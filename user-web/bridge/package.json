@@ -14,7 +14,7 @@
     "lint:fix": "eslint src test scripts --fix"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "esbuild": "^0.21.5",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
