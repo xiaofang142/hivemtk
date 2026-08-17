@@ -70,7 +70,7 @@ jobs:
       - name: Upload coverage to Codecov
         # 缺 CODECOV_TOKEN 时不阻断；仅仓库内部 PR 上传
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: user-web/bridge/coverage/lcov.info
           flags: bridge
