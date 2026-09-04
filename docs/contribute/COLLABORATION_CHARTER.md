@@ -24,12 +24,18 @@ origin    = github(如需,可 git remote rename github origin)
 
 ## 2. 贡献通道与顺序(每次都按这个来)
 
+> **通道决策(2026-09-04 实测后定案)**:
+> - **GitHub = 成员直推(fast path)**:hivemtkbot 已被加为 `xiaofang142/hivemtk` 成员(dry-run 推送验证通过),分支可直接推上游同名分支,再开 PR 评审合并;同时 push 到 fork 备份。
+> - **Gitee = fork + MR**:jungle-hero 未被加为上游成员(实测 `Access denied`),fork 也未创建;待 Gitee 网页 fork 后走标准 fork→MR 流程。
+> - 简言之:**日常走 GitHub 成员直推,代码备份与 Gitee 互动走 fork**。
+
 ```
 ①上游同步     git fetch upstream && git checkout master && git merge --ff-only upstream/master
 ②分支         git checkout -b <type>/<topic>     # type ∈ fix|feature|docs|perf|test
 ③开发+自测    改动 → 构建双平台 → vet → go test ./...(-count=1)
 ④提交         Conventional Commits 中文 subject,钩子自动校验
-⑤推 fork      git push github <branch>(Gitee 视目标同步)
+⑤推送         GitHub:直推 upstream 同名分支(成员权限,实测已生效);同时 push github 备份
+              Gitee:push gitee(fork)后开 MR
 ⑥上游动作     先 Issue 后 PR(见 §4)
 ⑦评审         意见 → 原分支追加 commit → 通知评审者
 ⑧合并后清理   删分支 → 同步 master(回到①)
