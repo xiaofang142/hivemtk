@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
@@ -427,7 +426,9 @@ func main() {
 	}
 	addr := "0.0.0.0:" + port
 	logger.Infof("营销后端服务启动于 %s", addr)
-	if err := endless.ListenAndServe(addr, r); err != nil && !isGracefulShutdownErr(err) {
+	// serveHTTP 按平台拆分：Unix 走 endless（零停机热重启），Windows 走标准 http
+	// （见 serve_unix.go / serve_windows.go）
+	if err := serveHTTP(addr, r); err != nil && !isGracefulShutdownErr(err) {
 		panic("服务启动失败：" + err.Error())
 	}
 }

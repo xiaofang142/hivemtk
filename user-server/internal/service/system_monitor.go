@@ -3,11 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -74,20 +72,12 @@ func sampleResourceUsage() {
 	diskSnapshot.Store(sampleDiskOnce())
 }
 
-func sampleCPUOnce() float64 {
-	var r1, r2 syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &r1); err != nil {
-		return 0
-	}
-	t1 := time.Now()
-	time.Sleep(100 * time.Millisecond)
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &r2); err != nil {
-		return 0
-	}
-	t2 := time.Now()
+// sampleCPUOnce / sampleDiskOnce 为平台相关实现，按构建标签拆分：
+// Unix 见 system_monitor_unix.go（getrusage / statfs），
+// Windows 见 system_monitor_windows.go（GetProcessTimes / GetDiskFreeSpaceEx）。
 
-	cpu1 := time.Duration(r1.Utime.Nano()) + time.Duration(r1.Stime.Nano())
-	cpu2 := time.Duration(r2.Utime.Nano()) + time.Duration(r2.Stime.Nano())
+// cpuUsagePercent 由两次 CPU 时间快照与墙钟间隔计算归一化 CPU 使用率（%）。
+func cpuUsagePercent(cpu1, cpu2 time.Duration, t1, t2 time.Time) float64 {
 	cpuDelta := cpu2 - cpu1
 	wallDelta := t2.Sub(t1)
 	if wallDelta <= 0 {
@@ -97,37 +87,16 @@ func sampleCPUOnce() float64 {
 	if numCPU < 1 {
 		numCPU = 1
 	}
-	usage := float64(cpuDelta) / float64(wallDelta) * 100 / float64(numCPU)
-	if usage < 0 {
-		usage = 0
-	}
-	if usage > 100 {
-		usage = 100
-	}
-	return usage
+	return clampPercent(float64(cpuDelta) / float64(wallDelta) * 100 / float64(numCPU))
 }
 
-func sampleDiskOnce() float64 {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return 0
-	}
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(cwd, &stat); err != nil {
-		return 0
-	}
-	total := uint64(stat.Blocks) * uint64(stat.Bsize)
-	if total == 0 {
-		return 0
-	}
-	free := uint64(stat.Bfree) * uint64(stat.Bsize)
-	used := total - free
-	usage := float64(used) / float64(total) * 100
+// clampPercent 将百分比截断到 [0, 100]。
+func clampPercent(usage float64) float64 {
 	if usage < 0 {
-		usage = 0
+		return 0
 	}
 	if usage > 100 {
-		usage = 100
+		return 100
 	}
 	return usage
 }
