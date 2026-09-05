@@ -88,6 +88,13 @@
 | 2026-09-05 | 分支备份 | GitHub | fix/user-server-windows-build | https://github.com/hivemtkbot/hivemtk/tree/fix/user-server-windows-build | 已推 |
 | 2026-09-05 | 分支备份 | GitHub | docs/collaboration-guides | https://github.com/hivemtkbot/hivemtk/tree/docs/collaboration-guides | 已推 |
 | 2026-09-05 | 分支备份 | Gitee | 同上两分支 | https://gitee.com/jungle-hero/hivemtk/branches | 已推 |
+| 2026-09-05 | 直推上游 | GitHub | 两分支推入 xiaofang142/hivemtk(hivemtkbot write 权限已生效) | https://github.com/xiaofang142/hivemtk/tree/fix/user-server-windows-build | 已推 |
+| 2026-09-05 | Issue | GitHub | #11 Windows 编译修复报告 + 收流方向询问 | https://github.com/xiaofang142/hivemtk/issues/11 | 开放 |
+| 2026-09-05 | PR | GitHub | #12 fix(user-server): Windows 编译修复(Closes #11) | https://github.com/xiaofang142/hivemtk/pull/12 | 待评审 |
+| 2026-09-05 | PR | GitHub | #13 docs(contribute): 贡献者文档三份 | https://github.com/xiaofang142/hivemtk/pull/13 | 待评审 |
+
+> 2026-09-05 备注:Gitee 侧 Issue/MR 创建需要 Gitee 私人令牌(凭据管理器中暂无),SSH 推送分支已完成;
+> MR 可在 https://gitee.com/jungle-hero/hivemtk/pull/new/jungle-hero:fix/user-server-windows-build...master 一键创建。拿到 token 后由 AI 补齐并更新本表。
 
 ## 8. 合并后同步(上游→下游)
 
