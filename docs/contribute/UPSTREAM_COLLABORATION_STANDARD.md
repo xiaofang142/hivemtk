@@ -92,9 +92,10 @@
 | 2026-09-05 | Issue | GitHub | #11 Windows 编译修复报告 + 收流方向询问 | https://github.com/xiaofang142/hivemtk/issues/11 | 开放 |
 | 2026-09-05 | PR | GitHub | #12 fix(user-server): Windows 编译修复(Closes #11) | https://github.com/xiaofang142/hivemtk/pull/12 | 待评审 |
 | 2026-09-05 | PR | GitHub | #13 docs(contribute): 贡献者文档三份 | https://github.com/xiaofang142/hivemtk/pull/13 | 待评审 |
+| 2026-09-05 | MR | Gitee | !1 fix(user-server): Windows 编译修复(首评承载 bug 报告+收流询问) | https://gitee.com/xhpmayun/hivemtk/pulls/1 | 待评审 |
+| 2026-09-05 | MR | Gitee | !2 docs(contribute): 贡献者文档三份 | https://gitee.com/xhpmayun/hivemtk/pulls/2 | 待评审 |
 
-> 2026-09-05 备注:Gitee 侧 Issue/MR 创建需要 Gitee 私人令牌(凭据管理器中暂无),SSH 推送分支已完成;
-> MR 可在 https://gitee.com/jungle-hero/hivemtk/pull/new/jungle-hero:fix/user-server-windows-build...master 一键创建。拿到 token 后由 AI 补齐并更新本表。
+> 2026-09-05 平台能力备注:Gitee 个人版 API 无法创建上游 Issue(`POST /repos/{owner}/issues` 报 "project or enterprise",该端点仅企业版可用)——**Gitee 侧 bug 报告以 MR 首条评论承载**(见 !1 评论);MR 创建/更新/评论 API 一切正常(jungle-hero token,最小权限 issues/pull_requests/projects)。Gitee MR 必须以 `head: fork用户:分支` 跨库形式创建。
 
 ## 8. 合并后同步(上游→下游)
 
