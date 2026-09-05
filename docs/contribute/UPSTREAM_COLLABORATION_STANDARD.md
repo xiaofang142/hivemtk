@@ -92,10 +92,17 @@
 | 2026-09-05 | Issue | GitHub | #11 Windows 编译修复报告 + 收流方向询问 | https://github.com/xiaofang142/hivemtk/issues/11 | 开放 |
 | 2026-09-05 | PR | GitHub | #12 fix(user-server): Windows 编译修复(Closes #11) | https://github.com/xiaofang142/hivemtk/pull/12 | 待评审 |
 | 2026-09-05 | PR | GitHub | #13 docs(contribute): 贡献者文档三份 | https://github.com/xiaofang142/hivemtk/pull/13 | 待评审 |
-| 2026-09-05 | MR | Gitee | !1 fix(user-server): Windows 编译修复(首评承载 bug 报告+收流询问) | https://gitee.com/xhpmayun/hivemtk/pulls/1 | 待评审 |
-| 2026-09-05 | MR | Gitee | !2 docs(contribute): 贡献者文档三份 | https://gitee.com/xhpmayun/hivemtk/pulls/2 | 待评审 |
+| 2026-09-05 | MR | Gitee | !1 fix(user-server): Windows 编译修复(首评承载 bug 报告+收流询问) | https://gitee.com/xhpmayun/hivemtk/pulls/1 | ~~open~~ 已关闭(源分支清理触发,教训见下) |
+| 2026-09-05 | MR | Gitee | !2 docs(contribute): 贡献者文档三份 | https://gitee.com/xhpmayun/hivemtk/pulls/2 | ~~open~~ 已关闭(同上) |
+| 2026-09-05 | **PR 合并** | GitHub | **#12 / #13 已 squash 合入 master(61b0d3c / 7771ecb),#11 自动关闭** | https://github.com/xiaofang142/hivemtk/pull/12 | ✅ 已合并 |
+| 2026-09-05 | MR 重建 | Gitee | !3(=!1 内容)/ !4(=!2 内容),基于合并后 master 重建 | https://gitee.com/xhpmayun/hivemtk/pulls/3 · /pulls/4 | open,审查已过,卡"测试"标记 |
 
 > 2026-09-05 平台能力备注:Gitee 个人版 API 无法创建上游 Issue(`POST /repos/{owner}/issues` 报 "project or enterprise",该端点仅企业版可用)——**Gitee 侧 bug 报告以 MR 首条评论承载**(见 !1 评论);MR 创建/更新/评论 API 一切正常(jungle-hero token,最小权限 issues/pull_requests/projects)。Gitee MR 必须以 `head: fork用户:分支` 跨库形式创建。
+>
+> **⚠️ 流程教训(已固化)**:
+> 1. **删已合并分支必须等双平台 MR/PR 都合并后**,或删除前先检查 Gitee 侧是否还有 open MR——源分支删除会**自动关闭**依赖它的 Gitee MR(!1/!2 因此被关,重建为 !3/!4)。
+> 2. **Gitee 合并门槛链**:owner 审查(POST /pulls/{n}/review,204 即过)→ 测试标记("未通过设置的测试",**API 无法标记,必须网页端由测试员点头**)。GitHub 侧无此门槛。
+> 3. 双平台合并顺序定案:**先 GitHub PR 合并 → 同步 Gitee master → Gitee 侧若只有镜像同步需求则直接同步 master、不再重复发 MR**(避免双份历史)。
 
 ## 8. 合并后同步(上游→下游)
 
