@@ -147,7 +147,7 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 	defer cancel()
 	ctx = logger.WithModule(ctx, "webhook")
 
-	agentCtx, _ := s.loadAgentForChannel(ctx, channel, accountID)
+	agentCtx, _ := s.loadAgentForChannel(ctx, channel, accountID, p.ChatID)
 
 	req := &SalesRequest{
 		SessionID:   p.ChatID,
@@ -179,11 +179,14 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 	s.sendOutbound(ctx, channel, accountID, p, resp.Reply, hubMsg, RichCardsFromDTO(resp.Cards))
 }
 
-func (s *WebhookService) loadAgentForChannel(ctx context.Context, channel WebhookChannel, accountID string) (*AgentContext, error) {
+func (s *WebhookService) loadAgentForChannel(ctx context.Context, channel WebhookChannel, accountID string, chatID ...string) (*AgentContext, error) {
 	if s.agentBindingSvc == nil {
 		return nil, nil
 	}
 	channelType := NormalizeChannelType(string(channel))
+	if len(chatID) > 0 && chatID[0] != "" {
+		return s.agentBindingSvc.LoadAgentForChannel(ctx, channelType, accountID, chatID[0])
+	}
 	return s.agentBindingSvc.LoadAgentForChannel(ctx, channelType, accountID)
 }
 
@@ -218,7 +221,7 @@ func (s *WebhookService) triggerSmartOrchestrator(ctx context.Context, channel W
 		routeCtx = trace.NewContextWithTraceID(routeCtx, parentTraceID)
 	}
 	routeCtx = logger.WithModule(routeCtx, "webhook")
-	agentCtx, _ := s.loadAgentForChannel(routeCtx, channel, accountID)
+	agentCtx, _ := s.loadAgentForChannel(routeCtx, channel, accountID, p.ChatID)
 
 	in := &IncomingContext{
 		Platform:  model.Platform(channel),

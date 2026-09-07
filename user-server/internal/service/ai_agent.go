@@ -389,10 +389,27 @@ func (s *ChannelAgentBindingService) ReplaceBinding(ctx context.Context, channel
 }
 
 // LoadAgentForChannel 加载渠道账号绑定的主智能体上下文
-// WebhookService.triggerSalesEngine 调用此方法
-// 返回 nil, nil 表示未绑定（调用方回退默认配置）
-func (s *ChannelAgentBindingService) LoadAgentForChannel(ctx context.Context, channelType, accountID string) (*AgentContext, error) {
-	binding, err := s.repo.GetPrimaryByChannelAccount(ctx, channelType, accountID)
+//
+// 路由优先级：
+//  1. chat_id 精确匹配 → 这个群/会话专属 agent
+//  2. account 级默认绑定（chat_id IS NULL）
+//  3. 兜底 fallback
+//
+// chatID 为空字符串时退化到旧行为（只看 account 级默认）。
+// 返回 nil, nil 表示未绑定（调用方回退默认配置）。
+func (s *ChannelAgentBindingService) LoadAgentForChannel(ctx context.Context, channelType, accountID string, chatID ...string) (*AgentContext, error) {
+	var chat string
+	if len(chatID) > 0 {
+		chat = chatID[0]
+	}
+
+	var binding *model.ChannelAgentBinding
+	var err error
+	if chat != "" {
+		binding, err = s.repo.ResolveBinding(ctx, channelType, accountID, chat)
+	} else {
+		binding, err = s.repo.GetPrimaryByChannelAccount(ctx, channelType, accountID)
+	}
 	if err != nil {
 		return nil, err
 	}

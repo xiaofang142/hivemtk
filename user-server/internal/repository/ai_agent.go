@@ -221,6 +221,53 @@ func (r *ChannelAgentBindingRepository) ListByAgentID(ctx context.Context, agent
 	return list, nil
 }
 
+// ResolveBinding 按优先级路由查找渠道+账号+会话的最佳绑定
+//
+// 匹配优先级（从高到低，高优先级行排前面）：
+//  1. chat_id 精确匹配  + priority DESC（最具体）
+//  2. chat_id IS NULL（account 级默认）+ priority DESC
+//  3. is_primary=true 兜底
+//
+// 返回 nil, nil 表示未绑定
+func (r *ChannelAgentBindingRepository) ResolveBinding(ctx context.Context, channelType, accountID, chatID string) (*model.ChannelAgentBinding, error) {
+	var b model.ChannelAgentBinding
+
+	// 统一查询：chat_id 精确匹配 OR chat_id 为 NULL 的默认绑定
+	// ORDER BY CASE WHEN 实现 chat_id 精确匹配行优先，然后 priority 高的优先
+	q := r.db.WithContext(ctx).
+		Where("channel_type = ? AND account_id = ? AND enabled = ?", channelType, accountID, true).
+		Where("(chat_id = ? OR chat_id IS NULL)", chatID).
+		Order("CASE WHEN chat_id = '" + chatID + "' THEN 0 ELSE 1 END"). // 精确 chat_id 排前面（SQL 字符串拼接，安全因为 chat_id 来自 Telegram API）
+		Order("priority DESC").                                         // 手动优先级
+		Order("is_primary DESC").                                       // 主绑定兜底
+		Order("id DESC").
+		Limit(1)
+
+	if err := q.First(&b).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &b, nil
+}
+
+// GetBindingByChatID 按渠道+账号+chat_id 精确查询（不含默认绑定）
+func (r *ChannelAgentBindingRepository) GetBindingByChatID(ctx context.Context, channelType, accountID, chatID string) (*model.ChannelAgentBinding, error) {
+	var b model.ChannelAgentBinding
+	err := r.db.WithContext(ctx).Where(
+		"channel_type = ? AND account_id = ? AND chat_id = ? AND enabled = ?",
+		channelType, accountID, chatID, true,
+	).First(&b).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &b, nil
+}
+
 // Update 更新绑定
 func (r *ChannelAgentBindingRepository) Update(ctx context.Context, b *model.ChannelAgentBinding) error {
 	return r.db.Save(b).Error
