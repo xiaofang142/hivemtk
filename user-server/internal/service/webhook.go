@@ -37,10 +37,12 @@ type WebhookService struct {
 	feishuIntegration *FeishuIntegrationService
 	tgIntegration     *TelegramIntegrationService
 	waIntegration     *WhatsAppCloudIntegrationService
+	qqIntegration     *QQIntegrationService
 
 	wechatIntegration *WechatService
 
 	telegramRepo *repository.TelegramAccountRepository
+	qqRepo       *repository.QQAccountRepository
 
 	feishuRepo *repository.FeishuAccountRepository
 	waRepo     *repository.WhatsAppCloudAccountRepository
@@ -108,6 +110,10 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 	if db != nil {
 		telegramRepo.SetDB(context.Background(), db)
 	}
+	qqRepo := repository.NewQQAccountRepository()
+	if db != nil {
+		qqRepo.SetDB(context.Background(), db)
+	}
 	feishuRepo := repository.NewFeishuAccountRepository()
 	if db != nil {
 		feishuRepo.SetDB(context.Background(), db)
@@ -138,6 +144,7 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		wecomRepo:      wecomRepo,
 		integration:    NewWeComIntegrationService(db),
 		telegramRepo:   telegramRepo,
+		qqRepo:         qqRepo,
 		feishuRepo:     feishuRepo,
 		waRepo:         waRepo,
 		messageHubRepo: messageHubRepo,

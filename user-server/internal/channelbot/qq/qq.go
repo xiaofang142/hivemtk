@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -66,14 +65,33 @@ func NewClient(appID, appSecret string, opts ...core.ClientOption) *Client {
 func WithSandbox(c *Client) { c.apiBase = defaultSandbox }
 
 // tokenResp getAppAccessToken 响应
+// 注意：官方文档 expires_in 标注 number 但示例返回字符串 "7200"（自相矛盾），
+// 解析须兼容两种类型（json.RawMessage 手动判定）。
 type tokenResp struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   string `json:"expires_in"`
-	Code        int    `json:"code"`
-	Message     string `json:"message"`
+	AccessToken string          `json:"access_token"`
+	ExpiresIn   json.RawMessage `json:"expires_in"`
+	Code        int             `json:"code"`
+	Message     string          `json:"message"`
 }
 
-// GetAccessToken 获取 access_token（缓存期内直接复用，临期 300s 内刷新）
+// expiresInSeconds 兼容 expires_in 为字符串或数字两种返回
+func (t *tokenResp) expiresInSeconds() int {
+	if len(t.ExpiresIn) == 0 {
+		return 0
+	}
+	raw := strings.TrimSpace(string(t.ExpiresIn))
+	if n, err := strconv.Atoi(raw); err == nil {
+		return n
+	}
+	var f float64
+	if err := json.Unmarshal(t.ExpiresIn, &f); err == nil && f > 0 {
+		return int(f)
+	}
+	return 0
+}
+
+// GetAccessToken 获取 access_token（缓存期内直接复用，临期 300s 内刷新；
+// 官方机制：有效期内重复获取返回相同值，距过期 60s 内获取返回新 token）
 func (c *Client) GetAccessToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -97,10 +115,8 @@ func (c *Client) GetAccessToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("qq token empty (status %d code=%d msg=%s)", status, tr.Code, tr.Message)
 	}
 	expire := 7200 * time.Second
-	if tr.ExpiresIn != "" {
-		if n, perr := strconv.Atoi(tr.ExpiresIn); perr == nil && n > 0 {
-			expire = time.Duration(n) * time.Second
-		}
+	if n := tr.expiresInSeconds(); n > 0 {
+		expire = time.Duration(n) * time.Second
 	}
 	c.accessToken = tr.AccessToken
 	c.tokenExpAt = time.Now().Add(expire)
@@ -201,11 +217,27 @@ func (c *Client) sendSingle(ctx context.Context, target SendTarget, text string,
 	if err != nil {
 		return "", fmt.Errorf("qq send: %w", err)
 	}
+	// 401：token 失效，刷新后重试一次（官方 access_token 临期机制；官方无显式 401 流程文档，
+	// 刷新重试为工程实践——避免分段消息中途 token 过期导致整批失败）
 	if status == 401 {
 		c.InvalidateToken()
+		headers, herr := c.authHeaders(ctx)
+		if herr != nil {
+			return "", herr
+		}
+		body, status, err = c.DoJSON(ctx, "POST", c.apiBase+target.apiPath(), bytes.NewReader(b), headers)
+		if err != nil {
+			return "", fmt.Errorf("qq send retry after 401: %w", err)
+		}
 	}
 	var sr sendResp
-	_ = json.Unmarshal(body, &sr)
+	if uerr := json.Unmarshal(body, &sr); uerr != nil {
+		// 非 JSON 响应不能当作成功（2xx + 空 body 场景）
+		if status >= 200 && status < 300 {
+			return "", fmt.Errorf("qq send non-json response (status %d): %s", status, truncateForLog(body))
+		}
+		return "", fmt.Errorf("qq send status %d body=%s", status, truncateForLog(body))
+	}
 	if status < 200 || status >= 300 || sr.Code != 0 {
 		return "", fmt.Errorf("qq send status %d code=%d msg=%s body=%s", status, sr.Code, sr.Message, truncateForLog(body))
 	}
@@ -235,14 +267,14 @@ func splitQQMessage(text string, limit int) []string {
 	var out []string
 	for len(runes) > limit {
 		split := -1
-		for i := limit; i > 0; i-- {
+		for i := limit - 1; i > 0; i-- {
 			if runes[i] == '\n' {
 				split = i + 1
 				break
 			}
 		}
 		if split == -1 {
-			for i := limit; i > 0; i-- {
+			for i := limit - 1; i > 0; i-- {
 				if runes[i] == '。' || runes[i] == '！' || runes[i] == '？' || runes[i] == '.' || runes[i] == '!' || runes[i] == '?' {
 					split = i + 1
 					break
@@ -250,7 +282,7 @@ func splitQQMessage(text string, limit int) []string {
 			}
 		}
 		if split == -1 {
-			for i := limit; i > 0; i-- {
+			for i := limit - 1; i > 0; i-- {
 				if runes[i] == ' ' {
 					split = i + 1
 					break
@@ -318,6 +350,30 @@ func GenerateCallbackTestSignature(secret, eventTS, plainToken string) (signatur
 	}
 	sig := ed25519.Sign(priv, []byte(eventTS+plainToken))
 	return hex.EncodeToString(sig), nil
+}
+
+// op13 限制：plain_token 长度约束（官方为随机串，64 字符足够宽松），
+// event_ts 距今 ±5 分钟内有效——防止端点被滥用为任意消息的签名预言机。
+const (
+	op13PlainTokenMaxLen = 64
+	op13EventTSWindow    = 5 * time.Minute
+)
+
+// IsValidChallenge 校验 Op13 挑战参数合法性（plain_token 格式 + event_ts 新鲜度）
+func IsValidChallenge(plainToken, eventTS string) bool {
+	if plainToken == "" || len(plainToken) > op13PlainTokenMaxLen ||
+		strings.ContainsAny(plainToken, "{}[]\"\\ \n\r\t") {
+		return false
+	}
+	ts, err := strconv.ParseInt(eventTS, 10, 64)
+	if err != nil || ts <= 0 {
+		return false
+	}
+	diff := time.Since(time.Unix(ts, 0))
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= op13EventTSWindow
 }
 
 // ---------------------------------------------------------------------------
@@ -439,15 +495,13 @@ func parseQQTimestamp(ts string) int64 {
 	if ts == "" {
 		return 0
 	}
-	// 官方 timestamp 为 ISO8601 字符串；解析失败回退当前时间
+	// 官方 timestamp 为 RFC3339/ISO8601；解析失败返回 0（中台 NormalizeEvent 会补 now），
+	// 另兼容常见日期时间格式（部分事件文档示例为空格分隔格式）
 	if t, err := time.Parse(time.RFC3339, ts); err == nil {
 		return t.Unix()
 	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", ts, time.Local); err == nil {
+		return t.Unix()
+	}
 	return 0
-}
-
-// NewTestSignaturePair 仅供测试：用随机 seed 生成 (私钥, secret) 对
-func NewTestSignaturePair(secret string) ed25519.PrivateKey {
-	_ = rand.Reader
-	return DerivePrivateKey(secret)
 }

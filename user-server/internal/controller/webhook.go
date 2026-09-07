@@ -401,6 +401,8 @@ func extractHeaders(ctx *gin.Context) map[string]string {
 		"X-Douyin-Signature", "X-Lark-Signature",
 		"X-Wechat-Timestamp", "X-Wechat-Nonce", "X-Wechat-Signature",
 		"X-Telegram-Bot-Api-Secret-Token",
+		// QQ 开放平台 Ed25519 验签头（webhook 事件推送必带）
+		"X-Signature-Ed25519", "X-Signature-Timestamp",
 	} {
 		if v := ctx.GetHeader(k); v != "" {
 			headers[k] = v

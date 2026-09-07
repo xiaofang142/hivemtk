@@ -103,11 +103,28 @@ func (s *WebhookService) shouldTriggerAI(ctx context.Context, channel WebhookCha
 		}
 		return acc.AIAgentEnabled
 	case ChannelQQ:
-		acc, err := NewQQService(s.db).GetAccount(ctx, uint(accID))
+		if s.qqRepo == nil {
+			return false
+		}
+		acc, err := s.qqRepo.GetByID(ctx, uint(accID))
 		if err != nil {
 			return false
 		}
 		return acc.AIAgentEnabled && acc.Status == 1
+	default:
+		// 无账号级 AI 开关的渠道（wechat/dingtalk/桥接五端等）不在此拦截：
+		// 经 TriggerInboundAI 路径的 AI 触发放行，避免误杀既有渠道。
+		return true
+	}
+}
+
+// channelHasAIAgentSwitch 渠道是否有账号级 AI 开关字段。
+// TriggerInboundAI 的开关守卫只对该集合内的渠道生效；
+// 不在集合内的渠道（无开关概念）一律放行。
+func channelHasAIAgentSwitch(ch WebhookChannel) bool {
+	switch ch {
+	case ChannelWeCom, ChannelFeishu, ChannelTelegram, ChannelWhatsapp, ChannelQQ:
+		return true
 	default:
 		return false
 	}
@@ -275,8 +292,9 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		logger.Ctx(ctx).Debug().Str("event_id", eventID).Msg("[Webhook] TriggerInboundAI duplicate, skip")
 		return
 	}
-	// 渠道账号 AI 开关守卫：QQ 等通过 Ingress 触发 AI 的渠道也必须尊重账号级开关
-	if channel != "" && !s.shouldTriggerAI(ctx, WebhookChannel(channel), accountID) {
+	// 渠道账号 AI 开关守卫：仅对有账号级 AI 开关字段的渠道生效
+	// （wechat/dingtalk/桥接五端等无开关渠道直接放行，避免误杀既有 AI 链路）
+	if channel != "" && channelHasAIAgentSwitch(WebhookChannel(channel)) && !s.shouldTriggerAI(ctx, WebhookChannel(channel), accountID) {
 		logger.Ctx(ctx).Info().Str("channel", channel).Str("account_id", accountID).
 			Msg("[Webhook] TriggerInboundAI skipped: channel AI agent disabled")
 		return

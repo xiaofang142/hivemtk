@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
@@ -99,7 +101,9 @@ func TestQQ_WebhookVerify_SignatureFlow(t *testing.T) {
 		t.Fatal("wrong timestamp should fail")
 	}
 	// WebhookService.Verify 通道
-	ws := &WebhookService{db: db}
+	qqRepo := repository.NewQQAccountRepository()
+	qqRepo.SetDB(context.Background(), db)
+	ws := &WebhookService{db: db, qqRepo: qqRepo}
 	ok, verr := ws.Verify(context.Background(), ChannelQQ, "1", body,
 		map[string]string{"X-Signature-Ed25519": sig, "X-Signature-Timestamp": ts}, nil)
 	if verr != nil || !ok {
@@ -123,8 +127,10 @@ func TestQQ_Op13CallbackChallenge(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	raw := []byte(`{"op":13,"plain_token":"pt-123","event_ts":"1728000000"}`)
-	ws := &WebhookService{db: db}
+	raw := []byte(fmt.Sprintf(`{"op":13,"plain_token":"pt-123","event_ts":"%d"}`, time.Now().Unix()))
+	qqRepo2 := repository.NewQQAccountRepository()
+	qqRepo2.SetDB(context.Background(), db)
+	ws := &WebhookService{db: db, qqRepo: qqRepo2}
 	handled, payload := ws.HandleQQCallbackChallenge(context.Background(), "1", raw)
 	if !handled {
 		t.Fatal("op13 should be handled")
@@ -212,13 +218,13 @@ func TestQQ_Integration_SendMessage(t *testing.T) {
 	_ = gotAuth
 
 	// msg_seq 递增验证
-	if seq := integration.nextMsgSeq("m1"); seq != 1 {
+	if seq := integration.NextMsgSeq("m1"); seq != 1 {
 		t.Errorf("first seq = %d", seq)
 	}
-	if seq := integration.nextMsgSeq("m1"); seq != 2 {
+	if seq := integration.NextMsgSeq("m1"); seq != 2 {
 		t.Errorf("second seq = %d", seq)
 	}
-	if seq := integration.nextMsgSeq("m2"); seq != 1 {
+	if seq := integration.NextMsgSeq("m2"); seq != 1 {
 		t.Errorf("new msg seq = %d", seq)
 	}
 

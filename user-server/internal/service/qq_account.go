@@ -69,6 +69,17 @@ func (s *QQService) DeleteAccount(ctx context.Context, id uint) error {
 	return s.accRepo.Delete(ctx, id)
 }
 
+// UpdateErrorOnly 只写错误状态字段（避免全量 Save 在并发下覆盖他处更新的字段）
+func (s *QQService) UpdateErrorOnly(ctx context.Context, accountID uint, errAt time.Time, errMsg string) error {
+	acc, err := s.accRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	acc.LastErrorAt = &errAt
+	acc.LastErrorMsg = errMsg
+	return s.accRepo.Update(ctx, acc)
+}
+
 // getWebhookSecret 取账号的 webhook 验签 secret（供 WebhookService.Verify 使用）
 func (s *QQService) getWebhookSecret(ctx context.Context, accountID string) string {
 	if s.accRepo == nil {
@@ -110,11 +121,24 @@ type QQIntegrationService struct {
 	hub   *MessageHubService
 	inbox *InboxService
 
-	// msgSeqMu/msgSeqMap 同一 msg_id 的被动回复 msg_seq 递增（QQ 被动回复 5 分钟限 5 条，
-	// 同一 msg_id 重发必须递增 msg_seq，否则平台丢弃）
-	msgSeqMu  sync.Mutex
-	msgSeqMap map[string]int
+	// msgSeq 同一 msg_id 的被动回复 msg_seq 递增（QQ 被动回复 5 分钟限 5 条，
+	// 同一 msg_id 重发必须递增 msg_seq，否则平台静默丢弃）。
+	// 带 TTL 淘汰：条目 10 分钟未访问即清理（被动窗口仅 5 分钟），防 map 无界增长。
+	msgSeqMu    sync.Mutex
+	msgSeqMap   map[string]*qqSeqEntry
+	msgSeqCount int
 }
+
+type qqSeqEntry struct {
+	seq      int
+	lastUsed time.Time
+}
+
+const (
+	qqSeqTTL         = 10 * time.Minute
+	qqSeqMaxEntries  = 4096
+	qqSeqSweepCycles = 64 // 每若干次写入触发一次惰性清扫
+)
 
 // NewQQIntegrationService 创建 QQ 集成服务
 func NewQQIntegrationService(db *gorm.DB) *QQIntegrationService {
@@ -122,7 +146,7 @@ func NewQQIntegrationService(db *gorm.DB) *QQIntegrationService {
 		qqSvc:     NewQQService(db),
 		hub:       NewMessageHubServiceWithDB(db, nil),
 		inbox:     NewInboxServiceWithDB(db),
-		msgSeqMap: make(map[string]int),
+		msgSeqMap: make(map[string]*qqSeqEntry),
 	}
 }
 
@@ -165,15 +189,41 @@ func (s *QQIntegrationService) IngestMessage(ctx context.Context, req *QQIngestR
 	return hubMsg, nil
 }
 
-// nextMsgSeq 同一 msg_id 的 msg_seq 自增
-func (s *QQIntegrationService) nextMsgSeq(msgID string) int {
+// NextMsgSeq 同一 msg_id 的 msg_seq 自增（平台要求相同 msg_id+msg_seq 视为重复发送）。
+// 主动消息（msgID 为空）走随机 seq；被动回复按 msg_id 计数递增，
+// 条目带 TTL 惰性淘汰防无界增长。
+func (s *QQIntegrationService) NextMsgSeq(msgID string) int {
 	if msgID == "" {
 		return 1 + int(time.Now().UnixNano()%1000) // 主动消息随机 seq
 	}
 	s.msgSeqMu.Lock()
 	defer s.msgSeqMu.Unlock()
-	s.msgSeqMap[msgID]++
-	return s.msgSeqMap[msgID]
+	now := time.Now()
+	if e, ok := s.msgSeqMap[msgID]; ok && now.Sub(e.lastUsed) < qqSeqTTL {
+		e.seq++
+		e.lastUsed = now
+		return e.seq
+	}
+	// 新条目或过期条目重建（被动窗口外重置 seq 从 1 起，安全）
+	if _, existed := s.msgSeqMap[msgID]; !existed {
+		s.msgSeqCount++
+	}
+	s.msgSeqMap[msgID] = &qqSeqEntry{seq: 1, lastUsed: now}
+	// 惰性清扫：条目数超阈值时剔除过期项
+	if s.msgSeqCount > qqSeqMaxEntries {
+		for k, v := range s.msgSeqMap {
+			if now.Sub(v.lastUsed) >= qqSeqTTL {
+				delete(s.msgSeqMap, k)
+				s.msgSeqCount--
+			}
+		}
+		if s.msgSeqCount > qqSeqMaxEntries {
+			// 极端场景（高频活跃 msg_id 超阈值）：放弃追踪，整体重置
+			s.msgSeqMap = make(map[string]*qqSeqEntry)
+			s.msgSeqCount = 0
+		}
+	}
+	return 1
 }
 
 // qqAPIBaseOverride 测试/代理环境覆盖官方 API 域名（QQ_API_BASE_URL）。
@@ -183,8 +233,9 @@ func qqAPIBaseOverride() string {
 }
 
 // SendMessage 出站发送 AI 回复。
-// convID 为群 openid（群聊回复）或单聊 openid；msgID 为被回复的原消息 ID（被动回复关联）。
-func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, convID, msgID, content string) error {
+// convID 为群 openid（群聊回复）或单聊 openid；msgID 为被回复的原消息 ID（被动回复关联）；
+// isGroup 由调用方从入站事件携带（优先于启发式判定）。
+func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, convID, msgID, content string, isGroup ...bool) error {
 	acc, err := s.qqSvc.GetAccount(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("get qq account: %w", err)
@@ -194,17 +245,19 @@ func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, 
 		opts = append(opts, core.WithBaseURL(base))
 	}
 	cli := qq.NewClient(acc.AppID, acc.AppSecret, opts...)
-	target := qq.SendTarget{MsgID: msgID, MsgSeq: s.nextMsgSeq(msgID)}
-	if isQQGroupConversation(convID) {
+	target := qq.SendTarget{MsgID: msgID, MsgSeq: s.NextMsgSeq(msgID)}
+	// 群/单聊判定：优先用调用方传入的结构化标记，缺省回退 openid 前缀启发式
+	group := len(isGroup) > 0 && isGroup[0]
+	if len(isGroup) == 0 {
+		group = isQQGroupConversation(convID)
+	}
+	if group {
 		target.GroupOpenID = convID
 	} else {
 		target.UserOpenID = convID
 	}
 	if _, err := cli.SendMessage(ctx, target, content); err != nil {
-		now := time.Now()
-		acc.LastErrorAt = &now
-		acc.LastErrorMsg = err.Error()
-		_ = s.qqSvc.UpdateAccount(ctx, acc)
+		_ = s.qqSvc.UpdateErrorOnly(ctx, accountID, time.Now(), err.Error())
 		return fmt.Errorf("send qq msg: %w", err)
 	}
 	// 成功后记录出站消息到 message_hub + inbox（与 TG 出站落库一致）

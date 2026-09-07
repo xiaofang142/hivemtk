@@ -1,20 +1,8 @@
-package service
+package controller
 
-// QQ 渠道二次全流程检查测试（全自动化，模拟信号驱动）。
-//
-// 测试策略（脑暴结论 A+F 方案）：
-//   - SimQQPlatform：内存模拟 QQ 开放平台，用真实 Ed25519 密钥派生签名，
-//     把 webhook 事件 POST 到真实 gin HTTP 入口（/api/webhook/qq/{account_id}），
-//     断言 HTTP 状态码与应答体（覆盖 controller 层，不只测 service 内部函数）。
-//   - 模拟 AI 信号：FAQ 高分命中走 LayerRouter SkipLLM 分支（官方为 LLM 留的
-//     零依赖旁路），SmartCSOrchestrator 真实执行（建会话/存消息/取回复），
-//     无需 LLM key、无需外网。
-//   - 出站模拟：qq.Client 经 WithBaseURL 指向 httptest 模拟平台，
-//     断言 Authorization: QQBot 头、msg_type/msg_id/msg_seq 协议字段。
-//
-// 覆盖链路：
-//   HTTP 入口 → 验签(Ed25519) → 入队 → dispatchQQ → Ingress(幂等) → message_hub
-//   → AI 触发 → orchestrator(会话/消息/回复) → sendOutbound → qq.Client → 模拟平台。
+// QQ 渠道全链路模拟测试（controller 包版本）：
+// 复用生产 WebhookController.RegisterRoutes（含 extractHeaders 白名单取头），
+// 修复 P0-1 后作为回归保护（service 包内测试无法 import controller——循环依赖）。
 
 import (
 	"bytes"
@@ -25,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -37,16 +26,32 @@ import (
 	"hivemtk-user/internal/pkg/featureflag"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// ---------------------------------------------------------------------------
-// SimQQPlatform：模拟 QQ 开放平台
-// ---------------------------------------------------------------------------
+// withLayer1FlagForQQ 开启 FF_LAYER1（controller 包内独立实现）
+func withLayer1FlagForQQ(t *testing.T, val string) {
+	t.Helper()
+	prev, hadPrev := os.LookupEnv("FF_LAYER1")
+	if val == "" {
+		_ = os.Unsetenv("FF_LAYER1")
+	} else {
+		_ = os.Setenv("FF_LAYER1", val)
+	}
+	featureflag.DefaultManager().ReloadAll()
+	t.Cleanup(func() {
+		if hadPrev {
+			_ = os.Setenv("FF_LAYER1", prev)
+		} else {
+			_ = os.Unsetenv("FF_LAYER1")
+		}
+		featureflag.DefaultManager().ReloadAll()
+	})
+}
 
-// simSentMessage 模拟平台收到的出站消息
 type simSentMessage struct {
 	GroupOpenID string
 	UserOpenID  string
@@ -221,13 +226,15 @@ type qqFullchainEnv struct {
 	engine    *gin.Engine
 	platform  *SimQQPlatform
 	botAPI    *httptest.Server
-	webhook   *WebhookService
+	webhook   *service.WebhookService
 	accountID string
 	secret    string
 }
 
 func setupQQFullchain(t *testing.T) *qqFullchainEnv {
 	t.Helper()
+	// 禁用 AI 回复静默时段(23:00-7:00 延迟队列会拦截出站,干扰测试断言)
+	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
 
 	database := testutil.NewTestDB(t,
 		&model.QQAccount{},
@@ -287,7 +294,7 @@ func setupQQFullchain(t *testing.T) *qqFullchainEnv {
 	}
 	agentID := agent.ID
 	sopTpl := model.SOPTemplate{
-		Name: "价格咨询模拟", Intent: IntentPriceInquiry, Stage: "",
+		Name: "价格咨询模拟", Intent: service.IntentPriceInquiry, Stage: "",
 		Template:   "我们的旗舰套餐是 999 元/月，企业版可议价。",
 		Confidence: 0.9, AgentID: &agentID, Enabled: &enabled,
 	}
@@ -297,62 +304,33 @@ func setupQQFullchain(t *testing.T) *qqFullchainEnv {
 
 	// 引擎装配：dispatcher=nil（SOP 命中即回，不触 LLM）；intent=nil 走 fallback(unknown)
 	// → SOP 分支要求 Intent != unknown，故注入规则意图识别 mock。
-	engine := NewSalesEngine(database, nil, &simIntentRecognizer{}, nil, nil, nil, nil, nil)
-	withLayer1Flag(t, "1")
-	lr := &LayerRouter{
-		faqRepo: nil,
-		sopRepo: repository.NewSOPTemplateRepository(database),
-		sopSvc:  NewSOPTemplateService(database, nil),
-		logRepo: nil,
-	}
+	engine := service.NewSalesEngine(database, nil, &simIntentRecognizer{}, nil, nil, nil, nil, nil)
+	withLayer1FlagForQQ(t, "1")
+	lr := service.NewLayerRouter(database, nil, repository.NewSOPTemplateRepository(database), nil, nil, service.NewSOPTemplateService(database, nil))
 	engine.SetLayerRouter(context.Background(), lr)
-	orch := NewSmartCSOrchestrator(engine, DefaultOrchestratorConfig(), nil)
+	orch := service.NewSmartCSOrchestrator(engine, service.DefaultOrchestratorConfig(), nil)
 
 	// webhook 服务 + AI 注入
 	// 生产装配（router.go:348,466-467）：bridgeIngressSvc 是独立 ingress，
 	// 其 aiTrigger = webhookSvc（AITrigger 接口），webhookSvc.ingressSvc = bridgeIngressSvc。
 	// 测试复刻该接线：入站消息 → dispatchQQ → webhookSvc.ingressSvc(=bridge ingress)
 	// → persist → triggerAIForEvent → aiTrigger(=webhookSvc).TriggerInboundAI → AI。
-	webhookSvc := NewWebhookService(database)
-	bridgeIngress := NewInboxIngressServiceWithDB(database, nil)
+	webhookSvc := service.NewWebhookService(database)
+	bridgeIngress := service.NewInboxIngressServiceWithDB(database, nil)
 	bridgeIngress.SetAITrigger(webhookSvc)
-	bridgeIngress.SetInboxService(NewInboxServiceWithDB(database))
+	bridgeIngress.SetInboxService(service.NewInboxServiceWithDB(database))
 	webhookSvc.SetIngressSvc(bridgeIngress)
 	webhookSvc.SetSalesEngine(context.Background(), engine)
 	webhookSvc.SetSmartOrchestrator(context.Background(), orch)
 	// 渠道绑定智能体（生产为全局单例构造；测试注入测试 DB）
-	webhookSvc.SetAgentBindingService(context.Background(), NewChannelAgentBindingServiceWithDB(database, NewAIAgentServiceWithDB(database)))
+	webhookSvc.SetAgentBindingService(context.Background(), service.NewChannelAgentBindingServiceWithDB(database, service.NewAIAgentServiceWithDB(database)))
 
-	// 真 gin 入口：只挂 QQ webhook 路由（等价 controller.RegisterRoutes 的 QQ 分支）
+	// 真 gin 入口：复用生产 WebhookController.RegisterRoutes（含 extractHeaders 白名单、
+	// Op13 短路、响应码映射），确保 controller 层取头逻辑被真实覆盖（P0-1 回归保护）。
 	gin.SetMode(gin.TestMode)
 	g := gin.New()
-	g.POST("/api/webhook/qq/:account_id", func(c *gin.Context) {
-		// 与 controller.Receive 相同的 QQ Op13 短路与 Receive 请求构造
-		channel := ChannelQQ
-		accountID := c.Param("account_id")
-		body, err := readAllBody(c)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"accepted": false, "reason": "read body: " + err.Error()})
-			return
-		}
-		if handled, payload := webhookSvc.HandleQQCallbackChallenge(c.Request.Context(), accountID, body); handled {
-			c.JSON(http.StatusOK, payload)
-			return
-		}
-		reqCtx := c.Request.Context()
-		result, _ := webhookSvc.Receive(reqCtx, &ReceiveRequest{
-			Channel: channel, AccountID: accountID, Body: body,
-			Headers: extractGinHeaders(c), SourceIP: c.ClientIP(), Query: nil,
-		})
-		status := http.StatusOK
-		if result != nil && !result.Accepted {
-			status = http.StatusBadRequest
-			if result.VerifyFail {
-				status = http.StatusUnauthorized
-			}
-		}
-		c.JSON(status, result)
-	})
+	ctrl := NewWebhookController(webhookSvc)
+	ctrl.RegisterRoutes(g)
 
 	return &qqFullchainEnv{
 		db: database, engine: g, platform: platform, botAPI: botAPI,
@@ -366,9 +344,9 @@ type simIntentRecognizer struct{}
 
 func (m *simIntentRecognizer) Recognize(_ context.Context, _, _, text string) (*dto.RecognizeResult, error) {
 	if strings.Contains(text, "价格") {
-		return &dto.RecognizeResult{IntentType: IntentPriceInquiry, Confidence: 0.9, Method: "sim"}, nil
+		return &dto.RecognizeResult{IntentType: service.IntentPriceInquiry, Confidence: 0.9, Method: "sim"}, nil
 	}
-	return &dto.RecognizeResult{IntentType: IntentGreeting, Confidence: 0.6, Method: "sim"}, nil
+	return &dto.RecognizeResult{IntentType: service.IntentGreeting, Confidence: 0.6, Method: "sim"}, nil
 }
 
 func readAllBody(c *gin.Context) ([]byte, error) {
@@ -636,14 +614,14 @@ func TestQQFullchain_MsgSeqMonotonic(t *testing.T) {
 	env := setupQQFullchain(t)
 	defer env.webhook.Stop(context.Background())
 
-	integration := NewQQIntegrationService(env.db)
-	if seq := integration.nextMsgSeq("seq-msg"); seq != 1 {
+	integration := service.NewQQIntegrationService(env.db)
+	if seq := integration.NextMsgSeq("seq-msg"); seq != 1 {
 		t.Errorf("first seq = %d", seq)
 	}
-	if seq := integration.nextMsgSeq("seq-msg"); seq != 2 {
+	if seq := integration.NextMsgSeq("seq-msg"); seq != 2 {
 		t.Errorf("second seq = %d", seq)
 	}
-	if seq := integration.nextMsgSeq("seq-msg-2"); seq != 1 {
+	if seq := integration.NextMsgSeq("seq-msg-2"); seq != 1 {
 		t.Errorf("new msg seq = %d", seq)
 	}
 }
@@ -686,11 +664,11 @@ func TestQQFullchain_AIDisabled_NoOutbound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestQQFullchain_PlatformWhitelist(t *testing.T) {
-	if !ValidPlatform("qq") {
+	if !service.ValidPlatform("qq") {
 		t.Fatal("qq should be a valid platform in messageHubPlatforms")
 	}
-	if NormalizeChannelType("qq") != string(model.ChannelTypeQQ) {
-		t.Errorf("NormalizeChannelType(qq) = %q", NormalizeChannelType("qq"))
+	if service.NormalizeChannelType("qq") != string(model.ChannelTypeQQ) {
+		t.Errorf("NormalizeChannelType(qq) = %q", service.NormalizeChannelType("qq"))
 	}
 	_ = featureflag.Get("layer1") // 引用防 import 裁剪
 }

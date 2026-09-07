@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,10 +25,18 @@ func VerifyQQ(secret, sigHex, timestamp string, body []byte) bool {
 
 // HandleQQCallbackChallenge Op13 回调地址验证短路处理。
 // 返回 handled=true 时调用方应直接以 JSON 应答（不走 webhook 入队流程）。
+//
+// 安全缓解（P1-2 签名预言机）：op13 必须在验签前处理（协议先有鸡还是先有蛋），
+// 但对 challenge 参数做严格校验——plain_token 长度约束 + event_ts 新鲜度（±5 分钟），
+// 使该端点无法被滥用为任意消息的签名预言机。
 func (s *WebhookService) HandleQQCallbackChallenge(ctx context.Context, accountID string, raw []byte) (handled bool, payload any) {
 	e, err := qq.ParseEvent(raw)
 	if err != nil || !e.IsCallbackVerify() {
 		return false, nil
+	}
+	if !qq.IsValidChallenge(e.PlainToken, e.EventTS) {
+		logger.Errorf("[QQ] op13 challenge rejected: invalid plain_token/event_ts account=%s", accountID)
+		return true, map[string]any{"plain_token": "", "signature": ""}
 	}
 	qqSvc := NewQQService(s.db)
 	plainToken, signature, ok := qqSvc.VerifyQQCallbackChallenge(ctx, accountID, e)
@@ -74,7 +83,9 @@ func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *Pa
 		return nil, nil
 	}
 
-	// 同步构造 hub 记录供 sendOutbound / AI 触发使用（Ingress 内部已落库，此处为内存视图）
+	// 同步构造 hub 记录供 sendOutbound / AI 触发使用（Ingress 内部已落库，此处为内存视图）。
+	// MsgID/Extra 与 Ingress 落库口径对齐（MsgID=qq_evt_{事件id}，Extra.channel_msg_id
+	// 供 QQOutboundMsgID 取被动回复关联 ID——P2-2 修复）。
 	hub := &model.MessageHub{
 		Platform:       model.ChannelQQ,
 		AccountID:      accountID,
@@ -87,6 +98,7 @@ func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *Pa
 		SentAt:         time.Now(),
 		IsGroup:        inbound.IsGroup,
 		GroupID:        inbound.GroupID,
+		Extra:          map[string]any{"channel_msg_id": inbound.MessageID},
 	}
 	if hub.Content == "" {
 		hub.Content = "[qq]"
@@ -96,8 +108,18 @@ func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *Pa
 
 // getQQWebhookSecret 取 QQ 账号验签 secret
 func (s *WebhookService) getQQWebhookSecret(ctx context.Context, accountID string) string {
-	qqSvc := NewQQService(s.db)
-	return qqSvc.getWebhookSecret(ctx, accountID)
+	if s.qqRepo == nil {
+		return ""
+	}
+	id, err := strconv.ParseUint(accountID, 10, 64)
+	if err != nil || id == 0 {
+		return ""
+	}
+	acc, err := s.qqRepo.GetByID(ctx, uint(id))
+	if err != nil || acc == nil {
+		return ""
+	}
+	return acc.WebhookSecret
 }
 
 // triggerQQSalesEngine QQ AI 触发（群消息必须有内容；单聊直接触发）
