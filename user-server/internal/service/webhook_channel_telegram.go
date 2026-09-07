@@ -123,8 +123,9 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		if newMember != nil {
 			// 方案 B：管控群先禁言（HandleNewMembers 内部判断网关配置，未配置直接跳过）
 			accID, _ := strconv.ParseUint(accountID, 10, 64)
+			gateActive := false
 			if accID > 0 {
-				s.tgGate.HandleNewMembers(ctx, uint(accID), chatID, []telegram.TGUser{*newMember})
+				gateActive = s.tgGate.HandleNewMembers(ctx, uint(accID), chatID, []telegram.TGUser{*newMember})
 			}
 
 			senderIDStr := fmt.Sprintf("%d", newMember.ID)
@@ -157,6 +158,12 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 				}
 			}
 			s.upsertInboxFromHub(ctx, hub, fromName)
+
+			// 门控群（方案 B 禁言中）：验证提示已由 HandleNewMembers 发出，
+			// 不再叠加 AI 欢迎语，避免污染验证引导 / 诱导禁言用户误以为可发言
+			if gateActive {
+				return hub, nil, nil
+			}
 
 			triggerMsg := fmt.Sprintf("新用户 %s (@%s) 刚加入群组「%s」。请以销售助手身份主动发起欢迎+销售开场白，引导用户了解我们的产品。",
 				newMember.FirstName, newMember.Username, groupLabel)
@@ -312,7 +319,17 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		if tgPayload.Message != nil && tgPayload.Message.Chat != nil {
 			groupTitle = tgPayload.Message.Chat.Title
 		}
-		newOpportunity = s.mineTelegramGroupLead(context.Background(), hub, accountID, chatIDStr, groupTitle, senderIDStr, picked.username, picked.fromName, picked.text)
+		// 门控互锁前置：未验证成员在门控群的发言不挖掘线索/商机（先于 mining，避免拦截前已入库）
+		interlocked := false
+		if picked.chatType == "group" || picked.chatType == "supergroup" {
+			accID, _ := strconv.ParseUint(accountID, 10, 64)
+			if accID > 0 && s.tgGate.MemberUnverified(ctx, uint(accID), chatIDStr, senderIDStr) {
+				interlocked = true
+			}
+		}
+		if !interlocked {
+			newOpportunity = s.mineTelegramGroupLead(context.Background(), hub, accountID, chatIDStr, groupTitle, senderIDStr, picked.username, picked.fromName, picked.text)
+		}
 	}
 
 	mentioned := isTelegramBotMentioned(picked.text, botUsername)
@@ -327,6 +344,14 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		accID, _ := strconv.ParseUint(accountID, 10, 64)
 		if accID > 0 {
 			gateHandled = s.tgGate.HandleStartCommand(ctx, uint(accID), tgUserFromMessage(tgPayload), picked.text, picked.chatID)
+		}
+	}
+
+	// 门控群 AI 互锁（后置兜底）：未验证成员即使 @机器人 也不触发销售 AI
+	if picked.chatType == "group" || picked.chatType == "supergroup" {
+		accID, _ := strconv.ParseUint(accountID, 10, 64)
+		if accID > 0 && s.tgGate.MemberUnverified(ctx, uint(accID), chatIDStr, senderIDStr) {
+			return hub, &tgDispatchExtra{Mentioned: false, NewOpportunity: false, GateHandled: true}, nil
 		}
 	}
 

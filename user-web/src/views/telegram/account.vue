@@ -24,6 +24,16 @@
           <el-table :data="filteredAccounts" style="width: 100%" border>
             <el-table-column prop="account_name" :label="$t('账号名称')" min-width="160" />
             <el-table-column prop="bot_token_masked" label="Bot Token" min-width="200" />
+            <el-table-column label="Token 健康度" width="130" align="center">
+              <template #default="scope">
+                <el-tooltip v-if="scope.row.last_error_msg && (scope.row.last_error_msg.includes('401') || scope.row.last_error_msg.includes('404'))" placement="top">
+                  <template #content>Telegram 返回 401/404：Token 无效或已撤销。<br/>到 @BotFather → /mybots → API Token 重新生成，<br/>点「编辑」粘贴新 Token</template>
+                  <el-tag type="danger" effect="plain">无效 → 点「编辑」换 Token</el-tag>
+                </el-tooltip>
+                <el-tag v-else-if="scope.row.last_error_msg" type="warning" effect="plain">{{ scope.row.last_error_msg.includes('429') ? '限流中' : '有错误' }}</el-tag>
+                <el-tag v-else type="success" effect="plain">正常</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="webhook_url" label="Webhook URL" min-width="240" show-overflow-tooltip />
             <el-table-column label="Webhook" width="110" align="center">
               <template #default="scope">
@@ -79,13 +89,19 @@
         <el-form-item label="Bot Token" prop="bot_token">
           <el-input
             v-model="accountForm.bot_token"
-            :placeholder="dialogType === 'edit' ? '留空则保持原 Token 不变' : '请输入 Telegram Bot Token'"
+            :placeholder="dialogType === 'edit' ? '留空则保持原 Token 不变' : '形如 123456789:AAxxxx...（共 35 位）'"
             type="password"
             show-password
           />
+          <div class="form-hint" style="font-size:12px;margin-top:4px">
+            获取方式：Telegram 搜索 @BotFather → 发送 /mybots → 选择 Bot → API Token → 复制完整 Token（数字:35位字符）
+          </div>
         </el-form-item>
         <el-form-item label="Webhook URL" prop="webhook_url">
-          <el-input v-model="accountForm.webhook_url" placeholder="例如：https://your-domain/api/webhook/telegram/1" />
+          <el-input v-model="accountForm.webhook_url" placeholder="https://your-domain/api/webhook/telegram/1（必须 https://）" />
+          <div class="form-hint" style="color:#e6a23c;font-size:12px;margin-top:4px">
+            Telegram 强制 https。推荐留空由系统按公网域名自动推导，或填完整 https 地址
+          </div>
         </el-form-item>
         <el-form-item label="Webhook Secret" prop="webhook_secret">
           <el-input v-model="accountForm.webhook_secret" placeholder="可选，用于 Telegram X-Telegram-Bot-Api-Secret-Token 校验" />
@@ -219,6 +235,20 @@ const rules = {
         if (dialogType.value === 'add' && !value) {
           return callback(new Error('请输入 Bot Token'))
         }
+        if (value && !/^\d{6,10}:[A-Za-z0-9_-]{35}$/.test(value.trim())) {
+          return callback(new Error('Token 格式不对：应为「数字:35位字母数字」，请到 @BotFather → /mybots → API Token 完整复制'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  webhook_url: [
+    {
+      validator: (rule, value, callback) => {
+        if (value && value.trim().startsWith('http://')) {
+          return callback(new Error('Telegram 强制要求 https://，请把 http:// 改成 https://'))
+        }
         callback()
       },
       trigger: 'blur'
@@ -307,6 +337,21 @@ const handleDelete = (row) => {
 }
 
 const handleRegisterWebhook = (row) => {
+  // 前置自检：给出可操作的提示，避免打到 Telegram 才收到晦涩报错
+  const problems = []
+  if (row.last_error_msg && row.last_error_msg.includes('401')) {
+    problems.push('当前 Bot Token 已被 Telegram 判定无效（401）。请先到 @BotFather 重新生成 Token 并在「编辑」里更新，再注册 Webhook')
+  }
+  if (row.webhook_url && row.webhook_url.startsWith('http://')) {
+    problems.push('Webhook URL 是 http:// 开头，Telegram 强制要求 https://，请在「编辑」里修改')
+  }
+  if (!row.webhook_url) {
+    problems.push('Webhook URL 为空：请在「编辑」里填写（https://你的域名/api/webhook/telegram/' + row.id + '），或配置公网域名后留空自动推导')
+  }
+  if (problems.length) {
+    ElMessageBox.alert(problems.join('\n'), '注册前检查未通过', { type: 'warning', confirmButtonText: '知道了' })
+    return
+  }
   ElMessageBox.confirm(`确定要为机器人 ${row.account_name} 注册 Webhook 吗？`, '确认', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',

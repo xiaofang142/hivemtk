@@ -594,7 +594,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	webhookCtrl.SetAgentBindingService(channelBindingSvcGlobal)
 
 	go service.ReconcileTelegramWebhooks(service.NewTelegramService(gormDB))
-	go service.StartGateSweeper(gormDB)
+	service.StartGateSweeper(gormDB)
 
 	platform := r.Group("/api/platform")
 	platform.Use(middleware.InitGuard())

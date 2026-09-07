@@ -78,6 +78,9 @@ func (s *AuthorizationService) ResetPassword(ctx context.Context, actorID, targe
 	if actorID == targetID {
 		return fmt.Errorf("不能重置自己的密码，请使用修改密码功能: %w", ErrInvalidInput)
 	}
+	if targetID == initialAdminID {
+		return ErrInitialAdminProtected
+	}
 	if err := validatePassword(newPassword); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
 	}

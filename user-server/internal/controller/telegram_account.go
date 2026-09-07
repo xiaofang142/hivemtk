@@ -135,7 +135,7 @@ func (ctrl *TelegramAccountController) Get(c *gin.Context) {
 
 type telegramAccountCreateReq struct {
 	AccountName    string `json:"account_name" binding:"required"`
-	BotToken       string `json:"bot_token" binding:"required"`
+	BotToken       string `json:"bot_token"` // Update 时可为空=保持原值（与前端"留空保持不变"约定一致）
 	BotUsername    string `json:"bot_username"`
 	WebhookURL     string `json:"webhook_url"`
 	WebhookSecret  string `json:"webhook_secret"`
@@ -155,6 +155,7 @@ func (ctrl *TelegramAccountController) Create(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "Bot Token 格式错误", vErr.Error())
 		return
 	}
+	// Create 必须显式给 token（bot_token 为空在上面校验即失败），Update 走"空=保留原值"语义
 	if req.Status == 0 {
 		req.Status = 1
 	}
@@ -302,7 +303,10 @@ func (ctrl *TelegramAccountController) RegisterWebhook(c *gin.Context) {
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
 		_ = ctrl.svc.UpdateAccount(context.Background(), acc)
-		response.ErrorFromDB(c, err, "注册 Webhook 失败", err.Error())
+		// 把 Telegram 原始报错翻译成可操作的提示（token 无效/URL 非 https 等），
+		// 直接作为 message 返回给前端 toast 展示
+		friendly := tgbot.FriendlyTGAPIError(err)
+		response.Error(c, http.StatusBadRequest, friendly.Error(), err.Error())
 		return
 	}
 
@@ -381,6 +385,9 @@ func (ctrl *TelegramAccountController) Status(c *gin.Context) {
 		"bot_error":        errToStr(botErr),
 		"webhook_info":     whInfo,
 		"webhook_error":    errToStr(whErr),
+		"polling_mode":     service.IsTelegramPollingEnabled(),
+		"polling_owner":    acc.PollingOwner,
+		"polling_heartbeat_at": acc.PollingHeartbeatAt,
 	}
 	response.Success(c, resp, "获取状态成功")
 }
@@ -418,7 +425,8 @@ func (ctrl *TelegramAccountController) TestSend(c *gin.Context) {
 		return
 	}
 	if err := tgbot.SendMessage(acc.BotToken, req.ChatID, req.Text); err != nil {
-		response.ErrorFromDB(c, err, "发送失败", err.Error())
+		friendly := tgbot.FriendlyTGAPIError(err)
+		response.Error(c, http.StatusBadRequest, friendly.Error(), err.Error())
 		return
 	}
 	response.Success(c, gin.H{"ok": true}, "发送成功")

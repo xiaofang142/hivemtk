@@ -229,7 +229,7 @@ func ValidateBotToken(token string) error {
 	}
 
 	if len(tok) != 35 {
-		return fmt.Errorf("bot_token 格式错误：token 长度 %d 不等于 35", len(tok))
+		return fmt.Errorf("bot_token 格式错误：token 长度 %d 不等于 35（Telegram 官方 token 固定 35 位），请到 @BotFather 重新复制完整 token")
 	}
 	for i := 0; i < len(tok); i++ {
 		c := tok[i]
@@ -238,6 +238,30 @@ func ValidateBotToken(token string) error {
 		}
 	}
 	return nil
+}
+
+// FriendlyTGAPIError 把 Telegram Bot API 原始报错翻译成运维可读的中文提示+修复建议。
+// 兜底原样返回，绝不静默吞掉。
+func FriendlyTGAPIError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "401"):
+		return fmt.Errorf("Bot Token 无效（Telegram 返回 401 Unauthorized）。请到 Telegram 的 @BotFather → /mybots → API Token 重新生成并完整粘贴")
+	case strings.Contains(msg, "404"):
+		return fmt.Errorf("Bot 不存在（Telegram 返回 404 Not Found）。Token 可能已被 revoke，请到 @BotFather 重新生成")
+	case strings.Contains(msg, "https url"):
+		return fmt.Errorf("Webhook URL 必须是 https:// 开头（Telegram 强制要求），请修改后再试")
+	case strings.Contains(msg, "Failed to resolve host") || strings.Contains(msg, "name resolution"):
+		return fmt.Errorf("Telegram 无法解析 Webhook 域名（DNS 失败）：确认域名已生效、公网可访问，且必须是公网域名（不能用内网地址）")
+	case strings.Contains(msg, "getaddrinfo") || strings.Contains(msg, "no such host") || strings.Contains(msg, "connection refused"):
+		return fmt.Errorf("Webhook 地址不可达：Telegram 服务器无法访问该域名，请检查域名解析/证书/反向代理")
+	case strings.Contains(msg, "429"):
+		return fmt.Errorf("请求过于频繁（Telegram 限流），请稍后重试")
+	}
+	return err
 }
 
 // SetWebhook 注册 Telegram Webhook
@@ -336,7 +360,7 @@ func GetUpdates(ctx context.Context, botToken string, offset int64, limit, timeo
 	}
 	form.Set("limit", fmt.Sprintf("%d", limit))
 	form.Set("timeout", fmt.Sprintf("%d", timeout))
-	form.Set("allowed_updates", `["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","inline_query"]`)
+	form.Set("allowed_updates", `["message","edited_message","channel_post","edited_channel_post","callback_query","my_chat_member","chat_member","chat_join_request","inline_query"]`)
 
 	client := &http.Client{
 		Timeout:   time.Duration(timeout+10) * time.Second,

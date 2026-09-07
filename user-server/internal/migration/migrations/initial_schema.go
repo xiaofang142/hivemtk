@@ -192,4 +192,5 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewAgentCheckpointMigration(db))
 	register(NewChurnScoreMigration(db))
 	register(NewTelegramGroupGateMigration(db))
+	register(NewAdminPasswordGuardMigration(db))
 }

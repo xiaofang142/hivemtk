@@ -140,3 +140,49 @@ func TestGenVerifyToken(t *testing.T) {
 		seen[tok] = true
 	}
 }
+
+// MemberUnverified：未验证（pending/restricted/kicked 且未激活）→ true；
+// approved / authorized / 无台账 → false（非门控群放行给原业务）
+func TestMemberUnverified(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.TelegramGroupMember{})
+	if db == nil {
+		t.Skip("no test db")
+	}
+	svc := NewTelegramGateService(db)
+	past := timePtr(time.Now().Add(-time.Minute))
+
+	seeds := []struct {
+		user   string
+		status string
+		auth   bool
+		want   bool
+	}{
+		{"1", model.TGMemberPending, false, true},
+		{"2", model.TGMemberRestricted, false, true},
+		{"3", model.TGMemberKicked, false, true},
+		{"4", model.TGMemberApproved, true, false},
+		{"5", model.TGMemberRestricted, true, false}, // authorized 但状态没刷新（异常兜底）
+	}
+	for _, s := range seeds {
+		if err := db.Create(&model.TelegramGroupMember{
+			AccountID: 7, ChatID: "-77", UserID: s.user,
+			JoinStatus: s.status, Authorized: s.auth,
+		}).Error; err != nil {
+			t.Fatalf("seed %s: %v", s.user, err)
+		}
+	}
+	for _, s := range seeds {
+		got := svc.MemberUnverified(context.Background(), 7, "-77", s.user)
+		if got != s.want {
+			t.Errorf("user=%s status=%s auth=%v: got=%v want=%v", s.user, s.status, s.auth, got, s.want)
+		}
+	}
+	// 非门控群 / 无记录 → 放行
+	if svc.MemberUnverified(context.Background(), 7, "-88", "1") {
+		t.Error("无台账应返回 false")
+	}
+	if svc.MemberUnverified(context.Background(), 9, "-77", "1") {
+		t.Error("其他账号无台账应返回 false")
+	}
+	_ = past
+}

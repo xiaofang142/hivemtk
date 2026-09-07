@@ -167,7 +167,7 @@ const statusTagType = (s) => ({ pending: 'warning', restricted: 'danger', approv
 
 async function fetchAccounts() {
   const res = await listAccounts()
-  accounts.value = res.data?.list || res.data || []
+  accounts.value = (res && (res.list || res.data?.list)) || []
 }
 
 async function fetchGates() {
@@ -175,7 +175,7 @@ async function fetchGates() {
   try {
     const params = filterAccount.value ? { account_id: filterAccount.value } : {}
     const res = await listGates(params)
-    gates.value = res.data?.list || res.data || []
+    gates.value = (res && (res.list || res.data?.list)) || []
   } finally {
     loading.value = false
   }
@@ -232,7 +232,7 @@ async function fetchMembers() {
     const params = { limit: 100 }
     if (memberStatusTab.value) params.status = memberStatusTab.value
     const res = await listGateMembers(currentGate.value.id, params)
-    members.value = res.data?.list || res.data || []
+    members.value = (res && (res.list || res.data?.list)) || []
   } finally {
     membersLoading.value = false
   }

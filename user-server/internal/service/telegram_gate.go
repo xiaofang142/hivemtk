@@ -157,21 +157,22 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 	}
 }
 
-// HandleNewMembers 方案 B 入口：new_chat_members → 禁言 + 提示
-func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID uint, chatID int64, members []telegram.TGUser) {
+// HandleNewMembers 方案 B 入口：new_chat_members → 禁言 + 提示。
+// 返回是否命中了门控（true=本群是启用的 mute_unlock 管控群，调用方应跳过 AI 欢迎语）。
+func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID uint, chatID int64, members []telegram.TGUser) bool {
 	if s == nil || s.db == nil || len(members) == 0 {
-		return
+		return false
 	}
 	chatIDStr := strconv.FormatInt(chatID, 10)
 	gate, err := s.gateRepo.GetByChatID(ctx, accountID, chatIDStr)
 	if err != nil || gate == nil || !gate.Enabled || gate.Mode != TGGateModeMuteUnlock {
-		return
+		return false
 	}
 
 	cli, err := s.client(ctx, accountID)
 	if err != nil {
 		logger.Errorf("[TG-Gate] Bot 客户端加载失败 account=%d: %v", accountID, err)
-		return
+		return true // 已判定为管控群，但禁言执行不了；调用方仍应跳过 AI 欢迎语
 	}
 
 	botUsername := s.botUsername(ctx, accountID)
@@ -180,11 +181,13 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		ttl = 10
 	}
 
+	handled := false
 	for i := range members {
 		m := members[i]
 		if m.IsBot {
 			continue
 		}
+		handled = true
 		expires := time.Now().Add(time.Duration(ttl) * time.Minute)
 		token := genVerifyToken()
 		member := &model.TelegramGroupMember{
@@ -218,6 +221,7 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 			logger.Errorf("[TG-Gate] 群内验证提示发送失败 account=%d chat=%s: %v", accountID, chatIDStr, err)
 		}
 	}
+	return handled
 }
 
 // parseStartCommand 识别 /start 命令：返回 (token, isStart)，token 可为空（纯 /start）
@@ -340,6 +344,31 @@ func tgUserDisplayName(u *telegram.TGUser) string {
 	return name
 }
 
+// MemberUnverified 判断成员在指定群是否处于未过验证状态（pending/restricted/kicked 且未激活）。
+// 用于门控群 AI 互锁：未验证成员的群发言不触发销售 AI / 线索商机挖掘。
+// 语义：群有启用中的 mute_unlock 门控但该成员无台账 → 视为门控生效前已在群的
+// 历史成员/绕过入群事件的人，同样拦截（gateWhitelisted 为 false）；
+// 群无门控或成员已验证 → 放行。
+func (s *TelegramGateService) MemberUnverified(ctx context.Context, accountID uint, chatID, userID string) bool {
+	if s == nil || s.db == nil {
+		return false
+	}
+	m, err := s.memberRepo.Get(ctx, accountID, chatID, userID)
+	if err == nil && m != nil {
+		if m.Authorized {
+			return false
+		}
+		switch m.JoinStatus {
+		case model.TGMemberPending, model.TGMemberRestricted, model.TGMemberKicked:
+			return true
+		}
+		return false
+	}
+	// 无台账：仅当群是启用中的禁言解锁门控时才拦截（历史成员补验证），否则放行
+	gate, gerr := s.gateRepo.GetByChatID(ctx, accountID, chatID)
+	return gerr == nil && gate != nil && gate.Enabled && gate.Mode == TGGateModeMuteUnlock
+}
+
 // ---------- 网关配置管理（管理端） ----------
 
 // ListGates 网关列表（accountID=0 表示全部）
@@ -451,13 +480,20 @@ func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int,
 	return swept, nil
 }
 
-// StartGateSweeper 启动后台 TTL 清扫协程（进程级单例由调用方保证）
+// StartGateSweeper 启动后台 TTL 清扫协程；调用方在路由注册后直接调用（内部 go routine），
+// 每分钟执行一次 SweepExpired。db 为 nil 时直接返回（测试/无 DB 场景）。
 func StartGateSweeper(db *gorm.DB) {
 	if db == nil {
 		return
 	}
 	svc := NewTelegramGateService(db)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[TG-Gate] TTL 清扫协程 panic 重启: %v", r)
+				go StartGateSweeper(db) // 自愈重启
+			}
+		}()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
