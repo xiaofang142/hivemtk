@@ -18,15 +18,15 @@ export const CHANNEL_OPTIONS = Object.freeze([
   {
     value: 'douyin',
     label: '抖音',
-    tagType: '',
+    tagType: 'info',
     group: CHANNEL_GROUP.SOCIAL,
     icon: 'Share',
     description: '抖音私信'
   },
-  { value: 'kuaishou',      label: '快手',      tagType: '',        group: CHANNEL_GROUP.SOCIAL, icon: 'Share',           description: '快手私信' },
+  { value: 'kuaishou',      label: '快手',      tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'Share',           description: '快手私信' },
   { value: 'xiaohongshu',   label: '小红书',    tagType: 'danger',  group: CHANNEL_GROUP.SOCIAL, icon: 'Postcard',        description: '小红书私信' },
   { value: 'xianyu',        label: '闲鱼',      tagType: 'warning', group: CHANNEL_GROUP.SOCIAL, icon: 'Goods',           description: '闲鱼私信' },
-  { value: 'tiktok',        label: 'TikTok',    tagType: '',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'TikTok 私信' },
+  { value: 'tiktok',        label: 'TikTok',    tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'TikTok 私信' },
   { value: 'sms',           label: '短信',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Cellphone',       description: '短信触达（模板/直发）' },
   { value: 'email',         label: '邮件',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Message',         description: '邮件触达（支持附件）' },
   { value: 'card',          label: '卡片',      tagType: 'info',    group: CHANNEL_GROUP.CARD,   icon: 'Postcard',        description: '卡片消息（子渠道）' },

@@ -4,7 +4,7 @@ export const INTENT_TYPE_OPTIONS = Object.freeze([
   { value: 'churn',         label: '流失意向',  tagType: 'danger',  description: '客户有流失倾向' },
   { value: 'complaint',     label: '投诉',      tagType: 'danger',  description: '客户投诉' },
   { value: 'greeting',      label: '问候',      tagType: 'info',    description: '寒暄/问候' },
-  { value: 'support',       label: '售后',      tagType: '',        description: '售后服务' },
+  { value: 'support',       label: '售后',      tagType: 'info',        description: '售后服务' },
   { value: 'other',         label: '其他',      tagType: 'info',    description: '其他意图' }
 ]);
 
@@ -21,7 +21,7 @@ export const getIntentTypeLabel = (v) => {
   return INTENT_TYPE_LABEL_MAP[v] || String(v)
 }
 
-export const getIntentTypeTagType = (v) => INTENT_TYPE_TAG_TYPE_MAP[v] || ''
+export const getIntentTypeTagType = (v) => INTENT_TYPE_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   INTENT_TYPE_OPTIONS,

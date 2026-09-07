@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -471,10 +472,11 @@ func NewChannelAgentBindingControllerWithService(svc *service.ChannelAgentBindin
 func (ctrl *ChannelAgentBindingController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/channel-agent-bindings")
 	{
+		// 绑定关系只读对 staff 开放（aiAgent List 页展示），写操作仅 admin/manager（对齐 chatChannel 菜单 roles）
 		g.GET("", ctrl.List)
-		g.POST("", ctrl.Create)
-		g.PUT("/:id", ctrl.Update)
-		g.DELETE("/:id", ctrl.Delete)
+		g.POST("", middleware.ManagerOrAdminMiddleware(), ctrl.Create)
+		g.PUT("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Update)
+		g.DELETE("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Delete)
 		g.GET("/by-agent/:agent_id", ctrl.ListByAgent)
 	}
 }

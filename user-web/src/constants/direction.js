@@ -18,7 +18,8 @@ export const getDirectionLabel = (v) => {
   return DIRECTION_LABEL_MAP[v] || String(v)
 }
 
-export const getDirectionTagType = (v) => DIRECTION_TAG_TYPE_MAP[v] || ''
+// 未知方向兜底 'info'，避免 ElTag 收到空 type 触发 prop 校验告警（控制台噪音）
+export const getDirectionTagType = (v) => DIRECTION_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   DIRECTION_OPTIONS,

@@ -8,7 +8,7 @@ export const SOURCE_OPTIONS = Object.freeze([
   },
   { value: 'manual',    label: '手动',       tagType: 'info',    group: 'common', description: '人工操作产生' },
   { value: 'system',    label: '系统',       tagType: 'info',    group: 'common', description: '系统内部事件' },
-  { value: 'rule',      label: '规则',       tagType: '',        group: 'common', description: '规则引擎生成' },
+  { value: 'rule',      label: '规则',       tagType: 'info',        group: 'common', description: '规则引擎生成' },
   { value: 'llm',       label: 'AI',         tagType: 'primary', group: 'common', description: 'AI/LLM 生成' },
 
   {
@@ -21,7 +21,7 @@ export const SOURCE_OPTIONS = Object.freeze([
   { value: 'text',      label: '文本输入',   tagType: 'success', group: 'knowledge', description: '在线文本输入' },
   { value: 'url',       label: 'URL 抓取',   tagType: 'warning', group: 'knowledge', description: 'URL 网页抓取' },
   { value: 'openapi',   label: 'OpenAPI',    tagType: 'info',    group: 'knowledge', description: '外部 OpenAPI 同步' },
-  { value: 'batch',     label: '批量导入',   tagType: '',        group: 'knowledge', description: '批量任务导入' },
+  { value: 'batch',     label: '批量导入',   tagType: 'info',        group: 'knowledge', description: '批量任务导入' },
   { value: 'api',       label: 'API',        tagType: 'info',    group: 'knowledge', description: '外部 API 推送' },
   { value: 'crawler',   label: '爬虫',       tagType: 'warning', group: 'knowledge', description: '爬虫采集' },
 
@@ -58,7 +58,7 @@ export const getSourceLabel = (value) => {
   return SOURCE_LABEL_MAP[value] || value
 };
 
-export const getSourceTagType = (value) => SOURCE_TAG_TYPE_MAP[value] || '';
+export const getSourceTagType = (value) => SOURCE_TAG_TYPE_MAP[value] || 'info';
 
 export const filterSourcesByGroup = (groups) => {
   const list = Array.isArray(groups) ? groups : [groups]

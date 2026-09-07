@@ -39,14 +39,14 @@ export const getCustomerStatusLabel = (value) => {
   return CUSTOMER_STATUS_LABEL_MAP[value] || String(value)
 };
 
-export const getCustomerStatusTagType = (value) => CUSTOMER_STATUS_TAG_TYPE_MAP[value] || '';
+export const getCustomerStatusTagType = (value) => CUSTOMER_STATUS_TAG_TYPE_MAP[value] || 'info';
 
 export const getCustomerTagLabel = (value) => {
   if (value === undefined || value === null || value === '') return '-'
   return CUSTOMER_TAG_LABEL_MAP[value] || String(value)
 };
 
-export const getCustomerTagTagType = (value) => CUSTOMER_TAG_TAG_TYPE_MAP[value] || '';
+export const getCustomerTagTagType = (value) => CUSTOMER_TAG_TAG_TYPE_MAP[value] || 'info';
 
 export const filterCustomerByGroup = (groups) => {
   const list = Array.isArray(groups) ? groups : [groups]

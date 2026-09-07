@@ -7,7 +7,7 @@ export const MSG_TYPE_OPTIONS = Object.freeze([
   { value: 'video',    label: '视频',   tagType: 'success', icon: 'VideoCamera',  description: '视频消息' },
   { value: 'voice',    label: '语音',   tagType: 'primary', icon: 'Microphone',   description: '语音消息' },
   { value: 'card',     label: '卡片',   tagType: 'warning', icon: 'Postcard',     description: '卡片消息' },
-  { value: 'event',    label: '事件',   tagType: '',        icon: 'Bell',         description: '事件通知' },
+  { value: 'event',    label: '事件',   tagType: 'info',    icon: 'Bell',         description: '事件通知' },
   { value: 'system',   label: '系统',   tagType: 'info',    icon: 'Setting',      description: '系统消息' }
 ]);
 
@@ -24,7 +24,8 @@ export const getMsgTypeLabel = (v) => {
   return MSG_TYPE_LABEL_MAP[v] || String(v)
 }
 
-export const getMsgTypeTagType = (v) => MSG_TYPE_TAG_TYPE_MAP[v] || ''
+// 未知类型兜底 'info'，避免 ElTag 收到空 type 触发 prop 校验告警（控制台噪音）
+export const getMsgTypeTagType = (v) => MSG_TYPE_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   MSG_TYPE_OPTIONS,

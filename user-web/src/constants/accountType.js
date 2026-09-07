@@ -61,7 +61,7 @@ export const getAccountStatusLabel = (value) => {
 
 export const getAccountStatusTagType = (value) => {
   if (value === undefined || value === null || value === '') return ''
-  return ACCOUNT_STATUS_TAG_TYPE_MAP[value] || ACCOUNT_STATUS_TAG_TYPE_MAP[String(value)] || ''
+  return ACCOUNT_STATUS_TAG_TYPE_MAP[value] || ACCOUNT_STATUS_TAG_TYPE_MAP[String(value)] || 'info'
 };
 
 export const filterAccountStatusByGroup = (groups) => {
