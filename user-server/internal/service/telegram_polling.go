@@ -212,22 +212,60 @@ func IsTelegramPollingEnabled() bool {
 
 // EnsureTelegramMode 根据部署模式自动选择 webhook 或 polling
 //
-//   - polling 启用（无公网域名）→ 停 webhook、启动 polling
-//   - polling 禁用（有公网域名）→ 走原有 webhook 路径（由调用方负责）
+// 决策优先级（从高到低）：
+//  1. 账号已显式启用 webhook（WebhookEnabled=true 且 WebhookURL 非空）→ 保留 webhook，跳过
+//  2. 环境变量 TELEGRAM_POLLING 显式指定 → 按指定值
+//  3. 全局有公网基座 PUBLIC_BASE_URL → 走 webhook
+//  4. 以上全无 → 降级 polling（局域网无公网场景）
 //
-// 启动期对账（ReconcileTelegramWebhooks）调用本函数决定每个账号的模式。
-// 单账号 register-webhook 成功后也应该调用本函数（让 polling 停掉以避免重复消费）。
+// 核心原则：DB 事实 > env 变量 > 默认值。账号既然配了 webhook，就绝不抢它。
 func EnsureTelegramMode(svc *TelegramService) {
-	if !IsTelegramPollingEnabled() {
-		return
-	}
 	accs, err := svc.ListAccounts(context.Background())
 	if err != nil {
 		logger.Warnf("[TG-Mode] 列举 Telegram 账号失败: %v", err)
 		return
 	}
+
+	// 先扫一遍：有没有账号已启用 webhook？
+	hasWebhookConfigured := false
 	for _, acc := range accs {
 		if acc.BotToken == "" || acc.Status != 1 {
+			continue
+		}
+		if acc.WebhookEnabled && acc.WebhookURL != "" {
+			hasWebhookConfigured = true
+			break
+		}
+	}
+
+	// 全局 env 变量显式指定 → 最高优先级
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv(TelegramPollingEnvKey))); v != "" {
+		switch v {
+		case "0", "false", "no", "off":
+			logger.Infof("[TG-Mode] TELEGRAM_POLLING=%s 显式关闭 polling，跳过", v)
+			return
+		case "1", "true", "yes", "on":
+			// 显式开 polling，继续往下走
+		}
+	} else if hasWebhookConfigured {
+		// DB 里有账号配了 webhook → 全自动零配置走 webhook
+		logger.Infof("[TG-Mode] 检测到账号已启用 webhook，跳过 polling 启动（全自动零配置）")
+		return
+	} else if config.GetPublicBaseURL() != "" {
+		// 全局公网基座有值 → 走 webhook
+		logger.Infof("[TG-Mode] PUBLIC_BASE_URL=%s 存在，跳过 polling 启动", config.GetPublicBaseURL())
+		return
+	}
+
+	// 只有三个条件都不满足 → 降级 polling
+	logger.Infof("[TG-Mode] 无 webhook 配置、无公网域名、无显式指定，降级 polling 模式")
+	for _, acc := range accs {
+		if acc.BotToken == "" || acc.Status != 1 {
+			continue
+		}
+		// 即使在 polling 模式，也不要碰已启用 webhook 的账号
+		if acc.WebhookEnabled && acc.WebhookURL != "" {
+			logger.Infof("[TG-Mode] 账号 %d(%s) 已配置 webhook，跳过 polling 启动", acc.ID, acc.AccountName)
 			continue
 		}
 		if err := tgbot.DeleteWebhook(acc.BotToken); err != nil {
