@@ -461,10 +461,14 @@ func (c *Client) UnrestrictChatMember(ctx context.Context, chatID, userID int64)
 		"can_add_web_page_previews": true,
 		"can_invite_users":          true,
 	}
+	// 关键：必须传 until_date。Telegram 语义——不传（0）且权限放开会被解释为
+	// "受限至永久"，成员停留在 restricted；官方规则"距当前 <30 秒视为永久"，
+	// 故取 now+60s，Telegram 到点自动解除限制（状态回到 member）。
 	return c.callMethod(ctx, "restrictChatMember", map[string]any{
 		"chat_id":     chatID,
 		"user_id":     userID,
 		"permissions": perms,
+		"until_date":  time.Now().Add(60 * time.Second).Unix(),
 	})
 }
 

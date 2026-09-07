@@ -296,7 +296,9 @@ func (s *TelegramGateService) AuthorizeMember(ctx context.Context, member *model
 		}
 	} else {
 		if err := cli.UnrestrictChatMember(ctx, chatID, userID); err != nil {
-			logger.Warnf("[TG-Gate] 解禁失败（可能已退群）chat=%s user=%d: %v", member.ChatID, userID, err)
+			// 解禁失败不落 approved：否则台账显示已放行而 TG 侧仍受限，链路断裂
+			// （用户被告知"验证通过"却发不了言）
+			return fmt.Errorf("unrestrict chat=%s user=%s: %w", member.ChatID, member.UserID, err)
 		}
 	}
 
@@ -456,6 +458,12 @@ func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int,
 	}
 	swept := 0
 	for _, member := range expired {
+		// 竞态防御：成员可能在过期后被 /start 放行（authorized 已翻 true），
+		// 踢出前按主键重读台账，避免把刚通过验证的成员误踢
+		fresh, err := s.memberRepo.GetByToken(ctx, member.VerifyToken)
+		if err == nil && fresh != nil && fresh.ID == member.ID && fresh.Authorized {
+			continue
+		}
 		cli, err := s.client(ctx, member.AccountID)
 		if err != nil {
 			continue
@@ -473,6 +481,12 @@ func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int,
 			// 踢出（untilDate=过去时间 → 只踢不拉黑，用户可再次申请加入）
 			if err := cli.BanChatMember(ctx, chatID, userID, time.Now().Add(-time.Minute).Unix()); err != nil {
 				logger.Warnf("[TG-Gate] 踢出超时成员失败 chat=%s user=%d: %v", member.ChatID, userID, err)
+			} else {
+				// Telegram 实际行为：banChatMember 过去时间 = 永久拉黑。补一次 unban
+				// 解除拉黑，保留"只踢不拉黑、可再次申请加入"的产品语义
+				if err := cli.UnbanChatMember(ctx, chatID, userID); err != nil {
+					logger.Warnf("[TG-Gate] 解除拉黑失败（仍为拉黑状态，用户无法再次加入）chat=%s user=%d: %v", member.ChatID, userID, err)
+				}
 			}
 		}
 		member.JoinStatus = model.TGMemberKicked
