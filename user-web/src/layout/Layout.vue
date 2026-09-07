@@ -34,6 +34,14 @@
         </el-badge>
       </div>
 
+      <div v-if="userStore.isLoggedIn" class="notif-bell geo-alert-bell"
+        @click="router.push('/geo-tools/alerts')"
+        :title="`GEO 告警：${geoAlertCount} 条未确认`">
+        <el-badge :value="geoAlertCount" :hidden="geoAlertCount === 0" :max="99">
+          <el-icon :size="20" color="#e6a23c"><Warning /></el-icon>
+        </el-badge>
+      </div>
+
       
       <div class="user-area" v-if="userStore.isLoggedIn">
         <LanguageSwitcher />
@@ -155,6 +163,15 @@ const t = i18n.global.t
 const activeTopMenu = ref('')
 const activeSubMenu = ref(route.path)
 const unreadCount = ref(0)
+const geoAlertCount = ref(0)
+import { getGeoAlertsUnreadCount } from '@/api/geoAlert'
+const loadGeoAlertCount = async () => {
+  try {
+    const res = await getGeoAlertsUnreadCount()
+    const data = res?.data || res
+    geoAlertCount.value = Number(data?.count || 0)
+  } catch { /* 静默失败：铃铛角标非关键路径 */ }
+}
 const SIDEBAR_COLLAPSED_KEY = 'hivemtk_sidebar_collapsed'
 const readSidebarCollapsed = () => {
   try {
@@ -542,11 +559,13 @@ const topMenus = ref([
             title: '监控',
             icon: 'Monitor',
             children: [
+              { key: 'geoVisibilityBoard', title: '可见性观测', icon: 'TrendCharts', path: '/geo-tools/visibility' },
               { key: 'geoSovBoard', title: '竞品 SOV', icon: 'DataLine', path: '/geo-tools/sov-board' },
               { key: 'geoCompetitors', title: '竞品管理', icon: 'UserFilled', path: '/geo-tools/competitors' },
               { key: 'geoCrawlerStats', title: '爬虫统计', icon: 'Monitor', path: '/geo-tools/crawler-stats' },
               { key: 'geoEntityGraph', title: '实体图谱', icon: 'Share', path: '/geo-tools/entity-graph' },
               { key: 'geoVerification', title: '多模型验证', icon: 'CircleCheck', path: '/geo-tools/verification' },
+              { key: 'geoAlertCenter', title: '告警中心', icon: 'Bell', path: '/geo-tools/alerts' },
               { key: 'geoReports', title: '数据报表', icon: 'DataAnalysis', path: '/geo-tools/reports' },
               { key: 'geoConfig', title: '配置优化', icon: 'Setting', path: '/geo-tools/config' },
             ]
@@ -736,6 +755,10 @@ onMounted(async () => {
   } catch (error) {
     console.error('初始化请求配置失败:', error)
   }
+  loadGeoAlertCount()
+  setInterval(() => {
+    if (document.visibilityState === 'visible') loadGeoAlertCount()
+  }, 60000)
 })
 </script>
 
@@ -838,6 +861,9 @@ onMounted(async () => {
 .notif-bell:hover {
   background: $border-extra-light;
   color: $primary-color;
+}
+.geo-alert-bell {
+  margin-left: 0;
 }
 
 /* ===== 用户区 ===== */

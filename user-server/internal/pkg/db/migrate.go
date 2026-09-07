@@ -276,6 +276,7 @@ func allModels() []any {
 		&geomodel.GeoEntityRelation{},
 		&geomodel.GeoAlert{},
 		&geomodel.GeoJobRun{},
+		&geomodel.GeoCompetitor{},
 	}
 }
 

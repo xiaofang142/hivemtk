@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
@@ -50,7 +52,23 @@ type SOVEntry struct {
 
 // GetShareOfVoice 按意图分组计算各品牌声量占比（Peec 三子指标对齐：可见性/位置/情感）
 // 数据源：geo_probe_runs（真实云端探针引擎）+ geo_config（品牌/竞品列表）
+// days>0 时仅统计最近 N 天的探针记录，支撑 SOV 趋势环比。
 func (s *GeoDecisionAnalyticsService) GetShareOfVoice(ctx context.Context, intent string) ([]SOVEntry, error) {
+	return s.GetShareOfVoiceBetween(ctx, intent, time.Time{}, time.Time{})
+}
+
+// GetShareOfVoiceDays 最近 N 天窗口的 SOV（days<=0 表示不限）
+func (s *GeoDecisionAnalyticsService) GetShareOfVoiceDays(ctx context.Context, intent string, days int) ([]SOVEntry, error) {
+	var since, until time.Time
+	if days > 0 {
+		until = time.Now()
+		since = until.AddDate(0, 0, -days)
+	}
+	return s.GetShareOfVoiceBetween(ctx, intent, since, until)
+}
+
+// GetShareOfVoiceBetween 指定时间窗口 [since, until) 的 SOV 计算（零值表示不限）
+func (s *GeoDecisionAnalyticsService) GetShareOfVoiceBetween(ctx context.Context, intent string, since, until time.Time) ([]SOVEntry, error) {
 
 	brandList := []string{}
 	if s.configRepo != nil {
@@ -76,7 +94,13 @@ func (s *GeoDecisionAnalyticsService) GetShareOfVoice(ctx context.Context, inten
 
 	var probeRuns []*model.GeoProbeRun
 	if s.probeRepo != nil {
-		rows, err := s.probeRepo.ListRecent(ctx, 500)
+		var rows []*model.GeoProbeRun
+		var err error
+		if !since.IsZero() {
+			rows, err = s.probeRepo.ListBetween(ctx, since, until)
+		} else {
+			rows, err = s.probeRepo.ListRecent(ctx, 500)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -125,6 +149,8 @@ func (s *GeoDecisionAnalyticsService) GetShareOfVoice(ctx context.Context, inten
 			SOV: safeDivF(a.count, total) * 100, AvgSentiment: sentiment,
 		})
 	}
+	// SOV 高的排前面，前端直接可读
+	sort.Slice(out, func(i, j int) bool { return out[i].SOV > out[j].SOV })
 	return out, nil
 }
 

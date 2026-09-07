@@ -421,6 +421,17 @@ func (s *ProbeService) ListRuns(ctx context.Context, limit int) ([]*model.GeoPro
 	return s.repo.ListRecent(ctx, limit)
 }
 
+// ListRunsByEngine 按引擎分页查询探针运行记录（观测页明细）
+func (s *ProbeService) ListRunsByEngine(ctx context.Context, engine string, page, limit int) ([]*model.GeoProbeRun, int64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if page <= 0 {
+		page = 1
+	}
+	return s.repo.ListByEngine(ctx, engine, page, limit)
+}
+
 func availableEngineNames(probes []SearchProbe) string {
 	names := make([]string, 0, len(probes))
 	for _, p := range probes {

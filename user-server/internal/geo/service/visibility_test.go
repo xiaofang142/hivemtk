@@ -86,6 +86,40 @@ func TestVisibilityTrendEngineFilter(t *testing.T) {
 	}
 }
 
+func TestEngineCompareAggregation(t *testing.T) {
+	repo := &memDailyRepo{stats: []*model.GeoDailyStat{
+		{Date: "2026-09-03", Engine: "perplexity", Intent: "AI客服", ProbeCount: 4, BrandMentionedCount: 4, CitationCount: 8},
+		{Date: "2026-09-03", Engine: "perplexity", Intent: "对比", ProbeCount: 2, BrandMentionedCount: 0},
+		{Date: "2026-09-03", Engine: "copilot", Intent: "AI客服", ProbeCount: 10, BrandMentionedCount: 2, NegativeCount: 1},
+	}}
+	svc := NewVisibilityService(repo)
+	res, err := svc.GetEngineCompare(context.Background(), TrendQuery{Days: 7})
+	if err != nil {
+		t.Fatalf("GetEngineCompare: %v", err)
+	}
+	if len(res.Engines) != 2 {
+		t.Fatalf("期望 2 个引擎，got %d", len(res.Engines))
+	}
+	// perplexity: 4/6≈0.667 应排在 copilot 0.2 前
+	if res.Engines[0].Engine != "perplexity" {
+		t.Fatalf("期望 perplexity 排第一，got %s", res.Engines[0].Engine)
+	}
+	px := res.Engines[0]
+	if px.ProbeCount != 6 || px.BrandHits != 4 {
+		t.Fatalf("perplexity 聚合异常: probes=%d hits=%d", px.ProbeCount, px.BrandHits)
+	}
+	if px.AvgCitations < 1.32 || px.AvgCitations > 1.34 {
+		t.Fatalf("perplexity 平均引用期望 ≈1.333，got %v", px.AvgCitations)
+	}
+	co := res.Engines[1]
+	if co.Engine != "copilot" || co.NegativeCount != 1 {
+		t.Fatalf("copilot 行异常: %+v", co)
+	}
+	if len(res.Daily) != 1 || res.Daily[0].Probes != 16 {
+		t.Fatalf("单日拆分异常: %+v", res.Daily)
+	}
+}
+
 func TestParseFanoutVariants(t *testing.T) {
 	content := `前置文本 {"variants":[{"category":"direct","query":"HiveMTK 是什么？"},{"category":"compare","query":"HiveMTK 和探马SCRM 哪个好"},{"category":"negative","query":"HiveMTK 靠谱吗"},{"category":"","query":"重复问法"},{"query":"无类别默认direct"}],"extra":1} 尾部`
 	variants, err := parseFanoutVariants(content)

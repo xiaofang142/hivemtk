@@ -17,6 +17,7 @@ type GeoProbeRunRepository interface {
 	ListByEngine(ctx context.Context, engine string, page, limit int) ([]*model.GeoProbeRun, int64, error)
 	ListRecent(ctx context.Context, limit int) ([]*model.GeoProbeRun, error)
 	ListSince(ctx context.Context, since time.Time, limit int) ([]*model.GeoProbeRun, error)
+	ListBetween(ctx context.Context, since, until time.Time) ([]*model.GeoProbeRun, error)
 	ListByIntent(ctx context.Context, intent string, since time.Time) ([]*model.GeoProbeRun, error)
 	DistinctEngines(ctx context.Context) ([]string, error)
 }
@@ -97,5 +98,16 @@ func (r *geoProbeRunRepo) ListSince(ctx context.Context, since time.Time, limit 
 	}
 	var list []*model.GeoProbeRun
 	err := q.Find(&list).Error
+	return list, err
+}
+
+// ListBetween 时间窗口 [since, until) 内的探针记录（until 为零值表示不限）
+func (r *geoProbeRunRepo) ListBetween(ctx context.Context, since, until time.Time) ([]*model.GeoProbeRun, error) {
+	q := r.db.WithContext(ctx).Where("created_at >= ?", since)
+	if !until.IsZero() {
+		q = q.Where("created_at < ?", until)
+	}
+	var list []*model.GeoProbeRun
+	err := q.Order("created_at ASC").Find(&list).Error
 	return list, err
 }

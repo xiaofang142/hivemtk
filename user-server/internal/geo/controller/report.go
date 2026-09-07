@@ -3,6 +3,8 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"hivemtk-user/internal/geo/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -75,6 +77,39 @@ func (c *ReportController) ShareOfVoice(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, result, "ok")
+}
+
+// ShareOfVoiceTrend SOV 趋势环比：当前窗口 vs 上一窗口
+// GET /geo/sov/trend?intent=&days=30
+// current = 最近 days 天；previous = 其前一个 days 天（两窗口不重叠）
+func (c *ReportController) ShareOfVoiceTrend(ctx *gin.Context) {
+	if c.analyticsSvc == nil {
+		response.Error(ctx, http.StatusServiceUnavailable, "analytics service 未初始化")
+		return
+	}
+	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "30"))
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	intent := ctx.Query("intent")
+
+	now := time.Now()
+	current, err := c.analyticsSvc.GetShareOfVoiceBetween(ctx.Request.Context(), intent, now.AddDate(0, 0, -days), now)
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "SOV 趋势分析失败: "+err.Error())
+		return
+	}
+	previous, err := c.analyticsSvc.GetShareOfVoiceBetween(ctx.Request.Context(), intent, now.AddDate(0, 0, -days*2), now.AddDate(0, 0, -days))
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "SOV 趋势分析失败: "+err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{
+		"current":  current,
+		"previous": previous,
+		"days":     days,
+		"intent":   intent,
+	}, "ok")
 }
 
 // CrawlerStats 爬虫统计
