@@ -513,6 +513,9 @@ type channelBindingReq struct {
 	ChannelType string `json:"channel_type" binding:"required"`
 	AccountID   string `json:"account_id" binding:"required"`
 	AgentID     uint   `json:"agent_id" binding:"required"`
+	ChatID      string `json:"chat_id"`                  // 群组/会话 ID（空=account 级默认绑定）
+	ChatType    string `json:"chat_type"`                // group | dm | thread（可选）
+	Priority    int    `json:"priority"`                 // 手动优先级，高优先匹配
 	// PATCH 语义：nil = 未传 = Update 保留原值 / Create 走默认
 	IsPrimary *bool `json:"is_primary"`
 	Enabled   *bool `json:"enabled"`
@@ -528,6 +531,9 @@ func (ctrl *ChannelAgentBindingController) Create(c *gin.Context) {
 		ChannelType: service.NormalizeChannelType(req.ChannelType),
 		AccountID:   req.AccountID,
 		AgentID:     req.AgentID,
+		ChatID:      req.ChatID,
+		ChatType:    req.ChatType,
+		Priority:    req.Priority,
 		Enabled:     true,
 	}
 	if req.IsPrimary != nil {
@@ -562,6 +568,10 @@ func (ctrl *ChannelAgentBindingController) Update(c *gin.Context) {
 	existing.ChannelType = service.NormalizeChannelType(req.ChannelType)
 	existing.AccountID = req.AccountID
 	existing.AgentID = req.AgentID
+	// chat_id/chat_type/priority 允许修改（群组路由调整场景）
+	existing.ChatID = req.ChatID
+	existing.ChatType = req.ChatType
+	existing.Priority = req.Priority
 	// PATCH 语义：未传保留原值，防止漏字段把绑定意外停用
 	if req.IsPrimary != nil {
 		existing.IsPrimary = *req.IsPrimary
