@@ -352,7 +352,13 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		}()
 	}
 
-	const replySemTimeout = 5 * time.Second
+	// replySem 并发限流：正常 5s 超时；商机触发放宽到 30s（高意向不能丢）
+	replySemTimeout := 5 * time.Second
+	replyReason := "normal"
+	if meta := extractTelegramReplyMetaFromCtx(ctx); meta != nil && meta.TriggerReason == "opportunity" {
+		replySemTimeout = 30 * time.Second
+		replyReason = "opportunity"
+	}
 	select {
 	case s.replySem <- struct{}{}:
 		defer func() { <-s.replySem }()
@@ -363,6 +369,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			Str("event_id", p.EventID).
 			Dur("timeout", replySemTimeout).
 			Int("sem_capacity", cap(s.replySem)).
+			Str("trigger_reason", replyReason).
 			Msg("[Webhook] runAIGeneration replySem 满 / 阻塞超时 — 跳过本轮 AI 推理，避免 goroutine 堆积 OOM；依赖下轮 inbound 重试")
 		return
 	case <-ctx.Done():

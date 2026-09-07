@@ -635,18 +635,28 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 		triggerAI = false // /start 网关验证已消费
 	}
 	if triggerAI {
+		// Telegram 群消息：先把 @mention/商机 元信息塞进 ctx → 让 sendOutbound 能 @mention 原发言人
+		aiCtx := ctx
+		if channel == ChannelTelegram && hubMsg.IsGroup && tgExtra != nil {
+			aiCtx = TelegramReplyMetaToContext(ctx, &TelegramReplyMeta{
+				FromUsername:  tgExtra.FromUsername,
+				FromName:      tgExtra.FromName,
+				FromUserID:    tgExtra.FromUserID,
+				ReplyToMsgID:  tgExtra.ReplyToMsgID,
+				TriggerReason: tgExtra.TriggerReason,
+			})
+		}
+
 		if channel != ChannelTelegram || !hubMsg.IsGroup {
-			s.triggerSalesEngine(ctx, channel, job.account, payload, hubMsg)
+			s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
 		} else {
 			mentioned := tgExtra != nil && tgExtra.Mentioned
 			newOpp := tgExtra != nil && tgExtra.NewOpportunity
 			switch {
 			case mentioned:
-
-				s.triggerSalesEngine(ctx, channel, job.account, payload, hubMsg)
+				s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
 			case newOpp && s.tgLeadOutreachAllowed(ctx, job.account, payload.ChatID, payload.Sender):
-
-				s.triggerSalesEngine(ctx, channel, job.account, payload, hubMsg)
+				s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
 			}
 		}
 	}

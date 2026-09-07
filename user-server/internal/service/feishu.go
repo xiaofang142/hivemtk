@@ -505,6 +505,11 @@ func (s *TelegramIntegrationService) IngestMessage(ctx context.Context, req *Tel
 }
 
 func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID uint, chatID int64, content string) error {
+	return s.SendMessageEx(ctx, accountID, chatID, content, telegram.SendMessageOptions{})
+}
+
+// SendMessageEx 带完整 SendMessageOptions（ParseMode / ReplyToMessageID / DisableWebPreview 等）
+func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountID uint, chatID int64, content string, opts telegram.SendMessageOptions) error {
 	if s.tg == nil {
 		return errors.New("db nil")
 	}
@@ -514,15 +519,14 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 	}
 	cli := telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client))
 
-	messageID, err := cli.SendMessage(ctx, chatID, content)
+	messageID, err := cli.SendMessage(ctx, chatID, content, opts)
 	if err != nil {
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
 		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
-		// 持久化失败只影响下次重启前的自愈，记日志留痕
-		logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
-	}
+			logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+		}
 		return fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -541,7 +545,7 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 		Content:        content,
 		ConversationID: chatIDStr,
 		IsAIReply:      true,
-		AIAgent:        "sales_engine",
+		AIAgent:        extractAgentIDFromCtx(ctx),
 		SentAt:         timePtr(time.Now()),
 	})
 	if hubMsg != nil {
