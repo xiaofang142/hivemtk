@@ -10,23 +10,23 @@
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card success">
-          <div class="stat-label">成功</div>
-          <div class="stat-value">{{ stats.success }}</div>
-          <div class="stat-sub">成功率 {{ successRate }}%</div>
+          <div class="stat-label">发送</div>
+          <div class="stat-value">{{ stats.outbound }}</div>
+          <div class="stat-sub">outbound 方向</div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card warning">
-          <div class="stat-label">重试中</div>
-          <div class="stat-value">{{ stats.retrying }}</div>
-          <div class="stat-sub">平均重试 2.1 次</div>
+          <div class="stat-label">接收</div>
+          <div class="stat-value">{{ stats.inbound }}</div>
+          <div class="stat-sub">inbound 方向</div>
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card danger">
-          <div class="stat-label">DLQ</div>
-          <div class="stat-value">{{ stats.dlq }}</div>
-          <div class="stat-sub">死信队列</div>
+          <div class="stat-label">未读</div>
+          <div class="stat-value">{{ stats.unread }}</div>
+          <div class="stat-sub">待处理消息</div>
         </el-card>
       </el-col>
     </el-row>
@@ -90,29 +90,25 @@ import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { http } from '@/utils/request'
 
-const stats = ref({ total: 0, success: 0, retrying: 0, dlq: 0 })
+const stats = ref({ total: 0, inbound: 0, outbound: 0, unread: 0 })
 const channelHealth = ref([])
 const dlqList = ref([])
 const loading = ref(false)
 const chartRef = ref()
 let sse = null
 
-const successRate = computed(() => {
-  if (!stats.value.total) return 0
-  return ((stats.value.success / stats.value.total) * 100).toFixed(1)
-})
-
 async function load() {
   loading.value = true
   try {
-    const [s, c, dlq] = await Promise.all([
+    // channel-health 后端暂无端点，allSettled 容错：单接口失败不拖垮整页数据
+    const [s, c, dlq] = await Promise.allSettled([
       http.get('/api/message-hub/stats', { window: '1h' }),
       http.get('/api/message-hub/channel-health'),
       http.get('/api/message-hub/dlq', { limit: 50 })
     ])
-    stats.value = s || stats.value
-    channelHealth.value = c || []
-    dlqList.value = dlq || []
+    if (s.status === 'fulfilled') stats.value = s.value || stats.value
+    if (c.status === 'fulfilled') channelHealth.value = c.value || []
+    if (dlq.status === 'fulfilled') dlqList.value = dlq.value || []
   } finally {
     loading.value = false
   }

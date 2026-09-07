@@ -10,6 +10,10 @@
           <el-icon><Plus /></el-icon>
           {{ $t('创建分群') }}
         </el-button>
+        <el-button @click="$router.push('/userSegment/builder')">
+          <el-icon><SetUp /></el-icon>
+          {{ $t('规则构建器') }}
+        </el-button>
         <el-button @click="refreshData">
           <el-icon><Refresh /></el-icon>
           {{ $t('刷新') }}

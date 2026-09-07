@@ -2,9 +2,14 @@
   <div class="email-drafts">
     <div class="drafts-header">
       <h1>{{ $t('邮件草稿箱') }}</h1>
-      <el-button type="primary" @click="handleCreateDraft">
-        <el-icon-plus /> {{ $t('新建草稿') }}
-      </el-button>
+      <div>
+        <el-button @click="$router.push('/email/drag-editor')">
+          <el-icon-edit /> {{ $t('拖拽编辑器') }}
+        </el-button>
+        <el-button type="primary" @click="handleCreateDraft">
+          <el-icon-plus /> {{ $t('新建草稿') }}
+        </el-button>
+      </div>
     </div>
     
     <el-table
