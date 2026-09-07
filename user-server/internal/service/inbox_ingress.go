@@ -66,6 +66,10 @@ type TriggerInboundMeta struct {
 	// 由入站回调捕获，经 sendOutbound case ChannelDingTalk 消费；其他渠道为空。
 	SessionWebhook          string
 	SessionWebhookExpiredAt int64
+	// ChannelMsgID 渠道平台原始消息 ID（如 QQ 事件 id）。
+	// QQ 被动回复必须关联原消息 msg_id（5 分钟窗口 5 条额度），
+	// 经 sendOutbound case ChannelQQ 消费；其他渠道为空。
+	ChannelMsgID string
 }
 
 func WithSenderName(name string) TriggerInboundOption {
@@ -85,6 +89,11 @@ func WithSessionWebhook(url string, expiredAt int64) TriggerInboundOption {
 		m.SessionWebhook = url
 		m.SessionWebhookExpiredAt = expiredAt
 	}
+}
+
+// WithChannelMsgID 传递渠道平台原始消息 ID（QQ 被动回复依赖）
+func WithChannelMsgID(msgID string) TriggerInboundOption {
+	return func(m *TriggerInboundMeta) { m.ChannelMsgID = msgID }
 }
 
 type InboxIngressResult struct {
@@ -531,6 +540,9 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 				exp = int64(t)
 			}
 			opts = append(opts, WithSessionWebhook(v, exp))
+		}
+		if v, ok := event.Extra["channel_msg_id"].(string); ok && v != "" {
+			opts = append(opts, WithChannelMsgID(v))
 		}
 	}
 	func() {

@@ -275,6 +275,12 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		logger.Ctx(ctx).Debug().Str("event_id", eventID).Msg("[Webhook] TriggerInboundAI duplicate, skip")
 		return
 	}
+	// 渠道账号 AI 开关守卫：QQ 等通过 Ingress 触发 AI 的渠道也必须尊重账号级开关
+	if channel != "" && !s.shouldTriggerAI(ctx, WebhookChannel(channel), accountID) {
+		logger.Ctx(ctx).Info().Str("channel", channel).Str("account_id", accountID).
+			Msg("[Webhook] TriggerInboundAI skipped: channel AI agent disabled")
+		return
+	}
 	rateKey := string(channel) + ":" + accountID
 	if !s.allowRate(ctx, rateKey) {
 		logger.Ctx(ctx).Warn().Str("channel", channel).Str("account_id", accountID).
@@ -317,6 +323,9 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		if meta.SessionWebhookExpiredAt > 0 {
 			hubMsg.Extra["session_webhook_expired_at"] = meta.SessionWebhookExpiredAt
 		}
+	}
+	if meta.ChannelMsgID != "" {
+		hubMsg.Extra["channel_msg_id"] = meta.ChannelMsgID
 	}
 	if meta.IsGroup {
 		if hubMsg.Extra == nil {

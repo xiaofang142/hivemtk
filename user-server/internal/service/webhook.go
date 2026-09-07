@@ -644,7 +644,9 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 	}
 
 	triggerAI := hubMsg != nil && s.shouldTriggerAI(ctx, channel, job.account)
-	if triggerAI {
+	// QQ 渠道 AI 触发已由 dispatchQQ → Ingress（aiTrigger=webhookSvc.TriggerInboundAI）
+	// 完成，这里不再走 triggerSalesEngine，避免同一事件双触发 AI（双重回复）。
+	if triggerAI && channel != ChannelQQ {
 		if channel != ChannelTelegram || !hubMsg.IsGroup {
 			s.triggerSalesEngine(ctx, channel, job.account, payload, hubMsg)
 		} else {

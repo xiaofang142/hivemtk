@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -174,6 +176,12 @@ func (s *QQIntegrationService) nextMsgSeq(msgID string) int {
 	return s.msgSeqMap[msgID]
 }
 
+// qqAPIBaseOverride 测试/代理环境覆盖官方 API 域名（QQ_API_BASE_URL）。
+// 生产留空走官方 https://api.bot.qq.com；测试指向 httptest 模拟平台。
+func qqAPIBaseOverride() string {
+	return strings.TrimSpace(os.Getenv("QQ_API_BASE_URL"))
+}
+
 // SendMessage 出站发送 AI 回复。
 // convID 为群 openid（群聊回复）或单聊 openid；msgID 为被回复的原消息 ID（被动回复关联）。
 func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, convID, msgID, content string) error {
@@ -181,7 +189,11 @@ func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, 
 	if err != nil {
 		return fmt.Errorf("get qq account: %w", err)
 	}
-	cli := qq.NewClient(acc.AppID, acc.AppSecret, core.WithHTTPClient(httpclient.Client))
+	opts := []core.ClientOption{core.WithHTTPClient(httpclient.Client)}
+	if base := qqAPIBaseOverride(); base != "" {
+		opts = append(opts, core.WithBaseURL(base))
+	}
+	cli := qq.NewClient(acc.AppID, acc.AppSecret, opts...)
 	target := qq.SendTarget{MsgID: msgID, MsgSeq: s.nextMsgSeq(msgID)}
 	if isQQGroupConversation(convID) {
 		target.GroupOpenID = convID
