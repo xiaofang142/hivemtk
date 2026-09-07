@@ -60,15 +60,17 @@ LLAMACPP_BIN="$(detect_llamacpp_bin)"
 : "${EMBEDDING_PORT:=8208}"
 : "${RERANK_PORT:=8209}"
 
-# ---- LLM 引擎：llamacpp（默认，GGUF）| mlx（Apple Silicon，SmolLM3-3B 4bit）----
+# ---- LLM 引擎：统一 llama.cpp（GGUF）——
+# 2026-09-07 移除 MLX 引擎（SmolLM3-3B MLX safetensors 已废弃）
+# Apple Silicon 上 llama-server + GGUF 质量/兼容性更优
 : "${LLM_ENGINE:=llamacpp}"
-# MLX 引擎专属参数（仅 LLM_ENGINE=mlx 时生效，均由 mlx/server.py 读取）
-: "${MLX_MODEL:=$HIVEMTK_MODELS_DIR/llm/SmolLM3-3B-4bit-mlx}"
-: "${MLX_MAX_TOKENS:=1024}"
-: "${MLX_ENABLE_THINKING:=false}"
-: "${MLX_HOST:=0.0.0.0}"
-: "${MLX_STATS_DIR:=$HIVEMTK_RUNTIME_DIR/mlx-stats}"
-: "${MLX_PYTHON:=}"   # 留空自动探测 python3；虚拟环境可指定绝对路径
+# MLX 引擎已废弃，保留变量名避免 .env 解析报错，但设为空
+MLX_MODEL=""
+MLX_MAX_TOKENS=1024
+MLX_ENABLE_THINKING=false
+MLX_HOST=0.0.0.0
+MLX_STATS_DIR="${HIVEMTK_RUNTIME_DIR}/mlx-stats"
+MLX_PYTHON=""
 export MLX_MODEL MLX_MAX_TOKENS MLX_ENABLE_THINKING MLX_HOST MLX_STATS_DIR MLX_PYTHON
 
 # ---- 推理参数 ----
@@ -93,14 +95,11 @@ fi
 : "${CACHE_REUSE:=128}"
 
 # ---- 推测解码 ----
-: "${LLM_DRAFT_REPO:=Qwen/Qwen2.5-0.5B-Instruct-GGUF}"
-if [[ "$HIVEMTK_PROFILE" == "prod" ]]; then
-  : "${SPEC_TYPE:=draft-simple}"
-  : "${LLM_DRAFT_FILE:=qwen2.5-0.5b-instruct-q4_k_m.gguf}"
-else
-  : "${SPEC_TYPE:=ngram-cache}"
-  : "${LLM_DRAFT_FILE:=}"
-fi
+# 2026-09-07 禁用：16GB Mac 上 7B Q4 已占 4.4G，加 draft 模型争内存得不偿失
+# 将来 32GB+ prod 工作站可重新启用（需先下载 LLM_DRAFT_FILE）
+LLM_DRAFT_REPO=""
+SPEC_TYPE="none"
+LLM_DRAFT_FILE=""
 : "${SPEC_DRAFT_N_MAX:=5}"
 : "${SPEC_NGRAM_SIMPLE_N:=64}"
 : "${SPEC_NGRAM_SIMPLE_M:=4}"

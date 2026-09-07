@@ -18,6 +18,7 @@ type SLAService struct {
 	ticker     *time.Ticker
 	violations chan *model.SLAViolation
 	stopCh     chan struct{}
+	stopOnce   sync.Once
 	db         *gorm.DB
 }
 
@@ -70,7 +71,8 @@ func (s *SLAService) Stop() {
 	if s.ticker != nil {
 		s.ticker.Stop()
 	}
-	close(s.stopCh)
+	// 防重复 close panic（main defer 与 panic 路径可能双重调用）
+	s.stopOnce.Do(func() { close(s.stopCh) })
 }
 
 func (s *SLAService) checkAll(ctx context.Context) error {

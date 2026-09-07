@@ -25,7 +25,7 @@ export const getRatingLabel = (v) => {
   return RATING_LABEL_MAP[v] || String(v)
 }
 
-export const getRatingTagType = (v) => RATING_TAG_TYPE_MAP[v] || ''
+export const getRatingTagType = (v) => RATING_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   RATING_OPTIONS,

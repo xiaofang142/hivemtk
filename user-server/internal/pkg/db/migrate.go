@@ -104,6 +104,8 @@ func allModels() []any {
 		&model.WeComTag{},
 		&model.TelegramAccount{},
 		&model.QQAccount{},
+		&model.TelegramGroupGate{},
+		&model.TelegramGroupMember{},
 		&model.FeishuAccount{},
 		&model.FeishuCustomer{},
 		&model.FeishuMessage{},

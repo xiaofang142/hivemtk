@@ -109,6 +109,10 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, req *ResetPass
 	if err != nil {
 		return err
 	}
+	// 初始超管（id=1）密码受系统级保护，不允许通过邮件重置流程修改
+	if token.UserID == strconv.FormatUint(uint64(initialAdminID), 10) {
+		return ErrInitialAdminProtected
+	}
 	policySvc := NewPasswordPolicyService()
 	uid, _ := strconv.ParseUint(token.UserID, 10, 64)
 	if err := policySvc.ValidatePassword(ctx, req.NewPassword, uint(uid)); err != nil {

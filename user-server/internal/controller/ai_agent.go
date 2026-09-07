@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -117,37 +118,39 @@ func (ctrl *AIAgentController) Get(c *gin.Context) {
 }
 
 type aiAgentCreateReq struct {
-	AgentCode            string                  `json:"agent_code" binding:"required"`
-	Name                 string                  `json:"name" binding:"required"`
-	Description          string                  `json:"description"`
-	Avatar               string                  `json:"avatar"`
-	AgentType            string                  `json:"agent_type"`
-	Persona              string                  `json:"persona" binding:"required"`
-	SystemPrompt         string                  `json:"system_prompt"`
-	Greeting             string                  `json:"greeting"`
-	RagProductIDs        []string                `json:"rag_product_ids"`
-	FAQEntryIDs          []string                `json:"faq_entry_ids"`
-	SOPTemplateIDs       []string                `json:"sop_template_ids"`
-	SOPIDs               []string                `json:"sop_ids"`
-	ScriptLibraryIDs     []string                `json:"script_library_ids"`
-	LLMModel             string                  `json:"llm_model"`
-	LLMProviderConfig    model.LLMProviderConfig `json:"llm_provider_config"`
-	Temperature          float64                 `json:"temperature"`
-	MaxTokens            int                     `json:"max_tokens"`
-	TopP                 float64                 `json:"top_p"`
-	FrequencyPenalty     float64                 `json:"frequency_penalty"`
-	PresencePenalty      float64                 `json:"presence_penalty"`
-	EnableRAG            bool                    `json:"enable_rag"`
-	EnableScriptMatch    bool                    `json:"enable_script_match"`
-	EnableHumanizePolish bool                    `json:"enable_humanize_polish"`
-	EnableContentAudit   bool                    `json:"enable_content_audit"`
-	EnablePlaybook       bool                    `json:"enable_playbook"`
-	RAGTopK              int                     `json:"rag_top_k"`
-	ConfidenceThreshold  float64                 `json:"confidence_threshold"`
-	MaxAIConsecutive     int                     `json:"max_ai_consecutive"`
-	Status               int                     `json:"status"`
-	InternalLanguage     string                  `json:"internal_language"`
-	TargetLanguage       string                  `json:"target_language"`
+        AgentCode            string                  `json:"agent_code" binding:"required"`
+        Name                 string                  `json:"name" binding:"required"`
+        Description          string                  `json:"description"`
+        Avatar               string                  `json:"avatar"`
+        AgentType            string                  `json:"agent_type"`
+        AgentMode            string                  `json:"agent_mode"`
+        Persona              string                  `json:"persona" binding:"required"`
+        SystemPrompt         string                  `json:"system_prompt"`
+        Greeting             string                  `json:"greeting"`
+        AssetBundleID        string                  `json:"asset_bundle_id"`
+        RagProductIDs        []string                `json:"rag_product_ids"`
+        FAQEntryIDs          []string                `json:"faq_entry_ids"`
+        SOPTemplateIDs       []string                `json:"sop_template_ids"`
+        SOPIDs               []string                `json:"sop_ids"`
+        ScriptLibraryIDs     []string                `json:"script_library_ids"`
+        LLMModel             string                  `json:"llm_model"`
+        LLMProviderConfig    model.LLMProviderConfig `json:"llm_provider_config"`
+        Temperature          float64                 `json:"temperature"`
+        MaxTokens            int                     `json:"max_tokens"`
+        TopP                 float64                 `json:"top_p"`
+        FrequencyPenalty     float64                 `json:"frequency_penalty"`
+        PresencePenalty      float64                 `json:"presence_penalty"`
+        EnableRAG            bool                    `json:"enable_rag"`
+        EnableScriptMatch    bool                    `json:"enable_script_match"`
+        EnableHumanizePolish bool                    `json:"enable_humanize_polish"`
+        EnableContentAudit   bool                    `json:"enable_content_audit"`
+        EnablePlaybook       bool                    `json:"enable_playbook"`
+        RAGTopK              int                     `json:"rag_top_k"`
+        ConfidenceThreshold  float64                 `json:"confidence_threshold"`
+        MaxAIConsecutive     int                     `json:"max_ai_consecutive"`
+        Status               int                     `json:"status"`
+        InternalLanguage     string                  `json:"internal_language"`
+        TargetLanguage       string                  `json:"target_language"`
 }
 
 func (ctrl *AIAgentController) Create(c *gin.Context) {
@@ -162,9 +165,11 @@ func (ctrl *AIAgentController) Create(c *gin.Context) {
 		Description:          req.Description,
 		Avatar:               req.Avatar,
 		AgentType:            req.AgentType,
+		AgentMode:            req.AgentMode,
 		Persona:              req.Persona,
 		SystemPrompt:         req.SystemPrompt,
 		Greeting:             req.Greeting,
+		AssetBundleID:        req.AssetBundleID,
 		RagProductIDs:        req.RagProductIDs,
 		FAQEntryIDs:          req.FAQEntryIDs,
 		SOPTemplateIDs:       req.SOPTemplateIDs,
@@ -260,8 +265,8 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("agent_type") && req.AgentType != "" {
 		existing.AgentType = req.AgentType
 	}
-	if hasKey("persona") && req.Persona != "" {
-		existing.Persona = req.Persona
+	if hasKey("agent_mode") && req.AgentMode != "" {
+		existing.AgentMode = req.AgentMode
 	}
 	if hasKey("description") {
 		existing.Description = req.Description
@@ -269,11 +274,17 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("avatar") {
 		existing.Avatar = req.Avatar
 	}
+	if hasKey("persona") && req.Persona != "" {
+		existing.Persona = req.Persona
+	}
 	if hasKey("system_prompt") {
 		existing.SystemPrompt = req.SystemPrompt
 	}
 	if hasKey("greeting") {
 		existing.Greeting = req.Greeting
+	}
+	if hasKey("asset_bundle_id") {
+		existing.AssetBundleID = req.AssetBundleID
 	}
 	if hasKey("rag_product_ids") {
 		existing.RagProductIDs = req.RagProductIDs
@@ -461,10 +472,11 @@ func NewChannelAgentBindingControllerWithService(svc *service.ChannelAgentBindin
 func (ctrl *ChannelAgentBindingController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/channel-agent-bindings")
 	{
+		// 绑定关系只读对 staff 开放（aiAgent List 页展示），写操作仅 admin/manager（对齐 chatChannel 菜单 roles）
 		g.GET("", ctrl.List)
-		g.POST("", ctrl.Create)
-		g.PUT("/:id", ctrl.Update)
-		g.DELETE("/:id", ctrl.Delete)
+		g.POST("", middleware.ManagerOrAdminMiddleware(), ctrl.Create)
+		g.PUT("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Update)
+		g.DELETE("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Delete)
 		g.GET("/by-agent/:agent_id", ctrl.ListByAgent)
 	}
 }
@@ -503,6 +515,9 @@ type channelBindingReq struct {
 	ChannelType string `json:"channel_type" binding:"required"`
 	AccountID   string `json:"account_id" binding:"required"`
 	AgentID     uint   `json:"agent_id" binding:"required"`
+	ChatID      string `json:"chat_id"`                  // 群组/会话 ID（空=account 级默认绑定）
+	ChatType    string `json:"chat_type"`                // group | dm | thread（可选）
+	Priority    int    `json:"priority"`                 // 手动优先级，高优先匹配
 	// PATCH 语义：nil = 未传 = Update 保留原值 / Create 走默认
 	IsPrimary *bool `json:"is_primary"`
 	Enabled   *bool `json:"enabled"`
@@ -518,6 +533,9 @@ func (ctrl *ChannelAgentBindingController) Create(c *gin.Context) {
 		ChannelType: service.NormalizeChannelType(req.ChannelType),
 		AccountID:   req.AccountID,
 		AgentID:     req.AgentID,
+		ChatID:      req.ChatID,
+		ChatType:    req.ChatType,
+		Priority:    req.Priority,
 		Enabled:     true,
 	}
 	if req.IsPrimary != nil {
@@ -552,6 +570,10 @@ func (ctrl *ChannelAgentBindingController) Update(c *gin.Context) {
 	existing.ChannelType = service.NormalizeChannelType(req.ChannelType)
 	existing.AccountID = req.AccountID
 	existing.AgentID = req.AgentID
+	// chat_id/chat_type/priority 允许修改（群组路由调整场景）
+	existing.ChatID = req.ChatID
+	existing.ChatType = req.ChatType
+	existing.Priority = req.Priority
 	// PATCH 语义：未传保留原值，防止漏字段把绑定意外停用
 	if req.IsPrimary != nil {
 		existing.IsPrimary = *req.IsPrimary

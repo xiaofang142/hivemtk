@@ -106,7 +106,10 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 	}
 
 	if s.db != nil && acc.ID > 0 {
-		_ = s.db.WithContext(ctx).Model(acc).UpdateColumn("daily_used", gorm.Expr("daily_used + 1")).Error
+		// 配额计数自增失败不阻断发信，但必须留痕：静默漂移会导致超额发送
+		if err := s.db.WithContext(ctx).Model(acc).UpdateColumn("daily_used", gorm.Expr("daily_used + 1")).Error; err != nil {
+			logger.Warnf("[email] daily_used 自增失败 account=%d（配额计数漂移）: %v", acc.ID, err)
+		}
 	}
 
 	if s.hub != nil {

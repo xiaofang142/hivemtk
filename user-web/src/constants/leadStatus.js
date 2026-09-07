@@ -38,7 +38,7 @@ export const getLeadStatusLabel = (value) => {
   return LEAD_STATUS_LABEL_MAP[value] || String(value)
 };
 
-export const getLeadStatusTagType = (value) => LEAD_STATUS_TAG_TYPE_MAP[value] || '';
+export const getLeadStatusTagType = (value) => LEAD_STATUS_TAG_TYPE_MAP[value] || 'info';
 
 export const filterLeadStatusByGroup = (groups) => {
   const list = Array.isArray(groups) ? groups : [groups]

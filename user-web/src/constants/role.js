@@ -10,7 +10,7 @@ export const ROLE_OPTIONS = Object.freeze([
   },
   { value: 'admin',      label: '管理员',  tagType: 'warning', group: 'team',     description: '团队/社区管理员' },
   { value: 'staff',      label: '员工',    tagType: 'info',    group: 'team',     description: '普通员工（可登录）' },
-  { value: 'supervisor', label: '主管',    tagType: '',        group: 'team',     description: '客服/销售主管' },
+  { value: 'supervisor', label: '主管',    tagType: 'info',        group: 'team',     description: '客服/销售主管' },
   { value: 'agent',      label: '坐席',    tagType: 'primary', group: 'team',     description: '客服坐席' },
   { value: 'member',     label: '成员',    tagType: 'info',    group: 'team',     description: '普通成员' },
   { value: 'guest',      label: '访客',    tagType: 'info',    group: 'team',     description: '只读访客' },
@@ -22,7 +22,7 @@ export const ROLE_OPTIONS = Object.freeze([
     description: '终端用户/客户'
   },
   { value: 'ai',         label: 'AI',      tagType: 'primary', group: 'message',  description: 'AI 智能体' },
-  { value: 'system',     label: '系统',    tagType: '',        group: 'message',  description: '系统消息' },
+  { value: 'system',     label: '系统',    tagType: 'info',        group: 'message',  description: '系统消息' },
   {
     value: 'customer_service',
     label: '客服',

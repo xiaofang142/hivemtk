@@ -28,14 +28,31 @@ var globalBruteForce = &bruteForceProtector{
 	entries: make(map[string]*bruteForceEntry),
 }
 
-var bruteForceJanitorOnce sync.Once
+var (
+	bruteForceJanitorOnce sync.Once
+	bruteForceJanitorStop = make(chan struct{})
+)
+
+// StopBruteForceJanitor 停止清理协程（优雅退出 / 测试清理用，重复调用安全）
+func StopBruteForceJanitor() {
+	select {
+	case <-bruteForceJanitorStop:
+	default:
+		close(bruteForceJanitorStop)
+	}
+}
 
 func startBruteForceJanitor() {
 	bruteForceJanitorOnce.Do(func() {
 		go func() {
 			ticker := time.NewTicker(10 * time.Minute)
 			defer ticker.Stop()
-			for range ticker.C {
+			for {
+				select {
+				case <-bruteForceJanitorStop:
+					return
+				case <-ticker.C:
+				}
 				now := time.Now()
 				globalBruteForce.mu.Lock()
 				for k, e := range globalBruteForce.entries {

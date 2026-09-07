@@ -221,6 +221,73 @@ func (r *ChannelAgentBindingRepository) ListByAgentID(ctx context.Context, agent
 	return list, nil
 }
 
+// ResolveBinding 按优先级路由查找渠道+账号+会话的最佳绑定
+//
+// 匹配优先级（从高到低）：
+//  1. chat_id 精确匹配  + priority DESC（最具体）
+//  2. chat_id IS NULL（account 级默认）+ priority DESC
+//  3. is_primary=true 兜底
+//
+// 返回 nil, nil 表示未绑定
+//
+// 实现策略：两次参数化查询（先精确后默认），避免 OR 条件导致 Seq Scan + 消除 SQL 注入风险。
+func (r *ChannelAgentBindingRepository) ResolveBinding(ctx context.Context, channelType, accountID, chatID string) (*model.ChannelAgentBinding, error) {
+	// Step 1: chat_id 精确匹配 + 高 priority
+	if chatID != "" {
+		var b model.ChannelAgentBinding
+		err := r.db.WithContext(ctx).
+			Where("channel_type = ? AND account_id = ? AND chat_id = ? AND enabled = ?",
+				channelType, accountID, chatID, true).
+			Order("priority DESC").
+			Order("is_primary DESC").
+			Order("id DESC").
+			Limit(1).
+			First(&b).Error
+		if err == nil {
+			return &b, nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+	}
+
+	// Step 2: chat_id IS NULL 的 account 级默认绑定
+	{
+		var b model.ChannelAgentBinding
+		err := r.db.WithContext(ctx).
+			Where("channel_type = ? AND account_id = ? AND chat_id IS NULL AND enabled = ?",
+				channelType, accountID, true).
+			Order("priority DESC").
+			Order("is_primary DESC").
+			Order("id DESC").
+			Limit(1).
+			First(&b).Error
+		if err == nil {
+			return &b, nil
+		}
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+}
+
+// GetBindingByChatID 按渠道+账号+chat_id 精确查询（不含默认绑定）
+func (r *ChannelAgentBindingRepository) GetBindingByChatID(ctx context.Context, channelType, accountID, chatID string) (*model.ChannelAgentBinding, error) {
+	var b model.ChannelAgentBinding
+	err := r.db.WithContext(ctx).Where(
+		"channel_type = ? AND account_id = ? AND chat_id = ? AND enabled = ?",
+		channelType, accountID, chatID, true,
+	).First(&b).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &b, nil
+}
+
 // Update 更新绑定
 func (r *ChannelAgentBindingRepository) Update(ctx context.Context, b *model.ChannelAgentBinding) error {
 	return r.db.Save(b).Error

@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -397,5 +398,104 @@ func TestSendMessage_ExhaustedRetries(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&attempts); got != 3 {
 		t.Errorf("expected 3 attempts (max), got %d", got)
+	}
+}
+
+// ChatJoinRequest / chat_member 更新必须能被 ParseUpdate 正确解析（此前这两个字段
+// 缺失导致方案 A 入口完全失灵，update 被静默丢弃）
+func TestParseUpdateChatJoinRequest(t *testing.T) {
+	raw := []byte(`{
+		"update_id": 1001,
+		"chat_join_request": {
+			"chat": {"id": -1001234567890, "title": "测试群", "type": "supergroup"},
+			"from": {"id": 555, "first_name": "小芳", "username": "xf_user", "is_bot": false},
+			"user_chat_id": 555
+		}
+	}`)
+	u, err := ParseUpdate(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if u.ChatJoinRequest == nil {
+		t.Fatal("ChatJoinRequest 未解析")
+	}
+	if u.ChatJoinRequest.From == nil || u.ChatJoinRequest.From.ID != 555 {
+		t.Fatalf("from 错误: %+v", u.ChatJoinRequest.From)
+	}
+	if u.ChatJoinRequest.Chat.ID != -1001234567890 {
+		t.Fatalf("chat id 错误: %d", u.ChatJoinRequest.Chat.ID)
+	}
+}
+
+func TestParseUpdateChatMemberUpdated(t *testing.T) {
+	raw := []byte(`{
+		"update_id": 1002,
+		"chat_member": {
+			"chat": {"id": -100123, "type": "supergroup"},
+			"from": {"id": 1, "first_name": "a"},
+			"old_chat_member": {"status": "left", "user": {"id": 9}},
+			"new_chat_member": {"status": "restricted", "user": {"id": 9}, "until_date": 1800000000}
+		}
+	}`)
+	u, err := ParseUpdate(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if u.ChatMember == nil || u.ChatMember.NewChatMember == nil {
+		t.Fatal("ChatMember 未解析")
+	}
+	if u.ChatMember.NewChatMember.Status != "restricted" {
+		t.Fatalf("status: %s", u.ChatMember.NewChatMember.Status)
+	}
+}
+
+func TestParseUpdateMessageStillWorks(t *testing.T) {
+	raw := []byte(`{"update_id": 1003, "message": {"message_id": 7, "from": {"id": 42, "first_name": "u"}, "chat": {"id": 42, "type": "private"}, "text": "/start abc"}}`)
+	u, err := ParseUpdate(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if u.Message == nil || u.Message.Text != "/start abc" {
+		t.Fatalf("message 解析回退失败: %+v", u.Message)
+	}
+}
+
+// RestrictChatMember 权限全关 + UnrestrictChatMember 恢复：方案 B 禁言/解禁的协议正确性
+func TestRestrictAndUnrestrictPayload(t *testing.T) {
+	var muPayload map[string]any
+	var unPayload map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(body)
+		if strings.Contains(r.URL.Path, "restrictChatMember") {
+			if strings.Contains(string(body), `"can_send_messages":true`) {
+				_ = json.Unmarshal(body, &unPayload)
+			} else {
+				_ = json.Unmarshal(body, &muPayload)
+			}
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{token: "t", apiBase: srv.URL}
+	c.BaseClient = core.NewBaseClient(core.WithTimeout(5 * time.Second))
+
+	if err := c.RestrictChatMember(t.Context(), -100, 42, 0); err != nil {
+		t.Fatalf("restrict: %v", err)
+	}
+	if muPayload["until_date"] == float64(0) || muPayload["until_date"] == nil {
+		t.Errorf("永久禁言应带兜底 until_date: %v", muPayload["until_date"])
+	}
+	if perms, ok := muPayload["permissions"].(map[string]any); !ok || perms["can_send_messages"] != false {
+		t.Errorf("禁言权限应全关: %v", muPayload["permissions"])
+	}
+
+	if err := c.UnrestrictChatMember(t.Context(), -100, 42); err != nil {
+		t.Fatalf("unrestrict: %v", err)
+	}
+	if perms, ok := unPayload["permissions"].(map[string]any); !ok || perms["can_send_messages"] != true {
+		t.Errorf("解禁应恢复发言权限: %v", unPayload["permissions"])
 	}
 }

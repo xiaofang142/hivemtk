@@ -111,6 +111,9 @@
               <el-button style="margin-left: 8px" @click="resetPipeFilter">{{ $t('重置') }}</el-button>
               <el-button type="warning" plain @click="resetRateLimit">{{ $t('重置限流') }}</el-button>
             </div>
+            <el-button style="margin-left: 8px" @click="$router.push('/reachPipeline/editor')">
+              <el-icon><Share /></el-icon>&nbsp;可视化编辑器
+            </el-button>
             <el-button type="primary" @click="openCreatePipe">
               <el-icon><Plus /></el-icon>&nbsp;新建 Pipeline
             </el-button>
@@ -584,7 +587,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Connection, VideoPlay, VideoPause, FolderOpened, List,
-  CircleCheck, CircleClose, Timer, Warning
+  CircleCheck, CircleClose, Timer, Warning, Share
 } from '@element-plus/icons-vue'
 import { reachPipelineApi } from '@/api/reachPipeline.js'
 import { CHANNEL_OPTIONS, getChannelLabel } from '@/constants/channel'

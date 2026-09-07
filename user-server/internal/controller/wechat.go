@@ -237,7 +237,8 @@ func (c *WechatController) ReceiveMessage(ctx *gin.Context) {
 	}
 
 	if err := c.svc.SaveIncomingMessage(ctx.Request.Context(), uint(accountID), msg, body); err != nil {
-
+		// 入站消息落库失败不能吞：微信侧不重推，丢了就永久丢
+		logger.Errorf("wechat: SaveIncomingMessage 失败 account=%d msg_type=%s: %v", accountID, msg.MsgType, err)
 	}
 
 	ctx.String(http.StatusOK, c.svc.BuildEmptyReply())

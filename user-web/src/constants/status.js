@@ -28,7 +28,7 @@ export const EXPERIMENT_STATUS = Object.freeze([
   { value: 'draft',     label: '草稿',       tagType: 'info',    sort: 1, group: 'experiment' },
   { value: 'running',   label: '进行中',     tagType: 'success', sort: 2, group: 'experiment' },
   { value: 'paused',    label: '已暂停',     tagType: 'warning', sort: 3, group: 'experiment' },
-  { value: 'completed', label: '已完成',     tagType: '',        sort: 4, group: 'experiment' },
+  { value: 'completed', label: '已完成',     tagType: 'info',        sort: 4, group: 'experiment' },
   { value: 'archived',  label: '已归档',     tagType: 'info',    sort: 5, group: 'experiment' }
 ])
 
@@ -111,7 +111,7 @@ export const SEGMENT_TYPE = Object.freeze([
   { value: 'auto',    label: '自动分群',   tagType: 'primary', sort: 1, group: 'segment' },
   { value: 'manual',  label: '手动分群',   tagType: 'info',    sort: 2, group: 'segment' },
   { value: 'dynamic', label: '动态分群',   tagType: 'success', sort: 3, group: 'segment' },
-  { value: 'static',  label: '静态分群',   tagType: '',        sort: 4, group: 'segment' }
+  { value: 'static',  label: '静态分群',   tagType: 'info',        sort: 4, group: 'segment' }
 ]);
 
 export const buildStatusMaps = (arr) => {

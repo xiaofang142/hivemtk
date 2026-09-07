@@ -40,5 +40,11 @@ export default [
     name: 'EmailDeliverability',
     component: () => import('@/views/email/Deliverability.vue'),
     meta: { title: '送达分析', group: 'email', icon: 'DataAnalysis', requiresAuth: true }
+  },
+  {
+    path: '/email/drag-editor',
+    name: 'EmailDragEditor',
+    component: () => import('@/views/email/DragEditor.vue'),
+    meta: { title: '拖拽编辑器', group: 'reach', icon: 'EditPen', requiresAuth: true }
   }
 ]

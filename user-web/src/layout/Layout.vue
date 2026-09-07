@@ -225,6 +225,8 @@ const topMenus = ref([
     roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
     children: [
       { key: 'messageHub', title: '消息中台 MQ', icon: 'MessageBox', path: '/messageHub/list', roles: ['admin', 'manager'] },
+      { key: 'messageHubDashboard', title: '消息中台看板', icon: 'DataBoard', path: '/messageHub/dashboard', roles: ['admin', 'manager'] },
+      { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]
   },
@@ -236,6 +238,7 @@ const topMenus = ref([
     children: [
       { key: 'clueList', title: '线索列表', icon: 'Document', path: '/clue/list' },
       { key: 'clueStatistics', title: '线索统计', icon: 'DataAnalysis', path: '/clue/statistics' },
+      { key: 'leadMining', title: '线索挖掘', icon: 'Search', path: '/lead-mining/index' },
       { key: 'customer360', title: '客户 360', icon: 'UserFilled', path: '/customer360/list' },
       { key: 'customerEvent', title: '客户事件', icon: 'Bell', path: '/customerEvent/list' },
       { key: 'tagSegmentation', title: '标签分层', icon: 'PriceTag', path: '/tagSegmentation/list', roles: ['admin', 'manager', 'viewer'] },
@@ -252,6 +255,18 @@ const topMenus = ref([
             title: 'OneID 列表',
             icon: 'List',
             path: '/oneid/list'
+          },
+          {
+            key: 'oneidConflicts',
+            title: '身份冲突解决',
+            icon: 'Warning',
+            path: '/oneid/conflicts'
+          },
+          {
+            key: 'oneidMergeRules',
+            title: '合并规则配置',
+            icon: 'Setting',
+            path: '/oneid/merge-rules'
           }
         ]
       }
@@ -305,9 +320,11 @@ const topMenus = ref([
         children: [
           { key: 'sopAgent', title: 'SOP 智能体', icon: 'Connection', path: '/sopAgent/list' },
           { key: 'sopTemplate', title: 'SOP 模板库', icon: 'Tickets', path: '/sop-template/list' },
+          { key: 'sopTemplateMarket', title: 'SOP 模板市场', icon: 'ShoppingCart', path: '/sop-template/market' },
           { key: 'faqKb', title: 'FAQ 知识库', icon: 'Notebook', path: '/faq/list' },
           { key: 'knowledgeBase', title: '知识库管理', icon: 'Files', path: '/knowledgeBase' },
           { key: 'scriptTemplate', title: '销冠话术库', icon: 'ChatLineSquare', path: '/scriptTemplate/list' },
+          { key: 'scriptTemplateAbStats', title: '话术 AB 统计', icon: 'DataLine', path: '/scriptTemplate/ab-stats' },
           { key: 'aiToolManagement', title: 'AI 工具管理', icon: 'Tools', path: '/aiAgent/tools' }
         ]
       },
@@ -318,6 +335,7 @@ const topMenus = ref([
         roles: ['admin', 'manager', 'sales', 'customer_service'],
         children: [
           { key: 'agentStatus', title: '坐席状态', icon: 'Headset', path: '/customerService/agentStatus' },
+          { key: 'csatDashboard', title: 'CSAT 看板', icon: 'Star', path: '/customerService/csat' },
           { key: 'quickReply', title: '快捷回复', icon: 'ChatLineSquare', path: '/customerService/quickReply' },
           { key: 'sessionTag', title: '会话标签', icon: 'CollectionTag', path: '/customerService/sessionTag' },
           { key: 'aiSuggestion', title: 'AI 建议', icon: 'MagicStick', path: '/customerService/aiSuggestion' }
@@ -329,7 +347,10 @@ const topMenus = ref([
         icon: 'Connection',
         roles: ['admin', 'manager'],
         children: [
-          { key: 'chatChannelList', title: '客服渠道', icon: 'Connection', path: '/chatChannel/list' }
+          { key: 'chatChannelList', title: '客服渠道', icon: 'Connection', path: '/chatChannel/list' },
+          { key: 'whatsappCloud', title: 'WhatsApp Cloud', icon: 'Connection', path: '/whatsapp-cloud' },
+          { key: 'dingtalkApp', title: '钉钉应用账号', icon: 'Connection', path: '/dingtalk-app' },
+          { key: 'cardsCrossPublish', title: '跨平台发布', icon: 'Share', path: '/cards/cross-publish' }
         ]
       },
       {
@@ -360,6 +381,7 @@ const topMenus = ref([
           { key: 'emailJobs', title: '我的任务', icon: 'Document', path: '/email/jobs' },
           { key: 'emailSmtp', title: '邮件账号', icon: 'Setting', path: '/email/smtp' },
           { key: 'emailInfo', title: '邮件代理', icon: 'Setting', path: '/email/info' },
+          { key: 'emailDeliverability', title: '送达分析', icon: 'DataAnalysis', path: '/email/deliverability' },
           { key: 'emailGuide', title: '邮件使用指南', icon: 'Document', path: '/email/guide' }
         ]
       },
@@ -426,7 +448,10 @@ const topMenus = ref([
         children: [
           { key: 'whatsappAccount', title: '账号管理', icon: 'Cpu', path: '/whatsapp/account' },
           { key: 'whatsappDrafts', title: '草稿箱', icon: 'Document', path: '/whatsapp/drafts' },
-          { key: 'whatsappJobs', title: '群发', icon: 'Promotion', path: '/whatsapp/jobs' }
+          { key: 'whatsappJobs', title: '群发', icon: 'Promotion', path: '/whatsapp/jobs' },
+          { key: 'whatsappLeadGroup', title: '群发线索分组', icon: 'UserFilled', path: '/whatsapp/lead-group-selection' },
+          { key: 'whatsappBulkMatrix', title: '群发统计矩阵', icon: 'Grid', path: '/whatsapp/bulk-matrix' },
+          { key: 'whatsappGroupMessaging', title: '群发矩阵', icon: 'Grid', path: '/whatsapp/group-messaging' }
         ]
       },
       {
@@ -488,7 +513,9 @@ const topMenus = ref([
           { key: 'knowledgeTokens', title: 'API Token', icon: 'Key', path: '/knowledge/tokens' },
           { key: 'knowledgeExternal', title: '外部系统接入', icon: 'Connection', path: '/knowledge/external' },
           { key: 'knowledgeStatistics', title: '知识库统计', icon: 'DataAnalysis', path: '/knowledge/statistics' },
-          { key: 'knowledgeOpenAPI', title: 'OpenAPI 集成', icon: 'Connection', path: '/knowledge/openapi' }
+          { key: 'knowledgeRagEval', title: 'RAG 评测', icon: 'CircleCheck', path: '/knowledge/rag-eval' },
+          { key: 'knowledgeOpenAPI', title: 'OpenAPI 集成', icon: 'Connection', path: '/knowledge/openapi' },
+          { key: 'knowledgeConnectors', title: '连接器配置', icon: 'Link', path: '/knowledge/connectors' }
         ]
       },
       {
@@ -528,6 +555,10 @@ const topMenus = ref([
       { key: 'abExperiment', title: 'A/B 实验', icon: 'DataLine', path: '/abExperiment/list', roles: ['admin', 'manager', 'viewer'] },
       { key: 'churnPrediction', title: '流失预警', icon: 'Warning', path: '/churnPrediction/list', roles: ['admin', 'manager', 'viewer'] },
       { key: 'customerJourney', title: '客户旅程大屏', icon: 'TrendCharts', path: '/customerJourney/dashboard', roles: ['admin', 'manager', 'sales', 'viewer'] },
+      { key: 'cohortPath', title: '同期群路径分析', icon: 'Guide', path: '/analytics/cohort-path', roles: ['admin', 'manager', 'viewer'] },
+      { key: 'confidencePanel', title: '置信度看板', icon: 'CircleCheck', path: '/confidence/panel', roles: ['admin', 'manager', 'viewer'] },
+      { key: 'humanizePanel', title: '拟人度看板', icon: 'MagicStick', path: '/humanize/panel', roles: ['admin', 'manager', 'viewer'] },
+      { key: 'feedbackLoopPanel', title: '反馈闭环', icon: 'Refresh', path: '/feedbackLoop/panel', roles: ['admin', 'manager', 'viewer'] },
       {
         key: 'geoTools',
         title: 'GEO 智能优化',
@@ -565,8 +596,9 @@ const topMenus = ref([
               { key: 'geoCrawlerStats', title: '爬虫统计', icon: 'Monitor', path: '/geo-tools/crawler-stats' },
               { key: 'geoEntityGraph', title: '实体图谱', icon: 'Share', path: '/geo-tools/entity-graph' },
               { key: 'geoVerification', title: '多模型验证', icon: 'CircleCheck', path: '/geo-tools/verification' },
-              { key: 'geoAlertCenter', title: '告警中心', icon: 'Bell', path: '/geo-tools/alerts' },
+              { key: 'geoAlerts', title: '预警中心', icon: 'Bell', path: '/geo-tools/alerts' },
               { key: 'geoReports', title: '数据报表', icon: 'DataAnalysis', path: '/geo-tools/reports' },
+              { key: 'geoDecisionReport', title: '决策报告', icon: 'Document', path: '/geo/decision-report' },
               { key: 'geoConfig', title: '配置优化', icon: 'Setting', path: '/geo-tools/config' },
             ]
           }
@@ -593,7 +625,11 @@ const topMenus = ref([
           { key: 'systemTrace', title: '链路追踪', icon: 'Connection', path: '/system/trace' },
           { key: 'systemGuide', title: '系统使用指南', icon: 'Document', path: '/system/guide' },
           { key: 'domainPool', title: '域名池', icon: 'Link', path: '/domainPool' },
-          { key: 'backupList', title: '备份恢复', icon: 'FolderOpened', path: '/backup/list' }
+          { key: 'backupList', title: '备份恢复', icon: 'FolderOpened', path: '/backup/list' },
+          { key: 'backupEnhanced', title: '备份高级版', icon: 'FolderChecked', path: '/backup/enhanced' },
+          { key: 'automationCenter', title: '自动化中心', icon: 'Operation', path: '/system/automation-hub', roles: ['admin'] },
+          { key: 'dynamicThreshold', title: '动态阈值参数', icon: 'DataLine', path: '/system/config-params', roles: ['admin'] },
+          { key: 'opsOverview', title: '运维总览', icon: 'Monitor', path: '/ops-overview', roles: ['admin'] }
         ]
       },
       {
@@ -615,6 +651,7 @@ const topMenus = ref([
         children: [
           { key: 'platformAccount', title: '平台账号', icon: 'Platform', path: '/platformAccount/list' },
           { key: 'integration', title: '第三方对接', icon: 'Connection', path: '/integration/list' },
+          { key: 'bridgeToken', title: '桥接凭证', icon: 'Key', path: '/bridge/token' },
           { key: 'operationLog', title: '操作日志', icon: 'Tickets', path: '/operationLog/list' },
           { key: 'securityAudit', title: '安全审计', icon: 'Shield', path: '/securityAudit/list' }
         ]

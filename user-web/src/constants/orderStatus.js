@@ -35,7 +35,7 @@ export const getOrderStatusLabel = (value) => {
   return ORDER_STATUS_LABEL_MAP[value] || String(value)
 };
 
-export const getOrderStatusTagType = (value) => ORDER_STATUS_TAG_TYPE_MAP[value] || '';
+export const getOrderStatusTagType = (value) => ORDER_STATUS_TAG_TYPE_MAP[value] || 'info';
 
 export const filterOrderStatusByGroup = (groups) => {
   const list = Array.isArray(groups) ? groups : [groups]

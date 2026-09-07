@@ -123,17 +123,62 @@ const cockpit = ref({
   intentDistribution: []
 })
 
-function mapHealthToCockpit(h) {
-  const data = h || {}
+/**
+ * 将后端 /api/ai/sales-cockpit 返回的 data 字段适配为前端模板期望的结构。
+ * 后端原始字段（snake_case / 平铺）→ 前端模板字段（camelCase / 语义化）。
+ */
+function adaptCockpit(src) {
+  const s = src || {}
+
+  // 四张能力卡 —— 后端结构已对齐，直接取值
+  const react = s.react || {}
+  const sop = s.sop || {}
+  const rag = s.rag || {}
+  const reach = s.reach || {}
+
+  // LLM 路由：后端 {scenario, provider, calls, avg_latency, total_cost}
+  //          → 前端 {scenario, primary, fallback, qps, errorRate}
+  const llmRoutes = (s.llmRoutes || []).map(r => ({
+    scenario: r.scenario || '—',
+    primary: r.provider || '—',
+    fallback: '—',
+    qps: Number(r.calls || 0).toLocaleString(),
+    errorRate: '0.0%'
+  }))
+
+  // 渠道健康：后端 {platform, status, cnt}
+  //          → 前端 {channel, qpsLimit, qpsUsed, errorRate}
+  const channelHealth = (s.channelHealth || []).map(r => ({
+    channel: r.platform || '—',
+    qpsLimit: 100,
+    qpsUsed: Number(r.cnt || 0),
+    errorRate: '0.0%'
+  }))
+
+  // 意图分布 → echarts pie [{name, value}]
+  const intentDistribution = (s.intentDistribution || []).map(r => ({
+    name: r.intent || '未分类',
+    value: Number(r.cnt || 0)
+  }))
+
+  // Top 工具：后端 {tool_name, calls}
+  //          → 前端 {name, category, calls, avgLatency}
+  const topTools = (s.topTools || []).map(r => ({
+    name: r.tool_name || '—',
+    category: '—',
+    calls: Number(r.calls || 0).toLocaleString(),
+    avgLatency: '—'
+  }))
+
   return {
-    react: { totalRuns: 0 },
-    sop: { executions: 0 },
-    rag: { queries: 0 },
-    reach: { sentToday: Math.round((data.outbound_rate_per_min || 0) * 60 * 24) },
-    llmRoutes: [],
-    channelHealth: [],
-    topTools: [],
-    intentDistribution: []
+    react: { totalRuns: Number(react.totalRuns || 0).toLocaleString() },
+    sop:   { executions: Number(sop.executions || 0).toLocaleString() },
+    rag:   { queries:    Number(rag.queries || 0).toLocaleString() },
+    reach: { sentToday:  Number(reach.sentToday || 0).toLocaleString() },
+    llmRoutes,
+    channelHealth,
+    intentDistribution,
+    topTools
   }
 }
 
@@ -143,7 +188,7 @@ let timer = null
 async function loadCockpit() {
   try {
     const res = await getSalesCockpit()
-    cockpit.value = mapHealthToCockpit(res.data)
+    cockpit.value = adaptCockpit(res.data || res)
     await nextTick()
     renderIntentChart()
   } catch (err) {

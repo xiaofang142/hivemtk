@@ -153,7 +153,9 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 		return
 	}
 
-	parentCtx := context.Background()
+	// 关键：用 ctx 作为 base（保留 TelegramReplyMeta / AgentID 等 values）
+	// 但要避免上游 cancel 提前终止 → 用 context.WithoutCancel
+	parentCtx := context.WithoutCancel(ctx)
 	if c := tracing.CarrierFromContext(ctx); c != nil {
 		parentCtx = tracing.WithCarrier(parentCtx, c)
 	} else if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {
@@ -168,7 +170,7 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 	defer cancel()
 	ctx = logger.WithModule(ctx, "webhook")
 
-	agentCtx, _ := s.loadAgentForChannel(ctx, channel, accountID)
+	agentCtx, _ := s.loadAgentForChannel(ctx, channel, accountID, p.ChatID)
 
 	req := &SalesRequest{
 		SessionID:   p.ChatID,
@@ -200,11 +202,14 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 	s.sendOutbound(ctx, channel, accountID, p, resp.Reply, hubMsg, RichCardsFromDTO(resp.Cards))
 }
 
-func (s *WebhookService) loadAgentForChannel(ctx context.Context, channel WebhookChannel, accountID string) (*AgentContext, error) {
+func (s *WebhookService) loadAgentForChannel(ctx context.Context, channel WebhookChannel, accountID string, chatID ...string) (*AgentContext, error) {
 	if s.agentBindingSvc == nil {
 		return nil, nil
 	}
 	channelType := NormalizeChannelType(string(channel))
+	if len(chatID) > 0 && chatID[0] != "" {
+		return s.agentBindingSvc.LoadAgentForChannel(ctx, channelType, accountID, chatID[0])
+	}
 	return s.agentBindingSvc.LoadAgentForChannel(ctx, channelType, accountID)
 }
 
@@ -234,12 +239,12 @@ func (s *WebhookService) triggerSmartOrchestrator(ctx context.Context, channel W
 		Str("event_id", p.EventID).
 		Msg("[Webhook] triggerSmartOrchestrator start")
 
-	routeCtx := context.Background()
+	routeCtx := context.WithoutCancel(ctx)
 	if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {
 		routeCtx = trace.NewContextWithTraceID(routeCtx, parentTraceID)
 	}
 	routeCtx = logger.WithModule(routeCtx, "webhook")
-	agentCtx, _ := s.loadAgentForChannel(routeCtx, channel, accountID)
+	agentCtx, _ := s.loadAgentForChannel(routeCtx, channel, accountID, p.ChatID)
 
 	in := &IncomingContext{
 		Platform:  model.Platform(channel),
@@ -385,7 +390,13 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		}()
 	}
 
-	const replySemTimeout = 5 * time.Second
+	// replySem 并发限流：正常 5s 超时；商机触发放宽到 30s（高意向不能丢）
+	replySemTimeout := 5 * time.Second
+	replyReason := "normal"
+	if meta := extractTelegramReplyMetaFromCtx(ctx); meta != nil && meta.TriggerReason == "opportunity" {
+		replySemTimeout = 30 * time.Second
+		replyReason = "opportunity"
+	}
 	select {
 	case s.replySem <- struct{}{}:
 		defer func() { <-s.replySem }()
@@ -396,6 +407,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			Str("event_id", p.EventID).
 			Dur("timeout", replySemTimeout).
 			Int("sem_capacity", cap(s.replySem)).
+			Str("trigger_reason", replyReason).
 			Msg("[Webhook] runAIGeneration replySem 满 / 阻塞超时 — 跳过本轮 AI 推理，避免 goroutine 堆积 OOM；依赖下轮 inbound 重试")
 		return
 	case <-ctx.Done():
@@ -403,7 +415,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		return
 	}
 
-	parentCtx := context.Background()
+	parentCtx := context.WithoutCancel(ctx)
 	if c := tracing.CarrierFromContext(ctx); c != nil {
 		parentCtx = tracing.WithCarrier(parentCtx, c)
 	} else if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {

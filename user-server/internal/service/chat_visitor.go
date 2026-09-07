@@ -418,8 +418,21 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 
 	if shouldForceTransferByKeywords(req.Content) {
 		if err := s.sessionSvc.AutoAssign(ctx, session.ID); err != nil {
-			_ = s.sessionRepo.UpdateStatus(ctx, session.ID, model.SessionStatusWaiting)
-			_ = s.sessionRepo.UpdateHandlerType(ctx, session.ID, model.HandlerTypeHuman)
+			logger.Errorf("chat_visitor: AutoAssign 失败 session=%d: %v", session.ID, err)
+			if uErr := s.sessionRepo.UpdateStatus(ctx, session.ID, model.SessionStatusWaiting); uErr != nil {
+				logger.Errorf("chat_visitor: 转等待状态失败 session=%d: %v", session.ID, uErr)
+			}
+			if hErr := s.sessionRepo.UpdateHandlerType(ctx, session.ID, model.HandlerTypeHuman); hErr != nil {
+				logger.Errorf("chat_visitor: 更新处理人类型失败 session=%d: %v", session.ID, hErr)
+				// 状态持久化失败时如实告知访客，AI 继续兜底，避免"已转人工"的假承诺
+				return &VisitorSendMessageResult{
+					UserMessage:    userMsg,
+					AIReplied:      false,
+					Transferred:    false,
+					TransferReason: "人工坐席暂不可用，AI 将继续为您服务",
+					HandlerType:    string(session.HandlerType),
+				}, nil
+			}
 		}
 		_ = websocket.BroadcastToAgents(websocket.TypeNewSession, map[string]any{
 			"session":    session,

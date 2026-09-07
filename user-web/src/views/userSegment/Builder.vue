@@ -112,10 +112,11 @@ function compileNode(node) {
 }
 
 async function save() {
+  // 后端 SegmentSaveRequest.Trigger 是 string；trigger 对象序列化为 JSON 字符串存放
   await http.post('/api/user-segments', {
     name: `分群 ${new Date().toISOString()}`,
     rules: rules.value,
-    trigger
+    trigger: JSON.stringify(trigger)
   })
   ElMessage.success('分群已保存')
 }

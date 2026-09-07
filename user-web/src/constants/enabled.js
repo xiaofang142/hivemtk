@@ -52,7 +52,7 @@ export const getEnabledLabel = (v) => {
 
 export const getEnabledTagType = (v) => {
   const key = String(v ?? '').toLowerCase()
-  return ENABLED_TAG_TYPE_MAP[key] || ''
+  return ENABLED_TAG_TYPE_MAP[key] || 'info'
 };
 
 export default {

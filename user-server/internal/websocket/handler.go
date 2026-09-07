@@ -38,6 +38,19 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// wsAgentAllowedRoles 允许订阅坐席 WS 的角色集合（admin/manager + 坐席角色）
+var wsAgentAllowedRoles = map[string]bool{
+	"admin":            true,
+	"manager":          true,
+	"staff":            true,
+	"customer_service": true,
+}
+
+func roleStrOf(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
 const heartbeatTouchInterval = 30 * time.Second
 
 var heartbeatToucher func(ctx context.Context, agentID uint) error
@@ -96,8 +109,11 @@ func (h *WSHandler) HandleWebSocket(c *gin.Context) {
 	}
 
 	if os.Getenv("WS_AGENT_ALLOW_ALL_USERS") != "true" {
-		if role, _ := c.Get("role"); role != "admin" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可订阅坐席通知"})
+		// 坐席订阅按设计面向客服工作台角色：admin/manager 及坐席（staff/customer_service）
+		// 管理端页面 /api/agents/me 会为坐席返回 agent_id，messageHub/customerSession 据此自动订阅；
+		// 若仅放行 admin，坐席登录后将陷入 403 重连循环（R14-3）
+		if role, _ := c.Get("role"); !wsAgentAllowedRoles[roleStrOf(role)] {
+			c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员或坐席可订阅坐席通知"})
 			return
 		}
 	}

@@ -93,6 +93,7 @@
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button link type="primary" size="small" @click="router.push({ name: 'ChatChannelInstallGuide', params: { id: row.channel_id } })">安装引导</el-button>
             <el-button link type="primary" size="small" @click="onRotateKey(row)">轮换 Key</el-button>
             <el-button link type="warning" size="small" @click="onResetSecret(row)">重置 Secret</el-button>
             <el-button v-if="row.status === 'disabled'" link type="success" size="small" @click="onEnable(row)">启用</el-button>

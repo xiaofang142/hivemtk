@@ -135,45 +135,67 @@ func (ctrl *TelegramAccountController) Get(c *gin.Context) {
 
 type telegramAccountCreateReq struct {
 	AccountName    string `json:"account_name" binding:"required"`
-	BotToken       string `json:"bot_token" binding:"required"`
-	BotUsername    string `json:"bot_username"`
-	WebhookURL     string `json:"webhook_url"`
-	WebhookSecret  string `json:"webhook_secret"`
-	WebhookEnabled bool   `json:"webhook_enabled"`
-	AIAgentEnabled bool   `json:"ai_agent_enabled"`
-	Status         int    `json:"status"`
+	BotToken       string `json:"bot_token" binding:"omitempty"`   // Create 时必填，Update 时留空=保持原值
+	BotUsername    string `json:"bot_username" binding:"omitempty"` // optional：后端自动通过 getMe 填充
+	WebhookURL     string `json:"webhook_url" binding:"omitempty"`  // optional：后端通过 public_base_url 自动推导
+	WebhookSecret  string `json:"webhook_secret" binding:"omitempty"` // optional：后端自动生成
+	WebhookEnabled *bool  `json:"webhook_enabled" binding:"omitempty"` // optional：后端根据有无公网自动设值
+	AIAgentEnabled *bool  `json:"ai_agent_enabled" binding:"omitempty"` // optional：后端默认开启
+	Status         *int   `json:"status" binding:"omitempty"`         // optional：默认 1（正常）
 }
 
 // Create 创建
+// 简化：用户只需填 account_name + bot_token，后端自动：
+//   - 调 getMe 填充 bot_username
+//   - 生成 webhook_secret
+//   - 通过 config.GetPublicBaseURL 推导 webhook_url
+//   - 有公网则异步 setWebhook，无公网则自动降级 polling
 func (ctrl *TelegramAccountController) Create(c *gin.Context) {
 	var req telegramAccountCreateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
 		return
 	}
+	if req.BotToken == "" {
+		response.Error(c, http.StatusBadRequest, "bot_token 必填", "")
+		return
+	}
 	if vErr := tgbot.ValidateBotToken(req.BotToken); vErr != nil {
 		response.Error(c, http.StatusBadRequest, "Bot Token 格式错误", vErr.Error())
 		return
 	}
-	if req.Status == 0 {
-		req.Status = 1
-	}
+
+	// 只取用户显式传入的字段；webhook/webhook_secret/webhook_enabled/ai_agent_enabled/bot_username 均由 service 自动填充
 	acc := &model.TelegramAccount{
-		AccountName:    req.AccountName,
-		BotToken:       req.BotToken,
-		BotUsername:    req.BotUsername,
-		WebhookURL:     req.WebhookURL,
-		WebhookSecret:  req.WebhookSecret,
-		WebhookEnabled: req.WebhookEnabled,
-		AIAgentEnabled: req.AIAgentEnabled,
-		Status:         req.Status,
-		OwnerUserID:    currentStaffUserID(c),
+		AccountName: req.AccountName,
+		BotToken:    req.BotToken,
+		OwnerUserID: currentStaffUserID(c),
 	}
-	if _, err := ctrl.svc.CreateAccount(context.Background(), acc); err != nil {
+	if req.BotUsername != "" {
+		acc.BotUsername = req.BotUsername
+	}
+	if req.WebhookURL != "" {
+		acc.WebhookURL = req.WebhookURL
+	}
+	if req.WebhookSecret != "" {
+		acc.WebhookSecret = req.WebhookSecret
+	}
+	if req.WebhookEnabled != nil {
+		acc.WebhookEnabled = *req.WebhookEnabled
+	}
+	if req.AIAgentEnabled != nil {
+		acc.AIAgentEnabled = *req.AIAgentEnabled
+	}
+	if req.Status != nil {
+		acc.Status = *req.Status
+	}
+
+	created, err := ctrl.svc.CreateAccount(context.Background(), acc)
+	if err != nil {
 		response.ErrorFromDB(c, err, "创建失败", err.Error())
 		return
 	}
-	response.Success(c, toTelegramAccountVO(acc), "创建成功")
+	response.Success(c, toTelegramAccountVO(created), "创建成功（Bot Token 验证 + Webhook/Polling 配置正在后台自动处理中）")
 }
 
 // Update 更新（Bot Token 为空时保持原值）
@@ -216,10 +238,15 @@ func (ctrl *TelegramAccountController) Update(c *gin.Context) {
 	if req.WebhookURL != "" {
 		acc.WebhookURL = req.WebhookURL
 	}
-	acc.WebhookEnabled = req.WebhookEnabled
-	acc.AIAgentEnabled = req.AIAgentEnabled
-	if req.Status != 0 {
-		acc.Status = req.Status
+	// 指针类型：非 nil 才覆盖（nil = 保留原值）
+	if req.WebhookEnabled != nil {
+		acc.WebhookEnabled = *req.WebhookEnabled
+	}
+	if req.AIAgentEnabled != nil {
+		acc.AIAgentEnabled = *req.AIAgentEnabled
+	}
+	if req.Status != nil {
+		acc.Status = *req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(context.Background(), acc); err != nil {
 		response.ErrorFromDB(c, err, "更新失败", err.Error())
@@ -302,7 +329,10 @@ func (ctrl *TelegramAccountController) RegisterWebhook(c *gin.Context) {
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
 		_ = ctrl.svc.UpdateAccount(context.Background(), acc)
-		response.ErrorFromDB(c, err, "注册 Webhook 失败", err.Error())
+		// 把 Telegram 原始报错翻译成可操作的提示（token 无效/URL 非 https 等），
+		// 直接作为 message 返回给前端 toast 展示
+		friendly := tgbot.FriendlyTGAPIError(err)
+		response.Error(c, http.StatusBadRequest, friendly.Error(), err.Error())
 		return
 	}
 
@@ -381,6 +411,9 @@ func (ctrl *TelegramAccountController) Status(c *gin.Context) {
 		"bot_error":        errToStr(botErr),
 		"webhook_info":     whInfo,
 		"webhook_error":    errToStr(whErr),
+		"polling_mode":     service.IsTelegramPollingEnabled(),
+		"polling_owner":    acc.PollingOwner,
+		"polling_heartbeat_at": acc.PollingHeartbeatAt,
 	}
 	response.Success(c, resp, "获取状态成功")
 }
@@ -418,7 +451,8 @@ func (ctrl *TelegramAccountController) TestSend(c *gin.Context) {
 		return
 	}
 	if err := tgbot.SendMessage(acc.BotToken, req.ChatID, req.Text); err != nil {
-		response.ErrorFromDB(c, err, "发送失败", err.Error())
+		friendly := tgbot.FriendlyTGAPIError(err)
+		response.Error(c, http.StatusBadRequest, friendly.Error(), err.Error())
 		return
 	}
 	response.Success(c, gin.H{"ok": true}, "发送成功")

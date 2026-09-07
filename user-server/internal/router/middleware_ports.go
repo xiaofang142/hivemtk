@@ -5,14 +5,16 @@ import (
 
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 )
 
-type operationLogSink struct{}
+// operationLogSink 审计 sink：经 OperationLogService 落库（Router 不直连 Repository）
+type operationLogSink struct {
+	svc *service.OperationLogService
+}
 
-func (operationLogSink) Save(ctx context.Context, entry *middleware.AuditEntry) error {
-	return repository.NewOperationLogRepository().Create(ctx, &model.OperationLog{
+func (s operationLogSink) Save(ctx context.Context, entry *middleware.AuditEntry) error {
+	return s.svc.Create(ctx, &model.OperationLog{
 		UserID:     entry.UserID,
 		Username:   entry.Username,
 		Action:     entry.Action,
@@ -57,5 +59,5 @@ func toChatChannelView(c *model.ChatChannel) *middleware.ChatChannelView {
 
 func injectMiddlewarePorts() {
 	middleware.SetPermChecker(service.NewPermissionService())
-	middleware.SetAuditSink(operationLogSink{})
+	middleware.SetAuditSink(operationLogSink{svc: service.NewOperationLogService()})
 }

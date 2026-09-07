@@ -10,5 +10,11 @@ export default [
     name: 'RfmMatrix',
     component: () => import('@/views/userSegment/RfmMatrix.vue'),
     meta: { title: 'RFM 矩阵', group: 'analytics', icon: 'Grid', requiresAuth: true }
+  },
+  {
+    path: '/userSegment/builder',
+    name: 'UserSegmentBuilder',
+    component: () => import('@/views/userSegment/Builder.vue'),
+    meta: { title: '分层规则构建', group: 'customer', icon: 'SetUp', requiresAuth: true }
   }
 ]

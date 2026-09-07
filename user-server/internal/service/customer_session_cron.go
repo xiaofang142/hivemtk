@@ -92,8 +92,12 @@ func (c *SessionTTLCron) trigger(ctx context.Context) {
 
 var sessionTTLCron *SessionTTLCron
 
-func init() {
-	sessionTTLCron = NewSessionTTLCron(NewCustomerSessionService())
+// StartSessionTTLCron 由 main 显式调用（替代原 init() 副作用：
+// import 本包的测试/CLI 二进制不应被拉起带 DB 访问的定时任务）
+func StartSessionTTLCron() {
+	if sessionTTLCron == nil {
+		sessionTTLCron = NewSessionTTLCron(NewCustomerSessionService())
+	}
 }
 
 // StopSessionTTLCron 进程退出时由 main 调用（与 defer 配合）

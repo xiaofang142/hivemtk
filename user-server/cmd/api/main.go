@@ -362,8 +362,9 @@ func main() {
 	defer ruleCron.Stop()
 	logger.Info("[RuleEngineCron] 自动化规则延迟执行已装配")
 
+	service.StartSessionTTLCron()
 	defer service.StopSessionTTLCron(context.Background())
-	logger.Info("[SessionTTLCron] 会话 TTL 自动关闭 cron 已装配（service 包 init 自动启动，这里只注册 defer Stop）")
+	logger.Info("[SessionTTLCron] 会话 TTL 自动关闭 cron 已显式启动（替代原 init 副作用）")
 
 	cronpkg.InitCron()
 	logger.Info("[GEO InitCron] 定时任务已注册（SOV刷新/负面监控/信源同步/竞品爬虫，经 JobManager 统一管理）")

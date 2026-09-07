@@ -16,6 +16,7 @@ import (
 	"net/url"
 
 	"os"
+	"regexp"
 	"strconv"
 
 	"strings"
@@ -32,6 +33,8 @@ import (
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/repository"
+
+	"hivemtk-user/internal/channelbot/telegram"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -332,7 +335,18 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		if chatID == 0 {
 			return
 		}
-		if err := s.tgIntegration.SendMessage(ctx, uint(accID), chatID, content); err != nil {
+
+		// 群聊增强：@mention 原发言人 + reply-to 消息
+		// 私聊保持原样
+		sendContent := content
+		sendOpts := telegram.SendMessageOptions{DisableWebPreview: true}
+		if hubMsg != nil && hubMsg.IsGroup {
+			if meta := extractTelegramReplyMetaFromCtx(ctx); meta != nil && meta.TriggerReason != "start" {
+				sendContent, sendOpts = buildTelegramGroupReply(content, meta)
+			}
+		}
+
+		if err := s.tgIntegration.SendMessageEx(ctx, uint(accID), chatID, sendContent, sendOpts); err != nil {
 			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
 		} else {
 			sent = true
@@ -712,4 +726,124 @@ func extractAgentIDFromCtx(ctx context.Context) string {
 		return v
 	}
 	return "unknown"
+}
+
+// ─── Telegram 群回复 @mention 上下文工具 ────────────────────────────
+
+type telegramReplyMetaCtxKey struct{}
+
+// TelegramReplyMeta 群回复 @mention 原发言人 + 触发原因
+type TelegramReplyMeta struct {
+	FromUsername  string // Telegram @username（可能为空 → fallback 用 fromName）
+	FromName      string // 真实姓名（HTML 转义后的展示名）
+	FromUserID    int64  // tg://user?id= 链接用
+	ReplyToMsgID  int64  // ReplyToMessageID（Telegram int64，0 表示不引用）
+	TriggerReason string // "mention" | "opportunity" | "private" | "start"
+}
+
+// TelegramReplyMetaToContext 把群回复元信息注入 ctx
+func TelegramReplyMetaToContext(ctx context.Context, meta *TelegramReplyMeta) context.Context {
+	if ctx == nil || meta == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, telegramReplyMetaCtxKey{}, meta)
+}
+
+func extractTelegramReplyMetaFromCtx(ctx context.Context) *TelegramReplyMeta {
+	if ctx == nil {
+		return nil
+	}
+	if v, ok := ctx.Value(telegramReplyMetaCtxKey{}).(*TelegramReplyMeta); ok {
+		return v
+	}
+	return nil
+}
+
+// buildTelegramGroupReply 把 AI 回复内容包装成 Telegram 群聊友好格式：
+//   1. 顶部 @mention 原发言人（<a href="tg://user?id=X">@username</a>）
+//   2. ReplyToMessageID 引用原消息（群内对话更直观）
+//   3. ParseModeHTML 确保 @mention 渲染成可点击链接
+func buildTelegramGroupReply(content string, meta *TelegramReplyMeta) (string, telegram.SendMessageOptions) {
+	opts := telegram.SendMessageOptions{
+		ParseMode:                 "HTML",
+		DisableMarkdownConversion: true, // 我们自己写 HTML（@mention + escape AI 回复）
+		DisableWebPreview:         true,
+	}
+	if meta == nil {
+		// 无 meta 也走 HTML escape（防御 LLM XSS）
+		return htmlEscapeAndPreserveMarkdown(content), opts
+	}
+	if meta.ReplyToMsgID > 0 {
+		opts.ReplyToMessageID = meta.ReplyToMsgID
+	}
+
+	// 1. 构造 @mention 头部（我们自己写的 HTML，可控安全）
+	var mentionPrefix string
+	displayName := meta.FromName
+	if displayName == "" {
+		displayName = meta.FromUsername
+	}
+	escapedDisplayName := htmlEscapeText(displayName)
+	if escapedDisplayName == "" {
+		escapedDisplayName = "朋友"
+	}
+	if meta.FromUserID > 0 {
+		// 可点击链接 @mention
+		mentionPrefix = fmt.Sprintf(`<a href="tg://user?id=%d">@%s</a> `, meta.FromUserID, escapedDisplayName)
+	} else if meta.FromUsername != "" {
+		mentionPrefix = "@" + htmlEscapeText(meta.FromUsername) + " "
+	} else {
+		mentionPrefix = escapedDisplayName + " "
+	}
+
+	// 2. AI 回复做 escape + 保留 **bold** 等 Markdown → HTML
+	escapedContent := htmlEscapeAndPreserveMarkdown(content)
+
+	// 3. 给商机触发加轻量引导提示
+	var leadHint string
+	if meta.TriggerReason == "opportunity" {
+		leadHint = "\n💡 看到你对这个话题感兴趣，我是 HiveMtk 的 AI 助手，想帮你进一步了解~"
+	}
+
+	full := mentionPrefix + escapedContent + leadHint
+	return full, opts
+}
+
+// htmlEscapeAndPreserveMarkdown 先 escape <>&" 防 XSS，再把 **bold** → <b>、`code` → <code>
+// 对应 Telegram HTML parse_mode 支持的标签
+func htmlEscapeAndPreserveMarkdown(s string) string {
+	if s == "" {
+		return ""
+	}
+	// Step 1: 完整 escape
+	s = htmlEscapeText(s)
+	// Step 2: 恢复 Markdown → HTML（和底层 markdownToTelegramHTML 一致）
+	s = regexp.MustCompile(`\*\*(.+?)\*\*`).ReplaceAllString(s, "<b>$1</b>")
+	s = regexp.MustCompile(`` + "`" + `(.+?)` + "`").ReplaceAllString(s, "<code>$1</code>")
+	s = regexp.MustCompile(`\*(.+?)\*`).ReplaceAllString(s, "<i>$1</i>")
+	return s
+}
+
+// htmlEscapeText Telegram HTML parse_mode 需要的最小转义
+func htmlEscapeText(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '&':
+			b.WriteString("&amp;")
+		case '"':
+			b.WriteString("&quot;")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

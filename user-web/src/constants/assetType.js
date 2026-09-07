@@ -3,7 +3,7 @@ export const ASSET_TYPE_OPTIONS = Object.freeze([
   { value: 'sales_script',       label: '销冠话术',    tagType: 'success', icon: 'ChatLineRound', description: '销售话术' },
   { value: 'ab_test_plan',       label: 'AB 测试',      tagType: 'warning', icon: 'DataAnalysis',  description: 'AB 实验方案' },
   { value: 'marketing_workflow', label: '工作流',      tagType: 'info',    icon: 'Share',         description: '营销工作流' },
-  { value: 'industry_sop',       label: '行业 SOP',     tagType: '',        icon: 'Document',      description: '行业标准操作流程' },
+  { value: 'industry_sop',       label: '行业 SOP',     tagType: 'info',        icon: 'Document',      description: '行业标准操作流程' },
   { value: 'knowledge_base',     label: '知识库',      tagType: 'primary', icon: 'Files',         description: '知识库' },
   { value: 'persona',            label: '角色',        tagType: 'info',    icon: 'UserFilled',    description: '角色（旧值）' }
 ]);
@@ -21,7 +21,7 @@ export const getAssetTypeLabel = (v) => {
   return ASSET_TYPE_LABEL_MAP[v] || String(v)
 }
 
-export const getAssetTypeTagType = (v) => ASSET_TYPE_TAG_TYPE_MAP[v] || ''
+export const getAssetTypeTagType = (v) => ASSET_TYPE_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   ASSET_TYPE_OPTIONS,

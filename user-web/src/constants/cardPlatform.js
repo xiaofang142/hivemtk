@@ -7,18 +7,18 @@ export const CARD_PLATFORM = Object.freeze({
 });
 
 export const CARD_PLATFORM_OPTIONS = Object.freeze([
-  { value: 'douyin',       label: '抖音',   tagType: '',        sort: 1, group: 'card',   icon: 'VideoCamera' },
-  { value: 'kuaishou',     label: '快手',   tagType: '',        sort: 2, group: 'card',   icon: 'VideoCamera' },
+  { value: 'douyin',       label: '抖音',   tagType: 'danger',        sort: 1, group: 'card',   icon: 'VideoCamera' },
+  { value: 'kuaishou',     label: '快手',   tagType: 'warning',        sort: 2, group: 'card',   icon: 'VideoCamera' },
   { value: 'xiaohongshu',  label: '小红书', tagType: 'danger',  sort: 3, group: 'card',   icon: 'Postcard' },
   { value: 'xianyu',       label: '闲鱼',   tagType: 'warning', sort: 4, group: 'card',   icon: 'Goods' },
-  { value: 'tiktok',       label: 'TikTok', tagType: '',        sort: 5, group: 'card',   icon: 'VideoCamera' }
+  { value: 'tiktok',       label: 'TikTok', tagType: 'danger',        sort: 5, group: 'card',   icon: 'VideoCamera' }
 ]);
 
 export const CLUE_TYPE_OPTIONS = Object.freeze([
   { value: '1', label: '小红书', tagType: 'danger',  sort: 1, group: 'clue' },
   { value: '2', label: '视频号', tagType: 'success', sort: 2, group: 'clue' },
-  { value: '3', label: '抖音',   tagType: '',        sort: 3, group: 'clue' },
-  { value: '4', label: '快手',   tagType: '',        sort: 4, group: 'clue' }
+  { value: '3', label: '抖音',   tagType: 'info',        sort: 3, group: 'clue' },
+  { value: '4', label: '快手',   tagType: 'info',        sort: 4, group: 'clue' }
 ]);
 
 export const CLUE_TYPE_OPTIONS_LEGACY = Object.freeze([
@@ -57,7 +57,7 @@ export const getCardPlatformLabel = (value) => {
 
 export const getCardPlatformTagType = (value) => {
   if (value === undefined || value === null || value === '') return ''
-  return CARD_PLATFORM_TAG_TYPE_MAP[value] || CLUE_TYPE_LABEL_MAP[value] || ''
+  return CARD_PLATFORM_TAG_TYPE_MAP[value] || CLUE_TYPE_LABEL_MAP[value] || 'info'
 };
 
 export const getClueTypeLabel = (value) => {

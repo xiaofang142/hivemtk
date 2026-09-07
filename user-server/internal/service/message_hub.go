@@ -545,6 +545,10 @@ func (s *MessageHubService) notify(ctx context.Context, msg *model.MessageHub) {
 	subs := make([]MessageSubscriber, len(s.subscribers))
 	copy(subs, s.subscribers)
 	s.subMu.RUnlock()
+	// 订阅者异步处理不能复用调用方 ctx（notify 常在 HTTP 请求链路中触发，
+	// 请求返回即取消，订阅方处理会被掐断半途），脱离取消链 + 显式超时
+	asyncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 	for _, sub := range subs {
 		go func(sub MessageSubscriber) {
 			defer func() {
@@ -553,7 +557,7 @@ func (s *MessageHubService) notify(ctx context.Context, msg *model.MessageHub) {
 				}
 			}()
 			if sub.Filter(msg) {
-				if err := sub.OnMessage(ctx, msg); err != nil {
+				if err := sub.OnMessage(asyncCtx, msg); err != nil {
 					logger.Errorf("[message_hub] subscriber OnMessage error: %v", err)
 				}
 			}

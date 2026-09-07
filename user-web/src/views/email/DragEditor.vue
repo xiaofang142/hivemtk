@@ -103,6 +103,7 @@ const newTestEmail = ref('')
 const sending = ref(false)
 const previewVisible = ref(false)
 const compiledHTML = ref('')
+const saving = ref(false)
 
 const builtinVars = [
   { key: '{{customer.name}}' },
@@ -170,8 +171,20 @@ async function sendTest() {
   }
 }
 
-function save() {
-  ElMessage.success('模板已保存')
+async function save() {
+  compiledHTML.value = compileToHTML()
+  saving.value = true
+  try {
+    await http.post('/api/email/drafts', {
+      subject: subject.value || '未命名拖拽模板',
+      content: compiledHTML.value
+    })
+    ElMessage.success('模板已保存到草稿箱')
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e?.message || e))
+  } finally {
+    saving.value = false
+  }
 }
 
 function previewDesktop() {

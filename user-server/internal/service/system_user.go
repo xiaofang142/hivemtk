@@ -237,6 +237,9 @@ func (s *SystemUserService) DeleteUser(ctx context.Context, id uint) error {
 //  2. 记录密码历史
 //  3. 发邮件通知用户（若 email 已配置）
 func (s *SystemUserService) ResetPassword(ctx context.Context, id uint, newPassword string) error {
+	if id == initialAdminID {
+		return ErrInitialAdminProtected
+	}
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

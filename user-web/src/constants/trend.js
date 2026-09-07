@@ -17,7 +17,7 @@ export const getTrendLabel = (value) => {
   return TREND_LABEL_MAP[value] || String(value)
 };
 
-export const getTrendTagType = (value) => TREND_TAG_TYPE_MAP[value] || '';
+export const getTrendTagType = (value) => TREND_TAG_TYPE_MAP[value] || 'info';
 
 export default {
   TREND_OPTIONS,

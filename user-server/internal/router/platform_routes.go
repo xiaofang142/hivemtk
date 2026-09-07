@@ -53,6 +53,8 @@ func setupTelegramRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	telegramAccountCtrl := controller.NewTelegramAccountController(service.NewTelegramService(gormDB))
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	telegramAccountCtrl.RegisterRoutes(admin)
+	gateCtrl := controller.NewTelegramGateController(service.NewTelegramGateService(gormDB))
+	gateCtrl.RegisterRoutes(admin)
 }
 
 func setupFeishuRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {

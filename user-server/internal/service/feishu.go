@@ -2,47 +2,31 @@ package service
 
 import (
 	"bytes"
-
 	"context"
-
-	"encoding/binary"
-
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
-
 	"crypto/sha256"
-
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
-
 	"encoding/json"
-
 	"errors"
-
 	"fmt"
-
 	"io"
-
 	"net/http"
-
 	"strings"
-
 	"time"
 
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/channelbot/core"
-
 	"hivemtk-user/internal/channelbot/telegram"
-
-	"hivemtk-user/internal/model"
-
-	"hivemtk-user/internal/pkg/httpclient"
-
-	"hivemtk-user/internal/pkg/utils/logger"
-
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/base64"
 	"hivemtk-user/internal/channelbot/whatsapp"
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/httpclient"
+	"hivemtk-user/internal/pkg/tgbot"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -236,7 +220,10 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = string(respB)
-		_ = s.feishu.UpdateAccount(ctx, acc)
+		if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("feishu api status %d: %s", resp.StatusCode, string(respB))
 	}
 	outMsg := &model.FeishuMessage{
@@ -315,7 +302,10 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 	expires := time.Now().Add(time.Duration(out.Expire-300) * time.Second)
 	acc.AccessToken = out.TenantAccessToken
 	acc.TokenExpires = &expires
-	_ = s.feishu.UpdateAccount(ctx, acc)
+	if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 	return out.TenantAccessToken, nil
 }
 
@@ -352,9 +342,64 @@ func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.Telegram
 	if acc.Status == 0 {
 		acc.Status = 1
 	}
+
+	// 1. 先落库，拿到自增 ID（后续推导 webhook_url 需要 acc.ID）
 	if err := s.accRepo.Create(ctx, acc); err != nil {
 		return nil, err
 	}
+
+	// 2. 自动获取 bot_username（异步尝试，失败不阻断创建）
+	if acc.BotUsername == "" {
+		if uname, gerr := tgbot.GetBotUsername(acc.BotToken); gerr == nil && uname != "" {
+			acc.BotUsername = uname
+		}
+	}
+
+	// 3. 自动生成 webhook_secret（无需用户填写）
+	if acc.WebhookSecret == "" {
+		acc.WebhookSecret = GenTGWebhookSecret()
+	}
+
+	// 4. 推导 webhook_url：优先用户显式填写，其次 config.GetPublicBaseURL
+	resolvedURL, hasPublic := ResolveTelegramWebhookURL(acc)
+	if resolvedURL != "" {
+		acc.WebhookURL = resolvedURL
+		acc.WebhookEnabled = true
+		acc.AIAgentEnabled = true
+	}
+
+	// 5. 回写自动填充的字段（bot_username / webhook_secret / webhook_url / webhook_enabled / ai_agent_enabled）
+	if err := s.accRepo.Update(ctx, acc); err != nil {
+		logger.Warnf("[TG] 账号 %d(%s) 回写自动填充字段失败: %v", acc.ID, acc.AccountName, err)
+	}
+
+	// 6. 异步注册 webhook 或降级 polling（goroutine 不阻断 HTTP 响应）
+	if resolvedURL != "" && hasPublic {
+		// 有公网域名 → goroutine 调 setWebhook
+		go func() {
+			if err := tgbot.SetWebhook(acc.BotToken, acc.WebhookURL, acc.WebhookSecret); err != nil {
+				logger.Warnf("[TG] 账号 %d(%s) 异步 setWebhook 失败: %v (可在 UI 手动重试)", acc.ID, acc.AccountName, err)
+				now := time.Now()
+				acc.LastErrorAt = &now
+				acc.LastErrorMsg = err.Error()
+				_ = s.accRepo.Update(context.Background(), acc)
+			} else {
+				logger.Infof("[TG] 账号 %d(%s) 异步 setWebhook 成功: %s", acc.ID, acc.AccountName, acc.WebhookURL)
+				now := time.Now()
+				acc.LastSyncAt = &now
+				acc.LastErrorAt = nil
+				acc.LastErrorMsg = ""
+				_ = s.accRepo.Update(context.Background(), acc)
+			}
+		}()
+	} else {
+		// 无公网域名 → 自动降级 polling（StartTelegramPolling 内部会抢占分布式锁，幂等）
+		go func() {
+			StartTelegramPolling(acc)
+			logger.Infof("[TG] 账号 %d(%s) 无 public_base_url / 显式 webhook_url，自动降级为 polling 模式", acc.ID, acc.AccountName)
+		}()
+	}
+
 	return acc, nil
 }
 
@@ -460,6 +505,11 @@ func (s *TelegramIntegrationService) IngestMessage(ctx context.Context, req *Tel
 }
 
 func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID uint, chatID int64, content string) error {
+	return s.SendMessageEx(ctx, accountID, chatID, content, telegram.SendMessageOptions{})
+}
+
+// SendMessageEx 带完整 SendMessageOptions（ParseMode / ReplyToMessageID / DisableWebPreview 等）
+func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountID uint, chatID int64, content string, opts telegram.SendMessageOptions) error {
 	if s.tg == nil {
 		return errors.New("db nil")
 	}
@@ -469,12 +519,14 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 	}
 	cli := telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client))
 
-	messageID, err := cli.SendMessage(ctx, chatID, content)
+	messageID, err := cli.SendMessage(ctx, chatID, content, opts)
 	if err != nil {
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.tg.UpdateAccount(ctx, acc)
+		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
+			logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+		}
 		return fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -493,7 +545,7 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 		Content:        content,
 		ConversationID: chatIDStr,
 		IsAIReply:      true,
-		AIAgent:        "sales_engine",
+		AIAgent:        extractAgentIDFromCtx(ctx),
 		SentAt:         timePtr(time.Now()),
 	})
 	if hubMsg != nil {
@@ -526,7 +578,10 @@ func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uin
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.tg.UpdateAccount(ctx, acc)
+		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("send tg card: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -760,7 +815,10 @@ func (s *WhatsAppCloudIntegrationService) SendMessage(ctx context.Context, accou
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.wa.UpdateAccount(ctx, acc)
+		if uErr := s.wa.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[wa] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("send wa msg: %w", err)
 	}
 	msgID := wamid

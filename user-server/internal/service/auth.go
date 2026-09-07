@@ -189,9 +189,20 @@ func (s *AuthService) GetCurrentUser(ctx context.Context, userID uint) (*SystemU
 	return s.toUserResponse(ctx, user), nil
 }
 
+// initialAdminID 初始超管的固定用户 ID（system_init 初始化向导创建的第一个账号）。
+// 该账号的密码受系统级保护：所有改密入口（自助改密/管理员重置/邮件重置）均拒绝。
+const initialAdminID uint = 1
+
+// ErrInitialAdminProtected 初始超管账号（id=1）受保护，禁止自助改密
+var ErrInitialAdminProtected = errors.New("初始超管账号的密码不允许通过此入口修改（系统级保护）")
+
 // ChangePassword 修改密码
 // 修复：强制走密码策略校验 + 记录历史
+// 保护：初始超管（id=1）密码不允许通过任何入口修改，防止密码被改后无法登录
 func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *ChangePasswordRequest) error {
+	if userID == initialAdminID {
+		return ErrInitialAdminProtected
+	}
 	user, err := s.systemUserRepo.GetByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

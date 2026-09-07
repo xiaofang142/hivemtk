@@ -41,7 +41,7 @@ export const getRiskLevelLabel = (v) => {
 
 export const getRiskLevelTagType = (v) => {
   const n = normalizeRiskLevel(v)
-  return RISK_LEVEL_TAG_TYPE_MAP[n] || ''
+  return RISK_LEVEL_TAG_TYPE_MAP[n] || 'info'
 }
 
 export default {

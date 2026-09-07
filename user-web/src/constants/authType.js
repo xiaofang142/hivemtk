@@ -4,7 +4,7 @@ export const AUTH_TYPE_OPTIONS = Object.freeze([
   { value: 'hmac',    label: 'HMAC 签名',    tagType: 'primary', description: 'HMAC 签名鉴权' },
   { value: 'basic',   label: 'Basic Auth',   tagType: 'danger',  description: 'HTTP Basic 鉴权' },
   { value: 'oauth2',  label: 'OAuth2',       tagType: 'success', description: 'OAuth2 鉴权' },
-  { value: 'none',    label: '无鉴权',       tagType: '',        description: '无需鉴权（内网调用）' }
+  { value: 'none',    label: '无鉴权',       tagType: 'info',        description: '无需鉴权（内网调用）' }
 ]);
 
 export const AUTH_TYPE_LABEL_MAP = Object.freeze(
@@ -20,7 +20,7 @@ export const getAuthTypeLabel = (v) => {
   return AUTH_TYPE_LABEL_MAP[v] || String(v)
 }
 
-export const getAuthTypeTagType = (v) => AUTH_TYPE_TAG_TYPE_MAP[v] || ''
+export const getAuthTypeTagType = (v) => AUTH_TYPE_TAG_TYPE_MAP[v] || 'info'
 
 export default {
   AUTH_TYPE_OPTIONS,

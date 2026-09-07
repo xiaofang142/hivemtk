@@ -403,13 +403,182 @@ func VerifyWebhook(secret, headerSecret string) bool {
 	return core.SecureEqual(secret, headerSecret)
 }
 
+// callMethod 调用任意 Bot API 方法（群管理类接口专用；非 200 返回错误体）
+func (c *Client) callMethod(ctx context.Context, method string, payload map[string]any) error {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("tg %s marshal: %w", method, err)
+	}
+	api := fmt.Sprintf("%s/bot%s/%s", c.apiBase, c.token, method)
+	respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
+	if err != nil {
+		return fmt.Errorf("tg %s: %w", method, err)
+	}
+	if status != 200 {
+		return fmt.Errorf("tg %s status %d: %s", method, status, string(respB))
+	}
+	return nil
+}
+
+// ApproveChatJoinRequest 批准入群申请（方案 A）
+func (c *Client) ApproveChatJoinRequest(ctx context.Context, chatID, userID int64) error {
+	return c.callMethod(ctx, "approveChatJoinRequest", map[string]any{"chat_id": chatID, "user_id": userID})
+}
+
+// DeclineChatJoinRequest 拒绝入群申请（方案 A 超时清理）
+func (c *Client) DeclineChatJoinRequest(ctx context.Context, chatID, userID int64) error {
+	return c.callMethod(ctx, "declineChatJoinRequest", map[string]any{"chat_id": chatID, "user_id": userID})
+}
+
+// RestrictChatMember 禁言（方案 B：权限全关；untilDate=0 表示永久）
+func (c *Client) RestrictChatMember(ctx context.Context, chatID, userID int64, untilDate int64) error {
+	if untilDate <= 0 {
+		untilDate = int64(time.Now().Add(365 * 24 * time.Hour).Unix())
+	}
+	perms := map[string]any{
+		"can_send_messages":         false,
+		"can_send_polls":            false,
+		"can_send_other_messages":   false,
+		"can_add_web_page_previews": false,
+		"can_change_info":           false,
+		"can_invite_users":          false,
+		"can_pin_messages":          false,
+	}
+	return c.callMethod(ctx, "restrictChatMember", map[string]any{
+		"chat_id":     chatID,
+		"user_id":     userID,
+		"permissions": perms,
+		"until_date":  untilDate,
+	})
+}
+
+// UnrestrictChatMember 解除禁言（恢复全权限）
+func (c *Client) UnrestrictChatMember(ctx context.Context, chatID, userID int64) error {
+	perms := map[string]any{
+		"can_send_messages":         true,
+		"can_send_polls":            true,
+		"can_send_other_messages":   true,
+		"can_add_web_page_previews": true,
+		"can_invite_users":          true,
+	}
+	// 关键：必须传 until_date。Telegram 语义——不传（0）且权限放开会被解释为
+	// "受限至永久"，成员停留在 restricted；官方规则"距当前 <30 秒视为永久"，
+	// 故取 now+60s，Telegram 到点自动解除限制（状态回到 member）。
+	return c.callMethod(ctx, "restrictChatMember", map[string]any{
+		"chat_id":     chatID,
+		"user_id":     userID,
+		"permissions": perms,
+		"until_date":  time.Now().Add(60 * time.Second).Unix(),
+	})
+}
+
+// BanChatMember 踢出成员（untilDate=0 永久拉黑；传过去的时间可只踢不拉黑）
+func (c *Client) BanChatMember(ctx context.Context, chatID, userID, untilDate int64) error {
+	return c.callMethod(ctx, "banChatMember", map[string]any{"chat_id": chatID, "user_id": userID, "until_date": untilDate})
+}
+
+// UnbanChatMember 解除拉黑（banOnlyIfBanned=true 时仅对被拉黑者生效）
+func (c *Client) UnbanChatMember(ctx context.Context, chatID, userID int64) error {
+	return c.callMethod(ctx, "unbanChatMember", map[string]any{"chat_id": chatID, "user_id": userID, "only_if_banned": true})
+}
+
+// GetChatMember 查询成员状态
+func (c *Client) GetChatMember(ctx context.Context, chatID, userID int64) (map[string]any, error) {
+	b, err := json.Marshal(map[string]any{"chat_id": chatID, "user_id": userID})
+	if err != nil {
+		return nil, fmt.Errorf("tg getChatMember marshal: %w", err)
+	}
+	api := fmt.Sprintf("%s/bot%s/getChatMember", c.apiBase, c.token)
+	respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
+	if err != nil {
+		return nil, fmt.Errorf("tg getChatMember: %w", err)
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("tg getChatMember status %d: %s", status, string(respB))
+	}
+	var r struct {
+		OK     bool           `json:"ok"`
+		Result map[string]any `json:"result"`
+	}
+	if err := json.Unmarshal(respB, &r); err != nil || !r.OK {
+		return nil, fmt.Errorf("tg getChatMember parse: %s", string(respB))
+	}
+	return r.Result, nil
+}
+
+// CreateChatInviteLink 创建一次性入群邀请链接（createsJoinRequest 可与方案 A 配合）
+func (c *Client) CreateChatInviteLink(ctx context.Context, chatID int64, createsJoinRequest bool) (string, error) {
+	payload := map[string]any{"chat_id": chatID}
+	if createsJoinRequest {
+		payload["creates_join_request"] = true
+	} else {
+		payload["member_limit"] = 1
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("tg createChatInviteLink marshal: %w", err)
+	}
+	api := fmt.Sprintf("%s/bot%s/createChatInviteLink", c.apiBase, c.token)
+	respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
+	if err != nil {
+		return "", fmt.Errorf("tg createChatInviteLink: %w", err)
+	}
+	if status != 200 {
+		return "", fmt.Errorf("tg createChatInviteLink status %d: %s", status, string(respB))
+	}
+	var r struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			InviteLink string `json:"invite_link"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respB, &r); err != nil || !r.OK {
+		return "", fmt.Errorf("tg createChatInviteLink parse: %s", string(respB))
+	}
+	return r.Result.InviteLink, nil
+}
+
 // Update Telegram webhook 推送的 Update 结构（精简版）
 type Update struct {
-	UpdateID      int64            `json:"update_id"`
-	Message       *TGMessage       `json:"message"`
-	EditedMessage *TGMessage       `json:"edited_message"`
-	ChannelPost   *TGMessage       `json:"channel_post"`
-	CallbackQuery *TGCallbackQuery `json:"callback_query,omitempty"`
+	UpdateID        int64                `json:"update_id"`
+	Message         *TGMessage           `json:"message"`
+	EditedMessage   *TGMessage           `json:"edited_message"`
+	ChannelPost     *TGMessage           `json:"channel_post"`
+	CallbackQuery   *TGCallbackQuery     `json:"callback_query,omitempty"`
+	ChatJoinRequest *TGChatJoinRequest   `json:"chat_join_request,omitempty"`
+	ChatMember      *TGChatMemberUpdated `json:"chat_member,omitempty"`
+	MyChatMember    *TGChatMemberUpdated `json:"my_chat_member,omitempty"`
+}
+
+// TGChatJoinRequest 加群申请（群组开启 "申请加入" 后由 Telegram 推送）
+type TGChatJoinRequest struct {
+	Chat       *TGChat       `json:"chat"`
+	From       *TGUser       `json:"from"`
+	UserChatID int64         `json:"user_chat_id"` // 用户与 Bot 的私聊 chat_id
+	InviteLink *TGInviteLink `json:"invite_link,omitempty"`
+}
+
+// TGInviteLink 邀请链接信息
+type TGInviteLink struct {
+	InviteLink string  `json:"invite_link"`
+	Creator    *TGUser `json:"creator,omitempty"`
+}
+
+// TGChatMemberUpdated 成员状态变更（joined/kicked/restricted 等）
+type TGChatMemberUpdated struct {
+	Chat          *TGChat       `json:"chat"`
+	From          *TGUser       `json:"from"`
+	NewChatMember *TGChatMember `json:"new_chat_member"`
+	OldChatMember *TGChatMember `json:"old_chat_member,omitempty"`
+}
+
+// TGChatMember 成员状态与权限
+type TGChatMember struct {
+	Status          string  `json:"status"` // creator/administrator/member/restricted/left/kicked
+	User            *TGUser `json:"user"`
+	UntilDate       int64   `json:"until_date,omitempty"`
+	CanSendMessages *bool   `json:"can_send_messages,omitempty"`
+	IsMember        *bool   `json:"is_member,omitempty"`
 }
 
 // TGCallbackQuery 回调查询
