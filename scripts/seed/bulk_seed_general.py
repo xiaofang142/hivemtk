@@ -38,14 +38,15 @@ def batch_insert(table, cols, rows):
     return cur.rowcount
 
 # ================================================================
-# 0. 幂等清理
+# 0. 幂等清理 - 清所有 hivemtk% agent 数据（保证脚本独立运行也幂等）
 # ================================================================
-print("[0/5] 清理旧 seed 数据...")
-cur.execute("DELETE FROM faq_entries WHERE question LIKE '%[seed-035]%' OR question LIKE '%[ind-seed]%'")
-cur.execute("DELETE FROM sop_templates WHERE name LIKE '%[seed-035]%' OR name LIKE '%[ind-seed]%'")
-cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'seed-035-%' OR product_id LIKE 'ind-seed-%'")
-cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'seed-035-%' OR product_id LIKE 'ind-seed-%'")
-cur.execute("DELETE FROM rag_products WHERE id LIKE 'seed-035-%'")
+print("[0/5] 清理旧种子数据...")
+cur.execute("DELETE FROM faq_entries WHERE agent_id >= 50")
+cur.execute("DELETE FROM sop_templates WHERE agent_id >= 50")
+cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%' OR product_id = 'hivemtk-platform-cs'")
+cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%' OR product_id = 'hivemtk-platform-cs'")
+cur.execute("DELETE FROM rag_products WHERE id LIKE 'ind-seed-%' OR id LIKE 'seed-035-%' OR id = 'hivemtk-platform-cs'")
+conn.commit()
 
 AGENT_CS  = get_agent_id('hivemtk-agent-general-cs')
 AGENT_SAL = get_agent_id('hivemtk-agent-ecom-sales')
@@ -559,10 +560,7 @@ print(f"  ✓ SOP 模板: {len(sop_rows)} 条 (CS={len([s for s in sop_rows if s
 # ================================================================
 print("[5/5] RAG 知识库扩容...")
 
-# 幂等清理
-cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'seed-035-%' OR product_id LIKE 'ind-seed-%'")
-cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'seed-035-%' OR product_id LIKE 'ind-seed-%'")
-cur.execute("DELETE FROM rag_products WHERE id LIKE 'seed-035-%'")
+# (已在开头完成清理)
 
 # 2 个 RAG 产品
 rag_products = [
