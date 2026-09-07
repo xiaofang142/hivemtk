@@ -407,6 +407,8 @@ func NormalizeChannelType(ch string) string {
 	switch ch {
 	case "telegram", "tg":
 		return string(model.ChannelTypeTelegram)
+	case "qq", "qqbot":
+		return string(model.ChannelTypeQQ)
 	case "wecom", "wechat_work", "wechatwork":
 		return string(model.ChannelTypeWeCom)
 	case "feishu", "lark":

@@ -52,6 +52,17 @@ func (s *ChannelOverviewService) GetOverview(ctx context.Context) dto.ChannelOve
 			HealthURL:        "/api/webhook/telegram/{account_id}",
 		},
 		{
+			Channel:          "qq",
+			ChannelName:      "QQ 机器人",
+			Category:         "official_api",
+			AccountCount:     s.safeCount("qq", func() (int64, error) { return s.repo.CountQQ(ctx) }),
+			ActiveCount:      s.safeCount("qq_active", func() (int64, error) { return s.repo.CountQQActive(ctx) }),
+			IntegrationReady: true,
+			RequiredFields:   []string{"app_id", "app_secret", "webhook_secret(BotSecret)"},
+			ConfigURLs:       []string{"/api/qq/accounts", "/api/qq/accounts (POST)"},
+			HealthURL:        "/api/webhook/qq/{account_id}",
+		},
+		{
 			Channel:          "whatsapp",
 			ChannelName:      "WhatsApp Cloud API",
 			Category:         "official_api",

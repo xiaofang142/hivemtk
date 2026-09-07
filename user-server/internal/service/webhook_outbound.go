@@ -345,6 +345,26 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				sent = true
 			}
 		}
+	case ChannelQQ:
+		accID, err := strconv.ParseUint(accountID, 10, 64)
+		if err != nil || accID == 0 {
+			return
+		}
+		convID := ""
+		if hubMsg != nil && hubMsg.ConversationID != "" {
+			convID = hubMsg.ConversationID
+		}
+		if convID == "" {
+			return
+		}
+		// 被动回复关联原消息 ID（QQ 平台 5 分钟窗口 5 条被动回复额度）
+		replyMsgID := QQOutboundMsgID(hubMsg)
+		qqIntegration := NewQQIntegrationService(s.db)
+		if err := qqIntegration.SendMessage(ctx, uint(accID), convID, replyMsgID, content); err != nil {
+			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+		} else {
+			sent = true
+		}
 	case ChannelWhatsapp:
 		if s.waIntegration == nil {
 			s.waIntegration = NewWhatsAppCloudIntegrationService(s.db)

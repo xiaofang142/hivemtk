@@ -421,6 +421,14 @@ const topMenus = ref([
         ]
       },
       {
+        key: 'qq',
+        title: 'QQ 机器人',
+        icon: 'ChatDotRound',
+        children: [
+          { key: 'qqAccount', title: '机器人账号', icon: 'Cpu', path: '/qq/account' }
+        ]
+      },
+      {
         key: 'feishu',
         title: '飞书',
         icon: 'ChatDotRound',

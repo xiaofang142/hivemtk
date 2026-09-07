@@ -94,6 +94,7 @@ type ChannelType string
 
 const (
 	ChannelTypeTelegram    ChannelType = "telegram"
+	ChannelTypeQQ          ChannelType = "qq"
 	ChannelTypeWeCom       ChannelType = "wecom"
 	ChannelTypeFeishu      ChannelType = "feishu"
 	ChannelTypeWhatsApp    ChannelType = "whatsapp"

@@ -104,6 +104,14 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 
 	reqCtx := middleware.InjectLangToCtx(ctx.Request.Context(), c.langResolver, "", 0)
 
+	// QQ 开放平台 Op13 回调地址验证：需同步返回 Ed25519 签名，不走入队流程
+	if channel == service.ChannelQQ {
+		if handled, payload := c.svc.HandleQQCallbackChallenge(reqCtx, accountID, body); handled {
+			ctx.JSON(http.StatusOK, payload)
+			return
+		}
+	}
+
 	if channel == service.ChannelFeishu {
 		challenge, handled, verr := c.svc.HandleFeishuURLVerification(reqCtx, accountID, body)
 		if handled {

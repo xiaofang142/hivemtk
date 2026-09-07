@@ -83,6 +83,16 @@ func (r *ChannelOverviewRepository) CountDingTalkActive(ctx context.Context) (in
 	return r.countWhere(ctx, "dingtalk_app_accounts", "status = ?", "active")
 }
 
+// CountQQ 统计 QQ 机器人账号总数
+func (r *ChannelOverviewRepository) CountQQ(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "qq_accounts")
+}
+
+// CountQQActive 统计启用中的 QQ 机器人账号数
+func (r *ChannelOverviewRepository) CountQQActive(ctx context.Context) (int64, error) {
+	return r.countWhere(ctx, "qq_accounts", "status = ?", 1)
+}
+
 // CountSMS 统计短信配置总数
 func (r *ChannelOverviewRepository) CountSMS(ctx context.Context) (int64, error) {
 	return r.countRows(ctx, "sms_configs")

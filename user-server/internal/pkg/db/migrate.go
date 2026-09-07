@@ -103,6 +103,7 @@ func allModels() []any {
 		&model.WeComMessage{},
 		&model.WeComTag{},
 		&model.TelegramAccount{},
+		&model.QQAccount{},
 		&model.FeishuAccount{},
 		&model.FeishuCustomer{},
 		&model.FeishuMessage{},

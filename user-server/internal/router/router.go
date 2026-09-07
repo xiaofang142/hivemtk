@@ -341,6 +341,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupTelegramRoutes(auth, gormDB)
 
+		setupQQRoutes(auth, gormDB)
+
 		setupFeishuRoutes(auth, gormDB)
 
 		bridgeIngressSvc := service.NewInboxIngressService()

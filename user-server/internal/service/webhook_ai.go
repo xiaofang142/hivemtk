@@ -102,6 +102,12 @@ func (s *WebhookService) shouldTriggerAI(ctx context.Context, channel WebhookCha
 			return false
 		}
 		return acc.AIAgentEnabled
+	case ChannelQQ:
+		acc, err := NewQQService(s.db).GetAccount(ctx, uint(accID))
+		if err != nil {
+			return false
+		}
+		return acc.AIAgentEnabled && acc.Status == 1
 	default:
 		return false
 	}

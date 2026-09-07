@@ -107,3 +107,30 @@ type WhatsAppCloudAccount struct {
 }
 
 func (WhatsAppCloudAccount) TableName() string { return "whatsapp_cloud_accounts" }
+
+// QQAccount QQ 机器人开放平台账号（q.qq.com）
+//
+// 凭证模型：AppID + AppSecret 换 access_token（服务端缓存 7200s），
+// WebhookSecret 为官方 BotSecret（用于 Ed25519 webhook 验签派生）。
+type QQAccount struct {
+	ID uint `gorm:"primaryKey;autoIncrement" json:"id"`
+
+	OwnerUserID    uint       `gorm:"default:0;index" json:"owner_user_id"`
+	AccountName    string     `gorm:"type:varchar(100);not null" json:"account_name"`
+	AppID          string     `gorm:"type:varchar(100);not null" json:"app_id"`
+	AppSecret      string     `gorm:"type:varchar(200);not null" json:"app_secret"`
+	WebhookSecret  string     `gorm:"type:varchar(200)" json:"webhook_secret"`
+	WebhookURL     string     `gorm:"type:varchar(500)" json:"webhook_url"`
+	WebhookEnabled bool       `gorm:"default:false" json:"webhook_enabled"`
+	AIAgentEnabled bool       `gorm:"default:false" json:"ai_agent_enabled"`
+	AccessToken    string     `gorm:"type:text" json:"access_token"`
+	TokenExpires   *time.Time `json:"token_expires"`
+	LastSyncAt     *time.Time `json:"last_sync_at"`
+	LastErrorAt    *time.Time `json:"last_error_at"`
+	LastErrorMsg   string     `gorm:"type:text" json:"last_error_msg"`
+	Status         int        `gorm:"default:1" json:"status"`
+	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (QQAccount) TableName() string { return "qq_accounts" }
