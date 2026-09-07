@@ -229,7 +229,7 @@ func ValidateBotToken(token string) error {
 	}
 
 	if len(tok) != 35 {
-		return fmt.Errorf("bot_token 格式错误：token 长度 %d 不等于 35（Telegram 官方 token 固定 35 位），请到 @BotFather 重新复制完整 token")
+		return fmt.Errorf("bot_token 格式错误：token 长度 %d 不等于 35（Telegram 官方 token 固定 35 位），请到 @BotFather 重新复制完整 token", len(tok))
 	}
 	for i := 0; i < len(tok); i++ {
 		c := tok[i]
