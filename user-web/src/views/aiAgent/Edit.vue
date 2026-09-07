@@ -51,6 +51,37 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item label="智能体模式" prop="agent_mode">
+              <el-select v-model="form.agent_mode" style="width: 100%">
+                <el-option label="被动响应（用户问才答）" value="passive" />
+                <el-option label="主动出击（会主动推荐/推送）" value="active" />
+              </el-select>
+              <div class="form-tip">被动=客服风格只响应提问；主动=销售风格会主动推荐商品/活动/逼单</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="资产包">
+              <el-select
+                v-model="form.asset_bundle_id"
+                placeholder="选择资产包（含话术/SOP/FAQ）"
+                clearable
+                filterable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="b in assetBundleOptions"
+                  :key="b.asset_id"
+                  :label="b.title || b.asset_id"
+                  :value="b.asset_id"
+                >
+                  <span>{{ b.title || b.asset_id }}</span>
+                  <span style="float: right; color: #8492a6; font-size: 12px">{{ b.industry || '' }}</span>
+                </el-option>
+              </el-select>
+              <div class="form-tip">资产包包含该智能体的话术模板、SOP流程、FAQ知识库。创建时绑定，运行时自动注入 system prompt。</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="头像URL">
               <el-input v-model="form.avatar" placeholder="头像图片URL" />
             </el-form-item>
@@ -462,6 +493,7 @@ import { faqApi } from '@/api/faq'
 import { sopTemplateApi } from '@/api/sopTemplate'
 import { listByType as listKBByType } from '@/api/knowledgeBase'
 import { listByAgent as listAgentKBs, replaceAgentKBs } from '@/api/agentKBBinding'
+import { listBundles } from '@/api/assetBundle'
 import { INTERNAL_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 
 const internalLanguageOptions = INTERNAL_LANGUAGE_OPTIONS
@@ -481,6 +513,7 @@ const sopOptions = ref([])
 const scriptOptions = ref([])
 const faqOptions = ref([])
 const sopTemplateOptions = ref([])
+const assetBundleOptions = ref([])
 
 const kbTree = ref([]);
 const loadingKB = ref(false)
@@ -492,9 +525,11 @@ const getDefaultForm = () => ({
   description: '',
   avatar: '',
   agent_type: 'sales',
+  agent_mode: 'passive',
   persona: '',
   system_prompt: '',
   greeting: '',
+  asset_bundle_id: '',
   internal_language: 'zh',
   target_language: '',
   kb_ids: [],
@@ -574,6 +609,15 @@ const loadScriptOptions = async () => {
     scriptOptions.value = res?.list || res?.items || []
   } catch (e) {
     console.warn('加载话术模板列表失败：', e?.message)
+  }
+}
+
+const loadAssetBundles = async () => {
+  try {
+    const res = await listBundles({ page: 1, page_size: 200, status: 'active' })
+    assetBundleOptions.value = res?.list || res?.items || []
+  } catch (e) {
+    console.warn('加载资产包列表失败：', e?.message)
   }
 }
 
@@ -795,7 +839,7 @@ const runTest = async () => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadRagProducts(), loadSopOptions(), loadScriptOptions()])
+  await Promise.all([loadRagProducts(), loadSopOptions(), loadScriptOptions(), loadAssetBundles()])
   if (isEdit.value) {
     await loadAgentDetail()
   }

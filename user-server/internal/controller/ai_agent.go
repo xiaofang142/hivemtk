@@ -117,37 +117,39 @@ func (ctrl *AIAgentController) Get(c *gin.Context) {
 }
 
 type aiAgentCreateReq struct {
-	AgentCode            string                  `json:"agent_code" binding:"required"`
-	Name                 string                  `json:"name" binding:"required"`
-	Description          string                  `json:"description"`
-	Avatar               string                  `json:"avatar"`
-	AgentType            string                  `json:"agent_type"`
-	Persona              string                  `json:"persona" binding:"required"`
-	SystemPrompt         string                  `json:"system_prompt"`
-	Greeting             string                  `json:"greeting"`
-	RagProductIDs        []string                `json:"rag_product_ids"`
-	FAQEntryIDs          []string                `json:"faq_entry_ids"`
-	SOPTemplateIDs       []string                `json:"sop_template_ids"`
-	SOPIDs               []string                `json:"sop_ids"`
-	ScriptLibraryIDs     []string                `json:"script_library_ids"`
-	LLMModel             string                  `json:"llm_model"`
-	LLMProviderConfig    model.LLMProviderConfig `json:"llm_provider_config"`
-	Temperature          float64                 `json:"temperature"`
-	MaxTokens            int                     `json:"max_tokens"`
-	TopP                 float64                 `json:"top_p"`
-	FrequencyPenalty     float64                 `json:"frequency_penalty"`
-	PresencePenalty      float64                 `json:"presence_penalty"`
-	EnableRAG            bool                    `json:"enable_rag"`
-	EnableScriptMatch    bool                    `json:"enable_script_match"`
-	EnableHumanizePolish bool                    `json:"enable_humanize_polish"`
-	EnableContentAudit   bool                    `json:"enable_content_audit"`
-	EnablePlaybook       bool                    `json:"enable_playbook"`
-	RAGTopK              int                     `json:"rag_top_k"`
-	ConfidenceThreshold  float64                 `json:"confidence_threshold"`
-	MaxAIConsecutive     int                     `json:"max_ai_consecutive"`
-	Status               int                     `json:"status"`
-	InternalLanguage     string                  `json:"internal_language"`
-	TargetLanguage       string                  `json:"target_language"`
+        AgentCode            string                  `json:"agent_code" binding:"required"`
+        Name                 string                  `json:"name" binding:"required"`
+        Description          string                  `json:"description"`
+        Avatar               string                  `json:"avatar"`
+        AgentType            string                  `json:"agent_type"`
+        AgentMode            string                  `json:"agent_mode"`
+        Persona              string                  `json:"persona" binding:"required"`
+        SystemPrompt         string                  `json:"system_prompt"`
+        Greeting             string                  `json:"greeting"`
+        AssetBundleID        string                  `json:"asset_bundle_id"`
+        RagProductIDs        []string                `json:"rag_product_ids"`
+        FAQEntryIDs          []string                `json:"faq_entry_ids"`
+        SOPTemplateIDs       []string                `json:"sop_template_ids"`
+        SOPIDs               []string                `json:"sop_ids"`
+        ScriptLibraryIDs     []string                `json:"script_library_ids"`
+        LLMModel             string                  `json:"llm_model"`
+        LLMProviderConfig    model.LLMProviderConfig `json:"llm_provider_config"`
+        Temperature          float64                 `json:"temperature"`
+        MaxTokens            int                     `json:"max_tokens"`
+        TopP                 float64                 `json:"top_p"`
+        FrequencyPenalty     float64                 `json:"frequency_penalty"`
+        PresencePenalty      float64                 `json:"presence_penalty"`
+        EnableRAG            bool                    `json:"enable_rag"`
+        EnableScriptMatch    bool                    `json:"enable_script_match"`
+        EnableHumanizePolish bool                    `json:"enable_humanize_polish"`
+        EnableContentAudit   bool                    `json:"enable_content_audit"`
+        EnablePlaybook       bool                    `json:"enable_playbook"`
+        RAGTopK              int                     `json:"rag_top_k"`
+        ConfidenceThreshold  float64                 `json:"confidence_threshold"`
+        MaxAIConsecutive     int                     `json:"max_ai_consecutive"`
+        Status               int                     `json:"status"`
+        InternalLanguage     string                  `json:"internal_language"`
+        TargetLanguage       string                  `json:"target_language"`
 }
 
 func (ctrl *AIAgentController) Create(c *gin.Context) {
@@ -162,9 +164,11 @@ func (ctrl *AIAgentController) Create(c *gin.Context) {
 		Description:          req.Description,
 		Avatar:               req.Avatar,
 		AgentType:            req.AgentType,
+		AgentMode:            req.AgentMode,
 		Persona:              req.Persona,
 		SystemPrompt:         req.SystemPrompt,
 		Greeting:             req.Greeting,
+		AssetBundleID:        req.AssetBundleID,
 		RagProductIDs:        req.RagProductIDs,
 		FAQEntryIDs:          req.FAQEntryIDs,
 		SOPTemplateIDs:       req.SOPTemplateIDs,
@@ -260,8 +264,8 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("agent_type") && req.AgentType != "" {
 		existing.AgentType = req.AgentType
 	}
-	if hasKey("persona") && req.Persona != "" {
-		existing.Persona = req.Persona
+	if hasKey("agent_mode") && req.AgentMode != "" {
+		existing.AgentMode = req.AgentMode
 	}
 	if hasKey("description") {
 		existing.Description = req.Description
@@ -269,11 +273,17 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("avatar") {
 		existing.Avatar = req.Avatar
 	}
+	if hasKey("persona") && req.Persona != "" {
+		existing.Persona = req.Persona
+	}
 	if hasKey("system_prompt") {
 		existing.SystemPrompt = req.SystemPrompt
 	}
 	if hasKey("greeting") {
 		existing.Greeting = req.Greeting
+	}
+	if hasKey("asset_bundle_id") {
+		existing.AssetBundleID = req.AssetBundleID
 	}
 	if hasKey("rag_product_ids") {
 		existing.RagProductIDs = req.RagProductIDs

@@ -135,46 +135,67 @@ func (ctrl *TelegramAccountController) Get(c *gin.Context) {
 
 type telegramAccountCreateReq struct {
 	AccountName    string `json:"account_name" binding:"required"`
-	BotToken       string `json:"bot_token"` // Update 时可为空=保持原值（与前端"留空保持不变"约定一致）
-	BotUsername    string `json:"bot_username"`
-	WebhookURL     string `json:"webhook_url"`
-	WebhookSecret  string `json:"webhook_secret"`
-	WebhookEnabled bool   `json:"webhook_enabled"`
-	AIAgentEnabled bool   `json:"ai_agent_enabled"`
-	Status         int    `json:"status"`
+	BotToken       string `json:"bot_token" binding:"omitempty"`   // Create 时必填，Update 时留空=保持原值
+	BotUsername    string `json:"bot_username" binding:"omitempty"` // optional：后端自动通过 getMe 填充
+	WebhookURL     string `json:"webhook_url" binding:"omitempty"`  // optional：后端通过 public_base_url 自动推导
+	WebhookSecret  string `json:"webhook_secret" binding:"omitempty"` // optional：后端自动生成
+	WebhookEnabled *bool  `json:"webhook_enabled" binding:"omitempty"` // optional：后端根据有无公网自动设值
+	AIAgentEnabled *bool  `json:"ai_agent_enabled" binding:"omitempty"` // optional：后端默认开启
+	Status         *int   `json:"status" binding:"omitempty"`         // optional：默认 1（正常）
 }
 
 // Create 创建
+// 简化：用户只需填 account_name + bot_token，后端自动：
+//   - 调 getMe 填充 bot_username
+//   - 生成 webhook_secret
+//   - 通过 config.GetPublicBaseURL 推导 webhook_url
+//   - 有公网则异步 setWebhook，无公网则自动降级 polling
 func (ctrl *TelegramAccountController) Create(c *gin.Context) {
 	var req telegramAccountCreateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
 		return
 	}
+	if req.BotToken == "" {
+		response.Error(c, http.StatusBadRequest, "bot_token 必填", "")
+		return
+	}
 	if vErr := tgbot.ValidateBotToken(req.BotToken); vErr != nil {
 		response.Error(c, http.StatusBadRequest, "Bot Token 格式错误", vErr.Error())
 		return
 	}
-	// Create 必须显式给 token（bot_token 为空在上面校验即失败），Update 走"空=保留原值"语义
-	if req.Status == 0 {
-		req.Status = 1
-	}
+
+	// 只取用户显式传入的字段；webhook/webhook_secret/webhook_enabled/ai_agent_enabled/bot_username 均由 service 自动填充
 	acc := &model.TelegramAccount{
-		AccountName:    req.AccountName,
-		BotToken:       req.BotToken,
-		BotUsername:    req.BotUsername,
-		WebhookURL:     req.WebhookURL,
-		WebhookSecret:  req.WebhookSecret,
-		WebhookEnabled: req.WebhookEnabled,
-		AIAgentEnabled: req.AIAgentEnabled,
-		Status:         req.Status,
-		OwnerUserID:    currentStaffUserID(c),
+		AccountName: req.AccountName,
+		BotToken:    req.BotToken,
+		OwnerUserID: currentStaffUserID(c),
 	}
-	if _, err := ctrl.svc.CreateAccount(context.Background(), acc); err != nil {
+	if req.BotUsername != "" {
+		acc.BotUsername = req.BotUsername
+	}
+	if req.WebhookURL != "" {
+		acc.WebhookURL = req.WebhookURL
+	}
+	if req.WebhookSecret != "" {
+		acc.WebhookSecret = req.WebhookSecret
+	}
+	if req.WebhookEnabled != nil {
+		acc.WebhookEnabled = *req.WebhookEnabled
+	}
+	if req.AIAgentEnabled != nil {
+		acc.AIAgentEnabled = *req.AIAgentEnabled
+	}
+	if req.Status != nil {
+		acc.Status = *req.Status
+	}
+
+	created, err := ctrl.svc.CreateAccount(context.Background(), acc)
+	if err != nil {
 		response.ErrorFromDB(c, err, "创建失败", err.Error())
 		return
 	}
-	response.Success(c, toTelegramAccountVO(acc), "创建成功")
+	response.Success(c, toTelegramAccountVO(created), "创建成功（Bot Token 验证 + Webhook/Polling 配置正在后台自动处理中）")
 }
 
 // Update 更新（Bot Token 为空时保持原值）
@@ -217,10 +238,15 @@ func (ctrl *TelegramAccountController) Update(c *gin.Context) {
 	if req.WebhookURL != "" {
 		acc.WebhookURL = req.WebhookURL
 	}
-	acc.WebhookEnabled = req.WebhookEnabled
-	acc.AIAgentEnabled = req.AIAgentEnabled
-	if req.Status != 0 {
-		acc.Status = req.Status
+	// 指针类型：非 nil 才覆盖（nil = 保留原值）
+	if req.WebhookEnabled != nil {
+		acc.WebhookEnabled = *req.WebhookEnabled
+	}
+	if req.AIAgentEnabled != nil {
+		acc.AIAgentEnabled = *req.AIAgentEnabled
+	}
+	if req.Status != nil {
+		acc.Status = *req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(context.Background(), acc); err != nil {
 		response.ErrorFromDB(c, err, "更新失败", err.Error())
