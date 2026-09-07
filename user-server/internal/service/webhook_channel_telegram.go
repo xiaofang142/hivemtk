@@ -25,6 +25,15 @@ type tgDispatchExtra struct {
 	Mentioned      bool
 	NewOpportunity bool
 	GateHandled    bool // /start 网关验证已消费，不再触发销售智能体
+
+	// 群回复 @mention 原发言人 + reply-to 消息所需
+	FromUsername string // Telegram @username（可能为空）
+	FromName     string // 真实姓名（fallback）
+	FromUserID   int64  // 原发言人 user_id（用于 tg://user?id= 链接）
+	ReplyToMsgID int64  // 原消息 msgID（回复引用，Telegram int64）
+
+	// 触发原因（传递到 AI 上下文 + 回复行为决策）
+	TriggerReason string // "mention" | "opportunity" | "private" | "start" | ""
 }
 
 const (
@@ -351,11 +360,38 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 	if picked.chatType == "group" || picked.chatType == "supergroup" {
 		accID, _ := strconv.ParseUint(accountID, 10, 64)
 		if accID > 0 && s.tgGate.MemberUnverified(ctx, uint(accID), chatIDStr, senderIDStr) {
-			return hub, &tgDispatchExtra{Mentioned: false, NewOpportunity: false, GateHandled: true}, nil
+			return hub, &tgDispatchExtra{
+				Mentioned: false, NewOpportunity: false, GateHandled: true,
+				FromUsername: picked.username, FromName: picked.fromName, FromUserID: picked.fromID,
+				ReplyToMsgID: picked.msgID,
+				TriggerReason: "",
+			}, nil
 		}
 	}
 
-	return hub, &tgDispatchExtra{Mentioned: mentioned, NewOpportunity: newOpportunity, GateHandled: gateHandled}, nil
+	// 推断触发原因（handleJob 会最终决定用哪个触发 AI）
+	reason := ""
+	switch {
+	case gateHandled:
+		reason = "start"
+	case mentioned:
+		reason = "mention"
+	case newOpportunity:
+		reason = "opportunity"
+	case picked.chatType == "private":
+		reason = "private"
+	}
+
+	return hub, &tgDispatchExtra{
+		Mentioned:      mentioned,
+		NewOpportunity: newOpportunity,
+		GateHandled:    gateHandled,
+		FromUsername:   picked.username,
+		FromName:       picked.fromName,
+		FromUserID:     picked.fromID,
+		ReplyToMsgID:   picked.msgID,
+		TriggerReason:  reason,
+	}, nil
 }
 
 // tgUserFromMessage 提取 /start 命令发送者

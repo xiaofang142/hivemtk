@@ -320,101 +320,95 @@ BEGIN
 
     -- ================================================================
     -- PART 4: 创建通用电商 RAG 知识库（Layer2 兜底）
+    -- 注：拆成独立 SQL 语句（不在主 DO $$ 里），用子查询关联 document_id
     -- ================================================================
-    IF NOT EXISTS (SELECT 1 FROM rag_products WHERE id = pid) THEN
-        INSERT INTO rag_products (
-            id, name, description, category, vector_table,
-            embedding_model, embedding_dim, llm_model,
-            temperature, max_tokens, top_p, frequency_penalty, presence_penalty,
-            response_format, system_prompt,
-            top_k, chunk_size, chunk_overlap, similarity_threshold,
-            is_active, status, doc_count, chunk_count,
-            created_at, updated_at
-        ) VALUES (
-            pid,
-            '通用电商客服知识库',
-            '覆盖电商售前咨询（商品规格/材质/价格）、售后（退换货政策/维修）、物流（发货时效/快递查询）、活动（优惠券/满减/会员）、订单（修改/地址/发票）等通用电商客服场景。',
-            'ecommerce',
-            'rag_ecommerce_general',
-            'bge-m3', 1024, 'Qwen2.5-1.5B-Instruct',
-            0.3, 1024, 0.9, 0.5, 0.5,
-            'text',
-            '你是电商客服助手，依据检索到的知识片段回答。原则：1) 严格按政策回答，不超权承诺；2) 涉及具体订单/价格/库存引导用户提供订单号后查询；3) 保持礼貌亲切；4) 若片段未覆盖，诚实说明。',
-            5, 800, 100, 0.55,
-            TRUE, 1, 0, 0,
-            NOW(), NOW()
-        );
+END $$;
 
-        -- 文档 1：售前咨询（商品规格/材质/价格/活动）
-        DECLARE doc_id1 BIGINT;
-        INSERT INTO knowledge_documents (
-            product_id, source_type, title, file_name, filename, file_type,
-            chunk_count, embed_status, tags, category, priority,
-            metadata, imported_by, status, created_at, updated_at
-        ) VALUES (
-            pid, 'text', '电商售前咨询手册', 'pre_sales.md', 'pre_sales.md', 'md',
-            8, 'indexed', '["售前","商品","规格","价格","活动"]', 'pre_sales', 100,
-            '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW()
-        ) RETURNING id INTO doc_id1;
+-- === RAG 知识库（独立语句）===
+DELETE FROM knowledge_chunks WHERE product_id = 'ecommerce-general-cs';
+DELETE FROM knowledge_documents WHERE product_id = 'ecommerce-general-cs';
+DELETE FROM rag_products WHERE id = 'ecommerce-general-cs';
 
-        INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-        (doc_id1, pid, 0, '商品规格查询标准流程：客户问规格 → 确认具体款号/系列 → 查规格表（尺寸/材质/重量/产地/适用人群）→ 分点列 3-5 个核心参数 → 引导看详情页或发参数图。常用拒绝："具体参数以详情页最新为准，我帮您查一下哈～"', 158, '{"doc":"pre_sales","section":"规格流程"}', NOW()),
-        (doc_id1, pid, 1, '价格说明：标价为商品指导价，最终价格以下单时显示为准。活动叠加规则——秒杀/限时折扣与优惠券不可同时使用（二选一）；会员折扣与优惠券可叠加；满减与优惠券看活动详情页说明。任何情况下不口头承诺"这个价买贵了退差价"，引导看价保政策。', 182, '{"doc":"pre_sales","section":"价格"}', NOW()),
-        (doc_id1, pid, 2, '材质安全承诺：所有商品材质符合国家相关标准，详情页附检测报告。贴身衣物/接触皮肤类商品特别说明面料成分（A类/B类）；食品类需有 SC 编号和保质期说明；化妆品需有特证编号。客户对材质有疑虑时主动提供检测报告截图。', 168, '{"doc":"pre_sales","section":"材质安全"}', NOW()),
-        (doc_id1, pid, 3, '尺码推荐流程：询问身高体重 → 查尺码表 → 推荐正码（不偏大不偏小）→ 特殊体型提醒（大肚腩/孕后期建议大一码）→ 附尺码对照表链接 → 犹豫时引导看用户评价里的尺码反馈。鞋类还需问脚长、是否穿袜子。', 178, '{"doc":"pre_sales","section":"尺码"}', NOW()),
-        (doc_id1, pid, 4, '活动话术模板："这款目前有 XX 活动，XX 时间结束，现在下单立省 XX 元 🎉"；"还有 XX 件，库存紧张哦～"；"今天下单还送 XX 赠品"；"会员专享价比普通价低 XX%"。禁止用"最后一件""马上没了"等过度营销词。', 165, '{"doc":"pre_sales","section":"活动话术"}', NOW()),
-        (doc_id1, pid, 5, '优惠券使用规则：优惠券分品类券（限特定品类）、满减券（需满足金额门槛）、新人券（限首次下单）。查看方式——用户中心→优惠券；领取方式——首页活动页/粉丝群/会员生日。不叠加规则以优惠券详情页为准。', 172, '{"doc":"pre_sales","section":"优惠券"}', NOW()),
-        (doc_id1, pid, 6, '组合推荐策略：客户问单品 → 主动推荐搭配（"这个和 XX 一起买更搭哦，立减 XX 元"）；客户问品类 → 先问用途（送礼还是自用）、送谁、预算多少 → 推荐 2-3 款 → 每款讲一个亮点 → 引导选。', 169, '{"doc":"pre_sales","section":"搭配推荐"}', NOW()),
-        (doc_id1, pid, 7, '送礼场景话术："送礼的话推荐 XX 款，包装精美有礼盒 🎁"；"这款是今年爆款，很多人买来送 XX"；"附手写贺卡，写上祝福更有心意～"。主动问送礼对象、预算、是否需要贺卡。', 156, '{"doc":"pre_sales","section":"送礼"}', NOW());
+INSERT INTO rag_products (
+    id, name, description, category, vector_table,
+    embedding_model, embedding_dim, llm_model,
+    temperature, max_tokens, top_p, frequency_penalty, presence_penalty,
+    response_format, system_prompt,
+    top_k, chunk_size, chunk_overlap, similarity_threshold,
+    is_active, status, doc_count, chunk_count,
+    created_at, updated_at
+) VALUES (
+    'ecommerce-general-cs',
+    '通用电商客服知识库',
+    '覆盖电商售前咨询（商品规格/材质/价格）、售后（退换货政策/维修）、物流（发货时效/快递查询）、活动（优惠券/满减/会员）、订单（修改/地址/发票）等通用电商客服场景。',
+    'ecommerce',
+    'rag_ecommerce_general',
+    'bge-m3', 1024, 'Qwen2.5-1.5B-Instruct',
+    0.3, 1024, 0.9, 0.5, 0.5,
+    'text',
+    '你是电商客服助手，依据检索到的知识片段回答。原则：1) 严格按政策回答，不超权承诺；2) 涉及具体订单/价格/库存引导用户提供订单号后查询；3) 保持礼貌亲切；4) 若片段未覆盖，诚实说明。',
+    5, 800, 100, 0.55,
+    TRUE, 1, 0, 0,
+    NOW(), NOW()
+) ON CONFLICT (id) DO NOTHING;
 
-        -- 文档 2：售后退换货
-        DECLARE doc_id2 BIGINT;
-        INSERT INTO knowledge_documents (
-            product_id, source_type, title, file_name, filename, file_type,
-            chunk_count, embed_status, tags, category, priority,
-            metadata, imported_by, status, created_at, updated_at
-        ) VALUES (
-            pid, 'text', '电商售后退换货手册', 'after_sales.md', 'after_sales.md', 'md',
-            7, 'indexed', '["售后","退换货","退款","维修"]', 'after_sales', 100,
-            '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW()
-        ) RETURNING id INTO doc_id2;
+-- 文档 1：售前咨询
+INSERT INTO knowledge_documents (
+    product_id, source_type, title, file_name, filename, file_type,
+    chunk_count, embed_status, tags, category, priority,
+    metadata, imported_by, status, created_at, updated_at
+) VALUES
+('ecommerce-general-cs', 'text', '电商售前咨询手册', 'pre_sales.md', 'pre_sales.md', 'md', 8, 'indexed', '["售前","商品","规格","价格","活动"]', 'pre_sales', 100, '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW()),
+('ecommerce-general-cs', 'text', '电商售后退换货手册', 'after_sales.md', 'after_sales.md', 'md', 7, 'indexed', '["售后","退换货","退款","维修"]', 'after_sales', 100, '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW()),
+('ecommerce-general-cs', 'text', '电商物流与订单操作手册', 'logistics_order.md', 'logistics_order.md', 'md', 6, 'indexed', '["物流","快递","订单","发货"]', 'logistics', 95, '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW())
+ON CONFLICT DO NOTHING;
 
-        INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-        (doc_id2, pid, 0, '7 天无理由退换：适用除贴身内衣/食品/特殊定制外的所有商品；条件——商品完好、吊牌未拆、配件齐全、不影响二次销售；流程——申请→寄回→验收入库→退款（原路返回 1-3 工作日）。运费——质量问题商家承担，个人原因买家承担。', 178, '{"doc":"after_sales","section":"7天无理由"}', NOW()),
-        (doc_id2, pid, 1, '质量问题处理：签收后 15 天内可申请质量问题退换；需提供照片/视频证据（外观/功能/尺寸）；商家审核通过后寄回；运费商家承担；特殊情况（小额问题）可协商部分退款不退货。', 162, '{"doc":"after_sales","section":"质量问题"}', NOW()),
-        (doc_id2, pid, 2, '退款时效说明：①原路退回（微信/支付宝/银行卡）1-3 工作日到账；②账户余额退款实时到账；③花呗/信用卡 3-5 工作日到账。超 5 工作日未到账引导查支付软件账单。', 158, '{"doc":"after_sales","section":"退款时效"}', NOW()),
-        (doc_id2, pid, 3, '商品已发货但想退款：①未签收——直接申请退款，商家联系快递拦截；②已签收——走 7 天无理由流程；③部分发货——可退未发部分，已发部分签收后退。运费：已发货未签收的拦截费由商家承担（非用户原因）。', 168, '{"doc":"after_sales","section":"发货后退款"}', NOW()),
-        (doc_id2, pid, 4, '破损/丢失处理：签收时发现破损——拍照留证→当场拒收→联系客服补发；签收后破损——24 小时内联系客服→提供照片→商家走物流理赔流程；整单丢失——商家走物流索赔→同时给用户补发或退款。', 172, '{"doc":"after_sales","section":"破损丢失"}', NOW()),
-        (doc_id2, pid, 5, '超售后期沟通话术："理解您的心情～虽然已经过了退换期，我帮您 @售后专员 看看能不能特殊处理一下"——先共情，再转人工，不拒绝。同时可以说"这款有任何使用问题都可以联系我们，终身技术支持"。', 168, '{"doc":"after_sales","section":"超期话术"}', NOW()),
-        (doc_id2, pid, 6, '投诉安抚 SOP：①先共情"真的很抱歉给您带来不好的体验 😢"②承认问题（不辩解）③给出具体方案（退款/补发/优惠券）④确认接受⑤跟进结果。禁止：和用户争辩、用"这是规定"搪塞、让用户自己找老板。', 175, '{"doc":"after_sales","section":"投诉安抚"}', NOW());
+-- 插入 chunks（用子查询关联 document_id）
+INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at)
+SELECT d.id, 'ecommerce-general-cs', v.idx, v.content, v.cc, v.meta, NOW()
+FROM knowledge_documents d
+JOIN (
+    -- === 文档 1: 售前 ===
+    SELECT '电商售前咨询手册' AS title, 0 AS idx, '商品规格查询标准流程：客户问规格 → 确认具体款号/系列 → 查规格表（尺寸/材质/重量/产地/适用人群）→ 分点列 3-5 个核心参数 → 引导看详情页或发参数图。常用拒绝："具体参数以详情页最新为准，我帮您查一下哈～"' AS content, 158 AS cc, '{"doc":"pre_sales","section":"规格流程"}' AS meta
+    UNION ALL SELECT '电商售前咨询手册', 1, '价格说明：标价为商品指导价，最终价格以下单时显示为准。活动叠加规则——秒杀/限时折扣与优惠券不可同时使用（二选一）；会员折扣与优惠券可叠加；满减与优惠券看活动详情页说明。任何情况下不口头承诺"这个价买贵了退差价"，引导看价保政策。', 182, '{"doc":"pre_sales","section":"价格"}'
+    UNION ALL SELECT '电商售前咨询手册', 2, '材质安全承诺：所有商品材质符合国家相关标准，详情页附检测报告。贴身衣物/接触皮肤类商品特别说明面料成分（A类/B类）；食品类需有 SC 编号和保质期说明；化妆品需有特证编号。客户对材质有疑虑时主动提供检测报告截图。', 168, '{"doc":"pre_sales","section":"材质安全"}'
+    UNION ALL SELECT '电商售前咨询手册', 3, '尺码推荐流程：询问身高体重 → 查尺码表 → 推荐正码（不偏大不偏小）→ 特殊体型提醒（大肚腩/孕后期建议大一码）→ 附尺码对照表链接 → 犹豫时引导看用户评价里的尺码反馈。鞋类还需问脚长、是否穿袜子。', 178, '{"doc":"pre_sales","section":"尺码"}'
+    UNION ALL SELECT '电商售前咨询手册', 4, '活动话术模板："这款目前有 XX 活动，XX 时间结束，现在下单立省 XX 元 🎉"；"还有 XX 件，库存紧张哦～"；"今天下单还送 XX 赠品"；"会员专享价比普通价低 XX%"。禁止用"最后一件""马上没了"等过度营销词。', 165, '{"doc":"pre_sales","section":"活动话术"}'
+    UNION ALL SELECT '电商售前咨询手册', 5, '优惠券使用规则：优惠券分品类券（限特定品类）、满减券（需满足金额门槛）、新人券（限首次下单）。查看方式——用户中心→优惠券；领取方式——首页活动页/粉丝群/会员生日。不叠加规则以优惠券详情页为准。', 172, '{"doc":"pre_sales","section":"优惠券"}'
+    UNION ALL SELECT '电商售前咨询手册', 6, '组合推荐策略：客户问单品 → 主动推荐搭配（"这个和 XX 一起买更搭哦，立减 XX 元"）；客户问品类 → 先问用途（送礼还是自用）、送谁、预算多少 → 推荐 2-3 款 → 每款讲一个亮点 → 引导选。', 169, '{"doc":"pre_sales","section":"搭配推荐"}'
+    UNION ALL SELECT '电商售前咨询手册', 7, '送礼场景话术："送礼的话推荐 XX 款，包装精美有礼盒 🎁"；"这款是今年爆款，很多人买来送 XX"；"附手写贺卡，写上祝福更有心意～"。主动问送礼对象、预算、是否需要贺卡。', 156, '{"doc":"pre_sales","section":"送礼"}'
+    -- === 文档 2: 售后 ===
+    UNION ALL SELECT '电商售后退换货手册', 0, '7 天无理由退换：适用除贴身内衣/食品/特殊定制外的所有商品；条件——商品完好、吊牌未拆、配件齐全、不影响二次销售；流程——申请→寄回→验收入库→退款（原路返回 1-3 工作日）。运费——质量问题商家承担，个人原因买家承担。', 178, '{"doc":"after_sales","section":"7天无理由"}'
+    UNION ALL SELECT '电商售后退换货手册', 1, '质量问题处理：签收后 15 天内可申请质量问题退换；需提供照片/视频证据（外观/功能/尺寸）；商家审核通过后寄回；运费商家承担；特殊情况（小额问题）可协商部分退款不退货。', 162, '{"doc":"after_sales","section":"质量问题"}'
+    UNION ALL SELECT '电商售后退换货手册', 2, '退款时效说明：①原路退回（微信/支付宝/银行卡）1-3 工作日到账；②账户余额退款实时到账；③花呗/信用卡 3-5 工作日到账。超 5 工作日未到账引导查支付软件账单。', 158, '{"doc":"after_sales","section":"退款时效"}'
+    UNION ALL SELECT '电商售后退换货手册', 3, '商品已发货但想退款：①未签收——直接申请退款，商家联系快递拦截；②已签收——走 7 天无理由流程；③部分发货——可退未发部分，已发部分签收后退。运费：已发货未签收的拦截费由商家承担（非用户原因）。', 168, '{"doc":"after_sales","section":"发货后退款"}'
+    UNION ALL SELECT '电商售后退换货手册', 4, '破损/丢失处理：签收时发现破损——拍照留证→当场拒收→联系客服补发；签收后破损——24 小时内联系客服→提供照片→商家走物流理赔流程；整单丢失——商家走物流索赔→同时给用户补发或退款。', 172, '{"doc":"after_sales","section":"破损丢失"}'
+    UNION ALL SELECT '电商售后退换货手册', 5, '超售后期沟通话术："理解您的心情～虽然已经过了退换期，我帮您 @售后专员 看看能不能特殊处理一下"——先共情，再转人工，不拒绝。同时可以说"这款有任何使用问题都可以联系我们，终身技术支持"。', 168, '{"doc":"after_sales","section":"超期话术"}'
+    UNION ALL SELECT '电商售后退换货手册', 6, '投诉安抚 SOP：①先共情"真的很抱歉给您带来不好的体验 😢"②承认问题（不辩解）③给出具体方案（退款/补发/优惠券）④确认接受⑤跟进结果。禁止：和用户争辩、用"这是规定"搪塞、让用户自己找老板。', 175, '{"doc":"after_sales","section":"投诉安抚"}'
+    -- === 文档 3: 物流 ===
+    UNION ALL SELECT '电商物流与订单操作手册', 0, '发货时效规则：①现货——48 小时内发货（工作日 48h）；②预售——以商品详情页标注的发货时间为准（通常 7-15 天）；③大促期间——发货时效可能延长，详情页会公告；④节假日——顺延至节后工作日。', 162, '{"doc":"logistics","section":"发货时效"}'
+    UNION ALL SELECT '电商物流与订单操作手册', 1, '物流查询方式：①发送订单号 → 客服查运单+快递公司 → 返回快递公司官网链接；②提醒用户可自行查——"在订单详情点【查看物流】就能实时追踪啦～"；③超 3 天未更新——建议联系快递公司官网查询，或客服协助联系快递。', 178, '{"doc":"logistics","section":"物流查询"}'
+    UNION ALL SELECT '电商物流与订单操作手册', 2, '地址修改流程：①订单未发货——直接后台改地址（买家/客服都可操作）；②订单已发货——联系快递改址（可能产生改址费，偏远地区无法改）；③建议：下单前仔细核对地址！', 155, '{"doc":"logistics","section":"改地址"}'
+    UNION ALL SELECT '电商物流与订单操作手册', 3, '发票申请流程：①下单时备注发票抬头+税号；②已下单未开票——申请补开，1-3 工作日开出；③电子发票——发到邮箱；④纸质发票——随单寄或单独寄（可能有额外运费）；⑤发票信息有误——作废重开（当月可直接改，跨月需走红冲流程）。', 168, '{"doc":"logistics","section":"发票"}'
+    UNION ALL SELECT '电商物流与订单操作手册', 4, '超区/无网点处理：快递到不了用户地址 → ①提前电话联系用户协商；②转发其他可达快递；③退回后换地址重发；④告知时效延长。禁止静默退回不通知。', 155, '{"doc":"logistics","section":"超区"}'
+    UNION ALL SELECT '电商物流与订单操作手册', 5, '催发货话术："我帮您催一下哈～"→ 内部标记加急；"这款目前现货紧张，正在陆续发出中，您的订单会在 XX 时间前发出"；"给您发最新发货进度截图"。给一个明确时间预期，不模糊。', 148, '{"doc":"logistics","section":"催发货"}'
+) v ON d.title = v.title AND d.product_id = 'ecommerce-general-cs'
+ON CONFLICT DO NOTHING;
 
-        -- 文档 3：物流查询与订单
-        DECLARE doc_id3 BIGINT;
-        INSERT INTO knowledge_documents (
-            product_id, source_type, title, file_name, filename, file_type,
-            chunk_count, embed_status, tags, category, priority,
-            metadata, imported_by, status, created_at, updated_at
-        ) VALUES (
-            pid, 'text', '电商物流与订单操作手册', 'logistics_order.md', 'logistics_order.md', 'md',
-            6, 'indexed', '["物流","快递","订单","发货"]', 'logistics', 95,
-            '{"source":"seed-034"}', 'system_seed', 1, NOW(), NOW()
-        ) RETURNING id INTO doc_id3;
+-- 更新统计
+UPDATE rag_products
+SET doc_count = 3, chunk_count = (SELECT COUNT(*) FROM knowledge_chunks WHERE product_id = 'ecommerce-general-cs'),
+    last_import_at = NOW(), updated_at = NOW()
+WHERE id = 'ecommerce-general-cs';
 
-        INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-        (doc_id3, pid, 0, '发货时效规则：①现货——48 小时内发货（工作日 48h）；②预售——以商品详情页标注的发货时间为准（通常 7-15 天）；③大促期间——发货时效可能延长，详情页会公告；④节假日——顺延至节后工作日。', 162, '{"doc":"logistics","section":"发货时效"}', NOW()),
-        (doc_id3, pid, 1, '物流查询方式：①发送订单号 → 客服查运单+快递公司 → 返回快递公司官网链接；②提醒用户可自行查——"在订单详情点【查看物流】就能实时追踪啦～"；③超 3 天未更新——建议联系快递公司官网查询，或客服协助联系快递。', 178, '{"doc":"logistics","section":"物流查询"}', NOW()),
-        (doc_id3, pid, 2, '地址修改流程：①订单未发货——直接后台改地址（买家/客服都可操作）；②订单已发货——联系快递改址（可能产生改址费，偏远地区无法改）；③建议：下单前仔细核对地址！', 155, '{"doc":"logistics","section":"改地址"}', NOW()),
-        (doc_id3, pid, 3, '发票申请流程：①下单时备注发票抬头+税号；②已下单未开票——申请补开，1-3 工作日开出；③电子发票——发到邮箱；④纸质发票——随单寄或单独寄（可能有额外运费）；⑤发票信息有误——作废重开（当月可直接改，跨月需走红冲流程）。', 168, '{"doc":"logistics","section":"发票"}', NOW()),
-        (doc_id3, pid, 4, '超区/无网点处理：快递到不了用户地址 → ①提前电话联系用户协商；②转发其他可达快递；③退回后换地址重发；④告知时效延长。禁止静默退回不通知。', 155, '{"doc":"logistics","section":"超区"}', NOW()),
-        (doc_id3, pid, 5, '催发货话术："我帮您催一下哈～"→ 内部标记加急；"这款目前现货紧张，正在陆续发出中，您的订单会在 XX 时间前发出"；"给您发最新发货进度截图"。给一个明确时间预期，不模糊。', 148, '{"doc":"logistics","section":"催发货"}', NOW());
-
-        -- 更新统计
-        UPDATE rag_products
-        SET doc_count = 3, chunk_count = (SELECT COUNT(*) FROM knowledge_chunks WHERE product_id = pid),
-            last_import_at = NOW(), updated_at = NOW()
-        WHERE id = pid;
-        RAISE NOTICE '✓ 通用电商 RAG 知识库已创建，共 % 文档 % 分段', 3, (SELECT COUNT(*) FROM knowledge_chunks WHERE product_id = pid);
-    END IF;
+-- === 重新开始主 DO 块 ===
+DO $$
+DECLARE
+    hivemtk_agent_id BIGINT;
+    cs_agent_id BIGINT;
+    sales_agent_id BIGINT;
+    community_agent_id BIGINT;
+BEGIN
 
     -- ================================================================
     -- PART 5: 为通用电商客服智能体创建 40+ 条产品级 FAQ
