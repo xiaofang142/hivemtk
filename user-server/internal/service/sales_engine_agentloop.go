@@ -597,12 +597,9 @@ func (e *SalesEngine) buildPrompt(
 		sb.WriteString(fmt.Sprintf("【客户阶段】: %s\n", stage))
 	}
 
-	if len(ragChunks) > 0 {
-		sb.WriteString("\n【知识库参考】:\n")
-		for i, chunk := range ragChunks {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, truncate(chunk.Content, 200)))
-		}
-	}
+	// RAG chunks 已在 buildAgentSystemPrompt (system message) 里拼一次，
+	// 这里不再重复，避免占双倍 token（ContextBudget 统一管理）
+	// 留 ragChunks 参数以便未来做按需注入
 
 	if script != nil {
 		sb.WriteString(fmt.Sprintf("\n【话术参考】: %s\n", truncate(script.Content, 150)))

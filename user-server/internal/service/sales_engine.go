@@ -299,9 +299,18 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 			Step: "5_recall_rag", Status: "fail", Error: err.Error(),
 		})
 	} else {
+		// ContextBudget 动态裁剪：按 relevance score 排序后塞入 token 预算
+		budget := NewContextBudget(defaultContextWindow)
+		ragChunks, dropped := budget.TruncateRAGChunks(ragChunks)
+
 		resp.Steps = append(resp.Steps, dto.SalesStepLog{
 			Step: "5_recall_rag", Status: "ok", LatencyMs: ms(stepStart),
-			Extra: map[string]any{"chunk_count": len(ragChunks)},
+			Extra: map[string]any{
+				"chunk_count":     len(ragChunks),
+				"chunks_dropped":  dropped,
+				"rag_budget":      budget.RAGTokenBudget(),
+				"total_context":   budget.TotalContext,
+			},
 		})
 	}
 	resp.RAGChunks = ragChunks
