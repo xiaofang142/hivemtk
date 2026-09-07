@@ -69,10 +69,12 @@ const (
 )
 
 func tgGateDefaultWelcome(mode string) string {
+	// 统一 4 个占位符（和 DB welcome_msg 模板一致）:
+	//   [0]=displayName, [1]=@botUsername, [2]=botDomain(不带@), [3]=token
 	if mode == TGGateModeJoinRequest {
-		return "@%s 你的入群申请已收到！请点击 Bot 私聊链接完成验证：https://t.me/%s?start=%s ，验证通过后将自动批准进群。"
+		return "👋 欢迎 %s！你正在通过 %s 加入群组。\n\n请点击这里完成验证：https://t.me/%s?start=%s\n\n验证后即可正常发言~"
 	}
-	return "@%s 欢迎加入！为防止垃圾广告，账号已临时禁言。请点击链接完成验证：https://t.me/%s?start=%s ，验证通过后自动解除。"
+	return "👋 欢迎 %s！你正在通过 %s 加入群组。\n\n请点击这里完成验证：https://t.me/%s?start=%s\n\n验证后即可正常发言~"
 }
 
 // client 加载 Bot 客户端
@@ -139,11 +141,12 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 	// 此时依赖群里提示让用户主动点开 Bot（不重试，等用户 /start）。
 	botUsername := s.botUsername(ctx, accountID)
 	link := botDeepLink(botUsername, token)
+	botDomain := strings.TrimPrefix(botUsername, "@")
 	welcome := gate.WelcomeMsg
 	if welcome == "" {
 		welcome = tgGateDefaultWelcome(TGGateModeJoinRequest)
 	}
-	welcome = fmt.Sprintf(welcome, tgUserDisplayName(req.From), botUsername, token)
+	welcome = fmt.Sprintf(welcome, tgUserDisplayName(req.From), botUsername, botDomain, token)
 
 	if cli, cerr := s.client(ctx, accountID); cerr == nil {
 		if _, serr := cli.SendMessage(ctx, req.From.ID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); serr != nil {
@@ -213,10 +216,11 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		}
 
 		welcome := gate.WelcomeMsg
-		if welcome == "" {
-			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
-		}
-		welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, token)
+			if welcome == "" {
+				welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+			}
+			botDomain := strings.TrimPrefix(botUsername, "@")
+			welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			logger.Errorf("[TG-Gate] 群内验证提示发送失败 account=%d chat=%s: %v", accountID, chatIDStr, err)
 		}

@@ -16,6 +16,7 @@ import (
 	"net/url"
 
 	"os"
+	"regexp"
 	"strconv"
 
 	"strings"
@@ -741,44 +742,63 @@ func extractTelegramReplyMetaFromCtx(ctx context.Context) *TelegramReplyMeta {
 //   3. ParseModeHTML 确保 @mention 渲染成可点击链接
 func buildTelegramGroupReply(content string, meta *TelegramReplyMeta) (string, telegram.SendMessageOptions) {
 	opts := telegram.SendMessageOptions{
-		ParseMode:         "HTML",
-		DisableWebPreview: true,
+		ParseMode:                 "HTML",
+		DisableMarkdownConversion: true, // 我们自己写 HTML（@mention + escape AI 回复）
+		DisableWebPreview:         true,
 	}
 	if meta == nil {
-		return content, opts
+		// 无 meta 也走 HTML escape（防御 LLM XSS）
+		return htmlEscapeAndPreserveMarkdown(content), opts
 	}
 	if meta.ReplyToMsgID > 0 {
 		opts.ReplyToMessageID = meta.ReplyToMsgID
 	}
 
-	// 构造 @mention 头部（Telegram HTML parse_mode 格式）
-	// 有 username 用 @username（纯文本 @name 即可被识别），
-	// 没有 username 用 tg://user?id=X 链接
+	// 1. 构造 @mention 头部（我们自己写的 HTML，可控安全）
 	var mentionPrefix string
 	displayName := meta.FromName
 	if displayName == "" {
 		displayName = meta.FromUsername
 	}
+	escapedDisplayName := htmlEscapeText(displayName)
+	if escapedDisplayName == "" {
+		escapedDisplayName = "朋友"
+	}
 	if meta.FromUserID > 0 {
-		escaped := htmlEscapeText(displayName)
-		if escaped == "" {
-			escaped = "朋友"
-		}
-		mentionPrefix = fmt.Sprintf(`<a href="tg://user?id=%d">@%s</a> `, meta.FromUserID, escaped)
+		// 可点击链接 @mention
+		mentionPrefix = fmt.Sprintf(`<a href="tg://user?id=%d">@%s</a> `, meta.FromUserID, escapedDisplayName)
 	} else if meta.FromUsername != "" {
-		mentionPrefix = fmt.Sprintf("@%s ", meta.FromUsername)
-	} else if displayName != "" {
-		mentionPrefix = displayName + " "
+		mentionPrefix = "@" + htmlEscapeText(meta.FromUsername) + " "
+	} else {
+		mentionPrefix = escapedDisplayName + " "
 	}
 
-	// 给商机触发加一个轻量引导提示（不打扰但让用户知道是 AI 主动关怀）
+	// 2. AI 回复做 escape + 保留 **bold** 等 Markdown → HTML
+	escapedContent := htmlEscapeAndPreserveMarkdown(content)
+
+	// 3. 给商机触发加轻量引导提示
 	var leadHint string
 	if meta.TriggerReason == "opportunity" {
-		leadHint = "\n💡 看到你对这个话题感兴趣，我是 @HiveMtkBot 的 AI 助手，想帮你进一步了解~"
+		leadHint = "\n💡 看到你对这个话题感兴趣，我是 HiveMtk 的 AI 助手，想帮你进一步了解~"
 	}
 
-	full := mentionPrefix + content + leadHint
+	full := mentionPrefix + escapedContent + leadHint
 	return full, opts
+}
+
+// htmlEscapeAndPreserveMarkdown 先 escape <>&" 防 XSS，再把 **bold** → <b>、`code` → <code>
+// 对应 Telegram HTML parse_mode 支持的标签
+func htmlEscapeAndPreserveMarkdown(s string) string {
+	if s == "" {
+		return ""
+	}
+	// Step 1: 完整 escape
+	s = htmlEscapeText(s)
+	// Step 2: 恢复 Markdown → HTML（和底层 markdownToTelegramHTML 一致）
+	s = regexp.MustCompile(`\*\*(.+?)\*\*`).ReplaceAllString(s, "<b>$1</b>")
+	s = regexp.MustCompile(`` + "`" + `(.+?)` + "`").ReplaceAllString(s, "<code>$1</code>")
+	s = regexp.MustCompile(`\*(.+?)\*`).ReplaceAllString(s, "<i>$1</i>")
+	return s
 }
 
 // htmlEscapeText Telegram HTML parse_mode 需要的最小转义

@@ -130,7 +130,9 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 		return
 	}
 
-	parentCtx := context.Background()
+	// 关键：用 ctx 作为 base（保留 TelegramReplyMeta / AgentID 等 values）
+	// 但要避免上游 cancel 提前终止 → 用 context.WithoutCancel
+	parentCtx := context.WithoutCancel(ctx)
 	if c := tracing.CarrierFromContext(ctx); c != nil {
 		parentCtx = tracing.WithCarrier(parentCtx, c)
 	} else if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {
@@ -211,7 +213,7 @@ func (s *WebhookService) triggerSmartOrchestrator(ctx context.Context, channel W
 		Str("event_id", p.EventID).
 		Msg("[Webhook] triggerSmartOrchestrator start")
 
-	routeCtx := context.Background()
+	routeCtx := context.WithoutCancel(ctx)
 	if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {
 		routeCtx = trace.NewContextWithTraceID(routeCtx, parentTraceID)
 	}
@@ -377,7 +379,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		return
 	}
 
-	parentCtx := context.Background()
+	parentCtx := context.WithoutCancel(ctx)
 	if c := tracing.CarrierFromContext(ctx); c != nil {
 		parentCtx = tracing.WithCarrier(parentCtx, c)
 	} else if parentTraceID := trace.TraceIDFromContext(ctx); parentTraceID != "" {
