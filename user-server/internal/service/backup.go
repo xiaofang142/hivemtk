@@ -444,9 +444,9 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 		if err != nil {
 			return err
 		}
-		defer rc.Close()
 
 		if f.FileInfo().IsDir() {
+			rc.Close()
 			if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
 				return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 			}
@@ -455,19 +455,26 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 		}
 
 		if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
+			rc.Close()
 			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 		}
 		path := filepath.Join("restore_tmp", f.Name)
 		os.MkdirAll(filepath.Dir(path), 0700)
 		outFile, err := os.Create(path)
 		if err != nil {
+			rc.Close()
 			return err
 		}
-		defer outFile.Close()
 
-		_, err = io.Copy(outFile, rc)
-		if err != nil {
-			return err
+		// 循环体内禁止 defer（大备份数千条目会堆积数千 FD 触发 EMFILE），逐文件显式关闭
+		_, copyErr := io.Copy(outFile, rc)
+		closeErr := outFile.Close()
+		rc.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 	}
 	return nil

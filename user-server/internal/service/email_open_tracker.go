@@ -12,6 +12,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -84,7 +85,7 @@ func (s *EmailOpenTrackerService) RenderPixel(ctx context.Context, token, ip, ua
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
 		if err := s.tracking.RecordOpenEvent(bgCtx, t, ipAddr, userAgent); err != nil {
-			_ = err
+			logger.Warnf("[email_open] 打开事件记录失败 token=%s: %v", t, err)
 		}
 	}(token, ip, ua)
 

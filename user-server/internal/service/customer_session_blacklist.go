@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 	"reflect"
@@ -75,12 +76,14 @@ func (s *CustomerSessionService) BlacklistUser(ctx context.Context, req *Blackli
 		return fmt.Errorf("写入黑名单失败: %w", err)
 	}
 
+	// 黑名单已生效，但会话未关闭则访客仍停留在原会话收发——必须记日志并反馈给调用方
 	if err := s.sessionRepo.UpdateStatus(ctx, req.SessionID, model.SessionStatusClosed); err != nil {
-		_ = err
+		logger.Errorf("blacklist: 会话关闭失败 session=%d: %v", req.SessionID, err)
+		return fmt.Errorf("黑名单已写入，但关闭会话失败: %w", err)
 	}
 
 	if err := s.notifySessionUpdate(ctx, session, "blacklisted", "human"); err != nil {
-		_ = err
+		logger.Errorf("blacklist: 会话通知失败 session=%d: %v", req.SessionID, err)
 	}
 	if err := websocket.SendToVisitor(websocket.TypeAgentJoined, map[string]any{
 		"session_id":  session.SessionID,
@@ -88,7 +91,7 @@ func (s *CustomerSessionService) BlacklistUser(ctx context.Context, req *Blackli
 		"reason":      "因违反服务条款，该访客已被加入黑名单",
 		"blacklisted": true,
 	}, session.SessionID); err != nil {
-		_ = err
+		logger.Errorf("blacklist: WS 通知访客失败 session=%d: %v", req.SessionID, err)
 	}
 
 	return nil

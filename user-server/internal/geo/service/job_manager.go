@@ -81,7 +81,7 @@ var specParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom
 //  3. 每次运行落 geo_job_runs 历史（管理端可查）
 //  4. cron 表达式可经管理端 API 调整并持久化到 GeoConfig.CronSpecs
 type JobManager struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	sched   JobScheduler
 	runRepo repository.GeoJobRunRepository
 	cfgRepo repository.GeoConfigRepository
@@ -312,11 +312,16 @@ type GeoJobInfo struct {
 
 // ListJobs 全部任务 + 最新一次运行状态
 func (m *JobManager) ListJobs(ctx context.Context) []GeoJobInfo {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	// 锁内只做快照（specs/running/setup），DB IO（runRepo.Latest）移到锁外，
+	// 避免与 UpdateSchedule 的锁内持久化互相阻塞
+	m.mu.RLock()
 	out := make([]GeoJobInfo, 0, len(geoJobDefs))
-	for _, d := range geoJobDefs {
+	type pendingRun struct {
+		idx  int
+		name string
+	}
+	pending := make([]pendingRun, 0, len(geoJobDefs))
+	for i, d := range geoJobDefs {
 		info := GeoJobInfo{
 			Name:        d.Name,
 			Description: d.Description,
@@ -325,10 +330,15 @@ func (m *JobManager) ListJobs(ctx context.Context) []GeoJobInfo {
 			Scheduled:   m.setup,
 			Running:     m.running[d.Name].Load(),
 		}
-		if run, err := m.runRepo.Latest(ctx, d.Name); err == nil {
-			info.LatestRun = run
-		}
 		out = append(out, info)
+		pending = append(pending, pendingRun{idx: i, name: d.Name})
+	}
+	m.mu.RUnlock()
+
+	for _, p := range pending {
+		if run, err := m.runRepo.Latest(ctx, p.name); err == nil {
+			out[p.idx].LatestRun = run
+		}
 	}
 	return out
 }

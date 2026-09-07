@@ -181,12 +181,16 @@ func (h *Hub) BroadcastToMerchant(merchantID string, messageType string, payload
 		return err
 	}
 
+	// 只在锁内做快照；Broadcast 的入队（broadcast channel 可能阻塞）必须在 RUnlock 之后，
+	// 否则 channel 打满时持 RLock 阻塞会卡死 Run 循环的 Lock → 整个 hub 死锁
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	agentIDs := make([]string, 0, len(h.clients))
+	for agentID := range h.clients {
+		agentIDs = append(agentIDs, agentID)
+	}
+	h.mu.RUnlock()
 
-	for agentID, client := range h.clients {
-		_ = client
-		_ = merchantID
+	for _, agentID := range agentIDs {
 		h.Broadcast(&Message{
 			Type:    messageType,
 			AgentID: agentID,

@@ -70,13 +70,16 @@ func (s *EventTracker) Track(ctx context.Context, dto *EventDTO) error {
 	}
 
 	if !s.disableAsync {
+		// fire-and-forget 异步处理不能复用请求 ctx：HTTP handler 返回即取消，异步任务会被掐断半途
+		asyncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		go func() {
+			defer cancel()
 			defer func() {
 				if r := recover(); r != nil {
 					logger.Errorf("event_tracker: AutoTagger.ProcessEvent recovered from panic: %v", r)
 				}
 			}()
-			if err := s.autoTagger.ProcessEvent(ctx, event); err != nil {
+			if err := s.autoTagger.ProcessEvent(asyncCtx, event); err != nil {
 				logger.Errorf("AutoTagger.ProcessEvent error: %v", err)
 			}
 		}()
@@ -87,7 +90,7 @@ func (s *EventTracker) Track(ctx context.Context, dto *EventDTO) error {
 						logger.Errorf("event_tracker: orchestrator.OnCustomerEvent recovered from panic: %v", r)
 					}
 				}()
-				s.orchestrator.OnCustomerEvent(ctx, dto.CustomerID, event)
+				s.orchestrator.OnCustomerEvent(asyncCtx, dto.CustomerID, event)
 			}()
 		}
 	}

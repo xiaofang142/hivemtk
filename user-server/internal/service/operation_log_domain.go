@@ -48,6 +48,11 @@ func toOperationLogView(log *model.OperationLog) *OperationLogView {
 	}
 }
 
+// Create 写入操作日志（审计 sink 用，保持 Router→Service→Repository 分层）
+func (s *OperationLogService) Create(ctx context.Context, log *model.OperationLog) error {
+	return s.logRepo.Create(ctx, log)
+}
+
 // GetAll 获取操作日志列表
 func (s *OperationLogService) GetAll(ctx context.Context, page, pageSize int, filters map[string]any) ([]*OperationLogView, int64, error) {
 	if page < 1 {

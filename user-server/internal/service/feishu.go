@@ -236,7 +236,10 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = string(respB)
-		_ = s.feishu.UpdateAccount(ctx, acc)
+		if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("feishu api status %d: %s", resp.StatusCode, string(respB))
 	}
 	outMsg := &model.FeishuMessage{
@@ -315,7 +318,10 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 	expires := time.Now().Add(time.Duration(out.Expire-300) * time.Second)
 	acc.AccessToken = out.TenantAccessToken
 	acc.TokenExpires = &expires
-	_ = s.feishu.UpdateAccount(ctx, acc)
+	if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 	return out.TenantAccessToken, nil
 }
 
@@ -474,7 +480,10 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.tg.UpdateAccount(ctx, acc)
+		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -526,7 +535,10 @@ func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uin
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.tg.UpdateAccount(ctx, acc)
+		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("send tg card: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -760,7 +772,10 @@ func (s *WhatsAppCloudIntegrationService) SendMessage(ctx context.Context, accou
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
-		_ = s.wa.UpdateAccount(ctx, acc)
+		if uErr := s.wa.UpdateAccount(ctx, acc); uErr != nil {
+		// 持久化失败只影响下次重启前的自愈，记日志留痕
+		logger.Warnf("[wa] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+	}
 		return fmt.Errorf("send wa msg: %w", err)
 	}
 	msgID := wamid

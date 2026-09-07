@@ -10,5 +10,11 @@ export default [
     name: 'TelegramAccount',
     component: () => import('@/views/telegram/account.vue'),
     meta: { title: '机器人账号', group: 'community', icon: 'Cpu' }
+  },
+  {
+    path: '/telegram/gate',
+    name: 'TelegramGate',
+    component: () => import('@/views/telegram/gate.vue'),
+    meta: { title: '入群管控', group: 'community', icon: 'Lock' }
   }
 ]

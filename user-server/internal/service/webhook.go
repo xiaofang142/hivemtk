@@ -35,6 +35,7 @@ type WebhookService struct {
 
 	feishuIntegration *FeishuIntegrationService
 	tgIntegration     *TelegramIntegrationService
+	tgGate            *TelegramGateService
 	waIntegration     *WhatsAppCloudIntegrationService
 
 	wechatIntegration *WechatService
@@ -137,6 +138,7 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		wecomRepo:      wecomRepo,
 		integration:    NewWeComIntegrationService(db),
 		telegramRepo:   telegramRepo,
+		tgGate:         NewTelegramGateService(db),
 		feishuRepo:     feishuRepo,
 		waRepo:         waRepo,
 		messageHubRepo: messageHubRepo,
@@ -629,6 +631,9 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 	}
 
 	triggerAI := hubMsg != nil && s.shouldTriggerAI(ctx, channel, job.account)
+	if channel == ChannelTelegram && tgExtra != nil && tgExtra.GateHandled {
+		triggerAI = false // /start 网关验证已消费
+	}
 	if triggerAI {
 		if channel != ChannelTelegram || !hubMsg.IsGroup {
 			s.triggerSalesEngine(ctx, channel, job.account, payload, hubMsg)

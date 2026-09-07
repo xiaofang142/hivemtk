@@ -24,6 +24,7 @@ import (
 type tgDispatchExtra struct {
 	Mentioned      bool
 	NewOpportunity bool
+	GateHandled    bool // /start 网关验证已消费，不再触发销售智能体
 }
 
 const (
@@ -81,6 +82,20 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 
 	botUsername := s.getTelegramBotUsername(ctx, accountID)
 
+	// 方案 A：入群申请（群开启 "申请加入" 后 Telegram 推送 chat_join_request）
+	if tgPayload.ChatJoinRequest != nil && tgPayload.ChatJoinRequest.From != nil {
+		accID, _ := strconv.ParseUint(accountID, 10, 64)
+		if accID > 0 {
+			s.tgGate.HandleJoinRequest(ctx, uint(accID), tgPayload.ChatJoinRequest)
+		}
+		return nil, nil, nil
+	}
+
+	// 成员状态变更（chat_member / my_chat_member）暂无业务，静默消费
+	if tgPayload.ChatMember != nil || tgPayload.MyChatMember != nil {
+		return nil, nil, nil
+	}
+
 	if tgPayload.Message != nil && len(tgPayload.Message.NewChatMembers) > 0 && tgPayload.Message.Chat != nil {
 		chatID := tgPayload.Message.Chat.ID
 		chatType := tgPayload.Message.Chat.Type
@@ -106,6 +121,12 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			}
 		}
 		if newMember != nil {
+			// 方案 B：管控群先禁言（HandleNewMembers 内部判断网关配置，未配置直接跳过）
+			accID, _ := strconv.ParseUint(accountID, 10, 64)
+			if accID > 0 {
+				s.tgGate.HandleNewMembers(ctx, uint(accID), chatID, []telegram.TGUser{*newMember})
+			}
+
 			senderIDStr := fmt.Sprintf("%d", newMember.ID)
 			fromName := newMember.FirstName
 			if newMember.Username != "" {
@@ -300,7 +321,30 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		mentioned = true
 	}
 
-	return hub, &tgDispatchExtra{Mentioned: mentioned, NewOpportunity: newOpportunity}, nil
+	// 网关验证：私聊 /start（带或不带 token）走激活流程，命中后不再触发销售智能体
+	gateHandled := false
+	if !picked.fromIsBot && picked.chatType == "private" && strings.HasPrefix(strings.TrimSpace(picked.text), "/start") {
+		accID, _ := strconv.ParseUint(accountID, 10, 64)
+		if accID > 0 {
+			gateHandled = s.tgGate.HandleStartCommand(ctx, uint(accID), tgUserFromMessage(tgPayload), picked.text, picked.chatID)
+		}
+	}
+
+	return hub, &tgDispatchExtra{Mentioned: mentioned, NewOpportunity: newOpportunity, GateHandled: gateHandled}, nil
+}
+
+// tgUserFromMessage 提取 /start 命令发送者
+func tgUserFromMessage(tgPayload *telegram.Update) *telegram.TGUser {
+	if tgPayload.Message != nil && tgPayload.Message.From != nil {
+		return tgPayload.Message.From
+	}
+	if tgPayload.EditedMessage != nil && tgPayload.EditedMessage.From != nil {
+		return tgPayload.EditedMessage.From
+	}
+	if tgPayload.CallbackQuery != nil && tgPayload.CallbackQuery.From != nil {
+		return tgPayload.CallbackQuery.From
+	}
+	return nil
 }
 
 const tgLeadOutreachCooldown = 30 * time.Minute
