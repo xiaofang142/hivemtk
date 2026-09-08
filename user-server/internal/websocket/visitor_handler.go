@@ -120,11 +120,11 @@ func (h *VisitorWSHandler) HandleVisitorWebSocket(c *gin.Context) {
 
 	visitorToken := strings.TrimSpace(c.Query("visitor_token"))
 	if visitorToken == "" {
-
 		visitorToken = strings.TrimSpace(c.Query("token"))
 	}
+	// fail-closed：session_id/visitor_id 已给出但缺 token 一律拒绝，
+	// 防止凭 session_id 冒连他人会话接收坐席/AI 回复
 	if visitorToken == "" && sessionID != "" && visitorID != "" {
-
 		logger.Ctx(ctx).Warn().Str("session_id", sessionID).Str("visitor_id", visitorID).Msg("WebSocket 连接无 visitor_token，已拒绝")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "visitor_token required"})
 		return
