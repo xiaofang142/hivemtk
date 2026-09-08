@@ -324,7 +324,7 @@ const addTag = async () => {
       if (!current.value.tags) current.value.tags = []
       current.value.tags.push(value)
     }
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 }
 
 const removeTag = async (tag) => {

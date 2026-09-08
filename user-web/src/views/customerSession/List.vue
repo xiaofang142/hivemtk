@@ -433,7 +433,7 @@ onMounted(async () => {
       setupAgentSocket()
       return
     }
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
   try {
     const res = await getOnlineAgents()
     const list = res || [];
@@ -443,7 +443,7 @@ onMounted(async () => {
       myStatus.value = arr[0].status || 'offline'
       setupAgentSocket()
     }
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });
 
 watch(currentSession, (newVal, oldVal) => {

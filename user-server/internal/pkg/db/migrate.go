@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"sync"
 	contentmodel "hivemtk-user/internal/content/model"
 	geomodel "hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/model"
@@ -305,7 +306,8 @@ func AutoMigrate() *gorm.DB {
 	ensureExtensions()
 
 	tolerated := 0
-	for _, m := range allModels() {
+	all := append(allModels(), ExtraModels()...)
+	for _, m := range all {
 		if err := DB.AutoMigrate(m); err != nil {
 			if isTolerableMigrateError(err) {
 				if !DB.Migrator().HasTable(m) {
@@ -318,7 +320,7 @@ func AutoMigrate() *gorm.DB {
 		}
 	}
 
-	if missing := missingTables(DB, allModels()...); len(missing) > 0 {
+	if missing := missingTables(DB, all...); len(missing) > 0 {
 		panic(fmt.Sprintf("AutoMigrate 终校验失败：以下模型对应的数据表缺失（可能被可容忍错误静默吞掉，需排查建表失败根因）：%s", strings.Join(missing, ", ")))
 	}
 
@@ -399,4 +401,26 @@ func createTableFallback(m any) {
 	} else {
 		panic(fmt.Sprintf("AutoMigrate 兜底 CreateTable(%T) 后表仍缺失，需排查建表失败根因", m))
 	}
+}
+
+// extraModels 允许其他包（如 service）注册自有模型，统一走启动期 AutoMigrate，
+// 替代散落在业务路径上的 AutoMigrate 调用（迁移漂移治理：单轨收敛）。
+var extraModelsMu sync.Mutex
+
+var extraModels []any
+
+// RegisterExtraModels 由各包在 init() 中注册模型，需在 AutoMigrate() 之前完成。
+func RegisterExtraModels(models ...any) {
+	extraModelsMu.Lock()
+	defer extraModelsMu.Unlock()
+	extraModels = append(extraModels, models...)
+}
+
+// ExtraModels 返回已注册的外部模型列表。
+func ExtraModels() []any {
+	extraModelsMu.Lock()
+	defer extraModelsMu.Unlock()
+	out := make([]any, len(extraModels))
+	copy(out, extraModels)
+	return out
 }

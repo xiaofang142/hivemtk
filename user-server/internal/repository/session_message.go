@@ -229,3 +229,12 @@ func (r *SessionMessageRepository) ListInternalBySession(ctx context.Context, se
 		Find(&list).Error
 	return list, err
 }
+
+// ListRecentDescBySessionID 按 session_id 倒序取最近 N 条消息（AI agent loop 历史上下文用）
+func (r *SessionMessageRepository) ListRecentDescBySessionID(ctx context.Context, sessionID string, limit int) ([]model.SessionMessage, error) {
+	var hist []model.SessionMessage
+	err := r.db.WithContext(ctx).
+		Where("session_id = ?", sessionID).
+		Order("id desc").Limit(limit).Find(&hist).Error
+	return hist, err
+}

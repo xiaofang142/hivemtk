@@ -2,6 +2,7 @@ package router
 
 import (
 	"hivemtk-user/internal/controller"
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -16,37 +17,37 @@ func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		service.NewXiaohongshuCardService(gormDB),
 		service.NewXianyuCardService(gormDB),
 	)
-	auth.POST("/cards/cross-publish", crossPubCtrl.CrossPublish)
+	auth.POST("/cards/cross-publish", middleware.RequirePermission("cards.write"), crossPubCtrl.CrossPublish)
 
 	douyinCardCtrl := controller.NewDouyinCardController(service.NewDouyinCardService(gormDB))
 	auth.GET("/douyin-card/list", douyinCardCtrl.GetList)
-	auth.POST("/douyin-card", douyinCardCtrl.Create)
-	auth.PUT("/douyin-card/:id", douyinCardCtrl.Update)
-	auth.DELETE("/douyin-card/:id", douyinCardCtrl.Delete)
+	auth.POST("/douyin-card", middleware.RequirePermission("cards.write"), douyinCardCtrl.Create)
+	auth.PUT("/douyin-card/:id", middleware.RequirePermission("cards.write"), douyinCardCtrl.Update)
+	auth.DELETE("/douyin-card/:id", middleware.RequirePermission("cards.delete"), douyinCardCtrl.Delete)
 	auth.GET("/douyin-card/:id", douyinCardCtrl.GetByID)
 	auth.GET("/douyin/list", douyinCardCtrl.GetList)
 	auth.GET("/douyin/:id", douyinCardCtrl.GetByID)
-	auth.POST("/douyin/create", douyinCardCtrl.Create)
-	auth.PUT("/douyin/update", douyinCardCtrl.Update)
-	auth.DELETE("/douyin/delete/:id", douyinCardCtrl.Delete)
+	auth.POST("/douyin/create", middleware.RequirePermission("cards.write"), douyinCardCtrl.Create)
+	auth.PUT("/douyin/update", middleware.RequirePermission("cards.write"), douyinCardCtrl.Update)
+	auth.DELETE("/douyin/delete/:id", middleware.RequirePermission("cards.delete"), douyinCardCtrl.Delete)
 	auth.GET("/douyin/view/:id", douyinCardCtrl.GetByID)
-	auth.POST("/douyin/:id/generate-short-link", douyinCardCtrl.GenerateShortLink)
+	auth.POST("/douyin/:id/generate-short-link", middleware.RequirePermission("cards.write"), douyinCardCtrl.GenerateShortLink)
 
 	kuaishouCardCtrl := controller.NewKuaishouCardController(service.NewKuaishouCardService(gormDB))
 	auth.GET("/kuaishou-card/list", kuaishouCardCtrl.GetList)
-	auth.POST("/kuaishou-card", kuaishouCardCtrl.Create)
-	auth.PUT("/kuaishou-card/:id", kuaishouCardCtrl.Update)
-	auth.DELETE("/kuaishou-card/:id", kuaishouCardCtrl.Delete)
+	auth.POST("/kuaishou-card", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Create)
+	auth.PUT("/kuaishou-card/:id", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Update)
+	auth.DELETE("/kuaishou-card/:id", middleware.RequirePermission("cards.delete"), kuaishouCardCtrl.Delete)
 	auth.GET("/kuaishou-card/:id", kuaishouCardCtrl.GetByID)
 	auth.GET("/kuaishou/list", kuaishouCardCtrl.GetList)
 	auth.GET("/kuaishou/:id", kuaishouCardCtrl.GetByID)
-	auth.POST("/kuaishou/create", kuaishouCardCtrl.Create)
-	auth.PUT("/kuaishou/update", kuaishouCardCtrl.Update)
-	auth.DELETE("/kuaishou/delete/:id", kuaishouCardCtrl.Delete)
+	auth.POST("/kuaishou/create", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Create)
+	auth.PUT("/kuaishou/update", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Update)
+	auth.DELETE("/kuaishou/delete/:id", middleware.RequirePermission("cards.delete"), kuaishouCardCtrl.Delete)
 	auth.GET("/kuaishou/view/:id", kuaishouCardCtrl.GetByID)
 	auth.POST("/kuaishou/like/:id", kuaishouCardCtrl.LikeCard)
 	auth.POST("/kuaishou/share/:id", kuaishouCardCtrl.ShareCard)
-	auth.POST("/kuaishou/:id/generate-short-link", kuaishouCardCtrl.GenerateShortLink)
+	auth.POST("/kuaishou/:id/generate-short-link", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.GenerateShortLink)
 
 	xiaohongshuCardCtrl := controller.NewXiaohongshuCardController(service.NewXiaohongshuCardService(gormDB))
 	auth.GET("/xiaohongshu-card/list", xiaohongshuCardCtrl.GetList)

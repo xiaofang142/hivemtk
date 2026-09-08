@@ -329,7 +329,7 @@ const markSuccess = async (row) => {
     try {
       await recordObjectionUsage({ template_id: row.template_id, success: true })
       ElMessage.success(i18n.global.t('已标记为成功'))
-    } catch (e) {}
+    } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
   }
 }
 
@@ -339,7 +339,7 @@ const markFailed = async (row) => {
     try {
       await recordObjectionUsage({ template_id: row.template_id, success: false })
       ElMessage.success(i18n.global.t('已标记为失败'))
-    } catch (e) {}
+    } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
   }
 }
 

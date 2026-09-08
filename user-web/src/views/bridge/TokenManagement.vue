@@ -45,7 +45,7 @@ const resetting = ref(false)
 const loadStatus = async () => {
   try {
     status.value = (await getBridgeTokenStatus()) || {}
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 }
 
 const onReset = async () => {

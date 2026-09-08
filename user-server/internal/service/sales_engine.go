@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/repository"
 	confidencesvc "hivemtk-user/internal/service/confidence"
 	humanizesvc "hivemtk-user/internal/service/humanize"
 	"strconv"
@@ -51,7 +52,8 @@ type AgentToolResult struct {
 }
 
 type SalesEngine struct {
-	db              *gorm.DB
+	db              *gorm.DB //nolint:unused // 历史字段：新代码请用 sessionMsgRepo
+	sessionMsgRepo  *repository.SessionMessageRepository
 	dispatcher      *llm.Dispatcher
 	intent          IntentRecognizerInterface
 	memory          DialogueMemoryInterface
@@ -114,6 +116,7 @@ func NewSalesEngine(
 	polisher := NewHumanizePolisher()
 	return &SalesEngine{
 		db:             db,
+		sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db),
 		dispatcher:     dispatcher,
 		intent:         intent,
 		memory:         memory,

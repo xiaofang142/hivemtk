@@ -355,7 +355,7 @@ const loadConfig = async () => {
         critical_risk_score: cfg.critical_risk_score ?? 85,
       })
     }
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 }
 
 const refreshAll = async () => {

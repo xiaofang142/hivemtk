@@ -23,3 +23,7 @@ export function deleteAccount(id) {
 export function testSend(id, data) {
   return http.post(`/api/qq/accounts/${id}/test-send`, data)
 }
+
+export function verifyCallback(id) {
+  return http.post(`/api/qq/accounts/${id}/verify-callback`, {})
+}

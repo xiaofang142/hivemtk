@@ -11,16 +11,17 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/repository"
 )
 
 type SLAService struct {
-	mu         sync.RWMutex
-	policies   map[uint]*model.SLAPolicy
-	ticker     *time.Ticker
-	violations chan *model.SLAViolation
-	stopCh     chan struct{}
-	stopOnce   sync.Once
-	db         *gorm.DB
+	mu          sync.RWMutex
+	policies    map[uint]*model.SLAPolicy
+	ticker      *time.Ticker
+	violations  chan *model.SLAViolation
+	stopCh      chan struct{}
+	stopOnce    sync.Once
+	sessionRepo *repository.CustomerSessionRepository
 }
 
 func NewSLAService() *SLAService {
@@ -33,7 +34,9 @@ func NewSLAService() *SLAService {
 
 func NewSLAServiceWithDB(db *gorm.DB) *SLAService {
 	s := NewSLAService()
-	s.db = db
+	if db != nil {
+		s.sessionRepo = repository.NewCustomerSessionRepositoryWithDB(db)
+	}
 	return s
 }
 
@@ -79,17 +82,15 @@ func (s *SLAService) Stop() {
 func (s *SLAService) checkAll(ctx context.Context) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.db == nil {
+	if s.sessionRepo == nil {
 		return nil
 	}
 	for _, policy := range s.policies {
 		if !policy.Enabled {
 			continue
 		}
-		var pendingCount int64
-		if err := s.db.Model(&model.CustomerSession{}).
-			Where("status = ? AND created_at > ?", "open", time.Now().Add(-24*time.Hour)).
-			Count(&pendingCount).Error; err != nil {
+		pendingCount, err := s.sessionRepo.CountOpenSessionsSince24h(ctx)
+		if err != nil {
 			continue
 		}
 		if pendingCount > 0 && policy.WarnThreshold > 0 {
@@ -122,29 +123,25 @@ func (s *SLAService) GetStats(policyID uint, since time.Time) (*SLAStats, error)
 		return nil, fmt.Errorf("policy %d not found", policyID)
 	}
 	stats := &SLAStats{PolicyID: policy.ID, PolicyName: policy.Name}
-	if s.db == nil {
+	if s.sessionRepo == nil {
 		return stats, nil
 	}
-	var total int64
-	if err := s.db.Model(&model.CustomerSession{}).
-		Where("created_at >= ?", since).Count(&total).Error; err != nil {
+	ctx := context.Background()
+	total, err := s.sessionRepo.CountSessionsSince(ctx, since)
+	if err != nil {
 		return stats, err
 	}
 	stats.TotalSessions = int(total)
 	if total == 0 {
 		return stats, nil
 	}
-	var resolved int64
-	if err := s.db.Model(&model.CustomerSession{}).
-		Where("created_at >= ? AND status IN ?", since,
-			[]string{"resolved", "closed"}).Count(&resolved).Error; err != nil {
+	resolved, err := s.sessionRepo.CountSessionsByStatusSince(ctx, since,
+		[]string{"resolved", "closed"})
+	if err != nil {
 		return stats, err
 	}
-	var openHandling int64
-	s.db.Model(&model.CustomerSession{}).
-		Where("created_at >= ? AND status IN ?", since,
-			[]string{"pending", "ai_handling", "human_handling", "waiting"}).
-		Count(&openHandling)
+	openHandling, _ := s.sessionRepo.CountSessionsByStatusSince(ctx, since,
+		[]string{"pending", "ai_handling", "human_handling", "waiting"})
 	if policy.ResolutionSeconds > 0 {
 		stats.FirstResponseMet = stats.TotalSessions
 		stats.ResolutionMet = int(resolved)

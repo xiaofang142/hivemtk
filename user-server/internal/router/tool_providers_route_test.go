@@ -59,8 +59,9 @@ func TestHandleToolProviders_HTTP_WithoutInit(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("body not JSON: %v", err)
 	}
-	if resp["success"] != false {
-		t.Error("success should be false")
+	// 信封已归一为 {code, message}（code!=0 表示失败），不再有 success 布尔
+	if code, ok := resp["code"].(string); !ok || code == "SUCCESS" {
+		t.Errorf("code should be a non-SUCCESS error code, got %v", resp["code"])
 	}
 }
 

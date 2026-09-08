@@ -253,7 +253,7 @@ export class ChatSocket {
     this.pendingAcks.clear()
     try {
       this.ws.send(JSON.stringify({ type: 'ack', seq: seqs }))
-    } catch (err) {}
+    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
   }
 
   ackDelivered(messageIds) {
@@ -261,14 +261,14 @@ export class ChatSocket {
     if (!messageIds || messageIds.length === 0) return
     try {
       this.ws.send(JSON.stringify({ type: 'delivered', payload: { ids: messageIds } }))
-    } catch (err) {}
+    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
   }
 
   resume() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     try {
       this.ws.send(JSON.stringify({ type: 'resume', since_seq: this.lastSeq }))
-    } catch (err) {}
+    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
   }
 
   startPing() {

@@ -57,10 +57,11 @@
               </template>
             </el-table-column>
             <el-table-column prop="last_error_msg" label="最近错误" min-width="160" show-overflow-tooltip />
-            <el-table-column label="操作" width="310" fixed="right">
+            <el-table-column label="操作" width="380" fixed="right">
               <template #default="scope">
                 <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
                 <el-button size="small" type="warning" @click="handleTestSend(scope.row)">测试发送</el-button>
+                <el-button size="small" type="success" :loading="verifyingId === scope.row.id" @click="handleVerifyCallback(scope.row)">自检验签</el-button>
                 <el-button size="small" type="primary" @click="openBindingDialog(scope.row)">绑定AI</el-button>
                 <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
               </template>
@@ -104,7 +105,20 @@
           />
         </el-form-item>
         <el-form-item label="Webhook URL" prop="webhook_url">
-          <el-input v-model="accountForm.webhook_url" placeholder="例如：https://your-domain/api/webhook/qq/1" />
+          <el-input
+            v-model="accountForm.webhook_url"
+            :placeholder="accountForm.webhook_url_suggested ? '' : '未配置 PUBLIC_BASE_URL，请手填（https，端口限 80/443/8080/8443）'"
+            :disabled="webhookUrlLocked"
+          >
+            <template v-if="accountForm.webhook_url" #append>
+              <el-button @click="copyText(accountForm.webhook_url)">复制</el-button>
+            </template>
+          </el-input>
+          <div class="form-hint-block">
+            <el-text type="info" size="small">
+              {{ webhookUrlHint }}
+            </el-text>
+          </div>
         </el-form-item>
         <el-form-item label="启用 Webhook" prop="webhook_enabled">
           <el-switch v-model="accountForm.webhook_enabled" />
@@ -177,7 +191,8 @@ import {
   createAccount,
   updateAccount,
   deleteAccount,
-  testSend
+  testSend,
+  verifyCallback
 } from '@/api/qqBot'
 import AgentBindingDialog from '@/components/AgentBindingDialog.vue'
 
@@ -186,6 +201,7 @@ const submitting = ref(false)
 const testing = ref(false)
 const accounts = ref([])
 const searchKeyword = ref('')
+const verifyingId = ref(null)
 
 const bindingDialogVisible = ref(false);
 const bindingAccountId = ref('')
@@ -231,9 +247,21 @@ const accountForm = reactive({
   app_secret: '',
   webhook_secret: '',
   webhook_url: '',
+  webhook_url_suggested: '',
   webhook_enabled: true,
   ai_agent_enabled: true,
   status: 1
+})
+
+// Webhook URL 锁定逻辑：公网 base 可用且推导值合法时只读展示推导值；否则可编辑
+const webhookUrlLocked = computed(() => {
+  return !!accountForm.webhook_url_suggested && !accountForm.id_dirty_url
+})
+const webhookUrlHint = computed(() => {
+  if (accountForm.webhook_url_suggested) {
+    return '已按 PUBLIC_BASE_URL 自动推导（可直接复制到 q.qq.com → 开发者 → 回调配置）。修改公网域名后重新保存账号即可刷新。'
+  }
+  return '未检测到公网域名配置（PUBLIC_BASE_URL），请手动填写回调地址：https://你的域名/api/webhook/qq/{账号ID}，端口限 80/443/8080/8443。'
 })
 
 const rules = {
@@ -261,6 +289,7 @@ const handleAdd = () => {
     app_secret: '',
     webhook_secret: '',
     webhook_url: '',
+    webhook_url_suggested: '',
     webhook_enabled: true,
     ai_agent_enabled: true,
     status: 1
@@ -277,6 +306,7 @@ const handleEdit = (row) => {
     app_secret: '',
     webhook_secret: '',
     webhook_url: row.webhook_url,
+    webhook_url_suggested: row.webhook_url_suggested || '',
     webhook_enabled: row.webhook_enabled,
     ai_agent_enabled: row.ai_agent_enabled,
     status: row.status
@@ -294,7 +324,8 @@ const submitForm = () => {
         app_id: accountForm.app_id,
         app_secret: accountForm.app_secret,
         webhook_secret: accountForm.webhook_secret,
-        webhook_url: accountForm.webhook_url,
+        // 公网域名自动推导场景下不回传（空值=后端推导/保留原值）
+        webhook_url: webhookUrlLocked ? '' : accountForm.webhook_url,
         webhook_enabled: accountForm.webhook_enabled,
         ai_agent_enabled: accountForm.ai_agent_enabled,
         status: accountForm.status
@@ -315,6 +346,32 @@ const submitForm = () => {
       submitting.value = false
     }
   })
+}
+
+const copyText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制到剪贴板')
+  } catch {
+    ElMessage.warning('浏览器不支持自动复制，请手动复制')
+  }
+}
+
+const handleVerifyCallback = async (row) => {
+  verifyingId.value = row.id
+  try {
+    const res = await verifyCallback(row.id)
+    const sig = (res && res.signature) || ''
+    ElMessageBox.alert(
+      `签名前 32 位：${sig.slice(0, 32)}…\n\n${(res && res.hint) || '将回调地址粘贴到 q.qq.com 平台完成真实验证。'}`,
+      '自检通过：验签链路连通',
+      { confirmButtonText: '知道了', type: 'success' }
+    ).catch(() => {})
+  } catch (e) {
+    ElMessage.error('自检失败：' + (e.message || e))
+  } finally {
+    verifyingId.value = null
+  }
 }
 
 const handleDelete = (row) => {
@@ -398,6 +455,10 @@ onMounted(fetchAccounts)
   margin-left: 12px;
   color: #909399;
   font-size: 12px;
+}
+.form-hint-block {
+  margin-top: 4px;
+  line-height: 1.4;
 }
 .test-hint {
   padding: 0 8px 8px;

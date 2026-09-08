@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -47,40 +46,43 @@ func (ctrl *QQAccountController) RegisterRoutes(router *gin.RouterGroup) {
 		g.PUT("/:id", ctrl.Update)
 		g.DELETE("/:id", ctrl.Delete)
 		g.POST("/:id/test-send", ctrl.TestSend)
+		g.POST("/:id/verify-callback", ctrl.VerifyCallback)
 	}
 }
 
 type qqAccountVO struct {
-	ID              uint       `json:"id"`
-	AccountName     string     `json:"account_name"`
-	AppID           string     `json:"app_id"`
-	AppSecretMasked string     `json:"app_secret_masked"`
-	WebhookURL      string     `json:"webhook_url"`
-	WebhookEnabled  bool       `json:"webhook_enabled"`
-	AIAgentEnabled  bool       `json:"ai_agent_enabled"`
-	LastSyncAt      *time.Time `json:"last_sync_at"`
-	LastErrorAt     *time.Time `json:"last_error_at"`
-	LastErrorMsg    string     `json:"last_error_msg"`
-	Status          int        `json:"status"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID                uint       `json:"id"`
+	AccountName       string     `json:"account_name"`
+	AppID             string     `json:"app_id"`
+	AppSecretMasked   string     `json:"app_secret_masked"`
+	WebhookURL        string     `json:"webhook_url"`
+	WebhookURLSuggest string     `json:"webhook_url_suggested"`
+	WebhookEnabled    bool       `json:"webhook_enabled"`
+	AIAgentEnabled    bool       `json:"ai_agent_enabled"`
+	LastSyncAt        *time.Time `json:"last_sync_at"`
+	LastErrorAt       *time.Time `json:"last_error_at"`
+	LastErrorMsg      string     `json:"last_error_msg"`
+	Status            int        `json:"status"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 func toQQAccountVO(acc *model.QQAccount) qqAccountVO {
 	return qqAccountVO{
-		ID:              acc.ID,
-		AccountName:     acc.AccountName,
-		AppID:           acc.AppID,
-		AppSecretMasked: maskBotToken(acc.AppSecret),
-		WebhookURL:      acc.WebhookURL,
-		WebhookEnabled:  acc.WebhookEnabled,
-		AIAgentEnabled:  acc.AIAgentEnabled,
-		LastSyncAt:      acc.LastSyncAt,
-		LastErrorAt:     acc.LastErrorAt,
-		LastErrorMsg:    acc.LastErrorMsg,
-		Status:          acc.Status,
-		CreatedAt:       acc.CreatedAt,
-		UpdatedAt:       acc.UpdatedAt,
+		ID:                acc.ID,
+		AccountName:       acc.AccountName,
+		AppID:             acc.AppID,
+		AppSecretMasked:   maskBotToken(acc.AppSecret),
+		WebhookURL:        acc.WebhookURL,
+		WebhookURLSuggest: service.SuggestQQWebhookURL(acc.ID),
+		WebhookEnabled:    acc.WebhookEnabled,
+		AIAgentEnabled:    acc.AIAgentEnabled,
+		LastSyncAt:        acc.LastSyncAt,
+		LastErrorAt:       acc.LastErrorAt,
+		LastErrorMsg:      acc.LastErrorMsg,
+		Status:            acc.Status,
+		CreatedAt:         acc.CreatedAt,
+		UpdatedAt:         acc.UpdatedAt,
 	}
 }
 
@@ -137,12 +139,20 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 	if req.Status == 0 {
 		req.Status = 1
 	}
+	// webhook URL：显式传入需过校验；未传时在落库拿到 ID 后按 PUBLIC_BASE_URL 推导补值
+	webhookURL := strings.TrimSpace(req.WebhookURL)
+	if webhookURL != "" {
+		if vErr := service.ValidateQQWebhookURL(webhookURL); vErr != nil {
+			response.Error(c, http.StatusBadRequest, "WebhookURL 格式不合法", vErr.Error())
+			return
+		}
+	}
 	acc := &model.QQAccount{
 		AccountName:    req.AccountName,
 		AppID:          req.AppID,
 		AppSecret:      req.AppSecret,
 		WebhookSecret:  req.WebhookSecret,
-		WebhookURL:     req.WebhookURL,
+		WebhookURL:     webhookURL,
 		WebhookEnabled: req.WebhookEnabled,
 		AIAgentEnabled: req.AIAgentEnabled,
 		Status:         req.Status,
@@ -151,6 +161,15 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 	if _, err := ctrl.svc.CreateAccount(context.Background(), acc); err != nil {
 		response.ErrorFromDB(c, err, "创建失败", err.Error())
 		return
+	}
+	// 拿到 ID 后补推导 URL（仅当用户未显式传入且推导值合法）
+	if webhookURL == "" {
+		if suggested := deriveQQWebhookURL(acc.ID); suggested != "" {
+			if vErr := service.ValidateQQWebhookURL(suggested); vErr == nil && acc.WebhookURL == "" {
+				acc.WebhookURL = suggested
+				_ = ctrl.svc.UpdateAccount(context.Background(), acc)
+			}
+		}
 	}
 	response.Success(c, toQQAccountVO(acc), "创建成功")
 }
@@ -187,7 +206,16 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 		acc.WebhookSecret = req.WebhookSecret
 	}
 	if req.WebhookURL != "" {
-		acc.WebhookURL = req.WebhookURL
+		webhookURL := strings.TrimSpace(req.WebhookURL)
+		if vErr := service.ValidateQQWebhookURL(webhookURL); vErr != nil {
+			now := time.Now()
+			acc.LastErrorAt = &now
+			acc.LastErrorMsg = "webhook URL 校验失败: " + vErr.Error()
+			_ = ctrl.svc.UpdateAccount(context.Background(), acc)
+			response.Error(c, http.StatusBadRequest, "WebhookURL 格式不合法", vErr.Error())
+			return
+		}
+		acc.WebhookURL = webhookURL
 	}
 	acc.WebhookEnabled = req.WebhookEnabled
 	acc.AIAgentEnabled = req.AIAgentEnabled
@@ -257,10 +285,39 @@ func (ctrl *QQAccountController) TestSend(c *gin.Context) {
 	response.Success(c, gin.H{"ok": true}, "发送成功")
 }
 
+// VerifyCallback 本地 op13 验签自检：模拟平台回调验证请求，返回签名应答。
+// POST /api/qq/accounts/:id/verify-callback
+//
+// 能力边界：仅证明签名链路连通 + BotSecret 已填写；secret 是否正确
+// 由 q.qq.com 保存回调地址时平台发起的真实 op13 验证确认。
+func (ctrl *QQAccountController) VerifyCallback(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
+		return
+	}
+	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	if err != nil {
+		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		return
+	}
+	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
+		return
+	}
+	result, err := ctrl.svc.VerifyCallbackSelfCheck(context.Background(), uint(id))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "自检失败", err.Error())
+		return
+	}
+	response.Success(c, gin.H{
+		"plain_token": result.PlainToken,
+		"event_ts":    result.EventTS,
+		"signature":   result.Signature,
+		"hint":        "本地签名链路连通。将上方回调地址粘贴到 q.qq.com → 开发者 → 回调配置，平台将发起真实 op13 验证以确认 BotSecret 正确。",
+	}, "自检通过：验签链路连通，BotSecret 已配置")
+}
+
 // deriveQQWebhookURL 推导 QQ webhook 回调地址（供前端展示）
 func deriveQQWebhookURL(accountID uint) string {
-	if base := config.GetPublicBaseURL(); base != "" {
-		return strings.TrimRight(base, "/") + "/api/webhook/qq/" + strconv.FormatUint(uint64(accountID), 10)
-	}
-	return ""
+	return service.SuggestQQWebhookURL(accountID)
 }

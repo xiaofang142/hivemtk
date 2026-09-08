@@ -166,8 +166,22 @@ func (sc *SelfConsistency[T]) Run(ctx context.Context, sampler Sampler[T], voter
 		return allKeys[i].Count > allKeys[j].Count
 	})
 
+	// 代表值优先取与归一化 key 完全一致的原始样本（大小写规范的那个）；
+	// 若同 key 无任何原始样本等于 key，则退回首见样本
+	winnerRep := samples[winner.key]
+	for _, r := range results {
+		if r.err != nil {
+			continue
+		}
+		if voter.Key(r.answer) == winner.key {
+			if norm, ok := any(winner.key).(T); ok && any(r.answer) == any(norm) {
+				winnerRep = r.answer
+				break
+			}
+		}
+	}
 	return VoteResult[T]{
-		Winner:     samples[winner.key],
+		Winner:     winnerRep,
 		WinnerKey:  winner.key,
 		Count:      winner.count,
 		Total:      total,

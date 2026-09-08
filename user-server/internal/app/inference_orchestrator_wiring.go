@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"net/http"
 	"sync"
 	"time"
 
@@ -89,19 +88,13 @@ func SetupInferenceRoutes(auth *gin.RouterGroup) {
 func handleInferenceRun(c *gin.Context) {
 	orch := GetInferenceOrchestrator()
 	if orch == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"success": false,
-			"error":   "inference orchestrator not initialized",
-		})
+		response.Error(c, 503, "inference orchestrator not initialized")
 		return
 	}
 
 	var req inferenceRunRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "invalid request: " + err.Error(),
-		})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 
@@ -127,15 +120,11 @@ func handleInferenceRun(c *gin.Context) {
 	result, err := orch.Process(ctx, payload, nil)
 	if err != nil {
 		logger.Errorf("[inference_api] run failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
+		response.Error(c, 500, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":          true,
+	response.Success(c, gin.H{
 		"session_id":       result.SessionID,
 		"final_reply":      result.FinalReply,
 		"handoff_to_human": result.HandoffToHuman,
@@ -143,16 +132,13 @@ func handleInferenceRun(c *gin.Context) {
 		"tool_call_count":  result.ToolCallCount,
 		"crisis_level":     result.CrisisLevel,
 		"total_duration":   result.TotalDuration.String(),
-	})
+	}, "ok")
 }
 
 func handleInferenceStats(c *gin.Context) {
 	orch := GetInferenceOrchestrator()
 	if orch == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"success": false,
-			"error":   "inference orchestrator not initialized",
-		})
+		response.Error(c, 503, "inference orchestrator not initialized")
 		return
 	}
 	response.Success(c, gin.H{
@@ -208,7 +194,7 @@ func SetupToolPermissionRoutes(auth *gin.RouterGroup) {
 func handleGetPermissionDefault(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	response.Success(c, gin.H{
@@ -223,23 +209,23 @@ type setPermissionDefaultRequest struct {
 func handleSetPermissionDefault(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	var req setPermissionDefaultRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request: " + err.Error()})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 	pc.SetDefaultAllow(req.DefaultAllow)
 	logger.Infof("[permission] default_allow set to %v", req.DefaultAllow)
-	c.JSON(http.StatusOK, gin.H{"success": true, "default_allow": req.DefaultAllow})
+	response.Success(c, gin.H{"default_allow": req.DefaultAllow}, "ok")
 }
 
 func handleGetGlobalWhitelist(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	tools := pc.ListGlobalWhitelist()
@@ -256,27 +242,26 @@ type addGlobalWhitelistRequest struct {
 func handleAddGlobalWhitelist(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	var req addGlobalWhitelistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request: " + err.Error()})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 	pc.AddGlobalWhitelist(req.Tools)
 	logger.Infof("[permission] global whitelist added %d tools", len(req.Tools))
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"tools":   pc.ListGlobalWhitelist(),
-		"count":   len(pc.ListGlobalWhitelist()),
-	})
+	response.Success(c, gin.H{
+		"tools": pc.ListGlobalWhitelist(),
+		"count": len(pc.ListGlobalWhitelist()),
+	}, "ok")
 }
 
 func handleListConfiguredAgents(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	agents := pc.ListConfiguredAgents()
@@ -289,21 +274,20 @@ func handleListConfiguredAgents(c *gin.Context) {
 func handleGetAgentWhitelist(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	agentID := c.Param("agent_id")
 	if agentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "agent_id required"})
+		response.Error(c, 400, "agent_id required")
 		return
 	}
 	tools := pc.ListAgentWhitelist(agentID)
-	c.JSON(http.StatusOK, gin.H{
-		"success":  true,
+	response.Success(c, gin.H{
 		"agent_id": agentID,
 		"tools":    tools,
 		"count":    len(tools),
-	})
+	}, "ok")
 }
 
 type setAgentWhitelistRequest struct {
@@ -313,45 +297,42 @@ type setAgentWhitelistRequest struct {
 func handleSetAgentWhitelist(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	agentID := c.Param("agent_id")
 	if agentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "agent_id required"})
+		response.Error(c, 400, "agent_id required")
 		return
 	}
 	var req setAgentWhitelistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request: " + err.Error()})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 	pc.SetAgentWhitelist(agentID, req.Tools)
 	logger.Infof("[permission] agent=%s whitelist set (%d tools)", agentID, len(req.Tools))
-	c.JSON(http.StatusOK, gin.H{
-		"success":  true,
+	response.Success(c, gin.H{
 		"agent_id": agentID,
 		"tools":    pc.ListAgentWhitelist(agentID),
 		"count":    len(pc.ListAgentWhitelist(agentID)),
-	})
+	}, "ok")
 }
 
 func handleRemoveAgentWhitelist(c *gin.Context) {
 	pc := GetGlobalPermissionChecker()
 	if pc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "permission checker not initialized"})
+		response.Error(c, 503, "permission checker not initialized")
 		return
 	}
 	agentID := c.Param("agent_id")
 	if agentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "agent_id required"})
+		response.Error(c, 400, "agent_id required")
 		return
 	}
 	pc.RemoveAgentWhitelist(agentID)
 	logger.Infof("[permission] agent=%s whitelist removed (fallback to default policy)", agentID)
-	c.JSON(http.StatusOK, gin.H{
-		"success":  true,
+	response.Success(c, gin.H{
 		"agent_id": agentID,
-		"message":  "whitelist removed, fallback to default policy",
-	})
+	}, "whitelist removed, fallback to default policy")
 }
