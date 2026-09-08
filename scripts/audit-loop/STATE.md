@@ -413,3 +413,22 @@
 **验证证据**：`go build ./...` OK；`go vet ./...` OK；`go test ./internal/service/ -run Email` OK。
 
 **Commit**：见 git log `fix(security): 审计R1-security: 删除email追踪/退订服务死代码默认密钥常量`
+
+---
+
+## R23 全角度一次性审查（2026-09-09，手动触发，0 代码缺陷）
+
+用户指示"全链路、多角度、多方向、一次性审查"。因第二圈 R13-R22 刚完成连续十个 0 缺陷轮，本轮按"不复查已留档基础面"原则，做全角度横向收尾审查：
+
+### 审查覆盖
+- **回归基线**：go build/vet/test 全绿（service+repository 全包 0 失败）；eslint errors=0；vitest 6 文件 174 用例全过；vite build 成功（PWA precache 495 entries）
+- **契约**：audit_api_contract.py 复跑 0/831 UNMATCHED；QQ 域前端 7 调用 vs 后端 7 路由逐条人工对照一致
+- **安全复扫**：硬编码密钥 0 复发；SQL 拼接 3 处（backup_data.go 白名单守卫+2 个 bench test）合规；上传链路完整（扩展黑名单+魔数校验+SVG XSS 拒绝+病毒扫描+uuid 落盘路径不可控）；webhook 各渠道验签 fail-closed 在位（wechat/telegram/feishu/douyin）；CORS 白名单+扩展来源 fail-closed+ SSE 同源判定在位；无 pprof/expvar 暴露
+- **QQ 新代码面**（同事近期提交）：VerifyCallback 走 AdminAuthMiddleware 组 + guardChannelAccountOwnership 双重守卫；ValidateQQWebhookURL 已接线 Create/Update 保存链路（controller:145/168/210）；自检能力边界注释明确不虚称"secret 正确"
+- **R9 修复点回归**：ListByTools/CountByRoles/idx_extcust_platform_external 复合索引全部在位
+
+### 发现与修复（1 处，文档级）
+- CHANGELOG.md 审计循环段落停留在"R1-R11 进行中"，R12 收官与二圈 R13-R22 十个 0 缺陷轮未记录 → 已补录为"R1-R22"并附二圈结论摘要（commit b402117）
+
+### 结论
+代码 0 缺陷。全部验证绿。已推双远端（gitee b402117 + github b402117）。下一轮 R24 security（第三圈开始）。

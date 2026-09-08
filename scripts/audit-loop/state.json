@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 23,
-  "next_angle_index": 11,
+  "round": 24,
+  "next_angle_index": 0,
   "angles": [
     "security",
     "authz",
@@ -208,6 +208,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第二圈 0缺陷: R11 键名统一无回退(全仓无 MERCHANT_HMAC_SECRET); 端口三方一致; build/vet 全绿"
+    },
+    {
+      "round": 23,
+      "angle": "full-sweep-manual",
+      "date": "2026-09-09",
+      "found": 1,
+      "fixed": 1,
+      "notes": "全角度一次性审查(手动触发): 0代码缺陷; CHANGELOG补录R12-R22(文档缺陷1处已修); build/vet/test/eslint/vitest/vite/契约0-831全绿; 安全/QQ新代码面/R9修复点回归在位; 已推双远端 b402117"
     }
   ]
 }
