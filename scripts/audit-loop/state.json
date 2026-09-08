@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 20,
-  "next_angle_index": 8,
+  "round": 21,
+  "next_angle_index": 9,
   "angles": [
     "security",
     "authz",
@@ -18,7 +18,7 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 20,
+    "rounds_completed": 21,
     "issues_found_total": 15,
     "issues_fixed_total": 15,
     "last_completed_at": "2026-09-09",
@@ -184,6 +184,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第二圈 0缺陷: eslint 0 errors(R8 成果保持); vitest 174 全过"
+    },
+    {
+      "round": 21,
+      "angle": "perf",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R9 三处修复在位(ListByTools/CountByRoles/复合索引); N+1 候选 27 处较基线 31 下降(R9 修复生效); build/vet/test 全绿"
     }
   ]
 }

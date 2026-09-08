@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：20（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13–R20 为 0 缺陷轮）
-- 下一轮角度：perf
+- 已完成轮次：21（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13–R21 为 0 缺陷轮）
+- 下一轮角度：test-coverage
 
 ## 轮次报告
+
+### R21 — perf（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R9 三处修复回归复核、N+1 候选基线对比。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R9 修复全部在位：`ListByTools`（ai_tool 列表批量绑定）、`CountByRoles`（role GROUP BY）、`idx_extcust_platform_external` 复合索引
+- N+1 结构化扫描候选 **27 处，较 R9 基线 31 处下降 4 处**（即 R9 批量化修复的直接效果），无新增热点
+- `go build/vet` 全绿；service(26.1s)/repository 测试全绿
+
+**验证证据**：build/vet/test 三绿。
+
+**Commit**：见 git log `chore(audit): 审计R21-perf: 0缺陷轮核查记录与状态推进`
 
 ### R20 — frontend（2026-09-09）— 第二圈，0 缺陷轮
 
