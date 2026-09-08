@@ -5,13 +5,29 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：13（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13 为 0 缺陷轮）
-- 下一轮角度：authz
+- 已完成轮次：14（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13/R14 为 0 缺陷轮）
+- 下一轮角度：architecture
 
 ## 轮次报告
 
-### R13 — security（2026-09-09）— 第二圈首轮，0 缺陷轮
+### R14 — authz（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R2 修复点回归复核、`frontend_aliases.go` 143 个 `doReg`（非 admin 通道）中全部 62 个写路由二圈清点、`doRegAdmin` 143 处守卫在位确认。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R2 修复点回归：访客 WS fail-closed 注释与拒绝逻辑原样在位（`visitor_handler.go:126-131`），websocket/middleware 测试全绿
+- `doRegAdmin` 143 处（含 rag-eval run/upload 之外的破坏性操作 backup restore/delete、operation-logs、message-hub DLQ）守卫齐全
+- 62 个非 admin 写路由逐类清点：全部为坐席工作台业务写（会话消息/转接/标签/优先级/编辑锁/内部备注、客户 360 标签与自定义属性、意图识别、对话记忆、快捷回复文件夹、通知已读、CSAT），与 R2 结论一致——这些是登录坐席的日常业务操作，非管理面配置；真正的高危面（备份恢复、DLQ 重投、运营日志清理、模型配置写）全部在 `doRegAdmin` 之下
+
+**验证证据**：`go vet ./...` 全绿；websocket(4.2s)/middleware(3.9s) 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R14-authz: 0缺陷轮核查记录与状态推进`
+
+### R13 — security（2026-09-09）
+— 第二圈首轮，0 缺陷轮
 
 **审计范围**：R1 全部扫描项二圈复扫（硬编码密钥/SQL 拼接/敏感日志）、第一圈修复点回归复核、期间新增代码（QQ webhook 自检、seed）安全审查。
 
