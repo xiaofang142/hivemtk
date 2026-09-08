@@ -5,11 +5,30 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：11 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：14 / 14（R6 为 0 缺陷轮）
-- 下一轮角度：docs-consistency
+- 已完成轮次：12（**第一圈 12 角度收官**）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环，下一轮 R13 回 security）
+- 累计发现 / 修复：15 / 15（R6 为 0 缺陷轮）
+- 下一轮角度：security（第二圈开始）
 
 ## 轮次报告
+
+### R12 — docs-consistency（2026-09-09）— 第一圈收官
+
+**审计范围**：`check-doc-consistency.sh` + `check-feature-doc.sh` 全量、DEV_DOCS_INDEX/README 链接有效性、CHANGELOG 与 git 历史对齐。
+
+**发现与处置（2 项，均已修复）**：
+
+1. `docs/marketing-features/README.md:271,295` — `AI_CORE_FEATURE_INVENTORY.md` 引用相对路径 `../../../docs/...` 多了一级（该文件实际在 `docs/architecture/`），`check-doc-consistency.sh` 唯一 error。**处置**：改 `../../docs/...`，脚本 error 清零。
+2. `CHANGELOG.md` — 永动审计循环 R1–R11 共 11 轮修复完全未记录。**处置**：`[未发布]` 段补录机制说明 + 每轮一行摘要。
+
+**核查通过项（无需修复）**：
+- `DEV_DOCS_INDEX.md` 全部相对链接 0 失效（python 全量校验）；索引的 user-server/user-web dev 四件套文档均存在
+- 根 `README.md` 链接 0 失效
+- `check-feature-doc.sh`：0 失败（1 跳过为 README 本身）
+- 余 19 个警告均为父仓库/平台端文档（CODEOWNERS、深架构系列等），不在本仓库范围，留档不阻断
+
+**验证证据**：`check-doc-consistency.sh` 0 error；`check-feature-doc.sh` 0 失败；`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：`1b82feb`
 
 ### R11 — config-deploy（2026-09-08）
 

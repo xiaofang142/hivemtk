@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 11,
-  "next_angle_index": 11,
+  "round": 12,
+  "next_angle_index": 0,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 11,
-    "issues_found_total": 14,
-    "issues_fixed_total": 14,
+    "rounds_completed": 12,
+    "issues_found_total": 15,
+    "issues_fixed_total": 15,
     "last_completed_at": "2026-09-08",
-    "last_commit": "8e45b53"
+    "last_commit": "1b82feb"
   },
   "history": [
     {
@@ -112,6 +112,14 @@
       "found": 1,
       "fixed": 1,
       "notes": "MERCHANT_HMAC_SECRET→MERCHANT_API_SECRET 键名统一(.env-example+DEPLOYMENT_GUIDE);端口/迁移幂等/config.yaml死键核查通过"
+    },
+    {
+      "round": 12,
+      "angle": "docs-consistency",
+      "date": "2026-09-09",
+      "found": 2,
+      "fixed": 2,
+      "notes": "第一轮12角度收官: marketing-features README失效路径修复+CHANGELOG补录R1-R11; 下轮回 security 开始第二圈"
     }
   ]
 }
