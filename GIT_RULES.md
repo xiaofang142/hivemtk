@@ -52,11 +52,12 @@ git config core.hooksPath .githooks
 
 > 例外：`scripts/inference-host/models.env` 为非敏感模型定义，已在 `.gitignore` 显式保留。
 
-## 5. PR 流程
+## 5. 协作模式（最高指示：禁用 PR，成员直推）
 
-- 基于 `master` 开 `feature/*` 分支，发起 PR 时使用 `.github/PULL_REQUEST_TEMPLATE.md`。
-- 需要至少一个评审通过方可合并到 `master`。
-- 合并前确保 CI 通过、无密钥泄露。
+- **只使用两个仓库**：`gitee.com/xhpmayun/hivemtk` 与 `github.com/xiaofang142/hivemtk`，其他 forks 一律不用。
+- **禁止 PR 流程**：不发起 PR、不走评审合并。
+- 每次开发完成后将 `master` 直推上述两个 remote；推送前 `git fetch` 确认 fast-forward，分叉先 merge 再推。
+- 早期版本的 PR 条款已废止，仅保留 `.github/PULL_REQUEST_TEMPLATE.md` 文件本身以兼容历史。
 
 ## 6. 换行与编码
 

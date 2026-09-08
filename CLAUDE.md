@@ -1,9 +1,19 @@
 # CLAUDE.md - 最高规则
 
+## 🏆 规则0：Git 仓库与协作模式(最高指示,优先级最高)
+
+- **只允许使用这两个仓库**,其他仓库一律不用(jungle-hero/hivemtkbot 等 forks 已弃用,勿推送):
+  - `gitee.com/xhpmayun/hivemtk`(本地 remote 名 `gitee-upstream`)
+  - `github.com/xiaofang142/hivemtk`(本地 remote 名 `upstream`)
+- **禁止使用 PR 流程**(不发 PR、不提 PR、不走评审合并)。
+- 协作模式为**成员开发直推**:每次开发完成后,将 `master` 直推到上述两个 remote。
+- 推送前必须 `git fetch` 确认是 fast-forward;若分叉,先 merge 再推。
+- 本规则与规则1冲突时以本规则为准。
+
 ## 🏆 规则1：每次任务完成自动提交并推送
 - 任务/轮次完成后，必须自动 `git add` 变更文件
 - 自动 `git commit` 含清晰 message（轮次/功能/测试状态）
-- 自动 `git push` 到 **Gitee(origin) 和 GitHub(github)** 双远端
+- 自动 `git push` 到 **gitee-upstream(xhpmayun) 和 upstream(xiaofang142)** 双远端
 - 不等待确认，不询问，作为工作流固化步骤执行
 
 ---
