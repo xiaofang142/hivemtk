@@ -53,7 +53,7 @@ const initRoutes = [
 ];
 
 const moduleNames = [
-  'email', 'telegram', 'whatsapp', 'clue', 'system',
+  'email', 'telegram', 'qq', 'whatsapp', 'clue', 'system',
   'domainPool', 'shortLink', 'douyinCard', 'xiaohongshuCard', 'kuaishouCard',
   'xianyuCard', 'sms', 'livecode', 'tiktok',
   'abExperiment', 'batchOperation', 'churnPrediction',

@@ -16,6 +16,7 @@ const (
 	ChannelEmail     = "email"
 	ChannelFeishu    = "feishu"
 	ChannelDingTalk  = "dingtalk"
+	ChannelQQ        = "qq"
 	ChannelPersonal  = "personal_wx"
 	ChannelInstagram = "instagram"
 )

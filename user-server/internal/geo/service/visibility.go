@@ -48,6 +48,30 @@ type VisibilityTrendResult struct {
 	TotalBrandHits int                    `json:"total_brand_hits"`
 }
 
+// EngineCompareRow 引擎维度对比行（观测页「引擎对比」表）
+type EngineCompareRow struct {
+	Engine        string  `json:"engine"`
+	ProbeCount    int     `json:"probe_count"`
+	BrandHits     int     `json:"brand_hits"`
+	Visibility    float64 `json:"visibility"`
+	AvgCitations  float64 `json:"avg_citations"`
+	NegativeCount int     `json:"negative_count"`
+}
+
+// DailyEngineBreakdown 单日按引擎拆分的品牌命中数（堆叠趋势图数据源）
+type DailyEngineBreakdown struct {
+	Date       string             `json:"date"`
+	Probes     int                `json:"probes"`
+	ByEngine   map[string]float64 `json:"by_engine"`
+}
+
+// EngineCompareResult 引擎对比 + 全局概览 + 单日拆分
+type EngineCompareResult struct {
+	Summary VisibilityTrendResult  `json:"summary"`
+	Engines []EngineCompareRow     `json:"engines"`
+	Daily   []DailyEngineBreakdown `json:"daily"`
+}
+
 // GetTrend 可见性趋势 + 环比（周环比：各取 days/2 对半对比；不足 2 天无环比）
 func (s *VisibilityService) GetTrend(ctx context.Context, q TrendQuery) (*VisibilityTrendResult, error) {
 	if q.Days <= 0 || q.Days > 365 {
@@ -119,6 +143,106 @@ func (s *VisibilityService) GetTrend(ctx context.Context, q TrendQuery) (*Visibi
 		if res.PreviousAvg > 0 {
 			res.ChangePct = res.Change / res.PreviousAvg
 		}
+	} else if len(points) > 0 {
+		// 只有一个观测点时没有上一窗口可对比，当前可见率应等于整体可见率，
+		// 否则前端概览卡会显示 0.0% 而与引擎对比表自相矛盾。
+		if totalProbes > 0 {
+			res.CurrentAvg = float64(totalBrandHits) / float64(totalProbes)
+		}
+		res.Change = 0
+		res.ChangePct = 0
 	}
 	return res, nil
+}
+
+// GetEngineCompare 引擎维度对比：整体概览 + 每引擎可见率/负面/引用 + 单日拆分。
+// 运营用它回答「哪个 AI 引擎看得见我、哪个引擎在说坏话、该优先补哪个引擎的内容」。
+func (s *VisibilityService) GetEngineCompare(ctx context.Context, q TrendQuery) (*EngineCompareResult, error) {
+	if q.Days <= 0 || q.Days > 365 {
+		q.Days = 30
+	}
+	summary, err := s.GetTrend(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+
+	// 全量（不带 engine 过滤）取回，按引擎聚合；intent 过滤保持一致
+	allStats, err := s.dailyRepo.GetTrend(ctx, "", "", q.Intent, q.Days)
+	if err != nil {
+		return nil, err
+	}
+
+	type engineAgg struct {
+		probes    int
+		hits      int
+		citations int
+		negative  int
+	}
+	byEngine := map[string]*engineAgg{}
+	for _, st := range allStats {
+		if st.Engine == "" {
+			continue
+		}
+		a, ok := byEngine[st.Engine]
+		if !ok {
+			a = &engineAgg{}
+			byEngine[st.Engine] = a
+		}
+		a.probes += st.ProbeCount
+		a.hits += st.BrandMentionedCount
+		a.citations += st.CitationCount
+		a.negative += st.NegativeCount
+	}
+
+	engines := make([]EngineCompareRow, 0, len(byEngine))
+	for name, a := range byEngine {
+		row := EngineCompareRow{
+			Engine:        name,
+			ProbeCount:    a.probes,
+			BrandHits:     a.hits,
+			NegativeCount: a.negative,
+		}
+		if a.probes > 0 {
+			row.Visibility = float64(a.hits) / float64(a.probes)
+			row.AvgCitations = float64(a.citations) / float64(a.probes)
+		}
+		engines = append(engines, row)
+	}
+	sort.Slice(engines, func(i, j int) bool {
+		if engines[i].Visibility != engines[j].Visibility {
+			return engines[i].Visibility > engines[j].Visibility
+		}
+		return engines[i].ProbeCount > engines[j].ProbeCount
+	})
+
+	// 单日拆分：日期 × 引擎 品牌命中数，供前端结合 probes 自行计算比率
+	dateOrder := make([]string, 0, len(summary.Points))
+	for _, p := range summary.Points {
+		dateOrder = append(dateOrder, p.Date)
+	}
+	dateIdx := map[string]int{}
+	for i, d := range dateOrder {
+		dateIdx[d] = i
+	}
+	daily := make([]DailyEngineBreakdown, len(dateOrder))
+	for i := range daily {
+		daily[i] = DailyEngineBreakdown{Date: dateOrder[i], ByEngine: map[string]float64{}}
+	}
+	for _, st := range allStats {
+		if q.Engine != "" && st.Engine != q.Engine {
+			continue
+		}
+		idx, ok := dateIdx[st.Date]
+		if !ok || st.Engine == "" || st.ProbeCount <= 0 {
+			continue
+		}
+		daily[idx].Probes += st.ProbeCount
+		daily[idx].ByEngine[st.Engine] += float64(st.BrandMentionedCount)
+	}
+
+	return &EngineCompareResult{
+		Summary: *summary,
+		Engines: engines,
+		Daily:   daily,
+	}, nil
 }

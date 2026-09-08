@@ -98,3 +98,9 @@ func setupTiktokRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	)
 	tiktokCardCtrl.RegisterRoutes(auth)
 }
+
+func setupQQRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
+	qqAccountCtrl := controller.NewQQAccountController(service.NewQQService(gormDB))
+	admin := auth.Group("", middleware.AdminAuthMiddleware())
+	qqAccountCtrl.RegisterRoutes(admin)
+}

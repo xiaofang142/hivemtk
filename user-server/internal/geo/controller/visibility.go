@@ -36,6 +36,22 @@ func (c *VisibilityController) Trend(ctx *gin.Context) {
 	response.Success(ctx, result, "ok")
 }
 
+// EngineCompare GET /geo/visibility/engine-compare?intent=&days=
+// 引擎维度对比（可见率/负面/引用 + 单日拆分），观测页主数据源
+func (c *VisibilityController) EngineCompare(ctx *gin.Context) {
+	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "30"))
+	result, err := c.visibilitySvc.GetEngineCompare(ctx.Request.Context(), service.TrendQuery{
+		Engine: ctx.Query("engine"),
+		Intent: ctx.Query("intent"),
+		Days:   days,
+	})
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "获取引擎对比失败")
+		return
+	}
+	response.Success(ctx, result, "ok")
+}
+
 // Fanout POST /geo/prompt/fanout
 func (c *VisibilityController) Fanout(ctx *gin.Context) {
 	var req service.FanoutRequest

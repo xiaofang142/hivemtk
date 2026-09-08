@@ -50,3 +50,9 @@ export const updateCompetitor = (id, data) =>
 
 export const deleteCompetitor = (id) =>
   http.delete(`/api/geo/competitors/${id}`)
+
+export const getEngineCompare = (days = 30, intent = '') =>
+  http.get('/api/geo/visibility/engine-compare', { days, intent: intent || '' })
+
+export const getSOVTrend = (days = 30, intent = '') =>
+  http.get('/api/geo/sov/trend', { days, intent: intent || '' })

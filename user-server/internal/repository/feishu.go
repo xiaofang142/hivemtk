@@ -350,3 +350,57 @@ func (r *WhatsAppCloudAccountRepository) GetFirst(ctx context.Context) (*model.W
 	}
 	return &acc, nil
 }
+
+// ---------------------------------------------------------------------------
+// QQAccountRepository QQ 机器人账号仓库
+// ---------------------------------------------------------------------------
+
+// QQAccountRepository QQ 账号仓库
+type QQAccountRepository struct {
+	db *gorm.DB
+}
+
+// NewQQAccountRepository 创建 QQ 账号仓库
+func NewQQAccountRepository() *QQAccountRepository {
+	return &QQAccountRepository{db: _db.GetDB()}
+}
+
+// SetDB 注入 db（用于测试）
+func (r *QQAccountRepository) SetDB(ctx context.Context, db *gorm.DB) {
+	if db != nil {
+		r.db = db
+	}
+}
+
+// Create 创建 QQ 账号
+func (r *QQAccountRepository) Create(ctx context.Context, acc *model.QQAccount) error {
+	return r.db.WithContext(ctx).Create(acc).Error
+}
+
+// GetByID 按 ID 查询
+func (r *QQAccountRepository) GetByID(ctx context.Context, id uint) (*model.QQAccount, error) {
+	var acc model.QQAccount
+	if err := r.db.WithContext(ctx).First(&acc, id).Error; err != nil {
+		return nil, err
+	}
+	return &acc, nil
+}
+
+// GetAll 全量列表（按 ID 倒序）
+func (r *QQAccountRepository) GetAll(ctx context.Context) ([]*model.QQAccount, error) {
+	var accs []*model.QQAccount
+	if err := r.db.WithContext(ctx).Order("id DESC").Find(&accs).Error; err != nil {
+		return nil, err
+	}
+	return accs, nil
+}
+
+// Update 更新
+func (r *QQAccountRepository) Update(ctx context.Context, acc *model.QQAccount) error {
+	return r.db.WithContext(ctx).Save(acc).Error
+}
+
+// Delete 删除
+func (r *QQAccountRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&model.QQAccount{}, id).Error
+}

@@ -61,8 +61,7 @@ func TestValidPlatform_Supported(t *testing.T) {
 func TestValidPlatform_Unsupported(t *testing.T) {
 	for _, p := range []string{"", "unknown", "facebook", "twitter", "wechat", "QQ", "weibo", "钉钉", "邮箱", "123"} {
 		if ValidPlatform(p) {
-			t.Errorf("expected %s invalid", p)
-		}
+			t.Errorf("expected %s invalid", p)		}
 	}
 }
 

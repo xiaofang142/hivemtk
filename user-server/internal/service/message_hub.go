@@ -51,6 +51,7 @@ var messageHubPlatforms = map[string]bool{
 	"email":       true,
 	"telegram":    true,
 	"feishu":      true,
+	"qq":          true,
 }
 
 var messageHubMsgTypes = map[string]bool{

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelbot/whatsapp"
 	"hivemtk-user/internal/model"
@@ -37,10 +38,12 @@ type WebhookService struct {
 	tgIntegration     *TelegramIntegrationService
 	tgGate            *TelegramGateService
 	waIntegration     *WhatsAppCloudIntegrationService
+	qqIntegration     *QQIntegrationService
 
 	wechatIntegration *WechatService
 
 	telegramRepo *repository.TelegramAccountRepository
+	qqRepo       *repository.QQAccountRepository
 
 	feishuRepo *repository.FeishuAccountRepository
 	waRepo     *repository.WhatsAppCloudAccountRepository
@@ -108,6 +111,10 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 	if db != nil {
 		telegramRepo.SetDB(context.Background(), db)
 	}
+	qqRepo := repository.NewQQAccountRepository()
+	if db != nil {
+		qqRepo.SetDB(context.Background(), db)
+	}
 	feishuRepo := repository.NewFeishuAccountRepository()
 	if db != nil {
 		feishuRepo.SetDB(context.Background(), db)
@@ -138,6 +145,7 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		wecomRepo:      wecomRepo,
 		integration:    NewWeComIntegrationService(db),
 		telegramRepo:   telegramRepo,
+		qqRepo:         qqRepo,
 		tgGate:         NewTelegramGateService(db),
 		feishuRepo:     feishuRepo,
 		waRepo:         waRepo,
@@ -473,6 +481,20 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 			return false, errors.New("missing X-Telegram-Bot-Api-Secret-Token header")
 		}
 		return telegram.VerifyWebhook(secret, headerSecret), nil
+	case ChannelQQ:
+		secret := s.getQQWebhookSecret(ctx, accountID)
+		if secret == "" {
+			return false, errors.New("qq webhook secret 未配置（q.qq.com 管理端 BotSecret）")
+		}
+		sig := headers["X-Signature-Ed25519"]
+		if sig == "" {
+			sig = headers["X-Signature-ed25519"]
+		}
+		ts := headers["X-Signature-Timestamp"]
+		if sig == "" || ts == "" {
+			return false, errors.New("missing X-Signature-Ed25519/X-Signature-Timestamp header")
+		}
+		return qq.VerifySignature(secret, sig, ts, body), nil
 	case ChannelFeishu:
 
 		secret, _ := s.getAccountSecret(ctx, string(channel), accountID)
@@ -613,7 +635,7 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 
 	if hubMsg == nil && dispatchErr == nil {
 		known := channel == ChannelWeCom || channel == ChannelWhatsapp ||
-			channel == ChannelTelegram || channel == ChannelFeishu
+			channel == ChannelTelegram || channel == ChannelFeishu || channel == ChannelQQ
 		if known {
 			logger.Infof("[Webhook] skip non-message event channel=%s event=%s", channel, job.event.EventID)
 			s.markProcessed(ctx, job.event)
@@ -631,10 +653,12 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 	}
 
 	triggerAI := hubMsg != nil && s.shouldTriggerAI(ctx, channel, job.account)
+	// QQ 渠道 AI 触发已由 dispatchQQ → Ingress（aiTrigger=webhookSvc.TriggerInboundAI）
+	// 完成，这里不再走 triggerSalesEngine，避免同一事件双触发 AI（双重回复）。
 	if channel == ChannelTelegram && tgExtra != nil && tgExtra.GateHandled {
 		triggerAI = false // /start 网关验证已消费
 	}
-	if triggerAI {
+	if triggerAI && channel != ChannelQQ {
 		// Telegram 群消息：先把 @mention/商机 元信息塞进 ctx → 让 sendOutbound 能 @mention 原发言人
 		aiCtx := ctx
 		if channel == ChannelTelegram && hubMsg.IsGroup && tgExtra != nil {
@@ -646,6 +670,7 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 				TriggerReason: tgExtra.TriggerReason,
 			})
 		}
+
 
 		if channel != ChannelTelegram || !hubMsg.IsGroup {
 			s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
@@ -674,6 +699,9 @@ func (s *WebhookService) dispatchToChannel(ctx context.Context, channel WebhookC
 		return hub, nil, err
 	case ChannelTelegram:
 		return s.dispatchTelegram(ctx, accountID, p, raw)
+	case ChannelQQ:
+		hub, err := s.dispatchQQ(ctx, accountID, p, raw)
+		return hub, nil, err
 	case ChannelFeishu:
 		hub, err := s.dispatchFeishu(ctx, accountID, p, raw)
 		return hub, nil, err

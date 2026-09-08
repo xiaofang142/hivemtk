@@ -1,5 +1,11 @@
 export default [
   {
+    path: '/geo-tools/visibility',
+    name: 'GeoVisibilityBoard',
+    component: () => import('@/views/geo/VisibilityBoard.vue'),
+    meta: { title: '可见性观测', group: 'analytics', icon: 'TrendCharts', requiresAuth: true }
+  },
+  {
     path: '/geo/decision-report',
     name: 'GeoDecisionReport',
     component: () => import('@/views/geo/DecisionReport.vue'),

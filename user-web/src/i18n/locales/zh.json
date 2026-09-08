@@ -290,6 +290,8 @@
     "geoPlatformPublish": "平台发布",
     "geoWorkflow": "工作流",
     "geoMonitor": "监控",
+    "geoVisibilityBoard": "可见性观测",
+    "geoAlertCenter": "告警中心",
     "geoSovBoard": "竞品 SOV",
     "geoCompetitors": "竞品管理",
     "geoCrawlerStats": "爬虫统计",

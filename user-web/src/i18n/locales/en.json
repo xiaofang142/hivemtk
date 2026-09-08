@@ -290,6 +290,8 @@
     "geoPlatformPublish": "Platform Publish",
     "geoWorkflow": "Workflow",
     "geoMonitor": "Monitoring",
+    "geoVisibilityBoard": "Visibility Board",
+    "geoAlertCenter": "Alert Center",
     "geoSovBoard": "Competitor SOV",
     "geoCompetitors": "Competitor Mgmt",
     "geoCrawlerStats": "Crawler Stats",

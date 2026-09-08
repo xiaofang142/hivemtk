@@ -103,6 +103,7 @@ func allModels() []any {
 		&model.WeComMessage{},
 		&model.WeComTag{},
 		&model.TelegramAccount{},
+		&model.QQAccount{},
 		&model.TelegramGroupGate{},
 		&model.TelegramGroupMember{},
 		&model.FeishuAccount{},
@@ -277,6 +278,7 @@ func allModels() []any {
 		&geomodel.GeoEntityRelation{},
 		&geomodel.GeoAlert{},
 		&geomodel.GeoJobRun{},
+		&geomodel.GeoCompetitor{},
 	}
 }
 

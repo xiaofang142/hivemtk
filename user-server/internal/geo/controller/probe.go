@@ -105,10 +105,23 @@ func (c *ProbeController) ListAvailableEngines(ctx *gin.Context) {
 	response.Success(ctx, names, "ok")
 }
 
-// ListRuns 最近探针运行记录
-// GET /geo/probe/runs?limit=20
+// ListRuns 最近探针运行记录（支持引擎过滤）
+// GET /geo/probe/runs?limit=20&engine=
 func (c *ProbeController) ListRuns(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	engine := ctx.Query("engine")
+	if engine != "" {
+		list, _, err := c.probeSvc.ListRunsByEngine(ctx.Request.Context(), engine, 1, limit)
+		if err != nil {
+			response.ErrorFromDB(ctx, err, "查询探针记录失败")
+			return
+		}
+		response.Success(ctx, list, "ok")
+		return
+	}
 	list, err := c.probeSvc.ListRuns(ctx.Request.Context(), limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询探针记录失败")

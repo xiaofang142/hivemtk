@@ -160,6 +160,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.GET("/reports/api-costs", reportCtrl.GetAPICosts)
 
 	geo.GET("/sov", reportCtrl.ShareOfVoice)
+	geo.GET("/sov/trend", reportCtrl.ShareOfVoiceTrend)
 	geo.GET("/crawler-stats", reportCtrl.CrawlerStats)
 	geo.POST("/crawler/run", reportCtrl.RunCrawler)
 	geo.POST("/inaccurate-claims", reportCtrl.InaccurateClaims)
@@ -176,6 +177,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.DELETE("/alerts/:id", alertCtrl.Delete)
 
 	geo.GET("/visibility/trend", visibilityCtrl.Trend)
+	geo.GET("/visibility/engine-compare", visibilityCtrl.EngineCompare)
 	geo.POST("/prompt/fanout", visibilityCtrl.Fanout)
 
 	geo.GET("/config", configCtrl.GetConfig)
