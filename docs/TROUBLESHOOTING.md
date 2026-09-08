@@ -223,6 +223,18 @@ PUBLIC_BASE_URL=https://chat.example.com
 
 **降级说明**：留空时这些渠道自动降级为轮询（polling）模式——能用，但禁止水平扩展，仅适合开发/单实例。
 
+#### 4.1.1 Telegram webhook 真伪信号与验签链路（2026-09-08 实战）
+
+**真伪区分三层机制**（按官方 core.telegram.org/bots/webhooks + Bot API）：
+
+1. `secret_token`（主方案，已启用）：setWebhook 传入后 TG 每次推送带 `X-Telegram-Bot-Api-Secret-Token` 头；服务端与 `telegram_accounts.webhook_secret` 恒等比对（`webhook.go` Verify → telegram case）。⚠️ `.env` 的 `ALLOW_INSECURE_WEBHOOK=true` 会在 `WebhookService.Verify` 入口对**所有渠道**验签全局短路，生产必须删除（启动护栏只拦显式非 dev 环境，APP_ENV 未设=会被当 dev 放行）。
+2. 来源 IP 白名单（纵深补充）：TG 源 IP 段 149.154.160.0/20 + 91.108.4.0/22（官方明示可能变化）。本部署 frp 隧道下应用层只见隧道出口 IP，白名单只能配在云端 nginx。
+3. `update_id` 幂等：TG 对非 2xx 响应重复投递（update 保存 ≤24h）；服务端以 `tg_upd_<update_id>` 作 eventID 进 Redis SetNX 去重（仅 5 分钟 TTL，长窗口重发可能二次触发业务，DB 层 `uni_message_hub_platform_msg_conv` 唯一索引兜底插入）。
+
+**云端 nginx 上白名单的宝塔陷阱（2026-09-08 事故复盘）**：宝塔主配置 `nginx.conf` 末尾是 `include /www/server/panel/vhost/nginx/*.conf;`（http 级通配）。若在 `/www/server/panel/vhost/nginx/` 目录下放只含 `allow/deny` 的片段文件（如做 include 复用），会被 http 级加载 → **全站所有 vhost 被 IP 白名单拦成 403**；且该文件 `nginx -t` 前已生成，`nginx -t` 测不出引用错误。事故当日已回滚。**规则**：allow/deny 片段文件只能放 `extension/<域名>/` 目录（该域名 vhost 内 include），或直接内联进 location；严禁落在 `vhost/nginx/*.conf` 通配范围内。
+
+**验签失败排查**：`{"verify_failed":true,"reason":"missing header"}`=请求未带 secret 头（伪造或 TG 未收到 secret_token 注册）；`signature mismatch`=头存在但不匹配（secret 轮换后未重挂 webhook）。修复后用 `getWebhookInfo` 看 `last_error_message` 确认 TG 投递面恢复。
+
 ### 4.2 批量任务卡在 running 不动
 
 **症状**：批量发送 job 长时间 `running` 且 `success + failed < total`。
