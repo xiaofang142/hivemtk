@@ -268,7 +268,7 @@ HiveMtk 是一套**开源自部署**的 AI 私域运营系统，解决一个核�
 
 ## 九、已知限制（如实披露）
 
-以下短板在源码审查中确认存在（编号 G1–G12 来自父仓库 [`docs/architecture/AI_CORE_FEATURE_INVENTORY.md`](../../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) 末尾的「已知限制」章节），选购/二开前请知悉：
+以下短板在源码审查中确认存在（编号 G1–G12 来自父仓库 [`docs/architecture/AI_CORE_FEATURE_INVENTORY.md`](../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) 末尾的「已知限制」章节），选购/二开前请知悉：
 
 | # | 限制 | 影响 |
 |---|------|------|
@@ -292,7 +292,7 @@ HiveMtk 是一套**开源自部署**的 AI 私域运营系统，解决一个核�
 | [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md) | 怎么装起来（安装/部署/配置） |
 | [operations/MERCHANT_DEPLOYMENT.md](../operations/MERCHANT_DEPLOYMENT.md) | 运维手册（日常运维操作） |
 | [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) | 出了问题怎么办（故障排查） |
-| [architecture/AI_CORE_FEATURE_INVENTORY.md](../../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) | F1–F15 源码级功能清单（父仓库权威版） |
+| [architecture/AI_CORE_FEATURE_INVENTORY.md](../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) | F1–F15 源码级功能清单（父仓库权威版） |
 
 ---
 
