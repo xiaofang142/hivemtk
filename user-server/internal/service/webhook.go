@@ -370,6 +370,13 @@ func (s *WebhookService) Receive(ctx context.Context, req *ReceiveRequest) (*Rec
 	}
 	if s.eventRepo != nil {
 		if err := s.eventRepo.Create(ctx, evt); err != nil {
+			// uni_webhook_events_event_id 唯一约束冲突 = 该事件已落库处理过。
+			// 场景：Redis 去重仅 5 分钟 TTL，而 Telegram 对非 2xx 的重试窗口远超 5 分钟，
+			// 长窗口重发会撞这里。必须按"重复事件"幂等放行（accepted=true），
+			// 否则 accepted=false 会让 TG 无限重试同一 update。
+			if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "23505") {
+				return &ReceiveResult{Accepted: true, Duplicate: true, EventID: payload.EventID}, nil
+			}
 			return &ReceiveResult{Accepted: false, Reason: "persist error: " + err.Error()}, nil
 		}
 	}
@@ -675,7 +682,6 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 				TriggerReason: tgExtra.TriggerReason,
 			})
 		}
-
 
 		if channel != ChannelTelegram || !hubMsg.IsGroup {
 			s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
