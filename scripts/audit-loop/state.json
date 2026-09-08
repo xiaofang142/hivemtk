@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 1,
-  "next_angle_index": 1,
+  "round": 2,
+  "next_angle_index": 2,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 1,
-    "issues_found_total": 2,
-    "issues_fixed_total": 2,
+    "rounds_completed": 2,
+    "issues_found_total": 3,
+    "issues_fixed_total": 3,
     "last_completed_at": "2026-09-08",
-    "last_commit": "R1"
+    "last_commit": "d906d49"
   },
   "history": [
     {
@@ -32,6 +32,14 @@
       "found": 2,
       "fixed": 2,
       "notes": "email_tracking/email_unsubscribe 死常量默认密钥删除；govulncheck 环境不可用已记录"
+    },
+    {
+      "round": 2,
+      "angle": "authz",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "访客WS无token分支fail-closed补全；远端分叉已按规则0 merge 后推送"
     }
   ]
 }

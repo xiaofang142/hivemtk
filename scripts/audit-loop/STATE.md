@@ -5,11 +5,32 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：1 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：2 / 2
-- 下一轮角度：authz
+- 已完成轮次：2 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：3 / 3
+- 下一轮角度：architecture
 
 ## 轮次报告
+
+### R2 — authz（2026-09-08）
+
+**审计范围**：公开路由最小化、`/api/manage` 守卫覆盖、admin 中间件语义、垂直越权（staff 调管理接口）、水平越权 IDOR 抽查（chat public / whatsapp / geo / 卡片 / 短链 / email）、visitor WebSocket 鉴权、monitor 端点暴露面、init 流程守卫。
+
+**发现与处置（1 项，已修复）**：
+
+1. `user-server/internal/websocket/visitor_handler.go:126` — 访客 WS 无 token 分支语义依赖 `sessionID/visitorID` 非空的前置条件，且代码留有空行残迹疑似被改动过；若上游校验顺序变化即退化为凭 `session_id` 冒连他人会话、接收坐席/AI 回复（P1）。**处置：确认拒绝条件后补全注释固化 fail-closed 语义**，无 token 且带会话参数的连接明确 401 拒绝。
+
+**核查通过项（无需修复）**：
+- 公开路由最小化核对：`/health` `/system/info` `/auth/login(+mfa)` `init-*`（有 install.lock 已初始化 403 守卫）`/license/*`（固定空）`/s/:code` `/l/:code` `/livecode/*` `/platform/register` help-center 公开读、chat public（visitor_token 全链路校验：GetMessages/Send/Offline/Transfer/Close/Rate/UploadToken 均过 `validateVisitorTokenOrAbort`；GetActiveSession/RecentClosed 按 visitorID 自查范围）
+- `/api/manage/*` 写操作全部在 `manageAdmin`（AdminAuthMiddleware）组；7 个免 admin 的 manage GET 仅低敏读（co-pilot 配置/rag-eval 记录/规则列表/SLA 配置），data-export 在同一组但服务端无越权放大（GDPR 导出按 customer_id 全量，属管理端设计，前端管理页调用）
+- 系统运维高危端点（restart/logs/backup/restore/system config 写）整组挂在 `systemAdmin`（AdminAuthMiddleware）之后
+- whatsapp/telegram/feishu/wa-cloud 写操作全部在 admin 子组；geo 的 config 写/平台账号写/工作流写/jobs 触发在 `geoAdmin` 组
+- visitor WebSocket：token 校验绑定 channelID+visitorID+sessionID 三元组；SMTP 响应 DTO 不含 password 字段（模型 `json:"-"`，DTO 无此字段）
+- monitor 端点挂在 JWT 组（`auth.Use(JWTAuthMiddleware)` 之后注册），需登录
+- SystemUser 响应统一走 `SystemUserResponse`（无 password 字段）
+
+**验证证据**：`go build ./...` OK；`go vet ./...` OK；`go test ./internal/websocket/ ./internal/controller/ ./internal/middleware/` 三包全绿。远端分叉（gitee-upstream 有新 docs 提交）已按规则0 `git merge` 后推送，merge 后 build 复验 OK。
+
+**Commit**：`01e7297`（修复）+ `d906d49`（merge 推送）
 
 ### R1 — security（2026-09-08）
 
