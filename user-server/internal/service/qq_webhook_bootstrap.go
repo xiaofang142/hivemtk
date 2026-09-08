@@ -13,6 +13,7 @@ import (
 
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/pkg/db"
 )
 
 // ErrQQAccountNotFound QQ 账号不存在（verify-callback 自检入口）
@@ -90,6 +91,12 @@ type QQCallbackSelfCheckResult struct {
 // 对任意非空 secret 都能成功签名，secret 是否填对只能由 q.qq.com 保存回调时
 // 平台发起的真实 op13 验证确认。调用方文案不得宣称"自检通过 = secret 正确"。
 func (s *QQService) VerifyCallbackSelfCheck(ctx context.Context, accountID uint) (*QQCallbackSelfCheckResult, error) {
+	if s.accRepo == nil {
+		return nil, errors.New("qq account repository unavailable")
+	}
+	if db.GetDB() == nil {
+		return nil, errors.New("database unavailable")
+	}
 	acc, err := s.accRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("get qq account: %w", err)
