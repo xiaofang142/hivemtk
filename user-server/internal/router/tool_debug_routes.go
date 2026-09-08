@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"time"
 
@@ -33,7 +32,7 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 func handleToolList(c *gin.Context) {
 	registry := tooluse.GetGlobalRegistry()
 	if registry == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "tool registry not initialized"})
+		response.Error(c, 503, "tool registry not initialized")
 		return
 	}
 	category := c.Query("category")
@@ -61,28 +60,25 @@ func handleToolList(c *gin.Context) {
 func handleToolGet(c *gin.Context) {
 	registry := tooluse.GetGlobalRegistry()
 	if registry == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "tool registry not initialized"})
+		response.Error(c, 503, "tool registry not initialized")
 		return
 	}
 	name := c.Query("name")
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "name query parameter required"})
+		response.Error(c, 400, "name query parameter required")
 		return
 	}
 	tool, err := registry.Get(name)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": err.Error()})
+		response.Error(c, 404, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"tool": gin.H{
-			"name":        tool.Name(),
-			"category":    string(tool.Category()),
-			"description": tool.Description(),
-			"parameters":  tool.Parameters(),
-		},
-	})
+	response.Success(c, gin.H{
+		"name":        tool.Name(),
+		"category":    string(tool.Category()),
+		"description": tool.Description(),
+		"parameters":  tool.Parameters(),
+	}, "ok")
 }
 
 type toolExecuteRequest struct {
@@ -97,12 +93,12 @@ type toolExecuteRequest struct {
 func handleToolExecute(c *gin.Context) {
 	exec := tooluse.GetGlobalExecutor()
 	if exec == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "tool executor not initialized"})
+		response.Error(c, 503, "tool executor not initialized")
 		return
 	}
 	var req toolExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request: " + err.Error()})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 	if req.Args == nil {
@@ -138,9 +134,9 @@ func handleToolExecute(c *gin.Context) {
 		respErr = routeResult.Err.Error()
 	}
 	resp := gin.H{
-		"success":     routeResult.Result.Success,
-		"tool_result": routeResult.Result.Data,
-		"error":       respErr,
+		"exec_success": routeResult.Result.Success,
+		"tool_result":  routeResult.Result.Data,
+		"error":        respErr,
 	}
 	if routeResult.CircuitOpen {
 		resp["circuit_open"] = true
@@ -148,7 +144,7 @@ func handleToolExecute(c *gin.Context) {
 	if routeResult.RateLimit {
 		resp["rate_limited"] = true
 	}
-	c.JSON(http.StatusOK, resp)
+	response.Success(c, resp, "ok")
 }
 
 func handleToolStats(c *gin.Context) {
@@ -189,7 +185,7 @@ func handleToolAudit(c *gin.Context) {
 
 	exec := tooluse.GetGlobalExecutor()
 	if exec == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "tool executor not initialized"})
+		response.Error(c, 503, "tool executor not initialized")
 		return
 	}
 
@@ -241,25 +237,23 @@ type toolCircuitResetRequest struct {
 func handleToolCircuitReset(c *gin.Context) {
 	router := app.GetGlobalToolRouter()
 	if router == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "tool router not initialized"})
+		response.Error(c, 503, "tool router not initialized")
 		return
 	}
 	var req toolCircuitResetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request: " + err.Error()})
+		response.Error(c, 400, "invalid request: "+err.Error())
 		return
 	}
 	if strings.TrimSpace(req.ToolName) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "tool_name required"})
+		response.Error(c, 400, "tool_name required")
 		return
 	}
 	router.ResetCircuit(req.ToolName)
 	logger.Infof("[tool-debug] circuit reset tool=%s by caller=%s", req.ToolName, c.ClientIP())
-	c.JSON(http.StatusOK, gin.H{
-		"success":   true,
+	response.Success(c, gin.H{
 		"tool_name": req.ToolName,
-		"message":   "circuit breaker reset",
-	})
+	}, "circuit breaker reset")
 }
 
 func atoiSafe(s string) (int, error) {
@@ -284,10 +278,7 @@ func (e *simpleError) Error() string { return e.msg }
 
 func handleToolProviders(c *gin.Context) {
 	if app.GetGlobalProviderRegistry() == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"success": false,
-			"error":   "provider registry not initialized",
-		})
+		response.Error(c, 503, "provider registry not initialized")
 		return
 	}
 	results := app.GetGlobalProviderRegistry().Results()

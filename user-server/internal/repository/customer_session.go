@@ -691,3 +691,30 @@ func (r *CustomerSessionRepository) CountPendingUnassigned(ctx context.Context) 
 		Count(&count).Error
 	return count, err
 }
+
+// CountSessionsByStatusSince 统计 since 之后指定状态集合的会话数（SLA 统计用）
+func (r *CustomerSessionRepository) CountSessionsByStatusSince(ctx context.Context, since time.Time, statuses []string) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("created_at >= ? AND status IN ?", since, statuses).
+		Count(&n).Error
+	return n, err
+}
+
+// CountSessionsSince 统计 since 之后全部会话数（SLA 统计用）
+func (r *CustomerSessionRepository) CountSessionsSince(ctx context.Context, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("created_at >= ?", since).
+		Count(&n).Error
+	return n, err
+}
+
+// CountOpenSessionsSince24h 统计 24 小时内 open 状态会话数（SLA 巡检用）
+func (r *CustomerSessionRepository) CountOpenSessionsSince24h(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("status = ? AND created_at > ?", "open", time.Now().Add(-24*time.Hour)).
+		Count(&n).Error
+	return n, err
+}

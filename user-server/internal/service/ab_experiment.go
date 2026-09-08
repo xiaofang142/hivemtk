@@ -8,8 +8,12 @@ import (
 
 	"gorm.io/gorm"
 
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 )
+
+func init() { _db.RegisterExtraModels(&repository.AbExposure{}) }
 
 // 变体常量
 const (
@@ -20,16 +24,8 @@ const (
 // AbExposureBuffer 曝光异步落库缓冲容量
 const AbExposureBuffer = 1024
 
-// AbExposure 曝光/转化记录表
-type AbExposure struct {
-	ID           uint       `gorm:"primarykey" json:"id"`
-	ExperimentID string     `gorm:"size:64;index:idx_ab_exp_customer,priority:1" json:"experiment_id"`
-	CustomerID   string     `gorm:"size:64;index:idx_ab_exp_customer,priority:2" json:"customer_id"`
-	Variant      string     `gorm:"size:16" json:"variant"`
-	SessionID    string     `gorm:"size:64" json:"session_id"`
-	ExposedAt    time.Time  `json:"exposed_at"`
-	ConvertedAt  *time.Time `json:"converted_at"`
-}
+// AbExposure 曝光/转化记录表（结构体权威定义在 repository，此处类型别名保持既有 API 兼容）
+type AbExposure = repository.AbExposure
 
 func fnv1a32(s string) uint32 {
 	h := uint32(2166136261)
@@ -58,7 +54,7 @@ type AbVariantSummary struct {
 
 // ABExperiment A/B 实验框架（曝光落库 + 转化回填 + 汇总）
 type ABExperiment struct {
-	db           *gorm.DB
+	exposureRepo *repository.ABExposureRepository
 	ch           chan AbExposure
 	done         chan struct{}
 	cancel       context.CancelFunc
@@ -67,30 +63,16 @@ type ABExperiment struct {
 	DroppedCount atomic.Int64
 }
 
-var abSchemaOnce sync.Once
-
-func abEnsureSchema(db *gorm.DB) {
-	abSchemaOnce.Do(func() {
-		if db == nil {
-			return
-		}
-		if err := db.AutoMigrate(&AbExposure{}); err != nil {
-			logger.Errorf("[T-7] AbExposure AutoMigrate 失败: %v", err)
-		}
-	})
-}
-
 // NewABExperiment 构造并启动异步落库 worker（db 为 nil 时纯内存模式）
 func NewABExperiment(db *gorm.DB, bufferSize int) *ABExperiment {
 	if bufferSize <= 0 {
 		bufferSize = AbExposureBuffer
 	}
 	a := &ABExperiment{
-		db:   db,
-		ch:   make(chan AbExposure, bufferSize),
-		done: make(chan struct{}),
+		exposureRepo: repository.NewABExposureRepositoryWithDB(db),
+		ch:           make(chan AbExposure, bufferSize),
+		done:         make(chan struct{}),
 	}
-	abEnsureSchema(db)
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.wg.Add(1)
@@ -110,10 +92,10 @@ func NewABExperiment(db *gorm.DB, bufferSize int) *ABExperiment {
 }
 
 func (a *ABExperiment) insert(e AbExposure) {
-	if a.db == nil {
+	if a.exposureRepo == nil {
 		return
 	}
-	if err := a.db.Create(&e).Error; err != nil {
+	if err := a.exposureRepo.Create(context.Background(), &e); err != nil {
 		logger.Errorf("[T-7] 曝光落库失败 exp=%s cust=%s err=%v", e.ExperimentID, e.CustomerID, err)
 	}
 }
@@ -138,12 +120,10 @@ func (a *ABExperiment) LogExposure(expID, variant, customerID, sessionID string)
 
 // MarkConversion 回填转化时间（首次转化生效；nil db 安全跳过）
 func (a *ABExperiment) MarkConversion(expID, customerID string) {
-	if a == nil || a.db == nil {
+	if a == nil || a.exposureRepo == nil {
 		return
 	}
-	if err := a.db.Model(&AbExposure{}).
-		Where("experiment_id = ? AND customer_id = ? AND converted_at IS NULL", expID, customerID).
-		Update("converted_at", time.Now()).Error; err != nil {
+	if err := a.exposureRepo.MarkConversion(context.Background(), expID, customerID, time.Now()); err != nil {
 		logger.Errorf("[T-7] 转化回填失败 exp=%s cust=%s err=%v", expID, customerID, err)
 	}
 }
@@ -154,12 +134,12 @@ func (a *ABExperiment) Summaries(expID string, window time.Duration) map[string]
 		AbVariantControl:   {Variant: AbVariantControl},
 		AbVariantTreatment: {Variant: AbVariantTreatment},
 	}
-	if a == nil || a.db == nil {
+	if a == nil || a.exposureRepo == nil {
 		return res
 	}
 	since := time.Now().Add(-window)
-	var rows []AbExposure
-	if err := a.db.Where("experiment_id = ? AND exposed_at >= ?", expID, since).Find(&rows).Error; err != nil {
+	rows, err := a.exposureRepo.ListSince(context.Background(), expID, since)
+	if err != nil {
 		logger.Errorf("[T-7] 汇总查询失败 exp=%s err=%v", expID, err)
 		return res
 	}

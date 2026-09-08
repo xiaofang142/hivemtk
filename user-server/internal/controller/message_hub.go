@@ -74,16 +74,18 @@ func (c *MessageHubController) PushBatch(ctx *gin.Context) {
 		return
 	}
 	results, errs := c.svc.PushBatch(ctx.Request.Context(), reqs)
-	resp := gin.H{
-		"success": 0,
-		"failed":  0,
-		"items":   results,
-		"errors":  errs,
-	}
+	succeeded := 0
 	for _, e := range errs {
 		if e == nil {
-			resp["success"] = resp["success"].(int) + 1
+			succeeded++
 		}
+	}
+	// 字段名 success_count/failed_count，避免与信封级 success 布尔约定混淆
+	resp := gin.H{
+		"success_count": succeeded,
+		"failed_count":  len(errs) - succeeded,
+		"items":         results,
+		"errors":        errs,
 	}
 	response.Success(ctx, resp, "批量推送完成")
 }

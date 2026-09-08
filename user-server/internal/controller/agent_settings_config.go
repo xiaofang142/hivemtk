@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"net/http"
-
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -21,7 +19,7 @@ func NewAgentSettingsController() *AgentSettingsController {
 func (c *AgentSettingsController) GetConfig(ctx *gin.Context) {
 	cfg, err := service.LoadAgentSettingsConfig(ctx.Request.Context())
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		response.Error(ctx, 500, err.Error())
 		return
 	}
 	response.Success(ctx, cfg, "ok")
@@ -31,15 +29,15 @@ func (c *AgentSettingsController) GetConfig(ctx *gin.Context) {
 func (c *AgentSettingsController) SaveConfig(ctx *gin.Context) {
 	var cfg service.AgentSettingsConfig
 	if err := ctx.ShouldBindJSON(&cfg); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "请求体格式错误: " + err.Error()})
+		response.Error(ctx, 400, "请求体格式错误: "+err.Error())
 		return
 	}
 	if cfg.MaxLoopIterations != 0 && cfg.MaxLoopIterations < 2 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "max_loop_iterations 必须 >= 2（否则工具调用无法产出答案）"})
+		response.Error(ctx, 400, "max_loop_iterations 必须 >= 2（否则工具调用无法产出答案）")
 		return
 	}
 	if err := service.SaveAgentSettingsConfig(ctx.Request.Context(), &cfg); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		response.Error(ctx, 500, err.Error())
 		return
 	}
 	response.Success(ctx, cfg, "ok")

@@ -214,7 +214,7 @@ const loadLicenseInfo = async () => {
   try {
     const response = await getLicenseStatus({ _silent: true })
     if (response) licenseInfo.value = response
-  } catch (error) {}
+  } catch (error) { console.warn("[request] 后台调用失败(已忽略):", error) }
 };
 
 const topMenus = ref([

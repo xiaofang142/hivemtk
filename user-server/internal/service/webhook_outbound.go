@@ -28,6 +28,7 @@ import (
 	"hivemtk-user/internal/model"
 
 	"hivemtk-user/internal/pkg/utils"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
@@ -90,37 +91,13 @@ func isDelayedReplay(ctx context.Context) bool {
 	return ok && v
 }
 
-var (
-	delayedOutboundTableMu   sync.Mutex
-	delayedOutboundTableDone = map[*gorm.DB]bool{}
-)
-
-func ensureDelayedOutboundTable(ctx context.Context, db *gorm.DB) {
-	if db == nil {
-		return
-	}
-	delayedOutboundTableMu.Lock()
-	done := delayedOutboundTableDone[db]
-	delayedOutboundTableMu.Unlock()
-	if done {
-		return
-	}
-	if err := db.AutoMigrate(&DelayedOutboundReply{}); err != nil {
-		logger.Errorf("[H-3] reach_delayed_outbound 建表失败: %v", err)
-		return
-	}
-	delayedOutboundTableMu.Lock()
-	delayedOutboundTableDone[db] = true
-	delayedOutboundTableMu.Unlock()
-}
+func init() { _db.RegisterExtraModels(&DelayedOutboundReply{}) }
 
 func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) bool {
 	if s.db == nil {
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Msg("[H-3] db 未初始化，quiet hours 延迟入队失败，按原路径直接发送")
 		return false
 	}
-	ensureDelayedOutboundTable(ctx, s.db)
-
 	var cardsPayload model.JSONMap
 	if len(cards) > 0 {
 		if raw, err := json.Marshal(cards); err == nil {
@@ -180,7 +157,6 @@ func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
 	if s.db == nil {
 		return
 	}
-	ensureDelayedOutboundTable(ctx, s.db)
 	now := time.Now()
 	var picked []DelayedOutboundReply
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

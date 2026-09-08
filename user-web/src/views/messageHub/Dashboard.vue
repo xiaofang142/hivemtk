@@ -157,9 +157,9 @@ function connectSSE() {
         const data = JSON.parse(e.data)
         if (data.stats) stats.value = data.stats
         if (data.channelHealth) channelHealth.value = data.channelHealth
-      } catch (_) {}
+      } catch (_) { console.warn("[request] 后台调用失败(已忽略):", _) }
     }
-  } catch (_) {}
+  } catch (_) { console.warn("[request] 后台调用失败(已忽略):", _) }
 }
 
 onMounted(() => {

@@ -147,7 +147,7 @@ watch(offlineBannerCount, (c) => {
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: 'mcw-unread', count: c }, '*')
     }
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });
 
 const humanHint = ref(false);

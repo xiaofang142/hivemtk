@@ -7,12 +7,16 @@ import (
 	"sync"
 	"time"
 
+	_db "hivemtk-user/internal/pkg/db"
+
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 const complianceReminderTag = "[COMPLIANCE]"
+
+func init() { _db.RegisterExtraModels(&ReachComplianceLog{}) }
 
 // ReachComplianceLog 合规提醒审计日志（表 reach_compliance_log）
 type ReachComplianceLog struct {
@@ -56,9 +60,6 @@ func InitComplianceAuditLogger(db *gorm.DB) *ComplianceAuditLogger {
 			stop:    make(chan struct{}),
 		}
 		if db != nil {
-			if err := db.AutoMigrate(&ReachComplianceLog{}); err != nil {
-				logger.Errorf("[R-8] reach_compliance_log 建表失败: %v", err)
-			}
 			go complianceLogger.flushLoop()
 		}
 	})

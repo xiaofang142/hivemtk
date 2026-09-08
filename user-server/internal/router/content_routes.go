@@ -74,11 +74,11 @@ func setupClueRoutes(auth *gin.RouterGroup) {
 	}
 
 	clueScoreCtrl := controller.NewClueScoreController()
-	auth.POST("/clue/score", clueScoreCtrl.ScoreClue)
-	auth.POST("/clue/score-all", clueScoreCtrl.ScoreAll)
+	auth.POST("/clue/score", middleware.RequirePermission("clues.write"), clueScoreCtrl.ScoreClue)
+	auth.POST("/clue/score-all", middleware.RequirePermission("clues.write"), clueScoreCtrl.ScoreAll)
 	auth.GET("/clue/score/:clue_id", clueScoreCtrl.GetByClueID)
 	auth.GET("/clue/score/list", clueScoreCtrl.ListByGrade)
-	auth.POST("/clue/engagement", clueScoreCtrl.RecordEngagement)
+	auth.POST("/clue/engagement", middleware.RequirePermission("clues.write"), clueScoreCtrl.RecordEngagement)
 }
 
 func setupLeadMiningRoutes(auth *gin.RouterGroup) {

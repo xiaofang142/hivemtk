@@ -314,7 +314,7 @@ const setupRealtime = async () => {
       onError: (e) => { console.warn('[unifiedMessage ws]', e) }
     })
     agentSocketInst.connect()
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 };
 
 const scheduleRealtimeRefresh = () => {

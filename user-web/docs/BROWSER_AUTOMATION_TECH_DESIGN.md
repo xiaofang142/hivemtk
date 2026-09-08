@@ -15,7 +15,7 @@
 | **5 数据库** | 5 张新表 ER + DDL | DBA |
 | **6 原语 Schema** | Plan Schema + 13 种原语契约 | 前后端 + Chrome 扩展开发 |
 | **7 LLM 大脑** | Brain 设计 + ReAct 闭环 + 缓存 | AI 工程师 |
-| **8 Native Messaging** | Chrome 扩展 + Python Host 设计 | 前端 + Go 后端 |
+| **8 Native Messaging** | Chrome 扩展 + Native Messaging Host (Go) 设计 | 前端 + Go 后端 |
 | **9 调度引擎** | Cron + 循环 + 工作流子节点 | 后端 |
 | **10 MCP 注册** | browser_* tools + Agent 调用流 | 后端 + Agent 工程 |
 | **11 前端** | 6 个页面设计 + 编排器 UI | 前端 |
@@ -110,7 +110,7 @@
 ### 2.3 关键发现
 
 1. **没有任何成品项目完美命中全部硬约束**。业界热门方案（Playwright MCP / Stagehand / Browser Use / Skyvern）全部走 Playwright 隔离浏览器，**根本不尝试复用主 Profile**。
-2. **Browser Agent Bridge**（https://github.com/TNJ2026/browser-agent-bridge）是最接近的参考实现——Native Messaging + Chrome 扩展 + Python Host + HTTP/WS JSON-RPC，**但它不做 LLM 大脑层**，只暴露原语。我们可以直接借鉴其 Native Messaging 通信协议和 Host 实现。
+2. **Browser Agent Bridge**（https://github.com/TNJ2026/browser-agent-bridge）是最接近的参考实现——Native Messaging + Chrome 扩展 + Native Messaging Host (Go) + HTTP/WS JSON-RPC，**但它不做 LLM 大脑层**，只暴露原语。我们可以直接借鉴其 Native Messaging 通信协议和 Host 实现。
 3. **CDP 路线的弹窗枷锁无解**。Chrome 的远程调试协议对外部调试器（任何走 `--remote-debugging-port` 的方案）有明确的用户确认保护，重启后首次连接必弹 "Allow"。这不是代码 bug，是 Chrome 安全模型。
 4. **2025-2026 年业界范式转向 AI-First Browser Automation**（LLM 驱动 DOM 理解 + 原语执行），但几乎所有方案都在隔离浏览器里跑。我们的差异化在于：**把 AI-First 能力寄生到用户正在用的浏览器里**。
 
@@ -126,7 +126,7 @@
 
 | 路线 | 实现 | 优点 | 缺点 | 决策 |
 |------|------|------|------|------|
-| **方案 A：自建极简网关** | 剥离 Native Messaging 最小骨架，自己维护 | 全部硬约束命中、源码可控、代码量小（~500 行核心） | 需要少量 JS + Python + Go | ✅ **选这个** |
+| **方案 A：自建极简网关** | 剥离 Native Messaging 最小骨架，自己维护 | 全部硬约束命中、源码可控、代码量小（~500 行核心） | 需要少量 JS + Go | ✅ **选这个** |
 | **方案 B：改造 Browser Agent Bridge** | fork 后替换 MCP 层，加 Brain 层 | 省掉扩展 + Host 编码 | 上游更新需 rebase，架构不完全契合（它用 HTTP/WS 而非直接 MCP） | ❌ 架构不契合 |
 | **方案 C：继续用 CDP 路线 + 忍弹窗** | Chrome DevTools MCP / Playwright MCP + CDP 连接 | 零编码 | 重启必弹 Allow、抢焦点、硬约束全破 | ❌ 硬约束不满足 |
 
@@ -148,7 +148,7 @@ Chrome 官方文档确认：Native Messaging host 是通过 manifest 的 `allowe
 | 组件 | 选型 | 理由 |
 |------|------|------|
 | Chrome 扩展 | Manifest V3 + 纯 JS | Chrome 官方标准，service worker 模型稳定；几百行足够 |
-| Native Host | Python 3 | 跨平台；stdio 消息循环实现简单；browser-agent-bridge 已验证 |
+| Native Host | Go | 跨平台；stdio 消息循环实现简单；browser-agent-bridge 已验证 |
 | Go Hand 层 | Go + `encoding/json` + 自定义 stdio | 后端本就是 Go，Native Messaging 协议（4 字节长度 + JSON payload）可直接实现 |
 | LLM 大脑 | 复用现有 `aiagent/llm` + `llm_routing` | 不新建 LLM 基础设施，只写 prompt + plan 解析 |
 | Plan 缓存 | PostgreSQL JSONB + SHA256 hash | 项目已有 PG 基础设施，不需要 Redis |
@@ -163,9 +163,10 @@ Chrome 官方文档确认：Native Messaging host 是通过 manifest 的 `allowe
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 1: Brain (LLM 决策层)                                │
 │                                                             │
-│  输入: 自然语言 prompt + 页面 DOM 快照 + 变量定义            │
+│  输入: 自然语言 prompt + accessibility snapshot (@ref) + 变量 │
 │  输出: browser_plan_v1 JSON (结构化原语序列)                 │
 │  职责: 理解意图 + 生成计划 + ReAct 闭环 + 计划缓存           │
+│  关键: snapshot 是 @e1/@e2 refs 表 (2-5 KB)，不是原始 HTML   │
 │  不做: 不直接操作浏览器、不写脚本                             │
 └─────────────────────────────────────────────────────────────┘
                               │ browser_plan_v1
@@ -174,29 +175,34 @@ Chrome 官方文档确认：Native Messaging host 是通过 manifest 的 `allowe
 │                                                             │
 │  输入: browser_plan_v1 + 运行时变量值                       │
 │  输出: 逐原语执行指令 + 写 browser_steps 表                  │
-│  职责: 变量替换 {{var}} → 真实值、selector 校验、超时/重试注入│
+│  职责: 变量替换 {{var}}、ref→DOM 元素定位、超时/重试注入      │
 │  不做: 不调 LLM、不直接操作浏览器                             │
 └─────────────────────────────────────────────────────────────┘
                               │ 逐原语指令
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 3: Hand (浏览器原语执行层)                            │
 │                                                             │
-│  Go Hand → Native Messaging (stdio JSON) → Chrome 扩展      │
+│  Go Hand (Go NM Host) ──(Native Messaging stdio)──▶ Chrome 扩展│
+│                                                             │
+│  Go 直接实现 Chrome Native Messaging 协议（小端 4B 长度帧） │
+│  event_loop 模式：for { readFrame → dispatch → writeFrame } │
 │                                                             │
 │  输入: 单条原语 (action + params)                            │
 │  输出: 执行结果 (ok/error + 快照/截图)                       │
-│  职责: 维持长连接、多 Agent 互斥队列、断线重连              │
+│  职责: 维持长连接、多 Agent 互斥队列 (mutex)、断线重连       │
 │  不做: 不理解业务逻辑、不调用 LLM                             │
 └─────────────────────────────────────────────────────────────┘
                               │
 ┌─────────────────────────────────────────────────────────────┐
 │  Chrome 扩展 (Manifest V3)                                 │
 │                                                             │
-│  权限: tabs + scripting  （最小权限，不读写 Cookie）          │
-│  API: createBackgroundTab / click / type / screenshot /     │
-│       getHTML / waitForLoad / scroll / extract / assert    │
+│  权限: tabs + scripting （最小权限，不读写 Cookie）          │
+│  API: createBackgroundTab / click / type / snapshot(@ref)  │
+│       screenshot / markdown / getHTML / wait / scroll /    │
+│       extract / assert / evaluate / close / switch_tab     │
 │                                                             │
 │  寄生在用户主 Chrome Profile，后台 tab (active:false) 不抢焦点│
+│  Native Messaging port 天然保活 service worker（不需要 offscreen）│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -239,10 +245,11 @@ Chrome 官方文档确认：Native Messaging host 是通过 manifest 的 `allowe
 └──────────────────────────────────────────────────────────────────┘
                               │ Native Messaging (4 字节长度 + JSON)
 ┌──────────────────────────────────────────────────────────────────┐
-│              Native Host (Python 3 ~200 行)                      │
-│  stdin ←→ stdout JSON 协议                                       │
-│  维持长连接、断线自动重连、单实例互斥队列                          │
+│              Go Native Messaging Host (~80 行)                    │
+│  4 字节 Little Endian 长度头 + UTF-8 JSON                        │
+│  event_loop 模式，Chrome 管理生命周期                              │
 │  位置:  ~/Library/Application Support/... NativeMessagingHosts/  │
+│  关键: Go 直接实现，省掉 Python 中间层（见深度调研 §1）            │
 └──────────────────────────────────────────────────────────────────┘
                               │ Native Messaging API
 ┌──────────────────────────────────────────────────────────────────┐
@@ -265,7 +272,7 @@ Chrome 官方文档确认：Native Messaging host 是通过 manifest 的 `allowe
 |----------|--------|----------|--------|
 | `pkg/cron` | BrowserCronAdapter 注册定时浏览器任务 | 新建 `browser_automation_scheduler.go` | ~100 行 |
 | `workflow_orchestrator` | 新增 action 节点 `browser_task` | 改造 `workflow_node_executors.go` | ~150 行 |
-| `aiagent/mcp/server` | 注册 `browser_*` MCP tools | 改造 `server.go` 或新建 `browser_tools.go` | ~200 行 |
+| `aiagent/mcp/server` | 注册 `browser_*` MCP tools | 改造 `server.go` 或新建 `browser_tools.go` | .~80 行 |
 | FeatureFlag | 新增 `FF_BROWSER_AUTOMATION` 等开关 | `system_config` | 3 行 config |
 | `AutomationHub.vue` | 扩展为浏览器自动化入口 | 改造现有 | ~50% |
 
@@ -372,7 +379,7 @@ browser_llm_plans                               (LLM 计划缓存，独立)
 
 ```
 ┌───────────────────────────────┐
-│ 4 字节大端长度 (uint32)       │
+│ 4 字节小端长度 (uint32 LE)     │
 ├───────────────────────────────┤
 │ JSON payload (长度字节)        │
 │ {                             │
@@ -384,7 +391,7 @@ browser_llm_plans                               (LLM 计划缓存，独立)
 └───────────────────────────────┘
 ```
 
-Chrome Native Messaging 标准格式，Go/Python/扩展三方统一。
+Chrome Native Messaging 标准格式，Go/扩展三方统一。
 
 ---
 
@@ -467,136 +474,217 @@ Step 1..N: Translator 执行原语
 
 ## 8. Native Messaging 子系统
 
-### 8.1 组件关系
+### 8.1 组件关系（**深度调研修正：Go 直做，无 Python**）
 
 ```
-┌──────────────┐  Go native  │ ┌──────────────┐  stdio JSON  │ ┌──────────────┐
-│  Go Hand 层  │ ──────────▶ │ Python Host   │ ──────────▶  │ Chrome 扩展   │
-│ (BrowserHand)│  stdio pipe │ ~200 行       │  (Chrome 启动)│ Manifest V3   │
-└──────────────┘             └──────────────┘               └──────────────┘
+Go Hand (browser_automation_hand.go)
+  │
+  │ exec.Command("hivemtk_browser_nm_host")
+  │ ── 启动 Go Native Messaging Host 子进程 ──
+  │   │
+  │   │ stdio pipe（进程内通信）
+  │   │
+  │   ▼
+  │ Go NM Host (~80 行)
+  │ 4 字节 Little Endian 长度帧 + UTF-8 JSON
+  │ event_loop: for { readFrame → dispatch → writeFrame }
+  │
+  │   │ Chrome 管理的 stdio 通道（Native Messaging）
+  │   ▼
+Chrome MV3 扩展 ──▶ 用户主 Chrome Profile
 ```
+
+**为什么不需要 Python**：
+- Go 可以直接实现 Chrome Native Messaging Host — 已验证成熟库 `github.com/rickypc/native-messaging-host`
+- 协议实现 ~60 行：读 4 字节 LE 长度头 + JSON，写 response
+- Go binary 单文件部署，比 Python + 依赖包方便
+- 架构层数减 1（Go → Extension，不是 Go → Python → Extension）
 
 ### 8.2 Chrome 扩展（~300 行 JS）
 
 ```
 chrome-extension/
-├── manifest.json         ← MV3，tabs + scripting
-├── background.js         ← Native Messaging 监听 + tabs API 封装 + 消息路由
-├── popup.html            ← 连接状态显示（可选，开发调试用）
+├── manifest.json         ← MV3，tabs + scripting + optional(offscreen)
+├── background.js         ← Native Messaging 监听 + tabs API 封装 + accessibility snapshot
 └── icons/
 ```
 
 **manifest.json 关键点**：
 - `"manifest_version": 3`
-- `"permissions": ["tabs", "scripting"]` — 最小权限
-- `"host_permissions": []` — 不需要全站点匹配（scripting 通过 executeScript 可以注入任何 tab）
+- `"permissions": ["tabs", "scripting"]` — 最小权限（不读 Cookie）
+- `"host_permissions": []` — scripting.executeScript 可注入任何 tab
 - `"background": {"service_worker": "background.js"}`
-- Native Messaging 连接通过 `chrome.runtime.connectNative('com.hivemtk.browser')`
+- Native Messaging 连接：`chrome.runtime.connectNative('com.hivemtk.browser')`
 
-**background.js 核心流程**：
+**background.js 核心**：
 ```js
-// 1. 连接 Native Host
+// 1. 连接 Go Native Messaging Host
 let port = chrome.runtime.connectNative('com.hivemtk.browser');
 port.onMessage.addListener(handleCommand);
-port.onDisconnect.addListener(reconnect);
+port.onDisconnect.addListener(() => {
+  console.warn('NM Host disconnected, Go Hand will retry');
+});
+// port 保活 service worker — 不需要 offscreen document
 
-// 2. 维护已知 tab 列表
-const knownTabs = new Map();  // tab_id → {url, title, last_active_at}
-
-// 3. handleCommand 分发到对应 Chrome API
+// 2. handleCommand 分发
 async function handleCommand(cmd) {
   switch (cmd.action) {
-    case 'open_tab':    return chrome.tabs.create({url: cmd.url, active: cmd.active ?? false});
-    case 'click':       return execScript(cmd.tab_id, `(sel) => document.querySelector(sel).click()`, [cmd.selector]);
-    case 'type':        return execScript(cmd.tab_id, typeScript, [cmd.selector, cmd.value, cmd.clear_first, cmd.submit_on_enter]);
-    case 'screenshot':  return chrome.tabs.captureVisibleTab();
-    case 'wait':        return waitForCondition(cmd.tab_id, cmd.cond);
+    case 'open_tab':
+      return await chrome.tabs.create({url: cmd.url, active: cmd.active ?? false});
+    case 'click':
+      return await execScript(cmd.tab_id, `(sel) => document.querySelector(sel).click()`, [cmd.selector]);
+    case 'snapshot':  // accessibility snapshot，生成 @e1/@e2 refs
+      return await execScript(cmd.tab_id, snapshotScript);
+    case 'markdown':  // 页面转 Markdown（给 LLM 吃）
+      return await execScript(cmd.tab_id, markdownScript);
     // ... 其他原语
   }
 }
 ```
 
-### 8.3 Native Host（Python ~200 行）
+### 8.3 Go Native Messaging Host（~80 行，event_loop 模式）
 
+```go
+// main.go — Chrome Native Messaging Host
+// 编译: go build -o hivemtk_browser_nm_host .
+
+package main
+
+import (
+    "encoding/binary"
+    "encoding/json"
+    "io"
+    "os"
+)
+
+func main() {
+    for {
+        // 1. 读 4 字节 Little Endian 长度头
+        var length uint32
+        if err := binary.Read(os.Stdin, binary.LittleEndian, &length); err != nil {
+            if err == io.EOF {
+                return // Chrome 关闭通道，进程退出（Chrome 管理生命周期）
+            }
+            return
+        }
+        if length > 1*1024*1024 { // Chrome 限制 Host→扩展 1 MiB
+            return
+        }
+
+        // 2. 读消息体
+        buf := make([]byte, length)
+        if _, err := io.ReadFull(os.Stdin, buf); err != nil {
+            return
+        }
+
+        // 3. 解析 JSON 并处理
+        var msg map[string]any
+        if err := json.Unmarshal(buf, &msg); err != nil {
+            writeFrame(map[string]any{"ok": false, "error": "invalid_json"})
+            continue
+        }
+        response := dispatch(msg)  // 由 Go Hand 层业务逻辑注入
+
+        // 4. 写 response
+        writeFrame(response)
+    }
+}
+
+func writeFrame(resp map[string]any) {
+    payload, _ := json.Marshal(resp)
+    binary.Write(os.Stdout, binary.LittleEndian, uint32(len(payload)))
+    os.Stdout.Write(payload)
+    os.Stdout.Flush()
+}
 ```
-native-host/
-├── hivemtk_browser_host.py   ← stdio JSON 消息循环
-├── install.sh                 ← 注册 Native Messaging 清单到系统路径
-└── manifest.json.template
+
+**协议帧精确规范**：
+- 4 字节 **Little Endian** uint32 长度头（之前误写为大端，已修正）
+- 长度 = 后续 JSON payload 的字节数
+- 扩展→Host 最大 64 MiB；Host→扩展 最大 1 MiB（Chrome 硬限制）
+- **绝对不能往 stdout 写非帧数据**（如 println）——Chrome 会解析失败
+- 日志走 stderr 或文件
+
+**Chrome 生命周期管理**：
+- 扩展 `connectNative()` → Chrome fork Host 进程 → Host 开始读 stdin
+- 扩展 port 断开 / Chrome 重启 → Chrome 发送 EOF 关闭 Host 进程
+- Go Host 不要自己 daemonize，让 Chrome 管理
+- 崩溃后 Chrome 不自动重启，需要 Go Hand 层 `EnsureConnected()` 重试
+
+### 8.4 Go Hand ↔ Go NM Host 通信
+
+Go Hand 通过 `exec.Command` 启动 NM Host，用 `Cmd.Stdin` / `Cmd.Stdout` pipe：
+
+```go
+type BrowserHand struct {
+    cmd    *exec.Cmd
+    stdin  io.WriteCloser
+    stdout io.ReadCloser
+    mutex  sync.Mutex  // 多 Agent 并发保护
+    hostMu sync.Mutex  // Host 单实例保护
+}
+
+func NewBrowserHand() (*BrowserHand, error) {
+    b := &BrowserHand{}
+    if err := b.ensureHost(); err != nil {
+        return nil, err
+    }
+    return b, nil
+}
+
+func (b *BrowserHand) ensureHost() error {
+    b.hostMu.Lock()
+    defer b.hostMu.Unlock()
+    if b.cmd != nil {
+        return nil  // 已启动
+    }
+    b.cmd = exec.Command("hivemtk_browser_nm_host")
+    b.cmd.Stdin, _ = b.cmd.StdinPipe()
+    b.cmd.Stdout, _ = b.cmd.StdoutPipe()
+    b.cmd.Stderr = os.Stderr  // 日志走 stderr
+    return b.cmd.Start()
+}
+
+func (b *BrowserHand) Click(tabID int, refOrSelector string) error {
+    b.mutex.Lock()
+    defer b.mutex.Unlock()
+    // ... 组装 frame → 写 stdin → 读 response
+    return b.send(map[string]any{
+        "action": "click",
+        "tab_id": tabID,
+        "target": refOrSelector,
+    })
+}
 ```
 
-**核心逻辑**：
-```python
-# 1. 读 frame：4 字节大端长度 + JSON payload
-def read_message():
-    length = struct.unpack('>I', sys.stdin.buffer.read(4))[0]
-    return json.loads(sys.stdin.buffer.read(length))
-
-# 2. 写 frame
-def write_message(msg):
-    payload = json.dumps(msg).encode('utf-8')
-    sys.stdout.buffer.write(struct.pack('>I', len(payload)))
-    sys.stdout.buffer.write(payload)
-    sys.stdout.buffer.flush()
-
-# 3. 消息循环
-def main():
-    while True:
-        msg = read_message()
-        # 转发到 Chrome 扩展（Chrome 自动管理 Native Host ↔ Extension 通道）
-        # Chrome 会自动把 message 转给扩展 → 扩展处理后 → Chrome 自动转回 response
-        # 但我们需要自己管理连接，因为 Chrome 扩展 ↔ Native Host 的 stdio 是 Chrome 管理的
-        # 
-        # 实际上 Native Host 是 Chrome 启动的子进程，stdin/stdout 就是 Chrome 的通道
-        # 所以 Python Host 只需要：读 Chrome 发来的 frame → 处理 → 写 response frame
-        # "处理" 就是：根据 action 做什么？其实扩展已经在 Chrome 端处理了
-        # Python Host 只是 Go Hand 层 ↔ Chrome 的桥
-```
-
-> 注：Chrome Native Messaging 的实际模型是 **Chrome 启动 Native Host 子进程，通过 stdio 双向通信**。所以 Python Host 的 stdin/stdout 直接连 Chrome，不直接连 Go 后端。**Go ↔ Python 之间需要另一层通信**。
-
-**修正后的架构**：
-
-```
-Go Hand ──▶ (HTTP/WS JSON-RPC 本地端口) ──▶ Python Host ──(Native Messaging)──▶ Chrome 扩展
-```
-
-或者更简洁：
-
-```
-Go Hand ──▶ Python Host (作为 Go 的子进程，通过 stdio) ──(Native Messaging)──▶ Chrome 扩展
-```
-
-**推荐 Go 方案**：Go 直接 fork/exec Python Host 子进程，通过 stdio 与它通信，Python Host 再与 Chrome 通过 Native Messaging stdio 通信。Go 的 `os/exec` 天然支持把子进程 stdin/stdout pipe 出来。这样整条链路都是进程内的，不需要 HTTP 端口。
-
-### 8.4 安装步骤
+### 8.5 安装步骤
 
 ```bash
 # macOS
-# 1. 把 manifest 拷到 Chrome 期望的位置
-cp native-host/manifest.json \
-  ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.hivemtk.browser.json
 
-# 2. 确保 Python Host 有执行权限
-chmod +x native-host/hivemtk_browser_host.py
+# 1. 编译 Go Native Messaging Host
+cd chrome-extension/nm-host/
+go build -o ~/.local/bin/hivemtk_browser_nm_host .
 
-# 3. 把扩展加载到 Chrome
-#    chrome://extensions → 开发者模式 → 加载已解压扩展 → 选 chrome-extension/
+# 2. 确保有执行权限 + 创建 manifest
+chmod +x ~/.local/bin/hivemtk_browser_nm_host
 
-# 4. 验证
-#    扩展 icon → popup 显示 "HiveMTK Browser Connected" = 成功
-```
-
-**manifest.json 路径（macOS 用户级）**：`~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.hivemtk.browser.json`
-
-```json
+mkdir -p ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/
+cat > ~/Library/Application\ Support/Google/Chrome/NativeMessagingHosts/com.hivemtk.browser.json << 'EOF'
 {
   "name": "com.hivemtk.browser",
-  "description": "HiveMTK Browser Automation Host",
-  "path": "/Users/xxx/.local/bin/hivemtk_browser_host.py",
+  "description": "HiveMTK Browser Automation Native Messaging Host",
+  "path": "/Users/xxx/.local/bin/hivemtk_browser_nm_host",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://<扩展ID>/"]
 }
+EOF
+
+# 3. Chrome 加载扩展
+#    chrome://extensions → 开发者模式 → 加载已解压扩展 → 选 chrome-extension/
+
+# 4. 验证
+#    扩展 icon 点击 → popup 显示 "HiveMTK Browser Connected" = 成功
 ```
 
 ---
@@ -821,16 +909,16 @@ aiagent/mcp/server.go handleBrowserOpenTask()
 
 | # | 风险 | 概率 | 影响 | 对策 |
 |---|------|------|------|------|
-| 1 | **Native Host 进程崩溃** → 整条链路断 | 中 | 高 | Python Host 做守护进程重启；Go Hand 层 `EnsureConnected()` 做 3 次重试 + 指数退避 |
+| 1 | **Native Host 进程崩溃** → 整条链路断 | 中 | 高 | Go NM Host 做守护进程重启；Go Hand 层 `EnsureConnected()` 做 3 次重试 + 指数退避 |
 | 2 | **Chrome 重启后扩展失活** → 需要手动 reload | 低 | 中 | Manifest V3 扩展随 Chrome 自动加载，不需要 reload；首次连接 Go 侧做健康检查 |
 | 3 | **LLM 生成错误 selector** → 执行失败 | 中 | 中 | Translator 做 selector 预校验（尝试 `querySelector` 并看返回值）；失败时 Brain.RePlan 重新规划 |
 | 4 | **SPA 页面等待永远不触发** → timeout | 中 | 中 | 内置默认等待策略（2s / 10s / 60s 三级）；超过 timeout 写 failed，不阻塞整个 session |
 | 5 | **多 Chrome 窗口混乱** → tab 归属错 | 低 | 中 | open_tab 时指定 `windowId: chrome.windows.WINDOW_ID_CURRENT`；维护 tab→window 映射 |
 | 6 | **Playwright 类方案后续又想换回** | 低 | 低 | 架构已分层（Brain → Translator → Hand），Hand 接口固定，换实现不影响上层 |
-| 7 | **Go ↔ Python stdio pipe 阻塞** | 低 | 中 | Go 用 `exec.CommandContext` + `io.Copy` goroutine 读 stdout，带超时；Python 端每个 command 必须在限定时间内写 response |
+| 7 | **Go Hand ↔ Go NM Host stdio pipe 阻塞** | 低 | 中 | Go 用 `exec.CommandContext` + `io.Copy` goroutine 读 stdout，带超时；Go NM Host 端每个 command 必须在限定时间内写 response |
 | 8 | **生产环境有人手动 kill Chrome → session 全断** | 低 | 高 | 这是硬约束——寄生式方案依赖 Chrome 在运行。Hand 层检测到端口断开时立即回写 session 为 terminated；调度器停止新的 cron 触发直到健康检查恢复 |
 | 9 | **Manifest V3 background service worker 超时限制（30s）** | 中 | 中 | 长任务（screenshot/save 大文件）必须通过 `offscreen.html` 或拆成多步；单条原语执行时间严格控制在 5s 内 |
-| 10 | **项目没有 Go 版 Native Messaging 参考实现** | 中 | 低 | Browser Agent Bridge 有完整 Python Host 实现可参考；Go 端 stdio frame 协议实现约 50 行 |
+| 10 | **项目已验证成熟 Go 库：github.com/rickypc/native-messaging-host** | 中 | 低 | Browser Agent Bridge 有完整 Native Messaging Host (Go) 实现可参考；Go 端 stdio frame 协议实现约 50 行 |
 
 ---
 
@@ -845,7 +933,7 @@ aiagent/mcp/server.go handleBrowserOpenTask()
 | 1 | DB Migration 5 张表 | SQL Migration + GORM Model | 无 |
 | 2 | Repository 层（5 个 repo） | CRUD + 查询方法 | #1 |
 | 3 | Chrome 扩展 MV3（核心 3 种原语） | manifest + background.js | 无 |
-| 4 | Python Native Host | stdio 消息循环 | #3 |
+| 4 | Go NM Host | stdio 消息循环 | #3 |
 | 5 | Go Hand 层（最小集） | open_tab / click / screenshot | #4 |
 | 6 | Service + Controller + Router | 手动执行 API | #2 #5 |
 | 7 | 前端任务编排（显式原语模式） | 列表页 + 编排器 | #6 |
@@ -900,21 +988,21 @@ D17-D20: 安全 + 审计 + 加固  生产就绪
 |------|------|------|--------|
 | 定时调度 | ✅ `pkg/cron` | — | 新增 BrowserCronAdapter ~100 行 |
 | 工作流编排 | ✅ `workflow_orchestrator` | — | 新增 browser_task executor ~150 行 |
-| MCP 协议 | ✅ `aiagent/mcp/server` | — | 注册 3 个 tools ~200 行 |
+| MCP 协议 | ✅ `aiagent/mcp/server` | — | 注册 3 个 tools .~80 行 |
 | LLM routing | ✅ 现有 `llm_routing` | — | Brain prompt 模板 ~30 行 |
 | 五层架构 | ✅ 现有分层模式 | — | 新域 browser_automation |
 | GORM/PG | ✅ 现有 DB 基建 | — | 5 张新表 |
 | Chrome 扩展 | — | ✅ MV3 ~300 行 | 全部新建 |
-| Python Host | — | ✅ ~200 行 | 全部新建 |
+| Native Messaging Host (Go) | — | ✅ .~80 行 | 全部新建 |
 | Go Hand（Native Messaging） | — | ✅ ~400 行 | 全部新建 |
 | Brain/Translator/Service | — | ✅ 新域 Service 层 | 全部新建 |
 | 前端页面 | ✅ Vue3 + ElementPlus | ✅ 6 个新页面 | 全新 + 1 个改造 |
 
 **总新增代码量估算**：
 - Chrome 扩展: ~300 行 JS
-- Python Host: ~200 行
+- Native Messaging Host (Go): .~80 行
 - Go 后端: ~1,500 行（Model + Repository + Service + Controller + Router）
-- DTO: ~200 行
+- DTO: .~80 行
 - 前端: ~2,000 行（6 页面 + API 层）
 - Migration: ~150 行 SQL
 - **合计约 4,350 行**（不含测试）

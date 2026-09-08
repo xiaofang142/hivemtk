@@ -124,10 +124,8 @@ func (e *SalesEngine) runAgentLoop(
 		Content: prompt,
 	})
 
-	if e.db != nil && req.SessionID != "" {
-		var hist []model.SessionMessage
-		if err := e.db.Where("session_id = ?", req.SessionID).
-			Order("id desc").Limit(20).Find(&hist).Error; err == nil && len(hist) > 0 {
+	if e.sessionMsgRepo != nil && req.SessionID != "" {
+		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, 20); herr == nil && len(hist) > 0 {
 
 			if hist[0].Content == req.UserMessage {
 				hist = hist[1:]
@@ -612,7 +610,7 @@ func (e *SalesEngine) buildPrompt(
 		sb.WriteString("\n")
 	}
 
-	if e.db != nil && req.SessionID != "" {
+	if e.sessionMsgRepo != nil && req.SessionID != "" {
 		hist := e.fetchHistoryWithinTokenBudget(req.SessionID, req.UserMessage)
 		if len(hist) > 0 {
 			var hb strings.Builder
@@ -660,9 +658,11 @@ const agentLoopHistoryMaxCandidates = 200
 const historyMsgTokenOverhead = 6
 
 func (e *SalesEngine) fetchHistoryWithinTokenBudget(sessionID, userMessage string) []model.SessionMessage {
-	var hist []model.SessionMessage
-	if err := e.db.Where("session_id = ?", sessionID).
-		Order("id desc").Limit(agentLoopHistoryMaxCandidates).Find(&hist).Error; err != nil || len(hist) == 0 {
+	if e.sessionMsgRepo == nil {
+		return nil
+	}
+	hist, err := e.sessionMsgRepo.ListRecentDescBySessionID(context.Background(), sessionID, agentLoopHistoryMaxCandidates)
+	if err != nil || len(hist) == 0 {
 		return nil
 	}
 

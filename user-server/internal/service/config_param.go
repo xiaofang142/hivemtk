@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -86,8 +87,9 @@ func GlobalConfigParam() *ConfigParamService {
 // SeedConfigParams 启动时调用：AutoMigrate + Upsert 默认参数。
 // 首次启动会写入全部 60+ 参数；后续启动只补齐缺失项，不覆盖用户已改值。
 func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
-	if err := db.WithContext(ctx).AutoMigrate(&model.ConfigParam{}, &model.ConfigParamAuditLog{}); err != nil {
-		return fmt.Errorf("AutoMigrate config_params: %w", err)
+	// 建表已收敛到启动期 AutoMigrate（db.RegisterExtraModels），此处仅 seed
+	if err := db.WithContext(ctx).First(&model.ConfigParam{}).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("config_params 表不可用: %w", err)
 	}
 	repo := repository.NewConfigParamRepository(db)
 	svc := NewConfigParamService(db)

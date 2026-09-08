@@ -215,13 +215,7 @@ func sendMailSSL(addr, host string, auth smtp.Auth, from string, to []string, ms
 	return w.Close()
 }
 
-// EnsureSchema 自动建表
-func (s *EmailService) EnsureSchema(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.WithContext(ctx).AutoMigrate(&EmailAccount{})
-}
+func init() { _db.RegisterExtraModels(&EmailAccount{}) }
 
 func emailFromEnv() *EmailAccount {
 	host := os.Getenv("SMTP_HOST")

@@ -313,7 +313,7 @@ const showEditDialog = (row) => {
     if (authCfg.token) form.auth_token = authCfg.token
     if (authCfg.secret) form.auth_token = authCfg.secret
     if (authCfg.username) form.auth_username = authCfg.username
-  } catch (e) {}
+  } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
   editingId.value = row.id
   showCreateDialog.value = true
 }

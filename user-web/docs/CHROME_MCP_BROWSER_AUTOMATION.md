@@ -57,7 +57,7 @@
 ### 整体架构
 
 ```
-Agent(Claude Code/Codex/OpenCode) ←→ MCP 网关(本地Node/Python) ←→ Native Messaging ←→ 自制轻量Chrome扩展
+Agent(Claude Code/Codex/OpenCode) ←→ Go Hand 层（exec.Command 启动 Go NM Host） ←→ Native Messaging ←→ 自制轻量Chrome扩展
 ```
 
 ### 1. Chrome 扩展（仅几百行）
@@ -87,7 +87,7 @@ Agent(Claude Code/Codex/OpenCode) ←→ MCP 网关(本地Node/Python) ←→ Na
 
 ### 缺点
 
-需要少量 JS + Python/Node 代码，不是开箱即用。但代码量很小，不需要浏览器自动化深坑。
+需要少量 JS + Go 代码（Go NM Host ~80 行），不是开箱即用。但代码量很小，不需要浏览器自动化深坑。
 
 > **原则**：不要让扩展承担 Agent 决策，扩展只做 "浏览器原语"，业务逻辑交给 MCP 层，这是稳定性关键。
 
@@ -128,12 +128,12 @@ Agent(Claude Code/Codex/OpenCode) ←→ MCP 网关(本地Node/Python) ←→ Na
    - `background.js`：Native Messaging 监听 + tabs API 封装
    - 核心 API：`createBackgroundTab(url)` / `getTabContent(tabId)` / `click(tabId, selector)` / `type(tabId, selector, text)` / `screenshot(tabId)`
 
-2. **写 Native 主机程序**（Python / Node）
-   - stdio 消息循环，JSON 行协议
+2. **写 Go Native Messaging Host）
+   - 4 字节 Little Endian 长度帧 + UTF-8 JSON 协议
    - 断线自动重连 + 消息队列（防 Chrome 重启时丢消息）
    - 多 Agent 互斥锁（同一时刻只有一个操作流入扩展）
 
-3. **写 MCP Server**（Python 推荐 `mcp` SDK）
+3. **Go 后端直接提供 HTTP API）
    - tools：`browser_open_tab` / `browser_get_content` / `browser_click` / `browser_type` / `browser_screenshot`
    - 超时保护：每个 tool 调用带超时，防止扩展卡死
 
