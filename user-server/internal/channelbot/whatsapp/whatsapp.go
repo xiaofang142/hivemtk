@@ -165,6 +165,14 @@ type WebhookEvent struct {
 					Text      struct {
 						Body string `json:"body"`
 					} `json:"text"`
+					Image    *WAMedia `json:"image,omitempty"`
+					Audio    *WAMedia `json:"audio,omitempty"`
+					Video    *WAMedia `json:"video,omitempty"`
+					Document *struct {
+						WAMedia
+						Filename string `json:"filename"`
+					} `json:"document,omitempty"`
+					Sticker *WAMedia `json:"sticker,omitempty"`
 				} `json:"messages"`
 				Statuses []WebhookStatus `json:"statuses"`
 			} `json:"value"`
@@ -201,6 +209,83 @@ func (e *WebhookEvent) FirstMessage() (from, msgID, msgType, content, name strin
 		}
 	}
 	return "", "", "", "", "", 0, false
+}
+
+// WAMedia WhatsApp 媒体消息公共字段（image/audio/video/document/sticker 共用）
+type WAMedia struct {
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256"`
+	MediaID  string `json:"id"`
+}
+
+// WAMessageRef 单条消息的媒体引用视图（供 service 层按消息提取 media_id/mime）。
+// Type 取值与 Meta webhook 的 message.type 一致。
+type WAMessageRef struct {
+	Type     string
+	Image    *WAMedia
+	Audio    *WAMedia
+	Video    *WAMedia
+	Sticker  *WAMedia
+	Document *struct {
+		WAMedia
+		Filename string `json:"filename"`
+	}
+}
+
+// MediaRefs 遍历 webhook 中所有媒体消息，返回引用列表（按出现顺序）。
+func (e *WebhookEvent) MediaRefs() []WAMessageRef {
+	var out []WAMessageRef
+	for _, ent := range e.Entry {
+		for _, ch := range ent.Changes {
+			for i := range ch.Value.Messages {
+				m := &ch.Value.Messages[i]
+				if m.Type == "text" || m.Type == "" {
+					continue
+				}
+				ref := WAMessageRef{
+					Type:     m.Type,
+					Image:    m.Image,
+					Audio:    m.Audio,
+					Video:    m.Video,
+					Sticker:  m.Sticker,
+					Document: m.Document,
+				}
+				out = append(out, ref)
+			}
+		}
+	}
+	return out
+}
+
+// MediaRef 提取第一条媒体消息的引用（media_id + mime_type + 文件名）。
+// 非媒体消息返回 ok=false。
+func (e *WebhookEvent) MediaRef() (mediaID, mimeType, filename string, ok bool) {
+	for _, ent := range e.Entry {
+		for _, ch := range ent.Changes {
+			for i := range ch.Value.Messages {
+				msg := &ch.Value.Messages[i]
+				var ref *WAMedia
+				switch msg.Type {
+				case "image":
+					ref = msg.Image
+				case "audio":
+					ref = msg.Audio
+				case "video":
+					ref = msg.Video
+				case "sticker":
+					ref = msg.Sticker
+				case "document":
+					if msg.Document != nil {
+						return msg.Document.MediaID, msg.Document.MimeType, msg.Document.Filename, true
+					}
+				}
+				if ref != nil && ref.MediaID != "" {
+					return ref.MediaID, ref.MimeType, "", true
+				}
+			}
+		}
+	}
+	return "", "", "", false
 }
 
 // ToInbound 归一化为 core.InboundMessage（accountID 由调用方填充）

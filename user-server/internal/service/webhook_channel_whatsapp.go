@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
 	"hivemtk-user/internal/channelbot/whatsapp"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -79,11 +81,32 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 		return nil, err
 	}
 
+	// 媒体消息转存（best-effort）：media id 仅 7 天有效，异步下载并把长期 URL 回填 message_hub.media_url
+	if s.messageHubRepo != nil {
+		if mediaID, _, filename, ok := waPayload.MediaRef(); ok {
+			s.ensureReposFromDB(ctx)
+			s.persistWhatsAppMediaAsync(ctx, accountID, mediaID, filename)
+		}
+	}
+
 	var firstHub *model.MessageHub
 	for _, e := range waPayload.Entry {
 		for _, c := range e.Changes {
 			for _, msg := range c.Value.Messages {
 				content := waMessageContent(msg.Type, msg.Text.Body)
+				// 非文本消息：保留渠道原生引用（media_id/mime/filename），供展示与 AI 理解
+				var mediaExtra map[string]any
+				if msg.Type != "text" {
+					if r, fname, mok := mediaRefOfMsg(&msg); mok {
+						mediaExtra = map[string]any{
+							"media_id":  r.MediaID,
+							"mime_type": r.MimeType,
+						}
+						if fname != "" {
+							mediaExtra["filename"] = fname
+						}
+					}
+				}
 
 				name := msg.From
 				for _, ct := range c.Value.Contacts {
@@ -103,6 +126,9 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 					MsgType:        msg.Type,
 					Content:        content,
 					SentAt:         time.Now(),
+				}
+				if mediaExtra != nil {
+					hub.Extra = mediaExtra
 				}
 
 				s.upsertInboxFromHub(ctx, hub, name)
@@ -159,4 +185,97 @@ func (s *WebhookService) dispatchWhatsAppStatuses(ctx context.Context, accountID
 	}
 	logger.Infof("[Webhook] whatsapp statuses consumed account=%s", accountID)
 	return true, nil
+}
+
+// mediaRefOfMsg 从单条 WA webhook 消息提取媒体引用（供 hub.Extra 落库）。
+// 直接接收匿名结构体指针，避免暴露 channelbot 内部类型映射。
+func mediaRefOfMsg(msg *struct {
+	From      string `json:"from"`
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	Type      string `json:"type"`
+	Text      struct {
+		Body string `json:"body"`
+	} `json:"text"`
+	Image    *whatsapp.WAMedia `json:"image,omitempty"`
+	Audio    *whatsapp.WAMedia `json:"audio,omitempty"`
+	Video    *whatsapp.WAMedia `json:"video,omitempty"`
+	Document *struct {
+		whatsapp.WAMedia
+		Filename string `json:"filename"`
+	} `json:"document,omitempty"`
+	Sticker *whatsapp.WAMedia `json:"sticker,omitempty"`
+}) (whatsapp.WAMedia, string, bool) {
+	var empty whatsapp.WAMedia
+	switch msg.Type {
+	case "image":
+		if msg.Image != nil {
+			return *msg.Image, "", true
+		}
+	case "audio":
+		if msg.Audio != nil {
+			return *msg.Audio, "", true
+		}
+	case "video":
+		if msg.Video != nil {
+			return *msg.Video, "", true
+		}
+	case "sticker":
+		if msg.Sticker != nil {
+			return *msg.Sticker, "", true
+		}
+	case "document":
+		if msg.Document != nil {
+			return msg.Document.WAMedia, msg.Document.Filename, true
+		}
+	}
+	return empty, "", false
+}
+
+// persistWhatsAppMediaAsync 异步下载 WA 媒体并转存，成功后按 media_id 定位 hub 行回填 media_url。
+// 失败仅告警（占位符文本已入库，不影响主链路）。
+func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountID, mediaID, filename string) {
+	accID, _ := strconv.ParseUint(accountID, 10, 64)
+	utils.SafeGo(ctx, "whatsapp.media_persist", func(gctx context.Context) {
+		token, _, err := s.waCloudSecrets(gctx, accountID)
+		if err != nil || token == "" {
+			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[WhatsApp] 媒体转存跳过：账号凭证缺失")
+			return
+		}
+		acc, gerr := s.waCloudAccount(gctx, accID)
+		if gerr != nil || acc == nil {
+			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[WhatsApp] 媒体转存跳过：账号不存在")
+			return
+		}
+		rc, contentType, ferr := FetchWhatsAppMedia(gctx, token, acc.PhoneNumberID, mediaID)
+		if ferr != nil {
+			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体下载失败（占位符保留）")
+			return
+		}
+		defer rc.Close()
+		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
+		if rerr != nil {
+			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体读取失败")
+			return
+		}
+		publicURL, serr := channelMediaPersist(gctx, "whatsapp", mediaID, data, contentType, filename)
+		if serr != nil {
+			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体转存失败")
+			return
+		}
+		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "whatsapp", accountID, mediaID, publicURL)
+		logger.Ctx(gctx).Info().Str("media_id", mediaID).Str("url", publicURL).Msg("[WhatsApp] 媒体已转存")
+	})
+}
+
+// waCloudSecrets 取 WA Cloud 账号 token（复用 WhatsAppCloudService）。
+func (s *WebhookService) waCloudSecrets(ctx context.Context, accountID string) (token, appSecret string, err error) {
+	svc := NewWhatsAppCloudService(s.db)
+	return svc.GetSecretsByAccountID(ctx, accountID)
+}
+
+// waCloudAccount 取 WA Cloud 账号（需要 PhoneNumberID 拼下载 URL）。
+func (s *WebhookService) waCloudAccount(ctx context.Context, id uint64) (*model.WhatsAppCloudAccount, error) {
+	svc := NewWhatsAppCloudService(s.db)
+	return svc.GetAccount(ctx, uint(id))
 }

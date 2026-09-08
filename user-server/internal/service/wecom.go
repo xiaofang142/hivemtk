@@ -460,6 +460,19 @@ func (s *WeComService) SendMessage(ctx context.Context, account *model.WeComAcco
 	switch req.MsgType {
 	case "text":
 		msgData["text"] = map[string]string{"content": req.Content}
+	case "markdown":
+		msgData["markdown"] = map[string]string{"content": req.Content}
+	case "textcard":
+		// textcard 约定：Content=描述，Title=标题，URL=跳转链接，PicURL=配图
+		msgData["textcard"] = map[string]any{
+			"title":       req.Title,
+			"description": req.Content,
+			"url":         req.URL,
+			"btntxt":      "查看详情",
+		}
+		if req.PicURL != "" {
+			msgData["textcard"].(map[string]any)["picurl"] = req.PicURL
+		}
 	case "image":
 		msgData["image"] = map[string]string{"media_id": req.MediaID}
 	case "link":

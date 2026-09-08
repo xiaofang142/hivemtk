@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	kbrepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
@@ -12,12 +13,11 @@ import (
 )
 
 type RagProductService struct {
-	db   *gorm.DB
 	repo *kbrepo.RagConfigRepository
 }
 
 func NewRagProductService(db *gorm.DB) *RagProductService {
-	return &RagProductService{db: db, repo: kbrepo.NewRagConfigRepository(db)}
+	return &RagProductService{repo: kbrepo.NewRagConfigRepository(db)}
 }
 
 // NewRagProductServiceFromGlobal 全局 DB 装配入口。
@@ -27,29 +27,25 @@ func NewRagProductServiceFromGlobal() *RagProductService {
 }
 
 func (s *RagProductService) List(ctx context.Context) ([]*model.RagProduct, error) {
-	var products []*model.RagProduct
-	if err := s.db.WithContext(ctx).Find(&products).Error; err != nil {
-		return nil, err
-	}
-	return products, nil
+	return s.repo.ListAllRagProducts(ctx)
 }
 
 func (s *RagProductService) Get(ctx context.Context, id string) (*model.RagProduct, error) {
-	var p model.RagProduct
-	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&p).Error; err != nil {
+	p, err := s.repo.GetRagProductForUpdate(ctx, id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("rag product not found")
 		}
 		return nil, err
 	}
-	return &p, nil
+	return p, nil
 }
 
 func (s *RagProductService) Create(ctx context.Context, p *model.RagProduct) error {
 	if p.VectorTable == "" {
 		p.VectorTable = "rag_vectors_" + p.ID
 	}
-	return s.db.WithContext(ctx).Create(p).Error
+	return s.repo.CreateRagProductWithVectorTable(ctx, p)
 }
 
 func (s *RagProductService) Update(ctx context.Context, p *model.RagProduct) error {
@@ -57,22 +53,27 @@ func (s *RagProductService) Update(ctx context.Context, p *model.RagProduct) err
 }
 
 func (s *RagProductService) Delete(ctx context.Context, id string) error {
-	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&model.RagProduct{}).Error
+	return s.repo.DeleteRagProductByID(ctx, id)
 }
 
 func (s *RagProductService) Stats(ctx context.Context) (map[string]any, error) {
-	var total int64
+	products, err := s.repo.ListAllRagProducts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list rag products for stats: %w", err)
+	}
+	var totalDocs, totalChunks int64
 	var active int64
-	s.db.WithContext(ctx).Model(&model.RagProduct{}).Count(&total)
-	s.db.WithContext(ctx).Model(&model.RagProduct{}).Where("is_active = ?", true).Count(&active)
-	var totalDocs int64
-	var totalChunks int64
-	s.db.WithContext(ctx).Model(&model.RagProduct{}).Select("COALESCE(SUM(doc_count),0)").Scan(&totalDocs)
-	s.db.WithContext(ctx).Model(&model.RagProduct{}).Select("COALESCE(SUM(chunk_count),0)").Scan(&totalChunks)
+	for _, p := range products {
+		totalDocs += int64(p.DocCount)
+		totalChunks += p.ChunkCount
+		if p.IsActive {
+			active++
+		}
+	}
 	return map[string]any{
-		"total":        total,
+		"total":        int64(len(products)),
 		"active":       active,
-		"inactive":     total - active,
+		"inactive":     int64(len(products)) - active,
 		"total_docs":   totalDocs,
 		"total_chunks": totalChunks,
 	}, nil

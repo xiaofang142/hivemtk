@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,6 +28,6 @@ func DebugRoutesHandler(engine *gin.Engine) gin.HandlerFunc {
 			seen[key] = true
 			out = append(out, RouteInfo{Method: rt.Method, Path: rt.Path})
 		}
-		c.JSON(200, gin.H{"code": 0, "total": len(out), "routes": out})
+		response.Success(c, gin.H{"total": len(out), "routes": out}, "ok")
 	}
 }

@@ -27,7 +27,7 @@ func NewReachWeComSendTool(deps ReachToolDeps) *ReachWeComSendTool {
 					"msg_type": {
 						Type:        "string",
 						Description: "消息类型",
-						Enum:        []string{"text", "image", "link", "textcard", "miniprogram", "file"},
+						Enum:        []string{"text", "image", "link", "textcard", "markdown", "file"},
 						Default:     "text",
 					},
 					"content": {Type: "string", Description: "消息内容（text 类型为文本，其他类型为 JSON 配置）"},

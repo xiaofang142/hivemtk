@@ -11,6 +11,8 @@ import (
 
 	"fmt"
 
+	"io"
+
 	"strconv"
 
 	"strings"
@@ -18,6 +20,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 func (s *WebhookService) getFeishuEncryptKey(ctx context.Context, accountID string) string {
@@ -169,6 +173,22 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 	if content == "" {
 		content = "[" + m.MessageType + "]"
 	}
+	// 飞书媒体消息：content JSON 带 image_key/file_key，保留到 hub.Extra 供转存与展示
+	mediaFileKey := ""
+	switch m.MessageType {
+	case "image":
+		var imgObj struct {
+			ImageKey string `json:"image_key"`
+		}
+		_ = json.Unmarshal([]byte(m.Content), &imgObj)
+		mediaFileKey = imgObj.ImageKey
+	case "file", "audio", "media":
+		var fileObj struct {
+			FileKey string `json:"file_key"`
+		}
+		_ = json.Unmarshal([]byte(m.Content), &fileObj)
+		mediaFileKey = fileObj.FileKey
+	}
 	senderID := ""
 	if fsPayload.Event.Sender != nil && fsPayload.Event.Sender.SenderID != nil {
 		senderID = fsPayload.Event.Sender.SenderID.OpenID
@@ -192,10 +212,17 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 		IsGroup:        m.ChatType == "group",
 		GroupID:        m.ChatID,
 	}
+	if mediaFileKey != "" {
+		hub.Extra = model.JSONMap{"file_key": mediaFileKey, "message_id": m.MessageID}
+	}
 	if err := s.messageHubRepo.Create(ctx, hub); err != nil {
 		if !strings.Contains(err.Error(), "UNIQUE") && !strings.Contains(err.Error(), "duplicate") {
 			return nil, err
 		}
+	}
+	// 媒体转存（best-effort）：异步下载飞书资源并回填长期 URL
+	if mediaFileKey != "" {
+		s.persistFeishuMediaAsync(ctx, accountID, m.MessageID, mediaFileKey, m.MessageType)
 	}
 	s.upsertInboxFromHub(ctx, hub, "")
 
@@ -205,4 +232,47 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 	p.Sender = senderID
 	p.ChatID = m.ChatID
 	return hub, nil
+}
+
+// persistFeishuMediaAsync 异步下载飞书消息资源并转存，按 msg_id 回填 message_hub.media_url。
+func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID, messageID, fileKey, msgType string) {
+	utils.SafeGo(ctx, "feishu.media_persist", func(gctx context.Context) {
+		accID, _ := strconv.ParseUint(accountID, 10, 64)
+		if accID == 0 {
+			return
+		}
+		acc, gerr := NewFeishuService(s.db).GetAccount(gctx, uint(accID))
+		if gerr != nil || acc == nil {
+			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[Feishu] 媒体转存跳过：账号不存在")
+			return
+		}
+		integration := NewFeishuIntegrationService(s.db)
+		tenantToken, tkerr := integration.getAccessToken(gctx, acc)
+		if tkerr != nil || tenantToken == "" {
+			logger.Ctx(gctx).Warn().Err(tkerr).Str("account_id", accountID).Msg("[Feishu] 媒体转存跳过：tenant_access_token 获取失败")
+			return
+		}
+		resType := "file"
+		if msgType == "image" {
+			resType = "image"
+		}
+		rc, contentType, derr := FetchFeishuMedia(gctx, tenantToken, messageID, fileKey, resType)
+		if derr != nil {
+			logger.Ctx(gctx).Warn().Err(derr).Str("file_key", fileKey).Msg("[Feishu] 媒体下载失败（占位符保留）")
+			return
+		}
+		defer rc.Close()
+		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
+		if rerr != nil {
+			logger.Ctx(gctx).Warn().Err(rerr).Str("file_key", fileKey).Msg("[Feishu] 媒体读取失败")
+			return
+		}
+		publicURL, serr := channelMediaPersist(gctx, "feishu", fileKey, data, contentType, "")
+		if serr != nil {
+			logger.Ctx(gctx).Warn().Err(serr).Str("file_key", fileKey).Msg("[Feishu] 媒体转存失败")
+			return
+		}
+		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "feishu", accountID, messageID, publicURL)
+		logger.Ctx(gctx).Info().Str("file_key", fileKey).Str("url", publicURL).Msg("[Feishu] 媒体已转存")
+	})
 }

@@ -182,3 +182,22 @@ func (r *MessageHubRepository) MarkReadByIDs(ctx context.Context, ids []uint) er
 			"read_at": now,
 		}).Error
 }
+
+// UpdateMediaURL 回填媒体消息的转存 URL（渠道媒体 ID 有效期短，转存后把长期 URL 写回）。
+func (r *MessageHubRepository) UpdateMediaURL(ctx context.Context, id uint, mediaURL string) error {
+	if r == nil || r.db == nil || id == 0 || mediaURL == "" {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Where("id = ?", id).
+		Update("media_url", mediaURL).Error
+}
+
+// UpdateMediaURLByMsgID 按 platform+msg_id 回填 media_url（Ingress 去重后行主键未知时的兜底路径）。
+func (r *MessageHubRepository) UpdateMediaURLByMsgID(ctx context.Context, platform, msgID, mediaURL string) error {
+	if r == nil || r.db == nil || platform == "" || msgID == "" || mediaURL == "" {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("platform = ? AND msg_id = ?", platform, msgID).
+		Update("media_url", mediaURL).Error
+}

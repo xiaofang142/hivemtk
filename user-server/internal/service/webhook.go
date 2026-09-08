@@ -507,6 +507,14 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 
 			secret = s.getFeishuEncryptKey(ctx, accountID)
 		}
+		if secret == "" {
+			// EncryptKey 未配置的账号：飞书不会发送 X-Lark-Signature 可验的签名，
+			// 降级为仅依赖 URL 验证阶段的 VerificationToken 校验（明文模式），
+			// 不再 fail-closed 拒收全部事件（曾导致未配 EncryptKey 的账号静默丢消息）。
+			logger.Ctx(ctx).Warn().Str("account_id", accountID).
+				Msg("[Feishu] encrypt_key 未配置，跳过 X-Lark-Signature 验签（明文事件模式，仅 URL 验证 token 保护）")
+			return true, nil
+		}
 		return verifyFeishu(secret, body, headers), nil
 	case ChannelKuaishou, ChannelXiaohongshu, ChannelXianyu:
 		secret, _ := s.getAccountSecret(ctx, string(channel), accountID)

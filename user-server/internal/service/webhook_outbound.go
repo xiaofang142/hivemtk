@@ -319,6 +319,19 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		} else {
 			sent = true
 		}
+		// 富卡片随行下发（card.show 等工具产出），映射为飞书 interactive 卡片
+		for _, card := range cards {
+			cardJSON, merr := feishuCardToInteractiveJSON(&card)
+			if merr != nil {
+				logger.Ctx(ctx).Warn().Err(merr).Str("channel", "feishu").Msg("feishu card marshal failed, skip")
+				continue
+			}
+			if cerr := s.feishuIntegration.SendInteractiveCard(ctx, uint(accID), target, cardJSON, idType, outConv); cerr != nil {
+				logger.Ctx(ctx).Error().Err(cerr).Str("channel", "feishu").Str("open_id", target).Msg("outbound feishu card failed")
+			} else {
+				sent = true
+			}
+		}
 	case ChannelTelegram:
 		if s.tgIntegration == nil {
 			s.tgIntegration = NewTelegramIntegrationService(s.db)
@@ -395,11 +408,30 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		if s.messageHubRepo != nil && hubMsg != nil && hubMsg.ConversationID != "" {
 			if last, qerr := s.messageHubRepo.GetLastInboundByConversation(ctx, hubMsg.ConversationID); qerr == nil && last != nil && !last.SentAt.IsZero() {
 				if time.Since(last.SentAt) > 24*time.Hour {
-					logger.Ctx(ctx).Warn().
+					// 超 24h 客服窗口：自由文本会被 Meta 拒收，降级走预审批模板兜底
+					//（模板名可用环境变量按账号/全局配置；未配置模板时维持原失败语义）。
+					tplName := os.Getenv("WHATSAPP_FALLBACK_TEMPLATE")
+					if tplName == "" {
+						logger.Ctx(ctx).Warn().
+							Str("channel", "whatsapp").Str("account_id", accountID).
+							Str("to", p.Sender).
+							Time("last_inbound_at", last.SentAt).
+							Msg("[WhatsApp] 超出 24h 客服窗口且未配置 WHATSAPP_FALLBACK_TEMPLATE，AI 文本回复不可送达，标记失败")
+						return
+					}
+					logger.Ctx(ctx).Info().
 						Str("channel", "whatsapp").Str("account_id", accountID).
 						Str("to", p.Sender).
-						Time("last_inbound_at", last.SentAt).
-						Msg("[WhatsApp] 超出 24h 客服窗口，AI 文本回复不可送达（需模板消息），标记失败")
+						Str("template", tplName).
+						Msg("[WhatsApp] 超出 24h 客服窗口，AI 回复降级为模板消息发送")
+					if terr := s.waIntegration.SendTemplateMessage(ctx, uint(accID), p.Sender, content, &WhatsAppTemplatePayload{
+						TemplateName: tplName,
+						Language:     os.Getenv("WHATSAPP_FALLBACK_TEMPLATE_LANG"),
+					}); terr != nil {
+						s.outboundSendFailed(ctx, channel, accountID, hubMsg, terr)
+					} else {
+						sent = true
+					}
 					return
 				}
 			}
@@ -760,9 +792,9 @@ func extractTelegramReplyMetaFromCtx(ctx context.Context) *TelegramReplyMeta {
 }
 
 // buildTelegramGroupReply 把 AI 回复内容包装成 Telegram 群聊友好格式：
-//   1. 顶部 @mention 原发言人（<a href="tg://user?id=X">@username</a>）
-//   2. ReplyToMessageID 引用原消息（群内对话更直观）
-//   3. ParseModeHTML 确保 @mention 渲染成可点击链接
+//  1. 顶部 @mention 原发言人（<a href="tg://user?id=X">@username</a>）
+//  2. ReplyToMessageID 引用原消息（群内对话更直观）
+//  3. ParseModeHTML 确保 @mention 渲染成可点击链接
 func buildTelegramGroupReply(content string, meta *TelegramReplyMeta) (string, telegram.SendMessageOptions) {
 	opts := telegram.SendMessageOptions{
 		ParseMode:                 "HTML",
@@ -819,7 +851,7 @@ func htmlEscapeAndPreserveMarkdown(s string) string {
 	s = htmlEscapeText(s)
 	// Step 2: 恢复 Markdown → HTML（和底层 markdownToTelegramHTML 一致）
 	s = regexp.MustCompile(`\*\*(.+?)\*\*`).ReplaceAllString(s, "<b>$1</b>")
-	s = regexp.MustCompile(`` + "`" + `(.+?)` + "`").ReplaceAllString(s, "<code>$1</code>")
+	s = regexp.MustCompile(``+"`"+`(.+?)`+"`").ReplaceAllString(s, "<code>$1</code>")
 	s = regexp.MustCompile(`\*(.+?)\*`).ReplaceAllString(s, "<i>$1</i>")
 	return s
 }

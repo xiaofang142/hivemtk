@@ -227,3 +227,29 @@ func (r *RagConfigRepository) DeleteRagProduct(ctx context.Context, id string) e
 func (r *RagConfigRepository) UpdateRagProductStats(ctx context.Context, productID string, docCount int, chunkCount int64, lastSyncAt any) error {
 	return nil
 }
+
+// ListAllRagProducts 全量产品列表（含未激活，供 Stats 汇总）
+func (r *RagConfigRepository) ListAllRagProducts(ctx context.Context) ([]*model.RagProduct, error) {
+	var products []*model.RagProduct
+	err := r.db.WithContext(ctx).Find(&products).Error
+	return products, err
+}
+
+// GetRagProductForUpdate 按 ID 取产品（含未激活）
+func (r *RagConfigRepository) GetRagProductForUpdate(ctx context.Context, id string) (*model.RagProduct, error) {
+	var p model.RagProduct
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// DeleteRagProductByID 按 ID 硬删产品
+func (r *RagConfigRepository) DeleteRagProductByID(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.RagProduct{}).Error
+}
+
+// CreateRagProductWithVectorTable 创建产品（service 层已补齐 vector_table 默认值）
+func (r *RagConfigRepository) CreateRagProductWithVectorTable(ctx context.Context, p *model.RagProduct) error {
+	return r.db.WithContext(ctx).Create(p).Error
+}

@@ -174,10 +174,26 @@ func (s *FeishuIntegrationService) IngestMessage(ctx context.Context, req *Feish
 	return hubMsg, conv, nil
 }
 
+// SendInteractiveCard 发送飞书 interactive 卡片消息（msg_type=interactive）。
+// cardJSON 为卡片 JSON 字符串（元素层，不含外层 msg_type/receive_id 包装）；
+// 卡片 JSON 2.0 需在卡内声明 "schema":"2.0"，≤30KB。
+// conversationID 语义与 SendMessage 一致：非空时出站记录落同一会话。
+func (s *FeishuIntegrationService) SendInteractiveCard(ctx context.Context, accountID uint, openID, cardJSON, receiveIDType, conversationID string) error {
+	if strings.TrimSpace(cardJSON) == "" {
+		return errors.New("feishu card content empty")
+	}
+	return s.sendMessageTyped(ctx, accountID, openID, "interactive", cardJSON, receiveIDType, conversationID)
+}
+
 // SendMessage 发送飞书文本消息。
 // conversationID：入站会话 ID（chat_id，oc_ 开头）。非空时出站记录落同一会话，
 // 保证钩子3 方向判定/去重/Recheck 与入站一致；为空时回退旧格式 feishu-{account}-{openID}。
 func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID uint, openID, content, receiveIDType, conversationID string) error {
+	return s.sendMessageTyped(ctx, accountID, openID, "text", content, receiveIDType, conversationID)
+}
+
+// sendMessageTyped 按 msg_type 发送飞书消息（text/interactive 等）并统一落库。
+func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, accountID uint, openID, msgType, content, receiveIDType, conversationID string) error {
 	if s.feishuMsgRepo == nil {
 		return errors.New("db nil")
 	}
@@ -202,8 +218,8 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 
 	body := map[string]any{
 		"receive_id": openID,
-		"msg_type":   "text",
-		"content":    feishuTextContentJSON(content),
+		"msg_type":   msgType,
+		"content":    content,
 	}
 	b, _ := json.Marshal(body)
 	req, _ := http.NewRequestWithContext(ctx, "POST",
@@ -222,9 +238,9 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = string(respB)
 		if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
-		// 持久化失败只影响下次重启前的自愈，记日志留痕
-		logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
-	}
+			// 持久化失败只影响下次重启前的自愈，记日志留痕
+			logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+		}
 		return fmt.Errorf("feishu api status %d: %s", resp.StatusCode, string(respB))
 	}
 	outMsg := &model.FeishuMessage{
@@ -233,7 +249,7 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 		ChatID:    openID,
 		ChatType:  chatType,
 		SenderID:  openID,
-		MsgType:   "text",
+		MsgType:   msgType,
 		Content:   content,
 		Direction: "outbound",
 	}
@@ -249,7 +265,7 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 		AccountID:      fmt.Sprintf("%d", accountID),
 		MsgID:          outMsg.MsgID,
 		Direction:      "outbound",
-		MsgType:        "text",
+		MsgType:        msgType,
 		SenderID:       fmt.Sprintf("%d", accountID),
 		ReceiverID:     openID,
 		Content:        content,
@@ -580,9 +596,9 @@ func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uin
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
 		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
-		// 持久化失败只影响下次重启前的自愈，记日志留痕
-		logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
-	}
+			// 持久化失败只影响下次重启前的自愈，记日志留痕
+			logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+		}
 		return fmt.Errorf("send tg card: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -802,6 +818,26 @@ func (s *WhatsAppCloudIntegrationService) IngestMessage(ctx context.Context, req
 }
 
 func (s *WhatsAppCloudIntegrationService) SendMessage(ctx context.Context, accountID uint, toPhone, content string) error {
+	return s.SendMessageWithTemplate(ctx, accountID, toPhone, content, "", nil)
+}
+
+// WhatsAppTemplatePayload 超出 24h 客服窗口时的模板兜底参数。
+// TemplateName/Language 必填；BodyParams 按序填充模板 {{1}} {{2}} 占位符。
+type WhatsAppTemplatePayload struct {
+	TemplateName string
+	Language     string
+	BodyParams   []string
+}
+
+// SendTemplateMessage 通过 Cloud API 发送模板消息（窗外合规触达路径）。
+// 成功后与 SendMessage 一致落 feishu_messages 之外的 hub/inbox 出站记录。
+func (s *WhatsAppCloudIntegrationService) SendTemplateMessage(ctx context.Context, accountID uint, toPhone, content string, tpl *WhatsAppTemplatePayload) error {
+	return s.SendMessageWithTemplate(ctx, accountID, toPhone, content, tpl.TemplateName, tpl)
+}
+
+// SendMessageWithTemplate 发送 WA 消息：模板名为空走自由文本（仅 24h 客服窗口内），
+// 非空走预审批模板（窗外唯一合规路径）。
+func (s *WhatsAppCloudIntegrationService) SendMessageWithTemplate(ctx context.Context, accountID uint, toPhone, content, templateName string, tpl *WhatsAppTemplatePayload) error {
 	if s.wa == nil {
 		return errors.New("db nil")
 	}
@@ -811,16 +847,37 @@ func (s *WhatsAppCloudIntegrationService) SendMessage(ctx context.Context, accou
 	}
 	cli := whatsapp.NewCloudClient(acc.PhoneNumberID, acc.AccessToken, core.WithHTTPClient(httpclient.Client))
 
-	wamid, err := cli.SendText(ctx, toPhone, content)
+	var wamid string
+	if templateName != "" && tpl != nil {
+		lang := tpl.Language
+		if lang == "" {
+			lang = "zh_CN"
+		}
+		var components []core.TemplateComponent
+		if len(tpl.BodyParams) > 0 {
+			params := make([]core.TemplateParameter, 0, len(tpl.BodyParams))
+			for _, v := range tpl.BodyParams {
+				params = append(params, core.TemplateParameter{Type: "text", Text: v})
+			}
+			components = append(components, core.TemplateComponent{Type: "body", Parameters: params})
+		}
+		wamid, err = cli.SendTemplate(ctx, toPhone, templateName, lang, components)
+	} else {
+		wamid, err = cli.SendText(ctx, toPhone, content)
+	}
 	if err != nil {
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
 		if uErr := s.wa.UpdateAccount(ctx, acc); uErr != nil {
-		// 持久化失败只影响下次重启前的自愈，记日志留痕
-		logger.Warnf("[wa] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
-	}
+			// 持久化失败只影响下次重启前的自愈，记日志留痕
+			logger.Warnf("[wa] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
+		}
 		return fmt.Errorf("send wa msg: %w", err)
+	}
+	outType := "text"
+	if templateName != "" {
+		outType = "template"
 	}
 	msgID := wamid
 	if msgID == "" {
@@ -831,7 +888,7 @@ func (s *WhatsAppCloudIntegrationService) SendMessage(ctx context.Context, accou
 		AccountID:      fmt.Sprintf("%d", accountID),
 		MsgID:          msgID,
 		Direction:      "outbound",
-		MsgType:        "text",
+		MsgType:        outType,
 		SenderID:       fmt.Sprintf("%d", accountID),
 		ReceiverID:     toPhone,
 		Content:        content,
@@ -907,4 +964,63 @@ func timePtr(t time.Time) *time.Time { return &t }
 func feishuTextContentJSON(text string) string {
 	b, _ := json.Marshal(map[string]string{"text": text})
 	return string(b)
+}
+
+// feishuCardToInteractiveJSON 把内部 RichCard 映射为飞书 interactive 卡片 content JSON。
+// 采用卡片 JSON 1.0 的 i18n_elements（兼容面最大）；按钮仅映射带 URL 的跳转项。
+func feishuCardToInteractiveJSON(card *model.RichCard) (string, error) {
+	if card == nil || strings.TrimSpace(card.Title) == "" {
+		return "", errors.New("feishu card: title required")
+	}
+	elements := []map[string]any{}
+	if desc := strings.TrimSpace(card.Description); desc != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": desc,
+		})
+	}
+	for k, v := range card.Fields {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": fmt.Sprintf("**%s**: %s", k, v),
+		})
+	}
+	buttons := []map[string]any{}
+	for _, b := range card.Buttons {
+		if b.URL == "" {
+			continue
+		}
+		buttons = append(buttons, map[string]any{
+			"tag": "button",
+			"text": map[string]any{
+				"tag":     "plain_text",
+				"content": b.Text,
+			},
+			"type": "default",
+			"url":  b.URL,
+		})
+	}
+	if len(buttons) > 0 {
+		elements = append(elements, map[string]any{
+			"tag":     "action",
+			"actions": buttons,
+		})
+	}
+	cardMap := map[string]any{
+		"config": map[string]any{"wide_screen_mode": true},
+		"header": map[string]any{
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": card.Title,
+			},
+		},
+		"i18n_elements": map[string]any{
+			"zh_cn": elements,
+		},
+	}
+	b, err := json.Marshal(cardMap)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

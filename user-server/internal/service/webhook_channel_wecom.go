@@ -19,12 +19,15 @@ import (
 
 	"fmt"
 
+	"io"
+
 	"strconv"
 
 	"strings"
 
 	"hivemtk-user/internal/model"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -245,8 +248,92 @@ func (s *WebhookService) dispatchWeCom(ctx context.Context, accountID string, p 
 		if hubMsg != nil && content != "" && fromUser != "" && msgType != "event" {
 			MineUnifiedLead(ctx, s, hubMsg, WeComLeadAdapter{}, accountID, chatID, "", fromUser, fromName, "", content)
 		}
+		// 媒体消息转存（best-effort）：企微 media_id 仅 3 天有效，异步下载回填长期 URL
+		if mediaID != "" && hubMsg != nil && isWeComMediaMsgType(msgType) {
+			s.persistWeComMediaAsync(ctx, accountID, hubMsg.MsgID, mediaID, msgType)
+		}
 	}
 	return hubMsg, err
+}
+
+// isWeComMediaMsgType 企微携带 MediaId 的消息类型。
+func isWeComMediaMsgType(msgType string) bool {
+	switch msgType {
+	case "image", "voice", "video", "file":
+		return true
+	}
+	return false
+}
+
+// persistWeComMediaAsync 异步下载企微媒体并转存，按 msg_id 回填 message_hub.media_url。
+func (s *WebhookService) persistWeComMediaAsync(ctx context.Context, accountID, msgID, mediaID, msgType string) {
+	if s.wecomRepo == nil {
+		return
+	}
+	utils.SafeGo(ctx, "wecom.media_persist", func(gctx context.Context) {
+		accID, _ := strconv.ParseUint(accountID, 10, 64)
+		if accID == 0 {
+			if accs, gerr := s.wecomRepo.GetByMerchant(gctx); gerr == nil && len(accs) > 0 {
+				accID = uint64(accs[0].ID)
+			}
+		}
+		if accID == 0 {
+			return
+		}
+		token, terr := s.wecomAccessToken(gctx, uint(accID))
+		if terr != nil || token == "" {
+			logger.Ctx(gctx).Warn().Err(terr).Str("account_id", accountID).Msg("[WeCom] 媒体转存跳过：access_token 获取失败")
+			return
+		}
+		rc, contentType, derr := FetchWeComMedia(gctx, token, mediaID)
+		if derr != nil {
+			logger.Ctx(gctx).Warn().Err(derr).Str("media_id", mediaID).Msg("[WeCom] 媒体下载失败（占位符保留）")
+			return
+		}
+		defer rc.Close()
+		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
+		if rerr != nil {
+			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WeCom] 媒体读取失败")
+			return
+		}
+		if contentType == "" || contentType == "application/octet-stream" {
+			contentType = wecomDefaultContentType(msgType)
+		}
+		publicURL, serr := channelMediaPersist(gctx, "wecom", mediaID, data, contentType, "")
+		if serr != nil {
+			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[WeCom] 媒体转存失败")
+			return
+		}
+		if s.messageHubRepo == nil {
+			s.ensureReposFromDB(gctx)
+		}
+		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "wecom", accountID, msgID, publicURL)
+		logger.Ctx(gctx).Info().Str("media_id", mediaID).Str("url", publicURL).Msg("[WeCom] 媒体已转存")
+	})
+}
+
+// wecomDefaultContentType 企微 media/get 不回 Content-Type 时按 MsgType 推断。
+func wecomDefaultContentType(msgType string) string {
+	switch msgType {
+	case "image":
+		return "image/jpeg"
+	case "voice":
+		return "audio/amr"
+	case "video":
+		return "video/mp4"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// wecomAccessToken 取企微 access_token（复用 WeComService 缓存逻辑）。
+func (s *WebhookService) wecomAccessToken(ctx context.Context, accountID uint) (string, error) {
+	acc, err := s.wecomRepo.GetByID(ctx, accountID)
+	if err != nil || acc == nil {
+		return "", fmt.Errorf("wecom account %d not found", accountID)
+	}
+	svc := NewWeComServiceWithDB(s.db)
+	return svc.GetAccessToken(ctx, acc)
 }
 
 func (s *WebhookService) parseWeComPlain(ctx context.Context, accountID string, raw []byte) map[string]any {
