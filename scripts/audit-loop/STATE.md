@@ -5,11 +5,27 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：14（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13/R14 为 0 缺陷轮）
-- 下一轮角度：architecture
+- 已完成轮次：15（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13/R14/R15 为 0 缺陷轮）
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R15 — architecture（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：`check-architecture.sh` 全量复跑（R3 修复回归）、L4 存量基线核对。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R3 命名修复 0 回退：文件命名规范段全绿（无 `_controller/_service` 冗余后缀、无版本/通用名文件）
+- `rag_product.go` Repository 化在位（仅装配入口 `_db.GetDB()` 一处，属预期）
+- 脚本整体 1 error = L4 service 直连 DB 存量 152 处，与 R3 留档基线（161 处）相比下降 9 处（R3 修复），无新增违规
+- controller 反向依赖 / repository 反向依赖 / interface 规范 / ctx 透传 / config 位置等其余 9 项检查全绿
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R15-architecture: 0缺陷轮核查记录与状态推进`
 
 ### R14 — authz（2026-09-09）— 第二圈，0 缺陷轮
 
