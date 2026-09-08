@@ -89,6 +89,32 @@ func (r *InboxConversationRepository) FindByPlatformAccountCustomer(ctx context.
 	return &conv, nil
 }
 
+// CreateOrUpdateByChannel 创建会话；若并发下撞唯一键 uk_inbox_conv_channel (platform,account_id,customer_id)，
+// 则退回查找并更新 last_message，保证 webhook 重发不会产生重复会话。
+func (r *InboxConversationRepository) CreateOrUpdateByChannel(ctx context.Context, conv *model.InboxConversation) error {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	err := r.db.Create(conv).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrDuplicatedKey) && !strings.Contains(strings.ToLower(err.Error()), "duplicate") &&
+		!strings.Contains(err.Error(), "SQLSTATE 23505") {
+		return err
+	}
+	existing, findErr := r.FindByPlatformAccountCustomer(ctx, conv.Platform, conv.AccountID, conv.CustomerID)
+	if findErr != nil || existing == nil {
+		return err
+	}
+	return r.UpdateLastMessage(ctx, existing.ID, conv.LastMessagePreview, func() time.Time {
+		if conv.LastMessageAt != nil {
+			return *conv.LastMessageAt
+		}
+		return time.Now()
+	}(), 1)
+}
+
 // Create 创建会话
 func (r *InboxConversationRepository) Create(ctx context.Context, conv *model.InboxConversation) error {
 	if r == nil || r.db == nil {

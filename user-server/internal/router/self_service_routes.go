@@ -14,5 +14,5 @@ func setupSelfServiceRoutes(public *gin.RouterGroup, db *gorm.DB) {
 	authCtrl := controller.NewAuthController()
 	public.POST("/public/register", middleware.BruteForceGuard("register"), authCtrl.Register)
 	public.POST("/public/forgot-password", middleware.BruteForceGuard("forgot-password"), selfSvcCtrl.ForgotPassword)
-	public.POST("/public/reset-password", selfSvcCtrl.ResetPassword)
+	public.POST("/public/reset-password", middleware.BruteForceGuard("reset-password"), selfSvcCtrl.ResetPassword)
 }

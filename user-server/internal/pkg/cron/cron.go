@@ -6,6 +6,7 @@ import (
 	geoservice "hivemtk-user/internal/geo/service"
 	opsservice "hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 	"sync"
@@ -26,11 +27,23 @@ type TaskManager struct {
 func GetTaskManager() *TaskManager {
 	once.Do(func() {
 		taskManager = &TaskManager{
-			cron: cron.New(cron.WithSeconds()),
+			cron: cron.New(
+				cron.WithSeconds(),
+				// panic 不击穿进程；上一轮未跑完的任务本轮跳过，防重叠执行
+				cron.WithChain(cron.Recover(cron.PrintfLogger(logger.StdLogger())), cron.SkipIfStillRunning(cron.PrintfLogger(logger.StdLogger()))),
+			),
 		}
 		taskManager.cron.Start()
 	})
 	return taskManager
+}
+
+// goTask 在 cron 触发器内部再以 SafeGo 起异步执行：
+// SkipIfStillRunning 只对 Job 函数本身生效，Job 内立即返回的异步任务需自行收敛 recover。
+func (tm *TaskManager) goTask(name string, fn func(ctx context.Context)) func() {
+	return func() {
+		utils.SafeGo(context.Background(), "cron."+name, fn)
+	}
 }
 
 func (tm *TaskManager) AddTask(spec string, cmd func()) (cron.EntryID, error) {
@@ -79,17 +92,17 @@ func InitCron() {
 		panic(err)
 	}
 
-	_, err = mgr.AddTask("0 */5 * * * *", func() {
-		go service.NewBridgeOfflineReplayService().RunOnce(context.Background())
-	})
+	_, err = mgr.AddTask("0 */5 * * * *", mgr.goTask("bridge_offline_replay", func(ctx context.Context) {
+		service.NewBridgeOfflineReplayService().RunOnce(ctx)
+	}))
 	if err != nil {
 		logger.Info(fmt.Sprintf("添加离线消息回扫定时任务失败 %s", err.Error()))
 		panic(err)
 	}
 
-	_, err = mgr.AddTask("5 */5 * * * *", func() {
-		go service.NewHandoffChainService().RunCron(context.Background(), 200)
-	})
+	_, err = mgr.AddTask("5 */5 * * * *", mgr.goTask("handoff_chain", func(ctx context.Context) {
+		service.NewHandoffChainService().RunCron(ctx, 200)
+	}))
 	if err != nil {
 		logger.Info(fmt.Sprintf("添加工单升级链定时任务失败 %s", err.Error()))
 		panic(err)
@@ -97,9 +110,9 @@ func InitCron() {
 
 	geoservice.SetupGeoJobs(mgr)
 
-	_, err = mgr.AddTask("0 5 3 * * *", func() {
-		go service.RunDailyBackup()
-	})
+	_, err = mgr.AddTask("0 5 3 * * *", mgr.goTask("daily_backup", func(ctx context.Context) {
+		service.RunDailyBackup()
+	}))
 	if err != nil {
 		logger.Info(fmt.Sprintf("添加每日自动备份定时任务失败 %s", err.Error()))
 		panic(err)

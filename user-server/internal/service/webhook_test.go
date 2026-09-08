@@ -398,8 +398,9 @@ func TestWebhookService_Receive_Wechat(t *testing.T) {
 	hdr := map[string]string{"X-Wechat-Timestamp": "1", "X-Wechat-Nonce": "2", "X-Wechat-Signature": "x"}
 	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelWechat, AccountID: "a1", Body: body, Headers: hdr})
 
-	if !r.Accepted {
-		t.Errorf("expected accepted (secret 未配置时跳过验签), got %+v", r)
+	// fail-closed：secret 未配置时必须拒绝验签（与其他渠道一致）
+	if r.Accepted {
+		t.Errorf("expected rejected (secret 未配置时 fail-closed), got %+v", r)
 	}
 }
 

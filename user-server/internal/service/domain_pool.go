@@ -141,11 +141,7 @@ func (s *domainPoolService) CheckDomain(ctx context.Context, id int) (bool, erro
 
 	url := fmt.Sprintf("http://%s:%d", domainPool.Domain, domainPool.Port)
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Get(url)
+	resp, err := domainCheckHTTPClient.Get(url)
 	if err != nil {
 		s.domainPoolRepo.UpdateStatus(ctx, id, 2)
 		s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now())
@@ -180,12 +176,10 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 
 			url := fmt.Sprintf("http://%s:%d", dp.Domain, dp.Port)
 
-			client := &http.Client{Timeout: 5 * time.Second}
-
 			status := 2
 			msg := "不可访问"
 
-			resp, err := client.Get(url)
+			resp, err := domainCheckHTTPClient.Get(url)
 			if err != nil {
 				msg = fmt.Sprintf("连接错误: %s", err.Error())
 			} else {
@@ -214,6 +208,10 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 }
 
 const domainCheckConcurrency = 16
+
+// domainCheckHTTPClient 域名健康检查共享 HTTP 客户端：
+// 复用连接池避免每次检查新建 client（高频检查下耗尽临时端口）。
+var domainCheckHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
 func (s *domainPoolService) AddBlacklist(ctx context.Context, domain, platform, reason, source string, ttlHours int) error {
 	var expiresAt *time.Time

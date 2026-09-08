@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -177,13 +178,17 @@ func IngressSecretAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// fail-closed：secret 未配置时拒绝，防止受保护端点退化为无鉴权
 		if secret == "" {
-
-			c.Next()
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"code":    503,
+				"message": "入口 secret 未配置（INGRESS_SECRET），已拒绝访问",
+			})
+			c.Abort()
 			return
 		}
 		provided := strings.TrimSpace(c.GetHeader("X-Ingress-Secret"))
-		if provided == "" || provided != secret {
+		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) != 1 {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    401,
 				"message": "无效的入口凭证",

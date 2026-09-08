@@ -613,15 +613,21 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 		{"feature_flags", "feature_flags", backupData.FeatureFlags},
 	}
 	restoredExtraTables := 0
+	var failedExtraTables []string
 	for _, e := range extras {
 		if len(e.rows) == 0 {
 			continue
 		}
 		if err := s.backupDataRepo.RestoreTable(ctx, e.tableName, e.rows); err != nil {
 			logger.Error(err, fmt.Sprintf("恢复扩表 %s 失败", e.tableName))
+			failedExtraTables = append(failedExtraTables, e.tableName)
 			continue
 		}
 		restoredExtraTables++
+	}
+	if len(failedExtraTables) > 0 {
+		return fmt.Errorf("恢复扩表失败: %s（数据库处于该备份恢复前的状态或部分表失败，请检查日志）",
+			strings.Join(failedExtraTables, ", "))
 	}
 
 	logger.Info(fmt.Sprintf("备份 %s 恢复完成: 线索 %d 条, 用户 %d 个, 扩表 %d 组",

@@ -33,6 +33,17 @@ var allowedCORSOrigins = parseCORSOrigins(os.Getenv("CORS_ALLOW_ORIGINS_USER"))
 
 var sseAllowedCORSOrigins = parseCORSOrigins(os.Getenv("SSE_CORS_ALLOW_ORIGINS"))
 
+func isLocalEnv() bool {
+	for _, k := range []string{"APP_ENV", "MODE"} {
+		v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
+		switch v {
+		case "", "dev", "development", "debug", "test", "local":
+			return true
+		}
+	}
+	return false
+}
+
 func requestScheme(r *http.Request) string {
 	if r == nil {
 		return "https"
@@ -93,15 +104,15 @@ func corsMiddleware() gin.HandlerFunc {
 			case strings.HasPrefix(origin, "chrome-extension://"):
 
 				allowedExts := strings.Split(os.Getenv("CORS_ALLOWED_EXTENSIONS"), ",")
-				if len(allowedExts) > 0 && allowedExts[0] != "" {
-					for _, ext := range allowedExts {
-						if origin == strings.TrimSpace(ext) {
-							allow = true
-							break
-						}
+				for _, ext := range allowedExts {
+					if strings.TrimSpace(ext) != "" && origin == strings.TrimSpace(ext) {
+						allow = true
+						break
 					}
-				} else {
-					allow = true
+				}
+				// fail-closed：未配置白名单时不再放行任意扩展来源
+				if !allow {
+					logger.Infof("[CORS] 拒绝未列入 CORS_ALLOWED_EXTENSIONS 的扩展来源: %s", origin)
 				}
 			default:
 
@@ -179,7 +190,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	r.GET("/healthz", LivenessCheck())
 	r.GET("/readyz", ReadinessCheck(HealthRedis, gormDB))
 
-	r.GET("/__debug__/routes", controller.DebugRoutesHandler(r))
+	// 路由表调试端点：默认仅本地/开发环境开放；生产需显式 ENABLE_DEBUG_ROUTES=true
+	if os.Getenv("ENABLE_DEBUG_ROUTES") == "true" || isLocalEnv() {
+		r.GET("/__debug__/routes", controller.DebugRoutesHandler(r))
+	}
 
 	r.Use(middleware.RateLimitMiddleware(middleware.RateLimitConfig{
 		RPS:        1000,

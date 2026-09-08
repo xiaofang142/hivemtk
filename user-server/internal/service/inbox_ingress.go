@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"strings"
@@ -276,7 +277,7 @@ func StartInboxHumanLockExpiryChecker(ctx context.Context, c cache.Cache, interv
 	if interval <= 0 {
 		interval = time.Minute
 	}
-	go func() {
+	utils.SafeGo(ctx, "inbox.lock_expiry_checker", func(ctx context.Context) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -287,7 +288,7 @@ func StartInboxHumanLockExpiryChecker(ctx context.Context, c cache.Cache, interv
 				getInboxLockMgr().checkExpired(ctx, c)
 			}
 		}
-	}()
+	})
 }
 
 func (s *InboxIngressService) tryAcquireAILock(ctx context.Context, sessionID string) (bool, error) {

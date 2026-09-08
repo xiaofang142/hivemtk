@@ -124,15 +124,16 @@ func (r *backupDataRepo) RestoreShortLink(ctx context.Context, row map[string]an
 	return r.db.WithContext(ctx).Table("short_links").Create(row).Error
 }
 
+// allowedBackupTables 备份/恢复白名单，key 为数据库真实表名。
 var allowedBackupTables = map[string]bool{
-	"user_mfa":              true,
-	"obs_config":            true,
-	"email_accounts":        true,
-	"email_jobs":            true,
-	"dnc":                   true,
-	"system_config":         true,
-	"webhook_subscriptions": true,
-	"password_history":      true,
+	"user_mfa":                true,
+	"obs_config":              true,
+	"email_accounts":          true,
+	"email_jobs":              true,
+	"customer_do_not_contact": true,
+	"system_config":           true,
+	"webhook_subscriptions":   true,
+	"password_history":        true,
 }
 
 func (r *backupDataRepo) DumpTable(ctx context.Context, tableName string) (json.RawMessage, error) {
@@ -149,6 +150,8 @@ func (r *backupDataRepo) DumpTable(ctx context.Context, tableName string) (json.
 	return json.Marshal(rows)
 }
 
+// RestoreTable 恢复单表：整表 DELETE + 逐行 Create 包在同一个事务里，
+// 任一行失败整体回滚，绝不留下"清空了但没恢复完"的半恢复状态。
 func (r *backupDataRepo) RestoreTable(ctx context.Context, tableName string, rows []map[string]any) error {
 	if !allowedBackupTables[tableName] {
 		return fmt.Errorf("表 %s 不在恢复白名单内", tableName)
@@ -157,15 +160,17 @@ func (r *backupDataRepo) RestoreTable(ctx context.Context, tableName string, row
 		return nil
 	}
 
-	if err := r.db.WithContext(ctx).Exec(fmt.Sprintf("DELETE FROM %s", tableName)).Error; err != nil {
-		return fmt.Errorf("清空 %s 失败: %w", tableName, err)
-	}
-	for _, row := range rows {
-		if err := r.db.WithContext(ctx).Table(tableName).Create(row).Error; err != nil {
-			fmt.Printf("[backup] RestoreTable row skipped table=%s err=%v\n", tableName, err)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(fmt.Sprintf("DELETE FROM %s", tableName)).Error; err != nil {
+			return fmt.Errorf("清空 %s 失败: %w", tableName, err)
 		}
-	}
-	return nil
+		for i, row := range rows {
+			if err := tx.Table(tableName).Create(row).Error; err != nil {
+				return fmt.Errorf("恢复 %s 第 %d 行失败: %w", tableName, i+1, err)
+			}
+		}
+		return nil
+	})
 }
 
 var _ = time.Now

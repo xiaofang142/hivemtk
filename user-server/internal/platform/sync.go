@@ -1,10 +1,12 @@
 package platform
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"runtime"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -28,7 +30,7 @@ func generateRandomKey(length int) string {
 func InitSync() error {
 	merchantKey = generateRandomKey(32)
 	logger.Info("[独立部署模式] 平台同步已禁用（InitSync no-op）")
-	go func() {
+	utils.SafeGo(context.Background(), "platform.register_merchant", func(ctx context.Context) {
 		if err := RegisterMerchant(RegisterMerchantReq{
 			Name:         "HiveMTK 本地商户",
 			ContactEmail: merchantKey + "@local",
@@ -38,7 +40,7 @@ func InitSync() error {
 		} else {
 			logger.Info("[独立部署模式] 已自动向平台注册商户 key=" + merchantKey)
 		}
-	}()
+	})
 	return nil
 }
 

@@ -368,7 +368,9 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 
 		case ev, ok := <-busCh:
 			if !ok {
-				continue
+				// channel 被关闭：若继续 select 会立即变 hot-spin 空转烧 CPU，直接结束流
+				logger.Ctx(ctx).Info().Msg("[SSE] bus channel closed, stream ended")
+				return
 			}
 			if !writeSSEEvent(c.Writer, ev) {
 				logger.Ctx(ctx).Info().Msg("[SSE] client disconnected during bus event")

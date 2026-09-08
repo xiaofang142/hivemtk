@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -44,11 +46,13 @@ func StopBruteForceJanitor() {
 
 func startBruteForceJanitor() {
 	bruteForceJanitorOnce.Do(func() {
-		go func() {
+		utils.SafeGo(context.Background(), "brute_force.janitor", func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Minute)
 			defer ticker.Stop()
 			for {
 				select {
+				case <-ctx.Done():
+					return
 				case <-bruteForceJanitorStop:
 					return
 				case <-ticker.C:
@@ -62,7 +66,7 @@ func startBruteForceJanitor() {
 				}
 				globalBruteForce.mu.Unlock()
 			}
-		}()
+		})
 	})
 }
 

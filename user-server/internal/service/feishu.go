@@ -26,6 +26,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/httpclient"
 	"hivemtk-user/internal/pkg/tgbot"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -376,7 +377,7 @@ func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.Telegram
 	// 6. 异步注册 webhook 或降级 polling（goroutine 不阻断 HTTP 响应）
 	if resolvedURL != "" && hasPublic {
 		// 有公网域名 → goroutine 调 setWebhook
-		go func() {
+		utils.SafeGo(context.Background(), "telegram.async_set_webhook", func(ctx context.Context) {
 			if err := tgbot.SetWebhook(acc.BotToken, acc.WebhookURL, acc.WebhookSecret); err != nil {
 				logger.Warnf("[TG] 账号 %d(%s) 异步 setWebhook 失败: %v (可在 UI 手动重试)", acc.ID, acc.AccountName, err)
 				now := time.Now()
@@ -391,13 +392,13 @@ func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.Telegram
 				acc.LastErrorMsg = ""
 				_ = s.accRepo.Update(context.Background(), acc)
 			}
-		}()
+		})
 	} else {
 		// 无公网域名 → 自动降级 polling（StartTelegramPolling 内部会抢占分布式锁，幂等）
-		go func() {
+		utils.SafeGo(context.Background(), "telegram.async_polling_fallback", func(ctx context.Context) {
 			StartTelegramPolling(acc)
 			logger.Infof("[TG] 账号 %d(%s) 无 public_base_url / 显式 webhook_url，自动降级为 polling 模式", acc.ID, acc.AccountName)
-		}()
+		})
 	}
 
 	return acc, nil

@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// roundMoney 金额四舍五入到分，抑制 float64 乘法二进制误差（存储层 NUMERIC(12,2)）
+func roundMoney(v float64) float64 {
+	return math.Round(v*100) / 100
+}
 
 // DraftStatus 草稿状态
 type DraftStatus string
@@ -193,11 +199,11 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 	if existing != nil {
 		if intent.Quantity > 0 {
 			existing.Quantity += intent.Quantity
-			existing.TotalAmount = existing.UnitPrice * float64(existing.Quantity)
+			existing.TotalAmount = roundMoney(existing.UnitPrice * float64(existing.Quantity))
 		}
 		if intent.UnitPrice > 0 {
 			existing.UnitPrice = intent.UnitPrice
-			existing.TotalAmount = existing.UnitPrice * float64(existing.Quantity)
+			existing.TotalAmount = roundMoney(existing.UnitPrice * float64(existing.Quantity))
 		}
 		if intent.Confidence > existing.Confidence {
 			existing.Confidence = intent.Confidence
@@ -213,7 +219,7 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 		quantity = 1
 	}
 	unitPrice := intent.UnitPrice
-	totalAmount := unitPrice * float64(quantity)
+	totalAmount := roundMoney(unitPrice * float64(quantity))
 
 	conf := intent.Confidence
 	if unitPrice > 0 {
@@ -305,7 +311,7 @@ func (s *OrderDraftService) CreateManual(ctx context.Context, req *CreateDraftRe
 		Category:    req.Category,
 		Quantity:    req.Quantity,
 		UnitPrice:   req.UnitPrice,
-		TotalAmount: req.UnitPrice * float64(req.Quantity),
+		TotalAmount: roundMoney(req.UnitPrice * float64(req.Quantity)),
 		Confidence:  1.0,
 		Source:      "manual",
 		Status:      DraftStatusPending,

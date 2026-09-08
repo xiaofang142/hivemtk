@@ -8,13 +8,17 @@ const t = (key) => i18n.global.t(key)
 
 const createRequestInstance = () => {
   let apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || '';
-  try {
-    const configStr = localStorage.getItem('apiConfig')
-    if (configStr) {
-      const cfg = JSON.parse(configStr)
-      apiBaseUrl = cfg.baseUrl || apiBaseUrl
-    }
-  } catch (e) {}
+  // localStorage 覆盖仅允许在开发环境生效；生产构建一律走 env 配置，
+  // 防止被篡改的 localStorage 把全部 API 流量指向任意地址
+  if (import.meta.env?.DEV) {
+    try {
+      const configStr = localStorage.getItem('apiConfig')
+      if (configStr) {
+        const cfg = JSON.parse(configStr)
+        apiBaseUrl = cfg.baseUrl || apiBaseUrl
+      }
+    } catch (e) {}
+  }
   return axios.create({
     baseURL: apiBaseUrl,
     headers: {
@@ -170,10 +174,12 @@ const addInterceptors = () => {
 
         switch (status) {
           case 401:
+            // 401 一律清凭据跳登录：silent 请求只是不弹提示，
+            // token 已过期时保留它只会造成后续请求反复失败
             if (!silent) {
               showToast(t('http.loginExpired'))
-              clearAuthAndGoLogin()
             }
+            clearAuthAndGoLogin()
             break
           case 403:
             if (!silent) showToast(t('http.accessDenied'))

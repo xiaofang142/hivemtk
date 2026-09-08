@@ -82,7 +82,10 @@ func (s *PasswordResetService) RequestPasswordReset(ctx context.Context, req *Re
 
 	if s.emailService != nil {
 		if _, err := s.emailService.Send(ctx, 0, req.Email, subject, body, nil); err != nil {
-			logger.Ctx(ctx).Warn().Err(err).Str("email", req.Email).Str("reset_url", resetURL).Msg("password reset 邮件发送失败，但 token 已生成")
+			// 只记录 token 前缀（前 8 位），完整 reset URL 带 token 明文不能落日志
+			logger.Ctx(ctx).Warn().Err(err).Str("email", req.Email).
+				Str("token_prefix", resetToken.Token[:min(8, len(resetToken.Token))]).
+				Msg("password reset 邮件发送失败，但 token 已生成")
 		} else {
 			logger.Ctx(ctx).Info().Str("email", req.Email).Msg("password reset 邮件发送成功")
 		}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 )
 
@@ -48,15 +49,20 @@ func startResourceSampling() {
 	smInitOnce.Do(func() {
 		initResourceSnapshots()
 		smSamplingDone = make(chan struct{})
-		go func() {
+		utils.SafeGo(context.Background(), "system_monitor.resource_sampling", func(ctx context.Context) {
 			defer close(smSamplingDone)
 			sampleResourceUsage()
 			ticker := time.NewTicker(5 * time.Second)
 			defer ticker.Stop()
-			for range ticker.C {
-				sampleResourceUsage()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					sampleResourceUsage()
+				}
 			}
-		}()
+		})
 	})
 }
 
