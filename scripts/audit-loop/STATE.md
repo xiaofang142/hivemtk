@@ -5,11 +5,32 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：4 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：8 / 8
-- 下一轮角度：concurrency
+- 已完成轮次：5 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：9 / 9
+- 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R5 — concurrency（2026-09-08）
+
+**审计范围**：裸 `go func()` 全量 48 处生命周期审查、包级 map / 全局可变状态并发访问、WS Hub 注册表锁、后台 loop（cron/cleanup/dispatch/flush）退出通道、单例 set-once 语义。
+
+**发现与处置（1 项，已修复）**：
+
+1. `user-server/internal/service/channel_media.go:34` — `channelMediaFollowers` 包级 map：`RegisterChannelMediaFollower`（装配层写）与三渠道入站媒体转存（webhook 并发读）无任何锁，高负载下可触发 `fatal: concurrent map read and map write`（P1）。**处置**：补 `sync.RWMutex`，注册走写锁、`fetchChannelMediaFollower` 走读锁。
+
+**核查通过项（无需修复）**：
+- 48 处裸 `go func()`：2 处为 wg.Wait+close 模式（受控）、其余均为 `SafeGo`（recover 保护）或 hub/cron 一次性 worker；后台 loop（trace_sink flushLoop、db_audit_persister consume、event bus worker、SOP dispatcher 等）均有 stopCh/doneCh 或进程生命周期语义
+- WS Hub：`clients`/`agentOnline` 全部读写持 `mu`（含 ticker 心跳摘除路径）；visitor 注册表有独立 RWMutex
+- 限流器（visitor limiter）、typing predict cache、ownership cache 均有锁
+- `globalReader`/`GlobalSSEBus`/`globalTraceBus` 等单例为启动期 set-once（sync.Once 或装配层先行注入），无运行时竞态
+- `bridgeChannels` 包级 map 为 init-only（仅启动期赋值，无运行时写）
+
+**环境限制留档**：`go test -race` 需要 CGO+gcc，宿主机（Windows/Git Bash）无 gcc，无法启用竞态检测；本轮以逐文件锁核查替代。后续若在 CI Linux 环境跑 race 可补验。
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；websocket(5.5s)/middleware(5.8s)/service(23.9s) 三包测试全绿。
+
+**Commit**：`59aa223`
 
 ### R4 — error-handling（2026-09-08）
 
