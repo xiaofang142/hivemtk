@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：12（**第一圈 12 角度收官**）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环，下一轮 R13 回 security）
-- 累计发现 / 修复：15 / 15（R6 为 0 缺陷轮）
-- 下一轮角度：security（第二圈开始）
+- 已完成轮次：13（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13 为 0 缺陷轮）
+- 下一轮角度：authz
 
 ## 轮次报告
+
+### R13 — security（2026-09-09）— 第二圈首轮，0 缺陷轮
+
+**审计范围**：R1 全部扫描项二圈复扫（硬编码密钥/SQL 拼接/敏感日志）、第一圈修复点回归复核、期间新增代码（QQ webhook 自检、seed）安全审查。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 硬编码密钥二圈复扫：仅剩 `PasswordSourceResetPassword` 枚举常量（非密钥）；R1 删除的两个死常量 **0 复发**
+- SQL 拼接 4 处与 R1 结论一致（内部常量表名/白名单参数）
+- 敏感日志：password_reset 仅记 email/事件；webhook 验签 secret 未配置时只记 accountID 不记值
+- `ALLOW_INSECURE_WEBHOOK` 环境护栏完整：非 dev 环境 `log.Fatalf` 启动即断言（`guardInsecureWebhookAtStartup` 在 NewWebhookService 即触发）
+- 期间新增代码（同事 QQ webhook URL 自检/推导、seed 补齐）：本地静态校验无网络面，路由在既有 admin 守卫之下
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；service + channelbot 四子包测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R13-security: 0缺陷轮核查记录与状态推进`
 
 ### R12 — docs-consistency（2026-09-09）— 第一圈收官
 
