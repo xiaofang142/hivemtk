@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：16（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13/R14/R15/R16 为 0 缺陷轮）
-- 下一轮角度：concurrency
+- 已完成轮次：17（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13–R17 为 0 缺陷轮）
+- 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R17 — concurrency（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R5 修复点回归复核、裸 `go func()` 数量基线核对（48→48）、包级 map 二圈清点。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R5 修复点在位：`channelMediaFollowersMu` RWMutex 读写锁原样覆盖注册/读取两条路径
+- 裸 `go func()` 48 处与 R5 基线数量一致（无新增失控 goroutine）
+- 包级 map 二圈清点：`validOperators`/`SupportedAutoAssignStrategies`/`bridgeChannels`/`cardChannelMetas`/`StageMetas`/`leadMiningChannels` 等均为 init-only 或静态查找表，无运行时写
+
+**验证证据**：`go vet ./...` 全绿；service(25.4s)/websocket(4.6s) 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R17-concurrency: 0缺陷轮核查记录与状态推进`
 
 ### R16 — error-handling（2026-09-09）— 第二圈，0 缺陷轮
 
