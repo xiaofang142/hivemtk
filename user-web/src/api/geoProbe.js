@@ -9,9 +9,6 @@ export const testEngineProbe = (engine, query) =>
 export const listProbeRuns = (engine, limit = 100) =>
   http.get('/api/geo/probe/runs', { engine, limit })
 
-export const runSOVRefresh = () =>
-  http.post('/api/geo/probe/run-sov')
-
 export const runNegativeMonitor = () =>
   http.post('/api/geo/probe/run-negative')
 
