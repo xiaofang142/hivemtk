@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：22（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13–R22 为 0 缺陷轮）
-- 下一轮角度：config-deploy
+- 已完成轮次：23（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13–R23 为 0 缺陷轮）
+- 下一轮角度：docs-consistency
 
 ## 轮次报告
+
+### R23 — config-deploy（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R11 修复点回归（键名统一）、端口三方一致性复核。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R11 键名统一无回退：全仓 `MERCHANT_HMAC_SECRET` 0 残留；`.env-example`（78/89 行）、`DEPLOYMENT_GUIDE.md`（130/199 行）、`config/platform.yaml`（15 行插值）三处键名链一致
+- 端口三方一致：docker-compose 12 处端口引用、PORT_REGISTRY.md 21 行登记、config.yaml `${DB_PORT:8232}` 默认值维持 R11 结论
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R23-config-deploy: 0缺陷轮核查记录与状态推进`
 
 ### R22 — test-coverage（2026-09-09）— 第二圈，0 缺陷轮
 
