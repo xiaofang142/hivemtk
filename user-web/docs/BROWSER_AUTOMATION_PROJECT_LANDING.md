@@ -67,14 +67,14 @@ hivemtk/
 
 ```
 user-server/internal/browser_automation/model/
-├── browser_task.go        ← 任务主体（最核心）
-├── browser_session.go     ← Chrome tab 会话
-├── browser_step.go        ← 任务内的执行步骤
-├── browser_cron.go        ← 定时触发器
-└── browser_llm_plan.go    ← LLM 生成的执行计划
+├── task.go           ← 任务主体（最核心）
+├── session.go        ← Chrome tab 会话
+├── step.go           ← 任务内的执行步骤
+├── cron.go           ← 定时触发器
+└── llm_plan.go       ← LLM 生成的执行计划
 ```
 
-#### model/browser_task.go
+#### model/task.go
 
 ```go
 package model
@@ -120,7 +120,7 @@ type BrowserTask struct {
 func (BrowserTask) TableName() string { return "browser_tasks" }
 ```
 
-#### model/browser_session.go
+#### model/session.go
 
 ```go
 package model
@@ -153,7 +153,7 @@ type BrowserSession struct {
 func (BrowserSession) TableName() string { return "browser_sessions" }
 ```
 
-#### model/browser_step.go
+#### model/step.go
 
 ```go
 package model
@@ -185,7 +185,7 @@ type BrowserStep struct {
 func (BrowserStep) TableName() string { return "browser_steps" }
 ```
 
-#### model/browser_cron.go
+#### model/cron.go
 
 ```go
 package model
@@ -212,7 +212,7 @@ type BrowserCronTrigger struct {
 func (BrowserCronTrigger) TableName() string { return "browser_cron_triggers" }
 ```
 
-#### model/browser_llm_plan.go
+#### model/llm_plan.go
 
 ```go
 package model
@@ -255,14 +255,14 @@ func (BrowserLLMPlan) TableName() string { return "browser_llm_plans" }
 
 ```
 user-server/internal/browser_automation/repository/
-├── browser_task.go
-├── browser_session.go
-├── browser_step.go
-├── browser_cron.go
-└── browser_llm_plan.go
+├── task.go
+├── session.go
+├── step.go
+├── cron.go
+└── llm_plan.go
 ```
 
-#### repository/browser_task.go（接口签名预览）
+#### repository/task.go（接口签名预览）
 
 ```go
 package repository
@@ -316,82 +316,64 @@ func NewBrowserTaskRepositoryWithDB(db *gorm.DB) BrowserTaskRepository {
 
 ```
 user-server/internal/browser_automation/service/
-├── browser_task_service.go   ← 任务 CRUD + 发布/暂停/归档
-├── browser_cron_service.go    ← Cron 调度 + 与 pkg/cron 集成
-├── browser_brain_service.go   ← LLM Plan 生成（调用 aiagent/llm.Dispatcher）
-├── browser_executor.go        ← 执行引擎：步骤解释 + Hand 调用 + Session 流转
-└── browser_hand.go            ← 【核心】Go NM Hand：exec.Command + LE 帧 + 并发互斥
+├── task.go   ← 任务 CRUD + 发布/暂停/归档
+├── cron.go    ← Cron 调度 + 与 pkg/cron 集成
+├── brain.go   ← LLM Plan 生成（调用 aiagent/llm.Dispatcher）
+├── executor.go        ← 执行引擎：步骤解释 + Hand 调用 + Session 流转
+└── hand.go            ← 【核心】统一端口内部接口调用 + WebSocket 等待 Host 回传
+└── host_conn.go        ← 【配套】WebSocket 管理 Host 连接池（/internal/browser/controller 内）
 ```
 
-#### service/browser_hand.go（最核心文件）
+#### service/hand.go（统一端口版本，不启动任何子进程）
+
+**核心改变**：BrowserHand 不 `exec.Command` 任何进程（那是 Chrome 的职责）。
+它只往 user-server 统一端口的内部接口发请求，内部接口通过 WebSocket 推给 Host，Host 处理完回传。
 
 ```go
 package service
 
 import (
+    "bytes"
     "context"
-    "encoding/binary"
     "encoding/json"
-    "errors"
     "fmt"
-    "io"
-    "os"
-    "os/exec"
+    "net/http"
     "sync"
-    "syscall"
     "time"
 )
 
 // Hand Go Native Messaging Hand 层
-// 负责：启动 Go NM Host 子进程 + stdio pipe 通信 + 4 字节 LE 帧协议 + 并发互斥
-// 约束：一个 user-server 实例只有一个 BrowserHand，多 Agent 命令通过 mutex 串行
+// 约束 1: Chrome 才是 Go NM Host 的父进程，user-server 不启动 Host
+// 约束 2: 统一端口 → 往 http://127.0.0.1:<统一端口>/internal/browser/host 发请求
+// 约束 3: 多 Agent 命令同一时刻只进一个（Host 单线程串行处理扩展通道）
 type Hand struct {
-    mu       sync.Mutex     // 多 Agent 并发保护（同一时刻只进一个命令）
-    hostMu   sync.Mutex     // Host 单实例保护
-    cmd      *exec.Cmd
-    stdin    io.WriteCloser
-    stdout   io.ReadCloser
-    cmdPath  string        // "hivemtk_browser_nm_host"（编译后 binary 路径）
-    timeout  time.Duration // 单命令超时
-    connected bool
+    mu          sync.Mutex     // 多 Agent 并发保护
+    serverURL   string         // "http://127.0.0.1" + config.DefaultListenPort
+    httpClient  *http.Client   // 带超时
 }
 
-// NewHand 构造器（单例调用）
+// NewHand 构造器（单例）
 func NewHand() *Hand {
-    return &BrowserHand{
-        cmdPath: "hivemtk_browser_nm_host",
-        timeout: 30 * time.Second,
+    return &Hand{
+        serverURL:  fmt.Sprintf("http://127.0.0.1:%d", config.DefaultListenPort),
+        httpClient: &http.Client{Timeout: 30 * time.Second},
     }
 }
 
-// EnsureConnected 确保 Host 子进程活着
-// 断线 / Chrome 重启后自动重试
-func (h *Hand) EnsureConnected(ctx context.Context) error {
-    h.hostMu.Lock()
-    defer h.hostMu.Unlock()
-    if h.connected { return nil }
-
-    cmd := exec.CommandContext(ctx, h.cmdPath)
-    cmd.Stdin, _ = cmd.StdinPipe()
-    cmd.Stdout, _ = cmd.StdoutPipe()
-    cmd.Stderr = os.Stderr // 日志走 stderr，绝不走 stdout（否则帧解析崩）
-    cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // 独立进程组
-
-    if err := cmd.Start(); err != nil {
-        return fmt.Errorf("nm_host 启动失败: %w", err)
+// EnsureHostReady 检查 Host 是否在线（通过统一端口内部接口）
+// /internal/browser/host/status 返回 {"connected": bool}
+func (h *Hand) EnsureHostReady(ctx context.Context) error {
+    req, _ := http.NewRequestWithContext(ctx, "GET", h.serverURL+"/internal/browser/host/status", nil)
+    resp, err := h.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("Host 状态检查失败（可能 Chrome 没启动或扩展未加载）: %w", err)
     }
-    h.cmd = cmd
-    h.stdin = cmd.Stdin.(io.WriteCloser)
-    h.stdout = cmd.Stdout.(io.ReadCloser)
-    h.connected = true
-
-    // 异步监测子进程退出，触发重连
-    go func() {
-        cmd.Wait()
-        h.hostMu.Lock()
-        h.connected = false
-        h.hostMu.Unlock()
-    }()
+    defer resp.Body.Close()
+    var body map[string]any
+    json.NewDecoder(resp.Body).Decode(&body)
+    if ok, _ := body["connected"].(bool); !ok {
+        return fmt.Errorf("Go NM Host 未连接，请确认 Chrome 已启动 + 扩展已加载")
+    }
     return nil
 }
 
@@ -424,65 +406,52 @@ func (h *Hand) typeText(ctx context.Context, tabID int, target string, value str
 
 // snapshot 原语（accessibility @e1/@e2 refs）
 func (h *Hand) snapshot(ctx context.Context, tabID int) (string, error) {
-    resp, err := h.send(ctx, map[string]any{
-        "action": "snapshot", "tab_id": tabID,
-    })
+    resp, err := h.send(ctx, map[string]any{"action": "snapshot", "tab_id": tabID})
     if err != nil { return "", err }
     s, _ := resp["snapshot"].(string)
     return s, nil
 }
 
-// markdown 原语（页面转 Markdown）
-func (h *Hand) markdown(ctx context.Context, tabID int) (string, error) {
-    resp, err := h.send(ctx, map[string]any{
-        "action": "markdown", "tab_id": tabID,
-    })
-    if err != nil { return "", err }
-    m, _ := resp["markdown"].(string)
-    return m, nil
-}
-
 // screenshot 原语
 func (h *Hand) screenshot(ctx context.Context, tabID int) (string, error) {
-    resp, err := h.send(ctx, map[string]any{
-        "action": "screenshot", "tab_id": tabID,
-    })
+    resp, err := h.send(ctx, map[string]any{"action": "screenshot", "tab_id": tabID})
     if err != nil { return "", err }
     b64, _ := resp["base64"].(string)
     return b64, nil
 }
 
-// waitFor 原语
-func (h *Hand) waitFor(ctx context.Context, tabID int, ms int) error {
-    _, err := h.send(ctx, map[string]any{
-        "action": "wait", "tab_id": tabID, "ms": ms,
-    })
-    return err
-}
-
-// scroll 原语
-func (h *Hand) scroll(ctx context.Context, tabID int, direction string, amount int) error {
-    _, err := h.send(ctx, map[string]any{
-        "action": "scroll", "tab_id": tabID, "direction": direction, "amount": amount,
-    })
-    return err
-}
-
-// closeTab 原语
-func (h *Hand) closeTab(ctx context.Context, tabID int) error {
-    _, err := h.send(ctx, map[string]any{
-        "action": "close_tab", "tab_id": tabID,
-    })
-    return err
-}
-
-// send 核心：4 字节 Little Endian 帧 + JSON
+// send 核心：POST 到统一端口的 /internal/browser/host
+// 内部 Controller 收到后 → 通过 WebSocket 推给 Go NM Host → Host 写帧到 Chrome 扩展
+// 扩展处理完 → Host 回传 → Controller HTTP response 返回 → Hand 拿到结果
 func (h *Hand) send(ctx context.Context, req map[string]any) (map[string]any, error) {
     h.mu.Lock()
     defer h.mu.Unlock()
 
-    if err := h.EnsureConnected(ctx); err != nil {
+    if err := h.EnsureHostReady(ctx); err != nil {
         return nil, err
+    }
+
+    body, _ := json.Marshal(req)
+    httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+        h.serverURL+"/internal/browser/host", bytes.NewReader(body))
+    httpReq.Header.Set("Content-Type", "application/json")
+    httpReq.Header.Set("X-Internal-Token", internalToken()) // 预共享密钥
+
+    resp, err := h.httpClient.Do(httpReq)
+    if err != nil {
+        return nil, fmt.Errorf("Host 通信失败: %w", err)
+    }
+    defer resp.Body.Close()
+
+    var result map[string]any
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        return nil, fmt.Errorf("response 解析失败: %w", err)
+    }
+    if ok, _ := result["ok"].(bool); !ok {
+        return nil, fmt.Errorf("%v", result["error"])
+    }
+    return result, nil
+}
     }
 
     // 加超时
@@ -530,7 +499,7 @@ func (h *Hand) send(ctx context.Context, req map[string]any) (map[string]any, er
 }
 ```
 
-#### service/browser_executor.go（执行引擎预览）
+#### service/executor.go（执行引擎预览）
 
 ```go
 // Executor 是任务执行的调度中心
@@ -563,12 +532,12 @@ func (s *TaskService) RunTask(ctx context.Context, taskID uint, userID uint) (*m
 
 ```
 user-server/internal/browser_automation/controller/
-├── browser_task_controller.go   ← 任务 CRUD + 发布/暂停/执行/归档
-├── browser_session_controller.go ← Session 查询 + Step 列表 + 日志回放
-└── browser_cron_controller.go   ← Cron 触发器 CRUD + 启停
+├── task.go   ← 任务 CRUD + 发布/暂停/执行/归档
+├── session.go ← Session 查询 + Step 列表 + 日志回放
+└── cron.go   ← Cron 触发器 CRUD + 启停
 ```
 
-#### controller/browser_task_controller.go（接口签名预览）
+#### controller/task.go（接口签名预览）
 
 ```go
 package controller
@@ -606,9 +575,9 @@ Handler 签名全部是 `func (c *gin.Context)`，用 `c.ShouldBindJSON(&dto)` �
 
 ```
 user-server/internal/browser_automation/dto/
-├── browser_task.go    ← CreateTaskReq / UpdateTaskReq / TaskListReq / RunTaskReq
-├── browser_session.go ← SessionListReq / StepListReq
-└── browser_cron.go    ← CreateCronReq / UpdateCronReq
+├── task.go    ← CreateTaskReq / UpdateTaskReq / TaskListReq / RunTaskReq
+├── session.go ← SessionListReq / StepListReq
+└── cron.go    ← CreateCronReq / UpdateCronReq
 ```
 
 ```go
@@ -1042,136 +1011,230 @@ user-server/cmd/nm-host/
 └── manifest.json.template ← Chrome Native Messaging 清单模板
 ```
 
-### 5.1.1 物理执行模型（关键！Chrome 怎么"执行"这个 Go Host）
+### 5.1.1 物理执行模型（关键！严格遵守项目"统一端口"定位）
+
+**本项目核心事实**：`user-server/cmd/api/main.go` 启动一个 gin.Engine、**一个端口**（比如 8080），
+前端静态资源 `/assets/*`、后端 API `/api/*`、Vue SPA `/`、WebSocket 全挂在这一个端口上。
+**不能开第二个 HTTP server**。
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ 谁启动 Host？—— Chrome，不是 user-server                               │
+│ 项目统一端口架构（只有一个 HTTP server：gin.Engine on :8080）           │
 │                                                                       │
-│ 用户打开 Chrome → Chrome 启动时加载扩展 → 扩展 background.js 执行：     │
-│   let port = chrome.runtime.connectNative('com.hivemtk.browser');      │
-│                    │                                                  │
-│                    ▼                                                  │
-│ Chrome 查 manifest.json 找到 path："/usr/local/bin/hivemtk_browser_nm_host" │
-│                    │                                                  │
-│                    ▼                                                  │
-│ Chrome fork 这个 binary → Host 进程启动 → stdin/stdout 由 Chrome 管控  │
-│                    │                                                  │
-│                    ▼                                                  │
-│ Host 同时开两条通道：                                                  │
-│   Channel A (Chrome 管控): stdin/stdout ↔ Chrome 扩展 Native Messaging │
-│   Channel B (Host 自开):  HTTP server localhost:18789 ↔ user-server    │
-│                           BrowserHand.send() POST /rpc               │
+│  user-server (api binary)                                             │
+│  ┌─────────────────────────────────────────────────────────┐          │
+│  │  gin.Engine  (一个端口，比如 http://host:8080)           │          │
+│  │  ├── /api/browser-automation/*  ← 业务 API（前端 Vue 调用）│          │
+│  │  ├── /internal/browser/host     ← NM Host 内部回调接口    │          │
+│  │  │   （localhost only，不对外暴露，无 Auth 但 IP 白名单） │          │
+│  │  ├── /assets/*                  ← Vue3 静态资源          │          │
+│  │  ├── /                          ← Vue3 SPA              │          │
+│  │  └── websocket                  ← 统一端口的 WS          │          │
+│  └─────────────────────────────────────────────────────────┘          │
+│                                                                       │
+│  Chrome Native Messaging（独立进程，Chrome 管控启动）                    │
+│  ┌─────────────────────────────────────────────────────────┐          │
+│  │  Go NM Host (cmd/nm-host/main.go)                        │          │
+│  │  ├── stdin/stdout  ← Chrome 管控的 Native Messaging      │          │
+│  │  │   Channel A: 4B LE 帧 + JSON ↔ Chrome 扩展            │          │
+│  │  │                                                       │          │
+│  │  └── HTTP client → http://127.0.0.1:8080/internal/browser/host │    │
+│  │       Channel B: Host 作为**客户端**连 user-server 统一端口│          │
+│  │       Host 不开任何 HTTP server！它只是 HTTP client        │          │
+│  └─────────────────────────────────────────────────────────┘          │
+│                                                                       │
+│  Chrome 扩展 (user-web/extension/)                                     │
+│  ┌─────────────────────────────────────────────────────────┐          │
+│  │  background.js                                           │          │
+│  │  └── chrome.runtime.connectNative('com.hivemtk.browser') │          │
+│  │      → Chrome 自动 fork Go NM Host binary                │          │
+│  │      → Host stdin/stdout 由 Chrome 管控                  │          │
+│  └─────────────────────────────────────────────────────────┘          │
 └───────────────────────────────────────────────────────────────────────┘
-
-两条通道的精确协议：
-
-Channel A: Host ↔ Chrome 扩展（Chrome 管控的 Native Messaging）
-  → 帧格式: 4 字节 Little Endian 长度头 + UTF-8 JSON body
-  → 例子: [0x1a 0x00 0x00 0x00]{"action":"click","tab_id":1}
-  → 限制: 扩展→Host 64 MiB / Host→扩展 1 MiB
-
-Channel B: user-server ↔ Host（Host 自开 HTTP）
-  → 协议: POST http://127.0.0.1:18789/rpc
-  → Body: {"action":"click","tab_id":1,"target":"#submit"}
-  → Response: {"ok":true,"data":{"chrome_tab_id":1},"latency_ms":3}
-  → 安全: 只监听 loopback，需要 Bearer Token（install.sh 生成）
 ```
 
-**为什么不能让 user-server 直接启动 Host？**
-- Chrome Native Messaging 协议**要求** Host 进程由 Chrome 启动，Chrome 管控 stdin/stdout
-- 如果 user-server 也 fork Host → Host 有两个父进程、stdin/stdout 冲突
-- 唯一可行：Chrome 启动 Host（Channel A），Host 自开 HTTP（Channel B）让 user-server 连进来
+#### 谁启动 Go NM Host？—— **Chrome，不是 user-server**
 
-与 `service/browser_hand.go` 的 Hand 层对接：Hand → Host（子进程 stdin/stdout） → Chrome 扩展（Native Messaging）
+Chrome Native Messaging 协议硬性要求：
+1. Host 进程必须由 Chrome 启动（Chrome fork manifest.json 里 `path` 指定的 binary）
+2. Chrome 管控 Host 的 stdin/stdout
+3. user-server **不能** fork Host（否则 stdin/stdout 冲突）
+
+#### Host 怎么跟 user-server 通信？—— **HTTP client 连统一端口**
+
+Go NM Host 自己**不开 HTTP server**，它只是 HTTP client：
+
+```
+请求方向：user-server → Host → Chrome 扩展 → Host → user-server
+
+① user-server BrowserHand.Executor.RunTask()
+   → POST http://127.0.0.1:8080/internal/browser/host
+          body: {"action":"click","tab_id":1,"target":"#submit"}
+   ↑ 这是 user-server 调自己的统一端口内部接口！
+
+② /internal/browser/host Controller 收到请求
+   → 把 command 写入共享 channel（或通过 Host 注册的长连接）
+
+③ Go NM Host 轮询（或 WebSocket 长连接）从 user-server 拿 command
+   → 写 4B LE 帧到 Chrome 扩展（通过 stdin）
+
+④ Chrome 扩展处理原语：chrome.scripting.executeScript(...)
+   → 回写 4B LE 帧到 Host（stdout）
+
+⑤ Go NM Host 读响应帧
+   → HTTP response 返回给 user-server 的内部 Controller
+   → → Executor 拿到 result → 继续下一步
+```
+
+#### 两条通道的精确协议
+
+**Channel A: Go NM Host ↔ Chrome 扩展**（Chrome 管控的 Native Messaging，不可绕过）
+  - 帧格式：4 字节 Little Endian 长度头 + UTF-8 JSON body
+  - 限制：扩展→Host 64 MiB / Host→扩展 1 MiB
+
+**Channel B: Go NM Host ↔ user-server 统一端口**（Host 是 HTTP client，user-server 是 server）
+  - 方式 1（推荐）：**WebSocket 长连接**
+    - Host 启动时：`ws://127.0.0.1:8080/internal/browser/ws`
+    - user-server 内部 Controller 把 WebSocket 挂到统一 gin.Engine 上
+    - Host 保持连接，user-server 通过 WS 推 command 过来
+    - 好处：不用轮询，实时性好，Host 状态天然知道
+  - 方式 2（备选）：Host 轮询 `GET http://127.0.0.1:8080/internal/browser/poll?last_id=N`
+    - Host 每 100ms 轮询一次，user-server 返回积压的 commands
+    - 简单但延迟稍高、浪费端口请求
+  - 安全：IP 白名单 127.0.0.1 / ::1，不走反代
+
+#### 为什么不开第二个端口？
+
+因为 `cmd/api/main.go` 只有一个 `gin.New()` 监听一个端口，这是项目定位。
+`/internal/browser/*` 内部路由直接**挂在同一个 gin.Engine 上**，和 `/api/*`、`/assets/*`、`/`、WebSocket 并列：
 
 ```go
+// cmd/api/main.go 里 SetupRoutes() 会调用
+// 内部路由和外部路由都挂在同一个 r *gin.Engine 上
+router.SetupBrowserAutomationRoutes(auth, r, gormDB)
+// SetupBrowserAutomationRoutes 内部:
+//   r.Group("/internal/browser")  ← 内部路由挂同一端口
+//     .GET("/ws", ...)             ← WebSocket 长连接
+//     .GET("/poll", ...)           ← 轮询备选
+//     .POST("/host-register", ...)
+//   auth.Group("/api/browser-automation")  ← 业务 API 挂同一端口
+//     .POST("/tasks/:id/run", ...)
+```
+
+完全没有第二个端口，统一端口贯穿一切。
+
+与 `service/hand.go` 的 Hand 层对接：**统一端口 WebSocket**
+
+```go
+// user-server/cmd/nm-host/main.go — Go NM Host（Chrome 启动的子进程）
+// 职责：
+//   1. stdin/stdout 走 Chrome Native Messaging（4 字节 LE 帧）
+//   2. 同时作为 HTTP client 连 user-server 统一端口 /internal/browser/ws（WebSocket）
+//   3. 从 WS 拿 command → 写帧给 Chrome 扩展 → 等扩展响应 → WS 回传 user-server
+
 package main
 
 import (
+    "context"
     "encoding/binary"
     "encoding/json"
     "io"
+    "log"
+    "net/http"
     "os"
+    "os/signal"
+    "strconv"
+    "syscall"
+
+    "github.com/gorilla/websocket"
 )
 
-// 核心：event_loop 读取 Hand 层发来的帧，转发给 Chrome 扩展处理
-// Chrome 扩展通过 Native Messaging 回 response，Host 再写回 Hand 层
+// 通过环境变量知道统一端口（install.sh 写进 Chrome Native Messaging manifest 的 args）
+// 或者 Host 启动时读 ~/.hivemtk/nm_host.conf
+var (
+    serverURL = envOr("HIVE_MTK_SERVER_URL", "http://127.0.0.1:8080")
+    wsURL     = envOr("HIVE_MTK_WS_URL", "ws://127.0.0.1:8080/internal/browser/ws")
+    token     = envOr("HIVE_MTK_INTERNAL_TOKEN", "")
+)
+
 func main() {
+    // 1. 连 user-server 统一端口的 WebSocket
+    hdr := http.Header{"Authorization": []string{"Bearer " + token}}
+    wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, hdr)
+    if err != nil {
+        log.Fatalf("连 user-server /internal/browser/ws 失败: %v", err)
+    }
+    defer wsConn.Close()
+    log.Println("✅ Go NM Host 已连接 user-server 统一端口 WebSocket")
+
+    // 2. 发注册消息
+    wsConn.WriteJSON(map[string]any{
+        "type":    "register",
+        "version": "1.0.0",
+        "pid":     os.Getpid(),
+    })
+
+    // 3. 主循环：从 WebSocket 拿 command → 写帧给 Chrome 扩展 → 等响应 → WS 回传
     for {
-        // 1. 读 Hand 层发来的帧（4 字节 LE 长度头 + JSON body）
-        var length uint32
-        if err := binary.Read(os.Stdin, binary.LittleEndian, &length); err != nil {
-            if err == io.EOF { os.Exit(0) }
-            return
-        }
-        if length > 64*1024*1024 { return } // Chrome 扩展→Host 64 MiB 限制
-
-        body := make([]byte, length)
-        if _, err := io.ReadFull(os.Stdin, body); err != nil { return }
-
-        var msg map[string]any
-        if err := json.Unmarshal(body, &msg); err != nil {
-            writeFrame(map[string]any{"ok": false, "error": "invalid_json"})
+        // 3a. 从 WebSocket 读 command
+        _, raw, err := wsConn.ReadMessage()
+        if err != nil {
+            log.Printf("WebSocket 断开，重连中...: %v", err)
+            reconnect(wsURL, token)
             continue
         }
 
-        // 2. 转发给 Chrome 扩展（Native Messaging）
-        //    Host 作为 Chrome 启动的子进程，Chrome 已把 msg 转给扩展
-        //    扩展处理完会通过 Native Messaging 回 response
-        //    但——这里有个关键点：我们是 Hand → Host → Chrome 扩展
-        //    Hand 通过 exec.Command 启动 Host，Hand 是 Host 的父进程
-        //    Chrome 也需要 Host 作为 Native Messaging Host
-        //    → Host 需要同时处理两条通道：Hand 的 stdin/stdout + Chrome 的 stdin/stdout
-        //    → 这不可能（一个进程一个 stdin）
-        //
-        // 正确做法：Host 有两个职责：
-        //   a) 连接 Chrome 扩展（Native Messaging 标准通道，stdin/stdout 由 Chrome 管理）
-        //   b) 被 Hand 作为子进程启动 → 不行，因为 Chrome 也需要启动它
-        //
-        // 解法：Hand 不启动 Host，而是 Hand 通过本地 Unix Socket 或 HTTP 连接一个常驻 Host 进程
-        // Host 常驻进程 = Chrome 启动的 + 监听本地 socket 接受 Hand 命令
-        // 这是唯一可行方案（让 Host 成为独立 daemon，Chrome 连接是一个通道，Hand 连接是另一个通道）
+        var cmd map[string]any
+        if err := json.Unmarshal(raw, &cmd); err != nil {
+            wsConn.WriteJSON(map[string]any{"ok": false, "error": "invalid_cmd_json"})
+            continue
+        }
+
+        // 3b. 写 4 字节 LE 帧 + JSON body 给 Chrome 扩展（通过 Chrome 管控的 stdin）
+        if err := writeNativeFrame(cmd); err != nil {
+            wsConn.WriteJSON(map[string]any{"ok": false, "error": fmt.Sprintf("chrome_write: %v", err)})
+            continue
+        }
+
+        // 3c. 等 Chrome 扩展的响应帧（从 Chrome 管控的 stdout 读）
+        resp, err := readNativeFrame()
+        if err != nil {
+            wsConn.WriteJSON(map[string]any{"ok": false, "error": fmt.Sprintf("chrome_read: %v", err)})
+            continue
+        }
+
+        // 3d. 通过 WebSocket 回传给 user-server
+        wsConn.WriteJSON(resp)
     }
+}
+
+// writeNativeFrame 写 4 字节 LE 长度头 + JSON body 到 Chrome 管控的 stdin
+func writeNativeFrame(msg map[string]any) error {
+    body, _ := json.Marshal(msg)
+    header := make([]byte, 4)
+    binary.LittleEndian.PutUint32(header, uint32(len(body)))
+    if _, err := os.Stdout.Write(header); err != nil { return err }
+    _, err := os.Stdout.Write(body)
+    return err
+}
+
+// readNativeFrame 从 Chrome 管控的 stdout 读 4 字节 LE 长度头 + JSON body
+func readNativeFrame() (map[string]any, error) {
+    header := make([]byte, 4)
+    if _, err := io.ReadFull(os.Stdin, header); err != nil {
+        return nil, err
+    }
+    length := binary.LittleEndian.Uint32(header)
+    body := make([]byte, length)
+    if _, err := io.ReadFull(os.Stdin, body); err != nil {
+        return nil, err
+    }
+    var resp map[string]any
+    return resp, json.Unmarshal(body, &resp)
 }
 ```
 
-> ⚠️ **架构修正（重要！）**：
->
-> 最初方案"Hand 启动 Host 子进程 + stdio pipe"**行不通**。因为：
-> - Host 必须被 Chrome 启动（才能走 Native Messaging 连接到扩展）
-> - Chrome 启动的子进程 stdin/stdout 由 Chrome 管控
-> - 如果 Hand 也启动 Host → Host 有两个父进程，冲突
->
-> **正确架构**：
->
-> ```
-> 方案 A：Host 是独立 daemon（推荐）
-> ┌──────────────┐     HTTP / Unix Socket      ┌──────────────┐     Native Messaging     ┌──────────────┐
-> │   Go Hand    │ ──────────────────────────▶ │ Go NM Host   │ ──────────────────────▶ │ Chrome 扩展   │
-> │ (user-server)│     localhost:18789         │ (常驻进程)   │     Chrome 管理 stdio   │ Manifest V3   │
-> └──────────────┘                             └──────────────┘                           └──────────────┘
->                                                    ▲
->                                                    │ Chrome 启动 Host 进程
->
-> 方案 B：MCP 模式（Chrome 触发时启动，一次性）
-> ┌──────────────┐   websocket   ┌──────────────┐
-> │   Go Hand    │ ◀────────────▶ │ Go NM Host   │  ← 保持 Host 常驻
-> │ (user-server)│   ws://local   │ (daemon)     │
-> └──────────────┘                └──────────────┘
->                                         │ Native Messaging
->                                         ▼
->                                   ┌──────────────┐
->                                   │ Chrome 扩展   │
->                                   └──────────────┘
-> ```
->
-> 本项目采用**方案 A（Host 是独立 HTTP 服务 + Native Messaging 客户端）**，理由：
-> - Chrome 扩展 `connectNative()` 会 fork Host 进程 → Host 启动时连接一个预注册的本地 HTTP 服务（由系统 init.d / launchd / systemd 常驻运行）
-> - 这样 Host 进程同时有两条通道：Chrome 的 stdio（Native Messaging）+ Hand 的 HTTP（localhost:18789）
-> - 协议：Hand ↔ Host 用 HTTP JSON-RPC；Host ↔ Chrome 扩展用 Native Messaging 4 字节 LE 帧
-
-### 5.3 manifest.json
+### 5.3 manifest.json（Chrome Native Messaging 清单）
 
 ```json
 {
@@ -1241,26 +1304,25 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 │  internal/router/browser_automation_routes.go: SetupBrowserAutomationRoutes()        │
 │   ba.POST("/tasks/:id/run", taskCtrl.Run)                                           │
 │   ↓                                                                                 │
-│  internal/browser_automation/controller/browser_task_controller.go: TaskCtrl.Run()  │
+│  internal/browser_automation/controller/task.go: TaskCtrl.Run()  │
 │   c.Param("id") → c.GetUint("user_id") → 调 taskSvc.RunTask(ctx, taskID, userID)  │
 │   ↓                                                                                 │
-│  internal/browser_automation/service/browser_task_service.go: RunTask()             │
+│  internal/browser_automation/service/task.go: RunTask()             │
 │   taskRepo.GetByID(ctx, id, userID) → sessionRepo.Create(ctx, session)              │
 │   ↓                                                                                 │
-│  internal/browser_automation/service/browser_executor.go: ExecuteSession(session)   │
+│  internal/browser_automation/service/executor.go: ExecuteSession(session)   │
 │   遍历 task.Steps → 每个 step 调 hand.OpenTab/Click/Type/Snapshot/Screenshot...     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                       │ BrowserHand.send() HTTP JSON-RPC
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ③ Go NM Host (独立 daemon, localhost:18789)                                          │
+│ ③ Go NM Host (Chrome fork 的独立进程, HTTP client 连统一端口)                       │
 │                                                                                     │
-│  user-server/cmd/nm-host/main.go: HTTP handler                                    │
-│   POST /rpc {"action":"open_tab","url":"...","active":false}                         │
-│   ↓                                                                                 │
-│   写 4 字节 Little Endian 帧 → Chrome Native Messaging stdio → 发送给扩展            │
-│   ↓                                                                                 │
-│   读 Chrome 扩展 response frame → 返回 HTTP JSON 给 Go Hand                         │
+│  user-server/cmd/nm-host/main.go:                                                   │
+│   启动时 WebSocket 连接 ws://127.0.0.1:8080/internal/browser/ws                      │
+│   user-server 统一端口收到 command → 通过 WS 推给 Host                              │
+│   Host 写 4 字节 LE 帧 → Chrome Native Messaging stdio → 扩展                       │
+│   Host 读扩展 response frame → WS 推回 user-server                                 │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                       │ Native Messaging 4B LE 帧 + JSON
                                       ▼
@@ -1289,9 +1351,9 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
                                       ▼
 │ ④ 扩展 → ③ Host → ② Go Hand → executor 更新 session.status / step.result → 写 DB     │
 │                                                                                     │
-│  internal/browser_automation/repository/browser_step.go: UpdateStatus()             │
-│  internal/browser_automation/repository/browser_session.go: UpdateStatus()          │
-│  internal/browser_automation/repository/browser_task.go: UpdateStatus()             │
+│  internal/browser_automation/repository/step.go: UpdateStatus()             │
+│  internal/browser_automation/repository/session.go: UpdateStatus()          │
+│  internal/browser_automation/repository/task.go: UpdateStatus()             │
 │                                                                                     │
 │  ① 前端 2s 轮询 → SessionMonitor.vue 实时更新每个 step 的 pending/running/success/failed 状态 │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -1349,7 +1411,7 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 ### 8.1 LLM Routing（Brain 模式）
 
 ```
-service/browser_brain_service.go:
+service/brain.go:
   1. 调 Hand.snapshot(tabID) → 拿到 @e1/@e2 refs snapshot
   2. 调 aiagent/llm.Dispatcher（项目已有的 LLM 路由）
      - brain_goal + snapshot 作为 prompt
@@ -1370,7 +1432,7 @@ controller 里:
 ### 8.3 Cron 调度
 
 ```
-service/browser_cron_service.go:
+service/cron.go:
   1. 用 existing internal/pkg/cron（项目已有 cron 框架）
   2. CronTrigger.Enabled=true + NextRunAt 到期 → 自动调 taskSvc.RunTask()
   3. CronTrigger.LastRunAt / NextRunAt 自动更新
@@ -1401,27 +1463,27 @@ BrowserHand.mu sync.Mutex:
 
 ```
 internal/migration/migrations/v3_37_0_browser_automation_migration.go  ← 5 张表 DDL
-internal/browser_automation/model/browser_task.go
-internal/browser_automation/model/browser_session.go
-internal/browser_automation/model/browser_step.go
-internal/browser_automation/model/browser_cron.go
-internal/browser_automation/model/browser_llm_plan.go
-internal/browser_automation/repository/browser_task.go
-internal/browser_automation/repository/browser_session.go
-internal/browser_automation/repository/browser_step.go
-internal/browser_automation/repository/browser_cron.go
-internal/browser_automation/repository/browser_llm_plan.go
-internal/browser_automation/service/browser_task_service.go
-internal/browser_automation/service/browser_executor.go
-internal/browser_automation/service/browser_brain_service.go
-internal/browser_automation/service/browser_cron_service.go
-internal/browser_automation/service/browser_hand.go
-internal/browser_automation/controller/browser_task_controller.go
-internal/browser_automation/controller/browser_session_controller.go
-internal/browser_automation/controller/browser_cron_controller.go
-internal/browser_automation/dto/browser_task.go
-internal/browser_automation/dto/browser_session.go
-internal/browser_automation/dto/browser_cron.go
+internal/browser_automation/model/task.go
+internal/browser_automation/model/session.go
+internal/browser_automation/model/step.go
+internal/browser_automation/model/cron.go
+internal/browser_automation/model/llm_plan.go
+internal/browser_automation/repository/task.go
+internal/browser_automation/repository/session.go
+internal/browser_automation/repository/step.go
+internal/browser_automation/repository/cron.go
+internal/browser_automation/repository/llm_plan.go
+internal/browser_automation/service/task.go
+internal/browser_automation/service/executor.go
+internal/browser_automation/service/brain.go
+internal/browser_automation/service/cron.go
+internal/browser_automation/service/hand.go
+internal/browser_automation/controller/task.go
+internal/browser_automation/controller/session.go
+internal/browser_automation/controller/cron.go
+internal/browser_automation/dto/task.go
+internal/browser_automation/dto/session.go
+internal/browser_automation/dto/cron.go
 internal/router/browser_automation_routes.go  ← 注册 + DI 装配
 ```
 
@@ -1736,7 +1798,7 @@ Chrome 扩展 background.js:
 ### 14.1 执行完成后自动通知
 
 ```go
-// 新增 FeedbackService（service/browser_feedback.go）
+// 新增 FeedbackService（service/feedback.go）
 type FeedbackService struct {
     // 复用项目已有的通知渠道（channelbot 里的飞书/钉钉/企微）
     larkClient   *lark.BotClient
@@ -1872,9 +1934,9 @@ ALTER TABLE browser_steps ADD COLUMN extract_data JSONB;
 ## 16. 新增文件清单（Feedback 层 + 补齐）
 
 ```
-internal/browser_automation/service/browser_feedback.go   ← 【新增】通知 + LLM 总结 + 导出
+internal/browser_automation/service/feedback.go   ← 【新增】通知 + LLM 总结 + 导出
 internal/browser_automation/service/browser_feedback_test.go
-internal/browser_automation/dto/browser_feedback.go       ← 【新增】NotifyConfigReq / ExportReq
+internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigReq / ExportReq
 ```
 
 **更新后总文件数**：
