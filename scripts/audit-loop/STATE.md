@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：15（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13/R14/R15 为 0 缺陷轮）
-- 下一轮角度：error-handling
+- 已完成轮次：16（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13/R14/R15/R16 为 0 缺陷轮）
+- 下一轮角度：concurrency
 
 ## 轮次报告
+
+### R16 — error-handling（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R4 修复点回归复核、`go vet ./...` 全量、controller 层忽略 err 二圈复扫、前端 lint/测试回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R4 修复点在位：`wecom.go` RefreshAccount 回查判错（`account, err = GetAccountByID` + 显式 500）与 `main.js` 全局 `errorHandler`/`unhandledrejection` 兜底均无回退
+- `go vet ./...` 零输出；controller 层 `x, _ = Get...` 模式二圈复扫无新增（此前唯一一处已修）
+- 前端 `eslint src` errors = 0（R8 成果保持）；vitest 6 文件 174 用例全过
+
+**验证证据**：`go vet ./...` 全绿；eslint errors=0；vitest 174 用例全过。
+
+**Commit**：见 git log `chore(audit): 审计R16-error-handling: 0缺陷轮核查记录与状态推进`
 
 ### R15 — architecture（2026-09-09）— 第二圈，0 缺陷轮
 
