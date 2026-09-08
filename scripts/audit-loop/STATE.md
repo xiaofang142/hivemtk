@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：5 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：9 / 9
-- 下一轮角度：data-integrity
+- 已完成轮次：6 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：9 / 9（R6 为 0 缺陷轮）
+- 下一轮角度：api-contract
 
 ## 轮次报告
+
+### R6 — data-integrity（2026-09-08）— 0 缺陷轮
+
+**审计范围**：多表写事务覆盖、唯一约束与重复行风险（geo_daily_stats 教训复查）、金额字段存储类型、恢复/备份原子性、迁移幂等性。
+
+**核查通过项（0 缺陷）**：
+- `geo_daily_stats`：uniqueIndex `idx_date_engine_intent`（stat_date+engine+intent）在 model tag 声明且经 `db.AutoMigrate` 落库；仓储 Upsert 用 `FirstOrCreate+Assign` 语义防重；聚合侧 `runeTruncate(r.Query, 40)` 保证 intent 不超 `varchar(64)`，避免截断后超长写失败破坏唯一键 — 历史重复行问题（见 GEO 观测模块交付记录）已闭环
+- 消息主链路原子性：`MessageHubRepository.CreateWithInbox` 消息创建+会话更新包同一事务；`msg_id` 幂等去重 + `isDuplicateKeyErr` 兜底；`uk_inbox_conv_channel`（platform+account_id+customer_id）唯一键防并发重发建重复会话，`CreateOrUpdateByChannel` 撞键退化为更新
+- 金额存储：`SalesEvent.Amount` 统一 `numeric(12,2)`（model 注释明示杜绝 float 误差），历史迁移 `amount_money_migration.go` 有 ROUND 转换；float64 字段仅剩评分/奖励/置信度等统计语义，合规
+- 备份恢复：`RestoreTable` 整表 DELETE + 逐行 Create 包同一事务，任一行失败整体回滚，且有 `allowedBackupTables` 白名单防任意表操作
+- 会话分配：`AssignSession` 用 `SELECT FOR UPDATE`（clause.Locking）+ 手动事务 + recover 回滚，防超卖并发分配
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；geo/repository/repository 三包测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R6-data-integrity: 0缺陷轮核查记录`（本轮无代码修复，仅状态推进）
 
 ### R5 — concurrency（2026-09-08）
 
