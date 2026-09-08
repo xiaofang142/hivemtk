@@ -37,6 +37,7 @@ type SystemUserRepository interface {
 
 	ListByRole(ctx context.Context, role string, page, size int) ([]*model.SystemUser, int64, error)
 	CountByRole(ctx context.Context, role string) (int64, error)
+	CountByRoles(ctx context.Context, roles []string) (map[string]int64, error)
 	CountAdmins(ctx context.Context) (int64, error)
 	DeleteSafe(ctx context.Context, id uint) error
 	SetEnabled(ctx context.Context, id uint, enabled bool) error
@@ -196,6 +197,30 @@ func (r *systemUserRepo) CountByRole(ctx context.Context, role string) (int64, e
 		return 0, err
 	}
 	return n, nil
+}
+
+// CountByRoles 批量统计多个角色的成员数（一次 GROUP BY 替代 N 次 CountByRole，消除角色列表 N+1）。
+func (r *systemUserRepo) CountByRoles(ctx context.Context, roles []string) (map[string]int64, error) {
+	out := make(map[string]int64, len(roles))
+	if len(roles) == 0 {
+		return out, nil
+	}
+	type row struct {
+		Role  string
+		Count int64
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).Model(&model.SystemUser{}).
+		Select("role, COUNT(*) as count").
+		Where("role IN ?", roles).
+		Group("role").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.Role] = r.Count
+	}
+	return out, nil
 }
 
 func (r *systemUserRepo) CountAdmins(ctx context.Context) (int64, error) {

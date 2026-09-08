@@ -74,3 +74,19 @@ func (r *AIToolAccountBindingRepository) ListByAccountType(ctx context.Context, 
 	err := r.db.WithContext(ctx).Where("account_type = ?", accountType).Find(&bindings).Error
 	return bindings, err
 }
+
+// ListByTools 批量获取多个工具的账号绑定（一次 IN 查询替代 N 次 ListByTool，消除列表页 N+1）。
+func (r *AIToolAccountBindingRepository) ListByTools(ctx context.Context, toolNames []string) (map[string][]model.AIToolAccountBinding, error) {
+	out := make(map[string][]model.AIToolAccountBinding, len(toolNames))
+	if len(toolNames) == 0 {
+		return out, nil
+	}
+	var bindings []model.AIToolAccountBinding
+	if err := r.db.WithContext(ctx).Where("tool_name IN ?", toolNames).Find(&bindings).Error; err != nil {
+		return nil, err
+	}
+	for _, b := range bindings {
+		out[b.ToolName] = append(out[b.ToolName], b)
+	}
+	return out, nil
+}

@@ -33,17 +33,20 @@ func NewRoleServiceWithRepo(repo repository.SystemUserRepository) *RoleService {
 }
 
 func (s *RoleService) ListRoles(ctx context.Context) ([]*RoleWithCount, error) {
+	codes := make([]string, 0, len(model.SystemRoleList))
+	for _, r := range model.SystemRoleList {
+		codes = append(codes, r.Code)
+	}
+	counts, err := s.userRepo.CountByRoles(ctx, codes)
+	if err != nil {
+		logger.Warnf("[RoleService] 批量统计角色成员数失败，全部记 0: %v", err)
+		counts = map[string]int64{}
+	}
 	roles := make([]*RoleWithCount, 0, len(model.SystemRoleList))
 	for _, r := range model.SystemRoleList {
-		count, err := s.userRepo.CountByRole(ctx, r.Code)
-		if err != nil {
-
-			logger.Warnf("[RoleService] 统计角色 %s 成员数失败，记 0: %v", r.Code, err)
-			count = 0
-		}
 		roles = append(roles, &RoleWithCount{
 			SystemRole:  r,
-			MemberCount: count,
+			MemberCount: counts[r.Code],
 		})
 	}
 	return roles, nil

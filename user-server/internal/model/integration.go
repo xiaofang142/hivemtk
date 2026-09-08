@@ -48,8 +48,8 @@ func (SyncLog) TableName() string {
 // ExternalCustomer 外部客户（CRM 对接）
 type ExternalCustomer struct {
 	ID            uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform      string     `gorm:"type:varchar(50);index" json:"platform"`
-	ExternalID    string     `gorm:"type:varchar(100);index" json:"external_id"`
+	Platform      string     `gorm:"type:varchar(50);index:idx_extcust_platform_external,priority:1" json:"platform"`
+	ExternalID    string     `gorm:"type:varchar(100);index:idx_extcust_platform_external,priority:2" json:"external_id"`
 	Name          string     `gorm:"type:varchar(100)" json:"name"`
 	Phone         string     `gorm:"type:varchar(50);index" json:"phone"`
 	Email         string     `gorm:"type:varchar(100)" json:"email"`
