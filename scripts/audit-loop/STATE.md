@@ -5,11 +5,33 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：3 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：6 / 6
-- 下一轮角度：error-handling
+- 已完成轮次：4 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：8 / 8
+- 下一轮角度：concurrency
 
 ## 轮次报告
+
+### R4 — error-handling（2026-09-08）
+
+**审计范围**：go vet 全量、忽略 err（`_, _ =` / `x, _ :=`）扫描、panic 风险（裸下标 [0]/[1]、nil 解引用、无 ok 类型断言）、显式 panic 站点、前端未捕获 Promise 与全局异常处理器。
+
+**发现与处置（2 项，均已修复）**：
+
+1. `user-server/internal/controller/wecom.go:279` — `RefreshAccount` 刷新 token 后回查账号 `account, _ = GetAccountByID(...)` 忽略错误（P2）：回查失败时会把**旧账号数据**当成功返回，token 实际已换新，调用方拿到过期 token 静默失败。**处置**：显式判错并返回 500 语义错误。
+2. `user-web/src/main.js` — 无 `app.config.errorHandler` 与 `unhandledrejection` 监听（P2）：Vue 渲染异常与未捕获 Promise 拒绝静默丢失，产生"白屏无报错"不可观测故障。**处置**：补全局兜底，统一落 console。
+
+**核查通过项（无需修复）**：
+- `go vet ./...` 全零
+- service 层 24 处 `_, _ =` 全部为 best-effort 设计（hub.Push 旁路通知/ScoreClue 打分/锁释放/BOM 写响应等，失败不影响主链路，部分已有日志）
+- 显式 panic 5 处：3 处为启动期注册冲突（快速失败，合理）、1 处 `MustNewChatChannelService`（注释明示语义）、1 处事务 defer recover 后 re-panic（标准模式）
+- 高危裸下标 [0]/[1] 抽查 15 处（ai_tagger/faq/inbox/channel_media 等）全部有长度守卫或由正则捕获组保证
+- 前端 45 处 `.then` 链由 axios 响应拦截器统一 reject + toast，无裸悬空 Promise
+
+**既有问题记录（非本轮引入）**：user-web 的 eslint 工具链缺 `@eslint/js` 依赖（`eslint.config.mjs` 注释自述"尚未启用"），`npm run lint` 本就不可用；本轮以前端 `vite build` 成功 + vitest 174 用例全过作为前端回归证据。eslint 依赖补装列入 frontend 角度轮次处理。
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；controller/service Go 测试全绿；前端生产构建成功 + vitest 6 文件 174 用例全过。
+
+**Commit**：`621ae5b`
 
 ### R3 — architecture（2026-09-08）
 
