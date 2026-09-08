@@ -5,11 +5,29 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：10 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：13 / 13（R6 为 0 缺陷轮）
-- 下一轮角度：config-deploy
+- 已完成轮次：11 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：14 / 14（R6 为 0 缺陷轮）
+- 下一轮角度：docs-consistency
 
 ## 轮次报告
+
+### R11 — config-deploy（2026-09-08）
+
+**审计范围**：`.env.example` 键名 vs 代码 `os.Getenv` 消费对照、docker-compose 端口 vs `PORT_REGISTRY.md` vs `config.yaml` 三方对齐、迁移幂等性抽查、config.yaml 死键扫描、DEPLOYMENT_GUIDE 环境变量表核对。
+
+**发现与处置（1 项，已修复）**：
+
+1. 商户签名密钥键名不一致（P1）— `.env-example` 与 `DEPLOYMENT_GUIDE.md` 使用 `MERCHANT_HMAC_SECRET`，但代码实际消费链为 `config/platform.yaml` 的 `secret: "${MERCHANT_API_SECRET}"`（`os.ExpandEnv` 插值）→ `PlatformCfg.Secret` → `platform/client.go` HMAC 签名（也直接读 `os.Getenv("MERCHANT_API_SECRET")`）。按文档配置 `MERCHANT_HMAC_SECRET` 会被**静默忽略**，启动时报 "MERCHANT_API_SECRET 未配置"。**处置**：`.env-example` 与 DEPLOYMENT_GUIDE 两处统一改为 `MERCHANT_API_SECRET`（代码侧为既定事实、bootstrap.sh/测试已使用该键，故改文档侧）。
+
+**核查通过项（无需修复）**：
+- `.env.example`（user-server）4 个键全部有真实消费方：`VISITOR_TOKEN_SECRET`（config.yaml 插值→WebSocket 访客 token）、`USER_JWT_SECRET`（jwt.go panic 级校验）、`POSTGRES_PASSWORD`（docker-compose `:?` 强制）、`FIELD_ENCRYPTION_KEY`（`internal/pkg/crypto/field.go` AEAD 初始化）
+- 端口三方一致：8202 PG / 8203 Redis（compose 默认=PORT_REGISTRY）；8204 API / 8207-8209 推理栈（宿主机进程）；`DB_PORT:8232` 为宿主机直连 Dev 模式默认，文档明示
+- 迁移幂等性：`amount_money_migration` 等经 `information_schema.columns` 列存在性检查；`CREATE ... IF NOT EXISTS` 模式广泛使用；注册表机制防重放
+- config.yaml 顶层键与 config struct yaml tag 全对齐，无死键；`QINIU_ACCESS_KEY/DEEPL_API_KEY` 等经 `${VAR}` 插值消费，非死键
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿（文档/示例文件改动，无代码行为变化）。
+
+**Commit**：`8e45b53`
 
 ### R10 — test-coverage（2026-09-08）
 
