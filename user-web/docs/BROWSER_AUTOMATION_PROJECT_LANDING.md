@@ -1577,7 +1577,7 @@ cmd/nm-host/manifest.json.template  ← Chrome Native Messaging 清单模板
 ### 11.2 Step DTO（精确字段）
 
 ```go
-// dto/browser_task.go 里的 StepItem（前端编排 → 后端落库）
+// dto/task.go 里的 StepItem（前端编排 → 后端落库）
 type StepItem struct {
     Action       string `json:"action" binding:"required,oneof=open_tab click type snapshot markdown screenshot wait wait_for_selector scroll extract close_tab"`
     Target       string `json:"target"`                       // click/type/scroll/extract 用
@@ -1935,7 +1935,7 @@ ALTER TABLE browser_steps ADD COLUMN extract_data JSONB;
 
 ```
 internal/browser_automation/service/feedback.go   ← 【新增】通知 + LLM 总结 + 导出
-internal/browser_automation/service/browser_feedback_test.go
+internal/browser_automation/service/feedback_test.go
 internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigReq / ExportReq
 ```
 
