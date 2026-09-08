@@ -5,11 +5,29 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：17（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13–R17 为 0 缺陷轮）
-- 下一轮角度：data-integrity
+- 已完成轮次：18（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13–R18 为 0 缺陷轮）
+- 下一轮角度：api-contract
 
 ## 轮次报告
+
+### R18 — data-integrity（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：R6 六项核查二圈复扫（geo_daily_stats 唯一索引、金额存储、备份白名单、会话分配行锁、消息链路事务、迁移幂等）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项（逐项在位确认）**：
+- `geo_daily_stats` uniqueIndex `idx_date_engine_intent` tag 在位
+- `SalesEvent.Amount` `numeric(12,2)` 存储不变
+- `allowedBackupTables` 备份/恢复白名单在位
+- 会话分配 `SELECT FOR UPDATE`（clause.Locking Strength:UPDATE）在位
+- 消息链路 `Transaction(func(tx *gorm.DB))` 原子写在位
+- geo repository/service + repository 测试全绿
+
+**验证证据**：`go test ./internal/geo/... ./internal/repository/` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R18-data-integrity: 0缺陷轮核查记录与状态推进`
 
 ### R17 — concurrency（2026-09-09）— 第二圈，0 缺陷轮
 
