@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：7 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：10 / 10（R6 为 0 缺陷轮）
-- 下一轮角度：frontend
+- 已完成轮次：8 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：11 / 11（R6 为 0 缺陷轮）
+- 下一轮角度：perf
 
 ## 轮次报告
+
+### R8 — frontend（2026-09-08）
+
+**审计范围**：eslint 工具链启用（R4 遗留项）与 src 全量 lint 归零、Vue 正确性缺陷（解析错误/重复 key/prop 直改/computed 漏 .value/deprecated 语法）、空块静默、no-undef 真缺陷、受限导入规范。
+
+**发现与处置（1 项打包修复，163 errors → 0）**：
+
+1. eslint 工具链（P2 打包项）— 同事在工作区补装了 `@eslint/js`/`eslint-plugin-vue`/`globals` 依赖并修了 `import.meta` globals 误用，但 src 仍有 163 个 error。**处置（分型全清）**：
+   - **globals 白名单升级**：`globals.browser + globals.node` 替代手写 18 项白名单 → 清零 38 个 `no-undef`（WebSocket/fetch/btoa/caches/URLSearchParams 等标准 API）
+   - **Vue 正确性 30 处**：QuickReplyPanel 模板解析错误（字面 `{{` 写法改为模板字符串）、SubMenuItem 与 props 重复 key（模板改用 `props.` 前缀引用）、WeComSendDialog 直接改 prop（改 emit）、qq/account `computed` 漏 `.value`（真实逻辑 bug，保存时锁状态判断恒真）、intentRecognition 过滤器缺 `||` 致意外换行调用（真实逻辑 bug，keywords 过滤失效）、6 文件 Vue2 filter 语法改 `??` 兜底、2 文件 `beforeDestroy` 改 `beforeUnmount`
+   - **no-empty 70 处**：批量补显式注释（空 catch 补 best-effort 语义说明/空分支补 no-op），可读性归一
+   - **真缺陷 6 处 no-undef 修根**：MaterialSelectDialog 取消按钮误发 `confirm`（引用未定义变量且语义错误）、integration 别名笔误、sms Jobs 缺 `toList` 导入、tiktok CardStats 函数名大小写笔误、customer360 未定义 `getRoleLabel` 内联映射、assetBundle `weaveOk` 作用域错误提升（原代码 catch 判断恒真）
+   - **散错 19 处**：3 个受限 default 导入改 `{ http }`、5 处无用转义（regex `\-` 与模板字符串 `<\/script>` 改拼接避免 SFC 解析破坏）、5 处无用赋值、5 处 preserve-caught-error 补 `{ cause }` 错误链、1 处未用 `$index`
+
+**验证证据**：`npx eslint src` errors = 0；`vite build` 生产构建成功；`vitest run` 6 文件 174 用例全过。
+
+**Commit**：`28d3bad`
 
 ### R7 — api-contract（2026-09-08）
 
