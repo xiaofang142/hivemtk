@@ -12,7 +12,7 @@
 
     
     <template v-for="item in menu.children" :key="item.path || item.key">
-      <sub-menu-item :menu="item" :icon-components="iconComponents" />
+      <sub-menu-item :menu="item" :icon-components="props.iconComponents" />
     </template>
   </el-sub-menu>
 
@@ -25,14 +25,12 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { resolveRouteIcon, routeIconMap } from '@/utils/iconMap'
+import { resolveRouteIcon } from '@/utils/iconMap'
 
 import i18n from '@/i18n'
 const t = i18n.global.t
 
 const router = useRouter()
-
-const iconComponents = routeIconMap;
 
 const handleMenuClick = (menu) => {
   if (menu.path) {

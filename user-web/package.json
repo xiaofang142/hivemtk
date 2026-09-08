@@ -45,6 +45,7 @@
     "web-vitals": "^4.2.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@intlify/unplugin-vue-i18n": "^4.0.0",
     "@playwright/test": "^1.61.1",
     "@storybook/addon-a11y": "^8.0.0",
@@ -54,7 +55,10 @@
     "@vitejs/plugin-vue": "^5.2.3",
     "@vitest/coverage-v8": "^4.1.10",
     "@vue/test-utils": "^2.4.11",
+    "eslint": "^10.10.0",
+    "eslint-plugin-vue": "^10.11.0",
     "eslint-plugin-vuejs-accessibility": "^2.4.1",
+    "globals": "^17.12.0",
     "jsdom": "^29.1.1",
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.1.0",

@@ -3,7 +3,7 @@
     <el-card class="box-card">
       <template #header>
         <div class="card-header">
-          <span>抖音卡片统计 - {{ cardInfo.title | '加载中...' }}</span>
+          <span>抖音卡片统计 - {{ cardInfo.title ?? '加载中...' }}</span>
           <div class="header-actions">
             <el-button @click="goBack">{{ $t('返回') }}</el-button>
             <el-date-picker

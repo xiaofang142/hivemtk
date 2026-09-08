@@ -325,7 +325,7 @@ const submitForm = () => {
         app_secret: accountForm.app_secret,
         webhook_secret: accountForm.webhook_secret,
         // 公网域名自动推导场景下不回传（空值=后端推导/保留原值）
-        webhook_url: webhookUrlLocked ? '' : accountForm.webhook_url,
+        webhook_url: webhookUrlLocked.value ? '' : accountForm.webhook_url,
         webhook_enabled: accountForm.webhook_enabled,
         ai_agent_enabled: accountForm.ai_agent_enabled,
         status: accountForm.status

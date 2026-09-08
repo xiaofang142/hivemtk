@@ -432,8 +432,8 @@ const runSandbox = async () => {
   sandbox.history.push({ role: 'user', content: userQuery })
   sandbox.input = ''
 
+  let weaveOk = false;
   try {
-    let weaveOk = false;
     const weaveResp = await weaveBundle({
       asset_id: bundle.asset_id,
       user_query: userQuery,

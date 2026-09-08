@@ -1,4 +1,4 @@
-import http from '@/utils/request'
+import { http } from '@/utils/request'
 
 export const SystemApi = {
   getConfig() {

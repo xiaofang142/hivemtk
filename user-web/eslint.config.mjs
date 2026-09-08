@@ -17,6 +17,7 @@
  */
 import pluginVue from 'eslint-plugin-vue'
 import js from '@eslint/js'
+import globals from 'globals'
 
 export default [
   js.configs.recommended,
@@ -28,37 +29,22 @@ export default [
       ecmaVersion: 2024,
       sourceType: 'module',
       globals: {
-        // Browser 全局变量
-        window: 'readonly',
-        document: 'readonly',
-        localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        console: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        URL: 'readonly',
-        Blob: 'readonly',
-        FormData: 'readonly',
-        HTMLElement: 'readonly',
-        Event: 'readonly',
-        FileReader: 'readonly',
-        history: 'readonly',
-        location: 'readonly',
-        navigator: 'readonly',
-        // Vite 注入
-        import.meta: 'readonly',
+        // Browser 运行时全局变量（window 之外常用的标准 Web API）
+        ...globals.browser,
+        // Vite/Node 构建脚本环境（vite.config.js 等入口需要）
+        ...globals.node,
       },
     },
     rules: {
       // P1-3: 禁止 default 导入 @/utils/request，新代码必须用 { http }
+      // importNames: ['default'] —— 只禁 default 导入；{ http } 命名导入不受影响
       'no-restricted-imports': [
         'error',
         {
           paths: [
             {
               name: '@/utils/request',
+              importNames: ['default'],
               message: "请使用 `import { http } from '@/utils/request'`，不要 default 导入。详见 request.js 顶部说明。",
               allowTypeImports: false,
             },

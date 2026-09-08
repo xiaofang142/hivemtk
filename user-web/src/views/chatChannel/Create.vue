@@ -213,17 +213,18 @@ const rules = {
 const embedCode = computed(() => {
   if (!createdData.value?.app_key) return ''
   const baseURL = window.location.origin
+  const closeTag = '<' + '/script>'
   return `<!-- 将以下代码嵌入到企业网站 </body> 之前 -->
-<script src="${baseURL}/embed/marketing-chat-widget.iife.js" data-app-key="${createdData.value.app_key}"><\/script>
+<script src="${baseURL}/embed/marketing-chat-widget.iife.js" data-app-key="${createdData.value.app_key}">${closeTag}
 <!-- 集成完成！刷新页面即可看到右下角浮标 -->`
 })
 
 const onSubmit = async () => {
-  let valid = false;
+  let valid
   try {
     valid = await formRef.value.validate()
   } catch (e) {
-    return
+    valid = false
   }
   if (!valid) return
   saving.value = true

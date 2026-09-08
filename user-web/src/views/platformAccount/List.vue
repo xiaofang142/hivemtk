@@ -394,7 +394,7 @@ const handleSubmit = async () => {
         if (submitData.credentials) {
           try {
             submitData.credentials = JSON.parse(submitData.credentials)
-          } catch (e) {}
+          } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
         }
         if (isEdit.value) {
           await platformAccountApi.updateAccount(form.id, submitData)

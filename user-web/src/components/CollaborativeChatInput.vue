@@ -100,21 +100,21 @@ async function checkLock() {
   try {
     const lock = await getEditLock(props.sessionId)
     editingLock.value = lock
-    if (lock && lock.holder !== 'me' && lock.expiresAt > Date.now()) {}
-  } catch (_) {}
+    if (lock && lock.holder !== 'me' && lock.expiresAt > Date.now()) { /* no-op */ }
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 async function acquireLock() {
   if (mode.value === 'note') return
   try {
     await acquireEditLock(props.sessionId)
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 async function releaseLock() {
   try {
     await releaseEditLock(props.sessionId)
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 onMounted(() => {

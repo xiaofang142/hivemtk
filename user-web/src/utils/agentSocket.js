@@ -55,7 +55,7 @@ export default class AgentSocket {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(this._storageKey(), String(seq))
       }
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   buildWsUrl() {
@@ -79,7 +79,7 @@ export default class AgentSocket {
     const s = String(this.agentId)
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
     const nodeId = `n${(h % 100).toString().padStart(2, '0')}`;
-    try { sessionStorage.setItem('agentSocket:stickyNodeId', nodeId) } catch (_) {}
+    try { sessionStorage.setItem('agentSocket:stickyNodeId', nodeId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     return nodeId
   }
 
@@ -191,14 +191,14 @@ export default class AgentSocket {
     this.pendingAcks.clear()
     try {
       this.ws.send(JSON.stringify({ type: 'ack', seq: seqs }))
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   startPing() {
     this.stopPing()
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try { this.ws.send(JSON.stringify({ event: 'ping' })) } catch (e) {}
+        try { this.ws.send(JSON.stringify({ event: 'ping' })) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       }
     }, PING_INTERVAL_MS)
   }
@@ -232,7 +232,7 @@ export default class AgentSocket {
       this.ackFlushTimer = null
     }
     if (this.ws) {
-      try { this.ws.close() } catch (e) {}
+      try { this.ws.close() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       this.ws = null
     }
   }

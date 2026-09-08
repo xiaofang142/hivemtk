@@ -11,7 +11,7 @@ export function safeDispose(inst) {
   if (!inst || typeof inst.dispose !== 'function') return
   try {
     if (!inst.isDisposed()) inst.dispose()
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 export { echarts }

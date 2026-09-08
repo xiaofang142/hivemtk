@@ -62,7 +62,7 @@ export default {
     this.chartInst = safeInit(this.$refs.trendChart)
     this.loadAll()
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.chartInst) this.chartInst.dispose()
   },
   methods: {

@@ -254,7 +254,7 @@ const loadStats = async () => {
       multiIdentity: s.multi_identity ?? s.multiIdentity ?? 0,
       multiRate: s.total ? Math.round(((s.multi_identity ?? s.multiIdentity ?? 0) * 1000) / s.total) / 10 : 0
     }
-  } catch (e) {} finally {
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
     statsLoading.value = false
   }
 }

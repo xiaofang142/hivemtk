@@ -98,7 +98,7 @@ const avatarStyle = (msg) => ({ background: avatarBg(msg) })
 
 const onCardAction = (btn) => {
   if (btn && btn.action)
-    {}
+    { /* no-op */ }
 };
 
 const showName = (msg) => {

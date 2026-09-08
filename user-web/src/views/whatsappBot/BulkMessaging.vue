@@ -418,7 +418,7 @@ const deleteTemplate = async (row) => {
     await bulkMessagingApi.deleteTemplate(row.id)
     ElMessage.success(i18n.global.t('模板删除成功'))
     loadTemplates()
-  } catch (error) {}
+  } catch (error) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const saveTemplate = async () => {

@@ -70,7 +70,7 @@ function loadHistory() {
 function saveHistory(events) {
   try {
     localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(events.slice(-MAX_HISTORY)))
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 function loadQueue() {
@@ -85,7 +85,7 @@ function loadQueue() {
 function saveQueue(queue) {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-MAX_QUEUE)))
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 async function flush() {
@@ -128,7 +128,7 @@ const journey = {
       localStorage.setItem(STORAGE_KEY_USER, userId)
       this.userId = userId
       this.track('identify', { ...attributes, user_id: userId })
-    } catch (_) {}
+    } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   },
 
   track(eventName, properties = {}) {

@@ -194,7 +194,7 @@ const mapEvent = (e) => {
   try {
     data = typeof e.event_data === 'string' ? JSON.parse(e.event_data) : (e.event_data || {})
   } catch (_) {
-    data = {}
+    // JSON 解析失败时维持初始空对象
   }
   return {
     id: e.id,

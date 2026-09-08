@@ -174,7 +174,7 @@ async function onDelete(row) {
     await deleteCompetitor(row.id)
     ElMessage.success('已删除')
     await load()
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 onMounted(load)

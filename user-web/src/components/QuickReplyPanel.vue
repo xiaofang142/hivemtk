@@ -29,7 +29,7 @@
             <div class="item-text">{{ item.content }}</div>
             <div v-if="item.variables && item.variables.length" class="item-vars">
               <el-tag v-for="v in item.variables" :key="v" size="small" type="info">
-                {{ '{{' }}{{ v }}{{ '}}' }}
+                {{ `\{\{${v}\}\}` }}
               </el-tag>
             </div>
           </div>

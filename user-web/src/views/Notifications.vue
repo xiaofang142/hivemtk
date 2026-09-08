@@ -234,7 +234,7 @@ const onView = async (row) => {
       await platformAPI.markMessageRead(row.id)
       row.is_read = true
       computeStats()
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 }
 
@@ -245,7 +245,7 @@ const onMarkAllRead = async () => {
     for (const id of ids) {
       try {
         await platformAPI.markMessageRead(id)
-      } catch {}
+      } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     }
     list.value.forEach(m => { m.is_read = true })
     computeStats()

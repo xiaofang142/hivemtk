@@ -184,7 +184,7 @@ const sidebarCollapsed = ref(readSidebarCollapsed())
 const persistSidebarCollapsed = () => {
   try {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const licenseInfo = ref(null);

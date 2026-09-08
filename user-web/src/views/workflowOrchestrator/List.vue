@@ -254,7 +254,7 @@ const handlePublish = async (row) => {
     await workflowOrchestratorApi.publishVersion(row.id)
     ElMessage.success('发布成功')
     loadData()
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const handleArchive = async (row) => {
@@ -263,7 +263,7 @@ const handleArchive = async (row) => {
     await workflowOrchestratorApi.archiveVersion(row.id)
     ElMessage.success('已归档')
     loadData()
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const handleDelete = async (row) => {
@@ -272,7 +272,7 @@ const handleDelete = async (row) => {
     await workflowOrchestratorApi.deleteVersion(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const loadData = async () => {

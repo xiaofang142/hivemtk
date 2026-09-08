@@ -227,7 +227,7 @@ onMounted(async () => {
   try {
     const cfg = await geoApi.getConfig()
     brandName.value = cfg?.brand_name || ''
-  } catch (e) {}
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 })
 </script>
 

@@ -63,7 +63,7 @@ const nextNodeId = shallowRef(1)
 
 function onNodesChange(changes) {
   changes.forEach((c) => {
-    if (c.type === 'position' && c.dragging) {}
+    if (c.type === 'position' && c.dragging) { /* no-op: 显式忽略该分支 */ }
   });
 }
 

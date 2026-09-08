@@ -191,7 +191,7 @@ async function ensureRouteLoaded(path) {
     }
     const routes = Array.isArray(mod.default) ? mod.default : [mod.default]
     for (const r of routes) {
-      try { router.addRoute('Layout', r) } catch (e) {}
+      try { router.addRoute('Layout', r) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     }
     loadedModules.add(moduleName)
     return true

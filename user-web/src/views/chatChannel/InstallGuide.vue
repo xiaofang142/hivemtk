@@ -213,7 +213,7 @@ const embedSnippet = computed(() => {
   };
   document.body.appendChild(btn);
 })();
-<\/script>`;
+<${'/script'}>`;
 })
 
 const loadChannels = async () => {

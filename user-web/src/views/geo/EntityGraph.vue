@@ -169,7 +169,7 @@ const onGenerateSchema = async () => {
       brandName = cfg?.brand_name || brandName
       advantages = cfg?.advantages || ''
       domain = cfg?.domain || ''
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     const data = await geoApi.generateSchema({
       content: currentEntity.value.description || currentEntity.value.name,
       brand_name: brandName,

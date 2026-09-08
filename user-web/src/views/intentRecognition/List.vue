@@ -529,7 +529,7 @@ const filteredDict = computed(() => {
   if (!dictKeyword.value) return intentDict.value
   const kw = dictKeyword.value.toLowerCase()
   return intentDict.value.filter(d =>
-    d.name.includes(kw) || d.type.includes(kw)
+    d.name.includes(kw) || d.type.includes(kw) ||
     (d.keywords || []).some(k => k.includes(kw))
   )
 })

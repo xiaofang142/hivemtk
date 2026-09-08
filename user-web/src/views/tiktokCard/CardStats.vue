@@ -167,7 +167,7 @@ const fetchCardStats = async () => {
       params.endDate = formatDate(dateRange.value[1])
     }
     
-    const res = await getTiktokCardStats(cardId.value, params)
+    const res = await getTikTokCardStats(cardId.value, params)
     Object.assign(cardStats, res);
 
     nextTick(() => {

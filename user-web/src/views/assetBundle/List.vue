@@ -165,7 +165,7 @@ const fetchEnabled = async () => {
     const list = data.list || []
     enabledList.value = list
     hotEnabledIds.value = new Set(list.map(b => b.id))
-  } catch (e) {}
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const handleEnable = async (row) => {

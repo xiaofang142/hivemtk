@@ -124,7 +124,7 @@ function statusType(status) {
 
 async function send() {
   if (!form.value.templateId) return ElMessage.warning('请选择模板')
-  let variables = {}
+  let variables;
   try { variables = JSON.parse(form.value.variablesJson) } catch (e) {
     return ElMessage.error('变量 JSON 格式错误')
   }

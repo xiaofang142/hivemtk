@@ -314,7 +314,7 @@ const showLogDetail = (row) => {
 const deleteIntegration = async (row) => {
   try {
     await ElMessageBox.confirm(`确定删除集成 "${row.name}"？`, '确认', { type: 'warning' })
-    await deleteIntegrationApiFn(row.id)
+    await deleteIntegrationApi(row.id)
     ElMessage.success(i18n.global.t('删除成功'))
     refreshData()
   } catch (e) {

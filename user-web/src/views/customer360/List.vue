@@ -262,7 +262,7 @@ const selectCustomer = async (row) => {
   behaviors.value = messages.map((m) => ({
     time: m.created_at,
     type: m.sender_type === 'user' ? 'primary' : 'success',
-    action: m.sender_name || getRoleLabel(m.sender_type),
+    action: m.sender_name || (m.sender_type === 'user' ? '客户' : '坐席'),
     detail: m.content
   }))
   communications.value = messages.map((m) => ({
