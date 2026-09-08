@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -30,12 +31,18 @@ import (
 // channelMediaFollower 用 Bearer token 下载受保护媒体（WhatsApp Cloud API）。
 type channelMediaFollower func(ctx context.Context, mediaID string) (io.ReadCloser, string, error)
 
-// fetchDefaultMediaFollower 由 integration_reach_adapter 注入各渠道实现，避免 service 直依赖渠道凭证细节。
-var channelMediaFollowers = map[string]channelMediaFollower{}
+// channelMediaFollowers 由装配层注入各渠道实现，避免 service 直依赖渠道凭证细节。
+// 注册多发生在启动装配阶段，但渠道入站是并发读，必须持锁防 map 并发读写 panic。
+var (
+	channelMediaFollowersMu sync.RWMutex
+	channelMediaFollowers   = map[string]channelMediaFollower{}
+)
 
 // RegisterChannelMediaFollower 注册渠道媒体下载器（渠道名小写：whatsapp/wecom/feishu）。
 func RegisterChannelMediaFollower(channel string, f channelMediaFollower) {
 	if f != nil {
+		channelMediaFollowersMu.Lock()
+		defer channelMediaFollowersMu.Unlock()
 		channelMediaFollowers[channel] = f
 	}
 }
@@ -49,6 +56,8 @@ type mediaPersistRecord struct {
 
 // fetchChannelMediaFollower 取渠道下载器的内部入口（测试可注入）。
 func fetchChannelMediaFollower(channel string) (channelMediaFollower, bool) {
+	channelMediaFollowersMu.RLock()
+	defer channelMediaFollowersMu.RUnlock()
 	f, ok := channelMediaFollowers[channel]
 	return f, ok
 }
