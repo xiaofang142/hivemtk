@@ -28,18 +28,43 @@ hivemtk/
 │       ├── stores/browserAutomation.js ← 【新建】Pinia store
 │       └── router/modules/browserAutomation.js ← 【新建】
 │
-└── user-web/extension/               ← 【新建】Chrome MV3 扩展（纯 JS，不含 Go 源码）
-    ├── manifest.json
-    ├── background.js
-    └── icons/
+└── user-web/browser_automation/          ← 【新建】Chrome MV3 扩展独立子项目（对齐 user-web/bridge/）
+    ├── package.json                       ← 独立依赖，name: hivemtk-browser-automation
+    ├── manifest.json                      ← MV3 清单（项目根，build 时复制到 dist/）
+    ├── scripts/
+    │   ├── build.mjs                      ← esbuild 多入口打包（对齐 bridge/scripts/build.mjs）
+    │   └── release.mjs
+    ├── src/
+    │   ├── background/index.js            ← Service Worker：connectNative + 原语分发
+    │   ├── popup/index.js                 ← 弹窗面板：任务快捷启动 / Host 状态
+    │   ├── popup/popup.html
+    │   ├── core/
+    │   │   ├── native-messaging.js        ← Chrome Native Messaging 4B LE 帧协议
+    │   │   ├── primitives.js              ← 11 种原语（click/type/snapshot/screenshot...）
+    │   │   ├── tab-manager.js             ← 后台 tab 管理（active:false）
+    │   │   └── accessibility.js           ← @e1/@e2 refs snapshot 生成
+    │   └── content/                       ← 可选：content script
+    ├── assets/icons/
+    ├── dist/                              ← build 产物（Chrome "Load unpacked" 指向这里）
+    ├── test/                              ← vitest 单测（对齐 bridge/test/）
+    └── docs/
 
-└── user-server/cmd/nm-host/          ← 【新建】Go Native Messaging Host（独立 binary）
-    ├── main.go                       (~80 行，event_loop)
-    ├── install.sh                    ← 编译 + 注册 manifest + 校验
+└── user-server/cmd/nm-host/               ← 【新建】Go Native Messaging Host（独立 binary）
+    ├── main.go                            (~80 行，HTTP client + Native Messaging event_loop)
+    ├── install.sh                         ← 编译 + 注册 manifest + 校验
     └── manifest.json.template
 
-    【说明】Go NM Host 放 cmd/ 下，与 api/、geo-run/、seed/ 等独立 binary 并列，
-    共享 user-server/go.mod。Chrome 扩展目录里只有 JS/CSS，职责单一。
+    【命名对齐关系】
+    ┌────────────────────────────────────────────────────────────┐
+    │ 前端 Chrome 扩展     user-web/browser_automation/            │
+    │ 后端 Go 域           user-server/internal/browser_automation/ │
+    │ Go NM Host binary    user-server/cmd/nm-host/               │
+    │                                                            │
+    │ 完全对齐 bridge 样板：                                      │
+    │   user-web/bridge/            ↔  user-server/internal/bridge/ │
+    │   独立 package.json + esbuild 打包 + vitest 单测             │
+    │   manifest.json 放项目根，build.mjs 复制到 dist/            │
+    └────────────────────────────────────────────────────────────┘
 ```
 
 ### 项目现有约定（必须遵守）
@@ -532,9 +557,10 @@ func (s *TaskService) RunTask(ctx context.Context, taskID uint, userID uint) (*m
 
 ```
 user-server/internal/browser_automation/controller/
-├── task.go   ← 任务 CRUD + 发布/暂停/执行/归档
-├── session.go ← Session 查询 + Step 列表 + 日志回放
-└── cron.go   ← Cron 触发器 CRUD + 启停
+├── task.go      ← 任务 CRUD + 发布/暂停/执行/归档
+├── session.go   ← Session 查询 + Step 列表 + 日志回放
+├── cron.go      ← Cron 触发器 CRUD + 启停
+└── hand.go      ← Host 状态查询 + EnsureHostReady（Admin 专用）
 ```
 
 #### controller/task.go（接口签名预览）
@@ -567,7 +593,7 @@ func NewTaskController(svc *service.TaskService) *TaskController {
 // c.POST("/:id/archive", ctrl.Archive)
 ```
 
-Handler 签名全部是 `func (c *gin.Context)`，用 `c.ShouldBindJSON(&dto)` 绑定，返回 `c.JSON(200, gin.H{"code":0, "data":...})`。
+Handler 签名全部是 `func (c *gin.Context)`，用 `c.ShouldBindJSON(&dto)` 绑定，返回**严格使用 `response.Success(ctx, data, "ok")` / `response.Error(ctx, http.StatusXXX, "msg")`**（参考样板 `geo/controller/alert.go`），禁止手写 `c.JSON(200, gin.H{"code":0,...})`。
 
 ---
 
@@ -640,8 +666,15 @@ func (m *BrowserAutomationMigration) Up(ctx context.Context) error {
 }
 
 func (m *BrowserAutomationMigration) Down(ctx context.Context) error {
-    // DROP TABLE IF EXISTS 反向顺序（steps 依赖 session，先删子表）
-    return nil
+    if m.db == nil { return fmt.Errorf("db is nil") }
+    // 反向顺序：子表先删，父表后删
+    return m.db.WithContext(ctx).Exec(`
+        DROP TABLE IF EXISTS browser_steps CASCADE;
+        DROP TABLE IF EXISTS browser_llm_plans CASCADE;
+        DROP TABLE IF EXISTS browser_cron_triggers CASCADE;
+        DROP TABLE IF EXISTS browser_sessions CASCADE;
+        DROP TABLE IF EXISTS browser_tasks CASCADE;
+    `).Error
 }
 ```
 
@@ -766,6 +799,7 @@ import (
     browserrepo "hivemtk-user/internal/browser_automation/repository"
     browsersvc "hivemtk-user/internal/browser_automation/service"
     "hivemtk-user/internal/middleware"
+    "hivemtk-user/internal/pkg/utils/response"
     "github.com/gin-gonic/gin"
     "gorm.io/gorm"
 )
@@ -789,6 +823,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
     taskSvc     := browsersvc.NewTaskService(taskRepo, sessionRepo, hand, execSvc, brainSvc)
     cronSvc     := browsersvc.NewCronService(cronRepo, taskSvc)
     sessionSvc  := browsersvc.NewSessionService(sessionRepo, stepRepo)
+
+    handCtrl   := browserctrl.NewHandController(hand)
 
     // --- Controller ---
     taskCtrl    := browserctrl.NewTaskController(taskSvc)
@@ -827,13 +863,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
     // Admin 专用
     baAdmin := ba.Group("")
     baAdmin.Use(middleware.AdminAuthMiddleware())
-    baAdmin.POST("/hand/ensure", func(c *gin.Context) {
-        if err := hand.EnsureConnected(c.Request.Context()); err != nil {
-            c.JSON(500, gin.H{"code":500, "message": err.Error()})
-            return
-        }
-        c.JSON(200, gin.H{"code":0, "data": gin.H{"connected": true}})
-    })
+    baAdmin.GET("/hand/status",  handCtrl.GetStatus)
+    baAdmin.POST("/hand/ensure", handCtrl.EnsureHostReady)
 }
 ```
 
@@ -856,66 +887,66 @@ SetupBrowserAutomationRoutes(auth, gormDB)
 import { http } from '@/utils/http'
 
 // 任务
-export const listTasks = (params) =>
+export const listBrowserTasks = (params) =>
   http.get('/api/browser-automation/tasks', params)
 
-export const getTask = (id) =>
+export const getBrowserTask = (id) =>
   http.get(`/api/browser-automation/tasks/${id}`)
 
-export const createTask = (data) =>
+export const createBrowserTask = (data) =>
   http.post('/api/browser-automation/tasks', data)
 
-export const updateTask = (id, data) =>
+export const updateBrowserTask = (id, data) =>
   http.put(`/api/browser-automation/tasks/${id}`, data)
 
-export const deleteTask = (id) =>
+export const deleteBrowserTask = (id) =>
   http.delete(`/api/browser-automation/tasks/${id}`)
 
-export const publishTask = (id) =>
+export const publishBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/publish`)
 
-export const runTask = (id) =>
+export const runBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/run`)
 
-export const pauseTask = (id) =>
+export const pauseBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/pause`)
 
-export const resumeTask = (id) =>
+export const resumeBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/resume`)
 
-export const archiveTask = (id) =>
+export const archiveBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/archive`)
 
 // Cron
-export const listCron = () =>
+export const listBrowserCron = () =>
   http.get('/api/browser-automation/cron')
 
-export const createCron = (data) =>
+export const createBrowserCron = (data) =>
   http.post('/api/browser-automation/cron', data)
 
-export const updateCron = (id, data) =>
+export const updateBrowserCron = (id, data) =>
   http.put(`/api/browser-automation/cron/${id}`, data)
 
-export const deleteCron = (id) =>
+export const deleteBrowserCron = (id) =>
   http.delete(`/api/browser-automation/cron/${id}`)
 
-export const enableCron = (id) =>
+export const enableBrowserCron = (id) =>
   http.post(`/api/browser-automation/cron/${id}/enable`)
 
-export const disableCron = (id) =>
+export const disableBrowserCron = (id) =>
   http.post(`/api/browser-automation/cron/${id}/disable`)
 
 // Session
-export const listSessions = (params) =>
+export const listBrowserSessions = (params) =>
   http.get('/api/browser-automation/sessions', params)
 
-export const getSession = (id) =>
+export const getBrowserSession = (id) =>
   http.get(`/api/browser-automation/sessions/${id}`)
 
-export const listSessionSteps = (id) =>
+export const listBrowserSessionSteps = (id) =>
   http.get(`/api/browser-automation/sessions/${id}/steps`)
 
-export const listTaskSessions = (taskId) =>
+export const listBrowserSessions = (taskId) =>
   http.get(`/api/browser-automation/tasks/${taskId}/sessions`)
 ```
 
@@ -925,13 +956,13 @@ export const listTaskSessions = (taskId) =>
 
 | 页面 | 文件 | 功能 |
 |------|------|------|
-| 任务列表 | `TaskList.vue` | 表格：名称 / 状态 / 类型 / 上次执行时间 / 操作（发布/执行/编辑/归档/删除） |
-| 新建任务 | `TaskCreate.vue` | 分步表单：基本信息 → URL → 编排步骤 → Brain 模式开关 → 定时触发器 |
-| 编辑任务 | `TaskEdit.vue` | 同 Create，预填 |
-| 任务详情 | `TaskDetail.vue` | 概览 + 步骤列表 + 历史执行（sessions）+ Cron 配置 |
-| Session 监控 | `SessionMonitor.vue` | 实时查看运行中 session 的 steps 执行状态、耗时、截图 |
-| Cron 管理 | `CronList.vue` | Cron 触发器列表 + 启停 + 手动触发 |
-| Hand 连通性 | `HandStatus.vue` | Admin 用：检查 Go NM Host 是否连接 + Chrome 扩展状态 |
+| 任务列表 | `List.vue` | 表格：名称 / 状态 / 类型 / 上次执行时间 / 操作（发布/执行/编辑/归档/删除） |
+| 新建任务 | `Create.vue` | 分步表单：基本信息 → URL → 编排步骤 → Brain 模式开关 → 定时触发器 |
+| 编辑任务 | `Editor.vue` | 同 Create，预填 |
+| 任务详情 | `Detail.vue` | 概览 + 步骤列表 + 历史执行（sessions）+ Cron 配置 |
+| Session 监控 | `Monitor.vue` | 实时查看运行中 session 的 steps 执行状态、耗时、截图 |
+| Cron 管理 | `Cron.vue` | Cron 触发器列表 + 启停 + 手动触发 |
+| Hand 连通性 | `Status.vue` | Admin 用：检查 Go NM Host 是否连接 + Chrome 扩展状态 |
 
 ### 4.3 Pinia Store
 
@@ -939,7 +970,7 @@ export const listTaskSessions = (taskId) =>
 
 ```js
 import { defineStore } from 'pinia'
-import { runTask, listTaskSessions, listSessionSteps } from '@/api/browserAutomation'
+import { runBrowserTask, listBrowserSessions, listBrowserSessionSteps } from '@/api/browserAutomation'
 
 export const useBrowserAutomationStore = defineStore('browserAutomation', {
   state: () => ({
@@ -948,11 +979,11 @@ export const useBrowserAutomationStore = defineStore('browserAutomation', {
   }),
   actions: {
     async startRun(taskId) {
-      const res = await runTask(taskId)
+      const res = await runBrowserTask(taskId)
       this.runningSession = res.data
       // 启动轮询（每 2s 查 step 列表直到状态 != running）
       this.pollTimer = setInterval(async () => {
-        const steps = await listSessionSteps(this.runningSession.id)
+        const steps = await listBrowserSessionSteps(this.runningSession.id)
         this.runningSession.steps = steps.data
         const allDone = steps.data.every(s => ['success','failed','skipped'].includes(s.status))
         if (allDone) {
@@ -977,15 +1008,46 @@ export const useBrowserAutomationStore = defineStore('browserAutomation', {
 export default [
   {
     path: '/browser-automation',
-    meta: { title: '浏览器自动化', icon: 'Monitor', group: 'automation' },
+    name: 'BrowserAutomation',
+    meta: { title: '浏览器自动化', icon: 'Monitor', group: 'automation', requiresAuth: true },
     children: [
       { path: '', redirect: '/browser-automation/tasks' },
-      { path: 'tasks', component: () => import('@/views/browserAutomation/TaskList.vue'), meta: { title: '任务列表' } },
-      { path: 'tasks/create', component: () => import('@/views/browserAutomation/TaskCreate.vue'), meta: { title: '新建任务' } },
-      { path: 'tasks/:id/edit', component: () => import('@/views/browserAutomation/TaskEdit.vue'), meta: { title: '编辑任务' } },
-      { path: 'tasks/:id', component: () => import('@/views/browserAutomation/TaskDetail.vue'), meta: { title: '任务详情' } },
-      { path: 'sessions/:id', component: () => import('@/views/browserAutomation/SessionMonitor.vue'), meta: { title: '执行监控' } },
-      { path: 'cron', component: () => import('@/views/browserAutomation/CronList.vue'), meta: { title: '定时触发器' } },
+      {
+        path: 'tasks',
+        name: 'BrowserAutomationList',
+        component: () => import('@/views/browserAutomation/List.vue'),
+        meta: { title: '任务列表', requiresAuth: true }
+      },
+      {
+        path: 'tasks/create',
+        name: 'BrowserAutomationCreate',
+        component: () => import('@/views/browserAutomation/Create.vue'),
+        meta: { title: '新建任务', requiresAuth: true }
+      },
+      {
+        path: 'tasks/:id/edit',
+        name: 'BrowserAutomationEditor',
+        component: () => import('@/views/browserAutomation/Editor.vue'),
+        meta: { title: '编辑任务', requiresAuth: true }
+      },
+      {
+        path: 'tasks/:id',
+        name: 'BrowserAutomationDetail',
+        component: () => import('@/views/browserAutomation/Detail.vue'),
+        meta: { title: '任务详情', requiresAuth: true }
+      },
+      {
+        path: 'sessions/:id',
+        name: 'BrowserAutomationMonitor',
+        component: () => import('@/views/browserAutomation/Monitor.vue'),
+        meta: { title: '执行监控', requiresAuth: true }
+      },
+      {
+        path: 'cron',
+        name: 'BrowserAutomationCron',
+        component: () => import('@/views/browserAutomation/Cron.vue'),
+        meta: { title: '定时触发器', requiresAuth: true }
+      },
     ]
   }
 ]
@@ -1000,7 +1062,7 @@ export default [
 ### 5.1 项目位置
 
 ```
-user-web/extension/
+user-web/browser_automation/
 ├── manifest.json         ← MV3，tabs + scripting
 ├── background.js         ← connectNative + onMessage + 原语分发
 └── icons/                ← 扩展图标
@@ -1043,7 +1105,7 @@ user-server/cmd/nm-host/
 │  │       Host 不开任何 HTTP server！它只是 HTTP client        │          │
 │  └─────────────────────────────────────────────────────────┘          │
 │                                                                       │
-│  Chrome 扩展 (user-web/extension/)                                     │
+│  Chrome 扩展 (user-web/browser_automation/)                                     │
 │  ┌─────────────────────────────────────────────────────────┐          │
 │  │  background.js                                           │          │
 │  │  └── chrome.runtime.connectNative('com.hivemtk.browser') │          │
@@ -1288,13 +1350,13 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ ① 前端 user-web                                                                     │
 │                                                                                     │
-│  TaskList.vue 点"执行"                                                              │
+│  List.vue 点"执行"                                                              │
 │   ↓                                                                                 │
-│  src/api/browserAutomation.js: runTask(taskId) → POST /api/browser-automation/tasks/:id/run │
+│  src/api/browserAutomation.js: runBrowserTask(taskId) → POST /api/browser-automation/tasks/:id/run │
 │   ↓                                                                                 │
 │  src/stores/browserAutomation.js: startRun() → 拿到 session_id → 启动 2s 轮询 timer│
 │   ↓                                                                                 │
-│  每 2s: GET /api/browser-automation/sessions/:id/steps → 更新 SessionMonitor.vue    │
+│  每 2s: GET /api/browser-automation/sessions/:id/steps → 更新 Monitor.vue    │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                       │ HTTP (JSON)
                                       ▼
@@ -1329,7 +1391,7 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ ④ Chrome 扩展 (MV3 Service Worker)                                                  │
 │                                                                                     │
-│  user-web/extension/background.js: port.onMessage.addListener(handleCommand)         │
+│  user-web/browser_automation/src/background/index.js: port.onMessage.addListener(handleCommand)         │
 │   case 'open_tab':  chrome.tabs.create({url, active:false})  ← 后台 tab，不抢焦点    │
 │   case 'click':     chrome.scripting.executeScript({tabId, func: () => querySelector.click()}) │
 │   case 'type':      chrome.scripting.executeScript({tabId, func: typeScript})       │
@@ -1355,7 +1417,7 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 │  internal/browser_automation/repository/session.go: UpdateStatus()          │
 │  internal/browser_automation/repository/task.go: UpdateStatus()             │
 │                                                                                     │
-│  ① 前端 2s 轮询 → SessionMonitor.vue 实时更新每个 step 的 pending/running/success/failed 状态 │
+│  ① 前端 2s 轮询 → Monitor.vue 实时更新每个 step 的 pending/running/success/failed 状态 │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1441,7 +1503,7 @@ service/cron.go:
 ### 8.4 执行日志
 
 ```
-SessionMonitor.vue 展示实时日志流：
+Monitor.vue 展示实时日志流：
   - 后端 session_steps 表轮询（2s 一次）
   - 后续可升级为 websocket 推送（项目已有 internal/websocket）
 ```
@@ -1481,40 +1543,49 @@ internal/browser_automation/service/hand.go
 internal/browser_automation/controller/task.go
 internal/browser_automation/controller/session.go
 internal/browser_automation/controller/cron.go
+internal/browser_automation/controller/hand.go
 internal/browser_automation/dto/task.go
 internal/browser_automation/dto/session.go
 internal/browser_automation/dto/cron.go
 internal/router/browser_automation_routes.go  ← 注册 + DI 装配
 ```
 
-**共计：23 个 .go 文件**（不含测试）
+**共计：24 个 .go 文件**（不含测试）
 
 ### 9.2 user-web 新建文件
 
 ```
 src/api/browserAutomation.js
-src/views/browserAutomation/TaskList.vue
-src/views/browserAutomation/TaskCreate.vue
-src/views/browserAutomation/TaskEdit.vue
-src/views/browserAutomation/TaskDetail.vue
-src/views/browserAutomation/SessionMonitor.vue
-src/views/browserAutomation/CronList.vue
-src/views/browserAutomation/HandStatus.vue
+src/views/browserAutomation/List.vue
+src/views/browserAutomation/Create.vue
+src/views/browserAutomation/Editor.vue
+src/views/browserAutomation/Detail.vue
+src/views/browserAutomation/Monitor.vue
+src/views/browserAutomation/Cron.vue
+src/views/browserAutomation/Status.vue
 src/stores/browserAutomation.js
 src/router/modules/browserAutomation.js
 ```
 
 **共计：10 个前端文件**
 
-### 9.3 Chrome 扩展
+### 9.3 Chrome 扩展（user-web/browser_automation/）
 
 ```
-user-web/extension/manifest.json
-user-web/extension/background.js
-user-web/extension/icons/          ← 扩展图标（可选 3 张 PNG）
+browser_automation/package.json
+browser_automation/manifest.json
+browser_automation/scripts/build.mjs
+browser_automation/src/background/index.js
+browser_automation/src/core/native-messaging.js
+browser_automation/src/core/primitives.js
+browser_automation/src/core/tab-manager.js
+browser_automation/src/core/accessibility.js
+browser_automation/src/popup/index.js + popup.html
+browser_automation/test/*.test.js          ← vitest 单测
+browser_automation/assets/icons/           ← 扩展图标
 ```
 
-**共计：3 项（核心 2 个文件）**
+**共计：约 12 个文件（对齐 bridge 样板规模）**
 
 ### 9.4 Go NM Host（user-server/cmd/nm-host/）
 
@@ -1536,8 +1607,8 @@ cmd/nm-host/manifest.json.template  ← Chrome Native Messaging 清单模板
 | user-server Migration + Router | 2 | Go | user-server/internal/migration/migrations/ + router/ |
 | user-server Go NM Host | 3 | Go + Shell | user-server/cmd/nm-host/ |
 | user-web 前端 | 10 | JS + Vue3 | user-web/src/ |
-| Chrome 扩展 | 2 | JS + JSON | user-web/extension/ |
-| **合计** | **42** | **Go + JS + Shell，零 Python** | |
+| Chrome 扩展 | ~12 | JS + JSON + Shell | user-web/browser_automation/（独立子项目） |
+| **合计** | **~54** | **Go + JS + Shell，零 Python** | |
 
 ---
 
@@ -1745,7 +1816,7 @@ func (e *Executor) executeStep(ctx context.Context, session *model.BrowserSessio
 }
 ```
 
-前端 SessionMonitor.vue 显示每个 step 的执行前/后对比截图（hover 或点击展开）。
+前端 Monitor.vue 显示每个 step 的执行前/后对比截图（hover 或点击展开）。
 
 ### 13.2 性能指标
 
@@ -1762,7 +1833,7 @@ type BrowserSession struct {
 }
 ```
 
-前端 SessionMonitor.vue 顶部显示 Dashboard：总耗时、成功率、P50/P95 step 耗时、Hand 延迟。
+前端 Monitor.vue 顶部显示 Dashboard：总耗时、成功率、P50/P95 step 耗时、Hand 延迟。
 
 ### 13.3 Session 回放
 
@@ -1788,7 +1859,7 @@ Chrome 扩展 background.js:
   })
 → 返回错误数组
 → 存 browser_session.console_errors 字段
-→ 前端 SessionMonitor.vue 底部有红色 Warning 区域展示
+→ 前端 Monitor.vue 底部有红色 Warning 区域展示
 ```
 
 ---
@@ -1821,7 +1892,7 @@ func (f *FeedbackService) NotifySessionComplete(ctx context.Context, session *mo
 }
 ```
 
-前端 TaskDetail.vue 有"通知设置"tab：飞书机器人 webhook / 钉钉机器人 webhook / 邮件地址。
+前端 Detail.vue 有"通知设置"tab：飞书机器人 webhook / 钉钉机器人 webhook / 邮件地址。
 
 ### 14.2 结果自动保存
 
@@ -1952,7 +2023,7 @@ internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigRe
 ```
 ┌───────────────────── 编 排 阶 段 ─────────────────────┐
 │                                                          │
-│  TaskList.vue ──[+ 新建任务]──▶ TaskCreate.vue           │
+│  List.vue ──[+ 新建任务]──▶ Create.vue           │
 │     │                                                      │
 │     │ 填 name / url / task_type                            │
 │     │ 选模式: ○ 显式 steps   ● Brain 目标驱动              │
@@ -1969,7 +2040,7 @@ internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigRe
                          ▼
 ┌───────────────────── 执 行 阶 段 ─────────────────────┐
 │                                                          │
-│  TaskList.vue ──[▶ 执行]──▶ POST :id/run                  │
+│  List.vue ──[▶ 执行]──▶ POST :id/run                  │
 │     │                                                      │
 │     │ ① TaskController.Run()                               │
 │     │ ② Executor.ExecuteSession()                          │
@@ -1997,7 +2068,7 @@ internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigRe
                          ▼
 ┌───────────────────── 监 控 阶 段 ─────────────────────┐
 │                                                          │
-│  SessionMonitor.vue                                      │
+│  Monitor.vue                                      │
 │     │                                                      │
 │     │ 2s 轮询 sessions/:id/steps                         │
 │     │    └── 每个 step 显示 pending→running→success/failed │
@@ -2046,7 +2117,7 @@ internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigRe
 │     │     └── 完整报告 → Markdown                           │
 │     │                                                      │
 │     │ 前端展示:                                             │
-│     │   ├── TaskDetail.vue: 执行历史 + 通知设置 tab        │
+│     │   ├── Detail.vue: 执行历史 + 通知设置 tab        │
 │     │   ├── SessionDetail.vue: LLM 总结卡片 + 导出按钮     │
 │     │   └── 飞书/钉钉机器人: 通知卡片                       │
 │                                                          │
