@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 8,
-  "next_angle_index": 8,
+  "round": 9,
+  "next_angle_index": 9,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 8,
-    "issues_found_total": 11,
-    "issues_fixed_total": 11,
+    "rounds_completed": 9,
+    "issues_found_total": 12,
+    "issues_fixed_total": 12,
     "last_completed_at": "2026-09-08",
-    "last_commit": "28d3bad"
+    "last_commit": "8d47d5f"
   },
   "history": [
     {
@@ -88,6 +88,14 @@
       "found": 1,
       "fixed": 1,
       "notes": "eslint 工具链启用收尾+errors 163→0(Vue正确性30/no-empty70/no-undef44/散错19全修)"
+    },
+    {
+      "round": 9,
+      "angle": "perf",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "N+1打包项: ai_tool ListTools+role ListRoles 批量化, ExternalCustomer 复合索引; 31候选逐个评估"
     }
   ]
 }

@@ -5,11 +5,30 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：8 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：11 / 11（R6 为 0 缺陷轮）
-- 下一轮角度：perf
+- 已完成轮次：9 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：12 / 12（R6 为 0 缺陷轮）
+- 下一轮角度：test-coverage
 
 ## 轮次报告
+
+### R9 — perf（2026-09-08）
+
+**审计范围**：循环内 DB 调用（N+1）结构化扫描（花括号配对 31 个候选逐个评估）、无分页大列表、热查询索引覆盖。
+
+**发现与处置（1 项打包修复）**：
+
+1. 列表页 N+1 与热路径缺索引（P2 打包）— **处置**：
+   - `ai_tool_config.go ListTools`：每工具一次 `ListByTool`（页大小 N 次查询）改为新增 `ListByTools`（一次 `IN` 查询 + map 分组）
+   - `role.go ListRoles`：3 个角色 3 次 `CountByRole` 改为新增 `CountByRoles`（一次 `GROUP BY`）
+   - `model/integration.go ExternalCustomer`：`platform` 与 `external_id` 两个独立单列索引合并为复合索引 `idx_extcust_platform_external`（priority 1/2），`GetByExternalID` 与 CRM 同步 upsert 热路径走同一索引查找
+
+**评估后不改项（留档）**：
+- N+1 候选其余 28 处：均为低频后台任务（cron 聚合/调度器）、逐行容错写（integration 同步 upsert 需逐条判存后 Create/Update，批量化需引入事务级去重，收益低风险高）、或循环次数受配置上限约束（`config_param.go` 15 个固定配置项）
+- 无分页 `Find` 7 处：宏/自动化规则/渠道账号等配置类小表全量加载，量级受控，属设计内行为
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；service(24.8s)/repository 测试全绿。
+
+**Commit**：`8d47d5f`
 
 ### R8 — frontend（2026-09-08）
 
