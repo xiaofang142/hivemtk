@@ -84,8 +84,9 @@
 └──────────────────────────────────────────────────────────────────────┘
                               │ Native Messaging (stdio JSON)
 ┌──────────────────────────────────────────────────────────────────────┐
-│                  Native Host (Python/Node) 本地进程                    │
-│  stdin ←→ stdout JSON 协议，断线自动重连，多 Agent 消息队列           │
+│              Go Native Messaging Host (~80 行)                        │
+│  4 字节 Little Endian 长度帧 + UTF-8 JSON                              │
+│  Chrome 管理生命周期，Go Hand 用 exec.Command 启动                    │
 └──────────────────────────────────────────────────────────────────────┘
                               │ Native Messaging API
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -516,20 +517,20 @@ async function handleCommand(cmd) {
 }
 ```
 
-### 7.2 Native Host（Python ~200 行）
+### 7.2 Go Native Messaging Host（~80 行，event_loop 模式）
 
 ```
-native-host/
-├── hivemtk_browser_host.py   ← stdio JSON 消息循环
-├── install.sh                 ← 注册 Native Messaging 清单
+chrome-extension/nm-host/
+├── main.go                  ← 4 字节 LE 长度帧 + JSON，event_loop
+├── install.sh               ← 编译 Go binary + 注册 manifest
 └── manifest.json.template
 ```
 
 **核心逻辑**：
-- stdin/stdout JSON 行协议（Native Messaging 标准格式：4 字节大端长度 + JSON payload）
-- 维持长连接，断线自动重连
-- 多 Agent 并发队列（同一扩展实例同一时刻只处理一个命令）
-- 把 Go 后端的 Hand 层命令翻译成扩展消息
+- 4 字节 Little Endian 长度头 + UTF-8 JSON 帧格式（Chrome Native Messaging 标准）
+- event_loop 模式：`for { readFrame → dispatch → writeFrame }`
+- Chrome fork Host 进程、管理生命周期；Go Hand 用 `exec.Command` 启动 + stdio pipe 通信
+- 多 Agent 并发互斥在 Go Hand 层用 `sync.Mutex` 解决（Host 本身单线程串行处理）
 
 ### 7.3 安装（macOS）
 
@@ -780,7 +781,7 @@ registerExecutor("browser_task", func(ctx context.Context, node model.WorkflowNo
 
 1. DB Migration（5 张表）
 2. Model + Repository
-3. Hand（Native Messaging 客户端 + Chrome 扩展 + Python Host）
+3. Go NM Host + Chrome 扩展 + Go Hand 层
 4. 后端 Service + Controller + Router（不含 LLM）
 5. 前端任务编排（显式原语模式）+ 执行监控
 6. 手动触发执行 end-to-end 跑通
@@ -817,6 +818,6 @@ registerExecutor("browser_task", func(ctx context.Context, node model.WorkflowNo
 | 五层架构 | ✅ 现有分层模式 | 新域 browser_automation |
 | DB 基础库 | ✅ GORM + 现有 migration 框架 | 5 张新表 |
 | Chrome 扩展 | — | ✅ 新建 Manifest V3 |
-| Native Host | — | ✅ 新建 Python 程序 |
+| Go NM Host | — | ✅ 新建 Go main.go ~80 行 |
 | LLM Brain | — | ✅ 新建 + 复用现有 LLM routing |
 | 前端框架 | ✅ Vue3 + ElementPlus + router | 新页面 6 个 |
