@@ -44,8 +44,8 @@ hivemtk/
 |------|------|------|
 | Router → Handler → Service → Repository → Model 五层 | CLAUDE.md | browser_automation 域严格五层，不跨层 |
 | Repository interface + WithDB 构造器 | geo/repository/alert.go | `BrowserTaskRepository` interface + `NewBrowserTaskRepositoryWithDB(db)` |
-| Service struct（不搞 interface） | geo/service/alert.go | `BrowserTaskService` struct 持有 repo |
-| Controller 持有 Service 指针 | geo/controller/alert.go | `BrowserTaskController` 持有 `*BrowserTaskService` |
+| Service struct（不搞 interface） | geo/service/alert.go | `TaskService` struct 持有 repo |
+| Controller 持有 Service 指针 | geo/controller/alert.go | `TaskController` 持有 `*TaskService` |
 | Migration 五方法：Version/Name/Description/Up/Down | migrations/v3_35_0 | `BrowserAutomationMigration` struct |
 | Model 用 GORM tag + TableName() | geo/model/*.go | `gorm:"primaryKey;autoIncrement"` + `DeletedAt` 软删除 |
 | 前端 API 用 `@/utils/http` | src/api/geoAlert.js | `import { http } from '@/utils/http'` |
@@ -338,10 +338,10 @@ import (
     "time"
 )
 
-// BrowserHand Go Native Messaging Hand 层
+// Hand Go Native Messaging Hand 层
 // 负责：启动 Go NM Host 子进程 + stdio pipe 通信 + 4 字节 LE 帧协议 + 并发互斥
 // 约束：一个 user-server 实例只有一个 BrowserHand，多 Agent 命令通过 mutex 串行
-type BrowserHand struct {
+type Hand struct {
     mu       sync.Mutex     // 多 Agent 并发保护（同一时刻只进一个命令）
     hostMu   sync.Mutex     // Host 单实例保护
     cmd      *exec.Cmd
@@ -352,8 +352,8 @@ type BrowserHand struct {
     connected bool
 }
 
-// NewBrowserHand 构造器（单例调用）
-func NewBrowserHand() *BrowserHand {
+// NewHand 构造器（单例调用）
+func NewHand() *Hand {
     return &BrowserHand{
         cmdPath: "hivemtk_browser_nm_host",
         timeout: 30 * time.Second,
@@ -362,7 +362,7 @@ func NewBrowserHand() *BrowserHand {
 
 // EnsureConnected 确保 Host 子进程活着
 // 断线 / Chrome 重启后自动重试
-func (h *BrowserHand) EnsureConnected(ctx context.Context) error {
+func (h *Hand) EnsureConnected(ctx context.Context) error {
     h.hostMu.Lock()
     defer h.hostMu.Unlock()
     if h.connected { return nil }
@@ -392,7 +392,7 @@ func (h *BrowserHand) EnsureConnected(ctx context.Context) error {
 }
 
 // openTab 原语
-func (h *BrowserHand) openTab(ctx context.Context, url string, active bool) (int, error) {
+func (h *Hand) openTab(ctx context.Context, url string, active bool) (int, error) {
     resp, err := h.send(ctx, map[string]any{
         "action": "open_tab", "url": url, "active": active,
     })
@@ -402,7 +402,7 @@ func (h *BrowserHand) openTab(ctx context.Context, url string, active bool) (int
 }
 
 // click 原语
-func (h *BrowserHand) click(ctx context.Context, tabID int, target string) error {
+func (h *Hand) click(ctx context.Context, tabID int, target string) error {
     _, err := h.send(ctx, map[string]any{
         "action": "click", "tab_id": tabID, "target": target,
     })
@@ -410,7 +410,7 @@ func (h *BrowserHand) click(ctx context.Context, tabID int, target string) error
 }
 
 // typeText 原语
-func (h *BrowserHand) typeText(ctx context.Context, tabID int, target string, value string, clearFirst bool) error {
+func (h *Hand) typeText(ctx context.Context, tabID int, target string, value string, clearFirst bool) error {
     _, err := h.send(ctx, map[string]any{
         "action": "type", "tab_id": tabID, "target": target, "value": value,
         "clear_first": clearFirst,
@@ -419,7 +419,7 @@ func (h *BrowserHand) typeText(ctx context.Context, tabID int, target string, va
 }
 
 // snapshot 原语（accessibility @e1/@e2 refs）
-func (h *BrowserHand) snapshot(ctx context.Context, tabID int) (string, error) {
+func (h *Hand) snapshot(ctx context.Context, tabID int) (string, error) {
     resp, err := h.send(ctx, map[string]any{
         "action": "snapshot", "tab_id": tabID,
     })
@@ -429,7 +429,7 @@ func (h *BrowserHand) snapshot(ctx context.Context, tabID int) (string, error) {
 }
 
 // markdown 原语（页面转 Markdown）
-func (h *BrowserHand) markdown(ctx context.Context, tabID int) (string, error) {
+func (h *Hand) markdown(ctx context.Context, tabID int) (string, error) {
     resp, err := h.send(ctx, map[string]any{
         "action": "markdown", "tab_id": tabID,
     })
@@ -439,7 +439,7 @@ func (h *BrowserHand) markdown(ctx context.Context, tabID int) (string, error) {
 }
 
 // screenshot 原语
-func (h *BrowserHand) screenshot(ctx context.Context, tabID int) (string, error) {
+func (h *Hand) screenshot(ctx context.Context, tabID int) (string, error) {
     resp, err := h.send(ctx, map[string]any{
         "action": "screenshot", "tab_id": tabID,
     })
@@ -449,7 +449,7 @@ func (h *BrowserHand) screenshot(ctx context.Context, tabID int) (string, error)
 }
 
 // waitFor 原语
-func (h *BrowserHand) waitFor(ctx context.Context, tabID int, ms int) error {
+func (h *Hand) waitFor(ctx context.Context, tabID int, ms int) error {
     _, err := h.send(ctx, map[string]any{
         "action": "wait", "tab_id": tabID, "ms": ms,
     })
@@ -457,7 +457,7 @@ func (h *BrowserHand) waitFor(ctx context.Context, tabID int, ms int) error {
 }
 
 // scroll 原语
-func (h *BrowserHand) scroll(ctx context.Context, tabID int, direction string, amount int) error {
+func (h *Hand) scroll(ctx context.Context, tabID int, direction string, amount int) error {
     _, err := h.send(ctx, map[string]any{
         "action": "scroll", "tab_id": tabID, "direction": direction, "amount": amount,
     })
@@ -465,7 +465,7 @@ func (h *BrowserHand) scroll(ctx context.Context, tabID int, direction string, a
 }
 
 // closeTab 原语
-func (h *BrowserHand) closeTab(ctx context.Context, tabID int) error {
+func (h *Hand) closeTab(ctx context.Context, tabID int) error {
     _, err := h.send(ctx, map[string]any{
         "action": "close_tab", "tab_id": tabID,
     })
@@ -473,7 +473,7 @@ func (h *BrowserHand) closeTab(ctx context.Context, tabID int) error {
 }
 
 // send 核心：4 字节 Little Endian 帧 + JSON
-func (h *BrowserHand) send(ctx context.Context, req map[string]any) (map[string]any, error) {
+func (h *Hand) send(ctx context.Context, req map[string]any) (map[string]any, error) {
     h.mu.Lock()
     defer h.mu.Unlock()
 
@@ -532,7 +532,7 @@ func (h *BrowserHand) send(ctx context.Context, req map[string]any) (map[string]
 // Executor 是任务执行的调度中心
 // RunTask → 创建 Session → 遍历 Steps → 每个 Step 调 Hand → 落库 Step
 // Brain 模式：先让 BrainService 出 plan → 翻译为 steps → 再执行
-func (s *BrowserTaskService) RunTask(ctx context.Context, taskID uint, userID uint) (*model.BrowserSession, error) {
+func (s *TaskService) RunTask(ctx context.Context, taskID uint, userID uint) (*model.BrowserSession, error) {
     // 1. 校验任务归属 + 状态
     task, err := s.taskRepo.GetByID(ctx, taskID, userID)
     // 2. 启动 session（状态=running，chrome tab ID 先 0，hand.openTab 成功后更新）
@@ -574,12 +574,12 @@ import (
     "github.com/gin-gonic/gin"
 )
 
-type BrowserTaskController struct {
-    svc *service.BrowserTaskService
+type TaskController struct {
+    svc *service.TaskService
 }
 
-func NewBrowserTaskController(svc *service.BrowserTaskService) *BrowserTaskController {
-    return &BrowserTaskController{svc: svc}
+func NewTaskController(svc *service.TaskService) *TaskController {
+    return &TaskController{svc: svc}
 }
 
 // c.GET("", ctrl.List)     → 用户自己的任务列表
@@ -810,17 +810,17 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
     planRepo    := browserrepo.NewBrowserLLMPlanRepositoryWithDB(gormDB)
 
     // --- Service ---
-    hand        := browsersvc.NewBrowserHand()  // 单例，进程生命周期
-    execSvc     := browsersvc.NewBrowserExecutor(hand, sessionRepo, stepRepo, planRepo)
-    brainSvc    := browsersvc.NewBrowserBrainService(planRepo, nil) // LLM dispatcher 注入
-    taskSvc     := browsersvc.NewBrowserTaskService(taskRepo, sessionRepo, hand, execSvc, brainSvc)
-    cronSvc     := browsersvc.NewBrowserCronService(cronRepo, taskSvc)
-    sessionSvc  := browsersvc.NewBrowserSessionService(sessionRepo, stepRepo)
+    hand        := browsersvc.NewHand()  // 单例，进程生命周期
+    execSvc     := browsersvc.NewExecutor(hand, sessionRepo, stepRepo, planRepo)
+    brainSvc    := browsersvc.NewBrainService(planRepo, nil) // LLM dispatcher 注入
+    taskSvc     := browsersvc.NewTaskService(taskRepo, sessionRepo, hand, execSvc, brainSvc)
+    cronSvc     := browsersvc.NewCronService(cronRepo, taskSvc)
+    sessionSvc  := browsersvc.NewSessionService(sessionRepo, stepRepo)
 
     // --- Controller ---
-    taskCtrl    := browserctrl.NewBrowserTaskController(taskSvc)
-    cronCtrl    := browserctrl.NewBrowserCronController(cronSvc)
-    sessionCtrl := browserctrl.NewBrowserSessionController(sessionSvc)
+    taskCtrl    := browserctrl.NewTaskController(taskSvc)
+    cronCtrl    := browserctrl.NewCronController(cronSvc)
+    sessionCtrl := browserctrl.NewSessionController(sessionSvc)
 
     // --- 路由注册 ---
     ba := auth.Group("/browser-automation")
@@ -1435,3 +1435,503 @@ extension/nm-host/manifest.json.template
 | **P3** | Go Hand 层 + Executor + 三层 Controller | 是——能跑通一条 end-to-end |
 | **P4** | 前端 API + 7 页面 + Store + Router | 是——用户能点起来 |
 | **P5** | Cron 调度 + Brain LLM 模式 | 否——MVP 先用显式 steps 模式 |
+
+---
+
+## 11. 编排阶段：原语全集 + 错误处理策略 + Workflow 嵌套
+
+### 11.1 原语全集（11 种，精确到参数）
+
+编排页面让用户选原语 → 填参数 → 顺序排列 → 生成 JSON steps 数组。
+
+| # | 原语 | Go Hand 方法 | 关键参数 | 说明 |
+|---|------|-------------|----------|------|
+| 1 | `open_tab` | `hand.openTab(ctx, url, active)` | `url: string` `active: bool` | **active 必须 false**（寄生式不抢焦点） |
+| 2 | `click` | `hand.click(ctx, tabID, target)` | `target: selector 或 @e3 refs` | 扩展执行 `querySelector(target).click()` |
+| 3 | `type` | `hand.typeText(ctx, tabID, target, value, clearFirst)` | `target` `value: string` `clear_first: bool` `submit_on_enter: bool` | clear_first=true 时先 `.value=''` |
+| 4 | `snapshot` | `hand.snapshot(ctx, tabID)` | 无 | 返回 accessibility @e1/@e2 refs 表 |
+| 5 | `markdown` | `hand.markdown(ctx, tabID)` | 无 | 返回页面 Markdown（给 LLM 吃） |
+| 6 | `screenshot` | `hand.screenshot(ctx, tabID)` | `format: png\|jpeg` `full_page: bool` | 返回 base64，存 session.screenshot_b64 |
+| 7 | `wait` | `hand.waitFor(ctx, tabID, ms)` | `ms: int` | 等待固定毫秒，或条件等待 |
+| 8 | `wait_for_selector` | `hand.waitForSelector(ctx, tabID, selector, timeoutMs)` | `selector` `timeout_ms: int` | 扩展侧轮询 DOM，出现则返回 |
+| 9 | `scroll` | `hand.scroll(ctx, tabID, direction, amount)` | `direction: up\|down\|left\|right` `amount: px` | `window.scrollBy` |
+| 10 | `extract` | `hand.extract(ctx, tabID, schema)` | `schema: json` | 扩展侧按 schema 从 DOM 提取结构化数据 |
+| 11 | `close_tab` | `hand.closeTab(ctx, tabID)` | 无 | 执行完成后关闭后台 tab |
+
+### 11.2 Step DTO（精确字段）
+
+```go
+// dto/browser_task.go 里的 StepItem（前端编排 → 后端落库）
+type StepItem struct {
+    Action       string `json:"action" binding:"required,oneof=open_tab click type snapshot markdown screenshot wait wait_for_selector scroll extract close_tab"`
+    Target       string `json:"target"`                       // click/type/scroll/extract 用
+    Value        string `json:"value"`                        // type 用
+    Ms           int    `json:"ms"`                           // wait 用
+    ClearFirst   bool   `json:"clear_first"`                  // type 用
+    SubmitOnEnter bool  `json:"submit_on_enter"`              // type 用
+    Direction    string `json:"direction"`                    // scroll 用
+    Amount       int    `json:"amount"`                       // scroll 用
+    Selector     string `json:"selector"`                     // wait_for_selector 用
+    TimeoutMs    int    `json:"timeout_ms"`                   // wait_for_selector 用
+    Format       string `json:"format"`                       // screenshot 用
+    FullPage     bool   `json:"full_page"`                    // screenshot 用
+    Schema       string `json:"schema"`                       // extract 用（JSON schema）
+    // 错误处理策略（**关键！之前没设计**）
+    ContinueOnError bool `json:"continue_on_error"`           // 默认 false；true 则此步失败后继续下一步
+    RetryCount      int  `json:"retry_count"`                 // 默认 0；失败后重试次数
+    RetryBackoffMs  int  `json:"retry_backoff_ms"`            // 默认 1000；重试间隔指数增长
+}
+```
+
+### 11.3 错误处理层级
+
+```
+Step 执行失败 → retry_count > 0 ? 重试（backoff * 2 递增）→ run out of retry ?
+  → continue_on_error ? 标记 step.status=failed → 继续下一步
+  → !continue_on_error ? 整个 Session 标记 failed → session.error_msg = step.error_msg
+```
+
+### 11.4 Workflow 嵌套（Task 间依赖）
+
+```
+BrowserTask model 新增字段：
+  DependsOnTaskID *uint `json:"depends_on_task_id"` // 前置任务 ID
+  DependsOnMode   string `json:"depends_on_mode"`   // all_done / any_success / step_count_match
+
+Executor 启动前检查：
+  if task.DependsOnTaskID != nil {
+    depTask := taskRepo.GetByID(ctx, *task.DependsOnTaskID, userID)
+    lastSession := sessionRepo.GetLatestByTaskID(ctx, *task.DependsOnTaskID)
+    switch task.DependsOnMode {
+    case "all_done":
+      if lastSession == nil || lastSession.Status != "completed" { return error("前置任务未完成") }
+    case "any_success":
+      if !sessionRepo.HasSuccess(ctx, *task.DependsOnTaskID) { return error("前置任务从未成功过") }
+    }
+  }
+```
+
+前端：编排页面底部有"依赖前置任务"开关 → 选一个已发布任务 + 触发条件。
+
+---
+
+## 12. 执行阶段：控制流 + 中断 + 超时清理
+
+### 12.1 Session 手动中断
+
+```go
+// TaskController 新增 endpoint：
+// POST /api/browser-automation/sessions/:id/stop
+func (c *SessionController) Stop(c *gin.Context) {
+    // 1. sessionRepo.GetByID → 校验归属
+    // 2. 往 executor 的 stopCh 发信号
+    executor.SignalStop(sessionID)
+    // 3. sessionRepo.UpdateStatus(id, "stopped", "用户手动中断")
+    // 4. 关闭 Chrome tab
+    hand.closeTab(ctx, session.ChromeTabID)
+}
+
+// Executor 内部：每步执行前检查 stopCh
+func (e *Executor) ExecuteSession(ctx context.Context, session *model.BrowserSession) error {
+    for i, step := range session.Steps {
+        select {
+        case <-e.stopCh:
+            return errors.New("executor stopped by user")
+        default:
+        }
+        // ... 执行 step
+    }
+}
+```
+
+### 12.2 Chrome 断开自动清理
+
+```go
+// Session 启动时：executor 启动 goroutine 监测 chrome tab 是否还活着
+go func() {
+    ticker := time.NewTicker(5 * time.Second)
+    defer ticker.Stop()
+    for range ticker.C {
+        // 调扩展原生 Chrome API：chrome.tabs.get(tabID)
+        tab, err := hand.tabExists(ctx, session.ChromeTabID)
+        if err != nil || tab == nil {
+            sessionRepo.UpdateStatus(ctx, session.ID, "failed", "Chrome tab 被关闭")
+            return
+        }
+    }
+}()
+```
+
+### 12.3 超时自动终止
+
+```go
+// Session 超时 = task.TimeoutSec（默认 120s）
+sessionTimer := time.AfterFunc(time.Duration(task.TimeoutSec)*time.Second, func() {
+    sessionRepo.UpdateStatus(ctx, session.ID, "failed", fmt.Sprintf("执行超时（%ds）", task.TimeoutSec))
+    hand.closeTab(context.Background(), session.ChromeTabID)
+    // 同时发通知（Feedback 阶段）
+    feedbackSvc.NotifySessionTimeout(ctx, session)
+})
+defer sessionTimer.Stop()
+```
+
+### 12.4 Brain 模式动态调整
+
+```go
+// Brain 模式执行流程（比显式 steps 多一步 snapshot + 重新 plan）
+// 显式 steps:  [step1 → step2 → step3 → done]
+// Brain 模式:  [snapshot → plan1 → step1 → snapshot → plan2 → step2 → ... → goal_reached]
+
+func (s *Executor) RunBrainMode(ctx context.Context, session *model.BrowserSession, goal string) error {
+    maxIterations := 10 // 防无限循环
+    for i := 0; i < maxIterations; i++ {
+        // 1. snapshot 当前页面
+        snap, err := hand.snapshot(ctx, session.ChromeTabID)
+        if err != nil { return err }
+        // 2. 让 LLM 出 plan
+        plan, err := brainSvc.GeneratePlan(ctx, session.TaskID, goal, snap)
+        if err != nil { return err }
+        // 3. 执行 plan 里的 steps
+        done, err := s.ExecuteSteps(ctx, session, plan.Steps)
+        if done || err != nil {
+            // 4. done=true = LLM 判断 goal 达成了
+            break
+        }
+    }
+    return nil
+}
+```
+
+---
+
+## 13. 监控阶段：实时截图流 + 性能指标 + 回放
+
+### 13.1 每步自动截图
+
+```go
+// Executor 配置：每个 step 执行完后自动截图
+// step.auto_screenshot = true（默认）
+func (e *Executor) executeStep(ctx context.Context, session *model.BrowserSession, step *model.BrowserStep) error {
+    // ... 执行 step ...
+    // 执行完后截图
+    if step.Action != "screenshot" {
+        b64, err := e.hand.screenshot(ctx, session.ChromeTabID)
+        if err == nil {
+            // 存到 step.result 里（作为 step 的附属数据）
+            step.Result = map[string]any{
+                "action_result": stepResult,
+                "after_screenshot": b64,
+            }
+            stepRepo.UpdateResult(ctx, step.ID, step.Result)
+        }
+    }
+    return nil
+}
+```
+
+前端 SessionMonitor.vue 显示每个 step 的执行前/后对比截图（hover 或点击展开）。
+
+### 13.2 性能指标
+
+Session 模型新增：
+```go
+type BrowserSession struct {
+    // ... 原有字段 ...
+    TotalSteps     int            `json:"total_steps"`
+    SuccessSteps   int            `json:"success_steps"`
+    FailedSteps    int            `json:"failed_steps"`
+    P50StepMs      int64          `json:"p50_step_ms"`    // step 耗时中位数
+    P95StepMs      int64          `json:"p95_step_ms"`    // step 耗时 95 分位
+    HandLatencyMs  int64          `json:"hand_latency_ms"` // Hand ↔ Host HTTP 延迟
+}
+```
+
+前端 SessionMonitor.vue 顶部显示 Dashboard：总耗时、成功率、P50/P95 step 耗时、Hand 延迟。
+
+### 13.3 Session 回放
+
+```
+SessionDetail.vue → "回放" 按钮
+  → 前端逐步高亮每个 step 的 status
+  → 同时显示该 step 的 before/after 截图对比
+  → 可以"重跑单个 step"（手动修正后重新执行）
+```
+
+### 13.4 Console 错误捕获
+
+```
+Chrome 扩展 background.js:
+  chrome.scripting.executeScript({
+    tabId,
+    func: () => {
+      const errors = [];
+      const origError = console.error;
+      console.error = (...args) => { errors.push(args.map(a => String(a)).join(' ')); origError(...args); };
+      return errors;
+    }
+  })
+→ 返回错误数组
+→ 存 browser_session.console_errors 字段
+→ 前端 SessionMonitor.vue 底部有红色 Warning 区域展示
+```
+
+---
+
+## 14. 反馈阶段：通知 + 结果保存 + 自动重试 + LLM 总结 + 导出
+
+### 14.1 执行完成后自动通知
+
+```go
+// 新增 FeedbackService（service/browser_feedback.go）
+type FeedbackService struct {
+    // 复用项目已有的通知渠道（channelbot 里的飞书/钉钉/企微）
+    larkClient   *lark.BotClient
+    dingClient   *dingtalk.BotClient
+    emailSvc     *email.Service
+}
+
+func (f *FeedbackService) NotifySessionComplete(ctx context.Context, session *model.BrowserSession) {
+    // 1. 生成通知消息（状态 + 耗时 + 步骤数）
+    // 2. 查用户设置的通知渠道（user 表或 config）
+    // 3. 发送
+    switch session.Status {
+    case "completed":
+        msg := fmt.Sprintf("✅ 浏览器任务 [%s] 执行完成，耗时 %ds，成功率 %d/%d",
+            session.Task.Name, session.DurationMs/1000, session.SuccessSteps, session.TotalSteps)
+    case "failed", "stopped":
+        msg := fmt.Sprintf("❌ 浏览器任务 [%s] %s：%s",
+            session.Task.Name, session.Status, session.ErrorMsg)
+    }
+}
+```
+
+前端 TaskDetail.vue 有"通知设置"tab：飞书机器人 webhook / 钉钉机器人 webhook / 邮件地址。
+
+### 14.2 结果自动保存
+
+```go
+// Session 完成后：
+// 1. 所有 step.extract 原语的提取结果 → 写入 browser_session.extracted_data (JSONB)
+// 2. 所有 step.screenshot + step.after_screenshot → 打包存 uploads/ 目录（项目已有 uploads）
+// 3. session 主截图 → 存 browser_session.final_screenshot_url
+func (e *Executor) saveArtifacts(ctx context.Context, session *model.BrowserSession) {
+    // 提取所有 step 里的 extract 结果
+    extracts := collectExtractsFromSteps(session.Steps)
+    session.ExtractedData = datatypes.JSON(extracts)
+    
+    // 打包截图
+    tarPath, _ := uploadScreenshots(session.Steps)
+    session.ScreenshotsArchiveURL = tarPath
+    
+    sessionRepo.Update(ctx, session)
+}
+```
+
+### 14.3 失败自动重试（不是 step 级，是 session 级）
+
+```
+BrowserTask 新增字段：
+  RetryOnFail  bool  `json:"retry_on_fail"`  // 默认 false
+  RetryDelaySec int  `json:"retry_delay_sec"` // 默认 300（5 分钟后重试）
+  MaxRetryTimes int  `json:"max_retry_times"` // 默认 3
+
+Executor 逻辑：
+  if session.Status == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes {
+    // 延迟 retry_delay_sec 后再触发 RunTask
+    cronSvc.ScheduleDelayedExecution(ctx, task.ID, task.RetryDelaySec)
+    taskRepo.IncrementRetryCount(ctx, task.ID)
+  }
+```
+
+### 14.4 LLM 自动总结
+
+```go
+// FeedbackService 里调用 aiagent/llm.Dispatcher
+func (f *FeedbackService) SummarizeSession(ctx context.Context, session *model.BrowserSession) string {
+    // prompt: "以下是浏览器自动化任务执行结果，请总结关键发现：...\n" +
+    //         "Goal: " + task.BrainGoal + "\n" +
+    //         "Extracts: " + session.ExtractedData + "\n" +
+    //         "Console Errors: " + session.ConsoleErrors + "\n" +
+    //         "Success Rate: " + successRate
+    summary, tokenUsed, err := llmDispatcher.ChatCompletion(ctx, prompt)
+    sessionRepo.SaveSummary(ctx, session.ID, summary)
+    return summary
+}
+```
+
+前端 SessionDetail.vue 顶部显示 LLM 总结卡片（可隐藏）。
+
+### 14.5 结果导出
+
+```
+SessionDetail.vue → "导出" 按钮
+  → 导出格式选择：
+     - 结构化数据（JSON / CSV，来自 extract 原语结果）
+     - 截图打包（.tar.gz）
+     - 完整报告（Markdown：目标 + 步骤 + 截图 + LLM 总结）
+
+后端：
+  GET /api/browser-automation/sessions/:id/export?format=json|csv|md|archive
+  生成文件 → 返回 uploads URL（项目已有 upload 基础设施）
+```
+
+---
+
+## 15. 新增表字段汇总（之前 5 张表需要补齐）
+
+### browser_tasks 新增
+
+```sql
+ALTER TABLE browser_tasks ADD COLUMN depends_on_task_id BIGINT;
+ALTER TABLE browser_tasks ADD COLUMN depends_on_mode VARCHAR(32) DEFAULT 'all_done';
+ALTER TABLE browser_tasks ADD COLUMN retry_on_fail BOOLEAN DEFAULT FALSE;
+ALTER TABLE browser_tasks ADD COLUMN retry_delay_sec INT DEFAULT 300;
+ALTER TABLE browser_tasks ADD COLUMN max_retry_times INT DEFAULT 3;
+ALTER TABLE browser_tasks ADD COLUMN retry_count INT DEFAULT 0;
+```
+
+### browser_sessions 新增
+
+```sql
+ALTER TABLE browser_sessions ADD COLUMN total_steps INT DEFAULT 0;
+ALTER TABLE browser_sessions ADD COLUMN success_steps INT DEFAULT 0;
+ALTER TABLE browser_sessions ADD COLUMN failed_steps INT DEFAULT 0;
+ALTER TABLE browser_sessions ADD COLUMN p50_step_ms BIGINT;
+ALTER TABLE browser_sessions ADD COLUMN p95_step_ms BIGINT;
+ALTER TABLE browser_sessions ADD COLUMN hand_latency_ms BIGINT;
+ALTER TABLE browser_sessions ADD COLUMN console_errors TEXT;
+ALTER TABLE browser_sessions ADD COLUMN extracted_data JSONB;
+ALTER TABLE browser_sessions ADD COLUMN final_screenshot_url VARCHAR(1024);
+ALTER TABLE browser_sessions ADD COLUMN screenshots_archive_url VARCHAR(1024);
+ALTER TABLE browser_sessions ADD COLUMN llm_summary TEXT;
+```
+
+### browser_steps 新增
+
+```sql
+ALTER TABLE browser_steps ADD COLUMN after_screenshot TEXT;  -- base64
+ALTER TABLE browser_steps ADD COLUMN extract_data JSONB;
+```
+
+---
+
+## 16. 新增文件清单（Feedback 层 + 补齐）
+
+```
+internal/browser_automation/service/browser_feedback.go   ← 【新增】通知 + LLM 总结 + 导出
+internal/browser_automation/service/browser_feedback_test.go
+internal/browser_automation/dto/browser_feedback.go       ← 【新增】NotifyConfigReq / ExportReq
+```
+
+**更新后总文件数**：
+- user-server：25 个 .go（+2 feedback）
+- user-web：10 个前端文件
+- Chrome 扩展：6 个
+- **合计：41 个文件**
+
+---
+
+## 17. 完整业务生命周期状态图（编排→执行→监控→反馈 全链路）
+
+```
+┌───────────────────── 编 排 阶 段 ─────────────────────┐
+│                                                          │
+│  TaskList.vue ──[+ 新建任务]──▶ TaskCreate.vue           │
+│     │                                                      │
+│     │ 填 name / url / task_type                            │
+│     │ 选模式: ○ 显式 steps   ● Brain 目标驱动              │
+│     │ 编排: [open_tab → click → type → snapshot → close] │
+│     │   每个 step: target / retry / continue_on_error     │
+│     │ 可选: 依赖前置任务 / Cron 表达式                      │
+│     │ 可选: 失败自动重试 + 通知渠道                          │
+│     │                                                      │
+│     ├──▶ 存 browser_tasks (status=draft)                   │
+│     └──▶ publish → status=ready                            │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌───────────────────── 执 行 阶 段 ─────────────────────┐
+│                                                          │
+│  TaskList.vue ──[▶ 执行]──▶ POST :id/run                  │
+│     │                                                      │
+│     │ ① TaskController.Run()                               │
+│     │ ② Executor.ExecuteSession()                          │
+│     │    ├── 创建 BrowserSession (status=created)          │
+│     │    ├── Hand.openTab() → Chrome 扩展                 │
+│     │    │   └── chrome.tabs.create({active:false})        │
+│     │    ├── Session 每 5s 监测 tab 存活                   │
+│     │    ├── Session 超时定时器（默认 120s）               │
+│     │    ├── 遍历 steps:                                   │
+│     │    │   ├── Step 超时                                  │
+│     │    │   ├── Step retry_count 重试                     │
+│     │    │   ├── Step continue_on_error 跳过失败继续       │
+│     │    │   └── Step 执行完 auto_screenshot               │
+│     │    ├── Brain 模式: snapshot → LLM plan → 循环        │
+│     │    └── Session 完成/失败                              │
+│     │ ③ 用户可手动中断: POST sessions/:id/stop             │
+│     │                                                      │
+│     ├──▶ 每个 step → browser_steps (status=success/failed) │
+│     ├──▶ session → browser_sessions (status=completed)    │
+│     ├──▶ task → browser_tasks (status=running→done)        │
+│     └──▶ 失败 → retry_on_fail ? schedule retry : done     │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌───────────────────── 监 控 阶 段 ─────────────────────┐
+│                                                          │
+│  SessionMonitor.vue                                      │
+│     │                                                      │
+│     │ 2s 轮询 sessions/:id/steps                         │
+│     │    └── 每个 step 显示 pending→running→success/failed │
+│     │                                                      │
+│     │ Session 顶部 Dashboard:                              │
+│     │   ├── 总耗时 / P50 step 耗时 / P95 step 耗时         │
+│     │   ├── 成功率（success/total）                        │
+│     │   ├── Hand ↔ Host HTTP 延迟                          │
+│     │   └── Console 错误（红色 Warning 区）                │
+│     │                                                      │
+│     │ Step 列表:                                           │
+│     │   ├── 点击展开 → before/after 截图对比               │
+│     │   ├── 耗时 bar                                       │
+│     │   └── 重跑单个 step 按钮                             │
+│     │                                                      │
+│     │ SessionDetail.vue                                   │
+│     │   ├── 历史执行列表（sessions table）                 │
+│     │   ├── 回放模式（逐步高亮）                            │
+│     │   └── 依赖关系图（Workflow 嵌套可视化）                │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌───────────────────── 反 馈 阶 段 ─────────────────────┐
+│                                                          │
+│  Session 完成触发 FeedbackService:                        │
+│     │                                                      │
+│     │ ① 自动通知（飞书/钉钉/邮件）                          │
+│     │     └── "✅ 任务 X 完成，3步成功/1步失败，耗时 23s"   │
+│     │                                                      │
+│     │ ② 自动保存 artifacts                                 │
+│     │     ├── extract 原语 → extracted_data (JSONB)        │
+│     │     ├── 所有截图 → screenshots_archive_url            │
+│     │     └── 最终截图 → final_screenshot_url              │
+│     │                                                      │
+│     │ ③ LLM 自动总结                                       │
+│     │     └── BrainService.Summarize() → llm_summary       │
+│     │         "本次执行发现...价格区间 ... 竞品 A 排在首位"   │
+│     │                                                      │
+│     │ ④ 失败自动重试（session 级）                         │
+│     │     └── schedule delayed execution                   │
+│     │                                                      │
+│     │ ⑤ 结果导出                                           │
+│     │     ├── 结构化数据 → CSV/JSON                         │
+│     │     ├── 截图打包 → .tar.gz                            │
+│     │     └── 完整报告 → Markdown                           │
+│     │                                                      │
+│     │ 前端展示:                                             │
+│     │   ├── TaskDetail.vue: 执行历史 + 通知设置 tab        │
+│     │   ├── SessionDetail.vue: LLM 总结卡片 + 导出按钮     │
+│     │   └── 飞书/钉钉机器人: 通知卡片                       │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
