@@ -276,7 +276,11 @@ func (c *WeComController) RefreshAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, _ = c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err = c.wecomService.GetAccountByID(context.Background(), uint(id))
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "刷新后回查账号失败："+err.Error())
+		return
+	}
 	response.Success(ctx, account, "刷新成功")
 }
 

@@ -18,6 +18,15 @@ applyDirection(i18n.global.locale.value)
 
 const app = createApp(App)
 
+// 全局错误兜底：Vue 渲染/生命周期异常与未捕获 Promise 拒绝统一落 console，
+// 防止单点异常静默吞掉导致"页面白屏但无任何报错"的不可观测故障。
+app.config.errorHandler = (err, instance, info) => {
+  console.error('[Vue errorHandler]', info, err)
+}
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[unhandledrejection]', event.reason)
+})
+
 app.use(router)
 app.use(pinia)
 app.use(ElementPlus)

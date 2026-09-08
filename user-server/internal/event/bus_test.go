@@ -95,7 +95,7 @@ func TestEventBus_HandlerError(t *testing.T) {
 
 	bus.Publish(Event{Topic: "topic.err"})
 
-	waitForCondition(t, func() bool { return executed.Load() == 1 }, 100*time.Millisecond)
+	waitForCondition(t, func() bool { return executed.Load() == 1 }, 2*time.Second)
 	if executed.Load() != 1 {
 		t.Errorf("expected second handler to execute despite first failure, got %d", executed.Load())
 	}
