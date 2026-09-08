@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 21,
-  "next_angle_index": 9,
+  "round": 22,
+  "next_angle_index": 10,
   "angles": [
     "security",
     "authz",
@@ -18,7 +18,7 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 21,
+    "rounds_completed": 22,
     "issues_found_total": 15,
     "issues_fixed_total": 15,
     "last_completed_at": "2026-09-09",
@@ -192,6 +192,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第二圈 0缺陷: R9 三处修复在位(ListByTools/CountByRoles/复合索引); N+1 候选 27 处较基线 31 下降(R9 修复生效); build/vet/test 全绿"
+    },
+    {
+      "round": 22,
+      "angle": "test-coverage",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: go test 全包零失败; channelbot/core 3用例(8 RUN/PASS)在位"
     }
   ]
 }

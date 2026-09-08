@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：21（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：15 / 15（R6/R13–R21 为 0 缺陷轮）
-- 下一轮角度：test-coverage
+- 已完成轮次：22（第二圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：15 / 15（R6/R13–R22 为 0 缺陷轮）
+- 下一轮角度：config-deploy
 
 ## 轮次报告
+
+### R22 — test-coverage（2026-09-09）— 第二圈，0 缺陷轮
+
+**审计范围**：`go test ./... -count=1` 全包复跑、R10 补测成果回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 全包 `go test` **零失败**（前 21 轮所有修复与变更的回归保持全绿）
+- R10 补测在位：`channelbot/core/core_test.go` 3 组用例（8 个 RUN/PASS 断言点）运行正常
+
+**验证证据**：`go test ./... -count=1` 全绿（无 FAIL 行）。
+
+**Commit**：见 git log `chore(audit): 审计R22-test-coverage: 0缺陷轮核查记录与状态推进`
 
 ### R21 — perf（2026-09-09）— 第二圈，0 缺陷轮
 
