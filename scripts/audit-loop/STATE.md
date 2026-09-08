@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：6 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：9 / 9（R6 为 0 缺陷轮）
-- 下一轮角度：api-contract
+- 已完成轮次：7 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：10 / 10（R6 为 0 缺陷轮）
+- 下一轮角度：frontend
 
 ## 轮次报告
+
+### R7 — api-contract（2026-09-08）
+
+**审计范围**：前端 `src/api/*.js` 调用 vs 后端 gin 路由注册双向对照（`scripts/audit_api_contract.py`，同事新增工具）、响应格式/错误码一致性抽查、UNMATCHED 逐条真伪核实。
+
+**发现与处置（1 项，已修复）**：
+
+1. `user-server/cmd/seed/`（P1）— 同事提交 `3d7ac65` 只包含 `seed_faq_sop.go`（seeder 模块），缺命令入口：`SeedContext`/`cleanByCondition`/`seedTag`/`batchInsert`/`randInt` 全部未定义，`go build ./...` 失败，`bootstrap.sh` 的 `go run ./cmd/seed` 必然编译失败。**处置**：新建 `cmd/seed/main.go`，补 Seeder 框架 + 全部 helpers；`seedTag` 与 seeder 内硬编码的 `__URGENCY_SUPPORT_SEED_20260908__` 标记保持一致，保证 Clean 幂等只清本批种子。
+
+**核查通过项（无需修复）**：
+- 契约对照复跑：前端 831 个调用 **0 UNMATCHED** — 抽样发现的角色死 CRUD（`POST/PUT/DELETE /api/system/roles/*` 3 端点后端从未实现）与 `runSOVRefresh` 死导出，同事已在本工作区同步修复（`role.js` 收敛为只读 3 端点、`RoleList.vue` 重写为只读视图移除全部 CRUD UI、`geoProbe.js` 删死导出），本次一并入库并复核无其他消费方受影响
+- 脚本 UNRESOLVED 40 项均为对 `Group` 间接绑定（platform/market/local 别名组、controller.Register 内嵌 group）的解析限制，逐组抽样（asset-market/local-assets/asset-bundle/knowledge）核实路由真实存在，属工具误报非契约缺口
+- 响应格式抽查：controller 层 235 处统一走 `response.Success/Error`；`{code,data,message}` 协议一致
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿（修复后）；controller/service 测试全绿；前端 vite build 成功 + vitest 174 用例全过。
+
+**Commit**：`25c9ed9`
 
 ### R6 — data-integrity（2026-09-08）— 0 缺陷轮
 
