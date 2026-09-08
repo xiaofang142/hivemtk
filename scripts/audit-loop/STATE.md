@@ -5,11 +5,29 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：2 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：3 / 3
-- 下一轮角度：architecture
+- 已完成轮次：3 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：6 / 6
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R3 — architecture（2026-09-08）
+
+**审计范围**：`scripts/check-architecture.sh` 全量（controller 反向依赖、service 直连 DB、repository 反向依赖、文件命名、interface 规范、ctx 透传）、Router 内联 handler、五层铁律抽查。
+
+**发现与处置（3 项，均已修复）**：
+
+1. 文件命名违规 12 处（P2）— `_controller.go` 冗余后缀 10 个 + `_service.go` 后缀 2 个。**处置**：5 个 manage 控制器（rag_eval/smart_router/agent_co_pilot/data_export/typing_predict 的 Manage*Controller）内容并入同域文件后删除冗余文件；其余 7 个（bridge_token/dnc/handoff_chain/r48_growth/rule_engine/decision/customer_queue/do_not_contact）`git mv` 去后缀重命名。
+2. `internal/controller/debug_routes.go:29` — `c.JSON(200, ...)` 直写响应，绕过统一响应协议（P2）。**处置**：改用 `response.Success`。
+3. `internal/service/rag_product.go` — service struct 持 gorm 直连 9 处（P2，OPT-ARC-01 范畴的样板案例）。**处置**：整文件改造为 Repository 注入，`RagConfigRepository` 新增 `ListAllRagProducts/GetRagProductForUpdate/DeleteRagProductByID/CreateRagProductWithVectorTable` 四方法，Stats 改内存聚合。
+
+**存量说明**：service 直连 DB 全仓历史存量 170 处 → 本轮清 9 处后余 161 处（26 文件），属 OPT-ARC-01 渐进重构范畴，按 CLAUDE.md 规则2"当轮修复"原则已消化样板 1 域；后续 error-handling 等轮次若触及同文件顺带收敛，另起独立重构轮会与"发现问题立即修复"冲突，特此留档为**已知技术债基线**（脚本 WARN 级，不阻断）。
+
+**期间事件**：工作区合入同事未提交的渠道媒体转存半成品（channel_media.go / whatsapp 媒体链路 / feishu 卡片），已确认其编译通过并随本轮提交入库；推送遇双远端各有新提交，按规则0 merge 后三仓收敛于 `e512f4d`。
+
+**验证证据**：`check-architecture.sh` 16 错 → 1 错（仅剩 L4 存量项）；`go build ./...`、`go vet ./...` 全绿；service(37s)/controller/repository 三包测试全绿。
+
+**Commit**：`a200aa6`（修复）+ `ef3a33d`/`e512f4d`（merge 与推送）
 
 ### R2 — authz（2026-09-08）
 

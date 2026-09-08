@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 2,
-  "next_angle_index": 2,
+  "round": 3,
+  "next_angle_index": 3,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 2,
-    "issues_found_total": 3,
-    "issues_fixed_total": 3,
+    "rounds_completed": 3,
+    "issues_found_total": 6,
+    "issues_fixed_total": 6,
     "last_completed_at": "2026-09-08",
-    "last_commit": "d906d49"
+    "last_commit": "e512f4d"
   },
   "history": [
     {
@@ -40,6 +40,14 @@
       "found": 1,
       "fixed": 1,
       "notes": "访客WS无token分支fail-closed补全；远端分叉已按规则0 merge 后推送"
+    },
+    {
+      "round": 3,
+      "angle": "architecture",
+      "date": "2026-09-08",
+      "found": 3,
+      "fixed": 3,
+      "notes": "命名违规12处清零(5合并+7重命名)+debug_routes响应归一+rag_product Repository化(9处)；剩余161处service直连DB为历史存量列入OPT-ARC-01渐进重构"
     }
   ]
 }
