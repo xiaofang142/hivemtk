@@ -28,14 +28,18 @@ hivemtk/
 │       ├── stores/browserAutomation.js ← 【新建】Pinia store
 │       └── router/modules/browserAutomation.js ← 【新建】
 │
-└── user-web/extension/               ← 【新建】Chrome MV3 扩展
+└── user-web/extension/               ← 【新建】Chrome MV3 扩展（纯 JS，不含 Go 源码）
     ├── manifest.json
     ├── background.js
-    └── nm-host/                     ← 【新建】Go Native Messaging Host
-        ├── main.go                  (~80 行，event_loop)
-        ├── go.mod
-        ├── install.sh
-        └── manifest.json.template
+    └── icons/
+
+└── user-server/cmd/nm-host/          ← 【新建】Go Native Messaging Host（独立 binary）
+    ├── main.go                       (~80 行，event_loop)
+    ├── install.sh                    ← 编译 + 注册 manifest + 校验
+    └── manifest.json.template
+
+    【说明】Go NM Host 放 cmd/ 下，与 api/、geo-run/、seed/ 等独立 binary 并列，
+    共享 user-server/go.mod。Chrome 扩展目录里只有 JS/CSS，职责单一。
 ```
 
 ### 项目现有约定（必须遵守）
@@ -1030,14 +1034,54 @@ export default [
 user-web/extension/
 ├── manifest.json         ← MV3，tabs + scripting
 ├── background.js         ← connectNative + onMessage + 原语分发
-└── nm-host/
-    ├── main.go           ← ~80 行，event_loop（4 字节 LE 帧 + JSON）
-    ├── go.mod
-    ├── install.sh        ← 编译 + 注册 manifest + 校验
-    └── manifest.json.template
+└── icons/                ← 扩展图标
+
+user-server/cmd/nm-host/
+├── main.go               ← Go NM Host daemon（HTTP + Native Messaging 双通道）
+├── install.sh            ← 编译 binary + 注册 manifest.json 到 Chrome 路径
+└── manifest.json.template ← Chrome Native Messaging 清单模板
 ```
 
-### 5.2 Go NM Host（`nm-host/main.go`）
+### 5.1.1 物理执行模型（关键！Chrome 怎么"执行"这个 Go Host）
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ 谁启动 Host？—— Chrome，不是 user-server                               │
+│                                                                       │
+│ 用户打开 Chrome → Chrome 启动时加载扩展 → 扩展 background.js 执行：     │
+│   let port = chrome.runtime.connectNative('com.hivemtk.browser');      │
+│                    │                                                  │
+│                    ▼                                                  │
+│ Chrome 查 manifest.json 找到 path："/usr/local/bin/hivemtk_browser_nm_host" │
+│                    │                                                  │
+│                    ▼                                                  │
+│ Chrome fork 这个 binary → Host 进程启动 → stdin/stdout 由 Chrome 管控  │
+│                    │                                                  │
+│                    ▼                                                  │
+│ Host 同时开两条通道：                                                  │
+│   Channel A (Chrome 管控): stdin/stdout ↔ Chrome 扩展 Native Messaging │
+│   Channel B (Host 自开):  HTTP server localhost:18789 ↔ user-server    │
+│                           BrowserHand.send() POST /rpc               │
+└───────────────────────────────────────────────────────────────────────┘
+
+两条通道的精确协议：
+
+Channel A: Host ↔ Chrome 扩展（Chrome 管控的 Native Messaging）
+  → 帧格式: 4 字节 Little Endian 长度头 + UTF-8 JSON body
+  → 例子: [0x1a 0x00 0x00 0x00]{"action":"click","tab_id":1}
+  → 限制: 扩展→Host 64 MiB / Host→扩展 1 MiB
+
+Channel B: user-server ↔ Host（Host 自开 HTTP）
+  → 协议: POST http://127.0.0.1:18789/rpc
+  → Body: {"action":"click","tab_id":1,"target":"#submit"}
+  → Response: {"ok":true,"data":{"chrome_tab_id":1},"latency_ms":3}
+  → 安全: 只监听 loopback，需要 Bearer Token（install.sh 生成）
+```
+
+**为什么不能让 user-server 直接启动 Host？**
+- Chrome Native Messaging 协议**要求** Host 进程由 Chrome 启动，Chrome 管控 stdin/stdout
+- 如果 user-server 也 fork Host → Host 有两个父进程、stdin/stdout 冲突
+- 唯一可行：Chrome 启动 Host（Channel A），Host 自开 HTTP（Channel B）让 user-server 连进来
 
 与 `service/browser_hand.go` 的 Hand 层对接：Hand → Host（子进程 stdin/stdout） → Chrome 扩展（Native Messaging）
 
@@ -1211,7 +1255,7 @@ echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:t
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │ ③ Go NM Host (独立 daemon, localhost:18789)                                          │
 │                                                                                     │
-│  user-web/extension/nm-host/main.go: HTTP handler                                    │
+│  user-server/cmd/nm-host/main.go: HTTP handler                                    │
 │   POST /rpc {"action":"open_tab","url":"...","active":false}                         │
 │   ↓                                                                                 │
 │   写 4 字节 Little Endian 帧 → Chrome Native Messaging stdio → 发送给扩展            │
@@ -1400,28 +1444,38 @@ src/router/modules/browserAutomation.js
 
 **共计：10 个前端文件**
 
-### 9.3 Chrome 扩展 + Go NM Host
+### 9.3 Chrome 扩展
 
 ```
-extension/manifest.json
-extension/background.js
-extension/nm-host/main.go
-extension/nm-host/go.mod
-extension/nm-host/install.sh
-extension/nm-host/manifest.json.template
+user-web/extension/manifest.json
+user-web/extension/background.js
+user-web/extension/icons/          ← 扩展图标（可选 3 张 PNG）
 ```
 
-**共计：6 个文件**
+**共计：3 项（核心 2 个文件）**
 
-### 9.4 汇总
+### 9.4 Go NM Host（user-server/cmd/nm-host/）
 
-| 代码区 | 文件数 | 语言 |
-|--------|--------|------|
-| user-server 后端 | 23 | Go |
-| user-web 前端 | 10 | JS + Vue3 |
-| Chrome 扩展 | 2 | JS (background.js + manifest) |
-| Go NM Host | 4 | Go (main.go + install.sh) |
-| **合计** | **39** | **Go + JS，零 Python** |
+```
+cmd/nm-host/main.go                 ← Go NM Host daemon，HTTP + Native Messaging 双通道
+cmd/nm-host/install.sh              ← 编译 + 注册 manifest.json 到 Chrome 路径
+cmd/nm-host/manifest.json.template  ← Chrome Native Messaging 清单模板
+```
+
+**注意：没有独立 go.mod**，因为放在 `user-server/cmd/` 下，共享 `user-server/go.mod`（module `hivemtk-user`）。与 `api/`、`geo-run/`、`seed/` 等独立 binary 并列。
+
+**共计：3 个文件**
+
+### 9.5 汇总
+
+| 代码区 | 文件数 | 语言 | 位置 |
+|--------|--------|------|------|
+| user-server browser_automation 域 | 25 | Go | user-server/internal/browser_automation/ |
+| user-server Migration + Router | 2 | Go | user-server/internal/migration/migrations/ + router/ |
+| user-server Go NM Host | 3 | Go + Shell | user-server/cmd/nm-host/ |
+| user-web 前端 | 10 | JS + Vue3 | user-web/src/ |
+| Chrome 扩展 | 2 | JS + JSON | user-web/extension/ |
+| **合计** | **42** | **Go + JS + Shell，零 Python** | |
 
 ---
 
