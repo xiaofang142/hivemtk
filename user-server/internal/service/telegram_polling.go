@@ -356,6 +356,11 @@ func runTelegramPollingWorker(ctx context.Context, accountID uint, botToken, acc
 }
 
 func runPollingHeartbeat(ctx context.Context, accountID uint, accountName string, state *telegramPollingState) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf("[TG-Polling] 账号 %d(%s) 心跳协程 panic: %v", accountID, accountName, r)
+		}
+	}()
 	ticker := time.NewTicker(PollingLockHeartbeatInterval)
 	defer ticker.Stop()
 	for {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"github.com/redis/go-redis/v9"
@@ -250,7 +251,7 @@ func (h *HumanEscalationManager) StartLockExpiryChecker(ctx context.Context, int
 	if interval <= 0 {
 		interval = LockExpiryCheckInterval
 	}
-	go func() {
+	utils.SafeGo(ctx, "human_escalation.lock_expiry_checker", func(ctx context.Context) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -261,7 +262,7 @@ func (h *HumanEscalationManager) StartLockExpiryChecker(ctx context.Context, int
 				h.checkExpiredLocks(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (h *HumanEscalationManager) checkExpiredLocks(ctx context.Context) {

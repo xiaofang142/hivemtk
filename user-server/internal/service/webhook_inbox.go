@@ -34,7 +34,9 @@ func (s *WebhookService) upsertInboxFromHub(ctx context.Context, hub *model.Mess
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}
-	_ = s.inboxConvRepo.Create(ctx, newConv)
+	// CreateOrUpdateByChannel：并发 webhook 重发撞 uk_inbox_conv_channel 唯一键时
+	// 退化为更新既有会话，不再静默丢消息
+	_ = s.inboxConvRepo.CreateOrUpdateByChannel(ctx, newConv)
 }
 
 func (s *WebhookService) dispatchToUnified(ctx context.Context, um *model.UnifiedMessage) error {

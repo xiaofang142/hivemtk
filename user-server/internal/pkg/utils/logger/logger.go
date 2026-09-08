@@ -3,8 +3,10 @@ package logger
 import (
 	"context"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -292,4 +294,18 @@ func (w *rotatingWriter) Write(p []byte) (int, error) {
 	n, err := w.f.Write(p)
 	w.size += int64(n)
 	return n, err
+}
+
+// StdLogger 返回 io.Writer 兼容的标准 logger 适配器，
+// 供 cron.PrintfLogger 等需要 *log.Logger 的第三方库使用（Write 会带 \n，去掉多余换行）。
+type stdLoggerAdapter struct{}
+
+func (stdLoggerAdapter) Write(p []byte) (int, error) {
+	Infof("%s", strings.TrimRight(string(p), "\n"))
+	return len(p), nil
+}
+
+// StdLogger 返回全局日志器的 *log.Logger 视图。
+func StdLogger() *log.Logger {
+	return log.New(stdLoggerAdapter{}, "", 0)
 }

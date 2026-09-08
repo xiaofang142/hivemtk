@@ -3,6 +3,8 @@ package channelgw
 import (
 	"context"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,7 +65,31 @@ func NewWSTransport(pipeline IngressPipeline, registry *Registry) *WSTransport {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
-			CheckOrigin:     func(r *http.Request) bool { return true },
+			// 校验 Origin 与 Host 一致（同源）或命中显式白名单；
+			// 渠道客户端通常不带 Origin（非浏览器），不受影响。
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					return true
+				}
+				scheme := "http"
+				if r.TLS != nil {
+					scheme = "https"
+				}
+				if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
+					scheme = p
+				}
+				if origin == scheme+"://"+r.Host {
+					return true
+				}
+				for _, a := range strings.Split(os.Getenv("CHANNEL_WS_ALLOWED_ORIGINS"), ",") {
+					if strings.TrimSpace(a) != "" && strings.TrimSpace(a) == origin {
+						return true
+					}
+				}
+				logger.Warnf("[ChannelGW WS] 拒绝跨源 WebSocket 握手 origin=%s host=%s", origin, r.Host)
+				return false
+			},
 		},
 		pushInterval: runtimeWSPushIntervalDefault(context.Background()),
 		pushBatch:    wsPushBatchDefault,

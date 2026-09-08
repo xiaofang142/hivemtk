@@ -15,7 +15,9 @@ type SalesEvent struct {
 	CustomerID  string     `gorm:"type:varchar(64);index" json:"customer_id"`
 	OwnerID     string     `gorm:"type:varchar(64);index" json:"owner_id"`
 	ProductName string     `gorm:"type:varchar(200)" json:"product_name"`
-	Amount      float64    `json:"amount"`
+	// Amount 金额统一 NUMERIC(12,2) 存储，杜绝 float64 二进制误差累积；
+	// Go 侧读写仍用 float64（GORM 自动转换），聚合逻辑见 sales_event_stats
+	Amount      float64    `gorm:"type:numeric(12,2)" json:"amount"`
 	Action      string     `gorm:"type:varchar(20)" json:"action"`
 	Channel     string     `gorm:"type:varchar(30)" json:"channel"`
 	Result      string     `gorm:"type:varchar(20)" json:"result"`

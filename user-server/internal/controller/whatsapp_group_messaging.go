@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -27,6 +29,8 @@ type GroupMessagingController struct {
 	clueSvc         *service.ClueService
 	messageQueue    *service.MessageQueueService
 	templateService *service.WhatsAppTemplateService
+	// queueRunning 群发队列互斥标记：同一时刻仅允许一个发送循环在跑
+	queueRunning atomic.Bool
 }
 
 func NewGroupMessagingController(
@@ -189,7 +193,15 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 	}
 
 	if req.ScheduleAt == nil || req.ScheduleAt.Before(time.Now()) {
-		go gmc.processMessageQueue(queueID)
+		// 同一队列禁止并发重复处理（重复提交会导致重复扣发）
+		if !gmc.queueRunning.CompareAndSwap(false, true) {
+			response.Error(c, http.StatusConflict, "已有群发队列在处理中，请稍后再试", "已有群发队列在处理中，请稍后再试")
+			return
+		}
+		utils.SafeGo(context.Background(), "whatsapp.group_messaging", func(ctx context.Context) {
+			defer gmc.queueRunning.Store(false)
+			gmc.processMessageQueue(queueID)
+		})
 	}
 
 	response.Success(c, gin.H{

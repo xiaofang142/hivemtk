@@ -456,8 +456,13 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 
 		token, _ := s.getWechatSecrets(ctx, accountID)
 		if token == "" {
-			logger.Warnf("[Webhook] wechat 验签 secret 未配置 account=%s，跳过该渠道验签（W-6）", accountID)
-			return true, nil
+			// fail-closed：secret 未配置时拒绝验签（与其他渠道一致）。
+			// 仅当显式 ALLOW_INSECURE_WEBHOOK=true（受启动环境护栏限制）才放行。
+			if os.Getenv("ALLOW_INSECURE_WEBHOOK") == "true" {
+				logger.Warnf("[Webhook] wechat 验签 secret 未配置 account=%s，ALLOW_INSECURE_WEBHOOK=true 已启用，跳过该渠道验签", accountID)
+				return true, nil
+			}
+			return false, fmt.Errorf("wechat 验签 secret 未配置 account=%s，已拒绝请求；请为该账号配置 CallbackToken", accountID)
 		}
 		return verifyWechat(token, body, headers), nil
 	case ChannelDouyin, ChannelTiktok:

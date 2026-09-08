@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 type SLAService struct {
@@ -52,7 +53,7 @@ func (s *SLAService) AddPolicy(p *model.SLAPolicy) {
 // Start 启动 SLA 监控（每分钟检测）
 func (s *SLAService) Start(ctx context.Context) {
 	s.ticker = time.NewTicker(60 * time.Second)
-	go func() {
+	utils.SafeGo(ctx, "sla.monitor", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -64,7 +65,7 @@ func (s *SLAService) Start(ctx context.Context) {
 				_ = s.checkAll(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (s *SLAService) Stop() {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/system/install"
 )
@@ -53,7 +54,7 @@ func computeDeviceFingerprint() string {
 // 心跳会随请求携带：设备指纹（用户端生成）+ 主机信息 + 运行指标；
 // 上报方公网 IP 由平台侧从请求中采集，不依赖用户端自报。
 func StartHeartbeat(ctx context.Context) {
-	go func() {
+	utils.SafeGo(ctx, "platform.heartbeat", func(ctx context.Context) {
 		time.Sleep(30 * time.Second)
 		sendHeartbeat()
 		ticker := time.NewTicker(heartbeatInterval())
@@ -66,7 +67,7 @@ func StartHeartbeat(ctx context.Context) {
 				sendHeartbeat()
 			}
 		}
-	}()
+	})
 }
 
 func sendHeartbeat() {

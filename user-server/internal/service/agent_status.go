@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -148,7 +149,7 @@ func (s *AgentStatusService) StartHeartbeatMonitor(ctx context.Context, interval
 	s.monitorOn = true
 	s.mu.Unlock()
 
-	go func() {
+	utils.SafeGo(ctx, "agent_status.heartbeat_monitor", func(ctx context.Context) {
 		defer func() { s.mu.Lock(); s.monitorOn = false; s.mu.Unlock() }()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -160,7 +161,7 @@ func (s *AgentStatusService) StartHeartbeatMonitor(ctx context.Context, interval
 				s.CheckStaleAgents(context.Background(), timeout) //nolint:ctxcheck 后台任务与请求生命周期解耦
 			}
 		}
-	}()
+	})
 }
 
 // CheckStaleAgents 扫描在线坐席：心跳超时者自动 offline 并释放在办会话。

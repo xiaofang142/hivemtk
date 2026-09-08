@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -478,7 +479,7 @@ func (d *Dispatcher) StartCacheJanitor(ctx context.Context, interval time.Durati
 	ticker := time.NewTicker(interval)
 	stopCh := make(chan struct{})
 	var once sync.Once
-	go func() {
+	utils.SafeGo(ctx, "llm.dispatcher.cache_janitor", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -489,7 +490,7 @@ func (d *Dispatcher) StartCacheJanitor(ctx context.Context, interval time.Durati
 				d.sweepExpiredCache()
 			}
 		}
-	}()
+	})
 	return func() {
 		once.Do(func() {
 			close(stopCh)

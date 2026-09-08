@@ -452,22 +452,35 @@ func (c *Client) RestrictChatMember(ctx context.Context, chatID, userID int64, u
 	})
 }
 
-// UnrestrictChatMember 解除禁言（恢复全权限）
-func (c *Client) UnrestrictChatMember(ctx context.Context, chatID, userID int64) error {
-	perms := map[string]any{
+// tgFullSendPerms 全量发送权限：restrictChatMember 的 permissions 是"未列出的字段一律
+// 按 false 处理"，解禁时若只放开文本权限，成员将不能发图/文件/投票/回应（观感=仍被压）。
+func tgFullSendPerms() map[string]any {
+	return map[string]any{
 		"can_send_messages":         true,
+		"can_send_audios":           true,
+		"can_send_documents":        true,
+		"can_send_photos":           true,
+		"can_send_videos":           true,
+		"can_send_video_notes":      true,
+		"can_send_voice_notes":      true,
+		"can_send_media_messages":   true,
 		"can_send_polls":            true,
 		"can_send_other_messages":   true,
 		"can_add_web_page_previews": true,
+		"can_react_to_messages":     true,
 		"can_invite_users":          true,
 	}
+}
+
+// UnrestrictChatMember 解除禁言（恢复全权限）
+func (c *Client) UnrestrictChatMember(ctx context.Context, chatID, userID int64) error {
 	// 关键：必须传 until_date。Telegram 语义——不传（0）且权限放开会被解释为
 	// "受限至永久"，成员停留在 restricted；官方规则"距当前 <30 秒视为永久"，
 	// 故取 now+60s，Telegram 到点自动解除限制（状态回到 member）。
 	return c.callMethod(ctx, "restrictChatMember", map[string]any{
 		"chat_id":     chatID,
 		"user_id":     userID,
-		"permissions": perms,
+		"permissions": tgFullSendPerms(),
 		"until_date":  time.Now().Add(60 * time.Second).Unix(),
 	})
 }

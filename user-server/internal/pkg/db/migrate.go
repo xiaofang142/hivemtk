@@ -106,6 +106,7 @@ func allModels() []any {
 		&model.QQAccount{},
 		&model.TelegramGroupGate{},
 		&model.TelegramGroupMember{},
+		&model.SSOIdentity{},
 		&model.FeishuAccount{},
 		&model.FeishuCustomer{},
 		&model.FeishuMessage{},
