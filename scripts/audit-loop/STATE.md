@@ -5,11 +5,31 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：9 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：12 / 12（R6 为 0 缺陷轮）
-- 下一轮角度：test-coverage
+- 已完成轮次：10 / 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：13 / 13（R6 为 0 缺陷轮）
+- 下一轮角度：config-deploy
 
 ## 轮次报告
+
+### R10 — test-coverage（2026-09-08）
+
+**审计范围**：全包 `go test ./...` 绿灯确认、无测试业务域盘点（按包 × 文件规模）、测试缺口补测优先级。
+
+**发现与处置（1 项）**：
+
+1. `internal/channelbot/core/` 测试数 0（P3）— 该包承载跨渠道安全比较 `SecureEqual`（常量时 HMAC 校验基元）与 `ToMessageEvent` 归一化映射（四渠道入站统一入口），全部为纯函数、零依赖，是最应先补测的缺口。**处置**：新增 `core_test.go` 3 组用例 — SecureEqual 相等/前缀/空值语义、ToMessageEvent 全字段映射（SessionID 拼接、Extra 三键、Timestamp 转换）、空可选字段行为、BaseClient 选项装配。
+
+**核查通过项（无需修复）**：
+- `go test ./... -count=1` **零失败**（含前 9 轮所有修复的回归）
+- 测试基数健康：service 221 个测试文件 / controller 51 / repository 53 / aiagent/llm 25 / middleware 8
+
+**测试缺口留档（增量补测路线）**：
+- service 层 10 个 500+ 行文件无专属测试（sop.go 964 行、r44_gap_services.go 910、webhook_outbound.go 857、sales_engine.go 746、proactive_reach.go 725、chat_visitor.go 719 等）——均为多依赖编排层，补测需先引入 mock 框架支撑，非纯函数可一轮清零，列入后续循环增量处理
+- `internal/reach/`（卡片触达）子包 0 测试，同上
+
+**验证证据**：`go vet ./internal/channelbot/...` 绿 + `go test ./... -count=1` 全绿。
+
+**Commit**：`a490044`
 
 ### R9 — perf（2026-09-08）
 

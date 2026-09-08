@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 9,
-  "next_angle_index": 9,
+  "round": 10,
+  "next_angle_index": 10,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 9,
-    "issues_found_total": 12,
-    "issues_fixed_total": 12,
+    "rounds_completed": 10,
+    "issues_found_total": 13,
+    "issues_fixed_total": 13,
     "last_completed_at": "2026-09-08",
-    "last_commit": "8d47d5f"
+    "last_commit": "a490044"
   },
   "history": [
     {
@@ -96,6 +96,14 @@
       "found": 1,
       "fixed": 1,
       "notes": "N+1打包项: ai_tool ListTools+role ListRoles 批量化, ExternalCustomer 复合索引; 31候选逐个评估"
+    },
+    {
+      "round": 10,
+      "angle": "test-coverage",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "channelbot/core 0测试补3用例; 全包 go test 零失败; service层大文件缺口留档"
     }
   ]
 }
