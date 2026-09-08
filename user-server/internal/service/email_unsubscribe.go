@@ -23,8 +23,6 @@ const emailUnsubscribeTokenTTL = 30 * 24 * time.Hour
 
 const emailUnsubscribeSecretEnv = "EMAIL_UNSUBSCRIBE_SECRET"
 
-const emailUnsubscribeDefaultSecret = "marketing-tools-kit-email-unsubscribe-dev-secret"
-
 // UnsubscribeClaim 退订 token 中携带的声明
 type UnsubscribeClaim struct {
 	Email  string `json:"email"`

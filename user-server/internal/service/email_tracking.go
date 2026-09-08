@@ -25,8 +25,6 @@ import (
 
 const emailTrackingSecretEnv = "EMAIL_TRACKING_SECRET"
 
-const emailTrackingDefaultSecret = "marketing-tools-kit-email-tracking-dev-secret"
-
 // EmailTrackingClaim 追踪 token 携带的声明
 //
 // 每个收件人 + 每个 job 独立 token，避免泄露后影响其他收件人
