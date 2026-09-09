@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：35（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R35 为 0 代码缺陷轮）
-- 下一轮角度：docs-consistency
+- 已完成轮次：36（**第三圈收官**）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环，第四圈自 R37 security 起）
+- 累计发现 / 修复：17 / 17（R6/R13–R36 为 0 代码缺陷轮）
+- 下一轮角度：security
 
 ## 轮次报告
+
+### R36 — docs-consistency（2026-09-10）— 第三圈收官，0 缺陷轮
+
+**审计范围**：`check-doc-consistency.sh` + `check-feature-doc.sh` 复跑、L4 收敛入库（`174a471`/`d9e7cd8`）后的后端回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- `check-doc-consistency.sh` 0 ❌；`check-feature-doc.sh` 0 失败
+- L4 收敛入库后的回归：`go build` + `go vet` 全绿；service 全部子包 + repository 测试 **0 FAIL**——大规模重构（44 文件）未破坏任何行为
+- 同事追加的状态补录（`d9e7cd8`）与循环状态文件一致
+
+**验证证据**：doc 脚本 0 错 + build/vet/test 三绿（0 FAIL）。
+
+**第三圈总结（R25–R36，12 角度）**：全部 0 代码缺陷。R35 期间同事完成 L4 存量收敛大批次（44 文件，审计循环此前多轮留档的存量债开始实际消化），收敛后全量回归绿。
+
+**Commit**：见 git log `chore(audit): 审计R36-docs-consistency: 第三圈收官记录与状态推进`
 
 ### R35 — config-deploy（2026-09-10）— 第三圈，0 缺陷轮（全角度横向核查）
 
