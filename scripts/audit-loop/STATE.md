@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：29（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：16 / 16（R6/R13–R29 为 0 代码缺陷轮）
-- 下一轮角度：data-integrity
+- 已完成轮次：30（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：16 / 16（R6/R13–R30 为 0 代码缺陷轮）
+- 下一轮角度：api-contract
 
 ## 轮次报告
+
+### R30 — data-integrity（2026-09-09）— 第三圈，0 缺陷轮
+
+**审计范围**：R6 六项核查三圈复扫（spot-check 形式）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项（逐项在位）**：
+- `geo_daily_stats` uniqueIndex（3 处 tag 引用）
+- `SalesEvent.Amount` numeric(12,2)
+- 消息链路事务（message_hub_inbox_message.go:37）
+- 会话分配 SELECT FOR UPDATE（session_assignment.go:363）
+- geo repository/service + repository 测试全绿（0.4s/0.5s/0.5s）
+
+**验证证据**：geo + repository 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R30-data-integrity: 0缺陷轮核查记录与状态推进`
 
 ### R29 — concurrency（2026-09-09）— 第三圈，0 缺陷轮
 
