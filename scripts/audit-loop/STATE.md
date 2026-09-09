@@ -5,11 +5,27 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：36（**第三圈收官**）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环，第四圈自 R37 security 起）
-- 累计发现 / 修复：17 / 17（R6/R13–R36 为 0 代码缺陷轮）
-- 下一轮角度：security
+- 已完成轮次：37（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：17 / 17（R6/R13–R37 为 0 代码缺陷轮）
+- 下一轮角度：authz
 
 ## 轮次报告
+
+### R37 — security（2026-09-10）— 第四圈首轮，0 缺陷轮
+
+**审计范围**：R1/R13/R25 扫描项四圈复扫（硬编码密钥、SQL 拼接、敏感日志）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 硬编码密钥复扫：0 命中
+- SQL 拼接 4 处维持受控结论（常量表名/白名单参数/migration 内部）
+- 敏感日志（secret=/password= 形参）：0 命中
+- L4 收敛大批次落地后的回归：`go build` + `go vet` 全绿；service 全部子包测试 0 FAIL
+
+**验证证据**：build/vet/test 三绿（0 FAIL）。
+
+**Commit**：见 git log `chore(audit): 审计R37-security: 0缺陷轮核查记录与状态推进`
 
 ### R36 — docs-consistency（2026-09-10）— 第三圈收官，0 缺陷轮
 
