@@ -1,50 +1,63 @@
-# GitHub Topics for hivemtk repos
+# GitHub / Gitee Topics for hivemtk repos
 # 通过 GitHub CLI 一键应用：
-#   gh repo edit --add-topic marketing-automation --add-topic agpl-3-0 --add-topic go ...
-# 或在仓库 Settings → Topics 粘贴下面列表
+#   gh repo edit xiaofang142/hivemtk --add-topic scrm --add-topic ai-agent ...（逐个 --add-topic）
+# 或在仓库 Settings → Topics / Gitee 仓库管理 → 编辑 → 标签 粘贴下面列表
 # 目标仓库：
-#   - gitee.com/xhpmayun/hivemtk (用户端)
-#   - gitee.com/xhpmayun/hivemtk-platform (平台端)
+#   - gitee.com/xhpmayun/hivemtk (用户端) · github.com/xiaofang142/hivemtk (镜像)
+#   - gitee.com/xhpmayun/hivemtk-platform (平台端) · github.com/xiaofang142/hivemtk-platform (镜像)
+#
+# 仓库 About（一句话简介，两平台通用）：
+#   开源私域营销 AI 系统 | ReAct 智能体 · 10+ 渠道触达 · 数据零出域 | Go + Vue3 + pgvector | Self-hosted AI Marketing OS
+#   Open-source self-hosted AI marketing OS: ReAct agents, 10+ channel reach, zero data egress. Go + Vue3 + pgvector.
 
-# 必选（核心定位）
+# 定位（搜索主词，优先放前 10 个 —— GitHub 前排 topic 权重更高）
+- scrm
 - marketing-automation
-- crm
-- customer-data-platform
-- sop-orchestration
 - ai-agent
+- react-agent
 - rag
+- customer-data-platform
+- customer-service
+- private-domain
+- llm
 - knowledge-base
-- multi-channel-messaging
+
+# 业务场景
+- wechat
 - wechat-work
+- whatsapp
 - whatsapp-business
+- telegram
+- douyin
+- xiaohongshu
+- kuaishou
+- xianyu
+- tiktok
+- sms-marketing
+- email-marketing
+- ecommerce
+- sales-copilot
 
 # 技术栈
 - golang
 - vue3
 - typescript
 - postgresql
+- pgvector
 - redis
 - gorm
 - gin
 - element-plus
 - vite
+- llama-cpp
+- qwen
+- bge-m3
 
-# 协议与定位
-- agpl-3-0
-- open-source
+# 部署与协议
 - self-hosted
+- on-premise
 - private-deployment
-- sso
-- oss
-
-# 业务场景
-- ecommerce
-- customer-service
-- whatsapp
-- wechat
-- douyin
-- xiaohongshu
-- kuaishou
-- xianyu
-- sms-marketing
-- email-marketing
+- zero-data-egress
+- docker-compose
+- open-source
+- agpl-3-0

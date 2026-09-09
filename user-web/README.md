@@ -1,6 +1,6 @@
 # user-web · 用户端 B 端工作台
 
-> HiveMtk 用户端的 B 端运营工作台。Vue 3 + Vite + Element Plus + Pinia，覆盖客户 / 线索 / 客服 / 触达 / 知识库 / 看板 / 智能体等用户端 94 个核心业务模块。
+> HiveMtk 的 Vue 3 运营工作台：统一收件箱、AI 智能体管理、客户 360°、触达排程、知识库、营销画布、数据看板都在这里操作。覆盖用户端 94 个核心业务模块。项目总览见 [仓库根 README](../README.md)。
 >
 > 后端服务对接 [`../user-server`](../user-server/)，嵌入聊天窗 SDK 配套 [`../embed-sdk`](../embed-sdk/)。
 
