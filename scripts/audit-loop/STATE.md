@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：27（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：16 / 16（R6/R13–R27 为 0 代码缺陷轮）
-- 下一轮角度：error-handling
+- 已完成轮次：28（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：16 / 16（R6/R13–R28 为 0 代码缺陷轮）
+- 下一轮角度：concurrency
 
 ## 轮次报告
+
+### R28 — error-handling（2026-09-09）— 第三圈，0 缺陷轮
+
+**审计范围**：R4 修复点回归（wecom 回查判错 + 前端全局兜底）、`go vet`、前端 lint/测试。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R4 修复点在位：`wecom.go:281` 回查判错显式返回；`main.js:23-26` 全局 `errorHandler` + `unhandledrejection` 兜底
+- `go vet ./...` 零输出；`eslint src` errors = 0；controller 测试全绿（14.9s）
+
+**验证证据**：vet 零 + eslint 0 + controller 测试绿。
+
+**Commit**：见 git log `chore(audit): 审计R28-error-handling: 0缺陷轮核查记录与状态推进`
 
 ### R27 — architecture（2026-09-09）— 第三圈，0 缺陷轮
 
