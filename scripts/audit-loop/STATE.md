@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：38（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R38 为 0 代码缺陷轮）
-- 下一轮角度：architecture
+- 已完成轮次：39（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：17 / 17（R6/R13–R39 为 0 代码缺陷轮）
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R39 — architecture（2026-09-10）— 第四圈，0 缺陷轮
+
+**审计范围**：`check-architecture.sh` 复跑（L4 收敛大批次落地后的新基线）、命名规范回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- **L4 新基线：service 直连 DB 38 处，较收敛前基线 152 处下降 114 处**——同事的 L4 批量收敛（44 文件）经本脚本量化确认，审计循环留档的存量债消化约 75%
+- 命名规范段全绿（0 违规）
+- 其余检查（反向依赖/interface/ctx 透传/config 位置）全绿
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R39-architecture: 0缺陷轮核查记录与状态推进`
 
 ### R38 — authz（2026-09-10）— 第四圈，0 缺陷轮
 
