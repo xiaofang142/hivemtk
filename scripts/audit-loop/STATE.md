@@ -5,11 +5,33 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：34（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R34 为 0 代码缺陷轮）
-- 下一轮角度：config-deploy
+- 已完成轮次：35（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：17 / 17（R6/R13–R35 为 0 代码缺陷轮）
+- 下一轮角度：docs-consistency
 
 ## 轮次报告
+
+### R35 — config-deploy（2026-09-10）— 第三圈，0 缺陷轮（全角度横向核查）
+
+**审计背景**：用户手动触发"全面多角度审计"。此时工作区存在同事进行中的**大规模 L4 仓储化 WIP**（44 个修改文件 + 21 个新增 repository 文件，未提交，774 insertions/1154 deletions），本轮在"HEAD 基线 + 同事 WIP 现场"两种状态下做了全角度横向核查，**不改不提交同事 WIP**。
+
+**发现与处置**：**0 本仓代码缺陷**。过程性发现 2 项（均为 WIP 中间态，复验时已消失）：
+
+1. 首跑全包 `go test` 出现 `TestWechatService_ListAccounts_NilDB` 1 例失败 — 根因：审计运行期间同事正在改写 `wechat.go`（db 直连 → WechatAccountRepository 仓储化），测试在**旧测试语义**（db=nil 应报错）与**新仓储实现**（repo.List nil 时返回空表）交错的中间态上执行。复跑（同事改写稳定后）4 个 NilDB 用例全部 PASS，service 包与全包 `go test` 均 0 FAIL。非代码缺陷，不处置。
+2. 架构检查首跑报 2 错误（`reach_compliance_log_repo.go` 缺 ctx + L4 残留）— 复跑时同事已补 ctx 透传，ctx 抽查段全绿；唯一剩错为 L4 存量（同事本轮 WIP 正是收敛该项，涉及 44 文件，等其自行收尾提交）。
+
+**全角度核查通过项**：
+- **security**：硬编码密钥 0 命中（kb_connectors 字段名表/email_tracking 环境变量名均为非密钥）；旧键名 `MERCHANT_HMAC_SECRET` 全仓 0 残留
+- **config-deploy**：`MERCHANT_API_SECRET` 三处链（.env-example/DEPLOYMENT_GUIDE/platform.yaml）一致；端口三方（compose 8202/8203 + PORT_REGISTRY + config.yaml 默认值）一致；`cmd/seed` main.go 在位
+- **architecture**：build/vet 全绿；命名段/interface 规范/Config 位置全绿；21 个新增 repository 文件全部含 context 导入（无 ctx 违规新增）
+- **api-contract**：`audit_api_contract.py` 复跑 **0/831 UNMATCHED**
+- **frontend**：`npx eslint src` **0 errors**（17411 warnings 为规则白名单既定状态）；vitest 6 文件 **174 用例全过**
+- **docs-consistency**：`check-doc-consistency.sh` **0 error**（19 警告均为父仓库/平台端文档既定范围）
+- **test-coverage**：全包 `go test ./... -count=1` 复跑 **0 FAIL**
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；全包 go test 0 FAIL；eslint 0 errors；vitest 174 全过；契约 0/831；doc 脚本 0 error。
+
+**Commit**：见 git log `chore(audit): 审计R35-config-deploy: 0缺陷轮全角度核查记录与状态推进`
 
 ### R34 — test-coverage（2026-09-09）— 第三圈，1 发现（非本仓代码缺陷）
 
