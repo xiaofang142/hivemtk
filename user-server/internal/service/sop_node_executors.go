@@ -372,7 +372,7 @@ type LLMNodeExecutor struct {
 	nodeType   string
 	dispatcher *llm.Dispatcher
 	llmSem     chan struct{}
-	db         *gorm.DB
+	execRepo   *repository.SopExecutionRepository
 }
 
 func (e *LLMNodeExecutor) NodeType() string { return e.nodeType }
@@ -472,11 +472,12 @@ func (e *LLMNodeExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*N
 }
 
 func NewLLMNodeExecutor(nodeType string, deps *SOPNodeExecutorDeps) *LLMNodeExecutor {
+	execRepo := repository.NewSopExecutionRepository(deps.DB)
 	return &LLMNodeExecutor{
 		nodeType:   nodeType,
 		dispatcher: deps.Dispatcher,
 		llmSem:     deps.LLMSem,
-		db:         deps.DB,
+		execRepo:   execRepo,
 	}
 }
 
@@ -488,12 +489,12 @@ func (e *LLMNodeExecutor) Compensate(ctx context.Context, execCtx *ExecutionCont
 	if e == nil || execCtx == nil || execCtx.Execution == nil {
 		return nil
 	}
-	if e.db == nil || execCtx.Node == nil {
+	if e.execRepo == nil || execCtx.Node == nil {
 		return nil
 	}
 
-	var exec model.SOPExecution
-	if err := e.db.WithContext(ctx).First(&exec, execCtx.Execution.ID).Error; err != nil {
+	exec, err := e.execRepo.GetByID(ctx, execCtx.Execution.ID)
+	if err != nil {
 		return err
 	}
 	if exec.ExecutionData == nil {
@@ -509,10 +510,7 @@ func (e *LLMNodeExecutor) Compensate(ctx context.Context, execCtx *ExecutionCont
 	if !changed {
 		return nil
 	}
-	return e.db.WithContext(ctx).
-		Model(&model.SOPExecution{}).
-		Where("id = ?", exec.ID).
-		Update("execution_data", exec.ExecutionData).Error
+	return e.execRepo.UpdateFields(ctx, exec.ID, map[string]any{"execution_data": exec.ExecutionData})
 }
 
 type llmDecision struct {

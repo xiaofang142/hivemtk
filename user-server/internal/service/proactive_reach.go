@@ -61,7 +61,7 @@ type ProactiveReachResponse struct {
 }
 
 type ProactiveReachService struct {
-	db            *gorm.DB
+	repo          *repository.ProactiveReachRepository
 	customerRepo  *customerRepo
 	accountLookup AccountLookup
 
@@ -126,10 +126,10 @@ type AccountLookup interface {
 // NewProactiveReachService 创建主动触达服务
 func NewProactiveReachService(db *gorm.DB, lookup AccountLookup) *ProactiveReachService {
 	if lookup == nil {
-		lookup = &defaultAccountLookup{db: db}
+		lookup = &defaultAccountLookup{repo: repository.NewProactiveReachRepository(db)}
 	}
 	return &ProactiveReachService{
-		db:            db,
+		repo:          repository.NewProactiveReachRepository(db),
 		customerRepo:  newCustomerRepo(db),
 		accountLookup: lookup,
 		dnc:           NewDoNotContactService(nil),
@@ -148,34 +148,21 @@ func (s *ProactiveReachService) dncService() *DoNotContactService {
 	return s.dnc
 }
 
-func newCustomerRepo(db *gorm.DB) *customerRepo {
-	return &customerRepo{db: db}
+// customerRepo 客户读取的进程内适配（gorm 收敛到 repository.ProactiveReachRepository）
+type customerRepo struct {
+	repo *repository.ProactiveReachRepository
 }
 
-type customerRepo struct {
-	db *gorm.DB
+func newCustomerRepo(db *gorm.DB) *customerRepo {
+	return &customerRepo{repo: repository.NewProactiveReachRepository(db)}
 }
 
 func (r *customerRepo) GetByID(ctx context.Context, id string) (*model.Customer, error) {
-	if r.db == nil {
-		return nil, nil
-	}
-	var c model.Customer
-	if err := r.db.WithContext(ctx).First(&c, "id = ?", id).Error; err != nil {
-		return nil, nil
-	}
-	return &c, nil
+	return r.repo.GetCustomerByID(ctx, id)
 }
 
 func (r *customerRepo) GetByUnifiedID(ctx context.Context, oneID string) (*model.Customer, error) {
-	if r.db == nil {
-		return nil, nil
-	}
-	var c model.Customer
-	if err := r.db.WithContext(ctx).First(&c, "unified_id = ?", oneID).Error; err != nil {
-		return nil, nil
-	}
-	return &c, nil
+	return r.repo.GetCustomerByUnifiedID(ctx, oneID)
 }
 
 // ReachByCustomer 按客户主键或 OneID 智能选择渠道发送
@@ -278,7 +265,7 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 }
 
 func (s *ProactiveReachService) loadCustomer(ctx context.Context, customerID, oneID string) (*model.Customer, error) {
-	if s.customerRepo == nil || s.db == nil {
+	if s.customerRepo == nil {
 		return nil, nil
 	}
 	if customerID != "" {
@@ -296,14 +283,11 @@ func (s *ProactiveReachService) LoadCustomer(ctx context.Context, customerID, on
 }
 
 func (s *ProactiveReachService) loadCustomerPreferredOrder(ctx context.Context, oneID string, fallback []string) ([]string, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, nil
 	}
-	var rows []model.CustomerChannel
-	if err := s.db.WithContext(ctx).
-		Where("one_id = ?", oneID).
-		Order("is_primary DESC, preferred_rank ASC, last_seen_at DESC").
-		Find(&rows).Error; err != nil {
+	rows, err := s.repo.ListCustomerChannelsByOneID(ctx, oneID)
+	if err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
@@ -598,71 +582,14 @@ func parseInt64(s string) int64 {
 }
 
 type defaultAccountLookup struct {
-	db *gorm.DB
+	repo *repository.ProactiveReachRepository
 }
 
 func (l *defaultAccountLookup) FindActiveAccount(ctx context.Context, channel string) (string, error) {
-	if l.db == nil {
+	if l.repo == nil {
 		return "", errors.New("db not available")
 	}
-	switch channel {
-	case "telegram":
-		var acc struct {
-			ID uint
-		}
-		if err := l.db.WithContext(ctx).Table("telegram_accounts").Where("status = ?", 1).Order("id ASC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%d", acc.ID), nil
-	case "whatsapp":
-		var acc struct {
-			ID string
-		}
-		if err := l.db.WithContext(ctx).Table("whatsapp_accounts").Where("status = ?", "active").Order("created_at ASC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return acc.ID, nil
-	case "feishu":
-		var acc struct {
-			ID uint
-		}
-		if err := l.db.WithContext(ctx).Table("feishu_accounts").Where("status = ?", 1).Order("id ASC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%d", acc.ID), nil
-	case "wecom":
-		var acc struct {
-			ID uint
-		}
-		if err := l.db.WithContext(ctx).Table("wecom_accounts").Where("login_state = ?", "online").Order("id ASC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%d", acc.ID), nil
-	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu":
-
-		var acc struct {
-			AccountID string
-		}
-		if err := l.db.WithContext(ctx).Table("bridge_accounts").
-			Where("channel = ? AND status = ?", channel, "online").
-			Order("last_sync_at DESC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return acc.AccountID, nil
-	case "wechat":
-
-		var acc struct {
-			ID uint
-		}
-		if err := l.db.WithContext(ctx).Table("wechat_accounts").
-			Where("status = ?", "active").
-			Where("app_id <> ? AND app_secret <> ?", "", "").
-			Order("id ASC").First(&acc).Error; err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%d", acc.ID), nil
-	}
-	return "", fmt.Errorf("account lookup not supported for channel: %s", channel)
+	return l.repo.FindActiveAccountID(ctx, channel)
 }
 
 // BindProactiveReachSenders 把 Reach Sender 注册到 ProactiveReachService

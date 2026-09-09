@@ -15,7 +15,6 @@ import (
 
 type MessageHubSummaryAggregationService struct {
 	repo repository.MessageHubSummaryRepository
-	db   *gorm.DB
 
 	batchSize int
 }
@@ -26,7 +25,6 @@ func NewMessageHubSummaryAggregationService(database *gorm.DB) *MessageHubSummar
 	}
 	return &MessageHubSummaryAggregationService{
 		repo:      repository.NewMessageHubSummaryRepository(database),
-		db:        database,
 		batchSize: 50000,
 	}
 }
@@ -34,7 +32,7 @@ func NewMessageHubSummaryAggregationService(database *gorm.DB) *MessageHubSummar
 // RunOnce 消费自上次水位线以来的全部新消息并累加进 summary 表。
 // 返回本轮消费的消息行数。DB 未就绪返回 (0, nil) 静默跳过。
 func (s *MessageHubSummaryAggregationService) RunOnce(ctx context.Context) (int64, error) {
-	if s.db == nil || s.repo == nil {
+	if s.repo == nil {
 		return 0, nil
 	}
 	wm, err := s.repo.LoadWatermark(ctx, model.SummarySourceMessageHub)
@@ -43,13 +41,8 @@ func (s *MessageHubSummaryAggregationService) RunOnce(ctx context.Context) (int6
 	}
 	var consumed int64
 	for {
-		rows := make([]model.MessageHub, 0, s.batchSize)
-		if err := s.db.WithContext(ctx).
-			Model(&model.MessageHub{}).
-			Where("id > ?", wm).
-			Order("id ASC").
-			Limit(s.batchSize).
-			Find(&rows).Error; err != nil {
+		rows, err := s.repo.LoadBatchSince(ctx, wm, s.batchSize)
+		if err != nil {
 			return consumed, err
 		}
 		if len(rows) == 0 {
@@ -130,7 +123,7 @@ func init() {
 }
 
 func startHubSummaryAggCron(svc *MessageHubSummaryAggregationService) *hubSummaryAggCron {
-	if svc == nil || svc.db == nil {
+	if svc == nil {
 		return nil
 	}
 	c := &hubSummaryAggCron{svc: svc, stopCh: make(chan struct{})}

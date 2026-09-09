@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"gorm.io/gorm"
+	"hivemtk-user/internal/repository"
 )
 
 type ResolutionStats struct {
@@ -23,11 +23,11 @@ type DailyResolutionPoint struct {
 }
 
 type AIResolutionStatsService struct {
-	db *gorm.DB
+	repo *repository.AIResolutionStatsRepository
 }
 
-func NewAIResolutionStatsService(db *gorm.DB) *AIResolutionStatsService {
-	return &AIResolutionStatsService{db: db}
+func NewAIResolutionStatsService(repo *repository.AIResolutionStatsRepository) *AIResolutionStatsService {
+	return &AIResolutionStatsService{repo: repo}
 }
 
 func (s *AIResolutionStatsService) GetStats(ctx context.Context, days int) (*ResolutionStats, error) {
@@ -36,19 +36,15 @@ func (s *AIResolutionStatsService) GetStats(ctx context.Context, days int) (*Res
 	}
 	since := time.Now().AddDate(0, 0, -days)
 	stats := &ResolutionStats{}
-	if s.db == nil {
+	if s.repo == nil {
 		return stats, nil
 	}
-	if err := s.db.WithContext(ctx).Table("ai_suggestions").
-		Where("created_at >= ?", since).
-		Count(&stats.TotalSuggestions).Error; err != nil {
+	total, adopted, err := s.repo.CountSuggestions(ctx, since)
+	if err != nil {
 		return stats, err
 	}
-	if err := s.db.WithContext(ctx).Table("ai_suggestions").
-		Where("created_at >= ? AND adopted = ?", since, true).
-		Count(&stats.AdoptedSuggestions).Error; err != nil {
-		return stats, err
-	}
+	stats.TotalSuggestions = total
+	stats.AdoptedSuggestions = adopted
 	if stats.TotalSuggestions > 0 {
 		stats.AdoptionRate = float64(stats.AdoptedSuggestions) / float64(stats.TotalSuggestions) * 100
 	}

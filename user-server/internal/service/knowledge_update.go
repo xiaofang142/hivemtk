@@ -9,35 +9,29 @@ import (
 
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
 
-type KBDocumentChunk struct {
-	ID            uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	DocumentID    uint      `gorm:"index;not null" json:"document_id"`
-	ChunkIndex    int       `gorm:"not null;default:0" json:"chunk_index"`
-	ContentHash   string    `gorm:"type:varchar(64);index;not null" json:"content_hash"`
-	ChunkContent  string    `gorm:"type:text" json:"chunk_content"`
-	EmbeddingHash string    `gorm:"type:varchar(64);default:''" json:"embedding_hash"`
-	Status        string    `gorm:"type:varchar(20);default:'active';index" json:"status"`
-	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-}
+// KBDocumentChunk 文档切片（域内只读别名，gorm 行模型在 repository.KBDocumentChunkRow）
+type KBDocumentChunk = repository.KBDocumentChunkRow
 
-func (KBDocumentChunk) TableName() string { return "kb_document_chunks" }
+// KBDocumentChunkRow 仓储层行模型别名（沿用旧名，减少 diff）
+type KBDocumentChunkRow = repository.KBDocumentChunkRow
 
 type KnowledgeUpdateService struct {
-	db *gorm.DB
+	repo *repository.KBDocumentChunkRepository
 }
 
 // NewKnowledgeUpdateService 创建增量更新服务
 func NewKnowledgeUpdateService() *KnowledgeUpdateService {
-	return &KnowledgeUpdateService{db: db.GetDB()}
+	return &KnowledgeUpdateService{repo: repository.NewKBDocumentChunkRepository(db.GetDB())}
 }
 
 // NewKnowledgeUpdateServiceWithDB 注入 DB（测试用）
 func (s *KnowledgeUpdateService) WithDB(d *gorm.DB) *KnowledgeUpdateService {
-	s.db = d
+	s.repo = repository.NewKBDocumentChunkRepository(d)
 	return s
 }
 
@@ -56,7 +50,7 @@ type UpdateDeltaResult struct {
 // UpdateDocumentDelta 对指定文档执行增量切片更新
 // 如果 chunks 表不存在或旧 chunks 为空，退化为全量重建
 func (s *KnowledgeUpdateService) UpdateDocumentDelta(ctx context.Context, documentID uint, newContent string) (*UpdateDeltaResult, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, fmt.Errorf("db 未初始化")
 	}
 	startedAt := time.Now()
@@ -70,24 +64,25 @@ func (s *KnowledgeUpdateService) UpdateDocumentDelta(ctx context.Context, docume
 		newHashes[h] = i
 	}
 
-	var oldChunks []KBDocumentChunk
-	if err := s.db.WithContext(ctx).
-		Where("document_id = ? AND status = ?", documentID, "active").
-		Order("chunk_index ASC").
-		Find(&oldChunks).Error; err != nil {
+	oldRows, err := s.repo.ListActiveByDocument(ctx, documentID)
+	if err != nil {
 		return nil, fmt.Errorf("查询旧 chunks: %w", err)
+	}
+	oldChunks := make([]KBDocumentChunk, len(oldRows))
+	for i := range oldRows {
+		oldChunks[i] = KBDocumentChunk(oldRows[i])
 	}
 
 	if len(oldChunks) == 0 {
 		for i, c := range newChunks {
-			chunk := KBDocumentChunk{
+			chunk := KBDocumentChunkRow{
 				DocumentID:   documentID,
 				ChunkIndex:   i,
 				ContentHash:  contentHash(c),
 				ChunkContent: c,
 				Status:       "active",
 			}
-			if err := s.db.WithContext(ctx).Create(&chunk).Error; err != nil {
+			if err := s.repo.Create(ctx, &chunk); err != nil {
 				logger.Warnf("[KBUpdate] 新建 chunk 失败 doc=%d idx=%d: %v", documentID, i, err)
 			}
 			result.Added++
@@ -108,8 +103,7 @@ func (s *KnowledgeUpdateService) UpdateDocumentDelta(ctx context.Context, docume
 		}
 	}
 	if len(toDelete) > 0 {
-		if err := s.db.WithContext(ctx).
-			Exec("UPDATE kb_document_chunks SET status = ? WHERE id IN ?", "superseded", toDelete).Error; err != nil {
+		if err := s.repo.MarkSuperseded(ctx, toDelete); err != nil {
 			logger.Warnf("[KBUpdate] 标记 superseded 失败 doc=%d: %v", documentID, err)
 		}
 		result.Removed = len(toDelete)
@@ -120,14 +114,14 @@ func (s *KnowledgeUpdateService) UpdateDocumentDelta(ctx context.Context, docume
 		h := contentHash(c)
 		newIdx = newHashes[h]
 		if _, existed := oldHashSet[h]; !existed {
-			chunk := KBDocumentChunk{
+			chunk := KBDocumentChunkRow{
 				DocumentID:   documentID,
 				ChunkIndex:   newIdx,
 				ContentHash:  h,
 				ChunkContent: c,
 				Status:       "active",
 			}
-			if err := s.db.WithContext(ctx).Create(&chunk).Error; err != nil {
+			if err := s.repo.Create(ctx, &chunk); err != nil {
 				logger.Warnf("[KBUpdate] 新增 chunk 失败 doc=%d idx=%d: %v", documentID, newIdx, err)
 			}
 			result.Added++

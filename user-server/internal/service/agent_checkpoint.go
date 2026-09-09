@@ -14,71 +14,30 @@ import (
 	"fmt"
 	"time"
 
+	"hivemtk-user/internal/repository"
+
 	"gorm.io/gorm"
 )
 
 // AgentStageNames 五阶段顺序（恢复游标依据）
 var AgentStageNames = []string{"perception", "alignment", "gatekeeper", "planner", "reviewer"}
 
-// AgentCheckpointRepository checkpoint 存取
-type AgentCheckpointRepository struct {
-	db *gorm.DB
+// AgentCheckpoint 单条记录（别名，存储结构已收敛到 repository 层）
+type AgentCheckpoint = repository.AgentCheckpoint
+
+// NewAgentCheckpointRepository 构造（gorm 收敛在仓储，service 不直连 DB）
+func NewAgentCheckpointRepository(db *gorm.DB) *repository.AgentCheckpointRepository {
+	return repository.NewAgentCheckpointRepository(db)
 }
 
-// NewAgentCheckpointRepository 构造
-func NewAgentCheckpointRepository(db *gorm.DB) *AgentCheckpointRepository {
-	return &AgentCheckpointRepository{db: db}
+// SaveCheckpoint 阶段完成即落 checkpoint（upsert，幂等）
+func SaveCheckpoint(ctx context.Context, repo *repository.AgentCheckpointRepository, threadID, stage string, state json.RawMessage) error {
+	return repo.Save(ctx, threadID, stage, state)
 }
 
-// Save 阶段完成即落 checkpoint（upsert，幂等）
-func (r *AgentCheckpointRepository) Save(ctx context.Context, threadID, stage string, state json.RawMessage) error {
-	if r.db == nil {
-		return nil
-	}
-	if threadID == "" || stage == "" {
-		return nil
-	}
-	return r.db.WithContext(ctx).Exec(`
-		INSERT INTO agent_checkpoints (thread_id, stage, state, created_at, updated_at)
-		VALUES (?, ?, ?, NOW(), NOW())
-		ON CONFLICT (thread_id, stage) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()`,
-		threadID, stage, string(state)).Error
-}
-
-// AgentCheckpoint 单条记录
-type AgentCheckpoint struct {
-	ThreadID  string
-	Stage     string
-	State     json.RawMessage
-	UpdatedAt time.Time
-}
-
-// LoadLatest 取该 thread 最新 checkpoint（按 updated_at DESC），无记录返回 nil
-func (r *AgentCheckpointRepository) LoadLatest(ctx context.Context, threadID string) (*AgentCheckpoint, error) {
-	if r.db == nil || threadID == "" {
-		return nil, nil
-	}
-	var rows []struct {
-		ThreadID  string          `gorm:"column:thread_id"`
-		Stage     string          `gorm:"column:stage"`
-		State     json.RawMessage `gorm:"column:state"`
-		UpdatedAt time.Time       `gorm:"column:updated_at"`
-	}
-	if err := r.db.WithContext(ctx).Table("agent_checkpoints").
-		Where("thread_id = ?", threadID).
-		Order("updated_at DESC").Limit(1).
-		Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	return &AgentCheckpoint{
-		ThreadID:  rows[0].ThreadID,
-		Stage:     rows[0].Stage,
-		State:     rows[0].State,
-		UpdatedAt: rows[0].UpdatedAt,
-	}, nil
+// LoadLatestCheckpoint 取该 thread 最新 checkpoint，无记录返回 nil
+func LoadLatestCheckpoint(ctx context.Context, repo *repository.AgentCheckpointRepository, threadID string) (*AgentCheckpoint, error) {
+	return repo.LoadLatest(ctx, threadID)
 }
 
 // ResumeStage 返回应从哪个阶段续跑（无 checkpoint → 从第一阶段起跑）。
@@ -105,3 +64,6 @@ func NewThreadID(sessionID string) string {
 	}
 	return sessionID
 }
+
+var _ = gorm.ErrRecordNotFound
+var _ = context.Background

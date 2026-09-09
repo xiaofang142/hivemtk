@@ -966,6 +966,8 @@ func newMockConfigKVRepo() *mockConfigKVRepo {
 	return &mockConfigKVRepo{data: make(map[string]string)}
 }
 
+func (m *mockConfigKVRepo) Available() bool { return true }
+
 func (m *mockConfigKVRepo) Get(_ context.Context, key string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

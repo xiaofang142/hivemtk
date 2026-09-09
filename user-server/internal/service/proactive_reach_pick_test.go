@@ -44,7 +44,7 @@ func TestProactiveReachService_PickChannel_OutboundChannels(t *testing.T) {
 
 // TestProactiveReachService_PickChannel_NilDB_OutboundChannels 验证 nil DB 下出站渠道仍可用
 func TestProactiveReachService_PickChannel_NilDB_OutboundChannels(t *testing.T) {
-	svc := NewProactiveReachService(nil, &defaultAccountLookup{db: nil})
+	svc := NewProactiveReachService(nil, &defaultAccountLookup{repo: nil})
 	customer := &model.Customer{
 		UnifiedID: "phone:13800138000",
 		Phone:     "13800138000",

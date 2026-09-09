@@ -5,18 +5,17 @@ import (
 	"time"
 
 	"hivemtk-user/internal/pkg/db"
-
-	"gorm.io/gorm"
+	"hivemtk-user/internal/repository"
 )
 
 // SalesCockpitService 驾驶舱聚合服务
 type SalesCockpitService struct {
-	db *gorm.DB
+	repo *repository.SalesCockpitRepository
 }
 
 // NewSalesCockpitService 构造
 func NewSalesCockpitService() *SalesCockpitService {
-	return &SalesCockpitService{db: db.GetDB()}
+	return &SalesCockpitService{repo: repository.NewSalesCockpitRepository(db.GetDB())}
 }
 
 // GetCockpit 全景聚合（单次请求 5 条聚合 SQL，均带 LIMIT/索引时间过滤）
@@ -80,23 +79,9 @@ func (s *SalesCockpitService) GetCockpit(ctx context.Context) (map[string]any, e
 }
 
 func (s *SalesCockpitService) countWhere(ctx context.Context, table, cond string, args ...any) int64 {
-	if s.db == nil {
-		return 0
-	}
-	var n int64
-	if err := s.db.WithContext(ctx).Table(table).Where(cond, args...).Count(&n).Error; err != nil {
-		return 0
-	}
-	return n
+	return s.repo.CountWhere(ctx, table, cond, args...)
 }
 
 func (s *SalesCockpitService) groupQuery(ctx context.Context, sql string, args ...any) []map[string]any {
-	if s.db == nil {
-		return []map[string]any{}
-	}
-	out := []map[string]any{}
-	if err := s.db.WithContext(ctx).Raw(sql, args...).Scan(&out).Error; err != nil {
-		return []map[string]any{}
-	}
-	return out
+	return s.repo.GroupQuery(ctx, sql, args...)
 }

@@ -11,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 )
 
 func newTestPipeline(adapter ChannelAdapter) SendPipeline {
@@ -1345,7 +1346,7 @@ func TestResolvePerUserLimit_Default(t *testing.T) {
 // TestComplianceAuditLogger_FlushWritesDB 缓冲记录经 Flush 批量写入 reach_compliance_log
 func TestComplianceAuditLogger_FlushWritesDB(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &ReachComplianceLog{})
-	l := &ComplianceAuditLogger{db: db}
+	l := &ComplianceAuditLogger{repo: repository.NewReachComplianceLogRepository(db)}
 	l.record("sms", "13800000001")
 	l.record("wecom", "user-b")
 	if l.BufferedCount() != 2 {

@@ -20,21 +20,13 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
 
-// WebhookSubscription 出站 Webhook 订阅
-type WebhookSubscription struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	URL       string    `gorm:"type:varchar(500);not null" json:"url"`
-	Events    string    `gorm:"type:varchar(500);not null" json:"events"`
-	Secret    string    `gorm:"type:varchar(120);not null" json:"secret"`
-	Enabled   bool      `gorm:"default:true" json:"enabled"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-}
-
-func (WebhookSubscription) TableName() string { return "webhook_subscriptions" }
+// WebhookSubscription 出站 Webhook 订阅（别名，模型已收敛到 model 层）
+type WebhookSubscription = model.WebhookSubscription
 
 // Webhook 事件常量
 const (
@@ -53,11 +45,13 @@ func PublishWebhookEvent(ctx context.Context, event string, payload map[string]a
 
 // WebhookSubService CRUD 服务
 type WebhookSubService struct {
-	db *gorm.DB
+	repo *repository.WebhookSubscriptionRepository
 }
 
 // NewWebhookSubService 构造
-func NewWebhookSubService(gdb *gorm.DB) *WebhookSubService { return &WebhookSubService{db: gdb} }
+func NewWebhookSubService(gdb *gorm.DB) *WebhookSubService {
+	return &WebhookSubService{repo: repository.NewWebhookSubscriptionRepository(gdb)}
+}
 
 // NewWebhookSubServiceFromGlobal 便捷构造
 func NewWebhookSubServiceFromGlobal() *WebhookSubService { return NewWebhookSubService(db.GetDB()) }
@@ -76,7 +70,7 @@ func (s *WebhookSubService) Create(ctx context.Context, url, events string) (*mo
 	}
 	secret := "whsec_" + base64.RawURLEncoding.EncodeToString(b)
 	sub := &model.WebhookSubscription{URL: url, Events: events, Secret: secret, Enabled: true}
-	if err := s.db.WithContext(ctx).Create(sub).Error; err != nil {
+	if err := s.repo.Create(ctx, sub); err != nil {
 		return nil, err
 	}
 	return sub, nil
@@ -84,22 +78,18 @@ func (s *WebhookSubService) Create(ctx context.Context, url, events string) (*mo
 
 // List 订阅列表
 func (s *WebhookSubService) List(ctx context.Context) ([]*model.WebhookSubscription, error) {
-	var list []*model.WebhookSubscription
-	err := s.db.WithContext(ctx).Order("id ASC").Find(&list).Error
-	return list, err
+	return s.repo.List(ctx)
 }
 
 // Delete 删除
 func (s *WebhookSubService) Delete(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Delete(&model.WebhookSubscription{}, id).Error
+	return s.repo.Delete(ctx, id)
 }
 
 // PublishEvent 事件发布（fire-and-forget，失败仅日志，绝不阻塞主链路）
 func (s *WebhookSubService) PublishEvent(ctx context.Context, event string, payload map[string]any) {
-	var subs []model.WebhookSubscription
-	if err := s.db.WithContext(ctx).
-		Where("enabled = ? AND (events LIKE ? OR events LIKE ?)", true, "%"+event+"%", "%all%").
-		Limit(100).Find(&subs).Error; err != nil || len(subs) == 0 {
+	subs, err := s.repo.ListEnabledByEvent(ctx, event)
+	if err != nil || len(subs) == 0 {
 		return
 	}
 	body, _ := json.Marshal(map[string]any{
@@ -140,11 +130,8 @@ func (s *WebhookSubService) PublishEvent(ctx context.Context, event string, payl
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）
 func (s *CustomerServicePlusService) SetCustomAttributes(ctx context.Context, customerID string, attrs map[string]any) (map[string]any, error) {
-	g := s.db
-	var curStr string
-	if err := g.WithContext(ctx).Table("customers").
-		Select("COALESCE(NULLIF(custom_attributes::text,''), '{}')").
-		Where("id = ?", customerID).Scan(&curStr).Error; err != nil {
+	curStr, err := s.opsRepo.GetCustomerCustomAttributes(ctx, customerID)
+	if err != nil {
 		return nil, err
 	}
 	merged := map[string]any{}
@@ -153,41 +140,27 @@ func (s *CustomerServicePlusService) SetCustomAttributes(ctx context.Context, cu
 		merged[k] = v
 	}
 	raw, _ := json.Marshal(merged)
-	res := g.WithContext(ctx).Table("customers").
-		Where("id = ?", customerID).
-		Update("custom_attributes", string(raw))
-	if res.Error != nil {
-		return nil, res.Error
+	ok, err := s.opsRepo.UpdateCustomerCustomAttributes(ctx, customerID, string(raw))
+	if err != nil {
+		return nil, err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return nil, gorm.ErrRecordNotFound
 	}
 	return merged, nil
 }
 
-// SavedView 保存视图
-type SavedView struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
-	Name      string    `gorm:"type:varchar(100);not null" json:"name"`
-	Route     string    `gorm:"type:varchar(100);not null" json:"route"`
-	Filter    string    `gorm:"type:text" json:"filter"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-}
-
-func (SavedView) TableName() string { return "saved_views" }
+// SavedView 保存视图（别名，模型已收敛到 model 层）
+type SavedView = model.SavedView
 
 // CreateSavedView 创建视图（同名覆盖）
 func (s *CustomerServicePlusService) CreateSavedView(ctx context.Context, userID uint, name, route, filter string) (*model.SavedView, error) {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(route) == "" {
 		return nil, fmt.Errorf("name/route 必填")
 	}
-	g := s.db
-	_ = g.WithContext(ctx).
-		Where("user_id = ? AND name = ? AND route = ?", userID, name, route).
-		Delete(&model.SavedView{}).Error
+	s.savedViewRepo.DeleteByName(ctx, userID, name, route)
 	v := &model.SavedView{UserID: userID, Name: name, Route: route, Filter: filter}
-	if err := g.WithContext(ctx).Create(v).Error; err != nil {
+	if err := s.savedViewRepo.Create(ctx, v); err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -195,40 +168,23 @@ func (s *CustomerServicePlusService) CreateSavedView(ctx context.Context, userID
 
 // ListSavedViews 视图列表（按用户+路由）
 func (s *CustomerServicePlusService) ListSavedViews(ctx context.Context, userID uint, route string) ([]*model.SavedView, error) {
-	var list []*model.SavedView
-	q := s.db.WithContext(ctx).Where("user_id = ?", userID)
-	if route != "" {
-		q = q.Where("route = ?", route)
-	}
-	err := q.Order("id ASC").Limit(100).Find(&list).Error
-	return list, err
+	return s.savedViewRepo.ListByUserAndRoute(ctx, userID, route)
 }
 
 // DeleteSavedView 删除视图
 func (s *CustomerServicePlusService) DeleteSavedView(ctx context.Context, id, userID uint) error {
-	res := s.db.WithContext(ctx).
-		Where("id = ? AND user_id = ?", id, userID).
-		Delete(&model.SavedView{})
-	if res.Error != nil {
-		return res.Error
+	ok, err := s.savedViewRepo.DeleteOwned(ctx, id, userID)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
 }
 
-// ReportSubscription 报表订阅
-type ReportSubscription struct {
-	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Email     string     `gorm:"type:varchar(200);not null;uniqueIndex" json:"email"`
-	Schedule  string     `gorm:"type:varchar(20);default:'daily'" json:"schedule"`
-	Enabled   bool       `gorm:"default:true" json:"enabled"`
-	LastSent  *time.Time `json:"last_sent,omitempty"`
-	CreatedAt time.Time  `gorm:"autoCreateTime" json:"created_at"`
-}
-
-func (ReportSubscription) TableName() string { return "report_subscriptions" }
+// ReportSubscription 报表订阅（别名，模型已收敛到 model 层）
+type ReportSubscription = model.ReportSubscription
 
 // CreateReportSubscription 订阅报表
 func (s *CustomerServicePlusService) CreateReportSubscription(ctx context.Context, email, schedule string) (*model.ReportSubscription, error) {
@@ -238,11 +194,10 @@ func (s *CustomerServicePlusService) CreateReportSubscription(ctx context.Contex
 	if schedule != "daily" && schedule != "weekly" {
 		schedule = "daily"
 	}
-	g := s.db
 
-	_ = g.WithContext(ctx).Where("email = ?", email).Delete(&model.ReportSubscription{}).Error
+	s.reportSubRepo.DeleteByEmail(ctx, email)
 	sub := &model.ReportSubscription{Email: email, Schedule: schedule, Enabled: true}
-	if err := g.WithContext(ctx).Create(sub).Error; err != nil {
+	if err := s.reportSubRepo.Create(ctx, sub); err != nil {
 		return nil, err
 	}
 	return sub, nil
@@ -250,39 +205,26 @@ func (s *CustomerServicePlusService) CreateReportSubscription(ctx context.Contex
 
 // ListReportSubscriptions 订阅列表
 func (s *CustomerServicePlusService) ListReportSubscriptions(ctx context.Context) ([]*model.ReportSubscription, error) {
-	var list []*model.ReportSubscription
-	err := s.db.WithContext(ctx).Order("id ASC").Find(&list).Error
-	return list, err
+	return s.reportSubRepo.List(ctx)
 }
 
 // DeleteReportSubscription 退订
 func (s *CustomerServicePlusService) DeleteReportSubscription(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Delete(&model.ReportSubscription{}, id).Error
+	return s.reportSubRepo.Delete(ctx, id)
 }
 
 // SendScheduledReports cron 入口：给全部启用订阅发送昨日汇总（汇总 CSV 内存生成→SMTP）
 func (s *CustomerServicePlusService) SendScheduledReports(ctx context.Context) (int, error) {
-	g := s.db
-	var subs []model.ReportSubscription
-	if err := g.WithContext(ctx).Where("enabled = ?", true).Find(&subs).Error; err != nil {
+	subs, err := s.reportSubRepo.ListEnabled(ctx)
+	if err != nil {
 		return 0, err
 	}
 	if len(subs) == 0 {
 		return 0, nil
 	}
 
-	type summaryRow struct {
-		Metric string `gorm:"column:metric"`
-		Value  int64  `gorm:"column:value"`
-	}
-	var rows []summaryRow
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	err := g.WithContext(ctx).Raw(`
-		SELECT '新会话' AS metric, COUNT(*) AS value FROM customer_sessions WHERE created_at::date = ?
-		UNION ALL SELECT '新消息', COUNT(*) FROM session_messages WHERE created_at::date = ?
-		UNION ALL SELECT '新客户', COUNT(*) FROM customers WHERE created_at::date = ?
-		UNION ALL SELECT '发送消息', COUNT(*) FROM message_hub WHERE direction='outbound' AND sent_at::date = ?`,
-		yesterday, yesterday, yesterday, yesterday).Scan(&rows).Error
+	rows, err := s.reportSubRepo.DailyReportSummary(ctx, yesterday)
 	if err != nil {
 		return 0, err
 	}
@@ -292,7 +234,7 @@ func (s *CustomerServicePlusService) SendScheduledReports(ctx context.Context) (
 		csv.WriteString(fmt.Sprintf("%s,%d\n", r.Metric, r.Value))
 	}
 
-	emailSvc := NewEmailService(g)
+	emailSvc := s.emailSvc
 	sent := 0
 	for _, sub := range subs {
 		subject := fmt.Sprintf("每日数据报表 %s", yesterday)
@@ -301,7 +243,7 @@ func (s *CustomerServicePlusService) SendScheduledReports(ctx context.Context) (
 			slog.Warn("[ReportCron] 报表发送失败", "email", sub.Email, "err", err)
 			continue
 		}
-		g.WithContext(ctx).Model(&model.ReportSubscription{}).Where("id = ?", sub.ID).Update("last_sent", time.Now())
+		s.reportSubRepo.MarkSent(ctx, sub.ID, time.Now())
 		sent++
 	}
 	return sent, nil
@@ -309,19 +251,8 @@ func (s *CustomerServicePlusService) SendScheduledReports(ctx context.Context) (
 
 // SessionTranscript 导出转录（csv=true 时返回 CSV 两列）
 func (s *CustomerServicePlusService) SessionTranscript(ctx context.Context, sessionID string, csv bool) (string, string, error) {
-	type msgRow struct {
-		SenderType string    `gorm:"column:sender_type"`
-		SenderName string    `gorm:"column:sender_name"`
-		Content    string    `gorm:"column:content"`
-		CreatedAt  time.Time `gorm:"column:created_at"`
-	}
-	var msgs []transcriptMsgRow
-
-	if err := s.db.WithContext(ctx).
-		Table("session_messages").
-		Select("sender_type, COALESCE(sender_name,'') AS sender_name, content, created_at").
-		Where("session_id = ? AND is_internal = ?", sessionID, false).
-		Order("created_at ASC").Limit(2000).Scan(&msgs).Error; err != nil {
+	msgs, err := s.reportSubRepo.ListSessionTranscriptMessages(ctx, sessionID)
+	if err != nil {
 		return "", "", err
 	}
 	if len(msgs) == 0 {
@@ -333,7 +264,7 @@ func (s *CustomerServicePlusService) SessionTranscript(ctx context.Context, sess
 		for _, m := range msgs {
 			line := strings.ReplaceAll(m.Content, "\"", "\"\"")
 			line = strings.ReplaceAll(line, "\n", " ")
-			fmt.Fprintf(&b, "%s,%s,\"%s\"\n", m.CreatedAt.Format("2006-01-02 15:04:05"), whoOf(m), line)
+			fmt.Fprintf(&b, "%s,%s,\"%s\"\n", m.CreatedAt.Format("2006-01-02 15:04:05"), whoOf2(m), line)
 		}
 		return "text/csv", b.String(), nil
 	}
@@ -341,19 +272,12 @@ func (s *CustomerServicePlusService) SessionTranscript(ctx context.Context, sess
 	b.WriteString(fmt.Sprintf("会话转录 %s\n导出时间 %s\n====================\n\n",
 		sessionID, time.Now().Format("2006-01-02 15:04")))
 	for _, m := range msgs {
-		fmt.Fprintf(&b, "[%s] %s:\n%s\n\n", m.CreatedAt.Format("15:04:05"), whoOf(m), m.Content)
+		fmt.Fprintf(&b, "[%s] %s:\n%s\n\n", m.CreatedAt.Format("15:04:05"), whoOf2(m), m.Content)
 	}
 	return "text/plain", b.String(), nil
 }
 
-type transcriptMsgRow struct {
-	SenderType string    `gorm:"column:sender_type"`
-	SenderName string    `gorm:"column:sender_name"`
-	Content    string    `gorm:"column:content"`
-	CreatedAt  time.Time `gorm:"column:created_at"`
-}
-
-func whoOf(m transcriptMsgRow) string {
+func whoOf2(m repository.TranscriptMessageRow) string {
 	if m.SenderName != "" {
 		return m.SenderName
 	}
@@ -386,31 +310,19 @@ func (s *EmailGapService) AIPerformance(ctx context.Context, days int) (*AIPerfo
 	if days <= 0 || days > 90 {
 		days = 7
 	}
-	g := s.db
+	repo := repository.NewAIPerformanceRepository(s.db)
 	since := time.Now().AddDate(0, 0, -days)
 	res := &AIPerformanceResult{Window: fmt.Sprintf("%dd", days)}
-	_ = g.WithContext(ctx).Table("customer_sessions").
-		Where("created_at >= ?", since).Count(&res.TotalSessions).Error
-	_ = g.WithContext(ctx).Table("customer_sessions").
-		Where("created_at >= ? AND status = ?", since, "closed").Count(&res.ClosedByAI).Error
+	res.TotalSessions, _ = repo.CountSessionsSince(ctx, since, "")
+	res.ClosedByAI, _ = repo.CountSessionsSince(ctx, since, "status = 'closed'")
 
-	_ = g.WithContext(ctx).Table("customer_sessions").
-		Where("created_at >= ? AND (agent_id IS NULL OR agent_id = '')", since).Count(&res.AIHandled).Error
+	res.AIHandled, _ = repo.CountSessionsSince(ctx, since, "(agent_id IS NULL OR agent_id = '')")
 	res.HumanHandled = res.TotalSessions - res.AIHandled
 	if res.TotalSessions > 0 {
 		res.AutoRate = float64(res.AIHandled) * 100 / float64(res.TotalSessions)
 	}
 
-	type lr struct {
-		Scenario string  `gorm:"column:scenario"`
-		Cnt      int64   `gorm:"column:cnt"`
-		Cost     float64 `gorm:"column:cost"`
-	}
-	var lrs []lr
-	if err := g.WithContext(ctx).Table("llm_routing_logs").
-		Select("scenario, COUNT(*) AS cnt, COALESCE(SUM(cost),0) AS cost").
-		Where("created_at >= ?", since).
-		Group("scenario").Scan(&lrs).Error; err == nil {
+	if lrs, err := repo.SumLLMRoutingByScenario(ctx, since); err == nil {
 		res.Breakdown = map[string]int64{}
 		for _, r := range lrs {
 			res.LLMCalls += r.Cnt

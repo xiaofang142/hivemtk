@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -20,6 +21,14 @@ import (
 // 命名按业务域（feedback_loop），不按管理角色或优先级。
 type FeedbackLoopRepository struct {
 	db *gorm.DB
+}
+
+// GetDB 暴露底层连接（仅供 trace_learning 聚合等只读协作方使用，不用于 service 写路径）。
+func (r *FeedbackLoopRepository) GetDB() *gorm.DB {
+	if r == nil {
+		return nil
+	}
+	return r.db
 }
 
 // NewFeedbackLoopRepository 构造（无参，内部取库句柄，遵循本包其他仓储约定）
@@ -392,4 +401,48 @@ func (r *FeedbackLoopRepository) RollbackABTest(ctx context.Context, testID uint
 		}
 		return nil
 	})
+}
+
+// GetSuggestionAuditFields 读取建议的审计字段（evidence_data），供门禁审计读写。
+func (r *FeedbackLoopRepository) GetSuggestionAuditFields(ctx context.Context, sugID uint) (*model.OptimizationSuggestion, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("feedback loop repository not initialized")
+	}
+	var row model.OptimizationSuggestion
+	if err := r.db.WithContext(ctx).Select("id", "evidence_data").First(&row, sugID).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// UpdateSuggestionEvidenceData 更新建议的 evidence_data 审计字段。
+func (r *FeedbackLoopRepository) UpdateSuggestionEvidenceData(ctx context.Context, sugID uint, ev model.JSONMap) error {
+	if r == nil || r.db == nil {
+		return errors.New("feedback loop repository not initialized")
+	}
+	return r.db.WithContext(ctx).Model(&model.OptimizationSuggestion{}).
+		Where("id = ?", sugID).
+		Update("evidence_data", ev).Error
+}
+
+// ListTopEvaluatedTraces 取评分最高的非 bad trace（golden 集取样源）。
+func (r *FeedbackLoopRepository) ListTopEvaluatedTraces(ctx context.Context, limit int) ([]TopEvaluatedTrace, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("feedback loop repository not initialized")
+	}
+	var logs []TopEvaluatedTrace
+	err := r.db.WithContext(ctx).
+		Table("trace_eval_log").
+		Select("trace_id, score").
+		Where("bad = ?", false).
+		Order("score DESC").
+		Limit(limit).
+		Scan(&logs).Error
+	return logs, err
+}
+
+// TopEvaluatedTrace golden 集取样行
+type TopEvaluatedTrace struct {
+	TraceID string `gorm:"column:trace_id"`
+	Score   int    `gorm:"column:score"`
 }

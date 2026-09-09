@@ -126,3 +126,13 @@ func (h *PasswordResetUserTxHelpers) UpdatePasswordInTx(ctx context.Context, use
 		Where("id = ?", uid).
 		Update("password", hashedPassword).Error
 }
+
+// RunPasswordResetTransaction 事务封口：标记 token 已用 + 更新用户密码（五层 L5：事务在仓储层编排）
+func RunPasswordResetTransaction(ctx context.Context, db *gorm.DB, tokenID, userID, hashedPassword string) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := NewPasswordResetTokenRepositoryWithTx(tx).MarkUsed(ctx, tokenID, time.Now()); err != nil {
+			return err
+		}
+		return NewPasswordResetUserTxHelpers(tx).UpdatePasswordInTx(ctx, userID, hashedPassword)
+	})
+}

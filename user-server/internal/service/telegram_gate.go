@@ -437,14 +437,14 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 	if s.memberRepo == nil {
 		return fmt.Errorf("db nil")
 	}
-	var member model.TelegramGroupMember
-	if err := s.db.WithContext(ctx).First(&member, memberID).Error; err != nil {
+	member, err := s.memberRepo.GetMemberByID(ctx, memberID)
+	if err != nil {
 		return err
 	}
 	if member.Authorized {
 		return nil
 	}
-	return s.AuthorizeMember(ctx, &member)
+	return s.AuthorizeMember(ctx, member)
 }
 
 // SweepExpired TTL 清扫：超时未验证 → 方案 A 拒绝申请 / 方案 B 踢出并落台账 kicked

@@ -57,21 +57,12 @@ func (o *SOPAutoOptimizer) passGate(ctx context.Context, sug *model.Optimization
 		}
 	}
 
-	if o.db == nil {
+	if o.getRepo() == nil {
 		return goldenGateResult{Passed: false, Reason: "回归门：db 未初始化"}
 	}
 
-	var logs []struct {
-		TraceID string `gorm:"column:trace_id"`
-		Score   int    `gorm:"column:score"`
-	}
-	if err := o.db.WithContext(ctx).
-		Table("trace_eval_log").
-		Select("trace_id, score").
-		Where("bad = ?", false).
-		Order("score DESC").
-		Limit(goldenCaseLimit).
-		Scan(&logs).Error; err != nil {
+	logs, err := o.getRepo().ListTopEvaluatedTraces(ctx, goldenCaseLimit)
+	if err != nil {
 		return goldenGateResult{Passed: false, Reason: fmt.Sprintf("回归门：读取 golden 集失败 %v", err)}
 	}
 	if len(logs) < minGoldenCases {
@@ -84,7 +75,7 @@ func (o *SOPAutoOptimizer) passGate(ctx context.Context, sug *model.Optimization
 
 	var caseLines strings.Builder
 	for _, l := range logs {
-		agg, err := tracelearning.AggregateTrace(ctx, o.db, l.TraceID)
+		agg, err := tracelearning.AggregateTrace(ctx, o.getRepo().GetDB(), l.TraceID)
 		if err != nil || agg == nil || agg.Query == "" || agg.Reply == "" {
 			continue
 		}
@@ -125,11 +116,12 @@ func (o *SOPAutoOptimizer) passGate(ctx context.Context, sug *model.Optimization
 }
 
 func (o *SOPAutoOptimizer) recordGateResult(ctx context.Context, sugID uint, res goldenGateResult) {
-	if o.db == nil {
+	repo := o.getRepo()
+	if repo == nil {
 		return
 	}
-	var row model.OptimizationSuggestion
-	if err := o.db.WithContext(ctx).Select("id", "evidence_data").First(&row, sugID).Error; err != nil {
+	row, err := repo.GetSuggestionAuditFields(ctx, sugID)
+	if err != nil {
 		logger.Warnf("[sop_gate] 读取建议 %d 审计字段失败: %v", sugID, err)
 		return
 	}
@@ -144,9 +136,7 @@ func (o *SOPAutoOptimizer) recordGateResult(ctx context.Context, sugID uint, res
 		"checked_at": time.Now().Format(time.RFC3339),
 		"source":     "auto_optimize_v2_gate",
 	}
-	if err := o.db.WithContext(ctx).Model(&model.OptimizationSuggestion{}).
-		Where("id = ?", sugID).
-		Update("evidence_data", ev).Error; err != nil {
+	if err := repo.UpdateSuggestionEvidenceData(ctx, sugID, ev); err != nil {
 		logger.Warnf("[sop_gate] 写入建议 %d 门禁审计失败: %v", sugID, err)
 	}
 }

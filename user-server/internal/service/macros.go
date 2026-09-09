@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
@@ -31,13 +31,18 @@ type MacroAction struct {
 
 // MacroService 宏服务
 type MacroService struct {
-	db     *gorm.DB
-	csPlus *CustomerServicePlusService
+	macroRepo *repository.MacroRepository
+	sessOp    *repository.SessionActionRepository
+	csPlus    *CustomerServicePlusService
 }
 
 // NewMacroService 构造
 func NewMacroService(gdb *gorm.DB) *MacroService {
-	return &MacroService{db: gdb, csPlus: NewCustomerServicePlusServiceFromGlobal()}
+	return &MacroService{
+		macroRepo: repository.NewMacroRepository(gdb),
+		sessOp:    repository.NewSessionActionRepository(gdb),
+		csPlus:    NewCustomerServicePlusServiceFromGlobal(),
+	}
 }
 
 // NewMacroServiceFromGlobal 便捷构造
@@ -63,7 +68,7 @@ func (s *MacroService) Create(ctx context.Context, name string, actions []MacroA
 		return nil, err
 	}
 	m := &model.Macro{Name: name, Actions: string(raw)}
-	if err := s.db.WithContext(ctx).Create(m).Error; err != nil {
+	if err := s.macroRepo.Create(ctx, m); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -71,14 +76,12 @@ func (s *MacroService) Create(ctx context.Context, name string, actions []MacroA
 
 // List 宏列表
 func (s *MacroService) List(ctx context.Context) ([]*model.Macro, error) {
-	var list []*model.Macro
-	err := s.db.WithContext(ctx).Order("id ASC").Find(&list).Error
-	return list, err
+	return s.macroRepo.List(ctx)
 }
 
 // Delete 删除宏
 func (s *MacroService) Delete(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Delete(&model.Macro{}, id).Error
+	return s.macroRepo.Delete(ctx, id)
 }
 
 // ApplyResult 应用结果
@@ -89,8 +92,8 @@ type ApplyResult struct {
 
 // Apply 对会话执行宏动作序列
 func (s *MacroService) Apply(ctx context.Context, macroID uint, sessionID, operator string) (*ApplyResult, error) {
-	var m model.Macro
-	if err := s.db.WithContext(ctx).First(&m, macroID).Error; err != nil {
+	m, err := s.macroRepo.GetByID(ctx, macroID)
+	if err != nil {
 		return nil, err
 	}
 	var actions []MacroAction
@@ -130,73 +133,24 @@ func (s *MacroService) appendSessionTag(ctx context.Context, sessionID, tagCode 
 	if strings.TrimSpace(tagCode) == "" {
 		return fmt.Errorf("标签为空")
 	}
-	g := s.db
-	var tagsRaw string
-	if err := g.WithContext(ctx).Table("customer_sessions").
-		Select("COALESCE(tags,'')").Where("session_id = ?", sessionID).Scan(&tagsRaw).Error; err != nil {
-		return err
-	}
-	var arr []string
-	if json.Unmarshal([]byte(tagsRaw), &arr) != nil {
-		arr = []string{}
-	}
-	for _, t := range arr {
-		if t == tagCode {
-			return nil
-		}
-	}
-	arr = append(arr, tagCode)
-	merged, _ := json.Marshal(arr)
-	return g.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("tags", string(merged)).Error
+	_, err := s.sessOp.AppendTag(ctx, sessionID, tagCode)
+	return err
 }
 
 func (s *MacroService) assignSession(ctx context.Context, sessionID, agentID string) error {
 	if strings.TrimSpace(agentID) == "" {
 		return fmt.Errorf("坐席为空")
 	}
-	return s.db.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("agent_id", agentID).Error
+	return s.sessOp.AssignAgent(ctx, sessionID, agentID)
 }
 
 func (s *MacroService) closeSession(ctx context.Context, sessionID string) error {
-	return s.db.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("status", "closed").Error
+	return s.sessOp.Close(ctx, sessionID)
 }
 
 func (s *MacroService) enqueueOutbound(ctx context.Context, sessionID, content string) error {
 	if strings.TrimSpace(content) == "" {
 		return fmt.Errorf("消息内容为空")
 	}
-	g := s.db
-
-	var sess struct {
-		Platform string
-		Account  string
-	}
-	if err := g.WithContext(ctx).Table("customer_sessions").
-		Select("platform, COALESCE(account_id,'') AS account").
-		Where("session_id = ?", sessionID).Scan(&sess).Error; err != nil {
-		return err
-	}
-
-	now := time.Now()
-	rec := &model.MessageHub{
-		Platform:       sess.Platform,
-		MsgID:          fmt.Sprintf("macro_%s_%d", sessionID, now.UnixNano()),
-		AccountID:      sess.Account,
-		Direction:      "outbound",
-		Status:         "pending",
-		MsgType:        "text",
-		SenderID:       "system",
-		SenderName:     "宏消息",
-		Content:        content,
-		ConversationID: sessionID,
-		TraceID:        "macro",
-		SentAt:         now,
-	}
-	return g.WithContext(ctx).Create(rec).Error
+	return s.sessOp.EnqueueOutbound(ctx, sessionID, content)
 }

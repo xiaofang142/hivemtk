@@ -40,6 +40,9 @@ type MessageHubSummaryRepository interface {
 	// LatestUpdate 返回最近一次聚合刷新时间 MAX(updated_at)；表空返回 nil。
 	// 用于 X-8 陈旧判定（hour_bucket 是小时粒度，不能反映聚合任务新鲜度）。
 	LatestUpdate(ctx context.Context) (*time.Time, error)
+	// LoadBatchSince 按水位线分批拉取原始消息（id > since，升序，limit 上限）。
+	// 供聚合服务消费；返回空 slice 表示已无新数据。
+	LoadBatchSince(ctx context.Context, since int64, limit int) ([]model.MessageHub, error)
 }
 
 type msgHourlySummaryRepo struct {
@@ -130,4 +133,18 @@ func (r *msgHourlySummaryRepo) LatestUpdate(ctx context.Context) (*time.Time, er
 		Select("MAX(updated_at) AS latest").
 		Scan(&row).Error
 	return row.Latest, err
+}
+
+func (r *msgHourlySummaryRepo) LoadBatchSince(ctx context.Context, since int64, limit int) ([]model.MessageHub, error) {
+	if limit <= 0 {
+		limit = 50000
+	}
+	rows := make([]model.MessageHub, 0, limit)
+	err := r.db.WithContext(ctx).
+		Model(&model.MessageHub{}).
+		Where("id > ?", since).
+		Order("id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
 }

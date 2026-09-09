@@ -15,7 +15,6 @@ import (
 )
 
 type SecurityAuditService struct {
-	db   *gorm.DB
 	repo *repository.SecurityAuditRepository
 }
 
@@ -23,7 +22,7 @@ type SecurityAuditService struct {
 func NewSecurityAuditService(gdb *gorm.DB) *SecurityAuditService {
 	repo := repository.NewSecurityAuditRepository()
 	repo.SetDB(context.Background(), gdb)
-	return &SecurityAuditService{db: gdb, repo: repo}
+	return &SecurityAuditService{repo: repo}
 }
 
 // SetRepository 注入 repository（用于测试或多租户场景）
@@ -34,10 +33,7 @@ func (s *SecurityAuditService) SetRepository(ctx context.Context, repo *reposito
 }
 
 func (s *SecurityAuditService) withDB(ctx context.Context) *gorm.DB {
-	if s.repo != nil {
-		return s.repo.GetDB(ctx)
-	}
-	return s.db.WithContext(ctx)
+	return s.repo.GetDB(ctx)
 }
 
 type auditCheck struct {

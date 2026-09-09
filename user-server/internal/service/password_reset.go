@@ -125,22 +125,7 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, req *ResetPass
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		now := time.Now()
-		tokenRepo := repository.NewPasswordResetTokenRepositoryWithTx(tx)
-		if err := tokenRepo.MarkUsed(ctx, token.ID, now); err != nil {
-			return err
-		}
-		userHelper := repository.NewPasswordResetUserTxHelpers(tx)
-		if err := userHelper.UpdatePasswordInTx(ctx, token.UserID, hashedPassword); err != nil {
-			return err
-		}
-		logger.Ctx(ctx).Info().
-			Str("user_id", token.UserID).
-			Str("token_id", token.ID).
-			Msg("password reset successfully")
-		return nil
-	})
+	return repository.RunPasswordResetTransaction(ctx, s.db, token.ID, token.UserID, hashedPassword)
 }
 
 func (s *PasswordResetService) CleanupExpiredTokens(ctx context.Context) error {

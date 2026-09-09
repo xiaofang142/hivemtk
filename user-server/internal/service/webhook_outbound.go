@@ -36,9 +36,6 @@ import (
 	"hivemtk-user/internal/repository"
 
 	"hivemtk-user/internal/channelbot/telegram"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
@@ -49,23 +46,8 @@ const (
 	delayedOutboundBatchSize    = 20
 )
 
-// DelayedOutboundReply AI 回复延迟出站记录（表 reach_delayed_outbound）
-type DelayedOutboundReply struct {
-	ID             uint          `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform       string        `gorm:"type:varchar(30);index" json:"platform"`
-	AccountID      string        `gorm:"type:varchar(64)" json:"account_id"`
-	ConversationID string        `gorm:"type:varchar(128);index" json:"conversation_id"`
-	SenderID       string        `gorm:"type:varchar(128)" json:"sender_id"`
-	Content        string        `gorm:"type:text" json:"content"`
-	Cards          model.JSONMap `gorm:"type:jsonb" json:"cards"`
-	SendAt         time.Time     `gorm:"index" json:"send_at"`
-	Status         string        `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	SentAt         *time.Time    `json:"sent_at"`
-	CreatedAt      time.Time     `gorm:"autoCreateTime" json:"created_at"`
-}
-
-// TableName 指定表名
-func (DelayedOutboundReply) TableName() string { return "reach_delayed_outbound" }
+// DelayedOutboundReply 别名（模型已收敛到 model 层，表 reach_delayed_outbound）
+type DelayedOutboundReply = model.DelayedOutboundReply
 
 func isAIReplyQuietHours(t time.Time) bool {
 	if os.Getenv("DISABLE_AI_QUIET_HOURS") != "" {
@@ -94,7 +76,7 @@ func isDelayedReplay(ctx context.Context) bool {
 func init() { _db.RegisterExtraModels(&DelayedOutboundReply{}) }
 
 func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) bool {
-	if s.db == nil {
+	if s.delayedRepo == nil {
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Msg("[H-3] db 未初始化，quiet hours 延迟入队失败，按原路径直接发送")
 		return false
 	}
@@ -117,7 +99,7 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 	if hubMsg != nil {
 		rec.ConversationID = hubMsg.ConversationID
 	}
-	if err := s.db.WithContext(ctx).Create(rec).Error; err != nil {
+	if err := s.delayedRepo.CreatePending(ctx, rec); err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", string(channel)).Msg("[H-3] 延迟入队失败，按原路径直接发送")
 		return false
 	}
@@ -154,44 +136,24 @@ func (s *WebhookService) startDelayedOutboundDispatch() {
 var dispatchOnce sync.Once
 
 func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
-	if s.db == nil {
+	if s.delayedRepo == nil {
 		return
 	}
 	now := time.Now()
-	var picked []DelayedOutboundReply
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Raw(`SELECT * FROM reach_delayed_outbound WHERE status = ? AND send_at <= ? ORDER BY send_at ASC LIMIT ? FOR UPDATE SKIP LOCKED`,
-			"pending", now, delayedOutboundBatchSize).Scan(&picked).Error; err != nil {
-			return err
-		}
-		if len(picked) == 0 {
-			return nil
-		}
-		ids := make([]uint, 0, len(picked))
-		for _, r := range picked {
-			ids = append(ids, r.ID)
-		}
-		return tx.Model(&DelayedOutboundReply{}).Where("id IN ?", ids).
-			Update("status", "sending").Error
-	})
+	picked, err := s.delayedRepo.PickDueForUpdate(ctx, now, delayedOutboundBatchSize)
 	if err != nil {
 
 		picked = nil
-		var ids []uint
-		if err2 := s.db.WithContext(ctx).Model(&DelayedOutboundReply{}).
-			Where("status = ? AND send_at <= ?", "pending", now).
-			Order("send_at ASC").Limit(delayedOutboundBatchSize).
-			Pluck("id", &ids).Error; err2 != nil || len(ids) == 0 {
+		ids, err2 := s.delayedRepo.PluckDueIDs(ctx, now, delayedOutboundBatchSize)
+		if err2 != nil || len(ids) == 0 {
 			return
 		}
-		res := s.db.WithContext(ctx).Model(&DelayedOutboundReply{}).
-			Where("id IN ? AND status = ?", ids, "pending").Update("status", "sending")
-		if res.Error != nil || res.RowsAffected == 0 {
+		ok, err2 := s.delayedRepo.MarkSendingIfPending(ctx, ids)
+		if err2 != nil || !ok {
 			return
 		}
-		if err2 := s.db.WithContext(ctx).Where("id IN ? AND status = ?", ids, "sending").
-			Order("send_at ASC").Limit(delayedOutboundBatchSize).
-			Find(&picked).Error; err2 != nil || len(picked) == 0 {
+		picked, err2 = s.delayedRepo.ListSendingByID(ctx, ids, delayedOutboundBatchSize)
+		if err2 != nil || len(picked) == 0 {
 			return
 		}
 	}
@@ -220,9 +182,7 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 
 	s.sendOutbound(DelayedReplayToContext(ctx), channel, rec.AccountID, p, rec.Content, hubMsg, cards)
 
-	now := time.Now()
-	if err := s.db.WithContext(ctx).Model(&DelayedOutboundReply{}).Where("id = ?", rec.ID).
-		Updates(map[string]any{"status": "sent", "sent_at": &now}).Error; err != nil {
+	if err := s.delayedRepo.MarkSent(ctx, rec.ID, time.Now()); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 延迟回复状态回写失败")
 	}
 }
@@ -561,7 +521,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			}
 
 			persisted := outMsg
-			if err := s.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}}, DoNothing: true}).Create(outMsg).Error; err != nil {
+			if _, err := s.delayedRepo.CreateMessageHubIdempotent(ctx, outMsg); err != nil {
 				retryMsg := &model.MessageHub{
 					MsgID:          outMsg.MsgID + ":" + hubMsg.ConversationID,
 					Platform:       outMsg.Platform,
@@ -582,7 +542,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 					TraceID:        outMsg.TraceID,
 					DedupHash:      outMsg.DedupHash,
 				}
-				if err2 := s.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}}, DoNothing: true}).Create(retryMsg).Error; err2 != nil {
+				if _, err2 := s.delayedRepo.CreateMessageHubIdempotent(ctx, retryMsg); err2 != nil {
 					logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge").Str("channel", string(channel)).Msg("failed to persist bridge outbound reply to message_hub")
 				} else {
 					persisted = retryMsg

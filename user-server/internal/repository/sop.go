@@ -445,3 +445,22 @@ func (r *SopExecutionRepository) CountBySOPID(ctx context.Context, sopID uint) (
 	}
 	return count, nil
 }
+
+// LatestBySOPAndCustomer 取该客户在某 SOP 下最近一次执行记录；无记录返回 (nil, nil)。
+func (r *SopExecutionRepository) LatestBySOPAndCustomer(ctx context.Context, sopID uint, customerID string) (*model.SOPExecution, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("sop execution repository not initialized")
+	}
+	var last model.SOPExecution
+	err := r.db.WithContext(ctx).
+		Where("sop_id = ? AND customer_id = ?", sopID, customerID).
+		Order("created_at DESC").
+		First(&last).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &last, nil
+}

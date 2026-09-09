@@ -9,12 +9,13 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 )
 
 // FeedbackLearner 反馈学习器
 // 商业价值：智能体不是一次性的，每次客户反馈/人工接管/数据积累都让 AI 越来越懂
 type FeedbackLearner struct {
-	db          *gorm.DB
+	recordRepo  *repository.FeedbackRecordRepository
 	mu          sync.RWMutex
 	intentCache map[string]*IntentStats
 	sopCache    map[string]*SOPStats
@@ -59,7 +60,7 @@ type FeedbackRecord struct {
 // NewFeedbackLearner 创建反馈学习器
 func NewFeedbackLearner(db *gorm.DB) *FeedbackLearner {
 	return &FeedbackLearner{
-		db:          db,
+		recordRepo:  repository.NewFeedbackRecordRepository(db),
 		intentCache: make(map[string]*IntentStats),
 		sopCache:    make(map[string]*SOPStats),
 	}
@@ -72,7 +73,7 @@ func (f *FeedbackLearner) RecordFeedback(ctx context.Context, record *FeedbackRe
 	if record.CreatedAt.IsZero() {
 		record.CreatedAt = time.Now()
 	}
-	if f.db != nil {
+	if f.recordRepo != nil {
 		orm := &model.FeedbackRecordORM{
 			SessionID:      record.SessionID,
 			CustomerID:     record.CustomerID,
@@ -88,7 +89,7 @@ func (f *FeedbackLearner) RecordFeedback(ctx context.Context, record *FeedbackRe
 			LatencyMs:      record.LatencyMs,
 			CreatedAt:      record.CreatedAt,
 		}
-		if err := f.db.WithContext(ctx).Create(orm).Error; err != nil {
+		if err := f.recordRepo.Create(ctx, orm); err != nil {
 			logger.Ctx(ctx).Warn().Err(err).Str("session_id", record.SessionID).
 				Msg("[feedback_learner] persist feedback record failed, fallback to in-memory only")
 		}

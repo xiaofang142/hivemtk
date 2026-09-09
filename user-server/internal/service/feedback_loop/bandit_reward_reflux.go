@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var refluxSignalSet = map[string]bool{
@@ -22,6 +22,7 @@ var refluxSignalSet = map[string]bool{
 // BanditRewardReflux 回流 worker 纯逻辑（可独立单测）
 type BanditRewardReflux struct {
 	db     *gorm.DB
+	repo   *repository.FeedbackLoopRepository
 	bandit BanditUpdater
 }
 
@@ -31,8 +32,14 @@ type BanditUpdater interface {
 }
 
 // NewBanditRewardReflux 构造
+//
+// 参数 db 仅为构造签名兼容保留，内部用 db 构造 repository，不存 gorm 直连写路径
 func NewBanditRewardReflux(db *gorm.DB, bandit BanditUpdater) *BanditRewardReflux {
-	return &BanditRewardReflux{db: db, bandit: bandit}
+	return &BanditRewardReflux{
+		db:     db,
+		repo:   repository.NewFeedbackLoopRepositoryWithDB(db),
+		bandit: bandit,
+	}
 }
 
 // RefluxStats 单次回流统计
@@ -47,15 +54,11 @@ type RefluxStats struct {
 // RefluxOnce 扫描 (since, until] 窗口内事件并回流。返回统计。
 func (r *BanditRewardReflux) RefluxOnce(ctx context.Context, since, until time.Time) (RefluxStats, error) {
 	var stats RefluxStats
-	if r.db == nil || r.bandit == nil {
+	if r.repo == nil || r.bandit == nil {
 		return stats, fmt.Errorf("reflux not initialized")
 	}
 
-	var events []model.FeedbackEvent
-	err := r.db.WithContext(ctx).
-		Where("created_at > ? AND created_at <= ? AND reward != 0", since, until).
-		Order("id ASC").Limit(500).
-		Find(&events).Error
+	events, err := r.repo.ListRewardRefluxEvents(ctx, since, until)
 	if err != nil {
 		return stats, fmt.Errorf("load events: %w", err)
 	}
@@ -66,9 +69,8 @@ func (r *BanditRewardReflux) RefluxOnce(ctx context.Context, since, until time.T
 		}
 		stats.Scanned++
 
-		var cnt int64
-		if err := r.db.WithContext(ctx).Model(&model.BanditRefluxLog{}).
-			Where("event_id = ?", ev.EventID).Count(&cnt).Error; err != nil {
+		cnt, err := r.repo.CountRefluxLogsByEventID(ctx, ev.EventID)
+		if err != nil {
 			stats.Failed++
 			continue
 		}
@@ -103,7 +105,7 @@ func (r *BanditRewardReflux) RefluxOnce(ctx context.Context, since, until time.T
 			Reward:       reward,
 			Success:      success,
 		}
-		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&log).Error; err != nil {
+		if err := r.repo.CreateRefluxLog(ctx, &log); err != nil {
 
 			stats.Failed++
 			continue
@@ -126,11 +128,7 @@ func (r *BanditRewardReflux) resolveArm(ctx context.Context, ev model.FeedbackEv
 
 	if ev.PromptCandidateID > 0 {
 
-		var arm model.BanditArm
-		err := r.db.WithContext(ctx).
-			Joins("JOIN prompt_ab_tests t ON t.experiment_id = bandit_arms.experiment_id AND t.status = 'running'").
-			Where("bandit_arms.prompt_candidate_id = ? AND bandit_arms.experiment_type = ?", ev.PromptCandidateID, model.BanditExperimentTypePrompt).
-			First(&arm).Error
+		arm, err := r.repo.ResolveArmForPromptCandidate(ctx, ev.PromptCandidateID)
 		if err == nil {
 			return &refluxTarget{ExperimentID: arm.ExperimentID, ArmKey: arm.ArmKey}
 		}
@@ -141,18 +139,13 @@ func (r *BanditRewardReflux) resolveArm(ctx context.Context, ev model.FeedbackEv
 	}
 
 	if ev.SOPID > 0 {
-		var tests []model.PromptABTest
-		if err := r.db.WithContext(ctx).
-			Where("status = ? AND experiment_type = ? AND sop_id = ?", "running", model.BanditExperimentTypeSOPVariant, ev.SOPID).
-			Order("id ASC").Limit(2).
-			Find(&tests).Error; err != nil || len(tests) == 0 {
+		tests, err := r.repo.ListRunningABTestsBySOP(ctx, ev.SOPID)
+		if err != nil || len(tests) == 0 {
 			return nil
 		}
 
-		var arm model.BanditArm
-		if err := r.db.WithContext(ctx).
-			Where("experiment_id = ? AND sop_id = ?", tests[0].ExperimentID, ev.SOPID).
-			First(&arm).Error; err != nil {
+		arm, err := r.repo.GetBanditArmByExperimentAndSOP(ctx, tests[0].ExperimentID, ev.SOPID)
+		if err != nil {
 			return nil
 		}
 		return &refluxTarget{ExperimentID: arm.ExperimentID, ArmKey: arm.ArmKey}
