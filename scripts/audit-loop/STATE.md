@@ -5,11 +5,27 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：24（**第二圈收官**，同事手动全角度扫描已并入）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环，第三圈自 R25 security 起）
-- 累计发现 / 修复：16 / 16（R6/R13–R24 为 0 代码缺陷轮）
-- 下一轮角度：security
+- 已完成轮次：25（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：16 / 16（R6/R13–R25 为 0 代码缺陷轮）
+- 下一轮角度：authz
 
 ## 轮次报告
+
+### R25 — security（2026-09-09）— 第三圈首轮，0 缺陷轮
+
+**审计范围**：R1/R13 扫描项三圈复扫（硬编码密钥、SQL 拼接、敏感日志）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 硬编码密钥复扫：0 命中（`PasswordSourceResetPassword` 枚举非密钥）
+- SQL 拼接 4 处维持受控结论（常量表名/白名单参数/migration 内部）
+- 敏感日志：telegram 跳过校验仅告警开关状态；password_reset 仅记 email/事件
+- `go build` + `go vet` 全绿；service 测试全绿（21.3s）
+
+**验证证据**：build/vet/test 三绿。
+
+**Commit**：见 git log `chore(audit): 审计R25-security: 0缺陷轮核查记录与状态推进`
 
 ### R24 — 第二圈收官复核（2026-09-09）
 
