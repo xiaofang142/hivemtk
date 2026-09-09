@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：26（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：16 / 16（R6/R13–R26 为 0 代码缺陷轮）
-- 下一轮角度：architecture
+- 已完成轮次：27（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：16 / 16（R6/R13–R27 为 0 代码缺陷轮）
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R27 — architecture（2026-09-09）— 第三圈，0 缺陷轮
+
+**审计范围**：`check-architecture.sh` 复跑、L4 存量基线对比、命名规范回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 文件命名段全绿（0 命名违规，R3 成果持续保持）
+- L4 service 直连 DB 存量 152 处，与 R3/R15 基线完全一致——无新增违规
+- 其余检查（controller/repository 反向依赖、interface 规范、ctx 透传、config 位置）全绿
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R27-architecture: 0缺陷轮核查记录与状态推进`
 
 ### R26 — authz（2026-09-09）— 第三圈，0 缺陷轮
 
