@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：39（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R39 为 0 代码缺陷轮）
-- 下一轮角度：error-handling
+- 已完成轮次：40（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：17 / 17（R6/R13–R40 为 0 代码缺陷轮）
+- 下一轮角度：concurrency
 
 ## 轮次报告
+
+### R40 — error-handling（2026-09-10）— 第四圈，0 缺陷轮
+
+**审计范围**：R4 修复点回归（wecom 回查判错 + 前端全局兜底）、`go vet`、前端 lint、controller 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R4 修复点在位：`wecom.go:281` 回查判错显式返回；`main.js` 全局 `errorHandler`/`unhandledrejection` 兜底（4 处）
+- `go vet ./...` 零输出；`eslint src` errors = 0；controller 测试全绿（13.6s）
+
+**验证证据**：vet 零 + eslint 0 + controller 测试绿。
+
+**Commit**：见 git log `chore(audit): 审计R40-error-handling: 0缺陷轮核查记录与状态推进`
 
 ### R39 — architecture（2026-09-10）— 第四圈，0 缺陷轮
 
