@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 40,
-  "next_angle_index": 4,
+  "round": 41,
+  "next_angle_index": 5,
   "angles": [
     "security",
     "authz",
@@ -18,7 +18,7 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 40,
+    "rounds_completed": 41,
     "issues_found_total": 17,
     "issues_fixed_total": 17,
     "last_completed_at": "2026-09-10",
@@ -384,6 +384,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第四圈 0缺陷: R4 修复点在位(wecom:281/main.js 4处兜底); vet零; eslint 0; controller测试绿"
+    },
+    {
+      "round": 41,
+      "angle": "concurrency",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: R5 RWMutex 5处引用在位; goroutine 基线48持平; service/websocket 测试绿"
     }
   ]
 }
