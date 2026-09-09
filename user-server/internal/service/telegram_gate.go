@@ -319,17 +319,29 @@ func (s *TelegramGateService) AuthorizeMember(ctx context.Context, member *model
 			logger.Warnf("[TG-Gate] approve 失败（可能已加入）chat=%s user=%d: %v", member.ChatID, userID, err)
 		}
 	} else {
+		// 先落库再解禁：Authorized 翻 true 后，RecoverStalled/SweepExpired 都会
+		// 跳过该成员，杜绝"补偿循环补禁言"与"/start 解禁"交叉把用户重新禁言
+		// 一年的竞态（补偿循环与清扫器共用 authorized=false 过滤）。
+		now := time.Now()
+		member.Authorized = true
+		member.AuthorizedAt = &now
+		member.JoinStatus = model.TGMemberApproved
+		if err := s.memberRepo.Update(ctx, member); err != nil {
+			return fmt.Errorf("mark approved: %w", err)
+		}
 		if err := cli.UnrestrictChatMember(ctx, chatID, userID); err != nil {
-			// 解禁失败不落 approved：否则台账显示已放行而 TG 侧仍受限，链路断裂
-			// （用户被告知"验证通过"却发不了言）
+			// 解禁失败必须回滚 approved：否则台账显示已放行而 TG 侧仍受限
+			// （用户被告知"验证通过"却发不了言）。回滚后清扫器补偿循环会再试。
+			member.Authorized = false
+			member.AuthorizedAt = nil
+			member.JoinStatus = model.TGMemberRestricted
+			if uErr := s.memberRepo.Update(ctx, member); uErr != nil {
+				logger.Errorf("[TG-Gate] 回滚 approved 失败（台账与 TG 侧可能不一致，需人工核对）chat=%s user=%s: %v", member.ChatID, member.UserID, uErr)
+			}
 			return fmt.Errorf("unrestrict chat=%s user=%s: %w", member.ChatID, member.UserID, err)
 		}
 	}
 
-	now := time.Now()
-	member.Authorized = true
-	member.AuthorizedAt = &now
-	member.JoinStatus = model.TGMemberApproved
 	return s.memberRepo.Update(ctx, member)
 }
 
