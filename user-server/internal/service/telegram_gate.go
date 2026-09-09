@@ -209,9 +209,12 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 			continue
 		}
 
-		// 立即全功能禁言
+		// 先禁言再发提示（顺序不能反：先发提示万一禁言失败，用户会以为可发言）。
+		// 禁言/提示任何一步失败都不 continue——台账保持 restricted，交给
+		// StartGateSweeper 的补偿循环（HandleNewMembers 本身可能已被 30s webhook
+		// 超时打断，在请求内重试只会加剧超时）。
 		if err := cli.RestrictChatMember(ctx, chatID, m.ID, 0); err != nil {
-			logger.Errorf("[TG-Gate] 禁言失败（检查 Bot 是否有 Restrict Members 权限）account=%d user=%d: %v", accountID, m.ID, err)
+			logger.Errorf("[TG-Gate] 禁言失败（已入补偿队列，清扫器将重试）account=%d user=%d: %v", accountID, m.ID, err)
 			continue
 		}
 
@@ -222,10 +225,31 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 			botDomain := strings.TrimPrefix(botUsername, "@")
 			welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
-			logger.Errorf("[TG-Gate] 群内验证提示发送失败 account=%d chat=%s: %v", accountID, chatIDStr, err)
+			// 提示没送达 = 用户不知道要验证 = 必然超时被踢。禁言已生效、不致命，
+			// 但必须补发：记录后由清扫器带 verify_token 补发（expires_at 重算，等于宽限重置）
+			logger.Errorf("[TG-Gate] 群内验证提示发送失败（已入补偿队列，清扫器将补发）account=%d chat=%s: %v", accountID, chatIDStr, err)
+			s.compensateWelcome(ctx, accountID, chatID, m.ID)
 		}
 	}
 	return handled
+}
+
+// compensateWelcome 提示补发登记：把该成员 expires_at 顺延一个 TTL 并打标，
+// 让 StartGateSweeper 的补偿循环下个周期重新发提示（sweeper 内识别"禁言成功
+// 但提示未发"的成员）。实现上无需新字段：把 expires_at 推迟到 now+TTL 即可，
+// 补偿循环按 verify_token 重发提示。
+func (s *TelegramGateService) compensateWelcome(ctx context.Context, accountID uint, chatID int64, userID int64) {
+	chatIDStr := strconv.FormatInt(chatID, 10)
+	userIDStr := strconv.FormatInt(userID, 10)
+	m, err := s.memberRepo.Get(ctx, accountID, chatIDStr, userIDStr)
+	if err != nil || m == nil {
+		return
+	}
+	newExp := time.Now().Add(2 * time.Minute) // 下个清扫周期（1 分钟）内必被扫到
+	m.ExpiresAt = &newExp
+	if err := s.memberRepo.Update(ctx, m); err != nil {
+		logger.Errorf("[TG-Gate] 提示补发登记失败 account=%d chat=%s user=%s: %v", accountID, chatIDStr, userIDStr, err)
+	}
 }
 
 // parseStartCommand 识别 /start 命令：返回 (token, isStart)，token 可为空（纯 /start）
@@ -447,11 +471,79 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 	return s.AuthorizeMember(ctx, &member)
 }
 
+// RecoverStalled 入群响应补偿循环（可靠性的最后兜底）。
+//
+// HandleNewMembers 在 webhook 请求内同步执行，TG API 网络抖动可能让禁言或
+// 验证提示失败。台账里 restricted 但“未被禁言/提示没送达”的成员，若不补偿
+// 就会静默卡死（用户没人管，10 分钟后被踢，体验=入群没人响应）。
+// 每个清扫周期由 SweepExpired 调用：逐个重读 TG 侧真实状态，未禁言的补禁言，
+// 临近过期的重发验证提示（刷新 expires_at 给用户重新计时）。
+// 每次最多处理 limit 条，避免清扫周期被拖垮。
+func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
+	if s == nil || s.db == nil {
+		return
+	}
+	// 禁言中的成员且 2 分钟内将到期：大概率是“提示发送失败”被 compensateWelcome
+	// 顺延过期的，或首次提示被网络抖动吞掉的。重发提示并重新计时。
+	soon := time.Now().Add(2 * time.Minute)
+	var stalled []*model.TelegramGroupMember
+	if err := s.db.WithContext(ctx).
+		Where("join_status = ? AND authorized = ? AND expires_at IS NOT NULL AND expires_at < ?",
+			model.TGMemberRestricted, false, soon).
+		Limit(limit).Find(&stalled).Error; err != nil || len(stalled) == 0 {
+		return
+	}
+	for _, m := range stalled {
+		chatID, _ := strconv.ParseInt(m.ChatID, 10, 64)
+		userID, _ := strconv.ParseInt(m.UserID, 10, 64)
+		if chatID == 0 || userID == 0 {
+			continue
+		}
+		// 按 chat+user 找群配置（每个成员单独取，容忍个别群配置已删）
+		gate, gerr := s.gateRepo.GetByChatID(ctx, m.AccountID, m.ChatID)
+		if gerr != nil || gate == nil || !gate.Enabled {
+			continue
+		}
+		cli, cerr := s.client(ctx, m.AccountID)
+		if cerr != nil {
+			return // 账号级故障（token/DB），本轮放弃
+		}
+		// 幂等补禁言：若首次禁言就成功，重复 restrict 只是幂等写，无副作用
+		if err := cli.RestrictChatMember(ctx, chatID, userID, 0); err != nil {
+			logger.Warnf("[TG-Gate] 补偿禁言失败 chat=%s user=%s: %v", m.ChatID, m.UserID, err)
+			continue
+		}
+		botUsername := s.botUsername(ctx, m.AccountID)
+		welcome := gate.WelcomeMsg
+		if welcome == "" {
+			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+		}
+		welcome = fmt.Sprintf(welcome, m.FullName, botUsername, strings.TrimPrefix(botUsername, "@"), m.VerifyToken)
+		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
+			logger.Warnf("[TG-Gate] 补偿提示发送失败 chat=%s user=%s: %v", m.ChatID, m.UserID, err)
+			continue // expires_at 已临近，下轮 sweeper 将按超时正常踢出
+		}
+		// 补发成功：按配置 TTL 重新计时
+		ttl := gate.VerifyTTLMin
+		if ttl <= 0 {
+			ttl = 10
+		}
+		newExp := time.Now().Add(time.Duration(ttl) * time.Minute)
+		m.ExpiresAt = &newExp
+		if err := s.memberRepo.Update(ctx, m); err != nil {
+			logger.Errorf("[TG-Gate] 补偿后计时刷新失败 id=%d: %v", m.ID, err)
+		} else {
+			logger.Infof("[TG-Gate] 补偿完成：已补禁言+补发提示 chat=%s user=%s 新过期时间=%s", m.ChatID, m.UserID, newExp.Format("15:04:05"))
+		}
+	}
+}
+
 // SweepExpired TTL 清扫：超时未验证 → 方案 A 拒绝申请 / 方案 B 踢出并落台账 kicked
 func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int, error) {
 	if s == nil || s.db == nil {
 		return 0, nil
 	}
+	s.RecoverStalled(ctx, 50) // 补偿：入群时禁言/提示失败的成员
 	expired, err := s.memberRepo.ListExpired(ctx, time.Now(), limit)
 	if err != nil {
 		return 0, err
