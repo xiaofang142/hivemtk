@@ -506,3 +506,19 @@
 
 ### 结论
 代码 0 缺陷。全部验证绿。已推双远端（gitee b402117 + github b402117）。下一轮 R24 security（第三圈开始）。
+
+---
+
+## R27 — architecture（2026-09-09）— 第三圈，1 发现 1 修复
+
+**审计范围**：check-architecture.sh 全量 + 命名/interface/ctx/反向依赖人工抽查。
+
+**发现与修复（1）**：
+- 脚本唯一 ERROR：`service/agent_attribution.go` 直连 gorm 做两段聚合查询（会话解决指标 + CSAT），违反 L4
+- 修复：新建 `repository/agent_attribution.go`（AggregateSessionsByAgent / AggregateCSATByAgent + SessionAggRow/CSATAggRow 行类型），service 收敛为纯指标拼装；CSAT 聚合失败降级不阻断主指标（与原行为一致）
+
+**回归证据**：go build/vet 全绿；service(22.0s)/repository(0.6s)/controller(13.5s) 三包测试全绿；修复文件 grep 复验无违规模式；脚本复查 agent_attribution 已从违规清单消失。
+
+**存量基线**：L4 service 直连 DB 152 处（与 R15 二圈基线持平，WARN 级 OPT-ARC-01 渐进重构范畴）。
+
+**Commit**：refactor(arch) 审计R27（agent_attribution Repository 化）
