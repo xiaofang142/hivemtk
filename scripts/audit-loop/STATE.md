@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：42（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R42 为 0 代码缺陷轮）
-- 下一轮角度：api-contract
+- 已完成轮次：43（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：17 / 17（R6/R13–R43 为 0 代码缺陷轮）
+- 下一轮角度：frontend
 
 ## 轮次报告
+
+### R43 — api-contract（2026-09-10）— 第四圈，0 缺陷轮
+
+**审计范围**：`audit_api_contract.py` 复跑、eslint/vet 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 契约：前端 831 调用 **0 UNMATCHED**；后端路由 1862 个；unresolved 42 为已知解析限制
+- `eslint src` errors = 0；`go vet ./...` 零输出
+
+**验证证据**：契约 0 UNMATCHED + eslint 0 + vet 零。
+
+**Commit**：见 git log `chore(audit): 审计R43-api-contract: 0缺陷轮核查记录与状态推进`
 
 ### R42 — data-integrity（2026-09-10）— 第四圈，0 缺陷轮
 
