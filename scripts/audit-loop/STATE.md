@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：28（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：16 / 16（R6/R13–R28 为 0 代码缺陷轮）
-- 下一轮角度：concurrency
+- 已完成轮次：29（第三圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：16 / 16（R6/R13–R29 为 0 代码缺陷轮）
+- 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R29 — concurrency（2026-09-09）— 第三圈，0 缺陷轮
+
+**审计范围**：R5 修复点回归、goroutine 基线核对、工作区新增代码并发面审查。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R5 修复点在位：`channelMediaFollowersMu` RWMutex（channel_media.go:37/44/48）
+- 裸 `go func()` 48 处与基线持平
+- 工作区同事进行中的 `agent_attribution` 仓储化重构（service 直连 DB → 新建 repository 层）：编译通过、service 测试全绿，属架构改善方向，与分层规范一致；**本轮不提交**（同事工作未完成，等其自行收尾）
+
+**验证证据**：`go vet ./...` 零输出 + service 测试全绿（21.3s）。
+
+**Commit**：见 git log `chore(audit): 审计R29-concurrency: 0缺陷轮核查记录与状态推进`
 
 ### R28 — error-handling（2026-09-09）— 第三圈，0 缺陷轮
 
