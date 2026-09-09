@@ -14,21 +14,18 @@ import (
 	"fmt"
 	"time"
 
-	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-
-	"gorm.io/gorm"
 )
 
 // AgentAttributionService Agent 绩效归因服务
 type AgentAttributionService struct {
-	db *gorm.DB
+	repo *repository.AgentAttributionRepository
 }
 
 // NewAgentAttributionService 创建服务实例
 func NewAgentAttributionService() *AgentAttributionService {
 	return &AgentAttributionService{
-		db: repository.GetDB(),
+		repo: repository.NewAgentAttributionRepository(),
 	}
 }
 
@@ -74,59 +71,18 @@ func (s *AgentAttributionService) GetPerformance(ctx context.Context, q *Perform
 		endTime = *q.EndTime
 	}
 
-	type aggRow struct {
-		AgentID       uint    `gorm:"column:agent_id"`
-		AgentName     string  `gorm:"column:agent_name"`
-		Total         int64   `gorm:"column:total"`
-		AIResolved    int64   `gorm:"column:ai_resolved"`
-		HumanTakeover int64   `gorm:"column:human_takeover"`
-		AvgResolveSec float64 `gorm:"column:avg_resolve_sec"`
-	}
-
-	var rows []aggRow
-	query := s.db.WithContext(ctx).
-		Model(&model.CustomerSession{}).
-		Select(`
-			agent_id,
-			agent_name,
-			COUNT(*) as total,
-			COUNT(*) FILTER (WHERE handler_type = 'ai') as ai_resolved,
-			COUNT(*) FILTER (WHERE handler_type = 'human') as human_takeover,
-			AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, updated_at) - created_at))) as avg_resolve_sec
-		`).
-		Where("created_at BETWEEN ? AND ? AND agent_id > 0", startTime, endTime).
-		Group("agent_id, agent_name")
-
-	if q.AgentID > 0 {
-		query = query.Where("agent_id = ?", q.AgentID)
-	}
-
-	if err := query.Scan(&rows).Error; err != nil {
+	rows, err := s.repo.AggregateSessionsByAgent(ctx, q.AgentID, startTime, endTime)
+	if err != nil {
 		return nil, fmt.Errorf("ATTRIB_001: 会话聚合查询失败: %w", err)
 	}
 
-	type csatRow struct {
-		AgentID   uint    `gorm:"column:agent_id"`
-		AvgScore  float64 `gorm:"column:avg_score"`
-		Responded int64   `gorm:"column:responded"`
-	}
-	var csatRows []csatRow
-	csatQuery := s.db.WithContext(ctx).
-		Table("csat_surveys cs").
-		Select(`
-			cs.agent_id,
-			AVG(cs.score) as avg_score,
-			COUNT(*) as responded
-		`).
-		Joins("JOIN customer_sessions sess ON sess.session_id = cs.session_id").
-		Where("cs.status = 'responded' AND cs.score > 0 AND sess.created_at BETWEEN ? AND ?", startTime, endTime).
-		Group("cs.agent_id")
-	if err := csatQuery.Scan(&csatRows).Error; err != nil {
-
+	csatRows, err := s.repo.AggregateCSATByAgent(ctx, startTime, endTime)
+	if err != nil {
+		// CSAT 聚合失败不阻断绩效主指标，降级为无 CSAT 数据
 		csatRows = nil
 	}
 
-	csatMap := make(map[uint]csatRow, len(csatRows))
+	csatMap := make(map[uint]repository.CSATAggRow, len(csatRows))
 	for _, r := range csatRows {
 		csatMap[r.AgentID] = r
 	}
