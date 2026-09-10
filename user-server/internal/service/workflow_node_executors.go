@@ -143,11 +143,69 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 			SideEffects: []string{sideEffectKey},
 		}, nil
 
+	case "browser_task":
+		taskID, userID := 0, 0
+		if wctx.NodeConfig != nil {
+			switch v := wctx.NodeConfig["task_id"].(type) {
+			case float64:
+				taskID = int(v)
+			case int:
+				taskID = v
+			case string:
+				fmt.Sscanf(v, "%d", &taskID)
+			}
+			switch v := wctx.NodeConfig["user_id"].(type) {
+			case float64:
+				userID = int(v)
+			case int:
+				userID = v
+			case string:
+				fmt.Sscanf(v, "%d", &userID)
+			}
+		}
+		if taskID <= 0 {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: "browser_task action requires task_id in node config",
+				Retryable:    false,
+			}, nil
+		}
+		if workflowBrowserTaskRunner == nil {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: "browser task runner not configured",
+				Retryable:    false,
+			}, nil
+		}
+		if err := workflowBrowserTaskRunner(ctx, uint(taskID), uint(userID), 0); err != nil {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: fmt.Sprintf("browser task %d failed: %v", taskID, err),
+				Retryable:    true,
+			}, nil
+		}
+		AppendWorkflowSideEffect(wctx, sideEffectKey)
+		return &WorkflowNodeExecResult{
+			Status:      NodeStatusCompleted,
+			Output:      model.JSONMap{"task_id": taskID, "user_id": userID, "_action_type": "browser_task"},
+			NextNodeID:  "",
+			SideEffects: []string{sideEffectKey},
+		}, nil
+
 	default:
 		logger.Ctx(ctx).Warn().Str("action_type", actionType).Msg("ActionNodeExecutor: unknown action_type, using noop")
 		noop := &WorkflowNoopExecutor{nodeType: WorkflowNodeTypeAction}
 		return noop.Execute(ctx, wctx)
 	}
+}
+
+// workflowBrowserTaskRunner browser_task 动作执行注入点
+// （由 router 装配层注入 TaskService.RunTaskWithRetry，避免 service → browser_automation/service 循环依赖）
+var workflowBrowserTaskRunner func(ctx context.Context, taskID, userID uint, retryCount int) error
+
+// SetWorkflowBrowserTaskRunner 注入 browser_task 动作执行函数
+func SetWorkflowBrowserTaskRunner(fn func(ctx context.Context, taskID, userID uint, retryCount int) error) {
+	workflowBrowserTaskRunner = fn
 }
 
 // ConditionNodeExecutor 条件节点执行器

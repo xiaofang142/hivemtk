@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -41,7 +42,7 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 		return
 	}
 
-	mcpSrv := mcp.NewServer(nil)
+	mcpSrv := mcp.NewServer(tooluse.GetGlobalRegistry())
 	resp, err := mcpSrv.HandleRequest(ctx.Request.Context(), body)
 	if err != nil {
 

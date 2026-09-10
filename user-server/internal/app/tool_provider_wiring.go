@@ -210,6 +210,13 @@ func registerAllAgentToolsViaProviders(gormDB *gorm.DB) {
 	tooluse.RegisterCardTools(tooluse.GetGlobalRegistry())
 	logger.Info("[agent] ✅ 会话内卡片工具（card.show）已接入全局注册中心")
 
+	// browser 自动化工具（browser_open_task / browser_task_status / browser_task_list）
+	if err := tooluse.RegisterBrowserTools(tooluse.GetGlobalRegistry(), tooluse.NewBrowserToolDeps(gormDB)); err != nil {
+		logger.Errorf("[agent] ⚠️ browser 自动化工具注册失败: %v", err)
+	} else {
+		logger.Info("[agent] ✅ browser 自动化工具（browser_open_task/browser_task_status/browser_task_list）已接入全局注册中心")
+	}
+
 	rewirePermissionDecorators(tooluse.GetGlobalRegistry())
 
 	applyTenantDisabledTools(tooluse.GetGlobalRegistry())

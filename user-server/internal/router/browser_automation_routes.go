@@ -9,10 +9,12 @@ import (
 	_ "hivemtk-user/internal/browser_automation/platform/xianyu"      // 平台适配器 init() 自注册（L3 注册表）
 	barepo "hivemtk-user/internal/browser_automation/repository"
 	basvc "hivemtk-user/internal/browser_automation/service"
+	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	hrepo "hivemtk-user/internal/repository"
+	wfsvc "hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -43,6 +45,12 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 
 	// 失败自动重试装配：FeedbackService → TaskService.RunTaskWithRetry（进程级一次性注入）
 	basvc.SetRetryRunner(taskSvc.RunTaskWithRetry)
+
+	// MCP browser 工具执行器注入：tooluse.SetBrowserTaskRunner → TaskService.RunTaskWithRetry
+	tooluse.SetBrowserTaskRunner(taskSvc.RunTaskWithRetry)
+
+	// workflow browser_task 动作执行器注入：service.SetWorkflowBrowserTaskRunner → TaskService.RunTaskWithRetry
+	wfsvc.SetWorkflowBrowserTaskRunner(taskSvc.RunTaskWithRetry)
 
 	// Host 断连清理钩子：该用户所有 running session 置 failed
 	registry.SetDisconnectHook(func(ctx context.Context, userID uint) {
