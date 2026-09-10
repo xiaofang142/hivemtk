@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 49,
-  "next_angle_index": 1,
+  "round": 50,
+  "next_angle_index": 2,
   "angles": [
     "security",
     "authz",
@@ -18,7 +18,7 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 49,
+    "rounds_completed": 50,
     "issues_found_total": 21,
     "issues_fixed_total": 21,
     "last_completed_at": "2026-09-10",
@@ -472,6 +472,14 @@
       "found": 1,
       "fixed": 1,
       "notes": "第五圈首轮。修复=批次2 brain_budget_test 断言口径(38a0306)；批次1(414e39f WS泄漏/XSS/黑名单绕过)与批次2(SOP wait死循环/RAG缓存投毒等)由前一会话产出、本轮验证收编。全扫描组 0 新增缺陷"
+    },
+    {
+      "round": 50,
+      "angle": "authz",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第五圈 0缺陷: 新增 browser-automation 面核查(JWT auth组+token reset admin+host-ws双层防护fail-closed); doRegAdmin 146; merge 远端无冲突"
     }
   ]
 }
