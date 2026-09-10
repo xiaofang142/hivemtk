@@ -21,6 +21,6 @@ export default [
     path: '/asset-market/sync-log',
     name: 'AssetSyncLog',
     component: () => import('@/views/assetMarket/SyncLog.vue'),
-    meta: { title: '同步日志', group: 'aiAgent', requiresAuth: true, hidden: true }
+    meta: { title: '同步日志', group: 'aiAgent', icon: 'Refresh', requiresAuth: true }
   }
 ]

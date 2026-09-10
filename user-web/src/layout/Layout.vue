@@ -508,7 +508,6 @@ const topMenus = ref([
           { key: 'knowledgeManagement', title: '文档管理', icon: 'Document', path: '/knowledge/management' },
           { key: 'knowledgeBatchImport', title: '批量导入', icon: 'UploadFilled', path: '/knowledge/batch-import' },
           { key: 'knowledgePlayground', title: '检索 Playground', icon: 'Aim', path: '/knowledge/playground' },
-          { key: 'knowledgeChunks', title: '分段编辑', icon: 'Edit', path: '/knowledge/management' },
           { key: 'knowledgeFeedbacks', title: '反馈管理', icon: 'ChatLineRound', path: '/knowledge/feedbacks' },
           { key: 'knowledgeTokens', title: 'API Token', icon: 'Key', path: '/knowledge/tokens' },
           { key: 'knowledgeExternal', title: '外部系统接入', icon: 'Connection', path: '/knowledge/external' },
