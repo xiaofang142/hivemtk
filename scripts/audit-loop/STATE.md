@@ -11,6 +11,28 @@
 
 ## 轮次报告
 
+### R48 — 功能完善度/流畅度/连贯性专项（2026-09-10）— 3 发现（1 修复 2 评估不改）
+
+**审计背景**：用户指示"持续审计，深入细节审计，功能完善度审计，功能流畅度审计，功能连贯性审计"。R36 已修复首批 3 项（访客关闭会话拦截/评分回流 CSAT/菜单去重与 hidden 冲突，commit `54a7440`），本轮继续深挖。范围：核心用户旅程（访客→建会话→AI/坐席承接→消息收发→关闭/评价）逐链路走查、前端 147 菜单 × 78 路由模块 × 199 路由全量比对、TODO/未实现/占位扫描、状态机/枚举前后端一致性抽查、Webhook 渠道验签与 AI 触发面核查。
+
+**发现与处置（1 修复 2 评估不改）**：
+
+1. **Webhook 入站双通道语义确认（P3，评估后不改）** — 深挖 R36 遗留疑问：`handleJob` 里 `dispatchToChannel`（落 message_hub/inbox）之后 `triggerSalesEngine` 直接走 SalesEngine，而 telegram/qq 走 Ingress 管线。逐渠道核对确认这是**设计内双通道**：QQ 经 dispatchQQ→Ingress（避免双触发，代码注释明示）；其余渠道走 triggerSalesEngine 但 `shouldTriggerAI`（webhook_ai.go:60）按渠道账号级 `AIAgentEnabled` 开关守卫（wecom/feishu/telegram/whatsapp/qq 五渠道有开关；douyin 等 bridge 渠道无开关概念默认放行）；出站 sendOutbound 全渠道覆盖。e2e `TestE2E_WebhookService_ShouldTriggerAI_FourChannels` 固化该语义。**结论：非断点，不修改**。
+2. **同事 WIP 协作边界（流程性）** — 审计期间同事继续 WIP（`cmd/pwtool/`、internal/pkg 5 个新测试文件、`BindAssetLoaderRepository` 接线等），与本轮修复文件无交集，确认边界避免混提，WIP 不代提交。
+3. **`knowledgeChunks` i18n key 孤立（P3，随 R36 菜单删除产生）** — Layout.vue 删除「分段编辑」菜单项后，若 zh/en.json 有对应 menu key 会成孤立键。核查：i18n 无 `knowledgeChunks` 键（title 为字面量直写），无孤立残留，**无需修复**。
+
+**核查通过项**：
+- **功能完善度**：TODO/FIXME 扫描——Go 侧 5 处命中均为合理场景（SOP 补偿语义留 TODO/featureflag 文档示例/geo_audit 检查逻辑自身引用占位词/SAP 模板占位 URL/typing_predict 示例文案）；前端 0 处；`integration_reach_adapter.go` 8 个"未实现"方法均有边界注释（抖音/快手/小红书/TikTok/闲鱼无官方私信 API 走 bridge 网页桥接）
+- **前端死链**：147 菜单路径全部命中路由、152 component import 全部解析真实文件（R36 修复后无新增）
+- **状态机一致性**：后端 6 态枚举（pending/ai_handling/human_handling/waiting/resolved/closed）与前端 `useSessionFilters.js` SESSION_STATUS_META 完全对齐
+- **访客公开链**：rate/close/transfer/messages/offline 全端点 `validateVisitorTokenOrAbort` 四元组归属校验在位
+- **Webhook 验签**：douyin/tiktok/kuaishou/xiaohongshu/xianyu 走 verifyHMAC（secret 空即 fail-closed，webhook.go:579）；wecom/wechat/telegram/qq/feishu 各有专属验签，无裸奔渠道
+- **CSAT 双通道**：管理端 `POST /customer-sessions/:id/csat` → Submit→responded 闭环；embed 端经 R36 修复后评分回流调查单；自动调查（TriggerCSATOnClose）→ 访客评分 → 看板统计链路已通
+
+**验证证据**：`go build`/`go vet` 全绿；service 包测试 23.4s 全绿；`npx eslint src` 0 errors；vitest 6 文件 174 用例全过；`vite build` 成功（PWA precache 495 entries）；`check-doc-consistency.sh` 0 error；`check-feature-doc.sh` 0 失败。
+
+**Commit**：R36 修复批次见 `54a7440`；本轮无新代码修复，仅状态推进
+
 ### R47 — config-deploy（2026-09-10）— 第四圈，0 缺陷轮
 
 **审计范围**：R11 修复点回归、同事 WIP（agent_status/session_chain 等仓储调整）编译/测试面验证。
