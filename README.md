@@ -35,8 +35,8 @@
 | ![统一收件箱](docs/screenshots/screenshot-unified-inbox.png) | ![AI 智能体](docs/screenshots/screenshot-ai-agent.png) |
 | **营销画布** | **客户 360°** |
 | ![营销画布](docs/screenshots/screenshot-marketing-canvas.png) | ![客户 360°](docs/screenshots/screenshot-customer-360.png) |
-| **知识库 RAG** | |
-| ![知识库 RAG](docs/screenshots/screenshot-knowledge-rag.png) | |
+| **知识库 RAG** | **数据大屏** |
+| ![知识库 RAG](docs/screenshots/screenshot-knowledge-rag.png) | ![数据大屏](docs/screenshots/screenshot-dashboard-screen.png) |
 
 ---
 

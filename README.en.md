@@ -41,8 +41,8 @@ One workspace for every social channel. One AI agent for every customer conversa
 | ![Unified Inbox](docs/screenshots/screenshot-unified-inbox.png) | ![AI Agent](docs/screenshots/screenshot-ai-agent.png) |
 | **Marketing Canvas** | **Customer 360°** |
 | ![Marketing Canvas](docs/screenshots/screenshot-marketing-canvas.png) | ![Customer 360°](docs/screenshots/screenshot-customer-360.png) |
-| **Knowledge Base RAG** | |
-| ![Knowledge Base RAG](docs/screenshots/screenshot-knowledge-rag.png) | |
+| **Knowledge Base RAG** | **Dashboard Screen** |
+| ![Knowledge Base RAG](docs/screenshots/screenshot-knowledge-rag.png) | ![Dashboard Screen](docs/screenshots/screenshot-dashboard-screen.png) |
 
 ---
 

@@ -18,11 +18,13 @@ await page.waitForTimeout(6000);
 console.log('after login url:', page.url());
 
 const shots = [
+  ['http://localhost:8211/#/login',              'screenshot-login.png',           3000],
   ['http://localhost:8211/#/messageHub/list',    'screenshot-unified-inbox.png',   5000],
   ['http://localhost:8211/#/aiAgent/list',       'screenshot-ai-agent.png',        5000],
   ['http://localhost:8211/#/marketingFlow/list', 'screenshot-marketing-canvas.png',5000],
   ['http://localhost:8211/#/customer360/list',   'screenshot-customer-360.png',    5000],
   ['http://localhost:8211/#/knowledgeBase/list', 'screenshot-knowledge-rag.png',   5000],
+  ['http://localhost:8211/#/dashboardScreen/list', 'screenshot-dashboard-screen.png', 5000],
 ];
 
 for (const [url, file, ms] of shots) {

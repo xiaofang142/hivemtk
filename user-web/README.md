@@ -295,17 +295,17 @@ npm run test:e2e:ui
 
 ## 📷 截图
 
-统一收件箱 / AI 智能体 / 营销画布 / 客户 360° / 知识库 RAG 五张核心页面截图已收录在仓库根 [`docs/screenshots/`](../docs/screenshots/),亦嵌入根 [README](../README.md#界面一览) 与 [英文 README](../README.en.md#screenshots)。
+统一收件箱 / AI 智能体 / 营销画布 / 客户 360° / 知识库 RAG / 数据大屏 六张核心页面截图已收录在仓库根 [`docs/screenshots/`](../docs/screenshots/),亦嵌入根 [README](../README.md#界面一览) 与 [英文 README](../README.en.md#screenshots)。
 
 | 统一收件箱 | AI 智能体 |
 |---|---|
 | ![统一收件箱](../docs/screenshots/screenshot-unified-inbox.png) | ![AI 智能体](../docs/screenshots/screenshot-ai-agent.png) |
 | **营销画布** | **客户 360°** |
 | ![营销画布](../docs/screenshots/screenshot-marketing-canvas.png) | ![客户 360°](../docs/screenshots/screenshot-customer-360.png) |
-| **知识库 RAG** | |
-| ![知识库 RAG](../docs/screenshots/screenshot-knowledge-rag.png) | |
+| **知识库 RAG** | **数据大屏** |
+| ![知识库 RAG](../docs/screenshots/screenshot-knowledge-rag.png) | ![数据大屏](../docs/screenshots/screenshot-dashboard-screen.png) |
 
-> _待补：登录页 / 工作台首页 / 数据大屏 等页面截图。_
+> _登录页截图已捕获（`screenshot-login.png`）但默认不嵌入——登录页信息密度低,如需展示可自行加入上文表格。_
 
 ## 📚 关联文档
 
