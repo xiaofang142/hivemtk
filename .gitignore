@@ -82,12 +82,14 @@ build/
 *.fill_cache.json
 
 # 图片资源（体积大，不纳入版本追踪；本地保留即可）
+# 例外：README 展示截图 docs/screenshots/screenshot-*.png 必须入库
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webp
 *.ico
+!docs/screenshots/screenshot-*.png
 # 离线包构建产物
 dist-offline/
 

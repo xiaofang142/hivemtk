@@ -28,6 +28,18 @@
 
 ---
 
+## 界面一览
+
+| 统一收件箱 | AI 智能体 |
+|---|---|
+| ![统一收件箱](docs/screenshots/screenshot-unified-inbox.png) | ![AI 智能体](docs/screenshots/screenshot-ai-agent.png) |
+| **营销画布** | **客户 360°** |
+| ![营销画布](docs/screenshots/screenshot-marketing-canvas.png) | ![客户 360°](docs/screenshots/screenshot-customer-360.png) |
+| **知识库 RAG** | |
+| ![知识库 RAG](docs/screenshots/screenshot-knowledge-rag.png) | |
+
+---
+
 ## 这是什么
 
 **HiveMtk**("Hive"+"Marketing Toolkit")是一套**面向中文私域运营场景的开源 AI 营销系统**,把四件事在同一个仓库里做透:

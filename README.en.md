@@ -34,6 +34,18 @@ One workspace for every social channel. One AI agent for every customer conversa
 
 ---
 
+## Screenshots
+
+| Unified Inbox | AI Agent |
+|---|---|
+| ![Unified Inbox](docs/screenshots/screenshot-unified-inbox.png) | ![AI Agent](docs/screenshots/screenshot-ai-agent.png) |
+| **Marketing Canvas** | **Customer 360°** |
+| ![Marketing Canvas](docs/screenshots/screenshot-marketing-canvas.png) | ![Customer 360°](docs/screenshots/screenshot-customer-360.png) |
+| **Knowledge Base RAG** | |
+| ![Knowledge Base RAG](docs/screenshots/screenshot-knowledge-rag.png) | |
+
+---
+
 ## What Is This
 
 **HiveMtk** ("Hive" + "Marketing Toolkit") is an **open-source AI marketing system for private-domain operations**, nailing four things in a single repo:
