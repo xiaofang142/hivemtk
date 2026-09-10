@@ -112,8 +112,14 @@ func (t *BrowserOpenTaskTool) Execute(ctx context.Context, args map[string]any) 
 		}
 		return ErrorResult(t.Name(), fmt.Errorf("查询任务失败: %w", err)), nil
 	}
-	if task.Status == "archived" {
-		return ErrorResult(t.Name(), fmt.Errorf("browser task %d 已归档，不能执行", taskID)), nil
+	// 状态前置校验（与 TaskService.RunTask 内部白名单一致），draft/running 等非法状态即时反馈而非异步静默失败
+	switch task.Status {
+	case "ready", "paused", "done", "failed":
+		// 可执行状态
+	case "running":
+		return ErrorResult(t.Name(), fmt.Errorf("browser task %d 正在运行中（幂等保护，拒绝重复触发）", taskID)), nil
+	default:
+		return ErrorResult(t.Name(), fmt.Errorf("browser task %d 状态 %s 不可执行（需先 publish）", taskID, task.Status)), nil
 	}
 
 	userID := task.UserID

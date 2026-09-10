@@ -177,7 +177,11 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 				Retryable:    false,
 			}, nil
 		}
-		if err := workflowBrowserTaskRunner(ctx, uint(taskID), uint(userID), 0); err != nil {
+		// HTTP 触发链路的 ctx 会随响应返回而取消（dispatcher.SafeGo 不解绑），
+		// 浏览器任务同步耗时数分钟，必须脱离取消链并设硬超时；WithoutCancel 保留 trace 等 Value
+		runCtx, runCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Minute)
+		defer runCancel()
+		if err := workflowBrowserTaskRunner(runCtx, uint(taskID), uint(userID), 0); err != nil {
 			return &WorkflowNodeExecResult{
 				Status:       NodeStatusFailed,
 				ErrorMessage: fmt.Sprintf("browser task %d failed: %v", taskID, err),
