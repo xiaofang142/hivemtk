@@ -135,6 +135,7 @@
   "menu": {
     "workspace": "ワークスペース",
     "messageHub": "メッセージハブ (MQ)",
+    "inbox": "統一受信トレイ",
     "wecomAccount": "マルチアカウント集約",
     "customer": "顧客センター",
     "clueList": "リード一覧",
@@ -313,7 +314,12 @@
     "geoDecisionReport": "意思決定レポート",
     "emailDragEditor": "ドラッグエディタ",
     "reachPipelineEditor": "Pipeline編集",
-    "userSegmentBuilder": "セグメントビルダー"
+    "userSegmentBuilder": "セグメントビルダー",
+    "browserAutomation": "ブラウザ自動化",
+    "baTasks": "タスク一覧",
+    "baCreate": "新規タスク",
+    "baCron": "定期トリガー",
+    "baStatus": "ホスト状態"
   },
   "保存": "保存",
   "提交": "送信",

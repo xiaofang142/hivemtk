@@ -403,21 +403,54 @@ func VerifyWebhook(secret, headerSecret string) bool {
 	return core.SecureEqual(secret, headerSecret)
 }
 
-// callMethod 调用任意 Bot API 方法（群管理类接口专用；非 200 返回错误体）
+// callMethod 调用任意 Bot API 方法（群管理类接口专用；非 200 返回错误体）。
+//
+// 可靠性保证：本机到 api.telegram.org 的 TLS 握手在跨境网络下动辄 2~9 秒，
+// 单次调用失败率不可忽略。禁言/解禁/踢出这类管理动作一旦静默失败，用户
+// 体验直接断裂（入群无人管、验证通过仍被禁言），因此这里对 429/5xx/网络
+// 错误做与 sendSingle 同款的指数退避重试；4xx（权限/参数类）不重试，立即返回。
 func (c *Client) callMethod(ctx context.Context, method string, payload map[string]any) error {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("tg %s marshal: %w", method, err)
 	}
 	api := fmt.Sprintf("%s/bot%s/%s", c.apiBase, c.token, method)
-	respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
-	if err != nil {
-		return fmt.Errorf("tg %s: %w", method, err)
-	}
-	if status != 200 {
+
+	var lastErr error
+	wait := tgSendInitialWait
+	for attempt := 0; attempt < tgSendMaxRetries; attempt++ {
+		if attempt > 0 {
+			if err := sleepCtx(ctx, wait); err != nil {
+				return err
+			}
+			wait *= 2
+			if wait > tgSendMaxWait {
+				wait = tgSendMaxWait
+			}
+		}
+		respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
+		if err != nil {
+			lastErr = fmt.Errorf("tg %s: %w", method, err)
+			continue
+		}
+		if status == 200 {
+			return nil
+		}
+		if status == 429 {
+			ra := parseRetryAfter(respB)
+			if ra > 0 {
+				wait = time.Duration(ra)*time.Second + 200*time.Millisecond
+			}
+			lastErr = fmt.Errorf("tg %s 429 (retry_after=%ds): %s", method, ra, string(respB))
+			continue
+		}
+		if status >= 500 && status < 600 {
+			lastErr = fmt.Errorf("tg %s status %d: %s", method, status, string(respB))
+			continue
+		}
 		return fmt.Errorf("tg %s status %d: %s", method, status, string(respB))
 	}
-	return nil
+	return fmt.Errorf("tg %s exhausted %d retries: %w", method, tgSendMaxRetries, lastErr)
 }
 
 // ApproveChatJoinRequest 批准入群申请（方案 A）

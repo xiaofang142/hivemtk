@@ -64,6 +64,7 @@ const moduleNames = [
   'community', 'unifiedMessage', 'platformAccount', 'messageHub',
   "intentRecognition", 'dialogueMemory', 'sopAgent',
   "reachPipeline", 'wecomAccount',
+  'inbox',
   'whatsappCloud',
   'dingtalkApp',
   "llmRouting", 'tagSegmentation', 'conversionFunnel',
@@ -92,6 +93,7 @@ const moduleNames = [
   "analytics",
   "bridgeToken",
   "leadMining",
+  "browserAutomation",
 ];
 
 const eagerLoadedRoutes = [];
@@ -171,6 +173,7 @@ const pathToModule = {
   'bridge': 'bridgeToken',
   'token': 'bridgeToken',
   'lead-mining': 'leadMining',
+  'browser-automation': 'browserAutomation',
 };
 
 async function ensureRouteLoaded(path) {

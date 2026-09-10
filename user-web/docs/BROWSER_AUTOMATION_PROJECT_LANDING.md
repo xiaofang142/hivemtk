@@ -1,103 +1,162 @@
-# Browser Automation — 项目落地设计文档
+# Browser Automation — 项目落地设计文档 v2
 
-> 本文档是技术方案在 **hivemtk 现有代码库上的精确落点**。所有路径、接口签名、迁移 SQL、路由注册均来自对项目现有样板（geo / content 域）的直接映射。
-> **零 Python，纯 JS + Go**。
+> 本文档是技术方案在 **hivemtk 现有代码库上的精确落点**。所有路径、接口签名、迁移 SQL、路由注册均来自对项目现有样板（geo / channelgw / bridge 域）的直接映射，并经 2026-09-08 全量核查修正。
+> **零 Python，纯 JS + Go。**
+
+## 修订记录（v2 相对 v1 的关键变更）
+
+| # | 变更 | 原因 |
+|---|------|------|
+| A1 | 删除 v1 `service/hand.go` 中残留的 stdin/stdout 旧版 `send()` 代码块 | v1 文档拼接残片，无法编译 |
+| A2 | 通信模型定稿：**WS 单长连接**（Host 主动连 server），删除 `POST /internal/browser/host` 同步接口与 `/poll` 轮询备选 | 三处自相矛盾；channelgw 已有现成 WS 样板 |
+| A3 | 帧大小限制修正：扩展→Host **4GB**，Host→扩展 **1MB**（1MB 检查加在**写方向**） | v1 写反方向、写错数字 |
+| A4 | 帧长度头改用 `binary.NativeEndian`（官方措辞 native order；arm64/x86 上等价 LE） | 官方规范 |
+| A5 | Host 重新定性：**非 daemon**，生命周期随扩展 port 生灭；补 `port.onDisconnect` 重连 + **server 端 Host 断连清理钩子**（running session 置 failed） | MV3 SW 生命周期硬约束 |
+| A6 | 截图方案定稿 **M3**：MVP 仅 session 结束对 active tab 截一次 final_screenshot；删除"每步自动截图/前后对比/全页截图" | `captureVisibleTab` 无 tabId 参数、不能截后台 tab、不能全页、限频 2 次/秒 |
+| A7 | 新增 §10 多租户与产品边界：Host 注册必须携带用户身份（Bearer token），命令**只路由到归属 Host**；无 Host 用户明确降级引导 | v1 完全没回答"命令推给哪个 Host"，存在越权串号 |
+| B1 | DDL 去掉内联 INDEX 与 FOREIGN KEY（Postgres 不支持内联；项目样板不用 FK，配合软删除） | 照 v1 抄建表直接报错 |
+| B2 | 合并 v1 §15 的 ALTER 增量列进 v3.37.0 建表，一次建全；Model 同步补齐 | v1 三处字段集互不一致 |
+| B3 | 通知渠道换成真实客户端：`FeishuIntegrationService` / `pkg/mail.SendMail` / `EmailSendService`；钉钉走通用 webhook | v1 假设的 `lark.BotClient` 等不存在 |
+| B4 | 内部通道鉴权复用 **BridgeIngressGuard 模式**（KV `bridge_ingest_token`，fail-closed），废弃 v1 发明的 `X-Internal-Token` | 项目已有预共享密钥机制 |
+| B5 | Cron 表达式：存储/前端展示 5 段，**注册到 TaskManager 前补 `"0 "` 前缀转 6 段秒级** | 项目 `cron.WithSeconds()`，5 段 spec 解析报错 |
+| B6–B11 | 前端 API 重名函数、Pinia setup 风格、`res?.data || res` 拆包、路由 moduleNames 白名单、Layout.vue 手写菜单、Dispatcher 真实调用形态、LocalDriver 存产物、WS 挂载对齐 bridgeWS 样板 | 与现有代码不符 |
+| P2 | Hand 全局锁改 **per-Host 串行 + req_id 异步关联**；`/run` 改异步返回 session_id；stopCh 注册表；依赖环检测；URL scheme 白名单；unpacked 扩展 manifest 写死 `key` 固定 ID | v1 并发模型会互相堵死/HTTP 必超时/refs 越权风险 |
 
 ---
 
 ## 0. 项目位置总览
 
-Browser Automation 功能横跨三个代码区：
-
 ```
 hivemtk/
 ├── user-server/                      ← Go 后端（五层架构）
-│   └── internal/browser_automation/  ← 【新建】新域目录（第 47 个业务域）
-│       ├── controller/   (3 个文件)
-│       ├── service/      (4 个文件 + Hand)
-│       ├── repository/   (5 个文件)
-│       ├── model/        (5 个文件)
-│       └── dto/          (3 个文件)
-│   └── internal/migration/migrations/v3_37_0_browser_automation_migration.go  ← 【新建】
-│   └── internal/router/browser_automation_routes.go                         ← 【新建】
+│   ├── internal/browser_automation/  ← 【新建】新业务域
+│   │   ├── controller/   (4 个文件)
+│   │   ├── service/      (8 个文件)
+│   │   ├── repository/   (5 个文件)
+│   │   ├── model/        (5 个文件)
+│   │   └── dto/          (3 个文件)
+│   ├── internal/migration/migrations/v3_37_0_browser_automation_migration.go  ← 【新建】
+│   ├── internal/router/browser_automation_routes.go                           ← 【新建】
+│   └── cmd/nm-host/                  ← 【新建】Go Native Messaging Host（独立 binary，共享 go.mod）
+│       ├── main.go                   (~200 行：stdin/stdout 帧协议 + WS client)
+│       ├── install.sh                ← 编译 + 注册 manifest + 固定扩展 ID 说明
+│       └── manifest.json.template
 │
-├── user-web/                         ← Vue3 + ElementPlus 前端
-│   └── src/
-│       ├── api/browserAutomation.js  ← 【新建】
-│       ├── views/browserAutomation/  ← 【新建】7 个页面
-│       ├── stores/browserAutomation.js ← 【新建】Pinia store
-│       └── router/modules/browserAutomation.js ← 【新建】
-│
-└── user-web/browser_automation/          ← 【新建】Chrome MV3 扩展独立子项目（对齐 user-web/bridge/）
-    ├── package.json                       ← 独立依赖，name: hivemtk-browser-automation
-    ├── manifest.json                      ← MV3 清单（项目根，build 时复制到 dist/）
-    ├── scripts/
-    │   ├── build.mjs                      ← esbuild 多入口打包（对齐 bridge/scripts/build.mjs）
-    │   └── release.mjs
-    ├── src/
-    │   ├── background/index.js            ← Service Worker：connectNative + 原语分发
-    │   ├── popup/index.js                 ← 弹窗面板：任务快捷启动 / Host 状态
-    │   ├── popup/popup.html
-    │   ├── core/
-    │   │   ├── native-messaging.js        ← Chrome Native Messaging 4B LE 帧协议
-    │   │   ├── primitives.js              ← 11 种原语（click/type/snapshot/screenshot...）
-    │   │   ├── tab-manager.js             ← 后台 tab 管理（active:false）
-    │   │   └── accessibility.js           ← @e1/@e2 refs snapshot 生成
-    │   └── content/                       ← 可选：content script
-    ├── assets/icons/
-    ├── dist/                              ← build 产物（Chrome "Load unpacked" 指向这里）
-    ├── test/                              ← vitest 单测（对齐 bridge/test/）
-    └── docs/
-
-└── user-server/cmd/nm-host/               ← 【新建】Go Native Messaging Host（独立 binary）
-    ├── main.go                            (~80 行，HTTP client + Native Messaging event_loop)
-    ├── install.sh                         ← 编译 + 注册 manifest + 校验
-    └── manifest.json.template
-
-    【命名对齐关系】
-    ┌────────────────────────────────────────────────────────────┐
-    │ 前端 Chrome 扩展     user-web/browser_automation/            │
-    │ 后端 Go 域           user-server/internal/browser_automation/ │
-    │ Go NM Host binary    user-server/cmd/nm-host/               │
-    │                                                            │
-    │ 完全对齐 bridge 样板：                                      │
-    │   user-web/bridge/            ↔  user-server/internal/bridge/ │
-    │   独立 package.json + esbuild 打包 + vitest 单测             │
-    │   manifest.json 放项目根，build.mjs 复制到 dist/            │
-    └────────────────────────────────────────────────────────────┘
+└── user-web/                         ← Vue3 + ElementPlus 前端
+    ├── src/api/browserAutomation.js      ← 【新建】
+    ├── src/views/browserAutomation/      ← 【新建】6 个页面
+    ├── src/stores/browserAutomation.js   ← 【新建】Pinia setup 风格
+    ├── src/router/modules/browserAutomation.js ← 【新建】+ index.js moduleNames 注册
+    └── browser_automation/           ← 【新建】Chrome MV3 扩展独立子项目（对齐 user-web/bridge/）
+        ├── package.json              ← name: hivemtk-browser-automation, esbuild + vitest
+        ├── manifest.json             ← MV3（项目根，build.mjs 复制到 dist/，写死 key 固定 ID）
+        ├── scripts/build.mjs
+        ├── src/
+        │   ├── background/index.js   ← Service Worker：connectNative + 原语分发 + onDisconnect 重连
+        │   ├── popup/index.js + popup.html
+        │   └── core/
+        │       ├── native-messaging.js
+        │       ├── primitives.js     ← 9 种原语
+        │       ├── tab-manager.js
+        │       └── accessibility.js  ← snapshot 生成 @e{N} refs
+        ├── test/                     ← vitest
+        └── assets/icons/
 ```
 
-### 项目现有约定（必须遵守）
+### 项目现有约定（必须遵守，全部已核实）
 
-| 约定 | 来源 | 落地 |
+| 约定 | 来源（已核实） | 落地 |
 |------|------|------|
-| Router → Handler → Service → Repository → Model 五层 | CLAUDE.md | browser_automation 域严格五层，不跨层 |
-| Repository interface + WithDB 构造器 | geo/repository/alert.go | `BrowserTaskRepository` interface + `NewBrowserTaskRepositoryWithDB(db)` |
-| Service struct（不搞 interface） | geo/service/alert.go | `TaskService` struct 持有 repo |
-| Controller 持有 Service 指针 | geo/controller/alert.go | `TaskController` 持有 `*TaskService` |
-| Migration 五方法：Version/Name/Description/Up/Down | migrations/v3_35_0 | `BrowserAutomationMigration` struct |
-| Model 用 GORM tag + TableName() | geo/model/*.go | `gorm:"primaryKey;autoIncrement"` + `DeletedAt` 软删除 |
-| 前端 API 用 `@/utils/http` | src/api/geoAlert.js | `import { http } from '@/utils/http'` |
-| 前端路由模块化注册 | src/router/modules/*.js | `browserAutomation.js` 导出路由数组 |
-| DI 装配在 router 文件内完成 | router/geo_routes.go | `SetupBrowserAutomationRoutes()` 内 New Repo → New Svc → New Ctrl → 注册路由 |
-| 普通路由 vs Admin 路由分组 | router/geo_routes.go | 敏感操作走 `middleware.AdminAuthMiddleware()` |
+| 五层架构 Router→Handler→Service→Repository→Model | CLAUDE.md | browser_automation 域严格五层 |
+| Repository interface + 双构造器 | `internal/geo/repository/alert.go` | `BrowserTaskRepository` + `New...WithDB(db)` |
+| Service struct 不搞 interface | `internal/geo/service/alert.go` L14 | `TaskService` struct 持有 repo |
+| Controller 持有 *Service 私有字段 | `internal/geo/controller/alert.go` L16 | 同款 |
+| 响应 `response.Success/Error/SuccessWithList`（code 为 int 0） | `internal/pkg/utils/response/response.go` L48/85 | 禁手写 c.JSON |
+| Migration 五方法 + `initial_schema.go` RegisterMigrations 注册 | `internal/migration/registry.go` L13、`migrations/initial_schema.go` L194 | v3.37.0 追加一行 |
+| DDL raw SQL 分条 Exec、索引单独 CREATE INDEX、无 FK | `migrations/v3_35_0_telegram_group_gate_migration.go` | 同款 |
+| 路由 Setup 函数签名 `func SetupXxxRoutes(auth *gin.RouterGroup, gormDB *gorm.DB)` | `internal/router/geo_routes.go` L24 | 同款，挂载点 `router.go` L321 附近 |
+| 用户身份 `c.GetUint("user_id")`（JWTAuthMiddleware 注入，uint） | `internal/middleware/jwt.go` L71 | 所有 repo 按 userID 过滤 |
+| Admin 路由 `middleware.AdminAuthMiddleware()` | `internal/middleware/jwt.go` L93 | Hand 状态/内部配置走 admin |
+| Cron：`internal/pkg/cron` TaskManager，**6 段秒级 spec**，`AddTask(spec, fn)` | `internal/pkg/cron/cron.go` L30/49 | geo 已有 `SetupGeoJobs(mgr)` 先例 |
+| LLM：`llm.NewDispatcher(llm.NewLLMService()).Dispatch(ctx, DispatchRequest{...})` | `internal/aiagent/llm/dispatcher.go` L76、`dispatcher_dispatch.go` L19/279 | brain 模式 + 总结 |
+| 内部预共享密钥：KV `bridge_ingest_token`（fail-closed） | `internal/middleware/bridge_ingress_guard.go` | 复用该模式做 Host 通道 token |
+| WS 挂统一端口：`bridgeWS := r.Group("/api"); bridgeWS.GET("/ws/channel", transport.HandleWS)` | `internal/router/router.go` L441-458、`internal/channelgw/ws.go` L101 | Host WS 同款挂法 |
+| gorilla/websocket、gorm.io/datatypes v1.2.7 已在 go.mod | go.mod | 直接用 |
+| 上传产物：`storage.NewLocalDriver(baseDir, publicBaseURL)` + `UploadReader` | `internal/storage/local.go` L26/64 | 截图/导出存 URL |
+| 前端 http：`import { http } from '@/utils/http'`；拦截器**已拆到 data.data** | `src/api/geoAlert.js`、`src/utils/request.js` | 页面取数 `res?.data || res` |
+| Pinia 全部 setup 风格 | `src/stores/user.js` | 同款 |
+| 路由模块 export default 数组 + **index.js moduleNames 白名单** + **Layout.vue 手写菜单** | `src/router/index.js`、`src/layout/Layout.vue` | 三处都要注册 |
+| 页面文案硬编码中文（项目惯例非 $t） | `src/views/geo/*` | 同款 |
+| 扩展子项目样板：bridge/（esbuild IIFE 多入口 + vitest + 根 manifest） | `user-web/bridge/` | browser_automation 子项目对齐 |
 
 ---
 
-## 1. user-server 侧：browser_automation 域完整五层
+## 1. 通信模型（定稿）
 
-### 1.1 Model 层（5 个文件）
-
-参考样板：`internal/geo/model/geo_alert.go`（最简洁的 model 模板）
+### 1.1 物理拓扑（统一端口，唯一 HTTP server :8204）
 
 ```
-user-server/internal/browser_automation/model/
-├── task.go           ← 任务主体（最核心）
-├── session.go        ← Chrome tab 会话
-├── step.go           ← 任务内的执行步骤
-├── cron.go           ← 定时触发器
-└── llm_plan.go       ← LLM 生成的执行计划
+┌───────────────────────────────────────────────────────────────────────┐
+│ user-server (api binary, gin.Engine on :8204 —— config.DefaultListenPort)│
+│  /api/browser-automation/*   业务 API（JWT）                             │
+│  /api/browser/host-ws        Host WebSocket 入口（BridgeGuard 模式 token）│
+│  /api/browser-automation/*   其余业务路由……                              │
+│  /files/*                    静态产物                                    │
+└──────────────▲────────────────────────────────────────────────────────┘
+               │ Channel B：WS 长连接（Host 是 ws client，帧=JSON+req_id）
+┌──────────────┴────────────────────────────────────────────────────────┐
+│ Go NM Host（cmd/nm-host，Chrome fork 的子进程，非 daemon）                │
+│  Channel A：stdin/stdout 4B native-order 长度头 + JSON ↔ Chrome 扩展     │
+│  写方向（Host→扩展）单帧 ≤1MB；读方向（扩展→Host）≤4GB                    │
+└──────────────▲────────────────────────────────────────────────────────┘
+               │ chrome.runtime.connectNative('com.hivemtk.browser')
+┌──────────────┴────────────────────────────────────────────────────────┐
+│ Chrome 扩展（MV3 SW）。Chrome 105+ connectNative 本身保活 SW，114+ port   │
+│ 收发消息也保活 → port 不断则 SW 不死；port 断 → Host 进程被杀。            │
+│ 扩展必须监听 port.onDisconnect 自动重连；server 侧断连即清理该 Host 会话。 │
+└───────────────────────────────────────────────────────────────────────┘
 ```
+
+### 1.2 定稿理由（为什么不是 HTTP 同步回调 / 轮询）
+
+- HTTP 同步回调要求内部 Controller 挂起 gin worker 等 Chrome 执行完，Host 掉线时请求堆积不可控；
+- 轮询 100ms 空转浪费且延迟高；
+- 项目已有 `channelgw.WSTransport`（`/api/ws/channel`）成熟样板：升级 → 读 register 帧 → 校验 → 双泵循环。照抄结构即可。
+- MV3 侧 connectNative port 是天然长连接，与 WS 对接形态一致。
+
+### 1.3 请求-响应关联协议（WS 帧格式）
+
+```jsonc
+// server → Host：命令帧
+{ "req_id": "b7f9…", "action": "click", "tab_id": 12, "target": "#submit" }
+// Host → server：响应帧（req_id 原样带回）
+{ "req_id": "b7f9…", "ok": true, "data": { ... } }
+{ "req_id": "b7f9…", "ok": false, "error": "selector_not_found" }
+
+// 注册帧（Host → server，连接后第一条）：
+{ "type": "register", "version": "1.0.0", "pid": 1234 }
+// 注册校验不靠 register 帧内容，靠 WS 握手时的 Authorization: Bearer <host token>，
+// server 从 token 解出 user_id，绑定 连接↔用户。校验失败发 register_reject 并断开。
+```
+
+- Host 通道 token：复用 bridge 模式，KV key `browser_host_token`（admin 接口生成），`Authorization: Bearer <token>` + query `?token=`（JWT 中间件同款兼容，供 NM Host 无 header 环境使用）。
+- **并发模型**：单个 Host 连接内命令**串行**（Host 单循环），不同用户的 Host 互不影响；server 端 Hand 不再加全局互斥锁，改为 per-连接发送锁 + `map[req_id]chan result` 异步等待（带超时）。同一用户多任务并发受 Host 串行天然排队。
+
+### 1.4 安全边界
+
+1. `/api/browser/host-ws` 双层防护：
+   - **token 校验**（KV `browser_host_token`，fail-closed，参照 `BridgeIngressGuard`：无 token 配置时 503 拒绝，支持 `_prev` 双 token 轮换）；
+   - **ClientIP 白名单**：仅 `127.0.0.1` / `::1`（frp 回源场景取 `X-Real-IP`，取不到且非本地直连即拒绝）。
+2. nginx/frp 层：`/api/browser/host-ws` 不对外网暴露（本地部署本来走 127.0.0.1；文档部署清单需加一条 nginx location deny 兜底）。
+3. 任务 URL 白名单：创建/执行任务时校验 `url` scheme ∈ {http, https}（防止 `chrome://`、`file://`、内网探测）。
+
+---
+
+## 2. user-server 侧：browser_automation 域五层
+
+### 2.1 Model 层（5 个文件）
+
+参考样板：`internal/geo/model/alert.go`
 
 #### model/task.go
 
@@ -106,40 +165,45 @@ package model
 
 import (
     "time"
+
     "gorm.io/datatypes"
     "gorm.io/gorm"
 )
 
 // BrowserTask 浏览器自动化任务主体
 type BrowserTask struct {
-    ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+    ID          uint           `gorm:"primaryKey" json:"id"`
     Name        string         `gorm:"column:name;size:256;not null;index" json:"name"`
     Description string         `gorm:"column:description;type:text" json:"description"`
-    TaskType    string         `gorm:"column:task_type;size:32;not null;index" json:"task_type"` // one_shot / loop / cron / workflow
+    TaskType    string         `gorm:"column:task_type;size:32;not null;default:one_shot;index" json:"task_type"` // one_shot / loop / cron / workflow
     Status      string         `gorm:"column:status;size:32;not null;default:draft;index" json:"status"` // draft / ready / running / paused / done / failed / archived
     Url         string         `gorm:"column:url;size:2048;not null" json:"url"`
-    // 步骤编排（显式原语模式）
-    Steps       datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"` // [{"action":"click","target":"#submit"}, ...]
-    // LLM 自动模式参数
+    Steps       datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"`
     BrainMode   bool           `gorm:"column:brain_mode;default:false" json:"brain_mode"`
-    BrainGoal   string         `gorm:"column:brain_goal;type:text" json:"brain_goal"` // LLM 目标："打开淘宝搜索鞋，看前 10 页价格"
+    BrainGoal   string         `gorm:"column:brain_goal;type:text" json:"brain_goal"`
     LlmPlanID   *uint          `gorm:"column:llm_plan_id;index" json:"llm_plan_id,omitempty"`
-    // 执行控制
     LoopCount   int            `gorm:"column:loop_count;default:1" json:"loop_count"`
     DelayMs     int            `gorm:"column:delay_ms;default:1000" json:"delay_ms"`
     TimeoutSec  int            `gorm:"column:timeout_sec;default:120" json:"timeout_sec"`
+    // workflow 依赖（依赖环在建依赖时 DFS 检测）
+    DependsOnTaskID *uint      `gorm:"column:depends_on_task_id;index" json:"depends_on_task_id,omitempty"`
+    DependsOnMode   string     `gorm:"column:depends_on_mode;size:32;default:all_done" json:"depends_on_mode"` // all_done / any_success
+    // 失败自动重试（session 级）
+    RetryOnFail    bool       `gorm:"column:retry_on_fail;default:false" json:"retry_on_fail"`
+    RetryDelaySec  int        `gorm:"column:retry_delay_sec;default:300" json:"retry_delay_sec"`
+    MaxRetryTimes  int        `gorm:"column:max_retry_times;default:3" json:"max_retry_times"`
+    RetryCount     int        `gorm:"column:retry_count;default:0" json:"retry_count"`
     // 归属
     UserID      uint           `gorm:"column:user_id;index;not null" json:"user_id"`
     AccountID   uint           `gorm:"column:account_id;index" json:"account_id"`
     // 执行状态快照
-    CurrentSessionID *uint      `gorm:"column:current_session_id" json:"current_session_id,omitempty"`
-    LastRunAt   *time.Time     `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
-    LastResult  string         `gorm:"column:last_result;type:text" json:"last_result,omitempty"`
-    ErrorMsg    string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
+    LastRunAt  *time.Time      `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
+    LastResult string          `gorm:"column:last_result;type:text" json:"last_result,omitempty"`
+    ErrorMsg   string          `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
 
-    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-    UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-    DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (BrowserTask) TableName() string { return "browser_tasks" }
@@ -152,27 +216,39 @@ package model
 
 import (
     "time"
+
+    "gorm.io/datatypes"
     "gorm.io/gorm"
 )
 
 // BrowserSession Chrome tab 会话（一次执行 = 一个 session）
-// Chrome "寄生"式：复用主 Profile、后台 tab、不抢焦点
 type BrowserSession struct {
-    ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+    ID          uint           `gorm:"primaryKey" json:"id"`
     TaskID      uint           `gorm:"column:task_id;index;not null" json:"task_id"`
-    ChromeTabID int            `gorm:"column:chrome_tab_id;index" json:"chrome_tab_id"` // Chrome tab.id（扩展上报）
+    UserID      uint           `gorm:"column:user_id;index;not null" json:"user_id"`
+    ChromeTabID int            `gorm:"column:chrome_tab_id;index" json:"chrome_tab_id"`
     Url         string         `gorm:"column:url;size:2048" json:"url"`
     Title       string         `gorm:"column:title;size:512" json:"title"`
-    Status      string         `gorm:"column:status;size:32;not null;default:created;index" json:"status"` // created / active / completed / failed / closed
-    Snapshot    string         `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"` // accessibility @e1/@e2 refs（执行前）
-    LlmPlan     string         `gorm:"column:llm_plan;type:text" json:"llm_plan,omitempty"`  // 执行时的 LLM plan JSON
+    Status      string         `gorm:"column:status;size:32;not null;default:created;index" json:"status"` // created / active / completed / failed / stopped
+    Snapshot    string         `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"`
+    LlmPlan     datatypes.JSON `gorm:"column:llm_plan;type:jsonb" json:"llm_plan,omitempty"`
     StartedAt   *time.Time     `gorm:"column:started_at" json:"started_at,omitempty"`
     CompletedAt *time.Time     `gorm:"column:completed_at" json:"completed_at,omitempty"`
     DurationMs  int64          `gorm:"column:duration_ms" json:"duration_ms"`
     ErrorMsg    string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
+    // 监控指标
+    TotalSteps   int    `gorm:"column:total_steps;default:0" json:"total_steps"`
+    SuccessSteps int    `gorm:"column:success_steps;default:0" json:"success_steps"`
+    FailedSteps  int    `gorm:"column:failed_steps;default:0" json:"failed_steps"`
+    HandLatencyMs int64 `gorm:"column:hand_latency_ms" json:"hand_latency_ms"`
+    ConsoleErrors string `gorm:"column:console_errors;type:text" json:"console_errors,omitempty"`
+    // 反馈产物（截图存 LocalDriver 的 URL，不落 base64）
+    ExtractedData        datatypes.JSON `gorm:"column:extracted_data;type:jsonb" json:"extracted_data,omitempty"`
+    FinalScreenshotURL   string         `gorm:"column:final_screenshot_url;size:1024" json:"final_screenshot_url,omitempty"`
+    LlmSummary           string         `gorm:"column:llm_summary;type:text" json:"llm_summary,omitempty"`
 
-    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-    DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (BrowserSession) TableName() string { return "browser_sessions" }
@@ -185,26 +261,28 @@ package model
 
 import (
     "time"
+
+    "gorm.io/datatypes"
     "gorm.io/gorm"
 )
 
-// BrowserStep 任务内的执行步骤（每次执行产生一条 step 记录）
-// 也作为 session 的子记录，用于逐步回放 + 调试
+// BrowserStep 任务内的执行步骤（每次执行产生一条 step 记录，用于回放/调试）
 type BrowserStep struct {
-    ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-    SessionID   uint           `gorm:"column:session_id;index;not null" json:"session_id"`
-    TaskID      uint           `gorm:"column:task_id;index;not null" json:"task_id"`
-    StepIndex   int            `gorm:"column:step_index;not null" json:"step_index"`
-    Action      string         `gorm:"column:action;size:32;not null;index" json:"action"` // open_tab / click / type / snapshot / markdown / wait / scroll / screenshot
-    Target      string         `gorm:"column:target;size:1024" json:"target"`   // selector 或 @e3 refs
-    Value       string         `gorm:"column:value;type:text" json:"value"`     // type 动作的输入值
-    Status      string         `gorm:"column:status;size:32;not null;default:pending;index" json:"status"` // pending / running / success / failed / skipped
-    Result      string         `gorm:"column:result;type:text" json:"result,omitempty"` // action 返回值（snapshot/markdown 结果）
-    DurationMs  int64          `gorm:"column:duration_ms" json:"duration_ms"`
-    ErrorMsg    string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
+    ID         uint           `gorm:"primaryKey" json:"id"`
+    SessionID  uint           `gorm:"column:session_id;index;not null" json:"session_id"`
+    TaskID     uint           `gorm:"column:task_id;index;not null" json:"task_id"`
+    StepIndex  int            `gorm:"column:step_index;not null" json:"step_index"`
+    Action     string         `gorm:"column:action;size:32;not null;index" json:"action"`
+    Target     string         `gorm:"column:target;size:1024" json:"target"`
+    Value      string         `gorm:"column:value;type:text" json:"value"`
+    Params     datatypes.JSON `gorm:"column:params;type:jsonb" json:"params"` // wait/scroll/extract/screenshot 等扩展参数
+    Status     string         `gorm:"column:status;size:32;not null;default:pending;index" json:"status"` // pending / running / success / failed / skipped
+    Result     datatypes.JSON `gorm:"column:result;type:jsonb" json:"result,omitempty"`
+    DurationMs int64          `gorm:"column:duration_ms" json:"duration_ms"`
+    ErrorMsg   string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
 
-    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-    DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (BrowserStep) TableName() string { return "browser_steps" }
@@ -217,21 +295,22 @@ package model
 
 import (
     "time"
+
     "gorm.io/gorm"
 )
 
-// BrowserCronTrigger 定时触发器（Cron 表达式 → 触发 Task 执行）
-// 调度由现有 internal/pkg/cron 接管，Trigger 只负责参数 + 状态
+// BrowserCronTrigger 定时触发器（CronExpr 存储 5 段表达式，注册前补秒段转 6 段）
 type BrowserCronTrigger struct {
-    ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-    TaskID      uint           `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
-    CronExpr    string         `gorm:"column:cron_expr;size:128;not null" json:"cron_expr"`       // "*/5 * * * *" 或 "0 9 * * 1-5"
-    Enabled     bool           `gorm:"column:enabled;default:true;index" json:"enabled"`
-    NextRunAt   *time.Time     `gorm:"column:next_run_at" json:"next_run_at,omitempty"`
-    LastRunAt   *time.Time     `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
-    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-    UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-    DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+    ID        uint           `gorm:"primaryKey" json:"id"`
+    TaskID    uint           `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
+    CronExpr  string         `gorm:"column:cron_expr;size:128;not null" json:"cron_expr"`
+    Enabled   bool           `gorm:"column:enabled;default:true;index" json:"enabled"`
+    NextRunAt *time.Time     `gorm:"column:next_run_at" json:"next_run_at,omitempty"`
+    LastRunAt *time.Time     `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
+
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (BrowserCronTrigger) TableName() string { return "browser_cron_triggers" }
@@ -244,371 +323,163 @@ package model
 
 import (
     "time"
+
     "gorm.io/datatypes"
     "gorm.io/gorm"
 )
 
 // BrowserLLMPlan LLM 生成的执行计划（Brain 层产物）
-// Brain 层吃 accessibility snapshot → 产出 plan → Translator 层翻译成 steps → Hand 执行
 type BrowserLLMPlan struct {
-    ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-    TaskID      uint           `gorm:"column:task_id;index;not null" json:"task_id"`
-    Goal        string         `gorm:"column:goal;type:text;not null" json:"goal"`              // 原始目标描述
-    Snapshot    string         `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"`      // 输入 snapshot（@e1/@e2 refs）
-    Steps       datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"`                     // LLM 输出的步骤数组
-    Reasoning   string         `gorm:"column:reasoning;type:text" json:"reasoning,omitempty"`    // LLM 推理过程（调试用）
-    Model       string         `gorm:"column:model;size:64" json:"model"`                        // 使用的模型（路由决定）
-    TokenIn     int            `gorm:"column:token_in" json:"token_in"`
-    TokenOut    int            `gorm:"column:token_out" json:"token_out"`
-    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-    DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+    ID        uint           `gorm:"primaryKey" json:"id"`
+    TaskID    uint           `gorm:"column:task_id;index;not null" json:"task_id"`
+    Goal      string         `gorm:"column:goal;type:text;not null" json:"goal"`
+    Snapshot  string         `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"`
+    Steps     datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"`
+    Reasoning string         `gorm:"column:reasoning;type:text" json:"reasoning,omitempty"` // 调试用，注意脱敏
+    Model     string         `gorm:"column:model;size:64" json:"model"`
+    TokenIn   int            `gorm:"column:token_in" json:"token_in"`
+    TokenOut  int            `gorm:"column:token_out" json:"token_out"`
+
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (BrowserLLMPlan) TableName() string { return "browser_llm_plans" }
 ```
 
----
+### 2.2 Repository 层（5 个文件）
 
-### 1.2 Repository 层（5 个文件）
-
-参考样板：`internal/geo/repository/alert.go`
-
-每个 repo 文件有：
-- `XxxRepository` interface
-- `xxxRepo` private struct 持有 `*gorm.DB`
-- `NewXxxRepository()` + `NewXxxRepositoryWithDB(db)` 两个构造器
-
-```
-user-server/internal/browser_automation/repository/
-├── task.go
-├── session.go
-├── step.go
-├── cron.go
-└── llm_plan.go
-```
-
-#### repository/task.go（接口签名预览）
-
-```go
-package repository
-
-import (
-    "context"
-    "hivemtk-user/internal/browser_automation/model"
-    _db "hivemtk-user/internal/pkg/db"
-    "gorm.io/gorm"
-)
-
-// BrowserTaskRepository 任务仓储
-type BrowserTaskRepository interface {
-    Create(ctx context.Context, t *model.BrowserTask) error
-    GetByID(ctx context.Context, id uint, userID uint) (*model.BrowserTask, error)
-    List(ctx context.Context, userID uint, status, taskType string, page, limit int) ([]*model.BrowserTask, int64, error)
-    Update(ctx context.Context, t *model.BrowserTask) error
-    UpdateStatus(ctx context.Context, id uint, status string, errMsg string) error
-    SoftDelete(ctx context.Context, id uint, userID uint) error
-    // 查询辅助
-    FindRunning(ctx context.Context, userID uint) ([]*model.BrowserTask, error)
-}
-
-type browserTaskRepo struct { db *gorm.DB }
-
-func NewBrowserTaskRepository() BrowserTaskRepository {
-    return &browserTaskRepo{db: _db.GetDB()}
-}
-func NewBrowserTaskRepositoryWithDB(db *gorm.DB) BrowserTaskRepository {
-    return &browserTaskRepo{db: db}
-}
-
-// ... 方法实现（每个都 ctx 第一个参数 + r.db.WithContext(ctx).Create/Where/Order...）
-```
-
-**所有 5 个 repo 接口签名**：
+参考样板：`internal/geo/repository/alert.go`（interface + 双构造器 + ctx 首参 + `r.db.WithContext(ctx)`）。
 
 | Repo | 方法 |
 |------|------|
-| **BrowserTaskRepository** | Create / GetByID / List / Update / UpdateStatus / SoftDelete / FindRunning |
-| **BrowserSessionRepository** | Create / GetByID / ListByTaskID / UpdateStatus / UpdateChromeTabID / SoftDelete |
-| **BrowserStepRepository** | Create / ListBySessionID / ListByTaskID / UpdateStatus / SoftDelete |
-| **BrowserCronTriggerRepository** | Create / GetByTaskID / ListAllEnabled / UpdateNextRunAt / UpdateLastRunAt / Delete |
-| **BrowserLLMPlanRepository** | Create / GetByID / ListByTaskID / SoftDelete |
+| **BrowserTaskRepository** | Create / GetByID(id, userID) / List(userID, status, taskType, page, limit) / Update / UpdateStatus / SoftDelete / FindRunning(userID) / GetByIDAnyUser(id)（依赖检查用，仅同 owner 校验在 service 层做） |
+| **BrowserSessionRepository** | Create / GetByID(id, userID) / ListByTaskID / ListByUser / UpdateStatus / UpdateChromeTabID / UpdateMetrics / FailRunningByUser(userID, reason)（Host 断连清理钩子）/ HasSuccess(taskID) / GetLatestByTaskID |
+| **BrowserStepRepository** | BatchCreate / GetByID / ListBySessionID / UpdateStatus / UpdateResult |
+| **BrowserCronTriggerRepository** | Create / GetByTaskID / GetByID / ListByUser / ListAllEnabled / Update / UpdateTimes / Delete |
+| **BrowserLLMPlanRepository** | Create / GetByID / ListByTaskID |
 
----
+全部带 `userID` 过滤（除 GetByIDAnyUser 明确注释用途），防越权串号。
 
-### 1.3 Service 层（4 个文件 + Hand）
-
-参考样板：`internal/geo/service/alert.go`
+### 2.3 Service 层（8 个文件）
 
 ```
-user-server/internal/browser_automation/service/
-├── task.go   ← 任务 CRUD + 发布/暂停/归档
-├── cron.go    ← Cron 调度 + 与 pkg/cron 集成
-├── brain.go   ← LLM Plan 生成（调用 aiagent/llm.Dispatcher）
-├── executor.go        ← 执行引擎：步骤解释 + Hand 调用 + Session 流转
-└── hand.go            ← 【核心】统一端口内部接口调用 + WebSocket 等待 Host 回传
-└── host_conn.go        ← 【配套】WebSocket 管理 Host 连接池（/internal/browser/controller 内）
+service/
+├── task.go       ← 任务 CRUD + publish/pause/archive + RunTask（异步）
+├── executor.go   ← 执行引擎：steps 解释 + Hand 调用 + stopCh 注册表 + 超时
+├── hand.go       ← 命令发送：per-连接锁 + req_id 异步等待（无全局锁）
+├── host_registry.go ← 【核心】Host WS 注册表：userID→连接 映射 + 断连清理钩子
+├── session.go    ← Session/Step 查询 + 手动中断
+├── cron.go       ← Cron 管理 + TaskManager 集成（5 段→6 段转换）
+├── brain.go      ← LLM plan 生成 + session 总结（Dispatcher）
+└── feedback.go   ← 通知（Feishu/Mail）+ 产物保存（LocalDriver）+ 导出
 ```
 
-#### service/hand.go（统一端口版本，不启动任何子进程）
-
-**核心改变**：BrowserHand 不 `exec.Command` 任何进程（那是 Chrome 的职责）。
-它只往 user-server 统一端口的内部接口发请求，内部接口通过 WebSocket 推给 Host，Host 处理完回传。
+#### service/host_registry.go（核心新增，v1 缺失）
 
 ```go
 package service
 
-import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "sync"
-    "time"
-)
-
-// Hand Go Native Messaging Hand 层
-// 约束 1: Chrome 才是 Go NM Host 的父进程，user-server 不启动 Host
-// 约束 2: 统一端口 → 往 http://127.0.0.1:<统一端口>/internal/browser/host 发请求
-// 约束 3: 多 Agent 命令同一时刻只进一个（Host 单线程串行处理扩展通道）
-type Hand struct {
-    mu          sync.Mutex     // 多 Agent 并发保护
-    serverURL   string         // "http://127.0.0.1" + config.DefaultListenPort
-    httpClient  *http.Client   // 带超时
+// HostRegistry 管理在线 NM Host 连接：userID → *HostConn
+// - Register(user_id, conn)：WS 注册成功后登记
+// - Send(userID, cmd)：命令路由到**归属 Host**，无连接返回 ErrHostOffline
+// - Unregister(user_id, conn)：断连时触发清理钩子——该用户所有 running session 置 failed
+type HostRegistry struct {
+    mu    sync.RWMutex
+    conns map[uint]*HostConn // key = user_id
 }
 
-// NewHand 构造器（单例）
-func NewHand() *Hand {
-    return &Hand{
-        serverURL:  fmt.Sprintf("http://127.0.0.1:%d", config.DefaultListenPort),
-        httpClient: &http.Client{Timeout: 30 * time.Second},
-    }
-}
+var ErrHostOffline = errors.New("browser host 未连接，请确认本机 Chrome 已启动且扩展已加载")
+```
 
-// EnsureHostReady 检查 Host 是否在线（通过统一端口内部接口）
-// /internal/browser/host/status 返回 {"connected": bool}
-func (h *Hand) EnsureHostReady(ctx context.Context) error {
-    req, _ := http.NewRequestWithContext(ctx, "GET", h.serverURL+"/internal/browser/host/status", nil)
-    resp, err := h.httpClient.Do(req)
-    if err != nil {
-        return fmt.Errorf("Host 状态检查失败（可能 Chrome 没启动或扩展未加载）: %w", err)
-    }
-    defer resp.Body.Close()
-    var body map[string]any
-    json.NewDecoder(resp.Body).Decode(&body)
-    if ok, _ := body["connected"].(bool); !ok {
-        return fmt.Errorf("Go NM Host 未连接，请确认 Chrome 已启动 + 扩展已加载")
-    }
-    return nil
-}
+HostConn 持有 `*websocket.Conn`、写锁、`pending map[string]chan *CommandResult`、`closed chan struct{}`。读写泵：读循环收到帧按 `req_id` 投递到 pending channel；写循环串行发帧（`?token=` 或 Authorization 均在握手层校验完成）。
 
-// openTab 原语
-func (h *Hand) openTab(ctx context.Context, url string, active bool) (int, error) {
-    resp, err := h.send(ctx, map[string]any{
-        "action": "open_tab", "url": url, "active": active,
-    })
-    if err != nil { return 0, err }
-    tabID, _ := resp["chrome_tab_id"].(float64)
-    return int(tabID), nil
-}
+#### service/hand.go（定稿版，替换 v1 残片）
 
-// click 原语
-func (h *Hand) click(ctx context.Context, tabID int, target string) error {
-    _, err := h.send(ctx, map[string]any{
-        "action": "click", "tab_id": tabID, "target": target,
-    })
-    return err
-}
+```go
+package service
 
-// typeText 原语
-func (h *Hand) typeText(ctx context.Context, tabID int, target string, value string, clearFirst bool) error {
-    _, err := h.send(ctx, map[string]any{
-        "action": "type", "tab_id": tabID, "target": target, "value": value,
-        "clear_first": clearFirst,
-    })
-    return err
-}
-
-// snapshot 原语（accessibility @e1/@e2 refs）
-func (h *Hand) snapshot(ctx context.Context, tabID int) (string, error) {
-    resp, err := h.send(ctx, map[string]any{"action": "snapshot", "tab_id": tabID})
-    if err != nil { return "", err }
-    s, _ := resp["snapshot"].(string)
-    return s, nil
-}
-
-// screenshot 原语
-func (h *Hand) screenshot(ctx context.Context, tabID int) (string, error) {
-    resp, err := h.send(ctx, map[string]any{"action": "screenshot", "tab_id": tabID})
-    if err != nil { return "", err }
-    b64, _ := resp["base64"].(string)
-    return b64, nil
-}
-
-// send 核心：POST 到统一端口的 /internal/browser/host
-// 内部 Controller 收到后 → 通过 WebSocket 推给 Go NM Host → Host 写帧到 Chrome 扩展
-// 扩展处理完 → Host 回传 → Controller HTTP response 返回 → Hand 拿到结果
-func (h *Hand) send(ctx context.Context, req map[string]any) (map[string]any, error) {
-    h.mu.Lock()
-    defer h.mu.Unlock()
-
-    if err := h.EnsureHostReady(ctx); err != nil {
+// Hand 命令出口：往 HostRegistry 归属连接发命令帧，等 req_id 回包。
+// 约束：1) 不启动任何子进程（Chrome 才是 Host 父进程）
+//       2) 单 Host 连接内串行（Host 单循环），跨用户天然隔离
+//       3) 每命令带超时（默认 30s，wait_for_selector 类可更长）
+func (h *Hand) send(ctx context.Context, userID uint, timeout time.Duration, cmd map[string]any) (map[string]any, error) {
+    if err := h.registry.EnsureOnline(userID); err != nil {
         return nil, err
     }
-
-    body, _ := json.Marshal(req)
-    httpReq, _ := http.NewRequestWithContext(ctx, "POST",
-        h.serverURL+"/internal/browser/host", bytes.NewReader(body))
-    httpReq.Header.Set("Content-Type", "application/json")
-    httpReq.Header.Set("X-Internal-Token", internalToken()) // 预共享密钥
-
-    resp, err := h.httpClient.Do(httpReq)
-    if err != nil {
-        return nil, fmt.Errorf("Host 通信失败: %w", err)
-    }
-    defer resp.Body.Close()
-
-    var result map[string]any
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return nil, fmt.Errorf("response 解析失败: %w", err)
-    }
-    if ok, _ := result["ok"].(bool); !ok {
-        return nil, fmt.Errorf("%v", result["error"])
-    }
-    return result, nil
-}
-    }
-
-    // 加超时
-    sendCtx, cancel := context.WithTimeout(ctx, h.timeout)
+    ctx2, cancel := context.WithTimeout(ctx, timeout)
     defer cancel()
-
-    // 1. 写帧：4 字节 LE 长度头 + JSON body
-    payload, _ := json.Marshal(req)
-    frame := make([]byte, 4+len(payload))
-    binary.LittleEndian.PutUint32(frame[:4], uint32(len(payload)))
-    copy(frame[4:], payload)
-
-    if _, err := h.stdin.Write(frame); err != nil {
-        h.connected = false
-        return nil, fmt.Errorf("写帧失败: %w", err)
-    }
-    h.stdin.(*os.File).Sync() // 立即 flush
-
-    // 2. 读帧：4 字节 LE 长度头
-    header := make([]byte, 4)
-    if _, err := io.ReadFull(h.stdout, header); err != nil {
-        h.connected = false
-        return nil, fmt.Errorf("读帧头失败: %w", err)
-    }
-    length := binary.LittleEndian.Uint32(header)
-    if length > 1*1024*1024 { // Chrome Host→扩展 1 MiB 硬限制
-        return nil, errors.New("frame 超过 Chrome 1 MiB 限制")
-    }
-
-    // 3. 读 body
-    body := make([]byte, length)
-    if _, err := io.ReadFull(h.stdout, body); err != nil {
-        h.connected = false
-        return nil, fmt.Errorf("读帧体失败: %w", err)
-    }
-
-    var resp map[string]any
-    if err := json.Unmarshal(body, &resp); err != nil {
-        return nil, fmt.Errorf("JSON 解析失败: %w", err)
-    }
-    if ok, _ := resp["ok"].(bool); !ok {
-        return nil, errors.New(fmt.Sprint(resp["error"]))
-    }
-    return resp, nil
+    return h.registry.Request(ctx2, userID, cmd) // 内部分配 req_id、登记 pending、写帧、等回包
 }
+
+// openTab / click / typeText / snapshot / markdown / waitFor /
+// waitForSelector / scroll / extract / closeTab —— 一一映射 §6 原语表
 ```
 
-#### service/executor.go（执行引擎预览）
+#### service/task.go — RunTask（异步定稿）
 
 ```go
-// Executor 是任务执行的调度中心
-// RunTask → 创建 Session → 遍历 Steps → 每个 Step 调 Hand → 落库 Step
-// Brain 模式：先让 BrainService 出 plan → 翻译为 steps → 再执行
-func (s *TaskService) RunTask(ctx context.Context, taskID uint, userID uint) (*model.BrowserSession, error) {
-    // 1. 校验任务归属 + 状态
-    task, err := s.taskRepo.GetByID(ctx, taskID, userID)
-    // 2. 启动 session（状态=running，chrome tab ID 先 0，hand.openTab 成功后更新）
-    session := &model.BrowserSession{TaskID: taskID, Status: "created"}
-    s.sessionRepo.Create(ctx, session)
-    // 3. 调 Hand.openTab
-    tabID, err := s.hand.openTab(ctx, task.Url, false) // active=false 不抢焦点
-    s.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
-    s.sessionRepo.UpdateStatus(ctx, session.ID, "active", "")
-    session.ChromeTabID = tabID
-    // 4. 如果是 Brain 模式：让 Brain 出 plan → 翻译为 steps
-    // 5. 遍历 steps，每个调 Hand 原语 → 落库 Step
-    // 6. session 完成/失败 → 更新 status + error_msg
-    // 7. 更新 task.LastRunAt / LastResult / Status
-    return session, nil
-}
+// RunTask 校验归属/状态/依赖/URL scheme → 创建 Session → goroutine 执行 → 立即返回 session
+// - 幂等：同任务已有 running session 时返回 409（复用 FindRunning）
+// - 依赖检查：all_done=前置最近 session completed；any_success=HasSuccess
+// - 依赖环：SetDependsOn 时 DFS 检测（task.go 内 DetectDependencyCycle）
+// - 执行体：utils.SafeGo(ctx, "browser_automation.run", func(ctx){ executor.ExecuteSession(...) })
+func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint) (*model.BrowserSession, error)
 ```
 
----
+#### service/executor.go
 
-### 1.4 Controller 层（3 个文件）
+- `stopRegistry map[uint]chan struct{}`（sessionID→stopCh），`SignalStop(sessionID)` 供手动中断；
+- 每步执行前 `select stopCh`；
+- 每步经 Hand 发命令，`step.status` pending→running→success/failed，逐条落库；
+- 错误处理：`retry_count`（backoff×2 递增）→ `continue_on_error` 决定跳过或整 session failed；
+- 超时：`context.WithTimeout(ctx, task.TimeoutSec)` 包住整个 session（替代 v1 的 AfterFunc 直改状态——状态只由 Executor 收口），到点 ctx 取消 → 当前命令失败 → session failed + 关 tab；
+- 步间 `time.Sleep(task.DelayMs)` 可被 stopCh 打断；
+- Host 断连（Hand 返回 ErrHostOffline / registry 广播）：session 置 failed "Host 掉线"。
 
-参考样板：`internal/geo/controller/alert.go`
-
-```
-user-server/internal/browser_automation/controller/
-├── task.go      ← 任务 CRUD + 发布/暂停/执行/归档
-├── session.go   ← Session 查询 + Step 列表 + 日志回放
-├── cron.go      ← Cron 触发器 CRUD + 启停
-└── hand.go      ← Host 状态查询 + EnsureHostReady（Admin 专用）
-```
-
-#### controller/task.go（接口签名预览）
+#### service/brain.go（真实 Dispatcher 调用形态）
 
 ```go
-package controller
-
-import (
-    "hivemtk-user/internal/browser_automation/service"
-    "github.com/gin-gonic/gin"
-)
-
-type TaskController struct {
-    svc *service.TaskService
-}
-
-func NewTaskController(svc *service.TaskService) *TaskController {
-    return &TaskController{svc: svc}
-}
-
-// c.GET("", ctrl.List)     → 用户自己的任务列表
-// c.POST("", ctrl.Create)    → 新建任务
-// c.GET("/:id", ctrl.Get)   → 任务详情
-// c.PUT("/:id", ctrl.Update) → 更新
-// c.DELETE("/:id", ctrl.Delete) → 软删除
-// c.POST("/:id/publish", ctrl.Publish) → draft → ready
-// c.POST("/:id/run", ctrl.Run)    → 触发执行（返回 session_id）
-// c.POST("/:id/pause", ctrl.Pause)
-// c.POST("/:id/resume", ctrl.Resume)
-// c.POST("/:id/archive", ctrl.Archive)
+dispatcher := llm.NewDispatcher(llm.NewLLMService())
+result, err := dispatcher.Dispatch(ctx, llm.DispatchRequest{
+    Scenario:    llm.ScenarioHighQuality,
+    SystemPrompt: browserPlanSystemPrompt, // 输出 JSON steps 数组
+    Prompt:      goal + "\n\n页面快照：\n" + snap,
+    JSONMode:    true,
+    MaxTokens:   4096,
+})
+// 结构化解析用 dispatcher.DispatchStructured(ctx, req, &planSchema)（dispatcher_dispatch.go L279）
 ```
 
-Handler 签名全部是 `func (c *gin.Context)`，用 `c.ShouldBindJSON(&dto)` 绑定，返回**严格使用 `response.Success(ctx, data, "ok")` / `response.Error(ctx, http.StatusXXX, "msg")`**（参考样板 `geo/controller/alert.go`），禁止手写 `c.JSON(200, gin.H{"code":0,...})`。
+Brain 模式循环（maxIterations=10）：snapshot → Dispatch 解析 steps → 执行 → done? 注意每轮 plan 落库（含 reasoning 脱敏截断 4KB）。
 
----
-
-### 1.5 DTO 层（3 个文件）
-
-```
-user-server/internal/browser_automation/dto/
-├── task.go    ← CreateTaskReq / UpdateTaskReq / TaskListReq / RunTaskReq
-├── session.go ← SessionListReq / StepListReq
-└── cron.go    ← CreateCronReq / UpdateCronReq
-```
+#### service/cron.go（6 段转换）
 
 ```go
-package dto
+// toSixField 把用户/前端 5 段 cron（"*/5 * * * *"）转项目 TaskManager 的 6 段秒级（"0 */5 * * * *"）
+func toSixField(expr string) string { return "0 " + expr }
+// 注册：mgr := cron.GetTaskManager(); mgr.AddTask(toSixField(t.CronExpr), func(){ ... RunTask ... })
+// Enable/Disable/Delete 时 mgr.RemoveTask(entryID)；进程重启后 ListAllEnabled 重新注册
+```
 
+#### service/feedback.go（真实客户端）
+
+- 通知：飞书 `service.NewFeishuIntegrationService(db).SendMessage(...)`；邮件 `pkg/mail.SendMail(cfg, to, subject, body, false)`；钉钉/企微走通用 webhook（`WebhookService`）。
+- 产物：`storage.NewLocalDriver(uploadDir, publicBaseURL)` + `UploadReader` 存 final_screenshot（PNG bytes），session 只存 URL（`/files/...`）。
+- session 完成/失败后异步触发：通知 + LLM 总结（可选开关）+ retry_on_fail 调度（`cron.AddTask` 一次性延迟任务 + `RemoveTask`）。
+
+### 2.4 Controller 层（4 个文件）
+
+签名对齐 `internal/geo/controller/alert.go`：`func (c *TaskController) Xxx(ctx *gin.Context)`，`response.Success/Error`，`c.GetUint("user_id")`。
+
+- **task.go**：CRUD + publish/run/pause/resume/archive + SetDependsOn（检环）；
+- **session.go**：List / Get / ListSteps / **Stop**（POST /sessions/:id/stop）；
+- **cron.go**：CRUD + enable/disable；
+- **host.go**：GetStatus（admin，registry 在线状态）/ ResetToken（admin，KV upsert `browser_host_token`）。
+
+### 2.5 DTO 层（3 个文件）
+
+```go
 type CreateBrowserTaskReq struct {
     Name        string `json:"name" binding:"required,max=256"`
     Description string `json:"description"`
@@ -616,72 +487,40 @@ type CreateBrowserTaskReq struct {
     Url         string `json:"url" binding:"required,max=2048,url"`
     BrainMode   bool   `json:"brain_mode"`
     BrainGoal   string `json:"brain_goal"`
-    Steps       []any  `json:"steps"`
-    LoopCount   int    `json:"loop_count"`
-    DelayMs     int    `json:"delay_ms"`
-    TimeoutSec  int    `json:"timeout_sec"`
+    Steps       []StepItem `json:"steps"`
+    LoopCount   int    `json:"loop_count" binding:"omitempty,min=1,max=1000"`
+    DelayMs     int    `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
+    TimeoutSec  int    `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
+}
+
+type StepItem struct {
+    Action       string `json:"action" binding:"required,oneof=open_tab click type snapshot markdown screenshot wait wait_for_selector scroll extract close_tab"`
+    Target       string `json:"target"`
+    Value        string `json:"value"`
+    Ms           int    `json:"ms"`
+    ClearFirst   bool   `json:"clear_first"`
+    SubmitOnEnter bool  `json:"submit_on_enter"`
+    Direction    string `json:"direction" binding:"omitempty,oneof=up down left right"`
+    Amount       int    `json:"amount"`
+    Selector     string `json:"selector"`
+    TimeoutMs    int    `json:"timeout_ms"`
+    // 错误处理
+    ContinueOnError bool `json:"continue_on_error"`
+    RetryCount      int  `json:"retry_count" binding:"omitempty,min=0,max=10"`
+    RetryBackoffMs  int  `json:"retry_backoff_ms" binding:"omitempty,min=100"`
 }
 ```
+
+> `extract` 原语 MVP 降级：`schema` 为 CSS selector 列表（`{"title": ".h1", "items": ".card"}`），复杂提取走 Brain 模式（markdown + LLM），不实现通用 schema 解释器。
 
 ---
 
-## 2. Migration
+## 3. Migration v3.37.0
 
 路径：`user-server/internal/migration/migrations/v3_37_0_browser_automation_migration.go`
-
-参考样板：`v3_35_0_telegram_group_gate_migration.go`
-
-```go
-package migrations
-
-import (
-    "context"
-    "fmt"
-    "hivemtk-user/internal/migration"
-    "gorm.io/gorm"
-)
-
-// BrowserAutomationMigration v3.37.0：浏览器自动化（寄生式 Chrome Native Messaging）
-type BrowserAutomationMigration struct { db *gorm.DB }
-var _ migration.Migration = (*BrowserAutomationMigration)(nil)
-
-func NewBrowserAutomationMigration(db *gorm.DB) *BrowserAutomationMigration {
-    return &BrowserAutomationMigration{db: db}
-}
-func (m *BrowserAutomationMigration) Version() string      { return "v3.37.0" }
-func (m *BrowserAutomationMigration) Name() string         { return "browser_tasks / sessions / steps / cron_triggers / llm_plans" }
-func (m *BrowserAutomationMigration) Description() string  { return "浏览器自动化：寄生式 Chrome Native Messaging + Go 直做 Host + 纯 JS 扩展" }
-
-func (m *BrowserAutomationMigration) Up(ctx context.Context) error {
-    if m.db == nil { return fmt.Errorf("db is nil") }
-    // 5 张表 DDL（直接 raw SQL，风格同 telegram_group_gates）
-    // ... CREATE TABLE IF NOT EXISTS browser_tasks (...)
-    // ... CREATE INDEX browser_tasks_status_idx ON browser_tasks(status)
-    // ... CREATE TABLE IF NOT EXISTS browser_sessions (...)
-    // ... CREATE TABLE IF NOT EXISTS browser_steps (...)
-    // ... CREATE TABLE IF NOT EXISTS browser_cron_triggers (...)
-    // ... CREATE UNIQUE INDEX browser_cron_task_uk ON browser_cron_triggers(task_id)
-    // ... CREATE TABLE IF NOT EXISTS browser_llm_plans (...)
-    return nil
-}
-
-func (m *BrowserAutomationMigration) Down(ctx context.Context) error {
-    if m.db == nil { return fmt.Errorf("db is nil") }
-    // 反向顺序：子表先删，父表后删
-    return m.db.WithContext(ctx).Exec(`
-        DROP TABLE IF EXISTS browser_steps CASCADE;
-        DROP TABLE IF EXISTS browser_llm_plans CASCADE;
-        DROP TABLE IF EXISTS browser_cron_triggers CASCADE;
-        DROP TABLE IF EXISTS browser_sessions CASCADE;
-        DROP TABLE IF EXISTS browser_tasks CASCADE;
-    `).Error
-}
-```
-
-**完整 DDL（raw SQL，与 telegram_group_gate 风格一致）**：
+风格对齐 `v3_35_0_telegram_group_gate_migration.go`：raw SQL、分条 Exec、`CREATE INDEX IF NOT EXISTS` 单独语句、**无内联 INDEX、无 FOREIGN KEY**。
 
 ```sql
--- 1. 任务主体
 CREATE TABLE IF NOT EXISTS browser_tasks (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(256) NOT NULL,
@@ -696,77 +535,88 @@ CREATE TABLE IF NOT EXISTS browser_tasks (
     loop_count INT NOT NULL DEFAULT 1,
     delay_ms INT NOT NULL DEFAULT 1000,
     timeout_sec INT NOT NULL DEFAULT 120,
+    depends_on_task_id BIGINT,
+    depends_on_mode VARCHAR(32) DEFAULT 'all_done',
+    retry_on_fail BOOLEAN NOT NULL DEFAULT FALSE,
+    retry_delay_sec INT NOT NULL DEFAULT 300,
+    max_retry_times INT NOT NULL DEFAULT 3,
+    retry_count INT NOT NULL DEFAULT 0,
     user_id BIGINT NOT NULL,
-    account_id BIGINT,
-    current_session_id BIGINT,
+    account_id BIGINT DEFAULT 0,
     last_run_at TIMESTAMP,
     last_result TEXT,
     error_msg TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP,
-    INDEX idx_browser_tasks_user (user_id),
-    INDEX idx_browser_tasks_status (status),
-    INDEX idx_browser_tasks_task_type (task_type)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_browser_tasks_user ON browser_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_browser_tasks_status ON browser_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_browser_tasks_type ON browser_tasks(task_type);
 
--- 2. Chrome session
 CREATE TABLE IF NOT EXISTS browser_sessions (
     id BIGSERIAL PRIMARY KEY,
     task_id BIGINT NOT NULL,
-    chrome_tab_id INT,
-    url VARCHAR(2048),
-    title VARCHAR(512),
+    user_id BIGINT NOT NULL,
+    chrome_tab_id INT DEFAULT 0,
+    url VARCHAR(2048) DEFAULT '',
+    title VARCHAR(512) DEFAULT '',
     status VARCHAR(32) NOT NULL DEFAULT 'created',
     snapshot TEXT,
-    llm_plan TEXT,
+    llm_plan JSONB,
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
-    duration_ms BIGINT,
+    duration_ms BIGINT DEFAULT 0,
     error_msg TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP,
-    INDEX idx_browser_sessions_task (task_id),
-    INDEX idx_browser_sessions_status (status),
-    INDEX idx_browser_sessions_chrome_tab (chrome_tab_id)
+    total_steps INT NOT NULL DEFAULT 0,
+    success_steps INT NOT NULL DEFAULT 0,
+    failed_steps INT NOT NULL DEFAULT 0,
+    hand_latency_ms BIGINT DEFAULT 0,
+    console_errors TEXT,
+    extracted_data JSONB,
+    final_screenshot_url VARCHAR(1024) DEFAULT '',
+    llm_summary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_browser_sessions_task ON browser_sessions(task_id);
+CREATE INDEX IF NOT EXISTS idx_browser_sessions_user ON browser_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_browser_sessions_status ON browser_sessions(status);
 
--- 3. 执行步骤
 CREATE TABLE IF NOT EXISTS browser_steps (
     id BIGSERIAL PRIMARY KEY,
     session_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
     step_index INT NOT NULL,
     action VARCHAR(32) NOT NULL,
-    target VARCHAR(1024),
+    target VARCHAR(1024) DEFAULT '',
     value TEXT,
+    params JSONB,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
-    result TEXT,
-    duration_ms BIGINT,
+    result JSONB,
+    duration_ms BIGINT DEFAULT 0,
     error_msg TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP,
-    INDEX idx_browser_steps_session (session_id),
-    INDEX idx_browser_steps_task (task_id),
-    INDEX idx_browser_steps_action (action)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_browser_steps_session ON browser_steps(session_id);
+CREATE INDEX IF NOT EXISTS idx_browser_steps_task ON browser_steps(task_id);
+CREATE INDEX IF NOT EXISTS idx_browser_steps_status ON browser_steps(status);
 
--- 4. 定时触发器
 CREATE TABLE IF NOT EXISTS browser_cron_triggers (
     id BIGSERIAL PRIMARY KEY,
-    task_id BIGINT NOT NULL UNIQUE,
+    task_id BIGINT NOT NULL,
     cron_expr VARCHAR(128) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     next_run_at TIMESTAMP,
     last_run_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
-    INDEX idx_browser_cron_enabled (enabled),
-    FOREIGN KEY (task_id) REFERENCES browser_tasks(id) ON DELETE CASCADE
+    CONSTRAINT uk_browser_cron_task UNIQUE (task_id)
 );
+CREATE INDEX IF NOT EXISTS idx_browser_cron_enabled ON browser_cron_triggers(enabled);
 
--- 5. LLM Plan
 CREATE TABLE IF NOT EXISTS browser_llm_plans (
     id BIGSERIAL PRIMARY KEY,
     task_id BIGINT NOT NULL,
@@ -774,79 +624,67 @@ CREATE TABLE IF NOT EXISTS browser_llm_plans (
     snapshot TEXT,
     steps JSONB,
     reasoning TEXT,
-    model VARCHAR(64),
-    token_in INT,
-    token_out INT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP,
-    INDEX idx_browser_llm_plans_task (task_id)
+    model VARCHAR(64) DEFAULT '',
+    token_in INT DEFAULT 0,
+    token_out INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_browser_llm_plans_task ON browser_llm_plans(task_id);
 ```
+
+Down：子表先删（steps → llm_plans → cron_triggers → sessions → tasks），全部 `DROP TABLE IF EXISTS`。
+注册：`initial_schema.go` 的 `RegisterMigrations` 末尾追加 `register(NewBrowserAutomationMigration(db))`。
 
 ---
 
-## 3. Router 注册
+## 4. Router 注册
 
-路径：`user-server/internal/router/browser_automation_routes.go`
-
-参考样板：`internal/router/geo_routes.go`（DI 全在 Setup 函数内完成）
+路径：`internal/router/browser_automation_routes.go`
 
 ```go
-package router
+// SetupBrowserAutomationRoutes 浏览器自动化路由。
+// 业务路由挂 auth（JWT）；Host WS 挂在 engine 上（独立于 auth，自带 token+IP 双层防护）。
+func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.DB) {
+    // DI 装配（全部在函数内完成）
+    hostRegistry := service.NewHostRegistry()                 // 进程级单例
+    hand         := service.NewHand(hostRegistry)
+    taskRepo     := repository.NewBrowserTaskRepositoryWithDB(gormDB)
+    sessionRepo  := repository.NewBrowserSessionRepositoryWithDB(gormDB)
+    stepRepo     := repository.NewBrowserStepRepositoryWithDB(gormDB)
+    cronRepo     := repository.NewBrowserCronTriggerRepositoryWithDB(gormDB)
+    planRepo     := repository.NewBrowserLLMPlanRepositoryWithDB(gormDB)
+    brainSvc     := service.NewBrainService(planRepo)
+    feedbackSvc  := service.NewFeedbackService(gormDB)
+    executor     := service.NewExecutor(hand, sessionRepo, stepRepo, brainSvc, feedbackSvc)
+    taskSvc      := service.NewTaskService(taskRepo, sessionRepo, executor)
+    sessionSvc   := service.NewSessionService(sessionRepo, stepRepo, executor)
+    cronSvc      := service.NewCronService(cronRepo, taskSvc)
+    // 进程启动后恢复已启用 cron：utils.SafeGo 里 cronSvc.RestoreAll()
 
-import (
-    browserctrl "hivemtk-user/internal/browser_automation/controller"
-    browserrepo "hivemtk-user/internal/browser_automation/repository"
-    browsersvc "hivemtk-user/internal/browser_automation/service"
-    "hivemtk-user/internal/middleware"
-    "hivemtk-user/internal/pkg/utils/response"
-    "github.com/gin-gonic/gin"
-    "gorm.io/gorm"
-)
+    taskCtrl    := controller.NewTaskController(taskSvc)
+    sessionCtrl := controller.NewSessionController(sessionSvc)
+    cronCtrl    := controller.NewCronController(cronSvc)
+    hostCtrl    := controller.NewHostController(hostRegistry, taskSvc)
 
-// SetupBrowserAutomationRoutes 浏览器自动化路由
-// 权限分级：所有写操作（/browser-automation/tasks POST/PUT/DELETE/run）需登录；
-// 敏感配置（如禁用全部 session）走 AdminAuthMiddleware()
-func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
-
-    // --- Repository ---
-    taskRepo    := browserrepo.NewBrowserTaskRepositoryWithDB(gormDB)
-    sessionRepo := browserrepo.NewBrowserSessionRepositoryWithDB(gormDB)
-    stepRepo    := browserrepo.NewBrowserStepRepositoryWithDB(gormDB)
-    cronRepo    := browserrepo.NewBrowserCronTriggerRepositoryWithDB(gormDB)
-    planRepo    := browserrepo.NewBrowserLLMPlanRepositoryWithDB(gormDB)
-
-    // --- Service ---
-    hand        := browsersvc.NewHand()  // 单例，进程生命周期
-    execSvc     := browsersvc.NewExecutor(hand, sessionRepo, stepRepo, planRepo)
-    brainSvc    := browsersvc.NewBrainService(planRepo, nil) // LLM dispatcher 注入
-    taskSvc     := browsersvc.NewTaskService(taskRepo, sessionRepo, hand, execSvc, brainSvc)
-    cronSvc     := browsersvc.NewCronService(cronRepo, taskSvc)
-    sessionSvc  := browsersvc.NewSessionService(sessionRepo, stepRepo)
-
-    handCtrl   := browserctrl.NewHandController(hand)
-
-    // --- Controller ---
-    taskCtrl    := browserctrl.NewTaskController(taskSvc)
-    cronCtrl    := browserctrl.NewCronController(cronSvc)
-    sessionCtrl := browserctrl.NewSessionController(sessionSvc)
-
-    // --- 路由注册 ---
     ba := auth.Group("/browser-automation")
-
-    // 任务
-    ba.POST("/tasks", taskCtrl.Create)
+    ba.POST("/tasks", taskCtrl.Create)                 // + URL scheme 校验
     ba.GET("/tasks", taskCtrl.List)
     ba.GET("/tasks/:id", taskCtrl.Get)
     ba.PUT("/tasks/:id", taskCtrl.Update)
     ba.DELETE("/tasks/:id", taskCtrl.Delete)
     ba.POST("/tasks/:id/publish", taskCtrl.Publish)
-    ba.POST("/tasks/:id/run", taskCtrl.Run)        // ← 触发执行，返回 session_id
+    ba.POST("/tasks/:id/run", taskCtrl.Run)            // 异步，立即返回 session_id
     ba.POST("/tasks/:id/pause", taskCtrl.Pause)
     ba.POST("/tasks/:id/resume", taskCtrl.Resume)
     ba.POST("/tasks/:id/archive", taskCtrl.Archive)
 
-    // Cron
+    ba.GET("/sessions", sessionCtrl.List)
+    ba.GET("/sessions/:id", sessionCtrl.Get)
+    ba.GET("/sessions/:id/steps", sessionCtrl.ListSteps)
+    ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
+    ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
+
     ba.GET("/cron", cronCtrl.List)
     ba.POST("/cron", cronCtrl.Create)
     ba.PUT("/cron/:id", cronCtrl.Update)
@@ -854,1271 +692,258 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
     ba.POST("/cron/:id/enable", cronCtrl.Enable)
     ba.POST("/cron/:id/disable", cronCtrl.Disable)
 
-    // Session（只读查询，监控用）
-    ba.GET("/sessions", sessionCtrl.List)
-    ba.GET("/sessions/:id", sessionCtrl.Get)
-    ba.GET("/sessions/:id/steps", sessionCtrl.ListSteps)
-    ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
-
-    // Admin 专用
     baAdmin := ba.Group("")
     baAdmin.Use(middleware.AdminAuthMiddleware())
-    baAdmin.GET("/hand/status",  handCtrl.GetStatus)
-    baAdmin.POST("/hand/ensure", handCtrl.EnsureHostReady)
+    baAdmin.GET("/host/status", hostCtrl.GetStatus)
+    baAdmin.POST("/host/token/reset", hostCtrl.ResetToken)
+
+    // Host WebSocket（双层防护：bridge 模式 token + 本地回环 IP 白名单）
+    engine.GET("/api/browser/host-ws", NewHostWSHandler(hostRegistry, taskSvc, sessionRepo).Handle)
 }
 ```
 
-最后需要在 `internal/router/router.go` 里加一行：
+`router.go` 挂载（L321 `SetupGeoRoutes(auth, gormDB)` 旁）：
+
 ```go
-SetupBrowserAutomationRoutes(auth, gormDB)
+SetupBrowserAutomationRoutes(auth, r, gormDB)
 ```
+
+> `/api/browser/host-ws` 挂 engine 而非 auth 组：它不走 JWT（NM Host 无用户登录态），鉴权由 Handler 内 token+IP 双层完成；挂在 `/api` 前缀下便于 nginx/frp 一条规则封禁。**部署清单必须加：nginx `location /api/browser/ { deny all; }`（仅本机回环放行）**。
 
 ---
 
-## 4. user-web 前端
+## 5. Go NM Host（cmd/nm-host）
 
-### 4.1 API 文件
-
-路径：`user-web/src/api/browserAutomation.js`
-
-参考样板：`user-web/src/api/geoAlert.js`
-
-```js
-import { http } from '@/utils/http'
-
-// 任务
-export const listBrowserTasks = (params) =>
-  http.get('/api/browser-automation/tasks', params)
-
-export const getBrowserTask = (id) =>
-  http.get(`/api/browser-automation/tasks/${id}`)
-
-export const createBrowserTask = (data) =>
-  http.post('/api/browser-automation/tasks', data)
-
-export const updateBrowserTask = (id, data) =>
-  http.put(`/api/browser-automation/tasks/${id}`, data)
-
-export const deleteBrowserTask = (id) =>
-  http.delete(`/api/browser-automation/tasks/${id}`)
-
-export const publishBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/publish`)
-
-export const runBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/run`)
-
-export const pauseBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/pause`)
-
-export const resumeBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/resume`)
-
-export const archiveBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/archive`)
-
-// Cron
-export const listBrowserCron = () =>
-  http.get('/api/browser-automation/cron')
-
-export const createBrowserCron = (data) =>
-  http.post('/api/browser-automation/cron', data)
-
-export const updateBrowserCron = (id, data) =>
-  http.put(`/api/browser-automation/cron/${id}`, data)
-
-export const deleteBrowserCron = (id) =>
-  http.delete(`/api/browser-automation/cron/${id}`)
-
-export const enableBrowserCron = (id) =>
-  http.post(`/api/browser-automation/cron/${id}/enable`)
-
-export const disableBrowserCron = (id) =>
-  http.post(`/api/browser-automation/cron/${id}/disable`)
-
-// Session
-export const listBrowserSessions = (params) =>
-  http.get('/api/browser-automation/sessions', params)
-
-export const getBrowserSession = (id) =>
-  http.get(`/api/browser-automation/sessions/${id}`)
-
-export const listBrowserSessionSteps = (id) =>
-  http.get(`/api/browser-automation/sessions/${id}/steps`)
-
-export const listBrowserSessions = (taskId) =>
-  http.get(`/api/browser-automation/tasks/${taskId}/sessions`)
+```go
+// main.go 主循环（~200 行）
+// 1. env: HIVE_MTK_WS_URL(默认 ws://127.0.0.1:8204/api/browser/host-ws)
+//         HIVE_MTK_HOST_TOKEN(必填，install.sh 时由 admin 生成写入 ~/.hivemtk/nm_host.conf)
+// 2. websocket.DefaultDialer.Dial(wsURL+"?token="+token) —— 断线指数退避重连
+// 3. 循环：读 WS 命令帧 → writeNativeFrame(stdout, 4B native-order 长度头 + JSON)
+//          → readNativeFrame(stdin) → WS 回传 {req_id, ok, data|error}
+// 4. 帧限制：写方向(Host→扩展)校验 ≤1MiB（官方 host→extension 限制）
+// 5. stdin 关闭（Chrome 退出/port 断开）→ 进程自然退出（Chrome 负责杀）
 ```
 
-### 4.2 页面
+- 字节序：`binary.NativeEndian.PutUint32`（官方措辞 native order；arm64/x86 等价 LE）。
+- **没有独立 go.mod**（共享 `user-server/go.mod`，与 api/geo-run/seed 并列）。
+- install.sh：编译 → `/usr/local/bin/hivemtk_browser_nm_host` → 写 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.hivemtk.browser.json`（macOS 用户级；`allowed_origins` 填**固定扩展 ID**，见 §7.1 key 固定）→ 提示填 token。
 
-路径：`user-web/src/views/browserAutomation/`
+### 5.1 扩展 ID 固定（v1 缺失）
 
-| 页面 | 文件 | 功能 |
-|------|------|------|
-| 任务列表 | `List.vue` | 表格：名称 / 状态 / 类型 / 上次执行时间 / 操作（发布/执行/编辑/归档/删除） |
-| 新建任务 | `Create.vue` | 分步表单：基本信息 → URL → 编排步骤 → Brain 模式开关 → 定时触发器 |
-| 编辑任务 | `Editor.vue` | 同 Create，预填 |
-| 任务详情 | `Detail.vue` | 概览 + 步骤列表 + 历史执行（sessions）+ Cron 配置 |
-| Session 监控 | `Monitor.vue` | 实时查看运行中 session 的 steps 执行状态、耗时、截图 |
-| Cron 管理 | `Cron.vue` | Cron 触发器列表 + 启停 + 手动触发 |
-| Hand 连通性 | `Status.vue` | Admin 用：检查 Go NM Host 是否连接 + Chrome 扩展状态 |
-
-### 4.3 Pinia Store
-
-路径：`user-web/src/stores/browserAutomation.js`
-
-```js
-import { defineStore } from 'pinia'
-import { runBrowserTask, listBrowserSessions, listBrowserSessionSteps } from '@/api/browserAutomation'
-
-export const useBrowserAutomationStore = defineStore('browserAutomation', {
-  state: () => ({
-    runningSession: null,
-    pollTimer: null,
-  }),
-  actions: {
-    async startRun(taskId) {
-      const res = await runBrowserTask(taskId)
-      this.runningSession = res.data
-      // 启动轮询（每 2s 查 step 列表直到状态 != running）
-      this.pollTimer = setInterval(async () => {
-        const steps = await listBrowserSessionSteps(this.runningSession.id)
-        this.runningSession.steps = steps.data
-        const allDone = steps.data.every(s => ['success','failed','skipped'].includes(s.status))
-        if (allDone) {
-          clearInterval(this.pollTimer)
-        }
-      }, 2000)
-    },
-    stopPoll() {
-      if (this.pollTimer) clearInterval(this.pollTimer)
-    }
-  }
-})
-```
-
-### 4.4 Router
-
-路径：`user-web/src/router/modules/browserAutomation.js`
-
-参考样板：`user-web/src/router/modules/geoTools.js`
-
-```js
-export default [
-  {
-    path: '/browser-automation',
-    name: 'BrowserAutomation',
-    meta: { title: '浏览器自动化', icon: 'Monitor', group: 'automation', requiresAuth: true },
-    children: [
-      { path: '', redirect: '/browser-automation/tasks' },
-      {
-        path: 'tasks',
-        name: 'BrowserAutomationList',
-        component: () => import('@/views/browserAutomation/List.vue'),
-        meta: { title: '任务列表', requiresAuth: true }
-      },
-      {
-        path: 'tasks/create',
-        name: 'BrowserAutomationCreate',
-        component: () => import('@/views/browserAutomation/Create.vue'),
-        meta: { title: '新建任务', requiresAuth: true }
-      },
-      {
-        path: 'tasks/:id/edit',
-        name: 'BrowserAutomationEditor',
-        component: () => import('@/views/browserAutomation/Editor.vue'),
-        meta: { title: '编辑任务', requiresAuth: true }
-      },
-      {
-        path: 'tasks/:id',
-        name: 'BrowserAutomationDetail',
-        component: () => import('@/views/browserAutomation/Detail.vue'),
-        meta: { title: '任务详情', requiresAuth: true }
-      },
-      {
-        path: 'sessions/:id',
-        name: 'BrowserAutomationMonitor',
-        component: () => import('@/views/browserAutomation/Monitor.vue'),
-        meta: { title: '执行监控', requiresAuth: true }
-      },
-      {
-        path: 'cron',
-        name: 'BrowserAutomationCron',
-        component: () => import('@/views/browserAutomation/Cron.vue'),
-        meta: { title: '定时触发器', requiresAuth: true }
-      },
-    ]
-  }
-]
-```
-
-最后在 `user-web/src/router/index.js` 注册这个 module。
+`allowed_origins` **禁止通配符**，而 unpacked 扩展 ID 随目录路径派生。manifest.json 写死 `"key"`（公钥）固定 ID，install.sh 的 EXT_ID 即可写死，换目录/重装无需重跑注册。
 
 ---
 
-## 5. Chrome 扩展 + Go NM Host
+## 6. 原语全集（9 种 MVP + 2 种 Brain 内部）
 
-### 5.1 项目位置
+> 每个原语标注 MV3 约束。扩展侧统一 `chrome.scripting.executeScript({target:{tabId}, func, args})` —— **func 会被序列化，闭包变量全部丢失，外部值必须经 args 传入**（官方 scripting API 硬约束）。
 
-```
-user-web/browser_automation/
-├── manifest.json         ← MV3，tabs + scripting
-├── background.js         ← connectNative + onMessage + 原语分发
-└── icons/                ← 扩展图标
+| # | 原语 | 扩展实现 | 关键参数 / 约束 |
+|---|------|---------|----------------|
+| 1 | `open_tab` | `chrome.tabs.create({url, active:false})` | url 已在 service 层限 http/https；active 恒 false |
+| 2 | `click` | executeScript `args:[target]` → `document.querySelector(t)?.click()` | target=CSS selector 或 `@e3` refs（经 accessibility.js 映射） |
+| 3 | `type` | executeScript `args:[target, value, clearFirst, submit]` | 先 focus，`document.execCommand('insertText')` 触发输入事件 |
+| 4 | `snapshot` | executeScript 遍历可交互 DOM 生成 `role [name] @eN` | refs 表由扩展持久缓存（常驻 map），跨命令有效；页面导航即失效重取 |
+| 5 | `markdown` | executeScript 走 DOM → 粗粒度 Markdown | 供 LLM 吃 |
+| 6 | `screenshot` | **MVP 仅限对 active tab**：`chrome.tabs.captureVisibleTab(windowId, {format:'png'})` | 无 tabId 参数；不能截后台 tab；不能全页；限频 2 次/秒 → 仅 session 完成后把 tab 激活截一次 final_screenshot（方案 M3）。全页/后台截图后续可选 chrome.debugger + CDP `captureBeyondViewport`（有"正在调试"横幅，本版不做） |
+| 7 | `wait` | setTimeout | ms ∈ [0, 60000] |
+| 8 | `wait_for_selector` | executeScript 轮询 querySelector（200ms 间隔） | timeout_ms ∈ [1000, 60000] |
+| 9 | `scroll` | executeScript `window.scrollBy` | direction ∈ up/down/left/right |
+| 10 | `extract` | executeScript 按 CSS selector 列表提取 textContent | MVP 降级为 selector 列表，不做通用 schema |
+| 11 | `close_tab` | `chrome.tabs.remove(tabId)` | session 收尾调用 |
 
-user-server/cmd/nm-host/
-├── main.go               ← Go NM Host daemon（HTTP + Native Messaging 双通道）
-├── install.sh            ← 编译 binary + 注册 manifest.json 到 Chrome 路径
-└── manifest.json.template ← Chrome Native Messaging 清单模板
-```
+**截图说明（M3 定稿）**：session 执行结束后，扩展把 tab `chrome.tabs.update(tabId, {active:true})` 激活 → `captureVisibleTab` 截一次 → 传回 server 存 LocalDriver → `chrome.tabs.update(tabId, {active:false})`（若原非激活）。代价：执行结束瞬间 tab 会闪一下焦点；换取零 debugger 权限、无横幅。`after_screenshot` 每步截图从 Model/DDL 中**移除**。
 
-### 5.1.1 物理执行模型（关键！严格遵守项目"统一端口"定位）
+---
 
-**本项目核心事实**：`user-server/cmd/api/main.go` 启动一个 gin.Engine、**一个端口**（比如 8080），
-前端静态资源 `/assets/*`、后端 API `/api/*`、Vue SPA `/`、WebSocket 全挂在这一个端口上。
-**不能开第二个 HTTP server**。
+## 7. Chrome 扩展（user-web/browser_automation/）
 
-```
-┌───────────────────────────────────────────────────────────────────────┐
-│ 项目统一端口架构（只有一个 HTTP server：gin.Engine on :8080）           │
-│                                                                       │
-│  user-server (api binary)                                             │
-│  ┌─────────────────────────────────────────────────────────┐          │
-│  │  gin.Engine  (一个端口，比如 http://host:8080)           │          │
-│  │  ├── /api/browser-automation/*  ← 业务 API（前端 Vue 调用）│          │
-│  │  ├── /internal/browser/host     ← NM Host 内部回调接口    │          │
-│  │  │   （localhost only，不对外暴露，无 Auth 但 IP 白名单） │          │
-│  │  ├── /assets/*                  ← Vue3 静态资源          │          │
-│  │  ├── /                          ← Vue3 SPA              │          │
-│  │  └── websocket                  ← 统一端口的 WS          │          │
-│  └─────────────────────────────────────────────────────────┘          │
-│                                                                       │
-│  Chrome Native Messaging（独立进程，Chrome 管控启动）                    │
-│  ┌─────────────────────────────────────────────────────────┐          │
-│  │  Go NM Host (cmd/nm-host/main.go)                        │          │
-│  │  ├── stdin/stdout  ← Chrome 管控的 Native Messaging      │          │
-│  │  │   Channel A: 4B LE 帧 + JSON ↔ Chrome 扩展            │          │
-│  │  │                                                       │          │
-│  │  └── HTTP client → http://127.0.0.1:8080/internal/browser/host │    │
-│  │       Channel B: Host 作为**客户端**连 user-server 统一端口│          │
-│  │       Host 不开任何 HTTP server！它只是 HTTP client        │          │
-│  └─────────────────────────────────────────────────────────┘          │
-│                                                                       │
-│  Chrome 扩展 (user-web/browser_automation/)                                     │
-│  ┌─────────────────────────────────────────────────────────┐          │
-│  │  background.js                                           │          │
-│  │  └── chrome.runtime.connectNative('com.hivemtk.browser') │          │
-│  │      → Chrome 自动 fork Go NM Host binary                │          │
-│  │      → Host stdin/stdout 由 Chrome 管控                  │          │
-│  └─────────────────────────────────────────────────────────┘          │
-└───────────────────────────────────────────────────────────────────────┘
-```
-
-#### 谁启动 Go NM Host？—— **Chrome，不是 user-server**
-
-Chrome Native Messaging 协议硬性要求：
-1. Host 进程必须由 Chrome 启动（Chrome fork manifest.json 里 `path` 指定的 binary）
-2. Chrome 管控 Host 的 stdin/stdout
-3. user-server **不能** fork Host（否则 stdin/stdout 冲突）
-
-#### Host 怎么跟 user-server 通信？—— **HTTP client 连统一端口**
-
-Go NM Host 自己**不开 HTTP server**，它只是 HTTP client：
-
-```
-请求方向：user-server → Host → Chrome 扩展 → Host → user-server
-
-① user-server BrowserHand.Executor.RunTask()
-   → POST http://127.0.0.1:8080/internal/browser/host
-          body: {"action":"click","tab_id":1,"target":"#submit"}
-   ↑ 这是 user-server 调自己的统一端口内部接口！
-
-② /internal/browser/host Controller 收到请求
-   → 把 command 写入共享 channel（或通过 Host 注册的长连接）
-
-③ Go NM Host 轮询（或 WebSocket 长连接）从 user-server 拿 command
-   → 写 4B LE 帧到 Chrome 扩展（通过 stdin）
-
-④ Chrome 扩展处理原语：chrome.scripting.executeScript(...)
-   → 回写 4B LE 帧到 Host（stdout）
-
-⑤ Go NM Host 读响应帧
-   → HTTP response 返回给 user-server 的内部 Controller
-   → → Executor 拿到 result → 继续下一步
-```
-
-#### 两条通道的精确协议
-
-**Channel A: Go NM Host ↔ Chrome 扩展**（Chrome 管控的 Native Messaging，不可绕过）
-  - 帧格式：4 字节 Little Endian 长度头 + UTF-8 JSON body
-  - 限制：扩展→Host 64 MiB / Host→扩展 1 MiB
-
-**Channel B: Go NM Host ↔ user-server 统一端口**（Host 是 HTTP client，user-server 是 server）
-  - 方式 1（推荐）：**WebSocket 长连接**
-    - Host 启动时：`ws://127.0.0.1:8080/internal/browser/ws`
-    - user-server 内部 Controller 把 WebSocket 挂到统一 gin.Engine 上
-    - Host 保持连接，user-server 通过 WS 推 command 过来
-    - 好处：不用轮询，实时性好，Host 状态天然知道
-  - 方式 2（备选）：Host 轮询 `GET http://127.0.0.1:8080/internal/browser/poll?last_id=N`
-    - Host 每 100ms 轮询一次，user-server 返回积压的 commands
-    - 简单但延迟稍高、浪费端口请求
-  - 安全：IP 白名单 127.0.0.1 / ::1，不走反代
-
-#### 为什么不开第二个端口？
-
-因为 `cmd/api/main.go` 只有一个 `gin.New()` 监听一个端口，这是项目定位。
-`/internal/browser/*` 内部路由直接**挂在同一个 gin.Engine 上**，和 `/api/*`、`/assets/*`、`/`、WebSocket 并列：
-
-```go
-// cmd/api/main.go 里 SetupRoutes() 会调用
-// 内部路由和外部路由都挂在同一个 r *gin.Engine 上
-router.SetupBrowserAutomationRoutes(auth, r, gormDB)
-// SetupBrowserAutomationRoutes 内部:
-//   r.Group("/internal/browser")  ← 内部路由挂同一端口
-//     .GET("/ws", ...)             ← WebSocket 长连接
-//     .GET("/poll", ...)           ← 轮询备选
-//     .POST("/host-register", ...)
-//   auth.Group("/api/browser-automation")  ← 业务 API 挂同一端口
-//     .POST("/tasks/:id/run", ...)
-```
-
-完全没有第二个端口，统一端口贯穿一切。
-
-与 `service/hand.go` 的 Hand 层对接：**统一端口 WebSocket**
-
-```go
-// user-server/cmd/nm-host/main.go — Go NM Host（Chrome 启动的子进程）
-// 职责：
-//   1. stdin/stdout 走 Chrome Native Messaging（4 字节 LE 帧）
-//   2. 同时作为 HTTP client 连 user-server 统一端口 /internal/browser/ws（WebSocket）
-//   3. 从 WS 拿 command → 写帧给 Chrome 扩展 → 等扩展响应 → WS 回传 user-server
-
-package main
-
-import (
-    "context"
-    "encoding/binary"
-    "encoding/json"
-    "io"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "strconv"
-    "syscall"
-
-    "github.com/gorilla/websocket"
-)
-
-// 通过环境变量知道统一端口（install.sh 写进 Chrome Native Messaging manifest 的 args）
-// 或者 Host 启动时读 ~/.hivemtk/nm_host.conf
-var (
-    serverURL = envOr("HIVE_MTK_SERVER_URL", "http://127.0.0.1:8080")
-    wsURL     = envOr("HIVE_MTK_WS_URL", "ws://127.0.0.1:8080/internal/browser/ws")
-    token     = envOr("HIVE_MTK_INTERNAL_TOKEN", "")
-)
-
-func main() {
-    // 1. 连 user-server 统一端口的 WebSocket
-    hdr := http.Header{"Authorization": []string{"Bearer " + token}}
-    wsConn, _, err := websocket.DefaultDialer.Dial(wsURL, hdr)
-    if err != nil {
-        log.Fatalf("连 user-server /internal/browser/ws 失败: %v", err)
-    }
-    defer wsConn.Close()
-    log.Println("✅ Go NM Host 已连接 user-server 统一端口 WebSocket")
-
-    // 2. 发注册消息
-    wsConn.WriteJSON(map[string]any{
-        "type":    "register",
-        "version": "1.0.0",
-        "pid":     os.Getpid(),
-    })
-
-    // 3. 主循环：从 WebSocket 拿 command → 写帧给 Chrome 扩展 → 等响应 → WS 回传
-    for {
-        // 3a. 从 WebSocket 读 command
-        _, raw, err := wsConn.ReadMessage()
-        if err != nil {
-            log.Printf("WebSocket 断开，重连中...: %v", err)
-            reconnect(wsURL, token)
-            continue
-        }
-
-        var cmd map[string]any
-        if err := json.Unmarshal(raw, &cmd); err != nil {
-            wsConn.WriteJSON(map[string]any{"ok": false, "error": "invalid_cmd_json"})
-            continue
-        }
-
-        // 3b. 写 4 字节 LE 帧 + JSON body 给 Chrome 扩展（通过 Chrome 管控的 stdin）
-        if err := writeNativeFrame(cmd); err != nil {
-            wsConn.WriteJSON(map[string]any{"ok": false, "error": fmt.Sprintf("chrome_write: %v", err)})
-            continue
-        }
-
-        // 3c. 等 Chrome 扩展的响应帧（从 Chrome 管控的 stdout 读）
-        resp, err := readNativeFrame()
-        if err != nil {
-            wsConn.WriteJSON(map[string]any{"ok": false, "error": fmt.Sprintf("chrome_read: %v", err)})
-            continue
-        }
-
-        // 3d. 通过 WebSocket 回传给 user-server
-        wsConn.WriteJSON(resp)
-    }
-}
-
-// writeNativeFrame 写 4 字节 LE 长度头 + JSON body 到 Chrome 管控的 stdin
-func writeNativeFrame(msg map[string]any) error {
-    body, _ := json.Marshal(msg)
-    header := make([]byte, 4)
-    binary.LittleEndian.PutUint32(header, uint32(len(body)))
-    if _, err := os.Stdout.Write(header); err != nil { return err }
-    _, err := os.Stdout.Write(body)
-    return err
-}
-
-// readNativeFrame 从 Chrome 管控的 stdout 读 4 字节 LE 长度头 + JSON body
-func readNativeFrame() (map[string]any, error) {
-    header := make([]byte, 4)
-    if _, err := io.ReadFull(os.Stdin, header); err != nil {
-        return nil, err
-    }
-    length := binary.LittleEndian.Uint32(header)
-    body := make([]byte, length)
-    if _, err := io.ReadFull(os.Stdin, body); err != nil {
-        return nil, err
-    }
-    var resp map[string]any
-    return resp, json.Unmarshal(body, &resp)
-}
-```
-
-### 5.3 manifest.json（Chrome Native Messaging 清单）
+### 7.1 manifest.json
 
 ```json
 {
-  "name": "com.hivemtk.browser",
-  "description": "HiveMTK Browser Automation Native Messaging Host",
-  "path": "/usr/local/bin/hivemtk_browser_nm_host",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://<EXTENSION_ID>/"]
+  "manifest_version": 3,
+  "name": "HiveMTK Browser Automation",
+  "version": "1.0.0",
+  "key": "<写死公钥，固定扩展 ID>",
+  "permissions": ["nativeMessaging", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" },
+  "icons": { "128": "icons/128.png" }
 }
 ```
 
-### 5.4 install.sh
+- `"nativeMessaging"` 权限**必须**声明（connectNative 前提）。
+- `host_permissions` MVP 用 `<all_urls>`（通用自动化场景），上线前可按需收敛。
+- background 只负责 connectNative port 生命周期 + 原语分发；sendNativeMessage **不可用**（每次新起 Host 进程、只认第一条回包，无法做长会话）。
 
-```bash
-#!/bin/bash
-# 编译 Go Host → 拷贝到 /usr/local/bin → 注册 manifest → 打开 manifest.json 填入扩展 ID
+### 7.2 background/index.js
 
-set -e
-GO_HOST_DIR="$(cd "$(dirname "$0")" && pwd)"
-BINARY_PATH="/usr/local/bin/hivemtk_browser_nm_host"
+```
+port = chrome.runtime.connectNative('com.hivemtk.browser')
+port.onMessage ← {req_id, action, ...} → primitives 分发 → port.postMessage({req_id, ok, data})
+port.onDisconnect ← 自动重连（指数退避，上限 5 次）；重连失败置 popup 状态"Host 离线"
+SW 保活：Chrome 105+ connectNative 保活 SW；114+ port 收发消息保活 → port 不断则 SW 不死。
+```
 
-# 1. 编译
-cd "$GO_HOST_DIR" && go build -o /tmp/hivemtk_browser_nm_host .
-sudo mv /tmp/hivemtk_browser_nm_host "$BINARY_PATH"
+### 7.3 core 模块
 
-# 2. 注册 manifest（macOS 用户级）
-EXT_ID="${1:-YOUR_EXT_ID_HERE}"
-MANIFEST_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-mkdir -p "$MANIFEST_DIR"
-cat > "$MANIFEST_DIR/com.hivemtk.browser.json" << EOF
-{
-  "name": "com.hivemtk.browser",
-  "description": "HiveMTK Browser Automation Native Messaging Host",
-  "path": "$BINARY_PATH",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://$EXT_ID/"]
-}
-EOF
+- `native-messaging.js`：port 封装 + req_id 关联（单 port 复用）。
+- `primitives.js`：§6 原语实现（全部 executeScript func+args 形态）。
+- `tab-manager.js`：open/close/activate、tab 存活探测（`chrome.tabs.get`）。
+- `accessibility.js`：`@e{N}` refs 快照生成 + ref→selector 映射缓存（页面导航失效）。
 
-echo "✅ 安装完成。在 Chrome 扩展页面启用扩展后，刷新扩展即可。"
-echo "   验证: Go Hand 调 /api/browser-automation/hand/ensure → connected:true"
+### 7.4 popup
+
+Host 连接状态 + 快捷"执行选中任务"入口 + 最近 session 列表。
+
+---
+
+## 8. 全链路数据流（定稿）
+
+```
+① 前端 List.vue 点"执行"
+   api/browserAutomation.js runBrowserTask(id) → POST /api/browser-automation/tasks/:id/run
+   → store.startRun() 拿 session_id → 跳 Monitor.vue，2s 轮询 steps
+② TaskController.Run → taskSvc.RunTask：校验(归属/幂等/依赖/URL) → 建 Session → SafeGo 异步执行
+③ Executor：hand.send(userID, cmd) → HostRegistry.Request 分配 req_id → 写 WS 帧
+④ NM Host 读 WS 帧 → writeNativeFrame → 扩展 SW → primitives.executeScript
+⑤ 扩展回帧 → Host 读 stdin → WS 回传 {req_id,...} → registry 投递 pending chan → Hand 返回
+⑥ Executor 逐条落 step → session 完成 → feedback（通知/截图产物/总结/retry）
+⑦ 前端轮询 sessions/:id/steps 渲染状态
 ```
 
 ---
 
-## 6. 全链路数据流
+## 9. 状态机
 
-从前端点"执行任务"按钮 → 浏览器 tab 打开 → 步骤跑 → 结果回传前端轮询，**每个字节在哪个文件流动**：
-
+### Task
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ① 前端 user-web                                                                     │
-│                                                                                     │
-│  List.vue 点"执行"                                                              │
-│   ↓                                                                                 │
-│  src/api/browserAutomation.js: runBrowserTask(taskId) → POST /api/browser-automation/tasks/:id/run │
-│   ↓                                                                                 │
-│  src/stores/browserAutomation.js: startRun() → 拿到 session_id → 启动 2s 轮询 timer│
-│   ↓                                                                                 │
-│  每 2s: GET /api/browser-automation/sessions/:id/steps → 更新 Monitor.vue    │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                      │ HTTP (JSON)
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ② 后端 user-server                                                                  │
-│                                                                                     │
-│  internal/router/browser_automation_routes.go: SetupBrowserAutomationRoutes()        │
-│   ba.POST("/tasks/:id/run", taskCtrl.Run)                                           │
-│   ↓                                                                                 │
-│  internal/browser_automation/controller/task.go: TaskCtrl.Run()  │
-│   c.Param("id") → c.GetUint("user_id") → 调 taskSvc.RunTask(ctx, taskID, userID)  │
-│   ↓                                                                                 │
-│  internal/browser_automation/service/task.go: RunTask()             │
-│   taskRepo.GetByID(ctx, id, userID) → sessionRepo.Create(ctx, session)              │
-│   ↓                                                                                 │
-│  internal/browser_automation/service/executor.go: ExecuteSession(session)   │
-│   遍历 task.Steps → 每个 step 调 hand.OpenTab/Click/Type/Snapshot/Screenshot...     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                      │ BrowserHand.send() HTTP JSON-RPC
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ③ Go NM Host (Chrome fork 的独立进程, HTTP client 连统一端口)                       │
-│                                                                                     │
-│  user-server/cmd/nm-host/main.go:                                                   │
-│   启动时 WebSocket 连接 ws://127.0.0.1:8080/internal/browser/ws                      │
-│   user-server 统一端口收到 command → 通过 WS 推给 Host                              │
-│   Host 写 4 字节 LE 帧 → Chrome Native Messaging stdio → 扩展                       │
-│   Host 读扩展 response frame → WS 推回 user-server                                 │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                      │ Native Messaging 4B LE 帧 + JSON
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ④ Chrome 扩展 (MV3 Service Worker)                                                  │
-│                                                                                     │
-│  user-web/browser_automation/src/background/index.js: port.onMessage.addListener(handleCommand)         │
-│   case 'open_tab':  chrome.tabs.create({url, active:false})  ← 后台 tab，不抢焦点    │
-│   case 'click':     chrome.scripting.executeScript({tabId, func: () => querySelector.click()}) │
-│   case 'type':      chrome.scripting.executeScript({tabId, func: typeScript})       │
-│   case 'snapshot':  chrome.scripting.executeScript({tabId, func: snapshotScript})   │
-│   case 'markdown':  chrome.scripting.executeScript({tabId, func: markdownScript})   │
-│   case 'screenshot':chrome.tabs.captureVisibleTab({tabId})                          │
-│   回传: chrome.runtime.sendNativeMessage('com.hivemtk.browser', {ok:true, data:...})│
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                      │ Chrome 内部 API 调用
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ ⑤ 用户主 Chrome Profile                                                              │
-│                                                                                     │
-│  chrome.tabs.create → 新 tab（active:false，不抢用户当前焦点）                        │
-│  chrome.scripting.executeScript → 注入 JS 执行 click/type/snapshot/markdown          │
-│  chrome.tabs.captureVisibleTab → 截图                                                │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                      │ 回传路径（反向）
-                                      ▼
-│ ④ 扩展 → ③ Host → ② Go Hand → executor 更新 session.status / step.result → 写 DB     │
-│                                                                                     │
-│  internal/browser_automation/repository/step.go: UpdateStatus()             │
-│  internal/browser_automation/repository/session.go: UpdateStatus()          │
-│  internal/browser_automation/repository/task.go: UpdateStatus()             │
-│                                                                                     │
-│  ① 前端 2s 轮询 → Monitor.vue 实时更新每个 step 的 pending/running/success/failed 状态 │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+[publish] draft→ready    [run] ready→running    完成→done / 失败→failed(可 retry_on_fail)
+[pause] running→paused   [resume] paused→running   [archive] 终态→archived
+```
+> pause 语义定稿：pause = stop 当前 session（保留 tab），resume = 重新 run。长等待原语执行中不可中断，pause 在步间生效。
+
+### Session
+```
+created →(openTab ok)→ active →(全部 step 完)→ completed
+                     ↘(任一 step 终止失败 / 超时 / stop / Host 掉线)→ failed|stopped
+```
+
+### Step
+```
+pending → running → success | failed | skipped(continue_on_error)
 ```
 
 ---
 
-## 7. 业务生命周期状态机
+## 10. 多租户与产品边界（新增，v1 缺失）
 
-### 7.1 Task 状态
-
-```
-                    publish()                   run()
-  [draft] ─────────────────▶ [ready] ─────────────────▶ [running]
-       ▲                      │  │                        │
-       │ update steps          │  │ pause()               │ run() loop
-       └───────────────────────┘  ▼                        ▼
-                              [paused]  ◀──────────────── [done/failed]
-                                  │                          │
-                                  │ resume()                 │ archive()
-                                  ▼                          ▼
-                              [running]                 [archived]
-```
-
-### 7.2 Session 状态
-
-```
-  [created] ── openTab 成功 ──▶ [active] ── 所有 step 完成 ──▶ [completed]
-      │                              │
-      │ openTab 失败                 │ 任一 step 失败
-      ▼                              ▼
-  [failed]                       [failed]
-```
-
-### 7.3 Step 状态
-
-```
-  [pending] ─── executor 开始执行 ──▶ [running] ── 原语返回 OK ──▶ [success]
-                                          │
-                                          │ 原语返回 error
-                                          ▼
-                                      [failed]
-```
-
-### 7.4 Cron Trigger 状态
-
-```
-  [enabled] ◀──── toggle ────▶ [disabled]
-```
+1. **适用形态**：本功能仅对"本机部署 user-server + 本机 Chrome"的单机/自部署形态开放。云端多租户用户默认无 Host。
+2. **无 Host 降级**：`POST /tasks/:id/run` 时 `ErrHostOffline` → 409 + message 引导："本机 Chrome 未连接。请在本机安装扩展（chrome://extensions 加载 user-web/browser_automation/dist）并运行 user-server/cmd/nm-host/install.sh"。前端 Detail/List 对 409 弹引导弹窗。
+3. **命令路由**：Host WS 注册以 Bearer token 鉴权，token 与 user_id 绑定（admin 生成 token 时记录归属），registry 按 user_id 路由，**绝不跨用户投递命令**。
+4. **数据归属**：tasks/sessions/steps 全表带 user_id 且 repo 层强制过滤；admin 可经 `/host/status` 看在线状态但看不到他人任务列表。
 
 ---
 
-## 8. 与现有系统的集成点
+## 11. 前端（user-web）
 
-### 8.1 LLM Routing（Brain 模式）
+### 11.1 API（src/api/browserAutomation.js）
 
-```
-service/brain.go:
-  1. 调 Hand.snapshot(tabID) → 拿到 @e1/@e2 refs snapshot
-  2. 调 aiagent/llm.Dispatcher（项目已有的 LLM 路由）
-     - brain_goal + snapshot 作为 prompt
-     - 模型选择由 llmRouting 表决定
-  3. 解析 LLM 输出 → steps 数组
-  4. 存 LLMPlan 表 + executor 用 plan 替代显式 steps
-```
+对齐 geoAlert.js；**注意不要重名导出**（v1 `listBrowserSessions` 定义了两次）：
 
-### 8.2 用户鉴权
-
-```
-所有路由走 auth *gin.RouterGroup
-controller 里:
-  userID := c.GetUint("user_id")  // middleware 注入
-  所有 repo 的 GetByID/List 都带 userID 过滤
+```js
+import { http } from '@/utils/http'
+export const listBrowserTasks = (params) => http.get('/api/browser-automation/tasks', params)
+export const runBrowserTask = (id) => http.post(`/api/browser-automation/tasks/${id}/run`)
+// ...任务/Session/Cron 全套；按任务查会话命名 listBrowserTaskSessions(taskId)
 ```
 
-### 8.3 Cron 调度
+### 11.2 Store（setup 风格，注意拆包）
 
-```
-service/cron.go:
-  1. 用 existing internal/pkg/cron（项目已有 cron 框架）
-  2. CronTrigger.Enabled=true + NextRunAt 到期 → 自动调 taskSvc.RunTask()
-  3. CronTrigger.LastRunAt / NextRunAt 自动更新
-```
-
-### 8.4 执行日志
-
-```
-Monitor.vue 展示实时日志流：
-  - 后端 session_steps 表轮询（2s 一次）
-  - 后续可升级为 websocket 推送（项目已有 internal/websocket）
-```
-
-### 8.5 多 Agent 并发
-
-```
-BrowserHand.mu sync.Mutex:
-  - 同一 user-server 实例的所有 Agent 命令串行化
-  - Go NM Host HTTP 服务本身也是单线程串行处理 Chrome 扩展通道
-  - 真正多并发 = 多 Chrome Profile / 多 NM Host 实例（MVP 先不做）
-```
-
----
-
-## 9. 项目文件清单汇总
-
-### 9.1 user-server 新建文件
-
-```
-internal/migration/migrations/v3_37_0_browser_automation_migration.go  ← 5 张表 DDL
-internal/browser_automation/model/task.go
-internal/browser_automation/model/session.go
-internal/browser_automation/model/step.go
-internal/browser_automation/model/cron.go
-internal/browser_automation/model/llm_plan.go
-internal/browser_automation/repository/task.go
-internal/browser_automation/repository/session.go
-internal/browser_automation/repository/step.go
-internal/browser_automation/repository/cron.go
-internal/browser_automation/repository/llm_plan.go
-internal/browser_automation/service/task.go
-internal/browser_automation/service/executor.go
-internal/browser_automation/service/brain.go
-internal/browser_automation/service/cron.go
-internal/browser_automation/service/hand.go
-internal/browser_automation/controller/task.go
-internal/browser_automation/controller/session.go
-internal/browser_automation/controller/cron.go
-internal/browser_automation/controller/hand.go
-internal/browser_automation/dto/task.go
-internal/browser_automation/dto/session.go
-internal/browser_automation/dto/cron.go
-internal/router/browser_automation_routes.go  ← 注册 + DI 装配
-```
-
-**共计：24 个 .go 文件**（不含测试）
-
-### 9.2 user-web 新建文件
-
-```
-src/api/browserAutomation.js
-src/views/browserAutomation/List.vue
-src/views/browserAutomation/Create.vue
-src/views/browserAutomation/Editor.vue
-src/views/browserAutomation/Detail.vue
-src/views/browserAutomation/Monitor.vue
-src/views/browserAutomation/Cron.vue
-src/views/browserAutomation/Status.vue
-src/stores/browserAutomation.js
-src/router/modules/browserAutomation.js
-```
-
-**共计：10 个前端文件**
-
-### 9.3 Chrome 扩展（user-web/browser_automation/）
-
-```
-browser_automation/package.json
-browser_automation/manifest.json
-browser_automation/scripts/build.mjs
-browser_automation/src/background/index.js
-browser_automation/src/core/native-messaging.js
-browser_automation/src/core/primitives.js
-browser_automation/src/core/tab-manager.js
-browser_automation/src/core/accessibility.js
-browser_automation/src/popup/index.js + popup.html
-browser_automation/test/*.test.js          ← vitest 单测
-browser_automation/assets/icons/           ← 扩展图标
-```
-
-**共计：约 12 个文件（对齐 bridge 样板规模）**
-
-### 9.4 Go NM Host（user-server/cmd/nm-host/）
-
-```
-cmd/nm-host/main.go                 ← Go NM Host daemon，HTTP + Native Messaging 双通道
-cmd/nm-host/install.sh              ← 编译 + 注册 manifest.json 到 Chrome 路径
-cmd/nm-host/manifest.json.template  ← Chrome Native Messaging 清单模板
-```
-
-**注意：没有独立 go.mod**，因为放在 `user-server/cmd/` 下，共享 `user-server/go.mod`（module `hivemtk-user`）。与 `api/`、`geo-run/`、`seed/` 等独立 binary 并列。
-
-**共计：3 个文件**
-
-### 9.5 汇总
-
-| 代码区 | 文件数 | 语言 | 位置 |
-|--------|--------|------|------|
-| user-server browser_automation 域 | 25 | Go | user-server/internal/browser_automation/ |
-| user-server Migration + Router | 2 | Go | user-server/internal/migration/migrations/ + router/ |
-| user-server Go NM Host | 3 | Go + Shell | user-server/cmd/nm-host/ |
-| user-web 前端 | 10 | JS + Vue3 | user-web/src/ |
-| Chrome 扩展 | ~12 | JS + JSON + Shell | user-web/browser_automation/（独立子项目） |
-| **合计** | **~54** | **Go + JS + Shell，零 Python** | |
-
----
-
-## 10. 实施优先级
-
-| 阶段 | 内容 | 阻塞后续 |
-|------|------|----------|
-| **P0** | Go NM Host daemon（HTTP + Native Messaging 双通道）+ manifest 注册 + install.sh | 是——没有它 Go Hand 就是瞎命令 |
-| **P1** | Chrome 扩展 background.js（connectNative + 8 个原语） | 是——寄生式 Chrome 能不能跑的前提 |
-| **P2** | DB Migration + 5 Model + 5 Repository | 是——所有后端 CRUD 的基础 |
-| **P3** | Go Hand 层 + Executor + 三层 Controller | 是——能跑通一条 end-to-end |
-| **P4** | 前端 API + 7 页面 + Store + Router | 是——用户能点起来 |
-| **P5** | Cron 调度 + Brain LLM 模式 | 否——MVP 先用显式 steps 模式 |
-
----
-
-## 11. 编排阶段：原语全集 + 错误处理策略 + Workflow 嵌套
-
-### 11.1 原语全集（11 种，精确到参数）
-
-编排页面让用户选原语 → 填参数 → 顺序排列 → 生成 JSON steps 数组。
-
-| # | 原语 | Go Hand 方法 | 关键参数 | 说明 |
-|---|------|-------------|----------|------|
-| 1 | `open_tab` | `hand.openTab(ctx, url, active)` | `url: string` `active: bool` | **active 必须 false**（寄生式不抢焦点） |
-| 2 | `click` | `hand.click(ctx, tabID, target)` | `target: selector 或 @e3 refs` | 扩展执行 `querySelector(target).click()` |
-| 3 | `type` | `hand.typeText(ctx, tabID, target, value, clearFirst)` | `target` `value: string` `clear_first: bool` `submit_on_enter: bool` | clear_first=true 时先 `.value=''` |
-| 4 | `snapshot` | `hand.snapshot(ctx, tabID)` | 无 | 返回 accessibility @e1/@e2 refs 表 |
-| 5 | `markdown` | `hand.markdown(ctx, tabID)` | 无 | 返回页面 Markdown（给 LLM 吃） |
-| 6 | `screenshot` | `hand.screenshot(ctx, tabID)` | `format: png\|jpeg` `full_page: bool` | 返回 base64，存 session.screenshot_b64 |
-| 7 | `wait` | `hand.waitFor(ctx, tabID, ms)` | `ms: int` | 等待固定毫秒，或条件等待 |
-| 8 | `wait_for_selector` | `hand.waitForSelector(ctx, tabID, selector, timeoutMs)` | `selector` `timeout_ms: int` | 扩展侧轮询 DOM，出现则返回 |
-| 9 | `scroll` | `hand.scroll(ctx, tabID, direction, amount)` | `direction: up\|down\|left\|right` `amount: px` | `window.scrollBy` |
-| 10 | `extract` | `hand.extract(ctx, tabID, schema)` | `schema: json` | 扩展侧按 schema 从 DOM 提取结构化数据 |
-| 11 | `close_tab` | `hand.closeTab(ctx, tabID)` | 无 | 执行完成后关闭后台 tab |
-
-### 11.2 Step DTO（精确字段）
-
-```go
-// dto/task.go 里的 StepItem（前端编排 → 后端落库）
-type StepItem struct {
-    Action       string `json:"action" binding:"required,oneof=open_tab click type snapshot markdown screenshot wait wait_for_selector scroll extract close_tab"`
-    Target       string `json:"target"`                       // click/type/scroll/extract 用
-    Value        string `json:"value"`                        // type 用
-    Ms           int    `json:"ms"`                           // wait 用
-    ClearFirst   bool   `json:"clear_first"`                  // type 用
-    SubmitOnEnter bool  `json:"submit_on_enter"`              // type 用
-    Direction    string `json:"direction"`                    // scroll 用
-    Amount       int    `json:"amount"`                       // scroll 用
-    Selector     string `json:"selector"`                     // wait_for_selector 用
-    TimeoutMs    int    `json:"timeout_ms"`                   // wait_for_selector 用
-    Format       string `json:"format"`                       // screenshot 用
-    FullPage     bool   `json:"full_page"`                    // screenshot 用
-    Schema       string `json:"schema"`                       // extract 用（JSON schema）
-    // 错误处理策略（**关键！之前没设计**）
-    ContinueOnError bool `json:"continue_on_error"`           // 默认 false；true 则此步失败后继续下一步
-    RetryCount      int  `json:"retry_count"`                 // 默认 0；失败后重试次数
-    RetryBackoffMs  int  `json:"retry_backoff_ms"`            // 默认 1000；重试间隔指数增长
-}
-```
-
-### 11.3 错误处理层级
-
-```
-Step 执行失败 → retry_count > 0 ? 重试（backoff * 2 递增）→ run out of retry ?
-  → continue_on_error ? 标记 step.status=failed → 继续下一步
-  → !continue_on_error ? 整个 Session 标记 failed → session.error_msg = step.error_msg
-```
-
-### 11.4 Workflow 嵌套（Task 间依赖）
-
-```
-BrowserTask model 新增字段：
-  DependsOnTaskID *uint `json:"depends_on_task_id"` // 前置任务 ID
-  DependsOnMode   string `json:"depends_on_mode"`   // all_done / any_success / step_count_match
-
-Executor 启动前检查：
-  if task.DependsOnTaskID != nil {
-    depTask := taskRepo.GetByID(ctx, *task.DependsOnTaskID, userID)
-    lastSession := sessionRepo.GetLatestByTaskID(ctx, *task.DependsOnTaskID)
-    switch task.DependsOnMode {
-    case "all_done":
-      if lastSession == nil || lastSession.Status != "completed" { return error("前置任务未完成") }
-    case "any_success":
-      if !sessionRepo.HasSuccess(ctx, *task.DependsOnTaskID) { return error("前置任务从未成功过") }
-    }
+```js
+import { defineStore } from 'pinia'
+import { ref, onUnmounted } from 'vue'
+export const useBrowserAutomationStore = defineStore('browserAutomation', () => {
+  const runningSession = ref(null)
+  let pollTimer = null
+  const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
+  async function pollSteps(sessionId) {
+    // 拦截器已拆 data.data；res?.data || res 兜底
+    const res = await getBrowserSessionSteps(sessionId)
+    const steps = res?.data || res
+    // ... all done → stopPoll
   }
-```
-
-前端：编排页面底部有"依赖前置任务"开关 → 选一个已发布任务 + 触发条件。
-
----
-
-## 12. 执行阶段：控制流 + 中断 + 超时清理
-
-### 12.1 Session 手动中断
-
-```go
-// TaskController 新增 endpoint：
-// POST /api/browser-automation/sessions/:id/stop
-func (c *SessionController) Stop(c *gin.Context) {
-    // 1. sessionRepo.GetByID → 校验归属
-    // 2. 往 executor 的 stopCh 发信号
-    executor.SignalStop(sessionID)
-    // 3. sessionRepo.UpdateStatus(id, "stopped", "用户手动中断")
-    // 4. 关闭 Chrome tab
-    hand.closeTab(ctx, session.ChromeTabID)
-}
-
-// Executor 内部：每步执行前检查 stopCh
-func (e *Executor) ExecuteSession(ctx context.Context, session *model.BrowserSession) error {
-    for i, step := range session.Steps {
-        select {
-        case <-e.stopCh:
-            return errors.New("executor stopped by user")
-        default:
-        }
-        // ... 执行 step
-    }
-}
-```
-
-### 12.2 Chrome 断开自动清理
-
-```go
-// Session 启动时：executor 启动 goroutine 监测 chrome tab 是否还活着
-go func() {
-    ticker := time.NewTicker(5 * time.Second)
-    defer ticker.Stop()
-    for range ticker.C {
-        // 调扩展原生 Chrome API：chrome.tabs.get(tabID)
-        tab, err := hand.tabExists(ctx, session.ChromeTabID)
-        if err != nil || tab == nil {
-            sessionRepo.UpdateStatus(ctx, session.ID, "failed", "Chrome tab 被关闭")
-            return
-        }
-    }
-}()
-```
-
-### 12.3 超时自动终止
-
-```go
-// Session 超时 = task.TimeoutSec（默认 120s）
-sessionTimer := time.AfterFunc(time.Duration(task.TimeoutSec)*time.Second, func() {
-    sessionRepo.UpdateStatus(ctx, session.ID, "failed", fmt.Sprintf("执行超时（%ds）", task.TimeoutSec))
-    hand.closeTab(context.Background(), session.ChromeTabID)
-    // 同时发通知（Feedback 阶段）
-    feedbackSvc.NotifySessionTimeout(ctx, session)
+  async function startRun(taskId) {
+    const res = await runBrowserTask(taskId)
+    runningSession.value = res?.data || res
+    stopPoll()
+    pollTimer = setInterval(() => pollSteps(runningSession.value.id), 2000)
+  }
+  return { runningSession, startRun, stopPoll }
 })
-defer sessionTimer.Stop()
 ```
 
-### 12.4 Brain 模式动态调整
+### 11.3 路由 + 菜单（三处注册）
 
-```go
-// Brain 模式执行流程（比显式 steps 多一步 snapshot + 重新 plan）
-// 显式 steps:  [step1 → step2 → step3 → done]
-// Brain 模式:  [snapshot → plan1 → step1 → snapshot → plan2 → step2 → ... → goal_reached]
+1. `src/router/modules/browserAutomation.js`：`export default [...]`，meta `{title:'浏览器自动化', icon:'Monitor', group:'automation', requiresAuth:true}`；页面 List / Create(合并 Editor，`:id` 可选) / Detail / Monitor / Cron。
+2. `src/router/index.js`：`moduleNames` 数组加入 `'browserAutomation'` + `pathToModule` 映射。
+3. `src/layout/Layout.vue`：手写菜单配置加入分组（icon 经 `utils/iconMap.js`）。
 
-func (s *Executor) RunBrainMode(ctx context.Context, session *model.BrowserSession, goal string) error {
-    maxIterations := 10 // 防无限循环
-    for i := 0; i < maxIterations; i++ {
-        // 1. snapshot 当前页面
-        snap, err := hand.snapshot(ctx, session.ChromeTabID)
-        if err != nil { return err }
-        // 2. 让 LLM 出 plan
-        plan, err := brainSvc.GeneratePlan(ctx, session.TaskID, goal, snap)
-        if err != nil { return err }
-        // 3. 执行 plan 里的 steps
-        done, err := s.ExecuteSteps(ctx, session, plan.Steps)
-        if done || err != nil {
-            // 4. done=true = LLM 判断 goal 达成了
-            break
-        }
-    }
-    return nil
-}
-```
+### 11.4 页面（6 个，页面文案硬编码中文）
+
+| 页面 | 文件 | 功能 |
+|------|------|------|
+| 任务列表 | List.vue | 表格 + 发布/执行/暂停/归档/删除 + **409 无 Host 引导弹窗** |
+| 任务编辑 | Editor.vue | Create+Edit 合一（`:id?`）；步骤编排（原语下拉+参数+错误策略）+ Brain 开关 + 依赖任务选择 |
+| 任务详情 | Detail.vue | 概览 + 步骤列表 + sessions 历史 + Cron 配置 + 通知设置 |
+| 执行监控 | Monitor.vue | 2s 轮询 steps；Dashboard（总耗时/成功率/P50 手算可省/Hand 延迟）+ LLM 总结卡 + 停止按钮 |
+| 定时触发器 | Cron.vue | 列表 + 启停 + 表达式校验提示（5 段） |
+| Host 状态 | Status.vue | admin：在线状态 + token 重置 + 安装引导 |
 
 ---
 
-## 13. 监控阶段：实时截图流 + 性能指标 + 回放
+## 12. 文件清单
 
-### 13.1 每步自动截图
-
-```go
-// Executor 配置：每个 step 执行完后自动截图
-// step.auto_screenshot = true（默认）
-func (e *Executor) executeStep(ctx context.Context, session *model.BrowserSession, step *model.BrowserStep) error {
-    // ... 执行 step ...
-    // 执行完后截图
-    if step.Action != "screenshot" {
-        b64, err := e.hand.screenshot(ctx, session.ChromeTabID)
-        if err == nil {
-            // 存到 step.result 里（作为 step 的附属数据）
-            step.Result = map[string]any{
-                "action_result": stepResult,
-                "after_screenshot": b64,
-            }
-            stepRepo.UpdateResult(ctx, step.ID, step.Result)
-        }
-    }
-    return nil
-}
-```
-
-前端 Monitor.vue 显示每个 step 的执行前/后对比截图（hover 或点击展开）。
-
-### 13.2 性能指标
-
-Session 模型新增：
-```go
-type BrowserSession struct {
-    // ... 原有字段 ...
-    TotalSteps     int            `json:"total_steps"`
-    SuccessSteps   int            `json:"success_steps"`
-    FailedSteps    int            `json:"failed_steps"`
-    P50StepMs      int64          `json:"p50_step_ms"`    // step 耗时中位数
-    P95StepMs      int64          `json:"p95_step_ms"`    // step 耗时 95 分位
-    HandLatencyMs  int64          `json:"hand_latency_ms"` // Hand ↔ Host HTTP 延迟
-}
-```
-
-前端 Monitor.vue 顶部显示 Dashboard：总耗时、成功率、P50/P95 step 耗时、Hand 延迟。
-
-### 13.3 Session 回放
-
-```
-SessionDetail.vue → "回放" 按钮
-  → 前端逐步高亮每个 step 的 status
-  → 同时显示该 step 的 before/after 截图对比
-  → 可以"重跑单个 step"（手动修正后重新执行）
-```
-
-### 13.4 Console 错误捕获
-
-```
-Chrome 扩展 background.js:
-  chrome.scripting.executeScript({
-    tabId,
-    func: () => {
-      const errors = [];
-      const origError = console.error;
-      console.error = (...args) => { errors.push(args.map(a => String(a)).join(' ')); origError(...args); };
-      return errors;
-    }
-  })
-→ 返回错误数组
-→ 存 browser_session.console_errors 字段
-→ 前端 Monitor.vue 底部有红色 Warning 区域展示
-```
+| 代码区 | 文件 |
+|--------|------|
+| user-server 域 | model×5 + repository×5 + service×8 + controller×4 + dto×3 = **25 个 .go** |
+| migration + router | v3_37_0_browser_automation_migration.go + browser_automation_routes.go = **2** |
+| NM Host | cmd/nm-host/{main.go, install.sh, manifest.json.template} = **3** |
+| user-web | api×1 + views×6 + store×1 + router module×1 = **9** |
+| 扩展 | manifest.json + package.json + build.mjs + background + core×4 + popup×2 + test×3 ≈ **12** |
+| **合计** | **~51 个文件** |
 
 ---
 
-## 14. 反馈阶段：通知 + 结果保存 + 自动重试 + LLM 总结 + 导出
+## 13. 实施优先级
 
-### 14.1 执行完成后自动通知
-
-```go
-// 新增 FeedbackService（service/feedback.go）
-type FeedbackService struct {
-    // 复用项目已有的通知渠道（channelbot 里的飞书/钉钉/企微）
-    larkClient   *lark.BotClient
-    dingClient   *dingtalk.BotClient
-    emailSvc     *email.Service
-}
-
-func (f *FeedbackService) NotifySessionComplete(ctx context.Context, session *model.BrowserSession) {
-    // 1. 生成通知消息（状态 + 耗时 + 步骤数）
-    // 2. 查用户设置的通知渠道（user 表或 config）
-    // 3. 发送
-    switch session.Status {
-    case "completed":
-        msg := fmt.Sprintf("✅ 浏览器任务 [%s] 执行完成，耗时 %ds，成功率 %d/%d",
-            session.Task.Name, session.DurationMs/1000, session.SuccessSteps, session.TotalSteps)
-    case "failed", "stopped":
-        msg := fmt.Sprintf("❌ 浏览器任务 [%s] %s：%s",
-            session.Task.Name, session.Status, session.ErrorMsg)
-    }
-}
-```
-
-前端 Detail.vue 有"通知设置"tab：飞书机器人 webhook / 钉钉机器人 webhook / 邮件地址。
-
-### 14.2 结果自动保存
-
-```go
-// Session 完成后：
-// 1. 所有 step.extract 原语的提取结果 → 写入 browser_session.extracted_data (JSONB)
-// 2. 所有 step.screenshot + step.after_screenshot → 打包存 uploads/ 目录（项目已有 uploads）
-// 3. session 主截图 → 存 browser_session.final_screenshot_url
-func (e *Executor) saveArtifacts(ctx context.Context, session *model.BrowserSession) {
-    // 提取所有 step 里的 extract 结果
-    extracts := collectExtractsFromSteps(session.Steps)
-    session.ExtractedData = datatypes.JSON(extracts)
-    
-    // 打包截图
-    tarPath, _ := uploadScreenshots(session.Steps)
-    session.ScreenshotsArchiveURL = tarPath
-    
-    sessionRepo.Update(ctx, session)
-}
-```
-
-### 14.3 失败自动重试（不是 step 级，是 session 级）
-
-```
-BrowserTask 新增字段：
-  RetryOnFail  bool  `json:"retry_on_fail"`  // 默认 false
-  RetryDelaySec int  `json:"retry_delay_sec"` // 默认 300（5 分钟后重试）
-  MaxRetryTimes int  `json:"max_retry_times"` // 默认 3
-
-Executor 逻辑：
-  if session.Status == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes {
-    // 延迟 retry_delay_sec 后再触发 RunTask
-    cronSvc.ScheduleDelayedExecution(ctx, task.ID, task.RetryDelaySec)
-    taskRepo.IncrementRetryCount(ctx, task.ID)
-  }
-```
-
-### 14.4 LLM 自动总结
-
-```go
-// FeedbackService 里调用 aiagent/llm.Dispatcher
-func (f *FeedbackService) SummarizeSession(ctx context.Context, session *model.BrowserSession) string {
-    // prompt: "以下是浏览器自动化任务执行结果，请总结关键发现：...\n" +
-    //         "Goal: " + task.BrainGoal + "\n" +
-    //         "Extracts: " + session.ExtractedData + "\n" +
-    //         "Console Errors: " + session.ConsoleErrors + "\n" +
-    //         "Success Rate: " + successRate
-    summary, tokenUsed, err := llmDispatcher.ChatCompletion(ctx, prompt)
-    sessionRepo.SaveSummary(ctx, session.ID, summary)
-    return summary
-}
-```
-
-前端 SessionDetail.vue 顶部显示 LLM 总结卡片（可隐藏）。
-
-### 14.5 结果导出
-
-```
-SessionDetail.vue → "导出" 按钮
-  → 导出格式选择：
-     - 结构化数据（JSON / CSV，来自 extract 原语结果）
-     - 截图打包（.tar.gz）
-     - 完整报告（Markdown：目标 + 步骤 + 截图 + LLM 总结）
-
-后端：
-  GET /api/browser-automation/sessions/:id/export?format=json|csv|md|archive
-  生成文件 → 返回 uploads URL（项目已有 upload 基础设施）
-```
+| 阶段 | 内容 | 验收 |
+|------|------|------|
+| P0 | migration + model + repository + dto | go build 通过 |
+| P1 | host_registry + hand + executor + task/session/cron/brain/feedback service | 单测通过 |
+| P2 | controller + 路由 + router.go 接线 | go build + 手工 curl |
+| P3 | 扩展 + NM Host + install.sh | 扩展加载 + Host 注册成功（host/status connected:true） |
+| P4 | 前端 9 文件 | vite build + 页面走查 |
+| P5 | brain 模式打磨 + 通知渠道接入 | 端到端 |
 
 ---
 
-## 15. 新增表字段汇总（之前 5 张表需要补齐）
+## 14. 已核实的关键事实清单（防再错）
 
-### browser_tasks 新增
-
-```sql
-ALTER TABLE browser_tasks ADD COLUMN depends_on_task_id BIGINT;
-ALTER TABLE browser_tasks ADD COLUMN depends_on_mode VARCHAR(32) DEFAULT 'all_done';
-ALTER TABLE browser_tasks ADD COLUMN retry_on_fail BOOLEAN DEFAULT FALSE;
-ALTER TABLE browser_tasks ADD COLUMN retry_delay_sec INT DEFAULT 300;
-ALTER TABLE browser_tasks ADD COLUMN max_retry_times INT DEFAULT 3;
-ALTER TABLE browser_tasks ADD COLUMN retry_count INT DEFAULT 0;
-```
-
-### browser_sessions 新增
-
-```sql
-ALTER TABLE browser_sessions ADD COLUMN total_steps INT DEFAULT 0;
-ALTER TABLE browser_sessions ADD COLUMN success_steps INT DEFAULT 0;
-ALTER TABLE browser_sessions ADD COLUMN failed_steps INT DEFAULT 0;
-ALTER TABLE browser_sessions ADD COLUMN p50_step_ms BIGINT;
-ALTER TABLE browser_sessions ADD COLUMN p95_step_ms BIGINT;
-ALTER TABLE browser_sessions ADD COLUMN hand_latency_ms BIGINT;
-ALTER TABLE browser_sessions ADD COLUMN console_errors TEXT;
-ALTER TABLE browser_sessions ADD COLUMN extracted_data JSONB;
-ALTER TABLE browser_sessions ADD COLUMN final_screenshot_url VARCHAR(1024);
-ALTER TABLE browser_sessions ADD COLUMN screenshots_archive_url VARCHAR(1024);
-ALTER TABLE browser_sessions ADD COLUMN llm_summary TEXT;
-```
-
-### browser_steps 新增
-
-```sql
-ALTER TABLE browser_steps ADD COLUMN after_screenshot TEXT;  -- base64
-ALTER TABLE browser_steps ADD COLUMN extract_data JSONB;
-```
-
----
-
-## 16. 新增文件清单（Feedback 层 + 补齐）
-
-```
-internal/browser_automation/service/feedback.go   ← 【新增】通知 + LLM 总结 + 导出
-internal/browser_automation/service/feedback_test.go
-internal/browser_automation/dto/feedback.go       ← 【新增】NotifyConfigReq / ExportReq
-```
-
-**更新后总文件数**：
-- user-server：25 个 .go（+2 feedback）
-- user-web：10 个前端文件
-- Chrome 扩展：6 个
-- **合计：41 个文件**
-
----
-
-## 17. 完整业务生命周期状态图（编排→执行→监控→反馈 全链路）
-
-```
-┌───────────────────── 编 排 阶 段 ─────────────────────┐
-│                                                          │
-│  List.vue ──[+ 新建任务]──▶ Create.vue           │
-│     │                                                      │
-│     │ 填 name / url / task_type                            │
-│     │ 选模式: ○ 显式 steps   ● Brain 目标驱动              │
-│     │ 编排: [open_tab → click → type → snapshot → close] │
-│     │   每个 step: target / retry / continue_on_error     │
-│     │ 可选: 依赖前置任务 / Cron 表达式                      │
-│     │ 可选: 失败自动重试 + 通知渠道                          │
-│     │                                                      │
-│     ├──▶ 存 browser_tasks (status=draft)                   │
-│     └──▶ publish → status=ready                            │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌───────────────────── 执 行 阶 段 ─────────────────────┐
-│                                                          │
-│  List.vue ──[▶ 执行]──▶ POST :id/run                  │
-│     │                                                      │
-│     │ ① TaskController.Run()                               │
-│     │ ② Executor.ExecuteSession()                          │
-│     │    ├── 创建 BrowserSession (status=created)          │
-│     │    ├── Hand.openTab() → Chrome 扩展                 │
-│     │    │   └── chrome.tabs.create({active:false})        │
-│     │    ├── Session 每 5s 监测 tab 存活                   │
-│     │    ├── Session 超时定时器（默认 120s）               │
-│     │    ├── 遍历 steps:                                   │
-│     │    │   ├── Step 超时                                  │
-│     │    │   ├── Step retry_count 重试                     │
-│     │    │   ├── Step continue_on_error 跳过失败继续       │
-│     │    │   └── Step 执行完 auto_screenshot               │
-│     │    ├── Brain 模式: snapshot → LLM plan → 循环        │
-│     │    └── Session 完成/失败                              │
-│     │ ③ 用户可手动中断: POST sessions/:id/stop             │
-│     │                                                      │
-│     ├──▶ 每个 step → browser_steps (status=success/failed) │
-│     ├──▶ session → browser_sessions (status=completed)    │
-│     ├──▶ task → browser_tasks (status=running→done)        │
-│     └──▶ 失败 → retry_on_fail ? schedule retry : done     │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌───────────────────── 监 控 阶 段 ─────────────────────┐
-│                                                          │
-│  Monitor.vue                                      │
-│     │                                                      │
-│     │ 2s 轮询 sessions/:id/steps                         │
-│     │    └── 每个 step 显示 pending→running→success/failed │
-│     │                                                      │
-│     │ Session 顶部 Dashboard:                              │
-│     │   ├── 总耗时 / P50 step 耗时 / P95 step 耗时         │
-│     │   ├── 成功率（success/total）                        │
-│     │   ├── Hand ↔ Host HTTP 延迟                          │
-│     │   └── Console 错误（红色 Warning 区）                │
-│     │                                                      │
-│     │ Step 列表:                                           │
-│     │   ├── 点击展开 → before/after 截图对比               │
-│     │   ├── 耗时 bar                                       │
-│     │   └── 重跑单个 step 按钮                             │
-│     │                                                      │
-│     │ SessionDetail.vue                                   │
-│     │   ├── 历史执行列表（sessions table）                 │
-│     │   ├── 回放模式（逐步高亮）                            │
-│     │   └── 依赖关系图（Workflow 嵌套可视化）                │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌───────────────────── 反 馈 阶 段 ─────────────────────┐
-│                                                          │
-│  Session 完成触发 FeedbackService:                        │
-│     │                                                      │
-│     │ ① 自动通知（飞书/钉钉/邮件）                          │
-│     │     └── "✅ 任务 X 完成，3步成功/1步失败，耗时 23s"   │
-│     │                                                      │
-│     │ ② 自动保存 artifacts                                 │
-│     │     ├── extract 原语 → extracted_data (JSONB)        │
-│     │     ├── 所有截图 → screenshots_archive_url            │
-│     │     └── 最终截图 → final_screenshot_url              │
-│     │                                                      │
-│     │ ③ LLM 自动总结                                       │
-│     │     └── BrainService.Summarize() → llm_summary       │
-│     │         "本次执行发现...价格区间 ... 竞品 A 排在首位"   │
-│     │                                                      │
-│     │ ④ 失败自动重试（session 级）                         │
-│     │     └── schedule delayed execution                   │
-│     │                                                      │
-│     │ ⑤ 结果导出                                           │
-│     │     ├── 结构化数据 → CSV/JSON                         │
-│     │     ├── 截图打包 → .tar.gz                            │
-│     │     └── 完整报告 → Markdown                           │
-│     │                                                      │
-│     │ 前端展示:                                             │
-│     │   ├── Detail.vue: 执行历史 + 通知设置 tab        │
-│     │   ├── SessionDetail.vue: LLM 总结卡片 + 导出按钮     │
-│     │   └── 飞书/钉钉机器人: 通知卡片                       │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
+1. module 名 `hivemtk-user`；统一端口 `config.DefaultListenPort = "8204"`。
+2. migration 最高版本 v3.36.0 → 本功能 **v3.37.0**。
+3. `response.Success(ctx, data, msg)` / `response.Error(ctx, httpCode, msg)`（`utils/response`）。
+4. `AdminAuthMiddleware` / `JWTAuthMiddleware` 在 `internal/middleware/jwt.go`；`c.GetUint("user_id")`。
+5. Cron 是 6 段秒级 spec（`cron.WithSeconds()`）。
+6. LLM 入口 `llm.NewDispatcher(llm.NewLLMService()).Dispatch(ctx, llm.DispatchRequest{...})`；场景常量如 `ScenarioHighQuality`；结构化用 `DispatchStructured`。
+7. 内部 token 先例：`BridgeIngressGuard`（KV `bridge_ingest_token`，fail-closed + `_prev` 轮换 + 常量时间比较）。
+8. WS 挂统一端口先例：`router.go` bridgeWS 组 `/api/ws/channel`（gorilla/websocket）。
+9. Chrome NM 帧：4B **native-order** 长度头；host→extension 1MB / extension→host 4GB；`connectNative` 需 `nativeMessaging` 权限；`sendNativeMessage` 每次新起进程不可用于长会话。
+10. MV3：SW 30s idle 被杀，但 connectNative（105+）与 port 消息（114+）保活；port 断 Host 被杀。
+11. `captureVisibleTab(windowId?, options?)` 无 tabId、仅激活 tab、不可全页、2 次/秒。
+12. `executeScript` 的 func 序列化注入，闭包丢失，必须 args 传参；默认仅顶层 frame。
+13. `allowed_origins` 禁通配符；unpacked ID 用 manifest `"key"` 固定。
+14. 前端拦截器返回 `data.data`；页面兜底 `res?.data || res`；Pinia setup 风格；菜单在 Layout.vue 手写 + router index moduleNames 白名单。

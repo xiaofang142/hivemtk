@@ -185,6 +185,7 @@ func (r *InboxConversationRepository) attachSessionMessageFallback(ctx context.C
 // ReconcileUnread 以 message_hub 最后一条消息为准，批量重算全部会话的未读计数与状态。
 //   - 最后一条是我方（AI/坐席）消息 → 未读清零；原“未读”态转“待处理/消息池”。
 //   - 最后一条是客户消息 → 未读记为 1（至少有一条未读）；已分配/已关闭保持不变，其余转“未读”。
+//   - 历史脏状态（非 unread/open/assigned/closed 四值字典，如 webhook 早期写入的 'active'）一并归一。
 //
 // 仅更新存在 message_hub 记录的会话；无消息记录的会话保持原状。
 func (r *InboxConversationRepository) ReconcileUnread(ctx context.Context) (int64, error) {
@@ -205,10 +206,30 @@ func (r *InboxConversationRepository) ReconcileUnread(ctx context.Context) (int6
 		    status = CASE
 		        WHEN l.direction = 'inbound'
 		            THEN CASE WHEN ic.status IN ('assigned', 'closed') THEN ic.status ELSE 'unread' END
-		        ELSE CASE WHEN ic.status = 'unread' THEN 'open' ELSE ic.status END
+		        ELSE CASE WHEN ic.status IN ('unread', 'active') THEN 'open' ELSE ic.status END
 		    END
 		FROM latest l
 		WHERE ic.conversation_id = l.conversation_id
+	`)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// NormalizeStatuses 将历史遗留的非标准状态值归一为四值字典：
+//   - active（webhook_inbox 旧写入值）→ unread（未读计数>0）或 open（无未读）
+//   - 其它未知值同样按有无未读落到 unread / open
+//
+// 返回归一化行数。幂等，可在每次对账时调用。
+func (r *InboxConversationRepository) NormalizeStatuses(ctx context.Context) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Exec(`
+		UPDATE inbox_conversations
+		SET status = CASE WHEN unread_count > 0 THEN 'unread' ELSE 'open' END
+		WHERE status NOT IN ('unread', 'open', 'assigned', 'closed')
 	`)
 	if res.Error != nil {
 		return 0, res.Error

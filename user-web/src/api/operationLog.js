@@ -12,9 +12,6 @@ export function getOperationLogStatistics(params) {
 export function exportOperationLogs(params) {
   return http.get('/api/operation-logs/export', params, { responseType: 'blob' });
 }
-export function deleteOperationLogs(ids) {
-  return http.delete('/api/operation-logs', { data: { ids } })
-}
 export function cleanOperationLogs(beforeDate) {
   return http.post('/api/operation-logs/clean', { beforeDate })
 }

@@ -245,3 +245,23 @@ func (c *OperationLogController) DeleteLogs(ctx *gin.Context) {
 		"deleted_count": count,
 	}, "删除成功")
 }
+
+// RollbackLog 回滚一条操作日志（Enhanced.vue 回滚按钮）
+// POST /api/operation-logs/:id/rollback
+func (c *OperationLogController) RollbackLog(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "无效的日志 ID")
+		return
+	}
+	operator := ""
+	if v, ok := ctx.Get("username"); ok {
+		operator, _ = v.(string)
+	}
+	rollbackLog, err := c.logSvc.Rollback(ctx, uint(id), operator)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "回滚失败: "+err.Error())
+		return
+	}
+	response.Success(ctx, rollbackLog, "已回滚")
+}

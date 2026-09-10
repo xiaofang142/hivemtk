@@ -129,6 +129,7 @@
   "menu": {
     "workspace": "Workspace",
     "messageHub": "Message Hub (MQ)",
+    "inbox": "Bandeja de entrada unificada",
     "wecomAccount": "Multi-account Aggregation",
     "customer": "Customer Center",
     "clueList": "Lead List",
@@ -307,7 +308,12 @@
     "geoDecisionReport": "Informe de decisión",
     "emailDragEditor": "Editor de arrastre",
     "reachPipelineEditor": "Editor Pipeline",
-    "userSegmentBuilder": "Constructor segmentos"
+    "userSegmentBuilder": "Constructor segmentos",
+    "browserAutomation": "Automatización del navegador",
+    "baTasks": "Lista de tareas",
+    "baCreate": "Nueva tarea",
+    "baCron": "Disparadores programados",
+    "baStatus": "Estado del host"
   },
   "保存": "Save",
   "提交": "Submit",

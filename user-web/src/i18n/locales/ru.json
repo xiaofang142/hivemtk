@@ -129,6 +129,7 @@
   "menu": {
     "workspace": "Workspace",
     "messageHub": "Message Hub (MQ)",
+    "inbox": "Единый почтовый ящик",
     "wecomAccount": "Multi-account Aggregation",
     "customer": "Customer Center",
     "clueList": "Lead List",
@@ -307,7 +308,12 @@
     "geoDecisionReport": "Отчёт о решении",
     "emailDragEditor": "Редактор drag&drop",
     "reachPipelineEditor": "Редактор Pipeline",
-    "userSegmentBuilder": "Конструктор сегментов"
+    "userSegmentBuilder": "Конструктор сегментов",
+    "browserAutomation": "Автоматизация браузера",
+    "baTasks": "Список задач",
+    "baCreate": "Новая задача",
+    "baCron": "Плановые триггеры",
+    "baStatus": "Статус хоста"
   },
   "保存": "Save",
   "提交": "Submit",

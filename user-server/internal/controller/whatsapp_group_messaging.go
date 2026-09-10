@@ -484,6 +484,129 @@ func (gmc *GroupMessagingController) GetSendRecords(c *gin.Context) {
 	}, "获取发送记录成功")
 }
 
+// BulkSend 模板批量发送（BulkMatrix.vue 依赖）
+// POST /api/whatsapp/bulk-send {template_id, audience{type,segment_id}, rate_per_minute, variables}
+func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
+	var req struct {
+		TemplateID    string `json:"template_id" binding:"required"`
+		Audience      struct {
+			Type      string `json:"type"`
+			SegmentID string `json:"segment_id"`
+		} `json:"audience"`
+		RatePerMinute int               `json:"rate_per_minute"`
+		Variables     map[string]string `json:"variables"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		return
+	}
+
+	template, err := gmc.templateService.GetTemplate(context.Background(), req.TemplateID)
+	if HandleDBError(c, err, "获取消息模板") {
+		return
+	}
+	if !template.IsActive {
+		response.Error(c, http.StatusBadRequest, "模板未激活", "模板未激活")
+		return
+	}
+
+	var leads []map[string]any
+	switch req.Audience.Type {
+	case "segment":
+		if req.Audience.SegmentID == "" {
+			response.Error(c, http.StatusBadRequest, "请选择目标分群")
+			return
+		}
+		clues, _, err := gmc.clueSvc.GetWhatsappClues(context.Background())
+		if err != nil {
+			response.ErrorFromDB(c, err, "获取线索失败")
+			return
+		}
+		for _, clue := range clues {
+			leads = append(leads, map[string]any{
+				"id": clue.ID, "name": clue.Name, "phone": clue.Account,
+				"email": "", "company": clue.Address, "source": "whatsapp",
+			})
+		}
+	default: // all / clue / csv 均按全部 WhatsApp 线索发送
+		clues, _, err := gmc.clueSvc.GetWhatsappClues(context.Background())
+		if err != nil {
+			response.ErrorFromDB(c, err, "获取线索失败")
+			return
+		}
+		for _, clue := range clues {
+			leads = append(leads, map[string]any{
+				"id": clue.ID, "name": clue.Name, "phone": clue.Account,
+				"email": "", "company": clue.Address, "source": "whatsapp",
+			})
+		}
+	}
+	if len(leads) == 0 {
+		response.Error(c, http.StatusBadRequest, "目标群体为空，无可发送对象")
+		return
+	}
+
+	messages := make([]model.QueuedMessage, 0, len(leads))
+	for _, lead := range leads {
+		content := gmc.personalizeMessage(template.Content, lead, req.Variables)
+		messages = append(messages, model.QueuedMessage{
+			ID:          generateMessageID(),
+			LeadID:      lead["id"].(string),
+			PhoneNumber: lead["phone"].(string),
+			Content:     content,
+			TemplateID:  template.ID,
+			CreatedAt:   time.Now(),
+		})
+	}
+
+	queueID, err := gmc.messageQueue.AddBatch(context.Background(), messages)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "添加到队列失败", "添加到队列失败")
+		return
+	}
+
+	if !gmc.queueRunning.CompareAndSwap(false, true) {
+		response.Error(c, http.StatusConflict, "已有群发队列在处理中，请稍后再试", "已有群发队列在处理中，请稍后再试")
+		return
+	}
+	utils.SafeGo(context.Background(), "whatsapp.bulk_send", func(ctx context.Context) {
+		defer gmc.queueRunning.Store(false)
+		gmc.processMessageQueue(queueID)
+	})
+
+	response.Success(c, gin.H{
+		"id":     queueID,
+		"queue_id": queueID,
+		"count":  len(messages),
+	}, "批量发送任务已启动")
+}
+
+// GetJobProgress 批量发送进度（BulkMatrix.vue 轮询依赖）
+// GET /api/whatsapp/jobs/:id/progress
+func (gmc *GroupMessagingController) GetJobProgress(c *gin.Context) {
+	jobID := c.Param("id")
+	status := gmc.messageQueue.GetStatus(context.Background(), jobID)
+
+	total := status.Total
+	percentage := 0.0
+	if total > 0 {
+		percentage = float64(status.Sent+status.Failed) * 100 / float64(total)
+	}
+	done := status.Status == "completed"
+
+	response.Success(c, gin.H{
+		"id":     jobID,
+		"status": map[bool]string{true: "done", false: "running"}[done],
+		"percentage": percentage,
+		"stats": gin.H{
+			"sent":   status.Sent,
+			"failed": status.Failed,
+			"total":  status.Total,
+		},
+		"recent": []any{},
+	}, "获取进度成功")
+}
+
 func generateMessageID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
 }

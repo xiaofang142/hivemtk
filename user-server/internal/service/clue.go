@@ -52,6 +52,11 @@ func (s *ClueService) GetClueAllList(ctx context.Context, clueType int64) ([]*mo
 	return s.repo.GetClueAllList(ctx, clueType)
 }
 
+// GetWhatsappClues 取全部 WhatsApp 线索（type IN (5,7)，兼容历史错误类型）
+func (s *ClueService) GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, error) {
+	return s.repo.GetWhatsappClues(ctx)
+}
+
 func (s *ClueService) BatchImportClues(ctx context.Context, clues []*model.Clue) (successCount, skipCount int64, err error) {
 	return s.repo.BatchCreateWithDedup(ctx, clues)
 }

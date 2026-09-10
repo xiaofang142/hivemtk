@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { width: 360px; font-family: -apple-system, "PingFang SC", sans-serif; margin: 0; padding: 12px; font-size: 13px; }
+    h1 { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; display: inline-block; }
+    .dot.on { background: #22c55e; } .dot.off { background: #ef4444; }
+    section { border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
+    label { display: block; color: #666; margin: 6px 0 3px; font-size: 12px; }
+    input { width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .row { display: flex; gap: 6px; margin-top: 8px; }
+    button { flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 12px; }
+    button.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+    button.danger { background: #ef4444; color: #fff; border-color: #ef4444; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .banner { padding: 7px 9px; border-radius: 4px; margin-top: 8px; font-size: 12px; line-height: 1.5; display: none; }
+    .banner.success { background: #ecfdf5; color: #065f46; display: block; }
+    .banner.error { background: #fef2f2; color: #991b1b; display: block; }
+    .banner.info { background: #eff6ff; color: #1e40af; display: block; }
+    .task { padding: 7px 0; border-bottom: 1px dashed #eee; }
+    .task .t-name { font-weight: 600; }
+    .task .t-meta { color: #888; font-size: 11px; margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+    .tag { padding: 1px 6px; border-radius: 3px; font-size: 10px; background: #eee; }
+    .tag.running { background: #fef3c7; color: #92400e; }
+    .tag.done { background: #d1fae5; color: #065f46; }
+    .tag.failed { background: #fee2e2; color: #991b1b; }
+    .tag.ready { background: #dbeafe; color: #1e40af; }
+    .hint { color: #999; font-size: 11px; line-height: 1.5; }
+    .session-line { font-size: 11px; color: #555; margin-top: 4px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1><span class="dot" id="hostDot"></span>HiveMTK 浏览器自动化</h1>
+  <div class="hint" id="hostLine">Host 状态检测中…</div>
+
+  <div class="banner" id="banner"></div>
+
+  <!-- 登录区（未登录时显示） -->
+  <section id="loginSection" style="display:none">
+    <label for="username">账号</label>
+    <input id="username" autocomplete="off" />
+    <label for="password">密码</label>
+    <input id="password" type="password" />
+    <div class="hint" style="margin-top:6px">登录一次长期有效：token 剩余不足 1 小时自动静默续期（滚动 24 小时窗口）。</div>
+    <div class="row">
+      <button id="loginBtn" class="primary">登录</button>
+    </div>
+  </section>
+
+  <!-- 主功能区（已登录） -->
+  <section id="mainSection" style="display:none">
+    <div class="row" style="margin-top:0">
+      <button id="refreshBtn">刷新任务</button>
+      <button id="logoutBtn">退出</button>
+    </div>
+    <div id="taskList"><div class="hint">加载中…</div></div>
+
+    <!-- 执行监控区 -->
+    <div id="monitor" style="display:none; margin-top:8px">
+      <label>执行监控（Session <span id="monSessionId"></span>）</label>
+      <div class="session-line" id="monSteps"></div>
+    </div>
+  </section>
+
+  <!-- 设置区 -->
+  <section>
+    <label for="serverUrl">服务端 API 地址（留空用默认 http://localhost:8204）</label>
+    <input id="serverUrl" placeholder="http://localhost:8204" autocomplete="off" />
+    <div class="row">
+      <button id="testBtn">测试连接</button>
+      <button id="saveBtn" class="primary">保存设置</button>
+    </div>
+    <div class="hint" style="margin-top:6px">保存后立即生效；默认地址来自 user-server 统一端口 8204。</div>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

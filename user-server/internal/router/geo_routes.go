@@ -210,6 +210,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/probe/all", probeCtrl.ProbeAll)
 	geo.POST("/probe/run-negative", probeCtrl.RunNegativeMonitor)
 	geo.POST("/probe/run-source-sync", probeCtrl.RunSourceSync)
+	geo.POST("/probe/run-sov", probeCtrl.RunSOVRefresh)
 	geo.GET("/probe/runs", probeCtrl.ListRuns)
 
 	geo.GET("/source-catalog/levels", sourceCtrl.LookupLevels)

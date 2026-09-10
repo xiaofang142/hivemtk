@@ -210,3 +210,6 @@ mtk-serve
 *.safetensors
 *.bin
 *.pt
+
+# ---------- Go 编译产物（禁止入库）----------
+user-server/nm-host

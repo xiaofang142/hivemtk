@@ -30,7 +30,7 @@ func (s *WebhookService) upsertInboxFromHub(ctx context.Context, hub *model.Mess
 		LastMessagePreview: hub.Content,
 		LastMessageAt:      &hub.SentAt,
 		UnreadCount:        1,
-		Status:             "active",
+		Status:             InboxStatusUnread,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -16,11 +17,12 @@ type OneIDMergeRuleService struct {
 	rules *MergeRuleSet
 }
 
-// NewOneIDMergeRuleService 创建合并规则服务实例
+var oneIDMergeRuleSingleton = &OneIDMergeRuleService{rules: defaultRuleSet()}
+
+// NewOneIDMergeRuleService 返回包级单例（进程内共享同一规则集；
+// 规则设计为内存态配置，重启恢复默认，GET/SAVE/DELETE 必须操作同一实例）
 func NewOneIDMergeRuleService() *OneIDMergeRuleService {
-	return &OneIDMergeRuleService{
-		rules: defaultRuleSet(),
-	}
+	return oneIDMergeRuleSingleton
 }
 
 // MergeRule 合并规则
@@ -94,6 +96,33 @@ func (s *OneIDMergeRuleService) SaveRules(ctx context.Context, set *MergeRuleSet
 	set.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	s.rules = set
 	return set, nil
+}
+
+// DeleteRule 按 ID 删除规则；内置规则不允许删除，自定义规则从集合中移除
+func (s *OneIDMergeRuleService) DeleteRule(ctx context.Context, id int64) (*MergeRuleSet, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.rules.BuiltIn {
+		if r.ID == id {
+			return nil, fmt.Errorf("内置规则不允许删除，仅可停用")
+		}
+	}
+	found := false
+	custom := make([]MergeRule, 0, len(s.rules.Custom))
+	for _, r := range s.rules.Custom {
+		if r.ID == id {
+			found = true
+			continue
+		}
+		custom = append(custom, r)
+	}
+	if !found {
+		return nil, fmt.Errorf("规则 %d 不存在", id)
+	}
+	s.rules.Custom = custom
+	out := *s.rules
+	return &out, nil
 }
 
 // ApplyRules 应用规则到一对候选客户（供 CustomerIdentity.MergeCustomers 调用）

@@ -88,6 +88,7 @@
   "menu": {
     "workspace": "مساحة العمل",
     "messageHub": "مركز الرسائل (MQ)",
+    "inbox": "صندوق الوارد الموحد",
     "wecomAccount": "تجميع الحسابات المتعددة",
     "customer": "مركز العملاء",
     "clueList": "قائمة العملاء المحتملين",
@@ -266,7 +267,12 @@
     "geoDecisionReport": "تقرير القرار",
     "emailDragEditor": "محرر السحب",
     "reachPipelineEditor": "محرر Pipeline",
-    "userSegmentBuilder": "منشئ الشرائح"
+    "userSegmentBuilder": "منشئ الشرائح",
+    "browserAutomation": "أتمتة المتصفح",
+    "baTasks": "قائمة المهام",
+    "baCreate": "مهمة جديدة",
+    "baCron": "مؤقتات مجدولة",
+    "baStatus": "حالة المضيف"
   },
   "保存": "حفظ",
   "提交": "إرسال",

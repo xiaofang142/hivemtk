@@ -154,6 +154,25 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	inboxIngressCtrl := controller.NewInboxIngressController(service.NewInboxIngressService())
 	auth.POST("/inbox/lock-human", inboxIngressCtrl.LockHuman)
 	auth.POST("/inbox/unlock-human/:session_id", inboxIngressCtrl.UnlockHuman)
+
+	// 统一收件箱：会话工作台（列表/详情/已读/置顶/星标/静音/标签/分配/统计/对账/消息线程）
+	inboxCtrl := controller.NewInboxController(service.NewInboxService())
+	auth.GET("/inbox/conversations", inboxCtrl.List)
+	auth.GET("/inbox/stats", inboxCtrl.Stats)
+	auth.GET("/inbox/assignments", inboxCtrl.ListAssignments)
+	auth.GET("/inbox/staff/:staff/load", inboxCtrl.StaffLoad)
+	auth.GET("/inbox/conversations/:id", inboxCtrl.GetByID)
+	auth.GET("/inbox/conversations/:id/messages", inboxCtrl.GetMessages)
+	auth.POST("/inbox/conversations/:id/read", inboxCtrl.MarkRead)
+	auth.POST("/inbox/conversations/:id/pin", inboxCtrl.Pin)
+	auth.POST("/inbox/conversations/:id/star", inboxCtrl.Star)
+	auth.POST("/inbox/conversations/:id/mute", inboxCtrl.Mute)
+	auth.POST("/inbox/conversations/:id/tags", inboxCtrl.AddTag)
+	auth.DELETE("/inbox/conversations/:id/tags/:tag", inboxCtrl.RemoveTag)
+	auth.DELETE("/inbox/conversations/:id/messages/:mid", inboxCtrl.DeleteMessage)
+	auth.POST("/inbox/assign", inboxCtrl.Assign)
+	auth.POST("/inbox/assign/auto", inboxCtrl.AutoAssign)
+	auth.POST("/inbox/reconcile", inboxCtrl.Reconcile)
 }
 
 func setupPlatformAccountRoutes(auth *gin.RouterGroup) {

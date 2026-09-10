@@ -227,6 +227,32 @@ func (c *EmailGapController) DomainReputation(ctx *gin.Context) {
 	response.Success(ctx, res, "ok")
 }
 
+// SuspendDomain POST /api/email/domains/:id/suspend {domain}（Deliverability.vue 暂停按钮）
+// 前端当前只传 row.id；id = 域名列表序号（1-based），按序号回查域名后写入暂停清单
+func (c *EmailGapController) SuspendDomain(ctx *gin.Context) {
+	var req struct {
+		Domain string `json:"domain"`
+	}
+	_ = ctx.ShouldBindJSON(&req)
+	if req.Domain == "" {
+		list, err := c.svc.DomainReputation(ctx.Request.Context())
+		if HandleServiceError(ctx, err) {
+			return
+		}
+		id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+		if err != nil || id < 1 || int(id) > len(list) {
+			response.Error(ctx, http.StatusBadRequest, "无效的域名 ID")
+			return
+		}
+		req.Domain = list[id-1].Domain
+	}
+	if err := c.svc.SuspendEmailDomain(ctx.Request.Context(), req.Domain); err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"domain": req.Domain, "suspended": true}, "已暂停")
+}
+
 // TestSend POST /api/email/test-send {subject, html, to[]}
 func (c *EmailGapController) TestSend(ctx *gin.Context) {
 	var req struct {

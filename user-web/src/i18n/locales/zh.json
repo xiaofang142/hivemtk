@@ -128,6 +128,7 @@
   "menu": {
     "workspace": "工作台",
     "messageHub": "消息中台 MQ",
+    "inbox": "统一收件箱",
     "wecomAccount": "多账号聚合",
     "customer": "客户中心",
     "clueList": "线索列表",
@@ -325,7 +326,12 @@
     "geoDecisionReport": "决策报告",
     "emailDragEditor": "拖拽编辑器",
     "reachPipelineEditor": "Pipeline 编辑",
-    "userSegmentBuilder": "分层规则构建"
+    "userSegmentBuilder": "分层规则构建",
+    "browserAutomation": "浏览器自动化",
+    "baTasks": "任务列表",
+    "baCreate": "新建任务",
+    "baCron": "定时触发器",
+    "baStatus": "Host 状态"
   },
   "保存": "保存",
   "提交": "提交",

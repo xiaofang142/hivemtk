@@ -122,6 +122,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	doRegAdmin("GET", "/oneid/merge-rules", oneIDCtrl.GetMergeRules)
 	doRegAdmin("POST", "/oneid/merge-rules", oneIDCtrl.SaveMergeRules)
+	doRegAdmin("DELETE", "/oneid/merge-rules/:id", oneIDCtrl.DeleteMergeRule)
 
 	doRegAdmin("POST", "/oneid/merge-rules/preview", oneIDCtrl.PreviewMergeRules)
 
@@ -616,6 +617,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/email/deliverability", emailGapCtrl.Deliverability)
 	doReg("GET", "/email/bounces/breakdown", emailGapCtrl.BounceBreakdown)
 	doReg("GET", "/email/domain-reputation", emailGapCtrl.DomainReputation)
+	doRegAdmin("POST", "/email/domains/:id/suspend", emailGapCtrl.SuspendDomain)
 	doReg("POST", "/email/test-send", emailGapCtrl.TestSend)
 	doReg("GET", "/user-segments/rfm", emailGapCtrl.RFMMatrix)
 	doReg("GET", "/user-segments/rfm/stats", emailGapCtrl.RFMMatrixStats)
@@ -643,6 +645,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin("GET", "/operation-logs/statistics", opLogCtrl.GetStatistics)
 	doRegAdmin("GET", "/operation-logs/export", opLogCtrl.ExportLogs)
 	doRegAdmin("POST", "/operation-logs/clean", opLogCtrl.CleanLogs)
+	doRegAdmin("POST", "/operation-logs/:id/rollback", opLogCtrl.RollbackLog)
 
 	churnCtrl := opsctrl.NewChurnPredictionController()
 	doReg("GET", "/churn-prediction", churnCtrl.GetChurnPredictions)
