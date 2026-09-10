@@ -456,6 +456,14 @@
       "found": 1,
       "fixed": 0,
       "notes": "功能三维度专项(深入细节): Webhook入站双通道语义确认为设计内(shouldTriggerAI开关守卫+e2e固化,不改); TODO/死链/状态机/验签面全部核查通过; 同事WIP边界确认; R36批次的3修复已由54a7440提交"
+    },
+    {
+      "round": 46,
+      "angle": "test-coverage",
+      "date": "2026-09-10",
+      "found": 2,
+      "fixed": 2,
+      "notes": "本会话补做(与R48并行): 两项打包: ①L4残余直连24->14(autoAssign事务下沉AutoAssignAgentTx/session_chain.GetSession/inbox feedbackRepo/summary_agg nil-DB守卫/asset_loader仓储化AssetLoaderRepository+ctx透传,main装配Bind); ②纯函数包0测试清零6个(bm25/messageid/textutil/async/httpclient/errhttp)+AutoAssignAgentTx事务测试2用例; build/vet/test全绿(dcda7ff); ctx段ERROR清零"
     }
   ]
 }
