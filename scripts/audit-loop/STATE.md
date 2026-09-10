@@ -5,11 +5,39 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：47（第四圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：17 / 17（R6/R13–R47 为 0 代码缺陷轮）
-- 下一轮角度：docs-consistency
+- 已完成轮次：49（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49 扫描组为 0 新增缺陷）
+- 下一轮角度：authz
 
 ## 轮次报告
+
+### R49 — security（2026-09-10）— 第五圈首轮，1 发现 1 修复（测试口径），0 新增安全缺陷
+
+**审计背景**：state round=48 / next=0（security）。开工时工作区存在前一会话（另一并发会话）的 R49 批次1 已提交未推送（`414e39f`：WS 泄漏三处+RichCard 协议白名单 XSS+黑名单 embed 端绕过）与批次2 未提交 WIP（11 文件：SOP wait 死循环/RAG 缓存投毒/空回复缓存/parallel 上下文丢失/Notion 分页/导入 panic 兜底）。本轮职责：收编验证 WIP + 独立执行 security 全扫描组。
+
+**发现与处置（1 修复 1 记录）**：
+
+1. **`TestBudgetInput_SnapshotCapped` 断言口径错误（P3，测试缺陷，已修，随批次2 入库 `38a0306`）** — 断言检查的是入参 `st.Memory`（budgetInput 不改动入参）且未计 marker "…" 的 1 rune，导致已交付功能被误判 FAIL。修正为检查返回的 `stBudgeted` 副本 + `memoryBudgetRunes+1` 上限。全包测试回归绿。
+2. **批次2 收编（流程性记录）** — 11 文件 WIP 经 build/vet/test 全绿验证后随本轮提交入库（`38a0306`，SOP wait 死循环修复为安全相关功能性修复：timer 到期重入 WaitExecutor 导致执行永久卡 running）。
+
+**security 扫描组（全部 0 新增缺陷）**：
+- 硬编码密钥：唯一命中 `jwt.go testJWTSecret`（测试专用常量、带 do-not-use-in-prod 标注，go test 进程 fallback，非泄漏）
+- SQL 拼接：4 处受控面维持（hnsw.ef_search 整型常量/备份表白名单/DROP TYPE 注册表/测试库 DDL）；`message_hub_inbox_outbound.go` Raw+RETURNING 为参数化查询拼接常量片段，无注入面
+- 敏感日志：命中均为注释或 DSN 格式串（`db.go` 密码来自 env 插值，非字面量）
+- `os/exec`：0 命中；`InsecureSkipVerify`：0 命中
+- **新增提交面核查（browser_automation/nm-host，合并自 upstream 59 提交）**：`HostWSHandler` 双层防护在位——回环 IP 限制（host.go:79-82）+ token fail-closed（`bh_<userID>_<rand>` 解析归属 user_id，host.go:84-92）；注意 `clientIPOf` 信任 `X-Real-IP`/`X-Forwarded-For` 但 gin `SetTrustedProxies` 已限定 127/8+私网段（cmd/api/main.go:209），公网直连伪造头不影响 `ctx.ClientIP()` 兜底路径，且该端点另有 token 硬校验，纵深足够
+- 路由鉴权抽查：`r44_gap_endpoints.go` 全部经 `doReg`（JWT 组）/`doRegAdmin`（admin 中间件）注册（frontend_aliases.go:594-615）；`/api` 组 271 行处统一 `auth.Use(JWTAuthMiddleware)` 后再挂各 setup
+- XSS 面：全仓 5 处 v-html 全部有转义/DOMPurify 口径（ChatMessages 先 escape 再 br、KbCitation DOMPurify 白名单、BulkMessaging DOMPurify、DragEditor esc+escUrl 协议白名单、KbCitation 同口径）；RichCard 修复后 `safeUrl` 仅放行 http/https（414e39f）
+- SSO redirect：`resolveRedirectTarget` 仅放行站内相对路径（`/` 前缀且拒 `//`）+ 配置 frontend 域，无开放重定向（sso.go:125-133）
+- webhook 护栏：`ALLOW_INSECURE_WEBHOOK` 非开发环境启动即断言在位（webhook.go:98→442）；verifyHMAC secret 空即 fail-closed 维持
+- govulncheck 仍不可用（go1.25 工具链 vs go1.27 mod graph 版本错位，环境限制留档）
+- pwtool：仅生成公开自举默认密码 Seed@123456 的 bcrypt 哈希（同 bootstrap.sh 既有产品决策），无新敏感面
+
+**验证证据**：`go build`/`go vet` 全绿；`go test ./... -count=1` 全包 0 FAIL；批次1 黑名单/webhook E2E 测试定向回归绿。
+
+**Commit**：批次2+测试口径修复 `38a0306`（本仓库），状态推进随本提交。
+
+
 
 ### R48 — 功能完善度/流畅度/连贯性专项（2026-09-10）— 3 发现（1 修复 2 评估不改）
 

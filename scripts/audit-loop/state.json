@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 48,
-  "next_angle_index": 0,
+  "round": 49,
+  "next_angle_index": 1,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 48,
-    "issues_found_total": 20,
-    "issues_fixed_total": 20,
+    "rounds_completed": 49,
+    "issues_found_total": 21,
+    "issues_fixed_total": 21,
     "last_completed_at": "2026-09-10",
-    "last_commit": "174a471"
+    "last_commit": "38a0306"
   },
   "history": [
     {
@@ -464,6 +464,14 @@
       "found": 2,
       "fixed": 2,
       "notes": "本会话补做(与R48并行): 两项打包: ①L4残余直连24->14(autoAssign事务下沉AutoAssignAgentTx/session_chain.GetSession/inbox feedbackRepo/summary_agg nil-DB守卫/asset_loader仓储化AssetLoaderRepository+ctx透传,main装配Bind); ②纯函数包0测试清零6个(bm25/messageid/textutil/async/httpclient/errhttp)+AutoAssignAgentTx事务测试2用例; build/vet/test全绿(dcda7ff); ctx段ERROR清零"
+    },
+    {
+      "round": 49,
+      "angle": "security",
+      "date": "2026-09-10",
+      "found": 1,
+      "fixed": 1,
+      "notes": "第五圈首轮。修复=批次2 brain_budget_test 断言口径(38a0306)；批次1(414e39f WS泄漏/XSS/黑名单绕过)与批次2(SOP wait死循环/RAG缓存投毒等)由前一会话产出、本轮验证收编。全扫描组 0 新增缺陷"
     }
   ]
 }
