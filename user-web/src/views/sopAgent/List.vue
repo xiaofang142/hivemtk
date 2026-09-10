@@ -23,25 +23,25 @@
         <el-row :gutter="16" class="stats-row" v-loading="statsLoading">
           <el-col :span="6">
             <el-card shadow="hover" class="stat-card">
-              <div class="stat-value">{{ sopStats.total | 0 }}</div>
+              <div class="stat-value">{{ sopStats.total ?? 0 }}</div>
               <div class="stat-label">SOP 总数</div>
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card shadow="hover" class="stat-card stat-active">
-              <div class="stat-value">{{ sopStats.active | 0 }}</div>
+              <div class="stat-value">{{ sopStats.active ?? 0 }}</div>
               <div class="stat-label">{{ $t('已激活') }}</div>
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card shadow="hover" class="stat-card stat-inactive">
-              <div class="stat-value">{{ sopStats.inactive | 0 }}</div>
+              <div class="stat-value">{{ sopStats.inactive ?? 0 }}</div>
               <div class="stat-label">{{ $t('已停用') }}</div>
             </el-card>
           </el-col>
           <el-col :span="6">
             <el-card shadow="hover" class="stat-card stat-running">
-              <div class="stat-value">{{ sopStats.running | 0 }}</div>
+              <div class="stat-value">{{ sopStats.running ?? 0 }}</div>
               <div class="stat-label">{{ $t('进行中执行') }}</div>
             </el-card>
           </el-col>

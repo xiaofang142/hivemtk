@@ -3,19 +3,13 @@
     <el-card class="header-card">
       <div class="header-content">
         <div>
-          <h2 class="page-title">角色管理（v3.1）</h2>
-          <p class="page-subtitle">可视化创建自定义角色，支持菜单权限 + 按钮权限 + 数据范围</p>
+          <h2 class="page-title">{{ t('role.title') }}</h2>
+          <p class="page-subtitle">{{ t('role.subtitle') }}</p>
         </div>
-        <div class="header-actions">
-          <el-tooltip content="v3.1 角色收口为三档系统角色，自定义角色将在后续版本开放" placement="top">
-            <span>
-              <el-button type="primary" disabled>
-                <el-icon><Plus /></el-icon>
-                新建自定义角色
-              </el-button>
-            </span>
-          </el-tooltip>
-        </div>
+        <el-tag type="info" size="large">
+          <el-icon><Lock /></el-icon>
+          {{ t('role.systemRole') }}
+        </el-tag>
       </div>
     </el-card>
 
@@ -26,221 +20,178 @@
       @retry="loadRoles"
     />
 
-    <el-tabs v-else v-model="activeTab" @tab-change="onTabChange">
-      
-      <el-tab-pane label="系统角色" name="system">
-        <el-row :gutter="20" v-loading="loading">
-          <el-col
-            v-for="role in systemRoles"
-            :key="role.role_code"
-            :span="8"
-          >
-            <el-card class="role-card system-role" shadow="hover">
-              <div class="role-card-header">
-                <div class="role-icon" :style="{ background: role.color }">
-                  <el-icon :size="20"><Lock /></el-icon>
-                </div>
-                <div class="role-info">
-                  <h3 class="role-name">{{ role.name }}</h3>
-                  <el-tag size="small" type="info">系统内置</el-tag>
-                </div>
-                <el-tooltip content="系统角色不可修改" placement="top">
-                  <el-icon class="lock-icon"><Lock /></el-icon>
-                </el-tooltip>
-              </div>
-              <p class="role-desc">{{ role.description }}</p>
-              <div class="role-meta">
-                <span class="member-count">
-                  <el-icon><User /></el-icon>
-                  成员：<strong>{{ role.member_count || 0 }}</strong>
-                </span>
-                <el-button
-                  type="primary"
-                  link
-                  :disabled="!role.member_count"
-                  @click="openMembersDialog(role)"
-                >
-                  查看成员
-                </el-button>
-              </div>
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-tab-pane>
+    <el-row v-else :gutter="20" v-loading="loading">
+      <el-col
+        v-for="role in roles"
+        :key="role.code"
+        :span="8"
+      >
+        <el-card class="role-card" shadow="hover">
+          <div class="role-card-header">
+            <el-tag :type="role.tag_type || 'primary'" size="large">
+              {{ role.name }}
+            </el-tag>
+            <el-tooltip :content="t('role.cannotEditRole')" placement="top">
+              <el-icon class="lock-icon"><Lock /></el-icon>
+            </el-tooltip>
+          </div>
+          <p class="role-desc">{{ role.description }}</p>
+          <div class="role-meta">
+            <span class="member-count">
+              <el-icon><User /></el-icon>
+              {{ t('role.memberCount') }}:
+              <strong>{{ role.member_count }}</strong>
+            </span>
+            <el-button
+              type="primary"
+              link
+              :disabled="role.member_count === 0"
+              @click="openMembersDialog(role)"
+            >
+              {{ t('role.viewMembers') }}
+            </el-button>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
 
-      
-      <el-tab-pane label="自定义角色" name="custom">
-        <el-alert
-          type="info"
-          :closable="false"
-          show-icon
-          title="自定义角色暂未启用"
-          description="当前版本（v3.1）角色收口为三档系统角色（超管 / 客服 / 员工）。自定义角色的菜单权限、按钮权限与数据范围配置能力将在后续版本开放；如需调整人员权限，请在「用户管理」中为账号分配系统角色。"
-          style="margin-bottom: 16px"
-        />
-        <el-row :gutter="20" v-loading="loading">
-          <el-col
-            v-for="role in customRoles"
-            :key="role.id"
-            :span="8"
-          >
-            <el-card class="role-card" shadow="hover">
-              <div class="role-card-header">
-                <div class="role-icon" :style="{ background: role.color || '#409eff' }">
-                  <el-icon :size="20"><UserFilled /></el-icon>
-                </div>
-                <div class="role-info">
-                  <h3 class="role-name">{{ role.name }}</h3>
-                  <el-tag size="small" :type="role.enabled ? 'success' : 'info'">
-                    {{ role.enabled ? '已启用' : '已禁用' }}
-                  </el-tag>
-                </div>
-              </div>
-              <p class="role-desc">{{ role.description || '暂无描述' }}</p>
-              <div class="role-meta-info">
-                <el-row :gutter="8">
-                  <el-col :span="8">
-                    <div class="meta-item">
-                      <span class="meta-label">菜单</span>
-                      <span class="meta-value">{{ role.menu_count || 0 }}</span>
-                    </div>
-                  </el-col>
-                  <el-col :span="8">
-                    <div class="meta-item">
-                      <span class="meta-label">按钮</span>
-                      <span class="meta-value">{{ role.button_count || 0 }}</span>
-                    </div>
-                  </el-col>
-                  <el-col :span="8">
-                    <div class="meta-item">
-                      <span class="meta-label">数据范围</span>
-                      <el-tag size="small" type="info">{{ getScopeLabel(role.scope_type) }}</el-tag>
-                    </div>
-                  </el-col>
-                </el-row>
-              </div>
-              <div class="role-meta">
-                <span class="member-count">
-                  <el-icon><User /></el-icon>
-                  成员：<strong>{{ role.member_count || 0 }}</strong>
-                </span>
-              </div>
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-tab-pane>
-    </el-tabs>
-
-    
+    <!-- 成员列表对话框 -->
     <el-dialog
       v-model="membersDialogVisible"
-      :title="currentRole ? `${currentRole.name} - 成员列表` : ''"
+      :title="currentRole ? `${currentRole.name} - ${t('role.memberCount')}` : ''"
       width="720px"
       :close-on-click-modal="false"
     >
-      <el-table v-loading="membersLoading" :data="members" stripe border height="420">
-        <el-table-column label="用户名" prop="username" min-width="120" show-overflow-tooltip />
-        <el-table-column label="姓名" prop="real_name" min-width="120" show-overflow-tooltip />
-        <el-table-column label="邮箱" prop="email" min-width="180" show-overflow-tooltip />
-        <el-table-column label="状态" width="100">
+      <el-table
+        v-loading="membersLoading"
+        :data="members"
+        stripe
+        border
+        height="420"
+      >
+        <el-table-column
+          :label="t('role.username')"
+          prop="username"
+          min-width="120"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          :label="t('role.realName')"
+          prop="real_name"
+          min-width="120"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          :label="t('role.email')"
+          prop="email"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column :label="t('role.status')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">
-              {{ row.enabled ? '启用' : '禁用' }}
+              {{ row.enabled ? t('role.enabled') : t('role.disabled') }}
             </el-tag>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="t('role.noMembers')" />
+        </template>
       </el-table>
+      <el-pagination
+        v-if="membersPagination.total > 0"
+        :current-page="membersPagination.page"
+        :page-size="membersPagination.size"
+        :page-sizes="[10, 20, 50]"
+        :total="membersPagination.total"
+        layout="total, sizes, prev, pager, next"
+        @size-change="onMembersSizeChange"
+        @current-change="onMembersCurrentChange"
+        style="margin-top: 12px; text-align: right"
+      />
     </el-dialog>
-
-    
-
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import {
-  Lock,
-  User,
-  UserFilled,
-  Plus
-} from '@element-plus/icons-vue'
-import {
-  listSystemRoles,
-  listCustomRoles,
-  listRoleMembers
-} from '@/api/role'
+import { Lock, User } from '@element-plus/icons-vue'
+import { listRoles, listRoleMembers } from '@/api/role'
 import PageState from '@/components/PageState.vue'
 
-const activeTab = ref('system');
+const { t } = useI18n()
+
+// 角色列表
+const roles = ref([])
 const loading = ref(false)
 const error = ref('')
-const systemRoles = ref([])
-const customRoles = ref([])
 
-const membersDialogVisible = ref(false);
+// 成员弹窗
+const membersDialogVisible = ref(false)
 const membersLoading = ref(false)
 const currentRole = ref(null)
 const members = ref([])
+const membersPagination = ref({ page: 1, size: 20, total: 0 })
 
-const getScopeLabel = (scope) => {
-  const map = { all: '全部', dept: '部门', self: '自己', custom: '自定义' }
-  return map[scope] || scope
-};
-
-const loadRoles = async () => {
+// 加载角色列表
+async function loadRoles() {
   loading.value = true
   error.value = ''
   try {
-    const [sysRes, customRes] = await Promise.all([
-      listSystemRoles().catch(() => []),
-      listCustomRoles().catch(() => [])
-    ])
-    systemRoles.value = Array.isArray(sysRes) ? sysRes : sysRes?.data || []
-    customRoles.value = Array.isArray(customRes) ? customRes : customRes?.data || []
+    const res = await listRoles()
+    // 兼容后端返回 {code, data: [...]} 或直接是数组
+    const list = Array.isArray(res) ? res : (res?.data || [])
+    roles.value = list
   } catch (e) {
-    error.value = e?.message || '加载角色失败'
+    error.value = e?.message || t('role.loadFailed')
   } finally {
     loading.value = false
   }
-};
-
-const onTabChange = (tab) => {
-  if (tab === 'system') loadSystemRoles()
-  if (tab === 'custom') loadCustomRoles()
 }
 
-const loadSystemRoles = async () => {
-  try {
-    const res = await listSystemRoles().catch(() => [])
-    systemRoles.value = Array.isArray(res) ? res : res?.data || []
-  } catch {}
-}
-
-const loadCustomRoles = async () => {
-  try {
-    const res = await listCustomRoles().catch(() => [])
-    customRoles.value = Array.isArray(res) ? res : res?.data || []
-  } catch {}
-}
-
-const openMembersDialog = async (role) => {
+// 打开成员列表
+async function openMembersDialog(role) {
   currentRole.value = role
   membersDialogVisible.value = true
+  membersPagination.value = { page: 1, size: 20, total: 0 }
+  await loadMembers()
+}
+
+// 加载成员列表
+async function loadMembers() {
+  if (!currentRole.value) return
   membersLoading.value = true
   try {
-    const res = await listRoleMembers(role.role_code || role.code, {
-      page: 1,
-      size: 200
-    }).catch(() => null)
+    const res = await listRoleMembers(currentRole.value.code, {
+      page: membersPagination.value.page,
+      size: membersPagination.value.size
+    })
+    // 后端 SuccessWithPage 返回 { list, total, page, page_size }
     const data = res?.data || res
-    members.value = data?.list || data || []
+    members.value = data?.list || []
+    membersPagination.value = {
+      page: data?.page || membersPagination.value.page,
+      size: data?.page_size || membersPagination.value.size,
+      total: data?.total || 0
+    }
   } catch (e) {
-    ElMessage.error('加载成员失败')
+    ElMessage.error(e?.message || t('common.operationFailed'))
   } finally {
     membersLoading.value = false
   }
+}
+
+function onMembersSizeChange(size) {
+  membersPagination.value.size = size
+  membersPagination.value.page = 1
+  loadMembers()
+}
+
+function onMembersCurrentChange(page) {
+  membersPagination.value.page = page
+  loadMembers()
 }
 
 onMounted(loadRoles)
@@ -269,38 +220,15 @@ onMounted(loadRoles)
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
 .role-card {
   margin-bottom: 20px;
-  min-height: 200px;
+  min-height: 180px;
 }
 .role-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   margin-bottom: 12px;
-}
-.role-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
-}
-.role-info {
-  flex: 1;
-  min-width: 0;
-}
-.role-name {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
 }
 .lock-icon {
   color: var(--el-text-color-placeholder);
@@ -313,27 +241,6 @@ onMounted(loadRoles)
   line-height: 1.6;
   margin: 0 0 16px 0;
   min-height: 40px;
-}
-.role-meta-info {
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
-}
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
-}
-.meta-label {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-}
-.meta-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-color-primary);
 }
 .role-meta {
   display: flex;
@@ -353,20 +260,5 @@ onMounted(loadRoles)
   color: var(--el-color-primary);
   font-size: 16px;
   margin-left: 4px;
-}
-.role-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-.perm-card {
-  width: 100%;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.perm-card :deep(.el-card__body) {
-  padding: 12px;
 }
 </style>

@@ -18,7 +18,7 @@ function report(payload) {
       headers: { 'Content-Type': 'application/json' },
       keepalive: true,
     }).catch(() => {});
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 function getRating(name, value) {

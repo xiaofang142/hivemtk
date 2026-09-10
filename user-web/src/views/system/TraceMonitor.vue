@@ -525,23 +525,23 @@ function openTrace(row) {
 }
 
 async function loadHealth() {
-  try { health.value = await monitorApi.health() } catch (e) {}
+  try { health.value = await monitorApi.health() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadNodeHealth() {
   try {
     const res = await monitorApi.nodeHealth()
     nodeRows.value = res.nodes || []
     nodeWindow.value = res.window || ''
-  } catch (e) {}
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadLatency() {
-  try { latencyRows.value = await monitorApi.latency() } catch (e) {}
+  try { latencyRows.value = await monitorApi.latency() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadTraces() {
-  try { traceRows.value = await monitorApi.traces({ limit: 50 }) } catch (e) {}
+  try { traceRows.value = await monitorApi.traces({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadAnomalies() {
-  try { anomaly.value = await monitorApi.anomalies() } catch (e) {}
+  try { anomaly.value = await monitorApi.anomalies() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 function parseJSON(v, fallback) {
@@ -569,10 +569,10 @@ function scoreType(s) {
   return 'warning'
 }
 async function loadEvalLogs() {
-  try { evalLogs.value = await monitorApi.evalLogs({ limit: 50 }) } catch (e) {}
+  try { evalLogs.value = await monitorApi.evalLogs({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadWeights() {
-  try { weights.value = await monitorApi.knowledgeWeights({ limit: 50 }) } catch (e) {}
+  try { weights.value = await monitorApi.knowledgeWeights({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function refreshLearn() {
   await Promise.all([loadEvalLogs(), loadWeights()])

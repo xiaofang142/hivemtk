@@ -19,31 +19,31 @@
     <el-row :gutter="16" class="stats-row" v-loading="statsLoading">
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-value">{{ stats.total | 0 }}</div>
+          <div class="stat-value">{{ stats.total ?? 0 }}</div>
           <div class="stat-label">{{ $t('消息总数') }}</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-inbound">
-          <div class="stat-value">{{ stats.inbound | 0 }}</div>
+          <div class="stat-value">{{ stats.inbound ?? 0 }}</div>
           <div class="stat-label">{{ $t('接收消息') }}</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-outbound">
-          <div class="stat-value">{{ stats.outbound | 0 }}</div>
+          <div class="stat-value">{{ stats.outbound ?? 0 }}</div>
           <div class="stat-label">{{ $t('发送消息') }}</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-unread">
-          <div class="stat-value">{{ stats.unread | 0 }}</div>
+          <div class="stat-value">{{ stats.unread ?? 0 }}</div>
           <div class="stat-label">{{ $t('未读消息') }}</div>
         </el-card>
       </el-col>
       <el-col :span="4">
         <el-card shadow="hover" class="stat-card stat-recent">
-          <div class="stat-value">{{ stats.recent_24h | 0 }}</div>
+          <div class="stat-value">{{ stats.recent_24h ?? 0 }}</div>
           <div class="stat-label">近 24h 新增</div>
         </el-card>
       </el-col>
@@ -447,7 +447,9 @@ const setupRealtime = async () => {
       onError: (e) => { console.warn('[messageHub ws]', e) }
     })
     agentSocketInst.connect()
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[messageHub] agent socket 初始化失败（不阻塞页面）:', e)
+  }
 }
 
 onMounted(async () => {

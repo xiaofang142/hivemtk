@@ -112,3 +112,58 @@ func (r *RagEvalRepository) FailRun(ctx context.Context, runID uint, errMsg stri
 		"failed", now, errMsg, runID,
 	).Error
 }
+
+// ListRecentQueryLogs 取最近 RAG 查询日志（去重取样源，供自动评测出题）。
+func (r *RagEvalRepository) ListRecentQueryLogs(ctx context.Context, since time.Time, limit int) ([]*model.RagQueryLog, error) {
+	var logs []*model.RagQueryLog
+	err := r.db.WithContext(ctx).
+		Model(&model.RagQueryLog{}).
+		Where("created_at >= ?", since).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&logs).Error
+	return logs, err
+}
+
+// ListIndexedDocuments 取已索引状态的 KB 文档（评测出题兜底源）。
+func (r *RagEvalRepository) ListIndexedDocuments(ctx context.Context, limit int) ([]*model.KBDocument, error) {
+	var docs []*model.KBDocument
+	err := r.db.WithContext(ctx).
+		Model(&model.KBDocument{}).
+		Where("status = ?", model.KBDocumentStatusIndexed).
+		Limit(limit).
+		Find(&docs).Error
+	return docs, err
+}
+
+// LatestRun 取最新一次评测 run；无记录返回空对象（与 gap 契约一致）。
+func (r *RagEvalRepository) LatestRun(ctx context.Context) (*model.RagEvalRun, error) {
+	var run model.RagEvalRun
+	err := r.db.WithContext(ctx).Order("id DESC").First(&run).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &model.RagEvalRun{}, nil
+		}
+		return nil, err
+	}
+	return &run, nil
+}
+
+// ListRunsDesc 按 id 降序列出 run（limit<=0 或 >100 归一为 20）。
+func (r *RagEvalRepository) ListRunsDesc(ctx context.Context, limit int) ([]*model.RagEvalRun, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var runs []*model.RagEvalRun
+	err := r.db.WithContext(ctx).Order("id DESC").Limit(limit).Find(&runs).Error
+	return runs, err
+}
+
+// GetRunRaw 按 ID 取 run（含不存在错误透传）。
+func (r *RagEvalRepository) GetRunRaw(ctx context.Context, id uint) (*model.RagEvalRun, error) {
+	var run model.RagEvalRun
+	if err := r.db.WithContext(ctx).First(&run, id).Error; err != nil {
+		return nil, err
+	}
+	return &run, nil
+}

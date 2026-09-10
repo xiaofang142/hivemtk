@@ -238,7 +238,7 @@ const loadAccounts = async () => {
     accounts.value = Array.isArray(data)
       ? data.reduce((acc, a) => { acc[a.platform || a.name || a.key] = a; return acc }, {})
       : (data || {})
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const loadArticles = async () => {
@@ -325,7 +325,7 @@ const runPipeline = async () => {
           url: r.url
         }))
       }
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     pipelineRunning.value = false
     ElMessage.success('Pipeline 执行完成')
     loadRecords()

@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 )
 
@@ -119,9 +117,8 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 			})
 
 			if hub.Direction == "inbound" && event.SessionID != "" {
-				if gdb := db.GetDB(); gdb != nil {
-					recRepo := repository.NewFeedbackRecordRepository(gdb)
-					if rows, err := recRepo.UpdateCustomerAcceptBySession(ctx, event.SessionID); err != nil {
+				if s.feedbackRepo != nil {
+					if rows, err := s.feedbackRepo.UpdateCustomerAcceptBySession(ctx, event.SessionID); err != nil {
 						logger.Warnf("[feedback] UpdateCustomerAcceptBySession failed session=%s: %v", event.SessionID, err)
 					} else if rows > 0 {
 						logger.Debugf("[feedback] customer_accept marked session=%s rows=%d", event.SessionID, rows)

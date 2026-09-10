@@ -1,33 +1,26 @@
-package service
-
 // reach_send_pipeline_compliance.go 合规提醒与审计（R-8）：主动触达发送前的
 // 合规提醒 WARN 日志，以及异步批量落库的合规审计记录（表 reach_compliance_log）。
+package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
-
-	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 const complianceReminderTag = "[COMPLIANCE]"
 
-func init() { _db.RegisterExtraModels(&ReachComplianceLog{}) }
+func init() { _db.RegisterExtraModels(&model.ReachComplianceLog{}) }
 
-// ReachComplianceLog 合规提醒审计日志（表 reach_compliance_log）
-type ReachComplianceLog struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Channel     string    `gorm:"type:varchar(30);index" json:"channel"`
-	RecipientID string    `gorm:"type:varchar(128)" json:"recipient_id"`
-	CreatedAt   time.Time `gorm:"autoCreateTime;index" json:"created_at"`
-}
-
-// TableName 指定表名
-func (ReachComplianceLog) TableName() string { return "reach_compliance_log" }
+// ReachComplianceLog 合规提醒审计日志（别名，模型已收敛到 model 层）
+type ReachComplianceLog = model.ReachComplianceLog
 
 const (
 	complianceFlushBatchSize = 100
@@ -38,7 +31,7 @@ const (
 type ComplianceAuditLogger struct {
 	mu      sync.Mutex
 	buf     []*ReachComplianceLog
-	db      *gorm.DB
+	repo    *repository.ReachComplianceLogRepository
 	flushCh chan struct{}
 	stop    chan struct{}
 	stopped sync.Once
@@ -55,7 +48,7 @@ var (
 func InitComplianceAuditLogger(db *gorm.DB) *ComplianceAuditLogger {
 	complianceLoggerOnce.Do(func() {
 		complianceLogger = &ComplianceAuditLogger{
-			db:      db,
+			repo:    repository.NewReachComplianceLogRepository(db),
 			flushCh: make(chan struct{}, 1),
 			stop:    make(chan struct{}),
 		}
@@ -88,6 +81,16 @@ func (l *ComplianceAuditLogger) record(channel, recipientID string) {
 	}
 }
 
+// BufferedCount 当前缓冲条数（测试用）
+func (l *ComplianceAuditLogger) BufferedCount() int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.buf)
+}
+
 // Flush 将缓冲批量写入 DB（供 flushLoop 与测试调用）；db 未配置时清空缓冲并返回
 func (l *ComplianceAuditLogger) Flush() error {
 	l.mu.Lock()
@@ -98,10 +101,10 @@ func (l *ComplianceAuditLogger) Flush() error {
 	batch := l.buf
 	l.buf = nil
 	l.mu.Unlock()
-	if l.db == nil || len(batch) == 0 {
+	if l.repo == nil || len(batch) == 0 {
 		return nil
 	}
-	if err := l.db.CreateInBatches(batch, len(batch)).Error; err != nil {
+	if err := l.repo.CreateInBatches(context.Background(), copyComplianceBatch(batch), len(batch)); err != nil {
 
 		l.mu.Lock()
 		l.buf = append(batch, l.buf...)
@@ -112,6 +115,19 @@ func (l *ComplianceAuditLogger) Flush() error {
 		return err
 	}
 	return nil
+}
+
+// copyComplianceBatch 转换缓冲行为仓储入参
+func copyComplianceBatch(batch []*ReachComplianceLog) []*model.ReachComplianceLog {
+	out := make([]*model.ReachComplianceLog, 0, len(batch))
+	for _, b := range batch {
+		out = append(out, &model.ReachComplianceLog{
+			Channel:     b.Channel,
+			RecipientID: b.RecipientID,
+			CreatedAt:   b.CreatedAt,
+		})
+	}
+	return out
 }
 
 func (l *ComplianceAuditLogger) flushLoop() {
@@ -128,22 +144,18 @@ func (l *ComplianceAuditLogger) flushLoop() {
 			}
 		case <-ticker.C:
 			if err := l.Flush(); err != nil {
-				logger.Errorf("[R-8] 合规日志定时刷盘失败: %v", err)
+				logger.Errorf("[R-8] 合规日志刷盘失败: %v", err)
 			}
 		}
 	}
 }
 
-// Stop 停止刷盘循环并冲刷残余缓冲
+// Stop 停止刷盘协程（落盘剩余缓冲）
 func (l *ComplianceAuditLogger) Stop() {
+	if l == nil {
+		return
+	}
 	l.stopped.Do(func() { close(l.stop) })
-}
-
-// BufferedCount 当前缓冲条数（测试用）
-func (l *ComplianceAuditLogger) BufferedCount() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.buf)
 }
 
 func LogComplianceReminder(channel, recipientID string) {

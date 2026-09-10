@@ -21,11 +21,13 @@ import (
 
 // SessionChainService 会话生命周期链服务
 type SessionChainService struct {
-	db *gorm.DB
+	repo *repository.SessionChainRepository
 }
 
 // NewSessionChainService 构造
-func NewSessionChainService(gdb *gorm.DB) *SessionChainService { return &SessionChainService{db: gdb} }
+func NewSessionChainService(gdb *gorm.DB) *SessionChainService {
+	return &SessionChainService{repo: repository.NewSessionChainRepository(gdb)}
+}
 
 // NewSessionChainServiceFromGlobal 便捷构造
 func NewSessionChainServiceFromGlobal() *SessionChainService {
@@ -106,17 +108,10 @@ func (s *SessionChainService) RunAutoResolve(ctx context.Context) (int, error) {
 	if !cfg.Enabled {
 		return 0, nil
 	}
-	g := s.db
 	threshold := time.Now().Add(-time.Duration(cfg.Hours) * time.Hour)
-	var sessions []*model.CustomerSession
-	q := g.WithContext(ctx).
-		Where("status IN ? AND updated_at < ?", []model.SessionStatus{
-			model.SessionStatusPending, model.SessionStatusAIHandling, model.SessionStatusWaiting,
-		}, threshold).
-		Limit(200).
-		Find(&sessions)
-	if q.Error != nil {
-		return 0, q.Error
+	sessions, err := s.repo.ListStaleSessions(ctx, threshold)
+	if err != nil {
+		return 0, err
 	}
 	closed := 0
 	for _, sess := range sessions {
@@ -134,43 +129,26 @@ func (s *SessionChainService) RunAutoResolve(ctx context.Context) (int, error) {
 			if !has {
 				tags = append(tags, cfg.AddTag)
 				if merged, err := json.Marshal(tags); err == nil {
-					_ = g.WithContext(ctx).Model(&model.CustomerSession{}).
-						Where("id = ?", sess.ID).Update("tags", string(merged)).Error
+					_ = s.repo.UpdateSessionTags(ctx, sess.ID, string(merged))
 				}
 			}
 		}
-		if err := s.closeByPK(ctx, sess.ID); err == nil {
+		if err := s.repo.CloseSessionByPK(ctx, sess.ID); err == nil {
 			closed++
 		}
 	}
 	return closed, nil
 }
 
-func (s *SessionChainService) closeByPK(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Model(&model.CustomerSession{}).
-		Where("id = ?", id).Update("status", model.SessionStatusClosed).Error
-}
-
 // ReopenOnInboundMessage 访客消息落库后调用：resolved/closed 会话自动回 waiting（toggle_status 语义）。
 // 返回 true=发生了 reopen。
 func (s *SessionChainService) ReopenOnInboundMessage(ctx context.Context, sessionID string) (bool, error) {
-	g := s.db
-	res := g.WithContext(ctx).
-		Model(&model.CustomerSession{}).
-		Where("session_id = ? AND status IN ?", sessionID, []model.SessionStatus{
-			model.SessionStatusResolved, model.SessionStatusClosed,
-		}).
-		Update("status", model.SessionStatusWaiting)
-	if res.Error != nil {
-		return false, res.Error
-	}
-	return res.RowsAffected > 0, nil
+	return s.repo.ReopenSessionOnInbound(ctx, sessionID)
 }
 
 // GetSession 根据 session_id 获取会话（供 controller 层复用，避免直接 db.GetDB）
 func (s *SessionChainService) GetSession(ctx context.Context, sessionID string) (*model.CustomerSession, error) {
-	repo := repository.NewCustomerSessionRepositoryWithDB(s.db)
-	return repo.GetBySessionID(ctx, sessionID)
+	return s.repo.GetSessionBySessionID(ctx, sessionID)
 }
 
 // 支持的事件
@@ -206,14 +184,18 @@ type RuleAction struct {
 
 // RuleEngineService 规则引擎
 type RuleEngineService struct {
-	db     *gorm.DB
+	repo   *repository.AutomationRuleRepository
 	csPlus *CustomerServicePlusService
 	now    func() time.Time
 }
 
 // NewRuleEngineService 构造
 func NewRuleEngineService(gdb *gorm.DB) *RuleEngineService {
-	return &RuleEngineService{db: gdb, csPlus: NewCustomerServicePlusServiceFromGlobal(), now: time.Now}
+	return &RuleEngineService{
+		repo:   repository.NewAutomationRuleRepository(gdb),
+		csPlus: NewCustomerServicePlusServiceFromGlobal(),
+		now:    time.Now,
+	}
 }
 
 // NewRuleEngineServiceFromGlobal 便捷构造
@@ -246,7 +228,7 @@ func (s *RuleEngineService) Create(ctx context.Context, r *model.AutomationRule)
 			return nil, fmt.Errorf("不支持的动作: %s", a.Type)
 		}
 	}
-	if err := s.db.WithContext(ctx).Create(r).Error; err != nil {
+	if err := s.repo.CreateRule(ctx, r); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -254,24 +236,17 @@ func (s *RuleEngineService) Create(ctx context.Context, r *model.AutomationRule)
 
 // List 规则列表
 func (s *RuleEngineService) List(ctx context.Context, event string) ([]*model.AutomationRule, error) {
-	q := s.db.WithContext(ctx).Model(&model.AutomationRule{})
-	if event != "" {
-		q = q.Where("event = ?", event)
-	}
-	var list []*model.AutomationRule
-	err := q.Order("priority ASC, id ASC").Find(&list).Error
-	return list, err
+	return s.repo.ListRules(ctx, event)
 }
 
 // Delete 删除
 func (s *RuleEngineService) Delete(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Delete(&model.AutomationRule{}, id).Error
+	return s.repo.DeleteRule(ctx, id)
 }
 
 // Toggle 启停
 func (s *RuleEngineService) Toggle(ctx context.Context, id uint, enabled bool) error {
-	return s.db.WithContext(ctx).Model(&model.AutomationRule{}).
-		Where("id = ?", id).Update("enabled", enabled).Error
+	return s.repo.ToggleRule(ctx, id, enabled)
 }
 
 // DispatchSessionEvent 会话事件入口（session 落库/迁移点调用）
@@ -295,12 +270,8 @@ func (s *RuleEngineService) Dispatch(ctx context.Context, event, sessionID strin
 
 // DispatchWithText 完整入口（带消息内容）
 func (s *RuleEngineService) DispatchWithText(ctx context.Context, event, sessionID string, inboundText string, session *model.CustomerSession) {
-	g := s.db
-	var rules []*model.AutomationRule
-	if err := g.WithContext(ctx).
-		Where("event = ? AND enabled = ?", event, true).
-		Order("priority ASC, id ASC").Limit(20).
-		Find(&rules).Error; err != nil {
+	rules, err := s.repo.ListEnabledRulesByEvent(ctx, event)
+	if err != nil {
 		return
 	}
 	for _, rule := range rules {
@@ -312,7 +283,7 @@ func (s *RuleEngineService) DispatchWithText(ctx context.Context, event, session
 				RuleID: rule.ID, SessionID: sessionID,
 				ExecuteAt: s.now().Add(time.Duration(rule.DelayMinutes) * time.Minute),
 			}
-			_ = g.WithContext(ctx).Create(pending).Error
+			_ = s.repo.CreatePendingRuleExecution(ctx, pending)
 			continue
 		}
 		s.executeRule(ctx, rule, sessionID, session)
@@ -413,7 +384,6 @@ func (s *RuleEngineService) executeRule(ctx context.Context, rule *model.Automat
 	if json.Unmarshal([]byte(rule.Actions), &acts) != nil {
 		return
 	}
-	g := s.db
 	for _, a := range acts {
 		var err error
 		switch a.Type {
@@ -430,21 +400,17 @@ func (s *RuleEngineService) executeRule(ctx context.Context, rule *model.Automat
 			if !has {
 				tags = append(tags, a.Value)
 				if merged, jm := json.Marshal(tags); jm == nil {
-					err = g.WithContext(ctx).Model(&model.CustomerSession{}).
-						Where("session_id = ?", sessionID).Update("tags", string(merged)).Error
+					err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "tags", string(merged))
 				}
 			}
 		case RuleActSetPriority:
 			lvl := 0
 			fmt.Sscanf(a.Value, "%d", &lvl)
-			err = g.WithContext(ctx).Model(&model.CustomerSession{}).
-				Where("session_id = ?", sessionID).Update("priority", lvl).Error
+			err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "priority", lvl)
 		case RuleActAssign:
-			err = g.WithContext(ctx).Model(&model.CustomerSession{}).
-				Where("session_id = ?", sessionID).Update("agent_id", a.Value).Error
+			err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "agent_id", a.Value)
 		case RuleActClose:
-			err = g.WithContext(ctx).Model(&model.CustomerSession{}).
-				Where("session_id = ?", sessionID).Update("status", model.SessionStatusClosed).Error
+			err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "status", model.SessionStatusClosed)
 		case RuleActSendMessage:
 			now := time.Now()
 			rec := &model.MessageHub{
@@ -461,7 +427,7 @@ func (s *RuleEngineService) executeRule(ctx context.Context, rule *model.Automat
 				TraceID:        "rule",
 				SentAt:         now,
 			}
-			err = g.WithContext(ctx).Create(rec).Error
+			err = s.repo.CreateRuleOutboundMessage(ctx, rec)
 		case RuleActAddNote:
 			m := NewSessionMessageRepository()
 			err = m.Create(ctx, &model.SessionMessage{
@@ -478,37 +444,34 @@ func (s *RuleEngineService) executeRule(ctx context.Context, rule *model.Automat
 			return
 		}
 	}
-	_ = g.WithContext(ctx).Model(rule).UpdateColumn("run_count", gorm.Expr("run_count + 1")).Error
+	_ = s.repo.IncrementRuleRunCount(ctx, rule)
 }
 
 // ProcessPendingRules 延迟规则复核（cron 入口）
 func (s *RuleEngineService) ProcessPendingRules(ctx context.Context) (int, error) {
-	g := s.db
-	var pendings []*model.RulePendingExecution
-	if err := g.WithContext(ctx).
-		Where("status = ? AND execute_at <= ?", "pending", time.Now()).
-		Order("execute_at ASC").Limit(50).Find(&pendings).Error; err != nil {
+	pendings, err := s.repo.ListDuePendingExecutions(ctx, time.Now())
+	if err != nil {
 		return 0, err
 	}
 	done := 0
 	for _, p := range pendings {
-		var rule model.AutomationRule
-		if err := g.WithContext(ctx).First(&rule, p.RuleID).Error; err != nil || !rule.Enabled {
-			_ = g.WithContext(ctx).Model(p).Update("status", "failed").Error
+		rule, err := s.repo.GetRuleByID(ctx, p.RuleID)
+		if err != nil || !rule.Enabled {
+			_ = s.repo.UpdatePendingExecutionStatus(ctx, p.ID, "failed")
 			continue
 		}
-		var sess model.CustomerSession
-		if err := g.WithContext(ctx).Where("session_id = ?", p.SessionID).First(&sess).Error; err != nil {
-			_ = g.WithContext(ctx).Model(p).Update("status", "failed").Error
+		sess, err := s.repo.GetSessionBySessionID(ctx, p.SessionID)
+		if err != nil {
+			_ = s.repo.UpdatePendingExecutionStatus(ctx, p.ID, "failed")
 			continue
 		}
-		if !s.matchConditions(&rule, &sess, "") {
-			_ = g.WithContext(ctx).Model(p).Update("status", "done").Error
+		if !s.matchConditions(rule, sess, "") {
+			_ = s.repo.UpdatePendingExecutionStatus(ctx, p.ID, "done")
 			done++
 			continue
 		}
-		s.executeRule(ctx, &rule, p.SessionID, &sess)
-		_ = g.WithContext(ctx).Model(p).Update("status", "done").Error
+		s.executeRule(ctx, rule, p.SessionID, sess)
+		_ = s.repo.UpdatePendingExecutionStatus(ctx, p.ID, "done")
 		done++
 	}
 	return done, nil

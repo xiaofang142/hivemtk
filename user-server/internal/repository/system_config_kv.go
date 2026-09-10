@@ -14,6 +14,8 @@ import (
 
 // SystemConfigKVRepository KV 配置仓储接口
 type SystemConfigKVRepository interface {
+	// Available 报告底层 DB 是否可用（nil 探测收敛到 repository 层）。
+	Available() bool
 	Get(ctx context.Context, key string) (string, error)
 
 	Upsert(ctx context.Context, key, value string) (string, error)
@@ -28,6 +30,11 @@ type systemConfigKVRepo struct {
 // NewSystemConfigKVRepository 构造
 func NewSystemConfigKVRepository() SystemConfigKVRepository {
 	return &systemConfigKVRepo{db: db.GetDB()}
+}
+
+// Available 报告底层 DB 是否可用。
+func (r *systemConfigKVRepo) Available() bool {
+	return r != nil && r.db != nil
 }
 
 func (r *systemConfigKVRepo) Get(ctx context.Context, key string) (string, error) {

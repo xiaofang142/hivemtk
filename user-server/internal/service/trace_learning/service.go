@@ -11,8 +11,8 @@ import (
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
@@ -28,6 +28,7 @@ func traceLockKey(traceID string) int64 {
 // Service 追踪自学习服务：聚合 trace → LLM 打分 → 调整知识库权重 → 记录审计。
 type Service struct {
 	db         *gorm.DB
+	repo       *repository.TraceLearningRepository
 	dispatcher *llm.Dispatcher
 	cfg        Config
 }
@@ -44,7 +45,7 @@ func New(db *gorm.DB, dispatcher *llm.Dispatcher, cfg Config) *Service {
 			})
 		}
 	}
-	return &Service{db: db, dispatcher: dispatcher, cfg: cfg}
+	return &Service{db: db, repo: repository.NewTraceLearningRepository(db), dispatcher: dispatcher, cfg: cfg}
 }
 
 func (s *Service) EvaluateTrace(ctx context.Context, traceID string, dryRun bool) (*model.TraceEvalLog, error) {
@@ -163,14 +164,14 @@ func (s *Service) persistAttemptedLog(ctx context.Context, db *gorm.DB, traceID 
 		Bad:            false,
 		AdjustedChunks: "[]",
 	}
-	return db.WithContext(ctx).Where("trace_id = ?", traceID).Assign(log).FirstOrCreate(&log).Error
+	return repository.NewTraceLearningRepository(db).UpsertAttemptedEvalLog(ctx, &log)
 }
 
 const runBatchLockKey int64 = 9173001
 
 func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRun bool) (*BatchResult, error) {
 	ctx = ensureCtx(ctx)
-	if s.db == nil {
+	if s.repo == nil || s.repo.GetDB() == nil {
 		return nil, fmt.Errorf("db nil")
 	}
 	if batchSize <= 0 || batchSize > 500 {
@@ -185,7 +186,7 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 	var previewMu sync.Mutex
 	var previewBuf []*model.TraceEvalLog
 
-	connErr := s.db.WithContext(ctx).Connection(func(conn *gorm.DB) error {
+	connErr := s.repo.GetDB().WithContext(ctx).Connection(func(conn *gorm.DB) error {
 		var held bool
 		if e := conn.Raw("SELECT pg_try_advisory_lock(?)", runBatchLockKey).Scan(&held).Error; e != nil {
 			return e
@@ -198,23 +199,8 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 
 		stalled := 0
 		for {
-			sub := conn.WithContext(ctx).Table("message_trace").
-				Select("trace_id").
-				Where("node = ?", tracing.NodeAIDispatch).
-				Where("output::text LIKE ?", `%"`+`reply`+`"%`)
-			if sinceHours > 0 {
-				sub = sub.Where("created_at >= now() - make_interval(hours => ?)", sinceHours)
-			}
-			var traceIDs []string
-			if err := conn.WithContext(ctx).
-				Table("message_trace").
-				Select("trace_id").
-				Where("trace_id IN (?)", sub).
-				Where("trace_id NOT IN (SELECT trace_id FROM trace_eval_log)").
-				Group("trace_id").
-				Order("MAX(id) ASC").
-				Limit(batchSize).
-				Pluck("trace_id", &traceIDs).Error; err != nil {
+			traceIDs, err := repository.NewTraceLearningRepository(conn).ListPendingTraceIDs(ctx, sinceHours, batchSize)
+			if err != nil {
 				return err
 			}
 			if len(traceIDs) == 0 {
@@ -283,11 +269,7 @@ func (s *Service) Logs(ctx context.Context, limit int) ([]model.TraceEvalLog, er
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	var logs []model.TraceEvalLog
-	if err := s.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&logs).Error; err != nil {
-		return nil, err
-	}
-	return logs, nil
+	return s.repo.ListRecentEvalLogs(ctx, limit)
 }
 
 // TopWeights 知识库权重排行（取权重偏离 1.0 最大的 chunk，供前端展示「自学习影响」）。
@@ -296,17 +278,7 @@ func (s *Service) TopWeights(ctx context.Context, limit int) ([]map[string]any, 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	var rows []map[string]any
-	if err := s.db.WithContext(ctx).
-		Table("knowledge_chunks").
-		Select("id, content, weight, hit_count").
-		Where("weight <> 1").
-		Order("abs(weight - 1) DESC").
-		Limit(limit).
-		Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
+	return s.repo.ListTopWeightDeviations(ctx, limit)
 }
 
 var _ = marshalJSON

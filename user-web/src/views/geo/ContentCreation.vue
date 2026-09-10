@@ -125,7 +125,7 @@ import { ref, reactive, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { EditPen, DocumentCopy, DataAnalysis } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
-import http from '@/utils/request'
+import { http } from '@/utils/request'
 
 const models = ref([])
 
@@ -154,7 +154,7 @@ const loadModels = async () => {
       .map(m => ({ label: `${m.name || m.vendor || 'Unknown'}`, value: m.name }))
     models.value = cloud
     if (cloud.length && !form.model) form.model = cloud[0].value
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 onMounted(loadModels)
 

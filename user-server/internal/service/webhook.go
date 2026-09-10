@@ -51,6 +51,7 @@ type WebhookService struct {
 	messageHubRepo *repository.MessageHubRepository
 	inboxConvRepo  *repository.InboxConversationRepository
 	unifiedMsgRepo repository.UnifiedMessageRepository
+	delayedRepo    *repository.DelayedOutboundRepository
 
 	clueRepo repository.ClueRepository
 
@@ -152,6 +153,7 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		messageHubRepo: messageHubRepo,
 		inboxConvRepo:  inboxConvRepo,
 		unifiedMsgRepo: unifiedMsgRepo,
+		delayedRepo:    repository.NewDelayedOutboundRepository(db),
 		ingressSvc:     NewInboxIngressServiceWithDB(db, nil),
 		rlBuckets:      make(map[string]*tokenBucket),
 		workerCount:    webhookEnvInt("WEBHOOK_WORKER_COUNT", WebhookWorkerCount),

@@ -63,7 +63,7 @@ export class ChatSocket {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem(this._storageKey(), String(seq))
       }
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   connect() {
@@ -246,7 +246,7 @@ export class ChatSocket {
     if (this.pendingAcks.size === 0) return
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       if (immediate)
-        {}
+        { /* no-op */ }
       return
     }
     const seqs = Array.from(this.pendingAcks).sort((a, b) => a - b)
@@ -275,7 +275,7 @@ export class ChatSocket {
     this.stopPing()
     this.pingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try { this.ws.send(JSON.stringify({ type: 'ping' })) } catch {}
+        try { this.ws.send(JSON.stringify({ type: 'ping' })) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       }
     }, PING_INTERVAL_MS)
   }
@@ -327,8 +327,8 @@ export class ChatSocket {
         if (this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'close' }))
         }
-      } catch {}
-      try { this.ws.close() } catch {}
+      } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+      try { this.ws.close() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       this.ws = null
     }
   }

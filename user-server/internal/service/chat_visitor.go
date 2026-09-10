@@ -335,6 +335,13 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 		return nil, err
 	}
 
+	// 会话状态守卫：resolved/closed 会话不允许访客继续追加消息（与坐席侧
+	// CustomerSessionService.SendMessage 的领域判断保持同一口径），
+	// 防止会话关闭后旧 session_id/token 仍可写入并意外触发 AI 回复。
+	if !CustomerSessionCanSendMessage(session) {
+		return nil, fmt.Errorf("会话状态 %s 不允许发送消息，请开启新会话", session.Status)
+	}
+
 	channel, err := s.resolveChannel(ctx, req.ChannelID)
 	if err != nil {
 		return nil, err
@@ -702,7 +709,24 @@ func (s *VisitorChatService) RateSession(ctx context.Context, channelID, visitor
 	if rating < 1 || rating > 5 {
 		return errors.New("评分必须在 1-5 之间")
 	}
-	return s.sessionSvc.RateSession(ctx, session.ID, rating, comment)
+	if err := s.sessionSvc.RateSession(ctx, session.ID, rating, comment); err != nil {
+		return err
+	}
+
+	// 回流 CSAT 调查单：会话关闭时 SessionChainService.TriggerCSATOnClose 会自动
+	// 创建 csat_surveys（status=sent），访客在 embed 窗口提交的评分需要同步写回该
+	// 调查单（status→responded），否则管理端 CSAT 看板（只统计 csat_surveys）永远
+	// 读不到 embed 访客评分，调查单停留在 sent 无人闭环。无调查单时静默跳过
+	// （best-effort：访客可能直接评分而未走自动调查流程，此时 customer_sessions.rating
+	// 已落地，不阻断）。
+	csatRepo := repository.NewCSATSurveyRepository()
+	if _, err := csatRepo.SubmitResponse(ctx, session.SessionID, rating, comment); err != nil {
+		logger.Ctx(ctx).Info().
+			Str("session_id", session.SessionID).
+			Int("rating", rating).
+			Msg("[VisitorChat] 无进行中的 CSAT 调查单，评分仅落 customer_sessions.rating")
+	}
+	return nil
 }
 
 func (s *VisitorChatService) countOnlineAgents(ctx context.Context) (int, error) {

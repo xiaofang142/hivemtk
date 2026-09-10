@@ -159,3 +159,15 @@ func (r *TelegramGroupMemberRepository) ListByChat(ctx context.Context, accountI
 	}
 	return members, total, nil
 }
+
+// GetMemberByID 按主键读取成员台账（管理端人工放行兜底用）
+func (r *TelegramGroupMemberRepository) GetMemberByID(ctx context.Context, memberID uint) (*model.TelegramGroupMember, error) {
+	if r == nil || r.db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	var member model.TelegramGroupMember
+	if err := r.db.WithContext(ctx).First(&member, memberID).Error; err != nil {
+		return nil, err
+	}
+	return &member, nil
+}

@@ -95,7 +95,7 @@ export default {
     this.chartInst = safeInit(this.$refs.funnelChart)
     this.loadAll()
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this._destroyed = true
     if (this.chartInst) {
       this.chartInst.dispose()

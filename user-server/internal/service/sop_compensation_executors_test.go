@@ -34,7 +34,7 @@ func TestD03_LLMCompensateClearsKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := &LLMNodeExecutor{db: db}
+	e := &LLMNodeExecutor{execRepo: repository.NewSopExecutionRepository(db)}
 	execCtx := &ExecutionContext{
 		Execution: exec,
 		Node:      &dto.SOPNode{ID: "node1", Type: SOPNodeTypeLLM},

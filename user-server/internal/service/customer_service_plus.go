@@ -40,6 +40,11 @@ type CustomerServicePlusService struct {
 	folderRepo  *repository.QuickReplyFolderRepository
 	agentRepo   *repository.AgentStatusRepository
 
+	opsRepo       *repository.CSPlusOpsRepository
+	savedViewRepo *repository.SavedViewRepository
+	reportSubRepo *repository.ReportSubscriptionRepository
+	emailSvc      *EmailService
+
 	mu    sync.Mutex
 	locks map[string]EditLock
 }
@@ -52,13 +57,17 @@ func NewCustomerServicePlusService(
 	agentRepo *repository.AgentStatusRepository,
 ) *CustomerServicePlusService {
 	return &CustomerServicePlusService{
-		db:          gdb,
-		sessionRepo: sessionRepo,
-		msgRepo:     msgRepo,
-		tagRepo:     repository.NewSessionTagRepository(),
-		folderRepo:  repository.NewQuickReplyFolderRepository(),
-		agentRepo:   agentRepo,
-		locks:       map[string]EditLock{},
+		db:            gdb,
+		sessionRepo:   sessionRepo,
+		msgRepo:       msgRepo,
+		tagRepo:       repository.NewSessionTagRepository(),
+		folderRepo:    repository.NewQuickReplyFolderRepository(),
+		agentRepo:     agentRepo,
+		opsRepo:       repository.NewCSPlusOpsRepository(gdb),
+		savedViewRepo: repository.NewSavedViewRepository(gdb),
+		reportSubRepo: repository.NewReportSubscriptionRepository(gdb),
+		emailSvc:      NewEmailService(gdb),
+		locks:         map[string]EditLock{},
 	}
 }
 
@@ -366,25 +375,12 @@ func (s *CustomerServicePlusService) DLQList(ctx context.Context, limit int) ([]
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	g := s.db
-	var total int64
-	if err := g.WithContext(ctx).Table("message_hub").Where("status = 'failed'").Count(&total).Error; err != nil {
+	total, err := s.opsRepo.CountFailedMessages(ctx)
+	if err != nil {
 		return nil, 0, err
 	}
-	type srcRow struct {
-		ID        uint
-		Platform  string
-		MsgID     string
-		Direction string
-		Content   string
-		Extra     []byte
-		UpdatedAt time.Time
-	}
-	var src []srcRow
-	if err := g.WithContext(ctx).Table("message_hub").
-		Select("id, platform, msg_id, direction, content, extra, sent_at AS updated_at").
-		Where("status = 'failed'").
-		Order("updated_at DESC").Limit(limit).Scan(&src).Error; err != nil {
+	src, err := s.opsRepo.ListFailedMessages(ctx, limit)
+	if err != nil {
 		return nil, 0, err
 	}
 	out := make([]*DLQListRow, 0, len(src))
@@ -409,14 +405,11 @@ func (s *CustomerServicePlusService) DLQList(ctx context.Context, limit int) ([]
 
 // DLQRetryOne 单条重试: failed→pending
 func (s *CustomerServicePlusService) DLQRetryOne(ctx context.Context, id uint) error {
-	g := s.db
-	res := g.WithContext(ctx).Table("message_hub").
-		Where("id = ? AND status = 'failed'", id).
-		Update("status", "pending")
-	if res.Error != nil {
-		return res.Error
+	ok, err := s.opsRepo.RetryFailedMessage(ctx, id)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return fmt.Errorf("记录不存在或非失败状态")
 	}
 	return nil
@@ -424,12 +417,11 @@ func (s *CustomerServicePlusService) DLQRetryOne(ctx context.Context, id uint) e
 
 // DLQDrop 丢弃死信（删除）
 func (s *CustomerServicePlusService) DLQDrop(ctx context.Context, id uint) error {
-	g := s.db
-	res := g.WithContext(ctx).Table("message_hub").Where("id = ? AND status = 'failed'", id).Delete(nil)
-	if res.Error != nil {
-		return res.Error
+	ok, err := s.opsRepo.DropFailedMessage(ctx, id)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return fmt.Errorf("记录不存在或非失败状态")
 	}
 	return nil
@@ -437,12 +429,7 @@ func (s *CustomerServicePlusService) DLQDrop(ctx context.Context, id uint) error
 
 // DLQBatchRetry 批量重试（返回真实重入队数量；上限单批 500 防风暴）
 func (s *CustomerServicePlusService) DLQBatchRetry(ctx context.Context) (int64, error) {
-	g := s.db
-	res := g.WithContext(ctx).Table("message_hub").
-		Where("status = 'failed'").
-		Limit(500).
-		Update("status", "pending")
-	return res.RowsAffected, res.Error
+	return s.opsRepo.BatchRetryFailed(ctx)
 }
 
 // SetSessionPriority 设置会话优先级（0 普通 / 1 低 / 2 高 / 3 紧急）
@@ -450,14 +437,11 @@ func (s *CustomerServicePlusService) SetSessionPriority(ctx context.Context, ses
 	if level < 0 || level > 3 {
 		return fmt.Errorf("优先级取值 0-3")
 	}
-	g := s.db
-	res := g.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("priority", level)
-	if res.Error != nil {
-		return res.Error
+	ok, err := s.opsRepo.UpdateSessionFieldBySessionID(ctx, sessionID, "priority", level)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return fmt.Errorf("会话不存在")
 	}
 	return nil
@@ -469,14 +453,11 @@ func (s *CustomerServicePlusService) SnoozeSession(ctx context.Context, sessionI
 		return time.Time{}, fmt.Errorf("暂缓时长须在 0-720 小时")
 	}
 	until := time.Now().Add(time.Duration(hours * float64(time.Hour)))
-	g := s.db
-	res := g.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("snoozed_until", until)
-	if res.Error != nil {
-		return time.Time{}, res.Error
+	ok, err := s.opsRepo.UpdateSessionFieldBySessionID(ctx, sessionID, "snoozed_until", until)
+	if err != nil {
+		return time.Time{}, err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return time.Time{}, fmt.Errorf("会话不存在")
 	}
 	return until, nil
@@ -484,13 +465,11 @@ func (s *CustomerServicePlusService) SnoozeSession(ctx context.Context, sessionI
 
 // UnsnoozeSession 取消暂缓
 func (s *CustomerServicePlusService) UnsnoozeSession(ctx context.Context, sessionID string) error {
-	res := s.db.WithContext(ctx).Table("customer_sessions").
-		Where("session_id = ?", sessionID).
-		Update("snoozed_until", nil)
-	if res.Error != nil {
-		return res.Error
+	ok, err := s.opsRepo.UpdateSessionFieldBySessionID(ctx, sessionID, "snoozed_until", nil)
+	if err != nil {
+		return err
 	}
-	if res.RowsAffected == 0 {
+	if !ok {
 		return fmt.Errorf("会话不存在")
 	}
 	return nil
@@ -498,10 +477,7 @@ func (s *CustomerServicePlusService) UnsnoozeSession(ctx context.Context, sessio
 
 // RecoverSnoozed cron 到期恢复：snoozed_until 已过 → 置 NULL（返回恢复条数）
 func (s *CustomerServicePlusService) RecoverSnoozed(ctx context.Context) (int64, error) {
-	res := s.db.WithContext(ctx).Table("customer_sessions").
-		Where("snoozed_until IS NOT NULL AND snoozed_until < NOW()").
-		Update("snoozed_until", nil)
-	return res.RowsAffected, res.Error
+	return s.opsRepo.RecoverSnoozed(ctx)
 }
 
 var officeHoursOnce sync.Once

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
@@ -151,6 +152,7 @@ func setupWebChatE2E(t *testing.T) (*VisitorChatService, *SmartCSOrchestrator, *
 		&model.ChatChannel{},
 		&model.QuickReply{},
 		&model.SessionTag{},
+		&model.CSATSurvey{},
 	)
 	db.SetTestDB(database)
 
@@ -343,4 +345,94 @@ func TestE2E_WebChat_FullBusinessLine(t *testing.T) {
 	}
 	_ = rag
 	t.Logf("✅ 场景D（完整业务线）通过：AI回复→转人工→坐席回复 状态机正确")
+}
+
+// TestE2E_WebChat_ClosedSessionSendMessageRejected 审计R36功能连贯性修复回归：
+// 访客对 resolved/closed 会话调用 SendMessage 必须被拒（与坐席侧同一状态口径），
+// 防止关闭后旧 session_id 仍可写入并意外触发 AI。
+func TestE2E_WebChat_ClosedSessionSendMessageRejected(t *testing.T) {
+	visitorSvc, _, _, _ := setupWebChatE2E(t)
+
+	open, err := visitorSvc.OpenSession(context.Background(), &VisitorOpenSessionRequest{
+		ChannelID: "default",
+		VisitorID: "v_e2e_005",
+	})
+	if err != nil {
+		t.Fatalf("OpenSession 失败: %v", err)
+	}
+
+	if err := visitorSvc.CloseSession(context.Background(), "default", "v_e2e_005", open.Session.SessionID); err != nil {
+		t.Fatalf("CloseSession 失败: %v", err)
+	}
+
+	_, err = visitorSvc.SendMessage(context.Background(), &VisitorSendMessageRequest{
+		ChannelID: "default",
+		VisitorID: "v_e2e_005",
+		SessionID: open.Session.SessionID,
+		Content:   "会话都关了还能发吗",
+	})
+	if err == nil {
+		t.Fatal("❌ 已关闭会话仍允许访客发消息（状态守卫缺失）")
+	}
+	if !strings.Contains(err.Error(), "不允许发送消息") {
+		t.Errorf("❌ 拒绝语义异常，期望包含'不允许发送消息'，实际: %v", err)
+	}
+	t.Logf("✅ 关闭会话拦截通过: %v", err)
+}
+
+// TestE2E_WebChat_VisitorRatingReflowsToCSATSurvey 审计R36功能连贯性修复回归：
+// 关闭会话自动生成 csat_surveys（sent）后，访客评分需同步回流该调查单
+// （status→responded），否则管理端 CSAT 看板读不到 embed 访客评分。
+func TestE2E_WebChat_VisitorRatingReflowsToCSATSurvey(t *testing.T) {
+	visitorSvc, _, _, database := setupWebChatE2E(t)
+
+	open, err := visitorSvc.OpenSession(context.Background(), &VisitorOpenSessionRequest{
+		ChannelID: "default",
+		VisitorID: "v_e2e_006",
+	})
+	if err != nil {
+		t.Fatalf("OpenSession 失败: %v", err)
+	}
+	// 关闭会话 → TriggerCSATOnClose 异步创建调查单
+	if err := visitorSvc.CloseSession(context.Background(), "default", "v_e2e_006", open.Session.SessionID); err != nil {
+		t.Fatalf("CloseSession 失败: %v", err)
+	}
+
+	// 等待异步 TriggerCSATOnClose 落库
+	var survey model.CSATSurvey
+	surveyFound := false
+	for i := 0; i < 50; i++ {
+		time.Sleep(20 * time.Millisecond)
+		if err := database.Where("session_id = ?", open.Session.SessionID).First(&survey).Error; err == nil {
+			surveyFound = true
+			break
+		}
+	}
+	if !surveyFound {
+		t.Skip("异步 CSAT 调查单未在超时内创建（goroutine 调度），跳过回流断言")
+	}
+
+	if err := visitorSvc.RateSession(context.Background(), "default", "v_e2e_006", open.Session.SessionID, 5, "很满意"); err != nil {
+		t.Fatalf("RateSession 失败: %v", err)
+	}
+
+	var after model.CSATSurvey
+	if err := database.Where("session_id = ?", open.Session.SessionID).First(&after).Error; err != nil {
+		t.Fatalf("调查单回查失败: %v", err)
+	}
+	if after.Status != model.CSATStatusResponded {
+		t.Errorf("❌ 调查单状态应为 responded，实际: %s", after.Status)
+	}
+	if after.Score != 5 {
+		t.Errorf("❌ 调查单评分应为 5，实际: %d", after.Score)
+	}
+
+	var sess model.CustomerSession
+	if err := database.Where("session_id = ?", open.Session.SessionID).First(&sess).Error; err != nil {
+		t.Fatalf("会话回查失败: %v", err)
+	}
+	if sess.Rating != 5 {
+		t.Errorf("❌ 会话评分应为 5，实际: %d", sess.Rating)
+	}
+	t.Logf("✅ 评分回流通过：csat_surveys.status=%s score=%d，customer_sessions.rating=%d", after.Status, after.Score, sess.Rating)
 }

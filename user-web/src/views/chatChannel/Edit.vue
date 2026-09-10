@@ -182,7 +182,7 @@ const loadCurrentDefaultAgent = async () => {
       form.value.default_agent_id = aid
       initialDefaultAgentId.value = aid
     }
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const syncDefaultAgentBinding = async () => {
@@ -198,7 +198,7 @@ const syncDefaultAgentBinding = async () => {
           await deleteBinding(b.id || b.ID).catch(() => null)
         }
       }
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
   if (cur) {
     await createBinding({

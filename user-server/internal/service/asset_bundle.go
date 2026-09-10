@@ -17,7 +17,6 @@ import (
 
 	"sync"
 
-	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/dto"
@@ -688,11 +687,11 @@ func (c *hotPlugCache) ensureKV() repository.SystemConfigKVRepository {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.kv == nil {
-
-		if _db.GetDB() == nil {
+		kv := repository.NewSystemConfigKVRepository()
+		if !kv.Available() {
 			return nil
 		}
-		c.kv = repository.NewSystemConfigKVRepository()
+		c.kv = kv
 	}
 	return c.kv
 }

@@ -8,7 +8,6 @@ import (
 	rag_core "hivemtk-user/internal/aiagent/rag/core"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 	"strconv"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // SessionAssignmentService 会话分配服务
@@ -342,54 +340,12 @@ func (s *SessionAssignmentService) handleByHuman(ctx context.Context, session *m
 }
 
 func (s *SessionAssignmentService) autoAssignToAgent(ctx context.Context, session *model.CustomerSession, reason string) error {
-	gdb := db.GetDB()
-	if gdb == nil {
-		return errors.New("database not initialized")
-	}
-
-	tx := gdb.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return fmt.Errorf("start transaction: %w", tx.Error)
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-			panic(r)
-		}
-	}()
-
-	var bestAgent model.AgentStatus
-	cutoff := time.Now().Add(-5 * time.Minute)
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("status IN ? AND active_sessions < max_sessions AND last_active_at > ?",
-			[]string{"online", "busy"}, cutoff).
-		Order("active_sessions ASC").
-		Limit(1).
-		First(&bestAgent).Error; err != nil {
-		tx.Rollback()
+	bestAgent, err := s.agentRepo.AutoAssignAgentTx(ctx, s.sessionRepo, session.ID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("无在线客服")
 		}
-		return fmt.Errorf("pick agent: %w", err)
-	}
-
-	txSessionRepo := repository.NewCustomerSessionRepositoryWithDB(tx)
-	if err := txSessionRepo.AssignAgent(ctx, session.ID, bestAgent.AgentID, bestAgent.AgentName); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("assign agent: %w", err)
-	}
-
-	if err := tx.Model(&model.AgentStatus{}).Where("agent_id = ?", bestAgent.AgentID).
-		Updates(map[string]any{
-			"active_sessions": gorm.Expr("active_sessions + 1"),
-			"today_sessions":  gorm.Expr("today_sessions + 1"),
-		}).Error; err != nil {
-		tx.Rollback()
-		return fmt.Errorf("increment agent load: %w", err)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("commit assign: %w", err)
+		return err
 	}
 
 	websocket.NotifyNewSession(strconv.FormatUint(uint64(bestAgent.AgentID), 10), map[string]any{

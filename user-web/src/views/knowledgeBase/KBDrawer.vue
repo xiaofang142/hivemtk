@@ -298,7 +298,7 @@ const loadStats = async () => {
         hit_count: res.hit_count ?? 0
       }
     }
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const loadItemsPreview = async () => {

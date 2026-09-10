@@ -95,7 +95,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
         ElMessage.success(i18n.global.t('会话已创建'))
         reloadSessions()
       }
-    } catch (e) {}
+    } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   const closeSession = async () => {
@@ -168,7 +168,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
   }
   const blacklist = async () => {
     if (!currentSession.value) return
-    let reason = ''
+    let reason;
     try {
       const promptRes = await ElMessageBox.prompt('请输入拉黑原因（选填）', '拉黑访客', {
         type: 'warning',

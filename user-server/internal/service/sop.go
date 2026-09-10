@@ -723,13 +723,9 @@ func (s *SOPService) entryAllowedByPolicy(ctx context.Context, sopID uint, custo
 	if policy.Mode == SOPEntryModeAlways {
 		return true
 	}
-	var last model.SOPExecution
-	err := s.db.WithContext(ctx).
-		Where("sop_id = ? AND customer_id = ?", sopID, customerID).
-		Order("created_at DESC").
-		First(&last).Error
-	if err != nil {
-
+	last, err := s.execRepo.LatestBySOPAndCustomer(ctx, sopID, customerID)
+	if err != nil || last == nil {
+		// 无执行记录或查询失败均放行（与原 ErrRecordNotFound 语义一致）
 		return true
 	}
 	switch policy.Mode {

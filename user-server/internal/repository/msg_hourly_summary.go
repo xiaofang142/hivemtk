@@ -40,6 +40,9 @@ type MessageHubSummaryRepository interface {
 	// LatestUpdate 返回最近一次聚合刷新时间 MAX(updated_at)；表空返回 nil。
 	// 用于 X-8 陈旧判定（hour_bucket 是小时粒度，不能反映聚合任务新鲜度）。
 	LatestUpdate(ctx context.Context) (*time.Time, error)
+	// LoadBatchSince 按水位线分批拉取原始消息（id > since，升序，limit 上限）。
+	// 供聚合服务消费；返回空 slice 表示已无新数据。
+	LoadBatchSince(ctx context.Context, since int64, limit int) ([]model.MessageHub, error)
 }
 
 type msgHourlySummaryRepo struct {
@@ -51,6 +54,9 @@ func NewMessageHubSummaryRepository(db *gorm.DB) MessageHubSummaryRepository {
 }
 
 func (r *msgHourlySummaryRepo) LoadWatermark(ctx context.Context, source string) (int64, error) {
+	if r.db == nil {
+		return 0, gorm.ErrInvalidDB
+	}
 	var wm model.AggregationWatermark
 	err := r.db.WithContext(ctx).
 		Where("source = ?", source).
@@ -76,6 +82,9 @@ const upsertIncrementSQL = `
 		updated_at    = NOW()`
 
 func (r *msgHourlySummaryRepo) UpsertIncrementBatch(ctx context.Context, source string, newWatermark int64, deltas []MsgHourlyDelta) error {
+	if r.db == nil {
+		return gorm.ErrInvalidDB
+	}
 	if len(deltas) == 0 {
 		return r.db.WithContext(ctx).Model(&model.AggregationWatermark{}).
 			Clauses(clause.OnConflict{
@@ -130,4 +139,21 @@ func (r *msgHourlySummaryRepo) LatestUpdate(ctx context.Context) (*time.Time, er
 		Select("MAX(updated_at) AS latest").
 		Scan(&row).Error
 	return row.Latest, err
+}
+
+func (r *msgHourlySummaryRepo) LoadBatchSince(ctx context.Context, since int64, limit int) ([]model.MessageHub, error) {
+	if r.db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	if limit <= 0 {
+		limit = 50000
+	}
+	rows := make([]model.MessageHub, 0, limit)
+	err := r.db.WithContext(ctx).
+		Model(&model.MessageHub{}).
+		Where("id > ?", since).
+		Order("id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
 }

@@ -10,8 +10,8 @@
               <div class="stat-icon stat-icon-blue"><el-icon><Connection /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">总 Pipeline 数</div>
-                <div class="stat-value">{{ stats.total | 0 }}</div>
-                <div class="stat-sub">活跃 {{ stats.active | 0 }} · 暂停 {{ stats.paused | 0 }}</div>
+                <div class="stat-value">{{ stats.total ?? 0 }}</div>
+                <div class="stat-sub">活跃 {{ stats.active ?? 0 }} · 暂停 {{ stats.paused ?? 0 }}</div>
               </div>
             </el-card>
           </el-col>
@@ -20,7 +20,7 @@
               <div class="stat-icon stat-icon-green"><el-icon><VideoPlay /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">{{ $t('运行中') }}</div>
-                <div class="stat-value">{{ stats.active | 0 }}</div>
+                <div class="stat-value">{{ stats.active ?? 0 }}</div>
                 <div class="stat-sub">活跃状态的 Pipeline</div>
               </div>
             </el-card>
@@ -30,7 +30,7 @@
               <div class="stat-icon stat-icon-orange"><el-icon><VideoPause /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">{{ $t('已暂停') }}</div>
-                <div class="stat-value">{{ stats.paused | 0 }}</div>
+                <div class="stat-value">{{ stats.paused ?? 0 }}</div>
                 <div class="stat-sub">已归档 {{ archivedCount }}</div>
               </div>
             </el-card>
@@ -50,8 +50,8 @@
               <div class="stat-icon stat-icon-cyan"><el-icon><List /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">{{ $t('任务总数') }}</div>
-                <div class="stat-value">{{ stats.jobs | 0 }}</div>
-                <div class="stat-sub">待执行 {{ stats.pending | 0 }} · 运行中 {{ stats.running | 0 }}</div>
+                <div class="stat-value">{{ stats.jobs ?? 0 }}</div>
+                <div class="stat-sub">待执行 {{ stats.pending ?? 0 }} · 运行中 {{ stats.running ?? 0 }}</div>
               </div>
             </el-card>
           </el-col>
@@ -60,7 +60,7 @@
               <div class="stat-icon stat-icon-green2"><el-icon><CircleCheck /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">{{ $t('成功数') }}</div>
-                <div class="stat-value">{{ stats.success | 0 }}</div>
+                <div class="stat-value">{{ stats.success ?? 0 }}</div>
                 <div class="stat-sub">成功率 {{ overallSuccessRate }}%</div>
               </div>
             </el-card>
@@ -70,7 +70,7 @@
               <div class="stat-icon stat-icon-red"><el-icon><CircleClose /></el-icon></div>
               <div class="stat-body">
                 <div class="stat-title">{{ $t('失败数') }}</div>
-                <div class="stat-value">{{ stats.failed | 0 }}</div>
+                <div class="stat-value">{{ stats.failed ?? 0 }}</div>
                 <div class="stat-sub">失败率 {{ overallFailureRate }}%</div>
               </div>
             </el-card>
@@ -122,7 +122,7 @@
           <el-table :data="filteredPipelines" v-loading="pipeLoading" stripe>
             <el-table-column prop="name" :label="$t('名称')" min-width="150" show-overflow-tooltip />
             <el-table-column :label="$t('描述')" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.description | '-' }}</template>
+              <template #default="{ row }">{{ row.description ?? '-' }}</template>
             </el-table-column>
             <el-table-column label="渠道" width="110">
               <template #default="{ row }">
@@ -661,7 +661,7 @@ const loadStats = async () => {
   try {
     const res = await reachPipelineApi.getStats()
     stats.value = res || {}
-  } catch (e) {}
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 const archivedCount = computed(() => {
   const total = Number(stats.value.total || 0)

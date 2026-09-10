@@ -560,7 +560,7 @@ const form = reactive(getDefaultForm())
 const rules = {
   agent_code: [
     { required: true, message: i18n.global.t('请输入智能体编码'), trigger: 'blur' },
-    { pattern: /^[a-zA-Z0-9_\-]+$/, message: i18n.global.t('编码仅支持字母、数字、下划线、连字符'), trigger: 'blur' }
+    { pattern: /^[a-zA-Z0-9_-]+$/, message: i18n.global.t('编码仅支持字母、数字、下划线、连字符'), trigger: 'blur' }
   ],
   name: [
     { required: true, message: i18n.global.t('请输入智能体名称'), trigger: 'blur' }

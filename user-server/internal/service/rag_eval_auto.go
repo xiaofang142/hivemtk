@@ -17,22 +17,18 @@ import (
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	dto "hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 
-	"gorm.io/gorm"
 )
 
 // RagEvalAutoService RAG 自动评测服务
 type RagEvalAutoService struct {
-	db   *gorm.DB
 	repo *repository.RagEvalRepository
 }
 
 // NewRagEvalAutoService 创建实例
 func NewRagEvalAutoService() *RagEvalAutoService {
 	return &RagEvalAutoService{
-		db:   db.GetDB(),
 		repo: repository.NewRagEvalRepository(),
 	}
 }
@@ -93,12 +89,8 @@ func (s *RagEvalAutoService) generateQuestions(ctx context.Context, cfg *RagEval
 	questions := make([]*model.RagEvalQuestion, 0, cfg.MaxQuestions)
 
 	var logs []*model.RagQueryLog
-	if err := s.db.WithContext(ctx).
-		Model(&model.RagQueryLog{}).
-		Where("created_at >= ?", time.Now().AddDate(0, 0, -30)).
-		Order("created_at DESC").
-		Limit(cfg.MaxQuestions * 3).
-		Find(&logs).Error; err != nil {
+	logs, logErr := s.repo.ListRecentQueryLogs(ctx, time.Now().AddDate(0, 0, -30), cfg.MaxQuestions*3)
+	if logErr != nil {
 		logs = nil
 	}
 
@@ -121,13 +113,9 @@ func (s *RagEvalAutoService) generateQuestions(ctx context.Context, cfg *RagEval
 	}
 
 	if len(questions) < cfg.MaxQuestions {
-		var docs []*model.KBDocument
-		if err := s.db.WithContext(ctx).
-			Model(&model.KBDocument{}).
-			Where("status = ?", model.KBDocumentStatusIndexed).
-			Limit(cfg.MaxQuestions - len(questions)).
-			Find(&docs).Error; err != nil {
-			return nil, fmt.Errorf("RAG_EVAL_004: 查询知识库文档失败: %w", err)
+		docs, docErr := s.repo.ListIndexedDocuments(ctx, cfg.MaxQuestions-len(questions))
+		if docErr != nil {
+			return nil, fmt.Errorf("RAG_EVAL_004: 查询知识库文档失败: %w", docErr)
 		}
 		for _, doc := range docs {
 			if len(questions) >= cfg.MaxQuestions {

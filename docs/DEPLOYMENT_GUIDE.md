@@ -127,7 +127,7 @@ POSTGRES_PASSWORD=
 REDIS_PASSWORD=
 JWT_SECRET=               # ≥32 字符，不足启动时直接 panic
 FIELD_ENCRYPTION_KEY=     # ≥32 字符
-MERCHANT_HMAC_SECRET=     # ≥32 字符
+MERCHANT_API_SECRET=      # ≥32 字符
 PLATFORM_LICENSE_SECRET=
 PLATFORM_ADMIN_PASSWORD=
 ```
@@ -196,7 +196,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `REDIS_PASSWORD` | 强密码 | mtk-redis 容器拒绝启动 |
 | `JWT_SECRET` | ≥32 字符 | user-server 启动 panic（测试专用短密钥仅在 test 模式放行） |
 | `FIELD_ENCRYPTION_KEY` | ≥32 字符 | 加密字段功能不可用；**轮换会使既有加密数据失效** |
-| `MERCHANT_HMAC_SECRET` | ≥32 字符 | merchant-api 签名鉴权失败 |
+| `MERCHANT_API_SECRET` | ≥32 字符 | merchant-api 签名鉴权失败（user-server 经 config/platform.yaml `secret: "${MERCHANT_API_SECRET}"` 消费） |
 | `DB_HOST` / `DB_PORT` | 默认 `127.0.0.1:8202` | 连不上库直接启动失败 |
 
 ### 6.2 按需设置

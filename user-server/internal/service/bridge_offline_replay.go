@@ -2,27 +2,27 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
 
 type BridgeOfflineReplayService struct {
-	db *gorm.DB
+	repo *repository.BridgeOfflineReplayRepository
 }
 
 // NewBridgeOfflineReplayService 创建离线回扫服务
 func NewBridgeOfflineReplayService() *BridgeOfflineReplayService {
-	return &BridgeOfflineReplayService{db: db.GetDB()}
+	return &BridgeOfflineReplayService{repo: repository.NewBridgeOfflineReplayRepository(db.GetDB())}
 }
 
 // NewBridgeOfflineReplayServiceWithDB 注入 DB（测试用）
 func (s *BridgeOfflineReplayService) WithDB(d *gorm.DB) *BridgeOfflineReplayService {
-	s.db = d
+	s.repo = repository.NewBridgeOfflineReplayRepository(d)
 	return s
 }
 
@@ -49,36 +49,17 @@ type ReplayStats struct {
 // 判定规则：bridge_metrics 中最近 10 分钟内无新消息到达 → 视为离线
 // （同时 fallback 到 bridge_accounts 中 status != "online" 的渠道）
 func (s *BridgeOfflineReplayService) DetectOfflineChannels(ctx context.Context) ([]OfflineChannel, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, nil
 	}
 
-	type channelStat struct {
-		Platform  string    `gorm:"column:platform"`
-		AccountID string    `gorm:"column:account_id"`
-		LastSeen  time.Time `gorm:"column:last_seen"`
-	}
-	var stats []channelStat
-	err := s.db.WithContext(ctx).
-		Table("bridge_metrics").
-		Select("platform, account_id, MAX(updated_at) as last_seen").
-		Group("platform, account_id").
-		Scan(&stats).Error
+	stats, err := s.repo.GroupBridgeMetricsLastSeen(ctx)
 	if err != nil {
 
 		logger.Warnf("[BridgeReplay] bridge_metrics 查询失败，fallback bridge_accounts: %v", err)
-		type accOffline struct {
-			Platform  string    `gorm:"column:platform"`
-			AccountID string    `gorm:"column:account_id"`
-			UpdatedAt time.Time `gorm:"column:updated_at"`
-		}
-		var accs []accOffline
-		if err2 := s.db.WithContext(ctx).
-			Table("bridge_accounts").
-			Select("platform, account_id, updated_at").
-			Where("status != ?", "online").
-			Scan(&accs).Error; err2 != nil {
-			return nil, fmt.Errorf("detect offline channels: %w", err2)
+		accs, err2 := s.repo.ListNonOnlineBridgeAccounts(ctx)
+		if err2 != nil {
+			return nil, err2
 		}
 		now := time.Now()
 		out := make([]OfflineChannel, 0, len(accs))
@@ -113,48 +94,25 @@ func (s *BridgeOfflineReplayService) DetectOfflineChannels(ctx context.Context) 
 // 从 reach_delayed_outbound 取 status="pending" 的消息，
 // 重新投送到 DeliverBridgeOutbound 出站管道，然后标记为 replayed。
 func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, platform, accountID string, limit int) (replayed, failed int64) {
-	if s.db == nil {
+	if s.repo == nil {
 		return 0, 0
 	}
-	type delayedMsg struct {
-		ID             uint64 `gorm:"column:id"`
-		ConversationID string `gorm:"column:conversation_id"`
-		SenderID       string `gorm:"column:sender_id"`
-		ReceiverID     string `gorm:"column:receiver_id"`
-		MsgType        string `gorm:"column:msg_type"`
-		Content        string `gorm:"column:content"`
-		EventID        string `gorm:"column:event_id"`
-		RetryCount     int    `gorm:"column:retry_count"`
-	}
-	var msgs []delayedMsg
-	q := s.db.WithContext(ctx).
-		Table("reach_delayed_outbound").
-		Where("platform = ? AND account_id = ? AND status = ?", platform, accountID, "pending").
-		Order("send_at ASC")
-	if limit > 0 {
-		q = q.Limit(limit)
-	}
-	if err := q.Scan(&msgs).Error; err != nil {
+	msgs, err := s.repo.ListPendingDelayedOutbound(ctx, platform, accountID, limit)
+	if err != nil {
 		logger.Warnf("[BridgeReplay] 查询 reach_delayed_outbound 失败: %v", err)
 		return 0, 0
 	}
 	for _, m := range msgs {
 
-		err := DeliverBridgeOutbound(ctx, platform, accountID, m.ConversationID, m.MsgType, m.Content, m.EventID)
+		err := DeliverBridgeOutbound(ctx, m.Platform, m.AccountID, m.ConversationID, m.MsgType, m.Content, m.EventID)
 		if err != nil {
 			failed++
 			logger.Warnf("[BridgeReplay] 重放失败 id=%d err=%v", m.ID, err)
-			_ = s.db.WithContext(ctx).Exec(
-				"UPDATE reach_delayed_outbound SET retry_count = retry_count + 1, last_error = ?, status = ? WHERE id = ?",
-				err.Error(), "replay_failed", m.ID,
-			).Error
+			_ = s.repo.MarkDelayedOutboundReplayFailed(ctx, m.ID, err.Error())
 			continue
 		}
 		replayed++
-		_ = s.db.WithContext(ctx).Exec(
-			"UPDATE reach_delayed_outbound SET status = ?, replayed_at = NOW(), retry_count = retry_count + 1 WHERE id = ?",
-			"replayed", m.ID,
-		).Error
+		_ = s.repo.MarkDelayedOutboundReplayed(ctx, m.ID)
 	}
 	return replayed, failed
 }

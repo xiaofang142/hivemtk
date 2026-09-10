@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
@@ -27,36 +28,35 @@ type HandoffRule struct {
 }
 
 type HandoffChainService struct {
-	db *gorm.DB
+	repo *repository.HandoffChainRepository
 }
 
 // NewHandoffChainService 创建转派链服务
 func NewHandoffChainService() *HandoffChainService {
-	return &HandoffChainService{db: db.GetDB()}
+	return &HandoffChainService{repo: repository.NewHandoffChainRepository(db.GetDB())}
 }
 
 // NewHandoffChainServiceWithDB 注入 DB（测试用）
 func (s *HandoffChainService) WithDB(d *gorm.DB) *HandoffChainService {
-	s.db = d
+	s.repo = repository.NewHandoffChainRepository(d)
 	return s
 }
 
-// LoadRules 从 system_config_kv 加载规则
+// LoadRules 从 system_config_kv 加载规则（经 repository 收口）
 func (s *HandoffChainService) LoadRules(ctx context.Context) ([]HandoffRule, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return defaultHandoffRules(), nil
 	}
-	var kv model.SystemConfigKV
 
-	err := s.db.WithContext(ctx).Where("key = ?", "handoff_rules").First(&kv).Error
+	raw, err := s.repo.GetHandoffRules(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return defaultHandoffRules(), nil
-		}
 		return nil, fmt.Errorf("load handoff_rules: %w", err)
 	}
+	if raw == "" {
+		return defaultHandoffRules(), nil
+	}
 	var rules []HandoffRule
-	if err := json.Unmarshal([]byte(kv.Value), &rules); err != nil {
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
 		logger.Warnf("[HandoffChain] 解析 handoff_rules JSON 失败，使用默认规则: %v", err)
 		return defaultHandoffRules(), nil
 	}
@@ -78,14 +78,11 @@ func (s *HandoffChainService) SaveRules(ctx context.Context, rules []HandoffRule
 	if err != nil {
 		return fmt.Errorf("marshal rules: %w", err)
 	}
-	if s.db == nil {
+	if s.repo == nil {
 		return fmt.Errorf("db 未初始化")
 	}
-	kv := model.SystemConfigKV{
-		Key:   "handoff_rules",
-		Value: string(data),
-	}
-	return s.db.WithContext(ctx).Save(&kv).Error
+	_, err = s.repo.SaveHandoffRules(ctx, string(data))
+	return err
 }
 
 // CheckRules 对指定会话执行规则链检查
@@ -99,25 +96,28 @@ func (s *HandoffChainService) CheckRules(ctx context.Context, sessionID string) 
 	if len(rules) == 0 {
 		return nil, nil
 	}
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, nil
 	}
 
-	type sessSnapshot struct {
+	sessRow, err := s.repo.GetHandoffSessionSnapshot(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("查询会话: %w", err)
+	}
+	sess := struct {
 		ID              string     `gorm:"column:id"`
 		Status          string     `gorm:"column:status"`
 		CreatedAt       time.Time  `gorm:"column:created_at"`
 		ResolvedAt      *time.Time `gorm:"column:updated_at"`
 		CsatScore       *int       `gorm:"column:rating"`
 		AssignedAgentID *uint      `gorm:"column:agent_id"`
-	}
-	var sess sessSnapshot
-	if err := s.db.WithContext(ctx).
-		Table("customer_sessions").
-		Select("id, status, created_at, updated_at, rating, agent_id").
-		Where("id = ?", sessionID).
-		Scan(&sess).Error; err != nil {
-		return nil, fmt.Errorf("查询会话: %w", err)
+	}{
+		ID:              sessRow.ID,
+		Status:          sessRow.Status,
+		CreatedAt:       sessRow.CreatedAt,
+		ResolvedAt:      sessRow.ResolvedAt,
+		CsatScore:       sessRow.CsatScore,
+		AssignedAgentID: sessRow.AssignedAgentID,
 	}
 
 	now := time.Now()
@@ -142,31 +142,22 @@ func (s *HandoffChainService) CheckRules(ctx context.Context, sessionID string) 
 // RunCron 扫描全量未解决会话并执行规则链
 // 供 cron 定期调用（建议每 5 分钟）
 func (s *HandoffChainService) RunCron(ctx context.Context, limit int) (int, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return 0, nil
 	}
 	if limit <= 0 {
 		limit = 200
 	}
 
-	type sessRow struct {
-		ID string `gorm:"column:id"`
-	}
-	var rows []sessRow
-	if err := s.db.WithContext(ctx).
-		Table("customer_sessions").
-		Select("id").
-		Where("status NOT IN ?", []string{"resolved", "closed"}).
-		Order("created_at ASC").
-		Limit(limit).
-		Scan(&rows).Error; err != nil {
+	rows, err := s.repo.ListUnresolvedSessionIDs(ctx, limit)
+	if err != nil {
 		return 0, err
 	}
 	triggeredTotal := 0
-	for _, row := range rows {
-		tr, err := s.CheckRules(ctx, row.ID)
+	for _, rowID := range rows {
+		tr, err := s.CheckRules(ctx, rowID)
 		if err != nil {
-			logger.Warnf("[HandoffChain] CheckRules session=%s 失败: %v", row.ID, err)
+			logger.Warnf("[HandoffChain] CheckRules session=%s 失败: %v", rowID, err)
 			continue
 		}
 		triggeredTotal += len(tr)
@@ -208,22 +199,17 @@ func (s *HandoffChainService) matchRule(rule HandoffRule, sess struct {
 
 func (s *HandoffChainService) applyRule(ctx context.Context, rule HandoffRule, sessionID string) error {
 
-	if s.db != nil {
-		record := model.HandoffDecisionRecord{
-			DecisionID:   rule.ID + "_" + sessionID,
-			SessionID:    sessionID,
-			Reason:       rule.Action + "_by_rule:" + rule.ID,
-			ReasonDetail: rule.Description,
-			IntentType:   rule.TargetRole,
-		}
-		_ = s.db.WithContext(ctx).Create(&record).Error
+	record := model.HandoffDecisionRecord{
+		DecisionID:   rule.ID + "_" + sessionID,
+		SessionID:    sessionID,
+		Reason:       rule.Action + "_by_rule:" + rule.ID,
+		ReasonDetail: rule.Description,
+		IntentType:   rule.TargetRole,
 	}
+	_ = s.repo.CreateHandoffDecisionRecord(ctx, &record)
 
-	if s.db != nil && rule.Action == "escalate" {
-		_ = s.db.WithContext(ctx).
-			Table("customer_sessions").
-			Where("id = ?", sessionID).
-			Update("status", "escalated").Error
+	if rule.Action == "escalate" {
+		_ = s.repo.EscalateSession(ctx, sessionID)
 	}
 	return nil
 }

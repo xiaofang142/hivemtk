@@ -17,7 +17,7 @@ const createRequestInstance = () => {
         const cfg = JSON.parse(configStr)
         apiBaseUrl = cfg.baseUrl || apiBaseUrl
       }
-    } catch (e) {}
+    } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
   return axios.create({
     baseURL: apiBaseUrl,
@@ -119,7 +119,7 @@ const addInterceptors = () => {
           if (parsed && typeof parsed === 'object') {
             body = parsed
           }
-        } catch {}
+        } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       }
       if (!isJsonResponse(response) && typeof body !== 'object') {
         if (import.meta.env?.DEV) {

@@ -299,14 +299,14 @@ const loadWorkflows = async () => {
   try {
     const data = await listWorkflows()
     workflows.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 const loadExecutions = async () => {
   execLoading.value = true
   try {
     const data = await listWorkflowExecutions(currentWorkflow.value?.id)
     executions.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
-  } catch {}
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   execLoading.value = false
 }
 

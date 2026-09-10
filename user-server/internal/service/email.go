@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -43,21 +44,42 @@ func (EmailAccount) TableName() string { return "email_accounts" }
 
 // EmailService 邮件发送服务（基于 SMTP，纯协议层，不依赖第三方 SaaS）
 type EmailService struct {
-	db  *gorm.DB
-	hub *MessageHubService
+	accRepo *repository.EmailAccountRepository
+	hub     *MessageHubService
 }
 
 // NewEmailService 创建邮件服务
 func NewEmailService(db *gorm.DB) *EmailService {
 	return &EmailService{
-		db:  db,
-		hub: NewMessageHubServiceWithDB(db, nil),
+		accRepo: repository.NewEmailAccountRepository(db),
+		hub:     NewMessageHubServiceWithDB(db, nil),
 	}
 }
 
 // NewEmailServiceAuto 创建邮件服务（自动从全局 DB 获取连接，用于 controller 层解耦）
 func NewEmailServiceAuto() *EmailService {
 	return NewEmailService(_db.GetDB())
+}
+
+// emailAccountFromRow repo 行模型 → service 账号模型（字段一一对应）
+func emailAccountFromRow(r *repository.EmailAccountRow) *EmailAccount {
+	if r == nil {
+		return nil
+	}
+	return &EmailAccount{
+		ID:         r.ID,
+		Name:       r.Name,
+		Host:       r.Host,
+		Port:       r.Port,
+		Username:   r.Username,
+		Password:   r.Password,
+		FromAddr:   r.FromAddr,
+		FromName:   r.FromName,
+		UseSSL:     r.UseSSL,
+		DailyQuota: r.DailyQuota,
+		DailyUsed:  r.DailyUsed,
+		Status:     r.Status,
+	}
 }
 
 // Send 发送邮件（通过指定 accountID 或默认账号）
@@ -70,26 +92,23 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 	}
 
 	var acc *EmailAccount
-	if s.db != nil {
+	if s.accRepo != nil {
 		if accountID > 0 {
-			if err := s.db.WithContext(ctx).First(&acc, accountID).Error; err != nil {
+			row, err := s.accRepo.GetByID(ctx, accountID)
+			if err != nil {
 				return "", fmt.Errorf("email account not found: %w", err)
 			}
-			if acc != nil && acc.ID > 0 && acc.DailyUsed >= acc.DailyQuota {
+			acc = emailAccountFromRow(row)
+			if acc.ID > 0 && acc.DailyUsed >= acc.DailyQuota {
 				return "", errors.New("email account quota exceeded")
 			}
 		} else {
 
-			var candidates []EmailAccount
-			if err := s.db.WithContext(ctx).
-				Where("status = ? AND daily_used < daily_quota", "active").
-				Order("daily_used ASC").
-				Find(&candidates).Error; err != nil || len(candidates) == 0 {
-
+			candidates, err := s.accRepo.ListActiveBelowQuota(ctx)
+			if err != nil || len(candidates) == 0 {
 				acc = emailFromEnv()
 			} else {
-				chosen := candidates[0]
-				acc = &chosen
+				acc = emailAccountFromRow(&candidates[0])
 			}
 		}
 	}
@@ -105,9 +124,9 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 		return "", fmt.Errorf("smtp send: %w", err)
 	}
 
-	if s.db != nil && acc.ID > 0 {
+	if s.accRepo != nil && acc.ID > 0 {
 		// 配额计数自增失败不阻断发信，但必须留痕：静默漂移会导致超额发送
-		if err := s.db.WithContext(ctx).Model(acc).UpdateColumn("daily_used", gorm.Expr("daily_used + 1")).Error; err != nil {
+		if err := s.accRepo.IncDailyUsed(ctx, acc.ID); err != nil {
 			logger.Warnf("[email] daily_used 自增失败 account=%d（配额计数漂移）: %v", acc.ID, err)
 		}
 	}

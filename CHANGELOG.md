@@ -7,6 +7,24 @@
 
 ## [未发布] - 2026-Q3
 
+### 新增 (Added)
+
+#### 永动审计循环 R1–R22 (2026-09-08/09，12 角度循环第一圈收官 + 第二圈进行中)
+- 机制：`scripts/audit-loop/`（PLAN.md 12 角度手册 + state.json 机器状态 + STATE.md 报告），ZCode 自动化每 30 分钟一轮，发现问题当轮修复、每轮提交推送
+- **R1 security**：删除 email_tracking/email_unsubscribe 死代码默认 HMAC 密钥常量
+- **R2 authz**：访客 WebSocket 无 token 连接 fail-closed 语义固化（防凭 session_id 冒连他人会话）
+- **R3 architecture**：命名违规 12 处清零（5 个 manage 控制器并入同域文件 + 7 个去冗余后缀）、debug_routes 响应协议归一、rag_product 服务 Repository 化（9 处直连 DB）
+- **R4 error-handling**：wecom RefreshAccount 忽略错误回查修复、前端补全局 errorHandler/unhandledrejection 兜底
+- **R5 concurrency**：channelMediaFollowers 包级 map 并发读写补 RWMutex（三渠道媒体转存并发读）
+- **R6 data-integrity**：0 缺陷轮（事务覆盖/唯一约束/金额存储/恢复原子性/迁移幂等全部核查通过）
+- **R7 api-contract**：cmd/seed 缺命令入口致 go build 失败，补 main.go（Seeder 框架 + helpers）；前后端契约对照 831 调用 0 UNMATCHED
+- **R8 frontend**：eslint 工具链启用收尾，src errors 163 → 0（含 2 个真逻辑 bug：computed 漏 .value、意图过滤缺 ||）
+- **R9 perf**：ai_tool/role 列表页 N+1 批量化（IN 查询/GROUP BY），ExternalCustomer 补复合索引
+- **R10 test-coverage**：channelbot/core 补测 0→3 用例；全包 go test 零失败
+- **R11 config-deploy**：商户签名密钥键名统一 MERCHANT_API_SECRET（文档侧与代码不一致会致启动报错）
+- **R12 docs-consistency**（第一圈收官）：修复 marketing-features README 失效相对路径引用，check-doc-consistency.sh 唯一 error 清零；CHANGELOG 补录审计循环机制
+- **第二圈 R13–R22**（security/authz/architecture/error-handling/concurrency/data-integrity/api-contract/frontend/perf/test-coverage）：连续十个 0 缺陷轮——第一圈 15 项修复全部回归在位，N+1 候选 31→27（R9 修复直接效果），契约复跑 0/831 UNMATCHED，eslint errors 保持 0，vitest 174 用例全过
+
 ### 安全 (Security)
 
 #### 用户端质量飞轮 (2026-08-17 多角度轰炸测试 + 修复)

@@ -31,12 +31,17 @@ func (s *AIToolConfigService) ListTools(ctx context.Context, category string, en
 		return nil, err
 	}
 
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.ToolName)
+	}
+	bindingsByTool, _ := s.bindingRepo.ListByTools(ctx, names)
+
 	result := make([]model.AIToolWithBinding, 0, len(tools))
 	for _, tool := range tools {
-		bindings, _ := s.bindingRepo.ListByTool(ctx, tool.ToolName)
 		result = append(result, model.AIToolWithBinding{
 			AIToolConfig:  tool,
-			BoundAccounts: bindings,
+			BoundAccounts: bindingsByTool[tool.ToolName],
 		})
 	}
 

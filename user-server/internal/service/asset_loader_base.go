@@ -1,34 +1,27 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
+
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
 
+// assetLoaderRepo 五个 Loader 共用的资产读取仓储（构造期注入，L4 不直连 DB）
+var assetLoaderRepo *repository.AssetLoaderRepository
+
+// BindAssetLoaderRepository 装配期注入资产读取仓储（main/router 调用一次）
+func BindAssetLoaderRepository(db *gorm.DB) {
+	assetLoaderRepo = repository.NewAssetLoaderRepository(db)
+}
+
 // LoadAssetFromDB 通用 DB 加载（优先 local_assets）
 func LoadAssetFromDB(db *gorm.DB, assetType, assetID string) ([]byte, bool) {
-	if db == nil {
-		return nil, false
-	}
-	var row struct {
-		Data json.RawMessage
-	}
-	err := db.Table("local_assets la").
-		Joins("JOIN local_asset_data lad ON lad.local_asset_id = la.id").
-		Where("la.asset_id = ? AND la.asset_type = ? AND la.is_active = ? AND la.deleted_at IS NULL", assetID, assetType, true).
-		Select("lad.data").
-		Scan(&row).Error
-	if err != nil {
-		slog.Warn("Loader DB error, fallback to default",
-			"asset_type", assetType, "asset_id", assetID, "error", err.Error())
-		return nil, false
-	}
-	if len(row.Data) == 0 {
-		return nil, false
-	}
-	return row.Data, true
+	repo := repository.NewAssetLoaderRepository(db)
+	return repo.LoadAssetData(context.Background(), assetType, assetID)
 }
 
 // ListAssetsFromDB 按类型列出激活资产
@@ -37,18 +30,22 @@ func ListAssetsFromDB(db *gorm.DB, assetType string) ([]struct {
 	Name    string
 	Data    json.RawMessage
 }, error) {
-	var rows []struct {
+	repo := repository.NewAssetLoaderRepository(db)
+	rows, err := repo.ListActiveAssetsByType(context.Background(), assetType)
+	out := make([]struct {
 		AssetID string
 		Name    string
 		Data    json.RawMessage
+	}, len(rows))
+	for i, r := range rows {
+		out[i] = struct {
+			AssetID string
+			Name    string
+			Data    json.RawMessage
+		}{AssetID: r.AssetID, Name: r.Name, Data: r.Data}
 	}
-	if db == nil {
-		return rows, nil
+	if err != nil {
+		slog.Warn("ListAssetsFromDB error", "asset_type", assetType, "error", err.Error())
 	}
-	err := db.Table("local_assets la").
-		Joins("JOIN local_asset_data lad ON lad.local_asset_id = la.id").
-		Where("la.asset_type = ? AND la.is_active = ? AND la.deleted_at IS NULL", assetType, true).
-		Select("la.asset_id, la.name, lad.data").
-		Scan(&rows).Error
-	return rows, err
+	return out, err
 }

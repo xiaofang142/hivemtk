@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 
@@ -33,7 +32,7 @@ func NewBackupGapService(gdb *gorm.DB) *BackupGapService {
 }
 
 // NewBackupGapServiceFromGlobal 便捷构造
-func NewBackupGapServiceFromGlobal() *BackupGapService { return NewBackupGapService(db.GetDB()) }
+func NewBackupGapServiceFromGlobal() *BackupGapService { return NewBackupGapService(repository.GetDB()) }
 
 // BackupStatsRow backup 页统计契约
 type BackupStatsRow struct {
@@ -137,17 +136,18 @@ func (s *BackupGapService) nextRunTime(st BackupStrategy) time.Time {
 // RagEvalGapService RAG 评测服务（诚实口径：Recall@5 = 检索 top5 文本含答案关键词的比例；MRR/NDCG 按同口径排序）
 type RagEvalGapService struct {
 	db       *gorm.DB
+	evalRepo *repository.RagEvalRepository
 	searchFn func(ctx context.Context, productID, query string) ([]string, error)
 }
 
 // NewRagEvalGapService 构造（searchFn: 复用既有 RagSearcher 混合检索，由装配处注入）
 func NewRagEvalGapService(gdb *gorm.DB, searchFn func(ctx context.Context, productID, query string) ([]string, error)) *RagEvalGapService {
-	return &RagEvalGapService{db: gdb, searchFn: searchFn}
+	return &RagEvalGapService{db: gdb, evalRepo: repository.NewRagEvalRepositoryWithDB(gdb), searchFn: searchFn}
 }
 
 // NewRagEvalGapServiceFromGlobal 便捷构造
 func NewRagEvalGapServiceFromGlobal(searchFn func(ctx context.Context, productID, query string) ([]string, error)) *RagEvalGapService {
-	return NewRagEvalGapService(db.GetDB(), searchFn)
+	return NewRagEvalGapService(repository.GetDB(), searchFn)
 }
 
 func (s *RagEvalGapService) searchTop5(ctx context.Context, productID, question string) ([]string, error) {
@@ -309,14 +309,7 @@ func answerKeywords(ans string) []string {
 
 // Latest 最新一次 run
 func (s *RagEvalGapService) Latest(ctx context.Context) (*model.RagEvalRun, error) {
-	var run model.RagEvalRun
-	if err := s.db.WithContext(ctx).Order("id DESC").First(&run).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return &model.RagEvalRun{}, nil
-		}
-		return nil, err
-	}
-	return &run, nil
+	return s.evalRepo.LatestRun(ctx)
 }
 
 // Runs 历史
@@ -324,15 +317,13 @@ func (s *RagEvalGapService) Runs(ctx context.Context, limit int) ([]*model.RagEv
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	var runs []*model.RagEvalRun
-	err := s.db.WithContext(ctx).Order("id DESC").Limit(limit).Find(&runs).Error
-	return runs, err
+	return s.evalRepo.ListRunsDesc(ctx, limit)
 }
 
 // Diff 与基线对比
 func (s *RagEvalGapService) Diff(ctx context.Context, baselineID uint) (map[string]any, error) {
-	var base model.RagEvalRun
-	if err := s.db.WithContext(ctx).First(&base, baselineID).Error; err != nil {
+	base, err := s.evalRepo.GetRunRaw(ctx, baselineID)
+	if err != nil {
 		return nil, err
 	}
 	latest, _ := s.Latest(ctx)
@@ -356,7 +347,7 @@ type CohortGapService struct {
 func NewCohortGapService(gdb *gorm.DB) *CohortGapService { return &CohortGapService{db: gdb} }
 
 // NewCohortGapServiceFromGlobal 便捷构造
-func NewCohortGapServiceFromGlobal() *CohortGapService { return NewCohortGapService(db.GetDB()) }
+func NewCohortGapServiceFromGlobal() *CohortGapService { return NewCohortGapService(repository.GetDB()) }
 
 // CohortResult 周留存矩阵
 type CohortResult struct {
@@ -514,7 +505,7 @@ type EmailGapService struct {
 func NewEmailGapService(gdb *gorm.DB) *EmailGapService { return &EmailGapService{db: gdb} }
 
 // NewEmailGapServiceFromGlobal 便捷构造
-func NewEmailGapServiceFromGlobal() *EmailGapService { return NewEmailGapService(db.GetDB()) }
+func NewEmailGapServiceFromGlobal() *EmailGapService { return NewEmailGapService(repository.GetDB()) }
 
 // DeliverabilityStats 页面顶部指标
 type DeliverabilityStats struct {

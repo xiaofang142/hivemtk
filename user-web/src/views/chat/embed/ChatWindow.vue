@@ -282,7 +282,7 @@ const connectWebSocket = () => {
           created_at: new Date().toISOString()
         })
         offlineBannerCount.value = list.length
-        try { socket && socket.ackDelivered(list.map(m => m.id)) } catch {}
+        try { socket && socket.ackDelivered(list.map(m => m.id)) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       }
     },
     onAITyping: (payload) => {
@@ -400,7 +400,7 @@ const onClose = async () => {
   if (sessionId.value) {
     try {
       await chatApi.closeSession(sessionId.value, effectiveChannelId.value, visitorId.value)
-    } catch {}
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
   emit('close')
 }

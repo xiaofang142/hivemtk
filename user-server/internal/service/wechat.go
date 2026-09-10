@@ -16,6 +16,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
@@ -28,7 +29,7 @@ import (
 //   - 客服消息发送（AccessToken 自动管理）
 //   - 账号管理
 type WechatService struct {
-	db           *gorm.DB
+	repo         *repository.WechatAccountRepository
 	mu           sync.RWMutex
 	tokenClients map[uint]*wechatTokenClient
 }
@@ -44,81 +45,57 @@ type wechatTokenClient struct {
 // NewWechatService 创建微信公众号服务
 func NewWechatService(db *gorm.DB) *WechatService {
 	return &WechatService{
-		db:           db,
+		repo:         repository.NewWechatAccountRepository(db),
 		tokenClients: make(map[uint]*wechatTokenClient),
 	}
 }
 
 // ListAccounts 列出所有公众号账号
 func (s *WechatService) ListAccounts(ctx context.Context) ([]model.WechatAccount, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, fmt.Errorf("wechat: db not initialized")
 	}
-	var accounts []model.WechatAccount
-	if err := s.db.WithContext(ctx).Order("id ASC").Find(&accounts).Error; err != nil {
-		return nil, err
-	}
-	return accounts, nil
+	return s.repo.List(ctx)
 }
 
 // GetAccount 获取单个公众号账号
 func (s *WechatService) GetAccount(ctx context.Context, id uint) (*model.WechatAccount, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, fmt.Errorf("wechat: db not initialized")
 	}
-	var acc model.WechatAccount
-	if err := s.db.WithContext(ctx).First(&acc, id).Error; err != nil {
-		return nil, err
-	}
-	return &acc, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 // GetFirstActiveAccount 查找第一个 active 公众号账号（用于智能选渠道兜底）
 func (s *WechatService) GetFirstActiveAccount(ctx context.Context) (*model.WechatAccount, error) {
-	if s.db == nil {
+	if s.repo == nil {
 		return nil, fmt.Errorf("wechat: db not initialized")
 	}
-	var acc model.WechatAccount
-	if err := s.db.WithContext(ctx).
-		Where("status = ?", "active").
-		Where("app_id <> ? AND app_secret <> ?", "", "").
-		Order("id ASC").
-		First(&acc).Error; err != nil {
-		return nil, err
-	}
-	return &acc, nil
+	return s.repo.GetFirstActive(ctx)
 }
 
 // CreateAccount 创建公众号账号
 func (s *WechatService) CreateAccount(ctx context.Context, acc *model.WechatAccount) error {
-	if s.db == nil {
+	if s.repo == nil {
 		return fmt.Errorf("wechat: db not initialized")
 	}
-	return s.db.WithContext(ctx).Create(acc).Error
+	return s.repo.Create(ctx, acc)
 }
 
 // UpdateAccount 更新公众号账号
 func (s *WechatService) UpdateAccount(ctx context.Context, acc *model.WechatAccount) error {
-	if s.db == nil {
+	if s.repo == nil {
 		return fmt.Errorf("wechat: db not initialized")
 	}
-	return s.db.WithContext(ctx).Model(acc).Updates(map[string]any{
-		"app_id":           acc.AppID,
-		"app_secret":       acc.AppSecret,
-		"original_id":      acc.OriginalID,
-		"token":            acc.Token,
-		"encoding_aes_key": acc.EncodingAESKey,
-		"agent_id":         acc.AgentID,
-		"status":           acc.Status,
-	}).Error
+	return s.repo.UpdateCredentials(ctx, acc)
 }
 
 // DeleteAccount 删除公众号账号
 func (s *WechatService) DeleteAccount(ctx context.Context, id uint) error {
-	if s.db == nil {
+	if s.repo == nil {
 		return fmt.Errorf("wechat: db not initialized")
 	}
-	return s.db.WithContext(ctx).Delete(&model.WechatAccount{}, id).Error
+	return s.repo.Delete(ctx, id)
 }
 
 // VerifySignature 验证微信服务器签名
@@ -317,7 +294,7 @@ func (s *WechatService) SendCustomMessage(ctx context.Context, accountID uint, o
 		MsgID:      fmt.Sprintf("out_%d", time.Now().UnixNano()),
 		IsOutgoing: true,
 	}
-	if err := s.db.WithContext(ctx).Create(msg).Error; err != nil {
+	if err := s.repo.CreateMessage(ctx, msg); err != nil {
 		logger.Warnf("[Wechat] 记录消息失败: %v", err)
 	}
 
@@ -336,7 +313,7 @@ func (s *WechatService) SaveIncomingMessage(ctx context.Context, accountID uint,
 		RawXML:     string(rawXML),
 		IsOutgoing: false,
 	}
-	return s.db.WithContext(ctx).Create(record).Error
+	return s.repo.CreateMessage(ctx, record)
 }
 
 // BuildTextReply 构建文本回复 XML

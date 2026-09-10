@@ -1,6 +1,6 @@
 # user-web · 用户端 B 端工作台
 
-> HiveMtk 用户端的 B 端运营工作台。Vue 3 + Vite + Element Plus + Pinia，覆盖客户 / 线索 / 客服 / 触达 / 知识库 / 看板 / 智能体等用户端 94 个核心业务模块。
+> HiveMtk 的 Vue 3 运营工作台：统一收件箱、AI 智能体管理、客户 360°、触达排程、知识库、营销画布、数据看板都在这里操作。覆盖用户端 94 个核心业务模块。项目总览见 [仓库根 README](../README.md)。
 >
 > 后端服务对接 [`../user-server`](../user-server/)，嵌入聊天窗 SDK 配套 [`../embed-sdk`](../embed-sdk/)。
 
@@ -295,7 +295,17 @@ npm run test:e2e:ui
 
 ## 📷 截图
 
-> _待补：登录页 / 工作台首页 / 统一收件箱 / 客户 360° / 知识库工作台 / 营销画布 / 数据大屏 等关键页面截图。_
+统一收件箱 / AI 智能体 / 营销画布 / 客户 360° / 知识库 RAG 五张核心页面截图已收录在仓库根 [`docs/screenshots/`](../docs/screenshots/),亦嵌入根 [README](../README.md#界面一览) 与 [英文 README](../README.en.md#screenshots)。
+
+| 统一收件箱 | AI 智能体 |
+|---|---|
+| ![统一收件箱](../docs/screenshots/screenshot-unified-inbox.png) | ![AI 智能体](../docs/screenshots/screenshot-ai-agent.png) |
+| **营销画布** | **客户 360°** |
+| ![营销画布](../docs/screenshots/screenshot-marketing-canvas.png) | ![客户 360°](../docs/screenshots/screenshot-customer-360.png) |
+| **知识库 RAG** | |
+| ![知识库 RAG](../docs/screenshots/screenshot-knowledge-rag.png) | |
+
+> _待补：登录页 / 工作台首页 / 数据大屏 等页面截图。_
 
 ## 📚 关联文档
 

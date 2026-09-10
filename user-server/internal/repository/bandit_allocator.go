@@ -2,12 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"hivemtk-user/internal/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // GetRunningPromptABTestBySOPNode 查询指定 SOP 节点 running 状态的 Prompt A/B 测试
@@ -129,4 +131,82 @@ func (r *FeedbackLoopRepository) UpdateBanditArmLastSampled(ctx context.Context,
 	return r.db.WithContext(ctx).Model(&model.BanditArm{}).
 		Where("experiment_id = ? AND arm_key = ?", experimentID, armKey).
 		Update("last_sampled_at", sampledAt).Error
+}
+
+// ListRewardRefluxEvents 查询 (since, until] 窗口内 reward != 0 的反馈事件（回流扫描源）
+func (r *FeedbackLoopRepository) ListRewardRefluxEvents(ctx context.Context, since, until time.Time) ([]model.FeedbackEvent, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("feedback loop repository not initialized")
+	}
+	var events []model.FeedbackEvent
+	err := r.db.WithContext(ctx).
+		Where("created_at > ? AND created_at <= ? AND reward != 0", since, until).
+		Order("id ASC").Limit(500).
+		Find(&events).Error
+	return events, err
+}
+
+// CountRefluxLogsByEventID 统计事件已回流次数（台账防重复）
+func (r *FeedbackLoopRepository) CountRefluxLogsByEventID(ctx context.Context, eventID string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("feedback loop repository not initialized")
+	}
+	var cnt int64
+	err := r.db.WithContext(ctx).Model(&model.BanditRefluxLog{}).
+		Where("event_id = ?", eventID).Count(&cnt).Error
+	return cnt, err
+}
+
+// CreateRefluxLog 幂等写入回流台账（event_id 冲突时忽略）
+func (r *FeedbackLoopRepository) CreateRefluxLog(ctx context.Context, log *model.BanditRefluxLog) error {
+	if r == nil || r.db == nil {
+		return errors.New("feedback loop repository not initialized")
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(log).Error
+}
+
+// ResolveArmForPromptCandidate 按 prompt candidate 解析运行中实验臂
+//
+// JOIN prompt_ab_tests 限定 running 状态；未命中返回 gorm.ErrRecordNotFound 语义由调用方处理
+func (r *FeedbackLoopRepository) ResolveArmForPromptCandidate(ctx context.Context, promptCandidateID uint) (*model.BanditArm, error) {
+	if r == nil || r.db == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var arm model.BanditArm
+	err := r.db.WithContext(ctx).
+		Joins("JOIN prompt_ab_tests t ON t.experiment_id = bandit_arms.experiment_id AND t.status = 'running'").
+		Where("bandit_arms.prompt_candidate_id = ? AND bandit_arms.experiment_type = ?", promptCandidateID, model.BanditExperimentTypePrompt).
+		First(&arm).Error
+	if err != nil {
+		return nil, err
+	}
+	return &arm, nil
+}
+
+// ListRunningABTestsBySOP 按 SOP 查询 running 的 SOP 变体实验（升序取前 2 条）
+func (r *FeedbackLoopRepository) ListRunningABTestsBySOP(ctx context.Context, sopID uint) ([]model.PromptABTest, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("feedback loop repository not initialized")
+	}
+	var tests []model.PromptABTest
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND experiment_type = ? AND sop_id = ?", "running", model.BanditExperimentTypeSOPVariant, sopID).
+		Order("id ASC").Limit(2).
+		Find(&tests).Error
+	return tests, err
+}
+
+// GetBanditArmByExperimentAndSOP 按实验 + SOP 查询臂
+func (r *FeedbackLoopRepository) GetBanditArmByExperimentAndSOP(ctx context.Context, experimentID string, sopID uint) (*model.BanditArm, error) {
+	if r == nil || r.db == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var arm model.BanditArm
+	err := r.db.WithContext(ctx).
+		Where("experiment_id = ? AND sop_id = ?", experimentID, sopID).
+		First(&arm).Error
+	if err != nil {
+		return nil, err
+	}
+	return &arm, nil
 }

@@ -68,7 +68,6 @@ const emit = defineEmits(['update:visible', 'confirm'])
 const selectedMaterials = ref([])
 
 const handleCancel = () => {
-  emit('confirm', list)
   emit('update:visible', false)
 }
 

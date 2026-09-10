@@ -234,7 +234,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
     const ids = sessionTags.value.map((t) => t.id)
     try {
       await tagService.tagSession(currentSession.value.id, { tags: ids })
-    } catch (e) {}
+    } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   const loadQuickReplies = async () => {

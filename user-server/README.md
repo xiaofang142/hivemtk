@@ -1,6 +1,6 @@
 # user-server · 用户端后端服务
 
-> HiveMtk 用户端的 Go 后端核心服务，承载 CDP、智能客服、RAG 检索、智能卡片、触达编排等业务能力。覆盖用户端 94 个核心业务模块，Go 1.25 / Gin / GORM，所有客户业务数据本地化存储。
+> HiveMtk 的 Go 后端核心服务：多渠道 CDP、ReAct 智能体引擎、RAG 知识库、智能卡片、触达编排都从这里出。覆盖用户端 94 个核心业务模块，Go 1.25 / Gin / GORM,所有客户业务数据本地化存储。项目总览见 [仓库根 README](../README.md)。
 >
 > 推理栈架构：**宿主机 llama.cpp + TEI 兼容服务**（非容器化），数据层（PostgreSQL + Redis）走 Docker。详见 [`../docs/architecture/HOST_INFERENCE_PLAN.md`](../docs/architecture/HOST_INFERENCE_PLAN.md)。
 >
@@ -122,8 +122,7 @@ user-server/
 │   ├── service/                # 业务编排（五层架构 · 第 2 层）
 │   ├── template/               # HTML 模板
 │   └── websocket/              # WebSocket 服务
-├── config.yaml                 # 宿主直连配置（dev 默认）
-├── config.yaml          # Docker 内配置（服务名寻址）
+├── config.yaml                 # 服务配置（dev 宿主直连；Docker 内经 ${ENV_VAR} 注入服务名寻址）
 ├── go.mod
 ├── go.sum
 ├── Dockerfile

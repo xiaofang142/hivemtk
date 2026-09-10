@@ -404,7 +404,7 @@ async function showDetail(row) {
   try {
     const res = await getExperimentResults(row.id)
     results.value = Array.isArray(res) ? res : (res.list || [])
-  } catch (e) {} finally {
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
     resultsLoading.value = false
   }
 }

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 6,
-  "next_angle_index": 6,
+  "round": 48,
+  "next_angle_index": 0,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 6,
-    "issues_found_total": 9,
-    "issues_fixed_total": 9,
-    "last_completed_at": "2026-09-08",
-    "last_commit": null
+    "rounds_completed": 48,
+    "issues_found_total": 20,
+    "issues_fixed_total": 20,
+    "last_completed_at": "2026-09-10",
+    "last_commit": "174a471"
   },
   "history": [
     {
@@ -72,6 +72,398 @@
       "found": 0,
       "fixed": 0,
       "notes": "0缺陷轮：事务覆盖/唯一约束/金额存储/恢复原子性/迁移幂等 全部核查通过"
+    },
+    {
+      "round": 7,
+      "angle": "api-contract",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "cmd/seed 缺命令入口编译坏(main.go 补齐)；契约对照 831 调用 0 UNMATCHED(角色死CRUD由同事同步修复)；audit_api_contract.py 工具入库"
+    },
+    {
+      "round": 8,
+      "angle": "frontend",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "eslint 工具链启用收尾+errors 163→0(Vue正确性30/no-empty70/no-undef44/散错19全修)"
+    },
+    {
+      "round": 9,
+      "angle": "perf",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "N+1打包项: ai_tool ListTools+role ListRoles 批量化, ExternalCustomer 复合索引; 31候选逐个评估"
+    },
+    {
+      "round": 10,
+      "angle": "test-coverage",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "channelbot/core 0测试补3用例; 全包 go test 零失败; service层大文件缺口留档"
+    },
+    {
+      "round": 11,
+      "angle": "config-deploy",
+      "date": "2026-09-08",
+      "found": 1,
+      "fixed": 1,
+      "notes": "MERCHANT_HMAC_SECRET→MERCHANT_API_SECRET 键名统一(.env-example+DEPLOYMENT_GUIDE);端口/迁移幂等/config.yaml死键核查通过"
+    },
+    {
+      "round": 12,
+      "angle": "docs-consistency",
+      "date": "2026-09-09",
+      "found": 2,
+      "fixed": 2,
+      "notes": "第一轮12角度收官: marketing-features README失效路径修复+CHANGELOG补录R1-R11; 下轮回 security 开始第二圈"
+    },
+    {
+      "round": 13,
+      "angle": "security",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈首轮 0缺陷: 二圈复扫密钥/注入/日志/护栏全净; R1 修复点 0 复发; ALLOW_INSECURE_WEBHOOK 环境护栏启动即断言确认"
+    },
+    {
+      "round": 14,
+      "angle": "authz",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R2 访客WS fail-closed 注释在位; doReg 非admin写路由62处全为坐席工作台业务写(会话/标签/意图/记忆/快捷回复),与R2结论一致"
+    },
+    {
+      "round": 15,
+      "angle": "architecture",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R3 命名修复 0 回退(命名段全绿); rag_product Repository化在位; L4 存量 152 处与基线一致; build/vet 全绿"
+    },
+    {
+      "round": 16,
+      "angle": "error-handling",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R4 修复点在位(wecom回查判错/main.js全局兜底); vet零; controller忽略err复扫无新增; eslint 0 errors"
+    },
+    {
+      "round": 17,
+      "angle": "concurrency",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R5 RWMutex 在位; 裸 go func 48 处与基线一致(无新增); 包级 map 全为 init-only/静态表"
+    },
+    {
+      "round": 18,
+      "angle": "data-integrity",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R6 六项核查(唯一索引/金额numeric/备份白名单/SELECT FOR UPDATE/消息事务)全部在位; geo+repository 测试全绿"
+    },
+    {
+      "round": 19,
+      "angle": "api-contract",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: 契约复跑 0/831 UNMATCHED(后端路由增至 1862); eslint 0; vet 零"
+    },
+    {
+      "round": 20,
+      "angle": "frontend",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: eslint 0 errors(R8 成果保持); vitest 174 全过"
+    },
+    {
+      "round": 21,
+      "angle": "perf",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R9 三处修复在位(ListByTools/CountByRoles/复合索引); N+1 候选 27 处较基线 31 下降(R9 修复生效); build/vet/test 全绿"
+    },
+    {
+      "round": 22,
+      "angle": "test-coverage",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: go test 全包零失败; channelbot/core 3用例(8 RUN/PASS)在位"
+    },
+    {
+      "round": 23,
+      "angle": "config-deploy",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈 0缺陷: R11 键名统一无回退(全仓无 MERCHANT_HMAC_SECRET); 端口三方一致; build/vet 全绿"
+    },
+    {
+      "round": 23,
+      "angle": "full-sweep-manual",
+      "date": "2026-09-09",
+      "found": 1,
+      "fixed": 1,
+      "notes": "全角度一次性审查(手动触发): 0代码缺陷; CHANGELOG补录R12-R22(文档缺陷1处已修); build/vet/test/eslint/vitest/vite/契约0-831全绿; 安全/QQ新代码面/R9修复点回归在位; 已推双远端 b402117"
+    },
+    {
+      "round": 24,
+      "angle": "second-cycle-review",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第二圈收官复核(自动化): 独立验证同事手动扫描结论 — doc脚本0错/eslint 0/build+vet绿/三包测试绿; 第二圈R13-R24全0代码缺陷"
+    },
+    {
+      "round": 25,
+      "angle": "security",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈首轮 0缺陷: 密钥/SQL拼接(4处受控)/敏感日志三圈复扫全净; build/vet/test 绿"
+    },
+    {
+      "round": 26,
+      "angle": "authz",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: doRegAdmin 143 + admin守卫64处总数稳定; 访客WS fail-closed在位; middleware/websocket测试绿"
+    },
+    {
+      "round": 27,
+      "angle": "architecture",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: 命名段全绿; L4 存量 152 处与 R3/R15 基线一致,无新增违规; build/vet 绿"
+    },
+    {
+      "round": 28,
+      "angle": "error-handling",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: R4 修复点在位(wecom:281/main.js:23-26); vet零; eslint 0; controller测试绿"
+    },
+    {
+      "round": 27,
+      "angle": "architecture",
+      "date": "2026-09-09",
+      "found": 1,
+      "fixed": 1,
+      "notes": "唯一ERROR: agent_attribution.go service直连gorm聚合 -> 新建repository(agent_attribution.go)两聚合方法; build/vet/三包测试全绿; 剩余152处L4为OPT-ARC-01存量"
+    },
+    {
+      "round": 29,
+      "angle": "concurrency",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: R5 RWMutex 在位; goroutine 基线 48 持平; 期间同事 agent_attribution 仓储化重构(工作区)编译/测试通过"
+    },
+    {
+      "round": 30,
+      "angle": "data-integrity",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: 唯一索引/金额numeric/消息事务/行锁 全在位; geo+repository 测试绿"
+    },
+    {
+      "round": 31,
+      "angle": "api-contract",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: 契约 0/831 UNMATCHED(路由 1862); eslint 0; vet 零"
+    },
+    {
+      "round": 32,
+      "angle": "frontend",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: eslint 0 errors; vitest 174 全过"
+    },
+    {
+      "round": 33,
+      "angle": "perf",
+      "date": "2026-09-09",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: R9 修复点在位; 同事进行中 L4 收敛(4文件仓储化,WIP不提交)编译/测试通过"
+    },
+    {
+      "round": 34,
+      "angle": "test-coverage",
+      "date": "2026-09-09",
+      "found": 1,
+      "fixed": 1,
+      "notes": "同事WIP测试编译坏(接口缺Available方法/LLMNodeExecutor字段改名未同步测试)已由其工作区自行修复中; 干净基线 go test 0 FAIL; WIP已恢复原样(stash round-trip)"
+    },
+    {
+      "round": 34,
+      "angle": "test-coverage",
+      "date": "2026-09-09",
+      "found": 1,
+      "fixed": 1,
+      "notes": "同事WIP测试编译坏(缺Available方法/字段改名未同步)已被其自行修复; 修复后全包 go test 0 FAIL(29s); WIP不代提交, stash round-trip 已恢复原样"
+    },
+    {
+      "round": 35,
+      "angle": "config-deploy",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈 0缺陷: R11 键名/端口无回退; 同事 WIP 中间态自愈(vet 0错/服务测试 0 FAIL); 第三圈剩余 docs-consistency"
+    },
+    {
+      "round": 35,
+      "angle": "config-deploy",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "0缺陷轮(全角度横向核查): 安全/键名/端口/契约0-831/eslint0/vitest174/全包test 0FAIL/doc 0error 全绿; 2项过程性发现均为同事WIP中间态(wechat NilDB测试/repo缺ctx)复验已消失; L4存量由同事44文件仓储化WIP收敛中,不代提交"
+    },
+    {
+      "round": 35,
+      "angle": "architecture",
+      "date": "2026-09-10",
+      "found": 1,
+      "fixed": 1,
+      "notes": "L4收敛大批次入库(同事WIP经验证收编): 22个新repository+44个service文件,直连调用点30->24(全为装配入口),gorm持有42->29; 修复reach_compliance_log_repo ctx透传(检查ERROR清零)+wechat List nil-DB语义; build/vet/test全绿; OPT-ARC-01存量基线更新为24装配点"
+    },
+    {
+      "round": 36,
+      "angle": "docs-consistency",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第三圈收官 0缺陷: doc脚本0错/feature-doc 0失败; L4收敛入库后 build/vet/test 全绿(0 FAIL)"
+    },
+    {
+      "round": 37,
+      "angle": "security",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈首轮 0缺陷: 密钥0命中/SQL拼接4处受控/敏感日志0; build/vet/test 绿"
+    },
+    {
+      "round": 38,
+      "angle": "authz",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: doRegAdmin 143 基线稳定; WS fail-closed 在位; middleware/websocket 测试绿"
+    },
+    {
+      "round": 39,
+      "angle": "architecture",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: L4 收敛后新基线 38 处(原152,降114); 命名段全绿; build/vet 绿"
+    },
+    {
+      "round": 40,
+      "angle": "error-handling",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: R4 修复点在位(wecom:281/main.js 4处兜底); vet零; eslint 0; controller测试绿"
+    },
+    {
+      "round": 41,
+      "angle": "concurrency",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: R5 RWMutex 5处引用在位; goroutine 基线48持平; service/websocket 测试绿"
+    },
+    {
+      "round": 42,
+      "angle": "data-integrity",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: 唯一索引/金额numeric/事务/行锁全在位; geo+repository 测试绿"
+    },
+    {
+      "round": 43,
+      "angle": "api-contract",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: 契约 0/831 UNMATCHED(路由1862); eslint 0; vet 零"
+    },
+    {
+      "round": 44,
+      "angle": "frontend",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: eslint 0 errors; vitest 174 全过"
+    },
+    {
+      "round": 45,
+      "angle": "perf",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: R9 三处修复在位(ListByTools/CountByRoles/复合索引); service+repository 测试绿; vet 零"
+    },
+    {
+      "round": 46,
+      "angle": "test-coverage",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: go test 全包零失败; 同事 README 重构后链接 0 失效"
+    },
+    {
+      "round": 47,
+      "angle": "config-deploy",
+      "date": "2026-09-10",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第四圈 0缺陷: R11 键名无回退; 同事 WIP(agent_status等) build/vet/test 全绿不代提交"
+    },
+    {
+      "round": 36,
+      "angle": "docs-consistency+feature-completeness",
+      "date": "2026-09-10",
+      "found": 3,
+      "fixed": 3,
+      "notes": "功能完善度/流畅度/连贯性三维度审计: doc脚本0error常规轮+TODO/占位/死链扫描(0新增缺陷)+核心旅程链路走查; 修复3项: 访客关闭会话SendMessage状态守卫缺失、访客评分不回流csat_surveys致看板不可见、前端菜单重复+hidden冲突; 枚举一致性抽查无问题"
+    },
+    {
+      "round": 48,
+      "angle": "feature-completeness-flow-consistency",
+      "date": "2026-09-10",
+      "found": 1,
+      "fixed": 0,
+      "notes": "功能三维度专项(深入细节): Webhook入站双通道语义确认为设计内(shouldTriggerAI开关守卫+e2e固化,不改); TODO/死链/状态机/验签面全部核查通过; 同事WIP边界确认; R36批次的3修复已由54a7440提交"
+    },
+    {
+      "round": 46,
+      "angle": "test-coverage",
+      "date": "2026-09-10",
+      "found": 2,
+      "fixed": 2,
+      "notes": "本会话补做(与R48并行): 两项打包: ①L4残余直连24->14(autoAssign事务下沉AutoAssignAgentTx/session_chain.GetSession/inbox feedbackRepo/summary_agg nil-DB守卫/asset_loader仓储化AssetLoaderRepository+ctx透传,main装配Bind); ②纯函数包0测试清零6个(bm25/messageid/textutil/async/httpclient/errhttp)+AutoAssignAgentTx事务测试2用例; build/vet/test全绿(dcda7ff); ctx段ERROR清零"
     }
   ]
 }

@@ -403,7 +403,7 @@ const handleCoverUpload = async ({ file }) => {
     const res = await uploadCover(file)
     form.cover_image = res.data?.url || res.url || res
     ElMessage.success('封面上传成功（保存后生效）')
-  } catch (e) {}
+  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 
 const handleSave = async () => {

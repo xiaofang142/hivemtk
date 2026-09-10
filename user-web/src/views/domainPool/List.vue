@@ -162,7 +162,7 @@ const form = reactive({
 const rules = {
   domain: [
     { required: true, message: i18n.global.t('请输入域名'), trigger: 'blur' },
-    { pattern: /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/, message: i18n.global.t('请输入有效的域名'), trigger: 'blur' }
+    { pattern: /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/, message: i18n.global.t('请输入有效的域名'), trigger: 'blur' }
   ],
   port: [
     { required: true, message: i18n.global.t('请输入端口'), trigger: 'blur' },

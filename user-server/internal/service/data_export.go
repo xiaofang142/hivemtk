@@ -18,13 +18,13 @@ import (
 
 // DataExportService GDPR DSAR 数据导出服务
 type DataExportService struct {
-	db *gorm.DB
+	repo *repository.DataExportRepository
 }
 
 // NewDataExportService 创建服务实例
 func NewDataExportService() *DataExportService {
 	return &DataExportService{
-		db: repository.GetDB(),
+		repo: repository.NewDataExportRepository(repository.GetDB()),
 	}
 }
 
@@ -63,20 +63,17 @@ func (s *DataExportService) Export(ctx context.Context, customerID string) (*Exp
 		CustomerID: customerID,
 	}
 
-	var customer model.Customer
-	if err := s.db.WithContext(ctx).Where("id = ?", customerID).First(&customer).Error; err != nil {
+	customer, err := s.repo.GetCustomer(ctx, customerID)
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("DSAR_002: 客户 %s 不存在", customerID)
 		}
 		return nil, fmt.Errorf("DSAR_003: 查询客户失败: %w", err)
 	}
-	bundle.Customer = &customer
+	bundle.Customer = customer
 
-	var sessions []*model.CustomerSession
-	if err := s.db.WithContext(ctx).
-		Where("one_id = ?", customer.UnifiedID).
-		Order("created_at ASC").
-		Find(&sessions).Error; err != nil {
+	sessions, err := s.repo.ListSessionsByOneID(ctx, customer.UnifiedID)
+	if err != nil {
 		return nil, fmt.Errorf("DSAR_004: 查询会话失败: %w", err)
 	}
 	bundle.Sessions = sessions
@@ -86,30 +83,22 @@ func (s *DataExportService) Export(ctx context.Context, customerID string) (*Exp
 		for _, s := range sessions {
 			sessionIDs = append(sessionIDs, s.SessionID)
 		}
-		var messages []*model.SessionMessage
-		if err := s.db.WithContext(ctx).
-			Where("session_id IN ?", sessionIDs).
-			Order("created_at ASC").
-			Find(&messages).Error; err != nil {
+		messages, err := s.repo.ListMessagesBySessionIDs(ctx, sessionIDs)
+		if err != nil {
 			return nil, fmt.Errorf("DSAR_005: 查询消息失败: %w", err)
 		}
 		bundle.Messages = messages
 		bundle.MessageCount = len(messages)
 	}
 
-	var tags []*model.CustomerTag
-	if err := s.db.WithContext(ctx).
-		Order("name ASC").
-		Find(&tags).Error; err != nil {
+	tags, err := s.repo.ListAllTags(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("DSAR_006: 查询标签失败: %w", err)
 	}
 	bundle.Tags = tags
 
-	var memories []*model.MemoryItem
-	if err := s.db.WithContext(ctx).
-		Where("customer_id = ?", customerID).
-		Order("created_at ASC").
-		Find(&memories).Error; err != nil {
+	memories, err := s.repo.ListMemoriesByCustomer(ctx, customerID)
+	if err != nil {
 		return nil, fmt.Errorf("DSAR_007: 查询记忆条目失败: %w", err)
 	}
 	bundle.MemoryItems = memories

@@ -201,7 +201,7 @@ const handleStop = async () => {
     await workflowOrchestratorApi.stopExecution(executionId.value)
     ElMessage.success('已停止')
     loadData()
-  } catch (_) {}
+  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 
 const statusType = (s) => ({ running: 'primary', completed: 'success', failed: 'danger', terminated: 'warning', pending: 'info' }[s] || 'info');

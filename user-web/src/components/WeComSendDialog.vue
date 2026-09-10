@@ -30,7 +30,7 @@
       </template>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
+      <el-button @click="emit('update:visible', false)">取消</el-button>
       <el-button type="primary" :loading="loading" @click="submit">发送</el-button>
     </template>
   </el-dialog>

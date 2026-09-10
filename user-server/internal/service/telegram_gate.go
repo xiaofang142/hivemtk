@@ -473,14 +473,14 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 	if s.memberRepo == nil {
 		return fmt.Errorf("db nil")
 	}
-	var member model.TelegramGroupMember
-	if err := s.db.WithContext(ctx).First(&member, memberID).Error; err != nil {
+	member, err := s.memberRepo.GetMemberByID(ctx, memberID)
+	if err != nil {
 		return err
 	}
 	if member.Authorized {
 		return nil
 	}
-	return s.AuthorizeMember(ctx, &member)
+	return s.AuthorizeMember(ctx, member)
 }
 
 // RecoverStalled 入群响应补偿循环（可靠性的最后兜底）。
