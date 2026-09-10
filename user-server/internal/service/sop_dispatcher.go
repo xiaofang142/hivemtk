@@ -49,6 +49,12 @@ type dispatchTask struct {
 	TraceID     string
 
 	SkipWait bool
+
+	// TimerFired 标记本任务由 wait timer 到期触发（outbox dispatcher 派发）。
+	// wait 节点的等待条件已满足，processTask 应视为"等待完成、推进下一节点"，
+	// 而不是重新执行 WaitExecutor——否则 waitUntil 被重算、timer 无限再生，
+	// 执行永久卡 running（审计R49 修复的 SOP wait 死循环）。
+	TimerFired bool
 }
 
 // SOPExecutionDispatcher SOP 执行调度器
@@ -378,11 +384,19 @@ func (d *SOPExecutionDispatcher) processTask(ctx context.Context, workerID int, 
 	latencyMs := time.Since(start).Milliseconds()
 
 	var result *NodeExecResult
-	if task.SkipWait && node.Type == SOPNodeTypeWait {
-
-		logger.Ctx(ctx).Info().
-			Str("node_id", node.ID).
-			Msg("[worker] skip wait node (max_wait exceeded, treated as satisfied)")
+	if (task.SkipWait || task.TimerFired) && node.Type == SOPNodeTypeWait {
+		// SkipWait：max_wait 超期，视为满足；TimerFired：timer 正常到期，等待条件已满足。
+		// 两者都直接推进下一节点，不得重新执行 WaitExecutor（重入会重算 waitUntil
+		// 并再建 timer，形成死循环）。
+		if task.SkipWait {
+			logger.Ctx(ctx).Info().
+				Str("node_id", node.ID).
+				Msg("[worker] skip wait node (max_wait exceeded, treated as satisfied)")
+		} else {
+			logger.Ctx(ctx).Info().
+				Str("node_id", node.ID).
+				Msg("[worker] wait node satisfied (timer fired), advance to next")
+		}
 		result = &NodeExecResult{Status: NodeStatusSkipped}
 	} else {
 		d.writeExecEvent(ctx, exec, node, NodeEventStarted, task.Attempt, nil, nil, "")

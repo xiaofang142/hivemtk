@@ -128,5 +128,11 @@ func (e *SalesEngine) generateCandidate(
 	if err != nil {
 		return "", nil, nil, err
 	}
-	return e.calibrate(ctx, strings.TrimSpace(result.Content), targetLang), result, nil, nil
+	reply := strings.TrimSpace(result.Content)
+	// 空 LLM 回复（finish_reason=length 截断/模型异常）不降级的话用户会收到空消息，
+	// 且空串会被 dispatcher 按 CacheKey 缓存 1 小时，同 prompt 持续命中空回复
+	if reply == "" {
+		reply = e.emptyReplyFallback()
+	}
+	return e.calibrate(ctx, reply, targetLang), result, nil, nil
 }

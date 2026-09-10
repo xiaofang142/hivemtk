@@ -229,11 +229,13 @@ func (e *SalesEngine) runPhase1Serial(ctx context.Context, req *SalesRequest, re
 	intent := phase0.intent
 	memCtx := phase0.memCtx
 	customer := phase0.customer
+	// 上下文透传：phase0 已取到 customer/memory，丢弃会导致转人工判断缺记忆
+	// 依据、SOP 阶段路由恒 default、prompt 缺客户信息（parallel 模式静默退化）
 	_ = memCtx
 	_ = customer
 
 	stepStart := time.Now()
-	transfer, reason := e.shouldTransferToHuman(ctx, intent, nil, req)
+	transfer, reason := e.shouldTransferToHuman(ctx, intent, memCtx, req)
 	if transfer {
 		resp.TransferredToHuman = true
 		resp.TransferReason = reason
@@ -246,7 +248,7 @@ func (e *SalesEngine) runPhase1Serial(ctx context.Context, req *SalesRequest, re
 	}
 
 	stepStart = time.Now()
-	sopAgent, stage, err := e.matchSOP(ctx, intent, nil)
+	sopAgent, stage, err := e.matchSOP(ctx, intent, customer)
 	if err != nil {
 		resp.Steps = append(resp.Steps, dto.SalesStepLog{
 			Step: "4_match_sop", Status: "fail", Error: err.Error(),
@@ -285,7 +287,7 @@ func (e *SalesEngine) runPhase1Serial(ctx context.Context, req *SalesRequest, re
 	}
 
 	stepStart = time.Now()
-	reply, dispatchResult, cards, err := e.generateCandidate(ctx, req, intent, nil, sopAgent, stage, phase0.ragChunks, nil, nil)
+	reply, dispatchResult, cards, err := e.generateCandidate(ctx, req, intent, memCtx, sopAgent, stage, phase0.ragChunks, nil, customer)
 	if err != nil {
 		resp.Steps = append(resp.Steps, dto.SalesStepLog{
 			Step: "6_generate_candidate", Status: "fail", Error: err.Error(),

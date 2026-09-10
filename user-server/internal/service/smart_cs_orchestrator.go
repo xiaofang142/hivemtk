@@ -388,7 +388,19 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	result.AIReplied = true
 	result.Reply = salesResp.Reply
 
+	// FAQ 答案缓存写入守卫：只有当 top1 RAG 召回分数达到置信度阈值时才缓存。
+	// 无门槛写入会让低分召回（甚至幻觉拼接）的回复长期留在缓存里，
+	// 后续相似问题直接命中并绕过置信度→转人工判断（缓存投毒）。
+	faqStoreAllowed := false
 	if faqKBID != "" && len(faqVec) > 0 && len(salesResp.RAGChunks) > 0 && salesResp.Reply != "" {
+		top1Score := salesResp.RAGChunks[0].Score
+		faqStoreAllowed = top1Score >= o.confidenceThreshold
+		if !faqStoreAllowed {
+			logger.Infof("[ragcache] skip store answer: top1 rag score %.3f < threshold %.3f (kb_id=%s)",
+				top1Score, o.confidenceThreshold, faqKBID)
+		}
+	}
+	if faqStoreAllowed {
 		go func(answer string, vec []float32) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -489,7 +501,17 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID str
 	result.HandlerType = model.HandlerTypeAI
 	result.AIReplied = true
 	result.Reply = lr.Answer
-	result.Confidence = 1.0
+	// 置信度用实际召回相似度而非恒 1.0：恒 1.0 会绕过置信度阈值→转人工的
+	// 下游判断，缓存命中变成"免检通道"。相似度低于阈值时仍走正常降级。
+	if lr.Similarity < o.confidenceThreshold {
+		logger.Ctx(ctx).Info().
+			Str("kb_id", kbID).
+			Float64("similarity", lr.Similarity).
+			Float64("threshold", o.confidenceThreshold).
+			Msg("[ragcache] similarity below confidence threshold, skip cache hit")
+		return nil, false
+	}
+	result.Confidence = lr.Similarity
 	if o.enableAutoReply {
 		if session := o.sessionOfResult(result); session != nil {
 			utils.WarnErrKV("smartcs.saveOutboundMessage.hit", o.saveOutboundMessage(ctx, session, lr.Answer, true), "session_id", session.SessionID, "source", "ragcache")

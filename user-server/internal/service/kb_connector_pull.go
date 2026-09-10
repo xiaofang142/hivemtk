@@ -208,47 +208,63 @@ func (s *KBConnectorService) notionSearch(ctx context.Context, token, query stri
 }
 
 func (s *KBConnectorService) notionPageText(ctx context.Context, token, pageID string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://api.notion.com/v1/blocks/"+pageID+"/children?page_size=100", nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Notion-Version", "2022-06-28")
-	resp, err := s.httpCli.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if resp.StatusCode != http.StatusOK {
-		var e struct {
-			Message string `json:"message"`
-		}
-		_ = json.Unmarshal(raw, &e)
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, e.Message)
-	}
-
-	var generic struct {
-		Results []map[string]any `json:"results"`
-	}
-	if err := json.Unmarshal(raw, &generic); err != nil {
-		return "", err
-	}
+	// 分页拉取：Notion blocks 接口单页上限 100，超 100 block 的页面
+	// 不翻页会静默丢内容（导入"成功"但知识不完整）
 	var sb strings.Builder
-	for _, b := range generic.Results {
-		bt, _ := b["type"].(string)
-		if bt == "" {
-			continue
+	cursor := ""
+	const notionPageLimit = 100
+	for page := 0; page < 100; page++ { // 100 页硬上限（10000 block）防异常数据拖死循环
+		u := "https://api.notion.com/v1/blocks/" + pageID + "/children?page_size=100"
+		if cursor != "" {
+			u += "&start_cursor=" + cursor
 		}
-		obj, ok := b[bt].(map[string]any)
-		if !ok {
-			continue
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return "", err
 		}
-		if line := notionRichText(obj["rich_text"]); line != "" {
-			sb.WriteString(line)
-			sb.WriteString("\n")
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Notion-Version", "2022-06-28")
+		resp, err := s.httpCli.Do(req)
+		if err != nil {
+			return "", err
 		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			var e struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(raw, &e)
+			return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, e.Message)
+		}
+
+		var generic struct {
+			Results             []map[string]any `json:"results"`
+			HasMore             bool             `json:"has_more"`
+			NextCursor          string           `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(raw, &generic); err != nil {
+			return "", err
+		}
+		for _, b := range generic.Results {
+			bt, _ := b["type"].(string)
+			if bt == "" {
+				continue
+			}
+			obj, ok := b[bt].(map[string]any)
+			if !ok {
+				continue
+			}
+			if line := notionRichText(obj["rich_text"]); line != "" {
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			}
+		}
+		if !generic.HasMore || generic.NextCursor == "" {
+			break
+		}
+		cursor = generic.NextCursor
+		_ = notionPageLimit // 单页 page_size=100 固定在 URL 中
 	}
 	return sb.String(), nil
 }

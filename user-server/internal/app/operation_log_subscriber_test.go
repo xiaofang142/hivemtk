@@ -203,6 +203,12 @@ func (r *testLogRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, error
 	return 0, nil
 }
 
+func (r *testLogRepo) UpdateNewValue(ctx context.Context, id uint, newValue string) error {
+	return r.db.WithContext(ctx).Model(&model.OperationLog{}).
+		Where("id = ?", id).
+		Update("new_value", newValue).Error
+}
+
 func waitForLogCondition(t *testing.T, cond func() bool, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

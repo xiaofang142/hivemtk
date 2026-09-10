@@ -125,11 +125,26 @@ func (e *SalesEngine) runAgentLoop(
 	})
 
 	if e.sessionMsgRepo != nil && req.SessionID != "" {
-		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, 20); herr == nil && len(hist) > 0 {
+		// 历史注入走 token 预算截断：无预算的原样注入在长会话下会顶爆
+		// provider ContextWindow，dispatcher 逐个跳过候选最终降级模板回复
+		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates); herr == nil && len(hist) > 0 {
 
 			if hist[0].Content == req.UserMessage {
 				hist = hist[1:]
 			}
+			// 预算截断：与 fetchHistoryWithinTokenBudget 同一口径
+			budget := agentLoopHistoryTokenBudget * (100 - agentLoopHistoryOutputReservePct) / 100
+			used := 0
+			keep := len(hist)
+			for i, m := range hist {
+				cost := textutil.EstimateTokens(m.Content) + historyMsgTokenOverhead
+				if used+cost > budget {
+					keep = i
+					break
+				}
+				used += cost
+			}
+			hist = hist[:keep]
 			if len(hist) > 0 {
 
 				for i, j := 0, len(hist)-1; i < j; i, j = i+1, j-1 {
@@ -203,6 +218,7 @@ func (e *SalesEngine) runAgentLoop(
 	}
 	curTools := toolDefs
 	lengthRetryDone := false
+	perIterTimeouts := 0
 	var collectedCards []model.RichCard
 	for iter := 1; iter <= maxIter; iter++ {
 
@@ -237,8 +253,14 @@ func (e *SalesEngine) runAgentLoop(
 		if err != nil {
 
 			if iterCtx.Err() == context.DeadlineExceeded && agentLoopCtx.Err() == nil {
-				logger.Warnf("[AgentLoop] iter=%d per-iter timeout (budget=%s), continue with next iter", iter, agentLoopMaxPerIterTimeout)
-				continue
+				perIterTimeouts++
+				// 每轮 60s 挂起的 provider 若不限次，3×60s 全烧在超时上才被
+				// wall-clock 拦停，用户侧单条消息首响应延迟 3 分钟。限 1 次重试。
+				if perIterTimeouts <= 1 {
+					logger.Warnf("[AgentLoop] iter=%d per-iter timeout (budget=%s), retry once", iter, agentLoopMaxPerIterTimeout)
+					continue
+				}
+				logger.Warnf("[AgentLoop] iter=%d per-iter timeout x%d, give up and fallback", iter, perIterTimeouts)
 			}
 
 			if firstLLMError == nil {

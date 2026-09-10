@@ -24,15 +24,16 @@ func TestTruncateRunes_UTF8Safety(t *testing.T) {
 // TestBudgetInput_SnapshotCapped P0-1：大快照被裁剪并带标注
 func TestBudgetInput_SnapshotCapped(t *testing.T) {
 	big := strings.Repeat("菜单项 ", 20000) // 80k rune
-	snap, st := budgetInput(big, &reflectState{Memory: strings.Repeat("记", 1000)})
+	snap, stBudgeted := budgetInput(big, &reflectState{Memory: strings.Repeat("记", 1000)})
 	if utf8.RuneCountInString(snap) > snapshotBudgetRunes+50 {
 		t.Fatalf("快照未按预算裁剪: %d", utf8.RuneCountInString(snap))
 	}
 	if !strings.Contains(snap, "[快照过长已截断") {
 		t.Fatalf("缺少截断标注")
 	}
-	if st == nil || utf8.RuneCountInString(st.Memory) > memoryBudgetRunes {
-		t.Fatalf("memory 未限长")
+	// budgetInput 返回裁剪副本，不改动入参 st；marker "…" 记 1 rune，故上限 600+1
+	if stBudgeted == nil || utf8.RuneCountInString(stBudgeted.Memory) > memoryBudgetRunes+utf8.RuneCountInString("…") {
+		t.Fatalf("memory 未限长: %d", utf8.RuneCountInString(stBudgeted.Memory))
 	}
 }
 

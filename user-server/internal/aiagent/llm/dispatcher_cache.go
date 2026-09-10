@@ -39,6 +39,10 @@ func (d *Dispatcher) setCache(ctx context.Context, key string, ttl int, content 
 	if ttl <= 0 || key == "" {
 		return
 	}
+	// 空内容（截断/模型异常）不入缓存：否则同 prompt 在 TTL 内持续命中空回复
+	if strings.TrimSpace(content) == "" {
+		return
+	}
 
 	_ = cache.GetGlobalCache().Set(ctx, key, content, time.Duration(ttl)*time.Second)
 }

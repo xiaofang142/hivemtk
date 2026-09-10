@@ -15,6 +15,7 @@ import (
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	"hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"github.com/google/uuid"
 )
@@ -110,6 +111,18 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 		job.Payload = string(payload)
 		_ = s.externalRepo.Create(ctx, job)
 		go func(productID string, items []BatchImportItem, op string) {
+			// SafeGo：裸 go func 中 panic 会击穿进程；失败不得标 completed
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Errorf("[ExternalImport] panic recovered job_no=%s panic=%v", jobNo, r)
+					failedAt := time.Now()
+					_ = s.externalRepo.UpdateStatusByJobNo(context.Background(), jobNo, map[string]any{
+						"status":        "failed",
+						"finished_at":   &failedAt,
+						"error_detail":  fmt.Sprintf("panic: %v", r),
+					})
+				}
+			}()
 			bg, bgCancel := context.WithTimeout(context.Background(), ExternalImportTimeout())
 			defer bgCancel()
 			started := time.Now()
@@ -118,8 +131,20 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 				"status":     "running",
 				"started_at": &now,
 			})
-			resp, _ := s.runExternalImport(bg, productID, items, op, jobNo)
+			resp, runErr := s.runExternalImport(bg, productID, items, op, jobNo)
 			finished := time.Now()
+			if runErr != nil || resp == nil {
+				errDetail := ""
+				if runErr != nil {
+					errDetail = runErr.Error()
+				}
+				_ = s.externalRepo.UpdateStatusByJobNo(bg, jobNo, map[string]any{
+					"status":       "failed",
+					"finished_at":  &finished,
+					"error_detail": errDetail,
+				})
+				return
+			}
 			updates := map[string]any{
 				"status":       "completed",
 				"finished_at":  &finished,
