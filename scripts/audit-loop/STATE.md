@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：56（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 已完成轮次：57（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
 - 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：perf
+- 下一轮角度：test-coverage
 
 ## 轮次报告
+
+### R57 — perf（2026-09-11）— 第五圈，0 缺陷轮
+
+**审计范围**：R9 修复点回归复核、service/repository 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R9 修复全部在位：`ListByTools`（3 处）、`CountByRoles`（4 处）、`idx_extcust_platform_external` 复合索引（2 处）
+- service(22.6s)/repository(0.7s) 测试全绿；`go vet ./...` 零输出
+
+**验证证据**：vet 零 + service/repository 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R57-perf: 0缺陷轮核查记录与状态推进`
 
 ### R56 — frontend（2026-09-11）— 第五圈，0 缺陷轮
 
