@@ -22,7 +22,7 @@
         </el-table>
         <el-pagination
           v-if="customers.length > pageSize"
-          v-model="currentPage"
+          v-model:current-page="currentPage"
           :page-size="pageSize"
           :total="customers.length"
           layout="prev, pager, next, total"
@@ -164,7 +164,7 @@
       </el-form>
       <template #footer>
         <el-button @click="contactVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitContact">发送</el-button>
+        <el-button type="primary" :loading="submittingContact" @click="submitContact">发送</el-button>
       </template>
     </el-dialog>
   </div>
@@ -210,6 +210,7 @@ const ordersLoading = ref(false)
 const contactVisible = ref(false)
 const contactForm = ref({ content: '' })
 const currentPage = ref(1)
+const selectingId = ref(null)
 const pageSize = ref(20)
 
 const pagedCustomers = computed(() => {
@@ -256,22 +257,29 @@ const toCustomerModel = (raw, fallbackId) => {
 };
 
 const selectCustomer = async (row) => {
-  const raw = await getCustomerDetail(row.id)
-  current.value = toCustomerModel(raw, row.id)
-  const messages = raw?.message_history || []
-  behaviors.value = messages.map((m) => ({
-    time: m.created_at,
-    type: m.sender_type === 'user' ? 'primary' : 'success',
-    action: m.sender_name || (m.sender_type === 'user' ? '客户' : '坐席'),
-    detail: m.content
-  }))
-  communications.value = messages.map((m) => ({
-    time: m.created_at,
-    channel: 'web',
-    direction: m.sender_type === 'user' ? 'in' : 'out',
-    content: m.content
-  }))
-  loadOrders(current.value.phone, current.value.name);
+  // 竞态守卫：快速连点客户行时，先点客户的慢响应不得覆盖后点客户的面板
+  selectingId.value = row.id
+  try {
+    const raw = await getCustomerDetail(row.id)
+    if (selectingId.value !== row.id) return
+    current.value = toCustomerModel(raw, row.id)
+    const messages = raw?.message_history || []
+    behaviors.value = messages.map((m) => ({
+      time: m.created_at,
+      type: m.sender_type === 'user' ? 'primary' : 'success',
+      action: m.sender_name || (m.sender_type === 'user' ? '客户' : '坐席'),
+      detail: m.content
+    }))
+    communications.value = messages.map((m) => ({
+      time: m.created_at,
+      channel: 'web',
+      direction: m.sender_type === 'user' ? 'in' : 'out',
+      content: m.content
+    }))
+    loadOrders(current.value.phone, current.value.name);
+  } catch (e) {
+    console.error('加载客户详情失败:', e)
+  }
 }
 
 const loadOrders = async (phone, name) => {
@@ -293,11 +301,15 @@ const contactCustomer = () => {
   contactVisible.value = true
 }
 
+const submittingContact = ref(false)
 const submitContact = async () => {
   if (!contactForm.value.content.trim()) {
     ElMessage.warning(i18n.global.t('请输入消息内容'))
     return
   }
+  // 提交锁：createSession+sendMessage 两串行请求期间双击会创建重复会话/消息
+  if (submittingContact.value) return
+  submittingContact.value = true
   try {
     const res = await createSession({
       platform: 'web',
@@ -312,6 +324,8 @@ const submitContact = async () => {
     contactVisible.value = false
   } catch (e) {
     ElMessage.error(i18n.global.t('发送失败，请稍后重试'))
+  } finally {
+    submittingContact.value = false
   }
 }
 

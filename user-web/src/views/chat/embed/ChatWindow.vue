@@ -237,6 +237,9 @@ const loadHistory = async () => {
 
 const connectWebSocket = () => {
   if (!sessionId.value) return
+  // 先关闭旧实例：resumeSession/重试会再次进入本函数，
+  // 直接覆盖 socket 变量会泄漏旧 ws、心跳与重连定时器（并继续推送旧会话消息）
+  if (socket) { try { socket.close() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } socket = null }
   socket = new ChatSocket({
     sessionId: sessionId.value,
     visitorId: visitorId.value,
@@ -288,8 +291,14 @@ const connectWebSocket = () => {
     onAITyping: (payload) => {
       typing.value = !!payload?.typing;
     },
-    onConnected: () => {},
-    onDisconnected: () => {}
+    onConnected: () => {
+      initFailed.value = false
+    },
+    onDisconnected: () => {},
+    onError: () => {
+      // 连接层失败（含重连耗尽）时亮出横幅，避免聊天窗口静默冻结
+      if (!socket || !socket.connected) initFailed.value = true
+    }
   })
   socket.connect()
 }

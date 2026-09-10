@@ -140,7 +140,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SubMenuItem from '@/components/SubMenuItem.vue'
@@ -164,8 +164,10 @@ const activeTopMenu = ref('')
 const activeSubMenu = ref(route.path)
 const unreadCount = ref(0)
 const geoAlertCount = ref(0)
+let geoAlertTimer = null
 import { getGeoAlertsUnreadCount } from '@/api/geoAlert'
 const loadGeoAlertCount = async () => {
+  if (!userStore.isLoggedIn) return
   try {
     const res = await getGeoAlertsUnreadCount()
     const data = res?.data || res
@@ -792,9 +794,13 @@ onMounted(async () => {
     console.error('初始化请求配置失败:', error)
   }
   loadGeoAlertCount()
-  setInterval(() => {
+  geoAlertTimer = setInterval(() => {
     if (document.visibilityState === 'visible') loadGeoAlertCount()
   }, 60000)
+})
+
+onUnmounted(() => {
+  if (geoAlertTimer) { clearInterval(geoAlertTimer); geoAlertTimer = null }
 })
 </script>
 

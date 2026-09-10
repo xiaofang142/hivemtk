@@ -125,8 +125,11 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
 
   const selectSession = async (session) => {
     currentSession.value = session
+    const sid = session.id
     try {
       const res = await getSessionMessages(session.id)
+      // 竞态守卫：快速连点会话时，先点会话的慢响应不得覆盖当前会话的消息区
+      if (currentSession.value?.id !== sid) return
       const list = Array.isArray(res) ? res : (res?.list || [])
       messages.value = list.map((m) => ({
         id: m.id,
@@ -140,6 +143,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       await nextTick()
       scrollToBottom()
     } catch (e) {
+      if (currentSession.value?.id !== sid) return
       console.error('加载会话消息失败:', e)
       ElMessage.error(i18n.global.t('加载会话消息失败'))
     }

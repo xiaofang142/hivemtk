@@ -128,9 +128,17 @@ export class ChatSocket {
   }
 
   async _tryRefreshTokenAndReconnect() {
+    // 1006（服务器重启/网络闪断）在访客侧最常见：浏览器无 close 帧，
+    // 与"token 失效"无关。访客端没有 agent token，不能因缺少它而放弃重连
+    // （否则聊天窗口永久冻结，访客以为客服不理人）；有 agent token 的坐席端
+    // 才走 token 刷新路径。访客侧走普通指数退避重连，resume 依赖 since_seq 续传。
     const hasAgentToken = !!localStorage.getItem('token');
     if (!hasAgentToken) {
-      this.onError(new Error('auth_required'))
+      if (this.shouldReconnect) {
+        this.scheduleReconnect()
+      } else {
+        this.onError(new Error('auth_required'))
+      }
       return
     }
     try {

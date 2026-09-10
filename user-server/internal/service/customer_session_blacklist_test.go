@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/model"
@@ -451,4 +452,59 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestVisitorOpenSession_BlacklistRejected 审计R49修复回归：
+// embed 访客 OpenSession（新建与 resume 两条路径）必须被黑名单拦截，
+// 与管理端 CreateSession 的 preCreateBlacklistGuard 同一口径，
+// 否则被拉黑访客可通过 embed 端绕过黑名单重新取得 visitor_token。
+func TestVisitorOpenSession_BlacklistRejected(t *testing.T) {
+	setupBlacklistServiceTestDB(t)
+	svc := NewCustomerSessionService()
+
+	sess, err := svc.CreateSession(context.Background(), &CreateSessionRequest{
+		Platform:  model.PlatformWebEmbed,
+		AccountID: "default",
+		UserID:    "u_blocked_visitor",
+		UserName:  "待拉黑访客",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := svc.BlacklistUser(context.Background(), &BlacklistRequest{
+		SessionID:    sess.ID,
+		Reason:       "审计回归-永久拉黑",
+		OperatorID:   1,
+		OperatorName: "audit",
+		TTLHours:     0,
+	}); err != nil {
+		t.Fatalf("BlacklistUser: %v", err)
+	}
+
+	channelSvc := MustNewChatChannelService(db.GetDB())
+	visitorSvc := NewVisitorChatService(context.Background(), db.GetDB(), channelSvc, nil, nil)
+
+	// 路径1：全新建会话
+	_, err = visitorSvc.OpenSession(context.Background(), &VisitorOpenSessionRequest{
+		ChannelID: "default",
+		VisitorID: "u_blocked_visitor",
+		Resume:    false,
+	})
+	if err == nil {
+		t.Fatal("❌ 被拉黑访客仍可通过 OpenSession 新建会话（黑名单被绕过）")
+	}
+	if !strings.Contains(err.Error(), "黑名单") {
+		t.Errorf("❌ 拒绝语义异常，期望包含'黑名单'，实际: %v", err)
+	}
+
+	// 路径2：resume 复活旧会话
+	_, err = visitorSvc.OpenSession(context.Background(), &VisitorOpenSessionRequest{
+		ChannelID: "default",
+		VisitorID: "u_blocked_visitor",
+		Resume:    true,
+	})
+	if err == nil {
+		t.Fatal("❌ 被拉黑访客仍可通过 resume 复活会话（黑名单被绕过）")
+	}
+	t.Logf("✅ 黑名单 embed 端拦截通过: %v", err)
 }

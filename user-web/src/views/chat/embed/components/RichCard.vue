@@ -16,9 +16,9 @@
           v-for="(btn, i) in card.buttons"
           :key="i"
           class="card-btn"
-          :href="btn.url || undefined"
-          :target="btn.url ? '_blank' : undefined"
-          :rel="btn.url ? 'noopener noreferrer' : undefined"
+          :href="safeUrl(btn.url)"
+          :target="safeUrl(btn.url) ? '_blank' : undefined"
+          :rel="safeUrl(btn.url) ? 'noopener noreferrer' : undefined"
           @click="onBtn(btn)"
         >{{ btn.text }}</a>
       </div>
@@ -31,6 +31,18 @@ const props = defineProps({
   card: { type: Object, required: true }
 })
 const emit = defineEmits(['action'])
+
+// 卡片按钮 URL 协议白名单：AI 产出的 ai_cards 直通访客端，
+// 不校验协议的话 javascript:/data: 伪协议 href 会成为 XSS 注入点
+const safeUrl = (url) => {
+  if (!url || typeof url !== 'string') return undefined
+  try {
+    const u = new URL(url, window.location.origin)
+    return ['http:', 'https:'].includes(u.protocol) ? url : undefined
+  } catch {
+    return undefined
+  }
+}
 
 const onBtn = (btn) => {
   if (btn.action) {

@@ -332,7 +332,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (realtimeTimer) { clearTimeout(realtimeTimer); realtimeTimer = null }
-  if (agentSocketInst) { agentSocketInst.disconnect?.(); agentSocketInst = null }
+  if (agentSocketInst) { agentSocketInst.close(); agentSocketInst = null }
 })
 
 const handleChannelChange = (val) => {

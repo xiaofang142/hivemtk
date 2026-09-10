@@ -190,6 +190,15 @@ func (s *VisitorChatService) OpenSession(ctx context.Context, req *VisitorOpenSe
 		return nil, errors.New("渠道已禁用")
 	}
 
+	// 黑名单守卫：与 CustomerSessionService.CreateSession 的 preCreateBlacklistGuard
+	// 同一口径。被拉黑访客（含 resume 复活旧会话）不得获取新 visitor_token，
+	// 否则黑名单形同虚设——拉黑只拦了管理端建会话路径，embed 端绕过。
+	if banned, berr := s.sessionSvc.IsUserBlacklisted(ctx, req.VisitorID, model.PlatformWebEmbed); berr != nil {
+		return nil, fmt.Errorf("黑名单校验失败: %w", berr)
+	} else if banned {
+		return nil, errors.New("该访客已被加入黑名单，无法创建会话")
+	}
+
 	if req.Resume {
 		existing, err := s.sessionRepo.GetLatestActiveByPlatformAccountUser(ctx,
 			model.PlatformWebEmbed, channel.ChannelID, req.VisitorID,
