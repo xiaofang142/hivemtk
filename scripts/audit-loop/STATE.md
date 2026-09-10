@@ -5,9 +5,29 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：49（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49 扫描组为 0 新增缺陷）
-- 下一轮角度：authz
+- 已完成轮次：50（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R50 扫描组为 0 新增缺陷）
+- 下一轮角度：architecture
+
+## 轮次报告
+
+### R50 — authz（2026-09-10）— 第五圈，0 缺陷轮
+
+**审计范围**：守卫基线核对、新增 browser-automation 功能面的权限审查（merge `54404ff`/`a95d6b6` 后）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 新增 `/api/browser-automation/*` 全部挂在 JWT `auth` 组内；`host/token/reset` 单独走 `AdminAuthMiddleware`；`/api/browser/host-ws` 双层防护（token + 本地回环 IP，fail-closed）
+- `doRegAdmin` 146 处（较基线 143 增长 3 处为新增 admin 路由，方向正确）
+- 访客 WS fail-closed 拒绝分支在位（`visitor_handler.go:129`）
+- merge 后回归：`go build` + `go vet` 全绿；service/app 测试 0 FAIL（含 R48 补的 `testLogRepo.UpdateNewValue` mock 修复）
+
+**验证证据**：build/vet/test 三绿（0 FAIL）。
+
+**Commit**：`8ca45e8`
+
+### R49 — security（2026-09-10）
 
 ## 轮次报告
 
