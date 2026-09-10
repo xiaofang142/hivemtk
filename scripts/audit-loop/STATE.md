@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：52（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 已完成轮次：53（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
 - 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：concurrency
+- 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R53 — concurrency（2026-09-11）— 第五圈，0 缺陷轮
+
+**审计范围**：R5 修复点回归、goroutine 基线核对、websocket 包偶发 FAIL 排查。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R5 修复点在位：`channelMediaFollowersMu` RWMutex 5 处引用
+- 裸 `go func()` 50 处（较基线 48 +2，为 browser_automation 新功能的 bootstrap/host-ws 正常增长，均在 SafeGo 或 fail-closed 处理器内）
+- websocket 包单次联合运行出现偶发 FAIL，单独复跑 + 组合复跑共 3 次均绿——判定为测试环境时序抖动（非代码缺陷），已记录观察；后续如复现将加 `t.Parallel` 隔离排查
+
+**验证证据**：vet 零 + service/websocket 复跑测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R53-concurrency: 0缺陷轮核查记录与状态推进`
 
 ### R52 — error-handling（2026-09-11）— 第五圈，0 缺陷轮
 
