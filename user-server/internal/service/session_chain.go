@@ -148,8 +148,7 @@ func (s *SessionChainService) ReopenOnInboundMessage(ctx context.Context, sessio
 
 // GetSession 根据 session_id 获取会话（供 controller 层复用，避免直接 db.GetDB）
 func (s *SessionChainService) GetSession(ctx context.Context, sessionID string) (*model.CustomerSession, error) {
-	repo := repository.NewCustomerSessionRepositoryWithDB(db.GetDB())
-	return repo.GetBySessionID(ctx, sessionID)
+	return s.repo.GetSessionBySessionID(ctx, sessionID)
 }
 
 // 支持的事件

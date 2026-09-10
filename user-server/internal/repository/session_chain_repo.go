@@ -71,6 +71,18 @@ func (r *SessionChainRepository) ReopenSessionOnInbound(ctx context.Context, ses
 	return res.RowsAffected > 0, nil
 }
 
+// GetSessionBySessionID 按 session_id 取会话（SessionChainService.GetSession 收口）
+func (r *SessionChainRepository) GetSessionBySessionID(ctx context.Context, sessionID string) (*model.CustomerSession, error) {
+	if r.db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	var sess model.CustomerSession
+	if err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&sess).Error; err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
 // AutomationRuleRepository 自动化规则 CRUD 与延迟执行收口
 type AutomationRuleRepository struct {
 	db *gorm.DB

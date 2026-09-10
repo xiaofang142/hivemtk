@@ -123,6 +123,7 @@ func main() {
 	}
 
 	service.InitDefaultStorageIfEmpty(db.GetDB())
+	service.BindAssetLoaderRepository(db.GetDB())
 
 	logger.Info("[DNC] customer_do_not_contact ready, sms_unsubscribes pending backfill via DoNotContactService.BackfillFromSMSUnsubscribe")
 

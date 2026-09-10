@@ -107,6 +107,7 @@ type InboxIngressResult struct {
 
 type InboxIngressService struct {
 	hubRepo       *repository.MessageHubRepository
+	feedbackRepo  *repository.FeedbackRecordRepository
 	cache         cache.Cache
 	triggerCh     chan string
 	aiTrigger     AITrigger
@@ -123,13 +124,16 @@ func NewInboxIngressServiceWithDB(db *gorm.DB, c cache.Cache) *InboxIngressServi
 		c = cache.GetGlobalCache()
 	}
 	var hubRepo *repository.MessageHubRepository
+	var feedbackRepo *repository.FeedbackRecordRepository
 	if db != nil {
 		hubRepo = repository.NewMessageHubRepositoryWithDB(db)
+		feedbackRepo = repository.NewFeedbackRecordRepository(db)
 	}
 	return &InboxIngressService{
-		hubRepo:   hubRepo,
-		cache:     c,
-		triggerCh: make(chan string, 1024),
+		hubRepo:      hubRepo,
+		feedbackRepo: feedbackRepo,
+		cache:        c,
+		triggerCh:    make(chan string, 1024),
 	}
 }
 

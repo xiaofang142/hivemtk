@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -20,9 +19,6 @@ type MessageHubSummaryAggregationService struct {
 }
 
 func NewMessageHubSummaryAggregationService(database *gorm.DB) *MessageHubSummaryAggregationService {
-	if database == nil {
-		database = db.GetDB()
-	}
 	return &MessageHubSummaryAggregationService{
 		repo:      repository.NewMessageHubSummaryRepository(database),
 		batchSize: 50000,

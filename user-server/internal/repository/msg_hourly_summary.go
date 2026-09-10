@@ -54,6 +54,9 @@ func NewMessageHubSummaryRepository(db *gorm.DB) MessageHubSummaryRepository {
 }
 
 func (r *msgHourlySummaryRepo) LoadWatermark(ctx context.Context, source string) (int64, error) {
+	if r.db == nil {
+		return 0, gorm.ErrInvalidDB
+	}
 	var wm model.AggregationWatermark
 	err := r.db.WithContext(ctx).
 		Where("source = ?", source).
@@ -79,6 +82,9 @@ const upsertIncrementSQL = `
 		updated_at    = NOW()`
 
 func (r *msgHourlySummaryRepo) UpsertIncrementBatch(ctx context.Context, source string, newWatermark int64, deltas []MsgHourlyDelta) error {
+	if r.db == nil {
+		return gorm.ErrInvalidDB
+	}
 	if len(deltas) == 0 {
 		return r.db.WithContext(ctx).Model(&model.AggregationWatermark{}).
 			Clauses(clause.OnConflict{
@@ -136,6 +142,9 @@ func (r *msgHourlySummaryRepo) LatestUpdate(ctx context.Context) (*time.Time, er
 }
 
 func (r *msgHourlySummaryRepo) LoadBatchSince(ctx context.Context, since int64, limit int) ([]model.MessageHub, error) {
+	if r.db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
 	if limit <= 0 {
 		limit = 50000
 	}

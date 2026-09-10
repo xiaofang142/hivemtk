@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // AgentStatusRepository 客服状态仓库
@@ -133,4 +135,51 @@ func (r *AgentStatusRepository) CountByStatusIn(ctx context.Context, statuses []
 	err := r.db.WithContext(ctx).Model(&model.AgentStatus{}).
 		Where("status IN ?", statuses).Count(&count).Error
 	return count, err
+}
+
+// AutoAssignAgentTx 自动分配事务：行锁锁定最闲在线坐席 → 会话分配 → 坐席负载 +1，原子提交。
+// 返回被分配的坐席（供调用方做 WS 通知）；无可用坐席返回 gorm.ErrRecordNotFound。
+// 该方法为 data-integrity R6 的 SELECT FOR UPDATE 行锁分配链路的仓储收口（原 service 层直连 tx 实现）。
+func (r *AgentStatusRepository) AutoAssignAgentTx(ctx context.Context, sessionRepo *CustomerSessionRepository, sessionID uint) (*model.AgentStatus, error) {
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("start transaction: %w", tx.Error)
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+			panic(rec)
+		}
+	}()
+
+	var bestAgent model.AgentStatus
+	cutoff := time.Now().Add(-5 * time.Minute)
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("status IN ? AND active_sessions < max_sessions AND last_active_at > ?",
+			[]string{"online", "busy"}, cutoff).
+		Order("active_sessions ASC").
+		Limit(1).
+		First(&bestAgent).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := sessionRepo.AssignAgent(ctx, sessionID, bestAgent.AgentID, bestAgent.AgentName); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("assign agent: %w", err)
+	}
+
+	if err := tx.Model(&model.AgentStatus{}).Where("agent_id = ?", bestAgent.AgentID).
+		Updates(map[string]any{
+			"active_sessions": gorm.Expr("active_sessions + 1"),
+			"today_sessions":  gorm.Expr("today_sessions + 1"),
+		}).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("increment agent load: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, fmt.Errorf("commit assign: %w", err)
+	}
+	return &bestAgent, nil
 }
