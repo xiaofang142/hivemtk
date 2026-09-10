@@ -651,12 +651,22 @@ func (s *InboxService) Reconcile(ctx context.Context, mode string) (*ReconcileRe
 	case ReconcileModeBackfill:
 		return s.reconcileBackfill(ctx)
 	default:
+		// 先归一历史脏状态（如 webhook 早期写入的 'active'），再按消息事实源重算
+		normalized, err := s.inboxRepo.NormalizeStatuses(ctx)
+		if err != nil {
+			return nil, err
+		}
 		n, err := s.inboxRepo.ReconcileUnread(ctx)
 		if err != nil {
 			return nil, err
 		}
 		res.UnreadReconciled = n
-		res.Message = fmt.Sprintf("已按消息事实源重算 %d 条会话的未读/状态", n)
+		res.NormalizedConv = normalized
+		if normalized > 0 {
+			res.Message = fmt.Sprintf("归一 %d 条非标准状态会话，并按消息事实源重算 %d 条会话的未读/状态", normalized, n)
+		} else {
+			res.Message = fmt.Sprintf("已按消息事实源重算 %d 条会话的未读/状态", n)
+		}
 		return res, nil
 	}
 }

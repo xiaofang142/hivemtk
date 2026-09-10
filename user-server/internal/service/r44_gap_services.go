@@ -609,6 +609,7 @@ func (s *EmailGapService) BounceBreakdown(ctx context.Context, days int) ([]map[
 
 // DomainReputationRow 域名信誉行
 type DomainReputationRow struct {
+	ID          int64  `json:"id"`
 	Domain      string `json:"domain"`
 	Reputation  string `json:"reputation"`
 	SentLast24h int64  `json:"sentLast24h"`
@@ -676,7 +677,34 @@ func (s *EmailGapService) DomainReputation(ctx context.Context) ([]DomainReputat
 		}
 		out = append(out, row)
 	}
+	// 前端按 row.id 调用暂停接口，这里注入稳定 id（域名序号，1-based）
+	for i := range out {
+		out[i].ID = int64(i + 1)
+	}
 	return out, nil
+}
+
+// emailSuspendedDomainsKey KV 中暂停域名的逗号分隔清单
+const emailSuspendedDomainsKey = "email_suspended_domains"
+
+// SuspendEmailDomain 暂停域名使用（写入 KV 黑名单，下次发送前应检查）
+func (s *EmailGapService) SuspendEmailDomain(ctx context.Context, domain string) error {
+	domain = strings.TrimSpace(strings.ToLower(domain))
+	if domain == "" {
+		return fmt.Errorf("域名不能为空")
+	}
+	kv := repository.NewSystemConfigKVRepository()
+	var suspended []string
+	if raw, err := kv.Get(ctx, emailSuspendedDomainsKey); err == nil && raw != "" {
+		for _, d := range strings.Split(raw, ",") {
+			if strings.TrimSpace(d) != "" && strings.TrimSpace(strings.ToLower(d)) != domain {
+				suspended = append(suspended, strings.TrimSpace(strings.ToLower(d)))
+			}
+		}
+	}
+	suspended = append(suspended, domain)
+	_, err := kv.Upsert(ctx, emailSuspendedDomainsKey, strings.Join(suspended, ","))
+	return err
 }
 
 // RFMMatrixRow 矩阵行（前端 RfmMatrix: [{recency, frequency, count}]）

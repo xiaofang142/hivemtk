@@ -7,10 +7,14 @@
           <p class="page-subtitle">可视化创建自定义角色，支持菜单权限 + 按钮权限 + 数据范围</p>
         </div>
         <div class="header-actions">
-          <el-button type="primary" @click="openCreateDialog">
-            <el-icon><Plus /></el-icon>
-            新建自定义角色
-          </el-button>
+          <el-tooltip content="v3.1 角色收口为三档系统角色，自定义角色将在后续版本开放" placement="top">
+            <span>
+              <el-button type="primary" disabled>
+                <el-icon><Plus /></el-icon>
+                新建自定义角色
+              </el-button>
+            </span>
+          </el-tooltip>
         </div>
       </div>
     </el-card>
@@ -66,6 +70,14 @@
 
       
       <el-tab-pane label="自定义角色" name="custom">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="自定义角色暂未启用"
+          description="当前版本（v3.1）角色收口为三档系统角色（超管 / 客服 / 员工）。自定义角色的菜单权限、按钮权限与数据范围配置能力将在后续版本开放；如需调整人员权限，请在「用户管理」中为账号分配系统角色。"
+          style="margin-bottom: 16px"
+        />
         <el-row :gutter="20" v-loading="loading">
           <el-col
             v-for="role in customRoles"
@@ -113,26 +125,7 @@
                   成员：<strong>{{ role.member_count || 0 }}</strong>
                 </span>
               </div>
-              <div class="role-actions">
-                <el-button size="small" @click="openEditDialog(role)">编辑</el-button>
-                <el-button size="small" type="primary" @click="openMembersDialog(role)">成员</el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  @click="onDelete(role)"
-                >
-                  删除
-                </el-button>
-              </div>
             </el-card>
-          </el-col>
-          <el-col v-if="!loading && customRoles.length === 0" :span="24">
-            <el-empty description="暂无自定义角色，点击右上角创建">
-              <el-button type="primary" @click="openCreateDialog">
-                <el-icon><Plus /></el-icon>
-                新建自定义角色
-              </el-button>
-            </el-empty>
           </el-col>
         </el-row>
       </el-tab-pane>
@@ -160,125 +153,13 @@
     </el-dialog>
 
     
-    <el-dialog
-      v-model="formDialogVisible"
-      :title="formMode === 'create' ? '新建自定义角色' : '编辑自定义角色'"
-      width="900px"
-      :close-on-click-modal="false"
-      @close="resetForm"
-    >
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="formRules"
-        label-width="100px"
-        v-loading="formLoading"
-      >
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="角色编码" prop="role_code">
-              <el-input
-                v-model="form.role_code"
-                placeholder="如 marketing_manager"
-                :disabled="formMode === 'edit'"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="角色名称" prop="name">
-              <el-input v-model="form.name" placeholder="如 营销经理" />
-            </el-form-item>
-          </el-col>
-        </el-row>
 
-        <el-form-item label="角色描述">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="2"
-            placeholder="简要描述角色的职责和适用场景"
-          />
-        </el-form-item>
-
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="颜色">
-              <el-color-picker v-model="form.color" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="图标">
-              <el-input v-model="form.icon" placeholder="Element Icon 名称" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="启用">
-              <el-switch v-model="form.enabled" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        
-        <el-form-item label="菜单权限">
-          <el-card shadow="never" class="perm-card">
-            <el-tree
-              ref="menuTreeRef"
-              :data="menuTree"
-              show-checkbox
-              node-key="path"
-              :default-checked-keys="form.menu_perms"
-              :props="{ label: 'title', children: 'children' }"
-            />
-          </el-card>
-        </el-form-item>
-
-        
-        <el-form-item label="按钮权限">
-          <el-card shadow="never" class="perm-card">
-            <el-checkbox-group v-model="form.button_perms">
-              <el-checkbox
-                v-for="btn in availableButtons"
-                :key="btn.code"
-                :label="btn.code"
-              >
-                {{ btn.name }}
-              </el-checkbox>
-            </el-checkbox-group>
-          </el-card>
-        </el-form-item>
-
-        
-        <el-form-item label="数据范围" prop="scope_type">
-          <el-radio-group v-model="form.scope_type">
-            <el-radio value="all">全部数据</el-radio>
-            <el-radio value="dept">本部门</el-radio>
-            <el-radio value="self">仅自己</el-radio>
-            <el-radio value="custom">自定义部门</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-form-item v-if="form.scope_type === 'custom'" label="自定义部门">
-          <el-input
-            v-model="customDeptText"
-            placeholder="部门 ID，多个用英文逗号分隔"
-            @blur="syncCustomDept"
-          />
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="formDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="formSubmitting" @click="onSubmit">
-          保存
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
   Lock,
   User,
@@ -288,9 +169,6 @@ import {
 import {
   listSystemRoles,
   listCustomRoles,
-  createRole,
-  updateRole,
-  deleteRole,
   listRoleMembers
 } from '@/api/role'
 import PageState from '@/components/PageState.vue'
@@ -306,128 +184,10 @@ const membersLoading = ref(false)
 const currentRole = ref(null)
 const members = ref([])
 
-const formDialogVisible = ref(false);
-const formMode = ref('create')
-const formLoading = ref(false)
-const formSubmitting = ref(false)
-const formRef = ref(null)
-const menuTreeRef = ref(null)
-const customDeptText = ref('')
-
-const form = ref({
-  role_code: '',
-  name: '',
-  description: '',
-  color: '#409eff',
-  icon: 'UserFilled',
-  enabled: true,
-  menu_perms: [],
-  button_perms: [],
-  scope_type: 'self',
-  custom_dept_ids: []
-})
-
-const formRules = {
-  role_code: [
-    { required: true, message: '请输入角色编码', trigger: 'blur' },
-    { pattern: /^[a-z][a-z0-9_]*$/, message: '小写字母开头，仅含 a-z 0-9 _', trigger: 'blur' }
-  ],
-  name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
-  scope_type: [{ required: true, message: '请选择数据范围', trigger: 'change' }]
-}
-
-const menuTree = ref([
-  {
-    title: '工作台',
-    path: '/dashboard',
-    children: [
-      { title: '数据概览', path: '/dashboard/overview' },
-      { title: '销售驾驶舱', path: '/dashboard/cockpit' }
-    ]
-  },
-  {
-    title: '客户',
-    path: '/customer',
-    children: [
-      { title: '客户列表', path: '/customer/list' },
-      { title: '客户360', path: '/customer/360' },
-      { title: '客户旅程', path: '/customer/journey' }
-    ]
-  },
-  {
-    title: '营销',
-    path: '/marketing',
-    children: [
-      { title: '触达', path: '/marketing/reach' },
-      { title: 'A/B 测试', path: '/marketing/ab-test' },
-      { title: '客户分群', path: '/marketing/segment' }
-    ]
-  },
-  {
-    title: 'AI 智能',
-    path: '/ai',
-    children: [
-      { title: 'AI 销冠', path: '/ai/sales' },
-      { title: '知识库', path: '/ai/knowledge' },
-      { title: 'SOP 模板', path: '/ai/sop' }
-    ]
-  },
-  {
-    title: '系统',
-    path: '/system',
-    children: [
-      { title: '用户管理', path: '/system/user' },
-      { title: '角色管理', path: '/system/role' },
-      { title: '权限设置', path: '/system/permission' },
-      { title: '操作日志', path: '/system/log' }
-    ]
-  }
-]);
-
-const availableButtons = ref([
-  { code: 'user:create', name: '新建用户' },
-  { code: 'user:update', name: '编辑用户' },
-  { code: 'user:delete', name: '删除用户' },
-  { code: 'role:create', name: '新建角色' },
-  { code: 'role:update', name: '编辑角色' },
-  { code: 'role:delete', name: '删除角色' },
-  { code: 'customer:export', name: '导出客户' },
-  { code: 'order:refund', name: '订单退款' },
-  { code: 'message:send', name: '发送消息' }
-]);
-
 const getScopeLabel = (scope) => {
   const map = { all: '全部', dept: '部门', self: '自己', custom: '自定义' }
   return map[scope] || scope
 };
-
-const syncCustomDept = () => {
-  if (!customDeptText.value) {
-    form.value.custom_dept_ids = []
-    return
-  }
-  form.value.custom_dept_ids = customDeptText.value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-const resetForm = () => {
-  form.value = {
-    role_code: '',
-    name: '',
-    description: '',
-    color: '#409eff',
-    icon: 'UserFilled',
-    enabled: true,
-    menu_perms: [],
-    button_perms: [],
-    scope_type: 'self',
-    custom_dept_ids: []
-  }
-  customDeptText.value = ''
-  formRef.value?.clearValidate()
-}
 
 const loadRoles = async () => {
   loading.value = true
@@ -481,86 +241,6 @@ const openMembersDialog = async (role) => {
   } finally {
     membersLoading.value = false
   }
-}
-
-const openCreateDialog = () => {
-  formMode.value = 'create'
-  resetForm()
-  formDialogVisible.value = true
-};
-
-const openEditDialog = async (role) => {
-  formMode.value = 'edit'
-  formLoading.value = true
-  formDialogVisible.value = true
-  try {
-    const res = await listCustomRoles({ id: role.id }).catch(() => null)
-    const detail = res?.data?.find((r) => r.id === role.id) || role
-    form.value = {
-      id: detail.id,
-      role_code: detail.role_code,
-      name: detail.name,
-      description: detail.description || '',
-      color: detail.color || '#409eff',
-      icon: detail.icon || 'UserFilled',
-      enabled: detail.enabled !== false,
-      menu_perms: detail.menu_perms || [],
-      button_perms: detail.button_perms || [],
-      scope_type: detail.scope_type || 'self',
-      custom_dept_ids: detail.custom_dept_ids || []
-    }
-    customDeptText.value = (detail.custom_dept_ids || []).join(',')
-  } catch (e) {
-    ElMessage.error('加载角色详情失败')
-    formDialogVisible.value = false
-  } finally {
-    formLoading.value = false
-  }
-}
-
-const onSubmit = async () => {
-  try {
-    await formRef.value?.validate()
-  } catch {
-    return
-  }
-  formSubmitting.value = true
-  try {
-    const checked = menuTreeRef.value?.getCheckedNodes() || [];
-    const halfChecked = menuTreeRef.value?.getHalfCheckedNodes() || []
-    const allCheckedNodes = [...checked, ...halfChecked]
-    form.value.menu_perms = allCheckedNodes.map((n) => n.path).filter(Boolean)
-
-    if (formMode.value === 'create') {
-      await createRole(form.value)
-      ElMessage.success('创建成功')
-    } else {
-      await updateRole(form.value.id, form.value)
-      ElMessage.success('更新成功')
-    }
-    formDialogVisible.value = false
-    loadCustomRoles()
-  } catch (e) {
-    ElMessage.error('保存失败：' + (e?.message || '未知错误'))
-  } finally {
-    formSubmitting.value = false
-  }
-}
-
-const onDelete = (role) => {
-  ElMessageBox.confirm(
-    `确认删除角色「${role.name}」吗？相关成员将失去该角色权限。`,
-    '删除确认',
-    { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
-  ).then(async () => {
-    try {
-      await deleteRole(role.id)
-      ElMessage.success('删除成功')
-      loadCustomRoles()
-    } catch (e) {
-      ElMessage.error('删除失败：' + (e?.message || '未知错误'))
-    }
-  }).catch(() => {})
 }
 
 onMounted(loadRoles)

@@ -21,6 +21,7 @@ type OperationLogRepository interface {
 	GetByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.OperationLog, int64, error)
 	DeleteOldLogs(ctx context.Context, beforeDate time.Time) error
 	DeleteByIDs(ctx context.Context, ids []uint) (int64, error)
+	UpdateNewValue(ctx context.Context, id uint, newValue string) error
 }
 
 type operationLogRepo struct {
@@ -105,4 +106,10 @@ func (r *operationLogRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, 
 	}
 	result := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&model.OperationLog{})
 	return result.RowsAffected, result.Error
+}
+
+func (r *operationLogRepo) UpdateNewValue(ctx context.Context, id uint, newValue string) error {
+	return r.db.WithContext(ctx).Model(&model.OperationLog{}).
+		Where("id = ?", id).
+		Update("new_value", newValue).Error
 }

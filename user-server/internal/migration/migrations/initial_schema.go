@@ -193,4 +193,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewChurnScoreMigration(db))
 	register(NewTelegramGroupGateMigration(db))
 	register(NewAdminPasswordGuardMigration(db))
+	register(NewBrowserAutomationMigration(db))
+	register(NewBrowserCommandLogMigration(db))
+	register(NewBrowserTaskPlatformMigration(db))
 }

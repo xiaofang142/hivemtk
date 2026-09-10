@@ -43,6 +43,8 @@ func setupWhatsappRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		admin.POST("/jobs", whatsappCtrl.CreateJob)
 		admin.DELETE("/jobs/:id", whatsappCtrl.DeleteJob)
 		admin.POST("/group-messaging/send", whatsappGroupMsgCtrl.SelectGroupAndSendMessage)
+		admin.POST("/bulk-send", whatsappGroupMsgCtrl.BulkSend)
+		admin.GET("/jobs/:id/progress", whatsappGroupMsgCtrl.GetJobProgress)
 		admin.POST("/templates", whatsappGroupMsgCtrl.CreateTemplate)
 		admin.PUT("/templates/:id", whatsappGroupMsgCtrl.UpdateTemplate)
 		admin.DELETE("/templates/:id", whatsappGroupMsgCtrl.DeleteTemplate)

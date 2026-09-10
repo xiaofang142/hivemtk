@@ -1,0 +1,7 @@
+{
+  "name": "com.hivemtk.browser",
+  "description": "HiveMTK Browser Automation Native Messaging Host",
+  "path": "/usr/local/bin/hivemtk_browser_nm_host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://YOUR_EXT_ID_HERE/"]
+}

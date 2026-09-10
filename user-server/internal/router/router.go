@@ -319,6 +319,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupClueRoutes(auth)
 		SetupGeoRoutes(auth, gormDB)
+		SetupBrowserAutomationRoutes(auth, r, gormDB)
 		setupLeadMiningRoutes(auth)
 
 		setupCustomerRFMRoutes(auth)

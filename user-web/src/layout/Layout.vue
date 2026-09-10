@@ -226,6 +226,7 @@ const topMenus = ref([
     children: [
       { key: 'messageHub', title: '消息中台 MQ', icon: 'MessageBox', path: '/messageHub/list', roles: ['admin', 'manager'] },
       { key: 'messageHubDashboard', title: '消息中台看板', icon: 'DataBoard', path: '/messageHub/dashboard', roles: ['admin', 'manager'] },
+      { key: 'inbox', title: '统一收件箱', icon: 'Box', path: '/inbox/list' },
       { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]
@@ -559,6 +560,18 @@ const topMenus = ref([
       { key: 'confidencePanel', title: '置信度看板', icon: 'CircleCheck', path: '/confidence/panel', roles: ['admin', 'manager', 'viewer'] },
       { key: 'humanizePanel', title: '拟人度看板', icon: 'MagicStick', path: '/humanize/panel', roles: ['admin', 'manager', 'viewer'] },
       { key: 'feedbackLoopPanel', title: '反馈闭环', icon: 'Refresh', path: '/feedbackLoop/panel', roles: ['admin', 'manager', 'viewer'] },
+      {
+        key: 'browserAutomation',
+        title: '浏览器自动化',
+        icon: 'Monitor',
+        path: '/browser-automation/tasks',
+        children: [
+          { key: 'baTasks', title: '任务列表', icon: 'Monitor', path: '/browser-automation/tasks' },
+          { key: 'baCreate', title: '新建任务', icon: 'Plus', path: '/browser-automation/tasks/create' },
+          { key: 'baCron', title: '定时触发器', icon: 'Timer', path: '/browser-automation/cron' },
+          { key: 'baStatus', title: 'Host 状态', icon: 'CircleCheck', path: '/browser-automation/status' },
+        ]
+      },
       {
         key: 'geoTools',
         title: 'GEO 智能优化',

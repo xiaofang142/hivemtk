@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "HiveMTK Browser Automation",
+  "version": "1.2.0",
+  "description": "HiveMTK 浏览器自动化扩展（寄生式后台 tab + Native Messaging）",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApdD/2KgDxsDk1ZvygN+wPbnYD6lsp6Q3hgY5AMu3e1vNcFMMYibL04Utb1r2LiuiFAAd340SURxOyAS/i2CTXV8rSsgjQEjnVCJ5imHgVgbaWCLfaOjjJxOxhLKO/qeFelk3KX48kfM/tVCxuDHIg+HZlYJpqIeoCZmNKY3VBkA4Zo1ZElP3fDOjQiJsZ4h3TUwxSC7L7hLjz+JkWHth8QThhmC4bPCIa5+Yzzkiz+1m7DWsC7AFWujpDa1TpieNsoBJXbF1v3ARfW/zsEpPaAPlWJc1qE4ukX1nuj4+gUb3Xva0UTTiQZmgRVznMMR+K44QQWnHUuBR4Xcr4LsYPwIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "tabs",
+    "scripting",
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "HiveMTK 浏览器自动化"
+  },
+  "icons": {
+    "128": "icons/128.png"
+  }
+}

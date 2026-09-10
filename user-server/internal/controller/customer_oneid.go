@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -284,10 +285,25 @@ func (c *CustomerOneIDController) SaveMergeRules(ctx *gin.Context) {
 	mergeRuleSvc := service.NewOneIDMergeRuleService()
 	out, err := mergeRuleSvc.SaveRules(ctx.Request.Context(), &set)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "保存合并规则失败")
+		response.Error(ctx, http.StatusBadRequest, "保存合并规则失败", err.Error())
 		return
 	}
 	response.Success(ctx, out, "保存成功")
+}
+
+// DeleteMergeRule DELETE /api/oneid/merge-rules/:id（MergeRuleConfig.vue 删除按钮）
+func (c *CustomerOneIDController) DeleteMergeRule(ctx *gin.Context) {
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的规则 ID")
+		return
+	}
+	out, err := service.NewOneIDMergeRuleService().DeleteRule(ctx.Request.Context(), id)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, out, "删除成功")
 }
 
 // PreviewMergeRules godoc

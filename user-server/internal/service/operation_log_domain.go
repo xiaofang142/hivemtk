@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -20,31 +21,34 @@ func NewOperationLogService() *OperationLogService {
 
 // OperationLogView 操作日志视图（脱离 model 的 DTO）
 type OperationLogView struct {
-	ID         uint      `json:"id"`
-	UserID     uint      `json:"user_id"`
-	Username   string    `json:"username"`
-	Action     string    `json:"action"`
-	Module     string    `json:"module"`
-	Resource   string    `json:"resource"`
-	ResourceID string    `json:"resource_id"`
-	IP         string    `json:"ip"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID           uint      `json:"id"`
+	UserID       uint      `json:"user_id"`
+	Username     string    `json:"username"`
+	Action       string    `json:"action"`
+	Module       string    `json:"module"`
+	Resource     string    `json:"resource"`
+	ResourceID   string    `json:"resource_id"`
+	IP           string    `json:"ip"`
+	CreatedAt    time.Time `json:"created_at"`
+	Rollbackable bool      `json:"rollbackable"`
 }
 
 func toOperationLogView(log *model.OperationLog) *OperationLogView {
 	if log == nil {
 		return nil
 	}
+	// 可回滚口径：操作带了旧值快照（update/delete 类写操作），才谈得上回滚
 	return &OperationLogView{
-		ID:         log.ID,
-		UserID:     log.UserID,
-		Username:   log.Username,
-		Action:     log.Action,
-		Module:     log.Module,
-		Resource:   log.Resource,
-		ResourceID: log.ResourceID,
-		IP:         log.IP,
-		CreatedAt:  log.CreatedAt,
+		ID:           log.ID,
+		UserID:       log.UserID,
+		Username:     log.Username,
+		Action:       log.Action,
+		Module:       log.Module,
+		Resource:     log.Resource,
+		ResourceID:   log.ResourceID,
+		IP:           log.IP,
+		CreatedAt:    log.CreatedAt,
+		Rollbackable: log.OldValue != "",
 	}
 }
 
@@ -111,6 +115,39 @@ func (s *OperationLogService) DeleteOldLogs(ctx context.Context, cutoff time.Tim
 // DeleteByIDs 批量删除操作日志，返回删除条数
 func (s *OperationLogService) DeleteByIDs(ctx context.Context, ids []uint) (int64, error) {
 	return s.logRepo.DeleteByIDs(ctx, ids)
+}
+
+// Rollback 回滚一条操作日志：把日志中记录的 old_value 写回 new_value 快照位，
+// 并追加一条 rollback 审计日志。诚实口径：old_value 为空的日志不可回滚。
+func (s *OperationLogService) Rollback(ctx context.Context, id uint, operator string) (*model.OperationLog, error) {
+	log, err := s.logRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if log == nil {
+		return nil, fmt.Errorf("日志 %d 不存在", id)
+	}
+	if log.OldValue == "" {
+		return nil, fmt.Errorf("该操作无可回滚的旧值快照")
+	}
+	if err := s.logRepo.UpdateNewValue(ctx, id, log.OldValue); err != nil {
+		return nil, err
+	}
+	rollbackLog := &model.OperationLog{
+		UserID:     log.UserID,
+		Username:   operator,
+		Action:     "rollback",
+		Module:     log.Module,
+		Resource:   log.Resource,
+		ResourceID: log.ResourceID,
+		Detail:     fmt.Sprintf("回滚日志 #%d（%s %s）", log.ID, log.Action, log.Resource),
+		OldValue:   log.NewValue,
+		NewValue:   log.OldValue,
+	}
+	if err := s.logRepo.Create(ctx, rollbackLog); err != nil {
+		return nil, err
+	}
+	return rollbackLog, nil
 }
 
 // OperationLogStats 操作日志统计

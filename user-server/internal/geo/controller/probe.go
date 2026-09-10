@@ -84,6 +84,16 @@ func (c *ProbeController) RunNegativeMonitor(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"started": true}, "已启动负面监控任务")
 }
 
+// RunSOVRefresh 手动触发 SOV 刷新（SovBoard.vue 刷新按钮依赖）
+// POST /geo/probe/run-sov
+func (c *ProbeController) RunSOVRefresh(ctx *gin.Context) {
+	if _, err := service.GetGeoJobManager().Trigger(service.JobSOVRefresh); err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"started": true}, "已启动 SOV 刷新任务")
+}
+
 // RunSourceSync 手动触发信源目录同步
 // POST /geo/probe/run-source-sync
 func (c *ProbeController) RunSourceSync(ctx *gin.Context) {

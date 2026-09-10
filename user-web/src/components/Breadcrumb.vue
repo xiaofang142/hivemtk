@@ -33,6 +33,7 @@ const topMenusMap = {
 
 const subMenusMap = {
   messageHub: { parent: 'workspace', title: i18n.global.t('消息中台 MQ') },
+  inbox: { parent: 'workspace', title: i18n.global.t('统一收件箱') },
   wecomAccount: { parent: 'workspace', title: i18n.global.t('多账号聚合') },
   clue: { parent: 'customer', title: i18n.global.t('线索') },
   customer360: { parent: 'customer', title: i18n.global.t('客户') },
