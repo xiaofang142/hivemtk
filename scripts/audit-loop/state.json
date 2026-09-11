@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 71,
-  "next_angle_index": 11,
+  "round": 72,
+  "next_angle_index": 0,
   "angles": [
     "security",
     "authz",
@@ -18,9 +18,9 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 71,
-    "issues_found_total": 21,
-    "issues_fixed_total": 21,
+    "rounds_completed": 72,
+    "issues_found_total": 22,
+    "issues_fixed_total": 22,
     "last_completed_at": "2026-09-12",
     "last_commit": "38a0306"
   },
@@ -648,6 +648,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第六圈 0缺陷: R11 键名无回退; 端口三方一致; build/vet 绿"
+    },
+    {
+      "round": 72,
+      "angle": "docs-consistency",
+      "date": "2026-09-12",
+      "found": 1,
+      "fixed": 1,
+      "notes": "CHANGELOG补录第三至第六圈结论; doc脚本0 error/0失败; README/DEV_DOCS_INDEX 74链接0失效; 第六圈收官(12角度0代码缺陷)"
     }
   ]
 }

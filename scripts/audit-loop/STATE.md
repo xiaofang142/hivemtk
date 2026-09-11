@@ -5,11 +5,31 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：71（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：docs-consistency
+- 已完成轮次：72（六圈收官）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51/R53–R72 扫描组为 0 新增缺陷）
+- 下一轮角度：security（第七圈首轮）
 
 ## 轮次报告
+
+### R72 — docs-consistency（2026-09-12）— 第六圈收官，1 发现 1 修复（文档级），0 代码缺陷
+
+**审计范围**：`check-doc-consistency.sh` + `check-feature-doc.sh` 复跑、README/DEV_DOCS_INDEX 相对链接全量校验、README 双语图片引用核对、CHANGELOG 与审计历史对齐。
+
+**发现与处置（1 修复）**：
+
+1. **CHANGELOG 审计循环段落停留在 R1–R22（P3，文档级）** — `b402117` 补录过第二圈，但第三圈（R25–R36）至第六圈（R61–R71）共四圈结论完全未记录。**处置**：标题更新为 R1–R72 六圈 21 发现 21 修复，追加第三/四/五/六圈各一行摘要（含 L4 收敛 152→38→35 处、browser-automation 功能面入库契约保持对齐、R36/R48 功能专项修复等里程碑）。
+
+**核查通过项**：
+- `check-doc-consistency.sh`：0 ❌（marketing-features README 全部链接有效 + feature doc 8 节结构全过）；19 个警告均为父仓库/平台端文档既定范围，留档不阻断
+- `check-feature-doc.sh`：0 失败（1 跳过为 README 本身）
+- README.md / README.en.md / DEV_DOCS_INDEX.md 相对链接 74 处全量校验 0 失效
+- 中/英 README 12 处图片引用对应文件全部在位（6 张 screenshot-*.png 双语共用）
+
+**第六圈总结（R61–R72，12 角度）**：全部 0 代码缺陷收官。第一圈 21 项修复经六圈复扫全部稳固；全仓 go test 零失败、eslint errors=0、契约 872 调用 0 UNMATCHED、端口/键名三方一致持续保持。CHANGELOG 补录为文档级唯一修复项。
+
+**验证证据**：doc 脚本 0 error/0 失败 + 链接校验 74 处 0 失效。
+
+**Commit**：见 git log `chore(audit): 审计R72-docs-consistency: 第六圈收官记录与状态推进`
 
 ### R71 — config-deploy（2026-09-12）— 第六圈，0 缺陷轮
 
