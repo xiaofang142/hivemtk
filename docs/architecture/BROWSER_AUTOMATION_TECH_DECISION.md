@@ -506,6 +506,8 @@ user-web/bridge/                  Chrome 扩展（注意：扩展目录名是 br
 |------|------|------|
 | v1.0 | 2026-09-11 | 初稿：技术选型论证 + 决策归档 |
 | v2.0（附录） | 2026-09-11 | 附录 A：C1–C8 源码可追溯锚点 + S1–S6 评分落地映射（论证可追溯，不动正文结论） |
+| v3.0（附录） | 2026-09-11 | 附录 B：勘误回写（6 条，以代码为准） |
+| v4.0（附录） | 2026-09-11 | 附录 C：全链路 9 步外部对标（Browser-Use/Stagehand/chromedp/rod/Temporal/IPI 论文），每步给出采用结论 |
 
 ---
 
@@ -547,3 +549,28 @@ S1–S6 评分落地映射（评分见正文 §4，落地证据见 SOLUTION/FULL
 - B6 交叉引用：实现层差距分级（G1–G9）与决策（D1–D6）见
   `user-web/docs/platform-base/BROWSER_AUTOMATION_MODULE_TECH_PROOF.md` v1.0；
   本文档只管选型判定，两文冲突处以 PROOF 文件:行号证据为准。
+
+---
+
+## 附录 C. 全链路 9 步外部对标 + 采用结论（v4 深挖）
+
+> 对标时间 2026-09-11；资料来源：browser-use 官方仓库/论文、Stagehand v4 官方文档、
+> chromedp/pkg.go.dev（v0.16.0，2,179 引用）、rod 官方对标页、Temporal 官方博客、
+> IPI 攻击论文（arXiv 2507.14799）、Cloudflare Browser Run changelog（2026-07）。
+> 结论：本链路与两大主流（Browser-Use、Stagehand）同构，"原子原语+智能体+扩展就近
+> 执行+a11y 优先"是行业最优解——我方已站在上面，9 步全部"维持现状+吸收增量"。
+
+| # | 链路步骤 | 外部最优方案 | 我方现状 | 采用结论 |
+|---|---|---|---|---|
+| 1 | 原语层 | Stagehand act/extract/observe＋确定性 page API 混合（v4 口号：Playwright 为测试而生，Stagehand 为 Agent 而生） | Hand 对外 15＋Executor 确定性 loop＋Brain 智能体，同构 | ✅维持；v2 吸收 self-healing（动作失败自动刷新定位） |
+| 2 | 元素定位 | a11y tree 是行业标准：Playwright MCP 快照、Cloudflare `/accessibilityTree` 独立端点（2026-07）、Browser-Use DOM+ARIA | @eN refs（SW 内存，MAX400）同构 | ✅维持 a11y-first；v2 加 vision 兜底（canvas/图表类元素） |
+| 3 | 可信输入 | CDP trusted input 是唯一绕过合成事件检测路径；Stagehand"runtime lives in the browser"（扩展就近执行，click 21ms、自带 healing） | 扩展内 CDP 直连 input.js（ASCII 码表+CJK insertText+5 步轨迹），不走远程调试端口 | ✅维持；扩展就近执行被 Stagehand 独立验证为最优 |
+| 4 | 服务端 CDP 驱动 | rod（新项目推荐，Playwright 级 DX）vs chromedp（零依赖，v0.16.0） | 服务端零浏览器依赖（go.mod 已验证无）——本步不需要 | ✅维持"不用"；v3 独立 collector tag 再选 rod |
+| 5 | 任务编排 | Temporal（durable execution 标准）vs 自研 DB 状态机；Temporal 官方承认短工作流可用轻量 task queue | Executor DB 状态机＋五重熔断，符合单体+短任务最优 | ✅维持自研；v3 长任务/跨机再评估 Temporal |
+| 6 | LLM 规划闭环 | Browser-Use observe→think→act＋Registry＋SecurityWatchdog；bu-2-0（2026-01）专用决策模型；Cloud 实测 78% | Brain reflect+plan＋JudgeDone＋Hand registry，同构 | ✅维持；v2 借鉴两点：① 小模型蒸馏降成本 ② SecurityWatchdog 式域限制 |
+| 7 | 威胁模型 | IPI 论文实证：a11y tree 可被页面 HTML 预埋触发器劫持（GCG 算法，登录凭证外泄/强制点广告） | T1 已登记：brain.go:155 快照无分隔直拼 prompt，防线仅 JudgeDone | ⚠️升级为行业级已确认风险；v2 加固：分隔符包装＋敏感动作二次确认＋allowlist（见 §8 待办） |
+| 8 | NM Host 桥 | Chrome 官方原生通道；Go 实现零依赖单二进制 | Go nm-host（211 行，双泵+退避 2s→60s） | ✅维持 Go（C7）；不引入 Python/Node runtime |
+| 9 | 回包+鉴权 | req_id over WS = 标准 request-response（等价 JSON-RPC/gRPC stream）；bh_ token＋fail-closed 符合 M2M 最佳实践 | pending chan＋uuid＋四分支 select；双候选常量时间比较 | ✅维持；剩余仅"定时自动轮换"（B5） |
+
+一句话总结：9 步中 8 步"维持现状"（外部最优与我方同构）、1 步（T1 提示注入）
+"升级风险+列入 v2 加固"。路线不动（S1 8/8 有效），下一步只做增量吸收。
