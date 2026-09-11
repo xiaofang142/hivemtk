@@ -505,3 +505,72 @@ user-web/bridge/                  Chrome 扩展（注意：扩展目录名是 br
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | v1.0 | 2026-09-11 | 初稿：技术选型论证 + 决策归档 |
+| v2.0（附录） | 2026-09-11 | 附录 A：C1–C8 源码可追溯锚点 + S1–S6 评分落地映射（论证可追溯，不动正文结论） |
+| v3.0（附录） | 2026-09-11 | 附录 B：勘误回写（6 条，以代码为准） |
+| v4.0（附录） | 2026-09-11 | 附录 C：全链路 9 步外部对标（Browser-Use/Stagehand/chromedp/rod/Temporal/IPI 论文），每步给出采用结论 |
+
+---
+
+## 附录 A. 约束↔源码↔评分可追溯矩阵（v2 深化）
+
+C1–C8 每条约束的源码落点（本轮精读原文）：
+
+| 约束 | 源码锚点 | 落点说明 |
+|---|---|---|
+| C1 复用主 Profile | 架构事实：无 `--user-data-dir`/`--remote-debugging-port` 启动代码；nm-host 由 Chrome 以 connectNative fork（main.go:1-9 注释） | 寄生用户真实 Chrome，SSO/证书/登录态天然继承 |
+| C2 后台 tab 不抢焦点 | `tabs.create({active:false})`（FULL_LINK S5）+ screenshot 先激活是唯一例外（M3 定稿） | AI 与用户共用浏览器不干扰 |
+| C3 重启自动连接无弹窗 | nm-host 指数退避 2s→60s（main.go:142-156）+ 扩展重连 2s→30s 上限 5 次（S5）+ 启动 EnsureToken/RestoreAll（routes 122-125） | 掉线自愈，无人工干预 |
+| C4 多 Agent 共享会话 | Registry userID→单 conn + 三处外部注入共用 `RunTaskWithRetry`（routes 46-53：MCP tooluse / workflow / Feedback 重试） | 自研 Agent+MCP+workflow 同一入口 |
+| C5 无独立浏览器实例 | Hand 约束①不启动子进程（hand.go:9）+ 全链路无 chromedp/rod/playwright 依赖（go.mod 已验证无） | 零服务端浏览器进程，零内存 |
+| C6 单统一端口 :8204 | WS 挂 engine 同端口 `/api/browser/host-ws`（routes 118）；默认 `ws://127.0.0.1:8204`（main.go:27） | 无新增端口 |
+| C7 Go 主栈 | nm-host 与服务端同 go.mod（gorilla 复用）；扩展仅 JS（Chrome 强制） | 无 Node/Python runtime 依赖 |
+| C8 私域单租户 | token 内嵌 userID 归属 + 命令只路由归属 Host（host_token.go:16-17；registry 121-122） | 多租户边界已有，单租户部署是其特例 |
+
+S1–S6 评分落地映射（评分见正文 §4，落地证据见 SOLUTION/FULL_LINK）：
+
+| 方案 | 评分结论 | 落地证据（v1 已验证） |
+|---|---|---|
+| S1 NM 桥（维持） | 8/8 约束全过 | I1 16/16 对齐零缺口 + I2 token 链完备 + I3 脚本交付；四处 1.2.0 锚点同改 |
+| S2 Playwright | 违反 C1/C5/C7 | 仅限 cold-start/E2E 场景（正文口径），本模块不用 |
+| S3 chromedp/rod | 违反 C1/C5 | 仅独立 collector tag 可选（正文口径），本模块不用 |
+| S4 Selenium | 违反 C1/C5/C7 | 同上，无落地 |
+| S5 CDP 直连 | 被 Chrome136/147 封杀（默认 profile 静默拒绝） | trend 表 §2.2；本链 CDP 只用在扩展内 trusted 输入（input.js），不走远程调试端口 |
+| S6 Vision | 慢（2-5s/步）贵，L5 | v2 路线仅作截图+LLM 视觉兜底，非主链 |
+
+## 附录 B：勘误回写（以代码为准，与 PROOF §4 互认）
+- B1 扩展目录：正文"扩展目录名 bridge"错。`user-web/bridge/`=私信桥；
+  自动化扩展=`user-web/browser_automation/` v1.2.0。
+- B2 原语口径："16/16"修正为"对外 15（oneof）+ 内部 tab_exists"，dispatch 15+2 终态。
+- B3 Chrome147 论据降级为"社区叙事、来源存疑"（官方 changelog 未找到）；Chrome136
+  官方 blog 背书成立，结论不受影响。
+- B4 定量引用：browser-use 114.1k（非 78k）、Stagehand 24.2k；326KB/11KB、44%、93%
+  三数出处未核验，不再作为论据。
+- B5 I2 状态：token 轮换标✅（双候选+常量时间比较+reset API 已实现），剩余仅"定时自动轮换"。
+- B6 交叉引用：实现层差距分级（G1–G9）与决策（D1–D6）见
+  `user-web/docs/platform-base/BROWSER_AUTOMATION_MODULE_TECH_PROOF.md` v1.0；
+  本文档只管选型判定，两文冲突处以 PROOF 文件:行号证据为准。
+
+---
+
+## 附录 C. 全链路 9 步外部对标 + 采用结论（v4 深挖）
+
+> 对标时间 2026-09-11；资料来源：browser-use 官方仓库/论文、Stagehand v4 官方文档、
+> chromedp/pkg.go.dev（v0.16.0，2,179 引用）、rod 官方对标页、Temporal 官方博客、
+> IPI 攻击论文（arXiv 2507.14799）、Cloudflare Browser Run changelog（2026-07）。
+> 结论：本链路与两大主流（Browser-Use、Stagehand）同构，"原子原语+智能体+扩展就近
+> 执行+a11y 优先"是行业最优解——我方已站在上面，9 步全部"维持现状+吸收增量"。
+
+| # | 链路步骤 | 外部最优方案 | 我方现状 | 采用结论 |
+|---|---|---|---|---|
+| 1 | 原语层 | Stagehand act/extract/observe＋确定性 page API 混合（v4 口号：Playwright 为测试而生，Stagehand 为 Agent 而生） | Hand 对外 15＋Executor 确定性 loop＋Brain 智能体，同构 | ✅维持；v2 吸收 self-healing（动作失败自动刷新定位） |
+| 2 | 元素定位 | a11y tree 是行业标准：Playwright MCP 快照、Cloudflare `/accessibilityTree` 独立端点（2026-07）、Browser-Use DOM+ARIA | @eN refs（SW 内存，MAX400）同构 | ✅维持 a11y-first；v2 加 vision 兜底（canvas/图表类元素） |
+| 3 | 可信输入 | CDP trusted input 是唯一绕过合成事件检测路径；Stagehand"runtime lives in the browser"（扩展就近执行，click 21ms、自带 healing） | 扩展内 CDP 直连 input.js（ASCII 码表+CJK insertText+5 步轨迹），不走远程调试端口 | ✅维持；扩展就近执行被 Stagehand 独立验证为最优 |
+| 4 | 服务端 CDP 驱动 | rod（新项目推荐，Playwright 级 DX）vs chromedp（零依赖，v0.16.0） | 服务端零浏览器依赖（go.mod 已验证无）——本步不需要 | ✅维持"不用"；v3 独立 collector tag 再选 rod |
+| 5 | 任务编排 | Temporal（durable execution 标准）vs 自研 DB 状态机；Temporal 官方承认短工作流可用轻量 task queue | Executor DB 状态机＋五重熔断，符合单体+短任务最优 | ✅维持自研；v3 长任务/跨机再评估 Temporal |
+| 6 | LLM 规划闭环 | Browser-Use observe→think→act＋Registry＋SecurityWatchdog；bu-2-0（2026-01）专用决策模型；Cloud 实测 78% | Brain reflect+plan＋JudgeDone＋Hand registry，同构 | ✅维持；v2 借鉴两点：① 小模型蒸馏降成本 ② SecurityWatchdog 式域限制 |
+| 7 | 威胁模型 | IPI 论文实证：a11y tree 可被页面 HTML 预埋触发器劫持（GCG 算法，登录凭证外泄/强制点广告） | T1 已登记：brain.go:155 快照无分隔直拼 prompt，防线仅 JudgeDone | ⚠️升级为行业级已确认风险；v2 加固：分隔符包装＋敏感动作二次确认＋allowlist（见 §8 待办） |
+| 8 | NM Host 桥 | Chrome 官方原生通道；Go 实现零依赖单二进制 | Go nm-host（211 行，双泵+退避 2s→60s） | ✅维持 Go（C7）；不引入 Python/Node runtime |
+| 9 | 回包+鉴权 | req_id over WS = 标准 request-response（等价 JSON-RPC/gRPC stream）；bh_ token＋fail-closed 符合 M2M 最佳实践 | pending chan＋uuid＋四分支 select；双候选常量时间比较 | ✅维持；剩余仅"定时自动轮换"（B5） |
+
+一句话总结：9 步中 8 步"维持现状"（外部最优与我方同构）、1 步（T1 提示注入）
+"升级风险+列入 v2 加固"。路线不动（S1 8/8 有效），下一步只做增量吸收。
