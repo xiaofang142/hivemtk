@@ -187,6 +187,99 @@ S0 前端控制台（Vue3 7 路由 + api + stores）
 
 ---
 
+## 附录 A. 命令往返时序（源码级）
+
+一次 `click` 从前端到回包的完整帧旅程（各段帧格式均为本轮精读原文）：
+
+```
+前端 Monitor.vue
+ │ POST /browser-automation/tasks/:id/run（JWT）
+ ▼
+TaskController.Run (task.go:215) → TaskService.RunTaskWithRetry → Executor.executeBrain/executeSteps
+ │ Hand.click(ctx, userID, tabID, "@e7")（hand.go:38）
+ │   → cmd = {"action":"click","tab_id":7,"target":"@e7"}
+ ▼
+HostRegistry.Request (host_registry.go:216)：uuid req_id 注入 → registerPending → writeJSON（writeMu 串行，写 deadline 10s）
+ │ WS 帧 {"action":"click","tab_id":7,"target":"@e7","req_id":"<uuid>"}
+ ▼
+nm-host pumpLoop (main.go:196)：conn.ReadJSON → writeNativeFrame（4 字节 native-endian 头 + JSON，≤1MiB）
+ │ NM 帧 → Chrome → 扩展 background onMessage
+ ▼
+primitives.js dispatch(cmd)：@e7→CSS 解析 → 三层递进点击 → 回 {"req_id":"<uuid>","ok":true,"data":{...}}
+ │ NM 回帧 → nm-host stdin 泵 → conn.WriteJSON → WS
+ ▼
+HostRegistry.readLoop (68-94)：按 req_id 投递 pending chan → Request select 第四分支收包
+ → res.Data（!ok 则 errors.New透出 error 文）
+ ▼
+Executor.executeStepWithRetry (436-485)：step 落库 running → dispatchStep → UpdateResult(success/failed)
+ + command_log append 两条（direction=command/event，seq session 局部单调，468-480 行）
+```
+
+超时/中断四分支（host_registry.go:231-246）：ctx 取消 / 连接关闭（→ErrHostOffline→controller 转 409 引导）
+/ 超时（`Host 命令超时（%s，action=%v）`）/ 回包。超时后 late 回包因 pending 已删而被丢弃（89-91 行），无泄漏。
+
+---
+
+## 附录 B. 错误码表（API 信封 + 链路错误）
+
+全仓统一信封（CLAUDE.md API 规范）：成功 `{"code":0,"data":{...},"message":"ok"}`；
+失败 `code = 400 参数 / 401 认证 / 403 权限 / 404 不存在 / 409 冲突 / 500 服务端`。
+
+| 错误 | 源码 | 含义与处理 |
+|---|---|---|
+| Host 未连接 | `ErrHostOffline`（host_registry.go:18）→ controller 转 **409** | 前端 Status 页引导：本机 Chrome 加载扩展 + 运行 install.sh |
+| Host 命令超时 | `Host 命令超时（%s，action=%v）`（host_registry.go:237） | 按 Hand 超时表（§3.1/SOLUTION §3.1）；wait 类已按参数放宽 |
+| 发送失败 | `发送命令到 Host 失败`（229 行） | WS 写坏，nm-host 侧通常已在重连（退避 2s→60s） |
+| chrome 写坏 | `chrome_write: ...`（main.go:208） | NM 通道坏（扩展重载），server 侧命令快速失败，不悬挂 |
+| 平台未注册 | `平台 %s 未注册（可用: %v）`（platform.go:95） | 返回 error 而非 nil，防下游空指针 |
+| 能力缺实现 | `声明了 post_comment 但未实现 CommentPoster（fails-loudly）`（141 行） | 首次调用即报错，防静默假成功 |
+| 账号风控 | ErrType `disconnect`（platform.go:36） | Executor 直接终止（重试无意义）+ 人工介入 |
+| 登录态过期 | ErrType `refresh_token` | 可刷新后重试 |
+| LLM 不可重试 | 401/403/unauthorized/invalid_api_key/forbidden（brain_reliability.go:15） | 立即快败，省 token 预算 |
+| LLM 可重试 | 429/5xx/超时/网络/JSON 抖动（21-26 行） | 退避重试；未知错误保守不重试（32 行） |
+
+---
+
+## 附录 C. Controller 函数级签名（5 文件 27 方法）
+
+| 文件 | 方法（行） | 路由 |
+|---|---|---|
+| task.go | Create(61)/List(99)/Get(114)/Update(128)/Delete(189)/Publish(202)/Run(215)/Pause(229)/Resume(242)/Archive(256)/SetDependency(269) | §3.4 任务 12 端点 |
+| session.go | List(24)/Get(39)/ListSteps(54)/ListByTask(69)/Stop(85) | Session 5 端点 |
+| cron.go | List(24)/Create(34)/Update(53)/Delete(73)/Enable(87)/Disable(92) | Cron 6 端点 |
+| host.go | GetStatus(29，分流 admin 全量/普通只读自己)/ResetToken(42，admin)/HostWSHandler.Handle(75，token+回环) | Host + WS |
+| platform.go | List(26)/Locators(44) | 平台 2 端点 |
+
+五层铁律抽查：Controller 均为 `func (c *XController) M(ctx *gin.Context)` 薄封装（参数绑定→调 Service→信封返回），
+repository 构造与 service 装配全部收敛在 routes.go 26-44 行（DI 不在 controller），合规。
+
+---
+
+## 附录 D. 六表 Schema（GORM model 原文）
+
+| 表 | TableName | 关键列（节选） |
+|---|---|---|
+| BrowserTask | `browser_tasks` | task_type(one_shot/loop/cron/workflow，默认 one_shot)/status(draft/ready/running/paused/done/failed/archived，默认 draft)/steps jsonb/brain_mode+brain_goal/loop_count=1/delay_ms=**1000**/timeout_sec=**120**/depends_on(mode all_done/any_success)/retry(retry_on_fail=false/delay 300s/max 3)/platform(默认 xiaohongshu)/user_id+account_id |
+| BrowserSession | `browser_sessions` | task_id/user_id/chrome_tab_id/status(**created**/active/completed/failed/stopped，默认 created)/snapshot text/llm_plan jsonb/total/success/failed_steps/hand_latency_ms/console_errors/extracted_data jsonb/final_screenshot_url/llm_summary（completed 与 failed 都写） |
+| BrowserStep | `browser_steps` | session_id/task_id/step_index/action(32)/target(1024，selector 或 @eN)/value text/params jsonb/status(**pending**/running/success/failed/skipped，默认 pending)/result jsonb/duration_ms/error_msg |
+| BrowserCommandLog | `browser_command_log` | session_id/task_id/step_id/**seq**(session 内单调)/direction(**command/event**；judge 验收记 direction=judge，executor.go:330)/action(32)/payload jsonb（命令帧或回包全文）/duration_ms/ok |
+| BrowserCronTrigger | `browser_cron_triggers` | task_id(uniq)/cron_expr(128，如 */5 * * * *)/enabled=**true**/next_run_at/last_run_at |
+| BrowserLLMPlan | `browser_llm_plans` | task_id/goal/snapshot/steps jsonb/reasoning（脱敏截断）/model(64)/token_in/token_out（P1-1 计量来源） |
+
+step 表 action 注释列出的 11 个（open_tab/click/type/snapshot/markdown/screenshot/wait/
+wait_for_selector/scroll/extract/close_tab）是 MVP 注释早于后加的 click_near/assert/query/
+post_comment/tab_exists 5 个——注释滞后，行为以 dispatchStep + Hand 16 方法为准（已知文档债，不改代码）。
+
+---
+
+## 附录 E. 前端 api 20+ 接口清单（browserAutomation.js 91 行）
+
+tasks（CRUD + publish/run/pause/resume/archive/dependency 12 个）/ sessions（list/get/steps/listByTask/stop 5 个）/
+cron（CRUD + enable/disable 6 个）/ host（status + token/reset admin 2 个）/ platforms（list + :id/locators 2 个），
+合计约 27 个，与后端 25 端点一一对应（前端 stop/run 等动词映射见 S0 表）。
+
+---
+
 ## I4–I6 后续口径（v1 范围外，本轮不动代码）
 
 - I4 重连续跑（P2）：Host 重连后 session 从最后成功 step 续跑，需 Executor 记 checkpoint。

@@ -505,3 +505,32 @@ user-web/bridge/                  Chrome 扩展（注意：扩展目录名是 br
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | v1.0 | 2026-09-11 | 初稿：技术选型论证 + 决策归档 |
+| v2.0（附录） | 2026-09-11 | 附录 A：C1–C8 源码可追溯锚点 + S1–S6 评分落地映射（论证可追溯，不动正文结论） |
+
+---
+
+## 附录 A. 约束↔源码↔评分可追溯矩阵（v2 深化）
+
+C1–C8 每条约束的源码落点（本轮精读原文）：
+
+| 约束 | 源码锚点 | 落点说明 |
+|---|---|---|
+| C1 复用主 Profile | 架构事实：无 `--user-data-dir`/`--remote-debugging-port` 启动代码；nm-host 由 Chrome 以 connectNative fork（main.go:1-9 注释） | 寄生用户真实 Chrome，SSO/证书/登录态天然继承 |
+| C2 后台 tab 不抢焦点 | `tabs.create({active:false})`（FULL_LINK S5）+ screenshot 先激活是唯一例外（M3 定稿） | AI 与用户共用浏览器不干扰 |
+| C3 重启自动连接无弹窗 | nm-host 指数退避 2s→60s（main.go:142-156）+ 扩展重连 2s→30s 上限 5 次（S5）+ 启动 EnsureToken/RestoreAll（routes 122-125） | 掉线自愈，无人工干预 |
+| C4 多 Agent 共享会话 | Registry userID→单 conn + 三处外部注入共用 `RunTaskWithRetry`（routes 46-53：MCP tooluse / workflow / Feedback 重试） | 自研 Agent+MCP+workflow 同一入口 |
+| C5 无独立浏览器实例 | Hand 约束①不启动子进程（hand.go:9）+ 全链路无 chromedp/rod/playwright 依赖（go.mod 已验证无） | 零服务端浏览器进程，零内存 |
+| C6 单统一端口 :8204 | WS 挂 engine 同端口 `/api/browser/host-ws`（routes 118）；默认 `ws://127.0.0.1:8204`（main.go:27） | 无新增端口 |
+| C7 Go 主栈 | nm-host 与服务端同 go.mod（gorilla 复用）；扩展仅 JS（Chrome 强制） | 无 Node/Python runtime 依赖 |
+| C8 私域单租户 | token 内嵌 userID 归属 + 命令只路由归属 Host（host_token.go:16-17；registry 121-122） | 多租户边界已有，单租户部署是其特例 |
+
+S1–S6 评分落地映射（评分见正文 §4，落地证据见 SOLUTION/FULL_LINK）：
+
+| 方案 | 评分结论 | 落地证据（v1 已验证） |
+|---|---|---|
+| S1 NM 桥（维持） | 8/8 约束全过 | I1 16/16 对齐零缺口 + I2 token 链完备 + I3 脚本交付；四处 1.2.0 锚点同改 |
+| S2 Playwright | 违反 C1/C5/C7 | 仅限 cold-start/E2E 场景（正文口径），本模块不用 |
+| S3 chromedp/rod | 违反 C1/C5 | 仅独立 collector tag 可选（正文口径），本模块不用 |
+| S4 Selenium | 违反 C1/C5/C7 | 同上，无落地 |
+| S5 CDP 直连 | 被 Chrome136/147 封杀（默认 profile 静默拒绝） | trend 表 §2.2；本链 CDP 只用在扩展内 trusted 输入（input.js），不走远程调试端口 |
+| S6 Vision | 慢（2-5s/步）贵，L5 | v2 路线仅作截图+LLM 视觉兜底，非主链 |
