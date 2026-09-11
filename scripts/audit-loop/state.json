@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 65,
-  "next_angle_index": 5,
+  "round": 66,
+  "next_angle_index": 6,
   "angles": [
     "security",
     "authz",
@@ -18,10 +18,10 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 65,
+    "rounds_completed": 66,
     "issues_found_total": 21,
     "issues_fixed_total": 21,
-    "last_completed_at": "2026-09-11",
+    "last_completed_at": "2026-09-12",
     "last_commit": "38a0306"
   },
   "history": [
@@ -600,6 +600,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第六圈 0缺陷: R5 RWMutex 5处在位; goroutine 基线50持平; service/websocket 测试绿"
+    },
+    {
+      "round": 66,
+      "angle": "data-integrity",
+      "date": "2026-09-12",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第六圈 0缺陷: 唯一索引/金额numeric/事务/行锁全在位; geo+repository 测试绿; merge 远端新增健康检查脚本"
     }
   ]
 }
