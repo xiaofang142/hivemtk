@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：62（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 已完成轮次：63（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
 - 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：architecture
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R63 — architecture（2026-09-11）— 第六圈，0 缺陷轮
+
+**审计范围**：`check-architecture.sh` 复跑、L4 基线核对、命名规范回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- L4 基线：service 直连 DB 35 处，与 R51 基线一致（无新增违规）
+- 命名段全绿（0 违规）；其余检查（反向依赖/interface/ctx 透传/config 位置）全绿
+- `go build` + `go vet` 全绿
+
+**验证证据**：build/vet 双绿 + 脚本仅剩已知 L4 存量项。
+
+**Commit**：见 git log `chore(audit): 审计R63-architecture: 0缺陷轮核查记录与状态推进`
 
 ### R62 — authz（2026-09-11）— 第六圈，0 缺陷轮
 
