@@ -5,11 +5,26 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：61（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 已完成轮次：62（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
 - 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：authz
+- 下一轮角度：architecture
 
 ## 轮次报告
+
+### R62 — authz（2026-09-11）— 第六圈，0 缺陷轮
+
+**审计范围**：守卫基线核对（`doRegAdmin` 计数）、R2 修复点回归、middleware/websocket 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- `doRegAdmin` 146 处与基线一致
+- 访客 WS fail-closed 拒绝分支在位（`visitor_handler.go:129`）
+- middleware(2.3s)/websocket(2.6s) 测试全绿；`go vet ./...` 零输出
+
+**验证证据**：vet 零 + middleware/websocket 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R62-authz: 0缺陷轮核查记录与状态推进`
 
 ### R61 — security（2026-09-11）— 第六圈首轮，0 缺陷轮
 
