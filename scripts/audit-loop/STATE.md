@@ -5,11 +5,25 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：58（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 已完成轮次：59（第五圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
 - 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
-- 下一轮角度：config-deploy
+- 下一轮角度：docs-consistency
 
 ## 轮次报告
+
+### R59 — config-deploy（2026-09-11）— 第五圈，0 缺陷轮
+
+**审计范围**：R11 修复点回归、端口/键名三方对照。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R11 键名链一致：`MERCHANT_HMAC_SECRET` 0 残留；`.env-example`（78/89/90 行）、`config/platform.yaml`（`${MERCHANT_API_SECRET}` 插值）对齐
+- 端口三方一致：docker-compose 12 处引用 / PORT_REGISTRY / config.yaml `${DB_PORT:8232}` 维持既定关系
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R59-config-deploy: 0缺陷轮核查记录与状态推进`
 
 ### R58 — test-coverage（2026-09-11）— 第五圈，0 缺陷轮
 
