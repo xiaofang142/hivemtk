@@ -285,3 +285,20 @@ cron（CRUD + enable/disable 6 个）/ host（status + token/reset admin 2 个�
 - I4 重连续跑（P2）：Host 重连后 session 从最后成功 step 续跑，需 Executor 记 checkpoint。
 - I5 审计（P2）：command_log 导出/追溯面板。
 - I6 多 Host（P3）：Registry userID→conn 改为 userID→[]conn + 负载选择，预留即可。
+
+---
+
+## 附录 E：Planner 输入帧结构与提示注入面（本轮新增）
+
+- 输入帧（`service/brain.go:148-173 planOnce`）：
+  `系统prompt（BuildPlanSystemPrompt+平台知识） + "目标："+goal + "\n\n页面快照：\n"+snapshot
+  [+上一步评估/累积记忆/动作历史] → JSONMode(MaxTokens 4096)`。
+- 快照截断 64K（`brain.go:233` rune 截断，预算函数见 brain_budget.go，单测 5 组覆盖）。
+- 风险点：snapshot 与 goal 之间仅一个换行分隔，无不可信数据标注（详见 SOLUTION §7.1）。
+  现有防线：JudgeDone 独立验收 fail-closed + 动作白名单（非白名单动作 LLM 无法下发，
+  最坏情况是误操作已有 15 原语之一，而非任意代码执行）—— blast radius 有界，
+  这是"暂可接受、v2 再加固"的论证依据。
+
+## 口径修正（与 PROOF §4-1 一致）
+- 对外编排原语=15（oneof，`dto/task.go:5`），dispatch=15+2终态，扩展内部+1（tab_exists）。
+  本文档 S2/S4 中"16 原语"表述统一修正为"对外 15 + 内部 1"。

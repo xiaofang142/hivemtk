@@ -534,3 +534,16 @@ S1–S6 评分落地映射（评分见正文 §4，落地证据见 SOLUTION/FULL
 | S4 Selenium | 违反 C1/C5/C7 | 同上，无落地 |
 | S5 CDP 直连 | 被 Chrome136/147 封杀（默认 profile 静默拒绝） | trend 表 §2.2；本链 CDP 只用在扩展内 trusted 输入（input.js），不走远程调试端口 |
 | S6 Vision | 慢（2-5s/步）贵，L5 | v2 路线仅作截图+LLM 视觉兜底，非主链 |
+
+## 附录 B：勘误回写（以代码为准，与 PROOF §4 互认）
+- B1 扩展目录：正文"扩展目录名 bridge"错。`user-web/bridge/`=私信桥；
+  自动化扩展=`user-web/browser_automation/` v1.2.0。
+- B2 原语口径："16/16"修正为"对外 15（oneof）+ 内部 tab_exists"，dispatch 15+2 终态。
+- B3 Chrome147 论据降级为"社区叙事、来源存疑"（官方 changelog 未找到）；Chrome136
+  官方 blog 背书成立，结论不受影响。
+- B4 定量引用：browser-use 114.1k（非 78k）、Stagehand 24.2k；326KB/11KB、44%、93%
+  三数出处未核验，不再作为论据。
+- B5 I2 状态：token 轮换标✅（双候选+常量时间比较+reset API 已实现），剩余仅"定时自动轮换"。
+- B6 交叉引用：实现层差距分级（G1–G9）与决策（D1–D6）见
+  `user-web/docs/platform-base/BROWSER_AUTOMATION_MODULE_TECH_PROOF.md` v1.0；
+  本文档只管选型判定，两文冲突处以 PROOF 文件:行号证据为准。
