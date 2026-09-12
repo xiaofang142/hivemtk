@@ -65,6 +65,11 @@ func (m *MockSystemUserRepository) List(ctx context.Context, page, pageSize int)
 	return args.Get(0).([]*model.SystemUser), args.Get(1).(int64), args.Error(2)
 }
 
+func (m *MockSystemUserRepository) SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]*model.SystemUser, int64, error) {
+	args := m.Called(ctx, keyword, offset, limit)
+	return args.Get(0).([]*model.SystemUser), args.Get(1).(int64), args.Error(2)
+}
+
 func (m *MockSystemUserRepository) Count(ctx context.Context) (int64, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(int64), args.Error(1)

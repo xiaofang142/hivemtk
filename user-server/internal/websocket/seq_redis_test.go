@@ -93,6 +93,17 @@ func TestD15_PendingSinceMergesRemote(t *testing.T) {
 
 	pendingRedis.asyncSetJSON("s1", map[uint64]time.Time{9: time.Now()})
 
+	// asyncSetJSON 是异步 goroutine 写同一 seqCache；等待其落盘后再覆盖快照，
+	// 否则后台写会与本行的确定性写入竞态，偶发把快照覆盖回 {9} 导致合并断言失败。
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var probe map[uint64]time.Time
+		if _ = seqCache.GetJSON(nil, pendingKey("s1"), &probe); len(probe) == 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
 	_ = seqCache.SetJSON(nil, pendingKey("s1"), map[uint64]time.Time{5: time.Now(), 9: time.Now()}, 0)
 
 	got := p.PendingSince("s1", 6)
