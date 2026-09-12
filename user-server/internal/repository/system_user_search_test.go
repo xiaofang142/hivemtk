@@ -36,13 +36,13 @@ func TestSystemUser_SearchUsers(t *testing.T) {
 		wantIDs  int64 // total
 		wantName string
 	}{
-		{"alice", 1, "alice"},     // username 精确命中
-		{"ALICE", 1, "alice"},     // ILIKE 不区分大小写
-		{"example", 2, ""},        // email 双命中（a@/b@Example 大小写混合）
-		{"张伟", 1, "alice"},      // real_name 命中
-		{"char", 1, "Charlie"},    // username 前缀部分命中
-		{"nomatch", 0, ""},        // 无命中
-		{"", 3, ""},               // 空关键词 = 全量（分页由 offset/limit 控制）
+		{"alice", 1, "alice"},  // username 精确命中
+		{"ALICE", 1, "alice"},  // ILIKE 不区分大小写
+		{"example", 2, ""},     // email 双命中（a@/b@Example 大小写混合）
+		{"张伟", 1, "alice"},     // real_name 命中
+		{"char", 1, "Charlie"}, // username 前缀部分命中
+		{"nomatch", 0, ""},     // 无命中
+		{"", 3, ""},            // 空关键词 = 全量（分页由 offset/limit 控制）
 	}
 	for _, c := range cases {
 		list, total, err := repo.SearchUsers(ctx, c.keyword, 0, 10)

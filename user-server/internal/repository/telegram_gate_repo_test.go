@@ -17,9 +17,9 @@ func TestTelegramMember_ListStalledRestricted(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	restrictedSoon := now.Add(1 * time.Minute)   // 禁言中+临近到期 → 应命中
-	restrictedFar := now.Add(24 * time.Hour)     // 禁言中+到期远 → 不应命中
-	pendingSoon := now.Add(1 * time.Minute)      // 待验证（非 restricted）→ 不应命中
+	restrictedSoon := now.Add(1 * time.Minute) // 禁言中+临近到期 → 应命中
+	restrictedFar := now.Add(24 * time.Hour)   // 禁言中+到期远 → 不应命中
+	pendingSoon := now.Add(1 * time.Minute)    // 待验证（非 restricted）→ 不应命中
 	members := []*model.TelegramGroupMember{
 		{AccountID: 1, ChatID: "c1", UserID: "u1", FullName: "hit", JoinStatus: model.TGMemberRestricted, Authorized: false, ExpiresAt: &restrictedSoon},
 		{AccountID: 1, ChatID: "c1", UserID: "u2", FullName: "far", JoinStatus: model.TGMemberRestricted, Authorized: false, ExpiresAt: &restrictedFar},
