@@ -239,9 +239,9 @@ func (s *KBConnectorService) notionPageText(ctx context.Context, token, pageID s
 		}
 
 		var generic struct {
-			Results             []map[string]any `json:"results"`
-			HasMore             bool             `json:"has_more"`
-			NextCursor          string           `json:"next_cursor"`
+			Results    []map[string]any `json:"results"`
+			HasMore    bool             `json:"has_more"`
+			NextCursor string           `json:"next_cursor"`
 		}
 		if err := json.Unmarshal(raw, &generic); err != nil {
 			return "", err

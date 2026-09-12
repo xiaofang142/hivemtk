@@ -367,10 +367,10 @@ func (AISalesLog) TableName() string { return "ai_sales_logs" }
 
 // InboxConversation 统一收件箱会话
 type InboxConversation struct {
-	ID                 uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform           string `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
-	AccountID          string `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
-	CustomerID         string `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
+	ID                 uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform           string     `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
+	AccountID          string     `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
+	CustomerID         string     `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
 	CustomerName       string     `gorm:"type:varchar(200)" json:"customer_name"`
 	ConversationID     string     `gorm:"type:varchar(100);index" json:"conversation_id"`
 	Status             string     `gorm:"type:varchar(20);default:'unread';index" json:"status"`

@@ -60,9 +60,9 @@ type EngineCompareRow struct {
 
 // DailyEngineBreakdown 单日按引擎拆分的品牌命中数（堆叠趋势图数据源）
 type DailyEngineBreakdown struct {
-	Date       string             `json:"date"`
-	Probes     int                `json:"probes"`
-	ByEngine   map[string]float64 `json:"by_engine"`
+	Date     string             `json:"date"`
+	Probes   int                `json:"probes"`
+	ByEngine map[string]float64 `json:"by_engine"`
 }
 
 // EngineCompareResult 引擎对比 + 全局概览 + 单日拆分

@@ -2,13 +2,13 @@ package db
 
 import (
 	"fmt"
-	"sync"
 	contentmodel "hivemtk-user/internal/content/model"
 	geomodel "hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/model"
 	opsmodel "hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"strings"
+	"sync"
 
 	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
 

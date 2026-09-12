@@ -35,13 +35,13 @@ func SetBrowserTaskRunner(fn func(ctx context.Context, taskID, userID uint, retr
 // ---------- 查询行结构（直接查表，避免 import browser_automation/model） ----------
 
 type browserTaskRow struct {
-	ID         uint   `gorm:"column:id"`
-	Name       string `gorm:"column:name"`
-	TaskType   string `gorm:"column:task_type"`
-	Status     string `gorm:"column:status"`
-	Platform   string `gorm:"column:platform"`
-	UserID     uint   `gorm:"column:user_id"`
-	LastResult string `gorm:"column:last_result"`
+	ID         uint       `gorm:"column:id"`
+	Name       string     `gorm:"column:name"`
+	TaskType   string     `gorm:"column:task_type"`
+	Status     string     `gorm:"column:status"`
+	Platform   string     `gorm:"column:platform"`
+	UserID     uint       `gorm:"column:user_id"`
+	LastResult string     `gorm:"column:last_result"`
 	LastRunAt  *time.Time `gorm:"column:last_run_at"`
 }
 

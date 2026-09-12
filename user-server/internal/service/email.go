@@ -17,9 +17,9 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 )
 
 // EmailAccount 邮件账号配置（独立表，不依赖既有 schema）

@@ -219,11 +219,11 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		}
 
 		welcome := gate.WelcomeMsg
-			if welcome == "" {
-				welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
-			}
-			botDomain := strings.TrimPrefix(botUsername, "@")
-			welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
+		if welcome == "" {
+			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+		}
+		botDomain := strings.TrimPrefix(botUsername, "@")
+		welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			// 提示没送达 = 用户不知道要验证 = 必然超时被踢。禁言已生效、不致命，
 			// 但必须补发：记录后由清扫器带 verify_token 补发（expires_at 重算，等于宽限重置）

@@ -19,6 +19,7 @@ import (
 //   - 禁止修改 id=1（初始超管 admin）的 password；
 //   - 禁止删除 id=1；
 //   - 禁止将 id=1 降级为非 admin 角色 / 停用（enabled=false 或 status!=1）。
+//
 // 触发器是最后一道防线，应用层四条改密入口仍保留各自的 service 级校验。
 type AdminPasswordGuardMigration struct {
 	db *gorm.DB

@@ -51,8 +51,8 @@ func (p *Platform) Locators() map[string]string {
 // 实测拦截形态：302→/website-login/error?error_code=300012（IP 风险）；461/471+Verifytype 头
 func (p *Platform) DetectBlock(pageSnapshot string) bool {
 	for _, m := range []string{
-		"website-login/error",  // 登录/风控重定向
-		"IP存在风险",             // 300012 错误文案
+		"website-login/error", // 登录/风控重定向
+		"IP存在风险",              // 300012 错误文案
 		"当前环境异常",              // 验证码页文案
 		"error_code=300012",
 	} {

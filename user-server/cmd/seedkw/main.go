@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"hivemtk-user/internal/geo/model"
-	
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,6 +27,6 @@ func main() {
 	}
 	var n int64
 	g.Model(&model.GeoKeyword{}).Count(&n)
-	
+
 	fmt.Println("keywords:", n)
 }

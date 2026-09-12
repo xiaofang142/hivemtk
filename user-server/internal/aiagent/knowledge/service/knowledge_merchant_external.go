@@ -117,9 +117,9 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 					logger.Errorf("[ExternalImport] panic recovered job_no=%s panic=%v", jobNo, r)
 					failedAt := time.Now()
 					_ = s.externalRepo.UpdateStatusByJobNo(context.Background(), jobNo, map[string]any{
-						"status":        "failed",
-						"finished_at":   &failedAt,
-						"error_detail":  fmt.Sprintf("panic: %v", r),
+						"status":       "failed",
+						"finished_at":  &failedAt,
+						"error_detail": fmt.Sprintf("panic: %v", r),
 					})
 				}
 			}()

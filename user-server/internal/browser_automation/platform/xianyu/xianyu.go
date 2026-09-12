@@ -3,6 +3,7 @@
 //   - 详情页 /item?id={item_id}；全 CSR，数据走 mtop（sign=MD5(token&t&appKey&data)，appKey=34839810）
 //   - 评论发布接口无公开资料（调研明确标注未找到）→ 不声明 post_comment 能力
 //   - 环境检测狠（baxia 滑块 + RGV587 实弹响应，本机 2026-09-09 实测）
+//
 // M2 期先落「读链路」（商品标题/价格/描述/卖家，DOM 可见即 extract）+ DetectBlock 判据。
 package xianyu
 
@@ -51,11 +52,11 @@ func (p *Platform) Locators() map[string]string {
 // DetectBlock 拦截页识别（本机实测：裸自动化 → 「非法访问」弹层；风控 → baxia 滑块 RGV587）
 func (p *Platform) DetectBlock(pageSnapshot string) bool {
 	for _, m := range []string{
-		"baxia",       // 阿里风控域
-		"RGV587",      // 滑块验证错误码
-		"非法访问",        // 弹层文案
-		"滑动验证",        // 滑块文案
-		"punish",      // 阿里惩罚页路径
+		"baxia",  // 阿里风控域
+		"RGV587", // 滑块验证错误码
+		"非法访问",   // 弹层文案
+		"滑动验证",   // 滑块文案
+		"punish", // 阿里惩罚页路径
 	} {
 		if strings.Contains(pageSnapshot, m) {
 			return true

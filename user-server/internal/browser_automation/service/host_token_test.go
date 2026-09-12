@@ -38,7 +38,7 @@ func TestParseHostTokenUser(t *testing.T) {
 // fakeKV 空候选 KV（Get 恒报错 ⇒ candidates 空 ⇒ fail-closed）
 type errKV struct{}
 
-func (errKV) Available() bool { return false }
+func (errKV) Available() bool                                 { return false }
 func (errKV) Get(_ context.Context, _ string) (string, error) { return "", errors.New("empty") }
 func (errKV) Upsert(_ context.Context, _, _ string) (string, error) {
 	return "", errors.New("empty")
@@ -58,7 +58,7 @@ func TestValidateHostTokenFailClosed(t *testing.T) {
 // okKV 返回固定 token 的 KV
 type okKV struct{ token string }
 
-func (k okKV) Available() bool                                      { return true }
+func (k okKV) Available() bool { return true }
 func (k okKV) Get(_ context.Context, key string) (string, error) {
 	if key == hostTokenKey {
 		return k.token, nil

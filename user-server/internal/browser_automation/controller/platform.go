@@ -16,10 +16,10 @@ func NewPlatformController() *PlatformController { return &PlatformController{} 
 
 // platformDTO 平台概要（前端只需 identifier/能力/是否可发评论）
 type platformDTO struct {
-	Identifier       string   `json:"identifier"`
-	Capabilities     []string `json:"capabilities"`
-	CanPostComment   bool     `json:"can_post_comment"`
-	MaxConcurrentJobs int     `json:"max_concurrent_jobs"`
+	Identifier        string   `json:"identifier"`
+	Capabilities      []string `json:"capabilities"`
+	CanPostComment    bool     `json:"can_post_comment"`
+	MaxConcurrentJobs int      `json:"max_concurrent_jobs"`
 }
 
 // List GET /browser-automation/platforms —— 列出已注册平台（L3 注册表实时读取）
@@ -31,9 +31,9 @@ func (c *PlatformController) List(ctx *gin.Context) {
 			caps = append(caps, string(cp))
 		}
 		list = append(list, platformDTO{
-			Identifier:       p.Identifier(),
-			Capabilities:     caps,
-			CanPostComment:   platform.HasCapability(p, platform.CapPostComment),
+			Identifier:        p.Identifier(),
+			Capabilities:      caps,
+			CanPostComment:    platform.HasCapability(p, platform.CapPostComment),
 			MaxConcurrentJobs: p.MaxConcurrentJobs(),
 		})
 	}

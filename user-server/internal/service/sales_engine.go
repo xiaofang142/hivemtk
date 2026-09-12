@@ -309,10 +309,10 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 		resp.Steps = append(resp.Steps, dto.SalesStepLog{
 			Step: "5_recall_rag", Status: "ok", LatencyMs: ms(stepStart),
 			Extra: map[string]any{
-				"chunk_count":     len(ragChunks),
-				"chunks_dropped":  dropped,
-				"rag_budget":      budget.RAGTokenBudget(),
-				"total_context":   budget.TotalContext,
+				"chunk_count":    len(ragChunks),
+				"chunks_dropped": dropped,
+				"rag_budget":     budget.RAGTokenBudget(),
+				"total_context":  budget.TotalContext,
 			},
 		})
 	}

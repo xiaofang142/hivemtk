@@ -135,13 +135,13 @@ func (ctrl *TelegramAccountController) Get(c *gin.Context) {
 
 type telegramAccountCreateReq struct {
 	AccountName    string `json:"account_name" binding:"required"`
-	BotToken       string `json:"bot_token" binding:"omitempty"`   // Create 时必填，Update 时留空=保持原值
-	BotUsername    string `json:"bot_username" binding:"omitempty"` // optional：后端自动通过 getMe 填充
-	WebhookURL     string `json:"webhook_url" binding:"omitempty"`  // optional：后端通过 public_base_url 自动推导
-	WebhookSecret  string `json:"webhook_secret" binding:"omitempty"` // optional：后端自动生成
-	WebhookEnabled *bool  `json:"webhook_enabled" binding:"omitempty"` // optional：后端根据有无公网自动设值
+	BotToken       string `json:"bot_token" binding:"omitempty"`        // Create 时必填，Update 时留空=保持原值
+	BotUsername    string `json:"bot_username" binding:"omitempty"`     // optional：后端自动通过 getMe 填充
+	WebhookURL     string `json:"webhook_url" binding:"omitempty"`      // optional：后端通过 public_base_url 自动推导
+	WebhookSecret  string `json:"webhook_secret" binding:"omitempty"`   // optional：后端自动生成
+	WebhookEnabled *bool  `json:"webhook_enabled" binding:"omitempty"`  // optional：后端根据有无公网自动设值
 	AIAgentEnabled *bool  `json:"ai_agent_enabled" binding:"omitempty"` // optional：后端默认开启
-	Status         *int   `json:"status" binding:"omitempty"`         // optional：默认 1（正常）
+	Status         *int   `json:"status" binding:"omitempty"`           // optional：默认 1（正常）
 }
 
 // Create 创建
@@ -397,22 +397,22 @@ func (ctrl *TelegramAccountController) Status(c *gin.Context) {
 	bot, botErr := tgbot.GetMe(acc.BotToken)
 	whInfo, whErr := tgbot.GetWebhookInfo(acc.BotToken)
 	resp := gin.H{
-		"account_id":       acc.ID,
-		"account_name":     acc.AccountName,
-		"bot_token_masked": maskBotToken(acc.BotToken),
-		"ai_agent_enabled": acc.AIAgentEnabled,
-		"status":           acc.Status,
-		"webhook_enabled":  acc.WebhookEnabled,
-		"webhook_url":      acc.WebhookURL,
-		"last_sync_at":     acc.LastSyncAt,
-		"last_error_at":    acc.LastErrorAt,
-		"last_error_msg":   acc.LastErrorMsg,
-		"bot":              bot,
-		"bot_error":        errToStr(botErr),
-		"webhook_info":     whInfo,
-		"webhook_error":    errToStr(whErr),
-		"polling_mode":     service.IsTelegramPollingEnabled(),
-		"polling_owner":    acc.PollingOwner,
+		"account_id":           acc.ID,
+		"account_name":         acc.AccountName,
+		"bot_token_masked":     maskBotToken(acc.BotToken),
+		"ai_agent_enabled":     acc.AIAgentEnabled,
+		"status":               acc.Status,
+		"webhook_enabled":      acc.WebhookEnabled,
+		"webhook_url":          acc.WebhookURL,
+		"last_sync_at":         acc.LastSyncAt,
+		"last_error_at":        acc.LastErrorAt,
+		"last_error_msg":       acc.LastErrorMsg,
+		"bot":                  bot,
+		"bot_error":            errToStr(botErr),
+		"webhook_info":         whInfo,
+		"webhook_error":        errToStr(whErr),
+		"polling_mode":         service.IsTelegramPollingEnabled(),
+		"polling_owner":        acc.PollingOwner,
 		"polling_heartbeat_at": acc.PollingHeartbeatAt,
 	}
 	response.Success(c, resp, "获取状态成功")

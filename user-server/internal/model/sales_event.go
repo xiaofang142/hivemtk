@@ -8,13 +8,13 @@ import "time"
 // 记录订单 / 跟进 / AI 谈单 / 订单草稿四类销售事件，供销售工作台与业绩聚合
 // 做 DB 权威统计；与实时驾驶舱（dashboard_sse_stats）互补。
 type SalesEvent struct {
-	ID          uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	EventType   string     `gorm:"type:varchar(30);index" json:"event_type"`
-	OrderID     string     `gorm:"type:varchar(64);index" json:"order_id"`
-	DraftID     string     `gorm:"type:varchar(64);index" json:"draft_id"`
-	CustomerID  string     `gorm:"type:varchar(64);index" json:"customer_id"`
-	OwnerID     string     `gorm:"type:varchar(64);index" json:"owner_id"`
-	ProductName string     `gorm:"type:varchar(200)" json:"product_name"`
+	ID          uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	EventType   string `gorm:"type:varchar(30);index" json:"event_type"`
+	OrderID     string `gorm:"type:varchar(64);index" json:"order_id"`
+	DraftID     string `gorm:"type:varchar(64);index" json:"draft_id"`
+	CustomerID  string `gorm:"type:varchar(64);index" json:"customer_id"`
+	OwnerID     string `gorm:"type:varchar(64);index" json:"owner_id"`
+	ProductName string `gorm:"type:varchar(200)" json:"product_name"`
 	// Amount 金额统一 NUMERIC(12,2) 存储，杜绝 float64 二进制误差累积；
 	// Go 侧读写仍用 float64（GORM 自动转换），聚合逻辑见 sales_event_stats
 	Amount      float64    `gorm:"type:numeric(12,2)" json:"amount"`

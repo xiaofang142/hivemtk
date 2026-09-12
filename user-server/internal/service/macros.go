@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
