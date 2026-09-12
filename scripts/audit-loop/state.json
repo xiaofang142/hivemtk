@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 73,
-  "next_angle_index": 1,
+  "round": 74,
+  "next_angle_index": 2,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 73,
+    "rounds_completed": 74,
     "issues_found_total": 22,
     "issues_fixed_total": 22,
     "last_completed_at": "2026-09-12",
-    "last_commit": "38a0306"
+    "last_commit": "R74_PENDING"
   },
   "history": [
     {
@@ -672,6 +672,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第七圈首轮 0缺陷: 密钥0命中/SQL拼接4处受控/敏感日志0命中; build/vet 绿"
+    },
+    {
+      "round": 74,
+      "angle": "authz",
+      "date": "2026-09-12",
+      "found": 0,
+      "fixed": 0,
+      "notes": "第七圈 0缺陷: doRegAdmin 146 基线稳定; AdminAuthMiddleware 引用 70 处(较64增长6处均为admin守卫组接线,方向正确); 访客WS fail-closed在位(visitor_handler.go:129); browser-automation三层守卫在位; middleware/websocket测试绿; build/vet 绿"
     }
   ]
 }

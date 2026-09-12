@@ -5,11 +5,28 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：73（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51/R53–R72 扫描组为 0 新增缺陷）
-- 下一轮角度：authz
+- 已完成轮次：74（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷）
+- 下一轮角度：architecture
 
 ## 轮次报告
+
+### R74 — authz（2026-09-12）— 第七圈，0 缺陷轮
+
+**审计范围**：doRegAdmin/admin 守卫基线计数、访客 WS fail-closed 回归、browser-automation 守卫面复核、middleware/websocket 测试。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- `doRegAdmin` 146 处与 R50/R62 基线完全持平，无新增无回退
+- `AdminAuthMiddleware` 引用 70 处（R26 口径 64→70，增长 6 处逐一核对：browser_automation/token-reset、channel_overview、tool_debug、workflow_orchestrator 三处 admin 组等——均为 admin 守卫组接线点增加，方向正确，非守卫缺失）
+- 访客 WS fail-closed 在位（visitor_handler.go:129：session_id/visitor_id 已给但缺 token 一律 401 拒绝）
+- browser-automation 三层守卫在位：`/api/browser-automation/*` 挂 JWT auth 组、`host/token/reset` 独立 AdminAuthMiddleware 子组、`/api/browser/host-ws` token+回环 fail-closed 双层防护
+- 敏感 reset/rotate 类写路由抽查：全部在 admin 组之下，无漏网
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；`go test ./internal/middleware/... ./internal/websocket/... -count=1` 全过（3.7s/4.4s）。
+
+**Commit**：见 git log `chore(audit): 审计R74-authz: 0缺陷轮核查记录与状态推进`
 
 ### R72 — docs-consistency（2026-09-12）— 第六圈收官，1 发现 1 修复（文档级），0 代码缺陷
 
