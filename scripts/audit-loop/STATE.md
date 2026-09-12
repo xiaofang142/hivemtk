@@ -25,6 +25,8 @@
 
 **基线更新**：L4 脚本直连命中 15→14（均为装配入口；`system_user.go:597` 的 `repository.GetDB().WithContext` 本就在脚本正则盲区外，属人工深查捕获的实锤违规）。**后续轮次注意**：govulncheck 已可用（安全轮闸门从"go vet 替代"升级为真 `govulncheck ./...`）；Go 工具链现为 go1.27。
 
+**R75 补记（同会话，096aaba/bc74b7d/09c427e）**：①为下沉的 2 个仓储方法补专属回归用例（`system_user_search_test.go` 7 组关键词断言 ILIKE 语义/分页 id DESC；`telegram_gate_repo_test.go` 三态过滤/limit/空结果）——本机无 PG 按 testutil 设计 Skip 降级，环境可达即生效。②顺手发现并清偿 **gofmt 全仓漂移 38 文件**（`gofmt -l` 38→0，纯格式零行为变更；`-w` diff 抽查确认仅换行/注释缩进重排），build/vet/test 全包零 FAIL。③test-coverage 轮后续可用 `gofmt -l ./user-server/internal ./user-server/cmd` 作新增基线闸门（当前 0）。
+
 **Commit**：36ed71a（代码修复+收编）；状态推进见其后 chore。
 
 ### R74 — authz（2026-09-12）— 第七圈，0 缺陷轮

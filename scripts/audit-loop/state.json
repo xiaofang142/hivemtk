@@ -22,7 +22,7 @@
     "issues_found_total": 26,
     "issues_fixed_total": 26,
     "last_completed_at": "2026-09-12",
-    "last_commit": "36ed71a"
+    "last_commit": "09c427e"
   },
   "history": [
     {
@@ -687,7 +687,7 @@
       "date": "2026-09-12",
       "found": 4,
       "fixed": 4,
-      "notes": "深度轮(远端零代码增量,转深扫): ①govulncheck解锁(go install latest对齐go1.27)扫出2真实漏洞 GO-2025-3553(jwt v5.2.0→v5.2.2)/GO-2025-3540(go-redis v9.7.0→v9.7.3),复扫0; ②L4实锤违规2处下沉: telegram_gate RecoverStalled s.db查询→TelegramGroupMemberRepository.ListStalledRestricted + system_user SearchUsers repository.GetDB直连→repo.SearchUsers(mock同步); ③收编websocket seq_redis_test竞态修复(asyncSetJSON等待快照). 脚本剩余14处命中全为装配入口基线. build/vet/test全包绿"
+      "notes": "深度轮(远端零代码增量,转深扫): ①govulncheck解锁(go install latest对齐go1.27)扫出2真实漏洞 GO-2025-3553(jwt v5.2.0→v5.2.2)/GO-2025-3540(go-redis v9.7.0→v9.7.3),复扫0; ②L4实锤违规2处下沉: telegram_gate RecoverStalled s.db查询→TelegramGroupMemberRepository.ListStalledRestricted + system_user SearchUsers repository.GetDB直连→repo.SearchUsers(mock同步); ③收编websocket seq_redis_test竞态修复(asyncSetJSON等待快照). 脚本剩余14处命中全为装配入口基线. build/vet/test全包绿; 补记: 下沉方法专属测试2文件+全仓gofmt清扫38文件(gofmt -l归零)"
     }
   ]
 }
