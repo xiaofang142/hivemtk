@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 74,
-  "next_angle_index": 2,
+  "round": 75,
+  "next_angle_index": 3,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 74,
-    "issues_found_total": 22,
-    "issues_fixed_total": 22,
+    "rounds_completed": 75,
+    "issues_found_total": 26,
+    "issues_fixed_total": 26,
     "last_completed_at": "2026-09-12",
-    "last_commit": "195a4f1"
+    "last_commit": "36ed71a"
   },
   "history": [
     {
@@ -680,6 +680,14 @@
       "found": 0,
       "fixed": 0,
       "notes": "第七圈 0缺陷: doRegAdmin 146 基线稳定; AdminAuthMiddleware 引用 70 处(较64增长6处均为admin守卫组接线,方向正确); 访客WS fail-closed在位(visitor_handler.go:129); browser-automation三层守卫在位; middleware/websocket测试绿; build/vet 绿"
+    },
+    {
+      "round": 75,
+      "angle": "architecture",
+      "date": "2026-09-12",
+      "found": 4,
+      "fixed": 4,
+      "notes": "深度轮(远端零代码增量,转深扫): ①govulncheck解锁(go install latest对齐go1.27)扫出2真实漏洞 GO-2025-3553(jwt v5.2.0→v5.2.2)/GO-2025-3540(go-redis v9.7.0→v9.7.3),复扫0; ②L4实锤违规2处下沉: telegram_gate RecoverStalled s.db查询→TelegramGroupMemberRepository.ListStalledRestricted + system_user SearchUsers repository.GetDB直连→repo.SearchUsers(mock同步); ③收编websocket seq_redis_test竞态修复(asyncSetJSON等待快照). 脚本剩余14处命中全为装配入口基线. build/vet/test全包绿"
     }
   ]
 }

@@ -5,11 +5,27 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：74（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷）
-- 下一轮角度：architecture
+- 已完成轮次：75（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：26 / 26（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编）
+- 下一轮角度：error-handling
 
 ## 轮次报告
+
+### R75 — architecture（2026-09-12）— 第七圈，深度轮，4 发现 4 修复
+
+**审计背景**：远端自 R74 以来零代码增量（纯 spot-check 无增量价值），本会话转为深扫面：把长期"不可用"的 govulncheck 真正解锁并首扫 + L4 基线逐条实锤化。
+
+**发现与修复（4 项，全部当轮闭环，commit 36ed71a）**：
+1. **（P0 工具）govulncheck 解锁**：根因确诊——旧二进制用 go1.25 构建、与本机 go1.27 的 `go list` 版本错位。`go install golang.org/x/vuln/cmd/govulncheck@latest` 重建后**首次成功扫描**（75 轮以来第一次）。
+2. **（P1）2 个真实漏洞**：GO-2025-3553 `golang-jwt/jwt/v5@v5.2.0`（header 解析过量内存分配，调用链 utils/jwt.go:141 ParseToken→ParseUnverified）→ 升 v5.2.2；GO-2025-3540 `redis/go-redis/v9@v9.7.0`（CLIENT SETINFO 超时乱序响应，调用链 cache/redis.go:176 Clear→FlushDB→initConn）→ 升 v9.7.3。升级后复扫 **0 调用路径漏洞**；另有 1+4 项 imported-module 级漏洞为代码不可达路径，不处置。
+3. **（P2）L4 实锤违规 2 处下沉仓储化**：脚本命中逐条核对后，真违规仅 2 处——`telegram_gate.go:502` RecoverStalled 直用 `s.db.WithContext(...).Where(...).Find` → 新增 `TelegramGroupMemberRepository.ListStalledRestricted`（ctx 透传）；`system_user.go:597` SearchUsers 直用 `repository.GetDB()` 拼 ILIKE 查询 → 新增 `SystemUserRepository.SearchUsers` 接口方法+实现，MockSystemUserRepository 同步补桩。**其余 14 条命中全部为 `New*Service`/`*FromGlobal` 构造装配入口**（R35 既定基线口径，属脚本正则盲区非缺陷）。
+4. **（P3）收编 websocket 竞态测试修复**：工作区 WIP `seq_redis_test.go`（TestD15 等 asyncSetJSON 后台写落盘再覆盖快照，消除竞态）验证 `-run TestD15 -count=3` 绿后随本轮入库——R53/R65 留档的"websocket 偶发 FAIL 环境抖动"首个实锤候选修复。
+
+**验证证据**：build/vet 零输出；`go test ./... -count=1` 全包零 FAIL；service 23.4s/repository 1.0s 绿；govulncheck 复扫 "No vulnerabilities found"。
+
+**基线更新**：L4 脚本直连命中 15→14（均为装配入口；`system_user.go:597` 的 `repository.GetDB().WithContext` 本就在脚本正则盲区外，属人工深查捕获的实锤违规）。**后续轮次注意**：govulncheck 已可用（安全轮闸门从"go vet 替代"升级为真 `govulncheck ./...`）；Go 工具链现为 go1.27。
+
+**Commit**：36ed71a（代码修复+收编）；状态推进见其后 chore。
 
 ### R74 — authz（2026-09-12）— 第七圈，0 缺陷轮
 
