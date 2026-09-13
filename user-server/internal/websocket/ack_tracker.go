@@ -150,10 +150,22 @@ func (p *pendingRedisBacked) asyncSetJSON(sessionID string, snapshot map[uint64]
 	if c == nil {
 		return
 	}
+	// snapshot 可能直接别名调用方（Track/Ack）在持有 p.mu 时传入的实时 map
+	// p.items[sessionID]。异步 goroutine 在 p.mu 之外对 snapshot 做 json.Marshal(map)，
+	// 与后续 Track/Ack 对该 map 的写入并发 → 数据竞争 + fatal: concurrent map
+	// iteration and map write（不可 recover，整个进程崩溃）。因此必须在派生 goroutine
+	// 之前（仍在调用方锁内）做一次深拷贝，让后台只读私有副本。
+	if snapshot == nil {
+		return
+	}
+	isolated := make(map[uint64]time.Time, len(snapshot))
+	for k, v := range snapshot {
+		isolated[k] = v
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = c.SetJSON(ctx, pendingKey(sessionID), snapshot, 24*time.Hour)
+		_ = c.SetJSON(ctx, pendingKey(sessionID), isolated, 24*time.Hour)
 	}()
 }
 

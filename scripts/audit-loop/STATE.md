@@ -5,11 +5,32 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：76（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：29 / 29（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编；R76 深度轮 3 项：panic 裸断言+吞错 2 类）
-- 下一轮角度：concurrency
+- 已完成轮次：77（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：31 / 31（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编；R76 深度轮 3 项：panic 裸断言+吞错 2 类；R77 深度轮 2 项：WS ACK 快照逃逸竞争+SMS 运营商缓存锁误用）
+- 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R77 — concurrency（2026-09-13）— 第七圈，深度轮，2 发现 2 修复
+
+**审计背景**：前六圈本角度 spot-check 均 0 缺陷。本轮按"深度面"打法穷举：①non-test 文件全部 40 处 `go func` panic 保护逐条实锤化（内联 recover / 有界同步 / 真裸奔三分）；②包级 map 写路径锁覆盖逐点核查；③cron/ticker/worker 生命周期收口复核。远端自 R76 零代码增量（fetch 后 HEAD 同步），无增量 spot 价值，转全仓深扫。
+
+**发现与修复（2 项，commit 见 git log）**：
+1. **（P1 数据竞争/fatal）`websocket/ack_tracker.go:145` asyncSetJSON 快照逃逸**：`Track`/`Ack` 在持有 `p.mu` 时把 `p.items[sessionID]` 的**实时 map 引用**直接传给 `asyncSetJSON`，后者 `go func` 里对该 map 做 `c.SetJSON(...)`（MemoryCache 路径 `json.Marshal(map)` 在锁外迭代）——与后续 Track/Ack 在同一 map 上的写入并发，构成数据竞争；MemoryCache 用后台异步写 Redis 时最坏触发 **`fatal: concurrent map iteration and map write`（fatal 不可 recover，整进程崩溃）**。调用链为每次访客/坐席 WS 消息 ACK 的热路径（`Track`/`Ack` 每消息必触发）。**处置：派生 goroutine 之前（仍在调用方锁内）对快照做一次深拷贝**，后台只读私有副本；行为零变更（快照仍是调用时刻的）。补 `ack_tracker_snapshot_test.go`：确定性闸门（gate）测试——后台 SetJSON 阻塞至调用方改写原 map 后才放行读取，断言捕获内容恰为调用时刻快照（修复前必红：本地实测 FAIL 见"泄漏 key 2"；修复后必绿，-count=2 稳定）；另附 8×200 并发 Track/Ack/Pending 冒烟回归。
+2. **（P2 数据竞争）`service/sms_delivery_tracker.go` carrierCache 锁误用 3 点**：①`:126-129` `DetectAndRecordPortability` 冷路径在 **RLock 释放后**对 `s.carrierCache[phone]=newCarrier` 无锁写——与并发 `GetCurrentCarrier` 的 RLock 读、后台 webhook goroutine 并发写构成竞争；②`loadCarrierCache` 读改 `s.carrierLoaded`/`s.carrierLoadErrAt` 完全无锁③webhook 入口 `RecordDelivery` 起 `go func` 调 `DetectAndRecordPortability`，多号码回调天然并发。**处置**：①改单次写锁（读+写原子化，顺带消除"先写后被 load 覆盖"的 TOCTOU 语义毛刺，`original` 回退为 zero=Unknown 与本函数"新号码不落库"早退语义一致）；②③`carrierLoaded`/`carrierLoadErrAt` 全部纳入 `carrierMu` 保护（锁外执行 repo 加载，写回时持锁）。SMS webhook 面本机无 PG 用既有 mock 测试回归（`Sms|Portability|Carrier` 定向全绿）。
+
+**核查通过项（无需修复）**：
+- 全仓 non-test `go func` 40 处三分穷举：内联 recover 22 处（含 SSE/事件总线/cron 停止屏障）；有界同步 worker 11 处（wg/channel 收集，`cached_embedding_client` worker 仅调度 `submitTracked` 外层已 recover 的任务、`selfconsistency` Sample 为调用方注入且生产唯一调用方 `browser_automation/brain.go` 注释明示泄漏已接受并限 180s HTTP 超时——panic 等价性成立）——竞争面均封闭。真裸奔（fully-detached 且 recover 缺失）候选逐一核对：**除 ack_tracker 外全部为低风险面**：`system_ops.go` 内仅 `time.Sleep+os.Exit` 无 panic 源；`flag.go`/`bridge_sink.go` 为 ticker-reload/flush 循环（ReloadAll/Flush 内部自捕获已核）；`ab_experiment.go` worker `insert` 为 repo.Create+错误日志（无裸断言/无 map 逃逸）；`backup.go:405` `executeRestore` 与 `executeBackup` 同型自带 recover（defer 状态落库）；`reach_pipeline_claim.go`/`sms`/`email_open`/`objection recordUsageAsync` 等 DB 异步写均无 panic 面（nil-repo 早退在位）。
+- panic 等价性专项：dispatcher fan-out `callProvider` 在 panic 时由 `dispatchFanOut` 唯一调用方 `Dispatch` 的 defer recover 接住（行为与 goroutine 内 recover 后无结果投递一致，fan-out loop 会走 fanCtx.Done 超时分支）——无击穿新增面。
+- 包级 map 并发面：`bridgeChannels` 写仅 `init()`+tests（-p 1 串行）；`IntentRecognizer.keywordMap/embFailCount` 由实例 `anchorMu` 全程保护；intentKeywordOverride 写读均过 `intentOverrideMu`；其余包级 map 全部为 init-only 静态表（复扫口径同 R17/R29/R41/R53/R65）。
+- WS/SSE 连接清理与 cron Stop：`SessionTTFCron`/`FeedbackLearningCron`/`webhook.Stop`/`message_hub_summary_agg`/`message_trace_cleanup_cron` 停轮均有 wg/close(done)+超时兜底；`PendingAck.Drop` 断开清 pending 防泄漏在位；`reach_pipeline_claim` 心跳 goroutine close(hbStop)+join 配对。
+- `go test ./... -count=1` 全包 FAIL 归零（含 R75 收编的 seq_redis 竞态修复第 2 次回归通过）。
+
+**验证证据**：`go build ./...` OK；`go vet ./...` 零输出；`gofmt -l internal` 零；定向回归：新闸门测试修复前 FAIL/修复后 PASS（-count=2）+ 并发冒烟；`go test ./internal/websocket/ ./internal/service/ -count=1` 绿；全包 `go test ./... -count=1` 零 FAIL。
+
+**基线/后续注意**：①concurrency 轮新增闸门：`grep -n 'pendingRedis.asyncSetJSON\|Snapshot(' internal/websocket/` 与 `python scripts/...`（本轮临时脚本思路可固化为"gofunc body 无 recover 即列单人工三分"）；②`AUDIT_HIGHEST_STANDARD.md` 的 P1-3"55/76 无 recover"为 08-26 旧基线，实测现存 non-test 裸 go func 40 处已全部有保护或有界（见核查项），下轮起可刷新该文档口径（docs-consistency 轮）；③`cmd/nm-host`、`cmd/bridge-mock`、`tests/perf/perflib`、`scripts/` 为工具/演示面不入业务闸门统计。
+
+**Commit**：见 git log `fix(server): 审计R77-concurrency`
 
 ### R76 — error-handling（2026-09-13）— 第七圈，深度轮，3 发现 3 修复
 
