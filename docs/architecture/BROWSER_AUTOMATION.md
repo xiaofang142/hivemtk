@@ -230,7 +230,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 熔断：maxBrainIterations=40 / plan 连败 3（空 plan 计入）/ 动作连败 5 / token 预算 200k（BRAIN_TOKEN_BUDGET）/ wall-clock=TimeoutSec+30s（R22：ctx 链在 LLM/DB 栈曾不生效，session132 实测 11min+ → 双看门狗）。循环指纹连续 3 轮同序列注 nudge / judge fail-open 连续 2 次不放行 / retry≤3、backoff 1s–10s 钳位 / LLM MaxTokens plan 4096·judge 512·轻量 256 / history≤24 滑窗 / 步间 humanizedDelay=base±30% 均匀 / 单步指数退避 backoff·2^(attempt-1) 默认 1000ms。
 越界钳位（扩展）：wait_for_selector timeout 1–60s / scroll 0–20000 / extract 单 key ≤100 节点 / markdown ≤64KiB / wait ≤60s。
 错误码要点：ErrHostOffline→409；`chrome_write` 错误帧=NM 通道坏快速失败；平台未注册/能力缺实现=error 直返（fails-loudly）；disconnect→终止+人工介入；401/403 LLM 快败不烧预算；429/5xx 退避；未知保守不重试。
-版本锚点：**三处 1.4.0 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部，一站式 post_comment 协议 case 已删（单一路径防分叉）。
+版本锚点：**三处 1.4.1 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正，R26 升 1.4.1=注入竞速 deadline）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部，一站式 post_comment 协议 case 已删（单一路径防分叉）。
 
 ## 4.7 v1 稳定化收口状态与挂账
 
@@ -322,7 +322,8 @@ R24 挂账四项全部闭合并经真机全链路验收（详细链路与新缺�
 - **R1（P0）send 超时=结果未知 ≠ 失败**：小红书重页上 comment_send 回包可超 45s **但评论实际已提交**（session179 判死、181 起回查发现入库）。修=send 任何结局（成功/出错/超时）一律进 finalize 回查，verified 即步成功并保留 send_error 审计——Postiz「有心跳后超时=结果未知→回查，绝不重发」语义的完整落地（F2①/F2② 至此才真正闭环）。
 - **R2（P0）Brain 超时后终态写回丢失**：executeBrain 因 ctx 取消收敛后，用已 Done 的 ctx 写 failed 终态被 DB 驱动连带取消→session 永久 active（session188 实证）。修=ExecuteSession 收口段统一 `context.WithoutCancel`+120s writeCtx。**教训：看门狗保证了"返回"，没保证"写回"——收敛路径上的状态持久化必须脱离被看护 ctx 的取消链**（与 R22 execCtx 不响应取消同族）。
 - **R3 finalize 证据归属**：先误取评论区首条→改"含目标文本优先"→再收口"**恰等于目标文本=own 证据优先**"（防他人引用同文误判）。
-- **R4 运行态纪律**：nm-host 假死新形态=进程活+host/status 在列但命令全超时；判据=轻量 wait pong 任务，不通即 pkill 让 SW 重拉。挂 R26：HostRegistry 侧"命令级健康探针+自动重连窗口"值得产品化。
+- **R4 运行态纪律**：nm-host 假死新形态=进程活+host/status 在列但命令全超时；判据=轻量 wait pong 任务，不通即 pkill 让 SW 重拉。**R26-1 ✅已产品化**：host_registry 命令级超时计数（连续 2 条判假死→主动 close→复用断连清理钩子+nm-host 退避重连=自愈），SIGSTOP 注入真机全链验证。
+- **R5 send 45s 慢回包本体**：**R26-2 ✅归因三分落地**——扩展定位注入 raceTimeout deadline（15s，注入未执行=零副作用），Go 侧 `*_inject_timeout_` 早返「未提交」不烧 finalize、WS 超时仍 finalize 回查（R1 语义不变）；45s 慢回包根治（CDP 事件批量化）挂下轮独立论证。
 
 ---
 
@@ -375,3 +376,4 @@ R24 挂账四项全部闭合并经真机全链路验收（详细链路与新缺�
 | v1.2 | 2026-09-11 | **R24 实施轮**：D1–D4/F1–F8/G17–G21/T1/D5 全量代码落地（Go 模块+扩展 v1.3.0+user-web+迁移 v3.40.0）；§5 各 G 项标注实施状态与证据；G17 定稿修正（不激活=静默截错，改服务端硬闸拒 Brain 轮内 screenshot）；Charter 现状表/DESIGN 四件套口径回写（B6/B9 勘误落地）|
 | v1.3 | 2026-09-12 | **R25 轮**：新增 §1.2 执行前提 P0（宿主机默认 Profile+社交账号人工已登录，凌驾 C1–C8），原 1.2–1.5 顺延为 1.3–1.6；§1.1 "告诉我账号密码"示例与 P0 冲突已修正；R25 全链路调研+优化+三平台真机评论执行结果见 §5.6 |
 | v1.4 | 2026-09-13 | **R25 实施轮（扩展 v1.4.0）**：F2② 三段式拆回 Go+finalize / F6 历史压缩+新元素标记 / G9 死代码全收口 / A1–A6 真机全绿，见 §5.6；新缺陷 R1 send 超时回查、R2 终态写脱离取消链、R3 证据 own 归属全部落地；§4.6 版本锚点三处 1.4.0、协议口径 15+3 内部子命令 |
+| v1.5 | 2026-09-13 | **R26 运行态产品化轮（扩展 v1.4.1）**：R4 假死自愈探针产品化（host_registry 命令级超时计数连续 2 判死主动断开复用钩子，SIGSTOP 真机全链验证）；R26-2 注入竞速 deadline+Go 归因三分（inject_timeout 早返零副作用/WS 超时回查/业务错误正常失败）；42 项 vitest+Go 全包全绿；版本锚点三处 1.4.1；详见 R25 审计文档 §5 |

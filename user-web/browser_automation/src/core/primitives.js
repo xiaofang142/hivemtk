@@ -484,6 +484,20 @@ function injQuery(kind, selector, attribute) {
 // 实现级规范来源见 cdp/input.js 头注释
 import * as cdpInput from './cdp/input.js';
 
+/**
+ * racedExecuteInTab R26-2：executeScript 竞速超时——重页（小红书评论区渲染/主线程拥堵）
+ * 会把注入队列堵到数十秒，NM 回包赶不上服务端超时产生「假失败真提交」灰态。
+ * 只读定位类调用加本地 deadline：超时=注入从未执行（页面主线程没轮到它），
+ * 返回显式 timeout 错误，与「注入执行了但失败」区分——提交前灰态归 Go finalize 处置。
+ */
+function raceTimeout(promise, ms, label) {
+  let timer;
+  const guard = new Promise((_, rej) => {
+    timer = setTimeout(() => rej(new Error(`${label}_inject_timeout_${ms}ms`)), ms);
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
 async function executeInTab(tabId, func, args = []) {
   const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
   const r = res?.result;
@@ -622,8 +636,10 @@ export async function dispatch(cmd, deps) {
           const inputSel = cmd.input_selector || '';
           const sendText = cmd.send_button_text || '';
           if (cmd.action === 'comment_prep') {
-            // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）
-            const pre = await executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel]);
+            // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）。
+            // R26-2：定位注入加 15s 竞速 deadline——重页注入队列拥堵时早返明确错误
+            // （注入未执行，无副作用），不再陪跑到服务端超时产生灰态。
+            const pre = await raceTimeout(executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel]), cmd.inject_timeout_ms || 15000, 'comment_prep');
             if (!pre.input_found) throw new Error('comment_input_not_found');
             if (pre.needs_trusted) {
               // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
@@ -634,7 +650,9 @@ export async function dispatch(cmd, deps) {
           }
           // comment_send 阶段二：拿发送按钮坐标，CDP trusted 坐标点击（mouseMoved 轨迹前置）。
           // 提交不可逆：本命令绝不含 verify——verify 超时态由 Go 侧 finalize 轮询处置（禁双发）。
-          const btn = await executeInTab(tabId, injPostCommentSend, [inputSel, sendText]);
+          // R26-2：按钮定位注入同样加 15s 竞速——**注入未执行=点击从未发生=无副作用**，
+          // 错误名 comment_send_inject_timeout 供服务端归类（pre-click 灰态≠post-click 未知态）。
+          const btn = await raceTimeout(executeInTab(tabId, injPostCommentSend, [inputSel, sendText]), cmd.inject_timeout_ms || 15000, 'comment_send');
           if (!btn.ok) throw new Error(btn.error || 'send_button_not_found');
           await cdpInput.clickAt(tabId, btn.x, btn.y);
           return { ok: true, sent: true };

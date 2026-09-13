@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -141,7 +142,29 @@ func TestMergeExtractSemantics(t *testing.T) {
 	}
 }
 
-// 5) dto/提示词口径：post_comment 仍是对外动作名（三段式是内部实现，不扩 dto 枚举），
+// 5) R26-2 归因三分：注入竞速超时=点击未发生（早返不进 finalize）；
+// WS 超时=结果未知（进 finalize 回查）；普通错误同理。静态契约+纯函数双锁。
+func TestInjectTimeoutAttribution(t *testing.T) {
+	if !isInjectTimeout(errors.New("comment_send_inject_timeout_15000ms")) {
+		t.Error("扩展竞速错误必须识别")
+	}
+	if isInjectTimeout(errors.New("Host 命令超时（45s，action=comment_send）")) {
+		t.Error("WS 超时=结果未知，不得误判为未发生")
+	}
+	if isInjectTimeout(nil) || isInjectTimeout(errors.New("send_button_not_found")) {
+		t.Error("nil/业务错误不得识别为注入超时")
+	}
+	// dispatchStep 里 send 路径：注入超时早返，其余进 finalize
+	src := readSrc(t, "executor.go")
+	iSend := strings.Index(src, "e.hand.commentSend(")
+	iFin := strings.Index(src, "e.finalizeComment(")
+	iGuard := strings.Index(src, "isInjectTimeout(sendErr)")
+	if !(iSend < iGuard && iGuard < iFin) {
+		t.Errorf("归因顺序必须 send→超时判定→finalize，got send=%d guard=%d finalize=%d", iSend, iGuard, iFin)
+	}
+}
+
+// 6) dto/提示词口径：post_comment 仍是对外动作名（三段式是内部实现，不扩 dto 枚举），
 // 且 Brain 提示词描述与三段式语义一致（防文档性谎言）。
 func TestPostCommentPublicContractUnchanged(t *testing.T) {
 	src := readSrc(t, "../dto/task.go")

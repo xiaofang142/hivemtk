@@ -249,4 +249,22 @@ describe('primitives dispatch', () => {
     await expect(dispatch({ action: 'post_comment', tab_id: 42, value: 'x' }, deps))
       .rejects.toThrow('unknown_action');
   });
+
+  it('R26-2 注入竞速：executeScript 挂起时 comment_prep 按 inject_timeout_ms 早返明确错误', async () => {
+    // 模拟重页注入队列拥堵：executeScript 永不 resolve
+    fakeChrome.scripting.executeScript.mockImplementationOnce(() => new Promise(() => {}));
+    const deps = makeDeps();
+    await expect(dispatch({
+      action: 'comment_prep', tab_id: 42, value: 'x',
+      input_selector: 'textarea.content-textarea', inject_timeout_ms: 200,
+    }, deps)).rejects.toThrow('comment_prep_inject_timeout_200ms');
+  });
+
+  it('R26-2 注入竞速：comment_send 同样有 deadline（未执行=点击从未发生，可安全重下发）', async () => {
+    fakeChrome.scripting.executeScript.mockImplementationOnce(() => new Promise(() => {}));
+    const deps = makeDeps();
+    await expect(dispatch({
+      action: 'comment_send', tab_id: 42, inject_timeout_ms: 200,
+    }, deps)).rejects.toThrow('comment_send_inject_timeout_200ms');
+  });
 });

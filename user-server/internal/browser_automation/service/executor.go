@@ -162,6 +162,12 @@ func sendErrText(err error) string {
 	return err.Error()
 }
 
+// isInjectTimeout R26-2：识别扩展侧竞速错误（*_inject_timeout_*ms，见 primitives.js raceTimeout）。
+// 语义=注入从未在页面执行→该命令零副作用，与「执行了但失败」「WS 超时结果未知」三分归一。
+func isInjectTimeout(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "_inject_timeout_")
+}
+
 // ExecuteSession 执行一个 session（在独立 goroutine 中运行）。
 // ctx 由调用方包上 task.TimeoutSec 超时。
 func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, steps []parsedStep) {
@@ -632,9 +638,15 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if _, err := e.hand.commentPrep(ctx, userID, tabID, step.Value, prepReq); err != nil {
 			return err
 		}
-		// 不可逆提交点。send 的任何结局（成功/出错/超时=结果未知）都必须走 finalize 验证：
-		// Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
+		// 不可逆提交点。send 结局分两类归因（R26-2 竞速超时使边界可判）：
+		// ① *_inject_timeout=按钮定位注入未执行→点击从未发生→无副作用，直接判失败早返
+		//    （不进 finalize 白轮 16s，也不污染证据——错误文本自证「未点击」可安全重下发）；
+		// ② 其余任何结局（成功/出错/WS 超时）→点击可能已发生=结果未知→必须 finalize 回查：
+		//    Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
 		_, sendErr := e.hand.commentSend(ctx, userID, tabID, prepReq)
+		if isInjectTimeout(sendErr) {
+			return fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
+		}
 		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
 		e.mergeExtract(ctx, session, "post_comment", map[string]any{

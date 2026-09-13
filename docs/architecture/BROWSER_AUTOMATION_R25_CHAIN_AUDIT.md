@@ -56,8 +56,22 @@ R24 已实施项（见主文档 v1.2 修订记录）不在本文重复；本文�
 - **R1（P0，executor 收口缺陷，真机 session179→181 暴露）：send 超时被当失败即止，不 finalize 归因**。小红书详情页 executeScript/CDP 可被页面主线程堵到超时（send_error=45s 超时**但评论实际已提交**）——结果未知态必须回查而非判死。修：send 任何结局（成功/出错/超时）都走 finalize 验证，verified=true 即步成功（evidence 记 send_error 供审计）；这正是 Postiz 心跳判因矩阵「有心跳后超时=结果未知→回查」语义。**实证=session195：send_error=45s 超时，finalize 见评论渲染，步判成功，任务 completed**。
 - **R2（P0，session188 卡 active 7min+）：Brain 超时收敛后终态写回用已取消的 ctx**，DB 写被取消→看门狗白兜。修：ExecuteSession 收口段统一 context.WithoutCancel+120s writeCtx（终态/指标/总结全走它）。实证=session191（修复后）failed 终态正常+llm_summary 落库。
 - **R3（证据归属）：finalize 证据取「评论区首条」非「我们的评论」**（session181 拿到无关文本）。两轮收口：先改「含目标文本优先」，实测仍可能误命中引用同文的历史评论→改「全文恰等于目标=own 优先，含目标次之」。session195 verified=true（容器级证据，item 恰等未命中=评论在弹窗折叠区，如实记录）。
-- **R4（运行态纪律）：nm-host 假死新形态**——进程活着+host/status 有 1.4.0 但命令帧全超时（session181-190 多轮）；判据=**lightweight wait 任务**（pong 探针）不通即 pkill nm-host 让 SW 重拉，恢复后一次跑通。扩展 v1.4.0 生效判据链=install.sh 版本锚点三处 1.4.0（manifest/src+n.m-host）+ScriptCache 清理+Chrome 冷重启。
-- **R5（预期待办）：comment_send 45s 内回包在重页面不稳定**——非正确性问题（finalize 兜底归因），但步耗时被拉长；候选优化=executeScript 竞速超时（超时即返 {sent_unknown}）挂 R26。
+- **R4（运行态纪律）：nm-host 假死新形态**——进程活着+host/status 有 1.4.0 但命令帧全超时（session181-190 多轮）；判据=**lightweight wait 任务**（pong 探针）不通即 pkill nm-host 让 SW 重拉，恢复后一次跑通。扩展 v1.4.0 生效判据链=install.sh 版本锚点三处 1.4.0（manifest/src+n.m-host）+ScriptCache 清理+Chrome 冷重启。**→R26-1 已产品化为服务端自愈探针（§5）。**
+- **R5（预期待办）：comment_send 45s 内回包在重页面不稳定**——非正确性问题（finalize 兜底归因），但步耗时被拉长；候选优化=executeScript 竞速超时（超时即返明确错误）。**→R26-2 已落地（§5）：注入类 deadline+Go 归因三分。**
+
+## §5 R26 轮（2026-09-13 晚，扩展 v1.4.1）：R25 遗留运行态项产品化
+
+### R26-1 Host 应用面假死自愈探针（host_registry.go）
+心跳（D4a）只测传输面；真机暴露「传输活、应用死」=WS/ping/pong 全正常但 stdio→扩展断链、命令有去无回（人工 pkill 才能恢复）。产品化=**命令级超时计数**：Request 超时分支 noteCmdTimeout 累计、回包到达 noteCmdAlive 清零；连续 `consecutiveCmdTimeoutSick=2` 条即服务端主动 `conn.close()`——复用既有 unregister+断连清理钩子（running session 置 failed）+ nm-host WS 退避重连 + SW connectNative 重拉，整链无人工自愈。阈值语义=单条慢命令（截图类 60s）不误杀；close 对 conn=nil 容错（测试探针连接）。
+**真机验证（SIGSTOP 注入）**：暂停 nm-host→两条 pong 任务超时→日志「连续 2 条命令超时…判 Host 应用面假死，主动断开触发自愈」+ host/status 清零 → resume/kill 后 SW 重拉注册（1.4.1）→ pong 即 completed。单测 TestCmdTimeoutSickProbe（阈值不清零/清零不误杀/钩子触发/摘除注册表）。
+
+### R26-2 注入竞速 deadline（primitives.js + executor.go）
+扩展侧 `raceTimeout(executeInTab, cmd.inject_timeout_ms||15000)` 包 comment_prep/send 的**定位注入**（注入未开始=零副作用可判）；Go 侧归因三分：`*_inject_timeout_*`=点击从未发生→早返「未提交」不烧 finalize；WS 超时=结果未知→finalize 回查（R25-R1 维持）；业务错误=正常失败。扩展测试 2 项（挂起 Promise 精确错误名）+Go TestInjectTimeoutAttribution。
+版本链三处 1.4.1。vitest 42 全绿、Go internal 全包全绿、真机回归：pong 196-201（含假死注入两轮）+ post_comment 快乐路径 202 completed（send 45s 超时态 finalize 正确归因成功，评论已入库）。
+
+### 仍开放（挂下轮）
+- send 的 45s 超时本身未消除（CDP 事件序列在重页仍慢）——现归因正确、耗时可容忍；根治候选=cdpInput.clickAt 内部事件批量化/降低单条 round-trip（动 trusted 主通道时序需谨慎，单独立轮论证）。
+- 探针阈值 2 为保守值；若真机出现「连续 2 条合法慢命令」误杀证据，再议按 action 分级阈值。
 
 ### 遗留挂账
 - Brain A2 目标「h1 提取」在 xhs 弹窗 DOM 无 h1 时靠 judge 拒绝+自恢复滚动换路（21 步成），效率待观察不判缺陷。

@@ -24,6 +24,10 @@ type CommandResult struct {
 	Data  map[string]any `json:"data,omitempty"`
 }
 
+// consecutiveCmdTimeoutSick 连续命令超时判病阈值：2 条=几乎必然假死（合法慢命令
+// 最长 60s 且罕见连续两条超时；单条慢命令超时属页面异常，非链路假死）。
+const consecutiveCmdTimeoutSick = 2
+
 // HostConn 一条 NM Host WebSocket 连接（与 user_id 一一绑定）
 // 并发约定：写帧经 writeMu 串行；读循环把回包按 req_id 投递到 pending chan。
 type HostConn struct {
@@ -37,6 +41,12 @@ type HostConn struct {
 
 	pendingMu sync.Mutex
 	pending   map[string]chan *CommandResult
+
+	// R4（R25 真机暴露，R26 产品化）命令级健康探针：nm-host 假死新形态=WS/心跳全活
+	// （TCP 半双工未断、ping/pong 正常）但 stdio→扩展方向断链——命令帧有去无回。
+	// 心跳测不出这种"传输活、应用死"，唯一可靠信号=命令超时本身：连续 N 条超时即判假死，
+	// 服务端主动 close（复用断连清理钩子+nm-host WS 退避重连），把人工 pkill 变自愈。
+	cmdTimeouts int
 
 	closedOnce sync.Once
 	closed     chan struct{}
@@ -146,7 +156,9 @@ func (c *HostConn) removePending(reqID string) {
 func (c *HostConn) close() {
 	c.closedOnce.Do(func() {
 		close(c.closed)
-		_ = c.conn.Close()
+		if c.conn != nil { // 测试构造的探针连接无真实 WS（R4）
+			_ = c.conn.Close()
+		}
 		if c.registry != nil {
 			c.registry.unregister(c.UserID, c)
 			c.registry.onDisconnect(c.UserID)
@@ -271,8 +283,11 @@ func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Du
 	case <-conn.Done():
 		return nil, ErrHostOffline
 	case <-time.After(timeout):
+		// R4 探针：超时计数（有去无回=假死信号）；达阈值主动判死本连接触发自愈。
+		conn.noteCmdTimeout(cmd["action"])
 		return nil, fmt.Errorf("Host 命令超时（%s，action=%v）", timeout, cmd["action"])
 	case res := <-ch:
+		conn.noteCmdAlive() // 回包到达=应用面活着，清零计数
 		if !res.OK {
 			return nil, errors.New(strings.TrimSpace(res.Error))
 		}
@@ -281,4 +296,25 @@ func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Du
 		}
 		return res.Data, nil
 	}
+}
+
+// noteCmdTimeout 命令超时计数；连续达阈值→判假死，服务端主动 close 该连接。
+// close 走既有路径：unregister + onDisconnect（running session 置 failed）；
+// 扩展侧 SW 的 connectNative 断线重连会拉起新 nm-host，下一次任务即用健康连接。
+func (c *HostConn) noteCmdTimeout(action any) {
+	c.pendingMu.Lock()
+	c.cmdTimeouts++
+	n := c.cmdTimeouts
+	c.pendingMu.Unlock()
+	if n >= consecutiveCmdTimeoutSick {
+		logger.Warnf("[BrowserHost] 连续 %d 条命令超时（最近 action=%v）判 Host 应用面假死，主动断开触发自愈 user=%d pid=%d", n, action, c.UserID, c.PID)
+		c.close()
+	}
+}
+
+// noteCmdAlive 回包/正常到达即证明应用面存活，清零超时计数。
+func (c *HostConn) noteCmdAlive() {
+	c.pendingMu.Lock()
+	c.cmdTimeouts = 0
+	c.pendingMu.Unlock()
 }
