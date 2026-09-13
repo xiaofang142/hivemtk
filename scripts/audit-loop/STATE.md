@@ -5,11 +5,31 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：75（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：26 / 26（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编）
-- 下一轮角度：error-handling
+- 已完成轮次：76（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：29 / 29（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编；R76 深度轮 3 项：panic 裸断言+吞错 2 类）
+- 下一轮角度：concurrency
 
 ## 轮次报告
+
+### R76 — error-handling（2026-09-13）— 第七圈，深度轮，3 发现 3 修复
+
+**审计背景**：前六圈本角度均 0 缺陷（R4 修复点每轮回查在位）。本轮按"深度面"打法做全仓穷举：①类型断言无 ok 守卫（panic 面）逐条实锤化；②`_ =` 吞错 583 处按危害分类（DB 状态流转写 > 缓存/日志 > 资源 Close）。
+
+**发现与修复（3 项，commit 8e5d49e）**：
+1. **（P1 panic）`service/auto_tagger.go:443` compareValues 裸断言**：`compareStringValues(fieldValue.(string), operator, value.(string))` 中 `value` 直接来自商户可编辑的规则 JSON（`customerTagSetRule` 仅 json.Marshal 无类型校验），字段值为 string 而规则 value 配成数字/布尔即 panic。调用链 `evaluateSimpleRule` 可同步触发（`customer_orchestrator.OnCustomerCreated` 经 `CustomerService.CreateOrUpdate` HTTP 链路）。**处置：改双值断言，类型不匹配按规则不命中处理**，补 `TestAutoTagger_compareValues_MismatchedTypes` 5 组用例（数字/布尔/nil/切片/反向 int64×string，带 recover 断言）。
+2. **（P2 吞错）`knowledge_merchant_external.go:112` 外部导入异步分支 `_ = s.externalRepo.Create(ctx, job)`**：job 落库失败仍照常 go 异步跑并返回 `pending + jobNo`，后续全部 `UpdateStatusByJobNo` 落空（按不存在的 jobNo 更新 0 行），调用方永远轮询不到结果且无任何日志。**处置：Create 失败即返回错误，不进入异步分支**。
+3. **（P3 吞错）知识库状态流转写 3 处补日志**：`knowledge_base_import.go` 的 `markDocumentIndexed`/`markDocumentFailed` 与 `knowledge_service_reindex.go:69` `docRepo.Update` 均 `_ =` 吞错——状态机推进失败意味着文档滞留 processing/旧状态且运维零感知。**处置：三处补 `logger.Errorf`**（行为不变，仅加可观测性）。
+
+**核查通过项（无需修复）**：
+- 全仓单值类型断言穷举：除上述 #1 外，controller 层 `userID.(uint)` 裸断言 6 处（marketing_flow:44、template_market:76、script_template:35、custom_report:53/183、dashboard_screen:35）逐一核对 `JWTAuthMiddleware`（jwt.go:71 `claims.UserID` 恒为 `uint`；test-mode 分支 Set `uint(1)`）——断言恒安全，非缺陷。`TeamJWTAuthMiddleware` 会把 `claims["user_id"]` 以 `float64` 注入 context（与裸断言不兼容），但**全仓 0 处接线**（grep 复核），属休眠死路径；`PermissionJWT`/`ManagerOrAdmin` 不触碰 user_id。`whatsapp_group_messaging.go` 178/554 处 `lead["id"].(string)` 的 map 构造点全部为 `model.Clue` string 字段，恒安全。`feedback_decorator.go:264` `v.(string)` 唯一 Store 点只写 `err.Error()`（string），恒安全。`cache/memory.go` 与 `lru_cache.go` 的 `*cacheItem/*lruEntry` 为容器内部私有类型，恒安全。`decision_executors.go` map 自持字面量类型恒安全。`material.go:379` `file.(io.Seeker)`：gin multipart 的 `multipart.File` 接口本身含 Seek 方法，恒安全。
+- `_ =` 其余分类抽查：browser_automation executor / dead_letter replay / knowledge reindex UpdateStatus 失败标记等均为"best-effort 状态刷新或已死条目清理"，失败无可行动作，属合理吞错；`rows.Close/Body.Close` 类无问题；无事务 Commit/Rollback 吞错。
+- 前端未捕获 Promise：34 文件 `.then(` 抽查——`request.js` 拦截器统一 reject + main.js 全局 `errorHandler`/`unhandledrejection` 兜底在位（R4 修复点第 7 次回归确认）；ElMessageBox 链式 `.then` 有 `.catch` 或调用点 await 包裹。
+
+**验证证据**：`go build ./...` OK；`go vet ./...` 零输出；`go test ./... -count=1` 全包零 FAIL；`gofmt -l internal` 零；eslint 未改前端（基线 0 errors）。
+
+**基线/后续注意**：①`TeamJWTAuthMiddleware` 是未来接线即炸的陷阱（float64 user_id × 裸断言），authz/architecture 轮可评估删除或归一 claims 类型；②error-handling 轮下轮起可加闸门 `grep -rE '_ = .*\.(Create|Updates)\(' internal/ | grep -v _test`（本轮新增 0 命中，基线清零）。
+
+**Commit**：8e5d49e
 
 ### R75 — architecture（2026-09-12）— 第七圈，深度轮，4 发现 4 修复
 

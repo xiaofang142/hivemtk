@@ -1,8 +1,8 @@
 {
   "version": 1,
   "created_at": "2026-09-08",
-  "round": 75,
-  "next_angle_index": 3,
+  "round": 76,
+  "next_angle_index": 4,
   "angles": [
     "security",
     "authz",
@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 75,
-    "issues_found_total": 26,
-    "issues_fixed_total": 26,
-    "last_completed_at": "2026-09-12",
-    "last_commit": "09c427e"
+    "rounds_completed": 76,
+    "issues_found_total": 29,
+    "issues_fixed_total": 29,
+    "last_completed_at": "2026-09-13",
+    "last_commit": "8e5d49e"
   },
   "history": [
     {
@@ -688,6 +688,14 @@
       "found": 4,
       "fixed": 4,
       "notes": "深度轮(远端零代码增量,转深扫): ①govulncheck解锁(go install latest对齐go1.27)扫出2真实漏洞 GO-2025-3553(jwt v5.2.0→v5.2.2)/GO-2025-3540(go-redis v9.7.0→v9.7.3),复扫0; ②L4实锤违规2处下沉: telegram_gate RecoverStalled s.db查询→TelegramGroupMemberRepository.ListStalledRestricted + system_user SearchUsers repository.GetDB直连→repo.SearchUsers(mock同步); ③收编websocket seq_redis_test竞态修复(asyncSetJSON等待快照). 脚本剩余14处命中全为装配入口基线. build/vet/test全包绿; 补记: 下沉方法专属测试2文件+全仓gofmt清扫38文件(gofmt -l归零)"
+    },
+    {
+      "round": 76,
+      "angle": "error-handling",
+      "date": "2026-09-13",
+      "found": 3,
+      "fixed": 3,
+      "notes": "第七圈深度轮: 全仓类型断言无ok扫描(裸断言仅compareValues 1处实锤,controller层userID.(uint)逐一核对JWT中间件恒Set uint为类型安全)+_ =吞错分类(真缺陷2处:外部导入job落库吞错致幽灵轮询/知识库状态写吞错3处补日志); go vet零/全包测试零FAIL/gofmt零/eslint零"
     }
   ]
 }
