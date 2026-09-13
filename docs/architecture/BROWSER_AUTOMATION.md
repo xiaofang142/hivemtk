@@ -230,7 +230,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 熔断：maxBrainIterations=40 / plan 连败 3（空 plan 计入）/ 动作连败 5 / token 预算 200k（BRAIN_TOKEN_BUDGET）/ wall-clock=TimeoutSec+30s（R22：ctx 链在 LLM/DB 栈曾不生效，session132 实测 11min+ → 双看门狗）。循环指纹连续 3 轮同序列注 nudge / judge fail-open 连续 2 次不放行 / retry≤3、backoff 1s–10s 钳位 / LLM MaxTokens plan 4096·judge 512·轻量 256 / history≤24 滑窗 / 步间 humanizedDelay=base±30% 均匀 / 单步指数退避 backoff·2^(attempt-1) 默认 1000ms。
 越界钳位（扩展）：wait_for_selector timeout 1–60s / scroll 0–20000 / extract 单 key ≤100 节点 / markdown ≤64KiB / wait ≤60s。
 错误码要点：ErrHostOffline→409；`chrome_write` 错误帧=NM 通道坏快速失败；平台未注册/能力缺实现=error 直返（fails-loudly）；disconnect→终止+人工介入；401/403 LLM 快败不烧预算；429/5xx 退避；未知保守不重试。
-版本锚点：**三处 1.4.1 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正，R26 升 1.4.1=注入竞速 deadline）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部，一站式 post_comment 协议 case 已删（单一路径防分叉）。
+版本锚点：**三处 1.4.2 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正，R26 升 1.4.1=注入竞速 deadline，R27 升 1.4.2=nm-host shutdown 控制帧消费端）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部+__host_shutdown__ 控制帧（nm-host 拦截不转发扩展），一站式 post_comment 协议 case 已删（单一路径防分叉）。
 
 ## 4.7 v1 稳定化收口状态与挂账
 
@@ -377,3 +377,4 @@ R24 挂账四项全部闭合并经真机全链路验收（详细链路与新缺�
 | v1.3 | 2026-09-12 | **R25 轮**：新增 §1.2 执行前提 P0（宿主机默认 Profile+社交账号人工已登录，凌驾 C1–C8），原 1.2–1.5 顺延为 1.3–1.6；§1.1 "告诉我账号密码"示例与 P0 冲突已修正；R25 全链路调研+优化+三平台真机评论执行结果见 §5.6 |
 | v1.4 | 2026-09-13 | **R25 实施轮（扩展 v1.4.0）**：F2② 三段式拆回 Go+finalize / F6 历史压缩+新元素标记 / G9 死代码全收口 / A1–A6 真机全绿，见 §5.6；新缺陷 R1 send 超时回查、R2 终态写脱离取消链、R3 证据 own 归属全部落地；§4.6 版本锚点三处 1.4.0、协议口径 15+3 内部子命令 |
 | v1.5 | 2026-09-13 | **R26 运行态产品化轮（扩展 v1.4.1）**：R4 假死自愈探针产品化（host_registry 命令级超时计数连续 2 判死主动断开复用钩子，SIGSTOP 真机全链验证）；R26-2 注入竞速 deadline+Go 归因三分（inject_timeout 早返零副作用/WS 超时回查/业务错误正常失败）；42 项 vitest+Go 全包全绿；版本锚点三处 1.4.1；详见 R25 审计文档 §5 |
+| v1.6 | 2026-09-14 | **R27 双项（扩展/nm-host v1.4.2）**：① I5 审计导出 GET /sessions/:id/export（会话+步+命令流+LLM 成本账单请求归并、snapshot 大文本不带出、真机 195/188 验证）+前端导出按钮；② **探针自愈链真机补全**（更正 v1.5 过于乐观的"全链验证"结论：close-only 后 nm-host 退避重连成僵尸注册、服务不恢复，session199/204-208 四轮实证）——判病先发 `__host_shutdown__` 控制帧令 host 进程退出→Chrome 重拉全新进程，端到端零人工自愈在 v1.4.2 真机闭环（僵尸 59920 退出→新 pid 60643 注册→pong completed）。版本锚点三处 1.4.2 |

@@ -28,7 +28,7 @@ var (
 	hostPort = envOr("HIVE_MTK_PORT", "8204")
 	// hostVersion 与扩展 manifest.json version 同步维护（R17：Chrome SW ScriptCache 缓存陷阱
 	// 导致旧扩展代码常驻——host/status 版本号是「新代码是否生效」的快速排查锚点）
-	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.4.1")
+	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.4.2")
 )
 
 func envOr(key, def string) string {
@@ -201,6 +201,13 @@ func pumpLoop(conn *websocket.Conn, reader *bufio.Reader) bool {
 			default:
 			}
 			return false
+		}
+		// R27-2 自愈控制帧：服务端判应用面假死后下发（转发前拦截），host 主动退出——
+		// Chrome 感知 port 死 → SW onDisconnect 重连 → connectNative 拉起全新 host 进程。
+		// 只重连 WS（僵尸注册：WS 活应用死）不足以端到端恢复，必须换进程。
+		if action, _ := cmd["action"].(string); action == "__host_shutdown__" {
+			fmt.Fprintf(os.Stderr, "[nm-host] 收到 shutdown 控制帧（reason=%v），主动退出触发 Chrome 重拉\n", cmd["reason"])
+			return true
 		}
 		if err := writeNativeFrame(cmd); err != nil {
 			// 扩展通道坏了：回错误帧给 server，让 server 侧命令快速失败

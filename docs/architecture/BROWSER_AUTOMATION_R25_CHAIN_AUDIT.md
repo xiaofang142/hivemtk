@@ -65,6 +65,11 @@ R24 已实施项（见主文档 v1.2 修订记录）不在本文重复；本文�
 心跳（D4a）只测传输面；真机暴露「传输活、应用死」=WS/ping/pong 全正常但 stdio→扩展断链、命令有去无回（人工 pkill 才能恢复）。产品化=**命令级超时计数**：Request 超时分支 noteCmdTimeout 累计、回包到达 noteCmdAlive 清零；连续 `consecutiveCmdTimeoutSick=2` 条即服务端主动 `conn.close()`——复用既有 unregister+断连清理钩子（running session 置 failed）+ nm-host WS 退避重连 + SW connectNative 重拉，整链无人工自愈。阈值语义=单条慢命令（截图类 60s）不误杀；close 对 conn=nil 容错（测试探针连接）。
 **真机验证（SIGSTOP 注入）**：暂停 nm-host→两条 pong 任务超时→日志「连续 2 条命令超时…判 Host 应用面假死，主动断开触发自愈」+ host/status 清零 → resume/kill 后 SW 重拉注册（1.4.1）→ pong 即 completed。单测 TestCmdTimeoutSickProbe（阈值不清零/清零不误杀/钩子触发/摘除注册表）。
 
+#### R27-2 真机二次暴露：close-only 自愈链不闭环（僵尸注册）→ shutdown 控制帧补全（v1.4.2）
+R26 的 SIGSTOP 验证是在**人工 resume/kill 之后**才确认恢复的——人为杀进程掩盖了「close 后 nm-host 自动重连但应用面仍死」的中间态。R27 服务端重启后挂起 nm-host **不人工干预**再测：判病→close→nm-host `runLoop` 退避重连→**秒级重注册成僵尸**（pid 不变、host/status 复现），后续命令继续全超时（session199/204-208 四轮实证）。根因=**服务端 close 只断 WS，nm-host 进程与 Chrome port 都活着**，重连后 stdio→扩展断链依旧。
+修=判病时**先发 `__host_shutdown__` 控制帧再 close**：nm-host pumpLoop 在转发前拦截该 action、按 stdin 关闭语义**主动退出进程**→Chrome 感知 port 死→SW onDisconnect 重连→connectNative **拉起全新 host（新 pid）**；c.conn==nil 单测路径跳帧只 close。
+**端到端真机验证（v1.4.2 全程零人工）**：SIGSTOP→2 超时判病下发 shutdown+close→status 清零→CONT 后**旧进程 59920 确认退出（僵尸消除）**→SW 重拉新 pid 60643 注册 1.4.2→pong session212 completed。**自愈链从「判病」到「新进程服务恢复」真正闭环**。
+
 ### R26-2 注入竞速 deadline（primitives.js + executor.go）
 扩展侧 `raceTimeout(executeInTab, cmd.inject_timeout_ms||15000)` 包 comment_prep/send 的**定位注入**（注入未开始=零副作用可判）；Go 侧归因三分：`*_inject_timeout_*`=点击从未发生→早返「未提交」不烧 finalize；WS 超时=结果未知→finalize 回查（R25-R1 维持）；业务错误=正常失败。扩展测试 2 项（挂起 Promise 精确错误名）+Go TestInjectTimeoutAttribution。
 版本链三处 1.4.1。vitest 42 全绿、Go internal 全包全绿、真机回归：pong 196-201（含假死注入两轮）+ post_comment 快乐路径 202 completed（send 45s 超时态 finalize 正确归因成功，评论已入库）。

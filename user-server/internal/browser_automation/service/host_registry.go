@@ -299,15 +299,22 @@ func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Du
 }
 
 // noteCmdTimeout 命令超时计数；连续达阈值→判假死，服务端主动 close 该连接。
-// close 走既有路径：unregister + onDisconnect（running session 置 failed）；
-// 扩展侧 SW 的 connectNative 断线重连会拉起新 nm-host，下一次任务即用健康连接。
+// R27-2 真机修正（session199/204-208 两轮实证）：只 close 服务端 WS 不够——nm-host 会秒级
+// 重连重注册成「僵尸注册」（WS 活、应用死照旧），端到端服务不恢复。正确自愈链必须让
+// **host 进程退出**：Chrome 感知 port 死 → SW onDisconnect 重连 → connectNative 拉起全新 host。
+// 故 close 前先发 __host_shutdown 控制帧（pumpLoop 拦截、转发前终结，WS 活着才判得准）。
 func (c *HostConn) noteCmdTimeout(action any) {
 	c.pendingMu.Lock()
 	c.cmdTimeouts++
 	n := c.cmdTimeouts
 	c.pendingMu.Unlock()
 	if n >= consecutiveCmdTimeoutSick {
-		logger.Warnf("[BrowserHost] 连续 %d 条命令超时（最近 action=%v）判 Host 应用面假死，主动断开触发自愈 user=%d pid=%d", n, action, c.UserID, c.PID)
+		logger.Warnf("[BrowserHost] 连续 %d 条命令超时（最近 action=%v）判 Host 应用面假死：下发 shutdown 帧+断开连接触发自愈 user=%d pid=%d", n, action, c.UserID, c.PID)
+		// 控制帧尽力送达（判病前提=WS 传输可用）；失败也无妨，close 仍兜底回收服务端状态。
+		// c.conn==nil（单测探针连接）时跳过帧只走 close。
+		if c.conn != nil {
+			_ = c.writeJSON(map[string]any{"action": "__host_shutdown__", "reason": "sick_probe", "req_id": ""})
+		}
 		c.close()
 	}
 }
