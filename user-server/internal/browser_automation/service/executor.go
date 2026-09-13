@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ type StepParams struct {
 	// assert/query 用（洞察层）
 	AssertKind string `json:"assert_kind,omitempty"` // contains_text / selector_exists
 	QueryKind  string `json:"query_kind,omitempty"`  // text / exists / count / attr
+	Attribute  string `json:"attribute,omitempty"`   // query attr 用：属性名（D2 贯通）
 }
 
 // StepRuntime 步骤编排里的错误处理策略
@@ -144,6 +146,22 @@ func (e *Executor) stopFired(ch chan struct{}) bool {
 	}
 }
 
+// stopChFor 读取 session 当前注册的 stop 通道（分发路径不穿 stopCh 参数，finalize 轮询需可中断）。
+// 未注册返回 nil——channel(nil) 的接收永远阻塞，调用方须先判空。
+func (e *Executor) stopChFor(sessionID uint) chan struct{} {
+	e.stopMu.Lock()
+	defer e.stopMu.Unlock()
+	return e.stopRegistry[sessionID]
+}
+
+// sendErrText 提交命令错误的落库文本（nil→空串）
+func sendErrText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 // ExecuteSession 执行一个 session（在独立 goroutine 中运行）。
 // ctx 由调用方包上 task.TimeoutSec 超时。
 func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, steps []parsedStep) {
@@ -187,7 +205,7 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 					}
 				}
 				// 轮次 >0 时重新 open_tab 的场景由显式 steps 表达；此处不隐式开 tab
-				status, errMsg := e.executeStepWithRetry(ctx, task, session, i, step, stopCh, &cmdSeq)
+				status, errMsg, _ := e.executeStepWithRetry(ctx, task, session, i, step, stopCh, &cmdSeq)
 				switch status {
 				case "success":
 					success++
@@ -214,13 +232,18 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 			finalStatus = "stopped"
 		}
 	}
-	_ = e.sessionRepo.UpdateStatus(ctx, session.ID, finalStatus, sessionFailed)
-	_ = e.sessionRepo.UpdateMetrics(ctx, session.ID, success+failed, success, failed, 0)
+	// R25 真机回归 P0 修复（session188 实测）：executeBrain 因 ctx 超时收敛返回后，
+	// ctx 已 Done——用原 ctx 写终态会被 DB 驱动取消，session 永久停留 active（看门狗白兜）。
+	// 终态收口必须用脱离取消的 context（30s 独立超时，只保写库完成，不继承执行期取消）。
+	writeCtx, cancelWrite := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
+	defer cancelWrite()
+	_ = e.sessionRepo.UpdateStatus(writeCtx, session.ID, finalStatus, sessionFailed)
+	_ = e.sessionRepo.UpdateMetrics(writeCtx, session.ID, success+failed, success, failed)
 
 	// Brain 模式：LLM 总结执行结果落 llm_summary（P2-2：completed 与 failed 都总结——失败归因同样是交付物）
 	if e.brain != nil && task.BrainMode && (finalStatus == "completed" || finalStatus == "failed") {
-		if summ := e.brain.SummarizeSession(ctx, task.BrainGoal, success, success+failed, string(session.ExtractedData), session.ConsoleErrors); summ != "" {
-			_ = e.sessionRepo.UpdateArtifacts(ctx, session.ID, nil, "", summ, "")
+		if summ := e.brain.SummarizeSession(writeCtx, task.ID, session.ID, task.BrainGoal, success, success+failed, string(session.ExtractedData)); summ != "" {
+			_ = e.sessionRepo.UpdateArtifacts(writeCtx, session.ID, nil, "", summ)
 		}
 	}
 
@@ -250,6 +273,8 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	// P0-4：LLM 下发参数钳位状态
 	consecutiveActionFails := 0
 	judgeFailOpen := 0 // P1-2 连续 fail-open 计数
+	// F6 历史压缩台账：滑窗溢出条目按动作折叠计数，台账首行回喂 LLM（零 LLM 成本的 browser-use 压缩等价）
+	foldedHistory := map[string]int{}
 	// P1-1：session 级 token 预算熔断（plan+judge 全计入）
 	tokenUsed := 0
 	tokenBudget := brainTokenBudget()
@@ -292,9 +317,14 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 				return success, failed, "snapshot 失败: " + err.Error()
 			}
 		}
-		// reflect 状态（对标 browser-use MessageManager）：跨轮评估/记忆/历史
-		st := &reflectState{History: history, PrevEvaluation: prevEvaluation, Memory: memory}
-		stepsJSON, done, err := e.brain.GeneratePlanReflect(ctx, task.ID, task.BrainGoal, taskPlatformID(task), snap, st)
+		// reflect 状态（对标 browser-use MessageManager）：跨轮评估/记忆/历史。
+		// F6 压缩视图：折叠台账非空时作为历史首行喂 LLM（滑窗只保近史，构成信息不丢）。
+		histView := history
+		if hdr := buildFoldHeader(foldedHistory); hdr != "" {
+			histView = append([]string{hdr}, history...)
+		}
+		st := &reflectState{History: histView, PrevEvaluation: prevEvaluation, Memory: memory}
+		stepsJSON, done, err := e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
 		prevEvaluation, memory = st.PrevEvaluation, st.Memory
 		tokenUsed += e.brain.LastPlanTokens() // P1-1 session 级 token 计量
 		if tokenUsed > tokenBudget {
@@ -311,10 +341,22 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 		consecutiveFails = 0
 		if done {
-			// 独立 judge 验收（对标 browser-use judge）：agent 自称完成 ≠ 真完成
+			// 独立 judge 验收（对标 browser-use judge）：agent 自称完成 ≠ 真完成。
+			// F5（G14）：证据改为**重拍的页面真实快照**（不再是自报摘要）——验收员只信页面；
+			// 快照重拍失败才降级回自报摘要（fail-soft：judge 增强不阻断主流程）。
 			judgeCtx := ctx
-			finalState := fmt.Sprintf("提取数据摘要:%s\n最近动作:%s", truncate(string(session.ExtractedData), 2048), strings.Join(lastN(history, 6), "; "))
-			approve, reason := e.brain.JudgeDone(judgeCtx, task.BrainGoal, finalState)
+			evidenceSnap, snapErr := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
+			var evidence string
+			if snapErr == nil && evidenceSnap != "" {
+				evidence = fmt.Sprintf("最新页面快照（独立复核证据，agent 无法伪造）：\n%s", truncateRunes(evidenceSnap, 16000, "\n…[证据快照已截断]"))
+			} else {
+				evidence = fmt.Sprintf("提取数据摘要:%s\n最近动作:%s", truncate(string(session.ExtractedData), 2048), strings.Join(lastN(history, 6), "; "))
+			}
+			approve, reason := e.brain.JudgeDone(judgeCtx, task.ID, session.ID, task.BrainGoal, evidence)
+			tokenUsed += e.brain.LastAuxTokens() // D3/G3：judge 消耗计入 session 预算
+			if tokenUsed > tokenBudget {
+				return success, failed, "Token 预算耗尽（" + itoa(tokenUsed) + " > " + itoa(tokenBudget) + "）"
+			}
 			// P1-2：连续 fail-open 视为未通过（验收增强挂掉≠放行伪装成功）
 			if reason == "judge_unavailable" {
 				judgeFailOpen++
@@ -357,7 +399,8 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 
 		abort := ""
-		for _, it := range items {
+		truncated := ""
+		for si, it := range items {
 			if abort != "" {
 				break
 			}
@@ -372,6 +415,14 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			if it.Action == "" {
 				continue // LLM 偶发空步，跳过
 			}
+			if it.Action == "screenshot" {
+				// G17：Brain 轮内拒绝 screenshot（captureVisibleTab 必然激活 tab 抢用户焦点，
+				// 且 F2 前无法确认静默截错）——护栏已禁止 LLM 输出，这里是服务端硬闸（不信任模型）。
+				logger.Warnf("[BrowserExec] brain 轮内 screenshot 被服务端拒绝（抢焦点）session=%d", session.ID)
+				hist := "screenshot → 被拒绝（Brain 模式禁止抢焦点截图，请用 snapshot/markdown 观察）"
+				history = appendHistoryBounded(history, hist, foldedHistory)
+				continue
+			}
 			step := parsedStep{
 				StepItem:        it,
 				ContinueOnError: it.ContinueOnError,
@@ -380,19 +431,14 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			}
 			// P0-4：LLM 幻觉参数服务端钳位
 			step.RetryCount, step.RetryBackoffMs = clampBrainStepParams(step.RetryCount, step.RetryBackoffMs)
-			status, errMsg := e.executeStepWithRetry(ctx, task, session, stepIdx, step, stopCh, &cmdSeq)
+			status, errMsg, stepResult := e.executeStepWithRetry(ctx, task, session, stepIdx, step, stopCh, &cmdSeq)
 			stepIdx++
-			// 历史记录（截断防膨胀）：LLM 下轮能看到已做过的关键动作
+			// 历史记录（F6 滑窗压缩：溢出最旧条折叠入账）：LLM 下轮能看到已做过的关键动作
 			hist := step.Action + " " + step.Target
 			if step.Action == "click" {
 				hist += " → " + status
 			}
-			if len(history) < 24 {
-				history = append(history, hist)
-			} else {
-				copy(history, history[1:])
-				history[len(history)-1] = hist
-			}
+			history = appendHistoryBounded(history, hist, foldedHistory)
 			switch status {
 			case "success":
 				success++
@@ -406,6 +452,18 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 					abort = errMsg
 				}
 			}
+			// F6a（G15 先行项）：页面改变型动作成功且本轮仍有后续步 → 立即截断本轮。
+			// 后续步引用的 @eN/CSS 属于旧页面快照，继续执行=错位（browser-use「页面变即截断」语义；
+			// 下一迭代自然重拍快照，规划不丢上下文）。证据=open_tab 必然换页 / click 回包 navigated。
+			if status == "success" && si < len(items)-1 && stepChangedPage(it.Action, stepResult) {
+				truncated = it.Action
+				break
+			}
+		}
+		if truncated != "" {
+			hist := truncated + " → 页面已跳转，本轮计划剩余步骤已跳过（下轮将基于最新快照重规划）"
+			history = appendHistoryBounded(history, hist, foldedHistory)
+			logger.Infof("[BrowserExec] brain 轮内 %s 引发页面变化，截断剩余步骤 session=%d", truncated, session.ID)
 		}
 		if abort != "" {
 			// 步骤失败多为 tab 丢失（SW 空闲回收）：不清场，交给下一轮 snapshot 恢复逻辑；
@@ -420,9 +478,10 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			return success, failed, reason
 		}
 		// 循环检测 nudge（对标 browser-use 循环指纹）：连续 3 轮同序列 → 注入换路径提示
+		// G9 收口（R25）：文案走 brain_prompts 工厂（prompt 资产化铁律，禁止散落拼接）
 		if stuck, seq := loopFingerprint(history); stuck {
 			logger.Warnf("[BrowserExec] brain 循环检测命中 session=%d seq=%s，注入 nudge", session.ID, seq)
-			prevEvaluation = "检测到你在原地打转（最近 3 轮动作序列相同），本轮必须换路径"
+			prevEvaluation = strings.TrimSpace(BuildLoopNudge(strings.Split(seq, "|")))
 		}
 	}
 	if exceeded {
@@ -431,9 +490,10 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	return success, failed, ""
 }
 
-// executeStepWithRetry 单步执行（含 retry/backoff），返回 (finalStatus, errMsg)。
+// executeStepWithRetry 单步执行（含 retry/backoff），返回 (finalStatus, errMsg, resultJSON)。
+// resultJSON：成功时的原语回包（F6a 页面变化证据用），失败为 nil。
 // seq：session 局部命令日志计数器（P0-2，调用方持有保证 session 内单调、跨 session 隔离）。
-func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string) {
+func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string, json.RawMessage) {
 	stepRow := &model.BrowserStep{
 		SessionID: session.ID,
 		TaskID:    task.ID,
@@ -447,7 +507,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		stepRow.Params = params
 	}
 	if err := e.stepRepo.BatchCreate(ctx, []*model.BrowserStep{stepRow}); err != nil {
-		return "failed", "step 落库失败: " + err.Error()
+		return "failed", "step 落库失败: " + err.Error(), nil
 	}
 
 	retries := step.RetryCount
@@ -455,12 +515,17 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	if backoff <= 0 {
 		backoff = 1000
 	}
+	// F2①（G11）：不可逆写原语服务端强制 retries=0——「提交成功但 verify 超时」是结果未知态，
+	// 重试=可能双发（Postiz 接口级契约：不可逆变更 maximumAttempts:1）。不信任编排/LLM 传入的重试参数。
+	if isWriteAction(step.Action) {
+		retries = 0
+	}
 	var lastErr string
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
 			if !sleepInterruptible(ctx, stopCh, time.Duration(backoff*(1<<(attempt-1)))*time.Millisecond) {
 				_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, "用户手动中断")
-				return "failed", "用户手动中断"
+				return "failed", "用户手动中断", nil
 			}
 		}
 		start := time.Now()
@@ -471,17 +536,26 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		err := e.dispatchStep(ctx, task, session, step)
 		dur := time.Since(start).Milliseconds()
 		if err == nil {
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", e.lastStepResult, dur, "")
-			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(e.lastStepResult)}, dur, true)
+			result := e.lastStepResult
 			e.lastStepResult = nil
-			return "success", ""
+			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", result, dur, "")
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
+			return "success", "", json.RawMessage(result)
 		}
+		e.lastStepResult = nil
 		lastErr = err.Error()
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, false)
 		logger.Warnf("[BrowserExec] step 失败 session=%d idx=%d action=%s attempt=%d: %s", session.ID, index, step.Action, attempt, lastErr)
+		// F7（G16）：重试按平台错误归因分线（MediaCrawler 处置矩阵语义）——
+		// bad_body（内容被拒）重试无意义直接终止；refresh_token/disconnect 同样终止（交上层 session 级处置）；
+		// 仅 retry（瞬态）继续退避重试。
+		if attempt < retries && !stepErrRetryable(taskPlatformID(task), lastErr) {
+			logger.Warnf("[BrowserExec] 错误分类为不可重试，终止步重试 session=%d action=%s", session.ID, step.Action)
+			break
+		}
 	}
 	_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, lastErr)
-	return "failed", lastErr
+	return "failed", lastErr, nil
 }
 
 // detectBlockedIfFatal 拦截页检测（铁律 4 全自动闭环）：步后 snapshot 命中平台拦截判据
@@ -531,30 +605,54 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 		return e.recordResult(map[string]any{"chrome_tab_id": tabID})
 	case "click":
-		return e.hand.click(ctx, userID, tabID, step.Target)
+		res, err := e.hand.click(ctx, userID, tabID, step.Target)
+		if err != nil {
+			return err
+		}
+		return e.recordResult(map[string]any{"navigated": res["navigated"] == true})
 	case "type":
 		return e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
 	case "click_near":
 		// 以 Anchor CSS 为基准点击容器内指定文本的 button（发送/提交按钮无稳定 class 场景）
 		return e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
 	case "post_comment":
-		// 一站式发评论：扩展侧定位输入框→CDP trusted 键入→trusted 点发送→就地验证渲染。
+		// F2②（G11 正确版）：三段式拆分——prep（可重入）→ send（唯一不可逆点，F2① 已禁重试）
+		// → verify 轮询 finalize（只读、可中断、可归因）。提交与验证彻底分离：
+		// verify 超时 ≠ 重试提交（Postiz maximumAttempts:1 红线）；finalize 落库证据闭环。
 		// 选择器四元组由平台适配器（L3）下发——扩展零平台知识（设计稿 P5）；
 		// 未声明 post_comment 能力的平台在此 fails-loudly（P4 契约默认失败）。
 		locs, err := platform.CommentLocatorsFor(ctx, taskPlatformID(task))
 		if err != nil {
 			return err
 		}
-		res, err := e.hand.postComment(ctx, userID, tabID, step.Value, map[string]any{
-			"input_selector":    locs.InputSelector,
-			"send_button_text":  locs.SendButtonText,
-			"comment_container": locs.CommentContainer,
-			"comment_item_text": locs.CommentItemText,
-		})
-		if err != nil {
+		prepReq := map[string]any{
+			"input_selector":   locs.InputSelector,
+			"send_button_text": locs.SendButtonText,
+		}
+		if _, err := e.hand.commentPrep(ctx, userID, tabID, step.Value, prepReq); err != nil {
 			return err
 		}
-		return e.recordResult(map[string]any{"posted": res["posted"], "verified": res["verified"]})
+		// 不可逆提交点。send 的任何结局（成功/出错/超时=结果未知）都必须走 finalize 验证：
+		// Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
+		_, sendErr := e.hand.commentSend(ctx, userID, tabID, prepReq)
+		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
+		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
+		e.mergeExtract(ctx, session, "post_comment", map[string]any{
+			"text":       step.Value,
+			"send_error": sendErrText(sendErr),
+			"verified":   verified,
+			"evidence":   evidence,
+			"posted_at":  time.Now().Format(time.RFC3339),
+		})
+		if verified {
+			return e.recordResult(map[string]any{"posted": true, "verified": true, "evidence": evidence})
+		}
+		// fails-loudly：提交结局未知或验证未见——归因「平台静默吞/审核中/渲染超时」，
+		// 步判失败但不重试（重试=双发）。这是 R17/R19-6 实测形态的正式归宿。
+		if sendErr != nil {
+			return fmt.Errorf("post_comment 提交命令异常（%v）且回查未见评论——结果未知，不重试防双发", sendErr)
+		}
+		return fmt.Errorf("post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发")
 	case "assert":
 		// 断言类原语（洞察层）：contains_text / selector_exists，失败即抛错（Playwright expect 语义）
 		timeout := p.TimeoutMs
@@ -564,7 +662,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		return e.hand.assert(ctx, userID, tabID, p.AssertKind, step.Value, timeout)
 	case "query":
 		// 只读洞察原语：text/exists/count/attr，返回数据不抛错（Midscene 洞察类语义）
-		res, err := e.hand.query(ctx, userID, tabID, p.QueryKind, step.Target)
+		res, err := e.hand.query(ctx, userID, tabID, p.QueryKind, step.Target, p.Attribute)
 		if err != nil {
 			return err
 		}
@@ -574,7 +672,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			return err
 		}
-		_ = e.sessionRepo.UpdateTitleAndSnapshot(ctx, session.ID, "", snap)
+		_ = e.sessionRepo.UpdateSnapshot(ctx, session.ID, snap)
 		return e.recordResult(map[string]any{"snapshot_chars": len(snap), "snapshot": snap})
 	case "markdown":
 		md, err := e.hand.markdown(ctx, userID, tabID)
@@ -583,6 +681,10 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		return e.recordResult(map[string]any{"markdown_chars": len(md), "markdown": md})
 	case "screenshot":
+		// G17 定稿（二验修正）：captureVisibleTab 只能截「当前激活 tab」且不报错——
+		// 不激活直接截会静默截到用户正在看的页面（假内容），降级方案不成立。
+		// 因此：激活是正确性必需，抢焦点的收口放在「频度」——护栏禁止 Brain 轮内使用
+		// screenshot（观察用 snapshot/markdown），用户显式编排/终态留证时才会激活一次。
 		b64, err := e.hand.screenshot(ctx, userID, tabID, true)
 		if err != nil {
 			return err
@@ -592,7 +694,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 				logger.Warnf("[BrowserExec] 截图落库失败 session=%d: %v", session.ID, err)
 			} else if url != "" {
 				session.FinalScreenshotURL = url
-				_ = e.sessionRepo.UpdateArtifacts(ctx, session.ID, nil, url, "", "")
+				_ = e.sessionRepo.UpdateArtifacts(ctx, session.ID, nil, url, "")
 			}
 		}
 		return e.recordResult(map[string]any{"screenshot_url": session.FinalScreenshotURL, "screenshot_b64_chars": len(b64)})
@@ -621,18 +723,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if !ok {
 			merged = map[string]any{"raw": data}
 		}
-		existing := map[string]any{}
-		if len(session.ExtractedData) > 0 {
-			_ = json.Unmarshal(session.ExtractedData, &existing)
-		}
-		for k, v := range merged {
-			existing[k] = v
-		}
-		blob, err := json.Marshal(existing)
-		if err == nil {
-			_ = e.sessionRepo.UpdateExtractedData(ctx, session.ID, blob)
-			session.ExtractedData = blob
-		}
+		e.mergeExtract(ctx, session, "", merged)
 		return e.recordResult(merged)
 	case "close_tab":
 		return e.hand.closeTab(ctx, userID, tabID)
@@ -652,6 +743,59 @@ func (e *Executor) recordResult(payload map[string]any) error {
 	return nil
 }
 
+// mergeExtract 合并写 session.extracted_data（追溯面板读这里）。
+// key 非空时嵌套在 key 名下（如 post_comment 证据），空时直接顶层合并（extract 原语语义）。
+func (e *Executor) mergeExtract(ctx context.Context, session *model.BrowserSession, key string, payload map[string]any) {
+	existing := map[string]any{}
+	if len(session.ExtractedData) > 0 {
+		_ = json.Unmarshal(session.ExtractedData, &existing)
+	}
+	if key != "" {
+		// 同名 key 多次提交 → 追加为数组（评论可能一条任务发多条）
+		prev, had := existing[key]
+		if !had {
+			existing[key] = []any{payload}
+		} else if arr, ok := prev.([]any); ok {
+			existing[key] = append(arr, payload)
+		} else {
+			existing[key] = []any{prev, payload}
+		}
+	} else {
+		for k, v := range payload {
+			existing[k] = v
+		}
+	}
+	blob, err := json.Marshal(existing)
+	if err == nil {
+		_ = e.sessionRepo.UpdateExtractedData(ctx, session.ID, blob)
+		session.ExtractedData = blob
+	}
+}
+
+// finalizeComment F2② finalize：提交后的只读验证轮询（Postiz pending→checkPostStatus→finalize 语义）。
+// 短超时多次 comment_verify——每次都是只读命令，可安全重试/可中断；绝不重新提交。
+// 轮询窗口 = 首验 6s + 复核 2×5s（覆盖小红书评论异步审核回显的实测节奏），stopCh 关闭即放弃。
+// 返回 (verified, evidence)：evidence=最后一次验证回包（含命中容器数/条目文本节选）。
+func (e *Executor) finalizeComment(ctx context.Context, userID uint, tabID int, text string, locs platform.CommentLocators, stopCh chan struct{}) (bool, map[string]any) {
+	rounds := []int{6000, 5000, 5000}
+	var last map[string]any
+	for i, timeoutMs := range rounds {
+		if ctx.Err() != nil || (stopCh != nil && e.stopFired(stopCh)) {
+			return false, last
+		}
+		res, err := e.hand.commentVerify(ctx, userID, tabID, text, locs.CommentContainer, locs.CommentItemText, timeoutMs)
+		if err != nil {
+			logger.Warnf("[BrowserExec] comment_verify 第%d轮出错（继续轮询）user=%d tab=%d: %v", i+1, userID, tabID, err)
+			continue
+		}
+		last = res
+		if verified, _ := res["verified"].(bool); verified {
+			return true, res
+		}
+	}
+	return false, last
+}
+
 func buildStepParams(step parsedStep) StepParams {
 	p := StepParams{
 		Ms:            step.Ms,
@@ -666,6 +810,7 @@ func buildStepParams(step parsedStep) StepParams {
 		ButtonText:    step.ButtonText,
 		AssertKind:    step.AssertKind,
 		QueryKind:     step.QueryKind,
+		Attribute:     step.Attribute,
 	}
 	return p
 }
@@ -738,4 +883,102 @@ func lastN(s []string, n int) []string {
 		return s
 	}
 	return s[len(s)-n:]
+}
+
+// ---- F6（G15 余项）历史压缩：滑动窗口 + 确定性折叠台账 ----
+// browser-use 用额外 LLM 调用压缩历史（25 步/40k→6k）；我们取等价语义的零成本形态：
+// 溢出窗口的最旧条目不静默丢弃，而是计入折叠台账（按动作计数），台账首行喂 LLM——
+// 保留"总共做过什么"的构成信息（防重复无效动作），逐条细节永久可查 command_log。
+
+// historyWindow Brain 历史滑动窗口容量
+const historyWindow = 24
+
+// appendHistoryBounded 容量约束下追加历史：溢出时最旧一条计入 folded 台账（键=动作名）。
+// folded 允许为 nil（judge/摘要等只读路径复用本函数记账时不折叠）。
+func appendHistoryBounded(history []string, entry string, folded map[string]int) []string {
+	if len(history) >= historyWindow {
+		oldest := history[0]
+		history = history[1:]
+		if folded != nil {
+			folded[historyActionOf(oldest)]++
+		}
+	}
+	return append(history, entry)
+}
+
+// historyActionOf 提取历史行动作词（行格式 "<action> <target>[ → 状态]"；折叠行以 "[" 前缀开头不计动作）
+func historyActionOf(line string) string {
+	if strings.HasPrefix(line, "[") {
+		return "compacted"
+	}
+	if i := strings.IndexByte(line, ' '); i > 0 {
+		return line[:i]
+	}
+	return line
+}
+
+// buildFoldHeader 折叠台账首行，如 "[已折叠 37 步: click×21 type×9 extract×7]"；台账为空返回 ""。
+func buildFoldHeader(folded map[string]int) string {
+	if len(folded) == 0 {
+		return ""
+	}
+	total := 0
+	keys := make([]string, 0, len(folded))
+	for k, v := range folded {
+		total += v
+		if v > 0 {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s×%d", k, folded[k]))
+	}
+	return fmt.Sprintf("[已折叠 %d 步: %s]", total, strings.Join(parts, " "))
+}
+
+// isWriteAction 不可逆写原语（F2①/G11）：这类动作「提交成功但验证失败」是结果未知态，
+// 自动重试=可能双发（Postiz 契约：不可逆变更 maximumAttempts:1）。扩展写原语集时在此登记。
+func isWriteAction(action string) bool {
+	switch action {
+	case "post_comment":
+		return true
+	default:
+		return false
+	}
+}
+
+// stepChangedPage F6a 证据判定：open_tab 必然换页；click 以扩展回包 navigated 为准；
+// click_near/type 无换页证据不截断（保守——误截只多一轮快照，不错截）。
+func stepChangedPage(action string, result json.RawMessage) bool {
+	if action == "open_tab" {
+		return true
+	}
+	if action == "click" && len(result) > 0 {
+		var r struct {
+			Navigated bool `json:"navigated"`
+		}
+		if json.Unmarshal(result, &r) == nil {
+			return r.Navigated
+		}
+	}
+	return false
+}
+
+// stepErrRetryable 步失败是否值得再试（F7/G16，对标 MediaCrawler 错误处置矩阵/Postiz 读写分治）：
+// 平台 ClassifyError 归因为 bad_body（内容被拒，重试必再拒）/refresh_token（单账号无法刷新）/
+// disconnect（账号级风控）时立即终止步重试；仅 retry（瞬态：超时/元素未就绪）继续。
+// 平台未注册或判据未命中时按默认 retry 处理（ClassifyError 默认值），行为与改造前兼容。
+func stepErrRetryable(platformID, errText string) bool {
+	p, err := platform.Get(platformID)
+	if err != nil {
+		return true
+	}
+	switch p.ClassifyError(errText) {
+	case platform.ErrBadBody, platform.ErrRefreshToken, platform.ErrDisconnect:
+		return false
+	default:
+		return true
+	}
 }

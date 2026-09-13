@@ -11,11 +11,17 @@ import (
 type SessionService struct {
 	sessionRepo repository.BrowserSessionRepository
 	stepRepo    repository.BrowserStepRepository
+	cmdLogRepo  repository.BrowserCommandLogRepository
 	executor    *Executor
 }
 
 func NewSessionService(sessionRepo repository.BrowserSessionRepository, stepRepo repository.BrowserStepRepository, executor *Executor) *SessionService {
 	return &SessionService{sessionRepo: sessionRepo, stepRepo: stepRepo, executor: executor}
+}
+
+// SetCommandLogRepository D1：命令流查询仓储注入（装配期一次性，路由未注入时查询返回空不报错）
+func (s *SessionService) SetCommandLogRepository(r repository.BrowserCommandLogRepository) {
+	s.cmdLogRepo = r
 }
 
 func (s *SessionService) Get(ctx context.Context, id, userID uint) (*model.BrowserSession, error) {
@@ -36,6 +42,31 @@ func (s *SessionService) ListSteps(ctx context.Context, sessionID, userID uint) 
 		return nil, err
 	}
 	return s.stepRepo.ListBySessionID(ctx, sessionID)
+}
+
+// ListCommandLogs D1（G1 补口）：session 归属校验 + append-only 命令流查询（审计链读侧）。
+// direction 空=全部；command/event/judge 三类帧按 seq 升序（铁律 4「日志可还原每一步」的兑现）。
+func (s *SessionService) ListCommandLogs(ctx context.Context, sessionID, userID uint, direction string) ([]*model.BrowserCommandLog, error) {
+	if s.cmdLogRepo == nil {
+		return []*model.BrowserCommandLog{}, nil
+	}
+	if _, err := s.sessionRepo.GetByID(ctx, sessionID, userID); err != nil {
+		return nil, err
+	}
+	all, err := s.cmdLogRepo.ListBySessionID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if direction == "" {
+		return all, nil
+	}
+	out := make([]*model.BrowserCommandLog, 0, len(all))
+	for _, l := range all {
+		if l.Direction == direction {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 // Stop 手动中断（session 置 stopped 由 Executor 收口；此处仅发信号 + 返回是否命中运行中）

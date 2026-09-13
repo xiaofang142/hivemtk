@@ -19,6 +19,7 @@ type StepItem struct {
 	// assert/query 用（洞察层原语）
 	AssertKind string `json:"assert_kind" binding:"omitempty,oneof=contains_text selector_exists"` // assert 子类型
 	QueryKind  string `json:"query_kind" binding:"omitempty,oneof=text exists count attr"`         // query 子类型
+	Attribute  string `json:"attribute" binding:"omitempty,max=64"`                                // query attr 用：属性名（href/src/value/...）
 	// 错误处理策略
 	ContinueOnError bool `json:"continue_on_error"` // 默认 false；true 则此步失败后继续下一步
 	RetryCount      int  `json:"retry_count" binding:"omitempty,min=0,max=10"`

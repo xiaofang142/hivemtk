@@ -56,6 +56,36 @@ func newHostConn(userID uint, version string, pid int, conn *websocket.Conn, reg
 
 func (c *HostConn) Done() <-chan struct{} { return c.closed }
 
+// 心跳常量（D4a/G4）：半开 TCP（VPN 抖动/机器睡眠唤醒）无应用层探测时，
+// Request 挂满命令超时且断连清理钩子不触发（TCP 未断）。ping/pong + 读超时把它变确定事件。
+const (
+	hostPingInterval = 30 * time.Second
+	hostReadTimeout  = 90 * time.Second // 容忍 2 个 ping 周期丢帧
+)
+
+// pingLoop 服务端定时 ping（gorilla 客户端默认自动回 pong，nm-host 无需改动）。
+// 连接关闭随 closed 退出；写失败（半开连对端已死）即 close——触发既有断连清理钩子。
+func (c *HostConn) pingLoop() {
+	t := time.NewTicker(hostPingInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.closed:
+			return
+		case <-t.C:
+			c.writeMu.Lock()
+			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			err := c.conn.WriteMessage(websocket.PingMessage, nil)
+			c.writeMu.Unlock()
+			if err != nil {
+				logger.Warnf("[BrowserHost] ping 失败 user=%d（判死连接）: %v", c.UserID, err)
+				c.close()
+				return
+			}
+		}
+	}
+}
+
 // writeJSON 串行写帧
 func (c *HostConn) writeJSON(v any) error {
 	c.writeMu.Lock()
@@ -64,9 +94,15 @@ func (c *HostConn) writeJSON(v any) error {
 	return c.conn.WriteJSON(v)
 }
 
-// readLoop 读循环：按 req_id 投递回包；连接断开时收尾
+// readLoop 读循环：按 req_id 投递回包；连接断开时收尾。
+// D4a：读超时 90s，收到 pong 即重置——僵尸连接最迟 90s 判定并触发清理钩子。
 func (c *HostConn) readLoop() {
 	defer c.close()
+	c.conn.SetReadLimit(4 << 20) // 扩展→Host 方向官方上限 4GB 太大，命令回包 4MiB 封顶已绰绰（截图 base64 实测 <2MiB）
+	_ = c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
+	c.conn.SetPongHandler(func(string) error {
+		return c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
+	})
 	for {
 		var frame struct {
 			ReqID string         `json:"req_id"`
@@ -157,6 +193,7 @@ func (r *HostRegistry) Register(userID uint, version string, pid int, conn *webs
 	r.mu.Unlock()
 	logger.Infof("[BrowserHost] Host 已注册 user=%d version=%s pid=%d", userID, version, pid)
 	go hc.readLoop()
+	go hc.pingLoop() // D4a：心跳探测，僵尸连接最迟 90s 判死
 	return hc
 }
 

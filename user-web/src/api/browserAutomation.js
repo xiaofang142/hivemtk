@@ -54,6 +54,10 @@ export const listBrowserTaskSessions = (taskId, params) =>
 export const stopBrowserSession = (id, reason) =>
   http.post(`/api/browser-automation/sessions/${id}/stop`, { reason: reason || '' })
 
+// D1（G1 补口）：append-only 命令流审计（direction 可选 command/event/judge）
+export const getBrowserSessionLogs = (id, direction) =>
+  http.get(`/api/browser-automation/sessions/${id}/logs`, direction ? { direction } : undefined)
+
 // ========== Cron ==========
 
 export const listBrowserCron = () =>

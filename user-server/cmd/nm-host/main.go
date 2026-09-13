@@ -28,7 +28,7 @@ var (
 	hostPort = envOr("HIVE_MTK_PORT", "8204")
 	// hostVersion 与扩展 manifest.json version 同步维护（R17：Chrome SW ScriptCache 缓存陷阱
 	// 导致旧扩展代码常驻——host/status 版本号是「新代码是否生效」的快速排查锚点）
-	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.2.0")
+	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.4.0")
 )
 
 func envOr(key, def string) string {

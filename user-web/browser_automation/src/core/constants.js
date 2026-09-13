@@ -28,6 +28,11 @@ export const STEP_ACTIONS = [
   { value: 'scroll', label: '滚动' },
   { value: 'extract', label: '提取数据' },
   { value: 'close_tab', label: '关闭标签页' },
+  // 与 user-server dto/task.go oneof 对齐（G 系列前端滞后收口）：补 4 个后加原语
+  { value: 'click_near', label: '锚点附近点击' },
+  { value: 'post_comment', label: '发评论' },
+  { value: 'assert', label: '断言' },
+  { value: 'query', label: '查询' },
 ];
 
 // URL 规范化：补协议、去尾斜杠（参照 bridge normalizeServerUrl）

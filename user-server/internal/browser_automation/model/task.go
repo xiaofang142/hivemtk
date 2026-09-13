@@ -19,7 +19,8 @@ type BrowserTask struct {
 	Steps     datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"`
 	BrainMode bool           `gorm:"column:brain_mode;default:false" json:"brain_mode"`
 	BrainGoal string         `gorm:"column:brain_goal;type:text" json:"brain_goal"`
-	LlmPlanID *uint          `gorm:"column:llm_plan_id;index" json:"llm_plan_id,omitempty"`
+	// G9 死代码收口（R25）：LlmPlanID 零写入零消费（成本账走 browser_llm_plans 表
+	// 按 task_id/session_id 维度查，D3 已落地）；字段删除，DB 列按 D6 决策保留不动。
 	// 执行控制
 	LoopCount  int `gorm:"column:loop_count;default:1" json:"loop_count"`
 	DelayMs    int `gorm:"column:delay_ms;default:1000" json:"delay_ms"`
@@ -32,6 +33,9 @@ type BrowserTask struct {
 	RetryDelaySec int  `gorm:"column:retry_delay_sec;default:300" json:"retry_delay_sec"`
 	MaxRetryTimes int  `gorm:"column:max_retry_times;default:3" json:"max_retry_times"`
 	RetryCount    int  `gorm:"column:retry_count;default:0" json:"retry_count"`
+	// NextRetryAt 重试持久化到期时间（D4b/G5）：原为内存 goroutine 定时器，进程重启即丢；
+	// 现在 scheduleRetry 落列 + 每分钟扫描认领（条件更新置 NULL，多副本同库仅一方触发）——重启不丢。
+	NextRetryAt *time.Time `gorm:"column:next_retry_at" json:"next_retry_at,omitempty"`
 	// 归属
 	UserID    uint   `gorm:"column:user_id;index;not null" json:"user_id"`
 	AccountID uint   `gorm:"column:account_id;index" json:"account_id"`

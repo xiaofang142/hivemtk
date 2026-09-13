@@ -76,6 +76,9 @@
       <template v-else>
         <el-space>
           <el-input v-model="newCronExpr" placeholder="*/5 * * * *（5 段）" style="width: 200px" />
+          <el-select v-model="newCronTz" clearable placeholder="时区（默认服务器）" style="width: 170px; margin-left: 8px">
+            <el-option v-for="tz in ['Asia/Shanghai','Asia/Tokyo','Europe/London','America/New_York','UTC']" :key="tz" :label="tz" :value="tz" />
+          </el-select>
           <el-button type="primary" @click="addCron">添加触发器</el-button>
         </el-space>
       </template>
@@ -98,6 +101,7 @@ const task = ref(null)
 const sessions = ref([])
 const cron = ref(null)
 const newCronExpr = ref('*/5 * * * *')
+const newCronTz = ref('Asia/Shanghai')
 
 const unpack = (res) => res?.data ?? res
 
@@ -131,7 +135,7 @@ async function onPublish() {
 
 async function addCron() {
   try {
-    await createBrowserCron({ task_id: Number(route.params.id), cron_expr: newCronExpr.value, enabled: true })
+    await createBrowserCron({ task_id: Number(route.params.id), cron_expr: newCronExpr.value, time_zone: newCronTz.value || '', enabled: true })
     ElMessage.success('触发器已添加')
     load()
   } catch (e) { ElMessage.error(String(e?.message || e)) }

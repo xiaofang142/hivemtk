@@ -1,7 +1,7 @@
 # 浏览器自动化多平台基座设计（v2 实施稿）
 
-> 状态：**设计稿 v2（吸收二轮补调研），待确认后实施**。
-> 依据：五路调研（trusted 输入 / 基座先例 / 三平台实测 / CDP 实现级 / 差距盘点），全部结论带来源，查不到的明确标注「未找到」。
+> 状态：**v2 已拍板并实施（M1/M2 落地，M3/M4 按分期挂账）**。差距复审与收口以 `docs/architecture/BROWSER_AUTOMATION.md` §5 为准。
+> 口径修正（R24）：本文"四件套 Locators/Recipe/Verifier/Signature"为设计前瞻——**落地接口为 Locators/DetectBlock/ClassifyError/Capabilities + CommentPoster(可选)**（platform.Platform 6 方法）；Recipe 流程归属编排/Brain 层，Signature 待 M3 抖音签名接入时再抽象，不预建空接口（主文档 §5.2 G6 裁定）。
 > 日期：2026-09-09。目标：小红书已验证的「寄生式扩展」架构升级为通用基座，下一批平台：抖音（网页版）、闲鱼（goofish.com）。
 
 ---

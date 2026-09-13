@@ -15,7 +15,7 @@ describe('constants', () => {
   });
 
   it('原语下拉与后端 dto oneof 数量一致', () => {
-    expect(STEP_ACTIONS.length).toBe(11);
+    expect(STEP_ACTIONS.length).toBe(15); // 与后端 dto oneof 一致（对外 15）
     expect(STEP_ACTIONS.map((a) => a.value)).toContain('wait_for_selector');
   });
 });

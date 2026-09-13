@@ -46,6 +46,8 @@ func taskErrToResponse(ctx *gin.Context, err error) {
 		response.Error(ctx, http.StatusConflict, err.Error())
 	case errors.Is(err, basvc.ErrTaskRunning):
 		response.Error(ctx, http.StatusConflict, err.Error())
+	case errors.Is(err, basvc.ErrUserBusy):
+		response.Error(ctx, http.StatusConflict, err.Error())
 	case errors.Is(err, basvc.ErrDependencyNotMet):
 		response.Error(ctx, http.StatusConflict, err.Error())
 	case errors.Is(err, basvc.ErrInvalidURL):

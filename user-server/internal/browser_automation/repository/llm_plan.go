@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -14,6 +15,8 @@ type BrowserLLMPlanRepository interface {
 	Create(ctx context.Context, p *model.BrowserLLMPlan) error
 	GetByID(ctx context.Context, id uint) (*model.BrowserLLMPlan, error)
 	ListByTaskID(ctx context.Context, taskID uint, limit int) ([]*model.BrowserLLMPlan, error)
+	// PruneSnapshotText G19：清空 cutoff 前的 snapshot 大文本（成本账 token/model/kind 保留）
+	PruneSnapshotText(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 type browserLLMPlanRepo struct {
@@ -49,4 +52,15 @@ func (r *browserLLMPlanRepo) ListByTaskID(ctx context.Context, taskID uint, limi
 	var list []*model.BrowserLLMPlan
 	err := r.db.WithContext(ctx).Where("task_id = ?", taskID).Order("id DESC").Limit(limit).Find(&list).Error
 	return list, err
+}
+
+// PruneSnapshotText G19：仅置空快照大字段（审计与成本账不丢），分批 5000。
+func (r *browserLLMPlanRepo) PruneSnapshotText(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&model.BrowserLLMPlan{}).
+		Where("created_at < ? AND snapshot <> ''", cutoff).
+		Update("snapshot", "")
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }

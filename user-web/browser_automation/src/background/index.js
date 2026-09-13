@@ -5,17 +5,18 @@
 import { createNativePort } from '../core/native-messaging.js';
 import { createTabManager } from '../core/tab-manager.js';
 import { dispatch } from '../core/primitives.js';
-import { collectInteractiveNodes, assembleSnapshot, getRefSelector } from '../core/accessibility.js';
+import { collectInteractiveNodes, assembleSnapshot, getRefSelector, resetSnapshotBaseline } from '../core/accessibility.js';
 
 const tabManager = createTabManager();
 
 // accessibility 的页面侧函数经 executeScript 注入，SW 侧只做组装
 const accessibility = {
   collectInPage: collectInteractiveNodes,
-  assemble: (collected) => {
-    const { text } = assembleSnapshot(collected);
-    return { snapshot: text };
+  assemble: (collected, tabKey) => {
+    const { text, new_count: newCount } = assembleSnapshot(collected, tabKey);
+    return { snapshot: text, new_count: newCount };
   },
+  resetBaseline: resetSnapshotBaseline,
   getRefSelector,
 };
 

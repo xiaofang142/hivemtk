@@ -35,14 +35,15 @@ func TestValidateURL(t *testing.T) {
 }
 
 func TestToSixField(t *testing.T) {
-	cases := map[string]string{
-		"*/5 * * * *":   "0 */5 * * * *",
-		"0 9 * * 1-5":   "0 0 9 * * 1-5",
-		"0 */5 * * * *": "0 */5 * * * *", // 已是 6 段不动
+	cases := []struct{ expr, tz, want string }{
+		{"*/5 * * * *", "", "0 */5 * * * *"},
+		{"0 9 * * 1-5", "", "0 0 9 * * 1-5"},
+		{"0 */5 * * * *", "", "0 */5 * * * *"}, // 已是 6 段不动
+		{"0 9 * * *", "Asia/Shanghai", "CRON_TZ=Asia/Shanghai 0 0 9 * * *"}, // G20：时区前缀
 	}
-	for in, want := range cases {
-		if got := toSixField(in); got != want {
-			t.Errorf("toSixField(%q) = %q, want %q", in, got, want)
+	for _, c := range cases {
+		if got := toSixField(c.expr, c.tz); got != c.want {
+			t.Errorf("toSixField(%q,%q) = %q, want %q", c.expr, c.tz, got, c.want)
 		}
 	}
 }
@@ -51,14 +52,21 @@ func TestValidateCronExpr(t *testing.T) {
 	valid := []string{"*/5 * * * *", "0 9 * * 1-5", "30 3 * * *"}
 	invalid := []string{"bad", "* * *", "60/5 * * * *"}
 	for _, e := range valid {
-		if err := ValidateCronExpr(e); err != nil {
+		if err := ValidateCronExpr(e, ""); err != nil {
 			t.Errorf("ValidateCronExpr(%q) unexpected err: %v", e, err)
 		}
 	}
 	for _, e := range invalid {
-		if err := ValidateCronExpr(e); err == nil {
+		if err := ValidateCronExpr(e, ""); err == nil {
 			t.Errorf("ValidateCronExpr(%q) should fail", e)
 		}
+	}
+	// G20：时区合法性
+	if err := ValidateCronExpr("0 9 * * *", "Asia/Shanghai"); err != nil {
+		t.Errorf("ValidateCronExpr with valid tz should pass: %v", err)
+	}
+	if err := ValidateCronExpr("0 9 * * *", "Not/AZone"); err == nil {
+		t.Error("ValidateCronExpr with invalid tz should fail")
 	}
 }
 

@@ -13,6 +13,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="cron_expr" label="表达式" width="160" />
+      <el-table-column prop="time_zone" label="时区" width="140">
+        <template #default="{ row }">{{ row.time_zone || '服务器本地' }}</template>
+      </el-table-column>
       <el-table-column prop="enabled" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '已停用' }}</el-tag>

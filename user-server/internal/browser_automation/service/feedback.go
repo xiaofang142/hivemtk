@@ -24,7 +24,6 @@ type FeedbackService struct {
 func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRepo repository.BrowserTaskRepository) *FeedbackService {
 	return &FeedbackService{sessionRepo: sessionRepo, taskRepo: taskRepo}
 }
-
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
 func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, finalStatus string, success, total int) {
 	defer func() {
@@ -112,25 +111,53 @@ func (f *FeedbackService) SaveFinalScreenshot(ctx context.Context, sessionID uin
 	return publicURL, nil
 }
 
-// scheduleRetry 延迟 retry_delay_sec 后重新触发 RunTask
+// scheduleRetry 失败自动重试（D4b/G5 持久化版）：原为内存 goroutine 定时器，进程重启即丢；
+// 现在写 task.next_retry_at（DB 事实），由 StartRetryScanner 每分钟条件认领后触发——重启不丢。
 func (f *FeedbackService) scheduleRetry(ctx context.Context, task *model.BrowserTask) {
 	delay := task.RetryDelaySec
 	if delay <= 0 {
 		delay = 300
 	}
 	newCount := task.RetryCount + 1
-	logger.Infof("[BrowserFeedback] 任务失败自动重试 task=%d 第 %d/%d 次，%ds 后执行", task.ID, newCount, task.MaxRetryTimes, delay)
-	// 延迟执行：goroutine + timer（轻量，不占用 cron 槽位；进程重启则放弃本次重试，语义可接受）
+	at := time.Now().Add(time.Duration(delay) * time.Second)
+	if err := f.taskRepo.SetNextRetryAt(ctx, task.ID, &at); err != nil {
+		logger.Warnf("[BrowserFeedback] 重试落库失败 task=%d: %v", task.ID, err)
+		return
+	}
+	logger.Infof("[BrowserFeedback] 任务失败自动重试已挂起 task=%d 第 %d/%d 次，%ds 后（%s）执行（持久化，重启不丢）",
+		task.ID, newCount, task.MaxRetryTimes, delay, at.Format(time.RFC3339))
+}
+
+// StartRetryScanner D4b：重试到期扫描器（每分钟）。ClaimDueRetries 条件认领（置 NULL）
+// 保证多副本/双 tick 不双触发；认领后进程崩溃则该次重试放弃（与旧语义一致，但正常运行期重启不再丢）。
+func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 	go func() {
-		select {
-		case <-time.After(time.Duration(delay) * time.Second):
-		case <-ctx.Done():
-			return
-		}
-		if err := f.runRetry(ctx, task, newCount); err != nil {
-			logger.Warnf("[BrowserFeedback] 重试触发失败 task=%d: %v", task.ID, err)
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				f.scanDueRetries(ctx)
+			}
 		}
 	}()
+}
+
+func (f *FeedbackService) scanDueRetries(ctx context.Context) {
+	due, err := f.taskRepo.ClaimDueRetries(ctx, time.Now(), 10)
+	if err != nil {
+		logger.Warnf("[BrowserFeedback] 重试扫描失败: %v", err)
+		return
+	}
+	for _, t := range due {
+		newCount := t.RetryCount + 1
+		logger.Infof("[BrowserFeedback] 认领到期重试 task=%d 第 %d/%d 次", t.ID, newCount, t.MaxRetryTimes)
+		if err := f.runRetry(context.Background(), t, newCount); err != nil {
+			logger.Warnf("[BrowserFeedback] 重试触发失败 task=%d: %v", t.ID, err)
+		}
+	}
 }
 
 // runRetry 由 TaskService 注入的重试执行器（避免 import cycle，见 SetRetryRunner）

@@ -2,6 +2,7 @@
 // 快照格式（供 LLM 吃）：
 //   button "登录" @e1
 //   textbox "搜索" @e2
+//   *button "发送" @e3          ← 相对上一快照新出现的元素（browser-use *[index] 语义）
 // refs 映射缓存在扩展 SW 内存（Map<ref, selector>）；页面导航即失效。
 
 const MAX_NODES = 400;
@@ -109,17 +110,41 @@ export function collectInteractiveNodes() {
 }
 
 /**
- * assembleSnapshot SW 侧组装快照文本并登记 refs
- * @returns {{ text: string, count: number }}
+ * assembleSnapshot SW 侧组装快照文本并登记 refs。
+ * F6 新元素标记（browser-use *[index] 语义）：与上一快照（同 tab）的 role+name 指纹集
+ * 做 diff——新出现元素行首加 `*`。首帧/导航重建基线前不打标（防"全是新元素"噪声）。
+ * @param {{nodes:Array,paths:Array}} collected
+ * @param {number|string} [tabKey] 基线归属 tab（缺省 'default'，单 tab 场景）
+ * @returns {{ text: string, count: number, new_count: number }}
  */
-export function assembleSnapshot({ nodes, paths }) {
+const baselines = new Map(); // tabKey -> Set<role + '|' + name>
+
+export function assembleSnapshot({ nodes, paths }, tabKey = 'default') {
   resetRefs();
+  const prev = baselines.get(tabKey) || null;
+  const now = new Set();
   const lines = [];
+  let newCount = 0;
   nodes.forEach((n, i) => {
     refCounter += 1;
     const ref = `@e${refCounter}`;
     refMap.set(ref, paths[i]);
-    lines.push(`${n.role} "${n.name}" ${ref}`);
+    const key = `${n.role}|${n.name}`;
+    const isNew = prev && !prev.has(key) && !now.has(key);
+    if (isNew) newCount += 1;
+    now.add(key);
+    lines.push(`${isNew ? '*' : ''}${n.role} "${n.name}" ${ref}`);
   });
-  return { text: lines.join('\n'), count: lines.length };
+  baselines.set(tabKey, now);
+  return { text: lines.join('\n'), count: lines.length, new_count: newCount };
+}
+
+// resetSnapshotBaseline 清某 tab（或全部）的对比基线——页面导航/open_tab 后调用，
+// 使下一帧重新建立基线而不把整页标成新元素。
+export function resetSnapshotBaseline(tabKey) {
+  if (tabKey === undefined) {
+    baselines.clear();
+  } else {
+    baselines.delete(tabKey);
+  }
 }

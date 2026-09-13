@@ -33,6 +33,10 @@ var ErrInvalidURL = errors.New("url 仅支持 http/https 协议")
 // ErrTaskRunning 同任务已有 running session（幂等拒绝）
 var ErrTaskRunning = errors.New("任务正在执行中，请勿重复触发")
 
+// ErrUserBusy 并发闸（F8/G18）：同用户已有 running session。
+// 根因：同 Host 连接上命令逻辑级交织（帧串行≠会话串行），平台「写操作串行」风控要求无闸兜底。
+var ErrUserBusy = errors.New("已有浏览器任务执行中（同一 Host 串行），请等待其结束或先停止")
+
 // ErrDependencyNotMet 前置依赖未满足
 var ErrDependencyNotMet = errors.New("前置依赖任务未满足")
 
@@ -292,6 +296,16 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 	}
 	if runningByTask > 0 {
 		return nil, ErrTaskRunning
+	}
+	// F8 并发闸（G18）：消费 MaxConcurrentJobs 语义——单 Host 连接上多 session 是
+	// 逻辑级并发（帧串行≠会话串行），写互踩且风控节奏被打乱。闸值=每用户同时 1 个
+	// running session（v1 单租户单 Host，取平台声明下限）；cron 触发命中此闸=本轮自然跳过（调用方仅记日志）。
+	runningByUser, err := s.sessionRepo.CountRunningByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if runningByUser > 0 {
+		return nil, ErrUserBusy
 	}
 
 	if err := s.checkDependency(ctx, t); err != nil {

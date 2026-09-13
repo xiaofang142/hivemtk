@@ -6,10 +6,49 @@ const WAIT_SELECTOR_INTERVAL_MS = 200;
 
 // ---- 页面上下文函数（序列化注入，禁止引用外部闭包）----
 
-function injClick(target) {
+// actionability 五项检查（F4/G13，对齐 Playwright 语义：visible/stable/enabled/hit-target/box）。
+// mode='probe'：只做可点性检查+返回中心视口坐标（trusted 路径用）；
+// 非 probe 路径（DOM 兜底）失败=element_not_interactable（服务端 ClassifyError=retry 类）。
+function actionabilityCheck(el) {
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return 'not_visible';
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return 'zero_box';
+  if (el.disabled || el.getAttribute('aria-disabled') === 'true') return 'disabled';
+  // hit-target：中心点被什么接管（浮层遮挡检测，browser-use occlusion check 同构）
+  try {
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) return 'covered';
+  } catch { /* jsdom 等无 elementFromPoint 环境：跳过该项 */ }
+  // 注：stable（两帧同 box）在注入函数单帧执行模型里无法低成本实现；
+  // trusted 路径的 infobar 500ms 等待 + CDP press 前 pointerSettle 时序已覆盖主要动画窗口。
+  return null;
+}
+
+function injClick(target, mode) {
   const el = document.querySelector(target);
   if (!el) return { ok: false, error: 'element_not_found: ' + target };
-  try { el.scrollIntoView?.({ block: 'center' }); } catch { /* jsdom/不可滚动时忽略 */ }
+  if (mode === 'probe') {
+    // trusted 主通道（F1）：只做可点性检查 + 滚入视口 + 返回中心坐标，真实事件由 CDP 注入
+    const err = actionabilityCheck(el);
+    if (err === 'covered' || err === 'zero_box') {
+      try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
+    }
+    const retry = actionabilityCheck(el);
+    if (retry) return { ok: false, error: 'element_not_interactable: ' + retry };
+    const r = el.getBoundingClientRect();
+    return {
+      ok: true,
+      x: Math.round(r.left + r.width / 2),
+      y: Math.round(r.top + r.height / 2),
+      jitter_radius: Math.min(r.width, r.height) / 2,
+      href: el.tagName === 'A' ? (el.href || '') : '',
+      page_url: location.href,
+    };
+  }
+  // DOM 兜底路径保持宽松（旧语义）：jsdom/无几何环境也能走通；仅 disabled 硬失败
+  if (el.disabled) return { ok: false, error: 'element_not_interactable: disabled' };
+  try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* jsdom/不可滚动时忽略 */ }
   el.click();
   // SPA（React/Vue 合成事件）常忽略程序化 el.click()：补发真实指针事件序列。
   const opts = { bubbles: true, cancelable: true, view: window, pointerId: 1, isPrimary: true };
@@ -37,10 +76,47 @@ function injClick(target) {
   return { ok: true, navigated };
 }
 
-function injType(target, value, clearFirst, submitOnEnter) {
+// mode='probe'（F1 trusted 主通道）：可编辑性检查 + 清空 + 聚焦放光标，键入交 CDP insertText；
+// mode='fallback'（trusted 失败后兜底）：可编辑性检查 + DOM 输入管线注入。
+function injType(target, value, clearFirst, submitOnEnter, mode) {
   const el = document.querySelector(target);
   if (!el) return { ok: false, error: 'element_not_found: ' + target };
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden') return { ok: false, error: 'element_not_interactable: not_visible' };
+  if (el.disabled || el.getAttribute('aria-readonly') === 'true' || el.readOnly) return { ok: false, error: 'element_not_interactable: not_editable' };
+  try { el.scrollIntoView?.({ block: 'center' }); } catch { /* noop */ }
   el.focus();
+  if (mode === 'probe') {
+    // 清空（CDP 键入语义=替换，先删净）
+    if (clearFirst || el.value || el.textContent) {
+      const sel = window.getSelection();
+      if (el.isContentEditable) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try { document.execCommand('delete', false, null); } catch { /* noop */ }
+        el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward', data: null }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        const r2 = document.createRange();
+        r2.selectNodeContents(el);
+        r2.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r2);
+      } else {
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } else if (el.isContentEditable) {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    return { ok: true, editable: true };
+  }
   // contenteditable（小红书/微博等富文本评论框）：不能用 el.value，只能走输入管线
   if (el.isContentEditable) {
     if (clearFirst || el.textContent) {
@@ -95,6 +171,16 @@ function injType(target, value, clearFirst, submitOnEnter) {
   return { ok: true };
 }
 
+// injNavigatedCheck trusted 点击后的纯观察检测（R25-Q1 修正）：
+// 对比 probe 记录的 page_url——CDP 真实点击对 A 元素的导航由浏览器自己完成，
+// trusted 路径禁止再 location.href= 接管（_blank 链接会双跳：新标签已由浏览器打开，
+// 当前自动化 tab 又被多余带走）。href 接管仅保留给 DOM 兜底路径（injClick 内联逻辑）。
+function injNavigatedCheck(probePageUrl) {
+  try {
+    return { ok: true, navigated: !!probePageUrl && location.href !== probePageUrl };
+  } catch { return { ok: true, navigated: false }; }
+}
+
 function injScroll(direction, amount) {
   const dx = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
   const dy = direction === 'up' ? -amount : direction === 'down' ? amount : 0;
@@ -104,7 +190,7 @@ function injScroll(direction, amount) {
 
 // 以锚元素为基准点击「同容器内的 button」——应对发送/提交按钮无稳定 class、
 // 且 @e ref 每次快照重排导致硬编码 ref 不可靠的场景（如小红书评论发送按钮）
-function injClickNear(anchorSelector, buttonText) {
+function injClickNear(anchorSelector, buttonText, mode) {
   const anchor = document.querySelector(anchorSelector);
   if (!anchor) return { ok: false, error: 'anchor_not_found: ' + anchorSelector };
   let root = anchor.parentElement;
@@ -114,6 +200,22 @@ function injClickNear(anchorSelector, buttonText) {
       ? btns.find((b) => (b.innerText || '').trim().includes(buttonText))
       : btns[0];
     if (hit) {
+      if (mode === 'probe') {
+        const err = actionabilityCheck(hit);
+        if (err) {
+          try { hit.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
+        }
+        const retry = actionabilityCheck(hit);
+        if (retry) return { ok: false, error: 'element_not_interactable: ' + retry };
+        const r = hit.getBoundingClientRect();
+        return {
+          ok: true,
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2),
+          jitter_radius: Math.min(r.width, r.height) / 2,
+          clicked: (hit.innerText || 'button').trim(),
+        };
+      }
       try { hit.scrollIntoView?.({ block: 'center' }); } catch { /* noop */ }
       hit.click();
       const opts = { bubbles: true, cancelable: true, view: window, pointerId: 1, isPrimary: true };
@@ -191,7 +293,7 @@ function injPostCommentPrep(text, inputSelector) {
     }
     return null;
   })();
-  if (!el) return { ok: false, input_found: false };
+  if (!el) return { ok: false, input_found: false, error: 'comment_input_not_found' };
 
   el.focus();
   if (el.isContentEditable) {
@@ -259,6 +361,7 @@ function injPostCommentSend(inputSelector, sendButtonText) {
 /**
  * injPostCommentVerify 阶段三：验证评论已渲染进评论区（xiaohongshu-mcp waitCommentRendered 模式）。
  * MutationObserver 等「评论区出现目标文本」或超时；配平台选择器参数（来自适配器，缺省用小红书）。
+ * F2②：回包带 evidence（命中容器数 + 首个评论条目文本节选）——finalize 落库审计用。
  */
 function injPostCommentVerify(targetText, opts) {
   const o = opts || {};
@@ -266,17 +369,42 @@ function injPostCommentVerify(targetText, opts) {
   const deadline = Date.now() + (o.timeoutMs || 5000);
   const norm = (s) => (s || '').replace(/\s+/g, '');
   const want = norm(targetText);
+  // innerText 在非渲染上下文（jsdom/后台 tab 未布局）为空——textContent 兜底
+  const textOf = (n) => (n ? (n.innerText || n.textContent || '') : '');
+
+  const evidenceOf = () => {
+    const containers = document.querySelectorAll(containerSel);
+    let ev = { containers: containers.length };
+    if (o.itemSelector) {
+      // R25 证据语义修正（session192 实测）：优先取**全文恰等于目标文本**的条目=我们刚发的那条；
+      // 「包含目标」会误命中他人引用了同样文字的历史评论（如「今天真好吃」⊂「今天真好吃吗」）。
+      // 无精确命中时退化为含目标文本的条目（verified 判定仍是 contains 语义，此处只关乎证据归属）。
+      let containsHit = '';
+      for (const c of containers) {
+        const items = c.querySelectorAll(o.itemSelector);
+        for (const item of items) {
+          const t = textOf(item).trim();
+          if (!t) continue;
+          const nt = norm(t);
+          if (nt === want) { ev.item_text = t.slice(0, 200); ev.own = true; return ev; }
+          if (!containsHit && nt.includes(want)) containsHit = t;
+        }
+      }
+      if (containsHit) { ev.item_text = containsHit.slice(0, 200); ev.matched = true; }
+    }
+    return ev;
+  };
 
   // 立即查一次（评论可能已渲染）
   const checkNow = () => {
     const containers = document.querySelectorAll(containerSel);
     for (const c of containers) {
-      if (norm(c.innerText).includes(want)) return true;
+      if (norm(textOf(c)).includes(want)) return true;
     }
     // 兜底：全文搜（评论区容器类名可能变）
-    return norm(document.body.innerText).includes(want);
+    return norm(textOf(document.body)).includes(want);
   };
-  if (checkNow()) return { ok: true, posted: true, verified: true };
+  if (checkNow()) return { ok: true, posted: true, verified: true, evidence: evidenceOf() };
 
   return new Promise((resolve) => {
     const done = (result) => {
@@ -284,13 +412,13 @@ function injPostCommentVerify(targetText, opts) {
       resolve(result);
     };
     const observer = new MutationObserver(() => {
-      if (checkNow()) done({ ok: true, posted: true, verified: true });
+      if (checkNow()) done({ ok: true, posted: true, verified: true, evidence: evidenceOf() });
     });
     try {
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     } catch { /* 容器不可观察时退化为轮询 */ }
     const poll = setInterval(() => {
-      if (checkNow()) { clearInterval(poll); done({ ok: true, posted: true, verified: true }); return; }
+      if (checkNow()) { clearInterval(poll); done({ ok: true, posted: true, verified: true, evidence: evidenceOf() }); return; }
       if (Date.now() > deadline) {
         clearInterval(poll);
         done({ ok: true, posted: false, verified: false, reason: 'comment_not_rendered' });
@@ -373,6 +501,9 @@ async function executeInTab(tabId, func, args = []) {
 export async function dispatch(cmd, deps) {
   const { openTab, closeTab, activateTab, tabExists } = deps.tabManager;
   const { getRefSelector } = deps.accessibility;
+  // F6 基线联动：导航即清该 tab 的新元素基线（下一帧重新建立，不把整页标成新元素）。
+  // resetBaseline 为可选依赖（旧测试 deps 未提供时静默跳过）。
+  const resetBaseline = deps.accessibility.resetBaseline || (() => {});
 
   switch (cmd.action) {
     case 'open_tab': {
@@ -380,12 +511,15 @@ export async function dispatch(cmd, deps) {
         throw new Error('open_tab 需要合法 http(s) URL，收到: ' + (cmd.url || '(空)'));
       }
       const tab = await openTab(cmd.url, cmd.active === true);
+      resetBaseline(tab.id);
       return { chrome_tab_id: tab.id, title: tab.title || '' };
     }
     case 'click':
     case 'type':
     case 'click_near':
-    case 'post_comment':
+    case 'comment_prep':
+    case 'comment_send':
+    case 'comment_verify':
     case 'wait_for_selector':
     case 'assert':
     case 'query':
@@ -399,14 +533,66 @@ export async function dispatch(cmd, deps) {
       // refs → CSS selector 映射（@eN 引用在 SW 内存）
       const resolveTarget = (t) => (t && t.startsWith('@e') ? getRefSelector(t) || t : t);
       switch (cmd.action) {
-        case 'click':
-          return await executeInTab(tabId, injClick, [resolveTarget(cmd.target)]);
-        case 'click_near':
-          return await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '']);
-        case 'type':
-          return await executeInTab(tabId, injType, [
-            resolveTarget(cmd.target), cmd.value || '', !!cmd.clear_first, !!cmd.submit_on_enter,
-          ]);
+        case 'click': {
+          // F1 铁律 2 收口：写操作主通道=CDP trusted（probe 定位坐标→贝塞尔轨迹点击）；
+          // CDP 不可用（调试器被占/扩展受限）才降级 DOM 合成兜底——兜底结果标注 channel。
+          try {
+            const probe = await executeInTab(tabId, injClick, [resolveTarget(cmd.target), 'probe']);
+            await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
+            // R25-Q1：点击生效帧后短暂等路由，再纯读 location 对比判定同页导航；
+            // 检测注入失败通常=页面正在导航中，按已导航处理。不再主动接管 href。
+            await new Promise((r) => setTimeout(r, 300));
+            let navigated = false;
+            try {
+              const nav = await executeInTab(tabId, injNavigatedCheck, [probe.page_url]);
+              navigated = !!nav.navigated;
+            } catch {
+              navigated = true;
+            }
+            if (navigated) resetBaseline(tabId);
+            return { ok: true, navigated, channel: 'cdp' };
+          } catch (e) {
+            if (!String(e?.message || e).includes('element_not_found')) {
+              // 元素在但 CDP 失败（attach 被拒/调试器占用）：DOM 兜底
+              const r = await executeInTab(tabId, injClick, [resolveTarget(cmd.target), 'fallback']).catch(() => null);
+              if (r?.ok) {
+                if (r.navigated) resetBaseline(tabId);
+                return { ...r, channel: 'dom_fallback' };
+              }
+            }
+            throw e;
+          }
+        }
+        case 'click_near': {
+          try {
+            const probe = await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '', 'probe']);
+            await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
+            return { ok: true, clicked: probe.clicked, channel: 'cdp' };
+          } catch (e) {
+            if (!String(e?.message || e).includes('anchor_not_found') && !String(e?.message || e).includes('button_not_found')) {
+              const r = await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '', 'fallback']).catch(() => null);
+              if (r?.ok) return { ...r, channel: 'dom_fallback' };
+            }
+            throw e;
+          }
+        }
+        case 'type': {
+          const sel = resolveTarget(cmd.target);
+          try {
+            await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, !!cmd.submit_on_enter, 'probe']);
+            await cdpInput.typeText(tabId, cmd.value || '');
+            if (cmd.submit_on_enter) {
+              await cdpInput.pressEnter(tabId).catch(() => {});
+            }
+            return { ok: true, editable: true, channel: 'cdp' };
+          } catch (e) {
+            if (!String(e?.message || e).includes('element_not_found')) {
+              const r = await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, !!cmd.submit_on_enter, 'fallback']).catch(() => null);
+              if (r?.ok) return { ...r, channel: 'dom_fallback' };
+            }
+            throw e;
+          }
+        }
         case 'wait_for_selector': {
           const timeout = Math.min(Math.max(cmd.timeout_ms || 10000, 1000), 60000);
           return await executeInTab(tabId, injWaitForSelector, [cmd.selector, timeout]);
@@ -422,34 +608,43 @@ export async function dispatch(cmd, deps) {
         }
         case 'snapshot': {
           const collected = await executeInTab(tabId, deps.accessibility.collectInPage, []);
-          return deps.accessibility.assemble(collected);
+          // F6 新元素标记：基线按 tab 归属（两 tab 快照互不污染 diff 集）
+          return deps.accessibility.assemble(collected, tabId);
         }
         case 'markdown':
           return await executeInTab(tabId, injMarkdown, []);
-        case 'post_comment': {
+        case 'comment_prep':
+        case 'comment_send': {
+          // F2②（G11 正确版）：三段式编排收口 Go——扩展只暴露无状态子命令，
+          // 提交（comment_send）与验证（comment_verify 轮询）分离，可中断可归因。
+          // 旧一站式 post_comment 兼容路径已删（服务端 v3.41.0 起只发子命令，单一路径防分叉）。
           // 平台选择器由服务端 L3 适配器下发（无则缺省小红书——R17 真机实测）
           const inputSel = cmd.input_selector || '';
           const sendText = cmd.send_button_text || '';
-          // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）
-          const pre = await executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel]);
-          if (!pre.input_found) throw new Error('comment_input_not_found');
-          if (pre.needs_trusted) {
-            // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
-            // 含 humanize 时序与 infobar 稳定等待 —— 见 cdp/input.js
-            await cdpInput.typeText(tabId, cmd.value || '');
+          if (cmd.action === 'comment_prep') {
+            // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）
+            const pre = await executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel]);
+            if (!pre.input_found) throw new Error('comment_input_not_found');
+            if (pre.needs_trusted) {
+              // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
+              // 含 humanize 时序与 infobar 稳定等待 —— 见 cdp/input.js
+              await cdpInput.typeText(tabId, cmd.value || '');
+            }
+            return { ok: true, input_found: true, needs_trusted: !!pre.needs_trusted, input_text: pre.input_text || '' };
           }
-          // 阶段二：拿发送按钮坐标，CDP trusted 坐标点击（mouseMoved 轨迹前置）
+          // comment_send 阶段二：拿发送按钮坐标，CDP trusted 坐标点击（mouseMoved 轨迹前置）。
+          // 提交不可逆：本命令绝不含 verify——verify 超时态由 Go 侧 finalize 轮询处置（禁双发）。
           const btn = await executeInTab(tabId, injPostCommentSend, [inputSel, sendText]);
           if (!btn.ok) throw new Error(btn.error || 'send_button_not_found');
           await cdpInput.clickAt(tabId, btn.x, btn.y);
-          // 阶段三：就地验证——评论渲染进评论区（MutationObserver+轮询，超时兜底）
-          const vr = await executeInTab(tabId, injPostCommentVerify, [
-            cmd.value || '', { timeoutMs: 6000, containerSelector: cmd.comment_container || '' },
+          return { ok: true, sent: true };
+        }
+        case 'comment_verify': {
+          // 只读验证（可重试/可中断）：评论是否渲染进评论区。Go finalize 轮询调用。
+          return await executeInTab(tabId, injPostCommentVerify, [
+            cmd.value || '',
+            { timeoutMs: cmd.timeout_ms || 3000, containerSelector: cmd.comment_container || '', itemSelector: cmd.comment_item_text || '' },
           ]);
-          if (!vr.verified) {
-            throw new Error('post_comment 未生效: 输入框已清但评论区未见评论（可能被平台拦截/审核中）');
-          }
-          return { ok: true, posted: true, verified: true };
         }
         case 'assert': {
           const kind = cmd.assert || 'contains_text';
@@ -464,12 +659,13 @@ export async function dispatch(cmd, deps) {
       break;
     }
     case 'screenshot': {
-      // M3 定稿：captureVisibleTab 仅支持当前激活 tab —— 先激活再截（见设计文档 §6）
+      // M3 定稿：captureVisibleTab 仅支持当前激活 tab —— 先激活再截（见设计文档 §6）。
+      // G9 勘误：第一参数是 windowId 不是 tabId；本扩展单窗常态，恒传 undefined（当前聚焦窗）。
       const tabId = cmd.tab_id;
       if (cmd.activate_first) await activateTab(tabId);
       // 激活后让渲染一帧
       await new Promise((r) => setTimeout(r, 150));
-      const dataUrl = await chrome.tabs.captureVisibleTab(tabId === null ? undefined : undefined, { format: 'png' });
+      const dataUrl = await chrome.tabs.captureVisibleTab(undefined, { format: 'png' });
       return { base64: dataUrl };
     }
     case 'wait': {

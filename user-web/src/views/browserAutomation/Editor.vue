@@ -66,12 +66,15 @@
                 <el-option label="元素存在" value="selector_exists" />
               </el-select>
               <el-input v-if="step.action === 'assert'" v-model="step.value" placeholder="断言文本/selector" style="width: 180px" />
+              <el-input v-if="step.action === 'click_near'" v-model="step.anchor" placeholder="锚点 CSS selector" style="width: 160px" />
+              <el-input v-if="step.action === 'click_near'" v-model="step.button_text" placeholder="按钮文本" style="width: 110px" />
               <el-select v-if="step.action === 'query'" v-model="step.query_kind" style="width: 130px">
                 <el-option label="取文本" value="text" />
                 <el-option label="是否存在" value="exists" />
                 <el-option label="计数" value="count" />
                 <el-option label="取属性" value="attr" />
               </el-select>
+              <el-input v-if="step.action === 'query' && step.query_kind === 'attr'" v-model="step.attribute" placeholder="属性名（href/src/value）" style="width: 150px" />
               <el-checkbox v-model="step.continue_on_error" label="失败继续" />
               <el-input-number v-model="step.retry_count" :min="0" :max="10" size="small" style="width: 90px" />
               <el-button size="small" type="danger" icon="Delete" circle @click="removeStep(i)" />
@@ -134,7 +137,7 @@ const platforms = ref([])
 
 const actions = [
   { value: 'open_tab', label: '打开标签页' }, { value: 'click', label: '点击' },
-  { value: 'type', label: '输入' }, { value: 'post_comment', label: '发评论' },
+  { value: 'type', label: '输入' }, { value: 'click_near', label: '锚点附近点击' }, { value: 'post_comment', label: '发评论（服务端禁重试）' },
   { value: 'snapshot', label: '页面快照' },
   { value: 'markdown', label: '页面 Markdown' }, { value: 'screenshot', label: '截图' },
   { value: 'wait', label: '等待' }, { value: 'wait_for_selector', label: '等待元素' },
@@ -150,7 +153,8 @@ const currentPlatform = computed(() => platforms.value.find((p) => p.identifier 
 const emptyStep = () => ({
   action: 'click', target: '', value: '', ms: 0, clear_first: false, submit_on_enter: false,
   direction: 'down', amount: 400, selector: '', timeout_ms: 10000,
-  assert_kind: 'contains_text', query_kind: 'text',
+  assert_kind: 'contains_text', query_kind: 'text', attribute: '',
+  anchor: '', button_text: '',
   continue_on_error: false, retry_count: 0, retry_backoff_ms: 1000,
 })
 

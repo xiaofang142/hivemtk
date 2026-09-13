@@ -14,7 +14,6 @@
       <el-descriptions :column="4" border>
         <el-descriptions-item label="耗时">{{ (session.duration_ms / 1000).toFixed(1) }}s</el-descriptions-item>
         <el-descriptions-item label="成功率">{{ session.total_steps ? `${session.success_steps}/${session.total_steps}` : '—' }}</el-descriptions-item>
-        <el-descriptions-item label="Hand 延迟">{{ session.hand_latency_ms }}ms</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ session.started_at ? new Date(session.started_at).toLocaleString('zh-CN') : '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="session.error_msg" label="错误" :span="4">
           <span style="color: #ef4444">{{ session.error_msg }}</span>
@@ -45,6 +44,38 @@
       </el-table>
     </el-card>
 
+    <el-card style="margin-top: 12px">
+      <template #header>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>命令流（append-only 审计：command 下发 / event 回包 / judge 验收）</span>
+          <el-select v-model="logDirection" size="small" style="width: 110px" @change="loadLogs">
+            <el-option label="全部" value="" />
+            <el-option label="command" value="command" />
+            <el-option label="event" value="event" />
+            <el-option label="judge" value="judge" />
+          </el-select>
+        </div>
+      </template>
+      <el-table :data="logs" size="small" max-height="420">
+        <el-table-column prop="seq" label="seq" width="60" />
+        <el-table-column prop="direction" label="方向" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" :type="{ command: '', event: 'success', judge: 'warning' }[row.direction] || 'info'">{{ row.direction }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="action" label="动作" width="130" />
+        <el-table-column prop="ok" label="结果" width="70">
+          <template #default="{ row }">{{ row.ok ? '✓' : '✗' }}</template>
+        </el-table-column>
+        <el-table-column prop="duration_ms" label="耗时" width="80">
+          <template #default="{ row }">{{ row.duration_ms ? `${row.duration_ms}ms` : '—' }}</template>
+        </el-table-column>
+        <el-table-column label="payload" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }"><span style="font-family: monospace; font-size: 12px">{{ payloadPreview(row.payload) }}</span></template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-card v-if="session?.final_screenshot_url" header="最终截图" style="margin-top: 12px">
       <el-image :src="session.final_screenshot_url" fit="contain" style="max-width: 100%" :preview-src-list="[session.final_screenshot_url]" />
     </el-card>
@@ -55,13 +86,31 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession } from '@/api/browserAutomation'
+import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, getBrowserSessionLogs } from '@/api/browserAutomation'
 
 const route = useRoute()
 const sessionId = computed(() => route.params.id)
 const session = ref(null)
 const steps = ref([])
+const logs = ref([])
+const logDirection = ref('')
 const loading = ref(false)
+
+const payloadPreview = (p) => {
+  if (p == null) return '—'
+  const str = typeof p === 'string' ? p : JSON.stringify(p)
+  return str.length > 160 ? str.slice(0, 160) + '…' : str
+}
+
+async function loadLogs() {
+  try {
+    const res = await getBrowserSessionLogs(sessionId.value, logDirection.value)
+    const list = unpack(res)
+    logs.value = Array.isArray(list) ? list : list?.list || []
+  } catch {
+    logs.value = []
+  }
+}
 let pollTimer = null
 
 const unpack = (res) => res?.data ?? res
@@ -73,6 +122,7 @@ async function load() {
       getBrowserSession(sessionId.value),
       getBrowserSessionSteps(sessionId.value),
     ])
+    loadLogs()
     session.value = unpack(sRes)
     const list = unpack(stRes)
     steps.value = Array.isArray(list) ? list : list?.list || []
@@ -87,7 +137,7 @@ async function load() {
 
 async function onStop() {
   await stopBrowserSession(sessionId.value, '用户手动中断')
-  ElMessage.success('中断信号已发送')
+  ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
   load()
 }
 

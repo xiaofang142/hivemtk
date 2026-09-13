@@ -133,32 +133,98 @@ async function typeText(tabId, text) {
   });
 }
 
-// ---- 鼠标：mouseMoved 前置 → settle → press → hold → release（clickCount 一致）----
+// ---- 鼠标：贝塞尔轨迹 → settle → 落点抖动 → press → hold → release（clickCount 一致）----
+// F3（G12）：起点=上一 mousemove 位置（无则目标点随机偏移），三次贝塞尔插值
+// （步数随距离 10–40、每步 5–9ms、控制点垂直偏移 ±5–15%、easeInOut）+ 落点抖动
+// （min(8, radius) 内均匀随机）——参数表照抄 xiaohongshu-mcp humanize/mouse.go 实测值。
 
-async function clickAt(tabId, x, y) {
+const lastMouse = new Map(); // tabId -> {x,y}
+
+// easeInOut 缓动参数（0~1）
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+// bezierPoints 三次贝塞尔轨迹采样：从 (x0,y0) 到 (x1,y1)，控制点沿垂直方向随机偏移
+function bezierPoints(x0, y0, x1, y1) {
+  const dist = Math.hypot(x1 - x0, y1 - y0);
+  const steps = Math.max(10, Math.min(40, Math.round(dist / 10)));
+  // 单位垂直向量（轨迹弧的侧向控制基）
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.max(dist, 1);
+  const px = -dy / len, py = dx / len;
+  // 两个控制点：沿线 1/3、2/3 处，各带 ±5–15% 距离的随机侧移（同向为主、少量反向，逼近真人弧线）
+  const sgn = Math.random() < 0.75 ? 1 : -1;
+  const amp1 = dist * (0.05 + Math.random() * 0.10) * sgn;
+  const amp2 = dist * (0.05 + Math.random() * 0.10) * (Math.random() < 0.5 ? sgn : -sgn);
+  const c1x = x0 + dx / 3 + px * amp1, c1y = y0 + dy / 3 + py * amp1;
+  const c2x = x0 + (2 * dx) / 3 + px * amp2, c2y = y0 + (2 * dy) / 3 + py * amp2;
+  const pts = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = easeInOut(i / steps);
+    const mt = 1 - t;
+    const x = mt * mt * mt * x0 + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * x1;
+    const y = mt * mt * mt * y0 + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * y1;
+    pts.push({ x: Math.round(x), y: Math.round(y) });
+  }
+  return pts;
+}
+
+// clickJitter 落点抖动半径：目标元素半宽的 15% 与 8px 取小（无尺寸信息时 3px）
+function clickJitter(radius) {
+  const r = Math.max(0, Math.min(8, radius || 3));
+  return { dx: Math.round((Math.random() * 2 - 1) * r), dy: Math.round((Math.random() * 2 - 1) * r) };
+}
+
+/**
+ * clickAt CDP 可信点击（铁律 2：写操作必经通道）。
+ * opts: { jitterRadius } —— 目标元素半尺寸（内容器提供）用于落点抖动。
+ * 轨迹起点记忆（lastMouse）：连续操作从上一位置自然移动，而非每次同一偏移出发。
+ */
+async function clickAt(tabId, x, y, opts = {}) {
   return withDebugger(tabId, async (target) => {
-    // 前置移动：从邻近点 5 步线性轨迹（xiaohongshu-skills 模式），button:"none"
-    const sx = Math.max(0, x - 20), sy = Math.max(0, y - 45);
-    for (let i = 1; i <= 5; i++) {
-      await send(target, 'Input.dispatchMouseEvent', {
-        type: 'mouseMoved',
-        x: Math.round(sx + ((x - sx) * i) / 5),
-        y: Math.round(sy + ((y - sy) * i) / 5),
-        button: 'none', buttons: 0, modifiers: 0,
-      });
-      await sleep(8);
+    const last = lastMouse.get(tabId);
+    let sx, sy;
+    if (last && (last.x !== x || last.y !== y)) {
+      sx = last.x; sy = last.y;
+    } else {
+      // 无历史位置：从目标点随机方向 20–60px 处出发（起点恒定=可检测特征）
+      const ang = Math.random() * Math.PI * 2;
+      const d = 20 + Math.random() * 40;
+      sx = Math.max(0, Math.round(x + Math.cos(ang) * d));
+      sy = Math.max(0, Math.round(y + Math.sin(ang) * d));
     }
+    for (const pt of bezierPoints(sx, sy, x, y)) {
+      await send(target, 'Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: pt.x, y: pt.y, button: 'none', buttons: 0, modifiers: 0,
+      });
+      await sleep(5 + Math.round(Math.random() * 4)); // 5–9ms/步
+    }
+    lastMouse.set(tabId, { x, y });
+    const { dx, dy } = clickJitter(opts.jitterRadius);
+    const cx = Math.max(0, x + dx), cy = Math.max(0, y + dy);
     await sleep(TIMING.pointerSettle());
     await send(target, 'Input.dispatchMouseEvent', {
-      type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1, modifiers: 0,
+      type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1, modifiers: 0,
     });
     await sleep(TIMING.clickHold());
     await send(target, 'Input.dispatchMouseEvent', {
-      type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1, modifiers: 0,
+      type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1, modifiers: 0,
     });
     await sleep(TIMING.afterClick());
     return { ok: true };
   });
 }
 
-export { typeText, clickAt, isASCIIKey, KEY_DEFS, TIMING };
+// pressEnter 可信 Enter 提交（type submit_on_enter 用）：text='\r'，对齐 Puppeteer 规范
+async function pressEnter(tabId) {
+  return withDebugger(tabId, async (target) => {
+    const base = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+    await send(target, 'Input.dispatchKeyEvent', { type: 'keyDown', ...base, text: '\r', unmodifiedText: '\r' });
+    await sleep(30);
+    await send(target, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+    return { ok: true };
+  });
+}
+
+export { typeText, clickAt, pressEnter, isASCIIKey, KEY_DEFS, TIMING, bezierPoints };

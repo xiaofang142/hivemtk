@@ -1,7 +1,7 @@
 package tooluse
 
 // browser_tools.go 浏览器自动化 MCP 工具集
-// 设计文档: BROWSER_AUTOMATION_TECH_DESIGN.md 阶段3 #19 (外部 Agent 调用面)
+// 设计文档: docs/architecture/BROWSER_AUTOMATION.md §4.1 (外部 Agent 调用面；原 TECH_DESIGN 已并入该主文档)
 // 工具: browser_open_task / browser_task_status / browser_task_list
 // 执行注入: SetBrowserTaskRunner(TaskService.RunTaskWithRetry) 由 router 装配层注入,
 // 避免 tooluse → browser_automation/service 反向依赖。

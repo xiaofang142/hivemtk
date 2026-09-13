@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # check_browser_host.sh
-# 浏览器自动化链路健康检查(I3: BROWSER_AUTOMATION_TECH_DECISION.md §4.3)
+# 浏览器自动化链路健康检查(I3: docs/architecture/BROWSER_AUTOMATION.md §4.7)
 # 覆盖整链: 扩展 manifest → NM Host 二进制/配置/Chrome 注册 → 服务端 host/status
 #
 # 用法:
@@ -55,7 +55,7 @@ HOST_NAME="com.hivemtk.browser"
 
 echo "============================================================"
 echo "  浏览器自动化链路健康检查 (I3)"
-echo "  决策: docs/architecture/BROWSER_AUTOMATION_TECH_DECISION.md §4.3"
+echo "  决策: docs/architecture/BROWSER_AUTOMATION.md §4.7 (I3)"
 echo "============================================================"
 echo ""
 

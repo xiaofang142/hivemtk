@@ -50,18 +50,16 @@
 
 ---
 
-## 现状对照（2026-09-09）
+## 现状对照（2026-09-13 R25 实施轮后；A1–A6 真机回归已全量跑通）
 
-| 铁律 | 状态 | 差距 |
-|------|------|------|
-| 1 三平台兼容 | ✅ 已达成 | douyin 写链路待 M3（签名 API）；xianyu 写链路接口未公开 |
-| 2 UI 自动化/模拟人工 | ⚠️ 部分 | CDP trusted 输入+humanize 键鼠节奏已有（R17/R19）；**步间节奏抖动未实现**（固定 delay_ms） |
-| 3 基座+LLM 驱动 | ⚠️ 部分 | Brain 已跑通但**平台知识零注入**（LLM 拿不到适配器 Locators/拦截判据）；原语清单未喂给 Brain |
-| 4 全程全自动 | ⚠️ 部分 | 重试/自愈/命令日志已有；**DetectBlock 拦截页检测未接线进执行链**（判据在适配器里但没人调用） |
+| 铁律 | 状态 | 差距（R23 复审 + R24/R25 收口后） |
+|------|------|---------|
+| 1 三平台兼容 | ✅ 已达成 | douyin 写链路待 M3（签名 API）；xianyu 写链路接口未公开——均按能力矩阵如实不声明；**R25 真机三平台读链路全 completed（xhs195/douyin186/xianyu187）** |
+| 2 UI 自动化/模拟人工 | ✅ R25 真机验收 | trusted CDP 通道（F1·F3·F4）+ 步间抖动（R21）；**R17/R19-6 的「平台静默吞」归因已闭环=F2② finalize 只读回查：send 超时结果未知态真机实证「评论已入库、finalize 见渲染、判成功不重发」（session195，扩展 v1.4.0）** |
+| 3 基座+LLM 驱动 | ✅ R25 真机验收 | Brain 平台知识注入（R21）；attr 贯通+judge 独立快照复核（R24）；**R25 真机：Brain 目标达成+judge 拒绝自恢复+循环 nudge 生效（session191），历史压缩+新元素标记（F6）全落地** |
+| 4 全程全自动 | ✅ R25 真机验收 | DetectBlock/F8/写禁重试/F7/日志链（R21/R24）；**A1–A6 全量真机回归=R25 已完成（明细见 docs/architecture/BROWSER_AUTOMATION_R25_CHAIN_AUDIT.md §4）；send 超时≠失败、终态写脱离取消链两个 P0 同轮修复** |
 
-## 本轮（R21）任务
+## R21 任务（全部完成，见 git）
+1. Brain 平台知识注入 ✅；2. 检测接线 ✅；3. 步间抖动 ✅；4. 三平台真机回归——读链路 API 模式 ✅（R20），Brain 模式回归挂 R24 实施后执行。
 
-1. Brain 平台知识注入：平台 Locators/Capabilities/DetectBlock 判据注入 LLM prompt，原语清单机器可读喂给 Brain。
-2. 检测接线：执行链每步后跑平台 DetectBlock，命中即按 ClassifyError 归因并终止/重试——闭环铁律 4。
-3. 步间节奏抖动：delay_ms 加 ±30% 随机抖动（模拟人工）——补齐铁律 2。
-4. 三平台真机回归：读链路 API 模式 + Brain 模式各一轮，对照验收标准 A1–A5。
+> 验收与差距明细统一维护于 `docs/architecture/BROWSER_AUTOMATION.md`（主文档 §5）；本表只记铁律级状态。

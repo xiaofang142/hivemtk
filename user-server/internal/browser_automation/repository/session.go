@@ -18,10 +18,13 @@ type BrowserSessionRepository interface {
 	ListByUser(ctx context.Context, userID uint, status string, page, limit int) ([]*model.BrowserSession, int64, error)
 	UpdateStatus(ctx context.Context, id uint, status, errMsg string) error
 	UpdateChromeTabID(ctx context.Context, id uint, tabID int) error
-	UpdateMetrics(ctx context.Context, id uint, total, success, failed int, handLatencyMs int64) error
-	UpdateTitleAndSnapshot(ctx context.Context, id uint, title, snapshot string) error
+	// UpdateMetrics 步数计数收口（G9：hand_latency 恒 0 死列已移除，签名收窄）
+	UpdateMetrics(ctx context.Context, id uint, total, success, failed int) error
+	// UpdateSnapshot 页面快照落库（G9：原 UpdateTitleAndSnapshot 的 title 参数从未写入，已收窄）
+	UpdateSnapshot(ctx context.Context, id uint, snapshot string) error
 	UpdateExtractedData(ctx context.Context, id uint, extractedData ExtractedJSON) error
-	UpdateArtifacts(ctx context.Context, id uint, extractedData []byte, finalScreenshotURL, llmSummary, consoleErrors string) error
+	// UpdateArtifacts 反馈产物（截图 URL / LLM 总结）。G9：console_errors 不采集，参数已删。
+	UpdateArtifacts(ctx context.Context, id uint, extractedData []byte, finalScreenshotURL, llmSummary string) error
 	// FailRunningByUser Host 断连清理钩子：该用户所有 running session 置 failed，返回受影响 session 列表
 	FailRunningByUser(ctx context.Context, userID uint, reason string) ([]*model.BrowserSession, error)
 	HasSuccess(ctx context.Context, taskID uint) (bool, error)
@@ -119,27 +122,20 @@ func (r *browserSessionRepo) UpdateChromeTabID(ctx context.Context, id uint, tab
 		Update("chrome_tab_id", tabID).Error
 }
 
-func (r *browserSessionRepo) UpdateMetrics(ctx context.Context, id uint, total, success, failed int, handLatencyMs int64) error {
+func (r *browserSessionRepo) UpdateMetrics(ctx context.Context, id uint, total, success, failed int) error {
 	return r.db.WithContext(ctx).Model(&model.BrowserSession{}).Where("id = ?", id).Updates(map[string]any{
-		"total_steps":     total,
-		"success_steps":   success,
-		"failed_steps":    failed,
-		"hand_latency_ms": handLatencyMs,
+		"total_steps":   total,
+		"success_steps": success,
+		"failed_steps":  failed,
 	}).Error
 }
 
-func (r *browserSessionRepo) UpdateTitleAndSnapshot(ctx context.Context, id uint, title, snapshot string) error {
-	updates := map[string]any{}
-	if title != "" {
-		updates["title"] = title
-	}
-	if snapshot != "" {
-		updates["snapshot"] = snapshot
-	}
-	if len(updates) == 0 {
+func (r *browserSessionRepo) UpdateSnapshot(ctx context.Context, id uint, snapshot string) error {
+	if snapshot == "" {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.BrowserSession{}).Where("id = ?", id).Updates(updates).Error
+	return r.db.WithContext(ctx).Model(&model.BrowserSession{}).Where("id = ?", id).
+		Update("snapshot", snapshot).Error
 }
 
 // UpdateExtractedData 合并后的 extract 结果落库（executor 负责合并，repo 只写列）
@@ -151,7 +147,7 @@ func (r *browserSessionRepo) UpdateExtractedData(ctx context.Context, id uint, e
 		Update("extracted_data", extractedData).Error
 }
 
-func (r *browserSessionRepo) UpdateArtifacts(ctx context.Context, id uint, extractedData ExtractedJSON, finalScreenshotURL, llmSummary, consoleErrors string) error {
+func (r *browserSessionRepo) UpdateArtifacts(ctx context.Context, id uint, extractedData ExtractedJSON, finalScreenshotURL, llmSummary string) error {
 	updates := map[string]any{}
 	if len(extractedData) > 0 {
 		updates["extracted_data"] = extractedData
@@ -161,9 +157,6 @@ func (r *browserSessionRepo) UpdateArtifacts(ctx context.Context, id uint, extra
 	}
 	if llmSummary != "" {
 		updates["llm_summary"] = llmSummary
-	}
-	if consoleErrors != "" {
-		updates["console_errors"] = consoleErrors
 	}
 	if len(updates) == 0 {
 		return nil

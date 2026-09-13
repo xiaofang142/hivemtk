@@ -41,6 +41,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	executor.SetCommandLogRepository(cmdLogRepo)
 	taskSvc := basvc.NewTaskService(taskRepo, sessionRepo, executor)
 	sessionSvc := basvc.NewSessionService(sessionRepo, stepRepo, executor)
+	sessionSvc.SetCommandLogRepository(cmdLogRepo) // D1（G1）：命令流审计查询
 	cronSvc := basvc.NewCronService(cronRepo, taskRepo, taskSvc)
 
 	// 失败自动重试装配：FeedbackService → TaskService.RunTaskWithRetry（进程级一次性注入）
@@ -87,10 +88,11 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.POST("/tasks/:id/archive", taskCtrl.Archive)
 	ba.PUT("/tasks/:id/dependency", taskCtrl.SetDependency)
 
-	// Session（查询 + 中断）
+	// Session（查询 + 中断 + 审计命令流）
 	ba.GET("/sessions", sessionCtrl.List)
 	ba.GET("/sessions/:id", sessionCtrl.Get)
 	ba.GET("/sessions/:id/steps", sessionCtrl.ListSteps)
+	ba.GET("/sessions/:id/logs", sessionCtrl.ListLogs) // D1：command/event/judge 全链路还原
 	ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
 	ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
 
@@ -117,10 +119,13 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	// --- Host WebSocket（双层防护：token + 本地回环 IP；fail-closed）---
 	engine.GET("/api/browser/host-ws", bactrl.NewHostWSHandler(registry, kvRepo).Handle)
 
-	// 进程启动后台任务：恢复已启用触发器 + 保证存在 Host token
+	// 进程启动后台任务：恢复已启用触发器 + 保证存在 Host token +
+	// D4b 重试到期扫描（重启不丢挂起重试）+ G19 审计数据保留裁剪
 	ctx := context.Background()
 	utils.SafeGo(ctx, "browser_automation.bootstrap", func(ctx context.Context) {
 		basvc.EnsureHostTokenExists(ctx, kvRepo)
 		cronSvc.RestoreAll(ctx)
+		feedbackSvc.StartRetryScanner(ctx)
+		basvc.StartAuditRetention(ctx, cmdLogRepo, planRepo)
 	})
 }

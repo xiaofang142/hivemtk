@@ -24,6 +24,9 @@ type BrowserTaskRepository interface {
 	SoftDelete(ctx context.Context, id, userID uint) error
 	FindRunning(ctx context.Context, userID uint) ([]*model.BrowserTask, error)
 	ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error)
+	// D4b（G5）：重试持久化——scheduleRetry 落 next_retry_at，扫描器条件认领（置 NULL）防双触发
+	SetNextRetryAt(ctx context.Context, id uint, at *time.Time) error
+	ClaimDueRetries(ctx context.Context, now time.Time, limit int) ([]*model.BrowserTask, error)
 }
 
 type browserTaskRepo struct {
@@ -130,6 +133,43 @@ func (r *browserTaskRepo) FindRunning(ctx context.Context, userID uint) ([]*mode
 func (r *browserTaskRepo) ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error) {
 	var list []*model.BrowserTask
 	err := r.db.WithContext(ctx).Where("depends_on_task_id = ? AND deleted_at IS NULL", taskID).Find(&list).Error
+	return list, err
+}
+
+// SetNextRetryAt D4b（G5）：设置/清除任务的重试到期时间（nil=取消挂起重试）
+func (r *browserTaskRepo) SetNextRetryAt(ctx context.Context, id uint, at *time.Time) error {
+	return r.db.WithContext(ctx).Model(&model.BrowserTask{}).Where("id = ?", id).
+		Update("next_retry_at", at).Error
+}
+
+// ClaimDueRetries D4b（G5）：原子认领到期重试——条件更新置 NULL，多副本同库仅一方 RowsAffected=1；
+// 认领成功后进程崩溃则重试丢失（与改造前语义相同），但重启不再丢挂起重试。
+func (r *browserTaskRepo) ClaimDueRetries(ctx context.Context, now time.Time, limit int) ([]*model.BrowserTask, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	ids := []uint{}
+	err := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
+		Where("next_retry_at IS NOT NULL AND next_retry_at <= ? AND deleted_at IS NULL", now).
+		Order("next_retry_at ASC").Limit(limit).
+		Pluck("id", &ids).Error
+	if err != nil || len(ids) == 0 {
+		return nil, err
+	}
+	claimed := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		res := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
+			Where("id = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?", id, now).
+			Update("next_retry_at", nil)
+		if res.Error == nil && res.RowsAffected == 1 {
+			claimed = append(claimed, id)
+		}
+	}
+	if len(claimed) == 0 {
+		return nil, nil
+	}
+	var list []*model.BrowserTask
+	err = r.db.WithContext(ctx).Where("id IN ?", claimed).Find(&list).Error
 	return list, err
 }
 

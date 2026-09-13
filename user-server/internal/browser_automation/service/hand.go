@@ -34,12 +34,19 @@ func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool
 	return tabID, nil
 }
 
-// click 原语
-func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string) error {
-	_, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+// click 原语。回包含扩展侧 injClick 的 navigated 标志（是否发生页面跳转）——
+// F6a 轮内截断的证据来源（browser-use「页面变即截断剩余动作」语义，零额外往返）。
+func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string) (map[string]any, error) {
+	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "click", "tab_id": tabID, "target": target,
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		res = map[string]any{}
+	}
+	return res, nil
 }
 
 // typeText 原语
@@ -127,23 +134,51 @@ func (h *Hand) assert(ctx context.Context, userID uint, tabID int, kind, value s
 	return err
 }
 
-// query 原语：只读洞察（text/exists/count/attr），返回数据不抛错
-func (h *Hand) query(ctx context.Context, userID uint, tabID int, kind, selector string) (map[string]any, error) {
-	return h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+// query 原语：只读洞察（text/exists/count/attr），返回数据不抛错。
+// attr 子类型必须带 attribute（属性名）——D2 三层贯通：dto→StepParams→本帧→扩展 injQuery。
+func (h *Hand) query(ctx context.Context, userID uint, tabID int, kind, selector, attribute string) (map[string]any, error) {
+	cmd := map[string]any{
 		"action": "query", "tab_id": tabID, "query": kind, "selector": selector,
-	})
+	}
+	if attribute != "" {
+		cmd["attribute"] = attribute
+	}
+	return h.registry.Request(ctx, userID, defaultCmdTimeout, cmd)
 }
 
-// postComment 原语：一站式发评论（输入+发送+验证），返回扩展回包。
-// locators 来自平台适配器（L3 四件套下发，扩展零平台知识——设计稿 P5）。
-func (h *Hand) postComment(ctx context.Context, userID uint, tabID int, text string, locators map[string]any) (map[string]any, error) {
-	req := map[string]any{
-		"action": "post_comment", "tab_id": tabID, "value": text,
+// F2②（G11 正确版）三段式子命令：扩展侧零状态、零编排知识，提交与验证分离。
+// 旧一站式 Hand.postComment 已随 Executor 切三段式删除（扩展侧 v1.4.0 起 post_comment
+// 协议动作也已移除，comment_prep/send/verify 是唯一路径，防双路径分叉）。
+// 契约：comment_prep / comment_verify 可安全重复（只读定位+可重入键入/只读检查）；
+// comment_send = 不可逆提交点，全链路只允许发生一次（服务端步级禁重试 F2① 继续兜底）。
+
+// commentPrep 阶段一：定位评论输入框+聚焦+（contenteditable 走 CDP trusted 键入）注入文字
+func (h *Hand) commentPrep(ctx context.Context, userID uint, tabID int, text string, locators map[string]any) (map[string]any, error) {
+	req := map[string]any{"action": "comment_prep", "tab_id": tabID, "value": text}
+	for k, v := range locators {
+		req[k] = v
 	}
+	return h.registry.Request(ctx, userID, 30*time.Second, req)
+}
+
+// commentSend 阶段二：定位发送按钮坐标 + CDP trusted 点击（唯一不可逆点，禁重试）。
+// 超时预算对齐旧一站式 post_comment=45s：重页（小红书评论区渲染）上 CDP 事件逐条
+// round-trip 可达秒级，30s 实测触发假超时（session179：发送实际成功但回包迟于超时）。
+// 真机实证教训：发送结果未知时归因交 finalize 回查，不重发。
+func (h *Hand) commentSend(ctx context.Context, userID uint, tabID int, locators map[string]any) (map[string]any, error) {
+	req := map[string]any{"action": "comment_send", "tab_id": tabID}
 	for k, v := range locators {
 		req[k] = v
 	}
 	return h.registry.Request(ctx, userID, 45*time.Second, req)
+}
+
+// commentVerify 阶段三：只读验证评论渲染（finalize 轮询单元，短超时多次调用）
+func (h *Hand) commentVerify(ctx context.Context, userID uint, tabID int, text, containerSel, itemSel string, timeoutMs int) (map[string]any, error) {
+	return h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+10*time.Second, map[string]any{
+		"action": "comment_verify", "tab_id": tabID, "value": text,
+		"comment_container": containerSel, "comment_item_text": itemSel, "timeout_ms": timeoutMs,
+	})
 }
 
 // extract 按 CSS selector 列表提取文本（MVP 降级形态）
@@ -165,17 +200,8 @@ func (h *Hand) closeTab(ctx context.Context, userID uint, tabID int) error {
 	return err
 }
 
-// tabExists 探测 tab 是否存活（Chrome 断开自动清理用）
-func (h *Hand) tabExists(ctx context.Context, userID uint, tabID int) (bool, error) {
-	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
-		"action": "tab_exists", "tab_id": tabID,
-	})
-	if err != nil {
-		return false, err
-	}
-	exists, _ := res["exists"].(bool)
-	return exists, nil
-}
+// G9 死代码清扫（R25）：Hand.tabExists（远程 tab_exists 命令）全仓零调用方已删除；
+// 扩展侧 tab_exists case 保留——dispatch 内部用它做 tab 存活闸门（那是本地函数，不走命令帧）。
 
 const defaultCmdTimeout = 30 * time.Second
 

@@ -41,7 +41,7 @@ func (c *CronController) Create(ctx *gin.Context) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	tr, err := c.svc.Create(ctx.Request.Context(), taskUserID(ctx), req.TaskID, req.CronExpr, enabled)
+	tr, err := c.svc.Create(ctx.Request.Context(), taskUserID(ctx), req.TaskID, req.CronExpr, req.TimeZone, enabled)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -61,7 +61,7 @@ func (c *CronController) Update(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
-	tr, err := c.svc.Update(ctx.Request.Context(), uint(id), taskUserID(ctx), req.CronExpr)
+	tr, err := c.svc.Update(ctx.Request.Context(), uint(id), taskUserID(ctx), req.CronExpr, req.TimeZone)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return

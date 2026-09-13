@@ -98,9 +98,12 @@ inference:
     model: "bge-reranker-v2-m3"
     enabled: true
   llm:
-    mode: local
-    base_url: "http://127.0.0.1:8207/v1"
-    model: "qwen2.5-7b-instruct-q4_k_m"
+    # 2026-09-10：本地 llama-server(8207) 已下线省资源，LLM 统一走 freeapi 线上网关。
+    # 注意：provider/路由真相源在 llm_providers/llm_routing_rules 表（DB 覆盖本节），
+    # 本节 base_url 仅作 default provider 与 humanize 评估器检测的兜底值。
+    mode: remote
+    base_url: "http://127.0.0.1:8787/v1"
+    model: "step-3.7-flash"
     temperature: 0.7
     max_tokens: 1024
     timeout_seconds: 720

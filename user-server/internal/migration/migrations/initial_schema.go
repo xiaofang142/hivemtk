@@ -196,4 +196,5 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewBrowserAutomationMigration(db))
 	register(NewBrowserCommandLogMigration(db))
 	register(NewBrowserTaskPlatformMigration(db))
+	register(NewBrowserAuditRetryTzMigration(db))
 }

@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { collectInteractiveNodes, assembleSnapshot, getRefSelector, resetRefs } from '../src/core/accessibility.js';
+import { collectInteractiveNodes, assembleSnapshot, getRefSelector, resetRefs, resetSnapshotBaseline } from '../src/core/accessibility.js';
 
 describe('accessibility snapshot', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     resetRefs();
+    resetSnapshotBaseline(); // F6：全量清基线，用例间互不污染
   });
 
   it('收集可交互元素并生成 @eN refs', () => {
@@ -39,5 +40,34 @@ describe('accessibility snapshot', () => {
     const snap = assembleSnapshot(collectInteractiveNodes());
     expect(snap.count).toBe(0);
     expect(snap.text).toBe('');
+  });
+
+  // ---- F6 新元素标记（browser-use *[index] 语义）----
+  it('F6 首帧不打标；下一帧新出现的 role|name 行首带 *', () => {
+    const key = 'tab-f6';
+    resetSnapshotBaseline(key);
+    document.body.innerHTML = '<button id="a">A</button>';
+    const first = assembleSnapshot(collectInteractiveNodes(), key);
+    // 首帧无基线 → 全部正常行，不打 *
+    expect(first.text).not.toContain('*');
+    expect(first.new_count).toBe(0);
+    // 第二帧新增一个按钮：新行带 *，旧行不带
+    document.body.innerHTML += '<button id="b">B</button>';
+    const second = assembleSnapshot(collectInteractiveNodes(), key);
+    const lines = second.text.split('\n');
+    expect(lines.some((l) => l.startsWith('*') && l.includes('"B"'))).toBe(true);
+    expect(lines.some((l) => !l.startsWith('*') && l.includes('"A"'))).toBe(true);
+    expect(second.new_count).toBe(1);
+  });
+
+  it('F6 导航清基线：resetSnapshotBaseline 后首帧重新不打标', () => {
+    const key = 'tab-nav';
+    resetSnapshotBaseline(key);
+    document.body.innerHTML = '<button id="a">A</button>';
+    assembleSnapshot(collectInteractiveNodes(), key);
+    document.body.innerHTML = '<button id="c">C</button>';
+    resetSnapshotBaseline(key); // 模拟导航
+    const after = assembleSnapshot(collectInteractiveNodes(), key);
+    expect(after.text).not.toContain('*');
   });
 });

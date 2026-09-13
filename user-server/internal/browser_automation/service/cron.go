@@ -36,29 +36,39 @@ func NewCronService(cronRepo repository.BrowserCronTriggerRepository, taskRepo r
 	}
 }
 
-// toSixField 5 段 cron → 项目 TaskManager 的 6 段秒级
-func toSixField(expr string) string {
+// toSixField 5 段 cron → 项目 TaskManager 的 6 段秒级；
+// timeZone 非空时前缀 CRON_TZ=（robfig v3 原生支持，G20：调度不依赖服务器本地时区）。
+func toSixField(expr, timeZone string) string {
 	expr = strings.TrimSpace(expr)
 	fields := strings.Fields(expr)
 	if len(fields) == 5 {
-		return "0 " + expr
+		expr = "0 " + expr
+	}
+	if tz := strings.TrimSpace(timeZone); tz != "" {
+		return "CRON_TZ=" + tz + " " + expr
 	}
 	return expr
 }
 
-// cronParser 6 段秒级解析器（与 TaskManager 内部配置一致，用于提前校验）
+// cronParser 6 段秒级解析器（NewParser 原生支持 TZ=/CRON_TZ= 前缀，与 TaskManager 配置一致，用于提前校验）
 var cronParser = cronv3.NewParser(cronv3.Second | cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow | cronv3.Descriptor)
 
-// ValidateCronExpr 校验 5 段 cron 表达式（转 6 段后解析）
-func ValidateCronExpr(expr string) error {
-	spec := toSixField(expr)
+// ValidateCronExpr 校验 5 段 cron 表达式（转 6 段后解析）+ 时区合法性（G20）。timeZone 空=服务器本地。
+func ValidateCronExpr(expr, timeZone string) error {
+	tz := strings.TrimSpace(timeZone)
+	if tz != "" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			return fmt.Errorf("时区无效（需 IANA 名，如 Asia/Shanghai）: %w", err)
+		}
+	}
+	spec := toSixField(expr, tz)
 	if _, err := cronParser.Parse(spec); err != nil {
 		return fmt.Errorf("cron 表达式无效（需 5 段格式，如 */5 * * * *）: %w", err)
 	}
 	return nil
 }
 
-func (s *CronService) Create(ctx context.Context, userID uint, taskID uint, cronExpr string, enabled bool) (*model.BrowserCronTrigger, error) {
+func (s *CronService) Create(ctx context.Context, userID uint, taskID uint, cronExpr, timeZone string, enabled bool) (*model.BrowserCronTrigger, error) {
 	t, err := s.taskRepo.GetByID(ctx, taskID, userID)
 	if err != nil {
 		return nil, errors.New("任务不存在")
@@ -66,13 +76,13 @@ func (s *CronService) Create(ctx context.Context, userID uint, taskID uint, cron
 	if t.TaskType != "cron" {
 		return nil, errors.New("仅 cron 类型任务可配置定时触发器")
 	}
-	if err := ValidateCronExpr(cronExpr); err != nil {
+	if err := ValidateCronExpr(cronExpr, timeZone); err != nil {
 		return nil, err
 	}
 	if _, err := s.cronRepo.GetByTaskID(ctx, taskID); err == nil {
 		return nil, errors.New("该任务已存在触发器")
 	}
-	tr := &model.BrowserCronTrigger{TaskID: taskID, CronExpr: strings.TrimSpace(cronExpr), Enabled: enabled}
+	tr := &model.BrowserCronTrigger{TaskID: taskID, CronExpr: strings.TrimSpace(cronExpr), TimeZone: strings.TrimSpace(timeZone), Enabled: enabled}
 	if err := s.cronRepo.Create(ctx, tr); err != nil {
 		return nil, err
 	}
@@ -82,15 +92,16 @@ func (s *CronService) Create(ctx context.Context, userID uint, taskID uint, cron
 	return tr, nil
 }
 
-func (s *CronService) Update(ctx context.Context, id, userID uint, cronExpr string) (*model.BrowserCronTrigger, error) {
+func (s *CronService) Update(ctx context.Context, id, userID uint, cronExpr, timeZone string) (*model.BrowserCronTrigger, error) {
 	tr, err := s.cronRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateCronExpr(cronExpr); err != nil {
+	if err := ValidateCronExpr(cronExpr, timeZone); err != nil {
 		return nil, err
 	}
 	tr.CronExpr = strings.TrimSpace(cronExpr)
+	tr.TimeZone = strings.TrimSpace(timeZone)
 	if err := s.cronRepo.Update(ctx, tr); err != nil {
 		return nil, err
 	}
@@ -134,7 +145,7 @@ func (s *CronService) SetEnabled(ctx context.Context, id, userID uint, enabled b
 func (s *CronService) registerWithUser(tr *model.BrowserCronTrigger, userID uint) {
 	taskID := tr.TaskID
 	mgr := pkgcron.GetTaskManager()
-	entry, err := mgr.AddTask(toSixField(tr.CronExpr), func() {
+	entry, err := mgr.AddTask(toSixField(tr.CronExpr, tr.TimeZone), func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		// 触发时再次校验 enabled（Disable 与 fire 竞态窗口）

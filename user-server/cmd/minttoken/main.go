@@ -7,7 +7,7 @@ import (
 
 func main() {
 	j := utils.NewJWTUtils(utils.DefaultJWTConfig)
-	tok, err := j.GenerateToken(1, "admin", "admin")
+	tok, err := j.GenerateToken(26, "uit_admin", "admin")
 	if err != nil {
 		panic(err)
 	}

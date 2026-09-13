@@ -65,6 +65,27 @@ func (c *SessionController) ListSteps(ctx *gin.Context) {
 	response.SuccessWithList(ctx, steps, int64(len(steps)))
 }
 
+// ListLogs GET /browser-automation/sessions/:id/logs?direction=command|event|judge
+// D1（G1 补口）：append-only 命令流审计查询（归属校验与 direction 过滤在 service）。
+func (c *SessionController) ListLogs(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "invalid id")
+		return
+	}
+	direction := ctx.DefaultQuery("direction", "")
+	if direction != "" && direction != "command" && direction != "event" && direction != "judge" {
+		response.Error(ctx, http.StatusBadRequest, "direction 仅支持 command/event/judge")
+		return
+	}
+	logs, err := c.svc.ListCommandLogs(ctx.Request.Context(), uint(id), taskUserID(ctx), direction)
+	if err != nil {
+		response.Error(ctx, http.StatusNotFound, "会话不存在")
+		return
+	}
+	response.SuccessWithList(ctx, logs, int64(len(logs)))
+}
+
 // ListByTask GET /browser-automation/tasks/:id/sessions
 func (c *SessionController) ListByTask(ctx *gin.Context) {
 	id, ok := parseID(ctx)
