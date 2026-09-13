@@ -18,11 +18,11 @@
     "docs-consistency"
   ],
   "stats": {
-    "rounds_completed": 76,
-    "issues_found_total": 29,
-    "issues_fixed_total": 29,
+    "rounds_completed": 77,
+    "issues_found_total": 31,
+    "issues_fixed_total": 31,
     "last_completed_at": "2026-09-13",
-    "last_commit": "8e5d49e"
+    "last_commit": "8b491ba"
   },
   "history": [
     {
@@ -696,6 +696,14 @@
       "found": 3,
       "fixed": 3,
       "notes": "第七圈深度轮: 全仓类型断言无ok扫描(裸断言仅compareValues 1处实锤,controller层userID.(uint)逐一核对JWT中间件恒Set uint为类型安全)+_ =吞错分类(真缺陷2处:外部导入job落库吞错致幽灵轮询/知识库状态写吞错3处补日志); go vet零/全包测试零FAIL/gofmt零/eslint零"
+    },
+    {
+      "round": 77,
+      "angle": "concurrency",
+      "date": "2026-09-13",
+      "found": 2,
+      "fixed": 2,
+      "notes": "第七圈深度轮(远端零增量转全仓深扫): ①ack_tracker.asyncSetJSON 持锁传入的实时map逃逸到后台goroutine锁外Marshal→数据竞争/fatal进程崩溃,派生前深拷贝+确定性闸门测试(修复前必红实测)②sms_delivery_tracker carrierCache RLock释放后无锁写+carrierLoaded/ErrAt无锁→写锁原子化+全字段入锁. 全仓non-test go func 40处三分穷举(内联recover 22/有界11/裸奔候选逐条核销仅本2实锤)+包级map/cron Stop复核; -race本机不可用(CGO无gcc)沿用锁核查+并发测试替代; build/vet/gofmt/test全包零FAIL"
     }
   ]
 }

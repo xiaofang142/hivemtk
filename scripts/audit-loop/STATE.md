@@ -30,7 +30,7 @@
 
 **基线/后续注意**：①concurrency 轮新增闸门：`grep -n 'pendingRedis.asyncSetJSON\|Snapshot(' internal/websocket/` 与 `python scripts/...`（本轮临时脚本思路可固化为"gofunc body 无 recover 即列单人工三分"）；②`AUDIT_HIGHEST_STANDARD.md` 的 P1-3"55/76 无 recover"为 08-26 旧基线，实测现存 non-test 裸 go func 40 处已全部有保护或有界（见核查项），下轮起可刷新该文档口径（docs-consistency 轮）；③`cmd/nm-host`、`cmd/bridge-mock`、`tests/perf/perflib`、`scripts/` 为工具/演示面不入业务闸门统计。
 
-**Commit**：见 git log `fix(server): 审计R77-concurrency`
+**Commit**：8b491ba
 
 ### R76 — error-handling（2026-09-13）— 第七圈，深度轮，3 发现 3 修复
 
