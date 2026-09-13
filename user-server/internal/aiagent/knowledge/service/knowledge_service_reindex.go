@@ -66,7 +66,10 @@ func (s *KnowledgeService) Reindex(ctx context.Context, productID string, docID 
 	now := time.Now()
 	doc.EmbedStatus = model.EmbedStatusIndexed
 	doc.LastIndexAt = &now
-	_ = s.docRepo.Update(ctx, doc)
+	if err := s.docRepo.Update(ctx, doc); err != nil {
+		// 向量已重建但文档状态未落库：文档滞留旧状态，运维无从判断——必须落日志
+		logger.Errorf("[knowledge][Reindex] 更新文档索引状态失败 doc=%d: %v", doc.ID, err)
+	}
 	return nil
 }
 

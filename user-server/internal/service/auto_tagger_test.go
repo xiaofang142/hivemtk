@@ -328,6 +328,35 @@ func TestAutoTagger_compareValues(t *testing.T) {
 	}
 }
 
+// TestAutoTagger_compareValues_MismatchedTypes 字段为 string 而规则 value 非 string（商户 JSON 规则可编辑产生）
+// 不得 panic（R76 修复：原裸断言 value.(string) 触发 panic），类型不匹配按不命中处理
+func TestAutoTagger_compareValues_MismatchedTypes(t *testing.T) {
+	mixed := []struct {
+		name       string
+		fieldValue any
+		operator   string
+		value      any
+	}{
+		{"string字段对数字值", "gold", "eq", 50.0},
+		{"string字段对布尔值", "gold", "eq", true},
+		{"string字段对nil值", "gold", "contains", nil},
+		{"int64字段对string值", int64(5), "eq", "5"},
+		{"string字段对切片值", "a", "gt", []any{1}},
+	}
+	for _, tt := range mixed {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("compareValues(%v, %s, %v) panic: %v", tt.fieldValue, tt.operator, tt.value, r)
+				}
+			}()
+			if got := compareValues(tt.fieldValue, tt.operator, tt.value); got != false {
+				t.Errorf("compareValues(%v, %s, %v) = %v, want false(类型不匹配不命中)", tt.fieldValue, tt.operator, tt.value, got)
+			}
+		})
+	}
+}
+
 // TestAutoTagger_compareStringValues 测试字符串比较
 func TestAutoTagger_compareStringValues(t *testing.T) {
 	tests := []struct {
