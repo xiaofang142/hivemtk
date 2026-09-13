@@ -7,7 +7,7 @@
 
 | # | 环节 | 载体 | 契约（做什么/不做什么） | 失败形态与归宿 | 论证结论 |
 |---|------|------|------------------------|--------------|---------|
-| S0 | 前端控制台 | user-web Vue3：List/Editor/Detail/Monitor(含命令流面板)/Cron(含时区)/Status + api 28 端点 | 只发 REST，不碰浏览器 | 409 引导装扩展；500 提示 | 🟡 dist 已重建但**浏览器未重载新 dist**（旧 1.2.0 页面缓存） |
+| S0 | 前端控制台 | user-web Vue3：List/Editor/Detail/Monitor(含命令流面板+I5 审计包导出)/Cron(含时区)/Status + api 29 端点（28 JWT+WS） | 只发 REST，不碰浏览器 | 409 引导装扩展；500 提示 | ✅ dist 已重建并在线验证（export 真机通过） |
 | S1 | Gin 路由 | browser_automation_routes.go：JWT 26 端点+WS 独立+DI 装配 | Router 零逻辑 | 启动期 panic 即拒 | ✅ R24 验证（logs 端点在线实测） |
 | S2 | Executor 双模式 | executor.go：steps 解释 / Brain 循环；步级 retry+backoff；humanizedDelay；DetectBlock 步后；F2① 写禁重试；F7 错误分线；F6a 轮内截断；G17 screenshot 硬拒 | 状态收口只由它写；不持平台知识 | 失败步→abort→session failed+llm_summary 归因 | ❌→已修：F1 trusted 路径的 href 兜底**双跳缺陷**（详 §2-Q1） |
 | S3 | Hand+Registry | hand.go 17 方法（超时表）；host_registry.go：per-user 路由+req_id pending+**心跳 30s/90s**；顶号+断连清理钩子 | 单 Host 串行；不启动子进程 | 离线→ErrHostOffline→409；超时→error 帧 | ✅ 代码过（race 测试绿）；**运行态当前离线**（count=0，S5 断） |
@@ -72,6 +72,14 @@ R24 已实施项（见主文档 v1.2 修订记录）不在本文重复；本文�
 ### 仍开放（挂下轮）
 - send 的 45s 超时本身未消除（CDP 事件序列在重页仍慢）——现归因正确、耗时可容忍；根治候选=cdpInput.clickAt 内部事件批量化/降低单条 round-trip（动 trusted 主通道时序需谨慎，单独立轮论证）。
 - 探针阈值 2 为保守值；若真机出现「连续 2 条合法慢命令」误杀证据，再议按 action 分级阈值。
+
+## §6 R26-3 交叉复审（2026-09-13，R26 改动后全链路零断链）
+
+- **协议三方对齐 ✅**：dto oneof 15 动作（LLM/编排可见）全部被扩展 dispatch 顶层 case 覆盖；内部子命令 comment_prep/send/verify+tab_exists 不出现在 dto/prompt（R25 契约测试锁住）；aiagent browser_tools 无旧 post_comment 命令帧、无任何已删 G9 符号残留（全仓 grep 零命中）。
+- **F8 并发闸 v1.4.1 真机复验 ✅**：douyin 任务 203 运行中再发 xianyu run → DUPLICATE_ENTRY_3003 正确拒绝。
+- **双平台读链路 v1.4.1 复验 ✅**：douyin 203 / pong 196-201 全 completed；post_comment 202 completed（见 §5）。
+- **D6 代码事实**：browser 六表未注册进 AutoMigrate/RegisterExtraModels（全仓 grep 零命中）=版本化独轨已是既成事实，与 D6「倾向」一致——拍板只差文档确认，无代码动作。
+- **残留盘点（均维持挂账、非缺陷）**：I4 重连续跑 P2（command_log 重放源已就绪）、I5 审计扩展 P2（D1 读侧已交付，导出/console 属增强）、I6 多 Host P3、I2 定时自动轮换（现手动 reset API）、T1 v2 加固（R24 已落分隔符+护栏第 6 条）；D7 人工确认开关待拍板。**本轮无新缺陷。**
 
 ### 遗留挂账
 - Brain A2 目标「h1 提取」在 xhs 弹窗 DOM 无 h1 时靠 judge 拒绝+自恢复滚动换路（21 步成），效率待观察不判缺陷。

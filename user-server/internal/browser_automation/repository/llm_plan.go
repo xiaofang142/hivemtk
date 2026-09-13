@@ -15,6 +15,8 @@ type BrowserLLMPlanRepository interface {
 	Create(ctx context.Context, p *model.BrowserLLMPlan) error
 	GetByID(ctx context.Context, id uint) (*model.BrowserLLMPlan, error)
 	ListByTaskID(ctx context.Context, taskID uint, limit int) ([]*model.BrowserLLMPlan, error)
+	// ListBySessionID I5：session 导出取该会话全部 plan/judge/summary 记录（成本账全量，limit 保护）
+	ListBySessionID(ctx context.Context, sessionID uint, limit int) ([]*model.BrowserLLMPlan, error)
 	// PruneSnapshotText G19：清空 cutoff 前的 snapshot 大文本（成本账 token/model/kind 保留）
 	PruneSnapshotText(ctx context.Context, cutoff time.Time) (int64, error)
 }
@@ -51,6 +53,17 @@ func (r *browserLLMPlanRepo) ListByTaskID(ctx context.Context, taskID uint, limi
 	}
 	var list []*model.BrowserLLMPlan
 	err := r.db.WithContext(ctx).Where("task_id = ?", taskID).Order("id DESC").Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// ListBySessionID I5：session 维度的全量 LLM 记录（plan/judge/summary 按时间升序，导出用）。
+// limit 上限放宽到 200（Brain 40 迭代×多类 + judge/summary，单 session 足够全量）。
+func (r *browserLLMPlanRepo) ListBySessionID(ctx context.Context, sessionID uint, limit int) ([]*model.BrowserLLMPlan, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 200
+	}
+	var list []*model.BrowserLLMPlan
+	err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("id ASC").Limit(limit).Find(&list).Error
 	return list, err
 }
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"hivemtk-user/internal/browser_automation/dto"
 	"hivemtk-user/internal/browser_automation/service"
@@ -100,6 +101,27 @@ func (c *SessionController) ListByTask(ctx *gin.Context) {
 		return
 	}
 	response.SuccessWithList(ctx, list, total)
+}
+
+// Export GET /browser-automation/sessions/:id/export
+// I5：session 全量审计包（会话+步流水+命令流+LLM 成本账）单请求归并，
+// 前端「导出审计包」按钮直接落盘 JSON——铁律 4 审计链的离线归档面。
+func (c *SessionController) Export(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "invalid id")
+		return
+	}
+	sess, steps, logs, plans, err := c.svc.SessionExport(ctx.Request.Context(), uint(id), taskUserID(ctx))
+	if err != nil {
+		response.Error(ctx, http.StatusNotFound, "会话不存在")
+		return
+	}
+	ctx.Header("Content-Disposition", "attachment; filename=browser_session_"+ctx.Param("id")+"_audit.json")
+	response.Success(ctx, gin.H{
+		"session": sess, "steps": steps, "command_log": logs, "llm_plans": plans,
+		"exported_at": time.Now().Format(time.RFC3339),
+	}, "ok")
 }
 
 // Stop POST /browser-automation/sessions/:id/stop

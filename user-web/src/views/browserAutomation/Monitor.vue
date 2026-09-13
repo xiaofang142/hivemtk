@@ -7,6 +7,7 @@
           {{ session.status }}
         </el-tag>
         <el-button v-if="session && ['created','active'].includes(session.status)" type="danger" @click="onStop">停止</el-button>
+        <el-button v-if="session" @click="onExport">导出审计包</el-button>
       </el-space>
     </div>
 
@@ -86,7 +87,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, getBrowserSessionLogs } from '@/api/browserAutomation'
+import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, getBrowserSessionLogs, exportBrowserSessionAudit } from '@/api/browserAutomation'
 
 const route = useRoute()
 const sessionId = computed(() => route.params.id)
@@ -139,6 +140,23 @@ async function onStop() {
   await stopBrowserSession(sessionId.value, '用户手动中断')
   ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
   load()
+}
+
+// I5：审计包导出（会话+步+命令流+LLM 成本账）落盘 JSON
+async function onExport() {
+  try {
+    const res = await exportBrowserSessionAudit(sessionId.value)
+    const payload = unpack(res)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `browser_session_${sessionId.value}_audit.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success('审计包已导出')
+  } catch {
+    ElMessage.error('导出失败')
+  }
 }
 
 onMounted(() => {

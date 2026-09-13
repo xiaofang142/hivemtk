@@ -42,6 +42,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	taskSvc := basvc.NewTaskService(taskRepo, sessionRepo, executor)
 	sessionSvc := basvc.NewSessionService(sessionRepo, stepRepo, executor)
 	sessionSvc.SetCommandLogRepository(cmdLogRepo) // D1（G1）：命令流审计查询
+	sessionSvc.SetLLMPlanRepository(planRepo)      // I5：审计导出含 LLM 成本账
 	cronSvc := basvc.NewCronService(cronRepo, taskRepo, taskSvc)
 
 	// 失败自动重试装配：FeedbackService → TaskService.RunTaskWithRetry（进程级一次性注入）
@@ -93,6 +94,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.GET("/sessions/:id", sessionCtrl.Get)
 	ba.GET("/sessions/:id/steps", sessionCtrl.ListSteps)
 	ba.GET("/sessions/:id/logs", sessionCtrl.ListLogs) // D1：command/event/judge 全链路还原
+	ba.GET("/sessions/:id/export", sessionCtrl.Export) // I5：审计包单请求归并导出
 	ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
 	ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
 

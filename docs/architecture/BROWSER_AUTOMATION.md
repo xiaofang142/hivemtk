@@ -238,7 +238,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 - **I2 ✅**：token 生成/轮换双候选/常量时间/fail-closed/reset API 全链完备（勘误 B5）；剩"定时自动轮换"（现手动）。
 - **I3 ✅**：`scripts/check_browser_host.sh`（171 行，5 级检查：扩展双 manifest 版本→hostVersion 锚点→Host 二进制+conf→NM 注册表→host/status 在线；--offline 模式）。
 - **I4 重连续跑 P2**（挂账：Host 重连后从最后成功 step 续跑，需 Executor checkpoint 位点，依赖 F2 的 finalize 与 M4 事件日志重放）。
-- **I5 审计完善 P2**（=G1 查询端点 + 导出面板 + 扩展侧 console/截图进审计流）。
+- **I5 审计完善 P2**：G1 查询端点（D1 ✅R24）+ **导出端点 ✅R27**（GET /sessions/:id/export 单请求归并会话+步流水+命令流+LLM 成本账，前端 Monitor「导出审计包」落盘 JSON；真机验证 session195 steps5/logs10 + session188 plans18·snapshot 不带出）+ 截图已在导出包（final_screenshot_url 字段）；console 采集维持**不做**（G9 决策=该列恒空已从模型删除，注入页 console 读取属注入劫持面扩张）。
 - **I6 多 Host P3**（Register 改 userID→[]conn+负载选择，预留）。
 - T1 **提示注入面（行业级已确认风险）**：brain.go:155 快照与 goal 仅换行分隔、无不可信数据标注；现有防线=动作白名单（LLM 只能下发 15 原语，blast radius 有界）+JudgeDone；v2 加固=分隔符包装+敏感动作复核（→ 与 F5 同批）。
 

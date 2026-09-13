@@ -58,6 +58,10 @@ export const stopBrowserSession = (id, reason) =>
 export const getBrowserSessionLogs = (id, direction) =>
   http.get(`/api/browser-automation/sessions/${id}/logs`, direction ? { direction } : undefined)
 
+// I5：审计包导出（会话+步流水+命令流+LLM 成本账单请求归并，前端落盘 JSON）
+export const exportBrowserSessionAudit = (id) =>
+  http.get(`/api/browser-automation/sessions/${id}/export`)
+
 // ========== Cron ==========
 
 export const listBrowserCron = () =>

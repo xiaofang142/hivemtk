@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
@@ -12,6 +13,7 @@ type SessionService struct {
 	sessionRepo repository.BrowserSessionRepository
 	stepRepo    repository.BrowserStepRepository
 	cmdLogRepo  repository.BrowserCommandLogRepository
+	planRepo    repository.BrowserLLMPlanRepository
 	executor    *Executor
 }
 
@@ -22,6 +24,11 @@ func NewSessionService(sessionRepo repository.BrowserSessionRepository, stepRepo
 // SetCommandLogRepository D1：命令流查询仓储注入（装配期一次性，路由未注入时查询返回空不报错）
 func (s *SessionService) SetCommandLogRepository(r repository.BrowserCommandLogRepository) {
 	s.cmdLogRepo = r
+}
+
+// SetLLMPlanRepository I5：LLM 记录仓储注入（导出取 plan/judge/summary 成本账）
+func (s *SessionService) SetLLMPlanRepository(r repository.BrowserLLMPlanRepository) {
+	s.planRepo = r
 }
 
 func (s *SessionService) Get(ctx context.Context, id, userID uint) (*model.BrowserSession, error) {
@@ -80,4 +87,53 @@ func (s *SessionService) Stop(ctx context.Context, sessionID, userID uint, reaso
 	}
 	ok := s.executor.SignalStop(sessionID)
 	return ok, nil
+}
+
+// ---- I5 审计导出（一次请求归并 session 全量审计事实，可离线归档）----
+
+// SessionExportRow LLM 记录导出行（snapshot 大文本不带：G19 后本就可能为空且导出体积敏感；
+// 成本账/归因全字段保留，要快照原文走 llm_plans 查询端点或 command_log event 帧）
+type SessionExportRow struct {
+	ID        uint      `json:"id"`
+	Kind      string    `json:"kind"` // plan / judge / summary
+	Goal      string    `json:"goal"`
+	Steps     []byte    `json:"steps,omitempty"`
+	Reasoning string    `json:"reasoning,omitempty"`
+	Model     string    `json:"model"`
+	TokenIn   int       `json:"token_in"`
+	TokenOut  int       `json:"token_out"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SessionExport I5：session 全量审计包=会话元数据+步流水+命令流+LLM 成本账。
+// 归属校验与 ListCommandLogs 同构（GetByID 带 userID）；仓储未装配的分量置空不报错
+// （审计导出是增强，不因装配缺位而失败——与 D1 读侧同纪律）。
+func (s *SessionService) SessionExport(ctx context.Context, sessionID, userID uint) (*model.BrowserSession, []*model.BrowserStep, []*model.BrowserCommandLog, []*SessionExportRow, error) {
+	sess, err := s.sessionRepo.GetByID(ctx, sessionID, userID)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	steps, err := s.stepRepo.ListBySessionID(ctx, sessionID)
+	if err != nil {
+		steps = nil // 步查询失败不阻断导出（会话元数据仍有价值）
+	}
+	var logs []*model.BrowserCommandLog
+	if s.cmdLogRepo != nil {
+		if l, err := s.cmdLogRepo.ListBySessionID(ctx, sessionID); err == nil {
+			logs = l
+		}
+	}
+	var plans []*SessionExportRow
+	if s.planRepo != nil {
+		if ps, err := s.planRepo.ListBySessionID(ctx, sessionID, 200); err == nil {
+			for _, p := range ps {
+				plans = append(plans, &SessionExportRow{
+					ID: p.ID, Kind: p.Kind, Goal: p.Goal, Steps: []byte(p.Steps),
+					Reasoning: p.Reasoning, Model: p.Model,
+					TokenIn: p.TokenIn, TokenOut: p.TokenOut, CreatedAt: p.CreatedAt,
+				})
+			}
+		}
+	}
+	return sess, steps, logs, plans, nil
 }
