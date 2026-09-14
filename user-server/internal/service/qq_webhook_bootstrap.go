@@ -13,7 +13,6 @@ import (
 
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/config"
-	"hivemtk-user/internal/pkg/db"
 )
 
 // ErrQQAccountNotFound QQ 账号不存在（verify-callback 自检入口）
@@ -94,9 +93,8 @@ func (s *QQService) VerifyCallbackSelfCheck(ctx context.Context, accountID uint)
 	if s.accRepo == nil {
 		return nil, errors.New("qq account repository unavailable")
 	}
-	if db.GetDB() == nil {
-		return nil, errors.New("database unavailable")
-	}
+	// R29（L4 收口）：DB 未就绪的 nil 语义由 repo 边界返回 gorm.ErrInvalidDB，
+	// service 不再全局摸 db.GetDB()（五层 §三.4）。
 	acc, err := s.accRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("get qq account: %w", err)

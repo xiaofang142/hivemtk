@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +29,7 @@ import (
 // resolver 由装配层注入（service.ChatChannelService 的适配器）。
 func AppKeyResolve(resolver ChatChannelResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if IsTestMode && testing.Testing() {
+		if IsTestMode && testModeGate() {
 			c.Next()
 			return
 		}
@@ -174,7 +173,7 @@ const DefaultChannelID = "default"
 func IngressSecretAuth() gin.HandlerFunc {
 	secret := strings.TrimSpace(os.Getenv("INGRESS_API_KEY"))
 	return func(c *gin.Context) {
-		if IsTestMode && testing.Testing() {
+		if IsTestMode && testModeGate() {
 			c.Next()
 			return
 		}

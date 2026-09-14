@@ -39,6 +39,15 @@
 | 主机 | 8C16G + 500G SSD | 16C32G + 1T NVMe |
 | GPU | 可选（llama.cpp CPU 推理） | RTX 3060 12G+ |
 
+## 反代配置
+
+部署前请先选择反代（nginx / Caddy / Traefik / FRP）并按
+[反代配置模板](reverse-proxy/README.md) 配置。**关键约束**：HTTP/2 必须
+显式关闭，否则 SSE 大屏数据延迟/丢失。
+
+> 另见：[私域部署强制要求](../../user-server/docs/operations/PRIVATE_NETWORK_REQUIRED.md)（user-server 禁止直接公网暴露）、
+> [LICENSE 合规自检](LICENSE_COMPLIANCE.md)（AGPL-3.0 第 13 条）。
+
 ## 3. 部署步骤
 
 ### 3.1 安装依赖

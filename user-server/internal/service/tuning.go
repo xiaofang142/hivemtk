@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/pagination"
 	"hivemtk-user/internal/repository"
 )
 
@@ -27,15 +28,15 @@ type TuningService interface {
 
 	ListChampionBaselines(ctx context.Context) ([]model.ChampionBaseline, error)
 
-	ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int) ([]model.FeedbackEvent, int64, error)
+	ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int, cursor pagination.Cursor) ([]model.FeedbackEvent, int64, error)
 	StatsFeedbackEvents(ctx context.Context, since time.Time) (map[string]int64, error)
 
-	ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int) ([]model.ChampionDialogue, int64, error)
+	ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int, cursor pagination.Cursor) ([]model.ChampionDialogue, int64, error)
 
-	ListPromptCandidates(ctx context.Context, status string, page, pageSize int) ([]model.PromptCandidate, int64, error)
+	ListPromptCandidates(ctx context.Context, status string, page, pageSize int, cursor pagination.Cursor) ([]model.PromptCandidate, int64, error)
 	UpdatePromptCandidateStatus(ctx context.Context, id, status string) error
 
-	ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int) ([]model.BanditArm, int64, error)
+	ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int, cursor pagination.Cursor) ([]model.BanditArm, int64, error)
 
 	ListLowQualitySamples(ctx context.Context, sampleType string, page, pageSize int) ([]model.LowQualitySample, int64, error)
 }
@@ -126,8 +127,8 @@ func (s *tuningService) ListChampionBaselines(ctx context.Context) ([]model.Cham
 	return s.baselineRepo.ListEnabledModels(ctx)
 }
 
-func (s *tuningService) ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int) ([]model.FeedbackEvent, int64, error) {
-	return s.feedbackRepo.ListFeedbackEvents(ctx, sessionID, signalKey, page, pageSize)
+func (s *tuningService) ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int, cursor pagination.Cursor) ([]model.FeedbackEvent, int64, error) {
+	return s.feedbackRepo.ListFeedbackEvents(ctx, sessionID, signalKey, page, pageSize, cursor)
 }
 
 func (s *tuningService) StatsFeedbackEvents(ctx context.Context, since time.Time) (map[string]int64, error) {
@@ -142,20 +143,20 @@ func (s *tuningService) StatsFeedbackEvents(ctx context.Context, since time.Time
 	return out, nil
 }
 
-func (s *tuningService) ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int) ([]model.ChampionDialogue, int64, error) {
-	return s.feedbackRepo.ListChampionDialogues(ctx, intent, industry, page, pageSize)
+func (s *tuningService) ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int, cursor pagination.Cursor) ([]model.ChampionDialogue, int64, error) {
+	return s.feedbackRepo.ListChampionDialogues(ctx, intent, industry, page, pageSize, cursor)
 }
 
-func (s *tuningService) ListPromptCandidates(ctx context.Context, status string, page, pageSize int) ([]model.PromptCandidate, int64, error) {
-	return s.feedbackRepo.ListPromptCandidates(ctx, status, page, pageSize)
+func (s *tuningService) ListPromptCandidates(ctx context.Context, status string, page, pageSize int, cursor pagination.Cursor) ([]model.PromptCandidate, int64, error) {
+	return s.feedbackRepo.ListPromptCandidates(ctx, status, page, pageSize, cursor)
 }
 
 func (s *tuningService) UpdatePromptCandidateStatus(ctx context.Context, id, status string) error {
 	return s.feedbackRepo.UpdatePromptCandidateStatus(ctx, id, status)
 }
 
-func (s *tuningService) ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int) ([]model.BanditArm, int64, error) {
-	return s.feedbackRepo.ListBanditArms(ctx, experimentID, sopID, page, pageSize)
+func (s *tuningService) ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int, cursor pagination.Cursor) ([]model.BanditArm, int64, error) {
+	return s.feedbackRepo.ListBanditArms(ctx, experimentID, sopID, page, pageSize, cursor)
 }
 
 func (s *tuningService) ListLowQualitySamples(ctx context.Context, sampleType string, page, pageSize int) ([]model.LowQualitySample, int64, error) {

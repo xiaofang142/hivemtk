@@ -7,10 +7,8 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 
-	"gorm.io/gorm"
 )
 
 // 宏动作类型
@@ -37,16 +35,16 @@ type MacroService struct {
 }
 
 // NewMacroService 构造
-func NewMacroService(gdb *gorm.DB) *MacroService {
+func NewMacroService() *MacroService {
 	return &MacroService{
-		macroRepo: repository.NewMacroRepository(gdb),
-		sessOp:    repository.NewSessionActionRepository(gdb),
-		csPlus:    NewCustomerServicePlusServiceFromGlobal(),
+		macroRepo: repository.NewMacroRepository(),
+		sessOp:    repository.NewSessionActionRepository(),
+		csPlus:    NewCustomerServicePlusService(),
 	}
 }
 
-// NewMacroServiceFromGlobal 便捷构造
-func NewMacroServiceFromGlobal() *MacroService { return NewMacroService(db.GetDB()) }
+// NewMacroServiceFromGlobal 历史别名（装配语义已并入无参构造）
+func NewMacroServiceFromGlobal() *MacroService { return NewMacroService() }
 
 // Create 创建宏
 func (s *MacroService) Create(ctx context.Context, name string, actions []MacroAction) (*model.Macro, error) {

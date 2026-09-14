@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,7 +20,7 @@ import (
 //   - 测试模式短路逻辑沿用全局 IsTestMode（不重复声明）
 func RequireAdminMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if IsTestMode && testing.Testing() {
+		if IsTestMode && testModeGate() {
 			c.Next()
 			return
 		}

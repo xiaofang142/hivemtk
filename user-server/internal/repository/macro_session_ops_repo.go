@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -21,7 +22,13 @@ type SessionActionRepository struct {
 }
 
 // NewSessionActionRepository 构造
-func NewSessionActionRepository(db *gorm.DB) *SessionActionRepository {
+// NewSessionActionRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewSessionActionRepository() *SessionActionRepository {
+	return NewSessionActionRepositoryWithDB(_db.GetDB())
+}
+
+// NewSessionActionRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewSessionActionRepositoryWithDB(db *gorm.DB) *SessionActionRepository {
 	return &SessionActionRepository{db: db}
 }
 

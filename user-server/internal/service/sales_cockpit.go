@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 )
 
@@ -15,7 +14,7 @@ type SalesCockpitService struct {
 
 // NewSalesCockpitService 构造
 func NewSalesCockpitService() *SalesCockpitService {
-	return &SalesCockpitService{repo: repository.NewSalesCockpitRepository(db.GetDB())}
+	return &SalesCockpitService{repo: repository.NewSalesCockpitRepository()}
 }
 
 // GetCockpit 全景聚合（单次请求 5 条聚合 SQL，均带 LIMIT/索引时间过滤）
@@ -50,10 +49,11 @@ func (s *SalesCockpitService) GetCockpit(ctx context.Context) (map[string]any, e
 		 ORDER BY cnt DESC
 		 LIMIT 30`)
 
+	// OPT-DB-10：intent_logs 已并入 intent_records（source='fine_grained'）
 	intentDist := s.groupQuery(ctx,
 		`SELECT intent_type AS intent, COUNT(*) AS cnt
-		 FROM intent_logs
-		 WHERE created_at >= ?
+		 FROM intent_records
+		 WHERE created_at >= ? AND source = 'fine_grained'
 		 GROUP BY intent_type
 		 ORDER BY cnt DESC
 		 LIMIT 12`, weekAgo)

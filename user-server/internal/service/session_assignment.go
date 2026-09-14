@@ -234,15 +234,14 @@ func (s *SessionAssignmentService) generateLLMResponse(ctx context.Context, cont
 
 回复：`, content)
 
-	config := &llm.LLMConfig{
-		Model:          "gpt-3.5-turbo",
-		APIType:        "openai",
-		Temperature:    0.7,
-		MaxTokens:      500,
-		ResponseFormat: "text",
-	}
+	// 模型/BaseURL/APIKey 继承全局推理配置（config.yaml inference.llm > LLM_* > 本地默认），
+	// 此处只覆写本场景需要的回复风格参数，禁止硬编码具体厂商模型。
+	cfg := s.llmService.GetDefaultConfig()
+	cfg.Temperature = 0.7
+	cfg.MaxTokens = 500
+	cfg.ResponseFormat = "text"
 
-	output, err := s.llmService.Generate(ctx, config, prompt)
+	output, err := s.llmService.Generate(ctx, cfg, prompt)
 	if err != nil {
 		return "", 0.5, err
 	}

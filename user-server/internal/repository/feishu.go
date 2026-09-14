@@ -174,6 +174,9 @@ func (r *TelegramAccountRepository) Create(ctx context.Context, acc *model.Teleg
 
 func (r *TelegramAccountRepository) GetByID(ctx context.Context, id uint) (*model.TelegramAccount, error) {
 	var acc model.TelegramAccount
+	if r.db == nil { // DB 未装配：nil 语义在 repo 边界收口（对齐 kb_document_chunk_repo），service 不摸全局句柄
+		return nil, gorm.ErrInvalidDB
+	}
 	if err := r.db.First(&acc, id).Error; err != nil {
 		return nil, err
 	}
@@ -380,6 +383,9 @@ func (r *QQAccountRepository) Create(ctx context.Context, acc *model.QQAccount) 
 // GetByID 按 ID 查询
 func (r *QQAccountRepository) GetByID(ctx context.Context, id uint) (*model.QQAccount, error) {
 	var acc model.QQAccount
+	if r.db == nil { // DB 未装配：nil 语义收口在 repo 边界（对齐 kb_document_chunk_repo），service 不摸全局句柄
+		return nil, gorm.ErrInvalidDB
+	}
 	if err := r.db.WithContext(ctx).First(&acc, id).Error; err != nil {
 		return nil, err
 	}

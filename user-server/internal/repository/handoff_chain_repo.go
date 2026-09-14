@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"errors"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -21,7 +22,13 @@ type HandoffChainRepository struct {
 }
 
 // NewHandoffChainRepository 构造
-func NewHandoffChainRepository(db *gorm.DB) *HandoffChainRepository {
+// NewHandoffChainRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewHandoffChainRepository() *HandoffChainRepository {
+	return NewHandoffChainRepositoryWithDB(_db.GetDB())
+}
+
+// NewHandoffChainRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewHandoffChainRepositoryWithDB(db *gorm.DB) *HandoffChainRepository {
 	return &HandoffChainRepository{db: db}
 }
 

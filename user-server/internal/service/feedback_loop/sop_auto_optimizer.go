@@ -166,9 +166,17 @@ func (o *SOPAutoOptimizer) applyPromptRewrite(ctx context.Context, sug *model.Op
 }
 
 func (o *SOPAutoOptimizer) rewriteNodePrompt(ctx context.Context, sug *model.OptimizationSuggestion) (string, error) {
+	graph, err := o.getRepo().GetSOPGraph(ctx, sug.SOPID)
+	if err != nil {
+		return "", fmt.Errorf("fetch sop graph: %w", err)
+	}
+	currentPrompt, ok := ExtractNodePrompt(graph, sug.NodeID)
+	if !ok {
+		return "", fmt.Errorf("sop %d 图中未找到节点 %q 的可用 prompt，拒绝以建议文本顶替重写基线", sug.SOPID, sug.NodeID)
+	}
 	systemPrompt := `你是销售 SOP 优化专家。给定一个 LLM 节点的当前 prompt 和优化建议，输出改进后的完整 prompt。
 要求：保留原有业务意图与合规边界；按建议落实改进；输出仅含新 prompt 正文，不要解释。`
-	userPrompt := fmt.Sprintf("当前 prompt：\n%s\n\n优化建议：\n%s\n\n输出改进后的 prompt：", sug.SuggestionText, sug.SuggestionText)
+	userPrompt := fmt.Sprintf("当前 prompt：\n%s\n\n优化建议：\n%s\n\n输出改进后的 prompt：", currentPrompt, sug.SuggestionText)
 	res, err := o.gateLLM.Dispatch(ctx, llm.DispatchRequest{
 		Scenario:     llm.ScenarioHighQuality,
 		SystemPrompt: systemPrompt,

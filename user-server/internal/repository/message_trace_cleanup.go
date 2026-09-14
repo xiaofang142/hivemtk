@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -16,7 +17,13 @@ type MessageTraceCleanupRepo struct {
 }
 
 // NewMessageTraceCleanupRepo 构造
-func NewMessageTraceCleanupRepo(db *gorm.DB) *MessageTraceCleanupRepo {
+// NewMessageTraceCleanupRepo 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewMessageTraceCleanupRepo() *MessageTraceCleanupRepo {
+	return NewMessageTraceCleanupRepoWithDB(_db.GetDB())
+}
+
+// NewMessageTraceCleanupRepoWithDB 显式注入 DB（测试/装配用）
+func NewMessageTraceCleanupRepoWithDB(db *gorm.DB) *MessageTraceCleanupRepo {
 	return &MessageTraceCleanupRepo{db: db}
 }
 

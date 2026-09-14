@@ -1,0 +1,74 @@
+# ============================================================================
+# HiveMtk user-server FRP 客户端配置（v3 审计 P1-A1）
+# ----------------------------------------------------------------------------
+# FRP 私域穿透：把本地 user-server(:8204) 暴露到公网 frps
+#
+# ==== HiveMtk 生产实际架构 ====
+#
+#   用户浏览器 ──HTTPS──> nginx, 同机 frps)
+#                            │
+#   ┌────────────────────────┼─────────────────────────────────┐
+#   │ 路径                    │ Host 改写                       │
+#   ├─────────────────────────┼─────────────────────────────────┤
+#   │ /api/*                  │ → hiveuserapi.xapptool.cn       │
+#   │ /chat/embed/*           │ → hiveuser.xapptool.cn          │
+#   │ /* (静态资源)            │ 不走 frp, nginx 直接读 dist/    │
+#   └─────────────────────────┴─────────────────────────────────┘
+#                            │
+#                            ▼
+#                  frps vhostHTTPPort=8280 (同机 127.0.0.1)
+#                            │
+#                     frp 隧道 (长连接)
+#                            │
+#                            ▼
+#                        frpc (本文件)
+#                            │
+#                            ▼
+#                   本地 user-server :8204
+#
+# ==== 铁律 ====
+# 1. nginx 必须在 location 里显式 proxy_set_header Host <customDomain>
+#    — frps 按 Host 匹配 customDomains, 透传 $host 会匹配不到
+# 2. type=http 已天然支持 WebSocket Upgrade — 不需要单独配 type=tcp
+# 3. frps 监听 vhostHTTPPort (本项目=8280), 不是 bindPort(7000)
+# 4. 同机部署时 nginx proxy_pass 用 127.0.0.1:8280 (内网回环最快)
+# ============================================================================
+
+# frps 地址和控制端口
+serverAddr = "frps-server.example.com"   # frps 所在云服务器公网 IP
+serverPort = 7000                         # frps bindPort (控制连接)
+
+# 与 frps 一致的 token
+auth.token = "CHANGE_ME_RANDOM_64_CHARS"
+
+# 传输层 TLS（建议开启, 隧道全程加密）
+transport.tls.enable = true
+
+# ========== user-server 穿透 ==========
+# 前端域名的 /api/* 路径  +  独立 API 域名  都打到本地 Go :8204
+#
+# 生产对应:
+#   hiveuserapi.xapptool.cn          ← 整站 frp (独立 server block)
+#   hiveuser.xapptool.cn/api/*       ← nginx location Host 改写到此域名
+[[proxies]]
+name = "mtk-user-chat"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 8204
+customDomains = ["hiveuserapi.xapptool.cn"]
+transport.useCompression = true
+transport.heartbeatInterval = 30
+transport.heartbeatTimeout = 90
+
+# ========== (可选) /chat/embed 穿透 ==========
+# 只有当 /chat/embed 路由需要本地热更新时才加这段
+# 否则让 nginx 直接读 dist/ 静态包即可, 不需要 frp
+[[proxies]]
+name = "mtk-user-web-embed"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 8204
+customDomains = ["hiveuser.xapptool.cn"]
+transport.useCompression = true
+transport.heartbeatInterval = 30
+transport.heartbeatTimeout = 90

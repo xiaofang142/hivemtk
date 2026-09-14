@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"strings"
@@ -10,9 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// IsTestMode 由装配层/测试显式开启，生产路径永不置为 true
 var IsTestMode bool
 
-var testModeGate = func() bool { return false }
+// testModeGate 判定当前进程是否为 go test 生成的测试二进制。
+// 以 flag 探测替代 import "testing"：生产二进制恒为 false，
+// 同时保留跨包测试二进制中命中 gate 的原有语义（testing.Testing()）。
+var testModeGate = func() bool {
+	return flag.Lookup("test.v") != nil
+}
 
 // JWTAuthMiddleware JWT认证中间件
 func JWTAuthMiddleware() gin.HandlerFunc {

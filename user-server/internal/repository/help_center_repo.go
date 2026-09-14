@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"strings"
 	"time"
 
@@ -42,7 +43,13 @@ type HelpCenterRepository struct {
 }
 
 // NewHelpCenterRepository 构造
-func NewHelpCenterRepository(db *gorm.DB) *HelpCenterRepository {
+// NewHelpCenterRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewHelpCenterRepository() *HelpCenterRepository {
+	return NewHelpCenterRepositoryWithDB(_db.GetDB())
+}
+
+// NewHelpCenterRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewHelpCenterRepositoryWithDB(db *gorm.DB) *HelpCenterRepository {
 	return &HelpCenterRepository{db: db}
 }
 

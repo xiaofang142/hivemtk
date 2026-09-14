@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 
 	"hivemtk-user/internal/model"
 
@@ -15,7 +16,13 @@ type MacroRepository struct {
 }
 
 // NewMacroRepository 构造
-func NewMacroRepository(db *gorm.DB) *MacroRepository {
+// NewMacroRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewMacroRepository() *MacroRepository {
+	return NewMacroRepositoryWithDB(_db.GetDB())
+}
+
+// NewMacroRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewMacroRepositoryWithDB(db *gorm.DB) *MacroRepository {
 	return &MacroRepository{db: db}
 }
 

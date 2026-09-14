@@ -63,6 +63,6 @@
 - [x] 无 token 请求 → 401/503（默认 fail-closed）
 - [x] 错误 token → 401，常量时间比较
 - [x] 正确 token → 放行（ingest/outbox/ack/SSE 四端点）
-- [ ] 管理端生成/重置 UI（user-web 待开发）
-- [ ] SSE query-token 透传与日志脱敏（待实现）
-- [ ] 双值灰度窗口（待实现）
+- [x] 管理端生成/重置 UI（`user-web/src/views/bridge/TokenManagement.vue`，路由 `/bridge/token`，接 `/api/bridge/token/status|reset`）
+- [x] SSE query-token 透传与日志脱敏（`bridge_ingress_guard.go` 支持 `?bridge_token=` 并在校验通过后从 RawQuery 剥离；`bridge_helpers.go` `maskTokenBridge` 脱敏记录，单测对齐扩展端格式）
+- [x] 双值灰度窗口（guard 同时接受 `BRIDGE_INGEST_TOKEN` + `BRIDGE_INGEST_TOKEN_PREV`；`BridgeTokenService.Reset` 轮换时旧值自动转入 PREV）

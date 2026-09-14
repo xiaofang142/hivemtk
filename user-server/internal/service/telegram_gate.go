@@ -39,15 +39,16 @@ import (
 //
 // 超时未验证：方案 A declineChatJoinRequest；方案 B banChatMember 踢出。
 // TTL 清扫由 StartGateSweeper 后台协程周期执行。
+// TelegramGateService L4 门面：只持 repository，不持有 *gorm.DB（五层架构 §三.4，
+// 对齐 telegram_polling_lock.go 先例）。nil 守卫统一判 gateRepo（构造期与 db 同生共死）。
 type TelegramGateService struct {
-	db         *gorm.DB
 	gateRepo   *repository.TelegramGroupGateRepository
 	memberRepo *repository.TelegramGroupMemberRepository
 	tgRepo     *repository.TelegramAccountRepository
 }
 
 func NewTelegramGateService(db *gorm.DB) *TelegramGateService {
-	svc := &TelegramGateService{db: db}
+	svc := &TelegramGateService{}
 	if db != nil {
 		svc.gateRepo = repository.NewTelegramGroupGateRepositoryWithDB(db)
 		svc.memberRepo = repository.NewTelegramGroupMemberRepositoryWithDB(db)
@@ -56,6 +57,9 @@ func NewTelegramGateService(db *gorm.DB) *TelegramGateService {
 	}
 	return svc
 }
+
+// wired 依赖装配判定（gateRepo 与 db 同生共死，判它即判全部）
+func (s *TelegramGateService) wired() bool { return s != nil && s.gateRepo != nil }
 
 // gate mode 常量
 const (
@@ -105,7 +109,7 @@ func botDeepLink(botUsername, token string) string {
 
 // HandleJoinRequest 方案 A 入口：处理 chat_join_request
 func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID uint, req *telegram.TGChatJoinRequest) {
-	if s == nil || s.db == nil || req == nil || req.Chat == nil || req.From == nil {
+	if !s.wired() || req == nil || req.Chat == nil || req.From == nil {
 		return
 	}
 	chatIDStr := strconv.FormatInt(req.Chat.ID, 10)
@@ -163,7 +167,7 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 // HandleNewMembers 方案 B 入口：new_chat_members → 禁言 + 提示。
 // 返回是否命中了门控（true=本群是启用的 mute_unlock 管控群，调用方应跳过 AI 欢迎语）。
 func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID uint, chatID int64, members []telegram.TGUser) bool {
-	if s == nil || s.db == nil || len(members) == 0 {
+	if !s.wired() || len(members) == 0 {
 		return false
 	}
 	chatIDStr := strconv.FormatInt(chatID, 10)
@@ -265,7 +269,7 @@ func parseStartCommand(text string) (string, bool) {
 // HandleStartCommand /start 激活入口：私聊收到 "/start <token>" 或纯 "/start"。
 // 返回是否命中了网关验证流程（命中后不再走销售智能体）。
 func (s *TelegramGateService) HandleStartCommand(ctx context.Context, accountID uint, from *telegram.TGUser, text string, privateChatID int64) bool {
-	if s == nil || s.db == nil || from == nil {
+	if !s.wired() || from == nil {
 		return false
 	}
 	token, isStart := parseStartCommand(text)
@@ -392,7 +396,7 @@ func tgUserDisplayName(u *telegram.TGUser) string {
 // 历史成员/绕过入群事件的人，同样拦截（gateWhitelisted 为 false）；
 // 群无门控或成员已验证 → 放行。
 func (s *TelegramGateService) MemberUnverified(ctx context.Context, accountID uint, chatID, userID string) bool {
-	if s == nil || s.db == nil {
+	if !s.wired() {
 		return false
 	}
 	m, err := s.memberRepo.Get(ctx, accountID, chatID, userID)
@@ -492,7 +496,7 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 // 临近过期的重发验证提示（刷新 expires_at 给用户重新计时）。
 // 每次最多处理 limit 条，避免清扫周期被拖垮。
 func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
-	if s == nil || s.memberRepo == nil {
+	if !s.wired() {
 		return
 	}
 	// 禁言中的成员且 2 分钟内将到期：大概率是“提示发送失败”被 compensateWelcome
@@ -549,7 +553,7 @@ func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 
 // SweepExpired TTL 清扫：超时未验证 → 方案 A 拒绝申请 / 方案 B 踢出并落台账 kicked
 func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int, error) {
-	if s == nil || s.db == nil {
+	if !s.wired() {
 		return 0, nil
 	}
 	s.RecoverStalled(ctx, 50) // 补偿：入群时禁言/提示失败的成员

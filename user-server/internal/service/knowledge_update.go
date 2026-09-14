@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -26,12 +25,12 @@ type KnowledgeUpdateService struct {
 
 // NewKnowledgeUpdateService 创建增量更新服务
 func NewKnowledgeUpdateService() *KnowledgeUpdateService {
-	return &KnowledgeUpdateService{repo: repository.NewKBDocumentChunkRepository(db.GetDB())}
+	return &KnowledgeUpdateService{repo: repository.NewKBDocumentChunkRepository()}
 }
 
 // NewKnowledgeUpdateServiceWithDB 注入 DB（测试用）
 func (s *KnowledgeUpdateService) WithDB(d *gorm.DB) *KnowledgeUpdateService {
-	s.repo = repository.NewKBDocumentChunkRepository(d)
+	s.repo = repository.NewKBDocumentChunkRepositoryWithDB(d)
 	return s
 }
 

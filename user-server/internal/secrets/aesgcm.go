@@ -1,8 +1,9 @@
 // Package secrets 提供基于 AES-256-GCM 的对称加密原语，落地 TL-1 决策：
 //
-//	启动时若未配置 MASTER_KEY（>=32 字节），InitFromEnv 返回 error 但进程继续运行——
-//	Ready() 返回 false，Encrypt/Decrypt 会返回 ErrMasterKeyMissing。
-//	调用方需自行判断 Ready()，缺密钥时降级为明文读写（WARN 日志）。
+//	启动时若未配置 MASTER_KEY（>=32 字节），InitFromEnv 返回 error；
+//	cmd/api 装配层在生产环境（config.IsDevelopmentEnv()==false）据此 fail-fast 拒绝启动，
+//	仅开发环境允许降级。Ready() 返回 false 时 Encrypt/Decrypt 返回 ErrMasterKeyMissing，
+//	调用方需自行判断 Ready()，降级路径为明文读写（WARN 日志）。
 //
 // 设计要点：
 //   - 使用 AEAD (GCM) 而非裸 AES，提供完整性校验。

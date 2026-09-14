@@ -23,6 +23,10 @@
               @change="onToggleIntent"
             />
           </el-tooltip>
+          <el-button @click="openKeywordOverride" style="margin-right: 12px">
+            <el-icon><EditPen /></el-icon>
+            {{ $t('词表配置') }}
+          </el-button>
           <el-button @click="refreshAll" :loading="loading">
             <el-icon><Refresh /></el-icon>
             {{ $t('刷新') }}
@@ -409,6 +413,60 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 词表配置对话框 -->
+    <el-dialog v-model="keywordOverrideVisible" title="意图词表配置" width="720px">
+      <el-alert
+        title="覆盖语义为追加（不删除默认词表），保存即热生效"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      />
+      <div v-if="keywordOverrideLoading" style="text-align: center; padding: 40px">
+        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+        <p style="margin-top: 12px; color: #909399">加载中...</p>
+      </div>
+      <div v-else>
+        <div v-for="intent in keywordOverrideIntents" :key="intent.type" style="margin-bottom: 20px">
+          <div style="display: flex; align-items: center; margin-bottom: 8px">
+            <el-tag :type="getIntentTagType(intent.type)" size="small">
+              {{ intent.name }}
+            </el-tag>
+            <span style="margin-left: 8px; font-size: 12px; color: #909399">({{ intent.type }})</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px">
+            <el-tag
+              v-for="(kw, idx) in (keywordOverrideDraft[intent.type] || [])"
+              :key="idx"
+              closable
+              @close="removeKeyword(intent.type, idx)"
+              size="small"
+              effect="plain"
+            >
+              {{ kw }}
+            </el-tag>
+            <el-tag v-if="!keywordOverrideDraft[intent.type]?.length" type="info" size="small" effect="plain">
+              暂无覆盖词
+            </el-tag>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <el-input
+              v-model="keywordInput[intent.type]"
+              placeholder="输入关键词后回车添加"
+              size="small"
+              style="flex: 1"
+              @keyup.enter="addKeyword(intent.type)"
+            />
+            <el-button size="small" @click="addKeyword(intent.type)">添加</el-button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="keywordOverrideVisible = false">取消</el-button>
+        <el-button type="primary" :loading="keywordOverrideSaving" @click="saveKeywordOverride">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -417,7 +475,7 @@ import i18n from '@/i18n'
 
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Aim, MagicStick, Refresh } from '@element-plus/icons-vue'
+import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
 import { intentApi } from '@/api/intentRecognition.js'
 import { getChannelLabel } from '@/constants/channel'
 const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合' };
@@ -501,6 +559,72 @@ const onToggleIntent = async (val) => {
     configLoading.value = false
   }
 };
+
+// 词表配置对话框
+const keywordOverrideVisible = ref(false)
+const keywordOverrideLoading = ref(false)
+const keywordOverrideSaving = ref(false)
+const keywordOverrideDraft = ref({})
+const keywordInput = ref({})
+
+const keywordOverrideIntents = computed(() => {
+  return intentDict.value.map(d => ({
+    type: d.type,
+    name: d.name
+  }))
+})
+
+const openKeywordOverride = async () => {
+  keywordOverrideVisible.value = true
+  keywordOverrideLoading.value = true
+  keywordOverrideDraft.value = {}
+  keywordInput.value = {}
+  
+  try {
+    const res = await intentApi.getKeywordOverride()
+    if (res && typeof res === 'object') {
+      keywordOverrideDraft.value = JSON.parse(JSON.stringify(res))
+    }
+  } catch (e) {
+    ElMessage.error('加载词表配置失败：' + (e.message || '未知错误'))
+  } finally {
+    keywordOverrideLoading.value = false
+  }
+}
+
+const addKeyword = (type) => {
+  const input = keywordInput.value[type]
+  if (!input || !input.trim()) return
+  
+  if (!keywordOverrideDraft.value[type]) {
+    keywordOverrideDraft.value[type] = []
+  }
+  
+  const kw = input.trim()
+  if (!keywordOverrideDraft.value[type].includes(kw)) {
+    keywordOverrideDraft.value[type].push(kw)
+  }
+  keywordInput.value[type] = ''
+}
+
+const removeKeyword = (type, idx) => {
+  if (keywordOverrideDraft.value[type]) {
+    keywordOverrideDraft.value[type].splice(idx, 1)
+  }
+}
+
+const saveKeywordOverride = async () => {
+  keywordOverrideSaving.value = true
+  try {
+    await intentApi.updateKeywordOverride({ override: keywordOverrideDraft.value })
+    ElMessage.success('词表配置已保存并热生效')
+    keywordOverrideVisible.value = false
+  } catch (e) {
+    ElMessage.error('保存词表配置失败：' + (e.message || '未知错误'))
+  } finally {
+    keywordOverrideSaving.value = false
+  }
+}
 
 const intentNameMap = computed(() => {
   const map = {}

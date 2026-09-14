@@ -1,0 +1,96 @@
+# ============================================================================
+# HiveMtk user-server nginx 反代模板（v3 审计 P1-A1）
+# ----------------------------------------------------------------------------
+# 关键约束：
+#   1. HTTP/2 必须显式关闭（SSE 长连接与 h2 多路复用冲突 → 大屏数据延迟/丢失）
+#   2. SSE 路径 proxy_buffering off（nginx 默认开启缓冲会吞掉流式推送）
+#   3. WebSocket 路径透传 Upgrade/Connection 头
+#   4. 走 frps vhost 时，必须显式 proxy_set_header Host <customDomain>
+#      （frps 按 Host 匹配 customDomains，透传 $host 会匹配不到）
+# ============================================================================
+
+# ---- upstream：user-server（Go, :8204）----
+upstream hivemtk_user_server {
+    server 127.0.0.1:8204;
+    keepalive 32;
+}
+
+# ---- upstream：frps vhostHTTPPort（本项目 = 8280，同机内网回环）----
+upstream hivemtk_frps {
+    server 127.0.0.1:8280;
+    keepalive 16;
+}
+
+server {
+    listen 443 ssl;
+    # [关键] per-server 显式禁用 HTTP/2，保证 SSE/WS 走 HTTP/1.1 持久连接
+    http2 off;
+
+    server_name your-domain.com;
+
+    ssl_certificate     /etc/nginx/certs/your-domain.com.pem;
+    ssl_certificate_key /etc/nginx/certs/your-domain.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # ---- SSE：/api/sse/* 必须无缓冲 + 超长超时 ----
+    location /api/sse/ {
+        proxy_pass http://hivemtk_user_server;
+        proxy_http_version 1.1;
+
+        proxy_buffering off;          # [关键] 关闭响应缓冲，逐事件下发
+        proxy_cache off;
+        proxy_read_timeout 24h;       # 长连接不被 60s 默认值切断
+        proxy_send_timeout 24h;
+
+        add_header X-Accel-Buffering no;  # 双保险：禁用 FastCGI/代理层缓冲
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+
+    # ---- WebSocket：/api/ws/* 透传 Upgrade ----
+    location /api/ws/ {
+        proxy_pass http://hivemtk_user_server;
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 24h;
+        proxy_send_timeout 24h;
+    }
+
+    # ---- 业务 API：直连 user-server ----
+    location /api/ {
+        proxy_pass http://hivemtk_user_server;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+
+    # ---- （可选）FRP 穿透路径：Host 改写为 frpc customDomains ----
+    # 生产示例：/chat/embed/* → hiveuser.xapptool.cn，/api/* → hiveuserapi.xapptool.cn
+    # location /chat/embed/ {
+    #     proxy_pass http://hivemtk_frps;
+    #     proxy_http_version 1.1;
+    #     proxy_set_header Host hiveuser.xapptool.cn;   # [铁律] 显式改写，不能透传 $host
+    #     proxy_set_header X-Real-IP $remote_addr;
+    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # }
+
+    # ---- 静态资源：直接读 dist/，不走 frp ----
+    # location / {
+    #     root /var/www/hivemtk/dist;
+    #     try_files $uri $uri/ /index.html;
+    # }
+}

@@ -6,6 +6,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"gorm.io/gorm"
@@ -32,7 +33,13 @@ type KBDocumentChunkRepository struct {
 }
 
 // NewKBDocumentChunkRepository 构造
-func NewKBDocumentChunkRepository(db *gorm.DB) *KBDocumentChunkRepository {
+// NewKBDocumentChunkRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewKBDocumentChunkRepository() *KBDocumentChunkRepository {
+	return NewKBDocumentChunkRepositoryWithDB(_db.GetDB())
+}
+
+// NewKBDocumentChunkRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewKBDocumentChunkRepositoryWithDB(db *gorm.DB) *KBDocumentChunkRepository {
 	return &KBDocumentChunkRepository{db: db}
 }
 

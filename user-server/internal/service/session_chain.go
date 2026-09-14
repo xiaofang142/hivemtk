@@ -12,11 +12,9 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 
-	"gorm.io/gorm"
 )
 
 // SessionChainService 会话生命周期链服务
@@ -25,13 +23,13 @@ type SessionChainService struct {
 }
 
 // NewSessionChainService 构造
-func NewSessionChainService(gdb *gorm.DB) *SessionChainService {
-	return &SessionChainService{repo: repository.NewSessionChainRepository(gdb)}
+func NewSessionChainService() *SessionChainService {
+	return &SessionChainService{repo: repository.NewSessionChainRepository()}
 }
 
 // NewSessionChainServiceFromGlobal 便捷构造
 func NewSessionChainServiceFromGlobal() *SessionChainService {
-	return NewSessionChainService(db.GetDB())
+	return NewSessionChainService()
 }
 
 // TriggerCSATOnClose 会话关闭时自动下发 CSAT（csat_survey_listener 语义）。
@@ -190,16 +188,16 @@ type RuleEngineService struct {
 }
 
 // NewRuleEngineService 构造
-func NewRuleEngineService(gdb *gorm.DB) *RuleEngineService {
+func NewRuleEngineService() *RuleEngineService {
 	return &RuleEngineService{
-		repo:   repository.NewAutomationRuleRepository(gdb),
-		csPlus: NewCustomerServicePlusServiceFromGlobal(),
+		repo:   repository.NewAutomationRuleRepository(),
+		csPlus: NewCustomerServicePlusService(),
 		now:    time.Now,
 	}
 }
 
 // NewRuleEngineServiceFromGlobal 便捷构造
-func NewRuleEngineServiceFromGlobal() *RuleEngineService { return NewRuleEngineService(db.GetDB()) }
+func NewRuleEngineServiceFromGlobal() *RuleEngineService { return NewRuleEngineService() }
 
 // Create 创建规则
 func (s *RuleEngineService) Create(ctx context.Context, r *model.AutomationRule) (*model.AutomationRule, error) {

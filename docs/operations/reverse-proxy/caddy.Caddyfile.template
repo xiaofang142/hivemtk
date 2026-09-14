@@ -1,0 +1,24 @@
+# ============================================================================
+# HiveMtk user-server Caddy 反代模板（v3 审计 P1-A1）
+# ============================================================================
+
+your-domain.com {
+    # [关键] Caddy 默认 HTTP/2，需在 transport 配强制 HTTP/1.1
+    encode gzip zstd
+
+    reverse_proxy user-server:8204 {
+        # SSE 必须无缓冲
+        @sse path /api/sse/*
+        request_buffering off
+        flush_interval -1
+
+        # WebSocket
+        @ws path /api/ws/*
+        header_up Upgrade {http.request.header.Upgrade}
+        header_up Connection upgrade
+
+        transport http {
+            versions h1  # 强制 HTTP/1.1
+        }
+    }
+}

@@ -14,11 +14,9 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 
-	"gorm.io/gorm"
 )
 
 // EditLockTTL 会话编辑锁 TTL（协作碰撞检测）
@@ -32,8 +30,9 @@ type EditLock struct {
 }
 
 // CustomerServicePlusService 客服增强服务
+// R29（L4 收口）：struct 不再持有 *gorm.DB——174a4717 收敛时删了 SQL 却漏删字段，
+// 且 FromGlobal 把全局句柄当参数传回（审计 grep 命中根源）。仓储全走无参工厂自取。
 type CustomerServicePlusService struct {
-	db          *gorm.DB
 	sessionRepo *repository.CustomerSessionRepository
 	msgRepo     *repository.SessionMessageRepository
 	tagRepo     *repository.SessionTagRepository
@@ -49,24 +48,19 @@ type CustomerServicePlusService struct {
 	locks map[string]EditLock
 }
 
-// NewCustomerServicePlusService 构造（DI 在路由装配完成）
-func NewCustomerServicePlusService(
-	gdb *gorm.DB,
-	sessionRepo *repository.CustomerSessionRepository,
-	msgRepo *repository.SessionMessageRepository,
-	agentRepo *repository.AgentStatusRepository,
-) *CustomerServicePlusService {
+// NewCustomerServicePlusService 构造（无参仓储工厂——装配层不再传 DB 句柄，
+// 对齐 message_hub.go:132 NewMessageHubService 先例）
+func NewCustomerServicePlusService() *CustomerServicePlusService {
 	return &CustomerServicePlusService{
-		db:            gdb,
-		sessionRepo:   sessionRepo,
-		msgRepo:       msgRepo,
+		sessionRepo:   repository.NewCustomerSessionRepository(),
+		msgRepo:       repository.NewSessionMessageRepository(),
 		tagRepo:       repository.NewSessionTagRepository(),
 		folderRepo:    repository.NewQuickReplyFolderRepository(),
-		agentRepo:     agentRepo,
-		opsRepo:       repository.NewCSPlusOpsRepository(gdb),
-		savedViewRepo: repository.NewSavedViewRepository(gdb),
-		reportSubRepo: repository.NewReportSubscriptionRepository(gdb),
-		emailSvc:      NewEmailService(gdb),
+		agentRepo:     repository.NewAgentStatusRepository(),
+		opsRepo:       repository.NewCSPlusOpsRepository(),
+		savedViewRepo: repository.NewSavedViewRepository(),
+		reportSubRepo: repository.NewReportSubscriptionRepository(),
+		emailSvc:      NewEmailServiceAuto(),
 		locks:         map[string]EditLock{},
 	}
 }
@@ -304,14 +298,9 @@ func csPlusContainsString(list []string, s string) bool {
 	return false
 }
 
-// NewCustomerServicePlusServiceFromGlobal 便捷构造：使用全局 DB 仓储（控制器装配用）
+// NewCustomerServicePlusServiceFromGlobal 历史别名（装配语义已并入无参构造）
 func NewCustomerServicePlusServiceFromGlobal() *CustomerServicePlusService {
-	return NewCustomerServicePlusService(
-		db.GetDB(),
-		repository.NewCustomerSessionRepository(),
-		repository.NewSessionMessageRepository(),
-		repository.NewAgentStatusRepository(),
-	)
+	return NewCustomerServicePlusService()
 }
 
 func (s *CustomerServicePlusService) DeleteFolder(ctx context.Context, folderID uint) error {
@@ -485,7 +474,7 @@ var officeHoursSvc *OfficeHoursService
 
 // GetOfficeHoursService 获取实例
 func GetOfficeHoursService() *OfficeHoursService {
-	officeHoursOnce.Do(func() { officeHoursSvc = NewOfficeHoursService(repository.NewOfficeHoursRepo(db.GetDB())) })
+	officeHoursOnce.Do(func() { officeHoursSvc = NewOfficeHoursService(repository.NewOfficeHoursRepo()) })
 	return officeHoursSvc
 }
 

@@ -455,6 +455,7 @@ func (s *IntentRecognizer) saveIntentLog(ctx context.Context, customerID, sessio
 		LatencyMs:   result.LatencyMs,
 		Reasoning:   result.Reasoning,
 		Timestamp:   time.Now(),
+		Source:      model.IntentLogSource,
 	}
 	go func() {
 		defer func() {

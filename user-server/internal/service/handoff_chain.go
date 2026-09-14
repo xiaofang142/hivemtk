@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -33,12 +32,12 @@ type HandoffChainService struct {
 
 // NewHandoffChainService 创建转派链服务
 func NewHandoffChainService() *HandoffChainService {
-	return &HandoffChainService{repo: repository.NewHandoffChainRepository(db.GetDB())}
+	return &HandoffChainService{repo: repository.NewHandoffChainRepository()}
 }
 
 // NewHandoffChainServiceWithDB 注入 DB（测试用）
 func (s *HandoffChainService) WithDB(d *gorm.DB) *HandoffChainService {
-	s.repo = repository.NewHandoffChainRepository(d)
+	s.repo = repository.NewHandoffChainRepositoryWithDB(d)
 	return s
 }
 

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -152,7 +151,7 @@ func (t *MessageTraceCleanupTask) Stop(ctx context.Context) {
 var traceCleanupCron *MessageTraceCleanupTask
 
 func init() {
-	repo := repository.NewMessageTraceCleanupRepo(db.GetDB())
+	repo := repository.NewMessageTraceCleanupRepo()
 	traceCleanupCron = NewMessageTraceCleanupTask(repo)
 	traceCleanupCron.Start(context.Background())
 }

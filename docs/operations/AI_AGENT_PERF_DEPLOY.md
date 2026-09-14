@@ -594,6 +594,8 @@ psql -c "SELECT to_layer, count(*) FROM layer_decision_logs WHERE created_at > N
 
 ## 八、升级检查清单 (Pre-deploy)
 
+> 说明：以下为**每次升级部署前逐项执行的运维检查单**，非待完成的开发任务，故常态保持未勾选。
+
 - [ ] PG 备份完成
 - [ ] 5 层架构 check 通过
 - [ ] 单元测试覆盖率 > 80%

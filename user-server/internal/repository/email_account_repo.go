@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -32,7 +33,13 @@ type EmailAccountRepository struct {
 }
 
 // NewEmailAccountRepository 构造
-func NewEmailAccountRepository(db *gorm.DB) *EmailAccountRepository {
+// NewEmailAccountRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewEmailAccountRepository() *EmailAccountRepository {
+	return NewEmailAccountRepositoryWithDB(_db.GetDB())
+}
+
+// NewEmailAccountRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewEmailAccountRepositoryWithDB(db *gorm.DB) *EmailAccountRepository {
 	return &EmailAccountRepository{db: db}
 }
 

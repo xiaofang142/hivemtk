@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 
@@ -48,13 +47,13 @@ type WebhookSubService struct {
 	repo *repository.WebhookSubscriptionRepository
 }
 
-// NewWebhookSubService 构造
-func NewWebhookSubService(gdb *gorm.DB) *WebhookSubService {
-	return &WebhookSubService{repo: repository.NewWebhookSubscriptionRepository(gdb)}
+// NewWebhookSubService 构造（无参仓储工厂）
+func NewWebhookSubService() *WebhookSubService {
+	return &WebhookSubService{repo: repository.NewWebhookSubscriptionRepository()}
 }
 
-// NewWebhookSubServiceFromGlobal 便捷构造
-func NewWebhookSubServiceFromGlobal() *WebhookSubService { return NewWebhookSubService(db.GetDB()) }
+// NewWebhookSubServiceFromGlobal 历史别名（装配语义已并入无参构造）
+func NewWebhookSubServiceFromGlobal() *WebhookSubService { return NewWebhookSubService() }
 
 // Create 创建订阅（URL 必须 http(s)，secret 自动生成）
 func (s *WebhookSubService) Create(ctx context.Context, url, events string) (*model.WebhookSubscription, error) {

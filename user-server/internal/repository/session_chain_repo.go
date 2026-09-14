@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"errors"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -17,7 +18,13 @@ type SessionChainRepository struct {
 }
 
 // NewSessionChainRepository 构造
-func NewSessionChainRepository(db *gorm.DB) *SessionChainRepository {
+// NewSessionChainRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewSessionChainRepository() *SessionChainRepository {
+	return NewSessionChainRepositoryWithDB(_db.GetDB())
+}
+
+// NewSessionChainRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewSessionChainRepositoryWithDB(db *gorm.DB) *SessionChainRepository {
 	return &SessionChainRepository{db: db}
 }
 
@@ -89,7 +96,13 @@ type AutomationRuleRepository struct {
 }
 
 // NewAutomationRuleRepository 构造
-func NewAutomationRuleRepository(db *gorm.DB) *AutomationRuleRepository {
+// NewAutomationRuleRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewAutomationRuleRepository() *AutomationRuleRepository {
+	return NewAutomationRuleRepositoryWithDB(_db.GetDB())
+}
+
+// NewAutomationRuleRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewAutomationRuleRepositoryWithDB(db *gorm.DB) *AutomationRuleRepository {
 	return &AutomationRuleRepository{db: db}
 }
 

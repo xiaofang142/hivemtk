@@ -120,20 +120,24 @@ func (r *IntentLogRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	}
 }
 
-// Create 创建精细意图识别日志
+// Create 创建精细意图识别日志（写入 intent_records，强制 source='fine_grained'）
 func (r *IntentLogRepository) Create(ctx context.Context, log *model.IntentLog) error {
+	if log.Source == "" {
+		log.Source = model.IntentLogSource
+	}
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
 // List 查询精细意图识别日志
 // customerID/major 空字符串表示不筛选；limit 上限 1000
 func (r *IntentLogRepository) List(ctx context.Context, customerID, major string, limit int) ([]model.IntentLog, error) {
-	q := r.db.WithContext(ctx).Model(&model.IntentLog{})
+	q := r.db.WithContext(ctx).Model(&model.IntentLog{}).
+		Where("source = ?", model.IntentLogSource)
 	if customerID != "" {
 		q = q.Where("customer_id = ?", customerID)
 	}
 	if major != "" {
-		q = q.Where("intent_major = ?", major)
+		q = q.Where("intent_type = ?", major)
 	}
 	var logs []model.IntentLog
 	if err := q.Order("timestamp DESC").Limit(limit).Find(&logs).Error; err != nil {
@@ -145,7 +149,7 @@ func (r *IntentLogRepository) List(ctx context.Context, customerID, major string
 // ListByTraceID 按 trace_id 查询，按 timestamp 升序
 func (r *IntentLogRepository) ListByTraceID(ctx context.Context, traceID string) ([]model.IntentLog, error) {
 	var logs []model.IntentLog
-	if err := r.db.WithContext(ctx).Where("trace_id = ?", traceID).
+	if err := r.db.WithContext(ctx).Where("trace_id = ? AND source = ?", traceID, model.IntentLogSource).
 		Order("timestamp ASC").Find(&logs).Error; err != nil {
 		return nil, err
 	}
@@ -172,38 +176,38 @@ type IntentLogMethodStat struct {
 	Count  int64  `json:"count"`
 }
 
-// GetMajorStatsSince 按 major 聚合统计（timestamp > since）
+// GetMajorStatsSince 按 major 聚合统计（timestamp > since，仅 fine_grained 来源）
 func (r *IntentLogRepository) GetMajorStatsSince(ctx context.Context, since time.Time) ([]IntentLogMajorStat, error) {
 	var stats []IntentLogMajorStat
 	if err := r.db.WithContext(ctx).Model(&model.IntentLog{}).
-		Select("intent_major, COUNT(*) as count, AVG(confidence) as avg_conf").
-		Where("timestamp > ?", since).
-		Group("intent_major").
+		Select("intent_type as intent_major, COUNT(*) as count, AVG(confidence) as avg_conf").
+		Where("timestamp > ? AND source = ?", since, model.IntentLogSource).
+		Group("intent_type").
 		Scan(&stats).Error; err != nil {
 		return nil, err
 	}
 	return stats, nil
 }
 
-// GetMinorStatsSince 按 major+minor 聚合统计（timestamp > since）
+// GetMinorStatsSince 按 major+minor 聚合统计（timestamp > since，仅 fine_grained 来源）
 func (r *IntentLogRepository) GetMinorStatsSince(ctx context.Context, since time.Time) ([]IntentLogMinorStat, error) {
 	var stats []IntentLogMinorStat
 	if err := r.db.WithContext(ctx).Model(&model.IntentLog{}).
-		Select("intent_major, intent_minor, COUNT(*) as count").
-		Where("timestamp > ?", since).
-		Group("intent_major, intent_minor").
+		Select("intent_type as intent_major, intent_subtype as intent_minor, COUNT(*) as count").
+		Where("timestamp > ? AND source = ?", since, model.IntentLogSource).
+		Group("intent_type, intent_subtype").
 		Scan(&stats).Error; err != nil {
 		return nil, err
 	}
 	return stats, nil
 }
 
-// GetMethodStatsSince 按 method 聚合统计（timestamp > since）
+// GetMethodStatsSince 按 method 聚合统计（timestamp > since，仅 fine_grained 来源）
 func (r *IntentLogRepository) GetMethodStatsSince(ctx context.Context, since time.Time) ([]IntentLogMethodStat, error) {
 	var stats []IntentLogMethodStat
 	if err := r.db.WithContext(ctx).Model(&model.IntentLog{}).
 		Select("method, COUNT(*) as count").
-		Where("timestamp > ?", since).
+		Where("timestamp > ? AND source = ?", since, model.IntentLogSource).
 		Group("method").
 		Scan(&stats).Error; err != nil {
 		return nil, err

@@ -17,7 +17,13 @@ type WebhookSubscriptionRepository struct {
 }
 
 // NewWebhookSubscriptionRepository 构造
-func NewWebhookSubscriptionRepository(db *gorm.DB) *WebhookSubscriptionRepository {
+// NewWebhookSubscriptionRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewWebhookSubscriptionRepository() *WebhookSubscriptionRepository {
+	return NewWebhookSubscriptionRepositoryWithDB(_db.GetDB())
+}
+
+// NewWebhookSubscriptionRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewWebhookSubscriptionRepositoryWithDB(db *gorm.DB) *WebhookSubscriptionRepository {
 	return &WebhookSubscriptionRepository{db: db}
 }
 

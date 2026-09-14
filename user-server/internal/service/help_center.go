@@ -10,10 +10,8 @@ import (
 	"hivemtk-user/internal/model"
 	"time"
 
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 
-	"gorm.io/gorm"
 )
 
 // HelpCenterService 帮助中心服务
@@ -21,13 +19,13 @@ type HelpCenterService struct {
 	repo *repository.HelpCenterRepository
 }
 
-// NewHelpCenterService 构造
-func NewHelpCenterService(gdb *gorm.DB) *HelpCenterService {
-	return &HelpCenterService{repo: repository.NewHelpCenterRepository(gdb)}
+// NewHelpCenterService 构造（无参仓储工厂，对齐 message_hub 先例）
+func NewHelpCenterService() *HelpCenterService {
+	return &HelpCenterService{repo: repository.NewHelpCenterRepository()}
 }
 
-// NewHelpCenterServiceFromGlobal 便捷构造（使用全局 DB）
-func NewHelpCenterServiceFromGlobal() *HelpCenterService { return NewHelpCenterService(db.GetDB()) }
+// NewHelpCenterServiceFromGlobal 历史别名（装配语义已并入无参构造）
+func NewHelpCenterServiceFromGlobal() *HelpCenterService { return NewHelpCenterService() }
 
 // HCArticleRow 文章列表行
 type HCArticleRow struct {

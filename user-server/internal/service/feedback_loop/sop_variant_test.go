@@ -179,6 +179,25 @@ func TestMutateNodePrompt_ExactAndFallback(t *testing.T) {
 	}
 }
 
+func TestExtractNodePrompt(t *testing.T) {
+	if p, ok := ExtractNodePrompt(sampleGraph(), "n3"); !ok || p != "推荐产品" {
+		t.Fatalf("exact match failed: ok=%v prompt=%q", ok, p)
+	}
+	if p, ok := ExtractNodePrompt(sampleGraph(), "no_such"); !ok || p == "" {
+		t.Fatalf("fallback to first llm/message node failed: ok=%v prompt=%q", ok, p)
+	}
+	if _, ok := ExtractNodePrompt(nil, "n3"); ok {
+		t.Fatal("nil graph should return ok=false")
+	}
+	if _, ok := ExtractNodePrompt(model.JSONMap{"foo": 1}, "n3"); ok {
+		t.Fatal("graph without nodes should return ok=false")
+	}
+	empty := model.JSONMap{"nodes": []any{}}
+	if _, ok := ExtractNodePrompt(empty, "n3"); ok {
+		t.Fatal("empty nodes should return ok=false")
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }

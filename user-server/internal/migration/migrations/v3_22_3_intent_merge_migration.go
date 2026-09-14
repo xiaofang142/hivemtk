@@ -32,21 +32,8 @@ func (m *IntentMergeMigration) Up(ctx context.Context) error {
 		return fmt.Errorf("db is nil")
 	}
 
-	var intentLogsExists bool
-	err := m.db.WithContext(ctx).Raw(
-		`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'intent_logs')`,
-	).Scan(&intentLogsExists).Error
-	if err != nil {
-		return fmt.Errorf("检查 intent_logs 表失败: %w", err)
-	}
-
-	if !intentLogsExists {
-
-		return nil
-	}
-
 	var intentRecordsExists bool
-	err = m.db.WithContext(ctx).Raw(
+	err := m.db.WithContext(ctx).Raw(
 		`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'intent_records')`,
 	).Scan(&intentRecordsExists).Error
 	if err != nil {
@@ -57,6 +44,8 @@ func (m *IntentMergeMigration) Up(ctx context.Context) error {
 		return fmt.Errorf("intent_records 表不存在，无法合并")
 	}
 
+	// 统一列结构无条件幂等保证：新库（无 intent_logs）同样需要这些列，
+	// 否则精细意图（IntentLog→intent_records 映射视图）写入会缺列失败。
 	addColumns := map[string]string{
 		"method":    `ADD COLUMN IF NOT EXISTS method varchar(16) NOT NULL DEFAULT 'llm'`,
 		"reasoning": `ADD COLUMN IF NOT EXISTS reasoning text`,
@@ -75,6 +64,19 @@ func (m *IntentMergeMigration) Up(ctx context.Context) error {
 	_ = m.db.WithContext(ctx).Exec(`CREATE INDEX IF NOT EXISTS idx_intent_records_trace_id ON intent_records (trace_id)`)
 	_ = m.db.WithContext(ctx).Exec(`CREATE INDEX IF NOT EXISTS idx_intent_records_timestamp ON intent_records (timestamp)`)
 	_ = m.db.WithContext(ctx).Exec(`CREATE INDEX IF NOT EXISTS idx_intent_records_source ON intent_records (source)`)
+	_ = m.db.WithContext(ctx).Exec(`CREATE INDEX IF NOT EXISTS idx_intent_records_type_source ON intent_records (intent_type, source)`)
+
+	var intentLogsExists bool
+	err = m.db.WithContext(ctx).Raw(
+		`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'intent_logs')`,
+	).Scan(&intentLogsExists).Error
+	if err != nil {
+		return fmt.Errorf("检查 intent_logs 表失败: %w", err)
+	}
+
+	if !intentLogsExists {
+		return nil
+	}
 
 	var mergedCount int64
 	m.db.WithContext(ctx).Model(&struct{}{}).

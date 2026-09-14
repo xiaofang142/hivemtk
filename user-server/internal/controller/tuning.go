@@ -2,6 +2,7 @@ package controller
 
 import (
 	"hivemtk-user/internal/dto"
+	cursorpkg "hivemtk-user/internal/pkg/pagination"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -185,13 +186,14 @@ func (c *TuningController) ListFeedbackEvents(ctx *gin.Context) {
 	}
 	sessionID := ctx.Query("session_id")
 	signalKey := ctx.Query("signal_key")
+	cursor := cursorpkg.Cursor(ctx.Query("cursor"))
 
-	rows, total, err := c.svc.ListFeedbackEvents(ctx.Request.Context(), sessionID, signalKey, page, pageSize)
+	rows, total, err := c.svc.ListFeedbackEvents(ctx.Request.Context(), sessionID, signalKey, page, pageSize, cursor)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "list failed: "+err.Error())
 		return
 	}
-	c.jsonList(ctx, rows, total, page, pageSize)
+	c.jsonListWithCursor(ctx, rows, total, page, pageSize)
 }
 
 // StatsFeedbackEvents 反馈事件统计
@@ -219,13 +221,14 @@ func (c *TuningController) ListChampionDialogues(ctx *gin.Context) {
 	}
 	intent := ctx.Query("intent")
 	industry := ctx.Query("industry")
+	cursor := cursorpkg.Cursor(ctx.Query("cursor"))
 
-	rows, total, err := c.svc.ListChampionDialogues(ctx.Request.Context(), intent, industry, page, pageSize)
+	rows, total, err := c.svc.ListChampionDialogues(ctx.Request.Context(), intent, industry, page, pageSize, cursor)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "list failed: "+err.Error())
 		return
 	}
-	c.jsonList(ctx, rows, total, page, pageSize)
+	c.jsonListWithCursor(ctx, rows, total, page, pageSize)
 }
 
 // ListPromptCandidates 候选列表
@@ -236,13 +239,14 @@ func (c *TuningController) ListPromptCandidates(ctx *gin.Context) {
 		return
 	}
 	status := ctx.Query("status")
+	cursor := cursorpkg.Cursor(ctx.Query("cursor"))
 
-	rows, total, err := c.svc.ListPromptCandidates(ctx.Request.Context(), status, page, pageSize)
+	rows, total, err := c.svc.ListPromptCandidates(ctx.Request.Context(), status, page, pageSize, cursor)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "list failed: "+err.Error())
 		return
 	}
-	c.jsonList(ctx, rows, total, page, pageSize)
+	c.jsonListWithCursor(ctx, rows, total, page, pageSize)
 }
 
 // UpdatePromptCandidateStatus 更新候选状态
@@ -269,13 +273,14 @@ func (c *TuningController) ListBanditArms(ctx *gin.Context) {
 	}
 	experimentID := ctx.Query("experiment_id")
 	sopID := ctx.Query("sop_id")
+	cursor := cursorpkg.Cursor(ctx.Query("cursor"))
 
-	rows, total, err := c.svc.ListBanditArms(ctx.Request.Context(), experimentID, sopID, page, pageSize)
+	rows, total, err := c.svc.ListBanditArms(ctx.Request.Context(), experimentID, sopID, page, pageSize, cursor)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "list failed: "+err.Error())
 		return
 	}
-	c.jsonList(ctx, rows, total, page, pageSize)
+	c.jsonListWithCursor(ctx, rows, total, page, pageSize)
 }
 
 // ListLowQualitySamples 低质样本列表
@@ -301,5 +306,17 @@ func (c *TuningController) jsonList(ctx *gin.Context, list any, total int64, pag
 		"total": total,
 		"page":  page,
 		"size":  pageSize,
+	}, "")
+}
+
+// jsonListWithCursor 在列表响应中附带 next_cursor（keyset 分页翻页游标，空串表示无更多数据）
+func (c *TuningController) jsonListWithCursor(ctx *gin.Context, list any, total int64, page, pageSize int) {
+	next := cursorpkg.NextCursor(list, pageSize)
+	response.Success(ctx, gin.H{
+		"list":        list,
+		"total":       total,
+		"page":        page,
+		"size":        pageSize,
+		"next_cursor": string(next),
 	}, "")
 }

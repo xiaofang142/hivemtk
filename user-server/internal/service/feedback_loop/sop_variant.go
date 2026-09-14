@@ -299,6 +299,53 @@ func SOPGraphMutatorForNodePrompt(nodeID, newPrompt string) func(graph model.JSO
 	}
 }
 
+// ExtractNodePrompt 从 SOPGraph 中提取指定节点的当前 prompt
+//
+// 优先精确匹配 nodeID；找不到时回退首个 llm/message 节点。
+// 返回 ok=false 表示图中无可用 prompt（调用方应 fail-closed，不得用建议文本顶替）。
+func ExtractNodePrompt(graph model.JSONMap, nodeID string) (string, bool) {
+	if graph == nil {
+		return "", false
+	}
+	nodesKey := ""
+	for _, key := range []string{"nodes", "steps", "node_list"} {
+		if _, ok := graph[key]; ok {
+			nodesKey = key
+			break
+		}
+	}
+	if nodesKey == "" {
+		return "", false
+	}
+	raw, ok := graph[nodesKey].([]any)
+	if !ok || len(raw) == 0 {
+		return "", false
+	}
+	fallback := ""
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		t, _ := m["type"].(string)
+		if t != "llm" && t != "message" {
+			continue
+		}
+		prompt, _ := m["prompt"].(string)
+		if fallback == "" {
+			fallback = prompt
+		}
+		id, _ := m["id"].(string)
+		if nodeID != "" && id == nodeID {
+			return prompt, true
+		}
+	}
+	if fallback != "" {
+		return fallback, true
+	}
+	return "", false
+}
+
 func removeNextRef(nodes []any, targetID string) {
 	if targetID == "" {
 		return

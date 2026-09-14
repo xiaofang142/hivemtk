@@ -75,7 +75,7 @@ type CursorQueryOpts struct {
 	OrderBy string
 	// 过滤条件（可选的 WHERE 子句）
 	Where map[string]any
-	// 结果集
+	// 结果集指针（如 &[]Model{}，GORM Find 要求指针）
 	Dest any
 }
 
@@ -94,7 +94,7 @@ type CursorQueryResult struct {
 //  2. 取最后一条的 (ts, id) 作为 nextCursor
 //  3. 后续查询：WHERE (ts, id) < (cursor.ts, cursor.id) + LIMIT N+1
 //  4. 比 N 多取 1 条用于判断 hasMore
-func CursorQuery(ctx context.Context, db *gorm.DB, opts CursorQueryQuery) (*CursorQueryResult, error) {
+func CursorQuery(ctx context.Context, db *gorm.DB, opts CursorQueryOpts) (*CursorQueryResult, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 || pageSize > CursorPageSize {
 		pageSize = CursorPageSize
@@ -147,14 +147,14 @@ func CursorQuery(ctx context.Context, db *gorm.DB, opts CursorQueryQuery) (*Curs
 	}, nil
 }
 
-// CursorQueryQuery cursor-based 查询参数（兼容 gorm.DB）
-type CursorQueryQuery struct {
-	Table    string
-	Cursor   Cursor
-	PageSize int
-	OrderBy  string
-	Where    map[string]any
-	Dest     any
+// NextCursor 取分页结果最后一条的游标，供客户端翻页使用。
+// 当结果条数不足 pageSize（即已到末页）或结果为空时返回空游标。
+func NextCursor(rows any, pageSize int) Cursor {
+	n := sliceLen(rows)
+	if n == 0 || n < pageSize {
+		return ""
+	}
+	return extractCursorFromItem(sliceAt(rows, n-1))
 }
 
 func IsValidLimit(limit int) bool {

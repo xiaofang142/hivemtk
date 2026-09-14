@@ -9,6 +9,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/pagination"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -37,7 +38,8 @@ func NewFeedbackLoopRepository() *FeedbackLoopRepository {
 }
 
 // ListFeedbackEvents 反馈事件分页列表
-func (r *FeedbackLoopRepository) ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int) ([]model.FeedbackEvent, int64, error) {
+// 支持 cursor-based keyset 分页（向后兼容 offset 分页）
+func (r *FeedbackLoopRepository) ListFeedbackEvents(ctx context.Context, sessionID, signalKey string, page, pageSize int, cursor pagination.Cursor) ([]model.FeedbackEvent, int64, error) {
 	q := r.db.WithContext(ctx).Model(&model.FeedbackEvent{})
 	if sessionID != "" {
 		q = q.Where("session_id = ?", sessionID)
@@ -49,8 +51,21 @@ func (r *FeedbackLoopRepository) ListFeedbackEvents(ctx context.Context, session
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// keyset 分页优先；无 cursor 时保持 offset 分页向后兼容
+	useCursor := false
+	if cursor != "" {
+		ts, id, ok := pagination.DecodeCursor(cursor)
+		if ok {
+			q = q.Where("(created_at, id) < (?, ?)", ts, id)
+			useCursor = true
+		}
+	}
 	var rows []model.FeedbackEvent
-	if err := q.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+	q = q.Order("created_at DESC, id DESC")
+	if !useCursor {
+		q = q.Offset((page - 1) * pageSize)
+	}
+	if err := q.Limit(pageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	return rows, total, nil
@@ -78,10 +93,11 @@ func (r *FeedbackLoopRepository) StatsFeedbackEvents(ctx context.Context, since 
 }
 
 // ListChampionDialogues 销冠对话分页列表
+// 支持 cursor-based keyset 分页（向后兼容 offset 分页）
 //
 // 注意：ChampionDialogue 模型无 intent/industry 列，原 controller 的这两个过滤为潜在 bug，
 // 此处保留原始 Where 以不改变运行行为（仅在对应参数传入时触发）。
-func (r *FeedbackLoopRepository) ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int) ([]model.ChampionDialogue, int64, error) {
+func (r *FeedbackLoopRepository) ListChampionDialogues(ctx context.Context, intent, industry string, page, pageSize int, cursor pagination.Cursor) ([]model.ChampionDialogue, int64, error) {
 	q := r.db.WithContext(ctx).Model(&model.ChampionDialogue{})
 	if intent != "" {
 		q = q.Where("intent = ?", intent)
@@ -93,15 +109,29 @@ func (r *FeedbackLoopRepository) ListChampionDialogues(ctx context.Context, inte
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// keyset 分页优先；无 cursor 时保持 offset 分页向后兼容
+	useCursor := false
+	if cursor != "" {
+		ts, id, ok := pagination.DecodeCursor(cursor)
+		if ok {
+			q = q.Where("(created_at, id) < (?, ?)", ts, id)
+			useCursor = true
+		}
+	}
 	var rows []model.ChampionDialogue
-	if err := q.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+	q = q.Order("created_at DESC, id DESC")
+	if !useCursor {
+		q = q.Offset((page - 1) * pageSize)
+	}
+	if err := q.Limit(pageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	return rows, total, nil
 }
 
 // ListPromptCandidates Prompt 候选分页列表
-func (r *FeedbackLoopRepository) ListPromptCandidates(ctx context.Context, status string, page, pageSize int) ([]model.PromptCandidate, int64, error) {
+// 支持 cursor-based keyset 分页（向后兼容 offset 分页）
+func (r *FeedbackLoopRepository) ListPromptCandidates(ctx context.Context, status string, page, pageSize int, cursor pagination.Cursor) ([]model.PromptCandidate, int64, error) {
 	q := r.db.WithContext(ctx).Model(&model.PromptCandidate{})
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -110,8 +140,21 @@ func (r *FeedbackLoopRepository) ListPromptCandidates(ctx context.Context, statu
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// keyset 分页优先；无 cursor 时保持 offset 分页向后兼容
+	useCursor := false
+	if cursor != "" {
+		ts, id, ok := pagination.DecodeCursor(cursor)
+		if ok {
+			q = q.Where("(created_at, id) < (?, ?)", ts, id)
+			useCursor = true
+		}
+	}
 	var rows []model.PromptCandidate
-	if err := q.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+	q = q.Order("created_at DESC, id DESC")
+	if !useCursor {
+		q = q.Offset((page - 1) * pageSize)
+	}
+	if err := q.Limit(pageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	return rows, total, nil
@@ -127,7 +170,7 @@ func (r *FeedbackLoopRepository) UpdatePromptCandidateStatus(ctx context.Context
 }
 
 // ListBanditArms Bandit 臂分页列表
-func (r *FeedbackLoopRepository) ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int) ([]model.BanditArm, int64, error) {
+func (r *FeedbackLoopRepository) ListBanditArms(ctx context.Context, experimentID, sopID string, page, pageSize int, cursor pagination.Cursor) ([]model.BanditArm, int64, error) {
 	q := r.db.WithContext(ctx).Model(&model.BanditArm{})
 	if experimentID != "" {
 		q = q.Where("experiment_id = ?", experimentID)
@@ -139,8 +182,21 @@ func (r *FeedbackLoopRepository) ListBanditArms(ctx context.Context, experimentI
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// keyset 分页优先；无 cursor 时保持 offset 分页向后兼容
+	useCursor := false
+	if cursor != "" {
+		ts, id, ok := pagination.DecodeCursor(cursor)
+		if ok {
+			q = q.Where("(created_at, id) < (?, ?)", ts, id)
+			useCursor = true
+		}
+	}
 	var rows []model.BanditArm
-	if err := q.Order("experiment_id DESC, arm_key ASC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error; err != nil {
+	q = q.Order("created_at DESC, id DESC")
+	if !useCursor {
+		q = q.Offset((page - 1) * pageSize)
+	}
+	if err := q.Limit(pageSize).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	return rows, total, nil
@@ -239,6 +295,17 @@ func (r *FeedbackLoopRepository) MarkSuggestionApplied(ctx context.Context, id u
 		Model(&model.OptimizationSuggestion{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"status": model.SuggestionStatusApplied, "applied_at": appliedAt}).Error
+}
+
+// GetSOPGraph 读取 SOP 的图结构（供 Service 层 prompt_rewrite 前提取当前 prompt）
+func (r *FeedbackLoopRepository) GetSOPGraph(ctx context.Context, sopID uint) (model.JSONMap, error) {
+	var sop model.SOPAgent
+	if err := r.db.WithContext(ctx).
+		Select("sop_graph").
+		First(&sop, sopID).Error; err != nil {
+		return nil, fmt.Errorf("fetch sop %d: %w", sopID, err)
+	}
+	return sop.SOPGraph, nil
 }
 
 func (r *FeedbackLoopRepository) CloneSOPAndCreateABTest(ctx context.Context, sopID uint, nameSuffix string, experimentTag string) error {

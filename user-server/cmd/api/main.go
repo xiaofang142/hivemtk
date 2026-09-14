@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	"hivemtk-user/internal/aiagent/embedding"
 	"hivemtk-user/internal/aiagent/llm"
 	rag "hivemtk-user/internal/aiagent/rag/incremental"
 	"hivemtk-user/internal/app"
@@ -136,10 +137,10 @@ func main() {
 	service.SetAgentLoopTimeout(appCfg.Inference.LLM.TimeoutSeconds)
 
 	if err := secrets.InitFromEnv(); err != nil {
-		if os.Getenv("GIN_MODE") == "debug" {
-			logger.Warnf("[secrets] MASTER_KEY 未配置（debug 模式降级明文存储）: %v", err)
+		if config.IsDevelopmentEnv() {
+			logger.Warnf("[secrets] MASTER_KEY 未配置（非生产环境降级明文存储）: %v", err)
 		} else {
-			logger.Errorf("[secrets] MASTER_KEY 未配置或无效，生产模式拒绝启动（GIN_MODE=debug 可临时降级）: %v", err)
+			logger.Errorf("[secrets] MASTER_KEY 未配置或无效，生产环境拒绝启动（设置 APP_ENV=development 或 GIN_MODE=debug 可临时降级）: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -275,7 +276,7 @@ func main() {
 		intentRec.SetSOPService(context.Background(), scheduler.SOPService(context.Background()))
 	}
 
-	service.InitConfidenceAggregator(db.GetDB(), nil, nil)
+	service.InitConfidenceAggregator(db.GetDB(), service.NewLocalConfidenceEmbedder())
 	service.InitHumanizeEvalService(db.GetDB(), nil)
 	service.InitFeedbackCollector(db.GetDB())
 	logger.Info("[P0-3/4/5] confidence aggregator + humanize evaluator + feedback collector initialized")
@@ -287,7 +288,7 @@ func main() {
 	defer traceLearningCron.Stop(context.Background())
 	logger.Info("[trace_learning] 自学习闭环已装配（cron 每小时评估新 trace 并调整知识库权重）")
 
-	feedbackComponents := service.InitFeedbackLoopComponents(db.GetDB(), llm.GetGlobalDispatcher(), nil)
+	feedbackComponents := service.InitFeedbackLoopComponents(db.GetDB(), llm.GetGlobalDispatcher(), embedding.NewLocalEmbedding(1024, 42))
 	if feedbackComponents.Optimizer != nil {
 		feedbackComponents.Optimizer.SetGateLLM(llm.GetGlobalDispatcher())
 	}

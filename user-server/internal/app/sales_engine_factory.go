@@ -60,7 +60,7 @@ func BuildSalesEngine(gormDB *gorm.DB) *service.SalesEngine {
 
 	confidenceAgg := service.GetConfidenceAggregator()
 	if confidenceAgg == nil {
-		confidenceAgg = service.InitConfidenceAggregator(gormDB, dispatcher, nil)
+		confidenceAgg = service.InitConfidenceAggregator(gormDB, service.NewLocalConfidenceEmbedder())
 	}
 
 	engine.SetConfidenceAggregator(context.Background(), confidenceAgg)

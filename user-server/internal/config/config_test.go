@@ -38,6 +38,36 @@ func TestGetEnvDir_Consistency(t *testing.T) {
 	}
 }
 
+func TestIsDevelopmentEnv(t *testing.T) {
+	cases := []struct {
+		name   string
+		appEnv string
+		mode   string
+		gin    string
+		want   bool
+	}{
+		{name: "APP_ENV development", appEnv: "development", want: true},
+		{name: "APP_ENV dev 大小写", appEnv: "DEV", want: true},
+		{name: "APP_ENV local", appEnv: " local ", want: true},
+		{name: "MODE 兜底", mode: "test", want: true},
+		{name: "APP_ENV 优先于 MODE", appEnv: "production", mode: "dev", want: false},
+		{name: "APP_ENV production", appEnv: "production", want: false},
+		{name: "未声明环境但 GIN_MODE debug", gin: "debug", want: true},
+		{name: "未声明环境且 GIN_MODE release", gin: "release", want: false},
+		{name: "全部未声明", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", tc.appEnv)
+			t.Setenv("MODE", tc.mode)
+			t.Setenv("GIN_MODE", tc.gin)
+			if got := IsDevelopmentEnv(); got != tc.want {
+				t.Errorf("IsDevelopmentEnv()=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGetEnvDir_PathStructure(t *testing.T) {
 	rootDir := GetRootDir()
 	envDir := GetEnvDir()

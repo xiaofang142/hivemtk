@@ -51,14 +51,17 @@ type EmailService struct {
 // NewEmailService 创建邮件服务
 func NewEmailService(db *gorm.DB) *EmailService {
 	return &EmailService{
-		accRepo: repository.NewEmailAccountRepository(db),
+		accRepo: repository.NewEmailAccountRepositoryWithDB(db),
 		hub:     NewMessageHubServiceWithDB(db, nil),
 	}
 }
 
-// NewEmailServiceAuto 创建邮件服务（自动从全局 DB 获取连接，用于 controller 层解耦）
+// NewEmailServiceAuto 创建邮件服务（无参仓储工厂，对齐 message_hub 先例）
 func NewEmailServiceAuto() *EmailService {
-	return NewEmailService(_db.GetDB())
+	return &EmailService{
+		accRepo: repository.NewEmailAccountRepository(),
+		hub:     NewMessageHubService(),
+	}
 }
 
 // emailAccountFromRow repo 行模型 → service 账号模型（字段一一对应）

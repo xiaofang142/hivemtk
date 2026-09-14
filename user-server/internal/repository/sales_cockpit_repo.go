@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -13,7 +14,13 @@ type SalesCockpitRepository struct {
 }
 
 // NewSalesCockpitRepository 构造
-func NewSalesCockpitRepository(db *gorm.DB) *SalesCockpitRepository {
+// NewSalesCockpitRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewSalesCockpitRepository() *SalesCockpitRepository {
+	return NewSalesCockpitRepositoryWithDB(_db.GetDB())
+}
+
+// NewSalesCockpitRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewSalesCockpitRepositoryWithDB(db *gorm.DB) *SalesCockpitRepository {
 	return &SalesCockpitRepository{db: db}
 }
 

@@ -39,5 +39,13 @@ export const intentApi = {
 
   updateConfig(data) {
     return http.put('/api/intent/config', data)
+  },
+
+  getKeywordOverride() {
+    return http.get('/api/intent-records/keywords-override')
+  },
+
+  updateKeywordOverride(data) {
+    return http.put('/api/intent-records/keywords-override', data)
   }
 };

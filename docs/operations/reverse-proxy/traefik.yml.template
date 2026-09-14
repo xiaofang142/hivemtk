@@ -1,0 +1,27 @@
+# ============================================================================
+# HiveMtk user-server Traefik 反代模板（v3 审计 P1-A1）
+# ============================================================================
+# static configuration（traefik.yml）
+entryPoints:
+  websecure:
+    address: :443
+    # [关键] SSE + FRP 兼容：禁用 HTTP/2
+    http:
+      http2:
+        enabled: false
+
+http:
+  routers:
+    hivemtk:
+      rule: Host(`your-domain.com`)
+      entryPoints: [websecure]
+      service: hivemtk-svc
+      tls:
+        certResolver: letsencrypt
+  services:
+    hivemtk-svc:
+      loadBalancer:
+        servers:
+          - url: http://user-server:8204
+        # SSE 无缓冲：Traefik 默认流式转发，但需确保 entryPoint 已禁用 HTTP/2
+        # （见上方 entryPoints.websecure.http.http2.enabled: false）

@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,7 +15,13 @@ type BridgeOfflineReplayRepository struct {
 }
 
 // NewBridgeOfflineReplayRepository 构造
-func NewBridgeOfflineReplayRepository(db *gorm.DB) *BridgeOfflineReplayRepository {
+// NewBridgeOfflineReplayRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewBridgeOfflineReplayRepository() *BridgeOfflineReplayRepository {
+	return NewBridgeOfflineReplayRepositoryWithDB(_db.GetDB())
+}
+
+// NewBridgeOfflineReplayRepositoryWithDB 显式注入 DB（测试/装配用）
+func NewBridgeOfflineReplayRepositoryWithDB(db *gorm.DB) *BridgeOfflineReplayRepository {
 	return &BridgeOfflineReplayRepository{db: db}
 }
 

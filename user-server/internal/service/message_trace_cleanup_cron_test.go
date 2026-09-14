@@ -47,7 +47,7 @@ func setupTraceCleanupTestDB(t *testing.T) *gorm.DB {
 }
 
 func newSilentCleanupTask(database *gorm.DB) *MessageTraceCleanupTask {
-	task := NewMessageTraceCleanupTask(repository.NewMessageTraceCleanupRepo(database))
+	task := NewMessageTraceCleanupTask(repository.NewMessageTraceCleanupRepoWithDB(database))
 	return task
 }
 
