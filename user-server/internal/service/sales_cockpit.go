@@ -20,8 +20,9 @@ func NewSalesCockpitService() *SalesCockpitService {
 
 // GetCockpit 全景聚合（单次请求 5 条聚合 SQL，均带 LIMIT/索引时间过滤）
 // 返回字段与前端 Index.vue 模板期望结构严格对齐：
-//   react.totalRuns / sop.executions / rag.queries / reach.sentToday
-//   llmRoutes / channelHealth / intentDistribution / topTools
+//
+//	react.totalRuns / sop.executions / rag.queries / reach.sentToday
+//	llmRoutes / channelHealth / intentDistribution / topTools
 func (s *SalesCockpitService) GetCockpit(ctx context.Context) (map[string]any, error) {
 	today := time.Now().Format("2006-01-02")
 	weekAgo := time.Now().AddDate(0, 0, -7)

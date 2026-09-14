@@ -18,7 +18,6 @@ import (
 	dto "hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-
 )
 
 // RagEvalAutoService RAG 自动评测服务

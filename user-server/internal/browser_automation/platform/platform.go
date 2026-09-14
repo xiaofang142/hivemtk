@@ -2,7 +2,8 @@
 //
 // 设计来源：user-web/docs/platform-base/PLATFORM_BASE_DESIGN.md（八原则 P1-P8）。
 // 先例：Postiz social.abstract.ts（三段式验证协议，契约默认失败）+
-//       Mixpost SocialProviderManager（注册表）+ Apify SessionPool（三态机）。
+//
+//	Mixpost SocialProviderManager（注册表）+ Apify SessionPool（三态机）。
 //
 // 新平台接入 = platform/<name>/ 目录四件套（Locators/Recipe/Verifier/Signature）
 // + init() 注册，基座/Brain/UI 零改动（P5）。
@@ -61,10 +62,10 @@ type CommentPoster interface {
 
 // CommentLocators 平台发评论选择器四元组（适配器声明，基座统一下发扩展）
 type CommentLocators struct {
-	InputSelector     string `json:"input_selector"`      // 评论输入框（CSS）
-	SendButtonText    string `json:"send_button_text"`    // 发送按钮文本（发/发布/评论）
-	CommentContainer  string `json:"comment_container"`   // 评论区容器（验证渲染用）
-	CommentItemText   string `json:"comment_item_text"`   // 单条评论文本节点（可选）
+	InputSelector    string `json:"input_selector"`    // 评论输入框（CSS）
+	SendButtonText   string `json:"send_button_text"`  // 发送按钮文本（发/发布/评论）
+	CommentContainer string `json:"comment_container"` // 评论区容器（验证渲染用）
+	CommentItemText  string `json:"comment_item_text"` // 单条评论文本节点（可选）
 }
 
 // Registry 平台注册表（基座唯一入口；新平台 init() 注册）

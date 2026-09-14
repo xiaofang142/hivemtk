@@ -140,6 +140,20 @@ func (r *TelegramGroupMemberRepository) ListExpired(ctx context.Context, now tim
 	return members, nil
 }
 
+// ListStalledRestricted 找出"禁言中、未验证且 expires_at 早于 before"的成员（入群补偿循环用）
+func (r *TelegramGroupMemberRepository) ListStalledRestricted(ctx context.Context, before time.Time, limit int) ([]*model.TelegramGroupMember, error) {
+	var members []*model.TelegramGroupMember
+	q := r.db.WithContext(ctx).Where("join_status = ? AND authorized = ? AND expires_at IS NOT NULL AND expires_at < ?",
+		model.TGMemberRestricted, false, before)
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Find(&members).Error; err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
 // ListByChat 群成员台账列表（管理端）
 func (r *TelegramGroupMemberRepository) ListByChat(ctx context.Context, accountID uint, chatID string, status string, limit, offset int) ([]*model.TelegramGroupMember, int64, error) {
 	var members []*model.TelegramGroupMember

@@ -95,7 +95,7 @@ func TestInboundMessage_ToMessageEvent_EmptyOptional(t *testing.T) {
 
 func TestClientOptions(t *testing.T) {
 	c := NewBaseClient(
-		WithTimeout(3 * time.Second),
+		WithTimeout(3*time.Second),
 		WithBaseURL("https://example.com"),
 	)
 	if c.BaseURL != "https://example.com" {

@@ -440,7 +440,12 @@ func compareValues(fieldValue any, operator string, value any) bool {
 	case int64:
 		fv, fvOk = float64(v), true
 	case string:
-		return compareStringValues(fieldValue.(string), operator, value.(string))
+		// 规则 value 来自商户可编辑 JSON，字段为 string 时值可能是数字/布尔类型——裸断言 value.(string) 会 panic，类型不匹配按不命中处理
+		sv, svOk := value.(string)
+		if !svOk {
+			return false
+		}
+		return compareStringValues(v, operator, sv)
 	default:
 		return false
 	}

@@ -3,6 +3,7 @@
 //   - 详情页 URL /video/{aweme_id}；全 CSR + jvm 混淆，读接口需 a_bogus+msToken 签名
 //   - 发评论公开 API：POST /aweme/v1/web/comment/publish（M3 做）；DOM 选择器无公开资料
 //   - 全线风控高：验证码中间页 rmc.bytedance.com（本机 2026-09-09 实测）
+//
 // M2 期先落「读链路」（DOM 路线：标题/作者/评论文本可见即可 extract）+ DetectBlock 判据。
 package douyin
 
@@ -37,15 +38,15 @@ func (p *Platform) MaxConcurrentJobs() int { return 1 } // 写操作串行（风
 func (p *Platform) Locators() map[string]string {
 	return map[string]string{
 		// R20 实测：搜索结果页 a[href*='/video/'] 卡片整体含标题+作者+时长+点赞（无独立 title 节点）
-		"video_card":     "a[href*='/video/'], a[href*='/note/'], a[href*='modal_id']",
-		"video_link":     "a[href*='/video/'], a[href*='/note/']",
-		"video_title":    "a[href*='/video/']", // 卡片整体文本（标题混在卡片文本里）
-		"video_author":   "[class*=author] a, [class*=author-name]",
-		"comment_input":  "[class*=comment-input] [contenteditable], [class*=pub] [contenteditable]",
-		"comment_item":   "[class*=comment-item], [class*=CommentItem]",
-		"comment_text":   "[class*=comment-item] span:not([class*=time]), p",
-		"like_count":     "[class*=like-wrapper], [data-e2e=video-player-digg]",
-		"search_input":   "input[placeholder*=搜索]",
+		"video_card":    "a[href*='/video/'], a[href*='/note/'], a[href*='modal_id']",
+		"video_link":    "a[href*='/video/'], a[href*='/note/']",
+		"video_title":   "a[href*='/video/']", // 卡片整体文本（标题混在卡片文本里）
+		"video_author":  "[class*=author] a, [class*=author-name]",
+		"comment_input": "[class*=comment-input] [contenteditable], [class*=pub] [contenteditable]",
+		"comment_item":  "[class*=comment-item], [class*=CommentItem]",
+		"comment_text":  "[class*=comment-item] span:not([class*=time]), p",
+		"like_count":    "[class*=like-wrapper], [data-e2e=video-player-digg]",
+		"search_input":  "input[placeholder*=搜索]",
 		// 拦截标记
 		"blocked_marker": "rmc.bytedance.com, 验证码, 安全验证",
 	}

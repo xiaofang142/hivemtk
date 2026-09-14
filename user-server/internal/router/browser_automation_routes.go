@@ -3,13 +3,13 @@ package router
 import (
 	"context"
 
+	"hivemtk-user/internal/aiagent/agent/tooluse"
 	bactrl "hivemtk-user/internal/browser_automation/controller"
 	_ "hivemtk-user/internal/browser_automation/platform/douyin"      // 平台适配器 init() 自注册（L3 注册表）
-	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu" // 平台适配器 init() 自注册（L3 注册表）
 	_ "hivemtk-user/internal/browser_automation/platform/xianyu"      // 平台适配器 init() 自注册（L3 注册表）
+	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu" // 平台适配器 init() 自注册（L3 注册表）
 	barepo "hivemtk-user/internal/browser_automation/repository"
 	basvc "hivemtk-user/internal/browser_automation/service"
-	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"

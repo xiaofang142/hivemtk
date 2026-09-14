@@ -55,7 +55,6 @@ func (s *faqSopSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *faqSopSeeder) buildFAQs() []model.FAQEntry {
 	entries := make([]model.FAQEntry, 0, 80)
 	entries = append(entries, s.faqOverview()...)
@@ -601,7 +600,6 @@ func (s *faqSopSeeder) faqGeneral() []model.FAQEntry {
 	return out
 }
 
-
 func (s *faqSopSeeder) buildSOPTemplates() []model.SOPTemplate {
 	trueVal := true
 	tpls := make([]model.SOPTemplate, 0, 30)
@@ -1025,7 +1023,6 @@ func (s *faqSopSeeder) sopClosingStage() []model.SOPTemplate {
 	return out
 }
 
-
 // ================================================================
 // faqUrgency — 逼单/催进展 FAQ (8 条) — Layer1 命中直接引流微信
 // ================================================================
@@ -1037,50 +1034,50 @@ func (s *faqSopSeeder) faqUrgency() []model.FAQEntry {
 		Conf     float64
 	}{
 		{
-			Q: "什么时候好 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `加作者微信 xiao142000 直接沟通进展，备注逼单会优先处理。作者在线时间 9:00-23:00，通常 1 小时内回复。`,
+			Q:        "什么时候好 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `加作者微信 xiao142000 直接沟通进展，备注逼单会优先处理。作者在线时间 9:00-23:00，通常 1 小时内回复。`,
 			Keywords: []string{"什么时候好", "多久好", "什么时候完成", "预计什么时候"},
 			Conf:     0.94,
 		},
 		{
-			Q: "帮我催一下 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `好的！请加作者微信 xiao142000，备注逼单-您的需求简述，作者会优先看到。也可以拉进专属群同步进度。`,
+			Q:        "帮我催一下 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `好的！请加作者微信 xiao142000，备注逼单-您的需求简述，作者会优先看到。也可以拉进专属群同步进度。`,
 			Keywords: []string{"催", "快一点", "加急", "快点", "进展"},
 			Conf:     0.93,
 		},
 		{
-			Q: "能快一点吗 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `理解您的急迫。加微信 xiao142000 沟通后，可以讨论走加急通道、先出 MVP 版本或优先排期。不要犹豫，直接加微信！`,
+			Q:        "能快一点吗 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `理解您的急迫。加微信 xiao142000 沟通后，可以讨论走加急通道、先出 MVP 版本或优先排期。不要犹豫，直接加微信！`,
 			Keywords: []string{"快一点", "能快", "有没有更快", "太慢"},
 			Conf:     0.92,
 		},
 		{
-			Q: "我比较急 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `急单请直接微信 xiao142000，备注逼单-紧急，作者会置顶处理。微信群也有 SOP 维护者在线，可以同步进度。`,
+			Q:        "我比较急 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `急单请直接微信 xiao142000，备注逼单-紧急，作者会置顶处理。微信群也有 SOP 维护者在线，可以同步进度。`,
 			Keywords: []string{"急", "紧急", "很急", "等不及"},
 			Conf:     0.91,
 		},
 		{
-			Q: "谁负责这个项目 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `作者兼维护者 wxid: xiao142000。直接加微信沟通最快，微信群也有产品/技术/运营 7x24 答疑。`,
+			Q:        "谁负责这个项目 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `作者兼维护者 wxid: xiao142000。直接加微信沟通最快，微信群也有产品/技术/运营 7x24 答疑。`,
 			Keywords: []string{"谁负责", "负责人", "作者", "维护者"},
 			Conf:     0.95,
 		},
 		{
-			Q: "能联系作者吗 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `当然！作者微信 xiao142000。加好友时备注来意（部署/开发/逼单/合作），秒通过。`,
+			Q:        "能联系作者吗 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `当然！作者微信 xiao142000。加好友时备注来意（部署/开发/逼单/合作），秒通过。`,
 			Keywords: []string{"联系作者", "联系开发", "找作者", "找开发"},
 			Conf:     0.96,
 		},
 		{
-			Q: "你们几点在线 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `作者在线时间 9:00-23:00（北京时区）。紧急情况加微信 xiao142000 随时留言，看到就回。`,
+			Q:        "你们几点在线 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `作者在线时间 9:00-23:00（北京时区）。紧急情况加微信 xiao142000 随时留言，看到就回。`,
 			Keywords: []string{"几点在线", "营业时间", "什么时候有人", "在线时间"},
 			Conf:     0.88,
 		},
 		{
-			Q: "有微信吗 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `有！作者 wxid: xiao142000，加好友时备注来意更快通过。也可以说拉群进 SOP 专属微信群。`,
+			Q:        "有微信吗 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `有！作者 wxid: xiao142000，加好友时备注来意更快通过。也可以说拉群进 SOP 专属微信群。`,
 			Keywords: []string{"微信", "有微信吗", "联系方式", "怎么联系"},
 			Conf:     0.97,
 		},
@@ -1112,44 +1109,44 @@ func (s *faqSopSeeder) faqSupport() []model.FAQEntry {
 		Conf     float64
 	}{
 		{
-			Q: "SOP 有问题 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `SOP 遇到问题别慌！加微信 xiao142000，说明 SOP问题后可以拉您进 SOP 专属微信群，群里有维护者和同行业商户一起排查。`,
+			Q:        "SOP 有问题 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `SOP 遇到问题别慌！加微信 xiao142000，说明 SOP问题后可以拉您进 SOP 专属微信群，群里有维护者和同行业商户一起排查。`,
 			Keywords: []string{"SOP有问题", "SOP不对", "SOP bug", "SOP 出错"},
 			Conf:     0.94,
 		},
 		{
-			Q: "SOP 不触发 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `SOP 不触发通常是意图识别没命中或 confidence 不够。加微信 xiao142000 进群，贴出您的意图配置和触发条件，维护者会帮您定位。`,
+			Q:        "SOP 不触发 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `SOP 不触发通常是意图识别没命中或 confidence 不够。加微信 xiao142000 进群，贴出您的意图配置和触发条件，维护者会帮您定位。`,
 			Keywords: []string{"SOP不触发", "不触发SOP", "触发不了", "触发失败"},
 			Conf:     0.93,
 		},
 		{
-			Q: "跑不起来怎么办 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `跑不起来原因很多（端口冲突/密钥没改/Docker 没启动/模型缺失）。最快方式：加微信 xiao142000，拉进交流群，贴出报错日志，大家一起定位。`,
+			Q:        "跑不起来怎么办 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `跑不起来原因很多（端口冲突/密钥没改/Docker 没启动/模型缺失）。最快方式：加微信 xiao142000，拉进交流群，贴出报错日志，大家一起定位。`,
 			Keywords: []string{"跑不起来", "启动失败", "报错", "错误", "panic"},
 			Conf:     0.92,
 		},
 		{
-			Q: "部署卡住了 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `部署卡住常见原因：端口被占、.env 密钥没生成、Docker daemon 没启动、模型文件没下载。加微信 xiao142000，拉交流群，贴日志秒排查。`,
+			Q:        "部署卡住了 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `部署卡住常见原因：端口被占、.env 密钥没生成、Docker daemon 没启动、模型文件没下载。加微信 xiao142000，拉交流群，贴日志秒排查。`,
 			Keywords: []string{"卡住", "卡死", "不动了", "一直转圈"},
 			Conf:     0.89,
 		},
 		{
-			Q: "有群吗 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `有三个专属群：①部署/技术交流群 ②SOP 问题排查群 ③二次开发群。加微信 xiao142000 说拉群，按需拉入。`,
+			Q:        "有群吗 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `有三个专属群：①部署/技术交流群 ②SOP 问题排查群 ③二次开发群。加微信 xiao142000 说拉群，按需拉入。`,
 			Keywords: []string{"有群吗", "微信群", "交流群", "加群", "拉群"},
 			Conf:     0.95,
 		},
 		{
-			Q: "求助 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `加微信 xiao142000，说明遇到的问题（部署/SOP/开发/架构），拉进对应群聊，维护者 7x12 小时在线。贴日志+截图定位更快。`,
+			Q:        "求助 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `加微信 xiao142000，说明遇到的问题（部署/SOP/开发/架构），拉进对应群聊，维护者 7x12 小时在线。贴日志+截图定位更快。`,
 			Keywords: []string{"求助", "救命", "help", "需要帮助", "帮我"},
 			Conf:     0.90,
 		},
 		{
-			Q: "有没有人管 __URGENCY_SUPPORT_SEED_20260908__",
-			A: `有的！作者兼维护者微信 xiao142000，加好友秒通过。也可以拉进交流群，产品/技术/运营都在。`,
+			Q:        "有没有人管 __URGENCY_SUPPORT_SEED_20260908__",
+			A:        `有的！作者兼维护者微信 xiao142000，加好友秒通过。也可以拉进交流群，产品/技术/运营都在。`,
 			Keywords: []string{"有没有人管", "没人", "不理", "没人回复", "客服呢"},
 			Conf:     0.88,
 		},

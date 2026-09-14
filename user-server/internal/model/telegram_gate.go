@@ -13,7 +13,7 @@ import "time"
 type TelegramGroupGate struct {
 	ID uint `gorm:"primaryKey;autoIncrement" json:"id"`
 
-	AccountID    uint   `gorm:"not null;uniqueIndex:uk_tg_gate_account_chat" json:"account_id"`           // 所属 Bot 账号
+	AccountID    uint   `gorm:"not null;uniqueIndex:uk_tg_gate_account_chat" json:"account_id"`               // 所属 Bot 账号
 	ChatID       string `gorm:"type:varchar(64);not null;uniqueIndex:uk_tg_gate_account_chat" json:"chat_id"` // 群组 chat_id（负数）
 	ChatTitle    string `gorm:"type:varchar(255)" json:"chat_title"`
 	Mode         string `gorm:"type:varchar(32);default:'mute_unlock'" json:"mode"` // join_request | mute_unlock

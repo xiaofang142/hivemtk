@@ -488,8 +488,8 @@ func (gmc *GroupMessagingController) GetSendRecords(c *gin.Context) {
 // POST /api/whatsapp/bulk-send {template_id, audience{type,segment_id}, rate_per_minute, variables}
 func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 	var req struct {
-		TemplateID    string `json:"template_id" binding:"required"`
-		Audience      struct {
+		TemplateID string `json:"template_id" binding:"required"`
+		Audience   struct {
 			Type      string `json:"type"`
 			SegmentID string `json:"segment_id"`
 		} `json:"audience"`
@@ -575,9 +575,9 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 	})
 
 	response.Success(c, gin.H{
-		"id":     queueID,
+		"id":       queueID,
 		"queue_id": queueID,
-		"count":  len(messages),
+		"count":    len(messages),
 	}, "批量发送任务已启动")
 }
 
@@ -595,8 +595,8 @@ func (gmc *GroupMessagingController) GetJobProgress(c *gin.Context) {
 	done := status.Status == "completed"
 
 	response.Success(c, gin.H{
-		"id":     jobID,
-		"status": map[bool]string{true: "done", false: "running"}[done],
+		"id":         jobID,
+		"status":     map[bool]string{true: "done", false: "running"}[done],
 		"percentage": percentage,
 		"stats": gin.H{
 			"sent":   status.Sent,

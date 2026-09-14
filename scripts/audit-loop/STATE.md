@@ -5,11 +5,195 @@
 ## 循环总览
 
 - 循环启动：2026-09-08，由 ZCode 自动化每 30 分钟触发一轮
-- 已完成轮次：65（第六圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
-- 累计发现 / 修复：21 / 21（R6/R13–R47 及 R49/R51 扫描组为 0 新增缺陷）
+- 已完成轮次：77（第七圈进行中）/ 角度序列：security → authz → architecture → error-handling → concurrency → data-integrity → api-contract → frontend → perf → test-coverage → config-deploy → docs-consistency →（循环）
+- 累计发现 / 修复：31 / 31（R6/R13–R47 及 R49/R51/R53–R74 扫描组为 0 新增缺陷；R75 深度轮 4 项：govulncheck 解锁+2 漏洞+L4 下沉+竞态测试收编；R76 深度轮 3 项：panic 裸断言+吞错 2 类；R77 深度轮 2 项：WS ACK 快照逃逸竞争+SMS 运营商缓存锁误用）
 - 下一轮角度：data-integrity
 
 ## 轮次报告
+
+### R77 — concurrency（2026-09-13）— 第七圈，深度轮，2 发现 2 修复
+
+**审计背景**：前六圈本角度 spot-check 均 0 缺陷。本轮按"深度面"打法穷举：①non-test 文件全部 40 处 `go func` panic 保护逐条实锤化（内联 recover / 有界同步 / 真裸奔三分）；②包级 map 写路径锁覆盖逐点核查；③cron/ticker/worker 生命周期收口复核。远端自 R76 零代码增量（fetch 后 HEAD 同步），无增量 spot 价值，转全仓深扫。
+
+**发现与修复（2 项，commit 见 git log）**：
+1. **（P1 数据竞争/fatal）`websocket/ack_tracker.go:145` asyncSetJSON 快照逃逸**：`Track`/`Ack` 在持有 `p.mu` 时把 `p.items[sessionID]` 的**实时 map 引用**直接传给 `asyncSetJSON`，后者 `go func` 里对该 map 做 `c.SetJSON(...)`（MemoryCache 路径 `json.Marshal(map)` 在锁外迭代）——与后续 Track/Ack 在同一 map 上的写入并发，构成数据竞争；MemoryCache 用后台异步写 Redis 时最坏触发 **`fatal: concurrent map iteration and map write`（fatal 不可 recover，整进程崩溃）**。调用链为每次访客/坐席 WS 消息 ACK 的热路径（`Track`/`Ack` 每消息必触发）。**处置：派生 goroutine 之前（仍在调用方锁内）对快照做一次深拷贝**，后台只读私有副本；行为零变更（快照仍是调用时刻的）。补 `ack_tracker_snapshot_test.go`：确定性闸门（gate）测试——后台 SetJSON 阻塞至调用方改写原 map 后才放行读取，断言捕获内容恰为调用时刻快照（修复前必红：本地实测 FAIL 见"泄漏 key 2"；修复后必绿，-count=2 稳定）；另附 8×200 并发 Track/Ack/Pending 冒烟回归。
+2. **（P2 数据竞争）`service/sms_delivery_tracker.go` carrierCache 锁误用 3 点**：①`:126-129` `DetectAndRecordPortability` 冷路径在 **RLock 释放后**对 `s.carrierCache[phone]=newCarrier` 无锁写——与并发 `GetCurrentCarrier` 的 RLock 读、后台 webhook goroutine 并发写构成竞争；②`loadCarrierCache` 读改 `s.carrierLoaded`/`s.carrierLoadErrAt` 完全无锁③webhook 入口 `RecordDelivery` 起 `go func` 调 `DetectAndRecordPortability`，多号码回调天然并发。**处置**：①改单次写锁（读+写原子化，顺带消除"先写后被 load 覆盖"的 TOCTOU 语义毛刺，`original` 回退为 zero=Unknown 与本函数"新号码不落库"早退语义一致）；②③`carrierLoaded`/`carrierLoadErrAt` 全部纳入 `carrierMu` 保护（锁外执行 repo 加载，写回时持锁）。SMS webhook 面本机无 PG 用既有 mock 测试回归（`Sms|Portability|Carrier` 定向全绿）。
+
+**核查通过项（无需修复）**：
+- 全仓 non-test `go func` 40 处三分穷举：内联 recover 22 处（含 SSE/事件总线/cron 停止屏障）；有界同步 worker 11 处（wg/channel 收集，`cached_embedding_client` worker 仅调度 `submitTracked` 外层已 recover 的任务、`selfconsistency` Sample 为调用方注入且生产唯一调用方 `browser_automation/brain.go` 注释明示泄漏已接受并限 180s HTTP 超时——panic 等价性成立）——竞争面均封闭。真裸奔（fully-detached 且 recover 缺失）候选逐一核对：**除 ack_tracker 外全部为低风险面**：`system_ops.go` 内仅 `time.Sleep+os.Exit` 无 panic 源；`flag.go`/`bridge_sink.go` 为 ticker-reload/flush 循环（ReloadAll/Flush 内部自捕获已核）；`ab_experiment.go` worker `insert` 为 repo.Create+错误日志（无裸断言/无 map 逃逸）；`backup.go:405` `executeRestore` 与 `executeBackup` 同型自带 recover（defer 状态落库）；`reach_pipeline_claim.go`/`sms`/`email_open`/`objection recordUsageAsync` 等 DB 异步写均无 panic 面（nil-repo 早退在位）。
+- panic 等价性专项：dispatcher fan-out `callProvider` 在 panic 时由 `dispatchFanOut` 唯一调用方 `Dispatch` 的 defer recover 接住（行为与 goroutine 内 recover 后无结果投递一致，fan-out loop 会走 fanCtx.Done 超时分支）——无击穿新增面。
+- 包级 map 并发面：`bridgeChannels` 写仅 `init()`+tests（-p 1 串行）；`IntentRecognizer.keywordMap/embFailCount` 由实例 `anchorMu` 全程保护；intentKeywordOverride 写读均过 `intentOverrideMu`；其余包级 map 全部为 init-only 静态表（复扫口径同 R17/R29/R41/R53/R65）。
+- WS/SSE 连接清理与 cron Stop：`SessionTTFCron`/`FeedbackLearningCron`/`webhook.Stop`/`message_hub_summary_agg`/`message_trace_cleanup_cron` 停轮均有 wg/close(done)+超时兜底；`PendingAck.Drop` 断开清 pending 防泄漏在位；`reach_pipeline_claim` 心跳 goroutine close(hbStop)+join 配对。
+- `go test ./... -count=1` 全包 FAIL 归零（含 R75 收编的 seq_redis 竞态修复第 2 次回归通过）。
+
+**验证证据**：`go build ./...` OK；`go vet ./...` 零输出；`gofmt -l internal` 零；定向回归：新闸门测试修复前 FAIL/修复后 PASS（-count=2）+ 并发冒烟；`go test ./internal/websocket/ ./internal/service/ -count=1` 绿；全包 `go test ./... -count=1` 零 FAIL。
+
+**基线/后续注意**：①concurrency 轮新增闸门：`grep -n 'pendingRedis.asyncSetJSON\|Snapshot(' internal/websocket/` 与 `python scripts/...`（本轮临时脚本思路可固化为"gofunc body 无 recover 即列单人工三分"）；②`AUDIT_HIGHEST_STANDARD.md` 的 P1-3"55/76 无 recover"为 08-26 旧基线，实测现存 non-test 裸 go func 40 处已全部有保护或有界（见核查项），下轮起可刷新该文档口径（docs-consistency 轮）；③`cmd/nm-host`、`cmd/bridge-mock`、`tests/perf/perflib`、`scripts/` 为工具/演示面不入业务闸门统计。
+
+**Commit**：8b491ba
+
+### R76 — error-handling（2026-09-13）— 第七圈，深度轮，3 发现 3 修复
+
+**审计背景**：前六圈本角度均 0 缺陷（R4 修复点每轮回查在位）。本轮按"深度面"打法做全仓穷举：①类型断言无 ok 守卫（panic 面）逐条实锤化；②`_ =` 吞错 583 处按危害分类（DB 状态流转写 > 缓存/日志 > 资源 Close）。
+
+**发现与修复（3 项，commit 8e5d49e）**：
+1. **（P1 panic）`service/auto_tagger.go:443` compareValues 裸断言**：`compareStringValues(fieldValue.(string), operator, value.(string))` 中 `value` 直接来自商户可编辑的规则 JSON（`customerTagSetRule` 仅 json.Marshal 无类型校验），字段值为 string 而规则 value 配成数字/布尔即 panic。调用链 `evaluateSimpleRule` 可同步触发（`customer_orchestrator.OnCustomerCreated` 经 `CustomerService.CreateOrUpdate` HTTP 链路）。**处置：改双值断言，类型不匹配按规则不命中处理**，补 `TestAutoTagger_compareValues_MismatchedTypes` 5 组用例（数字/布尔/nil/切片/反向 int64×string，带 recover 断言）。
+2. **（P2 吞错）`knowledge_merchant_external.go:112` 外部导入异步分支 `_ = s.externalRepo.Create(ctx, job)`**：job 落库失败仍照常 go 异步跑并返回 `pending + jobNo`，后续全部 `UpdateStatusByJobNo` 落空（按不存在的 jobNo 更新 0 行），调用方永远轮询不到结果且无任何日志。**处置：Create 失败即返回错误，不进入异步分支**。
+3. **（P3 吞错）知识库状态流转写 3 处补日志**：`knowledge_base_import.go` 的 `markDocumentIndexed`/`markDocumentFailed` 与 `knowledge_service_reindex.go:69` `docRepo.Update` 均 `_ =` 吞错——状态机推进失败意味着文档滞留 processing/旧状态且运维零感知。**处置：三处补 `logger.Errorf`**（行为不变，仅加可观测性）。
+
+**核查通过项（无需修复）**：
+- 全仓单值类型断言穷举：除上述 #1 外，controller 层 `userID.(uint)` 裸断言 6 处（marketing_flow:44、template_market:76、script_template:35、custom_report:53/183、dashboard_screen:35）逐一核对 `JWTAuthMiddleware`（jwt.go:71 `claims.UserID` 恒为 `uint`；test-mode 分支 Set `uint(1)`）——断言恒安全，非缺陷。`TeamJWTAuthMiddleware` 会把 `claims["user_id"]` 以 `float64` 注入 context（与裸断言不兼容），但**全仓 0 处接线**（grep 复核），属休眠死路径；`PermissionJWT`/`ManagerOrAdmin` 不触碰 user_id。`whatsapp_group_messaging.go` 178/554 处 `lead["id"].(string)` 的 map 构造点全部为 `model.Clue` string 字段，恒安全。`feedback_decorator.go:264` `v.(string)` 唯一 Store 点只写 `err.Error()`（string），恒安全。`cache/memory.go` 与 `lru_cache.go` 的 `*cacheItem/*lruEntry` 为容器内部私有类型，恒安全。`decision_executors.go` map 自持字面量类型恒安全。`material.go:379` `file.(io.Seeker)`：gin multipart 的 `multipart.File` 接口本身含 Seek 方法，恒安全。
+- `_ =` 其余分类抽查：browser_automation executor / dead_letter replay / knowledge reindex UpdateStatus 失败标记等均为"best-effort 状态刷新或已死条目清理"，失败无可行动作，属合理吞错；`rows.Close/Body.Close` 类无问题；无事务 Commit/Rollback 吞错。
+- 前端未捕获 Promise：34 文件 `.then(` 抽查——`request.js` 拦截器统一 reject + main.js 全局 `errorHandler`/`unhandledrejection` 兜底在位（R4 修复点第 7 次回归确认）；ElMessageBox 链式 `.then` 有 `.catch` 或调用点 await 包裹。
+
+**验证证据**：`go build ./...` OK；`go vet ./...` 零输出；`go test ./... -count=1` 全包零 FAIL；`gofmt -l internal` 零；eslint 未改前端（基线 0 errors）。
+
+**基线/后续注意**：①`TeamJWTAuthMiddleware` 是未来接线即炸的陷阱（float64 user_id × 裸断言），authz/architecture 轮可评估删除或归一 claims 类型；②error-handling 轮下轮起可加闸门 `grep -rE '_ = .*\.(Create|Updates)\(' internal/ | grep -v _test`（本轮新增 0 命中，基线清零）。
+
+**Commit**：8e5d49e
+
+### R75 — architecture（2026-09-12）— 第七圈，深度轮，4 发现 4 修复
+
+**审计背景**：远端自 R74 以来零代码增量（纯 spot-check 无增量价值），本会话转为深扫面：把长期"不可用"的 govulncheck 真正解锁并首扫 + L4 基线逐条实锤化。
+
+**发现与修复（4 项，全部当轮闭环，commit 36ed71a）**：
+1. **（P0 工具）govulncheck 解锁**：根因确诊——旧二进制用 go1.25 构建、与本机 go1.27 的 `go list` 版本错位。`go install golang.org/x/vuln/cmd/govulncheck@latest` 重建后**首次成功扫描**（75 轮以来第一次）。
+2. **（P1）2 个真实漏洞**：GO-2025-3553 `golang-jwt/jwt/v5@v5.2.0`（header 解析过量内存分配，调用链 utils/jwt.go:141 ParseToken→ParseUnverified）→ 升 v5.2.2；GO-2025-3540 `redis/go-redis/v9@v9.7.0`（CLIENT SETINFO 超时乱序响应，调用链 cache/redis.go:176 Clear→FlushDB→initConn）→ 升 v9.7.3。升级后复扫 **0 调用路径漏洞**；另有 1+4 项 imported-module 级漏洞为代码不可达路径，不处置。
+3. **（P2）L4 实锤违规 2 处下沉仓储化**：脚本命中逐条核对后，真违规仅 2 处——`telegram_gate.go:502` RecoverStalled 直用 `s.db.WithContext(...).Where(...).Find` → 新增 `TelegramGroupMemberRepository.ListStalledRestricted`（ctx 透传）；`system_user.go:597` SearchUsers 直用 `repository.GetDB()` 拼 ILIKE 查询 → 新增 `SystemUserRepository.SearchUsers` 接口方法+实现，MockSystemUserRepository 同步补桩。**其余 14 条命中全部为 `New*Service`/`*FromGlobal` 构造装配入口**（R35 既定基线口径，属脚本正则盲区非缺陷）。
+4. **（P3）收编 websocket 竞态测试修复**：工作区 WIP `seq_redis_test.go`（TestD15 等 asyncSetJSON 后台写落盘再覆盖快照，消除竞态）验证 `-run TestD15 -count=3` 绿后随本轮入库——R53/R65 留档的"websocket 偶发 FAIL 环境抖动"首个实锤候选修复。
+
+**验证证据**：build/vet 零输出；`go test ./... -count=1` 全包零 FAIL；service 23.4s/repository 1.0s 绿；govulncheck 复扫 "No vulnerabilities found"。
+
+**基线更新**：L4 脚本直连命中 15→14（均为装配入口；`system_user.go:597` 的 `repository.GetDB().WithContext` 本就在脚本正则盲区外，属人工深查捕获的实锤违规）。**后续轮次注意**：govulncheck 已可用（安全轮闸门从"go vet 替代"升级为真 `govulncheck ./...`）；Go 工具链现为 go1.27。
+
+**R75 补记（同会话，096aaba/bc74b7d/09c427e）**：①为下沉的 2 个仓储方法补专属回归用例（`system_user_search_test.go` 7 组关键词断言 ILIKE 语义/分页 id DESC；`telegram_gate_repo_test.go` 三态过滤/limit/空结果）——本机无 PG 按 testutil 设计 Skip 降级，环境可达即生效。②顺手发现并清偿 **gofmt 全仓漂移 38 文件**（`gofmt -l` 38→0，纯格式零行为变更；`-w` diff 抽查确认仅换行/注释缩进重排），build/vet/test 全包零 FAIL。③test-coverage 轮后续可用 `gofmt -l ./user-server/internal ./user-server/cmd` 作新增基线闸门（当前 0）。
+
+**Commit**：36ed71a（代码修复+收编）；状态推进见其后 chore。
+
+### R74 — authz（2026-09-12）— 第七圈，0 缺陷轮
+
+**审计范围**：doRegAdmin/admin 守卫基线计数、访客 WS fail-closed 回归、browser-automation 守卫面复核、middleware/websocket 测试。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- `doRegAdmin` 146 处与 R50/R62 基线完全持平，无新增无回退
+- `AdminAuthMiddleware` 引用 70 处（R26 口径 64→70，增长 6 处逐一核对：browser_automation/token-reset、channel_overview、tool_debug、workflow_orchestrator 三处 admin 组等——均为 admin 守卫组接线点增加，方向正确，非守卫缺失）
+- 访客 WS fail-closed 在位（visitor_handler.go:129：session_id/visitor_id 已给但缺 token 一律 401 拒绝）
+- browser-automation 三层守卫在位：`/api/browser-automation/*` 挂 JWT auth 组、`host/token/reset` 独立 AdminAuthMiddleware 子组、`/api/browser/host-ws` token+回环 fail-closed 双层防护
+- 敏感 reset/rotate 类写路由抽查：全部在 admin 组之下，无漏网
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿；`go test ./internal/middleware/... ./internal/websocket/... -count=1` 全过（3.7s/4.4s）。
+
+**Commit**：见 git log `chore(audit): 审计R74-authz: 0缺陷轮核查记录与状态推进`
+
+### R72 — docs-consistency（2026-09-12）— 第六圈收官，1 发现 1 修复（文档级），0 代码缺陷
+
+**审计范围**：`check-doc-consistency.sh` + `check-feature-doc.sh` 复跑、README/DEV_DOCS_INDEX 相对链接全量校验、README 双语图片引用核对、CHANGELOG 与审计历史对齐。
+
+**发现与处置（1 修复）**：
+
+1. **CHANGELOG 审计循环段落停留在 R1–R22（P3，文档级）** — `b402117` 补录过第二圈，但第三圈（R25–R36）至第六圈（R61–R71）共四圈结论完全未记录。**处置**：标题更新为 R1–R72 六圈 21 发现 21 修复，追加第三/四/五/六圈各一行摘要（含 L4 收敛 152→38→35 处、browser-automation 功能面入库契约保持对齐、R36/R48 功能专项修复等里程碑）。
+
+**核查通过项**：
+- `check-doc-consistency.sh`：0 ❌（marketing-features README 全部链接有效 + feature doc 8 节结构全过）；19 个警告均为父仓库/平台端文档既定范围，留档不阻断
+- `check-feature-doc.sh`：0 失败（1 跳过为 README 本身）
+- README.md / README.en.md / DEV_DOCS_INDEX.md 相对链接 74 处全量校验 0 失效
+- 中/英 README 12 处图片引用对应文件全部在位（6 张 screenshot-*.png 双语共用）
+
+**第六圈总结（R61–R72，12 角度）**：全部 0 代码缺陷收官。第一圈 21 项修复经六圈复扫全部稳固；全仓 go test 零失败、eslint errors=0、契约 872 调用 0 UNMATCHED、端口/键名三方一致持续保持。CHANGELOG 补录为文档级唯一修复项。
+
+**验证证据**：doc 脚本 0 error/0 失败 + 链接校验 74 处 0 失效。
+
+**Commit**：见 git log `chore(audit): 审计R72-docs-consistency: 第六圈收官记录与状态推进`
+
+### R71 — config-deploy（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：R11 修复点回归、端口/键名三方对照。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R11 无回退：`MERCHANT_HMAC_SECRET` 0 残留
+- 端口三方一致：docker-compose 12 处引用 / PORT_REGISTRY / config.yaml 维持既定关系
+
+**验证证据**：`go build ./...` + `go vet ./...` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R71-config-deploy: 0缺陷轮核查记录与状态推进`
+
+### R70 — test-coverage（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：`go test ./... -count=1` 全包复跑。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 全包 `go test` **零失败**（前 69 轮所有修复与变更的回归保持全绿，含 browser-automation 新功能）
+
+**验证证据**：`go test ./... -count=1` 全绿。
+
+**Commit**：见 git log `chore(audit): 审计R70-test-coverage: 0缺陷轮核查记录与状态推进`
+
+### R69 — perf（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：R9 修复点回归复核、service/repository 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- R9 修复全部在位：`ListByTools`（3 处）、`CountByRoles`（4 处）、`idx_extcust_platform_external` 复合索引（2 处）
+- service(22.3s)/repository(0.8s) 测试全绿；`go vet ./...` 零输出
+
+**验证证据**：vet 零 + service/repository 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R69-perf: 0缺陷轮核查记录与状态推进`
+
+### R68 — frontend（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：`eslint src` 复跑、vitest 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- `eslint src` errors = **0**（R8 成果持续保持）
+- vitest 6 文件 174 用例全过
+
+**验证证据**：eslint 0 errors + vitest 174 全过。
+
+**Commit**：见 git log `chore(audit): 审计R68-frontend: 0缺陷轮核查记录与状态推进`
+
+### R67 — api-contract（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：`audit_api_contract.py` 复跑、eslint/vet 回归。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项**：
+- 契约：前端 872 调用 **0 UNMATCHED**；后端路由 1913 个；unresolved 43 为已知解析限制
+- `eslint src` errors = 0；`go vet ./...` 零输出
+
+**验证证据**：契约 0 UNMATCHED + eslint 0 + vet 零。
+
+**Commit**：见 git log `chore(audit): 审计R67-api-contract: 0缺陷轮核查记录与状态推进`
+
+### R66 — data-integrity（2026-09-12）— 第六圈，0 缺陷轮
+
+**审计范围**：R6 六项核查六圈复扫（spot-check）。
+
+**发现与处置**：**0 缺陷**。
+
+**核查通过项（逐项在位）**：
+- `geo_daily_stats` uniqueIndex（3 处 tag 引用）
+- `SalesEvent.Amount` numeric(12,2)
+- 消息链路事务（message_hub_inbox_message.go:37）
+- 会话分配 SELECT FOR UPDATE（session_assignment.go:363）
+- geo repository/service + repository 测试全绿
+
+**期间事件**：merge 远端新增提交（browser-automation 健康检查脚本 `check_browser_host.sh` + 解决方案调研文档），与 data-integrity 无冲突面。
+
+**验证证据**：geo + repository 测试全绿。
+
+**Commit**：见 git log `chore(audit): 审计R66-data-integrity: 0缺陷轮核查记录与状态推进`
 
 ### R65 — concurrency（2026-09-11）— 第六圈，0 缺陷轮
 

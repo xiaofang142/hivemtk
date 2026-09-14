@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -64,7 +65,13 @@ type SavedViewRepository struct {
 }
 
 // NewSavedViewRepository 构造
-func NewSavedViewRepository(db *gorm.DB) *SavedViewRepository {
+// NewSavedViewRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewSavedViewRepository() *SavedViewRepository {
+	return &SavedViewRepository{db: _db.GetDB()}
+}
+
+// NewSavedViewRepositoryWithDB 显式注入 DB（测试用）
+func NewSavedViewRepositoryWithDB(db *gorm.DB) *SavedViewRepository {
 	return &SavedViewRepository{db: db}
 }
 
@@ -117,7 +124,13 @@ type ReportSubscriptionRepository struct {
 }
 
 // NewReportSubscriptionRepository 构造
-func NewReportSubscriptionRepository(db *gorm.DB) *ReportSubscriptionRepository {
+// NewReportSubscriptionRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewReportSubscriptionRepository() *ReportSubscriptionRepository {
+	return &ReportSubscriptionRepository{db: _db.GetDB()}
+}
+
+// NewReportSubscriptionRepositoryWithDB 显式注入 DB（测试用）
+func NewReportSubscriptionRepositoryWithDB(db *gorm.DB) *ReportSubscriptionRepository {
 	return &ReportSubscriptionRepository{db: db}
 }
 

@@ -29,6 +29,7 @@ type SystemUserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*model.SystemUser, error)
 	GetByEmail(ctx context.Context, email string) (*model.SystemUser, error)
 	List(ctx context.Context, page, pageSize int) ([]*model.SystemUser, int64, error)
+	SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]*model.SystemUser, int64, error)
 	Count(ctx context.Context) (int64, error)
 	UsernameExists(ctx context.Context, username string, excludeID uint) (bool, error)
 	EmailExists(ctx context.Context, email string, excludeID uint) (bool, error)
@@ -120,6 +121,24 @@ func (r *systemUserRepo) Count(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// SearchUsers 按关键词搜索用户（username/email/real_name 不区分大小写），offset/limit 由调用方分页
+func (r *systemUserRepo) SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]*model.SystemUser, int64, error) {
+	var users []*model.SystemUser
+	var total int64
+	q := r.db.WithContext(ctx).Model(&model.SystemUser{})
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("username ILIKE ? OR email ILIKE ? OR real_name ILIKE ?", like, like, like)
+	}
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
 }
 
 func (r *systemUserRepo) UsernameExists(ctx context.Context, username string, excludeID uint) (bool, error) {

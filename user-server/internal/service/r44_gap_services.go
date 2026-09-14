@@ -32,7 +32,9 @@ func NewBackupGapService(gdb *gorm.DB) *BackupGapService {
 }
 
 // NewBackupGapServiceFromGlobal 便捷构造
-func NewBackupGapServiceFromGlobal() *BackupGapService { return NewBackupGapService(repository.GetDB()) }
+func NewBackupGapServiceFromGlobal() *BackupGapService {
+	return NewBackupGapService(repository.GetDB())
+}
 
 // BackupStatsRow backup 页统计契约
 type BackupStatsRow struct {
@@ -347,7 +349,9 @@ type CohortGapService struct {
 func NewCohortGapService(gdb *gorm.DB) *CohortGapService { return &CohortGapService{db: gdb} }
 
 // NewCohortGapServiceFromGlobal 便捷构造
-func NewCohortGapServiceFromGlobal() *CohortGapService { return NewCohortGapService(repository.GetDB()) }
+func NewCohortGapServiceFromGlobal() *CohortGapService {
+	return NewCohortGapService(repository.GetDB())
+}
 
 // CohortResult 周留存矩阵
 type CohortResult struct {

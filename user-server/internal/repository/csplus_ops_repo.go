@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,7 +15,13 @@ type CSPlusOpsRepository struct {
 }
 
 // NewCSPlusOpsRepository 构造
-func NewCSPlusOpsRepository(db *gorm.DB) *CSPlusOpsRepository {
+// NewCSPlusOpsRepository 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewCSPlusOpsRepository() *CSPlusOpsRepository {
+	return &CSPlusOpsRepository{db: _db.GetDB()}
+}
+
+// NewCSPlusOpsRepositoryWithDB 显式注入 DB（测试用）
+func NewCSPlusOpsRepositoryWithDB(db *gorm.DB) *CSPlusOpsRepository {
 	return &CSPlusOpsRepository{db: db}
 }
 

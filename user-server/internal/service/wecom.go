@@ -109,7 +109,7 @@ func (s *WeComService) GetAccessToken(ctx context.Context, account *model.WeComA
 
 // CreateAccountRequest 创建账号请求
 type CreateAccountRequest struct {
-	CorpID         string `json:"corp_id" binding:"required"`
+	CorpID string `json:"corp_id" binding:"required"`
 	// CorpSecret 更新时允许留空=保留原值（与 UpdateAccount 的密钥保留语义配套）；创建由 handler 单独校验
 	CorpSecret     string `json:"corp_secret"`
 	AgentID        int    `json:"agent_id"`

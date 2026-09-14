@@ -171,17 +171,22 @@ func (s *KnowledgeBaseService) processDocumentAsync(ctx context.Context, documen
 		return
 	}
 
-	_ = s.db.WithContext(bgCtx).Model(&model.KBDocument{}).Where("id = ?", documentID).Updates(map[string]any{
+	if err := s.db.WithContext(bgCtx).Model(&model.KBDocument{}).Where("id = ?", documentID).Updates(map[string]any{
 		"status":      model.KBDocumentStatusIndexed,
 		"chunk_count": len(chunks),
 		"content":     content,
 		"error_msg":   "",
-	}).Error
+	}).Error; err != nil {
+		// 索引已建成但状态写失败：文档将滞留 processing，前端无法感知——必须落日志供运维介入
+		logger.Errorf("[KBImport] 标记文档已索引失败 doc=%d: %v", documentID, err)
+	}
 }
 
 func (s *KnowledgeBaseService) markDocumentFailed(ctx context.Context, documentID uint, errMsg string) {
-	_ = s.db.WithContext(ctx).Model(&model.KBDocument{}).Where("id = ?", documentID).Updates(map[string]any{
+	if err := s.db.WithContext(ctx).Model(&model.KBDocument{}).Where("id = ?", documentID).Updates(map[string]any{
 		"status":    model.KBDocumentStatusFailed,
 		"error_msg": errMsg,
-	}).Error
+	}).Error; err != nil {
+		logger.Errorf("[KBImport] 标记文档失败状态失败 doc=%d (原错误: %s): %v", documentID, errMsg, err)
+	}
 }

@@ -363,7 +363,7 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			return hub, &tgDispatchExtra{
 				Mentioned: false, NewOpportunity: false, GateHandled: true,
 				FromUsername: picked.username, FromName: picked.fromName, FromUserID: picked.fromID,
-				ReplyToMsgID: picked.msgID,
+				ReplyToMsgID:  picked.msgID,
 				TriggerReason: "",
 			}, nil
 		}

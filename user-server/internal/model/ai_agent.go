@@ -126,9 +126,9 @@ type ChannelAgentBinding struct {
 	ID          uint   `gorm:"primaryKey;autoIncrement" json:"id"`
 	ChannelType string `gorm:"type:varchar(32);not null;index" json:"channel_type"`
 	AccountID   string `gorm:"type:varchar(64);not null;index" json:"account_id"`
-	ChatID      string `gorm:"type:varchar(64);index" json:"chat_id,omitempty"`     // 群组/会话 ID（Telegram chat_id / Slack channel_id），NULL=account 级默认
-	ChatType    string `gorm:"type:varchar(16)" json:"chat_type,omitempty"`         // group | dm | thread
-	Priority    int    `gorm:"default:0" json:"priority"`                           // 手动优先级，高优先
+	ChatID      string `gorm:"type:varchar(64);index" json:"chat_id,omitempty"` // 群组/会话 ID（Telegram chat_id / Slack channel_id），NULL=account 级默认
+	ChatType    string `gorm:"type:varchar(16)" json:"chat_type,omitempty"`     // group | dm | thread
+	Priority    int    `gorm:"default:0" json:"priority"`                       // 手动优先级，高优先
 	AgentID     uint   `gorm:"not null;index" json:"agent_id"`
 	IsPrimary   bool   `gorm:"default:true" json:"is_primary"`
 	Enabled     bool   `gorm:"default:true" json:"enabled"`

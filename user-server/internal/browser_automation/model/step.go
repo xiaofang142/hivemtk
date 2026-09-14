@@ -13,12 +13,12 @@ type BrowserStep struct {
 	SessionID  uint           `gorm:"column:session_id;index;not null" json:"session_id"`
 	TaskID     uint           `gorm:"column:task_id;index;not null" json:"task_id"`
 	StepIndex  int            `gorm:"column:step_index;not null" json:"step_index"`
-	Action     string         `gorm:"column:action;size:32;not null;index" json:"action"` // open_tab / click / type / snapshot / markdown / screenshot / wait / wait_for_selector / scroll / extract / close_tab
-	Target     string         `gorm:"column:target;size:1024" json:"target"`              // selector 或 @e3 refs
-	Value      string         `gorm:"column:value;type:text" json:"value"`                // type 动作的输入值
-	Params     datatypes.JSON `gorm:"column:params;type:jsonb" json:"params"`             // wait/scroll/extract/screenshot 等扩展参数
+	Action     string         `gorm:"column:action;size:32;not null;index" json:"action"`                 // open_tab / click / type / snapshot / markdown / screenshot / wait / wait_for_selector / scroll / extract / close_tab
+	Target     string         `gorm:"column:target;size:1024" json:"target"`                              // selector 或 @e3 refs
+	Value      string         `gorm:"column:value;type:text" json:"value"`                                // type 动作的输入值
+	Params     datatypes.JSON `gorm:"column:params;type:jsonb" json:"params"`                             // wait/scroll/extract/screenshot 等扩展参数
 	Status     string         `gorm:"column:status;size:32;not null;default:pending;index" json:"status"` // pending / running / success / failed / skipped
-	Result     datatypes.JSON `gorm:"column:result;type:jsonb" json:"result,omitempty"`   // action 返回值（snapshot/extract 结果）
+	Result     datatypes.JSON `gorm:"column:result;type:jsonb" json:"result,omitempty"`                   // action 返回值（snapshot/extract 结果）
 	DurationMs int64          `gorm:"column:duration_ms" json:"duration_ms"`
 	ErrorMsg   string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
 

@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -16,7 +17,13 @@ type OfficeHoursRepo struct {
 }
 
 // NewOfficeHoursRepo 构造
-func NewOfficeHoursRepo(db *gorm.DB) *OfficeHoursRepo {
+// NewOfficeHoursRepo 构造（无参，内部取全局 DB；对齐 customer_session.go 先例）
+func NewOfficeHoursRepo() *OfficeHoursRepo {
+	return &OfficeHoursRepo{db: _db.GetDB()}
+}
+
+// NewOfficeHoursRepoWithDB 显式注入 DB（测试用）
+func NewOfficeHoursRepoWithDB(db *gorm.DB) *OfficeHoursRepo {
 	return &OfficeHoursRepo{db: db}
 }
 

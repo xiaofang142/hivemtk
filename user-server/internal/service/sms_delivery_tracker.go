@@ -123,10 +123,10 @@ func (s *SmsDeliveryTrackerService) DetectAndRecordPortability(ctx context.Conte
 
 	if !exists {
 		s.loadCarrierCache(ctx)
-		s.carrierMu.RLock()
+		s.carrierMu.Lock()
 		original, exists = s.carrierCache[phone]
-		s.carrierMu.RUnlock()
 		s.carrierCache[phone] = newCarrier
+		s.carrierMu.Unlock()
 	}
 
 	if exists && original == newCarrier {
@@ -149,16 +149,19 @@ func (s *SmsDeliveryTrackerService) DetectAndRecordPortability(ctx context.Conte
 }
 
 func (s *SmsDeliveryTrackerService) loadCarrierCache(ctx context.Context) {
-	if s.carrierLoaded || s.deliveryRepo == nil {
-		return
-	}
-	if !s.carrierLoadErrAt.IsZero() && time.Since(s.carrierLoadErrAt) < utils.LongTimeout {
+	s.carrierMu.RLock()
+	loaded := s.carrierLoaded
+	errRecent := !s.carrierLoadErrAt.IsZero() && time.Since(s.carrierLoadErrAt) < utils.LongTimeout
+	s.carrierMu.RUnlock()
+	if loaded || s.deliveryRepo == nil || errRecent {
 		return
 	}
 	rows, err := s.deliveryRepo.LoadLatestPortability(ctx, 10000)
 	if err != nil {
 		logger.Errorf("[SmsDeliveryTracker] load carrier cache: %v", err)
+		s.carrierMu.Lock()
 		s.carrierLoadErrAt = time.Now()
+		s.carrierMu.Unlock()
 		return
 	}
 	s.carrierMu.Lock()
@@ -167,8 +170,8 @@ func (s *SmsDeliveryTrackerService) loadCarrierCache(ctx context.Context) {
 			s.carrierCache[r.Phone] = r.CurrentCarrier
 		}
 	}
-	s.carrierMu.Unlock()
 	s.carrierLoaded = true
+	s.carrierMu.Unlock()
 }
 
 // GetCurrentCarrier 查询号码当前归属运营商

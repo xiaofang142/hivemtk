@@ -594,23 +594,16 @@ func (s *SystemUserService) SearchUsers(ctx context.Context, keyword string, pag
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
-	q := repository.GetDB().WithContext(ctx).Model(&model.SystemUser{})
-	if keyword != "" {
-		like := "%" + keyword + "%"
-		q = q.Where("username ILIKE ? OR email ILIKE ? OR real_name ILIKE ?", like, like, like)
-	}
-	var users []model.SystemUser
+	var users []*model.SystemUser
 	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
 	offset := (page - 1) * pageSize
-	if err := q.Order("id DESC").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
+	var err error
+	if users, total, err = s.repo.SearchUsers(ctx, keyword, offset, pageSize); err != nil {
 		return nil, 0, err
 	}
 	responses := make([]*SystemUserResponse, 0, len(users))
 	for _, u := range users {
-		responses = append(responses, s.toUserResponse(ctx, &u))
+		responses = append(responses, s.toUserResponse(ctx, u))
 	}
 	return responses, total, nil
 }

@@ -219,11 +219,11 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		}
 
 		welcome := gate.WelcomeMsg
-			if welcome == "" {
-				welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
-			}
-			botDomain := strings.TrimPrefix(botUsername, "@")
-			welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
+		if welcome == "" {
+			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+		}
+		botDomain := strings.TrimPrefix(botUsername, "@")
+		welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			// 提示没送达 = 用户不知道要验证 = 必然超时被踢。禁言已生效、不致命，
 			// 但必须补发：记录后由清扫器带 verify_token 补发（expires_at 重算，等于宽限重置）
@@ -492,17 +492,14 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 // 临近过期的重发验证提示（刷新 expires_at 给用户重新计时）。
 // 每次最多处理 limit 条，避免清扫周期被拖垮。
 func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
-	if s == nil || s.db == nil {
+	if s == nil || s.memberRepo == nil {
 		return
 	}
 	// 禁言中的成员且 2 分钟内将到期：大概率是“提示发送失败”被 compensateWelcome
 	// 顺延过期的，或首次提示被网络抖动吞掉的。重发提示并重新计时。
 	soon := time.Now().Add(2 * time.Minute)
-	var stalled []*model.TelegramGroupMember
-	if err := s.db.WithContext(ctx).
-		Where("join_status = ? AND authorized = ? AND expires_at IS NOT NULL AND expires_at < ?",
-			model.TGMemberRestricted, false, soon).
-		Limit(limit).Find(&stalled).Error; err != nil || len(stalled) == 0 {
+	stalled, err := s.memberRepo.ListStalledRestricted(ctx, soon, limit)
+	if err != nil || len(stalled) == 0 {
 		return
 	}
 	for _, m := range stalled {
