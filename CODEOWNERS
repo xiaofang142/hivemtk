@@ -1,0 +1,78 @@
+# CODEOWNERS — HiveMtk 用户端仓库
+#
+# 语法：<path-pattern>  <@owner> [@owner...]
+# 匹配规则：最后一条匹配的模式生效（GitHub 官方语义）
+# 配套：docs/governance/MAINTAINERS.md（维护者名单）· GOVERNANCE.md（治理章程）
+#
+# 说明：owner 句柄为项目占位账号（@hivemtk-*），首次公开前替换为真实 GitHub 账号。
+# 详见 MAINTAINERS.md 文末「注意」。
+
+# ---------- 默认兜底：任何未被下方规则覆盖的变更 ----------
+*                                   @hivemtk-bdfl @hivemtk-arch-lead
+
+# ---------- 治理与元数据：BDFL 独占审批 ----------
+/LICENSE                            @hivemtk-bdfl
+/NOTICE                             @hivemtk-bdfl
+/CLA.md                             @hivemtk-bdfl
+/THIRD_PARTY_LICENSES.md            @hivemtk-bdfl
+/SECURITY.md                        @hivemtk-sec-lead @hivemtk-bdfl
+/CODE_OF_CONDUCT.md                 @hivemtk-devrel-lead
+/CONTRIBUTING.md                    @hivemtk-devrel-lead
+/CODEOWNERS                         @hivemtk-bdfl
+/GIT_RULES.md                       @hivemtk-bdfl @hivemtk-devops-lead
+
+# ---------- CI/CD 与构建 ----------
+/.github/                           @hivemtk-devops-lead
+/Makefile                           @hivemtk-devops-lead @hivemtk-be-lead
+/docker-compose.yml                 @hivemtk-devops-lead
+/.githooks/                         @hivemtk-devops-lead
+/.gitattributes                     @hivemtk-devops-lead
+/.gitignore                         @hivemtk-devops-lead
+
+# ---------- 后端：user-server（Go 五层架构）----------
+/user-server/                       @hivemtk-be-lead @hivemtk-arch-lead
+/user-server/cmd/                   @hivemtk-be-lead
+/user-server/internal/router/       @hivemtk-arch-lead
+/user-server/internal/controller/   @hivemtk-be-lead
+/user-server/internal/service/      @hivemtk-be-lead
+/user-server/internal/repository/   @hivemtk-be-db
+/user-server/internal/model/        @hivemtk-be-db
+/user-server/internal/migration/    @hivemtk-be-db
+/user-server/internal/security/     @hivemtk-sec-lead
+/user-server/internal/middleware/   @hivemtk-sec-lead @hivemtk-sec-sso
+/user-server/internal/secrets/      @hivemtk-sec-lead
+/user-server/internal/safeprompt/   @hivemtk-sec-lead
+/user-server/docs/                  @hivemtk-devrel-lead
+
+# ---------- AI 核心链路 ----------
+/user-server/internal/aiagent/      @hivemtk-arch-ai @hivemtk-ai-agent
+/user-server/internal/geo/          @hivemtk-arch-ai
+/user-server/internal/content/      @hivemtk-ai-rag
+/user-server/internal/etl/          @hivemtk-ai-rag
+
+# ---------- 桥接与渠道 ----------
+/user-server/internal/bridge/       @hivemtk-arch-bridge @hivemtk-bridge-ws
+/user-server/internal/browser_automation/  @hivemtk-bridge-chrome
+/user-server/internal/channelgw/    @hivemtk-bridge-channel
+/user-server/internal/channelbot/   @hivemtk-bridge-channel
+/user-server/internal/websocket/    @hivemtk-bridge-ws
+/user-server/internal/reach/        @hivemtk-bridge-channel
+
+# ---------- 数据库迁移 ----------
+/migrations/                        @hivemtk-be-db
+
+# ---------- 前端 ----------
+/user-web/                          @hivemtk-fe-user
+/embed-sdk/                         @hivemtk-fe-embed
+/user-web/bridge/                   @hivemtk-fe-embed @hivemtk-bridge-chrome
+
+# ---------- 国际化 ----------
+/user-web/src/locales/              @hivemtk-devrel-i18n @hivemtk-fe-user
+/user-web/scripts/check-i18n-coverage.cjs  @hivemtk-devrel-i18n
+
+# ---------- 文档 ----------
+/docs/                              @hivemtk-devrel-lead
+
+# ---------- 测试与验收脚本 ----------
+/tests/                             @hivemtk-sec-audit
+/scripts/                           @hivemtk-devops-lead @hivemtk-sec-audit
