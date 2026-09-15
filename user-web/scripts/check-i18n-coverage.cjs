@@ -44,6 +44,30 @@ function flatten(obj, prefix = '') {
   return out;
 }
 
+/**
+ * 展平为 [路径, 值] 对。
+ *
+ * 注意：不能用「取扁平路径再 split('.') 逐段下钻」的方式取值 —— 本仓库存在
+ * 键名自带点号的条目（如 "正在执行批量操作..."、"1. 配置 SMTP"），split 后
+ * 会解析到不存在的层级而得到 undefined，被误判为「空值」。
+ * 实测 16 个键受此影响，报告里恒显示「空值 16」的假信号。
+ */
+function flattenValues(obj, prefix = '') {
+  const out = [];
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      const path = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out.push(...flattenValues(v, path));
+      } else {
+        out.push([path, v]);
+      }
+    }
+  }
+  return out;
+}
+
 function loadLocale(code) {
   const file = path.join(LOCALES_DIR, `${code}.json`);
   if (!fs.existsSync(file)) return { keys: [], missing: true, file };
@@ -79,17 +103,12 @@ function checkCoverage() {
     }
     const locSet = new Set(loc.keys);
     const missing = ref.keys.filter((k) => !locSet.has(k));
-    const empty = loc.keys
-      .filter((k) => refKeys.has(k))
-      .map((k) => {
-        // 简单判断：空字符串
-        const json = JSON.parse(fs.readFileSync(loc.file, 'utf8'));
-        const parts = k.split('.');
-        let v = json;
-        for (const p of parts) v = v?.[p];
-        return isEmpty(v) ? k : null;
-      })
-      .filter(Boolean);
+    // 用 flattenValues 的真实取值判断，避免键名含点号时 split('.') 下钻失败
+    const locJson = JSON.parse(fs.readFileSync(loc.file, 'utf8'));
+    const empty = flattenValues(locJson)
+      .filter(([k]) => refKeys.has(k))
+      .filter(([, v]) => isEmpty(v))
+      .map(([k]) => k);
     const present = ref.keys.length - missing.length;
     const coverage = ref.keys.length === 0 ? 1 : present / ref.keys.length;
     results[code] = { coverage, missing, empty, total: ref.keys.length };

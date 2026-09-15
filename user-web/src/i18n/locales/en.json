@@ -1834,7 +1834,8 @@
     "validEmail": "Please enter a valid email",
     "save": "Save",
     "cancel": "Cancel",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "resetPasswordPlaceholder": "Enter a new password (at least 8 characters)"
   },
   "roleName": {
     "owner": "Owner",
