@@ -117,11 +117,30 @@ jobs:
           merge-multiple: true
 
       - name: Verify user-server artifact
+        # OPT-CI-03 修复：原实现为 `|| echo "::warning::SLSA verify failed"`，
+        # 验证失败只打警告不阻断 —— 供应链校验形同虚设（有牙无齿）。
+        # 现改为阻断：artifact 缺失、provenance 缺失、验证失败三种情况一律 exit 1。
         run: |
-          if [ -f artifacts/user-server-linux-amd64 ]; then
-            slsa-verifier verify-artifact \
-              --provenance-path artifacts/user-server-linux-amd64.intoto.jsonl \
-              --source-uri github.com/${{ github.repository }} \
-              --source-tag ${{ github.ref_name }} \
-              artifacts/user-server-linux-amd64 || echo "::warning::SLSA verify failed (may be tag mismatch)"
+          set -euo pipefail
+          ARTIFACT="artifacts/user-server-linux-amd64"
+          PROVENANCE="${ARTIFACT}.intoto.jsonl"
+
+          if [ ! -f "$ARTIFACT" ]; then
+            echo "::error::期望的构建产物不存在: $ARTIFACT"
+            exit 1
           fi
+          if [ ! -f "$PROVENANCE" ]; then
+            echo "::error::缺少 SLSA provenance 证明文件: $PROVENANCE"
+            exit 1
+          fi
+
+          echo "校验产物: $ARTIFACT"
+          echo "证明文件: $PROVENANCE"
+          echo "来源仓库: github.com/${{ github.repository }}"
+          echo "来源 tag : ${{ github.ref_name }}"
+
+          slsa-verifier verify-artifact \
+            --provenance-path "$PROVENANCE" \
+            --source-uri github.com/${{ github.repository }} \
+            --source-tag ${{ github.ref_name }} \
+            "$ARTIFACT"
