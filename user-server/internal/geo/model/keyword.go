@@ -20,6 +20,16 @@ type GeoKeyword struct {
 	FunnelStage  string  `gorm:"column:funnel_stage;size:20;index" json:"funnel_stage"`
 	Status       string  `gorm:"type:varchar(20);default:'active'" json:"status"`
 
+	// ⬇️ 新增：4 层漏斗字段
+	Layer string `gorm:"size:20;default:'seed';index" json:"layer"`
+	// 'seed' | 'related' | 'suggest' | 'longtail'
+	ParentID    string `gorm:"size:36;index" json:"parent_id"`
+	QueryIntent string `gorm:"size:30;index" json:"query_intent"`
+	// 'how_to' | 'comparison' | 'recommendation' | 'problem' | 'pricing' | 'case_study'
+	SuggestEngines string     `gorm:"type:text" json:"suggest_engines"` // JSON 数组
+	SuggestCount   int        `gorm:"default:0" json:"suggest_count"`
+	LastMinedAt    *time.Time `json:"last_mined_at"`
+
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`

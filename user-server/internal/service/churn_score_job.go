@@ -17,7 +17,6 @@ import (
 
 // ChurnScoreService 周批流失评分
 type ChurnScoreService struct {
-	db   *gorm.DB
 	repo *repository.ChurnScoreRepository
 
 	statsFn func(ctx context.Context) ([]ChurnCustomerStats, error)
@@ -34,7 +33,6 @@ type ChurnCustomerStats struct {
 // NewChurnScoreService 构造
 func NewChurnScoreService(db *gorm.DB) *ChurnScoreService {
 	return &ChurnScoreService{
-		db:          db,
 		repo:        repository.NewChurnScoreRepository(db),
 		statsFn:     defaultChurnStatsQuery,
 		horizonDays: 30,

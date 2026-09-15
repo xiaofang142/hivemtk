@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 // SOPTemplate SOP 模板 (Layer1 拼接回复)
 //
@@ -22,19 +25,20 @@ import "time"
 //   - Priority:  优先级 (数字越大越优先, 同 intent+stage 多模板时用)
 //   - Confidence: 基准置信度 (0-1)
 type SOPTemplate struct {
-	ID         uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name       string    `gorm:"type:varchar(100);not null" json:"name"`
-	Intent     string    `gorm:"type:varchar(64);not null;index" json:"intent"`
-	Stage      string    `gorm:"type:varchar(32);not null;index" json:"stage"`
-	Template   string    `gorm:"type:text;not null" json:"template"`
-	Vars       string    `gorm:"type:text" json:"vars"`
-	Priority   int       `gorm:"type:int;default:0" json:"priority"`
-	Confidence float64   `gorm:"type:decimal(5,4);default:0.8" json:"confidence"`
-	AgentID    *uint     `gorm:"index" json:"agent_id,omitempty"`
-	Enabled    *bool     `gorm:"type:boolean;default:true;not null" json:"enabled"`
-	HitCount   int64     `gorm:"type:bigint;default:0" json:"hit_count"`
-	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name       string         `gorm:"type:varchar(100);not null" json:"name"`
+	Intent     string         `gorm:"type:varchar(64);not null;index" json:"intent"`
+	Stage      string         `gorm:"type:varchar(32);not null;index" json:"stage"`
+	Template   string         `gorm:"type:text;not null" json:"template"`
+	Vars       string         `gorm:"type:text" json:"vars"`
+	Priority   int            `gorm:"type:int;default:0" json:"priority"`
+	Confidence float64        `gorm:"type:decimal(5,4);default:0.8" json:"confidence"`
+	AgentID    *uint          `gorm:"index" json:"agent_id,omitempty"`
+	Enabled    *bool          `gorm:"type:boolean;default:true;not null" json:"enabled"`
+	HitCount   int64          `gorm:"type:bigint;default:0" json:"hit_count"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName GORM 表名

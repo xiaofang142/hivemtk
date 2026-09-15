@@ -601,7 +601,7 @@ func TestWaitExecutor_IsAsync(t *testing.T) {
 }
 
 func TestWaitExecutor_WaitSeconds(t *testing.T) {
-	e := &WaitExecutor{db: nil}
+	e := &WaitExecutor{}
 	ec := &ExecutionContext{
 		Execution: &model.SOPExecution{ID: 1},
 		Node: &dto.SOPNode{

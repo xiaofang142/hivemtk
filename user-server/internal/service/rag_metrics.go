@@ -27,7 +27,6 @@ const (
 
 // RagMetricsService RAG 召回率监控服务
 type RagMetricsService struct {
-	db   *gorm.DB
 	repo repository.RagMetricsRepository
 
 	mu      sync.Mutex
@@ -40,11 +39,10 @@ type RagMetricsService struct {
 
 // NewRagMetricsService 创建召回率监控服务
 //
-// db 为 nil 时仅可调用计算类方法（GetRecallMetrics/GetLowRecallQueries），
-// 但 RecordQuery 会降级为 no-op
+// db 为 nil 时（repo 为 nil）仅可调用计算类方法（buildQueryLog），
+// 查询/写库类方法返回错误，RecordQuery 降级为 no-op
 func NewRagMetricsService(db *gorm.DB) *RagMetricsService {
 	s := &RagMetricsService{
-		db:      db,
 		repo:    repository.NewRagMetricsRepository(db),
 		queue:   make([]*model.RagQueryLog, 0, RagMetricsBatchSize),
 		flushCh: make(chan struct{}, 1),
@@ -128,7 +126,7 @@ func (s *RagMetricsService) RecordQuery(ctx context.Context, req *RecordQueryReq
 	if s == nil || req == nil {
 		return
 	}
-	if s.db == nil {
+	if s.repo == nil {
 		return
 	}
 	log := s.buildQueryLog(ctx, req)
@@ -146,8 +144,8 @@ func (s *RagMetricsService) RecordQuery(ctx context.Context, req *RecordQueryReq
 
 // RecordQuerySync 同步记录一次检索（测试用，保证写库完成）
 func (s *RagMetricsService) RecordQuerySync(ctx context.Context, req *RecordQueryRequest) error {
-	if s == nil || req == nil || s.db == nil {
-		return fmt.Errorf("service or db is nil")
+	if s == nil || req == nil || s.repo == nil {
+		return fmt.Errorf("service or repository is nil")
 	}
 	log := s.buildQueryLog(ctx, req)
 	return s.repo.CreateQueryLog(ctx, log)
@@ -211,7 +209,7 @@ func (s *RagMetricsService) flush(ctx context.Context) error {
 	s.queue = make([]*model.RagQueryLog, 0, RagMetricsBatchSize)
 	s.mu.Unlock()
 
-	if s.db == nil {
+	if s.repo == nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), utils.RagMetricsTimeout)
@@ -238,8 +236,8 @@ type RecallMetrics struct {
 
 // GetRecallMetrics 查询时间窗口内的召回指标
 func (s *RagMetricsService) GetRecallMetrics(ctx context.Context, start, end time.Time) (*RecallMetrics, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	if end.Before(start) {
 		return nil, fmt.Errorf("end before start")
@@ -299,8 +297,8 @@ type LowRecallQuery struct {
 // limit ≤ 0 或 > 1000 时用 100
 // 按 created_at DESC 排序（最近的优先）
 func (s *RagMetricsService) GetLowRecallQueries(ctx context.Context, threshold float64, limit int) ([]LowRecallQuery, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	if threshold <= 0 {
 		threshold = RagMetricsLowRecallDefault
@@ -336,8 +334,8 @@ func (s *RagMetricsService) GetLowRecallQueries(ctx context.Context, threshold f
 // 由 cron 每 5 分钟调用；也可手动调用补跑
 // 幂等：同一 window_start 已存在记录则更新
 func (s *RagMetricsService) AggregateWindow(ctx context.Context, windowStart, windowEnd time.Time) (*model.RagMetricsDaily, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	metrics, err := s.GetRecallMetrics(ctx, windowStart, windowEnd)
 	if err != nil {
@@ -383,8 +381,8 @@ func (s *RagMetricsService) AggregateLastWindow(ctx context.Context) (*model.Rag
 
 // GetLatestMetrics 获取最近 N 个聚合窗口（用于趋势图）
 func (s *RagMetricsService) GetLatestMetrics(ctx context.Context, limit int) ([]model.RagMetricsDaily, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = 20

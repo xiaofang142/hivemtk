@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -27,41 +28,44 @@ type MemoryItem struct {
 	Metadata   JSONMap     `gorm:"type:text" json:"metadata"`
 	ExpiresAt  *time.Time  `gorm:"index" json:"expires_at"`
 
-	ValidFrom *time.Time `gorm:"index" json:"valid_from,omitempty"`
-	InvalidAt *time.Time `gorm:"index" json:"invalid_at,omitempty"`
-	CreatedAt time.Time  `gorm:"autoCreateTime;index" json:"created_at"`
+	ValidFrom *time.Time     `gorm:"index" json:"valid_from,omitempty"`
+	InvalidAt *time.Time     `gorm:"index" json:"invalid_at,omitempty"`
+	CreatedAt time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MemoryItem) TableName() string { return "memory_items" }
 
 // SOPStateMemory L3 SOP 状态记忆（独立于 sop_executions，按 session 维度）
 type SOPStateMemory struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	SessionID   string    `gorm:"type:varchar(64);not null;index" json:"session_id"`
-	CustomerID  string    `gorm:"type:varchar(64);not null;index" json:"customer_id"`
-	SOPID       uint      `gorm:"not null;index" json:"sop_id"`
-	ExecutionID uint      `gorm:"index" json:"execution_id"`
-	CurrentNode string    `gorm:"type:varchar(64)" json:"current_node"`
-	StepIndex   int       `gorm:"default:0" json:"step_index"`
-	Status      string    `gorm:"type:varchar(20);default:'running';index" json:"status"`
-	StateData   JSONMap   `gorm:"type:text" json:"state_data"`
-	LastStepAt  time.Time `gorm:"index" json:"last_step_at"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	SessionID   string         `gorm:"type:varchar(64);not null;index" json:"session_id"`
+	CustomerID  string         `gorm:"type:varchar(64);not null;index" json:"customer_id"`
+	SOPID       uint           `gorm:"not null;index" json:"sop_id"`
+	ExecutionID uint           `gorm:"index" json:"execution_id"`
+	CurrentNode string         `gorm:"type:varchar(64)" json:"current_node"`
+	StepIndex   int            `gorm:"default:0" json:"step_index"`
+	Status      string         `gorm:"type:varchar(20);default:'running';index" json:"status"`
+	StateData   JSONMap        `gorm:"type:text" json:"state_data"`
+	LastStepAt  time.Time      `gorm:"index" json:"last_step_at"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (SOPStateMemory) TableName() string { return "sop_state_memories" }
 
 // BusinessMemory L4 业务记忆（订单/咨询/投诉/意向快照）
 type BusinessMemory struct {
-	ID         uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	CustomerID string    `gorm:"type:varchar(64);not null;index" json:"customer_id"`
-	MemoryType string    `gorm:"type:varchar(32);not null;index" json:"memory_type"`
-	Content    string    `gorm:"type:text;not null" json:"content"`
-	RelatedID  string    `gorm:"type:varchar(64);index" json:"related_id"`
-	Importance int       `gorm:"default:5;index" json:"importance"`
-	Metadata   JSONMap   `gorm:"type:text" json:"metadata"`
-	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	CustomerID string         `gorm:"type:varchar(64);not null;index" json:"customer_id"`
+	MemoryType string         `gorm:"type:varchar(32);not null;index" json:"memory_type"`
+	Content    string         `gorm:"type:text;not null" json:"content"`
+	RelatedID  string         `gorm:"type:varchar(64);index" json:"related_id"`
+	Importance int            `gorm:"default:5;index" json:"importance"`
+	Metadata   JSONMap        `gorm:"type:text" json:"metadata"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (BusinessMemory) TableName() string { return "business_memories" }

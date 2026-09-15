@@ -280,6 +280,11 @@ func allModels() []any {
 		&geomodel.GeoAlert{},
 		&geomodel.GeoJobRun{},
 		&geomodel.GeoCompetitor{},
+                &geomodel.GeoPushRecord{},
+                &geomodel.GeoSite{},
+                &geomodel.GeoPusherConfig{},
+                &geomodel.GeoIndexTracking{},
+                &geomodel.GeoSchemaTemplate{},
 	}
 }
 

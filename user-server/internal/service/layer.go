@@ -31,7 +31,6 @@ type FAQMatcher interface {
 
 // LayerRouter 双层路由决策器
 type LayerRouter struct {
-	db        *gorm.DB
 	faqRepo   FAQMatcher
 	sopRepo   *repository.SOPTemplateRepository
 	logRepo   *repository.LayerDecisionLogRepository
@@ -59,7 +58,6 @@ func NewLayerRouter(
 		logRepo = repository.NewLayerDecisionLogRepository(db)
 	}
 	return &LayerRouter{
-		db:      db,
 		faqRepo: faqRepo,
 		sopRepo: sopRepo,
 		logRepo: logRepo,

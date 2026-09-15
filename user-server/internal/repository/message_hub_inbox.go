@@ -128,7 +128,9 @@ func (r *MessageHubRepository) Delete(ctx context.Context, id uint) error {
 	if r == nil || r.db == nil {
 		return nil
 	}
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.MessageHub{}).Error
+	// message_hub 是消息流/出站队列表，claim SQL 按 status 取行不感知软删，
+	// 软删行可能被重新领取发送，故保持物理删除
+	return r.db.WithContext(ctx).Unscoped().Where("id = ?", id).Delete(&model.MessageHub{}).Error
 }
 
 func (r *MessageHubRepository) GetByPlatformAccountMsgID(ctx context.Context, platform, accountID, msgID string) (*model.MessageHub, error) {

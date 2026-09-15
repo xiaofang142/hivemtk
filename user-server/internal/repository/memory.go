@@ -88,7 +88,7 @@ func (r *memoryRepository) ListShortTermMemoryBySession(ctx context.Context, ses
 }
 
 func (r *memoryRepository) DeleteShortTermMemoryBySession(ctx context.Context, sessionID string) error {
-	return r.db.WithContext(ctx).
+	return r.db.WithContext(ctx).Unscoped().
 		Where("layer = ? AND session_id = ?", model.MemoryLayerShortTerm, sessionID).
 		Delete(&model.MemoryItem{}).Error
 }
@@ -118,7 +118,7 @@ func (r *memoryRepository) DeleteMemoryItemsByIDs(ctx context.Context, ids []uin
 	if len(ids) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&model.MemoryItem{}).Error
+	return r.db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Delete(&model.MemoryItem{}).Error
 }
 
 func (r *memoryRepository) ListFacts(ctx context.Context, customerID string, limit int) ([]model.MemoryItem, error) {
@@ -219,7 +219,7 @@ func (r *memoryRepository) DeleteBusinessMemoriesByIDs(ctx context.Context, ids 
 	if len(ids) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&model.BusinessMemory{}).Error
+	return r.db.WithContext(ctx).Unscoped().Where("id IN ?", ids).Delete(&model.BusinessMemory{}).Error
 }
 
 func (r *memoryRepository) CreateBusinessMemory(ctx context.Context, item *model.BusinessMemory) error {

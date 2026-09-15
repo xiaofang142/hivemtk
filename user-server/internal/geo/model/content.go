@@ -22,6 +22,18 @@ type GeoArticle struct {
 	JSONLD      string  `gorm:"column:json_ld;type:text" json:"json_ld"`
 	BrandName   string  `gorm:"type:varchar(200)" json:"brand_name"`
 
+	// ⬇️ 新增：静态站部署字段
+	SiteURL      string     `gorm:"type:varchar(500)" json:"site_url"`
+	SitePath     string     `gorm:"type:varchar(200)" json:"site_path"`
+	SchemaJSON   string     `gorm:"type:text" json:"schema_json"`
+	MarkdownPath string     `gorm:"type:varchar(200)" json:"markdown_path"`
+	DeployedAt   *time.Time `json:"deployed_at"`
+	LlmsIncluded bool       `gorm:"default:false" json:"llms_included"`
+
+	// ⬇️ 新增：漏斗分组字段（llms.txt 按层分组、frontmatter 输出）
+	FunnelStage string `gorm:"column:funnel_stage;size:20;index" json:"funnel_stage"`
+	QueryIntent string `gorm:"size:30;index" json:"query_intent"`
+
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`

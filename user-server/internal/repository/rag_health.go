@@ -18,7 +18,12 @@ type ragHealthRepo struct {
 }
 
 // NewRagHealthRepository 创建 RAG 健康度仓储
+//
+// ARC-01：db 为 nil 时返回 nil 接口，service 侧以 repo == nil 作为未初始化守卫。
 func NewRagHealthRepository(db *gorm.DB) RagHealthRepository {
+	if db == nil {
+		return nil
+	}
 	return &ragHealthRepo{db: db}
 }
 

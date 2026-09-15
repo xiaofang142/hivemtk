@@ -29,7 +29,7 @@ type HumanizeScore struct {
 	ID                 uint64                 `gorm:"primaryKey;autoIncrement" json:"id"`
 	ScoreID            string                 `gorm:"column:score_id;uniqueIndex;size:64;not null" json:"score_id"`
 	SessionID          string                 `gorm:"column:session_id;size:128;not null;index:idx_humanize_session,priority:1" json:"session_id"`
-	CustomerID         string                 `gorm:"column:customer_id;size:128;not null" json:"customer_id"`
+	CustomerID         string                 `gorm:"column:customer_id;size:64;not null" json:"customer_id"`
 	MessageID          string                 `gorm:"column:message_id;size:128" json:"message_id"`
 	Persona            string                 `gorm:"column:persona;size:128;index:idx_humanize_persona,priority:1" json:"persona"`
 	Industry           string                 `gorm:"column:industry;size:64;index:idx_humanize_persona,priority:2" json:"industry"`

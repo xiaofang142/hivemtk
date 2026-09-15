@@ -28,7 +28,6 @@ import (
 )
 
 type SOPService struct {
-	db         *gorm.DB
 	agentRepo  *repository.SopAgentRepository
 	execRepo   *repository.SopExecutionRepository
 	dispatcher *llm.Dispatcher
@@ -133,7 +132,6 @@ type SOPEdge = dto.SOPEdge
 
 func NewSOPService(db *gorm.DB, dispatcher *llm.Dispatcher) *SOPService {
 	return &SOPService{
-		db:         db,
 		agentRepo:  repository.NewSopAgentRepository(db),
 		execRepo:   repository.NewSopExecutionRepository(db),
 		dispatcher: dispatcher,

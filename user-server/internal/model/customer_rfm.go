@@ -19,7 +19,7 @@ import (
 // 综合分层：champion(8+)/loyal(6-7)/potential(5)/at_risk(3-4)/churn(<=2)
 type CustomerRFM struct {
 	ID         uint64 `gorm:"primaryKey;autoIncrement" json:"id"`
-	CustomerID string `gorm:"type:varchar(36);not null;uniqueIndex" json:"customer_id"`
+	CustomerID string `gorm:"type:varchar(64);not null;uniqueIndex" json:"customer_id"`
 	UnifiedID  string `gorm:"type:varchar(128);default:'';index" json:"unified_id"`
 
 	RecencyDays   int   `gorm:"type:int;not null;default:9999" json:"recency_days"`
@@ -68,7 +68,7 @@ var RFMSegmentDescriptions = map[string]string{
 // 触达任务，由 1 个或多个渠道触达 + 多个 step 组成
 type RecoveryQueue struct {
 	ID         uint64 `gorm:"primaryKey;autoIncrement" json:"id"`
-	CustomerID string `gorm:"type:varchar(36);not null;index" json:"customer_id"`
+	CustomerID string `gorm:"type:varchar(64);not null;index" json:"customer_id"`
 	UnifiedID  string `gorm:"type:varchar(128);default:'';index" json:"unified_id"`
 	Account    string `gorm:"type:varchar(255);default:''" json:"account"`
 

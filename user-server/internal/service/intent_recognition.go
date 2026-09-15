@@ -49,7 +49,6 @@ type IntentConfig struct {
 
 // IntentRecognizer 销售意图识别器
 type IntentRecognizer struct {
-	db               *gorm.DB
 	recordRepo       *repository.IntentRecordRepository
 	logRepo          *repository.IntentLogRepository
 	sopExecutionRepo *repository.SopExecutionRepository
@@ -77,7 +76,6 @@ func NewIntentRecognizer(db *gorm.DB, dispatcher *llm.Dispatcher, cache *redis.C
 		logRepo.SetDB(context.Background(), db)
 	}
 	rec := &IntentRecognizer{
-		db:               db,
 		recordRepo:       recordRepo,
 		logRepo:          logRepo,
 		sopExecutionRepo: repository.NewSopExecutionRepository(db),
@@ -806,7 +804,7 @@ func inferSentiment(intentType string) string {
 }
 
 func (s *IntentRecognizer) saveRecord(ctx context.Context, sessionID, customerID, text string, result *dto.RecognizeResult, llmModel string, costTokens, latencyMs int) {
-	if s.db == nil {
+	if s.recordRepo == nil {
 		return
 	}
 	entitiesJSON, _ := json.Marshal(result.Entities)

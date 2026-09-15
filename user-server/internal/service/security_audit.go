@@ -125,6 +125,12 @@ func (s *SecurityAuditService) ListAudits(ctx context.Context, page, pageSize in
 	return list, total, nil
 }
 
+// ListAuditsKeyset 使用 keyset 分页列出审计记录（不含 items，减少载荷）。
+// cursor 为空表示首页；返回 nextCursor 为空表示已到末页。
+func (s *SecurityAuditService) ListAuditsKeyset(ctx context.Context, cursor string, pageSize int) ([]model.SecurityAudit, int64, string, error) {
+	return s.repo.ListKeyset(ctx, cursor, pageSize)
+}
+
 // GetAuditDetail 获取审计明细（含 items）。
 func (s *SecurityAuditService) GetAuditDetail(ctx context.Context, id uint) (*model.SecurityAudit, error) {
 	var a model.SecurityAudit

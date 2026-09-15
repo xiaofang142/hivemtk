@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"gorm.io/gorm"
 )
 
 // MarketingWorkflow 自动化工作流
@@ -21,15 +20,14 @@ type MarketingWorkflow struct {
 
 // WorkflowLoader 工作流加载器
 type WorkflowLoader struct {
-	db *gorm.DB
 }
 
-func NewWorkflowLoader(db *gorm.DB) *WorkflowLoader {
-	return &WorkflowLoader{db: db}
+func NewWorkflowLoader() *WorkflowLoader {
+	return &WorkflowLoader{}
 }
 
 func (l *WorkflowLoader) LoadWorkflow(ctx context.Context, workflowID string) (*MarketingWorkflow, error) {
-	if data, found := LoadAssetFromDB(l.db, "marketing_workflow", workflowID); found {
+	if data, found := LoadAssetFromDB("marketing_workflow", workflowID); found {
 		var w MarketingWorkflow
 		if err := json.Unmarshal(data, &w); err == nil {
 			w.ID = workflowID
@@ -42,7 +40,7 @@ func (l *WorkflowLoader) LoadWorkflow(ctx context.Context, workflowID string) (*
 
 func (l *WorkflowLoader) ListAllWorkflows(ctx context.Context) ([]*MarketingWorkflow, error) {
 	var result []*MarketingWorkflow
-	rows, _ := ListAssetsFromDB(l.db, "marketing_workflow")
+	rows, _ := ListAssetsFromDB("marketing_workflow")
 	seen := map[string]bool{}
 	for _, r := range rows {
 		var w MarketingWorkflow

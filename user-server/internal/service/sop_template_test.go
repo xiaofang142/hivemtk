@@ -469,7 +469,7 @@ func TestSOPTemplate_MatchByAgent_RepoError(t *testing.T) {
 
 // TestSOPTemplate_MatchByAgent_NilRepo nil repo 安全
 func TestSOPTemplate_MatchByAgent_NilRepo(t *testing.T) {
-	svc := &SOPTemplateService{repo: nil, db: nil}
+	svc := &SOPTemplateService{repo: nil}
 	matches, err := svc.MatchByAgent(context.Background(), 1, "x", "", 3)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)

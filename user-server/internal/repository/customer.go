@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	_utils "hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 )
@@ -33,6 +34,9 @@ type CustomerRepository interface {
 	Update(ctx context.Context, customer *model.Customer) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, page, limit int, keyword string) ([]*model.Customer, int64, error)
+	// ListKeyset 使用 keyset（cursor）分页读取客户列表。
+	// cursor 为空表示首页；返回的 nextCursor 为空表示已到末页。
+	ListKeyset(ctx context.Context, cursor string, limit int, keyword string) ([]*model.Customer, int64, string, error)
 	FindByIdentity(ctx context.Context, phone, email, wechatOpenID, douyinOpenID, xiaohongshuID string) (*model.Customer, error)
 	FindByIdentityAll(ctx context.Context, phone, email, wechatOpenID, douyinOpenID, xiaohongshuID string) ([]*model.Customer, error)
 	CountNotEmpty(ctx context.Context, fieldName string) (int64, error)
@@ -188,6 +192,53 @@ func (r *customerRepository) List(ctx context.Context, page, limit int, keyword 
 	}
 
 	return customers, total, nil
+}
+
+// ListKeyset 使用 keyset（cursor）分页读取客户列表。
+//
+// 排序统一为 created_at DESC, id DESC（复合游标）。customer.id 为 uuid 字符串，
+// 因此游标使用 utils.EncodeStringIDCursor 编码 (created_at, id)，行值比较走
+// (created_at, id) < (?, ?)。多取 1 条用于判断是否还有下一页。
+func (r *customerRepository) ListKeyset(ctx context.Context, cursor string, limit int, keyword string) ([]*model.Customer, int64, string, error) {
+	var customers []*model.Customer
+	var total int64
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	q := dbFromCtx(ctx).Model(&model.Customer{})
+
+	kw := strings.TrimSpace(keyword)
+	if kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("phone LIKE ? OR email LIKE ? OR unified_id LIKE ?", like, like, like)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	if cursor != "" {
+		ts, id, ok := _utils.DecodeStringIDCursor(cursor)
+		if !ok {
+			return nil, 0, "", fmt.Errorf("invalid cursor: %s", cursor)
+		}
+		q = q.Where("(created_at, id) < (?, ?)", ts, id)
+	}
+
+	if err := q.Order("created_at DESC, id DESC").Limit(limit + 1).Find(&customers).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	nextCursor := ""
+	if len(customers) > limit {
+		last := customers[limit-1]
+		customers = customers[:limit]
+		nextCursor = _utils.EncodeStringIDCursor(last.CreatedAt, last.ID)
+	}
+
+	return customers, total, nextCursor, nil
 }
 
 func (r *customerRepository) FindByIdentity(ctx context.Context, phone, email, wechatOpenID, douyinOpenID, xiaohongshuID string) (*model.Customer, error) {

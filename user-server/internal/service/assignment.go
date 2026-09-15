@@ -61,11 +61,11 @@ func ResolveAutoAssignMode(mode string) (AssignmentStrategy, error) {
 }
 
 type AssignmentService struct {
-	db *gorm.DB
+	customerRepo repository.CustomerRepository
 }
 
 func NewAssignmentService(db *gorm.DB) *AssignmentService {
-	return &AssignmentService{db: db}
+	return &AssignmentService{customerRepo: repository.NewCustomerRepository()}
 }
 
 // AgentInfo 坐席信息
@@ -225,7 +225,7 @@ func extractSessionSkills(sess *model.CustomerSession) []string {
 }
 
 func (s *AssignmentService) resolveOwnerAgentID(ctx context.Context, sess *model.CustomerSession) uint {
-	if s == nil || s.db == nil || sess == nil {
+	if s == nil || s.customerRepo == nil || sess == nil {
 		return 0
 	}
 	identity := sess.OneID
@@ -235,7 +235,7 @@ func (s *AssignmentService) resolveOwnerAgentID(ctx context.Context, sess *model
 	if identity == "" {
 		return 0
 	}
-	cust, err := repository.NewCustomerRepository().GetByUnifiedID(ctx, identity)
+	cust, err := s.customerRepo.GetByUnifiedID(ctx, identity)
 	if err != nil || cust == nil || cust.OwnerAgentID == nil || *cust.OwnerAgentID == 0 {
 		return 0
 	}

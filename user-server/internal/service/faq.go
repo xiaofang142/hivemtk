@@ -71,7 +71,6 @@ type faqBindingRepoIface interface {
 type FAQService struct {
 	repo        faqRepoIface
 	bindingRepo faqBindingRepoIface
-	db          *gorm.DB
 	clock       Clock
 
 	mu     sync.RWMutex
@@ -100,7 +99,6 @@ func NewFAQService(db *gorm.DB, repo *repository.FAQRepository) *FAQService {
 		bindingIface = repository.NewAgentKBBindingRepository(db)
 	}
 	return &FAQService{
-		db:          db,
 		repo:        iface,
 		bindingRepo: bindingIface,
 		clock:       realClock{},

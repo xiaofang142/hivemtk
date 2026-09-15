@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 // FeedbackEvent 反馈事件（append-only 流水）
 //
@@ -9,24 +12,25 @@ import "time"
 //   - implicit  隐式反馈（转化率/回复率/会话时长/转人工）
 //   - champion  销冠标记（is_champion/script_adopt/5 维度评分）
 type FeedbackEvent struct {
-	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	EventID           string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"event_id"`
-	SessionID         string    `gorm:"type:varchar(120);index;not null" json:"session_id"`
-	CustomerID        string    `gorm:"type:varchar(64);index;not null" json:"customer_id"`
-	SOPID             uint      `gorm:"index" json:"sop_id"`
-	ExecutionID       uint      `json:"execution_id"`
-	Variant           string    `gorm:"type:varchar(50);index" json:"variant"`
-	PromptCandidateID uint      `gorm:"index" json:"prompt_candidate_id"`
-	EventType         string    `gorm:"type:varchar(30);index;not null" json:"event_type"`
-	SignalKey         string    `gorm:"type:varchar(50);index;not null" json:"signal_key"`
-	SignalValue       JSONMap   `gorm:"type:jsonb;not null" json:"signal_value"`
-	Weight            float64   `gorm:"type:decimal(4,2);not null;default:0" json:"weight"`
-	Reward            float64   `gorm:"type:decimal(6,3);not null;default:0" json:"reward"`
-	AIReply           string    `gorm:"type:text" json:"ai_reply"`
-	CustomerMsg       string    `gorm:"type:text" json:"customer_msg"`
-	Metadata          JSONMap   `gorm:"type:jsonb" json:"metadata"`
-	CreatedBy         uint      `json:"created_by"`
-	CreatedAt         time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	ID                uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	EventID           string         `gorm:"type:varchar(64);uniqueIndex;not null" json:"event_id"`
+	SessionID         string         `gorm:"type:varchar(120);index;not null" json:"session_id"`
+	CustomerID        string         `gorm:"type:varchar(64);index;not null" json:"customer_id"`
+	SOPID             uint           `gorm:"index" json:"sop_id"`
+	ExecutionID       uint           `json:"execution_id"`
+	Variant           string         `gorm:"type:varchar(50);index" json:"variant"`
+	PromptCandidateID uint           `gorm:"index" json:"prompt_candidate_id"`
+	EventType         string         `gorm:"type:varchar(30);index;not null" json:"event_type"`
+	SignalKey         string         `gorm:"type:varchar(50);index;not null" json:"signal_key"`
+	SignalValue       JSONMap        `gorm:"type:jsonb;not null" json:"signal_value"`
+	Weight            float64        `gorm:"type:decimal(4,2);not null;default:0" json:"weight"`
+	Reward            float64        `gorm:"type:decimal(6,3);not null;default:0" json:"reward"`
+	AIReply           string         `gorm:"type:text" json:"ai_reply"`
+	CustomerMsg       string         `gorm:"type:text" json:"customer_msg"`
+	Metadata          JSONMap        `gorm:"type:jsonb" json:"metadata"`
+	CreatedBy         uint           `json:"created_by"`
+	CreatedAt         time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 表名

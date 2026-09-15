@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 // knowledge_base.go 智能体知识库主表 (智能体 1:N 知识库)
 //
@@ -28,18 +31,19 @@ import "time"
 //   - INDEX(owner_agent_id)      按智能体查询其私有 KB
 //   - INDEX(enabled)             过滤禁用
 type KnowledgeBase struct {
-	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	KBCode       string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"kb_code"`
-	Type         string    `gorm:"type:varchar(16);not null;index" json:"type"`
-	Name         string    `gorm:"type:varchar(128);not null" json:"name"`
-	Description  string    `gorm:"type:text" json:"description"`
-	OwnerType    string    `gorm:"type:varchar(16);not null;default:private" json:"owner_type"`
-	OwnerAgentID *uint     `gorm:"index" json:"owner_agent_id,omitempty"`
-	MemberCount  int       `gorm:"type:integer;default:0" json:"member_count"`
-	DocCount     int       `gorm:"type:integer;default:0" json:"doc_count"`
-	Enabled      *bool     `gorm:"type:boolean;default:true;not null;index" json:"enabled"`
-	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID           uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	KBCode       string         `gorm:"type:varchar(64);uniqueIndex;not null" json:"kb_code"`
+	Type         string         `gorm:"type:varchar(16);not null;index" json:"type"`
+	Name         string         `gorm:"type:varchar(128);not null" json:"name"`
+	Description  string         `gorm:"type:text" json:"description"`
+	OwnerType    string         `gorm:"type:varchar(16);not null;default:private" json:"owner_type"`
+	OwnerAgentID *uint          `gorm:"index" json:"owner_agent_id,omitempty"`
+	MemberCount  int            `gorm:"type:integer;default:0" json:"member_count"`
+	DocCount     int            `gorm:"type:integer;default:0" json:"doc_count"`
+	Enabled      *bool          `gorm:"type:boolean;default:true;not null;index" json:"enabled"`
+	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName GORM 表名

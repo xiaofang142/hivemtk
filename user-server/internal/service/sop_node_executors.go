@@ -557,7 +557,6 @@ func buildLLMDecisionPrompt(ec *ExecutionContext, candidates []string) string {
 }
 
 type WaitExecutor struct {
-	db        *gorm.DB
 	timerRepo *repository.SOPTimerRepository
 }
 
@@ -649,7 +648,7 @@ func (e *WaitExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*Node
 //
 // 当 deps.DB 非 nil 时构造 timerRepo，否则 timerRepo 为 nil（Execute 会跳过 DB 写入）。
 func NewWaitExecutor(deps *SOPNodeExecutorDeps) *WaitExecutor {
-	e := &WaitExecutor{db: deps.DB}
+	e := &WaitExecutor{}
 	if deps.DB != nil {
 		e.timerRepo = repository.NewSOPTimerRepository(deps.DB)
 	}

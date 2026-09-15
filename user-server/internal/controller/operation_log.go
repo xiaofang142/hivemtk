@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -30,6 +31,8 @@ func NewOperationLogController() *OperationLogController {
 
 // GetList 获取操作日志列表
 func (c *OperationLogController) GetList(ctx *gin.Context) {
+	cursor, cursorLimit, useCursor := utils.ParseCursorParams(ctx, 20)
+
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 
@@ -38,6 +41,9 @@ func (c *OperationLogController) GetList(ctx *gin.Context) {
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
+	}
+	if useCursor {
+		pageSize = cursorLimit
 	}
 
 	filters := make(map[string]any)
@@ -55,6 +61,21 @@ func (c *OperationLogController) GetList(ctx *gin.Context) {
 	}
 	if endTime := ctx.Query("end_time"); endTime != "" {
 		filters["end_time"] = endTime
+	}
+
+	if useCursor {
+		logs, total, nextCursor, err := c.logSvc.GetAllKeyset(ctx, cursor, pageSize, filters)
+		if err != nil {
+			response.ErrorFromDB(ctx, err, err.Error())
+			return
+		}
+		response.Success(ctx, gin.H{
+			"list":        logs,
+			"total":       total,
+			"page_size":   pageSize,
+			"next_cursor": nextCursor,
+		}, "获取操作日志成功")
+		return
 	}
 
 	logs, total, err := c.logSvc.GetAll(ctx, page, pageSize, filters)

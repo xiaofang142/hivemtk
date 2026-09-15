@@ -9,7 +9,6 @@ import (
 
 	"hivemtk-user/internal/dto"
 
-	"gorm.io/gorm"
 )
 
 // ABTestPlan AB 测试方案
@@ -27,15 +26,14 @@ type ABTestPlan struct {
 
 // ABTestLoader AB 测试加载器
 type ABTestLoader struct {
-	db *gorm.DB
 }
 
-func NewABTestLoader(db *gorm.DB) *ABTestLoader {
-	return &ABTestLoader{db: db}
+func NewABTestLoader() *ABTestLoader {
+	return &ABTestLoader{}
 }
 
 func (l *ABTestLoader) LoadPlan(ctx context.Context, planID string) (*ABTestPlan, error) {
-	if data, found := LoadAssetFromDB(l.db, "ab_test_plan", planID); found {
+	if data, found := LoadAssetFromDB("ab_test_plan", planID); found {
 		var p ABTestPlan
 		if err := json.Unmarshal(data, &p); err == nil {
 			p.ID = planID
@@ -48,7 +46,7 @@ func (l *ABTestLoader) LoadPlan(ctx context.Context, planID string) (*ABTestPlan
 
 func (l *ABTestLoader) ListAllPlans(ctx context.Context) ([]*ABTestPlan, error) {
 	var result []*ABTestPlan
-	rows, _ := ListAssetsFromDB(l.db, "ab_test_plan")
+	rows, _ := ListAssetsFromDB("ab_test_plan")
 	seen := map[string]bool{}
 	for _, r := range rows {
 		var p ABTestPlan

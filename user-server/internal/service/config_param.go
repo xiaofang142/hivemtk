@@ -36,7 +36,6 @@ const configParamTTL = 60 * time.Second
 //   - 读操作在缓存 miss 时拉一次 group 全量（同组一次性加载，减少 DB 往返）
 type ConfigParamService struct {
 	repo *repository.ConfigParamRepository
-	db   *gorm.DB
 
 	mu     sync.RWMutex
 	cache  map[string]paramEntry
@@ -51,7 +50,6 @@ var globalOnce sync.Once
 func NewConfigParamService(db *gorm.DB) *ConfigParamService {
 	return &ConfigParamService{
 		repo:   repository.NewConfigParamRepository(db),
-		db:     db,
 		cache:  make(map[string]paramEntry, 256),
 		loaded: make(map[string]bool, 32),
 		nowFn:  time.Now,
@@ -225,7 +223,7 @@ func (s *ConfigParamService) getString(ctx context.Context, group, key string) (
 		s.mu.Unlock()
 	}
 
-	if s.db == nil {
+	if s.repo == nil {
 		return "", false
 	}
 

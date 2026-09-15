@@ -26,10 +26,11 @@ type LiveCode struct {
 	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 
-	ShortDomain   *DomainPool  `json:"short_domain" gorm:"foreignKey:ShortDomainID;references:id"`
-	EntryDomain   *DomainPool  `json:"entry_domain" gorm:"foreignKey:EntryDomainID;references:id"`
-	LandingDomain *DomainPool  `json:"landing_domain" gorm:"foreignKey:LandingDomainID;references:id"`
-	QRCodes       []LiveCodeQR `json:"qr_codes" gorm:"foreignKey:LiveCodeID"`
+	ShortDomain   *DomainPool    `json:"short_domain" gorm:"foreignKey:ShortDomainID;references:id"`
+	EntryDomain   *DomainPool    `json:"entry_domain" gorm:"foreignKey:EntryDomainID;references:id"`
+	LandingDomain *DomainPool    `json:"landing_domain" gorm:"foreignKey:LandingDomainID;references:id"`
+	QRCodes       []LiveCodeQR   `json:"qr_codes" gorm:"foreignKey:LiveCodeID"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 返回表名

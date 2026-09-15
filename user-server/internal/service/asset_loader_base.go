@@ -18,20 +18,24 @@ func BindAssetLoaderRepository(db *gorm.DB) {
 	assetLoaderRepo = repository.NewAssetLoaderRepository(db)
 }
 
-// LoadAssetFromDB 通用 DB 加载（优先 local_assets）
-func LoadAssetFromDB(db *gorm.DB, assetType, assetID string) ([]byte, bool) {
-	repo := repository.NewAssetLoaderRepository(db)
-	return repo.LoadAssetData(context.Background(), assetType, assetID)
+// LoadAssetFromDB 通用 DB 加载（优先 local_assets），走装配期注入的 AssetLoaderRepository
+func LoadAssetFromDB(assetType, assetID string) ([]byte, bool) {
+	if assetLoaderRepo == nil {
+		return nil, false
+	}
+	return assetLoaderRepo.LoadAssetData(context.Background(), assetType, assetID)
 }
 
-// ListAssetsFromDB 按类型列出激活资产
-func ListAssetsFromDB(db *gorm.DB, assetType string) ([]struct {
+// ListAssetsFromDB 按类型列出激活资产，走装配期注入的 AssetLoaderRepository
+func ListAssetsFromDB(assetType string) ([]struct {
 	AssetID string
 	Name    string
 	Data    json.RawMessage
 }, error) {
-	repo := repository.NewAssetLoaderRepository(db)
-	rows, err := repo.ListActiveAssetsByType(context.Background(), assetType)
+	if assetLoaderRepo == nil {
+		return nil, nil
+	}
+	rows, err := assetLoaderRepo.ListActiveAssetsByType(context.Background(), assetType)
 	out := make([]struct {
 		AssetID string
 		Name    string

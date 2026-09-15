@@ -21,7 +21,6 @@ var refluxSignalSet = map[string]bool{
 
 // BanditRewardReflux 回流 worker 纯逻辑（可独立单测）
 type BanditRewardReflux struct {
-	db     *gorm.DB
 	repo   *repository.FeedbackLoopRepository
 	bandit BanditUpdater
 }
@@ -36,7 +35,6 @@ type BanditUpdater interface {
 // 参数 db 仅为构造签名兼容保留，内部用 db 构造 repository，不存 gorm 直连写路径
 func NewBanditRewardReflux(db *gorm.DB, bandit BanditUpdater) *BanditRewardReflux {
 	return &BanditRewardReflux{
-		db:     db,
 		repo:   repository.NewFeedbackLoopRepositoryWithDB(db),
 		bandit: bandit,
 	}

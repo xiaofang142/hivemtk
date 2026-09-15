@@ -14,15 +14,14 @@ import (
 )
 
 type WhatsAppTemplateService struct {
-	db   *gorm.DB
 	repo *repository.WhatsappTemplateRepository
 }
 
 func NewWhatsAppTemplateService(db *gorm.DB) *WhatsAppTemplateService {
 	if db != nil {
-		return &WhatsAppTemplateService{db: db, repo: repository.NewWhatsappTemplateRepositoryWithDB(db)}
+		return &WhatsAppTemplateService{repo: repository.NewWhatsappTemplateRepositoryWithDB(db)}
 	}
-	return &WhatsAppTemplateService{db: nil, repo: repository.NewWhatsappTemplateRepository()}
+	return &WhatsAppTemplateService{repo: repository.NewWhatsappTemplateRepository()}
 }
 
 func (ts *WhatsAppTemplateService) CreateTemplate(ctx context.Context, template *model.WhatsappMessageTemplate) (*model.WhatsappMessageTemplate, error) {

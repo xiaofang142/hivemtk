@@ -24,7 +24,6 @@ type AgentContext = dto.AgentContext
 // AIAgentService AI 智能体服务
 type AIAgentService struct {
 	repo *repository.AIAgentRepository
-	db   *gorm.DB
 
 	cacheMu  sync.RWMutex
 	cache    map[uint]*agentCacheEntry
@@ -47,7 +46,6 @@ func NewAIAgentServiceWithDB(db *gorm.DB) *AIAgentService {
 	repo.SetDB(context.Background(), db)
 	return &AIAgentService{
 		repo:     repo,
-		db:       db,
 		cache:    make(map[uint]*agentCacheEntry),
 		cacheTTL: 30 * time.Second,
 	}
@@ -262,7 +260,6 @@ type ChannelAgentBindingService struct {
 	repo      *repository.ChannelAgentBindingRepository
 	agentRepo *repository.AIAgentRepository
 	agentSvc  *AIAgentService
-	db        *gorm.DB
 }
 
 // NewChannelAgentBindingService 创建渠道绑定服务(无参,内部用 dbUtil.GetDB())
@@ -280,7 +277,6 @@ func NewChannelAgentBindingServiceWithDB(db *gorm.DB, agentSvc *AIAgentService) 
 		repo:      repo,
 		agentRepo: agentRepo,
 		agentSvc:  agentSvc,
-		db:        db,
 	}
 }
 
@@ -382,8 +378,8 @@ func (s *ChannelAgentBindingService) ReplaceBinding(ctx context.Context, channel
 	if agent.Status != 1 {
 		return nil, errors.New("智能体已禁用, 无法绑定")
 	}
-	if s.db == nil {
-		return nil, errors.New("db 未初始化, 事务不可用")
+	if s.repo == nil {
+		return nil, errors.New("repository 未初始化, 事务不可用")
 	}
 	return s.repo.ReplacePrimaryBinding(ctx, channelType, accountID, agentID)
 }

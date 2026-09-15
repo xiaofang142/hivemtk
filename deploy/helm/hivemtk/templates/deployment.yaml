@@ -42,6 +42,23 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.secrets.enabled }}
+          volumeMounts:
+            - name: run-secrets
+              mountPath: {{ .Values.secrets.mountPath | default "/run/secrets" }}
+              readOnly: true
+          {{- end }}
+      {{- if .Values.secrets.enabled }}
+      volumes:
+        # OPT-SEC-08: K8s Secret 以文件形态挂载到 /run/secrets，
+        # 由 user-server 启动时的 secrets.LoadFiles 注入 env（已显式设置的 env 优先）。
+        # Secret 内 key 命名需带 .txt / .env 扩展名（如 MASTER_KEY.txt、hivemtk.env），
+        # 挂载后即为对应文件名供 fileloader 消费。
+        - name: run-secrets
+          secret:
+            secretName: {{ .Values.secrets.name }}
+            optional: true
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"hivemtk-user/internal/model"
+	_pagination "hivemtk-user/internal/pkg/pagination"
 
 	"gorm.io/gorm"
 )
@@ -47,6 +49,48 @@ func (r *SecurityAuditRepository) List(ctx context.Context, page, pageSize int) 
 		return nil, 0, err
 	}
 	return list, total, nil
+}
+
+// ListKeyset 使用 keyset（cursor）分页查询审计记录。
+//
+// security_audits 为 uint 自增 ID + created_at，游标复用 pagination.EncodeCursor
+// （格式 <unix_nano>:<id>）。排序统一为 created_at DESC, id DESC，行值比较走
+// (created_at, id) < (?, ?)。多取 1 条用于判断是否还有下一页。
+func (r *SecurityAuditRepository) ListKeyset(ctx context.Context, cursor string, pageSize int) ([]model.SecurityAudit, int64, string, error) {
+	if r.db == nil {
+		return nil, 0, "", errors.New("security audit repository not initialized")
+	}
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&model.SecurityAudit{}).Count(&total).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	q := r.db.WithContext(ctx).Model(&model.SecurityAudit{})
+	if cursor != "" {
+		ts, id, ok := _pagination.DecodeCursor(_pagination.Cursor(cursor))
+		if !ok {
+			return nil, 0, "", fmt.Errorf("invalid cursor: %s", cursor)
+		}
+		q = q.Where("(created_at, id) < (?, ?)", ts, id)
+	}
+
+	var list []model.SecurityAudit
+	if err := q.Order("created_at DESC, id DESC").Limit(pageSize + 1).Find(&list).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	nextCursor := ""
+	if len(list) > pageSize {
+		last := list[pageSize-1]
+		list = list[:pageSize]
+		nextCursor = string(_pagination.EncodeCursor(last.CreatedAt, uint64(last.ID)))
+	}
+
+	return list, total, nextCursor, nil
 }
 
 // GetByID 获取审计详情（含 items）

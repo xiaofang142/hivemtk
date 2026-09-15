@@ -64,7 +64,6 @@ type sopBindingRepoIface interface {
 type SOPTemplateService struct {
 	repo        sopRepoIface
 	bindingRepo sopBindingRepoIface
-	db          *gorm.DB
 
 	mu     sync.RWMutex
 	cache  map[uint][]model.SOPTemplate
@@ -92,7 +91,6 @@ func NewSOPTemplateService(db *gorm.DB, repo *repository.SOPTemplateRepository) 
 		bindingIface = repository.NewAgentKBBindingRepository(db)
 	}
 	return &SOPTemplateService{
-		db:          db,
 		repo:        iface,
 		bindingRepo: bindingIface,
 		cache:       make(map[uint][]model.SOPTemplate),

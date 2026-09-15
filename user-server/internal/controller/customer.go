@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -34,6 +35,21 @@ func NewCustomerController() *CustomerController {
 // @Success 200 {object} object{data=list, total=int} "获取成功"
 // @Router /api/customer [get]
 func (c *CustomerController) ListCustomers(ctx *gin.Context) {
+	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {
+		customers, total, nextCursor, err := c.customerService.ListKeyset(context.Background(), cursor, limit)
+		if err != nil {
+			response.ErrorFromDB(ctx, err, err.Error())
+			return
+		}
+		response.Success(ctx, gin.H{
+			"list":        customers,
+			"total":       total,
+			"limit":       limit,
+			"next_cursor": nextCursor,
+		}, "获取成功")
+		return
+	}
+
 	page, limit, err := pagination.Parse(ctx)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())

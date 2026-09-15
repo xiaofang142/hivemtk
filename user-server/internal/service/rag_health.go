@@ -32,7 +32,6 @@ const (
 
 // RagHealthService RAG 健康度服务
 type RagHealthService struct {
-	db       *gorm.DB
 	repo     repository.RagHealthRepository
 	metric   *RagMetricsService
 	mu       sync.Mutex
@@ -49,7 +48,6 @@ func NewRagHealthService(db *gorm.DB, metric *RagMetricsService) *RagHealthServi
 		metric = NewRagMetricsService(db)
 	}
 	return &RagHealthService{
-		db:     db,
 		repo:   repository.NewRagHealthRepository(db),
 		metric: metric,
 	}
@@ -92,8 +90,8 @@ const (
 //
 // 时间窗口默认为最近 1 小时；可通过 window 参数自定义
 func (s *RagHealthService) GetHealth(ctx context.Context, window time.Duration) (*RagHealthReport, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("service or db is nil")
+	if s == nil || s.repo == nil || s.metric == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	if window <= 0 {
 		window = RagHealthDefaultWindow

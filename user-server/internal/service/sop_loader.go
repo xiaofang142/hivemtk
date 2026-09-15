@@ -9,7 +9,6 @@ import (
 
 	"hivemtk-user/internal/dto"
 
-	"gorm.io/gorm"
 )
 
 // IndustrySOP 行业 SOP
@@ -25,15 +24,14 @@ type IndustrySOP struct {
 
 // SOPLoader SOP 加载器
 type SOPLoader struct {
-	db *gorm.DB
 }
 
-func NewSOPLoader(db *gorm.DB) *SOPLoader {
-	return &SOPLoader{db: db}
+func NewSOPLoader() *SOPLoader {
+	return &SOPLoader{}
 }
 
 func (l *SOPLoader) LoadSOP(ctx context.Context, sopID string) (*IndustrySOP, error) {
-	if data, found := LoadAssetFromDB(l.db, "industry_sop", sopID); found {
+	if data, found := LoadAssetFromDB("industry_sop", sopID); found {
 		var s IndustrySOP
 		if err := json.Unmarshal(data, &s); err == nil {
 			s.ID = sopID
@@ -49,7 +47,7 @@ func (l *SOPLoader) LoadSOP(ctx context.Context, sopID string) (*IndustrySOP, er
 
 func (l *SOPLoader) ListAllSOPs(ctx context.Context) ([]*IndustrySOP, error) {
 	var result []*IndustrySOP
-	rows, _ := ListAssetsFromDB(l.db, "industry_sop")
+	rows, _ := ListAssetsFromDB("industry_sop")
 	seen := map[string]bool{}
 	for _, r := range rows {
 		var s IndustrySOP

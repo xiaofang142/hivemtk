@@ -76,6 +76,23 @@ func (s *OperationLogService) GetAll(ctx context.Context, page, pageSize int, fi
 	return out, total, nil
 }
 
+// GetAllKeyset 获取操作日志列表（keyset 分页）。
+// cursor 为空表示首页；返回 nextCursor 为空表示已到末页。
+func (s *OperationLogService) GetAllKeyset(ctx context.Context, cursor string, pageSize int, filters map[string]any) ([]*OperationLogView, int64, string, error) {
+	if pageSize < 1 || pageSize > 50000 {
+		pageSize = 20
+	}
+	logs, total, nextCursor, err := s.logRepo.GetAllKeyset(ctx, cursor, pageSize, filters)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	out := make([]*OperationLogView, 0, len(logs))
+	for _, l := range logs {
+		out = append(out, toOperationLogView(l))
+	}
+	return out, total, nextCursor, nil
+}
+
 // GetByID 获取操作日志详情
 func (s *OperationLogService) GetByID(ctx context.Context, id uint) (*OperationLogView, error) {
 	log, err := s.logRepo.GetByID(ctx, id)

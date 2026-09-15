@@ -18,7 +18,7 @@ func (r *InboxConversationRepository) DeletePollutedInboxRows(ctx context.Contex
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).Unscoped().
 		Where("conversation_id LIKE ? OR customer_id LIKE ?", "conv:% %", "conv:% %").
 		Delete(&model.InboxConversation{})
 	return res.RowsAffected, res.Error
@@ -28,7 +28,7 @@ func (r *InboxConversationRepository) DeleteOrphanConvInboxRows(ctx context.Cont
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).Unscoped().
 		Where("conversation_id LIKE ? AND NOT EXISTS (SELECT 1 FROM message_hub m WHERE m.conversation_id = inbox_conversations.conversation_id)",
 			"conv:%").
 		Delete(&model.InboxConversation{})
@@ -280,7 +280,7 @@ func (r *InboxConversationRepository) DeleteOrphanInboxByConversation(ctx contex
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).Unscoped().
 		Where("platform = ? AND account_id = ? AND conversation_id = ? AND customer_id <> ?",
 			platform, accountID, conversationID, keepCustomerID).
 		Delete(&model.InboxConversation{})

@@ -136,6 +136,18 @@ func main() {
 	appCfg := config.GetAppConfig()
 	service.SetAgentLoopTimeout(appCfg.Inference.LLM.TimeoutSeconds)
 
+	// OPT-SEC-08：先从 /run/secrets（K8s Secret/Vault Agent 挂载卷）预加载密钥文件为
+	// env，再执行 InitFromEnv；已显式设置的 env 优先，不覆盖。
+	secretsDir := os.Getenv("HIVEMTK_SECRETS_DIR")
+	if secretsDir == "" {
+		secretsDir = "/run/secrets"
+	}
+	if injected, err := secrets.LoadFiles(secretsDir); err != nil {
+		logger.Warnf("[secrets] 加载 %s 密钥文件部分失败（继续启动）: %v", secretsDir, err)
+	} else if injected > 0 {
+		logger.Infof("[secrets] 从 %s 注入 %d 个密钥环境变量", secretsDir, injected)
+	}
+
 	if err := secrets.InitFromEnv(); err != nil {
 		if config.IsDevelopmentEnv() {
 			logger.Warnf("[secrets] MASTER_KEY 未配置（非生产环境降级明文存储）: %v", err)

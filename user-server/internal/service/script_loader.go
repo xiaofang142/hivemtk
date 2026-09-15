@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"gorm.io/gorm"
 )
 
 // SalesScript 销冠话术
@@ -21,15 +20,14 @@ type SalesScript struct {
 
 // ScriptLoader 话术加载器
 type ScriptLoader struct {
-	db *gorm.DB
 }
 
-func NewScriptLoader(db *gorm.DB) *ScriptLoader {
-	return &ScriptLoader{db: db}
+func NewScriptLoader() *ScriptLoader {
+	return &ScriptLoader{}
 }
 
 func (l *ScriptLoader) LoadScript(ctx context.Context, scriptID string) (*SalesScript, error) {
-	if data, found := LoadAssetFromDB(l.db, "sales_script", scriptID); found {
+	if data, found := LoadAssetFromDB("sales_script", scriptID); found {
 		var s SalesScript
 		if err := json.Unmarshal(data, &s); err == nil {
 			s.ID = scriptID
@@ -42,7 +40,7 @@ func (l *ScriptLoader) LoadScript(ctx context.Context, scriptID string) (*SalesS
 
 func (l *ScriptLoader) ListAllScripts(ctx context.Context) ([]*SalesScript, error) {
 	var result []*SalesScript
-	rows, _ := ListAssetsFromDB(l.db, "sales_script")
+	rows, _ := ListAssetsFromDB("sales_script")
 	seen := map[string]bool{}
 	for _, r := range rows {
 		var s SalesScript

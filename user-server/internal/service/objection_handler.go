@@ -153,7 +153,7 @@ type HandleRequest struct {
 	Text           string `json:"text"`
 	Category       string `json:"category"`
 	OneID          string `json:"one_id"`
-	CustomerID     uint   `json:"customer_id"`
+	CustomerID     string `json:"customer_id"`
 	ConversationID string `json:"conversation_id"`
 	TraceID        string `json:"trace_id"`
 }
@@ -340,7 +340,7 @@ func getScriptABService() *ScriptABService {
 // RecordScriptExposure T-7 曝光记录入口：fire-and-forget，绝不影响主链路
 //
 // version/oneID/customerID/conversationID/traceID 任一关键位缺失时静默跳过。
-func RecordScriptExposure(scriptID uint, version int, oneID string, customerID uint, conversationID, traceID string) {
+func RecordScriptExposure(scriptID uint, version int, oneID string, customerID string, conversationID, traceID string) {
 	svc := getScriptABService()
 	if svc == nil || scriptID == 0 || oneID == "" {
 		return
@@ -373,7 +373,7 @@ func (s *ObjectionHandlerService) recordUsageAsync(ctx context.Context, template
 type scriptExposure struct {
 	version        int
 	oneID          string
-	customerID     uint
+	customerID     string
 	conversationID string
 	traceID        string
 }

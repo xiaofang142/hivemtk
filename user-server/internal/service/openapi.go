@@ -26,7 +26,6 @@ import (
 
 // OpenAPIService 知识库 OpenAPI 数据源同步服务
 type OpenAPIService struct {
-	db        *gorm.DB
 	srcRepo   *knowledgerepo.KnowledgeOpenAPIRepository
 	docRepo   *knowledgerepo.KnowledgeDocumentRepository
 	kbService *knowledgesvc.KnowledgeService
@@ -36,7 +35,6 @@ type OpenAPIService struct {
 // NewOpenAPIService 创建 OpenAPI 服务
 func NewOpenAPIService() *OpenAPIService {
 	return &OpenAPIService{
-		db:        dbUtil.GetDB(),
 		srcRepo:   knowledgerepo.NewKnowledgeOpenAPIRepository(dbUtil.GetDB()),
 		docRepo:   knowledgerepo.NewKnowledgeDocumentRepository(dbUtil.GetDB()),
 		kbService: knowledgesvc.NewKnowledgeService(),
@@ -49,7 +47,6 @@ func NewOpenAPIService() *OpenAPIService {
 // NewOpenAPIServiceWithDB 带 DB 的 OpenAPI 服务(用于测试)
 func NewOpenAPIServiceWithDB(gdb *gorm.DB) *OpenAPIService {
 	return &OpenAPIService{
-		db:        gdb,
 		srcRepo:   knowledgerepo.NewKnowledgeOpenAPIRepository(gdb),
 		docRepo:   knowledgerepo.NewKnowledgeDocumentRepository(gdb),
 		kbService: knowledgesvc.NewKnowledgeServiceWithDB(gdb),

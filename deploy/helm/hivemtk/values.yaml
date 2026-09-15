@@ -67,15 +67,27 @@ env:
         key: db-password
 
 # 密钥 (skeleton, 生产应通过 ExternalSecrets / Vault 注入)
+#
+# OPT-SEC-08 消费机制：enabled=true 时该 Secret 以文件形态只读挂载到 mountPath
+# （默认 /run/secrets），user-server 启动时 secrets.LoadFiles 读取其中的
+# *.txt（文件名去扩展名=变量名，首行=值）与 *.env（KEY=VALUE）文件注入环境变量，
+# 随后 secrets.InitFromEnv 从 env 取 MASTER_KEY 等密钥。
+# 优先级：容器 env 已显式设置的变量不被文件覆盖（env > 文件）。
+# 因此供 fileloader 消费的 Secret key 需带扩展名，如 MASTER_KEY.txt、hivemtk.env；
+# 下方 keys 中的 db-host/db-password 等仍走 .Values.env 的 secretKeyRef 通道注入。
 secrets:
   enabled: true
   name: hivemtk-secrets
+  mountPath: /run/secrets   # fileloader 目录；可用 HIVEMTK_SECRETS_DIR env 覆盖
   # 真实密钥应从 Vault/SecretsManager 同步, 不在 values 写明文
   keys:
     - db-host
     - db-password
     - jwt-secret
     - field-encryption-key
+    # fileloader 风格示例（含扩展名，挂载为 /run/secrets/<key> 文件）：
+    # - MASTER_KEY.txt
+    # - hivemtk.env
 
 # 健康检查
 livenessProbe:

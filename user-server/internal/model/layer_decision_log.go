@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 // LayerDecisionLog 决策日志
 //
@@ -23,19 +26,20 @@ import "time"
 //   - WallMs:   本次决策 wall time (ms)
 //   - LLMSkipped: 是否跳过 LLM (Layer1 命中 -> true)
 type LayerDecisionLog struct {
-	ID         uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	TraceID    string    `gorm:"type:varchar(64);index" json:"trace_id"`
-	SessionID  string    `gorm:"type:varchar(120);index" json:"session_id"`
-	CustomerID string    `gorm:"type:varchar(64);index" json:"customer_id"`
-	Layer      string    `gorm:"type:varchar(32);not null;index" json:"layer"`
-	Reason     string    `gorm:"type:varchar(64);not null" json:"reason"`
-	Intent     string    `gorm:"type:varchar(64);index" json:"intent"`
-	ConfIn     float64   `gorm:"type:decimal(5,4);default:0" json:"conf_in"`
-	ConfOut    float64   `gorm:"type:decimal(5,4);default:0" json:"conf_out"`
-	WallMs     int       `gorm:"type:int;default:0" json:"wall_ms"`
-	LLMSkipped *bool     `gorm:"type:boolean;default:false;not null" json:"llm_skipped"`
-	Extra      string    `gorm:"type:text" json:"extra,omitempty"`
-	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	TraceID    string         `gorm:"type:varchar(64);index" json:"trace_id"`
+	SessionID  string         `gorm:"type:varchar(120);index" json:"session_id"`
+	CustomerID string         `gorm:"type:varchar(64);index" json:"customer_id"`
+	Layer      string         `gorm:"type:varchar(32);not null;index" json:"layer"`
+	Reason     string         `gorm:"type:varchar(64);not null" json:"reason"`
+	Intent     string         `gorm:"type:varchar(64);index" json:"intent"`
+	ConfIn     float64        `gorm:"type:decimal(5,4);default:0" json:"conf_in"`
+	ConfOut    float64        `gorm:"type:decimal(5,4);default:0" json:"conf_out"`
+	WallMs     int            `gorm:"type:int;default:0" json:"wall_ms"`
+	LLMSkipped *bool          `gorm:"type:boolean;default:false;not null" json:"llm_skipped"`
+	Extra      string         `gorm:"type:text" json:"extra,omitempty"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName GORM 表名

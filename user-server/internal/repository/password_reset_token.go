@@ -19,8 +19,12 @@ type PasswordResetTokenRepository struct {
 	db *gorm.DB
 }
 
-// NewPasswordResetTokenRepository 创建密码重置令牌仓储
+// NewPasswordResetTokenRepository 创建密码重置令牌仓储；db 为 nil 时返回 nil，
+// 与 service 层既有 `tokenRepo == nil` 防御语义保持一致。
 func NewPasswordResetTokenRepository(db *gorm.DB) *PasswordResetTokenRepository {
+	if db == nil {
+		return nil
+	}
 	return &PasswordResetTokenRepository{db: db}
 }
 
@@ -135,4 +139,13 @@ func RunPasswordResetTransaction(ctx context.Context, db *gorm.DB, tokenID, user
 		}
 		return NewPasswordResetUserTxHelpers(tx).UpdatePasswordInTx(ctx, userID, hashedPassword)
 	})
+}
+
+// RunResetTransaction 实例方法版事务封口，供 service 层通过仓储自身 db 调用，
+// 避免 service 持有 *gorm.DB（ARC-01 五层架构约束）。
+func (r *PasswordResetTokenRepository) RunResetTransaction(ctx context.Context, tokenID, userID, hashedPassword string) error {
+	if r == nil || r.db == nil {
+		return errors.New("password reset token repository not initialized")
+	}
+	return RunPasswordResetTransaction(ctx, r.db, tokenID, userID, hashedPassword)
 }

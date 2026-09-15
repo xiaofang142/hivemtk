@@ -35,7 +35,7 @@ const (
 // CustomerEvent 客户行为事件模型
 type CustomerEvent struct {
 	ID          string      `gorm:"type:varchar(36);primaryKey" json:"id"`
-	CustomerID  string      `gorm:"type:varchar(36);index;not null" json:"customer_id"`
+	CustomerID  string      `gorm:"type:varchar(64);index;not null" json:"customer_id"`
 	EventType   EventType   `gorm:"type:varchar(32);index;not null" json:"event_type"`
 	EventSource EventSource `gorm:"type:varchar(32);index" json:"event_source"`
 	EventData   string      `gorm:"type:text" json:"event_data"`

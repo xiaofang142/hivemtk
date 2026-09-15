@@ -104,6 +104,16 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	tmCtrl := geoctrl.NewTechMetricsController()
 	keCtrl := geoctrl.NewKeywordEnhanceController(keSvc)
 
+	// ⬇️ GEO v2 新增 Service + Controller
+	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
+	pushSvc := geoservice.NewPushService(gormDB)
+	siteSvc := geoservice.NewSiteDeployService(gormDB, pushSvc)
+	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB, nil, verifySvc)
+	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
+	pushCtrl := geoctrl.NewPushController(pushSvc)
+	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc)
+	indexCtrl := geoctrl.NewIndexTrackerController(indexTrackerSvc)
+
 	probeRepo := georepo.NewGeoProbeRunRepositoryWithDB(gormDB)
 	probes := geoservice.NewEngineProbesFromDB(gormDB)
 	probeSvc := geoservice.NewProbeService(probes, probeRepo)
@@ -201,6 +211,29 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/techconfig/llms-txt", tmCtrl.GenerateLLMsTxt)
 
 	geo.POST("/metrics/analyze", tmCtrl.AnalyzeMetrics)
+
+	// ⬇️ GEO v2 全链路路由
+	// 关键词蒸馏 v2
+	geo.POST("/keyword-mining/crawl-suggest", kwMiningCtrl.CrawlSuggest)
+	geo.POST("/keyword-mining/longtail", kwMiningCtrl.CombineLongtail)
+	geo.GET("/keyword-mining/funnel", kwMiningCtrl.BuildFunnel)
+
+	// 蜘蛛推送 v2
+	geo.POST("/push/urls", pushCtrl.PushURLs)
+	geo.GET("/push/quota", pushCtrl.QuotaStatus)
+	geo.GET("/push/sitemap", pushCtrl.GenerateSitemap)
+
+	// 静态站部署 v2
+	geo.POST("/site/export", siteCtrl.ExportToHugo)
+	geo.POST("/site/deploy", siteCtrl.TriggerDeploy)
+	geo.POST("/site/full-pipeline", siteCtrl.FullPipeline)
+	geo.GET("/site/llms-txt-preview", siteCtrl.LlmsTxtPreview)
+	geo.GET("/site/robots-preview", siteCtrl.RobotsTxtPreview)
+
+	// 收录追踪 v2
+	geo.POST("/index-tracking/verify/:article_id", indexCtrl.VerifyFull)
+	geo.GET("/index-tracking/funnel", indexCtrl.FunnelStats)
+	geo.POST("/index-tracking/verify-all", indexCtrl.ManualVerifyAll)
 
 	geo.GET("/keyword-enhance/analyze", keCtrl.Analyze)
 	geo.POST("/keyword-enhance/enhance", keCtrl.Enhance)

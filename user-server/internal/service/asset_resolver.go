@@ -42,11 +42,11 @@ var assetResolverInstance *AssetResolver
 func InitAssetResolver(db *gorm.DB) {
 	assetResolverInstance = &AssetResolver{
 		assetRepo: repository.NewLocalAssetRepository(db),
-		agent:     NewAgentLoader(db),
-		script:    NewScriptLoader(db),
-		sop:       NewSOPLoader(db),
-		abtest:    NewABTestLoader(db),
-		workflow:  NewWorkflowLoader(db),
+		agent:     NewAgentLoader(),
+		script:    NewScriptLoader(),
+		sop:       NewSOPLoader(),
+		abtest:    NewABTestLoader(),
+		workflow:  NewWorkflowLoader(),
 	}
 }
 

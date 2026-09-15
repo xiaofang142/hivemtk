@@ -1,17 +1,19 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"time"
 )
 
 // CommunityGroup 社群模型
 type CommunityGroup struct {
-	ID          string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	MemberCount int       `gorm:"default:0" json:"member_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string         `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	Name        string         `gorm:"type:varchar(255);not null" json:"name"`
+	Description string         `gorm:"type:text" json:"description"`
+	MemberCount int            `gorm:"default:0" json:"member_count"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 指定表名

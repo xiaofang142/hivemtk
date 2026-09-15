@@ -199,6 +199,19 @@ func (s *CustomerService) List(ctx context.Context, page, limit int) ([]*model.C
 	return s.repo.List(ctx, page, limit, "")
 }
 
+// ListKeyset 获取客户列表（keyset 分页）。
+// cursor 为空表示首页；返回 nextCursor 为空表示已到末页。
+func (s *CustomerService) ListKeyset(ctx context.Context, cursor string, limit int) ([]*model.Customer, int64, string, error) {
+	if limit <= 0 {
+		limit = DefaultLimit
+	}
+	if limit > MaxLimit {
+		limit = MaxLimit
+	}
+
+	return s.repo.ListKeyset(ctx, cursor, limit, "")
+}
+
 // AddTags 给客户添加标签
 func (s *CustomerService) AddTags(ctx context.Context, customerID string, tags []string) error {
 	if len(tags) == 0 {

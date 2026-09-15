@@ -69,6 +69,9 @@ func (f *fakeCustRepo) Delete(context.Context, string) error { return nil }
 func (f *fakeCustRepo) List(context.Context, int, int, string) ([]*model.Customer, int64, error) {
 	return nil, 0, nil
 }
+func (f *fakeCustRepo) ListKeyset(context.Context, string, int, string) ([]*model.Customer, int64, string, error) {
+	return nil, 0, "", nil
+}
 func (f *fakeCustRepo) FindByIdentity(context.Context, string, string, string, string, string) (*model.Customer, error) {
 	return nil, nil
 }

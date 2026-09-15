@@ -23,14 +23,12 @@ const (
 
 type PasswordResetService struct {
 	emailService *EmailService
-	db           *gorm.DB
 	tokenRepo    *repository.PasswordResetTokenRepository
 }
 
 func NewPasswordResetService(db *gorm.DB) *PasswordResetService {
 	return &PasswordResetService{
 		emailService: NewEmailService(db),
-		db:           db,
 		tokenRepo:    repository.NewPasswordResetTokenRepository(db),
 	}
 }
@@ -125,7 +123,10 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, req *ResetPass
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
-	return repository.RunPasswordResetTransaction(ctx, s.db, token.ID, token.UserID, hashedPassword)
+	if s.tokenRepo == nil {
+		return errors.New("password reset service not initialized")
+	}
+	return s.tokenRepo.RunResetTransaction(ctx, token.ID, token.UserID, hashedPassword)
 }
 
 func (s *PasswordResetService) CleanupExpiredTokens(ctx context.Context) error {

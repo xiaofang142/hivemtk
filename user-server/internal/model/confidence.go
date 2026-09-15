@@ -7,7 +7,7 @@ type ConfidenceSignal struct {
 	ID                   int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	SignalID             string    `gorm:"column:signal_id;uniqueIndex;size:64;not null" json:"signal_id"`
 	SessionID            string    `gorm:"column:session_id;size:128;not null;index:idx_signals_session,priority:1" json:"session_id"`
-	CustomerID           string    `gorm:"column:customer_id;size:128;not null;index:idx_signals_customer,priority:1" json:"customer_id"`
+	CustomerID           string    `gorm:"column:customer_id;size:64;not null;index:idx_signals_customer,priority:1" json:"customer_id"`
 	MessageID            string    `gorm:"column:message_id;size:128;not null" json:"message_id"`
 	IntentType           string    `gorm:"column:intent_type;size:64;not null" json:"intent_type"`
 	IntentConf           float64   `gorm:"column:intent_conf;type:decimal(5,4);not null" json:"intent_conf"`
@@ -57,7 +57,7 @@ type HandoffDecisionRecord struct {
 	ID                int64      `gorm:"primaryKey;autoIncrement" json:"id"`
 	DecisionID        string     `gorm:"column:decision_id;uniqueIndex;size:64;not null" json:"decision_id"`
 	SessionID         string     `gorm:"column:session_id;size:128;not null;index:idx_handoff_session,priority:1" json:"session_id"`
-	CustomerID        string     `gorm:"column:customer_id;size:128;not null" json:"customer_id"`
+	CustomerID        string     `gorm:"column:customer_id;size:64;not null" json:"customer_id"`
 	SignalID          string     `gorm:"column:signal_id;size:64;not null" json:"signal_id"`
 	Reason            string     `gorm:"column:reason;size:64;not null" json:"reason"`
 	ReasonDetail      string     `gorm:"column:reason_detail;type:text;default:''" json:"reason_detail"`

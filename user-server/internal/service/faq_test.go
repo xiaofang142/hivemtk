@@ -28,7 +28,7 @@ func makeFAQMatchResult(q, a, intent string, score float64) dto.FAQMatchResult {
 
 // TestFAQService_Match_NilRepo 测试 repo==nil 时的安全行为
 func TestFAQService_Match_NilRepo(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	matches, err := svc.Match(nil, "你好", 3)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
@@ -40,7 +40,7 @@ func TestFAQService_Match_NilRepo(t *testing.T) {
 
 // TestFAQService_ShouldSkipLLM_HighScore 测试高分命中 -> SkipLLM=true
 func TestFAQService_ShouldSkipLLM_HighScore(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	matches := []dto.FAQMatchResult{
 		makeFAQMatchResult("韵达发货吗", "韵达不发的哦", "logistics", 0.85),
 	}
@@ -58,7 +58,7 @@ func TestFAQService_ShouldSkipLLM_HighScore(t *testing.T) {
 
 // TestFAQService_ShouldSkipLLM_LowScore 测试低分命中 -> SkipLLM=false
 func TestFAQService_ShouldSkipLLM_LowScore(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	matches := []dto.FAQMatchResult{
 		makeFAQMatchResult("模糊问句", "回答", "unknown", 0.3),
 	}
@@ -73,7 +73,7 @@ func TestFAQService_ShouldSkipLLM_LowScore(t *testing.T) {
 
 // TestFAQService_ShouldSkipLLM_Empty 测试空匹配列表 -> SkipLLM=false
 func TestFAQService_ShouldSkipLLM_Empty(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	skip, top := svc.ShouldSkipLLM(nil)
 	if skip {
 		t.Error("expected skip=false for empty matches")
@@ -85,7 +85,7 @@ func TestFAQService_ShouldSkipLLM_Empty(t *testing.T) {
 
 // TestFAQService_ShouldSkipLLM_Boundary 测试临界值
 func TestFAQService_ShouldSkipLLM_Boundary(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 
 	matches := []dto.FAQMatchResult{
 		makeFAQMatchResult("临界", "临界回复", "logistics", faqHitThresh),
@@ -106,14 +106,14 @@ func TestFAQService_ShouldSkipLLM_Boundary(t *testing.T) {
 
 // TestFAQService_IncrementHitCount_NilRepo 测试 id=0 / nil repo 安全
 func TestFAQService_IncrementHitCount_NilRepo(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	svc.IncrementHitCount(nil, 0)
 	svc.IncrementHitCount(nil, 1)
 }
 
 // TestFAQService_Stats_NilRepo 测试空仓库 Stats
 func TestFAQService_Stats_NilRepo(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	total, enabled, err := svc.Stats(nil)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
@@ -125,7 +125,7 @@ func TestFAQService_Stats_NilRepo(t *testing.T) {
 
 // TestFAQService_InvalidateCache_NilSafe 测试 nil cache 也能安全失效
 func TestFAQService_InvalidateCache_NilSafe(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	svc.InvalidateCache(0)
 }
 
@@ -302,7 +302,7 @@ func TestFAQService_WeekDecay(t *testing.T) {
 
 // TestFAQService_WeekDecay_NilRepo nil repo 安全
 func TestFAQService_WeekDecay_NilRepo(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil, clock: fixedClock{T: time.Now()}}
+	svc := &FAQService{repo: nil, clock: fixedClock{T: time.Now()}}
 	decayed, err := svc.WeekDecay(context.Background())
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
@@ -402,7 +402,7 @@ func TestFAQService_MatchByAgent_AgentIDMismatch(t *testing.T) {
 
 // TestFAQService_MatchByAgent_NilRepo 验证 nil repo 安全
 func TestFAQService_MatchByAgent_NilRepo(t *testing.T) {
-	svc := &FAQService{repo: nil, db: nil}
+	svc := &FAQService{repo: nil}
 	matches, err := svc.MatchByAgent(context.Background(), 1, "test", 3)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)

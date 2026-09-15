@@ -44,7 +44,6 @@ type RagRecallMetricsSummary struct {
 
 // RagRecallMonitorService RAG 召回率监控服务
 type RagRecallMonitorService struct {
-	db   *gorm.DB
 	repo repository.RagRecallMonitorRepository
 
 	mu       sync.Mutex
@@ -60,7 +59,8 @@ type RagRecallMonitorService struct {
 
 // NewRagRecallMonitorService 创建 RAG 召回率监控服务
 //
-// interval / window <= 0 时使用默认值
+// interval / window <= 0 时使用默认值；db 为 nil 时 repo 为 nil，
+// 查询/写库类方法返回错误
 func NewRagRecallMonitorService(db *gorm.DB, interval, window time.Duration) *RagRecallMonitorService {
 	if interval <= 0 {
 		interval = RagRecallMonitorDefaultInterval
@@ -69,7 +69,6 @@ func NewRagRecallMonitorService(db *gorm.DB, interval, window time.Duration) *Ra
 		window = RagRecallMonitorDefaultWindow
 	}
 	return &RagRecallMonitorService{
-		db:       db,
 		repo:     repository.NewRagRecallMonitorRepository(db),
 		stopCh:   make(chan struct{}),
 		interval: interval,
@@ -126,8 +125,8 @@ func (s *RagRecallMonitorService) run(ctx context.Context) {
 
 // Collect 采集指定窗口的指标（不写库）
 func (s *RagRecallMonitorService) Collect(ctx context.Context, start, end time.Time) (*RagRecallMetricsSummary, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, errors.New("service or repository is nil")
 	}
 	if end.Before(start) {
 		return nil, errors.New("end before start")
@@ -184,7 +183,7 @@ func (s *RagRecallMonitorService) CollectAndStore(ctx context.Context, start, en
 	s.lastAt = time.Now()
 	s.mu.Unlock()
 
-	if s.db != nil {
+	if s.repo != nil {
 		payload, _ := json.Marshal(summary)
 		row := map[string]any{
 			"window_start":     summary.WindowStart,
@@ -219,8 +218,8 @@ func (s *RagRecallMonitorService) GetLatestSnapshot(ctx context.Context) (*RagRe
 
 // ListSnapshots 列出最近 N 条监控快照
 func (s *RagRecallMonitorService) ListSnapshots(ctx context.Context, limit int) ([]map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("service or db is nil")
+	if s == nil || s.repo == nil {
+		return nil, errors.New("service or repository is nil")
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = 50
@@ -242,8 +241,8 @@ func (s *RagRecallMonitorService) ListSnapshots(ctx context.Context, limit int) 
 // 设计：监控表不是核心业务表，使用 CreateTableIfNotExists 模式，
 // 部署初始化时调用一次即可。
 func (s *RagRecallMonitorService) EnsureSchema(ctx context.Context) error {
-	if s == nil || s.db == nil {
-		return errors.New("service or db is nil")
+	if s == nil || s.repo == nil {
+		return errors.New("service or repository is nil")
 	}
 	return s.repo.EnsureSchema(ctx)
 }

@@ -10,53 +10,55 @@ import (
 
 // MessageHub 消息中台 - 多账号聚合消息
 type MessageHub struct {
-	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform       string     `gorm:"type:varchar(30);not null;index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:1" json:"platform"`
-	MsgID          string     `gorm:"type:varchar(100);uniqueIndex:uni_message_hub_platform_msg_conv,priority:2" json:"msg_id"`
-	AccountID      string     `gorm:"type:varchar(100);not null;index" json:"account_id"`
-	Direction      string     `gorm:"type:varchar(10);not null" json:"direction"`
-	Status         string     `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	MsgType        string     `gorm:"type:varchar(20);not null" json:"msg_type"`
-	SenderID       string     `gorm:"type:varchar(100);index" json:"sender_id"`
-	SenderName     string     `gorm:"type:varchar(200)" json:"sender_name"`
-	ReceiverID     string     `gorm:"type:varchar(100)" json:"receiver_id"`
-	ReceiverName   string     `gorm:"type:varchar(200)" json:"receiver_name"`
-	Content        string     `gorm:"type:text" json:"content"`
-	MediaURL       string     `gorm:"type:varchar(500)" json:"media_url"`
-	ConversationID string     `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
-	IsGroup        bool       `gorm:"default:false" json:"is_group"`
-	GroupID        string     `gorm:"type:varchar(100)" json:"group_id"`
-	IsAIReply      bool       `gorm:"default:false" json:"is_ai_reply"`
-	AIAgent        string     `gorm:"type:varchar(50)" json:"ai_agent"`
-	TraceID        string     `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
-	DedupHash      string     `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
-	ClaimedAt      *time.Time `gorm:"index" json:"claimed_at"`
-	IsRead         bool       `gorm:"default:false" json:"is_read"`
-	ReadAt         *time.Time `json:"read_at"`
-	SentAt         time.Time  `gorm:"index" json:"sent_at"`
-	Extra          JSONMap    `gorm:"type:text" json:"extra"`
-	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform       string         `gorm:"type:varchar(30);not null;index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:1" json:"platform"`
+	MsgID          string         `gorm:"type:varchar(100);uniqueIndex:uni_message_hub_platform_msg_conv,priority:2" json:"msg_id"`
+	AccountID      string         `gorm:"type:varchar(100);not null;index" json:"account_id"`
+	Direction      string         `gorm:"type:varchar(10);not null" json:"direction"`
+	Status         string         `gorm:"type:varchar(20);default:'pending';index" json:"status"`
+	MsgType        string         `gorm:"type:varchar(20);not null" json:"msg_type"`
+	SenderID       string         `gorm:"type:varchar(100);index" json:"sender_id"`
+	SenderName     string         `gorm:"type:varchar(200)" json:"sender_name"`
+	ReceiverID     string         `gorm:"type:varchar(100)" json:"receiver_id"`
+	ReceiverName   string         `gorm:"type:varchar(200)" json:"receiver_name"`
+	Content        string         `gorm:"type:text" json:"content"`
+	MediaURL       string         `gorm:"type:varchar(500)" json:"media_url"`
+	ConversationID string         `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
+	IsGroup        bool           `gorm:"default:false" json:"is_group"`
+	GroupID        string         `gorm:"type:varchar(100)" json:"group_id"`
+	IsAIReply      bool           `gorm:"default:false" json:"is_ai_reply"`
+	AIAgent        string         `gorm:"type:varchar(50)" json:"ai_agent"`
+	TraceID        string         `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
+	DedupHash      string         `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
+	ClaimedAt      *time.Time     `gorm:"index" json:"claimed_at"`
+	IsRead         bool           `gorm:"default:false" json:"is_read"`
+	ReadAt         *time.Time     `json:"read_at"`
+	SentAt         time.Time      `gorm:"index" json:"sent_at"`
+	Extra          JSONMap        `gorm:"type:text" json:"extra"`
+	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MessageHub) TableName() string { return "message_hub" }
 
 // IntentRecord 销售意图识别记录
 type IntentRecord struct {
-	ID              uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	SessionID       string    `gorm:"type:varchar(120);not null;index" json:"session_id"`
-	CustomerID      string    `gorm:"type:varchar(64);index" json:"customer_id"`
-	MessageID       uint      `json:"message_id"`
-	RawText         string    `gorm:"type:text;not null" json:"raw_text"`
-	IntentType      string    `gorm:"type:varchar(50);not null;index" json:"intent_type"`
-	IntentSubtype   string    `gorm:"type:varchar(50)" json:"intent_subtype"`
-	Confidence      float64   `gorm:"type:decimal(5,2);not null" json:"confidence"`
-	ConfidenceLevel string    `gorm:"type:varchar(20)" json:"confidence_level"`
-	Entities        JSONMap   `gorm:"type:text" json:"entities"`
-	Sentiment       string    `gorm:"type:varchar(20)" json:"sentiment"`
-	LLMModel        string    `gorm:"type:varchar(50)" json:"llm_model"`
-	CostTokens      int       `gorm:"default:0" json:"cost_tokens"`
-	LatencyMs       int       `gorm:"default:0" json:"latency_ms"`
-	CreatedAt       time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	ID              uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	SessionID       string         `gorm:"type:varchar(120);not null;index" json:"session_id"`
+	CustomerID      string         `gorm:"type:varchar(64);index" json:"customer_id"`
+	MessageID       uint           `json:"message_id"`
+	RawText         string         `gorm:"type:text;not null" json:"raw_text"`
+	IntentType      string         `gorm:"type:varchar(50);not null;index" json:"intent_type"`
+	IntentSubtype   string         `gorm:"type:varchar(50)" json:"intent_subtype"`
+	Confidence      float64        `gorm:"type:decimal(5,2);not null" json:"confidence"`
+	ConfidenceLevel string         `gorm:"type:varchar(20)" json:"confidence_level"`
+	Entities        JSONMap        `gorm:"type:text" json:"entities"`
+	Sentiment       string         `gorm:"type:varchar(20)" json:"sentiment"`
+	LLMModel        string         `gorm:"type:varchar(50)" json:"llm_model"`
+	CostTokens      int            `gorm:"default:0" json:"cost_tokens"`
+	LatencyMs       int            `gorm:"default:0" json:"latency_ms"`
+	CreatedAt       time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (IntentRecord) TableName() string { return "intent_records" }
@@ -89,23 +91,24 @@ func (DialogueMemory) TableName() string { return "dialogue_memories" }
 
 // SOPAgent SOP 智能体
 type SOPAgent struct {
-	ID             uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name           string    `gorm:"type:varchar(100);not null" json:"name"`
-	Scenario       string    `gorm:"type:varchar(50);not null;index" json:"scenario"`
-	Description    string    `gorm:"type:varchar(500)" json:"description"`
-	TriggerType    string    `gorm:"type:varchar(50)" json:"trigger_type"`
-	TriggerConfig  JSONMap   `gorm:"type:text" json:"trigger_config"`
-	SOPGraph       JSONMap   `gorm:"type:text;not null" json:"sop_graph"`
-	Version        int       `gorm:"default:1" json:"version"`
-	IsActive       bool      `gorm:"default:true;index" json:"is_active"`
-	Priority       int       `gorm:"default:0" json:"priority"`
-	ExecutionCount int       `gorm:"default:0" json:"execution_count"`
-	SuccessCount   int       `gorm:"default:0" json:"success_count"`
-	ABTestConfig   JSONMap   `gorm:"type:text" json:"ab_test_config"`
-	UseBandit      bool      `gorm:"default:false" json:"use_bandit"`
-	CreatedBy      uint      `json:"created_by"`
-	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name           string         `gorm:"type:varchar(100);not null" json:"name"`
+	Scenario       string         `gorm:"type:varchar(50);not null;index" json:"scenario"`
+	Description    string         `gorm:"type:varchar(500)" json:"description"`
+	TriggerType    string         `gorm:"type:varchar(50)" json:"trigger_type"`
+	TriggerConfig  JSONMap        `gorm:"type:text" json:"trigger_config"`
+	SOPGraph       JSONMap        `gorm:"type:text;not null" json:"sop_graph"`
+	Version        int            `gorm:"default:1" json:"version"`
+	IsActive       bool           `gorm:"default:true;index" json:"is_active"`
+	Priority       int            `gorm:"default:0" json:"priority"`
+	ExecutionCount int            `gorm:"default:0" json:"execution_count"`
+	SuccessCount   int            `gorm:"default:0" json:"success_count"`
+	ABTestConfig   JSONMap        `gorm:"type:text" json:"ab_test_config"`
+	UseBandit      bool           `gorm:"default:false" json:"use_bandit"`
+	CreatedBy      uint           `json:"created_by"`
+	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (SOPAgent) TableName() string { return "sop_agents" }
@@ -134,8 +137,9 @@ type SOPExecution struct {
 	// NULL/空 视为无补偿历史（向后兼容存量数据）
 	ExecutedNodes JSONArray `gorm:"type:text" json:"executed_nodes"`
 
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (SOPExecution) TableName() string { return "sop_executions" }
@@ -270,7 +274,7 @@ type ScriptExposureLog struct {
 	ScriptID       uint       `gorm:"not null;index:idx_exposure_script_ver,priority:1" json:"script_id"`
 	Version        int        `gorm:"not null;default:1;index:idx_exposure_script_ver,priority:2" json:"version"`
 	Bucket         string     `gorm:"type:varchar(8);not null" json:"bucket"`
-	CustomerID     uint       `gorm:"index" json:"customer_id"`
+	CustomerID     string     `gorm:"column:customer_id;type:varchar(64);index" json:"customer_id"`
 	OneID          string     `gorm:"type:varchar(64);index" json:"one_id"`
 	ConversationID string     `gorm:"type:varchar(64);index" json:"conversation_id"`
 	TraceID        string     `gorm:"type:varchar(64)" json:"trace_id"`
@@ -367,30 +371,31 @@ func (AISalesLog) TableName() string { return "ai_sales_logs" }
 
 // InboxConversation 统一收件箱会话
 type InboxConversation struct {
-	ID                 uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform           string     `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
-	AccountID          string     `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
-	CustomerID         string     `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
-	CustomerName       string     `gorm:"type:varchar(200)" json:"customer_name"`
-	ConversationID     string     `gorm:"type:varchar(100);index" json:"conversation_id"`
-	Status             string     `gorm:"type:varchar(20);default:'unread';index" json:"status"`
-	AssignedTo         string     `gorm:"type:varchar(64);index" json:"assigned_to"`
-	AssignedToSOP      uint       `gorm:"index" json:"assigned_to_sop"`
-	AssignedAt         *time.Time `json:"assigned_at"`
-	UnreadCount        int        `gorm:"default:0" json:"unread_count"`
-	TotalCount         int        `gorm:"default:0" json:"total_count"`
-	LastMessageID      uint       `json:"last_message_id"`
-	LastMessagePreview string     `gorm:"type:varchar(500)" json:"last_message_preview"`
-	LastMessageAt      *time.Time `gorm:"index" json:"last_message_at"`
-	LastMessageFrom    string     `gorm:"type:varchar(20)" json:"last_message_from"`
-	Pinned             bool       `gorm:"default:false;index" json:"pinned"`
-	Starred            bool       `gorm:"default:false" json:"starred"`
-	Muted              bool       `gorm:"default:false" json:"muted"`
-	Tags               JSONArray  `gorm:"type:text" json:"tags"`
-	Extra              JSONMap    `gorm:"type:text" json:"extra"`
-	ClosedAt           *time.Time `json:"closed_at"`
-	CreatedAt          time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt          time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ID                 uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform           string         `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
+	AccountID          string         `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
+	CustomerID         string         `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
+	CustomerName       string         `gorm:"type:varchar(200)" json:"customer_name"`
+	ConversationID     string         `gorm:"type:varchar(100);index" json:"conversation_id"`
+	Status             string         `gorm:"type:varchar(20);default:'unread';index" json:"status"`
+	AssignedTo         string         `gorm:"type:varchar(64);index" json:"assigned_to"`
+	AssignedToSOP      uint           `gorm:"index" json:"assigned_to_sop"`
+	AssignedAt         *time.Time     `json:"assigned_at"`
+	UnreadCount        int            `gorm:"default:0" json:"unread_count"`
+	TotalCount         int            `gorm:"default:0" json:"total_count"`
+	LastMessageID      uint           `json:"last_message_id"`
+	LastMessagePreview string         `gorm:"type:varchar(500)" json:"last_message_preview"`
+	LastMessageAt      *time.Time     `gorm:"index" json:"last_message_at"`
+	LastMessageFrom    string         `gorm:"type:varchar(20)" json:"last_message_from"`
+	Pinned             bool           `gorm:"default:false;index" json:"pinned"`
+	Starred            bool           `gorm:"default:false" json:"starred"`
+	Muted              bool           `gorm:"default:false" json:"muted"`
+	Tags               JSONArray      `gorm:"type:text" json:"tags"`
+	Extra              JSONMap        `gorm:"type:text" json:"extra"`
+	ClosedAt           *time.Time     `json:"closed_at"`
+	CreatedAt          time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt          time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (InboxConversation) TableName() string { return "inbox_conversations" }
@@ -401,7 +406,7 @@ type InboxAssignment struct {
 	ConversationID uint      `gorm:"index;not null" json:"conversation_id"`
 	Platform       string    `gorm:"type:varchar(30);json" json:"platform"`
 	AccountID      string    `gorm:"type:varchar(100)" json:"account_id"`
-	CustomerID     string    `gorm:"type:varchar(100)" json:"customer_id"`
+	CustomerID     string    `gorm:"type:varchar(64)" json:"customer_id"`
 	Action         string    `gorm:"type:varchar(20);not null" json:"action"`
 	FromType       string    `gorm:"type:varchar(20)" json:"from_type"`
 	FromUserID     string    `gorm:"type:varchar(64)" json:"from_user_id"`

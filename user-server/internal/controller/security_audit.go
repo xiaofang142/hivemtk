@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -34,6 +35,22 @@ func (c *SecurityAuditController) ListSecurityAudits(ctx *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
+
+	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pageSize); useCursor {
+		list, total, nextCursor, err := c.svc.ListAuditsKeyset(ctx.Request.Context(), cursor, limit)
+		if err != nil {
+			response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "获取审计列表失败", gin.H{})
+			return
+		}
+		response.Success(ctx, gin.H{
+			"list":        list,
+			"total":       total,
+			"page_size":   limit,
+			"next_cursor": nextCursor,
+		}, "ok")
+		return
+	}
+
 	list, total, err := c.svc.ListAudits(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "获取审计列表失败", gin.H{})

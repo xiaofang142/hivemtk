@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -39,7 +40,8 @@ type PlatformAccountConfig struct {
 	CreatedAt          time.Time   `json:"created_at"`
 	UpdatedAt          time.Time   `json:"updated_at"`
 
-	RagProduct *RagProduct `json:"rag_product,omitempty" gorm:"foreignKey:RagProductID"`
+	RagProduct *RagProduct    `json:"rag_product,omitempty" gorm:"foreignKey:RagProductID"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 指定表名

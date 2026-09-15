@@ -191,6 +191,10 @@ func (r *testLogRepo) GetAll(ctx context.Context, page, pageSize int, filters ma
 	return nil, 0, nil
 }
 
+func (r *testLogRepo) GetAllKeyset(ctx context.Context, cursor string, pageSize int, filters map[string]any) ([]*model.OperationLog, int64, string, error) {
+	return nil, 0, "", nil
+}
+
 func (r *testLogRepo) GetByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.OperationLog, int64, error) {
 	return nil, 0, nil
 }

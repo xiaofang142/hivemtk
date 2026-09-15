@@ -18,7 +18,6 @@ import (
 type KnowledgeBaseService struct {
 	repo        *repository.KnowledgeBaseRepository
 	bindingRepo *repository.AgentKBBindingRepository
-	db          *gorm.DB
 }
 
 // IsValidKBType 校验知识库类型字段是否合法 (faq / rag / sop)
@@ -42,7 +41,6 @@ func NewKnowledgeBaseService(db *gorm.DB) *KnowledgeBaseService {
 	return &KnowledgeBaseService{
 		repo:        repository.NewKnowledgeBaseRepository(db),
 		bindingRepo: repository.NewAgentKBBindingRepository(db),
-		db:          db,
 	}
 }
 
@@ -318,7 +316,7 @@ func (s *KnowledgeBaseService) DeleteKB(ctx context.Context, id uint) error {
 
 // BindToAgent 入口 (供控制器调用), 内部委托 AgentKBBindingService
 func (s *KnowledgeBaseService) BindToAgent(ctx context.Context, kbID, agentID uint) error {
-	bindingSvc := NewAgentKBBindingServiceWithRepos(s.repo, s.bindingRepo, s.db)
+	bindingSvc := NewAgentKBBindingServiceWithRepos(s.repo, s.bindingRepo, dbUtil.GetDB())
 	return bindingSvc.Bind(ctx, agentID, kbID, 0)
 }
 

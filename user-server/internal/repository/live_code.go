@@ -38,7 +38,8 @@ func (r *liveCodeRepository) Update(ctx context.Context, liveCode *model.LiveCod
 }
 
 func (r *liveCodeRepository) Delete(ctx context.Context, id string) error {
-	return r.db.Where("id = ?", id).Delete(&model.LiveCode{}).Error
+	// ShortLink 带唯一索引，软删行会占用短链导致同名重建撞键，保持物理删除
+	return r.db.Unscoped().Where("id = ?", id).Delete(&model.LiveCode{}).Error
 }
 
 func (r *liveCodeRepository) GetAvailableLiveCodes(ctx context.Context) ([]*model.LiveCode, error) {

@@ -22,9 +22,14 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
+
+	cursorpkg "hivemtk-user/internal/pkg/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -256,4 +261,68 @@ func ParsePaginationOffset(c *gin.Context, opts ...PageOption) (offset, limit in
 		return 0, 0, err
 	}
 	return (page - 1) * pageSize, pageSize, nil
+}
+
+// ParseCursorParams 解析 keyset（cursor）分页参数。
+//
+// 触发条件：query 携带非空 cursor，或 mode=keyset。
+// 仅当 useCursor=true 时调用方应走 keyset 分支；否则保持原 offset 分页（向后兼容）。
+//
+// limit 解析优先级：limit > page_size > size > defaultLimit，
+// 最终钳制到 [1, pagination.CursorPageSize]。
+//
+// 用法：
+//
+//	cursor, limit, useCursor := utils.ParseCursorParams(c, 20)
+//	if useCursor {
+//	    list, total, next, err := repo.ListKeyset(ctx, cursor, limit, kw)
+//	}
+func ParseCursorParams(c *gin.Context, defaultLimit int) (cursor string, limit int, useCursor bool) {
+	cursor = c.Query("cursor")
+	mode := c.Query("mode")
+	useCursor = cursor != "" || mode == "keyset"
+
+	raw := c.Query("limit")
+	if raw == "" {
+		raw = c.Query("page_size")
+	}
+	if raw == "" {
+		raw = c.Query("size")
+	}
+	if v, ok := parsePageSizeStrict(raw); ok {
+		limit = v
+	} else if defaultLimit > 0 {
+		limit = defaultLimit
+	} else {
+		limit = defaultDefaultPageSize
+	}
+	limit = cursorpkg.ClampLimit(limit)
+	return cursor, limit, useCursor
+}
+
+// EncodeStringIDCursor 为 string 主键（如 uuid customer.id）编码 keyset 游标。
+// 格式与 EncodeCursor 一致：<unix_nano>:<id>，base64 URL 安全编码。
+func EncodeStringIDCursor(createdAt time.Time, id string) string {
+	raw := fmt.Sprintf("%d:%s", createdAt.UnixNano(), id)
+	return base64.URLEncoding.EncodeToString([]byte(raw))
+}
+
+// DecodeStringIDCursor 解码 EncodeStringIDCursor 生成的游标，返回 (createdAt, id, ok)。
+func DecodeStringIDCursor(cursor string) (time.Time, string, bool) {
+	if cursor == "" {
+		return time.Time{}, "", false
+	}
+	raw, err := base64.URLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", false
+	}
+	sep := bytes.IndexByte(raw, ':')
+	if sep <= 0 || sep == len(raw)-1 {
+		return time.Time{}, "", false
+	}
+	var tsNano int64
+	if _, err := fmt.Sscanf(string(raw[:sep]), "%d", &tsNano); err != nil {
+		return time.Time{}, "", false
+	}
+	return time.Unix(0, tsNano), string(raw[sep+1:]), true
 }

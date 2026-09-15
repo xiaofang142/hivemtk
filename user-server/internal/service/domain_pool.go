@@ -37,7 +37,6 @@ type DomainPoolService interface {
 type domainPoolService struct {
 	domainPoolRepo repository.DomainPoolRepository
 	blacklistRepo  *repository.DomainBlacklistRepository
-	db             *gorm.DB
 }
 
 // NewDomainPoolService 创建域名池服务实例
@@ -45,7 +44,6 @@ func NewDomainPoolService(db *gorm.DB) DomainPoolService {
 	return &domainPoolService{
 		domainPoolRepo: repository.NewDomainPoolRepository(db),
 		blacklistRepo:  repository.NewDomainBlacklistRepository(db),
-		db:             db,
 	}
 }
 

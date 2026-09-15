@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"time"
 
 	"github.com/lib/pq"
@@ -80,8 +81,9 @@ type AIAgent struct {
 	Status  int `gorm:"default:1;index" json:"status"`
 	Version int `gorm:"default:1" json:"version"`
 
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 指定表名
@@ -133,8 +135,9 @@ type ChannelAgentBinding struct {
 	IsPrimary   bool   `gorm:"default:true" json:"is_primary"`
 	Enabled     bool   `gorm:"default:true" json:"enabled"`
 
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 指定表名
@@ -153,8 +156,9 @@ type CustomerServiceAgent struct {
 	IsPrimary     bool `gorm:"default:true" json:"is_primary"`
 	Enabled       bool `gorm:"default:true" json:"enabled"`
 
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName 指定表名

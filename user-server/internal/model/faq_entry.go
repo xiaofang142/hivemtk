@@ -9,6 +9,7 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"time"
 
 	"github.com/lib/pq"
@@ -55,6 +56,7 @@ type FAQEntry struct {
 	Enabled          *bool          `gorm:"type:boolean;default:true;not null" json:"enabled"`
 	CreatedAt        time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt        time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // TableName GORM 表名

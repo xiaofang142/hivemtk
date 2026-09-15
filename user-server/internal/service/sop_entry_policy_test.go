@@ -137,7 +137,8 @@ func TestS1_1_EntryPolicy_Modes(t *testing.T) {
 
 // TestS1_1_CooldownBoundary cooldown 边界：恰好 N 天放行（>= 窗口），N 天内拦截
 func TestS1_1_CooldownBoundary(t *testing.T) {
-	svc := newS1TestService(t)
+	db := testutil.NewTestDB(t, &model.SOPAgent{}, &model.SOPExecution{})
+	svc := NewSOPService(db, nil)
 	ctx := context.Background()
 	sopID := createS1Agent(t, svc, model.JSONMap{"entry_policy": map[string]any{"mode": "cooldown", "cooldown_days": 7}})
 	policy := ParseSOPEntryPolicy(model.JSONMap{
@@ -162,14 +163,14 @@ func TestS1_1_CooldownBoundary(t *testing.T) {
 				Status:     SOPStatusSuccess,
 				CreatedAt:  now.Add(-time.Duration(tc.ageDays * float64(24*time.Hour))),
 			}
-			if err := svc.db.WithContext(ctx).Create(last).Error; err != nil {
+			if err := db.WithContext(ctx).Create(last).Error; err != nil {
 				t.Fatalf("seed execution: %v", err)
 			}
 			got := svc.entryAllowedByPolicy(ctx, sopID, "cust_boundary", policy)
 			if got != tc.allowed {
 				t.Errorf("age=%.0fd allowed=%v want=%v", tc.ageDays, got, tc.allowed)
 			}
-			svc.db.WithContext(ctx).Where("sop_id = ? AND customer_id = ?", sopID, "cust_boundary").
+			db.WithContext(ctx).Where("sop_id = ? AND customer_id = ?", sopID, "cust_boundary").
 				Delete(&model.SOPExecution{})
 		})
 	}

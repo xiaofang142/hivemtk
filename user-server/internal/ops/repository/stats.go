@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	sysmodel "hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbencrypt"
 )
 
 // StatsRepository 统计仓库接口
@@ -44,10 +45,15 @@ func NewStatsRepository(db *gorm.DB) StatsRepository {
 	return &statsRepository{db: db}
 }
 
+// CreateAPILog 写入 API 日志。OPT-SEC-04：敏感字段（IP/UA）落库前加密，
+// 存量明文与新密文双轨共存，读取出口统一解密。
 func (r *statsRepository) CreateAPILog(ctx context.Context, log *sysmodel.APILog) error {
+	log.IPAddress = dbencrypt.Encrypt(log.IPAddress)
+	log.UserAgent = dbencrypt.Encrypt(log.UserAgent)
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
+// GetAPILogs 读取 API 日志列表。OPT-SEC-04：出口统一解密，明文行原样透传。
 func (r *statsRepository) GetAPILogs(ctx context.Context, licenseID string, startTime, endTime time.Time, limit int) ([]*sysmodel.APILog, error) {
 	var logs []*sysmodel.APILog
 	query := r.db.WithContext(ctx).
@@ -59,6 +65,10 @@ func (r *statsRepository) GetAPILogs(ctx context.Context, licenseID string, star
 	}
 
 	err := query.Find(&logs).Error
+	for _, l := range logs {
+		l.IPAddress = dbencrypt.Decrypt(l.IPAddress)
+		l.UserAgent = dbencrypt.Decrypt(l.UserAgent)
+	}
 	return logs, err
 }
 

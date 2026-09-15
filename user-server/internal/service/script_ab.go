@@ -182,7 +182,7 @@ func (s *ScriptABService) ExpireScript(ctx context.Context, scriptID uint) error
 }
 
 // RecordExposure 记录曝光（调用方以 goroutine fire-and-forget 调用）
-func (s *ScriptABService) RecordExposure(scriptID uint, version int, oneID string, customerID uint, conversationID, traceID string) {
+func (s *ScriptABService) RecordExposure(scriptID uint, version int, oneID string, customerID string, conversationID, traceID string) {
 	if scriptID == 0 || oneID == "" {
 		return
 	}

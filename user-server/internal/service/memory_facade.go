@@ -60,14 +60,13 @@ type MemoryFact struct {
 }
 
 type MemoryFacade struct {
-	db *gorm.DB
 	ms *MemorySystem
 	dm *DialogueMemoryService
 }
 
 // NewMemoryFacade 从已存在对象注入构造（不重复初始化底层系统）
 func NewMemoryFacade(db *gorm.DB, ms *MemorySystem, dm *DialogueMemoryService) *MemoryFacade {
-	return &MemoryFacade{db: db, ms: ms, dm: dm}
+	return &MemoryFacade{ms: ms, dm: dm}
 }
 
 // Write 统一写入入口：dialogue→DialogueMemory.AppendMessage；fact→MemorySystem.L2SaveFactAt
