@@ -1,0 +1,41 @@
+# OPT-DB-08 一致性守卫：PostgreSQL ENUM 值域 ↔ Go 常量
+#
+# 背景：migrations/047_pg_enums.sql 要求「所有 ENUM 值必须与 Go 代码常量保持一致」。
+# 实测该约束曾被违反 3 处（缺 qq / system / system_seed）且长期无人发现，
+# 而 user-server 的 schema 由 GORM AutoMigrate 驱动且失败即 panic，
+# 值域不一致的后果是**应用启动失败**，故必须在 CI 阶段拦截。
+#
+# 配套脚本：scripts/check-enum-consistency.sh
+name: ENUM Consistency
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'migrations/*.sql'
+      - 'user-server/internal/model/*.go'
+      - 'user-server/internal/service/intent_recognition_fine.go'
+      - 'scripts/check-enum-consistency.sh'
+      - '.github/workflows/enum-consistency.yml'
+  pull_request:
+    paths:
+      - 'migrations/*.sql'
+      - 'user-server/internal/model/*.go'
+      - 'user-server/internal/service/intent_recognition_fine.go'
+      - 'scripts/check-enum-consistency.sh'
+      - '.github/workflows/enum-consistency.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  enum-consistency:
+    name: ENUM 值域 ↔ Go 常量
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check ENUM consistency
+        run: bash scripts/check-enum-consistency.sh

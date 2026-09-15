@@ -1,18 +1,46 @@
 -- =============================================================================
--- Migration 047: 高频 enum 改 PostgreSQL ENUM（OPT-DB-08 修复版）
--- 2026-08-16 修订
+-- Migration 047: 高频 enum 改 PostgreSQL ENUM（OPT-DB-08）
+-- 2026-08-16 创建；2026-09-15 修正值域缺陷 + 补充架构约束说明
 --
 -- 背景：项目中有大量 VARCHAR 字段表达"枚举语义"
 --       （platform/intent_type/message_status 等），字符串校验完全靠应用层，
 --       容易写脏数据 + 索引利用率低。
+--
+-- ⚠️ 重要架构约束（2026-09-15 实证补充，应用本迁移前必须阅读）：
+--   本迁移**不会在应用启动时自动执行**。user-server 的 schema 由
+--   `cmd/api/main.go` → `db.AutoMigrate()`（GORM）驱动，仓库内并无 SQL
+--   迁移执行器；`db.AutoMigrate()` 在迁移失败时 `panic(err)`。
+--
+--   由此产生两个必须知晓的后果：
+--   1. 若只应用本迁移而**不同步修改 Go model 的 gorm type tag**，则 GORM 认为
+--      model 声明（varchar）与库内实际类型（enum）不一致，会在下次启动时把列
+--      **改回 varchar**，本迁移的成果被静默回退。
+--   2. 若只改 model tag 而**不先创建 ENUM 类型**，AutoMigrate 建列时会因类型
+--      不存在而失败 → panic。
+--   GORM 的列类型比较取 `information_schema.columns.udt_name`
+--   （postgres 驱动 v1.6.0 migrator.go ColumnTypes），枚举列返回类型名本身，
+--   因此「类型已存在 + model tag 一致」是稳定态；类型变更时 GORM 生成
+--   `ALTER TABLE .. ALTER COLUMN .. TYPE .. USING ..::..`，可完成 varchar→enum。
+--   另注意：PostgreSQL **不允许**无 USING 的 varchar→enum 强转
+--   （`ERROR: column cannot be cast automatically to type ...`），故必须走 USING。
+--
+--   结论：本迁移应与 model tag 变更、ENUM 类型创建**三者同批**实施，
+--   否则任一单独实施都无效或不可用。见 scripts/check-enum-consistency.sh。
 --
 -- 重要：本迁移所有 ENUM 值必须与 Go 代码常量保持一致
 --   - 平台渠道: hivemtk/user-server/internal/model/ai_agent.go (ChannelTypeXxx)
 --   - 消息状态: hivemtk/user-server/internal/model/unified_message.go (MessageStatusXxx)
 --   - 嵌入状态: hivemtk/user-server/internal/model/kb_workspace.go (EmbedStatusXxx)
 --   - 文档来源: hivemtk/user-server/internal/model/kb_workspace.go (SourceTypeXxx)
---   - 意图主类: hivemtk/user-server/internal/service/intent_recognition_fine.go (IntentMajorXxx)
---   - 意图子类: hivemtk/user-server/internal/service/intent_recognition_fine.go (IntentMinorXxx)
+--
+--   值域修正（2026-09-15）：
+--   - platform_type_enum 补 'qq'（ChannelTypeQQ 存在但原枚举遗漏）
+--   - platform_type_enum 补 'system'（本迁移自身第 2 节会把未知值归一化为
+--     'system' 并计入白名单，但原枚举并未包含它 → 转换时必然报错）
+--   - source_type_enum 补 'system_seed'（migrations/031、034b 种子数据实际写入）
+--   - 原文件引用的 IntentMajorXxx / IntentMinorXxx 常量在代码库中**不存在**，
+--     intent_records.intent_major 的转换缺少可对齐的 Go 侧定义，本迁移保留该节
+--     但标注为待定，避免误以为已完成对齐。
 --
 -- 兼容性：
 --   - PG 11+ 通用
@@ -29,11 +57,11 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'platform_type_enum') THEN
     CREATE TYPE platform_type_enum AS ENUM (
-      'telegram', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
+      'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
-      'web', 'web_embed'
+      'web', 'web_embed', 'system'
     );
-    RAISE NOTICE 'Created enum platform_type_enum (12 values)';
+    RAISE NOTICE 'Created enum platform_type_enum (14 values)';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'intent_major_enum') THEN
@@ -60,9 +88,9 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'source_type_enum') THEN
     CREATE TYPE source_type_enum AS ENUM (
-      'upload', 'text', 'url', 'batch', 'openapi'
+      'upload', 'text', 'url', 'batch', 'openapi', 'system_seed'
     );
-    RAISE NOTICE 'Created enum source_type_enum (5 values, matches Go SourceTypeXxx)';
+    RAISE NOTICE 'Created enum source_type_enum (6 values, matches Go SourceTypeXxx + seed data)';
   END IF;
 END $$;
 
@@ -81,7 +109,7 @@ BEGIN
     UPDATE message_hub SET platform = 'xiaohongshu' WHERE platform = 'xhs';
     UPDATE message_hub SET platform = 'wecom' WHERE platform = 'wechat';
     UPDATE message_hub SET platform = 'system' WHERE platform NOT IN (
-      'telegram', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
+      'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
       'web', 'web_embed', 'system'
     );
@@ -90,7 +118,7 @@ BEGIN
     FROM message_hub
     WHERE platform IS NOT NULL
       AND platform NOT IN (
-        'telegram', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
+        'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
         'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
         'web', 'web_embed', 'system'
       );
@@ -108,6 +136,15 @@ END $$;
 -- 3) intent_records.intent_major → intent_major_enum
 --    注意：原 schema 中字段名是 intent_type,我们的 Go 常量是 IntentMajor
 --    因此这里使用 intent_major 作为新列名（不破坏兼容）
+--
+--    ⚠️ 待定（2026-09-15 实证）：原文件头引用的 `IntentMajorXxx` / `IntentMinorXxx`
+--    常量在 user-server 代码库中**不存在**（grep `IntentMajor\w*\s*=` 零命中），
+--    即 intent_major 在 Go 侧没有可对齐的枚举定义，AutoMigrate 也不会维护该列。
+--    同时线上 intent_records.intent_type 实际存在 16 种细粒度取值
+--    （purchase/social/objection_price/ask_service/unknown/greeting/...），
+--    与本节 8 值粗粒度枚举并非同层语义，无法直接强转。
+--    因此本节的 intent_major 列属于「新增的、尚无 Go 侧定义」的独立维度：
+--    可安全执行（新列仅回填 8 个匹配值，其余为 NULL），但**不等于** OPT-DB-08 已完成。
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -206,12 +243,13 @@ DECLARE
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'knowledge_documents') THEN
     -- 归一化 'import' / 'crawl' 等历史值
+    -- 注意：'system_seed'（migrations/031、034b 种子数据写入）是合法来源，**不**归一化
     UPDATE knowledge_documents SET source_type = 'upload'
     WHERE source_type IN ('import', 'crawl', 'manual', 'sync', 'imported');
 
     SELECT COUNT(*) INTO bad_count FROM knowledge_documents
     WHERE source_type IS NOT NULL
-      AND source_type NOT IN ('upload', 'text', 'url', 'batch', 'openapi');
+      AND source_type NOT IN ('upload', 'text', 'url', 'batch', 'openapi', 'system_seed');
 
     IF bad_count > 0 THEN
       RAISE WARNING 'knowledge_documents.source_type has % unknown values, skipping', bad_count;
