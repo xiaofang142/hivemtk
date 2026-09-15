@@ -10,7 +10,7 @@
 
 | 编号 | 标题 | 状态 | 决策日期 | 影响范围 |
 |------|------|------|----------|----------|
-| [ADR-001](ADR-001-layered-architecture.md) | 五层架构（Controller→Service→Repository→Model→DTO） | ✅ Accepted | 2026-Q1 | 后端全局 |
+| [ADR-001](ADR-001-five-layer-architecture.md) | 五层架构（Controller→Service→Repository→Model→DTO） | ✅ Accepted | 2026-Q1 | 后端全局 |
 | [ADR-002](ADR-002-agpl-license.md) | AGPL-3.0 许可证 | ✅ Accepted | 2026-Q1 | 法律 / 开源 |
 | [ADR-004](ADR-004-cors-strict-whitelist.md) | CORS 严格白名单 | ✅ Accepted | 2026-Q2 | 网关 |
 | [ADR-005](ADR-005-database-design.md) | 数据库设计 | ✅ Merged | 2026-Q3 | 后端全局 |
@@ -49,6 +49,15 @@
 | 800-899 | 流程 / 治理 |
 | 900-999 | Reserved |
 
+### 缺号说明
+
+| 编号 | 状态 | 原因 |
+|------|------|------|
+| ADR-003 | ❌ 已删除 | 原为 WebSocket 方案决策；该方案已弃用（现行为 HTTP 长轮询 + SSE），故编号作废且**不复用**，以保持历史引用的稳定性 |
+
+> 现有编号：001、002、004~015 共 **14 份**（ADR-003 缺号）。
+> 新增 ADR 请从 **ADR-016** 起顺延，不要回填 ADR-003。
+
 ### 已合并说明
 
 | 编号 | 主题 | 合并目标 | 状态 |
@@ -76,3 +85,4 @@
 |------|------|--------|------|
 | v1.0 | 2026-08-16 | audit-agent | 初版 |
 | v1.1 | 2026-08-16 | audit-agent | 删除 ADR-003（已弃用 WebSocket）、简化 ADR-014、修正引用 |
+| v1.2 | 2026-09-15 | audit-agent | 修复 ADR-001 死链（`ADR-001-layered-architecture.md` → `ADR-001-five-layer-architecture.md`）；将 ADR-003 缺号说明从修订历史提升为独立小节，避免新 ADR 回填该编号 |
