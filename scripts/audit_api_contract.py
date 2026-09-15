@@ -4,7 +4,12 @@
 用法：python scripts/audit_api_contract.py
 输出：UNMATCHED（前端调了后端不存在的路由）、BACKEND_NOT_CALLED（后端注册但前端未调，候选死接口/为外部客户端保留）。
 """
-import re, os, glob
+import re, os, glob, sys
+
+# --strict：供 CI 使用。UNMATCHED（前端调了后端不存在的路由）与通配 key（解析失败）
+# 都是**确定缺陷**，此时退出码 1；BACKEND_NOT_CALLED 只是候选清单（大量为
+# 外部客户端/管理端保留接口），不参与判定。
+STRICT = ('--strict' in sys.argv) or (os.environ.get('AUDIT_STRICT') == '1')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RDIRS = ['user-server/internal/router', 'user-server/internal/controller']
@@ -16,6 +21,17 @@ func_re = re.compile(r'func\s+(?:\((\w+)\s+\*?(\w+)\)\s+)?(\w+)\s*\(([^)]*)\)\s*
 rgtype = re.compile(r'\*gin\.RouterGroup\b')
 m_re = re.compile(r"http\.(get|post|put|delete|patch)\(\s*([`'\"])([^`'\"]+)\2")
 tpl = re.compile(r"\$\{[^}]+\}")
+# 模块级字符串常量：const BASE = '/api/dingtalk-app/accounts'
+# ⚠️ 2026-09-16 审计（TOOL-05）：原实现不解析这类常量，于是 `${BASE}/${id}` 经 tpl
+# 替换后变成 `:param/:param` —— 一个**匹配任意同长度路由**的通配 key：
+#   GET  :param/:param 命中 79 条后端路由、PUT 命中 8 条、DELETE 命中 3 条……
+# 即这些前端调用**从未被真正校验过**（后端把该路由删掉它也照样"匹配"），
+# 与此同时真实后端路由被反向误报进 BACKEND_NOT_CALLED 死接口清单。
+const_re = re.compile(r"\b(?:const|let|var)\s+(\w+)\s*=\s*(['\"])([^'\"]+)\2")
+# 裸常量实参：http.get(BASE, params) —— 实参不是字符串字面量，m_re 完全匹配不到
+ident_re = re.compile(r"http\.(get|post|put|delete|patch)\(\s*([A-Za-z_$][\w$]*)\s*[,)]")
+# ${NAME} 形式引用已知常量
+tpl_name = re.compile(r"\$\{(\w+)\}")
 
 
 def braces(src, start):
@@ -281,10 +297,36 @@ for fn2 in sorted(os.listdir(WEB)):
     if not fn2.endswith('.js'):
         continue
     src = open(os.path.join(WEB, fn2), encoding='utf-8').read()
+    consts = {m.group(1): m.group(3) for m in const_re.finditer(src)}
+
+    def _expand(u):
+        """把 ${KNOWN_CONST} 展开成其字面量，未知模板留给 tpl 兜底成 :param。
+
+        2026-09-16 审计（TOOL-05）：不展开已知常量时，整段前缀会退化成通配 `:param`。
+        """
+        return tpl_name.sub(lambda mm: consts.get(mm.group(1), mm.group(0)), u)
+
+    # ① 字面量 / 模板字面量实参
     for m in m_re.finditer(src):
-        p = tpl.sub(':param', m.group(3))
-        p = p.split('?')[0]
+        p = tpl.sub(':param', _expand(m.group(3))).split('?')[0]
         frontend.setdefault((m.group(1).upper(), p), []).append(fn2)
+    # ② 裸常量标识符实参（http.get(BASE, params)）—— 此前完全不可见
+    for m in ident_re.finditer(src):
+        name = m.group(2)
+        if name in consts:
+            p = consts[name].split('?')[0]
+            frontend.setdefault((m.group(1).upper(), p), []).append(fn2)
+
+
+# 自检（TOOL-05）：首段为 `:param` 的 key 是**通配**路径，会匹配任意同长度同方法的路由
+# —— 等于该前端调用根本没被校验（后端删掉该路由它也照样"匹配"）。
+# 正常业务路径不可能以参数开头，故一旦出现即说明前缀解析失败，必须显式报警而非静默计入"已匹配"。
+_degenerate = sorted(k for k in frontend if [s for s in k[1].split('/') if s][:1] == [':param'])
+if _degenerate:
+    print("⚠️  以下 %d 个前端调用被解析成通配路径（首段为 :param），其「已匹配」结论不可信：" % len(_degenerate))
+    for _m, _p in _degenerate:
+        print("      %-6s %-28s <- %s" % (_m, _p, ','.join(sorted(set(frontend[(_m, _p)])))))
+    print()
 
 
 def norm(p):
@@ -315,8 +357,23 @@ for (bm, bp), f in sorted(backend.items()):
                              '/public', '/s/', '/l/', '/livecode', '/callback', '/platform')):
         continue
     bpn = re.sub(r'/:[^/]+', '/:param', bp)
-    if not any(match(fp, bpn) for (m2, fp) in fe_keys):
+    # ⚠️ 2026-09-16 审计（TOOL-05）：原为 `for (m2, fp) in fe_keys`，**丢弃了 m2**
+    # —— 于是后端 `POST /api/x` 只要前端存在任意方法的 `/api/x` 就算"被调用"。
+    # 与上方 UNMATCHED 方向（方法敏感）口径不一致，属单向宽松 → 低估死接口。
+    if not any(m2 == bm and match(fp, bpn) for (m2, fp) in fe_keys):
         dead.append((bm, bp))
 print("\n=== BACKEND NOT CALLED BY FRONTEND (candidates): %d ===" % len(dead))
 for bm, bp in dead:
     print("%-7s %s" % (bm, bp))
+
+# 退出码（2026-09-16 审计 TOOL-05）：把"能发现断链"变成"能拦住断链"。
+# 本脚本此前**未接入任何 workflow**，即 功能连贯性 维度**没有任何自动化门禁** ——
+# 脚本写得很认真，但只在人工手动跑时才起作用。
+if STRICT:
+    bad = len(unmatched) + len(_degenerate)
+    if bad:
+        print("\n❌ strict: UNMATCHED=%d, 通配key=%d —— 存在确定的前后端契约缺陷"
+              % (len(unmatched), len(_degenerate)))
+        sys.exit(1)
+    print("\n✅ strict: UNMATCHED=0 且无通配 key（%d 个前端调用全部可解析并与后端匹配）"
+          % len(frontend))

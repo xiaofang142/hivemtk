@@ -311,7 +311,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune
+.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune audit
 
 lint-install:
 	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
@@ -365,3 +365,27 @@ test-db-prune:
 		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
 			"SELECT count(*)||' 个孤儿测试库，共 '||pg_size_pretty(sum(pg_database_size(datname))) FROM pg_database WHERE datname LIKE 'user_db_test_%';"; \
 	fi
+
+# =============================================================================
+# 静态审计护栏（本地与 CI 同口径）
+#
+# 2026-09-16 审计（TOOL-05）：audit_api_contract.py 与 audit-cross-package-ports.sh
+# **此前均未接入任何 workflow** —— 等于"写了检查但从不执行"。其中前者是
+# 「功能连贯性」维度唯一的自动化检查：它不在 CI 里，前端调用一个不存在的
+# 后端路由就能一路合入而无人拦截。
+#
+# 现已接入 .github/workflows/api-contract.yml；本目标用于本地同口径预检。
+#
+# 注：check-architecture.sh 不在本目标内 ——
+#   ① 它已由 user-server-ci.yml 单独执行（无需重复）；
+#   ② 它是全部静态检查里结构上最重的：对 internal/ 下 715 个 *_test.go 逐文件 spawn 3 个 grep、
+#      再对 internal/service 下 634 个 .go 逐文件 spawn 2 个 grep（合计约 3400 次进程创建），
+#      故不适合放进"改一行前端就顺手跑一下"的目标。
+#   需要时直接 `bash scripts/check-architecture.sh`。
+# =============================================================================
+audit:
+	@echo "── 前后端 API 契约（UNMATCHED 必须为 0，且不得出现通配 key）──"
+	@python3 scripts/audit_api_contract.py --strict
+	@echo "── 跨包端口单一源 ──"
+	@bash scripts/audit-cross-package-ports.sh
+	@echo "✅ 静态审计通过"

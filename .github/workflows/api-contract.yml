@@ -1,0 +1,58 @@
+# 前后端 API 契约 + 跨包端口一致性
+#
+# 背景（2026-09-16 审计 TOOL-05）：这两个脚本**均已实现但未接入任何 workflow**，
+# 等于「写了检查但从不执行」。其中 audit_api_contract.py 是**功能连贯性**维度
+# 唯一的自动化检查 —— 它不在 CI 里，意味着前端调用一个不存在的后端路由
+# 可以一路合入而无人拦截。
+#
+# 各步骤定位：
+#   - audit_api_contract.py --strict   阻断：UNMATCHED 必须为 0，且不得出现
+#                                      「通配 key」（解析失败会把真实缺陷掩盖成"已匹配"）
+#   - audit-cross-package-ports.sh     阻断：跨包端口字面量必须与单一源一致
+#
+# 注：BACKEND_NOT_CALLED（后端注册但前端未调）**不参与判定** —— 其中大量是
+# 面向外部客户端/管理端的保留接口，属候选清单而非缺陷。
+name: API Contract
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'user-web/src/api/**'
+      - 'user-server/internal/router/**'
+      - 'user-server/internal/controller/**'
+      - 'user-server/internal/monitor/**'
+      - 'user-server/internal/ops/controller/**'
+      - 'user-server/internal/aiagent/knowledge/controller/**'
+      - 'scripts/audit_api_contract.py'
+      - 'scripts/audit-cross-package-ports.sh'
+      - '.github/workflows/api-contract.yml'
+  pull_request:
+    paths:
+      - 'user-web/src/api/**'
+      - 'user-server/internal/router/**'
+      - 'user-server/internal/controller/**'
+      - 'user-server/internal/monitor/**'
+      - 'user-server/internal/ops/controller/**'
+      - 'user-server/internal/aiagent/knowledge/controller/**'
+      - 'scripts/audit_api_contract.py'
+      - 'scripts/audit-cross-package-ports.sh'
+      - '.github/workflows/api-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-contract:
+    name: 前后端契约 + 跨包端口
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 前后端 API 契约（阻断：UNMATCHED=0 且无通配 key）
+        run: python3 scripts/audit_api_contract.py --strict
+
+      - name: 跨包端口单一源（阻断）
+        run: bash scripts/audit-cross-package-ports.sh
