@@ -1,8 +1,14 @@
-# Lint：golangci-lint（Go）+ ESLint（前端 Bridge 扩展）
+# Lint：golangci-lint（Go）+ ESLint（user-web 主应用 + Bridge 扩展）
 # 文档: https://golangci-lint.run/usage/install/
 #
 # 架构合规检查（五层架构）已合并到 user-server-ci.yml（test job 中），
 # 不再在此处重复执行。参见 OPT-CI-07。
+#
+# 缺口修复（OPT-FE-03）：原 lint.yml 的 eslint job 只覆盖 user-web/bridge，
+# 主应用 user-web/ 从未被 CI lint 过。这导致 user-web/eslint.config.mjs 中
+# 的 `no-restricted-imports`（禁止 default 导入 @/utils/request）形同虚设——
+# 规则写了、文档写了、豁免块也维护了，但没有任何 CI 会因违规而失败。
+# 现补 `eslint-user-web` job，对主应用全量 lint。
 
 name: Lint
 
@@ -39,6 +45,32 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+  # 主应用 lint：阻断项为「error」。当前全量 628 文件 / 0 error / 18788 warning，
+  # 故此处刻意不加 --max-warnings——历史告警债务不阻断，但任何新增 error
+  # （含 default 导入、未定义变量等）都会让 job 失败。
+  eslint-user-web:
+    name: ESLint (user-web 主应用)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: user-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: user-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint (errors block, warnings informational)
+        run: npm run lint:check
 
   i18n-coverage:
     name: i18n Coverage Check

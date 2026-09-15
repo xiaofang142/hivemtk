@@ -58,57 +58,12 @@ export default [
     },
   },
 
-  // 存量放行：43 个文件继续使用 default 导入（等逐步迁移后删除此块）
-  {
-    files: [
-      'src/api/operationLog.js',
-      'src/api/churnPrediction.js',
-      'src/api/feishu.js',
-      'src/api/tuning.js',
-      'src/api/license.js',
-      'src/api/oneid.js',
-      'src/api/obs.js',
-      'src/api/integration.js',
-      'src/api/dashboardScreen.js',
-      'src/api/platform.js',
-      'src/api/livecode.js',
-      'src/api/batchOperation.js',
-      'src/api/chatChannel.js',
-      'src/api/userSegment.js',
-      'src/api/objection.js',
-      'src/api/customerService.js',
-      'src/api/securityAudit.js',
-      'src/api/aiAgent.js',
-      'src/api/bulkMessaging.js',
-      'src/api/i18nStats.js',
-      'src/api/customerServiceAgent.js',
-      'src/api/tiktokAutoReply.js',
-      'src/api/customerEvent.js',
-      'src/api/assetBundle.js',
-      'src/api/material.js',
-      'src/api/backup.js',
-      'src/api/customerSession.js',
-      'src/api/conversionFunnel.js',
-      'src/api/glossary.js',
-      'src/api/scriptTemplate.js',
-      'src/api/dingtalkApp.js',
-      'src/api/whatsappCloud.js',
-      'src/api/abExperiment.js',
-      'src/api/channelAgentBinding.js',
-      'src/api/assetMarket.js',
-      'src/api/marketingFlow.js',
-      'src/api/telegram.js',
-      'src/api/customer360.js',
-      'src/api/customerJourney.js',
-      'src/api/customReport.js',
-      'src/api/aiProductivity.js',
-      'src/api/tiktokCard.js',
-      'src/api/persona.js',
-    ],
-    rules: {
-      'no-restricted-imports': 'off',
-    },
-  },
+  // OPT-FE-03（已闭环）：此处原有 43 个文件的 default 导入"存量放行"块。
+  // 经核验 src/ 与 tests/ 下已无任何 default `request` 导入（全部为
+  // `import { http } from '@/utils/request'`，共 123 处），且清单中的
+  // `src/api/tiktokAutoReply.js` 已随 CDP 自动回复功能于 8212b5ca 删除。
+  // 该块已完全失效，故整体删除——`no-restricted-imports` 现在全仓生效，
+  // 任何新引入 default 导入都会被立即拦截。
 
   // 测试 / 构建配置文件放行
   {
