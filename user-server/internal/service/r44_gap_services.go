@@ -21,14 +21,14 @@ import (
 
 // BackupGapService backup 页面契约适配（复用既有 BackupService 存储能力 + KV 策略）
 type BackupGapService struct {
-	db  *gorm.DB
-	kv  repository.SystemConfigKVRepository
-	now func() time.Time
+	repo *repository.BackupGapRepo
+	kv   repository.SystemConfigKVRepository
+	now  func() time.Time
 }
 
-// NewBackupGapService 构造
+// NewBackupGapService 构造（ARC-01：gdb 为 nil 时 repo 为 nil，查询类方法返回错误）
 func NewBackupGapService(gdb *gorm.DB) *BackupGapService {
-	return &BackupGapService{db: gdb, kv: repository.NewSystemConfigKVRepository(), now: time.Now}
+	return &BackupGapService{repo: repository.NewBackupGapRepoWithDB(gdb), kv: repository.NewSystemConfigKVRepository(), now: time.Now}
 }
 
 // NewBackupGapServiceFromGlobal 便捷构造
@@ -89,31 +89,22 @@ func (s *BackupGapService) SaveStrategy(ctx context.Context, st *BackupStrategy)
 
 // Stats 聚合既有 backups 表（model.Backup）+ 表级规模估算
 func (s *BackupGapService) Stats(ctx context.Context) (*BackupStatsRow, error) {
-	g := s.db
-	var total int64
-	var last model.Backup
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	row := &BackupStatsRow{LastSuccess: "-", NextRun: "-"}
-	if err := g.WithContext(ctx).Model(&model.Backup{}).Count(&total).Error; err != nil {
+	total, err := s.repo.CountBackups(ctx)
+	if err != nil {
 		return nil, err
 	}
 	row.Total = total
-	if err := g.WithContext(ctx).
-		Where("status = ?", "success").
-		Order("created_at DESC").First(&last).Error; err == nil {
+	if last, err := s.repo.LastSuccess(ctx); err == nil {
 		row.LastSuccess = last.CreatedAt.Format("2006-01-02 15:04")
 		row.TotalSize = last.FileSize
 	}
 
-	type tr struct {
-		Table string `gorm:"column:table_name"`
-		Rows  int64  `gorm:"column:rows"`
-	}
-	var rows []tr
-	err := g.WithContext(ctx).Raw(`
-		SELECT relname AS table_name, GREATEST(n_live_tup, 0) AS rows
-		FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 10`).Scan(&rows).Error
-	if err == nil {
-		for _, r := range rows {
+	if stats, err := s.repo.TableStats(ctx); err == nil {
+		for _, r := range stats {
 			row.TableStats = append(row.TableStats, map[string]any{"table": r.Table, "rows": r.Rows})
 		}
 	}
@@ -137,14 +128,20 @@ func (s *BackupGapService) nextRunTime(st BackupStrategy) time.Time {
 
 // RagEvalGapService RAG 评测服务（诚实口径：Recall@5 = 检索 top5 文本含答案关键词的比例；MRR/NDCG 按同口径排序）
 type RagEvalGapService struct {
-	db       *gorm.DB
+	gapRepo  *repository.RagEvalGapRepo
 	evalRepo *repository.RagEvalRepository
 	searchFn func(ctx context.Context, productID, query string) ([]string, error)
 }
 
 // NewRagEvalGapService 构造（searchFn: 复用既有 RagSearcher 混合检索，由装配处注入）
+//
+// ARC-01：gdb 为 nil 时两个仓储均为 nil，查询/写库类方法返回错误。
 func NewRagEvalGapService(gdb *gorm.DB, searchFn func(ctx context.Context, productID, query string) ([]string, error)) *RagEvalGapService {
-	return &RagEvalGapService{db: gdb, evalRepo: repository.NewRagEvalRepositoryWithDB(gdb), searchFn: searchFn}
+	return &RagEvalGapService{
+		gapRepo:  repository.NewRagEvalGapRepoWithDB(gdb),
+		evalRepo: repository.NewRagEvalRepositoryWithDB(gdb),
+		searchFn: searchFn,
+	}
 }
 
 // NewRagEvalGapServiceFromGlobal 便捷构造
@@ -158,6 +155,9 @@ func (s *RagEvalGapService) searchTop5(ctx context.Context, productID, question 
 
 // UploadCSV 解析 CSV（列: question,answer）入库
 func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productID string) (int, error) {
+	if s == nil || s.gapRepo == nil {
+		return 0, fmt.Errorf("service or repository is nil")
+	}
 	cr := csv.NewReader(r)
 	cr.FieldsPerRecord = -1
 	records, err := cr.ReadAll()
@@ -172,7 +172,6 @@ func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productI
 	if len(records[0]) > 0 && strings.Contains(strings.ToLower(records[0][0]), "question") {
 		start = 1
 	}
-	g := s.db
 	n := 0
 	for i := start; i < len(records); i++ {
 		row := records[i]
@@ -184,7 +183,7 @@ func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productI
 			ans = strings.TrimSpace(row[1])
 		}
 		q := &model.RagEvalQuestion{ProductID: productID, Question: strings.TrimSpace(row[0]), Answer: ans}
-		if err := g.WithContext(ctx).Create(q).Error; err != nil {
+		if err := s.gapRepo.CreateQuestion(ctx, q); err != nil {
 			return n, err
 		}
 		n++
@@ -196,9 +195,12 @@ func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productI
 }
 
 func (s *RagEvalGapService) RunAsync(productID string) (*model.RagEvalRun, error) {
-	g := s.db
+	if s == nil || s.gapRepo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
+	ctx := context.Background()
 	run := &model.RagEvalRun{Total: -1}
-	if err := g.Create(run).Error; err != nil {
+	if err := s.gapRepo.CreateRun(ctx, run); err != nil {
 		return nil, err
 	}
 	go func(runID uint, pid string) {
@@ -211,25 +213,20 @@ func (s *RagEvalGapService) RunAsync(productID string) (*model.RagEvalRun, error
 		defer cancel()
 		res, err := s.computeRun(ctx, pid)
 		if err != nil {
-			_ = g.Model(&model.RagEvalRun{}).Where("id = ?", runID).Updates(map[string]any{"total": -2, "eval_set_size": 0}).Error
+			_ = s.gapRepo.MarkRunFailed(ctx, runID)
 			return
 		}
-		_ = g.Model(&model.RagEvalRun{}).Where("id = ?", runID).Updates(map[string]any{
+		_ = s.gapRepo.UpdateRunResult(ctx, runID, map[string]any{
 			"total": res.Total, "hit": res.Hit, "recall5": res.Recall5,
 			"mrr": res.MRR, "ndcg5": res.NDCG5, "eval_set_size": res.EvalSetSize,
-		}).Error
+		})
 	}(run.ID, productID)
 	return run, nil
 }
 
 func (s *RagEvalGapService) computeRun(ctx context.Context, productID string) (*model.RagEvalRun, error) {
-	g := s.db
-	var qs []model.RagEvalQuestion
-	q := g.WithContext(ctx).Model(&model.RagEvalQuestion{})
-	if productID != "" {
-		q = q.Where("product_id = ? OR product_id = ''", productID)
-	}
-	if err := q.Order("id ASC").Limit(200).Find(&qs).Error; err != nil {
+	qs, err := s.gapRepo.ListQuestions(ctx, productID)
+	if err != nil {
 		return nil, err
 	}
 	if len(qs) == 0 {
@@ -250,7 +247,7 @@ func (s *RagEvalGapService) computeRun(ctx context.Context, productID string) (*
 		run.MRR = run.MRR / float64(run.Total)
 		run.NDCG5 = run.NDCG5 / float64(run.Total)
 	}
-	if err := g.WithContext(ctx).Create(run).Error; err != nil {
+	if err := s.gapRepo.CreateRunCompleted(ctx, run); err != nil {
 		return nil, err
 	}
 	return run, nil
@@ -311,11 +308,17 @@ func answerKeywords(ans string) []string {
 
 // Latest 最新一次 run
 func (s *RagEvalGapService) Latest(ctx context.Context) (*model.RagEvalRun, error) {
+	if s == nil || s.evalRepo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	return s.evalRepo.LatestRun(ctx)
 }
 
 // Runs 历史
 func (s *RagEvalGapService) Runs(ctx context.Context, limit int) ([]*model.RagEvalRun, error) {
+	if s == nil || s.evalRepo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -324,11 +327,17 @@ func (s *RagEvalGapService) Runs(ctx context.Context, limit int) ([]*model.RagEv
 
 // Diff 与基线对比
 func (s *RagEvalGapService) Diff(ctx context.Context, baselineID uint) (map[string]any, error) {
+	if s == nil || s.evalRepo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	base, err := s.evalRepo.GetRunRaw(ctx, baselineID)
 	if err != nil {
 		return nil, err
 	}
 	latest, _ := s.Latest(ctx)
+	if latest == nil {
+		latest = &model.RagEvalRun{}
+	}
 	return map[string]any{
 		"baseline_id":  base.ID,
 		"latest_id":    latest.ID,
@@ -342,11 +351,13 @@ func (s *RagEvalGapService) Diff(ctx context.Context, baselineID uint) (map[stri
 
 // CohortGapService 留存/路径分析
 type CohortGapService struct {
-	db *gorm.DB
+	repo *repository.CohortGapRepo
 }
 
-// NewCohortGapService 构造
-func NewCohortGapService(gdb *gorm.DB) *CohortGapService { return &CohortGapService{db: gdb} }
+// NewCohortGapService 构造（ARC-01：gdb 为 nil 时 repo 为 nil，查询类方法返回错误）
+func NewCohortGapService(gdb *gorm.DB) *CohortGapService {
+	return &CohortGapService{repo: repository.NewCohortGapRepoWithDB(gdb)}
+}
 
 // NewCohortGapServiceFromGlobal 便捷构造
 func NewCohortGapServiceFromGlobal() *CohortGapService {
@@ -368,10 +379,12 @@ type CohortBucketRow struct {
 
 // Cohort 按客户注册周分群，后续周有行为事件（customer_events）即留存
 func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	if weeks <= 0 || weeks > 12 {
 		weeks = 8
 	}
-	g := s.db
 	now := time.Now()
 	thisWeekStart := now.AddDate(0, 0, -int(now.Weekday()))
 	type cohort struct {
@@ -395,9 +408,9 @@ func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult
 
 	for ci := range cohorts {
 		c := &cohorts[ci]
-		g.WithContext(ctx).Model(&model.Customer{}).
-			Where("created_at >= ? AND created_at < ?", c.start, c.end).
-			Count(&c.size)
+		if n, err := s.repo.CountCustomersBetween(ctx, c.start, c.end); err == nil {
+			c.size = n
+		}
 		c.retained = make([]int64, weeks)
 		for wi := 0; wi < weeks; wi++ {
 			wstart := c.end.AddDate(0, 0, 7*wi)
@@ -406,12 +419,9 @@ func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult
 				break
 			}
 			var n int64
-			g.WithContext(ctx).Model(&model.CustomerEvent{}).
-				Joins("JOIN customers ON customers.one_id = customer_events.customer_id OR customers.id::text = customer_events.customer_id").
-				Where("customers.created_at >= ? AND customers.created_at < ?", c.start, c.end).
-				Where("customer_events.created_at >= ? AND customer_events.created_at < ?", wstart, wend).
-				Distinct("customer_events.customer_id").
-				Count(&n)
+			if cnt, err := s.repo.CountRetainedEvents(ctx, c.start, c.end, wstart, wend); err == nil {
+				n = cnt
+			}
 			c.retained[wi] = n
 		}
 	}
@@ -437,20 +447,14 @@ type PathResult struct {
 
 // Path 事件路径：同一客户相邻事件对聚合 top N
 func (s *CohortGapService) Path(ctx context.Context, limit int) (*PathResult, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	if limit <= 0 || limit > 20 {
 		limit = 5
 	}
-	g := s.db
-	type ev struct {
-		CustomerID string
-		EventType  string
-		CreatedAt  time.Time
-	}
-	var evs []ev
-	if err := g.WithContext(ctx).Model(&model.CustomerEvent{}).
-		Select("customer_id, event_type, created_at").
-		Order("customer_id ASC, created_at ASC").Limit(5000).
-		Scan(&evs).Error; err != nil {
+	evs, err := s.repo.ListCustomerEvents(ctx)
+	if err != nil {
 		return nil, err
 	}
 	pairs := map[string]int64{}
@@ -502,11 +506,13 @@ func (s *CohortGapService) Path(ctx context.Context, limit int) (*PathResult, er
 
 // EmailGapService 邮件送达分析
 type EmailGapService struct {
-	db *gorm.DB
+	repo *repository.EmailGapRepo
 }
 
-// NewEmailGapService 构造
-func NewEmailGapService(gdb *gorm.DB) *EmailGapService { return &EmailGapService{db: gdb} }
+// NewEmailGapService 构造（ARC-01：gdb 为 nil 时 repo 为 nil，查询类方法返回错误）
+func NewEmailGapService(gdb *gorm.DB) *EmailGapService {
+	return &EmailGapService{repo: repository.NewEmailGapRepoWithDB(gdb)}
+}
 
 // NewEmailGapServiceFromGlobal 便捷构造
 func NewEmailGapServiceFromGlobal() *EmailGapService { return NewEmailGapService(repository.GetDB()) }
@@ -528,30 +534,28 @@ type DeliverabilityStats struct {
 
 // Deliverability 聚合 email_sends + email_tracking_events
 func (s *EmailGapService) Deliverability(ctx context.Context, days int) (*DeliverabilityStats, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	if days <= 0 || days > 365 {
 		days = 30
 	}
-	g := s.db
 	since := time.Now().AddDate(0, 0, -days)
 	st := &DeliverabilityStats{}
-	if err := g.WithContext(ctx).Model(&model.EmailSend{}).
-		Where("created_at >= ?", since).Count(&st.Sent).Error; err != nil {
+	sent, err := s.repo.CountSent(ctx, since)
+	if err != nil {
 		return nil, err
 	}
+	st.Sent = sent
 	countEvent := func(t string) int64 {
-		var n int64
-		g.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
-			Where("event_type = ? AND timestamp >= ?", t, since).Count(&n)
+		n, _ := s.repo.CountEventByType(ctx, t, since)
 		return n
 	}
 	st.Opened = countEvent("open")
 	st.Clicked = countEvent("click")
 	st.Unsub = countEvent("unsubscribe")
 
-	var bounces []model.EmailTrackingEvent
-	g.WithContext(ctx).
-		Where("event_type IN ? AND timestamp >= ?", []string{"bounce", "soft_bounce", "hard_bounce"}, since).
-		Order("timestamp DESC").Limit(2000).Find(&bounces)
+	bounces, _ := s.repo.ListBounces(ctx, since)
 	for _, b := range bounces {
 		switch b.EventType {
 		case "hard_bounce":
@@ -778,20 +782,11 @@ type BackupRow struct {
 
 // ListBackups 列出 backups 表（最多 100 条）
 func (s *BackupGapService) ListBackups(ctx context.Context) ([]BackupRow, error) {
-	type src struct {
-		ID         uint
-		BackupName string
-		BackupType string
-		Status     string
-		FileSize   int64
-		CreatedAt  string
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
-	g := s.db
-	var rows []src
-	if err := g.WithContext(ctx).
-		Table("backups").
-		Select("id, backup_name, backup_type, status, file_size, TO_CHAR(created_at,'YYYY-MM-DD HH24:MI') as created_at").
-		Order("id DESC").Limit(100).Scan(&rows).Error; err != nil {
+	rows, err := s.repo.ListBackups(ctx)
+	if err != nil {
 		return nil, err
 	}
 	out := make([]BackupRow, 0, len(rows))
@@ -806,24 +801,18 @@ func (s *BackupGapService) ListBackups(ctx context.Context) ([]BackupRow, error)
 
 // PreviewTableStats 返回核心表的行数估算（pg_stat_user_tables）
 func (s *BackupGapService) PreviewTableStats(ctx context.Context) ([]map[string]any, error) {
-	type tr struct {
-		Table string `gorm:"column:table_name"`
-		Rows  int64  `gorm:"column:rows"`
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
 	coreTables := []string{"customers", "customer_sessions", "session_messages", "message_hub", "clues", "script_library"}
-	g := s.db
-	var rows []tr
-	for _, t := range coreTables {
-		var r tr
-		if err := g.WithContext(ctx).Raw(
-			"SELECT ?::text AS table_name, GREATEST(n_live_tup,0) AS rows FROM pg_stat_user_tables WHERE relname = ?", t, t,
-		).Scan(&r).Error; err == nil && r.Table != "" {
-			rows = append(rows, r)
-		}
+	rows, err := s.repo.CoreTableStats(ctx, coreTables)
+	if err != nil {
+		return nil, err
 	}
-	if rows == nil {
+	if len(rows) == 0 {
+		rows = make([]repository.TableStatsRow, 0, len(coreTables))
 		for _, t := range coreTables {
-			rows = append(rows, tr{Table: t, Rows: 0})
+			rows = append(rows, repository.TableStatsRow{Table: t, Rows: 0})
 		}
 	}
 	out := make([]map[string]any, 0, len(rows))

@@ -216,6 +216,7 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 			"site_path":     sitePath,
 			"markdown_path": mdRelPath,
 			"deployed_at":   now,
+			"llms_included": true,
 		})
 		count++
 	}
@@ -280,8 +281,10 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 	s.db.Model(&siteCfg).Update("last_deploy_at", now)
 
 	// 触发蜘蛛推送（异步，不等部署完成）
+	// 用 >= 而不是 =，避免时间戳精度导致漏查
+	triggerFrom := now.Add(-30 * time.Second)
 	var articles []model.GeoArticle
-	s.db.Where("deployed_at = ?", now).Find(&articles)
+	s.db.Where("deployed_at >= ?", triggerFrom).Find(&articles)
 	urls := make([]string, 0, len(articles))
 	for _, a := range articles {
 		if a.SiteURL != "" {

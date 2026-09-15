@@ -16,7 +16,18 @@ type BackupGapRepo struct {
 }
 
 // NewBackupGapRepo 构造
-func NewBackupGapRepo() *BackupGapRepo { return &BackupGapRepo{db: db.GetDB()} }
+func NewBackupGapRepo() *BackupGapRepo { return NewBackupGapRepoWithDB(db.GetDB()) }
+
+// NewBackupGapRepoWithDB 装配/测试注入
+//
+// ARC-01：db 为 nil 时返回 nil 指针，service 侧以 repo == nil 作为未初始化守卫，
+// 避免持有非 nil 仓储却在方法内对 nil *gorm.DB 解引用 panic。
+func NewBackupGapRepoWithDB(gdb *gorm.DB) *BackupGapRepo {
+	if gdb == nil {
+		return nil
+	}
+	return &BackupGapRepo{db: gdb}
+}
 
 // CountBackups 总备份数
 func (r *BackupGapRepo) CountBackups(ctx context.Context) (int64, error) {
@@ -54,13 +65,57 @@ func (r *BackupGapRepo) TableStats(ctx context.Context) ([]TableStatsRow, error)
 	return rows, err
 }
 
+// BackupListRow backups 列表行
+type BackupListRow struct {
+	ID         uint
+	BackupName string
+	BackupType string
+	Status     string
+	FileSize   int64
+	CreatedAt  string
+}
+
+// ListBackups 列出 backups 表（最多 100 条，按 id 降序）
+func (r *BackupGapRepo) ListBackups(ctx context.Context) ([]BackupListRow, error) {
+	var rows []BackupListRow
+	if err := r.db.WithContext(ctx).
+		Table("backups").
+		Select("id, backup_name, backup_type, status, file_size, TO_CHAR(created_at,'YYYY-MM-DD HH24:MI') as created_at").
+		Order("id DESC").Limit(100).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// CoreTableStats 核心表行数估算（pg_stat_user_tables 按表名逐张查询）
+func (r *BackupGapRepo) CoreTableStats(ctx context.Context, tables []string) ([]TableStatsRow, error) {
+	rows := make([]TableStatsRow, 0, len(tables))
+	for _, t := range tables {
+		var stat TableStatsRow
+		if err := r.db.WithContext(ctx).Raw(
+			"SELECT ?::text AS table_name, GREATEST(n_live_tup,0) AS rows FROM pg_stat_user_tables WHERE relname = ?", t, t,
+		).Scan(&stat).Error; err == nil && stat.Table != "" {
+			rows = append(rows, stat)
+		}
+	}
+	return rows, nil
+}
+
 // RagEvalGapRepo RAG 评测仓储
 type RagEvalGapRepo struct {
 	db *gorm.DB
 }
 
 // NewRagEvalGapRepo 构造
-func NewRagEvalGapRepo() *RagEvalGapRepo { return &RagEvalGapRepo{db: db.GetDB()} }
+func NewRagEvalGapRepo() *RagEvalGapRepo { return NewRagEvalGapRepoWithDB(db.GetDB()) }
+
+// NewRagEvalGapRepoWithDB 装配/测试注入（ARC-01：nil db 返回 nil，service 以 repo == nil 守卫）
+func NewRagEvalGapRepoWithDB(gdb *gorm.DB) *RagEvalGapRepo {
+	if gdb == nil {
+		return nil
+	}
+	return &RagEvalGapRepo{db: gdb}
+}
 
 // CreateQuestion 入库一条评测题
 func (r *RagEvalGapRepo) CreateQuestion(ctx context.Context, q *model.RagEvalQuestion) error {
@@ -137,7 +192,15 @@ type CohortGapRepo struct {
 }
 
 // NewCohortGapRepo 构造
-func NewCohortGapRepo() *CohortGapRepo { return &CohortGapRepo{db: db.GetDB()} }
+func NewCohortGapRepo() *CohortGapRepo { return NewCohortGapRepoWithDB(db.GetDB()) }
+
+// NewCohortGapRepoWithDB 装配/测试注入（ARC-01：nil db 返回 nil，service 以 repo == nil 守卫）
+func NewCohortGapRepoWithDB(gdb *gorm.DB) *CohortGapRepo {
+	if gdb == nil {
+		return nil
+	}
+	return &CohortGapRepo{db: gdb}
+}
 
 // CountCustomersBetween 注册区间内的客户数
 func (r *CohortGapRepo) CountCustomersBetween(ctx context.Context, start, end time.Time) (int64, error) {
@@ -185,7 +248,15 @@ type EmailGapRepo struct {
 }
 
 // NewEmailGapRepo 构造
-func NewEmailGapRepo() *EmailGapRepo { return &EmailGapRepo{db: db.GetDB()} }
+func NewEmailGapRepo() *EmailGapRepo { return NewEmailGapRepoWithDB(db.GetDB()) }
+
+// NewEmailGapRepoWithDB 装配/测试注入（ARC-01：nil db 返回 nil，service 以 repo == nil 守卫）
+func NewEmailGapRepoWithDB(gdb *gorm.DB) *EmailGapRepo {
+	if gdb == nil {
+		return nil
+	}
+	return &EmailGapRepo{db: gdb}
+}
 
 // CountSent 时间范围内发送数
 func (r *EmailGapRepo) CountSent(ctx context.Context, since time.Time) (int64, error) {
@@ -284,4 +355,36 @@ func (r *EmailGapRepo) CountSpamReportToDomain(ctx context.Context, domain strin
 	err := r.db.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
 		Where("email LIKE ? AND event_type = ? AND timestamp >= ?", "%@"+domain, "spam_report", since).Count(&n).Error
 	return n, err
+}
+
+// CountBouncesToDomain 域名匹配 + 三类 bounce 事件计数
+func (r *EmailGapRepo) CountBouncesToDomain(ctx context.Context, domain string, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
+		Where("email LIKE ? AND event_type IN ? AND timestamp >= ?", "%@"+domain,
+			[]string{"bounce", "soft_bounce", "hard_bounce"}, since).Count(&n).Error
+	return n, err
+}
+
+// ResetDeadLetters 将 message_hub 中 dead_letter 重置为 pending，返回影响行数
+func (r *EmailGapRepo) ResetDeadLetters(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).
+		Table("message_hub").
+		Where("status = 'dead_letter'").
+		Update("status", "pending")
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// UpdateClueFields 按 ID 更新线索字段（导入合并用）
+func (r *EmailGapRepo) UpdateClueFields(ctx context.Context, clueID int64, updates map[string]any) error {
+	return r.db.WithContext(ctx).Table("clues").
+		Where("id = ?", clueID).Updates(updates).Error
+}
+
+// CreateClueRecord 强制创建单条线索
+func (r *EmailGapRepo) CreateClueRecord(ctx context.Context, rec map[string]any) error {
+	return r.db.WithContext(ctx).Table("clues").Create(rec).Error
 }
