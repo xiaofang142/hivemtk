@@ -105,7 +105,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
@@ -134,13 +134,14 @@ function jsonPreview(v) {
   } catch (e) { return '—' }
 }
 
-function load() {
-  request.get('/geo/schema-templates', {
-    params: { page: page.value, limit: limit.value, page_type: filterPageType.value, schema_type: filterSchemaType.value },
-  }).then(res => {
-    list.value = res.data?.list || []
-    total.value = res.data?.total || 0
-  }).catch(() => {})
+async function load() {
+  try {
+    const res = await geoApi.listSchemaTemplates({
+      page: page.value, limit: limit.value, page_type: filterPageType.value, schema_type: filterSchemaType.value,
+    })
+    list.value = res?.list || []
+    total.value = res?.total || 0
+  } catch (e) {}
 }
 
 function openDialog(row) {
@@ -168,9 +169,9 @@ async function save() {
       active: form.value.active,
     }
     if (isEdit.value) {
-      await request.put(`/geo/schema-templates/${form.value.id}`, payload)
+      await geoApi.updateSchemaTemplate(form.value.id, payload)
     } else {
-      await request.post('/geo/schema-templates', payload)
+      await geoApi.createSchemaTemplate(payload)
     }
     ElMessage.success('已保存')
     dialogVisible.value = false
@@ -183,7 +184,7 @@ async function save() {
 async function remove(row) {
   try {
     await ElMessageBox.confirm(`确认删除 ${row.page_type}/${row.schema_type} ?`, '警告', { type: 'warning' })
-    await request.delete(`/geo/schema-templates/${row.id}`)
+    await geoApi.deleteSchemaTemplate(row.id)
     ElMessage.success('已删除')
     load()
   } catch (e) {}

@@ -55,6 +55,5 @@ func (c *PushController) GenerateSitemap(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx.Header("Content-Type", "application/xml")
-	ctx.String(http.StatusOK, sitemap)
+	response.Success(ctx, gin.H{"content": sitemap}, "ok")
 }

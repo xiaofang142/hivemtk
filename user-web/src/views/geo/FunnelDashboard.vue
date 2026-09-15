@@ -63,7 +63,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 
 const stats = ref(null)
 const loading = ref(false)
@@ -110,8 +110,7 @@ function rate(n) {
 async function load() {
   loading.value = true
   try {
-    const res = await request.get('/geo/index-tracking/funnel')
-    stats.value = res.data
+    stats.value = await geoApi.getIndexFunnel()
   } catch (e) {
     console.warn(e)
   } finally {

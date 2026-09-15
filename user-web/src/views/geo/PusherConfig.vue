@@ -94,7 +94,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
@@ -117,12 +117,12 @@ function platformTag(p) {
   return m[p] || ''
 }
 
-function load() {
-  request.get('/geo/pushers', { params: { page: page.value, limit: limit.value } })
-    .then(res => {
-      list.value = res.data?.list || []
-      total.value = res.data?.total || 0
-    }).catch(() => {})
+async function load() {
+  try {
+    const res = await geoApi.listPushers({ page: page.value, limit: limit.value })
+    list.value = res?.list || []
+    total.value = res?.total || 0
+  } catch (e) {}
 }
 
 function openDialog(row) {
@@ -150,9 +150,9 @@ async function save() {
       active: form.value.active,
     }
     if (isEdit.value) {
-      await request.put(`/geo/pushers/${form.value.id}`, payload)
+      await geoApi.updatePusher(form.value.id, payload)
     } else {
-      await request.post('/geo/pushers', payload)
+      await geoApi.createPusher(payload)
     }
     ElMessage.success('已保存')
     dialogVisible.value = false
@@ -165,7 +165,7 @@ async function save() {
 async function remove(row) {
   try {
     await ElMessageBox.confirm(`确认删除 ${row.platform} ?`, '警告', { type: 'warning' })
-    await request.delete(`/geo/pushers/${row.id}`)
+    await geoApi.deletePusher(row.id)
     ElMessage.success('已删除')
     load()
   } catch (e) {}

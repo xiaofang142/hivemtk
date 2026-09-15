@@ -45,21 +45,21 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
+import { ElMessage } from 'element-plus'
 const quota = ref({})
 const urlsText = ref('')
 const selectedPlatforms = ref(['indexnow', 'baidu'])
 async function loadQuota() {
   try {
-    const res = await request.get('/geo/push/quota')
-    quota.value = res.data || {}
+    quota.value = (await geoApi.getPushQuota()) || {}
   } catch (e) {}
 }
 async function push() {
   const urls = urlsText.value.split('\n').map(s => s.trim()).filter(Boolean)
   if (!urls.length) return
   try {
-    await request.post('/geo/push/urls', { urls, platforms: selectedPlatforms.value })
+    await geoApi.pushUrls({ urls, platforms: selectedPlatforms.value })
     ElMessage.success('推送成功')
     urlsText.value = ''
     loadQuota()

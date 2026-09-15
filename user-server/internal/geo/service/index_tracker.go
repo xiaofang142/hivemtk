@@ -49,6 +49,20 @@ type FunnelStats struct {
 	IndexedByEngine map[string]int     `json:"indexed_by_engine"`
 	AICitedByEngine map[string]int     `json:"ai_cited_by_engine"`
 	ConversionRates map[string]float64 `json:"conversion_rates"`
+	Trackings       []TrackRow         `json:"trackings"`
+}
+
+// TrackRow 收录追踪明细行（JOIN 文章标题）
+type TrackRow struct {
+	ArticleID    string     `gorm:"column:article_id" json:"article_id"`
+	URL          string     `gorm:"column:url" json:"url"`
+	Engine       string     `gorm:"column:engine" json:"engine"`
+	Keyword      string     `gorm:"column:keyword" json:"keyword"`
+	Indexed      bool       `gorm:"column:indexed" json:"indexed"`
+	RankPosition int        `gorm:"column:rank_position" json:"rank_position"`
+	AICited      bool       `gorm:"column:ai_cited" json:"ai_cited"`
+	AICiteCount  int        `gorm:"column:ai_cite_count" json:"ai_cite_count"`
+	LastChecked  *time.Time `gorm:"column:last_checked" json:"last_checked"`
 }
 
 // VerifyArticleFull 单篇全链路验证：真实调用 AI 搜索探针，检测文章 URL 是否被引用
@@ -105,6 +119,7 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 			updates := map[string]any{
 				"ai_cited":      oc.cited > 0,
 				"ai_cite_count": oc.cited,
+				"url":           article.SiteURL,
 				"last_checked":  now,
 				"updated_at":    now,
 			}
@@ -119,6 +134,7 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 				tracking := model.GeoIndexTracking{
 					ArticleID:   article.ID,
 					Engine:      oc.engine,
+					URL:         article.SiteURL,
 					Keyword:     query,
 					AICited:     oc.cited > 0,
 					AICiteCount: oc.cited,
@@ -244,6 +260,14 @@ func (s *IndexTrackerService) FunnelStats(ctx context.Context) (*FunnelStats, er
 	if artCnt > 0 {
 		fs.ConversionRates["article_to_deployed"] = float64(depCnt) / float64(artCnt) * 100
 	}
+
+	// 追踪明细（最近 100 条，供前端列表展示）
+	var trackings []TrackRow
+	s.db.Model(&model.GeoIndexTracking{}).
+		Order("updated_at DESC").
+		Limit(100).
+		Scan(&trackings)
+	fs.Trackings = trackings
 
 	return fs, nil
 }

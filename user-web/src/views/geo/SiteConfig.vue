@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
@@ -112,12 +112,12 @@ function resetForm() {
   isEdit.value = false
 }
 
-function load() {
-  request.get('/geo/sites', { params: { page: page.value, limit: limit.value } })
-    .then(res => {
-      list.value = res.data?.list || []
-      total.value = res.data?.total || 0
-    }).catch(e => {})
+async function load() {
+  try {
+    const res = await geoApi.listSites({ page: page.value, limit: limit.value })
+    list.value = res?.list || []
+    total.value = res?.total || 0
+  } catch (e) {}
 }
 
 function openDialog(row) {
@@ -133,9 +133,9 @@ function openDialog(row) {
 async function save() {
   try {
     if (isEdit.value) {
-      await request.put(`/geo/sites/${form.value.id}`, form.value)
+      await geoApi.updateSite(form.value.id, form.value)
     } else {
-      await request.post('/geo/sites', form.value)
+      await geoApi.createSite(form.value)
     }
     ElMessage.success('已保存')
     dialogVisible.value = false
@@ -148,7 +148,7 @@ async function save() {
 async function remove(row) {
   try {
     await ElMessageBox.confirm(`确认删除 ${row.domain} ?`, '警告', { type: 'warning' })
-    await request.delete(`/geo/sites/${row.id}`)
+    await geoApi.deleteSite(row.id)
     ElMessage.success('已删除')
     load()
   } catch (e) {}

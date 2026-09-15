@@ -14,8 +14,8 @@
       </el-steps>
 
       <el-button-group style="margin-bottom:16px">
-        <el-button @click="runStep('/geo/site/export')">仅导出</el-button>
-        <el-button @click="runStep('/geo/site/deploy')">仅部署</el-button>
+        <el-button @click="exportOnly">仅导出</el-button>
+        <el-button @click="deployOnly">仅部署</el-button>
         <el-button type="primary" @click="fullPipeline">🚀 一键全链路</el-button>
       </el-button-group>
 
@@ -26,23 +26,32 @@
 
 <script setup>
 import { ref } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 import { ElMessage } from 'element-plus'
 const step = ref(0)
 const lastResult = ref('')
-async function runStep(path) {
+async function exportOnly() {
   try {
-    const res = await request.post(path)
-    lastResult.value = JSON.stringify(res.data)
-    ElMessage.success('成功')
-  } catch (e) { ElMessage.error('失败') }
+    const res = await geoApi.exportSite()
+    step.value = 1
+    lastResult.value = `导出 ${res?.exported ?? 0} 篇`
+    ElMessage.success('导出成功')
+  } catch (e) { ElMessage.error('导出失败') }
+}
+async function deployOnly() {
+  try {
+    const res = await geoApi.deploySite()
+    step.value = 2
+    lastResult.value = `部署地址：${res?.site_url || '—'}`
+    ElMessage.success('部署成功')
+  } catch (e) { ElMessage.error('部署失败') }
 }
 async function fullPipeline() {
   step.value = 1
   try {
-    const res = await request.post('/geo/site/full-pipeline')
+    const res = await geoApi.siteFullPipeline()
     step.value = 4
-    lastResult.value = `导出 ${res.data.exported} 篇 → ${res.data.site_url}`
+    lastResult.value = `导出 ${res?.exported} 篇 → ${res?.site_url}`
     ElMessage.success('全链路完成！')
   } catch (e) { step.value = 0 }
 }

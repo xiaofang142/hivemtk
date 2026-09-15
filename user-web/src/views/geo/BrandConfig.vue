@@ -12,7 +12,7 @@
               </div>
             </div>
           </template>
-          <el-empty v-if="!llmsContent" description="输入域名 → 点"生成预览"">
+          <el-empty v-if="!llmsContent" description="输入域名 → 点「生成预览」">
             <el-button type="primary" @click="loadLlms">示例域名</el-button>
           </el-empty>
           <pre v-else class="code-block">{{ llmsContent }}</pre>
@@ -32,7 +32,7 @@
               <el-button type="primary" @click="loadRobots">生成预览</el-button>
             </div>
           </template>
-          <el-empty v-if="!robotsContent" description="点"生成预览"查看 robots.txt 内容" />
+          <el-empty v-if="!robotsContent" description="点「生成预览」查看 robots.txt 内容" />
           <pre v-else class="code-block">{{ robotsContent }}</pre>
           <div v-if="robotsContent" style="margin-top:12px">
             <el-tag type="success">✅ 覆盖 21 个 AI 爬虫 UA</el-tag>
@@ -47,8 +47,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
-import { ElMessage } from 'element-plus'
+import { geoApi } from '@/api/geo'
 
 const activeTab = ref('llms')
 const previewDomain = ref('example.com')
@@ -57,20 +56,19 @@ const robotsContent = ref('')
 
 async function loadLlms() {
   try {
-    const res = await request.get('/geo/site/llms-txt-preview', { params: { domain: previewDomain.value } })
-    llmsContent.value = res.data || ''
+    const res = await geoApi.getLlmsTxtPreview(previewDomain.value)
+    llmsContent.value = res?.content || ''
   } catch (e) {
-    // 后端可能返回纯文本，兼容处理
-    llmsContent.value = e?.response?.data || '（后端暂未部署 llms.txt 生成逻辑）'
+    llmsContent.value = '（后端暂未部署 llms.txt 生成逻辑）'
   }
 }
 
 async function loadRobots() {
   try {
-    const res = await request.get('/geo/site/robots-preview')
-    robotsContent.value = res.data || ''
+    const res = await geoApi.getRobotsTxtPreview()
+    robotsContent.value = res?.content || ''
   } catch (e) {
-    robotsContent.value = e?.response?.data || '（后端暂未部署 robots.txt 生成逻辑）'
+    robotsContent.value = '（后端暂未部署 robots.txt 生成逻辑）'
   }
 }
 

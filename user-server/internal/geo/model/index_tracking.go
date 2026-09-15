@@ -18,6 +18,7 @@ type GeoIndexTracking struct {
 	ArticleID string `gorm:"type:varchar(36);index" json:"article_id"`
 	Engine    string `gorm:"type:varchar(30);index" json:"engine"`
 	// 'baidu' | 'google' | 'bing' | 'toutiao' | 'shenma' | '360' | 'doubao' | 'wenxin' | 'kimi' | 'deepseek'
+	URL          string     `gorm:"type:varchar(512)" json:"url"`
 	Keyword      string     `gorm:"type:text" json:"keyword"`
 	Indexed      bool       `gorm:"default:false" json:"indexed"`
 	RankPosition int        `json:"rank_position"`

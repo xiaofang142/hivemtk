@@ -35,20 +35,21 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 import { ElMessage } from 'element-plus'
 const trackings = ref([])
 
 async function load() {
   try {
-    const res = await request.get('/geo/index-tracking/funnel')
-    trackings.value = res.data?.trackings || []
+    const res = await geoApi.getIndexFunnel()
+    trackings.value = res?.trackings || []
   } catch (e) {}
 }
 async function verifyAll() {
   try {
-    await request.post('/geo/index-tracking/verify-all')
+    await geoApi.verifyAllIndex()
     ElMessage.success('已触发全量验证')
+    load()
   } catch (e) { ElMessage.error('失败') }
 }
 onMounted(load)

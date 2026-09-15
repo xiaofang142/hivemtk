@@ -33,7 +33,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import request from '@/api/index'
+import { geoApi } from '@/api/geo'
 const tab = ref('llms')
 const llmsPreview = ref('')
 const robotsPreview = ref('')
@@ -41,17 +41,17 @@ const sitemapPreview = ref('')
 async function load() {
   try {
     const [l, r] = await Promise.all([
-      request.get('/geo/site/llms-txt-preview'),
-      request.get('/geo/site/robots-preview'),
+      geoApi.getLlmsTxtPreview(),
+      geoApi.getRobotsTxtPreview(),
     ])
-    llmsPreview.value = l.data
-    robotsPreview.value = r.data
+    llmsPreview.value = l?.content || ''
+    robotsPreview.value = r?.content || ''
   } catch (e) {}
 }
 async function genSitemap() {
   try {
-    const r = await request.get('/geo/push/sitemap')
-    sitemapPreview.value = r.data
+    const r = await geoApi.getSitemapPreview()
+    sitemapPreview.value = r?.content || ''
   } catch (e) {}
 }
 onMounted(load)

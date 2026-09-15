@@ -55,14 +55,13 @@ func (c *SiteController) FullPipeline(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"exported": n, "site_url": url}, "ok")
 }
 
-// LlmsTxtPreview GET /geo/site/llms-txt-preview
+// LlmsTxtPreview GET /geo/site/llms-txt-preview?domain=example.com
 func (c *SiteController) LlmsTxtPreview(ctx *gin.Context) {
-	ctx.Header("Content-Type", "text/markdown")
-	ctx.String(http.StatusOK, service.GenerateLLMsTxt("Brand", "example.com", nil))
+	domain := ctx.DefaultQuery("domain", "example.com")
+	response.Success(ctx, gin.H{"content": service.GenerateLLMsTxt("Brand", domain, nil)}, "ok")
 }
 
 // RobotsTxtPreview GET /geo/site/robots-preview
 func (c *SiteController) RobotsTxtPreview(ctx *gin.Context) {
-	ctx.Header("Content-Type", "text/plain")
-	ctx.String(http.StatusOK, service.GenerateRobots())
+	response.Success(ctx, gin.H{"content": service.GenerateRobots()}, "ok")
 }
