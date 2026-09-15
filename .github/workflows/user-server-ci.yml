@@ -330,9 +330,20 @@ jobs:
         working-directory: embed-sdk
         run: npm ci
 
-      - name: Test
+      # 测试读取的是 IIFE 构建产物 dist/marketing-chat-widget.iife.js（见
+      # test/unit.test.mjs 与 boundary.test.mjs 的 IIFE_PATH），必须先 build。
+      # 原 job 只有 npm ci + npm test，因此每次都以
+      # 「IIFE 产物不存在,请先执行 npm run build」exit 1 失败。
+      - name: Build
         working-directory: embed-sdk
-        run: npm test
+        run: npm run build
+
+      # 用 test:all 而非 test：boundary.test.mjs 同样读取 IIFE 产物，且覆盖
+      # open/close/toggle 循环、重复 init、超大消息体、危险协议 origin 等边界，
+      # 原 job 只跑 unit 会漏掉这一整组断言。两者均为纯 Node mock，无网络依赖。
+      - name: Test (unit + boundary)
+        working-directory: embed-sdk
+        run: npm run test:all
 
   api-inventory:
     name: API Inventory Compare (M9)
