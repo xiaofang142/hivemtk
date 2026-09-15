@@ -9,6 +9,8 @@
 #   - audit_api_contract.py --strict   阻断：UNMATCHED 必须为 0，且不得出现
 #                                      「通配 key」（解析失败会把真实缺陷掩盖成"已匹配"）
 #   - audit-cross-package-ports.sh     阻断：跨包端口字面量必须与单一源一致
+#   - check_component_types.py         阻断：components.d.ts 不得声明已删除的组件
+#                                     （该 d.ts 自动生成、只增不减，删组件必留悬空行）
 #
 # 注：BACKEND_NOT_CALLED（后端注册但前端未调）**不参与判定** —— 其中大量是
 # 面向外部客户端/管理端的保留接口，属候选清单而非缺陷。
@@ -26,6 +28,9 @@ on:
       - 'user-server/internal/aiagent/knowledge/controller/**'
       - 'scripts/audit_api_contract.py'
       - 'scripts/audit-cross-package-ports.sh'
+      - 'scripts/check_component_types.py'
+      - 'user-web/src/types/components.d.ts'
+      - 'user-web/src/components/**'
       - '.github/workflows/api-contract.yml'
   pull_request:
     paths:
@@ -37,6 +42,9 @@ on:
       - 'user-server/internal/aiagent/knowledge/controller/**'
       - 'scripts/audit_api_contract.py'
       - 'scripts/audit-cross-package-ports.sh'
+      - 'scripts/check_component_types.py'
+      - 'user-web/src/types/components.d.ts'
+      - 'user-web/src/components/**'
       - '.github/workflows/api-contract.yml'
   workflow_dispatch:
 
@@ -56,3 +64,6 @@ jobs:
 
       - name: 跨包端口单一源（阻断）
         run: bash scripts/audit-cross-package-ports.sh
+
+      - name: 组件类型声明不得悬空（阻断）
+        run: python3 scripts/check_component_types.py

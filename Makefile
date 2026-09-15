@@ -388,4 +388,6 @@ audit:
 	@python3 scripts/audit_api_contract.py --strict
 	@echo "── 跨包端口单一源 ──"
 	@bash scripts/audit-cross-package-ports.sh
+	@echo "── 组件类型声明不得指向已删除的组件 ──"
+	@python3 scripts/check_component_types.py
 	@echo "✅ 静态审计通过"

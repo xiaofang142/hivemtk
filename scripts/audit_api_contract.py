@@ -13,7 +13,27 @@ STRICT = ('--strict' in sys.argv) or (os.environ.get('AUDIT_STRICT') == '1')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RDIRS = ['user-server/internal/router', 'user-server/internal/controller']
-WEB = os.path.join(ROOT, 'user-web/src/api')
+
+# ⚠️ 2026-09-16 审计（TOOL-06）：原为 `user-web/src/api` 且**只扫顶层 *.js**。
+# 实测 src/ 下还有 **81 处 `http.get/post/...` 写在 .vue 组件里**（如
+# `knowledge.vue` 直接 `http.put(\`/api/knowledge/connectors/${source}\`)`），
+# 这些调用**从未进入过契约审计** —— 于是"断链 0"对它们毫无意义。
+# 这正是 docs/architecture/BACKLOG_TODOLIST.md「断链 API ~200 个（前端已开发
+# 后端未实现）」可能的来源：两边说的根本不是同一批调用。
+#
+# 现改为递归扫描整个 `user-web/src`，同时覆盖 .js 与 .vue。
+WEB_ROOTS = [os.path.join(ROOT, 'user-web/src')]
+WEB_EXT = ('.js', '.vue')
+WEB_SKIP_DIRS = {'node_modules', 'dist', 'build', '.git'}
+
+
+def iter_web_files():
+    for base in WEB_ROOTS:
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in WEB_SKIP_DIRS]
+            for fn2 in sorted(filenames):
+                if fn2.endswith(WEB_EXT):
+                    yield os.path.join(dirpath, fn2)
 
 route_re = re.compile(r'(\w+)\.(GET|POST|PUT|DELETE|PATCH)\(\s*"([^"]*)"', re.ASCII)
 group_re = re.compile(r'(\w+)\s*:?=\s*(\w+)\.Group\(\s*"([^"]*)"')
@@ -293,10 +313,9 @@ for k in unres:
     print("   UNRESOLVED:", k)
 
 frontend = {}
-for fn2 in sorted(os.listdir(WEB)):
-    if not fn2.endswith('.js'):
-        continue
-    src = open(os.path.join(WEB, fn2), encoding='utf-8').read()
+for _path in iter_web_files():
+    fn2 = os.path.relpath(_path, os.path.join(ROOT, 'user-web/src')).replace('\\', '/')
+    src = open(_path, encoding='utf-8').read()
     consts = {m.group(1): m.group(3) for m in const_re.finditer(src)}
 
     def _expand(u):
