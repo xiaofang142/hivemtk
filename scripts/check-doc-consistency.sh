@@ -176,9 +176,13 @@ fi
 echo ""
 echo "[4/6] CODEOWNERS 路径检查..."
 
-if [ -f "$PROJECT_ROOT/CODEOWNERS" ]; then
+# 修正（2026-09-15）：CODEOWNERS 位于 hivemtk 仓库根（$PROJECT_ROOT/hivemtk/），
+# 且其内部路径是相对**该仓库根**的。原实现用 $PROJECT_ROOT/CODEOWNERS（工作区根）
+# 判存在性，恒为 false，导致本节被静默跳过（既无通过也无告警）。
+REPO_ROOT="$PROJECT_ROOT/hivemtk"
+if [ -f "$REPO_ROOT/CODEOWNERS" ]; then
   # 提取 CODEOWNERS 中所有路径（行首 / 开头）
-  PATHS=$(grep -E "^/" "$PROJECT_ROOT/CODEOWNERS" | awk '{print $1}' | grep -v "^$" || true)
+  PATHS=$(grep -E "^/" "$REPO_ROOT/CODEOWNERS" | awk '{print $1}' | grep -v "^$" || true)
   MISSING=0
   for p in $PATHS; do
     # 跳过通配符
@@ -191,7 +195,7 @@ if [ -f "$PROJECT_ROOT/CODEOWNERS" ]; then
     fi
     # CODEOWNERS 路径以 / 开头（相对仓库根）
     stripped="${p#/}"
-    full_path="$PROJECT_ROOT/$stripped"
+    full_path="$REPO_ROOT/$stripped"
     if [ ! -e "$full_path" ]; then
       log_warn "CODEOWNERS 引用的路径不存在: $p"
       MISSING=$((MISSING+1))
@@ -200,6 +204,8 @@ if [ -f "$PROJECT_ROOT/CODEOWNERS" ]; then
   if [ $MISSING -eq 0 ]; then
     log_pass "CODEOWNERS 路径引用全部有效"
   fi
+else
+  log_warn "未找到 CODEOWNERS: $REPO_ROOT/CODEOWNERS"
 fi
 
 # -----------------------------------------------------------------------------
@@ -209,7 +215,9 @@ echo ""
 echo "[5/6] 顶层架构文档 vs 营销文档一致性..."
 
 # 检查 ARCHITECTURE_OVERVIEW.md 引用的营销文档
-ARCH_DOC="$PROJECT_ROOT/ARCHITECTURE_OVERVIEW.md"
+# 修正（2026-09-15）：原路径为 $PROJECT_ROOT/ARCHITECTURE_OVERVIEW.md（工作区根），
+# 实际位于 docs/architecture/ 下，导致该节静默跳过。
+ARCH_DOC="$PROJECT_ROOT/docs/architecture/ARCHITECTURE_OVERVIEW.md"
 if [ -f "$ARCH_DOC" ]; then
   REFS=$(grep -oE 'marketing-features/[a-zA-Z0-9_./-]+\.md' "$ARCH_DOC" | sort -u || true)
   MISSING=0
@@ -231,6 +239,11 @@ fi
 echo ""
 echo "[6/6] 关键文件存在性..."
 
+# 说明（2026-09-15 修正）：
+#   PROJECT_ROOT 为**工作区根**（含 hivemtk/、hivemtk-platform/、docs/ 等）。
+#   原表把这些文件全部写成 ":."（即期望它们位于工作区根），实测 12 条全部误报缺失——
+#   这些文件实际分散在 hivemtk/、docs/architecture/、docs/governance/ 下。
+#   现已按实测路径逐条修正。
 KEY_FILES=(
   "README.md:hivemtk/"
   "README.en.md:hivemtk/"
@@ -245,24 +258,38 @@ KEY_FILES=(
   "NOTICE:hivemtk-platform/"
   "THIRD_PARTY_LICENSES.md:hivemtk/"
   "CLA.md:hivemtk/"
-  "CODEOWNERS:."
-  "GOVERNANCE.md:."
-  "MAINTAINERS.md:."
-  "ARCHITECTURE_OVERVIEW.md:."
-  "USER_SERVER_DEEP_ARCHITECTURE.md:."
-  "PLATFORM_DEEP_ARCHITECTURE.md:."
-  "DATABASE_SCHEMA_DEEP_DIVE.md:."
-  "FRONTEND_DEEP_ARCHITECTURE.md:."
-  "DEPLOYMENT_OPS_ARCHITECTURE.md:."
-  "CROSS_CUTTING_CONCERNS.md:."
-  "INDEX.md:."
-  "78-OPTIMIZATION-TASKS.md:."
-  "hivemtk/docs/standards/FEATURE_DOCUMENTATION_TEMPLATE.md:."
-  "hivemtk/docs/standards/MASTER_RULES.md:."
-  "hivemtk/docs/marketing-features/DEPRECATED_auto-reply.md:."
+  # ---- 仓库根（hivemtk 仓库）----
+  "CODEOWNERS:hivemtk/"
+  # ---- 工作区治理文档 ----
+  "GOVERNANCE.md:docs/governance/"
+  "MAINTAINERS.md:docs/governance/"
+  "78-OPTIMIZATION-TASKS.md:docs/governance/"
+  # ---- 工作区架构文档 ----
+  "ARCHITECTURE_OVERVIEW.md:docs/architecture/"
+  "USER_SERVER_DEEP_ARCHITECTURE.md:docs/architecture/"
+  "PLATFORM_DEEP_ARCHITECTURE.md:docs/architecture/"
+  "FRONTEND_DEEP_ARCHITECTURE.md:docs/architecture/"
+  "DEPLOYMENT_OPS_ARCHITECTURE.md:docs/architecture/"
+  "CROSS_CUTTING_CONCERNS.md:docs/architecture/"
+  # ---- 仓库内文档 ----
+  "DATABASE_SCHEMA_DEEP_DIVE.md:hivemtk/docs/architecture/"
+  "INDEX.md:hivemtk/docs/"
+  "FEATURE_DOCUMENTATION_TEMPLATE.md:hivemtk/docs/standards/"
+  "MASTER_RULES.md:hivemtk/docs/standards/"
+  "DEPRECATED_auto-reply.md:hivemtk/docs/marketing-features/"
 )
 
 MISSING=0
+SKIPPED_WS=0
+# 工作区级文档（docs/governance、docs/architecture 等）**不在本仓库内**，
+# 它们位于工作区根目录且未纳入版本控制。在 CI（仅 checkout 本仓库）或独立 clone 中
+# 这些文件必然不存在，若仍按「缺失」告警会产生大量假阳性。
+# 因此先探测工作区布局是否存在，不存在则跳过该类条目。
+HAS_WORKSPACE_DOCS=0
+if [ -d "$PROJECT_ROOT/docs/architecture" ]; then
+  HAS_WORKSPACE_DOCS=1
+fi
+
 for entry in "${KEY_FILES[@]}"; do
   IFS=':' read -r f dir <<< "$entry"
   # dir=. 时不要加点号前缀,避免 ./CODEOWNERS 变 .CODEOWNERS
@@ -271,13 +298,25 @@ for entry in "${KEY_FILES[@]}"; do
   else
     full_path="$PROJECT_ROOT/$dir$f"
   fi
+  # 工作区级文档缺失时跳过（仅在无工作区布局时生效）
+  if [ "$HAS_WORKSPACE_DOCS" -eq 0 ]; then
+    case "$dir" in
+      docs/*)
+        SKIPPED_WS=$((SKIPPED_WS+1))
+        continue
+        ;;
+    esac
+  fi
   if [ ! -f "$full_path" ]; then
     log_warn "关键文件缺失: $f (查找于 $dir)"
     MISSING=$((MISSING+1))
   fi
 done
+if [ "$SKIPPED_WS" -gt 0 ]; then
+  echo "  ℹ️  跳过 $SKIPPED_WS 个工作区级文档（未检测到工作区布局：$PROJECT_ROOT/docs/architecture 不存在）"
+fi
 if [ $MISSING -eq 0 ]; then
-  log_pass "所有 ${#KEY_FILES[@]} 个关键文件存在"
+  log_pass "所有 ${#KEY_FILES[@]} 个关键文件存在（跳过 $SKIPPED_WS 个工作区级条目）"
 fi
 
 # -----------------------------------------------------------------------------

@@ -1,0 +1,57 @@
+# 文档治理检查（OPT-DOC-13 / OPT-DOC-14 / OPT-DOC-15）
+#
+# 背景：这三个脚本此前**均已实现但未接入任何 workflow**，
+# 等于「写了检查但从不执行」。本 workflow 将其接入 CI。
+#
+# 各步骤定位：
+#   - check-doc-consistency.sh       阻断：文档引用/ADR 编号/CODEOWNERS 路径/关键文件存在性
+#   - check-feature-doc.sh           阻断：功能文档 8 节模板结构（必填节）
+#   - feature-doc-coverage-report.sh 仅报告：模板覆盖率是**产品目标**而非回归底线，
+#                                    当前 38% < 50% 目标，故不阻断（避免用未达标的目标卡住 CI）
+#
+# 注：脚本按「工作区布局」编写（`../..` = 工作区根，其下含 hivemtk/ 与 docs/）。
+# 在 GitHub Actions 中仓库被 checkout 到 `<work>/<repo>/<repo>`，故 `../..`
+# 恰好等于仓库上一级、其下存在 `hivemtk/`，布局成立；工作区级文档
+# （docs/governance、docs/architecture）不在仓库内，脚本已自动跳过该类条目。
+name: Docs Consistency
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'docs/**'
+      - 'scripts/check-doc-consistency.sh'
+      - 'scripts/check-feature-doc.sh'
+      - 'scripts/feature-doc-coverage-report.sh'
+      - 'CODEOWNERS'
+      - '.github/workflows/docs-consistency.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'scripts/check-doc-consistency.sh'
+      - 'scripts/check-feature-doc.sh'
+      - 'scripts/feature-doc-coverage-report.sh'
+      - 'CODEOWNERS'
+      - '.github/workflows/docs-consistency.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-consistency:
+    name: 文档一致性 + 模板结构
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 文档引用一致性（OPT-DOC-15）
+        run: bash scripts/check-doc-consistency.sh
+
+      - name: 功能文档 8 节模板结构（OPT-DOC-13）
+        run: bash scripts/check-feature-doc.sh
+
+      - name: 模板覆盖率报告（OPT-DOC-14，仅报告）
+        continue-on-error: true
+        run: bash scripts/feature-doc-coverage-report.sh

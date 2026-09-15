@@ -114,11 +114,11 @@ fi
 SERVICE_DB_HITS=$(grep -rnE --include="*.go" --exclude="*_test.go" \
   "db\.GetDB()|_db\.GetDB()|[a-zA-Z_]+\.db\.(WithContext|Raw|Exec|Create|Save|Update|Delete|Find|First|Where|Model|Transaction|Begin|Count|Clauses|Scan|Order|Dialector)" \
   "$TARGET/internal/service/" 2>/dev/null \
-  | grep -vE ':\s*//' \
-  | grep -vE ':\s*\*' \
-  | grep -vE ':\s*/\*' \
-  | grep -vE ':\s*//\s|:\s*//[^ ]' \
-  | grep -vE ':\s*db\s+\*gorm\.DB' \
+  | grep -vE ':[[:space:]]*//' \
+  | grep -vE ':[[:space:]]*\*' \
+  | grep -vE ':[[:space:]]*/\*' \
+  | grep -vE ':[[:space:]]*//[[:space:]]|:[[:space:]]*//[^ ]' \
+  | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
   || true)
 if [ -n "$SERVICE_DB_HITS" ]; then
   log_fail "[L4] service 直接调 db,违反分层(应通过 repository)"
@@ -131,8 +131,15 @@ fi
 # OPT-ARC-02：审计发现 12+ service struct 仍持 db *gorm.DB 字段。
 # 建议重构为「构造函数接收 repository.XxxRepository 接口」。
 # 本检查为 WARN 级别（不阻断），用于推动渐进式重构。
+#
+# ⚠️ 2026-09-15 修正：原模式为 "^\s*db\s+\*gorm\.DB"。
+#    POSIX ERE **不支持 `\s`**，BSD grep 下 `\s` 退化为字面量 `s`，
+#    该模式等价于 `^s*db s*...`，即要求行首（0 个或多个 's' 后）紧跟 `db`。
+#    而 Go struct 字段必然有缩进（Tab），因此**恒不命中** —— 本检查长期是空转，
+#    从不产生任何 WARN。实测：原模式命中 0 行，修正后命中 2 行。
+#    现改用 [[:space:]]。
 SERVICE_DB_FIELDS=$(grep -rnE --include="*.go" --exclude="*_test.go" \
-  "^\s*db\s+\*gorm\.DB" \
+  "^[[:space:]]*db[[:space:]]+\*gorm\.DB" \
   "$TARGET/internal/service/" 2>/dev/null \
   | grep -vE '://' \
   || true)
@@ -382,7 +389,12 @@ for f in $(find "$TARGET/internal/repository" -name "*.go" 2>/dev/null); do
           ;;
       esac
       method_sig="${BASH_REMATCH[0]}"
-      if ! echo "$method_sig" | grep -qE "\b[a-zA-Z_]+\s+context\.Context"; then
+      # ⚠️ 2026-09-15 修正：原模式 "\b[a-zA-Z_]+\s+context\.Context" 中
+      #    `\b`（词边界）与 `\s`（空白）**均不被 POSIX ERE 支持**，
+      #    BSD grep 下退化为字面量 `b` 与 `s`，等价于 `b[a-zA-Z_]+s+context.Context`。
+      #    实测该模式对 `(ctx context.Context)` 判为 NO MATCH，即**每个方法都会被误报**
+      #    缺 ctx。现改为不含 \b / \s 的等价模式。
+      if ! echo "$method_sig" | grep -qE "[a-zA-Z_]+[[:space:]]+context\.Context"; then
         log_fail "[Repository] $f 方法缺 ctx context.Context:"
         echo "    $method_sig"
         CTX_VIOLATIONS=$((CTX_VIOLATIONS+1))

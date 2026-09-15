@@ -27,10 +27,24 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-USER_SERVER="$PROJECT_ROOT/hivemtk/user-server"
-MIGRATION="$PROJECT_ROOT/hivemtk/migrations/047_pg_enums.sql"
+# 解析路径：
+#   本仓库约定脚本位于 <workspace>/hivemtk/scripts/，故 ../.. = 工作区根，
+#   其下应有 hivemtk/ 与 hivemtk-platform/。
+#   但若在**独立 clone**（目录名不叫 hivemtk）中运行，../.. 会指向仓库之外，
+#   此时回退为「以脚本所在仓库为根」的相对布局，保证脚本在两种场景都可用。
+REPO_ROOT="$SCRIPT_DIR/.."
+WORKSPACE_ROOT="$SCRIPT_DIR/../.."
+if [[ -d "$WORKSPACE_ROOT/hivemtk/user-server" ]]; then
+  PROJECT_ROOT="$(cd "$WORKSPACE_ROOT" && pwd)"
+  USER_SERVER="$PROJECT_ROOT/hivemtk/user-server"
+  MIGRATION="$PROJECT_ROOT/hivemtk/migrations/047_pg_enums.sql"
+else
+  PROJECT_ROOT="$(cd "$WORKSPACE_ROOT" && pwd)"
+  REPO="$(cd "$REPO_ROOT" && pwd)"
+  USER_SERVER="$REPO/user-server"
+  MIGRATION="$REPO/migrations/047_pg_enums.sql"
+fi
 
 ERRORS=0
 WARNS=0
@@ -126,8 +140,8 @@ check_pair() {
 echo "============================================================"
 echo "  ENUM 一致性检查（OPT-DB-08 配套）"
 echo "============================================================"
-echo "迁移文件 : ${MIGRATION#"$PROJECT_ROOT"/}"
-echo "Go 源码  : ${USER_SERVER#"$PROJECT_ROOT"/}"
+echo "迁移文件 : ${MIGRATION#"$(cd "$SCRIPT_DIR/.." && pwd)"/}"
+echo "Go 源码  : ${USER_SERVER#"$(cd "$SCRIPT_DIR/.." && pwd)"/}"
 echo ""
 
 echo "[1/5] platform_type_enum ↔ ChannelTypeXxx"

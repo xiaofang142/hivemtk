@@ -90,8 +90,8 @@ for f in "$DOCS_DIR"/*.md; do
 
   # 元数据块检查
   HAS_METADATA=false
-  if grep -qE "^\*\*所属系统\*\*:|^>\s*\*\*所属系统\*\*:" "$f" \
-     || grep -qE "^\*\*功能 slug\*\*:|^>\s*\*\*功能 slug\*\*:" "$f"; then
+  if grep -qE "^\*\*所属系统\*\*:|^>[[:space:]]*\*\*所属系统\*\*:" "$f" \
+     || grep -qE "^\*\*功能 slug\*\*:|^>[[:space:]]*\*\*功能 slug\*\*:" "$f"; then
     HAS_METADATA=true
   fi
 
