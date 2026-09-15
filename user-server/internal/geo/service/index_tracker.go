@@ -18,13 +18,12 @@ import (
 // 3. AutoVerifyCron — 每日定时入口（02:00）
 // 4. UpsertDailyStats — 聚合到 geo_daily_stats
 type IndexTrackerService struct {
-	db     *gorm.DB
-	probe  *ProbeService
-	verify *VerificationService
+	db *gorm.DB
 }
 
-func NewIndexTrackerService(db *gorm.DB, probe *ProbeService, verify *VerificationService) *IndexTrackerService {
-	return &IndexTrackerService{db: db, probe: probe, verify: verify}
+// NewIndexTrackerService 创建收录追踪服务
+func NewIndexTrackerService(db *gorm.DB) *IndexTrackerService {
+	return &IndexTrackerService{db: db}
 }
 
 // ArticleStanding 单篇文章站位评分

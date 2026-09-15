@@ -309,7 +309,10 @@ func (s *EmailGapService) AIPerformance(ctx context.Context, days int) (*AIPerfo
 	if days <= 0 || days > 90 {
 		days = 7
 	}
-	repo := repository.NewAIPerformanceRepository(s.db)
+	repo := s.aiRepo
+	if repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	since := time.Now().AddDate(0, 0, -days)
 	res := &AIPerformanceResult{Window: fmt.Sprintf("%dd", days)}
 	res.TotalSessions, _ = repo.CountSessionsSince(ctx, since, "")

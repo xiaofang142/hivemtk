@@ -506,12 +506,16 @@ func (s *CohortGapService) Path(ctx context.Context, limit int) (*PathResult, er
 
 // EmailGapService 邮件送达分析
 type EmailGapService struct {
-	repo *repository.EmailGapRepo
+	repo   *repository.EmailGapRepo
+	aiRepo *repository.AIPerformanceRepository
 }
 
 // NewEmailGapService 构造（ARC-01：gdb 为 nil 时 repo 为 nil，查询类方法返回错误）
 func NewEmailGapService(gdb *gorm.DB) *EmailGapService {
-	return &EmailGapService{repo: repository.NewEmailGapRepoWithDB(gdb)}
+	return &EmailGapService{
+		repo:   repository.NewEmailGapRepoWithDB(gdb),
+		aiRepo: repository.NewAIPerformanceRepository(gdb),
+	}
 }
 
 // NewEmailGapServiceFromGlobal 便捷构造
@@ -582,21 +586,15 @@ func (s *EmailGapService) Deliverability(ctx context.Context, days int) (*Delive
 
 // BounceBreakdown ISP 分桶（饼图: [{isp, count}]）
 func (s *EmailGapService) BounceBreakdown(ctx context.Context, days int) ([]map[string]any, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	if days <= 0 || days > 365 {
 		days = 30
 	}
-	g := s.db
 	since := time.Now().AddDate(0, 0, -days)
-	type row struct {
-		Domain string `gorm:"column:domain"`
-		Cnt    int64  `gorm:"column:cnt"`
-	}
-	var rows []row
-	if err := g.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
-		Select("SPLIT_PART(email, '@', 2) AS domain, COUNT(*) AS cnt").
-		Where("event_type IN ? AND timestamp >= ?", []string{"bounce", "soft_bounce", "hard_bounce"}, since).
-		Group("SPLIT_PART(email, '@', 2)").Order("cnt DESC").Limit(8).
-		Scan(&rows).Error; err != nil {
+	rows, err := s.repo.BounceByISP(ctx, since)
+	if err != nil {
 		return nil, err
 	}
 	out := []map[string]any{}
@@ -620,16 +618,11 @@ type DomainReputationRow struct {
 
 // DomainReputation 从 SMTP 配置取自有域名 → 24h 发送/退信聚合 + DNS 记录检查（诚实口径：无外网返回 unknown）
 func (s *EmailGapService) DomainReputation(ctx context.Context) ([]DomainReputationRow, error) {
-	g := s.db
-
-	var domains []string
-	type smtpRow struct {
-		Host string `gorm:"column:host"`
-		User string `gorm:"column:username"`
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
 	}
-	var smtps []smtpRow
-	if err := g.WithContext(ctx).Table("email_smtp").
-		Select("server AS host, username").Where("deleted_at IS NULL").Limit(10).Scan(&smtps).Error; err == nil {
+	var domains []string
+	if smtps, err := s.repo.ListSMTPServers(ctx); err == nil {
 		for _, r := range smtps {
 			parts := strings.Split(r.User, "@")
 			if len(parts) == 2 && parts[1] != "" {
@@ -638,27 +631,16 @@ func (s *EmailGapService) DomainReputation(ctx context.Context) ([]DomainReputat
 		}
 	}
 	if len(domains) == 0 {
-
-		type dr struct{ Domain string }
-		var drs []dr
-		g.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
-			Select("DISTINCT SPLIT_PART(email, '@', 2) AS domain").Limit(5).Scan(&drs)
-		for _, r := range drs {
-			if r.Domain != "" {
-				domains = append(domains, r.Domain)
-			}
-		}
+		fs, _ := s.repo.DistinctTrackingDomains(ctx)
+		domains = append(domains, fs...)
 	}
 	since24 := time.Now().Add(-24 * time.Hour)
 	out := []DomainReputationRow{}
 	for _, d := range domains {
 		row := DomainReputationRow{Domain: d}
-		g.WithContext(ctx).Model(&model.EmailSend{}).
-			Where("to LIKE ? AND created_at >= ?", "%@"+d, since24).Count(&row.SentLast24h)
-		g.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
-			Where("email LIKE ? AND event_type IN ? AND timestamp >= ?", "%@"+d, []string{"bounce", "soft_bounce", "hard_bounce"}, since24).Count(&row.Bounced)
-		g.WithContext(ctx).Model(&model.EmailTrackingEvent{}).
-			Where("email LIKE ? AND event_type = ? AND timestamp >= ?", "%@"+d, "spam_report", since24).Count(&row.Complained)
+		row.SentLast24h, _ = s.repo.CountSentToDomain(ctx, d, since24)
+		row.Bounced, _ = s.repo.CountBouncesToDomain(ctx, d, since24)
+		row.Complained, _ = s.repo.CountSpamReportToDomain(ctx, d, since24)
 		row.Delivered = row.SentLast24h - row.Bounced
 		if row.Delivered < 0 {
 			row.Delivered = 0
@@ -824,15 +806,10 @@ func (s *BackupGapService) PreviewTableStats(ctx context.Context) ([]map[string]
 
 // RetryDeadLetters 将 message_hub 中 status='dead_letter' 的记录重置为 pending
 func (s *EmailGapService) RetryDeadLetters(ctx context.Context) (int64, error) {
-	g := s.db
-	res := g.WithContext(ctx).
-		Table("message_hub").
-		Where("status = 'dead_letter'").
-		Update("status", "pending")
-	if res.Error != nil {
-		return 0, res.Error
+	if s == nil || s.repo == nil {
+		return 0, fmt.Errorf("service or repository is nil")
 	}
-	return res.RowsAffected, nil
+	return s.repo.ResetDeadLetters(ctx)
 }
 
 // ClueApplyResult 线索导入建议应用结果
@@ -847,27 +824,21 @@ func (s *EmailGapService) ClueApplySuggestions(ctx context.Context, action strin
 	ExistingClueID int64          `json:"existingClueId"`
 	Row            map[string]any `json:"row"`
 }) (*ClueApplyResult, error) {
-	g := s.db
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("service or repository is nil")
+	}
 	res := &ClueApplyResult{}
 	for _, dup := range duplicates {
 		if action != "merge" || dup.ExistingClueID <= 0 || dup.Row == nil {
 			res.Skipped++
 			continue
 		}
-		updates := map[string]any{}
-		for _, f := range []string{"name", "city", "address", "desc", "account", "source_id"} {
-			if v, ok := dup.Row[f]; ok {
-				if sv, isStr := v.(string); isStr && strings.TrimSpace(sv) != "" {
-					updates[f] = sv
-				}
-			}
-		}
+		updates := clueMergeUpdates(dup.Row)
 		if len(updates) == 0 {
 			res.Skipped++
 			continue
 		}
-		if err := g.WithContext(ctx).Table("clues").
-			Where("id = ?", dup.ExistingClueID).Updates(updates).Error; err != nil {
+		if err := s.repo.UpdateClueFields(ctx, dup.ExistingClueID, updates); err != nil {
 			res.Failed++
 			continue
 		}
@@ -876,8 +847,8 @@ func (s *EmailGapService) ClueApplySuggestions(ctx context.Context, action strin
 	return res, nil
 }
 
-// ClueMerge 合并线索字段到现有线索
-func (s *EmailGapService) ClueMerge(ctx context.Context, id int64, from map[string]any) (bool, error) {
+// clueMergeUpdates 从导入行提取可合并的非空字符串字段
+func clueMergeUpdates(from map[string]any) map[string]any {
 	updates := map[string]any{}
 	for _, f := range []string{"name", "city", "address", "desc", "account", "source_id"} {
 		if v, ok := from[f]; ok {
@@ -886,11 +857,19 @@ func (s *EmailGapService) ClueMerge(ctx context.Context, id int64, from map[stri
 			}
 		}
 	}
+	return updates
+}
+
+// ClueMerge 合并线索字段到现有线索
+func (s *EmailGapService) ClueMerge(ctx context.Context, id int64, from map[string]any) (bool, error) {
+	if s == nil || s.repo == nil {
+		return false, fmt.Errorf("service or repository is nil")
+	}
+	updates := clueMergeUpdates(from)
 	if len(updates) == 0 {
 		return true, nil
 	}
-	g := s.db
-	if err := g.WithContext(ctx).Table("clues").Where("id = ?", id).Updates(updates).Error; err != nil {
+	if err := s.repo.UpdateClueFields(ctx, id, updates); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -898,12 +877,14 @@ func (s *EmailGapService) ClueMerge(ctx context.Context, id int64, from map[stri
 
 // ClueForceCreate 强制创建线索（单条导入）
 func (s *EmailGapService) ClueForceCreate(ctx context.Context, row map[string]any) (bool, error) {
+	if s == nil || s.repo == nil {
+		return false, fmt.Errorf("service or repository is nil")
+	}
 	name, _ := row["name"].(string)
 	phone, _ := row["phone"].(string)
 	if strings.TrimSpace(name) == "" && strings.TrimSpace(phone) == "" {
 		return false, fmt.Errorf("name/phone 至少一项必填")
 	}
-	g := s.db
 	rec := map[string]any{
 		"name":      name,
 		"source_id": "force-" + strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -915,7 +896,7 @@ func (s *EmailGapService) ClueForceCreate(ctx context.Context, row map[string]an
 	if v, ok := row["desc"].(string); ok {
 		rec["desc"] = v
 	}
-	if err := g.WithContext(ctx).Table("clues").Create(rec).Error; err != nil {
+	if err := s.repo.CreateClueRecord(ctx, rec); err != nil {
 		return false, err
 	}
 	return true, nil

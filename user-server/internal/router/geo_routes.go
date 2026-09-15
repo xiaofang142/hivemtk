@@ -108,11 +108,16 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
 	pushSvc := geoservice.NewPushService(gormDB)
 	siteSvc := geoservice.NewSiteDeployService(gormDB, pushSvc)
-	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB, nil, verifySvc)
+	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB)
 	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
 	pushCtrl := geoctrl.NewPushController(pushSvc)
 	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc)
 	indexCtrl := geoctrl.NewIndexTrackerController(indexTrackerSvc)
+
+	// ⬇️ GEO v2 CRUD Controller（3 张核心配置表）
+	siteCRUDCtrl := geoctrl.NewGeoSiteController(gormDB)
+	pusherCRUDCtrl := geoctrl.NewGeoPusherConfigController(gormDB)
+	schemaCRUDCtrl := geoctrl.NewGeoSchemaTemplateController(gormDB)
 
 	probeRepo := georepo.NewGeoProbeRunRepositoryWithDB(gormDB)
 	probes := geoservice.NewEngineProbesFromDB(gormDB)
@@ -234,6 +239,25 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/index-tracking/verify/:article_id", indexCtrl.VerifyFull)
 	geo.GET("/index-tracking/funnel", indexCtrl.FunnelStats)
 	geo.POST("/index-tracking/verify-all", indexCtrl.ManualVerifyAll)
+
+	// ⬇️ GEO v2 三张核心配置表 CRUD
+	geo.GET("/sites", siteCRUDCtrl.List)
+	geo.POST("/sites", siteCRUDCtrl.Create)
+	geo.GET("/sites/:id", siteCRUDCtrl.Get)
+	geo.PUT("/sites/:id", siteCRUDCtrl.Update)
+	geo.DELETE("/sites/:id", siteCRUDCtrl.Delete)
+
+	geo.GET("/pushers", pusherCRUDCtrl.List)
+	geo.POST("/pushers", pusherCRUDCtrl.Create)
+	geo.GET("/pushers/:id", pusherCRUDCtrl.Get)
+	geo.PUT("/pushers/:id", pusherCRUDCtrl.Update)
+	geo.DELETE("/pushers/:id", pusherCRUDCtrl.Delete)
+
+	geo.GET("/schema-templates", schemaCRUDCtrl.List)
+	geo.POST("/schema-templates", schemaCRUDCtrl.Create)
+	geo.GET("/schema-templates/:id", schemaCRUDCtrl.Get)
+	geo.PUT("/schema-templates/:id", schemaCRUDCtrl.Update)
+	geo.DELETE("/schema-templates/:id", schemaCRUDCtrl.Delete)
 
 	geo.GET("/keyword-enhance/analyze", keCtrl.Analyze)
 	geo.POST("/keyword-enhance/enhance", keCtrl.Enhance)
