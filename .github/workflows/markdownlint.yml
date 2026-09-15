@@ -1,0 +1,68 @@
+# Markdown 规范检查（OPT-CI-09）
+#
+# 清单曾勾选 OPT-CI-09「添加 .markdownlint.json 集成 CI」为已实施，
+# 但配置文件全仓不存在、无任何 workflow 引用 markdownlint —— 属虚假完成。
+# 本次补齐：规则文件 + cli2 忽略配置 + 本工作流。
+#
+# 规则文件：
+#   .markdownlint.json        —— 规则集（default: true 逐条覆盖）
+#   .markdownlint-cli2.jsonc  —— 扫描 globs 与忽略目录
+#
+# 规则裁剪说明（面向存量仓库的务实取舍，非放水）：
+#   关闭 MD007 ul-indent     —— 自动生成清单类文档（NEW_FUNCTIONS_INVENTORY.md 等）
+#                                存在 1000+ 处历史缩进风格，重排会污染 diff 且无收益
+#   关闭 MD040 fenced-lang   —— 存量 216 处代码块缺语言标注，需逐块人工判断语言
+#   关闭 MD013 line-length   —— 本项目表格普遍超宽（架构对照表），截断反而降低可读性
+#   关闭 MD033/034/036/041/060 —— 徽章内联 HTML、裸邮箱、居中强调行、表格紧凑风格
+#   关闭 MD024/MD037         —— MD024：CHANGELOG/inventory 按约定重复节名；
+#                                MD037：cron 表达式 `*/5 * * * *` 与 glob `/api/*`
+#                                中的星号被误判为强调标记（误报）
+#   保留 MD001/003/005/018-021/023/042/047 —— 结构性规则，实测存量已全部合规
+#
+# 本地复现：
+#   npx -y markdownlint-cli2
+
+name: Markdown Lint
+
+on:
+  push:
+    paths:
+      - '**/*.md'
+      - '.markdownlint.json'
+      - '.markdownlint-cli2.jsonc'
+      - '.github/workflows/markdownlint.yml'
+  pull_request:
+    paths:
+      - '**/*.md'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    name: markdownlint-cli2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: '**/*.md'
+          # 阻断：发现违规即失败（非软门槛）
+          continue-on-error: false
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Markdown 规范检查通过" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Markdown 规范违规，详见上方输出" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "本地复现与自动修复：" >> "$GITHUB_STEP_SUMMARY"
+            echo '  npx -y markdownlint-cli2            # 检查' >> "$GITHUB_STEP_SUMMARY"
+            echo '  npx -y markdownlint-cli2 --fix      # 自动修复可修复项' >> "$GITHUB_STEP_SUMMARY"
+          fi

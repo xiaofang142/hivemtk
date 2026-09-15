@@ -1,0 +1,17 @@
+{
+  // markdownlint-cli2 配置（OPT-CI-09）
+  // 规则集见同目录 .markdownlint.json（cli2 会自动读取）
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/pg_data/**",
+    "**/uploads/**",
+    "**/logs/**",
+    "**/vendor/**",
+    "**/.git/**",
+    "**/tmp/**",
+    "**/backups/**"
+  ]
+}
