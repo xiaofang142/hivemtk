@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/geo/model"
@@ -18,12 +21,13 @@ import (
 // 3. AutoVerifyCron — 每日定时入口（02:00）
 // 4. UpsertDailyStats — 聚合到 geo_daily_stats
 type IndexTrackerService struct {
-	db *gorm.DB
+	db     *gorm.DB
+	probes []SearchProbe
 }
 
-// NewIndexTrackerService 创建收录追踪服务
-func NewIndexTrackerService(db *gorm.DB) *IndexTrackerService {
-	return &IndexTrackerService{db: db}
+// NewIndexTrackerService 创建收录追踪服务（probes 为 AI 搜索探针，可为空）
+func NewIndexTrackerService(db *gorm.DB, probes ...SearchProbe) *IndexTrackerService {
+	return &IndexTrackerService{db: db, probes: probes}
 }
 
 // ArticleStanding 单篇文章站位评分
@@ -47,7 +51,7 @@ type FunnelStats struct {
 	ConversionRates map[string]float64 `json:"conversion_rates"`
 }
 
-// VerifyArticleFull 单篇全链路验证
+// VerifyArticleFull 单篇全链路验证：真实调用 AI 搜索探针，检测文章 URL 是否被引用
 func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID string) (*ArticleStanding, error) {
 	var article model.GeoArticle
 	if err := s.db.First(&article, "id = ?", articleID).Error; err != nil {
@@ -59,45 +63,131 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 		Title:     article.Title,
 	}
 
-	// 搜索引擎 + AI 引擎
-	engines := []string{"baidu", "google", "bing", "toutiao", "shenma", "doubao", "wenxin", "kimi", "deepseek"}
-
-	for _, eng := range engines {
-		now := time.Now()
-		tracking := model.GeoIndexTracking{
-			ArticleID:   article.ID,
-			Engine:      eng,
-			Keyword:     article.Keyword,
-			LastChecked: &now,
-		}
-
-		// 简化版：已有 probe/verify 数据时从 geo_probe_runs / geo_verify_results 读
-		// 这里做标记占位，真实实现需要调用 ProbeService + VerificationService
-		var count int64
-		s.db.Model(&model.GeoIndexTracking{}).
-			Where("article_id = ? AND engine = ?", article.ID, eng).
-			Count(&count)
-		if count > 0 {
-			s.db.Model(&model.GeoIndexTracking{}).
-				Where("article_id = ? AND engine = ?", article.ID, eng).
-				Update("last_checked", now)
-		} else {
-			_ = s.db.Create(&tracking).Error
-		}
-
-		// 统计站位
-		if tracking.AICited {
-			as.AICitedEngines++
-		}
-		as.TotalEngines++
+	query := strings.TrimSpace(article.Keyword)
+	if query == "" {
+		query = article.Title
 	}
 
+	probes := s.activeProbes()
+	if len(probes) == 0 {
+		logger.Warnf("VerifyArticleFull: 无可用 AI 探针，仅回读历史 tracking (article=%s)", article.ID)
+	} else {
+		type outcome struct {
+			engine  string
+			cited   int
+			checked time.Time
+			err     error
+		}
+		outcomes := make([]outcome, len(probes))
+		var wg sync.WaitGroup
+		for i, p := range probes {
+			wg.Add(1)
+			go func(i int, p SearchProbe) {
+				defer wg.Done()
+				pctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+				defer cancel()
+				pr, err := p.Probe(pctx, query)
+				oc := outcome{engine: p.Name(), checked: time.Now(), err: err}
+				if err == nil {
+					oc.cited = countCitationMatches(article.SiteURL, pr.Citations)
+				}
+				outcomes[i] = oc
+			}(i, p)
+		}
+		wg.Wait()
+
+		for _, oc := range outcomes {
+			if oc.err != nil {
+				logger.Warnf("VerifyArticleFull: 探针 %s 失败: %v", oc.engine, oc.err)
+				continue
+			}
+			now := oc.checked
+			updates := map[string]any{
+				"ai_cited":      oc.cited > 0,
+				"ai_cite_count": oc.cited,
+				"last_checked":  now,
+				"updated_at":    now,
+			}
+			res := s.db.Model(&model.GeoIndexTracking{}).
+				Where("article_id = ? AND engine = ?", article.ID, oc.engine).
+				Updates(updates)
+			if res.Error != nil {
+				logger.Warnf("VerifyArticleFull: 更新 tracking %s 失败: %v", oc.engine, res.Error)
+				continue
+			}
+			if res.RowsAffected == 0 {
+				tracking := model.GeoIndexTracking{
+					ArticleID:   article.ID,
+					Engine:      oc.engine,
+					Keyword:     query,
+					AICited:     oc.cited > 0,
+					AICiteCount: oc.cited,
+					LastChecked: &now,
+				}
+				_ = s.db.Create(&tracking).Error
+			}
+		}
+	}
+
+	// 站位评分以 DB 最终状态为准，避免内存零值误判
+	var tracked []model.GeoIndexTracking
+	s.db.Where("article_id = ?", article.ID).Find(&tracked)
+	as.Trackings = tracked
+	as.TotalEngines = len(tracked)
+	for _, t := range tracked {
+		if t.AICited {
+			as.AICitedEngines++
+		}
+	}
 	if as.TotalEngines > 0 {
 		as.StandingScore = float64(as.AICitedEngines) / float64(as.TotalEngines) * 100
 	}
-
-	s.db.Where("article_id = ?", article.ID).Find(&as.Trackings)
 	return as, nil
+}
+
+// activeProbes 返回可用探针（构造注入优先，懒加载 DB 装配兜底）
+func (s *IndexTrackerService) activeProbes() []SearchProbe {
+	if len(s.probes) > 0 {
+		return s.probes
+	}
+	s.probes = NewEngineProbesFromDB(s.db)
+	return s.probes
+}
+
+// countCitationMatches 统计引用信源中命中文章 URL 的条数
+func countCitationMatches(siteURL string, cites []Citation) int {
+	if strings.TrimSpace(siteURL) == "" {
+		return 0
+	}
+	wantHost, wantPath, ok := splitURL(siteURL)
+	if !ok {
+		return 0
+	}
+	matched := 0
+	for _, c := range cites {
+		h, p, ok2 := splitURL(c.URL)
+		if !ok2 {
+			continue
+		}
+		hostHit := h == wantHost || strings.HasSuffix(h, "."+wantHost) || strings.HasSuffix(wantHost, "."+h)
+		pathHit := strings.TrimRight(p, "/") == strings.TrimRight(wantPath, "/")
+		if hostHit && pathHit {
+			matched++
+		}
+	}
+	return matched
+}
+
+func splitURL(raw string) (host, path string, ok bool) {
+	raw = strings.TrimSpace(raw)
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "", "", false
+	}
+	return strings.ToLower(u.Hostname()), u.Path, true
 }
 
 // FunnelStats 全链路漏斗统计
@@ -159,17 +249,24 @@ func (s *IndexTrackerService) FunnelStats(ctx context.Context) (*FunnelStats, er
 }
 
 // AutoVerifyCron 每日 02:00 定时入口
-// 扫描前一天发布的文章 → 全链路验证 → Upsert geo_daily_stats
+// 扫描已部署且超过 24h 未验证的文章 → 全链路验证 → Upsert geo_daily_stats
 func (s *IndexTrackerService) AutoVerifyCron(ctx context.Context) error {
-	// 读前一天发布的文章
-	yesterday := time.Now().AddDate(0, 0, -1)
 	var articles []model.GeoArticle
-	s.db.Where("DATE(created_at) = DATE(?)", yesterday).Find(&articles)
+	s.db.Where("deployed_at IS NOT NULL AND site_url != ''").
+		Where(`NOT EXISTS (
+			SELECT 1 FROM geo_index_trackings t
+			WHERE t.article_id = geo_articles.id AND t.updated_at > ?
+		)`, time.Now().Add(-24*time.Hour)).
+		Order("deployed_at DESC").
+		Limit(200).
+		Find(&articles)
 
-	logger.Warnf("AutoVerifyCron: 昨日发布 %d 篇待验证", len(articles))
+	logger.Warnf("AutoVerifyCron: %d 篇已部署文章待验证", len(articles))
 
 	for _, a := range articles {
-		_, _ = s.VerifyArticleFull(ctx, a.ID)
+		if _, err := s.VerifyArticleFull(ctx, a.ID); err != nil {
+			logger.Warnf("AutoVerifyCron: 验证文章 %s 失败: %v", a.ID, err)
+		}
 	}
 
 	// Upsert geo_daily_stats（聚合写入）

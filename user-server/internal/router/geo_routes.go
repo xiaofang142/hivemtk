@@ -105,10 +105,11 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	keCtrl := geoctrl.NewKeywordEnhanceController(keSvc)
 
 	// ⬇️ GEO v2 新增 Service + Controller
+	probes := geoservice.NewEngineProbesFromDB(gormDB)
 	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
 	pushSvc := geoservice.NewPushService(gormDB)
 	siteSvc := geoservice.NewSiteDeployService(gormDB, pushSvc)
-	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB)
+	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB, probes...)
 	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
 	pushCtrl := geoctrl.NewPushController(pushSvc)
 	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc)
@@ -120,7 +121,6 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	schemaCRUDCtrl := geoctrl.NewGeoSchemaTemplateController(gormDB)
 
 	probeRepo := georepo.NewGeoProbeRunRepositoryWithDB(gormDB)
-	probes := geoservice.NewEngineProbesFromDB(gormDB)
 	probeSvc := geoservice.NewProbeService(probes, probeRepo)
 	probeCtrl := geoctrl.NewProbeController(probeSvc)
 
