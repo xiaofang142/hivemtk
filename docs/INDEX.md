@@ -58,7 +58,18 @@
 
 ---
 
-## 六、相关资源
+## 六、嵌入 SDK 与反向代理
+
+| 文档 | 描述 |
+|------|------|
+| [operations/CHAT_WIDGET_EMBED.md](operations/CHAT_WIDGET_EMBED.md) | Chat Widget 嵌入 SDK 接入指南（`embed-sdk`，ADR-011） |
+| [architecture/adr/ADR-011-chat-widget-embed.md](architecture/adr/ADR-011-chat-widget-embed.md) | ADR-011：Chat Widget 嵌入方案决策记录 |
+| [architecture/FRP私域部署指南.md](architecture/FRP私域部署指南.md) | FRP 内网穿透私域部署指南 |
+| [operations/reverse-proxy/frpc.toml.template](operations/reverse-proxy/frpc.toml.template) | frpc 客户端配置模板 |
+
+---
+
+## 七、相关资源
 
 - [ADR 决策记录](architecture/adr/) — 架构决策历史
 - [bridge/README.md](bridge/README.md) — Bridge 桥接模块
