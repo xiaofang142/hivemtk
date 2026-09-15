@@ -1,0 +1,70 @@
+# 文档断链检查（OPT-CI-08）
+#
+# 清单曾勾选 OPT-CI-08「添加 lychee --offline 断链检查」为已实施，
+# 但 7 个 workflow 中无一处引用 lychee —— 属虚假完成。本工作流补齐该检查。
+#
+# 模式说明：
+#   --offline  只校验本地/相对路径引用，不发起外网请求
+#              （CI 稳定性优先：避免第三方站点抖动导致误报）
+#   外链（http/https）在 offline 模式下跳过，因此本检查零外部依赖。
+#
+# 本地复现：
+#   lychee --offline --no-progress './**/*.md'
+#   或使用 npx：npx -y lychee --offline './**/*.md'
+
+name: Docs Link Check
+
+on:
+  push:
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-link-check.yml'
+  pull_request:
+    paths:
+      - '**/*.md'
+  schedule:
+    # 每周一 04:00 UTC 全量巡检，捕捉随时间腐化的引用
+    - cron: '0 4 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  lychee:
+    name: lychee --offline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run lychee (offline link check)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # --offline      : 仅校验本地路径，不发外网请求
+          # --no-progress  : CI 日志可读
+          # --accept 200,204,206 : 常见成功码
+          # --exclude-path : 跳过依赖目录与构建产物
+          args: >-
+            --offline
+            --no-progress
+            --accept 200,204,206
+            --exclude-path node_modules
+            --exclude-path dist
+            --exclude-path pg_data
+            --exclude-path internal-docs
+            --verbose
+            './**/*.md'
+          fail: true
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ 文档本地引用检查通过（零断链）" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ 检测到断链，详见上方 lychee 输出" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "修复指引：相对路径以「被引用文件所在目录」为基准解析；" >> "$GITHUB_STEP_SUMMARY"
+            echo "本仓库历史高发区为 docs/ 下的跨目录引用与根目录 README 徽章链接。" >> "$GITHUB_STEP_SUMMARY"
+          fi
