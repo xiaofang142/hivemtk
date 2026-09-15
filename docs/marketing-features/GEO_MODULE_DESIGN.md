@@ -5,6 +5,55 @@
 > **范围**: Geo 模块从关键词蒸馏到 AI 引擎引用的完整产品链路、技术规格、菜单组织、数据模型、监控可视化、实施计划  
 > **依赖**: user-server/internal/geo/ 五层架构、manage 前端 Vue3+ElementPlus  
 
+> **所属系统**: user-server（`internal/geo/`）+ user-web（manage 前端）
+> **功能 slug**: geo-module
+> **代码位置**: `hivemtk/user-server/internal/geo/`、`hivemtk/user-web/src/router/modules/geoTools.js`
+
+---
+
+## §一 功能完成状态
+
+> 本节为 [`docs/standards/FEATURE_DOCUMENTATION_TEMPLATE.md`](../standards/FEATURE_DOCUMENTATION_TEMPLATE.md)
+> 要求的**首节**。目的：先如实交代完成度，再展开设计——避免"文档很长但功能没做"的误读，
+> 也避免"功能做了但没勾"的漏记（两类问题在 2026-09-15 的任务清单审计中都实际出现过）。
+>
+> 状态口径：✅ 已实现 / 🟡 部分实现 / 🔵 骨架已建 / ⬜ 规划中
+
+| 子能力 | 状态 | 证据 |
+|--------|------|------|
+| 五层架构骨架（Router→Handler→Service→Repository→Model） | ✅ | `internal/geo/` 下 **107** 个非测试 Go 文件，`dto/`、`repository/`、`controller/`、`service/` 分层齐备 |
+| 关键词蒸馏 / 分组 | ✅ | `repository/keyword.go`、`repository/keyword_group.go`、`dto/keyword.go`、`dto/keyword_enhance.go` |
+| 内容生产与知识接入 | ✅ | `repository/content.go`、`repository/knowledge.go`、`dto/content.go`、`dto/knowledge.go` |
+| 蜘蛛推送 / 索引追踪 | ✅ | `repository/geo_push_record.go`、`repository/geo_index_tracking.go`、`repository/geo_pusher_config.go` |
+| 站点与 Schema 模板 | ✅ | `repository/geo_site.go`、`repository/geo_schema_template.go` |
+| 竞品与探测（probe） | ✅ | `repository/competitor.go`、`repository/probe.go`、`repository/crawler_visit.go` |
+| 监控 / 日报 / 告警 | ✅ | `repository/daily_stats.go`、`repository/alert.go`、`model.GeoAlert` 等已登记进 `AutoMigrate` |
+| 作业编排 | ✅ | `repository/job_run.go`、`repository/workflow.go`、`dto/workflow.go` |
+| 前端菜单（Config → Execute → Observe） | ✅ | `router/modules/geoTools.js` 共 **24** 条路由 |
+| 数据表 | ✅ | 由 GORM `AutoMigrate` 维护（见 `user-server/internal/pkg/db/migrate.go` 的 `geomodel.*` 列表），**无**独立 SQL 迁移 |
+| 端到端验收 | 🟡 | 见 §八 测试策略；`scripts/api_verify_full.py` 覆盖部分 geo 端点 |
+
+> **说明**：本文其余章节是该模块的**设计蓝图**（含 §十一 的 15 个工作日实施计划）。
+> 代码已落地不等于蓝图全部完成——如需权威完成度，请以代码与本表为准，勿以设计章节的存在推断功能已完成。
+
+---
+
+## 模板 8 节对照
+
+本文早于 `FEATURE_DOCUMENTATION_TEMPLATE.md` 建立，沿用自身的十二章结构。
+为便于按模板导航，映射如下：
+
+| 模板节 | 本文对应位置 |
+|--------|--------------|
+| §一 功能完成状态 | 见上（本文新增） |
+| §二 核心原理 | [二、技术规格调研](#二技术规格调研202609-最新)、[三、完整产品链路](#三完整产品链路) |
+| §三 设计标准 | [二、技术规格调研](#二技术规格调研202609-最新)（llms.txt v2 / IndexNow / Google Indexing API / 6 引擎规范） |
+| §四 架构与模块关系 | [五、后端 Service 架构](#五后端-service-架构)、[四、菜单组织](#四菜单组织config--execute--observe) |
+| §五 数据模型 | [六、数据模型（ALTER + 新增）](#六数据模型alter--新增) |
+| §六 业务流程 | [三、完整产品链路](#三完整产品链路)、[七、蜘蛛推送 6 引擎完整方案](#七蜘蛛推送-6-引擎完整方案) |
+| §七 前端交互 | [四、菜单组织](#四菜单组织config--execute--observe)、[八、监控可视化设计](#八监控可视化设计) |
+| §八 测试策略 | 见文末（本文新增） |
+
 ---
 
 ## 目录
@@ -1405,4 +1454,58 @@ func (s *IndexTrackerService) AutoVerifyCron(ctx context.Context) error
 
 ---
 
-*文档版本: v1.0 · 整合 4 轮对话 · 2026-09-15*
+## §八 测试策略
+
+> 本节为 `FEATURE_DOCUMENTATION_TEMPLATE.md` 的**推荐节**，2026-09-15 补齐（原文档无测试策略）。
+
+### 8.1 单元测试（Go）
+
+`user-server/internal/geo/` 下现有 **9** 个测试文件：
+
+| 层 | 文件 | 覆盖重点 |
+|----|------|----------|
+| repository | `geo_test.go` | 仓储读写、查询链 |
+| service | `geo_test.go` | 服务层主流程 |
+| service | `intent_matrix_test.go` | 意图矩阵映射 |
+| service | `decision_executors_test.go` | 决策执行器 |
+| service | `job_manager_test.go` | 作业编排 / 调度 |
+| service | `visibility_test.go` | AI 引擎可见性计算 |
+| service | `alert_test.go` | 告警判定 |
+| service | `geo_api_test.go` | 对外 API 契约 |
+| service | `zz_edge_test.go` | 边界与异常路径 |
+
+运行方式：
+
+```bash
+cd hivemtk/user-server
+go test ./internal/geo/... -p 1 -count=1
+```
+
+> 注意：仓库统一使用 `-p 1`（串行）执行 Go 测试，原因见 `hivemtk/CLAUDE.md` 的并发限制说明。
+
+### 8.2 接口级验收
+
+- `scripts/api_verify_full.py` — 项目指定的验收入口，覆盖 geo 相关端点；
+- 新增/修改 geo 端点后必须同步更新该脚本，否则视为未完成。
+
+### 8.3 前端验证
+
+- 路由注册：`user-web/src/router/modules/geoTools.js`（24 条路由）需与后端端点一一对应；
+- `user-web/tests/` 下的页面级 e2e 用于关键路径回归。
+
+### 8.4 覆盖率
+
+geo 模块纳入仓库整体覆盖率统计，CI 门槛见 `.github/workflows/user-server-ci.yml`：
+**FLOOR=20%**（阻断回归底线）/ **TARGET=60%**（产品目标，仅告警）。
+
+### 8.5 已知测试缺口
+
+| 缺口 | 影响 | 建议 |
+|------|------|------|
+| 无端到端「推送→收录→引用」全链路测试 | 引擎侧变更可能静默失效 | 增加 mock 引擎的集成测试 |
+| 外部引擎接口无契约测试 | 上游协议变更无法提前发现 | 定期抓取规范快照做 diff |
+| 前端 geo 页面无独立组件测试 | 菜单/表单回归依赖手工 | 补 Vitest 组件用例 |
+
+---
+
+*文档版本: v1.1 · 整合 4 轮对话 · 2026-09-15（v1.1 按 FEATURE_DOCUMENTATION_TEMPLATE 补齐 §一 功能完成状态、§八 测试策略与元数据块）*

@@ -67,7 +67,8 @@
 /user-web/bridge/                   @hivemtk-fe-embed @hivemtk-bridge-chrome
 
 # ---------- 国际化 ----------
-/user-web/src/locales/              @hivemtk-devrel-i18n @hivemtk-fe-user
+# 注：语言包实际位于 src/i18n/locales/（2026-09-15 修正，原写 src/locales/ 不存在）
+/user-web/src/i18n/locales/         @hivemtk-devrel-i18n @hivemtk-fe-user
 /user-web/scripts/check-i18n-coverage.cjs  @hivemtk-devrel-i18n
 
 # ---------- 文档 ----------
