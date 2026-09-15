@@ -199,7 +199,7 @@ async function postIngest({ serverUrl, channel, accountId, conversationId, token
       json = text ? JSON.parse(text) : null;
     } catch (e) {
       log.error('ingest 响应 JSON 解析失败', e, { status: res.status, text: text.slice(0, 200) });
-      throw new Error('ingest 响应非 JSON: ' + text.slice(0, 100));
+      throw new Error('ingest 响应非 JSON: ' + text.slice(0, 100), { cause: e });
     }
     responsePayload = json;
     return json;

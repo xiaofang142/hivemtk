@@ -200,7 +200,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     : BRIDGE_THREE_CHANNEL.outboxBatchSize;
   const cache = getCache(channel);
   await cache.load();
-  let cfg = {};
+  let cfg;
   try {
     cfg = (await getConfig()) || {};
   } catch (_) {
@@ -294,9 +294,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   const MAX_RATE_RETRIES = 3; 
   for (const [convId, group] of groups) {
     const sentIds = [];
-    let convAbort = false; 
     for (const { msg, sanitized } of group) {
-      if (convAbort) break;
       let result = null;
       try {
         if (sendOutbound) {
@@ -344,7 +342,6 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         log.warn(`下行会话持续限速，放弃本会话剩余并留 pending`, {
           channel, convId, pending: group.length - sentIds.length,
         });
-        convAbort = true;
         break;
       }
     }

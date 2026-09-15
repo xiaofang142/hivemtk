@@ -127,13 +127,13 @@ export async function decryptJSON(payload, passphrase, opts = {}) {
   try {
     plainBuf = await subtle.decrypt({ name: AES_GCM, iv: base64ToBytes(nonce) }, key, base64ToBytes(ciphertext));
   } catch (e) {
-    throw new Error('解密失败：口令错误或文件已损坏');
+    throw new Error('解密失败：口令错误或文件已损坏', { cause: e });
   }
   const text = textDecoder.decode(plainBuf);
   try {
     return JSON.parse(text);
   } catch (e) {
-    throw new Error('解密后的内容不是合法 JSON');
+    throw new Error('解密后的内容不是合法 JSON', { cause: e });
   }
 }
 
@@ -174,7 +174,7 @@ export async function importConfig(fileOrText, passphrase, opts = {}) {
   try {
     parsed = JSON.parse(String(text || ''));
   } catch (e) {
-    throw new Error('非法 JSON 文件，无法解析');
+    throw new Error('非法 JSON 文件，无法解析', { cause: e });
   }
   if (!parsed || typeof parsed !== 'object') throw new Error('非法 JSON 文件，内容不是对象');
 

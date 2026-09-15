@@ -114,7 +114,7 @@ export class Uplink {
     const pending = items.filter((m) => !(m.event_id && this._confirmed.has(m.event_id)));
     if (!pending.length) return;
     const sample = pending[0];
-    let cfg = {};
+    let cfg;
     try {
       cfg = (await this.getConfig()) || {};
     } catch (_) {

@@ -79,11 +79,14 @@ export default [
   },
 
   // Chrome 扩展环境（OPT-FE-01 修复）
-  // browser_automation / bridge 是 Chrome 扩展，使用 chrome.* 扩展 API。
-  // 原配置只提供 globals.browser + globals.node，导致 26 处
-  // `'chrome' is not defined` 误报（no-undef）。
+  // browser_automation 是 Chrome 扩展，使用 chrome.* 扩展 API，且**没有自己的
+  // ESLint 配置**，因此由本配置负责。原配置只提供 globals.browser + globals.node，
+  // 导致 26 处 `'chrome' is not defined` 误报（no-undef）。
+  //
+  // 注意：bridge 不在此列 —— 它是独立的 npm 子项目（自带 package.json /
+  // eslint.config.mjs / package-lock.json / CI job），由自己的配置负责，见下方 ignores。
   {
-    files: ['browser_automation/**/*.js', 'bridge/**/*.js'],
+    files: ['browser_automation/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.webextensions,
@@ -101,6 +104,14 @@ export default [
       'src/types/components.d.ts',
       // 本文件是配置模板副本，非业务源码，不应被当作待 lint 的模块解析
       'eslint.config.recommended.mjs',
+      // ── bridge：独立的 npm 子项目，由 bridge/eslint.config.mjs 自行负责 ──
+      // 排除原因（2026-09-15）：根配置与 bridge 配置此前**同时**声明覆盖
+      // bridge/**，而究竟哪一份生效取决于 ESLint 是否启用嵌套配置解析
+      // （eslint 10 默认启用，9 不启用），导致同一个 commit 在不同环境
+      // lint 出不同结果 —— 本地 0 error，CI 16 error。门禁必须确定性，
+      // 故此处显式让出所有权。bridge 仍由 lint.yml 的 `ESLint (Bridge)` job
+      // （bridge 自己的配置 + --max-warnings=80）把关，覆盖并未减少。
+      'bridge/**',
     ],
   },
 ]

@@ -183,7 +183,7 @@ export class BaseAdapter {
 
   getMessages({ limit = 100 } = {}) {
     const out = [];
-    let items = [];
+    let items;
     try { items = this.getMessageItems() || []; } catch (_) { items = []; }
     const cid = this.getConversationId() || this.conversationId || '';
     for (const item of items) {
@@ -463,7 +463,7 @@ export class BaseAdapter {
       throttledWarn(this.log, `openConvNavFail:${cid}`, WARN_THROTTLE_MS,
         `整页导航后仍无法打开会话 ${cid}（小红书深链无法打开屏外会话），停止破坏性重载，留 pending 待用户打开`);
     }
-    let list = [];
+    let list;
     try {
       list = this.getConversationList() || [];
     } catch (_) { list = []; }
@@ -744,7 +744,7 @@ export class BaseAdapter {
     if (typeof hook !== 'function') { return { skipped: true, reason: 'no-hook' }; }
     this._patrolling = true;
     const startedAt = Date.now();
-    let visited = 0, withNew = 0, captured = 0, failures = 0, scannedTotal = 0, unreadCount = 0;
+    let visited = 0, withNew = 0, captured = 0, failures = 0, scannedTotal, unreadCount = 0;
 
     // 记住巡检前活动会话，巡检结束后尽量回到它（减少打扰）
     const beforeConv = this.getConversationId();
@@ -851,7 +851,7 @@ export class BaseAdapter {
     const firstRun = this._isFirstPatrolRun();
     const MAX_BATCH = firstRun ? PATROL_DEFAULTS.firstRunMaxBatch : PATROL_DEFAULTS.maxBatchPerPatrol;
     const cid = this.getConversationId() || this.conversationId || '';
-    let items = [];
+    let items;
     try { items = this.getMessageItems() || []; } catch (_) { items = []; }
     for (const item of items) {
       if (batch.length >= MAX_BATCH) {
@@ -1129,7 +1129,7 @@ export class BaseAdapter {
       return { ok: false, rateLimited: true, notFound: false };
     }
     if (decision.waitHintMs > 0) await sleep(decision.waitHintMs);
-    let ok = false;
+    let ok;
     try {
       await this.rawSendText(text); 
       ok = true;
