@@ -223,10 +223,6 @@ func (s *WebhookService) getAccountSecret(ctx context.Context, platform, account
 		return "", nil
 	}
 
-	if s.db == nil {
-		return "", nil
-	}
-
 	if acc, err := s.accountRepo.GetByPlatformAndAccount(ctx, platform, accountID); err == nil && acc != nil {
 		return acc.APISecret, nil
 	}

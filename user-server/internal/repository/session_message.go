@@ -29,6 +29,11 @@ func NewSessionMessageRepositoryWithDB(db *gorm.DB) *SessionMessageRepository {
 	}
 }
 
+// GetDB 暴露底层连接（供跨库查询场景使用，如 trace_learning 洞察读取）
+func (r *SessionMessageRepository) GetDB() *gorm.DB {
+	return r.db
+}
+
 // Create 创建消息
 func (r *SessionMessageRepository) Create(ctx context.Context, message *model.SessionMessage) error {
 	return r.db.Create(message).Error

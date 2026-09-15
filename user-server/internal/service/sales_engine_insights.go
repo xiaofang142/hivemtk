@@ -17,14 +17,14 @@ func SetLearningInsightIndustryProvider(fn func() string) {
 }
 
 func (e *SalesEngine) appendLearningInsights(sb *strings.Builder) {
-	if e.db == nil || insightIndustryFn == nil {
+	if e.sessionMsgRepo == nil || e.sessionMsgRepo.GetDB() == nil || insightIndustryFn == nil {
 		return
 	}
 	industry := insightIndustryFn()
 	if industry == "" {
 		return
 	}
-	insights, err := tracelearning.TopInsights(context.Background(), e.db, industry, salesInsightLimit)
+	insights, err := tracelearning.TopInsights(context.Background(), e.sessionMsgRepo.GetDB(), industry, salesInsightLimit)
 	if err != nil || len(insights) == 0 {
 		return
 	}

@@ -28,10 +28,19 @@ func setupTelegramTestDB(t *testing.T) *gorm.DB {
 	)
 }
 
+// newTestWebhookService 构造仅携带测试本地库的 WebhookService：
+// ARC-01 删除 db 字段后，经 eventRepo 注入使 lazyDB() 返回测试库，
+// ensureReposFromDB 才能把 messageHubRepo/clueRepo 等惰性建到该库上。
+func newTestWebhookService(db *gorm.DB) *WebhookService {
+	eventRepo := repository.NewWebhookEventRepository()
+	repository.SetWebhookEventRepoDB(eventRepo, db)
+	return &WebhookService{eventRepo: eventRepo}
+}
+
 // TestDispatchTelegram_JoinEvent_NewChatMembers 验证 TG 入群事件被正确解析并写入消息中台
 func TestDispatchTelegram_JoinEvent_NewChatMembers(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1001,
@@ -94,7 +103,7 @@ func TestDispatchTelegram_JoinEvent_NewChatMembers(t *testing.T) {
 // TestDispatchTelegram_JoinEvent_OnlyBotsSkipped 验证入群成员全是 bot 时不触发入群事件流程
 func TestDispatchTelegram_JoinEvent_OnlyBotsSkipped(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1002,
@@ -127,7 +136,7 @@ func TestDispatchTelegram_JoinEvent_OnlyBotsSkipped(t *testing.T) {
 // TestDispatchTelegram_LeftEvent_RecordsToHub 验证退群事件被记录但不触发 AI
 func TestDispatchTelegram_LeftEvent_RecordsToHub(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1003,
@@ -160,7 +169,7 @@ func TestDispatchTelegram_LeftEvent_RecordsToHub(t *testing.T) {
 // TestDispatchTelegram_RegularMessage_TextToHub 验证普通文本消息被正确写入消息中台
 func TestDispatchTelegram_RegularMessage_TextToHub(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1004,
@@ -198,7 +207,7 @@ func TestDispatchTelegram_RegularMessage_TextToHub(t *testing.T) {
 // TestDispatchTelegram_GroupMessage_IsGroupTrue 验证群组消息 IsGroup=true
 func TestDispatchTelegram_GroupMessage_IsGroupTrue(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1005,
@@ -230,7 +239,7 @@ func TestDispatchTelegram_GroupMessage_IsGroupTrue(t *testing.T) {
 // TestDispatchTelegram_SystemNotification_Skipped 验证系统通知消息（new_chat_title 等）被跳过
 func TestDispatchTelegram_SystemNotification_Skipped(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 1006,
@@ -324,7 +333,6 @@ func TestShouldTriggerAI_TelegramAccountStates(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			svc := &WebhookService{
-				db:           db,
 				telegramRepo: tgRepo,
 				salesEngine:  &SalesEngine{},
 			}
@@ -352,7 +360,6 @@ func TestShouldTriggerAI_NilSalesEngineReturnsFalse(t *testing.T) {
 	}
 
 	svc := &WebhookService{
-		db:           db,
 		telegramRepo: tgRepo,
 		salesEngine:  nil,
 	}
@@ -368,7 +375,6 @@ func TestShouldTriggerAI_InvalidAccountIDReturnsFalse(t *testing.T) {
 	tgRepo.SetDB(context.Background(), db)
 
 	svc := &WebhookService{
-		db:           db,
 		telegramRepo: tgRepo,
 		salesEngine:  &SalesEngine{},
 	}
@@ -385,8 +391,7 @@ func TestShouldTriggerAI_InvalidAccountIDReturnsFalse(t *testing.T) {
 
 // TestTriggerTelegramJoinSales_NilSalesEngineNoCrash 验证 salesEngine 为 nil 时安全返回
 func TestTriggerTelegramJoinSales_NilSalesEngineNoCrash(t *testing.T) {
-	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db, salesEngine: nil}
+	svc := &WebhookService{salesEngine: nil}
 	svc.triggerTelegramJoinSales(context.Background(), "1", "-1001234567890", "8888", "新用户加入群组")
 }
 
@@ -405,7 +410,6 @@ func TestTriggerTelegramJoinSales_ShouldNotTriggerWhenAIDisabled(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	svc := &WebhookService{
-		db:           db,
 		telegramRepo: tgRepo,
 		salesEngine:  &SalesEngine{},
 	}

@@ -134,7 +134,6 @@ func TestRunAIGeneration_ReleasesAILock_OnErrorExit(t *testing.T) {
 	ingress := NewInboxIngressServiceWithDB(nil, _mc1)
 
 	svc := &WebhookService{
-		db:                nil,
 		replySem:          make(chan struct{}, 4),
 		ingressSvc:        ingress,
 		smartOrchestrator: nil,
@@ -186,7 +185,6 @@ func TestRunAIGeneration_ReleasesAILock_OnSemaphoreTimeout(t *testing.T) {
 	sem := make(chan struct{}, 1)
 	sem <- struct{}{}
 	svc := &WebhookService{
-		db:         nil,
 		replySem:   sem,
 		ingressSvc: ingress,
 	}

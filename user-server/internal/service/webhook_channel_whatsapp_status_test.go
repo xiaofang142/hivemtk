@@ -12,7 +12,7 @@ import (
 
 func TestDispatchWhatsAppStatuses_AllStates(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	ctx := context.Background()
 
 	const account = "wa-acc-t3"
@@ -73,7 +73,7 @@ func TestDispatchWhatsAppStatuses_AllStates(t *testing.T) {
 
 func TestDispatchWhatsAppStatuses_MissAndPassthrough(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	ctx := context.Background()
 
 	handled, err := svc.dispatchWhatsAppStatuses(ctx, "wa-acc-t3b", []byte(`{"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.UNKNOWN9","status":"delivered"}]}}]}]}`))
@@ -125,7 +125,7 @@ func TestUpdateDeliveryStatus_TerminalStateGuard(t *testing.T) {
 
 func TestDispatchWhatsAppStatuses_MixedPayloadPassesMessages(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	ctx := context.Background()
 	row := &model.MessageHub{MsgID: "wamid.MIX1", Platform: "whatsapp", AccountID: "wa-mix", Direction: "outbound", MsgType: "text", ConversationID: "c", Content: "x", SentAt: time.Now()}
 	if err := db.Create(row).Error; err != nil {

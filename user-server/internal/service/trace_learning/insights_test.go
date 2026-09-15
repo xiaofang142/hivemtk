@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ func TestTopInsights_OrderAndDedup(t *testing.T) {
 // TestDistillInsightForTrace_SkipWithoutIndustry 未配置 Industry 时跳过沉淀（不写库）
 func TestDistillInsightForTrace_SkipWithoutIndustry(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.LearningInsight{})
-	svc := &Service{db: db, cfg: DefaultConfig()}
+	svc := &Service{repo: repository.NewTraceLearningRepository(db), cfg: DefaultConfig()}
 
 	svc.distillInsightForTrace(context.Background(),
 		&AggregatedTrace{TraceID: "t-x", Query: "q", Reply: "r"},

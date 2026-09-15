@@ -77,8 +77,8 @@ func (r *geoPushRecordRepo) GetList(page, limit int, platform, articleID string)
 func (r *geoPushRecordRepo) UpdateVerified(id string, verified bool) error {
 	now := time.Now()
 	return r.db.Model(&model.GeoPushRecord{}).Where("id = ?", id).Updates(map[string]any{
-		"verified":     verified,
-		"verified_at":  now,
+		"verified":    verified,
+		"verified_at": now,
 	}).Error
 }
 

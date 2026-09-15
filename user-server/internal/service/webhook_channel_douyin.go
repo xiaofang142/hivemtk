@@ -38,7 +38,7 @@ type douyinWebhookPayload struct {
 }
 
 func (s *WebhookService) dispatchDouyin(ctx context.Context, accountID string, p *ParsedPayload, raw []byte) (*model.MessageHub, *tgDispatchExtra, error) {
-	if s.db == nil {
+	if s.lazyDB() == nil {
 		return nil, nil, nil
 	}
 	s.ensureReposFromDB(ctx)

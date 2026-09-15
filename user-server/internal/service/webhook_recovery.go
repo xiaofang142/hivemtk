@@ -44,13 +44,17 @@ type webhookRecoveryScanner struct {
 }
 
 func newWebhookRecoveryScanner(svc *WebhookService) *webhookRecoveryScanner {
-	if svc == nil || svc.db == nil {
+	if svc == nil {
+		return nil
+	}
+	db := svc.lazyDB()
+	if db == nil {
 		return nil
 	}
 	eventRepo := svc.eventRepo
 	if eventRepo == nil {
 		eventRepo = repository.NewWebhookEventRepository()
-		repository.SetWebhookEventRepoDB(eventRepo, svc.db)
+		repository.SetWebhookEventRepoDB(eventRepo, db)
 	}
 	return &webhookRecoveryScanner{
 		svc:       svc,

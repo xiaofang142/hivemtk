@@ -63,7 +63,7 @@ const (
 )
 
 func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string, p *ParsedPayload, raw []byte) (*model.MessageHub, *tgDispatchExtra, error) {
-	if s.db == nil {
+	if s.lazyDB() == nil {
 		return nil, nil, nil
 	}
 	s.ensureReposFromDB(ctx)
@@ -496,7 +496,7 @@ func (s *WebhookService) triggerTelegramJoinSales(ctx context.Context, accountID
 		return
 	}
 	if s.tgIntegration == nil {
-		s.tgIntegration = NewTelegramIntegrationService(s.db)
+		s.tgIntegration = NewTelegramIntegrationService(s.lazyDB())
 	}
 	accID, err := strconv.ParseUint(accountID, 10, 64)
 	if err != nil || accID == 0 {
@@ -508,7 +508,7 @@ func (s *WebhookService) triggerTelegramJoinSales(ctx context.Context, accountID
 }
 
 func (s *WebhookService) getTelegramWebhookSecret(ctx context.Context, accountID string) string {
-	if s.telegramRepo == nil || s.db == nil {
+	if s.telegramRepo == nil {
 		return ""
 	}
 	accID, err := strconv.ParseUint(accountID, 10, 64)

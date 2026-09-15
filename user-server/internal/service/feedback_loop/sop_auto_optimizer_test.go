@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 )
 
 // TestSOPAutoOptimizer_ProcessPending_NoSuggestions 无建议
@@ -385,7 +386,7 @@ func TestSOPAutoOptimizer_FetchConversionRates(t *testing.T) {
 		}).Error
 	}
 
-	o := &SOPAutoOptimizer{db: db}
+	o := &SOPAutoOptimizer{repo: repository.NewFeedbackLoopRepositoryWithDB(db)}
 	control, experiment := o.fetchConversionRates(ctx, abTest.ID)
 	if !approxEqualF64(control, 0.5) {
 		t.Errorf("control rate = %v want 0.5", control)
@@ -441,7 +442,7 @@ func TestSOPAutoOptimizer_FetchComplaintRates(t *testing.T) {
 		}).Error
 	}
 
-	o := &SOPAutoOptimizer{db: db}
+	o := &SOPAutoOptimizer{repo: repository.NewFeedbackLoopRepositoryWithDB(db)}
 	control, experiment := o.fetchComplaintRates(ctx, abTest.ID)
 	if !approxEqualF64(control, 0.1) {
 		t.Errorf("control complaint rate = %v want 0.1", control)
@@ -474,7 +475,7 @@ func TestSOPAutoOptimizer_RollbackTest(t *testing.T) {
 		t.Fatalf("seed arms: %v", err)
 	}
 
-	o := &SOPAutoOptimizer{db: db}
+	o := &SOPAutoOptimizer{repo: repository.NewFeedbackLoopRepositoryWithDB(db)}
 	if err := o.rollbackTest(ctx, abTest.ID, "test_reason"); err != nil {
 		t.Fatalf("rollbackTest: %v", err)
 	}

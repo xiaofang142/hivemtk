@@ -94,7 +94,7 @@ func TestTelegramLeadAccountKey(t *testing.T) {
 
 func TestMineTelegramGroupLead_CreateDedupUpgrade(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	account := "@alice"
 	hub := &model.MessageHub{MsgID: "m-1", ConversationID: "conv-alice", SenderID: "123"}
 
@@ -158,7 +158,7 @@ func TestMineTelegramGroupLead_CreateDedupUpgrade(t *testing.T) {
 
 func TestMineTelegramGroupLead_NoiseSkipped(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	account := "@bob"
 	hub := &model.MessageHub{MsgID: "m-b", ConversationID: "conv-bob", SenderID: "999"}
 
@@ -176,7 +176,7 @@ func TestMineTelegramGroupLead_NoiseSkipped(t *testing.T) {
 
 func TestMineTelegramGroupLead_FallbackID(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 	hub := &model.MessageHub{MsgID: "m-c", ConversationID: "conv-555", SenderID: "555"}
 	svc.mineTelegramGroupLead(context.Background(), hub, "1", "-1001", "群A", "555", "", "Unknown", "我想采购一批货")
 	got, err := svc.clueRepo.FindByTypeAndAccount(context.Background(), ClueTypeTelegram, "tg:555")
@@ -190,7 +190,7 @@ func TestMineTelegramGroupLead_FallbackID(t *testing.T) {
 
 func TestDispatchTelegram_MinesHumanGroupMessage(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 2001,
@@ -223,7 +223,7 @@ func TestDispatchTelegram_MinesHumanGroupMessage(t *testing.T) {
 
 func TestDispatchTelegram_DoesNotMineBotItself(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 2002,
@@ -245,7 +245,7 @@ func TestDispatchTelegram_DoesNotMineBotItself(t *testing.T) {
 
 func TestDispatchTelegram_MinesPrivateHumanDM(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	svc := &WebhookService{db: db}
+	svc := newTestWebhookService(db)
 
 	payload := []byte(`{
 		"update_id": 2003,

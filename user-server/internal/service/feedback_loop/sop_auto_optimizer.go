@@ -17,7 +17,6 @@ import (
 
 // SOPAutoOptimizer SOP 自动优化器
 type SOPAutoOptimizer struct {
-	db      *gorm.DB
 	repo    *repository.FeedbackLoopRepository
 	bandit  BanditAllocatorInterface
 	gateLLM gateLLM
@@ -41,7 +40,6 @@ func NewSOPAutoOptimizer(db *gorm.DB, bandit BanditAllocatorInterface, cfg SOPAu
 		cfg.ABTestDuration = 7 * 24 * time.Hour
 	}
 	return &SOPAutoOptimizer{
-		db:     db,
 		repo:   repository.NewFeedbackLoopRepositoryWithDB(db),
 		bandit: bandit,
 		config: cfg,
@@ -50,9 +48,6 @@ func NewSOPAutoOptimizer(db *gorm.DB, bandit BanditAllocatorInterface, cfg SOPAu
 }
 
 func (o *SOPAutoOptimizer) getRepo() *repository.FeedbackLoopRepository {
-	if o.repo == nil && o.db != nil {
-		o.repo = repository.NewFeedbackLoopRepositoryWithDB(o.db)
-	}
 	return o.repo
 }
 

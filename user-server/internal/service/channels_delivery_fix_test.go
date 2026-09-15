@@ -237,7 +237,7 @@ func TestDingTalkReceiveMessage_CapturesSessionWebhookAndTriggersAI(t *testing.T
 	ingress := NewInboxIngressServiceWithDB(db, _mc1)
 	tr := &fakeAITrigger{}
 	ingress.SetAITrigger(tr)
-	webhookSvc := &WebhookService{db: db, ingressSvc: ingress}
+	webhookSvc := &WebhookService{ingressSvc: ingress}
 	dtSvc := NewDingTalkAppService(db, webhookSvc)
 
 	plain := `{"msgtype":"text","senderStaffId":"staff-9","conversationId":"cid-77","msgId":"m-77","createAt":1700000000000,"text":{"content":"你好"},"sessionWebhook":"https://oapi.dingtalk.com/robot/send?access_token=xyz","sessionWebhookExpiredTime":1893456000000}`
@@ -270,7 +270,7 @@ func TestHandleFeishuURLVerification_PlainChallengeEcho(t *testing.T) {
 	if err := db.Create(acc).Error; err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := &WebhookService{db: db, feishuRepo: repo}
+	svc := &WebhookService{feishuRepo: repo}
 	body, _ := json.Marshal(map[string]string{"challenge": "aj38fh", "token": "vtok-1", "type": "url_verification"})
 
 	challenge, handled, err := svc.HandleFeishuURLVerification(context.Background(), "1", body)
@@ -302,7 +302,7 @@ func TestVerify_FeishuSignatureFallbackToEncryptKey(t *testing.T) {
 	if err := db.Create(acc).Error; err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	svc := &WebhookService{db: db, feishuRepo: repo}
+	svc := &WebhookService{feishuRepo: repo}
 
 	body := []byte(`{"header":{"event_type":"im.message.receive_v1"}}`)
 	ts, nonce := "1700000000", "nonce-abc"

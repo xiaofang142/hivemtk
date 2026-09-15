@@ -38,21 +38,33 @@ func (s *WebhookService) HandleQQCallbackChallenge(ctx context.Context, accountI
 		logger.Errorf("[QQ] op13 challenge rejected: invalid plain_token/event_ts account=%s", accountID)
 		return true, map[string]any{"plain_token": "", "signature": ""}
 	}
-	qqSvc := NewQQService(s.db)
-	plainToken, signature, ok := qqSvc.VerifyQQCallbackChallenge(ctx, accountID, e)
-	if !ok {
-		logger.Errorf("[QQ] op13 challenge verify failed account=%s", accountID)
+	// ARC-01：直接使用 s.qqRepo 取 secret，等价于原 NewQQService(s.db).getWebhookSecret
+	var secret string
+	if s.qqRepo != nil {
+		if id, perr := strconv.ParseUint(accountID, 10, 64); perr == nil && id > 0 {
+			if acc, gerr := s.qqRepo.GetByID(ctx, uint(id)); gerr == nil && acc != nil {
+				secret = acc.WebhookSecret
+			}
+		}
+	}
+	if secret == "" || e.PlainToken == "" {
+		logger.Errorf("[QQ] op13 callback verify failed account=%s: secret missing", accountID)
+		return true, map[string]any{"plain_token": "", "signature": ""}
+	}
+	sig, err := qq.GenerateCallbackTestSignature(secret, e.EventTS, e.PlainToken)
+	if err != nil {
+		logger.Errorf("[QQ] op13 callback verify failed account=%s: %v", accountID, err)
 		return true, map[string]any{"plain_token": "", "signature": ""}
 	}
 	logger.Infof("[QQ] op13 callback verify ok account=%s", accountID)
-	return true, map[string]any{"plain_token": plainToken, "signature": signature}
+	return true, map[string]any{"plain_token": e.PlainToken, "signature": sig}
 }
 
 // dispatchQQ QQ 入站消息分发（与 dispatchTelegram 同构）
 //
 // 流程：解析事件 → Ingress 进消息中台（幂等 EventID）→ upsert inbox → 返回 hub 消息供 AI 触发判定。
 func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *ParsedPayload, raw []byte) (*model.MessageHub, error) {
-	if s.db == nil {
+	if s.lazyDB() == nil {
 		return nil, nil
 	}
 	s.ensureReposFromDB(ctx)

@@ -52,7 +52,7 @@ func (s *WebhookService) markProcessed(ctx context.Context, evt *model.WebhookEv
 	now := time.Now()
 	evt.Processed = true
 	evt.ProcessedAt = &now
-	if s.eventRepo != nil && s.db != nil {
+	if s.eventRepo != nil {
 		_ = s.eventRepo.Update(ctx, evt)
 	}
 }

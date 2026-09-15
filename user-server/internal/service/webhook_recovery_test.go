@@ -18,7 +18,7 @@ func newRecoveryFixture(t *testing.T) (*webhookRecoveryScanner, *repository.Webh
 	}
 	repo := repository.NewWebhookEventRepository()
 	repository.SetWebhookEventRepoDB(repo, db)
-	svc := &WebhookService{db: db}
+	svc := &WebhookService{eventRepo: repo}
 	sc := newWebhookRecoveryScanner(svc)
 	if sc == nil {
 		t.Fatal("scanner should not be nil with db")
@@ -128,7 +128,9 @@ func TestRecoveryScannerDisabled(t *testing.T) {
 		t.Skip("test db unavailable")
 	}
 	t.Setenv("WEBHOOK_RECOVERY_ENABLED", "false")
-	svc := &WebhookService{db: db}
+	repo := repository.NewWebhookEventRepository()
+	repository.SetWebhookEventRepoDB(repo, db)
+	svc := &WebhookService{eventRepo: repo}
 	svc.startRecoveryScanner()
 }
 

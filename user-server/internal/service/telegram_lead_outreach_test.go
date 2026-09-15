@@ -52,7 +52,7 @@ func TestDMOutreachCooldown_FirstAllowed_SecondBlocked(t *testing.T) {
 // 第二次同 (账号,用户,群) 调用在冷却层被拦截
 func TestTriggerDMOutreach_DMKeySetOnFirstCall(t *testing.T) {
 	ctx := context.Background()
-	ws := &WebhookService{db: nil}
+	ws := &WebhookService{}
 	svc := NewTelegramDMOutreachService(ws)
 	const (
 		acc = "1"

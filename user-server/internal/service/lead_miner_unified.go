@@ -270,7 +270,11 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 }
 
 func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.Clue, channel string, isOpp bool) {
-	if s == nil || s.db == nil || clue == nil || clue.ID == "" {
+	if s == nil || clue == nil || clue.ID == "" {
+		return
+	}
+	db := s.lazyDB()
+	if db == nil {
 		return
 	}
 	defer func() {
@@ -279,8 +283,8 @@ func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.
 		}
 	}()
 	scoreSvc := NewClueScoreServiceWithRepos(
-		repository.NewClueScoreRepositoryWithDB(s.db),
-		repository.NewClueEngagementRepositoryWithDB(s.db),
+		repository.NewClueScoreRepositoryWithDB(db),
+		repository.NewClueEngagementRepositoryWithDB(db),
 		s.clueRepo,
 	)
 	_ = scoreSvc.RecordEngagement(context.Background(), clue.ID, "group_message", channel, map[string]any{"is_opportunity": isOpp})

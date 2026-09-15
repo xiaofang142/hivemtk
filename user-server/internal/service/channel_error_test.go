@@ -71,7 +71,7 @@ func TestRetryDelaysFor(t *testing.T) {
 func TestOutboundSendFailed_MarksTerminalState(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
 	repo := repository.NewMessageHubRepositoryWithDB(db)
-	svc := &WebhookService{db: db, messageHubRepo: repo}
+	svc := &WebhookService{messageHubRepo: repo}
 	ctx := context.Background()
 
 	row := &model.MessageHub{MsgID: "wamid.T4AUTH", Platform: "whatsapp", AccountID: "a", Direction: "outbound", MsgType: "text", ConversationID: "c", Content: "x", SentAt: time.Now()}

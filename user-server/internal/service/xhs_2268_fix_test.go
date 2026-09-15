@@ -41,7 +41,6 @@ func TestNormalizeChannelType_BridgeWebChannels(t *testing.T) {
 func TestTriggerInboundAI_NoPanicOnNilOrchestrator(t *testing.T) {
 	svc := &WebhookService{
 		smartOrchestrator: nil,
-		db:                nil,
 	}
 
 	ctx := context.Background()
@@ -65,7 +64,6 @@ func TestTriggerInboundAI_NoPanicOnNilOrchestrator(t *testing.T) {
 func TestRunAIGeneration_RecoverPanic(t *testing.T) {
 	svc := &WebhookService{
 		smartOrchestrator: nil,
-		db:                nil,
 		replySem:          make(chan struct{}, 1),
 	}
 

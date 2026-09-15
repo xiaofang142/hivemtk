@@ -52,7 +52,6 @@ type AgentToolResult struct {
 }
 
 type SalesEngine struct {
-	db              *gorm.DB // 供 sales_engine_insights.go 的 appendLearningInsights 调用 trace_learning 查询
 	sessionMsgRepo  *repository.SessionMessageRepository
 	dispatcher      *llm.Dispatcher
 	intent          IntentRecognizerInterface
@@ -115,7 +114,6 @@ func NewSalesEngine(
 ) *SalesEngine {
 	polisher := NewHumanizePolisher()
 	return &SalesEngine{
-		db:             db,
 		sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db),
 		dispatcher:     dispatcher,
 		intent:         intent,

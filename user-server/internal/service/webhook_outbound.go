@@ -233,7 +233,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 	case ChannelFeishu:
 		if s.feishuIntegration == nil {
-			s.feishuIntegration = NewFeishuIntegrationService(s.db)
+			s.feishuIntegration = NewFeishuIntegrationService(s.lazyDB())
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
@@ -270,7 +270,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 	case ChannelTelegram:
 		if s.tgIntegration == nil {
-			s.tgIntegration = NewTelegramIntegrationService(s.db)
+			s.tgIntegration = NewTelegramIntegrationService(s.lazyDB())
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
@@ -324,7 +324,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		// 惰性单例：msg_seq 计数与 access_token 缓存必须在多次出站间保持，
 		// 每次新建实例会导致 seq 恒为 1（平台按重复丢弃）+ token 重复获取。
 		if s.qqIntegration == nil {
-			s.qqIntegration = NewQQIntegrationService(s.db)
+			s.qqIntegration = NewQQIntegrationService(s.lazyDB())
 		}
 		if err := s.qqIntegration.SendMessage(ctx, uint(accID), convID, QQOutboundMsgID(hubMsg), content); err != nil {
 			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
@@ -333,7 +333,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 	case ChannelWhatsapp:
 		if s.waIntegration == nil {
-			s.waIntegration = NewWhatsAppCloudIntegrationService(s.db)
+			s.waIntegration = NewWhatsAppCloudIntegrationService(s.lazyDB())
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
@@ -448,7 +448,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	case ChannelWechat:
 
 		if s.wechatIntegration == nil {
-			s.wechatIntegration = NewWechatService(s.db)
+			s.wechatIntegration = NewWechatService(s.lazyDB())
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil {

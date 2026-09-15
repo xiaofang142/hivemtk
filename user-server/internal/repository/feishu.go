@@ -25,6 +25,14 @@ func (r *FeishuAccountRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	}
 }
 
+// GetDB 返回底层连接（未初始化时为 nil），供调用方判空防误用
+func (r *FeishuAccountRepository) GetDB() *gorm.DB {
+	if r == nil {
+		return nil
+	}
+	return r.db
+}
+
 // Create 创建飞书账号
 func (r *FeishuAccountRepository) Create(ctx context.Context, acc *model.FeishuAccount) error {
 	return r.db.Create(acc).Error
@@ -33,6 +41,9 @@ func (r *FeishuAccountRepository) Create(ctx context.Context, acc *model.FeishuA
 // GetByID 根据 ID 获取
 func (r *FeishuAccountRepository) GetByID(ctx context.Context, id uint) (*model.FeishuAccount, error) {
 	var acc model.FeishuAccount
+	if r.db == nil { // DB 未装配：nil 语义收口在 repo 边界（对齐 kb_document_chunk_repo），service 不摸全局句柄
+		return nil, gorm.ErrInvalidDB
+	}
 	if err := r.db.First(&acc, id).Error; err != nil {
 		return nil, err
 	}

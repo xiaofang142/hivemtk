@@ -27,7 +27,6 @@ func traceLockKey(traceID string) int64 {
 
 // Service 追踪自学习服务：聚合 trace → LLM 打分 → 调整知识库权重 → 记录审计。
 type Service struct {
-	db         *gorm.DB
 	repo       *repository.TraceLearningRepository
 	dispatcher *llm.Dispatcher
 	cfg        Config
@@ -45,11 +44,14 @@ func New(db *gorm.DB, dispatcher *llm.Dispatcher, cfg Config) *Service {
 			})
 		}
 	}
-	return &Service{db: db, repo: repository.NewTraceLearningRepository(db), dispatcher: dispatcher, cfg: cfg}
+	return &Service{repo: repository.NewTraceLearningRepository(db), dispatcher: dispatcher, cfg: cfg}
 }
 
 func (s *Service) EvaluateTrace(ctx context.Context, traceID string, dryRun bool) (*model.TraceEvalLog, error) {
-	return s.evaluateTraceOn(ctx, s.db, traceID, dryRun)
+	if s.repo == nil {
+		return nil, fmt.Errorf("db nil")
+	}
+	return s.evaluateTraceOn(ctx, s.repo.GetDB(), traceID, dryRun)
 }
 
 func (s *Service) evaluateTraceOn(ctx context.Context, db *gorm.DB, traceID string, dryRun bool) (*model.TraceEvalLog, error) {
@@ -215,7 +217,7 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()
-					log, e2 := s.evaluateTraceOn(ctx, s.db, tid, dryRun)
+					log, e2 := s.evaluateTraceOn(ctx, s.repo.GetDB(), tid, dryRun)
 					if e2 != nil {
 						logger.Warnf("[trace_learning] 评估失败 trace=%s: %v", tid, e2)
 						return

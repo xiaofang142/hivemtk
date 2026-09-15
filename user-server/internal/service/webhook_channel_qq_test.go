@@ -103,7 +103,7 @@ func TestQQ_WebhookVerify_SignatureFlow(t *testing.T) {
 	// WebhookService.Verify 通道
 	qqRepo := repository.NewQQAccountRepository()
 	qqRepo.SetDB(context.Background(), db)
-	ws := &WebhookService{db: db, qqRepo: qqRepo}
+	ws := &WebhookService{qqRepo: qqRepo}
 	ok, verr := ws.Verify(context.Background(), ChannelQQ, "1", body,
 		map[string]string{"X-Signature-Ed25519": sig, "X-Signature-Timestamp": ts}, nil)
 	if verr != nil || !ok {
@@ -130,7 +130,7 @@ func TestQQ_Op13CallbackChallenge(t *testing.T) {
 	raw := []byte(fmt.Sprintf(`{"op":13,"plain_token":"pt-123","event_ts":"%d"}`, time.Now().Unix()))
 	qqRepo2 := repository.NewQQAccountRepository()
 	qqRepo2.SetDB(context.Background(), db)
-	ws := &WebhookService{db: db, qqRepo: qqRepo2}
+	ws := &WebhookService{qqRepo: qqRepo2}
 	handled, payload := ws.HandleQQCallbackChallenge(context.Background(), "1", raw)
 	if !handled {
 		t.Fatal("op13 should be handled")
@@ -258,7 +258,7 @@ func TestQQ_GroupConversationHeuristic(t *testing.T) {
 
 func TestQQ_TriggerSalesEngineGuard(t *testing.T) {
 	db := setupQQDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	// salesEngine 未注入时应安全无操作
 	ws.triggerQQSalesEngine(context.Background(), ChannelQQ, "1",
 		&ParsedPayload{Content: "hi"}, &model.MessageHub{Platform: "qq", ConversationID: "G1"})

@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 // TestFetchHistoryWithinTokenBudget_AllKept_SmallHistory 短历史全保留
 func TestFetchHistoryWithinTokenBudget_AllKept_SmallHistory(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.SessionMessage{})
-	e := &SalesEngine{db: db}
+	e := &SalesEngine{sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db)}
 
 	msgs := []model.SessionMessage{
 		{SessionID: "s1", SenderType: "customer", Content: "你好"},
@@ -41,7 +42,7 @@ func TestFetchHistoryWithinTokenBudget_AllKept_SmallHistory(t *testing.T) {
 // TestFetchHistoryWithinTokenBudget_CurrentMsgExcluded 最新一条为当前消息时剔除
 func TestFetchHistoryWithinTokenBudget_CurrentMsgExcluded(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.SessionMessage{})
-	e := &SalesEngine{db: db}
+	e := &SalesEngine{sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db)}
 
 	cur := model.SessionMessage{SessionID: "s2", SenderType: "customer", Content: "当前消息"}
 	prev := model.SessionMessage{SessionID: "s2", SenderType: "ai", Content: "上一条回复"}
@@ -61,7 +62,7 @@ func TestFetchHistoryWithinTokenBudget_CurrentMsgExcluded(t *testing.T) {
 // TestFetchHistoryWithinTokenBudget_BudgetRespected 长历史按预算截断且不超上限
 func TestFetchHistoryWithinTokenBudget_BudgetRespected(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.SessionMessage{})
-	e := &SalesEngine{db: db}
+	e := &SalesEngine{sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db)}
 
 	long := strings.Repeat("销", 400)
 	for i := 0; i < 30; i++ {
@@ -100,7 +101,7 @@ func TestFetchHistoryWithinTokenBudget_BudgetRespected(t *testing.T) {
 // TestFetchHistoryWithinTokenBudget_PairIntegrity 截断边界的孤儿 AI 回复被丢弃
 func TestFetchHistoryWithinTokenBudget_PairIntegrity(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.SessionMessage{})
-	e := &SalesEngine{db: db}
+	e := &SalesEngine{sessionMsgRepo: repository.NewSessionMessageRepositoryWithDB(db)}
 
 	long := strings.Repeat("测", 1600)
 	seq := []string{"customer", "ai", "customer", "ai", "customer", "ai"}

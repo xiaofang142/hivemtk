@@ -131,7 +131,7 @@ func TestTriggerDMOutreach_NilSafe(t *testing.T) {
 // TestTriggerDMOutreach_ScoreBelowThreshold 验证意向分不足不发送
 func TestTriggerDMOutreach_ScoreBelowThreshold(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	svc := NewTelegramDMOutreachService(ws)
 
 	svc.TriggerDMOutreach(context.Background(), "1", 9999991, "-100", "群", 59, true, "hi")
@@ -140,7 +140,7 @@ func TestTriggerDMOutreach_ScoreBelowThreshold(t *testing.T) {
 // TestTriggerDMOutreach_NotOpportunity 验证非商机不发送
 func TestTriggerDMOutreach_NotOpportunity(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	svc := NewTelegramDMOutreachService(ws)
 	svc.TriggerDMOutreach(context.Background(), "1", 9999992, "-100", "群", 80, false, "hi")
 }
@@ -150,7 +150,7 @@ func TestTriggerDMOutreach_NotOpportunity(t *testing.T) {
 // 但冷却 key 已 SetNX，第二次同 user+group 会被冷却拦截。
 func TestTriggerDMOutreach_CooldownBlocks(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	svc := NewTelegramDMOutreachService(ws)
 	const uid int64 = 9999993
 
@@ -167,7 +167,7 @@ func TestTriggerDMOutreach_CooldownBlocks(t *testing.T) {
 // TestTriggerDMOutreach_DMCooldownBlocks 验证 DM 维度冷却
 func TestTriggerDMOutreach_DMCooldownBlocks(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	svc := NewTelegramDMOutreachService(ws)
 	const uid int64 = 9999994
 	svc.TriggerDMOutreach(context.Background(), "1", uid, "-100A", "群A", 80, true, "hi")
@@ -182,7 +182,7 @@ func TestTriggerDMOutreach_DMCooldownBlocks(t *testing.T) {
 // TestBuildDMWelcomeTemplate_LanguageSelection 验证中英模板选择
 func TestBuildDMWelcomeTemplate_LanguageSelection(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	svc := NewTelegramDMOutreachService(ws)
 
 	zh := svc.buildDMWelcomeTemplate("销售群", "我想买产品")
@@ -209,7 +209,7 @@ func TestBuildDMWelcomeTemplate_LanguageSelection(t *testing.T) {
 // TestTriggerTGDMOutreach_InvalidFromID 验证 fromID 解析失败不 panic
 func TestTriggerTGDMOutreach_InvalidFromID(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	ws.triggerTGDMOutreach(context.Background(), "1", "not-a-number", "-100", "群", 80, "hi")
 	ws.triggerTGDMOutreach(context.Background(), "1", "0", "-100", "群", 80, "hi")
 }
@@ -230,7 +230,7 @@ func TestParseAccountID(t *testing.T) {
 // TestRecordDMOutreachEvent 验证记录 outreach 事件到 message_hub
 func TestRecordDMOutreachEvent(t *testing.T) {
 	db := setupTelegramTestDB(t)
-	ws := &WebhookService{db: db}
+	ws := newTestWebhookService(db)
 	ws.ensureReposFromDB(context.Background())
 	svc := NewTelegramDMOutreachService(ws)
 
@@ -263,7 +263,7 @@ type telegramOutreachHub struct {
 
 // TestTriggerDMOutreach_DoesNotPanicOnMissingDB 验证 db 为 nil 时不 panic
 func TestTriggerDMOutreach_DoesNotPanicOnMissingDB(t *testing.T) {
-	ws := &WebhookService{db: nil}
+	ws := &WebhookService{}
 	svc := NewTelegramDMOutreachService(ws)
 	defer func() {
 		if r := recover(); r != nil {

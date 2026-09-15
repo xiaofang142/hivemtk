@@ -25,7 +25,7 @@ import (
 )
 
 func (s *WebhookService) getFeishuEncryptKey(ctx context.Context, accountID string) string {
-	if s.db == nil || s.feishuRepo == nil {
+	if s.feishuRepo == nil {
 		return ""
 	}
 	id, err := strconv.ParseUint(accountID, 10, 64)
@@ -100,7 +100,7 @@ func (s *WebhookService) HandleFeishuURLVerification(ctx context.Context, accoun
 }
 
 func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p *ParsedPayload, raw []byte) (*model.MessageHub, error) {
-	if s.db == nil {
+	if s.lazyDB() == nil {
 		return nil, nil
 	}
 	s.ensureReposFromDB(ctx)
@@ -241,12 +241,18 @@ func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID,
 		if accID == 0 {
 			return
 		}
-		acc, gerr := NewFeishuService(s.db).GetAccount(gctx, uint(accID))
+		if s.feishuRepo == nil {
+			return
+		}
+		acc, gerr := s.feishuRepo.GetByID(gctx, uint(accID))
 		if gerr != nil || acc == nil {
 			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[Feishu] 媒体转存跳过：账号不存在")
 			return
 		}
-		integration := NewFeishuIntegrationService(s.db)
+		integration := s.feishuIntegration
+		if integration == nil {
+			integration = NewFeishuIntegrationService(s.lazyDB())
+		}
 		tenantToken, tkerr := integration.getAccessToken(gctx, acc)
 		if tkerr != nil || tenantToken == "" {
 			logger.Ctx(gctx).Warn().Err(tkerr).Str("account_id", accountID).Msg("[Feishu] 媒体转存跳过：tenant_access_token 获取失败")

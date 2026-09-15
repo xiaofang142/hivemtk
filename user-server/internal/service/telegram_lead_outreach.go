@@ -58,8 +58,8 @@ func (s *TelegramDMOutreachService) TriggerDMOutreach(ctx context.Context, accou
 	}
 
 	template := s.buildDMWelcomeTemplate(groupTitle, originalText)
-	if s.svc.tgIntegration == nil && s.svc.db != nil {
-		s.svc.tgIntegration = NewTelegramIntegrationService(s.svc.db)
+	if s.svc.tgIntegration == nil && s.svc.lazyDB() != nil {
+		s.svc.tgIntegration = NewTelegramIntegrationService(s.svc.lazyDB())
 	}
 	if s.svc.tgIntegration == nil {
 		logger.Warnf("[TG-DM-Outreach] tgIntegration 未初始化，跳过私信发送 account=%s user=%d group=%s",
@@ -116,7 +116,7 @@ func (s *TelegramDMOutreachService) buildDMWelcomeTemplate(groupTitle, originalT
 }
 
 func (s *TelegramDMOutreachService) recordDMOutreachEvent(ctx context.Context, accountID string, userID int64, groupID string, score int) {
-	if s.svc == nil || s.svc.db == nil {
+	if s.svc == nil || s.svc.messageHubRepo == nil {
 		return
 	}
 	defer func() {

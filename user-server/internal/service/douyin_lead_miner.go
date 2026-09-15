@@ -18,7 +18,7 @@ func (s *WebhookService) mineDouyinGroupLead(ctx context.Context, hub *model.Mes
 }
 
 func (s *WebhookService) triggerDouyinDMOutreach(ctx context.Context, accountID, fromID, groupID, groupTitle string, score int, originalText string) {
-	dySvc := NewDouyinIntegrationService(s.db)
+	dySvc := NewDouyinIntegrationService(s.lazyDB())
 	if dySvc == nil {
 		return
 	}
@@ -45,7 +45,7 @@ func (s *WebhookService) triggerDouyinDMOutreach(ctx context.Context, accountID,
 }
 
 func (s *WebhookService) recordDouyinDMOutreachEvent(ctx context.Context, accountID, fromID, groupID string, score int, msg string) {
-	if s.db == nil {
+	if s.messageHubRepo == nil {
 		return
 	}
 	defer func() {

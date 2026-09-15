@@ -27,7 +27,6 @@ import (
 )
 
 type WebhookService struct {
-	db          *gorm.DB
 	eventRepo   *repository.WebhookEventRepository
 	accountRepo *repository.IntegrationAccountRepository
 
@@ -140,26 +139,30 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		unifiedMsgRepo = repository.NewUnifiedMessageRepositoryWithDB(db)
 	}
 	s := &WebhookService{
-		db:             db,
-		eventRepo:      eventRepo,
-		accountRepo:    accountRepo,
-		wecomRepo:      wecomRepo,
-		integration:    NewWeComIntegrationService(db),
-		telegramRepo:   telegramRepo,
-		qqRepo:         qqRepo,
-		tgGate:         NewTelegramGateService(db),
-		feishuRepo:     feishuRepo,
-		waRepo:         waRepo,
-		messageHubRepo: messageHubRepo,
-		inboxConvRepo:  inboxConvRepo,
-		unifiedMsgRepo: unifiedMsgRepo,
-		delayedRepo:    repository.NewDelayedOutboundRepository(db),
-		ingressSvc:     NewInboxIngressServiceWithDB(db, nil),
-		rlBuckets:      make(map[string]*tokenBucket),
-		workerCount:    webhookEnvInt("WEBHOOK_WORKER_COUNT", WebhookWorkerCount),
-		queue:          make(chan *webhookJob, webhookEnvInt("WEBHOOK_QUEUE_SIZE", WebhookQueueSize)),
-		stopCh:         make(chan struct{}),
-		replySem:       make(chan struct{}, webhookEnvInt("WEBHOOK_REPLY_CONCURRENCY", WebhookReplyConcurrency)),
+		eventRepo:         eventRepo,
+		accountRepo:       accountRepo,
+		wecomRepo:         wecomRepo,
+		integration:       NewWeComIntegrationService(db),
+		feishuIntegration: NewFeishuIntegrationService(db),
+		tgIntegration:     NewTelegramIntegrationService(db),
+		waIntegration:     NewWhatsAppCloudIntegrationService(db),
+		qqIntegration:     NewQQIntegrationService(db),
+		wechatIntegration: NewWechatService(db),
+		telegramRepo:      telegramRepo,
+		qqRepo:            qqRepo,
+		tgGate:            NewTelegramGateService(db),
+		feishuRepo:        feishuRepo,
+		waRepo:            waRepo,
+		messageHubRepo:    messageHubRepo,
+		inboxConvRepo:     inboxConvRepo,
+		unifiedMsgRepo:    unifiedMsgRepo,
+		delayedRepo:       repository.NewDelayedOutboundRepository(db),
+		ingressSvc:        NewInboxIngressServiceWithDB(db, nil),
+		rlBuckets:         make(map[string]*tokenBucket),
+		workerCount:       webhookEnvInt("WEBHOOK_WORKER_COUNT", WebhookWorkerCount),
+		queue:             make(chan *webhookJob, webhookEnvInt("WEBHOOK_QUEUE_SIZE", WebhookQueueSize)),
+		stopCh:            make(chan struct{}),
+		replySem:          make(chan struct{}, webhookEnvInt("WEBHOOK_REPLY_CONCURRENCY", WebhookReplyConcurrency)),
 	}
 	s.startWorkers(context.Background())
 	s.startRLJanitor(context.Background())
@@ -197,23 +200,35 @@ func (s *WebhookService) SetIngressSvc(ingress *InboxIngressService) {
 	}
 }
 
+// lazyDB 惰性获取底层连接：优先 eventRepo（构造器必设），兜底全局 repository。
+// ARC-01：WebhookService 不再自持 db 字段，统一经此取源。
+func (s *WebhookService) lazyDB() *gorm.DB {
+	if s.eventRepo != nil {
+		if db := s.eventRepo.GetDB(); db != nil {
+			return db
+		}
+	}
+	return repository.GetDB()
+}
+
 func (s *WebhookService) ensureReposFromDB(ctx context.Context) {
-	if s.db == nil {
+	db := s.lazyDB()
+	if db == nil {
 		return
 	}
 	if s.messageHubRepo == nil {
 		s.messageHubRepo = repository.NewMessageHubRepository()
-		repository.SetMessageHubRepoDB(s.messageHubRepo, s.db)
+		repository.SetMessageHubRepoDB(s.messageHubRepo, db)
 	}
 	if s.inboxConvRepo == nil {
 		s.inboxConvRepo = repository.NewInboxConversationRepository()
-		repository.SetInboxConversationRepoDB(s.inboxConvRepo, s.db)
+		repository.SetInboxConversationRepoDB(s.inboxConvRepo, db)
 	}
 	if s.unifiedMsgRepo == nil {
-		s.unifiedMsgRepo = repository.NewUnifiedMessageRepositoryWithDB(s.db)
+		s.unifiedMsgRepo = repository.NewUnifiedMessageRepositoryWithDB(db)
 	}
 	if s.clueRepo == nil {
-		s.clueRepo = repository.NewClueRepositoryWithDB(s.db)
+		s.clueRepo = repository.NewClueRepositoryWithDB(db)
 	}
 }
 

@@ -332,7 +332,7 @@ func (s *WebhookService) wecomAccessToken(ctx context.Context, accountID uint) (
 	if err != nil || acc == nil {
 		return "", fmt.Errorf("wecom account %d not found", accountID)
 	}
-	svc := NewWeComServiceWithDB(s.db)
+	svc := NewWeComServiceWithDB(s.lazyDB())
 	return svc.GetAccessToken(ctx, acc)
 }
 
@@ -425,10 +425,10 @@ func validateWeComAgentID(payload map[string]any, expected int) bool {
 
 func (s *WebhookService) getWechatSecrets(ctx context.Context, accountID string) (string, string) {
 	if s.wechatIntegration == nil {
-		if s.db == nil {
+		if s.lazyDB() == nil {
 			return "", ""
 		}
-		s.wechatIntegration = NewWechatService(s.db)
+		s.wechatIntegration = NewWechatService(s.lazyDB())
 	}
 	var acc *model.WechatAccount
 	if id, err := strconv.ParseUint(accountID, 10, 64); err == nil && id > 0 {
@@ -456,7 +456,7 @@ func (s *WebhookService) getWeComSecrets(ctx context.Context, accountID string) 
 	if s.wecomRepo == nil {
 		return "", "", errors.New("wecomRepo nil")
 	}
-	if s.db == nil {
+	if s.lazyDB() == nil {
 		return "", "", nil
 	}
 
