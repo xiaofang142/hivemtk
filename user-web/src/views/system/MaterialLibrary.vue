@@ -50,7 +50,11 @@
           v-for="material in materialList"
           :key="material.id"
           class="material-item"
+          role="button"
+          tabindex="0"
           @click="handleSelect(material)"
+          @keydown.enter.prevent="handleSelect(material)"
+          @keydown.space.prevent="handleSelect(material)"
         >
           <div class="material-preview">
             <img

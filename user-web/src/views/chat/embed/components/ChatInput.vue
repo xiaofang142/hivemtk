@@ -2,7 +2,7 @@
   <div class="chat-input">
     
     <div v-if="pendingAttachment" class="attachment-preview">
-      <img v-if="pendingAttachment.mediaType === 'image'" :src="pendingAttachment.preview" class="preview-img" />
+      <img v-if="pendingAttachment.mediaType === 'image'" :src="pendingAttachment.preview" class="preview-img" alt="附件预览" />
       <div v-else class="preview-file">
         <div class="file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
         <div class="file-info">
@@ -21,6 +21,7 @@
       ref="textareaRef"
       v-model="text"
       class="input"
+      aria-label="消息输入框"
       rows="1"
       :placeholder="placeholder"
       :maxlength="maxLength"
@@ -34,6 +35,7 @@
         ref="fileInputRef"
         type="file"
         style="display: none"
+        aria-label="选择附件"
         :accept="acceptString"
         @change="onFileSelected"
       />

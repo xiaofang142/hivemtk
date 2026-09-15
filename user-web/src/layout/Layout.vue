@@ -28,14 +28,17 @@
       </el-menu>
 
       
-      <div v-if="userStore.isLoggedIn" class="notif-bell" @click="router.push({ name: 'Notifications' })">
+      <div v-if="userStore.isLoggedIn" class="notif-bell" role="button" tabindex="0" aria-label="通知" @click="router.push({ name: 'Notifications' })" @keydown.enter.prevent="router.push({ name: 'Notifications' })" @keydown.space.prevent="router.push({ name: 'Notifications' })">
         <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
           <el-icon :size="20"><Bell /></el-icon>
         </el-badge>
       </div>
 
       <div v-if="userStore.isLoggedIn" class="notif-bell geo-alert-bell"
+        role="button" tabindex="0" aria-label="GEO 告警"
         @click="router.push('/geo-tools/alerts')"
+        @keydown.enter.prevent="router.push('/geo-tools/alerts')"
+        @keydown.space.prevent="router.push('/geo-tools/alerts')"
         :title="`GEO 告警：${geoAlertCount} 条未确认`">
         <el-badge :value="geoAlertCount" :hidden="geoAlertCount === 0" :max="99">
           <el-icon :size="20" color="#e6a23c"><Warning /></el-icon>
@@ -68,7 +71,7 @@
       </div>
 
       
-      <div class="login-button" v-else @click="handleLogin">
+      <div class="login-button" v-else role="button" tabindex="0" @click="handleLogin" @keydown.enter.prevent="handleLogin" @keydown.space.prevent="handleLogin">
         <el-icon><User /></el-icon>
         <span>{{ t('layout.login') }}</span>
       </div>

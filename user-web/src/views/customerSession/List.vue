@@ -58,8 +58,12 @@
             v-for="session in filteredSessions"
             :key="session.id"
             class="session-item"
+            role="button"
+            tabindex="0"
             :class="{ active: currentSession?.id === session.id, blacklisted: blacklistedSessionIds.includes(session.id) }"
             @click="selectSession(session)"
+            @keydown.enter.prevent="selectSession(session)"
+            @keydown.space.prevent="selectSession(session)"
           >
             <el-avatar :size="40">{{ session.customerName?.charAt(0) }}</el-avatar>
             <div class="session-info">
@@ -191,7 +195,11 @@
                 v-for="s in aiSuggestions.slice(0, 3)"
                 :key="s.id"
                 class="ai-suggestion-item"
+                role="button"
+                tabindex="0"
                 @click="useAiSuggestion(s)"
+                @keydown.enter.prevent="useAiSuggestion(s)"
+                @keydown.space.prevent="useAiSuggestion(s)"
               >
                 <div class="ai-text">{{ s.suggestion }}</div>
                 <div class="ai-meta">

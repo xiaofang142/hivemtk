@@ -18,14 +18,20 @@
               v-for="block in blocks"
               :key="block.type"
               class="block-item"
+              role="button"
+              tabindex="0"
+              :aria-label="`添加${block.label}块`"
               draggable="true"
               @dragstart="onDragStart($event, block)"
+              @click="addBlock(block.type)"
+              @keydown.enter.prevent="addBlock(block.type)"
+              @keydown.space.prevent="addBlock(block.type)"
             >
               <el-icon><component :is="block.icon" /></el-icon>
               <span>{{ block.label }}</span>
             </div>
           </div>
-          <div class="canvas" @drop="onDrop" @dragover.prevent>
+          <div class="canvas" role="presentation" @drop="onDrop" @dragover.prevent>
             <div
               v-for="(block, i) in blocks_state"
               :key="block.id"
@@ -126,7 +132,13 @@ function onDragStart(e, block) {
 function onDrop(e) {
   const type = e.dataTransfer.getData('blockType')
   if (!type) return
+  addBlock(type)
+}
+
+// 键盘 / 点击的等价入口：拖放之外的可达替代（a11y）
+function addBlock(type) {
   const tpl = BLOCK_TYPES.find((b) => b.type === type)
+  if (!tpl) return
   blocks_state.value.push({
     id: _blockId++,
     type,

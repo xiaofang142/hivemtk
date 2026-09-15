@@ -15,8 +15,12 @@
           v-for="w in workflows"
           :key="w.id || w.name"
           class="workflow-item"
+          role="button"
+          tabindex="0"
           :class="{ active: currentWorkflow && (currentWorkflow.id === w.id || currentWorkflow.name === w.name) }"
           @click="selectWorkflow(w)"
+          @keydown.enter.prevent="selectWorkflow(w)"
+          @keydown.space.prevent="selectWorkflow(w)"
         >
           <div class="font-medium">{{ w.name }}</div>
           <div class="text-xs text-gray-500">{{ w.description || `${(w.steps || []).length} 个步骤` }}</div>

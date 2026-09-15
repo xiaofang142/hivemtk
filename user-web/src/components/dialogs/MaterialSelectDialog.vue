@@ -3,14 +3,14 @@
     <div class="material-library-content" style="display: flex;">
       <div style="width:200px; height: 400px;overflow-y: auto;">
           <div class="material-list">
-            <div class="material-item"  @click="handleCategoryClick(0)" :class="{ active: 0 === searchCategoryId }">
+            <div class="material-item" role="button" tabindex="0" @click="handleCategoryClick(0)" @keydown.enter.prevent="handleCategoryClick(0)" @keydown.space.prevent="handleCategoryClick(0)" :class="{ active: 0 === searchCategoryId }">
                 <div class="material-info">
                   <div class="material-name">{{ $t('全部') }}</div>
                 </div>
             </div>
           </div>
           <div class="material-list">
-            <div v-for="category in categorys" :key="category.id" class="material-item"  @click="handleCategoryClick(category.id)" :class="{ active: category.id === searchCategoryId }">
+            <div v-for="category in categorys" :key="category.id" class="material-item" role="button" tabindex="0" @click="handleCategoryClick(category.id)" @keydown.enter.prevent="handleCategoryClick(category.id)" @keydown.space.prevent="handleCategoryClick(category.id)" :class="{ active: category.id === searchCategoryId }">
                 <div class="material-info">
                   <div class="material-name">{{ category.name }}</div>
                 </div>

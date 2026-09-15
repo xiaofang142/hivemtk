@@ -33,8 +33,9 @@
     />
 
     
-    <div v-if="showOfflineList" class="modal-mask" @click.self="showOfflineList = false">
-      <div class="modal">
+    <div v-if="showOfflineList" class="modal-mask">
+      <div class="modal-backdrop" role="presentation" @click="showOfflineList = false"></div>
+      <div ref="offlineModalRef" class="modal">
         <div class="modal-header">
           <h3>{{ $t('历史会话') }}</h3>
           <button @click="showOfflineList = false">×</button>
@@ -45,7 +46,11 @@
             v-for="s in offlineSessions"
             :key="s.id"
             class="session-item"
+            role="button"
+            tabindex="0"
             @click="resumeSession(s)"
+            @keydown.enter.prevent="resumeSession(s)"
+            @keydown.space.prevent="resumeSession(s)"
           >
             <div class="session-time">{{ formatTime(s.created_at) }}</div>
             <div class="session-preview">{{ s.last_message || '空会话' }}</div>
@@ -55,8 +60,9 @@
     </div>
 
     
-    <div v-if="showRating" class="modal-mask" @click.self="showRating = false">
-      <div class="modal">
+    <div v-if="showRating" class="modal-mask">
+      <div class="modal-backdrop" role="presentation" @click="showRating = false"></div>
+      <div ref="ratingModalRef" class="modal">
         <div class="modal-header">
           <h3>{{ $t('服务评价') }}</h3>
           <button @click="onClose">×</button>
@@ -68,11 +74,16 @@
               v-for="n in 5"
               :key="n"
               class="star"
+              role="button"
+              tabindex="0"
+              :aria-label="`${n} 星`"
               :class="{ active: rating >= n }"
               @click="rating = n"
+              @keydown.enter.prevent="rating = n"
+              @keydown.space.prevent="rating = n"
             >★</span>
           </div>
-          <textarea v-model="ratingComment" class="reason-input" rows="3" :placeholder="$t('选填，您的宝贵建议...')"></textarea>
+          <textarea v-model="ratingComment" class="reason-input" rows="3" aria-label="评价备注" :placeholder="$t('选填，您的宝贵建议...')"></textarea>
           <div class="modal-actions">
             <button class="primary" @click="submitRating">{{ $t('提交') }}</button>
           </div>
@@ -85,7 +96,8 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { trapFocus } from '@/utils/a11y'
 import VisitorHeader from './components/VisitorHeader.vue'
 import ChatMessages from './components/ChatMessages.vue'
 import ChatInput from './components/ChatInput.vue'
@@ -419,6 +431,33 @@ const formatTime = (t) => {
   return new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+// OPT-FE-13：弹窗焦点管理。src/utils/a11y.js 此前零引用，这里真正接上，
+// 使 Tab 键在两个弹窗内循环、关闭后焦点回到触发元素。
+const offlineModalRef = ref(null)
+const ratingModalRef = ref(null)
+let releaseOfflineTrap = null
+let releaseRatingTrap = null
+
+watch(showOfflineList, async (v) => {
+  if (v) {
+    await nextTick()
+    releaseOfflineTrap = trapFocus(offlineModalRef.value)
+  } else if (releaseOfflineTrap) {
+    releaseOfflineTrap()
+    releaseOfflineTrap = null
+  }
+})
+
+watch(showRating, async (v) => {
+  if (v) {
+    await nextTick()
+    releaseRatingTrap = trapFocus(ratingModalRef.value)
+  } else if (releaseRatingTrap) {
+    releaseRatingTrap()
+    releaseRatingTrap = null
+  }
+})
+
 onMounted(() => {
   initVisitorId()
   loadOfflineSessions()
@@ -428,6 +467,8 @@ onMounted(() => {
 onUnmounted(() => {
   if (socket) socket.close()
   clearTransferTimer()
+  if (releaseOfflineTrap) releaseOfflineTrap()
+  if (releaseRatingTrap) releaseRatingTrap()
 })
 </script>
 
@@ -478,7 +519,17 @@ onUnmounted(() => {
   justify-content: center;
   z-index: 100;
 }
+/* 点击遮罩关闭：单独一层空元素承载点击，避免给含可聚焦子元素的容器加 role */
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
 .modal {
+  position: relative;
+  z-index: 1;
   background: #fff;
   border-radius: 8px;
   width: 320px;

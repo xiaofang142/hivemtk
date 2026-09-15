@@ -52,7 +52,7 @@
               :class="{ abnormal: isAbnormal(item), agent: item.node === 'ai_dispatch' }"
               shadow="hover"
             >
-              <div class="span-head" @click="toggle(item)">
+              <div class="span-head" role="button" tabindex="0" :aria-expanded="!!expanded[item.id]" @click="toggle(item)" @keydown.enter.prevent="toggle(item)" @keydown.space.prevent="toggle(item)">
                 <span class="caret">{{ expanded[item.id] ? '▾' : '▸' }}</span>
                 <span class="span-kind kind-lifecycle">生命周期</span>
                 <span class="span-title">{{ nodeLabel(item.node) }}</span>
@@ -79,7 +79,7 @@
 
             
             <el-card v-else-if="item._turn" class="span-card turn-card" shadow="hover">
-              <div class="span-head" @click="toggle(item.turn)">
+              <div class="span-head" role="button" tabindex="0" :aria-expanded="!!expanded[item.turn.id]" @click="toggle(item.turn)" @keydown.enter.prevent="toggle(item.turn)" @keydown.space.prevent="toggle(item.turn)">
                 <span class="caret">{{ expanded[item.turn.id] ? '▾' : '▸' }}</span>
                 <span class="span-kind kind-turn">Agent 轮</span>
                 <span class="span-title">第 {{ item.ti }} 轮</span>

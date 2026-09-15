@@ -102,7 +102,7 @@
             <el-table-column prop="id" label="ID" width="70" align="center" />
             <el-table-column label="智能体名称" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
-                <span class="agent-link" @click="goEditAgent(row)">
+                <span class="agent-link" role="button" tabindex="0" @click="goEditAgent(row)" @keydown.enter.prevent="goEditAgent(row)" @keydown.space.prevent="goEditAgent(row)">
                   {{ row.name || row.agent_name || '-' }}
                 </span>
               </template>

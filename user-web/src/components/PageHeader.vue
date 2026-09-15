@@ -1,7 +1,6 @@
 <template>
   <header
     class="page-header"
-    role="banner"
     :aria-label="ariaLabel || $t('common.pageHeader') || '页面头部'"
   >
     <div class="ph-left">

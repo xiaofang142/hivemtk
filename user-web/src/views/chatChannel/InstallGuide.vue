@@ -118,9 +118,14 @@
                 <div
                   v-if="selected"
                   class="widget-button"
+                  role="button"
+                  tabindex="0"
+                  aria-label="切换客服挂件预览"
                   :class="['pos-' + (selected.widget_position || 'bottom-right')]"
                   :style="{ backgroundColor: selected.widget_color || '#4F46E5' }"
                   @click="previewOpen = !previewOpen"
+                  @keydown.enter.prevent="previewOpen = !previewOpen"
+                  @keydown.space.prevent="previewOpen = !previewOpen"
                 >
                   <el-icon :size="24"><ChatDotRound /></el-icon>
                 </div>

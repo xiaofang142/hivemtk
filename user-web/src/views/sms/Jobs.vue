@@ -104,6 +104,7 @@
               type="file"
               accept=".csv,.txt"
               style="display: none"
+              aria-label="选择号码文件"
               @change="handleFileChange"
             />
             <el-button size="small" type="link" @click="handleBatchUpload">批量上传</el-button>

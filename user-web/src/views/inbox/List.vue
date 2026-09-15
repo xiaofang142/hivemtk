@@ -68,8 +68,12 @@
             v-for="conv in conversations"
             :key="conv.id"
             class="conv-item"
+            role="button"
+            tabindex="0"
             :class="{ active: currentConv && currentConv.id === conv.id }"
             @click="selectConversation(conv)"
+            @keydown.enter.prevent="selectConversation(conv)"
+            @keydown.space.prevent="selectConversation(conv)"
           >
             <div class="conv-item-top">
               <span class="conv-name">

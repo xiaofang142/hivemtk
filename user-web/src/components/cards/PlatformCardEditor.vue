@@ -47,7 +47,7 @@
     <el-card class="preview-card">
       <template #header><span>预览（实时）</span></template>
       <div class="card-preview">
-        <img v-if="form.cover" :src="form.cover" class="cover" />
+        <img v-if="form.cover" :src="form.cover" class="cover" :alt="form.title || '封面'" />
         <h3 class="title">{{ form.title || '标题' }}</h3>
         <p class="content">{{ form.content || '正文' }}</p>
         <div class="buttons">

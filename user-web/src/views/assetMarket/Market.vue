@@ -32,7 +32,7 @@
         @click="$router.push(`/asset-market/detail/${a.asset_id}`)"
       >
         <div class="cover-wrap">
-          <img v-if="a.cover_url" :src="a.cover_url" class="cover" />
+          <img v-if="a.cover_url" :src="a.cover_url" class="cover" :alt="a.name || '封面'" />
           <div v-else class="cover-placeholder">{{ typeLabel(a.asset_type)[0] }}</div>
         </div>
         <h3 class="title">{{ a.name }}</h3>

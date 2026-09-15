@@ -28,7 +28,11 @@
           v-for="u in mentionResults"
           :key="u.id"
           class="mention-item"
+          role="button"
+          tabindex="0"
           @click="selectMention(u)"
+          @keydown.enter.prevent="selectMention(u)"
+          @keydown.space.prevent="selectMention(u)"
         >
           <el-avatar :size="24">{{ u.name.charAt(0) }}</el-avatar>
           <span>{{ u.name }}</span>

@@ -10,15 +10,15 @@
 
     <div class="hc-body">
       <aside class="hc-cats">
-        <div class="cat" :class="{ active: activeCat === '' }" @click="setCat('')">全部</div>
-        <div v-for="c in categories" :key="c.category" class="cat" :class="{ active: activeCat === c.category }" @click="setCat(c.category)">
+        <div class="cat" role="button" tabindex="0" :class="{ active: activeCat === '' }" @click="setCat('')" @keydown.enter.prevent="setCat('')" @keydown.space.prevent="setCat('')">全部</div>
+        <div v-for="c in categories" :key="c.category" class="cat" role="button" tabindex="0" :class="{ active: activeCat === c.category }" @click="setCat(c.category)" @keydown.enter.prevent="setCat(c.category)" @keydown.space.prevent="setCat(c.category)">
           {{ c.category }} <span class="cnt">{{ c.count }}</span>
         </div>
       </aside>
 
       <main class="hc-articles">
         <div v-if="!detail" v-loading="loading" class="article-list">
-          <div v-for="a in articles" :key="a.id" class="article-card" @click="openArticle(a.id)">
+          <div v-for="a in articles" :key="a.id" class="article-card" role="button" tabindex="0" @click="openArticle(a.id)" @keydown.enter.prevent="openArticle(a.id)" @keydown.space.prevent="openArticle(a.id)">
             <div class="a-cat">{{ a.category }}</div>
             <div class="a-title">{{ a.title }}</div>
             <div class="a-summary">{{ a.summary || '（暂无摘要）' }}</div>

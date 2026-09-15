@@ -78,8 +78,12 @@
           v-for="(stage, idx) in stageList"
           :key="stage.stage"
           class="funnel-stage"
+          role="button"
+          tabindex="0"
           :style="getFunnelStyle(idx)"
           @click="selectStage(stage)"
+          @keydown.enter.prevent="selectStage(stage)"
+          @keydown.space.prevent="selectStage(stage)"
         >
           <div class="funnel-stage-content">
             <div class="funnel-stage-label">{{ stage.label }}</div>

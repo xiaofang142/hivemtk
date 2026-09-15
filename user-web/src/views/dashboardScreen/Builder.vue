@@ -32,8 +32,14 @@
             v-for="b in blockTypes"
             :key="b.type"
             class="palette-item"
+            role="button"
+            tabindex="0"
+            :aria-label="`添加${b.label}组件`"
             draggable="true"
             @dragstart="onPaletteDragStart($event, b)"
+            @click="addBlock(b.type)"
+            @keydown.enter.prevent="addBlock(b.type)"
+            @keydown.space.prevent="addBlock(b.type)"
           >
             <el-icon><component :is="b.icon" /></el-icon>
             <span>{{ b.label }}</span>
@@ -41,7 +47,7 @@
         </el-card>
       </el-col>
       <el-col :span="18">
-        <div class="canvas" @drop="onDrop" @dragover.prevent>
+        <div class="canvas" role="presentation" @drop="onDrop" @dragover.prevent>
           <div
             v-for="(block, i) in blocks"
             :key="block.id"

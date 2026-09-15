@@ -27,6 +27,8 @@
         v-for="node in nodeTemplates"
         :key="node.type"
         class="node-template"
+        role="button"
+        tabindex="0"
         :draggable="true"
         @dragstart="onDragStart($event, node)"
       >
@@ -81,14 +83,27 @@ function onDrop(event) {
   const raw = event.dataTransfer.getData('application/vueflow')
   if (!raw) return
   const template = JSON.parse(raw)
-  const id = `node_${nextNodeId.value++}`
   const rect = event.currentTarget.getBoundingClientRect()
   const position = {
     x: event.clientX - rect.left - 80,
     y: event.clientY - rect.top - 20
   }
+  appendNode(template, position)
+}
+
+// 键盘 / 点击的等价入口：拖放之外的可达替代（a11y）。
+// 落点按行列自动排布，避免叠在原点点上。
+function addNodeFromPalette(template) {
+  const idx = nodes.value.length
+  appendNode(template, {
+    x: 80 + (idx % 5) * 220,
+    y: 60 + Math.floor(idx / 5) * 120
+  })
+}
+
+function appendNode(template, position) {
   nodes.value.push({
-    id,
+    id: `node_${nextNodeId.value++}`,
     type: 'default',
     position,
     data: { label: template.label, type: template.type, ...template.defaultData },

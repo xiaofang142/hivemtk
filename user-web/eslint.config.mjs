@@ -16,6 +16,7 @@
 import pluginVue from 'eslint-plugin-vue'
 import js from '@eslint/js'
 import globals from 'globals'
+import a11y from 'eslint-plugin-vuejs-accessibility'
 
 export default [
   js.configs.recommended,
@@ -64,6 +65,24 @@ export default [
   // `src/api/tiktokAutoReply.js` 已随 CDP 自动回复功能于 8212b5ca 删除。
   // 该块已完全失效，故整体删除——`no-restricted-imports` 现在全仓生效，
   // 任何新引入 default 导入都会被立即拦截。
+
+  // OPT-FE-13：无障碍（a11y）规则接入
+  //
+  // 背景：package.json 早已声明 eslint-plugin-vuejs-accessibility（^2.4.1，
+  // 实际解析 2.6.0），但本文件从未 import/引用它 —— 插件装了却零生效，
+  // 属于典型的"假配置"。故在此真正接入并全量置为 error。
+  //
+  // 这里**不**使用 a11y.configs['flat/recommended']：它自带的 languageOptions
+  // 与 ESLint 10 冲突，会让 lint 直接崩在
+  // `TypeError: scopeManager.addGlobals is not a function`。
+  // 因此改为只注册 plugin + 逐条挂载 rules（不引入它的 languageOptions）。
+  {
+    files: ['**/*.vue'],
+    plugins: { 'vuejs-accessibility': a11y },
+    rules: Object.fromEntries(
+      Object.keys(a11y.rules).map((r) => [`vuejs-accessibility/${r}`, 'error'])
+    ),
+  },
 
   // 测试 / 构建配置文件放行
   {

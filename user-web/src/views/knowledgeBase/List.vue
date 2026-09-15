@@ -98,7 +98,7 @@
         <el-table-column prop="kb_code" label="KB编码" width="170" show-overflow-tooltip />
         <el-table-column label="名称" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="kb-name" :class="{ 'kb-name--clickable': true }" @click="openDetail(row)">
+            <span class="kb-name" role="button" tabindex="0" :class="{ 'kb-name--clickable': true }" @click="openDetail(row)" @keydown.enter.prevent="openDetail(row)" @keydown.space.prevent="openDetail(row)">
               {{ row.name }}
             </span>
           </template>

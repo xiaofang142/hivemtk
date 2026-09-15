@@ -66,8 +66,12 @@
               v-for="g in groups"
               :key="g.key"
               class="group-item"
+              role="button"
+              tabindex="0"
               :class="{ active: currentGroup === g.key }"
               @click="switchGroup(g.key)"
+              @keydown.enter.prevent="switchGroup(g.key)"
+              @keydown.space.prevent="switchGroup(g.key)"
             >
               <div class="group-item__main">
                 <el-icon class="group-icon"><Collection /></el-icon>

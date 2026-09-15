@@ -40,8 +40,12 @@
             v-for="type in nodeTypes"
             :key="type.value"
             class="palette-item"
+            role="button"
+            tabindex="0"
             :class="{ active: selectedNodeType === type.value }"
             @click="selectedNodeType = type.value"
+            @keydown.enter.prevent="selectedNodeType = type.value"
+            @keydown.space.prevent="selectedNodeType = type.value"
           >
             <el-icon><component :is="type.icon" /></el-icon>
             <span>{{ type.label }}</span>
@@ -95,7 +99,12 @@
                 :d="edge.path"
                 class="edge-path"
                 marker-end="url(#wf-arrow)"
+                role="button"
+                tabindex="0"
+                aria-label="删除连线"
                 @click="removeEdge(idx)"
+                @keydown.enter.prevent="removeEdge(idx)"
+                @keydown.space.prevent="removeEdge(idx)"
                 @dblclick.stop="editEdgeLabel(idx)"
               />
               <text
@@ -117,9 +126,13 @@
               v-for="(node, idx) in nodes"
               :key="node.id"
               class="node-box"
+              role="button"
+              tabindex="0"
               :style="{ left: node.x + 'px', top: node.y + 'px' }"
               :class="[`node-${node.type}`, { selected: idx === selectedNodeIdx, 'link-target': linking.active && linking.sourceIdx !== idx && !isLinkedFromSource(idx) }]"
               @click="selectedNodeIdx = idx"
+              @keydown.enter.prevent="selectedNodeIdx = idx"
+              @keydown.space.prevent="selectedNodeIdx = idx"
               @pointerdown.stop="onPointerDown(idx, $event)"
               @pointerenter="onNodeEnter(idx)"
               @pointerleave="onNodeLeave(idx)"
