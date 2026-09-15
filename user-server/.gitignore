@@ -39,14 +39,19 @@ yarn-error.log*
 Thumbs.db
 
 # ---------- 构建产物（Go 二进制）----------
+# ⚠️ 这些模式必须锚定到仓库根（前导 `/`）。
+# 裸模式（如 `seed`、`embedding-server`、`main`）会匹配**任意层级**的同名文件或目录，
+# 从而把源码目录一并吞掉：`seed` 吞掉 cmd/seed/、`embedding-server` 吞掉
+# cmd/embedding-server/、`main` 吞掉 internal/plugin/main/。
+# 后果是这些目录下的源码永远不会入库，CI 全新克隆后直接编译失败。
 /bin/
 bin/
-user-server
-embedding-server
-bridge-mock
+/user-server
+/embedding-server
+/bridge-mock
 cmd/api/api
 cmd/*/api
-main
+/main
 *.exe
 *.app
 *.dll
@@ -116,10 +121,10 @@ install.lock
 # ---------- 运行时上传目录（知识库样本数据，不进版本库；由运行时生成）----------
 internal/aiagent/knowledge/controller/uploads/
 # ---------- 一次性调试/构建产物 ----------
+# ⚠️ 仅锚定根目录的二进制；裸模式 `seed` / `importfaq` 会吞掉 cmd/seed/ 与
+# cmd/importfaq/ 源码目录（前者曾导致 12 个 seed 源码文件从未入库）。
 /seed
-seed
 /importfaq
-importfaq
 
 # ---------- 运行时密钥（平台商户 api_secret，user-server 启动时写回）----------
 config/.merchant_api_secret
