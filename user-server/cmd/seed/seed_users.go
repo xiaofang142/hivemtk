@@ -120,7 +120,7 @@ func (s *usersSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	agentStatuses := make([]model.AgentStatus, 0, len(ctx.CSUserIDs))
 	statuses := []string{"online", "busy", "offline"}
 	for i, csID := range ctx.CSUserIDs {
-		realName := specs[i+1].RealName 
+		realName := specs[i+1].RealName
 		st := statuses[i%len(statuses)]
 		var onlineAt *time.Time
 		if st != "offline" {
@@ -152,9 +152,5 @@ func (s *usersSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
-
 // 编译期确保 time 包被引用（var onlineAt *time.Time 已在 Seed 中显式使用）
 var _ = time.Now
-
-

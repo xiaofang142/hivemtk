@@ -107,7 +107,6 @@ func (s *assetsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *assetsSeeder) buildDomains() []model.DomainPool {
 	domains := []model.DomainPool{
 		{
@@ -187,13 +186,13 @@ func (s *assetsSeeder) buildShortLinks(domains []model.DomainPool) []model.Short
 	if len(domains) == 0 {
 		return nil
 	}
-	statuses := []int{1, 1, 1, 1, 2} 
+	statuses := []int{1, 1, 1, 1, 2}
 	links := make([]model.ShortLink, 0, 10)
 	for i := 0; i < 10; i++ {
 		status := statuses[i%len(statuses)]
 		var expireTime *time.Time
 		if i%4 == 0 {
-			t := daysAgo(-7) 
+			t := daysAgo(-7)
 			expireTime = &t
 		} else if i%4 == 1 {
 			t := daysAgo(3)
@@ -307,7 +306,7 @@ func (s *assetsSeeder) buildLiveCodes(domains []model.DomainPool) []model.LiveCo
 			ShortDomainID:   domains[0].ID,
 			EntryDomainID:   domains[1].ID,
 			LandingDomainID: domains[2].ID,
-			Status:          0, 
+			Status:          0,
 			TotalViews:      randInt(200, 5000),
 			TodayViews:      0,
 			TotalClicks:     randInt(100, 2000),
@@ -636,5 +635,3 @@ func (s *assetsSeeder) buildLocalAssets() []model.LocalAsset {
 
 // 防止未使用 import 警告
 var _ = json.Marshal
-
-

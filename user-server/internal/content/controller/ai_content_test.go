@@ -558,8 +558,8 @@ func TestAIContentController_GetGenerationHistory_EmptyResults(t *testing.T) {
 
 	var response map[string]any
 	json.Unmarshal(w.Body.Bytes(), &response)
-	if response["code"] != "SUCCESS" {
-		t.Errorf("Expected code SUCCESS, got %v", response["code"])
+	if response["code"] != float64(0) {
+		t.Errorf("Expected code 0, got %v", response["code"])
 	}
 }
 
@@ -664,8 +664,8 @@ func TestAIContentController_GetTemplateTypes_Success(t *testing.T) {
 
 	var response map[string]any
 	json.Unmarshal(w.Body.Bytes(), &response)
-	if response["code"] != "SUCCESS" {
-		t.Errorf("Expected code SUCCESS, got %v", response["code"])
+	if response["code"] != float64(0) {
+		t.Errorf("Expected code 0, got %v", response["code"])
 	}
 }
 

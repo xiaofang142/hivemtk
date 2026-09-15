@@ -12,10 +12,19 @@ import (
 )
 
 func setupCustomerServiceTestDB(t *testing.T) *gorm.DB {
+	// 需覆盖 MergeCustomers 事务改写的全部表（见 service/customer.go:346-383），
+	// 否则 TestCustomerService_MergeCustomers 报 relation does not exist。
 	database := testutil.NewTestDB(t,
 		&model.Customer{},
 		&model.CustomerEvent{},
 		&model.CustomerTag{},
+		&model.CustomerSession{},
+		&model.CustomerChannel{},
+		&model.CustomerDoNotContact{},
+		&model.CSATSurvey{},
+		&model.Clue{},
+		&model.ScriptExposureLog{},
+		&model.OperationLog{},
 	)
 	db.SetTestDB(database)
 	return database

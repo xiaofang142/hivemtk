@@ -255,6 +255,8 @@ func TestAuthService_ChangePassword(t *testing.T) {
 	service := setupAuthService(t)
 
 	database := db.GetDB()
+	// 先占住 id=1：初始超管受系统级保护禁止改密，被测用户必须落在 id≠1
+	seedInitialAdmin(t, database)
 	adminUser := &model.SystemUser{
 		Username: "admin",
 		Password: "admin123",

@@ -94,9 +94,9 @@ func TestChurnPredictionController_GetChurnPrediction(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -146,10 +146,10 @@ func TestChurnPredictionController_GetChurnPredictions(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 				assert.NotNil(t, response["data"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -193,9 +193,9 @@ func TestChurnPredictionController_GetHighRiskUsers(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -239,10 +239,10 @@ func TestChurnPredictionController_GetChurnWarnings(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 				assert.NotNil(t, response["data"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -286,10 +286,10 @@ func TestChurnPredictionController_GetUnhandledWarnings(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 				assert.NotNil(t, response["data"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -357,9 +357,9 @@ func TestChurnPredictionController_MarkWarningHandled(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -397,9 +397,9 @@ func TestChurnPredictionController_GetModelConfig(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -467,9 +467,9 @@ func TestChurnPredictionController_SaveModelConfig(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -513,9 +513,9 @@ func TestChurnPredictionController_GetChurnStatistics(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -553,9 +553,9 @@ func TestChurnPredictionController_GetRiskDistribution(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}

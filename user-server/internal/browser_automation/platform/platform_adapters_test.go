@@ -5,8 +5,8 @@ import (
 
 	"hivemtk-user/internal/browser_automation/platform"
 	_ "hivemtk-user/internal/browser_automation/platform/douyin"
-	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu"
 	_ "hivemtk-user/internal/browser_automation/platform/xianyu"
+	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu"
 )
 
 // D5 补测：三平台适配器纯函数（DetectBlock/ClassifyError/Locators/Capabilities）——
@@ -113,4 +113,9 @@ func TestCapabilitiesHonest(t *testing.T) {
 	}
 }
 
-func min(a, b int) int { if a < b { return a }; return b }
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

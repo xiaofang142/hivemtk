@@ -40,6 +40,15 @@ type Client struct {
 func NewTelegramClient(token string, opts ...core.ClientOption) *Client {
 	c := &Client{token: token, apiBase: defaultAPIBase}
 	c.BaseClient = core.NewBaseClient(opts...)
+	// WithBaseURL 注入的测试/代理地址优先于默认 apiBase（与 qq 客户端保持一致）。
+	//
+	// 历史缺陷：本客户端曾完全不读 BaseClient.BaseURL，于是 core.WithBaseURL
+	// 这个文档写着"用于测试或代理"的选项在此**静默失效** —— 调用方以为已改地址、
+	// 实际仍打 api.telegram.org。直接后果是 Telegram 群管控链路（telegram_gate.go）
+	// 无法在测试中指向 httptest 服务端，happy path 长期零覆盖。
+	if c.BaseURL != "" {
+		c.apiBase = c.BaseURL
+	}
 	return c
 }
 

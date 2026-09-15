@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/tracing"
@@ -118,6 +119,15 @@ func (d *Dispatcher) SetRoute(r ScenarioRoute) ScenarioRoute {
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*DispatchResult, error) {
+	// 空接收者保护：*Dispatcher 为 nil 时，下面 d.mu.RLock() 会空指针 panic。
+	//
+	// 为什么必须在这里兜底：本类型的指针常被塞进接口（例如 trace_learning.InsightLLM）。
+	// Go 里「值为 nil 的具名指针」装进接口后，接口本身**非 nil**，
+	// 于是调用方惯用的 `if iface == nil` 判断会失效（typed-nil 陷阱），
+	// 最终把空指针一路带到方法体内炸掉。在方法入口兜底可一次性覆盖全部调用点。
+	if d == nil {
+		return nil, errors.New("llm dispatcher is nil")
+	}
 	d.mu.RLock()
 	route, ok := d.routes[req.Scenario]
 	if !ok {

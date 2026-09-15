@@ -19,6 +19,12 @@ linters:
   enable:
     - govet
     - depguard
+    # 2026-09-16 审计（FMT-01）：补 gofmt 护栏。
+    # 此前只启用 govet+depguard，格式漂移无人可查，累积 34 个未格式化文件
+    # （cmd/seed/*、internal/service/*_loader.go 等）。
+    # 注意：run.tests=false 使本 linter 只覆盖生产代码，
+    # 测试文件的格式由 CI 的 `gofmt -l` 步骤与 `make fmt-check` 兜住。
+    - gofmt
   # TODO(P3-5 护栏常态化)：存量 errcheck/unused 清零后逐步启用
   # - errcheck
   # - ineffassign

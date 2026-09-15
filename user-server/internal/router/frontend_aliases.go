@@ -16,12 +16,32 @@ import (
 	"gorm.io/gorm"
 )
 
+// aliasRegFailures 记录 setupFrontendAliases 中注册失败的前端兼容别名。
+//
+// 别名层是「尽力而为」的兼容层：绝大多数失败是「权威路由已存在」的冗余注册，
+// 无害。但失败也可能意味着别名**从未生效**（path 冲突、拼写错误、权威路由被改名），
+// 这类问题在修复前是完全静默的。故保留可查询的记录，并由
+// TestFrontendAliases_NoFailedRegistration 断言其为空 —— 让「别名没生效」变成
+// 会失败的测试，而不是启动日志里没人看的告警。
+var aliasRegFailures []string
+
 func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.DB) {
+	aliasRegFailures = nil
 	aiAgentSvc := service.NewAIAgentServiceWithDB(gormDB)
+	// doReg 注册前端兼容别名。
+	//
+	// ⚠️ 2026-09-16：原实现在 recover 中 `_ = r` **静默吞掉**注册失败，导致别名层
+	// 完全没有可观测性 —— 审计时实测有 58 处 doReg 在每次启动时静默失败而无人知晓
+	// （同期 doRegAdmin 会打印告警，两者行为不一致）。现改为与 doRegAdmin 一致地打印
+	// 告警，使「别名没生效」这件事在启动日志里可见。
+	// 失败通常是「权威路由已存在」的冗余注册；若失败原因是 path 冲突或拼写错误，
+	// 则说明该别名从未生效，需要人工核对。
 	doReg := func(method, path string, handlers ...gin.HandlerFunc) {
 		defer func() {
 			if r := recover(); r != nil {
-				_ = r
+				msg := fmt.Sprintf("doReg %s %s -> %v", method, path, r)
+				aliasRegFailures = append(aliasRegFailures, msg)
+				fmt.Printf("[WARN] %s\n", msg)
 			}
 		}()
 		switch method {
@@ -41,7 +61,9 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin := func(method, path string, handlers ...gin.HandlerFunc) {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("[WARN] doRegAdmin panic: %s %s -> %v\n", method, path, r)
+				msg := fmt.Sprintf("doRegAdmin %s %s -> %v", method, path, r)
+				aliasRegFailures = append(aliasRegFailures, msg)
+				fmt.Printf("[WARN] %s\n", msg)
 			}
 		}()
 		adminHandlers := append([]gin.HandlerFunc{middleware.AdminAuthMiddleware()}, handlers...)
@@ -65,24 +87,11 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	clueCtrl := controller.NewClueController()
 	doReg("GET", "/clues", clueCtrl.GetClueList)
-	doReg("GET", "/clues/list", clueCtrl.GetClueList)
-	doReg("GET", "/clues/statistics", clueCtrl.GetClueStatistics)
-	doReg("GET", "/clues/type", clueCtrl.GetClueTypes)
 	doReg("GET", "/clues/import", clueCtrl.GetClueTypes)
-	doRegAdmin("POST", "/clues/import", clueCtrl.ImportClues)
 	doReg("GET", "/clue-statistics/overview", clueCtrl.GetClueStatistics)
 	doRegAdmin("DELETE", "/clues/:id", clueCtrl.DeleteClue)
 
 	customer360Ctrl := controller.NewCustomer360Controller()
-	doReg("GET", "/customer-360/list", customer360Ctrl.GetCustomerList)
-	doReg("GET", "/customer-360/stats", customer360Ctrl.GetCustomerStats)
-	doReg("GET", "/customer-360/tags", customer360Ctrl.GetCustomerTags)
-	doReg("GET", "/customer-360", customer360Ctrl.GetCustomer360)
-	doReg("PUT", "/customer-360/tags", customer360Ctrl.UpdateCustomerTags)
-	doReg("GET", "/customer/list", customer360Ctrl.GetCustomerList)
-	doReg("GET", "/customer/360/:id", customer360Ctrl.GetCustomer360ByID)
-	doReg("GET", "/customer/:id", customer360Ctrl.GetCustomerDetail)
-	doReg("PUT", "/customer/:id", customer360Ctrl.UpdateCustomer)
 
 	doReg("GET", "/customer-tags", customer360Ctrl.GetCustomerTags)
 	doReg("PUT", "/customer-tags", customer360Ctrl.UpdateCustomerTags)
@@ -91,7 +100,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	customerEventCtrl := controller.NewCustomerEventController()
 	doReg("GET", "/customer-events", customerEventCtrl.GetEventStats)
-	doReg("GET", "/customer-events/list", customerEventCtrl.GetEventStats)
 	doReg("GET", "/customer-events/stats", customerEventCtrl.GetEventStats)
 	doReg("GET", "/customer-events/customer/:customer_id", customerEventCtrl.GetEventHistory)
 	doReg("POST", "/customer-events/track", customerEventCtrl.TrackEvent)
@@ -127,16 +135,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin("POST", "/oneid/merge-rules/preview", oneIDCtrl.PreviewMergeRules)
 
 	customerSessionCtrl := controller.NewCustomerSessionController()
-	doReg("GET", "/customer-sessions", customerSessionCtrl.GetSessions)
 	doReg("GET", "/customer-sessions/list", customerSessionCtrl.GetSessions)
-	doReg("GET", "/customer-sessions/pending", customerSessionCtrl.GetPendingSessions)
-	doReg("GET", "/customer-sessions/:id", customerSessionCtrl.GetSessionByID)
-	doReg("GET", "/customer-sessions/:id/messages", customerSessionCtrl.GetMessages)
-	doReg("POST", "/customer-sessions/:id/messages", customerSessionCtrl.SendMessage)
-	doReg("POST", "/customer-sessions/:id/transfer", customerSessionCtrl.TransferSession)
-	doReg("POST", "/customer-sessions/:id/tags", customerSessionCtrl.TagSession)
-	doReg("POST", "/customer-sessions/:id/rate", customerSessionCtrl.RateSession)
-	doReg("PUT", "/customer-sessions/:id/status", customerSessionCtrl.UpdateSessionStatus)
 
 	intentRec := service.GetIntentRecognizer()
 	if intentRec == nil {
@@ -175,19 +174,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/llm-routing/models", llmCtrl.ListModels)
 	doRegAdmin("PUT", "/llm-routing/strategies", llmCtrl.UpdateStrategies)
 
-	doReg("GET", "/llm/models", llmCtrl.ListModels)
-	doReg("GET", "/llm/models/:id", llmCtrl.ListModels)
-	doRegAdmin("POST", "/llm/models", llmCtrl.CreateModel)
-	doRegAdmin("PUT", "/llm/models/:id", llmCtrl.UpdateModel)
-	doRegAdmin("DELETE", "/llm/models/:id", llmCtrl.DeleteModel)
-	doRegAdmin("PUT", "/llm/models/:id/status", llmCtrl.UpdateModel)
-	doRegAdmin("POST", "/llm/models/:id/test", llmCtrl.TestModel)
-	doReg("GET", "/llm/scene-routing", llmCtrl.ListStrategies)
-	doRegAdmin("PUT", "/llm/scene-routing", llmCtrl.UpdateStrategies)
-	doReg("GET", "/llm/fallback", llmCtrl.Stats)
-	doRegAdmin("PUT", "/llm/fallback", llmCtrl.UpdateStrategies)
-	doReg("GET", "/llm/cost-stats", llmCtrl.Usage)
-
 	reachCtrl := controller.NewReachPipelineController(service.NewReachPipelineService(gormDB))
 	doReg("GET", "/reach-pipelines", reachCtrl.ListPipelines)
 	doReg("GET", "/reach-pipelines/list", reachCtrl.ListPipelines)
@@ -198,9 +184,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin("DELETE", "/reach-pipelines/:id", reachCtrl.DeletePipeline)
 
 	marketingFlowCtrl := contentctrl.NewMarketingFlowController()
-	doReg("GET", "/marketing-flows", marketingFlowCtrl.GetFlowList)
 	doReg("GET", "/marketing-flows/list", marketingFlowCtrl.GetFlowList)
-	doReg("GET", "/marketing-flows/:id", marketingFlowCtrl.GetFlowByID)
 
 	doReg("GET", "/marketing-flows/executions", marketingFlowCtrl.GetExecutionList)
 	doReg("GET", "/marketing-flows/executions/stats", marketingFlowCtrl.GetExecutionStats)
@@ -247,9 +231,7 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/agent-statuses/:id/sessions", agentStatusCtrl.GetAgentSessions)
 
 	quickReplyCtrl := controller.NewQuickReplyController()
-	doReg("GET", "/quick-replies", quickReplyCtrl.GetReplies)
 	doReg("GET", "/quick-replies/list", quickReplyCtrl.GetReplies)
-	doReg("GET", "/quick-replies/categories", quickReplyCtrl.GetReplyCategories)
 
 	aiSuggestionCtrl := controller.NewAISuggestionController()
 	doReg("GET", "/ai-suggestions", aiSuggestionCtrl.GetSuggestions)
@@ -356,14 +338,10 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin("DELETE", "/tiktok-cards/:id", tiktokCtrl.Delete)
 
 	feishuCtrl := controller.NewFeishuAccountController(service.NewFeishuService(gormDB), service.NewFeishuIntegrationService(gormDB))
-	doReg("GET", "/feishu/accounts", feishuCtrl.List)
 	doReg("GET", "/feishu/accounts/list", feishuCtrl.List)
-	doReg("GET", "/feishu/accounts/:id", feishuCtrl.Get)
 
 	tgCtrl := controller.NewTelegramAccountController(service.NewTelegramService(gormDB))
-	doReg("GET", "/telegram/accounts", tgCtrl.List)
 	doReg("GET", "/telegram/accounts/list", tgCtrl.List)
-	doReg("GET", "/telegram/accounts/:id", tgCtrl.Get)
 
 	shortLinkCtrl := controller.NewShortLinkController(service.NewShortLinkService(gormDB))
 	doReg("GET", "/short-links", shortLinkCtrl.GetList)
@@ -376,8 +354,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	liveCodeCtrl := controller.NewLiveCodeController(service.NewLiveCodeService(gormDB))
 	doReg("GET", "/live-codes", liveCodeCtrl.GetList)
-	doReg("GET", "/live-codes/list", liveCodeCtrl.GetList)
-	doReg("GET", "/live-codes/:id", liveCodeCtrl.GetByID)
 	doRegAdmin("POST", "/live-codes", liveCodeCtrl.Create)
 	doRegAdmin("PUT", "/live-codes/:id", liveCodeCtrl.Update)
 	doRegAdmin("DELETE", "/live-codes/:id", liveCodeCtrl.Delete)
@@ -424,13 +400,8 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doRegAdmin("DELETE", "/dashboard-screens/:id", dashCtrl.DeleteScreen)
 	doReg("GET", "/dashboard-screens/:id/data", dashCtrl.GetDashboardData)
 	doReg("GET", "/dashboard-screens/:id/activities", dashCtrl.GetRealtimeActivities)
-	doReg("GET", "/dashboards", dashCtrl.GetScreenList)
 	doReg("GET", "/dashboards/list", dashCtrl.GetScreenList)
-	doReg("GET", "/dashboards/:id", dashCtrl.GetScreenByID)
 	doReg("GET", "/dashboards/:id/data", dashCtrl.GetDashboardData)
-	doReg("GET", "/dashboards/data", dashCtrl.GetDashboardData)
-	doReg("GET", "/dashboards/activities", dashCtrl.GetRealtimeActivities)
-	doReg("GET", "/dashboards/public/:code", dashCtrl.PublicViewScreen)
 	doReg("GET", "/dashboard-screen/list", dashCtrl.GetScreenList)
 	doReg("GET", "/dashboard-screen", dashCtrl.GetScreenList)
 
@@ -438,8 +409,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/conversion-funnels", funnelCtrl.GetFunnel)
 	doReg("GET", "/conversion-funnels/list", funnelCtrl.GetFunnel)
 	doReg("GET", "/conversion-funnels/stage", funnelCtrl.GetStageDetails)
-	doReg("GET", "/analytics/funnel", funnelCtrl.GetFunnel)
-	doReg("GET", "/analytics/funnel/stage", funnelCtrl.GetStageDetails)
 	doReg("GET", "/conversion-funnel", funnelCtrl.GetFunnel)
 	doReg("GET", "/conversion-funnel/list", funnelCtrl.GetFunnel)
 	doReg("GET", "/conversion-funnel/stage", funnelCtrl.GetStageDetails)
@@ -450,11 +419,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	journeyCtrl := controller.NewCustomerJourneyController()
 	doReg("GET", "/customer-journey/dashboard", journeyCtrl.GetOverview)
-	doReg("GET", "/customer-journey/overview", journeyCtrl.GetOverview)
-	doReg("GET", "/customer-journey/stages", journeyCtrl.ListStages)
-	doReg("GET", "/customer-journey/by-stage", journeyCtrl.ListByStage)
-	doReg("POST", "/customer-journey/touch", journeyCtrl.TouchCustomer)
-	doReg("POST", "/customer-journey/transition", journeyCtrl.TransitionStage)
 
 	sysCfgCtrl := controller.NewSystemConfigController()
 	doReg("GET", "/system/configs", sysCfgCtrl.GetConfig)
@@ -636,7 +600,6 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 
 	integrationCtrl := controller.NewIntegrationController()
 	doReg("GET", "/integrations/list", integrationCtrl.GetAccountList)
-	doReg("GET", "/integrations/:id", integrationCtrl.GetAccountByID)
 
 	opLogCtrl := controller.NewOperationLogController()
 	doRegAdmin("GET", "/operation-logs", opLogCtrl.GetList)
@@ -657,12 +620,4 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/churn-prediction/risk-distribution", churnCtrl.GetRiskDistribution)
 	doReg("GET", "/churn-prediction/model-config", churnCtrl.GetModelConfig)
 	doRegAdmin("POST", "/churn-prediction/model-config", churnCtrl.SaveModelConfig)
-	doReg("GET", "/churn/prediction", churnCtrl.GetChurnPrediction)
-	doReg("GET", "/churn/predictions", churnCtrl.GetChurnPredictions)
-	doReg("GET", "/churn/high-risk-users", churnCtrl.GetHighRiskUsers)
-	doReg("GET", "/churn/warnings", churnCtrl.GetChurnWarnings)
-	doReg("GET", "/churn/unhandled-warnings", churnCtrl.GetUnhandledWarnings)
-	doReg("GET", "/churn/model-config", churnCtrl.GetModelConfig)
-	doReg("GET", "/churn/statistics", churnCtrl.GetChurnStatistics)
-	doReg("GET", "/churn/risk-distribution", churnCtrl.GetRiskDistribution)
 }

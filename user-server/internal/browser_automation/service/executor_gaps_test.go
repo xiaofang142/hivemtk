@@ -9,8 +9,8 @@ import (
 	"hivemtk-user/internal/browser_automation/platform"
 	// 适配器注册（生产经 router 空白导入；service 测试自持）
 	_ "hivemtk-user/internal/browser_automation/platform/douyin"
-	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu"
 	_ "hivemtk-user/internal/browser_automation/platform/xianyu"
+	_ "hivemtk-user/internal/browser_automation/platform/xiaohongshu"
 )
 
 // D5 补测（主文档 §5.2 G8）：executor 本轮新增纯函数——

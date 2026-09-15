@@ -38,7 +38,7 @@ func TestToSixField(t *testing.T) {
 	cases := []struct{ expr, tz, want string }{
 		{"*/5 * * * *", "", "0 */5 * * * *"},
 		{"0 9 * * 1-5", "", "0 0 9 * * 1-5"},
-		{"0 */5 * * * *", "", "0 */5 * * * *"}, // 已是 6 段不动
+		{"0 */5 * * * *", "", "0 */5 * * * *"},                              // 已是 6 段不动
 		{"0 9 * * *", "Asia/Shanghai", "CRON_TZ=Asia/Shanghai 0 0 9 * * *"}, // G20：时区前缀
 	}
 	for _, c := range cases {

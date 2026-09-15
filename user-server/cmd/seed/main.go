@@ -57,43 +57,43 @@ type Seeder interface {
 
 // SeedContext 跨模块共享的上下文（保存已写入的关键 ID 供后续模块引用）
 type SeedContext struct {
-	AdminUserID    uint   
-	CSUserIDs      []uint 
-	StaffUserIDs   []uint 
-	AgentStatusIDs []uint 
+	AdminUserID    uint
+	CSUserIDs      []uint
+	StaffUserIDs   []uint
+	AgentStatusIDs []uint
 
-	CustomerIDs         []string 
-	ChampionCustomerIDs []string 
-	ChurnCustomerIDs    []string 
-	TagIDs              []string 
+	CustomerIDs         []string
+	ChampionCustomerIDs []string
+	ChurnCustomerIDs    []string
+	TagIDs              []string
 
-	SessionIDs         []string 
-	ActiveSessionIDs   []string 
-	ResolvedSessionIDs []string 
+	SessionIDs         []string
+	ActiveSessionIDs   []string
+	ResolvedSessionIDs []string
 
-	AIAgentIDs       []uint   
-	SOPAgentIDs      []uint   
-	RagProductIDs    []string 
-	ScriptLibraryIDs []uint   
+	AIAgentIDs       []uint
+	SOPAgentIDs      []uint
+	RagProductIDs    []string
+	ScriptLibraryIDs []uint
 
-	ReachPipelineIDs []uint 
-	ReachJobIDs      []uint 
-	InboxConvIDs     []uint 
+	ReachPipelineIDs []uint
+	ReachJobIDs      []uint
+	InboxConvIDs     []uint
 
-	DomainPoolIDs  []int    
-	ShortLinkIDs   []uint   
-	LiveCodeIDs    []string 
-	AssetBundleIDs []string 
+	DomainPoolIDs  []int
+	ShortLinkIDs   []uint
+	LiveCodeIDs    []string
+	AssetBundleIDs []string
 
-	PlatformAccountIDs []uint   
-	UnifiedMessageIDs  []uint64 
+	PlatformAccountIDs []uint
+	UnifiedMessageIDs  []uint64
 
-	LLMRoutingLogIDs []int64 
+	LLMRoutingLogIDs []int64
 
-	FunnelIDs       []uint64 
-	SalesPersonaIDs []uint64 
+	FunnelIDs       []uint64
+	SalesPersonaIDs []uint64
 
-	ClueIDs []string 
+	ClueIDs []string
 }
 
 // 所有注册的 seeder（按依赖顺序）
@@ -234,5 +234,3 @@ func selectSeeders(moduleFlag string) []Seeder {
 	}
 	return picked
 }
-
-

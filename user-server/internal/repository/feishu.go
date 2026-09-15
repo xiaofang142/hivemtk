@@ -173,6 +173,16 @@ func NewTelegramAccountRepository() *TelegramAccountRepository {
 	return &TelegramAccountRepository{db: _db.GetDB()}
 }
 
+// NewTelegramAccountRepositoryWithDB 显式注入 DB（推荐）。
+//
+// 无参版本读全局 _db.GetDB()，在未初始化全局句柄的场景（测试、独立装配）会拿到
+// nil 并在首次查询时报 gorm.ErrInvalidDB —— 调用方只能再补一次 SetDB。
+// 与 NewTelegramGroupGateRepositoryWithDB / NewTelegramGroupMemberRepositoryWithDB
+// 保持同一约定，避免调用点各写一套。
+func NewTelegramAccountRepositoryWithDB(db *gorm.DB) *TelegramAccountRepository {
+	return &TelegramAccountRepository{db: db}
+}
+
 func (r *TelegramAccountRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	if db != nil {
 		r.db = db

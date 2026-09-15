@@ -3,92 +3,33 @@ package repository
 import (
 	"context"
 	"fmt"
-	"net"
-	"os"
-	"regexp"
-	"sync"
 	"testing"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/testutil"
 
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
+// newBenchDB 引导基准测试库。
+//
+// ⚠️ 2026-09-16 审计（TEST-06）：此处原为**第四套**独立的测试库引导
+// （getBenchEnv + getBenchTestDSN + benchDBNameRe/benchProcDBInit/benchProcDBName，
+// 外加自建库 `user_db_test_bench_<pid>`），与 internal/pkg/testutil 并存，
+// 且默认值互相矛盾：
+//   - 默认端口 8202（**容器内**端口），而 testutil 探测 8232/8202；
+//   - 默认 user/password 都是 `postgres`，而 testutil 用 admin / POSTGRES_PASSWORD；
+//   - 认的是第五个环境变量名 `TEST_DATABASE_URL`（其余代码只认 POSTGRES_TEST_DSN）；
+//   - 连不上即 `tb.Skipf` → 基准测试静默跳过（exit 0），跑没跑过无人知晓。
+//
+// 后果：本机 PG 实际映射在 8232，这 2 个基准长期"跳过"而非执行。
+//
+// 现统一委托 testutil.NewTestDB（其参数已放宽为 testing.TB 正是为了支持 benchmark），
+// 隔离库回归 user_db_test_<pid>，不再产生额外的 `_bench_` 库族（实测历史遗留 48 个）。
 func newBenchDB(tb testing.TB, models ...any) *gorm.DB {
 	tb.Helper()
-	host := getBenchEnv("POSTGRES_TEST_HOST", "127.0.0.1")
-	port := getBenchEnv("POSTGRES_TEST_PORT", "8202")
-	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 2*time.Second); err != nil {
-		tb.Skipf("PostgreSQL 测试库不可达（%s:%s）：%v", host, port, err)
-		return nil
-	} else {
-		_ = conn.Close()
-	}
-	benchProcDBInit.Do(func() {
-		benchProcDBName = fmt.Sprintf("user_db_test_bench_%d", os.Getpid())
-
-		maintDSN := benchDBNameRe.ReplaceAllString(getBenchTestDSN(), "dbname=postgres")
-		if m, err := gorm.Open(postgres.Open(maintDSN), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Silent),
-		}); err == nil {
-			if sqlDB, e := m.DB(); e == nil {
-				defer sqlDB.Close()
-				_, _ = sqlDB.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS %q`, benchProcDBName))
-				if _, e := sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE %q`, benchProcDBName)); e != nil {
-					tb.Fatalf("创建基准测试库 %s 失败: %v", benchProcDBName, e)
-				}
-			}
-		} else {
-			tb.Fatalf("连接维护库失败: %v", err)
-		}
-	})
-	testDSN := benchDBNameRe.ReplaceAllString(getBenchTestDSN(), "dbname="+benchProcDBName)
-	database, err := gorm.Open(postgres.Open(testDSN), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		tb.Fatalf("连接 PostgreSQL 测试库失败: %v", err)
-	}
-	if sqlDB, dbErr := database.DB(); dbErr == nil {
-		_, _ = sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS vector")
-		_, _ = sqlDB.Exec("SET session_replication_role = 'replica'")
-	}
-	if len(models) > 0 {
-		for _, m := range models {
-			_ = database.Migrator().DropTable(m)
-		}
-		if migrateErr := database.AutoMigrate(models...); migrateErr != nil {
-			tb.Fatalf("AutoMigrate 失败: %v", migrateErr)
-		}
-	}
-	return database
-}
-
-var (
-	benchDBNameRe   = regexp.MustCompile(`dbname=[^\s]+`)
-	benchProcDBInit sync.Once
-	benchProcDBName string
-)
-
-func getBenchEnv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
-}
-
-func getBenchTestDSN() string {
-	if v := os.Getenv("TEST_DATABASE_URL"); v != "" {
-		return v
-	}
-	host := getBenchEnv("POSTGRES_TEST_HOST", "127.0.0.1")
-	port := getBenchEnv("POSTGRES_TEST_PORT", "8202")
-	user := getBenchEnv("POSTGRES_TEST_USER", "postgres")
-	pass := getBenchEnv("POSTGRES_TEST_PASSWORD", "postgres")
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable", host, port, user, pass)
+	return testutil.NewTestDB(tb, models...)
 }
 
 func BenchmarkAckOutboundDeliveredBatchReturningWithStatus_500_P0_5(b *testing.B) {

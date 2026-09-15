@@ -116,13 +116,18 @@ func (e *SalesEngine) generateCandidate(
 		}
 	}
 
+	// ⚠️ system prompt 必须经 plainDispatchSystemPrompt 拼接：本分支是
+	// toolExecutor 未装配（或未注册工具）时的直连路径，原先只传 persona，
+	// 导致 recallRAG 召回的知识库内容被丢弃（COH-01，见该函数注释与回归用例
+	// TestE2E_WebChat_VisitorAsk_AIReplyWithRAG）。
+	systemPrompt := e.plainDispatchSystemPrompt(ctx, req, targetLang, ragChunks)
 	result, err := e.dispatcher.Dispatch(ctx, llm.DispatchRequest{
 		Scenario:     scenario,
 		Prompt:       prompt,
-		SystemPrompt: e.personaWithLang(ctx, req.Config.Persona, targetLang),
+		SystemPrompt: systemPrompt,
 		MaxTokens:    req.Config.MaxTokens,
 		Temperature:  req.Config.Temperature,
-		CacheKey:     llm.CacheKey(scenario, prompt),
+		CacheKey:     llm.CacheKeyWithSystem(scenario, systemPrompt, prompt),
 		CacheTTL:     3600,
 	})
 	if err != nil {

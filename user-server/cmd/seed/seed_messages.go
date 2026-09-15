@@ -73,7 +73,6 @@ func (s *messagesSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *messagesSeeder) buildPlatformAccounts() []model.PlatformAccount {
 	specs := []struct {
 		Platform    model.Platform
@@ -96,10 +95,10 @@ func (s *messagesSeeder) buildPlatformAccounts() []model.PlatformAccount {
 		if sp.Status == 1 {
 			t := hoursAgo(randInt(1, 48))
 			lastSync = &t
-			exp := daysAgo(-30) 
+			exp := daysAgo(-30)
 			expires = &exp
 		} else {
-			exp := daysAgo(3) 
+			exp := daysAgo(3)
 			expires = &exp
 		}
 		acc := model.PlatformAccount{
@@ -332,5 +331,3 @@ func (s *messagesSeeder) buildMessageHub(accounts []model.PlatformAccount, ctx *
 
 // 防止未使用 import 警告（json 在某些扩展场景使用）
 var _ = json.Marshal
-
-

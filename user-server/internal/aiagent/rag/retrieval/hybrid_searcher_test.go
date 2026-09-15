@@ -3,7 +3,6 @@ package ragretrieval
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -17,6 +16,18 @@ import (
 // 注意：knowledge_chunks 表用 raw SQL 创建（含 pgvector 列），不能用 AutoMigrate
 type HybridSearcherTestModels struct{}
 
+// setupHybridTestDB 引导隔离测试库并建好 knowledge_chunks / knowledge_search_logs。
+//
+// ⚠️ 2026-09-16 审计（TEST-06）：本文件原先在每个用例开头都插了一段
+// `if os.Getenv("POSTGRES_TEST_DSN")=="" && os.Getenv("POSTGRES_TEST_HOST")=="" { t.Skip }`
+// 前置门（共 7 处）。那段门是**多余且有害**的：
+//   - testutil.NewTestDB 本身已实现"不可达则跳过"的语义，且带端口候选探测
+//     （8232 宿主机 / 8202 容器内）与 POSTGRES_PASSWORD 回落；
+//   - 而这段门只看两个环境变量，二者都没设时**直接跳过** ——
+//     于是本地即便 PG 就在 8232 上跑着，这 7 个集成用例也一律 SKIP（exit 0），
+//     属 RISK-01 同源的假绿；CI 现在会注入 POSTGRES_TEST_HOST，行为又与本机不一致。
+//
+// 已删除该前置门，统一由 testutil 决定跳过还是执行。
 func setupHybridTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	if testing.Short() {
@@ -27,21 +38,46 @@ func setupHybridTestDB(t *testing.T) *gorm.DB {
 	stmts := []string{
 		`CREATE EXTENSION IF NOT EXISTS vector`,
 		`DROP TABLE IF EXISTS knowledge_chunks CASCADE`,
+		// ⚠️ 本 DDL 必须与**生产** knowledge_chunks 的列集保持一致。
+		//
+		// 2026-09-16 审计（TEST-07）：原 DDL 只有 14 列，是较早的快照，缺少
+		// embedding_source（v3.31.0 迁移 `v3_31_0_embedding_source_migration.go` 新增）
+		// 等 10 列。而检索 SQL 会写
+		//   WHERE embedding IS NOT NULL AND embedding_source = 'tei'
+		// （见 hybrid_searcher.go:295 / vector_retriever.go:63,125），
+		// 于是向量检索恒报 column "embedding_source" does not exist (SQLSTATE 42703)，
+		// 被上层降级成"空结果 + WARN"，用例表现为 `expected at least 1 result`。
+		//
+		// 该缺陷之所以长期不可见，正是因为本文件每个用例都插了一段环境变量前置门
+		// 让它们一律 SKIP（见 setupHybridTestDB 注释）——门一拆，缺陷立刻现形。
+		//
+		// 现按实时库 user_db.knowledge_chunks 的 24 列补齐（含 product_id 由 BIGINT 改
+		// 回 TEXT：实时库就是 text）。**改动生产 schema 时请同步本 DDL。**
 		`CREATE TABLE knowledge_chunks (
 			id BIGSERIAL PRIMARY KEY,
 			document_id BIGINT NOT NULL DEFAULT 0,
-			product_id BIGINT NOT NULL DEFAULT 0,
-			content TEXT NOT NULL DEFAULT '',
+			product_id TEXT,
 			chunk_index INT DEFAULT 0,
-			embedding vector(1024),
+			content TEXT NOT NULL DEFAULT '',
+			content_hash VARCHAR(64),
+			token_count BIGINT DEFAULT 0,
+			char_count BIGINT DEFAULT 0,
 			embedding_id VARCHAR(64),
+			similarity_score NUMERIC,
+			hit_count BIGINT DEFAULT 0,
+			weight DOUBLE PRECISION DEFAULT 1.0,
+			metadata JSONB,
+			source_language VARCHAR(16),
+			translated_versions JSONB,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			embedding vector(1024),
 			content_tsv tsvector,
 			contextual_context TEXT,
 			contextual_tsv tsvector,
-			content_hash VARCHAR(64),
 			embed_status VARCHAR(20) DEFAULT 'pending',
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
+			updated_at TIMESTAMPTZ DEFAULT NOW(),
+			content_tsv_jieba tsvector,
+			embedding_source VARCHAR(16) NOT NULL DEFAULT 'tei'
 		)`,
 		`CREATE INDEX idx_knowledge_chunks_embedding_hnsw ON knowledge_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`,
 		`CREATE INDEX idx_knowledge_chunks_content_tsv ON knowledge_chunks USING GIN (content_tsv)`,
@@ -119,9 +155,6 @@ func waitUntil(cond func() bool, timeout time.Duration) bool {
 // chunk101(cos=0.707) 次之，chunk102(cos=0.25) 最差
 // 期望：返回 chunk100 排第一
 func TestHybridSearcher_VectorRetrieve_EndToEnd(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{
@@ -155,9 +188,6 @@ func TestHybridSearcher_VectorRetrieve_EndToEnd(t *testing.T) {
 }
 
 func TestHybridSearcher_BM25Retrieve_Fallback(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{err: fmt.Errorf("TEI down")}
@@ -197,9 +227,6 @@ func insertChunkNoEmbed(t *testing.T, db *gorm.DB, docID uint, productID string,
 
 // TestHybridSearcher_BothFail_ReturnsError 集成测试：两路均失败时返回 error
 func TestHybridSearcher_BothFail_ReturnsError(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{err: fmt.Errorf("TEI down")}
@@ -222,9 +249,6 @@ func TestHybridSearcher_BothFail_ReturnsError(t *testing.T) {
 
 // TestHybridSearcher_SearchIndex_WithProductFilter 集成测试：按 product_id 过滤检索
 func TestHybridSearcher_SearchIndex_WithProductFilter(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{
@@ -255,9 +279,6 @@ func TestHybridSearcher_SearchIndex_WithProductFilter(t *testing.T) {
 
 // TestHybridSearcher_TopKTruncation 集成测试：topK 截断
 func TestHybridSearcher_TopKTruncation(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{
@@ -284,9 +305,6 @@ func TestHybridSearcher_TopKTruncation(t *testing.T) {
 
 // TestHybridSearcher_LogSearch_WritesToDB 集成测试：logSearch 写入 knowledge_search_logs
 func TestHybridSearcher_LogSearch_WritesToDB(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{
@@ -319,9 +337,6 @@ func TestHybridSearcher_LogSearch_WritesToDB(t *testing.T) {
 
 // TestHybridSearcher_RerankerFailed_FallbackToFused 集成测试：rerank 失败时回退到融合顺序
 func TestHybridSearcher_RerankerFailed_FallbackToFused(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST_DSN") == "" && os.Getenv("POSTGRES_TEST_HOST") == "" {
-		t.Skip("skipping PG integration test (no POSTGRES_TEST_DSN)")
-	}
 	db := setupHybridTestDB(t)
 
 	mockEmbed := &mockEmbeddingService{
@@ -345,9 +360,27 @@ func TestHybridSearcher_RerankerFailed_FallbackToFused(t *testing.T) {
 		t.Error("expected results even when rerank fails")
 	}
 
+	// 归一化是 min-max：最高分→1、**最低分→0**（见 normalizeRRFScores 与
+	// normalize_test.go 的 TestD17b_NormalizeRRFScores「最低分应=0」）。
+	// 因此这里该断言的是**值域 + 单调性**，而不是"所有分都必须 > 0"。
+	//
+	// ⚠️ 2026-09-16 审计（TEST-07）：原断言为 `c.Score <= 0 || c.Score > 1.0001`，
+	// 即要求每个结果都 > 0 —— 这与同一提交（61ad8857「D17b：RRF 分数归一化」）
+	// 引入的 min→0 设计**直接自相矛盾**：只要结果数 ≥2 且分数不全相同，
+	// 末位必被归一化为 0，断言必失败。两者同批写就，却因本文件每个用例都被
+	// 环境变量前置门挡住长期 SKIP 而从未对撞（门一拆即现形）。
+	//
+	// 结论：是**断言错**，不是生产错 —— 生产侧另有 normalize_test.go 明确钉住
+	// "最低分应=0"。故此处改为断言真正的不变式，而非放宽以迁就旧断言。
+	if len(out) > 0 && out[0].Score != 1.0 {
+		t.Errorf("out[0] 归一化后应为 1（最高分），实际 %v", out[0].Score)
+	}
 	for i, c := range out {
-		if c.Score <= 0 || c.Score > 1.0001 {
-			t.Errorf("out[%d] 分数量纲异常（RRF 未归一化）: %v", i, c.Score)
+		if c.Score < 0 || c.Score > 1.0001 {
+			t.Errorf("out[%d] 归一化后应落在 [0,1]：%v", i, c.Score)
+		}
+		if i > 0 && c.Score > out[i-1].Score {
+			t.Errorf("out[%d].Score=%v 高于前一位 %v，单调性被破坏", i, c.Score, out[i-1].Score)
 		}
 	}
 }

@@ -281,8 +281,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		}()
 	}))
 
-	monitor.RegisterRoutes(auth)
-
 	bridgeTokenCtrl := controller.NewBridgeTokenController()
 	auth.GET("/bridge/token/status", middleware.JWTAuthMiddleware(), middleware.RequireAdminMiddleware(), bridgeTokenCtrl.GetStatus)
 	auth.POST("/bridge/token/reset", middleware.JWTAuthMiddleware(), middleware.RequireAdminMiddleware(), bridgeTokenCtrl.ResetBridgeToken)
@@ -293,6 +291,15 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	auth.Use(middleware.JWTAuthMiddleware())
 	{
+		// 业务链路监控 /api/monitor/*（health/anomalies/node-health/latency/
+		// lifecycle/traces/trace-tree）—— 返回会话链路与业务指标，必须登录态可见。
+		//
+		// ⚠️ 必须挂在 auth.Use(JWTAuthMiddleware()) 之后：gin 的 RouterGroup.Use
+		// 只在注册时把当时的 handler 链快照进路由，对**之前**注册的路由不生效。
+		// 历史缺陷：该行原位于 294 行 Use 之前，导致 7 个监控接口全部匿名可访问
+		// （启动日志中 handler 数为 11，而需登录的 /api/users 为 12）。
+		monitor.RegisterRoutes(auth)
+
 		setupAuthRoutes(auth, gormDB)
 
 		setupUserRoutes(auth)

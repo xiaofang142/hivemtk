@@ -52,6 +52,9 @@ func shouldDistillInsight(cfg Config, res *EvalResult) bool {
 // ExtractErrorPattern 调用 LLM 从差评样本中提取一句话错误模式
 func ExtractErrorPattern(ctx context.Context, llmClient InsightLLM, scenario llm.DispatchScenario, agg *AggregatedTrace) (string, error) {
 	ctx = ensureCtx(ctx)
+	// 注意：本判断只能拦住「无类型 nil」接口。若调用方传入的是
+	// 「值为 nil 的 *llm.Dispatcher」，接口非 nil，本判断不会命中，
+	// 需依赖 (*Dispatcher).Dispatch 内部的空接收者兜底。
 	if llmClient == nil {
 		return "", errors.New("llm dispatcher is nil")
 	}
@@ -103,6 +106,13 @@ func normalizeInsight(raw string) string {
 
 func (s *Service) distillInsightForTrace(ctx context.Context, agg *AggregatedTrace, res *EvalResult) {
 	if !shouldDistillInsight(s.cfg, res) {
+		return
+	}
+	// 未装配 dispatcher 时直接返回：本链路是 best-effort，无 LLM 就不沉淀，
+	// 不应产生告警噪音。注意必须用**具名指针**比较 —— s.dispatcher 是
+	// *llm.Dispatcher，若把它传进 ExtractErrorPattern 的 InsightLLM 接口参数，
+	// 空指针会被包成非 nil 接口，那里的 `llmClient == nil` 判断失效（typed-nil 陷阱）。
+	if s.dispatcher == nil {
 		return
 	}
 	industry := s.cfg.Industry

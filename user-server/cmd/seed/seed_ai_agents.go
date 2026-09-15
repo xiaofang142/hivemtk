@@ -180,7 +180,6 @@ func (s *aiAgentsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *aiAgentsSeeder) buildAIAgents() []model.AIAgent {
 	// hivemtk 平台知识库产品 ID（与迁移 031_platform_cs_rag_seed.sql、
 	// scripts/seed/expand_knowledge_base*.py 中的 PRODUCT_ID 一致，均为 'hivemtk-platform-cs'）。
@@ -1232,7 +1231,7 @@ func (s *aiAgentsSeeder) buildChampionDialogues(ctx *SeedContext) []model.Champi
 			CustomerMsg:         sc.CustMsg,
 			ChampionReply:       sc.Reply,
 			ContextMsgs:         model.JSONMap{"prev_count": randInt(2, 5)},
-			Embedding:           zeroVectorString(1024), 
+			Embedding:           zeroVectorString(1024),
 			ClusterID:           uint(i%3 + 1),
 			Reward:              randFloat(0.5, 0.95),
 			ConversionAchieved:  i%3 == 0,
@@ -1258,7 +1257,7 @@ func (s *aiAgentsSeeder) buildAISalesLogs(ctx *SeedContext) []model.AISalesLog {
 		}
 		promptTokens := randInt(100, 2000)
 		completionTokens := randInt(50, 1000)
-		success := i%10 != 0 
+		success := i%10 != 0
 		var errMsg string
 		if !success {
 			errMsg = "LLM 超时，触发降级"
@@ -1282,5 +1281,3 @@ func (s *aiAgentsSeeder) buildAISalesLogs(ctx *SeedContext) []model.AISalesLog {
 	}
 	return logs
 }
-
-

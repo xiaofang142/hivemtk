@@ -19,10 +19,20 @@ func TestSeedConfigParams(t *testing.T) {
 	}
 	var count int64
 	gdb.Model(&model.ConfigParam{}).Count(&count)
-	if count != 109 {
-		t.Fatalf("want 109, got %d", count)
+	// 与定义源联动，而非写死数字：原先写死 109，新增 2 条参数后即失配。
+	// 这样仍能捕获"参数被意外漏 seed"，但不会再因正常新增而误报。
+	want := int64(len(DefaultParamDefs()))
+	if count != want {
+		t.Fatalf("seed 后 config_params 行数 = %d，期望 %d（DefaultParamDefs 定义条数）", count, want)
 	}
 
+	// 注意：这里刻意用 GlobalConfigParam() 而非自己 new 一个 service。
+	// 本用例因此同时钉住两条不变式：
+	//   ① seed 后各类型化读取（Duration/Float/Int/Bool/String）能取到定义值；
+	//   ② SeedConfigParams 会把全局单例**重绑**到本次 seed 的实例上。
+	// ② 曾经被破坏：SetGlobal 原用 sync.Once，第二次 seed 的新实例被静默丢弃，
+	// 全局仍指向首个实例，而其按 key 负缓存把"表空时读到的 0"永久固化 →
+	// 本用例读到全零。详见 TASKS_AUDIT_2026-09-16.md · TEST-05。
 	svc := GlobalConfigParam()
 	ctx := context.Background()
 
@@ -41,7 +51,8 @@ func TestSeedConfigParams(t *testing.T) {
 	if v := svc.GetString(ctx, "knowledge", "embedding_dimension", "0"); v != "1024" {
 		t.Errorf("knowledge.embedding_dimension = %s, want 1024", v)
 	}
-	t.Logf("✅ Seed 59 params + typed reads all pass")
+	// 条数取自定义源，别写死（历史上这里写 59，后来参数增至 111 却没同步）
+	t.Logf("✅ Seed %d params + typed reads all pass", want)
 }
 
 func TestConfigParamUpdateResetAudit(t *testing.T) {

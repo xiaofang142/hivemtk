@@ -207,17 +207,17 @@ func (s *sessionsSeeder) buildMessages(sessions []model.CustomerSession, ctx *Se
 			var aiConfidence float64
 			var aiSource string
 			switch i % 3 {
-			case 0: 
+			case 0:
 				senderType = "user"
 				senderName = sess.UserName
 				content = randPick(userMsgs)
-			case 1: 
+			case 1:
 				senderType = "ai"
 				senderName = "AI助手"
 				content = randPick(aiMsgs)
 				aiConfidence = randFloat(0.6, 0.95)
 				aiSource = randPick([]string{"rule", "rag", "llm"})
-			case 2: 
+			case 2:
 				senderType = "agent"
 				senderName = sess.AgentName
 				content = randPick(agentMsgs)
@@ -236,7 +236,7 @@ func (s *sessionsSeeder) buildMessages(sessions []model.CustomerSession, ctx *Se
 				SenderAvatar: "https://cdn.hivemtk.demo/avatar.png",
 				AIConfidence: aiConfidence,
 				AISource:     aiSource,
-				IsRead:       senderType != "user", 
+				IsRead:       senderType != "user",
 				ReadAt:       nil,
 				CreatedAt:    msgTime,
 			})
@@ -287,9 +287,9 @@ func (s *sessionsSeeder) buildBlacklist(ctx *SeedContext) []model.UserBlacklist 
 		if len(ctx.CSUserIDs) > 0 {
 			operID = ctx.CSUserIDs[i%len(ctx.CSUserIDs)]
 		}
-		expires := daysAgo(-30) 
+		expires := daysAgo(-30)
 		blacklist = append(blacklist, model.UserBlacklist{
-			UserID:       ctx.CustomerIDs[i*5+3], 
+			UserID:       ctx.CustomerIDs[i*5+3],
 			Platform:     randPick([]model.Platform{model.PlatformDouyin, model.PlatformXiaohongshu, model.PlatformWeChat}),
 			Reason:       reasons[i],
 			Source:       randPick([]string{"manual", "auto", "risk"}),
@@ -344,5 +344,3 @@ func (s *sessionsSeeder) buildQuickReplies() []model.QuickReply {
 	}
 	return replies
 }
-
-

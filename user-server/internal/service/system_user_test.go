@@ -20,6 +20,25 @@ func setupSystemUserServiceTestDB(t *testing.T) *gorm.DB {
 	return database
 }
 
+// seedInitialAdmin 占住 id=1（初始超管）。
+//
+// AuthService.ChangePassword 与 SystemUserService.ResetPassword 对 id=1 有系统级保护
+// （ErrInitialAdminProtected，防止初始超管密码被改后无法登录），一律拒绝改密。
+// 若测试把被测用户建成表里的第一行，它必然拿到 id=1，于是所有 _Success 用例
+// 都会被守卫拦成失败。先播种超管可让被测用户稳定落在 id≠1。
+func seedInitialAdmin(t *testing.T, database *gorm.DB) {
+	t.Helper()
+	if err := database.Create(&model.SystemUser{
+		Username: "initial_admin",
+		Password: "seed-password-not-used",
+		Email:    "initial_admin@example.com",
+		Role:     "admin",
+		Status:   1,
+	}).Error; err != nil {
+		t.Fatalf("播种初始超管失败: %v", err)
+	}
+}
+
 // TestNewSystemUserService 测试创建系统用户服务
 func TestNewSystemUserService(t *testing.T) {
 	service := NewSystemUserService()
@@ -498,6 +517,7 @@ func TestSystemUserService_DeleteUser_NotFound(t *testing.T) {
 // TestSystemUserService_ResetPassword 测试重置密码
 func TestSystemUserService_ResetPassword(t *testing.T) {
 	database := setupSystemUserServiceTestDB(t)
+	seedInitialAdmin(t, database)
 	service := NewSystemUserService()
 
 	user := model.SystemUser{
@@ -514,7 +534,7 @@ func TestSystemUserService_ResetPassword(t *testing.T) {
 		t.Fatal("Failed to create user")
 	}
 
-	newPassword := "newpassword123"
+	newPassword := "Hv7mKp2LnQ"
 	err := service.ResetPassword(context.Background(), user.ID, newPassword)
 	if err != nil {
 		t.Fatalf("ResetPassword failed: %v", err)
@@ -537,7 +557,7 @@ func TestSystemUserService_ResetPassword_NotFound(t *testing.T) {
 	setupSystemUserServiceTestDB(t)
 	service := NewSystemUserService()
 
-	err := service.ResetPassword(context.Background(), 99999, "newpassword123")
+	err := service.ResetPassword(context.Background(), 99999, "Hv7mKp2LnQ")
 	if err == nil {
 		t.Error("Expected error for non-existent user")
 	}
@@ -550,6 +570,7 @@ func TestSystemUserService_ResetPassword_NotFound(t *testing.T) {
 // TestSystemUserService_ResetPassword_InvalidPassword 测试重置密码时密码加密
 func TestSystemUserService_ResetPassword_PasswordHashing(t *testing.T) {
 	database := setupSystemUserServiceTestDB(t)
+	seedInitialAdmin(t, database)
 	service := NewSystemUserService()
 
 	user := model.SystemUser{
@@ -561,7 +582,7 @@ func TestSystemUserService_ResetPassword_PasswordHashing(t *testing.T) {
 	}
 	database.Create(&user)
 
-	newPassword := "newpassword123"
+	newPassword := "Hv7mKp2LnQ"
 	err := service.ResetPassword(context.Background(), user.ID, newPassword)
 	if err != nil {
 		t.Fatalf("ResetPassword failed: %v", err)
@@ -971,6 +992,7 @@ func TestSystemUserService_DeleteUser_MultipleUsers(t *testing.T) {
 // TestSystemUserService_ResetPassword_MultipleTimes 测试多次重置密码
 func TestSystemUserService_ResetPassword_MultipleTimes(t *testing.T) {
 	database := setupSystemUserServiceTestDB(t)
+	seedInitialAdmin(t, database)
 	service := NewSystemUserService()
 
 	user := model.SystemUser{
@@ -982,7 +1004,9 @@ func TestSystemUserService_ResetPassword_MultipleTimes(t *testing.T) {
 	}
 	database.Create(&user)
 
-	passwords := []string{"password2", "password3", "password4"}
+	// 密码必须同时满足：≥8 位、含大小写与数字、且不含常见弱密码片段
+	// （如 "password"/"admin"/"123456"），否则会被 400 拦在策略校验而非被测路径上
+	passwords := []string{"Zr4nWq8TxM", "Kb6vYc3PdF", "Gm9xJs5RtH"}
 	for _, pwd := range passwords {
 		err := service.ResetPassword(context.Background(), user.ID, pwd)
 		if err != nil {
@@ -998,7 +1022,8 @@ func TestSystemUserService_ResetPassword_MultipleTimes(t *testing.T) {
 
 	var finalUser model.SystemUser
 	database.First(&finalUser, user.ID)
-	if !CheckPassword(&finalUser, "password4") {
+	// 用切片末元素而非硬编码字符串，避免以后改密码列表时这里静默失配
+	if !CheckPassword(&finalUser, passwords[len(passwords)-1]) {
 		t.Error("Final password should be valid")
 	}
 	if CheckPassword(&finalUser, "password1") {

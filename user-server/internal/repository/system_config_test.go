@@ -115,20 +115,39 @@ func TestSystemConfigRepository_SaveConfig_Update(t *testing.T) {
 		Name:       "update_test",
 		WebsiteURL: "https://original.example.com",
 	}
-	_, err := repo.SaveConfig(context.Background(), config)
-	if err != nil {
-		t.Errorf("SaveConfig() create error = %v", err)
+	if _, err := repo.SaveConfig(context.Background(), config); err != nil {
+		t.Fatalf("SaveConfig() 首次创建失败: %v", err)
 	}
 
+	// 单例配置：第二次保存应**覆盖**已有值。
+	// 管理端 SystemConfigController.SaveConfig（internal/controller/system_config.go:34）
+	// 正是靠这个语义让管理员改动能生效；原断言写成"保留原值"，
+	// 既与本用例名 _Update 自相矛盾，也与产品行为相反。
 	config.WebsiteURL = "https://updated.example.com"
-
 	resultConfig, err := repo.SaveConfig(context.Background(), config)
 	if err != nil {
-		t.Errorf("SaveConfig() error = %v", err)
+		t.Fatalf("SaveConfig() 更新失败: %v", err)
+	}
+	if resultConfig.WebsiteURL != "https://updated.example.com" {
+		t.Errorf("第二次保存应覆盖为 'https://updated.example.com'，实际 '%s'", resultConfig.WebsiteURL)
 	}
 
-	if resultConfig.WebsiteURL != "https://original.example.com" {
-		t.Errorf("Expected FirstOrCreate to keep original website URL 'https://original.example.com', got '%s'", resultConfig.WebsiteURL)
+	// 必须真正落库，而不只是返回值变了
+	var persisted model.SystemConfig
+	if err := db.GetDB().First(&persisted).Error; err != nil {
+		t.Fatalf("回查配置失败: %v", err)
+	}
+	if persisted.WebsiteURL != "https://updated.example.com" {
+		t.Errorf("库中 WebsiteURL 未被更新，实际 '%s'", persisted.WebsiteURL)
+	}
+
+	// 单例约束：不应产生第二行
+	var n int64
+	if err := db.GetDB().Model(&model.SystemConfig{}).Count(&n).Error; err != nil {
+		t.Fatalf("统计配置行数失败: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("system_config 应为单例（1 行），实际 %d 行", n)
 	}
 }
 

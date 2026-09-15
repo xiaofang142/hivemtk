@@ -65,3 +65,35 @@ func TestCacheKeyStableAndDistinct(t *testing.T) {
 		t.Fatal("different scenarios should produce different keys")
 	}
 }
+
+// TestCacheKeyWithSystem_DistinctBySystemPrompt 回归：system prompt 必须参与缓存 key。
+//
+// 背景：知识库召回内容注入在 system message（service.renderRAGReferenceBlock），
+// 若 key 只覆盖 scenario+user prompt，同一句客户消息在不同知识库上下文下会命中同一条
+// 缓存，把「按 A 知识库生成的回复」当成「B 知识库上下文」的结果返回。
+func TestCacheKeyWithSystem_DistinctBySystemPrompt(t *testing.T) {
+	const userPrompt = "你们的产品怎么收费？"
+
+	a := CacheKeyWithSystem(ScenarioSOPReply, "【知识库参考】:\n1. 标准版 1999 元/年", userPrompt)
+	b := CacheKeyWithSystem(ScenarioSOPReply, "【知识库参考】:\n1. 旗舰版 5999 元/年", userPrompt)
+	if a == b {
+		t.Fatal("不同知识库上下文（system prompt 不同）必须产生不同缓存 key，否则缓存跨知识上下文串味")
+	}
+
+	// 同一 system prompt + 同一 user prompt（含首尾空白）应稳定命中同一 key
+	c := CacheKeyWithSystem(ScenarioSOPReply, "  persona  ", "  "+userPrompt+"  ")
+	d := CacheKeyWithSystem(ScenarioSOPReply, "persona", userPrompt)
+	if c != d {
+		t.Fatal("trim 后应产生相同 key")
+	}
+
+	// 分隔符必须存在：否则 (sp="ab",p="c") 与 (sp="a",p="bc") 拼接后哈希碰撞
+	if CacheKeyWithSystem(ScenarioSOPReply, "ab", "c") == CacheKeyWithSystem(ScenarioSOPReply, "a", "bc") {
+		t.Fatal("system prompt 与 user prompt 之间必须有分隔符，避免边界歧义导致哈希碰撞")
+	}
+
+	// scenario 仍须参与 key
+	if CacheKeyWithSystem(ScenarioSOPReply, "sp", "p") == CacheKeyWithSystem(ScenarioIntentRecognize, "sp", "p") {
+		t.Fatal("different scenarios should produce different keys")
+	}
+}

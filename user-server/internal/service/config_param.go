@@ -43,8 +43,10 @@ type ConfigParamService struct {
 	nowFn  func() time.Time
 }
 
-var globalConfigParam *ConfigParamService
-var globalOnce sync.Once
+var (
+	globalConfigParamMu sync.RWMutex
+	globalConfigParam   *ConfigParamService
+)
 
 // NewConfigParamService 构造（main 启动时调用）
 func NewConfigParamService(db *gorm.DB) *ConfigParamService {
@@ -56,24 +58,40 @@ func NewConfigParamService(db *gorm.DB) *ConfigParamService {
 	}
 }
 
-// SetGlobal 装配层注入单例（各 module 通过 GlobalConfigParam() 读取）
+// SetGlobal 装配层注入单例（各 module 通过 GlobalConfigParam() 读取）。
+//
+// 语义：**后写覆盖**，不是"只生效一次"。
+//
+// 历史缺陷（见 TASKS_AUDIT_2026-09-16.md · TEST-05）：本函数原用 sync.Once，
+// 于是第二次及以后的 SeedConfigParams 造出的新实例被**静默丢弃**，全局仍指向首个实例。
+// 而 ConfigParamService 是按 key 的**负缓存**（未命中即把默认值写入 cache 并置 loaded），
+// 因此旧实例会把"表还空着时读到的 0"永久固化 —— 之后再怎么 seed 都读不回真值。
+// 测试侧的表现就是 TestSeedConfigParams 读到全零（bridge.polling_max_timeout = 0s）。
+//
+// 生产侧 cmd/api/main.go:119 只调用一次，故改为后写覆盖对生产**无行为变化**；
+// 同时本函数原先是无锁写、GlobalConfigParam 无锁读，在 -race 下本身即数据竞争，
+// 现统一用 RWMutex 保护。
 func SetGlobal(svc *ConfigParamService) {
-	globalOnce.Do(func() {
-		globalConfigParam = svc
-	})
+	globalConfigParamMu.Lock()
+	globalConfigParam = svc
+	globalConfigParamMu.Unlock()
 }
 
-// SetGlobalForTest 测试专用：强制替换全局实例（绕过 globalOnce）。
+// SetGlobalForTest 测试专用：强制替换全局实例。
 // 生产代码禁止调用——生产一律走 SetGlobal/NewConfigParamService+Seed。
+// 语义已与 SetGlobal 一致（后写覆盖），保留本名是为了让"这是测试在动全局状态"这件事在调用点可见。
 func SetGlobalForTest(svc *ConfigParamService) {
-	globalConfigParam = svc
+	SetGlobal(svc)
 }
 
 // GlobalConfigParam 获取全局单例（nil-safe：返回一个无 DB 的 fallback stub，
 // 所有 Get* 方法走 fallback 默认值而非 panic）
 func GlobalConfigParam() *ConfigParamService {
-	if globalConfigParam != nil {
-		return globalConfigParam
+	globalConfigParamMu.RLock()
+	svc := globalConfigParam
+	globalConfigParamMu.RUnlock()
+	if svc != nil {
+		return svc
 	}
 
 	return &ConfigParamService{

@@ -311,7 +311,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install vet test-go
+.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune
 
 lint-install:
 	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
@@ -323,5 +323,45 @@ lint: lint-install
 vet:
 	cd user-server && go vet ./...
 
+# 自动格式化（gofmt 语义等价，可放心批量执行）
+fmt:
+	cd user-server && gofmt -w $$(gofmt -l . | grep -v '^vendor/')
+
+# 格式门禁：gofmt -l 非空即失败，与 CI 同口径。
+# 为什么必须独立于 golangci-lint：user-server/.golangci.yml 只启用 govet+depguard，
+# 且 run.tests=false —— gofmt 未被覆盖，测试文件更是完全不被 lint。
+# 历史上因此积累 34 个未格式化文件（见 TASKS_AUDIT_2026-09-16.md · FMT-01）。
+fmt-check:
+	@cd user-server && out=$$(gofmt -l . | grep -v '^vendor/'); \
+	if [ -n "$$out" ]; then \
+		echo "❌ 以下文件未通过 gofmt（执行 make fmt 修复）："; \
+		echo "$$out"; \
+		exit 1; \
+	fi; \
+	echo "✅ gofmt 检查通过"
+
 test-go:
 	cd user-server && go test ./... -count=1
+
+# 清理 testutil 遗留的进程级测试库（user_db_test_<pid> / user_db_test_bench_<pid>）。
+#
+# 背景：testutil 每个测试进程建一个独立库，且**从不 DROP**（Go 无进程退出钩子），
+# 实测累积 1466 个孤儿库 / 19 GB。详见 docs/architecture/TASKS_AUDIT_2026-09-16.md · RISK-07。
+#
+# 默认只列出（安全）；确认无误后加 APPLY=1 才真正 DROP。
+#   make test-db-prune            # 只列
+#   make test-db-prune APPLY=1    # 真删
+test-db-prune:
+	@cd user-server && set -a && . ../.env && set +a; \
+	PW="$$POSTGRES_PASSWORD"; \
+	if [ "$$APPLY" = "1" ]; then \
+		echo "⚠️  APPLY=1：即将 DROP 全部 user_db_test_* 库"; \
+		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
+			"SELECT 'DROP DATABASE IF EXISTS \"'||datname||'\";' FROM pg_database WHERE datname LIKE 'user_db_test_%';" \
+			| docker exec -i -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres; \
+		echo "✅ 清理完成"; \
+	else \
+		echo "（只列不删。确认后执行 make test-db-prune APPLY=1）"; \
+		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
+			"SELECT count(*)||' 个孤儿测试库，共 '||pg_size_pretty(sum(pg_database_size(datname))) FROM pg_database WHERE datname LIKE 'user_db_test_%';"; \
+	fi

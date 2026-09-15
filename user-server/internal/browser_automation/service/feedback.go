@@ -24,6 +24,7 @@ type FeedbackService struct {
 func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRepo repository.BrowserTaskRepository) *FeedbackService {
 	return &FeedbackService{sessionRepo: sessionRepo, taskRepo: taskRepo}
 }
+
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
 func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, finalStatus string, success, total int) {
 	defer func() {

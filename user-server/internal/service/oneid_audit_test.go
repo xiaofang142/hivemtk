@@ -16,11 +16,18 @@ import (
 
 func setupAuditTestDB(t *testing.T) {
 	t.Helper()
+	// 同 oneid_merge_test.go：MergeCustomers 事务会改写下列全部表，
+	// 缺任意一张即报 relation does not exist 并回滚整笔合并。
 	database := testutil.NewTestDB(t,
 		&model.Customer{},
 		&model.CustomerSession{},
 		&model.CustomerEvent{},
 		&model.OperationLog{},
+		&model.CustomerChannel{},
+		&model.CustomerDoNotContact{},
+		&model.CSATSurvey{},
+		&model.Clue{},
+		&model.ScriptExposureLog{},
 	)
 	db.SetTestDB(database)
 }

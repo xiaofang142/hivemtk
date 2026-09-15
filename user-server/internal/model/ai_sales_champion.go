@@ -59,6 +59,27 @@ type IntentRecord struct {
 	LatencyMs       int            `gorm:"default:0" json:"latency_ms"`
 	CreatedAt       time.Time      `gorm:"autoCreateTime;index" json:"created_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
+	// ---- 以下 6 列由精细意图链路（model.IntentLog / 迁移 v3.22.3）写入 ----
+	//
+	// ⚠️ 本结构体是 intent_records 的**唯一 automigrate 来源**
+	// （见 internal/pkg/db/migrate.go 的 AutoMigrate 清单），因此它必须是该表的
+	// **完整**列映射。历史缺陷：这 6 列只声明在 model.IntentLog 里，而 IntentLog
+	// 被明确禁止加入 automigrate 清单 —— 于是
+	//   ① 测试侧：testutil.NewTestDB 会 DropTable 后按模型重建，缺列即丢列，
+	//      精细意图查询报 column "source" does not exist (SQLSTATE 42703)（8 个用例失败）；
+	//   ② 生产侧：全新部署时 AutoMigrate 建出的表同样缺这 6 列，精细意图功能不可用
+	//      （存量库之所以正常，只是因为 AutoMigrate 不会删列）。
+	// 列宽/默认值以实时库 user_db.intent_records 为准（22 列，见 TASKS_AUDIT_2026-09-16.md · TEST-05）。
+	//
+	// 这些字段用 json:"-" 隐藏：controller/intent.go 直接把 []model.IntentRecord 返回给
+	// 前端，补列不得改变既有响应结构（精细日志另有 IntentLog 视图与专属接口暴露）。
+	TraceID   string     `gorm:"type:varchar(64);index" json:"-"`
+	Timestamp *time.Time `json:"-"`
+	Source    string     `gorm:"type:varchar(32);not null;default:sales;index" json:"-"`
+	Method    string     `gorm:"type:varchar(16);not null;default:llm" json:"-"`
+	Reasoning string     `gorm:"type:text" json:"-"`
+	UpdatedAt time.Time  `gorm:"autoUpdateTime" json:"-"`
 }
 
 func (IntentRecord) TableName() string { return "intent_records" }
@@ -270,12 +291,14 @@ func (ScriptVersion) TableName() string { return "script_versions" }
 
 // ScriptExposureLog 话术 AB 曝光日志（T-7：分桶+曝光+归因窗转化回写）
 type ScriptExposureLog struct {
-	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	ScriptID       uint       `gorm:"not null;index:idx_exposure_script_ver,priority:1" json:"script_id"`
-	Version        int        `gorm:"not null;default:1;index:idx_exposure_script_ver,priority:2" json:"version"`
-	Bucket         string     `gorm:"type:varchar(8);not null" json:"bucket"`
-	CustomerID     string     `gorm:"column:customer_id;type:varchar(64);index" json:"customer_id"`
-	OneID          string     `gorm:"type:varchar(64);index" json:"one_id"`
+	ID         uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	ScriptID   uint   `gorm:"not null;index:idx_exposure_script_ver,priority:1" json:"script_id"`
+	Version    int    `gorm:"not null;default:1;index:idx_exposure_script_ver,priority:2" json:"version"`
+	Bucket     string `gorm:"type:varchar(8);not null" json:"bucket"`
+	CustomerID string `gorm:"column:customer_id;type:varchar(64);index" json:"customer_id"`
+	// 与 customers.unified_id 对齐为 varchar(128)：手机号型 OneID 长 70 字符
+	// （"phone:" + sha256 hex 64 位），varchar(64) 会写入溢出。
+	OneID          string     `gorm:"type:varchar(128);index" json:"one_id"`
 	ConversationID string     `gorm:"type:varchar(64);index" json:"conversation_id"`
 	TraceID        string     `gorm:"type:varchar(64)" json:"trace_id"`
 	ExposedAt      time.Time  `gorm:"index" json:"exposed_at"`

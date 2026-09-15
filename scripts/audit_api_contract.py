@@ -214,19 +214,31 @@ for _ in range(8):
             if obj:
                 cls = infer_type_of(d.get('_body', '')).get(obj)
                 if not cls:
-                    continue
-                key = cls + '.' + callee
-                if key not in func_file:
-                    continue
-                cf, rgn = func_file[key]
+                    # 包限定自由函数调用，如 `monitor.RegisterRoutes(auth)`：
+                    # obj 是 import 的包别名，不是本地控制器变量，infer_type_of 必然返回
+                    # None。原实现直接 `continue`，导致这类注册的 RouterGroup 参数永远
+                    # 绑定不上 → 路由前缀解析为 <UNRESOLVED:xxx> → 前端调用被误判为断链。
+                    # 这里按「包别名 == 被调函数所在目录名」匹配自由函数表。
+                    # （2026-09-16 修复：此前 /api/monitor/* 7 条被误报为 UNMATCHED）
+                    pkg_hit = func_file.get(callee)
+                    if not pkg_hit or os.path.basename(os.path.dirname(pkg_hit[0])) != obj:
+                        continue
+                    cf, rgn = pkg_hit
+                    key = callee
+                else:
+                    key = cls + '.' + callee
+                    if key not in func_file:
+                        continue
+                    cf, rgn = func_file[key]
             else:
+                key = callee
                 cf, rgn = func_file.get(callee, (None, []))
             for idx, pname in rgn:
                 if idx < 0 or idx >= len(args):
                     continue
                 a = args[idx].split(',')[0].strip()
                 val = resolve(fkey, a)
-                kk = (cf, key if obj else callee, pname)
+                kk = (cf, key, pname)
                 if val is not None and bindings.get(kk) != val:
                     bindings[kk] = val
                     changed = True
@@ -245,7 +257,21 @@ for fkey, d in sc_info.items():
             full = '<UNRESOLVED:%s>' % var
         backend[(meth, full + path)] = fkey
 
-unres = sorted(k for k in backend if 'UNRESOLVED' in k[1])
+# 未解析项去重（2026-09-16）：同一路由会在两个 scope 中被捕获 ——
+#   ① 函数级 scope（如 RegisterRoutes(rg *gin.RouterGroup)）—— 能解析出前缀；
+#   ② 文件级伪 scope（qual == '<file>'）—— 函数形参不在作用域内，必然解析失败。
+# 于是「已解析成功」的路由仍会以 <UNRESOLVED:xxx> 形式重复出现，把 unresolved 计数
+# 抬高成假象（实测 /api/monitor/* 7 条即为此类）。此处剔除「同方法下已存在同后缀
+# 可解析路由」的未解析项，只保留真正没解析出来的。
+_resolved = [(m, p) for (m, p) in backend if 'UNRESOLVED' not in p]
+
+
+def _shadowed(meth, path):
+    suffix = path.split('>', 1)[1] if '>' in path else path
+    return any(rm == meth and rp.endswith(suffix) for (rm, rp) in _resolved)
+
+
+unres = sorted(k for k in backend if 'UNRESOLVED' in k[1] and not _shadowed(*k))
 print("backend routes: %d, unresolved: %d" % (len(backend), len(unres)))
 for k in unres:
     print("   UNRESOLVED:", k)

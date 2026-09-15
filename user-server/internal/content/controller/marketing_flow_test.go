@@ -137,9 +137,9 @@ func TestMarketingFlowController_CreateFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -199,10 +199,10 @@ func TestMarketingFlowController_GetFlowList(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 				assert.NotNil(t, response["data"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -267,9 +267,9 @@ func TestMarketingFlowController_GetFlowByID(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -341,9 +341,9 @@ func TestMarketingFlowController_UpdateFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -401,9 +401,9 @@ func TestMarketingFlowController_DeleteFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -465,9 +465,9 @@ func TestMarketingFlowController_ActivateFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -528,9 +528,9 @@ func TestMarketingFlowController_PauseFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -591,9 +591,9 @@ func TestMarketingFlowController_StopFlow(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -661,9 +661,9 @@ func TestMarketingFlowController_GetExecutionList(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -735,9 +735,9 @@ func TestMarketingFlowController_GetExecutionStats(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}

@@ -491,9 +491,8 @@ function getConversationList() {
   for (const item of items) {
     if (!item || !item.offsetParent) continue;
     // ID 提取：data-conversation-id → /@username 链接 → 昵称
-    let id = null;
     const raw = item.getAttribute('data-conversation-id') || item.getAttribute('data-id') || item.id || null;
-    id = normalizeContactId(raw);
+    let id = normalizeContactId(raw);
     if (!id) {
       const link = item.querySelector('a[href*="/@"]');
       if (link) {

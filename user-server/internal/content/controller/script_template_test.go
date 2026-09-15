@@ -77,7 +77,7 @@ func TestScriptTemplateController_GetTemplateList_Success(t *testing.T) {
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["code"] != "SUCCESS" && resp["code"] != float64(200) && resp["code"] != "200" {
+	if resp["code"] != float64(0) && resp["code"] != float64(200) && resp["code"] != "200" {
 		t.Errorf("Expected success code, got %v", resp["code"])
 	}
 }

@@ -2,91 +2,38 @@ package monitor
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/tracing"
-
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
-func envOr(k, fallback string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func readEnvPassword() string {
-	roots := []string{"../.env", "../../.env", "../../../.env"}
-	for _, p := range roots {
-		if b, err := os.ReadFile(p); err == nil {
-			for _, line := range splitLines(string(b)) {
-				if len(line) > 0 && line[0] == '#' {
-					continue
-				}
-				var k, v string
-				for i := 0; i < len(line); i++ {
-					if line[i] == '=' {
-						k, v = line[:i], line[i+1:]
-						break
-					}
-				}
-				if k == "POSTGRES_PASSWORD" {
-					return v
-				}
-			}
-		}
-	}
-	return ""
-}
-
-func splitLines(s string) []string {
-	var out []string
-	cur := ""
-	for _, r := range s {
-		if r == '\n' {
-			out = append(out, cur)
-			cur = ""
-		} else {
-			cur += string(r)
-		}
-	}
-	if cur != "" {
-		out = append(out, cur)
-	}
-	return out
-}
-
-func openTestDB(t *testing.T) *gorm.DB {
-	pass := envOr("POSTGRES_TEST_PASSWORD", readEnvPassword())
-	dsn := "host=" + envOr("POSTGRES_TEST_HOST", "127.0.0.1") +
-		" port=" + envOr("POSTGRES_TEST_PORT", "8232") +
-		" user=" + envOr("POSTGRES_TEST_USER", "admin") +
-		" password=" + pass +
-		" dbname=" + envOr("POSTGRES_TEST_DBNAME", "user_db") +
-		" sslmode=disable"
-	gdb, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Logf("skip: 无法连接测试库: %v", err)
-		return nil
-	}
-	if err := gdb.AutoMigrate(&model.MessageHub{}, &model.MessageTrace{}); err != nil {
-		t.Logf("skip: 迁移失败: %v", err)
-		return nil
-	}
-	return gdb
-}
-
+// ⚠️ 2026-09-16 审计（TEST-06）：本文件原先自带一套 openTestDB + envOr +
+// readEnvPassword + splitLines（约 80 行），与 internal/pkg/testutil 并存，
+// 且两套默认值互相矛盾。已整段删除，统一改走 testutil.NewTestDB。
+//
+// 原实现的三个具体问题（保留说明以免回退）：
+//
+//  1. **默认连的是生产库**：`dbname` 默认值写成 `user_db` —— 那是主库名，
+//     而 testutil 的默认是 `user_db_test`（进程级隔离库）。本地只要 PG 可达，
+//     本用例就会在真实 `user_db` 上 AutoMigrate 并 `Create` 写入测试行
+//     （即下面的 inbound 消息），且 AutoMigrate 会顺带补列/补索引 ——
+//     测试**改动生产 schema 与数据**，不只是"跑测试"。
+//  2. **失败即静默跳过**：连不上/迁移失败时 `t.Logf` + 返回 nil，调用方 `t.Skip`
+//     → `go test` 退出 0，属本项目反复出现的假绿模式（RISK-01 同源）。
+//     端口/口令写错这类真实故障因此从不报警。
+//  3. **重复第三份连接参数**：端口默认 8232、口令另写一套 `.env` 解析器，
+//     与 testutil 的候选探测（8232/8202）和 `POSTGRES_PASSWORD` 回落各说各话。
+//
+// 现在的口径：**测试库引导只有 testutil 一个入口**。新增测试请直接调用
+// `testutil.NewTestDB(t, models...)`，不要自带 DSN 拼装。
 func TestTracingAndMonitoring(t *testing.T) {
-	gdb := openTestDB(t)
-	if gdb == nil {
-		t.Skip("无可用测试库，跳过集成测试")
-	}
+	// NewTestDB 在隔离库（user_db_test_<pid>）内 DropTable + AutoMigrate，
+	// 不会触碰 user_db；不可达时本地 Skip / CI Fatal（不再无条件 Skip）。
+	gdb := testutil.NewTestDB(t, &model.MessageHub{}, &model.MessageTrace{})
 	db.SetTestDB(gdb)
 	ctx := context.Background()
 	conv := "conv-monitor-test-" + time.Now().Format("150405")
@@ -191,8 +138,9 @@ func TestTracingAndMonitoring(t *testing.T) {
 		t.Fatalf("PurgeOld 不应删除近期数据，实际删除 %d", deleted)
 	}
 
-	gdb.WithContext(ctx).Where("conversation_id = ?", conv).Delete(&model.MessageTrace{})
-	gdb.WithContext(ctx).Where("conversation_id = ?", conv).Delete(&model.MessageHub{})
+	// 原实现在此处手工 `Delete` 清理本会话的测试行 —— 那是在**共享库**上跑测试
+	// 才需要的补偿动作。现在跑在进程级隔离库内（NewTestDB 每次 DropTable 重建），
+	// 数据不会外溢，手工清理已无必要，故移除（避免让读者误以为库是共享的）。
 }
 
 func TestGenerateTraceID(t *testing.T) {

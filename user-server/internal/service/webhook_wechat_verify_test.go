@@ -31,18 +31,43 @@ func newWechatVerifyService(t *testing.T, accounts ...*model.WechatAccount) *Web
 	return NewWebhookService(db)
 }
 
-// TestVerify_Wechat_NoSecretConfiguredSkips 未配置 secret：跳过验签（不再永远失败）
-func TestVerify_Wechat_NoSecretConfiguredSkips(t *testing.T) {
+// TestVerify_Wechat_NoSecretConfiguredRejects 未配置 secret：fail-closed 拒绝验签。
+//
+// 历史沿革（勿回退）：本用例原名 ..._Skips，断言「未配置 secret 时跳过验签」（fail-open）。
+// 后生产代码（internal/service/webhook.go:479-489）改为 fail-closed，理由充分 ——
+// 公开 webhook 在无 secret 时放行，等于任何人都能伪造上行消息注入系统。
+// 因此本用例同步改为断言「拒绝」，仅在显式 ALLOW_INSECURE_WEBHOOK=true 时才允许放行。
+func TestVerify_Wechat_NoSecretConfiguredRejects(t *testing.T) {
+	svc := newWechatVerifyService(t)
+	defer svc.Stop(context.Background())
+
+	ok, err := svc.Verify(context.Background(), ChannelWechat, "9",
+		[]byte(`{}`), map[string]string{}, nil)
+	if err == nil {
+		t.Fatal("未配置 secret 时应拒绝验签（fail-closed），实际未返回错误")
+	}
+	if ok {
+		t.Fatal("未配置 secret 时不得放行 —— fail-open 属安全缺陷，可被任意伪造上行消息")
+	}
+}
+
+// TestVerify_Wechat_InsecureEscapeHatch 仅当显式 ALLOW_INSECURE_WEBHOOK=true 时才放行。
+//
+// 这条逃生通道是给本地联调用的，必须有测试钉住「默认不生效」，
+// 否则一旦默认值被改，线上会在无验签状态下静默放行全部 webhook。
+func TestVerify_Wechat_InsecureEscapeHatch(t *testing.T) {
+	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
+
 	svc := newWechatVerifyService(t)
 	defer svc.Stop(context.Background())
 
 	ok, err := svc.Verify(context.Background(), ChannelWechat, "9",
 		[]byte(`{}`), map[string]string{}, nil)
 	if err != nil {
-		t.Fatalf("expected skip without error, got %v", err)
+		t.Fatalf("显式开启 ALLOW_INSECURE_WEBHOOK 后不应报错，实际 %v", err)
 	}
 	if !ok {
-		t.Fatal("W-6 未达成：未配置 secret 时验签仍失败（应跳过该渠道验签）")
+		t.Fatal("显式开启 ALLOW_INSECURE_WEBHOOK 后应放行")
 	}
 }
 

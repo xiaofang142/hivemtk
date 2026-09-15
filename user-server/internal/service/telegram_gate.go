@@ -45,15 +45,27 @@ type TelegramGateService struct {
 	gateRepo   *repository.TelegramGroupGateRepository
 	memberRepo *repository.TelegramGroupMemberRepository
 	tgRepo     *repository.TelegramAccountRepository
+
+	// apiBase 覆盖 Telegram Bot API 基址（空串=官方 api.telegram.org）。
+	// 供测试指向 httptest 服务端，避免 happy path 因真实 API 401 而无法覆盖；
+	// 也便于将来接自建网关/代理。见 SetAPIBase。
+	apiBase string
 }
+
+// SetAPIBase 覆盖 Bot API 基址（测试/代理场景）。
+//
+// 为什么需要这个接缝：AuthorizeMember 的放行动作（UnrestrictChatMember /
+// ApproveChatJoinRequest）必须打到 TG 侧；没有接缝时测试只能用假 token 打真 API，
+// 必然 401，于是"授权成功"这条主路径永远无法被验证（历史上该用例因此长期失败）。
+// 与 db.SetTestDB / config.SetAppConfig 同属项目既有的测试注入约定。
+func (s *TelegramGateService) SetAPIBase(u string) { s.apiBase = u }
 
 func NewTelegramGateService(db *gorm.DB) *TelegramGateService {
 	svc := &TelegramGateService{}
 	if db != nil {
 		svc.gateRepo = repository.NewTelegramGroupGateRepositoryWithDB(db)
 		svc.memberRepo = repository.NewTelegramGroupMemberRepositoryWithDB(db)
-		svc.tgRepo = repository.NewTelegramAccountRepository()
-		svc.tgRepo.SetDB(context.Background(), db)
+		svc.tgRepo = repository.NewTelegramAccountRepositoryWithDB(db)
 	}
 	return svc
 }
@@ -90,7 +102,11 @@ func (s *TelegramGateService) client(ctx context.Context, accountID uint) (*tele
 	if err != nil {
 		return nil, fmt.Errorf("get tg account %d: %w", accountID, err)
 	}
-	return telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client)), nil
+	opts := []core.ClientOption{core.WithHTTPClient(httpclient.Client)}
+	if s.apiBase != "" {
+		opts = append(opts, core.WithBaseURL(s.apiBase))
+	}
+	return telegram.NewTelegramClient(acc.BotToken, opts...), nil
 }
 
 // genVerifyToken 生成不可预测的验证 token（HMAC 链路：随机 20 字节，仅落库明文比对）

@@ -12,10 +12,20 @@ import (
 
 func setupMergeTestDB(t *testing.T) repository.CustomerRepository {
 	t.Helper()
+	// 以下模型全部为 MergeCustomers 事务实际改写的表，缺一即整笔事务回滚：
+	//   customers / customer_sessions / customer_events（主档与事件）
+	//   customer_channels / customer_do_not_contact / csat_surveys / clues /
+	//   script_exposure_logs（ReassignOneID 家族，见 service/customer.go:346-383）
+	//   operation_logs（合并审计日志）
 	database := testutil.NewTestDB(t,
 		&model.Customer{},
 		&model.CustomerSession{},
 		&model.CustomerEvent{},
+		&model.CustomerChannel{},
+		&model.CustomerDoNotContact{},
+		&model.CSATSurvey{},
+		&model.Clue{},
+		&model.ScriptExposureLog{},
 	)
 	db.SetTestDB(database)
 	repo := repository.NewCustomerRepository()

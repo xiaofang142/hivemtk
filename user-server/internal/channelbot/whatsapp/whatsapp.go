@@ -37,6 +37,12 @@ func NewCloudClient(phoneID, accessToken string, opts ...core.ClientOption) *Clo
 }
 
 func (c *CloudClient) apiBase() string {
+	// WithBaseURL 注入的测试/代理地址优先（与 qq/telegram 客户端保持一致）。
+	// 历史缺陷：本方法曾硬编码返回 defaultGraphBase，使 core.WithBaseURL
+	// 这个文档写着"用于测试或代理"的选项在此静默失效。
+	if c.BaseURL != "" {
+		return c.BaseURL
+	}
 	return defaultGraphBase + "/" + c.apiVersion
 }
 

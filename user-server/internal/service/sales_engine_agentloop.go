@@ -92,13 +92,16 @@ func (e *SalesEngine) runAgentLoop(
 	}
 	if len(toolDefs) == 0 {
 
+		// 工具被过滤为空（scenario 限定类别后无可用工具）→ 退回直连 dispatch。
+		// system prompt 必须经 plainDispatchSystemPrompt 拼接，否则知识库召回被丢弃。
+		systemPrompt := e.plainDispatchSystemPrompt(ctx, req, targetLang, ragChunks)
 		result, err := e.dispatcher.Dispatch(ctx, llm.DispatchRequest{
 			Scenario:     scenario,
 			Prompt:       prompt,
-			SystemPrompt: e.personaWithLang(ctx, req.Config.Persona, targetLang),
+			SystemPrompt: systemPrompt,
 			MaxTokens:    req.Config.MaxTokens,
 			Temperature:  req.Config.Temperature,
-			CacheKey:     llm.CacheKey(scenario, prompt),
+			CacheKey:     llm.CacheKeyWithSystem(scenario, systemPrompt, prompt),
 			CacheTTL:     3600,
 		})
 		if err != nil {
@@ -395,6 +398,39 @@ func (e *SalesEngine) emptyReplyFallback() string {
 	return "抱歉，我暂时无法处理您的请求，请稍后再试。"
 }
 
+// renderRAGReferenceBlock 渲染【知识库参考】区块。
+//
+// ⚠️ 所有「把 ragChunks 交给 LLM」的路径必须共用本函数：agent loop 的
+// buildAgentSystemPrompt，以及两条非 agent 的兜底 dispatch（见
+// (*SalesEngine).plainDispatchSystemPrompt）。
+//
+// 历史缺陷（TASKS_AUDIT_2026-09-16.md · COH-01）：本区块原先只拼在 agent loop 路径，
+// 另两条路径的 SystemPrompt 只传 persona，于是 recallRAG 召回的知识库内容被**静默丢弃** ——
+// 向量检索、计费、ContextBudget 裁剪、写入 resp.RAGChunks 全都正常发生，
+// 唯独 LLM 看不到，回答退化为无知识库兜底。表现为 E2E 断言「AI 回复未引用 RAG 知识库」。
+func renderRAGReferenceBlock(ragChunks []RAGChunk) string {
+	if len(ragChunks) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n【知识库参考】:\n")
+	for i, chunk := range ragChunks {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, truncate(chunk.Content, 400)))
+	}
+	return sb.String()
+}
+
+// plainDispatchSystemPrompt 非 agent loop 路径的 system prompt。
+//
+// 两条路径会走到这里：
+//  1. generateCandidate 中 toolExecutor 未装配（或未注册任何工具）时的直连 dispatch；
+//  2. runAgentLoop 中工具被 filterToolsForScenario / limitToolsForAgent 过滤为空时的兜底 dispatch。
+//
+// 两者都必须带上知识库参考，否则召回结果被丢弃（见 renderRAGReferenceBlock 注释）。
+func (e *SalesEngine) plainDispatchSystemPrompt(ctx context.Context, req *SalesRequest, targetLang string, ragChunks []RAGChunk) string {
+	return e.personaWithLang(ctx, req.Config.Persona, targetLang) + renderRAGReferenceBlock(ragChunks)
+}
+
 func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *model.DialogueMemory, customer *model.Customer, ragChunks []RAGChunk, guard *agentLoopGuard) string {
 	var sb strings.Builder
 	sb.WriteString(persona)
@@ -412,11 +448,7 @@ func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *mo
 	sb.WriteString("- 系统已为你预检索相关知识库内容（见下方【知识库参考】），优先基于其回答，避免重复调用 rag.search；仅当用户问题明显超出已给范围、需要更多资料时，才调用 rag.search 补充检索。\n")
 
 	if len(ragChunks) > 0 {
-		sb.WriteString("\n【知识库参考】:\n")
-
-		for i, chunk := range ragChunks {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, truncate(chunk.Content, 400)))
-		}
+		sb.WriteString(renderRAGReferenceBlock(ragChunks))
 	}
 
 	if guard != nil {
@@ -617,8 +649,13 @@ func (e *SalesEngine) buildPrompt(
 		sb.WriteString(fmt.Sprintf("【客户阶段】: %s\n", stage))
 	}
 
-	// RAG chunks 已在 buildAgentSystemPrompt (system message) 里拼一次，
-	// 这里不再重复，避免占双倍 token（ContextBudget 统一管理）
+	// RAG chunks 统一走 system message 注入（renderRAGReferenceBlock），
+	// 这里不再重复，避免占双倍 token（ContextBudget 统一管理）。
+	//
+	// ⚠️ 原文写的是「已在 buildAgentSystemPrompt 里拼一次」，但那只覆盖 agent loop 分支，
+	// 据此判断"其余路径也不需要拼"正是 COH-01 的成因。现在的口径是：
+	// **每条把 ragChunks 交给 LLM 的路径都经 renderRAGReferenceBlock 注入**，
+	// 因此 user prompt 侧确实不需要再拼。新增 dispatch 路径时请勿打破该不变式。
 	// 留 ragChunks 参数以便未来做按需注入
 
 	if script != nil {

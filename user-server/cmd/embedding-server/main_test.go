@@ -176,5 +176,3 @@ func TestEmbeddingServer_Embed_DefaultModel(t *testing.T) {
 		t.Errorf("expected default model echoed, got %s", resp.Model)
 	}
 }
-
-

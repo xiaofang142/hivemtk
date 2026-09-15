@@ -290,7 +290,7 @@ func (r *ReachPipelineRepository) GetScriptContent(ctx context.Context, template
 	var sl struct {
 		Content string `gorm:"column:content"`
 	}
-	if err := r.db.WithContext(ctx).Table("script_libraries").Select("content").Where("id = ?", templateID).Scan(&sl).Error; err == nil && sl.Content != "" {
+	if err := r.db.WithContext(ctx).Table("script_library").Select("content").Where("id = ?", templateID).Scan(&sl).Error; err == nil && sl.Content != "" {
 		return sl.Content, nil
 	}
 	return "", fmt.Errorf("template %s not found", templateID)

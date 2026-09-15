@@ -153,6 +153,9 @@ func setupWebChatE2E(t *testing.T) (*VisitorChatService, *SmartCSOrchestrator, *
 		&model.QuickReply{},
 		&model.SessionTag{},
 		&model.CSATSurvey{},
+		// VisitorChatService.OpenSession 会做黑名单校验，缺此表报
+		// relation "user_blacklist" does not exist
+		&model.UserBlacklist{},
 	)
 	db.SetTestDB(database)
 

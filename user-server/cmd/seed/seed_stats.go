@@ -62,7 +62,6 @@ func (s *statsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 // buildFunnels 生成 7 天 × 5 阶段的漏斗数据
 // 漏斗阶段：曝光 → 点击 → 咨询 → 加微 → 成交
 func (s *statsSeeder) buildFunnels() []model.ConversionFunnel {
@@ -70,7 +69,7 @@ func (s *statsSeeder) buildFunnels() []model.ConversionFunnel {
 	stages := []struct {
 		Name  string
 		Order int
-		Base  int 
+		Base  int
 	}{
 		{"exposure", 1, 10000},
 		{"click", 2, 3500},
@@ -100,7 +99,7 @@ func (s *statsSeeder) buildFunnels() []model.ConversionFunnel {
 				Stage:          st.Name,
 				StageOrder:     st.Order,
 				Count:          count,
-				ConversionRate: float64(int(convRate*100)) / 100, 
+				ConversionRate: float64(int(convRate*100)) / 100,
 				DropOffRate:    float64(int(dropOffRate*100)) / 100,
 				AvgDurationSec: randInt(30, 600),
 				Extra: model.JSONMap{
@@ -148,7 +147,7 @@ func (s *statsSeeder) buildSalesPersonas(ctx *SeedContext) []model.SalesPersona 
 		if activeCustomers < 0 {
 			activeCustomers = 0
 		}
-		avgDeal := int64(randInt(500, 10000)) * 100 
+		avgDeal := int64(randInt(500, 10000)) * 100
 		totalRev := avgDeal * int64(convertedCustomers)
 		lastActive := hoursAgo(randInt(1, 48))
 		p := model.SalesPersona{
@@ -243,5 +242,3 @@ func toAnySlice(ss []string) []any {
 
 // 防止 time 未使用警告
 var _ = time.Now
-
-

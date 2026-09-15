@@ -73,21 +73,20 @@ func (s *llmLogsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 // routingLogSpec 单条 dispatch 日志规格
 type routingLogSpec struct {
 	Scenario         string
 	Provider         string
 	Model            string
-	ModelType        string 
+	ModelType        string
 	Vendor           string
 	BaseURL          string
 	IsFallback       bool
 	FromCache        bool
 	Success          bool
-	TokenSource      string 
+	TokenSource      string
 	Estimator        string
-	Source           string 
+	Source           string
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
@@ -101,13 +100,13 @@ type routingLogSpec struct {
 
 // 7 个业务场景（来自 project_memory：intent/sop/objection/…）
 var llmScenarios = []string{
-	"intent",    
-	"sop",       
-	"objection", 
-	"greeting",  
-	"closing",   
-	"faq",       
-	"follow_up", 
+	"intent",
+	"sop",
+	"objection",
+	"greeting",
+	"closing",
+	"faq",
+	"follow_up",
 }
 
 func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
@@ -187,16 +186,16 @@ func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
 			}
 			idx++
 			spec := routingLogSpec{
-				Scenario:  scenario,
-				Provider:  p.Provider,
-				Model:     p.Model,
-				ModelType: "cloud",
-				Vendor:    p.Vendor,
-				BaseURL:   p.BaseURL,
-				Source:    "dispatch",
-				Success:   true,
-				LatencyMs: randInt(500, 3000),
-				HoursAgo:  randInt(1, 168),
+				Scenario:         scenario,
+				Provider:         p.Provider,
+				Model:            p.Model,
+				ModelType:        "cloud",
+				Vendor:           p.Vendor,
+				BaseURL:          p.BaseURL,
+				Source:           "dispatch",
+				Success:          true,
+				LatencyMs:        randInt(500, 3000),
+				HoursAgo:         randInt(1, 168),
 				TokenSource:      "actual",
 				Estimator:        "api_usage",
 				PromptTokens:     randInt(150, 800),
@@ -266,7 +265,7 @@ func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
 			HoursAgo:  randInt(1, 168),
 		}
 		switch i % 5 {
-		case 0: 
+		case 0:
 			spec.FromCache = true
 			spec.Source = "cache"
 			spec.Success = true
@@ -274,7 +273,7 @@ func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
 			spec.Estimator = "char_weight"
 			spec.PromptTokens = randInt(100, 600)
 			spec.CompletionTokens = randInt(30, 200)
-		case 1: 
+		case 1:
 			spec.IsFallback = true
 			spec.Source = "fallback"
 			spec.Success = true
@@ -282,14 +281,14 @@ func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
 			spec.Estimator = "char_weight"
 			spec.PromptTokens = randInt(200, 800)
 			spec.CompletionTokens = randInt(50, 300)
-		case 2: 
+		case 2:
 			spec.IsFallback = true
 			spec.Source = "fallback"
 			spec.Success = false
 			spec.ErrorMsg = "演示：上游 LLM 网关超时"
 			spec.TokenSource = "missing"
 			spec.Estimator = "empty_fallback"
-		case 3: 
+		case 3:
 			spec.IsFallback = false
 			spec.Source = "dispatch"
 			spec.Success = true
@@ -297,7 +296,7 @@ func (s *llmLogsSeeder) buildRoutingLogs() []routingLogSpec {
 			spec.Estimator = "api_usage"
 			spec.PromptTokens = randInt(200, 1000)
 			spec.CompletionTokens = randInt(50, 400)
-		case 4: 
+		case 4:
 			spec.Success = true
 			spec.Source = "dispatch"
 			spec.TokenSource = "missing"
@@ -328,7 +327,7 @@ type routingAuditSpec struct {
 	NewProvider   string
 	PrevFallbacks string
 	NewFallbacks  string
-	Action        string 
+	Action        string
 	Operator      string
 	HoursAgo      int
 }
@@ -344,7 +343,7 @@ func (s *llmLogsSeeder) buildRoutingAudits() []routingAuditSpec {
 		prev := providers[i%len(providers)]
 		next := providers[(i+3)%len(providers)]
 		if i%3 == 0 {
-			prev = "" 
+			prev = ""
 		}
 		a := routingAuditSpec{
 			Scenario:      scenario,
@@ -361,7 +360,6 @@ func (s *llmLogsSeeder) buildRoutingAudits() []routingAuditSpec {
 	}
 	return audits
 }
-
 
 func (s *llmLogsSeeder) insertRoutingLogs(database *gorm.DB, specs []routingLogSpec) error {
 	if len(specs) == 0 {
@@ -425,5 +423,3 @@ func isTableMissingErr(err error) bool {
 
 // 防止 time 未使用警告（time 在 future 扩展中使用）
 var _ = time.Now
-
-

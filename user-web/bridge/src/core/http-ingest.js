@@ -88,8 +88,8 @@ function previewBody(body, maxBytes = 4096) {
 // 失败（URL 构造抛错）返回 null，调用方需自行处理。
 // 成功返回 { url, payload }：url 给 fetch 使用；payload 给测试 / 调试使用。
 function _logRequest(label, serverUrl, params, body, extra) {
-  let url = '';
-  let parsed = null;
+  let url;
+  let parsed;
   try {
     url = buildIngestUrl(serverUrl, params);
     parsed = describeIngestParams(url);

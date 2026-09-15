@@ -523,7 +523,7 @@ function getConversationList() {
   for (const item of items) {
     if (!item || !item.offsetParent) continue;
     // 闲鱼会话项内没有 /user/ 链接，用 data-* 或名称兜底
-    let id = null;
+    let id;
     // 1) data 属性
     const raw =
       item.getAttribute('data-conversation-id') ||

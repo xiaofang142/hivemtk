@@ -133,9 +133,9 @@ func TestCustomReportController_CreateReport(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -194,9 +194,9 @@ func TestCustomReportController_GetReport(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -255,10 +255,10 @@ func TestCustomReportController_GetReportList(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 				assert.NotNil(t, response["data"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -269,11 +269,15 @@ func TestCustomReportController_UpdateReport(t *testing.T) {
 	db := setupCustomReportTestDB(t)
 	router := setupCustomReportRouter(t, db)
 
+	// CreatedBy 必须等于测试路由注入的 user_id(1)：service.UpdateReport 会做
+	// `!isAdmin && report.CreatedBy != userID` 归属校验，夹具不设 CreatedBy(=0)
+	// 会让"成功"用例必然拿到 403 无权限。
 	testReport := &model.CustomReport{
 		Name:        "Original Name",
 		Description: "Original Description",
 		DataSource:  "sessions",
 		ChartType:   "bar",
+		CreatedBy:   1,
 	}
 	db.Create(testReport)
 
@@ -339,9 +343,9 @@ func TestCustomReportController_UpdateReport(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -352,10 +356,12 @@ func TestCustomReportController_DeleteReport(t *testing.T) {
 	db := setupCustomReportTestDB(t)
 	router := setupCustomReportRouter(t, db)
 
+	// 同 UpdateReport：DeleteReport 同样校验归属，CreatedBy 须与注入的 user_id 一致。
 	testReport := &model.CustomReport{
 		Name:       "To Delete",
 		DataSource: "sessions",
 		ChartType:  "bar",
+		CreatedBy:  1,
 	}
 	db.Create(testReport)
 
@@ -398,9 +404,9 @@ func TestCustomReportController_DeleteReport(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -438,9 +444,9 @@ func TestCustomReportController_GetPublicTemplates(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -499,9 +505,9 @@ func TestCustomReportController_UseTemplate(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}
@@ -559,9 +565,9 @@ func TestCustomReportController_QueryReportData(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.expectSuccess {
-				assert.Equal(t, "SUCCESS", response["code"])
+				assert.Equal(t, float64(0), response["code"])
 			} else {
-				assert.NotEqual(t, "SUCCESS", response["code"])
+				assert.NotEqual(t, float64(0), response["code"])
 			}
 		})
 	}

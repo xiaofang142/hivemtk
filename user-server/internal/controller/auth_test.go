@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -250,18 +251,43 @@ func TestAuthController_GetCurrentUser_MissingUserID(t *testing.T) {
 	}
 }
 
+// seedRegularUser 播种「初始超管」（占住 id=1）+ 一个普通用户，返回该普通用户。
+//
+// 为什么必须先占住 id=1：service.ChangePassword 与 SystemUserService.ResetPassword
+// 对 id=1（初始超管）有系统级保护 —— 一律拒绝改密（ErrInitialAdminProtected）。
+// 而本文件原先的用例把普通用户建成表里的第一行，它必然拿到 id=1，
+// 于是：
+//   - *_Success 用例被守卫拦成 400 → 长期失败；
+//   - *_WrongOldPassword 用例恰好也期望 400 → "因错误原因通过"，实际根本没验到原密码分支。
+//
+// 这里显式占位，让被测用户稳定落在 id≠1，两条路径才真正被覆盖。
+func seedRegularUser(t *testing.T, username, password string) model.SystemUser {
+	t.Helper()
+	database := db.GetDB()
+	if err := database.Create(&model.SystemUser{
+		Username: "initial_admin",
+		Password: "seed-password-not-used",
+		Status:   1,
+	}).Error; err != nil {
+		t.Fatalf("播种初始超管失败: %v", err)
+	}
+	u := model.SystemUser{Username: username, Password: password, Status: 1}
+	if err := database.Create(&u).Error; err != nil {
+		t.Fatalf("创建普通用户失败: %v", err)
+	}
+	if u.ID == 1 {
+		t.Fatalf("普通用户不应拿到 id=1（初始超管受保护），实际 id=%d", u.ID)
+	}
+	return u
+}
+
 // TestAuthController_ChangePassword_Success 测试修改密码成功
 func TestAuthController_ChangePassword_Success(t *testing.T) {
 	setupTestControllerDB(t)
 	authCtrl := NewAuthController()
 	router := setupGinEngine()
 
-	user := model.SystemUser{
-		Username: "testuser",
-		Password: "oldpassword123",
-		Status:   1,
-	}
-	db.GetDB().Create(&user)
+	user := seedRegularUser(t, "testuser", "oldpassword123")
 
 	changeReq := service.ChangePasswordRequest{
 		OldPassword: "oldpassword123",
@@ -284,18 +310,60 @@ func TestAuthController_ChangePassword_Success(t *testing.T) {
 	}
 }
 
+// TestAuthController_ChangePassword_InitialAdminProtected 回归：初始超管（id=1）禁止自助改密。
+//
+// 这是一条系统级安全约束（防止初始超管密码被改后无法登录）。此前**没有任何测试覆盖**它，
+// 一旦被后续改动无声移除也不会有人发现。本用例同时校验状态码与"密码确实没被改"。
+func TestAuthController_ChangePassword_InitialAdminProtected(t *testing.T) {
+	setupTestControllerDB(t)
+	authCtrl := NewAuthController()
+	router := setupGinEngine()
+
+	const originalPwd = "admin-original-pwd"
+	admin := model.SystemUser{Username: "admin", Password: originalPwd, Status: 1}
+	if err := db.GetDB().Create(&admin).Error; err != nil {
+		t.Fatalf("创建初始超管失败: %v", err)
+	}
+	if admin.ID != 1 {
+		t.Fatalf("本用例前提是初始超管 id=1，实际 id=%d", admin.ID)
+	}
+
+	changeReq := service.ChangePasswordRequest{
+		OldPassword: originalPwd,
+		NewPassword: "N3wSecur3Pwd!",
+	}
+	body, _ := json.Marshal(changeReq)
+
+	router.PUT("/password", func(c *gin.Context) {
+		c.Set("user_id", admin.ID)
+		authCtrl.ChangePassword(c)
+	})
+
+	req, _ := http.NewRequest("PUT", "/password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("初始超管自助改密应被拒绝(400)，实际 %d，body: %s", w.Code, w.Body.String())
+	}
+
+	var after model.SystemUser
+	if err := db.GetDB().First(&after, admin.ID).Error; err != nil {
+		t.Fatalf("回查初始超管失败: %v", err)
+	}
+	if !service.CheckPassword(&after, originalPwd) {
+		t.Error("初始超管密码已被改动 —— 系统级保护失效")
+	}
+}
+
 // TestAuthController_ChangePassword_WrongOldPassword 测试错误原密码
 func TestAuthController_ChangePassword_WrongOldPassword(t *testing.T) {
 	setupTestControllerDB(t)
 	authCtrl := NewAuthController()
 	router := setupGinEngine()
 
-	user := model.SystemUser{
-		Username: "testuser",
-		Password: "correctpassword",
-		Status:   1,
-	}
-	db.GetDB().Create(&user)
+	user := seedRegularUser(t, "testuser", "correctpassword")
 
 	changeReq := service.ChangePasswordRequest{
 		OldPassword: "wrongpassword",
@@ -493,19 +561,15 @@ func TestSystemUserController_ResetPassword_Success(t *testing.T) {
 	ctrl := NewSystemUserController()
 	router := setupGinEngine()
 
-	user := model.SystemUser{
-		Username: "testuser",
-		Password: "oldpassword",
-		Status:   1,
-	}
-	db.GetDB().Create(&user)
+	user := seedRegularUser(t, "testuser", "oldpassword")
 
 	router.POST("/users/:id/reset-password", ctrl.ResetPassword)
 
-	resetReq := map[string]string{"password": "newpassword123"}
+	// 必须满足密码策略（含大写字母等），否则会被 400 拦在策略校验而非被测路径上
+	resetReq := map[string]string{"password": "Hv7mKp2LnQ"}
 	body, _ := json.Marshal(resetReq)
 
-	req, _ := http.NewRequest("POST", "/users/1/reset-password", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", fmt.Sprintf("/users/%d/reset-password", user.ID), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

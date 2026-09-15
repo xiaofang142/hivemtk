@@ -84,7 +84,10 @@ func TestSSORoute_ListProviders_Disabled(t *testing.T) {
 	}
 
 	var body struct {
-		Code    string `json:"code"`
+		// 统一响应信封的成功码是 **int 0**（见 response.Success 的实现注释：
+		// "规范: code 用 int 0 (不是 string \"SUCCESS\")，与 CLAUDE.md 架构规范一致"）。
+		// 此处原声明为 string 并断言 "SUCCESS"，属陈旧约定，会让该用例恒失败。
+		Code    int    `json:"code"`
 		Message string `json:"message"`
 		Data    struct {
 			Enabled   bool  `json:"enabled"`
@@ -94,8 +97,8 @@ func TestSSORoute_ListProviders_Disabled(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Code != "SUCCESS" {
-		t.Errorf("code: got %q want SUCCESS", body.Code)
+	if body.Code != 0 {
+		t.Errorf("code: got %d want 0", body.Code)
 	}
 	if body.Data.Enabled {
 		t.Error("expected enabled=false when SSO disabled")

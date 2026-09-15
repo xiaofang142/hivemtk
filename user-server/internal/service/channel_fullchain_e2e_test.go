@@ -518,7 +518,17 @@ func TestE2E_WebhookService_ShouldTriggerAI_FourChannels(t *testing.T) {
 		{ChannelTelegram, "1", true},
 		{ChannelFeishu, "1", true},
 		{ChannelWeCom, "999", false},
-		{ChannelDouyin, "1", false},
+		// 抖音等桥接渠道**没有**账号级 AI 开关（见 channelHasAIAgentSwitch），
+		// 按设计一律放行（shouldTriggerAI 的 default 分支）。
+		//
+		// 历史沿革（勿回退）：原断言写 want=false，是 2026-07-21 初始导入时的旧行为；
+		// 生产在 092f8cf1（2026-09-08「无账号级 AI 开关的渠道不在此拦截，
+		// 避免误杀既有 AI 链路」）中刻意改为放行并新增 channelHasAIAgentSwitch，
+		// 用例未同步才长期失败。
+		{ChannelDouyin, "1", true},
+		// 账号 ID 非法（不可解析 / 为 0）在任何渠道都应拦截
+		{ChannelDouyin, "abc", false},
+		{ChannelDouyin, "0", false},
 	}
 	for _, c := range cases {
 		got := svc.shouldTriggerAI(context.Background(), c.ch, c.acc)

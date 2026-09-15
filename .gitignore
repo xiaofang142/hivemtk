@@ -126,6 +126,9 @@ downloads/
 .data/
 .round
 .round.*
+# Vite 转译 vite.config.js 时产生的临时文件（正常会被自动删除，
+# 异常退出时会残留；内容含开发者本机绝对路径，禁止入库）
+*.timestamp-*.mjs
 
 # ---------- 数据库 / 持久化数据 ----------
 *.db

@@ -56,11 +56,10 @@ func (s *cluesSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *cluesSeeder) buildClues() []model.Clue {
 	sources := []struct {
 		SourceID string
-		Type     int64 
+		Type     int64
 		Account  string
 	}{
 		{"web_form", 1, "seed-form"},
@@ -95,7 +94,7 @@ func (s *cluesSeeder) buildClues() []model.Clue {
 		desc := descs[i%len(descs)]
 		isVerify := int64(0)
 		if i%3 == 0 {
-			isVerify = 1 
+			isVerify = 1
 		}
 		intentScore := int64(randInt(20, 95))
 		isOpp := int64(0)
@@ -147,7 +146,7 @@ func (s *cluesSeeder) buildScores(clues []model.Clue) []model.ClueScore {
 		verifyScore := int(c.IsVerify) * 100
 		profileScore := randInt(50, 90)
 		engagementScore := randInt(20, 90)
-		recencyScore := randInt(50, 100) 
+		recencyScore := randInt(50, 100)
 
 		factors := fmt.Sprintf(`{"channel":"%s","verify":%d,"profile":"%s","engagement":%d,"recency":%d,"seed":"%s"}`,
 			c.SourceID, c.IsVerify, c.City, engagementScore, recencyScore, seedTag)
@@ -197,5 +196,3 @@ func (s *cluesSeeder) buildEngagementEvents(clues []model.Clue) []model.ClueEnga
 	}
 	return events
 }
-
-

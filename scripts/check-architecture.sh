@@ -128,23 +128,29 @@ else
 fi
 
 # 2.2.1 service struct 持有 *gorm.DB 字段（架构反模式警告）
-# OPT-ARC-02：审计发现 12+ service struct 仍持 db *gorm.DB 字段。
 # 建议重构为「构造函数接收 repository.XxxRepository 接口」。
 # 本检查为 WARN 级别（不阻断），用于推动渐进式重构。
 #
-# ⚠️ 2026-09-15 修正：原模式为 "^\s*db\s+\*gorm\.DB"。
+# ⚠️ 2026-09-15 修正（第一版）：原模式为 "^\s*db\s+\*gorm\.DB"。
 #    POSIX ERE **不支持 `\s`**，BSD grep 下 `\s` 退化为字面量 `s`，
 #    该模式等价于 `^s*db s*...`，即要求行首（0 个或多个 's' 后）紧跟 `db`。
-#    而 Go struct 字段必然有缩进（Tab），因此**恒不命中** —— 本检查长期是空转，
-#    从不产生任何 WARN。实测：原模式命中 0 行，修正后命中 2 行。
-#    现改用 [[:space:]]。
+#    而 Go struct 字段必然有缩进（Tab），因此**恒不命中** —— 本检查长期是空转。
+#    改用 [[:space:]] 后能命中了，但**命中的是构造函数参数而不是字段**。
+#
+# ⚠️ 2026-09-16 修正（第二版）：第一版把 `\s` 换成 `[[:space:]]` 时未加行尾锚点，
+#    于是 `func NewXxx(db *gorm.DB, ...)` 这类**形参行**（行尾带逗号）被当成
+#    "struct 字段"告警，产生 5 条 100% 误报（实测 service 包内真正的字段形态
+#    `^\s+db\s+\*gorm\.DB$` 命中 0 条）。教训：把「恒不命中」改成「恒误报」并没有
+#    修好检查，只是换了一种失真。现加行尾锚点 + 允许 struct tag，只匹配真字段：
+#      - 行尾必须是行尾或 struct tag（`json:"-"` 形式），因此带逗号的形参被排除；
+#      - 形参行 `db *gorm.DB,` 与 `db *gorm.DB)` 均不再命中。
 SERVICE_DB_FIELDS=$(grep -rnE --include="*.go" --exclude="*_test.go" \
-  "^[[:space:]]*db[[:space:]]+\*gorm\.DB" \
+  '^[[:space:]]*db[[:space:]]+\*gorm\.DB([[:space:]]+`[^`]*`)?[[:space:]]*$' \
   "$TARGET/internal/service/" 2>/dev/null \
   | grep -vE '://' \
   || true)
 if [ -n "$SERVICE_DB_FIELDS" ]; then
-  log_warn "[L4] 以下 service struct 持有 *gorm.DB 字段(应重构为 Repository 注入,OPT-ARC-01):"
+  log_warn "[L4] 以下 service struct 持有 *gorm.DB 字段(应重构为 Repository 注入):"
   echo "$SERVICE_DB_FIELDS" | sed 's/^/    /' | head -20
   COUNT=$(echo "$SERVICE_DB_FIELDS" | wc -l | tr -d ' ')
   if [ "$COUNT" -gt 20 ]; then
@@ -426,7 +432,15 @@ fi
 
 # 检查 config 包分裂（多个目录都叫 config）
 CONFIG_DIRS=$(find "$TARGET/internal" -type d -name "config" 2>/dev/null || true)
-CONFIG_DIR_COUNT=$(echo "$CONFIG_DIRS" | grep -c . 2>/dev/null || echo 0)
+# ⚠️ 2026-09-16 修正：原写法 `CONFIG_DIR_COUNT=$(echo "$CONFIG_DIRS" | grep -c . 2>/dev/null || echo 0)`
+#    在 CONFIG_DIRS 为空时出错：`grep -c .` 会输出 "0" 并**以退出码 1 结束**，
+#    于是 `|| echo 0` 再追加一行，变量变成 "0\n0"，随后 `[ "$x" -gt 1 ]` 报
+#    "integer expression expected"。虽然 `if` 条件不触发 set -e，但会污染 stderr，
+#    且一旦 find 返回 0 个 config 目录，检查会走 else 分支误报"未分裂"。
+CONFIG_DIR_COUNT=0
+if [ -n "$CONFIG_DIRS" ]; then
+  CONFIG_DIR_COUNT=$(printf '%s\n' "$CONFIG_DIRS" | grep -c .)
+fi
 if [ "$CONFIG_DIR_COUNT" -gt 1 ]; then
   log_warn "[Config] 存在多个 config 包目录（应合并至 internal/config/）:"
   echo "$CONFIG_DIRS" | sed 's/^/    /'

@@ -150,7 +150,6 @@ func (s *reachSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	return nil
 }
 
-
 func (s *reachSeeder) buildPipelines() []model.ReachPipeline {
 	pipelines := []model.ReachPipeline{
 		{
@@ -704,5 +703,3 @@ func (s *reachSeeder) buildKuaishouCards() []model.KuaishouCard {
 	}
 	return cards
 }
-
-

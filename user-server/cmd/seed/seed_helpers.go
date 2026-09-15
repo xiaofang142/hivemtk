@@ -34,8 +34,6 @@ func hoursAgo(n int) time.Time {
 	return nowRef.Add(-time.Duration(n) * time.Hour)
 }
 
-
-
 // randInt 在 [min, max] 范围内生成随机整数
 func randInt(min, max int) int {
 	if max <= min {
@@ -80,8 +78,6 @@ func randPick[T any](items []T) T {
 	return items[seededRand.Intn(len(items))]
 }
 
-
-
 // toJSONString 将任意值序列化为 JSON 字符串（失败时返回 "{}"）
 func toJSONString(v any) string {
 	b, err := json.Marshal(v)
@@ -98,8 +94,6 @@ func toJSONArrayString(items []string) string {
 	}
 	return toJSONString(items)
 }
-
-
 
 // batchInsert 批量插入（每批 100 条），减少单次 SQL 大小
 //
@@ -158,7 +152,3 @@ func cleanByCondition(database *gorm.DB, model any, query string, args ...any) (
 	tx := database.Unscoped().Where(query, args...).Delete(model)
 	return tx.RowsAffected, tx.Error
 }
-
-
-
-

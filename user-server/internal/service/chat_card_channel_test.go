@@ -141,6 +141,9 @@ func TestVisitorChatService_ResolveCardChannel(t *testing.T) {
 		&model.ChatChannel{},
 		&model.QuickReply{},
 		&model.SessionTag{},
+		// VisitorChatService.OpenSession 会做黑名单校验，缺此表直接报
+		// relation "user_blacklist" does not exist 而失败
+		&model.UserBlacklist{},
 	)
 	db.SetTestDB(database)
 
@@ -207,6 +210,9 @@ func TestVisitorChatService_OpenSessionWithVisitorMeta(t *testing.T) {
 		&model.ChatChannel{},
 		&model.QuickReply{},
 		&model.SessionTag{},
+		// VisitorChatService.OpenSession 会做黑名单校验，缺此表直接报
+		// relation "user_blacklist" does not exist 而失败
+		&model.UserBlacklist{},
 	)
 	db.SetTestDB(database)
 

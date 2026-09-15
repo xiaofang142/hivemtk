@@ -38,7 +38,7 @@ type TraceMaskRow struct {
 func (r *MessageTraceCleanupRepo) ListForPIIMask(ctx context.Context, upper, lower time.Time, lastID uint, limit int) ([]TraceMaskRow, error) {
 	var rows []TraceMaskRow
 	err := r.db.WithContext(ctx).
-		Table("message_traces").
+		Table("message_trace").
 		Where("created_at <= ? AND created_at > ? AND id > ?", upper, lower, lastID).
 		Order("id ASC").Limit(limit).
 		Select("id", "input", "output").

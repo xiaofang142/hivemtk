@@ -15,8 +15,13 @@ import (
 )
 
 func setupCustomerTestDB(t *testing.T) *gorm.DB {
+	// CustomerChannel / CustomerDoNotContact 必须一并迁移：
+	// CustomerService.MergeCustomers 会改写这两张表，缺失时事务报
+	// `relation "customer_do_not_contact" does not exist` 而失败。
 	database := testutil.NewTestDB(t,
 		&model.Customer{},
+		&model.CustomerChannel{},
+		&model.CustomerDoNotContact{},
 	)
 	db.SetTestDB(database)
 	return database

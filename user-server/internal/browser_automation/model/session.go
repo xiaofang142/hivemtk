@@ -13,17 +13,17 @@ import (
 // 零生产/零消费（title 从未写入、llm_plan 被 browser_llm_plans 表取代、hand 延迟恒 0、
 // console 不采集）——模型字段已删；DB 列按 D6 决策保留待统一清理，不动线上 DDL。
 type BrowserSession struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	TaskID      uint           `gorm:"column:task_id;index;not null" json:"task_id"`
-	UserID      uint           `gorm:"column:user_id;index;not null" json:"user_id"`
-	ChromeTabID int            `gorm:"column:chrome_tab_id;index" json:"chrome_tab_id"` // Chrome tab.id（扩展上报）
-	Url         string         `gorm:"column:url;size:2048" json:"url"`
-	Status      string         `gorm:"column:status;size:32;not null;default:created;index" json:"status"` // created / active / completed / failed / stopped
-	Snapshot    string         `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"`
-	StartedAt   *time.Time     `gorm:"column:started_at" json:"started_at,omitempty"`
-	CompletedAt *time.Time     `gorm:"column:completed_at" json:"completed_at,omitempty"`
-	DurationMs  int64          `gorm:"column:duration_ms" json:"duration_ms"`
-	ErrorMsg    string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	TaskID      uint       `gorm:"column:task_id;index;not null" json:"task_id"`
+	UserID      uint       `gorm:"column:user_id;index;not null" json:"user_id"`
+	ChromeTabID int        `gorm:"column:chrome_tab_id;index" json:"chrome_tab_id"` // Chrome tab.id（扩展上报）
+	Url         string     `gorm:"column:url;size:2048" json:"url"`
+	Status      string     `gorm:"column:status;size:32;not null;default:created;index" json:"status"` // created / active / completed / failed / stopped
+	Snapshot    string     `gorm:"column:snapshot;type:text" json:"snapshot,omitempty"`
+	StartedAt   *time.Time `gorm:"column:started_at" json:"started_at,omitempty"`
+	CompletedAt *time.Time `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	DurationMs  int64      `gorm:"column:duration_ms" json:"duration_ms"`
+	ErrorMsg    string     `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
 	// 监控指标
 	TotalSteps   int `gorm:"column:total_steps;default:0" json:"total_steps"`
 	SuccessSteps int `gorm:"column:success_steps;default:0" json:"success_steps"`

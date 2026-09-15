@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"github.com/robfig/cron/v3"
@@ -35,10 +36,17 @@ func (f *fakeScheduler) RemoveTask(id cron.EntryID) {}
 
 func newTestJobManager(t *testing.T) (*JobManager, *fakeScheduler) {
 	t.Helper()
-	db := testutil.NewTestDB(t, &model.GeoJobRun{}, &model.GeoConfig{})
+	// ⚠️ 必须同时迁移 geo_keywords 并注入全局 DB：
+	// geoJobDefs 里的任务函数（如 sovRefreshJob）**不是**从 JobManager 取仓库，
+	// 而是自己调 repository.NewGeoKeywordRepository()，该构造函数读全局 _db.GetDB()。
+	// 只注入 runRepo/cfgRepo 而不设置全局 DB 时，任务函数拿到 nil *gorm.DB，
+	// 触发空指针 panic，被 recover 吞掉后记成 status=failed（测试期望 success）。
+	// 详见 TASKS_AUDIT_2026-09-16.md · GEO-01。
+	database := testutil.NewTestDB(t, &model.GeoJobRun{}, &model.GeoConfig{}, &model.GeoKeyword{})
+	db.SetTestDB(database)
 	m := &JobManager{
-		runRepo: repository.NewGeoJobRunRepositoryWithDB(db),
-		cfgRepo: repository.NewGeoConfigRepositoryWithDB(db),
+		runRepo: repository.NewGeoJobRunRepositoryWithDB(database),
+		cfgRepo: repository.NewGeoConfigRepositoryWithDB(database),
 		running: map[string]*atomic.Bool{},
 		specs:   map[string]string{},
 		entryID: map[string]cron.EntryID{},

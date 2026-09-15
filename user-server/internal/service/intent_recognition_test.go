@@ -14,9 +14,20 @@ import (
 )
 
 func setupIntentTestDB(t *testing.T) *gorm.DB {
+	// ⚠️ 只迁移 IntentRecord，**不得**把 &model.IntentLog{} 加进来。
+	//
+	// IntentLog 是 intent_records 的列映射视图（见 model/intent_log.go 顶部注释，
+	// OPT-DB-10：intent_logs 已并入统一意图表 intent_records，source='fine_grained'），
+	// 其列结构由迁移 v3.22.3 保证，明确「禁止加入 automigrate 清单」。
+	//
+	// 违反后果：两个结构体都声明 TableName()="intent_records"，AutoMigrate 先 DROP
+	// 同一张表再按两个模型分别建列，最终表结构以 IntentLog 为准，丢掉
+	// message_id / confidence_level / entities / sentiment / llm_model / cost_tokens / deleted_at，
+	// 于是 IntentRecordRepository.Create 报
+	//   column "message_id" of relation "intent_records" does not exist (SQLSTATE 42703)
+	// 导致本包 11 个用例长期失败。详见 TASKS_AUDIT_2026-09-16.md · TEST-03。
 	return testutil.NewTestDB(t,
 		&model.IntentRecord{},
-		&model.IntentLog{},
 	)
 }
 

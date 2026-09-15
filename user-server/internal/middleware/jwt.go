@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,18 +42,14 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			}
 		}
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "未提供认证令牌",
-			})
+			response.Error(c, http.StatusUnauthorized, "未提供认证令牌")
 			c.Abort()
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "认证令牌格式错误",
-			})
+			response.Error(c, http.StatusUnauthorized, "认证令牌格式错误")
 			c.Abort()
 			return
 		}
@@ -60,17 +57,13 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		claims, err := jwtUtils.ParseToken(parts[1])
 		if err != nil {
 			log.Printf("[WARN] JWT 校验失败: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "无效的认证令牌",
-			})
+			response.Error(c, http.StatusUnauthorized, "无效的认证令牌")
 			c.Abort()
 			return
 		}
 
 		if utils.IsJWTBlacklisted(parts[1]) {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "认证令牌已失效，请重新登录",
-			})
+			response.Error(c, http.StatusUnauthorized, "认证令牌已失效，请重新登录")
 			c.Abort()
 			return
 		}

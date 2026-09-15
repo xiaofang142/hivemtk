@@ -54,6 +54,20 @@ jobs:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password123
       POSTGRES_DB: marketing_tools
+      # ⚠️ 2026-09-16 审计修复：internal/pkg/testutil 读取的是 POSTGRES_TEST_* 前缀，
+      # 而上面这几个 POSTGRES_* 是给服务本体用的。此前 CI 只注入 POSTGRES_*，
+      # testutil 便回落到默认端口 8202（PG 实际监听 5432）→ DialTimeout 失败 →
+      # 依赖 testutil 的 288 个测试文件全部 t.Skipf → go test 退出 0，
+      # 阻断式门禁形同虚设。此处补齐 TEST_ 前缀变量，让门禁真正执行。
+      #
+      # 刻意**不设** POSTGRES_TEST_DBNAME：testutil 会以它为前缀创建
+      # `<前缀>_<pid>` 的进程级隔离库。若设成 marketing_tools，CI 里就会出现一堆
+      # 形如 `marketing_tools_12345` 的库，看起来像业务库而非测试库。
+      # 留空即用默认前缀 user_db_test，语义自明。
+      POSTGRES_TEST_HOST: 127.0.0.1
+      POSTGRES_TEST_PORT: "5432"
+      POSTGRES_TEST_USER: admin
+      POSTGRES_TEST_PASSWORD: password123
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +93,22 @@ jobs:
       - name: go vet
         working-directory: user-server
         run: go vet ./...
+
+      - name: gofmt（格式门禁）
+        # 2026-09-16 审计（FMT-01）：新增。
+        # 为什么需要独立一步：user-server/.golangci.yml 只启用 govet+depguard
+        # （run.tests=false），gofmt 既不在 lint 覆盖内，测试文件更是完全不被 lint。
+        # 无门禁 → 格式漂移无人可查，累积 34 个未格式化文件。
+        # 与本地 `make fmt-check` 同口径。
+        working-directory: user-server
+        run: |
+          out=$(gofmt -l . | grep -v '^vendor/' || true)
+          if [ -n "$out" ]; then
+            echo "::error::以下文件未通过 gofmt，请本地执行 make fmt 后提交："
+            echo "$out"
+            exit 1
+          fi
+          echo "✅ gofmt 检查通过（0 个文件需格式化）"
 
       - name: golangci-lint（架构护栏 depguard）
         # P0-1：分层依赖方向护栏，规则见 user-server/.golangci.yml

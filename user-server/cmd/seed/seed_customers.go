@@ -132,7 +132,6 @@ func (s *customersSeeder) buildCustomers() []model.Customer {
 	// 渠道分布（共 50 个客户）
 	// phone(15) + email(10) + wechat(12) + douyin(8) + xiaohongshu(5)
 
-
 	industries := []string{"电商", "教育", "金融", "医疗", "本地生活"}
 	cities := []string{"北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "南京", "苏州", "西安"}
 	customers := make([]model.Customer, 0, 50)
@@ -146,7 +145,7 @@ func (s *customersSeeder) buildCustomers() []model.Customer {
 		xhs := fmt.Sprintf("seed_xhs_%04d", idx)
 
 		c := model.Customer{
-			Phone:     phone, 
+			Phone:     phone,
 			Email:     email,
 			Tags:      toJSONArrayString([]string{industries[i%5], cities[i%10]}),
 			RFMScore:  randInt(1, 100),
@@ -154,16 +153,16 @@ func (s *customersSeeder) buildCustomers() []model.Customer {
 		}
 
 		switch {
-		case i < 15: 
-		case i < 25: 
-			c.Phone = "" 
-		case i < 37: 
+		case i < 15:
+		case i < 25:
+			c.Phone = ""
+		case i < 37:
 			c.Phone = ""
 			c.WechatOpenID = wechat
-		case i < 45: 
+		case i < 45:
 			c.Phone = ""
 			c.DouyinOpenID = douyin
-		default: 
+		default:
 			c.Phone = ""
 			c.XiaohongshuID = xhs
 		}
@@ -177,9 +176,9 @@ func (s *customersSeeder) buildRFM(customers []model.Customer) []model.CustomerR
 	segmentSpecs := []struct {
 		Count    int
 		Segment  string
-		RRange   [2]int   
-		FRange   [2]int   
-		MRange   [2]int64 
+		RRange   [2]int
+		FRange   [2]int
+		MRange   [2]int64
 		RScore   int
 		FScore   int
 		MScore   int
@@ -316,10 +315,10 @@ func (s *customersSeeder) buildLongTermMemories(customers []model.Customer) []mo
 			Importance: sp.Importance,
 			Source:     model.LongTermMemorySourceConversation,
 			Metadata:   model.JSONMap{},
-			ExpiresAt:  nil, 
+			ExpiresAt:  nil,
 		})
 		memories[i].Metadata = model.JSONMap{}
-		_ = meta 
+		_ = meta
 	}
 	return memories
 }
@@ -333,7 +332,7 @@ func (s *customersSeeder) buildRecoveryQueue(customers []model.Customer) []model
 
 	queue := make([]model.RecoveryQueue, 0, len(customers))
 	for i, c := range customers {
-		nextAttempt := daysAgo(-randInt(1, 7)) 
+		nextAttempt := daysAgo(-randInt(1, 7))
 		lastAttempt := daysAgo(randInt(1, 7))
 		queue = append(queue, model.RecoveryQueue{
 			CustomerID:    c.ID,
@@ -362,7 +361,3 @@ func randInt64(min, max int64) int64 {
 	}
 	return min + seededRand.Int63n(max-min+1)
 }
-
-
-
-
