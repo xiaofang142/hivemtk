@@ -1,0 +1,52 @@
+# Codecov 覆盖率策略（OPT-CI-06）
+#
+# 分工说明：
+#   阻断式门禁在 CI 侧 —— .github/workflows/user-server-ci.yml 的
+#   "Coverage threshold (OPT-CI-06)" 步骤（FLOOR=20 阻断 / TARGET=60 提示）。
+#   本文件负责 codecov 服务侧的「PR 状态检查」策略，两者口径保持一致。
+#
+# 实测基线（2026-09-15）：Go 语句覆盖率 22.0%
+# 产品目标：60%（未达成，提升路径 22 → 30 → 40 → 50 → 60）
+#
+# 注意：不得为了让状态检查变绿而下调 target。
+
+coverage:
+  precision: 1
+  round: down
+  range: "20...60"          # 色阶区间：<20 红，>=60 绿
+
+  status:
+    # 项目整体覆盖率：防止倒退
+    project:
+      default:
+        target: 20%          # 与 CI FLOOR 对齐（当前基线 22.0%）
+        threshold: 1%        # 允许 1% 波动，避免噪声抖动误报
+        informational: false # 参与阻断
+    # 本次改动新增代码的覆盖率
+    patch:
+      default:
+        target: auto         # 相对 base 提交，要求不低于现状
+        threshold: 5%
+        informational: true  # 新增代码覆盖率仅提示，不阻断（存量迁移期）
+
+# 忽略不计入覆盖率的路径
+ignore:
+  - "user-server/cmd/**"           # 进程入口，逻辑在 internal
+  - "user-server/internal/migration/**"
+  - "user-server/tests/**"
+  - "user-server/**/*_test.go"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+flags:
+  go:
+    paths:
+      - user-server/
+    carryforward: true
+  bridge:
+    paths:
+      - user-web/bridge/
+    carryforward: true

@@ -110,15 +110,40 @@ jobs:
           go tool cover -func=coverage/go-cover.out | tail -1
         continue-on-error: false
 
-      - name: Coverage threshold (P1-CI-06)
-        # OPT-CI-06：coverage 软门槛 50%（首期），下个迭代提升到 60%
+      - name: Coverage threshold (OPT-CI-06)
+        # OPT-CI-06：覆盖率门禁
+        #
+        # 2026-09-15 修复「假性完成 + 打折完成」：
+        #   原实现 THRESHOLD=50 但只打 ::warning:: 从不失败 —— 既非阻断，
+        #   且 50% 阈值高于真实覆盖率，一旦改成阻断会立刻让 CI 变红。
+        #
+        # 实测基线（2026-09-15，go test -p 1 ./internal/... -covermode=atomic）：
+        #   total statements coverage = 22.0%
+        #
+        # 因此本门禁分两层：
+        #   1) FLOOR（阻断）：低于回归底线即失败，防止覆盖率倒退
+        #   2) TARGET（仅提示）：产品目标 60%，当前 22.0%，差距如实打印、不掩盖
+        #
+        # 提升路径：随测试补齐逐步上调 FLOOR（22 → 30 → 40 → 50 → 60）。
+        # 注意：不得为了让 CI 变绿而下调 FLOOR。
         working-directory: user-server
         run: |
+          set -euo pipefail
           TOTAL=$(go tool cover -func=coverage/go-cover.out | tail -1 | awk '{print $3}' | sed 's/%//')
-          echo "Total coverage: ${TOTAL}%"
-          THRESHOLD=50
-          if awk "BEGIN {exit !($TOTAL < $THRESHOLD)}"; then
-            echo "::warning::Coverage ${TOTAL}% < ${THRESHOLD}% threshold"
+          FLOOR=20     # 阻断底线（回归保护）
+          TARGET=60    # 产品目标（OPT-CI-06 原始要求）
+
+          echo "Total coverage : ${TOTAL}%"
+          echo "Blocking floor : ${FLOOR}%"
+          echo "Product target : ${TARGET}%  (未达成，差距 $((TARGET - ${TOTAL%.*})) 个百分点)"
+
+          if awk "BEGIN {exit !($TOTAL < $FLOOR)}"; then
+            echo "::error::覆盖率 ${TOTAL}% 低于回归底线 ${FLOOR}%，构建失败"
+            echo "::error::请补齐测试后再提交；不得下调 FLOOR 以求通过。"
+            exit 1
+          fi
+          if awk "BEGIN {exit !($TOTAL < $TARGET)}"; then
+            echo "::warning::覆盖率 ${TOTAL}% 未达产品目标 ${TARGET}%（当前为阻断底线 ${FLOOR}%）"
           fi
 
       - name: Go dependency audit (govulncheck)
@@ -140,6 +165,11 @@ jobs:
 
       - name: Upload coverage to Codecov
         # 2026-08-15 P0-CI：Codecov 集成（需在仓库 settings 配置 CODECOV_TOKEN）
+        #
+        # 注意分工（OPT-CI-06 修复后）：
+        #   覆盖率「门禁」由上方 "Coverage threshold (OPT-CI-06)" 步骤承担（阻断式）。
+        #   本步骤只负责「上传报告供趋势查看」，故 fail_ci_if_error 保持 false ——
+        #   缺 CODECOV_TOKEN 时不应让构建失败。codecov 侧策略见仓库根 codecov.yml。
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         uses: codecov/codecov-action@v4
         with:
@@ -213,10 +243,11 @@ jobs:
 
       - name: ESLint (OPT-FE-01)
         # OPT-FE-01：user-web 主项目 ESLint 接入 CI
-        # 首次启用，allow warnings，下个迭代改为阻断
+        # 2026-09-15 修复「打折完成」：原为 continue-on-error: true（首次启用不阻断），
+        # 门禁形同虚设。实测 `eslint .` 全仓 631 文件 0 errors（18788 warnings 不阻断），
+        # 故改为阻断式门禁。
         working-directory: user-web
         run: npm run lint:check --if-present
-        continue-on-error: true
 
       - name: npm audit (OPT-CI-10)
         # OPT-CI-10：NPM 依赖漏洞扫描 (--audit-level=high)
