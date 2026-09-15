@@ -90,6 +90,20 @@ build/
 *.webp
 *.ico
 !docs/screenshots/screenshot-*.png
+
+# ⚠️ 例外（构建/运行时**必需**的静态资源，必须入库）
+# `*.png` 是未锚定的裸模式，会命中任意层级。以下三类资源缺失会导致产物损坏：
+#   1. public/logo.png —— index.html 的 favicon 与 manifest.webmanifest 的 PWA 图标
+#   2. bridge/assets/icons/*.png —— Chrome 扩展 manifest.json 的 icons/action 图标，
+#      缺失时扩展无法加载（浏览器直接报 manifest 校验失败）
+#   3. browser_automation/assets/icons/*.png —— 同上，另一扩展
+!user-web/public/logo.png
+!user-web/bridge/assets/*.png
+!user-web/bridge/assets/icons/*.png
+!user-web/browser_automation/assets/icons/*.png
+
+# 说明：user-web/src/assets/logo.png 与 public/logo.png 字节完全相同（MD5 一致）
+# 且全仓无任何引用，属冗余副本，按上述「大图不入库」策略继续忽略。
 # 离线包构建产物
 dist-offline/
 
