@@ -697,7 +697,7 @@ npm run build
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构图
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 代码开发手册
 - [FEATURES.md](./FEATURES.md) - 功能清单
-- [../../MENU_SPEC.md](../../MENU_SPEC.md) - 菜单页面规格清单
+- [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) - 菜单页面规格清单
 - [../../eslint.config.recommended.mjs](../../eslint.config.recommended.mjs) - ESLint 推荐配置
 
 ---

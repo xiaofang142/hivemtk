@@ -10,8 +10,8 @@
 
 | 表 | 模型位置 | 用途 | 写入方 |
 |---|---|---|---|
-| `intent_records` | [model/intent_log.go](file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/model/intent_log.go) | AI 销冠意图识别结果 | sales_engine |
-| `intent_logs` | [model/intent_record.go](file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/model/intent_record.go) | 智能体意图分类日志 | smart_cs_orchestrator |
+| `intent_records` | [model/intent_log.go](../../user-server/internal/model/intent_log.go) | AI 销冠意图识别结果 | sales_engine |
+| `intent_logs` | [model/intent_log.go](../../user-server/internal/model/intent_log.go) | 智能体意图分类日志 | smart_cs_orchestrator |
 
 ### 结构对比
 
@@ -80,7 +80,7 @@ COMMIT;
 
 | 文件 | 变更 |
 |---|---|
-| [model/intent_log.go](file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/model/intent_log.go) | 增加 source 字段 (enum: records/logs) |
+| [model/intent_log.go](../../user-server/internal/model/intent_log.go) | 增加 source 字段 (enum: records/logs) |
 | `service/intent_recognition.go` | 写入统一改到 intent_records，读取用 view |
 | `service/intent_recognition_fine.go` | 同上 |
 | `service/smart_cs_orchestrator.go` | 同上 |

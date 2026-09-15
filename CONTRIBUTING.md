@@ -66,7 +66,7 @@ curl http://localhost:8204/health
 ## 3. 反馈与支持
 
 - 技术问题：通过 Gitee / GitHub Issue 反馈
-- 安全漏洞：请私下联系 jideilvluoqun@gmail.com（详见 [SECURITY.md](SECURITY.md)）
+- 安全漏洞：请私下联系 `jideilvluoqun@gmail.com`（详见 [SECURITY.md](SECURITY.md)）
 
 ## 4. 行为准则
 

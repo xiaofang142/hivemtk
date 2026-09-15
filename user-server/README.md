@@ -11,7 +11,7 @@
 ### 核心业务能力
 
 - **多渠道 CDP 客户数据平台**：抖音 / 快手 / 小红书 / 闲鱼 / 微信 / 短信 / 邮件 / WhatsApp / Telegram 统一接入与 OneID 合并
-- **AI 智能体客服（ReAct 引擎）**：[41 个原子工具](../docs/architecture/agent-tools-inventory.md)（触达 / 项目管理 / 客户 / 知识库 / 业务）的多智能体编排
+- **AI 智能体客服（ReAct 引擎）**：[41 个原子工具](docs/AGENT_TOOLS.md)（触达 / 项目管理 / 客户 / 知识库 / 业务）的多智能体编排
 - **RAG 知识库**：pgvector 1024 维向量检索 + BGE Reranker 精排 + Redis LRU 双层缓存
 - **智能卡片**：抖音 / 快手 / 小红书 / 闲鱼 / TikTok 五平台卡券生成 + 短链追踪 + 转化漏斗
 - **SOP 自动化营销**：AB 实验、销冠 Prompt 库、营销画布、用户旅程编排
@@ -77,7 +77,7 @@ ReAct 引擎内置 41 个原子工具，按域分组：
 - **知识库域**：RAG 检索、分块管理、知识库 CRUD
 - **业务域**：订单 / 线索 / 售后 / 社群
 
-完整工具清单见 [`../docs/architecture/agent-tools-inventory.md`](../docs/architecture/agent-tools-inventory.md)。
+完整工具清单见 [`../docs/architecture/agent-tools-inventory.md`](docs/AGENT_TOOLS.md)。
 
 ## 📁 目录结构
 
@@ -299,7 +299,7 @@ go run ./cmd/routeinspect -format=md > ROUTES.md
 - 仓库根 [README](../README.md)
 - 架构图 [../docs/architecture/ARCHITECTURE_DIAGRAM.md](../docs/architecture/ARCHITECTURE_DIAGRAM.md)
 - Go 五层架构规范 [../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
-- AI Agent 41 工具清单 [../docs/architecture/agent-tools-inventory.md](../docs/architecture/agent-tools-inventory.md)
+- AI Agent 41 工具清单 [../docs/architecture/agent-tools-inventory.md](docs/AGENT_TOOLS.md)
 - 宿主机推理栈方案 [../docs/architecture/HOST_INFERENCE_PLAN.md](../docs/architecture/HOST_INFERENCE_PLAN.md)
 - 商户部署手册 [../docs/operations/MERCHANT_DEPLOYMENT.md](../docs/operations/MERCHANT_DEPLOYMENT.md)
 
@@ -310,4 +310,4 @@ go run ./cmd/routeinspect -format=md > ROUTES.md
 - 任何对本项目的修改与网络服务提供均须开源衍生代码（AGPL-3.0 第 13 条）
 - 商业闭源集成 / 二次分发请先联系商务获取授权
 
-商务合作 / 技术支持：jideilvluoqun@gmail.com
+商务合作 / 技术支持：`jideilvluoqun@gmail.com`

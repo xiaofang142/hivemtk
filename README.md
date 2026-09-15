@@ -172,7 +172,7 @@ HiveMtk 是私域营销系统,聚焦"多端触达 + 销冠 SOP + CDP + 零出域
 ✅ TikTok + WhatsApp + Telegram + Email 适配跨境出海场景。
 
 **有 SaaS 版吗?**
-❌ 不提供。坚持私有化部署、数据自主可控。企业级技术支持/定制集成联系 jideilvluoqun@gmail.com。
+❌ 不提供。坚持私有化部署、数据自主可控。企业级技术支持/定制集成联系 `jideilvluoqun@gmail.com`。
 
 ---
 
@@ -252,8 +252,8 @@ hivemtk/                        # 用户端仓库
 |------|------|------|
 | 🐛 Bug / Feature Request | [Gitee Issues](https://gitee.com/xhpmayun/hivemtk/issues) / [GitHub Issues](https://github.com/xiaofang142/hivemtk/issues) | 提交问题与建议 |
 | 💬 微信交流群 | 通过 Issue / 邮箱申请加入 | 产品/技术/运营答疑,禁止广告/政治/人肉,违者秒踢 |
-| 📧 商务合作 / 技术支持 | jideilvluoqun@gmail.com | 企业级技术支持、定制集成、私有部署咨询 |
-| 🔒 安全漏洞 | jideilvluoqun@gmail.com | 私密报告,详见 [SECURITY.md](SECURITY.md) |
+| 📧 商务合作 / 技术支持 | `jideilvluoqun@gmail.com` | 企业级技术支持、定制集成、私有部署咨询 |
+| 🔒 安全漏洞 | `jideilvluoqun@gmail.com` | 私密报告,详见 [SECURITY.md](SECURITY.md) |
 
 **镜像仓库**:Gitee 主仓库 [gitee.com/xhpmayun/hivemtk](https://gitee.com/xhpmayun/hivemtk)(国内推荐,下载更快)· GitHub 镜像 [github.com/xiaofang142/hivemtk](https://github.com/xiaofang142/hivemtk)(Actions 定时同步)
 

@@ -2,13 +2,13 @@
 
 > **规则级别**: ⭐⭐ 项目级开发文档
 > **关联文档**:
-> - 五层架构编码规范: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
-> - C4 系统架构图: [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../docs/architecture/ARCHITECTURE_DIAGRAM.md)
-> - 用户体系规范: [../../docs/architecture/USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md)
+> - 五层架构编码规范: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
+> - C4 系统架构图: [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../../docs/architecture/ARCHITECTURE_DIAGRAM.md)
+> - 用户体系规范: [../../docs/architecture/USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md)
 
 本文档面向 `user-server` 工程内部开发，描述**代码级模块结构、分层调用时序、关键子系统、外部依赖**四类视图。
-对系统级 Context / Container / Deployment 拓扑请直接阅读 [ARCHITECTURE_DIAGRAM.md](../../docs/architecture/ARCHITECTURE_DIAGRAM.md)；
-对每一层的硬约束与编码模板请阅读 [GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)。
+对系统级 Context / Container / Deployment 拓扑请直接阅读 [ARCHITECTURE_DIAGRAM.md](../../../docs/architecture/ARCHITECTURE_DIAGRAM.md)；
+对每一层的硬约束与编码模板请阅读 [GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)。
 
 ---
 
@@ -273,7 +273,7 @@ graph LR
     RagSvc --> RAG
 ```
 
-依赖规则（[GO_FIVE_LAYER_ARCHITECTURE.md §六](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)）：
+依赖规则（[GO_FIVE_LAYER_ARCHITECTURE.md §六](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)）：
 - `agent/` 可调所有 aiagent 子模块；`llm/` 可调 `vector/`；`embedding/` 可调 `vector/`；`knowledge/` 仅持有静态资产。
 - aiagent **被** Service 调用，**不调** 业务 Service（避免循环）。
 
@@ -523,15 +523,15 @@ graph TD
 
 | 主题 | 文档路径 |
 | --- | --- |
-| 五层架构硬约束 + 编码模板 | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
-| 系统级 C4 / Container / Deployment | [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../docs/architecture/ARCHITECTURE_DIAGRAM.md) |
-| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md) |
-| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../docs/architecture/MENU_PERMISSION_PLAN.md) |
-| 营销功能模块索引（94+ 子模块） | [../../docs/marketing-features/README.md](../../docs/marketing-features/README.md) |
-| host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../docs/architecture/HOST_INFERENCE_PLAN.md) |
-| ADR 决策记录（当前仅有 ADR-001/002/003/004，ADR-008 待补） | [../../docs/architecture/adr/](../../docs/architecture/adr/) |
-| 工程级 README | [../README.md](../README.md) |
-| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../NEW_FUNCTIONS_INVENTORY.md) |
+| 五层架构硬约束 + 编码模板 | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
+| 系统级 C4 / Container / Deployment | [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../../docs/architecture/ARCHITECTURE_DIAGRAM.md) |
+| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md) |
+| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../../docs/architecture/MENU_PERMISSION_PLAN.md) |
+| 营销功能模块索引（94+ 子模块） | [../../docs/marketing-features/README.md](../../../docs/marketing-features/README.md) |
+| host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md) |
+| ADR 决策记录（当前仅有 ADR-001/002/003/004，ADR-008 待补） | [../../../docs/architecture/adr/](../../../docs/architecture/adr/) |
+| 工程级 README | [../README.md](../../README.md) |
+| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../../NEW_FUNCTIONS_INVENTORY.md) |
 | 代码开发手册 | [./DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 代码规范 | [./CONVENTIONS.md](./CONVENTIONS.md) |
 | 功能清单 | [./FEATURES.md](./FEATURES.md) |

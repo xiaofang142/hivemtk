@@ -6,8 +6,8 @@
 > - 代码规范: [./CONVENTIONS.md](./CONVENTIONS.md)
 > - 功能清单: [./FEATURES.md](./FEATURES.md)
 > - **热重载工作流（⭐必读）**: [./HOT_RELOAD.md](./HOT_RELOAD.md)
-> - 五层架构硬约束: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
-> - 工程 README: [../README.md](../README.md)
+> - 五层架构硬约束: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
+> - 工程 README: [../README.md](../../README.md)
 
 本文档面向 `user-server` 工程的二次开发者，覆盖 **环境搭建、本地启动、目录导航、新增 API / AI 模块、数据库迁移、测试、调试、构建与部署** 八大主题。
 所有命令默认在 `hivemtk/user-server/` 目录下执行（除非显式 `cd ..`）。
@@ -444,7 +444,7 @@ internal/aiagent/<new_module>/
 
 ### 5.3 新增 Agent 工具
 
-`internal/aiagent/agent/tooluse/` 下注册工具，遵循 `Agent Tool Inventory`（详见 [../../docs/marketing-features/agent-tools-inventory.md](../../docs/marketing-features/agent-tools-inventory.md)）：
+`internal/aiagent/agent/tooluse/` 下注册工具，遵循 `Agent Tool Inventory`（详见 [../../docs/marketing-features/agent-tools-inventory.md](../AGENT_TOOLS.md)）：
 
 ```go
 // 1. 实现 Tool 接口
@@ -664,7 +664,7 @@ go build -o bin/embedding-server ./cmd/embedding-server
 docker build -t hivemtk/user-server:latest .
 ```
 
-> ℹ️ **Embedding 子服务定位**：`cmd/embedding-server/` 源码仍保留（纯 Go char n-gram TF-IDF + 随机投影实现，无 Python/ONNX 依赖），供无 host 推理栈的环境单独构建运行。Docker 部署场景下，Embedding 能力由宿主机 llama.cpp / TEI 提供（详见 [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../docs/architecture/HOST_INFERENCE_PLAN.md)），故 user-server Docker 镜像**不打包** embedding-server 二进制。
+> ℹ️ **Embedding 子服务定位**：`cmd/embedding-server/` 源码仍保留（纯 Go char n-gram TF-IDF + 随机投影实现，无 Python/ONNX 依赖），供无 host 推理栈的环境单独构建运行。Docker 部署场景下，Embedding 能力由宿主机 llama.cpp / TEI 提供（详见 [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md)），故 user-server Docker 镜像**不打包** embedding-server 二进制。
 
 ### 9.2 Dockerfile 说明
 
@@ -782,14 +782,14 @@ bash ../../scripts/api-inventory.sh                # API 一致性报告
 | 架构图（模块 / 时序 / 子系统） | [./ARCHITECTURE.md](./ARCHITECTURE.md) |
 | 代码规范（分层约束 / 命名 / 错误处理 / 日志） | [./CONVENTIONS.md](./CONVENTIONS.md) |
 | 功能清单（按业务域分组） | [./FEATURES.md](./FEATURES.md) |
-| 五层架构硬约束 + 编码模板 | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
-| 系统级 C4 / Container / Deployment | [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../docs/architecture/ARCHITECTURE_DIAGRAM.md) |
-| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md) |
-| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../docs/architecture/MENU_PERMISSION_PLAN.md) |
-| 营销功能模块索引（94+ 子模块） | [../../docs/marketing-features/README.md](../../docs/marketing-features/README.md) |
-| host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../docs/architecture/HOST_INFERENCE_PLAN.md) |
-| 工程级 README | [../README.md](../README.md) |
-| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../NEW_FUNCTIONS_INVENTORY.md) |
+| 五层架构硬约束 + 编码模板 | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
+| 系统级 C4 / Container / Deployment | [../../docs/architecture/ARCHITECTURE_DIAGRAM.md](../../../docs/architecture/ARCHITECTURE_DIAGRAM.md) |
+| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md) |
+| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../../docs/architecture/MENU_PERMISSION_PLAN.md) |
+| 营销功能模块索引（94+ 子模块） | [../../docs/marketing-features/README.md](../../../docs/marketing-features/README.md) |
+| host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md) |
+| 工程级 README | [../README.md](../../README.md) |
+| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../../NEW_FUNCTIONS_INVENTORY.md) |
 
 ---
 

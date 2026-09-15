@@ -6,10 +6,10 @@
 > 覆盖环境准备、命令、目录导航、协议契约、新功能流程、测试、构建发布与调试技巧。
 >
 > 关联文档：
-> - 扩展设计主文档：[./../bridge.md](./../bridge.md)
-> - 扩展架构总览：[./ARCHITECTURE.md](./ARCHITECTURE.md)
-> - 扩展默认值清单：[./DEFAULTS.md](./DEFAULTS.md)
-> - 上游服务端实现：[../../../user-server/internal/bridge/](../../../user-server/internal/bridge/)
+> - 扩展设计主文档：[./../bridge.md](../../bridge.md)
+> - 扩展架构总览：[./ARCHITECTURE.md](../ARCHITECTURE.md)
+> - 扩展默认值清单：[./DEFAULTS.md](../DEFAULTS.md)
+> - 上游服务端实现：[../../../user-server/internal/bridge/](../../../../user-server/internal/bridge)
 
 ---
 
@@ -95,7 +95,7 @@ npm run dev    # 持续构建（推荐）
 
 ### 3.2 桥接端点（HTTP 三通道）
 
-> bridge ↔ user-server 走 **HTTP 三通道**（非 WS / 非 SSE）。详见 [./ARCHITECTURE.md §1](./ARCHITECTURE.md)。
+> bridge ↔ user-server 走 **HTTP 三通道**（非 WS / 非 SSE）。详见 [./ARCHITECTURE.md §1](../ARCHITECTURE.md)。
 
 | 端点 | 方法 | 用途 | 实现位置 |
 | --- | --- | --- | --- |
@@ -338,7 +338,7 @@ npm run release
 
 ### 8.4 加载前必做真机校准
 
-详见 [./../bridge.md §10](./../bridge.md)：
+详见 [./../bridge.md §10](../../bridge.md)：
 
 - 抖音：私信列表 / 消息气泡 / 输入框 / 发送按钮真实生效
 - 小红书：`.xhs-im-conv-item` / `.chat-item` / `[contenteditable]` 输入框真实生效
@@ -418,11 +418,11 @@ chrome.storage.local.clear()
 
 ## 十一、相关文档
 
-- [./../bridge.md](./../bridge.md) — 设计主文档（背景 / 架构 / 数据流 / 限速 / 协议）
-- [./ARCHITECTURE.md](./ARCHITECTURE.md) — 架构总览
-- [./DEFAULTS.md](./DEFAULTS.md) — 前端默认值清单（与 constants.js 字面对齐）
-- [./../RELEASE.md](./../RELEASE.md) — 构建与发布
-- [../../../user-server/docs/dev/DEVELOPMENT.md](../../../user-server/docs/dev/DEVELOPMENT.md) — user-server 启动文档
+- [./../bridge.md](../../bridge.md) — 设计主文档（背景 / 架构 / 数据流 / 限速 / 协议）
+- [./ARCHITECTURE.md](../ARCHITECTURE.md) — 架构总览
+- [./DEFAULTS.md](../DEFAULTS.md) — 前端默认值清单（与 constants.js 字面对齐）
+- [./../RELEASE.md](../../RELEASE.md) — 构建与发布
+- [../../../user-server/docs/dev/DEVELOPMENT.md](../../../../user-server/docs/dev/DEVELOPMENT.md) — user-server 启动文档
 
 ---
 

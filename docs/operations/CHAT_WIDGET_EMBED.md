@@ -254,6 +254,6 @@ aws s3 sync dist/ s3://cdn.example.com/embed/ \
 - SDK 完整说明：[../../embed-sdk/README.md](../../embed-sdk/README.md)
 - 完整 ADR：[../architecture/adr/ADR-011-chat-widget-embed.md](../architecture/adr/ADR-011-chat-widget-embed.md)
 - FRP 私域部署指南：[../architecture/FRP私域部署指南.md](../architecture/FRP私域部署指南.md)
-- RAG 自动回复架构：[../architecture/RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md](../architecture/RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md)
+- RAG 自动回复架构：`RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md`（未编写）
 - 部署架构：[../architecture/部署方案_用户端.md](../architecture/部署方案_用户端.md)
 - 用户端部署手册：[MERCHANT_DEPLOYMENT.md](MERCHANT_DEPLOYMENT.md)

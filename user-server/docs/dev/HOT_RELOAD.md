@@ -4,9 +4,9 @@
 > **生效日期**: 2026-08-18
 > **关联文档**:
 > - 启动说明: [./DEVELOPMENT.md §2](./DEVELOPMENT.md)
-> - 仓库 Makefile: [`../../Makefile`](../../Makefile)
+> - 仓库 Makefile: [`../../Makefile`](../../../Makefile)
 > - 工具配置: [`../../.air.toml`](../../.air.toml)
-> - 父级 README: [`../README.md`](../README.md)
+> - 父级 README: [`../README.md`](../../README.md)
 
 本手册解释 **user-server 在本地开发态如何实现「保存即生效」**，无需每次手动 `go build` / `go run` / `docker compose restart`。面向所有需要高频修改 .go / .yaml / .html 的开发者。
 
@@ -312,7 +312,7 @@ cd user-server && go build -o ./tmp/main ./cmd/api
 | 配置热重载 | 监听 ../.env | 不适用 | `config.yaml` 改后需 `kill -HUP <pid>` |
 
 CI 流程参见 `.github/workflows/user-server-ci.yml`：lint → vet → build → test，均不依赖 air。
-生产重启流程参见 [`docs/operations/DR_RECOVERY.md`](../operations/DR_RECOVERY.md)：用 SIGHUP 触发 endless 优雅重启。
+生产重启流程参见 [`docs/operations/DR_RECOVERY.md`](../../../docs/operations/DR_RECOVERY.md)：用 SIGHUP 触发 endless 优雅重启。
 
 ---
 

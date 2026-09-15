@@ -66,7 +66,7 @@
 
 ## 三、端口分配
 
-**唯一权威来源：[ports.go](file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/config/ports.go)。网上任何资料与本表冲突时，以代码为准。**
+**唯一权威来源：[ports.go](../user-server/internal/config/ports.go)。网上任何资料与本表冲突时，以代码为准。**
 
 | 服务 | 端口 | 绑定 | 说明 |
 |------|------|------|------|

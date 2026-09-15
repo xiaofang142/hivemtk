@@ -501,7 +501,7 @@ graph LR
 - [CONVENTIONS.md](./CONVENTIONS.md) - 代码规范
 - [FEATURES.md](./FEATURES.md) - 功能清单
 - [../README.md](../../README.md) - 项目说明
-- [../../MENU_SPEC.md](../../MENU_SPEC.md) - 菜单页面规格清单
+- [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) - 菜单页面规格清单
 
 ---
 

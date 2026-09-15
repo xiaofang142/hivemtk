@@ -86,7 +86,7 @@ chore   杂项
 
 - [架构设计](../architecture/)
 - [部署指南](../operations/)
-- [API 文档](../api/)
+- [API 文档](../../user-server/api)
 
 ---
 

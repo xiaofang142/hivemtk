@@ -178,7 +178,7 @@ HiveMtk is a marketing system focused on "all-channel reach + sales-copilot SOP 
 ✅ TikTok + WhatsApp + Telegram + Email cover cross-border scenarios.
 
 **Is there a SaaS version?**
-❌ No. We insist on private deployment and data sovereignty. For enterprise support or custom integration: jideilvluoqun@gmail.com.
+❌ No. We insist on private deployment and data sovereignty. For enterprise support or custom integration: `jideilvluoqun@gmail.com`.
 
 ---
 
@@ -258,8 +258,8 @@ Proactive outreach (SMS / email / social DM / Telegram / WhatsApp) is a core sen
 |---------|-------|-------|
 | 🐛 Bug / Feature Request | [GitHub Issues](https://github.com/xiaofang142/hivemtk/issues) / [Gitee Issues](https://gitee.com/xhpmayun/hivemtk/issues) | Report issues & suggestions |
 | 💬 WeChat group | Apply via Issue / email | Product / tech / ops Q&A; no ads, no politics |
-| 📧 Business / Support | jideilvluoqun@gmail.com | Enterprise support, custom integration, deployment consulting |
-| 🔒 Security reports | jideilvluoqun@gmail.com | Private disclosure, see [SECURITY.md](SECURITY.md) |
+| 📧 Business / Support | `jideilvluoqun@gmail.com` | Enterprise support, custom integration, deployment consulting |
+| 🔒 Security reports | `jideilvluoqun@gmail.com` | Private disclosure, see [SECURITY.md](SECURITY.md) |
 
 **Mirrors**: Gitee primary [gitee.com/xhpmayun/hivemtk](https://gitee.com/xhpmayun/hivemtk) (faster in China) · GitHub mirror [github.com/xiaofang142/hivemtk](https://github.com/xiaofang142/hivemtk) (Actions-synced)
 

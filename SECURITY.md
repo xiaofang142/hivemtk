@@ -22,7 +22,7 @@
 
 **请勿在公开 Issue 中提交安全漏洞**。请通过以下私密渠道之一报告：
 
-- **邮箱**：jideilvluoqun@gmail.com
+- **邮箱**：`jideilvluoqun@gmail.com`
 - **Gitee 私信**：[@xhpmayun](https://gitee.com/xhpmayun)
 - **GitHub Security Advisory**：使用 GitHub 私密漏洞报告功能
   - GitHub 仓库：[xiaofang142/hivemtk](https://github.com/xiaofang142/hivemtk)
@@ -100,7 +100,7 @@
 
 - **JWT**: 用户端使用 JWT 鉴权，超管 + role + data_scope 注入 JWT
 - **AppKey 软解析**: 私域部署无强鉴权（基线），依赖网络边界 + JWT
-- **行级权限**: data_scope 字段控制数据可见范围（详见 [docs/marketing-features/row-level-security.md](docs/marketing-features/row-level-security.md)）
+- **行级权限**: data_scope 字段控制数据可见范围（详见 [docs/marketing-features/row-level-security.md`row-level-security.md`）
 - **公开路由**: Webhook / 追踪像素 / 退订页等公开路由按渠道签名鉴权
 
 ### 4.3 凭据加密
@@ -129,9 +129,9 @@
 ### 5.2 运维侧
 
 - 定期备份 PostgreSQL（`make backup`）
-- 监控异常登录告警（详见 [docs/marketing-features/anomaly-login-detector.md](docs/marketing-features/anomaly-login-detector.md)）
-- 监控操作日志（详见 [docs/marketing-features/operation-log.md](docs/marketing-features/operation-log.md)）
-- 监控安全审计（详见 [docs/marketing-features/security-audit.md](docs/marketing-features/security-audit.md)）
+- 监控异常登录告警（详见 [docs/marketing-features/anomaly-login-detector.md`anomaly-login-detector.md`）
+- 监控操作日志（详见 [docs/marketing-features/operation-log.md`operation-log.md`）
+- 监控安全审计（详见 [docs/marketing-features/security-audit.md`security-audit.md`）
 - 升级前阅读升级指南（`docs/marketing-features/upgrade.md`，编写中）
 
 ### 5.3 开发侧
@@ -149,13 +149,13 @@
 
 | 文档 | 说明 |
 |------|------|
-| [docs/marketing-features/auth-login-jwt.md](docs/marketing-features/auth-login-jwt.md) | 登录认证与 JWT 鉴权 |
-| [docs/marketing-features/permission-system.md](docs/marketing-features/permission-system.md) | 角色管理 + 授权管理 + 菜单权限 |
-| [docs/marketing-features/row-level-security.md](docs/marketing-features/row-level-security.md) | 行级权限 / 数据范围 |
-| [docs/marketing-features/anomaly-login-detector.md](docs/marketing-features/anomaly-login-detector.md) | 异常登录预警 |
-| [docs/marketing-features/security-audit.md](docs/marketing-features/security-audit.md) | 安全审计 |
-| [docs/marketing-features/operation-log.md](docs/marketing-features/operation-log.md) | 操作日志（事件总线订阅） |
-| [docs/marketing-features/trace-dashboard.md](docs/marketing-features/trace-dashboard.md) | 全链路追踪驾驶舱 |
+| [docs/marketing-features/auth-login-jwt.md`auth-login-jwt.md` | 登录认证与 JWT 鉴权 |
+| [docs/marketing-features/permission-system.md`permission-system.md` | 角色管理 + 授权管理 + 菜单权限 |
+| [docs/marketing-features/row-level-security.md`row-level-security.md` | 行级权限 / 数据范围 |
+| [docs/marketing-features/anomaly-login-detector.md`anomaly-login-detector.md` | 异常登录预警 |
+| [docs/marketing-features/security-audit.md`security-audit.md` | 安全审计 |
+| [docs/marketing-features/operation-log.md`operation-log.md` | 操作日志（事件总线订阅） |
+| [docs/marketing-features/trace-dashboard.md`trace-dashboard.md` | 全链路追踪驾驶舱 |
 
 ---
 
@@ -163,9 +163,9 @@
 
 | 渠道 | 入口 | 说明 |
 |------|------|------|
-| 🐛 安全漏洞 | jideilvluoqun@gmail.com | 私密报告 |
+| 🐛 安全漏洞 | `jideilvluoqun@gmail.com` | 私密报告 |
 | 💬 一般问题 | [Gitee Issues](https://gitee.com/xhpmayun/hivemtk/issues) | 公开讨论 |
-| 📧 商务合作 | jideilvluoqun@gmail.com | 企业级支持 |
+| 📧 商务合作 | `jideilvluoqun@gmail.com` | 企业级支持 |
 
 ---
 

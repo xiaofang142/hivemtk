@@ -5,11 +5,11 @@
 > - 架构图: [./ARCHITECTURE.md](./ARCHITECTURE.md)
 > - 代码开发手册: [./DEVELOPMENT.md](./DEVELOPMENT.md)
 > - 功能清单: [./FEATURES.md](./FEATURES.md)
-> - 五层架构硬约束（最高规则）: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
-> - 用户体系规范: [../../docs/architecture/USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md)
+> - 五层架构硬约束（最高规则）: [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
+> - 用户体系规范: [../../docs/architecture/USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md)
 
 本文档汇总 `user-server` 工程的代码规范，覆盖 **五层架构约束、命名规范、错误处理、日志、数据库、缓存、WebSocket、AI 调用、安全** 九大主题。
-所有规范为**强制**（⭐⭐⭐ 最高规则请直接阅读 [GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)），违反将被 `scripts/check-architecture.sh` 与 `golangci-lint`（含 `depguard` 规则）阻断。
+所有规范为**强制**（⭐⭐⭐ 最高规则请直接阅读 [GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)），违反将被 `scripts/check-architecture.sh` 与 `golangci-lint`（含 `depguard` 规则）阻断。
 
 ---
 
@@ -460,7 +460,7 @@ hub.Broadcast(payload)
 
 - **JWT**: `middleware/jwt.go` 解析 token，注入 `user_id` 到 ctx
 - **MFA**: `middleware/mfa.go` 双因素验证
-- **角色**: `admin` / `customer_service` / `staff` 三档（详见 [USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md)）
+- **角色**: `admin` / `customer_service` / `staff` 三档（详见 [USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md)）
 - **二元管控**: `enabled` 字段（禁用后无法登录）+ 角色（决定前端入口可见性）
 - **超管默认全权限**: 前端不拦截 + 后端不拦截，仅靠"账号存在 + 启用"判断
 
@@ -616,11 +616,11 @@ type ToolExecutorPort interface {
 | 架构图（模块 / 时序 / 子系统） | [./ARCHITECTURE.md](./ARCHITECTURE.md) |
 | 代码开发手册（环境 / 启动 / 调试 / 部署） | [./DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 功能清单（按业务域分组） | [./FEATURES.md](./FEATURES.md) |
-| 五层架构硬约束 + 编码模板（最高规则） | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
-| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../docs/architecture/USER_SYSTEM.md) |
-| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../docs/architecture/MENU_PERMISSION_PLAN.md) |
-| LLM 路由策略 | [../../docs/marketing-features/llm-routing.md](../../docs/marketing-features/llm-routing.md) |
-| 工程级 README | [../README.md](../README.md) |
+| 五层架构硬约束 + 编码模板（最高规则） | [../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../../../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md) |
+| 用户/角色/授权三模块 | [../../docs/architecture/USER_SYSTEM.md](../../../docs/architecture/USER_SYSTEM.md) |
+| 菜单与权限设计 | [../../docs/architecture/MENU_PERMISSION_PLAN.md](../../../docs/architecture/MENU_PERMISSION_PLAN.md) |
+| LLM 路由策略 | [../../docs/marketing-features/llm-routing.md`llm-routing.md` |
+| 工程级 README | [../README.md](../../README.md) |
 
 ---
 

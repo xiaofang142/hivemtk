@@ -36,7 +36,7 @@
 
 如发生违反本行为准则的行为，请通过以下私密渠道举报：
 
-- 📧 邮箱：jideilvluoqun@gmail.com
+- 📧 邮箱：`jideilvluoqun@gmail.com`
 - 💬 Gitee 私信：[@xhpmayun](https://gitee.com/xhpmayun)
 - 🔒 GitHub Security Advisory：使用私密漏洞报告功能
 

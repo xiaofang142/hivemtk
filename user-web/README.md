@@ -70,7 +70,7 @@
 - **素材库（Material Library）**：图片 / 视频 / 文档
 - **模板市场（Template Market）**：可订阅行业模板
 
-> 完整菜单 / 页面 / 路由对齐清单见 [`./MENU_SPEC.md`](./MENU_SPEC.md)。
+> 完整菜单 / 页面 / 路由对齐清单见 [`./MENU_SPEC.md`](docs/ui-inventory/MENU_SPEC.md)。
 
 ## 🧱 技术栈
 
@@ -310,7 +310,7 @@ npm run test:e2e:ui
 ## 📚 关联文档
 
 - 仓库根 [README](../README.md)
-- 菜单 / 路由清单 [./MENU_SPEC.md](./MENU_SPEC.md)
+- 菜单 / 路由清单 [./MENU_SPEC.md](docs/ui-inventory/MENU_SPEC.md)
 - 架构图 [../docs/architecture/ARCHITECTURE_DIAGRAM.md](../docs/architecture/ARCHITECTURE_DIAGRAM.md)
 - 嵌入聊天窗接入 [../docs/operations/CHAT_WIDGET_EMBED.md](../docs/operations/CHAT_WIDGET_EMBED.md)
 - 嵌入 SDK [../embed-sdk](../embed-sdk/)
@@ -323,4 +323,4 @@ npm run test:e2e:ui
 - 任何对本项目的修改与网络服务提供均须开源衍生代码（AGPL-3.0 第 13 条）
 - 商业闭源集成 / 二次分发请先联系商务获取授权
 
-商务合作 / 技术支持：jideilvluoqun@gmail.com
+商务合作 / 技术支持：`jideilvluoqun@gmail.com`

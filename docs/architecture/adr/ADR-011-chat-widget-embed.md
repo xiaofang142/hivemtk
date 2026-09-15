@@ -335,11 +335,11 @@ window.MarketingChatWidget     // 构造函数
 
 ## 十一、相关文档
 
-- [CHAT_WIDGET_EMBED.md](../operations/CHAT_WIDGET_EMBED.md) - 嵌入集成指南
+- [CHAT_WIDGET_EMBED.md](../../operations/CHAT_WIDGET_EMBED.md) - 嵌入集成指南
 - [FRP私域部署指南.md](../FRP私域部署指南.md) - FRP 穿透完整指南
-- [embed-sdk/README.md](../../embed-sdk/README.md) - SDK 完整说明
+- [embed-sdk/README.md](../../../embed-sdk/README.md) - SDK 完整说明
 - [部署方案_用户端.md](../部署方案_用户端.md) - 整体部署架构
-- [RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md](../RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md) - AI 自动回复架构
+- `RAG_AUTO_REPLY_UNIFIED_ARCHITECTURE.md`（未编写） - AI 自动回复架构
 
 ## 修订历史
 

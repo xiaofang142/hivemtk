@@ -14,7 +14,7 @@
 1. 打开 chrome://extensions
 2. 开启「开发者模式」
 3. 「加载已解压的扩展程序」-> 选择解压后的 dist 目录
-4. 点击工具栏图标 -> 填写 user-server 地址（如 http://localhost:8204）-> 保存
+4. 点击工具栏图标 -> 填写 user-server 地址（如 `http://localhost:8204`）-> 保存
 5. 打开任一平台私信页 -> 点「自检当前私信页」按 bridge.md §10 真机校准清单核对
 
 ## 验证清单

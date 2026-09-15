@@ -240,6 +240,6 @@ user-server 初始化完成后，会通过 `PLATFORM_API_URL` 向平台端低频
 ## 八、相关文档
 
 - 部署手册：[MERCHANT_DEPLOYMENT.md](MERCHANT_DEPLOYMENT.md)
-- 商户初始化向导（业务侧）：[../marketing-features/merchant-initialization.md](../marketing-features/merchant-initialization.md)
+- 商户初始化向导（业务侧）：[../marketing-features/merchant-initialization.md`merchant-initialization.md`
 - 部署方案：[../architecture/部署方案_用户端.md](../architecture/部署方案_用户端.md)
 - 平台端 / 用户端分工：[`hivemtk-platform/docs/architecture/部署方案_平台端与用户端.md`](../../../hivemtk-platform/docs/architecture/部署方案_平台端与用户端.md)

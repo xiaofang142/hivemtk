@@ -4,7 +4,7 @@
 >
 > 📦 **与 `scripts/inference/` 的关系**:`scripts/inference/` 是旧版 Docker 容器化推理栈(已弃用,保留兼容)。新部署请使用本目录;旧部署可参考 `scripts/inference/README.md` 了解历史方案。
 >
-> 完整方案：[../../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md)
+> 完整方案：[../../docs/architecture/HOST_INFERENCE_PLAN.md](../../docs/architecture/HOST_INFERENCE_PLAN.md)
 
 ## 一、文件清单
 
@@ -228,4 +228,4 @@ export UBATCH_SIZE=1024  # GPU 可处理更大 ubatch
 
 ## License
 
-本项目以 AGPL-3.0 发布，详见 [../LICENSE](../LICENSE) 与 [../NOTICE](../NOTICE)。
+本项目以 AGPL-3.0 发布，详见 [../LICENSE](../../LICENSE) 与 [../NOTICE](../../NOTICE)。

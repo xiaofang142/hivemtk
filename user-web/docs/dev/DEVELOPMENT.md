@@ -197,7 +197,7 @@ export default campaignAPI
 
 ### Step 5：注册菜单（MENU_SPEC.md）
 
-参照 [../../MENU_SPEC.md](../../MENU_SPEC.md) 的结构在文档中追加菜单项；如需在 `Layout.vue` 的 `topMenus` 中挂菜单，编辑 `Layout.vue` 的菜单树（参考既有分组字段 `group: 'reach'`）。
+参照 [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) 的结构在文档中追加菜单项；如需在 `Layout.vue` 的 `topMenus` 中挂菜单，编辑 `Layout.vue` 的菜单树（参考既有分组字段 `group: 'reach'`）。
 
 ### Step 6：补 i18n 文案
 
@@ -575,7 +575,7 @@ await updateRequestConfig()
 - [CONVENTIONS.md](./CONVENTIONS.md) - 代码规范
 - [FEATURES.md](./FEATURES.md) - 功能清单
 - [../../README.md](../../README.md) - 项目说明
-- [../../MENU_SPEC.md](../../MENU_SPEC.md) - 菜单页面规格清单
+- [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) - 菜单页面规格清单
 - [../ui-inventory/](../ui-inventory/) - UI 清单文件
 
 ---

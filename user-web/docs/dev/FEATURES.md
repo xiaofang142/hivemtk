@@ -19,7 +19,7 @@
 
 ## 主菜单结构
 
-参考 [../../MENU_SPEC.md](../../MENU_SPEC.md)：
+参考 [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md)：
 
 1. **工作台**（workspace）：统一收件箱、客服会话、统一消息、消息中台、企微账号管理
 2. **客户管理**（customer）：客户360、客户事件、线索、标签分层、用户分层RFM、客服渠道
@@ -469,7 +469,7 @@ src/views/
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构图
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 代码开发手册
 - [CONVENTIONS.md](./CONVENTIONS.md) - 代码规范
-- [../../MENU_SPEC.md](../../MENU_SPEC.md) - 菜单页面规格清单（含每页字段/操作详细规格）
+- [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) - 菜单页面规格清单（含每页字段/操作详细规格）
 - [../ui-inventory/](../ui-inventory/) - UI 清单文件（按分组 JSON）
 
 ---
