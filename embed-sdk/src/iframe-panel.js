@@ -1,7 +1,47 @@
 
 
 
+/**
+ * @file iframe 聊天窗面板
+ * @description 跨域安全约定:
+ *   - 父端用 allowedOrigins 列表(自动包含 apiBaseURL + window.location.origin)
+ *     替代严格的 `=== apiBaseURL.origin`,避免跨域部署下父子通信被拒
+ *   - iframe 端用具体 origin 发送,不用 '*'
+ *   - chat-widget-close 关闭消息走同一白名单校验,与 onMessage 等保持一致
+ */
+
+/**
+ * @typedef {import('./config.js').McwConfig} McwConfig
+ */
+
+/**
+ * Iframe 面板构造选项
+ * @typedef {Object} IframePanelOptions
+ * @property {string}   apiBaseURL
+ * @property {string}   [appKey]
+ * @property {string}   [channelId]
+ * @property {string}   [position]
+ * @property {string}   [color]
+ * @property {string}   [title]
+ * @property {string}   [welcome]
+ * @property {string}   [lang]
+ * @property {string}   [visitorIdKey]
+ * @property {number}   [zIndex]
+ * @property {number}   [offsetX]
+ * @property {number}   [offsetY]
+ * @property {number}   [width]
+ * @property {number}   [height]
+ * @property {string[]} [allowedOrigins]
+ * @property {Function} [onClose]        收到 chat-widget-close 时的回调
+ * @property {string}   [mode='floating'] floating | embedded
+ * @property {string|Element} [targetElement]
+ * @property {string}   [cspNonce]
+ */
+
 export class IframePanel {
+  /**
+   * @param {IframePanelOptions} options
+   */
   constructor(options) {
     this.apiBaseURL = options.apiBaseURL
     this.appKey = options.appKey || ''
@@ -138,6 +178,11 @@ export class IframePanel {
     window.addEventListener('message', this.messageHandler)
   }
 
+  /**
+   * 生成 iframe 内联样式
+   * @param {string} display  CSS display 值
+   * @returns {string}
+   */
   getStyle(display) {
     if (this.mode === 'embedded') {
       return [

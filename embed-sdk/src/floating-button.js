@@ -1,6 +1,28 @@
 
 
 
+/**
+ * @file 浮标按钮
+ * @description 纯 DOM 实现,无框架依赖;负责挂载 / 卸载 / 开关态与未读角标
+ */
+
+/**
+ * 浮标位置
+ * @typedef {'bottom-right' | 'bottom-left'} McwPosition
+ */
+
+/**
+ * 浮标按钮构造选项
+ * @typedef {Object} FloatingButtonOptions
+ * @property {string}      [color='#1989fa']  浮标主色(hex)
+ * @property {McwPosition} [position='bottom-right']  浮标位置
+ * @property {number}      [zIndex=9999]     浮标层级
+ * @property {number}      [offsetX=24]      水平边距(px)
+ * @property {number}      [offsetY=24]      垂直边距(px)
+ * @property {Function}    [onClick]         点击回调,参数:(opened:boolean)
+ * @property {number}      [unread=0]        初始未读数
+ */
+
 const ICON_SVG = `
 <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
   <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
@@ -14,6 +36,9 @@ const CLOSE_SVG = `
 `
 
 export class FloatingButton {
+  /**
+   * @param {FloatingButtonOptions} options
+   */
   constructor(options) {
     this.color = options.color || '#1989fa'
     this.position = options.position || 'bottom-right'
@@ -76,6 +101,11 @@ export class FloatingButton {
     }
   }
 
+  /**
+   * 设置未读角标(超过 99 显示 99+)
+   * @param {number} count
+   * @returns {void}
+   */
   setUnread(count) {
     this.unread = count || 0
     const badge = this.button && this.button.querySelector('.mcw-fab-badge')
