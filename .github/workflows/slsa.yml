@@ -1,14 +1,24 @@
 # SLSA Level 3 Provenance（供应链安全）
 #
-# 背景与落地说明：
-# - release.yml 已通过 buildx 的 `provenance: true` 为 Docker 镜像内嵌 OCI 层 provenance。
-# - 本工作流补充：对 release 构建产物（user-server Go 二进制 + Bridge 扩展 zip）
-#   生成独立、可验证的 SLSA 供应链证明（Sigstore 签名 attestation）。
-# - 采用官方 slsa-framework/slsa-github-actions 的 generate_attestations（delegator）模式，
-#   运行在 GitHub 托管的隔离构建器上，满足 SLSA L3 的可信构建条件（ephemeral + isolated）。
+# ── 本工作流为何被重写（2026-09-15）────────────────────────────────────────────
+# 原实现引用了 **不存在的仓库** `slsa-framework/slsa-github-actions`：
+#   - uses: slsa-framework/slsa-github-actions/actions/prepare-workflow@v2
+#   - uses: slsa-framework/slsa-github-actions/delegator/generate_attestations@v2
+# 该仓库在 GitHub 上返回 404（正确仓库名为 slsa-github-generator）。
+# 后果：GitHub 无法解析该工作流，整个文件被判为无效 ——
+#   * 每次 push 都生成一个 **0 秒、0 个 job** 的失败记录；
+#   * `on: push: tags: ["v*"]` 被忽略，master 的每次普通推送都会触发；
+#   * `gh workflow list` 中该工作流名显示为文件路径而非 `SLSA`。
+# 即：SLSA 供应链证明**从未真正生成过**，OPT-CI-03「启用 verify job」也就
+# 从未被执行（无牙可咬）。本次按官方文档的 generator 模式重写。
+#
+# 正确用法（slsa-github-generator v2）：
+#   调用方计算产物 sha256 → base64 编码 → 传给 generator_generic_slsa3.yml，
+#   由 GitHub 托管的隔离构建器签发 Sigstore keyless 签名的 L3 provenance。
+#   内部 delegator_generic_slsa3.yml 需要 slsa-token，**不可**被用户直接调用。
 #
 # 触发：tag 推送 v*（与 release.yml 同步）或手动 workflow_dispatch。
-# 产物：user-server-linux-amd64 二进制 + bridge 扩展 zip + provenance attestation（intoto JSON）。
+# 产物：user-server-linux-amd64 + bridge-extension.zip + 签名 provenance。
 
 name: SLSA
 
@@ -26,8 +36,7 @@ jobs:
     name: Build release artifacts
     runs-on: ubuntu-latest
     outputs:
-      provenance-name: ${{ steps.generate.outputs.provenance-name }}
-      digests: ${{ steps.generate.outputs.digests }}
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,105 +51,127 @@ jobs:
       - name: Build user-server (linux/amd64)
         working-directory: user-server
         run: |
-          mkdir -p bin
+          mkdir -p ../dist
           # -trimpath 保证可重现构建；CGO_ENABLED=0 产出静态二进制
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -o bin/user-server ./cmd/api/
+            go build -trimpath -o ../dist/user-server-linux-amd64 ./cmd/api/
 
-      - name: Upload user-server artifact
-        uses: actions/upload-artifact@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          name: user-server-linux-amd64
-          path: user-server/bin/user-server
-          if-no-files-found: error
-          retention-days: 90
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: user-web/bridge/package-lock.json
 
       - name: Build Bridge extension zip
         working-directory: user-web/bridge
         run: |
           npm ci
           npm run build
-          mkdir -p dist-zip
+          mkdir -p "$GITHUB_WORKSPACE/dist"
           cd dist
-          VERSION=${GITHUB_REF#refs/tags/v}
-          zip -r "../dist-zip/bridge-${VERSION}.zip" . -x "*.map"
+          zip -r "$GITHUB_WORKSPACE/dist/bridge-extension.zip" . -x "*.map"
+
+      # 计算待证明产物的 sha256（sha256sum 格式：<hash>  <name>），整体 base64 编码。
+      # generator 以该值为准签发 provenance，因此文件名必须与后续 verify 时一致。
+      - name: Compute hashes
+        id: hash
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ls -la
+          echo "hashes=$(sha256sum user-server-linux-amd64 bridge-extension.zip | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload user-server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-server-linux-amd64
+          path: dist/user-server-linux-amd64
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload Bridge artifact
         uses: actions/upload-artifact@v4
         with:
           name: bridge-extension
-          path: user-web/bridge/dist-zip/
+          path: dist/bridge-extension.zip
           if-no-files-found: error
           retention-days: 90
 
-      - name: Generate provenance
-        # 官方 prepare-workflow：根据已上传 artifact 计算 digest，输出给 delegator
-        id: generate
-        uses: slsa-framework/slsa-github-actions/actions/prepare-workflow@v2
-        with:
-          name: user-server-linux-amd64
-
-      - name: Upload provenance to artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.generate.outputs.provenance-name }}
-          path: ${{ steps.generate.outputs.provenance-path }}
-          if-no-files-found: error
-          retention-days: 90
-
-  generate-provenance:
+  provenance:
     name: Generate SLSA provenance
     needs: [build]
     permissions:
-      id-token: write # delegator 需要 OIDC token 做 Sigstore keyless 签名
-      contents: read
-      actions: read
-    uses: slsa-framework/slsa-github-actions/delegator/generate_attestations@v2
+      actions: read # 读取上游 artifact digest
+      id-token: write # Sigstore keyless 签名需要 OIDC token
+      contents: write # tag 触发时把 provenance 作为 release asset 上传
+    # 官方通用生成器（非内部 delegator）。必须锁定 tag，勿用分支引用。
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
-      base64-subjects: ${{ needs.build.outputs.digests }}
-      provenance-name: ${{ needs.build.outputs.provenance-name }}
+      base64-subjects: ${{ needs.build.outputs.hashes }}
+      provenance-name: hivemtk.intoto.jsonl
+      # 仅在 tag 推送时挂到 release；workflow_dispatch 下没有对应 release，
+      # 强行上传会因缺少 upload-tag-name 而报错。
+      upload-assets: ${{ github.event_name == 'push' }}
 
-  # OPT-CI-03：启用 verify job（之前被注释）
-  # 本地执行后可用以下命令独立验证 SLSA L3 供应链证明
+  # OPT-CI-03：verify job 必须**阻断**（原实现为 `|| echo "::warning::"`，验证失败
+  # 只打警告，供应链校验形同虚设）。
   verify:
-    needs: [generate-provenance]
+    name: Verify provenance
+    needs: [build, provenance]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # download-artifact 需要
     steps:
       - name: Install slsa-verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "*"
           path: artifacts/
           merge-multiple: true
 
-      - name: Verify user-server artifact
-        # OPT-CI-03 修复：原实现为 `|| echo "::warning::SLSA verify failed"`，
-        # 验证失败只打警告不阻断 —— 供应链校验形同虚设（有牙无齿）。
-        # 现改为阻断：artifact 缺失、provenance 缺失、验证失败三种情况一律 exit 1。
+      - name: Verify artifacts against provenance
+        # artifact 缺失、provenance 缺失、验证失败 —— 三种情况一律 exit 1。
         run: |
           set -euo pipefail
-          ARTIFACT="artifacts/user-server-linux-amd64"
-          PROVENANCE="${ARTIFACT}.intoto.jsonl"
 
-          if [ ! -f "$ARTIFACT" ]; then
-            echo "::error::期望的构建产物不存在: $ARTIFACT"
-            exit 1
-          fi
+          PROVENANCE="artifacts/hivemtk.intoto.jsonl"
+          ARTIFACTS=(
+            "artifacts/user-server-linux-amd64"
+            "artifacts/bridge-extension.zip"
+          )
+
+          echo "── 已下载产物 ──"
+          ls -la artifacts/
+
           if [ ! -f "$PROVENANCE" ]; then
             echo "::error::缺少 SLSA provenance 证明文件: $PROVENANCE"
             exit 1
           fi
+          for a in "${ARTIFACTS[@]}"; do
+            if [ ! -f "$a" ]; then
+              echo "::error::期望的构建产物不存在: $a"
+              exit 1
+            fi
+          done
 
-          echo "校验产物: $ARTIFACT"
-          echo "证明文件: $PROVENANCE"
-          echo "来源仓库: github.com/${{ github.repository }}"
-          echo "来源 tag : ${{ github.ref_name }}"
+          # workflow_dispatch 下 ref_name 是分支名，不能作为 --source-tag 断言
+          echo "来源仓库: github.com/${GITHUB_REPOSITORY}"
+          echo "ref      : ${GITHUB_REF_TYPE}/${GITHUB_REF_NAME}"
 
-          slsa-verifier verify-artifact \
-            --provenance-path "$PROVENANCE" \
-            --source-uri github.com/${{ github.repository }} \
-            --source-tag ${{ github.ref_name }} \
-            "$ARTIFACT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            slsa-verifier verify-artifact \
+              --provenance-path "$PROVENANCE" \
+              --source-uri "github.com/${GITHUB_REPOSITORY}" \
+              --source-tag "${GITHUB_REF_NAME}" \
+              "${ARTIFACTS[@]}"
+          else
+            slsa-verifier verify-artifact \
+              --provenance-path "$PROVENANCE" \
+              --source-uri "github.com/${GITHUB_REPOSITORY}" \
+              "${ARTIFACTS[@]}"
+          fi
+
+          echo "✅ SLSA provenance 校验通过"
