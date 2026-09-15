@@ -43,7 +43,7 @@ async function load() {
   try {
     const res = await geoApi.getIndexFunnel()
     trackings.value = res?.trackings || []
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 async function verifyAll() {
   try {

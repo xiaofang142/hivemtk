@@ -83,7 +83,7 @@ test('[CLICK-ALL] 全页面模拟人工点击扫描', async ({ page }) => {
         })
         return out
       })
-    } catch (e) {}
+    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const safe = [...new Set(texts)].filter((t) => SAFE.test(t) && !DANGER.test(t)).slice(0, 6)
 
     for (const label of safe) {

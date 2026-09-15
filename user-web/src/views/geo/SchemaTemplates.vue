@@ -141,7 +141,7 @@ async function load() {
     })
     list.value = res?.list || []
     total.value = res?.total || 0
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 function openDialog(row) {
@@ -161,7 +161,7 @@ function openDialog(row) {
 async function save() {
   try {
     let tpl = form.value.template_json_text
-    try { tpl = JSON.parse(form.value.template_json_text) } catch (e) {}
+    try { tpl = JSON.parse(form.value.template_json_text) } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const payload = {
       page_type: form.value.page_type,
       schema_type: form.value.schema_type,
@@ -187,7 +187,7 @@ async function remove(row) {
     await geoApi.deleteSchemaTemplate(row.id)
     ElMessage.success('已删除')
     load()
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 onMounted(load)

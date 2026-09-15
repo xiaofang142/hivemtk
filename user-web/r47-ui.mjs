@@ -96,7 +96,7 @@ for (const r of routes) {
     const tabs = await page.locator('.el-tabs__item:visible').all()
     for (const tb of tabs.slice(0, 4)) {
       curInteractions.length = 0
-      try { await tb.click({ timeout: 1200 }); clicked++; await page.waitForTimeout(500) } catch { }
+      try { await tb.click({ timeout: 1200 }); clicked++; await page.waitForTimeout(500) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       const bad = curInteractions.filter(e => !e.includes('429'))
       if (bad.length) problems.push({ route: r, interaction: 'tab:' + (await tb.textContent().catch(() => '') || '').trim(), bad: bad.slice(0, 2) })
     }

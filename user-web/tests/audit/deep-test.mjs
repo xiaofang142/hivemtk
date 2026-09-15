@@ -78,7 +78,7 @@ async function apiReq(token, method, url, body) {
   })
   const text = await res.text()
   let json = null
-  try { json = JSON.parse(text) } catch {}
+  try { json = JSON.parse(text) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   return { status: res.status, json, text }
 }
 
@@ -199,14 +199,14 @@ function deepCmp(apiObj, dbObj, prefix = '', extraSkip = []) {
     if (av !== null && typeof av === 'object') {
       // DB 可能以 JSON 字符串形式存储（text 列），解析后比对
       let dvObj = dv
-      if (typeof dv === 'string') { try { dvObj = JSON.parse(dv) } catch {} }
+      if (typeof dv === 'string') { try { dvObj = JSON.parse(dv) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ } }
       if (JSON.stringify(av) !== JSON.stringify(dvObj || null)) diffs.push({ field: prefix + k, api: av, db: dv })
       continue
     }
     // API 数组/对象 vs DB JSON 字符串：尝试解析等价
     if (Array.isArray(av) || (typeof av === 'object' && av !== null)) {
       let dvObj = dv
-      if (typeof dv === 'string') { try { dvObj = JSON.parse(dv) } catch {} }
+      if (typeof dv === 'string') { try { dvObj = JSON.parse(dv) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ } }
       if (JSON.stringify(av) !== JSON.stringify(dvObj || null)) diffs.push({ field: prefix + k, api: av, db: dv })
       continue
     }
@@ -288,9 +288,9 @@ async function openPage(browser, pagePath) {
     if (!u.includes('/api/')) return
     const req = r.request()
     let reqBody = null
-    try { reqBody = req.method() !== 'GET' ? JSON.parse(req.postData() || 'null') : Object.fromEntries(new URL(u).searchParams) } catch {}
+    try { reqBody = req.method() !== 'GET' ? JSON.parse(req.postData() || 'null') : Object.fromEntries(new URL(u).searchParams) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     let resJson = null
-    try { resJson = await r.json() } catch {}
+    try { resJson = await r.json() } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     xhr.push({ url: u.replace(BASE, ''), method: req.method(), status: r.status(), reqBody, resJson })
   })
   const CANDIDATES = [process.env.ADMIN_PASS || 'Admin@123456', 'Admin@12345678', 'Admin@123456', '62cfdc6bf1b075830734cc6f9a63501b']
@@ -300,7 +300,7 @@ async function openPage(browser, pagePath) {
     await page.locator('.login-box input[type="text"]').first().fill('admin').catch(() => {})
     await page.locator('.login-box input[type="password"]').fill(pw).catch(() => {})
     await page.locator('.login-box button.el-button--primary').click().catch(() => {})
-    try { await page.waitForURL((u) => !u.hash.includes('/login'), { timeout: 6000 }); break } catch {}
+    try { await page.waitForURL((u) => !u.hash.includes('/login'), { timeout: 6000 }); break } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     await page.waitForTimeout(300)
   }
   await page.goto(`${BASE}/#/${pagePath.replace(/^\//, '')}`, { waitUntil: 'networkidle', timeout: 25000 }).catch(() => {})
@@ -371,7 +371,7 @@ async function main() {
   }
 
   if (phase === 'a' || phase === 'ab') {
-    let pages = []
+    let pages
     if (single) pages = [single]
     else {
       const repDir = path.resolve(__dirname, 'reports')

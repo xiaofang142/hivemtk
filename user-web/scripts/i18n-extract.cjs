@@ -67,7 +67,7 @@ function walk(dir, out = []) {
 // 提取 $t('xxx') / $t("xxx") / t('xxx') / t("xxx")
 // 支持带参数: $t('key', { ... })  $t('key', n, { ... })
 // key 限制: 字母/数字/点/下划线/中划线 (vue-i18n 合法字符), 首字符必须为字母/下划线
-const T_REGEX = /(?:\$t|\bt\s*)\(\s*['"]([A-Za-z_][A-Za-z0-9_.\-]*)['"]/g;
+const T_REGEX = /(?:\$t|\bt\s*)\(\s*['"]([A-Za-z_][A-Za-z0-9_.-]*)['"]/g;
 function extractKeysFromVue(file) {
   const txt = fs.readFileSync(file, 'utf8');
   const keys = new Set();

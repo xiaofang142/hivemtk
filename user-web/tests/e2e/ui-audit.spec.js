@@ -70,9 +70,9 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
           else if (d && Array.isArray(d.items)) rec.dataLen = d.items.length
           else if (d && typeof d === 'object') rec.dataKeys = Object.keys(d).length
         }
-      } catch (e) {}
+      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       current.api.push(rec)
-    } catch (e) {}
+    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   page.on('console', (m) => {
     if (m.type() === 'error') {
@@ -119,7 +119,7 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
     await page.waitForTimeout(600)
 
     // DOM 检测
-    let dom = {}
+    let dom
     try {
       dom = await page.evaluate(() => {
         const q = (s) => document.querySelector(s)

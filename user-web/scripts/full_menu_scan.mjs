@@ -6,9 +6,9 @@ const BASE = 'http://localhost:8211';
 
 // 提取所有路由路径
 const paths = execSync(`grep -rh "path:" src/router/*.js src/router/modules/*.js 2>/dev/null | \
-  grep -oE "path:\\s*['\"]/[^'\"]+['\"]" | \
-  sed "s/path:\\s*['\"]//;s/['\"]//" | \
-  grep -v "redirect\|component\|meta\|//" | \
+  grep -oE "path:\\s*['"]/[^'"]+['"]" | \
+  sed "s/path:\\s*['"]//;s/['"]//" | \
+  grep -v "redirect|component|meta|//" | \
   sort -u`, { encoding: 'utf8' });
 
 const routes = paths.split('\n')

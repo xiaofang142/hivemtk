@@ -53,7 +53,7 @@ const selectedPlatforms = ref(['indexnow', 'baidu'])
 async function loadQuota() {
   try {
     quota.value = (await geoApi.getPushQuota()) || {}
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 async function push() {
   const urls = urlsText.value.split('\n').map(s => s.trim()).filter(Boolean)

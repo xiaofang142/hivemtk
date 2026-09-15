@@ -91,7 +91,7 @@ function extractBackendApis() {
     while ((m = re.exec(src)) !== null) {
       // 向前找最近的 group 变量引用（粗略：看该行是否在某个 group 作用域，这里用前文最近的 group := 语句）
       const before = src.slice(0, m.index)
-      let prefix = ''
+      let prefix
       // 找最后一个 "xxx := r.Group" 或 "xxx := auth.Group" 的位置，其 var 是否出现在本行调用对象前
       const lines = before.split('\n')
       let lastGroupLine = -1

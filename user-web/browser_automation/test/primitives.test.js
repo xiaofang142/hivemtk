@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { describe, it, expect, vi } from 'vitest';
 import { dispatch } from '../src/core/primitives.js';
 
 // mock chrome.scripting / chrome.tabs

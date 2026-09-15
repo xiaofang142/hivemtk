@@ -130,7 +130,7 @@ function injType(target, value, clearFirst, submitOnEnter, mode) {
       el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward', data: null }));
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    let inserted = false;
+    let inserted;
     try {
       // execCommand('insertText') 在 contenteditable 上走浏览器输入管线，触发真实 input/beforeinput
       inserted = document.execCommand('insertText', false, value);

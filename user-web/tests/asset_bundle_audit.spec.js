@@ -85,7 +85,7 @@ async function fillForm(page) {
       } else {
         await inp.fill('自动测试_' + Date.now()).catch(() => {})
       }
-    } catch (_) {}
+    } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   }
 }
 
@@ -100,12 +100,15 @@ async function clickAllButtons(page, realErrors, apiCalls, notes, skipLabels = [
     const labelCounts = {}
     let acted = false
     for (const b of btns) {
+      // key 在 try 内赋值、在 catch 内使用；必须提升到 try 之外，
+      // 否则 catch 分支访问会抛 ReferenceError 并掩盖原始异常。
+      let key
       try {
         if (!(await b.isVisible().catch(() => false))) continue
         if (await b.isDisabled().catch(() => false)) continue
         const label = ((await b.innerText().catch(() => '')).trim() || '').slice(0, 20)
         labelCounts[label] = (labelCounts[label] || 0) + 1
-        const key = label + '#' + labelCounts[label]
+        key = label + '#' + labelCounts[label]
         if (skipLabels.some((s) => label.includes(s))) continue
         if (clicked.has(key) || failed.has(key)) continue
         clicked.add(key)
@@ -154,7 +157,7 @@ test.describe('资产包 UI 真实后端审计', () => {
       const u = req.url()
       if (isApiUrl(u) && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(m)) {
         let body = ''
-        try { body = (req.postData() || '').slice(0, 300) } catch (_) {}
+        try { body = (req.postData() || '').slice(0, 300) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         apiCalls.push(`SEND ${m} ${stripOrigin(u)}${body ? ' :: ' + body : ''}`)
       }
     })
@@ -176,7 +179,7 @@ test.describe('资产包 UI 真实后端审计', () => {
             realErrors.push(`API_ERR(code=${j.code}): ${stripOrigin(u)} :: ${m || short}`)
           }
         }
-      } catch (_) {}
+      } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     })
 
     page.on('requestfailed', (r) => { if (isApiUrl(r.url())) realErrors.push('REQFAIL: ' + stripOrigin(r.url()) + ' ' + (r.failure()?.errorText || '')) })
@@ -185,7 +188,7 @@ test.describe('资产包 UI 真实后端审计', () => {
       for (let r = 0; r < p.rounds; r++) {
         page._auditPath = p.path
         await page.goto('#' + p.path, { waitUntil: 'domcontentloaded' })
-        try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch (_) {}
+        try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         await page.waitForTimeout(900)
         if (!(await page.locator('.app-main').first().isVisible().catch(() => false))) {
           realErrors.push(`WHITE_SCREEN: ${p.group}/${p.name} (${p.path})`)

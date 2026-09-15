@@ -90,7 +90,7 @@ async function webLogin(page, username, password, token, userInfo) {
       localStorage.setItem('system_initialized', initFlag)
       if (tok) localStorage.setItem('token', tok)
       if (info) localStorage.setItem('user_info', JSON.stringify(info))
-    } catch (e) {}
+    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   }, {
     tok: useToken,
     locale: 'zh',
@@ -116,7 +116,7 @@ async function webLogin(page, username, password, token, userInfo) {
   await page.waitForTimeout(500)
   // 强制 zh locale（页面重定向/跳转后仍生效）
   await page.evaluate(() => {
-    try { localStorage.setItem('app_locale', 'zh') } catch (e) {}
+    try { localStorage.setItem('app_locale', 'zh') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   const userInput = page.locator('.login-box input').first()
   const pwdInput = page.locator('.login-box input[type="password"]')
@@ -130,7 +130,7 @@ async function webLogin(page, username, password, token, userInfo) {
   }
   // 登录后再设一次
   await page.evaluate(() => {
-    try { localStorage.setItem('app_locale', 'zh') } catch (e) {}
+    try { localStorage.setItem('app_locale', 'zh') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   await page.waitForTimeout(1500)
 }

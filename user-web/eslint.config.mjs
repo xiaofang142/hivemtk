@@ -1,18 +1,16 @@
 /**
- * ESLint 推荐配置（参考用，尚未启用）
+ * ESLint 配置（已启用）
  *
- * 启用步骤（未来引入 ESLint 时）：
- *   1. npm install -D eslint eslint-plugin-vue
- *   2. 将本文件重命名为 eslint.config.mjs
- *   3. 在 package.json scripts 中增加：
- *        "lint": "eslint . --fix",
- *        "lint:check": "eslint ."
- *   4. 在 CI 中增加 lint:check 步骤
+ * 状态：本文件即生效配置，`npm run lint:check`（= eslint .）直接使用。
+ *       CI 接入见 .github/workflows/user-server-ci.yml 的 user-web-lint job（OPT-FE-01）。
+ *
+ * 历史：原注释写「参考用，尚未启用」，实际早已被 eslint 自动加载 —— 属注释与事实不符，
+ *       于 OPT-FE-01 修复时一并更正。
  *
  * 设计目标：
  *   - 约束新增代码必须使用 `import { http } from '@/utils/request'`
  *   - 存量 43 个 `import request from '@/utils/request'` 文件通过 overrides 临时放行
- *     （等存量逐步迁移完成后删除 overrides 块）
+ *     （等存量逐步迁移完成后删除 overrides 块，见 OPT-FE-03）
  *   - 不破坏现有 Vue 3 + Vite 构建
  */
 import pluginVue from 'eslint-plugin-vue'
@@ -117,11 +115,37 @@ export default [
     files: ['**/*.test.js', '**/*.spec.js', 'vite.config.js', 'vitest.config.*'],
     rules: {
       'no-restricted-imports': 'off',
+      // Playwright 的 test 回调首参是 fixture 容器：`async ({}, testInfo) => {}`
+      // 是官方写法，表示"本用例不注入任何 fixture"。该空对象模式由 Playwright
+      // 运行时按解构出的属性名决定注入哪些 fixture，改写为具名参数会改变注入语义。
+      // 属规则与框架约定的冲突，此处显式豁免（仅限测试文件）。
+      'no-empty-pattern': 'off',
+    },
+  },
+
+  // Chrome 扩展环境（OPT-FE-01 修复）
+  // browser_automation / bridge 是 Chrome 扩展，使用 chrome.* 扩展 API。
+  // 原配置只提供 globals.browser + globals.node，导致 26 处
+  // `'chrome' is not defined` 误报（no-undef）。
+  {
+    files: ['browser_automation/**/*.js', 'bridge/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.webextensions,
+      },
     },
   },
 
   // 忽略目录
   {
-    ignores: ['dist/**', 'node_modules/**', 'public/**', 'src/types/components.d.ts'],
+    ignores: [
+      'dist/**',
+      '**/dist/**',
+      'node_modules/**',
+      'public/**',
+      'src/types/components.d.ts',
+      // 本文件是配置模板副本，非业务源码，不应被当作待 lint 的模块解析
+      'eslint.config.recommended.mjs',
+    ],
   },
 ]

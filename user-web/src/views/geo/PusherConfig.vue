@@ -122,7 +122,7 @@ async function load() {
     const res = await geoApi.listPushers({ page: page.value, limit: limit.value })
     list.value = res?.list || []
     total.value = res?.total || 0
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 function openDialog(row) {
@@ -142,7 +142,7 @@ async function save() {
   try {
     // 把 config_json_text 解析成对象再序列化
     let cfgJson = form.value.config_json_text
-    try { cfgJson = JSON.parse(form.value.config_json_text) } catch (e) {}
+    try { cfgJson = JSON.parse(form.value.config_json_text) } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const payload = {
       platform: form.value.platform,
       config_json: cfgJson,
@@ -168,7 +168,7 @@ async function remove(row) {
     await geoApi.deletePusher(row.id)
     ElMessage.success('已删除')
     load()
-  } catch (e) {}
+  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 onMounted(load)

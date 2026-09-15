@@ -79,7 +79,7 @@ test.describe('数据分析 7 页回归', () => {
     try {
       const tok = readFileSync('/tmp/da_token.txt', 'utf8').trim()
       if (tok) { AUTH = { token: tok }; return }
-    } catch (e) {}
+    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     AUTH = await apiLogin()
     if (!AUTH || !AUTH.token) throw new Error('登录失败，无法获取 token')
   })
@@ -96,7 +96,7 @@ test.describe('数据分析 7 页回归', () => {
           if (auth.refreshToken) localStorage.setItem('refreshToken', auth.refreshToken)
           localStorage.setItem('system_initialized', 'true')
         }
-      } catch (e) {}
+      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     }, AUTH)
     pageErrors = []
     consoleErrors = []
@@ -145,7 +145,7 @@ test.describe('数据分析 7 页回归', () => {
           await t.click({ timeout: 3000 }).catch(() => {})
           await page.waitForTimeout(300)
         }
-      } catch (e) {}
+      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 
       try {
         const buttons = page.locator('.el-main button.el-button:visible')
@@ -165,7 +165,7 @@ test.describe('数据分析 7 页回归', () => {
           if (await close.count()) await close.click({ timeout: 2000 }).catch(() => {})
           await page.waitForTimeout(200)
         }
-      } catch (e) {}
+      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 
       await page.goto(BASE + '/#/' + p.path + '?cb=' + Date.now(), { waitUntil: 'domcontentloaded' })
       if (page.url().includes('/#/login')) {

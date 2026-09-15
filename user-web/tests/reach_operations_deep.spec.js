@@ -56,7 +56,7 @@ const PAGES = [
 function setLocale(page, locale) {
   // 在应用加载前注入 locale，确保测试以指定语言渲染（便于用确定性文案断言）
   return page.addInitScript((l) => {
-    try { localStorage.setItem('app_locale', l) } catch (e) {}
+    try { localStorage.setItem('app_locale', l) } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   }, locale)
 }
 

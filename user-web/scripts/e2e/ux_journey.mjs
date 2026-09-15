@@ -53,7 +53,7 @@ async function recordToasts(page, c) {
   try {
     const els = await page.locator('.el-message').allInnerTexts({ timeout: 500 })
     for (const t of els) if (!c.toasts.includes(t)) c.toasts.push(t)
-  } catch {}
+  } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 async function step(c, name, fn) {

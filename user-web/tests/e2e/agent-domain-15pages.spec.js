@@ -65,7 +65,7 @@ async function uiLogin(page) {
     try {
       localStorage.setItem('app_locale', 'zh')
       localStorage.setItem('locale', 'zh-cn')
-    } catch (e) {}
+    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   await page.goto(`${BASE}/#/login`, { timeout: 30000, waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.login-box input', { timeout: 20000 })
@@ -99,7 +99,7 @@ async function attachNetLog(page, fileName) {
   page.on('pageerror', (e) => log.push(`PAGEERR ${e.message}`))
   return {
     dump: () => {
-      try { fs.writeFileSync(path.join(RESULT_DIR, fileName), log.join('\n')) } catch {}
+      try { fs.writeFileSync(path.join(RESULT_DIR, fileName), log.join('\n')) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     }
   }
 }
@@ -157,7 +157,7 @@ test.describe('F-P0-35 智能体域 15 页', () => {
         try {
           localStorage.setItem('app_locale', 'zh')
           localStorage.setItem('locale', 'zh-cn')
-        } catch (e) {}
+        } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       })
       await page.goto(`${BASE}/#/login`, { timeout: 30000, waitUntil: 'domcontentloaded' })
       try {
@@ -181,11 +181,11 @@ test.describe('F-P0-35 智能体域 15 页', () => {
       try {
         localStorage.setItem('app_locale', 'zh')
         localStorage.setItem('locale', 'zh-cn')
-      } catch (e) {}
+      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     })
     await page.goto(BASE, { timeout: 30000, waitUntil: 'domcontentloaded' })
     await ensureAuthed(page)
-    await page.evaluate(() => { try { localStorage.setItem('app_locale', 'zh'); localStorage.setItem('locale', 'zh-cn') } catch (e) {} })
+    await page.evaluate(() => { try { localStorage.setItem('app_locale', 'zh'); localStorage.setItem('locale', 'zh-cn') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ } })
   })
 
   for (const p of pages) {

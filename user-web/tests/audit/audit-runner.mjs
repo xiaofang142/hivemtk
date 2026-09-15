@@ -45,7 +45,7 @@ async function login(page) {
     try {
       await page.waitForURL((u) => !u.hash.includes('/login'), { timeout: 6000 })
       return true
-    } catch {}
+    } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     await page.waitForTimeout(300)
   }
   throw new Error('登录失败：所有候选密码均无效')
@@ -243,8 +243,11 @@ async function auditPage(browser, pagePath, opts = {}) {
     if (/^(Previous|Next) (Year|Month|Year|Day)$|^(20\d\d|\d+月|January|February|March|April|May|June|July|August|September|October|November|December)$/.test(el.label)) continue
     if (/^(Go to previous page|Go to next page|Jump to|Total|goto)$/i.test(el.label)) continue
     const before = { c: col.consoleErrors.length, p: col.pageErrors.length, n: col.netErrors.length }
+    // locator 在 try 内赋值、在 catch 内用于判定"是否 disabled 元素"；
+    // 必须提升到 try 之外，否则 catch 分支访问会抛 ReferenceError。
+    let locator
     try {
-      const locator = locatorByIdx(page, el.idx)
+      locator = locatorByIdx(page, el.idx)
       if (await locator.count() === 0) continue
       if (await isDisabled(locator)) continue
       await waitLoadingGone()
@@ -297,7 +300,7 @@ async function auditPage(browser, pagePath, opts = {}) {
       if (isTimeout) {
         try {
           if (await locator.count() && await isDisabled(locator)) skip = true
-        } catch {}
+        } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         // 若点击超时但同时出现 console/pageerror，则仍记为 error（可能是真实功能异常）
         if (col.consoleErrors.length > before.c || col.pageErrors.length > before.p) skip = false
       }
@@ -325,7 +328,7 @@ async function main() {
     if (argv[i] === '--page') single = argv[++i]
     else if (!argv[i].startsWith('--')) pagesFile = argv[i]
   }
-  let pages = []
+  let pages
   if (single) {
     pages = [single]
   } else if (pagesFile) {

@@ -46,7 +46,7 @@ const versionJsonPlugin = {
   closeBundle() {
     try {
       mkdirSync('dist', { recursive: true })
-    } catch {}
+    } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     writeFileSync(
       'dist/version.json',
       JSON.stringify({

@@ -1,6 +1,6 @@
 import { getOutbox, ackOutbox } from './http-ingest.js';
 import { sanitizeForDisplay } from './sanitize.js';
-import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2 } from './constants.js';
+import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER } from './constants.js';
 import { createLogger } from './logger.js';
 import { connectSSE, getLastEventID, setLastEventID } from './sse-fetch-client.js';
 

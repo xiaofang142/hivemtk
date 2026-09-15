@@ -108,7 +108,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
         if (isApiUrl(req.url())) {
           const m = req.method()
           let body = ''
-          try { body = (req.postData() || '').slice(0, 240) } catch (_) {}
+          try { body = (req.postData() || '').slice(0, 240) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
           apiCalls.push(`${m} ${stripOrigin(req.url())}${body ? ' :: ' + body : ''}`)
         }
       })
@@ -118,7 +118,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
       await page.goto('#' + p.path, { waitUntil: 'domcontentloaded' })
       try {
         await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 })
-      } catch (_) {}
+      } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       await page.waitForTimeout(600)
 
       const shotDir = 'test-results/system-settings'
@@ -152,7 +152,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
                 const ty = await inp.getAttribute('type').catch(() => '')
                 if (ty === 'file') continue
                 await inp.fill('自动测试_' + Date.now()).catch(() => {})
-              } catch (_) {}
+              } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
             }
             const ok = dlg.getByRole('button', { name: /确定|确 定|保存|提交|新增|创建|确认|是/i }).first()
             await ok.click({ timeout: 2000 }).catch(() => {})
@@ -179,7 +179,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
             const ty = await inp.getAttribute('type').catch(() => '')
             if (ty === 'file') continue
             await inp.fill('测试输入_auto').catch(() => {})
-          } catch (_) {}
+          } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         }
       }
 

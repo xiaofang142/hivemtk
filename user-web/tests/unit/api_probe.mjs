@@ -137,7 +137,7 @@ function probe(item) {
   let after = isWrite ? psql(`SELECT count(*) FROM ${table}`) : null
   const dbDelta = isWrite ? (after !== before ? `${before}->${after}` : 'no-change') : null
   // 后端错误常为异步记录（goroutine / 延迟写日志），调用后稍等再抓日志，避免漏判 LOG_ERROR
-  try { execFileSync('sleep', ['1']) } catch {}
+  try { execFileSync('sleep', ['1']) } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   const errLogs = backendErrorsSince(since)
   const verdict = classify(status, { hasCode: r && typeof r.code === 'string' }, errLogs)
   if (item.method === 'POST' && verdict.ok && pickId(r)) { const n = nounOf(resolved); idCache['real:' + n] = String(pickId(r)); saveIdCache() }

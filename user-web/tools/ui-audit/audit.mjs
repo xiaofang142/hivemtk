@@ -123,7 +123,7 @@ function installListeners(page, sink) {
   page.on('dialog', async (d) => {
     try {
       await d.dismiss()
-    } catch {}
+    } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
 }
 
@@ -201,7 +201,7 @@ async function runInventory(scopeRoutes) {
       }
       for (const [g, arr] of Object.entries(grouped)) {
         lines.push(`### ${g} (${arr.length})`)
-        for (const it of arr) lines.push(`- [ ] ${it.text || '(无文本)'}${it.disabled ? '  \`disabled\`' : ''}`)
+        for (const it of arr) lines.push(`- [ ] ${it.text || '(无文本)'}${it.disabled ? '  `disabled`' : ''}`)
         lines.push('')
       }
     }
