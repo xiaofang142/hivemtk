@@ -3,7 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -93,6 +100,28 @@ func (q *QuotaManager) Reset() {
 	}
 }
 
+// SetLimit 覆盖平台每日上限（DB 同步用，<=0 视为无限额）
+func (q *QuotaManager) SetLimit(platform string, limit int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.limits[platform] = limit
+}
+
+// SetUsed 覆盖今日已用量（DB 同步用）
+func (q *QuotaManager) SetUsed(platform string, used int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.used[platform] = used
+	q.reset[platform] = time.Now()
+}
+
+// Used 返回今日已用量
+func (q *QuotaManager) Used(platform string) int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.used[platform]
+}
+
 // ────────────────────────────────────────────
 // BaiduPusher 百度主动推送 API
 // POST http://data.zz.baidu.com/urls?site=SITE&token=TOKEN
@@ -148,18 +177,40 @@ func (p *BaiduPusher) Push(ctx context.Context, urls []string) ([]PushResult, er
 			}
 			continue
 		}
+		respBody := bodyToString(resp.Body)
 		resp.Body.Close()
 
-		// 百度返回 {"success":N, "remain":N}
-		// 不解析 remain 精细处理，简单视为成功
-		// 真正配额管理走 QuotaManager
-		if resp.StatusCode == 200 {
-			for j := i; j < end; j++ {
+		// 百度返回 {"success":N, "remain":M}；失败返回 {"error":410,"message":"..."}
+		var br struct {
+			Success int    `json:"success"`
+			Remain  int    `json:"remain"`
+			Error   int    `json:"error"`
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal([]byte(respBody), &br)
+
+		if resp.StatusCode == 200 && br.Error == 0 {
+			// 配额按 success 数标记：前 N 个 URL 成功
+			n := br.Success
+			if n > end-i {
+				n = end - i
+			}
+			for j := i; j < i+n; j++ {
 				results[j].Success = true
 			}
+			for j := i + n; j < end; j++ {
+				results[j].Error = "baidu: 超出当日配额被拒收"
+			}
+			if br.Remain > 0 && i == 0 && len(results) > 0 {
+				results[0].RemainQuota = br.Remain
+			}
 		} else {
+			msg := fmt.Sprintf("baidu: HTTP %d", resp.StatusCode)
+			if br.Message != "" {
+				msg = fmt.Sprintf("baidu: error=%d %s", br.Error, br.Message)
+			}
 			for j := i; j < end; j++ {
-				results[j].Error = fmt.Sprintf("baidu: HTTP %d", resp.StatusCode)
+				results[j].Error = msg
 			}
 		}
 	}
@@ -178,12 +229,22 @@ type GoogleProject struct {
 
 type GooglePusher struct {
 	Projects []GoogleProject
-	token    string
+	mu       sync.Mutex
+	tokens   map[string]googleToken // client_email → 缓存 token
 	cli      *http.Client
 }
 
+type googleToken struct {
+	access   string
+	expireAt time.Time
+}
+
 func NewGooglePusher(projects []GoogleProject) *GooglePusher {
-	return &GooglePusher{Projects: projects, cli: newHTTPClient()}
+	return &GooglePusher{
+		Projects: projects,
+		tokens:   map[string]googleToken{},
+		cli:      newHTTPClient(),
+	}
 }
 
 func (p *GooglePusher) Name() string { return "google" }
@@ -224,25 +285,118 @@ func (p *GooglePusher) Push(ctx context.Context, urls []string) ([]PushResult, e
 			results[i].Error = err.Error()
 			continue
 		}
+		respBody := bodyToString(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			results[i].Success = true
 		} else {
-			results[i].Error = fmt.Sprintf("google: HTTP %d", resp.StatusCode)
+			results[i].Error = truncateStr(fmt.Sprintf("google: HTTP %d %s", resp.StatusCode, respBody), 300)
 		}
 	}
 	return results, nil
 }
 
-// getAccessToken 极简 JWT 实现（避免引入依赖）
+// getAccessToken 用 Service Account 私钥签 RS256 JWT，向 Google OAuth2 换取 access token
+// 标准库实现（不引入 golang.org/x/oauth2），按 client_email 缓存并提前 60s 过期
 func (p *GooglePusher) getAccessToken(ctx context.Context, proj GoogleProject) (string, error) {
-	// 真实生产应使用 golang.org/x/oauth2/google
-	// 这里返回占位，实际部署时替换
 	if proj.ClientEmail == "" || proj.PrivateKey == "" {
 		return "", fmt.Errorf("google: Service Account 未配置")
 	}
-	_ = ctx
-	return "PLACEHOLDER_GOOGLE_ACCESS_TOKEN", nil
+
+	now := time.Now()
+	p.mu.Lock()
+	if t, ok := p.tokens[proj.ClientEmail]; ok && t.access != "" && now.Before(t.expireAt) {
+		p.mu.Unlock()
+		return t.access, nil
+	}
+	p.mu.Unlock()
+
+	assertion, err := signGoogleJWT(proj.ClientEmail, proj.PrivateKey, now)
+	if err != nil {
+		return "", err
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
+	form.Set("assertion", assertion)
+
+	req, _ := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/token",
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := p.cli.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("google token: %w", err)
+	}
+	body := bodyToString(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("google token: HTTP %d %s", resp.StatusCode, truncateStr(body, 200))
+	}
+
+	var tr struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal([]byte(body), &tr); err != nil || tr.AccessToken == "" {
+		return "", fmt.Errorf("google token: 响应解析失败 %s", truncateStr(body, 200))
+	}
+	expiry := tr.ExpiresIn
+	if expiry <= 0 {
+		expiry = 3600
+	}
+	p.mu.Lock()
+	p.tokens[proj.ClientEmail] = googleToken{
+		access:   tr.AccessToken,
+		expireAt: now.Add(time.Duration(expiry-60) * time.Second),
+	}
+	p.mu.Unlock()
+	return tr.AccessToken, nil
+}
+
+// signGoogleJWT 构造并签名 Google Service Account 的 JWT assertion（RS256）
+func signGoogleJWT(clientEmail, privateKeyPEM string, now time.Time) (string, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return "", fmt.Errorf("google: private_key 不是合法 PEM")
+	}
+	var key *rsa.PrivateKey
+	if k, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		key = k
+	} else if pk, err2 := x509.ParsePKCS8PrivateKey(block.Bytes); err2 == nil {
+		rsaKey, ok := pk.(*rsa.PrivateKey)
+		if !ok {
+			return "", fmt.Errorf("google: private_key 不是 RSA 密钥")
+		}
+		key = rsaKey
+	} else {
+		return "", fmt.Errorf("google: private_key 解析失败(PKCS1/PKCS8)")
+	}
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	claims, _ := json.Marshal(map[string]any{
+		"iss":   clientEmail,
+		"scope": "https://www.googleapis.com/auth/indexing",
+		"aud":   "https://oauth2.googleapis.com/token",
+		"exp":   now.Add(time.Hour).Unix(),
+		"iat":   now.Unix(),
+	})
+	payload := base64.RawURLEncoding.EncodeToString(claims)
+	signInput := header + "." + payload
+
+	digest := sha256.Sum256([]byte(signInput))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	if err != nil {
+		return "", fmt.Errorf("google: JWT 签名失败: %w", err)
+	}
+	return signInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // ────────────────────────────────────────────
@@ -372,20 +526,46 @@ func (p *SitemapPusher) Push(ctx context.Context, urls []string) ([]PushResult, 
 // ────────────────────────────────────────────
 
 type PushService struct {
-	db      *gorm.DB
-	quota   *QuotaManager
-	pushers map[string]Pusher
+	db       *gorm.DB
+	quota    *QuotaManager
+	pushers  map[string]Pusher
+	mu       sync.Mutex
+	quotaDay string // 内存配额所属日期，跨天自动 Reset
 }
 
 func NewPushService(db *gorm.DB) *PushService {
 	svc := &PushService{
-		db:      db,
-		quota:   NewQuotaManager(),
-		pushers: map[string]Pusher{},
+		db:       db,
+		quota:    NewQuotaManager(),
+		pushers:  map[string]Pusher{},
+		quotaDay: time.Now().Format("2006-01-02"),
 	}
 	// 自动从 DB 读配置注册
 	svc.registerFromDB()
 	return svc
+}
+
+// rollQuotaDay 长驻进程跨天时重置内存配额
+func (s *PushService) rollQuotaDay() {
+	today := time.Now().Format("2006-01-02")
+	s.mu.Lock()
+	if today != s.quotaDay {
+		s.quotaDay = today
+		s.quota.Reset()
+	}
+	s.mu.Unlock()
+}
+
+// persistQuota 将内存配额写回 geo_pusher_configs（UsedToday/LastResetAt）
+func (s *PushService) persistQuota(platform string) {
+	used := s.quota.Used(platform)
+	s.db.Model(&model.GeoPusherConfig{}).
+		Where("platform = ?", platform).
+		Updates(map[string]any{
+			"used_today":    used,
+			"last_reset_at": time.Now(),
+			"updated_at":    time.Now(),
+		})
 }
 
 func (s *PushService) registerFromDB() {
@@ -393,7 +573,21 @@ func (s *PushService) registerFromDB() {
 	if err := s.db.Find(&configs).Error; err != nil {
 		return
 	}
+	today := time.Now().Format("2006-01-02")
 	for _, cfg := range configs {
+		// 配额 DB 同步：跨天自动归零，同天恢复已用量
+		if cfg.DailyLimit > 0 {
+			used := cfg.UsedToday
+			lastDay := ""
+			if cfg.LastResetAt != nil {
+				lastDay = cfg.LastResetAt.Format("2006-01-02")
+			}
+			if lastDay != today {
+				used = 0
+			}
+			s.quota.SetLimit(cfg.Platform, cfg.DailyLimit)
+			s.quota.SetUsed(cfg.Platform, used)
+		}
 		if !cfg.Active {
 			continue
 		}
@@ -456,6 +650,7 @@ func (s *PushService) PushURLs(ctx context.Context, urls []string) error {
 	}
 
 	tx := s.db.Begin()
+	s.rollQuotaDay()
 	for platform, pusher := range s.pushers {
 		if !s.quota.Allow(platform, len(urls)) {
 			logger.Warnf("[%s] 配额用尽，跳过 %d URL", platform, len(urls))
@@ -487,7 +682,8 @@ func (s *PushService) PushURLs(ctx context.Context, urls []string) error {
 			_ = tx.Create(rec).Error
 		}
 
-		s.quota.Consume(platform, len(urls))
+		s.quota.Consume(platform, success)
+		s.persistQuota(platform)
 		logger.Warnf("[%s] 推送 %d URL 成功=%d 失败=%d", platform, len(urls), success, fail)
 	}
 	return tx.Commit().Error
@@ -496,36 +692,47 @@ func (s *PushService) PushURLs(ctx context.Context, urls []string) error {
 // PushManual 手动推指定平台
 func (s *PushService) PushManual(ctx context.Context, urls []string, platforms []string) ([]*model.GeoPushRecord, error) {
 	var records []*model.GeoPushRecord
+	s.rollQuotaDay()
 	for _, plat := range platforms {
 		p, ok := s.pushers[plat]
 		if !ok {
+			continue
+		}
+		if !s.quota.Allow(plat, len(urls)) {
+			logger.Warnf("[%s] 手动推送：配额用尽，跳过", plat)
 			continue
 		}
 		results, err := p.Push(ctx, urls)
 		if err != nil {
 			continue
 		}
+		success := 0
 		for _, r := range results {
 			rec := &model.GeoPushRecord{Platform: plat, URL: r.URL, ErrorMsg: r.Error}
 			if r.Success {
 				rec.SuccessCount = 1
+				success++
 			} else {
 				rec.FailCount = 1
 			}
 			records = append(records, rec)
 			_ = s.db.Create(rec).Error
 		}
+		s.quota.Consume(plat, success)
+		s.persistQuota(plat)
 	}
 	return records, nil
 }
 
 // QuotaStatus 返回各引擎配额状态
 func (s *PushService) QuotaStatus() map[string]any {
+	s.rollQuotaDay()
 	out := map[string]any{}
 	for name := range s.pushers {
 		out[name] = map[string]any{
 			"registered": true,
 			"remain":     s.quota.Remain(name),
+			"used":       s.quota.Used(name),
 		}
 	}
 	return out

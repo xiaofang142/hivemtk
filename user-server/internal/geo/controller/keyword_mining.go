@@ -33,16 +33,21 @@ func (c *KeywordMiningController) CrawlSuggest(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(ctx, gin.H{"count": len(results), "keywords": results}, "ok")
+	saved, err := c.svc.SaveMiningResults(ctx.Request.Context(), req.Seeds, results)
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "下拉词落库失败: "+err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"count": len(results), "saved": saved, "keywords": results}, "ok")
 }
 
 // CombineLongtail POST /geo/keyword-mining/longtail
 // body: {"seeds": ["CRM"], "use_default_templates": true}
 func (c *KeywordMiningController) CombineLongtail(ctx *gin.Context) {
 	var req struct {
-		Seeds             []string `json:"seeds" binding:"required"`
-		UseDefaultTpls    bool     `json:"use_default_templates"`
-		CustomTemplates   []string `json:"custom_templates"`
+		Seeds           []string `json:"seeds" binding:"required"`
+		UseDefaultTpls  bool     `json:"use_default_templates"`
+		CustomTemplates []string `json:"custom_templates"`
 	}
 	if !response.BindJSON(ctx, &req) {
 		return
@@ -59,7 +64,12 @@ func (c *KeywordMiningController) CombineLongtail(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(ctx, gin.H{"count": len(results), "keywords": results}, "ok")
+	saved, err := c.svc.SaveMiningResults(ctx.Request.Context(), req.Seeds, results)
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "长尾词落库失败: "+err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"count": len(results), "saved": saved, "keywords": results}, "ok")
 }
 
 // BuildFunnel GET /geo/keyword-mining/funnel

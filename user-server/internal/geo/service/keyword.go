@@ -69,6 +69,13 @@ func (s *KeywordService) MineKeywords(ctx context.Context, seedWords []string, m
 			Intent:       kw.Intent,
 			Source:       mode,
 			SearchVolume: kw.EstimatedValue,
+			Layer:        "related",
+		}
+		for _, seed := range seedWords {
+			if seed != "" && strings.Contains(geoKW.Keyword, seed) {
+				geoKW.ParentKeyword = seed
+				break
+			}
 		}
 		if err := s.keywordRepo.Create(geoKW); err != nil {
 			failed++
@@ -277,7 +284,13 @@ func (s *KeywordService) SemanticExpand(ctx context.Context, keywords []string, 
 			continue
 		}
 		geoKW := &model.GeoKeyword{
-			Keyword: kw, Category: "扩展", Intent: "语义扩展", Source: "semantic_expand",
+			Keyword: kw, Category: "扩展", Intent: "语义扩展", Source: "semantic_expand", Layer: "related",
+		}
+		for _, seed := range keywordsToExpand {
+			if seed != "" && strings.Contains(kw, seed) {
+				geoKW.ParentKeyword = seed
+				break
+			}
 		}
 		if err := s.keywordRepo.Create(geoKW); err != nil {
 			failed++
@@ -411,9 +424,9 @@ func ruleBasedCluster(keywords []string) map[string][]string {
 	return clusters
 }
 
-// GetKeywordList 获取关键词列表（分页）
-func (s *KeywordService) GetKeywordList(ctx context.Context, page, limit int, search, source string) ([]*model.GeoKeyword, int64, error) {
-	return s.keywordRepo.GetList(search, "", source, "", "", page, limit)
+// GetKeywordList 获取关键词列表（分页），layer 为漏斗层级过滤（seed/related/suggest/longtail）
+func (s *KeywordService) GetKeywordList(ctx context.Context, page, limit int, search, source, layer string) ([]*model.GeoKeyword, int64, error) {
+	return s.keywordRepo.GetList(search, "", source, "", "", layer, page, limit)
 }
 
 // DeleteKeyword 删除关键词

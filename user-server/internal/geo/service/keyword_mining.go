@@ -268,6 +268,7 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 		keyword string
 		source  string
 		engine  string
+		seed    string
 		err     error
 	}
 
@@ -291,7 +292,7 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 				}
 				for _, kw := range suggests {
 					results = append(results, result{
-						keyword: kw, source: "suggest_" + eng.Name(), engine: eng.Name(),
+						keyword: kw, source: "suggest_" + eng.Name(), engine: eng.Name(), seed: seed,
 					})
 				}
 			}(seed, eng)
@@ -311,13 +312,19 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 			continue
 		}
 		if existing, ok := seen[kw]; ok {
-			// 合并 engines
+			// 合并 engines：仅新引擎追加，SuggestCount 口径=覆盖引擎数
 			var engs []string
 			_ = json.Unmarshal([]byte(existing.SuggestEngines), &engs)
-			engs = append(engs, r.engine)
-			b, _ := json.Marshal(engs)
-			existing.SuggestEngines = string(b)
-			existing.SuggestCount++
+			have := map[string]bool{}
+			for _, e := range engs {
+				have[e] = true
+			}
+			if !have[r.engine] {
+				engs = append(engs, r.engine)
+				b, _ := json.Marshal(engs)
+				existing.SuggestEngines = string(b)
+				existing.SuggestCount++
+			}
 			continue
 		}
 		engs, _ := json.Marshal([]string{r.engine})
@@ -326,6 +333,7 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 			Source:         r.source,
 			Category:       "suggest",
 			Layer:          "suggest",
+			ParentKeyword:  r.seed,
 			Intent:         "info",
 			FunnelStage:    "cognitive",
 			Status:         "active",
@@ -348,7 +356,7 @@ type LongtailTemplate struct {
 	FunnelStage string // 映射到 GeoKeyword.FunnelStage
 }
 
-// DefaultLongtailTemplates 默认 36 个模板（6 意图 × 6 场景）
+// DefaultLongtailTemplates 默认 23 个模板（6 意图覆盖 how_to/comparison/recommendation/problem/pricing/case_study）
 var DefaultLongtailTemplates = []LongtailTemplate{
 	// how_to
 	{"如何选择{seed}系统", "how_to", "cognitive"},
@@ -400,15 +408,15 @@ func (s *KeywordMiningService) CombineLongtail(ctx context.Context, seedWords []
 				continue
 			}
 			seen[kw] = &model.GeoKeyword{
-				Keyword:     kw,
-				Source:      "template_combined",
-				Category:    "longtail",
-				Layer:       "longtail",
-				ParentID:    "", // 后续可关联
-				QueryIntent: tpl.QueryIntent,
-				FunnelStage: tpl.FunnelStage,
-				Intent:      tpl.QueryIntent,
-				Status:      "active",
+				Keyword:       kw,
+				Source:        "template_combined",
+				Category:      "longtail",
+				Layer:         "longtail",
+				ParentKeyword: seed,
+				QueryIntent:   tpl.QueryIntent,
+				FunnelStage:   tpl.FunnelStage,
+				Intent:        tpl.QueryIntent,
+				Status:        "active",
 			}
 		}
 	}
@@ -452,6 +460,200 @@ func (s *KeywordMiningService) ClassifyIntent(ctx context.Context, keywords []st
 		result[kw] = assigned
 	}
 	return result, nil
+}
+
+// SaveMiningResults 将 suggest/longtail 挖掘结果落库（补全链路断点：挖掘→持久化→站位）
+//
+//  1. 种子词确保存在 Layer='seed' 行（站位的锚点）；
+//  2. 结果词按 ParentKeyword 回填 ParentID，形成 seed→suggest/longtail 派生树；
+//  3. QueryIntent 缺失时用启发式 ClassifyIntent 补全；
+//  4. 库中已存在的词合并引擎覆盖（SuggestEngines/SuggestCount），不重复插入。
+//
+// 返回实际插入+更新的词数。
+func (s *KeywordMiningService) SaveMiningResults(ctx context.Context, seeds []string, results []*model.GeoKeyword) (int, error) {
+	if len(results) == 0 {
+		return 0, nil
+	}
+	now := time.Now()
+
+	texts := make([]string, 0, len(results)+len(seeds)*2)
+	for _, seed := range seeds {
+		seed = strings.TrimSpace(seed)
+		if seed != "" {
+			texts = append(texts, seed)
+		}
+	}
+	for _, r := range results {
+		texts = append(texts, r.Keyword)
+		if r.ParentKeyword != "" {
+			texts = append(texts, r.ParentKeyword)
+		}
+	}
+
+	var existing []model.GeoKeyword
+	if err := s.db.Model(&model.GeoKeyword{}).
+		Where("keyword IN ?", texts).
+		Find(&existing).Error; err != nil {
+		return 0, err
+	}
+	byText := make(map[string]*model.GeoKeyword, len(existing))
+	for i := range existing {
+		byText[existing[i].Keyword] = &existing[i]
+	}
+
+	// 1. 种子词站位：不存在则创建 Layer='seed' 行；已存在则刷新 LastMinedAt
+	seedRows := make([]*model.GeoKeyword, 0, len(seeds))
+	seenSeed := map[string]bool{}
+	staleSeedIDs := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		seed = strings.TrimSpace(seed)
+		if seed == "" || seenSeed[seed] {
+			continue
+		}
+		seenSeed[seed] = true
+		if ex, ok := byText[seed]; ok {
+			if ex.Layer == "" || ex.Layer == "seed" {
+				staleSeedIDs = append(staleSeedIDs, ex.ID)
+			}
+			continue
+		}
+		seedRows = append(seedRows, &model.GeoKeyword{
+			Keyword:     seed,
+			Category:    "seed",
+			Source:      "manual_seed",
+			Layer:       "seed",
+			Status:      "active",
+			LastMinedAt: &now,
+		})
+	}
+	if len(seedRows) > 0 {
+		if err := s.kwRepo.BatchCreate(seedRows); err != nil {
+			return 0, err
+		}
+		for _, row := range seedRows {
+			byText[row.Keyword] = row
+		}
+	}
+	if len(staleSeedIDs) > 0 {
+		if err := s.db.Model(&model.GeoKeyword{}).Where("id IN ?", staleSeedIDs).
+			Updates(map[string]any{"last_mined_at": now, "updated_at": now}).Error; err != nil {
+			return 0, err
+		}
+	}
+
+	// 2. 意图补全（零成本启发式）
+	uncategorized := make([]string, 0, len(results))
+	for _, r := range results {
+		if r.QueryIntent == "" {
+			uncategorized = append(uncategorized, r.Keyword)
+		}
+	}
+	if len(uncategorized) > 0 {
+		if intents, err := s.ClassifyIntent(ctx, uncategorized); err == nil {
+			for _, r := range results {
+				if r.QueryIntent == "" {
+					if intent, ok := intents[r.Keyword]; ok {
+						r.QueryIntent = intent
+						r.Intent = intent
+					}
+				}
+			}
+		}
+	}
+
+	// 3. 站位（ParentID 回填）+ 分类：新词插入 / 已有词合并更新
+	toCreate := make([]*model.GeoKeyword, 0, len(results))
+	toSave := make([]*model.GeoKeyword, 0, len(results))
+	processed := map[string]bool{}
+	for _, r := range results {
+		if r.Keyword == "" || processed[r.Keyword] {
+			continue
+		}
+		processed[r.Keyword] = true
+
+		if r.ParentID == "" && r.ParentKeyword != "" {
+			if parent, ok := byText[r.ParentKeyword]; ok {
+				r.ParentID = parent.ID
+			}
+		}
+		r.LastMinedAt = &now
+
+		ex, ok := byText[r.Keyword]
+		if !ok {
+			toCreate = append(toCreate, r)
+			continue
+		}
+		mergeMiningResult(ex, r, now)
+		toSave = append(toSave, ex)
+	}
+
+	saved := 0
+	if len(toCreate) > 0 {
+		if err := s.kwRepo.BatchCreate(toCreate); err != nil {
+			return saved, err
+		}
+		saved += len(toCreate)
+	}
+	for _, ex := range toSave {
+		if err := s.db.Model(&model.GeoKeyword{}).Where("id = ?", ex.ID).Updates(map[string]any{
+			"layer":           ex.Layer,
+			"parent_id":       ex.ParentID,
+			"parent_keyword":  ex.ParentKeyword,
+			"query_intent":    ex.QueryIntent,
+			"intent":          ex.Intent,
+			"funnel_stage":    ex.FunnelStage,
+			"suggest_engines": ex.SuggestEngines,
+			"suggest_count":   ex.SuggestCount,
+			"last_mined_at":   ex.LastMinedAt,
+			"updated_at":      now,
+		}).Error; err != nil {
+			return saved, err
+		}
+		saved++
+	}
+	return saved, nil
+}
+
+// mergeMiningResult 将新挖掘行 r 的信息合并进库中已有行 ex
+func mergeMiningResult(ex, r *model.GeoKeyword, now time.Time) {
+	if r.Layer == "suggest" {
+		var engs []string
+		_ = json.Unmarshal([]byte(ex.SuggestEngines), &engs)
+		have := map[string]bool{}
+		for _, e := range engs {
+			have[e] = true
+		}
+		var newEngs []string
+		_ = json.Unmarshal([]byte(r.SuggestEngines), &newEngs)
+		added := 0
+		for _, e := range newEngs {
+			if !have[e] {
+				engs = append(engs, e)
+				have[e] = true
+				added++
+			}
+		}
+		if added > 0 {
+			b, _ := json.Marshal(engs)
+			ex.SuggestEngines = string(b)
+			ex.SuggestCount += added
+		}
+	}
+	if ex.ParentID == "" {
+		ex.ParentID = r.ParentID
+		ex.ParentKeyword = r.ParentKeyword
+	}
+	if ex.QueryIntent == "" && r.QueryIntent != "" {
+		ex.QueryIntent = r.QueryIntent
+		ex.Intent = r.Intent
+	}
+	if ex.Layer == "" && r.Layer != "" {
+		ex.Layer = r.Layer
+	}
+	if ex.FunnelStage == "" {
+		ex.FunnelStage = r.FunnelStage
+	}
+	ex.LastMinedAt = &now
 }
 
 // KeywordFunnel 漏斗统计
@@ -525,6 +727,31 @@ func (s *KeywordMiningService) BuildFunnel(ctx context.Context) (*KeywordFunnel,
 	}
 	for _, r := range srows {
 		f.FunnelStages[r.Layer] = int(r.Cnt)
+	}
+
+	// 按引擎聚合 suggest 层覆盖（suggest_engines 为 JSON 数组字符串）
+	var engRows []struct {
+		Engines string `gorm:"column:engines"`
+	}
+	if err := s.db.Model(&model.GeoKeyword{}).
+		Select("suggest_engines as engines").
+		Where("status = ? AND layer = ? AND suggest_engines <> ''", "active", "suggest").
+		Scan(&engRows).Error; err != nil {
+		return nil, err
+	}
+	for _, er := range engRows {
+		var engs []string
+		if err := json.Unmarshal([]byte(er.Engines), &engs); err != nil {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, e := range engs {
+			if e == "" || seen[e] {
+				continue
+			}
+			seen[e] = true
+			f.SuggestEngines[e]++
+		}
 	}
 
 	return f, nil

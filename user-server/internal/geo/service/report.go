@@ -44,7 +44,7 @@ func (s *ReportService) GetReport(ctx context.Context, startDate, endDate string
 	}
 	report.TotalArticles = totalArticles
 
-	_, totalKeywords, err := s.keywordRepo.GetList("", "", "", "", "", 1, 1)
+	_, totalKeywords, err := s.keywordRepo.GetList("", "", "", "", "", "", 1, 1)
 	if err != nil {
 		return nil, fmt.Errorf("获取关键词总数失败: %w", err)
 	}

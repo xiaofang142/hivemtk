@@ -21,7 +21,7 @@ type GeoKeywordRepository interface {
 	Create(keyword *model.GeoKeyword) error
 	BatchCreate(keywords []*model.GeoKeyword) error
 	GetByID(id string) (*model.GeoKeyword, error)
-	GetList(search, category, source, cluster, status string, page, limit int) ([]*model.GeoKeyword, int64, error)
+	GetList(search, category, source, cluster, status, layer string, page, limit int) ([]*model.GeoKeyword, int64, error)
 	Delete(id string) error
 	GetByCluster(cluster string) ([]*model.GeoKeyword, error)
 	GetStatistics() ([]map[string]any, error)
@@ -57,7 +57,7 @@ func (r *geoKeywordRepo) GetByID(id string) (*model.GeoKeyword, error) {
 	return &keyword, err
 }
 
-func (r *geoKeywordRepo) GetList(search, category, source, cluster, status string, page, limit int) ([]*model.GeoKeyword, int64, error) {
+func (r *geoKeywordRepo) GetList(search, category, source, cluster, status, layer string, page, limit int) ([]*model.GeoKeyword, int64, error) {
 	var keywords []*model.GeoKeyword
 	var total int64
 	offset := (page - 1) * limit
@@ -78,6 +78,9 @@ func (r *geoKeywordRepo) GetList(search, category, source, cluster, status strin
 	}
 	if status != "" {
 		query = query.Where("status = ?", status)
+	}
+	if layer != "" {
+		query = query.Where("layer = ?", layer)
 	}
 
 	err := query.Count(&total).Error

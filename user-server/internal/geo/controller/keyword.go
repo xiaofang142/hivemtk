@@ -79,8 +79,9 @@ func (c *KeywordController) GetKeywordList(ctx *gin.Context) {
 	}
 	search := ctx.Query("search")
 	source := ctx.Query("source")
+	layer := ctx.Query("layer")
 
-	list, total, err := c.svc.GetKeywordList(ctx.Request.Context(), page, limit, search, source)
+	list, total, err := c.svc.GetKeywordList(ctx.Request.Context(), page, limit, search, source, layer)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取关键词列表失败")
 		return

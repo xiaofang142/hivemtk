@@ -39,7 +39,7 @@ func TestGeoKeywordRepository(t *testing.T) {
 		t.Fatal("keyword ID should be auto-generated")
 	}
 
-	list, total, err := repo.GetList("", "", "", "", "", 1, 10)
+	list, total, err := repo.GetList("", "", "", "", "", "", 1, 10)
 	if err != nil {
 		t.Fatalf("GetList failed: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestGeoKeywordRepository(t *testing.T) {
 	if err := repo.Delete(kw.ID); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
-	_, total, _ = repo.GetList("", "", "", "", "", 1, 10)
+	_, total, _ = repo.GetList("", "", "", "", "", "", 1, 10)
 	if total != 0 {
 		t.Fatalf("expected 0 after delete, got %d", total)
 	}

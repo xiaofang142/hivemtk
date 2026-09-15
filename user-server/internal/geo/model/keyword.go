@@ -23,8 +23,10 @@ type GeoKeyword struct {
 	// ⬇️ 新增：4 层漏斗字段
 	Layer string `gorm:"size:20;default:'seed';index" json:"layer"`
 	// 'seed' | 'related' | 'suggest' | 'longtail'
-	ParentID    string `gorm:"size:36;index" json:"parent_id"`
-	QueryIntent string `gorm:"size:30;index" json:"query_intent"`
+	ParentID string `gorm:"size:36;index" json:"parent_id"`
+	// ParentKeyword 记录派生自哪个种子词（站位用；落库时解析为 ParentID）
+	ParentKeyword string `gorm:"size:255" json:"parent_keyword"`
+	QueryIntent   string `gorm:"size:30;index" json:"query_intent"`
 	// 'how_to' | 'comparison' | 'recommendation' | 'problem' | 'pricing' | 'case_study'
 	SuggestEngines string     `gorm:"type:text" json:"suggest_engines"` // JSON 数组
 	SuggestCount   int        `gorm:"default:0" json:"suggest_count"`

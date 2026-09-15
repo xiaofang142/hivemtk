@@ -29,7 +29,7 @@ func sovRefreshJob(ctx context.Context) (string, error) {
 	const sovKeywordSample = 60
 	var allKW []string
 	page, limit := 1, sovKeywordSample
-	list, _, err := keywordRepo.GetList("", "", "", "", "", page, limit)
+	list, _, err := keywordRepo.GetList("", "", "", "", "", "", page, limit)
 	if err != nil {
 		return "", fmt.Errorf("拉取关键词失败(页=%d): %w", page, err)
 	}

@@ -208,7 +208,7 @@ func (s *MonitorCrawlerService) loadKeywords(ctx context.Context) []string {
 	if s.keywordRepo == nil {
 		return nil
 	}
-	list, _, err := s.keywordRepo.GetList("", "", "", "", "active", 0, 50)
+	list, _, err := s.keywordRepo.GetList("", "", "", "", "active", "", 0, 50)
 	if err != nil {
 		return nil
 	}
