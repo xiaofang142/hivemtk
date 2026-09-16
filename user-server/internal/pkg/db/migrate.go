@@ -2,6 +2,8 @@ package db
 
 import (
 	"fmt"
+	ragcachemodel "hivemtk-user/internal/aiagent/rag/cache"
+	browsermodel "hivemtk-user/internal/browser_automation/model"
 	contentmodel "hivemtk-user/internal/content/model"
 	geomodel "hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/model"
@@ -291,6 +293,55 @@ func allModels() []any {
 		// 而该写入的 error 又被 `_ =` 丢弃 —— 全新部署不建表 ⇒ 数据永久为 0 且毫无报错。
 		// 现在补进清单，建表不再依赖"历史遗留库里恰好有这张表"。
 		&geomodel.GeoCrawlerVisit{},
+
+		// -------------------------------------------------------------------
+		// 2026-09-16 审计 DB-07：补齐「有生产写入路径、却从未登记建表」的模型。
+		//
+		// 这些模型的表在开发库里确实存在，但那只是历史遗留（曾有测试把模型
+		// AutoMigrate 进了 user_db，见 TEST-06）；它们既不在 allModels()、
+		// 也不在 internal/migration/migrations、也不在 migrations/*.sql 里。
+		// 因此**全新部署不会建这些表** → 写入失败 → 而多数写入点的 error
+		// 又被 `_ =` 丢掉 → 表现为"功能静默失效"。
+		//
+		// 以下 29 个已逐个核对：均有 repository/存储层的 Create/Save 写入路径。
+		// 另有两个因 import 成环无法写在此处，改用 RegisterExtraModels 登记：
+		//   - KBDocumentChunkRow（internal/repository，见该文件 init）
+		//   - TraceEvent        （internal/aiagent/llm，见该文件 init）
+		// -------------------------------------------------------------------
+		&model.AggregationWatermark{},
+		&model.AlertHistory{},
+		&model.AlertRule{},
+		&model.BanditRefluxLog{},
+		&model.ChurnScore{},
+		&model.ClueEngagementEvent{},
+		&model.ClueScore{},
+		&model.ConfigParamAuditLog{},
+		&model.CustomerChannel{},
+		&model.IntegrationTemplate{},
+		&model.IntentExample{},
+		&model.LLMRoutingLog{},
+		&model.LoginEvent{},
+		&model.PasswordHistory{},
+		&model.RagMetricsDaily{},
+		&model.RecoveryQueue{},
+		&model.SecurityAlert{},
+		&model.SystemConfigKV{},
+		&model.UserMFA{},
+		&model.WorkflowExecution{},
+		&model.WorkflowNodeExecution{},
+		&model.WorkflowVersion{},
+
+		&browsermodel.BrowserCommandLog{},
+		&browsermodel.BrowserCronTrigger{},
+		&browsermodel.BrowserLLMPlan{},
+		&browsermodel.BrowserSession{},
+		&browsermodel.BrowserStep{},
+		&browsermodel.BrowserTask{},
+
+		// 表 rag_answer_cache：store_pg.go 的文件头注释原本就写着
+		// 「需在 internal/migration/migrations 注册」并附了 DDL，但一直没接。
+		// 登记到 allModels() 效果等价（该包不 import pkg/db，无成环问题）。
+		&ragcachemodel.RAGAnswerCache{},
 	}
 }
 

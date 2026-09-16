@@ -27,6 +27,14 @@ type KBDocumentChunkRow struct {
 // TableName 指定表名
 func (KBDocumentChunkRow) TableName() string { return "kb_document_chunks" }
 
+// 2026-09-16 审计 DB-07：KBDocumentChunkRow 此前从未登记建表，
+// 而本文件第 64 行有 Create 写入 —— 全新部署会缺 kb_document_chunks 表。
+//
+// 为什么写在这里而不是 internal/pkg/db/migrate.go：本包 import 了 internal/pkg/db，
+// 反向 import 会成环。RegisterExtraModels 正是为这种情形准备的（在 init 里登记，
+// 由 AutoMigrate() 统一消费）。
+func init() { _db.RegisterExtraModels(&KBDocumentChunkRow{}) }
+
 // KBDocumentChunkRepository 文档切片仓储
 type KBDocumentChunkRepository struct {
 	db *gorm.DB

@@ -37,7 +37,22 @@ MIGRATE = os.path.join(USER_SERVER, 'internal', 'pkg', 'db', 'migrate.go')
 
 # 命中但经核实并非缺陷的模型（写清理由，避免后人重复排查）
 ALLOWLIST = {
-    # 例：'SomeStruct': '视图/只读映射，由 XXX.sql 手工建',
+    # —— 表已由另一个已登记的 struct 覆盖，无需重复登记 ——
+    'EmailAccountRow': '与 EmailAccount 同表 email_accounts，后者已登记',
+    'IntentLog': 'intent_records 的列映射视图，刻意不进 AutoMigrate（见 TEST-03 / DB-06）',
+
+    # —— 由 migrations/*.sql 建表（运维手工执行，不属于 AutoMigrate 覆盖范围）——
+    'AgentKBBinding': 'migrations/*.sql 建表',
+    'CustomerRFM': 'migrations/*.sql 建表',
+    'KnowledgeBase': 'migrations/*.sql 建表',
+    'SLAPolicy': 'migrations/*.sql 建表',
+    'SLAViolation': 'migrations/*.sql 建表',
+    'WechatAccount': 'migrations/*.sql 建表',
+
+    # —— 库中无对应表，属死模型（确认无写入路径后可考虑删除）——
+    'CardAccess': '库中无 card_accesses 表，死模型',
+    'DailyCardUVStats': '库中无 daily_card_uv_stats 表，死模型',
+    'WechatMessage': '库中无 wechat_messages 表，死模型',
 }
 
 SKIP_DIRS = {'vendor', 'node_modules', '.git', 'dist', 'build'}
@@ -125,11 +140,15 @@ def collect_registered():
                 names |= _names_in(open(os.path.join(mig_dir, fn), encoding='utf-8').read())
 
     for path in iter_go_files(USER_SERVER):
+        if path.endswith('_test.go'):
+            continue
         try:
             text = open(path, encoding='utf-8').read()
         except (OSError, UnicodeDecodeError):
             continue
-        if 'RegisterExtraModels' in text:
+        # 运行期注册 + 各处的独立 AutoMigrate 调用点
+        # （如 db_audit_persister.go 的 AutoMigrateAuditTable）
+        if 'RegisterExtraModels' in text or '.AutoMigrate(' in text:
             names |= _names_in(text)
     return names
 

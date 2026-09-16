@@ -7,6 +7,9 @@ import (
 	geomodel "hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+
+	ragcachemodel "hivemtk-user/internal/aiagent/rag/cache"
+	browsermodel "hivemtk-user/internal/browser_automation/model"
 )
 
 // TestAllModels_CoversModelsWithWritePaths 防止「模型有生产写入路径、却没登记建表」复发。
@@ -21,8 +24,45 @@ import (
 //
 // 新增模型时：只要它有**生产写入路径**，就把类型加进 mustCover。
 func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
+	// 注：KBDocumentChunkRow 与 TraceEvent 不在此列 —— 它们所在包 import 了
+	// internal/pkg/db，无法反向在 migrate.go 登记，改由各自包的 init()
+	// 调用 RegisterExtraModels（见 internal/repository/kb_document_chunk_repo.go
+	// 与 internal/aiagent/llm/trace_context.go）。本测试包不 import 这两个包，
+	// 其 init 不会执行，故在此断言会误报。
 	mustCover := []any{
 		&geomodel.GeoCrawlerVisit{},
+
+		&model.AggregationWatermark{},
+		&model.AlertHistory{},
+		&model.AlertRule{},
+		&model.BanditRefluxLog{},
+		&model.ChurnScore{},
+		&model.ClueEngagementEvent{},
+		&model.ClueScore{},
+		&model.ConfigParamAuditLog{},
+		&model.CustomerChannel{},
+		&model.IntegrationTemplate{},
+		&model.IntentExample{},
+		&model.LLMRoutingLog{},
+		&model.LoginEvent{},
+		&model.PasswordHistory{},
+		&model.RagMetricsDaily{},
+		&model.RecoveryQueue{},
+		&model.SecurityAlert{},
+		&model.SystemConfigKV{},
+		&model.UserMFA{},
+		&model.WorkflowExecution{},
+		&model.WorkflowNodeExecution{},
+		&model.WorkflowVersion{},
+
+		&browsermodel.BrowserCommandLog{},
+		&browsermodel.BrowserCronTrigger{},
+		&browsermodel.BrowserLLMPlan{},
+		&browsermodel.BrowserSession{},
+		&browsermodel.BrowserStep{},
+		&browsermodel.BrowserTask{},
+
+		&ragcachemodel.RAGAnswerCache{},
 	}
 
 	registered := make(map[string]bool, 512)

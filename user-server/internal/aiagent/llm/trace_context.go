@@ -11,8 +11,16 @@ import (
 
 	"github.com/google/uuid"
 
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
+
+// 2026-09-16 审计 DB-07：TraceEvent 此前从未登记建表，
+// 而 trace_sink.go 有 `s.db.Table("trace_events").Create(rows)` 写入。
+//
+// 为什么写在这里而不是 internal/pkg/db/migrate.go：本包 import 了 internal/pkg/db，
+// 反向 import 会成环，故走 RegisterExtraModels。
+func init() { _db.RegisterExtraModels(&TraceEvent{}) }
 
 // TraceSpanKind Span 类型
 type TraceSpanKind string

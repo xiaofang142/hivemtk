@@ -390,4 +390,6 @@ audit:
 	@bash scripts/audit-cross-package-ports.sh
 	@echo "── 组件类型声明不得指向已删除的组件 ──"
 	@python3 scripts/check_component_types.py
+	@echo "── 有写入路径的模型必须登记 AutoMigrate ──"
+	@python3 scripts/check_model_migration.py
 	@echo "✅ 静态审计通过"

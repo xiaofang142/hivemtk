@@ -29,6 +29,8 @@ on:
       - 'scripts/audit_api_contract.py'
       - 'scripts/audit-cross-package-ports.sh'
       - 'scripts/check_component_types.py'
+      - 'scripts/check_model_migration.py'
+      - 'user-server/internal/pkg/db/migrate.go'
       - 'user-web/src/types/components.d.ts'
       - 'user-web/src/components/**'
       - '.github/workflows/api-contract.yml'
@@ -43,6 +45,8 @@ on:
       - 'scripts/audit_api_contract.py'
       - 'scripts/audit-cross-package-ports.sh'
       - 'scripts/check_component_types.py'
+      - 'scripts/check_model_migration.py'
+      - 'user-server/internal/pkg/db/migrate.go'
       - 'user-web/src/types/components.d.ts'
       - 'user-web/src/components/**'
       - '.github/workflows/api-contract.yml'
@@ -67,3 +71,6 @@ jobs:
 
       - name: 组件类型声明不得悬空（阻断）
         run: python3 scripts/check_component_types.py
+
+      - name: 有写入路径的模型必须登记 AutoMigrate（阻断）
+        run: python3 scripts/check_model_migration.py
