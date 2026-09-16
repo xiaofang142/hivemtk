@@ -285,6 +285,12 @@ func allModels() []any {
 		&geomodel.GeoPusherConfig{},
 		&geomodel.GeoIndexTracking{},
 		&geomodel.GeoSchemaTemplate{},
+
+		// GeoCrawlerVisit 此前是 29 个 geo 模型里**唯一没登记**的（2026-09-16 审计 DB-07）：
+		// internal/router/router.go 的 AICrawlerMonitor 回调会 fire-and-forget 地写入它，
+		// 而该写入的 error 又被 `_ =` 丢弃 —— 全新部署不建表 ⇒ 数据永久为 0 且毫无报错。
+		// 现在补进清单，建表不再依赖"历史遗留库里恰好有这张表"。
+		&geomodel.GeoCrawlerVisit{},
 	}
 }
 

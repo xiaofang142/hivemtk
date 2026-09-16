@@ -268,16 +268,25 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	auth := r.Group("/api")
 	auth.Use(middleware.AICrawlerMonitor(func(engine, path, ua, ip string) {
 
+		// ⚠️ 2026-09-16（审计 DB-07）：此处原先是 `_ = ...Create(...).Error`，
+		// 写入失败被完全丢弃。而 GeoCrawlerVisit 当时又**没登记进 AutoMigrate**，
+		// 全新部署根本不会建 geo_crawler_visits 表 —— 于是"GEO 爬虫访问统计"会
+		// 永久为 0 且**日志里一行都没有**。
+		//
+		// 建表已补进 internal/pkg/db/migrate.go；这里再把错误显性化：
+		// 即便将来表再次出问题，也会在日志里留痕，而不是静默归零。
 		go func() {
 			if gormDB == nil {
 				return
 			}
-			_ = gormDB.WithContext(context.Background()).Create(&geomodel.GeoCrawlerVisit{
+			if err := gormDB.WithContext(context.Background()).Create(&geomodel.GeoCrawlerVisit{
 				Engine:    engine,
 				Path:      path,
 				UserAgent: ua,
 				IP:        ip,
-			}).Error
+			}).Error; err != nil {
+				logger.Warnf("[GEO] 记录 AI 爬虫访问失败（engine=%s path=%s）: %v", engine, path, err)
+			}
 		}()
 	}))
 

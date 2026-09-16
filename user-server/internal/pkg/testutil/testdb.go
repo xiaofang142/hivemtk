@@ -11,6 +11,7 @@
 package testutil
 
 import (
+	"database/sql"
 	"fmt"
 	"net"
 	"os"
@@ -116,7 +117,9 @@ func resolveTestDBEndpoint() (string, string, error) {
 // NewTestDB 创建并初始化（或复用）当前进程的独立 PostgreSQL 测试数据库。
 //
 // 行为：
-//  1. 首次调用时在维护库（postgres）创建 user_db_test_<pid> 独立库（先清理同名残留）。
+//  1. 首次调用时在维护库（postgres）创建独立库（先清理同名残留）。
+//     库名取自一组固定槽位（user_db_test_slot<N>），由会话级咨询锁分配，
+//     因此库总数有界；详见 procTestDBSlots 注释（RISK-07）。
 //  2. 连接该库，启用 pgvector 扩展（向量字段必需）。
 //  3. 在测试 session 内禁用外键约束（避免跨域共享模型引用时缺失依赖记录）。
 //  4. 对传入的 models 执行 AutoMigrate（先 DROP 目标表再重建，幂等）。
@@ -201,6 +204,46 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	return database
 }
 
+// procTestDBSlots 进程级测试库的槽位数。
+//
+// 2026-09-16（RISK-07 根因修复）：原实现按 `<base>_<pid>` 命名，**每个测试进程一个库
+// 且从不 DROP** —— 实测累积 1505 个 / 19 GB（见 docs/architecture/TASKS_AUDIT_2026-09-16.md）。
+//
+// 为什么不能在进程退出时删：Go **没有**通用的"测试进程退出"回调。只有显式写了 TestMain
+// 的包才有挂钩子的地方，而全仓 293 个使用 NewTestDB 的测试文件分布在 35 个包目录里，
+// 其中**只有 5 个包有 TestMain** —— 靠 TestMain 兜不住。
+//
+// 因此改为「固定槽位 + PostgreSQL 会话级咨询锁」：库总数由**历史运行次数**降为
+// **槽位数**（有界）。会话级咨询锁在连接断开时由 PG 自动释放，
+// 所以测试进程正常退出、崩溃、被 kill 都能自动回收槽位 —— 不需要任何退出钩子。
+const procTestDBSlots = 32
+
+// procTestDBLockBase 咨询锁的键空间基准（"mtk" + 0x00），
+// 避免与业务代码或其他工具的咨询锁意外撞键。
+const procTestDBLockBase = 0x6d746b00
+
+// procTestDBMaint 持有槽位所需的长连接。
+// **刻意不 Close**：会话级咨询锁随连接释放，连接必须活到进程结束，
+// 否则槽位会在测试跑到一半时被回收，另一个进程可能抢到同一个库。
+// 进程退出时 socket 由 OS 关闭，PG 随即释放锁 —— 这就是我们要的自动回收。
+var procTestDBMaint *sql.DB
+
+// acquireTestDBSlot 在维护库连接上依次尝试获取槽位咨询锁，返回首个拿到的槽位。
+// 全部被占用时返回 ok=false（同一台机器上并发跑了多套 go test）。
+func acquireTestDBSlot(conn *sql.DB, t testing.TB) (slot int, ok bool) {
+	for i := 0; i < procTestDBSlots; i++ {
+		var got bool
+		if err := conn.QueryRow("SELECT pg_try_advisory_lock($1)", procTestDBLockBase+int64(i)).Scan(&got); err != nil {
+			t.Logf("获取测试库槽位 %d 的咨询锁失败: %v", i, err)
+			continue
+		}
+		if got {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 func ensureProcTestDB(t testing.TB) {
 	procDBInit.Do(func() {
 		// 基名与 getTestDSN 同源（POSTGRES_TEST_DBNAME，默认 user_db_test）。
@@ -211,7 +254,6 @@ func ensureProcTestDB(t testing.TB) {
 		// 于是 POSTGRES_TEST_DBNAME **设了也不生效** —— 典型"配置项名承诺了它不做的事"。
 		// 现改为共用同一基名，两边不再各说各话。
 		base := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
-		name := fmt.Sprintf("%s_%d", base, os.Getpid())
 		_, port, _ := resolveTestDBEndpoint()
 		maintDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname=postgres")
 		m, err := gorm.Open(postgres.Open(maintDSN), &gorm.Config{
@@ -221,20 +263,31 @@ func ensureProcTestDB(t testing.TB) {
 			procDBInitErr = err
 			return
 		}
-		defer func() {
-			if s, e := m.DB(); e == nil {
-				_ = s.Close()
-			}
-		}()
-		s, _ := m.DB()
-		if _, e := s.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, name)); e != nil {
-			t.Logf("清理残留测试库提示 %s: %v", name, e)
+		s, err := m.DB()
+		if err != nil {
+			procDBInitErr = err
+			return
 		}
-		if _, e := s.Exec(fmt.Sprintf(`CREATE DATABASE "%s"`, name)); e != nil {
+		procTestDBMaint = s // 不 Close，理由见变量注释
+
+		slot, locked := acquireTestDBSlot(s, t)
+		if locked {
+			procDBName = fmt.Sprintf("%s_slot%d", base, slot)
+		} else {
+			// 槽位用尽：退回 PID 命名，宁可多一个可能成为孤儿的库，
+			// 也不能让两个进程共用同一个库（会互相 DROP 掉对方的数据）。
+			// 这种库由 make test-db-prune 兜底清理。
+			t.Logf("测试库槽位（%d 个）已全部被占用，本次回退为 PID 命名", procTestDBSlots)
+			procDBName = fmt.Sprintf("%s_%d", base, os.Getpid())
+		}
+
+		if _, e := s.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, procDBName)); e != nil {
+			t.Logf("清理残留测试库提示 %s: %v", procDBName, e)
+		}
+		if _, e := s.Exec(fmt.Sprintf(`CREATE DATABASE "%s"`, procDBName)); e != nil {
 			procDBInitErr = e
 			return
 		}
-		procDBName = name
 	})
 	if procDBInitErr != nil {
 		t.Fatalf("初始化进程级测试库失败: %v\n"+
