@@ -8,6 +8,7 @@ import './styles/index.scss'
 import { updateRequestConfig, http } from './utils/request'
 import i18n from './i18n'
 import { applyDirection } from './i18n/locale'
+import { initWebVitals } from './utils/webVitalsMonitor'
 
 // Element Plus 图标改为按需自动导入：
 //   - 由 vite.config.js 中的 unplugin-vue-components + ElementPlusResolver 在编译期
@@ -61,6 +62,32 @@ router.afterEach((to) => {
 })
 
 app.mount('#app')
+
+// ============================================================================
+// OPT-FE-14：首屏 Web Vitals（LCP 等）监控
+// ----------------------------------------------------------------------------
+// 执行时机: app.mount 之后、且延后到空闲时段 —— 不抢占首屏资源，
+// 避免"监控代码自己拖慢 LCP"。
+// 采样率: 默认 100%；可用 VITE_WEB_VITALS_SAMPLE_RATE 覆盖（如 0.1 只采 10%）。
+// 失败静默: 监控上报失败不应影响业务，内部已 catch。
+// ============================================================================
+const initWebVitalsSafely = () => {
+  try {
+    const raw = import.meta.env?.VITE_WEB_VITALS_SAMPLE_RATE
+    const parsed = raw === undefined || raw === '' ? 1 : Number(raw)
+    initWebVitals({
+      sampleRate: Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1) : 1,
+      debug: import.meta.env?.DEV === true,
+    })
+  } catch (err) {
+    console.warn('[web-vitals] 初始化失败，已忽略:', err)
+  }
+}
+if (typeof requestIdleCallback === 'function') {
+  requestIdleCallback(initWebVitalsSafely, { timeout: 3000 })
+} else {
+  setTimeout(initWebVitalsSafely, 0)
+}
 
 // ============================================================================
 // Service Worker 版本管理 — 彻底防旧页/404
