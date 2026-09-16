@@ -6,8 +6,10 @@
 # 各步骤定位：
 #   - check-doc-consistency.sh       阻断：文档引用/ADR 编号/CODEOWNERS 路径/关键文件存在性
 #   - check-feature-doc.sh           阻断：功能文档 8 节模板结构（必填节）
-#   - feature-doc-coverage-report.sh 仅报告：模板覆盖率是**产品目标**而非回归底线，
-#                                    当前 38% < 50% 目标，故不阻断（避免用未达标的目标卡住 CI）
+#   - feature-doc-coverage-report.sh 仅报告：模板覆盖率是**产品目标**而非回归底线，故不阻断
+#                                    （2026-09-16：三处脚本的节判定已统一到
+#                                     scripts/lib/feature-doc-sections.sh，修掉「正文/表格里
+#                                     提到节名就算通过」的假绿，当前覆盖率 100%）
 #
 # 注：脚本按「工作区布局」编写（`../..` = 工作区根，其下含 hivemtk/ 与 docs/）。
 # 在 GitHub Actions 中仓库被 checkout 到 `<work>/<repo>/<repo>`，故 `../..`

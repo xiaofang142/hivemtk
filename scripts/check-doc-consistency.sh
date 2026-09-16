@@ -21,6 +21,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# 8 节模板判定统一走单一真源
+# shellcheck source=lib/feature-doc-sections.sh
+source "$SCRIPT_DIR/lib/feature-doc-sections.sh"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -156,12 +160,15 @@ for f in $FEATURE_DOCS; do
   if [[ "$filename" =~ ^DEPRECATED_ ]]; then
     continue
   fi
-  # 检查是否含 8 节标题
-  if ! grep -q "^## 一、\|功能完成状态" "$f"; then
+  # 检查是否含 8 节标题。
+  # 旧实现用 `"^## 一、\|功能完成状态"` —— BSD grep 的 BRE 不支持 `\|`，
+  # 整条模式退化成字面量 `^## 一、|功能完成状态`，恒定不匹配，
+  # 导致对已含 §一 的文档误报「缺失」。改用 lib 的严格判定。
+  if ! fd_section_present "$f" 0; then
     log_warn "缺 §一 功能完成状态: $filename"
     STRUCT_VIOLATIONS=$((STRUCT_VIOLATIONS+1))
   fi
-  if ! grep -q "^## 二、\|核心原理" "$f"; then
+  if ! fd_section_present "$f" 1; then
     log_warn "缺 §二 核心原理: $filename"
     STRUCT_VIOLATIONS=$((STRUCT_VIOLATIONS+1))
   fi

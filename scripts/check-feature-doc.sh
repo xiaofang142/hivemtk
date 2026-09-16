@@ -19,6 +19,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# 节判定统一走单一真源，杜绝"正文/目录里提到节名就算通过"
+# shellcheck source=lib/feature-doc-sections.sh
+source "$SCRIPT_DIR/lib/feature-doc-sections.sh"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -45,20 +49,7 @@ echo "  模式: ${STRICT:-normal}"
 echo "============================================================"
 echo ""
 
-# 必填节标题正则（宽松匹配）
-REQUIRED_SECTIONS=(
-  "功能完成状态"
-  "核心原理"
-  "设计标准"
-  "架构与模块关系"
-  "数据模型"
-  "业务流程"
-)
-
-RECOMMENDED_SECTIONS=(
-  "前端交互"
-  "测试策略"
-)
+# 必填 / 推荐节由 lib/feature-doc-sections.sh 提供（FD_SECTIONS 前 6 项必填，后 2 项推荐）
 
 PASSED=0
 FAILED=0
@@ -72,21 +63,16 @@ for f in "$DOCS_DIR"/*.md; do
     continue
   fi
 
-  # 必填节检查
+  # 必填节检查（§一 ~ §六，必须落在标题行上）
   MISSING_REQUIRED=()
-  for section in "${REQUIRED_SECTIONS[@]}"; do
-    if ! grep -q "$section" "$f"; then
-      MISSING_REQUIRED+=("$section")
-    fi
-  done
+  while IFS= read -r section; do
+    [ -n "$section" ] && MISSING_REQUIRED+=("$section")
+  done < <(fd_missing_sections "$f" required)
 
-  # 推荐节检查
+  # 推荐节检查（§七 §八）
   MISSING_RECOMMENDED=()
-  for section in "${RECOMMENDED_SECTIONS[@]}"; do
-    if ! grep -q "$section" "$f"; then
-      MISSING_RECOMMENDED+=("$section")
-    fi
-  done
+  if ! fd_section_present "$f" 6; then MISSING_RECOMMENDED+=("前端交互"); fi
+  if ! fd_section_present "$f" 7; then MISSING_RECOMMENDED+=("测试策略"); fi
 
   # 元数据块检查
   HAS_METADATA=false

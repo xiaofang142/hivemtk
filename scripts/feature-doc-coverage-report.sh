@@ -25,18 +25,11 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# 八节标题（与 FEATURE_DOCUMENTATION_TEMPLATE.md 严格对齐）
-SECTIONS=(
-  "功能完成状态"
-  "核心原理"
-  "设计标准"
-  "架构与模块关系"
-  "数据模型"
-  "业务流程"
-  "前端交互"
-  "测试策略"
-)
-SHORT_NAMES=( "§一" "§二" "§三" "§四" "§五" "§六" "§七" "§八" )
+# 八节标题取自单一真源（与 FEATURE_DOCUMENTATION_TEMPLATE.md 对齐）
+# shellcheck source=lib/feature-doc-sections.sh
+source "$SCRIPT_DIR/lib/feature-doc-sections.sh"
+SECTIONS=( "${FD_SECTIONS[@]}" )
+SHORT_NAMES=( "${FD_SHORT[@]}" )
 
 MODE="table"
 OUT_FILE=""
@@ -84,7 +77,9 @@ for f in "$DOCS_DIR"/*.md; do
 
   for i in "${!SECTIONS[@]}"; do
     section="${SECTIONS[$i]}"
-    if grep -qE "^#+ *(一、|二、|三、|四、|五、|六、|七、|八、)?${section}|^#+ *${SHORT_NAMES[$i]}" "$f" 2>/dev/null; then
+    # 旧实现允许「任意一节的数字前缀」+ 本节名 命中（如 `## 六、数据模型` 被算作 §五），
+    # 会虚高覆盖率。改用 lib 的严格判定：序号必须与节序一致。
+    if fd_section_present "$f" "$i"; then
       cov+="1"
       filled=$((filled+1))
       TOTAL_FILLED=$((TOTAL_FILLED+1))
@@ -201,7 +196,9 @@ for i in 3 4 5 6 7; do
     case "$filename" in
       README.md|DEPRECATED_*) continue ;;
     esac
-    if grep -qE "^#+ *(一、|二、|三、|四、|五、|六、|七、|八、)?${section}|^#+ *${SHORT_NAMES[$i]}" "$f" 2>/dev/null; then
+    # 旧实现允许「任意一节的数字前缀」+ 本节名 命中（如 `## 六、数据模型` 被算作 §五），
+    # 会虚高覆盖率。改用 lib 的严格判定：序号必须与节序一致。
+    if fd_section_present "$f" "$i"; then
       count=$((count+1))
     fi
   done
