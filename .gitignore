@@ -190,6 +190,8 @@ install.lock
 # ---------- 生成产物（机器生成，不应纳入版本追踪）----------
 # 自动生成的代码/接口清单文档（由脚本重新生成）
 user-server/NEW_FUNCTIONS_INVENTORY.md
+# scripts/api-inventory.sh 的快照产物（CI 以 artifact 上传，非源码，2026-09-16 补）
+/api-inventory.md
 # 前端测试 / UI 扫描生成的产物与缓存（由脚本重新生成）
 user-web/tests/API_TEST_RESULTS.json
 user-web/tests/API_INVENTORY.json

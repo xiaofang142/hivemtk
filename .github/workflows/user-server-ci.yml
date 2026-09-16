@@ -346,7 +346,10 @@ jobs:
         run: npm run test:all
 
   api-inventory:
-    name: API Inventory Compare (M9)
+    # 2026-09-16 更正（RISK-06）：原名 "API Inventory Compare"，但它从不比对 ——
+    # 只产出清单快照、不设门禁。真正的阻断式契约门禁在 api-contract.yml
+    # （audit_api_contract.py --strict）。此处按实际行为改名，避免误导。
+    name: API Inventory Report (non-blocking)
     runs-on: ubuntu-latest
     needs: []
     steps:
