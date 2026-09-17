@@ -102,12 +102,12 @@
 
 ## 使用规则
 
-1. **友好尊重**：参考 [Code of Conduct](../../CODE_OF_CONDUCT.md)
+1. **友好尊重**：参考 [Code of Conduct](../CODE_OF_CONDUCT.md)
 2. **搜索先行**：发新帖前先搜索是否已有相关讨论
 3. **提供上下文**：OS / 版本 / 部署方式 / 错误日志
 4. **不要 DM maintainer**：公共问题在公共区域讨论，方便其他用户检索
 5. **bug 报告**：优先用 GitHub Issues（可追踪），Discussions 用于开放式讨论
-6. **安全问题**：见 [SECURITY.md](../../SECURITY.md)，**不要**在公开渠道披露
+6. **安全问题**：见 [SECURITY.md](../SECURITY.md)，**不要**在公开渠道披露
 
 ## 维护者职责
 
