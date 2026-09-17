@@ -128,7 +128,7 @@ user-server/
 ├── cmd/{api,embedding-server,perf,routeinspect,seed}/   L1 进程装配（embedding-server 可选，Docker 不打包）
 ├── internal/
 │   ├── router/                                 L2 路由声明（router.go + *_routes.go）
-│   ├── controller/                             L3 表现层（薄 handler）
+│   ├── controller/                             L3 表现层（薄 controller）
 │   ├── ops/controller/ · content/controller/   L3 业务域独立子包
 │   ├── service/                                L4 业务编排
 │   ├── ops/service/ · content/service/         L4 业务域独立子包

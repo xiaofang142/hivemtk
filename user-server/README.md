@@ -161,7 +161,7 @@ HIVEMTK_PROFILE=prod make inference-host-up
 启动后访问：
 
 - 用户端 B 端工作台：`http://localhost:8211`（前端 `user-web`）
-- API：`http://localhost:8204/api/v1/...`
+- API：`http://localhost:8204/api/...`
 - Swagger：`http://localhost:8204/swagger/index.html`
 - 健康检查：`http://localhost:8204/health`
 - LLM（OpenAI 兼容）：`http://127.0.0.1:8207/v1`
@@ -209,7 +209,7 @@ make dev           # air 监听 .go/.yaml/.html/.env，自动重编+重启，零
 curl http://localhost:8204/health
 # 期望：{"status":"ok","checks":{...}}
 
-curl http://localhost:8204/api/v1/public/init
+curl http://localhost:8204/api/public/init
 # 期望：返回初始化状态（已安装 / 未安装）
 ```
 
@@ -269,14 +269,14 @@ make inference-host-status
 
 | 路由 | 说明 |
 |---|---|
-| `POST /api/v1/auth/login` | 登录 |
-| `POST /api/v1/auth/refresh` | 刷新 Token |
-| `GET /api/v1/customer/list` | 客户列表 |
-| `GET /api/v1/clue/list` | 线索列表 |
+| `POST /api/auth/login` | 登录 |
+| `POST /api/auth/refresh` | 刷新 Token |
+| `GET /api/customer/list` | 客户列表 |
+| `GET /api/clue/list` | 线索列表 |
 | `POST /api/chat/public/sessions/:session_id/messages` | 公开客服对话（AppKey 鉴权） |
-| `GET /api/v1/knowledge/search` | 知识库检索 |
-| `POST /api/v1/short-link/create` | 创建短链 |
-| `GET /api/v1/dashboard/sse` | 看板实时数据（SSE） |
+| `GET /api/knowledge/search` | 知识库检索 |
+| `POST /api/short-link/create` | 创建短链 |
+| `GET /api/dashboard/sse` | 看板实时数据（SSE） |
 | `GET /health` `/healthz` `/readyz` | 健康检查 |
 | `GET /swagger/index.html` | Swagger 文档 |
 
