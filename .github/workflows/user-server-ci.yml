@@ -178,6 +178,13 @@ jobs:
 
       - name: Go dependency audit (govulncheck)
         # OPT-CI-04：依赖漏洞审计（2026-08-16 审计任务）
+        # 2026-09-18 评估后维持不阻断（与 gitleaks/npm audit 不同）：
+        #   ① go1.25.13 工具链下 `govulncheck@latest`(v1.8.0) 无法安装——其要求 go>=1.26.0，
+        #      CI parity 扫描直接 exit 1，门禁尚未运行即失败，与代码无关；
+        #   ② 本地 go1.26.0 扫描测得 26 个「可达」stdlib 漏洞（crypto/x509 等），
+        #      仅在 go1.26.1 修复，非本仓库可编辑消除，转阻断会立即红。
+        # 前置条件：CI 工具链升级到 go1.26.1+（且 govulncheck 可安装）后再转阻断。
+        # 在此之前本步骤保留 continue-on-error，作为漏洞趋势观测而非门禁。
         working-directory: user-server
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -186,12 +193,15 @@ jobs:
 
       - name: Secret scan (gitleaks)
         # OPT-CI-05：密钥扫描（2026-08-16 审计任务）
+        # 2026-09-18 转阻断：对全部 git 跟踪文件做高置信度密钥模式
+        # （AKIA/ghp_/sk-/PRIVATE KEY/xoxb/AIza）扫描，命中 0 处；
+        # "首次启用不阻断"前提已不成立。若未来误报测试夹具，
+        # 用仓库根 .gitleaks.toml allowlist 精确豁免，而不是回退本门禁。
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
           GITLEAKS_ENABLE_SUMMARY: true
-        continue-on-error: true  # 首次启用，不阻断
 
       - name: Upload coverage to Codecov
         # 2026-08-15 P0-CI：Codecov 集成（需在仓库 settings 配置 CODECOV_TOKEN）
@@ -284,7 +294,9 @@ jobs:
       - name: npm audit (OPT-CI-10)
         # OPT-CI-10：NPM 依赖漏洞扫描 (--audit-level=high)
         # 仅阻断 high/critical 级别；中等/低先警告
-        # 首次启用，只警告不阻断 (continue-on-error)，下个迭代改为阻断
+        # 2026-09-18 转阻断：本地以官方 registry 实测 user-web
+        # `npm audit --audit-level=high` 退出 0（high/critical=0，moderate=6 不阻断），
+        # 且 CI runner 无 .npmrc 覆盖 registry，测量与 CI 同源。
         working-directory: user-web
         run: |
           echo "::group::Running npm audit (high+ critical)"
@@ -294,9 +306,8 @@ jobs:
             HIGH_CRIT=$(node -e "const r=require('./npm-audit.json');const m=r.metadata?.vulnerabilities||{};console.log('high:',m.high||0,'critical:',m.critical||0,'total:',r.metadata?.totalDependencies||0);" 2>/dev/null || echo "JSON 解析失败")
             echo "  ${HIGH_CRIT}"
           fi
-          # 重新跑一次非 JSON 模式输出可读报告
-          npm audit --audit-level=high || echo "::warning::npm audit 发现 high/critical 级别漏洞，但首次启用不阻断"
-        continue-on-error: true
+          # 重新跑一次非 JSON 模式输出可读报告；high/critical 直接阻断
+          npm audit --audit-level=high
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
