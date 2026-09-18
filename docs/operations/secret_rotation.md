@@ -12,15 +12,82 @@
 
 ## 二、轮换清单
 
-| 密钥 | 环境变量 | 频率 | 存储位置 |
+> 本表的"环境变量名/存储位置"列在 2026-09-19 逐项对代码做过 `grep` 核对：
+> 原表写的 `MERCHANT_HMAC_KEY` 在 `user-server` 全仓 0 命中（真实键名是 `MERCHANT_API_SECRET`，
+> 且不在数据库而在 `.env`），已按实测更正。
+
+| 密钥 | 环境变量 | 频率 | 存储位置（实测） |
 |------|----------|------|----------|
-| JWT 签名 | `JWT_SECRET` | 90 天 | `.env` 文件 |
-| 商户 HMAC | `MERCHANT_HMAC_KEY` | 180 天 | 数据库 |
-| 字段加密 | `FIELD_ENCRYPTION_KEY` | 180 天 | `.env` 文件 |
-| 数据库密码 | `POSTGRES_PASSWORD` | 180 天 | `.env` 文件 |
-| Redis 密码 | `REDIS_PASSWORD` | 365 天 | `redis.conf` |
+| JWT 签名（用户端） | `USER_JWT_SECRET` | 90 天 | 根 `.env` **与** `user-server/.env`（后者覆盖前者，见二A.2） |
+| JWT 签名（商户/平台侧） | `JWT_SECRET` | 90 天 | 各自服务目录的 `.env` |
+| 商户 HMAC | `MERCHANT_API_SECRET` | 180 天 | `.env`（user 与 platform 两侧必须同值） |
+| 平台授权签名 | `PLATFORM_LICENSE_SECRET` | 180 天 | `.env`（两侧各一份） |
+| 字段加密 | `FIELD_ENCRYPTION_KEY` | 180 天 | `.env` 或 `/run/secrets`（见第六节） |
+| 数据库密码 | `POSTGRES_PASSWORD` | 180 天 | `.env` + `user-server/.env` + `assetdpo/.env`(`HIVE_DB_PASSWORD`)，同一个 role |
+| Redis 密码 | `REDIS_PASSWORD` | 365 天 | `.env` + `redis.conf` |
 
 ---
+
+## 二A、本机实测泄露面（2026-09-19，T-P0-05）
+
+### 二A.1 判据与结果
+
+判据不是"文件里还有没有"，而是"**公开仓的历史里能不能翻出来**"：
+
+```bash
+# 逐个真值在公开仓历史里做 pickaxe（只数命中提交数，不打印明文）。
+# 81955cfc 是"清除跟踪文件明文"那次提交，它本身会因删除真值而被 pickaxe 命中，
+# 所以以它的前一个版本为界来查，才等于"是否曾经公开暴露过"。
+cd hivemtk
+grep -E '^[A-Za-z0-9_]+=' .env | sort -u | while IFS='=' read -r k v; do
+  case "$k" in *PASSW*|*SECRET*|*TOKEN*|*KEY*) ;; *) continue ;; esac
+  [ ${#v} -ge 8 ] || continue
+  printf '%-26s 曾公开命中=%s\n' "$k" "$(git log 81955cfc~1 --format=%h -S"$v" | wc -l | tr -d ' ')"
+done
+```
+
+| 凭证 | 公开仓历史命中 | 本机是否正在用该值 | 结论 |
+|------|---|---|---|
+| `POSTGRES_PASSWORD`（用户库） | 9 个提交（最早 2026-07-23） | 是（`:8204` 进程 env 实测为该值） | 必须轮换 |
+| `MERCHANT_API_SECRET` | 2 个提交（2026-07-31） | 是，且 **user/platform 两侧同值**＝共享密钥 | 必须轮换（两侧一起） |
+| `PLATFORM_LICENSE_SECRET` | 2 个提交（2026-07-31） | 是（user 侧）；platform 侧本就另有一值 | 必须轮换 |
+| 平台库 `POSTGRES_PASSWORD` | 1 个提交（`user-server/tests/e2e/deep_lib.sh`，跨仓串味） | 是（`:8205`） | 必须轮换 |
+| `USER_JWT_SECRET`（64 hex，根 `.env`） | 4 个提交 | **否**——真正在用的是 `user-server/.env` 里另一枚（57 字符），且该值 pickaxe 0 命中 | 本机无需轮换；部署侧若用的是被提交的那枚则需轮换 |
+| `REDIS_PASSWORD` / `TG_BOT_TOKEN` / `VISITOR_TOKEN_SECRET` / `MASTER_KEY` / `PLATFORM_ADMIN_PASSWORD` / `DS_API_KEY` | 0 | 是 | 未进过版本库，按常规周期轮换即可 |
+| `QINIU_*` / `EMBEDDING_API_KEY` / `RERANK_API_KEY` / 邮箱口令 | — | `.env` 里为空值 | 未配置，无泄露面 |
+
+两点反直觉结论，值得留档：
+
+1. **泄露的是"文件态"还是"运行态"要分开判**。已提交的 JWT 值本机根本没在用（被
+   `user-server/.env` 覆盖），所以换它能带来的收益是零、代价是全员掉线；
+   而看起来"只是本地开发库"的 `POSTGRES_PASSWORD` 却是运行态真值，且与部署机同源的概率高。
+2. **跨仓串味**：私有 platform 库的口令是从 **公开** user 仓的 e2e 脚本里泄出去的。
+   只扫"本仓自己的 .env 键"会漏掉这一类，因此 `check-secrets.sh` 的 A 项要求把
+   相邻仓的 `.env` 也喂进来比对（`ENV_FILE=../hivemtk-platform/platform-server/.env bash scripts/check-secrets.sh`）。
+
+### 二A.2 处置状态（2026-09-19 用户拍板）
+
+- 已做：清除跟踪文件里的明文（`81955cfc`）+ 上防复发闸门 `scripts/check-secrets.sh`。
+- **暂不做：口令轮换与 git 历史改写**（F1 决策：暂不处置）。轮换工具已备好但默认拒绝执行，
+  需人工显式授权：`ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned`。
+- 不改历史的理由（记录在此，避免下次重新论证）：这些值已经公开可查，改写只是把"可查"变成
+  "不可查"，而**轮换是把"可用"变成"不可用"**——只有后者能真正终止泄露的价值；
+  同时 `filter-repo` 会作废所有既有克隆与 CI 缓存，收益为零、代价为共享现场破坏。
+  标准处置顺序即"rotate, don't erase"。
+- 未完成：顶层非 git 目录 `scripts/` 里那份 `bulk_seed.py` 仍含同一枚明文（不在任何闸门覆盖内），
+  该残留已移交审计会话 C 的定时修复任务（见 `docs/audit-2026-09-19-sessionC.md` F2），此处不重复修。
+
+### 二A.3 为什么这些脚本命令不能手敲
+
+一次轮换要同时落到 4 个 `.env`、1 次 `ALTER USER`、2 个运行中服务的重启。少做任何一步，
+得到的是"配置文件与真实口令漂移"的状态——表现为上千条测试假红而不是显式报错
+（2026-09-18 实际踩过）。所以要么全做、要么不做，用 `scripts/rotate-secrets.sh`：
+它在切口令前检测并发测试/灌数作业并拒绝（互斥），写后逐键校验重复键全部更新，
+`ALTER` 前后备份旧值到仓外 `700` 目录（放仓内会被自家闸门判为泄露），
+失败可用 `--rollback <备份目录>` 一步退回。
+
+---
+
 
 ## 三、轮换流程
 
@@ -30,84 +97,112 @@
 # 1. 生成新密钥
 openssl rand -hex 32
 
-# 2. 备份当前配置
-cp .env .env.backup
+# 2. 备份当前配置（备份文件不要放进仓内：check-secrets.sh 会按工作区内容扫，仓内副本即视为泄露）
+cp .env /tmp/env.backup.$(date +%s)
 
-# 3. 通知相关人员
+# 3. 通知相关人员（同一套口令被几个服务读，见二A.1 表格的"存储位置"列）
 ```
 
 ### 3.2 执行轮换
 
+日常一律走脚本，下面的手工命令是"脚本不可用时的等价步骤"，且必须整组做完：
+
 #### JWT 密钥 (90天)
 
 ```bash
-# 1. 编辑 .env 文件
-# JWT_SECRET_OLD=旧值
-# JWT_SECRET=新值
+# 1. 先确认"线上实际用的是哪一枚密钥"——根 .env 与 user-server/.env 都有 USER_JWT_SECRET，
+#    后加载的覆盖先加载的；改了没在用的那枚，等于没换。做法：拿一个真 token，逐个候选验签。
+set -a && . .env && set +a
+TOKEN=$(curl -s -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"'"${HIVEMTK_ADMIN:-e2e_admin}"'","password":"'"$HIVEMTK_ADMIN_PASS"'"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+python3 - "$TOKEN" "$(awk -F= '/^USER_JWT_SECRET=/{print $2; exit}' .env)" \
+                   "$(awk -F= '/^USER_JWT_SECRET=/{print $2; exit}' user-server/.env)" <<'PY'
+import sys, hmac, hashlib, base64
+h, p, s = sys.argv[1].split('.')
+for i, secret in enumerate(sys.argv[2:], 1):
+    sig = base64.urlsafe_b64encode(hmac.new(secret.encode(), f"{h}.{p}".encode(),
+                                            hashlib.sha256).digest()).rstrip(b'=').decode()
+    print(f"候选{i}: {'✅ 这就是线上生效的签名密钥' if sig == s else '❌ 不匹配（改它不会生效）'}")
+PY
+#   ↑ 2026-09-19 实测：候选1（根 .env）❌ 不匹配，候选2（user-server/.env）✅ 生效
 
-# 2. 重启服务
-docker compose restart user-server
+# 2. 改对应那枚 .env 的值（新旧两份都建议留注释一行，便于回滚），然后重启服务：
+#    user-server 不是 compose 服务（docker-compose.yml 里只有 mtk-postgres / mtk-redis），
+#    本地是裸进程，env 只在启动时读一次，不重启等于没换
+kill "$(lsof -nP -tiTCP:8204 -sTCP:LISTEN | head -1)"
+( cd user-server && set -a && . ../.env && [ -f .env ] && . ./.env && set +a \
+  && nohup ./bin/user-server >> /tmp/user-server.log 2>&1 & )
 
-# 3. 验证新密钥生效
-curl -H "Authorization: Bearer <新token>" http://localhost:8204/api/v1/health
+# 3. 正向验证：新 token 能过鉴权
+TOKEN=$(curl -s -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"'"${HIVEMTK_ADMIN:-e2e_admin}"'","password":"'"$HIVEMTK_ADMIN_PASS"'"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
+curl -s -o /dev/null -w '新token=%{http_code}\n' -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8204/api/auth/current-user          # 期望 200
 
-# 4. 7天后移除旧密钥
+# 4. 反向验证（这一步才是"换成功"的证据；只验正向不足以说明旧密钥已失效）
+curl -s -o /dev/null -w '伪造/旧token=%{http_code}\n' \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.notarealsig" \
+  http://127.0.0.1:8204/api/auth/current-user          # 期望 401（2026-09-19 实测 401）
 ```
 
 #### 数据库密码 (180天)
 
 ```bash
-# 1. 修改 PostgreSQL 密码
-psql -c "ALTER USER hivemtk PASSWORD '新密码';"
+# 角色名是 admin（不是 hivemtk；容器 POSTGRES_USER=admin），宿主端口 8232 → 容器内 8202
+NEW=$(openssl rand -hex 24)
+docker exec mtk-postgres sh -c "PGPORT=8202 psql -U admin -d postgres -c \"ALTER USER admin WITH PASSWORD '$NEW'\""
 
-# 2. 更新 .env 文件中的 POSTGRES_PASSWORD
+# 三个读同一 role 的文件要同步（漏一个就是"口令漂移"，表现为测试大面积假红而非显式报错）
+#   hivemtk/.env POSTGRES_PASSWORD（同文件内有重复行，两条都要改）
+#   hivemtk/user-server/.env POSTGRES_PASSWORD
+#   assetdpo/.env HIVE_DB_PASSWORD
+# 平台库是另一个容器/另一个口令：mtk-platform-postgres，容器内端口 8201
 
-# 3. 重启服务
-docker compose restart user-server
+# 校验：新口令连得上、旧口令连不上
+psql -h 127.0.0.1 -p 8232 -U admin -d user_db -c 'select 1'   # 输旧口令应失败，新口令应成功
+
+# 再按 3.2 的重启方式拉起 user-server
 ```
 
 #### Redis 密码 (365天)
 
 ```bash
-# 1. 修改 Redis 密码
-redis-cli CONFIG SET requirepass "新密码"
-
-# 2. 更新 .env 文件中的 REDIS_PASSWORD
-
-# 3. 重启服务
-docker compose restart user-server
+redis-cli -a "$OLD" CONFIG SET requirepass "$NEW"   # 运行时生效
+# 同步 .env 的 REDIS_PASSWORD 与 redis.conf 的 requirepass，然后重启读它的服务
 ```
 
 ### 3.3 验证
 
 ```bash
-# 检查服务健康状态
-curl http://localhost:8204/healthz
-
-# 检查日志有无错误
-docker compose logs --tail=50 user-server | grep -i error
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8204/health    # 200（含 Redis/DB 依赖检查）
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8204/healthz   # 200（仅存活）
+tail -50 /tmp/user-server.log | grep -i error
+python3 scripts/api_verify_full.py      # 三端四维度验收，见 CLAUDE.md 的 API 测试验收规则
 ```
 
 ---
 
-## 四、紧急轮换
+## 四、紧急轮换（密钥已泄露）
 
-**触发**: 密钥泄露
+口令已经在公开历史里 = 已泄露，处理顺序是**先终止可用性（轮换），再考虑可查性（改历史）**：
 
 ```bash
-# 1. 立即吊销
-# 编辑 .env 移除泄露的密钥
+# 1. 用一条命令把"曾公开命中"的集合全换掉（会改 4 个 .env + ALTER + 重启，见二A.3）
+ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned
 
-# 2. 生成新密钥
-NEW_SECRET=$(openssl rand -hex 32)
+# 2. 校验
+bash scripts/check-secrets.sh
+python3 scripts/api_verify_full.py
 
-# 3. 更新配置并重启
-# .env: JWT_SECRET=$NEW_SECRET
-docker compose restart user-server
-
-# 4. 验证服务正常
-curl http://localhost:8204/healthz
+# 3. 失败回退
+bash scripts/rotate-secrets.sh --rollback <脚本打印的备份目录>
 ```
+
+`git filter-repo` + 强推**不是**本场景的推荐动作，理由见二A.2。
+部署机（如 `hiveuser.*`）不会因本机轮换而变安全：同名凭证要在部署侧各自轮换一遍，
+且部署侧轮换后本机的旧值才算彻底失效。
 
 ---
 
@@ -115,12 +210,13 @@ curl http://localhost:8204/healthz
 
 ```bash
 # 查看密钥文件权限
-ls -la .env
-chmod 600 .env
-
-# 检查密钥使用时长
-# 通过 last_modified 时间戳判断
+ls -la .env && chmod 600 .env
 stat .env
+
+# 防复发闸门：A 项按本机 .env 真值逐字节比对，B 项扫字面量赋值模式
+bash scripts/check-secrets.sh
+# 跨仓比对（本仓文件 vs 相邻仓的 .env 真值，用于抓"私有仓口令从公开仓泄露"这类串味）
+ENV_FILE=../hivemtk-platform/platform-server/.env bash scripts/check-secrets.sh
 ```
 
 ---
