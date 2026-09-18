@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/dbencrypt"
 	_pagination "hivemtk-user/internal/pkg/pagination"
 
 	"gorm.io/gorm"
@@ -44,12 +45,19 @@ func NewOperationLogRepositoryWithDB(db *gorm.DB) OperationLogRepository {
 }
 
 func (r *operationLogRepo) Create(ctx context.Context, log *model.OperationLog) error {
+	// OPT-SEC-04：敏感字段 IP / User-Agent 落库前加密；dbencrypt 永不失败，
+	// MASTER_KEY 缺失时降级明文，存量明文行读取时原样透传。
+	log.IP = dbencrypt.Encrypt(log.IP)
+	log.UserAgent = dbencrypt.Encrypt(log.UserAgent)
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
 func (r *operationLogRepo) GetByID(ctx context.Context, id uint) (*model.OperationLog, error) {
 	var log model.OperationLog
 	err := r.db.WithContext(ctx).First(&log, id).Error
+	if err == nil {
+		decryptOperationLog(&log)
+	}
 	return &log, err
 }
 
@@ -82,7 +90,11 @@ func (r *operationLogRepo) GetAll(ctx context.Context, page, pageSize int, filte
 
 	offset := (page - 1) * pageSize
 	err = query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&logs).Error
-	return logs, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	decryptOperationLogs(logs)
+	return logs, total, nil
 }
 
 // GetAllKeyset 使用 keyset（cursor）分页读取操作日志。
@@ -140,6 +152,7 @@ func (r *operationLogRepo) GetAllKeyset(ctx context.Context, cursor string, page
 		nextCursor = string(_pagination.EncodeCursor(last.CreatedAt, uint64(last.ID)))
 	}
 
+	decryptOperationLogs(logs)
 	return logs, total, nextCursor, nil
 }
 
@@ -156,7 +169,11 @@ func (r *operationLogRepo) GetByUserID(ctx context.Context, userID uint, page, p
 
 	offset := (page - 1) * pageSize
 	err = query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&logs).Error
-	return logs, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	decryptOperationLogs(logs)
+	return logs, total, nil
 }
 
 func (r *operationLogRepo) DeleteOldLogs(ctx context.Context, beforeDate time.Time) error {
@@ -175,4 +192,21 @@ func (r *operationLogRepo) UpdateNewValue(ctx context.Context, id uint, newValue
 	return r.db.WithContext(ctx).Model(&model.OperationLog{}).
 		Where("id = ?", id).
 		Update("new_value", newValue).Error
+}
+
+// decryptOperationLog 读取出口解密单条操作日志的敏感字段（OPT-SEC-04）。
+// dbencrypt.Decrypt 对非 enc:v1: 前缀（存量明文）原样透传，故可无条件调用。
+func decryptOperationLog(log *model.OperationLog) {
+	if log == nil {
+		return
+	}
+	log.IP = dbencrypt.Decrypt(log.IP)
+	log.UserAgent = dbencrypt.Decrypt(log.UserAgent)
+}
+
+// decryptOperationLogs 批量读取出口解密。
+func decryptOperationLogs(logs []*model.OperationLog) {
+	for _, l := range logs {
+		decryptOperationLog(l)
+	}
 }

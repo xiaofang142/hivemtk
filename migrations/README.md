@@ -43,6 +43,9 @@
 25. 031_platform_cs_rag_seed.sql           ← 平台客服 RAG 种子
 26. 032_industry_assets_local_seed.sql     ← 行业资产本地种子
 27. 033_industry_ai_agents_seed.sql        ← 行业 AI 智能体种子
+    -- 034-056 为后续功能/索引迁移（bridge_metrics、enum、soft_delete 等），编号连续，此处不逐一列举
+28. 057_api_logs_encrypt_fields.sql        ← OPT-SEC-04 api_logs ip/user_agent 扩列（配合应用层加密）
+29. 058_operation_logs_encrypt_fields.sql  ← OPT-SEC-04 operation_logs ip/user_agent 扩列 text
 ```
 
 ## 关键约束

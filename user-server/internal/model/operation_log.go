@@ -14,8 +14,8 @@ type OperationLog struct {
 	Detail     string    `gorm:"type:text" json:"detail"`
 	OldValue   string    `gorm:"type:text" json:"old_value"`
 	NewValue   string    `gorm:"type:text" json:"new_value"`
-	IP         string    `gorm:"type:varchar(50)" json:"ip"`
-	UserAgent  string    `gorm:"type:varchar(255)" json:"user_agent"`
+	IP         string    `gorm:"type:text" json:"ip"`
+	UserAgent  string    `gorm:"type:text" json:"user_agent"`
 	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }
 
