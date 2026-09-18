@@ -14,15 +14,7 @@ func TestD06_CheckpointSaveResume(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.ConfigParam{})
 	_ = db
 
-	if err := db.Exec(`CREATE TABLE IF NOT EXISTS agent_checkpoints (
-		id BIGSERIAL PRIMARY KEY,
-		thread_id VARCHAR(120) NOT NULL,
-		stage VARCHAR(40) NOT NULL,
-		state JSONB NOT NULL DEFAULT '{}',
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		CONSTRAINT uk_agent_ckpt UNIQUE (thread_id, stage)
-	)`).Error; err != nil {
+	if err := db.Exec(checkpointTableDDL).Error; err != nil {
 		t.Skipf("建表失败（环境限制）: %v", err)
 	}
 	repo := NewAgentCheckpointRepository(db)
@@ -38,7 +30,7 @@ func TestD06_CheckpointSaveResume(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	latest, err := repo.LoadLatest(ctx, "thr-1")
+	latest, err := LoadLatestCheckpoint(ctx, repo, "thr-1")
 	if err != nil || latest == nil {
 		t.Fatalf("LoadLatest: %v", err)
 	}

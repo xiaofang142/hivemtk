@@ -32,6 +32,7 @@ type InferenceCycle struct {
 	TotalTimeout time.Duration
 
 	memoryProvider EpisodicMemoryProvider
+	ckptStore      StageCheckpointStore
 
 	mu        sync.RWMutex
 	stopped   bool
@@ -44,6 +45,16 @@ func (c *InferenceCycle) SetMemoryProvider(p EpisodicMemoryProvider) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.memoryProvider = p
+}
+
+// SetCheckpointStore 注入阶段边界检查点存储（T-P1-01 断点续跑挂载）。
+//
+// 调用方：internal/app.InitAgentCheckpointStore → InitInferenceOrchestrator。
+// 传 nil 或未注册 FF_LTC_CHECKPOINT 时推理链路与挂载前完全一致。
+func (c *InferenceCycle) SetCheckpointStore(s StageCheckpointStore) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ckptStore = s
 }
 
 // CycleStats 闭环统计
@@ -156,6 +167,7 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 
 	c.mu.RLock()
 	provider := c.memoryProvider
+	store := c.ckptStore
 	c.mu.RUnlock()
 	if provider != nil {
 		mem, err := provider.LoadEpisodicMemory(tctx, payload.SessionID, payload.CustomerID)
@@ -167,12 +179,16 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 		}
 	}
 
+	// 阶段边界检查点：store 未注入 / 开关关闭时 ckpt 为 nil，下面所有 ckpt.* 调用
+	// 全部空转，执行序列与挂载前逐语句一致。
+	ckpt := newCycleCheckpoint(tctx, store, payload, ic, c.orderedStageNames())
+
 	var percepResult, alignResult *StageResult
 
 	// 感知 → 对齐必须串行:对齐评分读取感知产出的 Sentiment/Intent,
 	// 此前并行执行曾造成数据竞争(race detector 实锤)与评分脏读;
 	// 感知为 LLM 调用、对齐为本地打分,串行无性能损失
-	if c.PerceptionStage != nil {
+	if c.PerceptionStage != nil && !ckpt.skipped(c.PerceptionStage.Name()) {
 		sctx, scancel := context.WithTimeout(tctx, c.StageTimeout)
 		r := c.PerceptionStage.Execute(sctx, ic)
 		scancel()
@@ -184,10 +200,12 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 		}
 		if r.EarlyReturn {
 			percepResult = &r
+		} else {
+			ckpt.complete(tctx, c.PerceptionStage.Name(), ic)
 		}
 	}
 
-	if c.AlignmentStage != nil {
+	if c.AlignmentStage != nil && !ckpt.skipped(c.AlignmentStage.Name()) {
 		sctx, scancel := context.WithTimeout(tctx, c.StageTimeout)
 		r := c.AlignmentStage.Execute(sctx, ic)
 		scancel()
@@ -199,6 +217,8 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 		}
 		if r.EarlyReturn {
 			alignResult = &r
+		} else {
+			ckpt.complete(tctx, c.AlignmentStage.Name(), ic)
 		}
 	}
 
@@ -213,13 +233,14 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 		ic.Decision.Intent = ic.Intent
 		ic.Decision.Alignment = ic.Alignment
 		c.recordStats(ic.Decision)
+		ckpt.finish(tctx, ic)
 		logger.Infof("[inference_cycle] early return at stage=%s handoff=%v reason=%s duration=%s",
 			earlyStageName, ic.Decision.HandoffToHuman, ic.Decision.StopReason, ic.Decision.TotalDuration)
 		return &ic.Decision, nil
 	}
 
 	for _, stage := range []InferenceStage{c.GatekeeperStage, c.PlannerStage, c.ReviewerStage} {
-		if stage == nil {
+		if stage == nil || ckpt.skipped(stage.Name()) {
 			continue
 		}
 
@@ -241,10 +262,12 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 			ic.Decision.Intent = ic.Intent
 			ic.Decision.Alignment = ic.Alignment
 			c.recordStats(ic.Decision)
+			ckpt.finish(tctx, ic)
 			logger.Infof("[inference_cycle] early return at stage=%s handoff=%v reason=%s duration=%s",
 				stage.Name(), ic.Decision.HandoffToHuman, ic.Decision.StopReason, ic.Decision.TotalDuration)
 			return &ic.Decision, nil
 		}
+		ckpt.complete(tctx, stage.Name(), ic)
 	}
 
 	ic.Decision.TotalDuration = time.Since(start)
@@ -267,11 +290,23 @@ func (c *InferenceCycle) RunOnce(ctx context.Context, payload CustomerMessagePay
 	ic.Decision.Alignment = ic.Alignment
 
 	c.recordStats(ic.Decision)
+	ckpt.finish(tctx, ic)
 	logger.Infof("[inference_cycle] completed trace=%s stages=%d plan_type=%s confidence=%.2f duration=%s",
 		payload.TraceID, len(ic.Stages),
 		planTypeOf(ic.Plan), ic.Decision.Confidence, ic.Decision.TotalDuration)
 
 	return &ic.Decision, nil
+}
+
+// orderedStageNames 本次闭环实际参与调度的阶段序列（恢复游标的比对依据）。
+func (c *InferenceCycle) orderedStageNames() []string {
+	names := make([]string, 0, 5)
+	for _, s := range []InferenceStage{c.PerceptionStage, c.AlignmentStage, c.GatekeeperStage, c.PlannerStage, c.ReviewerStage} {
+		if s != nil {
+			names = append(names, s.Name())
+		}
+	}
+	return names
 }
 
 func mergeDecision(base, override InferenceDecision) InferenceDecision {

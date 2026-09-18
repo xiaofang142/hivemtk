@@ -416,6 +416,10 @@ func main() {
 
 	registerEventSubscribers()
 
+	// 阶段边界断点续跑（T-P1-01）：必须在 router.Setup 之前装配，
+	// 否则 InitInferenceOrchestrator 构造推理闭环时拿不到 store。
+	app.InitAgentCheckpointStore(db.GetDB())
+
 	router.Setup(r, db.GetDB())
 
 	port := os.Getenv("PORT")

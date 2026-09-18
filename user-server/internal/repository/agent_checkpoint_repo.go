@@ -42,8 +42,13 @@ func (r *AgentCheckpointRepository) Save(ctx context.Context, threadID, stage st
 		threadID, stage, string(state)).Error
 }
 
-// LoadLatest 取该 thread 最新 checkpoint（按 updated_at DESC），无记录返回 nil
-func (r *AgentCheckpointRepository) LoadLatest(ctx context.Context, threadID string) (*AgentCheckpoint, error) {
+// LoadAllByThread 取该 thread 的全部阶段快照（单线程上限 = 阶段数，量级 5）。
+//
+// 不在 SQL 里按 updated_at 排序取"最新"：阶段可重跑（如 planner 失败后整阶段重来），
+// 重跑会把早期阶段的 updated_at 顶到最后，按时间取就会把恢复游标倒退。
+// "最新"的权威定义是阶段序号最大（AgentStageNames 顺序），该顺序表在 service 层，
+// 故仓储只负责取全量、由 service 判定游标。
+func (r *AgentCheckpointRepository) LoadAllByThread(ctx context.Context, threadID string) ([]AgentCheckpoint, error) {
 	if r.db == nil || threadID == "" {
 		return nil, nil
 	}
@@ -55,17 +60,18 @@ func (r *AgentCheckpointRepository) LoadLatest(ctx context.Context, threadID str
 	}
 	if err := r.db.WithContext(ctx).Table("agent_checkpoints").
 		Where("thread_id = ?", threadID).
-		Order("updated_at DESC").Limit(1).
+		Order("id ASC").
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 {
-		return nil, nil
+	out := make([]AgentCheckpoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, AgentCheckpoint{
+			ThreadID:  row.ThreadID,
+			Stage:     row.Stage,
+			State:     row.State,
+			UpdatedAt: row.UpdatedAt,
+		})
 	}
-	return &AgentCheckpoint{
-		ThreadID:  rows[0].ThreadID,
-		Stage:     rows[0].Stage,
-		State:     rows[0].State,
-		UpdatedAt: rows[0].UpdatedAt,
-	}, nil
+	return out, nil
 }

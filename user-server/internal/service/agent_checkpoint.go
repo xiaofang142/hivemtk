@@ -5,14 +5,18 @@
 // 恢复纪律（LangGraph superstep 语义）：
 //   - 只能从阶段边界恢复；阶段内失败整体重跑该阶段；
 //   - 每 stage 完成 upsert (thread_id, stage, state)；
-//   - 恢复 = LoadLatest(thread_id) → 从下一阶段继续；无记录则从感知阶段起跑。
+//   - 游标 = 阶段序号最大的一行（不是 updated_at 最新，见 LatestByStageOrder）；
+//   - 恢复 = LoadLatest(thread_id) → 从下一阶段继续；无记录则从感知阶段起跑；
+//   - thread_id 按载荷内容寻址（见 agent_runtime.CheckpointThreadID），同一逻辑运行
+//     重试才命中；state 里带指纹与 done 标，已完成/不匹配的运行一律整体重跑，
+//     不会把上一轮的阶段产出喂给新消息。
 package service
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"time"
+	"os"
+	"strings"
 
 	"hivemtk-user/internal/repository"
 
@@ -21,6 +25,28 @@ import (
 
 // AgentStageNames 五阶段顺序（恢复游标依据）
 var AgentStageNames = []string{"perception", "alignment", "gatekeeper", "planner", "reviewer"}
+
+// checkpointEnvVar 断点续跑挂载开关（T-P1-01）。默认关闭 = 现网行为零变化。
+const checkpointEnvVar = "FF_LTC_CHECKPOINT"
+
+// checkpointEnabledFn 判定入口，测试可替换（先例：aiReplyQuietHoursFn）。
+//
+// 有意不走 pkg/featureflag：那里是 5s 后台轮询的缓存值，一次 RunOnce 里
+// "存点"与"取点"可能落在缓存刷新两侧，出现只写不读（或反之）的半开状态。
+// checkpoint 的读写必须来自同一个判定，故每次直接读 env（进程级常量，纳秒级开销）。
+var checkpointEnabledFn = func() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(checkpointEnvVar))) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// CheckpointEnabled 报告阶段级 checkpoint 挂载是否开启。
+//
+// 调用方：internal/app 的 StageCheckpointStore 适配器（每次 RunOnce 快照一次）。
+func CheckpointEnabled() bool { return checkpointEnabledFn() }
 
 // AgentCheckpoint 单条记录（别名，存储结构已收敛到 repository 层）
 type AgentCheckpoint = repository.AgentCheckpoint
@@ -35,9 +61,37 @@ func SaveCheckpoint(ctx context.Context, repo *repository.AgentCheckpointReposit
 	return repo.Save(ctx, threadID, stage, state)
 }
 
-// LoadLatestCheckpoint 取该 thread 最新 checkpoint，无记录返回 nil
+// LoadLatestCheckpoint 取该 thread 的恢复游标（阶段序号最大的一条），无记录返回 nil。
+//
+// 不用"updated_at 最新"：阶段重跑会顶高早期阶段的时间戳，按时间取会让游标倒退。
 func LoadLatestCheckpoint(ctx context.Context, repo *repository.AgentCheckpointRepository, threadID string) (*AgentCheckpoint, error) {
-	return repo.LoadLatest(ctx, threadID)
+	rows, err := repo.LoadAllByThread(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return LatestByStageOrder(rows), nil
+}
+
+// LatestByStageOrder 按 AgentStageNames 序号取最靠后的阶段；未知阶段名的行忽略，
+// 全部未知（或空集）返回 nil = 从第一阶段起跑。
+func LatestByStageOrder(rows []AgentCheckpoint) *AgentCheckpoint {
+	best, bestIdx := (*AgentCheckpoint)(nil), -1
+	for i := range rows {
+		idx := stageIndex(rows[i].Stage)
+		if idx > bestIdx {
+			best, bestIdx = &rows[i], idx
+		}
+	}
+	return best
+}
+
+func stageIndex(stage string) int {
+	for i, name := range AgentStageNames {
+		if name == stage {
+			return i
+		}
+	}
+	return -1
 }
 
 // ResumeStage 返回应从哪个阶段续跑（无 checkpoint → 从第一阶段起跑）。
@@ -46,24 +100,11 @@ func ResumeStage(latest *AgentCheckpoint) string {
 	if latest == nil {
 		return AgentStageNames[0]
 	}
-	for i, name := range AgentStageNames {
-		if name == latest.Stage {
-			if i+1 >= len(AgentStageNames) {
-				return AgentStageNames[len(AgentStageNames)-1]
-			}
-			return AgentStageNames[i+1]
+	if i := stageIndex(latest.Stage); i >= 0 {
+		if i+1 >= len(AgentStageNames) {
+			return AgentStageNames[len(AgentStageNames)-1]
 		}
+		return AgentStageNames[i+1]
 	}
 	return AgentStageNames[0]
 }
-
-// NewThreadID 生成 checkpoint 会话标识
-func NewThreadID(sessionID string) string {
-	if sessionID == "" {
-		return "thr_" + fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return sessionID
-}
-
-var _ = gorm.ErrRecordNotFound
-var _ = context.Background

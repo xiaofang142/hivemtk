@@ -38,6 +38,7 @@ var (
 // 装配内容：
 //   - 创建 InferenceCycle（含默认 4 阶段：感知/对齐/门禁/规划）
 //   - 注入 EpisodicMemoryProvider（包装 MemorySystem）
+//   - 注入 StageCheckpointStore（T-P1-01 阶段边界断点续跑，受 FF_LTC_CHECKPOINT 控制）
 //   - 创建 CoreDataFlowOrchestrator（暂不注入 AssetLoader/ToolRouter/Publisher，
 //
 // 由后续 -6b/-6c 逐步激活
@@ -50,6 +51,11 @@ func InitInferenceOrchestrator() {
 			logger.Info("[inference] ✅ EpisodicMemoryProvider 已注入（包装 MemorySystem.BuildFullContext）")
 		} else {
 			logger.Warn("[inference] ⚠️ MemorySystem 未初始化，推理闭环将跳过情境记忆读取")
+		}
+
+		if store := GetAgentCheckpointStore(); store != nil {
+			cycle.SetCheckpointStore(store)
+			logger.Info("[inference] ✅ StageCheckpointStore 已注入（T-P1-01，实际是否落点取决于 FF_LTC_CHECKPOINT）")
 		}
 
 		globalInferenceOrchestrator = agent_runtime.NewCoreDataFlowOrchestrator(cycle, nil)
