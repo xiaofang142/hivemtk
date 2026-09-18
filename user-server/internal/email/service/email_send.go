@@ -119,9 +119,13 @@ func (s *EmailSendService) SendEmail(ctx context.Context, req dto.SendEmailReque
 			}
 			if err != nil {
 				logger.Errorf("邮件发送失败 [%s]: %v", emailSend.ID, err)
-				s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusFailed)
+				if e := s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusFailed); e != nil {
+					logger.Warnf("邮件状态落库失败(发送失败) [%s]: %v", emailSend.ID, e)
+				}
 			} else {
-				s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusSent)
+				if e := s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusSent); e != nil {
+					logger.Warnf("邮件状态落库失败(发送成功) [%s]: %v", emailSend.ID, e)
+				}
 			}
 		}()
 	}
@@ -145,9 +149,13 @@ func (s *EmailSendService) ProcessPendingEmails(ctx context.Context) error {
 		}
 		if err != nil {
 			logger.Errorf("邮件发送失败 [%s]: %v", email.ID, err)
-			s.repo.UpdateStatus(ctx, emailUUID, EmailStatusFailed)
+			if e := s.repo.UpdateStatus(ctx, emailUUID, EmailStatusFailed); e != nil {
+				logger.Warnf("邮件状态落库失败(发送失败) [%s]: %v", email.ID, e)
+			}
 		} else {
-			s.repo.UpdateStatus(ctx, emailUUID, EmailStatusSent)
+			if e := s.repo.UpdateStatus(ctx, emailUUID, EmailStatusSent); e != nil {
+				logger.Warnf("邮件状态落库失败(发送成功) [%s]: %v", email.ID, e)
+			}
 		}
 	}
 

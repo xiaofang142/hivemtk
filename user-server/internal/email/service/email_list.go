@@ -4,6 +4,7 @@ import (
 	"errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/mail"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"regexp"
 	"strings"
 	"time"
@@ -159,7 +160,9 @@ func (s *EmailListService) UpdateEmailListReadInfo(ctx context.Context, traceID 
 	res := s.repo.Update(ctx, emailList)
 
 	jobsService := NewEmailJobsService()
-	jobsService.IncreaseReadTotal(ctx, emailList.JobsID)
+	if e := jobsService.IncreaseReadTotal(ctx, emailList.JobsID); e != nil {
+		logger.Warnf("邮件已读数累加失败 [%s]: %v", emailList.ID, e)
+	}
 
 	if res != nil {
 		return res

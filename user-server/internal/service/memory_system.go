@@ -448,25 +448,37 @@ func (m *MemorySystem) SyncFromDialogueMemory(ctx context.Context, mem *model.Di
 	if len(mem.KeyFacts) > 0 {
 		for k, v := range mem.KeyFacts {
 			if s, ok := v.(string); ok && s != "" {
-				m.L2SaveFact(ctx, mem.CustomerID, k, s, 7)
+				if e := m.L2SaveFact(ctx, mem.CustomerID, k, s, 7); e != nil {
+					logger.Warnf("[MemorySystem] L2 事实同步失败 customer=%s key=%s: %v", mem.CustomerID, k, e)
+				}
 			}
 		}
 	}
 	if mem.Summary != "" {
-		m.L2SaveSummary(ctx, mem.CustomerID, mem.Summary)
+		if e := m.L2SaveSummary(ctx, mem.CustomerID, mem.Summary); e != nil {
+			logger.Warnf("[MemorySystem] L2 摘要同步失败 customer=%s: %v", mem.CustomerID, e)
+		}
 	}
 	if len(mem.Objections) > 0 {
 		objs, _ := json.Marshal(mem.Objections)
-		m.L4Record(ctx, mem.CustomerID, "objection", string(objs), "", 7, nil)
+		if e := m.L4Record(ctx, mem.CustomerID, "objection", string(objs), "", 7, nil); e != nil {
+			logger.Warnf("[MemorySystem] L4 objection 同步失败 customer=%s: %v", mem.CustomerID, e)
+		}
 	}
 	if mem.PurchaseIntent != "" {
-		m.L4Record(ctx, mem.CustomerID, "intent", "购买意向="+mem.PurchaseIntent, "", 8, nil)
+		if e := m.L4Record(ctx, mem.CustomerID, "intent", "购买意向="+mem.PurchaseIntent, "", 8, nil); e != nil {
+			logger.Warnf("[MemorySystem] L4 intent 同步失败 customer=%s: %v", mem.CustomerID, e)
+		}
 	}
 	if mem.Budget != "" {
-		m.L4Record(ctx, mem.CustomerID, "preference", "预算="+mem.Budget, "", 6, nil)
+		if e := m.L4Record(ctx, mem.CustomerID, "preference", "预算="+mem.Budget, "", 6, nil); e != nil {
+			logger.Warnf("[MemorySystem] L4 预算同步失败 customer=%s: %v", mem.CustomerID, e)
+		}
 	}
 	if mem.Demand != "" {
-		m.L4Record(ctx, mem.CustomerID, "preference", "需求="+mem.Demand, "", 6, nil)
+		if e := m.L4Record(ctx, mem.CustomerID, "preference", "需求="+mem.Demand, "", 6, nil); e != nil {
+			logger.Warnf("[MemorySystem] L4 需求同步失败 customer=%s: %v", mem.CustomerID, e)
+		}
 	}
 	logger.Infof("[MemorySystem] 同步 DialogueMemory customer=%s 完成", mem.CustomerID)
 }

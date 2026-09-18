@@ -265,9 +265,13 @@ func (s *CustomerSessionService) SendMessage(ctx context.Context, req *SendMessa
 	}
 
 	if req.SenderType == "ai" {
-		s.sessionRepo.IncrementAIReplyCount(ctx, session.ID)
+		if e := s.sessionRepo.IncrementAIReplyCount(ctx, session.ID); e != nil {
+			logger.Warnf("[Session] AI 回复计数失败 sessionID=%d: %v", session.ID, e)
+		}
 	} else if req.SenderType == "agent" {
-		s.sessionRepo.IncrementHumanReplyCount(ctx, session.ID)
+		if e := s.sessionRepo.IncrementHumanReplyCount(ctx, session.ID); e != nil {
+			logger.Warnf("[Session] 人工回复计数失败 sessionID=%d: %v", session.ID, e)
+		}
 
 		if session.HandoffAt != nil && session.FirstHumanReplyAt == nil {
 			now := time.Now()
@@ -278,12 +282,16 @@ func (s *CustomerSessionService) SendMessage(ctx context.Context, req *SendMessa
 			}
 		}
 		if session.AgentID > 0 {
-			s.agentRepo.IncrementTodayMessages(ctx, session.AgentID)
+			if e := s.agentRepo.IncrementTodayMessages(ctx, session.AgentID); e != nil {
+				logger.Warnf("[Session] 坐席今日消息计数失败 agentID=%d: %v", session.AgentID, e)
+			}
 		}
 	}
 
 	if session.AgentID > 0 && req.SenderType == "user" {
-		websocket.NotifyNewMessage(strconv.FormatUint(uint64(session.AgentID), 10), message)
+		if e := websocket.NotifyNewMessage(strconv.FormatUint(uint64(session.AgentID), 10), message); e != nil {
+			logger.Warnf("[Session] 新消息推送坐席失败 agentID=%d: %v", session.AgentID, e)
+		}
 	}
 
 	if req.SenderType == "agent" || req.SenderType == "ai" {
@@ -348,14 +356,18 @@ func (s *CustomerSessionService) UpdateSessionStatus(ctx context.Context, sessio
 
 	if (status == model.SessionStatusResolved || status == model.SessionStatusClosed) &&
 		session.AgentID > 0 && session.Status != status {
-		s.agentRepo.DecrementActiveSessions(ctx, session.AgentID)
+		if e := s.agentRepo.DecrementActiveSessions(ctx, session.AgentID); e != nil {
+			logger.Warnf("[Session] 坐席活跃会话计数扣减失败 agentID=%d: %v", session.AgentID, e)
+		}
 	}
 
 	if session.AgentID > 0 && session.Status != status {
-		websocket.NotifySessionUpdate(strconv.FormatUint(uint64(session.AgentID), 10), map[string]any{
+		if e := websocket.NotifySessionUpdate(strconv.FormatUint(uint64(session.AgentID), 10), map[string]any{
 			"session_id": session.SessionID,
 			"status":     status,
-		})
+		}); e != nil {
+			logger.Warnf("[Session] 会话状态推送坐席失败 agentID=%d: %v", session.AgentID, e)
+		}
 	}
 
 	if (status == model.SessionStatusResolved || status == model.SessionStatusClosed) && session.Status != status {

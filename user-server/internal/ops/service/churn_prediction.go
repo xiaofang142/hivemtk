@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
 	"time"
 
@@ -379,14 +380,20 @@ func (s *ChurnPredictionService) RunChurnCalculation(users []map[string]any) err
 
 		prediction, _ := s.predictionRepo.GetByUserID(userID)
 		if prediction != nil {
-			s.CreateChurnWarning(userID, prediction)
+			if err := s.CreateChurnWarning(userID, prediction); err != nil {
+				logger.Warnf("[Churn] 创建流失预警失败 userID=%s: %v", userID, err)
+			}
 		}
 	}
 
-	s.configRepo.UpdateCalcTime()
+	if err := s.configRepo.UpdateCalcTime(); err != nil {
+		logger.Warnf("[Churn] 更新计算时间失败: %v", err)
+	}
 
 	date := time.Now().Format("2006-01-02")
-	s.CalculateDailyStatistics(date)
+	if err := s.CalculateDailyStatistics(date); err != nil {
+		logger.Warnf("[Churn] 计算每日统计失败 date=%s: %v", date, err)
+	}
 
 	return nil
 }
@@ -520,7 +527,9 @@ func (s *ChurnPredictionService) GetRiskDistribution() (map[string]int, error) {
 // GenerateSuggestion 生成挽回建议
 func (s *ChurnPredictionService) GenerateSuggestion(prediction *model.ChurnPrediction, userData map[string]any) string {
 	var riskFactors []string
-	json.Unmarshal([]byte(prediction.RiskFactors), &riskFactors)
+	if err := json.Unmarshal([]byte(prediction.RiskFactors), &riskFactors); err != nil {
+		logger.Warnf("[Churn] 解析风险因子失败: %v", err)
+	}
 
 	suggestions := []string{}
 

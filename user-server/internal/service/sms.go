@@ -315,7 +315,7 @@ func (s *smsService) sendAliyun(ctx context.Context, phone, content string) (tim
 			continue
 		}
 		if resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("aliyun sms http status %d", resp.StatusCode)
 			continue
 		}
@@ -324,7 +324,7 @@ func (s *smsService) sendAliyun(ctx context.Context, phone, content string) (tim
 	if resp == nil {
 		return time.Time{}, "", "", fmt.Errorf("aliyun sms request failed after retries: %w", lastErr)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var result struct {
@@ -403,7 +403,7 @@ func (s *smsService) sendTencent(ctx context.Context, phone, content string) (ti
 	if err != nil {
 		return time.Time{}, "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result struct {
@@ -459,7 +459,7 @@ func (s *smsService) sendHuawei(ctx context.Context, phone, content string) (tim
 	if err != nil {
 		return time.Time{}, "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result struct {

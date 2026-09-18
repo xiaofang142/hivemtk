@@ -8,6 +8,7 @@ import (
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 	sysrepo "hivemtk-user/internal/repository"
 	"time"
 
@@ -128,14 +129,18 @@ func (s *DashboardScreenService) UpdateScreen(id uint, req *UpdateScreenRequest)
 	}
 
 	if req.Widgets != nil {
-		s.updateWidgets(screen.ID, req.Widgets)
+		if err := s.updateWidgets(screen.ID, req.Widgets); err != nil {
+			return nil, err
+		}
 	}
 
 	return screen, nil
 }
 
 func (s *DashboardScreenService) updateWidgets(screenID uint, widgets []WidgetConfig) error {
-	s.widgetRepo.DeleteByScreenID(screenID)
+	if err := s.widgetRepo.DeleteByScreenID(screenID); err != nil {
+		return err
+	}
 
 	for i, w := range widgets {
 		config, _ := json.Marshal(w.Config)
@@ -151,7 +156,9 @@ func (s *DashboardScreenService) updateWidgets(screenID uint, widgets []WidgetCo
 			Height:     w.Height,
 			SortOrder:  i,
 		}
-		s.widgetRepo.Create(widget)
+		if err := s.widgetRepo.Create(widget); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -165,7 +172,9 @@ func (s *DashboardScreenService) DeleteScreen(id uint) error {
 	}
 	_ = screen
 
-	s.widgetRepo.DeleteByScreenID(id)
+	if err := s.widgetRepo.DeleteByScreenID(id); err != nil {
+		return err
+	}
 
 	return s.screenRepo.Delete(id)
 }
@@ -177,7 +186,9 @@ func (s *DashboardScreenService) GetPublicScreen(code string) (*model.DashboardS
 		return nil, err
 	}
 
-	s.screenRepo.IncrementViewCount(screen.ID)
+	if err := s.screenRepo.IncrementViewCount(screen.ID); err != nil {
+		logger.Warnf("[DashboardScreen] 浏览量计数失败 screenID=%d: %v", screen.ID, err)
+	}
 
 	return screen, nil
 }

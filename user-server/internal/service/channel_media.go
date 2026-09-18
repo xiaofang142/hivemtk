@@ -76,7 +76,7 @@ func PersistChannelMedia(ctx context.Context, channel, mediaID, filenameHint str
 	if err != nil {
 		return nil, fmt.Errorf("fetch media: %w", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// 读取全部字节（媒体单文件上限 16MB（WA）/5MB(企微语音视频)，一次性读入可控）
 	data, err := io.ReadAll(io.LimitReader(rc, 64<<20))
@@ -192,7 +192,7 @@ func FetchWhatsAppMedia(ctx context.Context, accessToken, phoneID, mediaID strin
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", err
@@ -217,7 +217,7 @@ func FetchWhatsAppMedia(ctx context.Context, accessToken, phoneID, mediaID strin
 		return nil, "", err
 	}
 	if dlResp.StatusCode != http.StatusOK {
-		dlResp.Body.Close()
+		_ = dlResp.Body.Close()
 		return nil, "", fmt.Errorf("wa media download status %d", dlResp.StatusCode)
 	}
 	ct := meta.MimeType
@@ -243,7 +243,7 @@ func FetchWeComMedia(ctx context.Context, accessToken, mediaID string) (io.ReadC
 		return nil, "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, "", fmt.Errorf("wecom media download status %d", resp.StatusCode)
 	}
 	return resp.Body, resp.Header.Get("Content-Type"), nil
@@ -268,7 +268,7 @@ func FetchFeishuMedia(ctx context.Context, tenantToken, messageID, fileKey, resT
 		return nil, "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, "", fmt.Errorf("feishu media download status %d", resp.StatusCode)
 	}
 	return resp.Body, resp.Header.Get("Content-Type"), nil

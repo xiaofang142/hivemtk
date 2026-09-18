@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
 	"sync"
 )
@@ -117,7 +118,9 @@ func (s *ABExperimentService) UpdateExperiment(id uint, req *CreateExperimentReq
 		return nil, err
 	}
 
-	s.variantRepo.DeleteByExperiment(id)
+	if err := s.variantRepo.DeleteByExperiment(id); err != nil {
+		return nil, err
+	}
 	for i, v := range req.Variants {
 		configJSON, _ := json.Marshal(v.Config)
 		variant := &model.ABVariant{
@@ -140,7 +143,9 @@ func (s *ABExperimentService) UpdateExperiment(id uint, req *CreateExperimentReq
 
 // DeleteExperiment 删除实验
 func (s *ABExperimentService) DeleteExperiment(id uint) error {
-	s.variantRepo.DeleteByExperiment(id)
+	if err := s.variantRepo.DeleteByExperiment(id); err != nil {
+		return err
+	}
 	return s.experimentRepo.Delete(id)
 }
 
@@ -221,7 +226,9 @@ func (s *ABExperimentService) getVariantFromDB(sourceID string) (*model.ABVarian
 		}
 		cumulative += w
 		if pick < cumulative {
-			s.variantRepo.IncrementTraffic(v.ID)
+			if err := s.variantRepo.IncrementTraffic(v.ID); err != nil {
+				logger.Warnf("[ABExperiment] 流量计数失败 variantID=%d: %v", v.ID, err)
+			}
 
 			s.cacheMutex.Lock()
 			s.variantCache[s.hashSourceID(sourceID)+uint(experiment.ID)*1000000] = v
@@ -307,7 +314,9 @@ func (s *ABExperimentService) calculateWinner(experimentID uint) error {
 			winner = r
 		}
 		r.ConfidenceLevel = s.calculateConfidence(r)
-		s.resultRepo.Upsert(r)
+		if err := s.resultRepo.Upsert(r); err != nil {
+			logger.Warnf("[ABExperiment] 结果统计落库失败 variantID=%d: %v", r.VariantID, err)
+		}
 	}
 
 	if winner != nil {

@@ -81,14 +81,17 @@ func (d *LocalDriver) UploadReader(ctx context.Context, reader io.Reader, size i
 	}
 
 	if _, err := io.Copy(tmpFile, reader); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return "", "", fmt.Errorf("write file failed: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", "", fmt.Errorf("close tmp file failed: %w", err)
+	}
 
 	if err := os.Rename(tmpPath, fullPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return "", "", fmt.Errorf("rename tmp failed: %w", err)
 	}
 

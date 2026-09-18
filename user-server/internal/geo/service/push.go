@@ -178,7 +178,7 @@ func (p *BaiduPusher) Push(ctx context.Context, urls []string) ([]PushResult, er
 			continue
 		}
 		respBody := bodyToString(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// 百度返回 {"success":N, "remain":M}；失败返回 {"error":410,"message":"..."}
 		var br struct {
@@ -286,7 +286,7 @@ func (p *GooglePusher) Push(ctx context.Context, urls []string) ([]PushResult, e
 			continue
 		}
 		respBody := bodyToString(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			results[i].Success = true
 		} else {
@@ -329,7 +329,7 @@ func (p *GooglePusher) getAccessToken(ctx context.Context, proj GoogleProject) (
 		return "", fmt.Errorf("google token: %w", err)
 	}
 	body := bodyToString(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("google token: HTTP %d %s", resp.StatusCode, truncateStr(body, 200))
 	}
@@ -459,7 +459,7 @@ func (p *IndexNowPusher) Push(ctx context.Context, urls []string) ([]PushResult,
 			}
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			for j := i; j < end; j++ {
 				results[j].Success = true

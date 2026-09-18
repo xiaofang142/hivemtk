@@ -104,7 +104,7 @@ func UploadFile(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "获取上传文件失败")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if header.Size > config.MaxSize {
 		response.Error(ctx, http.StatusBadRequest, fmt.Sprintf("文件大小超出限制，最大允许 %dMB", config.MaxSize/1024/1024))
@@ -347,7 +347,7 @@ func scanFileForVirus(fileData []byte, scanURL string) (scanned bool, clean bool
 	if err != nil {
 		return false, true
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -366,7 +366,8 @@ func scanFileForVirus(fileData []byte, scanURL string) (scanned bool, clean bool
 
 func parseInt64(s string) int64 {
 	var result int64
-	fmt.Sscanf(s, "%d", &result)
+	// 解析失败时返回 0 是本辅助函数的既定契约，故忽略 Sscanf 错误。
+	_, _ = fmt.Sscanf(s, "%d", &result)
 	return result
 }
 
@@ -382,7 +383,7 @@ func ScanFileContent(filePath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reader := bufio.NewReader(file)
 	buf := make([]byte, 32*1024)

@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
 	cdprepo "hivemtk-user/internal/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"strings"
 	"sync"
 	"time"
@@ -299,12 +300,17 @@ func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.Mark
 }
 
 func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model.FlowExecution, flow *model.MarketingFlow, data map[string]any) {
+	persist := func() {
+		if err := s.executionRepo.Update(execution); err != nil {
+			logger.Errorf("[MarketingFlow] 执行状态落库失败 executionID=%d status=%s: %v", execution.ID, execution.Status, err)
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 
 			execution.Status = "failed"
 			execution.ErrorMessage = fmt.Sprintf("流程执行异常：%v", r)
-			s.executionRepo.Update(execution)
+			persist()
 		}
 	}()
 
@@ -312,7 +318,7 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 	if err := json.Unmarshal([]byte(flow.FlowData), &flowDef); err != nil {
 		execution.Status = "failed"
 		execution.ErrorMessage = fmt.Sprintf("流程定义解析失败：%v", err)
-		s.executionRepo.Update(execution)
+		persist()
 		return
 	}
 
@@ -320,7 +326,7 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 	if len(levels) == 0 {
 		execution.Status = "failed"
 		execution.ErrorMessage = "流程无有效节点"
-		s.executionRepo.Update(execution)
+		persist()
 		return
 	}
 
@@ -368,7 +374,7 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 		if len(levelErrs) > 0 {
 			execution.Status = "failed"
 			execution.ErrorMessage = levelErrs[0].Error()
-			s.executionRepo.Update(execution)
+			persist()
 			return
 		}
 		_ = levelIdx
@@ -378,7 +384,7 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 	execution.CompletedAt = func() *time.Time { t := time.Now(); return &t }()
 	executionDataBytes, _ := json.Marshal(executionData)
 	execution.ExecutionData = string(executionDataBytes)
-	s.executionRepo.Update(execution)
+	persist()
 }
 
 func topologicalLevels(nodes []model.FlowNode) [][]*model.FlowNode {

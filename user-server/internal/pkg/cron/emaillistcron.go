@@ -50,7 +50,9 @@ func EmailListCron() {
 		emailList.SendTime = time.Now()
 		emailList.From = emailSmtp.Username
 		emailList.IsSuccess = is_success
-		emailListService.UpdateEmailList(context.Background(), *emailList)
+		if e := emailListService.UpdateEmailList(context.Background(), *emailList); e != nil {
+			logger.Warnf("[email_list_cron] 更新邮件列表状态失败 id=%s: %v", emailList.ID, e)
+		}
 
 		jobs_id := emailList.JobsID
 		if jobs_id == uuid.Nil {
@@ -58,12 +60,18 @@ func EmailListCron() {
 			continue
 		}
 		emailJobService := email.NewEmailJobsService()
-		emailJobService.IncreaseSendTotal(context.Background(), jobs_id)
+		if e := emailJobService.IncreaseSendTotal(context.Background(), jobs_id); e != nil {
+			logger.Warnf("[email_list_cron] 累加发送总数失败 jobsID=%s: %v", jobs_id, e)
+		}
 		if is_success == 1 {
-			emailJobService.IncreaseSuccessTotal(context.Background(), jobs_id)
+			if e := emailJobService.IncreaseSuccessTotal(context.Background(), jobs_id); e != nil {
+				logger.Warnf("[email_list_cron] 累加成功总数失败 jobsID=%s: %v", jobs_id, e)
+			}
 		}
 		if is_success == 0 {
-			emailJobService.IncreaseFailTotal(context.Background(), jobs_id)
+			if e := emailJobService.IncreaseFailTotal(context.Background(), jobs_id); e != nil {
+				logger.Warnf("[email_list_cron] 累加失败总数失败 jobsID=%s: %v", jobs_id, e)
+			}
 		}
 	}
 }

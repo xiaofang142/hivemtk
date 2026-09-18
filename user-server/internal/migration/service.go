@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"time"
 
@@ -94,13 +95,17 @@ func (s *MigrationService) WaitForTask(ctx context.Context, taskID uint, timeout
 func (s *MigrationService) executeUpgradeAsync(parentCtx context.Context, taskID uint, fromVersion, toVersion string) {
 	bgCtx := context.Background()
 
-	s.taskRepo.UpdateStatus(bgCtx, taskID, "running", 0, 0, "开始升级", "")
+	if e := s.taskRepo.UpdateStatus(bgCtx, taskID, "running", 0, 0, "开始升级", ""); e != nil {
+		logger.Warnf("[Migration] 任务状态落库失败 taskID=%d: %v", taskID, e)
+	}
 
 	executedVersions, _ := s.recordRepo.GetExecutedVersions(bgCtx)
 	pendingMigrations := s.registry.GetPending(executedVersions)
 
 	if len(pendingMigrations) == 0 {
-		s.taskRepo.UpdateStatus(bgCtx, taskID, "completed", 100, 0, "无需升级", "")
+		if e := s.taskRepo.UpdateStatus(bgCtx, taskID, "completed", 100, 0, "无需升级", ""); e != nil {
+			logger.Warnf("[Migration] 任务状态落库失败 taskID=%d: %v", taskID, e)
+		}
 		return
 	}
 
@@ -110,10 +115,14 @@ func (s *MigrationService) executeUpgradeAsync(parentCtx context.Context, taskID
 		stepDesc := "执行迁移：" + migration.Name()
 
 		progress := (currentStep * 100) / totalSteps
-		s.taskRepo.UpdateStatus(bgCtx, taskID, "running", progress, currentStep, stepDesc, "")
+		if e := s.taskRepo.UpdateStatus(bgCtx, taskID, "running", progress, currentStep, stepDesc, ""); e != nil {
+			logger.Warnf("[Migration] 任务进度落库失败 taskID=%d step=%d: %v", taskID, currentStep, e)
+		}
 
 		if err := migration.Up(bgCtx); err != nil {
-			s.taskRepo.UpdateStatus(bgCtx, taskID, "failed", progress, currentStep, stepDesc, err.Error())
+			if e := s.taskRepo.UpdateStatus(bgCtx, taskID, "failed", progress, currentStep, stepDesc, err.Error()); e != nil {
+				logger.Warnf("[Migration] 任务失败状态落库失败 taskID=%d: %v", taskID, e)
+			}
 			return
 		}
 
@@ -125,10 +134,14 @@ func (s *MigrationService) executeUpgradeAsync(parentCtx context.Context, taskID
 			ExecutedAt: time.Now(),
 			ExecutedBy: "system",
 		}
-		s.recordRepo.Create(bgCtx, record)
+		if e := s.recordRepo.Create(bgCtx, record); e != nil {
+			logger.Errorf("[Migration] 迁移记录落库失败 version=%s: %v", record.Version, e)
+		}
 	}
 
-	s.taskRepo.UpdateStatus(bgCtx, taskID, "completed", 100, totalSteps, "升级完成", "")
+	if e := s.taskRepo.UpdateStatus(bgCtx, taskID, "completed", 100, totalSteps, "升级完成", ""); e != nil {
+		logger.Warnf("[Migration] 任务完成状态落库失败 taskID=%d: %v", taskID, e)
+	}
 }
 
 // GetUpgradeTask 获取升级任务
@@ -209,7 +222,9 @@ func (s *MigrationService) Rollback(ctx context.Context, targetVersion string) e
 	record, err := s.recordRepo.GetByVersion(ctx, targetVersion)
 	if err == nil && record != nil {
 		record.Status = "rolled_back"
-		s.recordRepo.Update(ctx, record)
+		if e := s.recordRepo.Update(ctx, record); e != nil {
+			return fmt.Errorf("回滚已执行但状态更新失败 version=%s: %w", targetVersion, e)
+		}
 	}
 
 	return nil

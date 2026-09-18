@@ -112,7 +112,7 @@ func (c *Client) ensureJWTToken() error {
 	if err != nil {
 		return fmt.Errorf("平台登录失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(resp.Body)
@@ -205,7 +205,7 @@ func (c *Client) doRetry(method, path string, reqData, respData any, retried boo
 		logger.Error(err, fmt.Sprintf("商户上报请求失败: %s %s, 耗时: %v", method, url, duration))
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized && !retried {
 		c.jwtMu.Lock()
@@ -383,7 +383,7 @@ func (c *Client) ReportInstall(req *ReportInstallReq) error {
 	if err != nil {
 		return fmt.Errorf("上报安装信息失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("上报安装信息返回 %d: %s", resp.StatusCode, string(raw))
@@ -425,7 +425,7 @@ func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 	if err != nil {
 		return fmt.Errorf("上报心跳失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("上报心跳返回 %d: %s", resp.StatusCode, string(raw))

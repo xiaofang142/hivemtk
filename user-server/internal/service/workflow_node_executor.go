@@ -261,8 +261,15 @@ func RegisterWorkflowNodeExecutors(registry *WorkflowNodeExecutorRegistry) {
 		return
 	}
 	ctx := context.Background()
-	registry.Register(ctx, &TriggerNodeExecutor{})
-	registry.Register(ctx, &ActionNodeExecutor{})
-	registry.Register(ctx, &ConditionNodeExecutor{})
-	registry.Register(ctx, &SubflowNodeExecutor{})
+	// Register 仅在重复注册时 panic，正常恒返回 nil；此处兜底记录任何意外错误。
+	reg := func(e WorkflowNodeExecutor) {
+		if err := registry.Register(ctx, e); err != nil {
+			logger.GetLogger().Error().Err(err).Str("node_type", e.NodeType()).
+				Msg("register workflow node executor failed")
+		}
+	}
+	reg(&TriggerNodeExecutor{})
+	reg(&ActionNodeExecutor{})
+	reg(&ConditionNodeExecutor{})
+	reg(&SubflowNodeExecutor{})
 }
