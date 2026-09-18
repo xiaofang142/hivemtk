@@ -329,8 +329,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupCardStatsRoutes(auth, gormDB)
 
-		setupDomainPoolRoutes(auth, gormDB)
-
 		setupMaterialRoutes(auth)
 
 		setupClueRoutes(auth)
@@ -636,4 +634,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	{
 		setupPlatformRoutes(platform, platformCtrl)
 	}
+
+	// Swagger 文档路由（dev-only）：RegisterSwaggerRoutes 内部以 ENABLE_SWAGGER=true 且仅本机访问双重门控，
+	// 未启用时直接 return，不向生产暴露任何文档端点。
+	RegisterSwaggerRoutes(r)
 }

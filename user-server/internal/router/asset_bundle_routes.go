@@ -44,7 +44,6 @@ func setupAssetMarketRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 	groups := []*gin.RouterGroup{
 		auth.Group("/v1/asset-market"),
-		auth.Group("/asset-market"),
 	}
 	for _, market := range groups {
 		market.GET("/list", h.ListMarket)
@@ -58,7 +57,6 @@ func setupAssetMarketRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 	localGroups := []*gin.RouterGroup{
 		auth.Group("/v1/local-assets"),
-		auth.Group("/local-assets"),
 	}
 	for _, local := range localGroups {
 		local.GET("", h.ListLocal)

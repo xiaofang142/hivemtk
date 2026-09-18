@@ -5,34 +5,9 @@ import (
 	contentservice "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
-	"hivemtk-user/internal/repository"
-	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
-
-func setupDomainPoolRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
-	database := gormDB
-	domainPoolRepo := repository.NewDomainPoolRepository(database)
-	domainPoolSvc := service.NewDomainPoolService(database)
-	healthSvc := service.NewDomainHealthService(database, domainPoolRepo)
-	domainPoolCtrl := controller.NewDomainPoolController(domainPoolSvc, healthSvc)
-	auth.GET("/domainpool/list", domainPoolCtrl.List)
-	auth.GET("/domainpool/:id", domainPoolCtrl.GetByID)
-
-	admin := auth.Group("/domainpool", middleware.AdminAuthMiddleware())
-	{
-		admin.POST("", domainPoolCtrl.Create)
-		admin.PUT("/:id", domainPoolCtrl.Update)
-		admin.DELETE("/:id", domainPoolCtrl.Delete)
-		admin.POST("/check-domain", domainPoolCtrl.CheckDomain)
-		admin.POST("/check-all", domainPoolCtrl.CheckAllDomains)
-		admin.POST("/create", domainPoolCtrl.Create)
-		admin.POST("/checkall", domainPoolCtrl.CheckAllDomains)
-		admin.PUT("/update", domainPoolCtrl.Update)
-	}
-}
 
 func setupMaterialRoutes(auth *gin.RouterGroup) {
 	materialCtrl := contentctrl.NewMaterialController(contentservice.NewMaterialService())
