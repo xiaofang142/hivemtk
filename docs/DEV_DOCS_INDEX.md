@@ -252,7 +252,7 @@ graph TB
 | E1 | 开源无认证：开源版移除 License 校验和 OTA 升级功能 | `hivemtk-platform/platform-server/docs/dev/FEATURES.md` §二十四 / `hivemtk-platform/docs/architecture/PLATFORM_ARCHITECTURE.md` ADR-P002 | platform-server |
 | E2 | Must remove all OTA-related logic；System only collects installation information and uses heartbeat data | `hivemtk-platform/platform-server/docs/dev/FEATURES.md` §二十四 | platform-server |
 | E3 | 禁止出现"download versions / pricing plans / registration/account opening / 定价"等闭源商业逻辑残留 | `hivemtk-platform/platform-server/docs/dev/FEATURES.md` §二十四 | platform-server |
-| E4 | 私域数据隔离：独立部署单实例数据物理隔离，业务表无需多租户字段 | `hivemtk/docs/architecture/ARCHITECTURE_DIAGRAM.md` ADR-003 / `hivemtk/user-server/docs/dev/ARCHITECTURE.md` | user-server、platform-server |
+| E4 | 私域数据隔离：独立部署单实例数据物理隔离，业务表无需多租户字段 | `hivemtk/docs/architecture/DATABASE_SCHEMA_DEEP_DIVE.md` §3.1 设计基线 + §3.2 移除 `merchant_id` 的迁移清单（旧引用 `ADR-003` 已作废且编号不复用，缺号说明见 `docs/architecture/adr/README.md`） | user-server、platform-server |
 | E5 | 强制五层架构：cmd/api → router/middleware/config → controller → service → model/database（同层禁止循环依赖） | `hivemtk/docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md` / `hivemtk-platform/docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md` | user-server、platform-server |
 | E6 | 智能体命名铁律：平台层统一称「智能体」(AIAgent)，禁止在文档/UI/代码注释中混用「AI 客服 / AI 销售」 | `hivemtk/docs/architecture/ARCHITECTURE_DIAGRAM.md` §九命名铁律 / `hivemtk-platform/docs/platform-features/ai-agent.md` | 全部工程 |
 | E7 | 命名禁用清单：禁止「机器人/助手」等称呼智能体；`AIAgent.AgentType`(sales/customer_service/hybrid) 仅作内部子类型 | `hivemtk/docs/architecture/ARCHITECTURE_DIAGRAM.md` §4.5 关键规则 | 全部工程 |

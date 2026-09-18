@@ -37,22 +37,26 @@
 所有 Go 代码必须严格遵循五层架构：
 
 ```
-Router → Handler → Service → Repository → Model
+Router → Controller → Service → Repository → Model
 ```
+
+> 目录即层名：`internal/{router,controller,service,repository,model}`。**本仓库无 `handler` 包**：
+> `internal/controller/` 下实测 157 个非测试文件、165 个控制器类型全为 `XxxController`（如 `CustomerController`），`XxxHandler` 零命中。
+> 新增业务域一律按 `controller` 落地，不引入 `handler` 同义词（避免双命名）。
 
 ### 各层职责
 | 层 | 职责 | 禁止 |
 |----|------|------|
-| Router | URL→Handler映射 | 写业务逻辑、内联handler |
-| Handler | 参数绑定+调Service+返回响应 | 写SQL、业务判断 |
+| Router | URL→Controller映射 | 写业务逻辑、内联闭包 |
+| Controller | 参数绑定+调Service+返回响应 | 写SQL、业务判断 |
 | Service | 业务逻辑 | 直接操作DB |
 | Repository | GORM数据访问 | 包含业务判断 |
 | Model | 纯数据结构 | 外部依赖 |
 
 ### 铁律
-1. **禁止跨层调用** — Handler → Repository = 违规
-2. **禁止内联 handler** — `func(c *gin.Context) { c.JSON(...) }` 不允许在 router.go 中出现
-3. **每域四层齐全** — 一个业务域 Handler/Service/Repository/Model 四文件必须完整
+1. **禁止跨层调用** — Controller → Repository = 违规
+2. **禁止内联闭包**（旧文档亦称"内联 handler"，指同一件事）— `func(c *gin.Context) { c.JSON(...) }` 不允许在 router.go 中出现
+3. **每域四层齐全** — 一个业务域 Controller/Service/Repository/Model 四文件必须完整
 4. **Router 只做映射** — DI 装配在 main.go 完成
 
 ---
@@ -81,8 +85,8 @@ Router → Handler → Service → Repository → Model
 
 | 项目 | 框架 | API出口 | 状态管理 |
 |------|------|---------|---------|
-| manage 后台 | Vue3+ElementPlus | src/api/index.js | Pinia |
-| uniapp 移动端 | UniApp | src/api/{module}.js | Pinia |
+| `user-web/`（唯一业务 Web 工程） | Vue 3.5 + Element Plus 2.9 | `src/api/{module}.js`（实测 98 个模块文件，统一 `import { http } from '@/utils/request'`） | Pinia 3 |
+| `embed-sdk/`（客服 Widget 嵌入 SDK，ADR-011） | 原生 JS + Vite，运行时零依赖 | 不直连业务 API，iframe 嵌 `user-web` 的 `/chat/embed/:channel_ref` | 无 |
 
 ---
 

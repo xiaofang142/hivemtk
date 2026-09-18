@@ -27,7 +27,7 @@ HiveMtk 后端采用**单体应用 + 模块化**设计，不引入微服务架�
 │ L1 Router                                │  路由注册
 │   - 注册 URL → Controller 映射           │  middleware 装配
 │   - 装载全局中间件（日志、TraceID、CORS） │  无业务逻辑
-│   - **禁止**写业务代码 / inline handler   │
+│   - **禁止**写业务代码 / inline 闭包      │
 └─────────────────┬────────────────────────┘
                   ▼
 ┌──────────────────────────────────────────┐
@@ -37,7 +37,7 @@ HiveMtk 后端采用**单体应用 + 模块化**设计，不引入微服务架�
 └─────────────────┬────────────────────────┘
                   ▼
 ┌──────────────────────────────────────────┐
-│ L2 Controller (Handler)                  │  HTTP 接口层
+│ L2 Controller                            │  HTTP 接口层
 │   - 参数绑定（c.ShouldBindJSON）          │  调 Service
 │   - 调 Service 编排业务                   │  返回响应
 │   - **禁止**写业务判断 / 直访 db / 直访   │  
@@ -124,7 +124,7 @@ hivemtk/user-server/
 │   └── api/
 │       └── main.go              # 进程入口（L1 Router 装配）
 ├── internal/
-│   ├── controller/              # L1+ Controller（HTTP handler）
+│   ├── controller/              # L2 Controller（HTTP 接口层）
 │   ├── service/                 # L3 Service
 │   ├── repository/              # L4 Repository
 │   ├── model/                   # L5 Model（GORM 实体）
@@ -152,11 +152,15 @@ hivemtk/user-server/
 
 | 层 | 函数名风格 | 示例 |
 |---|---|---|
-| Controller | `XxxHandler` / `XxxController` | `CreateCustomerHandler` |
+| Controller | `Xxx`（动词+名词，**不加 `Handler` 后缀**） | `CreateCustomer` |
 | Service | `Xxx` / `XxxService` | `CreateCustomer` |
 | Repository | `XxxByXxx` / `FindXxx` | `FindByPhone` |
 | Model | （仅 GORM hook + TableName）| `TableName()` |
 | DTO | `XxxRequest` / `XxxResponse` | `CreateCustomerRequest` |
+
+> 实测依据：`internal/controller/` 下 165 个控制器类型全为 `XxxController`、969 个方法全为「动词+名词」
+> （`ListCustomers` / `CreateCustomer` / `MergeCustomers`）。仓库**不存在 `internal/handler/` 包**，
+> `XxxHandler` 类型 0 命中；唯一含 Handler 字样的是 `CustomerSessionController.SwitchHandler`，语义为"转接坐席"，非命名约定。
 
 ---
 

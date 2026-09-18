@@ -13,7 +13,7 @@
 |---|---------|------|----------------|
 | 1 | `security` | 安全 | 硬编码密钥/token/密码；SQL 拼接注入；路径穿越；SSRF；不安全反序列化；JWT/会话缺陷；CORS 过宽；敏感信息泄漏到日志；`os/exec` 注入；上传文件校验。工具：`govulncheck`、grep 套件 |
 | 2 | `authz` | 认证与授权 | 每个管理端路由 `/api/manage/*` 是否有权限中间件；越权（水平：他人资源 ID 直取；垂直：普通用户调管理接口）；公开路由清单是否最小化；token 刷新/吊销 |
-| 3 | `architecture` | 架构分层 | 五层铁律：Router 无内联 handler、Handler 不写 SQL、Service 不直接操作 DB、Repository 无业务判断；每域四层齐全。跑 `scripts/check-architecture.sh` |
+| 3 | `architecture` | 架构分层 | 五层铁律：Router 无内联闭包、Controller 不写 SQL、Service 不直接操作 DB、Repository 无业务判断；每域四层齐全（层名以目录为准，仓库无 handler 包）。跑 `scripts/check-architecture.sh` |
 | 4 | `error-handling` | 错误处理 | Go 忽略的 `err`（`_ =` / 裸调用）；panic 风险（数组越界/nil 解引用/类型断言无 ok）；前端未捕获 Promise；错误吞掉后继续执行 |
 | 5 | `concurrency` | 并发与竞态 | map 并发写；goroutine 泄漏（无退出通道）；channel 死锁；`go vet -race` 可疑点；全局可变状态；WS/SSE 连接清理 |
 | 6 | `data-integrity` | 数据完整性 | 缺失唯一约束导致重复行（参考 daily_stats 教训）；事务缺失（多表写无 tx）；外键/级联删除孤儿；迁移与模型不一致；decimal 浮点误用 |

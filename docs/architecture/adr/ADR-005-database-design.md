@@ -18,7 +18,7 @@
 **主规范见 [DATABASE_SCHEMA_DEEP_DIVE.md](../DATABASE_SCHEMA_DEEP_DIVE.md)**，包含以下统一约定：
 
 1. **基类嵌入**：所有表统一嵌入 `BaseModel`，提供 id/created_at/updated_at/deleted_at
-2. **单租户**：项目为本地/私域单租户部署，无 `merchant_id` 字段（参见 ADR-003）
+2. **单租户**：项目为本地/私域单租户部署，无 `merchant_id` 字段（依据见主规范 [DATABASE_SCHEMA_DEEP_DIVE.md](../DATABASE_SCHEMA_DEEP_DIVE.md) §3.1/§3.2；旧引用 ADR-003 已作废且编号不复用）
 3. **软删除**：使用 gorm 的 `gorm.DeletedAt`，禁止硬删除（除审计日志）
 4. **字段命名**：
    - 时间：`xxx_at`（如 `created_at`、`published_at`）

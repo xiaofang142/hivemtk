@@ -536,7 +536,8 @@ graph TD
 | 代码规范 | [./CONVENTIONS.md](./CONVENTIONS.md) |
 | 功能清单 | [./FEATURES.md](./FEATURES.md) |
 
-> ℹ️ **ADR-008 待补**：`main.go` 的 `registerEventSubscribers()` 注释曾引用 `ADR-008 §2.2`，但 ADR-008 当前不存在（仅有 ADR-001 五层架构 / ADR-002 GORM / ADR-003 独立部署 / ADR-004 AI 销冠不重写已有服务）。Event Bus 订阅者注册规范对应的 ADR 待补；在补齐之前，相关注释已在 `main.go` 中改为说明性描述。
+> ℹ️ **Event Bus ADR 待补**：`main.go` 的 `registerEventSubscribers()` 注释曾引用 `ADR-008 §2.2`，但 `ADR-008` 实为「触达限流策略」（且已合并进 `docs/operations/SLA_SLO.md`），与 Event Bus 无关。
+> 现行 ADR 目录为 001~015 共 14 份，其中 **ADR-003 已作废、缺号不复用**（缺号说明见 [adr/README.md](../../../docs/architecture/adr/README.md)）。Event Bus 订阅者注册规范暂无对应 ADR，补写时请从 **ADR-016** 起顺延；在补齐之前，相关注释已在 `main.go` 中改为说明性描述。
 
 ---
 

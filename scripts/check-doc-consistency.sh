@@ -3,13 +3,16 @@
 # check-doc-consistency.sh
 # 文档一致性检查脚本（OPT-DOC-15）
 #
-# 校验项：
-#   1. README 引用 vs 实际 .md 文件存在性
-#   2. 文档内部相对链接断链
-#   3. 8 节模板结构
-#   4. ADR 编号连续性
-#   5. 元数据块（所属系统/功能 slug）
-#   6. .github/CODEOWNERS 路径引用
+# 校验项（与脚本内 [n/6] 分节一一对应）：
+#   1. README 引用（marketing-features / platform-features 两个索引）
+#   2. ADR 编号连续性（adr/README.md 登记为「已删除/作废」的有意缺号不计入断档）
+#   3. Feature Doc 8 节模板结构（判定源 lib/feature-doc-sections.sh）
+#   4. CODEOWNERS 路径引用
+#   5. 顶层架构文档 vs 营销文档一致性
+#   6. 关键文件存在性
+#
+# 注意：本脚本**不**做任意文档间相对链接的断链检查（第 1 项只覆盖两个 README 索引）。
+# 新增/改动的正文内相对链接需人工确认目标存在，否则会静默成为死引用。
 #
 # 用法：
 #   bash scripts/check-doc-consistency.sh
@@ -126,6 +129,15 @@ echo "[2/6] ADR 编号连续性..."
 
 ADR_DIR="$PROJECT_ROOT/hivemtk/docs/architecture/adr"
 if [ -d "$ADR_DIR" ]; then
+  # 有意缺号：adr/README.md 登记为「已删除/作废」的编号不允许回填（编号不复用是显式约定），
+  # 因此这类断档视为已归档，不再告警；只有**未登记**的断档才是真问题。
+  VOIDED=""
+  if [ -f "$ADR_DIR/README.md" ]; then
+    VOIDED=$(grep -oE '\|[[:space:]]*ADR-0*[0-9]+[[:space:]]*\|[[:space:]]*(❌[[:space:]]*)?(已删除|作废)' "$ADR_DIR/README.md" \
+             | grep -oE 'ADR-0*[0-9]+' | sed -E 's/ADR-0*//' | tr '\n' ' ' || true)
+  fi
+  is_voided() { case " $VOIDED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
   ADR_FILES=$(ls "$ADR_DIR"/ADR-*.md 2>/dev/null | sort || true)
   if [ -n "$ADR_FILES" ]; then
     NUMBERS=$(echo "$ADR_FILES" | sed -E 's/.*ADR-0*([0-9]+).*/\1/' | sort -n)
@@ -133,15 +145,25 @@ if [ -d "$ADR_DIR" ]; then
     GAPS=0
     for n in $NUMBERS; do
       if [ "$PREV" -ne 0 ] && [ "$n" -ne "$((PREV+1))" ]; then
-        log_warn "ADR 编号断档: ADR-$(printf '%03d' $PREV) → ADR-$(printf '%03d' $n) (缺 ADR-$(printf '%03d' $((PREV+1))) ~ ADR-$(printf '%03d' $((n-1))))"
-        GAPS=$((GAPS+1))
+        UNDOC=""
+        for m in $(seq $((PREV+1)) $((n-1))); do
+          if is_voided "$m"; then
+            log_pass "ADR-$(printf '%03d' "$m") 已在 adr/README.md 登记为作废（有意缺号，不回填）"
+          else
+            UNDOC="$UNDOC ADR-$(printf '%03d' "$m")"
+          fi
+        done
+        if [ -n "$UNDOC" ]; then
+          log_warn "ADR 编号断档: ADR-$(printf '%03d' "$PREV") → ADR-$(printf '%03d' "$n")（未登记作废：$UNDOC）"
+          GAPS=$((GAPS+1))
+        fi
       fi
       PREV=$n
     done
     if [ $GAPS -eq 0 ]; then
-      log_pass "ADR 编号连续 (现有 $PREV 个 ADR)"
+      log_pass "ADR 编号连续或断档均已登记（末号 ADR-$(printf '%03d' "$PREV")）"
     else
-      log_warn "ADR 编号有 $GAPS 个断档,需 OPT-DOC-10 补档或说明"
+      log_warn "ADR 有 $GAPS 处未登记断档,需补档或在 adr/README.md 说明"
     fi
   fi
 fi
@@ -283,7 +305,8 @@ KEY_FILES=(
   "INDEX.md:hivemtk/docs/"
   "FEATURE_DOCUMENTATION_TEMPLATE.md:hivemtk/docs/standards/"
   "MASTER_RULES.md:hivemtk/docs/standards/"
-  "DEPRECATED_auto-reply.md:hivemtk/docs/marketing-features/"
+  # DEPRECATED_auto-reply.md 已在 48e9d47c「docs: 清理冗余废弃文档（21 篇）」中删除，
+  # 全仓对其零引用，不再作为关键文件期望（曾产生长期假阳性告警）。
 )
 
 MISSING=0

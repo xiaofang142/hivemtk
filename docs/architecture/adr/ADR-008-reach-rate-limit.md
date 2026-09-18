@@ -1,8 +1,9 @@
 # ADR-008: 触达限流策略
 
-- **状态**：已合并到 `docs/operations/SLA_SLO.md` 与 `docs/marketing-features/sms-config.md`
+- **状态**：生效（本文件即权威文本）
 - **范围**：所有触达通道（SMS / 邮件 / WebSocket / 第三方 IM）
 - **原始编号**：DOC-RATE-001
+- **状态校正**：旧版曾标注"已合并到 `docs/operations/SLA_SLO.md` 与 `docs/marketing-features/sms-config.md`"，实测两处均无该内容——`SLA_SLO.md` 全文无限流/频控章节，`sms-config.md` 不存在。合并并未发生，策略以下文为准。
 
 ## 背景
 
@@ -15,7 +16,7 @@
 
 ## 决策
 
-**已合并到 `SLA_SLO.md`**，核心策略：
+决策保留于本文件，核心策略：
 
 ### 1. 三层限流
 
@@ -70,9 +71,10 @@
 
 ## 落地
 
-- `internal/service/reach_pipeline.go`
-- `controller/reach_pipeline.go`
-- `config/platform.yaml` → `rate_limit` 节点
+- `internal/service/reach_pipeline.go`（`RateLimitConfig` 与 `DefaultRateLimit()`）
+- `internal/service/reach_pipeline_ratelimit.go`（频控、每日配额与全局单用户上限）
+- `internal/controller/reach_pipeline.go`
+- 限流参数由触达请求的 DTO 字段 `rate_limit` 承载，缺省回落到 `DefaultRateLimit()`。旧版此处写作 "`config/platform.yaml` → `rate_limit` 节点"，实测该配置文件内**不存在** `rate_limit` 节点。
 
 ## 关联
 

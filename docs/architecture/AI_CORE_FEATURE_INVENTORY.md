@@ -188,7 +188,7 @@ ChrF 字符 n-gram + LLM Judge 主观评审；EvaluateBatch/EvaluateSingle
 
 | # | 位置 | 问题 |
 |---|---|---|
-| G1 | sop_dispatcher.go:673 | Saga 补偿空壳，缺 executed_nodes JSONB |
+| G1 | sop_dispatcher.go:696 | 补偿器未注入：`SetCompensationManager` 生产零调用（仅测试引用），单例 dispatcher 在 :840 构造时不带管理器 ⇒ `tryCompensate` 恒在 697 行 nil 早退，失败路径无 SAGA 回滚。原记根因"缺 executed_nodes 列"已于 v3.29.0 补列（`model/ai_sales_champion.go:159`，text 非 JSONB），现仅剩接线缺口 |
 | G2 | dispatcher_dispatch.go:368 | MultiModelVote 无真实一致性投票 |
 | G3 | intent_recognition.go:98 | greeting 不在词典，规则永远识别不出 |
 | G4 | smart_cs_orchestrator.go:537 | extractConfidence 启发式与五信号体系割裂 |
