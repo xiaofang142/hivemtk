@@ -36,7 +36,7 @@ func NewSystemInitController() *SystemInitController {
 // @Description 返回系统状态机（NOT_INSTALLED/HAS_ADMIN/INITIALIZED）
 // @Tags 系统初始化
 // @Produce json
-// @Success 200 {object} object{data=install.Status}
+// @Success 200 {object} map[string]interface{} "系统初始化状态"
 // @Router /api/system/init-status [get]
 func (c *SystemInitController) GetInitStatus(ctx *gin.Context) {
 	checker := middleware.GetLicenseChecker()

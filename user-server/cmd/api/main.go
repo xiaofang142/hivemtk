@@ -82,6 +82,15 @@ func (a redisPingerAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
+// @title						HiveMtk 用户端 API
+// @version					3.41.0
+// @description				HiveMtk 用户端（私域独立部署）RESTful API。认证采用 JWT：请求头 Authorization: Bearer <token>。
+// @description				仅当 ENABLE_SWAGGER=true 时，通过 http://localhost:8204/swagger/index.html 本地访问。
+// @BasePath					/
+// @securityDefinitions.apikey	BearerAuth
+// @in							header
+// @name						Authorization
+// @description					Bearer JWT，格式：Bearer <token>
 func main() {
 
 	utils.LoadDotEnv(".env")

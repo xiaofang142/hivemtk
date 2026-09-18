@@ -73,17 +73,8 @@ func (s *OneIDMergeRuleService) GetRules(ctx context.Context) (*MergeRuleSet, er
 	return &out, nil
 }
 
-// SaveRules godoc
-// @Summary      保存 OneID 合并规则集
-// @Description  全量替换当前规则集；预置规则只允许切换 enabled / 调整 priority
-// @Tags         OneID
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Param        body  body  MergeRuleSet  true  "规则集"
-// @Success      200   {object}  MergeRuleSet
-// @Failure      400   {object}  response.Response
-// @Router       /api/oneid/merge-rules [post]
+// SaveRules 全量替换当前规则集；预置规则只允许切换 enabled / 调整 priority。
+// HTTP 路由与 Swagger 注解归属 controller 层（CustomerOneIDController.SaveMergeRules）。
 func (s *OneIDMergeRuleService) SaveRules(ctx context.Context, set *MergeRuleSet) (*MergeRuleSet, error) {
 	if set == nil {
 		return nil, errors.New("规则集不能为空")

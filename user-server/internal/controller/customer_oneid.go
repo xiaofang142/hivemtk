@@ -276,6 +276,17 @@ func (c *CustomerOneIDController) GetMergeRules(ctx *gin.Context) {
 	response.Success(ctx, set, "获取成功")
 }
 
+// SaveMergeRules 保存 OneID 合并规则集
+// @Summary      保存 OneID 合并规则集
+// @Description  全量替换当前规则集；预置规则只允许切换 enabled / 调整 priority
+// @Tags         OneID
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body  service.MergeRuleSet  true  "规则集"
+// @Success      200   {object}  service.MergeRuleSet
+// @Failure      400   {object}  response.Response
+// @Router       /api/oneid/merge-rules [post]
 func (c *CustomerOneIDController) SaveMergeRules(ctx *gin.Context) {
 	var set service.MergeRuleSet
 	if err := ctx.ShouldBindJSON(&set); err != nil {

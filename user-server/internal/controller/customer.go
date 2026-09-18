@@ -32,7 +32,7 @@ func NewCustomerController() *CustomerController {
 // @Produce json
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20)
-// @Success 200 {object} object{data=list, total=int} "获取成功"
+// @Success 200 {object} map[string]interface{} "获取成功"
 // @Router /api/customer [get]
 func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {

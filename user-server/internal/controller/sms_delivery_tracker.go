@@ -70,7 +70,7 @@ func (c *SmsDeliveryTrackerController) GetMetrics(ctx *gin.Context) {
 // @Param        page   query  int  false  "页码（默认 1）"
 // @Param        limit  query  int  false  "每页条数（默认 20）"
 // @Param        phone  query  string  false  "按手机号过滤"
-// @Success      200    {array}  service.SmsNumberPortabilityRecord
+// @Success      200    {array}  map[string]interface{}
 // @Router       /api/sms/delivery/portability [get]
 func (c *SmsDeliveryTrackerController) ListPortability(ctx *gin.Context) {
 	if c.svc == nil {

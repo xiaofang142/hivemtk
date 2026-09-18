@@ -182,7 +182,7 @@ func (c *RagRecallMonitorController) GetRecallMetrics(ctx *gin.Context) {
 // @Description  用于调优分析，按创建时间倒序返回低召回查询
 // @Tags         RAG Recall
 // @Produce      json
-// @Param        threshold  query  float  false  "召回率阈值（默认 0.3）"
+// @Param        threshold  query  number  false  "召回率阈值（默认 0.3）"
 // @Param        limit      query  int    false  "返回条数（默认 50，最大 200）"
 // @Success      200        {array}   service.LowRecallQuery
 // @Router       /api/rag/recall/low-recall [get]
