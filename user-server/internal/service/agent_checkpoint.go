@@ -15,8 +15,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"strings"
 
 	"hivemtk-user/internal/repository"
 
@@ -31,17 +29,8 @@ const checkpointEnvVar = "FF_LTC_CHECKPOINT"
 
 // checkpointEnabledFn 判定入口，测试可替换（先例：aiReplyQuietHoursFn）。
 //
-// 有意不走 pkg/featureflag：那里是 5s 后台轮询的缓存值，一次 RunOnce 里
-// "存点"与"取点"可能落在缓存刷新两侧，出现只写不读（或反之）的半开状态。
-// checkpoint 的读写必须来自同一个判定，故每次直接读 env（进程级常量，纳秒级开销）。
-var checkpointEnabledFn = func() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(checkpointEnvVar))) {
-	case "1", "true", "yes", "y", "on":
-		return true
-	default:
-		return false
-	}
-}
+// 解析口径见 envFlagEnabled（默认关闭、无法解析一律判关）。
+var checkpointEnabledFn = func() bool { return envFlagEnabled(checkpointEnvVar) }
 
 // CheckpointEnabled 报告阶段级 checkpoint 挂载是否开启。
 //

@@ -62,9 +62,15 @@ type CompensationPlan struct {
 // CompensationManager Saga 补偿管理器
 //
 // 线程安全：支持多 Execution 并发补偿
+//
+// 计划保留有上界（config.MaxPlansKept）：本管理器在 T-P1-02 后是**进程级单例**，
+// 原先 plans 只增不减 ⇒ 每次失败执行泄漏一条计划（含全部节点记录），
+// 故障风暴（如 LLM 集群不可用致大量 SOP 失败）下会无界增长。现按写入顺序淘汰最旧的，
+// 因此 Summary()/GetPlan() 只覆盖"最近 N 次"，不是全量史册；全量留档属 DB 侧（T-P1-08）。
 type CompensationManager struct {
 	mu     sync.RWMutex
 	plans  map[uint]*CompensationPlan
+	order  []uint // plans 的写入顺序，用于有界淘汰
 	config CompensationConfig
 }
 
@@ -73,6 +79,7 @@ type CompensationConfig struct {
 	MaxAttempts        int
 	PerCompensationTTL time.Duration
 	TotalTimeout       time.Duration
+	MaxPlansKept       int // 内存中保留的补偿计划条数上界（<=0 取默认 512）
 }
 
 // DefaultCompensationConfig 默认配置
@@ -85,6 +92,7 @@ func DefaultCompensationConfig() CompensationConfig {
 		MaxAttempts:        3,
 		PerCompensationTTL: 30 * time.Second,
 		TotalTimeout:       5 * time.Minute,
+		MaxPlansKept:       512,
 	}
 }
 
@@ -99,10 +107,37 @@ func NewCompensationManager(cfg CompensationConfig) *CompensationManager {
 	if cfg.TotalTimeout <= 0 {
 		cfg.TotalTimeout = 5 * time.Minute
 	}
+	if cfg.MaxPlansKept <= 0 {
+		cfg.MaxPlansKept = 512
+	}
 	return &CompensationManager{
 		plans:  make(map[uint]*CompensationPlan),
 		config: cfg,
 	}
+}
+
+// retainPlan 记录本次补偿计划并按上界淘汰最旧者（调用方须已持写锁）。
+func (m *CompensationManager) retainPlan(executionID uint, plan *CompensationPlan) {
+	if _, exists := m.plans[executionID]; !exists {
+		m.order = append(m.order, executionID)
+	}
+	m.plans[executionID] = plan
+	for len(m.plans) > m.config.MaxPlansKept && len(m.order) > 0 {
+		oldest := m.order[0]
+		m.order = m.order[1:]
+		delete(m.plans, oldest)
+	}
+}
+
+// appendRecord 向已发布的计划追加一条节点补偿记录。
+//
+// result 自 retainPlan 起就对 GetPlan/Summary 的任意 goroutine 可见，因此对它每次改写
+// 都必须持写锁（接线前无生产读者，-race 从未覆盖这条路径；T-P1-02 装配后立刻暴露）。
+// 临界区只包住 append 本身，绝不跨 CompensateNode（单次最长 PerCompensationTTL）。
+func (m *CompensationManager) appendRecord(result *CompensationPlan, rec CompensationRecord) {
+	m.mu.Lock()
+	result.Records = append(result.Records, rec)
+	m.mu.Unlock()
 }
 
 // Plan 构造补偿计划：按 executed 节点的反向顺序构造
@@ -228,12 +263,11 @@ func (m *CompensationManager) Run(
 	}
 
 	m.mu.Lock()
-	m.plans[executionID] = result
+	m.retainPlan(executionID, result)
 	m.mu.Unlock()
 
 	defer func() {
-		result.FinishedAt = time.Now()
-
+		m.mu.Lock()
 		hasFailed := false
 		hasCompleted := false
 		for _, r := range result.Records {
@@ -251,10 +285,14 @@ func (m *CompensationManager) Run(
 		} else {
 			result.Status = CompensationStatusCompleted
 		}
+		result.FinishedAt = time.Now()
+		status, records := result.Status, len(result.Records)
+		m.mu.Unlock()
+
 		logger.Ctx(ctx).Info().
 			Uint("execution_id", executionID).
-			Str("status", result.Status).
-			Int("records", len(result.Records)).
+			Str("status", status).
+			Int("records", records).
 			Msg("[Compensation] run finished")
 	}()
 
@@ -262,7 +300,7 @@ func (m *CompensationManager) Run(
 		if totalCtx.Err() != nil {
 			logger.Ctx(ctx).Warn().Msg("[Compensation] total timeout, abort remaining")
 
-			result.Records = append(result.Records, CompensationRecord{
+			m.appendRecord(result, CompensationRecord{
 				NodeID:     planned.NodeID,
 				NodeType:   planned.NodeType,
 				Status:     CompensationStatusSkipped,
@@ -274,7 +312,7 @@ func (m *CompensationManager) Run(
 
 		execCtx := execCtxFor(planned.NodeID)
 		if execCtx == nil {
-			result.Records = append(result.Records, CompensationRecord{
+			m.appendRecord(result, CompensationRecord{
 				NodeID:     planned.NodeID,
 				Status:     CompensationStatusFailed,
 				Error:      "no execution context available",
@@ -285,7 +323,7 @@ func (m *CompensationManager) Run(
 
 		executor := getExecutor(planned.NodeType)
 		if executor == nil {
-			result.Records = append(result.Records, CompensationRecord{
+			m.appendRecord(result, CompensationRecord{
 				NodeID:     planned.NodeID,
 				NodeType:   planned.NodeType,
 				Status:     CompensationStatusSkipped,
@@ -295,17 +333,27 @@ func (m *CompensationManager) Run(
 		}
 
 		rec := m.CompensateNode(totalCtx, execCtx, executor)
-		result.Records = append(result.Records, rec)
+		m.appendRecord(result, rec)
 	}
 
 	return result
 }
 
-// GetPlan 查询补偿计划
+// GetPlan 查询补偿计划。
+//
+// 返回**快照副本**而非共享指针：Run 会在补偿过程中持续改写 Records/Status，
+// 把活指针交给调用方等于把未同步字段暴露给外部 goroutine（-race 实测到会报数据竞争）。
+// 若在读取时被 MaxPlansKept 淘汰，返回那一刻的内容仍有效。
 func (m *CompensationManager) GetPlan(executionID uint) *CompensationPlan {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.plans[executionID]
+	plan := m.plans[executionID]
+	if plan == nil {
+		return nil
+	}
+	snapshot := *plan
+	snapshot.Records = append([]CompensationRecord(nil), plan.Records...)
+	return &snapshot
 }
 
 // Summary 输出补偿计划摘要（用于监控/调试）
@@ -319,6 +367,9 @@ type CompensationSummary struct {
 }
 
 // Summary 全局补偿摘要
+//
+// 口径：只覆盖内存中仍保留的最近 MaxPlansKept 条计划（见 CompensationManager 注释），
+// 不是历史全量。用于灰度期"这一轮跑了多少补偿、失败多少"的即时观测。
 func (m *CompensationManager) Summary() CompensationSummary {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -340,6 +391,44 @@ func (m *CompensationManager) Summary() CompensationSummary {
 		}
 	}
 	return summary
+}
+
+// compensationEnvVar Saga 补偿挂载开关（T-P1-02）。默认关闭 = 现网行为零变化。
+const compensationEnvVar = "FF_LTC_SAGA_COMPENSATION"
+
+// compensationEnabledFn 判定入口，测试可替换（先例：checkpointEnabledFn）。
+var compensationEnabledFn = func() bool { return envFlagEnabled(compensationEnvVar) }
+
+// CompensationEnabled 报告 Saga 补偿挂载是否开启。
+func CompensationEnabled() bool { return compensationEnabledFn() }
+
+// InitSOPCompensation 把 Saga 补偿管理器装配到 SOP 调度器（T-P1-02 接线）。
+//
+// 调用方：cmd/api/main.go（紧随 InitSOPExecutionDispatcher / SetWSHub 之后）。
+// 开关关闭时**不注入**，d.compensationMgr 保持 nil ⇒ tryCompensate 首行早退，
+// 失败路径与接线前逐字节一致；返回 nil 即表示未挂载。
+//
+// 为何整进程可共用一个实例：plans 以 executionID 分键、条目互相独立，
+// MaxPlansKept 上界防住无界增长；PerCompensationTTL/TotalTimeout 是每次补偿的
+// 上下文超时，不是跨执行的可变状态。
+func InitSOPCompensation(d *SOPExecutionDispatcher) *CompensationManager {
+	if d == nil {
+		logger.GetLogger().Warn().Msg("[saga] ⚠️ dispatcher 为 nil，补偿管理器未装配")
+		return nil
+	}
+	if !CompensationEnabled() {
+		logger.GetLogger().Info().
+			Str("flag", compensationEnvVar).
+			Msg("[saga] 补偿未启用（失败执行仍不补偿，与接线前一致）")
+		return nil
+	}
+	mgr := NewCompensationManager(DefaultCompensationConfig())
+	d.SetCompensationManager(mgr)
+	logger.GetLogger().Info().
+		Str("flag", compensationEnvVar).
+		Int("max_plans_kept", mgr.config.MaxPlansKept).
+		Msg("[saga] ✅ 补偿管理器已装配")
+	return mgr
 }
 
 var _ = func() *dto.SOPNode {

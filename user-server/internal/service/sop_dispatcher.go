@@ -86,18 +86,31 @@ type SOPExecutionDispatcher struct {
 	retryTimersMu sync.Mutex
 	retryTimers   map[*time.Timer]struct{}
 
+	// compensationMu 保护 compensationMgr：装配发生在 InitSOPExecutionDispatcher 之后
+	// （那时 Start() 已把 worker 跑起来），而 worker 的失败路径会读这个字段。
+	// 无锁写=数据竞争（-race 可复现），故读写都过这里。
+	compensationMu  sync.RWMutex
 	compensationMgr *CompensationManager
 }
 
 // SetCompensationManager 注入 Saga 补偿管理器
 //
-// 业务方可在启动时调用：execDispatcher.SetCompensationManager(NewCompensationManager(...))
-// 不设置时 failExecution 走原路径（仅标记失败，不补偿）
+// 启动期由 service.InitSOPCompensation 调用（见 T-P1-02）；不注入时 failExecution
+// 走原路径（仅标记失败，不补偿）。
 func (d *SOPExecutionDispatcher) SetCompensationManager(m *CompensationManager) {
 	if d == nil {
 		return
 	}
+	d.compensationMu.Lock()
 	d.compensationMgr = m
+	d.compensationMu.Unlock()
+}
+
+// compensationManager 取当前补偿管理器（未装配返回 nil）。
+func (d *SOPExecutionDispatcher) compensationManager() *CompensationManager {
+	d.compensationMu.RLock()
+	defer d.compensationMu.RUnlock()
+	return d.compensationMgr
 }
 
 func (d *SOPExecutionDispatcher) registerRetryTimer(t *time.Timer) {
@@ -694,7 +707,11 @@ func appendExecutedNodeWithStatus(exec *model.SOPExecution, node *dto.SOPNode, a
 }
 
 func (d *SOPExecutionDispatcher) tryCompensate(_ context.Context, exec *model.SOPExecution) {
-	if d == nil || d.compensationMgr == nil {
+	if d == nil {
+		return
+	}
+	mgr := d.compensationManager() // 快照一次：整条补偿用同一个管理器，避免装配与执行交错
+	if mgr == nil {
 		return
 	}
 	if exec == nil || exec.ID == 0 {
@@ -729,7 +746,7 @@ func (d *SOPExecutionDispatcher) tryCompensate(_ context.Context, exec *model.SO
 			})
 		}
 
-		plan := d.compensationMgr.Plan(planRecords)
+		plan := mgr.Plan(planRecords)
 		if len(plan) == 0 {
 			logger.GetLogger().Debug().
 				Uint("execution_id", exec.ID).
@@ -750,7 +767,7 @@ func (d *SOPExecutionDispatcher) tryCompensate(_ context.Context, exec *model.SO
 			nodeByID[graph.Nodes[i].ID] = &graph.Nodes[i]
 		}
 
-		result := d.compensationMgr.Run(bgCtx, exec.ID, plan,
+		result := mgr.Run(bgCtx, exec.ID, plan,
 			func(nodeType string) NodeExecutor {
 				return d.registry.MustGet(bgCtx, nodeType)
 			},

@@ -284,6 +284,16 @@ func main() {
 	execDispatcher := service.InitSOPExecutionDispatcher(db.GetDB(), scheduler.SOPService(context.Background()), nil)
 	defer execDispatcher.Stop(context.Background())
 	execDispatcher.SetWSHub(context.Background(), websocket.GetHub())
+	// W-2 Saga 补偿挂载（T-P1-02）：FF_LTC_SAGA_COMPENSATION 关时不注入，失败路径与今天一致。
+	sopCompensationMgr := service.InitSOPCompensation(execDispatcher)
+	if sopCompensationMgr != nil {
+		// 灰度期观测：退出前把内存保留的补偿摘要打出来，作为"这条接线是否可默认开启"的证据来源。
+		defer func() {
+			s := sopCompensationMgr.Summary()
+			logger.Infof("[saga] 退出前补偿摘要：plans=%d completed=%d failed=%d partial=%d nodes=%d failed_nodes=%d",
+				s.TotalPlans, s.CompletedPlans, s.FailedPlans, s.PartialPlans, s.TotalNodes, s.FailedNodes)
+		}()
+	}
 
 	outboxDispatcher := service.InitSOPOutboxDispatcher(db.GetDB(), execDispatcher)
 	defer outboxDispatcher.Stop(context.Background())
