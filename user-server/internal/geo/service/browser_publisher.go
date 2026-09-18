@@ -89,7 +89,7 @@ func (a *apiPublisher) doPost(ctx context.Context, endpoint, token string, body 
 	if err != nil {
 		return "", fmt.Errorf("%s HTTP 请求失败: %w", a.platform, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {

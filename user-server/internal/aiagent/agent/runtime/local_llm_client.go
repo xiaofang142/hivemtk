@@ -111,7 +111,7 @@ func (c *LocalLLMClient) Chat(ctx context.Context, messages []model.AssetBundleM
 	if err != nil {
 		return "", fmt.Errorf("http do: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -81,7 +81,9 @@ func (dm *PgDialogManager) GetSession(ctx context.Context, sessionID string) (*S
 	}
 
 	var config SessionConfig
-	json.Unmarshal([]byte(row.Config), &config)
+	if err := json.Unmarshal([]byte(row.Config), &config); err != nil {
+		logger.Warnf("[PGDialog] 解析会话配置失败 sessionID=%s: %v", row.ID, err)
+	}
 
 	return &Session{
 		ID:        row.ID,
@@ -119,7 +121,10 @@ func (dm *PgDialogManager) GetConversationHistory(ctx context.Context, sessionID
 	var messages []Message
 	for _, r := range rows {
 		var msg Message
-		json.Unmarshal([]byte(r.Content), &msg)
+		if err := json.Unmarshal([]byte(r.Content), &msg); err != nil {
+			logger.Warnf("[PGDialog] 解析会话消息失败 sessionID=%s: %v", sessionID, err)
+			continue
+		}
 		messages = append(messages, msg)
 	}
 
@@ -180,7 +185,9 @@ func (dm *PgDialogManager) ListUserSessions(ctx context.Context, userID, platfor
 	var sessions []Session
 	for _, r := range rows {
 		var config SessionConfig
-		json.Unmarshal([]byte(r.Config), &config)
+		if err := json.Unmarshal([]byte(r.Config), &config); err != nil {
+			logger.Warnf("[PGDialog] 解析会话配置失败 sessionID=%s: %v", r.ID, err)
+		}
 		sessions = append(sessions, Session{
 			ID: r.ID, UserID: r.UserID, Platform: r.Platform,
 			KBID: r.KBID, Status: SessionStatus(r.Status),

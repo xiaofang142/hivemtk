@@ -66,7 +66,7 @@ func doJSON(ctx context.Context, endpoint, authHeader string, payload, out any) 
 	if err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("status %d: %s", resp.StatusCode, string(rb))

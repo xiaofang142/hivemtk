@@ -137,7 +137,7 @@ func (c *RagEvalGapController) Upload(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "缺少 file 字段")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	n, err := c.svc.UploadCSV(ctx.Request.Context(), file, ctx.PostForm("product_id"))
 	if HandleServiceError(ctx, err) {
 		return

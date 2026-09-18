@@ -188,7 +188,7 @@ func (s *MonitorCrawlerService) doCrawl(ctx context.Context, targetURL, keyword,
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	_, _ = resp.Body.Read(make([]byte, 2048))
 

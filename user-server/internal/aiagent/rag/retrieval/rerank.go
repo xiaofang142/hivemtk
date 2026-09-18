@@ -240,7 +240,7 @@ func (r *LocalReranker) callOnce(ctx context.Context, endpoint string, timeout t
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

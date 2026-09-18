@@ -115,7 +115,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 			case int:
 				durationMs = v
 			case string:
-				fmt.Sscanf(v, "%d", &durationMs)
+				_, _ = fmt.Sscanf(v, "%d", &durationMs)
 			}
 		}
 		if durationMs > 5000 {
@@ -152,7 +152,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 			case int:
 				taskID = v
 			case string:
-				fmt.Sscanf(v, "%d", &taskID)
+				_, _ = fmt.Sscanf(v, "%d", &taskID)
 			}
 			switch v := wctx.NodeConfig["user_id"].(type) {
 			case float64:
@@ -160,7 +160,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 			case int:
 				userID = v
 			case string:
-				fmt.Sscanf(v, "%d", &userID)
+				_, _ = fmt.Sscanf(v, "%d", &userID)
 			}
 		}
 		if taskID <= 0 {

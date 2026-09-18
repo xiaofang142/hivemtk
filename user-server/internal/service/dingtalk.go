@@ -96,7 +96,7 @@ func (s *DingTalkService) SendRobot(ctx context.Context, webhookOrToken, secret,
 	if err != nil {
 		return "", fmt.Errorf("dingtalk: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var out struct {
 		ErrCode int    `json:"errcode"`

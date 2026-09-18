@@ -108,7 +108,7 @@ func (ctrl *KnowledgeWorkspaceController) UploadImport(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "文件上传失败: "+err.Error())
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	req := &knowledgesvc.ImportRequest{
 		ProductID:  productID,
@@ -786,7 +786,7 @@ func (ctrl *KnowledgeWorkspaceController) UploadImportToKB(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "文件上传失败: "+err.Error())
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	title := c.PostForm("title")
 	if title == "" {

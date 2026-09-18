@@ -225,7 +225,7 @@ func (s *KBConnectorService) probe(ctx context.Context, source string, cfg map[s
 		res.Message = "网络不可达: " + err.Error()
 		return res
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	res.Latency = time.Since(start).Milliseconds()
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		res.OK = true

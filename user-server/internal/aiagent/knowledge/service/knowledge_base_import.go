@@ -59,9 +59,13 @@ func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string,
 	if err != nil {
 		return nil, fmt.Errorf("创建文件失败: %w", err)
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	if _, err := io.Copy(dst, io.LimitReader(file, MaxUploadFileSize+1)); err != nil {
+		_ = os.Remove(filePath)
+		return nil, fmt.Errorf("写入文件失败: %w", err)
+	}
+	if err := dst.Close(); err != nil {
 		_ = os.Remove(filePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
 	}

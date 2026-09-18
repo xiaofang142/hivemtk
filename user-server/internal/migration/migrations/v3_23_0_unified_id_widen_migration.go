@@ -42,7 +42,7 @@ func (m *UnifiedIDWidenMigration) Up(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("查询 unified_id 列失败: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type colInfo struct {
 		Schema string

@@ -153,7 +153,7 @@ func (cc *ContributorClient) doAuth(method, path string, body []byte, out any, t
 	if err != nil {
 		return fmt.Errorf("调用平台贡献者接口失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("平台贡献者接口返回 %d: %s", resp.StatusCode, string(raw))

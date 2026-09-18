@@ -290,7 +290,7 @@ func (s *WebhookService) persistWeComMediaAsync(ctx context.Context, accountID, 
 			logger.Ctx(gctx).Warn().Err(derr).Str("media_id", mediaID).Msg("[WeCom] 媒体下载失败（占位符保留）")
 			return
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
 		if rerr != nil {
 			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WeCom] 媒体读取失败")

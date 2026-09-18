@@ -149,7 +149,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintf(w, "local embedding-server (Go)\nmodel=%s\ndim=%d\nPOST /v1/embeddings\n", s.defaultMod, s.defaultDim)
+	_, _ = fmt.Fprintf(w, "local embedding-server (Go)\nmodel=%s\ndim=%d\nPOST /v1/embeddings\n", s.defaultMod, s.defaultDim)
 }
 
 func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {

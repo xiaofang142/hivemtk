@@ -211,7 +211,7 @@ func sendMailSSL(addr, host string, auth smtp.Auth, from string, to []string, ms
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if auth != nil {
 		if ok, _ := c.Extension("AUTH"); ok {
 			if err := c.Auth(auth); err != nil {

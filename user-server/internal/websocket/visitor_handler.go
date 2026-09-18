@@ -276,7 +276,7 @@ func sendToClient(client *Client, payload []byte) {
 
 func (h *VisitorWSHandler) writePump(client *Client, conn *websocket.Conn) {
 	defer func() {
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	ticker := time.NewTicker(pingPeriod)
@@ -307,7 +307,7 @@ func (h *VisitorWSHandler) readPump(client *Client, conn *websocket.Conn, ctx co
 	defer func() {
 		GlobalPendingAck().Drop(client.sessionID)
 		unregisterVisitorClient(client)
-		conn.Close()
+		_ = conn.Close()
 		logger.Ctx(ctx).Info().Str("session_id", client.sessionID).Msg("visitor disconnected")
 	}()
 

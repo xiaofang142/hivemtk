@@ -54,7 +54,7 @@ func (s *KnowledgeService) importUploadedFile(ctx context.Context, req *ImportRe
 	if err != nil {
 		return nil, fmt.Errorf("创建文件失败: %w", err)
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	size, err := io.Copy(dst, io.LimitReader(req.File, MaxUploadFileSize+1))
 	if err != nil {
@@ -65,7 +65,10 @@ func (s *KnowledgeService) importUploadedFile(ctx context.Context, req *ImportRe
 		_ = os.Remove(filePath)
 		return nil, fmt.Errorf("文件超过大小上限 %d MB", MaxUploadFileSize>>20)
 	}
-	_ = dst.Close()
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(filePath)
+		return nil, fmt.Errorf("写入文件失败: %w", err)
+	}
 
 	title := req.Title
 	if title == "" {
@@ -149,7 +152,7 @@ func (s *KnowledgeService) importFromURL(ctx context.Context, req *ImportRequest
 	if err != nil {
 		return nil, fmt.Errorf("抓取 URL 失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("URL 返回错误状态: %d", resp.StatusCode)
 	}

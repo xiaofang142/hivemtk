@@ -274,7 +274,7 @@ func main() {
 
 	batchN := 9
 	if v := os.Getenv("GEO_BATCH"); v != "" {
-		fmt.Sscanf(v, "%d", &batchN)
+		_, _ = fmt.Sscanf(v, "%d", &batchN)
 	}
 	intents := []struct{ label, query, kw string }{
 		{"疑问", "HiveMtk 是什么？支持哪些渠道和功能？", "HiveMtk 功能介绍"},

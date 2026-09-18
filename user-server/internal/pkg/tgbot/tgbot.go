@@ -166,7 +166,7 @@ func callBotAPI(botToken, method string, params url.Values) (map[string]any, err
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", botToken, method)
 	resp, err := defaultHTTPClient.PostForm(apiURL, params)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 	}
 	if err != nil {
 		return nil, fmt.Errorf("调用 %s 失败: %w", method, err)
@@ -374,7 +374,7 @@ func GetUpdates(ctx context.Context, botToken string, offset int64, limit, timeo
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getUpdates 失败: %w", err)

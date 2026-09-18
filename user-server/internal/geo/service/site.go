@@ -221,14 +221,20 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 
 	// 写 llms.txt（v2）
 	llmsContent := GenerateLLMsTxt(siteCfg.Domain, siteCfg.Domain, articles)
-	os.WriteFile(filepath.Join(staticDir, "llms.txt"), []byte(llmsContent), 0o644)
+	if err := os.WriteFile(filepath.Join(staticDir, "llms.txt"), []byte(llmsContent), 0o644); err != nil {
+		logger.Warnf("写 llms.txt 失败: %v", err)
+	}
 
 	// 写 robots.txt
-	os.WriteFile(filepath.Join(staticDir, "robots.txt"), []byte(GenerateRobots()), 0o644)
+	if err := os.WriteFile(filepath.Join(staticDir, "robots.txt"), []byte(GenerateRobots()), 0o644); err != nil {
+		logger.Warnf("写 robots.txt 失败: %v", err)
+	}
 
 	// 写 sitemap.xml
 	sitemap := s.buildSitemapXML(siteCfg.Domain, articles)
-	os.WriteFile(filepath.Join(staticDir, "sitemap.xml"), []byte(sitemap), 0o644)
+	if err := os.WriteFile(filepath.Join(staticDir, "sitemap.xml"), []byte(sitemap), 0o644); err != nil {
+		logger.Warnf("写 sitemap.xml 失败: %v", err)
+	}
 
 	logger.Warnf("ExportToHugo: %d 篇文章已导出到 %s", count, siteCfg.HugoPath)
 	return count, nil

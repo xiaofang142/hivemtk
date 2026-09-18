@@ -231,7 +231,7 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 	if err != nil {
 		return fmt.Errorf("send feishu msg: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respB, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		now := time.Now()
@@ -299,7 +299,7 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out struct {
 		Code              int    `json:"code"`
 		Msg               string `json:"msg"`

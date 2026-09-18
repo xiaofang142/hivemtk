@@ -252,7 +252,7 @@ func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountI
 			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体下载失败（占位符保留）")
 			return
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
 		if rerr != nil {
 			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体读取失败")

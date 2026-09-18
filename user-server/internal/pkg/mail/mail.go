@@ -42,7 +42,7 @@ func SendMail(cfg Config, to []string, subject, body string, isHTML bool) error 
 	}
 
 	if conn, err := d.Dial(); err == nil {
-		conn.Close()
+		_ = conn.Close()
 	} else {
 		return fmt.Errorf("SMTP连接测试失败: %v", err)
 	}

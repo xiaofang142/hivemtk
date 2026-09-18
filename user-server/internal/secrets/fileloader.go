@@ -80,7 +80,7 @@ func parseSecretFile(path, name, ext string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("secrets: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	vars := make(map[string]string)
 	if ext == ".txt" {

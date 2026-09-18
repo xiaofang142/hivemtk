@@ -203,7 +203,7 @@ func (c *wechatTokenClient) fetchAccessToken(ctx context.Context) (string, int, 
 	if err != nil {
 		return "", 0, fmt.Errorf("fetch wechat token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var result struct {
@@ -271,7 +271,7 @@ func (s *WechatService) SendCustomMessage(ctx context.Context, accountID uint, o
 	if err != nil {
 		return "", fmt.Errorf("wechat send msg: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result struct {

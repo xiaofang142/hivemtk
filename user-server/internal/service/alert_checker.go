@@ -352,7 +352,7 @@ func (n *WebhookAlertNotifier) Notify(ctx context.Context, rule *model.AlertRule
 	if err != nil {
 		return fmt.Errorf("webhook post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("webhook 返回非 2xx: %d", resp.StatusCode)

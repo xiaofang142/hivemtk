@@ -145,7 +145,7 @@ func (h *WSHandler) HandleWebSocket(c *gin.Context) {
 
 func (h *WSHandler) writePump(client *Client, conn *websocket.Conn, ctx context.Context) {
 	defer func() {
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	ticker := time.NewTicker(pingPeriod)
@@ -173,7 +173,10 @@ func (h *WSHandler) writePump(client *Client, conn *websocket.Conn, ctx context.
 			}
 
 			msgBytes, _ := json.Marshal(msg)
-			w.Write(msgBytes)
+			if _, err := w.Write(msgBytes); err != nil {
+				_ = w.Close()
+				return
+			}
 
 			if err := w.Close(); err != nil {
 				return
@@ -190,7 +193,7 @@ func (h *WSHandler) writePump(client *Client, conn *websocket.Conn, ctx context.
 func (h *WSHandler) readPump(client *Client, conn *websocket.Conn, agentID uint, ctx context.Context) {
 	defer func() {
 		h.hub.Unregister(client)
-		conn.Close()
+		_ = conn.Close()
 		logger.Ctx(ctx).Info().Uint("agent_id", agentID).Msg("agent disconnected")
 	}()
 

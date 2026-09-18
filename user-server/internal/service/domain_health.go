@@ -292,7 +292,7 @@ func (s *domainHealthService) doHTTPHead(ctx context.Context, url string) (bool,
 	if err != nil {
 		return false, 0, time.Since(start), err.Error()
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	latency := time.Since(start)
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		return true, resp.StatusCode, latency, ""

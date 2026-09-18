@@ -137,7 +137,7 @@ func (lr *LoadRunner) Run(ctx context.Context, cfg Config) (*Result, error) {
 					continue
 				}
 				io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 
 				mu.Lock()
 				statusCodes[resp.StatusCode]++

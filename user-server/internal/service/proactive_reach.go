@@ -571,13 +571,13 @@ func (s *ProactiveReachService) sendDingTalk(ctx context.Context, req *Proactive
 
 func parseUint(s string) uint {
 	var n uint
-	fmt.Sscanf(s, "%d", &n)
+	_, _ = fmt.Sscanf(s, "%d", &n)
 	return n
 }
 
 func parseInt64(s string) int64 {
 	var n int64
-	fmt.Sscanf(s, "%d", &n)
+	_, _ = fmt.Sscanf(s, "%d", &n)
 	return n
 }
 

@@ -114,7 +114,7 @@ func (s *MacroService) Apply(ctx context.Context, macroID uint, sessionID, opera
 			err = s.enqueueOutbound(ctx, sessionID, a.Value)
 		case MacroActSetPriority:
 			lvl := 0
-			fmt.Sscanf(a.Value, "%d", &lvl)
+			_, _ = fmt.Sscanf(a.Value, "%d", &lvl)
 			err = s.csPlus.SetSessionPriority(ctx, sessionID, lvl)
 		}
 		if err != nil {

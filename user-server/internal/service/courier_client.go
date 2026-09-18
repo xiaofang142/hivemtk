@@ -50,7 +50,7 @@ func (c *CourierClient) Query(ctx context.Context, carrier, trackingNo string) (
 	}
 	resp, err := c.http.Do(req)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 	}
 	if err != nil {
 		return nil, err

@@ -271,7 +271,9 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 		return
 	}
 
-	fmt.Fprintf(c.Writer, "retry: %d\n\n", heartbeatInterval.Milliseconds())
+	if _, err := fmt.Fprintf(c.Writer, "retry: %d\n\n", heartbeatInterval.Milliseconds()); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	ctx, cancel := context.WithTimeout(ctxReq, maxStreamDuration)

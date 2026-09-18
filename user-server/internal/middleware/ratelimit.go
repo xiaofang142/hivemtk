@@ -226,7 +226,7 @@ func GetRateLimitStatus(clientKey string) (remaining int, resetAfter float64) {
 		return int(globalRateLimiter.config.RPS * 60), 0
 	}
 	var cur int64
-	fmt.Sscanf(curStr, "%d", &cur)
+	_, _ = fmt.Sscanf(curStr, "%d", &cur)
 	rem := int64(globalRateLimiter.config.RPS*60) - cur
 	if rem < 0 {
 		rem = 0

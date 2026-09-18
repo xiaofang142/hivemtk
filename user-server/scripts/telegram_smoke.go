@@ -150,7 +150,7 @@ func callTG(token, method string, params map[string]string) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	var raw struct {
 		OK          bool            `json:"ok"`
@@ -206,7 +206,7 @@ func simulatePost(webhookURL, secret string) string {
 	if err != nil {
 		return fmt.Sprintf("HTTP 投递失败(预期，因为 user-server 未运行): %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
 	return fmt.Sprintf("HTTP %d, body=%s", resp.StatusCode, string(respBody))
 }

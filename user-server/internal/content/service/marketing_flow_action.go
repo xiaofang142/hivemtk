@@ -593,7 +593,7 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 	if err != nil {
 		return nil, fmt.Errorf("发送 Webhook 请求失败：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

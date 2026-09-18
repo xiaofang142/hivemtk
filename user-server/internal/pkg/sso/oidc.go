@@ -162,7 +162,7 @@ func (p *OIDCProvider) refreshDiscovery(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("sso: discovery request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("sso: discovery returned status %d", resp.StatusCode)
 	}
@@ -220,7 +220,7 @@ func (p *OIDCProvider) refreshJWKS(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("sso: jwks request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("sso: jwks returned status %d", resp.StatusCode)
 	}
@@ -397,7 +397,7 @@ func (p *OIDCProvider) exchangeCode(ctx context.Context, code, verifier string) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))

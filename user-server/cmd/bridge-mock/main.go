@@ -141,7 +141,7 @@ func main() {
 	aiDelay := defaultAIDelayMs * time.Millisecond
 	if v := os.Getenv("MOCK_AI_DELAY_MS"); v != "" {
 		var d int
-		fmt.Sscanf(v, "%d", &d)
+		_, _ = fmt.Sscanf(v, "%d", &d)
 		if d > 0 {
 			aiDelay = time.Duration(d) * time.Millisecond
 		}

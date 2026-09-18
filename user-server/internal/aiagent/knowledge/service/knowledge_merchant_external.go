@@ -251,7 +251,7 @@ func (s *KnowledgeMerchantService) fetchFeishu(ctx context.Context, docID string
 	if err != nil {
 		return nil, fmt.Errorf("飞书 token 请求失败: %w", err)
 	}
-	defer tokenResp.Body.Close()
+	defer func() { _ = tokenResp.Body.Close() }()
 	var tokenBody struct {
 		Code              int    `json:"code"`
 		Msg               string `json:"msg"`
@@ -275,7 +275,7 @@ func (s *KnowledgeMerchantService) fetchFeishu(ctx context.Context, docID string
 	if err != nil {
 		return nil, fmt.Errorf("飞书文档请求失败: %w", err)
 	}
-	defer docResp.Body.Close()
+	defer func() { _ = docResp.Body.Close() }()
 	if docResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(docResp.Body)
 		return nil, fmt.Errorf("飞书文档拉取失败: status=%d body=%s", docResp.StatusCode, string(body))
@@ -339,7 +339,7 @@ func (s *KnowledgeMerchantService) fetchNotionBlocksRecursive(ctx context.Contex
 	if err != nil {
 		return nil, fmt.Errorf("notion 拉取失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("notion 拉取失败: status=%d body=%s", resp.StatusCode, string(body))

@@ -385,7 +385,7 @@ func (s *PlatformService) publishGitHub(
 			logger.Errorf("查询 GitHub 文件元数据失败 path=%s（按新文件继续发布）: %v", path, err)
 		} else {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				var meta struct {
 					SHA string `json:"sha"`
@@ -416,7 +416,7 @@ func (s *PlatformService) publishGitHub(
 		s.saveFailedRecord(article.ID, req.Platform, err.Error())
 		return nil, fmt.Errorf("GitHub 请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		msg := strings.TrimSpace(string(respBody))

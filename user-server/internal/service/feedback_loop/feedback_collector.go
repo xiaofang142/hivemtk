@@ -270,7 +270,7 @@ func toFloat64(v any) (float64, bool) {
 func (c *FeedbackCollector) genEventID(req *dto.CollectRequest) string {
 	now := time.Now().UnixNano()
 	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%s|%d|", req.SessionID, req.SignalKey, req.CustomerMsg, now)
+	_, _ = fmt.Fprintf(h, "%s|%s|%s|%d|", req.SessionID, req.SignalKey, req.CustomerMsg, now)
 	nonce := make([]byte, 8)
 	if _, err := rand.Read(nonce); err != nil {
 		for i := 0; i < 8; i++ {

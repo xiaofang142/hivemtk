@@ -85,7 +85,7 @@ func (ctrl *KnowledgeMerchantController) BatchUpload(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "文件错误: "+err.Error())
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	req := &service.BatchImportRequest{
 		ProductID: productID,
 		Operator:  c.PostForm("operator"),

@@ -113,7 +113,7 @@ func (s *KnowledgeMerchantService) parseBatchFile(ctx context.Context, file mult
 	if file == nil {
 		return nil, errors.New("文件不能为空")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("读取文件失败: %w", err)

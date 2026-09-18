@@ -402,7 +402,7 @@ func (s *RuleEngineService) executeRule(ctx context.Context, rule *model.Automat
 			}
 		case RuleActSetPriority:
 			lvl := 0
-			fmt.Sscanf(a.Value, "%d", &lvl)
+			_, _ = fmt.Sscanf(a.Value, "%d", &lvl)
 			err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "priority", lvl)
 		case RuleActAssign:
 			err = s.repo.UpdateSessionFieldsBySessionID(ctx, sessionID, "agent_id", a.Value)

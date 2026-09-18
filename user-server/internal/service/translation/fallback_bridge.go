@@ -164,7 +164,7 @@ func (t *DeepLTranslator) Translate(ctx context.Context, text, fromLang, toLang 
 	if err != nil {
 		return "", fmt.Errorf("deepl: http request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

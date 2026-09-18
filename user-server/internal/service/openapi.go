@@ -169,7 +169,7 @@ func (s *OpenAPIService) SyncSource(ctx context.Context, productID string, sourc
 		s.recordSyncError(ctx, src, fmt.Sprintf("请求失败: %v", err), result, start)
 		return result, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -261,7 +261,7 @@ func (s *OpenAPIService) TestConnection(ctx context.Context, src *model.Knowledg
 			"latency_ms": time.Since(start).Milliseconds(),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	return map[string]any{

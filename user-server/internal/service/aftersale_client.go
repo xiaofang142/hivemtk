@@ -69,7 +69,7 @@ func (c *HTTPAfterSaleClient) Create(ctx context.Context, req *portcontract.Afte
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("aftersale api status %d", resp.StatusCode)
 	}

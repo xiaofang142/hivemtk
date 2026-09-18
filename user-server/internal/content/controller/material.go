@@ -134,7 +134,7 @@ func (c *MaterialController) UploadMaterial(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请上传文件")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if header.Size > 10*1024*1024 {
 		response.Error(ctx, http.StatusBadRequest, "文件大小不能超过10MB")

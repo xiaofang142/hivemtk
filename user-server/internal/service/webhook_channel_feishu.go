@@ -267,7 +267,7 @@ func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID,
 			logger.Ctx(gctx).Warn().Err(derr).Str("file_key", fileKey).Msg("[Feishu] 媒体下载失败（占位符保留）")
 			return
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
 		if rerr != nil {
 			logger.Ctx(gctx).Warn().Err(rerr).Str("file_key", fileKey).Msg("[Feishu] 媒体读取失败")

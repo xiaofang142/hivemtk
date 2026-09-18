@@ -58,7 +58,7 @@ func (m *MerchantIDNullableMigration) upPostgres() error {
 	if err != nil {
 		return fmt.Errorf("查询 merchant_id 列失败: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type tableRef struct {
 		Schema string

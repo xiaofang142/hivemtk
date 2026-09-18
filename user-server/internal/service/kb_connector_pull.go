@@ -177,7 +177,7 @@ func (s *KBConnectorService) notionSearch(ctx context.Context, token, query stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out struct {
 		Results []struct {
 			ID         string         `json:"id"`
@@ -225,7 +225,7 @@ func (s *KBConnectorService) notionPageText(ctx context.Context, token, pageID s
 			return "", err
 		}
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			var e struct {
 				Message string `json:"message"`

@@ -36,7 +36,7 @@ func (ctrl *KnowledgeBaseController) ImportKnowledgeBase(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "Failed to get file: "+err.Error())
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	title := c.PostForm("title")
 

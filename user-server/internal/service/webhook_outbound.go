@@ -432,7 +432,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			logger.Ctx(ctx).Error().Err(err).Str("channel", "dingtalk").Msg("dingtalk reply send failed")
 			return
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		respBody, _ := io.ReadAll(resp.Body)
 		var dtResult struct {
 			Errcode int    `json:"errcode"`

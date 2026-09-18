@@ -117,9 +117,9 @@ func main() {
 
 	cache.InitGlobalCache(redisClient)
 	if redisClient != nil {
-		defer redisClient.Close()
+		defer func() { _ = redisClient.Close() }()
 	}
-	defer cache.CloseGlobalCache(context.Background())
+	defer func() { _ = cache.CloseGlobalCache(context.Background()) }()
 
 	db.InitDB()
 	db.AutoMigrate()

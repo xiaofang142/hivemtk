@@ -79,8 +79,10 @@ func (c *TypingPredictController) SSEStream(ctx *gin.Context) {
 		return
 	}
 
-	fmt.Fprintf(ctx.Writer, "event: connected\ndata: {\"session_id\":\"%s\",\"timestamp\":%d}\n\n",
-		sessionID, time.Now().Unix())
+	if _, err := fmt.Fprintf(ctx.Writer, "event: connected\ndata: {\"session_id\":\"%s\",\"timestamp\":%d}\n\n",
+		sessionID, time.Now().Unix()); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	ticker := time.NewTicker(30 * time.Second)
@@ -96,7 +98,9 @@ func (c *TypingPredictController) SSEStream(ctx *gin.Context) {
 				"type":      "ping",
 				"timestamp": time.Now().Unix(),
 			})
-			fmt.Fprintf(ctx.Writer, "event: ping\ndata: %s\n\n", string(ping))
+			if _, err := fmt.Fprintf(ctx.Writer, "event: ping\ndata: %s\n\n", string(ping)); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

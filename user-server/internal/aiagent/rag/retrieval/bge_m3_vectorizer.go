@@ -254,7 +254,7 @@ func (v *BGEM3Vectorizer) callAPI(ctx context.Context, texts []string) ([][]floa
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

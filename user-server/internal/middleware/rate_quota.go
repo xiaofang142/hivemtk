@@ -98,7 +98,7 @@ func GetQuotaSnapshots() []quotaUsageSnapshot {
 			val, err := c.Get(context.Background(), key)
 			if err == nil && val != "" {
 				var used int64
-				fmt.Sscanf(val, "%d", &used)
+				_, _ = fmt.Sscanf(val, "%d", &used)
 				snap.Used = used
 			}
 
@@ -106,7 +106,7 @@ func GetQuotaSnapshots() []quotaUsageSnapshot {
 			tv, err := c.Get(context.Background(), triggeredKey)
 			if err == nil && tv != "" {
 				var triggered int64
-				fmt.Sscanf(tv, "%d", &triggered)
+				_, _ = fmt.Sscanf(tv, "%d", &triggered)
 				snap.Triggered = triggered
 			}
 		} else if globalRateLimiter != nil {
