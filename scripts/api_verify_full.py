@@ -243,7 +243,13 @@ def run_chain(keep=False):
     section("Step5 AI 链路: 轮询等待 AI 回复落 outbox (最多90s)")
     ai_handled = ing.get("ai_handled")
     print(f"【预期】ingest 返回 ai_handled={ai_handled}; 等待 outbound 回复落库...")
+    # 23:00-07:00 免打扰时段（webhook_outbound.go:192 isAIReplyQuietHours）按设计不把 AI
+    # 回复写进 message_hub，而是入 reach_delayed_outbound 等次日到期。此处在轮询里同时探测
+    # 延迟队列，命中则把 send_at 提前到期，交给服务自身的 30s ticker 走**真实**重放路径，
+    # 使 S5.2~S7 在任意时刻都执行同一条落库断言（不跳过、不放宽、不 mock）。
+    print("【预期】免打扰时段(23-07)命中时：回复先入 reach_delayed_outbound，再到期重放入 message_hub")
     reply = None
+    deferred = None
     deadline = time.time() + 90
     while time.time() < deadline:
         rows = qall(
@@ -252,9 +258,25 @@ def run_chain(keep=False):
         if rows:
             reply = rows[0]
             break
+        if deferred is None:
+            d = q1("SELECT id, send_at FROM reach_delayed_outbound "
+                   "WHERE platform=%s AND account_id=%s AND conversation_id=%s AND status='pending' "
+                   "ORDER BY id DESC LIMIT 1", (channel, account_id, conversation_id))
+            if d:
+                deferred = d
+                qexec("UPDATE reach_delayed_outbound SET send_at = now() - interval '1 second', "
+                      "updated_at = now() WHERE id=%s AND status='pending'", (d["id"],))
+                print(f"【分支】命中免打扰：回复已入延迟队列 id={d['id']} 原 send_at={d['send_at']}，"
+                      "已提前到期，等待服务重放")
         time.sleep(3)
-    check("S5.1 AI回复产生(outbound落库)", reply is not None,
-          "90s内未产生回复" if reply is None else f"msg_id={reply['msg_id']} content={reply['content'][:60]!r}")
+    if reply is None:
+        s51_detail = ("90s内未产生回复"
+                      + (f"（已入延迟队列 id={deferred['id']}，但到期重放未落 message_hub → 重放消费者缺陷）"
+                         if deferred else "（且未进延迟队列 → AI 链路真断）"))
+    else:
+        s51_detail = (f"msg_id={reply['msg_id']} content={reply['content'][:60]!r}"
+                      + ("[经延迟队列重放]" if deferred else "[直发]"))
+    check("S5.1 AI回复产生(outbound落库)", reply is not None, s51_detail)
     if reply:
         check("S5.2 is_ai_reply标记", reply["is_ai_reply"] is True, f"got={reply['is_ai_reply']}")
         check("S5.3 回复内容非空且非模板垃圾", len(reply["content"] or "") >= 2 and "抱歉" not in (reply["content"] or "")[:6],
@@ -323,6 +345,8 @@ def run_chain(keep=False):
     section("Step10 清理测试数据")
     if not keep:
         qexec("DELETE FROM message_hub WHERE account_id=%s", (account_id,))
+        # 免打扰延迟队列也须清：否则残留 pending 行会在次日 07:00 重放出无人认领的回复
+        qexec("DELETE FROM reach_delayed_outbound WHERE account_id=%s", (account_id,))
         qexec("DELETE FROM customer_sessions WHERE session_id=%s", (f"sess_{channel}_{account_id}_{sender_id}",))
         if cust:
             qexec("DELETE FROM customers WHERE id=%s", (cust["id"],))
