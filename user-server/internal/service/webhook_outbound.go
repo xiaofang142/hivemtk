@@ -115,6 +115,11 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 var delayedDispatchStop chan struct{}
 
 func (s *WebhookService) startDelayedOutboundDispatch() {
+	// 先把库里已到期的回复立刻投一轮，再挂 ticker。否则服务重启后到期项要等到
+	// "下一次有人入队"才被顺带启动的消费者取走（T-P0-07）。抢占式 pending→sending
+	// 保证这一轮与 ticker、与其他实例之间不会重复投递。
+	s.dispatchDueDelayedOutbound(context.Background())
+
 	dispatchOnce.Do(func() {
 		delayedDispatchStop = make(chan struct{})
 
