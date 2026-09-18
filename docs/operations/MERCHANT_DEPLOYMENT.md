@@ -271,6 +271,22 @@ grep PLATFORM_API_URL .env
 curl -s $PLATFORM_API_URL/health
 ```
 
+### 9.4 学习洞察 / 行业相关功能「静默无输出」
+
+`Industry`（行业）**不是环境变量**，而是随请求 / 商户记录传入的业务字段
+（`trace_learning`、SalesEngine 等以它作分桶键）。当调用方传入的 `industry` 为空时：
+
+- **写入侧**（`insights.go` `ExtractErrorPattern` 落库）：空 `industry` 归一为 `"general"` 桶，
+  洞察仍会保存；
+- **读取侧**（`TopInsights` 供 SalesEngine 组 prompt 注入）：`if industry == "" { return nil }`
+  —— **直接返回空**，不查询任何桶。
+
+后果：未设置行业的商户，其洞察写进 `"general"` 桶，但注入侧读 `""` 桶 → 永远拿不到，
+表现为「经验沉淀功能静默关闭」。
+
+**启用方式**：为商户 / 请求显式配置非空 `industry`（如 `retail`、`finance`）。
+这不是缺陷，是「按行业分桶」的设计约束；跨行业共享洞察需调用方显式传 `"general"`。
+
 ---
 
 ## 十、迁移到生产
