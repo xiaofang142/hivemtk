@@ -382,7 +382,10 @@ echo "[9/10] 上下文透传检查(抽查)..."
 CTX_VIOLATIONS=0
 # Repository 方法必须第一个参数是 ctx context.Context
 # 例外：纯内存访问器（Available/IsNil/GetDB/SetDB）不涉及 DB 操作，无需 ctx
-for f in $(find "$TARGET/internal/repository" -name "*.go" 2>/dev/null); do
+# 例外：_test.go 不参与本检查 —— 测试替身（如 fakeGin.Get）实现的是被测代码注入的
+#       第三方接口，不是 Repository 方法；把它算进来会产生"必须给 fake 加 ctx"的
+#       荒谬要求。真实 Repository 方法一律在非测试文件中，覆盖面不因此缩小。
+for f in $(find "$TARGET/internal/repository" -name "*.go" ! -name '*_test.go' 2>/dev/null); do
   # 提取所有导出的方法签名,检查是否含 ctx
   while IFS= read -r line; do
     # 排除注释和包声明
