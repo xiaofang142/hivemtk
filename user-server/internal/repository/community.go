@@ -9,6 +9,7 @@ import (
 	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
+	"hivemtk-user/internal/pkg/timeutil"
 )
 
 type CommunityRepository interface {
@@ -250,7 +251,7 @@ func (r *communityRepository) GetStatistics(ctx context.Context) (*map[string]an
 		return nil, err
 	}
 
-	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayStart := timeutil.StartOfDay(time.Now())
 	var newMembersToday int64
 	if err := r.db.WithContext(ctx).Model(&model.CommunityMember{}).
 		Where("join_date >= ?", todayStart).

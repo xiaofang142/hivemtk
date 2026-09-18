@@ -10,6 +10,7 @@
     "i18n:check": "node scripts/i18n-extract.cjs",
     "i18n:report": "node scripts/i18n-extract.cjs --json i18n-report.json",
     "i18n:coverage": "node scripts/check-i18n-coverage.cjs",
+    "assets:check": "node scripts/check-pwa-assets.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

@@ -328,9 +328,13 @@ fmt:
 	cd user-server && gofmt -w $$(gofmt -l . | grep -v '^vendor/')
 
 # 格式门禁：gofmt -l 非空即失败，与 CI 同口径。
-# 为什么必须独立于 golangci-lint：user-server/.golangci.yml 只启用 govet+depguard，
-# 且 run.tests=false —— gofmt 未被覆盖，测试文件更是完全不被 lint。
+# 为什么必须独立于 golangci-lint：user-server/.golangci.yml 的 run.tests=false，
+# 其 formatters.gofmt 只覆盖**生产代码**，测试文件完全不被 lint。
 # 历史上因此积累 34 个未格式化文件（见 TASKS_AUDIT_2026-09-16.md · FMT-01）。
+#
+# ⚠️ 2026-09-16 更正：gofmt **不能**写进 .golangci.yml 的 linters.enable。
+# v2 报 `gofmt is a formatter` 并拒绝加载整个配置 —— 那会让 govet 与 depguard
+# 一道失效，等于把架构护栏静默关掉（FMT-01 首版正是踩了这个坑，现已修）。
 fmt-check:
 	@cd user-server && out=$$(gofmt -l . | grep -v '^vendor/'); \
 	if [ -n "$$out" ]; then \

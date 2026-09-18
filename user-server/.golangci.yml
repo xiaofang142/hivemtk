@@ -19,12 +19,6 @@ linters:
   enable:
     - govet
     - depguard
-    # 2026-09-16 审计（FMT-01）：补 gofmt 护栏。
-    # 此前只启用 govet+depguard，格式漂移无人可查，累积 34 个未格式化文件
-    # （cmd/seed/*、internal/service/*_loader.go 等）。
-    # 注意：run.tests=false 使本 linter 只覆盖生产代码，
-    # 测试文件的格式由 CI 的 `gofmt -l` 步骤与 `make fmt-check` 兜住。
-    - gofmt
   # TODO(P3-5 护栏常态化)：存量 errcheck/unused 清零后逐步启用
   # - errcheck
   # - ineffassign
@@ -91,6 +85,17 @@ linters:
               desc: "aiagent 不得反向依赖 repository，走端口接口注入"
             - pkg: "hivemtk-user/internal/controller"
               desc: "aiagent 不得反向依赖 controller"
+
+# ⚠️ 2026-09-16 更正（FMT-01 回归修复）：gofmt **不能**写在 linters.enable 里。
+# golangci-lint v2 已把「格式化器」从 linters 拆出，写在这里会直接报
+#   Error: can't load config: gofmt is a formatter
+# 并拒绝加载**整个配置** —— 结果是 govet 与 depguard 一道失效，
+# 五层架构护栏被静默关闭（这正是同日 FMT-01 提交引入的回归，现已修）。
+# 与 CI 里的 `gofmt -l` 步骤互为补充：本段覆盖生产代码（run.tests=false），
+# 测试文件由该步骤与 `make fmt-check` 兜住。
+formatters:
+  enable:
+    - gofmt
 
 issues:
   # 存量代码较多，先不限单 issue 数量上限，保证护栏全量可见
