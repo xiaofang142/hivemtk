@@ -522,6 +522,8 @@ func TestCustomReportController_QueryReportData(t *testing.T) {
 		Name:       "Test Report",
 		DataSource: "sessions",
 		ChartType:  "bar",
+		Dimensions: "[]",
+		Metrics:    "[]",
 		IsPublic:   true,
 	}
 	db.Create(testReport)
