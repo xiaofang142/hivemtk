@@ -249,7 +249,9 @@ func (s *obsConfigService) TestConnection(ctx context.Context, config *dto.ObsCo
 		if err := os.WriteFile(testFile, []byte("test"), 0o644); err != nil {
 			return fmt.Errorf("local 存储目录不可写: %w", err)
 		}
-		os.Remove(testFile)
+		if err := os.Remove(testFile); err != nil {
+			logger.Warnf("[OBS] 清理测试写入文件失败 %s: %v", testFile, err)
+		}
 		logger.Infof("[OBS] Testing connection for local storage: OK (baseDir=%s, writable=true)", baseDir)
 		return nil
 	default:

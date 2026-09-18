@@ -106,7 +106,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 			if s.leadMiningSvc != nil {
 				s.leadMiningSvc.Enqueue(hub)
 			}
-			websocket.BroadcastToAgents(websocket.TypeNewMessage, map[string]any{
+			if err := websocket.BroadcastToAgents(websocket.TypeNewMessage, map[string]any{
 				"msg_id":          hub.MsgID,
 				"platform":        hub.Platform,
 				"conversation_id": hub.ConversationID,
@@ -114,7 +114,9 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 				"sender_name":     hub.SenderName,
 				"content":         hub.Content,
 				"sent_at":         hub.SentAt,
-			})
+			}); err != nil {
+				logger.Warnf("[Ingest] 广播新消息给客服失败 conv=%s: %v", hub.ConversationID, err)
+			}
 
 			if hub.Direction == "inbound" && event.SessionID != "" {
 				if s.feedbackRepo != nil {

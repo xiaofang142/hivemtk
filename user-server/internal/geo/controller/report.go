@@ -157,7 +157,9 @@ func (c *ReportController) RunCrawler(ctx *gin.Context) {
 				fmt.Printf("[GEO Crawler] panic: %v\n", r)
 			}
 		}()
-		service.CrawlerMonitorCronSync()
+		if _, err := service.CrawlerMonitorCronSync(); err != nil {
+			fmt.Printf("[GEO Crawler] 竞品监控同步失败: %v\n", err)
+		}
 	}()
 	response.Success(ctx, map[string]string{"status": "started"}, "爬虫已启动")
 }

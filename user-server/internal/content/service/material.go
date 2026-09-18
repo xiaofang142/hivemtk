@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/dto"
 	usermodel "hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	userrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/storage"
 	"image"
@@ -305,7 +306,9 @@ func (s *materialService) CreateMaterial(req *contentdto.CreateMaterialRequest) 
 	}
 
 	if req.CategoryID != "" {
-		s.categoryRepo.UpdateMaterialCount(req.CategoryID)
+		if err := s.categoryRepo.UpdateMaterialCount(req.CategoryID); err != nil {
+			logger.Warnf("[Material] 更新分类素材数量失败 categoryID=%s: %v", req.CategoryID, err)
+		}
 	}
 
 	return s.convertMaterialToDTO(material), nil
@@ -353,7 +356,9 @@ func (s *materialService) DeleteMaterial(id string) error {
 	}
 
 	if material.CategoryID != "" {
-		s.categoryRepo.UpdateMaterialCount(material.CategoryID)
+		if err := s.categoryRepo.UpdateMaterialCount(material.CategoryID); err != nil {
+			logger.Warnf("[Material] 删除后更新分类素材数量失败 categoryID=%s: %v", material.CategoryID, err)
+		}
 	}
 
 	return nil

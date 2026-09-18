@@ -211,7 +211,7 @@ func ErrorWithLog(c *gin.Context, errorCode utils.ErrorCode, message string, det
 	if len(details) > 0 {
 		detail = details[0]
 	}
-	utils.LogErrorWithRequest(c, utils.NewAppError(utils.ErrorTypeSystem, message, utils.GetHTTPCode(errorCode), detail))
+	_ = utils.LogErrorWithRequest(c, utils.NewAppError(utils.ErrorTypeSystem, message, utils.GetHTTPCode(errorCode), detail))
 
 	Error(c, errorCode, message)
 }

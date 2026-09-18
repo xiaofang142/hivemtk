@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 )
@@ -39,7 +40,9 @@ func (s *AISuggestionService) CreateSuggestion(ctx context.Context, sessionID st
 
 	session, _ := s.sessionRepo.GetBySessionID(ctx, sessionID)
 	if session != nil && session.AgentID > 0 {
-		websocket.NotifyAISuggestion(strconv.FormatUint(uint64(session.AgentID), 10), ais)
+		if err := websocket.NotifyAISuggestion(strconv.FormatUint(uint64(session.AgentID), 10), ais); err != nil {
+			logger.Warnf("[AISuggestion] 推送建议通知失败 agentID=%d: %v", session.AgentID, err)
+		}
 	}
 
 	return ais, nil

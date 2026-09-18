@@ -136,7 +136,7 @@ func (lr *LoadRunner) Run(ctx context.Context, cfg Config) (*Result, error) {
 					mu.Unlock()
 					continue
 				}
-				io.Copy(io.Discard, resp.Body)
+				_, _ = io.Copy(io.Discard, resp.Body)
 				_ = resp.Body.Close()
 
 				mu.Lock()

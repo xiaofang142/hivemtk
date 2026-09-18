@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"os"
 	"strings"
 
@@ -347,7 +348,9 @@ func (s *PromptTemplateService) InitSystemTemplates() error {
 		if existing == nil {
 			templateCopy := template
 			templateCopy.Status = 1
-			s.templateRepo.Create(&templateCopy)
+			if err := s.templateRepo.Create(&templateCopy); err != nil {
+				logger.Warnf("[PromptTemplate] 初始化系统模板失败 type=%s name=%s: %v", template.Type, template.Name, err)
+			}
 		}
 	}
 	return nil

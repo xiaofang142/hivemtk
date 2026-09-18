@@ -17,8 +17,12 @@ func main() {
 	appCfg := config.GetAppConfig()
 	dispatcher := llm.NewDispatcherFromConfig(appCfg)
 	llm.InitGlobalDispatcherWithDB(dispatcher, db.GetDB())
-	llm.GetGlobalDispatcher().LoadProvidersFromDB()
-	llm.GetGlobalDispatcher().LoadRoutesFromDB()
+	if err := llm.GetGlobalDispatcher().LoadProvidersFromDB(); err != nil {
+		fmt.Printf("[eval-trace] WARN: 从数据库加载 provider 失败：%v\n", err)
+	}
+	if err := llm.GetGlobalDispatcher().LoadRoutesFromDB(); err != nil {
+		fmt.Printf("[eval-trace] WARN: 从数据库加载场景路由规则失败：%v\n", err)
+	}
 
 	cfg := trace_learning.DefaultConfig()
 	cfg.Industry = "general"

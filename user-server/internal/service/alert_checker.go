@@ -84,13 +84,17 @@ func (c *AlertChecker) loop() {
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
-	c.checkOnce(context.Background())
+	if _, err := c.checkOnce(context.Background()); err != nil {
+		logger.Warnf("[AlertChecker] 首轮检查失败: %v", err)
+	}
 	for {
 		select {
 		case <-c.stop:
 			return
 		case <-ticker.C:
-			c.checkOnce(context.Background())
+			if _, err := c.checkOnce(context.Background()); err != nil {
+				logger.Warnf("[AlertChecker] 周期检查失败: %v", err)
+			}
 		}
 	}
 }

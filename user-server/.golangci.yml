@@ -31,13 +31,27 @@ linters:
     # ST1020/1021/1022 导出注释规范（116 处）、QF* 快速修建议（tagged switch 等）。
     # 保留 SA*（真实缺陷）、S*（简化）、ST1005（错误串规范）并已全部归零。
     - staticcheck
-  # TODO(P3-5 护栏常态化·剩余)：errcheck 实测**生产面**存量 354 处（2026-09-18，
-  # repo config tests=false 口径；此前注释里的 1713 为 --no-config 含测试全量口径，已更正）。
-  # 依本项目「清零后再启用」既定方法论（unused/ineffassign/staticcheck 皆如此），
-  # errcheck 不做一次性机械 `_ =` 包裹——那会把「确实该处理却被丢弃」的错误
-  # （DB 写、影响后续逻辑的 Unmarshal 等）连同可安全忽略的 Close 一并掩盖，
-  # 属质量倒退而非整改。留待专项：逐处判定「补处理 vs 显式 `_ =` + 注释」后再启用。
-  # - errcheck
+    # 2026-09-18 P3-5 第三阶段：errcheck 生产面存量 354→0，自此钉死为护栏。
+    # 依「清零后再启用」方法论，但**不做机械 `_ =` 包裹**——那会把「确实该处理
+    # 却被丢弃」的错误连同可安全忽略的 Close 一并掩盖，属质量倒退。逐处按下述
+    # R1–R9 判定「补处理（log/propagate）vs 显式 `_ =` + 注释」后归零：
+    #   R1 只读资源 Close（resp.Body / 只读 rows / 只读 rc）→ `_ = X.Close()`
+    #   R2 写入资源 Close（zip/tmp/dst 等落盘文件）→ 检查 err，失败传播；
+    #      本批据此修复 3 处真实隐患（storage/local.go、knowledge_*_import.go
+    #      未校验写盘 Close，磁盘满/flush 失败会被静默吞掉）
+    #   R3 bytes.Buffer / hash / 内部 writer 写入（不会失败）→ `_ = fmt.Fprintf`
+    #      真实 writer（SSE/scrape）失败 → 记日志或停止循环
+    #   R4 repo / 计数 / 状态落库 → logger.Warnf/Errorf；不因此改变控制流，
+    #      除非返回值驱动后续逻辑（则 log + continue）
+    #   R5 解析错误（json.Unmarshal / Sscanf）→ 按契约：值影响行为则传播，
+    #      否则 `_ =` + 注释或降级日志
+    #   R6 registry.Register（重名 panic，否则恒 nil）→ reg 闭包 + logger 兜底
+    #   R7 尽力而为的通知 / 临时文件清理 → logger.Warnf
+    #   R8 cache SetNX/ReleaseLock → 语义判定（内存态权威时显式丢弃）
+    #   R9 http flush / SSE 写 → 传播（停止循环 / return），仅当「客户端已断开」
+    #      确属无能为力时 `_, _ =`
+    # 未配置函数级排除，0 issues 完全靠逐处上下文处理达成。
+    - errcheck
   settings:
     staticcheck:
       checks:

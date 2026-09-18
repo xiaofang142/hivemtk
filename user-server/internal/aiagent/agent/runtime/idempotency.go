@@ -174,5 +174,7 @@ func MarkReplied(eventID string) {
 	guardMu.RLock()
 	b := activeBackend
 	guardMu.RUnlock()
-	b.claim(eventID)
+	// claim 仅用于置位：bool 结果对「标记已回复」无意义；后端实现不会返回非 nil error
+	// （Redis 分支内部已记日志并降级到本地），故显式丢弃。
+	_, _ = b.claim(eventID)
 }

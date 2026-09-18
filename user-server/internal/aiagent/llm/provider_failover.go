@@ -439,7 +439,9 @@ func (f *ProviderFailover) recordRateLimitCooldown(h *ProviderHealth, rle *RateL
 	h.LastError = rle.Error()
 	h.CircuitOpenUntil = time.Now().Add(dur)
 	if cache.GlobalIsRedis() {
-		cache.GetGlobalCache().SetNX(context.Background(), "mtk:circuit:open:"+h.ProviderName, "1", dur)
+		if _, err := cache.GetGlobalCache().SetNX(context.Background(), "mtk:circuit:open:"+h.ProviderName, "1", dur); err != nil {
+			logger.Warnf("[Failover] 写入熔断标记失败 provider=%s: %v", h.ProviderName, err)
+		}
 	}
 }
 
@@ -468,7 +470,9 @@ func (f *ProviderFailover) RecordFailure(providerName string, err error) {
 		dur := time.Duration(cfg.CircuitOpenDuration) * time.Second
 		h.CircuitOpenUntil = time.Now().Add(dur)
 		if cache.GlobalIsRedis() {
-			cache.GetGlobalCache().SetNX(context.Background(), "mtk:circuit:open:"+providerName, "1", dur)
+			if _, err := cache.GetGlobalCache().SetNX(context.Background(), "mtk:circuit:open:"+providerName, "1", dur); err != nil {
+				logger.Warnf("[Failover] 写入熔断标记失败 provider=%s: %v", providerName, err)
+			}
 		}
 	} else {
 		h.Status = ProviderStatusDegraded

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // InMemoryDialogManager 内存对话管理器实现
@@ -288,7 +290,9 @@ func (dm *InMemoryDialogManager) startSessionCleanup() {
 
 	for range ticker.C {
 		ctx := context.Background()
-		dm.CleanupExpiredSessions(ctx)
+		if err := dm.CleanupExpiredSessions(ctx); err != nil {
+			logger.Warnf("[DialogManager] 清理过期会话失败: %v", err)
+		}
 	}
 }
 

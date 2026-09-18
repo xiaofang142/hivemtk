@@ -473,7 +473,9 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 	}
 
 	_ = websocket.SendToVisitor(websocket.TypeAITyping, map[string]any{"typing": true}, session.SessionID)
-	defer websocket.SendToVisitor(websocket.TypeAITyping, map[string]any{"typing": false}, session.SessionID)
+	defer func() {
+		_ = websocket.SendToVisitor(websocket.TypeAITyping, map[string]any{"typing": false}, session.SessionID)
+	}()
 
 	in := &IncomingContext{
 		Platform:   model.PlatformWebEmbed,

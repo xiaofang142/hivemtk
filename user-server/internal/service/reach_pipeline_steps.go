@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 func (s *ReachPipelineService) runStep(ctx context.Context, step string, job *model.ReachJob, rl *RateLimitConfig) StepResult {
@@ -218,9 +219,13 @@ func (s *ReachPipelineService) aggregateReport(ctx context.Context, job *model.R
 	}
 	if s.repo != nil && s.repo.Available() && job.PipelineID > 0 {
 		if success > 0 && failed == 0 {
-			s.repo.IncrementPipelineField(ctx, job.PipelineID, "total_success", 1)
+			if err := s.repo.IncrementPipelineField(ctx, job.PipelineID, "total_success", 1); err != nil {
+				logger.Warnf("[ReachPipeline] 累计成功数失败 pipelineID=%d: %v", job.PipelineID, err)
+			}
 		} else if failed > 0 {
-			s.repo.IncrementPipelineField(ctx, job.PipelineID, "total_failure", 1)
+			if err := s.repo.IncrementPipelineField(ctx, job.PipelineID, "total_failure", 1); err != nil {
+				logger.Warnf("[ReachPipeline] 累计失败数失败 pipelineID=%d: %v", job.PipelineID, err)
+			}
 		}
 	}
 	return report, nil

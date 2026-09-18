@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 )
@@ -39,7 +40,9 @@ func (s *CustomerSessionService) AssignSession(ctx context.Context, req *AssignS
 
 	session, _ := s.sessionRepo.GetByID(ctx, req.SessionID)
 	if session != nil {
-		websocket.NotifyNewSession(strconv.FormatUint(uint64(req.AgentID), 10), session)
+		if err := websocket.NotifyNewSession(strconv.FormatUint(uint64(req.AgentID), 10), session); err != nil {
+			logger.Warnf("[CustomerSession] 通知客服新会话失败 agentID=%d: %v", req.AgentID, err)
+		}
 		_ = websocket.SendToVisitor(websocket.TypeAgentJoined, map[string]any{
 			"session_id": session.SessionID,
 			"handler":    "human",
@@ -91,7 +94,9 @@ func (s *CustomerSessionService) TransferSession(ctx context.Context, sessionID 
 	}
 
 	if session.AgentID > 0 {
-		s.agentRepo.DecrementActiveSessions(ctx, session.AgentID)
+		if err := s.agentRepo.DecrementActiveSessions(ctx, session.AgentID); err != nil {
+			logger.Warnf("[CustomerSession] 转接时回退原客服会话数失败 agentID=%d: %v", session.AgentID, err)
+		}
 	}
 
 	if err := s.sessionRepo.AssignAgent(ctx, sessionID, newAgentID, newAgent.AgentName); err != nil {
@@ -104,7 +109,9 @@ func (s *CustomerSessionService) TransferSession(ctx context.Context, sessionID 
 
 	session, _ = s.sessionRepo.GetByID(ctx, sessionID)
 	if session != nil {
-		websocket.NotifyNewSession(strconv.FormatUint(uint64(newAgentID), 10), session)
+		if err := websocket.NotifyNewSession(strconv.FormatUint(uint64(newAgentID), 10), session); err != nil {
+			logger.Warnf("[CustomerSession] 转接后通知客服失败 agentID=%d: %v", newAgentID, err)
+		}
 		_ = websocket.SendToVisitor(websocket.TypeAgentJoined, map[string]any{
 			"session_id": session.SessionID,
 			"handler":    "human",

@@ -170,7 +170,9 @@ func (m *JobManager) registerLocked(name, spec string) error {
 		delete(m.entryID, name)
 	}
 	id, err := m.sched.AddTask(spec, func() {
-		m.StartJob(name, "cron")
+		if _, err := m.StartJob(name, "cron"); err != nil {
+			logger.Error(err, fmt.Sprintf("[GEO Jobs] 定时触发任务 %s 失败", name))
+		}
 	})
 	if err != nil {
 		return fmt.Errorf("注册任务 %s 失败: %w", name, err)

@@ -101,7 +101,9 @@ func InitCron() {
 	}
 
 	_, err = mgr.AddTask("5 */5 * * * *", mgr.goTask("handoff_chain", func(ctx context.Context) {
-		service.NewHandoffChainService().RunCron(ctx, 200)
+		if _, cerr := service.NewHandoffChainService().RunCron(ctx, 200); cerr != nil {
+			logger.Info(fmt.Sprintf("工单升级链定时任务执行失败 %s", cerr.Error()))
+		}
 	}))
 	if err != nil {
 		logger.Info(fmt.Sprintf("添加工单升级链定时任务失败 %s", err.Error()))

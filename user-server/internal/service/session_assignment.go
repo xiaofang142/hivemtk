@@ -8,6 +8,7 @@ import (
 	rag_core "hivemtk-user/internal/aiagent/rag/core"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 	"strconv"
@@ -312,11 +313,13 @@ func (s *SessionAssignmentService) handleByAI(ctx context.Context, session *mode
 	}
 
 	if session.AgentID > 0 {
-		websocket.NotifySessionUpdate(strconv.FormatUint(uint64(session.AgentID), 10), map[string]any{
+		if err := websocket.NotifySessionUpdate(strconv.FormatUint(uint64(session.AgentID), 10), map[string]any{
 			"session_id": session.SessionID,
 			"status":     model.SessionStatusAIHandling,
 			"ai_replied": true,
-		})
+		}); err != nil {
+			logger.Warnf("[SessionAssignment] 通知客服会话状态更新失败 agentID=%d: %v", session.AgentID, err)
+		}
 	}
 
 	return s.sessionRepo.UpdateStatus(ctx, session.ID, model.SessionStatusWaiting)
@@ -347,13 +350,15 @@ func (s *SessionAssignmentService) autoAssignToAgent(ctx context.Context, sessio
 		return err
 	}
 
-	websocket.NotifyNewSession(strconv.FormatUint(uint64(bestAgent.AgentID), 10), map[string]any{
+	if err := websocket.NotifyNewSession(strconv.FormatUint(uint64(bestAgent.AgentID), 10), map[string]any{
 		"session_id":      session.SessionID,
 		"user_name":       session.UserName,
 		"last_message":    session.LastMessage,
 		"transfer_reason": reason,
 		"priority":        session.Priority,
-	})
+	}); err != nil {
+		logger.Warnf("[SessionAssignment] 自动分配后通知客服失败 agentID=%d: %v", bestAgent.AgentID, err)
+	}
 
 	_ = websocket.SendToVisitor(websocket.TypeAgentJoined, map[string]any{
 		"session_id": session.SessionID,
@@ -397,12 +402,14 @@ func (s *SessionAssignmentService) TransferToHuman(ctx context.Context, sessionI
 		if err := s.agentRepo.IncrementActiveSessions(ctx, agentID); err != nil {
 			return err
 		}
-		websocket.NotifyNewSession(strconv.FormatUint(uint64(agentID), 10), map[string]any{
+		if err := websocket.NotifyNewSession(strconv.FormatUint(uint64(agentID), 10), map[string]any{
 			"session_id":      session.SessionID,
 			"user_name":       session.UserName,
 			"last_message":    session.LastMessage,
 			"transfer_reason": reason,
-		})
+		}); err != nil {
+			logger.Warnf("[SessionAssignment] 转接后通知客服失败 agentID=%d: %v", agentID, err)
+		}
 		_ = websocket.SendToVisitor(websocket.TypeAgentJoined, map[string]any{
 			"session_id": session.SessionID,
 			"handler":    "human",

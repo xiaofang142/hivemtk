@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -154,6 +155,8 @@ func BuildCardTools() []Tool {
 // RegisterCardTools 将会话内卡片工具注册到全局工具注册表
 func RegisterCardTools(registry *ToolRegistry) {
 	for _, tool := range BuildCardTools() {
-		registry.Register(tool)
+		if err := registry.Register(tool); err != nil {
+			log.Printf("[WARN] register card tool %s failed: %v", tool.Name(), err)
+		}
 	}
 }

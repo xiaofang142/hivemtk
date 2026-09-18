@@ -8,6 +8,7 @@ import (
 	opsmodel "hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 var _ = sysmodel.JSONMap{}
@@ -51,7 +52,9 @@ func (s *TemplateMarketService) DownloadTemplate(userID uint, templateID uint) (
 		return nil, err
 	}
 
-	s.templateRepo.IncrementDownload(templateID)
+	if err := s.templateRepo.IncrementDownload(templateID); err != nil {
+		logger.Warnf("[TemplateMarket] 累加下载量失败 templateID=%d: %v", templateID, err)
+	}
 
 	return template, nil
 }

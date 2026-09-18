@@ -446,7 +446,10 @@ func missingTables(db *gorm.DB, models ...any) []string {
 
 func tableNameOf(db *gorm.DB, m any) string {
 	stmt := &gorm.Statement{DB: db, Dest: m}
-	stmt.Parse(m)
+	if err := stmt.Parse(m); err != nil {
+		logger.Warn(fmt.Sprintf("解析模型表名失败 %T: %v", m, err))
+		return ""
+	}
 	return stmt.Table
 }
 

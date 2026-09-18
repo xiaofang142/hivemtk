@@ -617,7 +617,7 @@ func (s *InboxIngressService) withIngestLock(ctx context.Context, conversationID
 			return true, fn()
 		}
 		if ok {
-			defer s.cache.ReleaseLock(ctx, key, token)
+			defer func() { _, _ = s.cache.ReleaseLock(ctx, key, token) }()
 			if ferr := fn(); ferr != nil {
 				return true, ferr
 			}

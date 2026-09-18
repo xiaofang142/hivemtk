@@ -184,7 +184,9 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 				continue
 			}
 			um := s.ToUnifiedMessage(ctx, ChannelWhatsapp, accountID, parsed)
-			s.dispatchToUnified(ctx, um)
+			if err := s.dispatchToUnified(ctx, um); err != nil {
+				logger.Errorf("[ReorderBuffer] flush dispatchToUnified failed account=%s session=%s: %v", accountID, sessionID, err)
+			}
 			if hub != nil && s.shouldTriggerAI(ctx, ChannelWhatsapp, accountID) {
 				s.triggerSalesEngine(ctx, ChannelWhatsapp, accountID, parsed, hub)
 			}
