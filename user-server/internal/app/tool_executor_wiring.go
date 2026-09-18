@@ -73,17 +73,22 @@ var (
 
 // initGlobalToolRouter 初始化全局 ToolRouter
 //
-// 调用方：router.Setup() 中，在 initGlobalToolExecutor + registerAllAgentTools 之后调用
+// 调用方：router.Setup() 中，在 InitGlobalToolExecutor + RegisterAllAgentTools 之后调用
 //
 // 装配内容：
 //   - 复用全局 ToolExecutor（不重复创建）
-//   - 复用全局 RateLimiter（与 Executor 同一个 TokenBucket 实例）
+//   - RateLimiter：**独立实例**，不与 Executor 的那个共享。两者是串联的两道独立准入：
+//     Executor 装饰器键 = CallerID:toolName（按调用方配额），
+//     ToolRouter 键 = toolName:AgentID（按智能体配额，见 defaultKeyBuilder）。
+//     串联不叠加吞吐（整体上限取两道中的较小者），但各自独立计量；
+//     若共享同一实例，在 CallerID 与 AgentID 同时为空的退化场景下
+//     两道会退化成同一个 bare toolName 桶而互相争用配额。
 //   - 配置：FailThreshold=5 / CooldownDuration=30s / DefaultToolCost=0.001
 func InitGlobalToolRouter() {
 	globalToolRouterOnce.Do(func() {
 		exec := tooluse.GetGlobalExecutor()
 		if exec == nil {
-			logger.Warn("[agent] ⚠️ ToolRouter 跳过初始化：全局 ToolExecutor 未就绪（请检查 initGlobalToolExecutor 调用顺序）")
+			logger.Warn("[agent] ⚠️ ToolRouter 跳过初始化：全局 ToolExecutor 未就绪（请检查 InitGlobalToolExecutor 调用顺序）")
 			return
 		}
 		globalToolRouter = tooluse.NewToolRouter(
@@ -117,7 +122,9 @@ func SetGlobalToolRouterForTest(r *tooluse.ToolRouter) { globalToolRouter = r }
 // 支持第三方包通过 tooluse.RegisterToolProvider 自注册扩展。
 //
 // 注册顺序：reach → pm → customer → knowledge → business → 第三方
-// 内置总计：20 + 3 + 8 + 4 + 5 = 40 个工具
+//
+// 工具数量不在注释里写死（历史上曾记为 40，实际已增至 42 而无人更正）。
+// 需要准确数字时用 `tooluse.GetGlobalRegistry().List()` 在运行时取。
 func RegisterAllAgentTools(gormDB *gorm.DB) {
 	registerAllAgentToolsViaProviders(gormDB)
 }
