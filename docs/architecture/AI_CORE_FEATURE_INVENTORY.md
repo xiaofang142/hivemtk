@@ -58,6 +58,7 @@
 - **文件**：`internal/aiagent/agent/runtime/inference_cycle.go` 等 5 stage
 - 感知→对齐打分→危机门禁→任务规划→复核；单阶段超时2s、总超时8s；EarlyReturn 危机转人工、FAQ SkipLLM
 - 危机关键词：高危23（退款/骗子/315/lawsuit…）直接人工；中危14；低危9；愤怒≥0.7 或共情≤2 升级中危
+- **阶段边界断点续跑**（T-P1-01，2026-09-19 接线）：每阶段成功后 upsert `agent_checkpoints(thread_id,stage,state)`，`thread_id` 按载荷内容寻址；中断后重试只跑剩余阶段、已完成阶段的产出由快照回填。开关 `FF_LTC_CHECKPOINT` **默认关闭**，关时执行序列与接线前逐语句一致。游标按阶段序号取最远行（不按 `updated_at`，见 `service.LatestByStageOrder`）；快照带 `done` 标与版本+载荷指纹，二者任一不符即退化为整体重跑。适配器 `internal/app/agent_checkpoint_wiring.go`，装配点 `cmd/api/main.go`（须早于 `router.Setup`）
 
 ## F3 工具集 + 护栏
 
@@ -185,6 +186,10 @@ ChrF 字符 n-gram + LLM Judge 主观评审；EvaluateBatch/EvaluateSingle
 ---
 
 ## 已知短板汇总
+
+> 口径提示：下表是 2026-08-25 源码精读快照。"已实现未接线"类条目（G1 等）的**当前接线状态以
+> `scripts/check-unwired-assets.sh` 实跑输出为准**（退出码 0=与登记一致 / 1=状态已变，须回灌本表 / 2=登记符号已消失）；
+> 该脚本每接完一条就把对应行的 `expect` 改为 `wired`，此后它反过来盯"已接线的别偷偷退化"。
 
 | # | 位置 | 问题 |
 |---|---|---|
