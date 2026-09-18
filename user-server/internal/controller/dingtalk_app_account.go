@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -92,7 +91,7 @@ func toDingTalkAppVO(a *model.DingTalkAppAccount) *dingTalkAppAccountVO {
 
 // List 列出所有钉钉应用账号
 func (ctrl *DingTalkAppAccountController) List(c *gin.Context) {
-	accs, err := ctrl.svc.ListAccounts(context.Background())
+	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(c, err, "查询失败", err.Error())
 		return
@@ -111,7 +110,7 @@ func (ctrl *DingTalkAppAccountController) Get(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -144,7 +143,7 @@ func (ctrl *DingTalkAppAccountController) Create(c *gin.Context) {
 	if acc.Status == 0 {
 		acc.Status = 1
 	}
-	if err := ctrl.svc.CreateAccount(context.Background(), acc); err != nil {
+	if err := ctrl.svc.CreateAccount(c.Request.Context(), acc); err != nil {
 		response.ErrorFromDB(c, err, "创建失败", err.Error())
 		return
 	}
@@ -163,7 +162,7 @@ func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -190,7 +189,7 @@ func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 	if req.Status != 0 {
 		acc.Status = req.Status
 	}
-	if err := ctrl.svc.UpdateAccount(context.Background(), acc); err != nil {
+	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
 		response.ErrorFromDB(c, err, "更新失败", err.Error())
 		return
 	}
@@ -204,7 +203,7 @@ func (ctrl *DingTalkAppAccountController) Delete(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -212,7 +211,7 @@ func (ctrl *DingTalkAppAccountController) Delete(c *gin.Context) {
 	if !guardChannelAccountOwnership(c, acc.UserID) {
 		return
 	}
-	if err := ctrl.svc.DeleteAccount(context.Background(), uint(id)); err != nil {
+	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
 		response.ErrorFromDB(c, err, "删除失败", err.Error())
 		return
 	}
@@ -226,7 +225,7 @@ func (ctrl *DingTalkAppAccountController) Test(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return

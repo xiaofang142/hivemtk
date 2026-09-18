@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -45,7 +44,7 @@ func (c *ShortLinkStatsController) GetStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := c.shortLinkService.GetStats(context.Background(), &req)
+	stats, err := c.shortLinkService.GetStats(ctx.Request.Context(), &req)
 	if HandleDBError(ctx, err, "获取短链统计") {
 		return
 	}
@@ -62,7 +61,7 @@ func (c *ShortLinkStatsController) GetAllStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := c.shortLinkService.GetAllStats(context.Background(), &req)
+	stats, err := c.shortLinkService.GetAllStats(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -88,7 +87,7 @@ func (c *ShortLinkStatsController) ShareShortLink(ctx *gin.Context) {
 	}
 	req.ID = uint(id)
 
-	share, err := c.shortLinkService.ShareShortLink(context.Background(), &req)
+	share, err := c.shortLinkService.ShareShortLink(ctx.Request.Context(), &req)
 	if HandleServiceError(ctx, err) {
 		return
 	}

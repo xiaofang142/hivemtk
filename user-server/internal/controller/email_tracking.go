@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -107,7 +106,7 @@ func (c *EmailTrackingController) GetJobMetrics(ctx *gin.Context) {
 		return
 	}
 
-	metric, err := c.svc.GetJobMetrics(context.Background(), jobID)
+	metric, err := c.svc.GetJobMetrics(ctx.Request.Context(), jobID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取指标失败："+err.Error())
 		return
@@ -127,7 +126,7 @@ func (c *EmailTrackingController) ListJobEvents(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 
-	events, total, err := c.svc.ListJobEvents(context.Background(), jobID, page, limit)
+	events, total, err := c.svc.ListJobEvents(ctx.Request.Context(), jobID, page, limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询事件失败："+err.Error())
 		return
@@ -163,7 +162,7 @@ func (c *EmailTrackingController) GetRangeMetrics(ctx *gin.Context) {
 		return
 	}
 
-	metric, err := c.svc.GetEmailMetrics(context.Background(), start, end)
+	metric, err := c.svc.GetEmailMetrics(ctx.Request.Context(), start, end)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "聚合指标失败："+err.Error())
 		return

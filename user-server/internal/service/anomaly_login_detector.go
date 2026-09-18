@@ -192,7 +192,7 @@ func (d *AnomalyLoginDetector) writeInboxNotification(ctx context.Context, lctx 
 		Content: result.AlertDescription,
 	}
 	riskRepo := repository.NewLoginRiskRepository()
-	return riskRepo.CreateNotification(context.Background(), notif)
+	return riskRepo.CreateNotification(ctx, notif)
 }
 
 func (d *AnomalyLoginDetector) sendEmailAlert(ctx context.Context, lctx *LoginRiskContext, result *LoginRiskResult) error {
@@ -216,7 +216,7 @@ func (d *AnomalyLoginDetector) sendEmailAlert(ctx context.Context, lctx *LoginRi
 		Content: body,
 		Status:  0,
 	}
-	return emailRepo.Create(context.Background(), email)
+	return emailRepo.Create(ctx, email)
 }
 
 // ListAlerts 列出告警（供 controller 复用，复用 LoginRiskService 已存在的方法）

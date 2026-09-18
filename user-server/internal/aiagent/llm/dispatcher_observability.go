@@ -279,7 +279,7 @@ func LogRoutingDecision(ctx context.Context, entry *LogEntry) {
 		"glossary_version":  entry.GlossaryVersion,
 		"cache_hit":         entry.CacheHit,
 	}
-	if err := d.WithContext(context.Background()).Table("llm_routing_logs").Create(row).Error; err != nil {
+	if err := d.WithContext(ctx).Table("llm_routing_logs").Create(row).Error; err != nil {
 		logger.Warnf("[LLM] LogRoutingDecision write failed: %v (entry=%+v)", err, entry)
 	}
 	updateMissingCounter(entry)

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -39,7 +38,7 @@ func (c *WeComController) CreateAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.CreateAccount(context.Background(), &req)
+	account, err := c.wecomService.CreateAccount(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -51,7 +50,7 @@ func (c *WeComController) CreateAccount(ctx *gin.Context) {
 // GetAccountList 获取企业微信账号列表
 func (c *WeComController) GetAccountList(ctx *gin.Context) {
 
-	accounts, err := c.wecomService.GetAccountList(context.Background())
+	accounts, err := c.wecomService.GetAccountList(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -70,7 +69,7 @@ func (c *WeComController) GetAccountByID(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -95,7 +94,7 @@ func (c *WeComController) UpdateAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.UpdateAccount(context.Background(), uint(id), &req)
+	account, err := c.wecomService.UpdateAccount(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -114,7 +113,7 @@ func (c *WeComController) DeleteAccount(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.wecomService.DeleteAccount(context.Background(), uint(id)); err != nil {
+	if err := c.wecomService.DeleteAccount(ctx.Request.Context(), uint(id)); err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
@@ -136,13 +135,13 @@ func (c *WeComController) SyncCustomers(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
 	}
 
-	count, err := c.wecomService.SyncCustomers(context.Background(), account)
+	count, err := c.wecomService.SyncCustomers(ctx.Request.Context(), account)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -160,7 +159,7 @@ func (c *WeComController) GetCustomerList(ctx *gin.Context) {
 		return
 	}
 
-	customers, total, err := c.wecomService.GetCustomerList(context.Background(), page, pageSize)
+	customers, total, err := c.wecomService.GetCustomerList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -184,13 +183,13 @@ func (c *WeComController) SyncGroups(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
 	}
 
-	count, err := c.wecomService.SyncGroups(context.Background(), account)
+	count, err := c.wecomService.SyncGroups(ctx.Request.Context(), account)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -208,7 +207,7 @@ func (c *WeComController) GetGroupList(ctx *gin.Context) {
 		return
 	}
 
-	groups, total, err := c.wecomService.GetGroupList(context.Background(), page, pageSize)
+	groups, total, err := c.wecomService.GetGroupList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -232,7 +231,7 @@ func (c *WeComController) SendMessage(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -244,7 +243,7 @@ func (c *WeComController) SendMessage(ctx *gin.Context) {
 		return
 	}
 
-	msgID, err := c.wecomService.SendMessage(context.Background(), account, &req)
+	msgID, err := c.wecomService.SendMessage(ctx.Request.Context(), account, &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -263,7 +262,7 @@ func (c *WeComController) RefreshAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -271,12 +270,12 @@ func (c *WeComController) RefreshAccount(ctx *gin.Context) {
 
 	account.AccessToken = ""
 	account.TokenExpires = time.Time{}
-	if _, err := c.wecomService.GetAccessToken(context.Background(), account); err != nil {
+	if _, err := c.wecomService.GetAccessToken(ctx.Request.Context(), account); err != nil {
 		response.ErrorFromDB(ctx, err, "刷新失败："+err.Error())
 		return
 	}
 
-	account, err = c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err = c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "刷新后回查账号失败："+err.Error())
 		return
@@ -293,7 +292,7 @@ func (c *WeComController) GetMessageList(ctx *gin.Context) {
 		return
 	}
 
-	messages, total, err := c.wecomService.GetMessageList(context.Background(), page, pageSize)
+	messages, total, err := c.wecomService.GetMessageList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -310,7 +309,7 @@ func (c *WeComController) GetMessageList(ctx *gin.Context) {
 // GetTagList 获取企业微信标签列表
 func (c *WeComController) GetTagList(ctx *gin.Context) {
 
-	tags, err := c.wecomService.GetTagList(context.Background())
+	tags, err := c.wecomService.GetTagList(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -329,13 +328,13 @@ func (c *WeComController) SyncTags(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.wecomService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
 	}
 
-	count, err := c.wecomService.SyncTags(context.Background(), account)
+	count, err := c.wecomService.SyncTags(ctx.Request.Context(), account)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

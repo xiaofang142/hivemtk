@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -28,7 +27,7 @@ func (c *EmailSmtpController) CreateEmailSmtp(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.CreateEmailSmtpDTO(context.Background(), req)
+	resp, err := c.svc.CreateEmailSmtpDTO(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -38,7 +37,7 @@ func (c *EmailSmtpController) CreateEmailSmtp(ctx *gin.Context) {
 
 // GetEmailSmtpList 获取SMTP配置列表
 func (c *EmailSmtpController) GetEmailSmtpList(ctx *gin.Context) {
-	resp, err := c.svc.GetEmailSmtpListDTO(context.Background())
+	resp, err := c.svc.GetEmailSmtpListDTO(ctx.Request.Context())
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -54,7 +53,7 @@ func (c *EmailSmtpController) GetEmailSmtp(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.GetEmailSmtpDTO(context.Background(), smtpIDStr)
+	resp, err := c.svc.GetEmailSmtpDTO(ctx.Request.Context(), smtpIDStr)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "SMTP配置不存在")
@@ -74,7 +73,7 @@ func (c *EmailSmtpController) UpdateEmailSmtp(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UpdateEmailSmtpDTO(context.Background(), req); err != nil {
+	if err := c.svc.UpdateEmailSmtpDTO(ctx.Request.Context(), req); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
@@ -89,7 +88,7 @@ func (c *EmailSmtpController) DeleteEmailSmtp(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.DeleteEmailSmtp(context.Background(), req.ID); err != nil {
+	if err := c.svc.DeleteEmailSmtp(ctx.Request.Context(), req.ID); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}

@@ -97,7 +97,7 @@ func (r *FAQRepository) ListCandidates(ctx context.Context, agentID uint, limit 
 // ScoreCandidates 对已加载的 FAQ 候选集做内存打分排序（不触发 DB 查询）。
 // 供 Service 层命中内存缓存后复用候选集、仅按不同 query 重新打分。
 func (r *FAQRepository) ScoreCandidates(ctx context.Context, entries []model.FAQEntry, msg string, topK int) ([]model.FAQEntry, error) {
-	return r.scoreAndRank(context.Background(), entries, msg, topK)
+	return r.scoreAndRank(ctx, entries, msg, topK)
 }
 
 func (r *FAQRepository) listEnabledForAgent(ctx context.Context, agentID uint, limit int) ([]model.FAQEntry, error) {

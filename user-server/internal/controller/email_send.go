@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -36,7 +35,7 @@ func (c *EmailSendController) SendEmail(ctx *gin.Context) {
 		return
 	}
 
-	email, err := c.svc.SendEmail(context.Background(), req)
+	email, err := c.svc.SendEmail(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "发送失败："+err.Error())
 		return

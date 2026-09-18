@@ -80,7 +80,7 @@ func (r *WorkflowNodeExecutorRegistry) Get(ctx context.Context, nodeType string)
 
 // MustGet 获取执行器，未注册时返回 WorkflowNoopExecutor 兜底
 func (r *WorkflowNodeExecutorRegistry) MustGet(ctx context.Context, nodeType string) WorkflowNodeExecutor {
-	e, err := r.Get(context.Background(), nodeType)
+	e, err := r.Get(ctx, nodeType)
 	if err != nil {
 		logger.Warnf("workflow node executor not found, using noop: %s", nodeType)
 		return &WorkflowNoopExecutor{nodeType: nodeType}

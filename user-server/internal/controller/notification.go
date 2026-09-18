@@ -49,7 +49,7 @@ func (ctrl *NotificationController) List(c *gin.Context) {
 	}
 	req.Keyword = c.Query("keyword")
 
-	resp, err := ctrl.svc.List(context.Background(), req)
+	resp, err := ctrl.svc.List(c.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(c, err, "查询失败", err.Error())
 		return
@@ -72,7 +72,7 @@ func (ctrl *NotificationController) MarkRead(c *gin.Context) {
 			uid = u
 		}
 	}
-	if err := ctrl.svc.MarkRead(context.Background(), uid, uint(id)); err != nil {
+	if err := ctrl.svc.MarkRead(c.Request.Context(), uid, uint(id)); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -88,7 +88,7 @@ func (ctrl *NotificationController) MarkAllRead(c *gin.Context) {
 			uid = u
 		}
 	}
-	n, err := ctrl.svc.MarkAllRead(context.Background(), uid)
+	n, err := ctrl.svc.MarkAllRead(c.Request.Context(), uid)
 	if err != nil {
 		response.ErrorFromDB(c, err, "操作失败", err.Error())
 		return
@@ -105,7 +105,7 @@ func (ctrl *NotificationController) UnreadCount(c *gin.Context) {
 			uid = u
 		}
 	}
-	count, err := ctrl.svc.CountUnread(context.Background(), uid)
+	count, err := ctrl.svc.CountUnread(c.Request.Context(), uid)
 	if err != nil {
 		response.ErrorFromDB(c, err, "查询失败", err.Error())
 		return

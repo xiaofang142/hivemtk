@@ -84,22 +84,22 @@ func (s *smsService) unsub() *SmsUnsubscribeService {
 }
 
 func (s *smsService) GetConfig(ctx context.Context) (*dto.SmsConfigResponse, error) {
-	config, err := s.repo.GetConfig(context.Background())
+	config, err := s.repo.GetConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	aliyunConfig, err := s.repo.GetAliyunConfig(context.Background())
+	aliyunConfig, err := s.repo.GetAliyunConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tencentConfig, err := s.repo.GetTencentConfig(context.Background())
+	tencentConfig, err := s.repo.GetTencentConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	huaweiConfig, err := s.repo.GetHuaweiConfig(context.Background())
+	huaweiConfig, err := s.repo.GetHuaweiConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (s *smsService) SaveConfig(ctx context.Context, req *dto.SmsConfigRequest) 
 		DailyLimit:      req.DailyLimit,
 		RetryTimes:      req.RetryTimes,
 	}
-	if err := s.repo.SaveConfig(context.Background(), config); err != nil {
+	if err := s.repo.SaveConfig(ctx, config); err != nil {
 		return err
 	}
 
@@ -145,7 +145,7 @@ func (s *smsService) SaveConfig(ctx context.Context, req *dto.SmsConfigRequest) 
 		AccessKeySecret: req.Aliyun.AccessKeySecret,
 		SignName:        req.Aliyun.SignName,
 	}
-	if err := s.repo.SaveAliyunConfig(context.Background(), aliyunConfig); err != nil {
+	if err := s.repo.SaveAliyunConfig(ctx, aliyunConfig); err != nil {
 		return err
 	}
 
@@ -155,7 +155,7 @@ func (s *smsService) SaveConfig(ctx context.Context, req *dto.SmsConfigRequest) 
 		AppID:     req.Tencent.AppId,
 		SignName:  req.Tencent.SignName,
 	}
-	if err := s.repo.SaveTencentConfig(context.Background(), tencentConfig); err != nil {
+	if err := s.repo.SaveTencentConfig(ctx, tencentConfig); err != nil {
 		return err
 	}
 
@@ -165,25 +165,25 @@ func (s *smsService) SaveConfig(ctx context.Context, req *dto.SmsConfigRequest) 
 		Sender:    req.Huawei.Sender,
 		Signature: req.Huawei.Signature,
 	}
-	return s.repo.SaveHuaweiConfig(context.Background(), huaweiConfig)
+	return s.repo.SaveHuaweiConfig(ctx, huaweiConfig)
 }
 
 func (s *smsService) IsProviderConfigured(ctx context.Context, provider string) (bool, error) {
 	switch provider {
 	case "aliyun":
-		cfg, err := s.repo.GetAliyunConfig(context.Background())
+		cfg, err := s.repo.GetAliyunConfig(ctx)
 		if err != nil {
 			return false, err
 		}
 		return cfg.AccessKeyID != "" && cfg.AccessKeySecret != "", nil
 	case "tencent":
-		cfg, err := s.repo.GetTencentConfig(context.Background())
+		cfg, err := s.repo.GetTencentConfig(ctx)
 		if err != nil {
 			return false, err
 		}
 		return cfg.SecretID != "" && cfg.SecretKey != "", nil
 	case "huawei":
-		cfg, err := s.repo.GetHuaweiConfig(context.Background())
+		cfg, err := s.repo.GetHuaweiConfig(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -194,11 +194,11 @@ func (s *smsService) IsProviderConfigured(ctx context.Context, provider string) 
 }
 
 func (s *smsService) GetSmsList(ctx context.Context, req *dto.SmsListRequest) ([]*model.SmsRecord, int64, error) {
-	return s.repo.GetSmsList(context.Background(), req.Page, req.Limit, req.Phone, req.Status, req.StartDate, req.EndDate)
+	return s.repo.GetSmsList(ctx, req.Page, req.Limit, req.Phone, req.Status, req.StartDate, req.EndDate)
 }
 
 func (s *smsService) GetSmsByID(ctx context.Context, id uint) (*model.SmsRecord, error) {
-	return s.repo.GetSmsByID(context.Background(), id)
+	return s.repo.GetSmsByID(ctx, id)
 }
 
 var smsNightRestrictedFn = isSMSNightRestricted
@@ -226,7 +226,7 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 	if s.unsub().IsUnsubscribed(ctx, req.Phone) {
 		return nil
 	}
-	config, err := s.repo.GetConfig(context.Background())
+	config, err := s.repo.GetConfig(ctx)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 		Status:   "sending",
 	}
 
-	if err := s.repo.CreateSmsRecord(context.Background(), record); err != nil {
+	if err := s.repo.CreateSmsRecord(ctx, record); err != nil {
 		return err
 	}
 
@@ -248,14 +248,14 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 		record.ErrorCode = errCode
 		record.ErrorMsg = errMsg
 		record.SendTime = &time.Time{}
-		_ = s.repo.UpdateSmsRecord(context.Background(), record)
+		_ = s.repo.UpdateSmsRecord(ctx, record)
 		return fmt.Errorf("send sms failed: %w", err)
 	}
 
 	record.SendTime = &sentTime
 	record.Status = "sent"
 
-	return s.repo.UpdateSmsRecord(context.Background(), record)
+	return s.repo.UpdateSmsRecord(ctx, record)
 }
 
 func (s *smsService) dispatchToProvider(ctx context.Context, phone, content, provider string) (time.Time, string, string, error) {
@@ -480,7 +480,7 @@ func (s *smsService) ResendSms(ctx context.Context, id uint) error {
 	if smsNightRestrictedFn(time.Now()) {
 		return errors.New("当前处于夜间禁发时段(22:00-8:00)，短信已拦截")
 	}
-	record, err := s.repo.GetSmsByID(context.Background(), id)
+	record, err := s.repo.GetSmsByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -493,15 +493,15 @@ func (s *smsService) ResendSms(ctx context.Context, id uint) error {
 	record.ErrorCode = ""
 	record.ErrorMsg = ""
 
-	if err := s.repo.UpdateSmsRecord(context.Background(), record); err != nil {
+	if err := s.repo.UpdateSmsRecord(ctx, record); err != nil {
 		return err
 	}
 
-	config, err := s.repo.GetConfig(context.Background())
+	config, err := s.repo.GetConfig(ctx)
 	if err != nil {
 		record.Status = "failed"
 		record.ErrorMsg = "获取短信配置失败: " + err.Error()
-		_ = s.repo.UpdateSmsRecord(context.Background(), record)
+		_ = s.repo.UpdateSmsRecord(ctx, record)
 		return err
 	}
 
@@ -510,22 +510,22 @@ func (s *smsService) ResendSms(ctx context.Context, id uint) error {
 		record.Status = "failed"
 		record.ErrorCode = errCode
 		record.ErrorMsg = errMsg
-		_ = s.repo.UpdateSmsRecord(context.Background(), record)
+		_ = s.repo.UpdateSmsRecord(ctx, record)
 		return fmt.Errorf("resend sms failed: %w", err)
 	}
 
 	record.SendTime = &sentTime
 	record.Status = "sent"
 
-	return s.repo.UpdateSmsRecord(context.Background(), record)
+	return s.repo.UpdateSmsRecord(ctx, record)
 }
 
 func (s *smsService) GetDraftList(ctx context.Context, req *dto.SmsDraftListRequest) ([]*model.SmsDraft, int64, error) {
-	return s.repo.GetDraftList(context.Background(), req.Page, req.Limit, req.Title)
+	return s.repo.GetDraftList(ctx, req.Page, req.Limit, req.Title)
 }
 
 func (s *smsService) GetDraftByID(ctx context.Context, id uint) (*model.SmsDraft, error) {
-	return s.repo.GetDraftByID(context.Background(), id)
+	return s.repo.GetDraftByID(ctx, id)
 }
 
 func (s *smsService) CreateDraft(ctx context.Context, req *dto.SmsDraftCreateRequest) error {
@@ -533,26 +533,26 @@ func (s *smsService) CreateDraft(ctx context.Context, req *dto.SmsDraftCreateReq
 		Title:   req.Title,
 		Content: req.Content,
 	}
-	return s.repo.CreateDraft(context.Background(), draft)
+	return s.repo.CreateDraft(ctx, draft)
 }
 
 func (s *smsService) UpdateDraft(ctx context.Context, id uint, req *dto.SmsDraftUpdateRequest) error {
-	draft, err := s.repo.GetDraftByID(context.Background(), id)
+	draft, err := s.repo.GetDraftByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	draft.Title = req.Title
 	draft.Content = req.Content
-	return s.repo.UpdateDraft(context.Background(), draft)
+	return s.repo.UpdateDraft(ctx, draft)
 }
 
 func (s *smsService) DeleteDraft(ctx context.Context, id uint) error {
-	return s.repo.DeleteDraft(context.Background(), id)
+	return s.repo.DeleteDraft(ctx, id)
 }
 
 func (s *smsService) SendDraft(ctx context.Context, id uint, phone string) error {
-	draft, err := s.repo.GetDraftByID(context.Background(), id)
+	draft, err := s.repo.GetDraftByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -561,15 +561,15 @@ func (s *smsService) SendDraft(ctx context.Context, id uint, phone string) error
 		Phone:   phone,
 		Content: draft.Content,
 	}
-	return s.SendSms(context.Background(), req)
+	return s.SendSms(ctx, req)
 }
 
 func (s *smsService) GetJobList(ctx context.Context, req *dto.SmsJobListRequest) ([]*model.SmsJob, int64, error) {
-	return s.repo.GetJobList(context.Background(), req.Page, req.Limit, req.Status, req.Name)
+	return s.repo.GetJobList(ctx, req.Page, req.Limit, req.Status, req.Name)
 }
 
 func (s *smsService) GetJobByID(ctx context.Context, id uint) (*model.SmsJob, error) {
-	return s.repo.GetJobByID(context.Background(), id)
+	return s.repo.GetJobByID(ctx, id)
 }
 
 func (s *smsService) CreateJob(ctx context.Context, req *dto.SmsJobCreateRequest) error {
@@ -591,7 +591,7 @@ func (s *smsService) CreateJob(ctx context.Context, req *dto.SmsJobCreateRequest
 		}
 	}
 
-	if err := s.repo.CreateJob(context.Background(), job); err != nil {
+	if err := s.repo.CreateJob(ctx, job); err != nil {
 		return err
 	}
 
@@ -606,20 +606,20 @@ func (s *smsService) CreateJob(ctx context.Context, req *dto.SmsJobCreateRequest
 		details = append(details, detail)
 	}
 
-	if err := s.repo.CreateJobDetails(context.Background(), details); err != nil {
+	if err := s.repo.CreateJobDetails(ctx, details); err != nil {
 		return err
 	}
 
 	if req.ScheduleTime == nil || req.ScheduleTime.Before(time.Now()) {
 		job.Status = "running"
-		return s.repo.UpdateJob(context.Background(), job)
+		return s.repo.UpdateJob(ctx, job)
 	}
 
 	return nil
 }
 
 func (s *smsService) PauseJob(ctx context.Context, id uint) error {
-	job, err := s.repo.GetJobByID(context.Background(), id)
+	job, err := s.repo.GetJobByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -629,11 +629,11 @@ func (s *smsService) PauseJob(ctx context.Context, id uint) error {
 	}
 
 	job.Status = "paused"
-	return s.repo.UpdateJob(context.Background(), job)
+	return s.repo.UpdateJob(ctx, job)
 }
 
 func (s *smsService) ResumeJob(ctx context.Context, id uint) error {
-	job, err := s.repo.GetJobByID(context.Background(), id)
+	job, err := s.repo.GetJobByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -643,11 +643,11 @@ func (s *smsService) ResumeJob(ctx context.Context, id uint) error {
 	}
 
 	job.Status = "running"
-	return s.repo.UpdateJob(context.Background(), job)
+	return s.repo.UpdateJob(ctx, job)
 }
 
 func (s *smsService) StopJob(ctx context.Context, id uint) error {
-	job, err := s.repo.GetJobByID(context.Background(), id)
+	job, err := s.repo.GetJobByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -657,11 +657,11 @@ func (s *smsService) StopJob(ctx context.Context, id uint) error {
 	}
 
 	job.Status = "failed"
-	return s.repo.UpdateJob(context.Background(), job)
+	return s.repo.UpdateJob(ctx, job)
 }
 
 func (s *smsService) DeleteJob(ctx context.Context, id uint) error {
-	job, err := s.repo.GetJobByID(context.Background(), id)
+	job, err := s.repo.GetJobByID(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -670,18 +670,18 @@ func (s *smsService) DeleteJob(ctx context.Context, id uint) error {
 		return errors.New("只能删除已完成或失败的任务")
 	}
 
-	if err := s.repo.DeleteJobDetails(context.Background(), id); err != nil {
+	if err := s.repo.DeleteJobDetails(ctx, id); err != nil {
 		return err
 	}
 
-	return s.repo.DeleteJob(context.Background(), id)
+	return s.repo.DeleteJob(ctx, id)
 }
 
 func (s *smsService) GetJobRecords(ctx context.Context, id uint, page, limit int) ([]*model.SmsJobDetail, int64, error) {
-	_, err := s.repo.GetJobByID(context.Background(), id)
+	_, err := s.repo.GetJobByID(ctx, id)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	return s.repo.GetJobDetails(context.Background(), id, page, limit)
+	return s.repo.GetJobDetails(ctx, id, page, limit)
 }

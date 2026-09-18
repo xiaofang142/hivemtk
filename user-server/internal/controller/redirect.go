@@ -70,7 +70,7 @@ func (ctrl *RedirectController) RedirectShortLink(ctx *gin.Context) {
 		return
 	}
 
-	shortLink, err := ctrl.shortLinkService.GetByShortCode(context.Background(), code)
+	shortLink, err := ctrl.shortLinkService.GetByShortCode(ctx.Request.Context(), code)
 	if err != nil {
 		ctx.String(http.StatusNotFound, "短链不存在")
 		return
@@ -85,7 +85,7 @@ func (ctrl *RedirectController) RedirectShortLink(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := ctrl.shortLinkService.AccessShortLink(context.Background(), &dto.AccessShortLinkRequest{
+	if _, err := ctrl.shortLinkService.AccessShortLink(ctx.Request.Context(), &dto.AccessShortLinkRequest{
 		ShortCode: code,
 		UserAgent: ctx.GetHeader("User-Agent"),
 		IP:        ctx.ClientIP(),
@@ -136,7 +136,7 @@ func (ctrl *RedirectController) RedirectShortLink(ctx *gin.Context) {
 }
 
 func (ctrl *RedirectController) recordCardView(platform string, id uint, ctx *gin.Context) {
-	bg := context.Background()
+	bg := ctx.Request.Context()
 	ip := ctx.ClientIP()
 	ua := ctx.GetHeader("User-Agent")
 	ref := ctx.GetHeader("Referer")

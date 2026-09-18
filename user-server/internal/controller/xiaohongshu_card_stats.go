@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -46,7 +45,7 @@ func (c *XiaohongshuCardStatsController) GetCardStats(ctx *gin.Context) {
 		req.GroupBy = "day"
 	}
 
-	stats, err := c.statsService.GetCardStats(context.Background(), req)
+	stats, err := c.statsService.GetCardStats(ctx.Request.Context(), req)
 	if HandleDBError(ctx, err, "获取小红书卡片统计") {
 		return
 	}
@@ -71,7 +70,7 @@ func (c *XiaohongshuCardStatsController) GetOverallStats(ctx *gin.Context) {
 		req.GroupBy = "day"
 	}
 
-	stats, err := c.statsService.GetOverallStats(context.Background(), req)
+	stats, err := c.statsService.GetOverallStats(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取统计数据失败", err.Error())
 		return

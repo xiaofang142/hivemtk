@@ -326,7 +326,7 @@ func (s *BatchOperationService) GenerateJSONL(ctx context.Context, exportType Ex
 			})
 		}
 	case ExportTypeUser:
-		users, _, err := s.userRepo.GetUserList(context.Background(), 1, 10000)
+		users, _, err := s.userRepo.GetUserList(ctx, 1, 10000)
 		if err != nil {
 			return nil, fmt.Errorf("查询用户失败: %w", err)
 		}
@@ -381,7 +381,7 @@ func (s *BatchOperationService) GenerateMarkdown(ctx context.Context, exportType
 		}
 	case ExportTypeUser:
 		headers = []string{"ID", "用户名", "邮箱", "手机号", "真实姓名", "状态", "创建时间"}
-		users, _, err := s.userRepo.GetUserList(context.Background(), 1, 10000)
+		users, _, err := s.userRepo.GetUserList(ctx, 1, 10000)
 		if err != nil {
 			return nil, err
 		}

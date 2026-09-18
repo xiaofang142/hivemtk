@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -34,12 +33,12 @@ func (c *ClueScoreController) ScoreClue(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
-	clue, err := c.svc.LoadClueForScoring(context.Background(), req.ClueID)
+	clue, err := c.svc.LoadClueForScoring(ctx.Request.Context(), req.ClueID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "线索不存在")
 		return
 	}
-	score, err := c.svc.ScoreClue(context.Background(), clue)
+	score, err := c.svc.ScoreClue(ctx.Request.Context(), clue)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "评分失败: "+err.Error())
 		return
@@ -61,7 +60,7 @@ func (c *ClueScoreController) ScoreAll(ctx *gin.Context) {
 	if v := ctx.Query("limit"); v != "" {
 		limit = parsePositiveInt(v, 200, 1000)
 	}
-	count, err := c.svc.ScoreAll(context.Background(), limit)
+	count, err := c.svc.ScoreAll(ctx.Request.Context(), limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "批量评分失败: "+err.Error())
 		return
@@ -77,7 +76,7 @@ func (c *ClueScoreController) ScoreAll(ctx *gin.Context) {
 // @Router /api/clue/score/{clue_id} [get]
 func (c *ClueScoreController) GetByClueID(ctx *gin.Context) {
 	clueID := ctx.Param("clue_id")
-	score, err := c.svc.GetByClueID(context.Background(), clueID)
+	score, err := c.svc.GetByClueID(ctx.Request.Context(), clueID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "未找到评分")
 		return
@@ -97,7 +96,7 @@ func (c *ClueScoreController) ListByGrade(ctx *gin.Context) {
 	grade := ctx.Query("grade")
 	page := parsePositiveInt(ctx.Query("page"), 1, 10000)
 	pageSize := parsePositiveInt(ctx.Query("page_size"), 20, 200)
-	list, total, err := c.svc.ListByGrade(context.Background(), grade, page, pageSize)
+	list, total, err := c.svc.ListByGrade(ctx.Request.Context(), grade, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return
@@ -128,7 +127,7 @@ func (c *ClueScoreController) RecordEngagement(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
-	if err := c.svc.RecordEngagement(context.Background(), req.ClueID, req.EventType, req.Channel, req.Payload); err != nil {
+	if err := c.svc.RecordEngagement(ctx.Request.Context(), req.ClueID, req.EventType, req.Channel, req.Payload); err != nil {
 		response.ErrorFromDB(ctx, err, "记录失败: "+err.Error())
 		return
 	}

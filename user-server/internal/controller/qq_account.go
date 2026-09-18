@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -88,7 +87,7 @@ func toQQAccountVO(acc *model.QQAccount) qqAccountVO {
 
 // List 列表
 func (ctrl *QQAccountController) List(c *gin.Context) {
-	accs, err := ctrl.svc.ListAccounts(context.Background())
+	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(c, err, "获取列表失败", err.Error())
 		return
@@ -107,7 +106,7 @@ func (ctrl *QQAccountController) Get(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -158,7 +157,7 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 		Status:         req.Status,
 		OwnerUserID:    currentStaffUserID(c),
 	}
-	if _, err := ctrl.svc.CreateAccount(context.Background(), acc); err != nil {
+	if _, err := ctrl.svc.CreateAccount(c.Request.Context(), acc); err != nil {
 		response.ErrorFromDB(c, err, "创建失败", err.Error())
 		return
 	}
@@ -167,7 +166,7 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 		if suggested := deriveQQWebhookURL(acc.ID); suggested != "" {
 			if vErr := service.ValidateQQWebhookURL(suggested); vErr == nil && acc.WebhookURL == "" {
 				acc.WebhookURL = suggested
-				_ = ctrl.svc.UpdateAccount(context.Background(), acc)
+				_ = ctrl.svc.UpdateAccount(c.Request.Context(), acc)
 			}
 		}
 	}
@@ -181,7 +180,7 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -211,7 +210,7 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 			now := time.Now()
 			acc.LastErrorAt = &now
 			acc.LastErrorMsg = "webhook URL 校验失败: " + vErr.Error()
-			_ = ctrl.svc.UpdateAccount(context.Background(), acc)
+			_ = ctrl.svc.UpdateAccount(c.Request.Context(), acc)
 			response.Error(c, http.StatusBadRequest, "WebhookURL 格式不合法", vErr.Error())
 			return
 		}
@@ -222,7 +221,7 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 	if req.Status != 0 {
 		acc.Status = req.Status
 	}
-	if err := ctrl.svc.UpdateAccount(context.Background(), acc); err != nil {
+	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
 		response.ErrorFromDB(c, err, "更新失败", err.Error())
 		return
 	}
@@ -236,7 +235,7 @@ func (ctrl *QQAccountController) Delete(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -244,7 +243,7 @@ func (ctrl *QQAccountController) Delete(c *gin.Context) {
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
 		return
 	}
-	if err := ctrl.svc.DeleteAccount(context.Background(), uint(id)); err != nil {
+	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
 		response.ErrorFromDB(c, err, "删除失败", err.Error())
 		return
 	}
@@ -260,7 +259,7 @@ func (ctrl *QQAccountController) TestSend(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -278,7 +277,7 @@ func (ctrl *QQAccountController) TestSend(c *gin.Context) {
 		return
 	}
 	integration := service.NewQQIntegrationService(nil)
-	if err := integration.SendMessage(context.Background(), acc.ID, req.TargetOpenID, "", req.Text); err != nil {
+	if err := integration.SendMessage(c.Request.Context(), acc.ID, req.TargetOpenID, "", req.Text); err != nil {
 		response.ErrorFromDB(c, err, "发送失败（注意：QQ 主动消息需用户允许且受频控，建议在群里 @机器人 后用被动回复）", err.Error())
 		return
 	}
@@ -296,7 +295,7 @@ func (ctrl *QQAccountController) VerifyCallback(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的账号ID", err.Error())
 		return
 	}
-	acc, err := ctrl.svc.GetAccount(context.Background(), uint(id))
+	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
 		return
@@ -304,7 +303,7 @@ func (ctrl *QQAccountController) VerifyCallback(c *gin.Context) {
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
 		return
 	}
-	result, err := ctrl.svc.VerifyCallbackSelfCheck(context.Background(), uint(id))
+	result, err := ctrl.svc.VerifyCallbackSelfCheck(c.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "自检失败", err.Error())
 		return

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"errors"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -42,7 +41,7 @@ func (c *Customer360Controller) GetCustomer360(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -82,7 +81,7 @@ func (c *Customer360Controller) GetCustomerList(ctx *gin.Context) {
 		filters["purchase_power"] = purchasePower
 	}
 
-	result, total, err := c.customer360Service.GetCustomerList(context.Background(), page, pageSize, filters)
+	result, total, err := c.customer360Service.GetCustomerList(ctx.Request.Context(), page, pageSize, filters)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -104,7 +103,7 @@ func (c *Customer360Controller) GetCustomerBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -124,7 +123,7 @@ func (c *Customer360Controller) GetCustomerStats(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -144,7 +143,7 @@ func (c *Customer360Controller) GetCustomerSessions(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -216,7 +215,7 @@ func (c *Customer360Controller) GetCustomerMessages(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -285,7 +284,7 @@ func (c *Customer360Controller) GetCustomer360ByID(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -356,7 +355,7 @@ func (c *Customer360Controller) GetCustomerDetail(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -406,7 +405,7 @@ func (c *Customer360Controller) UpdateCustomer(ctx *gin.Context) {
 		return
 	}
 
-	dto, dtoErr := c.customer360Service.GetCustomer360ByCustomerID(context.Background(), userID)
+	dto, dtoErr := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), userID)
 	if dtoErr != nil {
 		response.Success(ctx, gin.H{
 			"id":          view.ID,
@@ -431,7 +430,7 @@ func (c *Customer360Controller) GetCustomerBehaviors(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(context.Background(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -452,7 +451,7 @@ func (c *Customer360Controller) GetCustomerCommunications(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(context.Background(), customerID)
+	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), customerID)
 	if err != nil {
 		if errors.Is(err, service.ErrCustomerNotFound) {
 			response.Error(ctx, http.StatusNotFound, "客户不存在")

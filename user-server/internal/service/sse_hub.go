@@ -176,7 +176,7 @@ func (h *SSEHub) Unregister(ctx context.Context, clientID string) {
 			delete(h.ipCount, client.ip)
 		}
 	}
-	client.Close(context.Background())
+	client.Close(ctx)
 }
 
 // Publish 向指定 topic 的所有订阅者广播事件
@@ -190,13 +190,13 @@ func (h *SSEHub) Publish(ctx context.Context, event SSEEvent) {
 	h.mu.RLock()
 	clients := make([]*SSEClient, 0, len(h.clients))
 	for _, c := range h.clients {
-		if c.IsSubscribed(context.Background(), event.Topic) {
+		if c.IsSubscribed(ctx, event.Topic) {
 			clients = append(clients, c)
 		}
 	}
 	h.mu.RUnlock()
 	for _, c := range clients {
-		if !c.Send(context.Background(), event) {
+		if !c.Send(ctx, event) {
 			go h.Unregister(context.Background(), c.id)
 		}
 	}
@@ -232,7 +232,7 @@ func (h *SSEHub) ListClients(ctx context.Context) []map[string]any {
 		out = append(out, map[string]any{
 			"id":         c.id,
 			"ip":         c.ip,
-			"topics":     c.Topics(context.Background()),
+			"topics":     c.Topics(ctx),
 			"created_at": c.createdAt,
 			"uptime_sec": int(time.Since(c.createdAt).Seconds()),
 		})
@@ -246,7 +246,7 @@ func (h *SSEHub) Stop(ctx context.Context) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		for _, c := range h.clients {
-			c.Close(context.Background())
+			c.Close(ctx)
 		}
 		h.clients = make(map[string]*SSEClient)
 		h.ipCount = make(map[string]int)
@@ -384,7 +384,7 @@ func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
 		EventType: "connected",
 		Data: map[string]any{
 			"client_id": client.id,
-			"topics":    client.Topics(context.Background()),
+			"topics":    client.Topics(c.Request.Context()),
 			"message":   "SSE connected",
 		},
 		Timestamp: time.Now(),
@@ -401,9 +401,9 @@ func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
 			return
 		case <-hub.stopCh:
 			return
-		case <-client.CloseCh(context.Background()):
+		case <-client.CloseCh(c.Request.Context()):
 			return
-		case event := <-client.Events(context.Background()):
+		case event := <-client.Events(c.Request.Context()):
 			if err := SSEWriteEvent(c, event); err != nil {
 				return
 			}

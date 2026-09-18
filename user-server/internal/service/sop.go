@@ -324,7 +324,7 @@ func (s *SOPService) Execute(ctx context.Context, req *dto.ExecuteRequest) (*mod
 		return nil, ErrSOPEntrySuppressed
 	}
 
-	variantName, variantGraphID, err := s.resolveABTestVariant(context.Background(), agent, req.CustomerID)
+	variantName, variantGraphID, err := s.resolveABTestVariant(ctx, agent, req.CustomerID)
 	if err != nil {
 		return nil, fmt.Errorf("A/B 测试分流失败：%w", err)
 	}

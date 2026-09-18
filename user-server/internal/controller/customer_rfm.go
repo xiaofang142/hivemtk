@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -35,7 +34,7 @@ func (c *CustomerRFMController) ComputeForCustomer(ctx *gin.Context) {
 		return
 	}
 	cfg := service.DefaultRFMConfig()
-	rfm, err := c.svc.ComputeForCustomer(context.Background(), req.CustomerID, cfg)
+	rfm, err := c.svc.ComputeForCustomer(ctx.Request.Context(), req.CustomerID, cfg)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "计算失败: "+err.Error())
 		return
@@ -53,7 +52,7 @@ func (c *CustomerRFMController) ComputeForCustomer(ctx *gin.Context) {
 // @Router /api/customer-rfm/compute-all [post]
 func (c *CustomerRFMController) ComputeAll(ctx *gin.Context) {
 	limit := parsePositiveInt(ctx.Query("limit"), 200, 1000)
-	count, err := c.svc.ComputeAll(context.Background(), limit)
+	count, err := c.svc.ComputeAll(ctx.Request.Context(), limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "批量计算失败: "+err.Error())
 		return
@@ -69,7 +68,7 @@ func (c *CustomerRFMController) ComputeAll(ctx *gin.Context) {
 // @Router /api/customer-rfm/{customer_id} [get]
 func (c *CustomerRFMController) GetByCustomerID(ctx *gin.Context) {
 	customerID := ctx.Param("customer_id")
-	rfm, err := c.svc.GetByCustomerID(context.Background(), customerID)
+	rfm, err := c.svc.GetByCustomerID(ctx.Request.Context(), customerID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "未找到")
 		return
@@ -89,7 +88,7 @@ func (c *CustomerRFMController) ListBySegment(ctx *gin.Context) {
 	segment := ctx.Query("segment")
 	page := parsePositiveInt(ctx.Query("page"), 1, 10000)
 	pageSize := parsePositiveInt(ctx.Query("page_size"), 20, 200)
-	list, total, err := c.svc.ListBySegment(context.Background(), segment, page, pageSize)
+	list, total, err := c.svc.ListBySegment(ctx.Request.Context(), segment, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return
@@ -112,7 +111,7 @@ func (c *CustomerRFMController) ListBySegment(ctx *gin.Context) {
 // @Success 200 {object} object{data=dto.RFMDistributionResponse}
 // @Router /api/customer-rfm/distribution [get]
 func (c *CustomerRFMController) Distribution(ctx *gin.Context) {
-	dist, err := c.svc.Distribution(context.Background())
+	dist, err := c.svc.Distribution(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return

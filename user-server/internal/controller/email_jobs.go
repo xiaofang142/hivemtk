@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -29,7 +28,7 @@ func (c *EmailJobsController) CreateEmailJobs(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.CreateEmailJobsDTO(context.Background(), req)
+	resp, err := c.svc.CreateEmailJobsDTO(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -50,7 +49,7 @@ func (c *EmailJobsController) GetEmailJobsList(ctx *gin.Context) {
 	if req.PageSize <= 0 {
 		req.PageSize = 20
 	}
-	resp, err := c.svc.GetEmailJobsListDTO(context.Background(), req.Page, req.PageSize)
+	resp, err := c.svc.GetEmailJobsListDTO(ctx.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -74,7 +73,7 @@ func (c *EmailJobsController) GetEmailJobsDetail(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.GetEmailJobsByIDDTO(context.Background(), jobsID)
+	resp, err := c.svc.GetEmailJobsByIDDTO(ctx.Request.Context(), jobsID)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "任务不存在")
@@ -100,12 +99,12 @@ func (c *EmailJobsController) UpdateEmailJobs(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UpdateEmailJobsDTO(context.Background(), req); err != nil {
+	if err := c.svc.UpdateEmailJobsDTO(ctx.Request.Context(), req); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
 
-	resp, err := c.svc.GetEmailJobsByIDDTO(context.Background(), jobsID)
+	resp, err := c.svc.GetEmailJobsByIDDTO(ctx.Request.Context(), jobsID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -126,7 +125,7 @@ func (c *EmailJobsController) UpdateSendTotal(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UpdateEmailJobsDTO(context.Background(), req); err != nil {
+	if err := c.svc.UpdateEmailJobsDTO(ctx.Request.Context(), req); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
@@ -149,7 +148,7 @@ func (c *EmailJobsController) DeleteEmailJobs(ctx *gin.Context) {
 		return
 	}
 
-	if err = c.svc.DeleteEmailJobs(context.Background(), jobsID); err != nil {
+	if err = c.svc.DeleteEmailJobs(ctx.Request.Context(), jobsID); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}

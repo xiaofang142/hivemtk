@@ -140,7 +140,7 @@ func (s *WebhookService) isDuplicate(ctx context.Context, eventID string) bool {
 		return false
 	}
 	key := "mtk:webhook:dedup:" + eventID
-	set, err := cache.GetGlobalCache().SetNX(context.Background(), key, "1", WebhookDedupTTL)
+	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", WebhookDedupTTL)
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("event_id", eventID).Msg("[webhook] dedup 后端异常，放行")
 		return false
@@ -172,7 +172,7 @@ func (s *WebhookService) allowRate(ctx context.Context, key string) bool {
 	}
 	b.lastAccess = time.Now()
 	s.rlMu.Unlock()
-	return b.allow(context.Background())
+	return b.allow(ctx)
 }
 
 func (s *WebhookService) startRLJanitor(ctx context.Context) {

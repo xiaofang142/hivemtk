@@ -337,7 +337,7 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			}
 		}
 		if !interlocked {
-			newOpportunity = s.mineTelegramGroupLead(context.Background(), hub, accountID, chatIDStr, groupTitle, senderIDStr, picked.username, picked.fromName, picked.text)
+			newOpportunity = s.mineTelegramGroupLead(ctx, hub, accountID, chatIDStr, groupTitle, senderIDStr, picked.username, picked.fromName, picked.text)
 		}
 	}
 

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -44,7 +43,7 @@ func (c *ClueController) GetClueList(ctx *gin.Context) {
 	if req.PageSize <= 0 {
 		req.PageSize = 20
 	}
-	clues, total, err := c.svc.GetClueList(context.Background(), req.Page, req.PageSize)
+	clues, total, err := c.svc.GetClueList(ctx.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取线索列表失败")
 		return
@@ -86,7 +85,7 @@ func (c *ClueController) DeleteClue(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "参数错误")
 		return
 	}
-	err := c.svc.DeleteClue(context.Background(), req.ID)
+	err := c.svc.DeleteClue(ctx.Request.Context(), req.ID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "删除线索失败")
 		return
@@ -104,7 +103,7 @@ func (c *ClueController) DeleteClue(ctx *gin.Context) {
 // @Success      200  {object}  response.Response  "成功"
 // @Router       /api/clues/statistics [get]
 func (c *ClueController) GetClueStatistics(ctx *gin.Context) {
-	statistics, err := c.svc.GetClueStatistics(context.Background())
+	statistics, err := c.svc.GetClueStatistics(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取线索统计失败")
 		return
@@ -140,7 +139,7 @@ func (c *ClueController) ImportClues(ctx *gin.Context) {
 
 // GetClueTypes 获取线索类型列表
 func (c *ClueController) GetClueTypes(ctx *gin.Context) {
-	types, err := c.svc.GetClueTypes(context.Background())
+	types, err := c.svc.GetClueTypes(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取线索类型失败")
 		return

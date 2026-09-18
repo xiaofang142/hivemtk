@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -27,7 +26,7 @@ func (c *CommunityController) GetGroups(ctx *gin.Context) {
 		return
 	}
 
-	groups, total, err := c.svc.GetGroups(context.Background(), req.Page, req.PageSize, req.Search)
+	groups, total, err := c.svc.GetGroups(ctx.Request.Context(), req.Page, req.PageSize, req.Search)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取社群列表失败", err.Error())
 		return
@@ -49,7 +48,7 @@ func (c *CommunityController) GetGroupByID(ctx *gin.Context) {
 		return
 	}
 
-	group, err := c.svc.GetGroupByID(context.Background(), groupID)
+	group, err := c.svc.GetGroupByID(ctx.Request.Context(), groupID)
 	if HandleDBError(ctx, err, "获取社群详情") {
 		return
 	}
@@ -65,7 +64,7 @@ func (c *CommunityController) CreateGroup(ctx *gin.Context) {
 		return
 	}
 
-	group, err := c.svc.CreateGroup(context.Background(), &req)
+	group, err := c.svc.CreateGroup(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "创建社群失败", err.Error())
 		return
@@ -83,7 +82,7 @@ func (c *CommunityController) UpdateGroup(ctx *gin.Context) {
 		return
 	}
 
-	err := c.svc.UpdateGroup(context.Background(), groupID, &req)
+	err := c.svc.UpdateGroup(ctx.Request.Context(), groupID, &req)
 	if HandleDBError(ctx, err, "更新社群") {
 		return
 	}
@@ -94,7 +93,7 @@ func (c *CommunityController) UpdateGroup(ctx *gin.Context) {
 // DeleteGroup 删除社群
 func (c *CommunityController) DeleteGroup(ctx *gin.Context) {
 	groupID := ctx.Param("id")
-	err := c.svc.DeleteGroup(context.Background(), groupID)
+	err := c.svc.DeleteGroup(ctx.Request.Context(), groupID)
 	if HandleDBError(ctx, err, "删除社群") {
 		return
 	}
@@ -110,7 +109,7 @@ func (c *CommunityController) GetMembers(ctx *gin.Context) {
 		return
 	}
 
-	members, total, err := c.svc.GetMembers(context.Background(), req.GroupID, req.Page, req.PageSize, req.Search)
+	members, total, err := c.svc.GetMembers(ctx.Request.Context(), req.GroupID, req.Page, req.PageSize, req.Search)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取成员列表失败", err.Error())
 		return
@@ -132,7 +131,7 @@ func (c *CommunityController) GetMemberByID(ctx *gin.Context) {
 		return
 	}
 
-	member, err := c.svc.GetMemberByID(context.Background(), memberID)
+	member, err := c.svc.GetMemberByID(ctx.Request.Context(), memberID)
 	if HandleDBError(ctx, err, "获取社群成员详情") {
 		return
 	}
@@ -148,7 +147,7 @@ func (c *CommunityController) AddMember(ctx *gin.Context) {
 		return
 	}
 
-	member, err := c.svc.AddMember(context.Background(), &req)
+	member, err := c.svc.AddMember(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "添加成员失败", err.Error())
 		return
@@ -166,7 +165,7 @@ func (c *CommunityController) UpdateMember(ctx *gin.Context) {
 		return
 	}
 
-	err := c.svc.UpdateMember(context.Background(), memberID, &req)
+	err := c.svc.UpdateMember(ctx.Request.Context(), memberID, &req)
 	if HandleDBError(ctx, err, "更新社群成员") {
 		return
 	}
@@ -177,7 +176,7 @@ func (c *CommunityController) UpdateMember(ctx *gin.Context) {
 // RemoveMember 移除社群成员
 func (c *CommunityController) RemoveMember(ctx *gin.Context) {
 	memberID := ctx.Param("id")
-	err := c.svc.RemoveMember(context.Background(), memberID)
+	err := c.svc.RemoveMember(ctx.Request.Context(), memberID)
 	if HandleDBError(ctx, err, "移除社群成员") {
 		return
 	}
@@ -193,7 +192,7 @@ func (c *CommunityController) GetMessages(ctx *gin.Context) {
 		return
 	}
 
-	messages, total, err := c.svc.GetMessages(context.Background(), req.GroupID, req.Page, req.PageSize)
+	messages, total, err := c.svc.GetMessages(ctx.Request.Context(), req.GroupID, req.Page, req.PageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取消息列表失败", err.Error())
 		return
@@ -209,7 +208,7 @@ func (c *CommunityController) GetMessages(ctx *gin.Context) {
 
 // GetStatistics 获取社群统计
 func (c *CommunityController) GetStatistics(ctx *gin.Context) {
-	stats, err := c.svc.GetStatistics(context.Background())
+	stats, err := c.svc.GetStatistics(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取统计信息失败", err.Error())
 		return
@@ -235,7 +234,7 @@ func (c *CommunityController) ImportData(ctx *gin.Context) {
 
 	successCount := 0
 	for _, groupReq := range req.Groups {
-		if _, err := c.svc.CreateGroup(context.Background(), &groupReq); err == nil {
+		if _, err := c.svc.CreateGroup(ctx.Request.Context(), &groupReq); err == nil {
 			successCount++
 		}
 	}
@@ -248,7 +247,7 @@ func (c *CommunityController) ImportData(ctx *gin.Context) {
 
 // ExportData 导出社群数据
 func (c *CommunityController) ExportData(ctx *gin.Context) {
-	groups, _, err := c.svc.GetGroups(context.Background(), 1, 10000, "")
+	groups, _, err := c.svc.GetGroups(ctx.Request.Context(), 1, 10000, "")
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "导出数据失败", err.Error())
 		return

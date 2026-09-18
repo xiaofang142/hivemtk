@@ -2,7 +2,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 
 	"hivemtk-user/internal/dto"
@@ -27,12 +26,12 @@ func (c *CustomerJourneyController) GetOverview(ctx *gin.Context) {
 	customerID := ctx.Query("customer_id")
 
 	if customerID != "" {
-		state := c.svc.GetState(context.Background(), customerID)
+		state := c.svc.GetState(ctx.Request.Context(), customerID)
 		response.Success(ctx, state, "查询成功")
 		return
 	}
 
-	overview := c.svc.GetOverview(context.Background())
+	overview := c.svc.GetOverview(ctx.Request.Context())
 	response.Success(ctx, overview, "查询成功")
 }
 
@@ -70,7 +69,7 @@ func (c *CustomerJourneyController) TouchCustomer(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-	c.svc.Touch(context.Background(), req.CustomerID, req.Source)
+	c.svc.Touch(ctx.Request.Context(), req.CustomerID, req.Source)
 	response.Success(ctx, nil, "互动已记录")
 }
 
@@ -81,7 +80,7 @@ func (c *CustomerJourneyController) ListByStage(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "stage 参数不能为空")
 		return
 	}
-	ids := c.svc.ListByStage(context.Background(), dto.JourneyStage(stage))
+	ids := c.svc.ListByStage(ctx.Request.Context(), dto.JourneyStage(stage))
 	response.Success(ctx, gin.H{"stage": stage, "customer_ids": ids, "count": len(ids)}, "查询成功")
 }
 

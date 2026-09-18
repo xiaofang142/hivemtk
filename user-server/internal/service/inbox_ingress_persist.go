@@ -389,7 +389,7 @@ func (s *InboxIngressService) persistHistoryMessage(ctx context.Context, event *
 
 	if s.inboxSvc != nil {
 
-		if _, err := s.inboxSvc.UpsertFromHubMessage(context.Background(), hub); err != nil {
+		if _, err := s.inboxSvc.UpsertFromHubMessage(ctx, hub); err != nil {
 			logger.Warnf("[Inbox] 桥接历史消息同步统一收件箱失败(conv=%s): %v", event.ConversationID, err)
 		}
 	}

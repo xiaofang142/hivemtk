@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -58,7 +57,7 @@ func (c *CustomerOneIDController) MergeIdentity(ctx *gin.Context) {
 		return
 	}
 	custSvc := service.NewCustomerService()
-	svcCtx := service.WithOperator(context.Background(), service.Operator{
+	svcCtx := service.WithOperator(ctx.Request.Context(), service.Operator{
 		UserID:   getUserIDFromContext(ctx),
 		Username: ctx.GetString("username"),
 	})
@@ -147,7 +146,7 @@ func (c *CustomerOneIDController) ResolveConflict(ctx *gin.Context) {
 		return
 	}
 	custSvc := service.NewCustomerService()
-	svcCtx := service.WithOperator(context.Background(), service.Operator{
+	svcCtx := service.WithOperator(ctx.Request.Context(), service.Operator{
 		UserID:   getUserIDFromContext(ctx),
 		Username: ctx.GetString("username"),
 	})
@@ -205,7 +204,7 @@ func (c *CustomerOneIDController) LinkIdentity(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-	if err := c.identitySvc.LinkIdentity(context.Background(), customerID, identifiers.Phone, identifiers.Email, identifiers.WechatOpenID, identifiers.DouyinOpenID, identifiers.XiaohongshuID); err != nil {
+	if err := c.identitySvc.LinkIdentity(ctx.Request.Context(), customerID, identifiers.Phone, identifiers.Email, identifiers.WechatOpenID, identifiers.DouyinOpenID, identifiers.XiaohongshuID); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -220,7 +219,7 @@ func (c *CustomerOneIDController) ResolveIdentity(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-	customers, err := c.identitySvc.ResolveIdentity(context.Background(), identifiers)
+	customers, err := c.identitySvc.ResolveIdentity(ctx.Request.Context(), identifiers)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

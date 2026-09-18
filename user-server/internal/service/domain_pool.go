@@ -121,15 +121,15 @@ func (s *domainPoolService) SetAutoSwitch(ctx context.Context, id int, enabled b
 }
 
 func (s *domainPoolService) Delete(ctx context.Context, id int) error {
-	return s.domainPoolRepo.Delete(context.Background(), id)
+	return s.domainPoolRepo.Delete(ctx, id)
 }
 
 func (s *domainPoolService) GetByID(ctx context.Context, id int) (*model.DomainPool, error) {
-	return s.domainPoolRepo.GetByID(context.Background(), id)
+	return s.domainPoolRepo.GetByID(ctx, id)
 }
 
 func (s *domainPoolService) List(ctx context.Context, page, pageSize int, domain string, status int) ([]*model.DomainPool, int64, error) {
-	return s.domainPoolRepo.List(context.Background(), page, pageSize, domain, status)
+	return s.domainPoolRepo.List(ctx, page, pageSize, domain, status)
 }
 
 func (s *domainPoolService) CheckDomain(ctx context.Context, id int) (bool, error) {

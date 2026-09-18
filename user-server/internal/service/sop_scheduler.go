@@ -106,14 +106,14 @@ func (s *SOPScheduler) loop(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 
-	s.tick(context.Background())
+	s.tick(ctx)
 
 	for {
 		select {
 		case <-s.stopCh:
 			return
 		case <-ticker.C:
-			s.tick(context.Background())
+			s.tick(ctx)
 		}
 	}
 }

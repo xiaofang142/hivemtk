@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
@@ -34,7 +33,7 @@ func (c *AgentStatusController) CreateAgent(ctx *gin.Context) {
 		return
 	}
 
-	agent, err := c.agentService.CreateAgent(context.Background(), &req)
+	agent, err := c.agentService.CreateAgent(ctx.Request.Context(), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -52,7 +51,7 @@ func (c *AgentStatusController) GetAgentStatus(ctx *gin.Context) {
 		return
 	}
 
-	agent, err := c.agentService.GetAgentStatus(context.Background(), uint(id))
+	agent, err := c.agentService.GetAgentStatus(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -63,7 +62,7 @@ func (c *AgentStatusController) GetAgentStatus(ctx *gin.Context) {
 
 // GetOnlineAgents 获取在线客服列表
 func (c *AgentStatusController) GetOnlineAgents(ctx *gin.Context) {
-	agents, err := c.agentService.GetOnlineAgents(context.Background())
+	agents, err := c.agentService.GetOnlineAgents(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -107,7 +106,7 @@ func (c *AgentStatusController) GetMyAgent(ctx *gin.Context) {
 
 // ListAllAgents 列出全部客服（监管控制台）
 func (c *AgentStatusController) ListAllAgents(ctx *gin.Context) {
-	agents, err := c.agentService.ListAllAgents(context.Background())
+	agents, err := c.agentService.ListAllAgents(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -133,7 +132,7 @@ func (c *AgentStatusController) UpdateAgentStatus(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.agentService.UpdateAgentStatus(context.Background(), uint(id), req.Status); err != nil {
+	if err := c.agentService.UpdateAgentStatus(ctx.Request.Context(), uint(id), req.Status); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -150,7 +149,7 @@ func (c *AgentStatusController) GoOnline(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.agentService.GoOnline(context.Background(), uint(id)); err != nil {
+	if err := c.agentService.GoOnline(ctx.Request.Context(), uint(id)); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -167,7 +166,7 @@ func (c *AgentStatusController) GoOffline(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.agentService.GoOffline(context.Background(), uint(id)); err != nil {
+	if err := c.agentService.GoOffline(ctx.Request.Context(), uint(id)); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -184,7 +183,7 @@ func (c *AgentStatusController) GetAgentSessions(ctx *gin.Context) {
 		return
 	}
 
-	sessions, err := c.agentService.GetAgentSessions(context.Background(), uint(id))
+	sessions, err := c.agentService.GetAgentSessions(ctx.Request.Context(), uint(id))
 	if HandleDBError(ctx, err, "获取客服会话") {
 		return
 	}

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -47,7 +46,7 @@ func (c *AnomalyLoginDetectorController) ListLoginEvents(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	events, total, err := c.detector.ListLoginEvents(context.Background(), uid, page, pageSize)
+	events, total, err := c.detector.ListLoginEvents(ctx.Request.Context(), uid, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -87,7 +86,7 @@ func (c *AnomalyLoginDetectorController) ListAlerts(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	alerts, total, err := c.detector.ListAlerts(context.Background(), uid, status, page, pageSize)
+	alerts, total, err := c.detector.ListAlerts(ctx.Request.Context(), uid, status, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

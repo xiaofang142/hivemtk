@@ -25,7 +25,7 @@ func (c *FeedbackLoopCron) runBanditRewardReflux(ctx context.Context, db *gorm.D
 			continue
 		}
 		now := time.Now()
-		wctx, cancel := context.WithTimeout(context.Background(), utils.CronShortTimeout)
+		wctx, cancel := context.WithTimeout(ctx, utils.CronShortTimeout)
 		stats, err := reflux.RefluxOnce(wctx, cursor, now)
 		cancel()
 		if err != nil {

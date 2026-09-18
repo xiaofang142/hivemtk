@@ -29,7 +29,7 @@ func (e *SalesEngine) shouldTransferToHuman(ctx context.Context, intent *dto.Rec
 
 	switch intent.IntentType {
 	case IntentChurn, IntentComplaint:
-		return true, e.transferReason(context.Background(), intent, mem)
+		return true, e.transferReason(ctx, intent, mem)
 	}
 	return false, ""
 }
@@ -57,7 +57,7 @@ func (e *SalesEngine) shouldTransferByConfidence(ctx context.Context, intent *dt
 		logger.Ctx(ctx).Warn().Err(err).Msg("[sales] confidence aggregate failed, fallback to static rule")
 		switch intent.IntentType {
 		case IntentChurn, IntentComplaint:
-			return true, e.transferReason(context.Background(), intent, mem)
+			return true, e.transferReason(ctx, intent, mem)
 		}
 		return false, ""
 	}

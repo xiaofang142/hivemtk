@@ -287,6 +287,6 @@ func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.
 		repository.NewClueEngagementRepositoryWithDB(db),
 		s.clueRepo,
 	)
-	_ = scoreSvc.RecordEngagement(context.Background(), clue.ID, "group_message", channel, map[string]any{"is_opportunity": isOpp})
-	_, _ = scoreSvc.ScoreClue(context.Background(), clue)
+	_ = scoreSvc.RecordEngagement(ctx, clue.ID, "group_message", channel, map[string]any{"is_opportunity": isOpp})
+	_, _ = scoreSvc.ScoreClue(ctx, clue)
 }

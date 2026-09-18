@@ -32,7 +32,7 @@ func (ts *WhatsAppTemplateService) CreateTemplate(ctx context.Context, template 
 	template.CreatedAt = now
 	template.UpdatedAt = now
 
-	if err := ts.repo.Create(context.Background(), template); err != nil {
+	if err := ts.repo.Create(ctx, template); err != nil {
 		return nil, err
 	}
 	return template, nil
@@ -40,14 +40,14 @@ func (ts *WhatsAppTemplateService) CreateTemplate(ctx context.Context, template 
 
 func (ts *WhatsAppTemplateService) UpdateTemplate(ctx context.Context, template *model.WhatsappMessageTemplate) (*model.WhatsappMessageTemplate, error) {
 	template.UpdatedAt = time.Now()
-	if err := ts.repo.Save(context.Background(), template); err != nil {
+	if err := ts.repo.Save(ctx, template); err != nil {
 		return nil, err
 	}
 	return template, nil
 }
 
 func (ts *WhatsAppTemplateService) GetTemplate(ctx context.Context, templateID string) (*model.WhatsappMessageTemplate, error) {
-	template, err := ts.repo.GetByID(context.Background(), templateID)
+	template, err := ts.repo.GetByID(ctx, templateID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("模板不存在")
@@ -58,11 +58,11 @@ func (ts *WhatsAppTemplateService) GetTemplate(ctx context.Context, templateID s
 }
 
 func (ts *WhatsAppTemplateService) GetTemplates(ctx context.Context, category string, isActive *bool) ([]*model.WhatsappMessageTemplate, error) {
-	return ts.repo.ListByFilters(context.Background(), category, isActive)
+	return ts.repo.ListByFilters(ctx, category, isActive)
 }
 
 func (ts *WhatsAppTemplateService) DeleteTemplate(ctx context.Context, templateID string) error {
-	rowsAffected, err := ts.repo.DeleteByID(context.Background(), templateID)
+	rowsAffected, err := ts.repo.DeleteByID(ctx, templateID)
 	if err != nil {
 		return err
 	}

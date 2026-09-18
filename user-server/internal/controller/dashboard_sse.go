@@ -139,7 +139,7 @@ func (c *DashboardSSEController) collectSnapshot(ctx context.Context) *service.D
 		GeneratedAt: time.Now(),
 	}
 
-	if c.statsSvc != nil && c.statsSvc.Available(context.Background()) {
+	if c.statsSvc != nil && c.statsSvc.Available(ctx) {
 		c.statsSvc.CollectSessionStats(ctx, snap)
 		snap.HumanizeDistribution = c.statsSvc.CollectHumanizeDistribution(ctx)
 		snap.Funnel = c.statsSvc.CollectFunnel(ctx)

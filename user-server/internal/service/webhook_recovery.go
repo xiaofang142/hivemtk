@@ -132,7 +132,7 @@ func (sc *webhookRecoveryScanner) scanOnce(ctx context.Context) int {
 		}
 		sc.replay(ctx, evt)
 
-		_, _ = cache.GetGlobalCache().ReleaseLock(context.Background(),
+		_, _ = cache.GetGlobalCache().ReleaseLock(ctx,
 			"mtk:webhook:recovering:"+strconv.FormatUint(uint64(evt.ID), 10), token)
 		replayed++
 	}
@@ -145,7 +145,7 @@ func (sc *webhookRecoveryScanner) scanOnce(ctx context.Context) int {
 func (sc *webhookRecoveryScanner) claim(ctx context.Context, evt *model.WebhookEvent) (string, bool) {
 	key := "mtk:webhook:recovering:" + strconv.FormatUint(uint64(evt.ID), 10)
 	token := "recovery-" + strconv.FormatUint(uint64(evt.ID), 10) + "-" + time.Now().Format("150405.000000000")
-	ok, err := cache.GetGlobalCache().SetNX(context.Background(), key, token, webhookRecoveryGateTTL)
+	ok, err := cache.GetGlobalCache().SetNX(ctx, key, token, webhookRecoveryGateTTL)
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Uint("event_id", evt.ID).Msg("[WebhookRecovery] claim backend error, proceeding (fail-open)")
 		return "", true
@@ -208,7 +208,7 @@ func (sc *webhookRecoveryScanner) incrRetry(ctx context.Context, eventID string)
 		return 0
 	}
 	key := "mtk:webhook:retry:" + eventID
-	n, err := cache.GetGlobalCache().Incr(context.Background(), key, webhookRecoveryRetryTTL)
+	n, err := cache.GetGlobalCache().Incr(ctx, key, webhookRecoveryRetryTTL)
 	if err != nil {
 
 		return 0

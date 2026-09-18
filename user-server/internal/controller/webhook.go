@@ -209,7 +209,7 @@ func (c *WebhookController) WeComVerify(ctx *gin.Context) {
 		return
 	}
 
-	token, aesKey, err := c.svc.GetWeComSecrets(context.Background(), accountID)
+	token, aesKey, err := c.svc.GetWeComSecrets(ctx.Request.Context(), accountID)
 	if err != nil || token == "" {
 		ctx.String(http.StatusUnauthorized, "account not found or token missing")
 		return
@@ -381,8 +381,8 @@ func (c *WebhookController) DingTalkReceive(ctx *gin.Context) {
 
 // Stats 统计
 func (c *WebhookController) Stats(ctx *gin.Context) {
-	pending := c.svc.PendingCount(context.Background())
-	queueLen := c.svc.QueueLen(context.Background())
+	pending := c.svc.PendingCount(ctx.Request.Context())
+	queueLen := c.svc.QueueLen(ctx.Request.Context())
 	response.Success(ctx, gin.H{
 		"pending_events": pending,
 		"queue_length":   queueLen,

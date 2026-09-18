@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -22,7 +21,7 @@ func NewSystemConfigController() *SystemConfigController {
 
 // GetConfig 获取系统配置
 func (c *SystemConfigController) GetConfig(ctx *gin.Context) {
-	config, err := c.svc.GetConfig(context.Background())
+	config, err := c.svc.GetConfig(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -41,7 +40,7 @@ func (c *SystemConfigController) SaveConfig(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求体不能为空：至少提供一个配置字段（如 site_name）")
 		return
 	}
-	config, err := c.svc.SaveConfig(context.Background(), req)
+	config, err := c.svc.SaveConfig(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

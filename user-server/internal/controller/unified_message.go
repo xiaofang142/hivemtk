@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -34,7 +33,7 @@ func (c *UnifiedMessageController) GetMessages(ctx *gin.Context) {
 		return
 	}
 
-	messages, total, err := c.messageService.GetMessages(context.Background(), platform, page, pageSize)
+	messages, total, err := c.messageService.GetMessages(ctx.Request.Context(), platform, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -58,7 +57,7 @@ func (c *UnifiedMessageController) GetMessageByID(ctx *gin.Context) {
 		return
 	}
 
-	msg, err := c.messageService.GetMessageByID(context.Background(), uint(id))
+	msg, err := c.messageService.GetMessageByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -82,7 +81,7 @@ func NewPlatformAccountController() *PlatformAccountController {
 // GetAccounts 获取平台账号列表
 func (c *PlatformAccountController) GetAccounts(ctx *gin.Context) {
 
-	accounts, err := c.accountService.GetAccounts(context.Background())
+	accounts, err := c.accountService.GetAccounts(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -101,7 +100,7 @@ func (c *PlatformAccountController) GetAccountByID(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.accountService.GetAccountByID(context.Background(), uint(id))
+	account, err := c.accountService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if HandleDBError(ctx, err, "获取平台账号") {
 		return
 	}
@@ -118,7 +117,7 @@ func (c *PlatformAccountController) CreateAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.accountService.CreateAccount(context.Background(), &req)
+	account, err := c.accountService.CreateAccount(ctx.Request.Context(), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -143,7 +142,7 @@ func (c *PlatformAccountController) UpdateAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.accountService.UpdateAccount(context.Background(), uint(id), &req)
+	account, err := c.accountService.UpdateAccount(ctx.Request.Context(), uint(id), &req)
 	if HandleDBError(ctx, err, "更新平台账号") {
 		return
 	}
@@ -161,7 +160,7 @@ func (c *PlatformAccountController) DeleteAccount(ctx *gin.Context) {
 		return
 	}
 
-	if HandleDBError(ctx, c.accountService.DeleteAccount(context.Background(), uint(id)), "删除平台账号") {
+	if HandleDBError(ctx, c.accountService.DeleteAccount(ctx.Request.Context(), uint(id)), "删除平台账号") {
 		return
 	}
 
@@ -184,7 +183,7 @@ func (c *PlatformAccountController) LoginAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.accountService.Login(context.Background(), uint(id), &req)
+	account, err := c.accountService.Login(ctx.Request.Context(), uint(id), &req)
 	if HandleDBError(ctx, err, "登录平台账号") {
 		return
 	}
@@ -202,7 +201,7 @@ func (c *PlatformAccountController) CheckLoginStatus(ctx *gin.Context) {
 		return
 	}
 
-	status, err := c.accountService.CheckLoginStatus(context.Background(), uint(id))
+	status, err := c.accountService.CheckLoginStatus(ctx.Request.Context(), uint(id))
 	if HandleServiceError(ctx, err) {
 		return
 	}

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"strconv"
 
 	"hivemtk-user/internal/dto"
@@ -40,7 +39,7 @@ func (c *ObsConfigController) GetConfigList(ctx *gin.Context) {
 		limit = 10
 	}
 
-	resp, err := c.service.GetConfigList(context.Background(), page, limit, provider, status)
+	resp, err := c.service.GetConfigList(ctx.Request.Context(), page, limit, provider, status)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询OBS配置列表失败: "+err.Error())
 		return
@@ -57,7 +56,7 @@ func (c *ObsConfigController) GetConfig(ctx *gin.Context) {
 		return
 	}
 
-	config, err := c.service.GetConfig(context.Background(), id)
+	config, err := c.service.GetConfig(ctx.Request.Context(), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, 404, "NOT_FOUND", err.Error())
@@ -78,7 +77,7 @@ func (c *ObsConfigController) CreateConfig(ctx *gin.Context) {
 		return
 	}
 
-	config, err := c.service.CreateConfig(context.Background(), &req)
+	config, err := c.service.CreateConfig(ctx.Request.Context(), &req)
 	if HandleServiceError(ctx, err) {
 		return
 	}
@@ -100,7 +99,7 @@ func (c *ObsConfigController) UpdateConfig(ctx *gin.Context) {
 		return
 	}
 
-	config, err := c.service.UpdateConfig(context.Background(), id, &req)
+	config, err := c.service.UpdateConfig(ctx.Request.Context(), id, &req)
 	if HandleDBError(ctx, err, "更新OBS配置") {
 		return
 	}
@@ -116,7 +115,7 @@ func (c *ObsConfigController) DeleteConfig(ctx *gin.Context) {
 		return
 	}
 
-	if HandleDBError(ctx, c.service.DeleteConfig(context.Background(), id), "删除OBS配置") {
+	if HandleDBError(ctx, c.service.DeleteConfig(ctx.Request.Context(), id), "删除OBS配置") {
 		return
 	}
 
@@ -131,7 +130,7 @@ func (c *ObsConfigController) TestConnection(ctx *gin.Context) {
 		return
 	}
 
-	config, err := c.service.GetConfig(context.Background(), id)
+	config, err := c.service.GetConfig(ctx.Request.Context(), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, 404, "NOT_FOUND", err.Error())
@@ -141,7 +140,7 @@ func (c *ObsConfigController) TestConnection(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.service.TestConnection(context.Background(), config); err != nil {
+	if err := c.service.TestConnection(ctx.Request.Context(), config); err != nil {
 		response.Error(ctx, 400, "CONNECTION_FAILED", err.Error())
 		return
 	}
@@ -157,7 +156,7 @@ func (c *ObsConfigController) SetDefault(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.service.SetDefaultConfig(context.Background(), id); err != nil {
+	if err := c.service.SetDefaultConfig(ctx.Request.Context(), id); err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, 404, "NOT_FOUND", err.Error())
 			return
@@ -171,7 +170,7 @@ func (c *ObsConfigController) SetDefault(ctx *gin.Context) {
 
 // GetDefaultConfig 获取默认配置（开源版：全局默认）
 func (c *ObsConfigController) GetDefaultConfig(ctx *gin.Context) {
-	config, err := c.service.GetDefaultConfig(context.Background())
+	config, err := c.service.GetDefaultConfig(ctx.Request.Context())
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Success(ctx, nil, "暂无默认配置")

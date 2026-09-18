@@ -458,7 +458,7 @@ func (t *SalesActionTrigger) TriggerAfterOrder(ctx context.Context, orderID, cus
 	}
 
 	if t.stats != nil {
-		t.stats.RecordOrder(context.Background(), OrderEvent{
+		t.stats.RecordOrder(ctx, OrderEvent{
 			OrderID:     orderID,
 			CustomerID:  customerID,
 			OwnerID:     ownerID,

@@ -425,7 +425,7 @@ func (s *SessionAssignmentService) TransferToHuman(ctx context.Context, sessionI
 
 // GetPendingSessions 获取待分配会话
 func (s *SessionAssignmentService) GetPendingSessions(ctx context.Context) ([]*model.CustomerSession, error) {
-	return s.sessionRepo.GetPendingSessions(context.Background())
+	return s.sessionRepo.GetPendingSessions(ctx)
 }
 
 // AutoAssignAllPending 自动分配所有待处理会话

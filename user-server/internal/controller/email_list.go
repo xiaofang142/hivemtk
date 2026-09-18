@@ -2,7 +2,6 @@ package controller
 
 import (
 	"bytes"
-	"context"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -33,7 +32,7 @@ func (c *EmailListController) CreateEmailList(ctx *gin.Context) {
 		return
 	}
 
-	total, err := c.svc.CreateEmailList(context.Background(), req.Subject, req.Content, strings.Join(req.Attachments, ","))
+	total, err := c.svc.CreateEmailList(ctx.Request.Context(), req.Subject, req.Content, strings.Join(req.Attachments, ","))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -56,7 +55,7 @@ func (c *EmailListController) GetEmailListList(ctx *gin.Context) {
 	if req.PageSize <= 0 {
 		req.PageSize = 20
 	}
-	resp, err := c.svc.GetEmailListListDTO(context.Background(), req.Page, req.PageSize)
+	resp, err := c.svc.GetEmailListListDTO(ctx.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -79,7 +78,7 @@ func (c *EmailListController) GetEmailListDetail(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.GetEmailListByIDDTO(context.Background(), listID)
+	resp, err := c.svc.GetEmailListByIDDTO(ctx.Request.Context(), listID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -100,7 +99,7 @@ func (c *EmailListController) UpdateEmailList(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UpdateEmailListDTO(context.Background(), req); err != nil {
+	if err := c.svc.UpdateEmailListDTO(ctx.Request.Context(), req); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
@@ -123,7 +122,7 @@ func (c *EmailListController) DeleteEmailList(ctx *gin.Context) {
 		return
 	}
 
-	if err = c.svc.DeleteEmailList(context.Background(), listID); err != nil {
+	if err = c.svc.DeleteEmailList(ctx.Request.Context(), listID); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
@@ -153,7 +152,7 @@ func (c *EmailListController) TraceEmail(ctx *gin.Context) {
 		return
 	}
 
-	err = c.svc.UpdateEmailListReadInfo(context.Background(), traceID)
+	err = c.svc.UpdateEmailListReadInfo(ctx.Request.Context(), traceID)
 	if err != nil {
 		ctx.Data(200, "image/png", buf.Bytes())
 		return

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -89,7 +88,7 @@ func (c *CustomerEventController) GetEventHistory(ctx *gin.Context) {
 		}
 	}
 
-	events, err := c.tracker.GetEventHistory(context.Background(), customerID, limit)
+	events, err := c.tracker.GetEventHistory(ctx.Request.Context(), customerID, limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -114,7 +113,7 @@ func (c *CustomerEventController) DeleteEvent(ctx *gin.Context) {
 		return
 	}
 
-	count, err := c.tracker.DeleteByCustomerID(context.Background(), customerID)
+	count, err := c.tracker.DeleteByCustomerID(ctx.Request.Context(), customerID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -134,7 +133,7 @@ func (c *CustomerEventController) GetEventStats(ctx *gin.Context) {
 		end = time.Now().Format("2006-01-02")
 	}
 
-	stats, err := c.tracker.GetStats(context.Background(), start, end)
+	stats, err := c.tracker.GetStats(ctx.Request.Context(), start, end)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

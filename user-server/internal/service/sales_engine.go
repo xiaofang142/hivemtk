@@ -342,7 +342,7 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 		industry := Industry("")
 		productID := ""
 		stage := stageToJourneyStage(sopStage)
-		resp.PlaybookSuggestions = e.fetchPlaybookSuggestions(context.Background(), industry, productID, stage, intentResult.IntentType)
+		resp.PlaybookSuggestions = e.fetchPlaybookSuggestions(ctx, industry, productID, stage, intentResult.IntentType)
 		resp.Steps = append(resp.Steps, dto.SalesStepLog{
 			Step: "5.6_playbook_suggest", Status: "ok", LatencyMs: ms(stepStart),
 			Detail: fmt.Sprintf("count=%d stage=%s intent=%s", len(resp.PlaybookSuggestions), stage, intentResult.IntentType),
@@ -709,7 +709,7 @@ func (e *SalesEngine) ProcessIncomingMessage(ctx context.Context, msg *ChannelMe
 		return &SalesResponse{}, nil
 	}
 
-	content, sessionID, customerID := e.normalizeChannelMessage(context.Background(), msg)
+	content, sessionID, customerID := e.normalizeChannelMessage(ctx, msg)
 
 	req := &SalesRequest{
 		SessionID:   sessionID,

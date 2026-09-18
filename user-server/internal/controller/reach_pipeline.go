@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -278,7 +277,7 @@ func (c *ReachPipelineController) ResetRateLimit(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "channel 必填")
 		return
 	}
-	c.svc.ResetRateLimit(context.Background(), channel)
+	c.svc.ResetRateLimit(ctx.Request.Context(), channel)
 	response.Success(ctx, gin.H{"channel": channel}, "重置成功")
 }
 

@@ -192,7 +192,7 @@ func (s *xianyuCardService) GenerateCardChatPage(ctx context.Context, id uint, b
 
 func (s *xianyuCardService) GenerateShortLink(ctx context.Context, card *model.XianyuCard) error {
 	if card.ShortLinkID > 0 {
-		if err := s.shortLinkService.Delete(context.Background(), card.ShortLinkID); err != nil {
+		if err := s.shortLinkService.Delete(ctx, card.ShortLinkID); err != nil {
 			return fmt.Errorf("删除旧短链失败: %w", err)
 		}
 	}
@@ -200,7 +200,7 @@ func (s *xianyuCardService) GenerateShortLink(ctx context.Context, card *model.X
 	generateReq := &dto.GenerateShortCodeRequest{
 		Length: 6,
 	}
-	generateResp, err := s.shortLinkService.GenerateShortCode(context.Background(), generateReq)
+	generateResp, err := s.shortLinkService.GenerateShortCode(ctx, generateReq)
 	if err != nil {
 		return fmt.Errorf("生成短码失败：%w", err)
 	}

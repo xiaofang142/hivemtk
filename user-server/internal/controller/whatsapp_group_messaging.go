@@ -66,7 +66,7 @@ func (gmc *GroupMessagingController) GetLeadGroups(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	clues, total, err := gmc.clueSvc.GetClueAllList(context.Background(), 7)
+	clues, total, err := gmc.clueSvc.GetClueAllList(c.Request.Context(), 7)
 	if err != nil {
 		response.ErrorFromDB(c, err, "获取线索失败", err.Error())
 		return
@@ -118,7 +118,7 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 		return
 	}
 
-	template, err := gmc.templateService.GetTemplate(context.Background(), req.TemplateID)
+	template, err := gmc.templateService.GetTemplate(c.Request.Context(), req.TemplateID)
 	if HandleDBError(c, err, "获取消息模板") {
 		return
 	}
@@ -130,7 +130,7 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 
 	leads := make([]map[string]any, 0)
 
-	allClues, _, err := gmc.clueSvc.GetClueAllList(context.Background(), 7)
+	allClues, _, err := gmc.clueSvc.GetClueAllList(c.Request.Context(), 7)
 	if err != nil {
 		logger.Errorf("获取WhatsApp线索失败: %v", err)
 		for _, leadID := range req.LeadIDs {
@@ -186,7 +186,7 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 		messages = append(messages, message)
 	}
 
-	queueID, err := gmc.messageQueue.AddBatch(context.Background(), messages)
+	queueID, err := gmc.messageQueue.AddBatch(c.Request.Context(), messages)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "添加到队列失败", "添加到队列失败")
 		return
@@ -323,7 +323,7 @@ func (gmc *GroupMessagingController) recordSendFailure(message model.QueuedMessa
 func (gmc *GroupMessagingController) GetMessageStatus(c *gin.Context) {
 	queueID := c.Param("queue_id")
 
-	status := gmc.messageQueue.GetStatus(context.Background(), queueID)
+	status := gmc.messageQueue.GetStatus(c.Request.Context(), queueID)
 
 	response.Success(c, gin.H{
 		"queue_id": queueID,
@@ -344,7 +344,7 @@ func (gmc *GroupMessagingController) GetTemplates(c *gin.Context) {
 		}
 	}
 
-	templates, err := gmc.templateService.GetTemplates(context.Background(), category, isActive)
+	templates, err := gmc.templateService.GetTemplates(c.Request.Context(), category, isActive)
 	if err != nil {
 		response.ErrorFromDB(c, err, "获取模板失败", err.Error())
 		return
@@ -361,7 +361,7 @@ func (gmc *GroupMessagingController) GetTemplateByID(c *gin.Context) {
 		return
 	}
 
-	template, err := gmc.templateService.GetTemplate(context.Background(), templateID)
+	template, err := gmc.templateService.GetTemplate(c.Request.Context(), templateID)
 	if HandleDBError(c, err, "获取消息模板") {
 		return
 	}
@@ -377,7 +377,7 @@ func (gmc *GroupMessagingController) CreateTemplate(c *gin.Context) {
 		return
 	}
 
-	template, err := gmc.templateService.CreateTemplate(context.Background(), &req)
+	template, err := gmc.templateService.CreateTemplate(c.Request.Context(), &req)
 	if HandleDBError(c, err, "创建模板") {
 		return
 	}
@@ -399,7 +399,7 @@ func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 		return
 	}
 
-	existingTemplate, err := gmc.templateService.GetTemplate(context.Background(), id)
+	existingTemplate, err := gmc.templateService.GetTemplate(c.Request.Context(), id)
 	if HandleDBError(c, err, "获取模板") {
 		return
 	}
@@ -417,7 +417,7 @@ func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 	}
 	existingTemplate.Description = req.Description
 
-	updated, err := gmc.templateService.UpdateTemplate(context.Background(), existingTemplate)
+	updated, err := gmc.templateService.UpdateTemplate(c.Request.Context(), existingTemplate)
 	if HandleDBError(c, err, "更新模板") {
 		return
 	}
@@ -429,7 +429,7 @@ func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 func (gmc *GroupMessagingController) DeleteTemplate(c *gin.Context) {
 	id := c.Param("id")
 
-	if HandleDBError(c, gmc.templateService.DeleteTemplate(context.Background(), id), "删除模板") {
+	if HandleDBError(c, gmc.templateService.DeleteTemplate(c.Request.Context(), id), "删除模板") {
 		return
 	}
 
@@ -444,7 +444,7 @@ func (gmc *GroupMessagingController) GetSendRecords(c *gin.Context) {
 		return
 	}
 
-	allStatuses := gmc.messageQueue.ListAllStatuses(context.Background())
+	allStatuses := gmc.messageQueue.ListAllStatuses(c.Request.Context())
 
 	statuses := make([]map[string]any, 0, len(allStatuses))
 	for _, status := range allStatuses {
@@ -501,7 +501,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 		return
 	}
 
-	template, err := gmc.templateService.GetTemplate(context.Background(), req.TemplateID)
+	template, err := gmc.templateService.GetTemplate(c.Request.Context(), req.TemplateID)
 	if HandleDBError(c, err, "获取消息模板") {
 		return
 	}
@@ -517,7 +517,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 			response.Error(c, http.StatusBadRequest, "请选择目标分群")
 			return
 		}
-		clues, _, err := gmc.clueSvc.GetWhatsappClues(context.Background())
+		clues, _, err := gmc.clueSvc.GetWhatsappClues(c.Request.Context())
 		if err != nil {
 			response.ErrorFromDB(c, err, "获取线索失败")
 			return
@@ -529,7 +529,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 			})
 		}
 	default: // all / clue / csv 均按全部 WhatsApp 线索发送
-		clues, _, err := gmc.clueSvc.GetWhatsappClues(context.Background())
+		clues, _, err := gmc.clueSvc.GetWhatsappClues(c.Request.Context())
 		if err != nil {
 			response.ErrorFromDB(c, err, "获取线索失败")
 			return
@@ -559,7 +559,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 		})
 	}
 
-	queueID, err := gmc.messageQueue.AddBatch(context.Background(), messages)
+	queueID, err := gmc.messageQueue.AddBatch(c.Request.Context(), messages)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "添加到队列失败", "添加到队列失败")
 		return
@@ -585,7 +585,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 // GET /api/whatsapp/jobs/:id/progress
 func (gmc *GroupMessagingController) GetJobProgress(c *gin.Context) {
 	jobID := c.Param("id")
-	status := gmc.messageQueue.GetStatus(context.Background(), jobID)
+	status := gmc.messageQueue.GetStatus(c.Request.Context(), jobID)
 
 	total := status.Total
 	percentage := 0.0

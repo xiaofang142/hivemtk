@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -352,7 +351,7 @@ func (c *InboxController) DeleteMessage(ctx *gin.Context) {
 // StaffLoad 客服负载
 func (c *InboxController) StaffLoad(ctx *gin.Context) {
 	staff := ctx.Param("staff")
-	load, err := c.svc.StaffLoad(context.Background(), staff)
+	load, err := c.svc.StaffLoad(ctx.Request.Context(), staff)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

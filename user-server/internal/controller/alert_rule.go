@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,7 +37,7 @@ func (c *AlertRuleController) Create(ctx *gin.Context) {
 	}
 	creatorID, _ := ctx.Get("user_id")
 	uid, _ := toUint(creatorID)
-	rule, err := c.svc.Create(context.Background(), &req, uid)
+	rule, err := c.svc.Create(ctx.Request.Context(), &req, uid)
 	if err != nil {
 		if strings.Contains(err.Error(), "不合法") || strings.Contains(err.Error(), "不支持") {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
@@ -70,7 +69,7 @@ func (c *AlertRuleController) Update(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, err.Error())
 		return
 	}
-	rule, err := c.svc.Update(context.Background(), uint(id), &req)
+	rule, err := c.svc.Update(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
 		if err == service.ErrAlertRuleNotFound {
 			response.Error(ctx, http.StatusNotFound, err.Error())
@@ -99,7 +98,7 @@ func (c *AlertRuleController) Delete(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, "id 非法")
 		return
 	}
-	if err := c.svc.Delete(context.Background(), uint(id)); err != nil {
+	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
 		if err == service.ErrAlertRuleNotFound {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
@@ -123,7 +122,7 @@ func (c *AlertRuleController) GetByID(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, "id 非法")
 		return
 	}
-	rule, err := c.svc.GetByID(context.Background(), uint(id))
+	rule, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -144,7 +143,7 @@ func (c *AlertRuleController) List(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(ctx.DefaultQuery("size", "20"))
 	enabledOnly := ctx.Query("enabled_only") == "true"
-	list, total, err := c.svc.List(context.Background(), page, size, enabledOnly)
+	list, total, err := c.svc.List(ctx.Request.Context(), page, size, enabledOnly)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -173,7 +172,7 @@ func (c *AlertRuleController) SetStatus(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, "ids 不能为空")
 		return
 	}
-	if err := c.svc.SetStatus(context.Background(), req.IDs, req.Enabled); err != nil {
+	if err := c.svc.SetStatus(ctx.Request.Context(), req.IDs, req.Enabled); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -195,7 +194,7 @@ func (c *AlertRuleController) ListHistory(ctx *gin.Context) {
 	size, _ := strconv.Atoi(ctx.DefaultQuery("size", "20"))
 	ruleID, _ := strconv.ParseUint(ctx.Query("rule_id"), 10, 64)
 	source := ctx.Query("source")
-	list, total, err := c.svc.ListHistory(context.Background(), page, size, uint(ruleID), source)
+	list, total, err := c.svc.ListHistory(ctx.Request.Context(), page, size, uint(ruleID), source)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -216,7 +215,7 @@ func (c *AlertRuleController) ResolveHistory(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, "rule_id 非法")
 		return
 	}
-	if err := c.svc.ResolveHistory(context.Background(), uint(ruleID)); err != nil {
+	if err := c.svc.ResolveHistory(ctx.Request.Context(), uint(ruleID)); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -233,7 +232,7 @@ func (c *AlertRuleController) ResolveHistory(ctx *gin.Context) {
 // @Router       /api/monitor/alerts/unread [get]
 func (c *AlertRuleController) Unread(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
-	out, err := c.svc.GetUnread(context.Background(), limit)
+	out, err := c.svc.GetUnread(ctx.Request.Context(), limit)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return

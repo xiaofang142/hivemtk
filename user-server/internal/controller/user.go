@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -26,7 +25,7 @@ func (c *UserController) GetUserList(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.svc.GetUserList(context.Background(), page, pageSize)
+	result, err := c.svc.GetUserList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -39,7 +38,7 @@ func (c *UserController) GetUserList(ctx *gin.Context) {
 func (c *UserController) GetUser(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	user, err := c.svc.GetUser(context.Background(), idStr)
+	user, err := c.svc.GetUser(ctx.Request.Context(), idStr)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "用户不存在")
 		return
@@ -56,7 +55,7 @@ func (c *UserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.svc.RegisterUser(context.Background(), &req)
+	user, err := c.svc.RegisterUser(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -75,7 +74,7 @@ func (c *UserController) UpdateUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.svc.UpdateUser(context.Background(), idStr, &req)
+	user, err := c.svc.UpdateUser(ctx.Request.Context(), idStr, &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -87,7 +86,7 @@ func (c *UserController) UpdateUser(ctx *gin.Context) {
 func (c *UserController) DeleteUser(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	err := c.svc.DeleteUser(context.Background(), idStr)
+	err := c.svc.DeleteUser(ctx.Request.Context(), idStr)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -106,7 +105,7 @@ func (c *UserController) UpdatePassword(ctx *gin.Context) {
 		return
 	}
 
-	err := c.svc.UpdatePassword(context.Background(), idStr, &req)
+	err := c.svc.UpdatePassword(ctx.Request.Context(), idStr, &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -123,7 +122,7 @@ func (c *UserController) Login(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.svc.Login(context.Background(), &req)
+	result, err := c.svc.Login(ctx.Request.Context(), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusUnauthorized, err.Error())
 		return

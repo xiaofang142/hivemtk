@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -93,7 +92,7 @@ func defaultLogPath() string {
 
 // GetSystemStats 获取系统统计信息
 func (c *SystemOpsController) GetSystemStats(ctx *gin.Context) {
-	stats, err := c.monitorService.GetSystemStats(context.Background())
+	stats, err := c.monitorService.GetSystemStats(ctx.Request.Context())
 	if err != nil {
 		logger.Errorf("GetSystemStats failed: %v", err)
 		response.ErrorFromDB(ctx, err, "获取系统统计失败")
@@ -107,7 +106,7 @@ func (c *SystemOpsController) GetBackupList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
-	backups, total, err := c.backupService.GetBackupList(context.Background(), page, pageSize)
+	backups, total, err := c.backupService.GetBackupList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		logger.Errorf("GetBackupList failed: %v", err)
 		response.ErrorFromDB(ctx, err, "获取备份列表失败")
@@ -131,7 +130,7 @@ func (c *SystemOpsController) CreateBackup(ctx *gin.Context) {
 	}
 
 	createdBy := currentUserID(ctx)
-	backup, err := c.backupService.CreateBackup(context.Background(), createdBy, &req)
+	backup, err := c.backupService.CreateBackup(ctx.Request.Context(), createdBy, &req)
 	if err != nil {
 		logger.Errorf("CreateBackup failed: %v", err)
 		response.ErrorFromDB(ctx, err, "创建备份失败")
@@ -150,7 +149,7 @@ func (c *SystemOpsController) RestoreBackup(ctx *gin.Context) {
 	}
 
 	createdBy := currentUserID(ctx)
-	record, err := c.restoreService.RestoreBackup(context.Background(), createdBy, &req)
+	record, err := c.restoreService.RestoreBackup(ctx.Request.Context(), createdBy, &req)
 	if err != nil {
 		logger.Errorf("RestoreBackup failed: %v", err)
 		if strings.Contains(err.Error(), "不存在") {

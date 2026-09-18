@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -37,7 +36,7 @@ func (c *PromptController) GetVersions(ctx *gin.Context) {
 	}
 
 	status := ctx.Query("status")
-	versions, err := c.svc.ListVersions(context.Background(), idStr, uint(id), "", status)
+	versions, err := c.svc.ListVersions(ctx.Request.Context(), idStr, uint(id), "", status)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取 prompt 版本列表失败")
 		return
@@ -69,7 +68,7 @@ func (c *PromptController) Publish(ctx *gin.Context) {
 		return
 	}
 
-	newVersion, err := c.svc.Publish(context.Background(), service.PublishRequest{
+	newVersion, err := c.svc.Publish(ctx.Request.Context(), service.PublishRequest{
 		SystemPrompt:       req.SystemPrompt,
 		UserPromptTemplate: req.UserPromptTemplate,
 		SOPNodeID:          req.SOPNodeID,
@@ -89,7 +88,7 @@ func (c *PromptController) Publish(ctx *gin.Context) {
 // GET /api/prompts/ab-experiments?status=running
 func (c *PromptController) GetABExperiments(ctx *gin.Context) {
 	status := ctx.Query("status")
-	experiments, err := c.svc.ListABTests(context.Background(), status)
+	experiments, err := c.svc.ListABTests(ctx.Request.Context(), status)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取 A/B 实验列表失败")
 		return
@@ -134,7 +133,7 @@ func (c *PromptController) Create(ctx *gin.Context) {
 	if p.Status == "" {
 		p.Status = model.PromptCandidateStatusDraft
 	}
-	if err := c.svc.Create(context.Background(), p); err != nil {
+	if err := c.svc.Create(ctx.Request.Context(), p); err != nil {
 		response.ErrorFromDB(ctx, err, "创建 Prompt 失败")
 		return
 	}
@@ -150,7 +149,7 @@ func (c *PromptController) Update(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
 		return
 	}
-	p, err := c.svc.GetByID(context.Background(), uint(id))
+	p, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "Prompt 不存在")
 		return
@@ -182,7 +181,7 @@ func (c *PromptController) Update(ctx *gin.Context) {
 		p.Status = req.Status
 	}
 	p.ImprovementNotes = req.ImprovementNotes
-	if err := c.svc.Update(context.Background(), p); err != nil {
+	if err := c.svc.Update(ctx.Request.Context(), p); err != nil {
 		response.ErrorFromDB(ctx, err, "更新 Prompt 失败")
 		return
 	}
@@ -198,7 +197,7 @@ func (c *PromptController) Delete(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
 		return
 	}
-	if err := c.svc.Delete(context.Background(), uint(id)); err != nil {
+	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
 		response.ErrorFromDB(ctx, err, "删除 Prompt 失败")
 		return
 	}
@@ -214,7 +213,7 @@ func (c *PromptController) GetByID(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
 		return
 	}
-	p, err := c.svc.GetByID(context.Background(), uint(id))
+	p, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "Prompt 不存在")
 		return
@@ -242,7 +241,7 @@ func (c *PromptController) List(ctx *gin.Context) {
 			sopID = uint(v)
 		}
 	}
-	list, total, err := c.svc.List(context.Background(), page, pageSize, status, sopNodeID, sopID)
+	list, total, err := c.svc.List(ctx.Request.Context(), page, pageSize, status, sopNodeID, sopID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取 Prompt 列表失败")
 		return

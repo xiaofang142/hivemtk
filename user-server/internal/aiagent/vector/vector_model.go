@@ -346,7 +346,7 @@ func (vp *VectorProcessor) BatchSearch(ctx context.Context, queries []string, to
 	results := make([][]SearchResult, len(queries))
 
 	for i, query := range queries {
-		searchResults, err := vp.Search(context.Background(), query, topK)
+		searchResults, err := vp.Search(ctx, query, topK)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search for query %d: %w", i, err)
 		}

@@ -151,22 +151,22 @@ func (s *SalesWorkbenchService) GetOverview(ctx context.Context, salesID string)
 	overview.Month = s.aggregateMonth(ctx, salesID, stats, monthStart)
 
 	if stats != nil {
-		overview.AIProduct = stats.GetAIProductivity(context.Background(), monthStart)
+		overview.AIProduct = stats.GetAIProductivity(ctx, monthStart)
 	}
 
 	if journey != nil {
-		overview.Funnel = journey.Funnel(context.Background())
+		overview.Funnel = journey.Funnel(ctx)
 	}
 
 	if stats != nil {
-		overview.Leaderboard = stats.GetTeamRanking(context.Background(), monthStart, 5)
+		overview.Leaderboard = stats.GetTeamRanking(ctx, monthStart, 5)
 		overview.MyRank = s.findMyRank(ctx, overview.Leaderboard, salesID)
 	}
 
 	overview.Metrics = s.aggregateMetrics(ctx, salesID, stats, journey, tagger, monthStart)
 
 	if stats != nil {
-		perf := stats.GetSalesPerformance(context.Background(), salesID, time.Time{})
+		perf := stats.GetSalesPerformance(ctx, salesID, time.Time{})
 		if perf != nil {
 			overview.Name = perf.Name
 			overview.Team = perf.Team
@@ -181,7 +181,7 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 	now := time.Now()
 
 	if draft != nil {
-		for _, d := range draft.ListPending(context.Background(), salesID, 0) {
+		for _, d := range draft.ListPending(ctx, salesID, 0) {
 			todos = append(todos, &WorkbenchTodo{
 				Type:        "draft",
 				Priority:    5,
@@ -198,7 +198,7 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 	}
 
 	if followup != nil {
-		for _, r := range followup.ListPending(context.Background(), salesID, 0) {
+		for _, r := range followup.ListPending(ctx, salesID, 0) {
 			if r.DueAt.Before(todayStart(now)) || r.Status != "pending" {
 				continue
 			}
@@ -221,7 +221,7 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 				URL:         "/dashboard/followups/" + r.ID,
 			})
 		}
-		for _, r := range followup.ListOverdue(context.Background(), salesID) {
+		for _, r := range followup.ListOverdue(ctx, salesID) {
 			todos = append(todos, &WorkbenchTodo{
 				Type:        "followup",
 				Priority:    5,
@@ -255,7 +255,7 @@ func (s *SalesWorkbenchService) aggregateToday(ctx context.Context, salesID stri
 	if stats == nil {
 		return day
 	}
-	bg := context.Background()
+	bg := ctx
 	for _, o := range stats.Orders(bg, salesID, todayStart) {
 		day.NewOrders++
 		day.NewRevenue += o.Amount
@@ -280,7 +280,7 @@ func (s *SalesWorkbenchService) aggregateMonth(ctx context.Context, salesID stri
 	if stats == nil {
 		return month
 	}
-	bg := context.Background()
+	bg := ctx
 	for _, o := range stats.Orders(bg, salesID, monthStart) {
 		month.TotalOrders++
 		month.TotalRevenue += o.Amount
@@ -305,7 +305,7 @@ func (s *SalesWorkbenchService) aggregateMetrics(ctx context.Context, salesID st
 	if stats == nil {
 		return metrics
 	}
-	orders := stats.Orders(context.Background(), salesID, since)
+	orders := stats.Orders(ctx, salesID, since)
 	totalOrders := 0
 	repurchaseOrders := 0
 	uniqueCustomers := make(map[string]bool)
@@ -342,7 +342,7 @@ func (s *SalesWorkbenchService) aggregateMetrics(ctx context.Context, salesID st
 
 	aiCount := 0
 	totalCount := 0
-	for _, f := range stats.FollowUps(context.Background(), salesID, since) {
+	for _, f := range stats.FollowUps(ctx, salesID, since) {
 		totalCount++
 		if f.IsAI {
 			aiCount++

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reach/card/template"
@@ -33,7 +32,7 @@ func (c *LiveCodeController) Create(ctx *gin.Context) {
 		return
 	}
 
-	liveCode, err := c.liveCodeService.Create(context.Background(), &req)
+	liveCode, err := c.liveCodeService.Create(ctx.Request.Context(), &req)
 	if HandleDBError(ctx, err, "创建活码") {
 		return
 	}
@@ -51,7 +50,7 @@ func (c *LiveCodeController) Update(ctx *gin.Context) {
 		return
 	}
 
-	liveCode, err := c.liveCodeService.Update(context.Background(), idStr, &req)
+	liveCode, err := c.liveCodeService.Update(ctx.Request.Context(), idStr, &req)
 	if HandleDBError(ctx, err, "更新活码") {
 		return
 	}
@@ -63,7 +62,7 @@ func (c *LiveCodeController) Update(ctx *gin.Context) {
 func (c *LiveCodeController) Delete(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	err := c.liveCodeService.Delete(context.Background(), idStr)
+	err := c.liveCodeService.Delete(ctx.Request.Context(), idStr)
 	if HandleDBError(ctx, err, "删除活码") {
 		return
 	}
@@ -75,7 +74,7 @@ func (c *LiveCodeController) Delete(ctx *gin.Context) {
 func (c *LiveCodeController) GetByID(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	liveCode, err := c.liveCodeService.GetByID(context.Background(), idStr)
+	liveCode, err := c.liveCodeService.GetByID(ctx.Request.Context(), idStr)
 	if HandleDBError(ctx, err, "获取活码") {
 		return
 	}
@@ -100,7 +99,7 @@ func (c *LiveCodeController) GetList(ctx *gin.Context) {
 		pageSize = 10
 	}
 
-	liveCodes, total, err := c.liveCodeService.GetList(context.Background(), page, pageSize, name, status)
+	liveCodes, total, err := c.liveCodeService.GetList(ctx.Request.Context(), page, pageSize, name, status)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -116,7 +115,7 @@ func (c *LiveCodeController) GetList(ctx *gin.Context) {
 func (c *LiveCodeController) GetStats(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	stats, err := c.liveCodeService.GetStats(context.Background(), idStr)
+	stats, err := c.liveCodeService.GetStats(ctx.Request.Context(), idStr)
 	if HandleDBError(ctx, err, "获取活码统计") {
 		return
 	}
@@ -134,7 +133,7 @@ func (c *LiveCodeController) GenerateQRCode(ctx *gin.Context) {
 		return
 	}
 
-	qrCode, err := c.liveCodeService.GenerateQRCode(context.Background(), idStr, &req)
+	qrCode, err := c.liveCodeService.GenerateQRCode(ctx.Request.Context(), idStr, &req)
 	if HandleDBError(ctx, err, "生成活码二维码") {
 		return
 	}
@@ -146,7 +145,7 @@ func (c *LiveCodeController) GenerateQRCode(ctx *gin.Context) {
 func (c *LiveCodeController) GetQRCodes(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	qrCodes, err := c.liveCodeService.GetQRCodes(context.Background(), idStr)
+	qrCodes, err := c.liveCodeService.GetQRCodes(ctx.Request.Context(), idStr)
 	if HandleDBError(ctx, err, "获取活码二维码列表") {
 		return
 	}
@@ -158,7 +157,7 @@ func (c *LiveCodeController) GetQRCodes(ctx *gin.Context) {
 func (c *LiveCodeController) GetQRStats(ctx *gin.Context) {
 	qrIDStr := ctx.Param("qrId")
 
-	stats, err := c.liveCodeService.GetQRStats(context.Background(), qrIDStr)
+	stats, err := c.liveCodeService.GetQRStats(ctx.Request.Context(), qrIDStr)
 	if HandleDBError(ctx, err, "获取活码二维码统计") {
 		return
 	}
@@ -175,7 +174,7 @@ func (c *LiveCodeController) Share(ctx *gin.Context) {
 		UserAgent: ctx.GetHeader("User-Agent"),
 	}
 
-	shareResponse, err := c.liveCodeService.Share(context.Background(), idStr, &req)
+	shareResponse, err := c.liveCodeService.Share(ctx.Request.Context(), idStr, &req)
 	if HandleServiceError(ctx, err) {
 		return
 	}
@@ -191,7 +190,7 @@ func (c *LiveCodeController) RedirectLiveCode(ctx *gin.Context) {
 		return
 	}
 
-	liveCode, err := c.liveCodeService.GetByShortLink(context.Background(), code)
+	liveCode, err := c.liveCodeService.GetByShortLink(ctx.Request.Context(), code)
 	if err != nil {
 		ctx.String(http.StatusNotFound, "活码不存在")
 		return
@@ -207,7 +206,7 @@ func (c *LiveCodeController) RedirectLiveCode(ctx *gin.Context) {
 		UserAgent: ctx.GetHeader("User-Agent"),
 	}
 
-	response, err := c.liveCodeService.Share(context.Background(), liveCode.ID, req)
+	response, err := c.liveCodeService.Share(ctx.Request.Context(), liveCode.ID, req)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "分享失败: %v", err)
 		return
@@ -227,19 +226,19 @@ func (c *LiveCodeController) RedirectLiveCode(ctx *gin.Context) {
 func (c *LiveCodeController) RenderLiveCodePage(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 
-	liveCode, err := c.liveCodeService.GetByID(context.Background(), idStr)
+	liveCode, err := c.liveCodeService.GetByID(ctx.Request.Context(), idStr)
 	if err != nil {
 		ctx.String(http.StatusNotFound, "活码不存在")
 		return
 	}
 
-	stats, err := c.liveCodeService.GetStats(context.Background(), idStr)
+	stats, err := c.liveCodeService.GetStats(ctx.Request.Context(), idStr)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "获取活码统计失败")
 		return
 	}
 
-	qrCodes, err := c.liveCodeService.GetQRCodes(context.Background(), idStr)
+	qrCodes, err := c.liveCodeService.GetQRCodes(ctx.Request.Context(), idStr)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "获取二维码列表失败")
 		return
@@ -289,7 +288,7 @@ func (c *LiveCodeController) RecordClick(ctx *gin.Context) {
 		return
 	}
 
-	err := c.liveCodeService.RecordClick(context.Background(), idStr, ctx.ClientIP(), req.UserAgent, req.Referrer)
+	err := c.liveCodeService.RecordClick(ctx.Request.Context(), idStr, ctx.ClientIP(), req.UserAgent, req.Referrer)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "记录点击统计失败")
 		return
@@ -306,7 +305,7 @@ func (c *LiveCodeController) DeleteLiveCodeQR(ctx *gin.Context) {
 		return
 	}
 
-	err := c.liveCodeService.DeleteQRCode(context.Background(), idStr)
+	err := c.liveCodeService.DeleteQRCode(ctx.Request.Context(), idStr)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
@@ -333,7 +332,7 @@ func (c *LiveCodeController) UpdateLiveCodeQR(ctx *gin.Context) {
 		return
 	}
 
-	err := c.liveCodeService.UpdateQRCode(context.Background(), idStr, &req)
+	err := c.liveCodeService.UpdateQRCode(ctx.Request.Context(), idStr, &req)
 	if HandleDBError(ctx, err, "更新二维码") {
 		return
 	}

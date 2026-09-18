@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -39,7 +38,7 @@ func (c *KuaishouCardStatsController) GetCardStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := c.statsService.GetCardStats(context.Background(), &req)
+	stats, err := c.statsService.GetCardStats(ctx.Request.Context(), &req)
 	if HandleDBError(ctx, err, "获取快手卡片统计") {
 		return
 	}
@@ -56,7 +55,7 @@ func (c *KuaishouCardStatsController) GetOverallStats(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := c.statsService.GetOverallStats(context.Background(), &req)
+	stats, err := c.statsService.GetOverallStats(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取总体统计数据失败", err.Error())
 		return

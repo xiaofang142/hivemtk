@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -36,7 +35,7 @@ func NewCustomerController() *CustomerController {
 // @Router /api/customer [get]
 func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {
-		customers, total, nextCursor, err := c.customerService.ListKeyset(context.Background(), cursor, limit)
+		customers, total, nextCursor, err := c.customerService.ListKeyset(ctx.Request.Context(), cursor, limit)
 		if err != nil {
 			response.ErrorFromDB(ctx, err, err.Error())
 			return
@@ -56,7 +55,7 @@ func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 		return
 	}
 
-	customers, total, err := c.customerService.List(context.Background(), page, limit)
+	customers, total, err := c.customerService.List(ctx.Request.Context(), page, limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -86,7 +85,7 @@ func (c *CustomerController) GetCustomer(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := c.customerService.GetCustomerProfile(context.Background(), customerID)
+	profile, err := c.customerService.GetCustomerProfile(ctx.Request.Context(), customerID)
 	if err != nil {
 		if err == service.ErrCustomerNotFound {
 			response.Error(ctx, http.StatusNotFound, err.Error())
@@ -116,7 +115,7 @@ func (c *CustomerController) CreateCustomer(ctx *gin.Context) {
 		return
 	}
 
-	customer, err := c.customerService.CreateOrUpdate(context.Background(), &req)
+	customer, err := c.customerService.CreateOrUpdate(ctx.Request.Context(), &req)
 	if err != nil {
 		if err == service.ErrInvalidDTO {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
@@ -158,7 +157,7 @@ func (c *CustomerController) AddTags(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.customerService.AddTags(context.Background(), customerID, req.Tags); err != nil {
+	if err := c.customerService.AddTags(ctx.Request.Context(), customerID, req.Tags); err != nil {
 		if err == service.ErrCustomerNotFound {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
@@ -198,7 +197,7 @@ func (c *CustomerController) RemoveTags(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.customerService.RemoveTags(context.Background(), customerID, req.Tags); err != nil {
+	if err := c.customerService.RemoveTags(ctx.Request.Context(), customerID, req.Tags); err != nil {
 		if err == service.ErrCustomerNotFound {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
@@ -236,7 +235,7 @@ func (c *CustomerController) MergeCustomers(ctx *gin.Context) {
 		UserID:   getUserIDFromContext(ctx),
 		Username: ctx.GetString("username"),
 	}
-	svcCtx := service.WithOperator(context.Background(), op)
+	svcCtx := service.WithOperator(ctx.Request.Context(), op)
 
 	if err := c.customerService.MergeCustomers(svcCtx, req.PrimaryID, req.SecondaryID); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())

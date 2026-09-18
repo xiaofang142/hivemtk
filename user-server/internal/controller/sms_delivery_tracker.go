@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -114,7 +113,7 @@ func (c *SmsDeliveryTrackerController) GetCarrier(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "缺少 phone 参数")
 		return
 	}
-	carrier := c.svc.GetCurrentCarrier(context.Background(), phone)
+	carrier := c.svc.GetCurrentCarrier(ctx.Request.Context(), phone)
 	response.Success(ctx, gin.H{
 		"phone":   phone,
 		"carrier": carrier,

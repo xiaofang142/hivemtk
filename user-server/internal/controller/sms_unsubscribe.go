@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"crypto/subtle"
 	"encoding/csv"
 	"net/http"
@@ -134,7 +133,7 @@ func (c *SmsUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 	keyword := ctx.Query("keyword")
 
-	records, total, err := c.svc.ListUnsubscribes(context.Background(), page, limit, keyword)
+	records, total, err := c.svc.ListUnsubscribes(ctx.Request.Context(), page, limit, keyword)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询退订名单失败："+err.Error())
 		return
@@ -147,7 +146,7 @@ func (c *SmsUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 //
 // 导出退订名单 CSV
 func (c *SmsUnsubscribeController) ExportUnsubscribes(ctx *gin.Context) {
-	records, err := c.svc.ListAllUnsubscribes(context.Background())
+	records, err := c.svc.ListAllUnsubscribes(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "导出退订名单失败："+err.Error())
 		return

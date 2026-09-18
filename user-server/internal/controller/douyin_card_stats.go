@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -42,7 +41,7 @@ func (c *DouyinCardStatsController) GetCardStats(ctx *gin.Context) {
 		EndDate:   endDate,
 	}
 
-	stats, err := c.service.GetCardStats(context.Background(), req)
+	stats, err := c.service.GetCardStats(ctx.Request.Context(), req)
 	if HandleDBError(ctx, err, "获取抖音卡片统计") {
 		return
 	}
@@ -62,7 +61,7 @@ func (c *DouyinCardStatsController) GetOverallStats(ctx *gin.Context) {
 		EndDate:   endDate,
 	}
 
-	stats, err := c.service.GetOverallStats(context.Background(), req)
+	stats, err := c.service.GetOverallStats(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取总体统计数据失败", err.Error())
 		return

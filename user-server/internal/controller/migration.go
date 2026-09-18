@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/migration"
 	"hivemtk-user/internal/migration/migrations"
 	"hivemtk-user/internal/pkg/utils/pagination"
@@ -49,7 +48,7 @@ func (c *MigrationController) GetUpgradeTask(ctx *gin.Context) {
 		return
 	}
 
-	task, err := c.migrationService.GetUpgradeTask(context.Background(), uint(id))
+	task, err := c.migrationService.GetUpgradeTask(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -66,7 +65,7 @@ func (c *MigrationController) GetUpgradeHistory(ctx *gin.Context) {
 		return
 	}
 
-	tasks, total, err := c.migrationService.GetUpgradeHistory(context.Background(), page, pageSize)
+	tasks, total, err := c.migrationService.GetUpgradeHistory(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -82,7 +81,7 @@ func (c *MigrationController) GetUpgradeHistory(ctx *gin.Context) {
 
 // GetMigrationRecords 获取迁移记录
 func (c *MigrationController) GetMigrationRecords(ctx *gin.Context) {
-	records, err := c.migrationService.GetMigrationRecords(context.Background())
+	records, err := c.migrationService.GetMigrationRecords(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -93,7 +92,7 @@ func (c *MigrationController) GetMigrationRecords(ctx *gin.Context) {
 
 // GetCurrentVersion 获取当前数据库版本
 func (c *MigrationController) GetCurrentVersion(ctx *gin.Context) {
-	version, err := c.migrationService.GetCurrentVersion(context.Background())
+	version, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -112,13 +111,13 @@ func (c *MigrationController) CreateUpgradeTask(ctx *gin.Context) {
 		return
 	}
 
-	currentVersion, err := c.migrationService.GetCurrentVersion(context.Background())
+	currentVersion, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
 
-	task, err := c.migrationService.ExecuteUpgrade(context.Background(), currentVersion, req.ToVersion)
+	task, err := c.migrationService.ExecuteUpgrade(ctx.Request.Context(), currentVersion, req.ToVersion)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -137,7 +136,7 @@ func (c *MigrationController) Rollback(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.migrationService.Rollback(context.Background(), req.TargetVersion); err != nil {
+	if err := c.migrationService.Rollback(ctx.Request.Context(), req.TargetVersion); err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
@@ -147,13 +146,13 @@ func (c *MigrationController) Rollback(ctx *gin.Context) {
 
 // GetAvailableUpgrades 获取可执行的迁移列表
 func (c *MigrationController) GetAvailableUpgrades(ctx *gin.Context) {
-	currentVersion, err := c.migrationService.GetCurrentVersion(context.Background())
+	currentVersion, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
 
-	pendingMigrations, err := c.migrationService.GetPendingMigrations(context.Background())
+	pendingMigrations, err := c.migrationService.GetPendingMigrations(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

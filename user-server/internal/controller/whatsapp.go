@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"strings"
@@ -28,7 +27,7 @@ func NewWhatsappController() *WhatsappController {
 
 // Accounts
 func (c *WhatsappController) ListAccounts(ctx *gin.Context) {
-	list, err := c.svc.ListAccounts(context.Background())
+	list, err := c.svc.ListAccounts(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取账号列表失败", err.Error())
 		return
@@ -47,7 +46,7 @@ func (c *WhatsappController) CreateAccount(ctx *gin.Context) {
 		response.Error(ctx, 400, "参数错误", err.Error())
 		return
 	}
-	acc, err := c.svc.CreateAccount(context.Background(), req.Name, req.Remark)
+	acc, err := c.svc.CreateAccount(ctx.Request.Context(), req.Name, req.Remark)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "创建账号失败", err.Error())
 		return
@@ -63,7 +62,7 @@ func (c *WhatsappController) StartLogin(ctx *gin.Context) {
 		response.Error(ctx, 400, "账号ID错误", err.Error())
 		return
 	}
-	qr, err := c.svc.StartLogin(context.Background(), accID, 20*time.Second)
+	qr, err := c.svc.StartLogin(ctx.Request.Context(), accID, 20*time.Second)
 	if err != nil {
 
 		if strings.Contains(err.Error(), "dial") || strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "handshake") {
@@ -83,12 +82,12 @@ func (c *WhatsappController) LoginStatus(ctx *gin.Context) {
 		response.Error(ctx, 400, "账号ID错误", err.Error())
 		return
 	}
-	loggedIn, err := c.svc.LoginStatus(context.Background(), accID)
+	loggedIn, err := c.svc.LoginStatus(ctx.Request.Context(), accID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取登录状态失败", err.Error())
 		return
 	}
-	qr, _ := c.svc.GetLoginQR(context.Background(), accID)
+	qr, _ := c.svc.GetLoginQR(ctx.Request.Context(), accID)
 	response.Success(ctx, gin.H{"logged_in": loggedIn, "qr": qr}, "登录状态获取成功")
 }
 
@@ -98,7 +97,7 @@ type createDraftReq struct {
 }
 
 func (c *WhatsappController) ListDrafts(ctx *gin.Context) {
-	list, err := c.svc.ListDrafts(context.Background())
+	list, err := c.svc.ListDrafts(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取草稿失败", err.Error())
 		return
@@ -112,7 +111,7 @@ func (c *WhatsappController) CreateDraft(ctx *gin.Context) {
 		response.Error(ctx, 400, "参数错误", err.Error())
 		return
 	}
-	d, err := c.svc.CreateDraft(context.Background(), req.Title, req.Content)
+	d, err := c.svc.CreateDraft(ctx.Request.Context(), req.Title, req.Content)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "创建草稿失败", err.Error())
 		return
@@ -135,7 +134,7 @@ func (c *WhatsappController) CreateJob(ctx *gin.Context) {
 		response.Error(ctx, 400, "草稿ID错误", err.Error())
 		return
 	}
-	job, err := c.svc.CreateBulkJob(context.Background(), dID)
+	job, err := c.svc.CreateBulkJob(ctx.Request.Context(), dID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "创建任务失败", err.Error())
 		return
@@ -156,7 +155,7 @@ func (c *WhatsappController) UpdateAccount(ctx *gin.Context) {
 		response.Error(ctx, 400, "参数错误", err.Error())
 		return
 	}
-	acc, err := c.svc.GetAccount(context.Background(), accID)
+	acc, err := c.svc.GetAccount(ctx.Request.Context(), accID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取账号失败", err.Error())
 		return
@@ -167,7 +166,7 @@ func (c *WhatsappController) UpdateAccount(ctx *gin.Context) {
 	}
 	acc.Name = req.Name
 	acc.Remark = req.Remark
-	if err := c.svc.UpdateAccount(context.Background(), acc); err != nil {
+	if err := c.svc.UpdateAccount(ctx.Request.Context(), acc); err != nil {
 		response.ErrorFromDB(ctx, err, "更新账号失败", err.Error())
 		return
 	}
@@ -182,7 +181,7 @@ func (c *WhatsappController) DeleteAccount(ctx *gin.Context) {
 		response.Error(ctx, 400, "账号ID错误", err.Error())
 		return
 	}
-	if err := c.svc.DeleteAccount(context.Background(), accID); err != nil {
+	if err := c.svc.DeleteAccount(ctx.Request.Context(), accID); err != nil {
 		response.ErrorFromDB(ctx, err, "删除账号失败", err.Error())
 		return
 	}
@@ -202,7 +201,7 @@ func (c *WhatsappController) UpdateDraft(ctx *gin.Context) {
 		response.Error(ctx, 400, "参数错误", err.Error())
 		return
 	}
-	draft, err := c.svc.GetDraft(context.Background(), draftID)
+	draft, err := c.svc.GetDraft(ctx.Request.Context(), draftID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取草稿失败", err.Error())
 		return
@@ -213,7 +212,7 @@ func (c *WhatsappController) UpdateDraft(ctx *gin.Context) {
 	}
 	draft.Title = req.Title
 	draft.Content = req.Content
-	if err := c.svc.UpdateDraft(context.Background(), draft); err != nil {
+	if err := c.svc.UpdateDraft(ctx.Request.Context(), draft); err != nil {
 		response.ErrorFromDB(ctx, err, "更新草稿失败", err.Error())
 		return
 	}
@@ -228,7 +227,7 @@ func (c *WhatsappController) DeleteDraft(ctx *gin.Context) {
 		response.Error(ctx, 400, "草稿ID错误", err.Error())
 		return
 	}
-	if err := c.svc.DeleteDraft(context.Background(), draftID); err != nil {
+	if err := c.svc.DeleteDraft(ctx.Request.Context(), draftID); err != nil {
 		response.ErrorFromDB(ctx, err, "删除草稿失败", err.Error())
 		return
 	}
@@ -237,7 +236,7 @@ func (c *WhatsappController) DeleteDraft(ctx *gin.Context) {
 
 // ListJobs 列出群发任务
 func (c *WhatsappController) ListJobs(ctx *gin.Context) {
-	list, err := c.svc.ListJobs(context.Background())
+	list, err := c.svc.ListJobs(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取任务列表失败", err.Error())
 		return
@@ -253,7 +252,7 @@ func (c *WhatsappController) GetJob(ctx *gin.Context) {
 		response.Error(ctx, 400, "任务ID错误", err.Error())
 		return
 	}
-	job, err := c.svc.GetJob(context.Background(), jobID)
+	job, err := c.svc.GetJob(ctx.Request.Context(), jobID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取任务失败", err.Error())
 		return
@@ -273,7 +272,7 @@ func (c *WhatsappController) DeleteJob(ctx *gin.Context) {
 		response.Error(ctx, 400, "任务ID错误", err.Error())
 		return
 	}
-	if err := c.svc.DeleteJob(context.Background(), jobID); err != nil {
+	if err := c.svc.DeleteJob(ctx.Request.Context(), jobID); err != nil {
 		response.ErrorFromDB(ctx, err, "删除任务失败", err.Error())
 		return
 	}

@@ -2,7 +2,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -39,7 +38,7 @@ func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的员工ID")
 		return
 	}
-	rep, err := c.svc.BuildReport(context.Background(), uint(staffID))
+	rep, err := c.svc.BuildReport(ctx.Request.Context(), uint(staffID))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "报告生成失败: "+err.Error())
 		return
@@ -56,7 +55,7 @@ func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 // @Success      200  {object}  response.Response  "成功"
 // @Router       /api/sales-persona/staffs [get]
 func (c *SalesPersonaController) ListStaffs(ctx *gin.Context) {
-	staffs, err := c.svc.ListStaffs(context.Background())
+	staffs, err := c.svc.ListStaffs(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

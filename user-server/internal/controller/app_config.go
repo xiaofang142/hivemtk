@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/platform"
@@ -90,7 +89,7 @@ type AppConfigResp struct {
 
 // GetAppConfig 获取应用配置
 func (c *AppConfigController) GetAppConfig(ctx *gin.Context) {
-	sysConfig, err := c.sysConfigSvc.GetConfig(context.Background())
+	sysConfig, err := c.sysConfigSvc.GetConfig(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取系统配置失败", err.Error())
 		return
@@ -131,7 +130,7 @@ func (c *AppConfigController) UpdateAppConfig(ctx *gin.Context) {
 		return
 	}
 
-	_, err := c.sysConfigSvc.SaveBasicConfig(context.Background(), req.BasicConfig.AppName, req.PlatformSync.PlatformURL)
+	_, err := c.sysConfigSvc.SaveBasicConfig(ctx.Request.Context(), req.BasicConfig.AppName, req.PlatformSync.PlatformURL)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "保存配置失败", err.Error())
 		return
@@ -153,7 +152,7 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 		return
 	}
 
-	sysConfig, err := c.sysConfigSvc.GetConfig(context.Background())
+	sysConfig, err := c.sysConfigSvc.GetConfig(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取系统配置失败", err.Error())
 		return
@@ -165,7 +164,7 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 		logger.Errorf("[app-config/sync] 平台不可用，降级处理: %v", licErr)
 	}
 
-	userCount, requestCount := c.sysConfigSvc.GetUsageStats(context.Background())
+	userCount, requestCount := c.sysConfigSvc.GetUsageStats(ctx.Request.Context())
 
 	usageReport := UsageReportInfo{
 		UserCount:      int(userCount),
@@ -213,7 +212,7 @@ func (c *AppConfigController) HealthCheck(ctx *gin.Context) {
 	}
 
 	dbStatus := "disconnected"
-	if c.sysConfigSvc.PingDB(context.Background()) {
+	if c.sysConfigSvc.PingDB(ctx.Request.Context()) {
 		dbStatus = "connected"
 	}
 

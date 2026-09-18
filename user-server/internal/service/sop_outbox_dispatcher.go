@@ -106,14 +106,14 @@ func (o *SOPOutboxDispatcher) loop(ctx context.Context) {
 	ticker := time.NewTicker(o.tickInterval)
 	defer ticker.Stop()
 
-	o.processDueTimers(context.Background())
+	o.processDueTimers(ctx)
 
 	for {
 		select {
 		case <-o.stopCh:
 			return
 		case <-ticker.C:
-			o.processDueTimers(context.Background())
+			o.processDueTimers(ctx)
 		}
 	}
 }
@@ -458,7 +458,7 @@ func (d *SOPStuckDetector) loop(ctx context.Context) {
 		case <-d.stopCh:
 			return
 		case <-ticker.C:
-			d.scanStuckExecutions(context.Background())
+			d.scanStuckExecutions(ctx)
 			d.cleanupRecovered()
 		}
 	}

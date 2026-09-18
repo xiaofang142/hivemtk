@@ -110,7 +110,7 @@ func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.Mess
 	})
 
 	if s.inboxSvc != nil {
-		if _, err := s.inboxSvc.UpsertFromHubMessage(context.Background(), h); err != nil {
+		if _, err := s.inboxSvc.UpsertFromHubMessage(ctx, h); err != nil {
 			logger.Warnf("[Inbox] 人工代发同步统一收件箱失败(conv=%s): %v", h.ConversationID, err)
 		}
 	}

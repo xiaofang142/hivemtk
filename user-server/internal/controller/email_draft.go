@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -29,7 +28,7 @@ func (c *EmailDraftController) CreateEmailDraft(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.CreateEmailDraftDTO(context.Background(), req)
+	resp, err := c.svc.CreateEmailDraftDTO(ctx.Request.Context(), req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "创建失败："+err.Error())
 		return
@@ -39,7 +38,7 @@ func (c *EmailDraftController) CreateEmailDraft(ctx *gin.Context) {
 
 // GetEmailDraftList 获取草稿列表
 func (c *EmailDraftController) GetEmailDraftList(ctx *gin.Context) {
-	resp, err := c.svc.GetEmailDraftListDTO(context.Background())
+	resp, err := c.svc.GetEmailDraftListDTO(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取列表失败："+err.Error())
 		return
@@ -63,7 +62,7 @@ func (c *EmailDraftController) GetEmailDraftDetail(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.svc.GetEmailDraftByIDDTO(context.Background(), draftID)
+	resp, err := c.svc.GetEmailDraftByIDDTO(ctx.Request.Context(), draftID)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "草稿不存在")
@@ -88,7 +87,7 @@ func (c *EmailDraftController) UpdateEmailDraft(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UpdateEmailDraftDTO(context.Background(), req); err != nil {
+	if err := c.svc.UpdateEmailDraftDTO(ctx.Request.Context(), req); err != nil {
 		response.ErrorFromDB(ctx, err, "更新失败："+err.Error())
 		return
 	}
@@ -111,7 +110,7 @@ func (c *EmailDraftController) DeleteEmailDraft(ctx *gin.Context) {
 		return
 	}
 
-	if err = c.svc.DeleteEmailDraft(context.Background(), draftID); err != nil {
+	if err = c.svc.DeleteEmailDraft(ctx.Request.Context(), draftID); err != nil {
 		response.ErrorFromDB(ctx, err, "删除失败："+err.Error())
 		return
 	}

@@ -105,7 +105,7 @@ func (t *WSTransport) HandleWS(c *gin.Context) {
 		return
 	}
 
-	_ = conn.SetReadDeadline(time.Now().Add(runtimeWSRegisterTimeout(context.Background())))
+	_ = conn.SetReadDeadline(time.Now().Add(runtimeWSRegisterTimeout(c.Request.Context())))
 	var reg Frame
 	if err := conn.ReadJSON(&reg); err != nil {
 		logger.Warnf("[ChannelGW WS] 读取 register 帧失败: %v", err)
@@ -122,7 +122,7 @@ func (t *WSTransport) HandleWS(c *gin.Context) {
 		_ = conn.Close()
 		return
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(runtimeWSReadIdleTimeout(context.Background())))
+	_ = conn.SetReadDeadline(time.Now().Add(runtimeWSReadIdleTimeout(c.Request.Context())))
 
 	cn := &wsConn{
 		t:         t,

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -32,7 +31,7 @@ func NewUserSegmentController() *UserSegmentController {
 // GetRFMRule 获取 RFM 规则
 // 若未配置 RFM 规则（表为空或无 active 规则），返回成功态 + nil 数据，提示前端使用系统默认。
 func (c *UserSegmentController) GetRFMRule(ctx *gin.Context) {
-	rule, err := c.rfmService.GetRFMRule(context.Background())
+	rule, err := c.rfmService.GetRFMRule(ctx.Request.Context())
 	if err != nil {
 		if utils.IsRecordNotFound(err) {
 			response.Success(ctx, nil, "RFM 规则未配置，将使用系统默认")
@@ -58,7 +57,7 @@ func (c *UserSegmentController) ListRFMRules(ctx *gin.Context) {
 			pageSize = 100
 		}
 	}
-	rules, total, err := c.rfmService.ListRFMRules(context.Background(), page, pageSize)
+	rules, total, err := c.rfmService.ListRFMRules(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -79,7 +78,7 @@ func (c *UserSegmentController) SaveRFMRule(ctx *gin.Context) {
 		return
 	}
 
-	rule, err := c.rfmService.SaveRFMRule(context.Background(), &req)
+	rule, err := c.rfmService.SaveRFMRule(ctx.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -103,7 +102,7 @@ func (c *UserSegmentController) UpdateRFMRule(ctx *gin.Context) {
 		return
 	}
 
-	rule, err := c.rfmService.UpdateRFMRule(context.Background(), uint(id), &req)
+	rule, err := c.rfmService.UpdateRFMRule(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -121,7 +120,7 @@ func (c *UserSegmentController) DeleteRFMRule(ctx *gin.Context) {
 		return
 	}
 
-	if HandleDBError(ctx, c.rfmService.DeleteRFMRule(context.Background(), uint(id)), "删除 RFM 规则") {
+	if HandleDBError(ctx, c.rfmService.DeleteRFMRule(ctx.Request.Context(), uint(id)), "删除 RFM 规则") {
 		return
 	}
 
@@ -154,7 +153,7 @@ func (c *UserSegmentController) GetRFMList(ctx *gin.Context) {
 		segment = ctx.Query("layer")
 	}
 
-	rfms, total, err := c.rfmService.ListBySegment(context.Background(), segment, page, pageSize)
+	rfms, total, err := c.rfmService.ListBySegment(ctx.Request.Context(), segment, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -171,7 +170,7 @@ func (c *UserSegmentController) GetRFMList(ctx *gin.Context) {
 // GetRFMStats 获取 RFM 统计（新口径：segment 分布）
 // 保留 layer_count 键以兼容前端，同时提供 segment_count 同义键。
 func (c *UserSegmentController) GetRFMStats(ctx *gin.Context) {
-	dist, err := c.rfmService.Distribution(context.Background())
+	dist, err := c.rfmService.Distribution(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -214,7 +213,7 @@ func (c *UserSegmentController) GetUserRFM(ctx *gin.Context) {
 		return
 	}
 
-	rfm, err := c.rfmService.GetByCustomerID(context.Background(), customerID)
+	rfm, err := c.rfmService.GetByCustomerID(ctx.Request.Context(), customerID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "未找到客户 RFM 信息")
 		return

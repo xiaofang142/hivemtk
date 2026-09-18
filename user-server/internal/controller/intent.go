@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -138,7 +137,7 @@ func (c *IntentController) BatchRecognize(ctx *gin.Context) {
 // Stats 意图统计
 func (c *IntentController) Stats(ctx *gin.Context) {
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
-	stats, err := c.rec.GetIntentStats(context.Background(), days)
+	stats, err := c.rec.GetIntentStats(ctx.Request.Context(), days)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -149,7 +148,7 @@ func (c *IntentController) Stats(ctx *gin.Context) {
 		byIntent[k] = v
 		total += v
 	}
-	byMethod, byLevel := c.rec.GetMethodLevelStats(context.Background(), days)
+	byMethod, byLevel := c.rec.GetMethodLevelStats(ctx.Request.Context(), days)
 	distribution := make([]map[string]any, 0, len(byIntent))
 	for k, v := range byIntent {
 		distribution = append(distribution, map[string]any{"type": k, "count": v})
@@ -190,7 +189,7 @@ func (c *IntentController) RecentIntents(ctx *gin.Context) {
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	list, total, err := c.rec.GetRecentIntentsPaged(context.Background(), customerID, intentType, page, pageSize)
+	list, total, err := c.rec.GetRecentIntentsPaged(ctx.Request.Context(), customerID, intentType, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -241,7 +240,7 @@ func (c *IntentController) IntentLogs(ctx *gin.Context) {
 	customerID := ctx.Query("customer_id")
 	major := ctx.Query("major")
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
-	logs, err := c.rec.GetIntentLogs(context.Background(), customerID, major, limit)
+	logs, err := c.rec.GetIntentLogs(ctx.Request.Context(), customerID, major, limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -253,7 +252,7 @@ func (c *IntentController) IntentLogs(ctx *gin.Context) {
 // GET /api/intent/stats/fine?days=7
 func (c *IntentController) IntentStatsFine(ctx *gin.Context) {
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
-	stats, err := c.rec.GetIntentLogStats(context.Background(), days)
+	stats, err := c.rec.GetIntentLogStats(ctx.Request.Context(), days)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

@@ -227,16 +227,16 @@ func (d *SOPExecutionDispatcher) SetWSHub(ctx context.Context, hub *websocket.Hu
 	if d == nil || hub == nil {
 		return
 	}
-	d.replaceMessageExecutorHub(context.Background(), hub)
+	d.replaceMessageExecutorHub(ctx, hub)
 }
 
 func (d *SOPExecutionDispatcher) replaceMessageExecutorHub(ctx context.Context, hub *websocket.Hub) {
 	if d == nil || d.registry == nil {
 		return
 	}
-	for _, exec := range d.registry.AllExecutors(context.Background()) {
+	for _, exec := range d.registry.AllExecutors(ctx) {
 		if mb, ok := exec.(*MessageNodeBase); ok {
-			mb.SetWSHub(context.Background(), hub)
+			mb.SetWSHub(ctx, hub)
 		}
 	}
 }
@@ -251,7 +251,7 @@ func (d *SOPExecutionDispatcher) Start(ctx context.Context) {
 	d.running = true
 	d.stopCh = make(chan struct{})
 
-	workerCtx, workerCancel := context.WithCancel(context.Background())
+	workerCtx, workerCancel := context.WithCancel(ctx)
 	d.workerCancel = workerCancel
 
 	for i := 0; i < d.workerCount; i++ {
@@ -471,7 +471,7 @@ func (d *SOPExecutionDispatcher) loadGraph(ctx context.Context, exec *model.SOPE
 			}
 		}
 	}
-	graph, err := d.sopService.loadSOPGraph(context.Background(), agent, variantGraphID)
+	graph, err := d.sopService.loadSOPGraph(ctx, agent, variantGraphID)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +572,7 @@ func (d *SOPExecutionDispatcher) handleNodeFailure(ctx context.Context, exec *mo
 	d.writeExecEvent(ctx, exec, node, NodeEventFailed, task.Attempt, nil, nil, errMsg)
 
 	if task.Attempt+1 < d.retryPolicy.MaxAttempts {
-		backoff := d.retryPolicy.Backoff(context.Background(), task.Attempt+1)
+		backoff := d.retryPolicy.Backoff(ctx, task.Attempt+1)
 		logger.Ctx(ctx).Warn().
 			Str("node_id", node.ID).
 			Int("attempt", task.Attempt).

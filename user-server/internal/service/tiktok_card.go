@@ -129,7 +129,7 @@ func (s *tiktokCardService) GetByID(ctx context.Context, id uint) (*dto.TikTokCa
 
 	shortCode := ""
 	if card.ShortLinkID != 0 {
-		sl, err := s.shortLinkRepo.GetByID(context.Background(), card.ShortLinkID)
+		sl, err := s.shortLinkRepo.GetByID(ctx, card.ShortLinkID)
 		if err == nil && sl != nil {
 			shortCode = sl.ShortCode
 		}
@@ -174,7 +174,7 @@ func (s *tiktokCardService) GenerateShortLink(ctx context.Context, cardID uint) 
 	shortCode := generateRandomCode(8)
 
 	if card.ShortLinkID != 0 {
-		_ = s.shortLinkRepo.Delete(context.Background(), card.ShortLinkID)
+		_ = s.shortLinkRepo.Delete(ctx, card.ShortLinkID)
 	}
 
 	if card.RedirectURL == "" {
@@ -190,7 +190,7 @@ func (s *tiktokCardService) GenerateShortLink(ctx context.Context, cardID uint) 
 	if sl.DomainID == 0 {
 		sl.DomainID = 1
 	}
-	if err := s.shortLinkRepo.Create(context.Background(), sl); err != nil {
+	if err := s.shortLinkRepo.Create(ctx, sl); err != nil {
 		return nil, fmt.Errorf("创建短链失败: %w", err)
 	}
 

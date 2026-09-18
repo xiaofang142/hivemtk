@@ -51,7 +51,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.authService.Login(context.Background(), &req)
+	resp, err := c.authService.Login(ctx.Request.Context(), &req)
 	if err != nil {
 		middleware.RecordBruteForceFailure(ctx, "auth.login")
 
@@ -108,7 +108,7 @@ func (c *AuthController) Register(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.authService.Register(context.Background(), &req)
+	resp, err := c.authService.Register(ctx.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrUsernameExists) || errors.Is(err, service.ErrEmailExists) {
 			response.Error(ctx, http.StatusConflict, err.Error())
@@ -149,7 +149,7 @@ func (c *AuthController) RefreshToken(ctx *gin.Context) {
 		return
 	}
 
-	newToken, err := c.authService.RefreshToken(context.Background(), token)
+	newToken, err := c.authService.RefreshToken(ctx.Request.Context(), token)
 	if err != nil {
 		response.Error(ctx, http.StatusUnauthorized, "刷新令牌失败", err.Error())
 		return
@@ -202,7 +202,7 @@ func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.authService.GetCurrentUser(context.Background(), uid)
+	user, err := c.authService.GetCurrentUser(ctx.Request.Context(), uid)
 	if err != nil {
 		if HandleServiceError(ctx, err) {
 			return
@@ -244,7 +244,7 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.authService.ChangePassword(context.Background(), uid, &req); err != nil {
+	if err := c.authService.ChangePassword(ctx.Request.Context(), uid, &req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -275,7 +275,7 @@ func (c *AuthController) SetupMFA(ctx *gin.Context) {
 	username, _ := ctx.Get("username")
 	usernameStr, _ := username.(string)
 
-	resp, err := c.mfaService.SetupMFA(context.Background(), uid, usernameStr)
+	resp, err := c.mfaService.SetupMFA(ctx.Request.Context(), uid, usernameStr)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -303,7 +303,7 @@ func (c *AuthController) ConfirmMFASetup(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.mfaService.ConfirmMFASetup(context.Background(), uid, req.Code); err != nil {
+	if err := c.mfaService.ConfirmMFASetup(ctx.Request.Context(), uid, req.Code); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -334,7 +334,7 @@ func (c *AuthController) DisableMFA(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.mfaService.DisableMFA(context.Background(), uid, req.Password, req.Code); err != nil {
+	if err := c.mfaService.DisableMFA(ctx.Request.Context(), uid, req.Password, req.Code); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -356,13 +356,13 @@ func (c *AuthController) VerifyMFALogin(ctx *gin.Context) {
 		return
 	}
 
-	userID, username, role, err := c.mfaService.VerifyMFALogin(context.Background(), req.TempToken, req.Code)
+	userID, username, role, err := c.mfaService.VerifyMFALogin(ctx.Request.Context(), req.TempToken, req.Code)
 	if err != nil {
 		response.Error(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	jwtUtils := c.authService.JwtUtils(context.Background())
+	jwtUtils := c.authService.JwtUtils(ctx.Request.Context())
 	token, err := jwtUtils.GenerateToken(userID, username, role)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "颁发令牌失败")
@@ -395,7 +395,7 @@ func (c *AuthController) GetMFAStatus(ctx *gin.Context) {
 		return
 	}
 
-	enabled, err := c.mfaService.IsMFAEnabled(context.Background(), uid)
+	enabled, err := c.mfaService.IsMFAEnabled(ctx.Request.Context(), uid)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -422,7 +422,7 @@ func (c *AuthController) GenerateBackupCodes(ctx *gin.Context) {
 		return
 	}
 
-	codes, err := c.mfaService.GenerateBackupCodes(context.Background(), uid)
+	codes, err := c.mfaService.GenerateBackupCodes(ctx.Request.Context(), uid)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -449,7 +449,7 @@ func (c *AuthController) ListLoginEvents(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	events, total, err := c.riskService.ListLoginEvents(context.Background(), uid, page, pageSize)
+	events, total, err := c.riskService.ListLoginEvents(ctx.Request.Context(), uid, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -479,7 +479,7 @@ func (c *AuthController) ListSecurityAlerts(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	alerts, total, err := c.riskService.ListSecurityAlerts(context.Background(), uid, status, page, pageSize)
+	alerts, total, err := c.riskService.ListSecurityAlerts(ctx.Request.Context(), uid, status, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -511,7 +511,7 @@ func (c *AuthController) ResolveSecurityAlert(ctx *gin.Context) {
 	}
 	_ = ctx.ShouldBindJSON(&req)
 
-	if err := c.riskService.ResolveSecurityAlert(context.Background(), uint(alertID), uid, req.Note); err != nil {
+	if err := c.riskService.ResolveSecurityAlert(ctx.Request.Context(), uint(alertID), uid, req.Note); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -523,7 +523,7 @@ func (c *AuthController) ResolveSecurityAlert(ctx *gin.Context) {
 // GET /api/auth/password-policy
 func (c *AuthController) GetPasswordPolicy(ctx *gin.Context) {
 	policySvc := service.NewPasswordPolicyService()
-	policy := policySvc.GetPolicy(context.Background())
+	policy := policySvc.GetPolicy(ctx.Request.Context())
 	response.Success(ctx, policy, "查询成功")
 }
 
@@ -544,7 +544,7 @@ func (c *AuthController) SavePasswordPolicy(ctx *gin.Context) {
 	}
 
 	policySvc := service.NewPasswordPolicyService()
-	if err := policySvc.SavePolicy(context.Background(), &policy); err != nil {
+	if err := policySvc.SavePolicy(ctx.Request.Context(), &policy); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -576,7 +576,7 @@ func (c *SystemUserController) GetUsers(ctx *gin.Context) {
 		pageSize = 10
 	}
 
-	users, total, err := c.userService.GetUsers(context.Background(), page, pageSize)
+	users, total, err := c.userService.GetUsers(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -601,7 +601,7 @@ func (c *SystemUserController) SearchUsers(ctx *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
-	users, total, err := c.userService.SearchUsers(context.Background(), keyword, page, pageSize)
+	users, total, err := c.userService.SearchUsers(ctx.Request.Context(), keyword, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -623,7 +623,7 @@ func (c *SystemUserController) GetUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.userService.GetUserByID(context.Background(), uint(id))
+	user, err := c.userService.GetUserByID(ctx.Request.Context(), uint(id))
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, err.Error())
 		return
@@ -640,7 +640,7 @@ func (c *SystemUserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.userService.CreateUser(context.Background(), &req)
+	user, err := c.userService.CreateUser(ctx.Request.Context(), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -664,7 +664,7 @@ func (c *SystemUserController) UpdateUser(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.userService.UpdateUser(context.Background(), uint(id), &req)
+	user, err := c.userService.UpdateUser(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -717,7 +717,7 @@ func (c *SystemUserController) ResetPassword(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.userService.ResetPassword(context.Background(), uint(id), req.Password); err != nil {
+	if err := c.userService.ResetPassword(ctx.Request.Context(), uint(id), req.Password); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -746,7 +746,7 @@ func (c *AuthController) InitAdmin(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.authService.InitAdmin(context.Background(), req.Username, req.Password, req.Email); err != nil {
+	if err := c.authService.InitAdmin(ctx.Request.Context(), req.Username, req.Password, req.Email); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -774,7 +774,7 @@ func (c *SystemUserController) CreateDefaultAdmin(ctx *gin.Context) {
 	}
 
 	authSvc := service.NewAuthService()
-	if err := authSvc.InitAdmin(context.Background(), req.Username, req.Password, req.Email); err != nil {
+	if err := authSvc.InitAdmin(ctx.Request.Context(), req.Username, req.Password, req.Email); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -127,7 +127,7 @@ func (r *NodeExecutorRegistry) Get(ctx context.Context, nodeType string) (NodeEx
 // 兜底策略保证 SOP 流程不因未知节点类型中断，
 // NoopExecutor 会记录 warn 日志并将节点标记为 completed 推进下一节点。
 func (r *NodeExecutorRegistry) MustGet(ctx context.Context, nodeType string) NodeExecutor {
-	e, err := r.Get(context.Background(), nodeType)
+	e, err := r.Get(ctx, nodeType)
 	if err != nil {
 		logger.Warnf("node executor not found, using noop: %s", nodeType)
 		return &NoopExecutor{nodeType: nodeType}

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -36,7 +35,7 @@ func (c *AccountController) CreateAccount(ctx *gin.Context) {
 		ProxyPort:        req.ProxyPort,
 	}
 
-	createdAccount, err := c.svc.CreateAccount(context.Background(), account)
+	createdAccount, err := c.svc.CreateAccount(ctx.Request.Context(), account)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -58,7 +57,7 @@ func (c *AccountController) CreateAccount(ctx *gin.Context) {
 }
 
 func (c *AccountController) GetAccounts(ctx *gin.Context) {
-	accounts, err := c.svc.GetAccountList(context.Background())
+	accounts, err := c.svc.GetAccountList(ctx.Request.Context())
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
@@ -93,7 +92,7 @@ func (c *AccountController) GetAccount(ctx *gin.Context) {
 		return
 	}
 
-	account, err := c.svc.GetAccount(context.Background(), accountIDStr)
+	account, err := c.svc.GetAccount(ctx.Request.Context(), accountIDStr)
 	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "账户不存在")
@@ -151,10 +150,10 @@ func (c *AccountController) UpdateAccount(ctx *gin.Context) {
 	// PATCH 语义：未传 proxy_enable_proxy 保留原值，防止漏字段把代理开关意外关闭
 	if req.ProxyEnableProxy != nil {
 		account.ProxyEnableProxy = *req.ProxyEnableProxy
-	} else if existing, getErr := c.svc.GetAccount(context.Background(), accountIDStr); getErr == nil && existing != nil {
+	} else if existing, getErr := c.svc.GetAccount(ctx.Request.Context(), accountIDStr); getErr == nil && existing != nil {
 		account.ProxyEnableProxy = existing.ProxyEnableProxy
 	}
-	err := c.svc.UpdateAccount(context.Background(), account)
+	err := c.svc.UpdateAccount(ctx.Request.Context(), account)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -168,7 +167,7 @@ func (c *AccountController) DeleteAccount(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
-	err := c.svc.DeleteAccount(context.Background(), req.ID)
+	err := c.svc.DeleteAccount(ctx.Request.Context(), req.ID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

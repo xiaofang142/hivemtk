@@ -92,7 +92,7 @@ func (s *LoginRiskService) Evaluate(ctx context.Context, riskCtx *LoginRiskConte
 		RiskLevel: model.RiskLevelLow,
 	}
 
-	rctx := context.Background()
+	rctx := ctx
 
 	result.Location = s.resolveLocation(rctx, riskCtx.IP)
 
@@ -358,7 +358,7 @@ func (s *LoginRiskService) ListLoginEvents(ctx context.Context, userID uint, pag
 	if s.repo == nil {
 		return nil, 0, errors.New("repo 未初始化")
 	}
-	return s.repo.ListLoginEvents(context.Background(), userID, page, pageSize)
+	return s.repo.ListLoginEvents(ctx, userID, page, pageSize)
 }
 
 // ListSecurityAlerts 查询安全告警列表
@@ -366,7 +366,7 @@ func (s *LoginRiskService) ListSecurityAlerts(ctx context.Context, userID uint, 
 	if s.repo == nil {
 		return nil, 0, errors.New("repo 未初始化")
 	}
-	return s.repo.ListSecurityAlerts(context.Background(), userID, status, page, pageSize)
+	return s.repo.ListSecurityAlerts(ctx, userID, status, page, pageSize)
 }
 
 // ResolveSecurityAlert 处理安全告警
@@ -374,7 +374,7 @@ func (s *LoginRiskService) ResolveSecurityAlert(ctx context.Context, alertID, re
 	if s.repo == nil {
 		return errors.New("repo 未初始化")
 	}
-	return s.repo.ResolveSecurityAlert(context.Background(), alertID, resolverUserID, note, time.Now(), string(model.SecurityAlertStatusResolved))
+	return s.repo.ResolveSecurityAlert(ctx, alertID, resolverUserID, note, time.Now(), string(model.SecurityAlertStatusResolved))
 }
 
 // IgnoreSecurityAlert 忽略告警
@@ -382,5 +382,5 @@ func (s *LoginRiskService) IgnoreSecurityAlert(ctx context.Context, alertID, res
 	if s.repo == nil {
 		return errors.New("repo 未初始化")
 	}
-	return s.repo.ResolveSecurityAlert(context.Background(), alertID, resolverUserID, note, time.Now(), string(model.SecurityAlertStatusIgnored))
+	return s.repo.ResolveSecurityAlert(ctx, alertID, resolverUserID, note, time.Now(), string(model.SecurityAlertStatusIgnored))
 }

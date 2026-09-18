@@ -66,7 +66,7 @@ func (c *RecoveryQueueController) MarkAttempt(ctx *gin.Context) {
 		return
 	}
 	delay := time.Duration(req.NextDelay) * time.Second
-	if err := c.svc.MarkAttempt(context.Background(), id, req.Channel, req.Result, req.Stage, delay); err != nil {
+	if err := c.svc.MarkAttempt(ctx.Request.Context(), id, req.Channel, req.Result, req.Stage, delay); err != nil {
 		response.ErrorFromDB(ctx, err, "记录失败: "+err.Error())
 		return
 	}
@@ -91,7 +91,7 @@ func (c *RecoveryQueueController) MarkRecovered(ctx *gin.Context) {
 	}
 	var req dto.RecoveryMarkRecoveredRequest
 	_ = ctx.ShouldBindJSON(&req)
-	if err := c.svc.MarkRecovered(context.Background(), id, req.RecoveryValue); err != nil {
+	if err := c.svc.MarkRecovered(ctx.Request.Context(), id, req.RecoveryValue); err != nil {
 		response.ErrorFromDB(ctx, err, "标记失败: "+err.Error())
 		return
 	}
@@ -111,7 +111,7 @@ func (c *RecoveryQueueController) Cancel(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的ID")
 		return
 	}
-	if err := c.svc.Cancel(context.Background(), id); err != nil {
+	if err := c.svc.Cancel(ctx.Request.Context(), id); err != nil {
 		response.ErrorFromDB(ctx, err, "取消失败: "+err.Error())
 		return
 	}
@@ -130,7 +130,7 @@ func (c *RecoveryQueueController) ListByStage(ctx *gin.Context) {
 	stage := ctx.Query("stage")
 	page := parsePositiveInt(ctx.Query("page"), 1, 10000)
 	pageSize := parsePositiveInt(ctx.Query("page_size"), 20, 200)
-	list, total, err := c.svc.ListByStage(context.Background(), stage, page, pageSize)
+	list, total, err := c.svc.ListByStage(ctx.Request.Context(), stage, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return
@@ -153,7 +153,7 @@ func (c *RecoveryQueueController) ListByStage(ctx *gin.Context) {
 // @Success 200 {object} object{data=dto.RecoveryDistributionResponse}
 // @Router /api/recovery-queue/distribution [get]
 func (c *RecoveryQueueController) Distribution(ctx *gin.Context) {
-	dist, err := c.svc.Distribution(context.Background())
+	dist, err := c.svc.Distribution(ctx.Request.Context())
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return
@@ -173,7 +173,7 @@ func (c *RecoveryQueueController) Distribution(ctx *gin.Context) {
 // @Router /api/recovery-queue/ready [get]
 func (c *RecoveryQueueController) ListReadyForAttempt(ctx *gin.Context) {
 	limit := parsePositiveInt(ctx.Query("limit"), 50, 500)
-	list, err := c.svc.ListReadyForAttempt(context.Background(), limit)
+	list, err := c.svc.ListReadyForAttempt(ctx.Request.Context(), limit)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
 		return
