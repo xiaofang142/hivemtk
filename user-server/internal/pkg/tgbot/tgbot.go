@@ -35,11 +35,11 @@ func InitTGBot(botToken string, groupID int64, proxyEnabled bool, proxyProto str
 	if proxyEnabled {
 		tgProxyURL, err := url.Parse(fmt.Sprintf("%s://%s:%d", proxyProto, proxyHost, proxyPort))
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse proxy: %s", err)
+			return nil, fmt.Errorf("failed to parse proxy: %s", err)
 		}
 		tgDialer, err := proxy.FromURL(tgProxyURL, proxy.Direct)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to obtain proxy dialer: %s", err)
+			return nil, fmt.Errorf("failed to obtain proxy dialer: %s", err)
 		}
 		tgTransport := &http.Transport{
 			Dial: tgDialer.Dial,
@@ -138,8 +138,7 @@ func SendInviteJoinGroup(Bot *tgbotapi.BotAPI, groupID int64, userTgID int64) er
 	msg.DisableWebPagePreview = true
 	msg.ParseMode = "HTML"
 	_, err = Bot.Send(msg)
-
-	return nil
+	return err
 }
 
 // UnbanUser 通过 Bot 实例解封用户
@@ -183,7 +182,7 @@ func callBotAPI(botToken, method string, params url.Values) (map[string]any, err
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	if !result.OK {
-		return nil, fmt.Errorf("Telegram API 错误(%d): %s", result.ErrorCode, result.Description)
+		return nil, fmt.Errorf("telegram API 错误(%d): %s", result.ErrorCode, result.Description)
 	}
 	return result.Result, nil
 }
@@ -249,15 +248,15 @@ func FriendlyTGAPIError(err error) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "401"):
-		return fmt.Errorf("Bot Token 无效（Telegram 返回 401 Unauthorized）。请到 Telegram 的 @BotFather → /mybots → API Token 重新生成并完整粘贴")
+		return fmt.Errorf("bot Token 无效（Telegram 返回 401 Unauthorized）。请到 Telegram 的 @BotFather → /mybots → API Token 重新生成并完整粘贴")
 	case strings.Contains(msg, "404"):
-		return fmt.Errorf("Bot 不存在（Telegram 返回 404 Not Found）。Token 可能已被 revoke，请到 @BotFather 重新生成")
+		return fmt.Errorf("bot 不存在（Telegram 返回 404 Not Found）。Token 可能已被 revoke，请到 @BotFather 重新生成")
 	case strings.Contains(msg, "https url"):
-		return fmt.Errorf("Webhook URL 必须是 https:// 开头（Telegram 强制要求），请修改后再试")
+		return fmt.Errorf("webhook URL 必须是 https:// 开头（Telegram 强制要求），请修改后再试")
 	case strings.Contains(msg, "Failed to resolve host") || strings.Contains(msg, "name resolution"):
-		return fmt.Errorf("Telegram 无法解析 Webhook 域名（DNS 失败）：确认域名已生效、公网可访问，且必须是公网域名（不能用内网地址）")
+		return fmt.Errorf("telegram 无法解析 Webhook 域名（DNS 失败）：确认域名已生效、公网可访问，且必须是公网域名（不能用内网地址）")
 	case strings.Contains(msg, "getaddrinfo") || strings.Contains(msg, "no such host") || strings.Contains(msg, "connection refused"):
-		return fmt.Errorf("Webhook 地址不可达：Telegram 服务器无法访问该域名，请检查域名解析/证书/反向代理")
+		return fmt.Errorf("webhook 地址不可达：Telegram 服务器无法访问该域名，请检查域名解析/证书/反向代理")
 	case strings.Contains(msg, "429"):
 		return fmt.Errorf("请求过于频繁（Telegram 限流），请稍后重试")
 	}

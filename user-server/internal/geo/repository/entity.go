@@ -88,22 +88,39 @@ func (r *geoEntityRepo) GetRelationGraph(ctx context.Context, entityID uint, dep
 	if depth <= 0 {
 		depth = 1
 	}
-	rels, err := r.GetRelations(ctx, entityID)
-	if err != nil {
-		return nil, nil, err
-	}
 	seen := map[uint]bool{entityID: true}
-	ids := []uint{entityID}
-	for _, rel := range rels {
-		for _, id := range []uint{rel.EntityAID, rel.EntityBID} {
-			if !seen[id] {
-				seen[id] = true
-				ids = append(ids, id)
+	relSeen := map[uint]bool{}
+	var rels []*model.GeoEntityRelation
+	frontier := []uint{entityID}
+	for h := 0; h < depth && len(frontier) > 0; h++ {
+		var hop []*model.GeoEntityRelation
+		if err := r.db.WithContext(ctx).
+			Where("entity_a_id IN ? OR entity_b_id IN ?", frontier, frontier).
+			Find(&hop).Error; err != nil {
+			return nil, nil, err
+		}
+		next := []uint{}
+		for _, rel := range hop {
+			if relSeen[rel.ID] {
+				continue
+			}
+			relSeen[rel.ID] = true
+			rels = append(rels, rel)
+			for _, id := range []uint{rel.EntityAID, rel.EntityBID} {
+				if !seen[id] {
+					seen[id] = true
+					next = append(next, id)
+				}
 			}
 		}
+		frontier = next
 	}
 	var entities []*model.GeoEntity
-	if len(ids) > 1 {
+	if len(seen) > 1 {
+		ids := make([]uint, 0, len(seen))
+		for id := range seen {
+			ids = append(ids, id)
+		}
 		if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&entities).Error; err != nil {
 			return rels, nil, err
 		}
