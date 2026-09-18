@@ -99,10 +99,24 @@ func (d *LocalDriver) UploadReader(ctx context.Context, reader io.Reader, size i
 	return publicURL, storagePath, nil
 }
 
+// resolve 把存储相对路径安全地拼到 baseDir 之下，拒绝任何穿越 baseDir 的结果。
+// 当前调用方都只传驱动自身生成的 storagePath，此守卫是 safe-by-construction 兜底。
+func (d *LocalDriver) resolve(storagePath string) (string, error) {
+	full := filepath.Join(d.baseDir, storagePath)
+	rel, err := filepath.Rel(d.baseDir, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("invalid storage path: %q", storagePath)
+	}
+	return full, nil
+}
+
 // Download 读取本地文件
 func (d *LocalDriver) Download(ctx context.Context, storagePath string) (io.ReadCloser, error) {
 	_ = ctx
-	fullPath := filepath.Join(d.baseDir, storagePath)
+	fullPath, err := d.resolve(storagePath)
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("open file failed: %w", err)
@@ -113,7 +127,10 @@ func (d *LocalDriver) Download(ctx context.Context, storagePath string) (io.Read
 // Delete 删除本地文件（同时清理空目录链，最佳努力）
 func (d *LocalDriver) Delete(ctx context.Context, storagePath string) error {
 	_ = ctx
-	fullPath := filepath.Join(d.baseDir, storagePath)
+	fullPath, err := d.resolve(storagePath)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete file failed: %w", err)
 	}
@@ -138,8 +155,11 @@ func (d *LocalDriver) SignUploadURL(ctx context.Context, folder, filename, conte
 // Exists 检查文件是否存在
 func (d *LocalDriver) Exists(ctx context.Context, storagePath string) (bool, error) {
 	_ = ctx
-	fullPath := filepath.Join(d.baseDir, storagePath)
-	_, err := os.Stat(fullPath)
+	fullPath, err := d.resolve(storagePath)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(fullPath)
 	if err == nil {
 		return true, nil
 	}
