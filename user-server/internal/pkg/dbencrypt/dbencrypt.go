@@ -20,7 +20,7 @@ import (
 )
 
 // ciphertextPrefix 与 secrets 内部 stringEncPrefix 保持一致的持久化格式前缀。
-const ciphertextPrefix = "enc:v1:"
+const ciphertextPrefix = "enc:v1:" //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 
 var notReadyWarnOnce sync.Once
 

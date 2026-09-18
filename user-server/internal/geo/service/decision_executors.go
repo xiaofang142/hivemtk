@@ -248,56 +248,6 @@ func (s *WorkflowService) RegisterCaptureLeadExecutor(port LeadCapturePort) {
 	registerCaptureLeadExecutor(s, DecisionChainDeps{LeadPort: port})
 }
 
-type memChainRepo struct{ rows []*model.GeoQueryChain }
-
-func newMemChainRepo() repository.GeoQueryChainRepository { return &memChainRepo{} }
-
-func (r *memChainRepo) Append(_ context.Context, c *model.GeoQueryChain) error {
-	r.rows = append(r.rows, c)
-	return nil
-}
-func (r *memChainRepo) ListByChain(_ context.Context, _ string) ([]*model.GeoQueryChain, error) {
-	return r.rows, nil
-}
-func (r *memChainRepo) CountByChain(_ context.Context, _ string) (int64, error) {
-	return int64(len(r.rows)), nil
-}
-func (r *memChainRepo) ListByOneID(_ context.Context, _ string) ([]*model.GeoQueryChain, error) {
-	return r.rows, nil
-}
-func (r *memChainRepo) CountToday(_ context.Context) (int64, error) {
-	today := time.Now().Format("2006-01-02")
-	var n int64
-	for _, c := range r.rows {
-		if c.CreatedAt.Format("2006-01-02") == today {
-			n++
-		}
-	}
-	return n, nil
-}
-
-type memTaskRepo struct{ rows []*model.GeoContentTask }
-
-func newMemTaskRepo() repository.GeoContentTaskRepository { return &memTaskRepo{} }
-
-func (r *memTaskRepo) Create(_ context.Context, t *model.GeoContentTask) error {
-	r.rows = append(r.rows, t)
-	return nil
-}
-func (r *memTaskRepo) ListPending(_ context.Context, _ int) ([]*model.GeoContentTask, error) {
-	return r.rows, nil
-}
-func (r *memTaskRepo) MarkDone(_ context.Context, _ string) error { return nil }
-func (r *memTaskRepo) CountByStatus(_ context.Context, status string) (int64, error) {
-	var n int64
-	for _, t := range r.rows {
-		if t.Status == status {
-			n++
-		}
-	}
-	return n, nil
-}
-
 // InboxChainSync inbox 侧思维链回填（v3 决策链化 Phase3 收口）：
 // 已绑定 OneID 的 GEO 归因链，其客户的真实会话消息回写为 source=inbox 行，
 // 完成"探针模拟 → 真实用户行为"的数据闭环。

@@ -418,7 +418,7 @@ func isValidMajor(major string) bool {
 	return false
 }
 
-func isValidMinor(major, minor string) bool {
+func isValidMinor(major, minor string) bool { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	for _, mr := range fineIntentRules {
 		if mr.major == major {
 			for _, mi := range mr.minors {
@@ -431,7 +431,7 @@ func isValidMinor(major, minor string) bool {
 	return false
 }
 
-func getDefaultMinor(major string) string {
+func getDefaultMinor(major string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	for _, mr := range fineIntentRules {
 		if mr.major == major && len(mr.minors) > 0 {
 			return mr.minors[0].minor

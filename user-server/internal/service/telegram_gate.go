@@ -79,11 +79,6 @@ const (
 	TGGateModeMuteUnlock  = "mute_unlock"  // 方案 B
 )
 
-// tgGateDefaults 缺省提示语
-const (
-	tgGateDefaultVerifyMsg = "你好 %s！为防止垃圾广告，请点击下面的按钮完成验证，验证通过后即可正常使用群组。"
-)
-
 func tgGateDefaultWelcome(mode string) string {
 	// 统一 4 个占位符（和 DB welcome_msg 模板一致）:
 	//   [0]=displayName, [1]=@botUsername, [2]=botDomain(不带@), [3]=token

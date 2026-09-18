@@ -46,9 +46,6 @@ const (
 	WeComQuotaDegradeThreshold     = 0.9
 )
 
-func runtimeWeComErrorRateDegrade(ctx context.Context) float64 {
-	return GlobalConfigParam().GetFloat(ctx, "wecom", "error_rate_degrade", WeComErrorRateDegradeThreshold)
-}
 func runtimeWeComQuotaDegrade(ctx context.Context) float64 {
 	return GlobalConfigParam().GetFloat(ctx, "wecom", "quota_degrade", WeComQuotaDegradeThreshold)
 }

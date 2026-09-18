@@ -96,17 +96,6 @@ var upgraderVisitor = websocket.Upgrader{
 	},
 }
 
-func getAllowedWSOrigins() []string {
-	return allowedWSOrigins
-}
-
-var allowedWSOrigins = []string{}
-
-// SetAllowedWSOrigins 动态设置允许的 WebSocket Origin 列表（供启动时配置调用）
-func SetAllowedWSOrigins(origins []string) {
-	allowedWSOrigins = origins
-}
-
 func (h *VisitorWSHandler) HandleVisitorWebSocket(c *gin.Context) {
 	sessionID := strings.TrimSpace(c.Query("session_id"))
 	visitorID := strings.TrimSpace(c.Query("visitor_id"))

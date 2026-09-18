@@ -297,21 +297,16 @@ func mergeDecision(base, override InferenceDecision) InferenceDecision {
 	if override.StopReason != "" {
 		merged.StopReason = override.StopReason
 	}
-	if merged.Crisis.Level != CrisisNone || merged.Crisis.Reason != "" {
-	} else if override.Crisis.Level != CrisisNone || override.Crisis.Reason != "" {
-		merged.Crisis = override.Crisis
+	// merged 无危机信号时才采纳 override 的（原空 if 分支为该语义的残缺写法）
+	if merged.Crisis.Level == CrisisNone && merged.Crisis.Reason == "" {
+		if override.Crisis.Level != CrisisNone || override.Crisis.Reason != "" {
+			merged.Crisis = override.Crisis
+		}
 	}
 	if override.Review != nil {
 		merged.Review = override.Review
 	}
 	return merged
-}
-
-func reviewPassedOf(r *ReviewResult) any {
-	if r == nil {
-		return "n/a"
-	}
-	return r.Passed
 }
 
 func planTypeOf(p *ActionPlan) string {

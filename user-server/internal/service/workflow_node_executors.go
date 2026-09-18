@@ -290,13 +290,6 @@ func (e *ConditionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecC
 	}, nil
 }
 
-func wfGetString(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
 func evaluateCondition(ctxVal any, op string, target any) bool {
 	if ctxVal == nil {
 		return false

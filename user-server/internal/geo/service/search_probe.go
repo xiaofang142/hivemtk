@@ -12,11 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+
+	"gorm.io/gorm"
 )
 
 var urlRegexp = regexp.MustCompile(`https?://[^\s"'\)\]\}\>,;]+`)
@@ -224,51 +225,6 @@ func NewEngineProbesFromDB(g *gorm.DB) []SearchProbe {
 		}
 	}
 	return probes
-}
-
-func checkProbeHealth(endpoint string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/models", nil)
-	if err != nil {
-		return err
-	}
-	resp, err := probeHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-		return nil
-	}
-	return fmt.Errorf("status %d", resp.StatusCode)
-}
-
-func detectLocalLLMModel(endpoint string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	var out struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/models", nil)
-	resp, err := probeHTTPClient.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return ""
-	}
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &out); err != nil {
-		return ""
-	}
-	if len(out.Data) > 0 && out.Data[0].ID != "" {
-		return out.Data[0].ID
-	}
-	return ""
 }
 
 // MultiEngineProbe 将多个 SearchProbe 包装成一个 SearchProbe：顺序尝试，首个成功即返回

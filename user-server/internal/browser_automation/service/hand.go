@@ -17,11 +17,6 @@ func NewHand(registry *HostRegistry) *Hand {
 	return &Hand{registry: registry}
 }
 
-// ensureReady Host 在线检查
-func (h *Hand) ensureReady(ctx context.Context, userID uint) error {
-	return h.registry.EnsureOnline(userID)
-}
-
 // openTab 原语
 func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool) (int, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{

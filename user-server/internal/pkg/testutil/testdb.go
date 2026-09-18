@@ -222,12 +222,6 @@ const procTestDBSlots = 32
 // 避免与业务代码或其他工具的咨询锁意外撞键。
 const procTestDBLockBase = 0x6d746b00
 
-// procTestDBMaint 持有槽位所需的长连接。
-// **刻意不 Close**：会话级咨询锁随连接释放，连接必须活到进程结束，
-// 否则槽位会在测试跑到一半时被回收，另一个进程可能抢到同一个库。
-// 进程退出时 socket 由 OS 关闭，PG 随即释放锁 —— 这就是我们要的自动回收。
-var procTestDBMaint *sql.DB
-
 // acquireTestDBSlot 在维护库连接上依次尝试获取槽位咨询锁，返回首个拿到的槽位。
 // 全部被占用时返回 ok=false（同一台机器上并发跑了多套 go test）。
 func acquireTestDBSlot(conn *sql.DB, t testing.TB) (slot int, ok bool) {
@@ -268,7 +262,8 @@ func ensureProcTestDB(t testing.TB) {
 			procDBInitErr = err
 			return
 		}
-		procTestDBMaint = s // 不 Close，理由见变量注释
+		// s 刻意不 Close：会话级咨询锁随连接释放，连接必须活到进程结束，
+		// 否则槽位会在测试跑到一半时被回收。进程退出时 OS 关 socket，PG 随即释放锁。
 
 		slot, locked := acquireTestDBSlot(s, t)
 		if locked {

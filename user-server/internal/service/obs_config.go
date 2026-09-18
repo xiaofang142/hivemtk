@@ -385,10 +385,6 @@ func obsConfigIsFileSizeAllowed(c *model.ObsConfig, size int64) bool {
 	return size <= c.MaxSize
 }
 
-func obsConfigIsFileCountAllowed(c *model.ObsConfig) bool {
-	return c.FileCount < c.MaxCount
-}
-
 func obsConfigResponseToModel(d *dto.ObsConfigResponse) *model.ObsConfig {
 	if d == nil {
 		return nil

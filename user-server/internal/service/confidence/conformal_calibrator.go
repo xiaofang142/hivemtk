@@ -15,7 +15,6 @@ type ConformalCalibrator struct {
 	scores         []float64
 	maxRetained    int
 	recalibrateSec int
-	lastRecalibAt  int64
 }
 
 // NewConformalCalibrator 构造在线校准器

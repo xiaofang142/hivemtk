@@ -252,7 +252,7 @@ func isSentenceSep(r rune) bool {
 	return false
 }
 
-func min(a, b int) int {
+func min(a, b int) int { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if a < b {
 		return a
 	}

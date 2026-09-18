@@ -264,7 +264,7 @@ func (r *CrossEncoderReranker) Rerank(ctx context.Context, query string, docs []
 	return finalize(applyScoreFloor(r.scoreFloor, ranked), topK), nil
 }
 
-const rerankScoreFloorDefault = 0.3
+const rerankScoreFloorDefault = 0.3 //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 
 func applyScoreFloor(floor float64, ranked []RankedDoc) []RankedDoc {
 	if floor <= 0 || len(ranked) == 0 {

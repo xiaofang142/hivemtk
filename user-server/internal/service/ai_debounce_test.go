@@ -65,16 +65,6 @@ func newDebounceFixture(t *testing.T, seconds int) (*InboxIngressService, *stubA
 	return svc, stub, fmt.Sprintf("debounce-test-%s-%d-%d", t.Name(), seq, seconds)
 }
 
-// waitForAICalls 轮询等待 stub 收到至少 n 次 AI 触发,用于与防抖窗口关闭后的
-// time.AfterFunc 异步触发链同步;超时即返回,由调用方按精确断言判定失败。
-func waitForAICalls(t *testing.T, stub *stubAITrigger, n int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for stub.count() < n && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 func debounceEvent(sessionID, content string, seconds int) *model.MessageEvent {
 	conv := sessionID + "-conv"
 	return &model.MessageEvent{

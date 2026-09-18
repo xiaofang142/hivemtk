@@ -84,7 +84,7 @@ func (f *RRFFusion) Fuse(vecResults, bm25Results []Chunk, topN int) []Chunk {
 	return out
 }
 
-func trimChunks(chunks []Chunk, topK int) []Chunk {
+func trimChunks(chunks []Chunk, topK int) []Chunk { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if topK <= 0 {
 		return chunks
 	}
@@ -92,47 +92,4 @@ func trimChunks(chunks []Chunk, topK int) []Chunk {
 		return chunks[:topK]
 	}
 	return chunks
-}
-
-func mergeChunksByMaxScore(base, extra []Chunk) []Chunk {
-	if len(extra) == 0 {
-		return base
-	}
-	if len(base) == 0 {
-		return extra
-	}
-	best := make(map[string]float64, len(base))
-	order := make([]string, 0, len(base))
-	for _, c := range base {
-		if _, ok := best[c.ID]; !ok {
-			order = append(order, c.ID)
-		}
-		if c.Score > best[c.ID] {
-			best[c.ID] = c.Score
-		}
-	}
-	for _, c := range extra {
-		if _, ok := best[c.ID]; !ok {
-			order = append(order, c.ID)
-			best[c.ID] = c.Score
-			continue
-		}
-		if c.Score > best[c.ID] {
-			best[c.ID] = c.Score
-		}
-	}
-	contentByID := make(map[string]string, len(base)+len(extra))
-	for _, c := range base {
-		contentByID[c.ID] = c.Content
-	}
-	for _, c := range extra {
-		if _, ok := contentByID[c.ID]; !ok {
-			contentByID[c.ID] = c.Content
-		}
-	}
-	out := make([]Chunk, 0, len(order))
-	for _, id := range order {
-		out = append(out, Chunk{ID: id, Content: contentByID[id], Score: best[id]})
-	}
-	return out
 }

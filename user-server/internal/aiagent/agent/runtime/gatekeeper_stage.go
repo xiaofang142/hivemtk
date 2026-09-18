@@ -150,11 +150,10 @@ func (d *DefaultCrisisDetector) Detect(ctx context.Context, ic *InferenceContext
 // SentimentSlidingWindow 情绪滑动窗口（ring buffer 实现）
 // 检测连续下降趋势：近 N 轮情绪分持续降低
 type SentimentSlidingWindow struct {
-	mu        sync.Mutex
-	sessionID string
-	scores    []float64
-	idx       int
-	size      int
+	mu     sync.Mutex
+	scores []float64
+	idx    int
+	size   int
 }
 
 // NewSentimentSlidingWindow 构造情绪滑动窗口

@@ -101,7 +101,7 @@ func (l *MemorySendRateLimiter) Allow(ctx context.Context, key string, limit Rat
 	return false
 }
 
-func (l *MemorySendRateLimiter) totalBucketCount() int {
+func (l *MemorySendRateLimiter) totalBucketCount() int { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	total := 0
 	for i := range l.shards {
 		s := l.shards[i]

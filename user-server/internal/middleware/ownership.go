@@ -13,8 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type ctxKeyOwnership struct{}
-
 // OwnershipChecker 资源归属查询接口。
 //
 // table 为数据库表名（业务侧硬编码传入，避免 GORM TableName 反射开销），

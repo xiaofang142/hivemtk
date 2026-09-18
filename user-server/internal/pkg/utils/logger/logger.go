@@ -41,7 +41,6 @@ func DefaultConfig() LoggingConfig {
 var (
 	mu   sync.RWMutex
 	inst *zerolog.Logger
-	conf LoggingConfig
 )
 
 func parseLevel(s string) zerolog.Level {
@@ -82,10 +81,6 @@ func applyDefaults(c LoggingConfig) LoggingConfig {
 // InitLogger 依据配置初始化全局日志器；可重复调用，以最后一次为准（幂等）。
 func InitLogger(c LoggingConfig) {
 	c = applyDefaults(c)
-
-	mu.Lock()
-	conf = c
-	mu.Unlock()
 
 	level := parseLevel(c.Level)
 

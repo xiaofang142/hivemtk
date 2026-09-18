@@ -1020,7 +1020,7 @@ func (s *InboxService) releaseLoad(ctx context.Context, staff string) {
 	s.mu.Unlock()
 }
 
-func inferFromType(assignedTo string, assignedSOP uint) string {
+func inferFromType(assignedTo string, assignedSOP uint) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if assignedSOP > 0 {
 		return InboxAssignToSOP
 	}
@@ -1030,7 +1030,7 @@ func inferFromType(assignedTo string, assignedSOP uint) string {
 	return "system"
 }
 
-func firstNonEmpty(a, b string) string {
+func firstNonEmpty(a, b string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if strings.TrimSpace(a) != "" {
 		return a
 	}

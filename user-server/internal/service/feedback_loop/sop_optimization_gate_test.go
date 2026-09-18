@@ -30,11 +30,6 @@ func (f *fakeGateLLM) Dispatch(ctx context.Context, req llm.DispatchRequest) (*l
 	return &llm.DispatchResult{Content: f.content}, nil
 }
 
-type gateFixture struct {
-	db *gorm.DB
-	o  *SOPAutoOptimizer
-}
-
 func setupGateTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	return testutil.NewTestDB(t,

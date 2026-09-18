@@ -135,7 +135,7 @@ func (s *WebhookService) getQQWebhookSecret(ctx context.Context, accountID strin
 }
 
 // triggerQQSalesEngine QQ AI 触发（群消息必须有内容；单聊直接触发）
-func (s *WebhookService) triggerQQSalesEngine(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) {
+func (s *WebhookService) triggerQQSalesEngine(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if hubMsg == nil || strings.TrimSpace(p.Content) == "" {
 		return
 	}

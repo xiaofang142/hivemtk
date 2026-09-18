@@ -24,8 +24,6 @@ import (
 
 const tgLeadOpportunityThreshold = 40
 
-var tgMeaningfulRe = regexp.MustCompile(`[\p{L}\p{N}]`)
-
 var (
 	tgEmailRe = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 	tgPhoneRe = regexp.MustCompile(`\+?\d[\d\-\s]{6,}\d`)
@@ -84,7 +82,7 @@ func DetectTelegramIntent(text string) (score int, signals []string, isOpportuni
 	return score, signals, score >= tgLeadOpportunityThreshold
 }
 
-func formatTelegramLeadDesc(groupTitle, snippet string, score int, signals []string, isOpportunity bool) string {
+func formatTelegramLeadDesc(groupTitle, snippet string, score int, signals []string, isOpportunity bool) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	tag := "群发言线索"
 	if isOpportunity {
 		tag = "群发言商机"
@@ -153,8 +151,4 @@ func boolToInt64(b bool) int64 {
 		return 1
 	}
 	return 0
-}
-
-func (s *WebhookService) recordTelegramLeadScore(ctx context.Context, clue *model.Clue, isOpp bool) {
-	recordUnifiedLeadScore(ctx, s, clue, "telegram", isOpp)
 }

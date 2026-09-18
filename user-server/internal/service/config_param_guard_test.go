@@ -115,5 +115,3 @@ func TestD12_TTLExpiryReloads(t *testing.T) {
 		t.Fatalf("过期后应回源 v2, got %s", got)
 	}
 }
-
-func ctxBG() context.Context { return context.Background() }

@@ -59,10 +59,6 @@ type ConnectorPullRequest struct {
 	MaxPages int    `json:"max_pages"`
 }
 
-type kbImportSink interface {
-	Import(ctx context.Context, req *knowledgesvc.ImportRequest) (any, error)
-}
-
 // Pull 从连接器源拉取内容并导入知识库
 func (s *KBConnectorService) Pull(ctx context.Context, source, productID string, req *ConnectorPullRequest) (*ConnectorPullResult, error) {
 	if !kbConnectorSources[source] {

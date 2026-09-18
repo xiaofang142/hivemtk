@@ -42,13 +42,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	)
 }
 
-func computeWeComSignature(token, timestamp, nonce string) string {
-	parts := []string{token, timestamp, nonce}
-	sort.Strings(parts)
-	h := sha1.Sum([]byte(strings.Join(parts, "")))
-	return hex.EncodeToString(h[:])
-}
-
 func computeWeComSignatureURL(token, timestamp, nonce, echostr string) string {
 	parts := []string{token, timestamp, nonce, echostr}
 	sort.Strings(parts)

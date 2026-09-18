@@ -159,9 +159,6 @@ func (s *stubRFMRepo) CountBySegment(ctx context.Context) (map[string]int64, err
 func (s *stubRFMRepo) DeleteByCustomerID(ctx context.Context, id string) error { return nil }
 
 type stubOrderRepo struct {
-	cust    repository.CustomerRepository
-	ord     repository.OrderRepository
-	rec     repository.RecoveryQueueRepository
 	byAcct  []*model.Order
 	byTgID  []*model.Order
 	gotTgID int64

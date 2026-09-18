@@ -168,7 +168,7 @@ func (f *Flag) readEnv() bool {
 	return b
 }
 
-func (f *Flag) resolve() bool {
+func (f *Flag) resolve() bool { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	val := f.readEnv()

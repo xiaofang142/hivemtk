@@ -25,7 +25,6 @@ type MessageReorderBuffer struct {
 type sessionBuffer struct {
 	messages []msgEntry
 	timer    *time.Timer
-	flushed  bool
 }
 
 type msgEntry struct {

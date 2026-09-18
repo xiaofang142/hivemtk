@@ -378,8 +378,6 @@ func TestFeishuTextContentJSON_IsStringifiedJSON(t *testing.T) {
 }
 
 func TestDecryptFeishuEvent_OfficialPrefixFormat(t *testing.T) {
-	const encKey43 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-
 	raw := bytes.Repeat([]byte{0x37}, 32)
 	key43 := base64.StdEncoding.WithPadding(base64.NoPadding).EncodeToString(raw)
 	if len(key43) != 43 {

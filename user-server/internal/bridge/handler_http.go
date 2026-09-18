@@ -36,12 +36,6 @@ const (
 	HTTPIngestMaxMessages     = 200
 )
 
-func runtimePollingMaxTimeout(ctx context.Context) time.Duration {
-	return service.GlobalConfigParam().GetDuration(ctx, "bridge", "polling_max_timeout", HTTPPollingMaxTimeout)
-}
-func runtimePollingDefaultTimeout(ctx context.Context) time.Duration {
-	return service.GlobalConfigParam().GetDuration(ctx, "bridge", "polling_default_timeout", HTTPPollingDefaultTimeout)
-}
 func runtimeIngestMaxBodySize(ctx context.Context) int {
 	return service.GlobalConfigParam().GetInt(ctx, "bridge", "ingest_max_body_bytes", HTTPIngestMaxBodySize)
 }

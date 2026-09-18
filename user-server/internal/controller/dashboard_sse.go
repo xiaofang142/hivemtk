@@ -187,7 +187,7 @@ func writeDashboardRawEvent(c *gin.Context, eventType string, data map[string]an
 	return writeDashboardEvent(c, eventType, data)
 }
 
-func roundTo(v float64, n int) float64 {
+func roundTo(v float64, n int) float64 { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return 0
 	}

@@ -33,12 +33,6 @@ var (
 	smSamplingDone chan struct{}
 )
 
-type resourceSnapshot struct {
-	CPU  float64
-	Mem  float64
-	Disk float64
-}
-
 func initResourceSnapshots() {
 	cpuSnapshot.Store(float64(0))
 	memSnapshot.Store(float64(0))

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +23,6 @@ import (
 type SiteDeployService struct {
 	db      *gorm.DB
 	pushSvc *PushService
-	llmsTpl func(articles []model.GeoArticle, brand string) string
 }
 
 func NewSiteDeployService(db *gorm.DB, pushSvc *PushService) *SiteDeployService {
@@ -338,10 +336,4 @@ func slugify(title string) string {
 	}
 	title = strings.Trim(title, "-")
 	return title
-}
-
-// toJSON 工具
-func toJSON(v any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }

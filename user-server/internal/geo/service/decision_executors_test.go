@@ -115,11 +115,6 @@ func TestQueryProbeExecutor_EndToEnd(t *testing.T) {
 	}
 }
 
-type stepResultShim struct {
-	StepType string
-	Result   string
-}
-
 func TestAttributionAndGapFill_Pipeline(t *testing.T) {
 	s, _, tasks := newWFWithDecisionChain(t, "ourbrand")
 

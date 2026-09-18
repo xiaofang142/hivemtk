@@ -234,9 +234,11 @@ jobs:
       - name: ESLint (P0-CI)
         # 2026-08-15 P0-CI：开启前端 ESLint
         # eslint.config.mjs 在 user-web/bridge/，npm ci 已安装依赖
+        # 2026-09-18 转阻断：原"首次启用不阻断"约定到期。实测本地
+        # `npm run lint` = 0 errors / 69 warnings（warn 不阻断），满足门禁条件。
+        # warnings 清零属独立议题，勿在此阻断。
         working-directory: user-web/bridge
         run: npm run lint --if-present
-        continue-on-error: true  # 首次启用，规则不全，不阻断
 
       - name: vitest coverage
         # 2026-08-15 P0-CI：前端覆盖率采集

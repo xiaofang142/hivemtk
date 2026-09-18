@@ -118,22 +118,6 @@ func WithAllowOverMax(b bool) PageOption {
 	}
 }
 
-func withPageAlias(name string) PageOption {
-	return func(c *pageConfig) {
-		if name != "" {
-			c.pageAlias = name
-		}
-	}
-}
-
-func withPageSizeAlias(name string) PageOption {
-	return func(c *pageConfig) {
-		if name != "" {
-			c.pageSizeAlias = name
-		}
-	}
-}
-
 type errInvalidPageSize struct {
 	maxSize int
 }

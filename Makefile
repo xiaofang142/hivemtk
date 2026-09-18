@@ -347,10 +347,14 @@ fmt-check:
 test-go:
 	cd user-server && go test ./... -count=1
 
-# 清理 testutil 遗留的进程级测试库（user_db_test_<pid> / user_db_test_bench_<pid>）。
+# 清理 testutil **旧版**遗留的进程级测试库（user_db_test_<pid> / user_db_test_bench_<pid>）。
 #
-# 背景：testutil 每个测试进程建一个独立库，且**从不 DROP**（Go 无进程退出钩子），
-# 实测累积 1466 个孤儿库 / 19 GB。详见 docs/architecture/TASKS_AUDIT_2026-09-16.md · RISK-07。
+# 背景：testutil 曾每个测试进程建一个独立库且**从不 DROP**（Go 无进程退出钩子），
+# 实测累积 1466 个孤儿库 / 19 GB。详见 docs/architecture/TASKS_AUDIT_2026-09-16.md · RISK-07/HYG-02。
+#
+# ⚠️ 2026-09-18：根因已由 HYG-02 修复（改为固定槽位库 user_db_test_slot<N>）。
+# 槽位库是**合法常驻资产**，不得删除 —— 过滤条件据此从
+# `LIKE 'user_db_test_%'`（会把 8 个槽位库误报为孤儿）收紧为仅匹配 PID 数字后缀。
 #
 # 默认只列出（安全）；确认无误后加 APPLY=1 才真正 DROP。
 #   make test-db-prune            # 只列
@@ -358,16 +362,17 @@ test-go:
 test-db-prune:
 	@cd user-server && set -a && . ../.env && set +a; \
 	PW="$$POSTGRES_PASSWORD"; \
+	ORPHAN_RE="^user_db_test(_bench)?_[0-9]+$$"; \
 	if [ "$$APPLY" = "1" ]; then \
-		echo "⚠️  APPLY=1：即将 DROP 全部 user_db_test_* 库"; \
+		echo "⚠️  APPLY=1：即将 DROP 全部 PID 形态孤儿库（不含 slot 槽位库）"; \
 		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
-			"SELECT 'DROP DATABASE IF EXISTS \"'||datname||'\";' FROM pg_database WHERE datname LIKE 'user_db_test_%';" \
+			"SELECT 'DROP DATABASE IF EXISTS \"'||datname||'\";' FROM pg_database WHERE datname ~ '$$ORPHAN_RE';" \
 			| docker exec -i -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres; \
 		echo "✅ 清理完成"; \
 	else \
 		echo "（只列不删。确认后执行 make test-db-prune APPLY=1）"; \
 		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
-			"SELECT count(*)||' 个孤儿测试库，共 '||pg_size_pretty(sum(pg_database_size(datname))) FROM pg_database WHERE datname LIKE 'user_db_test_%';"; \
+			"SELECT count(*)||' 个孤儿测试库，共 '||coalesce(pg_size_pretty(sum(pg_database_size(datname))),'0 bytes') FROM pg_database WHERE datname ~ '$$ORPHAN_RE';"; \
 	fi
 
 # =============================================================================

@@ -961,7 +961,7 @@ func DecryptFeishuEvent(encryptKey, encrypted string) ([]byte, error) {
 
 func timePtr(t time.Time) *time.Time { return &t }
 
-func feishuTextContentJSON(text string) string {
+func feishuTextContentJSON(text string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	b, _ := json.Marshal(map[string]string{"text": text})
 	return string(b)
 }

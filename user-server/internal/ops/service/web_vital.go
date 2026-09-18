@@ -8,9 +8,7 @@ import (
 )
 
 // WebVitalService 前端性能指标（Web Vitals）上报服务
-type WebVitalService struct {
-	db interface{}
-}
+type WebVitalService struct{}
 
 // NewWebVitalService 构造
 func NewWebVitalService() *WebVitalService {

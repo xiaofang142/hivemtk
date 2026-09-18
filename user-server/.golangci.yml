@@ -19,11 +19,14 @@ linters:
   enable:
     - govet
     - depguard
-  # TODO(P3-5 护栏常态化)：存量 errcheck/unused 清零后逐步启用
-  # - errcheck
-  # - ineffassign
-  # - staticcheck
-  # - unused
+    # 2026-09-18 P3-5 第一阶段：unused 存量 65→0（逐项核对后删除死代码；
+    # 仅 tests=false 生产面计数），自此钉死为护栏。
+    - unused
+  # TODO(P3-5 护栏常态化·剩余)：以下规则实测存量如下（2026-09-18 基线，
+    # --no-config 全量口径），逐项归零后再启用：
+    # - errcheck      # 1713 处
+    # - ineffassign   # 32 处
+    # - staticcheck   # 293 处
   settings:
     depguard:
       rules:

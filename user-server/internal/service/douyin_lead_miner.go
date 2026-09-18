@@ -81,10 +81,6 @@ func (s *WebhookService) recordDouyinDMOutreachEvent(ctx context.Context, accoun
 	}
 }
 
-func (s *WebhookService) recordDouyinLeadScore(ctx context.Context, clue *model.Clue, isOpp bool) {
-	recordUnifiedLeadScore(ctx, s, clue, "douyin", isOpp)
-}
-
 func (s *WebhookService) DouyinLeadMiner() func(ctx context.Context, ev *model.MessageEvent) {
 	return func(ctx context.Context, ev *model.MessageEvent) {
 		if ev == nil {

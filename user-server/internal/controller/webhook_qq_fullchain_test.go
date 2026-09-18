@@ -349,25 +349,6 @@ func (m *simIntentRecognizer) Recognize(_ context.Context, _, _, text string) (*
 	return &dto.RecognizeResult{IntentType: service.IntentGreeting, Confidence: 0.6, Method: "sim"}, nil
 }
 
-func readAllBody(c *gin.Context) ([]byte, error) {
-	defer c.Request.Body.Close()
-	buf := new(bytes.Buffer)
-	if _, err := buf.ReadFrom(c.Request.Body); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func extractGinHeaders(c *gin.Context) map[string]string {
-	out := map[string]string{}
-	for k, v := range c.Request.Header {
-		if len(v) > 0 {
-			out[k] = v[0]
-		}
-	}
-	return out
-}
-
 // waitCond 轮询等待异步条件（AI 出站是异步 goroutine）
 func waitCond(t *testing.T, timeout time.Duration, cond func() bool, msg string) {
 	t.Helper()

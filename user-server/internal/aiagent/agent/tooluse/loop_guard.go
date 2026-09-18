@@ -301,10 +301,6 @@ func (g *LoopGuard) Stats() LoopGuardStats {
 	}
 }
 
-func hashArgs(args map[string]any) string {
-	return structuralFingerprint(args)
-}
-
 // LoopGuardDecorator 工具级循环检测装饰器
 //
 // 在工具执行前检查是否陷入循环，若陷入则返回 ErrLoopDetected。

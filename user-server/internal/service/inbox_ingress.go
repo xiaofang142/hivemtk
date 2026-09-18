@@ -228,7 +228,6 @@ func (s *InboxIngressService) RenewSessionHumanLock(ctx context.Context, session
 type inboxHumanLockExpiryManager struct {
 	mu        sync.RWMutex
 	deadlines map[string]time.Time
-	started   bool
 }
 
 var inboxLockMgr *inboxHumanLockExpiryManager
@@ -295,7 +294,7 @@ func StartInboxHumanLockExpiryChecker(ctx context.Context, c cache.Cache, interv
 	})
 }
 
-func (s *InboxIngressService) tryAcquireAILock(ctx context.Context, sessionID string) (bool, error) {
+func (s *InboxIngressService) tryAcquireAILock(ctx context.Context, sessionID string) (bool, error) { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if s.cache == nil || sessionID == "" {
 		return true, nil
 	}

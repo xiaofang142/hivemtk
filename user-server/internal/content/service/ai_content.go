@@ -9,8 +9,6 @@ import (
 	"os"
 	"strings"
 
-	sysrepo "hivemtk-user/internal/repository"
-
 	"gorm.io/gorm"
 )
 
@@ -93,6 +91,7 @@ func (s *AIContentService) GenerateContent(ctx context.Context, userID uint, req
 	}
 
 	if err := s.recordRepo.Create(record); err != nil {
+		return nil, fmt.Errorf("生成记录落库失败：%v", err)
 	}
 
 	return &GenerateContentResponse{
@@ -403,9 +402,7 @@ type llmSystemConfig struct {
 }
 
 func (s *AIContentService) loadSystemLLMConfig(ctx context.Context) (*llmSystemConfig, error) {
-	sysCfgRepo := sysrepo.NewSystemConfigRepository()
-	if sysCfg, err := sysCfgRepo.GetConfig(ctx); err == nil && sysCfg != nil {
-	}
+	// 注：曾有一段 sysrepo.GetConfig 的读取，其结果从未被使用（空 if 块），已删除。
 	apiKey := os.Getenv("LLM_API_KEY")
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")

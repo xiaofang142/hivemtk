@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"hivemtk-user/internal/cache"
@@ -38,7 +37,6 @@ type webhookRecoveryScanner struct {
 	enabled   bool
 
 	stopCh chan struct{}
-	mu     sync.Mutex
 
 	lastID uint64
 }

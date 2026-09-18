@@ -15,8 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"hivemtk-user/internal/model"
 )
 
 const (
@@ -153,16 +151,4 @@ func (n *CondNode) Evaluate(attrs map[string]any) bool {
 		return false
 	}
 	return fn(actual, n.Value)
-}
-
-func sessionCondAttrs(session *model.CustomerSession, aiReplyCount int) map[string]any {
-	if session == nil {
-		return nil
-	}
-	return map[string]any{
-		"platform":       string(session.Platform),
-		"handler_type":   string(session.HandlerType),
-		"status":         string(session.Status),
-		"ai_reply_count": aiReplyCount,
-	}
 }

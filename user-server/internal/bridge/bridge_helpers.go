@@ -6,14 +6,9 @@ import (
 
 	gw "hivemtk-user/internal/channelgw"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/service"
 )
 
-const maxReplyContentBytes = 4 * 1024
-
-func runtimeMaxReplyContentBytes(ctx context.Context) int {
-	return service.GlobalConfigParam().GetInt(ctx, "bridge", "max_reply_content_bytes", maxReplyContentBytes)
-}
+const maxReplyContentBytes = 4 * 1024 //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 
 // OwnershipChecker 账号归属校验回调：
 //   - 输入：uid (JWT 解析的 user_id), channel, accountID

@@ -145,7 +145,7 @@ func isDuplicateKey(err error) bool {
 		errors.Is(err, gorm.ErrDuplicatedKey)
 }
 
-func contentHashOf(content string) string {
+func contentHashOf(content string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
 	if content == "" {
 		return ""
 	}
