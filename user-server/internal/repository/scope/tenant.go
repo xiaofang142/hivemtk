@@ -25,11 +25,15 @@ func fromGinContext(ctx context.Context, key string) (any, bool) {
 	if ctx == nil {
 		return nil, false
 	}
-	v := ctx.Value(key)
-	if v == nil {
-		return nil, false
+	// 写入侧统一用 ginCtxKey 类型键；同时兼容历史裸字符串键（如中间件直接
+	// WithValue(ctx, "user_id", ...)），两种键都能命中。
+	if v := ctx.Value(ginCtxKey(key)); v != nil {
+		return v, true
 	}
-	return v, true
+	if v := ctx.Value(key); v != nil {
+		return v, true
+	}
+	return nil, false
 }
 
 // SetGinValuesToCtx 把 gin 上下文中的用户/角色信息注入到 ctx.Value，
