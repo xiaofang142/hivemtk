@@ -71,6 +71,23 @@
 
 ### F3.2 装饰器链（12）
 permission → ratelimit → circuit → retry → timeout → audit → cost → feedback → dead_letter → result_cache → double_intercept → param_validator；LoopGuard 同指纹 3次/60s 拒绝
+- 说明：上表是**全部已实现的装饰器**，单次工具调用的实际链更短。`ToolExecutor.buildHandler` 实跑为
+  permission → ratelimit → circuit → retry → timeout → audit(+cost)，`FeedbackSink` 非空时再在外面套一层；
+  dead_letter / result_cache / double_intercept / param_validator / LoopGuard 挂在 ToolRouter 与 Agent Loop 上，不在 executor 链内
+- **circuit 曾恒不生效（T-P1-04 于 2026-09-19 接线）**：`CircuitBreakerRegistry` 此前只在测试里构造，
+  `ToolExecutorConfig.CircuitBreaker` 生产无赋值点 ⇒ 装饰器 nil 早退，链上那格是空的。现由
+  `internal/app/tool_circuit_breaker_wiring.go:applyToolCircuitBreaker` 按 `FF_TOOL_CIRCUIT_BREAKER` 三态接线：
+  `off`（默认，字段置 nil，行为与接线前逐字相同）/ `shadow`（跑同一套 `Allow()` 状态机但不拦任何请求，只落
+  `event=tool_circuit_decision` 结构化日志 + 进程内 would-block 计数）/ `enforce`（真拦，返回 `ErrCircuitOpen`）。
+  布尔式真值（`true`/`1`/`on`/`yes`）一律归 `shadow`，**不授予拦截能力**；无法解析的值归 `off` 并告警
+- 两处"熔断"互不相干，排障别只看一套：① 本条的 executor 装饰链 registry（按工具累计连续失败，
+  阈值 5 / 基础冷却 30s / 上限 5m / 2x 退避 / 半开 1 次）；② `ToolRouter` 内部 `r.circuit`
+  （`RouterConfig{FailThreshold:5, CooldownDuration:30s}`）。`/api/agent/tools/circuit/reset` 此前只复位②，
+  对运维却答"circuit breaker reset"——假复位，现已两侧同清并在响应里回 `executor_circuit_reset`
+- 仍未接：`ToolAlertManager.AlertCircuitOpen`（注释写"由 CircuitBreakerDecorator 调用"，实为生产零调用；
+  根因是 `NewToolAlertManager` 本身无生产调用方，属审计告警侧缺口，见基线项 4）
+- 观测入口：`GET /api/agent/tools/circuit`（一次返回 mode / 生效配置 / executor 侧逐工具状态 / would-block 报告，
+  `wired=false` 时其余字段皆空，不可读作"没有工具出问题"）
 
 ### F3.3 MCP Server
 零依赖 JSON-RPC 2.0（协议 2025-06-18），initialize/tools.list/tools.call/ping；仅 HTTP
