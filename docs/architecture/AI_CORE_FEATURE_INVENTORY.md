@@ -138,7 +138,21 @@ consult3/price_inquiry3/objection4/after_sale4/complaint3/churn3/intent_buy3/ask
 
 ### F9.2 Dispatcher
 WorkerCount=16、QueueCapacity=1000背压拒绝、LLMConcurrency信号量=4、任务超时5min、重试3次指数退避1s×2封顶30s；waiting 挂起待 outbox 唤醒；事件日志唯一约束幂等
-- ⚠️ Saga 补偿空壳（sop_executions 缺 executed_nodes JSONB）
+- Saga 补偿已接线（T-P1-02，2026-09-19）：`InitSOPCompensation` 按 `FF_LTC_SAGA_COMPENSATION`（默认关）注入
+  `CompensationManager`；开旗后失败执行按 LIFO 撤销前序副作用（wait→删 pending 定时器，llm/ai_decide→清本节点产物键），
+  内存计划受 `MaxPlansKept=512` 上界约束、退出前打 Summary。补偿动作只回滚内部状态、无出域 ⇒ 关旗行为与接线前一致
+- 补偿语义收口（T-P1-03，2026-09-19）：19 种节点类型按"有无内部状态可撤销"三分，由
+  `TestNodeExecutor_CompensationInventory` 穷尽锁死（注册集合 + 可补偿分区 + 无沉默类型）：
+  ① **可全量补偿** 3 种（`llm`/`ai_decide` 清本节点产物键、`wait` 删 pending 定时器）；
+  ② **部分补偿** 12 种（9 销售话术 + 旧版 `message`/`action`/`send_offer`，均继承 `MessageNodeBase`）——
+  清 `ExecutionData` 里的话术产物，但**有意保留 `message_sent` 幂等键**（防重跑二次发送）、
+  **不撤回已出域消息**（出域须走 T-P3 审批闸门）；
+  ③ **无可撤销状态** 4 种（`start`/`end`/`condition`/`branch` 只写时间戳与分支标签留痕，`Noop` 是未注册兜底）
+  —— 不实现 `Compensable`，改为实现 `CompensationNoter` 自述理由，随 `CompensationRecord.Reason` 进入补偿计划与结构化日志
+  （`node compensated ... reason=` / `node not compensable, skipped ... reason=`）；补偿计划目前仅存内存（受上界淘汰），
+  DB 侧全量留档尚未落地，属 T-P1-08
+- 口径登记：**接口断言型接线（`executor.(Compensable)` 运行时类型断言）不入 grep 基线**——
+  `check-unwired-assets.sh` 探不到断言，这类接线的退化由上述契约测试盯梢
 - 配套：scheduler(60s tick)/outbox_dispatcher(batch=100,StuckDetector)/abtest(Variant权重分流)/condition 表达式求值
 
 ## F10 置信度与转人工（confidence/ 15文件）
@@ -190,10 +204,12 @@ ChrF 字符 n-gram + LLM Judge 主观评审；EvaluateBatch/EvaluateSingle
 > 口径提示：下表是 2026-08-25 源码精读快照。"已实现未接线"类条目（G1 等）的**当前接线状态以
 > `scripts/check-unwired-assets.sh` 实跑输出为准**（退出码 0=与登记一致 / 1=状态已变，须回灌本表 / 2=登记符号已消失）；
 > 该脚本每接完一条就把对应行的 `expect` 改为 `wired`，此后它反过来盯"已接线的别偷偷退化"。
+> **例外**：接线形态是运行时类型断言（如 `executor.(Compensable)`）时 grep 探不到，该类条目不由本脚本盯梢，
+> 改由穷尽性契约测试锁定（见 F9.2 的 T-P1-03 登记）。
 
 | # | 位置 | 问题 |
 |---|---|---|
-| G1 | sop_dispatcher.go:696 | 补偿器未注入：`SetCompensationManager` 生产零调用（仅测试引用），单例 dispatcher 在 :840 构造时不带管理器 ⇒ `tryCompensate` 恒在 697 行 nil 早退，失败路径无 SAGA 回滚。原记根因"缺 executed_nodes 列"已于 v3.29.0 补列（`model/ai_sales_champion.go:159`，text 非 JSONB），现仅剩接线缺口 |
+| G1 | sop_dispatcher.go:696 | 补偿器未注入：`SetCompensationManager` 生产零调用（仅测试引用），单例 dispatcher 在 :840 构造时不带管理器 ⇒ `tryCompensate` 恒在 697 行 nil 早退，失败路径无 SAGA 回滚。原记根因"缺 executed_nodes 列"已于 v3.29.0 补列（`model/ai_sales_champion.go:159`，text 非 JSONB），现仅剩接线缺口 **【T-P1-02 已接线（2026-09-19）】`service.InitSOPCompensation` 在 `cmd/api/main.go` 按 `FF_LTC_SAGA_COMPENSATION`（默认关）注入；接线过程实测出机器本身两处缺陷并已修：① `plans` 只增不减（进程级单例每次失败泄漏一条计划，故障风暴下无界）→ 新增 `MaxPlansKept` 淘汰；② `Run` 无锁改写已发布计划 + `GetPlan` 交出活指针 → `-race` 报 3 处 DATA RACE，现改写走短临界区、`GetPlan` 返回快照。另有 `sop_compensation_integration_test.go` 那批"集成测试"是零断言空跑烟测（构造 exec 不落库 ⇒ 恒早退），真实失败路径断言补齐在 `sop_compensation_wiring_test.go` **【T-P1-03 语义收口（2026-09-19）】**卡面要求"给 `StartExecutor`/`EndExecutor`/`ConditionExecutor`/`NoopExecutor` 补 `Compensate`，6/6 实现"，实跑证明这四类无可撤销状态，补空实现会把记录从 `skipped` 伪造成 `completed` 并让 `Compensable` 断言失去判别力 ⇒ 落点改为"6/6 有可断言的补偿语义"；原 `sop_node_executors.go:681` 记 TODO 的 12 个消息类节点已实现部分补偿，四分区与理由见 F9.2 |
 | G2 | dispatcher_dispatch.go:368 | MultiModelVote 无真实一致性投票 |
 | G3 | intent_recognition.go:98 | greeting 不在词典，规则永远识别不出 |
 | G4 | smart_cs_orchestrator.go:537 | extractConfidence 启发式与五信号体系割裂 |
