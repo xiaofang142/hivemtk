@@ -187,6 +187,15 @@ func (n *NoopExecutor) Execute(ctx context.Context, execCtx *ExecutionContext) (
 // IsAsync 同步执行
 func (n *NoopExecutor) IsAsync() bool { return false }
 
+// CompensationNote 声明兜底路径无可撤销状态（见 CompensationNoter）。
+//
+// 注意这条"无可撤销"成立于**补偿时刻**而非执行时刻：Noop 代表节点类型未注册，
+// 它自己确实什么都没做，但同一次运行里真发消息的节点若因注册缺失退化成 Noop，
+// 出域副作用已经发生且这里无从得知。故 MustGet 的 warn 日志是这条路径唯一的现场线索。
+func (n *NoopExecutor) CompensationNote() string {
+	return "节点类型未注册（Noop 兜底）：执行期即空操作，补偿期同样无可撤销状态"
+}
+
 func hasSideEffect(exec *model.SOPExecution, effect string) bool {
 	if exec == nil {
 		return false

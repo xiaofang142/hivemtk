@@ -46,6 +46,14 @@ func (e *StartExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*Nod
 
 func (e *StartExecutor) IsAsync() bool { return false }
 
+// CompensationNote 声明本类型无可撤销状态（见 CompensationNoter）。
+//
+// start 只把 `_started_at` / `_trigger` 写进 ExecutionData 作运行留痕：删掉它不消除任何副作用，
+// 反而抹掉"这次运行何时起过"的证据，失败排查时更需要它在场。
+func (e *StartExecutor) CompensationNote() string {
+	return "入口节点：仅写时间戳/触发源留痕，无业务状态可撤销"
+}
+
 type EndExecutor struct{}
 
 func (e *EndExecutor) NodeType() string { return SOPNodeTypeEnd }
@@ -66,6 +74,11 @@ func (e *EndExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*NodeE
 
 func (e *EndExecutor) IsAsync() bool { return false }
 
+// CompensationNote 声明本类型无可撤销状态（见 CompensationNoter）。
+func (e *EndExecutor) CompensationNote() string {
+	return "出口节点：仅写 `_ended_at` 留痕，无业务状态可撤销"
+}
+
 type MessageNodeBase struct {
 	nodeType    string
 	scenario    llm.DispatchScenario
@@ -73,6 +86,9 @@ type MessageNodeBase struct {
 	wsHub       *websocket.Hub
 	msgRepo     *repository.SessionMessageRepository
 	sessionRepo *repository.CustomerSessionRepository
+	// execRepo 仅补偿用（清 ExecutionData 产物键）。构造参数 deps.DB 为 nil 时留空，
+	// 与 LLMNodeExecutor 的降级口径一致：无库可回滚 ⇒ Compensate 直接成功。
+	execRepo *repository.SopExecutionRepository
 
 	llmSem chan struct{}
 }
@@ -293,7 +309,7 @@ func (b *MessageNodeBase) SetWSHub(ctx context.Context, hub *websocket.Hub) {
 }
 
 func NewMessageNodeExecutor(nodeType string, scenario llm.DispatchScenario, deps *SOPNodeExecutorDeps) *MessageNodeBase {
-	return &MessageNodeBase{
+	b := &MessageNodeBase{
 		nodeType:    nodeType,
 		scenario:    scenario,
 		dispatcher:  deps.Dispatcher,
@@ -302,6 +318,49 @@ func NewMessageNodeExecutor(nodeType string, scenario llm.DispatchScenario, deps
 		sessionRepo: deps.SessionRepo,
 		llmSem:      deps.LLMSem,
 	}
+	if deps.DB != nil { // 无库 ⇒ 无可回滚状态，Compensate 直接成功（同 NewWaitExecutor 的降级口径）
+		b.execRepo = repository.NewSopExecutionRepository(deps.DB)
+	}
+	return b
+}
+
+// Compensate 撤掉本节点写在 ExecutionData 里的内部产物（生成话术 + 来源标记），幂等。
+//
+// 有意**不**做两件事，理由同时经 CompensationNote 落进补偿记录：
+//  1. 不撤回已发出的消息——那是出域动作，须过 T-P3 的出域审批闸门，且客户侧已读不可逆；
+//  2. 不删 `message_sent:{exec}:{node}` 副作用键——它是重试幂等的唯一依据，删掉会让重跑
+//     对同一节点二次发送（补偿防的是"幽灵状态"，不是"再来一次")。
+//
+// 已知粗粒度（与 LLMNodeExecutor.Compensate 同）：键按 nodeType 而非 nodeID 命名，
+// 同类多节点互相覆盖，故清的是"最后一次写入"；补偿按 LIFO 逆序下发，与该语义自洽。
+// execRepo/节点为 nil（直构、降级）时直接成功——无状态可回滚。
+func (b *MessageNodeBase) Compensate(ctx context.Context, execCtx *ExecutionContext) error {
+	if b == nil || execCtx == nil || execCtx.Execution == nil || b.execRepo == nil {
+		return nil
+	}
+	exec, err := b.execRepo.GetByID(ctx, execCtx.Execution.ID)
+	if err != nil {
+		return err
+	}
+	if exec.ExecutionData == nil {
+		return nil
+	}
+	changed := false
+	for _, k := range []string{fmt.Sprintf("_%s_content", b.nodeType), fmt.Sprintf("_%s_source", b.nodeType)} {
+		if _, exists := exec.ExecutionData[k]; exists {
+			delete(exec.ExecutionData, k)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return b.execRepo.UpdateFields(ctx, exec.ID, map[string]any{"execution_data": exec.ExecutionData})
+}
+
+// CompensationNote 声明本类型补偿只覆盖内部产物、出域部分不可撤（见 CompensationNoter）。
+func (b *MessageNodeBase) CompensationNote() string {
+	return "仅清 ExecutionData 内的话术产物；消息已出域不撤回（须出域审批闸门，T-P3），message_sent 幂等键有意保留防重跑二次发送"
 }
 
 type ConditionExecutor struct {
@@ -311,6 +370,14 @@ type ConditionExecutor struct {
 func (e *ConditionExecutor) NodeType() string { return e.nodeType }
 
 func (e *ConditionExecutor) IsAsync() bool { return false }
+
+// CompensationNote 声明本类型无可撤销状态（见 CompensationNoter）。
+//
+// condition/branch 只做只读求值 + 选下一跳，写进 ExecutionData 的是 `_condition_branch`
+// （命中分支标签，排查"为什么走了这条岔路"的唯一线索）；撤销它等于销毁诊断证据。
+func (e *ConditionExecutor) CompensationNote() string {
+	return "路由节点：只读求值，仅留 `_condition_branch` 命中记录，无业务状态可撤销"
+}
 
 func (e *ConditionExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*NodeExecResult, error) {
 	if len(ec.Node.Conditions) > 0 {
@@ -675,11 +742,17 @@ func (e *WaitExecutor) Compensate(ctx context.Context, execCtx *ExecutionContext
 // 应在 SOPExecutionDispatcher 初始化时调用一次。
 // 重复注册会 panic（启动期错误）。
 //
-// 节点-Saga 补偿能力对照表（D03，Compensable 接口断言决定是否补偿）：
+// 节点-Saga 补偿能力对照表（D03 起，T-P1-03 收口；Compensable 接口断言决定是否下发撤销动作）：
 //   - wait            → 可补偿：删除 pending 定时器（WaitExecutor.Compensate，防重复/幽灵 timer）
 //   - llm / ai_decide → 可补偿：清 ExecutionData 中该节点产物键（LLMNodeExecutor.Compensate，业务状态回滚）
-//   - 9 种 message / message / action / send_offer → 不可补偿（发消息=外部副作用事务点，只能"补偿通知"，留 TODO）
-//   - start / end / condition / branch → 控制流，无副作用无需补偿（skipped）
+//   - 9 种 message / message / action / send_offer → **部分可补偿**：清 ExecutionData 内话术产物
+//     （MessageNodeBase.Compensate）；已出域的消息不撤回（出域动作须过 T-P3 审批闸门），
+//     `message_sent:` 幂等键有意保留，防重跑对同一节点二次发送
+//   - start / end / condition / branch → 控制流，无可撤销状态（skipped）
+//
+// 上表的每一行都有代码侧凭据：类型要么实现 Compensable，要么实现 CompensationNoter
+// 自述为何不撤销；两者皆无即由 TestNodeExecutor_CompensationInventory 判红。
+// 新增节点类型时先改那张表，否则新节点的"失败后留下什么"无人知晓。
 func RegisterAllNodeExecutors(registry *NodeExecutorRegistry, deps *SOPNodeExecutorDeps) {
 	// Register 仅在重复注册时 panic，正常返回 nil；此处兜底记录任何意外错误。
 	reg := func(e NodeExecutor) {

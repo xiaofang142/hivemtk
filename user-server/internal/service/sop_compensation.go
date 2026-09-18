@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,24 @@ type Compensable interface {
 	Compensate(ctx context.Context, execCtx *ExecutionContext) error
 }
 
+// CompensationNoter 可选接口：执行器用一句话自述本次补偿的**边界**（T-P1-03 AC③）。
+//
+// 为什么要有它：补偿计划里 `skipped` 原本既包括"这个节点本来就没有可撤销状态"（start/condition），
+// 也包括"有副作用但有意不撤销"（消息已发到客户手上）——两者在 Summary 里长得一模一样，
+// 而只有后者才是灰度该担心的那类。把理由做成方法而不是注释，才能让契约测试断言
+// "每个已注册类型要么可补偿、要么显式声明不补偿的理由"，也才会随补偿记录落进可观测输出。
+type CompensationNoter interface {
+	CompensationNote() string
+}
+
+// compensationNote 取执行器自述（未实现或未填返回空串）。
+func compensationNote(executor NodeExecutor) string {
+	if n, ok := executor.(CompensationNoter); ok {
+		return strings.TrimSpace(n.CompensationNote())
+	}
+	return ""
+}
+
 // CompensationRecord 单个节点的补偿记录
 type CompensationRecord struct {
 	NodeID     string    `json:"node_id"`
@@ -47,7 +66,10 @@ type CompensationRecord struct {
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 	Error      string    `json:"error,omitempty"`
-	TraceID    string    `json:"trace_id,omitempty"`
+	// Reason 补偿边界自述（见 CompensationNoter）：skipped 时说明"为何没有撤销动作"，
+	// completed 时说明"撤了什么、什么留在现场"。
+	Reason  string `json:"reason,omitempty"`
+	TraceID string `json:"trace_id,omitempty"`
 }
 
 // CompensationPlan 一次完整补偿计划
@@ -176,10 +198,16 @@ func (m *CompensationManager) CompensateNode(
 	comp, ok := executor.(Compensable)
 	if !ok {
 		rec.Status = CompensationStatusSkipped
+		rec.Reason = compensationNote(executor)
+		if rec.Reason == "" {
+			// 既不可补偿又没声明理由：留给契约测试去红，这里只保证记录可读。
+			rec.Reason = "执行器未实现 Compensable，且未声明不补偿理由"
+		}
 		rec.FinishedAt = time.Now()
 		logger.Ctx(ctx).Info().
 			Str("node_id", rec.NodeID).
 			Str("node_type", rec.NodeType).
+			Str("reason", rec.Reason).
 			Msg("[Compensation] node not compensable, skipped")
 		return rec
 	}
@@ -194,10 +222,12 @@ func (m *CompensationManager) CompensateNode(
 
 		if err == nil {
 			rec.Status = CompensationStatusCompleted
+			rec.Reason = compensationNote(executor) // 只撤了一半的执行器在此声明残留（见 CompensationNoter）
 			rec.FinishedAt = time.Now()
 			logger.Ctx(ctx).Info().
 				Str("node_id", rec.NodeID).
 				Str("node_type", rec.NodeType).
+				Str("reason", rec.Reason).
 				Int("attempt", attempt).
 				Dur("duration", time.Since(rec.StartedAt)).
 				Msg("[Compensation] node compensated")

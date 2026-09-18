@@ -10,6 +10,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,8 +21,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// compensationFixture 建一套可补偿的 SOP：start → n_llm(llm) → w1(wait) → end，
-// 并预置 1 条该节点的 pending 定时器 + 2 条**不该被动**的对照定时器。
+// compensationFixture 建一套可补偿的 SOP：start → n_llm(llm) → g1(greeting) → w1(wait) → end，
+// 覆盖三类补偿语义：全可撤（llm 产物键 / wait 定时器）、部分可撤（消息节点，T-P1-03）、
+// 无可撤状态（start），并预置 1 条该节点的 pending 定时器 + 2 条**不该被动**的对照定时器。
 type compensationFixture struct {
 	db        *gorm.DB
 	disp      *SOPExecutionDispatcher
@@ -39,7 +41,8 @@ func newCompensationFixture(t *testing.T) *compensationFixture {
 	graph := model.JSONMap{
 		"nodes": []any{
 			map[string]any{"id": "start", "type": "start", "next": []any{"n_llm"}},
-			map[string]any{"id": "n_llm", "type": "llm", "next": []any{"w1"}},
+			map[string]any{"id": "n_llm", "type": "llm", "next": []any{"g1"}},
+			map[string]any{"id": "g1", "type": "greeting", "next": []any{"w1"}},
 			map[string]any{"id": "w1", "type": "wait", "next": []any{"end"}},
 			map[string]any{"id": "end", "type": "end"},
 		},
@@ -64,9 +67,15 @@ func newCompensationFixture(t *testing.T) *compensationFixture {
 		ExecutedNodes: model.JSONArray{
 			map[string]any{"node_id": "start", "node_type": "start", "status": "completed", "attempt": 1},
 			map[string]any{"node_id": "n_llm", "node_type": "llm", "status": "completed", "attempt": 1},
+			map[string]any{"node_id": "g1", "node_type": "greeting", "status": "completed", "attempt": 1},
 			map[string]any{"node_id": "w1", "node_type": "wait", "status": "completed", "attempt": 1},
 		},
-		ExecutionData: model.JSONMap{"_llm_decision": "advance", "_llm_reason": "r", "keep_me": 1},
+		// g1 是消息节点：产物键可撤、已出域消息不可撤（T-P1-03 部分补偿）
+		ExecutionData: model.JSONMap{
+			"_llm_decision": "advance", "_llm_reason": "r",
+			"_greeting_content": "您好，看到您咨询过", "_greeting_source": "prompt",
+			"keep_me": 1,
+		},
 	}
 	if err := db.WithContext(ctx).Create(exec).Error; err != nil {
 		t.Fatalf("建执行失败: %v", err)
@@ -182,15 +191,15 @@ func TestSOPFailPath_CompensatesAndSummarizes(t *testing.T) {
 	})
 
 	plan := mgr.GetPlan(f.execID)
-	if len(plan.Records) != 3 {
-		t.Fatalf("3 个已执行节点应有 3 条补偿记录, got %d (%+v)", len(plan.Records), plan.Records)
+	if len(plan.Records) != 4 {
+		t.Fatalf("4 个已执行节点应有 4 条补偿记录, got %d (%+v)", len(plan.Records), plan.Records)
 	}
 	byNode := map[string]string{}
 	for _, r := range plan.Records {
 		byNode[r.NodeID] = r.Status
 	}
 	// SAGA 语义：补偿按执行的**逆序**（LIFO）下发，先撤最近的副作用
-	wantOrder := []string{"w1", "n_llm", "start"}
+	wantOrder := []string{"w1", "g1", "n_llm", "start"}
 	for i, want := range wantOrder {
 		if plan.Records[i].NodeID != want {
 			t.Fatalf("补偿顺序应为 %v，第 %d 条 got %s", wantOrder, i, plan.Records[i].NodeID)
@@ -204,6 +213,17 @@ func TestSOPFailPath_CompensatesAndSummarizes(t *testing.T) {
 	}
 	if byNode["start"] != CompensationStatusSkipped {
 		t.Errorf("start 无副作用应 skipped, got %q", byNode["start"])
+	}
+	// T-P1-03：skipped 必须自带理由，且"无可撤状态"与"有出域残留"要能分辨
+	byReason := map[string]string{}
+	for _, r := range plan.Records {
+		byReason[r.NodeID] = r.Reason
+	}
+	if byReason["start"] == "" {
+		t.Error("start 的 skipped 应自述为何不撤销")
+	}
+	if !strings.Contains(byReason["g1"], "出域") {
+		t.Errorf("消息节点的补偿记录应声明出域残留, got %q", byReason["g1"])
 	}
 	// 反向证据：撤销真的发生了，而不是"记了一条 completed 却没动手"
 	if n := f.countTimers(t, f.waitNode, "pending"); n != 0 {
@@ -224,9 +244,14 @@ func TestSOPFailPath_CompensatesAndSummarizes(t *testing.T) {
 	if _, ok := data["keep_me"]; !ok {
 		t.Error("补偿不得越界清除非本节点产物键")
 	}
+	for _, k := range []string{"_greeting_content", "_greeting_source"} {
+		if _, ok := data[k]; ok {
+			t.Errorf("消息节点产物键 %s 应被清除（部分补偿的内部那一半）", k)
+		}
+	}
 
 	sum := mgr.Summary()
-	if sum.TotalPlans != 1 || sum.TotalNodes != 3 || sum.CompletedPlans != 1 {
+	if sum.TotalPlans != 1 || sum.TotalNodes != 4 || sum.CompletedPlans != 1 {
 		t.Errorf("Summary 口径不符: %+v", sum)
 	}
 	if sum.FailedPlans != 0 || sum.FailedNodes != 0 {
