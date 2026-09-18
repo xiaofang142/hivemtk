@@ -168,8 +168,8 @@ func (c *CounterVec) Type() string { return "counter" }
 
 // Write 写指标文本格式（counter）
 func (c *CounterVec) Write(w io.Writer) {
-	fmt.Fprintf(w, "# HELP %s %s\n", c.name, c.help)
-	fmt.Fprintf(w, "# TYPE %s counter\n", c.name)
+	_, _ = fmt.Fprintf(w, "# HELP %s %s\n", c.name, c.help)
+	_, _ = fmt.Fprintf(w, "# TYPE %s counter\n", c.name)
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -190,7 +190,7 @@ func (c *CounterVec) Write(w io.Writer) {
 		sb.Reset()
 		sb.WriteString(c.name)
 		writeLabels(&sb, c.labelKeys, e.cell.values)
-		fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.v.Load())
+		_, _ = fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.v.Load())
 	}
 }
 
@@ -284,8 +284,8 @@ func (g *GaugeVec) Type() string { return "gauge" }
 
 // Write 写指标文本格式（gauge）
 func (g *GaugeVec) Write(w io.Writer) {
-	fmt.Fprintf(w, "# HELP %s %s\n", g.name, g.help)
-	fmt.Fprintf(w, "# TYPE %s gauge\n", g.name)
+	_, _ = fmt.Fprintf(w, "# HELP %s %s\n", g.name, g.help)
+	_, _ = fmt.Fprintf(w, "# TYPE %s gauge\n", g.name)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -306,7 +306,7 @@ func (g *GaugeVec) Write(w io.Writer) {
 		sb.Reset()
 		sb.WriteString(g.name)
 		writeLabels(&sb, g.labelKeys, e.cell.values)
-		fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.v.Load())
+		_, _ = fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.v.Load())
 	}
 }
 
@@ -407,8 +407,8 @@ func (h *HistogramVec) Type() string { return "histogram" }
 
 // Write 写指标文本格式（histogram）
 func (h *HistogramVec) Write(w io.Writer) {
-	fmt.Fprintf(w, "# HELP %s %s\n", h.name, h.help)
-	fmt.Fprintf(w, "# TYPE %s histogram\n", h.name)
+	_, _ = fmt.Fprintf(w, "# HELP %s %s\n", h.name, h.help)
+	_, _ = fmt.Fprintf(w, "# TYPE %s histogram\n", h.name)
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -431,13 +431,13 @@ func (h *HistogramVec) Write(w io.Writer) {
 			sb.WriteString(h.name)
 			sb.WriteString("_bucket")
 			writeLabelsWithExtra(&sb, h.labelKeys, e.cell.values, "le", formatFloat(b))
-			fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.counts[i].Load())
+			_, _ = fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.counts[i].Load())
 		}
 		sb.Reset()
 		sb.WriteString(h.name)
 		sb.WriteString("_bucket")
 		writeLabelsWithExtra(&sb, h.labelKeys, e.cell.values, "le", "+Inf")
-		fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.counts[len(h.buckets)].Load())
+		_, _ = fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.counts[len(h.buckets)].Load())
 		sumPtr := e.cell.sumPtr.Load()
 		sum := 0.0
 		if sumPtr != nil {
@@ -447,12 +447,12 @@ func (h *HistogramVec) Write(w io.Writer) {
 		sb.WriteString(h.name)
 		sb.WriteString("_sum")
 		writeLabels(&sb, h.labelKeys, e.cell.values)
-		fmt.Fprintf(w, "%s %s\n", sb.String(), formatFloat(sum))
+		_, _ = fmt.Fprintf(w, "%s %s\n", sb.String(), formatFloat(sum))
 		sb.Reset()
 		sb.WriteString(h.name)
 		sb.WriteString("_count")
 		writeLabels(&sb, h.labelKeys, e.cell.values)
-		fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.count.Load())
+		_, _ = fmt.Fprintf(w, "%s %d\n", sb.String(), e.cell.count.Load())
 	}
 }
 
@@ -582,7 +582,7 @@ func Gather(w io.Writer) {
 	sort.Strings(names)
 	for _, n := range names {
 		registry[n].Write(w)
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 }
 

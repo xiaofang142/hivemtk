@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"io"
 	"net/http"
@@ -141,14 +142,22 @@ func (s *domainPoolService) CheckDomain(ctx context.Context, id int) (bool, erro
 
 	resp, err := domainCheckHTTPClient.Get(url)
 	if err != nil {
-		s.domainPoolRepo.UpdateStatus(ctx, id, 2)
-		s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now())
+		if e := s.domainPoolRepo.UpdateStatus(ctx, id, 2); e != nil {
+			logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", id, e)
+		}
+		if e := s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now()); e != nil {
+			logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", id, e)
+		}
 		return false, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	s.domainPoolRepo.UpdateStatus(ctx, id, 1)
-	s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now())
+	if e := s.domainPoolRepo.UpdateStatus(ctx, id, 1); e != nil {
+		logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", id, e)
+	}
+	if e := s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now()); e != nil {
+		logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", id, e)
+	}
 
 	return true, nil
 }
@@ -182,7 +191,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 				msg = fmt.Sprintf("连接错误: %s", err.Error())
 			} else {
 				_, _ = io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if resp.StatusCode < 400 {
 					status = 1
 					msg = "可访问"
@@ -191,8 +200,12 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 				}
 			}
 
-			s.domainPoolRepo.UpdateStatus(ctx, dp.ID, status)
-			s.domainPoolRepo.UpdateLastCheck(ctx, dp.ID, time.Now())
+			if e := s.domainPoolRepo.UpdateStatus(ctx, dp.ID, status); e != nil {
+				logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", dp.ID, e)
+			}
+			if e := s.domainPoolRepo.UpdateLastCheck(ctx, dp.ID, time.Now()); e != nil {
+				logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", dp.ID, e)
+			}
 
 			results[i] = dto.DomainPoolCheckResponse{
 				ID:     dp.ID,

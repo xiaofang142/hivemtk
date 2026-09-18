@@ -43,11 +43,17 @@ func InitAllAccount() error {
 		botName, err := InitOneAccount(account)
 		if err != nil {
 			logger.Info(fmt.Sprintf("初始化账号ID %s 失败: %s", account.ID, err.Error()))
-			accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusInactive, err.Error())
+			if e := accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusInactive, err.Error()); e != nil {
+				logger.Warnf("更新账号失活状态失败 ID=%s: %v", account.ID, e)
+			}
 		} else {
 			logger.Info(fmt.Sprintf("初始化账号ID %s 成功: %s", account.ID, botName))
-			accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusActive, "")
-			accountSer.UpdateAccountTgNameById(context.Background(), account.ID, botName)
+			if e := accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusActive, ""); e != nil {
+				logger.Warnf("更新账号激活状态失败 ID=%s: %v", account.ID, e)
+			}
+			if e := accountSer.UpdateAccountTgNameById(context.Background(), account.ID, botName); e != nil {
+				logger.Warnf("更新账号 TgName 失败 ID=%s: %v", account.ID, e)
+			}
 		}
 	}
 	return nil
@@ -144,20 +150,28 @@ func handleUpdate(account accountData, update tgbotapi.Update) {
 			switch update.Message.Command() {
 			case "start":
 				msgText := BuildAccountStartNoticeMsg(account.AccountName)
-				tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID)
+				if e := tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID); e != nil {
+					logger.Warnf("发送机器人通知失败 chatID=%d: %v", update.Message.Chat.ID, e)
+				}
 			default:
 				msgText := BuildAccountStartNoticeMsg(account.AccountName)
-				tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID)
+				if e := tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID); e != nil {
+					logger.Warnf("发送机器人通知失败 chatID=%d: %v", update.Message.Chat.ID, e)
+				}
 			}
 		} else {
 			msgText := BuildAccountStartNoticeMsg(account.AccountName)
-			tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID)
+			if e := tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID); e != nil {
+				logger.Warnf("发送机器人通知失败 chatID=%d: %v", update.Message.Chat.ID, e)
+			}
 		}
 	}
 
 	if update.Message.NewChatMembers != nil {
 		msgText := BuildAccountStartNoticeMsg(account.AccountName)
-		tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID)
+		if e := tgbot.SendTgMsg(account.Bot, msgText, update.Message.Chat.ID); e != nil {
+			logger.Warnf("发送机器人通知失败 chatID=%d: %v", update.Message.Chat.ID, e)
+		}
 	}
 }
 
@@ -171,6 +185,5 @@ func SendMsgBYBootToken(token string, msgText string, chatID int64) error {
 	if err != nil {
 		return err
 	}
-	tgbot.SendTgMsg(account.Bot, msgText, chatID)
-	return nil
+	return tgbot.SendTgMsg(account.Bot, msgText, chatID)
 }

@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/model"
 
 	"hivemtk-user/internal/pkg/httpclient"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"hivemtk-user/internal/repository"
 
@@ -161,7 +162,7 @@ func (c *XiaoshouyiClient) GetAccessToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -182,7 +183,9 @@ func (c *XiaoshouyiClient) GetAccessToken(ctx context.Context) (string, error) {
 	}
 
 	expiresTime := time.Now().Add(time.Duration(result.ExpiresIn-600) * time.Second)
-	c.accountRepo.UpdateToken(ctx, c.account.ID, result.AccessToken, &expiresTime)
+	if e := c.accountRepo.UpdateToken(ctx, c.account.ID, result.AccessToken, &expiresTime); e != nil {
+		logger.Warnf("[Integration] Token 落库失败 accountID=%d: %v", c.account.ID, e)
+	}
 
 	return result.AccessToken, nil
 }
@@ -222,14 +225,18 @@ func (s *IntegrationService) syncXiaoshouyiCustomers(ctx context.Context, accoun
 
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -254,12 +261,16 @@ func (s *IntegrationService) syncXiaoshouyiCustomers(ctx context.Context, accoun
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
 	if result.Error.Code != 0 {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, result.Error.Message)
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, result.Error.Message); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, errors.New(result.Error.Message)
 	}
 
@@ -283,15 +294,23 @@ func (s *IntegrationService) syncXiaoshouyiCustomers(ctx context.Context, accoun
 		existing, _ := s.customerRepo.GetByExternalID(ctx, account.Platform, c.ID)
 		if existing != nil {
 			customer.ID = existing.ID
-			s.customerRepo.Update(ctx, customer)
-		} else {
-			s.customerRepo.Create(ctx, customer)
+			if e := s.customerRepo.Update(ctx, customer); e != nil {
+				logger.Errorf("[Integration] 客户落库失败 extID=%s: %v", c.ID, e)
+				continue
+			}
+		} else if e := s.customerRepo.Create(ctx, customer); e != nil {
+			logger.Errorf("[Integration] 客户创建失败 extID=%s: %v", c.ID, e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }
@@ -326,7 +345,7 @@ func (c *FenxiangxiaoClient) GetAccessToken(ctx context.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -348,7 +367,9 @@ func (c *FenxiangxiaoClient) GetAccessToken(ctx context.Context) (string, error)
 	}
 
 	expiresTime := time.Now().Add(time.Duration(result.ExpiresIn-600) * time.Second)
-	c.accountRepo.UpdateToken(ctx, c.account.ID, result.AccessToken, &expiresTime)
+	if e := c.accountRepo.UpdateToken(ctx, c.account.ID, result.AccessToken, &expiresTime); e != nil {
+		logger.Warnf("[Integration] Token 落库失败 accountID=%d: %v", c.account.ID, e)
+	}
 
 	return result.AccessToken, nil
 }
@@ -383,14 +404,18 @@ func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, acco
 
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -415,12 +440,16 @@ func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, acco
 		Errmsg  string `json:"errmsg"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
 	if result.Errcode != 0 {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, result.Errmsg)
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, result.Errmsg); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, errors.New(result.Errmsg)
 	}
 
@@ -445,15 +474,23 @@ func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, acco
 		existing, _ := s.customerRepo.GetByExternalID(ctx, account.Platform, c.ID)
 		if existing != nil {
 			customer.ID = existing.ID
-			s.customerRepo.Update(ctx, customer)
-		} else {
-			s.customerRepo.Create(ctx, customer)
+			if e := s.customerRepo.Update(ctx, customer); e != nil {
+				logger.Errorf("[Integration] 客户落库失败 extID=%s: %v", c.ID, e)
+				continue
+			}
+		} else if e := s.customerRepo.Create(ctx, customer); e != nil {
+			logger.Errorf("[Integration] 客户创建失败 extID=%s: %v", c.ID, e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }
@@ -513,14 +550,18 @@ func (s *IntegrationService) syncTaobaoOrders(ctx context.Context, account *mode
 
 	resp, err := client.httpClient.Get(apiURL + "?" + params.Encode())
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -550,7 +591,9 @@ func (s *IntegrationService) syncTaobaoOrders(ctx context.Context, account *mode
 		} `json:"trades_sold_get_response"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -599,15 +642,23 @@ func (s *IntegrationService) syncTaobaoOrders(ctx context.Context, account *mode
 		existing, _ := s.orderRepo.GetByOrderID(ctx, account.Platform, t.TID)
 		if existing != nil {
 			order.ID = existing.ID
-			s.orderRepo.Update(ctx, order)
-		} else {
-			s.orderRepo.Create(ctx, order)
+			if e := s.orderRepo.Update(ctx, order); e != nil {
+				logger.Errorf("[Integration] 订单更新失败: %v", e)
+				continue
+			}
+		} else if e := s.orderRepo.Create(ctx, order); e != nil {
+			logger.Errorf("[Integration] 订单创建失败: %v", e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }
@@ -655,14 +706,18 @@ func (s *IntegrationService) syncJDOrders(ctx context.Context, account *model.In
 
 	resp, err := client.httpClient.Get(apiURL + "?" + params.Encode())
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -690,7 +745,9 @@ func (s *IntegrationService) syncJDOrders(ctx context.Context, account *model.In
 		ErrMsg string `json:"error_response"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -739,15 +796,23 @@ func (s *IntegrationService) syncJDOrders(ctx context.Context, account *model.In
 		existing, _ := s.orderRepo.GetByOrderID(ctx, account.Platform, o.OrderID)
 		if existing != nil {
 			order.ID = existing.ID
-			s.orderRepo.Update(ctx, order)
-		} else {
-			s.orderRepo.Create(ctx, order)
+			if e := s.orderRepo.Update(ctx, order); e != nil {
+				logger.Errorf("[Integration] 订单更新失败: %v", e)
+				continue
+			}
+		} else if e := s.orderRepo.Create(ctx, order); e != nil {
+			logger.Errorf("[Integration] 订单创建失败: %v", e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }
@@ -790,14 +855,18 @@ func (s *IntegrationService) syncTaobaoProducts(ctx context.Context, account *mo
 
 	resp, err := client.httpClient.Get(apiURL + "?" + params.Encode())
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -817,7 +886,9 @@ func (s *IntegrationService) syncTaobaoProducts(ctx context.Context, account *mo
 		} `json:"items_seller_get_response"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -843,15 +914,23 @@ func (s *IntegrationService) syncTaobaoProducts(ctx context.Context, account *mo
 		existing, _ := s.productRepo.GetByProductID(ctx, account.Platform, item.NumIid)
 		if existing != nil {
 			product.ID = existing.ID
-			s.productRepo.Update(ctx, product)
-		} else {
-			s.productRepo.Create(ctx, product)
+			if e := s.productRepo.Update(ctx, product); e != nil {
+				logger.Errorf("[Integration] 商品更新失败: %v", e)
+				continue
+			}
+		} else if e := s.productRepo.Create(ctx, product); e != nil {
+			logger.Errorf("[Integration] 商品创建失败: %v", e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }
@@ -881,14 +960,18 @@ func (s *IntegrationService) syncJDProducts(ctx context.Context, account *model.
 
 	resp, err := client.httpClient.Get(apiURL + "?" + params.Encode())
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -907,7 +990,9 @@ func (s *IntegrationService) syncJDProducts(ctx context.Context, account *model.
 		} `json:"jingdong_pop_ware_sku_list_response"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error())
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
+			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
 		return 0, err
 	}
 
@@ -929,15 +1014,23 @@ func (s *IntegrationService) syncJDProducts(ctx context.Context, account *model.
 		existing, _ := s.productRepo.GetByProductID(ctx, account.Platform, sku.SkuId)
 		if existing != nil {
 			product.ID = existing.ID
-			s.productRepo.Update(ctx, product)
-		} else {
-			s.productRepo.Create(ctx, product)
+			if e := s.productRepo.Update(ctx, product); e != nil {
+				logger.Errorf("[Integration] 商品更新失败: %v", e)
+				continue
+			}
+		} else if e := s.productRepo.Create(ctx, product); e != nil {
+			logger.Errorf("[Integration] 商品创建失败: %v", e)
+			continue
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
-	s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, "")
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
+	if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 1, count, ""); e != nil {
+		logger.Warnf("[Integration] 同步成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+	}
 
 	return count, nil
 }

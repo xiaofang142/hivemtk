@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/httpclient"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"time"
 
@@ -85,7 +86,7 @@ func (s *WeComService) GetAccessToken(ctx context.Context, account *model.WeComA
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -102,7 +103,9 @@ func (s *WeComService) GetAccessToken(ctx context.Context, account *model.WeComA
 	}
 
 	expiresTime := time.Now().Add(time.Duration(tokenResp.ExpiresIn-600) * time.Second)
-	s.accountRepo.UpdateToken(ctx, account.ID, tokenResp.AccessToken, expiresTime)
+	if e := s.accountRepo.UpdateToken(ctx, account.ID, tokenResp.AccessToken, expiresTime); e != nil {
+		logger.Warnf("[WeCom] Token 落库失败 accountID=%d: %v", account.ID, e)
+	}
 
 	return tokenResp.AccessToken, nil
 }
@@ -208,7 +211,7 @@ func (s *WeComService) SyncCustomers(ctx context.Context, account *model.WeComAc
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -239,14 +242,22 @@ func (s *WeComService) SyncCustomers(ctx context.Context, account *model.WeComAc
 		existing, _ := s.customerRepo.GetByExternalUserID(ctx, userID)
 		if existing != nil {
 			customer.ID = existing.ID
-			s.customerRepo.Update(ctx, customer)
+			if e := s.customerRepo.Update(ctx, customer); e != nil {
+				logger.Errorf("[WeCom] 客户更新失败 externalUserID=%s: %v", userID, e)
+				continue
+			}
 		} else {
-			s.customerRepo.Create(ctx, customer)
+			if e := s.customerRepo.Create(ctx, customer); e != nil {
+				logger.Errorf("[WeCom] 客户创建失败 externalUserID=%s: %v", userID, e)
+				continue
+			}
 		}
 		count++
 	}
 
-	s.accountRepo.UpdateSyncTime(ctx, account.ID)
+	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
+		logger.Warnf("[WeCom] 更新同步时间失败 accountID=%d: %v", account.ID, e)
+	}
 	return count, nil
 }
 
@@ -256,7 +267,7 @@ func (s *WeComService) getCustomerDetail(ctx context.Context, token, userID stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -325,7 +336,7 @@ func (s *WeComService) SyncGroups(ctx context.Context, account *model.WeComAccou
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -359,9 +370,15 @@ func (s *WeComService) SyncGroups(ctx context.Context, account *model.WeComAccou
 		existing, _ := s.groupRepo.GetByChatID(ctx, g.ChatID)
 		if existing != nil {
 			group.ID = existing.ID
-			s.groupRepo.Update(ctx, group)
+			if e := s.groupRepo.Update(ctx, group); e != nil {
+				logger.Errorf("[WeCom] 群更新失败 chatID=%s: %v", g.ChatID, e)
+				continue
+			}
 		} else {
-			s.groupRepo.Create(ctx, group)
+			if e := s.groupRepo.Create(ctx, group); e != nil {
+				logger.Errorf("[WeCom] 群创建失败 chatID=%s: %v", g.ChatID, e)
+				continue
+			}
 		}
 		count++
 	}
@@ -381,7 +398,7 @@ func (s *WeComService) getGroupDetail(ctx context.Context, token, chatID string)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -489,7 +506,7 @@ func (s *WeComService) SendMessage(ctx context.Context, account *model.WeComAcco
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -519,7 +536,9 @@ func (s *WeComService) SendMessage(ctx context.Context, account *model.WeComAcco
 		Status:    1,
 		SendTime:  &now,
 	}
-	s.messageRepo.Create(ctx, message)
+	if e := s.messageRepo.Create(ctx, message); e != nil {
+		logger.Warnf("[WeCom] 消息记录落库失败 msgID=%s: %v", result.MsgID, e)
+	}
 
 	return result.MsgID, nil
 }
@@ -546,7 +565,7 @@ func (s *WeComService) SyncTags(ctx context.Context, account *model.WeComAccount
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -578,7 +597,10 @@ func (s *WeComService) SyncTags(ctx context.Context, account *model.WeComAccount
 			TagName:       t.TagName,
 			CustomerCount: t.UserCount,
 		}
-		s.tagRepo.Create(ctx, tag)
+		if e := s.tagRepo.Create(ctx, tag); e != nil {
+			logger.Errorf("[WeCom] 标签创建失败 tagID=%s: %v", tag.TagID, e)
+			continue
+		}
 		count++
 	}
 

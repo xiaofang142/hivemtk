@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
@@ -243,10 +244,14 @@ func isValidChartType(chartType string) bool {
 func (s *CustomReportService) querySessionData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	conds, args := BuildReportFilterSQL("sessions", report.Filters)
 
@@ -318,10 +323,14 @@ func (s *CustomReportService) querySessionData(ctx context.Context, report *mode
 
 func (s *CustomReportService) queryMessageData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	dimField := "msg_type"
 	metricField := "message_count"
@@ -391,10 +400,14 @@ func (s *CustomReportService) queryMessageData(ctx context.Context, report *mode
 
 func (s *CustomReportService) queryClueData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	conds, args := BuildReportFilterSQL("clues", report.Filters)
 
@@ -466,10 +479,14 @@ func (s *CustomReportService) queryClueData(ctx context.Context, report *model.C
 
 func (s *CustomReportService) queryRFMData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	var layer string
 	if v, ok := params["layer"]; ok && v != nil {
@@ -535,10 +552,14 @@ func (s *CustomReportService) queryRFMData(ctx context.Context, report *model.Cu
 
 func (s *CustomReportService) queryUserData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	dimField := "date"
 	if len(dimensions) > 0 {
@@ -605,10 +626,14 @@ func (s *CustomReportService) queryUserData(ctx context.Context, report *model.C
 
 func (s *CustomReportService) queryAgentData(ctx context.Context, report *model.CustomReport, params map[string]any) (*model.ReportData, error) {
 	var dimensions []model.ReportDimension
-	json.Unmarshal([]byte(report.Dimensions), &dimensions)
+	if err := json.Unmarshal([]byte(report.Dimensions), &dimensions); err != nil {
+		return nil, fmt.Errorf("解析报表维度配置失败: %w", err)
+	}
 
 	var metrics []model.ReportMetric
-	json.Unmarshal([]byte(report.Metrics), &metrics)
+	if err := json.Unmarshal([]byte(report.Metrics), &metrics); err != nil {
+		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
+	}
 
 	type agentAgg struct {
 		AgentName       string

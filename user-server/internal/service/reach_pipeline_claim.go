@@ -37,7 +37,9 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 		job.State = JobStateFailed
 		job.ErrorMessage = err.Error()
 		job.CompletedAt = &now
-		s.repo.SaveJob(ctx, job)
+		if e := s.repo.SaveJob(ctx, job); e != nil {
+			logger.Errorf("[reach_pipeline] 失败状态落库失败 jobID=%d: %v", job.ID, e)
+		}
 		return job, err
 	}
 	steps := []string{}
@@ -65,7 +67,9 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 	now := time.Now()
 	job.State = JobStateRunning
 	job.StartedAt = &now
-	s.repo.SaveJob(ctx, job)
+	if e := s.repo.SaveJob(ctx, job); e != nil {
+		logger.Errorf("[reach_pipeline] 运行状态落库失败 jobID=%d: %v", job.ID, e)
+	}
 
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -89,7 +93,9 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 		<-hbDone
 	}()
 
-	s.repo.IncrementPipelineField(ctx, pipe.ID, "total_runs", 1)
+	if e := s.repo.IncrementPipelineField(ctx, pipe.ID, "total_runs", 1); e != nil {
+		logger.Warnf("[reach_pipeline] total_runs 累加失败 pipeID=%d: %v", pipe.ID, e)
+	}
 
 	results := []StepResult{}
 	job.StepResults = toJSONArray(mustJSON(results))
@@ -107,7 +113,9 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 				job.ErrorMessage = res.Error
 				job.NextRunAt = &backoff
 				job.StepResults = toJSONArray(mustJSON(results))
-				s.repo.SaveJob(ctx, job)
+				if e := s.repo.SaveJob(ctx, job); e != nil {
+					logger.Errorf("[reach_pipeline] 限流状态落库失败 jobID=%d: %v", job.ID, e)
+				}
 				s.appendStepResult(ctx, job, res)
 				return job, ErrReachRateLimited
 			}
@@ -128,7 +136,9 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 	if success {
 		job.State = JobStateSuccess
 		job.ErrorMessage = ""
-		s.repo.IncrementPipelineField(ctx, pipe.ID, "total_success", 1)
+		if e := s.repo.IncrementPipelineField(ctx, pipe.ID, "total_success", 1); e != nil {
+			logger.Warnf("[reach_pipeline] total_success 累加失败 pipeID=%d: %v", pipe.ID, e)
+		}
 	} else {
 		if autoRetry && job.RetryCount < rp.MaxRetries {
 			job.RetryCount++
@@ -136,11 +146,15 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 			job.State = JobStateRetrying
 			job.NextRunAt = &next
 			job.ErrorMessage = fmt.Sprintf("[step=%s] %s（将自动重试 %d/%d）", firstErrStep, firstErrMsg, job.RetryCount, rp.MaxRetries)
-			s.repo.IncrementPipelineField(ctx, pipe.ID, "total_failure", 1)
+			if e := s.repo.IncrementPipelineField(ctx, pipe.ID, "total_failure", 1); e != nil {
+				logger.Warnf("[reach_pipeline] total_failure 累加失败 pipeID=%d: %v", pipe.ID, e)
+			}
 		} else {
 			job.State = JobStateFailed
 			job.ErrorMessage = fmt.Sprintf("[step=%s] %s", firstErrStep, firstErrMsg)
-			s.repo.IncrementPipelineField(ctx, pipe.ID, "total_failure", 1)
+			if e := s.repo.IncrementPipelineField(ctx, pipe.ID, "total_failure", 1); e != nil {
+				logger.Warnf("[reach_pipeline] total_failure 累加失败 pipeID=%d: %v", pipe.ID, e)
+			}
 			s.fireAlert(ctx, job, JobStateFailed, job.ErrorMessage)
 		}
 	}
@@ -219,7 +233,9 @@ func (s *ReachPipelineService) appendStepResult(ctx context.Context, job *model.
 	results = append(results, res)
 	data, _ := json.Marshal(results)
 	job.StepResults = toJSONArray(data)
-	s.repo.SaveJob(ctx, job)
+	if e := s.repo.SaveJob(ctx, job); e != nil {
+		logger.Errorf("[reach_pipeline] StepResults 追加落库失败 jobID=%d: %v", job.ID, e)
+	}
 }
 
 func computeNextRunTime(rp RetryPolicy, retryCount int) time.Time {

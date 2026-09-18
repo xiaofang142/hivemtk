@@ -293,15 +293,23 @@ func jsonArrayLen(b []byte) int {
 	return len(arr)
 }
 
-func (s *BackupService) compressBackup(ctx context.Context, dir, output string) error {
+func (s *BackupService) compressBackup(ctx context.Context, dir, output string) (err error) {
 	zipFile, err := os.Create(output)
 	if err != nil {
 		return err
 	}
-	defer zipFile.Close()
+	defer func() {
+		if cerr := zipFile.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
+	defer func() {
+		if cerr := zipWriter.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -328,7 +336,7 @@ func (s *BackupService) compressBackup(ctx context.Context, dir, output string) 
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		_, err = io.Copy(writer, file)
 		return err
@@ -353,7 +361,9 @@ func (s *BackupService) DeleteBackup(ctx context.Context, id uint) error {
 	}
 
 	if backup.FilePath != "" {
-		os.Remove(backup.FilePath)
+		if e := os.Remove(backup.FilePath); e != nil && !os.IsNotExist(e) {
+			logger.Warnf("[Backup] 删除备份文件失败 path=%s: %v", backup.FilePath, e)
+		}
 	}
 
 	return s.backupRepo.Delete(ctx, id)
@@ -412,24 +422,32 @@ func (s *RestoreService) RestoreBackup(ctx context.Context, createdBy uint, req 
 
 func (s *RestoreService) executeRestore(ctx context.Context, record *model.RestoreRecord, backup *model.Backup) {
 	record.Status = "running"
-	s.restoreRepo.Update(ctx, record)
+	if e := s.restoreRepo.Update(ctx, record); e != nil {
+		logger.Errorf("[Restore] 状态落库失败 recordID=%d: %v", record.ID, e)
+	}
 
 	if err := s.decompressBackup(ctx, backup.FilePath); err != nil {
 		record.Status = "failed"
 		record.ErrorMessage = "解压备份失败：" + err.Error()
-		s.restoreRepo.Update(ctx, record)
+		if e := s.restoreRepo.Update(ctx, record); e != nil {
+			logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
+		}
 		return
 	}
 
 	if err := s.restoreDatabase(ctx, backup); err != nil {
 		record.Status = "failed"
 		record.ErrorMessage = "数据库恢复失败：" + err.Error()
-		s.restoreRepo.Update(ctx, record)
+		if e := s.restoreRepo.Update(ctx, record); e != nil {
+			logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
+		}
 		return
 	}
 
 	record.Status = "completed"
-	s.restoreRepo.Update(ctx, record)
+	if e := s.restoreRepo.Update(ctx, record); e != nil {
+		logger.Errorf("[Restore] 完成状态落库失败 recordID=%d: %v", record.ID, e)
+	}
 }
 
 func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string) error {
@@ -437,7 +455,7 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	for _, f := range r.File {
 		rc, err := f.Open()
@@ -446,30 +464,35 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 		}
 
 		if f.FileInfo().IsDir() {
-			rc.Close()
+			_ = rc.Close()
 			if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
 				return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 			}
-			os.MkdirAll(f.Name, 0700)
+			if e := os.MkdirAll(f.Name, 0700); e != nil {
+				return e
+			}
 			continue
 		}
 
 		if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
-			rc.Close()
+			_ = rc.Close()
 			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 		}
 		path := filepath.Join("restore_tmp", f.Name)
-		os.MkdirAll(filepath.Dir(path), 0700)
+		if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
+			_ = rc.Close()
+			return e
+		}
 		outFile, err := os.Create(path)
 		if err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
 
 		// 循环体内禁止 defer（大备份数千条目会堆积数千 FD 触发 EMFILE），逐文件显式关闭
 		_, copyErr := io.Copy(outFile, rc)
 		closeErr := outFile.Close()
-		rc.Close()
+		_ = rc.Close()
 		if copyErr != nil {
 			return copyErr
 		}
@@ -633,7 +656,9 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 	logger.Info(fmt.Sprintf("备份 %s 恢复完成: 线索 %d 条, 用户 %d 个, 扩表 %d 组",
 		backup.BackupName, restoredClues, restoredUsers, restoredExtraTables))
 
-	os.RemoveAll("restore_tmp")
+	if e := os.RemoveAll("restore_tmp"); e != nil {
+		logger.Warnf("[Restore] 清理临时目录失败: %v", e)
+	}
 	return nil
 }
 
@@ -682,5 +707,7 @@ func (s *ScheduleBackupService) CreateDailyBackup(ctx context.Context) error {
 // RunDailyBackup 运行每日备份（定时任务入口）
 func RunDailyBackup() {
 	service := NewScheduleBackupService()
-	service.CreateDailyBackup(context.Background())
+	if err := service.CreateDailyBackup(context.Background()); err != nil {
+		logger.Errorf("[Backup] 定时备份任务失败: %v", err)
+	}
 }

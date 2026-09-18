@@ -681,30 +681,38 @@ func (e *WaitExecutor) Compensate(ctx context.Context, execCtx *ExecutionContext
 //   - 9 种 message / message / action / send_offer → 不可补偿（发消息=外部副作用事务点，只能"补偿通知"，留 TODO）
 //   - start / end / condition / branch → 控制流，无副作用无需补偿（skipped）
 func RegisterAllNodeExecutors(registry *NodeExecutorRegistry, deps *SOPNodeExecutorDeps) {
-	registry.Register(context.Background(), &StartExecutor{})
-	registry.Register(context.Background(), &EndExecutor{})
+	// Register 仅在重复注册时 panic，正常返回 nil；此处兜底记录任何意外错误。
+	reg := func(e NodeExecutor) {
+		if err := registry.Register(context.Background(), e); err != nil {
+			logger.GetLogger().Error().Err(err).Str("node_type", e.NodeType()).
+				Msg("register sop node executor failed")
+		}
+	}
 
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeGreeting, llm.ScenarioFriendlyChat, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeInquire, llm.ScenarioSOPReply, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeIntroduce, llm.ScenarioSOPReply, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeHandle, llm.ScenarioObjection, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeClose, llm.ScenarioHighQuality, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeInvite, llm.ScenarioSOPReply, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeFollowUp, llm.ScenarioFriendlyChat, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeActivate, llm.ScenarioFriendlyChat, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeNurture, llm.ScenarioFriendlyChat, deps))
+	reg(&StartExecutor{})
+	reg(&EndExecutor{})
 
-	registry.Register(context.Background(), &ConditionExecutor{nodeType: SOPNodeTypeCondition})
+	reg(NewMessageNodeExecutor(SOPNodeTypeGreeting, llm.ScenarioFriendlyChat, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeInquire, llm.ScenarioSOPReply, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeIntroduce, llm.ScenarioSOPReply, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeHandle, llm.ScenarioObjection, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeClose, llm.ScenarioHighQuality, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeInvite, llm.ScenarioSOPReply, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeFollowUp, llm.ScenarioFriendlyChat, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeActivate, llm.ScenarioFriendlyChat, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeNurture, llm.ScenarioFriendlyChat, deps))
 
-	registry.Register(context.Background(), NewLLMNodeExecutor(SOPNodeTypeLLM, deps))
+	reg(&ConditionExecutor{nodeType: SOPNodeTypeCondition})
 
-	registry.Register(context.Background(), NewWaitExecutor(deps))
+	reg(NewLLMNodeExecutor(SOPNodeTypeLLM, deps))
 
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeMessage, llm.ScenarioFriendlyChat, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeAction, llm.ScenarioSOPReply, deps))
-	registry.Register(context.Background(), NewMessageNodeExecutor(SOPNodeTypeSendOffer, llm.ScenarioObjection, deps))
-	registry.Register(context.Background(), NewLLMNodeExecutor(SOPNodeTypeAIDecide, deps))
-	registry.Register(context.Background(), &ConditionExecutor{nodeType: SOPNodeTypeBranch})
+	reg(NewWaitExecutor(deps))
+
+	reg(NewMessageNodeExecutor(SOPNodeTypeMessage, llm.ScenarioFriendlyChat, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeAction, llm.ScenarioSOPReply, deps))
+	reg(NewMessageNodeExecutor(SOPNodeTypeSendOffer, llm.ScenarioObjection, deps))
+	reg(NewLLMNodeExecutor(SOPNodeTypeAIDecide, deps))
+	reg(&ConditionExecutor{nodeType: SOPNodeTypeBranch})
 
 	logger.GetLogger().Info().
 		Strs("registered_types", registry.AllRegistered(context.Background())).
