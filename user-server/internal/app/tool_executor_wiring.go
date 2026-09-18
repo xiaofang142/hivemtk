@@ -23,6 +23,7 @@ import (
 //   - Timeout:            30s（单次工具执行上限）
 //   - AuditLogger:        内存版（保留最近 10000 条审计）
 //   - CostTracker:        内存版（运营面板可读取统计）
+//   - CircuitBreaker:     按 FF_TOOL_CIRCUIT_BREAKER 三态挂载（默认 off = 不接，见 tool_circuit_breaker_wiring.go）
 //
 // 优化：本地持有 memAuditLogger / memCostTracker 引用，
 // 通过 GetGlobalMemoryAuditLogger / GetGlobalMemoryCostTracker 暴露给调试 API（/agent/tools/audit /cost）。
@@ -40,9 +41,10 @@ func InitGlobalToolExecutor() {
 
 		FeedbackSink: NewFeedbackCollectorAdapter(service.GetFeedbackCollector()),
 	}
+	circuitMode := applyToolCircuitBreaker(&config)
 	exec := tooluse.NewToolExecutor(tooluse.GetGlobalRegistry(), config)
 	tooluse.SetGlobalExecutor(exec)
-	logger.Info("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用）")
+	logger.Infof("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=%s）", circuitMode)
 }
 
 var (

@@ -103,10 +103,31 @@ func BuildChainWithCircuitBreaker(
 	if circuitBreaker == nil {
 		return BuildDefaultChain(handler, checker, limiter, policy, timeout, logger, costTracker)
 	}
+	return BuildChainWithBreakerDecorator(handler, checker, limiter,
+		CircuitBreakerDecorator(circuitBreaker), policy, timeout, logger, costTracker)
+}
+
+// BuildChainWithBreakerDecorator 用调用方自备的熔断装饰器建链。
+//
+// 存在的理由：熔断有生效/观察两种形态（见 CircuitBreakerShadowDecorator），
+// 只传 *CircuitBreakerRegistry 无法表达这一选择。breaker 为 nil 时等价 BuildDefaultChain。
+func BuildChainWithBreakerDecorator(
+	handler ToolHandler,
+	checker PermissionChecker,
+	limiter RateLimiter,
+	breaker ToolDecorator,
+	policy RetryPolicy,
+	timeout time.Duration,
+	logger AuditLogger,
+	costTracker CostTracker,
+) ToolHandler {
+	if breaker == nil {
+		return BuildDefaultChain(handler, checker, limiter, policy, timeout, logger, costTracker)
+	}
 	return ChainDecorators(handler,
 		PermissionDecorator(checker),
 		RateLimitDecorator(limiter),
-		CircuitBreakerDecorator(circuitBreaker),
+		breaker,
 		RetryDecorator(policy),
 		TimeoutDecorator(timeout),
 		AuditDecorator(logger, costTracker),

@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/tools/stats", handleToolStats)
 	auth.GET("/agent/tools/audit", handleToolAudit)
 	auth.GET("/agent/tools/cost", handleToolCost)
+	auth.GET("/agent/tools/circuit", handleToolCircuitState)
 	auth.GET("/agent/tools/providers", handleToolProviders)
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
@@ -234,6 +236,68 @@ type toolCircuitResetRequest struct {
 	ToolName string `json:"tool_name" binding:"required"`
 }
 
+// handleToolCircuitState 读取工具熔断的接线状态与判定累计（T-P1-04）。
+//
+// 为什么要一次读两套：本项目有两处互不相干的"熔断"——
+//   - executor 装饰链上的 tooluse.CircuitBreakerRegistry（本卡接上，按工具累计连续失败）
+//   - ToolRouter 内部的 r.circuit（早已存在，用于失败工具短路/切换）
+//
+// 两者独立计量、独立冷却。排障时只看其中一套会得出相反结论，故本端点把两套一起摊开，
+// 并显式标出 executor 侧是否真的接上了（wired=false 时其余字段全是空值，别当成"没有工具出问题"）。
+func handleToolCircuitState(c *gin.Context) {
+	mode, cfg, registry, decisions := app.GetToolCircuitSnapshot()
+
+	out := gin.H{
+		"mode":             mode,
+		"wired":            registry != nil,
+		"executor_circuit": []gin.H{},
+		"config": gin.H{
+			"failure_threshold":      cfg.FailureThreshold,
+			"base_cooldown":          cfg.BaseCooldown.String(),
+			"max_cooldown":           cfg.MaxCooldown.String(),
+			"backoff_multiplier":     cfg.BackoffMultiplier,
+			"half_open_max_attempts": cfg.HalfOpenMaxAttempts,
+		},
+		"env_hint": "FF_TOOL_CIRCUIT_BREAKER=off|shadow|enforce（默认 off；true/on 一律按 shadow 处理，不直接取得拦截能力）",
+	}
+	if registry != nil {
+		states := registry.AllStates()
+		list := make([]gin.H, 0, len(states))
+		for name, st := range states {
+			list = append(list, gin.H{
+				"tool_name":         name,
+				"state":             st.State.String(),
+				"consecutive_fails": st.ConsecutiveFails,
+				"open_count":        st.OpenCount,
+			})
+		}
+		sort.Slice(list, func(i, j int) bool {
+			return list[i]["tool_name"].(string) < list[j]["tool_name"].(string)
+		})
+		out["executor_circuit"] = list
+	}
+	if decisions != nil {
+		rep := decisions.Report()
+		per := make([]gin.H, 0, len(rep.PerTool))
+		for _, st := range rep.PerTool {
+			per = append(per, gin.H{
+				"tool_name":              st.ToolName,
+				"total":                  st.Total,
+				"would_block":            st.WouldBlock,
+				"last_state":             st.LastState.String(),
+				"last_consecutive_fails": st.LastFails,
+			})
+		}
+		out["decision_report"] = gin.H{
+			"total":                rep.Total,
+			"would_block":          rep.WouldBlock,
+			"would_block_rate_pct": rep.WouldBlockRatePct,
+			"per_tool":             per,
+		}
+	}
+	response.Success(c, out, "ok")
+}
+
 func handleToolCircuitReset(c *gin.Context) {
 	router := app.GetGlobalToolRouter()
 	if router == nil {
@@ -250,9 +314,18 @@ func handleToolCircuitReset(c *gin.Context) {
 		return
 	}
 	router.ResetCircuit(req.ToolName)
-	logger.Infof("[tool-debug] circuit reset tool=%s by caller=%s", req.ToolName, c.ClientIP())
+	// 两套熔断都要清：只清 ToolRouter 那套的话，运维点了"重置"后 executor 侧仍会
+	// 继续返回 ErrCircuitOpen，接口却回答"circuit breaker reset"——这是假复位。
+	_, _, registry, _ := app.GetToolCircuitSnapshot()
+	if registry != nil {
+		registry.ResetTool(req.ToolName)
+	}
+	logger.Infof("[tool-debug] circuit reset tool=%s executor_side_circuit=%t by caller=%s",
+		req.ToolName, registry != nil, c.ClientIP())
 	response.Success(c, gin.H{
-		"tool_name": req.ToolName,
+		"tool_name":              req.ToolName,
+		"router_circuit_reset":   true,
+		"executor_circuit_reset": registry != nil,
 	}, "circuit breaker reset")
 }
 

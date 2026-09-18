@@ -425,6 +425,7 @@ func TestSetup_ToolDebugRoutesRegistered(t *testing.T) {
 		"GET-/api/agent/tools/stats",
 		"GET-/api/agent/tools/audit",
 		"GET-/api/agent/tools/cost",
+		"GET-/api/agent/tools/circuit",
 		"POST-/api/agent/tools/circuit/reset",
 	}
 	routes := r.Routes()
@@ -603,6 +604,46 @@ func TestHandleToolCircuitReset_HTTP(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503 when router is nil", w.Code)
+	}
+}
+
+// TestHandleToolCircuitState_HTTP_Unwired 锁住"未接线时的自述"：
+// wired 必须为 false，且空集合不得伪装成"所有工具都健康"。
+func TestHandleToolCircuitState_HTTP_Unwired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/circuit", nil)
+
+	handleToolCircuitState(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200；body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code int            `json:"code"`
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body not JSON: %v; body=%s", err, w.Body.String())
+	}
+	if resp.Code != 0 {
+		t.Fatalf("envelope code = %d, want 0；body=%s", resp.Code, w.Body.String())
+	}
+	if wired, ok := resp.Data["wired"].(bool); !ok || wired {
+		t.Errorf("wired = %v, want false（本测试进程未跑过熔断装配）", resp.Data["wired"])
+	}
+	if list, ok := resp.Data["executor_circuit"].([]any); !ok || len(list) != 0 {
+		t.Errorf("executor_circuit = %v, want 空数组（不是 null，前端要能直接遍历）", resp.Data["executor_circuit"])
+	}
+	if _, exists := resp.Data["decision_report"]; exists {
+		t.Errorf("未接线时不应出现 decision_report，否则 0 会读成'零次误拦'：实际 %v", resp.Data["decision_report"])
+	}
+	for _, k := range []string{"mode", "config", "env_hint"} {
+		if _, ok := resp.Data[k]; !ok {
+			t.Errorf("缺少字段 %s", k)
+		}
 	}
 }
 

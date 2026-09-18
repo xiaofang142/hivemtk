@@ -64,6 +64,12 @@ type ToolExecutorConfig struct {
 	CostTracker       CostTracker
 	CircuitBreaker    *CircuitBreakerRegistry
 
+	// CircuitBreakerShadow true 时熔断装饰器走观察态：照常判定与记账，但不拦下请求。
+	// 由接线方按 FF_TOOL_CIRCUIT_BREAKER 设定；CircuitBreaker 为 nil 时无意义。
+	CircuitBreakerShadow bool
+	// OnCircuitDecision 每次熔断判定回调一次（nil = 不上报）。用于观察期累计与告警。
+	OnCircuitDecision CircuitDecisionFunc
+
 	FeedbackSink FeedbackSink
 }
 
@@ -303,10 +309,10 @@ func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 		}
 	}
 
-	chain := BuildChainWithCircuitBreaker(raw,
+	chain := BuildChainWithBreakerDecorator(raw,
 		e.config.PermissionChecker,
 		e.config.RateLimiter,
-		e.config.CircuitBreaker,
+		e.circuitBreakerDecorator(),
 		policy,
 		timeout,
 		e.config.AuditLogger,
@@ -316,6 +322,18 @@ func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 		chain = FeedbackCollectorDecorator(e.config.FeedbackSink)(chain)
 	}
 	return chain
+}
+
+// circuitBreakerDecorator 按配置选出熔断装饰器；未接熔断时返回 nil，
+// 使 BuildChainWithBreakerDecorator 退化为 BuildDefaultChain（链序与接线前逐字节一致）。
+func (e *ToolExecutor) circuitBreakerDecorator() ToolDecorator {
+	if e.config.CircuitBreaker == nil {
+		return nil
+	}
+	if e.config.CircuitBreakerShadow {
+		return CircuitBreakerShadowDecorator(e.config.CircuitBreaker, e.config.OnCircuitDecision)
+	}
+	return CircuitBreakerDecoratorWithObserver(e.config.CircuitBreaker, e.config.OnCircuitDecision)
 }
 
 // BatchExecuteRequest 批量执行请求
