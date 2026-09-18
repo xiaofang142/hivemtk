@@ -77,16 +77,6 @@ func (r *clueRepo) BatchCreateWithDedup(ctx context.Context, clues []*model.Clue
 		deduped = append(deduped, c)
 	}
 
-	keys := make([]string, 0, len(deduped))
-	typeKey := make(map[string]struct{}, len(deduped))
-	for _, c := range deduped {
-		k := fmt.Sprintf("%d|%s", c.Type, c.Account)
-		if _, ok := typeKey[k]; !ok {
-			keys = append(keys, k)
-			typeKey[k] = struct{}{}
-		}
-	}
-
 	type pair struct {
 		Type    int64
 		Account string

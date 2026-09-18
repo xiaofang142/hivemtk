@@ -73,7 +73,6 @@ func extractFromBareJSON(reply string) *BusinessIntentResult {
 			depth--
 			if depth == 0 {
 				end = i
-				break
 			}
 		}
 		if end >= 0 {

@@ -118,7 +118,7 @@ func (s *WebhookService) startDelayedOutboundDispatch() {
 	dispatchOnce.Do(func() {
 		delayedDispatchStop = make(chan struct{})
 
-		utils.SafeGo(nil, "webhook_outbound.delayed_dispatch", func(ctx context.Context) {
+		utils.SafeGo(context.Background(), "webhook_outbound.delayed_dispatch", func(ctx context.Context) {
 			ticker := time.NewTicker(delayedOutboundPollInterval)
 			defer ticker.Stop()
 			for {

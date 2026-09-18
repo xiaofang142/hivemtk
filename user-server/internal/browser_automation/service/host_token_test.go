@@ -75,7 +75,7 @@ func TestValidateHostTokenMatch(t *testing.T) {
 	if !ok || userID != 7 {
 		t.Errorf("合法 token 应通过且解出 user=7，got %d,%v", userID, ok)
 	}
-	userID, ok = ValidateHostToken(context.Background(), kv, "bh_7_wrong")
+	_, ok = ValidateHostToken(context.Background(), kv, "bh_7_wrong")
 	if ok {
 		t.Error("错误 token 应拒绝")
 	}

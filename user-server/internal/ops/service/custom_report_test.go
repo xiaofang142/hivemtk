@@ -381,6 +381,9 @@ func TestCustomReportService_QueryReportData_Sessions(t *testing.T) {
 		t.Fatalf("seed unified_message: %v", err)
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, nil)
 	if err != nil {
@@ -415,6 +418,9 @@ func TestCustomReportService_QueryReportData_Clues(t *testing.T) {
 		ChartType:  "pie",
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, nil)
 	if err != nil {
@@ -454,6 +460,9 @@ func TestCustomReportService_QueryReportData_RFM(t *testing.T) {
 		ChartType:  "bar",
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, map[string]any{"layer": ""})
 	if err != nil {
@@ -496,6 +505,9 @@ func TestCustomReportService_QueryReportData_Messages(t *testing.T) {
 		t.Fatalf("seed unified_message: %v", err)
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, nil)
 	if err != nil {
@@ -523,6 +535,9 @@ func TestCustomReportService_QueryReportData_Agents(t *testing.T) {
 		ChartType:  "table",
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, nil)
 	if err != nil {
@@ -547,6 +562,9 @@ func TestCustomReportService_QueryReportData_Users(t *testing.T) {
 		ChartType:  "pie",
 	}
 	report, err := service.CreateReport(123, createReq)
+	if err != nil {
+		t.Fatalf("CreateReport failed: %v", err)
+	}
 
 	data, err := service.QueryReportData(context.Background(), report, nil)
 	if err != nil {

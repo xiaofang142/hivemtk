@@ -134,7 +134,7 @@ func mutateSOPGraph(graph model.JSONMap, experimentTag string) model.JSONMap {
 			"prompt": "客户如有顾虑，先复述认同（LAER-Acknowledge），再给证据与案例，最后邀请提问。",
 		}
 		prevID, _ := nodeMap(insertAfter)["id"].(string)
-		nextAfter, _ := nodeMap(insertAfter)["next"]
+		nextAfter := nodeMap(insertAfter)["next"]
 		nodes = append(nodes[:insertAfter+1], append([]any{objNode}, nodes[insertAfter+1:]...)...)
 		objNode["next"] = nextAfter
 		rewireNext(prevID, insertAfter+1)

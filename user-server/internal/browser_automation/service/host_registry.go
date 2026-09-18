@@ -285,7 +285,7 @@ func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Du
 	case <-time.After(timeout):
 		// R4 探针：超时计数（有去无回=假死信号）；达阈值主动判死本连接触发自愈。
 		conn.noteCmdTimeout(cmd["action"])
-		return nil, fmt.Errorf("Host 命令超时（%s，action=%v）", timeout, cmd["action"])
+		return nil, fmt.Errorf("host 命令超时（%s，action=%v）", timeout, cmd["action"])
 	case res := <-ch:
 		conn.noteCmdAlive() // 回包到达=应用面活着，清零计数
 		if !res.OK {

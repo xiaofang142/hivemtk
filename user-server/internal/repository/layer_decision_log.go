@@ -59,7 +59,7 @@ func (r *LayerDecisionLogRepository) StatsByLayer(ctx context.Context, since tim
 	}
 	out := make([]LayerStat, 0, len(rows))
 	for _, x := range rows {
-		out = append(out, LayerStat{Layer: x.Layer, Count: x.Count})
+		out = append(out, LayerStat(x))
 	}
 	return out, nil
 }
@@ -88,7 +88,7 @@ func (r *LayerDecisionLogRepository) StatsByIntent(ctx context.Context, since ti
 	}
 	out := make([]IntentStat, 0, len(rows))
 	for _, x := range rows {
-		out = append(out, IntentStat{Intent: x.Intent, Count: x.Count})
+		out = append(out, IntentStat(x))
 	}
 	return out, nil
 }

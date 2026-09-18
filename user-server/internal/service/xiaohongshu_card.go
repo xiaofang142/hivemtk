@@ -257,6 +257,7 @@ func (s *xiaohongshuCardService) GenerateCardChatPage(ctx context.Context, id ui
 
 func (s *xiaohongshuCardService) GenerateShortLink(ctx context.Context, card *model.XiaohongshuCard) error {
 	if card.ShortLinkID != nil {
+		return nil // 已绑定短链：幂等跳过，避免重复造短码留下孤儿
 	}
 
 	var domainID uint = 0

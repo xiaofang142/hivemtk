@@ -54,7 +54,7 @@ func EmailListCron() {
 
 		jobs_id := emailList.JobsID
 		if jobs_id == uuid.Nil {
-			logger.Error(fmt.Errorf("Email list %s not found", emailList.ID), "查找邮件列表失败")
+			logger.Error(fmt.Errorf("email list %s not found", emailList.ID), "查找邮件列表失败")
 			continue
 		}
 		emailJobService := email.NewEmailJobsService()

@@ -9,7 +9,6 @@ import (
 	"hivemtk-user/internal/browser_automation/dto"
 	bamodel "hivemtk-user/internal/browser_automation/model"
 	baplat "hivemtk-user/internal/browser_automation/platform"
-	"hivemtk-user/internal/browser_automation/service"
 	basvc "hivemtk-user/internal/browser_automation/service"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -21,10 +20,10 @@ import (
 
 // TaskController 任务控制器
 type TaskController struct {
-	svc *service.TaskService
+	svc *basvc.TaskService
 }
 
-func NewTaskController(svc *service.TaskService) *TaskController {
+func NewTaskController(svc *basvc.TaskService) *TaskController {
 	return &TaskController{svc: svc}
 }
 

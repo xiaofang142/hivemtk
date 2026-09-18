@@ -177,9 +177,6 @@ func (o *DoubleInterceptOrchestrator) executeToolCall(ctx context.Context, origi
 
 	o.stateMachine.MarkToolExecuted(result.Result, result.Err)
 
-	if result.Err != nil || !result.Result.Success {
-	}
-
 	return nil
 }
 

@@ -186,7 +186,6 @@ func (p *defaultSendPipeline) runRetry(ctx context.Context, req *ReachSendReques
 	for attempt := 0; attempt <= policy.MaxRetries; attempt++ {
 		msgID, err := p.executeSendWithFallback(ctx, req)
 		if err == nil {
-			lastErr = nil
 			resp.RetryCount = attempt
 			resp.MessageID = msgID
 			log.Success = true

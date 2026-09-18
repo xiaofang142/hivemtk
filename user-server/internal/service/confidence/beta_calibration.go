@@ -58,7 +58,7 @@ func (b *BetaCalibration) Fit(samples []BetaSample) *BetaCalibration {
 
 	plattSamples := make([]PlattSample, len(samples))
 	for i, s := range samples {
-		plattSamples[i] = PlattSample{DecisionValue: s.DecisionValue, Label: s.Label}
+		plattSamples[i] = PlattSample(s)
 	}
 	platt := NewPlattScaling().Fit(plattSamples)
 	a, bb := platt.Parameters()

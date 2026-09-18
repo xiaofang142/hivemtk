@@ -194,7 +194,7 @@ func (e *RepurchaseEngine) classifyRFM(ctx context.Context, r, f, m int) RFMType
 func (e *RepurchaseEngine) Predict(ctx context.Context, customerID string) *RepurchasePrediction {
 	rfm := e.ComputeRFM(ctx, customerID)
 	probability := 0.0
-	predictedDays := 365
+	var predictedDays int // switch 各分支（含 default）均赋值
 	reason := ""
 	sop := ""
 	switch rfm.Segment {

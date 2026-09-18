@@ -256,7 +256,7 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 
 	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
 	if err != nil {
-		return nil, fmt.Errorf("Schema 生成失败: %w", err)
+		return nil, fmt.Errorf("schema 生成失败: %w", err)
 	}
 	s.recordAPICall(ctx, resp, "schema_generate")
 

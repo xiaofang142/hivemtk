@@ -310,10 +310,8 @@ func (m *MemorySystem) L4Record(ctx context.Context, customerID, memoryType, con
 	}
 
 	meta := model.JSONMap{}
-	if metadata != nil {
-		for k, v := range metadata {
-			meta[k] = v
-		}
+	for k, v := range metadata {
+		meta[k] = v
 	}
 	item := &model.BusinessMemory{
 		CustomerID: customerID,

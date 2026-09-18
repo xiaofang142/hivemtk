@@ -15,9 +15,7 @@ import (
 func setupAgentStatusRepo(t *testing.T) (*AgentStatusRepository, context.Context) {
 	t.Helper()
 	db := testutil.NewTestDB(t, &model.AgentStatus{})
-	repo := NewAgentStatusRepository()
-
-	repo = NewAgentStatusRepositoryWithDB(db)
+	repo := NewAgentStatusRepositoryWithDB(db)
 	return repo, context.Background()
 }
 

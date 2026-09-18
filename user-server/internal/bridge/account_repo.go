@@ -123,10 +123,8 @@ func (r *BridgeAccountRepository) upsertBinding(ctx context.Context, channel, ac
 // 防止 readPump defer 触发时 WS ctx 被取消导致 DB 写入失败。
 func (r *BridgeAccountRepository) SetOffline(ctx context.Context, channel, accountID string) error {
 	now := time.Now()
-	dbCtx := ctx
-	if ctx == nil {
-		dbCtx = context.Background()
-	} else {
+	dbCtx := context.Background()
+	if ctx != nil {
 		dbCtx = context.WithoutCancel(ctx)
 	}
 	return r.db.WithContext(dbCtx).Model(&model.BridgeAccount{}).
@@ -136,10 +134,8 @@ func (r *BridgeAccountRepository) SetOffline(ctx context.Context, channel, accou
 
 func (r *BridgeAccountRepository) TouchLastSync(ctx context.Context, channel, accountID string) error {
 	now := time.Now()
-	dbCtx := ctx
-	if ctx == nil {
-		dbCtx = context.Background()
-	} else {
+	dbCtx := context.Background()
+	if ctx != nil {
 		dbCtx = context.WithoutCancel(ctx)
 	}
 	return r.db.WithContext(dbCtx).Model(&model.BridgeAccount{}).

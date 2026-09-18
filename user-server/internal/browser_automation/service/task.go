@@ -134,7 +134,7 @@ func (s *TaskService) Publish(ctx context.Context, id, userID uint) error {
 		return fmt.Errorf("仅草稿可发布，当前状态: %s", t.Status)
 	}
 	if t.BrainMode && strings.TrimSpace(t.BrainGoal) == "" {
-		return errors.New("Brain 模式必须填写 brain_goal")
+		return errors.New("brain 模式必须填写 brain_goal")
 	}
 	if !t.BrainMode && len(t.Steps) == 0 {
 		return errors.New("显式模式至少编排一个步骤")

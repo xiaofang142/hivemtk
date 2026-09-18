@@ -340,7 +340,7 @@ func (s *DashboardScreenService) AggregateDashboardData(isAdmin bool) (*Dashboar
 		return nil, fmt.Errorf("渠道分布查询失败: %w", err)
 	}
 	for _, r := range chRows {
-		agg.Channels = append(agg.Channels, NameValue{Name: r.Name, Value: r.Value})
+		agg.Channels = append(agg.Channels, NameValue(r))
 	}
 	for i, r := range agg.Channels {
 		if i >= 5 {
@@ -354,7 +354,7 @@ func (s *DashboardScreenService) AggregateDashboardData(isAdmin bool) (*Dashboar
 		return nil, fmt.Errorf("地区分布查询失败: %w", err)
 	}
 	for _, r := range regRows {
-		agg.Regions = append(agg.Regions, NameValue{Name: r.Name, Value: r.Value})
+		agg.Regions = append(agg.Regions, NameValue(r))
 	}
 
 	agg.Funnel = []NameValue{

@@ -101,7 +101,7 @@ func (s *DingTalkAppService) ReceiveMessage(ctx context.Context, accountID uint,
 	if acc.AESKey == "" {
 		return errors.New("dingtalk aes_key not configured; plaintext webhook rejected")
 	}
-	payload := raw
+	var payload []byte // 解密块内所有存活路径都会赋值
 	{
 		var env struct {
 			Encrypt string `json:"encrypt"`

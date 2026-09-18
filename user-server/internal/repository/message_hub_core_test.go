@@ -700,8 +700,11 @@ func TestMessageHubRepository_GetByPlatformContent(t *testing.T) {
 		t.Errorf("MsgID 期望 m_md5_1, 实际 %s", got.MsgID)
 	}
 
-	_, err = repo.GetByPlatformContent(ctx, "wechat", "精确内容")
-
+	if got2, err2 := repo.GetByPlatformContent(ctx, "wechat", "精确内容"); err2 != nil {
+		t.Errorf("同内容再查应稳定返回: %v", err2)
+	} else if got2 == nil || got2.MsgID != "m_md5_1" {
+		t.Errorf("同内容再查应命中同一条: %+v", got2)
+	}
 }
 
 func TestMessageHubRepository_GetByPlatformContent_EmptyArgs(t *testing.T) {

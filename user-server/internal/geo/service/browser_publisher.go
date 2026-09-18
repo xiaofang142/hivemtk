@@ -45,7 +45,7 @@ func (a *apiPublisher) Publish(ctx context.Context, account *model.GeoPlatformAc
 			userID = account.AccountID
 		}
 		if userID == "" {
-			return "", fmt.Errorf("Medium 平台需要 user_id（环境变量 MEDIUM_USER_ID 或账号 AccountID）")
+			return "", fmt.Errorf("medium 平台需要 user_id（环境变量 MEDIUM_USER_ID 或账号 AccountID）")
 		}
 		endpoint := strings.ReplaceAll(a.endpoint, "{userId}", userID)
 		body = map[string]any{

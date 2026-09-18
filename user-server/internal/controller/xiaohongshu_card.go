@@ -116,8 +116,8 @@ func (c *XiaohongshuCardController) GenerateShortLink(ctx *gin.Context) {
 		return
 	}
 
-	cardResp, err := c.service.GetByID(ctx, uint(id))
-	if HandleDBError(ctx, err, "获取小红书卡片") {
+	// 存在性/越权校验（结果在 133 行前后重新获取，此处只消费 error）
+	if _, err := c.service.GetByID(ctx, uint(id)); HandleDBError(ctx, err, "获取小红书卡片") {
 		return
 	}
 
@@ -130,7 +130,7 @@ func (c *XiaohongshuCardController) GenerateShortLink(ctx *gin.Context) {
 		return
 	}
 
-	cardResp, err = c.service.GetByID(ctx, uint(id))
+	cardResp, err := c.service.GetByID(ctx, uint(id))
 	if HandleDBError(ctx, err, "获取小红书卡片") {
 		return
 	}

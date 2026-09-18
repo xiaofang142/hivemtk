@@ -84,7 +84,7 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 			items = fetched
 		case "notion":
 			if req.NotionPageID == "" {
-				return nil, errors.New("Notion 模式需要 notion_page_id")
+				return nil, errors.New("notion 模式需要 notion_page_id")
 			}
 			fetched, ferr := s.fetchNotion(ctx, req.NotionPageID, tok)
 			if ferr != nil {
@@ -304,13 +304,13 @@ func (s *KnowledgeMerchantService) fetchFeishu(ctx context.Context, docID string
 
 func (s *KnowledgeMerchantService) fetchNotion(ctx context.Context, pageID string, tok *model.KnowledgeAPIToken) ([]BatchImportItem, error) {
 	if pageID == "" {
-		return nil, errors.New("Notion pageID 不能为空")
+		return nil, errors.New("notion pageID 不能为空")
 	}
 	_ = tok
 
 	apiKey := os.Getenv("NOTION_API_KEY")
 	if apiKey == "" {
-		return nil, errors.New("Notion 抓取未配置凭证 (NOTION_API_KEY)，请通过 items 字段直接传入结构化数据")
+		return nil, errors.New("notion 抓取未配置凭证 (NOTION_API_KEY)，请通过 items 字段直接传入结构化数据")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -319,7 +319,7 @@ func (s *KnowledgeMerchantService) fetchNotion(ctx context.Context, pageID strin
 		return nil, err
 	}
 	if len(items) == 0 {
-		return nil, errors.New("Notion 页面内容为空或全为非文本块")
+		return nil, errors.New("notion 页面内容为空或全为非文本块")
 	}
 	return items, nil
 }
@@ -337,12 +337,12 @@ func (s *KnowledgeMerchantService) fetchNotionBlocksRecursive(ctx context.Contex
 	req.Header.Set("Notion-Version", "2022-06-28")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Notion 拉取失败: %w", err)
+		return nil, fmt.Errorf("notion 拉取失败: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Notion 拉取失败: status=%d body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("notion 拉取失败: status=%d body=%s", resp.StatusCode, string(body))
 	}
 	var nb struct {
 		Results []struct {

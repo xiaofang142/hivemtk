@@ -85,7 +85,7 @@ func (s *KBConnectorService) Pull(ctx context.Context, source, productID string,
 func (s *KBConnectorService) pullNotion(ctx context.Context, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error) {
 	token, _ := saved.Config["token"].(string)
 	if strings.TrimSpace(token) == "" {
-		return nil, fmt.Errorf("Notion token 缺失，请重新保存凭据")
+		return nil, fmt.Errorf("notion token 缺失，请重新保存凭据")
 	}
 	maxPages := req.MaxPages
 	if maxPages <= 0 {
@@ -97,7 +97,7 @@ func (s *KBConnectorService) pullNotion(ctx context.Context, productID string, s
 
 	pages, err := s.notionSearch(ctx, token, req.Query)
 	if err != nil {
-		return nil, fmt.Errorf("Notion 搜索失败: %w", err)
+		return nil, fmt.Errorf("notion 搜索失败: %w", err)
 	}
 	res := &ConnectorPullResult{Source: "notion"}
 	importer := knowledgesvc.NewKnowledgeService()

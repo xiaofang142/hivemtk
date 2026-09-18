@@ -122,7 +122,7 @@ func (o *SOPOutboxDispatcher) processDueTimers(ctx context.Context) {
 	if o.timerRepo == nil || o.execDispatcher == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultHTTPTimeout)
+	ctx, cancel := context.WithTimeout(ctx, utils.DefaultHTTPTimeout)
 	defer cancel()
 	ctx = logger.WithModule(ctx, "sop_outbox")
 
@@ -479,7 +479,7 @@ func (d *SOPStuckDetector) scanStuckExecutions(ctx context.Context) {
 	if d.execRepo == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultHTTPTimeout)
+	ctx, cancel := context.WithTimeout(ctx, utils.DefaultHTTPTimeout)
 	defer cancel()
 	ctx = logger.WithModule(ctx, "sop_stuck_detector")
 

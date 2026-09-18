@@ -145,6 +145,9 @@ func TestSystemUserService_GetUsers_Pagination(t *testing.T) {
 	if len(users) != 5 {
 		t.Errorf("Expected 5 users on page 2, got %d", len(users))
 	}
+	if total != 15 {
+		t.Errorf("Expected total 15 on page 2, got %d", total)
+	}
 }
 
 // TestSystemUserService_GetUserByID 测试根据 ID 获取用户

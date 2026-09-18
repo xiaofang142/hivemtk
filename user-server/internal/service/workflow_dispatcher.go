@@ -361,7 +361,7 @@ func (d *WorkflowDispatcher) handleNodeFailure(
 
 		d.wg.Add(1)
 
-		utils.SafeGo(nil, "workflow_dispatcher.retry", func(_ context.Context) {
+		utils.SafeGo(context.Background(), "workflow_dispatcher.retry", func(_ context.Context) {
 			defer d.wg.Done()
 			select {
 			case <-time.After(backoff):

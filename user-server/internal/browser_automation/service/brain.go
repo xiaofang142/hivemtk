@@ -231,7 +231,6 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 		}
 		planModel, planTokIn, planTokOut = r.model, r.tokIn, r.tokOut
 	}
-	done = p.Done
 	steps := p.Steps
 	if len(steps) == 0 || string(steps) == "null" {
 		steps = []byte("[]")

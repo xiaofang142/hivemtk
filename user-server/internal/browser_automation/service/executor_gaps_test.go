@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/browser_automation/dto"
 	"hivemtk-user/internal/browser_automation/platform"
+
 	// 适配器注册（生产经 router 空白导入；service 测试自持）
 	_ "hivemtk-user/internal/browser_automation/platform/douyin"
 	_ "hivemtk-user/internal/browser_automation/platform/xianyu"
@@ -124,7 +125,7 @@ func TestAppendHistoryBoundedFolds(t *testing.T) {
 	}
 	// 最旧条是折叠行（"[" 前缀）时再溢出 → 计 compacted，不误归任何动作
 	h2 := append([]string{"[已折叠 1 步: x×1]"}, h...)
-	h2 = appendHistoryBounded(h2, "query body", folded)
+	_ = appendHistoryBounded(h2, "query body", folded)
 	if folded["compacted"] != 1 {
 		t.Errorf("折叠行被挤出应计 compacted: %v", folded)
 	}

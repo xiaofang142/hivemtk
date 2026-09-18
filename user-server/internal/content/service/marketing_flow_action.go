@@ -560,7 +560,7 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 	}
 
 	var bodyReader io.Reader
-	if data != nil && len(data) > 0 {
+	if len(data) > 0 {
 		body, err := json.Marshal(data)
 		if err != nil {
 			return nil, fmt.Errorf("JSON 序列化失败：%w", err)
@@ -601,7 +601,7 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("Webhook 返回错误状态码：%d, 响应：%s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("webhook 返回错误状态码：%d, 响应：%s", resp.StatusCode, string(respBody))
 	}
 
 	var result map[string]any

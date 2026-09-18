@@ -112,7 +112,8 @@ func (dp *DocumentProcessor) splitByHeadings(text string, doc rag_core.Document)
 }
 
 func (dp *DocumentProcessor) splitBySentences(text string, doc rag_core.Document) []rag_core.Chunk {
-	sentencePattern := `[.!?。！？]\s+|[.!?。！？](?=\n)|\n\s*\n`
+	// RE2 不支持 (?= 前瞻；"标点+换行"场景已由 \s+ 覆盖
+	sentencePattern := `[.!?。！？]\s+|\n\s*\n`
 	re := regexp.MustCompile(sentencePattern)
 	sentences := re.Split(text, -1)
 

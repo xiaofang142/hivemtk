@@ -180,7 +180,7 @@ func buildRAGPrompt(query, contextStr string, contextData map[string]any) string
 
 回答:`, contextStr, query)
 
-	if contextData != nil && len(contextData) > 0 {
+	if len(contextData) > 0 {
 		contextJSON, _ := json.Marshal(contextData)
 		prompt += fmt.Sprintf("\n\n额外上下文: %s", string(contextJSON))
 	}
@@ -283,7 +283,7 @@ func buildStructuredRAGPrompt(query, contextStr string, contextData map[string]a
 
 回答:`, contextStr, query, string(schemaJSON))
 
-	if contextData != nil && len(contextData) > 0 {
+	if len(contextData) > 0 {
 		contextJSON, _ := json.Marshal(contextData)
 		prompt += fmt.Sprintf("\n\n额外上下文: %s", string(contextJSON))
 	}

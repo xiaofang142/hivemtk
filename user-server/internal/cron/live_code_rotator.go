@@ -27,11 +27,8 @@ func (r *LiveCodeRotator) Start() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			go r.rotate()
-		}
+	for range ticker.C {
+		go r.rotate()
 	}
 }
 

@@ -22,12 +22,34 @@ linters:
     # 2026-09-18 P3-5 第一阶段：unused 存量 65→0（逐项核对后删除死代码；
     # 仅 tests=false 生产面计数），自此钉死为护栏。
     - unused
-  # TODO(P3-5 护栏常态化·剩余)：以下规则实测存量如下（2026-09-18 基线，
-    # --no-config 全量口径），逐项归零后再启用：
-    # - errcheck      # 1713 处
-    # - ineffassign   # 32 处
-    # - staticcheck   # 293 处
+    # 2026-09-18 P3-5 第一阶段续：ineffassign 存量 26→0（含 3 处真实缺陷：
+    # geo GetRelationGraph 忽略 depth / tiktok GetCardStats 忽略 days / tgbot 吞 Send 错误）
+    - ineffassign
+    # 2026-09-18 P3-5 第二阶段：staticcheck 生产面清零后启用。
+    # checks 刻意排除纯风格项：ST1000 包注释（481 处，逐包补写属文档工程）、
+    # ST1003 标识符命名（165 处，包名含下划线是全仓既定风格，改名波及面过大）、
+    # ST1020/1021/1022 导出注释规范（116 处）、QF* 快速修建议（tagged switch 等）。
+    # 保留 SA*（真实缺陷）、S*（简化）、ST1005（错误串规范）并已全部归零。
+    - staticcheck
+  # TODO(P3-5 护栏常态化·剩余)：errcheck 实测**生产面**存量 354 处（2026-09-18，
+  # repo config tests=false 口径；此前注释里的 1713 为 --no-config 含测试全量口径，已更正）。
+  # 依本项目「清零后再启用」既定方法论（unused/ineffassign/staticcheck 皆如此），
+  # errcheck 不做一次性机械 `_ =` 包裹——那会把「确实该处理却被丢弃」的错误
+  # （DB 写、影响后续逻辑的 Unmarshal 等）连同可安全忽略的 Close 一并掩盖，
+  # 属质量倒退而非整改。留待专项：逐处判定「补处理 vs 显式 `_ =` + 注释」后再启用。
+  # - errcheck
   settings:
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -ST1023
+        - -QF*
     depguard:
       rules:
         # model 为叶子层：只依赖标准库/第三方 ORM，不得反向依赖任何上层

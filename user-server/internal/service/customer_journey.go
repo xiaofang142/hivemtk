@@ -605,7 +605,7 @@ func (s *CustomerJourneyService) GetOverview(ctx context.Context) *JourneyOvervi
 		if count > 0 {
 			avgStay = stageStaySum[st] / float64(count)
 		}
-		meta, _ := StageMetas[st]
+		meta := StageMetas[st]
 		label := string(st)
 		if meta != nil {
 			label = meta.Label

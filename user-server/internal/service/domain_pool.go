@@ -175,7 +175,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 			url := fmt.Sprintf("http://%s:%d", dp.Domain, dp.Port)
 
 			status := 2
-			msg := "不可访问"
+			var msg string // 三个分支均赋值
 
 			resp, err := domainCheckHTTPClient.Get(url)
 			if err != nil {

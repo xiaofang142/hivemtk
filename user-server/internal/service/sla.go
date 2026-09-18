@@ -93,9 +93,9 @@ func (s *SLAService) checkAll(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if pendingCount > 0 && policy.WarnThreshold > 0 {
-
-		}
+		// 告警动作未实现：SLA 服务无通知设施，阈值语义（计数 vs 百分比）待产品定义。
+		// 缺口显式在案，禁止用空分支继续伪装"已检查"。
+		_ = pendingCount
 	}
 	return nil
 }

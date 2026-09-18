@@ -261,7 +261,7 @@ type defaultSendPipeline struct {
 }
 
 func NewSendPipeline(config SendPipelineConfig) SendPipeline {
-	if config.Steps == nil || len(config.Steps) == 0 {
+	if len(config.Steps) == 0 {
 		config.Steps = DefaultSendPipelineSteps
 	}
 	return &defaultSendPipeline{config: config}

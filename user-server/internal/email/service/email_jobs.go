@@ -54,11 +54,11 @@ func (s *EmailJobsService) DeleteEmailJobs(ctx context.Context, id uuid.UUID) er
 func (s *EmailJobsService) IncreaseSendTotal(ctx context.Context, jobs_id uuid.UUID) error {
 	jobs, err := s.repo.GetByID(ctx, jobs_id)
 	if err != nil {
-		logger.Error(fmt.Errorf("Failed to get email job: %v", err), "获取邮件任务失败")
+		logger.Error(fmt.Errorf("failed to get email job: %v", err), "获取邮件任务失败")
 		return err
 	}
 	if jobs == nil {
-		logger.Error(fmt.Errorf("Email job %s not found", jobs_id), "查找邮件任务失败")
+		logger.Error(fmt.Errorf("email job %s not found", jobs_id), "查找邮件任务失败")
 		return fmt.Errorf("email job not found")
 	}
 	jobs.SendTotal++
@@ -72,7 +72,7 @@ func (s *EmailJobsService) IncreaseSuccessTotal(ctx context.Context, jobs_id uui
 		return err
 	}
 	if jobs == nil {
-		logger.Error(fmt.Errorf("Email job %s not found", jobs_id), "查找邮件任务失败")
+		logger.Error(fmt.Errorf("email job %s not found", jobs_id), "查找邮件任务失败")
 		return fmt.Errorf("email job not found")
 	}
 	jobs.SuccessTotal++
@@ -86,7 +86,7 @@ func (s *EmailJobsService) IncreaseFailTotal(ctx context.Context, jobs_id uuid.U
 		return err
 	}
 	if jobs == nil {
-		logger.Error(fmt.Errorf("Email job %s not found", jobs_id), "查找邮件任务失败")
+		logger.Error(fmt.Errorf("email job %s not found", jobs_id), "查找邮件任务失败")
 		return fmt.Errorf("email job not found")
 	}
 	jobs.FailTotal++
@@ -100,7 +100,7 @@ func (s *EmailJobsService) IncreaseReadTotal(ctx context.Context, jobs_id uuid.U
 		return err
 	}
 	if jobs == nil {
-		logger.Error(fmt.Errorf("Email job %s not found", jobs_id), "查找邮件任务失败")
+		logger.Error(fmt.Errorf("email job %s not found", jobs_id), "查找邮件任务失败")
 		return fmt.Errorf("email job not found")
 	}
 	jobs.ReadTotal++

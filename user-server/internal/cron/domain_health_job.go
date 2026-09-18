@@ -34,11 +34,8 @@ func (j *DomainHealthCheckJob) Start() {
 	ticker := time.NewTicker(j.interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			go j.runOnce()
-		}
+	for range ticker.C {
+		go j.runOnce()
 	}
 }
 

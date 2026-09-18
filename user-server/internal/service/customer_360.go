@@ -870,7 +870,6 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 
 	allSessionIDs := make([]string, 0, len(sessions))
 	seenSess := make(map[string]struct{}, len(sessions))
-	userIDs := make([]string, 0, len(userSessionsMap))
 	accountIDs := make([]string, 0, len(userSessionsMap))
 	seenAcct := make(map[string]struct{}, len(userSessionsMap))
 
@@ -888,10 +887,6 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 			}
 		}
 	}
-	for uid := range userSessionsMap {
-		userIDs = append(userIDs, uid)
-	}
-
 	messageMap, _ := s.messageRepo.ListBySessionIDsBatch(ctx, allSessionIDs, 100)
 
 	allAccounts := make([]string, 0, len(accountIDs)+len(userSessionsMap))
@@ -960,15 +955,15 @@ func (s *Customer360Service) assembleCustomer360DTO(
 		return nil
 	}
 	dto := &Customer360DTO{}
-	dto.BasicInfo = s.buildBasicInfo(nil, userSessions)
-	dto.SessionStats = s.buildSessionStats(nil, userSessions)
-	dto.SessionHistory = s.buildSessionHistory(nil, userSessions)
+	dto.BasicInfo = s.buildBasicInfo(context.Background(), userSessions)
+	dto.SessionStats = s.buildSessionStats(context.Background(), userSessions)
+	dto.SessionHistory = s.buildSessionHistory(context.Background(), userSessions)
 	dto.MessageHistory = s.buildMessageHistoryFromMap(userSessions, messageMap)
 	dto.ClueInfo = s.buildClueInfoFromMap(userSessions, clueMap)
 	dto.OrderInfo = s.buildOrderInfoFromMap(userSessions, orderMap)
-	dto.InteractionStats = s.buildInteractionStats(nil, userSessions)
+	dto.InteractionStats = s.buildInteractionStats(context.Background(), userSessions)
 
-	dto.UserProfile = s.buildUserProfile(nil, userSessions, dto.InteractionStats, dto.OrderInfo, "")
+	dto.UserProfile = s.buildUserProfile(context.Background(), userSessions, dto.InteractionStats, dto.OrderInfo, "")
 	return dto
 }
 

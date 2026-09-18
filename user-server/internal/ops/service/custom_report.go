@@ -260,8 +260,7 @@ func (s *CustomReportService) querySessionData(ctx context.Context, report *mode
 	if len(dimensions) > 0 {
 		dimField = dimensions[0].Field
 	}
-	groupExpr := "status"
-	dimValueExpr := "status::text"
+	var groupExpr, dimValueExpr string // 三个分支（含 default）各自赋值
 	switch dimField {
 	case "date", "created_at":
 		groupExpr = "DATE(created_at)"
@@ -340,8 +339,7 @@ func (s *CustomReportService) queryMessageData(ctx context.Context, report *mode
 
 	conds, args := BuildReportFilterSQL("messages", report.Filters)
 
-	dimValueExpr := "COALESCE(content_type, 'unknown')"
-	groupExpr := "COALESCE(content_type, 'unknown')"
+	var dimValueExpr, groupExpr string // 三个分支（含 default）各自赋值
 	switch dimField {
 	case "date", "created_at":
 		groupExpr = "DATE(created_at)"
@@ -404,8 +402,7 @@ func (s *CustomReportService) queryClueData(ctx context.Context, report *model.C
 	if len(dimensions) > 0 {
 		dimField = dimensions[0].Field
 	}
-	dimValueExpr := "type::text"
-	groupExpr := "type"
+	var dimValueExpr, groupExpr string // 各分支（含 default）各自赋值
 	switch dimField {
 	case "is_verify":
 		dimValueExpr = "is_verify::text"
@@ -548,8 +545,7 @@ func (s *CustomReportService) queryUserData(ctx context.Context, report *model.C
 		dimField = dimensions[0].Field
 	}
 
-	groupExpr := "DATE(created_at)"
-	dimValueExpr := "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
+	var groupExpr, dimValueExpr string // 三个分支（含 default）各自赋值
 	switch dimField {
 	case "user_type", "churn_risk":
 		groupExpr = "churn_risk"

@@ -212,7 +212,8 @@ func (s *RagMetricsService) flush(ctx context.Context) error {
 	if s.repo == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), utils.RagMetricsTimeout)
+	// WithoutCancel：入参 ctx 的 trace 值保留，但落库不受调用方取消（含退出路径）影响
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), utils.RagMetricsTimeout)
 	defer cancel()
 	if err := s.repo.CreateQueryLogsInBatches(ctx, batch, 50); err != nil {
 		logger.Errorf("[RagMetrics] flush batch failed (%d logs): %v", len(batch), err)

@@ -122,7 +122,7 @@ func (s *SOPScheduler) tick(ctx context.Context) {
 	if s.agentRepo == nil || s.execRepo == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultHTTPTimeout)
+	ctx, cancel := context.WithTimeout(ctx, utils.DefaultHTTPTimeout)
 	defer cancel()
 
 	s.cleanupStuckExecutions(ctx)

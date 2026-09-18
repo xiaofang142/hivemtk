@@ -4,6 +4,7 @@ import (
 	"hivemtk-user/internal/model"
 
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -148,7 +149,8 @@ func (r *tiktokCardRepository) GetCardStats(ctx context.Context, id uint, days i
 	if days <= 0 {
 		days = 7
 	}
-	if err := r.db.Where("card_id = ?", id).Order("created_at DESC").Limit(50).Find(&activities).Error; err != nil {
+	since := time.Now().AddDate(0, 0, -days)
+	if err := r.db.Where("card_id = ? AND created_at >= ?", id, since).Order("created_at DESC").Limit(50).Find(&activities).Error; err != nil {
 		return nil, nil, err
 	}
 	return &card, activities, nil

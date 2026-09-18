@@ -431,9 +431,7 @@ func (s *materialService) GetMaterialSelector(licenseID string, materialType str
 	}
 
 	materialList := make([]contentdto.MaterialResponse, len(materials.List))
-	for i, material := range materials.List {
-		materialList[i] = material
-	}
+	copy(materialList, materials.List)
 
 	categoryList := make([]contentdto.MaterialCategoryResponse, len(categories))
 	for i, category := range categories {

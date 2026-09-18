@@ -711,11 +711,10 @@ func (u *Update) ToInbound(accountID string) *core.InboundMessage {
 		if u.CallbackQuery != nil && u.CallbackQuery.From != nil {
 			cb := u.CallbackQuery
 			chatID := ""
-			chatType := "private"
 			isGroup := false
 			if cb.Message != nil {
 				chatID = strconv.FormatInt(cb.Message.Chat.ID, 10)
-				chatType = cb.Message.Chat.Type
+				chatType := cb.Message.Chat.Type
 				isGroup = chatType == "group" || chatType == "supergroup"
 			}
 			return &core.InboundMessage{

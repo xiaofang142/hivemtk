@@ -181,9 +181,7 @@ func Anomalies(ctx context.Context) (*AnomalyGroups, error) {
 		log.Printf("monitor.Anomalies sync_gap: %v", err)
 	}
 	for _, r := range gaps {
-		g.SyncGap = append(g.SyncGap, SyncGapRow{
-			ConversationID: r.ConversationID, Channel: r.Channel, MessageCount: r.MessageCount,
-		})
+		g.SyncGap = append(g.SyncGap, SyncGapRow(r))
 	}
 
 	type stuckRow struct {

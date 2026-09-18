@@ -701,7 +701,7 @@ func (d *SOPExecutionDispatcher) tryCompensate(_ context.Context, exec *model.SO
 		return
 	}
 
-	utils.SafeGo(nil, "sop_dispatcher.compensate", func(ctx context.Context) {
+	utils.SafeGo(context.Background(), "sop_dispatcher.compensate", func(ctx context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.CronShortTimeout)
 		defer cancel()
 

@@ -129,7 +129,7 @@ func (r *LayerRouter) Route(ctx context.Context, req *RouteRequest) *dto.LayerDe
 				if top.Entry != nil {
 
 					entryID := top.Entry.ID
-					utils.SafeGo(nil, "layer.faq_hit_count", func(_ context.Context) {
+					utils.SafeGo(context.Background(), "layer.faq_hit_count", func(_ context.Context) {
 						_ = r.faqRepo.IncrementHitCount(context.Background(), entryID)
 					})
 				}
@@ -155,7 +155,7 @@ func (r *LayerRouter) Route(ctx context.Context, req *RouteRequest) *dto.LayerDe
 					}
 
 					faqID := top.ID
-					utils.SafeGo(nil, "layer.faq_hit_count", func(_ context.Context) {
+					utils.SafeGo(context.Background(), "layer.faq_hit_count", func(_ context.Context) {
 						_ = r.faqRepo.IncrementHitCount(context.Background(), faqID)
 					})
 					return decision
@@ -196,7 +196,7 @@ func (r *LayerRouter) Route(ctx context.Context, req *RouteRequest) *dto.LayerDe
 				}
 
 				sopID := top.ID
-				utils.SafeGo(nil, "layer.sop_hit_count", func(_ context.Context) {
+				utils.SafeGo(context.Background(), "layer.sop_hit_count", func(_ context.Context) {
 					_ = r.sopRepo.IncrementHitCount(context.Background(), sopID)
 				})
 				return decision
@@ -235,7 +235,7 @@ func (r *LayerRouter) record(ctx context.Context, req *RouteRequest, d *dto.Laye
 		Extra:      fmt.Sprintf("faq_id=%d sop_id=%d", d.FAQID, d.SOPID),
 	}
 
-	utils.SafeGo(nil, "layer.record", func(_ context.Context) {
+	utils.SafeGo(context.Background(), "layer.record", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
 		if err := r.logRepo.Record(bgCtx, log); err != nil {

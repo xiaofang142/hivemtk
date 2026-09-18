@@ -158,7 +158,7 @@ func TestMessageHubRepository_HasUnrepliedCustomerMessage(t *testing.T) {
 		t.Error("50s 前应在 2min 窗口内")
 	}
 
-	unreplied, within, _ = repo.HasUnrepliedCustomerMessage(ctx, convID, 10*time.Second)
+	_, within, _ = repo.HasUnrepliedCustomerMessage(ctx, convID, 10*time.Second)
 	if within {
 		t.Error("50s 前应在 10s 窗口外")
 	}
