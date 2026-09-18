@@ -10,9 +10,15 @@ PLAT_BASE="http://127.0.0.1:8205"
 PGHOST=127.0.0.1
 PGPORT=8232
 PGUSER=admin
-PGPASSWORD=dce21ad1da364a9c1d11d2641b1472353527b45acb601492
+# 口令仅从环境注入（本文件不落任何明文字面量）：
+#   user 库    ← hivemtk/.env 的 POSTGRES_PASSWORD
+#   platform 库 ← hivemtk-platform/.env 的 POSTGRES_PASSWORD，导出为 PLATFORM_POSTGRES_PASSWORD
+# 本机跑法： set -a && . ../.env && set +a && export PLATFORM_POSTGRES_PASSWORD=<平台库口令>
+: "${POSTGRES_PASSWORD:?缺少 POSTGRES_PASSWORD（user 库口令，见 hivemtk/.env）}"
+: "${PLATFORM_POSTGRES_PASSWORD:?缺少 PLATFORM_POSTGRES_PASSWORD（platform 库口令，见 hivemtk-platform/.env）}"
+PGPASSWORD="$POSTGRES_PASSWORD"
 PGDB=user_db
-PLAT_PGPASSWORD=a1b455935bd43efc273ee877dc43419eba85147dd874b81b
+PLAT_PGPASSWORD="$PLATFORM_POSTGRES_PASSWORD"
 PLAT_PGDB=platform_db
 
 # ---- token 管理 ----

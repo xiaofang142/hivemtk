@@ -13,7 +13,10 @@ import requests, json, sys, time, subprocess, os
 BASE = "http://127.0.0.1:8204"
 AUTH = None
 PG_ENV = os.environ.copy()
-PG_ENV["PGPASSWORD"] = "dce21ad1da364a9c1d11d2641b1472353527b45acb601492"
+PG_ENV["PGPASSWORD"] = (os.environ.get("POSTGRES_PASSWORD")
+                          or os.environ.get("HIVEMTK_DB_PASSWORD")
+                          or os.environ.get("PGPASSWORD")
+                          or sys.exit("❌ 缺少数据库口令：请导出 POSTGRES_PASSWORD"))
 RESULTS = []
 
 # ===== HiveMTK 品牌常量（全程使用，不是 TestBrand）=====

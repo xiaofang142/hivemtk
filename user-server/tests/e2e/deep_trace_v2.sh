@@ -8,7 +8,9 @@ BASE="http://127.0.0.1:8204"
 PGHOST=127.0.0.1
 PGPORT=8232
 PGUSER=admin
-PGPASSWORD=dce21ad1da364a9c1d11d2641b1472353527b45acb601492
+# 口令仅从环境注入：set -a && . ../../.env && set +a
+: "${POSTGRES_PASSWORD:?缺少 POSTGRES_PASSWORD（user 库口令，见 hivemtk/.env）}"
+PGPASSWORD="$POSTGRES_PASSWORD"
 PGDB=user_db
 
 PASS=0

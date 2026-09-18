@@ -3,9 +3,18 @@
 知识库扩展脚本第三批次 - 从885条扩展到1000+条
 """
 
+import os
+import sys
 import json
 import hashlib
 import psycopg2
+
+# 口令仅从环境注入（本文件不落任何明文字面量）：本机 `set -a && . .env && set +a`
+_DB_PW = (os.environ.get("POSTGRES_PASSWORD")
+          or os.environ.get("HIVEMTK_DB_PASSWORD")
+          or os.environ.get("PGPASSWORD"))
+if not _DB_PW:
+    sys.exit("❌ 缺少数据库口令：请导出 POSTGRES_PASSWORD（或 HIVEMTK_DB_PASSWORD / PGPASSWORD）")
 
 # 数据库配置
 DB_CONFIG = {
@@ -13,7 +22,7 @@ DB_CONFIG = {
     "port": 8232,
     "database": "user_db",
     "user": "admin",
-    "password": "dce21ad1da364a9c1d11d2641b1472353527b45acb601492"
+    "password": _DB_PW
 }
 
 # 产品ID

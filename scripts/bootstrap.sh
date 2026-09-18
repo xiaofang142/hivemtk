@@ -20,7 +20,13 @@
 #   6. 写 install.lock 标记已初始化
 #
 # 环境变量:
+#   （常规做法：set -a && . ./.env && set +a 后执行本脚本）
 #   POSTGRES_PASSWORD  必须（与 docker-compose.yml USER_POSTGRES_PASSWORD 一致）
+#   JWT_SECRET / USER_JWT_SECRET / MERCHANT_API_SECRET / PLATFORM_LICENSE_SECRET
+#                      必须，生成方式 openssl rand -hex 32。
+#                      本脚本不再为这几把密钥内置任何默认值：历史版本曾把与部署机
+#                      .env 相同的真实密钥写成 ${VAR:-<40+位hex>} 兜底，随公开仓库
+#                      一并外泄；现由 scripts/check-secrets.sh 的 A 项比对守死。
 #   USER_SERVER_PORT   可选，默认 8204
 #   PG_PORT            可选，默认 8232
 # =============================================================================
@@ -51,6 +57,10 @@ err()  { printf "${RED}[bootstrap]${NC} %s\n" "$*" >&2; }
 
 # 预检
 [ -z "$POSTGRES_PASSWORD" ] && { err "POSTGRES_PASSWORD 未设置"; exit 1; }
+# 签名/授权类密钥同样只允许来自环境：脚本内不得内置任何默认值（历史教训见 scripts/check-secrets.sh A 项）
+for _v in JWT_SECRET USER_JWT_SECRET MERCHANT_API_SECRET PLATFORM_LICENSE_SECRET; do
+  [ -z "${!_v}" ] && { err "$_v 未设置（生成一个：openssl rand -hex 32）"; exit 1; }
+done
 command -v psql >/dev/null || { err "psql 未安装"; exit 1; }
 command -v go   >/dev/null || { err "go  未安装"; exit 1; }
 command -v python3 >/dev/null || { err "python3 未安装"; exit 1; }
@@ -91,9 +101,9 @@ log "检查 admin 账号..."
 log "执行 Go 种子（10 模块）..."
 cd "$USER_SERVER_DIR"
 POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-JWT_SECRET="${JWT_SECRET:-e12a780c716a6aebfb4254960d90fce4e89568bc42a15343ac71da3fbd13f6d8}" \
-MERCHANT_API_SECRET="${MERCHANT_API_SECRET:-c8d036c275d3acc71a10a07f24385aa1b9bbe74d211caf8d7ef2a0a2b4dbe610}" \
-PLATFORM_LICENSE_SECRET="${PLATFORM_LICENSE_SECRET:-7d8bf609d350893f097386c1b9220d2c3b6c5a9b78491ca2db0f83d070743cba}" \
+JWT_SECRET="$JWT_SECRET" \
+MERCHANT_API_SECRET="$MERCHANT_API_SECRET" \
+PLATFORM_LICENSE_SECRET="$PLATFORM_LICENSE_SECRET" \
 go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
 
 # 5) 跑 Python 知识库种子
