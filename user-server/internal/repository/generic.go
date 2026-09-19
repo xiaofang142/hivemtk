@@ -4,11 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
+
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
+
+// orderClauseRe / identRe 是泛型仓库 orderBy 与条件列名的结构白名单。
+// BaseRepository 当前无生产调用方（2026-09-19 审计全树 grep 证实），但它是
+// 被反复复制的模板——预先把"裸 SQL 通道"焊死成"列名 + ASC/DESC"语法子集，
+// 未来接入 HTTP 参数也不会构成注入面。非法输入回退默认排序并告警（fail-closed）。
+var (
+	orderClauseRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*( (asc|desc))(,[ ]*[a-z_][a-z0-9_]*( (asc|desc)))*$`)
+	identRe       = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+)
+
+func sanitizeOrder(orderBy, fallback string) string {
+	v := strings.ToLower(strings.TrimSpace(orderBy))
+	if v == "" {
+		return fallback
+	}
+	if orderClauseRe.MatchString(v) {
+		return v
+	}
+	logger.Warnf("[generic-repo] 非法 orderBy 被结构白名单拒绝，回退 %q: %q", fallback, orderBy)
+	return fallback
+}
 
 var (
 	dbInst *gorm.DB
@@ -88,9 +112,7 @@ func (r *BaseRepository[T]) GetList(ctx context.Context, page, pageSize int, ord
 		return nil, 0, err
 	}
 
-	if orderBy == "" {
-		orderBy = "created_at DESC"
-	}
+	orderBy = sanitizeOrder(orderBy, "created_at DESC")
 
 	offset := (page - 1) * pageSize
 	err = query.Offset(offset).Limit(pageSize).Order(orderBy).Find(&entities).Error
@@ -109,6 +131,10 @@ func (r *BaseRepository[T]) GetListByCondition(ctx context.Context, page, pageSi
 	query := r.withCtx(ctx).Model(new(T))
 
 	for key, value := range condition {
+		if !identRe.MatchString(strings.ToLower(key)) {
+			logger.Warnf("[generic-repo] 非法条件列名被标识符白名单拒绝: %q", key)
+			continue
+		}
 		query = query.Where(key+" = ?", value)
 	}
 
@@ -117,9 +143,7 @@ func (r *BaseRepository[T]) GetListByCondition(ctx context.Context, page, pageSi
 		return nil, 0, err
 	}
 
-	if orderBy == "" {
-		orderBy = "created_at DESC"
-	}
+	orderBy = sanitizeOrder(orderBy, "created_at DESC")
 
 	offset := (page - 1) * pageSize
 	err = query.Offset(offset).Limit(pageSize).Order(orderBy).Find(&entities).Error
@@ -142,9 +166,7 @@ func (r *BaseRepository[T]) GetListByQuery(ctx context.Context, page, pageSize i
 		return nil, 0, err
 	}
 
-	if orderBy == "" {
-		orderBy = "created_at DESC"
-	}
+	orderBy = sanitizeOrder(orderBy, "created_at DESC")
 
 	offset := (page - 1) * pageSize
 	err = query.Offset(offset).Limit(pageSize).Order(orderBy).Find(&entities).Error
@@ -180,6 +202,10 @@ func (r *BaseRepository[T]) CountByCondition(ctx context.Context, condition map[
 	var count int64
 	query := r.withCtx(ctx).Model(new(T))
 	for key, value := range condition {
+		if !identRe.MatchString(strings.ToLower(key)) {
+			logger.Warnf("[generic-repo] 非法条件列名被标识符白名单拒绝: %q", key)
+			continue
+		}
 		query = query.Where(key+" = ?", value)
 	}
 	err := query.Count(&count).Error

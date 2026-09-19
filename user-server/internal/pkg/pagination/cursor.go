@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
 )
 
 const CursorPageSize = 100
+
+// orderClauseRe 与 repository.generic 同源："列名 ASC/DESC" 逗号串的语法子集。
+var orderClauseRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*( (asc|desc))(,[ ]*[a-z_][a-z0-9_]*( (asc|desc)))*$`)
 
 // Cursor 编码后的游标（base64 + 时间戳 + ID）
 type Cursor string
@@ -106,9 +111,13 @@ func CursorQuery(ctx context.Context, db *gorm.DB, opts CursorQueryOpts) (*Curso
 		q = q.Where(k, v)
 	}
 
-	orderBy := opts.OrderBy
+	orderBy := strings.ToLower(strings.TrimSpace(opts.OrderBy))
 	if orderBy == "" {
 		orderBy = "created_at DESC, id DESC"
+	} else if !orderClauseRe.MatchString(orderBy) {
+		// 结构白名单：CursorQuery 目前无生产调用方，但作为通用模板预拒
+		// "列名 + ASC/DESC"语法子集之外的一切输入（fail-closed，绝不带病执行）。
+		return nil, fmt.Errorf("invalid order_by: %s", opts.OrderBy)
 	}
 	q = q.Order(orderBy)
 
