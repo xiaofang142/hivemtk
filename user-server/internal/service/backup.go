@@ -463,27 +463,29 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 			return err
 		}
 
+		// filepath.Clean + IsLocal：规范化后仍是"当前目录内的相对路径"才放行。
+		// 覆盖绝对路径、盘符、".." 上跳（含 sub/../.. 组合）；不再误杀 "b..c" 这类合法文件名。
+		name := filepath.Clean(f.Name)
+		if !filepath.IsLocal(name) {
+			_ = rc.Close()
+			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
+		}
+		path := filepath.Join("restore_tmp", name)
+
 		if f.FileInfo().IsDir() {
 			_ = rc.Close()
-			if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
-				return fmt.Errorf("非法的备份条目路径: %s", f.Name)
-			}
-			if e := os.MkdirAll(f.Name, 0700); e != nil {
+			if e := os.MkdirAll(path, 0700); e != nil {
 				return e
 			}
 			continue
 		}
 
-		if filepath.IsAbs(f.Name) || strings.Contains(f.Name, "..") {
-			_ = rc.Close()
-			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
-		}
-		path := filepath.Join("restore_tmp", f.Name)
 		if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
 			_ = rc.Close()
 			return e
 		}
-		outFile, err := os.Create(path)
+		// 0600：备份解出的明文数据在 restore_tmp 清理前不对同组/其他用户可读
+		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			_ = rc.Close()
 			return err
