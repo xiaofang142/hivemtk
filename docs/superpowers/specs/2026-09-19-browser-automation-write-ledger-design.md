@@ -448,9 +448,13 @@ SSE 侧完全没有，而 SSE 是生产默认通道 → 同一条主动私信经
 `gofmt -l` 对本泳道全部改动文件零命中；`go vet ./...` 无输出；
 `internal/browser_automation/...` 无 race `platform ok 0.459s / service ok 111.511s`、带 race
 `platform ok 1.442s / service ok 122.051s`；`internal/repository ok 178.043s`、`internal/bridge ok 15.428s`、
-`internal/migration ok 0.508s` + `migrations ok 24.681s`、`internal/router ok 23.445s`（不带 `-race`：
-该项红是 aiagent/llm trace bus 的既有竞争，与本题无关且已在案）。
+`internal/migration ok 0.508s` + `migrations ok 24.681s`、`internal/router ok 23.445s`。
 `internal/service` 见下面的红→归因。
+`internal/router` 补跑了一次带 `-race`（不默认计入门禁）：**27 个 DATA RACE 块、3 条红用例**
+（`TestMonitorRoutes_RequireAuth` / `TestOrderWebhook_EndToEndContract` /
+`TestOrderWebhook_LegacyPathAnouncesDeprecationAndPointsToLiveRoute`），竞争帧全部落在
+trace/recovery 中间件捕获 `*gin.Context` 这一条链上（`context.go:174` 出现 254 次），
+整份日志里 `browser_automation` **零命中** ⇒ 属在案的既有竞争、不在本题范围。
 
 **洞一：门禁清单漏文件，批9 的 nm-host 用例历次都是 `[no test files]`**。
 影子树的覆盖清单是手挑的，`user-server/cmd/nm-host/main_test.go`（批9 新增，含注册探针、
@@ -521,3 +525,9 @@ B 后台占用时点执行 → 真实 HTTP 409 + `body.code=BROWSER_TASK_BUSY_80
 推完不认领（行仍 `pending`，轮询立刻再给一遍 = 双投面）、未 ack 行被第二条连接再推、
 游标盖过后再也没有路径取它（§3.7-2 的静默丢失现场）。
 两边都跑，新加的断言才不是「只会给自己发绿」的断言。
+
+**提交后自洽复验（`064c6a21`）**：门禁跑的是影子树，提交对不对只有「新克隆里只含已提交内容」才说得清——
+`git clone --shared` 后 `git checkout 064c6a21`（漏掉任何一个未跟踪的测试文件都会当场编不过）：
+`go build ./...` rc=0，`browser_automation` 三包 `controller ok 0.635s / platform ok 0.457s / service ok 123.917s`、
+`internal/bridge ok 16.317s`、`cmd/nm-host ok 0.720s`、`internal/repository ok 134.956s` 全绿
+（日志 `/tmp/b12_verify_go1.log`、`/tmp/b12_verify_repo.log`）。12 个新增测试文件确在提交内。
