@@ -271,6 +271,93 @@ func TestRecheck_FullScenario_OrphanMessage(t *testing.T) {
 	t.Logf("✓ 极限场景修复验证通过：AI 回复后用户新发消息被正确补触发")
 }
 
+// TestRecheck_PersistentSendFailure_BudgetCapped 复现 2026-09 TG 全链路测试发现的补触发风暴：
+//
+//	AI 回复已生成但出站发送持续失败(retryable 网络错误) → message_hub 无任何出站痕迹 →
+//	sendOutbound 尾部每轮都 ReleaseAIProcessingFlag + go RecheckUnrepliedAndTrigger →
+//	recheck 以全新 uuid event 重触发 AI（绕过 eventID 去重），5min 窗口内单条入站消息烧掉 11 次 LLM 调用。
+//
+// 修复语义：recheck 只负责「补 AI 推理期间遗漏的新消息」，同一条入站消息至多补触发 1 次；
+// 投递失败的重试不是 recheck 的职责。
+func TestRecheck_PersistentSendFailure_BudgetCapped(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
+	db.Create(&model.MessageHub{
+		MsgID: "in-stuck", Platform: "telegram", AccountID: "5",
+		Direction: "inbound", MsgType: "text", SenderID: "cust1",
+		Content: "这条消息的回复永远投递不出去", ConversationID: "conv-stuck",
+		SentAt: time.Now().Add(-2 * time.Second),
+	})
+
+	mc := cache.NewMemoryCache()
+	defer mc.Close()
+	svc := NewInboxIngressServiceWithDB(db, mc)
+	tr := &fakeAITrigger{}
+	svc.SetAITrigger(tr)
+
+	for i := 0; i < 3; i++ {
+		svc.RecheckUnrepliedAndTrigger(context.Background(), "conv-stuck", "")
+		// 模拟真实链路：runAIGeneration 结束后 defer 释放 ai_processing 标记，
+		// 使下一轮 recheck 能通过「处理中」守卫、抵达预算判定。
+		svc.ReleaseAIProcessingFlag(context.Background(), "conv-stuck")
+	}
+
+	if tr.called > 1 {
+		t.Fatalf("同一条入站消息的补触发应被预算封顶(≤1 次)，实际触发 %d 次——发送失败风暴未被阻断", tr.called)
+	}
+}
+
+// TestRecheck_NewMessageGetsFreshBudget 验证预算按消息粒度计：
+// 前一条消息耗尽预算后，新到达的入站消息仍可正常补触发。
+func TestRecheck_NewMessageGetsFreshBudget(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{})
+	now := time.Now()
+	convID := "conv-budget"
+	db.Create(&model.MessageHub{
+		MsgID: "in-old", Platform: "telegram", AccountID: "5",
+		Direction: "inbound", MsgType: "text", SenderID: "cust1",
+		Content: "旧消息已耗尽预算", ConversationID: convID,
+		SentAt: now.Add(-3 * time.Second),
+	})
+
+	mc := cache.NewMemoryCache()
+	defer mc.Close()
+	svc := NewInboxIngressServiceWithDB(db, mc)
+	tr := &fakeAITrigger{}
+	svc.SetAITrigger(tr)
+
+	// 两轮 recheck（中间释放标记模拟真实链路）：第一轮触发（消耗旧消息预算），第二轮被封顶
+	svc.RecheckUnrepliedAndTrigger(context.Background(), convID, "")
+	svc.ReleaseAIProcessingFlag(context.Background(), convID)
+	svc.RecheckUnrepliedAndTrigger(context.Background(), convID, "")
+	svc.ReleaseAIProcessingFlag(context.Background(), convID)
+	first := tr.called
+	if first != 1 {
+		t.Fatalf("旧消息应只补触发 1 次，实际 %d 次", first)
+	}
+
+	// 模拟：旧消息已回复(outbound 落库)，新消息到达成为最后一条 inbound
+	db.Create(&model.MessageHub{
+		MsgID: "out-old", Platform: "telegram", AccountID: "5",
+		Direction: "outbound", MsgType: "text", SenderID: "acc5", ReceiverID: "cust1",
+		Content: "已回复旧消息", ConversationID: convID,
+		IsAIReply: true, AIAgent: "sales_engine", SentAt: now,
+	})
+	db.Create(&model.MessageHub{
+		MsgID: "in-new", Platform: "telegram", AccountID: "5",
+		Direction: "inbound", MsgType: "text", SenderID: "cust1",
+		Content: "推理期间到达的新消息", ConversationID: convID,
+		SentAt: now.Add(time.Second),
+	})
+
+	svc.RecheckUnrepliedAndTrigger(context.Background(), convID, "")
+	if tr.called != first+1 {
+		t.Fatalf("新消息应获得独立预算并补触发，实际总触发 %d 次", tr.called)
+	}
+	if tr.lastContent != "推理期间到达的新消息" {
+		t.Fatalf("补触发内容应为新消息，实际 %q", tr.lastContent)
+	}
+}
+
 // TestRecheck_ContextCanceled_NoBlock 验证 context 取消时 RecheckUnrepliedAndTrigger 不阻塞。
 func TestRecheck_ContextCanceled_NoBlock(t *testing.T) {
 	svc := NewInboxIngressServiceWithDB(nil, newIsolatedCacheForTest(t))

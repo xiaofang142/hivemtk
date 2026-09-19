@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,16 @@ const (
 	InboxAIProcessingTTL = 2 * time.Minute
 
 	RecheckDelayAfterRelease = 800 * time.Millisecond
+
+	// InboxRecheckBudgetKey 补触发预算键（按最后一条入站消息 ID 计数）。
+	// 背景：出站发送以 retryable 错误失败时 message_hub 不落任何出站痕迹，
+	// sendOutbound 尾部又会无条件 release+recheck，导致 recheck 把「投递失败」
+	// 误判为「从未回复」，以全新 uuid event 反复重触发 AI（2026-09 实测单条消息 11 次 LLM 调用）。
+	// 语义：recheck 只负责补「AI 推理期间遗漏的新消息」，同一条消息至多补触发 Max 次；
+	// 投递重试不是它的职责。
+	InboxRecheckBudgetKey = "hivemtk:recheck:budget:"
+
+	InboxRecheckBudgetMax int64 = 1
 )
 
 type AITrigger interface {
@@ -687,6 +698,21 @@ func (s *InboxIngressService) RecheckUnrepliedAndTrigger(ctx context.Context, co
 			Str("conv_id", conversationID).
 			Msg("[Inbox][Recheck] 获取最后一条客户消息失败，跳过补触发")
 		return
+	}
+
+	if s.cache != nil && last.ID != 0 {
+		budgetKey := InboxRecheckBudgetKey + strconv.FormatUint(uint64(last.ID), 10)
+		n, berr := s.cache.Incr(ctx, budgetKey, InboxReplyWindow)
+		if berr != nil {
+			logger.Ctx(ctx).Warn().Err(berr).
+				Str("conv_id", conversationID).
+				Msg("[Inbox][Recheck] 补触发预算计数失败，放行本次（可能重复触发）")
+		} else if n > InboxRecheckBudgetMax {
+			logger.Ctx(ctx).Info().Int64("attempt", n).
+				Str("conv_id", conversationID).Uint("hub_id", last.ID).
+				Msg("[Inbox][Recheck] 该消息补触发预算已用尽——发送失败≠未回复，禁止反复重新生成 AI，跳过")
+			return
+		}
 	}
 
 	ev := &model.MessageEvent{
