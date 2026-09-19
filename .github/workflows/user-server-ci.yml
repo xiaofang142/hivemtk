@@ -23,51 +23,66 @@ on:
       - 'scripts/api-inventory.sh'
       - '.github/workflows/user-server-ci.yml'
 
+# ============================================================================
+# 拆分说明（2026-09-20 第二十六轮 · A3）：原来 15 个步骤串在一个 `test` job 里，
+# 任何一步红 ⇒ 同 job 后续步骤全部 skipped。这不是假想，是实测：
+#   scripts/check-ci-step-coverage.py 对最近 40 次 run 统计出 NEVER_RUN 7 个 ——
+#   golangci-lint 死 pin 的那五周里，Coverage / Coverage threshold / govulncheck /
+#   gitleaks / 基准 全是「写好了但一次都没跑过」的门。
+# 第二种黑障更隐蔽：job 级 timeout-minutes 会把 `go test ./... -race` **从中间掐断**，
+# 字母序在掐断点之后的包这一轮永远不被执行，而步骤结论只有 failure/cancelled，
+# 看不出少了谁。同一个门在三次 run 里的三种结论（都是本轮 gh run 日志实测）：
+#   · c72243d5：109 个包报了 583s，停在 internal/security，19:27:45 被 20 分钟超时 cancel；
+#   · 8b253b5a：勉强跑完 123 个包（测试时间合计 832s），但 internal/service 撞
+#     `-timeout 300s` 抛 `panic: test timed out after 5m0s`；
+#   · 286e88cb：又被 20 分钟超时 cancel。
+# ⇒ CI 对「测试到底跑没跑完」没有稳定答案。所以这里按「谁能遮挡谁」重新切 job，
+# 每个 job 的 timeout 由它自己那一步的实测耗时定，并且每跑测试的 job 末尾都加
+# 「包完整性断言」：go list 的包集合必须逐个出现在输出里，缺哪个就点名哪个 ——
+# 让「静默少跑」重新变成一件会自己喊出来的事。
+#
+# 一次切分带来的重复：`services.postgres` 只能逐 job 写（GitHub 没有 include/partial，
+# services 也不接受 env context 引用）。步骤级 env 已提到 workflow 级，只有一份。
+# 改 PG 口令/端口时，services 块有 4 处要同步（test-race-core / test-race-service /
+# coverage / benchmark），workflow env 1 处 —— 别只改一处，那会造出「某个 job 连不上库
+# 于是整包 skip」的第三种黑障。
+# ============================================================================
+env:
+  # 测试期占位密钥（≥32 字符满足 PLATFORM_JWT_SECRET 安全检查）
+  PLATFORM_JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min-len-OK
+  # 私域基线 §7.2：测试期允许 hash embedding 降级
+  EMBEDDING_ALLOW_FALLBACK: "true"
+  # 测试期禁用 WeCom 真实出站
+  WECOM_DISABLE_OUTBOUND: "1"
+  POSTGRES_HOST: 127.0.0.1
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: admin
+  POSTGRES_PASSWORD: password123
+  POSTGRES_DB: marketing_tools
+  # ⚠️ 2026-09-16 审计修复：internal/pkg/testutil 读取的是 POSTGRES_TEST_* 前缀，
+  # 而上面这几个 POSTGRES_* 是给服务本体用的。此前 CI 只注入 POSTGRES_*，
+  # testutil 便回落到默认端口 8202（PG 实际监听 5432）→ DialTimeout 失败 →
+  # 依赖 testutil 的 288 个测试文件全部 t.Skipf → go test 退出 0，
+  # 阻断式门禁形同虚设。此处补齐 TEST_ 前缀变量，让门禁真正执行。
+  #
+  # 刻意**不设** POSTGRES_TEST_DBNAME：testutil 会以它为前缀创建
+  # `<前缀>_<pid>` 的进程级隔离库。若设成 marketing_tools，CI 里就会出现一堆
+  # 形如 `marketing_tools_12345` 的库，看起来像业务库而非测试库。
+  # 留空即用默认前缀 user_db_test，语义自明。
+  POSTGRES_TEST_HOST: 127.0.0.1
+  POSTGRES_TEST_PORT: "5432"
+  POSTGRES_TEST_USER: admin
+  POSTGRES_TEST_PASSWORD: password123
+
 jobs:
-  test:
-    name: Build & Test (user-server)
+  # ------------------------------------------------------------------
+  # 静态门：不碰 DB、不跑测试，红只可能是代码本身的问题。
+  # 放在独立 job 的意义：它红的时候，测试/覆盖率/安全扫描照常出各自结论。
+  # ------------------------------------------------------------------
+  static-gates:
+    name: Static gates (arch/vet/gofmt/lint/build)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      postgres:
-        image: pgvector/pgvector:pg15
-        env:
-          POSTGRES_USER: admin
-          POSTGRES_PASSWORD: password123
-          POSTGRES_DB: marketing_tools
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U admin -d marketing_tools"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      # 测试期占位密钥（≥32 字符满足 PLATFORM_JWT_SECRET 安全检查）
-      PLATFORM_JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min-len-OK
-      # 私域基线 §7.2：测试期允许 hash embedding 降级
-      EMBEDDING_ALLOW_FALLBACK: "true"
-      # 测试期禁用 WeCom 真实出站
-      WECOM_DISABLE_OUTBOUND: "1"
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: marketing_tools
-      # ⚠️ 2026-09-16 审计修复：internal/pkg/testutil 读取的是 POSTGRES_TEST_* 前缀，
-      # 而上面这几个 POSTGRES_* 是给服务本体用的。此前 CI 只注入 POSTGRES_*，
-      # testutil 便回落到默认端口 8202（PG 实际监听 5432）→ DialTimeout 失败 →
-      # 依赖 testutil 的 288 个测试文件全部 t.Skipf → go test 退出 0，
-      # 阻断式门禁形同虚设。此处补齐 TEST_ 前缀变量，让门禁真正执行。
-      #
-      # 刻意**不设** POSTGRES_TEST_DBNAME：testutil 会以它为前缀创建
-      # `<前缀>_<pid>` 的进程级隔离库。若设成 marketing_tools，CI 里就会出现一堆
-      # 形如 `marketing_tools_12345` 的库，看起来像业务库而非测试库。
-      # 留空即用默认前缀 user_db_test，语义自明。
-      POSTGRES_TEST_HOST: 127.0.0.1
-      POSTGRES_TEST_PORT: "5432"
-      POSTGRES_TEST_USER: admin
-      POSTGRES_TEST_PASSWORD: password123
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,16 +114,12 @@ jobs:
         # 为什么需要独立一步：user-server/.golangci.yml 只启用 govet+depguard
         # （run.tests=false），gofmt 既不在 lint 覆盖内，测试文件更是完全不被 lint。
         # 无门禁 → 格式漂移无人可查，累积 34 个未格式化文件。
-        # 与本地 `make fmt-check` 同口径。
-        working-directory: user-server
-        run: |
-          out=$(gofmt -l . | grep -v '^vendor/' || true)
-          if [ -n "$out" ]; then
-            echo "::error::以下文件未通过 gofmt，请本地执行 make fmt 后提交："
-            echo "$out"
-            exit 1
-          fi
-          echo "✅ gofmt 检查通过（0 个文件需格式化）"
+        #
+        # 2026-09-20（A7）：原来这里自己抄了一遍 gofmt 判据，于是和本地 make fmt-check
+        # 各写各的 —— 而本地那份漏了 stderr：文件根本解析不了时 gofmt 不进 stdout、
+        # 只往 stderr 报错且 rc=2，格式门会对着语法坏掉的文件打 ✅。
+        # 现在直接调 Makefile 里那份修好的实现：**同一份判据，不再有两处口径**。
+        run: make fmt-check
 
       - name: golangci-lint（架构护栏 depguard）
         # P0-1：分层依赖方向护栏，规则见 user-server/.golangci.yml
@@ -121,7 +132,8 @@ jobs:
         # 且它排在 go build 之前，单测、基准、覆盖率、覆盖率阈值四步被连带 skipped。
         # 不选最新 v2.13.2：同一份 HEAD 影子克隆里 v2.10.0 为 0 issues，v2.13.2 另报 6 条
         # 新命中（5 govet + 1 staticcheck），换版本与修存量不应混在一个提交里。
-        # 再升 Go 目标版本时，这里的 pin 要一并核对。
+        # 再升 Go 目标版本时，这里的 pin 要一并核对 —— Makefile 的 GOLANGCI_LINT_VERSION
+        # 与本行由 `make lint-version-check` 强制对齐（不一致就拒绝跑本地 lint）。
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.10.0
@@ -132,23 +144,225 @@ jobs:
         working-directory: user-server
         run: go build ./...
 
+  # ------------------------------------------------------------------
+  # 安全扫描：与静态门/测试互不遮挡。gitleaks 阻断，govulncheck 观测。
+  # ------------------------------------------------------------------
+  security-scans:
+    name: Security scans (gitleaks / govulncheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # gitleaks-action 要读提交历史。此前该步骤被上游的死 pin 挡着从未真跑过，
+          # 「depth=1 时它到底扫不扫得到东西」没有任何历史证据，而扫不到时它是 exit 0
+          # —— 正是最坏的一种假绿。按 gitleaks-action 文档要求显式拉全历史。
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        # OPT-CI-05：密钥扫描（2026-08-16 审计任务）
+        # 2026-09-18 转阻断：对全部 git 跟踪文件做高置信度密钥模式
+        # （AKIA/ghp_/sk-/PRIVATE KEY/xoxb/AIza）扫描，命中 0 处；
+        # "首次启用不阻断"前提已不成立。若未来误报测试夹具，
+        # 用仓库根 .gitleaks.toml allowlist 精确豁免，而不是回退本门禁。
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+          GITLEAKS_ENABLE_SUMMARY: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: user-server/go.sum
+
+      - name: Go dependency audit (govulncheck)
+        # OPT-CI-04：依赖漏洞审计（2026-08-16 审计任务）
+        # 2026-09-18 评估后维持不阻断（与 gitleaks/npm audit 不同）：
+        #   ① go1.25.13 工具链下 `govulncheck@latest`(v1.8.0) 无法安装——其要求 go>=1.26.0，
+        #      CI parity 扫描直接 exit 1，门禁尚未运行即失败，与代码无关；
+        #   ② 本地 go1.26.0 扫描测得 26 个「可达」stdlib 漏洞（crypto/x509 等），
+        #      仅在 go1.26.1 修复，非本仓库可编辑消除，转阻断会立即红。
+        # 前置条件：CI 工具链升级到 go1.26.1+（且 govulncheck 可安装）后再转阻断。
+        # 在此之前本步骤保留 continue-on-error，作为漏洞趋势观测而非门禁。
+        working-directory: user-server
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+        continue-on-error: true
+
+  # ------------------------------------------------------------------
+  # -race：拆成 core + service 两片。
+  # internal/service 单独成 job 的原因（本轮 CI 日志实测）：它是唯一撞过
+  # `-timeout 300s` panic 的包（8b253b5a run：`FAIL hivemtk-user/internal/service
+  # 300.056s` + `panic: test timed out after 5m0s`），本地不带 -race 就要 452~567s，
+  # 和其余 152 个包（-race 合计 532s）共用一个 per-package timeout 只会两边都将就：
+  # 要么包被 timeout 掐死，要么 job 白等。拆开各按自己的耗时定预算。
+  # ------------------------------------------------------------------
+  test-race-core:
+    name: Unit tests -race (user-server core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: marketing_tools
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d marketing_tools"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: user-server/go.sum
+
       - name: Run unit tests (with -race)
         working-directory: user-server
-        run: go test ./... -count=1 -timeout 300s -p 1 -short -race
+        # 分片判据用 grep -x（整行精确匹配），不是 grep -v internal/service：
+        # 后者会把 internal/service/churn 等 9 个子包一起赶出 core 片，
+        # 而它们个个很快，留在 core 里更均衡。
+        run: |
+          set -euo pipefail
+          go list ./... | grep -vx 'hivemtk-user/internal/service' | sort > pkgs.txt
+          echo "本分片包数：$(wc -l < pkgs.txt | tr -d ' ') / 全仓 $(go list ./... | wc -l | tr -d ' ')"
+          rc=0
+          # -p 1 是硬要求：用例共享同一批测试库槽位（见 testutil procTestDBSlots），
+          # 并发跑会互相认领对方的行（reply_guard 认领表 / delayed-<id> 撞自增主键）。
+          # -timeout 900s：core 片最慢的包是 browser_automation/service 98s（本轮实测），
+          # 900s ≈ 9 倍余量；不再沿用 300s，那个值连 internal/service 都不够。
+          go test $(cat pkgs.txt) -count=1 -timeout 900s -p 1 -short -race 2>&1 | tee go-test.log || rc=$?
+          # 包完整性断言：go test 对每个包都会落一行 ok/FAIL/? [no test files]。
+          # 少了行 = 有包没跑（超时截断/panic/构建中断），必须点名，不能只给个红叉。
+          awk '/^(ok|FAIL|\?)[[:space:]]/{print $2}' go-test.log | sort -u > reported.txt
+          missing=$(comm -23 pkgs.txt reported.txt || true)
+          if [ -n "$missing" ]; then
+            echo "::error::以下包没有产生任何结果（套件被掐断，这些包本轮等于没测）："
+            echo "$missing"
+            exit 1
+          fi
+          exit $rc
 
-      - name: Run go benchmarks (P0-5 性能基线)
-        # 仅跑 P0-5 性能基线（500 条 IN 翻转 < 200ms 阈值），bench 默认只跑 1 次耗时短
+  test-race-service:
+    name: Unit tests -race (user-server service)
+    runs-on: ubuntu-latest
+    # 单包 job 也要给足：per-package -timeout 与 job timeout 谁先到都会截断，
+    # 45 min = 本地非 race 最慢观测（567s）的 ~4.7 倍，够 -race 与 runner 挤占。
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: marketing_tools
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d marketing_tools"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: user-server/go.sum
+
+      - name: Run unit tests (with -race)
         working-directory: user-server
-        run: go test -run=^$ -bench=BenchmarkAckOutboundDeliveredBatchReturningWithStatus_500_P0_5 -benchtime=1x ./internal/repository/
+        run: |
+          set -euo pipefail
+          go list ./... | grep -x 'hivemtk-user/internal/service' | sort > pkgs.txt
+          n=$(wc -l < pkgs.txt | tr -d ' ')
+          if [ "$n" != "1" ]; then
+            echo "::error::分片判据失效：internal/service 整行匹配到 $n 个包（应为 1），两片之和不再覆盖全仓"
+            exit 1
+          fi
+          rc=0
+          go test $(cat pkgs.txt) -count=1 -timeout 2400s -p 1 -short -race 2>&1 | tee go-test.log || rc=$?
+          awk '/^(ok|FAIL|\?)[[:space:]]/{print $2}' go-test.log | sort -u > reported.txt
+          missing=$(comm -23 pkgs.txt reported.txt || true)
+          if [ -n "$missing" ]; then
+            echo "::error::internal/service 没有产生结果（被超时截断），本轮等于没测"
+            exit 1
+          fi
+          exit $rc
+
+  # ------------------------------------------------------------------
+  # 覆盖率 + 阈值 + Codecov：三者必须在同一 job（profile 是 job 本地文件）。
+  # 不与 -race 合趟：合趟后任一片红就把整份 profile 拖残，阈值门会跟着假红，
+  # 两个互不相干的结论被绑成一个 —— 拆 job 的目的正是解掉这种耦合。
+  # ------------------------------------------------------------------
+  coverage:
+    name: Coverage (user-server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: marketing_tools
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d marketing_tools"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: user-server/go.sum
 
       - name: Coverage (Go)
         # 2026-08-15 P0-CI：覆盖率采集（包含 -cover.out 上传 Codecov）
+        # 2026-09-20（A3）：-timeout 300s → 2400s —— 300s 连 internal/service 单包都不够，
+        # 被掐断的包不写进 profile，覆盖率会莫名其妙掉、然后由阈值门报成"测试退步"。
         working-directory: user-server
         run: |
+          set -euo pipefail
           mkdir -p coverage
-          go test ./... -count=1 -timeout 300s -p 1 -short -coverprofile=coverage/go-cover.out -covermode=atomic
+          go list ./... | sort > pkgs.txt
+          rc=0
+          go test $(cat pkgs.txt) -count=1 -timeout 2400s -p 1 -short \
+            -coverprofile=coverage/go-cover.out -covermode=atomic 2>&1 | tee go-test.log || rc=$?
+          awk '/^(ok|FAIL|\?)[[:space:]]/{print $2}' go-test.log | sort -u > reported.txt
+          missing=$(comm -23 pkgs.txt reported.txt || true)
+          if [ -n "$missing" ]; then
+            echo "::error::以下包未产生结果，profile 不完整（覆盖率数字不可信）："
+            echo "$missing"
+            exit 1
+          fi
           go tool cover -func=coverage/go-cover.out | tail -1
-        continue-on-error: false
+          exit $rc
 
       - name: Coverage threshold (OPT-CI-06)
         # OPT-CI-06：覆盖率门禁
@@ -166,9 +380,18 @@ jobs:
         #
         # 提升路径：随测试补齐逐步上调 FLOOR（22 → 30 → 40 → 50 → 60）。
         # 注意：不得为了让 CI 变绿而下调 FLOOR。
+        # if: always() —— 上一步有用例红时 profile 依然是完整的
+        # （包完整性断言已保证不缺包，go test 对失败包照样写覆盖数据），
+        # 阈值结论不该被测试红一起吞掉；但缺 profile 时必须显式报错，
+        # 不能让 `go tool cover` 的 "no such file" 被读成"覆盖率为 0"。
+        if: always()
         working-directory: user-server
         run: |
           set -euo pipefail
+          if [ ! -s coverage/go-cover.out ]; then
+            echo "::error::coverage/go-cover.out 缺失或为空 —— 这是「没测到」，不是「覆盖率为 0」，别按覆盖率退步归因"
+            exit 1
+          fi
           TOTAL=$(go tool cover -func=coverage/go-cover.out | tail -1 | awk '{print $3}' | sed 's/%//')
           FLOOR=20     # 阻断底线（回归保护）
           TARGET=60    # 产品目标（OPT-CI-06 原始要求）
@@ -186,33 +409,6 @@ jobs:
             echo "::warning::覆盖率 ${TOTAL}% 未达产品目标 ${TARGET}%（当前为阻断底线 ${FLOOR}%）"
           fi
 
-      - name: Go dependency audit (govulncheck)
-        # OPT-CI-04：依赖漏洞审计（2026-08-16 审计任务）
-        # 2026-09-18 评估后维持不阻断（与 gitleaks/npm audit 不同）：
-        #   ① go1.25.13 工具链下 `govulncheck@latest`(v1.8.0) 无法安装——其要求 go>=1.26.0，
-        #      CI parity 扫描直接 exit 1，门禁尚未运行即失败，与代码无关；
-        #   ② 本地 go1.26.0 扫描测得 26 个「可达」stdlib 漏洞（crypto/x509 等），
-        #      仅在 go1.26.1 修复，非本仓库可编辑消除，转阻断会立即红。
-        # 前置条件：CI 工具链升级到 go1.26.1+（且 govulncheck 可安装）后再转阻断。
-        # 在此之前本步骤保留 continue-on-error，作为漏洞趋势观测而非门禁。
-        working-directory: user-server
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-        continue-on-error: true
-
-      - name: Secret scan (gitleaks)
-        # OPT-CI-05：密钥扫描（2026-08-16 审计任务）
-        # 2026-09-18 转阻断：对全部 git 跟踪文件做高置信度密钥模式
-        # （AKIA/ghp_/sk-/PRIVATE KEY/xoxb/AIza）扫描，命中 0 处；
-        # "首次启用不阻断"前提已不成立。若未来误报测试夹具，
-        # 用仓库根 .gitleaks.toml allowlist 精确豁免，而不是回退本门禁。
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
-          GITLEAKS_ENABLE_SUMMARY: true
-
       - name: Upload coverage to Codecov
         # 2026-08-15 P0-CI：Codecov 集成（需在仓库 settings 配置 CODECOV_TOKEN）
         #
@@ -227,6 +423,169 @@ jobs:
           flags: go
           name: user-server-coverage
           fail_ci_if_error: false  # 缺 token 时不阻断；本地可跑
+
+  # ------------------------------------------------------------------
+  # 基准：P0-5 性能基线（要读真实表，需要 postgres）。
+  # ------------------------------------------------------------------
+  benchmark:
+    name: Benchmarks (P0-5 性能基线)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: marketing_tools
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d marketing_tools"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: user-server/go.sum
+
+      - name: Run go benchmarks (P0-5 性能基线)
+        # 仅跑 P0-5 性能基线（500 条 IN 翻转 < 200ms 阈值），bench 默认只跑 1 次耗时短
+        working-directory: user-server
+        run: go test -run=^$ -bench=BenchmarkAckOutboundDeliveredBatchReturningWithStatus_500_P0_5 -benchtime=1x -timeout 900s ./internal/repository/
+
+  # ------------------------------------------------------------------
+  # user-web 三个关注点各自成 job：原先 ESLint 一红就把 npm audit 和
+  # `npm run build` 一起 skip 掉（本轮实测：一条 no-useless-assignment 令
+  # 「前端能否构建」这道门连续多次没有结论）。
+  # ------------------------------------------------------------------
+  user-web-eslint:
+    name: ESLint (user-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: user-web/package-lock.json
+
+      - name: npm ci
+        working-directory: user-web
+        run: npm ci
+
+      - name: ESLint (OPT-FE-01)
+        # OPT-FE-01：user-web 主项目 ESLint 接入 CI
+        # 2026-09-15 修复「打折完成」：原为 continue-on-error: true（首次启用不阻断），
+        # 门禁形同虚设。实测 `eslint .` 全仓 631 文件 0 errors（18788 warnings 不阻断），
+        # 故改为阻断式门禁。
+        working-directory: user-web
+        run: npm run lint:check --if-present
+
+  user-web-security:
+    name: npm audit (user-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: user-web/package-lock.json
+
+      - name: npm ci
+        working-directory: user-web
+        run: npm ci
+
+      - name: npm audit (OPT-CI-10)
+        # OPT-CI-10：NPM 依赖漏洞扫描，仅阻断 high/critical（moderate/low 只报不挡）。
+        # 2026-09-19 审计（第二十五轮）重写。原写法在 runner 上恒定红且**零覆盖**：
+        # npm 10 打的是 /-/npm/v1/security/audits/quick，runner 日志里 npm 自己已经提示
+        # 「This endpoint is being retired. Use the bulk advisory endpoint instead」，返回
+        #   400 Invalid package tree, run `npm install` to rebuild your package-lock.json
+        # 而 --json 那次把这份错误对象当成审计报告解析，打出
+        #   high: 0 critical: 0 total: 0
+        # —— 看着像「扫过了、没漏洞」，实际一个依赖都没查。本地用 npm 10.8.2 / 10.9.0 /
+        # 11.x + 官方 registry + CI 同形 node_modules 都复现不出该 400，故按 runner 侧
+        # 事实处理：改走 bulk advisories 端点（npm ≥ 11），并加覆盖数下限校验。
+        # 三点固定：① npx 装到临时目录，不动 job 内的全局 npm（原本是为后面的
+        # `npm run build` 留的；build 已拆到独立 job，但这条隔离仍值得保留）；
+        # ② 显式官方 registry —— npmmirror 的 /-/npm/v1/security/*
+        # 是 404 NOT_IMPLEMENTED，换镜像等于换回零覆盖；③ dependencies.total=0 直接
+        # exit 2，绝不与「无漏洞」同形。
+        working-directory: user-web
+        run: |
+          export npm_config_registry=https://registry.npmjs.org
+          npx --yes npm@11 audit --audit-level=high --json > npm-audit.json 2>/dev/null || true
+          node -e '
+            const fs = require("fs");
+            let r;
+            try { r = JSON.parse(fs.readFileSync("npm-audit.json", "utf8")); }
+            catch (e) {
+              console.error("::error::npm audit 拿不到 JSON 报告（端点或网络故障），本步骤零覆盖：" + e.message);
+              process.exit(2);
+            }
+            const md = r.metadata || {}, v = md.vulnerabilities || {}, deps = (md.dependencies || {}).total;
+            if (!deps) {
+              console.error("::error::npm audit 未返回依赖树（dependencies.total=0），本步骤零覆盖："
+                + JSON.stringify(r).slice(0, 300));
+              process.exit(2);
+            }
+            console.log(`已审计依赖 ${deps} 个：critical ${v.critical || 0} / high ${v.high || 0}`
+              + ` / moderate ${v.moderate || 0} / low ${v.low || 0}`);
+          '
+          # 再跑一次可读报告：high/critical 命中时由此步骤码阻断
+          npx --yes npm@11 audit --audit-level=high
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Upload npm audit report
+        # 将 JSON 报告上传为 artifact，便于 review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-web-npm-audit
+          path: user-web/npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  user-web-build:
+    name: Build (user-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: user-web/package-lock.json
+
+      - name: npm ci
+        working-directory: user-web
+        run: npm ci
+
+      - name: Build
+        working-directory: user-web
+        run: npm run build
 
   bridge-extension-test:
     # HiveBridge 扩展 vitest（协议/限速/sanitize/fallback 51 用例）
@@ -274,87 +633,6 @@ jobs:
           flags: bridge
           name: bridge-coverage
           fail_ci_if_error: false
-
-  user-web-lint:
-    name: Lint & Build (user-web)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: user-web/package-lock.json
-
-      - name: npm ci
-        working-directory: user-web
-        run: npm ci
-
-      - name: ESLint (OPT-FE-01)
-        # OPT-FE-01：user-web 主项目 ESLint 接入 CI
-        # 2026-09-15 修复「打折完成」：原为 continue-on-error: true（首次启用不阻断），
-        # 门禁形同虚设。实测 `eslint .` 全仓 631 文件 0 errors（18788 warnings 不阻断），
-        # 故改为阻断式门禁。
-        working-directory: user-web
-        run: npm run lint:check --if-present
-
-      - name: npm audit (OPT-CI-10)
-        # OPT-CI-10：NPM 依赖漏洞扫描，仅阻断 high/critical（moderate/low 只报不挡）。
-        # 2026-09-19 审计（第二十五轮）重写。原写法在 runner 上恒定红且**零覆盖**：
-        # npm 10 打的是 /-/npm/v1/security/audits/quick，runner 日志里 npm 自己已经提示
-        # 「This endpoint is being retired. Use the bulk advisory endpoint instead」，返回
-        #   400 Invalid package tree, run `npm install` to rebuild your package-lock.json
-        # 而 --json 那次把这份错误对象当成审计报告解析，打出
-        #   high: 0 critical: 0 total: 0
-        # —— 看着像「扫过了、没漏洞」，实际一个依赖都没查。本地用 npm 10.8.2 / 10.9.0 /
-        # 11.x + 官方 registry + CI 同形 node_modules 都复现不出该 400，故按 runner 侧
-        # 事实处理：改走 bulk advisories 端点（npm ≥ 11），并加覆盖数下限校验。
-        # 三点固定：① npx 装到临时目录，不动 job 全局 npm（后面的 npm run build 要用
-        # runner 自带版本）；② 显式官方 registry —— npmmirror 的 /-/npm/v1/security/*
-        # 是 404 NOT_IMPLEMENTED，换镜像等于换回零覆盖；③ dependencies.total=0 直接
-        # exit 2，绝不与「无漏洞」同形。
-        working-directory: user-web
-        run: |
-          export npm_config_registry=https://registry.npmjs.org
-          npx --yes npm@11 audit --audit-level=high --json > npm-audit.json 2>/dev/null || true
-          node -e '
-            const fs = require("fs");
-            let r;
-            try { r = JSON.parse(fs.readFileSync("npm-audit.json", "utf8")); }
-            catch (e) {
-              console.error("::error::npm audit 拿不到 JSON 报告（端点或网络故障），本步骤零覆盖：" + e.message);
-              process.exit(2);
-            }
-            const md = r.metadata || {}, v = md.vulnerabilities || {}, deps = (md.dependencies || {}).total;
-            if (!deps) {
-              console.error("::error::npm audit 未返回依赖树（dependencies.total=0），本步骤零覆盖："
-                + JSON.stringify(r).slice(0, 300));
-              process.exit(2);
-            }
-            console.log(`已审计依赖 ${deps} 个：critical ${v.critical || 0} / high ${v.high || 0}`
-              + ` / moderate ${v.moderate || 0} / low ${v.low || 0}`);
-          '
-          # 再跑一次可读报告：high/critical 命中时由此步骤码阻断
-          npx --yes npm@11 audit --audit-level=high
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Upload npm audit report
-        # 将 JSON 报告上传为 artifact，便于 review
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: user-web-npm-audit
-          path: user-web/npm-audit.json
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Build
-        working-directory: user-web
-        run: npm run build
 
   embed-sdk-lint:
     name: Lint (embed-sdk)
