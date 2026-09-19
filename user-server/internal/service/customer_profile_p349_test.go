@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 )
 
@@ -246,7 +247,11 @@ func TestBuildUserProfile_Enrichment(t *testing.T) {
 		t.Fatalf("seed session 失败: %v", err)
 	}
 	now := time.Now()
-	peakAt := time.Date(now.Year(), now.Month(), now.Day(), 20, 0, 0, 0, time.Local)
+	// 种子时刻必须写成**业务时的 20:00**，不能用 time.Local：PreferredTime 的小时
+	// 直方图是 SQL 侧 `EXTRACT(HOUR FROM created_at)`，而所有测试库连接串把会话时区
+	// 钉在 Asia/Shanghai ⇒ 分桶口径是业务时。写成 time.Local 的话，UTC 容器上
+	// 20:00Z 存成业务时 04:00，用例跟着宿主时区漂（第二十六轮 CI 实测红因）。
+	peakAt := timeutil.StartOfBusinessDay(now).Add(20 * time.Hour)
 	for i := 0; i < 3; i++ {
 		msg := &model.SessionMessage{
 			SessionID:  sess.SessionID,

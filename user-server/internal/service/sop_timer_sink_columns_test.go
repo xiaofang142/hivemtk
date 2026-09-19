@@ -14,7 +14,10 @@ import (
 func TestSOPTimer_SinkColumns_Persist(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.SOPTimer{})
 
-	now := time.Now().Add(-time.Minute)
+	// Truncate 不是装饰：PG 的 timestamp 只存到微秒，而 Linux 的 time.Now() 给纳秒
+	// （darwin 只给到微秒）。少了这一步，本用例在 mac 上恒绿、在 CI 上恒红
+	// —— 差的正好是那 <1µs 的截断量（第二十六轮 CI -race 实测红因）。
+	now := time.Now().Truncate(time.Microsecond).Add(-time.Minute)
 	expires := now.Add(time.Hour)
 	timer := &model.SOPTimer{
 		ExecutionID: 1,

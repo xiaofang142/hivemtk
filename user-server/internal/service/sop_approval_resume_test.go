@@ -740,7 +740,9 @@ func TestNotifyDecided_OnlyWakesMatchingToken(t *testing.T) {
 	ctx := context.Background()
 
 	exec := newSOPExecution(t, db, 1, "wake-match", "w1")
-	future := time.Now().Add(2 * time.Hour)
+	// 必须对齐到微秒：wait_until 是 timestamptz（PG 只存到 µs），而 Linux 的
+	// time.Now() 带纳秒 ⇒ 下面的 Equal(future) 在 mac 上恒绿、CI 上恒红。
+	future := time.Now().Truncate(time.Microsecond).Add(2 * time.Hour)
 
 	// 同一执行、同一节点上的多枚等待载体：只有凭证对得上的那枚该被提前。
 	own := &model.SOPTimer{ExecutionID: exec.ID, NodeID: "w1", WaitEvent: WaitEventApproval,

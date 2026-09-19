@@ -452,7 +452,11 @@ func TestApprovalService_SubmitIdempotentWhilePending(t *testing.T) {
 	if second.ResumeToken != first.ResumeToken {
 		t.Errorf("复用旧行时凭证必须保持原值（挂起流程手里那份不能莫名失效）：%q vs %q", second.ResumeToken, first.ResumeToken)
 	}
-	if first.ExpiresAt == nil || second.ExpiresAt == nil || !second.ExpiresAt.Equal(*first.ExpiresAt) {
+	// 两边对齐到微秒再比：first 是入队时算出的内存值（Linux 带纳秒），
+	// second 是从库里读回来的（timestamptz 只到微秒），直接 Equal 会差那 <1µs 的截断量
+	// —— 在 mac 上恒绿、CI 上恒红（sop_approval_resume_test.go:279 早就按 µs 口径比了）。
+	if first.ExpiresAt == nil || second.ExpiresAt == nil ||
+		!second.ExpiresAt.Truncate(time.Microsecond).Equal(first.ExpiresAt.Truncate(time.Microsecond)) {
 		t.Errorf("复用旧行时 TTL 不该被第二次入队改写：%v vs %v", second.ExpiresAt, first.ExpiresAt)
 	}
 	// 已有 pending 时**不再问策略**：策略刚被改过也不能把已经发出去的待办就地批掉。
