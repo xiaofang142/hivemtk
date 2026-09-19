@@ -48,6 +48,7 @@ func (c *SessionController) Get(ctx *gin.Context) {
 		response.Error(ctx, http.StatusNotFound, "会话不存在")
 		return
 	}
+	sess.ConfirmPending = c.svc.ConfirmPending(uint(id)) // D7：是否正等人工放行
 	response.Success(ctx, sess, "ok")
 }
 
@@ -143,4 +144,24 @@ func (c *SessionController) Stop(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{"stopped": true}, "中断信号已发送")
+}
+
+// Confirm POST /browser-automation/sessions/:id/confirm
+// D7：放行 require_confirm 闸门上的 post_comment 提交点（无请求体，幂等由 service 判定）
+func (c *SessionController) Confirm(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "invalid id")
+		return
+	}
+	ok, err := c.svc.Confirm(ctx.Request.Context(), uint(id), taskUserID(ctx))
+	if err != nil {
+		response.Error(ctx, http.StatusNotFound, "会话不存在")
+		return
+	}
+	if !ok {
+		response.Success(ctx, gin.H{"confirmed": false}, "该会话当前没有待确认的提交点")
+		return
+	}
+	response.Success(ctx, gin.H{"confirmed": true}, "已确认放行")
 }

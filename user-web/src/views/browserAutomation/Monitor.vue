@@ -6,7 +6,9 @@
         <el-tag v-if="session" :type="{ completed: 'success', failed: 'danger', stopped: 'info', active: 'warning' }[session.status] || 'info'">
           {{ session.status }}
         </el-tag>
+        <el-tag v-if="session.confirm_pending" type="warning">待人工确认（写操作已挂起）</el-tag>
         <el-button v-if="session && ['created','active'].includes(session.status)" type="danger" @click="onStop">停止</el-button>
+        <el-button v-if="session?.confirm_pending" type="primary" :loading="confirming" @click="onConfirm">确认放行</el-button>
         <el-button v-if="session" @click="onExport">导出审计包</el-button>
       </el-space>
     </div>
@@ -87,7 +89,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, getBrowserSessionLogs, exportBrowserSessionAudit } from '@/api/browserAutomation'
+import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, confirmBrowserSession, getBrowserSessionLogs, exportBrowserSessionAudit } from '@/api/browserAutomation'
 
 const route = useRoute()
 const sessionId = computed(() => route.params.id)
@@ -96,6 +98,7 @@ const steps = ref([])
 const logs = ref([])
 const logDirection = ref('')
 const loading = ref(false)
+const confirming = ref(false)
 
 const payloadPreview = (p) => {
   if (p == null) return '—'
@@ -140,6 +143,23 @@ async function onStop() {
   await stopBrowserSession(sessionId.value, '用户手动中断')
   ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
   load()
+}
+
+// D7：人工放行挂起的写操作提交点（confirmed=false = 挂起点已消失，提示后刷新即可）
+async function onConfirm() {
+  confirming.value = true
+  try {
+    const res = await confirmBrowserSession(sessionId.value)
+    const data = unpack(res)
+    if (data?.confirmed === false) {
+      ElMessage.warning(res?.message || '该会话当前没有待确认的提交点')
+    } else {
+      ElMessage.success('已放行，评论正在提交')
+    }
+    load()
+  } finally {
+    confirming.value = false
+  }
 }
 
 // I5：审计包导出（会话+步+命令流+LLM 成本账）落盘 JSON

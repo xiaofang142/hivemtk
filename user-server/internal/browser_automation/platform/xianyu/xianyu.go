@@ -33,36 +33,44 @@ func (p *Platform) Capabilities() []platform.Capability {
 
 func (p *Platform) MaxConcurrentJobs() int { return 1 }
 
-// Locators 平台元素定位表（DOM 知识唯一存放处；R20 真机校准 session118 实测）
+// Locators 平台元素定位表（DOM 知识唯一存放处；R20 真机校准 session118 实测；
+// A1：拦截文案移出 → BlockMarkers/BlockSelectors）
 func (p *Platform) Locators() map[string]string {
 	return map[string]string{
 		// R20 实测：商品卡片是 a[href*='/item?id='] 链接，长文本含标题+描述+价格+发货地
-		"item_card":      "a[href*='/item?id=']",
-		"item_title":     "a[href*='/item?id=']", // 卡片整体（标题混在卡片文本里，无独立节点）
-		"item_price":     "[class*=price], [class*=Price]",
-		"item_desc":      "[class*=desc], [class*=description]",
-		"seller_name":    "[class*=seller-name], [class*=user-name]",
-		"search_input":   "input[type=search], input[placeholder*=想要], input[placeholder*=搜索]",
-		"item_link":      "a[href*='/item?id=']",
-		"message_entry":  "[class*=message], [class*=chat]", // 私信（成熟生态走 WS 私信，M4+）
-		"blocked_marker": "baxia, RGV587, 非法访问, 滑块",
+		"item_card":     "a[href*='/item?id=']",
+		"item_title":    "a[href*='/item?id=']", // 卡片整体（标题混在卡片文本里，无独立节点）
+		"item_price":    "[class*=price], [class*=Price]",
+		"item_desc":     "[class*=desc], [class*=description]",
+		"seller_name":   "[class*=seller-name], [class*=user-name]",
+		"search_input":  "input[type=search], input[placeholder*=想要], input[placeholder*=搜索]",
+		"item_link":     "a[href*='/item?id=']",
+		"message_entry": "[class*=message], [class*=chat]", // 私信（成熟生态走 WS 私信，M4+）
 	}
 }
 
-// DetectBlock 拦截页识别（本机实测：裸自动化 → 「非法访问」弹层；风控 → baxia 滑块 RGV587）
-func (p *Platform) DetectBlock(pageSnapshot string) bool {
-	for _, m := range []string{
-		"baxia",  // 阿里风控域
-		"RGV587", // 滑块验证错误码
-		"非法访问",   // 弹层文案
-		"滑动验证",   // 滑块文案
-		"punish", // 阿里惩罚页路径
-	} {
-		if strings.Contains(pageSnapshot, m) {
-			return true
-		}
-	}
-	return false
+// BlockMarkers 风控文案判据（A2 结构层：只匹配交互/标题节点。「滑块」单词不收——
+// 商品图滑动提示等正常 UI 文案会撞车）
+func (p *Platform) BlockMarkers() []string {
+	return []string{"非法访问", "滑动验证", "访问出问题了", "RGV587"}
+}
+
+// BlockURLPatterns 拦截 URL 判据（阿里风控：punish/baxia/x5sec 均为惩罚流 URL 特征，
+// 公开反爬调研通用判据）
+func (p *Platform) BlockURLPatterns() []string {
+	return []string{"baxia", "punish", "x5sec"}
+}
+
+// BlockSelectors 风控专用容器（baxia SDK 渲染 id 前缀弹层/iframe——阿里系公开调研
+// 通用实证形态；执行器经 query exists 下探，URL 不变弹层场景由此兜住）
+func (p *Platform) BlockSelectors() []string {
+	return []string{`[id^="baxia"]`, `iframe[src*="baxia"]`}
+}
+
+// DetectBlock 拦截页识别（A2 结构化两层：URL 层 + 结构层；旧全文子串已废弃）
+func (p *Platform) DetectBlock(pageURL, pageSnapshot string) bool {
+	return platform.URLHits(pageURL, p.BlockURLPatterns()) ||
+		platform.StructuralMarkerHits(pageSnapshot, p.BlockMarkers())
 }
 
 // ClassifyError 平台错误归因（Postiz handleErrors 语义）
@@ -76,10 +84,11 @@ func (p *Platform) ClassifyError(errText string) platform.ErrType {
 		strings.Contains(errText, "滑块"), strings.Contains(errText, "punish"):
 		// 风控惩罚：连续出现应 retire 账号——归 disconnect 由上层判定
 		return platform.ErrDisconnect
-	case strings.Contains(errText, "timeout"), strings.Contains(errText, "未就绪"),
-		strings.Contains(errText, "element_not_found"):
+	case strings.Contains(errText, "timeout"), strings.Contains(errText, "超时"),
+		strings.Contains(errText, "未就绪"), strings.Contains(errText, "element_not_found"):
 		return platform.ErrRetry
 	default:
-		return platform.ErrRetry
+		// A3 fail-closed：判据未命中不再默认 retry（见 platform.ErrUnknown 注释）
+		return platform.ErrUnknown
 	}
 }

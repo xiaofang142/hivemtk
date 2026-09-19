@@ -34,6 +34,10 @@ const (
 	ErrBadBody      ErrType = "bad_body"      // 参数/内容不合规，不重试
 	ErrRetry        ErrType = "retry"         // 瞬态失败（网络/元素未就绪），可重试
 	ErrDisconnect   ErrType = "disconnect"    // 账号被平台拒绝，必须停止并人工介入
+	// ErrUnknown 判据未命中——A3 fail-closed（2026-09-19）：契约默认失败，不盲目重试。
+	// 依据：AWS SDK Go v2 retry 三值判定「全 Unknown 即不重试」；盲目重试把瞬态抖动
+	// 放大成风控信号，且掩盖归因缺口——未分类错误应由上层打点、显式扩表，而非默认放行。
+	ErrUnknown ErrType = "unknown"
 )
 
 // Platform 平台适配器接口（每个平台一个实现，四件套收口在此）
@@ -45,11 +49,16 @@ type Platform interface {
 	// MaxConcurrentJobs 单账号并发上限（Postiz 默认 1——写操作串行是风控要求）
 	MaxConcurrentJobs() int
 
-	// Locators 元素定位表（选择器+语义描述；平台 DOM 知识只存这里）
+	// Locators 元素定位表（选择器+语义描述；平台 DOM 知识只存这里；
+	// A1：拦截文案不混入定位表，见 BlockMarkers）
 	Locators() map[string]string
-	// DetectBlock 拦截页识别（平台私有判据：跳转 error 页/验证码/风控文案）
-	// 返回 true 表示当前页面是平台拦截页
-	DetectBlock(pageSnapshot string) bool
+	// DetectBlock 拦截页识别（A2 结构化判据：URL 层 + 快照结构层，不扫正文全文）。
+	// pageURL 来自 snapshot 原语回包（批2 起扩展快照携带 location.href）。
+	DetectBlock(pageURL, pageSnapshot string) bool
+	// BlockMarkers 风控文案判据（只与快照结构行匹配；同时供 Brain 平台知识 prompt）
+	BlockMarkers() []string
+	// BlockURLPatterns 拦截 URL 重定向/路径判据（实测形态见各适配器注释出处）
+	BlockURLPatterns() []string
 	// ClassifyError 平台错误归因（refresh-token/bad-body/retry/disconnect）
 	ClassifyError(errText string) ErrType
 }

@@ -46,6 +46,29 @@ func TestRegistry_RegisterAndQuery(t *testing.T) {
 	}
 }
 
+// TestKuaishouExperimentalDeclared B8（2026-09-19）：快手是唯一实验渠道——选择器
+// 纯模式猜测、零真机校准，注册处如实降级；其余四渠道保持生产声明。
+// 若快手完成真机校准，翻转 spec 的 Experimental 并同步 bridge constants.js。
+func TestKuaishouExperimentalDeclared(t *testing.T) {
+	if !Default.IsExperimental(model.ChannelKuaishou) {
+		t.Error("kuaishou 应登记为 experimental")
+	}
+	for _, name := range []string{model.ChannelDouyin, model.ChannelXHS, model.ChannelXianyu, model.ChannelTikTok} {
+		if Default.IsExperimental(name) {
+			t.Errorf("%s 不应标 experimental", name)
+		}
+	}
+	// 降级不删链路：五渠道仍全量可查
+	for _, name := range Default.Names() {
+		if !Default.IsChannel(name) {
+			t.Errorf("Names/IsChannel 不一致: %s", name)
+		}
+	}
+	if Default.IsExperimental("unknown-channel") {
+		t.Error("未注册渠道不应命中 IsExperimental")
+	}
+}
+
 // TestDefaultRegistry 默认注册表覆盖 5 大社交渠道，且均支持 HTTP + WebSocket 双传输。
 func TestDefaultRegistry(t *testing.T) {
 	want := []string{

@@ -101,3 +101,58 @@ func TestDisconnectHookCalled(t *testing.T) {
 		t.Errorf("钩子 userID=%d want 42", got)
 	}
 }
+
+// F7：host/status 响应形状必须与角色无关。扩展 popup 点亮判据是 count>0，
+// 普通用户分支（只读自己）历史上只返回 online/servable 不含 count → 已连接的
+// 普通用户永久看到「Host 离线」。同时锁 admin 分支的 hosts 来自一次快照
+// （旧实现 Status() 调两遍，count 与 hosts 之间可插入注册/摘除而自相矛盾）。
+func TestStatusForShapeIsRoleIndependent(t *testing.T) {
+	r := NewHostRegistry()
+
+	// 离线：count/hosts 仍要在（缺字段=前端判不了，而不是判成 0）
+	off := r.StatusFor(7, false)
+	if off["online"] != false || off["count"] != 0 {
+		t.Errorf("离线应 online=false/count=0，got %v", off)
+	}
+	if h, ok := off["hosts"].([]map[string]any); !ok || h == nil {
+		t.Error("离线 hosts 应为空切片而非 nil（JSON 要出 []）")
+	}
+
+	c := newHostConn(7, "1.4.2", 4242, nil, r)
+	r.mu.Lock()
+	r.conns[7] = c
+	r.mu.Unlock()
+
+	for _, all := range []bool{false, true} {
+		st := r.StatusFor(7, all)
+		if st["online"] != true || st["count"] != 1 {
+			t.Fatalf("all=%t 应 online=true/count=1，got %v", all, st)
+		}
+		if hosts, ok := st["hosts"].([]map[string]any); !ok || len(hosts) != 1 || hosts[0]["pid"] != 4242 {
+			t.Fatalf("all=%t hosts 形状异常，got %v", all, st["hosts"])
+		}
+		if st["servable"] != false || st["last_cmd_ok_at"] != nil {
+			t.Errorf("all=%t 刚注册无回包证据，servable 应为假且无时间戳，got %v / %v", all, st["servable"], st["last_cmd_ok_at"])
+		}
+	}
+
+	// 有回包证据后：self 与 admin 两个视角都携带 servable + 时间戳
+	c.noteCmdAlive()
+	self, admin := r.StatusFor(7, false), r.StatusFor(7, true)
+	for name, st := range map[string]map[string]any{"self": self, "admin": admin} {
+		if st["servable"] != true {
+			t.Errorf("%s 视角 servable 应为真", name)
+		}
+		if v, ok := st["last_cmd_ok_at"].(string); !ok || v == "" {
+			t.Errorf("%s 视角缺 last_cmd_ok_at，got %v", name, st["last_cmd_ok_at"])
+		}
+	}
+
+	// 越权隔离：普通用户视角看不到别人的 Host
+	if n := r.StatusFor(8, false)["count"]; n != 0 {
+		t.Errorf("user=8 无连接应 count=0，got %v", n)
+	}
+	if n := r.StatusFor(8, true)["count"]; n != 1 {
+		t.Errorf("admin 视角应看到 user=7 的 1 台，got %v", n)
+	}
+}

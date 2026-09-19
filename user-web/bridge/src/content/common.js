@@ -1,4 +1,4 @@
-import { DEFAULT_USER_SERVER } from '../core/constants.js';
+import { DEFAULT_USER_SERVER, isExperimentalChannel } from '../core/constants.js';
 import { createLogger } from '../core/logger.js';
 import { hydrateSelectors, SELECTOR_UPDATE_MSG } from '../core/selector-ai.js';
 import { Uplink } from '../core/uplink.js';
@@ -504,15 +504,24 @@ export function startBridge(channel, buildAdapter) {
     pollingLoop.start();
 
     // 页面卸载 / SPA 路由切换时清理
+    // B5（批3）：原实现每次 activate 都 addEventListener 且从不移除——面板反复开关使
+    // 监听器随激活次数累积（每层闭包持有旧 pollingLoop/adapter 引用=内存泄漏）。
+    // 修复：cleanup 执行时自我摘除；deactivate（sync 的 unmatch 分支）即回收监听。
     const cleanup = () => {
       closed = true;
       try { pollingLoop.stop(); } catch (_) {  }
-      adapter.stop();
+      try { adapter.stop(); } catch (_) {  }
+      window.removeEventListener('beforeunload', cleanup);
+      window.removeEventListener('pagehide', cleanup);
     };
     window.addEventListener('beforeunload', cleanup, { once: true });
     window.addEventListener('pagehide', cleanup, { once: true });
 
     window.__bridgeAdapter = adapter;
+    // B8：实验渠道如实告警（kuaishou 选择器未经真机校准）——不拦截功能，只标成熟度。
+    if (isExperimentalChannel(channel)) {
+      log.warn(`实验渠道 ${channel}：选择器未经真机校准，读漏/发偏时请在配置面板覆盖选择器`);
+    }
     log.info('桥接已启动（HTTP-only）', channel);
     return cleanup;
   };

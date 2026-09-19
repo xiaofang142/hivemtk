@@ -32,6 +32,9 @@ type BrowserSession struct {
 	ExtractedData      datatypes.JSON `gorm:"column:extracted_data;type:jsonb" json:"extracted_data,omitempty"`
 	FinalScreenshotURL string         `gorm:"column:final_screenshot_url;size:1024" json:"final_screenshot_url,omitempty"`
 	LlmSummary         string         `gorm:"column:llm_summary;type:text" json:"llm_summary,omitempty"`
+	// ConfirmPending D7 运行时位（不落库）：该 session 当前是否停在 require_confirm 闸门
+	// 等人工放行，由 controller 读侧从 Executor 实时状态填充。
+	ConfirmPending bool `gorm:"-" json:"confirm_pending"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

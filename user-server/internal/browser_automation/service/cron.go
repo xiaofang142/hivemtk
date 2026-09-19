@@ -146,7 +146,7 @@ func (s *CronService) registerWithUser(tr *model.BrowserCronTrigger, userID uint
 	taskID := tr.TaskID
 	mgr := pkgcron.GetTaskManager()
 	entry, err := mgr.AddTask(toSixField(tr.CronExpr, tr.TimeZone), func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), cronTriggerOpTimeout)
 		defer cancel()
 		// 触发时再次校验 enabled（Disable 与 fire 竞态窗口）
 		cur, err := s.cronRepo.GetByTaskID(ctx, taskID)

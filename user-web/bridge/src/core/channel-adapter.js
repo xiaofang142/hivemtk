@@ -1,8 +1,10 @@
 import { createLogger } from './logger.js';
-import { RateLimiter } from './rate-limiter.js';
+import { RateLimiter, globalSendWaitMs, stampGlobalSendAt } from './rate-limiter.js';
 import { makeUnifiedMessage, SENDER, DIRECTION, HISTORY_CONTEXT_WINDOW, PATROL_DEFAULTS, contentHash } from './types.js';
 import { mergeSelectors } from './selector-ai.js';
 import { simulateRealClick } from './dom.js';
+import { humanSendTimeoutMs } from './constants.js';
+import { withTimeout } from './downlink.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -254,11 +256,15 @@ export class BaseAdapter {
   }
 
   stop() {
+    // B5（批3）泄漏族收口：全部 timer 清除并置 null（幂等——重复 stop 不误清新实例），
+    // 补漏原实现未清的 _mutationTimer（stop 后 100ms 窗口内仍会触发一次 _flushMutations）。
     if (this.observer) this.observer.disconnect();
-    if (this.convPollTimer) clearInterval(this.convPollTimer);
-    if (this.fallbackTimer) clearInterval(this.fallbackTimer);
-    if (this._graceTimer) clearTimeout(this._graceTimer);
-    if (this._rescanTimer) clearInterval(this._rescanTimer);
+    if (this.convPollTimer) { clearInterval(this.convPollTimer); this.convPollTimer = null; }
+    if (this.fallbackTimer) { clearInterval(this.fallbackTimer); this.fallbackTimer = null; }
+    if (this._graceTimer) { clearTimeout(this._graceTimer); this._graceTimer = null; }
+    if (this._rescanTimer) { clearInterval(this._rescanTimer); this._rescanTimer = null; }
+    if (this._mutationTimer) { clearTimeout(this._mutationTimer); this._mutationTimer = null; }
+    this._pendingMutations = [];
     this._stopPatrol();
     if (this._sentSaveTimer) { clearInterval(this._sentSaveTimer); this._sentSaveTimer = null; }
     this._saveSentKeys();
@@ -1129,16 +1135,22 @@ export class BaseAdapter {
       return { ok: false, rateLimited: true, notFound: false };
     }
     if (decision.waitHintMs > 0) await sleep(decision.waitHintMs);
+    // B6（批3）：跨 tab/跨渠道全局最小间隔闸（storage 共享时钟；不可用时 0ms 降级）
+    const gateWaitMs = await globalSendWaitMs(this.rateLimiter.cfg.minIntervalMs);
+    if (gateWaitMs > 0) await sleep(gateWaitMs);
     let ok;
     try {
-      await this.rawSendText(text); 
+      // B4（批3）：rawSendText 裸 await——sendText 卡死（DOM 阻塞/框架吞事件）会永久挂起
+      // 整条按会话串行的下行队列。统一 withTimeout，预算随文案长度伸缩（B7 拟人键入时长）。
+      await withTimeout(this.rawSendText(text), humanSendTimeoutMs(text), `rawSendText(${this.channel})`);
       ok = true;
     } catch (e) {
-      this.log.error('回写失败', e);
+      this.log.error('回写失败', String(e?.message || e));
       return { ok: false, rateLimited: false, notFound: false };
     }
     if (ok) {
       this.rateLimiter.markSent(this.channel, account, conv, text);
+      stampGlobalSendAt(); // B6：不 await——storage 写失败已在内部吞掉，仅 best-effort 更新共享时钟
       this._emitMessage(
         { sender_type: SENDER.AGENT, text, media_url: '', timestamp: Date.now(), message_id: contentHash(this.channel, conv, text) }
       );

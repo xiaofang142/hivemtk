@@ -1,6 +1,9 @@
 import { postIngest, HTTP_INGEST_DEFAULTS } from './http-ingest.js';
 import { DEFAULT_USER_SERVER, BRIDGE_THREE_CHANNEL } from './constants.js';
 import { contentHash } from './types.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('uplink');
 
 // 前端完成消息 hash（稳定幂等）：同一消息产出同一 id。
 // 与服务端 ContentHashMsgID 严格一致（channel|conversationID|trim(content)，FNV-1a 32 位，带 mh: 前缀），
@@ -170,6 +173,14 @@ export class Uplink {
       );
       this._markConfirmedFromResponse(resp, pending);
     } catch (e) {
+      // B4（批3）：原 catch(e){} 吞错且 buffer 已从 map 摘除 = 瞬态网络故障直接丢消息。
+      // 修复：未确认条目回插队首（保留原顺序，封顶 maxBatch*5 防离线期无界堆积）+ Warn 日志。
+      // 回插项不自动重排 timer：由后续 enqueue/onFlushed 驱动再 flush；flushAll 亦兜底。
+      const existing = this.buffers.get(key) || { items: [], timer: null };
+      const restored = items.filter((m) => !(m.event_id && this._confirmed.has(m.event_id)));
+      existing.items = [...restored, ...existing.items].slice(-this.maxBatch * 5);
+      this.buffers.set(key, existing);
+      log.warn(`uplink flush 失败，${restored.length} 条回插待重传`, String(e?.message || e));
     }
   }
 

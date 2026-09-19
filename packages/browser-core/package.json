@@ -1,0 +1,11 @@
+{
+  "name": "@hivemtk/browser-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A/B 双链路共享的拟人输入纯函数基座：分布采样、参数表、轨迹与落点、逐段键入计划。零依赖、零 DOM、零 chrome（rng 可注入保证可测）。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  }
+}

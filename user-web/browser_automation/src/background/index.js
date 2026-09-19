@@ -13,8 +13,8 @@ const tabManager = createTabManager();
 const accessibility = {
   collectInPage: collectInteractiveNodes,
   assemble: (collected, tabKey) => {
-    const { text, new_count: newCount } = assembleSnapshot(collected, tabKey);
-    return { snapshot: text, new_count: newCount };
+    const { text, new_count: newCount, url } = assembleSnapshot(collected, tabKey);
+    return { snapshot: text, new_count: newCount, url };
   },
   resetBaseline: resetSnapshotBaseline,
   getRefSelector,

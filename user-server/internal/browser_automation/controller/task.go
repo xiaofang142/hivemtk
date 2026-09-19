@@ -81,6 +81,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 	t.RetryOnFail = req.RetryOnFail
 	t.RetryDelaySec = req.RetryDelaySec
 	t.MaxRetryTimes = req.MaxRetryTimes
+	t.RequireConfirm = req.RequireConfirm
 	if req.Steps != nil {
 		raw, err := json.Marshal(req.Steps)
 		if err != nil {
@@ -176,6 +177,9 @@ func (c *TaskController) Update(ctx *gin.Context) {
 		}
 		if req.TimeoutSec != nil {
 			t.TimeoutSec = *req.TimeoutSec
+		}
+		if req.RequireConfirm != nil { // D7
+			t.RequireConfirm = *req.RequireConfirm
 		}
 		return nil
 	})

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -61,12 +62,21 @@ type Executor struct {
 	brain       *BrainService
 	feedback    *FeedbackService
 
+	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
+	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
+
 	stopMu       sync.Mutex
 	stopRegistry map[uint]chan struct{} // sessionID → stopCh
 
-	// lastStepResult dispatchStep 捕获的原语回包（snapshot/extract/markdown/screenshot），
-	// executeStepWithRetry 落库到 step.result 后清空。非并发安全：仅 Executor 单 goroutine 触达。
-	lastStepResult []byte
+	// confirmRegistry D7：sessionID → 待放行确认通道（仅在 post_comment 提交点前挂起时存在）。
+	// 与 stopRegistry 同构但生命周期不同：stop 通道随 session 全程注册，确认通道只在等待期存在
+	// ——「存在即挂起」使 ConfirmPending 无需额外状态位。
+	confirmMu       sync.Mutex
+	confirmRegistry map[uint]chan struct{}
+
+	// R-A4（2026-09-19）：原 lastStepResult 字段已删——Executor 是进程级单例、
+	// 多 session 并发触达，字段传值既是数据竞态又会跨 session 串包；
+	// 回包改由 dispatchStep 返回值沿调用栈传递。
 }
 
 func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, stepRepo repository.BrowserStepRepository, brain *BrainService, feedback *FeedbackService) *Executor {
@@ -76,7 +86,10 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 		stepRepo:     stepRepo,
 		brain:        brain,
 		feedback:     feedback,
+		relocateLLM:  defaultRelocateLLM,
 		stopRegistry: make(map[uint]chan struct{}),
+
+		confirmRegistry: make(map[uint]chan struct{}),
 	}
 }
 
@@ -154,12 +167,103 @@ func (e *Executor) stopChFor(sessionID uint) chan struct{} {
 	return e.stopRegistry[sessionID]
 }
 
+// ---- D7 写操作人工确认闸门（与 stop 同构，语义相反：stop 取消、confirm 放行）----
+
+// SignalConfirm POST /sessions/:id/confirm 放行。返回 false=该 session 当前没有挂起的确认点
+// （未开 require_confirm / 已过提交点 / 已结束）。先摘后关：同一通道只可能被 close 一次。
+func (e *Executor) SignalConfirm(sessionID uint) bool {
+	e.confirmMu.Lock()
+	ch, ok := e.confirmRegistry[sessionID]
+	if ok {
+		delete(e.confirmRegistry, sessionID)
+	}
+	e.confirmMu.Unlock()
+	if !ok {
+		return false
+	}
+	close(ch)
+	return true
+}
+
+// ConfirmPending 该 session 是否正停在确认闸门（读侧暴露给前端按钮可见性）
+func (e *Executor) ConfirmPending(sessionID uint) bool {
+	e.confirmMu.Lock()
+	defer e.confirmMu.Unlock()
+	_, ok := e.confirmRegistry[sessionID]
+	return ok
+}
+
+// confirmOutcome D7 闸门三种出路（F4：终态语义必须可区分——「操作者主动不提交」和
+// 「确认超时」在审计面同形记 failed，等于把一次正常的人工否决统计成系统故障）。
+type confirmOutcome uint
+
+const (
+	confirmGranted confirmOutcome = iota
+	confirmStoppedByUser
+	confirmWaitTimedOut
+)
+
+// errConfirmAbortedByStop 挂起期间被 stop 中止的步错误原文。不复用「用户手动中断」那句
+// 原文：步与审计面要写清「停在确认闸门、评论从未提交」，终态收口再按此常量精确认出
+// 「这次失败的起因就是用户中断」→ 记 stopped。
+const errConfirmAbortedByStop = "post_comment 等待人工确认期间被用户中止，评论未提交"
+
+// waitForConfirm 挂起等人工放行。
+// 调用点在不可逆提交点之前，非 confirmGranted 分支从未点击过任何按钮——失败可安全重下发，
+// 不违「单次提交禁重试」红线（那是「已提交且结局未知」的专属纪律）。
+// stopChFor 未注册时返回 nil，select 对 nil 通道分支永不就绪，与 ctx.Done 并存安全。
+func (e *Executor) waitForConfirm(ctx context.Context, sessionID uint) confirmOutcome {
+	ch := make(chan struct{})
+	e.confirmMu.Lock()
+	e.confirmRegistry[sessionID] = ch
+	e.confirmMu.Unlock()
+	defer func() {
+		e.confirmMu.Lock()
+		if cur, ok := e.confirmRegistry[sessionID]; ok && cur == ch {
+			delete(e.confirmRegistry, sessionID)
+		}
+		e.confirmMu.Unlock()
+	}()
+
+	stopCh := e.stopChFor(sessionID)
+	select {
+	case <-ch:
+		return confirmGranted
+	case <-stopCh:
+		return confirmStoppedByUser
+	case <-ctx.Done():
+		return confirmWaitTimedOut
+	}
+}
+
 // sendErrText 提交命令错误的落库文本（nil→空串）
 func sendErrText(err error) string {
 	if err == nil {
 		return ""
 	}
 	return err.Error()
+}
+
+// cleanupSessionTab 会话收口时关闭自身 tab（F10）。脱离执行 ctx 的取消状态（超时/中止腿的
+// ctx 此刻必然已 Done，用它发命令等于注定失败），幂等——tab 已被 close_tab 步或用户关掉时
+// 扩展侧吞掉异常返回 ok。回收失败只降级为日志与审计行，绝不改判终态。
+func (e *Executor) cleanupSessionTab(baseCtx context.Context, task *model.BrowserTask,
+	session *model.BrowserSession, seq *int) {
+	if session.ChromeTabID <= 0 {
+		return // 没开过 tab（如 Host 离线即失败）——无从回收，也不该发命令
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(baseCtx), sessionTabCleanupBudget)
+	defer cancel()
+	start := time.Now()
+	err := e.hand.closeTab(cctx, task.UserID, session.ChromeTabID)
+	*seq++
+	e.appendCommandLog(cctx, session.ID, task.ID, 0, *seq, "event", "session_tab_cleanup",
+		map[string]any{"tab_id": session.ChromeTabID, "error": sendErrText(err)},
+		time.Since(start).Milliseconds(), err == nil)
+	if err != nil {
+		logger.Warnf("[BrowserExec] session=%d tab=%d 收口回收失败（不影响终态）: %v",
+			session.ID, session.ChromeTabID, err)
+	}
 }
 
 // isInjectTimeout R26-2：识别扩展侧竞速错误（*_inject_timeout_*ms，见 primitives.js raceTimeout）。
@@ -219,11 +323,19 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 					failed++
 					if !step.ContinueOnError {
 						sessionFailed = errMsg
+						// 真机实测（session229：xhs 跳 website-login/error?error_code=300012
+						// 「IP存在风险」）：风控页最常见的表现恰恰是「某步定位失败」，
+						// 而旧代码在此直接 break 跳过了步后拦截检测，于是风控页被误报成
+						// selector_timeout——归因错方向，人工就会去改选择器而不是换网络。
+						// 失败收口前先过一次拦截判定，命中即用语义更准的风控归因替换原始错误。
+						if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
+							sessionFailed = reason
+						}
 						break loop
 					}
 				}
 				// 拦截页检测（铁律 4）：成功步后页面可能已跳风控页——disconnect 类终止，全自动闭环
-				if blocked, reason := e.detectBlockedIfFatal(ctx, task, session); blocked {
+				if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
 					sessionFailed = reason
 					break loop
 				}
@@ -234,17 +346,26 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 	finalStatus := "completed"
 	if sessionFailed != "" {
 		finalStatus = "failed"
-		if e.stopFired(stopCh) && sessionFailed == "用户手动中断" {
+		// F4：stopped=「用户主动叫停」，与「系统跑失败」是两类事实。D7 挂起期间被 stop
+		// 中止同样归 stopped（原文常量精确匹配，不靠字符串模糊匹配）。
+		if e.stopFired(stopCh) && (sessionFailed == "用户手动中断" || sessionFailed == errConfirmAbortedByStop) {
 			finalStatus = "stopped"
 		}
 	}
 	// R25 真机回归 P0 修复（session188 实测）：executeBrain 因 ctx 超时收敛返回后，
 	// ctx 已 Done——用原 ctx 写终态会被 DB 驱动取消，session 永久停留 active（看门狗白兜）。
-	// 终态收口必须用脱离取消的 context（30s 独立超时，只保写库完成，不继承执行期取消）。
-	writeCtx, cancelWrite := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
+	// 终态收口必须用脱离取消的 context（独立时限见 timeouts.go，只保写库完成，不继承执行期取消）。
+	writeCtx, cancelWrite := context.WithTimeout(context.WithoutCancel(ctx), sessionFinalWriteBudget)
 	defer cancelWrite()
 	_ = e.sessionRepo.UpdateStatus(writeCtx, session.ID, finalStatus, sessionFailed)
 	_ = e.sessionRepo.UpdateMetrics(writeCtx, session.ID, success+failed, success, failed)
+
+	// F10 会话收口必须回收自己打开的 tab。openTab 从不复用（tab-manager.js:6 每次 tabs.create），
+	// 而 failed/stopped/超时 三条路径根本走不到编排里末尾的 close_tab 步——真机实测同一
+	// Profile 累积 40 个泄漏 tab（cron 任务按周期无限增长，后台 tab 常驻还拖慢 SW）。
+	// 「留着给用户看结果」不成立：证据已在审计包（快照/截图/command_log），且崩后
+	// chrome_tab_id 本就失效（A9 结论：续跑唯一合法入口是重新 open_tab）。
+	e.cleanupSessionTab(ctx, task, session, &cmdSeq)
 
 	// Brain 模式：LLM 总结执行结果落 llm_summary（P2-2：completed 与 failed 都总结——失败归因同样是交付物）
 	if e.brain != nil && task.BrainMode && (finalStatus == "completed" || finalStatus == "failed") {
@@ -255,7 +376,7 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 
 	// Brain 总结 / 失败重试调度 / 通知 —— FeedbackService 内部异步
 	if e.feedback != nil {
-		e.feedback.OnSessionFinished(context.Background(), task, session, finalStatus, success, success+failed)
+		e.feedback.OnSessionFinished(ctx, task, session, finalStatus, success, success+failed)
 	}
 }
 
@@ -286,7 +407,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	tokenBudget := brainTokenBudget()
 	// wall-clock 看门狗（R22）：ctx 取消链在某些 LLM/DB 调用栈不生效（session132 实测 11min+ active），
 	// 以真实时钟兜底——超 TimeoutSec+30s 强制收敛，会话必有终态
-	deadline := time.Now().Add(time.Duration(task.TimeoutSec)*time.Second + 30*time.Second)
+	deadline := time.Now().Add(time.Duration(task.TimeoutSec)*time.Second + taskWatchdogGrace)
 
 	for iter := 0; iter < maxBrainIterations; iter++ {
 		if e.stopFired(stopCh) {
@@ -307,7 +428,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			session.ChromeTabID = tabID
 			_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 		}
-		snap, err := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
+		snap, _, err := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
 		if err != nil {
 			// tab 可能在 LLM 思考间隙被 SW 空闲回收/用户关闭：重开一次再 snapshot
 			logger.Warnf("[BrowserExec] brain snapshot 失败 session=%d tab=%d: %v，尝试重开 tab", session.ID, session.ChromeTabID, err)
@@ -319,7 +440,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 			cmdSeq++ // P2-1 自愈动作落审计
 			e.appendCommandLog(ctx, session.ID, task.ID, 0, cmdSeq, "event", "open_tab_recovery", map[string]any{"reason": "snapshot_failed", "new_tab": tabID}, 0, true)
-			if snap, err = e.hand.snapshot(ctx, task.UserID, session.ChromeTabID); err != nil {
+			if snap, _, err = e.hand.snapshot(ctx, task.UserID, session.ChromeTabID); err != nil {
 				return success, failed, "snapshot 失败: " + err.Error()
 			}
 		}
@@ -351,7 +472,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			// F5（G14）：证据改为**重拍的页面真实快照**（不再是自报摘要）——验收员只信页面；
 			// 快照重拍失败才降级回自报摘要（fail-soft：judge 增强不阻断主流程）。
 			judgeCtx := ctx
-			evidenceSnap, snapErr := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
+			evidenceSnap, _, snapErr := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
 			var evidence string
 			if snapErr == nil && evidenceSnap != "" {
 				evidence = fmt.Sprintf("最新页面快照（独立复核证据，agent 无法伪造）：\n%s", truncateRunes(evidenceSnap, 16000, "\n…[证据快照已截断]"))
@@ -480,7 +601,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			logger.Warnf("[BrowserExec] brain 轮内步骤失败 session=%d: %s（下轮 snapshot 自恢复）", session.ID, abort)
 		}
 		// 拦截页检测（铁律 4）：Brain 轮后同样检测——风控页命中即终止，全自动闭环
-		if blocked, reason := e.detectBlockedIfFatal(ctx, task, session); blocked {
+		if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
 			return success, failed, reason
 		}
 		// 循环检测 nudge（对标 browser-use 循环指纹）：连续 3 轮同序列 → 注入换路径提示
@@ -539,16 +660,13 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		*seq++
 		cmdPayload := map[string]any{"action": step.Action, "target": step.Target, "params": buildStepParams(step)}
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", step.Action, cmdPayload, 0, true)
-		err := e.dispatchStep(ctx, task, session, step)
+		result, err := e.dispatchStep(ctx, task, session, step)
 		dur := time.Since(start).Milliseconds()
 		if err == nil {
-			result := e.lastStepResult
-			e.lastStepResult = nil
 			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", result, dur, "")
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
 			return "success", "", json.RawMessage(result)
 		}
-		e.lastStepResult = nil
 		lastErr = err.Error()
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, false)
 		logger.Warnf("[BrowserExec] step 失败 session=%d idx=%d action=%s attempt=%d: %s", session.ID, index, step.Action, attempt, lastErr)
@@ -567,19 +685,84 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 // detectBlockedIfFatal 拦截页检测（铁律 4 全自动闭环）：步后 snapshot 命中平台拦截判据
 // → 按 ClassifyError 归因，disconnect 类风控直接终止（重试无意义），其余继续（交给重试/自愈）。
 // 检测失败（snapshot 拿不到）不阻断主流程——检测是增强不是闸门。
-func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession) (blocked bool, reason string) {
+// seq：session 局部命令日志计数（F6：探测帧必须进审计包——本轮真机取证只能靠服务端日志
+// 时间线反推探测实耗，审计面上「检测到底跑没跑、跑了多久、看了什么」完全不可见）。
+func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, seq *int) (blocked bool, reason string) {
 	p, err := platform.Get(taskPlatformID(task))
 	if err != nil {
 		return false, ""
 	}
-	snap, err := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
-	if err != nil || snap == "" {
+	if session.ChromeTabID <= 0 {
+		// 本轮没开过 tab，或 close_tab 步已把 tab 回收（F10 后内存 id 归零）——没有页面可检。
+		// 必须在写审计帧之前返回：拿 tab 0 去 snapshot 只会留一条注定失败的探测行污染审计包。
 		return false, ""
 	}
-	if !p.DetectBlock(snap) {
+	var (
+		start       = time.Now()
+		snap        string
+		pageURL     string
+		snapErr     string
+		probed      int
+		blockedNow  bool
+		selectorHit bool
+	)
+	defer func() {
+		if seq == nil {
+			return
+		}
+		*seq++
+		// 审计用外层 ctx：探测预算可能已耗尽，落库不能被探测自身的超时带走。
+		// ok=「探测这条命令本身成没成」，不是「有没有拦到」——旧实现传 blocked，于是每一页
+		// 正常页面的探测都记成 ok=false（F11c 真机实测：审计包里 block_detect 全红，
+		// 读包的人会以为检测链路坏了；拦截结论另有 blocked/reason 字段承载）。
+		e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "event", "block_detect", map[string]any{
+			"url": pageURL, "snapshot_chars": len(snap), "snapshot_error": snapErr,
+			"selectors_probed": probed, "detect_block_hit": blockedNow, "selector_hit": selectorHit,
+			"blocked": blocked, "reason": reason,
+		}, time.Since(start).Milliseconds(), snapErr == "")
+	}()
+	// 整段探测共用一个短预算：snapshot（真机 24 次实测 max 876ms）+ 弹层选择器逐个 query，
+	// 若各自吃满 defaultCmdTimeout，失败步（本身已耗 30s）会被拖成 60s+，而且探测命令自身的
+	// 超时还会计入 A5 僵尸判定，把「步失败」误升级成「Host 假死」。预算内拿不到证据即放行。
+	pctx, cancel := context.WithTimeout(ctx, blockDetectBudget)
+	defer cancel()
+	snap, pageURL, err = e.hand.snapshot(pctx, task.UserID, session.ChromeTabID)
+	if err != nil {
+		snapErr = err.Error()
 		return false, ""
 	}
-	et := p.ClassifyError(snap)
+	// 真机实测（session234/235）：风控提示页只有标题+两个按钮，a11y 采集出的是空快照。
+	// 旧闸门 `snap == ""` 于是把「URL 已经明写 website-login/error?error_code=300012」的
+	// 拦截页判成「无数据」直接放行——URL 层判定不该依赖快照有没有内容。
+	// 只有「快照和 URL 都拿不到」（旧扩展 / tab 已死）才算真无证据。
+	if snap == "" && pageURL == "" {
+		return false, ""
+	}
+	blockedNow = p.DetectBlock(pageURL, snap)
+	// A2 容器层：URL 不变的弹层式拦截（如闲鱼 baxia 滑块）——风控专用选择器经 query
+	// exists 下探。fail-soft：查询出错不作拦截证据（检测是增强不是闸门）。
+	if !blockedNow {
+		if bs, ok := p.(platform.BlockSelectorDeclarer); ok {
+			for _, sel := range bs.BlockSelectors() {
+				probed++
+				res, qerr := e.hand.query(pctx, task.UserID, session.ChromeTabID, "exists", sel, "")
+				if qerr == nil && res["exists"] == true {
+					blockedNow = true
+					selectorHit = true
+					logger.Infof("[BrowserExec] 拦截容器命中 platform=%s selector=%s session=%d", p.Identifier(), sel, session.ID)
+					break
+				}
+			}
+		}
+	}
+	if !blockedNow {
+		return false, ""
+	}
+	et := p.ClassifyError(pageURL + "\n" + snap)
+	if selectorHit && et != platform.ErrDisconnect {
+		// 风控专用容器命中即定性拦截（弹层文案可能不进快照结构行，分类不得漏回 Unknown）
+		et = platform.ErrDisconnect
+	}
 	logger.Warnf("[BrowserExec] 平台拦截页命中 platform=%s errType=%s session=%d", p.Identifier(), et, session.ID)
 	switch et {
 	case platform.ErrDisconnect:
@@ -590,12 +773,13 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 	}
 }
 
-// dispatchStep 按动作分发到 Hand 原语
-func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep) error {
+// dispatchStep 按动作分发到 Hand 原语。
+// 回包（snapshot/extract/markdown/screenshot 等）作为返回值交 executeStepWithRetry 落库——
+// 不挂 Executor 字段：Executor 是进程级单例、多 session 并发触达（R-A4 竞态修复）。
+func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep) ([]byte, error) {
 	userID := task.UserID
 	tabID := session.ChromeTabID
 	p := buildStepParams(step)
-	e.lastStepResult = nil
 
 	switch step.Action {
 	case "open_tab":
@@ -605,22 +789,22 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		tabID, err := e.hand.openTab(ctx, userID, openURL, false) // active 恒 false
 		if err != nil {
-			return err
+			return nil, err
 		}
 		session.ChromeTabID = tabID
 		_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
-		return e.recordResult(map[string]any{"chrome_tab_id": tabID})
+		return recordResultPayload(map[string]any{"chrome_tab_id": tabID})
 	case "click":
 		res, err := e.hand.click(ctx, userID, tabID, step.Target)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return e.recordResult(map[string]any{"navigated": res["navigated"] == true})
+		return recordResultPayload(map[string]any{"navigated": res["navigated"] == true})
 	case "type":
-		return e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
+		return nil, e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
 	case "click_near":
 		// 以 Anchor CSS 为基准点击容器内指定文本的 button（发送/提交按钮无稳定 class 场景）
-		return e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
+		return nil, e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
 	case "post_comment":
 		// F2②（G11 正确版）：三段式拆分——prep（可重入）→ send（唯一不可逆点，F2① 已禁重试）
 		// → verify 轮询 finalize（只读、可中断、可归因）。提交与验证彻底分离：
@@ -629,14 +813,32 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 未声明 post_comment 能力的平台在此 fails-loudly（P4 契约默认失败）。
 		locs, err := platform.CommentLocatorsFor(ctx, taskPlatformID(task))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		prepReq := map[string]any{
 			"input_selector":   locs.InputSelector,
 			"send_button_text": locs.SendButtonText,
 		}
 		if _, err := e.hand.commentPrep(ctx, userID, tabID, step.Value, prepReq); err != nil {
-			return err
+			// A1 自愈一次：输入框定位失效（改版）→ LLM 按快照重选；选不中或已自愈过 → 原样上抛
+			if !e.healCommentInput(ctx, task, session, tabID, prepReq, err) {
+				return nil, err
+			}
+			if _, err2 := e.hand.commentPrep(ctx, userID, tabID, step.Value, prepReq); err2 != nil {
+				return nil, err2
+			}
+		}
+		// D7 人工确认闸门：require_confirm=true 的任务在此挂起，等 POST /sessions/:id/confirm
+		// 放行后才进不可逆提交点。挂起期间只有 prep（填文本，页面内可撤销、零平台副作用）；
+		// 未放行即中止=从未提交，可安全重下发。等待计入 task.TimeoutSec 预算（超时即中止）。
+		if task.RequireConfirm {
+			switch out := e.waitForConfirm(ctx, session.ID); out {
+			case confirmGranted:
+			case confirmStoppedByUser:
+				return nil, errors.New(errConfirmAbortedByStop)
+			default: // confirmWaitTimedOut：task.TimeoutSec 预算内未放行
+				return nil, fmt.Errorf("post_comment 等待人工确认超时（任务预算 %ds），评论未提交", task.TimeoutSec)
+			}
 		}
 		// 不可逆提交点。send 结局分两类归因（R26-2 竞速超时使边界可判）：
 		// ① *_inject_timeout=按钮定位注入未执行→点击从未发生→无副作用，直接判失败早返
@@ -645,7 +847,12 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		//    Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
 		_, sendErr := e.hand.commentSend(ctx, userID, tabID, prepReq)
 		if isInjectTimeout(sendErr) {
-			return fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
+			return nil, fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
+		}
+		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
+		// 重发不违「单次提交禁重试」红线；其余错误结局未知，交 finalize 回查绝不重发。
+		if sendErr != nil && e.healCommentSendButton(ctx, task, session, tabID, prepReq, sendErr) {
+			_, sendErr = e.hand.commentSend(ctx, userID, tabID, prepReq)
 		}
 		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
@@ -657,41 +864,41 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			"posted_at":  time.Now().Format(time.RFC3339),
 		})
 		if verified {
-			return e.recordResult(map[string]any{"posted": true, "verified": true, "evidence": evidence})
+			return recordResultPayload(map[string]any{"posted": true, "verified": true, "evidence": evidence})
 		}
 		// fails-loudly：提交结局未知或验证未见——归因「平台静默吞/审核中/渲染超时」，
 		// 步判失败但不重试（重试=双发）。这是 R17/R19-6 实测形态的正式归宿。
 		if sendErr != nil {
-			return fmt.Errorf("post_comment 提交命令异常（%v）且回查未见评论——结果未知，不重试防双发", sendErr)
+			return nil, fmt.Errorf("post_comment 提交命令异常（%v）且回查未见评论——结果未知，不重试防双发", sendErr)
 		}
-		return fmt.Errorf("post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发")
+		return nil, fmt.Errorf("post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发")
 	case "assert":
 		// 断言类原语（洞察层）：contains_text / selector_exists，失败即抛错（Playwright expect 语义）
 		timeout := p.TimeoutMs
 		if timeout <= 0 {
 			timeout = 5000
 		}
-		return e.hand.assert(ctx, userID, tabID, p.AssertKind, step.Value, timeout)
+		return nil, e.hand.assert(ctx, userID, tabID, p.AssertKind, step.Value, timeout)
 	case "query":
 		// 只读洞察原语：text/exists/count/attr，返回数据不抛错（Midscene 洞察类语义）
 		res, err := e.hand.query(ctx, userID, tabID, p.QueryKind, step.Target, p.Attribute)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return e.recordResult(res)
+		return recordResultPayload(res)
 	case "snapshot":
-		snap, err := e.hand.snapshot(ctx, userID, tabID)
+		snap, pageURL, err := e.hand.snapshot(ctx, userID, tabID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		_ = e.sessionRepo.UpdateSnapshot(ctx, session.ID, snap)
-		return e.recordResult(map[string]any{"snapshot_chars": len(snap), "snapshot": snap})
+		return recordResultPayload(map[string]any{"snapshot_chars": len(snap), "snapshot": snap, "page_url": pageURL})
 	case "markdown":
 		md, err := e.hand.markdown(ctx, userID, tabID)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return e.recordResult(map[string]any{"markdown_chars": len(md), "markdown": md})
+		return recordResultPayload(map[string]any{"markdown_chars": len(md), "markdown": md})
 	case "screenshot":
 		// G17 定稿（二验修正）：captureVisibleTab 只能截「当前激活 tab」且不报错——
 		// 不激活直接截会静默截到用户正在看的页面（假内容），降级方案不成立。
@@ -699,7 +906,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// screenshot（观察用 snapshot/markdown），用户显式编排/终态留证时才会激活一次。
 		b64, err := e.hand.screenshot(ctx, userID, tabID, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if b64 != "" && e.feedback != nil {
 			if url, err := e.feedback.SaveFinalScreenshot(ctx, session.ID, b64); err != nil {
@@ -709,17 +916,17 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 				_ = e.sessionRepo.UpdateArtifacts(ctx, session.ID, nil, url, "")
 			}
 		}
-		return e.recordResult(map[string]any{"screenshot_url": session.FinalScreenshotURL, "screenshot_b64_chars": len(b64)})
+		return recordResultPayload(map[string]any{"screenshot_url": session.FinalScreenshotURL, "screenshot_b64_chars": len(b64)})
 	case "wait":
-		return e.hand.waitFor(ctx, userID, tabID, p.Ms)
+		return nil, e.hand.waitFor(ctx, userID, tabID, p.Ms)
 	case "wait_for_selector":
 		timeout := p.TimeoutMs
 		if timeout <= 0 {
 			timeout = 10000
 		}
-		return e.hand.waitForSelector(ctx, userID, tabID, p.Selector, timeout)
+		return nil, e.hand.waitForSelector(ctx, userID, tabID, p.Selector, timeout)
 	case "scroll":
-		return e.hand.scroll(ctx, userID, tabID, p.Direction, p.Amount)
+		return nil, e.hand.scroll(ctx, userID, tabID, p.Direction, p.Amount)
 	case "extract":
 		// Brain 兼容：LLM 常把单选择器放 target 而不是 selectors map——基座层归一（铁律 3：大模型驱动容错）
 		selectors := p.Selectors
@@ -728,7 +935,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		data, err := e.hand.extract(ctx, userID, tabID, selectors)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// 合并本 session 各次 extract 到 extracted_data（追溯面板读这里）
 		merged, ok := data["data"].(map[string]any)
@@ -736,23 +943,28 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			merged = map[string]any{"raw": data}
 		}
 		e.mergeExtract(ctx, session, "", merged)
-		return e.recordResult(merged)
+		return recordResultPayload(merged)
 	case "close_tab":
-		return e.hand.closeTab(ctx, userID, tabID)
+		if err := e.hand.closeTab(ctx, userID, tabID); err != nil {
+			return nil, err
+		}
+		// 内存 tab id 归零（DB 值保留作审计）：收口回收据此判定「已回收」，
+		// 否则编排里的 close_tab + 收口清理会对同一 tab 发两帧。
+		session.ChromeTabID = 0
+		return nil, nil
 	default:
-		return fmt.Errorf("未知动作: %s", step.Action)
+		return nil, fmt.Errorf("未知动作: %s", step.Action)
 	}
 }
 
-// recordResult 缓存原语回包供 executeStepWithRetry 落库到 step.result
-func (e *Executor) recordResult(payload map[string]any) error {
+// recordResultPayload 序列化原语回包（R-A4：纯函数，经 dispatchStep 返回值传递，
+// 不再挂 Executor 字段）。marshal 失败显式抛错——旧 recordResult 吞错会让步静默
+// 落库空 result，追溯面板永远看不到内容。
+func recordResultPayload(payload map[string]any) ([]byte, error) {
 	if len(payload) == 0 {
-		return nil
+		return nil, nil
 	}
-	if blob, err := json.Marshal(payload); err == nil {
-		e.lastStepResult = blob
-	}
-	return nil
+	return json.Marshal(payload)
 }
 
 // mergeExtract 合并写 session.extracted_data（追溯面板读这里）。
@@ -978,19 +1190,15 @@ func stepChangedPage(action string, result json.RawMessage) bool {
 	return false
 }
 
-// stepErrRetryable 步失败是否值得再试（F7/G16，对标 MediaCrawler 错误处置矩阵/Postiz 读写分治）：
-// 平台 ClassifyError 归因为 bad_body（内容被拒，重试必再拒）/refresh_token（单账号无法刷新）/
-// disconnect（账号级风控）时立即终止步重试；仅 retry（瞬态：超时/元素未就绪）继续。
-// 平台未注册或判据未命中时按默认 retry 处理（ClassifyError 默认值），行为与改造前兼容。
+// stepErrRetryable 步失败是否值得再试（F7/G16 + R-A3 fail-closed，2026-09-19）：
+// 仅显式归因 retry（瞬态：超时/元素未就绪）继续退避重试；bad_body/refresh_token/
+// disconnect 终止（语义同前）；ErrUnknown（判据未命中）同样终止——未知错误盲目重试
+// 会把归因缺口放大成风控信号，正确路径是打点归因后显式扩表（AWS SDK「全 Unknown 不重试」语义）。
+// 平台未注册时维持兼容放行（无判据可用，不归 fail-closed 范畴）。
 func stepErrRetryable(platformID, errText string) bool {
 	p, err := platform.Get(platformID)
 	if err != nil {
 		return true
 	}
-	switch p.ClassifyError(errText) {
-	case platform.ErrBadBody, platform.ErrRefreshToken, platform.ErrDisconnect:
-		return false
-	default:
-		return true
-	}
+	return p.ClassifyError(errText) == platform.ErrRetry
 }

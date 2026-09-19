@@ -194,3 +194,47 @@ export class RateLimiter {
   }
 }
 
+// ── B6（批3）跨上下文全局发送闸 ──────────────────────────────────────
+// 每渠道 content script 是独立 JS 上下文：内存 lastGlobalSendAt 跨 tab/跨渠道
+// 互不可见，"层1·拟人最小间隔"实际只约束单 tab。以 chrome.storage.local 为
+// 共享时钟：发送前读取全局最近发送时刻补足 minIntervalMs，发送成功后写回。
+// best-effort 无原子锁（限流目标是反机器人节奏而非精确调度，毫秒级竞争可接受）；
+// storage 不可用/读写失败 → 静默降级为单 tab 语义（返回 0，不阻塞发送）。
+export const GLOBAL_SEND_AT_KEY = 'mtk_global_last_send_at';
+
+function storageLocal() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) return chrome.storage.local;
+  } catch (_) { }
+  return null;
+}
+
+export async function readGlobalLastSendAt() {
+  const s = storageLocal();
+  if (!s) return 0;
+  try {
+    const r = await s.get(GLOBAL_SEND_AT_KEY);
+    const v = r && r[GLOBAL_SEND_AT_KEY];
+    // 未来时间戳（其他设备时钟漂移）视为无效，防永久自锁
+    return typeof v === 'number' && v > 0 && v <= Date.now() + 5000 ? v : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+export async function stampGlobalSendAt(at = Date.now()) {
+  const s = storageLocal();
+  if (!s) return;
+  try {
+    await s.set({ [GLOBAL_SEND_AT_KEY]: at });
+  } catch (_) { }
+}
+
+export async function globalSendWaitMs(minIntervalMs) {
+  if (!minIntervalMs || minIntervalMs <= 0) return 0;
+  const last = await readGlobalLastSendAt();
+  if (!last) return 0;
+  const wait = minIntervalMs - (Date.now() - last);
+  return wait > 0 ? Math.round(wait) : 0;
+}
+

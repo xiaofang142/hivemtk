@@ -92,8 +92,10 @@ func TestOutboxDBFetcher_LastEventIDCursor(t *testing.T) {
 	}
 }
 
-// TestOutboxDBFetcher_NoCursorBackwardCompat 无游标 / 非法游标 → 全量认领（行为不变）
-func TestOutboxDBFetcher_NoCursorBackwardCompat(t *testing.T) {
+// TestOutboxDBFetcher_CursorSemantics 游标语义：空游标（首连）→ sinceID=0 全量补齐；
+// 非法游标 → B8（2026-09-19）改 fail-closed：querier 根本不被调用（哨兵值不动）、
+// 返回 0 行、游标原样回传——旧「退化为全量」会重放已投递消息致重复转发。
+func TestOutboxDBFetcher_CursorSemantics(t *testing.T) {
 	q := &fakeOutboxQuerier{rows: b3Rows()}
 	f := &outboxDBFetcher{}
 	f.SetQuerier(q)
@@ -107,13 +109,19 @@ func TestOutboxDBFetcher_NoCursorBackwardCompat(t *testing.T) {
 		t.Fatalf("无游标应 sinceID=0 全量返回 3 条, got since=%d n=%d", q.lastSinceID, len(events))
 	}
 
-	q.lastSinceID = 99
-	events, _, err = f.FetchOutboxSince(ctx, "douyin", "acc_b3", "not-a-number")
+	q.lastSinceID = 99 // 哨兵：非法游标下 querier 不应被触达
+	events, newID, err := f.FetchOutboxSince(ctx, "douyin", "acc_b3", "not-a-number")
 	if err != nil {
 		t.Fatalf("invalid-cursor fetch: %v", err)
 	}
-	if q.lastSinceID != 0 || len(events) != 3 {
-		t.Fatalf("非法游标应退化为全量, got since=%d n=%d", q.lastSinceID, len(events))
+	if q.lastSinceID != 99 {
+		t.Errorf("非法游标不应触达 querier（哨兵被改写=%d）", q.lastSinceID)
+	}
+	if len(events) != 0 {
+		t.Errorf("非法游标应 0 行，got %d", len(events))
+	}
+	if newID != "not-a-number" {
+		t.Errorf("非法游标应原样回传, got %q", newID)
 	}
 }
 

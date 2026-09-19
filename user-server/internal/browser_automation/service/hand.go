@@ -53,21 +53,37 @@ func (h *Hand) typeText(ctx context.Context, userID uint, tabID int, target, val
 	return err
 }
 
-// snapshot 原语（accessibility @e{N} refs）
-func (h *Hand) snapshot(ctx context.Context, userID uint, tabID int) (string, error) {
+// snapshot 原语（accessibility @e{N} refs）。
+// A2（批2）：回包同时携带 page_url——拦截判据的 URL 层此前无数据可用（快照不含 URL，
+// website-login/error 等判据永不命中）。url 为空表示旧版扩展未回传（fail-soft 降级）。
+func (h *Hand) snapshot(ctx context.Context, userID uint, tabID int) (text, pageURL string, err error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "snapshot", "tab_id": tabID,
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	s, _ := res["snapshot"].(string)
-	return s, nil
+	u, _ := res["url"].(string)
+	return s, u, nil
+}
+
+// resolveRef 把快照 @eN 引用解析回 CSS selector（A1 selector 自愈回路用：
+// LLM 依据快照行选 ref，Go 拿 ref 换真实定位）。ref 已失效（页面导航/新快照重置）返回空串。
+func (h *Hand) resolveRef(ctx context.Context, userID uint, tabID int, ref string) (string, error) {
+	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+		"action": "resolve_ref", "tab_id": tabID, "ref": ref,
+	})
+	if err != nil {
+		return "", err
+	}
+	sel, _ := res["selector"].(string)
+	return sel, nil
 }
 
 // markdown 原语（页面 Markdown，供 LLM 吃）
 func (h *Hand) markdown(ctx context.Context, userID uint, tabID int) (string, error) {
-	res, err := h.registry.Request(ctx, userID, 60*time.Second, map[string]any{
+	res, err := h.registry.Request(ctx, userID, handMarkdownTimeout, map[string]any{
 		"action": "markdown", "tab_id": tabID,
 	})
 	if err != nil {
@@ -79,7 +95,7 @@ func (h *Hand) markdown(ctx context.Context, userID uint, tabID int) (string, er
 
 // screenshot 原语（M3：仅对激活 tab；扩展侧先激活再截，见设计文档 §6）
 func (h *Hand) screenshot(ctx context.Context, userID uint, tabID int, activateFirst bool) (string, error) {
-	res, err := h.registry.Request(ctx, userID, 30*time.Second, map[string]any{
+	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "screenshot", "tab_id": tabID, "activate_first": activateFirst,
 	})
 	if err != nil {
@@ -91,7 +107,7 @@ func (h *Hand) screenshot(ctx context.Context, userID uint, tabID int, activateF
 
 // waitFor 固定等待
 func (h *Hand) waitFor(ctx context.Context, userID uint, tabID int, ms int) error {
-	_, err := h.registry.Request(ctx, userID, time.Duration(ms+5000)*time.Millisecond, map[string]any{
+	_, err := h.registry.Request(ctx, userID, time.Duration(ms)*time.Millisecond+handWaitGrace, map[string]any{
 		"action": "wait", "tab_id": tabID, "ms": ms,
 	})
 	return err
@@ -99,7 +115,7 @@ func (h *Hand) waitFor(ctx context.Context, userID uint, tabID int, ms int) erro
 
 // waitForSelector 条件等待
 func (h *Hand) waitForSelector(ctx context.Context, userID uint, tabID int, selector string, timeoutMs int) error {
-	_, err := h.registry.Request(ctx, userID, time.Duration(timeoutMs+10000)*time.Millisecond, map[string]any{
+	_, err := h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+handConditionGrace, map[string]any{
 		"action": "wait_for_selector", "tab_id": tabID, "selector": selector, "timeout_ms": timeoutMs,
 	})
 	return err
@@ -123,7 +139,7 @@ func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, bu
 
 // assert 原语：断言类（contains_text / selector_exists），失败即抛错
 func (h *Hand) assert(ctx context.Context, userID uint, tabID int, kind, value string, timeoutMs int) error {
-	_, err := h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+10*time.Second, map[string]any{
+	_, err := h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+handConditionGrace, map[string]any{
 		"action": "assert", "tab_id": tabID, "assert": kind, "value": value, "timeout_ms": timeoutMs,
 	})
 	return err
@@ -153,7 +169,7 @@ func (h *Hand) commentPrep(ctx context.Context, userID uint, tabID int, text str
 	for k, v := range locators {
 		req[k] = v
 	}
-	return h.registry.Request(ctx, userID, 30*time.Second, req)
+	return h.registry.Request(ctx, userID, defaultCmdTimeout, req)
 }
 
 // commentSend 阶段二：定位发送按钮坐标 + CDP trusted 点击（唯一不可逆点，禁重试）。
@@ -165,12 +181,12 @@ func (h *Hand) commentSend(ctx context.Context, userID uint, tabID int, locators
 	for k, v := range locators {
 		req[k] = v
 	}
-	return h.registry.Request(ctx, userID, 45*time.Second, req)
+	return h.registry.Request(ctx, userID, handCommentSendTimeout, req)
 }
 
 // commentVerify 阶段三：只读验证评论渲染（finalize 轮询单元，短超时多次调用）
 func (h *Hand) commentVerify(ctx context.Context, userID uint, tabID int, text, containerSel, itemSel string, timeoutMs int) (map[string]any, error) {
-	return h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+10*time.Second, map[string]any{
+	return h.registry.Request(ctx, userID, time.Duration(timeoutMs)*time.Millisecond+handConditionGrace, map[string]any{
 		"action": "comment_verify", "tab_id": tabID, "value": text,
 		"comment_container": containerSel, "comment_item_text": itemSel, "timeout_ms": timeoutMs,
 	})
@@ -197,8 +213,6 @@ func (h *Hand) closeTab(ctx context.Context, userID uint, tabID int) error {
 
 // G9 死代码清扫（R25）：Hand.tabExists（远程 tab_exists 命令）全仓零调用方已删除；
 // 扩展侧 tab_exists case 保留——dispatch 内部用它做 tab 存活闸门（那是本地函数，不走命令帧）。
-
-const defaultCmdTimeout = 30 * time.Second
 
 // toInt 宽松数字转换（JSON 解出的 float64）
 func toInt(v any) (int, bool) {

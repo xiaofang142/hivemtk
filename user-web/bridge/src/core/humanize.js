@@ -1,23 +1,11 @@
 
 import { createLogger } from './logger.js';
+// B7（批2）：分布采样 / sleep / 场景延迟参数表迁入 @hivemtk/browser-core
+// ——与 A 链路 CDP 输入共读同一参数源（数值逐字保持，双份漂移即缺陷源）。
+// 滑动窗口_density 自适应与 DOM 键入节奏是 bridge 特有能力，留在本地。
+import { gaussian, sleep, DELAY_PROFILES } from '../../../../packages/browser-core/index.js';
 
 const log = createLogger('humanize', 'bridge');
-
-// ─────────── 1. 高斯分布随机（Box-Muller 变换） ───────────
-// μ = 均值, σ = 标准差
-// 截断到 [min, max] 防极端值
-function gaussian(mean, std, min, max) {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-  const val = mean + z * std;
-  if (min != null && val < min) return min;
-  if (max != null && val > max) return max;
-  return val;
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 滑动窗口记录器（P3-B）：按 (channel, account, action) 跟踪"过去 windowMs 内的次数"
 class SlidingWindowCounter {
@@ -71,19 +59,9 @@ if (typeof setInterval !== 'undefined') {
   }, 60000);
 }
 
-// 业务场景 → 默认延迟参数
-// 真人操作典型延迟（参考 [CSDN 人类化] 2026 评测）：
-//   - click:   μ=180ms σ=60ms (60-360ms)
-//   - type:    μ=80ms  σ=25ms (30-220ms)
-//   - scroll:  μ=300ms σ=120ms (150-800ms)
-//   - 思考:    μ=1500ms σ=600ms (800-3500ms)
-const DELAY_PROFILES = Object.freeze({
-  click:   { mean: 180, std: 60,  min: 50, max: 360 },
-  type:    { mean: 80,  std: 25,  min: 30, max: 220 },
-  scroll:  { mean: 300, std: 120, min: 150, max: 800 },
-  think:   { mean: 1500, std: 600, min: 800, max: 3500 },
-  longthink: { mean: 3500, std: 1200, min: 2000, max: 8000 },
-});
+// 业务场景 → 默认延迟参数：见 browser-core timing.js DELAY_PROFILES（单一来源）。
+// 真人操作典型延迟（参考 [CSDN 人类化] 2026 评测）：click 180±60 / type 80±25 /
+// scroll 300±120 / think 1500±600 / longthink 3500±1200（截断正态）。
 
 async function humanDelay(profile = 'think', options = {}) {
   const cfg = DELAY_PROFILES[profile] || DELAY_PROFILES.think;

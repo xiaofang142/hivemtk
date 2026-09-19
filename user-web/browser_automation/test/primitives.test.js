@@ -243,6 +243,31 @@ describe('primitives dispatch', () => {
     expect(data.reason).toBe('comment_not_rendered');
   });
 
+  // F11（批5g 夹具真机实测 session281）：comment_send 失败后草稿原样留在 contenteditable 里，
+  // 旧「整页兜底搜索」把这条草稿当成「评论已渲染」→ 零提交也回 verified=true。
+  // 不可逆动作的自检假绿是最坏的一类假（用户据此以为评论已发出，不再补发）。
+  it('F11 假绿回归：草稿仍留在输入框里时 verified 必须为 false', async () => {
+    document.body.innerHTML = `
+      <div class="content-edit"><p class="content-textarea" contenteditable="true">真好吃啊</p></div>
+      <div class="comments-container"><div class="note-text">别人的评论</div></div>`;
+    const deps = makeDeps();
+    const data = await dispatch({
+      action: 'comment_verify', tab_id: 42, value: '真好吃啊',
+      comment_container: '.comments-container', comment_item_text: '.note-text', timeout_ms: 500,
+    }, deps);
+    expect(data.verified).toBe(false);
+    expect(data.posted).toBe(false);
+    // 同一段文字一旦落到评论区节点上就必须认（防把修复做成「永远检不到」）
+    document.querySelector('.comments-container').innerHTML =
+      '<div class="note-text">真好吃啊</div>';
+    const again = await dispatch({
+      action: 'comment_verify', tab_id: 42, value: '真好吃啊',
+      comment_container: '.comments-container', comment_item_text: '.note-text', timeout_ms: 500,
+    }, deps);
+    expect(again.verified).toBe(true);
+    expect(again.evidence.own).toBe(true);
+  });
+
   it('一站式 post_comment 已从扩展协议移除（单一路径防分叉）', async () => {
     const deps = makeDeps();
     await expect(dispatch({ action: 'post_comment', tab_id: 42, value: 'x' }, deps))
@@ -257,6 +282,18 @@ describe('primitives dispatch', () => {
       action: 'comment_prep', tab_id: 42, value: 'x',
       input_selector: 'textarea.content-textarea', inject_timeout_ms: 200,
     }, deps)).rejects.toThrow('comment_prep_inject_timeout_200ms');
+  });
+
+  it('批5 真机归因：帧无返回结果（导航/销毁）与注入自报失败必须是两种文案', async () => {
+    const deps = makeDeps();
+    // 真机 xhs 未登录重定向实测：Chrome 在帧被导航掉时返回 result=undefined
+    fakeChrome.scripting.executeScript.mockImplementationOnce(async () => [{ frameId: 42 }]);
+    await expect(dispatch({ action: 'query', tab_id: 42, query: 'exists', selector: '#root' }, deps))
+      .rejects.toThrow('inject_no_result');
+    // 注入确实跑了并给出理由：必须原样透出内层错误，不得被兜底文案覆盖
+    fakeChrome.scripting.executeScript.mockImplementationOnce(async () => [{ result: { ok: false, error: 'selector_timeout: #root' } }]);
+    await expect(dispatch({ action: 'wait_for_selector', tab_id: 42, selector: '#root', timeout_ms: 1000 }, deps))
+      .rejects.toThrow('selector_timeout: #root');
   });
 
   it('R26-2 注入竞速：comment_send 同样有 deadline（未执行=点击从未发生，可安全重下发）', async () => {

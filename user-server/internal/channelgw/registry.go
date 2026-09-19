@@ -15,6 +15,10 @@ type ChannelSpec struct {
 	Name       string
 	Transports []Transport
 	Label      string
+	// Experimental 能力降级声明（B8）：渠道已注册、链路可跑通，但选择器/字段未经
+	// 真机校准，不保证生产级正确率。行为不变（不删不拦），仅显式记录成熟度，
+	// 供诊断/展示层如实标注——替代「默认即生产可用」的过度声明。
+	Experimental bool
 }
 
 // Registry 渠道注册表（并发安全，支持运行时追加注册）。
@@ -52,6 +56,14 @@ func (r *Registry) IsChannel(name string) bool {
 	defer r.mu.RUnlock()
 	_, ok := r.specs[name]
 	return ok
+}
+
+// IsExperimental 渠道是否登记为实验性（B8：kuaishou 选择器纯模式猜测、零真机校准）。
+func (r *Registry) IsExperimental(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	s, ok := r.specs[name]
+	return ok && s.Experimental
 }
 
 // Supports 判断渠道是否支持指定传输（HTTP / WebSocket）。
@@ -93,7 +105,9 @@ func init() {
 	for _, spec := range []ChannelSpec{
 		{Name: model.ChannelDouyin, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "抖音"},
 		{Name: model.ChannelXHS, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "小红书"},
-		{Name: model.ChannelKuaishou, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "快手"},
+		// B8：快手网页 IM 选择器是 2026-08 观察的 [class*=…] 模式猜测，无真机
+		// 校准、无回归测试——标 experimental（能力如实降级，链路保留）。
+		{Name: model.ChannelKuaishou, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "快手", Experimental: true},
 		{Name: model.ChannelXianyu, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "闲鱼"},
 		{Name: model.ChannelTikTok, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "TikTok"},
 	} {

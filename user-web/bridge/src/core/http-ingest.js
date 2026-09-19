@@ -265,13 +265,35 @@ async function getOutbox({ serverUrl, channel, accountId, token }, opts = {}) {
   }
 }
 
+// ackOutbox 确认下发终态。
+//
+// B2（2026-09-19）：AI 回复 msg_id = contentHash(channel|content)，跨会话同文本 msg_id 相同。
+// 旧版只发 msg_ids → 服务端按 (channel, account, msg_id) 翻转，会话 A 的 ack 会误翻会话 B
+// 的同 msg_id 行（后端语义见 handler_http.go v2 分支）。
+// 新协议：opts.items（[{msg_id, conversation_id}]）或 opts.conversationId 存在且合法时
+// 发 v2 items[]，服务端按会话精确翻转；否则回退 legacy msg_ids（老服务端 / 无会话归属场景）。
 async function ackOutbox({ serverUrl, channel, accountId, token }, msgIds, opts = {}) {
   const acct = accountId || 'default';
   const u = new URL(`${toHttpUrl(serverUrl)}${OUTBOX_PATH}/ack`);
   u.searchParams.set('channel', channel || '');
   u.searchParams.set('account_id', acct);
   const label = opts.label || '[HTTP outbox-ack]';
-  const body = { [BRIDGE_PROTOCOL_V2.FIELD.MSG_IDS]: msgIds, [BRIDGE_PROTOCOL_V2.FIELD.STATUS]: BRIDGE_PROTOCOL_V2.TERMINAL.DELIVERED };
+  const V2 = BRIDGE_PROTOCOL_V2;
+  let items = null;
+  if (Array.isArray(opts.items) && opts.items.length
+      && opts.items.every((it) => it && it[V2.FIELD.MSG_ID] && it[V2.FIELD.CONVERSATION_ID])) {
+    // 服务端对 items[] 逐条校验 msg_id+conversation_id 非空，缺失会整单 400——前置自检。
+    items = opts.items.map((it) => ({
+      [V2.FIELD.MSG_ID]: it[V2.FIELD.MSG_ID],
+      [V2.FIELD.CONVERSATION_ID]: it[V2.FIELD.CONVERSATION_ID],
+    }));
+  } else if (opts.conversationId && opts.conversationId !== '_unknown_'
+      && Array.isArray(msgIds) && msgIds.length && msgIds.every((id) => !!id)) {
+    items = msgIds.map((id) => ({ [V2.FIELD.MSG_ID]: id, [V2.FIELD.CONVERSATION_ID]: opts.conversationId }));
+  }
+  const body = items
+    ? { v: V2.VERSION, [V2.FIELD.ITEMS]: items, [V2.FIELD.STATUS]: V2.TERMINAL.DELIVERED }
+    : { [V2.FIELD.MSG_IDS]: msgIds, [V2.FIELD.STATUS]: V2.TERMINAL.DELIVERED };
   const timeoutMs = opts.timeoutMs ?? HTTP_INGEST_DEFAULTS.requestTimeoutMs;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

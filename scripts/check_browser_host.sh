@@ -20,7 +20,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HIVEMTK_DIR="$PROJECT_ROOT/hivemtk"
 
-BASE_URL="${1:-}"
+# 必须留空：按文档写法 `--token JWT` 首参是标志位，若从 $1 取会把 "--token" 当成
+# BASE_URL，导致第 5 项 curl 打向不存在的地址、健康链路误报 FAIL。
+BASE_URL=""
 OFFLINE=0
 JWT="${HIVE_MTK_JWT:-}"
 
@@ -155,6 +157,11 @@ else
   elif echo "$RESP" | grep -q '"code":0\|"code": 0'; then
     log_pass "host/status 返回 code=0"
     log_info "$(echo "$RESP" | head -c 500)"
+    # F3：online=注册在场，servable=应用面确曾回包。只有前者时命令帧可能全部有去无回，
+    # 「看起来健康」却完全不可服务（真机踩过三次），故单列一条 WARN 指路。
+    if echo "$RESP" | grep -q '"online":true' && ! echo "$RESP" | grep -q '"servable":true'; then
+      log_warn "Host 注册在线但 servable=false：应用面未回过包（注册探针 ≤10s 内应出结论，仍 false 就查扩展 SW/重新加载扩展）"
+    fi
   else
     log_fail "host/status 返回异常: $(echo "$RESP" | head -c 300)"
   fi

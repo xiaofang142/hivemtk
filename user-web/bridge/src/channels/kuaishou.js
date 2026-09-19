@@ -1,6 +1,7 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, fillContentEditable, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { qs, qsa, cleanText, fillContentEditableHumanized, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -71,8 +72,10 @@ function getRealSendButton() {
 
 // 当前登录账号 id
 function getAccountId() {
-  // 尝试从 URL 路径提取用户 id
-  const pathMatch = location.pathname.match(/\/([^/]{6,})\/?$/);
+  // B8（2026-09-19）：旧实现取路径末段任意 ≥6 字符串——私信默认路径 /new-reco
+  // 本身就是 8 字符，渠道名被永久误判成账号 id 并进 localStorage。快手网页携带
+  // 用户 id 的 URL 形态只有 /profile/<userId>，其余路径不可信、不猜。
+  const pathMatch = location.pathname.match(/\/profile\/([^/?#]+)/);
   if (pathMatch && pathMatch[1]) {
     try { localStorage.setItem(`hivebridge:account:${CHANNELS.KUAISHOU}`, pathMatch[1]); } catch (_) {}
     return pathMatch[1];
@@ -335,8 +338,8 @@ const hooks = {
       log.error('未找到快手输入框');
       throw new Error('kuaishou input not found');
     }
-    fillContentEditable(editor, text);
-    await new Promise((r) => setTimeout(r, 150));
+    await fillContentEditableHumanized(editor, text);
+    await humanDelay('click', { channel: CHANNELS.KUAISHOU, account: getAccountId() });
     const btn = getRealSendButton();
     if (!btn) {
       log.error('未找到快手发送按钮');

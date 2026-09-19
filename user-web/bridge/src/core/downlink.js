@@ -1,8 +1,9 @@
 import { getOutbox, ackOutbox } from './http-ingest.js';
 import { sanitizeForDisplay } from './sanitize.js';
-import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER } from './constants.js';
+import { contentHash } from './types.js';
+import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER, humanSendTimeoutMs } from './constants.js';
 import { createLogger } from './logger.js';
-import { connectSSE, getLastEventID, setLastEventID } from './sse-fetch-client.js';
+import { connectSSE, getLastEventID, setLastEventID, stopSSE } from './sse-fetch-client.js';
 
 const log = createLogger('downlink');
 
@@ -98,16 +99,20 @@ export function ackRetryBackoffMs(attempt) {
 }
 
 // addPendingAck 添加 msg_id 到重试队列（首次入队时设置 firstSeenAt=now, attempts=0）。
-export function addPendingAck(channel, msgId, lastError) {
+// B2（2026-09-19）：条目携带 conversationId（DB 行的原始 conversation_id，非 DM 重映射后的
+// 会话键），重试 ack 时走 v2 items[] 按会话精确翻转。同 msg_id 跨会话入队极少见，
+// 以最后一次入队的 conv 为准（重试幂等，最坏退化为 legacy 翻转范围）。
+export function addPendingAck(channel, msgId, lastError, conversationId) {
   const m = this_pendingAckFor(channel);
   if (m.has(msgId)) {
     const entry = m.get(msgId);
     entry.lastTryAt = Date.now();
     if (lastError) entry.lastError = lastError;
+    if (conversationId) entry.conversationId = conversationId;
     return entry;
   }
   const now = Date.now();
-  const entry = { attempts: 0, firstSeenAt: now, lastTryAt: 0, lastError: lastError || '' };
+  const entry = { attempts: 0, firstSeenAt: now, lastTryAt: 0, lastError: lastError || '', conversationId: conversationId || '' };
   m.set(msgId, entry);
   if (m.size > MAX_PENDING_ACK_PER_CHANNEL) {
     const sorted = [...m.entries()].sort((a, b) => a[1].firstSeenAt - b[1].firstSeenAt);
@@ -135,7 +140,7 @@ export function claimDuePendingAck(channel) {
     }
     const backoff = ackRetryBackoffMs(entry.attempts + 1);
     if (entry.lastTryAt && now - entry.lastTryAt < backoff) continue;
-    due.push({ msgId, entry });
+    due.push({ msgId, conversationId: entry.conversationId || '', entry });
   }
   return due;
 }
@@ -218,12 +223,16 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   if (duePending.length) {
     let successCount = 0;
     let failCount = 0;
-    for (const { msgId } of duePending) {
+    for (const { msgId, conversationId } of duePending) {
       try {
         const reAck = await ackOutbox(
           { serverUrl, channel, accountId, token },
           [msgId],
-          { label: `[下行 ack 重试] ${channel}:${msgId}` }
+          {
+            label: `[下行 ack 重试] ${channel}:${msgId}`,
+            // B2：条目带会话归属时走 v2，按会话精确翻转；无归属（老数据）回退 legacy。
+            conversationId,
+          }
         );
         // 详细 ack 响应：acked/duplicate 视为成功，not_found/not_in_scope 也视为"已处理（无需再发）"
         const handled = processAckDetailedResult(reAck, [msgId], channel, 'reAck');
@@ -253,7 +262,11 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     { label: `[下行 outbox] ${channel}`, batchSize: outboxBatchSize }
   );
   const messages = (res && res.messages) || [];
-  console.log('[bridge FULL] 下发分组前 messages =', JSON.parse(JSON.stringify(messages)));
+  // B4（批3）：裸 console.log 全文泄露私信内容（控制台可被同浏览器其他扩展读取）
+  // → 降为 verbose-gated debug 且不再携带 content 字段（脱敏=不进参数，而非事后打码）。
+  log.debug('pollDownlink 分组前', {
+    channel, count: messages.length, ids: messages.map((m) => m.msg_id),
+  });
 
   // —— 按 conversation_id 分组（同会话内保留原顺序以维持单会话限速语义）——
   const groups = new Map(); 
@@ -294,13 +307,20 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   const MAX_RATE_RETRIES = 3; 
   for (const [convId, group] of groups) {
     const sentIds = [];
+    // B2：ack 必须带 DB 行的原始 conversation_id（不是 DM 重映射后的 convId），
+    // 服务端 v2 items[] 按 (msg_id, conversation_id) 精确翻转，防跨会话同 msg_id 误翻。
+    const sentEntries = [];
+    const recordSent = (msg) => {
+      sentIds.push(msg.msg_id);
+      sentEntries.push({ msg_id: msg.msg_id, conversation_id: msg.conversation_id || '' });
+    };
     for (const { msg, sanitized } of group) {
       let result = null;
       try {
         if (sendOutbound) {
           result = await withTimeout(
             sendOutbound(sanitized, convId, { viaAdapter: channel }),
-            sendTimeoutMs,
+            humanSendTimeoutMs(sanitized, sendTimeoutMs),
             `sendOutbound(${channel}:${convId})`
           );
         } else {
@@ -312,11 +332,13 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
       const ok = !!(result && result.ok);
       const rateLimited = !!(result && result.rateLimited);
       const notFound = !!(result && result.notFound);
-      console.log('[bridge FULL] sendOutbound 结果', {
+      // B4：同上——结果日志只带键与状态位，不带私信内容（verbose-gated）
+      log.debug('sendOutbound 结果', {
         channel, conv_id: convId, msg_id: msg.msg_id,
-        content: msg.content, sanitized, result,
+        ok: !!(result && result.ok), rateLimited: !!(result && result.rateLimited),
+        notFound: !!(result && result.notFound),
       });
-      if (ok) { sentIds.push(msg.msg_id); continue; }
+      if (ok) { recordSent(msg); continue; }
       if (notFound) {
         log.debug(`下行目标会话不存在，跳过并留 pending: ${convId}`, { msg_id: msg.msg_id });
         continue;
@@ -330,10 +352,10 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
           try {
             const r2 = await withTimeout(
               sendOutbound(sanitized, convId, { viaAdapter: channel }),
-              sendTimeoutMs,
+              humanSendTimeoutMs(sanitized, sendTimeoutMs),
               `sendOutbound-retry(${channel}:${convId})`
             );
-            if (r2 && r2.ok) { delivered = true; sentIds.push(msg.msg_id); }
+            if (r2 && r2.ok) { delivered = true; recordSent(msg); }
             else if (r2 && r2.notFound) break;      
             else if (r2 && !r2.rateLimited) break;   
           } catch (e) {  }
@@ -348,10 +370,17 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     if (sentIds.length) {
       for (const id of sentIds) cache.add(`${id}|${convId}`);
       // 第 2 步：尝试 ack 服务端（副作用：让 server 知道这条已下发）
+      // B2：全量条目都带原始 conversation_id 时走 v2 items[]（按会话精确翻转）；
+      // 有缺失（老服务端 payload 无该字段）→ 保守回退 legacy msg_ids（维持旧行为）。
+      const origConvOf = new Map(sentEntries.map((e) => [e.msg_id, e.conversation_id]));
+      const allHaveConv = sentEntries.every((e) => !!e.conversation_id);
+      const ackOpts = allHaveConv
+        ? { label: `[下行 ack] ${channel}:${convId}`, items: sentEntries }
+        : { label: `[下行 ack] ${channel}:${convId}` };
       const ackRes = await ackOutbox(
         { serverUrl, channel, accountId, token },
         sentIds,
-        { label: `[下行 ack] ${channel}:${convId}` }
+        ackOpts
       );
       if (ackRes && ackRes.status === 'ok') {
         // 2026-08-15 P3-D + P4-3.4 修复：详细 ack 响应——精确处理每条 msg_id
@@ -366,7 +395,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
           for (const id of sentIds) {
             const it = itemByMsgID.get(id);
             if (!it) {
-              addPendingAck(channel, id, 'ack_response_missing_item');
+              addPendingAck(channel, id, 'ack_response_missing_item', origConvOf.get(id));
               log.warn(`下行 ack 详情缺失 item: 入 _pendingAck 下轮重试`, { channel, conv_id: convId, msg_id: id });
               continue;
             }
@@ -378,7 +407,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
               // P0-6：存在但归属其他账号/方向 → 服务端明确"不归我管"，立即停止重发（防越权探测）
               log.warn(`下行 ack 详情: not_in_scope 停止重发（归属他账号/方向）`, { channel, conv_id: convId, msg_id: id });
             } else {
-              addPendingAck(channel, id, `unknown_status_${it.status}`);
+              addPendingAck(channel, id, `unknown_status_${it.status}`, origConvOf.get(id));
               log.warn(`下行 ack 详情未知 status: 入 _pendingAck`, { channel, conv_id: convId, msg_id: id, status: it.status });
             }
           }
@@ -386,7 +415,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         allAckIds.push(...sentIds);
       } else {
         for (const id of sentIds) {
-          addPendingAck(channel, id, 'ack_request_failed');
+          addPendingAck(channel, id, 'ack_request_failed', origConvOf.get(id));
         }
         log.warn(`下行单会话 ack 失败（已发已写 cache 防重发，纳入下轮 ack 重试队列）`, {
           channel, convId, count: sentIds.length,
@@ -398,7 +427,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   if (allAckIds.length) log.info(`下行完成: ${channel} 共 ${allAckIds.length} 条已 ack`, { convs: groups.size });
 }
 
-async function withTimeout(promise, ms, label) {
+export async function withTimeout(promise, ms, label) {
   if (!ms || ms <= 0) return promise;
   let timer = null;
   const timeout = new Promise((_, rej) => {
@@ -528,6 +557,26 @@ function getSSEQueue(channel) {
   return sseQueues.get(channel);
 }
 
+// resolveSSEOutboundKeys 从 SSE 事件 Data 解析去重/ack 键（B1，2026-09-19）。
+//
+// 背景：SSE 总线路径的 Data 曾缺 msg_id → `data.msg_id || data.id` 得 undefined →
+// 复合缓存键 "undefined|conv" 第二条同会话消息起全被误判重复 → 静默丢消息。
+// 服务端已统一 Data（bridge.BuildOutboundSSEEvent 双路径含 msg_id），此处为二道防线：
+//   - msg_id 缺失 → 用与服务端 ContentHashMsgID 同源算法回退（fail-loud error 日志）；
+//   - 绝不回退 data.id（那是 hub_id 数字串，拿去 ack 必然 not_found 且污染缓存键）。
+// 导出供单测直接断言键生成契约。
+export function resolveSSEOutboundKeys(data, channel) {
+  const convId = (data && data.conversation_id) || '_unknown_';
+  let msgId = (data && data.msg_id) || '';
+  if (!msgId) {
+    msgId = contentHash(channel, convId, (data && data.content) || '');
+    log.error('SSE 事件缺 msg_id，已用 contentHash 同源回退（服务端 Data 契约异常，须排查）', {
+      channel, conv_id: convId, fallback_msg_id: msgId,
+    });
+  }
+  return { msgId, convId };
+}
+
 // ---- 注册/注销到 Service Worker ----
 
 export async function registerWithServiceWorker(channel, accountId) {
@@ -643,10 +692,17 @@ export async function startSSEDelivery(channel, accountId, handlers) {
   let cleanupSSE;
   let stopped = false;
   let reconnectTimer = null;
+  let wakeWait = null; // B5：stop 时立即唤醒退避等待，不等满 delay
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 10;
   const RECONNECT_BASE_DELAY_MS = 1000;
   const RECONNECT_MAX_DELAY_MS = 30000;
+  // B3（2026-09-19，WHATWG SSE 重连语义 + AWS full-jitter 实践）：
+  //   原实现 10 次后永久 break——SSE 是下行主通道，永久放弃 = 渠道静默失联直到页面刷新。
+  //   改为超限后降级为慢重连（固定间隔 + 抖动），连接恢复时 Last-Event-ID 补拉机制兜住断流缺口。
+  const DEGRADED_RETRY_MS = 5 * 60_000;
+  // 服务端 retry: 字段建议值（sse-fetch-client onRetry 回调写入；0=未提供，用本地退避）
+  let serverRetryDelayMs = 0;
 
   // 带重连的 SSE 连接启动
   async function startSSEWithReconnect() {
@@ -659,13 +715,8 @@ export async function startSSEDelivery(channel, accountId, handlers) {
           onMessage: async (data) => {
             if (stopped) return;
 
-            const msgId = data.msg_id || data.id;
-            const convId = data.conversation_id || '_unknown_';
-
-            // 保存 Last-Event-ID
-            if (data.id) {
-              setLastEventID(channel, accountId, data.id);
-            }
+            // B1：键解析收敛到 resolveSSEOutboundKeys（msg_id 缺失回退 contentHash，绝不回退 data.id）
+            const { msgId, convId } = resolveSSEOutboundKeys(data, channel);
 
             // SentCache 防重（复合键：msg_id|conversation_id）
             const cacheKey = `${msgId}|${convId}`;
@@ -685,9 +736,14 @@ export async function startSSEDelivery(channel, accountId, handlers) {
                 // XSS 防护：净化内容
                 const safeContent = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;
 
-                // 调用 sendOutbound 发送到网页
+                // 调用 sendOutbound 发送到网页（B4：与轮询路径对称的超时保护，
+                // 预算随文案长度伸缩，防拟人键入长文被固定超时误杀）
                 if (handlers.sendOutbound) {
-                  const result = await handlers.sendOutbound(safeContent, convId, { viaAdapter: channel });
+                  const result = await withTimeout(
+                    handlers.sendOutbound(safeContent, convId, { viaAdapter: channel }),
+                    humanSendTimeoutMs(safeContent),
+                    `sendOutbound-SSE(${channel}:${convId})`
+                  );
                   const ok = !!(result && result.ok);
                   const rateLimited = !!(result && result.rateLimited);
                   const notFound = !!(result && result.notFound);
@@ -706,16 +762,20 @@ export async function startSSEDelivery(channel, accountId, handlers) {
                       isAIReply: data.is_ai_reply || data.event === 'ai_reply',
                     });
 
-                    // ack 服务端
+                    // ack 服务端（B2：convId 有效时 ackOutbox 内部自动走 v2 items[]）
+                    // ackOutbox 不抛错只回 {status:'error'}——两条失败路径都要入重试队列。
                     try {
-                      await ackOutbox(
+                      const ackRes = await ackOutbox(
                         { serverUrl, channel, accountId, token },
                         [msgId],
-                        { label: `[SSE ack] ${channel}:${convId}` }
+                        { label: `[SSE ack] ${channel}:${convId}`, conversationId: convId }
                       );
+                      if (!ackRes || ackRes.status !== 'ok') {
+                        addPendingAck(channel, msgId, 'sse_ack_not_ok', data.conversation_id || '');
+                      }
                     } catch (err) {
                       log.warn('SSE ack 失败，加入重试队列', err && err.message);
-                      addPendingAck(channel, msgId, 'sse_ack_failed');
+                      addPendingAck(channel, msgId, 'sse_ack_failed', data.conversation_id || '');
                     }
                   } else if (rateLimited) {
                     log.warn(`SSE 下行被限速: ${channel}:${convId}`, { msgId });
@@ -742,7 +802,13 @@ export async function startSSEDelivery(channel, accountId, handlers) {
           onLastEventID: (id) => {
             setLastEventID(channel, accountId, id);
           },
+          onRetry: (ms) => {
+            serverRetryDelayMs = ms;
+          },
         });
+
+        // B5：stop() 经 stopSSE 中止活动流后 await 才 resolve——先判停，不误报"已建立"、不清零计数
+        if (stopped) break;
 
         // 重置重连计数
         reconnectAttempts = 0;
@@ -755,25 +821,38 @@ export async function startSSEDelivery(channel, accountId, handlers) {
         if (stopped) break;
 
         reconnectAttempts++;
+        let delay;
         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
-          log.warn(`SSE 重连次数已达上限 (${MAX_RECONNECT_ATTEMPTS})，停止重连: ${channel}:${accountId}`);
-          break;
+          if (reconnectAttempts === MAX_RECONNECT_ATTEMPTS + 1) {
+            log.warn(`SSE 重连超过 ${MAX_RECONNECT_ATTEMPTS} 次，降级为 ${DEGRADED_RETRY_MS / 1000}s 慢重连（不再永久放弃）: ${channel}:${accountId}`);
+          }
+          // 服务端 retry: 心跳值（15s）适用于普通断流重连；连续失败已达上限说明
+          // 连接可能持续劣化，降级间隔只接受更长的 hint，不接受更短。
+          const base = Math.max(DEGRADED_RETRY_MS, serverRetryDelayMs);
+          delay = base + Math.floor(Math.random() * base * 0.2); // ±0~20% 抖动防惊群
+        } else {
+          // 快速恢复期（前 10 次）：坚持本地指数退避，不吃服务端 retry hint——
+          // hint=心跳间隔（15s）会把首次瞬时断流的恢复延迟从 1s 拉到 15s。
+          const exp = Math.min(
+            RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1),
+            RECONNECT_MAX_DELAY_MS
+          );
+          delay = Math.round(exp * (0.5 + Math.random() * 0.5)); // full-jitter 变体
+        }
+        log.info(`SSE 断开，${delay}ms 后第 ${reconnectAttempts} 次重连: ${channel}:${accountId}`);
+
+        // 通知上层连接已断开（前 10 次带进度提示；降级后不再刷屏，仅首次慢重连提示一次）
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS + 1) {
+          handlers.onError?.(new Error(`SSE 断开，准备重连 (${reconnectAttempts})`));
         }
 
-        // 计算重连延迟（指数退避）
-        const delay = Math.min(
-          RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1),
-          RECONNECT_MAX_DELAY_MS
-        );
-        log.info(`SSE 断开，${delay}ms 后尝试第 ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} 次重连: ${channel}:${accountId}`);
-
-        // 通知上层连接已断开
-        handlers.onError?.(new Error(`SSE 断开，准备重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`));
-
-        // 等待重连延迟
+        // 等待重连延迟（B5：可被 stop 立即唤醒——清 timer + wakeWait，不等满退避）
         await new Promise((resolve) => {
+          wakeWait = resolve;
           reconnectTimer = setTimeout(resolve, delay);
         });
+        wakeWait = null;
+        reconnectTimer = null;
 
         if (stopped) break;
       }
@@ -792,6 +871,12 @@ export async function startSSEDelivery(channel, accountId, handlers) {
   // 返回停止函数
   return async () => {
     stopped = true;
+    // B5（批3）：原实现只 await cleanupSSE——但该停止函数在流结束后才 resolve，
+    // 活动长连接期间 cleanupSSE 为 undefined，stop 实际无法断开 SSE（fetch 悬挂 + 循环续命）。
+    // 修复：key 级 stopSSE 立即 abort + 清退避 timer 并唤醒等待，重连循环即刻收束。
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (wakeWait) wakeWait();
+    stopSSE(channel, accountId);
     if (cleanupSSE) {
       try { await cleanupSSE(); } catch (_) {}
     }

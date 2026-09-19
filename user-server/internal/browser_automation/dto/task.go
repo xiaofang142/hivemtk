@@ -45,6 +45,8 @@ type CreateBrowserTaskReq struct {
 	RetryOnFail   bool `json:"retry_on_fail"`
 	RetryDelaySec int  `json:"retry_delay_sec" binding:"omitempty,min=30,max=86400"`
 	MaxRetryTimes int  `json:"max_retry_times" binding:"omitempty,min=0,max=10"`
+	// RequireConfirm D7：写操作提交前人工确认开关（默认 false=全自动）
+	RequireConfirm bool `json:"require_confirm"`
 }
 
 type UpdateBrowserTaskReq struct {
@@ -59,6 +61,8 @@ type UpdateBrowserTaskReq struct {
 	LoopCount   *int       `json:"loop_count" binding:"omitempty,min=1,max=1000"`
 	DelayMs     *int       `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
 	TimeoutSec  *int       `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
+	// RequireConfirm D7：指针语义——nil=不改（存量任务不因编辑而重置开关）
+	RequireConfirm *bool `json:"require_confirm"`
 }
 
 type RunBrowserTaskReq struct {

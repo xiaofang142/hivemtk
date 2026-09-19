@@ -1,6 +1,7 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, simulateRealClick, fillContentEditable, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -660,8 +661,8 @@ const hooks = {
       log.error('未找到抖音输入框（strict + fallback 均失败）');
       throw new Error('douyin input not found');
     }
-    fillContentEditable(editor, text);
-    await new Promise((r) => setTimeout(r, 150));
+    await fillContentEditableHumanized(editor, text);
+    await humanDelay('click', { channel: CHANNELS.DOUYIN, account: getAccountId() });
     const btn = getRealSendButton();
     if (!btn) {
       log.error('未找到抖音发送按钮');

@@ -3,6 +3,17 @@
 //   autoclaw-cc/xiaohongshu-skills（同场景：mouseMoved 轨迹 + press hold）
 //   A9T9/RPA cdp_input（事件序列工厂 + attach 生命周期 + infobar 坐标陷阱对策）
 //   xiaohongshu-mcp humanize（时序参数：对数正态分布）
+// B7（批2）：分布采样/时序参数表/轨迹与落点算法迁入 @hivemtk/browser-core
+// ——与 bridge 内容脚本共读同一参数源（数值逐字保持，双份漂移即缺陷源）。
+
+import {
+  sleep,
+  makeCdpTiming,
+  bezierPoints,
+  clickJitter,
+  moveStartPoint,
+  stepIntervalMs,
+} from '../../../../../packages/browser-core/index.js';
 
 // ---- WindowsVirtualKeyCode 码表（USKeyboardLayout 子集，仅本基座用到的）----
 
@@ -30,29 +41,9 @@ const KEY_DEFS = {
 
 const isASCIIKey = (ch) => Object.prototype.hasOwnProperty.call(KEY_DEFS, ch);
 
-// ---- humanize 时序（对数正态采样，参数表来自 xiaohongshu-mcp humanize/provider.go）----
+// ---- humanize 时序（对数正态采样；参数表单一来源见 @hivemtk/browser-core/timing.js）----
 
-function lognormal(median, min, max) {
-  // Mu/Sigma 反解：对数正态的 median = exp(Mu)
-  const mu = Math.log(median);
-  const sigma = 0.35;
-  let v;
-  do {
-    const u1 = Math.random() || 1e-9;
-    const u2 = Math.random();
-    v = Math.exp(mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2));
-  } while (v < min || v > max);
-  return Math.round(v);
-}
-
-const TIMING = {
-  keystroke: () => lognormal(120, 30, 400),   // 逐字间隔
-  clickHold: () => lognormal(84, 45, 250),    // down→up
-  pointerSettle: () => lognormal(300, 200, 1200), // move后→down前
-  afterClick: () => lognormal(400, 150, 2000),  // 点击后
-};
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TIMING = makeCdpTiming();
 
 // ---- attach 生命周期（A9T9 模式：单例 onDetach + idle 延迟 detach + 容忍 already-attached）----
 
@@ -140,40 +131,27 @@ async function typeText(tabId, text) {
 
 const lastMouse = new Map(); // tabId -> {x,y}
 
-// easeInOut 缓动参数（0~1）
-function easeInOut(t) {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
+// F11（批5g 夹具真机实测）：后台 tab 不出帧 → 每个 mouseMoved 的 CDP ack 都要等满
+// 5s 超时（实测逐条 5003/5004/5005ms 串联），10–40 步轨迹 = 50–200s，写腿永远走不到
+// 按下那一步（服务端只能看到 45s 命令超时，页面上一个鼠标事件都没落地）。
+// 对策：事件全部按序入队（IPC 顺序即事件顺序），只在「一段共享预算」里等 ack——
+// 慢 ack 不再逐个串联；按下/抬起同样入队后共享预算，超时抛 click_unacked：
+// 事件已下发=结局未知，交服务端 finalize 用只读验证裁决（禁重试，防双发）。
+const TRAJECTORY_ACK_BUDGET_MS = 6000;
+const CLICK_ACK_BUDGET_MS = 15000;
 
-// bezierPoints 三次贝塞尔轨迹采样：从 (x0,y0) 到 (x1,y1)，控制点沿垂直方向随机偏移
-function bezierPoints(x0, y0, x1, y1) {
-  const dist = Math.hypot(x1 - x0, y1 - y0);
-  const steps = Math.max(10, Math.min(40, Math.round(dist / 10)));
-  // 单位垂直向量（轨迹弧的侧向控制基）
-  const dx = x1 - x0, dy = y1 - y0;
-  const len = Math.max(dist, 1);
-  const px = -dy / len, py = dx / len;
-  // 两个控制点：沿线 1/3、2/3 处，各带 ±5–15% 距离的随机侧移（同向为主、少量反向，逼近真人弧线）
-  const sgn = Math.random() < 0.75 ? 1 : -1;
-  const amp1 = dist * (0.05 + Math.random() * 0.10) * sgn;
-  const amp2 = dist * (0.05 + Math.random() * 0.10) * (Math.random() < 0.5 ? sgn : -sgn);
-  const c1x = x0 + dx / 3 + px * amp1, c1y = y0 + dy / 3 + py * amp1;
-  const c2x = x0 + (2 * dx) / 3 + px * amp2, c2y = y0 + (2 * dy) / 3 + py * amp2;
-  const pts = [];
-  for (let i = 1; i <= steps; i++) {
-    const t = easeInOut(i / steps);
-    const mt = 1 - t;
-    const x = mt * mt * mt * x0 + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * x1;
-    const y = mt * mt * mt * y0 + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * y1;
-    pts.push({ x: Math.round(x), y: Math.round(y) });
-  }
-  return pts;
-}
-
-// clickJitter 落点抖动半径：目标元素半宽的 15% 与 8px 取小（无尺寸信息时 3px）
-function clickJitter(radius) {
-  const r = Math.max(0, Math.min(8, radius || 3));
-  return { dx: Math.round((Math.random() * 2 - 1) * r), dy: Math.round((Math.random() * 2 - 1) * r) };
+// awaitAcks 在预算内等一组命令的 ack；返回 {done, error}——预算内没等完不算失败
+// （事件已在渲染进程队列里），只有真正抛错才算。
+async function awaitAcks(promises, budgetMs) {
+  const settled = Promise.allSettled(promises);
+  const raced = await Promise.race([
+    settled.then(() => "done"),
+    sleep(budgetMs).then(() => "timeout"),
+  ]);
+  if (raced === "timeout") return { done: false };
+  const failed = (await settled).find((r) => r.status === "rejected");
+  if (failed) throw failed.reason;
+  return { done: true };
 }
 
 /**
@@ -189,28 +167,30 @@ async function clickAt(tabId, x, y, opts = {}) {
       sx = last.x; sy = last.y;
     } else {
       // 无历史位置：从目标点随机方向 20–60px 处出发（起点恒定=可检测特征）
-      const ang = Math.random() * Math.PI * 2;
-      const d = 20 + Math.random() * 40;
-      sx = Math.max(0, Math.round(x + Math.cos(ang) * d));
-      sy = Math.max(0, Math.round(y + Math.sin(ang) * d));
+      ({ sx, sy } = moveStartPoint(x, y));
     }
+    const moves = [];
     for (const pt of bezierPoints(sx, sy, x, y)) {
-      await send(target, 'Input.dispatchMouseEvent', {
+      moves.push(send(target, 'Input.dispatchMouseEvent', {
         type: 'mouseMoved', x: pt.x, y: pt.y, button: 'none', buttons: 0, modifiers: 0,
-      });
-      await sleep(5 + Math.round(Math.random() * 4)); // 5–9ms/步
+      }));
+      // 入队间隔=站点看到的移动节奏（humanize 语义保留）；等 ack 才是要避开串联的东西
+      await sleep(stepIntervalMs());
     }
+    await awaitAcks(moves, TRAJECTORY_ACK_BUDGET_MS);
     lastMouse.set(tabId, { x, y });
     const { dx, dy } = clickJitter(opts.jitterRadius);
     const cx = Math.max(0, x + dx), cy = Math.max(0, y + dy);
     await sleep(TIMING.pointerSettle());
-    await send(target, 'Input.dispatchMouseEvent', {
+    const press = send(target, 'Input.dispatchMouseEvent', {
       type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1, modifiers: 0,
     });
     await sleep(TIMING.clickHold());
-    await send(target, 'Input.dispatchMouseEvent', {
+    const release = send(target, 'Input.dispatchMouseEvent', {
       type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1, modifiers: 0,
     });
+    const { done } = await awaitAcks([press, release], CLICK_ACK_BUDGET_MS);
+    if (!done) throw new Error('click_unacked');
     await sleep(TIMING.afterClick());
     return { ok: true };
   });

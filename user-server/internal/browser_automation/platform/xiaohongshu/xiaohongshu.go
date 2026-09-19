@@ -33,34 +33,36 @@ func (p *Platform) Capabilities() []platform.Capability {
 
 func (p *Platform) MaxConcurrentJobs() int { return 1 } // 写操作串行（风控要求）
 
-// Locators 平台元素定位表（DOM 知识唯一存放处，扩展原语不再硬编码）
+// Locators 平台元素定位表（DOM 知识唯一存放处，扩展原语不再硬编码；
+// A1 收口：CommentLocators 从这里派生，同串 CSS 只写一遍；拦截文案移出 → BlockMarkers）
 func (p *Platform) Locators() map[string]string {
 	return map[string]string{
-		"note_link":      "a[href*='/search_result/'], a[href*='/explore/']",
-		"comment_input":  ".content-textarea, p.content-input, div.content-edit p",
-		"send_button":    "button.submit, div.bottom button",
-		"comment_list":   ".comments-container, .comments-el, [class*=comment-list]",
-		"comment_item":   ".parent-comment, .comment-item",
-		"note_title":     ".note-content .title, #detail-title",
-		"note_author":    ".author-wrapper .name, .username",
-		"blocked_marker": "website-login, 验证码, IP存在风险",
+		"note_link":        "a[href*='/search_result/'], a[href*='/explore/']",
+		"comment_input":    ".content-textarea, p.content-input, div.content-edit p",
+		"send_button":      "button.submit, div.bottom button",
+		"comment_list":     ".comments-container, .comments-el, [class*=comment-list]",
+		"comment_item":     ".parent-comment .note-text, .comment-item .note-text",
+		"note_title":       ".note-content .title, #detail-title",
+		"note_author":      ".author-wrapper .name, .username",
+		"send_button_text": "发送",
 	}
 }
 
-// DetectBlock 拦截页识别（平台私有判据）
-// 实测拦截形态：302→/website-login/error?error_code=300012（IP 风险）；461/471+Verifytype 头
-func (p *Platform) DetectBlock(pageSnapshot string) bool {
-	for _, m := range []string{
-		"website-login/error", // 登录/风控重定向
-		"IP存在风险",              // 300012 错误文案
-		"当前环境异常",              // 验证码页文案
-		"error_code=300012",
-	} {
-		if strings.Contains(pageSnapshot, m) {
-			return true
-		}
-	}
-	return false
+// BlockMarkers 风控文案判据（A2：只匹配快照结构行，评论正文含「验证码」不再误报；
+// 「验证码登录」类正常交互按钮也不列入——结构层只收拦截页专属文案）
+func (p *Platform) BlockMarkers() []string {
+	return []string{"IP存在风险", "当前环境异常"}
+}
+
+// BlockURLPatterns 拦截 URL 判据（实测形态：302→/website-login/error?error_code=300012）
+func (p *Platform) BlockURLPatterns() []string {
+	return []string{"website-login/error", "error_code=300012", "/captcha"}
+}
+
+// DetectBlock 拦截页识别（A2 结构化两层：URL 层 + 结构层；旧全文子串已废弃）
+func (p *Platform) DetectBlock(pageURL, pageSnapshot string) bool {
+	return platform.URLHits(pageURL, p.BlockURLPatterns()) ||
+		platform.StructuralMarkerHits(pageSnapshot, p.BlockMarkers())
 }
 
 // ClassifyError 平台错误归因（Postiz handleErrors 语义）
@@ -74,20 +76,23 @@ func (p *Platform) ClassifyError(errText string) platform.ErrType {
 		strings.Contains(errText, "blocked"), strings.Contains(errText, "300012"), strings.Contains(errText, "461"):
 		// 验证码/IP 风控：连续出现应 retire 账号——归 disconnect 由上层判定
 		return platform.ErrDisconnect
-	case strings.Contains(errText, "timeout"), strings.Contains(errText, "未就绪"),
-		strings.Contains(errText, "element_not_found"):
+	case strings.Contains(errText, "timeout"), strings.Contains(errText, "超时"),
+		strings.Contains(errText, "未就绪"), strings.Contains(errText, "element_not_found"):
 		return platform.ErrRetry
 	default:
-		return platform.ErrRetry
+		// A3 fail-closed：判据未命中不再默认 retry（见 platform.ErrUnknown 注释）
+		return platform.ErrUnknown
 	}
 }
 
-// CommentLocators 发评论选择器四元组（基座把这套下发给扩展 post_comment 原语）
+// CommentLocators 发评论选择器四元组（基座把这套下发给扩展 post_comment 原语）。
+// A1 单一来源：全部取自 Locators() 表，杜绝同串 CSS 写两遍的漂移（旧实现两处字面量重复）。
 func (p *Platform) CommentLocators() platform.CommentLocators {
+	l := p.Locators()
 	return platform.CommentLocators{
-		InputSelector:    ".content-textarea, p.content-input, div.content-edit p",
-		SendButtonText:   "发送",
-		CommentContainer: ".comments-container, .comments-el, [class*=comment-list]",
-		CommentItemText:  ".parent-comment .note-text, .comment-item .note-text",
+		InputSelector:    l["comment_input"],
+		SendButtonText:   l["send_button_text"],
+		CommentContainer: l["comment_list"],
+		CommentItemText:  l["comment_item"],
 	}
 }

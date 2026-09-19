@@ -28,7 +28,7 @@ var (
 	hostPort = envOr("HIVE_MTK_PORT", "8204")
 	// hostVersion 与扩展 manifest.json version 同步维护（R17：Chrome SW ScriptCache 缓存陷阱
 	// 导致旧扩展代码常驻——host/status 版本号是「新代码是否生效」的快速排查锚点）
-	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.4.2")
+	hostVersion = envOr("HIVE_MTK_HOST_VERSION", "1.5.0")
 )
 
 func envOr(key, def string) string {
@@ -112,7 +112,38 @@ func readFull(r *bufio.Reader, buf []byte) (int, error) {
 	return total, nil
 }
 
+// hostUsage 非 Chrome 启动时的唯一出路：只读信息，绝不连接服务端。
+const hostUsage = "用法: hivemtk_browser_nm_host [--version|--help]\n" +
+	"本程序由 Chrome 扩展经 connectNative 自动拉起（Chrome 会把 chrome-extension://<id>/ 作为第一个参数传入），不需要手工常驻运行。\n"
+
+// guardInvocation F1（批5e 真机踩坑登记）：Chrome 启动的 NM host 必定带
+// argv[1]="chrome-extension://<id>/"；缺这个参数就不是 Chrome 拉起的。
+// 旧版 main() 完全不读 os.Args，任何参数（含 --version）都会被忽略后直接连接注册，
+// 把扩展正在服务的那条连接的注册位抢走——host/status 照旧显示 count=1/在线，
+// 而命令帧送进一条没有 Chrome 端口的连接，表现为连续 30s 超时（session253），
+// 只能等 A5 判病自愈（代价 2×30s）。故非 Chrome 启动只允许 --version/--help 两条
+// 只读出路，其余一律 fails-loudly 且不连服务端。
+func guardInvocation() {
+	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "chrome-extension://") {
+		return // Chrome 启动 → 正常服务模式
+	}
+	for _, a := range os.Args[1:] {
+		switch a {
+		case "--version", "-v":
+			fmt.Println(hostVersion)
+			os.Exit(0)
+		case "--help", "-h":
+			fmt.Fprint(os.Stderr, hostUsage)
+			os.Exit(0)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "[nm-host] 拒绝启动： argv=%v 中没有 Chrome 传入的扩展 origin（chrome-extension://…），"+
+		"独立运行会抢走扩展 Host 的注册位。\n%s", os.Args[1:], hostUsage)
+	os.Exit(2)
+}
+
 func main() {
+	guardInvocation()
 	token := loadToken()
 	if token == "" {
 		// NM Host 的 stderr 仅用于调试日志（stdout 是协议通道）

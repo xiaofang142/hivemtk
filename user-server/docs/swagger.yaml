@@ -1374,7 +1374,7 @@ info:
     HiveMtk 用户端（私域独立部署）RESTful API。认证采用 JWT：请求头 Authorization: Bearer <token>。
     仅当 ENABLE_SWAGGER=true 时，通过 http://localhost:8204/swagger/index.html 本地访问。
   title: HiveMtk 用户端 API
-  version: 3.41.0
+  version: 3.42.0
 paths:
   /api/ai-agents:
     get:

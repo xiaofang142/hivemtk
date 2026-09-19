@@ -24,17 +24,18 @@ func NewHostController(registry *service.HostRegistry, kvRepo hrepo.SystemConfig
 	return &HostController{registry: registry, kvRepo: kvRepo}
 }
 
+// hostHandshakeReadDeadline register 帧握手读时限（A6）：Host 连上后 10s 内必须报
+// register 帧，否则判僵尸连接关闭——与 service/timeouts.go 同族，跨包不引私有常量。
+const hostHandshakeReadDeadline = 10 * time.Second
+
 // GetStatus GET /browser-automation/host/status
-// admin：全量 Host 列表；其他登录用户：仅自己的 Host 在线状态（popup 状态点依赖）。
+// admin 看全量、其他登录用户只看自己，但响应形状一致（count/hosts 恒在，见 StatusFor）。
 func (c *HostController) GetStatus(ctx *gin.Context) {
-	if role, _ := ctx.Get("role"); role != "admin" {
-		response.Success(ctx, c.registry.MyStatus(ctx.GetUint("user_id")), "ok")
-		return
+	isAdmin := false
+	if role, _ := ctx.Get("role"); role == "admin" {
+		isAdmin = true
 	}
-	response.Success(ctx, gin.H{
-		"hosts": c.registry.Status(),
-		"count": len(c.registry.Status()),
-	}, "ok")
+	response.Success(ctx, c.registry.StatusFor(ctx.GetUint("user_id"), isAdmin), "ok")
 }
 
 // ResetToken POST /browser-automation/host/token/reset
@@ -95,8 +96,9 @@ func (h *HostWSHandler) Handle(ctx *gin.Context) {
 		return
 	}
 
-	// 3. 读 register 帧
-	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	// 3. 读 register 帧（握手时限：与 service/timeouts.go 同族，A6 收口；
+	// 跨包不共享常量——引用另一包的私有预算表收益不抵耦合）
+	_ = conn.SetReadDeadline(time.Now().Add(hostHandshakeReadDeadline))
 	var reg struct {
 		Type    string `json:"type"`
 		Version string `json:"version"`

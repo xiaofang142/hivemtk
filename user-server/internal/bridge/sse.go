@@ -88,6 +88,51 @@ type SSEEvent struct {
 	Timestamp      time.Time      `json:"timestamp"`
 }
 
+// OutboundEventData 下行出站事件的业务字段（SSEEvent.Data 的单一构造源）。
+//
+// R-B1 契约（2026-09-19）：SSE 总线路径与 DB 补拉路径必须产出**逐键一致**的 Data——
+// 扩展端 downlink 以 Data.msg_id 为去重/ack 复合键（msg_id|conversation_id），
+// 曾因总线路径缺 msg_id → 键退化为 "undefined|conv" → 同会话第二条起全被误判重复
+// → 静默丢消息。任何新增投递路径一律经 BuildOutboundSSEEvent，禁止手拼 Data。
+type OutboundEventData struct {
+	HubID          uint64
+	MsgID          string
+	Platform       string
+	AccountID      string
+	ConversationID string
+	Content        string
+	MsgType        string
+	ReceiverID     string
+	IsAIReply      bool
+	Extra          any
+	CreatedAt      time.Time
+}
+
+// BuildOutboundSSEEvent 由 OutboundEventData 统一构造 new_outbound 事件。
+func BuildOutboundSSEEvent(d OutboundEventData) SSEEvent {
+	return SSEEvent{
+		ID:             strconv.FormatUint(d.HubID, 10),
+		Event:          "new_outbound",
+		ConversationID: d.ConversationID,
+		MsgType:        d.MsgType,
+		ReceiverID:     d.ReceiverID,
+		Seq:            int(d.HubID),
+		Data: map[string]any{
+			"hub_id":          d.HubID,
+			"msg_id":          d.MsgID,
+			"platform":        d.Platform,
+			"account_id":      d.AccountID,
+			"conversation_id": d.ConversationID,
+			"content":         d.Content,
+			"msg_type":        d.MsgType,
+			"receiver_id":     d.ReceiverID,
+			"is_ai_reply":     d.IsAIReply,
+			"extra":           d.Extra,
+		},
+		Timestamp: d.CreatedAt,
+	}
+}
+
 // SSEBus 事件通知总线：message_hub 写入后立即通知 SSE 连接
 //
 // 设计要点：
@@ -347,12 +392,20 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 	clientGone := c.Request.Context().Done()
 	lastBusEventAt := time.Now()
 
+	// R-B3（2026-09-19）：轮询定时器仅在目标间隔变化时 Reset——原实现每轮 select 前无条件
+	// Reset，而心跳每 15s 也触发一轮，poll 计时被反复续期 → 永远不到点 → 总线丢事件时
+	// 的 DB 兜底补拉形同虚设。
+	curPollInterval := pollInterval
+
 	for {
 
+		desired := pollInterval
 		if time.Since(lastBusEventAt) < 30*time.Second {
-			poll.Reset(idlePollInterval)
-		} else {
-			poll.Reset(pollInterval)
+			desired = idlePollInterval
+		}
+		if desired != curPollInterval {
+			poll.Reset(desired)
+			curPollInterval = desired
 		}
 
 		select {
@@ -422,6 +475,13 @@ func writeSSEEvent(w http.ResponseWriter, ev SSEEvent) bool {
 	}
 	dataJSON, err := json.Marshal(ev.Data)
 	if err != nil {
+		// 序列化失败 = 该事件必丢——Error 级日志留痕（原来只写注释帧给客户端，
+		// 客户端按协议忽略注释 → 静默丢消息且服务端零感知）。
+		logger.GetLogger().Error().Err(err).
+			Str("event", "sse_marshal_error").
+			Str("event_id", ev.ID).
+			Str("conv_id", ev.ConversationID).
+			Msg("[SSE] 事件 Data 序列化失败，已降级为注释帧（消息未送达，需排查 Data 内容）")
 		_, _ = fmt.Fprintf(w, ":marshal_error=%v\n\n", err)
 		return true
 	}

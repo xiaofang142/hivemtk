@@ -76,6 +76,11 @@ func (s *SessionService) ListCommandLogs(ctx context.Context, sessionID, userID 
 	return out, nil
 }
 
+// ConfirmPending D7 读侧：session 是否正等人工放行（不落库，实时取 Executor 挂起态）
+func (s *SessionService) ConfirmPending(sessionID uint) bool {
+	return s.executor.ConfirmPending(sessionID)
+}
+
 // Stop 手动中断（session 置 stopped 由 Executor 收口；此处仅发信号 + 返回是否命中运行中）
 func (s *SessionService) Stop(ctx context.Context, sessionID, userID uint, reason string) (bool, error) {
 	sess, err := s.sessionRepo.GetByID(ctx, sessionID, userID)
@@ -87,6 +92,19 @@ func (s *SessionService) Stop(ctx context.Context, sessionID, userID uint, reaso
 	}
 	ok := s.executor.SignalStop(sessionID)
 	return ok, nil
+}
+
+// Confirm D7：人工放行停在 require_confirm 闸门上的 post_comment 提交点。
+// 归属校验与 Stop 同构；返回 false=该 session 当前没有挂起确认点（未开关/已过提交点/已结束）。
+func (s *SessionService) Confirm(ctx context.Context, sessionID, userID uint) (bool, error) {
+	sess, err := s.sessionRepo.GetByID(ctx, sessionID, userID)
+	if err != nil {
+		return false, err
+	}
+	if sess.Status != "created" && sess.Status != "active" {
+		return false, nil
+	}
+	return s.executor.SignalConfirm(sessionID), nil
 }
 
 // ---- I5 审计导出（一次请求归并 session 全量审计事实，可离线归档）----

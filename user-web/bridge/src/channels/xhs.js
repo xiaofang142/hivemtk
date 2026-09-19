@@ -2,7 +2,8 @@ import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
-import { qs, qsa, cleanText, setValue, fillContentEditable, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName } from '../core/dom.js';
+import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
 const log = createLogger('xhs', CHANNELS.XHS);
@@ -604,17 +605,17 @@ const hooks = {
     }
     // 2026-08-07 修复（用户诉求③）：下发场景必须先清空输入框旧内容再写入新内容，
     //   避免「用户正在打字时 extension 同时下发」导致「旧内容+新内容」拼接发出。
-    //   - contenteditable：fillContentEditable({ clearBefore: true }) 先清空子节点再 insertText
+    //   - contenteditable：fillContentEditableHumanized({ clearBefore: true }) 先清空子节点再逐段拟人 insertText
     //   - textarea：setValue(el, '') 先清空再 setValue(el, text) 覆盖
-    //   顺序：清空 → 填值 → 180ms → 发送 → 立即通知调用方（ack 由 downlin k 队列统一处理）
+    //   顺序：清空 → 拟人键入 → 拟人点击间隔（humanDelay click 档案）→ 发送 → 立即通知调用方（ack 由 downlin k 队列统一处理）
     const isContentEditable = input.isContentEditable || input.getAttribute('contenteditable') === 'true' || input.tagName !== 'TEXTAREA';
     if (isContentEditable) {
-      fillContentEditable(input, text, { clearBefore: true });
+      await fillContentEditableHumanized(input, text, { clearBefore: true });
     } else {
       setValue(input, '');
       setValue(input, text);
     }
-    await new Promise((r) => setTimeout(r, 180));
+    await humanDelay('click', { channel: CHANNELS.XHS, account: getAccountId() });
     const sendBtn = findSendButton();
     if (sendBtn) {
       enhancedClick(sendBtn);

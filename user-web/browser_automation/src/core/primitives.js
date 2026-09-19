@@ -371,6 +371,26 @@ function injPostCommentVerify(targetText, opts) {
   const want = norm(targetText);
   // innerText 在非渲染上下文（jsdom/后台 tab 未布局）为空——textContent 兜底
   const textOf = (n) => (n ? (n.innerText || n.textContent || '') : '');
+  // 跨节点累积（评论正文可能被拆进多个文本节点），限窗避免长页 O(n²)
+  const textOutsideInputsIncludes = (needle) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    let acc = '';
+    while ((node = walker.nextNode())) {
+      const p = node.parentElement;
+      if (!p || /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(p.tagName)) continue;
+      // isContentEditable 为主判据；closest 兜底（jsdom 等引擎不实现该属性，缺它就会出现
+      // 「草稿仍留在输入框 → 零提交假绿」的 F11 形态）
+      if (p.isContentEditable) continue;
+      try {
+        if (p.closest('[contenteditable]:not([contenteditable="false"])')) continue;
+      } catch { /* 无 closest 的旧引擎：按可见文本继续判 */ }
+      acc += norm(node.nodeValue);
+      if (acc.length > 6000) acc = acc.slice(-3000);
+      if (needle && acc.includes(needle)) return true;
+    }
+    return false;
+  };
 
   const evidenceOf = () => {
     const containers = document.querySelectorAll(containerSel);
@@ -401,8 +421,11 @@ function injPostCommentVerify(targetText, opts) {
     for (const c of containers) {
       if (norm(textOf(c)).includes(want)) return true;
     }
-    // 兜底：全文搜（评论区容器类名可能变）
-    return norm(textOf(document.body)).includes(want);
+    // 兜底：全文搜（评论区容器类名可能变）——但必须先排除输入节点自身。
+    // F11（批5g 夹具真机实测 session281）：comment_send 失败时草稿仍留在 contenteditable 里，
+    // 旧兜底直接整页 includes(want) 命中那条草稿 → 零提交也报 verified=true。
+    // 不可逆动作的自检出现假绿是所有假里最坏的一类（用户据此认为评论已发出）。
+    return textOutsideInputsIncludes(want);
   };
   if (checkNow()) return { ok: true, posted: true, verified: true, evidence: evidenceOf() };
 
@@ -502,7 +525,10 @@ async function executeInTab(tabId, func, args = []) {
   const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
   const r = res?.result;
   if (!r || r.ok === false) {
-    throw new Error(r?.error || 'executeScript failed');
+    // r 为空与 r.ok=false 是两种成因：后者是注入跑了并给出理由（走 r.error），
+    // 前者是 Chrome 在该帧于注入期间被导航/销毁时返回 result=undefined
+    //（真机 xhs 未登录重定向实测：旧文案把两者混成 'executeScript failed'，无法归因）
+    throw new Error(r?.error || 'inject_no_result(该帧注入未返回，通常是页面正在导航/帧已销毁)');
   }
   return r;
 }
@@ -520,6 +546,12 @@ export async function dispatch(cmd, deps) {
   const resetBaseline = deps.accessibility.resetBaseline || (() => {});
 
   switch (cmd.action) {
+    case 'resolve_ref': {
+      // A1 selector 自愈回路：LLM 依据快照行选 @eN ref，Go 用本命令换回真实 CSS
+      // （ref→cssPath 映射只在 SW 内存，页面导航/新快照会重置——调用方须紧邻快照使用）。
+      const ref = String(cmd.ref || '');
+      return { selector: ref.startsWith('@e') ? getRefSelector(ref) || '' : ref };
+    }
     case 'open_tab': {
       if (!cmd.url || !/^https?:\/\//i.test(cmd.url)) {
         throw new Error('open_tab 需要合法 http(s) URL，收到: ' + (cmd.url || '(空)'));
@@ -632,8 +664,9 @@ export async function dispatch(cmd, deps) {
           // F2②（G11 正确版）：三段式编排收口 Go——扩展只暴露无状态子命令，
           // 提交（comment_send）与验证（comment_verify 轮询）分离，可中断可归因。
           // 旧一站式 post_comment 兼容路径已删（服务端 v3.41.0 起只发子命令，单一路径防分叉）。
-          // 平台选择器由服务端 L3 适配器下发（无则缺省小红书——R17 真机实测）
-          const inputSel = cmd.input_selector || '';
+          // 平台选择器由服务端 L3 适配器下发（无则缺省小红书——R17 真机实测）。
+          // A1 自愈回路：input_selector 允许是 @eN 引用（LLM 重定位产物），此处同 click/type 走 ref 解析
+          const inputSel = resolveTarget(cmd.input_selector || '');
           const sendText = cmd.send_button_text || '';
           if (cmd.action === 'comment_prep') {
             // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）。

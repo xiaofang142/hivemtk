@@ -1,4 +1,7 @@
 import { createLogger } from './logger.js';
+// B7（批2）：逐段键入计划器来自 @hivemtk/browser-core（段长/停顿分布与 A 链路共源）；
+// 本模块只做 DOM 注入执行 + 末段校验兜底。
+import { planTypingBursts, shouldInterjectMouse, sleep } from '../../../../packages/browser-core/index.js';
 
 export { createLogger };
 
@@ -92,16 +95,7 @@ export function setValue(el, value) {
 export function fillContentEditable(el, text, { clearBefore = false } = {}) {
   if (!el) return;
   el.focus();
-  if (clearBefore) {
-    try {
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        el.value = '';
-      } else {
-        while (el.firstChild) el.removeChild(el.firstChild);
-        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      }
-    } catch (_) {  }
-  }
+  if (clearBefore) clearEditable(el);
   try {
     document.execCommand('insertText', false, text);
   } catch (e) {
@@ -116,6 +110,68 @@ export function fillContentEditable(el, text, { clearBefore = false } = {}) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 }
+
+/** fillContentEditable 的清空段：textarea/input 清 value，contenteditable 摘空子节点并派发 input */
+function clearEditable(el) {
+  try {
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+      el.value = '';
+    } else {
+      while (el.firstChild) el.removeChild(el.firstChild);
+      el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+  } catch (_) {  }
+}
+
+/** 单段注入失败时的兜底追加（textarea/input 走 value 拼接，contenteditable 走 innerText） */
+function appendEditable(el, chunk) {
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+    el.value = (el.value || '') + chunk;
+  } else {
+    el.innerText = (el.innerText || '') + chunk;
+  }
+  el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: chunk, bubbles: true }));
+}
+
+/**
+ * fillContentEditableHumanized（B7）：按 browser-core 计划逐段拟人键入。
+ *
+ * 动机：fillContentEditable 一次性整段 insertText——无节奏、无停顿、无鼠标活动，
+ * 是内容脚本链路最典型的机器人特征。本函数保持同一注入通道（execCommand insertText，
+ * 合成事件 isTrusted=false 的现状不在本批范围），只把"节奏"做实：
+ *   - 1–4 码点分段、段后高斯停顿、标点加重停顿、5% 偶发思考停顿（计划器纯函数可测）；
+ *   - 18% 概率穿插一次 mousemove（真人打字时鼠标不会钉死）；
+ *   - 末段全量校验，不一致回落到 fillContentEditable 语义（保证发送内容正确优先于拟人）。
+ */
+export async function fillContentEditableHumanized(el, text, { clearBefore = false } = {}) {
+  if (!el || !text) return;
+  el.focus();
+  if (clearBefore) clearEditable(el);
+  for (const burst of planTypingBursts(text)) {
+    let ok = false;
+    try {
+      ok = document.execCommand('insertText', false, burst.text);
+    } catch (e) {
+      ok = false;
+    }
+    if (!ok) appendEditable(el, burst.text);
+    if (shouldInterjectMouse()) {
+      try {
+        const r = el.getBoundingClientRect();
+        el.dispatchEvent(new MouseEvent('mousemove', {
+          bubbles: true, view: typeof window !== 'undefined' ? window : undefined,
+          clientX: r.left + Math.random() * r.width, clientY: r.top + Math.random() * r.height,
+        }));
+      } catch (_) {  }
+    }
+    if (burst.delayMs > 0) await sleep(Math.round(burst.delayMs));
+  }
+  const expect = String(text).trim();
+  if ((el.innerText || el.value || '').toString().trim() !== expect) {
+    fillContentEditable(el, text, { clearBefore: true });
+  }
+}
+
 
 /** 抖音 humanType：逐字符 execCommand('insertText')（更拟人，适合作者打字节奏） */
 export function humanType(el, text, { interval = 20 } = {}) {

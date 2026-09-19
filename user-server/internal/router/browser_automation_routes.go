@@ -89,7 +89,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.POST("/tasks/:id/archive", taskCtrl.Archive)
 	ba.PUT("/tasks/:id/dependency", taskCtrl.SetDependency)
 
-	// Session（查询 + 中断 + 审计命令流）
+	// Session（查询 + 中断 + 写操作确认 + 审计命令流）
 	ba.GET("/sessions", sessionCtrl.List)
 	ba.GET("/sessions/:id", sessionCtrl.Get)
 	ba.GET("/sessions/:id/steps", sessionCtrl.ListSteps)
@@ -97,6 +97,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.GET("/sessions/:id/export", sessionCtrl.Export) // I5：审计包单请求归并导出
 	ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
 	ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
+	ba.POST("/sessions/:id/confirm", sessionCtrl.Confirm) // D7：写操作人工确认放行
 
 	// Cron
 	ba.GET("/cron", cronCtrl.List)

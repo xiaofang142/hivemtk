@@ -155,7 +155,7 @@ func (f *FeedbackService) scanDueRetries(ctx context.Context) {
 	for _, t := range due {
 		newCount := t.RetryCount + 1
 		logger.Infof("[BrowserFeedback] 认领到期重试 task=%d 第 %d/%d 次", t.ID, newCount, t.MaxRetryTimes)
-		if err := f.runRetry(context.Background(), t, newCount); err != nil {
+		if err := f.runRetry(ctx, t, newCount); err != nil {
 			logger.Warnf("[BrowserFeedback] 重试触发失败 task=%d: %v", t.ID, err)
 		}
 	}

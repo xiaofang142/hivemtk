@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -133,13 +134,57 @@ func TestAppendHistoryBoundedFolds(t *testing.T) {
 	_ = appendHistoryBounded(h, "query body", nil)
 }
 
-// 平台错误分类与执行层分线的一致性（ClassifyError 默认值=retry → 未知错误不阻塞重试）
-func TestPlatformDefaultErrTypeIsRetry(t *testing.T) {
-	p, err := platform.Get("xiaohongshu")
-	if err != nil {
-		t.Fatal(err)
+// R-A3（2026-09-19）fail-closed：默认分类由 retry 翻转为 unknown——不重试；
+// 可重试集合显式枚举（timeout/超时/未就绪/element_not_found）。
+func TestPlatformDefaultErrTypeIsUnknown(t *testing.T) {
+	for _, id := range []string{"xiaohongshu", "douyin", "xianyu"} {
+		p, err := platform.Get(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.ClassifyError("完全没见过的字符串") != platform.ErrUnknown {
+			t.Errorf("%s 默认分类应为 unknown（fail-closed）", id)
+		}
+		if p.ClassifyError("Host 命令超时: cdp 未回包") != platform.ErrRetry {
+			t.Errorf("%s 中文「超时」必须留在显式可重试表（Host 命令超时是最高频瞬态错误）", id)
+		}
+		if p.ClassifyError("timeout waiting for element") != platform.ErrRetry {
+			t.Errorf("%s timeout 应可重试", id)
+		}
 	}
-	if p.ClassifyError("完全没见过的字符串") != platform.ErrRetry {
-		t.Error("默认分类应为 retry（保守可重试）")
+}
+
+func TestStepErrRetryableFailClosed(t *testing.T) {
+	if stepErrRetryable("xiaohongshu", "完全没见过的字符串") {
+		t.Error("ErrUnknown 应不重试（R-A3 fail-closed）")
+	}
+	if !stepErrRetryable("xiaohongshu", "element_not_found: #x") {
+		t.Error("显式 retry 类应可重试")
+	}
+}
+
+func TestRecordResultPayloadExplicitError(t *testing.T) {
+	// R-A4：回包经返回值传递；marshal 失败显式抛错而非静默吞
+	blob, err := recordResultPayload(nil)
+	if err != nil || blob != nil {
+		t.Errorf("空 payload 应回 (nil, nil)，得 (%v, %v)", blob, err)
+	}
+	blob, err = recordResultPayload(map[string]any{"k": "v"})
+	if err != nil || string(blob) != `{"k":"v"}` {
+		t.Errorf("正常 payload 应回序列化结果，得 %s, %v", blob, err)
+	}
+	if _, err := recordResultPayload(map[string]any{"bad": make(chan int)}); err == nil {
+		t.Error("不可序列化 payload 必须显式抛错（旧实现吞错致 result 静默丢失）")
+	}
+}
+
+func TestExecutorCarriesNoPerSessionResultField(t *testing.T) {
+	// R-A4 结构防回归：Executor（进程级单例）不得再挂 []byte 类型的逐步回包字段。
+	ty := reflect.TypeOf(Executor{})
+	byteSlice := reflect.TypeOf([]byte(nil))
+	for i := 0; i < ty.NumField(); i++ {
+		if f := ty.Field(i); f.Type == byteSlice {
+			t.Errorf("Executor 不应持有 []byte 字段（曾为 lastStepResult 数据竞态源），发现: %s", f.Name)
+		}
 	}
 }

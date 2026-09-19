@@ -19,6 +19,7 @@
       <el-descriptions-item label="步间间隔">{{ task.delay_ms }}ms</el-descriptions-item>
       <el-descriptions-item label="超时">{{ task.timeout_sec }}s</el-descriptions-item>
       <el-descriptions-item label="失败重试">{{ task.retry_on_fail ? `${task.retry_delay_sec}s × ${task.max_retry_times} 次` : '关闭' }}</el-descriptions-item>
+      <el-descriptions-item label="写操作确认">{{ task.require_confirm ? '提交前需人工放行' : '全自动' }}</el-descriptions-item>
       <el-descriptions-item label="上次执行">{{ task.last_run_at ? new Date(task.last_run_at).toLocaleString('zh-CN') : '—' }}</el-descriptions-item>
       <el-descriptions-item label="上次结果">{{ task.last_result || '—' }}</el-descriptions-item>
       <el-descriptions-item v-if="task.error_msg" label="错误" :span="3">

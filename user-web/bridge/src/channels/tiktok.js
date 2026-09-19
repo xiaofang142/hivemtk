@@ -3,10 +3,11 @@ import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import {
-  qs, qsa, cleanText, setValue, fillContentEditable, enhancedClick,
+  qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick,
   simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage,
   sanitizePeerName,
 } from '../core/dom.js';
+import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
 const log = createLogger('tiktok', CHANNELS.TIKTOK);
@@ -637,11 +638,11 @@ const hooks = {
       throw new Error('tiktok input not found');
     }
     if (input.isContentEditable || input.getAttribute('contenteditable') === 'true' || input.tagName !== 'TEXTAREA') {
-      fillContentEditable(input, text);
+      await fillContentEditableHumanized(input, text);
     } else {
       setValue(input, text);
     }
-    await new Promise((r) => setTimeout(r, 150));
+    await humanDelay('click', { channel: CHANNELS.TIKTOK, account: getAccountId() });
     const btn = findSendButton();
     if (btn) {
       enhancedClick(btn);

@@ -112,7 +112,7 @@ export const PATROL_DEFAULTS = Object.freeze({
 //   - xiaohongshu：2s（XHS IM 是 React 受控组件，渲染最快）
 //   - tiktok：6s（海外链路 + 重 SPA，渲染最慢）
 //   - xianyu：4s（闲鱼 IM 入口 goofish.com，DOM 中等复杂度）
-//   - kuaishou：5s（未实现，预留）
+//   - kuaishou：5s（实验渠道，选择器未经真机校准，取抖音同档保守值）
 //
 // 默认值（BaseAdapter 未注入 hooks.historyGraceMs 时使用）：8s（保守上限）
 export const HISTORY_GRACE_MS = Object.freeze({
@@ -153,6 +153,16 @@ export const CHANNEL_DISPLAY = Object.freeze({
   xianyu: '闲鱼',
   kuaishou: '快手',
 });
+
+// B8（2026-09-19）实验渠道清单——与 user-server internal/channelgw/registry.go 的
+// ChannelSpec.Experimental 同步维护。快手网页 IM 选择器是模式猜测、零真机校准：
+// 链路可跑但不保证生产级正确率。语义是「如实降级声明」：只影响日志/诊断展示，
+// 不拦截任何功能（未证伪不删除）。
+export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true });
+
+export function isExperimentalChannel(channel) {
+  return !!EXPERIMENTAL_CHANNELS[channel];
+}
 
 // =============================================================
 // 7) 协议常量（与服务端 user-server/internal/bridge/frames.go 一一对应）
@@ -238,5 +248,13 @@ export const BRIDGE_THREE_CHANNEL = Object.freeze({
   sentCacheMax: 2000,
   sendOutboundTimeoutMs: 20000,
 });
+
+// B4（批3）：发送全链统一超时。B7 拟人键入后单次 sendText 时长随文本长度线性增长
+// （逐段停顿均值≈90ms/码点，标点/思考停顿上探 250ms/码点）——固定 20s 会对长文案
+// 产生"假超时→pending 重发→重复消息"。超时预算 = 基础 + 250ms×码点数，封顶 120s。
+export function humanSendTimeoutMs(text, baseMs = BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs) {
+  const chars = Array.from(String(text || '')).length;
+  return Math.min(baseMs + chars * 250, 120_000);
+}
 
 

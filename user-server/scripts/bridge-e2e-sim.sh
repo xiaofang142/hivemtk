@@ -11,7 +11,7 @@
 #   2) 幂等去重：相同 event_id 重报 → duplicate (DB msg_id 级, 跨重启生效)
 #   3) 回声/回环去重：相同 channel+content+sender 新 event_id → 被中间件拦截
 #   4) outbox 下发：拉到 AI 回复，校验字段完整性 + is_ai_reply + 内容质量
-#   5) ack 闭环：acked>=1，ack 后 outbox 清空 (at-least-once 确认)
+#   5) ack 闭环：acked_items_count>=1（响应字段名以 handler_http.go:784 为唯一源），ack 后 outbox 清空
 #   6) msg_id 回环：把 AI 回复原样回灌(event_id=内容哈希) → 被拦截
 # 另含：负向用例(缺参/不支持渠道) + 跨语言哈希契约锚点 + 推理栈健康门控。
 # AI 回复依赖推理栈；若推理栈不健康则相关项记 WARN(归属环境)而非 FAIL。
@@ -19,6 +19,11 @@
 set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8204}"
+# X-Bridge-Token 闸门（middleware/bridge_ingress_guard.go, code UNAUTHORIZED_2001）:
+# 本脚本早于该闸门，未带 token 时 ingest 全 401、GET outbox 的 401 还会被误归因为
+# "推理栈波动" WARN。用法: BRIDGE_TOKEN=$(查 system_config_kv.bridge_ingest_token) bash 本脚本
+BRIDGE_TOKEN="${BRIDGE_TOKEN:-}"
+H_TOKEN=(-H "X-Bridge-Token: ${BRIDGE_TOKEN}")
 CHANNELS=("douyin" "xiaohongshu" "kuaishou" "xianyu" "tiktok")
 PASS=0; FAIL=0; WARN=0
 declare -a REPORT
@@ -100,6 +105,11 @@ for p in 8207 8208 8209; do
   c=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "http://localhost:$p/health" || echo 000)
   if [ "$c" = "200" ]; then ok "推理栈 :$p /health → 200"; else warn "推理栈 :$p" "/health=$c (AI 可能降级，AI 回复相关项视为环境归因)"; LLM_OK=0; fi
 done
+if [ "$LLM_OK" = "0" ]; then
+  # 处置指针写进结果面（批5 发现登记项）：本脚本判不了也修不了推理栈，但必须说清
+  # 「去哪儿修、影响面止于哪一块」，否则 WARN 只到「环境归因」就断了。
+  warn "推理栈处置指引" "拉起缺口的栈：bash scripts/inference-host/start-all.sh；影响面=bridge outbox 的 AI 回复（浏览器 Brain 走平台 LLM 网关，不同路）"
+fi
 
 # ---- 0c. 跨语言哈希契约锚点（最高优先级）----
 ANCHOR=$(chash "douyin" "你好")
@@ -107,12 +117,12 @@ if [ "$ANCHOR" = "mh:00550fed" ]; then ok "哈希契约锚点 chash('douyin','�
 
 # ---- 负向用例 ----
 echo ""; echo "${C_YEL}--- 负向用例 ---${C_RST}"
-NEG=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest" -H 'Content-Type: application/json' \
+NEG=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
   -d '{"messages":[{"event_id":"x","conversation_id":"c","sender":{"id":"s","type":"customer"},"content":"hi","msg_type":"text","timestamp":1}]}')
 [ "$(printf '%s' "$NEG" | jq -r '.ok')" = "false" ] \
   && ok "缺参: 无 channel/account_id → ok=false (reason=$(printf '%s' "$NEG" | jq -r '.reason'))" \
   || bad "缺参" "ok 应为 false: $NEG"
-NEG2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest?channel=unknown_xyz&account_id=a" -H 'Content-Type: application/json' \
+NEG2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest?channel=unknown_xyz&account_id=a" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
   -d '{"messages":[{"event_id":"x2","conversation_id":"c2","sender":{"id":"s","type":"customer"},"content":"hi","msg_type":"text","timestamp":1}]}')
 [ "$(printf '%s' "$NEG2" | jq -r '.ok')" = "false" ] \
   && ok "不支持渠道: unknown_xyz → ok=false (reason=$(printf '%s' "$NEG2" | jq -r '.reason'))" \
@@ -127,8 +137,8 @@ for ch in "${CHANNELS[@]}"; do
 
   # 1) 首报（冷启动/瞬时抖动重试一次，同 event_id 幂等安全）
   BODY=$(mkmsg "$ch" "$ACCT" "$CONV" "$EVT1" "$CONTENT")
-  RESP=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$BODY")
-  [ "$(printf '%s' "$RESP" | jq -r '.ok')" = "true" ] || { sleep 2; RESP=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$BODY"); }
+  RESP=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BODY")
+  [ "$(printf '%s' "$RESP" | jq -r '.ok')" = "true" ] || { sleep 2; RESP=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BODY"); }
   if [ "$(printf '%s' "$RESP" | jq -r '.ok')" != "true" ]; then bad "$ch ingest" "ok!=true: $RESP"; continue; fi
   assert_type "$RESP" '.session_id' 'string' "$ch ingest.session_id"
   assert_type "$RESP" '.server_time' 'number' "$ch ingest.server_time"
@@ -146,7 +156,7 @@ for ch in "${CHANNELS[@]}"; do
     || warn "$ch ingest" "ai_handled=false (未触发 AI, reason=$(printf '%s' "$r0" | jq -r '.reason'))"
 
   # 2) 幂等去重：相同 event_id
-  R2=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$BODY")
+  R2=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BODY")
   r2=$(printf '%s' "$R2" | jq -c '.ingested[0]')
   if [ "$(printf '%s' "$r2" | jq -r '.duplicate')" = "true" ]; then
     ok "$ch 幂等去重: 同 event_id → duplicate=true (reason=$(printf '%s' "$r2" | jq -r '.reason'))"
@@ -155,7 +165,7 @@ for ch in "${CHANNELS[@]}"; do
   # 3) 回声/回环去重：相同 channel+content+sender，新 event_id
   #    约定：命中去重时 duplicate=true（权威信号，前端据此停重发）；accepted 恒为 true（表示已收讫）。
   BODY2=$(mkmsg "$ch" "$ACCT" "$CONV" "$EVT2" "$CONTENT")
-  R3=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$BODY2")
+  R3=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BODY2")
   r3=$(printf '%s' "$R3" | jq -c '.ingested[0]')
   assert_type "$r3" '.duplicate' 'boolean' "$ch 回声/回环去重.duplicate"
   if [ "$(printf '%s' "$r3" | jq -r '.duplicate')" = "true" ]; then
@@ -165,7 +175,7 @@ for ch in "${CHANNELS[@]}"; do
   # 4) outbox 拉取 AI 回复（轮询，容忍瞬时错误与推理栈偶发慢）
   REPLY=""; LAST=""
   for i in $(seq 1 75); do
-    OB=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$ACCT&limit=5")
+    OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$ACCT&limit=5")
     LAST=$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)
     if [ "$LAST" = "ok" ]; then
       n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
@@ -207,12 +217,12 @@ for ch in "${CHANNELS[@]}"; do
   # 5) ack 闭环
   MSGID=$(printf '%s' "$m0" | jq -r '.msg_id')
   ACK_BODY=$(python3 -c "import json;print(json.dumps({'msg_ids':['$MSGID'],'status':'delivered'}))")
-  ACK=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$ACK_BODY")
+  ACK=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$ACK_BODY")
   if [ "$(printf '%s' "$ACK" | jq -r '.status')" = "ok" ]; then
-    acked=$(printf '%s' "$ACK" | jq -r '.acked')
-    [ "${acked:-0}" -ge 1 ] && ok "$ch ack: 闭环成功 (acked=$acked)" || bad "$ch ack" "acked=$acked 期望>=1"
+    acked=$(printf '%s' "$ACK" | jq -r '.acked_items_count')
+    [ "${acked:-0}" -ge 1 ] && ok "$ch ack: 闭环成功 (acked_items_count=$acked)" || bad "$ch ack" "acked_items_count=$acked 期望>=1"
   else bad "$ch ack" "status!=ok: $ACK"; fi
-  OB2=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$ACCT&limit=5")
+  OB2=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$ACCT&limit=5")
   n2=$(printf '%s' "$OB2" | jq -r '.messages|length' 2>/dev/null)
   [ "${n2:-0}" = "0" ] && ok "$ch outbox: ack 后下发清空 (at-least-once 已确认)" \
     || warn "$ch outbox" "ack 后仍有 $n2 条 (reclaim 重下发, at-least-once 权衡)"
@@ -220,7 +230,7 @@ for ch in "${CHANNELS[@]}"; do
   # 6) msg_id 回环：AI 回复原样回灌 (event_id=内容哈希)
   LOOP_EVT=$(chash "$ch" "$rc")
   LOOP_BODY=$(mkmsg "$ch" "$ACCT" "$CONV" "$LOOP_EVT" "$rc")
-  LR=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' -d "$LOOP_BODY")
+  LR=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ch&account_id=$ACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$LOOP_BODY")
   lr=$(printf '%s' "$LR" | jq -c '.ingested[0]')
   if [ "$(printf '%s' "$lr" | jq -r '.duplicate')" = "true" ]; then
     ok "$ch msg_id 回环: AI 回复回灌被拦截 (event_id=内容哈希, reason=$(printf '%s' "$lr" | jq -r '.reason'))"
@@ -256,7 +266,7 @@ for i in range(3):
     })
 print(json.dumps({"messages": msgs}))
 ')
-BR=$(curl -s -m 25 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' -d "$BATCH_BODY")
+BR=$(curl -s -m 25 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BATCH_BODY")
 if [ "$(printf '%s' "$BR" | jq -r '.ok')" = "true" ]; then
   bc=$(printf '%s' "$BR" | jq -r '.ingested|length')
   [ "$bc" = "3" ] && ok "D1 批量 ingest: 3 条全部返回处理结果 (ingested=$bc)" || bad "D1 批量 ingest" "ingested=$bc 期望 3"
@@ -276,7 +286,7 @@ echo ""; echo "${C_YEL}--- D2. outbox limit 边界（limit=1 仅返回 1 条；�
 # 等待 D1 的 AI 回复落库（可能 3 条，按 conv 合并为 1 条回复更可能，但兜底测 limit）
 REPLY_D2=""
 for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=100")
+  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=100")
   st=$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)
   if [ "$st" = "ok" ]; then
     n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
@@ -290,16 +300,16 @@ else
   TOTAL_D2=$(printf '%s' "$REPLY_D2" | jq -r '.messages|length')
   # 先 ack 清空，便于后续 limit=1 精确计数
   ALL_IDS=$(printf '%s' "$REPLY_D2" | jq -r '[.messages[].msg_id]|join(",")')
-  curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+  curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
     -d "$(python3 -c "import json;print(json.dumps({'msg_ids':'$ALL_IDS'.split(','),'status':'delivered'}))")" >/dev/null
   ok "D2 outbox: 已拉到 $TOTAL_D2 条 AI 回复并清空（limit=100 返回全部）"
   # limit=1 边界：再发 2 条到同一 conv 看 limit 是否生效（若无新回复则不强制 fail）
   # 直接验证 limit 参数被接受且返回 <= limit
-  OB1=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=1")
+  OB1=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=1")
   n1=$(printf '%s' "$OB1" | jq -r '.messages|length' 2>/dev/null)
   [ "${n1:-0}" -le 1 ] && ok "D2 outbox limit=1: 返回 ${n1} 条 (<=1)" || bad "D2 outbox limit=1" "返回 $n1 条 >1"
   # 超大 limit 封顶：URL 传 9999，服务端应封顶 200（不报错）
-  OB9=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=9999")
+  OB9=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=9999")
   [ "$(printf '%s' "$OB9" | jq -r '.status' 2>/dev/null)" = "ok" ] \
     && ok "D2 outbox limit=9999: 服务端接受并封顶(不 500)" \
     || bad "D2 outbox limit=9999" "status!=ok: $OB9"
@@ -318,10 +328,10 @@ print(json.dumps({"messages":[{
     "timestamp": int(time.time()*1000)
 }]}))
 ')
-curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' -d "$ACK_BODY" >/dev/null
+curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$ACK_BODY" >/dev/null
 ACK_TARGET=""
 for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
+  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
   if [ "$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)" = "ok" ]; then
     n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
     [ "${n:-0}" -gt 0 ] && { ACK_TARGET="$OB"; break; }
@@ -333,24 +343,24 @@ if [ -z "$ACK_TARGET" ]; then
 else
   MID=$(printf '%s' "$ACK_TARGET" | jq -r '.messages[0].msg_id')
   # 首次 ack
-  A1=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+  A1=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
     -d "$(mkack "$MID" "delivered")")
-  a1=$(printf '%s' "$A1" | jq -r '.acked' 2>/dev/null)
-  [ "$a1" = "1" ] && ok "D3 ack 首次: acked=1" || bad "D3 ack 首次" "acked=$a1 期望 1"
+  a1=$(printf '%s' "$A1" | jq -r '.acked_items_count' 2>/dev/null)
+  [ "$a1" = "1" ] && ok "D3 ack 首次: acked_items_count=1" || bad "D3 ack 首次" "acked_items_count=$a1 期望 1"
   # 重复 ack（已 delivered，应幂等 acked=0）
-  A2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+  A2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
     -d "$(mkack "$MID" "delivered")")
-  a2=$(printf '%s' "$A2" | jq -r '.acked' 2>/dev/null)
-  [ "$a2" = "0" ] && ok "D3 ack 重复: acked=0 (幂等，已 delivered 不重复计)" || bad "D3 ack 重复" "acked=$a2 期望 0"
+  a2=$(printf '%s' "$A2" | jq -r '.acked_items_count' 2>/dev/null)
+  [ "$a2" = "0" ] && ok "D3 ack 重复: acked_items_count=0 (幂等，已 delivered 不重复计)" || bad "D3 ack 重复" "acked_items_count=$a2 期望 0"
   # 不存在的 msg_id
-  A3=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+  A3=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
     -d "$(mkack "mh:deadbeef" "delivered")")
-  a3=$(printf '%s' "$A3" | jq -r '.acked' 2>/dev/null)
-  [ "$a3" = "0" ] && ok "D3 ack 不存在 msg_id: acked=0 (安全忽略)" || bad "D3 ack 不存在" "acked=$a3 期望 0"
+  a3=$(printf '%s' "$A3" | jq -r '.acked_items_count' 2>/dev/null)
+  [ "$a3" = "0" ] && ok "D3 ack 不存在 msg_id: acked_items_count=0 (安全忽略)" || bad "D3 ack 不存在" "acked_items_count=$a3 期望 0"
   # 空 body（msg_ids 为空）
-  A4=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' -d '{}')
+  A4=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d '{}')
   a4=$(printf '%s' "$A4" | jq -r '.status' 2>/dev/null)
-  [ "$a4" = "ok" ] && ok "D3 ack 空 body: status=ok (acked=0, 不报错)" || bad "D3 ack 空 body" "status=$a4: $A4"
+  [ "$a4" = "ok" ] && ok "D3 ack 空 body: status=ok (acked_items_count=0, 不报错)" || bad "D3 ack 空 body" "status=$a4: $A4"
 fi
 
 # ---- D4. reclaim 超时重下发（inflight 卡 30s 后回收为 pending 重新可拉）----
@@ -365,11 +375,11 @@ print(json.dumps({"messages":[{
     "timestamp": int(time.time()*1000)
 }]}))
 ')
-curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' -d "$R4_BODY" >/dev/null
+curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$R4_BODY" >/dev/null
 # 拉取一次（转为 inflight），不 ack
 R4=""
 for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
+  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
   if [ "$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)" = "ok" ]; then
     n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
     [ "${n:-0}" -gt 0 ] && { R4="$OB"; break; }
@@ -385,7 +395,7 @@ else
   [ "$S1" = "inflight" ] && ok "D4 reclaim: 首次拉取后 status=$S1 (已被 claim)" || warn "D4 reclaim" "status=$S1 (期望 inflight)"
   echo "  等待 32s 让 inflight 超时被回收为 pending ..."
   sleep 32
-  R4b=$(curl -s -m 10 "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
+  R4b=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
   if [ "$(printf '%s' "$R4b" | jq -r '.status' 2>/dev/null)" = "ok" ] && [ "$(printf '%s' "$R4b" | jq -r '.messages|length' 2>/dev/null)" -gt 0 ]; then
     reclaimed=0
     for m in $(printf '%s' "$R4b" | jq -r '.messages[].msg_id'); do
@@ -396,7 +406,7 @@ else
       || warn "D4 reclaim" "超时后未重新拉到该 msg_id（可能已非 pending 或窗口边界）"
     # 清理：ack 掉重发的
     RIDS=$(printf '%s' "$R4b" | jq -r '[.messages[].msg_id]|join(",")')
-    curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+    curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
       -d "$(mkack "$RIDS" "delivered")" >/dev/null
   else
     warn "D4 reclaim" "超时后 outbox 未返回消息（可能 AI 回复本身未落库，环境归因）"
@@ -407,13 +417,13 @@ fi
 echo ""; echo "${C_YEL}--- D5. media 图片消息（msg_type=image, 带 media_url）---${C_RST}"
 DEVT5="deep_media_$(uid12)"
 MEDIA_URL="https://cdn.example.com/deep/${DEVT5}.jpg"
-MRES=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+MRES=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
   -d "$(python3 -c '
 import json, time
 print(json.dumps({"messages":[{
     "event_id": "'"$DEVT5"'", "conversation_id": "'"$DCONV"'",
     "sender": {"id": "cust_deep_media", "name": "访客", "type": "customer"},
-    "content": "用户发来一张商品图", "msg_type": "image",
+    "content": "用户发来一张商品图 '"$DEVT5"'", "msg_type": "image",
     "media_url": "'"$MEDIA_URL"'", "timestamp": int(time.time()*1000)
 }]}))
 ')")
@@ -431,7 +441,7 @@ else bad "D5 media ingest" "ok!=true: $MRES"; fi
 # ---- D6. channel query 覆盖 body（防扩展错传）----
 echo ""; echo "${C_YEL}--- D6. channel query 覆盖 body（body channel=xiaohongshu 但 query=douyin → 以 query 为准）---${C_RST}"
 DEVT6="deep_cover_$(uid12)"
-COVER=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' \
+COVER=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
   -d "$(python3 -c '
 import json, time
 print(json.dumps({"channel": "xiaohongshu", "account_id": "'"$DACCT"'", "messages":[{

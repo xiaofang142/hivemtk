@@ -106,7 +106,9 @@ export function collectInteractiveNodes() {
     seen.add(text);
     pushNode(el, 'text');
   });
-  return { nodes, paths };
+  // A2（批2）：快照携带页面 URL——拦截判据的 URL 层依赖（旧实现快照不含 URL，
+  // website-login/error 等重定向判据永不命中）
+  return { nodes, paths, url: location.href };
 }
 
 /**
@@ -115,11 +117,11 @@ export function collectInteractiveNodes() {
  * 做 diff——新出现元素行首加 `*`。首帧/导航重建基线前不打标（防"全是新元素"噪声）。
  * @param {{nodes:Array,paths:Array}} collected
  * @param {number|string} [tabKey] 基线归属 tab（缺省 'default'，单 tab 场景）
- * @returns {{ text: string, count: number, new_count: number }}
+ * @returns {{ text: string, count: number, new_count: number, url: string }}
  */
 const baselines = new Map(); // tabKey -> Set<role + '|' + name>
 
-export function assembleSnapshot({ nodes, paths }, tabKey = 'default') {
+export function assembleSnapshot({ nodes, paths, url }, tabKey = 'default') {
   resetRefs();
   const prev = baselines.get(tabKey) || null;
   const now = new Set();
@@ -136,7 +138,7 @@ export function assembleSnapshot({ nodes, paths }, tabKey = 'default') {
     lines.push(`${isNew ? '*' : ''}${n.role} "${n.name}" ${ref}`);
   });
   baselines.set(tabKey, now);
-  return { text: lines.join('\n'), count: lines.length, new_count: newCount };
+  return { text: lines.join('\n'), count: lines.length, new_count: newCount, url: url || '' };
 }
 
 // resetSnapshotBaseline 清某 tab（或全部）的对比基线——页面导航/open_tab 后调用，

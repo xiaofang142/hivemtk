@@ -139,6 +139,7 @@ export async function connectSSE(channel, accountId, opts = {}) {
     onMessage,
     onError,
     onLastEventID,
+    onRetry,
   } = opts;
 
   // 构建 URL
@@ -213,6 +214,8 @@ export async function connectSSE(channel, accountId, opts = {}) {
       },
       onRetry: (ms) => {
         log.info(`SSE 服务端建议重连间隔: ${ms}ms`);
+        // B3：透传给调用方（WHATWG retry: 仅纯数字生效，parseSSEStream 已做 isNaN 过滤）
+        onRetry?.(ms);
       },
     });
 
@@ -265,6 +268,21 @@ export function setLastEventID(channel, accountId, id) {
 export function isConnected(channel, accountId) {
   const key = `${channel}:${accountId}`;
   return connections.has(key);
+}
+
+/**
+ * B5（批3）：按 key 中止活动连接。connectSSE 的停止函数在流结束后才 resolve，
+ * 无法中断进行中的长连接；调用方需要"立即断开"（如 stop/页面卸载）时走本函数，
+ * 由 fetch AbortController 使 parseSSEStream 以 AbortError 收尾。
+ */
+export function stopSSE(channel, accountId) {
+  const key = `${channel}:${accountId}`;
+  if (!connections.has(key)) return false;
+  try {
+    connections.get(key).abortController.abort();
+  } catch (_) {}
+  connections.delete(key);
+  return true;
 }
 
 /**

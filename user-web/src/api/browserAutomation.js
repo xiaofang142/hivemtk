@@ -54,6 +54,10 @@ export const listBrowserTaskSessions = (taskId, params) =>
 export const stopBrowserSession = (id, reason) =>
   http.post(`/api/browser-automation/sessions/${id}/stop`, { reason: reason || '' })
 
+// D7：放行 require_confirm 闸门上挂起的写操作提交点（会话详情 confirm_pending=true 时可调用）
+export const confirmBrowserSession = (id) =>
+  http.post(`/api/browser-automation/sessions/${id}/confirm`, {})
+
 // D1（G1 补口）：append-only 命令流审计（direction 可选 command/event/judge）
 export const getBrowserSessionLogs = (id, direction) =>
   http.get(`/api/browser-automation/sessions/${id}/logs`, direction ? { direction } : undefined)

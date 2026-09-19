@@ -196,9 +196,19 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 
 	var sinceID uint64
 	if lastEventID != "" {
-		if id, err := strconv.ParseUint(lastEventID, 10, 64); err == nil {
-			sinceID = id
+		id, err := strconv.ParseUint(lastEventID, 10, 64)
+		if err != nil {
+			// B8（2026-09-19）：非法游标 ≠ 无游标。旧行为把垃圾游标当 0 → 全量回放
+			// 最多 200 条已投递 outbound → 浏览器重复转发。fail-closed：返回 0 行、
+			// 游标原样保留（连接继续收增量），Warn 留现场。空游标（首连）仍走全量补齐。
+			logger.Ctx(ctx).Warn().
+				Str("channel", channel).
+				Str("account_id", accountID).
+				Str("last_event_id", lastEventID).
+				Msg("[SSE] 非法 Last-Event-ID，游标 fail-closed 不回放大批量历史")
+			return nil, lastEventID, nil
 		}
+		sinceID = id
 	}
 
 	rows, err := f.querier.FetchOutboundSince(ctx, channel, accountID, sinceID, 200)
@@ -208,27 +218,20 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 
 	events := make([]SSEEvent, 0, len(rows))
 	for _, row := range rows {
-		events = append(events, SSEEvent{
-			ID:             strconv.FormatUint(uint64(row.ID), 10),
-			Event:          "new_outbound",
+		// R-B1：Data 统一经 BuildOutboundSSEEvent 构造（与总线路径逐键一致）
+		events = append(events, BuildOutboundSSEEvent(OutboundEventData{
+			HubID:          uint64(row.ID),
+			MsgID:          row.MsgID,
+			Platform:       row.Platform,
+			AccountID:      row.AccountID,
 			ConversationID: row.ConversationID,
+			Content:        row.Content,
 			MsgType:        row.MsgType,
 			ReceiverID:     row.ReceiverID,
-			Seq:            int(row.ID),
-			Data: map[string]any{
-				"hub_id":          row.ID,
-				"msg_id":          row.MsgID,
-				"platform":        row.Platform,
-				"account_id":      row.AccountID,
-				"conversation_id": row.ConversationID,
-				"content":         row.Content,
-				"msg_type":        row.MsgType,
-				"receiver_id":     row.ReceiverID,
-				"is_ai_reply":     row.IsAIReply,
-				"extra":           row.Extra,
-			},
-			Timestamp: row.CreatedAt,
-		})
+			IsAIReply:      row.IsAIReply,
+			Extra:          row.Extra,
+			CreatedAt:      row.CreatedAt,
+		}))
 	}
 
 	newLastID := lastEventID

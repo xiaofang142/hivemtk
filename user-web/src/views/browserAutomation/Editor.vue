@@ -104,6 +104,13 @@
         </template>
       </el-form-item>
 
+      <el-form-item v-if="hasWriteStep || form.brain_mode" label="写操作人工确认">
+        <el-switch v-model="form.require_confirm" />
+        <span class="form-hint">
+          开启后 post_comment 在提交前挂起，需在监控页点「确认放行」才真正发出（超时/中断则中止且不提交）
+        </span>
+      </el-form-item>
+
       <el-form-item v-if="form.task_type === 'workflow'" label="依赖前置任务">
         <el-select v-model="form.depends_on_task_id" clearable placeholder="选择已发布任务" style="width: 300px">
           <el-option v-for="t in readyTasks" :key="t.id" :label="`#${t.id} ${t.name}`" :value="t.id" />
@@ -163,8 +170,12 @@ const form = ref({
   brain_mode: false, brain_goal: '', steps: [],
   loop_count: 1, delay_ms: 1000, timeout_sec: 120,
   retry_on_fail: false, retry_delay_sec: 300, max_retry_times: 3,
+  require_confirm: false,
   depends_on_task_id: null, depends_on_mode: 'all_done',
 })
+
+// D7：确认开关只在存在不可逆写步骤（或 Brain 模式可能自行发帖）时露出
+const hasWriteStep = computed(() => form.value.steps.some((s) => s.action === 'post_comment'))
 
 const addStep = () => form.value.steps.push(emptyStep())
 const removeStep = (i) => form.value.steps.splice(i, 1)
@@ -249,5 +260,6 @@ onMounted(async () => {
 .step-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .step-index { width: 20px; text-align: right; color: #999; }
 .platform-hint { margin-left: 12px; color: #e6a23c; font-size: 12px; }
+.form-hint { margin-left: 12px; color: #909399; font-size: 12px; }
 .preset-hint { margin-left: 12px; color: #999; font-size: 12px; }
 </style>

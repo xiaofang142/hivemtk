@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -423,25 +422,21 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		bridgeHandler.SetOutboxQuerier(messageHubRepo)
 
 		service.SetGlobalSSEPublisher(func(channel, accountID string, hubID uint64, convID, msgType, receiverID, content string, isAIReply bool, createdAt time.Time) {
-			bridge.GlobalSSEBus.Publish(bridge.SSEEvent{
-				ID:             strconv.FormatUint(hubID, 10),
-				Event:          "new_outbound",
+			// R-B1：总线 Data 与 DB 补拉路径逐键一致（msg_id 必带——扩展端复合去重键
+			// msg_id|conversation_id 依赖它；曾缺 msg_id 致同会话第二条起静默丢消息）。
+			// msg_id 与落库行同源：service.ContentHashMsgID ≡ DeliverBridgeOutbound 赋值处。
+			bridge.GlobalSSEBus.Publish(bridge.BuildOutboundSSEEvent(bridge.OutboundEventData{
+				HubID:          hubID,
+				MsgID:          service.ContentHashMsgID(channel, convID, content),
+				Platform:       channel,
+				AccountID:      accountID,
 				ConversationID: convID,
+				Content:        content,
 				MsgType:        msgType,
 				ReceiverID:     receiverID,
-				Seq:            int(hubID),
-				Data: map[string]any{
-					"hub_id":          hubID,
-					"platform":        channel,
-					"account_id":      accountID,
-					"conversation_id": convID,
-					"content":         content,
-					"msg_type":        msgType,
-					"receiver_id":     receiverID,
-					"is_ai_reply":     isAIReply,
-				},
-				Timestamp: createdAt,
-			})
+				IsAIReply:      isAIReply,
+				CreatedAt:      createdAt,
+			}))
 		})
 
 		tooluseBridgeAdapter := bridge.NewBridgeReachAdapter(

@@ -76,6 +76,32 @@ describe('cdp/input', () => {
     expect(moves1First).toBeDefined();
   });
 
+  // F11（批5g 夹具真机实测）：后台 tab 不出帧，每个 mouseMoved 的 ack 要等满 5s 超时。
+  // 旧实现逐条 await → 10–40 步轨迹 = 50–200s，press/release 永远发不出去，
+  // 服务端只能看到 comment_send 45s 命令超时（页面上一个鼠标事件都没落地）。
+  it('慢 ack：mouseMoved 永不回包也必须把 press/release 发下去', async () => {
+    global.chrome = {
+      debugger: {
+        attach: vi.fn(async () => {}),
+        detach: vi.fn(async () => {}),
+        sendCommand: vi.fn(async (target, method, params) => {
+          sent.push({ method, params });
+          if (params.type === 'mouseMoved') return new Promise(() => {}); // 永不 ack
+          return {};
+        }),
+        onDetach: { addListener: vi.fn() },
+      },
+    };
+    vi.resetModules();
+    const m = await import('../src/core/cdp/input.js');
+    await m.clickAt(7, 200, 300); // 旧实现在这里永久挂住（本用例超时即红）
+    const down = sent.find((c) => c.params.type === 'mousePressed');
+    const up = sent.find((c) => c.params.type === 'mouseReleased');
+    expect(down).toBeTruthy();
+    expect(up).toBeTruthy();
+    expect(sent.filter((c) => c.params.type === 'mouseMoved').length).toBeGreaterThanOrEqual(10);
+  }, 20000);
+
   it('pressEnter 事件 text 为 \\r（Puppeteer 规范）', async () => {
     const m = await loadFresh();
     await m.pressEnter(4);

@@ -340,7 +340,7 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 
 	// 异步执行：SafeGoDetached 剥除请求 ctx 的取消链（HTTP 响应返回即 cancel，
 	// 普通 SafeGo 会让 Executor 在第一步就 ctx.Err() != nil 退出）；超时 = task.TimeoutSec
-	utils.SafeGoDetached(ctx, "browser_automation.run", time.Duration(t.TimeoutSec)*time.Second+30*time.Second, func(runCtx context.Context) {
+	utils.SafeGoDetached(ctx, "browser_automation.run", time.Duration(t.TimeoutSec)*time.Second+taskWatchdogGrace, func(runCtx context.Context) {
 		execCtx, cancel := context.WithTimeout(runCtx, time.Duration(t.TimeoutSec)*time.Second)
 		defer cancel()
 		s.executor.ExecuteSession(execCtx, t, session, steps)

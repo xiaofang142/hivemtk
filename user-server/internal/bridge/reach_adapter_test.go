@@ -210,15 +210,29 @@ func TestBridgeReachAdapter_PassthroughMethods(t *testing.T) {
 		}
 	})
 
-	t.Run("Recall 透传", func(t *testing.T) {
+	t.Run("Recall：非 bridge 渠道透传", func(t *testing.T) {
 		mock := &mockReachAdapter{}
 		adapter := NewBridgeReachAdapter(mock)
-		err := adapter.Recall(ctx, "douyin", "msg-xyz")
+		err := adapter.Recall(ctx, "wecom", "msg-xyz")
 		if err != nil {
 			t.Errorf("Recall 期望 nil, 得 %v", err)
 		}
-		if mock.gotRecallCh != "douyin" || mock.gotRecallMsgID != "msg-xyz" {
+		if mock.gotRecallCh != "wecom" || mock.gotRecallMsgID != "msg-xyz" {
 			t.Error("Recall 参数未透传")
+		}
+	})
+
+	t.Run("Recall：bridge 渠道显式 not_supported（B8）", func(t *testing.T) {
+		mock := &mockReachAdapter{}
+		adapter := NewBridgeReachAdapter(mock)
+		for _, ch := range []string{"douyin", "kuaishou", "xiaohongshu", "tiktok", "xianyu"} {
+			err := adapter.Recall(ctx, ch, "bridge:douyin:acc:open")
+			if err == nil || !strings.Contains(err.Error(), "不支持撤回") {
+				t.Errorf("%s Recall 期望 not_supported 错误, 得 %v", ch, err)
+			}
+		}
+		if mock.gotRecallCh != "" {
+			t.Error("bridge 渠道 Recall 不应触达 inner")
 		}
 	})
 

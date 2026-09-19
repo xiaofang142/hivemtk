@@ -34,7 +34,8 @@ func (p *Platform) Capabilities() []platform.Capability {
 
 func (p *Platform) MaxConcurrentJobs() int { return 1 } // 写操作串行（风控要求）
 
-// Locators 平台元素定位表（DOM 知识唯一存放处；R20 真机校准 session117/119 实测）
+// Locators 平台元素定位表（DOM 知识唯一存放处；R20 真机校准 session117/119 实测；
+// A1：拦截文案移出 → BlockMarkers）
 func (p *Platform) Locators() map[string]string {
 	return map[string]string{
 		// R20 实测：搜索结果页 a[href*='/video/'] 卡片整体含标题+作者+时长+点赞（无独立 title 节点）
@@ -47,24 +48,25 @@ func (p *Platform) Locators() map[string]string {
 		"comment_text":  "[class*=comment-item] span:not([class*=time]), p",
 		"like_count":    "[class*=like-wrapper], [data-e2e=video-player-digg]",
 		"search_input":  "input[placeholder*=搜索]",
-		// 拦截标记
-		"blocked_marker": "rmc.bytedance.com, 验证码, 安全验证",
 	}
 }
 
-// DetectBlock 拦截页识别（本机实测：无头/自动化特征 → 验证码中间页）
-func (p *Platform) DetectBlock(pageSnapshot string) bool {
-	for _, m := range []string{
-		"rmc.bytedance.com", // 验证码跳转域
-		"安全验证",
-		"captcha",
-		"verifycenter",
-	} {
-		if strings.Contains(pageSnapshot, m) {
-			return true
-		}
-	}
-	return false
+// BlockMarkers 风控文案判据（A2 结构层：只匹配交互/标题节点名。「验证码」不收——
+// 登录按钮「手机验证码登录」是正常页面常驻文案，收即误报）
+func (p *Platform) BlockMarkers() []string {
+	return []string{"安全验证", "拖动上方滑块", "滑块验证"}
+}
+
+// BlockURLPatterns 拦截 URL 判据（本机实测 2026-09-09：无头/自动化特征 → 验证码中间页
+// 跳转 rmc.bytedance.com；verifycenter 为该域验证流路径）
+func (p *Platform) BlockURLPatterns() []string {
+	return []string{"rmc.bytedance.com", "verifycenter", "/captcha"}
+}
+
+// DetectBlock 拦截页识别（A2 结构化两层：URL 层 + 结构层；旧全文子串已废弃）
+func (p *Platform) DetectBlock(pageURL, pageSnapshot string) bool {
+	return platform.URLHits(pageURL, p.BlockURLPatterns()) ||
+		platform.StructuralMarkerHits(pageSnapshot, p.BlockMarkers())
 }
 
 // ClassifyError 平台错误归因（Postiz handleErrors 语义）
@@ -78,10 +80,11 @@ func (p *Platform) ClassifyError(errText string) platform.ErrType {
 		strings.Contains(errText, "a_bogus"), strings.Contains(errText, "risk"):
 		// 签名/风控：连续出现应 retire 账号——归 disconnect 由上层判定
 		return platform.ErrDisconnect
-	case strings.Contains(errText, "timeout"), strings.Contains(errText, "未就绪"),
-		strings.Contains(errText, "element_not_found"):
+	case strings.Contains(errText, "timeout"), strings.Contains(errText, "超时"),
+		strings.Contains(errText, "未就绪"), strings.Contains(errText, "element_not_found"):
 		return platform.ErrRetry
 	default:
-		return platform.ErrRetry
+		// A3 fail-closed：判据未命中不再默认 retry（见 platform.ErrUnknown 注释）
+		return platform.ErrUnknown
 	}
 }
