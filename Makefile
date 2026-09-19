@@ -311,13 +311,39 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune audit audit-artifacts
+.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune audit audit-artifacts
+
+# 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
+# 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
+# `can't load config: the Go language version ... is lower than the targeted Go version`，
+# 于是 `make lint` 从来没真正分析过任何东西，却仍然"退出 0"（第二十五轮实测）。
+GOLANGCI_LINT_VERSION := v2.10.0
 
 lint-install:
-	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# lint-install 只在"PATH 上完全没有二进制"时才装，版本漂移到这里强制对齐
+lint-install-force:
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# 版本守卫：CI 按 workflow 的 pin 跑分析，本地按 PATH 上的二进制跑，两边不一致
+# 等于两套护栏 —— "本地绿 / CI 红"就是这么来的。所以 lint 前先把两边对一次。
+lint-version-check:
+	@ci=$$(awk '/^ +version: v[0-9]+\.[0-9]+\.[0-9]+/ {sub(/^ +version: v/, ""); print; exit}' .github/workflows/user-server-ci.yml); \
+	local_ver=$$(golangci-lint --version 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($$i == "version") {print $$(i+1); exit}}'); \
+	if [ -z "$$ci" ]; then \
+		echo "❌ 解析不到 CI 的 golangci-lint 版本 pin（workflow 里那行 version: vA.B.C 被改了？）"; exit 1; \
+	fi; \
+	if [ -z "$$local_ver" ]; then \
+		echo "❌ 本机没有 golangci-lint，执行 make lint-install-force（装 $$ci）"; exit 1; \
+	fi; \
+	if [ "$$ci" != "$$local_ver" ]; then \
+		echo "❌ golangci-lint 版本漂移：CI=$$ci 本机=$$local_ver，执行 make lint-install-force"; exit 1; \
+	fi; \
+	echo "✅ golangci-lint 版本与 CI 一致：$$ci"
 
 # 架构护栏：分层依赖方向 + depguard 规则（提交前必跑）
-lint: lint-install
+lint: lint-install lint-version-check
 	cd user-server && golangci-lint run ./...
 
 vet:
@@ -335,11 +361,21 @@ fmt:
 # ⚠️ 2026-09-16 更正：gofmt **不能**写进 .golangci.yml 的 linters.enable。
 # v2 报 `gofmt is a formatter` 并拒绝加载整个配置 —— 那会让 govet 与 depguard
 # 一道失效，等于把架构护栏静默关掉（FMT-01 首版正是踩了这个坑，现已修）。
+# ⚠️ 2026-09-20 更正（A7）：原来只比 gofmt -l 的 **stdout**，是有洞的 ——
+# 文件根本解析不了时，文件名既不进 stdout、`-e` 也不补进 stdout，报错只出现在
+# stderr 且 rc=2 ⇒ 这个门对着语法坏掉的文件照样打 ✅（canary 实测复现：
+# 一个缺右括号的 .go 让 make fmt-check 退出 0）。现在把 stderr 也当失败。
 fmt-check:
-	@cd user-server && out=$$(gofmt -l . | grep -v '^vendor/'); \
-	if [ -n "$$out" ]; then \
+	@cd user-server && gofmt_out=$$(gofmt -l . 2>/dev/null | grep -v '^vendor/'); \
+	gofmt_err=$$(gofmt -l . 2>&1 >/dev/null); \
+	if [ -n "$$gofmt_err" ]; then \
+		echo "❌ 以下文件 gofmt 无法解析（语法已坏，格式门原先看不见它）："; \
+		echo "$$gofmt_err"; \
+		exit 1; \
+	fi; \
+	if [ -n "$$gofmt_out" ]; then \
 		echo "❌ 以下文件未通过 gofmt（执行 make fmt 修复）："; \
-		echo "$$out"; \
+		echo "$$gofmt_out"; \
 		exit 1; \
 	fi; \
 	echo "✅ gofmt 检查通过"
