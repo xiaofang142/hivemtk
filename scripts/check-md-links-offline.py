@@ -10,11 +10,9 @@ import re
 import subprocess
 import sys
 
-SKIP_DIR = {"node_modules", "dist", "build", ".git", "pg_data", "uploads", "logs",
-            "vendor", "tmp", "backups", ".venv", "venv", "__pycache__"}
-LINK = re.compile(r"\[[^\]]*\]\(\s*([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)")
-# workflow 里的 --exclude-path
+# workflow 里的 --exclude-path（对端仓那份副本必须与此完全一致）
 EXCLUDE = ("node_modules", "dist", "pg_data", "internal-docs")
+LINK = re.compile(r"\[[^\]]*\]\(\s*([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)")
 
 
 def main(root):
@@ -22,8 +20,8 @@ def main(root):
         ["git", "-C", root, "-c", "core.quotePath=false", "ls-files", "-z"],
         capture_output=True, text=True, check=True).stdout.split("\0"))
     broken = []
-    # 只扫「已入仓」的 md：未追踪文件在 CI checkout 里不存在，扫它们只会造成
-    # 本地与 CI 判定不一致（本轮 3 处误报就是这么来的）。
+    # 只扫「已入仓」的 md：未追踪文件在任何干净 checkout / CI 里都不存在，
+    # 扫它们只会造成本地与 CI 判定不一致（本轮 3 处误报即由此而来）。
     md_files = sorted(fp for fp in tracked if fp.endswith(".md"))
     n = 0
     for rel in md_files:
@@ -40,27 +38,27 @@ def main(root):
             if fence:
                 continue
             for m in LINK.finditer(line):
-                    tgt = m.group(1)
-                    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", tgt) or tgt.startswith("#"):
-                        continue
-                    if "${" in tgt or "{{" in tgt or "<" in tgt or "`" in tgt:
-                        continue
-                    path = tgt.partition("#")[0].partition("?")[0]
-                    if not path:
-                        continue
-                    cand = os.path.normpath(os.path.join(os.path.dirname(fp), path))
-                    relc = os.path.relpath(cand, root)
-                    if relc.startswith(".."):
-                        why = "跨出仓库（CI checkout 里没有对端仓）"
-                    elif relc in tracked:
-                        continue
-                    elif any(t.startswith(relc.rstrip("/") + "/") for t in tracked):
-                        continue
-                    elif os.path.exists(cand):
-                        why = "本地存在但未纳入版本控制（.gitignore 或从未 add）"
-                    else:
-                        why = "仓库内不存在"
-                    broken.append((rel, lineno, tgt, relc, why))
+                tgt = m.group(1)
+                if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", tgt) or tgt.startswith("#"):
+                    continue
+                if "${" in tgt or "{{" in tgt or "<" in tgt or "`" in tgt:
+                    continue
+                path = tgt.partition("#")[0].partition("?")[0]
+                if not path:
+                    continue
+                cand = os.path.normpath(os.path.join(os.path.dirname(fp), path))
+                relc = os.path.relpath(cand, root)
+                if relc.startswith(".."):
+                    why = "跨出仓库（CI checkout 里没有对端仓）"
+                elif relc in tracked:
+                    continue
+                elif any(t.startswith(relc.rstrip("/") + "/") for t in tracked):
+                    continue
+                elif os.path.exists(cand):
+                    why = "本地存在但未纳入版本控制（.gitignore 或从未 add）"
+                else:
+                    why = "仓库内不存在"
+                broken.append((rel, lineno, tgt, relc, why))
     print(f"──── 扫描 {n} 个 md（CI 口径：只认 git 索引）────")
     for f, l, t, c, why in sorted(broken):
         print(f"  ❌ {f}:{l} → {t}\n        {why}｜解析为 {c}")

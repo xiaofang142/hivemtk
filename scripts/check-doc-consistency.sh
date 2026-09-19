@@ -41,6 +41,22 @@ log_pass() { echo -e "${GREEN}✅ $1${NC}"; }
 log_fail() { echo -e "${RED}❌ $1${NC}"; ERRORS=$((ERRORS+1)); }
 log_warn() { echo -e "${YELLOW}⚠️  $1${NC}"; WARNINGS=$((WARNINGS+1)); }
 
+# -----------------------------------------------------------------------------
+# 前置：本脚本是「工作区级」而非「仓库级」——它同时看 hivemtk/ 与 hivemtk-platform/
+# 两个仓，以及仓库外的顶层 docs/。故 PROJECT_ROOT 必须是仓库的上一级。
+# 布局不成立时（改名克隆、把仓库放到别的层级）过去只在 [3/6] 的 `find` 上因
+# set -e 直接退出：rc=1、除"项目根: /tmp"外无任何解释，看起来像仓库违规、
+# 实际是脚本找不到根。现显式以 rc=2 早退并给可操作信息（2=输入无效，1=发现违规）。
+# -----------------------------------------------------------------------------
+if [ ! -d "$PROJECT_ROOT/hivemtk" ]; then
+  echo -e "${RED}❌ 工作区布局不成立：$PROJECT_ROOT/hivemtk/ 不存在${NC}" >&2
+  echo "   推导链：SCRIPT_DIR=$SCRIPT_DIR ⇒ PROJECT_ROOT=$PROJECT_ROOT" >&2
+  echo "   本脚本须在 <workspace>/hivemtk/scripts/ 下运行（仓库的上一级须直接含 hivemtk/）。" >&2
+  echo "   GitHub Actions 的 <work>/<repo>/<repo> 恰好满足该布局，故 CI 可用；" >&2
+  echo "   影子克隆/改名目录要复刻同样层级，否则此门无法判定（不是仓库的错）。" >&2
+  exit 2
+fi
+
 echo "============================================================"
 echo "  文档一致性检查（OPT-DOC-15）"
 echo "  项目根: $PROJECT_ROOT"
@@ -174,8 +190,15 @@ fi
 echo ""
 echo "[3/6] Feature Doc 8 节结构..."
 
-FEATURE_DOCS=$(find "$PROJECT_ROOT/hivemtk/docs/marketing-features" -maxdepth 1 -name "*.md" ! -name "README.md" 2>/dev/null)
+# set -e 下 `VAR=$(find …)` 在 find 非零退出时会让整脚本死掉（目录缺失时以前就是这样），
+# 故显式吞掉退出码，并在下面对"零文件"单独判告警——不然本节会静默"通过"，
+# 而"扫了 0 个文档"与"扫了 20 个且全合规"是两件完全不同的事。
+FEATURE_DOCS=$(find "$PROJECT_ROOT/hivemtk/docs/marketing-features" -maxdepth 1 -name "*.md" ! -name "README.md" 2>/dev/null || true)
 STRUCT_VIOLATIONS=0
+FD_COUNT=$(printf '%s\n' "$FEATURE_DOCS" | grep -c . || true)
+if [ "$FD_COUNT" -eq 0 ]; then
+  log_warn "docs/marketing-features 下没有任何 feature doc，本节零覆盖（不是通过）"
+fi
 for f in $FEATURE_DOCS; do
   filename=$(basename "$f")
   # 跳过下线说明文档
@@ -196,7 +219,7 @@ for f in $FEATURE_DOCS; do
   fi
 done
 if [ $STRUCT_VIOLATIONS -eq 0 ]; then
-  log_pass "所有 feature doc 含 §一 §二 必填节"
+  log_pass "所有 feature doc 含 §一 §二 必填节（共检查 $FD_COUNT 个）"
 fi
 
 # -----------------------------------------------------------------------------
