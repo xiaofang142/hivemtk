@@ -302,22 +302,43 @@ jobs:
         run: npm run lint:check --if-present
 
       - name: npm audit (OPT-CI-10)
-        # OPT-CI-10：NPM 依赖漏洞扫描 (--audit-level=high)
-        # 仅阻断 high/critical 级别；中等/低先警告
-        # 2026-09-18 转阻断：本地以官方 registry 实测 user-web
-        # `npm audit --audit-level=high` 退出 0（high/critical=0，moderate=6 不阻断），
-        # 且 CI runner 无 .npmrc 覆盖 registry，测量与 CI 同源。
+        # OPT-CI-10：NPM 依赖漏洞扫描，仅阻断 high/critical（moderate/low 只报不挡）。
+        # 2026-09-19 审计（第二十五轮）重写。原写法在 runner 上恒定红且**零覆盖**：
+        # npm 10 打的是 /-/npm/v1/security/audits/quick，runner 日志里 npm 自己已经提示
+        # 「This endpoint is being retired. Use the bulk advisory endpoint instead」，返回
+        #   400 Invalid package tree, run `npm install` to rebuild your package-lock.json
+        # 而 --json 那次把这份错误对象当成审计报告解析，打出
+        #   high: 0 critical: 0 total: 0
+        # —— 看着像「扫过了、没漏洞」，实际一个依赖都没查。本地用 npm 10.8.2 / 10.9.0 /
+        # 11.x + 官方 registry + CI 同形 node_modules 都复现不出该 400，故按 runner 侧
+        # 事实处理：改走 bulk advisories 端点（npm ≥ 11），并加覆盖数下限校验。
+        # 三点固定：① npx 装到临时目录，不动 job 全局 npm（后面的 npm run build 要用
+        # runner 自带版本）；② 显式官方 registry —— npmmirror 的 /-/npm/v1/security/*
+        # 是 404 NOT_IMPLEMENTED，换镜像等于换回零覆盖；③ dependencies.total=0 直接
+        # exit 2，绝不与「无漏洞」同形。
         working-directory: user-web
         run: |
-          echo "::group::Running npm audit (high+ critical)"
-          npm audit --audit-level=high --json 2>/dev/null > npm-audit.json || AUDIT_EXIT=$?
-          if [ -f npm-audit.json ]; then
-            # 解析 JSON 报告摘要
-            HIGH_CRIT=$(node -e "const r=require('./npm-audit.json');const m=r.metadata?.vulnerabilities||{};console.log('high:',m.high||0,'critical:',m.critical||0,'total:',r.metadata?.totalDependencies||0);" 2>/dev/null || echo "JSON 解析失败")
-            echo "  ${HIGH_CRIT}"
-          fi
-          # 重新跑一次非 JSON 模式输出可读报告；high/critical 直接阻断
-          npm audit --audit-level=high
+          export npm_config_registry=https://registry.npmjs.org
+          npx --yes npm@11 audit --audit-level=high --json > npm-audit.json 2>/dev/null || true
+          node -e '
+            const fs = require("fs");
+            let r;
+            try { r = JSON.parse(fs.readFileSync("npm-audit.json", "utf8")); }
+            catch (e) {
+              console.error("::error::npm audit 拿不到 JSON 报告（端点或网络故障），本步骤零覆盖：" + e.message);
+              process.exit(2);
+            }
+            const md = r.metadata || {}, v = md.vulnerabilities || {}, deps = (md.dependencies || {}).total;
+            if (!deps) {
+              console.error("::error::npm audit 未返回依赖树（dependencies.total=0），本步骤零覆盖："
+                + JSON.stringify(r).slice(0, 300));
+              process.exit(2);
+            }
+            console.log(`已审计依赖 ${deps} 个：critical ${v.critical || 0} / high ${v.high || 0}`
+              + ` / moderate ${v.moderate || 0} / low ${v.low || 0}`);
+          '
+          # 再跑一次可读报告：high/critical 命中时由此步骤码阻断
+          npx --yes npm@11 audit --audit-level=high
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
