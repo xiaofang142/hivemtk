@@ -7,6 +7,7 @@
 package model
 
 import (
+	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
@@ -205,4 +206,36 @@ func gormTagOf(t *testing.T, st reflect.Type, field string) string {
 		t.Fatalf("字段 %s 不存在", field)
 	}
 	return f.Tag.Get("gorm")
+}
+
+// TestApprovalRequestResumeTokenNeverMarshals 恢复凭证不许出现在任何 JSON 里。
+//
+// 这条不是风格判据：审批详情/待办中心的响应体只要还带得上 resume_token，
+// "能读列表的人就能恢复任意一条挂起的流程"就成立，而这条授权路径不在状态机里。
+// 判据挂在标签上而不是挂在某个端点上：将来新增的端点不会有人回来补剥字段。
+//
+// 变异靶子：把标签改回 json:"resume_token,omitempty" ⇒ 本用例第一句就红。
+func TestApprovalRequestResumeTokenNeverMarshals(t *testing.T) {
+	row := ApprovalRequest{
+		ID:          "apr_123",
+		ResumeToken: "rt_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		SubjectType: "sop_node",
+		SubjectID:   "7--wait_1",
+		PolicyKey:   "quote.send",
+		Status:      ApprovalStatusPending,
+	}
+	b, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("序列化失败：%v", err)
+	}
+	out := string(b)
+	if strings.Contains(out, row.ResumeToken) || strings.Contains(out, "resume_token") {
+		t.Errorf("凭证泄漏进 JSON 了：%s", out)
+	}
+	if !strings.Contains(out, `"id":"apr_123"`) {
+		t.Errorf("整个结构体都没序列化出来，那上一条'不含凭证'的断言是白过的：%s", out)
+	}
+	if got := reflect.TypeOf(row); gormTagOf(t, got, "ResumeToken") == "" {
+		t.Error("ResumeToken 的 gorm 标签丢了：列还在，但索引形状不再由结构体决定")
+	}
 }

@@ -136,6 +136,10 @@ func InitApprovalRuntime(db *gorm.DB) *ApprovalRuntime {
 	prev := approvalRuntimeRef
 	approvalRuntimeRef = nil
 	approvalRuntimeMu.Unlock()
+	// 全局登记处先无条件清成 nil：下面两个"什么都不装"的出口（无库 / off）都必须留下
+	// nil，只有在这里清才同时覆盖得到它们。留着上一份的后果不是"没有功能"，
+	// 而是 /api/approvals/* 对着一个已经撤掉运行时的实例继续回 200。
+	service.SetGlobalApprovalRequestService(nil)
 	if prev != nil {
 		if prev.bridge != nil {
 			// 撤桥必须在停清扫之前：WaitExecutor 读的是全局桥，先撤掉它，
@@ -163,6 +167,18 @@ func InitApprovalRuntime(db *gorm.DB) *ApprovalRuntime {
 	}
 
 	svc := service.NewApprovalRequestService(repository.NewApprovalRequestRepositoryWithDB(db), nil)
+	// 待办出口（T-P3-04）：shadow 与 on 两档都装。出口本身是"每次调用现取全局底座"的
+	// 适配器，所以这里不必关心 InitHumanTaskRuntime 有没有跑过 —— 它在 router.go 里
+	// 恰好排在本次 Init 的下一句（:230 与 :235），传实例进去拿到的一定是 nil。
+	//
+	// shadow 档也要装，是因为这一档的用途就是"看清扫那段 UPDATE 在真表上跑对了没有"，
+	// 而它跑对的证据里包含"到期的审批把自己的待办带走了"。
+	svc.SetTaskSink(service.GlobalHumanTaskApprovalSink())
+	// 全局登记：裁决端点（/api/approvals/*，T-P3-04）在 router 包里现取全局，
+	// 与 setupHumanTaskRoutes 同一形状。没登记时端点回 503 而不是 404：
+	// 404 会被读成"路由没挂"，而事实是"路径在、底座不在"。
+	service.SetGlobalApprovalRequestService(svc)
+
 	rt := &ApprovalRuntime{svc: svc, mode: mode}
 
 	rt.sweeper = service.NewApprovalSweepWorker(svc, service.DefaultApprovalSweepInterval)
@@ -198,6 +214,11 @@ func StopApprovalRuntime() {
 	approvalRuntimeMu.Lock()
 	approvalRuntimeRef = nil
 	approvalRuntimeMu.Unlock()
+	// 全局审批服务一并撤掉（幂等，rt 为 nil 时也要清 —— 那正是"没装过就别留个指针"）。
+	// 协程停了而全局还在，/api/approvals/* 就继续回 200，而那时已经没人把到期 pending
+	// 翻成 expired：于是"从没被裁决过"的审批会一直看起来"还来得及批"、逾期读数恒为 0，
+	// 这比一句 503 难查得多 —— 503 至少是一句承认自己在停摆的话。
+	service.SetGlobalApprovalRequestService(nil)
 	if rt == nil {
 		return
 	}

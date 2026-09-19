@@ -139,13 +139,27 @@ BASELINE=(
   #       total_open 与逾期读数被这类死行灌水，而没人会注意到少了一行调用。
   #   13d 路由挂载：端点没挂上时坐席只能用 UI 猜，服务侧逻辑再对也无人可访问。
   # 仍未接线的端（登记在此而不是留白，否则"三类待办统一收口"会被读成整句成立）：
-  # 只有 conversation_handoff 有生产投递方，approval / collection_escalation 两类
-  # 今天**没有任何生产 Submit**（报价审批走的是 approval_requests 自己的表，催收竖
-  # 还没开工）—— 它们的接线分别在 T-P3-04 与催收竖，届时须回来加 13e/13f 两行。
+  # 只有 conversation_handoff 有生产投递方，collection_escalation 至今**没有任何生产
+  # Submit**（催收竖 T-P7-03 才建），届时回来补一行。
   "13|人工待办服务的装配入口|func NewHumanTaskService|NewHumanTaskService\\(|internal/app cmd/api internal/controller internal/router|wired"
   "13|转人工→投递会话待办的生产者注入点|func \\(o \\*SmartCSOrchestrator\\) SetHumanTaskProducer|SetHumanTaskProducer\\(|internal/app|wired"
   "13|会话结束时撤销开放待办的钩子调用方|func cancelOpenHumanTaskForSession|cancelOpenHumanTaskForSession\\(|internal/service|wired"
   "13|统一待办 API 的挂载入口|func setupHumanTaskRoutes|setupHumanTaskRoutes\\(|internal/router|wired"
+  # T-P3-04 把审批这一端接进池子（approval 类待办的生产投递方从此有了），追加三行 wired。
+  # 上面预告的是两行，实到三行：出口装配与路由挂载之外，"全局登记"那一格删掉后也只有
+  # HTTP 侧会坏，与另外两格是三种互不掩盖的失灵面。每行守的都是"删掉之后别处全绿"的接线：
+  #   13e 出口装配（审批 → 待办）：删掉 SetTaskSink = pending 审批永远不进池子，而审批行、
+  #       流程挂起、裁决唤醒四侧全部照旧 —— 唯一的变化是值班看不见。
+  #   13f 审批服务的全局登记：删掉它 = /api/approvals/* 恒 503（路径在、底座不在），
+  #       审批服务在流程内路径上依旧完好，只跑 service 层的测试全绿。
+  #       callpat 刻意写 `(svc)` 而不是裸名：同名的"清成 nil"两处调用（Init 前置清、Stop）
+  #       占了 3 个命中里的 2 个，裸名会让"登记那一行被删"仍显示 WIRED（变异实测过）。
+  #       "清成 nil"那两半不在这里守，由装配测试守（Off 与 Stop 两条用例）。
+  #   13g 裁决 API 的挂载入口：与 13d 同一形状，删掉 router.go 里那一行时
+  #       setupApprovalRoutes 函数还在，vet 与编译都不会说一句话。
+  "13|审批→统一待办的出口装配点|func \\(s \\*ApprovalRequestService\\) SetTaskSink|SetTaskSink\\(|internal/app|wired"
+  "13|审批服务的全局登记调用方|func SetGlobalApprovalRequestService|SetGlobalApprovalRequestService\\(svc\\)|internal/app|wired"
+  "13|审批裁决 API 的挂载入口|func setupApprovalRoutes|setupApprovalRoutes\\(|internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

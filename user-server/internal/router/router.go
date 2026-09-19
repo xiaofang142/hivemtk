@@ -362,6 +362,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 入口已 Use(JWTAuthMiddleware())，动作端点的操作者身份取自令牌里的 user_id。
 		setupHumanTaskRoutes(auth)
 
+		// 审批详情与裁决 /api/approvals/*（T-P3-04）：待办池里 kind=approval 那几行的
+		// 唯一出口。与上一行同一位置约束（身份取自令牌），且必须在
+		// app.InitApprovalRuntime 之后 —— 它决定这里是全局实例还是"回 503 的空壳"。
+		setupApprovalRoutes(auth)
+
 		systemAdmin := auth.Group("")
 		systemAdmin.Use(middleware.AdminAuthMiddleware())
 		setupSystemRoutes(systemAdmin)

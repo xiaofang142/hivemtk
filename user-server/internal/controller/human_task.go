@@ -146,7 +146,7 @@ func (c *HumanTaskController) Cancel(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	operator, ok := humanTaskOperator(ctx)
+	operator, ok := contextOperatorID(ctx)
 	if !ok {
 		response.Error(ctx, http.StatusUnauthorized, "撤销必须带操作者身份（未登录或会话里没有 user id）")
 		return
@@ -184,7 +184,7 @@ func (c *HumanTaskController) doAction(ctx *gin.Context, action string, fn human
 	if !ok {
 		return
 	}
-	operator, ok := humanTaskOperator(ctx)
+	operator, ok := contextOperatorID(ctx)
 	if !ok {
 		response.Error(ctx, http.StatusUnauthorized,
 			action+" 必须带操作者身份（未登录或会话里没有 user id）")
@@ -243,7 +243,7 @@ func humanTaskQueryFromRequest(ctx *gin.Context) (service.HumanTaskListQuery, bo
 	case assignee == "":
 	case strings.EqualFold(assignee, "me"):
 		// 取登录态身份，而不是信前端把自己 id 拼进 URL。
-		op, ok := humanTaskOperator(ctx)
+		op, ok := contextOperatorID(ctx)
 		if !ok {
 			response.Error(ctx, http.StatusUnauthorized, "assignee=me 需要登录态身份")
 			return q, false
@@ -308,39 +308,4 @@ func humanTaskIDParam(ctx *gin.Context) (string, bool) {
 		return "", false
 	}
 	return id, true
-}
-
-// humanTaskOperator 取登录态操作者身份（字符串形态：assignee_user_id 是 text 列，
-// 存的是 user id 的十进制表示，与 currentUserID 系列 helper 的四种类型口径一致）。
-//
-// 返回 ok=false 表示没有可用身份。注意这里不能用"返回 0 表示没有"那一套：
-// 本列的语义是"这件事挂在谁名下"，把无身份写成空串会一路通到服务层的
-// "operator 为空 ⇒ 400"，而那句 400 出现在 HTTP 上就是把 401 报错了码。
-func humanTaskOperator(ctx *gin.Context) (string, bool) {
-	v, exists := ctx.Get("user_id")
-	if !exists {
-		return "", false
-	}
-	switch id := v.(type) {
-	case uint:
-		if id == 0 {
-			return "", false
-		}
-		return strconv.FormatUint(uint64(id), 10), true
-	case int:
-		if id <= 0 {
-			return "", false
-		}
-		return strconv.Itoa(id), true
-	case float64:
-		// permission.go 那一路的 claims 是 JSON 解出来的，数字一律 float64。
-		if id < 1 || id != float64(int64(id)) {
-			return "", false
-		}
-		return strconv.FormatInt(int64(id), 10), true
-	case string:
-		s := strings.TrimSpace(id)
-		return s, s != ""
-	}
-	return "", false
 }

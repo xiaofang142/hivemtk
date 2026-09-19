@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -97,10 +98,18 @@ const DefaultHumanTaskHandoffSlaMinutes = 5
 // HumanTaskSubjectCustomerSession 会话待办的 subject_type 字面量。
 //
 // 导出是为了三处指同一个字符串：转人工投递（本卡）、会话关闭时的撤销钩子（本卡）、
-// 以及闸机基线里那一列。这里只登记 handoff 一类：approval / collection 两类待办
-// 今天还没有生产投递方（它们分别要等 T-P3-04 与催收竖），先定义一个没人用的常量
-// 就是留一份"看起来已经接好"的假象。
+// 以及闸机基线里那一列。
 const HumanTaskSubjectCustomerSession = "customer_session"
+
+// HumanTaskSubjectApprovalRequest 审批类待办的 subject_type 字面量（T-P3-04）。
+//
+// 它的 subject_id 是 approval_requests.id（不是被审对象的二元组）：待办与审批必须
+// 一对一，而"同一次动作重新 Submit"在审批侧本来就会新建一行（改判无路），
+// 于是待办也跟着新建一条 —— 用被审对象做键会让第二次入队复用第一次那条已关闭的待办。
+//
+// collection_escalation 一类仍**没有**生产投递方（催收竖 T-P7-03 才建），
+// 所以这里也只有两个常量：登记一个没人用的字符串，就是留一份"看起来已经接好"的假象。
+const HumanTaskSubjectApprovalRequest = "approval_request"
 
 // HumanTaskSubmitInput 投递一条待办。
 //
@@ -637,6 +646,180 @@ func (s *HumanTaskService) CancelOpenBySubject(ctx context.Context, subjectType,
 	}
 	row, err := s.repo.GetByID(ctx, cur.ID)
 	return row, applied, err
+}
+
+// CompleteOpenBySubject 按业务身份把那条开放待办收成 done，并把完成人记成 operator。
+//
+// 与 CancelOpenBySubject 的分工只在"这一行怎么结束"上：completed 是有人给了一句结论，
+// cancelled 是这件事不再需要结论。判据在调用方（裁决 vs 到期），本方法只认 operator：
+// 空 operator 必须拒 —— 完成而不记谁做的，坐席工作量与"这件事谁结的"同时失去事实源。
+func (s *HumanTaskService) CompleteOpenBySubject(ctx context.Context, subjectType, subjectID, operator string) (*model.HumanTask, bool, error) {
+	if err := s.require(); err != nil {
+		return nil, false, err
+	}
+	subjectType = strings.ToLower(strings.TrimSpace(subjectType))
+	subjectID = strings.TrimSpace(subjectID)
+	operator = strings.TrimSpace(operator)
+	if subjectType == "" || subjectID == "" {
+		return nil, false, fmt.Errorf("%w: subject_type/subject_id 为空，无法定位要收口的待办", ErrHumanTaskInputInvalid)
+	}
+	if operator == "" {
+		return nil, false, fmt.Errorf("%w: 完成必须记一个人（operator 为空）", ErrHumanTaskInputInvalid)
+	}
+	if utf8.RuneCountInString(operator) > humanTaskOperatorMaxLen {
+		operator = humanTaskClip(operator, humanTaskOperatorMaxLen)
+	}
+
+	cur, err := s.repo.GetOpenBySubject(ctx, subjectType, subjectID)
+	if err != nil || cur == nil {
+		return nil, false, err
+	}
+	to, ok := model.HumanTaskTransitionAllowed(cur.Kind, cur.Status, model.HumanTaskActionComplete)
+	if !ok {
+		return cur, false, nil
+	}
+	now := humanTaskNowFn()
+	applied, err := s.repo.ApplyAction(ctx, cur.ID, cur.Status, func(m *model.HumanTask) error {
+		m.Status = to
+		m.AssigneeUserID = operator // 与 Complete 同一口径：记下给出结论的人，即使他不是认领人
+		m.CompletedAt = &now
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if !applied {
+		fresh, gerr := s.repo.GetByID(ctx, cur.ID)
+		return fresh, false, gerr
+	}
+	row, err := s.repo.GetByID(ctx, cur.ID)
+	return row, applied, err
+}
+
+// --- 审批类待办（T-P3-04：一条 pending 审批 = 池子里的一行待办）——————————————
+
+// approvalTaskTitlePrefix 审批待办标题前缀（与"转人工："同一形状：一眼看出这类要干什么）。
+const approvalTaskTitlePrefix = "待审批："
+
+// approvalTaskSLAPart 把截止时刻写进理由里的格式（RFC3339：可与 approval_requests.expires_at 直接对账）。
+const approvalTaskSLAPart = time.RFC3339
+
+// SubmitForApproval 实现 ApprovalTaskSink：审批落库为 pending ⇒ 投一条 approval 类待办。
+//
+// 为什么这里不"顺手"把被审对象的业务内容也带进来（报价金额、外发名单）：那是调用方
+// （审批服务）也不知道的东西，本层能给的只有"哪条策略在等谁、几点截止"。
+// 想看得更多，待办中心凭 subject_id 去读审批详情端点。
+func (s *HumanTaskService) SubmitForApproval(ctx context.Context, req *model.ApprovalRequest) error {
+	if req == nil {
+		return fmt.Errorf("%w: 审批记录为空，待办将指不回任何一次裁决", ErrHumanTaskInputInvalid)
+	}
+	if req.Status != model.ApprovalStatusPending {
+		// 只有 pending 需要人。给一条已落定的审批投待办 = 造一行永远等不到人、
+		// 且会进逾期读数的死待办。
+		return fmt.Errorf("%w: 审批 %s 当前态 %s，不需要人工裁决",
+			ErrHumanTaskInputInvalid, req.ID, req.Status)
+	}
+	if req.ExpiresAt == nil {
+		// pending 必带到期时刻是审批侧的写入不变量（见 SubmitForNode 同一条判据）。
+		// 破了就不投：没有截止的审批待办永远不会逾期，而"卡点没人管"恰恰是这张表要暴露的。
+		return fmt.Errorf("%w: 审批 %s 是 pending 却没有 expires_at，待办无法进逾期读数",
+			ErrHumanTaskInputInvalid, req.ID)
+	}
+	_, _, err := s.Submit(ctx, HumanTaskSubmitInput{
+		Kind:        model.HumanTaskKindApproval,
+		SubjectType: HumanTaskSubjectApprovalRequest,
+		SubjectID:   req.ID,
+		Title:       approvalTaskTitlePrefix + req.PolicyKey + "（对象 " + req.SubjectType + "/" + req.SubjectID + "）",
+		Reason: "策略 " + req.PolicyKey + " 要求人工裁决，截止 " +
+			req.ExpiresAt.Format(approvalTaskSLAPart),
+		PayloadRef: req.SubjectType + "/" + req.SubjectID,
+		// 截止直接取审批行自己那一列：TTL 与逾期读数必须同源，否则一次改 TTL 就会
+		// 让"流程还等不等"与"待办逾不逾期"两套答案各说各话（T-P3-02 ⑥ 同一条理由）。
+		SlaDueAt: req.ExpiresAt,
+	})
+	return err
+}
+
+// CloseForApproval 实现 ApprovalTaskSink：审批落终态 ⇒ 收掉那条待办。
+//
+// 分成两件事而不是统一"关掉就行"：
+//   - 人给了结论（approved / rejected，裁决者是真人）⇒ done，并完成人记成那个真人；
+//   - 系统自己落的（TTL 到期、策略自动放行）⇒ cancelled，因为它不是"人处理完了"。
+//     把到期记成 done 会同时污染人工处理量与达成率两个数，而那正是 C3 分离视图的目的。
+func (s *HumanTaskService) CloseForApproval(ctx context.Context, req *model.ApprovalRequest) error {
+	if req == nil {
+		return fmt.Errorf("%w: 审批记录为空，无法定位要收口的待办", ErrHumanTaskInputInvalid)
+	}
+	if req.Status == model.ApprovalStatusPending {
+		// 收口只服务于"已经落定"。pending 行走到这里说明调用方把顺序写反了，
+		// 静默返回 nil 会让待办一直挂着而没人知道它其实早该收。
+		return fmt.Errorf("%w: 审批 %s 仍在等人裁决，不该收口它的待办", ErrHumanTaskInputInvalid, req.ID)
+	}
+	if model.ApprovalDecidedAutomatically(req.DecidedBy) {
+		_, _, err := s.CancelOpenBySubject(ctx, HumanTaskSubjectApprovalRequest, req.ID,
+			approvalTaskAutoCancelReason(req))
+		return err
+	}
+	_, _, err := s.CompleteOpenBySubject(ctx, HumanTaskSubjectApprovalRequest, req.ID, req.DecidedBy)
+	return err
+}
+
+// approvalTaskAutoCancelReason 系统侧收口那句话。到期与自动放行要分开写：
+// 值班看到"到期"会去查为什么没人批，看到"自动放行"会去查策略配置，是两个动作。
+func approvalTaskAutoCancelReason(req *model.ApprovalRequest) string {
+	switch req.Status {
+	case model.ApprovalStatusExpired:
+		return "审批到期未裁决，系统按 TTL 收口（裁决者 " + req.DecidedBy + "）"
+	case model.ApprovalStatusApproved:
+		return "策略自动放行，无需人工裁决（裁决者 " + req.DecidedBy + "）"
+	default:
+		return "审批已由 " + req.DecidedBy + " 落定为 " + req.Status + "，无需人工裁决"
+	}
+}
+
+// globalHumanTaskSink 审批服务应装的待办出口：每次调用**现取**全局底座（T-P3-04）。
+//
+// 为什么不直接把实例传过去（SetTaskSink(GlobalHumanTaskService()) 那种一步写法）：
+// router.go 里 InitApprovalRuntime 跑在 InitHumanTaskRuntime 之前（:230 与 :235），
+// 装配那一刻拿到的恒是 nil ⇒ 审批永远不进待办池。而"静默功能缺失"是这里最难查的
+// 失败形状：不报错、不告警，只有池子里永远看不见审批类待办。现取让装配顺序不再有意义。
+type globalHumanTaskSink struct{}
+
+// GlobalHumanTaskApprovalSink 审批运行时应装的出口（装配点：app.InitApprovalRuntime）。
+func GlobalHumanTaskApprovalSink() ApprovalTaskSink { return globalHumanTaskSink{} }
+
+// 底座未装配 ⇒ 按"没有出口"处理，返回 nil 而不是 error。
+//
+// 这与 deliverTask 对投递失败的上抛不矛盾，两者判的是不同的事：
+//   - 投递失败是**运行时故障**（表在、连接在、这次写坏了）⇒ 挂起必须失败，
+//     否则会留下一行没人看得见的 pending；
+//   - 底座未装配是**装配状态**，与 SetTaskSink(nil) 同一含义（"审批不进池子"那一档，
+//     也就是 T-P3-02 的交付态）。此时报故障会把一个部署选择伪装成事故。
+//
+// 未装配档不会把流程吊死：pending 行仍由清扫按自己的 expires_at 翻成 expired 并叫醒
+// 等待方（FF_LTC_APPROVAL_RESUME 开时清扫一定在跑），所以最坏结果是"这单等到超时"，
+// 而不是"永远挂着"。出声（Warn）是为了让这件事在日志里说得出。
+func (globalHumanTaskSink) SubmitForApproval(ctx context.Context, req *model.ApprovalRequest) error {
+	if pool := GlobalHumanTaskService(); pool != nil {
+		return pool.SubmitForApproval(ctx, req)
+	}
+	logger.Warnf("[human_task] 待办底座未装配 ⇒ 审批 %s 不进池子（仍由其 expires_at 到期收口）", approvalLinkID(req))
+	return nil
+}
+
+func (globalHumanTaskSink) CloseForApproval(ctx context.Context, req *model.ApprovalRequest) error {
+	if pool := GlobalHumanTaskService(); pool != nil {
+		return pool.CloseForApproval(ctx, req)
+	}
+	return nil
+}
+
+// approvalLinkID 给日志用的审批 id（nil 记录也走得通：日志行不该因一句 id  panic）。
+func approvalLinkID(req *model.ApprovalRequest) string {
+	if req == nil {
+		return "<nil>"
+	}
+	return req.ID
 }
 
 // transition 三个对外动作共用的那一段：读快照 → 判跃迁 → 锁内改 → 回读。

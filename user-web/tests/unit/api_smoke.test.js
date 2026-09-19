@@ -33,11 +33,11 @@ vi.mock('@/utils/request', () => ({ default: mocks.request, http: mocks.http }))
 vi.mock('axios', () => ({ default: mocks.axios, __esModule: true }))
 
 const API_FILES = [
-  'abExperiment', 'aiAgent', 'aiProductivity', 'backup', 'batchOperation',
+  'abExperiment', 'aiAgent', 'aiProductivity', 'approval', 'backup', 'batchOperation',
   'bulkMessaging', 'channelAgentBinding', 'chat', 'chatChannel', 'chatPublic', 'churnPrediction',
   'clue', 'community', 'conversionFunnel', 'customReport', 'customer360', 'customerEvent',
   'customerJourney', 'customerService', 'customerServiceAgent', 'customerSession', 'dashboardScreen',
-  'dialogueMemory', 'domainPool', 'douyinCard', 'email', 'feishu', 'integration', 'intentRecognition',
+  'dialogueMemory', 'domainPool', 'douyinCard', 'email', 'feishu', 'humanTask', 'integration', 'intentRecognition',
   'knowledge', 'knowledgeBase', 'knowledgeMerchant', 'kuaishouCard', 'license', 'livecode', 'llmRouting',
   'marketingFlow', 'material', 'messageHub', 'objection', 'obs', 'oneid', 'operationLog',
   'persona', 'platform', 'platformAccount', 'reachPipeline',

@@ -232,6 +232,9 @@ const topMenus = ref([
       { key: 'messageHub', title: '消息中台 MQ', icon: 'MessageBox', path: '/messageHub/list', roles: ['admin', 'manager'] },
       { key: 'messageHubDashboard', title: '消息中台看板', icon: 'DataBoard', path: '/messageHub/dashboard', roles: ['admin', 'manager'] },
       { key: 'inbox', title: '统一收件箱', icon: 'Box', path: '/inbox/list' },
+      // 待办中心与收件箱是两件事：那一边是"这个会话现在归谁"，这一边是"有件事在等人办，
+      // 几点之前不办就算逾期"。合并成一个入口会让 SLA 读数混进会话列表里。
+      { key: 'approvalTask', title: '待办中心', icon: 'Tickets', path: '/approvalTask/list' },
       { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]

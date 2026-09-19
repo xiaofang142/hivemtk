@@ -44,7 +44,14 @@ type ApprovalRequest struct {
 	//
 	// 索引是**部分**唯一（resume_token <> ''）：auto-approve 的记录永远不被恢复，
 	// 凭证列留空；若唯一索引不带谓词，第二条 auto-approve 记录就会撞在空串上。
-	ResumeToken string `gorm:"type:text;uniqueIndex:uq_approval_request_token,priority:1,where:resume_token <> ''" json:"resume_token,omitempty"`
+	//
+	// json:"-"（T-P3-04 收的 T-P3-02 那条边界）：这一列是凭证，不是业务字段。
+	// 只要它还能被 marshal 出去，任何一个"顺手返回整个 model"的新端点就会把它摊给
+	// 所有能读那个响应的人 —— 而那种泄漏逐条审端点看得出来、审未来端点看不出来。
+	// 挂在标签上等于让"不外泄"这件事不依赖每个写端点的人记不记得剥字段。
+	// 需要它的只有两处，都不经 JSON：流程侧从 sop_timers.payload 取（见
+	// service.approvalTimerPayloadToken）、仓储按列名查（GetByResumeToken）。
+	ResumeToken string `gorm:"type:text;uniqueIndex:uq_approval_request_token,priority:1,where:resume_token <> ''" json:"-"`
 
 	// ExpiresAt 裁决截止时刻，**只对 pending 有意义**：到期由清扫翻成 expired。
 	// 指针而非零值时间：已裁决的行留 NULL，"这条不再被任何清扫触碰"就是可读的事实，

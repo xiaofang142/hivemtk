@@ -65,6 +65,7 @@ const moduleNames = [
   "intentRecognition", 'dialogueMemory', 'sopAgent',
   "reachPipeline", 'wecomAccount',
   'inbox',
+  'approvalTask',
   'whatsappCloud',
   'dingtalkApp',
   "llmRouting", 'tagSegmentation', 'conversionFunnel',

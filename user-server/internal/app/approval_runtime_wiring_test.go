@@ -36,10 +36,15 @@ func approvalRuntimeTestDB(t *testing.T) *gorm.DB {
 
 // installApprovalRuntimeCleanup 每份用例结束都停运行时：Init 会留一个在跑的清扫协程，
 // 不清就会串到同包后续用例（以及它们对全局桥的断言）上。
+//
+// 全局审批服务也在这里清（T-P3-04 起它是一份真全局单例）：它比桥更会被后续用例
+// 间接触到（任何拿 GlobalApprovalRequestService 的地方），留着上一份就是一个
+// 没人负责、也没人知道还活着的实例。
 func installApprovalRuntimeCleanup(t *testing.T) {
 	t.Helper()
 	t.Cleanup(StopApprovalRuntime)
 	t.Cleanup(func() { service.SetApprovalResumeBridge(nil) })
+	t.Cleanup(func() { service.SetGlobalApprovalRequestService(nil) })
 }
 
 func TestParseApprovalRuntimeMode(t *testing.T) {
@@ -284,4 +289,180 @@ func executeApprovalWaitNode(t *testing.T, database *gorm.DB, ctx context.Contex
 		t.Fatalf("执行器返回 error（失败应由状态表达）：%v", err)
 	}
 	return res
+}
+
+// --- T-P3-04：全局登记处与待办出口 --------------------------------------------
+
+// approvalPlusTaskTestDB 审批 + 待办两张表。
+//
+// 不复用 approvalRuntimeTestDB：那个槽位没有 human_tasks 表，本组用例要证的正是
+// "审批入队时待办池里多了一行"。
+func approvalPlusTaskTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	return testutil.NewTestDB(t, &model.ApprovalRequest{}, &model.HumanTask{})
+}
+
+func installHumanTaskGlobalCleanup(t *testing.T) {
+	t.Helper()
+	prev := service.GlobalHumanTaskService()
+	t.Cleanup(func() { service.SetGlobalHumanTaskService(prev) })
+}
+
+func countApprovalTasks(t *testing.T, database *gorm.DB, approvalID string) int64 {
+	t.Helper()
+	var n int64
+	err := database.Model(&model.HumanTask{}).
+		Where("kind = ? AND subject_type = ? AND subject_id = ?",
+			model.HumanTaskKindApproval, service.HumanTaskSubjectApprovalRequest, approvalID).
+		Count(&n).Error
+	if err != nil {
+		t.Fatalf("读待办失败: %v", err)
+	}
+	return n
+}
+
+// 装配层必须把审批服务登记成全局实例：裁决端点在 router 包里现取全局，
+// 不登记就是"运行时装了、API 永远 503"，而 503 在监控里读起来像底座挂了。
+func TestInitApprovalRuntime_RegistersGlobalService(t *testing.T) {
+	installApprovalRuntimeCleanup(t)
+	database := approvalPlusTaskTestDB(t)
+	t.Setenv(ApprovalResumeFlagEnv, "on")
+
+	InitApprovalRuntime(database)
+	svc := service.GlobalApprovalRequestService()
+	if svc == nil {
+		t.Fatal("on 档之后全局审批服务仍为 nil")
+	}
+	if !svc.Available() {
+		t.Error("全局实例 Available()=false：拿到的是一份没有底座的壳")
+	}
+}
+
+// off / 无 DB 两档必须把全局**清成 nil**，尤其是"先 on 再 off"那一次：
+// 留着上一份，裁决端点会对着一个已经撤掉运行时实例继续回 200（T-P3-02 ⑤(b) 同一类缺陷）。
+func TestInitApprovalRuntime_OffAndNilDBClearGlobalService(t *testing.T) {
+	installApprovalRuntimeCleanup(t)
+	database := approvalPlusTaskTestDB(t)
+
+	t.Setenv(ApprovalResumeFlagEnv, "on")
+	if InitApprovalRuntime(database) == nil {
+		t.Fatal("前置：on 档没装上")
+	}
+	if service.GlobalApprovalRequestService() == nil {
+		t.Fatal("前置：全局审批服务没登记")
+	}
+
+	for _, c := range []struct {
+		name string
+		flag string
+		db   *gorm.DB
+	}{
+		{"切回 off", "off", database},
+		{"旗子还在但没了 DB 句柄", "on", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(ApprovalResumeFlagEnv, c.flag)
+			if rt := InitApprovalRuntime(c.db); rt != nil {
+				t.Errorf("%s 档不该返回运行时：%+v", c.flag, rt)
+			}
+			if got := service.GlobalApprovalRequestService(); got != nil {
+				t.Errorf("%s 档全局仍是 %+v：/api/approvals/* 会对着撤掉的实例继续回 200", c.name, got)
+			}
+		})
+	}
+}
+
+// 装配顺序陷阱（本卡最实际的一条）：router.go 里 InitApprovalRuntime 跑在
+// InitHumanTaskRuntime **之前**（:230 与 :235）。若装配时把当时的全局待办实例
+// 传进 SetTaskSink，拿到的恒是 nil ⇒ 审批永远不进待办池，而现象是"功能静默缺失"：
+// 没有报错、没有日志，只有池子里永远看不到审批类待办。
+//
+// 所以本用例刻意按生产顺序装：先审批、后待办，再入队。
+func TestInitApprovalRuntime_DeliversToHumanTaskPoolAssembledLater(t *testing.T) {
+	installApprovalRuntimeCleanup(t)
+	installHumanTaskGlobalCleanup(t)
+	database := approvalPlusTaskTestDB(t)
+	ctx := context.Background()
+
+	service.SetGlobalHumanTaskService(nil)
+	t.Setenv(ApprovalResumeFlagEnv, "on")
+	if InitApprovalRuntime(database) == nil {
+		t.Fatal("前置：审批运行时没装上")
+	}
+	// 待办底座后装（生产同序）
+	if InitHumanTaskRuntime(database) == nil {
+		t.Fatal("前置：待办底座没装上")
+	}
+
+	row, _, err := service.GlobalApprovalRequestService().Submit(ctx, service.ApprovalSubmitInput{
+		SubjectType: "quote", SubjectID: "q_wired_1", PolicyKey: "quote.send",
+	})
+	if err != nil {
+		t.Fatalf("入队失败: %v", err)
+	}
+	if n := countApprovalTasks(t, database, row.ID); n != 1 {
+		t.Errorf("待办池里审批 %s 名下行数=%d，期望 1（出口没接上或接成了装配时的 nil）", row.ID, n)
+	}
+
+	// 裁决之后那一行必须收口成 done：链子的另一半
+	if _, err := service.GlobalApprovalRequestService().Decide(ctx, row.ID, service.ApprovalApprove, "ops-lead", "wired"); err != nil {
+		t.Fatalf("裁决失败: %v", err)
+	}
+	var done int64
+	if err := database.Model(&model.HumanTask{}).
+		Where("subject_id = ? AND status = ?", row.ID, model.HumanTaskStatusDone).
+		Count(&done).Error; err != nil {
+		t.Fatalf("读待办失败: %v", err)
+	}
+	if done != 1 {
+		t.Errorf("裁决后收口成 done 的待办数=%d，期望 1（批了而池子里那条还能点，就是拆闸门按钮）", done)
+	}
+}
+
+// 待办底座没装配时，审批入队**照常成功**且不报错。
+//
+// 这条钉的是失败方向的取法：deliverTask 对"投递失败"是上抛（挂起必须失败，
+// 免得留下一行没人看得见的 pending），但"出口压根没装"是装配状态而不是故障，
+// 与 SetTaskSink(nil) 同一含义 ⇒ 按没有出口处理。兜底本来就在：pending 行会按
+// 自己的 expires_at 被清扫翻成 expired 并叫醒等待方，不会永久吊着。
+//
+// 反过来说，这一条不立住的话，T-P3-02 那批只装审批、不碰待办的用全会被判成失败。
+func TestApprovalRuntime_WithoutHumanTaskPoolStillSubmits(t *testing.T) {
+	installApprovalRuntimeCleanup(t)
+	installHumanTaskGlobalCleanup(t)
+	database := approvalPlusTaskTestDB(t)
+	ctx := context.Background()
+
+	service.SetGlobalHumanTaskService(nil)
+	t.Setenv(ApprovalResumeFlagEnv, "on")
+	rt := InitApprovalRuntime(database)
+	if rt == nil {
+		t.Fatal("前置：审批运行时没装上")
+	}
+	row, _, err := rt.svc.Submit(ctx, service.ApprovalSubmitInput{
+		SubjectType: "quote", SubjectID: "q_no_pool", PolicyKey: "quote.send",
+	})
+	if err != nil {
+		t.Fatalf("待办底座未装配时入队应成功（失败由 TTL 兜底），实际: %v", err)
+	}
+	if row.Status != model.ApprovalStatusPending {
+		t.Errorf("status = %s，期望 pending", row.Status)
+	}
+}
+
+// StopApprovalRuntime（将来 main.go 退出序列要调的那个入口）必须连全局一起清：
+// 协程停了而全局还在，API 就继续回 200，而那时已经没人清扫到期 pending 了。
+func TestStopApprovalRuntime_ClearsGlobalService(t *testing.T) {
+	installApprovalRuntimeCleanup(t)
+	database := approvalPlusTaskTestDB(t)
+	t.Setenv(ApprovalResumeFlagEnv, "on")
+
+	InitApprovalRuntime(database)
+	if service.GlobalApprovalRequestService() == nil {
+		t.Fatal("前置：全局审批服务没登记")
+	}
+	StopApprovalRuntime()
+	if got := service.GlobalApprovalRequestService(); got != nil {
+		t.Errorf("Stop 之后全局审批服务仍是 %+v ⇒ /api/approvals/* 对着停掉的运行时回 200", got)
+	}
 }

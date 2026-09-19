@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -202,21 +203,59 @@ type ApprovalWaitNotifier interface {
 	NotifyDecided(ctx context.Context, req *model.ApprovalRequest)
 }
 
+// ApprovalTaskSink 审批与统一待办池之间唯一的出口（T-P3-04）。
+//
+// 只有两个方法，且刻意不叫 SubmitTask/CancelTask 那样的动作名：投什么类别、标题写什么、
+// 截止落哪一列、done 还是 cancelled 全由实现方（HumanTaskService）按待办域的规矩定，
+// 审批侧只负责在正确的时刻递上"这一行现在长什么样"。
+//
+// 与 ApprovalWaitNotifier 同样的装配方式（setter + nil = 不接线），因为两者的
+// 可用性前提不同：待办底座没有旗子，而审批运行时受 FF_LTC_APPROVAL_RESUME 控制。
+type ApprovalTaskSink interface {
+	// SubmitForApproval 为一条 pending 审批投递（或复用）那条待办。
+	SubmitForApproval(ctx context.Context, req *model.ApprovalRequest) error
+	// CloseForApproval 收掉一条已落定审批的待办。
+	CloseForApproval(ctx context.Context, req *model.ApprovalRequest) error
+}
+
 // ApprovalRequestService 审批检查点服务
 type ApprovalRequestService struct {
 	repo   repository.ApprovalRequestRepository
 	policy AutoApprovalPolicy // nil = 永不自动放行（全部走人工，最保守的一档）
 
-	// notifierMu 保护 notifier：SetWaitNotifier 发生在装配期（router.Setup），
-	// 而读它发生在裁决期（HTTP 线程 / worker 线程），两者没有先后保证 ——
+	// notifierMu 保护 notifier 与 taskSink：两个装配期写入的出口，读发生在
+	// 裁决期（HTTP 线程 / worker 线程），与写入没有先后保证 ——
 	// 无锁读写是数据竞争（-race 可复现），口径同 SOPExecutionDispatcher.compensationMu。
 	notifierMu sync.RWMutex
 	notifier   ApprovalWaitNotifier // nil = 无人等（本服务可独立使用，见 T-P3-01 的零装配）
+	taskSink   ApprovalTaskSink     // nil = 不进待办池（装配未接齐时的默认档）
 }
 
 // NewApprovalRequestService 构造。policy 可为 nil（见上）。
 func NewApprovalRequestService(repo repository.ApprovalRequestRepository, policy AutoApprovalPolicy) *ApprovalRequestService {
 	return &ApprovalRequestService{repo: repo, policy: policy}
+}
+
+// globalApprovalSvc 全局审批服务实例（与 globalHumanTaskSvc 同一口径：atomic.Pointer）。
+//
+// 为什么现在要有全局：T-P3-04 的裁决端点在 router 包里，而 router 拿服务的既有形状
+// 就是"现取全局、取不到就回 503"（见 setupHumanTaskRoutes）。装配在 app 的
+// InitApprovalRuntime 里做，off / 无 DB 句柄两档都必须把它清成 nil ——
+// 留着上一份会让端点对着一个已经撤掉运行时实例继续回 200（T-P3-02 ⑤(b) 同一类缺陷）。
+var globalApprovalSvc atomic.Pointer[ApprovalRequestService]
+
+// SetGlobalApprovalRequestService 登记全局实例；传 nil 等于撤掉。
+func SetGlobalApprovalRequestService(s *ApprovalRequestService) { globalApprovalSvc.Store(s) }
+
+// GlobalApprovalRequestService 取全局实例（可能为 nil；调用方必须判空并给出"未装配"的答复）。
+func GlobalApprovalRequestService() *ApprovalRequestService { return globalApprovalSvc.Load() }
+
+// Available 底座可用（controller 用它区分 503 与业务错误，口径同 HumanTaskService.Available）。
+//
+// nil 接收者要返回 false 而不是 panic：路由层拿到全局实例时可能压根没装配
+// （off 档 / 无 DB），那边构造 controller 时传的就是 nil，判空必须能在 nil 上做。
+func (s *ApprovalRequestService) Available() bool {
+	return s != nil && s.repo != nil && s.repo.Available()
 }
 
 // SetWaitNotifier 装配唤醒出口。传 nil 等于撤掉（回滚到"只靠定时器到期"那一档）。
@@ -248,6 +287,62 @@ func (s *ApprovalRequestService) notifyWait(ctx context.Context, req *model.Appr
 		return
 	}
 	n.NotifyDecided(ctx, req)
+}
+
+// SetTaskSink 装配待办池出口；传 nil 等于撤掉（回到 T-P3-02 的交付态：审批只落自己的表）。
+//
+// 装配点：internal/app/approval_runtime_wiring.go。允许在 Start 之后调用，
+// 因为待办底座与审批运行时各自的装配顺序不固定（前者无旗子、后者有）。
+func (s *ApprovalRequestService) SetTaskSink(sink ApprovalTaskSink) {
+	if s == nil {
+		return
+	}
+	s.notifierMu.Lock()
+	s.taskSink = sink
+	s.notifierMu.Unlock()
+}
+
+func (s *ApprovalRequestService) sink() ApprovalTaskSink {
+	if s == nil {
+		return nil
+	}
+	s.notifierMu.RLock()
+	defer s.notifierMu.RUnlock()
+	return s.taskSink
+}
+
+// deliverTask 投待办。错误**必须上抛**给 Submit 的调用方。
+//
+// 失败方向选得很具体：待办没投出去 ⇒ 这条 pending 大概永远没人看见 ⇒ 挂起必须失败
+// （流程节点判失败、执行按失败收口，既不会放行危险动作，也不会把执行永久吊在 running）。
+// 反过来"只记日志继续挂起"会造出一个更坏的状态：流程挂着、池子里看不见、
+// 只能等 TTL 自己到期，而那看起来像"审批没人理"而不是"待办没投出去"。
+func (s *ApprovalRequestService) deliverTask(ctx context.Context, req *model.ApprovalRequest) error {
+	sink := s.sink()
+	if sink == nil {
+		return nil
+	}
+	if err := sink.SubmitForApproval(ctx, req); err != nil {
+		return fmt.Errorf("approval_request: 审批 %s 的待办投递失败（审批行仍在库里，下次入队会补投）: %w", req.ID, err)
+	}
+	return nil
+}
+
+// closeTask 收待办。失败**只出声，不改变裁决的结果**。
+//
+// 与 deliverTask 方向相反，理由同一条判据（只有已经成立的事实能让流程继续）：
+// 裁决此刻已落库、唤醒已发出，这里回一个 error 会让操作者以为自己没批成而去重试，
+// 而第二次拿到的是 409"已由他人裁决"。残留是一行没人收的死待办：它会被看见、会逾期，
+// 处理它的人点下去会拿到 409 并刷新列表 —— 难受，但不假。
+func (s *ApprovalRequestService) closeTask(ctx context.Context, req *model.ApprovalRequest) {
+	sink := s.sink()
+	if sink == nil {
+		return
+	}
+	if err := sink.CloseForApproval(ctx, req); err != nil {
+		logger.Warnf("[approval_request] 审批 %s（%s）已落定为 %s，但它的待办没收口：%v",
+			req.ID, req.PolicyKey, req.Status, err)
+	}
 }
 
 // Submit 入队一次审批请求。
@@ -294,6 +389,13 @@ func (s *ApprovalRequestService) Submit(ctx context.Context, in ApprovalSubmitIn
 		return nil, false, fmt.Errorf("approval_request: 查已有 pending 失败: %w", err)
 	}
 	if existing != nil {
+		// 复用路径也要保证待办在（T-P3-04）：第一次入队可能碰上"审批落库成功、
+		// 待办投递失败"（见 deliverTask 的失败方向），重试这一次就是它唯一的补投机会。
+		if existing.Status == model.ApprovalStatusPending {
+			if err := s.deliverTask(ctx, existing); err != nil {
+				return nil, false, err
+			}
+		}
 		return existing, false, nil
 	}
 
@@ -349,7 +451,19 @@ func (s *ApprovalRequestService) Submit(ctx context.Context, in ApprovalSubmitIn
 			// 闸门在这里的失败方向必须是"这次动作没拿到批准"，而不是"再开一条待办"。
 			return nil, false, ierr
 		}
+		if winner.Status == model.ApprovalStatusPending {
+			if err := s.deliverTask(ctx, winner); err != nil {
+				return nil, false, err
+			}
+		}
 		return winner, false, nil
+	}
+	// 待办投递放在**落库之后**：反过来会造出"池子里有一条待办、库里没有对应审批"的孤儿，
+	// 而点开它的人什么也批不了。落定态（auto-approve）不投——没有人要裁决它。
+	if req.Status == model.ApprovalStatusPending {
+		if err := s.deliverTask(ctx, req); err != nil {
+			return nil, false, err
+		}
 	}
 	return req, true, nil
 }
@@ -416,6 +530,10 @@ func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict 
 			// 调用方拿着 nil 无从判断裁决有没有生效，而它下一步就是"要不要真的外发"。
 			return nil, ErrApprovalNotFound
 		}
+		// 先收待办、再叫醒流程：反过来会让操作者在"已经批了"的那个瞬间还在池子里
+		// 看见一条能点的待办（点下去拿到 409，而 409 在这里读起来像权限问题）。
+		// 收口失败不上抛，理由见 closeTask。
+		s.closeTask(ctx, cur)
 		// 唤醒挂在这件事上的流程（T-P3-02）。放在**读回之后**：通知出去的那一刻，
 		// 被叫醒的一方会立刻回读这一行，它必须读到刚落的结论而不是旧值。
 		s.notifyWait(ctx, cur)
@@ -494,6 +612,7 @@ func (s *ApprovalRequestService) ExpireOverdue(ctx context.Context, limit int) (
 		return nil, err
 	}
 	for _, row := range flipped {
+		s.closeTask(ctx, row)
 		s.notifyWait(ctx, row)
 	}
 	return flipped, nil
