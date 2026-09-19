@@ -358,9 +358,13 @@ func (c *AuthController) VerifyMFALogin(ctx *gin.Context) {
 
 	userID, username, role, err := c.mfaService.VerifyMFALogin(ctx.Request.Context(), req.TempToken, req.Code)
 	if err != nil {
+		// 路由已挂 BruteForceGuard("auth.mfa")：失败必须在此单点计数，
+		// 否则守卫永不触发（TOTP 6 位码 ±90s 窗口可被持续爆破）。
+		middleware.RecordBruteForceFailure(ctx, "auth.mfa")
 		response.Error(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
+	middleware.ClearBruteForceFailure(ctx, "auth.mfa")
 
 	jwtUtils := c.authService.JwtUtils(ctx.Request.Context())
 	token, err := jwtUtils.GenerateToken(userID, username, role)

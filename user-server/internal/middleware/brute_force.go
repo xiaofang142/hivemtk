@@ -238,6 +238,11 @@ func ResetBruteForceForTest() {
 	globalBruteForce.entries = make(map[string]*bruteForceEntry)
 }
 
+// BruteForceDisabledForTest 显式查询禁用开关（仅用于测试环境自适应跳过）
+func BruteForceDisabledForTest() bool {
+	return bruteForceDisabled
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"

@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -63,9 +65,15 @@ func (c *SelfServiceController) ResetPassword(ctx *gin.Context) {
 		return
 	}
 	if err := c.passwordResetService.ResetPassword(ctx.Request.Context(), &req); err != nil {
+		// 路由已挂 BruteForceGuard("reset-password")：仅"令牌无效/过期"计入爆破计数；
+		// 新密码不符合策略是持票用户自身错误，不参与 IP 锁定。
+		if errors.Is(err, service.ErrInvalidResetToken) {
+			middleware.RecordBruteForceFailure(ctx, "reset-password")
+		}
 		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("failed to reset password")
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
+	middleware.ClearBruteForceFailure(ctx, "reset-password")
 	response.Success(ctx, nil, "password has been reset successfully")
 }

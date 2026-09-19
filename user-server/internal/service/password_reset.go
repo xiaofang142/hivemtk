@@ -21,6 +21,11 @@ const (
 	passwordResetTokenMaxActive = 3
 )
 
+// ErrInvalidResetToken 重置令牌无效/已过期/已使用的统一哨兵错误。
+// 控制器据此区分"令牌爆破失败"（计入防爆破计数）与"新密码不合策略"（不计），
+// 保持对外的模糊提示不变（不泄露令牌是否存在）。
+var ErrInvalidResetToken = errors.New("invalid or expired token")
+
 type PasswordResetService struct {
 	emailService *EmailService
 	tokenRepo    *repository.PasswordResetTokenRepository
@@ -97,10 +102,10 @@ func (s *PasswordResetService) ValidateResetToken(ctx context.Context, tokenStr 
 	}
 	token, err := s.tokenRepo.GetByToken(ctx, tokenStr)
 	if err != nil {
-		return nil, errors.New("invalid or expired token")
+		return nil, ErrInvalidResetToken
 	}
 	if !PasswordResetTokenIsValid(token) {
-		return nil, errors.New("invalid or expired token")
+		return nil, ErrInvalidResetToken
 	}
 	return token, nil
 }
