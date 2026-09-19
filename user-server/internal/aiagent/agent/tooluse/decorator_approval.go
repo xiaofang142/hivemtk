@@ -135,3 +135,34 @@ func approvalOwnerKey(ctx context.Context) string {
 	}
 	return tc.AgentID
 }
+
+// ApprovalGateDecorator 把审批门挂到装饰器链上（T-P1-05）。
+//
+// 为什么不用上面的 WithApproval（Tool 包装）：那条路要在每个注册点各包一层，而它在生产里
+// 一个调用点都没有（只剩测试在用）；装饰器形态只需在 executor 唯一的建链点表态一次。
+// 位置因此变成显式决策：放在 permission/ratelimit/audit/feedback 之外，
+// 被拒的冷触达既不消耗配额也不留下"执行过一次外发"的记录。
+// 重试不在考虑范围内——ClassifyToolError 已把 TOOL_APPROVAL_DENIED 归入
+// isNonRetryableError，两种包装形态都不会重试。
+//
+// shadow 的语义必须是结构性的：shadow=true 时**没有一条路径**会返回拒绝，
+// 判定结果只经 checker 自己的 OnDecision 回调留痕（见 internal/approval）。
+// 拒绝结论由 checker.IsApproved 决定，本装饰器不复制白名单逻辑。
+func ApprovalGateDecorator(t Tool, checker ApprovalChecker, shadow bool) ToolDecorator {
+	return func(next ToolHandler) ToolHandler {
+		return func(ctx context.Context, args map[string]any) (ToolResult, error) {
+			if checker == nil || t == nil || !IsColdOutreachTool(t) {
+				return next(ctx, args)
+			}
+			if checker.IsApproved(ctx, t.Name(), approvalOwnerKey(ctx)) {
+				return next(ctx, args)
+			}
+			if shadow {
+				return next(ctx, args)
+			}
+			err := fmt.Errorf("%w: tool %s (%s) requires cold outreach approval",
+				ErrApprovalDenied, t.Name(), t.Category())
+			return ErrorResult(t.Name(), err), err
+		}
+	}
+}

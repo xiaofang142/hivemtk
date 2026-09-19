@@ -22,12 +22,14 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/tools/audit", handleToolAudit)
 	auth.GET("/agent/tools/cost", handleToolCost)
 	auth.GET("/agent/tools/circuit", handleToolCircuitState)
+	auth.GET("/agent/tools/approval", handleToolApprovalState)
 	auth.GET("/agent/tools/providers", handleToolProviders)
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
 		admin.POST("/agent/tools/execute", handleToolExecute)
 		admin.POST("/agent/tools/circuit/reset", handleToolCircuitReset)
+		admin.POST("/agent/tools/approval/whitelist", handleToolApprovalWhitelist)
 	}
 }
 
@@ -327,6 +329,109 @@ func handleToolCircuitReset(c *gin.Context) {
 		"router_circuit_reset":   true,
 		"executor_circuit_reset": registry != nil,
 	}, "circuit breaker reset")
+}
+
+// toolApprovalWhitelistRequest 冷触达审批白名单授权请求。
+type toolApprovalWhitelistRequest struct {
+	ToolName  string `json:"tool_name" binding:"required"`
+	AccountID string `json:"account_id" binding:"required"`
+
+	// ExpiresAt RFC3339；留空 = 永不过期。
+	ExpiresAt string `json:"expires_at"`
+	Revoke    bool   `json:"revoke"`
+}
+
+// handleToolApprovalState 读取冷触达审批门的接线状态与 shadow 累计（T-P1-05）。
+//
+// 三件事必须一起看清，否则这份报告会被读反：
+//   - mode/wired：闸门有没有挂上执行链（FF_LTC_APPROVAL_GATE）
+//   - whitelist_flag_on：白名单有没有生效（approval.FlagKey，另一把旗子）
+//   - by_reason：would_deny 是"闸门没开"还是"账号没被批准"
+//
+// shadow 态下 would_deny 只是"切阻断后会被拦的量"，没有任何请求真的被拦。
+func handleToolApprovalState(c *gin.Context) {
+	snap, decisions := app.GetApprovalSnapshot()
+	out := gin.H{
+		"mode":               snap.Mode,
+		"wired":              snap.Wired,
+		"global_checker_set": snap.GlobalCheckerSet,
+		"flags": gin.H{
+			"gate":              snap.GateFlagEnv,
+			"whitelist":         snap.WhitelistFlagKey,
+			"whitelist_flag_on": snap.WhitelistFlagOn,
+		},
+		"env_hint": app.ApprovalGateFlagEnv + "=off|shadow（本版本只到 shadow：只记录判定、冷触达照常外发；" +
+			"写 block/enforce 也按 shadow 处理，转阻断是 T-P1-06）",
+		"reading_hint": "would_deny = 切阻断后会被拦的次数。by_reason 里 disabled_by_flag 占多数时，" +
+			"结论是「白名单旗子没开」，不是「账号没被批准」",
+	}
+	if decisions != nil {
+		rep := decisions.Report()
+		per := make([]gin.H, 0, len(rep.PerTool))
+		for _, st := range rep.PerTool {
+			per = append(per, gin.H{
+				"tool_name":   st.ToolName,
+				"total":       st.Total,
+				"would_deny":  st.WouldDeny,
+				"last_reason": st.LastReason,
+			})
+		}
+		out["decision_report"] = gin.H{
+			"total":               rep.Total,
+			"would_deny":          rep.WouldDeny,
+			"would_deny_rate_pct": rep.WouldDenyRatePct,
+			"by_reason":           rep.ByReason,
+			"per_tool":            per,
+		}
+	}
+	response.Success(c, out, "ok")
+}
+
+// handleToolApprovalWhitelist 给 (tool, account) 授权/撤权。
+//
+// 授权内容只落进程内存、重启即空：这不是偷懒，是刻意的下限——
+// 持久化授权要过审批流与留痕表（T-P3 的审批闸门域），在这里偷偷写一张表反而会造出
+// 第二个授权来源。shadow 态下授权不改变任何行为（本来就放行），它的作用是让报告
+// 能区分"这个账号真的该放"与"只是没人给他开过"。
+func handleToolApprovalWhitelist(c *gin.Context) {
+	var req toolApprovalWhitelistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid request: "+err.Error())
+		return
+	}
+	toolName := strings.TrimSpace(req.ToolName)
+	accountID := strings.TrimSpace(req.AccountID)
+	if toolName == "" || accountID == "" {
+		response.Error(c, 400, "tool_name and account_id required")
+		return
+	}
+	var expiresAt time.Time
+	if s := strings.TrimSpace(req.ExpiresAt); s != "" {
+		parsed, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			response.Error(c, 400, "expires_at 需为 RFC3339，如 2026-10-01T00:00:00Z")
+			return
+		}
+		expiresAt = parsed
+	}
+	if !app.ApprovalWhitelistMutate(toolName, accountID, expiresAt, req.Revoke) {
+		response.Error(c, 503, "审批门未接线（先设 "+app.ApprovalGateFlagEnv+"=shadow 再重启服务）")
+		return
+	}
+	expires := "never"
+	if !expiresAt.IsZero() {
+		expires = expiresAt.UTC().Format(time.RFC3339)
+	}
+	logger.Infof("[tool-debug] approval whitelist mutate tool=%s account=%s revoke=%t expires=%s by caller=%s",
+		toolName, accountID, req.Revoke, expires, c.ClientIP())
+	response.Success(c, gin.H{
+		"tool_name":  toolName,
+		"account_id": accountID,
+		"revoked":    req.Revoke,
+		"expires_at": expires,
+		"persisted":  false,
+		"note":       "白名单仅存于进程内存，重启即空；需持久授权请走审批闸门域，勿依赖本端点",
+	}, "ok")
 }
 
 func atoiSafe(s string) (int, error) {

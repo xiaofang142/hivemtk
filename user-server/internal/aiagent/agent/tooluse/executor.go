@@ -70,6 +70,13 @@ type ToolExecutorConfig struct {
 	// OnCircuitDecision 每次熔断判定回调一次（nil = 不上报）。用于观察期累计与告警。
 	OnCircuitDecision CircuitDecisionFunc
 
+	// ApprovalChecker 冷触达审批门检查器；nil = 不接线，行为与现状一致。
+	// 仅对 IsColdOutreachTool 为真的工具生效。
+	ApprovalChecker ApprovalChecker
+	// ApprovalShadow true 时只经 checker 留痕、不拦下请求（FF_LTC_APPROVAL_GATE=shadow）。
+	// 由接线方设定；本字段为 true 时 ApprovalGateDecorator 不存在任何拒绝路径。
+	ApprovalShadow bool
+
 	FeedbackSink FeedbackSink
 }
 
@@ -320,6 +327,13 @@ func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 	)
 	if e.config.FeedbackSink != nil {
 		chain = FeedbackCollectorDecorator(e.config.FeedbackSink)(chain)
+	}
+	if e.config.ApprovalChecker != nil && IsColdOutreachTool(tool) {
+		// 审批门放在整条链之外（含 feedback）：被拒的冷触达不应消耗限流令牌、不应进重试、
+		// 不应被 audit 记成"执行过一次外发"、也不应产生一条工具反馈（它的留痕走 checker 自己的 OnDecision）。
+		// shadow 态下这一层是纯透传，位置无所谓；位置真正生效是 T-P1-06 转阻断的时候，
+		// 现在定死是为了那时不必再挪——挪一次就要重新证明"少拦/多拦了哪些调用"。
+		chain = ApprovalGateDecorator(tool, e.config.ApprovalChecker, e.config.ApprovalShadow)(chain)
 	}
 	return chain
 }

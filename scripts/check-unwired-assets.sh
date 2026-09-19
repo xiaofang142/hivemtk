@@ -50,8 +50,9 @@ fi
 #   - expect 留空 = 登记为"未接线"；wired = 登记为"已接线"（回退即漂移）
 # -----------------------------------------------------------------------------
 BASELINE=(
-  "1|冷触达审批门（checker 为 nil 即直接放行）|func SetGlobalApprovalChecker|SetGlobalApprovalChecker\(|"
-  "1|冷触达审批门白名单构造|func NewWhiteList|NewWhiteList\(|"
+  "1|冷触达审批门（checker 为 nil 即直接放行）|func SetGlobalApprovalChecker|SetGlobalApprovalChecker\(|internal/app|wired"
+  "1|冷触达审批门白名单构造|func NewWhiteList|NewWhiteList\(|internal/app|wired"
+  "1|冷触达审批门装配入口（executor 配置真赋值）|func applyApprovalGate|applyApprovalGate\(|internal/app|wired"
   "2|Saga 补偿管理器注入|func \\(d \\*SOPExecutionDispatcher\\) SetCompensationManager|SetCompensationManager\(||wired"
   "2|Saga 补偿装配入口（生产装配点真调用）|func InitSOPCompensation|InitSOPCompensation\(|cmd/api|wired"
   "3|工具熔断器注册中心|func NewCircuitBreakerRegistry|NewCircuitBreakerRegistry\(|internal/app|wired"

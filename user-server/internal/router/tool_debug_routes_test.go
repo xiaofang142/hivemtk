@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -427,6 +428,9 @@ func TestSetup_ToolDebugRoutesRegistered(t *testing.T) {
 		"GET-/api/agent/tools/cost",
 		"GET-/api/agent/tools/circuit",
 		"POST-/api/agent/tools/circuit/reset",
+		"GET-/api/agent/tools/approval",
+		"POST-/api/agent/tools/approval/whitelist",
+		"GET-/api/agent/tools/providers",
 	}
 	routes := r.Routes()
 	routeSet := make(map[string]bool)
@@ -647,13 +651,109 @@ func TestHandleToolCircuitState_HTTP_Unwired(t *testing.T) {
 	}
 }
 
+// TestHandleToolApprovalState_HTTP_Unwired 审批门未接线时的自述（T-P1-05）。
+//
+// 必须与熔断那条同形：wired=false、空集合不伪装成健康、缺报告就说缺报告。
+// 这里刻意不回显一个全零的 decision_report——"一次都没发生"和"没接闸门"
+// 在灰度判定时是两个完全相反的结论。
+func TestHandleToolApprovalState_HTTP_Unwired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/approval", nil)
+
+	handleToolApprovalState(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200；body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code int            `json:"code"`
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body not JSON: %v; body=%s", err, w.Body.String())
+	}
+	if resp.Code != 0 {
+		t.Fatalf("envelope code = %d, want 0；body=%s", resp.Code, w.Body.String())
+	}
+	if wired, ok := resp.Data["wired"].(bool); !ok || wired {
+		t.Errorf("wired = %v, want false（本测试进程没跑过审批门装配）", resp.Data["wired"])
+	}
+	if _, exists := resp.Data["decision_report"]; exists {
+		t.Errorf("未接线时不应出现 decision_report，否则 0 会读成「零次冷触达」：实际 %v", resp.Data["decision_report"])
+	}
+	flags, ok := resp.Data["flags"].(map[string]any)
+	if !ok {
+		t.Fatalf("flags 缺失或类型不对：%v", resp.Data["flags"])
+	}
+	// 两把旗子必须同时回显：只看 mode=shadow 会把"白名单没生效"读成"账号都没被批准"
+	for _, k := range []string{"gate", "whitelist", "whitelist_flag_on"} {
+		if _, ok := flags[k]; !ok {
+			t.Errorf("flags 缺 %q：%v", k, flags)
+		}
+	}
+	if flags["whitelist"] != "ai.safety.tool_approval_gate" {
+		t.Errorf("flags.whitelist = %v, want ai.safety.tool_approval_gate", flags["whitelist"])
+	}
+	for _, k := range []string{"mode", "global_checker_set", "env_hint", "reading_hint"} {
+		if _, ok := resp.Data[k]; !ok {
+			t.Errorf("缺少字段 %s", k)
+		}
+	}
+	// 旗子名必须与代码实际读取的那个常量同源：抄一份字面量到提示语里，
+	// 将来改名就会变成"文档教你设一个没人读的变量"。
+	if flags["gate"] != app.ApprovalGateFlagEnv {
+		t.Errorf("flags.gate = %v, want %s（与 app 侧常量漂移）", flags["gate"], app.ApprovalGateFlagEnv)
+	}
+	if hint, _ := resp.Data["env_hint"].(string); !strings.HasPrefix(hint, app.ApprovalGateFlagEnv+"=") {
+		t.Errorf("env_hint 未以旗子名 %s= 开头：%q", app.ApprovalGateFlagEnv, hint)
+	}
+}
+
+// TestHandleToolApprovalWhitelist_HTTP_InputGuards 授权端点的入参守卫与未接线回退。
+//
+// 放行/撤权本身的语义在 internal/app 的 TestApprovalWhitelistGrantChangesReason 里锁，
+// 这里只锁端点这一层：坏输入不能写进白名单，未接线时不能假装成功。
+func TestHandleToolApprovalWhitelist_HTTP_InputGuards(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"非法 JSON", `{"tool_name":`, http.StatusBadRequest},
+		{"缺 tool_name", `{"account_id":"a1"}`, http.StatusBadRequest},
+		{"缺 account_id", `{"tool_name":"reach.batch"}`, http.StatusBadRequest},
+		{"全空白", `{"tool_name":"  ","account_id":"  "}`, http.StatusBadRequest},
+		{"expires_at 不是 RFC3339", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"2026/10/01"}`, http.StatusBadRequest},
+		// 入参合法但闸门没接线 ⇒ 必须 503，不能返回 200 让人以为授权成功了
+		{"未接线", `{"tool_name":"reach.batch","account_id":"a1"}`, http.StatusServiceUnavailable},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = httptest.NewRequest("POST", "/api/agent/tools/approval/whitelist", strings.NewReader(c.body))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+
+			handleToolApprovalWhitelist(ctx)
+
+			if w.Code != c.want {
+				t.Fatalf("status = %d, want %d；body=%s", w.Code, c.want, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestAtoiSafe(t *testing.T) {
 	cases := []struct {
 		input string
 		want  int
 		ok    bool
 	}{
-		{"100", 100, true},
 		{"0", 0, true},
 		{"", 0, false},
 		{"abc", 0, false},

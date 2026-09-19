@@ -83,21 +83,21 @@ func (w *WhiteListApprovalChecker) IsApproved(ctx context.Context, toolName, acc
 
 func (w *WhiteListApprovalChecker) decide(ctx context.Context, toolName, accountID string, flagOn bool) Decision {
 	if !flagOn {
-		return Decision{Allowed: false, Reason: "disabled_by_flag"}
+		return Decision{Allowed: false, Reason: ReasonDisabledByFlag}
 	}
 	w.mu.RLock()
 	m, ok := w.whitelist[toolName]
 	if !ok {
 		w.mu.RUnlock()
-		return Decision{Allowed: false, Reason: "denied_default"}
+		return Decision{Allowed: false, Reason: ReasonDeniedDefault}
 	}
 	exp, hit := m[accountID]
 	w.mu.RUnlock()
 	if !hit {
-		return Decision{Allowed: false, Reason: "denied_default"}
+		return Decision{Allowed: false, Reason: ReasonDeniedDefault}
 	}
 	if !exp.IsZero() && w.nowFn().After(exp) {
-		return Decision{Allowed: false, Reason: "denied_explicit"}
+		return Decision{Allowed: false, Reason: ReasonDeniedExplicit}
 	}
-	return Decision{Allowed: true, Reason: "whitelisted"}
+	return Decision{Allowed: true, Reason: ReasonWhitelisted}
 }
