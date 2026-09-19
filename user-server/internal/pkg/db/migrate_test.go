@@ -45,6 +45,10 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		&model.IntentExample{},
 		&model.LLMRoutingLog{},
 		&model.LoginEvent{},
+		// OrderDraft：T-P2-01 新增，有 repository.Upsert 这条生产写入路径。
+		// 不列进这里的后果正是本测试要拦的那类：allModels() 里少一行，
+		// 全新部署不建表，而 service 侧只在日志里说一句话。
+		&model.OrderDraft{},
 		&model.PasswordHistory{},
 		&model.RagMetricsDaily{},
 		&model.RecoveryQueue{},

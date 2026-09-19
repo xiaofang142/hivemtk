@@ -65,6 +65,10 @@ BASELINE=(
   "7|Agent 断点续跑 存点|func SaveCheckpoint|SaveCheckpoint\(||wired"
   "7|Agent 断点续跑 取点|func LoadLatestCheckpoint|LoadLatestCheckpoint\(||wired"
   "7|Agent 断点续跑 续跑阶段|func ResumeStage|ResumeStage\(||wired"
+  # 项8 = T-P2-01 新增：整条销售草稿竖（OrderDraftService）今天没有任何生产构造点，
+  # 持久化底座因此也只能是"实现完毕、等待装配"。登记为 unwired 而不是留白，
+  # 是为了让"草稿已落库"这种说法在接线前无法被悄悄讲出口（接线属 T-P2-06）。
+  "8|订单草稿持久化底座的装配入口|func NewOrderDraftServiceWithDB|NewOrderDraftServiceWithDB\(|internal/app cmd/api|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gorm.io/gorm"
+
+	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 )
 
 // roundMoney 金额四舍五入到分，抑制 float64 乘法二进制误差（存储层 NUMERIC(12,2)）
@@ -98,12 +102,20 @@ type orderRecord struct {
 }
 
 // OrderDraftService 订单草稿服务
+//
+// 状态存放交给 draftStore（内存一副 / DB 一副，见 order_draft_store.go）。
+// 本文件因此只保留业务判据（去重规则、置信度加成、状态机、事件口径），
+// 不再持有 map —— 这正是 T-P2-01 的落点：业务规则与"数据活多久"分开。
 type OrderDraftService struct {
-	mu sync.RWMutex
+	// mu 只保护 CreateFromIntent 的"查待确认草稿 → 合并或新建"这一段。
+	//
+	// 原来这里是一把盖住全部读写的大锁 + 三个 map；现在收窄到唯一一处**跨两次存储
+	// 调用**的复合操作：不锁住它就会有两个并发意向各自查不到对方、各建一份草稿，
+	// 销售工作台于是看到两条重复项（存量代码即如此，见改动前的 RLock/Lock 序列）。
+	// DB 那一副另有部分唯一索引 uq_order_draft_pending 兜跨进程的同一情形。
+	mu sync.Mutex
 
-	drafts     map[string]*OrderDraft
-	byCustomer map[string][]*OrderDraft
-	byOwner    map[string][]*OrderDraft
+	store draftStore
 
 	orderService *OrderService
 	journey      *CustomerJourneyService
@@ -125,8 +137,32 @@ type OrderDraftConfig struct {
 	DefaultExpiry time.Duration
 }
 
-// NewOrderDraftService 创建订单草稿服务
+// NewOrderDraftService 创建订单草稿服务（内存态底座）。
+//
+// 默认仍是内存：本卡的 AC③ 要求"现有调用方零改动通过编译"，而存量 25 个用例把
+// 返回的 *OrderDraft 当活对象用（改完字段直接断言列表/过期结果）。要 durable 底座
+// 请显式走 NewOrderDraftServiceWithDB —— 两条路的可观察差异由契约测试钉住。
 func NewOrderDraftService(cfg *OrderDraftConfig) *OrderDraftService {
+	return newOrderDraftService(cfg, newMemoryDraftStore())
+}
+
+// NewOrderDraftServiceWithDB 用持久化底座创建服务（T-P2-01 的交付物）。
+//
+// 生产装配点当前**不存在**（整条销售草稿竖今天没有构造点，见 T-P2-06），所以本函数
+// 今天只有测试在调 —— 这是事实，不是遗漏：底座先落地、装配另开卡，是为了不在
+// "连对象都没人 new"的代码上叠加"重启不丢"这种可对外宣称的能力。
+//
+// db 为 nil 时退回内存底座并出声告警（不静默、不 panic）。
+func NewOrderDraftServiceWithDB(cfg *OrderDraftConfig, db *gorm.DB) *OrderDraftService {
+	return newOrderDraftService(cfg, newDraftStoreForDB(db))
+}
+
+// NewOrderDraftServiceWithRepo 用指定仓库创建（注入 mock / 复用测试库句柄时用）。
+func NewOrderDraftServiceWithRepo(cfg *OrderDraftConfig, repo repository.OrderDraftRepository) *OrderDraftService {
+	return newOrderDraftService(cfg, newDBDraftStore(repo))
+}
+
+func newOrderDraftService(cfg *OrderDraftConfig, store draftStore) *OrderDraftService {
 	if cfg == nil {
 		cfg = &OrderDraftConfig{}
 	}
@@ -134,13 +170,22 @@ func NewOrderDraftService(cfg *OrderDraftConfig) *OrderDraftService {
 		cfg.DefaultExpiry = 7 * 24 * time.Hour
 	}
 	return &OrderDraftService{
-		drafts:        make(map[string]*OrderDraft),
-		byCustomer:    make(map[string][]*OrderDraft),
-		byOwner:       make(map[string][]*OrderDraft),
+		store:         store,
 		defaultExpiry: cfg.DefaultExpiry,
 
 		scriptConversionHook: defaultScriptConversionHook,
 	}
+}
+
+// Durable 报告草稿是否跨进程重启保留（观测端点/启动日志用）。
+//
+// 只有布尔是不够的：一个服务"接口全通、数据重启就没"和"已经落库"从外部看一模一样，
+// 必须有一个地方能问出来。
+func (s *OrderDraftService) Durable() bool { return s.store != nil && s.store.durable() }
+
+// DraftStatusCounts 各状态草稿条数（"是否还在无界增长"的可见入口）。
+func (s *OrderDraftService) DraftStatusCounts(ctx context.Context) (map[string]int64, error) {
+	return s.store.statusCounts(ctx)
 }
 
 func defaultScriptConversionHook(ctx context.Context, oneID, conversationID, outcome string) {
@@ -195,22 +240,47 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 		ownerID = "system"
 	}
 
-	existing := s.findPendingDraftByProduct(ctx, intent.CustomerID, intent.ProductName)
-	if existing != nil {
-		if intent.Quantity > 0 {
-			existing.Quantity += intent.Quantity
-			existing.TotalAmount = roundMoney(existing.UnitPrice * float64(existing.Quantity))
+	// 整段"查→合并或新建"在一把锁里：见结构体上 mu 的注释。
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mergeInto := func(id string) (*OrderDraft, bool) {
+		existing, applied, err := s.store.mutateIfPending(ctx, id, func(d *OrderDraft) {
+			if d.Metadata == nil {
+				d.Metadata = make(map[string]any)
+			}
+			if intent.Quantity > 0 {
+				d.Quantity += intent.Quantity
+				d.TotalAmount = roundMoney(d.UnitPrice * float64(d.Quantity))
+			}
+			if intent.UnitPrice > 0 {
+				d.UnitPrice = intent.UnitPrice
+				d.TotalAmount = roundMoney(d.UnitPrice * float64(d.Quantity))
+			}
+			if intent.Confidence > d.Confidence {
+				d.Confidence = intent.Confidence
+			}
+			d.UpdatedAt = time.Now()
+			d.Metadata["last_intent_id"] = intent.RawText
+		})
+		if err != nil {
+			logger.Errorf("[order-draft] 合并意向到草稿 %s 失败 ⇒ 本次 intent 不记入草稿（不伪记为已合并）：%v", id, err)
+			return nil, false
 		}
-		if intent.UnitPrice > 0 {
-			existing.UnitPrice = intent.UnitPrice
-			existing.TotalAmount = roundMoney(existing.UnitPrice * float64(existing.Quantity))
+		return existing, applied
+	}
+
+	candidates, err := s.findPendingDraftByProduct(ctx, intent.CustomerID, intent.ProductName)
+	if err != nil {
+		logger.Errorf("[order-draft] 去重查询失败 ⇒ 本次 intent 不建草稿（宁缺勿重）：%v", err)
+		return nil
+	}
+	if candidates != nil {
+		if merged, ok := mergeInto(candidates.ID); ok {
+			return merged
 		}
-		if intent.Confidence > existing.Confidence {
-			existing.Confidence = intent.Confidence
-		}
-		existing.UpdatedAt = time.Now()
-		existing.Metadata["last_intent_id"] = intent.RawText
-		return existing
+		// 合并落败 = 那条草稿在读取后已被确认/取消 ⇒ 它不再是"待确认"的那一个，
+		// 本次意向按新建处理（原实现无并发对手，所以从未暴露这一支）。
 	}
 
 	now := time.Now()
@@ -257,11 +327,21 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 		},
 	}
 
-	s.mu.Lock()
-	s.drafts[draft.ID] = draft
-	s.byCustomer[draft.CustomerID] = append(s.byCustomer[draft.CustomerID], draft)
-	s.byOwner[draft.OwnerID] = append(s.byOwner[draft.OwnerID], draft)
-	s.mu.Unlock()
+	if err := s.store.put(ctx, draft); err != nil {
+		if errors.Is(err, repository.ErrOrderDraftPendingConflict) {
+			// 部分唯一索引挡下了"同客户同产品两条 pending"（跨进程才会走到这里）。
+			// 冲突行必然满足模糊匹配，重查一次按合并处理即可。
+			if other, e := s.findPendingDraftByProduct(ctx, intent.CustomerID, intent.ProductName); e == nil && other != nil {
+				if merged, ok := mergeInto(other.ID); ok {
+					return merged
+				}
+			}
+			logger.Errorf("[order-draft] %s 的 pending 草稿冲突且重查未命中 ⇒ 本次 intent 丢弃", intent.ProductName)
+			return nil
+		}
+		logger.Errorf("[order-draft] 草稿落库失败 ⇒ 本次意向未记为草稿（不静默当成成功）：%v", err)
+		return nil
+	}
 
 	if s.stats != nil {
 		s.stats.RecordOrderDraft(ctx, OrderDraftEvent{
@@ -322,11 +402,10 @@ func (s *OrderDraftService) CreateManual(ctx context.Context, req *CreateDraftRe
 		Metadata:    make(map[string]any),
 	}
 
-	s.mu.Lock()
-	s.drafts[draft.ID] = draft
-	s.byCustomer[draft.CustomerID] = append(s.byCustomer[draft.CustomerID], draft)
-	s.byOwner[draft.OwnerID] = append(s.byOwner[draft.OwnerID], draft)
-	s.mu.Unlock()
+	if err := s.store.put(ctx, draft); err != nil {
+		logger.Errorf("[order-draft] 手动草稿落库失败 ⇒ 明确回错给调用方（不返回一份没存下的草稿）：%v", err)
+		return nil, fmt.Errorf("草稿保存失败: %w", err)
+	}
 
 	if s.stats != nil {
 		s.stats.RecordOrderDraft(ctx, OrderDraftEvent{
@@ -353,30 +432,52 @@ func (s *OrderDraftService) CreateManual(ctx context.Context, req *CreateDraftRe
 //
 // 返回：DraftConfirmResult（订单 ID + 阶段 + 跟进 ID）便于前端展示
 func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy string) (*DraftConfirmResult, error) {
-	s.mu.Lock()
-	draft, ok := s.drafts[draftID]
-	if !ok {
-		s.mu.Unlock()
+	cur, err := s.store.get(ctx, draftID)
+	if err != nil {
+		return nil, fmt.Errorf("读取草稿 %s 失败: %w", draftID, err)
+	}
+	if cur == nil {
 		return nil, fmt.Errorf("草稿 %s 不存在", draftID)
 	}
-	if draft.Status != DraftStatusPending {
-		s.mu.Unlock()
-		return nil, fmt.Errorf("草稿状态为 %s，不可确认", draft.Status)
-	}
-	if time.Now().After(draft.ExpiresAt) {
-		draft.Status = DraftStatusExpired
-		s.mu.Unlock()
-		return nil, fmt.Errorf("草稿已过期")
+	if cur.Status != DraftStatusPending {
+		return nil, fmt.Errorf("草稿状态为 %s，不可确认", cur.Status)
 	}
 	now := time.Now()
-	draft.Status = DraftStatusConfirmed
-	draft.ConfirmedAt = &now
-	draft.UpdatedAt = now
+	if now.After(cur.ExpiresAt) {
+		// 与实现前一致：就地刷成 expired 后报错，**不**记 expired 统计事件
+		// （ExpireOverdue 会记）。两条路口径不同是既有事实，改它会动仪表盘历史数字，
+		// 不属本卡范围 —— 已在卡面执行结果里登记为待决项。
+		if _, applied, e := s.store.mutateIfPending(ctx, draftID, func(d *OrderDraft) {
+			d.Status = DraftStatusExpired
+			d.UpdatedAt = now
+		}); e != nil {
+			logger.Errorf("[order-draft] 过期草稿 %s 状态回写失败：%v", draftID, e)
+		} else if !applied {
+			logger.Warnf("[order-draft] 草稿 %s 在判过期与回写之间被并发改动 ⇒ 仍按已过期拒绝本次确认", draftID)
+		}
+		return nil, fmt.Errorf("草稿已过期")
+	}
+	// 判 pending 与翻 confirmed 是一次加锁读里的一个动作（见 repository.MutatePending）：
+	// 分成两步 = 两个销售同时点确认时会各建一张订单。
+	draft, applied, err := s.store.mutateIfPending(ctx, draftID, func(d *OrderDraft) {
+		d.Status = DraftStatusConfirmed
+		d.ConfirmedAt = &now
+		d.UpdatedAt = now
+	})
+	if err != nil {
+		return nil, fmt.Errorf("确认草稿 %s 失败: %w", draftID, err)
+	}
+	if !applied {
+		fresh, _ := s.store.get(ctx, draftID)
+		if fresh == nil {
+			return nil, fmt.Errorf("草稿 %s 不存在", draftID)
+		}
+		return nil, fmt.Errorf("草稿状态为 %s，不可确认", fresh.Status)
+	}
 	if confirmedBy == "" {
 		confirmedBy = draft.OwnerID
 	}
 	orderID := ""
-	s.mu.Unlock()
 
 	result := &DraftConfirmResult{
 		Draft:         draft,
@@ -402,16 +503,19 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 				Source:      "draft",
 				CreatedAt:   now,
 			}
-			s.mu.Lock()
-			draft.OrderID = orderID
-			s.mu.Unlock()
 		}
 	} else {
 		orderID = generateTempOrderID()
 		result.OrderID = orderID
-		s.mu.Lock()
+	}
+
+	if orderID != "" {
 		draft.OrderID = orderID
-		s.mu.Unlock()
+		if err := s.store.put(ctx, draft); err != nil {
+			// 订单已经建出来了，这里只能出声而不能回滚：草稿侧缺 order_id 关联是可修的，
+			// 把已成功建单的回答成"失败"会让销售再点一次，那才是真事故。
+			logger.Errorf("[order-draft] 订单 %s 已创建但草稿 %s 的关联未落库 ⇒ 需人工对齐：%v", orderID, draftID, err)
+		}
 	}
 
 	if s.journey != nil {
@@ -479,25 +583,32 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 // 商业产品级：客户改变主意、价格谈崩、重复草稿 → 销售主动取消
 // 取消时记录原因，便于后续分析"哪些产品/价格/阶段容易被取消"
 func (s *OrderDraftService) Cancel(ctx context.Context, draftID, reason, cancelledBy string) error {
-	s.mu.Lock()
-	draft, ok := s.drafts[draftID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("草稿 %s 不存在", draftID)
-	}
-	if draft.Status != DraftStatusPending {
-		s.mu.Unlock()
-		return fmt.Errorf("草稿状态为 %s，不可取消", draft.Status)
-	}
 	now := time.Now()
-	draft.Status = DraftStatusCancelled
-	draft.CancelledAt = &now
-	draft.UpdatedAt = now
-	draft.CancelReason = reason
-	if cancelledBy != "" {
-		draft.Metadata["cancelled_by"] = cancelledBy
+	draft, applied, err := s.store.mutateIfPending(ctx, draftID, func(d *OrderDraft) {
+		d.Status = DraftStatusCancelled
+		d.CancelledAt = &now
+		d.UpdatedAt = now
+		d.CancelReason = reason
+		if cancelledBy != "" {
+			if d.Metadata == nil {
+				d.Metadata = make(map[string]any)
+			}
+			d.Metadata["cancelled_by"] = cancelledBy
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("取消草稿 %s 失败: %w", draftID, err)
 	}
-	s.mu.Unlock()
+	if !applied {
+		cur, e := s.store.get(ctx, draftID)
+		if e != nil {
+			return fmt.Errorf("读取草稿 %s 失败: %w", draftID, e)
+		}
+		if cur == nil {
+			return fmt.Errorf("草稿 %s 不存在", draftID)
+		}
+		return fmt.Errorf("草稿状态为 %s，不可取消", cur.Status)
+	}
 
 	if s.stats != nil {
 		s.stats.RecordOrderDraft(ctx, OrderDraftEvent{
@@ -518,102 +629,79 @@ func (s *OrderDraftService) Cancel(ctx context.Context, draftID, reason, cancell
 // Edit 草稿编辑（价格/数量/产品名/备注）
 // 商业产品级：销售在确认前可能需要修改价格（如客户砍价）或调整数量
 func (s *OrderDraftService) Edit(ctx context.Context, draftID string, updates DraftUpdates) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	draft, ok := s.drafts[draftID]
-	if !ok {
+	_, applied, err := s.store.mutateIfPending(ctx, draftID, func(d *OrderDraft) {
+		if updates.ProductName != nil && *updates.ProductName != "" {
+			d.ProductName = *updates.ProductName
+		}
+		if updates.Quantity != nil && *updates.Quantity > 0 {
+			d.Quantity = *updates.Quantity
+		}
+		if updates.UnitPrice != nil && *updates.UnitPrice >= 0 {
+			d.UnitPrice = *updates.UnitPrice
+		}
+		if updates.Note != nil {
+			d.Note = *updates.Note
+		}
+		d.TotalAmount = d.UnitPrice * float64(d.Quantity)
+		d.UpdatedAt = time.Now()
+	})
+	if err != nil {
+		return fmt.Errorf("编辑草稿 %s 失败: %w", draftID, err)
+	}
+	if applied {
+		return nil
+	}
+	// 落败两种情形分开报：不存在和状态不允许，销售工作台上的提示文案不一样（口径不变）。
+	cur, e := s.store.get(ctx, draftID)
+	if e != nil {
+		return fmt.Errorf("读取草稿 %s 失败: %w", draftID, e)
+	}
+	if cur == nil {
 		return fmt.Errorf("草稿 %s 不存在", draftID)
 	}
-	if draft.Status != DraftStatusPending {
-		return fmt.Errorf("草稿状态为 %s，不可编辑", draft.Status)
-	}
-	if updates.ProductName != nil && *updates.ProductName != "" {
-		draft.ProductName = *updates.ProductName
-	}
-	if updates.Quantity != nil && *updates.Quantity > 0 {
-		draft.Quantity = *updates.Quantity
-	}
-	if updates.UnitPrice != nil && *updates.UnitPrice >= 0 {
-		draft.UnitPrice = *updates.UnitPrice
-	}
-	if updates.Note != nil {
-		draft.Note = *updates.Note
-	}
-	draft.TotalAmount = draft.UnitPrice * float64(draft.Quantity)
-	draft.UpdatedAt = time.Now()
-	return nil
+	return fmt.Errorf("草稿状态为 %s，不可编辑", cur.Status)
 }
 
 // GetByID 根据 ID 查询草稿
 func (s *OrderDraftService) GetByID(ctx context.Context, draftID string) *OrderDraft {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.drafts[draftID]
+	draft, err := s.store.get(ctx, draftID)
+	if err != nil {
+		// 签名不变（返回裸指针），所以读库失败只能出声并回 nil —— 与"草稿不存在"
+		// 在调用方看来一样，这是既有 API 的形状限制，T-P2-06 装配时一并改成带 error。
+		logger.Errorf("[order-draft] 读取草稿 %s 失败：%v", draftID, err)
+		return nil
+	}
+	return draft
 }
 
 // ListPending 列出待确认草稿（销售工作台首页）
 // 商业产品级：销售每天打开系统，第一眼看到"我有多少待确认草稿"，按优先级排序
 func (s *OrderDraftService) ListPending(ctx context.Context, ownerID string, limit int) []*OrderDraft {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	pending := make([]*OrderDraft, 0)
-	now := time.Now()
-	for _, d := range s.drafts {
-		if d.Status != DraftStatusPending {
-			continue
-		}
-		if ownerID != "" && d.OwnerID != ownerID {
-			continue
-		}
-		if now.After(d.ExpiresAt) {
-			continue
-		}
-		pending = append(pending, d)
-	}
-	sort.Slice(pending, func(i, j int) bool {
-		if pending[i].Confidence != pending[j].Confidence {
-			return pending[i].Confidence > pending[j].Confidence
-		}
-		if pending[i].TotalAmount != pending[j].TotalAmount {
-			return pending[i].TotalAmount > pending[j].TotalAmount
-		}
-		return pending[i].ExpiresAt.Before(pending[j].ExpiresAt)
-	})
-	if limit > 0 && len(pending) > limit {
-		pending = pending[:limit]
+	pending, err := s.store.listPending(ctx, ownerID, time.Now(), limit)
+	if err != nil {
+		logger.Errorf("[order-draft] 待确认草稿列表读取失败 ⇒ 返回空列表（不返回半份）：%v", err)
+		return []*OrderDraft{}
 	}
 	return pending
 }
 
 // ListByCustomer 列出客户的所有草稿（含历史）
 func (s *OrderDraftService) ListByCustomer(ctx context.Context, customerID string) []*OrderDraft {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	drafts := s.byCustomer[customerID]
-	out := make([]*OrderDraft, len(drafts))
-	copy(out, drafts)
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
+	out, err := s.store.listByCustomer(ctx, customerID)
+	if err != nil {
+		logger.Errorf("[order-draft] 客户 %s 草稿列表读取失败：%v", customerID, err)
+		return []*OrderDraft{}
+	}
 	return out
 }
 
 // ListByOwner 列出销售负责的所有草稿
 func (s *OrderDraftService) ListByOwner(ctx context.Context, ownerID string) []*OrderDraft {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	drafts := s.byOwner[ownerID]
-	out := make([]*OrderDraft, len(drafts))
-	copy(out, drafts)
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Status == DraftStatusPending && out[j].Status != DraftStatusPending {
-			return true
-		}
-		if out[i].Status != DraftStatusPending && out[j].Status == DraftStatusPending {
-			return false
-		}
-		return out[i].CreatedAt.After(out[j].CreatedAt)
-	})
+	out, err := s.store.listByOwner(ctx, ownerID)
+	if err != nil {
+		logger.Errorf("[order-draft] 销售 %s 草稿列表读取失败：%v", ownerID, err)
+		return []*OrderDraft{}
+	}
 	return out
 }
 
@@ -621,53 +709,63 @@ func (s *OrderDraftService) ListByOwner(ctx context.Context, ownerID string) []*
 // 商业产品级：7 天未确认的草稿自动过期，避免销售工作台堆积无用草稿
 // 返回被过期的草稿数
 func (s *OrderDraftService) ExpireOverdue(ctx context.Context) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
-	count := 0
-	for _, d := range s.drafts {
-		if d.Status != DraftStatusPending {
-			continue
+	var event func(*OrderDraft)
+	if s.stats != nil {
+		stats := s.stats
+		event = func(d *OrderDraft) {
+			stats.RecordOrderDraft(ctx, OrderDraftEvent{
+				DraftID:     d.ID,
+				CustomerID:  d.CustomerID,
+				OwnerID:     d.OwnerID,
+				ProductName: d.ProductName,
+				Amount:      d.TotalAmount,
+				Action:      "expired",
+				Source:      d.Source,
+				Confidence:  d.Confidence,
+				OccurredAt:  now,
+			})
 		}
-		if now.After(d.ExpiresAt) {
-			d.Status = DraftStatusExpired
-			d.UpdatedAt = now
-			count++
-			if s.stats != nil {
-				s.stats.RecordOrderDraft(ctx, OrderDraftEvent{
-					DraftID:     d.ID,
-					CustomerID:  d.CustomerID,
-					OwnerID:     d.OwnerID,
-					ProductName: d.ProductName,
-					Amount:      d.TotalAmount,
-					Action:      "expired",
-					Source:      d.Source,
-					Confidence:  d.Confidence,
-					OccurredAt:  now,
-				})
-			}
-		}
+	}
+	// 过期是**落库的状态翻转**（内存副同样翻转自己的 map）：只计数不翻状态会让
+	// 下一轮扫描重新数到同一批草稿，"无界增长"从内存搬到 DB。
+	count, err := s.store.expireOverdue(ctx, now, event)
+	if err != nil {
+		logger.Errorf("[order-draft] 过期扫描中断 ⇒ 已翻 %d 条，剩余留待下次：%v", count, err)
 	}
 	return count
 }
 
-func (s *OrderDraftService) findPendingDraftByProduct(ctx context.Context, customerID, productName string) *OrderDraft {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, d := range s.drafts {
-		if d.CustomerID != customerID {
-			continue
-		}
-		if d.Status != DraftStatusPending {
-			continue
-		}
+// PurgeTerminal 清理超保留期的终态草稿（cancelled / expired），返回删除行数。
+//
+// 过期只把 pending 搬进终态，不删行 —— 终态行会永久堆积。保留期内它们是
+// "为什么这单没成"的分析材料（CancelReason / stats 事件），过期的则是纯体积，
+// 所以留一个有边界的清理入口而不是留一个不断增长的历史表。
+func (s *OrderDraftService) PurgeTerminal(ctx context.Context, retention time.Duration) int {
+	if retention <= 0 {
+		retention = defaultDraftRetention
+	}
+	deleted, err := s.store.purgeTerminal(ctx, time.Now().Add(-retention))
+	if err != nil {
+		logger.Errorf("[order-draft] 终态草稿清理失败 ⇒ 本轮不清理（保留期外的行留待下次）：%v", err)
+		return 0
+	}
+	return deleted
+}
+
+func (s *OrderDraftService) findPendingDraftByProduct(ctx context.Context, customerID, productName string) (*OrderDraft, error) {
+	candidates, err := s.store.pendingByCustomer(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range candidates {
 		if d.ProductName == productName ||
 			strings.Contains(d.ProductName, productName) ||
 			strings.Contains(productName, d.ProductName) {
-			return d
+			return d, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func (s *OrderDraftService) createOrderFromDraft(ctx context.Context, draft *OrderDraft) (*orderRecord, error) {

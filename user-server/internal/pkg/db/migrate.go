@@ -321,6 +321,10 @@ func allModels() []any {
 		&model.IntentExample{},
 		&model.LLMRoutingLog{},
 		&model.LoginEvent{},
+		// OrderDraft（表 order_drafts）：T-P2-01 前草稿只活在 service 的内存 map 里，
+		// 全仓无 model 无 repo，所以这里是第一次建表登记（走版本化迁移在本仓不生效，
+		// 见本文件头部关于 ExecuteUpgrade 固定空跑的说明）。
+		&model.OrderDraft{},
 		&model.PasswordHistory{},
 		&model.RagMetricsDaily{},
 		&model.RecoveryQueue{},

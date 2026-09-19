@@ -339,3 +339,4 @@ RFM/Churn 定时重算（`customer_rfm.go` 周批）→ `churn` 分层自动入�
 | G11 | active 模式 | 主动触达骨架未落地 |
 | G12 | eval 包 | ChrF+LLM Judge 较薄，无对话级端到端评测集 |
 | G13 | `service/proactive_reach.go` | **审批门盲区**：闸门挂在工具 executor 建链点，`ProactiveReachService` 无 pre-send 钩子 ⇒ cron/worker/直接 API 调用三条非工具路径的外发一律不受 W-1 约束（T-P1-07 的挽回 worker 即此类）。修法是在 `ReachByCustomer` 发送前加一个显式 checker 钩子，而不是在 worker 里伪造一个键为空的判定 |
+| G14 | `service/order_draft.go` / 表 `order_drafts` | 草稿持久化底座已落地（**T-P2-01，2026-09-19**）：内存 map 换成 `draftStore` 两副面孔（内存默认 / DB durable），新增 `model.OrderDraft` + `repository.OrderDraftRepository`；`ExpireOverdue` 由"只计数不翻转"改为落库翻转，并新增 `PurgeTerminal` 有界清理；`Confirm`/`Cancel`/`Edit` 的读—判—写收进 `FOR UPDATE` + 部分唯一索引 `uq_order_draft_pending`（原实现两个销售同时点确认会一单变两单）。**但整条销售草稿竖今天没有生产构造点**：`NewOrderDraftService*` 在 `internal/app`/`cmd/api` 零调用 ⇒ 今天不会有任何草稿真的写进 `order_drafts`（表会一直是空的）。该状态由 `check-unwired-assets.sh` 项8 按 `unwired` 登记盯梢，接线与观察端点属 **T-P2-06** |
