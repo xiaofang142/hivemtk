@@ -97,18 +97,21 @@ func parseToolCircuitMode(raw string) toolCircuitMode {
 }
 
 // envInt 取整数配置；第二个返回值为 false 表示未配或越界（越界时已告警）。
-func envInt(env string, lo, hi int) (int, bool) {
+//
+// logTag 由调用方给出：同一个解析器同时服务熔断与落库两把旗子，告警前缀写死会让
+// `TOOL_AUDIT_QUEUE_SIZE` 配错的运维被指到熔断那个文件去。
+func envInt(logTag, env string, lo, hi int) (int, bool) {
 	raw := strings.TrimSpace(os.Getenv(env))
 	if raw == "" {
 		return 0, false
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		logger.Warnf("[tool-circuit] %s=%q 不是整数 ⇒ 沿用默认值", env, raw)
+		logger.Warnf("%s %s=%q 不是整数 ⇒ 沿用默认值", logTag, env, raw)
 		return 0, false
 	}
 	if n < lo || n > hi {
-		logger.Warnf("[tool-circuit] %s=%d 超出可用区间 [%d,%d] ⇒ 沿用默认值（越界阈值比不设阈值更危险）", env, n, lo, hi)
+		logger.Warnf("%s %s=%d 超出可用区间 [%d,%d] ⇒ 沿用默认值（越界配置比不设配置更危险）", logTag, env, n, lo, hi)
 		return 0, false
 	}
 	return n, true
@@ -138,7 +141,7 @@ func envDuration(env string, min, max time.Duration) (time.Duration, bool) {
 // 每一项单独校验、单独回退——配错一项不应让其余四项跟着失效。
 func toolCircuitConfigFromEnv() tooluse.CircuitBreakerConfig {
 	cfg := tooluse.DefaultCircuitBreakerConfig()
-	if n, ok := envInt(circuitThresholdEnv, 1, circuitThresholdMax); ok {
+	if n, ok := envInt("[tool-circuit]", circuitThresholdEnv, 1, circuitThresholdMax); ok {
 		cfg.FailureThreshold = n
 	}
 	if d, ok := envDuration(circuitBaseCooldownEnv, time.Millisecond, time.Hour); ok {
@@ -158,7 +161,7 @@ func toolCircuitConfigFromEnv() tooluse.CircuitBreakerConfig {
 			cfg.BackoffMultiplier = f
 		}
 	}
-	if n, ok := envInt(circuitHalfOpenEnv, 1, circuitHalfOpenMaxLimit); ok {
+	if n, ok := envInt("[tool-circuit]", circuitHalfOpenEnv, 1, circuitHalfOpenMaxLimit); ok {
 		cfg.HalfOpenMaxAttempts = n
 	}
 	if cfg.MaxCooldown < cfg.BaseCooldown {

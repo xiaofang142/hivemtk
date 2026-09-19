@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 )
@@ -21,7 +22,8 @@ import (
 //   - RateLimiter:        TokenBucket 20 QPS / 突发 50（防 LLM 误用导致工具风暴）
 //   - RetryPolicy:        指数退避 3 次 / 基础 200ms / 上限 5s（含抖动）
 //   - Timeout:            30s（单次工具执行上限）
-//   - AuditLogger:        内存版（保留最近 10000 条审计）
+//   - AuditLogger:        内存版（保留最近 10000 条审计）；FF_TOOL_AUDIT_DB=on 时叠加
+//     DB 落库（内存+DB 双写，DB 侧失败整批降级回内存），见 tool_audit_wiring.go
 //   - CostTracker:        内存版（运营面板可读取统计）
 //   - CircuitBreaker:     按 FF_TOOL_CIRCUIT_BREAKER 三态挂载（默认 off = 不接，见 tool_circuit_breaker_wiring.go）
 //   - ApprovalGate:       按 FF_LTC_APPROVAL_GATE 三态挂载（off|shadow|block，默认 off；
@@ -29,7 +31,10 @@ import (
 //
 // 优化：本地持有 memAuditLogger / memCostTracker 引用，
 // 通过 GetGlobalMemoryAuditLogger / GetGlobalMemoryCostTracker 暴露给调试 API（/agent/tools/audit /cost）。
-// 未来切换为 DB 持久化版本时，仅需替换此处构造与暴露函数的实现。
+//
+// 注意：这两个内存引用**不会**因为接了 DB 落库而被替换掉 —— /agent/tools/audit 的默认
+// 数据源仍是内存（有界、快、无 DB 依赖），DB 侧走 ?source=db。落库是追加的耐久层，
+// 不是内存版的替代品；这一点若反过来做，降级时端点会突然查不到东西。
 func InitGlobalToolExecutor() {
 	memAuditLogger = tooluse.NewMemoryAuditLogger(10000)
 	memCostTracker = tooluse.NewMemoryCostTracker()
@@ -45,9 +50,10 @@ func InitGlobalToolExecutor() {
 	}
 	circuitMode := applyToolCircuitBreaker(&config)
 	approvalMode := applyApprovalGate(&config)
+	auditMode := applyToolAuditPersistence(&config, db.GetDB())
 	exec := tooluse.NewToolExecutor(tooluse.GetGlobalRegistry(), config)
 	tooluse.SetGlobalExecutor(exec)
-	logger.Infof("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=%s 审批门=%s）", circuitMode, approvalMode)
+	logger.Infof("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=%s 审批门=%s 审计落库=%s）", circuitMode, approvalMode, auditMode)
 }
 
 var (

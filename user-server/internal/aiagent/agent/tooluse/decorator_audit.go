@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"hivemtk-user/internal/pkg/metrics"
 )
@@ -126,12 +127,12 @@ func summarizeArgs(args map[string]any) string {
 		}
 		s := fmt.Sprintf("%v", v)
 		if len(s) > 50 {
-			s = s[:50] + "..."
+			s = cutBytes(s, 50) + "..."
 		}
 		out += fmt.Sprintf("%s=%s,", k, s)
 	}
 	if len(out) > 200 {
-		out = out[:200] + "..."
+		out = cutBytes(out, 200) + "..."
 	}
 	return out
 }
@@ -142,9 +143,27 @@ func summarizeResult(data any) string {
 	}
 	s := fmt.Sprintf("%v", data)
 	if len(s) > 200 {
-		return s[:200] + "..."
+		return cutBytes(s, 200) + "..."
 	}
 	return s
+}
+
+// cutBytes 按字节上限截断，并回退到最近的合法 rune 边界。
+//
+// 原来这里是 `s[:50]` / `s[:200]` 的裸字节切片。内存里这么砍没有任何后果，但本包现在
+// 会把摘要**落库**（T-P1-08）：砍在多字节字符中间会产出非法 UTF-8，PG 的 TEXT 列直接
+// 报 `invalid byte sequence for encoding "UTF8"`（实测），而 flushBatch 是整批
+// CreateInBatches ⇒ 一条坏数据带走 100 条好审计。本项目参数与话术大量是中文，
+// 命中概率不是尾数。
+func cutBytes(s string, maxBytes int) string {
+	if maxBytes <= 0 || len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 type NoOpAuditLogger struct{}

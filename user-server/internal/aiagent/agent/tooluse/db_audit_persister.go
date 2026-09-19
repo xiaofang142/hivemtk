@@ -7,35 +7,21 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
+
 	"gorm.io/gorm"
 )
 
-// ToolCallAuditRecord 工具调用审计记录（DB 模型）
+// ToolCallAuditRecord 工具调用审计记录（DB 模型别名）
 //
-// 表名：tool_call_audits
-type ToolCallAuditRecord struct {
-	ID            uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	TraceID       string    `gorm:"index;size:64" json:"trace_id"`
-	ToolName      string    `gorm:"index;size:128" json:"tool_name"`
-	CallerID      string    `gorm:"size:64" json:"caller_id"`
-	AgentID       string    `gorm:"size:64" json:"agent_id"`
-	CustomerID    string    `gorm:"size:64" json:"customer_id"`
-	SessionID     string    `gorm:"index;size:64" json:"session_id"`
-	Success       bool      `gorm:"index" json:"success"`
-	Error         string    `gorm:"type:text" json:"error"`
-	DurationMs    int64     `json:"duration_ms"`
-	RetryCount    int       `json:"retry_count"`
-	AuditTrace    string    `gorm:"size:128" json:"audit_trace"`
-	ArgsSummary   string    `gorm:"type:text" json:"args_summary"`
-	ResultSummary string    `gorm:"type:text" json:"result_summary"`
-	ExecutedAt    time.Time `gorm:"index" json:"executed_at"`
-	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
-}
-
-// TableName 指定表名
-func (ToolCallAuditRecord) TableName() string {
-	return "tool_call_audits"
-}
+// 实体已收敛到 internal/model.ToolCallAudit（表名 tool_call_audits 不变）。
+// 为什么要收敛：本仓建表由 internal/pkg/db 的 AutoMigrate() 清单驱动，模型留在本包
+// 时它只在 AutoMigrateAuditTable 里出现 —— 而那个函数**从未被任何生产代码调用过**，
+// 于是 check_model_migration.py 的 "文件里含 .AutoMigrate( 就算已登记" 启发式把它
+// 误判成已登记（实测库内根本没有 tool_call_audits 表）。现在登记走 allModels()，
+// 本包只留别名，写入口径逐字段不变。
+type ToolCallAuditRecord = model.ToolCallAudit
 
 // DBAuditLogger DB 持久化 AuditLogger
 //
@@ -48,7 +34,51 @@ type DBAuditLogger struct {
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	fallback AuditLogger
+
+	// mu 只保护计数与 lastWarn，不跨 DB 写持有（写慢时不能把计数也堵住）。
+	mu          sync.Mutex
+	enqueued    int64
+	fellBack    int64 // 因队列满或 DB 写失败而降级到 fallback 的条数
+	dbRows      int64 // 成功落库的条数
+	failBatches int64 // 失败的批次（CreateInBatches 一次整批算一次）
+	lastWarn    time.Time
 }
+
+// DBAuditStats DB 审计写入的自报口径（供 /agent/tools/audit 与装配层观测）
+//
+// 为什么必须把这些数摊开：本 logger 的失败方向是"降级到内存"，它对调用方永远返回
+// 成功 —— 没有计数的话，"全部落库"与"一条都没写进去、全在内存里等着重启即丢"
+// 在外面上看一模一样。
+type DBAuditStats struct {
+	Enqueued     int64 `json:"enqueued"`
+	DBRows       int64 `json:"db_rows"`
+	FellBack     int64 `json:"fell_back"`    // 没走正常落库的条数：有 fallback 时改走它，没有则该条未持久化
+	FailBatches  int64 `json:"fail_batches"` // CreateInBatches 一次整批算一次
+	QueueLen     int   `json:"queue_len"`
+	QueueCap     int   `json:"queue_cap"`
+	DegradedOnly bool  `json:"degraded_only"` // db 为 nil ⇒ 天生只能走内存
+}
+
+// Stats 返回写入计数快照。
+func (l *DBAuditLogger) Stats() DBAuditStats {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return DBAuditStats{
+		Enqueued:     l.enqueued,
+		DBRows:       l.dbRows,
+		FellBack:     l.fellBack,
+		FailBatches:  l.failBatches,
+		QueueLen:     len(l.queue),
+		QueueCap:     cap(l.queue),
+		DegradedOnly: l.db == nil,
+	}
+}
+
+// dbWarnInterval DB 写失败告警的最小间隔。
+//
+// 刷屏上限：flushBatch 最快 1s 一次（batchSize 100 或 flushInterval），不设间隔时
+// 一次 DB 故障能稳定产出 8.6 万行日志/天。
+const dbWarnInterval = 60 * time.Second
 
 // NewDBAuditLogger 创建 DB 持久化 AuditLogger
 //
@@ -78,11 +108,41 @@ func NewDBAuditLogger(db *gorm.DB, queueSize int, fallback AuditLogger) *DBAudit
 func (l *DBAuditLogger) Log(ctx context.Context, entry AuditEntry) {
 	select {
 	case l.queue <- entry:
+		l.mu.Lock()
+		l.enqueued++
+		l.mu.Unlock()
 	default:
-		if l.fallback != nil {
-			l.fallback.Log(ctx, entry)
-		}
+		l.useFallback(ctx, entry, "queue_full")
 	}
+}
+
+// useFallback 把一条审计交给降级通道并计数。
+//
+// fallback 为 nil 时的措辞刻意只说"持久化副本没落库"，不说"审计丢了"：
+// 单独挂本 logger 时确实一条都不剩，但生产形态是 CompositeAuditLogger(内存, 本器)，
+// 内存那一腿在进到这里之前就已经收下这条了。把它写成"丢失"会让排障的人去查一条
+// 其实看得见的记录。是否真有其它通道由装配方决定，本器无从得知。
+func (l *DBAuditLogger) useFallback(ctx context.Context, entry AuditEntry, reason string) {
+	l.mu.Lock()
+	l.fellBack++
+	warn := l.shouldWarnLocked()
+	l.mu.Unlock()
+	if l.fallback != nil {
+		l.fallback.Log(ctx, entry)
+		return
+	}
+	if warn {
+		logger.Warnf("[ToolAudit] ⚠️ 审计未落库（本器无降级通道）reason=%s tool=%s", reason, entry.ToolName)
+	}
+}
+
+// shouldWarnLocked 判定此刻是否该打告警；调用方须持锁。
+func (l *DBAuditLogger) shouldWarnLocked() bool {
+	if time.Since(l.lastWarn) < dbWarnInterval {
+		return false
+	}
+	l.lastWarn = time.Now()
+	return true
 }
 
 func (l *DBAuditLogger) consume() {
@@ -139,9 +199,12 @@ func (l *DBAuditLogger) flushBatch(batch []AuditEntry) {
 	if len(batch) == 0 {
 		return
 	}
+	ctx := context.Background()
 	if l.db == nil {
+		// 没有 DB 句柄时整批走降级 —— 这条路径在装配层"db 为 nil"时会长期命中，
+		// 所以只按 dbWarnInterval 限速告警一次，不逐批刷。
+		l.markDegraded(len(batch), "nil_db")
 		if l.fallback != nil {
-			ctx := context.Background()
 			for _, e := range batch {
 				l.fallback.Log(ctx, e)
 			}
@@ -153,13 +216,34 @@ func (l *DBAuditLogger) flushBatch(batch []AuditEntry) {
 		records = append(records, auditEntryToRecord(e))
 	}
 	if err := l.db.CreateInBatches(records, 100).Error; err != nil {
+		l.markDegraded(len(batch), "write_failed")
 		if l.fallback != nil {
-			ctx := context.Background()
 			for _, e := range batch {
 				l.fallback.Log(ctx, e)
 			}
 		}
+		return
 	}
+	l.mu.Lock()
+	l.dbRows += int64(len(records))
+	l.mu.Unlock()
+}
+
+// markDegraded 记一次整批降级并按限速打告警。
+func (l *DBAuditLogger) markDegraded(n int, reason string) {
+	l.mu.Lock()
+	l.fellBack += int64(n)
+	l.failBatches++
+	warn := l.shouldWarnLocked()
+	l.mu.Unlock()
+	if !warn {
+		return
+	}
+	if l.fallback != nil {
+		logger.Warnf("[ToolAudit] ⚠️ 审计批量落库失败 ⇒ 整批改走降级通道（不再耐久）reason=%s rows=%d", reason, n)
+		return
+	}
+	logger.Warnf("[ToolAudit] ⚠️ 审计批量落库失败 ⇒ 整批未持久化（本器无降级通道）reason=%s rows=%d", reason, n)
 }
 
 // Close 优雅关闭：等待队列消费完毕
@@ -170,31 +254,42 @@ func (l *DBAuditLogger) Close() {
 	})
 }
 
+// 定长列宽（与 model.ToolCallAudit 的 size tag 同源，改列宽时两处一起改）。
+const (
+	auditColTraceID     = 64
+	auditColToolName    = 128
+	auditColCallerID    = 64
+	auditColAgentID     = 64
+	auditColCustomerID  = 64
+	auditColSessionID   = 64
+	auditColAuditTrace  = 128
+	auditColErrorBudget = 2000
+)
+
+// auditEntryToRecord 把内存态审计映射成落库行。
+//
+// 每个 varchar 列都先按列宽裁一刀，不是防御性冗余而是**批写语义**决定的：
+// trace_id 由 middleware/trace.go 从上游 X-Trace-Id 透传（长度不受本地约束），
+// 一旦超长，PG 报 `value too long for type character varying(64)`，而 flushBatch 用
+// CreateInBatches 整批提交 ⇒ 一行超长会带走同批最多 100 条正常审计，且失败方向是
+// 静默降级到内存。截断的代价（同一批里 trace_id 前缀相同的行难以区分）明显更小。
 func auditEntryToRecord(e AuditEntry) ToolCallAuditRecord {
 	return ToolCallAuditRecord{
-		TraceID:       e.TraceID,
-		ToolName:      e.ToolName,
-		CallerID:      e.CallerID,
-		AgentID:       e.AgentID,
-		CustomerID:    e.CustomerID,
-		SessionID:     e.SessionID,
+		TraceID:       cutBytes(e.TraceID, auditColTraceID),
+		ToolName:      cutBytes(e.ToolName, auditColToolName),
+		CallerID:      cutBytes(e.CallerID, auditColCallerID),
+		AgentID:       cutBytes(e.AgentID, auditColAgentID),
+		CustomerID:    cutBytes(e.CustomerID, auditColCustomerID),
+		SessionID:     cutBytes(e.SessionID, auditColSessionID),
 		Success:       e.Success,
-		Error:         e.Error,
+		Error:         cutBytes(e.Error, auditColErrorBudget),
 		DurationMs:    int64(e.Duration / time.Millisecond),
 		RetryCount:    e.RetryCount,
-		AuditTrace:    e.AuditTrace,
+		AuditTrace:    cutBytes(e.AuditTrace, auditColAuditTrace),
 		ArgsSummary:   e.ArgsSummary,
 		ResultSummary: e.ResultSummary,
 		ExecutedAt:    e.ExecutedAt,
 	}
-}
-
-// AutoMigrateAuditTable 自动迁移审计表（启动时调用）
-func AutoMigrateAuditTable(db *gorm.DB) error {
-	if db == nil {
-		return nil
-	}
-	return db.AutoMigrate(&ToolCallAuditRecord{})
 }
 
 // AlertLevel 告警级别

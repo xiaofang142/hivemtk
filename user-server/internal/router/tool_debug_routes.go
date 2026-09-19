@@ -193,12 +193,20 @@ func handleToolAudit(c *gin.Context) {
 		return
 	}
 
+	snap := app.GetToolAuditSnapshot()
+	if isDBSource(c.Query("source")) {
+		auditFromDB(c, snap, toolName, limit)
+		return
+	}
+
 	memLogger := app.GetGlobalMemoryAuditLogger()
 	if memLogger == nil {
 		response.Success(c, gin.H{
-			"entries": []any{},
-			"warning": "memory audit logger not accessible (may be replaced by DB-backed implementation)",
-			"total":   0,
+			"source":      "memory",
+			"entries":     []any{},
+			"warning":     "memory audit logger not accessible (may be replaced by DB-backed implementation)",
+			"total":       0,
+			"persistence": toolAuditPersistenceEcho(snap),
 		}, "ok")
 		return
 	}
@@ -212,25 +220,147 @@ func handleToolAudit(c *gin.Context) {
 		out = append(out, e)
 	}
 	response.Success(c, gin.H{
-		"total":   len(out),
-		"entries": out,
+		"total":       len(out),
+		"entries":     out,
+		"source":      "memory",
+		"persistence": toolAuditPersistenceEcho(snap),
 	}, "ok")
 }
 
+// isDBSource 认 ?source=db（大小写不敏感）。其它值一律走内存，
+// 并在回显里留下实际生效的 source，避免运维以为看的是库。
+func isDBSource(raw string) bool {
+	return strings.EqualFold(strings.TrimSpace(raw), "db")
+}
+
+// toolAuditPersistenceEcho 落库接线状态回显（/audit 与 /cost 共用同一份口径）。
+//
+// 为什么默认路径也要回显：旗子没开时 ?source=db 会 503，而看默认内存响应的人只会得到
+// "有一堆审计"这个印象，永远不知道它们重启就没了。
+func toolAuditPersistenceEcho(snap app.ToolAuditSnapshot) gin.H {
+	out := gin.H{
+		"mode":        snap.Mode,
+		"db_wired":    snap.Wired,
+		"table":       snap.TableName,
+		"flag_env":    app.ToolAuditFlagEnv,
+		"db_handle":   snap.DBHandle,
+		"mem_entries": snap.MemCapUsed,
+	}
+	if snap.HasStats {
+		out["queue_size"] = snap.QueueSize
+		out["db_stats"] = snap.DBStats
+	}
+	return out
+}
+
+// toolAuditDBBlockedReason 判定"DB 读侧现在能不能查"，返回非空即应回 503。
+//
+// 抽成纯函数：旗子在装配期读一次，测试进程里既没有 HTTP 也没有第二次装配，
+// 走 handle 只能测到 off 那一支；把判定单拿出来才能断言各支的措辞。
+//
+// 三种"不能查"分开说，因为处置动作完全不同；措辞里一律带上 mode。旗子名用包级常量
+// 而不用 snap.FlagEnv —— 后者是快照字段，一旦哪个构造路径忘了填，运维就会读到
+// "设 =on 并重启"这种指不了任何地方的话（本卡的测试实测到了这个形状）。
+func toolAuditDBBlockedReason(snap app.ToolAuditSnapshot) string {
+	switch {
+	case !snap.DBHandle && !snap.Wired:
+		return "审计未落库（mode=" + snap.Mode + "）：设 " + app.ToolAuditFlagEnv + "=on 并重启；当前审计只在内存里，重启即丢"
+	case !snap.DBHandle:
+		return "mode=" + snap.Mode + " 且写侧已接线，但读侧句柄为 nil ⇒ 查不了库（查启动日志里的 [tool-audit] 告警）"
+	case !snap.Wired:
+		// 库里可能真有历史行（别的进程/更早一次接线写的），但本进程不产新行 ——
+		// 与其回一份"看起来是审计记录"的东西，不如把口径说清楚。
+		return "读侧有句柄但写侧未接线（mode=" + snap.Mode + "）⇒ ?source=db 只会查到既有行，本进程不落库；" +
+			"要落库请设 " + app.ToolAuditFlagEnv + "=on 并重启"
+	}
+	return ""
+}
+
+// auditFromDB 从 tool_call_audits 读审计行。
+func auditFromDB(c *gin.Context, snap app.ToolAuditSnapshot, toolName string, limit int) {
+	if reason := toolAuditDBBlockedReason(snap); reason != "" {
+		response.Error(c, 503, reason)
+		return
+	}
+	rows, err := app.ToolAuditDBRecent(c.Request.Context(), toolName, limit)
+	if err != nil {
+		// 读失败不回空列表：空列表的含义是"没有审计"，与"查不动"是两回事。
+		response.Error(c, 500, "读取持久化审计失败: "+err.Error())
+		return
+	}
+	total, cntErr := app.ToolAuditDBCount(c.Request.Context())
+	out := gin.H{
+		"source":      "db",
+		"total":       len(rows),
+		"entries":     rows,
+		"persistence": toolAuditPersistenceEcho(snap),
+	}
+	if cntErr == nil {
+		out["persisted_total"] = total
+	} else {
+		out["persisted_total_error"] = cntErr.Error()
+	}
+	if snap.DBStats.DBRows == 0 && total > 0 {
+		// 本进程一条没写、库里却有行 ⇒ 查得到东西但那是别的进程（或上一版）写的。
+		// 不点明的话，多副本环境里"我的写入正常"会被这张表的既有数据佐证成假结论。
+		out["note"] = "本进程落库计数为 0，以上行由其他进程/更早的启动写入"
+	}
+	response.Success(c, out, "ok")
+}
+
 func handleToolCost(c *gin.Context) {
+	snap := app.GetToolAuditSnapshot()
+	if isDBSource(c.Query("source")) {
+		if reason := toolAuditDBBlockedReason(snap); reason != "" {
+			response.Error(c, 503, reason)
+			return
+		}
+		rows, err := app.ToolAuditDBCostAggregates(c.Request.Context())
+		if err != nil {
+			response.Error(c, 500, "读取持久化计费聚合失败: "+err.Error())
+			return
+		}
+		stats := make([]gin.H, 0, len(rows))
+		for _, row := range rows {
+			// 键与 tooluse.CostStats 逐一对齐：消费方不该因为换了数据源就要改解析。
+			stats = append(stats, gin.H{
+				"tool_name":         row.ToolName,
+				"total_calls":       row.TotalCalls,
+				"success_calls":     row.SuccessCalls,
+				"failed_calls":      row.FailedCalls,
+				"total_duration_ms": row.TotalDurationMs,
+				"success_rate":      row.SuccessRate(),
+				"avg_duration_ms":   row.AvgDurationMs(),
+			})
+		}
+		response.Success(c, gin.H{
+			"source":      "db",
+			"total":       len(stats),
+			"stats":       stats,
+			"persistence": toolAuditPersistenceEcho(snap),
+			"note": "DB 口径来自 tool_call_audits 按 tool_name 聚合（不受内存 10000 条上限与重启影响），" +
+				"与内存口径在长时间运行后必然不等，差异本身就是丢失量",
+		}, "ok")
+		return
+	}
+
 	memTracker := app.GetGlobalMemoryCostTracker()
 	if memTracker == nil {
 		response.Success(c, gin.H{
-			"stats":   []any{},
-			"warning": "memory cost tracker not accessible",
-			"total":   0,
+			"source":      "memory",
+			"stats":       []any{},
+			"warning":     "memory cost tracker not accessible",
+			"total":       0,
+			"persistence": toolAuditPersistenceEcho(snap),
 		}, "ok")
 		return
 	}
 	stats := memTracker.Stats()
 	response.Success(c, gin.H{
-		"total": len(stats),
-		"stats": stats,
+		"source":      "memory",
+		"total":       len(stats),
+		"stats":       stats,
+		"persistence": toolAuditPersistenceEcho(snap),
 	}, "ok")
 }
 

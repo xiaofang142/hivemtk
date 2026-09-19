@@ -50,6 +50,7 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		&model.RecoveryQueue{},
 		&model.SecurityAlert{},
 		&model.SystemConfigKV{},
+		&model.ToolCallAudit{},
 		&model.UserMFA{},
 		&model.WorkflowExecution{},
 		&model.WorkflowNodeExecution{},

@@ -120,6 +120,39 @@ permission → ratelimit → circuit → retry → timeout → audit → cost �
     每次判定落一行 `event=tool_approval_decision`（`mode` / `allowed` / `would_deny` / `blocked` / `reason` /
     `whitelist_flag_on`；**`would_deny` 与 `blocked` 是两个字段**：前者模式无关，后者只在真拦下时为 true）
 
+- **W-6 工具审计/计费 DB 持久化（T-P1-08，2026-09-19）**：`DBAuditLogger` / `CompositeAuditLogger` 自 v3.29
+  就写完了并带单测，但生产从未构造 ⇒ executor 的 `AuditLogger` 恒是 `MemoryAuditLogger(10000)`，重启即丢、
+  多副本各看各的。接线时实测出四件比"没接线"更麻烦的事，均已修：
+  1. **表根本不存在**：`ToolCallAuditRecord` 定义在 tooluse 包内、没进 `internal/pkg/db` 建表清单，而它自带的
+     `AutoMigrateAuditTable` 全仓零调用；`check_model_migration.py` 又因"文件里含 `.AutoMigrate(`"把它判成已登记
+     （真库实测无 `tool_call_audits`）⇒ 只接 logger 不登记表的话第一批写入就整批静默降级，看着接了其实一行没落。
+     现模型收敛进 `internal/model/tool_audit.go` 并登记 `allModels()`（tooluse 侧留类型别名），
+     该启发式漏洞已收紧为"只认 `RegisterExtraModels`"，收紧后实测新增红项 0
+  2. **摘要截断产出非法 UTF-8**：`summarizeArgs`/`summarizeResult` 原按字节硬砍（`s[:200]`），砍进中文字符中间；
+     内存里无后果，落 PG 报 `invalid byte sequence for encoding "UTF8"`（真库探针实测），而 `CreateInBatches`
+     整批提交 ⇒ 一条坏数据带走 100 条好审计。现走 rune 边界回退的 `cutBytes`，并给每个 varchar 列按列宽裁一刀
+     （`trace_id` 由 `middleware/trace.go` 从上游头透传、长度不受本地约束）
+  3. **降级通道重复计数**：把内存 logger 既作复合器的一腿、又作 `DBAuditLogger` 的 fallback 时，DB 每失败一次
+     内存里就多一份重复行（实测降级 2 条后 `Count()=4`）⇒ 故障期 10000 条环形缓冲按 2 倍速被吃、`Count()` 翻倍。
+     现 fallback 传 nil，"降级不丢"由复合器的内存腿兑现
+  4. 告警按 60s 限速（一次 DB 故障否则能稳定产出 8.6 万行日志/天），并把 `enqueued/db_rows/fell_back/fail_batches`
+     摊进快照——本 logger 对调用方永远返回成功，没计数的话"全部落库"与"一条没写"外面看是一模一样的
+- 旗子 `FF_TOOL_AUDIT_DB` 刻意是**两态** `off|on`（默认 off），不同于另四把三态旗子：熔断/审批门/worker 会改变
+  请求结果，需要"只看不拦"的中间档；本旗子只决定落不落库，`true/1/on/yes` 就认作 on。`TOOL_AUDIT_QUEUE_SIZE`
+  默认 10000、上限 200000，越界回默认并告警。开旗但拿不到 DB 句柄 ⇒ 判 off 并告警，不留"看着开了其实没落"的中间态
+- **建表落点无版本化迁移**：生产只跑 `db.AutoMigrate()`（启动期 `ExecuteUpgrade(v1.0.0, v1.0.0)` 是空跑），
+  故 `allModels()` 登记即完成新老部署建表；再加一份永不执行的迁移只会多一个事实源（卡片原写"新增
+  `v3_42_0_tool_audit_migration.go`"，实测 v3.42.0 已被并行会话占用，且该路径生产不执行 ⇒ 落点校正为不建）
+- **计费不另建表**：`MemoryCostTracker` 的四样（次数/成功/失败/总耗时）是 `tool_call_audits` 按 `tool_name`
+  聚合的真子集，再存一份必出两个事实源 ⇒ DB 口径走 `repository.ToolAuditRepository.CostAggregates`
+- 观测入口：`GET /api/agent/tools/audit`、`GET /api/agent/tools/cost` 默认仍是内存（有界、快、不依赖 DB），
+  `?source=db` 走持久化口径；两者**恒回显** `persistence{mode, db_wired, table, flag_env, db_handle, mem_entries
+  [, queue_size, db_stats]}`，未接线时 `?source=db` 回 503 并指名旗子，而不是回一份空列表被读成"没有审计"。
+  `/cost` 两种数据源 JSON 键逐一对齐 `tooluse.CostStats`，消费方不必因换源改解析
+- ⚠️ **本表无保留期**：落库后从"最近 10000 条环形"变成每次工具调用一行、无上限增长。刻意不做自动清理——
+  默认删审计证据比默认不删更糟；改由 `persisted_total` / `CountAll` 把规模摊开可见，保留期待运营拍板（同
+  `reach_delayed_outbound` TTL 的处置口径）
+
 ### F3.3 MCP Server
 零依赖 JSON-RPC 2.0（协议 2025-06-18），initialize/tools.list/tools.call/ping；仅 HTTP
 

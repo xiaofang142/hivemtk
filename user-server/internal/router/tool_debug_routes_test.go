@@ -869,3 +869,186 @@ func TestAtoiSafe(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T-P1-08：/agent/tools/audit 与 /cost 的 ?source=db 分支与落库状态回显。
+//
+// 走纯函数而不是 httptest 的原因与 T-P1-05/06 同一口径：旗子在装配期读一次，
+// 测试进程里既没有 HTTP 也没有第二次装配，handle 只能测到 off 那一支。
+// 于是"给定快照 → 该回显什么 / 该拒什么"单独断言，off 那一支再补一条 httptest 兜底。
+// ---------------------------------------------------------------------------
+
+func TestIsDBSource(t *testing.T) {
+	cases := []struct{ raw, want string }{
+		{"db", "db"}, {"DB", "db"}, {" db ", "db"},
+	}
+	for _, c := range cases {
+		if !isDBSource(c.raw) {
+			t.Errorf("isDBSource(%q) 应为 true", c.raw)
+		}
+	}
+	// 认不出的值一律走内存：拼错 source 的人会在回显里看到 source=memory，
+	// 而不是静悄悄拿到一份"看起来是库里数据"的内存结果。
+	for _, raw := range []string{"", "database", "postgres", "mem", "true"} {
+		if isDBSource(raw) {
+			t.Errorf("isDBSource(%q) 应为 false", raw)
+		}
+	}
+}
+
+func TestToolAuditPersistenceEchoShape(t *testing.T) {
+	off := toolAuditPersistenceEcho(app.ToolAuditSnapshot{
+		Mode: "off", Wired: false, TableName: "tool_call_audits",
+		DBHandle: false, MemCapUsed: 7,
+	})
+	for _, key := range []string{"mode", "db_wired", "table", "flag_env", "db_handle", "mem_entries"} {
+		if _, ok := off[key]; !ok {
+			t.Errorf("off 回显缺字段 %s：%v", key, off)
+		}
+	}
+	if off["table"] != "tool_call_audits" || off["flag_env"] != "FF_TOOL_AUDIT_DB" {
+		t.Errorf("回显的表名/旗子名必须是运维能照着查的原文：%v", off)
+	}
+	// 未接线时不该出现队列/统计字段（有也是全 0，会被读成"接了但没量"）
+	for _, key := range []string{"queue_size", "db_stats"} {
+		if _, ok := off[key]; ok {
+			t.Errorf("off 回显不该有 %s：%v", key, off)
+		}
+	}
+
+	on := toolAuditPersistenceEcho(app.ToolAuditSnapshot{
+		Mode: "on", Wired: true, TableName: "tool_call_audits",
+		QueueSize: 500, DBHandle: true, HasStats: true,
+		DBStats: tooluse.DBAuditStats{Enqueued: 12, DBRows: 10, FellBack: 2, QueueLen: 2, QueueCap: 500},
+	})
+	if on["db_wired"] != true || on["queue_size"] != 500 {
+		t.Errorf("on 回显异常：%v", on)
+	}
+	stats, ok := on["db_stats"].(tooluse.DBAuditStats)
+	if !ok || stats.DBRows != 10 || stats.FellBack != 2 {
+		t.Errorf("db_stats 应原样带出降级量，实际 %v（%T）", on["db_stats"], on["db_stats"])
+	}
+}
+
+func TestToolAuditDBBlockedReasonBranches(t *testing.T) {
+	// 旗子没开：读写侧都没有
+	if r := toolAuditDBBlockedReason(app.ToolAuditSnapshot{Mode: "off"}); r == "" {
+		t.Error("完全未接线时应给出 503 原因")
+	} else if !strings.Contains(r, "FF_TOOL_AUDIT_DB") || !strings.Contains(r, "mode=off") {
+		t.Errorf("原因里要带旗子名与实际 mode，便于运维定位：%s", r)
+	}
+	// 写侧接了、读侧句柄 nil（DB 连接问题）
+	if r := toolAuditDBBlockedReason(app.ToolAuditSnapshot{Mode: "on", Wired: true, DBHandle: false}); !strings.Contains(r, "nil") {
+		t.Errorf("句柄缺失应点名 nil 句柄：%s", r)
+	}
+	// 读侧有句柄但写侧没接（旗子 off 却带着活库句柄）——最常见的误读场景
+	if r := toolAuditDBBlockedReason(app.ToolAuditSnapshot{Mode: "off", Wired: false, DBHandle: true}); !strings.Contains(r, "写侧未接线") {
+		t.Errorf("应说明写侧未接线：%s", r)
+	}
+	// 接好了一切正常，即便一条还没写（空表不是错误）
+	if r := toolAuditDBBlockedReason(app.ToolAuditSnapshot{Mode: "on", Wired: true, DBHandle: true}); r != "" {
+		t.Errorf("已接线时不该拒绝：%s", r)
+	}
+}
+
+// off 态下 ?source=db 必须 503 且说清原因，不能回一份空列表让人以为"库里没有审计"。
+func TestHandleToolAudit_DBSourceUnwired_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prevExec := tooluse.GetGlobalExecutor()
+	_, exec, _, _ := newTestExecutor(t)
+	tooluse.SetGlobalExecutor(exec)
+	t.Cleanup(func() { tooluse.SetGlobalExecutor(prevExec) })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/audit?source=db", nil)
+	handleToolAudit(c)
+
+	// response.Error(c, 503, …) 的既有口径：HTTP 状态码与业务码同时给
+	// （业务码是被 errorCodeFromHTTPCode 翻译过的字符串，不是裸 503）。
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("未接线应回 HTTP 503，实际 %d；body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v body=%s", err, w.Body.String())
+	}
+	if code, ok := resp["code"].(string); !ok || code == "0" || code == "" {
+		t.Errorf("业务码应为非 0 的错误码，实际 %v", resp["code"])
+	}
+	if msg, _ := resp["message"].(string); !strings.Contains(msg, app.ToolAuditFlagEnv) {
+		t.Errorf("错误信息应指名旗子 %s，实际 %q", app.ToolAuditFlagEnv, msg)
+	}
+}
+
+// AC③：默认（内存）数据源在接线后照样工作，且响应里带上落库状态回显。
+func TestHandleToolAudit_MemorySourceStillWorks_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prevExec := tooluse.GetGlobalExecutor()
+	_, exec, _, _ := newTestExecutor(t)
+	tooluse.SetGlobalExecutor(exec)
+	t.Cleanup(func() { tooluse.SetGlobalExecutor(prevExec) })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/audit?limit=5", nil)
+	handleToolAudit(c)
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v body=%s", err, w.Body.String())
+	}
+	if code, ok := resp["code"].(float64); !ok || code != 0 {
+		t.Fatalf("内存数据源应正常返回，body=%s", w.Body.String())
+	}
+	data, _ := resp["data"].(map[string]any)
+	if data["source"] != "memory" {
+		t.Errorf("回显应标明数据源，实际 %v", data["source"])
+	}
+	if _, ok := data["persistence"].(map[string]any); !ok {
+		t.Errorf("响应必须带 persistence 回显（否则看不出重启即丢），实际 %v", data["persistence"])
+	}
+}
+
+func TestHandleToolCost_DBSourceUnwired_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/cost?source=db", nil)
+	handleToolCost(c)
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v", err)
+	}
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("未接线应回 HTTP 503，实际 %d；body=%s", w.Code, w.Body.String())
+	}
+	if code, ok := resp["code"].(string); !ok || code == "" || code == "0" {
+		t.Errorf("业务码应为非 0 错误码，实际 %v", resp["code"])
+	}
+	if msg, _ := resp["message"].(string); !strings.Contains(msg, app.ToolAuditFlagEnv) {
+		t.Errorf("错误信息应指名旗子 %s，实际 %q", app.ToolAuditFlagEnv, msg)
+	}
+}
+
+// 内存数据源必须继续回 200（本卡是增量，不得把既有端点改成依赖 DB）。
+func TestHandleToolCost_MemorySourceStillWorks_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/cost", nil)
+	handleToolCost(c)
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v", err)
+	}
+	if code, ok := resp["code"].(float64); !ok || code != 0 {
+		t.Fatalf("内存计费应正常返回，body=%s", w.Body.String())
+	}
+	data, _ := resp["data"].(map[string]any)
+	if data["source"] != "memory" {
+		t.Errorf("回显应标明数据源，实际 %v", data["source"])
+	}
+}

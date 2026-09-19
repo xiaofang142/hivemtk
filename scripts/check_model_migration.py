@@ -146,9 +146,15 @@ def collect_registered():
             text = open(path, encoding='utf-8').read()
         except (OSError, UnicodeDecodeError):
             continue
-        # 运行期注册 + 各处的独立 AutoMigrate 调用点
-        # （如 db_audit_persister.go 的 AutoMigrateAuditTable）
-        if 'RegisterExtraModels' in text or '.AutoMigrate(' in text:
+        # 运行期注册（各包 init 里的 RegisterExtraModels）
+        #
+        # ⚠️ 2026-09-19（T-P1-08）：这里原本还认 "文件里出现 .AutoMigrate(" 一种证据，
+        # 于是**任何**含 AutoMigrate 字样的文件都能替它里面的模型做担保 —— 实测正是这个
+        # 漏洞放走了 tool_call_audits：db_audit_persister.go 自带一个
+        # `func AutoMigrateAuditTable(db) { return db.AutoMigrate(&ToolCallAuditRecord{}) }`，
+        # 而该函数全仓零调用（开发库里也确实没有这张表），闸门却一直报 ✅。
+        # 收紧后实测：新增红项 0（即没有别的合法用法依赖这条宽松判据）。
+        if 'RegisterExtraModels' in text:
             names |= _names_in(text)
     return names
 

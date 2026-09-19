@@ -326,6 +326,13 @@ func allModels() []any {
 		&model.RecoveryQueue{},
 		&model.SecurityAlert{},
 		&model.SystemConfigKV{},
+
+		// ToolCallAudit（表 tool_call_audits）：T-P0-04 判定的"实现了但没接线"里最隐蔽的一条
+		// —— 写入方 tooluse.DBAuditLogger 一直存在，但表**从未登记建表**（它自带的
+		// AutoMigrateAuditTable 零调用），且 check_model_migration.py 因为"文件里含
+		// .AutoMigrate("而把它误判成已登记。实测开发库里没有这张表。
+		&model.ToolCallAudit{},
+
 		&model.UserMFA{},
 		&model.WorkflowExecution{},
 		&model.WorkflowNodeExecution{},

@@ -124,6 +124,15 @@ func main() {
 	db.InitDB()
 	db.AutoMigrate()
 
+	// W-6 工具审计落库：退出前排空异步队列（见 internal/app/tool_audit_wiring.go）。
+	//
+	// 为什么登记在这里而不是紧跟装配点（router.Setup 在更下面）：defer 是 LIFO，
+	// 越晚登记的越早执行。审计写入是异步的，Close 之后再入队的条目就没有人消费了；
+	// 而 scheduler / SOP dispatcher / 挽回 worker 都会调用工具，它们必须在 Close 之前停稳。
+	// 登记点在各成分之前 ⇒ 本 Close 是最后一批执行的动作之一。
+	// 未接旗时它是 no-op（读包级变量，登记时是否已构造无所谓）。
+	defer app.CloseToolAuditPersistence()
+
 	if gdb := db.GetDB(); gdb != nil {
 		if err := service.SeedConfigParams(context.Background(), gdb); err != nil {
 			logger.Errorf("[ConfigParam] seed failed: %v", err)

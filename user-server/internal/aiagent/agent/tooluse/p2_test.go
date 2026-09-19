@@ -9,6 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 func makeFailingHandler(name string, callCount *int32, errMsg string) ToolHandler {
@@ -915,10 +919,115 @@ func (c *captureLogger) Log(ctx context.Context, entry AuditEntry) {
 	c.entries = append(c.entries, entry)
 }
 
-// TestD14_5_AutoMigrateAuditTable_NilDB 验证 AutoMigrate 在 nil DB 时不报错
-func TestD14_5_AutoMigrateAuditTable_NilDB(t *testing.T) {
-	if err := AutoMigrateAuditTable(nil); err != nil {
-		t.Errorf("nil DB 时 AutoMigrate 应返回 nil err，实际 %v", err)
+// TestD14_5_DBAuditLogger_PersistsRows 验证审计真的能落库（T-P1-08 AC①）。
+//
+// 这里刻意覆盖两个"接了但没落"的真实坑：
+//  1. 中文摘要按字节硬砍会产出非法 UTF-8，PG 直接拒绝整批（实测 error 22032）；
+//  2. varchar(64) 列被超长 trace_id 撑爆，CreateInBatches 整批回滚。
+//
+// 原 TestD14_5_AutoMigrateAuditTable_NilDB 随 AutoMigrateAuditTable 一起删除：
+// 那个函数就是"看着能建表、其实没人调"的元凶，建表职责已交还 internal/pkg/db 清单。
+func TestD14_5_DBAuditLogger_PersistsRows(t *testing.T) {
+	testDB := testutil.NewTestDB(t, &model.ToolCallAudit{})
+
+	// 中文为主、远超 200 字节的摘要：旧实现会在多字节字符中间切断。
+	chineseArgs := strings.Repeat("客户张三的订单备注信息与地址", 40)
+	oversizedTrace := strings.Repeat("t", 200)
+
+	logger := NewDBAuditLogger(testDB, 100, nil)
+	ctx := context.Background()
+	const total = 7
+	for i := 0; i < total; i++ {
+		logger.Log(ctx, AuditEntry{
+			TraceID:     oversizedTrace,
+			ToolName:    fmt.Sprintf("test.persist.%d", i),
+			Success:     i%2 == 0,
+			Error:       "boom",
+			Duration:    time.Duration(i+1) * 150 * time.Millisecond,
+			ArgsSummary: chineseArgs,
+			ExecutedAt:  time.Now().Add(-time.Duration(i) * time.Second),
+		})
+	}
+	logger.Close() // Close 会排空队列，因此返回后所有行必须已在库里
+
+	stats := logger.Stats()
+	if stats.DBRows != total {
+		t.Fatalf("期望落库 %d 行，实际 %d（fell_back=%d fail_batches=%d）", total, stats.DBRows, stats.FellBack, stats.FailBatches)
+	}
+
+	var rows []model.ToolCallAudit
+	if err := testDB.Order("id ASC").Find(&rows).Error; err != nil {
+		t.Fatalf("读回审计行失败：%v", err)
+	}
+	if len(rows) != total {
+		t.Fatalf("表内期望 %d 行，实际 %d", total, len(rows))
+	}
+	for _, row := range rows {
+		if !utf8.ValidString(row.ArgsSummary) {
+			t.Errorf("ArgsSummary 含非法 UTF8 序列（截断切进多字节字符里了）：%q", row.ArgsSummary)
+		}
+		if len(row.TraceID) > auditColTraceID {
+			t.Errorf("trace_id 未裁到列宽内：%d 字节 > %d", len(row.TraceID), auditColTraceID)
+		}
+	}
+	if rows[0].DurationMs != 150 {
+		t.Errorf("耗时应落库（CS-58）：期望 150ms，实际 %d", rows[0].DurationMs)
+	}
+	if rows[1].Success {
+		t.Error("Success=false 的条目不应记成成功")
+	}
+}
+
+// TestD14_5a_cutBytes_RuneBoundary 验证按字节裁剪不会切进多字节字符。
+func TestD14_5a_cutBytes_RuneBoundary(t *testing.T) {
+	s := "中文abc" // 中/文 各 3 字节
+	cases := []struct {
+		max  int
+		want string
+	}{
+		{max: 7, want: "中文a"}, // 7 会切在"文"中间 → 回退到 6 字节
+		{max: 3, want: "中"},   // 3 正好
+		{max: 2, want: ""},    // 2 落在首字符内部 → 回退到 0
+		{max: 100, want: s},   // 不截
+		{max: 0, want: s},     // 非正上限 = 不裁剪
+	}
+	for _, c := range cases {
+		got := cutBytes(s, c.max)
+		if got != c.want {
+			t.Errorf("cutBytes(%q, %d) = %q，期望 %q", s, c.max, got, c.want)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("cutBytes(%q, %d) 产出非法 UTF8：%q", s, c.max, got)
+		}
+	}
+}
+
+// TestD14_5b_SummarizeArgs_ChineseSafe 是缺陷②的回归测试：
+// 摘要入口直接产出可安全落库的字符串（旧实现按字节硬砍会切进中文里）。
+func TestD14_5b_SummarizeArgs_ChineseSafe(t *testing.T) {
+	args := map[string]any{
+		"content":   strings.Repeat("您好，您的订单已经发货请留意物流信息", 30),
+		"customer":  strings.Repeat("周小明", 40),
+		"phone":     "13800001111",
+		"empty_val": strings.Repeat("≤", 200),
+	}
+	got := summarizeArgs(args)
+	if !utf8.ValidString(got) {
+		t.Fatalf("summarizeArgs 产出非法 UTF8（该字符串一旦落库会整批被 PG 拒收）：%q", got)
+	}
+	if len(got) > 203 { // 200 字节上限 + "..." 后缀
+		t.Errorf("摘要长度失控：%d 字节", len(got))
+	}
+	if strings.Contains(got, "13800001111") {
+		t.Error("phone 应被脱敏")
+	}
+	for _, r := range got {
+		if r == utf8.RuneError {
+			t.Fatalf("摘要含 U+FFFD 替换符，说明截断切坏了字符")
+		}
+	}
+	if out := summarizeResult(strings.Repeat("订单已取消，退款将于三个工作日内到账", 30)); !utf8.ValidString(out) {
+		t.Errorf("summarizeResult 产出非法 UTF8：%q", out)
 	}
 }
 
