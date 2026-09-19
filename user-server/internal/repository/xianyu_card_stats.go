@@ -63,6 +63,9 @@ func NewXianyuCardStatsRepository(db *gorm.DB) XianyuCardStatsRepository {
 
 func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uint, startDate, endDate time.Time) (*CardStatsResult, error) {
 	var stats CardStatsResult
+	// endDate 是**含端点**的日历日 ⇒ 对时间戳列用半开区间 `>= start AND < 次日零点`。
+	// 原写法 `<= 次日零点` 会把次日 00:00:00 那一瞬也算进来。
+	endExclusive := endDate.AddDate(0, 0, 1)
 
 	type basicStats struct {
 		ViewCount  int64
@@ -73,7 +76,7 @@ func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uin
 
 	err := r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at <= ?", cardID, "view", startDate, endDate.AddDate(0, 0, 1)).
+		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at < ?", cardID, "view", startDate, endExclusive).
 		Count(&basic.ViewCount).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取浏览数失败: %w", err)
@@ -81,7 +84,7 @@ func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uin
 
 	err = r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at <= ?", cardID, "click", startDate, endDate.AddDate(0, 0, 1)).
+		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at < ?", cardID, "click", startDate, endExclusive).
 		Count(&basic.ClickCount).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取点击数失败: %w", err)
@@ -89,7 +92,7 @@ func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uin
 
 	err = r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at <= ?", cardID, "share", startDate, endDate.AddDate(0, 0, 1)).
+		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at < ?", cardID, "share", startDate, endExclusive).
 		Count(&basic.ShareCount).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取分享数失败: %w", err)
@@ -111,10 +114,10 @@ func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uin
 				SUM(CASE WHEN activity_type = 'click' THEN 1 ELSE 0 END) as click_count,
 				SUM(CASE WHEN activity_type = 'share' THEN 1 ELSE 0 END) as share_count
 			FROM xianyu_card_activities 
-			WHERE card_id = ? AND created_at >= ? AND created_at <= ?
+			WHERE card_id = ? AND created_at >= ? AND created_at < ?
 			GROUP BY DATE(created_at)
 			ORDER BY date DESC
-		`, cardID, startDate, endDate.AddDate(0, 0, 1)).
+		`, cardID, startDate, endExclusive).
 		Scan(&dateStatsList).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取按日期统计数据失败: %w", err)
@@ -142,6 +145,8 @@ func (r *xianyuCardStatsRepository) GetCardStats(ctx context.Context, cardID uin
 
 func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDate, endDate time.Time) (*CardOverallStatsResult, error) {
 	var stats CardOverallStatsResult
+	// 同 GetCardStats：日历日含端点 ⇒ 半开区间上界。
+	endExclusive := endDate.AddDate(0, 0, 1)
 
 	type totalStats struct {
 		TotalViewCount  int64
@@ -154,7 +159,7 @@ func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDa
 
 	err := r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("created_at >= ? AND created_at <= ?", startDate, endDate.AddDate(0, 0, 1)).
+		Where("created_at >= ? AND created_at < ?", startDate, endExclusive).
 		Where("activity_type = ?", "view").
 		Count(&total.TotalViewCount).Error
 	if err != nil {
@@ -163,7 +168,7 @@ func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDa
 
 	err = r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("created_at >= ? AND created_at <= ?", startDate, endDate.AddDate(0, 0, 1)).
+		Where("created_at >= ? AND created_at < ?", startDate, endExclusive).
 		Where("activity_type = ?", "click").
 		Count(&total.TotalClickCount).Error
 	if err != nil {
@@ -172,7 +177,7 @@ func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDa
 
 	err = r.db.WithContext(ctx).
 		Model(&model.XianyuCardActivity{}).
-		Where("created_at >= ? AND created_at <= ?", startDate, endDate.AddDate(0, 0, 1)).
+		Where("created_at >= ? AND created_at < ?", startDate, endExclusive).
 		Where("activity_type = ?", "share").
 		Count(&total.TotalShareCount).Error
 	if err != nil {
@@ -210,10 +215,10 @@ func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDa
 				SUM(CASE WHEN activity_type = 'click' THEN 1 ELSE 0 END) as click_count,
 				SUM(CASE WHEN activity_type = 'share' THEN 1 ELSE 0 END) as share_count
 			FROM xianyu_card_activities 
-			WHERE created_at >= ? AND created_at <= ?
+			WHERE created_at >= ? AND created_at < ?
 			GROUP BY DATE(created_at)
 			ORDER BY date DESC
-		`, startDate, endDate.AddDate(0, 0, 1)).
+		`, startDate, endExclusive).
 		Scan(&dateStatsList).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取按日期统计数据失败: %w", err)
@@ -238,11 +243,11 @@ func (r *xianyuCardStatsRepository) GetOverallStats(ctx context.Context, startDa
 				SUM(CASE WHEN ca.activity_type = 'share' THEN 1 ELSE 0 END) as share_count
 			FROM xianyu_cards c
 			LEFT JOIN xianyu_card_activities ca ON c.id = ca.card_id
-			WHERE ca.created_at >= ? AND ca.created_at <= ?
+			WHERE ca.created_at >= ? AND ca.created_at < ?
 			GROUP BY c.id, c.title
 			ORDER BY view_count DESC
 			LIMIT 10
-		`, startDate, endDate.AddDate(0, 0, 1)).
+		`, startDate, endExclusive).
 		Scan(&topCards).Error
 	if err != nil {
 		return nil, fmt.Errorf("获取热门卡片失败: %w", err)

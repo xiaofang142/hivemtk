@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -296,29 +297,57 @@ func TestXiaohongshuCardStats_GetCardDailyStats_Day(t *testing.T) {
 	assert.Equal(t, 4, total)
 }
 
-// TestXiaohongshuCardStats_GetCardDailyStats_Week 覆盖源码的 week 分支
-// 源码使用 MySQL 函数 YEARWEEK()，PostgreSQL 不支持 → 预期返回 error
+// TestXiaohongshuCardStats_GetCardDailyStats_Week 覆盖 week 分支的真实分组行为。
+//
+// 这一支原本用 MySQL 的 YEARWEEK()，在本仓的 PG 上必然报错，
+// 而旧断言 assert.Error 把「报错」当成了期望结果，等于把缺陷钉死在测试里。
+// 改成 DATE_TRUNC('week', …) 后，测试要断言的是「跨周的两条记录落在两个桶里」。
 func TestXiaohongshuCardStats_GetCardDailyStats_Week(t *testing.T) {
 	repo, ctx := setupXiaohongshuCardStatsRepo(t)
 	card := newTestCard(t, repo, "W1", 0, true)
 
-	newTestActivity(t, repo, card.ID, 1, "view", time.Now())
+	now := time.Now()
+	newTestActivity(t, repo, card.ID, 1, "view", now)
+	// 相隔 14 天必定跨周（也跨月），用它保证「两个桶」不是碰运气。
+	newTestActivity(t, repo, card.ID, 2, "view", now.Add(-14*24*time.Hour))
 
-	_, err := repo.GetCardDailyStats(ctx, card.ID, "", "", "week")
+	stats, err := repo.GetCardDailyStats(ctx, card.ID, "", "", "week")
+	require.NoError(t, err)
+	require.Len(t, stats, 2, "相隔 14 天的两条应分到两个周桶")
 
-	assert.Error(t, err)
+	dates := make(map[string]bool, len(stats))
+	total := 0
+	for _, s := range stats {
+		assert.Len(t, s.Date, 10, "week 分支按 ISO 周首日输出 YYYY-MM-DD")
+		assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, s.Date)
+		dates[s.Date] = true
+		total += s.Count
+	}
+	assert.Len(t, dates, 2)
+	assert.Equal(t, 2, total)
 }
 
-// TestXiaohongshuCardStats_GetCardDailyStats_Month 覆盖源码的 month 分支
-// 源码使用 MySQL 函数 DATE_FORMAT()，PostgreSQL 不支持 → 预期返回 error
+// TestXiaohongshuCardStats_GetCardDailyStats_Month 覆盖 month 分支的真实分组行为（同上，原为 DATE_FORMAT）。
 func TestXiaohongshuCardStats_GetCardDailyStats_Month(t *testing.T) {
 	repo, ctx := setupXiaohongshuCardStatsRepo(t)
 	card := newTestCard(t, repo, "M1", 0, true)
 
-	newTestActivity(t, repo, card.ID, 1, "view", time.Now())
+	now := time.Now()
+	newTestActivity(t, repo, card.ID, 1, "view", now)
+	// 40 天 > 任何月份长度，必定跨月。
+	newTestActivity(t, repo, card.ID, 2, "view", now.Add(-40*24*time.Hour))
 
-	_, err := repo.GetCardDailyStats(ctx, card.ID, "", "", "month")
-	assert.Error(t, err)
+	stats, err := repo.GetCardDailyStats(ctx, card.ID, "", "", "month")
+	require.NoError(t, err)
+	require.Len(t, stats, 2, "相隔 40 天的两条应分到两个月桶")
+
+	seen := make(map[string]bool, len(stats))
+	for _, s := range stats {
+		assert.Regexp(t, `^\d{4}-\d{2}$`, s.Date, "month 分支输出 YYYY-MM")
+		seen[s.Date] = true
+	}
+	assert.Len(t, seen, 2)
+	assert.Contains(t, seen, timeutil.BusinessDate(now)[:7], "本月桶必须存在")
 }
 
 func TestXiaohongshuCardStats_GetCardDailyStats_Default(t *testing.T) {
@@ -342,8 +371,8 @@ func TestXiaohongshuCardStats_GetCardDailyStats_WithDateRange(t *testing.T) {
 	newTestActivity(t, repo, card.ID, 2, "view", now.Add(-2*24*time.Hour))
 	newTestActivity(t, repo, card.ID, 3, "view", now.Add(-30*24*time.Hour))
 
-	start := now.Add(-7 * 24 * time.Hour).Format("2006-01-02")
-	end := now.Add(24 * time.Hour).Format("2006-01-02")
+	start := timeutil.BusinessDate(now.Add(-7 * 24 * time.Hour))
+	end := timeutil.BusinessDate(now.Add(24 * time.Hour))
 
 	stats, err := repo.GetCardDailyStats(ctx, card.ID, start, end, "day")
 	require.NoError(t, err)
@@ -353,6 +382,34 @@ func TestXiaohongshuCardStats_GetCardDailyStats_WithDateRange(t *testing.T) {
 		total += s.Count
 	}
 	assert.Equal(t, 2, total, "应只包含范围内的 2 条")
+}
+
+// TestXiaohongshuCardStats_GetCardDailyStats_EndDateIsInclusive 钉住「结束日整天算在区间内」。
+//
+// 旧写法 `created_at <= 'YYYY-MM-DD'` 在 PG 里等于 `<= 当日 00:00`，
+// 结束日那一整天的数据被静默丢掉；改成 `< (:date + 1 day)` 后，
+// 起止同为「今天」的区间必须能查到今天的记录。
+func TestXiaohongshuCardStats_GetCardDailyStats_EndDateIsInclusive(t *testing.T) {
+	repo, ctx := setupXiaohongshuCardStatsRepo(t)
+	card := newTestCard(t, repo, "END", 0, true)
+
+	now := time.Now()
+	newTestActivity(t, repo, card.ID, 1, "view", now)
+	today := timeutil.BusinessDate(now)
+
+	stats, err := repo.GetCardDailyStats(ctx, card.ID, today, today, "day")
+	require.NoError(t, err)
+
+	total := 0
+	for _, s := range stats {
+		// day 分支直接取 DATE(created_at)，驱动返回的是 date→time.Time，落到字符串字段上
+		// 形如 "2026-09-20T00:00:00Z"（week/month 走 TO_CHAR 才是纯日期串）；
+		// 这里只比前 10 位，格式不统一的问题另记。
+		require.GreaterOrEqual(t, len(s.Date), 10)
+		assert.Equal(t, today, s.Date[:10], "day 分支的桶必须落在业务日当天")
+		total += s.Count
+	}
+	assert.Equal(t, 1, total, "起止同为今天的区间必须包含今天")
 }
 
 func TestXiaohongshuCardStats_GetCardDailyStats_NoData(t *testing.T) {
@@ -388,19 +445,25 @@ func TestXiaohongshuCardStats_GetOverallDailyStats_All(t *testing.T) {
 func TestXiaohongshuCardStats_GetOverallDailyStats_Week(t *testing.T) {
 	repo, ctx := setupXiaohongshuCardStatsRepo(t)
 	c1 := newTestCard(t, repo, "OW", 0, true)
-	newTestActivity(t, repo, c1.ID, 1, "view", time.Now())
+	now := time.Now()
+	newTestActivity(t, repo, c1.ID, 1, "view", now)
+	newTestActivity(t, repo, c1.ID, 2, "view", now.Add(-14*24*time.Hour))
 
-	_, err := repo.GetOverallDailyStats(ctx, "", "", "week")
-	assert.Error(t, err, "PG 上 YEARWEEK 不存在，预期 error")
+	stats, err := repo.GetOverallDailyStats(ctx, "", "", "week")
+	require.NoError(t, err, "week 分支已改为 PG 的 DATE_TRUNC，不该再报错")
+	assert.Len(t, stats, 2)
 }
 
 func TestXiaohongshuCardStats_GetOverallDailyStats_Month(t *testing.T) {
 	repo, ctx := setupXiaohongshuCardStatsRepo(t)
 	c1 := newTestCard(t, repo, "OM", 0, true)
-	newTestActivity(t, repo, c1.ID, 1, "view", time.Now())
+	now := time.Now()
+	newTestActivity(t, repo, c1.ID, 1, "view", now)
+	newTestActivity(t, repo, c1.ID, 2, "view", now.Add(-40*24*time.Hour))
 
-	_, err := repo.GetOverallDailyStats(ctx, "", "", "month")
-	assert.Error(t, err, "PG 上 DATE_FORMAT 不存在，预期 error")
+	stats, err := repo.GetOverallDailyStats(ctx, "", "", "month")
+	require.NoError(t, err, "month 分支已改为 PG 的 TO_CHAR，不该再报错")
+	assert.Len(t, stats, 2)
 }
 
 func TestXiaohongshuCardStats_GetOverallDailyStats_WithDateRange(t *testing.T) {
@@ -411,8 +474,8 @@ func TestXiaohongshuCardStats_GetOverallDailyStats_WithDateRange(t *testing.T) {
 	newTestActivity(t, repo, c1.ID, 1, "view", now)
 	newTestActivity(t, repo, c1.ID, 2, "view", now.Add(-30*24*time.Hour))
 
-	start := now.Add(-7 * 24 * time.Hour).Format("2006-01-02")
-	end := now.Add(24 * time.Hour).Format("2006-01-02")
+	start := timeutil.BusinessDate(now.Add(-7 * 24 * time.Hour))
+	end := timeutil.BusinessDate(now.Add(24 * time.Hour))
 
 	stats, err := repo.GetOverallDailyStats(ctx, start, end, "day")
 	require.NoError(t, err)

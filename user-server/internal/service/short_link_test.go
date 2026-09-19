@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/repository"
 
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"gorm.io/gorm"
 )
@@ -1098,7 +1099,7 @@ func TestShortLinkService_GetStats_WithDateRange(t *testing.T) {
 	}
 	_, _ = service.AccessShortLink(context.Background(), accessReq)
 
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	statsReq := &dto.ShortLinkStatsRequest{
 		ID:        createResp.ID,
 		StartDate: today,
@@ -1213,7 +1214,7 @@ func TestShortLinkService_GetAllStats_WithDateRange(t *testing.T) {
 	}
 	_, _ = service.AccessShortLink(context.Background(), accessReq)
 
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	allStatsReq := &dto.AllShortLinksStatsRequest{
 		StartDate: today,
 		EndDate:   today,

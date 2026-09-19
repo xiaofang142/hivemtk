@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -407,11 +408,15 @@ func parseDateRange(start, end string) (time.Time, time.Time) {
 }
 
 func normalizeDateRange(start, end string) (string, string) {
+	// 默认窗口必须用业务日（CST）：这两个字符串会被下推到 `created_at::date`，
+	// 而 PG 会话时区钉在 Asia/Shanghai，用宿主机时区（CI/容器常为 UTC）的
+	// Format 会在 UTC 16:00–23:59 之间让窗口整体错一天。
+	now := time.Now()
 	if end == "" {
-		end = time.Now().Format("2006-01-02")
+		end = timeutil.BusinessDate(now)
 	}
 	if start == "" {
-		start = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+		start = timeutil.BusinessDate(now.AddDate(0, 0, -30))
 	}
 	return start, end
 }

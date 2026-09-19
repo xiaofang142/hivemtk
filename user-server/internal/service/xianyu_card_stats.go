@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -34,11 +34,11 @@ func NewXianyuCardStatsService(db any) XianyuCardStatsService {
 }
 
 func (s *xianyuCardStatsService) GetCardStats(ctx context.Context, cardID uint, startDate, endDate string) (*dto.XianyuCardStatsResponse, error) {
-	start, err := time.Parse("2006-01-02", startDate)
+	start, err := timeutil.ParseBusinessDate(startDate)
 	if err != nil {
 		return nil, fmt.Errorf("开始日期格式错误: %w", err)
 	}
-	end, err := time.Parse("2006-01-02", endDate)
+	end, err := timeutil.ParseBusinessDate(endDate)
 	if err != nil {
 		return nil, fmt.Errorf("结束日期格式错误: %w", err)
 	}
@@ -67,11 +67,11 @@ func (s *xianyuCardStatsService) GetCardStats(ctx context.Context, cardID uint, 
 }
 
 func (s *xianyuCardStatsService) GetOverallStats(ctx context.Context, startDate, endDate string) (*dto.XianyuCardOverallStatsResponse, error) {
-	start, err := time.Parse("2006-01-02", startDate)
+	start, err := timeutil.ParseBusinessDate(startDate)
 	if err != nil {
 		return nil, fmt.Errorf("开始日期格式错误: %w", err)
 	}
-	end, err := time.Parse("2006-01-02", endDate)
+	end, err := timeutil.ParseBusinessDate(endDate)
 	if err != nil {
 		return nil, fmt.Errorf("结束日期格式错误: %w", err)
 	}
@@ -112,11 +112,11 @@ func (s *xianyuCardStatsService) GetOverallStats(ctx context.Context, startDate,
 }
 
 func (s *xianyuCardStatsService) GetCardStatsRaw(ctx context.Context, cardID uint, startDate, endDate string) (*dto.CardStatsData, error) {
-	start, err := time.Parse("2006-01-02", startDate)
+	start, err := timeutil.ParseBusinessDate(startDate)
 	if err != nil {
 		return nil, fmt.Errorf("开始日期格式错误: %w", err)
 	}
-	end, err := time.Parse("2006-01-02", endDate)
+	end, err := timeutil.ParseBusinessDate(endDate)
 	if err != nil {
 		return nil, fmt.Errorf("结束日期格式错误: %w", err)
 	}
@@ -143,11 +143,11 @@ func (s *xianyuCardStatsService) GetCardStatsRaw(ctx context.Context, cardID uin
 }
 
 func (s *xianyuCardStatsService) GetOverallStatsRaw(ctx context.Context, startDate, endDate string) (*dto.OverallStatsData, error) {
-	start, err := time.Parse("2006-01-02", startDate)
+	start, err := timeutil.ParseBusinessDate(startDate)
 	if err != nil {
 		return nil, fmt.Errorf("开始日期格式错误: %w", err)
 	}
-	end, err := time.Parse("2006-01-02", endDate)
+	end, err := timeutil.ParseBusinessDate(endDate)
 	if err != nil {
 		return nil, fmt.Errorf("结束日期格式错误: %w", err)
 	}

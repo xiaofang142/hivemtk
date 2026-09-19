@@ -33,3 +33,44 @@ func StartOfDayOffset(t time.Time, daysAgo int) time.Time {
 func EndOfDay(t time.Time) time.Time {
 	return StartOfDay(t).AddDate(0, 0, 1).Add(-time.Nanosecond)
 }
+
+// businessTimeZone 是「业务日」所属的时区。
+//
+// 之所以需要一个显式的业务时区，而不是各算各的：本仓所有 PostgreSQL 连接串都把
+// 会话时区钉在 Asia/Shanghai（pkg/db/db.go:31 生产、cmd/seed/main.go:192 种子、
+// pkg/testutil/testdb.go:327 测试库），因此 SQL 里的 `DATE(ts)` 分桶、
+// `created_at::date` 比较、以及 'YYYY-MM-DD' 字面量的解释**一律按 CST**。
+// 而 Go 进程自己的 time.Now() 用的是容器本地时区（CI runner 与多数镜像默认 UTC），
+// 于是 `time.Now().Format("2006-01-02")` 生成的边界和 DB 的口径在
+// 16:00–23:59 UTC（= CST 次日 00:00–07:59）之间正好差一天。
+// 第二十六轮 CI 首次真跑 `-race` 时，internal/repository 的 6 条统计断言就是这么红的
+// —— 本地永远复现不出来，因为开发机时区恰好等于会话时区。
+var businessTimeZone = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
+		return loc
+	}
+	// 精简镜像可能没有 /usr/share/zoneinfo；中国无夏令时，固定 +8 与 IANA 名等价。
+	return time.FixedZone("CST", 8*3600)
+}()
+
+// BusinessDate 返回 t 在业务时区（CST）下的日历日，格式 YYYY-MM-DD。
+//
+// 凡是拿去和 SQL 的 `DATE(...)` / `::date` / 日期字面量比较的日期串，都必须由它生成，
+// 而不是 `t.Format("2006-01-02")`（后者跟随宿主机时区，与 DB 分桶口径不一致）。
+func BusinessDate(t time.Time) string {
+	return t.In(businessTimeZone).Format("2006-01-02")
+}
+
+// BusinessToday 返回业务时区下「今天」的日历日。
+func BusinessToday() string {
+	return BusinessDate(time.Now())
+}
+
+// ParseBusinessDate 按业务时区把 YYYY-MM-DD 解析成该日 00:00:00。
+//
+// 用来替代 `time.Parse("2006-01-02", s)`：后者返回 **UTC 零点**，
+// 拿去和 CST 会话时区下写入的时间戳列比较，窗口会整体后移 8 小时
+// （每天头 8 小时的记录被静默切掉）。凡是「日期串 → 时间戳列边界」的转换都走这里。
+func ParseBusinessDate(value string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", value, businessTimeZone)
+}

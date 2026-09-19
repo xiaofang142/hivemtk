@@ -345,7 +345,9 @@ func (s *shortLinkService) GetStats(ctx context.Context, req *dto.ShortLinkStats
 		if err != nil {
 			return nil, errors.New("结束日期格式错误，请使用YYYY-MM-DD格式")
 		}
-		endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		// 不再 +23:59:59：仓储层比较的是 DATE(access_time) 这个「日历日」，
+		// 结束日整天本就在区间内；再叠 23:59:59 会把区间尾巴推进业务时区的**下一日**
+		// （time.Parse 得到的是 UTC 零点，+8h 后跨日），凭空多算一天。
 	}
 
 	var dailyStatsResponse []dto.DailyStats
@@ -355,58 +357,62 @@ func (s *shortLinkService) GetStats(ctx context.Context, req *dto.ShortLinkStats
 
 		_, totalAccessCount, err := s.accessRepo.GetByShortLinkID(ctx, req.ID, 1, 0)
 		if err != nil {
-			totalAccess = 0
+			logger.Errorf("统计短链 %d 总访问数失败: %v", req.ID, err)
 		} else {
 			totalAccess = totalAccessCount
 		}
 	} else {
 
 		dailyStats, err := s.accessRepo.GetDailyStatsByShortLinkID(ctx, req.ID, startDate, endDate)
-		if err == nil {
-			for _, stat := range dailyStats {
-				if count, ok := stat["count"].(int64); ok {
-					totalAccess += count
-				}
-				date, _ := stat["date"].(string)
-				count, _ := stat["count"].(int64)
-				dailyStatsResponse = append(dailyStatsResponse, dto.DailyStats{
-					Date:  date,
-					Count: count,
-				})
+		if err != nil {
+			logger.Errorf("查询短链 %d 每日访问统计失败: %v", req.ID, err)
+		}
+		for _, stat := range dailyStats {
+			if count, ok := stat["count"].(int64); ok {
+				totalAccess += count
 			}
+			date, _ := stat["date"].(string)
+			count, _ := stat["count"].(int64)
+			dailyStatsResponse = append(dailyStatsResponse, dto.DailyStats{
+				Date:  date,
+				Count: count,
+			})
 		}
 	}
 
-	today := time.Now().Format("2006-01-02")
-	todayStart, _ := time.Parse("2006-01-02", today)
-	todayEnd := todayStart.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-
-	todayStats, err := s.accessRepo.GetDailyStatsByShortLinkID(ctx, req.ID, todayStart, todayEnd)
+	// 「今天」= 业务日（CST）。把同一个 now 同时当起止传给仓储层，
+	// 由它统一用 timeutil.BusinessDate 折算成日历日，避免在这里再拼一遍 UTC 零点。
+	now := time.Now()
+	todayStats, err := s.accessRepo.GetDailyStatsByShortLinkID(ctx, req.ID, now, now)
+	if err != nil {
+		logger.Errorf("查询短链 %d 今日访问统计失败: %v", req.ID, err)
+	}
 	var todayAccess int64
-	if err == nil && len(todayStats) > 0 {
+	if len(todayStats) > 0 {
 		if count, ok := todayStats[0]["count"].(int64); ok {
 			todayAccess = count
 		}
 	}
 
 	deviceTypeStats, err := s.accessRepo.GetDeviceTypeStatsByShortLinkID(ctx, req.ID, startDate, endDate)
+	if err != nil {
+		logger.Errorf("查询短链 %d 设备类型统计失败: %v", req.ID, err)
+	}
 	var deviceStats []dto.DeviceTypeStats
-	if err == nil {
-		for _, stat := range deviceTypeStats {
-			deviceType, _ := stat["device_type"].(string)
-			count, _ := stat["count"].(int64)
+	for _, stat := range deviceTypeStats {
+		deviceType, _ := stat["device_type"].(string)
+		count, _ := stat["count"].(int64)
 
-			var percentage float64
-			if totalAccess > 0 {
-				percentage = float64(count) / float64(totalAccess) * 100
-			}
-
-			deviceStats = append(deviceStats, dto.DeviceTypeStats{
-				DeviceType: deviceType,
-				Count:      count,
-				Percentage: percentage,
-			})
+		var percentage float64
+		if totalAccess > 0 {
+			percentage = float64(count) / float64(totalAccess) * 100
 		}
+
+		deviceStats = append(deviceStats, dto.DeviceTypeStats{
+			DeviceType: deviceType,
+			Count:      count,
+			Percentage: percentage,
+		})
 	}
 
 	return &dto.ShortLinkStatsResponse{
@@ -438,83 +444,78 @@ func (s *shortLinkService) GetAllStats(ctx context.Context, req *dto.AllShortLin
 		if err != nil {
 			return nil, errors.New("结束日期格式错误，请使用YYYY-MM-DD格式")
 		}
-		endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		// 同 GetStats：仓储层按日历日比较，结束日整天已在区间内，不再叠 +23:59:59。
 	}
 
-	var totalAccess int64
+	// 每日统计只查一次：总数和按日明细都来自同一份结果，
+	// 分两次查既多一倍 DB 往返，也可能因两次查询之间有新访问而让明细加总对不上总数。
 	dailyStats, err := s.accessRepo.GetAllDailyStats(ctx, startDate, endDate)
-	if err == nil {
-		for _, stat := range dailyStats {
-			if count, ok := stat["count"].(int64); ok {
-				totalAccess += count
-			}
-		}
+	if err != nil {
+		logger.Errorf("查询全量短链每日访问统计失败: %v", err)
+	}
+	var totalAccess int64
+	var dailyStatsResponse []dto.DailyStats
+	for _, stat := range dailyStats {
+		count, _ := stat["count"].(int64)
+		totalAccess += count
+		date, _ := stat["date"].(string)
+		dailyStatsResponse = append(dailyStatsResponse, dto.DailyStats{
+			Date:  date,
+			Count: count,
+		})
 	}
 
-	today := time.Now().Format("2006-01-02")
-	todayStart, _ := time.Parse("2006-01-02", today)
-	todayEnd := todayStart.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-
-	todayStats, err := s.accessRepo.GetAllDailyStats(ctx, todayStart, todayEnd)
+	// 「今天」= 业务日（CST），起止传同一个 now，由仓储层折算成单个日历日。
+	now := time.Now()
+	todayStats, err := s.accessRepo.GetAllDailyStats(ctx, now, now)
+	if err != nil {
+		logger.Errorf("查询全量短链今日访问统计失败: %v", err)
+	}
 	var todayAccess int64
-	if err == nil && len(todayStats) > 0 {
-		for _, stat := range todayStats {
-			if count, ok := stat["count"].(int64); ok {
-				todayAccess += count
-			}
+	for _, stat := range todayStats {
+		if count, ok := stat["count"].(int64); ok {
+			todayAccess += count
 		}
 	}
 
 	deviceTypeStats, err := s.accessRepo.GetAllDeviceTypeStats(ctx, startDate, endDate)
-	var deviceStats []dto.DeviceTypeStats
-	if err == nil {
-		for _, stat := range deviceTypeStats {
-			deviceType, _ := stat["device_type"].(string)
-			count, _ := stat["count"].(int64)
-
-			var percentage float64
-			if totalAccess > 0 {
-				percentage = float64(count) / float64(totalAccess) * 100
-			}
-
-			deviceStats = append(deviceStats, dto.DeviceTypeStats{
-				DeviceType: deviceType,
-				Count:      count,
-				Percentage: percentage,
-			})
-		}
+	if err != nil {
+		logger.Errorf("查询全量短链设备类型统计失败: %v", err)
 	}
+	var deviceStats []dto.DeviceTypeStats
+	for _, stat := range deviceTypeStats {
+		deviceType, _ := stat["device_type"].(string)
+		count, _ := stat["count"].(int64)
 
-	dailyStats, err = s.accessRepo.GetAllDailyStats(ctx, startDate, endDate)
-	var dailyStatsResponse []dto.DailyStats
-	if err == nil {
-		for _, stat := range dailyStats {
-			date, _ := stat["date"].(string)
-			count, _ := stat["count"].(int64)
-
-			dailyStatsResponse = append(dailyStatsResponse, dto.DailyStats{
-				Date:  date,
-				Count: count,
-			})
+		var percentage float64
+		if totalAccess > 0 {
+			percentage = float64(count) / float64(totalAccess) * 100
 		}
+
+		deviceStats = append(deviceStats, dto.DeviceTypeStats{
+			DeviceType: deviceType,
+			Count:      count,
+			Percentage: percentage,
+		})
 	}
 
 	shortLinksStats, err := s.accessRepo.GetAllShortLinksBasicStats(ctx, startDate, endDate)
+	if err != nil {
+		logger.Errorf("查询全量短链基础统计失败: %v", err)
+	}
 	var shortLinksStatsResponse []dto.ShortLinkBasicStats
-	if err == nil {
-		for _, stat := range shortLinksStats {
-			id, _ := stat["id"].(uint)
-			shortCode, _ := stat["short_code"].(string)
-			title, _ := stat["title"].(string)
-			accessCount, _ := stat["access_count"].(int64)
+	for _, stat := range shortLinksStats {
+		id, _ := stat["id"].(uint)
+		shortCode, _ := stat["short_code"].(string)
+		title, _ := stat["title"].(string)
+		accessCount, _ := stat["access_count"].(int64)
 
-			shortLinksStatsResponse = append(shortLinksStatsResponse, dto.ShortLinkBasicStats{
-				ID:          id,
-				ShortCode:   shortCode,
-				Title:       title,
-				AccessCount: accessCount,
-			})
-		}
+		shortLinksStatsResponse = append(shortLinksStatsResponse, dto.ShortLinkBasicStats{
+			ID:          id,
+			ShortCode:   shortCode,
+			Title:       title,
+			AccessCount: accessCount,
+		})
 	}
 
 	return &dto.AllShortLinksStatsResponse{

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"strconv"
@@ -37,8 +38,11 @@ func (c *XiaohongshuCardStatsController) GetCardStats(ctx *gin.Context) {
 	}
 
 	if req.StartDate == "" || req.EndDate == "" {
-		req.EndDate = time.Now().Format("2006-01-02")
-		req.StartDate = time.Now().AddDate(0, 0, -7).Format("2006-01-02")
+		// 默认窗口的「今天/7 天前」按业务日（CST）算：SQL 里 created_at::date 走的
+		// 就是 CST，用宿主机时区的 Format 会在 UTC 16:00–23:59 之间整体错一天。
+		now := time.Now()
+		req.EndDate = timeutil.BusinessDate(now)
+		req.StartDate = timeutil.BusinessDate(now.AddDate(0, 0, -7))
 	}
 
 	if req.GroupBy == "" {
@@ -62,8 +66,9 @@ func (c *XiaohongshuCardStatsController) GetOverallStats(ctx *gin.Context) {
 	}
 
 	if req.StartDate == "" || req.EndDate == "" {
-		req.EndDate = time.Now().Format("2006-01-02")
-		req.StartDate = time.Now().AddDate(0, 0, -30).Format("2006-01-02")
+		now := time.Now()
+		req.EndDate = timeutil.BusinessDate(now)
+		req.StartDate = timeutil.BusinessDate(now.AddDate(0, 0, -30))
 	}
 
 	if req.GroupBy == "" {

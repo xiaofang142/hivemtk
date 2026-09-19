@@ -20,17 +20,33 @@ func toPgVector(vec []float32) string {
 	return "[" + strings.Join(parts, ",") + "]"
 }
 
-// TestRagSearcher_RealVectorSearch 真实向量检索测试（自包含）
+// TestRagSearcher_RealVectorSearch 向量检索链路测试（自包含，两种向量来源都跑）
 //
-// 使用测试库 + 真实 TEI bge-m3 embedding（env: EMBEDDING_BASE_URL，本地可用
-// http://127.0.0.1:8208/v1）为知识分片灌入向量，验证 pgvector 余弦相似度召回。
+// 使用测试库为知识分片灌入向量，验证 pgvector 余弦相似度召回。
 // 不依赖外部 DB_* 环境变量，可在标准 go test 中运行（项目规则不允许跳过）。
+//
+// 向量来源随环境切换、断言强度也随之切换（见 embCfg 处的说明）：
+//   - 真 TEI bge-m3（EMBEDDING_ALLOW_FALLBACK 未开）：结构 + 语义断言（相似度下限、关键词命中）
+//   - CI 的 hash 兜底：结构 + 维度/非零/确定性/降序断言，语义断言无对象可量，
+//     但既不降阈值也不跳过用例
 func TestRagSearcher_RealVectorSearch(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.KnowledgeChunk{}, &model.KnowledgeDocument{})
 	testmigrate.RunTestMigrations(t, database)
 	s := NewRagSearcherWithDB(database)
 	if s.db == nil {
 		t.Fatalf("DB 未初始化")
+	}
+
+	// embCfg.AllowFallback 决定向量来源，且是二元的：EmbedWithLane 在
+	// AllowFallback=true 时整批直接返回 hash 伪向量、根本不请求 provider
+	// （embedding.go 的分支），false 时必定请求 provider。
+	// 因此 false 等价于「这批向量真的带语义」，可断言相似度下限与关键词命中；
+	// true（CI 注入 EMBEDDING_ALLOW_FALLBACK=true）时 hash 向量互相关似度≈0，
+	// 语义断言量的是桩而不是代码 —— 换成不依赖语义的结构化断言，不降阈值、不跳过。
+	embCfg := s.embeddingService.DefaultConfig()
+	semanticVectors := !embCfg.AllowFallback
+	if !semanticVectors {
+		t.Logf("⚠️ 当前为 hash 兜底向量模式（EMBEDDING_ALLOW_FALLBACK），语义类断言降级为结构化断言")
 	}
 
 	seed := []struct {
@@ -53,7 +69,7 @@ func TestRagSearcher_RealVectorSearch(t *testing.T) {
 		if err := database.Create(&chunk).Error; err != nil {
 			t.Fatalf("create chunk: %v", err)
 		}
-		vec, err := s.embeddingService.EmbedOne(ctx, s.embeddingService.DefaultConfig(), item.content)
+		vec, err := s.embeddingService.EmbedOne(ctx, embCfg, item.content)
 		if err != nil {
 			t.Fatalf("embed chunk: %v", err)
 		}
@@ -75,7 +91,7 @@ func TestRagSearcher_RealVectorSearch(t *testing.T) {
 	}
 
 	checkVectorSearch := func(t *testing.T, query, keyword string) {
-		qVec, err := s.embeddingService.EmbedOne(ctx, s.embeddingService.DefaultConfig(), query)
+		qVec, err := s.embeddingService.EmbedOne(ctx, embCfg, query)
 		if err != nil {
 			t.Fatalf("embed query: %v", err)
 		}
@@ -90,6 +106,7 @@ func TestRagSearcher_RealVectorSearch(t *testing.T) {
 		}
 		top := rows[0]
 
+		// 以下两条与向量来源无关：校验的是 pgvector 的 <=> 排序与打分本身
 		if top.row.Content != best {
 			t.Errorf("pgvector Top1=%q 与 in-Go 最相似分片=%q 不一致", top.row.Content, best)
 		}
@@ -97,11 +114,34 @@ func TestRagSearcher_RealVectorSearch(t *testing.T) {
 		if d := top.score - want; d > 0.05 || d < -0.05 {
 			t.Errorf("pgvector 余弦相似度=%.4f 与 in-Go=%.4f 偏差过大", top.score, want)
 		}
-		if top.score < 0.2 {
-			t.Errorf("Top1 余弦相似度过低: %.4f (期望 >= 0.2, in-Go=%.4f)", top.score, bestSim)
+		for i := 1; i < len(rows); i++ {
+			if rows[i-1].score < rows[i].score {
+				t.Errorf("vectorSearch 未按相似度降序返回: 第 %d 条 %.4f < 第 %d 条 %.4f",
+					i, rows[i-1].score, i-1, rows[i].score)
+			}
 		}
-		if !contains(top.row.Content, keyword) {
-			t.Errorf("Top1 内容与预期关键词无关: %s", top.row.Content)
+
+		if semanticVectors {
+			if top.score < 0.2 {
+				t.Errorf("Top1 余弦相似度过低: %.4f (期望 >= 0.2, in-Go=%.4f)", top.score, bestSim)
+			}
+			if !contains(top.row.Content, keyword) {
+				t.Errorf("Top1 内容与预期关键词无关: %s", top.row.Content)
+			}
+		} else {
+			if len(qVec) != embCfg.Dimension {
+				t.Errorf("query 向量维度=%d，与配置 %d 不一致（pgvector 列会直接报错）", len(qVec), embCfg.Dimension)
+			}
+			if n := l2Norm(qVec); n == 0 {
+				t.Errorf("query 向量为零向量，相似度无定义")
+			}
+			repeat, err := s.embeddingService.EmbedOne(ctx, embCfg, query)
+			if err != nil {
+				t.Fatalf("embed query(重复): %v", err)
+			}
+			if d := cosineSim(qVec, repeat); d < 0.999 {
+				t.Errorf("同一文本两次向量化不一致: cosine=%.6f", d)
+			}
 		}
 		t.Logf("✅ query=%q Top1=%q cosine=%.4f (in-Go=%.4f)", query, top.row.Content, top.score, want)
 	}
@@ -166,6 +206,15 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// l2Norm 零向量的余弦相似度无定义（cosineSim 会直接返回 0），故单独校验范数。
+func l2Norm(vec []float32) float64 {
+	var sum float64
+	for _, v := range vec {
+		sum += float64(v) * float64(v)
+	}
+	return math.Sqrt(sum)
 }
 
 func cosineSim(a, b []float32) float64 {

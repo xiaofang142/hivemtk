@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"time"
 
 	"gorm.io/gorm"
@@ -76,11 +77,11 @@ func (r *shortLinkAccessRepository) GetStatsByShortLinkID(ctx context.Context, s
 	query := r.db.Model(&model.ShortLinkAccess{}).Where("short_link_id = ?", shortLinkID)
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(access_time) >= ?", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) >= ?", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(access_time) <= ?", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) <= ?", timeutil.BusinessDate(endDate))
 	}
 
 	err := query.Count(&stats.TotalCount).Error
@@ -88,12 +89,11 @@ func (r *shortLinkAccessRepository) GetStatsByShortLinkID(ctx context.Context, s
 		return nil, err
 	}
 
-	today := time.Now().Format("2006-01-02")
-	todayStart, _ := time.Parse("2006-01-02", today)
+	today := timeutil.BusinessDate(time.Now())
 
 	var todayCount int64
 	err = r.db.Model(&model.ShortLinkAccess{}).
-		Where("short_link_id = ? AND DATE(access_time) >= ?", shortLinkID, todayStart.Format("2006-01-02")).
+		Where("short_link_id = ? AND DATE(access_time) = ?", shortLinkID, today).
 		Count(&todayCount).Error
 	if err != nil {
 		return nil, err
@@ -110,11 +110,11 @@ func (r *shortLinkAccessRepository) GetDailyStatsByShortLinkID(ctx context.Conte
 		Where("short_link_id = ?", shortLinkID)
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(access_time) >= ?", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) >= ?", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(access_time) <= ?", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) <= ?", timeutil.BusinessDate(endDate))
 	}
 
 	var results []map[string]any
@@ -128,11 +128,11 @@ func (r *shortLinkAccessRepository) GetDeviceTypeStatsByShortLinkID(ctx context.
 		Where("short_link_id = ?", shortLinkID)
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(access_time) >= ?", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) >= ?", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(access_time) <= ?", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) <= ?", timeutil.BusinessDate(endDate))
 	}
 
 	var results []map[string]any
@@ -145,11 +145,11 @@ func (r *shortLinkAccessRepository) GetAllDailyStats(ctx context.Context, startD
 		Select("DATE(access_time) as date, COUNT(*) as count")
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(access_time) >= ?", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) >= ?", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(access_time) <= ?", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) <= ?", timeutil.BusinessDate(endDate))
 	}
 
 	var results []map[string]any
@@ -162,11 +162,11 @@ func (r *shortLinkAccessRepository) GetAllDeviceTypeStats(ctx context.Context, s
 		Select("device_type, COUNT(*) as count")
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(access_time) >= ?", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) >= ?", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(access_time) <= ?", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(access_time) <= ?", timeutil.BusinessDate(endDate))
 	}
 
 	var results []map[string]any
@@ -180,11 +180,11 @@ func (r *shortLinkAccessRepository) GetAllShortLinksBasicStats(ctx context.Conte
 		Joins("LEFT JOIN short_link_accesses sla ON sl.id = sla.short_link_id")
 
 	if !startDate.IsZero() {
-		query = query.Where("DATE(sla.access_time) >= ? OR sla.access_time IS NULL", startDate.Format("2006-01-02"))
+		query = query.Where("DATE(sla.access_time) >= ? OR sla.access_time IS NULL", timeutil.BusinessDate(startDate))
 	}
 
 	if !endDate.IsZero() {
-		query = query.Where("DATE(sla.access_time) <= ? OR sla.access_time IS NULL", endDate.Format("2006-01-02"))
+		query = query.Where("DATE(sla.access_time) <= ? OR sla.access_time IS NULL", timeutil.BusinessDate(endDate))
 	}
 
 	var results []map[string]any

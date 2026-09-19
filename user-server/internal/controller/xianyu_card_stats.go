@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"strconv"
@@ -29,8 +30,10 @@ func NewXianyuCardStatsController(service service.XianyuCardStatsService) *Xiany
 // GetCardStats 获取卡片统计数据
 func (c *XianyuCardStatsController) GetCardStats(ctx *gin.Context) {
 	cardIDStr := ctx.Param("id")
-	startDate := ctx.DefaultQuery("start_date", time.Now().AddDate(0, 0, -7).Format("2006-01-02"))
-	endDate := ctx.DefaultQuery("end_date", time.Now().Format("2006-01-02"))
+	// 默认窗口按业务日（CST）给：日期串最终会和 CST 时区写入的 created_at 比较。
+	queryNow := time.Now()
+	startDate := ctx.DefaultQuery("start_date", timeutil.BusinessDate(queryNow.AddDate(0, 0, -7)))
+	endDate := ctx.DefaultQuery("end_date", timeutil.BusinessDate(queryNow))
 	_ = ctx.DefaultQuery("group_by", "day")
 
 	cardID, err := strconv.ParseUint(cardIDStr, 10, 64)
@@ -148,8 +151,9 @@ func (c *XianyuCardStatsController) GetCardStats(ctx *gin.Context) {
 
 // GetOverallStats 获取整体统计数据
 func (c *XianyuCardStatsController) GetOverallStats(ctx *gin.Context) {
-	startDate := ctx.DefaultQuery("start_date", time.Now().AddDate(0, 0, -7).Format("2006-01-02"))
-	endDate := ctx.DefaultQuery("end_date", time.Now().Format("2006-01-02"))
+	queryNow := time.Now()
+	startDate := ctx.DefaultQuery("start_date", timeutil.BusinessDate(queryNow.AddDate(0, 0, -7)))
+	endDate := ctx.DefaultQuery("end_date", timeutil.BusinessDate(queryNow))
 	_ = ctx.DefaultQuery("group_by", "day")
 
 	raw2, err := c.service.GetOverallStatsRaw(ctx, startDate, endDate)

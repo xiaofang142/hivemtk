@@ -57,31 +57,30 @@ func (r *douyinCardStatsRepository) CountCardViews(ctx context.Context, cardID u
 	return views, err
 }
 
+// applyDouyinStatsGroupBy 与 applyXiaohongshuStatsGroupBy 同源同改：
+// MySQL 的 YEARWEEK/DATE_FORMAT 换成本仓实际使用的 PG 函数，
+// 且分桶表达式必须在 SELECT 与 GROUP BY 里逐字一致（否则 42803）。
 func applyDouyinStatsGroupBy(query *gorm.DB, groupBy string) *gorm.DB {
+	bucket := "DATE(created_at)"
 	switch groupBy {
-	case "day":
-		return query.Select("DATE(created_at) as date, action, COUNT(*) as count").
-			Group("DATE(created_at), action").
-			Order("date, action")
 	case "week":
-		return query.Select("YEARWEEK(created_at) as date, action, COUNT(*) as count").
-			Group("YEARWEEK(created_at), action").
-			Order("date, action")
+		bucket = "TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD')"
 	case "month":
-		return query.Select("DATE_FORMAT(created_at, '%Y-%m') as date, action, COUNT(*) as count").
-			Group("DATE_FORMAT(created_at, '%Y-%m'), action").
-			Order("date, action")
-	default:
-		return query.Select("DATE(created_at) as date, action, COUNT(*) as count").
-			Group("DATE(created_at), action").
-			Order("date, action")
+		bucket = "TO_CHAR(created_at, 'YYYY-MM')"
 	}
+	return query.Select(bucket + " as date, action, COUNT(*) as count").
+		Group(bucket + ", action").
+		Order("date, action")
 }
 
 func (r *douyinCardStatsRepository) GetCardDailyStats(ctx context.Context, cardID uint, startDate, endDate, groupBy string) ([]DouyinCardStatsTempStat, error) {
 	query := r.db.WithContext(ctx).Model(&model.DouyinCardActivity{}).Where("card_id = ?", cardID)
-	if startDate != "" && endDate != "" {
-		query = query.Where("created_at >= ? AND created_at <= ?", startDate, endDate)
+	// 日期边界口径见 xiaohongshu_card_stats.go 的同名说明（半开区间，结束日全天计入）。
+	if startDate != "" {
+		query = query.Where("created_at >= ?::date", startDate)
+	}
+	if endDate != "" {
+		query = query.Where("created_at < (?::date + interval '1 day')", endDate)
 	}
 	query = applyDouyinStatsGroupBy(query, groupBy)
 	var stats []DouyinCardStatsTempStat
@@ -124,11 +123,12 @@ func (r *douyinCardStatsRepository) GetTopCards(ctx context.Context, limit int) 
 
 func (r *douyinCardStatsRepository) GetOverallDailyStats(ctx context.Context, startDate, endDate, groupBy string) ([]DouyinCardStatsTempStat, error) {
 	query := r.db.WithContext(ctx).Model(&model.DouyinCardActivity{})
+	// 半开区间：`<= 'YYYY-MM-DD'` 只到当天 00:00，会把结束日整天丢掉（详见 xiaohongshu_card_stats.go）。
 	if startDate != "" {
-		query = query.Where("created_at >= ?", startDate)
+		query = query.Where("created_at >= ?::date", startDate)
 	}
 	if endDate != "" {
-		query = query.Where("created_at <= ?", endDate)
+		query = query.Where("created_at < (?::date + interval '1 day')", endDate)
 	}
 	query = applyDouyinStatsGroupBy(query, groupBy)
 	var stats []DouyinCardStatsTempStat
