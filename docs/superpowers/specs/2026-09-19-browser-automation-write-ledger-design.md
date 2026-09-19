@@ -265,8 +265,7 @@ session 409 在 15s 被判 `failed`、文案「等待人工确认超时（任务
 `TestPumpLoopRepliesOversizedDropWithReqID` / `TestPumpLoopLogsOutboundRejectToStderr` /
 `TestStdinEOFExitsProcess` / `TestDialAddrStripsTokenQuery` / `TestTokenFingerprintAndScrub` /
 `TestReconnectKeepsFramesAndSingleReader` / `TestHostRegistryReadLimitHasHeadroomOverHostCap` /
-`TestSourceWiringIsLive`）+ `hand.go` 2 条帧契约用例（`resolve_ref` / `click` 必须带 `tab_id`）
-+ 扩展 vitest 9 个文件 96 条全绿（其中 `batch9-host-hygiene` 16 条、`batch9a-open-tab` 12 条）。
+`TestSourceWiringIsLive`）+ `hand.go` 2 条帧契约用例（`resolve_ref` / `click` 必须带 `tab_id`）+ 扩展 vitest 9 个文件 96 条全绿（其中 `batch9-host-hygiene` 16 条、`batch9a-open-tab` 12 条）。
 
 **变异电池 44/44 全被抓红**：批9 主电池 29 条（G1–G10 覆盖入帧上限判定、req_id 归因、抽干正文、
 读泵位置、token 三处脱敏、服务端 readlimit 配对、tab_id 下发；J1–J11 覆盖 `click_unacked` 守卫与
@@ -345,8 +344,7 @@ A0 未发布点执行 → 真实 409 且 `body.code=BROWSER_STATE_CONFLICT_8003`
 A 执行成功 → 地址栏跳到 `#/browser-automation/sessions/518` 且该页标题「执行监控 #518」（F-N3）、
 会话真机跑到 `completed`、成功路径零弹窗；B Host 被占时 UI 点执行 → 只弹**一条**
 `el-message--warning`「已有浏览器任务执行中（同一 Host 串行）」、body `BROWSER_TASK_BUSY_8002`、
-不误开 Host 弹窗、不再叠红色报错；C 真 `kill -9` nm-host 后点执行 → 真实 409 + `BROWSER_HOST_OFFLINE_8001`
-+ 只开 Host 引导弹窗一个 + 不叠红色报错 + 之后夹具自愈（扩展把 Host 拉回，`servable=true`）。
+不误开 Host 弹窗、不再叠红色报错；C 真 `kill -9` nm-host 后点执行 → 真实 409 + `BROWSER_HOST_OFFLINE_8001` + 只开 Host 引导弹窗一个 + 不叠红色报错 + 之后夹具自愈（扩展把 Host 拉回，`servable=true`）。
 
 **反向证据是编出「摘掉修复」的二进制跑出来的**（`/tmp/b10_rev_gate.sh`：克隆里打变异 → `go build` →
 换件重启 8299 → 跑同一条腿 → 还原 → `cmp` 零漂移）：R1 摘掉先验门 → C 腿 2 项红，实测形态正是本批
