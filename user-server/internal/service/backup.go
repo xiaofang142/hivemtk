@@ -78,9 +78,13 @@ func (s *BackupService) CreateBackup(ctx context.Context, createdBy uint, req *C
 		return nil, err
 	}
 
+	// 后台执行协程拿独立快照：executeBackup 会持续改写状态/路径字段，与调用方共享
+	// 同一 *model.Backup 即为数据竞争（go test -race 实证），调用方还可能读到未落库
+	// 的中间态。返回原始指针，语义恒为"刚入库的那一行（pending）"。
+	job := *backup
 	go func(b *model.Backup) {
 		s.executeBackup(context.WithoutCancel(ctx), b)
-	}(backup)
+	}(&job)
 
 	return backup, nil
 }
