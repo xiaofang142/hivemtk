@@ -30,10 +30,19 @@ const (
 )
 
 // 等待事件类型（写入 sop_timers.wait_event 与 sop_executions.wait_event）
+//
+// 三档的共同点：**没有任何一档在进程内等**。等的是 `sop_timers` 里那一行 pending，
+// 推进的是 outbox 轮询器（T-P3-02 起外加"审批落定即提前点火"这一路推送）。
 const (
 	WaitEventTimer         = "timer"
 	WaitEventCustomerReply = "customer_reply"
 	WaitEventExternal      = "external"
+
+	// WaitEventApproval 等一次人工/策略裁决（T-P3-02 / N-4 挂起恢复）。
+	// 与 timer 档的差别只有一个：等待对象是一条 approval_requests 记录，
+	// 所以到期时刻**取自那条记录自己的 expires_at**（同一事实源，见 WaitExecutor），
+	// 而不是节点配置里再写一个秒数 —— 两处各写一份 TTL，漂移时先骗到的是流程。
+	WaitEventApproval = "approval"
 )
 
 // NodeExecutor 节点执行器接口（Strategy 模式）
