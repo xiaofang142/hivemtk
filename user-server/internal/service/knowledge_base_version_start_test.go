@@ -7,6 +7,7 @@
 //   - 此时**绕开 service** 只走仓储 `Select("*").Create`（struct.Version 仍是零值），
 //     INSERT 既不报错、库里也读到 1；
 //   - 该列是 NOT NULL，默认值又已摘除 ⇒ 这个 1 只可能来自客户端。
+//
 // ⇒ GORM 按 `gorm:"default:1"` 标签在写入侧自己填了默认值，与 DB 默认值无关。
 //
 // 所以要锁的是"新 KB 从 1 号起"这个**行为**（两路都验），而不是假装 service 那行是唯一来源。
