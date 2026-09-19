@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/platform"
@@ -138,6 +137,12 @@ func (s *TaskService) Publish(ctx context.Context, id, userID uint) error {
 	}
 	if !t.BrainMode && len(t.Steps) == 0 {
 		return errors.New("显式模式至少编排一个步骤")
+	}
+	// 批8：确认等待预算夹紧 1..900s。dto binding 只管 HTTP 入口，这一列还有 cron/重试/
+	// 直接落库三条来路；Publish 是进入可执行态的唯一门，值在这里失守就等于把
+	// 「不可逆提交前挂起多久」交给一个没人校验的整数（0 会退化成默认 600s，负数直接不等待）。
+	if t.ConfirmWaitSec < 0 || t.ConfirmWaitSec > confirmWaitMaxSec {
+		return fmt.Errorf("confirm_wait_sec 必须在 1..%d 秒之间（0=默认 600），当前: %d", confirmWaitMaxSec, t.ConfirmWaitSec)
 	}
 	return s.taskRepo.UpdateStatus(ctx, t.ID, "ready", "")
 }
@@ -339,9 +344,10 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 	}
 
 	// 异步执行：SafeGoDetached 剥除请求 ctx 的取消链（HTTP 响应返回即 cancel，
-	// 普通 SafeGo 会让 Executor 在第一步就 ctx.Err() != nil 退出）；超时 = task.TimeoutSec
-	utils.SafeGoDetached(ctx, "browser_automation.run", time.Duration(t.TimeoutSec)*time.Second+taskWatchdogGrace, func(runCtx context.Context) {
-		execCtx, cancel := context.WithTimeout(runCtx, time.Duration(t.TimeoutSec)*time.Second)
+	// 普通 SafeGo 会让 Executor 在第一步就 ctx.Err() != nil 退出）；超时预算见 taskExecBudget
+	// （批8：TimeoutSec 只管自动化，D7 确认等待另计，外层看门狗同步放宽，否则「确认中」必被掐死）
+	utils.SafeGoDetached(ctx, "browser_automation.run", taskExecBudget(t)+taskWatchdogGrace, func(runCtx context.Context) {
+		execCtx, cancel := context.WithTimeout(runCtx, taskExecBudget(t))
 		defer cancel()
 		s.executor.ExecuteSession(execCtx, t, session, steps)
 	})

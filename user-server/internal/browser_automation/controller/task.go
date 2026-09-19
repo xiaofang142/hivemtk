@@ -82,6 +82,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 	t.RetryDelaySec = req.RetryDelaySec
 	t.MaxRetryTimes = req.MaxRetryTimes
 	t.RequireConfirm = req.RequireConfirm
+	t.ConfirmWaitSec = req.ConfirmWaitSec // 批8：0=沿用默认 600s（列 default 与 service 兜底同口径）
 	if req.Steps != nil {
 		raw, err := json.Marshal(req.Steps)
 		if err != nil {
@@ -180,6 +181,9 @@ func (c *TaskController) Update(ctx *gin.Context) {
 		}
 		if req.RequireConfirm != nil { // D7
 			t.RequireConfirm = *req.RequireConfirm
+		}
+		if req.ConfirmWaitSec != nil { // 批8：指针语义，nil=不改确认等待预算
+			t.ConfirmWaitSec = *req.ConfirmWaitSec
 		}
 		return nil
 	})

@@ -123,12 +123,14 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	engine.GET("/api/browser/host-ws", bactrl.NewHostWSHandler(registry, kvRepo).Handle)
 
 	// 进程启动后台任务：恢复已启用触发器 + 保证存在 Host token +
-	// D4b 重试到期扫描（重启不丢挂起重试）+ G19 审计数据保留裁剪
+	// D4b 重试到期扫描（重启不丢挂起重试）+ G19 审计数据保留裁剪 +
+	// 批8 任务快照对账（执行期被重启/终态写库失败留下的 running 僵尸任务，启动即收敛）
 	ctx := context.Background()
 	utils.SafeGo(ctx, "browser_automation.bootstrap", func(ctx context.Context) {
 		basvc.EnsureHostTokenExists(ctx, kvRepo)
 		cronSvc.RestoreAll(ctx)
 		feedbackSvc.StartRetryScanner(ctx)
 		basvc.StartAuditRetention(ctx, cmdLogRepo, planRepo)
+		basvc.StartStaleTaskReconcile(ctx, taskRepo, sessionRepo)
 	})
 }

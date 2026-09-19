@@ -32,6 +32,8 @@ type BrowserSessionRepository interface {
 	CountRunningByUser(ctx context.Context, userID uint) (int64, error)
 	// CountRunningByTask 同任务运行中 session 数（RunTask 幂等防重）
 	CountRunningByTask(ctx context.Context, userID, taskID uint) (int64, error)
+	// FailStaleUnfinished 批8 对账：某任务下在途且老于 before 的会话收口 failed（僵尸会话会永久占住并发闸）
+	FailStaleUnfinished(ctx context.Context, taskID uint, before time.Time, reason string) (int64, error)
 }
 
 // ExtractedJSON extracted_data 列的 JSON 载荷（避免 repo 直接依赖 datatypes 的写法扩散）
@@ -216,4 +218,19 @@ func (r *browserSessionRepo) CountRunningByTask(ctx context.Context, userID, tas
 	err := r.db.WithContext(ctx).Model(&model.BrowserSession{}).
 		Where("user_id = ? AND task_id = ? AND status IN ?", userID, taskID, []string{"created", "active"}).Count(&n).Error
 	return n, err
+}
+
+// FailStaleUnfinished 批8 对账器专用：把某任务下 created/active 且创建于 before 之前的会话收口为 failed。
+// before 由调用方给（不是无条件按 task_id 收口）：对账判据以「任务快照超出自身执行预算」为门槛，
+// 会话侧再设一道时间下限，避免把刚创建、正要被新一轮执行使用的行判死。
+// 条件更新（status IN 在途态）保证与执行协程同刻收口时后到者自动让位，real 终态不被覆盖。
+func (r *browserSessionRepo) FailStaleUnfinished(ctx context.Context, taskID uint, before time.Time, reason string) (int64, error) {
+	now := time.Now()
+	res := r.db.WithContext(ctx).Model(&model.BrowserSession{}).
+		Where("task_id = ? AND status IN ? AND created_at <= ?", taskID, []string{"created", "active"}, before).
+		Updates(map[string]any{"status": "failed", "error_msg": reason, "completed_at": &now})
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }

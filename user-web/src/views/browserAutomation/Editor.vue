@@ -76,6 +76,9 @@
               </el-select>
               <el-input v-if="step.action === 'query' && step.query_kind === 'attr'" v-model="step.attribute" placeholder="属性名（href/src/value）" style="width: 150px" />
               <el-checkbox v-model="step.continue_on_error" label="失败继续" />
+              <el-checkbox v-model="step.is_write" label="写操作">
+                <span class="step-write-hint">不可逆（服务端强制禁重试 + 记台账）</span>
+              </el-checkbox>
               <el-input-number v-model="step.retry_count" :min="0" :max="10" size="small" style="width: 90px" />
               <el-button size="small" type="danger" icon="Delete" circle @click="removeStep(i)" />
             </div>
@@ -104,11 +107,18 @@
         </template>
       </el-form-item>
 
-      <el-form-item v-if="hasWriteStep || form.brain_mode" label="写操作人工确认">
+      <el-form-item label="写操作人工确认">
         <el-switch v-model="form.require_confirm" />
-        <span class="form-hint">
-          开启后 post_comment 在提交前挂起，需在监控页点「确认放行」才真正发出（超时/中断则中止且不提交）
-        </span>
+        <template v-if="form.require_confirm">
+          <span style="margin: 0 8px">最长等待</span>
+          <el-input-number v-model="form.confirm_wait_sec" :min="1" :max="900" :step="30" />
+          <span class="form-hint">秒（与上方「超时」是两条独立预算：那条管自动化跑多久，这条管等人多久）</span>
+        </template>
+        <div class="form-hint" style="margin-left: 0; width: 100%">
+          开启后不可逆提交点前挂起，需在监控页点「确认放行」才真正发出（超时/中断则中止且不提交）。
+          受闸的写步：post_comment、输入后回车发评论、点击发送按钮，以及勾选「写操作」的步骤——
+          服务端按平台定位表推导，界面不提示也不改变判定。
+        </div>
       </el-form-item>
 
       <el-form-item v-if="form.task_type === 'workflow'" label="依赖前置任务">
@@ -162,6 +172,7 @@ const emptyStep = () => ({
   direction: 'down', amount: 400, selector: '', timeout_ms: 10000,
   assert_kind: 'contains_text', query_kind: 'text', attribute: '',
   anchor: '', button_text: '',
+  is_write: false,
   continue_on_error: false, retry_count: 0, retry_backoff_ms: 1000,
 })
 
@@ -170,12 +181,9 @@ const form = ref({
   brain_mode: false, brain_goal: '', steps: [],
   loop_count: 1, delay_ms: 1000, timeout_sec: 120,
   retry_on_fail: false, retry_delay_sec: 300, max_retry_times: 3,
-  require_confirm: false,
+  require_confirm: false, confirm_wait_sec: 600,
   depends_on_task_id: null, depends_on_mode: 'all_done',
 })
-
-// D7：确认开关只在存在不可逆写步骤（或 Brain 模式可能自行发帖）时露出
-const hasWriteStep = computed(() => form.value.steps.some((s) => s.action === 'post_comment'))
 
 const addStep = () => form.value.steps.push(emptyStep())
 const removeStep = (i) => form.value.steps.splice(i, 1)
@@ -260,6 +268,7 @@ onMounted(async () => {
 .step-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .step-index { width: 20px; text-align: right; color: #999; }
 .platform-hint { margin-left: 12px; color: #e6a23c; font-size: 12px; }
+.step-write-hint { color: #e6a23c; font-size: 12px; }
 .form-hint { margin-left: 12px; color: #909399; font-size: 12px; }
 .preset-hint { margin-left: 12px; color: #999; font-size: 12px; }
 </style>

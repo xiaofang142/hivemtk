@@ -199,4 +199,5 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewBrowserAuditRetryTzMigration(db))
 	register(NewOperationLogEncryptFieldsMigration(db))
 	register(NewBrowserRequireConfirmMigration(db))
+	register(NewBrowserWriteLedgerConfirmBudgetMigration(db))
 }

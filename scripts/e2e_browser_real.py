@@ -432,14 +432,17 @@ def cdp_close_fixture_tabs(rep, name, cdp_port, fixture_url):
                            "（%ds 内未自行关闭，已兜底回收）" % F10_DRAIN_BUDGET_SEC if left else ""))
 
 
-def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=False, inbox=False):
+def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=False, inbox=False,
+                       confirm_wait_sec=0):
     """夹具写腿：url 与 open_tab 都指向本地夹具页，platform 标签仍用 xiaohongshu（选适配器）。
 
-    timeout_sec 由场景决定：放行/中止腿要留足预算，超时腿必须显著小于轮询预算才能稳定撞闸。
     delay_ms=0 关掉步间 ±30% 随机抖动（确定性优先，拟人时序仍由扩展内部 TIMING 负责）。
     swallow=True 走「平台静默吞」变体：点击落地但页面刻意不提交，专测 finalize 的假绿防线。
     inbox=True 把输入卡片搬进评论区容器内（小红书真实形态）；与 swallow 合用即 Leg X——
     未提交的草稿就在「已发布评论」该出现的地方，verify 若还认它就是容器主分支假绿。
+    预算（批8 起两条分开，各自能单独撞闸才有验证价值）：
+      timeout_sec      执行预算；confirm_wait_sec 人工确认预算（0=服务端默认 600s）。
+      超时腿把确认预算调到 6s、执行预算留 90s → 掐断这次等待的只能是那条独立计时器。
     """
     qs = ("swallow=1" if swallow else "") + ("&" if swallow and inbox else "") + ("inbox=1" if inbox else "")
     page = fixture.url + ("?" + qs if qs else "")
@@ -448,6 +451,7 @@ def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=Fal
         "task_type": "one_shot", "platform": "xiaohongshu",
         "url": page, "loop_count": 1,
         "delay_ms": 0, "timeout_sec": timeout_sec, "require_confirm": require_confirm,
+        "confirm_wait_sec": confirm_wait_sec,
         "steps": [
             {"action": "open_tab", "target": page},
             {"action": "wait_for_selector", "selector": ".comments-container", "timeout_ms": 2000},
@@ -457,20 +461,24 @@ def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=Fal
     }, "夹具写腿链路验证 %s" % nonce
 
 
-def task_derived_write_fixture(fixture, nonce, timeout_sec, noinput=False):
+def task_derived_write_fixture(fixture, nonce, timeout_sec, noinput=False, require_confirm=False,
+                               confirm_wait_sec=0):
     """批7 派生写腿：编排里**没有** post_comment，「不可逆写」由 type 命中评论框 + 回车表达。
 
     这正是批7 之前的盲区：旧的写原语判定只认 action 名，这类「隐形提交步」既有重试资格、
     又不进台账、双发闸对它视而不见。夹具页刻意不绑 Enter 处理器 → 键入回车永远不会真的提交，
     于是带外 ledger 恒 0，本腿判据全落在「服务端怎么给这一步记账」上（is_write / submit_state）。
     noinput=True 切到 ?noinput=1 形态（评论框被摘除）→ 定位必然失败 = 动作从未发生。
+    require_confirm=True 是批8 的追加面：闸门此前只长在 post_comment 原语里，派生写步开着
+    人工确认也照样无条件发出——这条腿证的就是「问都不问」有没有被修掉。
     """
     page = fixture.url + ("?noinput=1" if noinput else "")
     return {
         "name": "E2E-夹具派生写步-%s" % nonce,
         "task_type": "one_shot", "platform": "xiaohongshu",
         "url": page, "loop_count": 1,
-        "delay_ms": 0, "timeout_sec": timeout_sec, "require_confirm": False,
+        "delay_ms": 0, "timeout_sec": timeout_sec, "require_confirm": require_confirm,
+        "confirm_wait_sec": confirm_wait_sec,
         "steps": [
             {"action": "open_tab", "target": page},
             {"action": "wait_for_selector", "selector": ".comments-container", "timeout_ms": 2000},
@@ -558,7 +566,15 @@ def run_and_watch(api, rep, task_payload, name, allow_write, created_ids, step_t
     audit = fetch_audit(api, session_id)
     logs = ((audit or {}).get("command_log") or [])
     detail = "session=%s status=%s want=%s err=%s" % (session_id, status, want_status, err[:160])
-    if gate:
+    if gate.get("expect_hanging"):
+        # 这条腿的期望是「到期仍非终态」：执行预算（15s）远短于确认预算（900s），
+        # 会话还活着才证明 D7 挂起没被执行预算掐断；进了终态反而是解耦失效。
+        alive = status in ("created", "active")
+        verdict = "PASS" if alive else "FAIL"
+        detail = "session=%s status=%s 期望=非终态（%ds 执行预算不得掐断 %ds 确认等待）err=%s" % (
+            session_id, status, task_payload.get("timeout_sec"),
+            task_payload.get("confirm_wait_sec"), err[:120])
+    elif gate:
         verdict = "PASS" if status == want_status else "FAIL"
     else:
         verdict = "PASS" if status == "completed" else ("WARN" if status == "stopped" else "FAIL")
@@ -679,6 +695,100 @@ def run_derived_write_leg(api, rep, task_payload, name, nonce, fixture, created_
         rep.add("PASS" if not left else "FAIL", name + " :: 二次运行页内零触达",
                 "input 帧=%d 草稿=%s 期望=0（闸门排在任何注入之前）" % (
                     len(left), (left[0]["text"] if left else "")[:24]))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+def run_derived_write_confirm_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """批8 设备级锁：派生写步（type+回车）也必须停在 D7 闸门上，未放行则**一帧都不下发**。
+
+    批7 把这类隐形写认成写步之后，闸门却仍只长在 post_comment 原语内部——真机上表现为
+    「用户开了人工确认，评论照样发出去」。夹具页不绑 Enter → 页面侧永不提交，
+    所以这里的硬证据是审计帧：闸门若排在下发之后，type 的 command 帧就会存在（页内触达>0）。
+    """
+    gate = {"action": "stop", "expect_status": "stopped", "expect_err": "评论未提交",
+            "ledger": 0, "nonce": nonce, "cleanup_fixture_tabs": True}
+    sid, sess = run_and_watch(api, rep, task_payload, name, False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    audit = fetch_audit(api, sid)
+    row = _b7_step(audit, 2)
+    rep.add("PASS" if row.get("is_write") else "FAIL", name + " :: 受闸的是写步",
+            "type+回车 is_write=%s（非写步不该挂闸门）" % row.get("is_write"))
+    rep.add("PASS" if row.get("status") == "failed" and "人工确认" in str(row.get("error_msg")) else "FAIL",
+            name + " :: 闸门归因落到步上",
+            "step.status=%s err=%s（文案要写明是确认闸门，不能只留一个「用户中止」）" % (
+                row.get("status"), str(row.get("error_msg"))[:110]))
+    logs = (audit or {}).get("command_log") or []
+    n_cmd = len([l for l in logs if l.get("action") == "type" and l.get("direction") == "command"])
+    rep.add("PASS" if n_cmd == 0 else "FAIL", name + " :: 未放行零下发",
+            "type 命令帧=%d 期望=0（闸门排在命令记账与下发之前）" % n_cmd)
+    touched = fixture.touched()
+    rep.add("PASS" if not touched else "FAIL", name + " :: 未放行页内零触达",
+            "input 帧=%d 草稿=%s 期望=0（真平台上这就是已经发出去的内容）" % (
+                len(touched), (touched[0]["text"] if touched else "")[:24]))
+    rep.add("PASS" if not fixture.submissions(nonce) else "FAIL", name + " :: 未放行零提交",
+            "ledger=%d 期望=0" % len(fixture.submissions(nonce)))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+def run_derived_write_release_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """上一条的正控：放行之后这一步必须真的做掉。
+
+    只测「挂起→中止」会把闸门实现成「一律不发」也能全绿；这里要求放行后键入落页、
+    台账照记 sent、会话跑到 completed——闸门只挡「没批准的那一次」，不是把写步吞掉。
+    """
+    gate = {"action": "confirm", "expect_status": "completed", "ledger": 0, "nonce": nonce,
+            "cleanup_fixture_tabs": True}
+    sid, sess = run_and_watch(api, rep, task_payload, name, False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    row = _b7_step(fetch_audit(api, sid), 2)
+    rep.add("PASS" if row.get("status") == "success" else "FAIL", name + " :: 放行后步成功",
+            "step.status=%s err=%s" % (row.get("status"), str(row.get("error_msg"))[:110]))
+    rep.add("PASS" if row.get("submit_state") == "sent" else "FAIL", name + " :: 放行后端照记",
+            "submit_state=%s want sent" % row.get("submit_state"))
+    touched = fixture.touched()
+    rep.add("PASS" if any(nonce in (t.get("text") or "") for t in touched) else "FAIL",
+            name + " :: 放行后键入落页",
+            "input 帧=%d 且含本轮 nonce（=0 说明闸门把步骤一起吞了）" % len(touched))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+def run_budget_decouple_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """批8 解耦的设备级正向锁：短执行预算不得掐断长确认等待（超时归因的那一半）。
+
+    与「确认预算耗尽」腿互为正反控：那条把确认预算调到 6s（先到期），这条把执行预算调到
+    15s、确认预算留 900s（后到期）。解耦前 execCtx 就是唯一的钟，15s 一到会话必被判
+    「任务执行预算用尽」——所以这条腿在旧代码上是红的，在新代码上要求 40s 后仍未进终态、
+    confirm_pending 仍为真、带外 ledger 仍为 0。收口由本腿自己中止（否则挂住的会话会占住
+    并发闸串扰后续腿），中止后必须落 stopped 且 tab 回收干净。
+    """
+    gate = {"action": "none", "expect_hanging": True, "ledger": 0, "evidence": False,
+            "nonce": nonce, "cleanup_fixture_tabs": False}
+    sid, _sess = run_and_watch(api, rep, task_payload, name, False, created_ids,
+                               step_timeout=40, gate=gate, fixture=fixture, cdp_port=cdp_port)
+    if sid is None:
+        return
+    ok, d = api.ok("GET", "/api/browser-automation/sessions/%s" % sid)
+    cur = (d.get("data") or {}) if ok else {}
+    rep.add("PASS" if cur.get("confirm_pending") else "FAIL", name + " :: 仍在闸门上等",
+            "confirm_pending=%s（40s 后还挂在确认点，才说明执行预算没越权掐它）"
+            % cur.get("confirm_pending"))
+    subs = fixture.submissions(nonce)
+    rep.add("PASS" if not subs else "FAIL", name + " :: 挂起全程零提交",
+            "ledger=%d 期望=0（等待期间被放行就是闸门失效）" % len(subs))
+    api.ok("POST", "/api/browser-automation/sessions/%s/stop" % sid,
+           {"reason": "e2e：解耦腿取证完毕，主动收口放并发闸"})
+    stopped = None
+    for _ in range(15):
+        ok2, d2 = api.ok("GET", "/api/browser-automation/sessions/%s" % sid)
+        stopped = (d2.get("data") or {}) if ok2 else {}
+        if stopped.get("status") in TERMINAL:
+            break
+        time.sleep(2)
+    rep.add("PASS" if stopped.get("status") == "stopped" else "FAIL", name + " :: 中止后收口",
+            "status=%s err=%s（挂起态必须可被 stop 立刻唤醒，否则并发闸被永久占住）" % (
+                stopped.get("status"), str(stopped.get("error_msg"))[:80]))
+    rep.add("PASS" if not fixture.submissions(nonce) else "FAIL", name + " :: 中止后仍零提交",
+            "ledger=%d 期望=0" % len(fixture.submissions(nonce)))
     cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
 
 
@@ -831,6 +941,13 @@ def poll_session(api, rep, session_id, timeout, task_payload, allow_write, gate=
         if last.get("status") in TERMINAL:
             return last
         time.sleep(2)
+    # 轮询到期而会话仍未进终态：不中止的话，它会一路占住「同一 Host 串行 / 用户并发」两道闸，
+    # 后面每条腿都变成「已有浏览器任务执行中」——一条腿的判错会串扰整轮，证据就全废了。
+    # expect_hanging 的腿例外：它就是要看「到期还活着」，收口由该腿自己做完再判。
+    if last is not None and last.get("status") not in TERMINAL and not gate.get("expect_hanging"):
+        api.ok("POST", "/api/browser-automation/sessions/%s/stop" % session_id,
+               {"reason": "e2e：轮询到期仍未终态，兜底中止以防串扰后续腿"})
+        print("      轮询到期（status=%s）→ 已兜底中止本会话" % last.get("status"), flush=True)
     return last
 
 
@@ -910,6 +1027,10 @@ def audit_check(rep, name, d, gate=None, fixture=None):
     if pc and len(pc) > 4:
         rep.add("WARN", name + " :: 写步命令数", "post_comment 命令帧 %d 条（重试=双发风险面）" % len(pc))
     if not gate:
+        return
+    if gate.get("expect_hanging"):
+        # 挂起腿到期时会话还活在闸门上：tab 回收途径、close_tab 帧数这些「收口后才有值」的
+        # 判据在这里必然为空，套用只会把设计期望判成缺陷（收口路径由标准腿各自锁）。
         return
 
     # F10 唯一性（审计半边）：一条腿的 tab 回收途径必须恰好一条。
@@ -1108,30 +1229,39 @@ def main():
         # 夹具写腿排在最前：不依赖任何账号登录态，是写链路上唯一可复跑的**设备级**证据
         # （真平台写腿要登录态，长期只能靠 WS 测证），五场景把 D7 的三种结局+全自动+静默吞一次跑齐。
         specs = [
-            # (名称, 需 D7 闸门, 闸门动作, 期望终态, 期望错误文案, 期望 ledger, 期望有证据, 期望 verified, 预算秒, 静默吞页, 输入框在容器内)
-            ("夹具写腿·D7 挂起→确认放行", True, "confirm", "completed", "", 1, True, True, 90, False, False),
-            ("夹具写腿·D7 挂起→用户中止", True, "stop", "stopped", "评论未提交", 0, False, False, 90, False, False),
-            ("夹具写腿·D7 挂起→预算耗尽", True, "none", "failed", "评论未提交", 0, False, False, 20, False, False),
-            ("夹具写腿·无闸门全自动提交", False, "none", "completed", "", 1, True, True, 90, False, False),
+            # (名称, 需 D7 闸门, 闸门动作, 期望终态, 期望错误文案, 期望 ledger, 期望有证据, 期望 verified,
+            #  执行预算秒, 静默吞页, 输入框在容器内, 确认预算秒)
+            ("夹具写腿·D7 挂起→确认放行", True, "confirm", "completed", "", 1, True, True, 90, False, False, 0),
+            ("夹具写腿·D7 挂起→用户中止", True, "stop", "stopped", "评论未提交", 0, False, False, 90, False, False, 0),
+            # 批8 解耦第一臂：确认预算先到期（执行预算还剩 84s）→ 文案必须点明是「人工确认等待」
+            # 而不是「任务执行预算」。第二臂（执行预算不得掐断长确认等待）判据方向相反——它要求
+            # 到期时会话**仍非终态**，套不进「期望终态」这张表，见下方 run_budget_decouple_leg。
+            ("夹具写腿·D7 挂起→确认预算耗尽", True, "none", "failed", "人工确认等待", 0, False, False, 90, False, False, 6),
+            ("夹具写腿·无闸门全自动提交", False, "none", "completed", "", 1, True, True, 90, False, False, 0),
             # F11b 真机反向锁：点击确实落到按钮上、页面刻意不提交 → verify 只能说「没见到评论」。
             # 若哪天整页兜底又被翻回 true，这条腿就是唯一会红的那条。
             ("夹具写腿·平台静默吞（点击落地未提交）", False, "none", "failed",
-             "验证未通过", 0, True, False, 90, True, False),
+             "验证未通过", 0, True, False, 90, True, False, 0),
             # Leg X 真机常驻反向锁（批6 立项证据）：同一形态再加一层——草稿就躺在容器里面。
             # 上一条款不到容器主分支（输入框在容器外），本条专门条款不到就双绿的容器主分支。
             # 判据仍是带外 ledger=0 + verified=false；旧实现下这条必红（真机 session343 实测
             # completed + verified=true + evidence 仅 {containers:1}——命中的正是容器里那条草稿）。
             ("夹具写腿·静默吞 + 输入框在容器内（Leg X）", False, "none", "failed",
-             "验证未通过", 0, True, False, 90, True, True),
+             "验证未通过", 0, True, False, 90, True, True, 0),
         ]
         for (nm, need_confirm, action, want_status, want_err, ledger_n, evidence,
-             want_verified, tmo, swallow, inbox) in specs:
+             want_verified, tmo, swallow, inbox, cwait) in specs:
             nonce = "q" + os.urandom(3).hex()  # 只用 0-9a-f，避开需 shift 的符号键
-            payload, _text = task_write_fixture(fixture, need_confirm, nonce, tmo, swallow, inbox)
+            payload, _text = task_write_fixture(fixture, need_confirm, nonce, tmo, swallow, inbox, cwait)
             cases.append({"name": nm, "payload": payload, "gate": {
                 "action": action, "expect_status": want_status, "expect_err": want_err,
                 "ledger": ledger_n, "evidence": evidence, "verified": want_verified,
                 "nonce": nonce, "cleanup_fixture_tabs": True}})
+        # 批8 解耦第二臂：执行预算(15s) 不得掐断确认等待(900s)——到期时要求会话仍活着。
+        hangnonce = "q" + os.urandom(3).hex()
+        hangpayload, _htext = task_write_fixture(fixture, True, hangnonce, 15, confirm_wait_sec=900)
+        cases.append({"name": "夹具写腿·执行预算不掐断确认等待（解耦正向锁）", "payload": hangpayload,
+                      "leg": run_budget_decouple_leg, "nonce": hangnonce})
         # 台账闸（批6）：双发的唯一硬证据是「同任务二次运行时，一个写帧都没下发」。
         # WS 测里这条靠 fakeExtension.countOf 证，设备侧必须再证一遍——真扩展/真 host 的帧序才是终局。
         dnonce = "q" + os.urandom(3).hex()
@@ -1156,6 +1286,16 @@ def main():
         cpayload.update({"retry_on_fail": True, "retry_delay_sec": 30, "max_retry_times": 1})
         cases.append({"name": "夹具写腿·自动重试轮跳过未验证写步且判红",
                       "payload": cpayload, "leg": run_retry_skip_write_leg, "nonce": cnonce})
+        # 批8：派生写步的 D7 面。两条互为正反控——未放行必须一帧不发（否则开关是摆设），
+        # 放行后必须照常键入（否则闸门把步骤吞了，用户看到的是「点了确认什么都没发生」）。
+        eunonce = "q" + os.urandom(3).hex()
+        eupayload, _etext = task_derived_write_fixture(fixture, eunonce, 60, require_confirm=True)
+        cases.append({"name": "夹具派生写步·D7 挂起→中止且零下发", "payload": eupayload,
+                      "leg": run_derived_write_confirm_leg, "nonce": eunonce})
+        runonce = "q" + os.urandom(3).hex()
+        runload, _rtext = task_derived_write_fixture(fixture, runonce, 60, require_confirm=True)
+        cases.append({"name": "夹具派生写步·D7 放行后照常提交", "payload": runload,
+                      "leg": run_derived_write_release_leg, "nonce": runonce})
     cases += [
         {"name": "真机基线读链路（无登录墙）", "payload": task_baseline_public(), "gate": None},
         {"name": "真机交互搜索腿（键入+点击+跳转+断言）", "payload": task_interact_public(), "gate": None},

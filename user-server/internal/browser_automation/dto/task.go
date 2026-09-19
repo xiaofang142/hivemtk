@@ -50,6 +50,9 @@ type CreateBrowserTaskReq struct {
 	MaxRetryTimes int  `json:"max_retry_times" binding:"omitempty,min=0,max=10"`
 	// RequireConfirm D7：写操作提交前人工确认开关（默认 false=全自动）
 	RequireConfirm bool `json:"require_confirm"`
+	// ConfirmWaitSec 批8：D7 确认等待预算（秒）。与 TimeoutSec 解耦——确认挂起不吃执行预算。
+	// 0=用服务端默认（600s）；上限 900s 与 Editor.vue 夹紧同口径。
+	ConfirmWaitSec int `json:"confirm_wait_sec" binding:"omitempty,min=1,max=900"`
 }
 
 type UpdateBrowserTaskReq struct {
@@ -66,6 +69,7 @@ type UpdateBrowserTaskReq struct {
 	TimeoutSec  *int       `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
 	// RequireConfirm D7：指针语义——nil=不改（存量任务不因编辑而重置开关）
 	RequireConfirm *bool `json:"require_confirm"`
+	ConfirmWaitSec *int  `json:"confirm_wait_sec" binding:"omitempty,min=1,max=900"`
 }
 
 type RunBrowserTaskReq struct {

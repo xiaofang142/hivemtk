@@ -23,6 +23,9 @@ type BrowserTaskRepository interface {
 	UpdateRunResult(ctx context.Context, id uint, status, lastResult, errMsg string, retryCount int) error
 	SoftDelete(ctx context.Context, id, userID uint) error
 	FindRunning(ctx context.Context, userID uint) ([]*model.BrowserTask, error)
+	// 批8 对账器（stale_reconcile.go）专用两条，见各自注释
+	FindStaleRunningAll(ctx context.Context, minAge time.Duration, limit int) ([]*model.BrowserTask, error)
+	ReconcileRunResult(ctx context.Context, id uint, status, lastResult, errMsg string) (bool, error)
 	ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error)
 	// D4b（G5）：重试持久化——scheduleRetry 落 next_retry_at，扫描器条件认领（置 NULL）防双触发
 	SetNextRetryAt(ctx context.Context, id uint, at *time.Time) error
@@ -128,6 +131,33 @@ func (r *browserTaskRepo) FindRunning(ctx context.Context, userID uint) ([]*mode
 	var list []*model.BrowserTask
 	err := r.db.WithContext(ctx).Where("user_id = ? AND status = ?", userID, "running").Find(&list).Error
 	return list, err
+}
+
+// FindStaleRunningAll 批8 对账器专用：跨用户扫「running 且 updated_at 老于 minAge」的任务。
+// 与 FindRunning 分列而非复用：那条带 userID 语义（用户侧「我的执行中」），对账是全库后台职责，
+// 混用会让「加个 userID 参数」变成越权读取的入口。minAge 只是粗筛下限，
+// 每任务真实预算（含 D7 确认等待）由调用方按 taskExecBudget 判。
+func (r *browserTaskRepo) FindStaleRunningAll(ctx context.Context, minAge time.Duration, limit int) ([]*model.BrowserTask, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	var list []*model.BrowserTask
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND deleted_at IS NULL AND updated_at <= ?", "running", time.Now().Add(-minAge)).
+		Order("id ASC").Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// ReconcileRunResult 批8 对账回填：仅当任务仍是 running 时写终态，返回是否由本次回填生效。
+// 条件 WHERE 不可省——对账器与执行协程可能同刻收口，无条件更新会把刚落下的真实终态盖成对账值。
+func (r *browserTaskRepo) ReconcileRunResult(ctx context.Context, id uint, status, lastResult, errMsg string) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
+		Where("id = ? AND status = ?", id, "running").
+		Updates(map[string]any{"status": status, "last_result": lastResult, "error_msg": errMsg})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
 }
 
 func (r *browserTaskRepo) ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error) {

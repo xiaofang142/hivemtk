@@ -26,12 +26,20 @@ func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRep
 }
 
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
+//
+// 批8：三步全部走 WithoutCancel 的独立预算 ctx。调用点在 ExecuteSession 收口末尾，
+// 传进来的 execCtx 在超时/中止腿上必然已 Done——用它写 task 行会被 DB 驱动取消，
+// 于是 session 已终态而 task 永久停在 running（任务砖化：既不能再下发，也显示不出结果）。
+// R25 只对 session 行做了这个处理（executor.go 的 writeCtx），task 行是同一缺陷的第二半。
+// 三步各自记可归因日志、互不牵连：快照写失败不该顺手取消挂起重试。
 func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, finalStatus string, success, total int) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf("[BrowserFeedback] panic recovered: %v", r)
 		}
 	}()
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionFinalWriteBudget)
+	defer cancel()
 
 	// 1. 更新任务快照（状态 + 结果摘要）
 	taskStatus := "done"
@@ -43,18 +51,19 @@ func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.Bro
 	if session.ErrorMsg != "" {
 		errMsg = session.ErrorMsg
 	}
-	if err := f.taskRepo.UpdateRunResult(ctx, task.ID, taskStatus, lastResult, errMsg, task.RetryCount); err != nil {
-		logger.Warnf("[BrowserFeedback] 更新任务快照失败 task=%d: %v", task.ID, err)
+	if err := f.taskRepo.UpdateRunResult(writeCtx, task.ID, taskStatus, lastResult, errMsg, task.RetryCount); err != nil {
+		// 这一步失败就是砖化的起点：留给 stale_reconcile 的启动/周期对账收敛
+		logger.Errorf("[BrowserFeedback] 更新任务快照失败 task=%d（待对账器收敛）: %v", task.ID, err)
 	}
 
 	// 2. 失败自动重试（session 级，一次性延迟任务）
 	if finalStatus == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes {
-		f.scheduleRetry(ctx, task)
+		f.scheduleRetry(writeCtx, task)
 	}
 
 	// 3. 失败通知（邮件；无 SMTP 配置静默跳过）
 	if finalStatus == "failed" {
-		f.notifyFailure(ctx, task, session, errMsg)
+		f.notifyFailure(writeCtx, task, session, errMsg)
 	}
 }
 

@@ -1,6 +1,10 @@
 package service
 
-import "time"
+import (
+	"time"
+
+	"hivemtk-user/internal/browser_automation/model"
+)
 
 // A6（批3·2026-09-19）：browser_automation 服务端全部超时/时限预算收口单表。
 // 纪律：不做配置化（YAGNI）——这些值要么是真机实测结论（session179/132/188），
@@ -63,7 +67,32 @@ const (
 	// 取消（超时/中止腿必然如此），必须走 WithoutCancel；close_tab 在扩展侧是一次
 	// chrome.tabs.remove，正常 <50ms，给 15s 全留给「SW 冷启 + WS 换发」。
 	sessionTabCleanupBudget = 15 * time.Second
+	// confirmWaitDefault / confirmWaitMaxSec 批8：D7 人工确认等待的独立预算与上限。
+	// 解耦理由（真机实测形态）：确认等待此前兼职在 task.TimeoutSec 上——「人还没看到待确认，
+	// 任务先被执行预算掐死」和「确认占用的时间把执行预算吃光」是同一枚硬币的两面。
+	confirmWaitDefault = 600 * time.Second
+	confirmWaitMaxSec  = 900
 )
+
+// confirmWaitBudget 任务生效的确认等待时长（0/负数=默认 600s；上限由 dto binding 与
+// Publish 校验夹紧，这里不再二次夹紧——预算读不到夹紧值本身就是接线缺陷，宁可跑出可见的长等）。
+func confirmWaitBudget(t *model.BrowserTask) time.Duration {
+	if t != nil && t.ConfirmWaitSec > 0 {
+		return time.Duration(t.ConfirmWaitSec) * time.Second
+	}
+	return confirmWaitDefault
+}
+
+// taskExecBudget 一次执行的 wall-clock 预算 = TimeoutSec（自动化本身）+ D7 确认等待（另计）。
+// 三处消费必须同源：RunTask 的 execCtx、SafeGoDetached 的外层看门狗、Brain 循环的真实时钟兜底。
+// 各写各的口径就是批8 要收的口子——曾经「确认中」的任务会被看门狗按 TimeoutSec 掐死。
+func taskExecBudget(t *model.BrowserTask) time.Duration {
+	d := time.Duration(t.TimeoutSec) * time.Second
+	if t.RequireConfirm {
+		d += confirmWaitBudget(t)
+	}
+	return d
+}
 
 // —— 写台账落库（write_ledger.go）——
 // ledgerWriteBudget 单行 submit_state UPDATE 的预算。执行 ctx 此刻常已 Done

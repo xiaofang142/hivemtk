@@ -206,13 +206,17 @@ const (
 // errConfirmAbortedByStop 挂起期间被 stop 中止的步错误原文。不复用「用户手动中断」那句
 // 原文：步与审计面要写清「停在确认闸门、评论从未提交」，终态收口再按此常量精确认出
 // 「这次失败的起因就是用户中断」→ 记 stopped。
-const errConfirmAbortedByStop = "post_comment 等待人工确认期间被用户中止，评论未提交"
+// 批8 起 post_comment 与派生写步（type+回车 / click 发送按钮）共用此原文——F4 的精确匹配
+// 只认这一条，措辞按步分叉就会把「闸门处中止」重新掉回 failed。
+const errConfirmAbortedByStop = "写步等待人工确认期间被用户中止，评论未提交"
 
-// waitForConfirm 挂起等人工放行。
+// waitForConfirm 挂起等人工放行，自带独立计时器（批8 解耦：不再让 execCtx.Done 兼职确认超时）。
+// 返回值第二项是**哪条预算到头**的原文（「确认等待 600s」还是「任务执行预算掐断」）——
+// 两者在审计面上必须可区分，否则人就会去调 timeout_sec 而真正该调的是 confirm_wait_sec。
 // 调用点在不可逆提交点之前，非 confirmGranted 分支从未点击过任何按钮——失败可安全重下发，
 // 不违「单次提交禁重试」红线（那是「已提交且结局未知」的专属纪律）。
 // stopChFor 未注册时返回 nil，select 对 nil 通道分支永不就绪，与 ctx.Done 并存安全。
-func (e *Executor) waitForConfirm(ctx context.Context, sessionID uint) confirmOutcome {
+func (e *Executor) waitForConfirm(ctx context.Context, sessionID uint, wait time.Duration) (confirmOutcome, string) {
 	ch := make(chan struct{})
 	e.confirmMu.Lock()
 	e.confirmRegistry[sessionID] = ch
@@ -225,14 +229,19 @@ func (e *Executor) waitForConfirm(ctx context.Context, sessionID uint) confirmOu
 		e.confirmMu.Unlock()
 	}()
 
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 	stopCh := e.stopChFor(sessionID)
 	select {
 	case <-ch:
-		return confirmGranted
+		return confirmGranted, ""
 	case <-stopCh:
-		return confirmStoppedByUser
+		return confirmStoppedByUser, "用户在确认闸门处中止"
+	case <-timer.C:
+		return confirmWaitTimedOut, fmt.Sprintf("人工确认等待 %ds", int(wait.Seconds()))
 	case <-ctx.Done():
-		return confirmWaitTimedOut
+		// 执行预算（TimeoutSec）到头。批8 起它与确认预算是两条独立计时器，谁先到谁说话。
+		return confirmWaitTimedOut, "任务执行预算用尽"
 	}
 }
 
@@ -418,15 +427,16 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	tokenUsed := 0
 	tokenBudget := brainTokenBudget()
 	// wall-clock 看门狗（R22）：ctx 取消链在某些 LLM/DB 调用栈不生效（session132 实测 11min+ active），
-	// 以真实时钟兜底——超 TimeoutSec+30s 强制收敛，会话必有终态
-	deadline := time.Now().Add(time.Duration(task.TimeoutSec)*time.Second + taskWatchdogGrace)
+	// 以真实时钟兜底——超执行预算+30s 强制收敛，会话必有终态。
+	// 批8：预算走 taskExecBudget（Brain 模式下 LLM 也能编排出写步，确认挂起同样要留出时长）
+	deadline := time.Now().Add(taskExecBudget(task) + taskWatchdogGrace)
 
 	for iter := 0; iter < maxBrainIterations; iter++ {
 		if e.stopFired(stopCh) {
 			return success, failed, "用户手动中断"
 		}
 		if ctx.Err() != nil || time.Now().After(deadline) {
-			return success, failed, fmt.Sprintf("执行超时（%ds）", task.TimeoutSec)
+			return success, failed, fmt.Sprintf("执行超时（%ds）", int(taskExecBudget(task).Seconds()))
 		}
 		if iter > 0 && !sleepInterruptible(ctx, stopCh, humanizedDelay(task.DelayMs)) {
 			return success, failed, "用户手动中断"
@@ -697,6 +707,22 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			return "failed", err.Error(), nil
 		}
 	}
+	// 批8：D7 覆盖派生写。批7 把「type+回车 / click 发送按钮 / click_near 发送」认成写步之后，
+	// 闸门却仍只长在 post_comment 原语内部——开了 require_confirm 的用户，这类隐形写照样被
+	// 无条件发出去。此处按步挂起（post_comment 保留原语内的闸门：先 prep 填好正文再确认，
+	// 让人看见将要发什么）。位置排在双发闸之后、任何命令帧之前：
+	// 该跳过的步不该先问一遍再跳过，未放行则该步一帧都没下发。
+	if writeStep && step.Action != "post_comment" && task.RequireConfirm {
+		out, why := e.waitForConfirm(ctx, session.ID, confirmWaitBudget(task))
+		if out != confirmGranted {
+			msg := fmt.Sprintf("写步等待人工确认超时（%s），评论未提交", why)
+			if out == confirmStoppedByUser {
+				msg = errConfirmAbortedByStop
+			}
+			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, msg)
+			return "failed", msg, nil
+		}
+	}
 	var lastErr string
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
@@ -892,14 +918,16 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitPrepared, textHash)
 		// D7 人工确认闸门：require_confirm=true 的任务在此挂起，等 POST /sessions/:id/confirm
 		// 放行后才进不可逆提交点。挂起期间只有 prep（填文本，页面内可撤销、零平台副作用）；
-		// 未放行即中止=从未提交，可安全重下发。等待计入 task.TimeoutSec 预算（超时即中止）。
+		// 未放行即中止=从未提交，可安全重下发。
+		// 批8：等待用 task.confirm_wait_sec 独立预算，不再吃 task.TimeoutSec（那条管自动化本身）。
 		if task.RequireConfirm {
-			switch out := e.waitForConfirm(ctx, session.ID); out {
+			out, why := e.waitForConfirm(ctx, session.ID, confirmWaitBudget(task))
+			switch out {
 			case confirmGranted:
 			case confirmStoppedByUser:
 				return nil, errors.New(errConfirmAbortedByStop)
-			default: // confirmWaitTimedOut：task.TimeoutSec 预算内未放行
-				return nil, fmt.Errorf("post_comment 等待人工确认超时（任务预算 %ds），评论未提交", task.TimeoutSec)
+			default: // confirmWaitTimedOut：确认预算或执行预算先到头，why 里写明是哪条
+				return nil, fmt.Errorf("post_comment 等待人工确认超时（%s），评论未提交", why)
 			}
 		}
 		// 不可逆提交点。send 结局分两类归因（R26-2 竞速超时使边界可判）：
