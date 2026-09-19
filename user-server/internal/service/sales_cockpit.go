@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 )
 
@@ -23,7 +24,9 @@ func NewSalesCockpitService() *SalesCockpitService {
 //	react.totalRuns / sop.executions / rag.queries / reach.sentToday
 //	llmRoutes / channelHealth / intentDistribution / topTools
 func (s *SalesCockpitService) GetCockpit(ctx context.Context) (map[string]any, error) {
-	today := time.Now().Format("2006-01-02")
+	// today 作为字符串下推给 `created_at >= ?`：PG 按会话时区（CST）解释它，
+	// 所以串本身必须是业务日，否则 UTC 宿主的"今日"计数会多出 18~26 小时
+	today := timeutil.BusinessToday()
 	weekAgo := time.Now().AddDate(0, 0, -7)
 
 	reactRuns := s.countWhere(ctx, "llm_routing_logs", "created_at >= ?", today)

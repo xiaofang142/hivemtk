@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 
@@ -222,7 +223,8 @@ func (s *CustomerServicePlusService) SendScheduledReports(ctx context.Context) (
 		return 0, nil
 	}
 
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	// 报表按 date 键查库：宿主机 UTC 时这个串比业务日少一天，取到的是前天的报表
+	yesterday := timeutil.BusinessDate(time.Now().AddDate(0, 0, -1))
 	rows, err := s.reportSubRepo.DailyReportSummary(ctx, yesterday)
 	if err != nil {
 		return 0, err

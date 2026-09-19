@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
 	"time"
@@ -390,7 +391,7 @@ func (s *ChurnPredictionService) RunChurnCalculation(users []map[string]any) err
 		logger.Warnf("[Churn] 更新计算时间失败: %v", err)
 	}
 
-	date := time.Now().Format("2006-01-02")
+	date := timeutil.BusinessToday()
 	if err := s.CalculateDailyStatistics(date); err != nil {
 		logger.Warnf("[Churn] 计算每日统计失败 date=%s: %v", date, err)
 	}

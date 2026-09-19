@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -124,7 +125,8 @@ func (r *CSATSurveyRepository) Trend(ctx context.Context, days int) ([]map[strin
 		Cnt  int64   `json:"count"`
 	}
 	var rows []row
-	since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
+	// since 下推给 `responded_at >= ?`，而 PG 会话时区钉在 CST ⇒ 边界按业务日算
+	since := timeutil.BusinessDate(time.Now().AddDate(0, 0, -days))
 	err := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).
 		Select("DATE(responded_at) AS date, AVG(score) AS avg, COUNT(*) AS cnt").
 		Where("status = ? AND responded_at >= ?", model.CSATStatusResponded, since).

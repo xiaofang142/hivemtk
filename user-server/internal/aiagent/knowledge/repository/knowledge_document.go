@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"time"
 
 	"gorm.io/gorm"
@@ -280,7 +281,7 @@ func (r *KnowledgeDocumentRepository) CountByMerchant(ctx context.Context) (int6
 // CountTodayImports 今日导入数（独立部署下统计全量）
 func (r *KnowledgeDocumentRepository) CountTodayImports(ctx context.Context) (int64, error) {
 	var count int64
-	todayStart := time.Now().Format("2006-01-02")
+	todayStart := timeutil.BusinessToday()
 	if err := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
 		Where("created_at >= ?", todayStart).
 		Count(&count).Error; err != nil {

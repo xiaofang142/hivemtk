@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 	"time"
 
@@ -210,7 +211,8 @@ func (s *tiktokCardService) StatsOverall(ctx context.Context) (*dto.TikTokCardSt
 
 	daily := make([]dto.TikTokCardDailyStat, 0, 7)
 	for i := 6; i >= 0; i-- {
-		day := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		// day 既下推给 `DATE(created_at) = ?` 又当图表刻度标签，两处必须同一口径
+		day := timeutil.BusinessDate(time.Now().AddDate(0, 0, -i))
 		dayCount, _ := s.repo.CountDailyView(ctx, day)
 		daily = append(daily, dto.TikTokCardDailyStat{Date: day, ViewCount: dayCount})
 	}
@@ -255,7 +257,8 @@ func (s *tiktokCardService) Stats(ctx context.Context, cardID uint) (*dto.TikTok
 
 	daily := make([]dto.TikTokCardDailyStat, 0, 7)
 	for i := 6; i >= 0; i-- {
-		day := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		// day 既下推给 `DATE(created_at) = ?` 又当图表刻度标签，两处必须同一口径
+		day := timeutil.BusinessDate(time.Now().AddDate(0, 0, -i))
 		dayCount, _ := s.repo.CountCardDailyView(ctx, cardID, day)
 		daily = append(daily, dto.TikTokCardDailyStat{Date: day, ViewCount: dayCount})
 	}

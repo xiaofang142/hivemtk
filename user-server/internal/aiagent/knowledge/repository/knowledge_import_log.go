@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"time"
 
 	"gorm.io/gorm"
@@ -70,7 +71,7 @@ func (r *KnowledgeImportLogRepository) DailyImportTrend(ctx context.Context, pro
 	if days <= 0 {
 		days = 30
 	}
-	start := time.Now().AddDate(0, 0, -days+1).Format("2006-01-02")
+	start := timeutil.BusinessDate(time.Now().AddDate(0, 0, -days+1))
 
 	type Result struct {
 		Day         time.Time
@@ -94,7 +95,7 @@ func (r *KnowledgeImportLogRepository) DailyImportTrend(ctx context.Context, pro
 
 	trendMap := make(map[string]DailyTrendItem)
 	for _, r := range results {
-		day := r.Day.Format("2006-01-02")
+		day := timeutil.BusinessDate(r.Day)
 		trendMap[day] = DailyTrendItem{
 			Day:    day,
 			Count:  r.TotalCount,
@@ -103,7 +104,7 @@ func (r *KnowledgeImportLogRepository) DailyImportTrend(ctx context.Context, pro
 	}
 	trend := make([]DailyTrendItem, 0, days)
 	for i := days - 1; i >= 0; i-- {
-		day := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		day := timeutil.BusinessDate(time.Now().AddDate(0, 0, -i))
 		if v, ok := trendMap[day]; ok {
 			trend = append(trend, v)
 		} else {

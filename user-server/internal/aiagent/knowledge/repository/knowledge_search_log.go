@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"time"
 
 	"gorm.io/gorm"
@@ -207,7 +208,7 @@ func (r *KnowledgeSearchLogRepository) GetScoreHistogram(ctx context.Context, pr
 // TodayCount 今日检索次数
 func (r *KnowledgeSearchLogRepository) TodayCount(ctx context.Context) (int64, error) {
 	var count int64
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	q := r.db.WithContext(ctx).Model(&model.KnowledgeSearchLog{}).Where("created_at >= ?", today)
 	if err := q.Count(&count).Error; err != nil {
 		return 0, err
@@ -220,7 +221,7 @@ func (r *KnowledgeSearchLogRepository) SearchTrend(ctx context.Context, productI
 	if days <= 0 {
 		days = 30
 	}
-	start := time.Now().AddDate(0, 0, -days+1).Format("2006-01-02")
+	start := timeutil.BusinessDate(time.Now().AddDate(0, 0, -days+1))
 
 	type Result struct {
 		Day   time.Time
@@ -240,11 +241,11 @@ func (r *KnowledgeSearchLogRepository) SearchTrend(ctx context.Context, productI
 
 	trendMap := make(map[string]int)
 	for _, r := range results {
-		trendMap[r.Day.Format("2006-01-02")] = r.Count
+		trendMap[timeutil.BusinessDate(r.Day)] = r.Count
 	}
 	trend := make([]DailyTrendItem, 0, days)
 	for i := days - 1; i >= 0; i-- {
-		day := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		day := timeutil.BusinessDate(time.Now().AddDate(0, 0, -i))
 		trend = append(trend, DailyTrendItem{Day: day, Count: trendMap[day]})
 	}
 	return trend, nil
