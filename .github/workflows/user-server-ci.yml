@@ -114,6 +114,22 @@ jobs:
           chmod +x scripts/check-date-bucket-tz.sh
           bash scripts/check-date-bucket-tz.sh
 
+      - name: 未接线资产台账核对（能力可用性的事实源）
+        # 2026-09-20 第二十六轮（A10）：这道门把 docs/architecture/AI_CORE_FEATURE_INVENTORY.md
+        # 的接线登记逐条 grep 回代码（34 行 / 现值 29 已接线），此前只在各卡验收时由人手动跑。
+        # 覆盖面在干净克隆（HEAD 9c40b9f4）上做过两次变异实测，不是照抄脚本的说法：
+        #   会响 —— 登记的符号整体消失（defpat 与 callpat 双双零命中 ⇒ rc=2，须回灌文档）；
+        #           未接线项被悄悄接上而文档没改（状态漂移 ⇒ rc=1）。
+        #   不会响 —— 注释掉 router.go 里 app.InitHumanTaskRuntime(gormDB) 这一行调用后仍 exit 0
+        #           （13a 的 callpat 被装配函数自身的命中满足，脚本自己的注释已声明这一边界）；
+        #           只改函数名也到不了 rc=2（defpat 未锚定，改名后仍是前缀命中）。
+        # 所以它守的是"文档登记与代码是否还一致"，不守"运行时确实装配了"—— 后者仍由装配测试负责，
+        # 这里不写成编译器/测试给不了的保证。接进 CI 的理由是手动跑过的门没人复验，
+        # 而恒绿的门与坏掉的门长得一样。耗时实测：干净克隆 17.7s（全 grep，无 DB / 无网络）。
+        run: |
+          chmod +x scripts/check-unwired-assets.sh
+          bash scripts/check-unwired-assets.sh
+
       - name: go vet
         working-directory: user-server
         run: go vet ./...
