@@ -56,7 +56,7 @@ describe('downlink / 本地已发缓存拦截重复下发', () => {
   beforeEach(() => { chrome = makeChromeStorage(); globalThis.chrome = chrome; vi.clearAllMocks(); });
   afterEach(() => { delete globalThis.chrome; });
 
-  it('同 msg_id 不重复下发（本地缓存拦截）+ 不重复 ack', async () => {
+  it('同 msg_id 不重复下发（本地缓存拦截）+ 补确认让服务端了结该欠投递行', async () => {
     await initDownlink(['tiktok']);
     const adapter = { sendOutbound: vi.fn(async () => ({ ok: true })) };
     getOutbox.mockResolvedValue({ status: 'ok', messages: [{ msg_id: 'm-t1', content: 'hi', conversation_id: 'c1' }] });
@@ -65,7 +65,12 @@ describe('downlink / 本地已发缓存拦截重复下发', () => {
     await pollDownlink('tiktok', 'acc1', c, { sendOutbound: adapter.sendOutbound }); 
     await pollDownlink('tiktok', 'acc1', c, { sendOutbound: adapter.sendOutbound }); 
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
-    expect(ackOutbox).toHaveBeenCalledTimes(1);
+    // 批11 改口径：第 2 次不再"静默跳过"。服务端仍把这行列进待办 = 它还欠一次确认；
+    // 不补确认则该行永远留在待办集合里（每轮都被拉回来空转）。补的这次走 v2 items，幂等。
+    expect(ackOutbox).toHaveBeenCalledTimes(2);
+    expect(ackOutbox.mock.calls[1][1]).toEqual(['m-t1']);
+    expect(ackOutbox.mock.calls[1][2].items).toEqual([{ msg_id: 'm-t1', conversation_id: 'c1' }]);
+    expect(ackOutbox.mock.calls[1][2].label).toContain('补确认');
   });
 });
 
@@ -106,13 +111,15 @@ describe('downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试）', 
     expect(stored['bridge_sent_douyin'] || []).toContain('m-ackfail|c1');
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
 
-    // 下轮：cache 命中 → 不重发用户，但 pendingAck 重试 ack
+    // 下轮：cache 命中 → 不重发用户，但两条独立机制各补一次确认
     ackOutbox.mockResolvedValue({ status: 'ok' });
     await pollDownlink('douyin', 'acc1', c, { sendOutbound: adapter.sendOutbound });
     // sendOutbound 不被再次调用（cache 拦截）
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
-    // ack 被重试了（两次：第一次失败 + 第二次成功）
-    expect(ackOutbox).toHaveBeenCalledTimes(2);
+    // 3 次 = 首次失败 + _pendingAck 队列重试 + 批11 欠投递行补确认。
+    // 两者不合并：pendingAck 只活在内存里（页面/SW 重启即丢），补确认是重启后唯一的了结路径。
+    // 服务端 ack 幂等（第二次回 duplicate），多一次请求换"重启不悬挂"。
+    expect(ackOutbox).toHaveBeenCalledTimes(3);
   });
 });
 

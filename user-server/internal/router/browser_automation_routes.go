@@ -67,7 +67,9 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	})
 
 	// --- Controller ---
-	taskCtrl := bactrl.NewTaskController(taskSvc)
+	// registry 必须进控制器：交互执行要先问一句「Host 在不在」，
+	// 否则离线点「执行」会拿到 200 + 一条稍后才失败的会话（批10 C 腿实测）。
+	taskCtrl := bactrl.NewTaskController(taskSvc, registry)
 	sessionCtrl := bactrl.NewSessionController(sessionSvc)
 	cronCtrl := bactrl.NewCronController(cronSvc)
 	hostCtrl := bactrl.NewHostController(registry, kvRepo)
@@ -129,6 +131,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	utils.SafeGo(ctx, "browser_automation.bootstrap", func(ctx context.Context) {
 		basvc.EnsureHostTokenExists(ctx, kvRepo)
 		cronSvc.RestoreAll(ctx)
+		// 批9 归属门：只认领 Host 连接在本机的用户重试（连接是进程内状态，队列是库内共享）
+		feedbackSvc.SetHostUsersProvider(registry.ConnectedUserIDs)
 		feedbackSvc.StartRetryScanner(ctx)
 		basvc.StartAuditRetention(ctx, cmdLogRepo, planRepo)
 		basvc.StartStaleTaskReconcile(ctx, taskRepo, sessionRepo)

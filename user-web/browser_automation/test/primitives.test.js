@@ -39,6 +39,7 @@ Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
 const makeDeps = () => ({
   tabManager: {
     openTab: vi.fn(async (url) => ({ id: 42, url })),
+    waitForLoad: vi.fn(async () => ({ loaded: true, title: '示例域', wait_ms: 30 })),
     closeTab: vi.fn(async () => {}),
     activateTab: vi.fn(async () => {}),
     tabExists: vi.fn(async (id) => id !== 999),

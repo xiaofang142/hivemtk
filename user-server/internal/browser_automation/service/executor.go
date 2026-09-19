@@ -443,7 +443,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 		// 兜底开 tab：LLM 首轮 plan 若未显式 open_tab，保证有页面可操作
 		if session.ChromeTabID == 0 {
-			tabID, err := e.hand.openTab(ctx, task.UserID, task.Url, false)
+			tabID, _, err := e.hand.openTab(ctx, task.UserID, task.Url, false)
 			if err != nil {
 				return success, failed, "open_tab 失败: " + err.Error()
 			}
@@ -454,7 +454,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			// tab 可能在 LLM 思考间隙被 SW 空闲回收/用户关闭：重开一次再 snapshot
 			logger.Warnf("[BrowserExec] brain snapshot 失败 session=%d tab=%d: %v，尝试重开 tab", session.ID, session.ChromeTabID, err)
-			tabID, openErr := e.hand.openTab(ctx, task.UserID, task.Url, false)
+			tabID, _, openErr := e.hand.openTab(ctx, task.UserID, task.Url, false)
 			if openErr != nil {
 				return success, failed, "snapshot 失败且重开 tab 失败: " + openErr.Error()
 			}
@@ -870,13 +870,15 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if openURL == "" {
 			openURL = task.Url // 编排未填 target 时兜底任务起始 URL
 		}
-		tabID, err := e.hand.openTab(ctx, userID, openURL, false) // active 恒 false
+		tabID, res, err := e.hand.openTab(ctx, userID, openURL, false) // active 恒 false
 		if err != nil {
 			return nil, err
 		}
 		session.ChromeTabID = tabID
 		_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
-		return recordResultPayload(map[string]any{"chrome_tab_id": tabID})
+		// page_loaded 原样透传（可能是 nil：老 Host 不回这个字段时如实记 null，
+		// 不能把「不知道」写成 false，也不能反过来把 false 洗成 true）。
+		return recordResultPayload(map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]})
 	case "click":
 		res, err := e.hand.click(ctx, userID, tabID, step.Target)
 		if err != nil {
@@ -995,11 +997,21 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		_ = e.sessionRepo.UpdateSnapshot(ctx, session.ID, snap)
 		return recordResultPayload(map[string]any{"snapshot_chars": len(snap), "snapshot": snap, "page_url": pageURL})
 	case "markdown":
-		md, err := e.hand.markdown(ctx, userID, tabID)
+		res, err := e.hand.markdown(ctx, userID, tabID)
 		if err != nil {
 			return nil, err
 		}
-		return recordResultPayload(map[string]any{"markdown_chars": len(md), "markdown": md})
+		md, _ := res["markdown"].(string)
+		// 截断标志如实上抛（批9a）：markdown 是「快照太长时改用 markdown 取全文」的出口
+		// （brain_budget 的截断提示就是这么写的），只记本地长度会把 64KiB 截断值当成整页，
+		// 而 len() 是字节数、扩展侧 markdown_chars 是字符数，两者对中文差 3 倍。
+		return recordResultPayload(map[string]any{
+			"markdown":       md,
+			"markdown_chars": res["markdown_chars"],
+			"full_chars":     res["full_chars"],
+			"truncated":      res["truncated"],
+			"content_empty":  res["content_empty"],
+		})
 	case "screenshot":
 		// G17 定稿（二验修正）：captureVisibleTab 只能截「当前激活 tab」且不报错——
 		// 不激活直接截会静默截到用户正在看的页面（假内容），降级方案不成立。

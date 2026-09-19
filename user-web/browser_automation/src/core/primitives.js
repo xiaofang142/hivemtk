@@ -262,9 +262,11 @@ function injMarkdown() {
   const pick = (root, sel) => root.querySelector(sel);
   const title = (pick(document, 'h1')?.innerText || document.title || '').trim();
   const lines = [`# ${title}`, ''];
+  let bodyLines = 0;
   document.querySelectorAll('h1,h2,h3,p,li').forEach((el) => {
     const t = (el.innerText || el.textContent || '').trim();
     if (!t) return;
+    bodyLines++;
     const tag = el.tagName.toLowerCase();
     if (tag === 'h1') lines.push(`# ${t}`, '');
     else if (tag === 'h2') lines.push(`## ${t}`, '');
@@ -272,7 +274,24 @@ function injMarkdown() {
     else if (tag === 'li') lines.push(`- ${t}`);
     else lines.push(t, '');
   });
-  return { ok: true, markdown: lines.join('\n').slice(0, 64 * 1024) };
+  // 零可读内容必须判红，而不是回一句空标题壳子：真机 session=432 实测
+  // open_tab 未等加载时读到 "# \n" 却整轮判成功（假绿）。这个特征与「页面确实没字」
+  // 无法区分，但对自动化而言两者都意味着「这一步没拿到东西」，交上层重试/换路径。
+  // 有标题就仍算读到东西——正文全在 div 里的 SPA 是既有抽取边界，不在这儿判死。
+  if (!title && bodyLines === 0) {
+    return { ok: false, error: 'empty_document: 页面无可读文本（未加载完成，或正文不在可读标签里）' };
+  }
+  const full = lines.join('\n');
+  const markdown = full.slice(0, 64 * 1024);
+  // 截断必须如实上报：只回截断后的长度，消费方会把 64KiB 当成整页内容。
+  return {
+    ok: true,
+    markdown,
+    markdown_chars: markdown.length,
+    full_chars: full.length,
+    truncated: markdown.length < full.length,
+    content_empty: bodyLines === 0,
+  };
 }
 
 // ---- 页面上下文函数（序列化注入，禁止引用外部闭包）----
@@ -551,13 +570,23 @@ async function executeInTab(tabId, func, args = []) {
   return r;
 }
 
+// isUnackedClick CDP 可信点击的「结局未知」态：mousePressed/mouseReleased 已下发进渲染进程
+// 队列，只是 ack 没回来（后台 tab 不出帧时实测可达 5s+/条）。
+// 批9：这种态**绝不**走 DOM el.click() 兜底——兜底等于在「可能已经点中」之上再点一次，
+// 对提交/发送按钮就是双发（公开评论不可撤回）。宁可把未知态原样抛给上层，
+// 由服务端 finalize 用只读验证裁决（写步骤 retries=0，见 Go 侧台账）。
+// 其余 CDP 失败（attach 被拒、调试器被占）事件从未下发，兜底仍然保留。
+function isUnackedClick(msg) {
+  return String(msg || '').includes('click_unacked');
+}
+
 /**
  * dispatch 执行一条命令帧（server → Host → 扩展）
  * @param {Map<string,Function>} deps 依赖注入（tab-manager / accessibility），便于测试
  * @returns {Promise<Object>} 回包 data
  */
 export async function dispatch(cmd, deps) {
-  const { openTab, closeTab, activateTab, tabExists } = deps.tabManager;
+  const { openTab, waitForLoad, closeTab, activateTab, tabExists } = deps.tabManager;
   const { getRefSelector } = deps.accessibility;
   // F6 基线联动：导航即清该 tab 的新元素基线（下一帧重新建立，不把整页标成新元素）。
   // resetBaseline 为可选依赖（旧测试 deps 未提供时静默跳过）。
@@ -566,9 +595,9 @@ export async function dispatch(cmd, deps) {
   switch (cmd.action) {
     case 'resolve_ref': {
       // A1 selector 自愈回路：LLM 依据快照行选 @eN ref，Go 用本命令换回真实 CSS
-      // （ref→cssPath 映射只在 SW 内存，页面导航/新快照会重置——调用方须紧邻快照使用）。
+      // （ref→cssPath 映射只在 SW 内存、按 tab 分桶，页面导航/新快照会重置——调用方须紧邻快照使用）。
       const ref = String(cmd.ref || '');
-      return { selector: ref.startsWith('@e') ? getRefSelector(ref) || '' : ref };
+      return { selector: ref.startsWith('@e') ? getRefSelector(ref, cmd.tab_id) || '' : ref };
     }
     case 'open_tab': {
       if (!cmd.url || !/^https?:\/\//i.test(cmd.url)) {
@@ -576,7 +605,10 @@ export async function dispatch(cmd, deps) {
       }
       const tab = await openTab(cmd.url, cmd.active === true);
       resetBaseline(tab.id);
-      return { chrome_tab_id: tab.id, title: tab.title || '' };
+      // 等页面这一帧真的加载出来再回包（假绿收口，见 tab-manager.waitForLoad）。
+      // 命令预算 30s，缺省等待 10s，上限 30s 由 waitForLoad 自身夹紧，永不吃掉命令超时。
+      const load = await waitForLoad(tab.id, cmd.load_timeout_ms);
+      return { chrome_tab_id: tab.id, title: load.title || tab.title || '', loaded: load.loaded, load_wait_ms: load.wait_ms };
     }
     case 'click':
     case 'type':
@@ -594,8 +626,18 @@ export async function dispatch(cmd, deps) {
       const tabId = cmd.tab_id;
       const exists = await tabExists(tabId);
       if (!exists) throw new Error('tab_not_found: ' + tabId);
-      // refs → CSS selector 映射（@eN 引用在 SW 内存）
-      const resolveTarget = (t) => (t && t.startsWith('@e') ? getRefSelector(t) || t : t);
+      // refs → CSS selector 映射（@eN 引用在 SW 内存、按 tab 分桶，批9）
+      // 解析不出来的 @eN=快照已失效（导航/新帧重置），绝不能原样塞进 querySelector：
+      // 那会变成 DOMException「'@e77' is not a valid selector」，把「元素未命中」伪装成语法错误，
+      // 而 A1 自愈只认 *_not_found 结构化 token（executor_selfheal.go isSelectorMiss）——
+      // 正是它最该接住的「LLM 选的 ref 过期了」这一案被错误类型吃掉，自愈回路永不触发。
+      // missToken 由调用点给出该听的错误名，保持归因准确。
+      const resolveTarget = (t, missToken) => {
+        if (!t || !t.startsWith('@e')) return t;
+        const sel = getRefSelector(t, tabId);
+        if (sel) return sel;
+        throw new Error((missToken || 'element_not_found') + ': ref 已失效（快照被重置）' + t);
+      };
       switch (cmd.action) {
         case 'click': {
           // F1 铁律 2 收口：写操作主通道=CDP trusted（probe 定位坐标→贝塞尔轨迹点击）；
@@ -616,8 +658,10 @@ export async function dispatch(cmd, deps) {
             if (navigated) resetBaseline(tabId);
             return { ok: true, navigated, channel: 'cdp' };
           } catch (e) {
-            if (!String(e?.message || e).includes('element_not_found')) {
-              // 元素在但 CDP 失败（attach 被拒/调试器占用）：DOM 兜底
+            const msg = String(e?.message || e);
+            if (isUnackedClick(msg)) throw e; // 可能已点中：兜底=双发，直接上抛交裁决
+            if (!msg.includes('element_not_found')) {
+              // 元素在但 CDP 失败（attach 被拒/调试器占用）：事件从未下发，DOM 兜底安全
               const r = await executeInTab(tabId, injClick, [resolveTarget(cmd.target), 'fallback']).catch(() => null);
               if (r?.ok) {
                 if (r.navigated) resetBaseline(tabId);
@@ -633,7 +677,9 @@ export async function dispatch(cmd, deps) {
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             return { ok: true, clicked: probe.clicked, channel: 'cdp' };
           } catch (e) {
-            if (!String(e?.message || e).includes('anchor_not_found') && !String(e?.message || e).includes('button_not_found')) {
+            const msg = String(e?.message || e);
+            if (isUnackedClick(msg)) throw e;
+            if (!msg.includes('anchor_not_found') && !msg.includes('button_not_found')) {
               const r = await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '', 'fallback']).catch(() => null);
               if (r?.ok) return { ...r, channel: 'dom_fallback' };
             }
@@ -683,8 +729,10 @@ export async function dispatch(cmd, deps) {
           // 提交（comment_send）与验证（comment_verify 轮询）分离，可中断可归因。
           // 旧一站式 post_comment 兼容路径已删（服务端 v3.41.0 起只发子命令，单一路径防分叉）。
           // 平台选择器由服务端 L3 适配器下发（无则缺省小红书——R17 真机实测）。
-          // A1 自愈回路：input_selector 允许是 @eN 引用（LLM 重定位产物），此处同 click/type 走 ref 解析
-          const inputSel = resolveTarget(cmd.input_selector || '');
+          // A1 自愈回路：input_selector 允许是 @eN 引用（LLM 重定位产物），此处同 click/type 走 ref 解析。
+          // ref 失效必须报 comment_input_not_found（Go 侧 healCommentInput 只认这个名字，
+          // 报错名不对=自愈不触发=一次改版把整条写链路打死），故显式给 missToken。
+          const inputSel = resolveTarget(cmd.input_selector || '', 'comment_input_not_found');
           const sendText = cmd.send_button_text || '';
           if (cmd.action === 'comment_prep') {
             // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）。

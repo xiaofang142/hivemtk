@@ -59,10 +59,13 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listBrowserTasks, publishBrowserTask, runBrowserTask, pauseBrowserTask, deleteBrowserTask,
 } from '@/api/browserAutomation'
+
+const router = useRouter()
 
 const statusOptions = [
   { value: 'draft', label: '草稿' }, { value: 'ready', label: '就绪' },
@@ -106,19 +109,31 @@ const statusTagType = (s) => ({
 const formatTime = (t) => new Date(t).toLocaleString('zh-CN')
 
 function handleRunError(err) {
-  // 409 = Host 未连接
-  if (String(err?.message || err).includes('未连接') || err?.code === 409) {
-    hostDialog.visible = true
-  } else {
-    ElMessage.error(String(err?.message || err))
+  // 分流只看业务码，不看文案也不只看 HTTP 状态：409 在域内有三条结论
+  // （Host 未连接 / 同 Host 串行闸占用 / 依赖未满足），只有第一条该开安装引导。
+  const msg = String(err?.message || err)
+  switch (err?.bizCode) {
+    case 'BROWSER_HOST_OFFLINE_8001':
+      hostDialog.visible = true
+      break
+    case 'BROWSER_TASK_BUSY_8002':
+      ElMessage.warning(msg)
+      break
+    default:
+      // 兜底：老服务端/网关没带码时仍按 409+文案给引导，别把用户晾在静默里
+      if (err?.status === 409 && msg.includes('未连接')) hostDialog.visible = true
+      else ElMessage.error(msg)
   }
 }
 
 async function onRun(row) {
   try {
-    await runBrowserTask(row.id)
+    const res = await runBrowserTask(row.id)
+    // F-N3：点了执行就要看得见执行——直接进这条会话的监控页（D7 放行、步骤流都在那里）
+    const sid = unpack(res)?.session_id
     ElMessage.success('已开始执行')
     load()
+    if (sid) router.push(`/browser-automation/sessions/${sid}`)
   } catch (e) { handleRunError(e) }
 }
 

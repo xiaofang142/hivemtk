@@ -43,6 +43,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from datetime import datetime
+
 DEFAULT_BASE = "http://127.0.0.1:8204"
 TERMINAL = {"completed", "failed", "stopped"}
 COMMENT_TEXT = "这套搭配的配色很耐看，收藏了 🌿"  # 无链接无联系方式=平台低风控文本
@@ -825,19 +827,24 @@ def run_never_executed_write_leg(api, rep, task_payload, name, nonce, fixture, c
     cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
 
 
-B7_RETRY_SCAN_BUDGET_SEC = 240  # retry_delay 30s + 扫描器 60s tick + 一轮执行 + 余量
+B7_RETRY_SCAN_BUDGET_SEC = 300  # 重试轮观测预算：扫描周期（每分钟）+ 一整条链路（夹具页 + finalize）
+# 本腿挂起重试的延时取 DTO 允许的下界（min=30）：第二轮必须由扫描器真的认领出来，才锁得住
+# 「自动重试轮 → 写步跳过 + 判红」这条语义。人工显式下发的重跑 RetryCount==0，走的是
+# guardResubmit 的「拒绝执行」分支（那是另一条设计结论：人要看见被拦下，而不是悄悄少跑一步），
+# 拿它当重试轮断言必然假红。延时取一小时只会让本腿等不到认领——那才是把语义丢了。
+B7_RETRY_PENDING_DELAY_SEC = 30
+# 本机最多等几轮认领：同库旧实例每抢一次就作废一轮（额度按 max_retry_times 计，见下方用例设置）
+B7_RETRY_MAX_ROUNDS = 3
 
 
-def _b7_wait_retry_session(api, task_id, first_sid, timeout=B7_RETRY_SCAN_BUDGET_SEC):
-    """等任务级自动重试轮真的起来并收口。sessions 列表按 id 倒序，取本任务除首轮外的最新一条。"""
+def find_retry_round_session(api, task_id, first_sid, timeout):
+    """等扫描器把挂起的自动重试认领成一条新会话（list 无 task_id 过滤，按归属筛）。"""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        ok, got = api.ok("GET", "/api/browser-automation/sessions?page=1&limit=50")
-        rows = ((got.get("data") or {}).get("list") or []) if ok else []
-        cands = [s for s in rows
-                 if s.get("task_id") == task_id and s.get("id") != first_sid]
-        if cands and cands[0].get("status") in TERMINAL:
-            return cands[0]
+        okl, lst = api.ok("GET", "/api/browser-automation/sessions?page=1&limit=10")
+        for it in ((lst.get("data") or {}).get("list") or []) if okl else []:
+            if it.get("task_id") == task_id and (it.get("id") or 0) > first_sid:
+                return it.get("id")
         time.sleep(3)
     return None
 
@@ -846,7 +853,8 @@ def run_retry_skip_write_leg(api, rep, task_payload, name, nonce, fixture, creat
     """批7 重试豁免的设备级锁，两头都判：不重发（防双发）+ 不判绿（防假绿）。
 
     首轮走 swallow 页 → 点击落地但页面不提交 → 台账停在 unattributed、会话 failed →
-    任务级自动重试（retry_on_fail）起来后，第二轮遇到这条「已尝试但未验证」的写步：
+    顺带断言 D4b 的挂起重试真的落库了（next_retry_at 非空且=现在+delay）。第二轮由服务端
+    扫描器到期认领（本腿只等不触发，理由见函数内注释）,遇到这条「已尝试但未验证」的写步：
       · 必须整步跳过——页侧零 touched / 零 swallowed / 审计里连一条 post_comment 命令帧都不该有；
       · 但**不许**因此换来一个 completed 会话。本轮什么都没证明，判绿就是批6 立项要消灭的假绿。
     豁免的意义仍在：只读步照常重放（success_steps≥2），重试出得了循环而不必重发评论。
@@ -870,10 +878,91 @@ def run_retry_skip_write_leg(api, rep, task_payload, name, nonce, fixture, creat
         cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
         return
     fixture.reset()  # 从此页侧读数只属于第二轮
-    s2 = _b7_wait_retry_session(api, task_id, sid)
-    if not s2:
-        rep.add("FAIL", name + " :: 自动重试轮起来",
-                "%ds 内没等到第二条 session（重试扫描器/next_retry_at 链路故障）" % B7_RETRY_SCAN_BUDGET_SEC)
+    # 第二轮必须由服务端扫描器自己认领，本腿只观察不触发：这条腿同时锁两件事——
+    #   1. 批7 重试豁免只在**自动重试轮**成立（guardResubmit 按 task.RetryCount>0 分「跳过」与
+    #      「拒绝」两条结论）。显式 POST /run 的 RetryCount==0，判的是人工重跑那条分支，
+    #      拿它断言「跳过」是脚本把自己的前置条件写错了（真跑出来过一次假红）。
+    #   2. 批9 认领归属门（ClaimDueRetries 只认本实例持有 Host 连接的用户）：同库另有实例时，
+    #      过去会出现「别的实例抢认领后判 host 未连接」（task=377 / session=429 现场）。
+    #      现在这条链在真机上必须自己走通，才算那道门有设备级证据。
+    oks, tk = api.ok("GET", "/api/browser-automation/tasks/%s" % task_id)
+    nra = (tk.get("data") or {}).get("next_retry_at") if oks else None
+    # 值也要判：只判非空的话，「delay 写死 0 / 单位算错」这类漂移照样绿
+    delta = None
+    if nra:
+        try:
+            delta = datetime.fromisoformat(nra).timestamp() - time.time()
+        except ValueError:
+            pass
+    rep.add("PASS" if delta is not None and B7_RETRY_PENDING_DELAY_SEC * 0.8 <= delta <=
+            B7_RETRY_PENDING_DELAY_SEC * 1.2 else "FAIL",
+            name + " :: 首轮失败挂起持久化重试（D4b）",
+            "next_retry_at=%r 距今=%s 期望≈+%ds（nil=没落库，重启即丢；偏差大=delay 口径错）" % (
+                nra, None if delta is None else int(delta), B7_RETRY_PENDING_DELAY_SEC))
+    sid2, s2, stolen, cursor = None, None, 0, sid
+    # 认领归属门只在「同为批9 版本」的实例之间成立：同库若还跑着一个不带门的旧实例
+    # （真机此刻就有——并行会话的 ./bin/user-server.r39），它会抢认领并以
+    # 「browser host 未连接」烧掉一次重试额度（task=377 / session=429 同形）。
+    # 所以本腿按轮次等：被抢的轮只记 WARN 并继续，判据落在属于本机的那一轮上——
+    # 把「掷硬币」变成可复现判据，同时把那道门的已知缺口如实留在报告里。
+    for _rnd in range(B7_RETRY_MAX_ROUNDS):
+        cand = find_retry_round_session(api, task_id, cursor, B7_RETRY_SCAN_BUDGET_SEC)
+        if not cand:
+            break
+        cursor = cand
+        s2 = poll_session(api, rep, cand, B7_RETRY_SCAN_BUDGET_SEC, task_payload, False, {},
+                          fixture, name) or {}
+        if "host 未连接" not in str((s2 or {}).get("error_msg") or ""):
+            sid2 = cand
+            break
+        stolen += 1
+    if stolen:
+        rep.add("WARN", name + " :: 重试轮被同库旧实例抢认领",
+                "%d 轮以「browser host 未连接」作废（归属门只在同版本实例间生效，跨版本挡不住）" % stolen)
+    if not sid2:
+        rep.add("FAIL", name + " :: 扫描器认领自动重试",
+                "%d 轮内没等到本机认领的会话（首轮 session=%s next_retry_at=%r，被抢 %d 轮）" % (
+                    B7_RETRY_MAX_ROUNDS, sid, nra, stolen))
+        cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+        return
+    rep.add("PASS", name + " :: 扫描器认领自动重试（归属门在真机生效）",
+            "首轮 session=%s → 重试轮 session=%s（作废轮=%d）" % (sid, sid2, stolen))
+    # 挂起行的两个动作发生在不同时刻：next_retry_at 在认领时置空（不置空会被同一分钟的下一轮
+    # 扫描再认领一次），retry_count 要等会话收口才随 UpdateRunResult 落库（feedback.go:60）。
+    # 所以断言必须排在终态回读之后。也不能要求「next_retry_at 必空」——额度没用完时它必须是
+    # **下一轮的未来到期时间**：空=重试链提前断，已过期=认领没把行消费掉（会被重复认领）。
+    okt, tk2 = api.ok("GET", "/api/browser-automation/tasks/%s" % task_id)
+    tdata2 = (tk2.get("data") or {}) if okt else {}
+    rc = tdata2.get("retry_count")
+    nra2 = tdata2.get("next_retry_at")
+    quota = task_payload.get("max_retry_times") or B7_RETRY_MAX_ROUNDS
+    delta2 = None
+    if nra2:
+        try:
+            delta2 = datetime.fromisoformat(nra2).timestamp() - time.time()
+        except ValueError:
+            pass
+    if (rc or 0) < 1:
+        hung_ok = False
+        why = "retry_count=%s 期望≥1（一轮都没涨=认领结果没落库）" % rc
+    elif rc >= quota:
+        hung_ok = not nra2
+        why = "retry_count=%s 已用满额度 %s，next_retry_at=%r 期望为空（还挂着=会超发）" % (rc, quota, nra2)
+    else:
+        hung_ok = delta2 is not None and delta2 > 0
+        why = ("retry_count=%s 额度 %s 未用满，next_retry_at 必须是未来时间，实得 %r（距今=%s）"
+               "：空=链子提前断，过去=认领没消费挂起行" % (rc, quota, nra2, delta2 and int(delta2)))
+    okr, reps = api.ok("GET", "/api/browser-automation/sessions?page=1&limit=50")
+    rounds = [it for it in (((reps.get("data") or {}).get("list") or []) if okr else [])
+              if it.get("task_id") == task_id]
+    rep.add("PASS" if hung_ok else "FAIL", name + " :: 挂起重试按额度续挂（不超发不断链）", why)
+    rep.add("PASS" if len(rounds) == rc + 1 else "FAIL",
+            name + " :: 一次认领一条会话（挂起行未被重复认领）",
+            "task=%s 会话数=%d 期望=retry_count+1=%d（首轮 1 条 + 每轮认领 1 条；"
+            "多出来的那条就是同一挂起行被认领两遍）" % (task_id, len(rounds), (rc or 0) + 1))
+    if not s2.get("id"):
+        rep.add("FAIL", name + " :: 重试轮起来",
+                "%ds 内没等到 session=%s 的终态" % (B7_RETRY_SCAN_BUDGET_SEC, sid2))
         cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
         return
     err2 = str(s2.get("error_msg") or "")
@@ -898,6 +987,12 @@ def run_retry_skip_write_leg(api, rep, task_payload, name, nonce, fixture, creat
     rep.add("PASS" if (s2.get("success_steps") or 0) >= 2 else "FAIL", name + " :: 只读步照常重放",
             "success_steps=%s 期望≥2（open_tab+wait_for_selector 跑完了才收口）"
             % s2.get("success_steps"))
+    # 收尾：软删本腿任务。它身上还挂着一条一小时后到期的重试，而 update 接口是「载入-改字段-
+    # Save」的语义（next_retry_at 无法经 API 清空）——软删后 gorm 的软删作用域（+ 认领 SQL 里
+    # 那句显式 deleted_at IS NULL）把它永久移出认领集合，免得一小时后凭空冒出一条野会话。
+    api.ok("DELETE", "/api/browser-automation/tasks/%s" % task_id, {})
+    if task_id in created_ids:
+        created_ids.remove(task_id)
     cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
 
 
@@ -1283,8 +1378,11 @@ def main():
                       "payload": bpayload, "leg": run_never_executed_write_leg, "nonce": bnonce})
         cnonce = "q" + os.urandom(3).hex()
         cpayload, _ctext = task_write_fixture(fixture, False, cnonce, 90, swallow=True)
-        cpayload.update({"retry_on_fail": True, "retry_delay_sec": 30, "max_retry_times": 1})
-        cases.append({"name": "夹具写腿·自动重试轮跳过未验证写步且判红",
+        # 额度取 B7_RETRY_MAX_ROUNDS：同库旧实例每抢一轮就作废一轮，额度只给 1 次时
+        # 本机一次都轮不到（真机跑出过），腿的判据随之永远落在被抢的那轮上。
+        cpayload.update({"retry_on_fail": True, "retry_delay_sec": B7_RETRY_PENDING_DELAY_SEC,
+                         "max_retry_times": B7_RETRY_MAX_ROUNDS})
+        cases.append({"name": "夹具写腿·重试轮跳过未验证写步且判红",
                       "payload": cpayload, "leg": run_retry_skip_write_leg, "nonce": cnonce})
         # 批8：派生写步的 D7 面。两条互为正反控——未放行必须一帧不发（否则开关是摆设），
         # 放行后必须照常键入（否则闸门把步骤吞了，用户看到的是「点了确认什么都没发生」）。

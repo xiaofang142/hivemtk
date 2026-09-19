@@ -7,17 +7,37 @@
 
 const MAX_NODES = 400;
 
-// ref 分配器（SW 单例内存）
-const refMap = new Map(); // ref -> cssPath
-let refCounter = 0;
+// ref 分配器（SW 单例内存，按 tab 分桶）
+// 批9：旧实现是**全局单桶 + 每次快照清空**，多 tab 编排时两条错路都会发生——
+// ① tab B 拍一帧就把 tab A 的 @eN 全清了，A 的后续定位凭空失效；
+// ② 计数器每帧归零，A 的 @e3 与 B 的 @e3 同号，后写覆盖前写 → A 的 ref 解析到 B 的元素。
+// 分桶后桶键 = String(tabKey)，与调用方传数字还是字符串无关（Go 侧 tab_id 是 JSON number）。
+const refBuckets = new Map(); // tabKey -> { counter: number, map: Map<ref, cssPath> }
 
-export function resetRefs() {
-  refMap.clear();
-  refCounter = 0;
+const bucketKey = (tabKey) => (tabKey === undefined || tabKey === null || tabKey === '' ? 'default' : String(tabKey));
+
+function refBucket(tabKey) {
+  const key = bucketKey(tabKey);
+  let b = refBuckets.get(key);
+  if (!b) {
+    b = { counter: 0, map: new Map() };
+    refBuckets.set(key, b);
+  }
+  return b;
 }
 
-export function getRefSelector(ref) {
-  return refMap.get(ref) || null;
+// resetRefs 清空 ref 桶：无参清全部，带 tabKey 只清该 tab（导航/新快照前调用）。
+export function resetRefs(tabKey) {
+  if (tabKey === undefined) {
+    refBuckets.clear();
+    return;
+  }
+  refBuckets.delete(bucketKey(tabKey));
+}
+
+export function getRefSelector(ref, tabKey) {
+  const b = refBuckets.get(bucketKey(tabKey));
+  return (b && b.map.get(ref)) || null;
 }
 
 /**
@@ -122,31 +142,38 @@ export function collectInteractiveNodes() {
 const baselines = new Map(); // tabKey -> Set<role + '|' + name>
 
 export function assembleSnapshot({ nodes, paths, url }, tabKey = 'default') {
-  resetRefs();
-  const prev = baselines.get(tabKey) || null;
+  const b = refBucket(tabKey);
+  b.map.clear();
+  b.counter = 0;
+  const key = bucketKey(tabKey);
+  const prev = baselines.get(key) || null;
   const now = new Set();
   const lines = [];
   let newCount = 0;
   nodes.forEach((n, i) => {
-    refCounter += 1;
-    const ref = `@e${refCounter}`;
-    refMap.set(ref, paths[i]);
-    const key = `${n.role}|${n.name}`;
-    const isNew = prev && !prev.has(key) && !now.has(key);
+    b.counter += 1;
+    const ref = `@e${b.counter}`;
+    b.map.set(ref, paths[i]);
+    const k = `${n.role}|${n.name}`;
+    const isNew = prev && !prev.has(k) && !now.has(k);
     if (isNew) newCount += 1;
-    now.add(key);
+    now.add(k);
     lines.push(`${isNew ? '*' : ''}${n.role} "${n.name}" ${ref}`);
   });
-  baselines.set(tabKey, now);
+  baselines.set(key, now);
   return { text: lines.join('\n'), count: lines.length, new_count: newCount, url: url || '' };
 }
 
 // resetSnapshotBaseline 清某 tab（或全部）的对比基线——页面导航/open_tab 后调用，
 // 使下一帧重新建立基线而不把整页标成新元素。
+// 批9：refs 与基线同生命周期（导航后 cssPath 必失效），一并清掉，避免旧 @eN 解析到
+// 新页面的同序元素——那是「定位看似成功、其实点错」的温床。
 export function resetSnapshotBaseline(tabKey) {
   if (tabKey === undefined) {
     baselines.clear();
-  } else {
-    baselines.delete(tabKey);
+    resetRefs();
+    return;
   }
+  baselines.delete(bucketKey(tabKey));
+  resetRefs(tabKey);
 }

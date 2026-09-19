@@ -44,6 +44,17 @@ const (
 	ErrorCodeFileTooLarge    ErrorCode = "FILE_TOO_LARGE_7001"
 	ErrorCodeInvalidFileType ErrorCode = "INVALID_FILE_TYPE_7002"
 	ErrorCodeUploadFailed    ErrorCode = "UPLOAD_FAILED_7003"
+
+	// 浏览器自动化域（批10）。两者 HTTP 同为 409，前端必须靠码分流：
+	// 「Host 未连接」要开安装引导，「已有任务执行中」只要等/看监控——
+	// 都按 409 处理会把忙的用户引去重装 Host（真机走 UI 时踩过这一条）。
+	ErrorCodeBrowserHostOffline ErrorCode = "BROWSER_HOST_OFFLINE_8001"
+	ErrorCodeBrowserTaskBusy    ErrorCode = "BROWSER_TASK_BUSY_8002"
+	// 前置状态不满足（draft 没发布就执行、非执行中却暂停…）。同样落 409，但不能让
+	// response.Error 按 HTTP 码折进 DUPLICATE_ENTRY_3003：那是「唯一键冲突」的意思，
+	// 而这里是「你点早了」。今天前端 default 分支只看文案所以不出错，可码域一旦混用，
+	// 任何按码分流的改动都会把误操作当成重复提交（同族两条 409 已经栽过一次）。
+	ErrorCodeBrowserStateConflict ErrorCode = "BROWSER_STATE_CONFLICT_8003"
 )
 
 // ErrorCodeConfig 错误码配置
@@ -92,6 +103,10 @@ var errorCodeRegistry = map[ErrorCode]ErrorCodeConfig{
 	ErrorCodeFileTooLarge:    {Code: ErrorCodeFileTooLarge, HTTPCode: 413, Message: "文件过大"},
 	ErrorCodeInvalidFileType: {Code: ErrorCodeInvalidFileType, HTTPCode: 415, Message: "文件类型不支持"},
 	ErrorCodeUploadFailed:    {Code: ErrorCodeUploadFailed, HTTPCode: 500, Message: "上传失败"},
+
+	ErrorCodeBrowserHostOffline:   {Code: ErrorCodeBrowserHostOffline, HTTPCode: 409, Message: "浏览器 Host 未连接"},
+	ErrorCodeBrowserTaskBusy:      {Code: ErrorCodeBrowserTaskBusy, HTTPCode: 409, Message: "已有浏览器任务执行中"},
+	ErrorCodeBrowserStateConflict: {Code: ErrorCodeBrowserStateConflict, HTTPCode: 409, Message: "任务状态不满足该操作"},
 }
 
 // GetErrorCodeConfig 获取错误码配置

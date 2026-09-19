@@ -112,7 +112,7 @@ func (c *HostConn) writeJSON(v any) error {
 // D4a：读超时 90s，收到 pong 即重置——僵尸连接最迟 90s 判定并触发清理钩子。
 func (c *HostConn) readLoop() {
 	defer c.close()
-	c.conn.SetReadLimit(4 << 20) // 扩展→Host 方向官方上限 4GB 太大，命令回包 4MiB 封顶已绰绰（截图 base64 实测 <2MiB）
+	c.conn.SetReadLimit(hostFrameReadLimit) // 批9：与 cmd/nm-host 的边缘上限配对，见 timeouts.go 常量注释
 	_ = c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
@@ -239,6 +239,19 @@ func (r *HostRegistry) EnsureOnline(userID uint) error {
 		return ErrHostOffline
 	}
 	return nil
+}
+
+// ConnectedUserIDs 本进程当前持有 Host 连接的用户集（批9 重试归属门用）。
+// 注意口径是「连接在本进程」，不是「servable」：servable 是探针给的短期健康信号，
+// 归属门要回答的是「这条重试只有我能跑」，连接在就归我管，探针未过自有下发路径归因。
+func (r *HostRegistry) ConnectedUserIDs() []uint {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]uint, 0, len(r.conns))
+	for uid := range r.conns {
+		out = append(out, uid)
+	}
+	return out
 }
 
 // Status 概览（admin 用）

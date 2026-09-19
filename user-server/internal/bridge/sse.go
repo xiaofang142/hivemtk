@@ -57,6 +57,11 @@ const (
 	SSEBusBufferSize            = 100
 )
 
+// EventNewOutbound 出站投递事件名。出站认领门（acquireOutboundPush）按它判定，
+// 而 R-B1 已规定一切投递路径的事件都必须经 BuildOutboundSSEEvent 构造——两者配对，
+// 手拼一个新事件名就绕过了认领，故这里给字面量一个可被测试锁住的符号。
+const EventNewOutbound = "new_outbound"
+
 func runtimeSSEHeartbeatInterval(ctx context.Context) time.Duration {
 	return service.GlobalConfigParam().GetDuration(ctx, "bridge", "sse_heartbeat_interval", SSEDefaultHeartbeatInterval)
 }
@@ -112,7 +117,7 @@ type OutboundEventData struct {
 func BuildOutboundSSEEvent(d OutboundEventData) SSEEvent {
 	return SSEEvent{
 		ID:             strconv.FormatUint(d.HubID, 10),
-		Event:          "new_outbound",
+		Event:          EventNewOutbound,
 		ConversationID: d.ConversationID,
 		MsgType:        d.MsgType,
 		ReceiverID:     d.ReceiverID,
@@ -133,16 +138,33 @@ func BuildOutboundSSEEvent(d OutboundEventData) SSEEvent {
 	}
 }
 
+// OutboundPushClaimer 出站行「推送前认领」（批11 §3.7-2），由 repository.MessageHubRepository 实现。
+//
+// 为什么必须在服务端：SSE 与长轮询是**同一个 message_hub 待办集合**的两条投递路径，
+// 而轮询侧早有 ClaimPendingOutbound 排他认领、SSE 侧此前从不认领（一条 go func 直接 Publish）。
+// 两端都不认领的同一条 pending 行可被两条路径各拿一次 → 同一句话打给真实客户两遍（不可逆写）。
+// 更常见的是：SSE 推送后发送失败，行仍是 pending，客户端游标已前移 → 永不再投 → 静默丢消息。
+//
+// 统一口径 = 「先认领、再推送、ack 落状态；断连不回收已认领行，由可见性超时重投」，
+// 与 service.InboxOutboundClaimTimeout（轮询侧同一个超时来源）配对。
+type OutboundPushClaimer interface {
+	ClaimOutboundForPush(ctx context.Context, id uint64, claimTimeout time.Duration) (bool, error)
+}
+
 // SSEBus 事件通知总线：message_hub 写入后立即通知 SSE 连接
 //
 // 设计要点：
 //   - 按 channel:account_id 和 conversation_id 双维度订阅
 //   - buffer 满时丢弃（非阻塞），消费者不应被拖慢
 //   - Subscribe 返回 cancel 函数，调用方负责释放
+//   - new_outbound 事件先过 claimer 认领再投递（见 OutboundPushClaimer）
 type SSEBus struct {
 	mu     sync.RWMutex
 	subs   map[string][]chan SSEEvent
 	buffer int
+
+	claimer      OutboundPushClaimer
+	claimTimeout time.Duration
 }
 
 // GlobalSSEBus 全局 SSE 事件总线
@@ -202,13 +224,116 @@ func (b *SSEBus) SubscribeByConversation(conversationID string) (chan SSEEvent, 
 	return ch, cancel
 }
 
+// SetOutboundClaimer 注入出站认领器（由 handler 在装配 repository 查询器时调用一次）。
+//
+// 传 nil 表示「认领不可用」——此时 new_outbound 退回旧行为（直接推、不认领）。
+// 这不是一个安全的稳态：装配齐全的生产进程里它必须非 nil，故未注入时打一条 Warn，
+// 让「双路可能重投」在日志里留痕而不是静默。
+func (b *SSEBus) SetOutboundClaimer(c OutboundPushClaimer) {
+	b.mu.Lock()
+	b.claimer = c
+	if c != nil {
+		b.claimTimeout = service.InboxOutboundClaimTimeout
+	}
+	b.mu.Unlock()
+	if c == nil {
+		logger.GetLogger().Warn().
+			Msg("[SSE] 出站认领器未注入，new_outbound 退回不认领直推（SSE/轮询双路重投面未收口）")
+		return
+	}
+	logger.GetLogger().Info().Str("claim_timeout", b.claimTimeout.String()).
+		Msg("[SSE] 出站认领器已注入：先认领再推送")
+}
+
+// hasSubscribersFor 这条事件此刻是否有活的接收者（会话级或账号级任一维度）。
+//
+// 只有「有人在线」时才值得为推送认领——否则认领回来没人收，行要压到可见性超时才回到待办，
+// 白白给一条本来可以由轮询立刻取走的消息加一轮超时延迟。
+// 两个维度都要看：Publish 对 conv 级与账号级订阅都投递，只查一边会把纯会话级订阅者饿死。
+func (b *SSEBus) hasSubscribersFor(ev SSEEvent) bool {
+	key := ""
+	if platform, ok := ev.Data["platform"].(string); ok {
+		if accountID, ok2 := ev.Data["account_id"].(string); ok2 {
+			key = platform + ":" + accountID
+		}
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if ev.ConversationID != "" && len(b.subs[ev.ConversationID]) > 0 {
+		return true
+	}
+	return key != "" && len(b.subs[key]) > 0
+}
+
+// claimForPush 判定这条 new_outbound 此刻归不归本次推送，并把行置 inflight。
+//
+// 返回 false 的几种情形都必须放弃推送，且都不算丢消息——行仍留在待办集合里，
+// 由下一次补拉/轮询按同一口径取走：
+//  1. 无在线订阅者（仅总线路径判定：不认领，把行留给轮询）
+//  2. 认领失败（别的消费者已认领 / 已 delivered / 方向不对）
+//  3. 认领报错（此刻无法判定归属 → 宁可少投一次，也不制造双投；超时后自愈）
+//
+// needSubscriber：总线 Publish 传 true；SSE 首连补拉传 false——那时读者就是这条
+// HTTP 流本身，还没往总线订阅（HandleOutboxSSE 里 Subscribe 在补拉之后），按订阅判定会把
+// 整个 backlog 判成「没人要」而一条都不发。
+//
+// claimer 未注入时退回旧行为（放行），由 SetOutboundClaimer 的 Warn 负责暴露。
+func (b *SSEBus) claimForPush(ctx context.Context, ev SSEEvent, needSubscriber bool) bool {
+	b.mu.RLock()
+	claimer, timeout := b.claimer, b.claimTimeout
+	b.mu.RUnlock()
+	if claimer == nil {
+		return true
+	}
+	hubID, ok := ev.Data["hub_id"].(uint64)
+	if !ok || hubID == 0 {
+		logger.GetLogger().Error().
+			Str("event_id", ev.ID).
+			Str("conv_id", ev.ConversationID).
+			Interface("hub_id", ev.Data["hub_id"]).
+			Msg("[SSE] new_outbound 缺合法 hub_id，无法认领即不推送（须排查事件构造路径）")
+		return false
+	}
+	channel, _ := ev.Data["platform"].(string)
+	accountID, _ := ev.Data["account_id"].(string)
+	if needSubscriber && !b.hasSubscribersFor(ev) {
+		logger.Ctx(ctx).Debug().
+			Uint64("hub_id", hubID).Str("channel", channel).Str("account_id", accountID).
+			Msg("[SSE] 无在线订阅者，不认领（留给轮询/下次补拉）")
+		return false
+	}
+	claimed, err := claimer.ClaimOutboundForPush(ctx, hubID, timeout)
+	if err != nil {
+		logger.GetLogger().Error().Err(err).
+			Uint64("hub_id", hubID).Str("channel", channel).
+			Msg("[SSE] 出站认领报错，放弃本次推送（行仍待办，超时后重投）")
+		return false
+	}
+	if !claimed {
+		logger.GetLogger().Info().
+			Uint64("hub_id", hubID).Str("channel", channel).Str("account_id", accountID).
+			Msg("[SSE] 出站认领未命中（已被别的消费者取走或已终态），跳过低延迟推送")
+		return false
+	}
+	return true
+}
+
 // Publish 发布事件到 SSE 总线
 //
 // 投递策略：
-//  1. 优先按 conversation_id 精准投递（会话级订阅）
-//  2. 再按 channel:account_id 广播（账号级订阅）
-//     - 通道满时丢弃，避免阻塞发布者
+//  1. new_outbound 先过服务端权威认领（claimForPush），拿不到归属就不推
+//  2. 优先按 conversation_id 精准投递（会话级订阅）
+//  3. 再按 channel:account_id 广播（账号级订阅）
+//     - 通道满时丢弃，避免阻塞发布者；丢弃的行由可见性超时回到待办后重投
 func (b *SSEBus) Publish(event SSEEvent) {
+	b.PublishCtx(context.Background(), event)
+}
+
+// PublishCtx 带调用链上下文的 Publish（认领那一步要落 ctx 日志）。
+func (b *SSEBus) PublishCtx(ctx context.Context, event SSEEvent) {
+	if event.Event == EventNewOutbound && !b.claimForPush(ctx, event, true) {
+		return
+	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 

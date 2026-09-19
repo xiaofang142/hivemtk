@@ -21,8 +21,10 @@ export const publishBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/publish`)
 
 // 异步执行：立即返回 {session_id, status}
+// _silent：409 在域内有三种结论（Host 未连接 / 已有任务占用 / 依赖未满足），
+// 该开引导弹窗还是提示条由列表页按 bizCode 分流，拦截器再弹一次会让「占用」出现两条同文案。
 export const runBrowserTask = (id) =>
-  http.post(`/api/browser-automation/tasks/${id}/run`)
+  http.post(`/api/browser-automation/tasks/${id}/run`, {}, { _silent: true })
 
 export const pauseBrowserTask = (id) =>
   http.post(`/api/browser-automation/tasks/${id}/pause`)

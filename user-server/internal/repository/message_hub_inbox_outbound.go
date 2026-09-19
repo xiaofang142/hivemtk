@@ -68,6 +68,59 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 	return list, nil
 }
 
+// ClaimOutboundForPush 单行认领：SSE 即时下推前必须先过这道门（批11 §3.7-2）。
+//
+// 认领条件与 ClaimPendingOutbound 严格同口径，只是作用域从「账号的一批」收窄到「刚写入的这一行」：
+//   - status='pending'                      —— 无人认领，正常下推
+//   - status='inflight' 且 claimed_at 已超超时 —— 上一次下推后扩展没 ack（发送失败/进程被杀/SW 回收），
+//     这条就是要重投的那条；不重投它它就永久停在 inflight，客户收不到且无人知晓
+//
+// 返回 false = 这一行此刻归别人（轮询已认领 / 已 delivered / 已 failed / 入站方向）→ 调用方必须放弃推送。
+// 单表单行、条件更新，天然互斥（并发两个推送只有一个能拿到 1 行），不需要额外锁。
+func (r *MessageHubRepository) ClaimOutboundForPush(ctx context.Context, id uint64, claimTimeout time.Duration) (bool, error) {
+	if r == nil || r.db == nil || id == 0 {
+		return false, nil
+	}
+	cutoff := time.Now().Add(-claimTimeout)
+	const q = `UPDATE message_hub SET status = 'inflight', claimed_at = now()
+		WHERE id = ? AND direction = 'outbound'
+		  AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))
+		RETURNING id`
+	var ids []uint64
+	if err := r.db.WithContext(ctx).Raw(q, id, cutoff).Scan(&ids).Error; err != nil {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
+
+// FetchOutboundUndelivered 列出「此刻仍欠交付」的出站行（批11 §3.7-2 的重投来源）。
+//
+// 与 FetchOutboundSince 的差别是本批要修的语义核心：那个按 id 游标取，游标一过就再也看不见
+// 这条行——于是「推给客户但发送失败」的消息随游标前移永不再投（扩展端 lastEventID 一存即过），
+// 出站静默丢失。本函数按**状态**取：pending（没人碰过）或 inflight 且认领已超时（碰过但没 ack），
+// 交付完（delivered/failed）自然离开集合，因此收敛且与游标无关。
+//
+// inflight 但 claimed_at IS NULL 不算欠：那是别处（非本批两条认领路径）置的状态，
+// 无超时可判，宁可漏投一轮也不重复推。
+func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, channel, accountID string, claimTimeout time.Duration, limit int) ([]model.MessageHub, error) {
+	if r == nil || r.db == nil || channel == "" || accountID == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 200
+	}
+	cutoff := time.Now().Add(-claimTimeout)
+	var rows []model.MessageHub
+	err := r.db.WithContext(ctx).
+		Where("platform = ? AND account_id = ? AND direction = 'outbound'", channel, accountID).
+		Where("(status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))", cutoff).
+		Order("id ASC").Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *MessageHubRepository) GetByMsgIDsInScope(ctx context.Context, platform, accountID string, msgIDs []string) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || len(msgIDs) == 0 || platform == "" || accountID == "" {
 		return nil, nil

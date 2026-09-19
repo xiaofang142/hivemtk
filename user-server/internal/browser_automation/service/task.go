@@ -39,6 +39,27 @@ var ErrUserBusy = errors.New("已有浏览器任务执行中（同一 Host 串�
 // ErrDependencyNotMet 前置依赖未满足
 var ErrDependencyNotMet = errors.New("前置依赖任务未满足")
 
+// StateConflictError 目标状态不满足这条操作的前置条件（草稿没发布就执行、非执行中却暂停…）。
+// InvalidInputError 入参本身越界（数值范围、未知枚举、缺字段），与状态无关。
+// 两类结论此前用裸 fmt.Errorf / errors.New 抛出 → controller default 分支 = HTTP 500：
+// 真机 UI 腿点 draft 任务的「执行」，服务端把「还没发布」这种用户误操作记成内部错误。
+// 给它们类型，错误码映射才有落脚点。
+type StateConflictError struct{ Msg string }
+
+func (e *StateConflictError) Error() string { return e.Msg }
+
+type InvalidInputError struct{ Msg string }
+
+func (e *InvalidInputError) Error() string { return e.Msg }
+
+func stateConflict(format string, a ...any) error {
+	return &StateConflictError{Msg: fmt.Sprintf(format, a...)}
+}
+
+func invalidInput(format string, a ...any) error {
+	return &InvalidInputError{Msg: fmt.Sprintf(format, a...)}
+}
+
 // ValidateURL scheme 白名单：仅 http/https（防 chrome://、file://、内网 file 探测）
 func ValidateURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -105,7 +126,7 @@ func (s *TaskService) Update(ctx context.Context, id, userID uint, mutator func(
 		return nil, err
 	}
 	if t.Status == "running" {
-		return nil, errors.New("任务执行中，暂停后再编辑")
+		return nil, stateConflict("任务执行中，暂停后再编辑")
 	}
 	if err := mutator(t); err != nil {
 		return nil, err
@@ -130,19 +151,19 @@ func (s *TaskService) Publish(ctx context.Context, id, userID uint) error {
 		return err
 	}
 	if t.Status != "draft" {
-		return fmt.Errorf("仅草稿可发布，当前状态: %s", t.Status)
+		return stateConflict("仅草稿可发布，当前状态: %s", t.Status)
 	}
 	if t.BrainMode && strings.TrimSpace(t.BrainGoal) == "" {
-		return errors.New("brain 模式必须填写 brain_goal")
+		return invalidInput("brain 模式必须填写 brain_goal")
 	}
 	if !t.BrainMode && len(t.Steps) == 0 {
-		return errors.New("显式模式至少编排一个步骤")
+		return invalidInput("显式模式至少编排一个步骤")
 	}
 	// 批8：确认等待预算夹紧 1..900s。dto binding 只管 HTTP 入口，这一列还有 cron/重试/
 	// 直接落库三条来路；Publish 是进入可执行态的唯一门，值在这里失守就等于把
 	// 「不可逆提交前挂起多久」交给一个没人校验的整数（0 会退化成默认 600s，负数直接不等待）。
 	if t.ConfirmWaitSec < 0 || t.ConfirmWaitSec > confirmWaitMaxSec {
-		return fmt.Errorf("confirm_wait_sec 必须在 1..%d 秒之间（0=默认 600），当前: %d", confirmWaitMaxSec, t.ConfirmWaitSec)
+		return invalidInput("confirm_wait_sec 必须在 1..%d 秒之间（0=默认 600），当前: %d", confirmWaitMaxSec, t.ConfirmWaitSec)
 	}
 	return s.taskRepo.UpdateStatus(ctx, t.ID, "ready", "")
 }
@@ -153,7 +174,7 @@ func (s *TaskService) Pause(ctx context.Context, id, userID uint) error {
 		return err
 	}
 	if t.Status != "running" {
-		return fmt.Errorf("仅执行中任务可暂停，当前状态: %s", t.Status)
+		return stateConflict("仅执行中任务可暂停，当前状态: %s", t.Status)
 	}
 	// pause 语义 = stop 当前 running session（见设计文档 §9）
 	sessions, _, err := s.sessionRepo.ListByTaskID(ctx, t.ID, userID, 1, 10)
@@ -173,7 +194,7 @@ func (s *TaskService) Resume(ctx context.Context, id, userID uint) (*model.Brows
 		return nil, err
 	}
 	if t.Status != "paused" {
-		return nil, fmt.Errorf("仅暂停任务可恢复，当前状态: %s", t.Status)
+		return nil, stateConflict("仅暂停任务可恢复，当前状态: %s", t.Status)
 	}
 	return s.RunTask(ctx, t.ID, userID, t.RetryCount)
 }
@@ -184,7 +205,7 @@ func (s *TaskService) Archive(ctx context.Context, id, userID uint) error {
 		return err
 	}
 	if t.Status == "running" {
-		return errors.New("任务执行中，不能归档")
+		return stateConflict("任务执行中，不能归档")
 	}
 	return s.taskRepo.UpdateStatus(ctx, t.ID, "archived", "")
 }
@@ -197,14 +218,14 @@ func (s *TaskService) SetDependency(ctx context.Context, id, userID uint, depend
 	}
 	if dependsOnTaskID != nil {
 		if *dependsOnTaskID == t.ID {
-			return errors.New("任务不能依赖自身")
+			return invalidInput("任务不能依赖自身")
 		}
 		dep, err := s.taskRepo.GetByIDAnyUser(ctx, *dependsOnTaskID)
 		if err != nil {
-			return errors.New("前置任务不存在")
+			return invalidInput("前置任务不存在")
 		}
 		if dep.UserID != userID {
-			return errors.New("前置任务不存在")
+			return invalidInput("前置任务不存在")
 		}
 		if err := s.checkDependencyCycle(ctx, userID, t.ID, *dependsOnTaskID); err != nil {
 			return err
@@ -228,7 +249,7 @@ func (s *TaskService) checkDependencyCycle(ctx context.Context, userID, taskID, 
 	current := dependsOn
 	for depth := 0; depth < maxDepth; depth++ {
 		if current == taskID {
-			return errors.New("检测到任务依赖环")
+			return invalidInput("检测到任务依赖环")
 		}
 		if visited[current] {
 			return nil
@@ -251,7 +272,7 @@ func (s *TaskService) validateDependencyMode(t *model.BrowserTask) error {
 	case "", "all_done", "any_success":
 		return nil
 	default:
-		return fmt.Errorf("未知依赖模式: %s", t.DependsOnMode)
+		return invalidInput("未知依赖模式: %s", t.DependsOnMode)
 	}
 }
 
@@ -292,7 +313,7 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 		return nil, ErrTaskRunning
 	}
 	if t.Status != "ready" && t.Status != "paused" && t.Status != "done" && t.Status != "failed" {
-		return nil, fmt.Errorf("任务状态 %s 不可执行（需先 publish）", t.Status)
+		return nil, stateConflict("任务状态 %s 不可执行（需先 publish）", t.Status)
 	}
 	// 幂等：同任务已有运行中 session 则拒绝（并发触发防重，靠 DB 唯一性兜底竞态）
 	runningByTask, err := s.sessionRepo.CountRunningByTask(ctx, userID, taskID)
@@ -323,7 +344,7 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 		return nil, err
 	}
 	if !t.BrainMode && len(steps) == 0 {
-		return nil, errors.New("任务未编排步骤")
+		return nil, stateConflict("任务未编排步骤")
 	}
 
 	session := &model.BrowserSession{

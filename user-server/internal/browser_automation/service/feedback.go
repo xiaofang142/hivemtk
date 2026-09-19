@@ -19,11 +19,17 @@ import (
 type FeedbackService struct {
 	sessionRepo repository.BrowserSessionRepository
 	taskRepo    repository.BrowserTaskRepository
+	// hostUsersFn 批9 归属门：返回本进程当前持有 Host 连接的用户集（装配见 router 的
+	// SetHostUsersProvider）。nil = 不参与过滤。
+	hostUsersFn func() []uint
 }
 
 func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRepo repository.BrowserTaskRepository) *FeedbackService {
 	return &FeedbackService{sessionRepo: sessionRepo, taskRepo: taskRepo}
 }
+
+// SetHostUsersProvider 注入「本机 Host 连接归属」查询（HostRegistry.ConnectedUserIDs）。
+func (f *FeedbackService) SetHostUsersProvider(fn func() []uint) { f.hostUsersFn = fn }
 
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
 //
@@ -140,6 +146,7 @@ func (f *FeedbackService) scheduleRetry(ctx context.Context, task *model.Browser
 
 // StartRetryScanner D4b：重试到期扫描器（每分钟）。ClaimDueRetries 条件认领（置 NULL）
 // 保证多副本/双 tick 不双触发；认领后进程崩溃则该次重试放弃（与旧语义一致，但正常运行期重启不再丢）。
+// 批9：认领前过归属门（见 scanDueRetries）。
 func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 	go func() {
 		t := time.NewTicker(time.Minute)
@@ -156,7 +163,19 @@ func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 }
 
 func (f *FeedbackService) scanDueRetries(ctx context.Context) {
-	due, err := f.taskRepo.ClaimDueRetries(ctx, time.Now(), 10)
+	// 批9 归属门：Host 连接是进程内状态，挂起重试是库内共享队列。本进程没有该用户的
+	// 连接却认领了它的重试，只会以「browser host 未连接」烧掉一次 MaxRetryTimes 额度
+	// （真机实测 task=377 session=429）。provider 未装配时不过滤——宁可退化成改造前
+	// 行为，也不让一次装配遗漏静默停掉全部重试。
+	var owners []uint
+	if f.hostUsersFn != nil {
+		owners = f.hostUsersFn()
+		if len(owners) == 0 {
+			logger.Infof("[BrowserFeedback] 本轮重试扫描跳过：本机无 Host 连接（挂起重试留给持有连接的实例认领）")
+			return
+		}
+	}
+	due, err := f.taskRepo.ClaimDueRetries(ctx, time.Now(), 10, owners)
 	if err != nil {
 		logger.Warnf("[BrowserFeedback] 重试扫描失败: %v", err)
 		return

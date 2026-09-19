@@ -151,13 +151,6 @@ func NewBridgeIngestHandler(ingress *service.InboxIngressService) *BridgeIngestH
 	return h
 }
 
-// SetOutboxQuerier 注入 OutboxQuerier（由 router 在装配完成后调用一次）
-func (h *BridgeIngestHandler) SetOutboxQuerier(q OutboxQuerier) {
-	if h.outboxFetcher != nil {
-		h.outboxFetcher.SetQuerier(q)
-	}
-}
-
 // SetLeadMiner 设置线索挖掘回调（Douyin/TikTok 等群聊渠道用）
 func (h *BridgeIngestHandler) SetLeadMiner(fn func(ctx context.Context, ev *model.MessageEvent)) {
 	h.leadMiner = fn
@@ -181,17 +174,85 @@ type OutboxQuerier interface {
 	FetchOutboundSince(ctx context.Context, channel, accountID string, sinceID uint64, limit int) ([]model.MessageHub, error)
 }
 
+// OutboxOwedQuerier 「仍欠交付」出站集合查询（批11 §3.7-2），同理由 repository 隐式实现。
+//
+// 与 OutboxQuerier 的分工就是本批要修的语义差：游标查询答不出「这条还没交付」，
+// 它只答「id 比游标大的」——推送失败/发送超时的行一旦落在游标之下就再也不被看见。
+type OutboxOwedQuerier interface {
+	FetchOutboundUndelivered(ctx context.Context, channel, accountID string, claimTimeout time.Duration, limit int) ([]model.MessageHub, error)
+}
+
 type outboxDBFetcher struct {
 	querier OutboxQuerier
+	owed    OutboxOwedQuerier
 }
 
 func (f *outboxDBFetcher) SetQuerier(q OutboxQuerier) {
 	f.querier = q
 }
 
+// SetOwedQuerier 注入未交付查询器；未注入时 FetchOutboxSince 退回游标旧语义（由装配处 Warn 留痕）。
+func (f *outboxDBFetcher) SetOwedQuerier(q OutboxOwedQuerier) {
+	f.owed = q
+}
+
+// SetOutboxQuerier 注入 OutboxQuerier（由 router 在装配完成后调用一次）。
+//
+// 同一个 repository 实例同时实现三个口：游标查询、未交付查询、推送前认领。后两个靠可选断言取，
+// 断不到就是装配缺件——这里必须喊出来（Warn/Error 各一条），否则 SSE 会静默退回
+// 「不认领 + 按游标补拉」的旧行为，本批收口的两条面（双投、静默丢）重新打开。
+func (h *BridgeIngestHandler) SetOutboxQuerier(q OutboxQuerier) {
+	if h.outboxFetcher != nil {
+		h.outboxFetcher.SetQuerier(q)
+		if oq, ok := q.(OutboxOwedQuerier); ok {
+			h.outboxFetcher.SetOwedQuerier(oq)
+		} else {
+			logger.GetLogger().Error().
+				Msg("[SSE] 注入的 outbox 查询器未实现 FetchOutboundUndelivered，补拉退回游标旧语义（发送失败的出站行不会再投）")
+		}
+	}
+	if cq, ok := q.(OutboundPushClaimer); ok {
+		GlobalSSEBus.SetOutboundClaimer(cq)
+	} else {
+		GlobalSSEBus.SetOutboundClaimer(nil)
+	}
+}
+
+// FetchOutboxSince 取「此刻该发给这条连接」的出站事件。
+//
+// 两条语义，取决于注入方是否实现了未交付查询（装配缺件时 SetOutboxQuerier 已 Error 留痕）：
+//   - owed（生产主路径，批11 §3.7-2）：按状态取仍欠交付的行，**与游标无关**。
+//     每条先过 GlobalSSEBus.claimForPush 认领门，抢不到就不发（同一行只可能有一条路径发出去）。
+//     交付完成的行靠 ack 离开集合，所以这条查询天然收敛、也不会重放历史。
+//   - 游标（旧语义，仅缺件兜底）：id > 游标，含已投递行。
+//
+// 无论哪条，newLastID 都继续推进——它是写给客户端的 id: 帧与 Last-Event-ID 协议字段，
+// 不再是服务端的读取闸门。
 func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, accountID, lastEventID string) ([]SSEEvent, string, error) {
 	if f.querier == nil {
 		return nil, "", nil
+	}
+	if f.owed != nil {
+		rows, err := f.owed.FetchOutboundUndelivered(ctx, channel, accountID, service.InboxOutboundClaimTimeout, sseBacklogLimit)
+		if err != nil {
+			return nil, "", err
+		}
+		events := make([]SSEEvent, 0, len(rows))
+		for _, row := range rows {
+			ev := buildOutboundEvent(row)
+			// 认领门与总线路径同一个函数：补拉发出去的行同样占 inflight，
+			// 于是轮询拿不到它（双投收口），超时未 ack 又会回到欠交付集合（重投收口）。
+			if !GlobalSSEBus.claimForPush(ctx, ev, false) {
+				continue
+			}
+			events = append(events, ev)
+		}
+		// 游标只作协议记账（id: 帧 / Last-Event-ID），不再是读取闸门
+		newLastID := lastEventID
+		if len(rows) > 0 {
+			newLastID = strconv.FormatUint(uint64(rows[len(rows)-1].ID), 10)
+		}
+		return events, newLastID, nil
 	}
 
 	var sinceID uint64
@@ -211,27 +272,14 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 		sinceID = id
 	}
 
-	rows, err := f.querier.FetchOutboundSince(ctx, channel, accountID, sinceID, 200)
+	rows, err := f.querier.FetchOutboundSince(ctx, channel, accountID, sinceID, sseBacklogLimit)
 	if err != nil {
 		return nil, "", err
 	}
-
 	events := make([]SSEEvent, 0, len(rows))
 	for _, row := range rows {
 		// R-B1：Data 统一经 BuildOutboundSSEEvent 构造（与总线路径逐键一致）
-		events = append(events, BuildOutboundSSEEvent(OutboundEventData{
-			HubID:          uint64(row.ID),
-			MsgID:          row.MsgID,
-			Platform:       row.Platform,
-			AccountID:      row.AccountID,
-			ConversationID: row.ConversationID,
-			Content:        row.Content,
-			MsgType:        row.MsgType,
-			ReceiverID:     row.ReceiverID,
-			IsAIReply:      row.IsAIReply,
-			Extra:          row.Extra,
-			CreatedAt:      row.CreatedAt,
-		}))
+		events = append(events, buildOutboundEvent(row))
 	}
 
 	newLastID := lastEventID
@@ -239,6 +287,25 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 		newLastID = strconv.FormatUint(uint64(rows[len(rows)-1].ID), 10)
 	}
 	return events, newLastID, nil
+}
+
+// sseBacklogLimit 单次补拉上限（两条语义共用同一个数，避免兜底路径比主路径更宽）。
+const sseBacklogLimit = 200
+
+func buildOutboundEvent(row model.MessageHub) SSEEvent {
+	return BuildOutboundSSEEvent(OutboundEventData{
+		HubID:          uint64(row.ID),
+		MsgID:          row.MsgID,
+		Platform:       row.Platform,
+		AccountID:      row.AccountID,
+		ConversationID: row.ConversationID,
+		Content:        row.Content,
+		MsgType:        row.MsgType,
+		ReceiverID:     row.ReceiverID,
+		IsAIReply:      row.IsAIReply,
+		Extra:          row.Extra,
+		CreatedAt:      row.CreatedAt,
+	})
 }
 
 // NewBridgeIngestHandlerWithMock 构造带 mock 的 HTTP ingest 处理器（仅测试用）

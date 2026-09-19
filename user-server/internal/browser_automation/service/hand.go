@@ -17,16 +17,17 @@ func NewHand(registry *HostRegistry) *Hand {
 	return &Hand{registry: registry}
 }
 
-// openTab 原语
-func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool) (int, error) {
+// openTab 原语。回包一并返回：批9a 起扩展侧会等页面加载完成，
+// loaded 是「这一步到底读到了没有」的审计事实，不能只留个 tab id 就当成功。
+func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool) (int, map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "open_tab", "url": url, "active": active,
 	})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	tabID, _ := toInt(res["chrome_tab_id"])
-	return tabID, nil
+	return tabID, res, nil
 }
 
 // click 原语。回包含扩展侧 injClick 的 navigated 标志（是否发生页面跳转）——
@@ -82,15 +83,14 @@ func (h *Hand) resolveRef(ctx context.Context, userID uint, tabID int, ref strin
 }
 
 // markdown 原语（页面 Markdown，供 LLM 吃）
-func (h *Hand) markdown(ctx context.Context, userID uint, tabID int) (string, error) {
+func (h *Hand) markdown(ctx context.Context, userID uint, tabID int) (map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, handMarkdownTimeout, map[string]any{
 		"action": "markdown", "tab_id": tabID,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	s, _ := res["markdown"].(string)
-	return s, nil
+	return res, nil
 }
 
 // screenshot 原语（M3：仅对激活 tab；扩展侧先激活再截，见设计文档 §6）

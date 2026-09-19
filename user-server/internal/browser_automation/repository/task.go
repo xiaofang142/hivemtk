@@ -29,7 +29,8 @@ type BrowserTaskRepository interface {
 	ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error)
 	// D4b（G5）：重试持久化——scheduleRetry 落 next_retry_at，扫描器条件认领（置 NULL）防双触发
 	SetNextRetryAt(ctx context.Context, id uint, at *time.Time) error
-	ClaimDueRetries(ctx context.Context, now time.Time, limit int) ([]*model.BrowserTask, error)
+	// ownerUserIDs：本进程持有 Host 连接的用户白名单（空=不加此过滤，见 ClaimDueRetries 注释）
+	ClaimDueRetries(ctx context.Context, now time.Time, limit int, ownerUserIDs []uint) ([]*model.BrowserTask, error)
 }
 
 type browserTaskRepo struct {
@@ -174,22 +175,41 @@ func (r *browserTaskRepo) SetNextRetryAt(ctx context.Context, id uint, at *time.
 
 // ClaimDueRetries D4b（G5）：原子认领到期重试——条件更新置 NULL，多副本同库仅一方 RowsAffected=1；
 // 认领成功后进程崩溃则重试丢失（与改造前语义相同），但重启不再丢挂起重试。
-func (r *browserTaskRepo) ClaimDueRetries(ctx context.Context, now time.Time, limit int) ([]*model.BrowserTask, error) {
+//
+// 批9 归属门：Host 连接是**进程内**状态（registry.conns），挂起重试却是**库内**共享队列。
+// 无门时任一实例都能认领任一用户的重试，然后在自己空空的 registry 上判「browser host
+// 未连接」，把 MaxRetryTimes 的额度烧在一次根本不可能执行的认领上（真机实测：task=377
+// session=429 由另一实例认领，而本机 Host 全程在线）。ownerUserIDs 即本进程持有连接的用户
+// 白名单。**空=不加过滤**：装配遗漏时退化成改造前行为，也不要静默停掉全部重试
+// （调用方若要表达「本机无人」，应自行不调用，见 feedback.scanDueRetries）。
+//
+// 状态门（批13）：挂起重试只在**仍处于失败态**时才有意义。next_retry_at 是失败时写下的，
+// 之后行的状态可以走到任何一处，而这四条路都不会回头清这个字段：
+// done —— 用户手工重跑成功了，RunTask 明确放行 done 态执行，扫描器到点就把一条已经成功
+// 的任务再跑一遍（含写步，防双发只剩台账这一道，等于把「成功即终止」推翻）；
+// paused —— 同样被 RunTask 放行（它是 Resume 的合法前态），于是「用户按了暂停」被后台
+// 重试悄悄解除；archived / running —— RunTask 会拒，但认领已经把字段置空，挂起被无声吞掉。
+// 认领条件与条件更新两处都带 status='failed'：只挑一处会留下 Pluck→Update 之间用户正好
+// 归档/重跑的竞态窗口（也正因如此，单独摘掉任一处都测不出红，两处一起摘才红——
+// 与 deleted_at 条件同性质，见 retry_claim_b9_test.go）。软删行另有 deleted_at 条件兜。
+func (r *browserTaskRepo) ClaimDueRetries(ctx context.Context, now time.Time, limit int, ownerUserIDs []uint) ([]*model.BrowserTask, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
 	ids := []uint{}
-	err := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
-		Where("next_retry_at IS NOT NULL AND next_retry_at <= ? AND deleted_at IS NULL", now).
-		Order("next_retry_at ASC").Limit(limit).
-		Pluck("id", &ids).Error
+	q := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
+		Where("next_retry_at IS NOT NULL AND next_retry_at <= ? AND deleted_at IS NULL AND status = ?", now, "failed")
+	if len(ownerUserIDs) > 0 {
+		q = q.Where("user_id IN ?", ownerUserIDs)
+	}
+	err := q.Order("next_retry_at ASC").Limit(limit).Pluck("id", &ids).Error
 	if err != nil || len(ids) == 0 {
 		return nil, err
 	}
 	claimed := make([]uint, 0, len(ids))
 	for _, id := range ids {
 		res := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
-			Where("id = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?", id, now).
+			Where("id = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ? AND status = ?", id, now, "failed").
 			Update("next_retry_at", nil)
 		if res.Error == nil && res.RowsAffected == 1 {
 			claimed = append(claimed, id)

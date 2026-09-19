@@ -45,6 +45,13 @@ const (
 	// 让给「SW 冷启/刚被 Chrome 唤醒」这类合法慢路径——探针误判的代价是白重启一次 host，
 	// 而探针时限过短的代价是把可用 Host 拖进重启循环，故宁松不紧（远小于用户可见的 30s 命令超时）。
 	hostServProbeTimeout = 10 * time.Second
+	// hostFrameReadLimit 单条 Host 回帧的字节上限（批9 与 cmd/nm-host 配套）。
+	// 为什么比 nm-host 的边缘上限（4MiB）**大一倍**：超限帧必须在 host 侧先被判掉——
+	// 服务端 read limit 触发的后果是「协议违规 → 整条 Host 连接关闭」，连带该用户所有
+	// 在途命令一起死；host 侧丢弃只损失一条命令并能回明确错误。两者相等时则取决于
+	// 谁先判，留出头寸才是不依赖时序的那一种。
+	// 依据：截图 base64 实测 <2MiB；Chrome 扩展→host 官方上限 64MiB（旧注释的 4GB 是文档误传）。
+	hostFrameReadLimit = 8 << 20
 )
 
 // —— 会话收敛与看门狗（executor.go / task.go / executor_selfheal.go / cron.go）——

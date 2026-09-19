@@ -4,7 +4,18 @@ import { getApiConfig } from './configManager'
 import i18n from '@/i18n'
 import { getStoredLocale } from '@/i18n/locale'
 
-const t = (key) => i18n.global.t(key)
+// 生产构建里 vue-i18n 的预编译消息编译器对全部现存 key 抛 UNEXPECTED_RETURN_TYPE
+// （spec §6：dev/prod 一致，1834/1834）。这里必须兜住：t() 的调用点全在拦截器给错误对象
+// 挂 status/bizCode 之前，一抛出去整条错误分支就变成 toast「SyntaxError」，
+// 调用方拿到的连 Error 都不是，分流字段自然全丢。取不到译文就退回 key 本身
+// （和 vue-i18n 自己遇到缺 key 的行为一致），全站 i18n 的正解仍按 §6 单独排期。
+const t = (key) => {
+  try {
+    return i18n.global.t(key)
+  } catch {
+    return key
+  }
+}
 
 const createRequestInstance = () => {
   let apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || '';
@@ -60,6 +71,9 @@ function extractServerMessage(data, fallback) {
 function buildRequestError(message, response, bizCode) {
   const err = new Error(message || t('http.requestFailed'))
   err.response = response || null
+  // status / bizCode 都是给调用方分流用的机器读数字段：只靠 message 文案判分支，
+  // 服务端换一次措辞（或切了语言）就把逻辑判错——浏览器任务的「忙」与「Host 离线」都栽过这条。
+  err.status = (response && response.status) || 0
   if (bizCode !== undefined) err.bizCode = bizCode
   return err
 }

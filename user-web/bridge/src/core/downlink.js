@@ -182,6 +182,22 @@ export async function initDownlink(channels) {
   }
 }
 
+// dmAwareConvId 计算"投递定位用"的会话键：主动私信（extra.dm_target==='member'）用 receiver_id，
+// 其余用行原始 conversation_id。
+//
+// 必须两条下行路径同源（轮询 + SSE）：SSE 是生产默认通道，若只在轮询侧重映射，
+// 同一条主动私信经 SSE 下发时会被填进群会话的输入框——发错对象且不可撤回。
+// extra 可能是对象（SSE Data / 新服务端）或 JSON 字符串（老 payload 直传 DB 列），两种都吃。
+export function dmAwareConvId(row, fallbackConvId) {
+  let convId = fallbackConvId;
+  if (row && row.receiver_id && row.receiver_id !== row.conversation_id) {
+    let ex = row.extra;
+    if (typeof ex === 'string') { try { ex = JSON.parse(ex); } catch (_) { ex = null; } }
+    if (ex && ex.dm_target === 'member') convId = row.receiver_id;
+  }
+  return convId;
+}
+
 // pollDownlink 通道C·下发轮询 + 通道B·状态确认。
 // 拉取本渠道待发消息 → 按 conversation_id 分组并行转发到对应网页会话 → 成功后批量 ack delivered。
 //
@@ -269,7 +285,9 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   });
 
   // —— 按 conversation_id 分组（同会话内保留原顺序以维持单会话限速语义）——
-  const groups = new Map(); 
+  const groups = new Map();
+  // 批11：cache 命中但服务端仍下发的行 → 补确认（见 reAckSentDuplicates 注释）
+  const dupEntries = [];
   for (const m of messages) {
     if (!m || !m.msg_id) continue;
     // SentCache key 必须用 msg_id|conversation_id 复合键：
@@ -279,20 +297,26 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     //   复合键保证不同会话的同 msg_id 消息各自独立去重。
     // 主动私信场景（后端 Extra.dm_target==='member'）：以 receiver_id（成员标识）为会话定位键，
     // 而非原群会话 conversation_id——抖音私信会话 id 即成员标识，列表匹配可打开已有私信会话。
-    let convId = m.conversation_id || '_unknown_';
-    if (m.receiver_id && m.receiver_id !== m.conversation_id) {
-      let ex = m.extra;
-      if (typeof ex === 'string') { try { ex = JSON.parse(ex); } catch (_) { ex = null; } }
-      if (ex && ex.dm_target === 'member') convId = m.receiver_id;
-    }
+    const convId = dmAwareConvId(m, m.conversation_id || '_unknown_');
     const cacheKey = `${m.msg_id}|${convId}`;
-    if (cache.has(cacheKey)) continue; 
+    if (cache.has(cacheKey)) {
+      dupEntries.push({ msg_id: m.msg_id, conversation_id: m.conversation_id || '' });
+      continue;
+    }
     const raw = m.content || '';
     if (!raw) continue; 
     // XSS 防护：净化内容（控制长度、去控制字符）
     const safeContent = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;
     if (!groups.has(convId)) groups.set(convId, []);
     groups.get(convId).push({ msg: m, sanitized: safeContent });
+  }
+
+  if (dupEntries.length) {
+    await reAckSentDuplicates(
+      { serverUrl, channel, accountId, token },
+      dupEntries,
+      `[下行重复补确认] ${channel}`
+    );
   }
 
   // —— 按 conversation_id 串行转发（核心修复：杜绝跨会话污染）——
@@ -493,6 +517,56 @@ export function processAckDetailedResult(ackRes, ackIds, channel = '', label = '
     else result.retriable++; 
   }
   return result;
+}
+
+// reAckSentDuplicates 补确认：本地 SentCache 已命中、服务端却仍然把这条交给我们。
+//
+// 批11（B 链路领取语义）出现该情形的三种真实原因：
+//   (a) 上次 ack 请求失败/非 ok（行仍 pending）；
+//   (b) 服务端 SSE 推送先给行打了 inflight 领取标记，ack 丢失 → 可见性超时后重推；
+//   (c) 页面/SW 重启把 _pendingAck（纯内存队列）清空，而已发缓存（chrome.storage）还在
+//       → 重试机制彻底失效，这是唯一还能了结该行的路径。
+// 旧行为是直接 continue：行永远留在"欠投递"集合里，服务端每 claimTimeout 重推一次，
+// 客户端每次都命中缓存再跳过——同一条文案在用户聊天窗里被反复打开→放弃，且无一处日志能看出
+// 这是"其实已经发出去了"。补一次 delivered 确认让行翻终态，重推循环当场收敛。
+//
+// 失败不抛错：退到 _pendingAck 队列（轮询模式下轮由 claimDuePendingAck 消化）；
+// SSE 模式不消化该队列，但服务端超时重推会再次进入本函数，仍能闭环。
+// 无 DB 会话归属的条目不走 v2 items（服务端会整单 400），也不能走 legacy
+// （legacy 按 msg_id 翻所有会话，会误翻其他会话尚未投递的同 msg_id 行）→ 只记 warn。
+async function reAckSentDuplicates(cred, entries, label) {
+  const withConv = [];
+  for (const e of entries) {
+    if (e.conversation_id && e.conversation_id !== '_unknown_') withConv.push(e);
+    else log.warn(`${label} 缺少会话归属，无法安全补确认`, { channel: cred.channel, msg_id: e.msg_id });
+  }
+  if (!withConv.length) return;
+  const ids = withConv.map((e) => e.msg_id);
+  const res = await ackOutbox(cred, ids, { label, items: withConv });
+  const S = BRIDGE_PROTOCOL_V2.RESPONSE_STATUS;
+  const items = res && res.status === 'ok' && Array.isArray(res.items) ? res.items : null;
+  if (!items) {
+    if (res && res.status === 'ok') {
+      // items 缺失 = 老服务端按全量成功处理（与正常下发 ack 同口径），不入重试队列
+      log.info(`${label} 已补确认`, { channel: cred.channel, count: ids.length });
+      return;
+    }
+    for (const e of withConv) addPendingAck(cred.channel, e.msg_id, 'duplicate_reack_failed', e.conversation_id);
+    log.warn(`${label} 失败，转入重试队列`, { channel: cred.channel, count: ids.length });
+    return;
+  }
+  const byID = new Map(items.map((it) => [it.msg_id, it]));
+  let settled = 0;
+  for (const e of withConv) {
+    const it = byID.get(e.msg_id);
+    const st = it && it.status;
+    // acked/duplicate：记账完成；not_found/not_in_scope：不可能再成功（已终态或归属他人）
+    if (st === S.ACKED || st === S.DUPLICATE || st === S.NOT_FOUND || st === S.NOT_IN_SCOPE) { settled++; continue; }
+    addPendingAck(cred.channel, e.msg_id, `duplicate_reack_${st || 'missing_item'}`, e.conversation_id);
+  }
+  log.info(`${label} 已补确认`, {
+    channel: cred.channel, total: ids.length, settled, retried: ids.length - settled,
+  });
 }
 
 // =============================================================
@@ -716,12 +790,24 @@ export async function startSSEDelivery(channel, accountId, handlers) {
             if (stopped) return;
 
             // B1：键解析收敛到 resolveSSEOutboundKeys（msg_id 缺失回退 contentHash，绝不回退 data.id）
-            const { msgId, convId } = resolveSSEOutboundKeys(data, channel);
+            const { msgId, convId: dbConvId } = resolveSSEOutboundKeys(data, channel);
+            // 批11：主动私信与轮询同源重映射——dbConvId 是 DB 行归属（ack 用），
+            // convId 是页面会话定位键（打开会话/入队/发送用）。二者只在 DM 场景分叉。
+            const convId = dmAwareConvId(data, dbConvId);
 
             // SentCache 防重（复合键：msg_id|conversation_id）
             const cacheKey = `${msgId}|${convId}`;
             if (cache.has(cacheKey)) {
-              log.info(`SSE 消息已在缓存中，跳过: ${cacheKey}`);
+              // 批11：本地已发过而服务端仍推来 = ack 丢包/领取超时重推。补确认让行翻终态，
+              // 否则每 claimTimeout 重推一次、每次命中缓存跳过，循环永不收敛。
+              log.info(`SSE 消息已在缓存中，补确认后跳过: ${cacheKey}`);
+              await reAckSentDuplicates(
+                { serverUrl, channel, accountId, token },
+                // 只确认服务端真实点名过的行：msg_id 缺失时 msgId 是本地 contentHash 回退值，
+                // 拿它去 ack 只会命中 not_found 噪声。
+                data.msg_id ? [{ msg_id: data.msg_id, conversation_id: data.conversation_id || '' }] : [],
+                `[SSE 重复补确认] ${channel}:${convId}`
+              );
               handlers.onDuplicate?.(msgId);
               return;
             }
@@ -762,13 +848,15 @@ export async function startSSEDelivery(channel, accountId, handlers) {
                       isAIReply: data.is_ai_reply || data.event === 'ai_reply',
                     });
 
-                    // ack 服务端（B2：convId 有效时 ackOutbox 内部自动走 v2 items[]）
+                    // ack 服务端（B2：会话有效时 ackOutbox 内部自动走 v2 items[]）
+                    // 批11：必须用 dbConvId（DB 行归属）而非 convId（页面定位键）——DM 场景两者不同，
+                    // 用页面键翻转会 ack 到不存在的行 → 真行永远留在欠投递集合里被重推。
                     // ackOutbox 不抛错只回 {status:'error'}——两条失败路径都要入重试队列。
                     try {
                       const ackRes = await ackOutbox(
                         { serverUrl, channel, accountId, token },
                         [msgId],
-                        { label: `[SSE ack] ${channel}:${convId}`, conversationId: convId }
+                        { label: `[SSE ack] ${channel}:${convId}`, conversationId: dbConvId }
                       );
                       if (!ackRes || ackRes.status !== 'ok') {
                         addPendingAck(channel, msgId, 'sse_ack_not_ok', data.conversation_id || '');

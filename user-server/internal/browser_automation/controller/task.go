@@ -10,6 +10,7 @@ import (
 	bamodel "hivemtk-user/internal/browser_automation/model"
 	baplat "hivemtk-user/internal/browser_automation/platform"
 	basvc "hivemtk-user/internal/browser_automation/service"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"strings"
@@ -18,13 +19,22 @@ import (
 	"gorm.io/gorm"
 )
 
+// hostProber 交互式执行前的 Host 在线探针，生产实现是 *service.HostRegistry。
+// 只挂在这一条 HTTP 路径上：cron 与自动重试要容忍「Host 暂时不在，会话排队等它」，
+// 而在列表页点「执行」的人必须当场拿到「没 Host」的结论。
+// 批10 的 C 腿（真机 kill nm-host 后点执行）实测：改造前 /run 回的是 200 + session_id，
+// RunTask 全异步，ErrHostOffline 只在执行期产生 → 8001 在请求面永远不出现，
+// 前端「离线 → 引导弹窗」形同虚设，用户看到的是「已开始执行」再等一条红色会话失败。
+type hostProber interface{ EnsureOnline(userID uint) error }
+
 // TaskController 任务控制器
 type TaskController struct {
-	svc *basvc.TaskService
+	svc  *basvc.TaskService
+	host hostProber
 }
 
-func NewTaskController(svc *basvc.TaskService) *TaskController {
-	return &TaskController{svc: svc}
+func NewTaskController(svc *basvc.TaskService, host hostProber) *TaskController {
+	return &TaskController{svc: svc, host: host}
 }
 
 func taskUserID(ctx *gin.Context) uint { return ctx.GetUint("user_id") }
@@ -42,10 +52,13 @@ func parseID(ctx *gin.Context) (uint, bool) {
 func taskErrToResponse(ctx *gin.Context, err error) {
 	switch {
 	case errors.Is(err, basvc.ErrHostOffline):
-		response.Error(ctx, http.StatusConflict, err.Error())
-	case errors.Is(err, basvc.ErrTaskRunning):
-		response.Error(ctx, http.StatusConflict, err.Error())
+		// 批10：离线与忙都归 409，但前端必须是两条路——离线要去装扩展/Host，忙只要等。
+		// 只给 HTTP 码时 response.Error 会把所有 409 折成 DUPLICATE_ENTRY_3003，
+		// 于是「已有任务执行中」也弹安装引导（真机走 UI 实测踩过）。码域见 utils/error_code.go。
+		response.Error(ctx, utils.ErrorCodeBrowserHostOffline, err.Error())
 	case errors.Is(err, basvc.ErrUserBusy):
+		response.Error(ctx, utils.ErrorCodeBrowserTaskBusy, err.Error())
+	case errors.Is(err, basvc.ErrTaskRunning):
 		response.Error(ctx, http.StatusConflict, err.Error())
 	case errors.Is(err, basvc.ErrDependencyNotMet):
 		response.Error(ctx, http.StatusConflict, err.Error())
@@ -54,7 +67,19 @@ func taskErrToResponse(ctx *gin.Context, err error) {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		response.Error(ctx, http.StatusNotFound, "任务不存在")
 	default:
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		// 类型分流放在 default 里：这两类是「带动态文案的前置条件」，没有可比对的哨兵值，
+		// 只能按类型判。状态不满足=409（和忙/离线同一族：换个时机再来），入参不合法=400
+		// （改请求再来）；两者都把真实文案原样带给前端，不再冒充 500。
+		var sc *basvc.StateConflictError
+		var ii *basvc.InvalidInputError
+		switch {
+		case errors.As(err, &sc):
+			response.Error(ctx, utils.ErrorCodeBrowserStateConflict, sc.Error())
+		case errors.As(err, &ii):
+			response.Error(ctx, http.StatusBadRequest, ii.Error())
+		default:
+			response.Error(ctx, http.StatusInternalServerError, err.Error())
+		}
 	}
 }
 
@@ -224,6 +249,11 @@ func (c *TaskController) Publish(ctx *gin.Context) {
 func (c *TaskController) Run(ctx *gin.Context) {
 	id, ok := parseID(ctx)
 	if !ok {
+		return
+	}
+	// 交互路径的先验门：Host 不在就当场 409 BROWSER_HOST_OFFLINE_8001，不建会话。
+	if err := c.host.EnsureOnline(taskUserID(ctx)); err != nil {
+		taskErrToResponse(ctx, err)
 		return
 	}
 	session, err := c.svc.RunTask(ctx.Request.Context(), id, taskUserID(ctx), 0)
