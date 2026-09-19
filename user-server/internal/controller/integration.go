@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -321,8 +324,23 @@ func (c *IntegrationController) GetExternalOrdersByCustomer(ctx *gin.Context) {
 
 // ReceiveOrderWebhook 接收电商订单状态推送（近实时刷新本地订单镜像）。
 // 仅接受平台侧推送；镜像为只读，客服不创建/履约订单。
+//
+// 两个入口共用本方法：公开 + HMAC 的新契约（/api/integration/webhook/order/:platform）
+// 与 auth 组里的旧契约（/api/integration/order-webhook/:platform，已标 deprecation）。
+// 因此下面按**入口**分流，而不是假设"一定是验签进来的"。
 func (c *IntegrationController) ReceiveOrderWebhook(ctx *gin.Context) {
 	platform := ctx.Param("platform")
+	// 验签在中间件里做，这里只做一次事后核对：公开入口的身份由路径前缀决定，
+	// 而"这条路由挂了 guard"目前是注册处的约定 —— 约定会在有人新注册一条同类路由、
+	// 或把 guard 挪走时失效。核对失败就当场拒，绝不把未验签的推送写成订单镜像。
+	if strings.HasPrefix(ctx.FullPath(), middleware.OrderWebhookVerifiedPathPrefix) {
+		if verified := ctx.GetString(middleware.VerifiedWebhookKey); verified != platform {
+			logger.Warnf("[order-webhook] 公开入口缺少验签凭据：path=%s ctx平台=%q 参数平台=%q ⇒ 拒绝（路由是否挂了 guard 需排查）",
+				ctx.FullPath(), verified, platform)
+			response.Error(ctx, http.StatusForbidden, "回调未经签名校验")
+			return
+		}
+	}
 	var body map[string]any
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "请求体解析失败："+err.Error())

@@ -241,7 +241,38 @@ func setupIntegrationRoutes(auth *gin.RouterGroup) {
 		admin.POST("/integrations/:id/sync-customers", integrationCtrl.SyncCustomers)
 		admin.POST("/integrations/:id/sync-products", integrationCtrl.SyncProducts)
 	}
-	auth.POST("/integration/order-webhook/:platform", integrationCtrl.ReceiveOrderWebhook)
+	// 旧契约（T-P2-02 起标记 deprecation，保留一个大版本）：挂在 auth 组里，
+	// 语义是"调用方是我们的登录用户"。外部电商平台不该持有会话票，所以新对接走
+	// setupOrderWebhookRoutes 那条公开 + HMAC 的路径。这里不删、也不改成验签 ——
+	// 现网可能真有内部服务在用它，直接换语义会把能跑的调用打挂；改为每次命中
+	// 回 deprecation 头 + 限速告警，日志即下线前的名单。
+	auth.POST(orderWebhookLegacyPath,
+		middleware.LegacyDeprecationNotice(orderWebhookSuccessorPrefix),
+		integrationCtrl.ReceiveOrderWebhook)
+}
+
+const (
+	// orderWebhookLegacyPath 旧路径（挂在 auth 组内，组前缀见 router.go 的 /api 组）。
+	orderWebhookLegacyPath = "/integration/order-webhook/:" + middleware.OrderWebhookPlatformParam
+	// orderWebhookPublicPath 新路径：公开 + HMAC 验签。与旧路径同域不同段，
+	// 对接方只需改一段 URL 即可切换，两条路可同时在线（一个用会话票、一个用签名）。
+	orderWebhookPublicPath = "/integration/webhook/order/:" + middleware.OrderWebhookPlatformParam
+	// orderWebhookSuccessorPrefix 给旧路径调用方指路用（Link: rel=successor-version），
+	// 因此必须是客户端能直接照抄的绝对路径 —— 它和上面那条注册路径的对应关系由
+	// TestOrderWebhook_BothPathsRegistered 钉住（用例真的照着这个头去发一次签名回调）；
+	// 指错路不会编译报错，只会让对接方对着 404 猜。
+	orderWebhookSuccessorPrefix = middleware.OrderWebhookVerifiedPathPrefix
+)
+
+// setupOrderWebhookRoutes 注册对外电商平台的订单回调入口。
+//
+// 挂在**公开组**上：外部平台没有、也不应该有本系统的会话凭证。代价是这个端点在互联网
+// 上裸奔，所以可信性全部押在 guard 的 HMAC 验签上 —— 无密钥 ⇒ 503（fail-closed），
+// 这条路径**没有** "先公开、后验签" 的中间态，见中间件文件头的三条口径。
+func setupOrderWebhookRoutes(public *gin.RouterGroup) {
+	integrationCtrl := controller.NewIntegrationController()
+	guard := middleware.NewOrderWebhookGuard(nil)
+	public.POST(orderWebhookPublicPath, guard.Middleware(), integrationCtrl.ReceiveOrderWebhook)
 }
 
 func setupCommunityRoutes(auth *gin.RouterGroup) {

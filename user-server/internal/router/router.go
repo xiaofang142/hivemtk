@@ -251,6 +251,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupSSORoutes(public, gormDB)
 		setupSelfServiceRoutes(public, gormDB)
 
+		// 电商订单回调（T-P2-02）：外部平台没有会话凭证，只能走公开组 + HMAC 验签。
+		// 与 auth 组里那条旧路径并存，旧路径已标 deprecation。
+		setupOrderWebhookRoutes(public)
+
 		hcCtrl := controller.NewHelpCenterController()
 		public.GET("/public/help-center/categories", hcCtrl.Categories)
 		public.GET("/public/help-center/articles", hcCtrl.Articles)
