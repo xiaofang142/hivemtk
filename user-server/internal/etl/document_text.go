@@ -69,6 +69,18 @@ func extractHTMLText(data []byte) string {
 	return collapseSpaces(buf.String())
 }
 
+// 第十六轮审计（2026-09-19）：外部文档是"小文件大输出"的放大攻击面——
+// zip 的 deflate 最大膨胀比约 1000:1，一个贴着上传上限的 .docx 可让
+// word/document.xml 解出数 GB 直接把进程打爆（内存 DoS）。所有解析器
+// 的**解压/累积输出**统一在此设硬上限，超上限视为炸弹/畸形文档报错，
+// 调用方（knowledge pipeline）报错后退化为原始字节（尺寸已被上传限住）。
+const (
+	// maxDocxEntryInflated 单个 zip 条目解压后的最大字节数
+	maxDocxEntryInflated = 32 << 20 // 32MB
+	// maxDocText 解析累积文本的最大字节数（docx body / pdf 全文共用）
+	maxDocText = 64 << 20 // 64MB
+)
+
 func extractDocx(data []byte) (string, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -80,10 +92,14 @@ func extractDocx(data []byte) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			raw, err := io.ReadAll(rc)
+			// +1 读一字节越界探针：据此区分"恰好到限"与"超限炸弹"
+			raw, err := io.ReadAll(io.LimitReader(rc, maxDocxEntryInflated+1))
 			_ = rc.Close()
 			if err != nil {
 				return "", err
+			}
+			if int64(len(raw)) > maxDocxEntryInflated {
+				return "", fmt.Errorf("word/document.xml 解压后超过 %dMB 上限（疑似 zip 炸弹文档）", maxDocxEntryInflated>>20)
 			}
 			return extractDocxBody(raw)
 		}
@@ -146,6 +162,10 @@ func extractPDF(data []byte) (string, error) {
 		if strings.TrimSpace(text) != "" {
 			sb.WriteString(text)
 			sb.WriteString("\n")
+			// 畸形 PDF（如构造的天文数字页数/文本流）同样按炸弹口径熔断
+			if sb.Len() > maxDocText {
+				return "", fmt.Errorf("pdf 累积文本超过 %dMB 上限（疑似构造文档）", maxDocText>>20)
+			}
 		}
 	}
 	if sb.Len() == 0 {

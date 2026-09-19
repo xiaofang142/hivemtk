@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -224,7 +223,7 @@ func (c *WechatController) ReceiveMessage(ctx *gin.Context) {
 		return
 	}
 
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, err := readWechatBody(ctx.Request.Body)
 	if err != nil {
 		ctx.String(http.StatusBadRequest, "read body failed")
 		return

@@ -245,8 +245,16 @@ func (s *WebhookService) PendingCount(ctx context.Context) int64 {
 // QueueLen 队列长度
 func (s *WebhookService) QueueLen(ctx context.Context) int { return len(s.queue) }
 
-// ReadAll 读取请求体
-func ReadAll(r io.Reader) ([]byte, error) { return io.ReadAll(r) }
+// MaxWebhookBody 渠道回调请求体硬上限（第十六轮审计，2026-09-19）。
+// /api/webhook/* 是**公网未认证入口**（验签必须先拿到完整 body 计算 HMAC，
+// 读体必然发生在任何鉴权之前），此前 io.ReadAll 不设限 ⇒ 任意匿名者
+// 持续 stream 大 body 即可打爆进程内存。各渠道官方事件 payload 远小于
+// 64KB（媒体走 URL 不走 base64），2MB 给合法流量留一个数量级余量；
+// 超限体被截断后 JSON 解析/验签必失败，走既有 400 分支——fail-closed。
+const MaxWebhookBody int64 = 2 << 20
+
+// ReadAll 读取渠道回调原始 body（带硬上限，见 MaxWebhookBody）
+func ReadAll(r io.Reader) ([]byte, error) { return io.ReadAll(io.LimitReader(r, MaxWebhookBody)) }
 
 func getString(m map[string]any, keys ...string) string {
 	for _, k := range keys {
