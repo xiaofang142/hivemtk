@@ -112,9 +112,19 @@ jobs:
 
       - name: golangci-lint（架构护栏 depguard）
         # P0-1：分层依赖方向护栏，规则见 user-server/.golangci.yml
+        # 2026-09-19 审计（第二十五轮）：version v2.1.6 → v2.10.0。
+        # v2.1.6 官方二进制以 go1.24 构建，而本仓 go.mod 与 .golangci.yml 的 run.go 都是 1.25，
+        # 该步在 runner 上从 2026-08-11 起就是 exit 3 抛
+        #   can't load config: the Go language version (go1.24) used to build golangci-lint
+        #   is lower than the targeted Go version (1.25)
+        # 即：errcheck / depguard / staticcheck 五道护栏在 master 上从未执行过，
+        # 且它排在 go build 之前，单测、基准、覆盖率、覆盖率阈值四步被连带 skipped。
+        # 不选最新 v2.13.2：同一份 HEAD 影子克隆里 v2.10.0 为 0 issues，v2.13.2 另报 6 条
+        # 新命中（5 govet + 1 staticcheck），换版本与修存量不应混在一个提交里。
+        # 再升 Go 目标版本时，这里的 pin 要一并核对。
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.1.6
+          version: v2.10.0
           working-directory: user-server
           args: --timeout=10m
 
