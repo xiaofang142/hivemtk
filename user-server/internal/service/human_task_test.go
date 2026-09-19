@@ -49,13 +49,18 @@ func useHumanTaskClock(t *testing.T, at time.Time) {
 
 // stubHumanTaskCfg 记录被问到的 group/key —— 这一条不是形式主义：
 // 键名打错时 GetInt 会安静地回 fallback，功能"看起来正常"，而运维改参数永远不生效。
+// mu 不是装饰：幂等用例会在 8 个 goroutine 里打同一个 stub（CI -race 实测三处记账
+// 字段同时竞态，本地 64 路探针稳定复现），被测的生产实现本身就带锁。
 type stubHumanTaskCfg struct {
+	mu               sync.Mutex
 	gotGroup, gotKey string
 	calls            int
 	value            int
 }
 
 func (s *stubHumanTaskCfg) GetInt(_ context.Context, group, key string, fallback int) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.gotGroup, s.gotKey, s.calls = group, key, s.calls+1
 	if s.value == 0 {
 		return fallback
