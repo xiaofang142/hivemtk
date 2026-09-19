@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -497,6 +498,36 @@ func TestGetGlobalTraceBusSingleton(t *testing.T) {
 	bus2 := GetGlobalTraceBus()
 	if bus1 != bus2 {
 		t.Error("expected same singleton instance")
+	}
+}
+
+// 30b. 守卫：全局 bus **尚未初始化**时并发 PublishTraceEvent 不得构成数据竞争。
+//
+// 为什么必须把 bus 复位成 nil：包内先跑的测试已经把 globalTraceBus 建好了，
+// 旧实现里 `if globalTraceBus == nil` 那次裸读就永远不会和 Once 闭包内的写同时发生，
+// 守卫会在坏代码上假绿。CI 的 `-race` 正是命中 :297 裸读 vs :290 写入这一对
+// （两个 goroutine 都从 :315 的 PublishTraceEvent 进来）。
+func TestGetGlobalTraceBusConcurrentFirstPublish(t *testing.T) {
+	globalTraceBus = nil
+	globalTraceBusOnce = *new(sync.Once)
+
+	const n = 32
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			PublishTraceEvent(TraceEvent{
+				TraceID: fmt.Sprintf("%032x", i+1),
+				Kind:    TraceSpanKindLog,
+				Service: "race-guard",
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	if bus := GetGlobalTraceBus(); bus == nil {
+		t.Fatal("并发 Publish 后全局 bus 不应为 nil")
 	}
 }
 

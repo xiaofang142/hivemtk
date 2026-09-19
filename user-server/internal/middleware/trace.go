@@ -77,22 +77,34 @@ func TraceMiddleware() gin.HandlerFunc {
 			status = "error"
 		}
 
-		utils.SafeGo(c.Request.Context(), "middleware.trace.publish", func(_ context.Context) {
+		// gin.Context 与其 Request/Writer 由 sync.Pool 复用，c.Next() 返回后 gin 就会把它们
+		// 重置给下一个请求 ⇒ 所有字段必须在当前 goroutine 内读成不可变值再交给异步发布，
+		// 否则既是数据竞争，也会把别的请求的 method/path/IP 记进本条 trace。
+		method := c.Request.Method
+		path := c.Request.URL.Path
+		respStatus := c.Writer.Status()
+		clientIP := c.ClientIP()
+		userAgent := c.Request.UserAgent()
+		hasTraceparent := c.GetHeader(traceparent.HeaderName) != ""
+
+		// 发布发生在请求生命周期之外 ⇒ 用 SafeGoDetached 剥离取消链（否则 ctx 一进来就已 cancel）
+		// 并带硬超时，与本包对"HTTP 请求结束后仍需继续执行的任务"的约定一致。
+		utils.SafeGoDetached(ctx, "middleware.trace.publish", 2*time.Second, func(_ context.Context) {
 			llm.PublishTraceEvent(llm.TraceEvent{
 				TraceID:    traceID,
 				SpanID:     spanID,
 				Kind:       llm.TraceSpanKindLog,
 				Service:    "http",
-				Operation:  c.Request.Method + " " + c.Request.URL.Path,
+				Operation:  method + " " + path,
 				DurationMs: duration,
 				Status:     status,
 				Metadata: map[string]any{
-					"method":          c.Request.Method,
-					"path":            c.Request.URL.Path,
-					"status":          c.Writer.Status(),
-					"client_ip":       c.ClientIP(),
-					"user_agent":      c.Request.UserAgent(),
-					"w3c_traceparent": c.GetHeader(traceparent.HeaderName) != "",
+					"method":          method,
+					"path":            path,
+					"status":          respStatus,
+					"client_ip":       clientIP,
+					"user_agent":      userAgent,
+					"w3c_traceparent": hasTraceparent,
 				},
 			})
 		})
