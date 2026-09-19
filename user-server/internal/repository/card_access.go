@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"time"
 
 	"gorm.io/gorm"
@@ -83,15 +84,22 @@ func (r *cardAccessRepository) CountDistinctIP(ctx context.Context, cardID uint,
 	return int(count), err
 }
 
+// accessTodayWindow 返回 now 所属业务日（CST）的半开区间 [当日 00:00, 次日 00:00)。
+//
+// 抽成纯函数是为了可确定性地测：窗口整体漂一天，「同卡同 IP 每日一限」就会
+// 在 UTC 容器上变成「同一业务日可访问两次」。
+func accessTodayWindow(now time.Time) (start, end time.Time) {
+	start = timeutil.StartOfBusinessDay(now)
+	return start, start.AddDate(0, 0, 1)
+}
+
 func (r *cardAccessRepository) HasAccessToday(ctx context.Context, cardID uint, ip string) (bool, error) {
-	today := time.Now().Format("2006-01-02")
-	tomorrow, _ := time.Parse("2006-01-02", today)
-	tomorrow = tomorrow.Add(24 * time.Hour)
+	start, end := accessTodayWindow(time.Now())
 
 	var count int64
 	err := r.db.Model(&model.CardAccess{}).
 		Where("card_id = ? AND ip_address = ? AND access_time >= ? AND access_time < ?",
-			cardID, ip, today+" 00:00:00", tomorrow.Format("2006-01-02 15:04:05")).
+			cardID, ip, start, end).
 		Count(&count).Error
 
 	return count > 0, err

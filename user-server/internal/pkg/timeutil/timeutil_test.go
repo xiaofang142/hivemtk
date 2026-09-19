@@ -142,3 +142,40 @@ func TestBusinessDateParseRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestStartOfBusinessDayIgnoresHostZone 钉死「今日」边界按业务日而非宿主机日切。
+//
+// 缺陷形状（第二十六轮 A2 只修了一半的那一半）：live_code / community 的
+// `created_at >= StartOfDay(time.Now())` 在 UTC 容器上取的是 UTC 零点 = CST 08:00，
+// 于是业务日 00:00–08:00 的增量被静默排除在「今日」之外 —— 症状是计数偏小，
+// 不是报错，且本地（宿主机 CST）永远看不出来。
+//
+// 反向验证：把实现换回 StartOfDay(t)，本用例在 setHost(UTC) 那一步立即失败。
+func TestStartOfBusinessDayIgnoresHostZone(t *testing.T) {
+	setHost := useHostZone(t)
+	// 2026-09-18 17:30 UTC == 2026-09-19 01:30 CST：宿主机日与业务日不同一天。
+	instant := time.Date(2026, 9, 18, 17, 30, 0, 0, time.UTC)
+	want := time.Date(2026, 9, 19, 0, 0, 0, 0, time.FixedZone("CST", 8*3600))
+
+	setHost(time.UTC)
+	if got := StartOfDay(instant); !got.Equal(want.Add(-16 * time.Hour)) {
+		t.Fatalf("前置假设被破坏：StartOfDay 本应给出错的 UTC 零点（= 业务日首前 16h），实得 %v", got)
+	}
+	if got := StartOfBusinessDay(instant); !got.Equal(want) {
+		t.Errorf("StartOfBusinessDay(UTC 宿主) = %v，期望 %v", got.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+
+	setHost(time.FixedZone("CST", 8*3600))
+	if got := StartOfBusinessDay(instant); !got.Equal(want) {
+		t.Errorf("换宿主时区后 StartOfBusinessDay 漂移了：= %v，期望 %v", got.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+
+	// 与 BusinessDate/ParseBusinessDate 必须同源：否则「日期串」与「时间戳边界」两条路会各自漂移。
+	parsed, err := ParseBusinessDate(BusinessDate(instant))
+	if err != nil {
+		t.Fatalf("ParseBusinessDate(BusinessDate(..)) 不该失败: %v", err)
+	}
+	if !parsed.Equal(StartOfBusinessDay(instant)) {
+		t.Errorf("日首两条算法不一致: %v vs %v", parsed, StartOfBusinessDay(instant))
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -219,7 +220,9 @@ func (c *OperationLogController) CleanLogs(ctx *gin.Context) {
 	}
 	var cutoff time.Time
 	if req.BeforeDate != "" {
-		t, err := time.Parse("2006-01-02", req.BeforeDate)
+		// 破坏性入参必须按业务时区落地：time.Parse 给 UTC 零点，在 UTC 容器上
+		// 等于 CST 当天 08:00，会把用户以为「保留」的那天前 8 小时日志一并删掉。
+		t, err := timeutil.ParseBusinessDate(req.BeforeDate)
 		if err != nil {
 			response.Error(ctx, http.StatusBadRequest, "日期格式错误,需要 YYYY-MM-DD")
 			return

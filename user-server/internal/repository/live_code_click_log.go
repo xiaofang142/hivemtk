@@ -48,7 +48,7 @@ func (r *liveCodeClickLogRepository) CountByLiveCode(ctx context.Context, liveCo
 
 func (r *liveCodeClickLogRepository) CountTodayByLiveCode(ctx context.Context, liveCodeID string) (int64, error) {
 	var count int64
-	todayStart := timeutil.StartOfDay(time.Now())
+	todayStart := timeutil.StartOfBusinessDay(time.Now())
 	err := r.db.WithContext(ctx).Model(&model.LiveCodeClickLog{}).
 		Where("live_code_id = ? AND created_at >= ?", liveCodeID, todayStart).
 		Count(&count).Error
@@ -65,7 +65,7 @@ func (r *liveCodeClickLogRepository) CountByQRCode(ctx context.Context, qrCodeID
 
 func (r *liveCodeClickLogRepository) CountTodayByQRCode(ctx context.Context, qrCodeID string) (int64, error) {
 	var count int64
-	todayStart := timeutil.StartOfDay(time.Now())
+	todayStart := timeutil.StartOfBusinessDay(time.Now())
 	err := r.db.WithContext(ctx).Model(&model.QRCodeClickLog{}).
 		Where("qr_code_id = ? AND created_at >= ?", qrCodeID, todayStart).
 		Count(&count).Error

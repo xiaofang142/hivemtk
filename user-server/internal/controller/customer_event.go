@@ -2,6 +2,7 @@ package controller
 
 import (
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
@@ -126,11 +127,13 @@ func (c *CustomerEventController) GetEventStats(ctx *gin.Context) {
 	start := ctx.Query("start")
 	end := ctx.Query("end")
 
+	// 缺省区间必须是**业务日**串：service.EventTracker.GetStats 用 ParseBusinessDate
+	// 解回来，两边口径要同源，否则默认窗口的首末日各差 8 小时。
 	if start == "" {
-		start = time.Now().AddDate(0, -1, 0).Format("2006-01-02")
+		start = timeutil.BusinessDate(time.Now().AddDate(0, -1, 0))
 	}
 	if end == "" {
-		end = time.Now().Format("2006-01-02")
+		end = timeutil.BusinessToday()
 	}
 
 	stats, err := c.tracker.GetStats(ctx.Request.Context(), start, end)

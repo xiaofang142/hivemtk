@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"gorm.io/gorm"
 )
@@ -55,11 +56,15 @@ func (r *geoQueryChainRepository) ListByOneID(ctx context.Context, oneID string)
 	return rows, err
 }
 
+// CountToday 统计业务日（CST）当日新增行数。
+//
+// 边界必须是业务日首：这是探针日预算护栏，原先用宿主机时区的日期串，
+// UTC 容器在 16:00–23:59（=CST 次日 00:00–07:59）之间算出的日子比业务日**晚一天**，
+// 于是窗口起点前移 24h、把昨日的行计进今日 ⇒ 预算被虚高的计数提前判满，探针无故停摆。
 func (r *geoQueryChainRepository) CountToday(ctx context.Context) (int64, error) {
-	today := time.Now().Format("2006-01-02") + " 00:00:00"
 	var n int64
 	err := r.db.WithContext(ctx).Model(&model.GeoQueryChain{}).
-		Where("created_at >= ?", today).
+		Where("created_at >= ?", timeutil.StartOfBusinessDay(time.Now())).
 		Count(&n).Error
 	return n, err
 }

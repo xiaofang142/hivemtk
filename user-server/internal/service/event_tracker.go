@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"time"
@@ -150,15 +151,23 @@ func (s *EventTracker) GetEventHistory(ctx context.Context, customerID string, l
 }
 
 // GetStats 获取事件统计
+//
+// start/end 是日粒度字符串，两条边界都必须按**业务时区**落地：
+//   - time.Parse("2006-01-02", …) 返回 UTC 零点，而本仓 PG 会话时区钉在 CST，
+//     拿去和 occurred_at 比较会整体后移 8 小时（每天头 8 小时的记录被切掉）；
+//   - 仓储用的是 `occurred_at <= end`，end 若停在结束日 00:00 就会把结束日**整天**
+//     静默丢掉 —— 与第二十六轮 short_link 那处同一个形状。
 func (s *EventTracker) GetStats(ctx context.Context, start, end string) (*repository.EventStats, error) {
-	startTime, err := time.Parse("2006-01-02", start)
+	startTime, err := timeutil.ParseBusinessDate(start)
 	if err != nil {
 		startTime = time.Now().AddDate(0, -1, 0)
 	}
 
-	endTime, err := time.Parse("2006-01-02", end)
+	endTime, err := timeutil.ParseBusinessDate(end)
 	if err != nil {
 		endTime = time.Now()
+	} else {
+		endTime = timeutil.EndOfDay(endTime)
 	}
 
 	return s.repo.GetStats(ctx, startTime, endTime)

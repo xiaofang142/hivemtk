@@ -251,7 +251,7 @@ func (r *communityRepository) GetStatistics(ctx context.Context) (*map[string]an
 		return nil, err
 	}
 
-	todayStart := timeutil.StartOfDay(time.Now())
+	todayStart := timeutil.StartOfBusinessDay(time.Now())
 	var newMembersToday int64
 	if err := r.db.WithContext(ctx).Model(&model.CommunityMember{}).
 		Where("join_date >= ?", todayStart).

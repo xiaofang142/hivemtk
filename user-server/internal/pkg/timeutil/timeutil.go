@@ -74,3 +74,15 @@ func BusinessToday() string {
 func ParseBusinessDate(value string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02", value, businessTimeZone)
 }
+
+// StartOfBusinessDay 返回 t 所属业务日（CST）的 00:00:00。
+//
+// 与 StartOfDay(t) 的分工：StartOfDay 取的是 **t 自身 Location** 的日首，
+// 传 `time.Now()` 时就是宿主机时区的零点；本仓时间戳列都在 CST 会话时区下读写，
+// 所以「今日 X」这类和 `created_at >= ?` 比较的边界必须用本函数。
+// UTC 容器上两者差 8 小时：用 StartOfDay(time.Now()) 统计「今日」会静默漏掉
+// 业务日 00:00–08:00 这一段（宿主机 UTC 零点 = CST 上午 8 点）。
+func StartOfBusinessDay(t time.Time) time.Time {
+	y, m, d := t.In(businessTimeZone).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, businessTimeZone)
+}
