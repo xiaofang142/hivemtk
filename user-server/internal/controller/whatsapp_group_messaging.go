@@ -316,7 +316,12 @@ func (gmc *GroupMessagingController) persistSendFailure(message model.QueuedMess
 }
 
 func (gmc *GroupMessagingController) recordSendFailure(message model.QueuedMessage) {
-	logger.Errorf("消息发送失败: ID=%s, Phone=%s, Content=%s", message.ID, message.PhoneNumber, message.Content)
+	// 失败排查只需可回查的 ID + 可定位的打码号码；正文截断到 120 rune，防整页客户内容进日志
+	content := message.Content
+	if rs := []rune(content); len(rs) > 120 {
+		content = string(rs[:120]) + "…"
+	}
+	logger.Errorf("消息发送失败: ID=%s, Phone=%s, Content=%s", message.ID, utils.MaskPhone(message.PhoneNumber), content)
 }
 
 // 获取发送状态

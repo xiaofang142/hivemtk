@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -286,8 +287,9 @@ func (s *ChannelOverviewService) ListCustomerChannels(ctx context.Context, custo
 		logger.Warnf("[ChannelOverview] ListCustomerChannels scan err: %v, customer_id=%s", err, customerID)
 		return nil, ErrChannelCustomerNotFound
 	}
+	// 电话/邮箱为明文 PII，Info 级链路日志一律打码后输出（customer_id 可回查全量）
 	logger.Infof("[ChannelOverview] ListCustomerChannels customer_id=%s -> unified_id=%s phone=%s email=%s name=%s",
-		customerID, cust.UnifiedID, cust.Phone, cust.Email, cust.Name)
+		customerID, cust.UnifiedID, utils.MaskPhone(cust.Phone), utils.MaskEmail(cust.Email), cust.Name)
 
 	rows, err := s.repo.ListCustomerChannelsByOneID(ctx, cust.UnifiedID)
 	if err != nil {
