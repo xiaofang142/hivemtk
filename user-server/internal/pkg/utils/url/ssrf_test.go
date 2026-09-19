@@ -38,18 +38,18 @@ func TestValidateURL_BlocksInternalAndReservedIPs(t *testing.T) {
 		raw    string
 		expect string // 错误信息应包含的 IP
 	}{
-		{"http://127.0.0.1/x", "127.0.0.1"},           // loopback
-		{"http://127.0.0.1:8080/admin", "127.0.0.1"},  // loopback + 端口
-		{"http://[::1]/", "::1"},                      // IPv6 loopback
-		{"http://10.1.2.3/", "10.1.2.3"},              // private A
-		{"http://192.168.0.254/", "192.168.0.254"},    // private C
-		{"http://172.16.5.5/", "172.16.5.5"},          // private B
-		{"http://[fc00::10]/", "fc00::10"},            // IPv6 ULA private
+		{"http://127.0.0.1/x", "127.0.0.1"},                             // loopback
+		{"http://127.0.0.1:8080/admin", "127.0.0.1"},                    // loopback + 端口
+		{"http://[::1]/", "::1"},                                        // IPv6 loopback
+		{"http://10.1.2.3/", "10.1.2.3"},                                // private A
+		{"http://192.168.0.254/", "192.168.0.254"},                      // private C
+		{"http://172.16.5.5/", "172.16.5.5"},                            // private B
+		{"http://[fc00::10]/", "fc00::10"},                              // IPv6 ULA private
 		{"http://169.254.169.254/latest/meta-data/", "169.254.169.254"}, // 云元数据
-		{"http://[fe80::1]/", "fe80::1"},              // link-local
-		{"http://224.0.0.5/", "224.0.0.5"},            // link-local multicast
-		{"http://0.0.0.0/", "0.0.0.0"},                // unspecified
-		{"http://[::]/", "::"},                        // IPv6 unspecified
+		{"http://[fe80::1]/", "fe80::1"},                                // link-local
+		{"http://224.0.0.5/", "224.0.0.5"},                              // link-local multicast
+		{"http://0.0.0.0/", "0.0.0.0"},                                  // unspecified
+		{"http://[::]/", "::"},                                          // IPv6 unspecified
 	}
 	for _, c := range cases {
 		err := ValidateURL(context.Background(), c.raw)
