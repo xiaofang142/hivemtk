@@ -250,9 +250,13 @@ func TestDashboardDoubleRead_StaleSummaryFallsBackToRaw(t *testing.T) {
 	}
 
 	now := time.Now()
+	// 两条样本必须落在同一个小时桶内。原先取 now-2min / now-3min：整点后 3 分钟内会跨桶
+	// （2026-09-19 16:02 全量门禁实测被拆成「15 点桶 1 条 + 16 点桶 1 条」），聚合结果
+	// 变成两个点，用例每小时必红 3 分钟。按本文件既有约定钉到上一个整点小时内。
+	anchor := now.Truncate(time.Hour).Add(-30 * time.Minute)
 	rawRows := []*model.MessageHub{
-		hubRow("telegram", "ct", true, "outbound", now.Add(-2*time.Minute)),
-		hubRow("telegram", "cu", false, "inbound", now.Add(-3*time.Minute)),
+		hubRow("telegram", "ct", true, "outbound", anchor),
+		hubRow("telegram", "cu", false, "inbound", anchor.Add(-time.Minute)),
 	}
 	if err := database.Create(rawRows).Error; err != nil {
 		t.Fatal(err)
