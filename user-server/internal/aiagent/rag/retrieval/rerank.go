@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"sort"
@@ -55,7 +56,9 @@ type RerankConfig struct {
 //
 // 代码层会自动补齐 /v1（与 embedding_service.go 一致），config.yaml 中 base_url
 // 无论是否带 /v1 后缀都能正确路由到 /v1/rerank。
-// 两者响应字段一致：results[].index / results[].relevance_score，业务代码零改动。
+// 两者响应字段一致：results[].index / results[].relevance_score，但量纲不同：
+// TEI/云端已做 sigmoid（0~1），llama.cpp 直接回原始 logit（可为负、可 >1），
+// 由 normalizeRerankScores 归一回概率域后再套用 rerankScoreFloor。
 type LocalReranker struct {
 	httpClient *http.Client
 	cfg        *RerankConfig
@@ -260,14 +263,45 @@ func (r *LocalReranker) callOnce(ctx context.Context, endpoint string, timeout t
 	return &rr, nil
 }
 
+// normalizeRerankScores 把重排分归一到 0~1 概率域。
+//
+// llama.cpp 的 --reranking 端点返回 cross-encoder 的原始 logit（实测 -9.2 ~ +4.5），
+// TEI / 云端返回的是 sigmoid 之后的概率。字段同名、量纲不同：不归一就直接套
+// rerankScoreFloor=0.3，llama.cpp 下几乎整批候选都「低于阈值」，命中知识被误判为
+// 知识不足并降级回 RRF 顺序，重排等于没生效。
+// 仅当出现越界分（<0 或 >1）时才整体做 sigmoid，概率域响应保持原样不二次变换。
+func normalizeRerankScores(scores []float64) []float64 {
+	outOfRange := false
+	for _, s := range scores {
+		if s < 0 || s > 1 {
+			outOfRange = true
+			break
+		}
+	}
+	if !outOfRange {
+		return scores
+	}
+	out := make([]float64, len(scores))
+	for i, s := range scores {
+		out[i] = 1 / (1 + math.Exp(-s))
+	}
+	return out
+}
+
 func mapRerankResults(docs []RerankDoc, rr *rerankResponse) []RerankResult {
 	type scored struct {
 		id    string
 		score float64
 	}
+	raw := make([]float64, len(rr.Results))
+	for i, item := range rr.Results {
+		raw[i] = item.RelevanceScore
+	}
+	normalized := normalizeRerankScores(raw)
+
 	scoredMap := make(map[int]float64, len(rr.Results))
-	for _, item := range rr.Results {
-		scoredMap[item.Index] = item.RelevanceScore
+	for i, item := range rr.Results {
+		scoredMap[item.Index] = normalized[i]
 	}
 
 	results := make([]scored, 0, len(docs))
