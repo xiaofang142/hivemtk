@@ -69,6 +69,12 @@ BASELINE=(
   # 持久化底座因此也只能是"实现完毕、等待装配"。登记为 unwired 而不是留白，
   # 是为了让"草稿已落库"这种说法在接线前无法被悄悄讲出口（接线属 T-P2-06）。
   "8|订单草稿持久化底座的装配入口|func NewOrderDraftServiceWithDB|NewOrderDraftServiceWithDB\(|internal/app cmd/api|"
+  # 项9 = T-P2-04 新增：sales_events 这张表**今天在生产路径上一行都不会写**。实测三项零命中：
+  # NewSalesEventStatsService 无生产构造点、注入点 SetStats( 零命中、唯一被接线的
+  # FollowUpService 走 `if s.stats != nil` 保护（stats 恒 nil）。本卡给这张表加了
+  # opportunity_id / quote_id 两个 LTC 预留列，若不登记，"商机事件已入库"这种话在
+  # 接线前可以悄悄讲出口——正是 R-4 那条僵尸表（conversion_funnels）的原样翻版。
+  "9|销售事件流的装配入口（sales_events 今日生产零写入）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

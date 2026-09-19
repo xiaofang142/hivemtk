@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.0（2026-08-16）
+> **版本**：v1.2（2026-09-19）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -560,6 +560,38 @@ erDiagram
 报表看起来"只是转化率低"；阶段之间不保证单调 ⇒ `rate` 可以 >100、`drop_rate` 可以为负
 （`conversion_funnel_baseline_test.go` 的 `_NonMonotonicStagesBaseline` 把这个现状钉在那里）。
 未知阶段名走 `GET /conversion-funnel/stage` 也回 200 + 空名字 + 0 计数，而不是 404。
+
+### 4.12 销售事件流 `sales_events`：给 LTC 开的预留列（T-P2-04）
+
+`sales_events` 是一张**只增不改的事件表**，写入方按 `event_type` 区分五类事件
+（`order` / `followup` / `ai_deal` / `order_draft` / `sales_profile`），读路径只有销售工作台与业绩聚合。
+T-P2-04 / R-5 为它加了两列外键位，把原文件头自记的"H2 技术债：事件流里挂不住商机/报价"还掉：
+
+| 列 | 类型 | 可空 | 回填 | 索引 | 生产者 |
+|---|---|---|---|---|---|
+| `opportunity_id` | `varchar(64)` | 是 | **不回填** | **暂无** | **暂无**（P4 商机事件写入） |
+| `quote_id` | `varchar(64)` | 是 | **不回填** | **暂无** | **暂无**（P6 报价事件写入） |
+
+三条口径写进 `model.SalesEvent` 的类型文档（a/b/c），这里说明**为什么长这样**：
+
+- **只开列、不写生产者。** 这两列今天没有调用方（恒为空），凭空造一个 DTO 透传点等于给
+  未来的商机域指定形状。§4.11 那条僵尸表就是这么来的。
+- **`NULL` 与 `''` 是两层含义。** 列可空且不回填 ⇒ 迁移前已有的行是 `NULL`（这条事件发生在
+  "商机"概念存在之前）；迁移后经 GORM 写入的行是 `''`（有这个概念、这次事件没有商机）。
+  Go 侧用 `string` 而非 `*string`，省掉写入侧的 nil 判断，代价是 **GORM 读回时两层都塌成空串**，
+  要区分只能在 SQL 里写 `IS NULL` / `= ''`。这条差异由
+  `internal/repository/sales_event_ltc_columns_test.go` 的 `_NullVsEmptyStringAreTwoLayers` 钉住。
+- **暂无索引是可验证的状态，不是遗漏。** `_NoIndexYet` 断言 `sales_events` 上不含这两列的索引；
+  P4 落地第一个按 `opportunity_id` 检索的读路径时，随那张卡加 `idx_sales_events_opportunity`
+  并**同步改掉**类型文档的 c) 与本节，届时该用例转红是预期中的红。
+  提前建索引只会在只增表上加写放大，且没有查询方能验证它有用。
+
+**同时必须说清楚的前置事实**：`sales_events` **今天在生产路径上零写入**——唯一的生产构造点
+`NewSalesEventStatsService(` 在非测试代码里 0 命中，注入点 `SetStats(` 亦 0 命中，已接线的
+`FollowUpService` 走 `if s.stats != nil` 保护（stats 恒 nil）。所以这两列今天不可能有真实数据，
+该状态由 `scripts/check-unwired-assets.sh` **项 9** 按 `unwired` 登记盯梢；接线前不得对外宣称
+"商机事件已入库"。
+
 ---
 
 ## 五、索引策略
@@ -718,3 +750,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 |------|------|--------|------|
 | v1.0 | 2026-08-16 | @data-platform | 初版数据库深度解析（合并散落文档） |
 | v1.1 | 2026-09-19 | @backend | 新增 §4.11 统计看板真实源与演示表：标注 `conversion_funnels` 为僵尸表（R-4 / T-P2-03 收口），给出两套阶段名、"不得写入"规则、删表前三条判据，并登记真实源的两处口径问题（短板 G16） |
+| v1.2 | 2026-09-19 | @backend | 新增 §4.12 销售事件流 `sales_events` 的 LTC 预留列（R-5 / T-P2-04）：给出两列的可空/不回填/暂无索引/暂无生产者四态，写明 `NULL` 与空串是两层含义且 GORM 读回会塌成同一空串，并把"整张表今日生产零写入"登记为 `check-unwired-assets.sh` 项 9；顺带把文档头版本号从 v1.0 对齐到修订历史 |
