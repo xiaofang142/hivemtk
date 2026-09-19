@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -197,16 +198,27 @@ func (s *SystemUserService) UpdateUser(ctx context.Context, id uint, req *Update
 	if req.RealName != "" {
 		user.RealName = req.RealName
 	}
-	if req.Role != "" {
+	privilegeChanged := false
+	if req.Role != "" && req.Role != user.Role {
 		user.Role = req.Role
+		privilegeChanged = true
 	}
-	if req.Status != 0 {
+	if req.Status != 0 && req.Status != user.Status {
 		user.Status = req.Status
+		privilegeChanged = true
 	}
 
 	if err := s.repo.Update(ctx, user); err != nil {
 		logger.Error(err, "保存用户失败")
 		return nil, errors.New("更新用户失败")
+	}
+
+	// 角色/启停状态变更 ⇒ 吊销该用户此前签发的全部令牌。
+	// role 与 data_scope 是**写在令牌里**由中间件直接放行的，旧令牌在自然过期前
+	// 仍带着旧权限；只改库不踢会话 = 降级/禁用最长 24h 不生效。
+	// 仅在权限相关字段真变化时才吊销：改个手机号不该把人踢下线。
+	if privilegeChanged {
+		utils.RevokeUserTokens(ctx, id)
 	}
 
 	return s.toUserResponse(ctx, user), nil
@@ -226,6 +238,9 @@ func (s *SystemUserService) DeleteUser(ctx context.Context, id uint) error {
 		logger.Error(err, "删除用户失败")
 		return errors.New("删除用户失败")
 	}
+
+	// 账号已删 ⇒ 其手上所有令牌立即失效（旧行为：继续以库中已不存在的身份可用最长 24h）
+	utils.RevokeUserTokens(ctx, id)
 
 	return nil
 }
@@ -269,6 +284,10 @@ func (s *SystemUserService) ResetPassword(ctx context.Context, id uint, newPassw
 	if err := policySvc.RecordPasswordHistory(ctx, id, newPassword, model.PasswordSourceResetPassword); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Uint("user_id", id).Msg("记录密码历史失败")
 	}
+
+	// 管理员重置密码＝"把这个人踢下线，用新密码重新登录"；
+	// 不吊销的话被重置账号（往往是已泄露的账号）旧会话仍可继续用满 24h。
+	utils.RevokeUserTokens(ctx, id)
 
 	if user.Email != "" {
 		emailSvc := NewEmailServiceAuto()
@@ -583,6 +602,8 @@ func (s *SystemUserService) DeleteByAdmin(ctx context.Context, actorID, targetID
 		logger.Error(err, "DeleteByAdmin 删除失败")
 		return err
 	}
+	// 与 DeleteUser 同口径：删除即吊销该身份的全部在途令牌
+	utils.RevokeUserTokens(ctx, targetID)
 	return nil
 }
 

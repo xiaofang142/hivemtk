@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/bcrypt"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -131,7 +132,13 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, req *ResetPass
 	if s.tokenRepo == nil {
 		return errors.New("password reset service not initialized")
 	}
-	return s.tokenRepo.RunResetTransaction(ctx, token.ID, token.UserID, hashedPassword)
+	if err := s.tokenRepo.RunResetTransaction(ctx, token.ID, token.UserID, hashedPassword); err != nil {
+		return err
+	}
+	// 邮件重置成功＝账号可能已泄露，旧会话一律吊销（含攻击者手上那把令牌）
+	utils.RevokeUserTokens(ctx, uint(uid))
+
+	return nil
 }
 
 func (s *PasswordResetService) CleanupExpiredTokens(ctx context.Context) error {

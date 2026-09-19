@@ -155,8 +155,16 @@ func TestAuthController_Login_WrongCredentials(t *testing.T) {
 }
 
 // TestAuthController_RefreshToken_Success 测试刷新令牌成功
+//
+// 第十八轮：RefreshToken 现在会回源校验账号（存在+启用），故先落 id=1 的真实用户。
 func TestAuthController_RefreshToken_Success(t *testing.T) {
 	setupTestControllerDB(t)
+	if err := db.GetDB().Create(&model.SystemUser{
+		ID: 1, Username: "testuser", Password: "Admin@123456",
+		Email: "testuser@test.com", Role: "admin", Status: 1, Enabled: true,
+	}).Error; err != nil {
+		t.Fatalf("seed user 1: %v", err)
+	}
 	authCtrl := NewAuthController()
 	router := setupGinEngine()
 	router.POST("/refresh", authCtrl.RefreshToken)

@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -65,6 +66,9 @@ func (s *AuthorizationService) SetEnabled(ctx context.Context, actorID, targetID
 	action := "user.enable"
 	if !enabled {
 		action = "user.disable"
+		// 禁用账号必须同时吊销其在途令牌：登录侧早已拒绝禁用账号，
+		// 但"已登录的被禁用户"此前可以继续用旧令牌访问到自然过期（≤24h）。
+		utils.RevokeUserTokens(ctx, targetID)
 	}
 	if err := s.writeAuditLog(ctx, actorID, targetID, target.Username, action,
 		fmt.Sprintf("actor=%d -> target=%d (%s) enabled=%v", actorID, targetID, target.Username, enabled)); err != nil {
@@ -101,6 +105,8 @@ func (s *AuthorizationService) ResetPassword(ctx context.Context, actorID, targe
 		}
 		return err
 	}
+	// 管理员改密＝强制该账号重新登录，旧会话（可能正被攻击者使用）一并吊销
+	utils.RevokeUserTokens(ctx, targetID)
 	if err := s.writeAuditLog(ctx, actorID, targetID, target.Username, "user.reset_password",
 		fmt.Sprintf("actor=%d -> target=%d (%s)", actorID, targetID, target.Username)); err != nil {
 		logger.Errorf("[permission] 审计写库失败（重置密码）: %v", err)

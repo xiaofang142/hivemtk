@@ -157,19 +157,53 @@ func (s *AuthService) loginWithUser(ctx context.Context, user *model.SystemUser)
 	return response, nil
 }
 
+// RefreshToken 续期令牌。
+//
+// 第十八轮（2026-09-19）改造：旧实现走 utils.RefreshToken，**只把旧令牌里的 claims 原样
+// 抄进新令牌**，全程不回源——后果是被禁用/被删除/被降权的账号只要每 24h 刷一次，
+// 就能带着过期的 role/data_scope 无限续期，"24 小时暴露面"实际是"永久暴露面"。
+// 现在改为：吊销位判定 → 回源查账号 → 状态守卫 → 用**当前**库内角色/数据范围重新签发。
 func (s *AuthService) RefreshToken(ctx context.Context, tokenString string) (string, error) {
 	if utils.IsJWTBlacklisted(tokenString) {
 		return "", errors.New("token 已失效")
 	}
-	newToken, err := s.jwtUtils.RefreshToken(tokenString)
+	claims, err := s.jwtUtils.ParseToken(tokenString)
 	if err != nil {
 		return "", err
 	}
+	if utils.IsTokenRevoked(ctx, claims.UserID, claims.IssuedAt) {
+		return "", errors.New("账号状态已变更，请重新登录")
+	}
+
+	user, err := s.systemUserRepo.GetByID(ctx, claims.UserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", errors.New("账号不存在或已被删除，请重新登录")
+		}
+		logger.Error(err, "刷新令牌时查询用户失败")
+		return "", errors.New("刷新令牌失败，请稍后重试")
+	}
+	if user.Status != 1 || !user.Enabled {
+		return "", errors.New("用户已被禁用")
+	}
+
+	newToken, err := s.jwtUtils.GenerateTokenWithScope(
+		user.ID, user.Username, user.Role, user.DataScope, user.DepartmentID, user.TeamID)
+	if err != nil {
+		logger.Error(err, "刷新令牌签发失败")
+		return "", errors.New("刷新令牌失败，请稍后重试")
+	}
+	// 一次性轮换：旧令牌立即拉黑，防止"刷新后新旧两把令牌并行可用"
 	utils.BlacklistJWT(tokenString)
 
 	return newToken, nil
 }
 
+// Logout 登出：仅拉黑当前这一把令牌。
+//
+// 刻意不做"按用户全端吊销"：RevokeUserTokens 会把同账号其它设备/浏览器的会话一并踢掉，
+// 属于"登出=登出所有设备"的产品语义变更，未经拍板不单方面改变（第十八轮登记）。
+// 按用户维度的即时吊销只挂在禁用/删除/改角色/改密这类安全事件上。
 func (s *AuthService) Logout(ctx context.Context, tokenString string) error {
 	utils.BlacklistJWT(tokenString)
 	return nil
@@ -236,6 +270,11 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *Chan
 	if err := policySvc.RecordPasswordHistory(ctx, userID, req.NewPassword, model.PasswordSourceChangePassword); err != nil {
 		logger.Errorf("记录密码历史失败（不影响改密流程）: %v", err)
 	}
+
+	// 改密成功即按用户维度吊销：controller 已经拉黑了"手上这把"令牌（说明本流程的
+	// 既定语义就是要求重新登录），但同账号在别处签发的令牌此前仍能活到自然过期——
+	// 密码被爆破/泄露后用户改密自救，攻击者会话不该继续存在。
+	utils.RevokeUserTokens(ctx, userID)
 
 	return nil
 }

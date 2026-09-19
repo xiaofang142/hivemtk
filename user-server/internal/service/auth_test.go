@@ -190,13 +190,24 @@ func TestAuthService_Login_NonExistentUser(t *testing.T) {
 }
 
 // TestAuthService_RefreshToken 测试刷新令牌
+//
+// 第十八轮改造：RefreshToken 不再"只抄旧令牌 claims"，必须回源确认账号存在且启用，
+// 因此这里要先落一个真实用户（旧测试直接给不存在的 user_id=1 签发令牌也能过，
+// 正是本轮修掉的缺陷）。
 func TestAuthService_RefreshToken(t *testing.T) {
-	service := setupAuthService(t)
+	database := setupAuthServiceTestDB(t)
+	service := NewAuthService()
 
-	_, _ = service.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admin123"})
+	user := &model.SystemUser{
+		Username: "admin", Password: "Admin@123456", Email: "admin@example.com",
+		Role: "admin", Status: 1, Enabled: true, DataScope: "all",
+	}
+	if err := database.Create(user).Error; err != nil {
+		t.Fatalf("seed admin: %v", err)
+	}
 
 	jwtUtils := service.JwtUtils(context.Background())
-	token, err := jwtUtils.GenerateToken(1, "admin", "admin")
+	token, err := jwtUtils.GenerateToken(user.ID, "admin", "admin")
 	if err != nil {
 		t.Fatalf("Failed to generate token: %v", err)
 	}

@@ -15,6 +15,11 @@ func setupBlacklistServiceTestDB(t *testing.T) {
 		&model.CustomerSession{},
 		&model.UserBlacklist{},
 		&model.AgentStatus{},
+		// TestVisitorOpenSession_BlacklistRejected 走 OpenSession→resolveChannel→
+		// GetOrCreateDefaultChannel，需要 chat_channels 表。此前该表只靠同包内
+		// 其它用例顺带迁移，单独 -run 该用例时必报 "relation does not exist"，
+		// 属隐藏的用例间顺序耦合，这里显式补齐。
+		&model.ChatChannel{},
 	)
 	db.SetTestDB(database)
 }

@@ -68,6 +68,14 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// 按用户维度的即时吊销（禁用/删除/改角色/改密）：
+		// 令牌签发时间早于该用户的作废水位线 ⇒ 一律拒绝，不再等到 24h 自然过期。
+		if utils.IsTokenRevoked(c.Request.Context(), claims.UserID, claims.IssuedAt) {
+			response.Error(c, http.StatusUnauthorized, "账号状态已变更，请重新登录")
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
@@ -145,6 +153,15 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 
 		claims, err := jwtUtils.ParseToken(parts[1])
 		if err != nil {
+			c.Next()
+			return
+		}
+
+		// 可选认证同样不得放行已吊销/已登出的令牌：
+		// 这里不返回 401（"可选"语义下应退化为匿名），但**绝不能**把身份写进上下文，
+		// 否则登出/禁用后的旧令牌仍能以下述 handler 信任的 user_id/role 继续操作。
+		if utils.IsJWTBlacklisted(parts[1]) ||
+			utils.IsTokenRevoked(c.Request.Context(), claims.UserID, claims.IssuedAt) {
 			c.Next()
 			return
 		}
