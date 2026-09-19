@@ -351,11 +351,17 @@ jobs:
           set -euo pipefail
           mkdir -p coverage
           go list ./... | sort > pkgs.txt
+          # 完整性断言的期望集合只能是「有测试文件的包」：开了 -coverprofile 之后，
+          # 无测试包不再打 `?   pkg [no test files]`，而是
+          # `\t pkg \t\tcoverage: 0.0% of statements`（行首是制表符），
+          # 下面那条 awk 三个行首锚点都匹配不上 ⇒ 11 个 cmd/* 会被点名成
+          # "未产生结果"（run 35467723878 实测），把真信号淹在假红里。
+          go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... | sort > testable.txt
           rc=0
           go test $(cat pkgs.txt) -count=1 -timeout 2400s -p 1 -short \
             -coverprofile=coverage/go-cover.out -covermode=atomic 2>&1 | tee go-test.log || rc=$?
           awk '/^(ok|FAIL|\?)[[:space:]]/{print $2}' go-test.log | sort -u > reported.txt
-          missing=$(comm -23 pkgs.txt reported.txt || true)
+          missing=$(comm -23 testable.txt reported.txt || true)
           if [ -n "$missing" ]; then
             echo "::error::以下包未产生结果，profile 不完整（覆盖率数字不可信）："
             echo "$missing"
