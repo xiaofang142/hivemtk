@@ -710,6 +710,100 @@ func TestHandleToolApprovalState_HTTP_Unwired(t *testing.T) {
 	if hint, _ := resp.Data["env_hint"].(string); !strings.HasPrefix(hint, app.ApprovalGateFlagEnv+"=") {
 		t.Errorf("env_hint 未以旗子名 %s= 开头：%q", app.ApprovalGateFlagEnv, hint)
 	}
+	// 提示语里的可用值必须与解析器真认的那三个一致（T-P1-06 起含 block）
+	if hint, _ := resp.Data["env_hint"].(string); !strings.Contains(hint, "off|shadow|block") {
+		t.Errorf("env_hint 没列出 off|shadow|block 三态：%q", hint)
+	}
+	for _, k := range []string{"blocks_when_denied", "whitelist_active_entries"} {
+		if _, ok := resp.Data[k]; !ok {
+			t.Errorf("未接线快照也须回显 %s（false/0 是有效读数，缺字段会被读成没实现）", k)
+		}
+	}
+	if b, _ := resp.Data["blocks_when_denied"].(bool); b {
+		t.Error("未接线（off）时 blocks_when_denied 必须为 false")
+	}
+	if _, exists := resp.Data["brake_engaged"]; exists {
+		t.Error("off 态没有刹车可言，brake_engaged 不该出现")
+	}
+}
+
+// TestApprovalStatePayload_BlockEcho 三种快照下的回显差异。
+//
+// 装配只在启动时跑一次，handle 在本进程只能测到 off，所以这里直接喂构造快照：
+// 唯一必须锁住的分叉是"block 且白名单旗子没开 ⇒ 明确告诉调用方现在其实不拦"。
+// 这一支如果漏了，端点会给出"mode=block + would_deny 一路涨"的读数，
+// 而真实行为是一单都没拦。
+func TestApprovalStatePayload_BlockEcho(t *testing.T) {
+	blockOn := app.ApprovalGateSnapshot{
+		Mode:                   "block",
+		Wired:                  true,
+		GlobalCheckerSet:       true,
+		BlocksWhenDenied:       true,
+		WhitelistFlagKey:       "ai.safety.tool_approval_gate",
+		WhitelistFlagEnv:       "FF_AI.SAFETY_TOOL_APPROVAL_GATE",
+		WhitelistFlagOn:        true,
+		WhitelistActiveEntries: 3,
+		GateFlagEnv:            app.ApprovalGateFlagEnv,
+	}
+
+	t.Run("block+白名单旗子未开 ⇒ 报刹车", func(t *testing.T) {
+		snap := blockOn
+		snap.WhitelistFlagOn = false
+		snap.WhitelistActiveEntries = 0
+		out := approvalStatePayload(snap)
+		if out["brake_engaged"] != true {
+			t.Errorf("brake_engaged = %v, want true", out["brake_engaged"])
+		}
+		note, _ := out["brake_note"].(string)
+		if !strings.Contains(note, "disabled_by_flag") || !strings.Contains(note, "whitelist_active_entries") {
+			t.Errorf("brake_note 没说清后果与下一步：%q", note)
+		}
+		if out["whitelist_active_entries"] != 0 {
+			t.Errorf("有效条目读数被改写：%v", out["whitelist_active_entries"])
+		}
+	})
+
+	t.Run("block+白名单旗子已开 ⇒ 不报刹车", func(t *testing.T) {
+		out := approvalStatePayload(blockOn)
+		if _, exists := out["brake_engaged"]; exists {
+			t.Error("两把旗子都到位时不该报刹车，否则告警永远亮着就没人再看")
+		}
+		if out["blocks_when_denied"] != true || out["mode"] != "block" {
+			t.Errorf("block 态回显：%v", out)
+		}
+		if out["whitelist_active_entries"] != 3 {
+			t.Errorf("有效条目 = %v, want 3", out["whitelist_active_entries"])
+		}
+	})
+
+	t.Run("shadow ⇒ blocks_when_denied=false 且不报刹车", func(t *testing.T) {
+		snap := blockOn
+		snap.Mode = "shadow"
+		snap.BlocksWhenDenied = false
+		snap.WhitelistFlagOn = false
+		out := approvalStatePayload(snap)
+		if _, exists := out["brake_engaged"]; exists {
+			t.Error("shadow 态本来就只记录，不该报刹车")
+		}
+		if out["blocks_when_denied"] != false {
+			t.Error("shadow 态 blocks_when_denied 必须为 false")
+		}
+	})
+
+	// 提示语里的白名单 env 名必须来自快照字段（同源），而不是端点再抄一份字面量
+	t.Run("env 提示同源", func(t *testing.T) {
+		out := approvalStatePayload(blockOn)
+		// 注意断言目标是 gin.H 而不是 map[string]any：前者是**命名类型**，
+		// 对未命名 map 类型的断言会失败并静默给出 nil，看起来像"字段没渲染"。
+		flags, _ := out["flags"].(gin.H)
+		if flags["whitelist_env"] != blockOn.WhitelistFlagEnv {
+			t.Errorf("flags.whitelist_env = %v, want %s", flags["whitelist_env"], blockOn.WhitelistFlagEnv)
+		}
+		hint, _ := out["env_hint"].(string)
+		if !strings.Contains(hint, blockOn.WhitelistFlagEnv) {
+			t.Errorf("env_hint 未引用快照里的白名单 env 名：%q", hint)
+		}
+	})
 }
 
 // TestHandleToolApprovalWhitelist_HTTP_InputGuards 授权端点的入参守卫与未接线回退。

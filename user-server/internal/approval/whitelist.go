@@ -72,13 +72,48 @@ func (w *WhiteListApprovalChecker) Revoke(toolName, accountID string) {
 }
 
 // IsApproved 实现 ApprovalChecker 接口。
+//
+// 需要知道"为什么"的调用方（转阻断时的放行抑制判断）走 Verdict，两者同源同回调，
+// 分成两次调用会留下判定与理由脱节的空间。
 func (w *WhiteListApprovalChecker) IsApproved(ctx context.Context, toolName, accountID string) bool {
+	allowed, _ := w.Verdict(ctx, toolName, accountID)
+	return allowed
+}
+
+// Verdict 返回判定与理由，并按 IsApproved 同样的方式回调留痕一次。
+//
+// 理由必须与判定同源于 decide()：报告里 `would_deny` 的含义（"切阻断后会被拦的量"）
+// 依赖这一点，若理由另算一份，disabled_by_flag 与 denied_default 的占比就会失真。
+func (w *WhiteListApprovalChecker) Verdict(ctx context.Context, toolName, accountID string) (bool, string) {
 	flagOn := featureflag.Get(FlagKey).Bool()
 	d := w.decide(ctx, toolName, accountID, flagOn)
 	if w.callback != nil {
 		w.callback(ctx, toolName, accountID, d)
 	}
-	return d.Allowed
+	return d.Allowed, d.Reason
+}
+
+// ActiveEntryCount 当前仍有效（未过期）的白名单条目数。
+//
+// 供转阻断前的自检与观测端点使用：block 态 + 0 条有效条目 = 所有冷触达都会被拒，
+// 这个数字必须能在开旗之前读到，而不是靠"上线后没人能外发"发现。
+// 过期条目在此按判定时同口径排除（用 nowFn，与 decide 一致）。
+func (w *WhiteListApprovalChecker) ActiveEntryCount() int {
+	if w == nil {
+		return 0
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	now := w.nowFn()
+	n := 0
+	for _, accounts := range w.whitelist {
+		for _, exp := range accounts {
+			if exp.IsZero() || now.Before(exp) {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 func (w *WhiteListApprovalChecker) decide(ctx context.Context, toolName, accountID string, flagOn bool) Decision {

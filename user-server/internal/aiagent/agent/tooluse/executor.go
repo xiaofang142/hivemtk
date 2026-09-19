@@ -331,8 +331,9 @@ func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 	if e.config.ApprovalChecker != nil && IsColdOutreachTool(tool) {
 		// 审批门放在整条链之外（含 feedback）：被拒的冷触达不应消耗限流令牌、不应进重试、
 		// 不应被 audit 记成"执行过一次外发"、也不应产生一条工具反馈（它的留痕走 checker 自己的 OnDecision）。
-		// shadow 态下这一层是纯透传，位置无所谓；位置真正生效是 T-P1-06 转阻断的时候，
-		// 现在定死是为了那时不必再挪——挪一次就要重新证明"少拦/多拦了哪些调用"。
+		// shadow 态下这一层是纯透传；block 态（T-P1-06）它开始真拦，"被拒的调用不消耗配额、
+		// 不进重试"这些性质随之外层成立——所以拦与不拦用的是同一个位置，观察期攒下的
+		// would_deny 与阻断期的实际拦截量因此可比。
 		chain = ApprovalGateDecorator(tool, e.config.ApprovalChecker, e.config.ApprovalShadow)(chain)
 	}
 	return chain

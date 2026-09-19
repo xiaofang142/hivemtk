@@ -1,16 +1,26 @@
-// approval_wiring_test.go T-P1-05：冷触达审批门接线的四条契约。
+// approval_wiring_test.go T-P1-05 接线 + T-P1-06 三态：冷触达审批门的契约。
 //
-// 卡面 AC：
+// T-P1-05 卡面 AC：
 //
 //	①cold outreach 工具调用产生 Decision 审计行 → TestApprovalDecisionAuditLineLandsInLog
 //	②IsApproved=false 时仍放行并打 shadow 标记   → TestApprovalGateShadowLetsColdOutreachThrough
 //	③NewWhiteList / SetGlobalApprovalChecker 有非测试调用点 → TestApplyApprovalGateShadowWiresRealWhitelist
 //	  （后者断言接上去的确实是 approval 包的真白名单实现，不是随手写的假 checker）
 //
-// 另有两条不属于卡面、但灰度更依赖的：
+// T-P1-06 卡面 AC：
+//
+//	①block 下 cold outreach 被拒且返回可读原因   → TestApprovalGateBlockDeniesUnapprovedColdOutreach
+//	②off/shadow/block 三态各有测试               → TestParseApprovalGateMode（映射）
+//	  + TestApplyApprovalGateOffLeavesExecutorUnchanged / …ShadowWiresRealWhitelist /
+//	    …BlockWiresGatedChecker（每态各自的接线后果）
+//	③shadow 期对比报告（多少调用会被拦）          → would_deny 口径在 block 后不变：
+//	  TestApprovalGateBlockKeepsWouldDenyMeaning
+//
+// 另有三条不属于卡面、但灰度更依赖的：
 //
 //	关旗必须逐字回到"没接过线"（TestApplyApprovalGateOffLeavesExecutorUnchanged）
-//	全局注入点交出的必须是"永不拦"的包装版（TestGlobalApprovalCheckerIsShadowSafe）
+//	shadow 的全局注入点不得交出拦人的权限（TestGlobalApprovalCheckerIsShadowSafe）
+//	block 的刹车：白名单旗子没开时不拦（TestApprovalGateBlockBrakeWithoutWhitelistFlag）
 //
 // 本文件全部用**真**的 WhiteListApprovalChecker + 真 featureflag：审批门的危险恰恰不在
 // 装饰器逻辑，而在"默认拒绝"这个语义被接到生产上，用假 checker 测不出来。
@@ -19,6 +29,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -55,7 +66,7 @@ func setApprovalWhitelistFlag(t *testing.T, on bool) {
 	if on {
 		value = "1"
 	}
-	t.Setenv("FF_"+strings.ToUpper(approval.FlagKey), value)
+	t.Setenv(featureflag.EnvNameOf(approval.FlagKey), value)
 	featureflag.DefaultManager().ReloadAll()
 }
 
@@ -158,16 +169,22 @@ func TestParseApprovalGateMode(t *testing.T) {
 		{" Shadow ", approvalGateShadow},
 		{"observe", approvalGateShadow},
 		{"report", approvalGateShadow},
+		// 布尔真值只到 shadow：写 true 的人未必知道"true"会把客户的冷触达拒掉，
+		// 转阻断必须由字面量表达（告警文案由 TestApprovalGateWarningsRenderCompletely 锁）
 		{"true", approvalGateShadow},
 		{"1", approvalGateShadow},
 		{"yes", approvalGateShadow},
 		{"on", approvalGateShadow},
-		// 本卡不交付阻断：写了 block/enforce 也只到 shadow，且必须显式告警（见下）
-		{"block", approvalGateShadow},
-		{"enforce", approvalGateShadow},
-		{"active", approvalGateShadow},
-		// 认不出的值判 off：把旗子拼错的人不该意外获得一个"看起来开了"的闸门
+		// T-P1-06：第三态只有这三个字面量进 block
+		{"block", approvalGateBlock},
+		{"BLOCK", approvalGateBlock},
+		{" block ", approvalGateBlock},
+		{"enforce", approvalGateBlock},
+		{"active", approvalGateBlock},
+		// 认不出的值判 off：把旗子拼错的人不该意外获得一个"看起来开了"的闸门，
+		// 更不该因为拼错"shadow"而拿到 block
 		{"shodow", approvalGateOff},
+		{"blok", approvalGateOff},
 		{"maybe", approvalGateOff},
 		{"2", approvalGateOff},
 	}
@@ -235,10 +252,13 @@ func TestApplyApprovalGateShadowWiresRealWhitelist(t *testing.T) {
 		t.Fatalf("模式 = %s, want shadow", mode)
 	}
 	if !config.ApprovalShadow {
-		t.Error("shadow 态 config.ApprovalShadow 必须为 true（本卡不存在置 false 的分支）")
+		t.Error("shadow 态 config.ApprovalShadow 必须为 true（只有 block 态才允许 false）")
 	}
 	if _, ok := config.ApprovalChecker.(*approval.WhiteListApprovalChecker); !ok {
 		t.Fatalf("接的是 %T，不是 *approval.WhiteListApprovalChecker", config.ApprovalChecker)
+	}
+	if snap, _ := GetApprovalSnapshot(); snap.BlocksWhenDenied {
+		t.Error("shadow 态快照必须报 blocks_when_denied=false：拒绝不会真的传下去")
 	}
 	snap, decisions := GetApprovalSnapshot()
 	if !snap.Wired || decisions == nil {
@@ -433,7 +453,7 @@ func TestApprovalDecisionAuditLineLandsInLog(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &parsed); err != nil {
 			t.Fatalf("Decision 审计行不是合法 JSON（下游采集会挂）：%v\n%s", err, line)
 		}
-		for _, key := range []string{"shadow", "would_deny", "allowed", "tool_name", "account", "reason", "whitelist_flag_on"} {
+		for _, key := range []string{"mode", "would_deny", "blocked", "allowed", "tool_name", "account", "reason", "whitelist_flag_on"} {
 			if _, ok := parsed[key]; !ok {
 				t.Errorf("审计行缺字段 %q：%v", key, parsed)
 			}
@@ -444,8 +464,11 @@ func TestApprovalDecisionAuditLineLandsInLog(t *testing.T) {
 		if parsed["account"] != "acct-3" {
 			t.Errorf("审计行账号 = %v, want acct-3（owner key 必须是 CallerID）", parsed["account"])
 		}
-		if parsed["shadow"] != true {
-			t.Errorf("shadow 态的审计行必须标 shadow=true：%v", parsed["shadow"])
+		if parsed["mode"] != string(approvalGateShadow) {
+			t.Errorf("审计行 mode = %v, want %q", parsed["mode"], approvalGateShadow)
+		}
+		if parsed["blocked"] != false {
+			t.Errorf("shadow 态一条都不该真拦，blocked 必须恒 false：%v", parsed["blocked"])
 		}
 		if parsed["reason"] != approval.ReasonDisabledByFlag {
 			t.Errorf("reason = %v, want %q", parsed["reason"], approval.ReasonDisabledByFlag)
@@ -471,17 +494,17 @@ func TestApprovalDecisionAuditLineLandsInLog(t *testing.T) {
 // printf 识别表里）。这类残缺恰好出现在最需要看清"我到底把旗子写成了什么"的那条日志上，
 // 所以逐条断言渲染完整，而不是只看它有没有报警。
 //
-// 三个写法都会告警（错拼 ⇒ 不识别；block/enforce ⇒ 本卡不支持的第三态），
-// 但落入的模式不同：错拼只能落 off，别名才落 shadow。这里锁的是"告警说清楚了吗"，
-// 模式映射本身由 TestParseApprovalGateMode 逐条覆盖。
+// 会告警的写法分两类：解析期（错拼 ⇒ 落 off；布尔真值 ⇒ 落 shadow）与
+// 装配期（block 的三句：刹车生效 / 有效条目=0 / 行为变更）。落点映射本身由
+// TestParseApprovalGateMode 逐条覆盖，这里锁的是"告警说清楚了吗"。
 func TestApprovalGateWarningsRenderCompletely(t *testing.T) {
 	cases := []struct {
 		raw      string
 		wantMode approvalGateMode
 	}{
 		{"shodow", approvalGateOff},
-		{"block", approvalGateShadow},
-		{"enforce", approvalGateShadow},
+		{"true", approvalGateShadow},
+		{"yes", approvalGateShadow},
 	}
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
@@ -498,6 +521,391 @@ func TestApprovalGateWarningsRenderCompletely(t *testing.T) {
 			}
 			if !strings.Contains(logged, ApprovalGateFlagEnv) {
 				t.Errorf("告警未点名旗子 %s：\n%s", ApprovalGateFlagEnv, logged)
+			}
+			// 布尔真值的告警必须把可用的三态列全，否则运维下一轮只会换个别的真值再试一次
+			if c.wantMode == approvalGateShadow && !strings.Contains(logged, "off|shadow|block") {
+				t.Errorf("布尔真值的告警没列出可用三态：\n%s", logged)
+			}
+		})
+	}
+}
+
+// TestApprovalGateBlockWarningsRenderCompletely block 态的三句装配告警逐个验渲染。
+//
+// 这三句是转阻断时唯一会读到"我这么开旗到底拦不拦人"的地方，任何一个 %s 漏了实参
+// 都会把刹车说明变成一串 %!q(MISSING)，而那正是最需要看懂的一行。
+func TestApprovalGateBlockWarningsRenderCompletely(t *testing.T) {
+	cases := []struct {
+		name    string
+		flagOn  bool
+		grant   bool
+		want    []string
+		notWant []string
+	}{
+		{
+			// 两把旗子只到位一把：必须既说清刹车，又说清"条目还是 0"
+			name:   "白名单旗子未开 ⇒ 报刹车",
+			flagOn: false,
+			want: []string{"刹车生效", approval.ReasonDisabledByFlag,
+				featureflag.EnvNameOf(approval.FlagKey), "有效白名单条目=0"},
+		},
+		{
+			name:    "两把旗子都开 ⇒ 不报刹车，但空表仍要单独告警",
+			flagOn:  true,
+			grant:   true,
+			want:    []string{"模式=block", "有效白名单条目=0", "行为变更", "所有**冷触达都会被拒", "白名单变更 grant"},
+			notWant: []string{"刹车生效"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			restoreApprovalState(t)
+			setApprovalWhitelistFlag(t, c.flagOn)
+			t.Setenv(ApprovalGateFlagEnv, "block")
+			logged := captureApprovalLog(t, func() {
+				config := tooluse.ToolExecutorConfig{}
+				applyApprovalGate(&config)
+				if !c.grant {
+					return
+				}
+				if !ApprovalWhitelistMutate("reach.batch", "acct-1", time.Time{}, false) {
+					t.Error("授权入口应可用")
+				}
+			})
+			if strings.Contains(logged, "%!") {
+				t.Errorf("block 告警渲染残缺：\n%s", logged)
+			}
+			for _, want := range c.want {
+				if !strings.Contains(logged, want) {
+					t.Errorf("block 告警里缺 %q：\n%s", want, logged)
+				}
+			}
+			for _, notWant := range c.notWant {
+				if strings.Contains(logged, notWant) {
+					t.Errorf("block 告警里出现了不该出现的 %q：\n%s", notWant, logged)
+				}
+			}
+			if !strings.Contains(logged, ApprovalGateFlagEnv) {
+				t.Errorf("block 告警未点名旗子：\n%s", logged)
+			}
+			if c.grant && !strings.Contains(logged, "白名单变更 grant") {
+				t.Errorf("授权变更必须留痕（含变更后的有效条目数）：\n%s", logged)
+			}
+		})
+	}
+}
+
+// TestApprovalWhitelistMutateLogsActiveEntries 授权留痕必须带上"改完还剩多少条"。
+//
+// block 态 revoke 是唯一能立刻把在跑的账号关掉的动作，事后要能回答
+// "几点几分谁把它撤了、撤完表里还有几条"。
+func TestApprovalWhitelistMutateLogsActiveEntries(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, true)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	applyApprovalGate(&config)
+
+	logged := captureApprovalLog(t, func() {
+		if !ApprovalWhitelistMutate("reach.batch", "acct-a", time.Time{}, false) {
+			t.Error("grant 应成功")
+		}
+		expire := time.Now().Add(-time.Minute)
+		if !ApprovalWhitelistMutate("reach.batch", "acct-b", expire, false) {
+			t.Error("带过期时间的 grant 也应成功入账（判定时才判过期）")
+		}
+		if !ApprovalWhitelistMutate("reach.batch", "acct-a", time.Time{}, true) {
+			t.Error("revoke 应成功")
+		}
+	})
+	for _, want := range []string{"白名单变更 grant", "白名单变更 revoke", "有效条目=1", "有效条目=0"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("留痕缺 %q：\n%s", want, logged)
+		}
+	}
+	if strings.Contains(logged, "%!") {
+		t.Errorf("留痕渲染残缺：\n%s", logged)
+	}
+	// 终态：acct-a 已撤，acct-b 那条虽然还在表里但已过期 ⇒ 有效条目必须是 0。
+	// 这个数字是 block 态放量前的自检读数，把过期项算进去就等于读数永远偏大。
+	if snap, _ := GetApprovalSnapshot(); snap.WhitelistActiveEntries != 0 {
+		t.Errorf("快照里的有效条目 = %d, want 0（已撤 + 已过期都不计）：%+v", snap.WhitelistActiveEntries, snap)
+	}
+}
+
+// --- T-P1-06：block 态 ---
+
+// TestApplyApprovalGateBlockWiresGatedChecker block 态的接线后果（AC② 第三态）。
+//
+// 这里盯的是两件容易在后续改动里偷偷退化的事：
+//  1. ApprovalShadow 必须翻成 false —— 否则装饰器只会记不会拦，block 名存实亡；
+//  2. 装饰器侧必须是 blockApprovalChecker 而不是裸 checker —— 否则刹车丢失，
+//     白名单旗子没开时会立刻变成"全量冷触达无差别失败"。
+func TestApplyApprovalGateBlockWiresGatedChecker(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, true)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	if mode := applyApprovalGate(&config); mode != approvalGateBlock {
+		t.Fatalf("模式 = %s, want block", mode)
+	}
+	if config.ApprovalShadow {
+		t.Error("block 态 config.ApprovalShadow 必须为 false")
+	}
+	if _, ok := config.ApprovalChecker.(blockApprovalChecker); !ok {
+		t.Fatalf("block 态装饰器侧接的是 %T，必须是 blockApprovalChecker", config.ApprovalChecker)
+	}
+	snap, decisions := GetApprovalSnapshot()
+	if !snap.Wired || !snap.GlobalCheckerSet || decisions == nil {
+		t.Errorf("block 接线后快照应完整：%+v decisions==nil? %v", snap, decisions == nil)
+	}
+	if !snap.BlocksWhenDenied {
+		t.Error("block 态必须报 blocks_when_denied=true")
+	}
+	if snap.Mode != string(approvalGateBlock) {
+		t.Errorf("快照 mode = %q, want block", snap.Mode)
+	}
+	if snap.WhitelistFlagEnv != featureflag.EnvNameOf(approval.FlagKey) {
+		t.Errorf("快照 WhitelistFlagEnv = %q，必须与 featureflag 的实际推导同源", snap.WhitelistFlagEnv)
+	}
+	if snap.WhitelistActiveEntries != 0 {
+		t.Errorf("新接线的白名单应为空，实际 %d 条", snap.WhitelistActiveEntries)
+	}
+
+	// 全局注入点在 block 态交出的是同一个有裁决权的 gate：WithApproval 那条路也必须拦，
+	// 否则同一个工具经两条路进来会得到两种后果，灰度读数无法解释。
+	cold := newApprovalProbeTool("reach.telegram.dm", tooluse.CategoryReach)
+	res, err := tooluse.WithApproval(cold).Execute(
+		tooluse.WithToolContext(context.Background(), &tooluse.ToolContext{CallerID: "acct-x"}), nil)
+	if err == nil || res.Success {
+		t.Errorf("block + 白名单旗子已开 + 未授权 ⇒ WithApproval 那条路也必须拒，实际 err=%v", err)
+	}
+	if cold.count() != 0 {
+		t.Errorf("被拒的调用不该到达工具本体，实际 %d 次", cold.count())
+	}
+}
+
+// TestApprovalGateBlockDeniesUnapprovedColdOutreach AC①：block 下冷触达被拒且原因可读。
+func TestApprovalGateBlockDeniesUnapprovedColdOutreach(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, true)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	applyApprovalGate(&config)
+	cold := newApprovalProbeTool("reach.batch_send.sms", tooluse.CategoryReach)
+	// 显式带重试策略：拒绝必须是终止语义，重试一次就是对着同一堵墙多发一次
+	config.RetryPolicy = tooluse.NewExponentialBackoffPolicy(3, time.Millisecond, 5*time.Millisecond)
+	config.AuditLogger = tooluse.NewMemoryAuditLogger(10)
+	exec := newExecutorWith(cold, config)
+
+	res := execCold(t, exec, "reach.batch_send.sms", "acct-1")
+	if res.Err == nil || res.Success {
+		t.Fatalf("未授权账号的冷触达必须被拒，实际 err=%v", res.Err)
+	}
+	if !errors.Is(res.Err, tooluse.ErrApprovalDenied) {
+		t.Errorf("拒绝必须是 ErrApprovalDenied，实际 %v", res.Err)
+	}
+	if got := tooluse.ClassifyToolError(res.Err); got != tooluse.ToolErrApprovalDenied {
+		t.Errorf("错误码 = %s, want %s（归错类会被当成可重试错误）", got, tooluse.ToolErrApprovalDenied)
+	}
+	for _, want := range []string{"reach.batch_send.sms", "approval"} {
+		if !strings.Contains(res.Err.Error(), want) {
+			t.Errorf("拒绝原因里读不到 %q：%s", want, res.Err.Error())
+		}
+	}
+	if cold.count() != 0 {
+		t.Errorf("被拒的外发一次都不该到达工具本体（含重试），实际 %d 次", cold.count())
+	}
+
+	_, decisions := GetApprovalSnapshot()
+	rep := decisions.Report()
+	if rep.Total != 1 || rep.WouldDeny != 1 {
+		t.Errorf("block 态的判定口径须与 shadow 一致（total/would_deny 各 1），实际 %+v", rep)
+	}
+	if rep.ByReason[approval.ReasonDeniedDefault] != 1 {
+		t.Errorf("未授权账号的 reason 应为 %q，实际 %v", approval.ReasonDeniedDefault, rep.ByReason)
+	}
+}
+
+// TestApprovalGateBlockBrakeWithoutWhitelistFlag 刹车：白名单旗子没开时 block 不拦。
+//
+// 同时证明"这不是留了个后门"：旗子没开时**即使灌了授权也不生效**，
+// 所以放行不是"绕过了白名单"，而是"白名单这一侧根本没有裁决可依"。
+func TestApprovalGateBlockBrakeWithoutWhitelistFlag(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, false)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	applyApprovalGate(&config)
+	cold := newApprovalProbeTool("reach.batch", tooluse.CategoryReach)
+	exec := newExecutorWith(cold, config)
+
+	if !ApprovalWhitelistMutate("reach.batch", "acct-brake", time.Time{}, false) {
+		t.Fatal("授权入口在 block 态必须可用")
+	}
+	logged := captureApprovalLog(t, func() {
+		res := execCold(t, exec, "reach.batch", "acct-brake")
+		if res.Err != nil || !res.Success {
+			t.Errorf("白名单旗子没开 ⇒ 刹车必须放行，实际 err=%v", res.Err)
+		}
+	})
+	if cold.count() != 1 {
+		t.Errorf("刹车放行后必须真的外发，实际 %d 次", cold.count())
+	}
+
+	_, decisions := GetApprovalSnapshot()
+	rep := decisions.Report()
+	if rep.Total != 1 || rep.WouldDeny != 1 {
+		t.Errorf("刹车放行不改判定口径：应仍记 1 笔 would_deny，实际 %+v", rep)
+	}
+	if rep.ByReason[approval.ReasonDisabledByFlag] != 1 {
+		t.Errorf("reason 应为 %q（证明授权确实没生效），实际 %v", approval.ReasonDisabledByFlag, rep.ByReason)
+	}
+	if !strings.Contains(logged, `"blocked":false`) {
+		t.Errorf("审计行必须标 blocked=false（会被拦但没拦）：\n%s", logged)
+	}
+	if !strings.Contains(logged, `"would_deny":true`) {
+		t.Errorf("审计行的 would_deny 不能因放行而被抹掉：\n%s", logged)
+	}
+}
+
+// TestApprovalGateBlockGrantRevokeAndExpiry block 态的三种结局：放行 / 撤权即拒 / 过期拒。
+func TestApprovalGateBlockGrantRevokeAndExpiry(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, true)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	applyApprovalGate(&config)
+	cold := newApprovalProbeTool("reach.schedule", tooluse.CategoryReach)
+	exec := newExecutorWith(cold, config)
+	_, decisions := GetApprovalSnapshot()
+
+	// ① 授权后放行
+	if !ApprovalWhitelistMutate("reach.schedule", "acct-ok", time.Time{}, false) {
+		t.Fatal("grant 应成功")
+	}
+	if res := execCold(t, exec, "reach.schedule", "acct-ok"); res.Err != nil || !res.Success {
+		t.Fatalf("已授权账号必须放行，实际 err=%v", res.Err)
+	}
+	if got := decisions.Report().ByReason[approval.ReasonWhitelisted]; got != 1 {
+		t.Errorf("应记 1 笔 %q，实际 %v", approval.ReasonWhitelisted, decisions.Report().ByReason)
+	}
+	// ② 撤权后立刻被拒（运行期改表是真有后果的）
+	if !ApprovalWhitelistMutate("reach.schedule", "acct-ok", time.Time{}, true) {
+		t.Fatal("revoke 应成功")
+	}
+	res := execCold(t, exec, "reach.schedule", "acct-ok")
+	if res.Err == nil || res.Success {
+		t.Error("撤权后下一次冷触达必须被拒")
+	}
+	if got := decisions.Report().ByReason[approval.ReasonDeniedDefault]; got != 1 {
+		t.Errorf("撤权后应回到 %q，实际 %v", approval.ReasonDeniedDefault, decisions.Report().ByReason)
+	}
+	// ③ 过期条目：入账时不判过期，判定时才拒（reason=denied_explicit，与"没开过"区分开）
+	if !ApprovalWhitelistMutate("reach.schedule", "acct-exp", time.Now().Add(-time.Minute), false) {
+		t.Fatal("grant 应成功")
+	}
+	res = execCold(t, exec, "reach.schedule", "acct-exp")
+	if res.Err == nil || res.Success {
+		t.Error("已过期的授权必须被拒")
+	}
+	rep := decisions.Report()
+	if rep.ByReason[approval.ReasonDeniedExplicit] != 1 {
+		t.Errorf("过期条目应记 %q，实际 %v", approval.ReasonDeniedExplicit, rep.ByReason)
+	}
+	// 三次调用里只第一次真的外发
+	if cold.count() != 1 {
+		t.Errorf("只放行的那次该到达工具本体，实际 %d 次", cold.count())
+	}
+	if rep.Total != 3 || rep.WouldDeny != 2 {
+		t.Errorf("total/would_deny 应为 3/2，实际 %d/%d", rep.Total, rep.WouldDeny)
+	}
+}
+
+// TestApprovalGateBlockWarmToolsUntouched block 不得外溢到非冷触达工具。
+func TestApprovalGateBlockWarmToolsUntouched(t *testing.T) {
+	restoreApprovalState(t)
+	setApprovalWhitelistFlag(t, true)
+	t.Setenv(ApprovalGateFlagEnv, "block")
+
+	config := tooluse.ToolExecutorConfig{}
+	applyApprovalGate(&config)
+	warm := newApprovalProbeTool("reach.weixin.send", tooluse.CategoryReach)
+	exec := newExecutorWith(warm, config)
+
+	if res := execCold(t, exec, "reach.weixin.send", "acct-none"); res.Err != nil || !res.Success {
+		t.Fatalf("warm 工具在 block 态也必须原样执行，实际 err=%v", res.Err)
+	}
+	if _, decisions := GetApprovalSnapshot(); decisions.Report().Total != 0 {
+		t.Errorf("warm 工具不该被审批门询问：%+v", decisions.Report())
+	}
+}
+
+// TestApprovalGateBlockKeepsWouldDenyMeaning AC③：观察期报告的口径在转阻断后仍然成立。
+//
+// would_deny 永远是"切阻断后会被拦的量"，与实际拦没拦无关。这条把两个模式的读数
+// 放在同一个用例里对比（1 放行 + 1 拒 ⇒ 两个模式下都是 total=2/would_deny=1），
+// 否则报告在转阻断当天就失去可比性，而那份报告正是转阻断的准入证据。
+//
+// 同时逐模式锁审计行的 blocked：shadow 一次都不该为 true（哪怕判定是拒绝），
+// block 才有 true。少了这半截，"blocked 只看判定不看模式"这种改动能在 shadow 期
+// 造出"已经拦下了"的假日志，而读数看起来一切正常。
+func TestApprovalGateBlockKeepsWouldDenyMeaning(t *testing.T) {
+	coldName := "reach.batch_outbound"
+	for _, c := range []struct {
+		mode        approvalGateMode
+		wantBlocked bool
+	}{
+		{approvalGateShadow, false},
+		{approvalGateBlock, true},
+	} {
+		t.Run(string(c.mode), func(t *testing.T) {
+			restoreApprovalState(t)
+			setApprovalWhitelistFlag(t, true)
+			t.Setenv(ApprovalGateFlagEnv, string(c.mode))
+
+			config := tooluse.ToolExecutorConfig{}
+			applyApprovalGate(&config)
+			cold := newApprovalProbeTool(coldName, tooluse.CategoryReach)
+			exec := newExecutorWith(cold, config)
+			if !ApprovalWhitelistMutate(coldName, "acct-granted", time.Time{}, false) {
+				t.Fatal("grant 应成功")
+			}
+
+			logged := captureApprovalLog(t, func() {
+				execCold(t, exec, coldName, "acct-granted")
+				res := execCold(t, exec, coldName, "acct-denied")
+				// 唯一按模式分叉的行为断言：block 拒掉未授权那次，shadow 一单不拦
+				if got := res.Err == nil; got != (c.mode == approvalGateShadow) {
+					t.Errorf("mode=%s 时放行与否判错：err=%v", c.mode, res.Err)
+				}
+			})
+
+			_, decisions := GetApprovalSnapshot()
+			rep := decisions.Report()
+			if rep.Total != 2 || rep.WouldDeny != 1 || rep.WouldDenyRatePct != 50 {
+				t.Errorf("两种模式的读数口径必须一致，实际 %+v", rep)
+			}
+			if snap, _ := GetApprovalSnapshot(); snap.BlocksWhenDenied != (c.mode == approvalGateBlock) {
+				t.Errorf("blocks_when_denied 没跟上模式：mode=%s snap=%+v", c.mode, snap)
+			}
+
+			blockedLines := strings.Count(logged, `"blocked":true`)
+			wantLines := 0
+			if c.wantBlocked {
+				wantLines = 1
+			}
+			if blockedLines != wantLines {
+				t.Errorf("mode=%s 的 blocked=true 行数 = %d, want %d：\n%s",
+					c.mode, blockedLines, wantLines, logged)
+			}
+			if denied := strings.Count(logged, `"would_deny":true`); denied != 1 {
+				t.Errorf("mode=%s 应有且只有 1 行 would_deny=true，实际 %d：\n%s", c.mode, denied, logged)
 			}
 		})
 	}

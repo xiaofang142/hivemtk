@@ -341,30 +341,52 @@ type toolApprovalWhitelistRequest struct {
 	Revoke    bool   `json:"revoke"`
 }
 
-// handleToolApprovalState 读取冷触达审批门的接线状态与 shadow 累计（T-P1-05）。
+// approvalStatePayload 把审批门快照渲染成端点响应体（不含判定报告）。
 //
-// 三件事必须一起看清，否则这份报告会被读反：
+// 四件事必须一起看清，否则这份报告会被读反：
 //   - mode/wired：闸门有没有挂上执行链（FF_LTC_APPROVAL_GATE）
 //   - whitelist_flag_on：白名单有没有生效（approval.FlagKey，另一把旗子）
+//   - blocks_when_denied：这个模式下"拒"会不会真的传下去（只有 block 为 true）
 //   - by_reason：would_deny 是"闸门没开"还是"账号没被批准"
 //
-// shadow 态下 would_deny 只是"切阻断后会被拦的量"，没有任何请求真的被拦。
-func handleToolApprovalState(c *gin.Context) {
-	snap, decisions := app.GetApprovalSnapshot()
+// would_deny 与"实际被拦"是两回事：shadow 态它照样增长却一单不拦；block 态它仍然
+// 包含被刹车豁免的 disabled_by_flag 那一类。所以两者不能互相代替，字段也刻意不合并。
+//
+// 抽成纯函数是为了让 block 态那段回显**可测**：闸门模式在装配期读一次，
+// 测试进程里既没有 HTTP 启动也没有第二次装配，走 handle 只能测到 off 那一支。
+// 于是把"给定快照 → 该回显哪些字段"单独拿出来，用构造出的快照直接断言。
+func approvalStatePayload(snap app.ApprovalGateSnapshot) gin.H {
 	out := gin.H{
 		"mode":               snap.Mode,
 		"wired":              snap.Wired,
 		"global_checker_set": snap.GlobalCheckerSet,
+		"blocks_when_denied": snap.BlocksWhenDenied,
 		"flags": gin.H{
 			"gate":              snap.GateFlagEnv,
 			"whitelist":         snap.WhitelistFlagKey,
+			"whitelist_env":     snap.WhitelistFlagEnv,
 			"whitelist_flag_on": snap.WhitelistFlagOn,
 		},
-		"env_hint": app.ApprovalGateFlagEnv + "=off|shadow（本版本只到 shadow：只记录判定、冷触达照常外发；" +
-			"写 block/enforce 也按 shadow 处理，转阻断是 T-P1-06）",
-		"reading_hint": "would_deny = 切阻断后会被拦的次数。by_reason 里 disabled_by_flag 占多数时，" +
-			"结论是「白名单旗子没开」，不是「账号没被批准」",
+		"whitelist_active_entries": snap.WhitelistActiveEntries,
+		"env_hint": app.ApprovalGateFlagEnv + "=off|shadow|block（shadow 只记录判定、冷触达照常外发；" +
+			"block 才真的拒，且需同时开白名单旗子 " + snap.WhitelistFlagEnv +
+			"；闸门模式在装配期读一次，改完须重启）",
+		"reading_hint": "would_deny = 切阻断后会被拦的次数（与实不实际拦无关）。by_reason 里 disabled_by_flag 占多数时，" +
+			"结论是「白名单旗子没开」，不是「账号没被批准」；block 态这一类还会被刹车放行",
 	}
+	if snap.BlocksWhenDenied && !snap.WhitelistFlagOn {
+		out["brake_engaged"] = true
+		out["brake_note"] = "block 态但白名单旗子未开 ⇒ reason=disabled_by_flag 的拒绝不拦，当前实际等价于 shadow；" +
+			"要真拦请开白名单旗子，并先确认 whitelist_active_entries 已经灌好（block + 0 条 = 全部冷触达被拒）"
+	}
+	return out
+}
+
+// handleToolApprovalState 读取冷触达审批门的接线状态与判定累计（T-P1-05 观察 / T-P1-06 三态）。
+// 回显口径见 approvalStatePayload。
+func handleToolApprovalState(c *gin.Context) {
+	snap, decisions := app.GetApprovalSnapshot()
+	out := approvalStatePayload(snap)
 	if decisions != nil {
 		rep := decisions.Report()
 		per := make([]gin.H, 0, len(rep.PerTool))
@@ -391,8 +413,11 @@ func handleToolApprovalState(c *gin.Context) {
 //
 // 授权内容只落进程内存、重启即空：这不是偷懒，是刻意的下限——
 // 持久化授权要过审批流与留痕表（T-P3 的审批闸门域），在这里偷偷写一张表反而会造出
-// 第二个授权来源。shadow 态下授权不改变任何行为（本来就放行），它的作用是让报告
-// 能区分"这个账号真的该放"与"只是没人给他开过"。
+// 第二个授权来源。
+//
+// 后果按模式分：shadow 态授权不改变任何行为（本来就放行），它的作用是让报告能区分
+// "这个账号真的该放"与"只是没人给他开过"；block 态这里就是**唯一的放行开关**，
+// revoke 一按，该账号下一次冷触达立刻被拒（且重启后条目清零 ⇒ 全拒）。
 func handleToolApprovalWhitelist(c *gin.Context) {
 	var req toolApprovalWhitelistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -415,7 +440,7 @@ func handleToolApprovalWhitelist(c *gin.Context) {
 		expiresAt = parsed
 	}
 	if !app.ApprovalWhitelistMutate(toolName, accountID, expiresAt, req.Revoke) {
-		response.Error(c, 503, "审批门未接线（先设 "+app.ApprovalGateFlagEnv+"=shadow 再重启服务）")
+		response.Error(c, 503, "审批门未接线（先设 "+app.ApprovalGateFlagEnv+"=shadow|block 再重启服务）")
 		return
 	}
 	expires := "never"

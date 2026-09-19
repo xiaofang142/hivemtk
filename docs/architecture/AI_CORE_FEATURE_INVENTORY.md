@@ -73,7 +73,7 @@
 permission → ratelimit → circuit → retry → timeout → audit → cost → feedback → dead_letter → result_cache → double_intercept → param_validator；LoopGuard 同指纹 3次/60s 拒绝
 - 说明：上表是**全部已实现的装饰器**，单次工具调用的实际链更短。`ToolExecutor.buildHandler` 实跑为
   permission → ratelimit → circuit → retry → timeout → audit(+cost)，`FeedbackSink` 非空时再在外面套一层；
-  `FF_LTC_APPROVAL_GATE=shadow` 时最外层再套一层审批门（见 W-1 条）；
+  `FF_LTC_APPROVAL_GATE` 非 `off` 时最外层再套一层审批门，`block` 态下该层会让拒绝真的传下去（见 W-1 条）；
   dead_letter / result_cache / double_intercept / param_validator / LoopGuard 挂在 ToolRouter 与 Agent Loop 上，不在 executor 链内
 - **circuit 曾恒不生效（T-P1-04 于 2026-09-19 接线）**：`CircuitBreakerRegistry` 此前只在测试里构造，
   `ToolExecutorConfig.CircuitBreaker` 生产无赋值点 ⇒ 装饰器 nil 早退，链上那格是空的。现由
@@ -89,25 +89,35 @@ permission → ratelimit → circuit → retry → timeout → audit → cost �
   根因是 `NewToolAlertManager` 本身无生产调用方，属审计告警侧缺口，见基线项 4）
 - 观测入口：`GET /api/agent/tools/circuit`（一次返回 mode / 生效配置 / executor 侧逐工具状态 / would-block 报告，
   `wired=false` 时其余字段皆空，不可读作"没有工具出问题"）
-- **W-1 冷触达审批门接线（T-P1-05 于 2026-09-19，本版本只到 shadow，不拦任何外发）**：
+- **W-1 冷触达审批门接线（T-P1-05 接线 / T-P1-06 三态，均 2026-09-19）**：
   此前的缺口比"`SetGlobalApprovalChecker` 生产零调用"更深一层——`WithApproval` / `WithApprovalChecker`
   的非测试调用点同样为 0，即**没有任何工具被审批门包过**，只补注入点等于接一根没人插的线。现改在
   executor 唯一建链点挂载：`internal/app/approval_wiring.go:applyApprovalGate` 按 `FF_LTC_APPROVAL_GATE`
-  两态装配，`tooluse.ApprovalGateDecorator` 只包 `IsColdOutreachTool` 命中的工具，位置在整条链之外
+  三态装配，`tooluse.ApprovalGateDecorator` 只包 `IsColdOutreachTool` 命中的工具，位置在整条链之外
   （被拒的冷触达不消耗限流令牌、不进重试、不被 audit 记成"执行过一次外发"、不产生工具反馈）
-  - **为什么本版本不给阻断**：`WhiteListApprovalChecker` 是**默认拒绝**语义（旗子没开 → `disabled_by_flag`
-    拒绝；开了但账号不在表里 → `denied_default` 拒绝），而白名单唯一的灌入口是下面的 admin 端点：手工、
-    不落库、重启即空。今天打开阻断 = 所有冷触达外发立刻全拒。`block`/`enforce`/`active` 一律降级 shadow 并告警，
-    代码里不存在把 `ApprovalShadow` 置 false 的分支；转阻断是 T-P1-06，准入条件是一份 shadow 报告 + 可运营的授权来源
-  - **两把旗子不是一把**：`FF_LTC_APPROVAL_GATE` 决定闸门挂没挂链，`ai.safety.tool_approval_gate`
-    （env `FF_AI.SAFETY_TOOL_APPROVAL_GATE`，featureflag 读取）决定白名单生不生效。观察端点两把一起回显，
-    否则 `would_deny=100%` 且 `by_reason` 全是 `disabled_by_flag` 会被读成"账号都没被批准"
-  - 全局注入点交出的不是裸 checker 而是 `shadowApprovalChecker` 包装版：`WithApproval` 那条路拿到 false 就硬拦、
-    它不认识 `ApprovalShadow`，不包这层则"本卡不阻断"只对装饰器那条路成立；inner 仍被问，留痕一笔不少
-  - 观测入口：`GET /api/agent/tools/approval`（mode / wired / global_checker_set / 两把旗子 /
+  - 三态：`off`（默认，字段与全局 checker 显式归零，行为与接线前逐字相同）/ `shadow`（挂链、每次判定留痕，
+    绝不拦）/ `block`（拒绝真的传下去：`ErrApprovalDenied` ⇒ `TOOL_APPROVAL_DENIED` ⇒ 不重试 ⇒
+    `StopReasonApprovalDenied`）。**布尔真值不授予阻断**——`true`/`1`/`on`/`yes` 一律降 `shadow` 并告警，
+    必须是字面量 `block|enforce|active`；这与熔断旗子刻意不同（熔断恢复即放行，审批会把客户的冷触达永久拒掉）
+  - **刹车（block 态唯一不拦的情形）**：白名单旗子 `ai.safety.tool_approval_gate` 没开时，判定理由为
+    `disabled_by_flag` 的调用不拦。此时 checker 根本没查过白名单，"允许"侧无路径可达，拦下去就是全量冷触达
+    无差别失败，且运维在端点上放进的账号也不生效。白名单旗子一开，同一份代码立刻开始真拦。
+    **不放刹车**的情形是"旗子已开但表为空"⇒ 全 `denied_default` ⇒ 全拦，这是 explicit-allow 的预期语义，
+    只在启动日志与快照里把 `whitelist_active_entries=0` 报出来
+  - **两把旗子不是一把**：`FF_LTC_APPROVAL_GATE` 决定闸门挂没挂链、以哪种模式挂，`ai.safety.tool_approval_gate`
+    （env 名由 `featureflag.EnvNameOf` 推导，点号合法：`FF_AI.SAFETY_TOOL_APPROVAL_GATE`）决定白名单生不生效。
+    ⇒ **阻断需要两把同时到位**，只开一把不会拦人。观察端点两把一起回显 + `blocks_when_denied` +
+    `whitelist_active_entries`，否则 `would_deny=100%` 且 `by_reason` 全是 `disabled_by_flag` 会被读成"账号都没被批准"
+  - 全局注入点按模式交出不同对象：shadow 交 `shadowApprovalChecker` 包装版（`WithApproval` 那条路拿到 false
+    就硬拦、它不认识 `ApprovalShadow`，不包这层"不阻断"只对装饰器一条路成立；inner 仍被问，留痕一笔不少），
+    block 交 `blockApprovalChecker`（带上面那道刹车），两条路共用同一个 checker 的 `Verdict`，判定与理由同源
+  - 观测入口：`GET /api/agent/tools/approval`（mode / wired / global_checker_set / blocks_when_denied /
+    两把旗子 / whitelist_active_entries / `brake_engaged`（block 但白名单旗子未开 ⇒ 实际等价 shadow，显式回显）/
     `decision_report{total, would_deny, would_deny_rate_pct, by_reason, per_tool}`；未接线时不出现
     `decision_report`，避免 0 读成"零次误拦"）；`POST /api/agent/tools/approval/whitelist`（admin，
-    授权/撤权只写进程内存，响应回显 `persisted:false`）；每次判定落一行 `event=tool_approval_decision`
+    授权/撤权只写进程内存，响应回显 `persisted:false`，grant/revoke 各留一行带生效条目数的日志）；
+    每次判定落一行 `event=tool_approval_decision`（`mode` / `allowed` / `would_deny` / `blocked` / `reason` /
+    `whitelist_flag_on`；**`would_deny` 与 `blocked` 是两个字段**：前者模式无关，后者只在真拦下时为 true）
 
 ### F3.3 MCP Server
 零依赖 JSON-RPC 2.0（协议 2025-06-18），initialize/tools.list/tools.call/ping；仅 HTTP

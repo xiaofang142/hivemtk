@@ -149,8 +149,16 @@ func (f *Flag) Bool() bool {
 	return f.cachedValue
 }
 
+// EnvNameOf 返回 flag 对应的环境变量名。
+//
+// 与 readEnv 同源：告警/运维端点提示"该开哪个 env"时必须用这里算，
+// 否则会出现提示写 FF_A_B、代码读 FF_A.B 这种查不出来的漂移（点号在 flag 名里是合法的）。
+func EnvNameOf(name string) string {
+	return "FF_" + strings.ToUpper(name)
+}
+
 func (f *Flag) readEnv() bool {
-	envName := "FF_" + strings.ToUpper(f.name)
+	envName := EnvNameOf(f.name)
 	v := os.Getenv(envName)
 	if v == "" {
 		return f.defaultValue
