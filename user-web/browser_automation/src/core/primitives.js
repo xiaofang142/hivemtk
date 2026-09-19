@@ -371,25 +371,44 @@ function injPostCommentVerify(targetText, opts) {
   const want = norm(targetText);
   // innerText 在非渲染上下文（jsdom/后台 tab 未布局）为空——textContent 兜底
   const textOf = (n) => (n ? (n.innerText || n.textContent || '') : '');
+  // 输入区节点判据（三条缺一不可）：表单控件 tagName / isContentEditable 主判据 /
+  // closest 兜底（jsdom 等引擎不实现该属性，缺它就会出现「草稿仍留在输入框 → 零提交假绿」形态）。
+  const inInputNode = (p) => {
+    if (!p) return false;
+    if (/^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(p.tagName)) return true;
+    if (p.isContentEditable) return true;
+    try {
+      return !!p.closest('[contenteditable]:not([contenteditable="false"])');
+    } catch {
+      return false; // 无 closest 的旧引擎：按可见文本继续判
+    }
+  };
   // 跨节点累积（评论正文可能被拆进多个文本节点），限窗避免长页 O(n²)
   const textOutsideInputsIncludes = (needle) => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node;
     let acc = '';
     while ((node = walker.nextNode())) {
-      const p = node.parentElement;
-      if (!p || /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(p.tagName)) continue;
-      // isContentEditable 为主判据；closest 兜底（jsdom 等引擎不实现该属性，缺它就会出现
-      // 「草稿仍留在输入框 → 零提交假绿」的 F11 形态）
-      if (p.isContentEditable) continue;
-      try {
-        if (p.closest('[contenteditable]:not([contenteditable="false"])')) continue;
-      } catch { /* 无 closest 的旧引擎：按可见文本继续判 */ }
+      if (inInputNode(node.parentElement)) continue;
       acc += norm(node.nodeValue);
       if (acc.length > 6000) acc = acc.slice(-3000);
       if (needle && acc.includes(needle)) return true;
     }
     return false;
+  };
+  // 子树版（F11b 批6）：容器/条目级取文同样必须剔除输入子树。
+  // 真机 Leg X 实测形态——小红书评论输入框**就在** .comments-container 里面，
+  // 旧实现整容器 textOf(c) 直接命中那条未提交草稿 → 零提交也报 verified=true。
+  // 不可逆动作的自检假绿是所有假里最坏的一类（用户据此认为评论已发出）。
+  const textExcludingInputs = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    let out = '';
+    while ((node = walker.nextNode())) {
+      if (inInputNode(node.parentElement)) continue;
+      out += norm(node.nodeValue);
+    }
+    return out;
   };
 
   const evidenceOf = () => {
@@ -399,15 +418,16 @@ function injPostCommentVerify(targetText, opts) {
       // R25 证据语义修正（session192 实测）：优先取**全文恰等于目标文本**的条目=我们刚发的那条；
       // 「包含目标」会误命中他人引用了同样文字的历史评论（如「今天真好吃」⊂「今天真好吃吗」）。
       // 无精确命中时退化为含目标文本的条目（verified 判定仍是 contains 语义，此处只关乎证据归属）。
+      // 条目文本走 textExcludingInputs：verified 与 evidence 必须来自同一套「剔除输入节点」的
+      // 文本，否则会产出「verified=false 但证据里有这条」的自相矛盾审计包。
       let containsHit = '';
       for (const c of containers) {
         const items = c.querySelectorAll(o.itemSelector);
         for (const item of items) {
-          const t = textOf(item).trim();
+          const t = textExcludingInputs(item);
           if (!t) continue;
-          const nt = norm(t);
-          if (nt === want) { ev.item_text = t.slice(0, 200); ev.own = true; return ev; }
-          if (!containsHit && nt.includes(want)) containsHit = t;
+          if (t === want) { ev.item_text = (textOf(item).trim()).slice(0, 200); ev.own = true; return ev; }
+          if (!containsHit && t.includes(want)) containsHit = textOf(item).trim();
         }
       }
       if (containsHit) { ev.item_text = containsHit.slice(0, 200); ev.matched = true; }
@@ -417,14 +437,12 @@ function injPostCommentVerify(targetText, opts) {
 
   // 立即查一次（评论可能已渲染）
   const checkNow = () => {
+    if (!want) return false;
     const containers = document.querySelectorAll(containerSel);
     for (const c of containers) {
-      if (norm(textOf(c)).includes(want)) return true;
+      if (textExcludingInputs(c).includes(want)) return true;
     }
     // 兜底：全文搜（评论区容器类名可能变）——但必须先排除输入节点自身。
-    // F11（批5g 夹具真机实测 session281）：comment_send 失败时草稿仍留在 contenteditable 里，
-    // 旧兜底直接整页 includes(want) 命中那条草稿 → 零提交也报 verified=true。
-    // 不可逆动作的自检出现假绿是所有假里最坏的一类（用户据此认为评论已发出）。
     return textOutsideInputsIncludes(want);
   };
   if (checkNow()) return { ok: true, posted: true, verified: true, evidence: evidenceOf() };

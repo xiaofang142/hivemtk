@@ -17,6 +17,16 @@ type BrowserStepRepository interface {
 	UpdateStatus(ctx context.Context, id uint, status, errMsg string) error
 	UpdateResult(ctx context.Context, id uint, status string, result []byte, durationMs int64, errMsg string) error
 	DeleteBySessionID(ctx context.Context, sessionID uint) error
+	// UpdateSubmitState 批6（F11b）写台账状态转移：只写 submit_state/text_hash 两列，
+	// 与 UpdateResult 分道——步终态（status）由步收口写，提交归因由台账写，两者在
+	// 「已提交但验证未见」时必然不同值，合成一列就会把结果未知态当成可重发。
+	UpdateSubmitState(ctx context.Context, id uint, state, textHash string) error
+	// FindSubmitAttempt 跨 session 查「同任务、同文本」是否已存在提交尝试
+	// （sent/verified/unattributed 三态都算尝试过；prepared 不算——点击从未发生）。
+	// 无尝试返回 gorm.ErrRecordNotFound。
+	// 批7（F-N4）键里不再有 step_index：Brain 模式的步下标每轮递增，带下标的键会让同一条
+	// 评论在换轮重放时落到不同下标上而漏闸。
+	FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error)
 }
 
 // StepResultJSON result 列的 JSON 载荷
@@ -72,4 +82,25 @@ func (r *browserStepRepo) UpdateResult(ctx context.Context, id uint, status stri
 
 func (r *browserStepRepo) DeleteBySessionID(ctx context.Context, sessionID uint) error {
 	return r.db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&model.BrowserStep{}).Error
+}
+
+func (r *browserStepRepo) UpdateSubmitState(ctx context.Context, id uint, state, textHash string) error {
+	return r.db.WithContext(ctx).Model(&model.BrowserStep{}).Where("id = ?", id).
+		Updates(map[string]any{"submit_state": state, "text_hash": textHash}).Error
+}
+
+func (r *browserStepRepo) FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error) {
+	if textHash == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var row model.BrowserStep
+	q := r.db.WithContext(ctx).Where("task_id = ? AND text_hash = ? AND submit_state IN ?",
+		taskID, textHash, model.StepSubmitAttemptedStates())
+	if excludeID > 0 {
+		q = q.Where("id <> ?", excludeID)
+	}
+	if err := q.Order("id asc").First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

@@ -262,14 +262,31 @@ const __push = (e) => window.__trace.push({
   t: (String(e.target && (e.target.className || e.target.tagName)) || '').slice(0, 24),
 });
 ['pointerdown', 'mousedown', 'mouseup', 'click', 'keydown'].forEach((k) => document.addEventListener(k, __push, true));
+// 触达记账（kind=touched）与 trace 分开：trace 走 1.5s 批量上行，页面可能在批量前就被回收，
+// 「零触达」判据若建立在 trace 上会因竞态而恒真。input 事件同步即时上行，才是硬预言机。
+// TI 存成常量而不是每次重新 querySelector：?noinput=1 腿会把整张卡片摘掉，
+// 之后按选择器再查会拿到 null 而在 interval 里抛错（trace 断供），存下的节点引用照常可读。
+const TI = document.querySelector('.content-textarea');
+TI.addEventListener('input', function () {
+  fetch('/log', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                 body: JSON.stringify({kind: 'touched', text: (this.innerText || '').slice(0, 40)})});
+}, true);
 setInterval(() => {
   if (!window.__trace.length) return;
   const batch = window.__trace.splice(0, window.__trace.length);
   fetch('/log', {method: 'POST', headers: {'Content-Type': 'application/json'},
                  body: JSON.stringify({kind: 'trace', events: batch,
-                   typed: (document.querySelector('.content-textarea').innerText || '').slice(0, 24),
+                   typed: (TI.innerText || '').slice(0, 24),
                    comments: document.querySelectorAll('.parent-comment').length})});
 }, 1500);
+// ?inbox=1（Leg X / 容器内假绿腿）：把输入卡片整体搬进 .comments-container 里面——
+// 这是小红书的真实 DOM 形态。只搬位置、不改任何提交与记账逻辑（监听器已绑在节点上，
+// 随节点一起搬家），于是判据仍然只有带外 ledger：会话若照样 completed+verified=true，
+// 就是「未提交草稿被容器主分支当成已发布评论」的假绿。
+if (/[?&]inbox=1/.test(location.search)) {
+  var cc = document.querySelector('.comments-container');
+  cc.insertBefore(document.getElementById('card'), cc.firstChild);
+}
 document.querySelector('.submit').addEventListener('click', function () {
   var t = (document.querySelector('.content-textarea').innerText || '').trim();
   if (!t) return;
@@ -290,6 +307,11 @@ document.querySelector('.submit').addEventListener('click', function () {
   fetch('/log', {method: 'POST', headers: {'Content-Type': 'application/json'},
                  body: JSON.stringify({kind: 'post', text: t})});    // 带外预言机
 });
+// ?noinput=1（批7「从未发生」腿）：把评论卡片整体摘除，只留评论区容器。
+// 派生写步（type 命中平台注册的 comment_input）于是必然 element_not_found——
+// 「从未在页面上发生」的动作不许记成提交尝试，否则用户改好选择器重跑仍被闸门拦死。
+// 摘除排在所有监听器注册之后，前面的记账逻辑一行不动（判据只多不少）。
+if (/[?&]noinput=1/.test(location.search)) document.getElementById('card').remove();
 </script></body></html>"""
 
 
@@ -357,6 +379,13 @@ class Fixture:
         """swallow 腿正判据：点击已落到按钮（处理器被调用）但页面刻意未提交。"""
         return [r for r in self.rows if r["kind"] == "swallowed" and nonce in r["text"]]
 
+    def touched(self, nonce=""):
+        """零触达判据：输入框收到过 input（=trusted 键入真的进过页面），同步上行无批量竞态。
+        逐字键入的中间帧只含半截文本，故默认不按 nonce 过滤（给了才过滤，用于「末帧含全文」的正控）。
+        """
+        rows = [r for r in self.rows if r["kind"] == "touched"]
+        return [r for r in rows if nonce in r["text"]] if nonce else rows
+
     def reset(self):
         self.rows.clear()
 
@@ -403,14 +432,17 @@ def cdp_close_fixture_tabs(rep, name, cdp_port, fixture_url):
                            "（%ds 内未自行关闭，已兜底回收）" % F10_DRAIN_BUDGET_SEC if left else ""))
 
 
-def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=False):
+def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=False, inbox=False):
     """夹具写腿：url 与 open_tab 都指向本地夹具页，platform 标签仍用 xiaohongshu（选适配器）。
 
     timeout_sec 由场景决定：放行/中止腿要留足预算，超时腿必须显著小于轮询预算才能稳定撞闸。
     delay_ms=0 关掉步间 ±30% 随机抖动（确定性优先，拟人时序仍由扩展内部 TIMING 负责）。
     swallow=True 走「平台静默吞」变体：点击落地但页面刻意不提交，专测 finalize 的假绿防线。
+    inbox=True 把输入卡片搬进评论区容器内（小红书真实形态）；与 swallow 合用即 Leg X——
+    未提交的草稿就在「已发布评论」该出现的地方，verify 若还认它就是容器主分支假绿。
     """
-    page = fixture.url + ("?swallow=1" if swallow else "")
+    qs = ("swallow=1" if swallow else "") + ("&" if swallow and inbox else "") + ("inbox=1" if inbox else "")
+    page = fixture.url + ("?" + qs if qs else "")
     return {
         "name": "E2E-夹具写腿-%s" % nonce,
         "task_type": "one_shot", "platform": "xiaohongshu",
@@ -423,6 +455,30 @@ def task_write_fixture(fixture, require_confirm, nonce, timeout_sec, swallow=Fal
             {"action": "close_tab"},
         ],
     }, "夹具写腿链路验证 %s" % nonce
+
+
+def task_derived_write_fixture(fixture, nonce, timeout_sec, noinput=False):
+    """批7 派生写腿：编排里**没有** post_comment，「不可逆写」由 type 命中评论框 + 回车表达。
+
+    这正是批7 之前的盲区：旧的写原语判定只认 action 名，这类「隐形提交步」既有重试资格、
+    又不进台账、双发闸对它视而不见。夹具页刻意不绑 Enter 处理器 → 键入回车永远不会真的提交，
+    于是带外 ledger 恒 0，本腿判据全落在「服务端怎么给这一步记账」上（is_write / submit_state）。
+    noinput=True 切到 ?noinput=1 形态（评论框被摘除）→ 定位必然失败 = 动作从未发生。
+    """
+    page = fixture.url + ("?noinput=1" if noinput else "")
+    return {
+        "name": "E2E-夹具派生写步-%s" % nonce,
+        "task_type": "one_shot", "platform": "xiaohongshu",
+        "url": page, "loop_count": 1,
+        "delay_ms": 0, "timeout_sec": timeout_sec, "require_confirm": False,
+        "steps": [
+            {"action": "open_tab", "target": page},
+            {"action": "wait_for_selector", "selector": ".comments-container", "timeout_ms": 2000},
+            {"action": "type", "target": ".content-textarea", "value": "派生写步链路验证 %s" % nonce,
+             "submit_on_enter": True},
+            {"action": "close_tab"},
+        ],
+    }, "派生写步链路验证 %s" % nonce
 
 
 # ---------------------------------------------------------------- 执行与观测
@@ -523,6 +579,216 @@ def run_and_watch(api, rep, task_payload, name, allow_write, created_ids, step_t
     if gate.get("cleanup_fixture_tabs") and fixture is not None:
         cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
     return session_id, sess
+
+
+def run_resubmit_gate_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port, gate):
+    """台账双发闸的设备级锁：同一任务连跑两次，第二次必须在「任何页面注入之前」被拦下。
+
+    首跑走标准夹具腿（终态 + ledger + 证据 + tab 回收一次锁死）；二次运行只认四件事：
+    终态 failed、拒绝文案、带外 ledger 不再增长、页内零 trusted 触达。
+    「零触达」必须配一条同预言机的正控（首跑要有触达帧），否则恒真的判据等于没判。
+    """
+    sid, sess = run_and_watch(api, rep, task_payload, name + "（首跑）", False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    touched1 = fixture.touched()
+    rep.add("PASS" if touched1 else "FAIL", name + " :: 首跑页内有触达（零触达判据的正控）",
+            "input 帧=%d 期望≥1（=0 说明预言机是死的，后面的零触达不可信）" % len(touched1))
+    task_id = (sess or {}).get("task_id")
+    if not task_id:
+        rep.add("FAIL", name + " :: 二次运行", "首跑未回读到 task_id（sid=%s）" % sid)
+        return
+    fixture.reset()  # 二次运行的判据由此变成「ledger 必须恒 0」，双发一眼可辨
+    okr, ran = api.ok("POST", "/api/browser-automation/tasks/%s/run" % task_id, {})
+    if not okr or not (ran.get("data") or {}).get("session_id"):
+        rep.add("FAIL", name + " :: 二次运行下发", json.dumps(ran, ensure_ascii=False)[:200])
+        return
+    sid2 = ran["data"]["session_id"]
+    sess2 = poll_session(api, rep, sid2, 60, task_payload, False, {}, fixture, name) or {}
+    st2 = sess2.get("status")
+    err2 = str(sess2.get("error_msg") or "")
+    rep.add("PASS" if st2 == "failed" else "FAIL", name + " :: 二次运行终态",
+            "session=%s status=%s 期望=failed（台账闸拦截）err=%s" % (sid2, st2, err2[:160]))
+    rep.add("PASS" if "拒绝执行" in err2 else "FAIL", name + " :: 二次运行文案",
+            "期望含「拒绝执行」实得「%s」" % err2[:160])
+    subs = len(fixture.submissions(nonce))
+    rep.add("PASS" if subs == 0 else "FAIL", name + " :: 二次运行零提交",
+            "ledger=%d 期望=0（>0 即双发，闸门失效）" % subs)
+    # 页侧带外零触达：闸门若排在注入之后，输入框必然收过 trusted 键入（input 同步上行，无批量竞态）。
+    # 不用 command_log 当这个判据——步级 command/event 是执行器记账，与「帧有没有送到页面」无关
+    # （真机 session357 实测：被拦下的那次运行照样留有一对 post_comment command/event，event 带拒绝文案）。
+    left = fixture.touched()
+    rep.add("PASS" if not left else "FAIL", name + " :: 二次运行页内零触达",
+            "input 帧=%d 草稿=%s 期望=0（闸门必须排在任何注入之前）" % (
+                len(left), (left[0]["text"] if left else "")[:24]))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+# ------------------------------------------------- 批7：写步属性化 / 豁免 设备级锁
+def _b7_step(audit, idx):
+    """审计包里按 step_index 取那一行。取不到回 {}，让上层以「字段缺失」判红而不是抛异常。"""
+    for s in (audit or {}).get("steps") or []:
+        if s.get("step_index") == idx:
+            return s
+    return {}
+
+
+def _b7_rerun(api, rep, name, task_id, task_payload, fixture):
+    """同任务二次下发（人工重跑语义：RetryCount 归 0，闸门不许豁免）。返回 (sid, 终态 dict)。"""
+    okr, ran = api.ok("POST", "/api/browser-automation/tasks/%s/run" % task_id, {})
+    sid = (ran.get("data") or {}).get("session_id") if okr else None
+    if not sid:
+        rep.add("FAIL", name + " :: 二次运行下发", json.dumps(ran, ensure_ascii=False)[:200])
+        return None, {}
+    return sid, (poll_session(api, rep, sid, 90, task_payload, False, {}, fixture, name) or {})
+
+
+def run_derived_write_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """批7 属性化的设备级锁：编排里没有 post_comment 的「隐形写步」也进台账、也被闸门拦。
+
+    夹具页刻意不绑 Enter 处理器 → 页面永远不会提交，所以「ledger 恒 0」在这里是**期望值**。
+    要证的是服务端怎么给这一步记账（is_write 落库 + submit_state=sent），以及第二次运行
+    一个帧都没下发。旧的判定只认 action 名，这条腿在改前必红（is_write=False、无台账、二轮照发）。
+    """
+    gate = {"action": "none", "expect_status": "completed", "ledger": 0, "nonce": nonce,
+            "cleanup_fixture_tabs": True}
+    sid, sess = run_and_watch(api, rep, task_payload, name, False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    row = _b7_step(fetch_audit(api, sid), 2)
+    rep.add("PASS" if row.get("is_write") else "FAIL", name + " :: 派生写判定落库",
+            "type+回车命中注册 comment_input → is_write=%s（只认 action 名的旧判定这里必为假）"
+            % row.get("is_write"))
+    rep.add("PASS" if row.get("submit_state") == "sent" else "FAIL", name + " :: 派生写台账",
+            "submit_state=%s want sent（这类原语没有回查通路，记成 verified 就是又一处假绿）"
+            % row.get("submit_state"))
+    touched1 = fixture.touched()
+    rep.add("PASS" if touched1 else "FAIL", name + " :: 首跑页内有触达（零触达判据的正控）",
+            "input 帧=%d 期望≥1（=0 说明预言机是死的，后面的零触达不可信）" % len(touched1))
+    task_id = (sess or {}).get("task_id")
+    if not task_id:
+        rep.add("FAIL", name + " :: 二次运行", "首跑未回读到 task_id（sid=%s）" % sid)
+    else:
+        fixture.reset()
+        sid2, sess2 = _b7_rerun(api, rep, name, task_id, task_payload, fixture)
+        err2 = str(sess2.get("error_msg") or "")
+        rep.add("PASS" if sess2.get("status") == "failed" else "FAIL", name + " :: 二次运行终态",
+                "session=%s status=%s 期望=failed（派生写步同样受双发闸保护）err=%s" % (
+                    sid2, sess2.get("status"), err2[:160]))
+        rep.add("PASS" if "拒绝执行" in err2 else "FAIL", name + " :: 二次运行文案",
+                "期望含「拒绝执行」实得「%s」" % err2[:160])
+        left = fixture.touched()
+        rep.add("PASS" if not left else "FAIL", name + " :: 二次运行页内零触达",
+                "input 帧=%d 草稿=%s 期望=0（闸门排在任何注入之前）" % (
+                    len(left), (left[0]["text"] if left else "")[:24]))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+def run_never_executed_write_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """批7 台账留空的设备级锁——**过拦**的反向测试（判据与上一条相反）。
+
+    ?noinput=1 页面上评论框被摘除，派生写步必然 element_not_found：动作从未在页面上发生，
+    台账就必须留空，第二次运行才还能照常跑到同一个定位失败上。若把它记成提交尝试，用户
+    改好选择器重跑会被一个从没发生过的动作永久拦死、只能换新任务——过拦的代价是真机可感的。
+    """
+    gate = {"action": "none", "expect_status": "failed", "expect_err": "element_not_found",
+            "ledger": 0, "nonce": nonce, "cleanup_fixture_tabs": True}
+    sid, sess = run_and_watch(api, rep, task_payload, name, False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    row = _b7_step(fetch_audit(api, sid), 2)
+    rep.add("PASS" if row.get("is_write") else "FAIL", name + " :: 失败步仍算写步",
+            "is_write=%s（写判定看编排，不看这一轮的结果）" % row.get("is_write"))
+    rep.add("PASS" if not row.get("submit_state") else "FAIL", name + " :: 从未发生不记尝试",
+            "submit_state=%r 期望空（记成 sent/unattributed 就把一次干净的定位失败永久拦死）"
+            % row.get("submit_state"))
+    rep.add("PASS" if not fixture.touched() else "FAIL", name + " :: 首跑页内零触达",
+            "input 帧=%d 期望=0（元素不存在时连键入都不该落地）" % len(fixture.touched()))
+    task_id = (sess or {}).get("task_id")
+    if not task_id:
+        rep.add("FAIL", name + " :: 二次运行", "首跑未回读到 task_id（sid=%s）" % sid)
+    else:
+        fixture.reset()
+        sid2, sess2 = _b7_rerun(api, rep, name, task_id, task_payload, fixture)
+        err2 = str(sess2.get("error_msg") or "")
+        rep.add("PASS" if "element_not_found" in err2 else "FAIL", name + " :: 二次运行仍失败在定位",
+                "status=%s err=%s 期望=element_not_found" % (sess2.get("status"), err2[:160]))
+        rep.add("PASS" if "拒绝执行" not in err2 else "FAIL", name + " :: 二次运行未被误拦",
+                "实得「%s」期望不含拒绝文案（台账留空才允许改好选择器后原任务重跑）" % err2[:160])
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+
+
+B7_RETRY_SCAN_BUDGET_SEC = 240  # retry_delay 30s + 扫描器 60s tick + 一轮执行 + 余量
+
+
+def _b7_wait_retry_session(api, task_id, first_sid, timeout=B7_RETRY_SCAN_BUDGET_SEC):
+    """等任务级自动重试轮真的起来并收口。sessions 列表按 id 倒序，取本任务除首轮外的最新一条。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ok, got = api.ok("GET", "/api/browser-automation/sessions?page=1&limit=50")
+        rows = ((got.get("data") or {}).get("list") or []) if ok else []
+        cands = [s for s in rows
+                 if s.get("task_id") == task_id and s.get("id") != first_sid]
+        if cands and cands[0].get("status") in TERMINAL:
+            return cands[0]
+        time.sleep(3)
+    return None
+
+
+def run_retry_skip_write_leg(api, rep, task_payload, name, nonce, fixture, created_ids, cdp_port):
+    """批7 重试豁免的设备级锁，两头都判：不重发（防双发）+ 不判绿（防假绿）。
+
+    首轮走 swallow 页 → 点击落地但页面不提交 → 台账停在 unattributed、会话 failed →
+    任务级自动重试（retry_on_fail）起来后，第二轮遇到这条「已尝试但未验证」的写步：
+      · 必须整步跳过——页侧零 touched / 零 swallowed / 审计里连一条 post_comment 命令帧都不该有；
+      · 但**不许**因此换来一个 completed 会话。本轮什么都没证明，判绿就是批6 立项要消灭的假绿。
+    豁免的意义仍在：只读步照常重放（success_steps≥2），重试出得了循环而不必重发评论。
+    """
+    gate = {"action": "none", "expect_status": "failed", "expect_err": "验证未通过",
+            "ledger": 0, "nonce": nonce, "evidence": True, "verified": False,
+            "cleanup_fixture_tabs": True}
+    sid, sess = run_and_watch(api, rep, task_payload, name + "（首轮）", False, created_ids,
+                              gate=gate, fixture=fixture, cdp_port=cdp_port)
+    audit1 = fetch_audit(api, sid)
+    row1 = _b7_step(audit1, 2)
+    task_id = (sess or {}).get("task_id")
+    if row1.get("submit_state") != "unattributed":
+        rep.add("FAIL", name + " :: 首轮台账=unattributed",
+                "实得 %r（前置条件不成立，后面的豁免判据无意义）" % row1.get("submit_state"))
+    sw1 = len(fixture.swallowed(nonce))
+    rep.add("PASS" if sw1 == 1 else "FAIL", name + " :: 首轮点击落地（重发判据的正控）",
+            "swallowed=%d 期望=1（=0 说明页面根本没被点到，后面的「第二轮没点」是恒真判据）" % sw1)
+    if not task_id:
+        rep.add("FAIL", name + " :: 自动重试轮", "首轮未回读到 task_id（sid=%s）" % sid)
+        cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+        return
+    fixture.reset()  # 从此页侧读数只属于第二轮
+    s2 = _b7_wait_retry_session(api, task_id, sid)
+    if not s2:
+        rep.add("FAIL", name + " :: 自动重试轮起来",
+                "%ds 内没等到第二条 session（重试扫描器/next_retry_at 链路故障）" % B7_RETRY_SCAN_BUDGET_SEC)
+        cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
+        return
+    err2 = str(s2.get("error_msg") or "")
+    rep.add("PASS" if s2.get("status") == "failed" else "FAIL", name + " :: 重试轮终态",
+            "session=%s status=%s 期望=failed（未验证的提交不能靠跳过换绿）err=%s" % (
+                s2.get("id"), s2.get("status"), err2[:160]))
+    rep.add("PASS" if "无法证明" in err2 else "FAIL", name + " :: 重试轮判红归因",
+            "期望含「无法证明」实得「%s」" % err2[:160])
+    audit2 = fetch_audit(api, s2.get("id"))
+    row2 = _b7_step(audit2, 2)
+    rep.add("PASS" if row2.get("status") == "skipped" else "FAIL", name + " :: 重试轮写步跳过",
+            "status=%s 期望=skipped err=%s" % (row2.get("status"), str(row2.get("error_msg"))[:120]))
+    logs2 = (audit2 or {}).get("command_log") or []
+    n_cmd2 = len([l for l in logs2
+                  if l.get("action") == "post_comment" and l.get("direction") == "command"])
+    rep.add("PASS" if n_cmd2 == 0 else "FAIL", name + " :: 重试轮零下发（服务端记账面）",
+            "post_comment 命令帧=%d 期望=0（闸门必须排在命令记账与下发之前）" % n_cmd2)
+    rep.add("PASS" if not fixture.touched() else "FAIL", name + " :: 重试轮页内零触达",
+            "input 帧=%d 期望=0" % len(fixture.touched()))
+    rep.add("PASS" if not fixture.swallowed(nonce) else "FAIL", name + " :: 重试轮零二次点击",
+            "swallowed=%d 期望=0（>0 即双发）" % len(fixture.swallowed(nonce)))
+    rep.add("PASS" if (s2.get("success_steps") or 0) >= 2 else "FAIL", name + " :: 只读步照常重放",
+            "success_steps=%s 期望≥2（open_tab+wait_for_selector 跑完了才收口）"
+            % s2.get("success_steps"))
+    cdp_close_fixture_tabs(rep, name, cdp_port, fixture.url)
 
 
 def poll_session(api, rep, session_id, timeout, task_payload, allow_write, gate=None, fixture=None,
@@ -842,24 +1108,54 @@ def main():
         # 夹具写腿排在最前：不依赖任何账号登录态，是写链路上唯一可复跑的**设备级**证据
         # （真平台写腿要登录态，长期只能靠 WS 测证），五场景把 D7 的三种结局+全自动+静默吞一次跑齐。
         specs = [
-            # (名称, 需 D7 闸门, 闸门动作, 期望终态, 期望错误文案, 期望 ledger, 期望有证据, 期望 verified, 预算秒, 静默吞页)
-            ("夹具写腿·D7 挂起→确认放行", True, "confirm", "completed", "", 1, True, True, 90, False),
-            ("夹具写腿·D7 挂起→用户中止", True, "stop", "stopped", "评论未提交", 0, False, False, 90, False),
-            ("夹具写腿·D7 挂起→预算耗尽", True, "none", "failed", "评论未提交", 0, False, False, 20, False),
-            ("夹具写腿·无闸门全自动提交", False, "none", "completed", "", 1, True, True, 90, False),
+            # (名称, 需 D7 闸门, 闸门动作, 期望终态, 期望错误文案, 期望 ledger, 期望有证据, 期望 verified, 预算秒, 静默吞页, 输入框在容器内)
+            ("夹具写腿·D7 挂起→确认放行", True, "confirm", "completed", "", 1, True, True, 90, False, False),
+            ("夹具写腿·D7 挂起→用户中止", True, "stop", "stopped", "评论未提交", 0, False, False, 90, False, False),
+            ("夹具写腿·D7 挂起→预算耗尽", True, "none", "failed", "评论未提交", 0, False, False, 20, False, False),
+            ("夹具写腿·无闸门全自动提交", False, "none", "completed", "", 1, True, True, 90, False, False),
             # F11b 真机反向锁：点击确实落到按钮上、页面刻意不提交 → verify 只能说「没见到评论」。
             # 若哪天整页兜底又被翻回 true，这条腿就是唯一会红的那条。
             ("夹具写腿·平台静默吞（点击落地未提交）", False, "none", "failed",
-             "验证未通过", 0, True, False, 90, True),
+             "验证未通过", 0, True, False, 90, True, False),
+            # Leg X 真机常驻反向锁（批6 立项证据）：同一形态再加一层——草稿就躺在容器里面。
+            # 上一条款不到容器主分支（输入框在容器外），本条专门条款不到就双绿的容器主分支。
+            # 判据仍是带外 ledger=0 + verified=false；旧实现下这条必红（真机 session343 实测
+            # completed + verified=true + evidence 仅 {containers:1}——命中的正是容器里那条草稿）。
+            ("夹具写腿·静默吞 + 输入框在容器内（Leg X）", False, "none", "failed",
+             "验证未通过", 0, True, False, 90, True, True),
         ]
         for (nm, need_confirm, action, want_status, want_err, ledger_n, evidence,
-             want_verified, tmo, swallow) in specs:
+             want_verified, tmo, swallow, inbox) in specs:
             nonce = "q" + os.urandom(3).hex()  # 只用 0-9a-f，避开需 shift 的符号键
-            payload, _text = task_write_fixture(fixture, need_confirm, nonce, tmo, swallow)
+            payload, _text = task_write_fixture(fixture, need_confirm, nonce, tmo, swallow, inbox)
             cases.append({"name": nm, "payload": payload, "gate": {
                 "action": action, "expect_status": want_status, "expect_err": want_err,
                 "ledger": ledger_n, "evidence": evidence, "verified": want_verified,
                 "nonce": nonce, "cleanup_fixture_tabs": True}})
+        # 台账闸（批6）：双发的唯一硬证据是「同任务二次运行时，一个写帧都没下发」。
+        # WS 测里这条靠 fakeExtension.countOf 证，设备侧必须再证一遍——真扩展/真 host 的帧序才是终局。
+        dnonce = "q" + os.urandom(3).hex()
+        dpayload, _dtext = task_write_fixture(fixture, False, dnonce, 90)
+        cases.append({"name": "夹具写腿·同文本二次运行（台账双发闸）", "payload": dpayload,
+                      "double_send": True, "gate": {
+                          "action": "none", "expect_status": "completed", "expect_err": "",
+                          "ledger": 1, "evidence": True, "verified": True,
+                          "nonce": dnonce, "cleanup_fixture_tabs": True}})
+        # 批7 三条设备级锁：写判定从「一个 action 名」升级成「一类原语属性」之后，
+        # 属性化本身（A）、台账不许过拦（B）、豁免不许换成假绿（C）各判一头。
+        anonce = "q" + os.urandom(3).hex()
+        apayload, _atext = task_derived_write_fixture(fixture, anonce, 60)
+        cases.append({"name": "夹具派生写步·无 post_comment 的隐形写也进台账并拦二次",
+                      "payload": apayload, "leg": run_derived_write_leg, "nonce": anonce})
+        bnonce = "q" + os.urandom(3).hex()
+        bpayload, _btext = task_derived_write_fixture(fixture, bnonce, 60, noinput=True)
+        cases.append({"name": "夹具派生写步·元素不存在时台账留空不误拦重跑",
+                      "payload": bpayload, "leg": run_never_executed_write_leg, "nonce": bnonce})
+        cnonce = "q" + os.urandom(3).hex()
+        cpayload, _ctext = task_write_fixture(fixture, False, cnonce, 90, swallow=True)
+        cpayload.update({"retry_on_fail": True, "retry_delay_sec": 30, "max_retry_times": 1})
+        cases.append({"name": "夹具写腿·自动重试轮跳过未验证写步且判红",
+                      "payload": cpayload, "leg": run_retry_skip_write_leg, "nonce": cnonce})
     cases += [
         {"name": "真机基线读链路（无登录墙）", "payload": task_baseline_public(), "gate": None},
         {"name": "真机交互搜索腿（键入+点击+跳转+断言）", "payload": task_interact_public(), "gate": None},
@@ -885,6 +1181,15 @@ def main():
             print("      夹具页：%s（写腿的不可逆点击只发生在本地页面上）" % fixture.url, flush=True)
         for c in cases:
             if args.only and args.only not in c["name"]:
+                continue
+            if c.get("double_send"):
+                run_resubmit_gate_leg(api, rep, c["payload"], c["name"], c["gate"]["nonce"],
+                                      fixture, created_ids, args.cdp_port, c["gate"])
+                continue
+            leg = c.get("leg")  # 批7：自带编排的多轮腿（二次运行 / 自动重试轮），判据在腿里
+            if leg is not None:
+                leg(api, rep, c["payload"], c["name"], c["nonce"], fixture, created_ids,
+                    args.cdp_port)
                 continue
             run_and_watch(api, rep, c["payload"], c["name"], args.allow_write, created_ids,
                           gate=c.get("gate"), fixture=fixture, cdp_port=args.cdp_port)

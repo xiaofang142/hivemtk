@@ -319,6 +319,18 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 				switch status {
 				case "success":
 					success++
+				case "skipped":
+					// 批7：写步在自动重试轮撞见历史提交尝试 → 整步不下发。两种事实分开判：
+					//   前一轮 verified → 目标已达成，本轮只是补完剩余步，不计成败也不中断；
+					//   前一轮 sent/unattributed → 提交从未被证明，本轮防双发也无从证明，
+					//     必须让本轮判红（否则「重试轮全绿」就是批6 要消灭的那类假绿），
+					//     但不 break——后面的只读步照常跑完，现场证据越全越好判。
+					if errMsg != "" {
+						failed++
+						if sessionFailed == "" {
+							sessionFailed = errMsg
+						}
+					}
 				case "failed":
 					failed++
 					if !step.ContinueOnError {
@@ -570,6 +582,17 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			case "success":
 				success++
 				consecutiveActionFails = 0
+			case "skipped":
+				// 批7：Brain 重试轮里的写步跳过，按前一轮台账态分判（见 ExecuteSession 同分支说明）。
+				// verified → 目标已达成，计成功让 LLM 继续收尾；未验证 → 计败并终止本轮，
+				// 因为「发这条内容」这个目标在本轮已不可能再达成（重发即双发），继续烧 LLM 调用没有出路。
+				if errMsg == "" {
+					success++
+					consecutiveActionFails = 0
+				} else {
+					failed++
+					abort = errMsg
+				}
 			case "failed":
 				failed++
 				consecutiveActionFails++
@@ -621,6 +644,9 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 // resultJSON：成功时的原语回包（F6a 页面变化证据用），失败为 nil。
 // seq：session 局部命令日志计数器（P0-2，调用方持有保证 session 内单调、跨 session 隔离）。
 func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string, json.RawMessage) {
+	// 批7：写步判定先于落库——is_write 要作为事实随步行一起存，
+	// 事后从 action 名字反推会把「type+回车提交」这类隐形写漏掉。
+	writeStep, writeWhy := isWriteStep(task, step)
 	stepRow := &model.BrowserStep{
 		SessionID: session.ID,
 		TaskID:    task.ID,
@@ -629,6 +655,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		Target:    step.Target,
 		Value:     step.Value,
 		Status:    "running",
+		IsWrite:   writeStep,
 	}
 	if params, err := json.Marshal(buildStepParams(step)); err == nil && string(params) != "{}" {
 		stepRow.Params = params
@@ -644,8 +671,31 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	}
 	// F2①（G11）：不可逆写原语服务端强制 retries=0——「提交成功但 verify 超时」是结果未知态，
 	// 重试=可能双发（Postiz 接口级契约：不可逆变更 maximumAttempts:1）。不信任编排/LLM 传入的重试参数。
-	if isWriteAction(step.Action) {
+	if writeStep {
 		retries = 0
+	}
+	// 批6（F11b）双发闸 + 批7 重试豁免：闸门必须在任何帧下发之前——prep/type 本身会改页面状态
+	// （把草稿塞进输入框），不是「零副作用探测」。
+	writeKey := ""
+	if writeStep {
+		writeKey = writeStepKey(step)
+		switch err := e.guardResubmit(ctx, task, writeKey, stepRow.ID); {
+		case errors.Is(err, errRetrySkipped):
+			prior := priorOfSkippedWrite(err)
+			msg := fmt.Sprintf("写步跳过（%s）：%v——同文本已有提交尝试，重发即双发", writeWhy, prior)
+			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "skipped", nil, 0, msg)
+			logger.Infof("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
+			if prior.verified() {
+				return "skipped", "", nil
+			}
+			// 前一轮只到 sent/unattributed：提交从未被证明，而本轮既不重发（双发）也就无从证明。
+			// 此时让整轮判绿就是批6 立项要消灭的那类假绿，所以把事实上抛给调用方计败。
+			return "skipped", fmt.Sprintf(
+				"重试轮防双发未重发，前一轮提交未验证（%v）——本轮无法证明内容已发布，请人工核对", prior), nil
+		case err != nil:
+			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, err.Error())
+			return "failed", err.Error(), nil
+		}
 	}
 	var lastErr string
 	for attempt := 0; attempt <= retries; attempt++ {
@@ -660,12 +710,18 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		*seq++
 		cmdPayload := map[string]any{"action": step.Action, "target": step.Target, "params": buildStepParams(step)}
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", step.Action, cmdPayload, 0, true)
-		result, err := e.dispatchStep(ctx, task, session, step)
+		result, err := e.dispatchStep(ctx, task, session, step, stepRow)
 		dur := time.Since(start).Milliseconds()
 		if err == nil {
+			if writeStep {
+				e.recordGenericWriteLedger(ctx, step, stepRow.ID, writeKey, nil)
+			}
 			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", result, dur, "")
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
 			return "success", "", json.RawMessage(result)
+		}
+		if writeStep {
+			e.recordGenericWriteLedger(ctx, step, stepRow.ID, writeKey, err)
 		}
 		lastErr = err.Error()
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, false)
@@ -776,7 +832,8 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 // dispatchStep 按动作分发到 Hand 原语。
 // 回包（snapshot/extract/markdown/screenshot 等）作为返回值交 executeStepWithRetry 落库——
 // 不挂 Executor 字段：Executor 是进程级单例、多 session 并发触达（R-A4 竞态修复）。
-func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep) ([]byte, error) {
+// stepRow：本步的 DB 行（含 ID），写原语分支用它落 submit_state 台账（批6/F11b）。
+func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep) ([]byte, error) {
 	userID := task.UserID
 	tabID := session.ChromeTabID
 	p := buildStepParams(step)
@@ -815,6 +872,8 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			return nil, err
 		}
+		// 双发闸在 executeStepWithRetry 下发任何帧之前已过（批7 起对全部写步统一生效）。
+		textHash := writeStepKey(step)
 		prepReq := map[string]any{
 			"input_selector":   locs.InputSelector,
 			"send_button_text": locs.SendButtonText,
@@ -828,6 +887,9 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 				return nil, err2
 			}
 		}
+		// prep 成功=文本已进输入框，点击仍未发生 → prepared（可安全重下发态，也是
+		// 「闸门/中止腿从未提交」的正面证据）
+		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitPrepared, textHash)
 		// D7 人工确认闸门：require_confirm=true 的任务在此挂起，等 POST /sessions/:id/confirm
 		// 放行后才进不可逆提交点。挂起期间只有 prep（填文本，页面内可撤销、零平台副作用）；
 		// 未放行即中止=从未提交，可安全重下发。等待计入 task.TimeoutSec 预算（超时即中止）。
@@ -849,12 +911,23 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if isInjectTimeout(sendErr) {
 			return nil, fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
 		}
+		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
+		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。
+		// 注入超时分支在上面提前返回、台账留在 prepared：那一支点击从未发生。
+		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitSent, textHash)
 		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
 		// 重发不违「单次提交禁重试」红线；其余错误结局未知，交 finalize 回查绝不重发。
 		if sendErr != nil && e.healCommentSendButton(ctx, task, session, tabID, prepReq, sendErr) {
 			_, sendErr = e.hand.commentSend(ctx, userID, tabID, prepReq)
 		}
 		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
+		// 回查结论落台账：verified 是唯一可对外宣称「已发布」的态；未见即 unattributed
+		// （已尝试、归因不到）——unattributed 仍在双发闸的拦截集合内，交人来判。
+		finalState := model.StepSubmitUnattributed
+		if verified {
+			finalState = model.StepSubmitVerified
+		}
+		e.recordSubmitState(ctx, stepRow.ID, finalState, textHash)
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
 		e.mergeExtract(ctx, session, "post_comment", map[string]any{
 			"text":       step.Value,
@@ -1160,17 +1233,6 @@ func buildFoldHeader(folded map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s×%d", k, folded[k]))
 	}
 	return fmt.Sprintf("[已折叠 %d 步: %s]", total, strings.Join(parts, " "))
-}
-
-// isWriteAction 不可逆写原语（F2①/G11）：这类动作「提交成功但验证失败」是结果未知态，
-// 自动重试=可能双发（Postiz 契约：不可逆变更 maximumAttempts:1）。扩展写原语集时在此登记。
-func isWriteAction(action string) bool {
-	switch action {
-	case "post_comment":
-		return true
-	default:
-		return false
-	}
 }
 
 // stepChangedPage F6a 证据判定：open_tab 必然换页；click 以扩展回包 navigated 为准；

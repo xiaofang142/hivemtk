@@ -65,6 +65,12 @@ const (
 	sessionTabCleanupBudget = 15 * time.Second
 )
 
+// —— 写台账落库（write_ledger.go）——
+// ledgerWriteBudget 单行 submit_state UPDATE 的预算。执行 ctx 此刻常已 Done
+// （「send 刚跨越、execCtx 恰好到期」正是最需要留台账的一刻），故走 WithoutCancel；
+// 单行更新正常 <5ms，给的 3s 全留给连接池重取，再长就不如让步自己失败。
+const ledgerWriteBudget = 3 * time.Second
+
 // —— 拦截页探测（executor.go detectBlockedIfFatal）——
 // blockDetectBudget 一次拦截检测的整段预算（snapshot + 弹层选择器逐个 query 共用）。
 // session236 实测：失败步本身已耗满 30s 命令超时，检测再叠一条满额 30s 命令，单步失败

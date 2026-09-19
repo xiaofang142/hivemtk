@@ -152,6 +152,26 @@ func TestSetRetryRunnerWiring(t *testing.T) {
 	}
 }
 
+// 批7 重试豁免的全部前提就是「runner 收到的计数 > 0」：计数一旦丢成 0，执行器会把
+// 自动重试当成人工重跑，写步撞闸判失败而不是跳过——豁免静默失效，且没有任何其它测试会红。
+func TestRunRetryPassesPositiveCount(t *testing.T) {
+	got := make(chan int, 1)
+	SetRetryRunner(func(_ context.Context, _, _ uint, retryCount int) error {
+		got <- retryCount
+		return nil
+	})
+	defer SetRetryRunner(nil)
+
+	f := &FeedbackService{}
+	task := &model.BrowserTask{ID: 7, RetryCount: 2, RetryOnFail: true, MaxRetryTimes: 5}
+	if err := f.runRetry(context.Background(), task, task.RetryCount+1); err != nil {
+		t.Fatalf("runRetry err: %v", err)
+	}
+	if n := <-got; n <= 0 {
+		t.Errorf("runner 收到 retryCount=%d，必须 >0（=0 则执行器走人工重跑分支，写步不豁免）", n)
+	}
+}
+
 // cron 触发体使用 trigger 主键更新（cur.ID）—— 静态约束回归：防再传 taskID
 func TestCronUpdateTimesUsesTriggerID(t *testing.T) {
 	src, err := os.ReadFile("cron.go")

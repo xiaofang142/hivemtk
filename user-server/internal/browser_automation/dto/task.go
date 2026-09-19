@@ -20,6 +20,9 @@ type StepItem struct {
 	AssertKind string `json:"assert_kind" binding:"omitempty,oneof=contains_text selector_exists"` // assert 子类型
 	QueryKind  string `json:"query_kind" binding:"omitempty,oneof=text exists count attr"`         // query 子类型
 	Attribute  string `json:"attribute" binding:"omitempty,max=64"`                                // query attr 用：属性名（href/src/value/...）
+	// IsWrite 批7：编排方显式声明「本步是不可逆写」。服务端只认「声明 ∪ 原语推导」的并集，
+	// 声明不许撤销推导（否则 LLM 一句 is_write=false 就能把发送步的重试闸门关掉）。
+	IsWrite bool `json:"is_write"`
 	// 错误处理策略
 	ContinueOnError bool `json:"continue_on_error"` // 默认 false；true 则此步失败后继续下一步
 	RetryCount      int  `json:"retry_count" binding:"omitempty,min=0,max=10"`

@@ -268,6 +268,49 @@ describe('primitives dispatch', () => {
     expect(again.evidence.own).toBe(true);
   });
 
+  // F11b（批6 真机 Leg X 实测）：小红书真实 DOM 里输入框**就在** .comments-container 内部，
+  // 容器主分支的 norm(textOf(c)) 会把那条未提交草稿读成「评论已渲染」→ 零提交也 verified=true。
+  // F11 那条只测了整页兜底分支，容器主分支当时漏网——两个分支必须各自有反向腿。
+  it('F11b 假绿回归：输入框在评论区容器内部时，草稿不得判成已发布', async () => {
+    document.body.innerHTML = `
+      <div class="comments-container">
+        <div id="card"><p class="content-textarea" contenteditable="true">真好吃啊</p></div>
+        <div class="note-text">别人的评论</div>
+      </div>`;
+    const deps = makeDeps();
+    const data = await dispatch({
+      action: 'comment_verify', tab_id: 42, value: '真好吃啊',
+      comment_container: '.comments-container', comment_item_text: '.note-text', timeout_ms: 500,
+    }, deps);
+    expect(data.verified).toBe(false);
+    expect(data.posted).toBe(false);
+    // 正向半（防把修复做成「永远检不到」）：同一文本一旦真正出现在评论条目上必须认，
+    // 且此时输入框草稿仍在（双份文本共存是提交后的真实页面形态）。
+    document.querySelector('.note-text').textContent = '真好吃啊';
+    const again = await dispatch({
+      action: 'comment_verify', tab_id: 42, value: '真好吃啊',
+      comment_container: '.comments-container', comment_item_text: '.note-text', timeout_ms: 500,
+    }, deps);
+    expect(again.verified).toBe(true);
+    expect(again.evidence.own).toBe(true);
+    // 证据支归属反向半：条目选择器同时命中「输入框条目」与「真评论条目」时，
+    // 精确命中不得记到草稿那份上——legacy 实现按 DOM 序先撞上可编辑条目，
+    // 会在审计包里把输入框里那条草稿当成「我们刚发布的评论」（own=true）。
+    document.body.innerHTML = `
+      <div class="comments-container">
+        <div class="comment-item" contenteditable="true">真好吃啊</div>
+        <div class="comment-item">真好吃啊～看起来不错</div>
+      </div>`;
+    const ev = await dispatch({
+      action: 'comment_verify', tab_id: 42, value: '真好吃啊',
+      comment_container: '.comments-container', comment_item_text: '.comment-item', timeout_ms: 500,
+    }, deps);
+    expect(ev.verified).toBe(true); // 含目标文本的真条目照常算已渲染
+    expect(ev.evidence.own).toBeUndefined();
+    expect(ev.evidence.matched).toBe(true);
+    expect(ev.evidence.item_text).toContain('看起来不错');
+  });
+
   it('一站式 post_comment 已从扩展协议移除（单一路径防分叉）', async () => {
     const deps = makeDeps();
     await expect(dispatch({ action: 'post_comment', tab_id: 42, value: 'x' }, deps))
