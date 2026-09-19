@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log"
@@ -109,11 +110,43 @@ func InitLogger(c LoggingConfig) {
 	mu.Unlock()
 }
 
+// stdout 是标准输出的读取接缝。**必须是函数**而不是 io.Writer 变量：
+// 包级变量会在初始化时冻结当时的 os.Stdout 句柄，测试里 `os.Stdout = w` 再重建日志器
+// 就什么也抓不到（internal/app 的两个真抓日志用例正是靠这个时序）。
+var stdout = func() io.Writer { return os.Stdout }
+
 func consoleWriter(format string) io.Writer {
 	if format == "json" {
-		return os.Stdout
+		return stdout()
 	}
-	return zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	// 文本编码把 message 原样写进行内（字段值是转义的），因此这里是唯一的伪造面。
+	return zerolog.ConsoleWriter{Out: lineSafeWriter{w: stdout()}, TimeFormat: time.RFC3339}
+}
+
+// lineSafeWriter 保证"一次 Write = 一条物理日志行"：正文里的 CR/LF 改成可见转义，
+// 行尾那一个换行原样保留。否则任何被打进 message 的可控串（用户名、远端响应体、
+// 反序列化后的 URL 路径）都能凭空劈出一条带正常时间戳的假日志行。
+type lineSafeWriter struct{ w io.Writer }
+
+func (l lineSafeWriter) Write(p []byte) (int, error) {
+	if _, err := l.w.Write(escapeInnerLineBreaks(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func escapeInnerLineBreaks(p []byte) []byte {
+	tail := ""
+	if len(p) > 0 && p[len(p)-1] == '\n' {
+		tail = "\n"
+	}
+	body := p[:len(p)-len(tail)]
+	if !bytes.ContainsAny(body, "\r\n") {
+		return p
+	}
+	out := bytes.ReplaceAll(body, []byte("\r"), []byte(`\r`))
+	out = bytes.ReplaceAll(out, []byte("\n"), []byte(`\n`))
+	return append(out, tail...)
 }
 
 // GetLogger 返回全局日志器；未初始化时惰性使用默认配置，保证任意调用都不会 panic。

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -78,14 +78,19 @@ func (c *AuthController) recordLoginRiskAsync(ctx *gin.Context, username string,
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[login-risk] panic recovered: %v", r)
+				// 走统一日志器而不是 stdlib log：stdlib 直接写 stderr，
+				// 任何被打进消息行的可控文本都能凭空劈出一条假日志行。
+				logger.GetLogger().Error().Any("panic", r).Msg("[login-risk] panic recovered")
 			}
 		}()
 		dctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		detector := service.NewAnomalyLoginDetector()
 		if _, err := detector.DetectAndAlert(dctx, lctx); err != nil {
-			log.Printf("[login-risk] detect failed user=%s success=%v err=%v", username, success, err)
+			logger.GetLogger().Warn().Err(err).
+				Str("username", username).
+				Bool("success", success).
+				Msg("[login-risk] 登录风险检测失败")
 		}
 	}()
 }
