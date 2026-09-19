@@ -236,8 +236,14 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 		fused = fused[:h.config.CandidatePool]
 	}
 
+	// FinalTopK 是**上限**，不是对调用方 topK 的覆盖。
+	// 写成覆盖时，默认配置（FinalTopK=5）会让 topK=1..4 的请求全部拿到 5 条：
+	// 实测 RagSearcher.Search(query, 3) 在默认配置下回了 4 条（种子只有 4 条）。
+	// 调用方用 topK 控制进 prompt 的分片数与计费（如 knowledge_merchant_playground.go
+	// 直接透传 req.TopK、tooluse/knowledge_tools.go 透传模型给的 topK），
+	// 多回来的每一条都是静默的预算超支。
 	finalK := topK
-	if h.config.FinalTopK > 0 {
+	if h.config.FinalTopK > 0 && h.config.FinalTopK < finalK {
 		finalK = h.config.FinalTopK
 	}
 	if len(fused) > finalK {

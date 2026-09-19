@@ -162,8 +162,32 @@ func TestRagSearcher_RealVectorSearch(t *testing.T) {
 		if len(chunks) == 0 {
 			t.Fatal("未返回任何 chunk")
 		}
-		if !contains(chunks[0].Content, "退") && !contains(chunks[0].Content, "换") {
-			t.Errorf("Top1 内容与退货无关: %s", chunks[0].Content)
+		if len(chunks) > 3 {
+			t.Errorf("topK=3 却返回 %d 条", len(chunks))
+		}
+		// 语义断言与向量来源同源（与 checkVectorSearch 同一口径）。
+		// 反例是第二十六轮 CI 首跑：同一段代码、同为 hash 兜底，
+		// CI 的 Top1=「发货时间…」score=1.0000，本地 Top1=「7天无理由退货…」score=0.5789，
+		// 红绿取决于运行期检索路径而非被测代码 —— 这种断言量的是桩，不是代码。
+		if semanticVectors {
+			if !contains(chunks[0].Content, "退") && !contains(chunks[0].Content, "换") {
+				t.Errorf("Top1 内容与退货无关: %s", chunks[0].Content)
+			}
+		} else {
+			// 兜底模式下改查召回集的形状：条条来自种子集、不重复、带正文与分数。
+			seen := map[string]bool{}
+			for _, c := range chunks {
+				if _, ok := seedVecs[c.Content]; !ok {
+					t.Errorf("Search 召回了种子集之外的分片: %q", c.Content)
+				}
+				if seen[c.Content] {
+					t.Errorf("Search 返回重复分片: %q", c.Content)
+				}
+				seen[c.Content] = true
+				if strings.TrimSpace(c.Content) == "" {
+					t.Error("召回分片正文为空")
+				}
+			}
 		}
 		t.Logf("✅ Search Top1=%s score=%.4f", chunks[0].Content, chunks[0].Score)
 	})

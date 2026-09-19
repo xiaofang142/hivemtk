@@ -301,6 +301,27 @@ func TestHybridSearcher_TopKTruncation(t *testing.T) {
 	if len(out) > 3 {
 		t.Errorf("topK=3 should truncate, got=%d", len(out))
 	}
+
+	// 上面那台 searcher 的 FinalTopK 是零值，测不到默认配置的形状。
+	// 默认 FinalTopK=5 曾经**覆盖**调用方的 topK（而不是给它设上限），
+	// 于是 topK=3 照样回 5 条 —— 线上所有走 DefaultHybridSearcherConfig 的调用都在超发。
+	defaultCfgSearcher := NewHybridSearcher(db, mockEmbed, nil, nil, nil, DefaultHybridSearcherConfig())
+	outSmall, err := defaultCfgSearcher.Search(context.Background(), "test", 3)
+	if err != nil {
+		t.Fatalf("默认配置 Search 失败: %v", err)
+	}
+	if len(outSmall) > 3 {
+		t.Errorf("默认配置下 topK=3 应截到 3 条，实得 %d 条（FinalTopK 又去覆盖调用方了）", len(outSmall))
+	}
+
+	// 反向一侧也要钉住：FinalTopK 作为**上限**仍然生效，不能退化成完全不设界。
+	outLarge, err := defaultCfgSearcher.Search(context.Background(), "test", 50)
+	if err != nil {
+		t.Fatalf("默认配置大 topK Search 失败: %v", err)
+	}
+	if len(outLarge) > 5 {
+		t.Errorf("FinalTopK=5 的上限失效：topK=50 实得 %d 条", len(outLarge))
+	}
 }
 
 // TestHybridSearcher_LogSearch_WritesToDB 集成测试：logSearch 写入 knowledge_search_logs
