@@ -1,0 +1,28 @@
+# gitleaks 配置 —— 只豁免一个写明用途的 CI 占位串
+#
+# 立项原因（第二十六轮 A3）：拆 job 之后 gitleaks 第一次真正执行（此前它排在
+# 恒定红的 golangci-lint 之后，被连带 skip 了五周），首跑即报
+#   generic-api-key has detected secret for file .github/workflows/user-server-ci.yml at commit 42d24511
+# 命中的是 user-server-ci.yml 里 `PLATFORM_JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min-len-OK`
+# —— 那是给测试期兜底用的**假**密钥（HS256 启动校验只查长度 ≥32），不是凭据。
+#
+# 为什么用 allowlist 而不是把门禁降回 continue-on-error：豁免范围必须精确到这串
+# 占位值本身。任何其它 key（含未来误提交的真凭据、其它路径、其它规则）照旧命中。
+#
+# 本地实测（v8.24.3，与 CI 日志 `gitleaks version: 8.24.3` 同版本，同一命令
+# `detect --log-opts=-1`）：
+#   · 移走本文件 → `leaks found: 1`（与 CI 同一条命中，证明豁免确实是承重的）；
+#   · 留本文件   → `no leaks found`；
+#   · 隔离仓里种 `ghp_…` 真格式 key + 同一串占位值 → 只报 `github-pat`，占位值被吃掉，
+#     证明 allowlist 没有顺手扩大半径。
+# 反向测试的 canary 别选 AKIA…：gitleaks 内置 allowlist 本身就豁免了文档示例 key
+# （AKIAIOSFODNN7EXAMPLE），拿它当探针会得到「门是死的」的错误结论。
+[extend]
+# 继承 gitleaks 内置规则集。漏了这一行的后果是「规则集变空 → 门恒绿」：
+# 上面那个隔离仓实验里，只删这一段、allowlist 原样保留，同一提交立刻从
+# `leaks found: 1` 变成 `no leaks found` —— 静默零覆盖，故本行必须有反向测试兜着。
+useDefault = true
+
+[allowlist]
+description = "CI 占位 JWT 密钥（非凭据，仅为满足 user-server 启动期的 ≥32 字符校验）"
+regexes = ['''ci-jwt-secret-placeholder-32-chars-min-len-OK''']
