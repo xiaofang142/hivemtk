@@ -95,7 +95,7 @@ export function renderAccountRows(states) {
       rows.push(
         `<div class="account-state-row" data-channel="${escapeHtml(channel)}" data-account="${escapeHtml(accountId)}">` +
         `  <div class="dot ${statusClass}"></div>` +
-        `  <div class="name">${channelDisplayName(channel)}</div>` +
+        `  <div class="name">${escapeHtml(channelDisplayName(channel))}</div>` +
         `  <div class="meta">${escapeHtml(accountId)}${pausedHint}</div>` +
         `  <button class="toggle ${enabled ? 'danger' : 'primary'}" data-channel="${escapeHtml(channel)}" data-account="${escapeHtml(accountId)}" data-enable="${enabled ? 'false' : 'true'}">${statusText === '启用' ? '暂停' : '启用'}</button>` +
         `</div>`

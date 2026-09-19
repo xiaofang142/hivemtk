@@ -1,6 +1,18 @@
 
 import { CHANNEL_DISPLAY, UI_DEFAULTS } from '../core/constants.js';
 
+// HTML 转义（popup XSS 收口：channel 键/state/错误码/失败原因/accountId
+// 均可源自第三方页面 DOM 或后端回传字符串，禁止原样进 innerHTML 模板）
+// 导出供 index.js 复用；accounts.js/error-messages.js 保有其历史局部定义。
+export function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // 状态机颜色映射（与 popup banner 风格统一）
 const STATE_COLORS = {
   CLOSED: '#16a34a',     
@@ -61,41 +73,41 @@ function renderChannelCard(channel, h) {
   const errDist = h.errorCodeDistribution || {};
   const errSummary = Object.entries(errDist)
     .filter(([, n]) => n > 0)
-    .map(([k, n]) => `${k}:${n}`)
+    .map(([k, n]) => `${escapeHtml(k)}:${escapeHtml(n)}`)
     .join(' / ') || '无';
 
   // 延迟分位
   const lat = h.latencyMs || {};
   const latSummary = lat.count
-    ? `P50 ${lat.p50}ms / P95 ${lat.p95}ms / max ${lat.max}ms`
+    ? `P50 ${escapeHtml(lat.p50)}ms / P95 ${escapeHtml(lat.p95)}ms / max ${escapeHtml(lat.max)}ms`
     : '无采样';
 
   // 累计
   const totals = h.totals || { calls: 0, ok: 0, fail: 0, okRate: 0 };
   const okRateStr = totals.calls
-    ? `${(totals.okRate * 100).toFixed(1)}%`
+    ? `${(Number(totals.okRate) * 100).toFixed(1)}%`
     : '-';
 
-  // 最近失败原因（最多 5 条）
+  // 最近失败原因（最多 5 条）——错误消息常嵌第三方页面文本，必须转义
   const reasons = (h.recentReasons || []).slice(0, 3)
-    .map(r => `  - ${String(r).slice(0, 80)}`)
+    .map(r => `  - ${escapeHtml(String(r).slice(0, 80))}`)
     .join('\n') || '  (无)';
 
   // 幂等键
   const idem = h.idempotency || { keysTracked: 0, dedupeHits: 0 };
-  const idemStr = `已跟踪 ${idem.keysTracked} 键 / 去重命中 ${idem.dedupeHits}`;
+  const idemStr = `已跟踪 ${escapeHtml(idem.keysTracked)} 键 / 去重命中 ${escapeHtml(idem.dedupeHits)}`;
 
   return [
-    `<div class="health-card" data-channel="${channel}" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;margin-bottom:6px;background:#fafafa;">`,
+    `<div class="health-card" data-channel="${escapeHtml(channel)}" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;margin-bottom:6px;background:#fafafa;">`,
     `  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">`,
-    `    <strong style="font-size:13px;">${channelDisplayName(channel)}</strong>`,
+    `    <strong style="font-size:13px;">${escapeHtml(channelDisplayName(channel))}</strong>`,
     `    ${healthyBadge}`,
     `  </div>`,
     `  <div style="font-size:12px;line-height:1.5;">`,
-    `    <div>熔断器: <span style="color:${color};font-weight:600;">${label}</span>（失败 ${h.failureCount || 0} 次）</div>`,
+    `    <div>熔断器: <span style="color:${color};font-weight:600;">${escapeHtml(label)}</span>（失败 ${escapeHtml(h.failureCount || 0)} 次）</div>`,
     `    <div>最近成功: ${lastSuccessAgo}（${fmtTime(h.lastSuccessAt)}）</div>`,
     `    <div>最近失败: ${lastFailureAgo}（${fmtTime(h.lastFailureAt)}）</div>`,
-    `    <div>调用: ${totals.calls}（成功 ${totals.ok} / 失败 ${totals.fail}，成功率 ${okRateStr}）</div>`,
+    `    <div>调用: ${escapeHtml(totals.calls)}（成功 ${escapeHtml(totals.ok)} / 失败 ${escapeHtml(totals.fail)}，成功率 ${okRateStr}）</div>`,
     `    <div>延迟: ${latSummary}</div>`,
     `    <div>错码: ${errSummary}</div>`,
     `    <div>幂等: ${idemStr}</div>`,
@@ -207,7 +219,7 @@ export function startHealthPanelPolling(opts) {
       const data = await fetchHealth();
       el.innerHTML = renderHealthPanel(data);
     } catch (e) {
-      el.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:8px;">健康面板拉取失败：${e && e.message ? e.message : String(e)}</div>`;
+      el.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:8px;">健康面板拉取失败：${escapeHtml(e && e.message ? e.message : String(e))}</div>`;
     }
   };
   tick();

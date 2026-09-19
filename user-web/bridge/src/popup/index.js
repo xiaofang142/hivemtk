@@ -19,6 +19,7 @@ import {
   renderHealthPanel,
   startHealthPanelPolling,
   stopHealthPanelPolling,
+  escapeHtml,
 } from './health.js';
 import { startAlertPolling, stopAlertPolling } from './alert-banner.js';
 import {
@@ -1015,20 +1016,23 @@ document.addEventListener('DOMContentLoaded', () => {
           const online = !!a.accountId;
           const healthy = h.healthy !== false;
           const dotClass = !online ? 'offline' : (healthy ? 'online' : 'unhealthy');
+          // popup XSS 收口：accountId/currentConvId 抓自第三方页面 DOM，
+          // h.state 回传自后端——一律转义后入模板（escapeHtml 与本文件
+          // accounts.js/health.js 同款约定）
           const meta = [];
-          if (a.accountId) meta.push(a.accountId);
-          if (a.currentConvId) meta.push('会话 ' + a.currentConvId);
+          if (a.accountId) meta.push(escapeHtml(a.accountId));
+          if (a.currentConvId) meta.push('会话 ' + escapeHtml(a.currentConvId));
           if (typeof a.capturedCount === 'number') meta.push('已捕获 ' + a.capturedCount);
-          if (h.state) meta.push('熔断 ' + h.state);
-          return `<div class="account-row" data-channel="${ch}">
+          if (h.state) meta.push('熔断 ' + escapeHtml(h.state));
+          return `<div class="account-row" data-channel="${escapeHtml(ch)}">
             <div class="dot ${dotClass}"></div>
-            <div class="name">${channelDisplayName(ch)}</div>
+            <div class="name">${escapeHtml(channelDisplayName(ch))}</div>
             <div class="meta">${meta.join(' / ') || '无数据'}</div>
           </div>`;
         });
         accountsList.innerHTML = rows.join('\n');
       } catch (e) {
-        accountsList.innerHTML = `<div class="hint" style="color:#dc2626;padding:8px;">加载失败：${e && e.message ? e.message : String(e)}</div>`;
+        accountsList.innerHTML = `<div class="hint" style="color:#dc2626;padding:8px;">加载失败：${escapeHtml(e && e.message ? e.message : String(e))}</div>`;
       }
     };
     accountsToggle.addEventListener('click', () => {
