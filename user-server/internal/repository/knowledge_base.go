@@ -173,6 +173,55 @@ func (r *KnowledgeBaseRepository) Update(ctx context.Context, id uint, kb *model
 		}).Error
 }
 
+// UpdateVersionCanary 只写版本/灰度三列，且**刻意不碰 updated_at**。
+//
+// 为什么必须是 UpdateColumns 而不是上面的 Update（也不能顺手复用后者）：
+// rag_answer_cache 的命中校验拿本表 updated_at 与缓存行写入时记录的 kb_updated_at
+// 比先后，只要本表 updated_at 变晚就把那条缓存行删掉（rag/cache/service.go 的
+// fresh()）。"切版本"若 bump 了 updated_at，就会把**另一个版本**的缓存行整批删空，
+// 回滚当场从"换个指针"退化成"重灌数据"——T-P2-05 的 AC② 就死在这一行上。
+// UpdateColumns 同时跳过 GORM 的自动时间戳与 hooks，这里要的就是这个副作用。
+func (r *KnowledgeBaseRepository) UpdateVersionCanary(ctx context.Context, id uint, version int, canaryEnabled bool, canaryPercent int) error {
+	if version < 1 {
+		version = 1
+	}
+	if canaryPercent < 0 {
+		canaryPercent = 0
+	}
+	return r.db.WithContext(ctx).Model(&model.KnowledgeBase{}).
+		Where("id = ?", id).
+		UpdateColumns(map[string]any{
+			"version":        version,
+			"canary_enabled": canaryEnabled,
+			"canary_percent": canaryPercent,
+		}).Error
+}
+
+// AnswerCacheRowsByVersion 统计某 KB 在 rag_answer_cache 里各 prompt_version 命名空间的行数。
+//
+// 读的是 rag 模块持有的表（跨模块），原因见 model.KnowledgeBase 版本口径 a/c：版本的
+// 物理载体就是这张表的命名空间维度，"两个版本共存"只有在这里才看得见。
+// 只读、参数绑定、不写；kbID 传十进制主键字符串（与 ragcache 写入口径一致）。
+func (r *KnowledgeBaseRepository) AnswerCacheRowsByVersion(ctx context.Context, kbID string) (map[string]int64, error) {
+	type row struct {
+		PromptVersion string
+		N             int64
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).Table("rag_answer_cache").
+		Select("prompt_version, COUNT(*) AS n").
+		Where("kb_id = ?", kbID).
+		Group("prompt_version").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(rows))
+	for _, x := range rows {
+		out[x.PromptVersion] = x.N
+	}
+	return out, nil
+}
+
 // Delete 删除知识库
 func (r *KnowledgeBaseRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.KnowledgeBase{}).Error

@@ -99,6 +99,14 @@ func (s *KnowledgeBaseService) CreateKB(ctx context.Context, kb *model.Knowledge
 		t := true
 		kb.Enabled = &t
 	}
+	// 新 KB 从 1 号起。实测这条对 Create 路径是**冗余**的：GORM 会按 `gorm:"default:1"` 标签
+	// 在客户端填值（把列默认值 DROP 掉之后只走仓储 Create 仍落 1，三条探针见
+	// knowledge_base_version_start_test.go 文件头）。保留它的理由是："零值→1"这条业务规则
+	// 不该寄望在某个库的内部行为上，也不该让 version=0 出现在管理端（读起来像"这库被切过版本"）。
+	// 只管零值：调用方显式给的版本号一律不动。
+	if kb.Version == 0 {
+		kb.Version = 1
+	}
 
 	if ownerAgentID > 0 {
 		binding := &model.AgentKBBinding{

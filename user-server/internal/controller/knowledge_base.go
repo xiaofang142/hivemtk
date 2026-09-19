@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -37,6 +39,11 @@ func (c *KnowledgeBaseController) RegisterRoutes(router *gin.RouterGroup) {
 		g.DELETE("/:id", c.Delete)
 		g.POST("/:id/bind", c.BindToAgent)
 		g.POST("/:id/unbind", c.UnbindFromAgent)
+		// 版本与灰度（T-P2-05 / G-1）：三处都只动 knowledge_bases 的版本三列与
+		// rag_answer_cache 的命名空间，不碰内容表。
+		g.GET("/:id/versions", c.VersionInfo)
+		g.POST("/:id/version", c.SwitchVersion)
+		g.PUT("/:id/canary", c.PutCanary)
 	}
 }
 
@@ -290,4 +297,108 @@ func (c *KnowledgeBaseController) UnbindFromAgent(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{"kb_id": kbID, "agent_id": req.AgentID}, "解绑成功")
+}
+
+// knowledgeBaseVersionSwitchReq 切版本请求。
+//
+// version 省略或 0 = 把当前灰度版本转正（Version+1）；显式给正整数 = 激活该号
+// （含退回旧号，即回滚）。负数按参数错误拒掉，不当"未传"处理。
+type knowledgeBaseVersionSwitchReq struct {
+	Version *int `json:"version"`
+}
+
+// SwitchVersion 切版本（转正 / 回滚），语义详见 service.PublishKBVersion。
+//
+// 切完直接回读整份版本信息，运营不用二次查询就能看到"新稳定命名空间是哪个号、
+// 两个版本的行是否都还在"。
+func (c *KnowledgeBaseController) SwitchVersion(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的知识库 ID")
+		return
+	}
+	var req knowledgeBaseVersionSwitchReq
+	if err := ctx.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		return
+	}
+	target := 0
+	if req.Version != nil {
+		target = *req.Version
+	}
+	if target < 0 {
+		// 负号在这里没有"未传"的含义，判 400 而不是让 service 的错误经 ErrorFromDB 变 500。
+		response.Error(ctx, http.StatusBadRequest, "version 不能为负")
+		return
+	}
+	kb, err := c.svc.PublishKBVersion(ctx.Request.Context(), uint(id), target)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, err.Error())
+		return
+	}
+	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), kb.ID)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, err.Error())
+		return
+	}
+	response.Success(ctx, info, "版本已切换")
+}
+
+// knowledgeBaseCanaryReq 灰度放量参数。
+//
+// enabled=true + percent=0 是合法组合（先把参数配好、比例随后抬），
+// 与"没开灰度"在行为上一致：都不放量。
+type knowledgeBaseCanaryReq struct {
+	Enabled *bool `json:"enabled" binding:"required"`
+	Percent *int  `json:"percent" binding:"required"`
+}
+
+// PutCanary 设置灰度比例（只改参数，不动内容，也不 bump updated_at）。
+func (c *KnowledgeBaseController) PutCanary(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的知识库 ID")
+		return
+	}
+	var req knowledgeBaseCanaryReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		return
+	}
+	if *req.Percent < 0 || *req.Percent > 100 {
+		response.Error(ctx, http.StatusBadRequest, "percent 必须在 [0,100] 区间内")
+		return
+	}
+	kb, err := c.svc.SetKBCanary(ctx.Request.Context(), uint(id), *req.Enabled, *req.Percent)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, err.Error())
+		return
+	}
+	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), kb.ID)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, err.Error())
+		return
+	}
+	response.Success(ctx, info, "灰度配置已更新")
+}
+
+// VersionInfo 读版本与灰度现状 + rag_answer_cache 各命名空间行数。
+//
+// 缺行口径与同文件的 Get 一致：service 回 (nil, nil) ⇒ response.NotFound。
+func (c *KnowledgeBaseController) VersionInfo(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的知识库 ID")
+		return
+	}
+	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), uint(id))
+	if err != nil {
+		response.ErrorFromDB(ctx, err, err.Error())
+		return
+	}
+	if info == nil {
+		response.NotFound(ctx, "知识库不存在")
+		return
+	}
+	response.Success(ctx, info, "查询成功")
 }

@@ -75,6 +75,18 @@ BASELINE=(
   # opportunity_id / quote_id 两个 LTC 预留列，若不登记，"商机事件已入库"这种话在
   # 接线前可以悄悄讲出口——正是 R-4 那条僵尸表（conversion_funnels）的原样翻版。
   "9|销售事件流的装配入口（sales_events 今日生产零写入）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|"
+  # 项10 = T-P2-05 新增：四行全部登记为 **wired**（防回退），不是待办。
+  # 10a 是答案缓存版本路由的唯一决策口：它的调用点在 smart_cs_orchestrator.go 里，
+  #   一旦被重构掉，编排器会静默退回挂载前的写死 "v1"，管理端配的版本/灰度当场变成
+  #   没人读的摆设——编译、单测、真机对话全都不会红，只有这条判定会红。
+  # 10b–10d 是运营侧写入口：三个 service 方法若失去 controller 调用点，"KB 能按客户分桶
+  #   放量"这句话就没有入口支撑（旗子 FF_LTC_KB_CANARY 抬到 on 也没人配得动参数）。
+  #   一符号一行：BASELINE 用 IFS='|' 切列，正则里的正则或（a|b）会被当场拦腰截断——
+  #   这条不是风格偏好，是这张表的硬约束（写错时 defpat 未命中 ⇒ exit 2 自曝）。
+  "10|KB 答案缓存版本路由（决策函数）|func KBAnswerVersionFor|KBAnswerVersionFor\\(|internal/service|wired"
+  "10|KB 版本转正/回滚写入口|func \\(s \\*KnowledgeBaseService\\) PublishKBVersion|PublishKBVersion\\(|internal/controller|wired"
+  "10|KB 灰度参数写入口|func \\(s \\*KnowledgeBaseService\\) SetKBCanary|SetKBCanary\\(|internal/controller|wired"
+  "10|KB 版本现状读出口|func \\(s \\*KnowledgeBaseService\\) KBVersionInfo|KBVersionInfo\\(|internal/controller|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.2（2026-09-19）
+> **版本**：v1.3（2026-09-19，T-P2-05 新增 §4.13 并实算修正 §5.2 的知识库索引行）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -592,6 +592,52 @@ T-P2-04 / R-5 为它加了两列外键位，把原文件头自记的"H2 技术�
 该状态由 `scripts/check-unwired-assets.sh` **项 9** 按 `unwired` 登记盯梢；接线前不得对外宣称
 "商机事件已入库"。
 
+### 4.13 知识库版本与灰度：`knowledge_bases` 上的三列（T-P2-05）
+
+| 列 | GORM 类型 | PG 实测类型 | 可空 | 默认 | 唯一读者 |
+|---|---|---|---|---|---|
+| `version` | `int` | **`bigint`** | 否（`not null`） | `1` | `service.KBAnswerVersionFor` |
+| `canary_enabled` | `*bool` | `boolean` | 是 | `false` | 同上 |
+| `canary_percent` | `int` | **`bigint`** | 否（`not null`） | `0` | 同上 |
+
+三列由 `AutoMigrate` 补（`internal/pkg/db/migrate.go:232` 已注册该模型），**没有任何版本化
+迁移文件**——仓内 `ExecuteUpgrade(ctx,"v1.0.0","v1.0.0")` 恒早退，迁移目录今天不执行（第四次确认）。
+
+**这三列不改任何一张内容表，它们只决定 `rag_answer_cache.prompt_version` 用哪个命名空间。**
+原因见 `AI_CORE_FEATURE_INVENTORY.md` 短板 **G18**：`knowledge_bases` 不在生产检索路径上
+（FAQ 按 `agent_id`、chunk 按 `product_id` 取数，两张内容表连 kb_id 列都没有），所以"知识库版本"
+唯一能真正生效的地方就是那张**按 kb_id 索引**的答案缓存表。版本号的物理载体是命名空间号
+（`v1`/`v2`/…），不是行复制、也不是内容副本：
+
+- `version <= 1 ⇒ "v1"`（`faqPromptVersion` 常量）。它兜住的是"还没被切过版本的号"：从没
+  publish 过的 1，以及 `0` 与负数（**实测更正，两次**：先误判"`Select("*")` 会把零值显式写进
+  列 ⇒ service 必须归一"，探针推翻；再误判"新行落 1 靠 DB `DEFAULT 1`"，把列默认值
+  `DROP` 掉之后只走仓储 `Create` 仍落 1、且不违反 `NOT NULL` ⇒ 真相是 **GORM 按
+  `gorm:"default:1"` 标签在客户端填值**。仓内正常通路造不出 `version=0`，"认 0" 是防御，
+  证据链见 `user-server/internal/service/knowledge_base_version_start_test.go` 文件头）。
+  这些一律与升级前**逐字节相同**（AC③，差分实跑见任务清单 r22）。别把它改成从 `v0` 起步或
+  去掉 `<=1` 归并——那等于一次清空全量答案缓存。
+- 灰度组用 `version + 1` 号而不是带后缀的临时号，于是"转正"退化成一次指针移动：灰度期焐热的
+  行正好是新版的稳定流量行，**回滚和再放量都不需要重灌**（AC②，由
+  `kb_canary_test.go` 的 `_TwoVersionsCoexistAndRollbackNeedsNoReingest` 拿真 pgvector 表实证）。
+- 两道独立的锁：环境变量 `FF_LTC_KB_CANARY`（三态 `off|shadow|on`，默认 off，布尔式真值只到
+  shadow，口径同 `tool_circuit_breaker_wiring.go`）与行上的 `canary_enabled + canary_percent`。
+  旗子不为 `on` 时恒用 `v1` ⇒ **本卡上线当天对线上缓存零影响**，运维抬旗才生效。
+- 分桶复用 `feature_flag.go` 的 `flagBucketHash`（FNV-1a，key = `"kb.{id}"`，`%100 < percent`），
+  与 `script_ab.go` 同族 ⇒ 仓内不出现第四套分桶口径；分桶键带 kbID，不同 KB 的灰度人群互相独立。
+
+**写入这三列必须走 `KnowledgeBaseRepository.UpdateVersionCanary`，不能走通用 `Update`。**
+通用 `Update` 的固定列 map 不含这三列（写了也丢），而 GORM 的 `Updates` 会顺手 bump `updated_at`
+——`updated_at` 正是答案缓存的失效信号（`cache/service.fresh()` 一见它前进就删行），那样切一次
+版本就把另一版本的缓存行全删了，上面那条 AC② 当场不成立。`UpdateVersionCanary` 用
+`UpdateColumns` 绕开自动时间戳，`kb_version_canary_test.go` 的 `_KeepsUpdatedAt` 以"通用 `Update`
+会 bump / 专用方法不会"的**对照断言**把这条锁死。
+
+**`not null` 是必需项而不是修饰**：可空的话一旦有行存成 `NULL`，GORM 读回 Go `int` 是转换错误而非
+零值 ⇒ 整行连管理端列表都打不开。`_LegacyRowsDefaultToOne` 除断言折算外还直读
+`information_schema`，钉住"存在 + `not null` + 默认值 `'1'`/`'0'` + 类型 `bigint`"四项；其中
+`bigint` 这条容易写成 `integer` 而假绿，勿放宽断言。
+
 ---
 
 ## 五、索引策略
@@ -612,7 +658,7 @@ T-P2-04 / R-5 为它加了两列外键位，把原文件头自记的"H2 技术�
 |------|------|------|
 | 客户列表 | `(status, created_at DESC)` | status 选择性高 |
 | 触达历史 | `(customer_id, platform, created_at DESC)` | 客户维度高 |
-| 知识库检索 | `(kb_id, doc_type, status)` | KB 维度优先 |
+| 知识库内容检索 | 无复合索引；实为 `idx_knowledge_chunks_product_id` 等**单列** btree | 登记的 `(kb_id, doc_type, status)` 经 T-P2-05 实测**在库里不存在、列名也对不上**：`knowledge_documents` / `knowledge_chunks` 两张内容表都没有 kb_id 列（检索按 `product_id` 过滤，见 G18），2026-08-25 快照照抄了别的系统的索引口径。直读 `pg_indexes` 的实算是：这两张表上全部是 GORM tag 生成的单列索引（`product_id` / `document_id` / `embed_status` / `content_hash` / `source_language` …）加 `content_tsv` 系 GIN 与 `embedding` 的 HNSW，**零条复合索引** |
 
 ### 5.3 JSONB 字段（必须 GIN 索引）
 

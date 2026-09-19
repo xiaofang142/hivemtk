@@ -292,13 +292,20 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	}
 
 	faqKBID, faqVec := "", []float32(nil)
+	// 答案缓存命名空间每次入会话算一次，再透传给 Lookup 与 Store：两处各自现算的话，
+	// 中途有人抬灰度比例会把同一会话的读键和写键劈成两个版本（读不到自己刚写的行）。
+	// KBAnswerVersionFor 在灰度未开（或该 KB 没 publish 过）时恒返回 faqPromptVersion，
+	// 即挂载前的字面量 "v1" ⇒ 这一行本身不改变今天的缓存键。
+	faqPromptVer := faqPromptVersion
 	if o.faqCache != nil && o.faqEmbedder != nil {
-		if faqKBID = o.resolveFAQKBID(ctx, finalAgentCtx); faqKBID != "" {
+		if kb := o.resolveFAQKB(ctx, finalAgentCtx); kb != nil {
+			faqKBID = strconv.FormatUint(uint64(kb.ID), 10)
+			faqPromptVer = KBAnswerVersionFor(kb, in.OneID)
 			faqVec = o.embedFAQQuery(ctx, in.Content)
 		}
 	}
 	if len(faqVec) > 0 {
-		if res, hit := o.lookupFAQAnswerCache(ctx, faqKBID, faqVec, result); hit {
+		if res, hit := o.lookupFAQAnswerCache(ctx, faqKBID, faqPromptVer, faqVec, result); hit {
 			return res, nil
 		}
 	}
@@ -409,7 +416,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 			}()
 			if err := o.faqCache.Store(context.Background(), ragcache.StoreRequest{
 				KBID:              faqKBID,
-				PromptVersion:     faqPromptVersion,
+				PromptVersion:     faqPromptVer,
 				QueryVector:       vec,
 				Answer:            answer,
 				FromKnowledgeBase: true,
@@ -436,9 +443,14 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	return result, nil
 }
 
-func (o *SmartCSOrchestrator) resolveFAQKBID(ctx context.Context, agentCtx *AgentContext) string {
+// resolveFAQKB 取本次会话用于答案缓存的知识库行。
+//
+// 由 resolveFAQKBID 改来：只回 ID 字符串的话，版本/灰度决策就没有输入（要读该行上的
+// Version/Canary* 三列），改回整行是这一步的最小形状。选行规则一字未动
+// （FAQ 优先、RAG 兜底、按 ListByAgent 原序），T-P2-05 AC③ 的差分对照跑的就是这里。
+func (o *SmartCSOrchestrator) resolveFAQKB(ctx context.Context, agentCtx *AgentContext) *model.KnowledgeBase {
 	if agentCtx == nil || agentCtx.AgentID == 0 {
-		return ""
+		return nil
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -446,24 +458,27 @@ func (o *SmartCSOrchestrator) resolveFAQKBID(ctx context.Context, agentCtx *Agen
 		}
 	}()
 	if o.kbRepo == nil {
-		return ""
+		return nil
 	}
 	kbs, err := o.kbRepo.ListByAgent(ctx, agentCtx.AgentID)
 	if err != nil {
-		return ""
+		return nil
 	}
-	fallback := ""
-	for _, kb := range kbs {
-		switch kb.Type {
+	fallbackIdx := -1
+	for i := range kbs {
+		switch kbs[i].Type {
 		case model.KnowledgeBaseTypeFAQ:
-			return strconv.FormatUint(uint64(kb.ID), 10)
+			return &kbs[i]
 		case model.KnowledgeBaseTypeRAG:
-			if fallback == "" {
-				fallback = strconv.FormatUint(uint64(kb.ID), 10)
+			if fallbackIdx < 0 {
+				fallbackIdx = i
 			}
 		}
 	}
-	return fallback
+	if fallbackIdx < 0 {
+		return nil
+	}
+	return &kbs[fallbackIdx]
 }
 
 func (o *SmartCSOrchestrator) embedFAQQuery(ctx context.Context, text string) []float32 {
@@ -479,7 +494,7 @@ func (o *SmartCSOrchestrator) embedFAQQuery(ctx context.Context, text string) []
 	return vec
 }
 
-func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID string, vec []float32, result *HandleResult) (*HandleResult, bool) {
+func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, promptVersion string, vec []float32, result *HandleResult) (*HandleResult, bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Warnf("[ragcache] lookup panic (kb_id=%s): %v", kbID, r)
@@ -487,7 +502,7 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID str
 	}()
 	lr, err := o.faqCache.Lookup(ctx, ragcache.LookupRequest{
 		KBID:          kbID,
-		PromptVersion: faqPromptVersion,
+		PromptVersion: promptVersion,
 		QueryVector:   vec,
 	})
 	if err != nil || lr == nil || lr.Tier == ragcache.TierMiss || strings.TrimSpace(lr.Answer) == "" {
@@ -495,6 +510,7 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID str
 	}
 	logger.Ctx(ctx).Info().
 		Str("kb_id", kbID).
+		Str("prompt_version", promptVersion).
 		Str("tier", string(lr.Tier)).
 		Float64("similarity", lr.Similarity).
 		Msg("[ragcache] FAQ answer cache HIT, skip LLM generation")
