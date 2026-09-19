@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.3（2026-09-19，T-P2-05 新增 §4.13 并实算修正 §5.2 的知识库索引行）
+> **版本**：v1.4（2026-09-19，T-P3-01 新增 §4.14 审批检查点表；v1.3 为 T-P2-05 的 §4.13）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -638,6 +638,79 @@ T-P2-04 / R-5 为它加了两列外键位，把原文件头自记的"H2 技术�
 `information_schema`，钉住"存在 + `not null` + 默认值 `'1'`/`'0'` + 类型 `bigint`"四项；其中
 `bigint` 这条容易写成 `integer` 而假绿，勿放宽断言。
 
+### 4.14 审批检查点 `approval_requests`：一套状态机，两种退化形态（T-P3-01）
+
+C2 的裁定是**只建一套**：A 文档的"同步二次确认"是本表在 `auto-approve` 快速路径下的退化形式
+（入队即 `approved`，调用方原地拿结果、不轮询），B 文档的"异步审批检查点"是同一条记录处于
+`pending` 的形状。因此本表**没有** `mode` / `sync` 这类列，区分只由 `status + decided_by` 表达。
+
+列与索引全部为实测值（`information_schema.columns` + `pg_indexes` 直读，非从标签推断）：
+
+| 列 | GORM 声明 | PG 实测 | 可空 | 索引 |
+|---|---|---|---|---|
+| `id` | `type:text;primaryKey` | `text` | **否** | `approval_requests_pkey` |
+| `subject_type` | `varchar(32)` | `character varying` | 是 | `uq_approval_request_open` 前缀 1 |
+| `subject_id` | `type:text` | `text` | 是 | 同上，前缀 2 |
+| `policy_key` | `varchar(64)` | `character varying` | 是 | 同上，前缀 3 |
+| `status` | `varchar(16)` | `character varying` | 是 | `idx_approval_requests_status` + 上面那个索引的谓词 |
+| `resume_token` | `type:text` | `text` | 是 | `uq_approval_request_token`（部分） |
+| `expires_at` | `*time.Time` | `timestamp with time zone` | 是 | `idx_approval_requests_expires_at` |
+| `decided_by` / `decision_note` | `type:text` | `text` | 是 | 无 |
+| `decided_at` | `*time.Time` | `timestamp with time zone` | 是 | 无 |
+| `created_at` / `updated_at` | 时间 | `timestamp with time zone` | 是 | `idx_approval_requests_created_at`（仅 created_at） |
+
+两条唯一索引的实际定义（由 `approval_request_test.go` 的 `_PartialIndexesExist` 断言"包含"而非整串
+比对，PG 会把谓词规范化）：
+
+```sql
+CREATE UNIQUE INDEX uq_approval_request_open  ON approval_requests USING btree
+  (subject_type, subject_id, policy_key) WHERE ((status)::text = 'pending'::text);
+CREATE UNIQUE INDEX uq_approval_request_token ON approval_requests USING btree
+  (resume_token) WHERE (resume_token <> ''::text);
+```
+
+**两个索引都必须是部分的**，这不是优化而是语义：
+
+- 不带 `status='pending'` ⇒ 已裁决的行永久占着身份键位，被拒的报价修正后**再也申请不了**
+  （同一 (subject, policy) 建不出第二条 pending），闸门把自己锁死。所以"重审 = 新建一条、留下
+  两条记录"这条路依赖这个谓词。
+- 不带 `resume_token <> ''` ⇒ 第二条 auto-approve 记录撞在空串上。auto-approve 的行永远不被
+  恢复，凭证列就是 `''`，且可以有很多条。
+- `policy_key` 必须进键：同一对象常同时要过两道策略（报价既过 `quote.send` 又过高折扣档），
+  只按 subject 去重会让第一道审批顺手把第二道批了 —— 闸门被自己绕过。
+
+**四列身份/状态位在 PG 里全部可空，这是实测事实，不是遗漏。** GORM 不给非指针 `string` 发
+`NOT NULL`（除非显式写 `not null` 标签），而这里刻意不加：`NOT NULL` 拦得住 `NULL`、拦不住 `''`，
+后者才是真实危险输入（一行 `subject_type=''` 既进不了待办中心也回不去幂等键），而它只能由入参校验
+拦 —— 落点在 `service.ApprovalSubmitInput.normalize()`（空值、长度上限 32/64/256、字符集收窄到
+`[a-z0-9_.-]`）。字符集这条与索引无关但同属键的卫生：`subject_type`/`policy_key` 会进入
+`check-unwired-assets.sh` 按 `|` 分列的匹配面，留一个自由字符串进去，迟早有人拿 `"a|b"` 当策略名，
+把一行登记劈成两行。
+
+**裁决写回走列白名单 + CAS，且 `Model()` 必须传空壳。** `approvalWriteColumns` 只含
+`status/decided_by/decided_at/decision_note/updated_at` —— 身份三列与 `resume_token` 改不动
+（否则"裁决 + 顺手改 subject"= 用一次合法批准给另一张报价开门）。实测踩到的坑是 GORM 的
+`tx.Model(&a)`：它会从 `a` 的主键值再拼一条 `id = ?` 进 `WHERE`，而 `a` 是刚被 `fn` 改过的实例，
+`fn` 一旦动了 `m.ID`，两条 `id` 条件互斥 ⇒ 更新命中 0 行 ⇒ `applied=false` ⇒ service 对一条
+**仍然 pending** 的记录报出"已由他人裁决"。改成 `tx.Model(&model.ApprovalRequest{})` 后由
+`_MutateCannotRepointIdentity` 实证。
+
+**"单赢家"与"行锁"是两件事，本卡实测把它们分开了**：并发 8 协程同一行只有 1 个 `applied`
+（`_ConcurrentMutateSingleWinner`），但**撑住它的是写回那句 `WHERE id=? AND status='pending'`，
+不是 `FOR UPDATE`** —— 变异 Mu-R3 摘掉行锁后该用例仍绿（UPDATE 自己会排队，重判时行已不是
+pending）。`FOR UPDATE` 买的是"`fn` 执行期间这一行不许被别人改"，其存在性由
+`_MutateHoldsRowLockWhileFnRuns` 直接观测（让 `fn` 停在事务里，另一条连接改同一行必须阻塞）。
+仓储与本测试文件原先都写着"没有 FOR UPDATE 时两边都会以为自己批成功"，那是**没跑过的推断**，
+Mu-R3 把它推翻后已按实测改写。
+
+**同时必须说清楚的前置事实**：本表**今日在生产路径上零构造、零读取**。`NewApprovalRequestService(`
+在非测试代码里 0 命中，`ByResumeToken(` 的调用方亦 0 命中，已登记为 `check-unwired-assets.sh`
+**项 12** 的两行 `unwired`；`ExpireOverdue` 也没有按节拍调用的 worker ⇒ **在本卡的接线卡（T-P3-02 /
+T-P3-07）落地之前，`pending` 不会自动过期**。同理，`AutoApprovalPolicy` 刻意**没有**接到旧的
+`approval.WhiteListApprovalChecker`（`(subject_type, subject_id)` → `(tool_name, account_id)` 的
+映射是调用方的知识），`decorator_approval.go` 一个字节未改 —— 那是 C2 的硬约束。
+本卡"建立了什么、没建立什么"的七条清点见 `AI_CORE_FEATURE_INVENTORY.md` 短板 **G20**。
+
 ---
 
 ## 五、索引策略
@@ -797,3 +870,5 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.0 | 2026-08-16 | @data-platform | 初版数据库深度解析（合并散落文档） |
 | v1.1 | 2026-09-19 | @backend | 新增 §4.11 统计看板真实源与演示表：标注 `conversion_funnels` 为僵尸表（R-4 / T-P2-03 收口），给出两套阶段名、"不得写入"规则、删表前三条判据，并登记真实源的两处口径问题（短板 G16） |
 | v1.2 | 2026-09-19 | @backend | 新增 §4.12 销售事件流 `sales_events` 的 LTC 预留列（R-5 / T-P2-04）：给出两列的可空/不回填/暂无索引/暂无生产者四态，写明 `NULL` 与空串是两层含义且 GORM 读回会塌成同一空串，并把"整张表今日生产零写入"登记为 `check-unwired-assets.sh` 项 9；顺带把文档头版本号从 v1.0 对齐到修订历史 |
+| v1.3 | 2026-09-19 | @backend | 新增 §4.13 知识库版本与灰度的三列（R-6 / T-P2-05）：给出 `version/canary_enabled/canary_percent` 的 PG 实测类型与"唯一读者是缓存命名空间折算"的定位，写明 `not null` 是必需项、写这三列必须走 `UpdateVersionCanary`（否则会 bump `updated_at` 而误删对侧缓存），并实算修正 §5.2 的知识库索引行（登记的复合索引在库里不存在）。**本行为 v1.4 补登记**：§4.13 落地时只改了文档头版本号，漏了本表 |
+| v1.4 | 2026-09-19 | @backend | 新增 §4.14 审批检查点 `approval_requests`（N-4 / T-P3-01）：直读 `information_schema` + `pg_indexes` 给出列/索引实测形状，写明两条唯一索引**必须**是部分的（丢了谓词会把闸门锁死 / 让第二条 auto-approve 撞空串）、身份四列在 PG 可空而判据在 `normalize()`、裁决写回的列白名单与 CAS，以及本卡"零构造零读取、`ExpireOverdue` 暂无按节拍调用方"的前置事实（项 12 / 短板 G20）；同时补记 GORM `tx.Model(&a)` 会追加主键条件、必须传空壳这条实测坑 |

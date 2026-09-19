@@ -35,6 +35,9 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		&model.AggregationWatermark{},
 		&model.AlertHistory{},
 		&model.AlertRule{},
+		// ApprovalRequest：T-P3-01 新增，有 repository.approvalRequestRepo.Insert 这条
+		// 生产写入路径（本卡虽未装配，登记建表与登记写入路径是两件事）。
+		&model.ApprovalRequest{},
 		&model.BanditRefluxLog{},
 		&model.ChurnScore{},
 		&model.ClueEngagementEvent{},

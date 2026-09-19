@@ -108,6 +108,17 @@ BASELINE=(
   "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|"
   "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|"
   "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|"
+  # 项12 = T-P3-01 新增：approval_requests 这张表**今天生产路径上一行都不会写**。
+  # 本卡按 C2 只建审批检查点的模型/仓储/服务三层，刻意不接线（接线卡分别是
+  # T-P3-02 挂起恢复、T-P5-03 外联闸门、T-P6-03 报价发送、T-P9-02 知识库变更）。
+  # 两行各盯一种互不包含的退化：
+  #   12a 装配入口零构造 ⇒ 整条审批竖没人用，P3 出口条件"出域动作必经 approval_request"
+  #       无从谈起；
+  #   12b 恢复读入口零调用 ⇒ 即使将来 Submit 被接上、审批也被批了，也没有任何挂起的流程
+  #       会被唤醒。挂起端与恢复端能各自烂掉一半，只登记 12a 看不见后一种。
+  # 两行按 UNWIRED 登记而不是留白：否则"审批闸门已经建好"会被读成"P3 已经闭环"。
+  "12|审批检查点服务的装配入口（approval_requests 今日生产零写入）|func NewApprovalRequestService|NewApprovalRequestService\(|internal/app cmd/api internal/controller internal/router|"
+  "12|审批挂起流程的恢复读入口（批了也没人续跑）|func \\(s \\*ApprovalRequestService\\) ByResumeToken|ByResumeToken\(|internal/app cmd/api internal/controller internal/router|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

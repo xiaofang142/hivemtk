@@ -311,6 +311,12 @@ func allModels() []any {
 		&model.AggregationWatermark{},
 		&model.AlertHistory{},
 		&model.AlertRule{},
+		// ApprovalRequest（表 approval_requests）：T-P3-01 / N-4 审批检查点，
+		// 写入路径是 repository.approvalRequestRepo.Insert。
+		// 本卡交付的是底座、尚未装配（装配卡 T-P3-02/T-P3-07），但**建表登记必须在
+		// 今天这一批**：登记晚一卡，中间那段部署里闸门第一次落库就会往不存在的表里写
+		// （T-P1-08 在 tool_call_audits 上正是这个形状：只接 logger 不登记表 = 整批静默降级）。
+		&model.ApprovalRequest{},
 		&model.BanditRefluxLog{},
 		&model.ChurnScore{},
 		&model.ClueEngagementEvent{},
