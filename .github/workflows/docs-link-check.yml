@@ -11,6 +11,8 @@
 # 本地复现：
 #   lychee --offline --no-progress './**/*.md'
 #   或使用 npx：npx -y lychee --offline './**/*.md'
+#   git 索引口径（第二个 step，与 lychee 同跑，任一道红即 job 红）：
+#   python3 scripts/check-md-links-offline.py .
 
 name: Docs Link Check
 
@@ -18,10 +20,15 @@ on:
   push:
     paths:
       - '**/*.md'
+      # 检查脚本自身改动也要触发：否则放宽判据的提交可以安静进 master，
+      # 门只在「文档变了」时才跑 —— 对端仓 platform 的副本一直是这么接的。
+      - 'scripts/check-md-links-offline.py'
       - '.github/workflows/docs-link-check.yml'
   pull_request:
     paths:
       - '**/*.md'
+      - 'scripts/check-md-links-offline.py'
+      - '.github/workflows/docs-link-check.yml'
   schedule:
     # 每周一 04:00 UTC 全量巡检，捕捉随时间腐化的引用
     - cron: '0 4 * * 1'
