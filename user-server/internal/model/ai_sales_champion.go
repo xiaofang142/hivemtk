@@ -328,7 +328,25 @@ type ObjectionTemplate struct {
 
 func (ObjectionTemplate) TableName() string { return "objection_templates" }
 
-// ConversionFunnel 转化漏斗
+// ConversionFunnel 转化漏斗 —— ⚠️ **僵尸表：只有演示数据在写，全仓没有读路径**（R-4）。
+//
+// 实测口径（2026-09-19）：对 `model.ConversionFunnel` 的非测试引用只有 `cmd/seed/seed_stats.go`
+// 一处（往里插 35 行假数据）；`GET /api/conversion-funnel` 走的是
+// `internal/ops/service.ConversionFunnelService.BuildFunnel`，它对 customer_events / clues /
+// intent_records / customer_sessions **实时聚合**，从不读本表。两边连阶段名都不成套：
+// 演示侧是 exposure/click/consult/add_wecom/deal，真实侧是 visit/clue/intent/session
+// （词表在 `internal/ops/repository.FunnelStageKey`）。因此谁按这张表算指标，得到的是一套
+// 产品里并不存在的漏斗。
+//
+// 为什么不删（"未证伪不删"）：本表仍在 `internal/pkg/db/migrate.go allModels()` 里登记，
+// 生产库可能已有历史行；删表要先证伪"仓外没有读取方"（BI/报表脚本不在本仓，本地看不到）。
+// 三条同时成立时另立卡删除：① 仓外读取方确认为零；② 表内行只来自 seed；③ 已决定归档方式。
+//
+// **LTC 报价/商机漏斗（T-P4、T-P7-02）不得写入本表**，阶段维度走
+// `ops/repository.FunnelStageKey`（`opportunity` 已作预留位定名、尚未产出）。
+//
+// 字段侧两条口径：`Stage` 存的是 seed 自造的演示字符串，不受上面那份词表约束；
+// `Extra` 里固定带 `seed` 与 `demo_only=true` —— 清库按前者匹配，读的人按后者辨真伪。
 type ConversionFunnel struct {
 	ID             uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	StatDate       string    `gorm:"type:varchar(20);not null;index" json:"stat_date"`

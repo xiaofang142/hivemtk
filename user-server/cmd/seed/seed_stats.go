@@ -1,9 +1,17 @@
 // seed_stats.go 模块 J：统计看板种子数据
 //
-// 覆盖表：
-// conversion_funnels (35) 转化漏斗，覆盖 7 天 × 5 个漏斗阶段
-// sales_personas (8) 销冠画像，覆盖 S/A/B/C 四个等级
-// wecom_account_health (8) 企微账号健康度，覆盖 normal/warning/critical/banned
+// ⚠️ 本模块写的**全部是演示数据**，不是任何看板的真实源。三张表的情况各不相同，
+// 其中 `conversion_funnels` 是 R-4 点名的僵尸表：
+//
+//	conversion_funnels (35) 转化漏斗，7 天 × 5 个阶段 —— **全仓没有读路径**。
+//	      `GET /api/conversion-funnel` 走 `internal/ops/service` 对 customer_events /
+//	      clues / intent_records / customer_sessions 的实时聚合，既不读本表、阶段名也
+//	      与本文件的 exposure/click/consult/add_wecom/deal 完全不同（真实词表在
+//	      `internal/ops/repository.FunnelStageKey`）。所以这里改阶段名不会影响任何线上
+//	      读数；反过来，谁想给漏斗加阶段，去改那份词表 + 聚合分支，**不要往本表补行**。
+//	      判据与"什么时候可以真删这张表"写在 model.ConversionFunnel 的注释里。
+//	sales_personas (8) 销冠画像，覆盖 S/A/B/C 四个等级
+//	wecom_account_health (8) 企微账号健康度，覆盖 normal/warning/critical/banned
 package main
 
 import (
@@ -18,8 +26,10 @@ import (
 
 type statsSeeder struct{}
 
-func (s *statsSeeder) Name() string        { return "stats" }
-func (s *statsSeeder) Description() string { return "漏斗(35)+销冠画像(8)+企微健康度(8)" }
+func (s *statsSeeder) Name() string { return "stats" }
+func (s *statsSeeder) Description() string {
+	return "漏斗(35)+销冠画像(8)+企微健康度(8)；均为演示数据，其中 conversion_funnels 无读路径"
+}
 
 func (s *statsSeeder) Clean(database *gorm.DB) error {
 	if err := database.Where("last_error LIKE ? OR metrics LIKE ?", "%"+seedTag+"%", "%"+seedTag+"%").
@@ -59,11 +69,18 @@ func (s *statsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 
 	log.Printf("  ✓ 已写入 漏斗%d+销冠画像%d+企微健康度%d",
 		len(funnels), len(personas), len(healths))
+	// "演示表不是真实源"这件事最容易在跑完 seed 的第二天被忘掉，所以每次 seed 都打出来。
+	log.Printf("  ⚠️ conversion_funnels 是演示表：GET /api/conversion-funnel 不读它（走 ops/service 实时聚合），" +
+		"两边阶段名也不成套 ⇒ 看板/报表都别从这张表取数（R-4；判据见 model.ConversionFunnel 注释）")
 	return nil
 }
 
 // buildFunnels 生成 7 天 × 5 阶段的漏斗数据
 // 漏斗阶段：曝光 → 点击 → 咨询 → 加微 → 成交
+//
+// 这五个阶段名是**本文件自造的演示词表**，与线上漏斗真正用的
+// `ops/repository.FunnelStageKey`（visit/clue/intent/session）不成一套。刻意不去对齐：
+// 对齐了只会让这张僵尸表看起来更像真的（R-4 要的是能辨真伪，不是看起来一致）。
 func (s *statsSeeder) buildFunnels() []model.ConversionFunnel {
 	funnelType := "sales"
 	stages := []struct {
@@ -103,9 +120,12 @@ func (s *statsSeeder) buildFunnels() []model.ConversionFunnel {
 				DropOffRate:    float64(int(dropOffRate*100)) / 100,
 				AvgDurationSec: randInt(30, 600),
 				Extra: model.JSONMap{
-					"seed":     seedTag,
-					"scenario": "演示销售漏斗",
-					"funnel":   funnelType,
+					"seed":      seedTag,
+					"scenario":  "演示销售漏斗",
+					"funnel":    funnelType,
+					"demo_only": true,
+					// 把真源指针写进行数据里：拿 BI 脚本/临时 SQL 读这张表的人不会先去翻代码注释。
+					"real_source": "GET /api/conversion-funnel 走 ops/service 实时聚合，不读本表",
 				},
 			}
 			funnels = append(funnels, f)

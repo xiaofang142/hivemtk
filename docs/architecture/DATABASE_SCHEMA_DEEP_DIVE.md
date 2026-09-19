@@ -526,6 +526,40 @@ erDiagram
 | `live_codes` | 活码 | code, target_url, type, rotation_strategy |
 | `live_code_stats` | 活码统计 | live_code_id, scan_count, last_scan_at |
 
+
+### 4.11 统计看板：真实源与演示表（勿混用）
+
+看板的数字有两个来源，长得像但不是一回事。`conversion_funnels` 是 R-4 点名的**僵尸表**，
+本文件把它写清楚，避免下一个人在 BI 里查到一套产品里不存在的漏斗。
+
+| 指标 | 真实源（线上读数走这条） | 演示表（只有 `cmd/seed` 在写） |
+|---|---|---|
+| 转化漏斗 | `internal/ops/service/conversion_funnel.go` `BuildFunnel` 对 `customer_events` / `clues` / `intent_records` / `customer_sessions` 的**实时聚合** | `conversion_funnels`（**全仓无读路径**） |
+
+两套阶段名**刻意不同**，这是判定"表是死的"的关键证据：
+
+| 侧 | 阶段名 |
+|---|---|
+| 真实源（词表在 `internal/ops/repository.FunnelStageKey`，代码里是唯一真源） | `visit` 访问 → `clue` 线索 → `intent` 意向 → `session` 会话 |
+| 演示表（`cmd/seed/seed_stats.go` 自造） | `exposure` → `click` → `consult` → `add_wecom` → `deal` |
+
+规则（写进 `model.ConversionFunnel` 的注释，同时由 `conversion_funnel_stage_test.go` 的
+`_DemoTableStaysOutOfVocabulary` 守着）：
+
+- **新域不得往 `conversion_funnels` 写数据**。报价/商机漏斗（T-P4、T-P7-02）的阶段维度一律
+  以 `FunnelStageKey` 为准；`opportunity`（商机）已作为**预留位定名、尚未产出**——定名而不产出，
+  是为了让回款域能引用同一个键，又不会在响应里凭空多出一个恒为 0 的阶段。
+- 演示行自带 `extra.demo_only = true` 与 `extra.real_source` 指针，供临时 SQL/BI 的使用者辨真伪。
+
+**为什么不删这张表（"未证伪不删"）**：它仍在 `internal/pkg/db/migrate.go allModels()` 的建表清单里，
+生产库可能已有历史行；而"没有读取方"只在**本仓**成立，仓外的 BI 脚本/定时报表看不到。
+三条同时成立时另立卡删除：① 仓外读取方确认为零；② 表内行只来自 seed；③ 已决定归档方式。
+
+**顺带登记的两处真实源口径问题**（不改，属"改变现网读数"，见短板 G16）：
+`BuildFunnel` 把四个 count 的错误全部吞掉 ⇒ 某个数据源表不可用时，接口回 200 且该阶段显示为 0，
+报表看起来"只是转化率低"；阶段之间不保证单调 ⇒ `rate` 可以 >100、`drop_rate` 可以为负
+（`conversion_funnel_baseline_test.go` 的 `_NonMonotonicStagesBaseline` 把这个现状钉在那里）。
+未知阶段名走 `GET /conversion-funnel/stage` 也回 200 + 空名字 + 0 计数，而不是 404。
 ---
 
 ## 五、索引策略
@@ -683,3 +717,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | 版本 | 日期 | 修订人 | 内容 |
 |------|------|--------|------|
 | v1.0 | 2026-08-16 | @data-platform | 初版数据库深度解析（合并散落文档） |
+| v1.1 | 2026-09-19 | @backend | 新增 §4.11 统计看板真实源与演示表：标注 `conversion_funnels` 为僵尸表（R-4 / T-P2-03 收口），给出两套阶段名、"不得写入"规则、删表前三条判据，并登记真实源的两处口径问题（短板 G16） |
