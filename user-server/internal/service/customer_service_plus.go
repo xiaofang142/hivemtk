@@ -306,16 +306,18 @@ func (s *CustomerServicePlusService) DeleteFolder(ctx context.Context, folderID 
 	return s.folderRepo.Delete(ctx, folderID)
 }
 
-// SegmentSaveRequest 分群保存请求
+// SegmentSaveRequest 分群保存请求。
+// 2026-09-19 安全收口：原 where_sql 字段是客户端直灌 WHERE 的 SQL 注入通道
+// （弱黑名单不拦子查询布尔盲猜），且前端零使用——字段已移除；请求里多余的
+// where_sql 会被 ShouldBindJSON 静默忽略，分群规模改由服务端规则计算（待排期）。
 type SegmentSaveRequest struct {
 	Name        string          `json:"name" binding:"required"`
 	Description string          `json:"description"`
 	Rules       json.RawMessage `json:"rules"`
 	Trigger     string          `json:"trigger"`
-	WhereSQL    string          `json:"where_sql,omitempty"`
 }
 
-// SaveSegment 创建分群（真实落库 + 规模估算）
+// SaveSegment 创建分群（真实落库；规模估算通道已移除，见 SegmentSaveRequest 注释）
 func (s *CustomerServicePlusService) SaveSegment(ctx context.Context, req *SegmentSaveRequest) (*model.CustomerSegment, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("分群名称不能为空")
@@ -329,11 +331,6 @@ func (s *CustomerServicePlusService) SaveSegment(ctx context.Context, req *Segme
 		Description: req.Description,
 		RulesJSON:   rulesJSON,
 		Trigger:     req.Trigger,
-	}
-	if req.WhereSQL != "" {
-		if n, err := s.sessionRepo.CountSegmentMembers(ctx, req.WhereSQL); err == nil {
-			seg.Size = n
-		}
 	}
 	if err := s.sessionRepo.CreateSegment(ctx, seg); err != nil {
 		return nil, err

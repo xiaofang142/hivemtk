@@ -211,7 +211,8 @@ func (c *CustomerServicePlusController) DeleteQuickReplyFolder(ctx *gin.Context)
 	response.Success(ctx, gin.H{"deleted": true}, "文件夹已删除")
 }
 
-// CreateSegment POST /api/user-segments {name, rules, trigger, where_sql}
+// CreateSegment POST /api/user-segments {name, rules, trigger}
+// （where_sql 注入通道已于 2026-09-19 移除，多余字段被绑定层静默忽略）
 func (c *CustomerServicePlusController) CreateSegment(ctx *gin.Context) {
 	var req service.SegmentSaveRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

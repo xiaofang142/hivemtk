@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -623,25 +622,6 @@ func (r *CustomerSessionRepository) ListSegments(ctx context.Context, limit int)
 	var list []*model.CustomerSegment
 	err := r.db.WithContext(ctx).Order("id DESC").Limit(limit).Find(&list).Error
 	return list, err
-}
-
-// CountSegmentMembers 规则规模估算（rules JSON 里编译的 SQL 条件安全执行）
-func (r *CustomerSessionRepository) CountSegmentMembers(ctx context.Context, whereSQL string) (int64, error) {
-	if strings.TrimSpace(whereSQL) == "" {
-		return 0, fmt.Errorf("空条件")
-	}
-
-	low := strings.ToLower(whereSQL)
-	for _, bad := range []string{";", "drop", "delete", "update ", "insert", "alter", "truncate", "pg_", "--"} {
-		if strings.Contains(low, bad) {
-			return 0, fmt.Errorf("条件包含非法片段")
-		}
-	}
-	var n int64
-	err := r.db.WithContext(ctx).Table("customers").
-		Where("deleted_at IS NULL AND (" + whereSQL + ")").
-		Count(&n).Error
-	return n, err
 }
 
 // ErrOptimisticLock 乐观锁冲突错误
