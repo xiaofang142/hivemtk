@@ -44,6 +44,10 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		&model.ClueScore{},
 		&model.ConfigParamAuditLog{},
 		&model.CustomerChannel{},
+		// HumanTask：T-P3-03 新增。列入 mustCover 而不是只信 allModels() 里那一行，
+		// 是因为待办这张表的失败面恰好是"表没建、代码全对"：转人工那条投递只在日志里
+		// 说一句"投递失败"，会话侧一切正常，而池子里永远没有行。
+		&model.HumanTask{},
 		&model.IntegrationTemplate{},
 		&model.IntentExample{},
 		&model.LLMRoutingLog{},

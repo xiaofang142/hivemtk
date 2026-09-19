@@ -127,6 +127,25 @@ BASELINE=(
   "12|审批检查点服务的装配入口（开关 FF_LTC_APPROVAL_RESUME，默认 off）|func NewApprovalRequestService|NewApprovalRequestService\(|internal/app cmd/api internal/controller internal/router|wired"
   "12|审批挂起流程的恢复读入口（点火时回读结论）|func \\(s \\*ApprovalRequestService\\) ByResumeToken|\\.ByResumeToken\\(|internal/service internal/app cmd/api internal/controller internal/router|wired"
   "12|到期 pending 审批的清扫调用方|func \\(s \\*ApprovalRequestService\\) ExpireOverdue|\\.ExpireOverdue\\([^)]*,|internal/service internal/app cmd/api internal/controller internal/router|wired"
+  # 项13 = T-P3-03 新增：统一人工待办（N-9）。四行全部 **wired**（防回退，不是待办）。
+  # 本卡的失败面很特别：待办这张表写不进去时**会话侧一切正常**（转人工照样把 status 改成
+  # waiting，只在日志里说一句"投递失败"），于是"有人在等"这件事从池子、从读数、从值班
+  # 视野里同时消失，而没有任何一条既有测试会红。四行各守一个删除即失灵的点：
+  #   13a 装配入口（internal/app/human_task_wiring.go）。它只证明"有人构造了服务"，
+  #       不证明运行时一定装配了：db==nil 时它把全局清成 nil（本卡没有旗子，
+  #       "没 DB 句柄"就是唯一的关闸，守住它的是装配测试而不是这一格）。
+  #   13b 生产者注入点：删掉它 = 转人工不再投待办，而编排器一切照旧（与 8d 同一形状）。
+  #   13c 会话结束时的撤销钩子：删掉它 = 池子里长期留着"会话早已结束、待办还挂着"的行，
+  #       total_open 与逾期读数被这类死行灌水，而没人会注意到少了一行调用。
+  #   13d 路由挂载：端点没挂上时坐席只能用 UI 猜，服务侧逻辑再对也无人可访问。
+  # 仍未接线的端（登记在此而不是留白，否则"三类待办统一收口"会被读成整句成立）：
+  # 只有 conversation_handoff 有生产投递方，approval / collection_escalation 两类
+  # 今天**没有任何生产 Submit**（报价审批走的是 approval_requests 自己的表，催收竖
+  # 还没开工）—— 它们的接线分别在 T-P3-04 与催收竖，届时须回来加 13e/13f 两行。
+  "13|人工待办服务的装配入口|func NewHumanTaskService|NewHumanTaskService\\(|internal/app cmd/api internal/controller internal/router|wired"
+  "13|转人工→投递会话待办的生产者注入点|func \\(o \\*SmartCSOrchestrator\\) SetHumanTaskProducer|SetHumanTaskProducer\\(|internal/app|wired"
+  "13|会话结束时撤销开放待办的钩子调用方|func cancelOpenHumanTaskForSession|cancelOpenHumanTaskForSession\\(|internal/service|wired"
+  "13|统一待办 API 的挂载入口|func setupHumanTaskRoutes|setupHumanTaskRoutes\\(|internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

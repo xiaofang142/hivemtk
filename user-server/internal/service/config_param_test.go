@@ -115,15 +115,26 @@ func TestFallbackNilDB(t *testing.T) {
 	t.Logf("✅ nil DB fallback pass")
 }
 
+// defaultParamDefsWant 参数定义的条数锚点。
+//
+// 它不验任何行为，只钉一件事：**新增或删掉一条参数定义时必须有人看见**。
+// 定义被漏掉一条时别处不会红 —— seed 那条用例比的是"库里的行数 vs 定义条数"，
+// 两边一起少就永远成立，所以这里留一个必须手动改的数（改之前先确认新增那条确实
+// 该进 DefaultParamDefs()，而不是"顺手多加了一个"）。
+// 2026-09-20（T-P3-03）：+1 = `human_task.handoff_first_response_minutes`。
+const defaultParamDefsWant = 112
+
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
-	if len(defs) != 111 {
-		t.Fatalf("want 110 defs, got %d", len(defs))
+	// 判据与提示语同源：上一版条件里是 111、失败消息里写 "want 110"、成功日志里写
+	// "106 validated"，三处各自漂移 ⇒ 真红了也读不出当前到底几条。
+	if len(defs) != defaultParamDefsWant {
+		t.Fatalf("want %d defs, got %d", defaultParamDefsWant, len(defs))
 	}
 	for i, d := range defs {
 		if d.Group == "" || d.Key == "" || d.DefaultValue == "" {
 			t.Errorf("def[%d] bad: group=%q key=%q default=%q", i, d.Group, d.Key, d.DefaultValue)
 		}
 	}
-	t.Logf("✅ 106 default defs validated")
+	t.Logf("✅ %d default defs validated", defaultParamDefsWant)
 }

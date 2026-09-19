@@ -229,6 +229,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 默认旗子 off ⇒ 这一步只打一行"未装配"日志，不产生任何协程。
 	app.InitApprovalRuntime(gormDB)
 
+	// 统一待办底座（T-P3-03）：同样必须在 BuildSmartOrchestrator 之前 —— 编排器按全局
+	// 服务决定挂不挂"转人工 → 投递会话待办"的生产者。本竖没有旗子：底座拿不到 DB 句柄
+	// 就是不装配，此时下面那组 /api/human-tasks/* 端点全部回 503（不会回一个空列表骗人）。
+	app.InitHumanTaskRuntime(gormDB)
+
 	engine := app.BuildSalesEngine(gormDB)
 	kbRepo := repository.NewKnowledgeBaseRepository(gormDB)
 	orchestrator := app.BuildSmartOrchestrator(engine, kbRepo, gormDB)
@@ -352,6 +357,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupCustomerRFMRoutes(auth)
 
 		setupRecoveryQueueRoutes(auth)
+
+		// 统一人工待办 /api/human-tasks/*（T-P3-03）：必须挂在这个块里 —— auth 组在本块
+		// 入口已 Use(JWTAuthMiddleware())，动作端点的操作者身份取自令牌里的 user_id。
+		setupHumanTaskRoutes(auth)
 
 		systemAdmin := auth.Group("")
 		systemAdmin.Use(middleware.AdminAuthMiddleware())

@@ -131,6 +131,14 @@ func DefaultParamDefs() []ParamDef {
 			Description: "同一会话内 AI 连续回复超过此次数后强制转人工",
 			ValueType:   "int", DefaultValue: "10", Min: strPtr("2"), Max: strPtr("50"), Step: strPtr("1")},
 
+		// human_task.handoff_first_response_minutes（T-P3-03）：键名这里是一串字面量、
+		// 服务侧读的是 service.HumanTaskConfigGroup / HumanTaskHandoffSlaKey 两个常量，
+		// 两边打错任意一处都**不会报错**，只会让运维改参数永远不生效（GetInt 安静回退默认值）。
+		// 所以一致性由 TestHumanTaskSeedKeyMatchesServiceConstants 逐字锁住。
+		{Group: "human_task", Key: "handoff_first_response_minutes", Name: "转人工首响时限（分钟）",
+			Description: "会话转人工后坐席首次响应的时限，超时即计入人工待办逾期读数；1~1440 之外一律回退默认 5 分钟",
+			ValueType:   "int", DefaultValue: "5", Min: strPtr("1"), Max: strPtr("1440"), Step: strPtr("1")},
+
 		{Group: "session", Key: "active_ttl", Name: "会话活跃 TTL",
 			Description: "无任何消息交互超过此时间后会话自动关闭（秒）",
 			ValueType:   "duration", DefaultValue: "86400", Min: strPtr("300"), Max: strPtr("2592000"), Step: strPtr("3600")},

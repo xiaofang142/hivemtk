@@ -371,12 +371,39 @@ func (s *CustomerSessionService) UpdateSessionStatus(ctx context.Context, sessio
 	}
 
 	if (status == model.SessionStatusResolved || status == model.SessionStatusClosed) && session.Status != status {
+		// 统一待办收口（T-P3-03）：会话都结束了，池子里那条"这条会话等人工"必须跟着落定。
+		cancelOpenHumanTaskForSession(ctx, session.SessionID, status)
+
 		chain := NewSessionChainServiceFromGlobal()
 		chain.TriggerCSATOnClose(session)
 		DispatchSessionEventAsync(RuleEventSessionResolved, session.SessionID, session)
 	}
 
 	return nil
+}
+
+// cancelOpenHumanTaskForSession 会话结束时撤销它那条开放的人工待办（非致命旁路）。
+//
+// 三处刻意的取舍：
+//   - 底座未装配（全局服务为 nil）时什么都不做、也不告警：那是本卡天然的关闸形态，
+//     每关一次会话喊一行 WARN 会把日志刷成噪声；
+//   - 只撤销开放那一条（服务侧按 subject 定位 + 跃迁判据），已 done 的原样留着 —— 坐席
+//     工作量与"这轮转人工处理了多久"都读那条记录，覆盖掉就等于把历史改了；
+//   - 失败只 Warn、不改变本函数返回值：会话状态此刻已经落库，撤销失败不能让它退回
+//     "没结束"，而漏掉的那一行坐席在收件箱里手动撤销即可（/cancel 端点已可用）。
+func cancelOpenHumanTaskForSession(ctx context.Context, sessionID string, status model.SessionStatus) {
+	svc := GlobalHumanTaskService()
+	if svc == nil || sessionID == "" {
+		return
+	}
+	what := "结束"
+	if status == model.SessionStatusClosed {
+		what = "关闭"
+	}
+	if _, _, err := svc.CancelOpenBySubject(ctx, HumanTaskSubjectCustomerSession, sessionID,
+		"系统自动撤销：会话已"+what); err != nil {
+		logger.Warnf("[Session] 撤销人工待办失败 session_id=%s: %v", sessionID, err)
+	}
 }
 
 // RateSession 评价会话

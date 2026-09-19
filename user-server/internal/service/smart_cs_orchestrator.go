@@ -61,6 +61,11 @@ type SmartCSOrchestrator struct {
 	// orderDraftProduce 「AI 响应 → 订单意向提取 → 建草稿」的生产者（T-P2-06）。
 	// 由 internal/app 的装配层注入；nil = 本进程不产草稿（旗子关着 / 没 DB 句柄）。
 	orderDraftProduce func(ctx context.Context, customerID, ownerID string, resp *SalesResponse)
+
+	// humanTaskProduce 「转人工 → 投递一条会话待办」的生产者（T-P3-03）。
+	// 同样由 internal/app 注入；nil = 本进程不产待办（没有 DB 句柄时就是这份形态），
+	// 此时 transferToHuman 的行为与本卡之前逐字一致。
+	humanTaskProduce func(ctx context.Context, session *model.CustomerSession, reason string) error
 }
 
 // OrchestratorConfig 编排器配置
@@ -137,6 +142,15 @@ func (o *SmartCSOrchestrator) SetDNCChecker(checker DoNotContactChecker) {
 // DB 句柄），编排器只负责在合适的时机把响应交出去 —— 与 SetDNCChecker 同一分层口径。
 func (o *SmartCSOrchestrator) SetOrderDraftProducer(produce func(ctx context.Context, customerID, ownerID string, resp *SalesResponse)) {
 	o.orderDraftProduce = produce
+}
+
+// SetHumanTaskProducer 注入「转人工 → 投递一条会话待办」的生产者（T-P3-03）。
+//
+// 传 nil 与不调这个效果相同：一条待办都不会投（= 本卡之前的行为，会话只改状态）。
+// 做成函数注入而不是编排器自己去拿全局服务，理由与上面那条一致：有没有 DB 句柄、
+// 要不要建底座是装配层的事；这里也顺带成为本卡天然的关闸（没有旗子，不注入即零改动）。
+func (o *SmartCSOrchestrator) SetHumanTaskProducer(produce func(ctx context.Context, session *model.CustomerSession, reason string) error) {
+	o.humanTaskProduce = produce
 }
 
 func (o *SmartCSOrchestrator) ensureCustomerForSession(ctx context.Context, platform model.Platform, senderID, userName string) {
@@ -832,7 +846,48 @@ func (o *SmartCSOrchestrator) transferToHuman(ctx context.Context, session *mode
 			logger.Ctx(ctx).Error().Err(err).Msg("[transferToHuman] autoAssignToAgent failed")
 		}
 	}
+
+	// 统一待办投递（T-P3-03 AC②）。三点口径：
+	//   - 放在会话状态落库**之后**：待办的意义是"池子里有一行等着人去处理这条会话"，
+	//     会话还没转过去就先投，坐席会领到一条 status 仍是 ai_handling 的会话；
+	//   - 失败只告警不上抛：会话此刻已经是 waiting 了，回滚不了，而上抛会让调用方把
+	//     整条消息处理判失败（客户那边其实已经转过去了）。漏投由这条 Error 日志兜底，
+	//     它是本卡唯一一处"待办可能缺"的已知缺口；
+	//   - 幂等交给服务：同一次转人工被低置信度与情绪策略两个出口各叫一次、以及上一轮
+	//     还没处理完就再转，都只会拿到同一条开放待办（用例逐条验过）。
+	if err := o.produceHandoffTask(ctx, session, reason); err != nil {
+		logger.Ctx(ctx).Error().Err(err).
+			Str("session_id", session.SessionID).
+			Msg("[transferToHuman] 投递人工待办失败（会话已转人工，但池子里没有这一行，需人工补投）")
+	}
 	return nil
+}
+
+// humanTaskProduceTimeout 给"转人工 → 写一条待办"留的时间窗。
+//
+// 一次读（查同 subject 的开放待办）+ 最多两次写（INSERT，或撞索引后回读），
+// 5s 远超正常耗时；给上界是因为这段跑在请求 ctx 的续命上，库卡住时不能把请求吊死。
+const humanTaskProduceTimeout = 5 * time.Second
+
+// produceHandoffTask 投递一次会话待办；未注入生产者时零动作。
+//
+// ctx 用 WithoutCancel + 新上界，而不是直接沿用请求 ctx（与订单草稿那条**刻意不同**）：
+// 草稿丢了可以重建、而且是后台附带产物，所以它异步跑；待办不行 —— 会话此刻已经被判成
+// "等人工"，客户端断开、响应已返回都不改变"有人在等"这件事。若沿用请求 ctx，
+// 客户端一断就把这条 INSERT 取消掉，结果正是本卡要消灭的那个形态：
+// 会话 waiting、池子里空无一物、谁也不知道。
+func (o *SmartCSOrchestrator) produceHandoffTask(ctx context.Context, session *model.CustomerSession, reason string) error {
+	if o.humanTaskProduce == nil {
+		return nil
+	}
+	if session == nil {
+		// 在这里先拒而不是让服务报"subject_id 为空"：那句错误在日志里指不回
+		// "哪一次转人工"，而调用链上只有这一处会传 nil 会话。
+		return fmt.Errorf("%w: transferToHuman 拿到了空会话，无法定位待办主体", ErrHumanTaskInputInvalid)
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), humanTaskProduceTimeout)
+	defer cancel()
+	return o.humanTaskProduce(ctx, session, reason)
 }
 
 func (o *SmartCSOrchestrator) incrementAIReplyCount(ctx context.Context, session *model.CustomerSession) error {

@@ -323,6 +323,11 @@ func allModels() []any {
 		&model.ClueScore{},
 		&model.ConfigParamAuditLog{},
 		&model.CustomerChannel{},
+		// HumanTask（表 human_tasks）：T-P3-03 / N-9 统一人工待办，三类 kind 共用一张表。
+		// 写入路径有两条且都已接线：repository.humanTaskRepo.Insert（转人工投递）与
+		// ApplyAction（坐席认领/释放/完成/撤销、会话结束时的系统撤销）。
+		// 与 ApprovalRequest 同一条理由：登记晚一卡，第一批流量就会往不存在的表里写。
+		&model.HumanTask{},
 		&model.IntegrationTemplate{},
 		&model.IntentExample{},
 		&model.LLMRoutingLog{},

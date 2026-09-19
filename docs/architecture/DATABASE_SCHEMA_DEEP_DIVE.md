@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.5（2026-09-20，T-P3-02 把 §4.14 的"零构造零读取"改写为接线现状与旗子边界；v1.4 为 T-P3-01 的 §4.14）
+> **版本**：v1.6（2026-09-20，T-P3-03 新增 §4.15 统一人工待办 `human_tasks`；v1.5 为 T-P3-02 对 §4.14 接线现状的改写）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -709,6 +709,91 @@ Mu-R3 把它推翻后已按实测改写。
 
 ---
 
+### 4.15 统一人工待办 `human_tasks`：一张表三类事，三列 SLA 各占一档（T-P3-03）
+
+C3 的裁定是**统一数据模型 + 分离视图**：会话转人工、等报价审批、催收升级在三条竖里都是
+"某件事停下等人"，所以共用一张表与**同一条状态机**；而两个消费入口（坐席收件箱按会话组织、
+SLA 以分钟计；待办中心按单据组织、SLA 以小时/天计）必须分开，否则"等报价审批 3 天"会被
+算进坐席响应时长。本表因此**没有** `view` / `channel` 这类视图列，分开只由 `kind + 三个
+独立 SLA 列` 表达。
+
+列与索引全部为实测值（`information_schema.columns` + `pg_indexes` 直读，非从标签推断）：
+
+| 列 | GORM 声明 | PG 实测 | 可空 | 索引 |
+|---|---|---|---|---|
+| `id` | `type:text;primaryKey` | `text` | **否** | `human_tasks_pkey` |
+| `kind` | `varchar(32);not null` | `character varying(32)` | **否** | `idx_human_tasks_kind` |
+| `status` | `varchar(16);not null` | `character varying(16)` | **否** | `idx_human_tasks_status` + 下面那个索引的谓词 |
+| `subject_type` | `varchar(32)` | `character varying(32)` | 是 | `uq_human_task_open` 前缀 1 |
+| `subject_id` | `type:text` | `text` | 是 | 同上，前缀 2 |
+| `title` / `reason` / `payload_ref` / `assignee_user_id` / `cancel_reason` | `type:text` | `text` | 是 | 无 |
+| `one_id` | `varchar(100)` | `character varying(100)` | 是 | `idx_human_tasks_one_id` |
+| `claimed_at` / `completed_at` / `cancelled_at` | `*time.Time` | `timestamp with time zone` | 是 | 无 |
+| `sla_first_response_at` | `*time.Time;index` | `timestamp with time zone` | 是 | `idx_human_tasks_sla_first_response_at` |
+| `sla_decide_at` | `*time.Time;index` | 同上 | 是 | `idx_human_tasks_sla_decide_at` |
+| `sla_escalate_at` | `*time.Time;index` | 同上 | 是 | `idx_human_tasks_sla_escalate_at` |
+| `created_at` / `updated_at` | 时间 | `timestamp with time zone` | 是 | `idx_human_tasks_created_at`（仅 created_at） |
+
+开放唯一索引的实际定义：
+
+```sql
+CREATE UNIQUE INDEX uq_human_task_open ON public.human_tasks USING btree
+  (subject_type, subject_id)
+  WHERE (((status)::text <> 'done'::text) AND ((status)::text <> 'cancelled'::text));
+```
+
+**它必须是部分的，而且谓词只能写成"非终态"这一侧。** 两点都是实测逼出来的：
+
+- 不带谓词 ⇒ 处理完一条会话待办之后，同一条会话**再也转不了人工**（旧行永久占着
+  `(subject_type, subject_id)`）。幂等要的是"同一件事的第二次投递回到同一条**开放**待办"，
+  不是"永远只有一条"。
+- 谓词写成 `status IN ('pending','claimed')` 语义等价，但**标签里放不进去**：GORM 用逗号
+  切分 tag 段，`where:status IN ('a','b')` 会被当场截断成两段（本卡实测踩过）。所以这里只认
+  "排除两个终态"的否定式写法 —— 代价是**加第五个状态时必须记得改这个谓词**，否则新状态会跟
+  终态抢坑位；这一条由 `model.HumanTaskTerminalStatuses`、`TestHumanTaskOpenPredicateMatchesIndexSQL`
+  与仓储侧 `TestHumanTaskRepo_OpenIndexIsPartial` 三处盯住。
+
+**三列 SLA 互斥，且互斥不落在库里。** `conversation_handoff` 只写 `sla_first_response_at`、
+`approval` 只写 `sla_decide_at`、`collection_escalation` 只写 `sla_escalate_at`；判据是
+`model.HumanTaskSLAField(kind)` 给列名 + `humanTaskPlaceSLA` 落列 +
+`model.HumanTaskSLAUnsupportedFields(task)` 在写入前拒绝越界列（判据是包级函数而不是
+`*HumanTask` 的方法 —— 五层架构门禁止 model 携带业务方法，见 `check-architecture.sh` [4/10]；
+本卡首版写成方法，被这道门当场判红）。**为什么不是一列 `sla_due_at`**：
+AC④ 要的"指标隔离"必须能被查询表达 —— 逾期读数按类各查自己那一列
+（`CountOverdueOpenByKind` 用 `HumanTaskSLAField(kind)` 动态选列），一列的话"会话首响超时"
+与"审批超时"在同一列上不可分，而合并视图正是 C3 点名要防的事。为什么不在 DB 加 CHECK：
+本仓 PG 侧不写 CHECK（`migrations/` 的版本化迁移在启动路径上固定空跑，见 §七），
+库内约束只能靠 AutoMigrate 的列与索引，值域判据一律在 `service`。
+
+**四个状态，刻意没有 `expired`**（与 §4.14 的 `approval_requests` 不同）：待办的逾期是
+**读数**不是**状态**。加一个 `expired` 就得配一个把开放行改写成终态的清扫器，而"没人处理"
+这件事一旦被系统自动落成终态，就会同时从收件箱、从 `total_open`、从逾期读数里消失 ——
+指标把要暴露的问题自己抹平了。逾期只由 `sla_* < now` 与"仍开放"两件事算出来。
+
+**长度上限分两档，处置不一样。** `subject_type`(32) / `subject_id`(256) / `payload_ref`(512) /
+`one_id`(100) 越界**即拒**（身份字段裁断等于把待办挂到另一件事上）；`title`(200) / `reason`(2000)
+越界**只裁断**，且按**字符**裁而不是字节（`varchar` 与列表页数的都是字符，按字节砍会留下半个
+汉字）。落点在 `service.HumanTaskSubmitInput.normalize()`。可空性与 §4.14 同理：GORM 不给
+非指针 `string` 发 `NOT NULL`，本表只有 `id/kind/status` 显式写了 `not null`，其余全靠入参校验。
+
+**建表登记走 `allModels()`，卡面写的 `v3_47_0_human_task_migration.go` 不存在**（刻意）：
+本仓启动时的版本化迁移固定空跑（`v1.0.0→v1.0.0`），生产 schema 由 GORM AutoMigrate 遍历
+`internal/pkg/db/migrate.go` 的 `allModels()` 得出，因此登记处是那里 + `migrate_test.go` 的
+`mustCover` 各一行。少这一行的失败面与 §4.14 同形：代码全对、表不存在，而转人工只在日志里
+说一句"投递失败"。
+
+**接线现状（T-P3-03，2026-09-20）**：`conversation_handoff` 有真实生产写入方 ——
+`transferToHuman` 在会话状态落库后投递一条（幂等：同一次转人工被多个策略出口各叫一次只落
+一行），会话 `resolved/closed` 时由 `cancelOpenHumanTaskForSession` 撤销那条开放待办，
+坐席侧四个动作端点走 `/api/human-tasks/:id/{claim,release,complete,cancel}`；闸门 **项 13**
+四行按 `wired` 登记（防回退）。本卡**没有旗子**：唯一的关闸是"拿不到 DB 句柄 ⇒ 全局服务为
+nil ⇒ 编排器不挂生产者"，此时 `transferToHuman` 与本卡之前逐字一致。
+`approval` / `collection_escalation` 两类今天**没有任何生产 Submit**（报价审批写的是
+§4.14 那张表，催收竖未开工），所以"三类统一收口"这句话只成立一类，边界清点见
+`AI_CORE_FEATURE_INVENTORY.md` 短板 **G21**。
+
+---
+
 ## 五、索引策略
 
 ### 5.1 单列索引
@@ -869,3 +954,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.3 | 2026-09-19 | @backend | 新增 §4.13 知识库版本与灰度的三列（R-6 / T-P2-05）：给出 `version/canary_enabled/canary_percent` 的 PG 实测类型与"唯一读者是缓存命名空间折算"的定位，写明 `not null` 是必需项、写这三列必须走 `UpdateVersionCanary`（否则会 bump `updated_at` 而误删对侧缓存），并实算修正 §5.2 的知识库索引行（登记的复合索引在库里不存在）。**本行为 v1.4 补登记**：§4.13 落地时只改了文档头版本号，漏了本表 |
 | v1.4 | 2026-09-19 | @backend | 新增 §4.14 审批检查点 `approval_requests`（N-4 / T-P3-01）：直读 `information_schema` + `pg_indexes` 给出列/索引实测形状，写明两条唯一索引**必须**是部分的（丢了谓词会把闸门锁死 / 让第二条 auto-approve 撞空串）、身份四列在 PG 可空而判据在 `normalize()`、裁决写回的列白名单与 CAS，以及本卡"零构造零读取、`ExpireOverdue` 暂无按节拍调用方"的前置事实（项 12 / 短板 G20）；同时补记 GORM `tx.Model(&a)` 会追加主键条件、必须传空壳这条实测坑 |
 | v1.5 | 2026-09-20 | @backend | §4.14 的接线现状改写（N-4 / T-P3-02）：装配入口/恢复读入口/到期清扫三处生产调用点落地，`check-unwired-assets.sh` 项 12 由两行 `unwired` 扩为三行并全部翻 `wired`（`ExpireOverdue` 那条用"两个实参"的形状与草稿侧同名方法分开，否则删掉清扫器不会红）；同时写清旗子边界 —— `FF_LTC_APPROVAL_RESUME` 默认 `off`（该档下运行时不构造、表仍零写入），`shadow` 只清扫不挂起，布尔真值降档到 `shadow`，所以"这张表有生产写入方"只在推 `on` 之后成立。v1.4 那句"零构造零读取"作为历史事实保留在修订历史里，正文已按其被推翻的部分改写 |
+| v1.6 | 2026-09-20 | @backend | 新增 §4.15 统一人工待办 `human_tasks`（N-9 / T-P3-03）：直读 `information_schema` + `pg_indexes` 给出 19 列 9 索引的实测形状，写明 C3"统一模型 + 分离视图"落到库里就是**一条状态机 + 三列互斥 SLA**（为什么不是一列 `sla_due_at`：AC④ 的指标隔离必须能被查询表达），开放唯一索引 `uq_human_task_open` 为什么**只能**写成"排除两个终态"的否定式（GORM tag 用逗号切段，`IN ('a','b')` 放不进去），四个状态里为什么刻意没有 `expired`（逾期是读数不是状态，落成终态等于指标把自己要暴露的问题抹平），以及长度上限为什么分"身份即拒 / 展示裁断"两档、且裁断按字符不按字节。同时登记一条与卡面的**偏离**：卡面要求的 `v3_47_0_human_task_migration.go` 不存在且不该存在 —— 本仓版本化迁移在启动路径上固定空跑，建表登记只有 `allModels()` + `migrate_test.go` 的 `mustCover` 两个落点 |

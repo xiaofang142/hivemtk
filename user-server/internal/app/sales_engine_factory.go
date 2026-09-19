@@ -129,6 +129,10 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 	// 编排器的生产者字段保持零值 nil，HandleIncomingWithAgent 尾部那条 `!= nil` 分支
 	// 因此根本不进（由 TestRunOrderDraftProduce_NilProducerIsNoop 锁定）。
 	attachOrderDraftProducer(o, currentOrderDraftRuntime())
+
+	// 会话人工待办生产者（T-P3-03）：全局底座由 router.Setup 里的 InitHumanTaskRuntime
+	// 装配，这里只负责挂。没装配（拿不到 DB 句柄）时挂的是 nil，与"本卡之前"逐字一致。
+	attachHumanTaskProducer(o)
 	return o
 }
 
