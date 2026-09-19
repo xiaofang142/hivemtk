@@ -14,7 +14,7 @@ export function createTabManager(chromeAPI = chrome) {
   async function waitForLoad(tabId, timeoutMs = 10000) {
     const budget = Math.min(Math.max(Number(timeoutMs) || 10000, 500), 30000);
     const deadline = Date.now() + budget;
-    let title = '';
+    let title;
     for (;;) {
       let tab;
       try {
