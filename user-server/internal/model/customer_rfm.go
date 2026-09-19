@@ -103,3 +103,11 @@ const (
 	RecoveryStageFailed    = "failed"
 	RecoveryStageCancelled = "cancelled"
 )
+
+// RecoveryDefaultMaxAttempts 挽回队列默认最大尝试次数。
+//
+// 与列上的 `default:3` 同源（两条建表路径都已实测：AutoMigrate 与
+// internal/migration/migrations/h_p1_migration.go 的 DDL 都把 max_attempts 落成 3，
+// 且零值插入后 GORM 会把 3 回写进结构体）。常量存在的意义是给
+// "显式写入" 与 "依赖列默认" 两条路同一个口径，避免默认值改了一处忘一处。
+const RecoveryDefaultMaxAttempts = 3

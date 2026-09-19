@@ -16,6 +16,20 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
+// 外发被拦的两类原因用哨兵错误表达，供调用方分支判断。
+//
+// 为什么单独定义：队列消费侧的调用方（挽回队列 worker，见 recovery_queue_worker.go）
+// 必须区分"对方退订了，这条该终止"和"刚发过，稍后再试"，
+// 两者的队列处置完全相反（cancelled vs 退避重试）。只靠 fmt.Errorf 的文案区分，
+// 就等于把控制流建在日志字符串上——改一句措辞就会静默改变队列行为。
+// 包装后 Error() 前缀与原来逐字一致，字符串匹配的既有调用方不受影响。
+var (
+	// ErrDoNotContact 命中全局退订标志位：该收件人不可再外发
+	ErrDoNotContact = errors.New("do-not-contact")
+	// ErrReachCooldown 冷却期内已发过：稍后可重试
+	ErrReachCooldown = errors.New("cooldown")
+)
+
 // ProactiveReachRequest 主动触达请求（按 OneID 智能选渠道）
 type ProactiveReachRequest struct {
 	// CustomerID 客户主键 ID（从线索/客户库中获取）
@@ -181,13 +195,13 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 
 	if req.Phone != "" {
 		if s.checkDoNotContact(ctx, "", "sms", req.Phone) {
-			return nil, fmt.Errorf("do-not-contact: phone %s has opted out globally, send skipped", req.Phone)
+			return nil, fmt.Errorf("%w: phone %s has opted out globally, send skipped", ErrDoNotContact, req.Phone)
 		}
 		return s.sendSMS(ctx, req, req.Phone)
 	}
 	if req.Email != "" {
 		if s.checkDoNotContact(ctx, "", "email", "email:"+NormalizeEmail(req.Email)) {
-			return nil, fmt.Errorf("do-not-contact: email %s has opted out globally, send skipped", req.Email)
+			return nil, fmt.Errorf("%w: email %s has opted out globally, send skipped", ErrDoNotContact, req.Email)
 		}
 		return s.sendEmail(ctx, req, req.Email)
 	}
@@ -207,7 +221,7 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 
 	available = s.filterDoNotContactChannels(ctx, customer.UnifiedID, available)
 	if len(available) == 0 {
-		return nil, fmt.Errorf("do-not-contact: customer %s has opted out on all available channels", customer.UnifiedID)
+		return nil, fmt.Errorf("%w: customer %s has opted out on all available channels", ErrDoNotContact, customer.UnifiedID)
 	}
 
 	preferred, _ := s.loadCustomerPreferredOrder(ctx, customer.UnifiedID, available)
@@ -232,7 +246,7 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 	}
 
 	if !s.checkCooldown(ctx, customer.UnifiedID) {
-		return nil, fmt.Errorf("cooldown: customer %s recently received a message, please wait", customer.UnifiedID)
+		return nil, fmt.Errorf("%w: customer %s recently received a message, please wait", ErrReachCooldown, customer.UnifiedID)
 	}
 
 	channel, recipient, accountID, err := s.pickChannel(ctx, available, customer)
@@ -345,12 +359,19 @@ func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []st
 	return "", "", "", fmt.Errorf("no active account for customer %s, tried: %s", customer.UnifiedID, strings.Join(tried, ","))
 }
 
+// reachCooldownWindow 同一客户两次外发的最小间隔。
+//
+// 提成常量是为了让依赖它的不变量可断言：挽回 worker 的退避基数必须严格大于这个窗口
+// （见 recovery_queue_worker.go 的 NewRecoveryQueueWorker），否则每次到期都会先撞冷却、
+// 白耗一轮。以前它只写在 SetNX 调用里，改一处就得靠记忆去改另一处。
+const reachCooldownWindow = 60 * time.Minute
+
 func (s *ProactiveReachService) checkCooldown(ctx context.Context, oneID string) bool {
 	if oneID == "" {
 		return true
 	}
 	key := "mtk:reach:cooldown:" + oneID
-	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", 60*time.Minute)
+	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", reachCooldownWindow)
 	if err != nil {
 		return true
 	}

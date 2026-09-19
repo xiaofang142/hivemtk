@@ -28,29 +28,76 @@ func NewRecoveryQueueServiceWithRepo(r repository.RecoveryQueueRepository) *Reco
 	return &RecoveryQueueService{repo: r, nowFunc: time.Now}
 }
 
+// RecoveryEnqueueInput 入队参数。
+//
+// 为什么是结构体而不是继续加位置参数：原来 7 个参数里已有 4 个同类 string，
+// 调用点写错顺序编译器不会拦（把 reason 填进 strategy 就是静默的错数据）；
+// 再加文案相关字段要到 12 个，风险继续放大。
+type RecoveryEnqueueInput struct {
+	CustomerID string
+	UnifiedID  string
+	Account    string
+	Reason     string
+	Strategy   string
+	Priority   int
+	// Content 外发文案。留空 ⇒ 消费 worker 只登记不发送（见 recovery_queue_worker.go 文件头）。
+	Content string
+	// Subject 邮件主题（选发邮件渠道时用）。
+	Subject string
+	// TemplateID 渠道侧模板 ID（短信/邮件/WhatsApp 模板）。
+	TemplateID string
+	// Params 模板参数。
+	Params map[string]string
+	// PreferredChannels 期望渠道（按序）；留空则由 ProactiveReachService 自行选路。
+	PreferredChannels []string
+	// MaxAttempts 最大尝试次数；0 表示沿用列默认值 3。
+	MaxAttempts int
+}
+
 // Enqueue 手动入队
-func (s *RecoveryQueueService) Enqueue(ctx context.Context, customerID, unifiedID, account, reason, strategy string, priority int) (*model.RecoveryQueue, error) {
-	if customerID == "" {
+func (s *RecoveryQueueService) Enqueue(ctx context.Context, in *RecoveryEnqueueInput) (*model.RecoveryQueue, error) {
+	if in == nil {
+		return nil, errors.New("入队参数不能为空")
+	}
+	if in.CustomerID == "" {
 		return nil, errors.New("customer_id 不能为空")
 	}
+	priority := in.Priority
 	if priority < 1 || priority > 10 {
 		priority = 5
 	}
+	reason := in.Reason
 	if reason == "" {
 		reason = "churn"
 	}
+	strategy := in.Strategy
 	if strategy == "" {
 		strategy = "sms_coupon"
 	}
+	maxAttempts := in.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = model.RecoveryDefaultMaxAttempts
+	}
+	meta, err := encodeRecoveryMeta(&RecoveryMessage{
+		Content:           in.Content,
+		Subject:           in.Subject,
+		TemplateID:        in.TemplateID,
+		Params:            in.Params,
+		PreferredChannels: in.PreferredChannels,
+	})
+	if err != nil {
+		return nil, err
+	}
 	item := &model.RecoveryQueue{
-		CustomerID:  customerID,
-		UnifiedID:   unifiedID,
-		Account:     account,
+		CustomerID:  in.CustomerID,
+		UnifiedID:   in.UnifiedID,
+		Account:     in.Account,
 		Reason:      reason,
 		Strategy:    strategy,
 		Priority:    priority,
 		Stage:       model.RecoveryStageQueued,
-		MaxAttempts: 3,
+		MaxAttempts: maxAttempts,
+		MetaJSON:    meta,
 	}
 	if err := s.repo.Create(ctx, item); err != nil {
 		return nil, err
@@ -60,8 +107,8 @@ func (s *RecoveryQueueService) Enqueue(ctx context.Context, customerID, unifiedI
 
 // MarkAttempt 记录一次触达尝试
 //
-//	stage: succeed / failed / running
-//	nextDelay: 下次重试延迟（0 表示不再重试）
+//	stage: queued（还要再试）/ succeed / failed / cancelled
+//	nextDelay: 下次重试延迟（0 表示不再排期）
 func (s *RecoveryQueueService) MarkAttempt(ctx context.Context, id uint64, channel, result, stage string, nextDelay time.Duration) error {
 	if id == 0 {
 		return errors.New("id 不能为空")
@@ -112,6 +159,28 @@ func (s *RecoveryQueueService) Distribution(ctx context.Context) (map[string]int
 // ListReadyForAttempt 取出可触达任务
 func (s *RecoveryQueueService) ListReadyForAttempt(ctx context.Context, limit int) ([]*model.RecoveryQueue, error) {
 	return s.repo.ListReadyForAttempt(ctx, s.nowFunc(), limit)
+}
+
+// DeferAttempt 只把下次可触达时间推后，**不消耗** attempts。
+//
+// 为什么需要它：ListReadyForAttempt 的排序是 `priority ASC, next_attempt_at ASC NULLS FIRST`
+// —— 没有文案、worker 只能跳过的那批项 next_attempt_at 恒为 NULL，会永久占住队首，
+// 在单轮上限（AC④）下把有文案的项挤出去。跳过时必须把它们推离队首，
+// 又不能记成"发送失败一次"（那会消耗掉三次机会里的一次，而什么都没发）。
+func (s *RecoveryQueueService) DeferAttempt(ctx context.Context, id uint64, delay time.Duration) error {
+	if id == 0 {
+		return errors.New("id 不能为空")
+	}
+	if delay <= 0 {
+		return errors.New("delay 必须为正")
+	}
+	item, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	next := s.nowFunc().Add(delay)
+	item.NextAttemptAt = &next
+	return s.repo.Update(ctx, item)
 }
 
 func nextDelayPtr(now time.Time, nextDelay time.Duration) *time.Time {

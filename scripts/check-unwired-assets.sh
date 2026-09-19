@@ -60,7 +60,7 @@ BASELINE=(
   "4|工具审计 DB 持久化|func NewDBAuditLogger|NewDBAuditLogger\(|"
   "4|工具审计 内存+DB+告警 组合器|func NewCompositeAuditLogger|NewCompositeAuditLogger\(|"
   "5|Agent 双模式分派（passive/active）|func Resolver|lifecycle\\.Resolver\\(|"
-  "6|挽回队列的定时消费者|type RecoveryQueue struct|RecoveryQueue|internal/cron internal/app"
+  "6|挽回队列的定时消费者|type RecoveryQueue struct|RecoveryQueue|internal/cron internal/app|wired"
   "7|Agent 断点续跑 存点|func SaveCheckpoint|SaveCheckpoint\(||wired"
   "7|Agent 断点续跑 取点|func LoadLatestCheckpoint|LoadLatestCheckpoint\(||wired"
   "7|Agent 断点续跑 续跑阶段|func ResumeStage|ResumeStage\(||wired"

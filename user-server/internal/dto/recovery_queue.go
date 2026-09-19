@@ -1,6 +1,10 @@
 package dto
 
 // RecoveryEnqueueRequest 入队请求
+//
+// Content 是消费 worker 唯一认的外发文案（见 service.RecoveryMessage）：
+// 留空可以入队，但 worker 只会一直跳过它 —— 入队 ≠ 会发出去，这一点必须在字段注释里说明白，
+// 否则运维会以为"排进去了就一定会触达"。
 type RecoveryEnqueueRequest struct {
 	CustomerID string `json:"customer_id" binding:"required"`
 	UnifiedID  string `json:"unified_id"`
@@ -8,6 +12,18 @@ type RecoveryEnqueueRequest struct {
 	Reason     string `json:"reason"`
 	Strategy   string `json:"strategy"`
 	Priority   int    `json:"priority"`
+	// Content 外发文案；worker 只发有文案的项
+	Content string `json:"content"`
+	// Subject 邮件主题
+	Subject string `json:"subject"`
+	// TemplateID 渠道侧模板 ID
+	TemplateID string `json:"template_id"`
+	// Params 模板参数
+	Params map[string]string `json:"params"`
+	// PreferredChannels 期望渠道（按序），留空由触达服务选路
+	PreferredChannels []string `json:"preferred_channels"`
+	// MaxAttempts 最大尝试次数；0 表示用默认 3
+	MaxAttempts int `json:"max_attempts"`
 }
 
 // RecoveryMarkAttemptRequest 触达尝试请求

@@ -13,7 +13,7 @@ func TestRecoveryQueueService_Enqueue_Default(t *testing.T) {
 	mock := newMockRecoveryRepo()
 	svc.repo = mock
 
-	item, err := svc.Enqueue(context.Background(), "c1", "u1", "a1", "", "", 0)
+	item, err := svc.Enqueue(context.Background(), recoveryEnqueueArgs("c1", "u1", "a1", "", "", 0))
 	if err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestRecoveryQueueService_Enqueue_Custom(t *testing.T) {
 	svc := NewRecoveryQueueService()
 	svc.repo = newMockRecoveryRepo()
 
-	item, err := svc.Enqueue(context.Background(), "c1", "u1", "a1", "complaint", "phone_call", 2)
+	item, err := svc.Enqueue(context.Background(), recoveryEnqueueArgs("c1", "u1", "a1", "complaint", "phone_call", 2))
 	if err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestRecoveryQueueService_MarkAttempt(t *testing.T) {
 	mock := newMockRecoveryRepo()
 	svc.repo = mock
 
-	item, _ := svc.Enqueue(context.Background(), "c1", "u1", "a1", "churn", "sms", 5)
+	item, _ := svc.Enqueue(context.Background(), recoveryEnqueueArgs("c1", "u1", "a1", "churn", "sms", 5))
 	if err := svc.MarkAttempt(context.Background(), item.ID, "sms", "delivered", "failed", 30*time.Second); err != nil {
 		t.Fatalf("MarkAttempt failed: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestRecoveryQueueService_MarkAttempt(t *testing.T) {
 func TestRecoveryQueueService_MarkRecovered(t *testing.T) {
 	svc := NewRecoveryQueueService()
 	svc.repo = newMockRecoveryRepo()
-	item, _ := svc.Enqueue(context.Background(), "c1", "u1", "a1", "churn", "sms", 5)
+	item, _ := svc.Enqueue(context.Background(), recoveryEnqueueArgs("c1", "u1", "a1", "churn", "sms", 5))
 	if err := svc.MarkRecovered(context.Background(), item.ID, 99000); err != nil {
 		t.Fatalf("MarkRecovered failed: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestRecoveryQueueService_MarkRecovered(t *testing.T) {
 func TestRecoveryQueueService_Cancel(t *testing.T) {
 	svc := NewRecoveryQueueService()
 	svc.repo = newMockRecoveryRepo()
-	item, _ := svc.Enqueue(context.Background(), "c1", "u1", "a1", "churn", "sms", 5)
+	item, _ := svc.Enqueue(context.Background(), recoveryEnqueueArgs("c1", "u1", "a1", "churn", "sms", 5))
 	if err := svc.Cancel(context.Background(), item.ID); err != nil {
 		t.Fatalf("Cancel failed: %v", err)
 	}
@@ -94,9 +94,24 @@ func TestRecoveryQueueService_Cancel(t *testing.T) {
 	}
 }
 
+// recoveryEnqueueArgs 把旧的 6 位置参数写法转成结构体入参（既有断言只关心其中几个字段）
+func recoveryEnqueueArgs(customerID, unifiedID, account, reason, strategy string, priority int) *RecoveryEnqueueInput {
+	return &RecoveryEnqueueInput{
+		CustomerID: customerID,
+		UnifiedID:  unifiedID,
+		Account:    account,
+		Reason:     reason,
+		Strategy:   strategy,
+		Priority:   priority,
+	}
+}
+
 type mockRecoveryRepo struct {
 	items map[uint64]*model.RecoveryQueue
 	next  uint64
+	// failMarkAttemptOn 让指定 id 的台账写入失败，用来验证"记账失败不拖垮整轮"
+	failMarkAttemptOn uint64
+	lastLimit         int
 }
 
 func newMockRecoveryRepo() *mockRecoveryRepo {
@@ -152,7 +167,17 @@ func (m *mockRecoveryRepo) ListByStage(ctx context.Context, stage string, page, 
 	return out, int64(len(out)), nil
 }
 
+func (m *mockRecoveryRepo) countReady(ctx context.Context, t testing.TB, now time.Time, limit int) int {
+	t.Helper()
+	out, err := m.ListReadyForAttempt(ctx, now, limit)
+	if err != nil {
+		t.Fatalf("ListReadyForAttempt: %v", err)
+	}
+	return len(out)
+}
+
 func (m *mockRecoveryRepo) ListReadyForAttempt(ctx context.Context, now time.Time, limit int) ([]*model.RecoveryQueue, error) {
+	m.lastLimit = limit
 	var out []*model.RecoveryQueue
 	for _, v := range m.items {
 		if v.Stage == model.RecoveryStageQueued && v.Attempts < v.MaxAttempts {
@@ -168,6 +193,9 @@ func (m *mockRecoveryRepo) ListReadyForAttempt(ctx context.Context, now time.Tim
 }
 
 func (m *mockRecoveryRepo) MarkAttempt(ctx context.Context, id uint64, channel, result string, nextAt *time.Time) error {
+	if id == m.failMarkAttemptOn {
+		return errNotFound{msg: "台账写入失败（测试注入）"}
+	}
 	if v, ok := m.items[id]; ok {
 		v.Attempts++
 		v.LastChannel = channel

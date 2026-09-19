@@ -26,6 +26,7 @@
 | F13 | 自学习闭环 | 实时反馈 + 销冠蒸馏 + Prompt迭代 + SOP自动优化 + Thompson Bandit + trace调权 | `internal/service/feedback_loop/*`, `trace_learning/*` |
 | F14 | 多智能体 | sales/cs/hybrid × passive/active | `internal/model/ai_agent.go`, `agent/lifecycle/` |
 | F15 | 评测 | ChrF + LLM Judge | `internal/aiagent/eval/*` |
+| F16 | 流失预警与挽回 | RFM/Churn 分层入队 + 到期消费外发（W-5，2026-09-19 接线） | `internal/service/customer_rfm.go`、`internal/service/recovery_queue*.go` |
 
 ---
 
@@ -244,6 +245,42 @@ Naturalness/Conciseness/Empathy/Professionalism/Persuasiveness
 ## F15 评测
 ChrF 字符 n-gram + LLM Judge 主观评审；EvaluateBatch/EvaluateSingle
 
+## F16 流失预警与挽回（W-5，2026-09-19 接线）
+RFM/Churn 定时重算（`customer_rfm.go` 周批）→ `churn` 分层自动入队 `recovery_queue` → **消费侧 worker 发出**。
+消费侧此前不存在：`ListReadyForAttempt` 只被只读路由调过，队列只进不出。
+
+- **入队两条路**（语义不同，别混）：① `CustomerRFMService.enqueueRecovery` 自动入队，**只带 reason/strategy/priority，
+  不带任何文案**（`meta_json` 走列默认 `'{}'`），`MaxAttempts` 不写 ⇒ 吃列默认 3；② admin `POST /recovery-queue/enqueue`
+  显式入队，可带 `content/subject/template_id/params/preferred_channels/max_attempts`。
+- **消费者** `internal/service/recovery_queue_worker.go`，装配点 `internal/app/recovery_worker_wiring.go`
+  （由 `cmd/api/main.go` 触发）。开关 `FF_LTC_RECOVERY_WORKER` **三态**：`off`（默认，`Start` 直接 no-op）/
+  `shadow` / `enforce`，**布尔真值降级为 `shadow`**（与熔断旗子同纪律）。节奏：`LTC_RECOVERY_WORKER_INTERVAL`
+  默认 5m（下限 30s）、`..._BATCH` 默认 20（上限 500，即 AC④ 的单轮上限）、`..._BACKOFF` 默认 24h。
+- **到期口径**（repo 既有，未改）：`stage='queued' AND attempts<max_attempts AND (next_attempt_at IS NULL OR <=now)`，
+  排序 `priority ASC, next_attempt_at ASC NULLS FIRST`。
+- **外发唯一出口是 `ProactiveReachService.ReachByCustomer`**，所以渠道可用性排序、全局退订（DNC）、60min 触达冷却
+  全部自动继承，worker 自己不另写一套频控。DNC 命中 ⇒ `stage=cancelled`（不再重试）；冷却命中 ⇒ **只推后、不消耗 attempt**。
+- **shadow 的副作用为零**：请求带 `DryRun=true`，走完整选路后在发送前返回，不取认领锁、不写台账，只累计
+  `would_send/would_fail`。
+- **认领锁** `mtk:recovery:claim:<id>`（`SetNX`，TTL 10min）：拿不到或出错一律**不发**（fail-**closed**）。
+  这与 reach 侧的冷却/DNC 判定方向**刻意相反**且都写进注释——那两处依赖出错时 fail-**open**（Redis 抖动不该静默吞掉
+  一次本该发的触达），而这里"判定不了就发"等于对同一客户重复外发。`cache.GlobalIsRedis()` 为假时锁退化为进程内，
+  `Start` 显式告警"认领仅在单进程内有效"。
+- **`uq_recovery_active` 在生产库不存在**（实测，非推断）：该部分唯一索引只写在 HP1 迁移 DDL 里，而生产建表走
+  `db.AutoMigrate()`、启动期迁移固定 `ExecuteUpgrade(ctx,"v1.0.0","v1.0.0")` ⇒ 实测 `recovery_queue` 只有 4 条索引、
+  重复活跃插入返回 `<nil>`。"一客户一条活跃"仅由 `recoveryQueueRepo.Create` 读后写保证（跨进程有竞态），
+  这正是上面那道认领锁存在的理由。
+- **发出去 ≠ 挽回来**：末次成功发送只把 stage 推到 `running`（等结果，既离开到期集合、又仍算活跃行），
+  `succeed` 只能由成交侧经 `MarkRecovered` 判定，worker 永不自证成功。
+- ⚠️ **`enforce` 不会轰炸未配文案的客户**：RFM 自动入队的行 `meta_json` 无正文 ⇒ 一律走"无内容跳过"分支
+  （推后 `backoff`，不消耗 attempt）。真发需要先经 admin 入队带上内容，或给存量行补 `meta_json`。
+- ⚠️ **本路径不经过 W-1 审批门**（见 G13）：冷触达审批门挂在工具 executor 建链点，`ProactiveReachService` 没有
+  pre-send 钩子、且 sms/email 的 accountID 恒为空 ⇒ 结构上无处可挂，cron/worker 侧外发目前是闸门的盲区。
+- 观测：每轮结束打一行 `[RecoveryWorker] 本轮结束 mode=… 到期=… 已发=… 无文案跳过=… 退订终止=… 冷却推后=…
+  失败记账=… 锁被占=… 取锁不可用=… 台账写失败=…`（shadow 追加"预计可发/预计失败，均未发出未记账"）；
+  日志**只含 customer_id 与渠道，不含手机号/邮箱**。计数目前只在日志里，未出口成端点（与 W-1/W-3 的
+  `/api/agent/tools/*` 观察端点相比是缺口，登记在待办）。
+
 ---
 
 ## 已知短板汇总
@@ -268,3 +305,4 @@ ChrF 字符 n-gram + LLM Judge 主观评审；EvaluateBatch/EvaluateSingle
 | G10 | fallback_tree | 模板兜底文案单一 |
 | G11 | active 模式 | 主动触达骨架未落地 |
 | G12 | eval 包 | ChrF+LLM Judge 较薄，无对话级端到端评测集 |
+| G13 | `service/proactive_reach.go` | **审批门盲区**：闸门挂在工具 executor 建链点，`ProactiveReachService` 无 pre-send 钩子 ⇒ cron/worker/直接 API 调用三条非工具路径的外发一律不受 W-1 约束（T-P1-07 的挽回 worker 即此类）。修法是在 `ReachByCustomer` 发送前加一个显式 checker 钩子，而不是在 worker 里伪造一个键为空的判定 |

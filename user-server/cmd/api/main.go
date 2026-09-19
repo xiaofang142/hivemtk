@@ -345,6 +345,12 @@ func main() {
 	defer churnCron.Stop(context.Background())
 	logger.Info("[ChurnScoreCron] BG/NBD 流失评分周批已装配")
 
+	// W-5 挽回队列消费：入队侧（RFM/Churn → Enqueue）早已就绪，缺的是把到期项发出去的人。
+	// 装配落在 internal/app（见 recovery_worker_wiring.go），开关 off 时 Start 直接 no-op。
+	if recoveryWorker := app.InitRecoveryWorker(db.GetDB()); recoveryWorker != nil {
+		defer recoveryWorker.Stop(context.Background())
+	}
+
 	ragEvalCron := service.NewRagEvalCron()
 	ragEvalCron.Start(context.Background())
 	defer ragEvalCron.Stop(context.Background())

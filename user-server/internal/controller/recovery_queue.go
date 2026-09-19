@@ -36,7 +36,20 @@ func (c *RecoveryQueueController) Enqueue(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
-	item, err := c.svc.Enqueue(context.Background(), req.CustomerID, req.UnifiedID, req.Account, req.Reason, req.Strategy, req.Priority)
+	item, err := c.svc.Enqueue(context.Background(), &service.RecoveryEnqueueInput{
+		CustomerID:        req.CustomerID,
+		UnifiedID:         req.UnifiedID,
+		Account:           req.Account,
+		Reason:            req.Reason,
+		Strategy:          req.Strategy,
+		Priority:          req.Priority,
+		Content:           req.Content,
+		Subject:           req.Subject,
+		TemplateID:        req.TemplateID,
+		Params:            req.Params,
+		PreferredChannels: req.PreferredChannels,
+		MaxAttempts:       req.MaxAttempts,
+	})
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "入队失败: "+err.Error())
 		return
