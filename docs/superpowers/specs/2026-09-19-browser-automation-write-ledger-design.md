@@ -531,3 +531,9 @@ B 后台占用时点执行 → 真实 HTTP 409 + `body.code=BROWSER_TASK_BUSY_80
 `go build ./...` rc=0，`browser_automation` 三包 `controller ok 0.635s / platform ok 0.457s / service ok 123.917s`、
 `internal/bridge ok 16.317s`、`cmd/nm-host ok 0.720s`、`internal/repository ok 134.956s` 全绿
 （日志 `/tmp/b12_verify_go1.log`、`/tmp/b12_verify_repo.log`）。12 个新增测试文件确在提交内。
+
+**未跑到的部分（不写成已验证）**：批11 扩展侧的补确认路径**没有在真 Chrome 里跑过**——夹具里只装了
+A 链路扩展，桥接扩展未加载，而真跑它要把消息发到真实平台会话页（本泳道纪律禁止）。
+它的证据面因此是：12 条变异击杀的单测（`/tmp/b11_js_battery.log`）+ 服务端活腿把「认领 / 互斥 /
+超时重投 / ack 了结」这一整圈闭环真跑出来（`/tmp/b12_leg_new_rerun.log` 9/9）；
+「扩展真的会去调那第二次幂等 ack POST」这一跳，属真机待用户侧回归项。
