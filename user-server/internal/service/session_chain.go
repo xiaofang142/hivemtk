@@ -37,6 +37,10 @@ func (s *SessionChainService) TriggerCSATOnClose(session *model.CustomerSession)
 	if session == nil || session.SessionID == "" {
 		return
 	}
+	// 仓储在构造时读 pkg/db 的全局句柄（repository/csat.go:23 等三处），所以构造必须留在调用方
+	// 这一侧：一旦放进下面的异步体，那次读就可能与"下一条用例改写全局句柄"的 db.SetTestDB()
+	// 撞在同一地址上 —— -race 在 TestE2E_WebChat_* 之间实测到这条竞态（单跑不复现）。
+	csat := NewCSATService()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -45,7 +49,6 @@ func (s *SessionChainService) TriggerCSATOnClose(session *model.CustomerSession)
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), utils.RagMetricsTimeout)
 		defer cancel()
-		csat := NewCSATService()
 		if _, err := csat.Trigger(ctx, session.SessionID, "auto"); err != nil {
 
 			return

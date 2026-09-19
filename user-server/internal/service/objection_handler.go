@@ -401,9 +401,13 @@ func fallbackVersionOf(templateID uint) int {
 	}
 	versionCacheMu.RUnlock()
 
+	// 句柄必须在 spawning 之前解析：repository.GetDB() 读的是 pkg/db 的包级全局，
+	// 放进下面的异步体就会与别的 goroutine（测试里 100 处 db.SetTestDB，进程里任何一次
+	// 重初始化）抢同一地址。同形状的 fire-and-forget 见 session_chain.go:TriggerCSATOnClose。
+	handle := repository.GetDB()
 	go func(id uint) {
 		defer func() { _ = recover() }()
-		repo := repository.NewScriptLibraryRepository(repository.GetDB())
+		repo := repository.NewScriptLibraryRepository(handle)
 		if repo == nil {
 			return
 		}
