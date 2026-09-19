@@ -73,6 +73,7 @@
 permission → ratelimit → circuit → retry → timeout → audit → cost → feedback → dead_letter → result_cache → double_intercept → param_validator；LoopGuard 同指纹 3次/60s 拒绝
 - 说明：上表是**全部已实现的装饰器**，单次工具调用的实际链更短。`ToolExecutor.buildHandler` 实跑为
   permission → ratelimit → circuit → retry → timeout → audit(+cost)，`FeedbackSink` 非空时再在外面套一层；
+  `FF_LTC_APPROVAL_GATE=shadow` 时最外层再套一层审批门（见 W-1 条）；
   dead_letter / result_cache / double_intercept / param_validator / LoopGuard 挂在 ToolRouter 与 Agent Loop 上，不在 executor 链内
 - **circuit 曾恒不生效（T-P1-04 于 2026-09-19 接线）**：`CircuitBreakerRegistry` 此前只在测试里构造，
   `ToolExecutorConfig.CircuitBreaker` 生产无赋值点 ⇒ 装饰器 nil 早退，链上那格是空的。现由
@@ -88,6 +89,25 @@ permission → ratelimit → circuit → retry → timeout → audit → cost �
   根因是 `NewToolAlertManager` 本身无生产调用方，属审计告警侧缺口，见基线项 4）
 - 观测入口：`GET /api/agent/tools/circuit`（一次返回 mode / 生效配置 / executor 侧逐工具状态 / would-block 报告，
   `wired=false` 时其余字段皆空，不可读作"没有工具出问题"）
+- **W-1 冷触达审批门接线（T-P1-05 于 2026-09-19，本版本只到 shadow，不拦任何外发）**：
+  此前的缺口比"`SetGlobalApprovalChecker` 生产零调用"更深一层——`WithApproval` / `WithApprovalChecker`
+  的非测试调用点同样为 0，即**没有任何工具被审批门包过**，只补注入点等于接一根没人插的线。现改在
+  executor 唯一建链点挂载：`internal/app/approval_wiring.go:applyApprovalGate` 按 `FF_LTC_APPROVAL_GATE`
+  两态装配，`tooluse.ApprovalGateDecorator` 只包 `IsColdOutreachTool` 命中的工具，位置在整条链之外
+  （被拒的冷触达不消耗限流令牌、不进重试、不被 audit 记成"执行过一次外发"、不产生工具反馈）
+  - **为什么本版本不给阻断**：`WhiteListApprovalChecker` 是**默认拒绝**语义（旗子没开 → `disabled_by_flag`
+    拒绝；开了但账号不在表里 → `denied_default` 拒绝），而白名单唯一的灌入口是下面的 admin 端点：手工、
+    不落库、重启即空。今天打开阻断 = 所有冷触达外发立刻全拒。`block`/`enforce`/`active` 一律降级 shadow 并告警，
+    代码里不存在把 `ApprovalShadow` 置 false 的分支；转阻断是 T-P1-06，准入条件是一份 shadow 报告 + 可运营的授权来源
+  - **两把旗子不是一把**：`FF_LTC_APPROVAL_GATE` 决定闸门挂没挂链，`ai.safety.tool_approval_gate`
+    （env `FF_AI.SAFETY_TOOL_APPROVAL_GATE`，featureflag 读取）决定白名单生不生效。观察端点两把一起回显，
+    否则 `would_deny=100%` 且 `by_reason` 全是 `disabled_by_flag` 会被读成"账号都没被批准"
+  - 全局注入点交出的不是裸 checker 而是 `shadowApprovalChecker` 包装版：`WithApproval` 那条路拿到 false 就硬拦、
+    它不认识 `ApprovalShadow`，不包这层则"本卡不阻断"只对装饰器那条路成立；inner 仍被问，留痕一笔不少
+  - 观测入口：`GET /api/agent/tools/approval`（mode / wired / global_checker_set / 两把旗子 /
+    `decision_report{total, would_deny, would_deny_rate_pct, by_reason, per_tool}`；未接线时不出现
+    `decision_report`，避免 0 读成"零次误拦"）；`POST /api/agent/tools/approval/whitelist`（admin，
+    授权/撤权只写进程内存，响应回显 `persisted:false`）；每次判定落一行 `event=tool_approval_decision`
 
 ### F3.3 MCP Server
 零依赖 JSON-RPC 2.0（协议 2025-06-18），initialize/tools.list/tools.call/ping；仅 HTTP
