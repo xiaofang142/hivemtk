@@ -13,10 +13,22 @@ set -e
 
 # 允许从项目根目录或子目录运行
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# 默认检查 user-server
-TARGET="${1:-$PROJECT_ROOT/hivemtk/user-server}"
+# TARGET 定位：默认值原先写死 $SCRIPT_DIR/../../hivemtk/user-server，只在「仓目录恰好叫
+# hivemtk」的两种布局里成立（本机 <ws>/hivemtk、GitHub runner 的 work/hivemtk/hivemtk）。
+# 换任何别的 checkout 路径（影子克隆 /tmp/xxx、fork 改名）就退化成
+# 「rc=1 + 只有一行 目标目录无效」的假红 —— 2026-09-20 第二十二轮在影子克隆里实测到。
+# 改为按候选顺序取第一个真正含 internal/ 的目录，两者都不中时保留旧值以便报错。
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TARGET=""
+for _cand in "$SCRIPT_DIR/../user-server" "$SCRIPT_DIR/../../hivemtk/user-server"; do
+  if [ -d "$_cand/internal" ]; then
+    TARGET="$(cd "$_cand" && pwd)"
+    break
+  fi
+done
+TARGET="${1:-$TARGET}"
+[ -n "$TARGET" ] || TARGET="$PROJECT_ROOT/user-server"
 TARGET_REL="${TARGET#$PROJECT_ROOT/}"
 
 # 颜色
@@ -252,6 +264,10 @@ echo ""
 echo "[6/10] 文件命名规范检查..."
 
 NAMING_VIOLATIONS=0
+# 与下面 6b 条同口径豁免「真正的测试文件」：*_test.go 且含 Test/Benchmark/Example 函数
+# —— Go 本就不把它编进产物，用 _ext/_test 命名是语义而非残渣。不排除的代价已实测：
+# local_dangerous_ext_test.go 让整条命名门（连同 CI 的 user-server-ci）常年红，规则失去信号。
+# 不含测试函数的 *_test.go 残渣仍会被本条拦下（反向测试已验证）。
 for f in $(find "$TARGET/internal" \
   \( -name "*_v[0-9]*.go" \
   -o -name "*_v[0-9][0-9]*.go" \
@@ -264,6 +280,9 @@ for f in $(find "$TARGET/internal" \
   -o -name "*_old*.go" \
   -o -name "*_bak*.go" \
   -o -name "*_copy*.go" \) 2>/dev/null); do
+  if [[ $f == *_test.go ]] && grep -Eq "^func (Test|Benchmark|Example)[A-Z_]" "$f" 2>/dev/null; then
+    continue
+  fi
   log_fail "[命名] 文件后缀违规: $f"
   NAMING_VIOLATIONS=$((NAMING_VIOLATIONS+1))
 done

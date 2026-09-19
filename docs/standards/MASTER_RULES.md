@@ -86,7 +86,7 @@ chore   杂项
 
 - [架构设计](../architecture/)
 - [部署指南](../operations/)
-- [API 文档](../../user-server/api)
+- [API 文档（Swagger 源文件）](../../user-server/docs/swagger.json) — 运行时 UI 见 user-server 的 `/swagger/index.html`
 
 ---
 

@@ -1,13 +1,18 @@
-# Release 工作流（2026-08-15 M4-P1-O11/O12 增强）
+# Release 工作流（2026-08-15 M4-P1-O11/O12 增强；2026-09-19 第二十二轮清理镜像链残留）
 #
 # 触发：tag 推送 (v*) 或手动触发
 # 功能：
-#   - 多架构 Docker 镜像构建（amd64 + arm64）
-#   - 推送到 GHCR
-#   - SBOM 生成（SPDX 格式）
-#   - 镜像签名（cosign keyless 模式）
+#   - Bridge 扩展打包（zip + sha256）
+#   - SBOM 生成（SPDX 格式，Go / Bridge 两个模块）
 #   - 创建 GitHub Release 附 SBOM + Bridge 扩展 zip
-#   - 镜像安全扫描（trivy）
+#
+# 镜像链（多架构 Docker 构建 + cosign 签名 + trivy 扫描）已删除：
+#   94415060「重构宿主机部署」删掉 user-server/Dockerfile（部署形态改为
+#   Docker 仅数据层 + 宿主机二进制），本工作流未同步清理 —— build-and-push 指向
+#   不存在的 Dockerfile、cosign 步骤引用不存在的 step id（digest 取到空串）、
+#   scan-image 扫描一个永不再产出的镜像。三者叠加 = 任何 tag 推送必然整链失败。
+#   恢复镜像发行时：先补回 Dockerfile，再重建这三段（digest 必须由带 id: 的
+#   build-push 步骤引出，不能凭空引用）。
 
 name: Release
 
@@ -19,89 +24,10 @@ on:
 
 permissions:
   contents: write
-  packages: write
-  id-token: write  # cosign keyless 需要 OIDC token
-  attestations: write  # sigstore 证明
-  security-events: write  # 扫描结果上传
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ============================================================
-  # 1. Docker 镜像构建 + 推送
-  # ============================================================
-  build-and-push:
-    name: Build & Push (multi-arch)
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-          - platform: linux/arm64
-            arch: arm64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version
-        id: version
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=dev
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=${VERSION%%.*}" >> $GITHUB_OUTPUT
-
-      - name: Build & push user-server
-        uses: docker/build-push-action@v5
-        with:
-          context: ./user-server
-          file: ./user-server/Dockerfile
-          platforms: ${{ matrix.platform }}
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-server:${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-server:${{ steps.version.outputs.VERSION_SHORT }}-${{ matrix.arch }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-server:latest-${{ matrix.arch }}
-          build-args: |
-            BUILD_DATE=${{ github.event.repository.updated_at }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ steps.version.outputs.VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
-
-      - name: Cosign 签名（keyless）
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          # 使用 GitHub OIDC token 进行无密钥签名
-          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-server@${{ steps.buildkit.outputs.digest }}
-
-  # ============================================================
-  # 2. Bridge 扩展打包
+  # 1. Bridge 扩展打包
   # ============================================================
   build-bridge:
     name: Build Bridge Extension
@@ -140,7 +66,7 @@ jobs:
           path: user-web/bridge/dist-zip/
 
   # ============================================================
-  # 3. SBOM 生成（SPDX 格式 + 多语言）
+  # 2. SBOM 生成（SPDX 格式 + 多语言）
   # ============================================================
   generate-sbom:
     name: Generate SBOM
@@ -173,32 +99,7 @@ jobs:
           retention-days: 90
 
   # ============================================================
-  # 4. 镜像安全扫描（Trivy）
-  # ============================================================
-  scan-image:
-    name: Trivy Security Scan
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/user-server:latest-amd64
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
-
-  # ============================================================
-  # 5. 创建 GitHub Release
+  # 3. 创建 GitHub Release
   # ============================================================
   create-release:
     name: Create GitHub Release
@@ -253,7 +154,6 @@ jobs:
 
             ### 下载
 
-            - **user-server 镜像**：`docker pull ghcr.io/${{ github.repository }}/user-server:${{ steps.version.outputs.VERSION }}-amd64`
             - **Bridge 扩展 ZIP**：见下方附件
             - **SBOM**：见下方附件（SPDX 格式）
 
@@ -263,11 +163,6 @@ jobs:
             # 校验 Bridge zip SHA256
             sha256sum bridge-${{ steps.version.outputs.VERSION }}.zip
             # 与 .sha256 文件对比
-
-            # 验证镜像签名（cosign keyless）
-            cosign verify ghcr.io/${{ github.repository }}/user-server:${{ steps.version.outputs.VERSION }}-amd64 \
-              --certificate-identity-regexp 'https://github.com/${{ github.repository }}' \
-              --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
             ```
           files: |
             artifacts/bridge-${{ steps.version.outputs.VERSION }}.zip

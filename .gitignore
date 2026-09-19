@@ -186,6 +186,11 @@ install.lock
 
 # ---------- 开发工具配置 ----------
 .air.toml
+# 例外：user-server/.air.toml 必须入仓 —— HOT_RELOAD.md §三 明写「已入仓，所有开发者
+# 共享同一份」，且 `make dev` 走 `cd user-server && air` 依赖它（缺文件时 air 退化为
+# 内置默认：不 source ../.env、不监听 .yaml/.html）。2026-09-20 第二十二轮实测：
+# 该文件此前从未被追踪，本文档的承诺对干净 checkout 不成立。
+!user-server/.air.toml
 
 # ---------- 生成产物（机器生成，不应纳入版本追踪）----------
 # 自动生成的代码/接口清单文档（由脚本重新生成）

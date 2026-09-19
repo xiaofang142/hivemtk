@@ -72,7 +72,7 @@
 ## 七、相关资源
 
 - [ADR 决策记录](architecture/adr/) — 架构决策历史
-- [bridge/README.md](bridge/README.md) — Bridge 桥接模块
+- [Bridge 运行手册](operations/Bridge_Runbook.md) — Bridge 桥接模块（内部设计稿 docs/bridge/ 按 .gitignore 只留本地，不入库）
 - [AI 功能清单基线](architecture/AI_CORE_FEATURE_INVENTORY.md) — AI 核心链路功能点 F1-F15 / 短板 G1-G12 事实来源（源码实测）
 
 ---

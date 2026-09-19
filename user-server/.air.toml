@@ -1,0 +1,43 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# 编译命令：source ../.env → set -a 自动 export → 编译 → tmp/main
+# - 工作目录是 user-server/，所以 ../.env 指向 hivemtk/.env
+# - 不存在时不报错，直接走 ${ENV_VAR:default} 占位符的默认值
+cmd = "sh -c 'set -a; [ -f ../.env ] && . ../.env; set +a; CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/main ./cmd/api'"
+bin = "tmp/main"
+# 运行命令：与编译同套 env 注入逻辑；exec 保证 tmp/main 收到 env
+# （不 source 的话，env 变量只活在 build 进程，spawn 出的 tmp/main 看不到）
+# 当 full_bin 设置时，air 跳过 bin+args_bin，直接用 full_bin 拉起子进程
+full_bin = "sh -c 'set -a; [ -f ../.env ] && . ../.env; set +a; exec ./tmp/main'"
+# 监听 .go / .yaml / .html / .json / 模板 变更；同时监听 ../.env / config.yaml 自动重编+重启
+include_ext = ["go", "tpl", "tmpl", "html", "yaml", "json"]
+include_file = ["../.env"]
+exclude_dir = ["tmp", "dist", "node_modules", "logs", "bin", "backups", "uploads", "data", "vendor", ".git"]
+# 排除测试文件 / 静态资源（避免 go test 触发的临时文件触发重编）
+exclude_regex = ["_test\\.go$", "flycheck_", "\\.out$", "\\.prof$", "\\.bak$", "coverage\\.html$"]
+exclude_unchanged = true
+delay = 1000
+# 出错时停止，避免 build 红状态反复重试拖死 CPU
+stop_on_error = true
+log = "air.log"
+
+# air [env] 会用 os.Setenv 注入到 build 进程；只放构建期参数，业务 env 已在 cmd / full_bin 里 source ../.env
+[env]
+CGO_ENABLED = "0"
+
+[color]
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true

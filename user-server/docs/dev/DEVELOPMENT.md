@@ -789,7 +789,7 @@ bash ../../scripts/api-inventory.sh                # API 一致性报告
 | 营销功能模块索引（94+ 子模块） | [../../docs/marketing-features/README.md](../../../docs/marketing-features/README.md) |
 | host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md) |
 | 工程级 README | [../README.md](../../README.md) |
-| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../../NEW_FUNCTIONS_INVENTORY.md) |
+| 函数清单 | `user-server/NEW_FUNCTIONS_INVENTORY.md`（机器生成，.gitignore 排除，不入库） |
 
 ---
 

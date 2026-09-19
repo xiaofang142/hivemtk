@@ -531,7 +531,7 @@ graph TD
 | host 推理栈部署方案 | [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md) |
 | ADR 决策记录（当前仅有 ADR-001/002/003/004，ADR-008 待补） | [../../../docs/architecture/adr/](../../../docs/architecture/adr/) |
 | 工程级 README | [../README.md](../../README.md) |
-| 函数清单 | [../NEW_FUNCTIONS_INVENTORY.md](../../NEW_FUNCTIONS_INVENTORY.md) |
+| 函数清单 | `user-server/NEW_FUNCTIONS_INVENTORY.md`（机器生成，.gitignore 排除，不入库） |
 | 代码开发手册 | [./DEVELOPMENT.md](./DEVELOPMENT.md) |
 | 代码规范 | [./CONVENTIONS.md](./CONVENTIONS.md) |
 | 功能清单 | [./FEATURES.md](./FEATURES.md) |

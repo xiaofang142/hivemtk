@@ -44,11 +44,11 @@ canonical = platform + "\n" + timestamp + "\n" + nonce + "\n" + raw_body
 signature = hex( HMAC_SHA256( secret, canonical ) )
 ```
 
-* `platform` 取路径参数原值（如 `taobao`），**参与签名**：不带它，A 平台的一份合法报文可以
+- `platform` 取路径参数原值（如 `taobao`），**参与签名**：不带它，A 平台的一份合法报文可以
   原封不动地推成 B 平台的订单（两家共用同一密钥时无人拦得住）。
-* `raw_body` 是**未解析的原始字节**，与发送的字节完全一致（不要重新序列化 JSON；
+- `raw_body` 是**未解析的原始字节**，与发送的字节完全一致（不要重新序列化 JSON；
   键序、空格、转义任何差异都会改变签名）。
-* `timestamp`/`nonce` 用请求头里的原值（已去首尾空白）。
+- `timestamp`/`nonce` 用请求头里的原值（已去首尾空白）。
 
 ## 5. 密钥配置
 
@@ -68,12 +68,12 @@ signature = hex( HMAC_SHA256( secret, canonical ) )
 
 ## 6. 时效与重放
 
-* 时间戳窗口默认 ±300s（`ORDER_WEBHOOK_MAX_SKEW_SECONDS`，10s–15min，越界按默认并 WARN）。
+- 时间戳窗口默认 ±300s（`ORDER_WEBHOOK_MAX_SKEW_SECONDS`，10s–15min，越界按默认并 WARN）。
   超前与滞后**同权重**判定（对端时钟快不得也一样被拒），出窗 → 401。
-* 窗口之内才验签，验签通过才登记 nonce；`nonce` 用 `SetNX` 写入缓存，
+- 窗口之内才验签，验签通过才登记 nonce；`nonce` 用 `SetNX` 写入缓存，
   TTL = **2×窗口**（所以任何一条 nonce 被逐出时，它的时间戳必然已出窗，不留空隙）。
   窗口内重复出现 → 409。
-* 缓存故障时**默认 fail-open**（签名与时间戳都已验证，最坏是同一订单状态被重复 upsert 一次），
+- 缓存故障时**默认 fail-open**（签名与时间戳都已验证，最坏是同一订单状态被重复 upsert 一次），
   并计数 + 限速 WARN；把 `ORDER_WEBHOOK_NONCE_STRICT=on` 打开则改为 fail-closed（拒绝）。
   多副本部署要共享 nonce，需要 Redis 后端；仅内存缓存时每个进程各自记一份。
 
@@ -93,11 +93,11 @@ signature = hex( HMAC_SHA256( secret, canonical ) )
 
 ## 8. 已知边界（本次未修，勿当作已具备）
 
-* 回调入库路径 `IntegrationService.UpsertOrderFromWebhook` 仍然：`webhook_events` 每次新建
+- 回调入库路径 `IntegrationService.UpsertOrderFromWebhook` 仍然：`webhook_events` 每次新建
   （`EventID` 含 `UnixNano`，**不去重**）、创建错误被丢弃（`_ =`）、对订单状态无回退保护。
   边缘的 nonce/签名校验挡住了重复推送，但**服务层自身仍不幂等** —— 幂等入账排在
   `docs/replan-2026-09/新规划任务清单.md` 的 T-P7-02（R-3 的残留项，见同文件 T-P2-02 执行结果第 6 条）。
-* 旧路径的 `Sunset` 日期**故意不写**：下线时点取决于"还有谁在用"，那份名单正由§2 的限速日志收集。
+- 旧路径的 `Sunset` 日期**故意不写**：下线时点取决于"还有谁在用"，那份名单正由§2 的限速日志收集。
 
 ## 9. 对接自检清单
 

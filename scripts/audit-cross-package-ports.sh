@@ -29,6 +29,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # 仓库根目录：脚本位于 hivemtk/scripts/，hivemtk/ 是子目录
 # ROOT = hivemtk/, REPO_ROOT = hivemtk/ 的上一层（真正的仓库根）
 REPO_ROOT="$(cd "$ROOT/.." && pwd)"
+# 本仓在工作区里的目录名不写死："hivemtk" 只是本机布局与 GitHub runner
+# （work/hivemtk/hivemtk 双层同名）两个巧合的交集。写死会让脚本在任意别的
+# checkout 路径下 Step 1 就 grep 不到 ports.go（2026-09-20 影子克隆实测）。
+SELF_NAME="$(basename "$ROOT")"
 
 cd "$REPO_ROOT"
 
@@ -48,11 +52,11 @@ ok() { echo -e "${GREEN}✓ $1${NC}"; }
 
 # 提取的"已声明单一源"
 # 1) user-server ports.go（位于 hivemtk/ 子目录下）
-USER_SERVER_PORTS_FILE="$REPO_ROOT/hivemtk/user-server/internal/config/ports.go"
+USER_SERVER_PORTS_FILE="$REPO_ROOT/$SELF_NAME/user-server/internal/config/ports.go"
 # 2) platform-server ports.go（位于 hivemtk-platform/ 子目录下）
 PLATFORM_PORTS_FILE="$REPO_ROOT/hivemtk-platform/platform-server/internal/config/ports.go"
 # 3) bridge constants.js
-BRIDGE_CONST_FILE="$REPO_ROOT/hivemtk/user-web/bridge/src/core/constants.js"
+BRIDGE_CONST_FILE="$REPO_ROOT/$SELF_NAME/user-web/bridge/src/core/constants.js"
 
 # =============================================================
 # Step 1: 提取 user-server 端口单一源
@@ -61,15 +65,15 @@ echo "============================================================"
 echo "Step 1: 提取 user-server ports.go 单一源"
 echo "============================================================"
 
-US_LISTEN_PORT=$(grep -E 'DefaultListenPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
-US_DB_PORT_DEV=$(grep -E 'DefaultDBPortDev[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
-US_DB_PORT_DOCKER=$(grep -E 'DefaultDBPortDocker[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
-US_REDIS_PORT=$(grep -E 'DefaultRedisPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
-US_PLATFORM_PORT=$(grep -E 'DefaultPlatformPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
-US_CDP_PORT=$(grep -E 'DefaultChromiumCDPPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
-US_LLM_PORT=$(grep -E 'DefaultLLMPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
-US_EMB_PORT=$(grep -E 'DefaultEmbeddingPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
-US_RERANK_PORT=$(grep -E 'DefaultRerankPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
+US_LISTEN_PORT=$(grep -E 'DefaultListenPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/') || true
+US_DB_PORT_DEV=$(grep -E 'DefaultDBPortDev[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
+US_DB_PORT_DOCKER=$(grep -E 'DefaultDBPortDocker[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
+US_REDIS_PORT=$(grep -E 'DefaultRedisPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/') || true
+US_PLATFORM_PORT=$(grep -E 'DefaultPlatformPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/') || true
+US_CDP_PORT=$(grep -E 'DefaultChromiumCDPPort[[:space:]]*=[[:space:]]*"' "$USER_SERVER_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/') || true
+US_LLM_PORT=$(grep -E 'DefaultLLMPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
+US_EMB_PORT=$(grep -E 'DefaultEmbeddingPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
+US_RERANK_PORT=$(grep -E 'DefaultRerankPort[[:space:]]*=[[:space:]]*[0-9]+' "$USER_SERVER_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
 
 echo "  DefaultListenPort      = $US_LISTEN_PORT"
 echo "  DefaultDBPortDev       = $US_DB_PORT_DEV"
@@ -81,6 +85,16 @@ echo "  DefaultLLMPort         = $US_LLM_PORT"
 echo "  DefaultEmbeddingPort   = $US_EMB_PORT"
 echo "  DefaultRerankPort      = $US_RERANK_PORT"
 echo
+# 提取为空 = 单一源里那个常量没了（被改名/被删）。必须判红：否则 Step 4/5 会拿
+# "" == "" 比出个「一致」的绿，把最要命的「单一源丢失」判成通过。
+for pair in "DefaultListenPort=$US_LISTEN_PORT" "DefaultDBPortDev=$US_DB_PORT_DEV" \
+            "DefaultDBPortDocker=$US_DB_PORT_DOCKER" "DefaultRedisPort=$US_REDIS_PORT" \
+            "DefaultPlatformPort=$US_PLATFORM_PORT" "DefaultChromiumCDPPort=$US_CDP_PORT" \
+            "DefaultLLMPort=$US_LLM_PORT" "DefaultEmbeddingPort=$US_EMB_PORT" \
+            "DefaultRerankPort=$US_RERANK_PORT"; do
+  [[ -n "${pair#*=}" ]] || err "user-server ports.go 提取不到 ${pair%%=*}（单一源缺该常量或被改名）"
+done
+echo
 
 # =============================================================
 # Step 2: 提取 platform-server 端口单一源
@@ -89,10 +103,24 @@ echo "============================================================"
 echo "Step 2: 提取 platform-server ports.go 单一源"
 echo "============================================================"
 
-PS_SERVER_PORT=$(grep -E 'DefaultServerPort[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/')
-PS_DB_PORT=$(grep -E 'DefaultDBPortDev[[:space:]]*=[[:space:]]*[0-9]+' "$PLATFORM_PORTS_FILE" | head -1 | grep -oE '[0-9]+$')
-PS_REDIS=$(grep -E 'DefaultRedisAddr[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-PS_OLLAMA=$(grep -E 'DefaultOllamaBaseURL[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+# 对端仓是「可选输入」：单仓 CI（GitHub runner 只 checkout 本仓）永远拿不到它。
+# 旧写法在 set -e 下直接 grep 不存在的文件 ⇒ 脚本死在 Step 2，整个 api-contract
+# 工作流常年红（Step 4/6/7 这些本仓能查的项也跟着查不到）。
+if [[ -f "$PLATFORM_PORTS_FILE" ]]; then
+  PS_SERVER_PORT=$(grep -E 'DefaultServerPort[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([0-9]+)".*/\1/') || true
+  PS_DB_PORT=$(grep -E 'DefaultDBPortDev[[:space:]]*=[[:space:]]*[0-9]+' "$PLATFORM_PORTS_FILE" | head -1 | grep -oE '[0-9]+$') || true
+  PS_REDIS=$(grep -E 'DefaultRedisAddr[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/') || true
+  PS_OLLAMA=$(grep -E 'DefaultOllamaBaseURL[[:space:]]*=[[:space:]]*"' "$PLATFORM_PORTS_FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/') || true
+  # 同上：对端在但常量被改名/删掉 ⇒ 提取为空必须判红，不能让 "" == "" 蒙成一致
+  for pair in "DefaultServerPort=$PS_SERVER_PORT" "DefaultDBPortDev=$PS_DB_PORT" \
+              "DefaultRedisAddr=$PS_REDIS" "DefaultOllamaBaseURL=$PS_OLLAMA"; do
+    [[ -n "${pair#*=}" ]] || err "platform-server ports.go 提取不到 ${pair%%=*}（单一源缺该常量或被改名）"
+  done
+else
+  PS_SERVER_PORT=""; PS_DB_PORT=""; PS_REDIS=""; PS_OLLAMA=""
+  PS_ABSENT=1
+  warn "对端仓未 checkout：$PLATFORM_PORTS_FILE 不存在，Step 2/5 跨仓比对跳过"
+fi
 
 echo "  DefaultServerPort    = $PS_SERVER_PORT"
 echo "  DefaultDBPortDev     = $PS_DB_PORT"
@@ -130,7 +158,9 @@ echo
 echo "============================================================"
 echo "Step 5: 验证 user-server <-> platform-server 端口对齐"
 echo "============================================================"
-if [[ "$US_PLATFORM_PORT" == "$PS_SERVER_PORT" ]]; then
+if [[ ${PS_ABSENT:-0} == 1 ]]; then
+  warn "Step 5 未执行：DefaultPlatformPort($US_PLATFORM_PORT) 未与对端核对（本机/工作区跑 make audit-ports 才会核）"
+elif [[ "$US_PLATFORM_PORT" == "$PS_SERVER_PORT" ]]; then
   ok "user-server.DefaultPlatformPort == platform-server.DefaultServerPort ($US_PLATFORM_PORT)"
 else
   err "user-server.DefaultPlatformPort($US_PLATFORM_PORT) != platform-server.DefaultServerPort($PS_SERVER_PORT)"
@@ -178,8 +208,8 @@ check_yaml_hardcode() {
   fi
 }
 
-check_yaml_hardcode "hivemtk/user-server/config.yaml" "user-server config"
-check_yaml_hardcode "hivemtk/user-server/config/platform.yaml" "user-server config/platform"
+check_yaml_hardcode "$SELF_NAME/user-server/config.yaml" "user-server config"
+check_yaml_hardcode "$SELF_NAME/user-server/config/platform.yaml" "user-server config/platform"
 check_yaml_hardcode "hivemtk-platform/platform-server/config.yaml" "platform-server config"
 echo
 
@@ -191,7 +221,7 @@ echo "Step 7: 审计 vite.config.js 单一源约束注释"
 echo "============================================================"
 
 for f in \
-  "hivemtk/user-web/vite.config.js" \
+  "$SELF_NAME/user-web/vite.config.js" \
   "hivemtk-platform/platform-web/vite.config.js" \
   "hivemtk-platform/platform-contributor/vite.config.js" \
   "hivemtk-platform/website/vite.config.js"
@@ -202,6 +232,8 @@ do
     else
       warn "$f 缺少单一源约束注释（建议添加 ports.go 引用注释）"
     fi
+  else
+    warn "$f 不存在，跳过（对端仓未 checkout 时属正常）"
   fi
 done
 echo
