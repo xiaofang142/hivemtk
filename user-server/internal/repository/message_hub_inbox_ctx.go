@@ -24,6 +24,14 @@ func (r *MessageHubRepository) GetLastByPlatformAccount(ctx context.Context, pla
 	return &msg, nil
 }
 
+// undeliveredOutboundCond 排除「投递失败的出站行」：这类行客户从未收到，
+// 不能充当「已回复」的证据。status 列可空（默认 'pending'，历史/直插行为 NULL），
+// 故必须 NULL 安全：直接写 status <> 'send_failed' 会把 NULL 行一起滤掉，
+// 于是每条正常出站都不再算回复 → 补触发风暴复发。
+const undeliveredOutboundCond = "NOT (direction = ? AND COALESCE(status, '') = ?)"
+
+var undeliveredOutboundArgs = []any{"outbound", "send_failed"}
+
 func (r *MessageHubRepository) HasUnrepliedCustomerMessage(ctx context.Context, conversationID string, replyWindow time.Duration) (unreplied bool, withinWindow bool, err error) {
 	if r == nil || r.db == nil {
 		return false, false, nil
@@ -35,6 +43,7 @@ func (r *MessageHubRepository) HasUnrepliedCustomerMessage(ctx context.Context, 
 
 	if err := r.db.WithContext(ctx).
 		Where("conversation_id = ?", conversationID).
+		Where(undeliveredOutboundCond, undeliveredOutboundArgs...).
 		Order("sent_at DESC").
 		Limit(1).
 		First(&last).Error; err != nil {
@@ -103,6 +112,7 @@ func (r *MessageHubRepository) ListByConversationContext(ctx context.Context, pl
 	if err := r.db.WithContext(ctx).Model(&model.MessageHub{}).
 		Where("platform = ? AND account_id = ? AND (sender_id = ? OR receiver_id = ?)",
 			platform, accountID, customerID, customerID).
+		Where(undeliveredOutboundCond, undeliveredOutboundArgs...).
 		Find(&hubs).Error; err != nil {
 		return nil, err
 	}

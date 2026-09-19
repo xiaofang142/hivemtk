@@ -83,24 +83,16 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Msg("[H-3] db 未初始化，quiet hours 延迟入队失败，按原路径直接发送")
 		return false
 	}
-	var cardsPayload model.JSONMap
-	if len(cards) > 0 {
-		if raw, err := json.Marshal(cards); err == nil {
-			cardsPayload = model.JSONMap{"cards": json.RawMessage(raw)}
-		}
-	}
-
 	rec := &DelayedOutboundReply{
-		Platform:  string(channel),
-		AccountID: accountID,
-		SenderID:  p.Sender,
-		Content:   content,
-		Cards:     cardsPayload,
-		SendAt:    nextQuietHoursRelease(time.Now(), aiReplyQuietEndHour),
-		Status:    "pending",
-	}
-	if hubMsg != nil {
-		rec.ConversationID = hubMsg.ConversationID
+		Platform:       string(channel),
+		AccountID:      accountID,
+		SenderID:       p.Sender,
+		Content:        content,
+		Cards:          delayedCardsPayload(cards),
+		ConversationID: convIDOrEmpty(hubMsg),
+		SendAt:         nextQuietHoursRelease(time.Now(), aiReplyQuietEndHour),
+		Status:         model.DelayedStatusPending,
+		Kind:           model.DelayedKindQuietHours,
 	}
 	if err := s.delayedRepo.CreatePending(ctx, rec); err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", string(channel)).Msg("[H-3] 延迟入队失败，按原路径直接发送")
@@ -113,6 +105,89 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 		Msg("[H-3] AI 回复命中 quiet hours(23:00-7:00)，进入延迟队列次日首发")
 	s.startDelayedOutboundDispatch()
 	return true
+}
+
+// delayedCardsPayload 富卡片随延迟记录一起落库，重放时原样下发。
+func delayedCardsPayload(cards []model.RichCard) model.JSONMap {
+	if len(cards) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(cards)
+	if err != nil {
+		return nil
+	}
+	return model.JSONMap{"cards": json.RawMessage(raw)}
+}
+
+const (
+	// sendRetryMaxAttempts 一条回复进入持久化重试队列后的最大重投次数。
+	// 与渠道客户端内部的 3 次退避不叠加计算：那一层只覆盖分钟级抖动，
+	// 这一层覆盖"进程还在、通道长时间不通"，次数再多也只是把过期内容投给客户。
+	sendRetryMaxAttempts = 3
+)
+
+// sendRetryBackoffs 第 n 次失败后的等待时长，超出表长按最后一档封顶。
+var sendRetryBackoffs = []time.Duration{
+	60 * time.Second,
+	2 * time.Minute,
+	4 * time.Minute,
+}
+
+// nextSendRetryAt 计算第 attempts 次失败后的重投时刻：退避 + 避开免打扰时段。
+func nextSendRetryAt(now time.Time, attempts int) time.Time {
+	idx := attempts
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(sendRetryBackoffs) {
+		idx = len(sendRetryBackoffs) - 1
+	}
+	at := now.Add(sendRetryBackoffs[idx])
+	// 免打扰时段内重投等于在深夜打扰客户，和首发同规则顺延到窗口开放。
+	if aiReplyQuietHoursFn(at) {
+		at = nextQuietHoursRelease(at, aiReplyQuietEndHour)
+	}
+	return at
+}
+
+// enqueueSendRetry 实时投递失败后把这条已生成的回复转入持久化重试队列。
+//
+// 为什么当场重试不够：断网/通道故障常持续数分钟到更久，进程内重试（渠道客户端的 3 次
+// 退避）用完就彻底放弃，而客户侧最后一条仍是入站行 —— 只能等客户自己再问一次。
+// 落库后即使服务重启，30s 轮询也会把到期记录投出去。
+func (s *WebhookService) enqueueSendRetry(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard, sendErr error) {
+	if s.delayedRepo == nil {
+		return
+	}
+	ce := AsChannelError(sendErr)
+	if ce == nil || !ce.Retryable {
+		return
+	}
+	now := time.Now()
+	rec := &DelayedOutboundReply{
+		Platform:       string(channel),
+		AccountID:      accountID,
+		SenderID:       p.Sender,
+		Content:        content,
+		Cards:          delayedCardsPayload(cards),
+		ConversationID: convIDOrEmpty(hubMsg),
+		SendAt:         nextSendRetryAt(now, 0),
+		Status:         model.DelayedStatusPending,
+		Kind:           model.DelayedKindSendRetry,
+		LastError:      ce.Raw,
+	}
+	if err := s.delayedRepo.CreatePending(ctx, rec); err != nil {
+		logger.Ctx(ctx).Error().Err(err).Str("channel", string(channel)).
+			Msg("[H-3] 投递失败重试入队失败，本条回复仅保留失败轨迹")
+		return
+	}
+	logger.Ctx(ctx).Warn().
+		Str("channel", string(channel)).
+		Str("conv_id", rec.ConversationID).
+		Uint("id", rec.ID).
+		Time("send_at", rec.SendAt).
+		Msg("[H-3] AI 回复投递失败（可重试），已进入持久化重试队列")
+	s.startDelayedOutboundDispatch()
 }
 
 var delayedDispatchStop chan struct{}
@@ -177,6 +252,26 @@ func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
 
 func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *DelayedOutboundReply) {
 	channel := WebhookChannel(rec.Platform)
+	now := time.Now()
+	isRetry := rec.Kind == model.DelayedKindSendRetry
+
+	if isRetry && rec.Attempts >= sendRetryMaxAttempts {
+		s.abandonReplay(ctx, rec, fmt.Sprintf("重投次数用尽（%d 次）", rec.Attempts))
+		return
+	}
+	if isRetry && s.messageHubRepo != nil && rec.ConversationID != "" {
+		// 旧内容不补投：等待期间坐席或新一轮 AI 回复已经出手，再投这条过期回复等于双份答案。
+		unreplied, _, err := s.messageHubRepo.HasUnrepliedCustomerMessage(ctx, rec.ConversationID, InboxReplyWindow)
+		if err == nil && !unreplied {
+			if ferr := s.delayedRepo.FinishReplay(ctx, rec.ID, model.DelayedStatusSuperseded, time.Now(), ""); ferr != nil {
+				logger.Ctx(ctx).Warn().Err(ferr).Uint("id", rec.ID).Msg("[H-3] 重放改判 superseded 回写失败")
+			}
+			logger.Ctx(ctx).Info().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
+				Msg("[H-3] 会话已被回复，队列中的旧出站不再补投（superseded）")
+			return
+		}
+	}
+
 	hubMsg := &model.MessageHub{
 		ConversationID: rec.ConversationID,
 		SenderID:       rec.SenderID,
@@ -193,34 +288,99 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 		}
 	}
 
-	s.sendOutbound(DelayedReplayToContext(ctx), channel, rec.AccountID, p, rec.Content, hubMsg, cards)
+	sent, sendErr := s.sendOutbound(DelayedReplayToContext(ctx), channel, rec.AccountID, p, rec.Content, hubMsg, cards)
 
-	if err := s.delayedRepo.MarkSent(ctx, rec.ID, time.Now()); err != nil {
-		logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 延迟回复状态回写失败")
+	switch {
+	case sent, !isRetry:
+		// 投递成功按 sent 收口；quiet hours 首发维持一次性语义（这条回复是按
+		// "次日首发"设计的，失败已由 sendOutbound 落失败轨迹，再叠重试等于改掉窗口定义）。
+		if err := s.delayedRepo.MarkSent(ctx, rec.ID, time.Now()); err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 延迟回复状态回写失败")
+		}
+	default:
+		ce := AsChannelError(sendErr)
+		if ce != nil && ce.Retryable {
+			attempts := rec.Attempts + 1
+			if err := s.delayedRepo.ScheduleRetry(ctx, rec.ID, nextSendRetryAt(now, attempts), ce.Raw); err != nil {
+				logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 重投失败改排下一次异常")
+			}
+			logger.Ctx(ctx).Warn().Uint("id", rec.ID).Int("attempts", attempts).
+				Msg("[H-3] 延迟出站重投仍失败，已按退避改排")
+			return
+		}
+		reason := "投递未成功且无渠道错误"
+		if ce != nil {
+			reason = ce.Raw
+		}
+		s.abandonReplay(ctx, rec, reason)
 	}
 }
 
-func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) {
+// abandonReplay 把重放行收口为终态 failed，并给这条客户消息留最后一次补触发机会：
+// 重试通道放弃后，会话里仍是未回复的入站行，不能就此没人应答。
+func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutboundReply, reason string) {
+	if err := s.delayedRepo.FinishReplay(ctx, rec.ID, model.DelayedStatusFailed, time.Now(), reason); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 重放终态回写失败")
+	}
+	logger.Ctx(ctx).Error().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
+		Str("reason", reason).Msg("[H-3] 延迟出站放弃重投，改判 failed")
+	if s.ingressSvc == nil || rec.ConversationID == "" {
+		return
+	}
+	s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), rec.ConversationID, "")
+}
+
+// sendOutbound 投递一条 AI 回复。
+//
+// 返回值是投递事实：sent 表示至少有一跳成功；sendErr 只在各渠道真实投递接口报错时非空
+// （解析失败、缺 webhook、域名非法等前置不满足的分支返回 (false, nil)，重试也无意义）。
+// 调用方据此决定是否进入持久化重试通道。
+func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
 
 	if !isDelayedReplay(ctx) && aiReplyQuietHoursFn(time.Now()) {
 		if s.enqueueDelayedOutbound(ctx, channel, accountID, p, content, hubMsg, cards) {
-			return
+			return false, nil
 		}
 	}
 
 	if !agent_runtime.ClaimReply(p.EventID) {
 		logger.Ctx(ctx).Info().Str("event_id", p.EventID).Msg("skip duplicate outbound (event already replied)")
 
-		return
+		return false, nil
 	}
 
-	sent := false
 	ctx, cancel := context.WithTimeout(ctx, utils.MediumTimeout)
 	defer func() {
 		if !sent {
 			agent_runtime.ReleaseReply(p.EventID)
 		}
 		cancel()
+	}()
+
+	// markSendFailed 统一失败口径：先记录真实错误供收尾判断是否入重试队列，
+	// 再走原有 outboundSendFailed（写终态失败轨迹 / 发布授权告警）。
+	markSendFailed := func(err error) {
+		sendErr = err
+		s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+	}
+
+	// 收尾（defer 保证各渠道的提前 return 分支同样覆盖）：
+	//  1. 可重试的投递失败 → 同步落一条 send_retry 到延迟出站队列，到期重投同一份内容；
+	//     必须先入队再放行 recheck，否则补触发看不到这条待投记录，会另生成一份回复。
+	//  2. 释放 AI 处理中标记；实时路径补一次「未回复」检查。
+	//     重放路径不做补触发：这条记录本身就是待投回复，重投结果由 replayDelayedOutbound 收口。
+	defer func() {
+		if sendErr != nil && !sent && !isDelayedReplay(ctx) {
+			s.enqueueSendRetry(ctx, channel, accountID, p, content, hubMsg, cards, sendErr)
+		}
+		if s.ingressSvc == nil || hubMsg == nil || hubMsg.ConversationID == "" {
+			return
+		}
+		s.ingressSvc.ReleaseAIProcessingFlag(ctx, hubMsg.ConversationID)
+		if isDelayedReplay(ctx) {
+			return
+		}
+		go s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
 	}()
 	switch channel {
 	case ChannelWeCom:
@@ -240,7 +400,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			IsAIReply:      true,
 			AIAgent:        "sales_engine",
 		}); err != nil {
-			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -264,7 +424,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			outConv = hubMsg.ConversationID
 		}
 		if err := s.feishuIntegration.SendMessage(ctx, uint(accID), target, content, idType, outConv); err != nil {
-			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -309,7 +469,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 
 		if err := s.tgIntegration.SendMessageEx(ctx, uint(accID), chatID, sendContent, sendOpts); err != nil {
-			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -340,7 +500,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			s.qqIntegration = NewQQIntegrationService(s.lazyDB())
 		}
 		if err := s.qqIntegration.SendMessage(ctx, uint(accID), convID, QQOutboundMsgID(hubMsg), content); err != nil {
-			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -377,7 +537,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 						TemplateName: tplName,
 						Language:     os.Getenv("WHATSAPP_FALLBACK_TEMPLATE_LANG"),
 					}); terr != nil {
-						s.outboundSendFailed(ctx, channel, accountID, hubMsg, terr)
+						markSendFailed(terr)
 					} else {
 						sent = true
 					}
@@ -387,7 +547,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 
 		if err := s.waIntegration.SendMessage(ctx, uint(accID), p.Sender, content); err != nil {
-			s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -645,12 +805,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
 	}
-
-	if s.ingressSvc != nil && hubMsg != nil && hubMsg.ConversationID != "" {
-		s.ingressSvc.ReleaseAIProcessingFlag(ctx, hubMsg.ConversationID)
-
-		go s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
-	}
+	return
 }
 
 func isBridgeChannelUndeliverableLocal(accountID, conversationID string) (bool, string) {

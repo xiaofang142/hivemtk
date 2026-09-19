@@ -130,9 +130,9 @@ func (e *SalesEngine) runAgentLoop(
 	if e.sessionMsgRepo != nil && req.SessionID != "" {
 		// 历史注入走 token 预算截断：无预算的原样注入在长会话下会顶爆
 		// provider ContextWindow，dispatcher 逐个跳过候选最终降级模板回复
-		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates); herr == nil && len(hist) > 0 {
-
-			if hist[0].Content == req.UserMessage {
+		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates); herr == nil {
+			hist = excludeSystemHistoryNotices(hist)
+			if len(hist) > 0 && hist[0].Content == req.UserMessage {
 				hist = hist[1:]
 			}
 			// 预算截断：与 fetchHistoryWithinTokenBudget 同一口径
@@ -716,12 +716,32 @@ const agentLoopHistoryMaxCandidates = 200
 
 const historyMsgTokenOverhead = 6
 
+// excludeSystemHistoryNotices 剔除发给坐席/用户的系统通知（sender_type=system）。
+//
+// 历史注入把「非 ai/agent」一律当客户话头喂给模型，于是「【系统】AI 连续回复已达上限
+// (10 次)，转人工跟进」这类内部通知会被模型当成客户说的话接着推理，甚至把推理过程
+// 当回复原样投递给客户（message_hub id=432 实测）。通知只服务于会话记录与坐席视图。
+func excludeSystemHistoryNotices(hist []model.SessionMessage) []model.SessionMessage {
+	out := hist[:0]
+	for _, m := range hist {
+		if m.SenderType == "system" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 func (e *SalesEngine) fetchHistoryWithinTokenBudget(sessionID, userMessage string) []model.SessionMessage {
 	if e.sessionMsgRepo == nil {
 		return nil
 	}
 	hist, err := e.sessionMsgRepo.ListRecentDescBySessionID(context.Background(), sessionID, agentLoopHistoryMaxCandidates)
 	if err != nil || len(hist) == 0 {
+		return nil
+	}
+	hist = excludeSystemHistoryNotices(hist)
+	if len(hist) == 0 {
 		return nil
 	}
 

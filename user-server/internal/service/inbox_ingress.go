@@ -124,6 +124,18 @@ type InboxIngressService struct {
 	aiTrigger     AITrigger
 	inboxSvc      *InboxService
 	leadMiningSvc *Service
+
+	// pendingOutbound 延迟出站队列探针：查「该会话是否还有一条排队待投的回复」。
+	// 为 nil 时（未接库/单测）视为无排队，行为与接入前一致。
+	pendingOutbound *repository.DelayedOutboundRepository
+}
+
+// SetPendingOutboundProbe 注入延迟出站队列仓储，让 recheck 在「回复已排队待投」时让位。
+func (s *InboxIngressService) SetPendingOutboundProbe(repo *repository.DelayedOutboundRepository) {
+	if s == nil {
+		return
+	}
+	s.pendingOutbound = repo
 }
 
 func NewInboxIngressService() *InboxIngressService {
@@ -136,15 +148,18 @@ func NewInboxIngressServiceWithDB(db *gorm.DB, c cache.Cache) *InboxIngressServi
 	}
 	var hubRepo *repository.MessageHubRepository
 	var feedbackRepo *repository.FeedbackRecordRepository
+	var pendingOutbound *repository.DelayedOutboundRepository
 	if db != nil {
 		hubRepo = repository.NewMessageHubRepositoryWithDB(db)
 		feedbackRepo = repository.NewFeedbackRecordRepository(db)
+		pendingOutbound = repository.NewDelayedOutboundRepository(db)
 	}
 	return &InboxIngressService{
-		hubRepo:      hubRepo,
-		feedbackRepo: feedbackRepo,
-		cache:        c,
-		triggerCh:    make(chan string, 1024),
+		hubRepo:         hubRepo,
+		feedbackRepo:    feedbackRepo,
+		pendingOutbound: pendingOutbound,
+		cache:           c,
+		triggerCh:       make(chan string, 1024),
 	}
 }
 
@@ -710,6 +725,23 @@ func (s *InboxIngressService) RecheckUnrepliedAndTrigger(ctx context.Context, co
 	if s.hubRepo == nil {
 		return
 	}
+
+	// 队列里已有一条待投的回复（免打扰首发或投递重试）＝这条回复本身正在路上，
+	// 再生成一份会让客户在恢复后收到两条。放在预算计数之前：压制不该消耗配额。
+	if s.pendingOutbound != nil {
+		pending, perr := s.pendingOutbound.HasPendingByConversation(ctx, conversationID)
+		if perr != nil {
+			logger.Ctx(ctx).Warn().Err(perr).
+				Str("conv_id", conversationID).
+				Msg("[Inbox][Recheck] 查询待投回复失败，按无排队继续")
+		} else if pending {
+			logger.Ctx(ctx).Info().
+				Str("conv_id", conversationID).
+				Msg("[Inbox][Recheck] 该回复已在延迟出站队列等待投递，跳过补触发避免双投")
+			return
+		}
+	}
+
 	unreplied, withinWindow, err := s.hubRepo.HasUnrepliedCustomerMessage(ctx, conversationID, InboxReplyWindow)
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).

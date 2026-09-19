@@ -342,10 +342,18 @@ func (s *LLMService) GenerateWithTools(ctx context.Context, config *LLMConfig, p
 	choice := resp.Choices[0]
 	content := choice.Message.Content
 	if content == "" {
-		content = choice.Message.ReasoningContent
-	}
-	if content == "" {
-		content = choice.Message.ReasoningContent2
+		// 绝不回退取 reasoning/reasoning_content：那是模型思考过程，不是给客户看的回复。
+		// 曾经回退导致「用户要求简单回复一个字。但根据系统指令…」这类推理文本经 polish 后
+		// 原样投递给真实客户（message_hub id=432）。保持为空，由上游空回复兜底处理。
+		if r := choice.Message.ReasoningContent + choice.Message.ReasoningContent2; r != "" {
+			runes := []rune(r)
+			head := runes
+			if len(head) > 40 {
+				head = head[:40]
+			}
+			logger.Warnf("[LLM] 模型只返回思考文本无正式内容，按空回复处理（不外发推理文本）model=%s reasoning_len=%d head=%q",
+				config.Model, len(runes), string(head))
+		}
 	}
 	result := &GenerateResult{
 		Content:      content,

@@ -278,6 +278,8 @@ func LogRoutingDecision(ctx context.Context, entry *LogEntry) {
 		"cross_lingual":     entry.CrossLingual,
 		"glossary_version":  entry.GlossaryVersion,
 		"cache_hit":         entry.CacheHit,
+		// map 插入不经过 GORM schema，autoCreateTime 不会生效；created_at 必须显式写入。
+		"created_at": time.Now(),
 	}
 	if err := d.WithContext(ctx).Table("llm_routing_logs").Create(row).Error; err != nil {
 		logger.Warnf("[LLM] LogRoutingDecision write failed: %v (entry=%+v)", err, entry)

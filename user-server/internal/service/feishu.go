@@ -559,6 +559,9 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 		if uErr := s.tg.UpdateAccount(ctx, acc); uErr != nil {
 			logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
 		}
+		// 失败也要留出站轨迹：否则会话里只剩客户入站行，事后既看不出 AI 生成过回复、
+		// 也看不出投递失败（2026-09-19 断网实测：日志有 outbound send failed，库里零痕迹）。
+		s.pushTelegramSendFailureTrace(ctx, accountID, chatID, content, err)
 		return fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
@@ -583,6 +586,37 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 		}
 	}
 	return nil
+}
+
+// pushTelegramSendFailureTrace 投递失败时补一条 send_failed 出站轨迹（只落库，不进 inbox 镜像）。
+//
+// 不落轨迹的后果不是"少一行数据"：会话最后一条永远是客户入站行，补触发链路只能靠日志
+// 猜"到底发没发过"，事后复盘也无法区分"没生成回复"与"生成了但没投出去"。
+func (s *TelegramIntegrationService) pushTelegramSendFailureTrace(ctx context.Context, accountID uint, chatID int64, content string, sendErr error) {
+	if s.hub == nil {
+		return
+	}
+	chatIDStr := fmt.Sprintf("%d", chatID)
+	reason := "send tg msg"
+	if sendErr != nil {
+		reason = sendErr.Error()
+	}
+	if _, err := s.hub.PushSendFailureTrace(ctx, &PushMessageRequest{
+		Platform:       "telegram",
+		AccountID:      fmt.Sprintf("%d", accountID),
+		MsgID:          telegramOutboundHubMsgID(accountID, 0),
+		Direction:      "outbound",
+		MsgType:        "text",
+		SenderID:       fmt.Sprintf("%d", accountID),
+		ReceiverID:     chatIDStr,
+		Content:        content,
+		ConversationID: chatIDStr,
+		IsAIReply:      true,
+		AIAgent:        extractAgentIDFromCtx(ctx),
+		SentAt:         timePtr(time.Now()),
+	}, reason); err != nil {
+		logger.Warnf("[tg] 投递失败轨迹落库失败 account=%d chat=%d: %v", accountID, chatID, err)
+	}
 }
 
 func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uint, chatID int64, card *model.RichCard) error {

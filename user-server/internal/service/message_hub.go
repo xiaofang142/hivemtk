@@ -298,6 +298,30 @@ func (s *MessageHubService) Push(ctx context.Context, req *PushMessageRequest) (
 	return msg, nil
 }
 
+// PushSendFailureTrace 落一条「投递失败」的出站轨迹：只写库，不进 stream、不通知订阅者。
+//
+// 与 Push 的差别是刻意的：这条消息客户从未收到，推给订阅者（坐席实时视图、会话镜像）
+// 等于宣告一次没有发生的投递；它的用途是审计留痕，以及让「是否已回复」的判定
+// 有反证可查（HasUnrepliedCustomerMessage 会排除 send_failed 出站行）。
+func (s *MessageHubService) PushSendFailureTrace(ctx context.Context, req *PushMessageRequest, failureReason string) (*model.MessageHub, error) {
+	if s.repo == nil {
+		return nil, nil
+	}
+	msg, err := s.Normalize(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	msg.Status = "send_failed"
+	msg.Extra["send_failed_at"] = time.Now().Format(time.RFC3339)
+	if failureReason != "" {
+		msg.Extra["send_failed_reason"] = failureReason
+	}
+	if err := s.repo.Create(ctx, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
 // PushBatch 批量推送
 func (s *MessageHubService) PushBatch(ctx context.Context, reqs []PushMessageRequest) ([]*model.MessageHub, []error) {
 	results := make([]*model.MessageHub, 0, len(reqs))

@@ -77,7 +77,11 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 		return nil, fmt.Errorf("whatsapp parse: %w", err)
 	}
 
-	if err := waPayload.Ingress(ctx, s.ingressHandler(ctx), accountID); err != nil {
+	// 与 Telegram 同构：本渠道的 AI 触发由 handleJob 末尾按账号 AI 开关
+	// （shouldTriggerAI → triggerSalesEngine）负责，中台 Ingress 只落库。
+	// 不打标记时两条路径会对同一条 wamid 各跑一次推理（去重键不同：Ingress 用 wamid，
+	// triggerSalesEngine 用 webhook job 的 EventID），客户收到两条回复。
+	if err := waPayload.Ingress(WithChannelOwnedAITrigger(ctx), s.ingressHandler(ctx), accountID); err != nil {
 		return nil, err
 	}
 

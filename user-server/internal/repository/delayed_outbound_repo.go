@@ -109,6 +109,61 @@ func (r *DelayedOutboundRepository) MarkSent(ctx context.Context, id uint, sentA
 		Updates(map[string]any{"status": "sent", "sent_at": &sentAt}).Error
 }
 
+// HasPendingByConversation 该会话是否还有「尚未投递且仍会被投递」的延迟出站。
+//
+// 只认 pending：sending 是本轮已抢占的瞬时态，进程崩溃时会永久悬挂在该状态，
+// 若把它算作待发，recheck 就会被一条没人投的行长期压制，客户反而永远收不到回复。
+func (r *DelayedOutboundRepository) HasPendingByConversation(ctx context.Context, conversationID string) (bool, error) {
+	if r.db == nil || conversationID == "" {
+		return false, nil
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+		Where("conversation_id = ? AND status = ?", conversationID, model.DelayedStatusPending).
+		Count(&n).Error
+	return n > 0, err
+}
+
+// ScheduleRetry 重投失败后原地改排：回到 pending、send_at 推到 nextAt、attempts+1、记 last_error。
+// 不新建行：一条待投回复在队列里始终只有一行，避免同一份内容因多次失败被重放多次。
+func (r *DelayedOutboundRepository) ScheduleRetry(ctx context.Context, id uint, nextAt time.Time, lastError string) error {
+	if r.db == nil || id == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
+		Updates(map[string]any{
+			"status":     model.DelayedStatusPending,
+			"send_at":    nextAt,
+			"attempts":   gorm.Expr("attempts + 1"),
+			"last_error": truncateForColumn(lastError, 1024),
+		}).Error
+}
+
+// FinishReplay 重放收口到终态（sent / superseded / failed），失败原因留在 last_error。
+func (r *DelayedOutboundRepository) FinishReplay(ctx context.Context, id uint, status string, at time.Time, lastError string) error {
+	if r.db == nil || id == 0 {
+		return nil
+	}
+	updates := map[string]any{"status": status, "sent_at": &at}
+	if lastError != "" {
+		updates["last_error"] = truncateForColumn(lastError, 1024)
+	}
+	return r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// truncateForColumn 按 rune 上限截断入库文本（varchar 超长会整条 UPDATE 失败，
+// 宁可截断也不能让失败原因把重试改排一起带崩）。
+func truncateForColumn(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	if len(r) > max {
+		r = r[:max]
+	}
+	return string(r)
+}
+
 // CreateMessageHubIdempotent 幂等写 message_hub（platform+msg_id+conversation_id 冲突忽略），
 // 返回实际持久化的行与首次错误（供调用方重试判定）。
 func (r *DelayedOutboundRepository) CreateMessageHubIdempotent(ctx context.Context, msg *model.MessageHub) (persisted *model.MessageHub, firstErr error) {
