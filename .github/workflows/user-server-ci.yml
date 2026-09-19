@@ -105,6 +105,15 @@ jobs:
           chmod +x scripts/check-architecture.sh
           bash scripts/check-architecture.sh
 
+      - name: 日期口径守卫（宿主机时区棘轮）
+        # 2026-09-20 第二十六轮（A8/A9）：本仓 DB 会话时区钉在 Asia/Shanghai，而
+        # Go 进程跟宿主机时区 ⇒ 日期键/日期窗口在 UTC 容器上恒漂 8 小时，这类缺陷
+        # 在开发机（CST）永远复现不出来。守卫是棘轮：命中数只许降不许升，
+        # 基线见 scripts/date-bucket-tz.baseline。
+        run: |
+          chmod +x scripts/check-date-bucket-tz.sh
+          bash scripts/check-date-bucket-tz.sh
+
       - name: go vet
         working-directory: user-server
         run: go vet ./...
