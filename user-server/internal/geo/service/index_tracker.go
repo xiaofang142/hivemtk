@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
@@ -314,7 +315,9 @@ func (s *IndexTrackerService) upsertDailyStats() {
 		Group("engine").
 		Scan(&rows)
 
-	statDate := time.Now().Format("2006-01-02")
+	// stat_date 是 DB 的日期唯一键组成部分：宿主机是 UTC 时，16:00–23:59 之间
+	// 这一轮会把业务当日的引用数累加到**前一天**的行上。
+	statDate := timeutil.BusinessToday()
 	for _, r := range rows {
 		// upsert：冲突则更新
 		s.db.Exec(`

@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"gorm.io/gorm"
 )
@@ -87,7 +88,9 @@ func (r *geoDailyStatRepo) GetTrend(ctx context.Context, engine, funnelStage, in
 	if days <= 0 {
 		days = 30
 	}
-	since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
+	// stat_date 是业务日口径的字符串键（由 scheduler 的 aggregateDailyStats 写入），
+	// 窗口首也必须是业务日，否则 UTC 宿主上"近 N 天"会少/多一天。
+	since := timeutil.BusinessDate(time.Now().AddDate(0, 0, -days))
 	var list []*model.GeoDailyStat
 	q := r.db.WithContext(ctx).Where("stat_date >= ?", since)
 	if engine != "" {
@@ -104,5 +107,5 @@ func (r *geoDailyStatRepo) GetTrend(ctx context.Context, engine, funnelStage, in
 }
 
 func (r *geoDailyStatRepo) DeleteBefore(ctx context.Context, before time.Time) error {
-	return r.db.WithContext(ctx).Where("stat_date < ?", before.Format("2006-01-02")).Delete(&model.GeoDailyStat{}).Error
+	return r.db.WithContext(ctx).Where("stat_date < ?", timeutil.BusinessDate(before)).Delete(&model.GeoDailyStat{}).Error
 }

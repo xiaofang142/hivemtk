@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 	"time"
@@ -62,7 +63,9 @@ func (s *cardAccessService) RecordAccess(ctx context.Context, cardID uint, cardT
 		return err
 	}
 
-	today := time.Now().Format("2006-01-02")
+	// Date 是 daily_card_uv_stats 的日期键，必须与下面 HasAccessToday 的业务日窗口
+	// 同口径：宿主时区一漂（UTC 容器 16:00–23:59）两者就差一天，UV 会累加到昨天的行上。
+	today := timeutil.BusinessToday()
 
 	stats, err := s.uvStatsRepo.GetByCardIDAndDate(ctx, cardID, cardType, today)
 	if err != nil && err != gorm.ErrRecordNotFound {
@@ -104,7 +107,7 @@ func (s *cardAccessService) GetCardUVStats(ctx context.Context, cardID uint, car
 		return nil, err
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	todayStats, _ := s.uvStatsRepo.GetByCardIDAndDate(ctx, cardID, cardType, today)
 
 	return &CardStatsResponse{
@@ -138,7 +141,7 @@ func (s *cardAccessService) GetDailyUVStats(ctx context.Context, cardID uint, ca
 }
 
 func (s *cardAccessService) GetTodayUV(ctx context.Context, cardID uint, cardType string) (int, error) {
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	stats, err := s.uvStatsRepo.GetByCardIDAndDate(ctx, cardID, cardType, today)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {

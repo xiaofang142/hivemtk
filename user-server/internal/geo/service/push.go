@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
@@ -538,7 +539,7 @@ func NewPushService(db *gorm.DB) *PushService {
 		db:       db,
 		quota:    NewQuotaManager(),
 		pushers:  map[string]Pusher{},
-		quotaDay: time.Now().Format("2006-01-02"),
+		quotaDay: timeutil.BusinessToday(),
 	}
 	// 自动从 DB 读配置注册
 	svc.registerFromDB()
@@ -546,8 +547,12 @@ func NewPushService(db *gorm.DB) *PushService {
 }
 
 // rollQuotaDay 长驻进程跨天时重置内存配额
+//
+// 日期键两侧都必须走 timeutil：`today` 是宿主时区口径、`last_reset_at` 是 DB 里
+// CST 会话时区写入的 timestamptz，混用 `Format` 会让同一天被判成跨天（配额莫名归零）
+// 或跨天被判成同天（当日额度提前打满）。
 func (s *PushService) rollQuotaDay() {
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	s.mu.Lock()
 	if today != s.quotaDay {
 		s.quotaDay = today
@@ -573,14 +578,14 @@ func (s *PushService) registerFromDB() {
 	if err := s.db.Find(&configs).Error; err != nil {
 		return
 	}
-	today := time.Now().Format("2006-01-02")
+	today := timeutil.BusinessToday()
 	for _, cfg := range configs {
 		// 配额 DB 同步：跨天自动归零，同天恢复已用量
 		if cfg.DailyLimit > 0 {
 			used := cfg.UsedToday
 			lastDay := ""
 			if cfg.LastResetAt != nil {
-				lastDay = cfg.LastResetAt.Format("2006-01-02")
+				lastDay = timeutil.BusinessDate(*cfg.LastResetAt)
 			}
 			if lastDay != today {
 				used = 0

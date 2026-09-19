@@ -9,6 +9,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -72,8 +73,14 @@ func sovRefreshJob(ctx context.Context) (string, error) {
 
 func aggregateDailyStats(ctx context.Context, probeRepo repository.GeoProbeRunRepository) error {
 	dailyRepo := repository.NewGeoDailyStatRepository()
-	today := time.Now().Format("2006-01-02")
-	todayStart, _ := time.Parse("2006-01-02", today)
+	// 业务日口径：stat_date 是 DB 的日期键，探针行是 timestamptz。宿主时区一漂，
+	// 这里会把整轮聚合写到**昨天**的键下（UTC 16:00 之后必然发生）。窗口首同理：
+	// `time.Parse("2006-01-02")` 给的是 UTC 零点，与业务日首恒差 8 小时 ——
+	// 白天那几轮 ListSince 从 CST 08:00 起拉，业务日 00:00–08:00 的记录整段漏算；
+	// 晚间那几轮反而多拉回昨天 16 小时，再被日期过滤掉（实测：同一瞬间
+	// 宿主键 2026-09-20 / 业务键 2026-09-21，两个窗口首差 16h）。
+	todayStart := timeutil.StartOfBusinessDay(time.Now())
+	today := timeutil.BusinessDate(todayStart)
 	type aggKey struct {
 		engine string
 		intent string
@@ -85,7 +92,7 @@ func aggregateDailyStats(ctx context.Context, probeRepo repository.GeoProbeRunRe
 		return fmt.Errorf("拉取今日探针记录失败: %w", err)
 	}
 	for _, r := range recentRuns {
-		if r.CreatedAt.Format("2006-01-02") != today {
+		if timeutil.BusinessDate(r.CreatedAt) != today {
 			continue
 		}
 		k := aggKey{engine: r.Engine, intent: runeTruncate(r.Query, 40)}
