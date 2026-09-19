@@ -311,7 +311,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune audit
+.PHONY: lint lint-install vet test-go fmt fmt-check test-db-prune audit audit-artifacts
 
 lint-install:
 	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
@@ -401,4 +401,19 @@ audit:
 	@python3 scripts/check_component_types.py
 	@echo "── 有写入路径的模型必须登记 AutoMigrate ──"
 	@python3 scripts/check_model_migration.py
+	@echo "── 文档相对链接在干净 checkout 里必须可解析 ──"
+	@python3 scripts/check-md-links-offline.py .
+	@echo "── workflow 引用完整性（with.file/steps.id/needs/artifact 配对）──"
+	@python3 scripts/check_workflow_refs.py --repo .
 	@echo "✅ 静态审计通过"
+
+# 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——
+#   ① CI 的 checkout 里没有 */dist（.gitignore 排除），也没有 .env；
+#   ② 现有两道秘密门都扫不到这一刻：check-secrets.sh 看 git 索引（产物永不进索引），
+#      check-secrets-workspace.sh 的 find 里 `-path '*/dist/*' -prune` 主动跳过产物；
+#      于是从 .env.local 之类（同样不入仓）被 vite 编进 bundle 的真凭证无人拦截。
+#   产物是"秘密真正对外公开"的那一步，只能在本地构建完、上传/发布前跑。
+#   缺 dist 目录或缺凭证键时脚本 rc=2（宁可报错，不静默零扫描）。
+audit-artifacts:
+	@bash scripts/check-secrets-artifacts.sh .env \
+		user-web/dist user-web/bridge/dist user-web/browser_automation/dist embed-sdk/dist

@@ -87,6 +87,22 @@ jobs:
       - name: Check i18n coverage
         run: node user-web/scripts/check-i18n-coverage.cjs
 
+  # ── 工作流自身的静态一致性 ──
+  # GitHub 不编译 workflow YAML：with.file/context/path 指向不存在的文件、
+  # steps.<id> 引用了没写 id: 的步骤、needs 指向不存在的 job、artifact 上传/下载名
+  # 不配对、步骤级属性（continue-on-error 等）误写进 with: —— 全部只会在 job 真跑时
+  # 才炸，且常以「取到空串」的静默形式出现。本轮就是靠它揪出 release.yml 里
+  # steps.buildkit.outputs.digest（无该 id）与已随 94415060 删除的 Dockerfile。
+  workflow-refs:
+    name: Workflow refs integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check workflow references
+        run: python3 scripts/check_workflow_refs.py --repo .
+
   license-compliance:
     name: LICENSE Compliance Scan
     runs-on: ubuntu-latest

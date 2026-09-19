@@ -57,6 +57,13 @@ jobs:
             './**/*.md'
           fail: true
 
+      # lychee 只看文件系统，分不清「本地有、仓库里没有」；本轮 7 处断链全部是
+      # 被 .gitignore 排除或从未 add 的目标（docs/bridge/、user-server/api、
+      # .air.toml、对端仓路径），本地跑 lychee 全绿、CI 跑全红。本步骤以 git 索引
+      # 为唯一事实源复现同一判据，并额外给出「为什么断」的归因。
+      - name: Offline link check (git-index scoped)
+        run: python3 scripts/check-md-links-offline.py .
+
       - name: Summary
         if: always()
         run: |
