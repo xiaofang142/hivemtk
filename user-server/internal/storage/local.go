@@ -41,9 +41,32 @@ func (d *LocalDriver) ensureDir(dir string) error {
 	return os.MkdirAll(dir, 0o750)
 }
 
+// dangerousWebExts "浏览器同源直接执行/渲染"的扩展名集合。
+//
+// 本地存储目录经 /files 以应用主站同源发布（router.serveUploadsGuarded），
+// 落盘 .html/.svg/.js 等即构成存储型 XSS。两类来源曾实测可达：
+//   - 素材库上传（content/service/material.go）不校验扩展名，文件名整体透传；
+//   - WhatsApp 入站媒体（service/channel_media.go）文件名 hint 来自远程消息、
+//     扩展名可由 HTML 内容嗅探（http.DetectContentType → text/html → .html）推出。
+//
+// 落盘时一律中和为 .bin（保留下载语义、放弃执行位）；对历史已落盘文件由
+// /files 服务层守卫兜底（同一清单经 IsDangerousWebExt 复用）。
+var dangerousWebExts = map[string]bool{
+	".html": true, ".htm": true, ".htmls": true, ".xhtml": true, ".xht": true,
+	".svg": true, ".svgz": true, ".js": true, ".mjs": true, ".xml": true,
+}
+
+// IsDangerousWebExt 供服务层（/files 守卫）与存储层共用同一判定清单。
+func IsDangerousWebExt(ext string) bool {
+	return dangerousWebExts[strings.ToLower(ext)]
+}
+
 func (d *LocalDriver) generatePath(folder, originalFilename string) string {
 	ext := strings.ToLower(filepath.Ext(originalFilename))
 	if ext == "" {
+		ext = ".bin"
+	}
+	if dangerousWebExts[ext] {
 		ext = ".bin"
 	}
 	now := time.Now()
