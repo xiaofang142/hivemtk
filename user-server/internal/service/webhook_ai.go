@@ -199,7 +199,9 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 		return
 	}
 
-	s.sendOutbound(ctx, channel, accountID, p, resp.Reply, hubMsg, RichCardsFromDTO(resp.Cards))
+	// 实时路径的失败在 sendOutbound 内部已收口：outboundSendFailed 落失败轨迹，
+	// 可重试错误由 defer 的 enqueueSendRetry 入队改投，调用方再记一次只会重复告警。
+	_, _ = s.sendOutbound(ctx, channel, accountID, p, resp.Reply, hubMsg, RichCardsFromDTO(resp.Cards))
 }
 
 func (s *WebhookService) loadAgentForChannel(ctx context.Context, channel WebhookChannel, accountID string, chatID ...string) (*AgentContext, error) {
@@ -535,7 +537,8 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		if agentCtx != nil && agentCtx.AgentCode != "" {
 			outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)
 		}
-		s.sendOutbound(outCtx, channel, accountID, p, result.Reply, hubMsg, result.Cards)
+		// 同上：失败落轨迹与改投重发均在 sendOutbound 内部收口。
+		_, _ = s.sendOutbound(outCtx, channel, accountID, p, result.Reply, hubMsg, result.Cards)
 		return
 	}
 
