@@ -311,7 +311,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune audit audit-artifacts
+.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune audit audit-artifacts audit-secrets
 
 # 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
 # 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
@@ -453,3 +453,14 @@ audit:
 audit-artifacts:
 	@bash scripts/check-secrets-artifacts.sh .env \
 		user-web/dist user-web/bridge/dist user-web/browser_automation/dist embed-sdk/dist
+
+# 提交前专用：待纳管文件（已跟踪 + 未跟踪，即"正要进仓"的那一批）的明文凭证闸门。
+# **不在 audit / CI 里** —— A 项要把本机 .env 的真实凭证值逐个搜进待纳管文件，
+# CI 既没有 .env、也绝不该有（把真凭证推上 runner 等于第二次泄露）；缺 .env 时
+# 脚本 rc=2，而不是静默零扫描。CI 侧对应的是 gitleaks，它抓的是公开高置信度模式，
+# 覆盖不到本仓自定义键名的字面量赋值。
+# 登记本目标的直接原因：这道门自 81955cfc 起挂在任何入口之外（无 CI、无 hook、
+# 无 make 目标），2026-09-20 首次执行就发现 HEAD 上挂着 1 条红（064c6a21 当天凌晨
+# 引入的 nm-host 测试夹具）—— 写了却没有任何入口执行的门，等于零覆盖的门。
+audit-secrets:
+	@bash scripts/check-secrets.sh
