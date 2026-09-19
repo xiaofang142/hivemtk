@@ -317,7 +317,9 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		hub.Content = "[" + picked.chatType + "]"
 	}
 
-	if err := tgPayload.Ingress(ctx, s.ingressHandler(ctx), accountID); err != nil {
+	// 入站经中台落库（message_hub / 去重钩子），但 AI 触发留在本 dispatch：
+	// 下面 handleJob 才会按群门控（@mention/商机）、/start 网关、账号 AI 开关决定是否 triggerSalesEngine。
+	if err := tgPayload.Ingress(WithChannelOwnedAITrigger(ctx), s.ingressHandler(ctx), accountID); err != nil {
 		return nil, nil, err
 	}
 	s.upsertInboxFromHub(ctx, hub, picked.fromName)

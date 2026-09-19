@@ -399,6 +399,24 @@ func (s *InboxIngressService) NormalizeEvent(ctx context.Context, event *model.M
 	return nil
 }
 
+// channelOwnedAITriggerKey 标记「本次入站的 AI 触发由渠道 dispatch 自己负责」。
+type channelOwnedAITriggerKey struct{}
+
+// WithChannelOwnedAITrigger 让这条入站只落库、不在中台触发 AI。
+//
+// 用于 webhook 原生 dispatch（如 Telegram）：它们在调 Ingress 之后还会按渠道门控
+// （群聊 @mention / 商机 / /start 网关 / 账号 AI 开关）自行 triggerSalesEngine，
+// 两条路径都触发就会对同一条消息生成多份回复并各自真实投递。
+// 标记走 ctx，不影响 bridge/其他渠道照常触发 AI。
+func WithChannelOwnedAITrigger(ctx context.Context) context.Context {
+	return context.WithValue(ctx, channelOwnedAITriggerKey{}, true)
+}
+
+func channelOwnsAITrigger(ctx context.Context) bool {
+	v, _ := ctx.Value(channelOwnedAITriggerKey{}).(bool)
+	return v
+}
+
 func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *model.MessageEvent) (*InboxIngressResult, error) {
 	result := &InboxIngressResult{
 		SessionID: event.SessionID,
@@ -486,6 +504,20 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 			Str("conv_id", event.ConversationID).
 			Str("event_id", event.EventID).
 			Msg("[Inbox] 系统消息：仅落库不触发 AI")
+		return result, nil
+	}
+
+	if channelOwnsAITrigger(ctx) {
+		result.QueuedForAI = false
+		result.Reason = "AI 由渠道 webhook dispatch 按门控触发；中台仅落库，避免同一消息双路径重复回复"
+		// 仍要打「AI 处理中」标记：渠道 dispatch 紧接着就会开始推理，
+		// 否则并发到达的消息会被 sendOutbound 尾部的 recheck 误判为孤儿并补触发重复回复。
+		s.markAIProcessing(ctx, event.ConversationID)
+		logger.Ctx(ctx).Info().
+			Str("channel", event.Channel).
+			Str("conv_id", event.ConversationID).
+			Str("event_id", event.EventID).
+			Msg("[Inbox] 渠道自管 AI 触发：仅落库不重复触发")
 		return result, nil
 	}
 
@@ -582,22 +614,34 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 			Int("content_len", len(event.Content)).
 			Msg("[Inbox] aiTrigger.TriggerInboundAI start")
 
-		if s.cache != nil && event.ConversationID != "" {
-			aiKey := InboxAIProcessingKey + event.ConversationID
-			acquired, lerr := s.cache.SetNX(ctx, aiKey, "1", InboxAIProcessingTTL)
-			if lerr != nil {
-				logger.Ctx(ctx).Warn().Err(lerr).
-					Str("conv_id", event.ConversationID).
-					Msg("[Inbox] 设置 AI 处理中标记失败（放行本次触发，但可能重复触发）")
-			} else if !acquired {
-				logger.Ctx(ctx).Info().
-					Str("conv_id", event.ConversationID).
-					Msg("[Inbox] AI 已在进行中（分布式排他命中），跳过本次触发避免重复回复")
-				return
-			}
+		if !s.markAIProcessing(ctx, event.ConversationID) {
+			return
 		}
 		s.aiTrigger.TriggerInboundAI(ctx, event.Channel, accountID, event.ConversationID, event.SenderID, event.Content, event.EventID, opts...)
 	}()
+}
+
+// markAIProcessing 给会话打「AI 正在处理」排他标记（TTL 内自动过期），返回是否新获取成功。
+// 读该标记的一方是 RecheckUnrepliedAndTrigger 与 triggerAIForEvent 自身的排他检查：
+// 推理期间到达的消息不该被补触发第二次。
+func (s *InboxIngressService) markAIProcessing(ctx context.Context, conversationID string) bool {
+	if s.cache == nil || conversationID == "" {
+		return true
+	}
+	aiKey := InboxAIProcessingKey + conversationID
+	acquired, lerr := s.cache.SetNX(ctx, aiKey, "1", InboxAIProcessingTTL)
+	if lerr != nil {
+		logger.Ctx(ctx).Warn().Err(lerr).
+			Str("conv_id", conversationID).
+			Msg("[Inbox] 设置 AI 处理中标记失败（放行本次触发，但可能重复触发）")
+		return true
+	}
+	if !acquired {
+		logger.Ctx(ctx).Info().
+			Str("conv_id", conversationID).
+			Msg("[Inbox] AI 已在进行中（分布式排他命中），跳过本次触发避免重复回复")
+	}
+	return acquired
 }
 
 func (s *InboxIngressService) ReleaseAIProcessingFlag(ctx context.Context, conversationID string) {

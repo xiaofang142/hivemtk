@@ -525,6 +525,19 @@ func (s *TelegramIntegrationService) SendMessage(ctx context.Context, accountID 
 	return s.SendMessageEx(ctx, accountID, chatID, content, telegram.SendMessageOptions{})
 }
 
+// telegramOutboundHubMsgID 出站消息在 message_hub 的 msg_id。
+//
+// 必须含 accountID：message_hub 唯一键是 (platform,msg_id,conversation_id)，不含账号，
+// 而 TG 的 message_id 是「每个 bot 每个 chat 各自计数」——两个 bot 服务同一个客户时
+// 必然产生相同编号，只写 tg-<message_id> 会撞唯一键，导致发送已成功却落库失败，
+// 上层据「无出站记录」误判未回复并重复生成投递（2026-09-19 实测）。
+func telegramOutboundHubMsgID(accountID uint, messageID int64) string {
+	if messageID > 0 {
+		return fmt.Sprintf("tg-out-%d-%d", accountID, messageID)
+	}
+	return fmt.Sprintf("tg-out-%d", time.Now().UnixNano())
+}
+
 // SendMessageEx 带完整 SendMessageOptions（ParseMode / ReplyToMessageID / DisableWebPreview 等）
 func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountID uint, chatID int64, content string, opts telegram.SendMessageOptions) error {
 	if s.tg == nil {
@@ -536,6 +549,8 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 	}
 	cli := telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client))
 
+	// Client.SendMessage 内部已按分片做 3 次退避重试（传输错误/429/5xx，4xx 直接失败），
+	// 服务层不再叠第二层重试，否则一次抖动最多放大成 12 个 sendMessage 请求。
 	messageID, err := cli.SendMessage(ctx, chatID, content, opts)
 	if err != nil {
 		now := time.Now()
@@ -547,10 +562,7 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 		return fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
-	msgID := fmt.Sprintf("tg-out-%d", time.Now().UnixNano())
-	if messageID > 0 {
-		msgID = fmt.Sprintf("tg-%d", messageID)
-	}
+	msgID := telegramOutboundHubMsgID(accountID, messageID)
 	hubMsg, _ := s.hub.Push(ctx, &PushMessageRequest{
 		Platform:       "telegram",
 		AccountID:      fmt.Sprintf("%d", accountID),
