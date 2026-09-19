@@ -108,17 +108,25 @@ BASELINE=(
   "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|"
   "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|"
   "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|"
-  # 项12 = T-P3-01 新增：approval_requests 这张表**今天生产路径上一行都不会写**。
-  # 本卡按 C2 只建审批检查点的模型/仓储/服务三层，刻意不接线（接线卡分别是
-  # T-P3-02 挂起恢复、T-P5-03 外联闸门、T-P6-03 报价发送、T-P9-02 知识库变更）。
-  # 两行各盯一种互不包含的退化：
-  #   12a 装配入口零构造 ⇒ 整条审批竖没人用，P3 出口条件"出域动作必经 approval_request"
-  #       无从谈起；
-  #   12b 恢复读入口零调用 ⇒ 即使将来 Submit 被接上、审批也被批了，也没有任何挂起的流程
-  #       会被唤醒。挂起端与恢复端能各自烂掉一半，只登记 12a 看不见后一种。
-  # 两行按 UNWIRED 登记而不是留白：否则"审批闸门已经建好"会被读成"P3 已经闭环"。
-  "12|审批检查点服务的装配入口（approval_requests 今日生产零写入）|func NewApprovalRequestService|NewApprovalRequestService\(|internal/app cmd/api internal/controller internal/router|"
-  "12|审批挂起流程的恢复读入口（批了也没人续跑）|func \\(s \\*ApprovalRequestService\\) ByResumeToken|ByResumeToken\(|internal/app cmd/api internal/controller internal/router|"
+  # 项12 = T-P3-01 建表、T-P3-02 接线。T-P3-01 交付时 approval_requests 在生产路径上一行
+  # 都不会写（装配入口零构造、恢复读入口零调用），两行按 UNWIRED 登记而不是留白：否则
+  # "审批闸门已经建好"会被读成"P3 已经闭环"。
+  # T-P3-02 把挂起端与恢复端都接上了，于是三行全部翻成 **wired**（防回退，不是待办）：
+  #   12a 装配入口有构造（internal/app/approval_runtime_wiring.go）。注意这一格只证明
+  #       "有人构造了服务"，不证明"运行中一定装配了"：总开关 FF_LTC_APPROVAL_RESUME
+  #       默认 off，off 档直接 return nil。开关在装配层，基线看不见它（要靠装配测试守住，
+  #       见 internal/app/approval_runtime_wiring_test.go）。
+  #   12b 恢复读入口有调用（sop_approval_resume.go 点火时回读）。callpat 写成
+  #       `\.ByResumeToken\(` 而不是裸名：仓储层自己的 GetByResumeToken 含同名子串，
+  #       那是实现的内部调用、不是接线证据。
+  #   12c 到期清扫有节拍器调用（T-P3-01 移交项：方法写得再完整，零调用方就等于
+  #       pending 只增不减）。callpat 用"两个实参"这一形状与草稿侧的 ExpireOverdue(ctx)
+  #       分开 —— 两条竖的 ExpireOverdue 同名不同签名，不区分的话删掉清扫器也不会红。
+  # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P5-03 外联闸门、
+  # T-P6-03 报价发送、T-P9-02 知识库变更 —— 它们的 subject_type 今天没有任何生产 Submit。
+  "12|审批检查点服务的装配入口（开关 FF_LTC_APPROVAL_RESUME，默认 off）|func NewApprovalRequestService|NewApprovalRequestService\(|internal/app cmd/api internal/controller internal/router|wired"
+  "12|审批挂起流程的恢复读入口（点火时回读结论）|func \\(s \\*ApprovalRequestService\\) ByResumeToken|\\.ByResumeToken\\(|internal/service internal/app cmd/api internal/controller internal/router|wired"
+  "12|到期 pending 审批的清扫调用方|func \\(s \\*ApprovalRequestService\\) ExpireOverdue|\\.ExpireOverdue\\([^)]*,|internal/service internal/app cmd/api internal/controller internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

@@ -75,6 +75,58 @@ func (r *SOPTimerRepository) MarkFired(ctx context.Context, id uint, now time.Ti
 	return res.RowsAffected, nil
 }
 
+// FindPendingByExecutionAndNode 取某执行某节点上仍处于 pending 的定时器（按 id ASC，可多条）。
+//
+// 为什么需要它（T-P3-02 审批唤醒）：裁决落在**任意时刻**，而等待那一刻写下的定时器只认
+// `wait_until`。要提前推进流程，就得从"哪一行在等这件事"反查到定时器，再把它的
+// `wait_until` 提前（见 MarkDueNow）—— 反查到多条是合法的（wait 节点重跑过一次 attempt），
+// 所以返回切片而不是 First：漏掉第二条 = 那一轮的流程永远醒不过来。
+//
+// 刻意不带 LIMIT：一个 (execution,node) 上的 pending 定时器天然只有个位数，
+// 加上限只会让"漏唤醒"变成静默行为。
+func (r *SOPTimerRepository) FindPendingByExecutionAndNode(ctx context.Context, executionID uint, nodeID string) ([]model.SOPTimer, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("sop timer repository not initialized")
+	}
+	var timers []model.SOPTimer
+	err := r.db.WithContext(ctx).
+		Where("execution_id = ? AND node_id = ? AND status = ?", executionID, nodeID, "pending").
+		Order("id ASC").
+		Find(&timers).Error
+	if err != nil {
+		return nil, err
+	}
+	return timers, nil
+}
+
+// MarkDueNow 把一枚仍在等的定时器提前到"此刻即可点火"，返回受影响行数。
+//
+// 为什么改 wait_until 而不是直接 MarkFired + 自己派发（T-P3-02 的推送侧选择）：
+// 派发走的是有缓冲的队列，队列满时 DispatchOrLog 只记日志不阻塞 —— 于是"行已 fired、
+// 任务没进队"成为一个新的挂死面：状态已不是 pending，轮询器再也不会看它第二眼，
+// 流程再也叫不醒。提前到期把点火与派发**留在 outbox 轮询器那条已有路径上**：
+// 抢占仍由 MarkFired 的 CAS 提供，裁决那一刻进程正好不在也不影响（新值已落库，
+// 下一轮、甚至下一个进程照样点火）⇒ AC② 可证。
+// 代价是唤醒延迟从 0 变成一个轮询周期（默认 5s），而推送这条股本就只买"及时性"。
+//
+// WHERE 里两个条件各挡一类并发：
+//   - status='pending'：已 fired/skipped/dead_letter 的行不动（与轮询器抢同一行时返回 0，
+//     调用方按"已经有人在处理了"处理）；
+//   - wait_until > now：重复通知不会把同一行反复改写，于是 RowsAffected 顺带回答了
+//     "这一次是不是我提前到的"。
+func (r *SOPTimerRepository) MarkDueNow(ctx context.Context, id uint, now time.Time) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("sop timer repository not initialized")
+	}
+	res := r.db.WithContext(ctx).Model(&model.SOPTimer{}).
+		Where("id = ? AND status = ? AND wait_until > ?", id, "pending", now).
+		Update("wait_until", now)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
 // CountPendingByExecutionID 统计指定执行 ID 的 pending timer 数
 //
 // 用于卡死检测：有 pending timer 表示 wait 节点正在等待，不算卡死。

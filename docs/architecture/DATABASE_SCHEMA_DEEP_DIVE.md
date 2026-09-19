@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.4（2026-09-19，T-P3-01 新增 §4.14 审批检查点表；v1.3 为 T-P2-05 的 §4.13）
+> **版本**：v1.5（2026-09-20，T-P3-02 把 §4.14 的"零构造零读取"改写为接线现状与旗子边界；v1.4 为 T-P3-01 的 §4.14）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -703,13 +703,9 @@ pending）。`FOR UPDATE` 买的是"`fn` 执行期间这一行不许被别人改
 仓储与本测试文件原先都写着"没有 FOR UPDATE 时两边都会以为自己批成功"，那是**没跑过的推断**，
 Mu-R3 把它推翻后已按实测改写。
 
-**同时必须说清楚的前置事实**：本表**今日在生产路径上零构造、零读取**。`NewApprovalRequestService(`
-在非测试代码里 0 命中，`ByResumeToken(` 的调用方亦 0 命中，已登记为 `check-unwired-assets.sh`
-**项 12** 的两行 `unwired`；`ExpireOverdue` 也没有按节拍调用的 worker ⇒ **在本卡的接线卡（T-P3-02 /
-T-P3-07）落地之前，`pending` 不会自动过期**。同理，`AutoApprovalPolicy` 刻意**没有**接到旧的
-`approval.WhiteListApprovalChecker`（`(subject_type, subject_id)` → `(tool_name, account_id)` 的
-映射是调用方的知识），`decorator_approval.go` 一个字节未改 —— 那是 C2 的硬约束。
-本卡"建立了什么、没建立什么"的七条清点见 `AI_CORE_FEATURE_INVENTORY.md` 短板 **G20**。
+**接线现状与边界（T-P3-02，2026-09-20）**：本表的写入方与读取方今天**都在**（§4.14 立表时登记的"零构造、零读取"已被本卡推翻）：`NewApprovalRequestService(` 由 `internal/app/approval_runtime_wiring.go` 构造、`ByResumeToken(` 由 `ApprovalResumeBridge.ResolveOnFire` 在定时器点火那一刻回读结论、`ExpireOverdue(ctx, limit)` 由 `ApprovalSweepWorker.RunOnce` 每 5 分钟按节拍调用 —— 闸门 **项 12** 随之由两行 `unwired` 扩为三行并全部翻 `wired`（防回退；`ExpireOverdue` 那条的匹配式按"两个实参"的形状与草稿侧同名方法分开，否则删掉清扫器不会红）。**但装配挂着旗子**：`FF_LTC_APPROVAL_RESUME` 默认 `off`，该档下运行时根本不构造（表仍零写入、图里的审批等待节点判失败），`shadow` 只清扫到期、不装挂起桥，只有显式 `on` 才启用挂起/恢复，布尔真值一律降档到 `shadow`。所以"这张表有生产写入方"只在把旗子推到 `on` 之后成立，今天的库里它仍是零写入。
+同理，`AutoApprovalPolicy` 刻意**没有**接到旧的 `approval.WhiteListApprovalChecker`（`(subject_type, subject_id)` → `(tool_name, account_id)` 的映射是调用方的知识），`decorator_approval.go` 一个字节未改 —— 那是 C2 的硬约束。
+本条竖"建立了什么、没建立什么"的清点（四件事）见 `AI_CORE_FEATURE_INVENTORY.md` 短板 **G20**。
 
 ---
 
@@ -872,3 +868,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.2 | 2026-09-19 | @backend | 新增 §4.12 销售事件流 `sales_events` 的 LTC 预留列（R-5 / T-P2-04）：给出两列的可空/不回填/暂无索引/暂无生产者四态，写明 `NULL` 与空串是两层含义且 GORM 读回会塌成同一空串，并把"整张表今日生产零写入"登记为 `check-unwired-assets.sh` 项 9；顺带把文档头版本号从 v1.0 对齐到修订历史 |
 | v1.3 | 2026-09-19 | @backend | 新增 §4.13 知识库版本与灰度的三列（R-6 / T-P2-05）：给出 `version/canary_enabled/canary_percent` 的 PG 实测类型与"唯一读者是缓存命名空间折算"的定位，写明 `not null` 是必需项、写这三列必须走 `UpdateVersionCanary`（否则会 bump `updated_at` 而误删对侧缓存），并实算修正 §5.2 的知识库索引行（登记的复合索引在库里不存在）。**本行为 v1.4 补登记**：§4.13 落地时只改了文档头版本号，漏了本表 |
 | v1.4 | 2026-09-19 | @backend | 新增 §4.14 审批检查点 `approval_requests`（N-4 / T-P3-01）：直读 `information_schema` + `pg_indexes` 给出列/索引实测形状，写明两条唯一索引**必须**是部分的（丢了谓词会把闸门锁死 / 让第二条 auto-approve 撞空串）、身份四列在 PG 可空而判据在 `normalize()`、裁决写回的列白名单与 CAS，以及本卡"零构造零读取、`ExpireOverdue` 暂无按节拍调用方"的前置事实（项 12 / 短板 G20）；同时补记 GORM `tx.Model(&a)` 会追加主键条件、必须传空壳这条实测坑 |
+| v1.5 | 2026-09-20 | @backend | §4.14 的接线现状改写（N-4 / T-P3-02）：装配入口/恢复读入口/到期清扫三处生产调用点落地，`check-unwired-assets.sh` 项 12 由两行 `unwired` 扩为三行并全部翻 `wired`（`ExpireOverdue` 那条用"两个实参"的形状与草稿侧同名方法分开，否则删掉清扫器不会红）；同时写清旗子边界 —— `FF_LTC_APPROVAL_RESUME` 默认 `off`（该档下运行时不构造、表仍零写入），`shadow` 只清扫不挂起，布尔真值降档到 `shadow`，所以"这张表有生产写入方"只在推 `on` 之后成立。v1.4 那句"零构造零读取"作为历史事实保留在修订历史里，正文已按其被推翻的部分改写 |

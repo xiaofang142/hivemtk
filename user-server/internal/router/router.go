@@ -224,6 +224,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 决定挂不挂生产者。默认旗子 off ⇒ 这一步只是打一行"未装配"日志，不产生任何协程。
 	app.InitOrderDraftRuntime(gormDB)
 
+	// 异步审批运行时（T-P3-02）：清扫器 + 挂起/恢复桥。放在 SOP 调度器之后、路由之前 ——
+	// 桥要在第一笔流量进来之前挂上，否则会出现"审批服务已能收单、流程侧无人被叫醒"的窗口。
+	// 默认旗子 off ⇒ 这一步只打一行"未装配"日志，不产生任何协程。
+	app.InitApprovalRuntime(gormDB)
+
 	engine := app.BuildSalesEngine(gormDB)
 	kbRepo := repository.NewKnowledgeBaseRepository(gormDB)
 	orchestrator := app.BuildSmartOrchestrator(engine, kbRepo, gormDB)

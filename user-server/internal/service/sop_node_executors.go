@@ -638,6 +638,21 @@ func (e *WaitExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*Node
 	waitEventStr, _ := ec.Node.Config["wait_event"].(string)
 	waitUntilStr, _ := ec.Node.Config["wait_until"].(string)
 
+	// 审批等待档（T-P3-02 / N-4）：等的是一个**结论**而不是一段时间，
+	// 挂起与唤醒的全部知识在 sop_approval_resume.go，这里只多一个岔口。
+	// 未装配时判失败而不是跳过：一个不能把关的闸门必须把门关上，
+	// 静默跳过等于让"旗子没开"变成"这批外发不需要审批"。
+	if waitEventStr == WaitEventApproval {
+		if b := GetApprovalResumeBridge(); b != nil {
+			return b.ExecuteApprovalWait(ctx, ec)
+		}
+		return &NodeExecResult{
+			Status:       NodeStatusFailed,
+			ErrorMessage: "approval wait: 审批运行时未装配（旗子 off / DB 句柄缺失），未放行",
+			Retryable:    false,
+		}, nil
+	}
+
 	var waitUntil time.Time
 	waitEvent := WaitEventTimer
 

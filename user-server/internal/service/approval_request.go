@@ -1,10 +1,11 @@
 // approval_request.go 异步审批检查点服务（T-P3-01 / N-4，C2 裁定的唯一实体）
 //
 // 本文件只有三件事：入队（含幂等与 auto-approve 快速路径）、裁决（比较并交换）、
-// 到期落终态。**挂起与恢复不在这里** —— 那是 T-P3-02 的活（它经 resume_token 读这条记录，
-// 再用 agent_checkpoints 的游标续跑）。这里的边界是"审批这件事的结论是什么"，
-// 一旦把"流程跑到哪了"也写进本表，就会出现"审批说已批准、流程根本没人续跑"这种
-// 两边都对、合起来错的分歧（C2 明确要求复用同一套游标，不另造）。
+// 到期落终态。**它不知道任何流程怎么挂起、从哪里续跑**：T-P3-02 把这些能力做成一个
+// 出口（`ApprovalWaitNotifier`，由 SOP 侧实现）而不是把流程知识写进本文件 ——
+// "审批这件事的结论是什么"与"流程跑到哪了"必须留在两处，一旦合表就会出现
+// "审批说已批准、流程根本没人续跑"这种两边都对、合起来错的分歧
+// （C2 明确要求复用同一套游标，不另造）。
 //
 // 旧接口 `tooluse.ApprovalChecker`（bool）在本卡**未被引用、也未被改动**：
 // C2 的约束是「禁止在 decorator_approval.go 上叠加第二个布尔接口」，
@@ -22,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -185,15 +187,67 @@ func newApprovalResumeToken() (string, error) {
 	return "rt_" + hex.EncodeToString(b[:]), nil
 }
 
+// ApprovalWaitNotifier 一条审批落定后该通知谁（T-P3-02 的出口，由 SOP 侧实现）。
+//
+// 形状上刻意只有"通知"而没有"注册等待者"：等待关系本来就在流程那一侧的记录里
+// （SOP 是 `sop_timers` 那一行 pending），本服务再存一份就是第二个事实源，
+// 两份不一致时永远是谁先动谁说了算 —— 那正是 C2 要合掉的那类双源。
+//
+// 无返回值是刻意的：**推送只是省时间，不是正确性的一部分**。正确性走"点火时回读结论"
+// （见 sop_approval_resume.go 的 ResolveOnFire）：进程在裁决那一刻正好不在，
+// 通知丢了也不要紧，定时器到自己的 wait_until 仍会把流程叫醒并读到真实结论。
+// 反过来若把它做成 error 上抛，裁决就会因为"叫不醒某个流程"而失败 ——
+// 人的裁决已经落库了，绝不能因为唤醒故障被回滚。
+type ApprovalWaitNotifier interface {
+	NotifyDecided(ctx context.Context, req *model.ApprovalRequest)
+}
+
 // ApprovalRequestService 审批检查点服务
 type ApprovalRequestService struct {
 	repo   repository.ApprovalRequestRepository
 	policy AutoApprovalPolicy // nil = 永不自动放行（全部走人工，最保守的一档）
+
+	// notifierMu 保护 notifier：SetWaitNotifier 发生在装配期（router.Setup），
+	// 而读它发生在裁决期（HTTP 线程 / worker 线程），两者没有先后保证 ——
+	// 无锁读写是数据竞争（-race 可复现），口径同 SOPExecutionDispatcher.compensationMu。
+	notifierMu sync.RWMutex
+	notifier   ApprovalWaitNotifier // nil = 无人等（本服务可独立使用，见 T-P3-01 的零装配）
 }
 
 // NewApprovalRequestService 构造。policy 可为 nil（见上）。
 func NewApprovalRequestService(repo repository.ApprovalRequestRepository, policy AutoApprovalPolicy) *ApprovalRequestService {
 	return &ApprovalRequestService{repo: repo, policy: policy}
+}
+
+// SetWaitNotifier 装配唤醒出口。传 nil 等于撤掉（回滚到"只靠定时器到期"那一档）。
+//
+// 装配点：internal/app/approval_runtime_wiring.go。刻意允许在 Start 之后调用，
+// 因为审批服务要先于 SOP 调度器存在、而桥接器要拿到调度器才能唤醒（两者构造顺序相反）。
+func (s *ApprovalRequestService) SetWaitNotifier(n ApprovalWaitNotifier) {
+	if s == nil {
+		return
+	}
+	s.notifierMu.Lock()
+	s.notifier = n
+	s.notifierMu.Unlock()
+}
+
+func (s *ApprovalRequestService) waitNotifier() ApprovalWaitNotifier {
+	s.notifierMu.RLock()
+	defer s.notifierMu.RUnlock()
+	return s.notifier
+}
+
+// notifyWait 把结论推给等待方；未装配时静默（那是默认档，不是故障）。
+func (s *ApprovalRequestService) notifyWait(ctx context.Context, req *model.ApprovalRequest) {
+	if s == nil || req == nil {
+		return
+	}
+	n := s.waitNotifier()
+	if n == nil {
+		return
+	}
+	n.NotifyDecided(ctx, req)
 }
 
 // Submit 入队一次审批请求。
@@ -362,6 +416,9 @@ func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict 
 			// 调用方拿着 nil 无从判断裁决有没有生效，而它下一步就是"要不要真的外发"。
 			return nil, ErrApprovalNotFound
 		}
+		// 唤醒挂在这件事上的流程（T-P3-02）。放在**读回之后**：通知出去的那一刻，
+		// 被叫醒的一方会立刻回读这一行，它必须读到刚落的结论而不是旧值。
+		s.notifyWait(ctx, cur)
 		return cur, nil
 	}
 
@@ -415,22 +472,31 @@ func (s *ApprovalRequestService) ByResumeToken(ctx context.Context, token string
 	}
 }
 
-// ExpireOverdue 把一批到期仍未裁决的 pending 翻成 expired，返回**实际翻转**的行数。
+// ExpireOverdue 把一批到期仍未裁决的 pending 翻成 expired，返回**实际被翻转的那些行**。
+//
+// 返回行而不是计数（T-P3-02 改的签名）：到期不是"少了一条待办"就完事 ——
+// 挂在它上面的流程同样需要被告知"这件事不会再有人批了"，否则 SOP 会一直等到
+// 定时器自己的 wait_until（两者虽然同源于同一个 expires_at，但唤醒路径必须存在，
+// 不然"到期"在流程侧读起来与"还没批"没有区别）。计数派不出这个用途。
 //
 // limit<=0 = 本轮不限（装配侧应传有界值，理由同 recovery worker 的单轮上限：
 // 一次清理的最坏耗时与锁范围必须有上界）。
 // 这一格状态必须由某个调用方按节拍来推（T-P2-06 在 PurgeTerminal 上刚踩过：
-// 常量写了、没人调，等于没有保留期）⇒ 本卡的装配落点在 T-P3-02/T-P3-07，
-// 在那之前 pending 不会自动过期，这一点写进移交清单而不是假装它已生效。
-func (s *ApprovalRequestService) ExpireOverdue(ctx context.Context, limit int) (int64, error) {
+// 常量写了、没人调，等于没有保留期）⇒ 定时调用方就在本卡的装配里
+// （internal/app/approval_runtime_wiring.go 的清扫协程），T-P3-01 登记的那条
+// "pending 不会自动过期"的移交项到这里收口。
+func (s *ApprovalRequestService) ExpireOverdue(ctx context.Context, limit int) ([]*model.ApprovalRequest, error) {
 	if s == nil || s.repo == nil || !s.repo.Available() {
-		return 0, errors.New("approval_request service: 未接仓储或句柄不可用")
+		return nil, errors.New("approval_request service: 未接仓储或句柄不可用")
 	}
-	rows, err := s.repo.ExpirePendingBatch(ctx, approvalNowFn(), limit)
+	flipped, err := s.repo.ExpirePendingBatch(ctx, approvalNowFn(), limit)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return int64(len(rows)), nil
+	for _, row := range flipped {
+		s.notifyWait(ctx, row)
+	}
+	return flipped, nil
 }
 
 // AllowedTransitions 暴露状态机给待办中心/审计视图（"这条还能被改成什么"）。

@@ -161,6 +161,8 @@ func (o *SOPOutboxDispatcher) processDueTimers(ctx context.Context) {
 			Attempt:     0,
 			TraceID:     traceID,
 			TimerFired:  true,
+			WaitEvent:   t.WaitEvent,
+			WaitPayload: t.Payload,
 		})
 		firedCount++
 

@@ -844,14 +844,22 @@ func TestApprovalService_ExpireOverdueUsesSameClockAsDecision(t *testing.T) {
 	}
 
 	// 未到点：一条都不该翻（提前过期 = 把还在等人裁决的审批自己判死）。
-	if n, err := svc.ExpireOverdue(ctx, 10); err != nil || n != 0 {
-		t.Fatalf("未到点期望 0，实际 (%d,%v)", n, err)
+	if rows, err := svc.ExpireOverdue(ctx, 10); err != nil || len(rows) != 0 {
+		t.Fatalf("未到点期望 0，实际 (%d,%v)", len(rows), err)
 	}
 
 	advance(time.Hour + time.Minute) // now = 01:01 ⇒ 只有 soon 到期
-	n, err := svc.ExpireOverdue(ctx, 10)
-	if err != nil || n != 1 {
-		t.Fatalf("期望翻 1 条，实际 (%d,%v)", n, err)
+	rows, err := svc.ExpireOverdue(ctx, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("期望翻 1 条，实际 (%d,%v)", len(rows), err)
+	}
+	// 返回值必须是**被翻转的那一行**而不是计数：挂在它上面的流程要靠这一行才知道
+	// "这件事不会再有人批了"（T-P3-02 的唤醒路径）。
+	if rows[0] == nil || rows[0].ID != soon.ID {
+		t.Fatalf("返回行应是被过期的那条，实际 %+v", rows[0])
+	}
+	if rows[0].Status != model.ApprovalStatusExpired {
+		t.Errorf("返回行的状态应是翻转后的 expired，实际 %q", rows[0].Status)
 	}
 	expired, err := repo.GetByID(ctx, soon.ID)
 	if err != nil || expired == nil {
@@ -884,11 +892,11 @@ func TestApprovalService_ExpireOverdueUsesSameClockAsDecision(t *testing.T) {
 	}
 
 	advance(2 * time.Hour) // later 也到期（01:01 + 2h = 03:01 > 02:00）
-	if n, err := svc.ExpireOverdue(ctx, 1); err != nil || n != 1 {
-		t.Fatalf("limit=1 时应只翻 1 条，实际 (%d,%v)", n, err)
+	if rows, err := svc.ExpireOverdue(ctx, 1); err != nil || len(rows) != 1 {
+		t.Fatalf("limit=1 时应只翻 1 条，实际 (%d,%v)", len(rows), err)
 	}
-	if n, err := svc.ExpireOverdue(ctx, 0); err != nil || n != 0 {
-		t.Fatalf("扫完后期望 0 条，实际 (%d,%v)", n, err)
+	if rows, err := svc.ExpireOverdue(ctx, 0); err != nil || len(rows) != 0 {
+		t.Fatalf("扫完后期望 0 条，实际 (%d,%v)", len(rows), err)
 	}
 }
 
