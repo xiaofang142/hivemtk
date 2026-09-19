@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // WorkbenchTodo 待办事项（销售工作台首页核心）
@@ -181,7 +183,15 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 	now := time.Now()
 
 	if draft != nil {
-		for _, d := range draft.ListPending(ctx, salesID, 0) {
+		// 读失败与"没有待确认草稿"得分开（T-P2-06 ③ 把 ListPending 改成回 error 之后，
+		// 这里就是第一个必须表态的调用方）。aggregateTodos 没有错误通道可回
+		// （它的签名属存量工作台口径，本卡不动），所以至少出声：
+		// 沉默地返回空待办 = 让一次查询故障长得像"今天没单子"，销售就不会去处理本该处理的单。
+		drafts, err := draft.ListPending(ctx, salesID, 0)
+		if err != nil {
+			logger.Errorf("[sales-workbench] 读取待确认草稿失败 ⇒ 本次待办里没有草稿项（不等于库里没有草稿）：%v", err)
+		}
+		for _, d := range drafts {
 			todos = append(todos, &WorkbenchTodo{
 				Type:        "draft",
 				Priority:    5,

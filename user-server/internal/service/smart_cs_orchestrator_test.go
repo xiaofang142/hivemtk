@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
@@ -398,4 +399,126 @@ func TestSmartCSOrchestrator_FindOrCreateSession_DerivedOneIDMergesSameUser(t *t
 	if second.SessionID != first.SessionID {
 		t.Fatalf("应命中同一会话；first=%s second=%s", first.SessionID, second.SessionID)
 	}
+}
+
+// ------------------------------------------------ T-P2-06：订单草稿生产者注入面 ----
+
+// 这几条测的是"挂上去的那一段"本身，不是整条会话链：HandleIncomingWithAgent 尾部只剩
+// 一行 `if produce != nil { go runOrderDraftProduce(...) }`，判据（nil / 空回复 / 超时
+// ctx / panic 兜底）全在 runOrderDraftProduce 里，所以这里可以直接驱动它。
+// 装配侧（谁把闭包挂上来、挂的是不是生产那一份）见 internal/app/order_draft_wiring_test.go。
+
+func TestRunOrderDraftProduce_NilProducerIsNoop(t *testing.T) {
+	o := NewSmartCSOrchestrator(nil, nil, nil)
+	// 未注入（= 旗子 off 的形态）：调用不该 panic，也不该有副作用
+	o.runOrderDraftProduce("cust-nil", &SalesResponse{Reply: "光子嫩肤 3 次 2280 元"})
+
+	// 注入后再清空：与"从没注入过"逐字等价（app 层 attach 失败时靠这个回到零改动）
+	called := 0
+	o.SetOrderDraftProducer(func(context.Context, string, string, *SalesResponse) { called++ })
+	o.runOrderDraftProduce("cust-nil", &SalesResponse{Reply: "x"})
+	if called != 1 {
+		t.Fatalf("注入后应调用一次，实际 %d", called)
+	}
+	o.SetOrderDraftProducer(nil)
+	o.runOrderDraftProduce("cust-nil", &SalesResponse{Reply: "x"})
+	if called != 1 {
+		t.Errorf("清空后不应再调用，实际累计 %d（传 nil 与不调 setter 必须等价）", called)
+	}
+}
+
+// 参数与 ctx：客户 ID 原样透传、归属留空由建草稿侧落 "system"、ctx 带 10s 上界且未取消。
+func TestRunOrderDraftProduce_ArgsAndFreshDeadline(t *testing.T) {
+	var (
+		gotCustomer, gotOwner, gotReply string
+		gotResp                         *SalesResponse
+		gotDeadline                     time.Time
+		hasDeadline                     bool
+		gotErr                          error
+	)
+	o := NewSmartCSOrchestrator(nil, nil, nil)
+	o.SetOrderDraftProducer(func(ctx context.Context, customerID, ownerID string, resp *SalesResponse) {
+		gotCustomer, gotOwner, gotResp = customerID, ownerID, resp
+		gotReply = resp.Reply
+		gotDeadline, hasDeadline = ctx.Deadline()
+		gotErr = ctx.Err()
+	})
+
+	resp := &SalesResponse{Reply: "好的，光子嫩肤 3 次 2280 元"}
+	// 请求 ctx 此刻已随响应返回而取消 —— 这正是实现里挂新 ctx 的原因，
+	// 所以这里断的是"传进来的那一份可继续用"。
+	o.runOrderDraftProduce("cust_deadline", resp)
+
+	if gotCustomer != "cust_deadline" {
+		t.Errorf("customerID=%q，期望原样透传", gotCustomer)
+	}
+	if gotOwner != "" {
+		t.Errorf("ownerID=%q，期望空串（会话侧没有稳定归属，交给 CreateFromIntent 落 system）", gotOwner)
+	}
+	if gotResp != resp || gotReply != resp.Reply {
+		t.Errorf("应把同一条响应交给生产者，实际 resp=%v reply=%q", gotResp != resp, gotReply)
+	}
+	if !hasDeadline {
+		t.Fatal("生产者拿到的 ctx 必须带超时（库卡住时 goroutine 要有收口）")
+	}
+	if gotErr != nil {
+		t.Errorf("ctx 不应已取消: %v", gotErr)
+	}
+	left := time.Until(gotDeadline)
+	if left <= 0 || left > orderDraftProduceTimeout {
+		t.Errorf("剩余时限 %s 应落在 (0, %s] 区间", left, orderDraftProduceTimeout)
+	}
+}
+
+// 空回复不建草稿：AI 没说话时也去提意向，等于把知识库里的一句报价当成客户下的单。
+func TestRunOrderDraftProduce_EmptyReplySkips(t *testing.T) {
+	called := 0
+	o := NewSmartCSOrchestrator(nil, nil, nil)
+	o.SetOrderDraftProducer(func(context.Context, string, string, *SalesResponse) { called++ })
+
+	for _, c := range []struct {
+		name string
+		resp *SalesResponse
+	}{
+		{"nil 响应", nil},
+		{"空回复", &SalesResponse{}},
+		{"纯空白回复", &SalesResponse{Reply: "   \n\t "}},
+	} {
+		o.runOrderDraftProduce("cust_empty", c.resp)
+		if called != 0 {
+			t.Fatalf("%s：不应调用生产者，实际调了 %d 次", c.name, called)
+		}
+	}
+	o.runOrderDraftProduce("cust_ok", &SalesResponse{Reply: "水光针 1 次 980"})
+	if called != 1 {
+		t.Errorf("非空回复应调用一次，实际 %d", called)
+	}
+}
+
+// 生产者 panic 必须在 goroutine 里被吞掉：没兜住的话整个进程会随一次提取失败而挂掉。
+//
+// 这条是反向测试的固定靶：把 defer/recover 删掉，测试进程会 panic 退出（而不是用例 FAIL），
+// 所以它同时也是"这条路径确实需要 recover"的证据。
+func TestRunOrderDraftProduce_PanicRecovered(t *testing.T) {
+	o := NewSmartCSOrchestrator(nil, nil, nil)
+	o.SetOrderDraftProducer(func(context.Context, string, string, *SalesResponse) {
+		panic("boom: 提取器内部炸了")
+	})
+	done := make(chan struct{})
+	go func() {
+		defer func() { close(done) }()
+		o.runOrderDraftProduce("cust_panic", &SalesResponse{Reply: "光子嫩肤"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("生产者 panic 后 runOrderDraftProduce 没返回")
+	}
+
+	// 真 panic（非自定义 error 类型）也要接得住
+	o.SetOrderDraftProducer(func(context.Context, string, string, *SalesResponse) {
+		var p *OrderDraft
+		_ = p.ID // 空指针解引用：与实现里 debug.Stack() 那条路径同型
+	})
+	o.runOrderDraftProduce("cust_nilptr", &SalesResponse{Reply: "光子嫩肤"})
 }

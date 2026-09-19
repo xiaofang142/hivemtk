@@ -66,6 +66,15 @@ const (
 	defaultDraftRetention = 90 * 24 * time.Hour
 )
 
+// 三副底座的名字（OrderDraftService.StoreKind 的取值，也是观察端点回显的 store 字段）。
+// 做成常量是为了让"端点说的"和"代码选的"不会各写各的字面量；导出给 router 包比对，
+// 因为端点那侧的分支判据必须与这里同一份。
+const (
+	DraftStoreKindMemory = "memory"
+	DraftStoreKindDB     = "db"
+	DraftStoreKindShadow = "shadow"
+)
+
 // ---------------------------------------------------------------- 内存实现 ----
 
 type memoryDraftStore struct {
@@ -424,6 +433,164 @@ func (s *dbDraftStore) purgeTerminal(ctx context.Context, before time.Time) (int
 
 func (s *dbDraftStore) statusCounts(ctx context.Context) (map[string]int64, error) {
 	return s.repo.CountByStatus(ctx)
+}
+
+// ------------------------------------------------------------ 影子底座 -------
+
+// shadowDraftStore 读走内存、写同时镜像一份到 DB（FF_LTC_ORDER_DRAFT_DB=shadow 用）。
+//
+// 为什么要这么一副"半新半旧"的底座：灰度期真正想知道的问题是"换成 DB 底座之后，
+// 读到的东西和内存里这套对不对得上"，而不是"新版能不能跑"。所以
+//   - 读一律走内存 ⇒ 对调用方零行为变化（包括多副本下各看各的这份内存，与今天一致）；
+//   - 写两边都做 ⇒ order_drafts 里有真实行可查，端点上两个口径的计数能并排看；
+//   - 镜像失败**不影响**业务：只累计计数 + 记最近一次错误，由观察端点摊开。
+//
+// durable() 在这里刻意返回 false，即使库里此刻真有行：影子期权威的那一份是内存，
+// 进程重启后读到的还是空。把 true 报出去就是让运维以为"现在重启不丢草稿了"，
+// 而这句话要到 on 档才成立。
+type shadowDraftStore struct {
+	primary *memoryDraftStore
+	mirror  repository.OrderDraftRepository
+
+	mu        sync.Mutex
+	failures  int64
+	lastError string
+}
+
+func newShadowDraftStore(db *gorm.DB) *shadowDraftStore {
+	return &shadowDraftStore{
+		primary: newMemoryDraftStore(),
+		mirror:  repository.NewOrderDraftRepositoryWithDB(db),
+	}
+}
+
+func (s *shadowDraftStore) durable() bool { return false }
+
+// recordMirrorFailure 累计一次镜像写失败。业务侧不感知（返回值刻意不给），
+// 但必须可查：静默吞掉的镜像失败会让整段灰度期的对照数据少于一半而无人知晓。
+func (s *shadowDraftStore) recordMirrorFailure(err error) {
+	if err == nil {
+		return
+	}
+	s.mu.Lock()
+	s.failures++
+	s.lastError = err.Error()
+	s.mu.Unlock()
+}
+
+// MirrorStats 最近一次读到的镜像失败数与最后一条错误。
+func (s *shadowDraftStore) MirrorStats() (failures int64, lastError string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.failures, s.lastError
+}
+
+// mirrorAvailable 报告镜像句柄是否可用（端点用它区分"没写进去"和"根本没地方写"）。
+func (s *shadowDraftStore) mirrorAvailable() bool { return s.mirror.Available() }
+
+// mirrorCounts 读库侧各状态行数，供与内存侧并排对照。错误照直回给调用方，
+// 这里不降级成空 map —— 空 map 会被读成"库里一条都没有"。
+func (s *shadowDraftStore) mirrorCounts(ctx context.Context) (map[string]int64, error) {
+	return s.mirror.CountByStatus(ctx)
+}
+
+func (s *shadowDraftStore) put(ctx context.Context, d *OrderDraft) error {
+	if err := s.primary.put(ctx, d); err != nil {
+		return err
+	}
+	s.recordMirrorFailure(s.mirror.Upsert(ctx, draftToModel(d)))
+	return nil
+}
+
+func (s *shadowDraftStore) get(ctx context.Context, id string) (*OrderDraft, error) {
+	return s.primary.get(ctx, id)
+}
+
+func (s *shadowDraftStore) pendingByCustomer(ctx context.Context, customerID string) ([]*OrderDraft, error) {
+	return s.primary.pendingByCustomer(ctx, customerID)
+}
+
+func (s *shadowDraftStore) listPending(ctx context.Context, ownerID string, now time.Time, limit int) ([]*OrderDraft, error) {
+	return s.primary.listPending(ctx, ownerID, now, limit)
+}
+
+func (s *shadowDraftStore) listByCustomer(ctx context.Context, customerID string) ([]*OrderDraft, error) {
+	return s.primary.listByCustomer(ctx, customerID)
+}
+
+func (s *shadowDraftStore) listByOwner(ctx context.Context, ownerID string) ([]*OrderDraft, error) {
+	return s.primary.listByOwner(ctx, ownerID)
+}
+
+func (s *shadowDraftStore) mutateIfPending(ctx context.Context, id string, fn func(*OrderDraft)) (*OrderDraft, bool, error) {
+	d, applied, err := s.primary.mutateIfPending(ctx, id, fn)
+	if err != nil || !applied {
+		return d, applied, err
+	}
+	// 镜像走 Upsert 而不是再来一次 MutatePending：权威判定已经在内存做过，
+	// 库里再锁一次只会把"本进程不认这条是 pending"的多副本分歧变成第二次错误来源。
+	s.recordMirrorFailure(s.mirror.Upsert(ctx, draftToModel(d)))
+	return d, applied, nil
+}
+
+func (s *shadowDraftStore) expireOverdue(ctx context.Context, now time.Time, ev func(*OrderDraft)) (int, error) {
+	n, err := s.primary.expireOverdue(ctx, now, ev)
+	if err != nil {
+		return n, err
+	}
+	s.sweepMirrorExpiry(ctx, now)
+	return n, nil
+}
+
+// sweepMirrorExpiry 把库侧的到期行也翻成 expired，与内存侧同一批节拍。
+// 不回调 ev：expired 统计事件由内存侧那份发一次，两边各发一遍等于把"过期草稿数"翻倍。
+func (s *shadowDraftStore) sweepMirrorExpiry(ctx context.Context, now time.Time) {
+	for round := 0; round < draftSweepMaxRounds; round++ {
+		rows, err := s.mirror.ExpirePendingBatch(ctx, now, draftSweepBatch)
+		if err != nil {
+			s.recordMirrorFailure(err)
+			return
+		}
+		if len(rows) < draftSweepBatch {
+			return
+		}
+	}
+	logger.Warnf("[order-draft] 影子镜像的过期扫描达到单轮上限 %d×%d，剩余留待下次",
+		draftSweepBatch, draftSweepMaxRounds)
+}
+
+func (s *shadowDraftStore) purgeTerminal(ctx context.Context, before time.Time) (int, error) {
+	n, err := s.primary.purgeTerminal(ctx, before)
+	if err != nil {
+		return n, err
+	}
+	for round := 0; round < draftSweepMaxRounds; round++ {
+		deleted, e := s.mirror.PurgeTerminal(ctx, before, draftSweepBatch)
+		if e != nil {
+			s.recordMirrorFailure(e)
+			return n, nil
+		}
+		if deleted < draftSweepBatch {
+			return n, nil
+		}
+	}
+	return n, nil
+}
+
+func (s *shadowDraftStore) statusCounts(ctx context.Context) (map[string]int64, error) {
+	return s.primary.statusCounts(ctx)
+}
+
+// newShadowDraftStoreForDB 拿到句柄才起影子，否则退回纯内存并出声。
+//
+// 这里不退成"影子但没有镜像"：那会交付一副看起来在对照、实际什么都没记的底座，
+// 端点上 mirror_available=false 与"今天就是没写进库"两种情况再也分不开。
+func newShadowDraftStoreForDB(db *gorm.DB) draftStore {
+	if db == nil {
+		logger.Warnf("[order-draft] ⚠️ shadow 档未拿到 DB 句柄 ⇒ 退回纯内存（无镜像可对照）")
+		return newMemoryDraftStore()
+	}
+	return newShadowDraftStore(db)
 }
 
 // ------------------------------------------------------------ 双向转换 -------

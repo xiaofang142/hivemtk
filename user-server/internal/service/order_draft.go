@@ -162,6 +162,64 @@ func NewOrderDraftServiceWithRepo(cfg *OrderDraftConfig, repo repository.OrderDr
 	return newOrderDraftService(cfg, newDBDraftStore(repo))
 }
 
+// NewOrderDraftServiceShadow 用影子底座创建服务（FF_LTC_ORDER_DRAFT_DB=shadow，见 T-P2-06）。
+//
+// 读走内存、写镜像到 DB：对调用方零行为变化，但库里会攒出真实行，
+// 于是"换 DB 底座前后读到的东西对不对得上"这件事有对照可看。
+// 注意 Durable() 在这一档是 false（权威那份仍是内存）。
+func NewOrderDraftServiceShadow(cfg *OrderDraftConfig, db *gorm.DB) *OrderDraftService {
+	return newOrderDraftService(cfg, newShadowDraftStoreForDB(db))
+}
+
+// StoreKind 当前用的是哪副底座："memory" / "db" / "shadow"。
+//
+// 给观察端点用：只有 Durable() 一个布尔的话，"影子期库里已经攒了 30 行"与
+// "真落库了"这两种状态回显完全一样，而它们的运维含义相反。
+func (s *OrderDraftService) StoreKind() string {
+	switch s.store.(type) {
+	case *dbDraftStore:
+		return DraftStoreKindDB
+	case *shadowDraftStore:
+		return DraftStoreKindShadow
+	default:
+		return DraftStoreKindMemory
+	}
+}
+
+// OrderDraftMirrorStatus 影子底座的对照读数（非影子底座时不会用到）。
+type OrderDraftMirrorStatus struct {
+	// Available 镜像句柄在不在。false = 影子档但没拿到 DB（已退回纯内存），
+	// 与"句柄在、只是还没写进东西"是两回事。
+	Available bool
+	// RowCounts 库侧各状态行数。读不动时为 nil，配合 ReadError 看。
+	RowCounts map[string]int64
+	// ReadError 库侧计数读取失败的原因（空 = 读到了）。
+	ReadError string
+	// Failures / LastError 镜像写失败的累计数与最后一条原因。
+	Failures  int64
+	LastError string
+}
+
+// MirrorStatus 读影子底座的对照状态。第二个返回值为 false 表示当前底座不是影子。
+func (s *OrderDraftService) MirrorStatus(ctx context.Context) (*OrderDraftMirrorStatus, bool) {
+	shadow, ok := s.store.(*shadowDraftStore)
+	if !ok {
+		return nil, false
+	}
+	st := &OrderDraftMirrorStatus{Available: shadow.mirrorAvailable()}
+	st.Failures, st.LastError = shadow.MirrorStats()
+	if !st.Available {
+		return st, true
+	}
+	counts, err := shadow.mirrorCounts(ctx)
+	if err != nil {
+		st.ReadError = err.Error()
+		return st, true
+	}
+	st.RowCounts = counts
+	return st, true
+}
+
 func newOrderDraftService(cfg *OrderDraftConfig, store draftStore) *OrderDraftService {
 	if cfg == nil {
 		cfg = &OrderDraftConfig{}
@@ -357,6 +415,55 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 		})
 	}
 	return draft
+}
+
+// CreateDraftsFromSalesResponse 从一条 AI 谈单响应里提取订单意向并建草稿
+// （T-P2-06 的生产入口：装配之前，order_drafts 表没有任何写入方）。
+//
+// 三点口径，都是照着 SalesActionTrigger 里那段既有逻辑抄的，不另起一套判据：
+//   - 提取文本 = 客户已说出口的需求/预算 + AI 的回复（见 draftExtractionText）；
+//     刻意**不**扫 RAG 命中块与话术模板 —— 那是"库里写了什么价"而不是"这单谈成了什么"，
+//     扫进来会让一条无关的知识库条目凭空造出一张客户没提过的草稿；
+//   - 每个意向走 CreateFromIntent（含同客户同产品去重合并、置信度加成、7 天到期），
+//     所以本方法不会绕过 T-P2-01 立的那两套并发保护；
+//   - 逐条意向独立成败：某一条落库失败只丢那一条，其余照常，返回值里只含有草稿的。
+//
+// extractor 为 nil 时不做任何事并返回 nil：宁可不建草稿，也不要在装配漏注入时
+// 悄悄换一套提取规则（正则的 product 名单是会改的，改在两份代码里就是两个口径）。
+func (s *OrderDraftService) CreateDraftsFromSalesResponse(
+	ctx context.Context,
+	extractor *OrderIntentExtractor,
+	customerID, ownerID string,
+	resp *SalesResponse,
+) []*OrderDraft {
+	if extractor == nil || resp == nil || customerID == "" {
+		return nil
+	}
+	intents := extractor.ExtractFromText(ctx, customerID, draftExtractionText(resp))
+	if len(intents) == 0 {
+		return nil
+	}
+	drafts := make([]*OrderDraft, 0, len(intents))
+	for i := range intents {
+		if d := s.CreateFromIntent(ctx, &intents[i], ownerID); d != nil {
+			drafts = append(drafts, d)
+		}
+	}
+	return drafts
+}
+
+// draftExtractionText 拼出订单意向提取要读的文本（唯一真源：SalesActionTrigger 与本方法都用它）。
+func draftExtractionText(resp *SalesResponse) string {
+	text := resp.Reply
+	if resp.Memory != nil {
+		if resp.Memory.Demand != "" {
+			text = resp.Memory.Demand + " " + text
+		}
+		if resp.Memory.Budget != "" {
+			text = resp.Memory.Budget + " " + text
+		}
+	}
+	return text
 }
 
 // CreateManual 销售手动创建草稿
@@ -662,53 +769,44 @@ func (s *OrderDraftService) Edit(ctx context.Context, draftID string, updates Dr
 	return fmt.Errorf("草稿状态为 %s，不可编辑", cur.Status)
 }
 
-// GetByID 根据 ID 查询草稿
-func (s *OrderDraftService) GetByID(ctx context.Context, draftID string) *OrderDraft {
-	draft, err := s.store.get(ctx, draftID)
-	if err != nil {
-		// 签名不变（返回裸指针），所以读库失败只能出声并回 nil —— 与"草稿不存在"
-		// 在调用方看来一样，这是既有 API 的形状限制，T-P2-06 装配时一并改成带 error。
-		logger.Errorf("[order-draft] 读取草稿 %s 失败：%v", draftID, err)
-		return nil
-	}
-	return draft
+// GetByID 根据 ID 查询草稿。
+//
+// 三种结果必须分得开（T-P2-06 ③）：
+//   - (draft, nil) 命中；
+//   - (nil, nil)   确实没有这条草稿 —— 与仓储口径一致（GetByID 不存在返回 (nil, nil)）；
+//   - (nil, err)   读不动（连接/SQL 故障）。
+//
+// 改签名前它把第三类 logger.Errorf 之后回 nil，于是"库挂了"在调用方看来与
+// "草稿不存在"逐字相同：销售工作台上表现为"这条草稿凭空消失了"，而事实是查不了。
+func (s *OrderDraftService) GetByID(ctx context.Context, draftID string) (*OrderDraft, error) {
+	return s.store.get(ctx, draftID)
 }
 
 // ListPending 列出待确认草稿（销售工作台首页）
 // 商业产品级：销售每天打开系统，第一眼看到"我有多少待确认草稿"，按优先级排序
-func (s *OrderDraftService) ListPending(ctx context.Context, ownerID string, limit int) []*OrderDraft {
-	pending, err := s.store.listPending(ctx, ownerID, time.Now(), limit)
-	if err != nil {
-		logger.Errorf("[order-draft] 待确认草稿列表读取失败 ⇒ 返回空列表（不返回半份）：%v", err)
-		return []*OrderDraft{}
-	}
-	return pending
+//
+// 读失败回 error 且列表为 nil，不回空切片：空列表的含义是"今天没有待确认草稿"，
+// 那是一句业务结论，拿一次查询故障去支撑它等于让销售停止处理本该处理的单。
+func (s *OrderDraftService) ListPending(ctx context.Context, ownerID string, limit int) ([]*OrderDraft, error) {
+	return s.store.listPending(ctx, ownerID, time.Now(), limit)
 }
 
-// ListByCustomer 列出客户的所有草稿（含历史）
-func (s *OrderDraftService) ListByCustomer(ctx context.Context, customerID string) []*OrderDraft {
-	out, err := s.store.listByCustomer(ctx, customerID)
-	if err != nil {
-		logger.Errorf("[order-draft] 客户 %s 草稿列表读取失败：%v", customerID, err)
-		return []*OrderDraft{}
-	}
-	return out
+// ListByCustomer 列出客户的所有草稿（含历史）。错误口径同 ListPending。
+func (s *OrderDraftService) ListByCustomer(ctx context.Context, customerID string) ([]*OrderDraft, error) {
+	return s.store.listByCustomer(ctx, customerID)
 }
 
-// ListByOwner 列出销售负责的所有草稿
-func (s *OrderDraftService) ListByOwner(ctx context.Context, ownerID string) []*OrderDraft {
-	out, err := s.store.listByOwner(ctx, ownerID)
-	if err != nil {
-		logger.Errorf("[order-draft] 销售 %s 草稿列表读取失败：%v", ownerID, err)
-		return []*OrderDraft{}
-	}
-	return out
+// ListByOwner 列出销售负责的所有草稿。错误口径同 ListPending。
+func (s *OrderDraftService) ListByOwner(ctx context.Context, ownerID string) ([]*OrderDraft, error) {
+	return s.store.listByOwner(ctx, ownerID)
 }
 
-// ExpireOverdue 批量过期超时草稿（定期调用）
+// ExpireOverdue 批量过期超时草稿（由 OrderDraftSweepWorker 定时调用）
 // 商业产品级：7 天未确认的草稿自动过期，避免销售工作台堆积无用草稿
-// 返回被过期的草稿数
-func (s *OrderDraftService) ExpireOverdue(ctx context.Context) int {
+//
+// 错误一并返回（T-P2-06 ②）：扫描中断时已翻的条数仍然有效，调用方（worker）要把
+// "翻了几条"和"为什么停在半路"分开报，只回一个 int 的话这两件事会被读成同一件。
+func (s *OrderDraftService) ExpireOverdue(ctx context.Context) (int, error) {
 	now := time.Now()
 	var event func(*OrderDraft)
 	if s.stats != nil {
@@ -729,11 +827,8 @@ func (s *OrderDraftService) ExpireOverdue(ctx context.Context) int {
 	}
 	// 过期是**落库的状态翻转**（内存副同样翻转自己的 map）：只计数不翻状态会让
 	// 下一轮扫描重新数到同一批草稿，"无界增长"从内存搬到 DB。
-	count, err := s.store.expireOverdue(ctx, now, event)
-	if err != nil {
-		logger.Errorf("[order-draft] 过期扫描中断 ⇒ 已翻 %d 条，剩余留待下次：%v", count, err)
-	}
-	return count
+	// 出错时不再就地 logger 一遍：错误已经回给调用方，worker 会带上轮次信息统一出声。
+	return s.store.expireOverdue(ctx, now, event)
 }
 
 // PurgeTerminal 清理超保留期的终态草稿（cancelled / expired），返回删除行数。
@@ -741,16 +836,14 @@ func (s *OrderDraftService) ExpireOverdue(ctx context.Context) int {
 // 过期只把 pending 搬进终态，不删行 —— 终态行会永久堆积。保留期内它们是
 // "为什么这单没成"的分析材料（CancelReason / stats 事件），过期的则是纯体积，
 // 所以留一个有边界的清理入口而不是留一个不断增长的历史表。
-func (s *OrderDraftService) PurgeTerminal(ctx context.Context, retention time.Duration) int {
+//
+// retention <= 0 走 defaultDraftRetention（90 天）。失败连同已删行数一起回给调用方：
+// 返回 0 会被读成"没有要清的"，而事实可能是"一条都没清掉"。
+func (s *OrderDraftService) PurgeTerminal(ctx context.Context, retention time.Duration) (int, error) {
 	if retention <= 0 {
 		retention = defaultDraftRetention
 	}
-	deleted, err := s.store.purgeTerminal(ctx, time.Now().Add(-retention))
-	if err != nil {
-		logger.Errorf("[order-draft] 终态草稿清理失败 ⇒ 本轮不清理（保留期外的行留待下次）：%v", err)
-		return 0
-	}
-	return deleted
+	return s.store.purgeTerminal(ctx, time.Now().Add(-retention))
 }
 
 func (s *OrderDraftService) findPendingDraftByProduct(ctx context.Context, customerID, productName string) (*OrderDraft, error) {

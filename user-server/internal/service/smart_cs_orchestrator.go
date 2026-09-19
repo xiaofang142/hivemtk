@@ -57,6 +57,10 @@ type SmartCSOrchestrator struct {
 	faqEmbedder llm.EmbeddingServiceInterface
 
 	dncChecker DoNotContactChecker
+
+	// orderDraftProduce 「AI 响应 → 订单意向提取 → 建草稿」的生产者（T-P2-06）。
+	// 由 internal/app 的装配层注入；nil = 本进程不产草稿（旗子关着 / 没 DB 句柄）。
+	orderDraftProduce func(ctx context.Context, customerID, ownerID string, resp *SalesResponse)
 }
 
 // OrchestratorConfig 编排器配置
@@ -124,6 +128,15 @@ func (o *SmartCSOrchestrator) SetIdentityService(svc *CustomerIdentityService) {
 
 func (o *SmartCSOrchestrator) SetDNCChecker(checker DoNotContactChecker) {
 	o.dncChecker = checker
+}
+
+// SetOrderDraftProducer 注入「AI 响应后提取订单意向并建草稿」的生产者（T-P2-06）。
+//
+// 传 nil 与不调这个效果相同：一条草稿都不会建。之所以做成函数注入而不是让编排器
+// 自己去 new 一个 OrderDraftService，是"要不要持久化"这个决策归装配层（读旗子、拿
+// DB 句柄），编排器只负责在合适的时机把响应交出去 —— 与 SetDNCChecker 同一分层口径。
+func (o *SmartCSOrchestrator) SetOrderDraftProducer(produce func(ctx context.Context, customerID, ownerID string, resp *SalesResponse)) {
+	o.orderDraftProduce = produce
 }
 
 func (o *SmartCSOrchestrator) ensureCustomerForSession(ctx context.Context, platform model.Platform, senderID, userName string) {
@@ -440,7 +453,47 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		}
 	}
 
+	// 订单意向提取 → 建草稿（T-P2-06 的生产入口）。三点口径：
+	//   - 只在 AI 真的给出回复之后跑：转人工/降级链那几条出口上面已经 return 了，
+	//     那里没有"谈出来的单"可提取；空回复的判据放在 runOrderDraftProduce 里，
+	//     这样这条路径能被单测直接驱动而不必搭完整的引擎 + 会话链；
+	//   - 异步 + recover + 独立 ctx：抽取要过正则、建草稿要写库，任何一步慢或炸都不能
+	//     把会话响应拖住或带崩（与上面 faqCache.Store 那个 goroutine 同一取舍）；
+	//     传进来的 ctx 此刻已随请求返回而取消，所以必须挂新 ctx 而不能沿用；
+	//   - produce 为 nil（旗子关/装配未注入）时零动作，本行不改变挂载前的行为。
+	if o.orderDraftProduce != nil {
+		go o.runOrderDraftProduce(session.UserID, salesResp)
+	}
+
 	return result, nil
+}
+
+// orderDraftProduceTimeout 给后台提取留的时间窗。
+//
+// 10s 是按"正则扫描一段回复 + 最多几条 INSERT"给的：远超正常耗时，又能在库卡住时
+// 准时把 goroutine 收掉，不至于每次会话失败都留下一个永久挂起的写库协程。
+const orderDraftProduceTimeout = 10 * time.Second
+
+// runOrderDraftProduce 在后台跑一次"意向提取 → 建草稿"。
+//
+// 单独成方法有两个用处：一是 HandleIncomingWithAgent 尾部只留一行、不把 recover 与
+// 超时脚手架摊进主流程；二是这条路径可被测试直接驱动（HandleIncomingWithAgent 需要
+// 完整的引擎 + 会话链，为了测几个 nil 判断去搭那套不值得）。
+func (o *SmartCSOrchestrator) runOrderDraftProduce(customerID string, resp *SalesResponse) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Warnf("[order-draft] 意向提取 panic 已 recover，不影响会话主链路: %v\n%s",
+				r, debug.Stack())
+		}
+	}()
+	produce := o.orderDraftProduce
+	// 空回复没有可提取的东西：AI 没说话就建草稿，等于把"库里某产品标价 880"当成客户下了单。
+	if produce == nil || resp == nil || strings.TrimSpace(resp.Reply) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), orderDraftProduceTimeout)
+	defer cancel()
+	produce(ctx, customerID, "", resp)
 }
 
 // resolveFAQKB 取本次会话用于答案缓存的知识库行。

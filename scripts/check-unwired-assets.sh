@@ -65,10 +65,18 @@ BASELINE=(
   "7|Agent 断点续跑 存点|func SaveCheckpoint|SaveCheckpoint\(||wired"
   "7|Agent 断点续跑 取点|func LoadLatestCheckpoint|LoadLatestCheckpoint\(||wired"
   "7|Agent 断点续跑 续跑阶段|func ResumeStage|ResumeStage\(||wired"
-  # 项8 = T-P2-01 新增：整条销售草稿竖（OrderDraftService）今天没有任何生产构造点，
-  # 持久化底座因此也只能是"实现完毕、等待装配"。登记为 unwired 而不是留白，
-  # 是为了让"草稿已落库"这种说法在接线前无法被悄悄讲出口（接线属 T-P2-06）。
-  "8|订单草稿持久化底座的装配入口|func NewOrderDraftServiceWithDB|NewOrderDraftServiceWithDB\(|internal/app cmd/api|"
+  # 项8 = T-P2-01 新增、T-P2-06 接线：整条销售草稿竖在接线前全仓非测试构造点为 0
+  # （NewOrderDraftService* 无人 new、SalesWorkbenchService 零引用、TriggerAfterSales 无
+  # 生产调用方、ExpireOverdue/PurgeTerminal 零调用方）⇒ order_drafts 一张表一行都不会被
+  # 生产路径写。四行全部登记为 **wired**（防回退），不是待办：
+  # 8a 是持久化底座的构造口，8b 是三态旗子的唯一装配入口，8c 是"没人调就等于没有保留期"
+  #   那条定时路径的调用方，8d 是生产者注入点（它一旦被删，AI 谈单就不再产草稿，
+  #   而编译、单测、真机对话全都不会红——只有这一行会红）。
+  #   一符号一行是这张表的硬约束（IFS='|' 切列，正则里的或会被拦腰截断）。
+  "8|订单草稿持久化底座的装配入口|func NewOrderDraftServiceWithDB|NewOrderDraftServiceWithDB\(|internal/app cmd/api|wired"
+  "8|订单草稿运行时装配（FF_LTC_ORDER_DRAFT_DB 三态）|func InitOrderDraftRuntime|InitOrderDraftRuntime\(|internal/app internal/router|wired"
+  "8|订单草稿到期/终态清扫的定时调用方|func NewOrderDraftSweepWorker|NewOrderDraftSweepWorker\(|internal/app|wired"
+  "8|AI 响应→建草稿的生产者注入点|func \\(o \\*SmartCSOrchestrator\\) SetOrderDraftProducer|SetOrderDraftProducer\(|internal/app|wired"
   # 项9 = T-P2-04 新增：sales_events 这张表**今天在生产路径上一行都不会写**。实测三项零命中：
   # NewSalesEventStatsService 无生产构造点、注入点 SetStats( 零命中、唯一被接线的
   # FollowUpService 走 `if s.stats != nil` 保护（stats 恒 nil）。本卡给这张表加了
@@ -87,6 +95,19 @@ BASELINE=(
   "10|KB 版本转正/回滚写入口|func \\(s \\*KnowledgeBaseService\\) PublishKBVersion|PublishKBVersion\\(|internal/controller|wired"
   "10|KB 灰度参数写入口|func \\(s \\*KnowledgeBaseService\\) SetKBCanary|SetKBCanary\\(|internal/controller|wired"
   "10|KB 版本现状读出口|func \\(s \\*KnowledgeBaseService\\) KBVersionInfo|KBVersionInfo\\(|internal/controller|wired"
+  # 项11 = T-P2-06 新增：本卡把草稿竖的**生产者侧**接上了（AI 回复→建草稿、清扫节拍、
+  # 观察端点），但装配过程中实测出**读侧与售后侧仍然没人注入**：
+  #   11a `SalesWorkbenchService.SetDraft` 在非测试代码零调用 ⇒ 工作台聚合待办里永远没有
+  #       草稿项，销售打开系统看不到"我有几条待确认草稿"（本卡只改了它的错误口径）；
+  #   11b `SalesActionTrigger.SetDraftService` 同理零调用 ⇒ 售后触发器提取的意向不落草稿；
+  #   11c `OrderDraftService.SetOrderService` 同理零调用 ⇒ `Confirm` 走到
+  #       `createOrderFromDraft` 只能回 "orderService 未注入"（实测：它明确报错，不会静默
+  #       造一条假订单，但"草稿可确认成单"这句话在注入补齐前说不出口）。
+  # 三行按 UNWIRED 登记而不是留白：否则"AI 谈单会产草稿、销售在工作台确认草稿"这半句话
+  # 会被读成整句都成立。兑现卡未在清单里指派（P4 是商机域、P8 是看板），开工前须先认领。
+  "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|"
+  "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|"
+  "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

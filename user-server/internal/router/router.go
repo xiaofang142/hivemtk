@@ -220,6 +220,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	app.InitGlobalToolRouter()
 	app.RegisterAllAgentTools(gormDB)
 	app.InitInferenceOrchestrator()
+	// 订单草稿运行时（T-P2-06）：必须在 BuildSmartOrchestrator 之前，后者按全局运行时
+	// 决定挂不挂生产者。默认旗子 off ⇒ 这一步只是打一行"未装配"日志，不产生任何协程。
+	app.InitOrderDraftRuntime(gormDB)
 
 	engine := app.BuildSalesEngine(gormDB)
 	kbRepo := repository.NewKnowledgeBaseRepository(gormDB)
@@ -592,6 +595,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		auth.POST("/upload", controller.UploadFile)
 
 		setupToolDebugRoutes(auth)
+
+		setupOrderDraftRoutes(auth)
 
 		app.SetupToolPermissionRoutes(auth)
 

@@ -123,6 +123,12 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 		dncSvc := service.NewDoNotContactService(dncRepo)
 		o.SetDNCChecker(dncSvc)
 	}
+
+	// 订单草稿生产者（T-P2-06）：运行时由 router.Setup 里的 InitOrderDraftRuntime 装配，
+	// 这里只负责"挂上"。拿不到运行时（旗子 FF_LTC_ORDER_DRAFT_DB=off）时什么都不挂：
+	// 编排器的生产者字段保持零值 nil，HandleIncomingWithAgent 尾部那条 `!= nil` 分支
+	// 因此根本不进（由 TestRunOrderDraftProduce_NilProducerIsNoop 锁定）。
+	attachOrderDraftProducer(o, currentOrderDraftRuntime())
 	return o
 }
 

@@ -288,7 +288,7 @@ func TestOrderDraftService_Durable_RestartSurvival(t *testing.T) {
 
 	// "重启"
 	second := durableDraftService(t, database)
-	after := second.GetByID(ctx, draft.ID)
+	after := draftByID(t, ctx, second, draft.ID)
 	if after == nil {
 		t.Fatalf("重启后草稿 %s 应仍在", draft.ID)
 	}
@@ -298,7 +298,7 @@ func TestOrderDraftService_Durable_RestartSurvival(t *testing.T) {
 	if after.Status != DraftStatusPending {
 		t.Errorf("重启后状态应仍是 pending，实际 %s", after.Status)
 	}
-	list := second.ListPending(ctx, "sales-restart", 10)
+	list := draftPending(t, ctx, second, "sales-restart", 10)
 	if len(list) != 1 || list[0].ID != draft.ID {
 		t.Fatalf("重启后待确认列表应含该草稿，实际 %+v", list)
 	}
@@ -355,7 +355,7 @@ func TestOrderDraftService_Durable_ExpireOverdueLandsInDB(t *testing.T) {
 		t.Fatalf("seed fresh-1 失败：%v", err)
 	}
 
-	if n := svc.ExpireOverdue(ctx); n != 2 {
+	if n := draftExpireOverdue(t, ctx, svc); n != 2 {
 		t.Fatalf("首轮期望过期 2 条，实际 %d", n)
 	}
 	for _, id := range []string{"due-1", "due-2"} {
@@ -375,7 +375,7 @@ func TestOrderDraftService_Durable_ExpireOverdueLandsInDB(t *testing.T) {
 		t.Errorf("未到期草稿不该被动过，实际 %s", fresh.Status)
 	}
 
-	if n := svc.ExpireOverdue(ctx); n != 0 {
+	if n := draftExpireOverdue(t, ctx, svc); n != 0 {
 		t.Errorf("第二轮期望 0 条，实际 %d（说明上一轮没真落库）", n)
 	}
 
@@ -419,7 +419,7 @@ func TestOrderDraftService_Durable_PurgeTerminalBounds(t *testing.T) {
 	seed("kept-confirmed", DraftStatusConfirmed, old)                    // 成单证据链：永不清理
 	seed("kept-recent", DraftStatusExpired, scenarioNow.Add(-time.Hour)) // 在保留期内
 
-	if n := svc.PurgeTerminal(ctx, 90*24*time.Hour); n != 2 {
+	if n := draftPurgeTerminal(t, ctx, svc, 90*24*time.Hour); n != 2 {
 		t.Fatalf("期望清掉 2 行，实际 %d", n)
 	}
 	for id, wantGone := range map[string]bool{
@@ -438,7 +438,7 @@ func TestOrderDraftService_Durable_PurgeTerminalBounds(t *testing.T) {
 			t.Errorf("%s 不该被清理", id)
 		}
 	}
-	if n := svc.PurgeTerminal(ctx, 0); n != 0 {
+	if n := draftPurgeTerminal(t, ctx, svc, 0); n != 0 {
 		// 传 0 走默认保留期（90 天）：kept-recent 在期内、kept-pending/confirmed 非终态
 		t.Errorf("第二轮期望 0 行（默认保留期），实际 %d", n)
 	}
@@ -467,7 +467,7 @@ func TestOrderDraftService_NilDBFallsBackToMemory(t *testing.T) {
 	if draft == nil {
 		t.Fatal("回退路径应仍可工作")
 	}
-	if got := svc.GetByID(context.Background(), draft.ID); got == nil {
+	if got := draftByID(t, context.Background(), svc, draft.ID); got == nil {
 		t.Error("回退到内存后仍应读得到")
 	}
 }
@@ -607,7 +607,7 @@ func TestOrderDraftService_PendingConflictMerges(t *testing.T) {
 	if fake.conflic != 1 {
 		t.Errorf("冲突分支应恰好走一次，实际 %d", fake.conflic)
 	}
-	if list := svc.ListPending(ctx, "", 10); len(list) != 1 {
+	if list := draftPending(t, ctx, svc, "", 10); len(list) != 1 {
 		t.Errorf("全程只该有一条 pending 草稿，实际 %d 条", len(list))
 	}
 }
@@ -631,7 +631,7 @@ func TestOrderDraftService_ConflictWithoutCandidateDropsIntent(t *testing.T) {
 	if got != nil {
 		t.Fatalf("重查无候选时应返回 nil，实际 %+v", got)
 	}
-	if list := svc.ListPending(context.Background(), "sales-y", 10); len(list) != 0 {
+	if list := draftPending(t, context.Background(), svc, "sales-y", 10); len(list) != 0 {
 		t.Errorf("不应有任何草稿落地，实际 %+v", list)
 	}
 }
@@ -664,5 +664,145 @@ func TestOrderDraftService_StorePutFailureIsVisible(t *testing.T) {
 	}
 	if draft != nil {
 		t.Errorf("回错时不该附带一份草稿，实际 %+v", draft)
+	}
+}
+
+// ---------------------------------------------------- T-P2-06 ③：读失败可区分 ----
+
+// readFailRepo 只把"读"这一段弄坏，写保持成功。
+//
+// 为什么必须只坏读：本卡 ③ 的病灶是"读库失败被吞成 nil/空列表"，写路径的失败
+// 上面几个用例已经钉过（failingStore）。混在一起的话，"CreateManual 成功 + 读回失败"
+// 这个最容易骗过人的组合就测不到 —— 而销售工作台正是这个形状。
+type readFailRepo struct {
+	repository.OrderDraftRepository
+	err error
+}
+
+func (r *readFailRepo) Available() bool { return true }
+
+func (r *readFailRepo) Upsert(context.Context, *model.OrderDraft) error { return nil }
+
+func (r *readFailRepo) GetByID(context.Context, string) (*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) ListPendingByCustomer(context.Context, string) ([]*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) ListPending(context.Context, string, time.Time, int) ([]*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) ListByCustomer(context.Context, string) ([]*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) ListByOwner(context.Context, string) ([]*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) CountByStatus(context.Context) (map[string]int64, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) MutatePending(context.Context, string, func(*model.OrderDraft)) (bool, error) {
+	return false, r.err
+}
+
+func (r *readFailRepo) ExpirePendingBatch(context.Context, time.Time, int) ([]*model.OrderDraft, error) {
+	return nil, r.err
+}
+
+func (r *readFailRepo) PurgeTerminal(context.Context, time.Time, int) (int64, error) {
+	return 0, r.err
+}
+
+// AC③：读不动 ≠ 没有。四种读一律把错误带到调用方，且**不附带**一个看起来像"空"的返回值。
+//
+// 改签名之前这些方法在失败时 logger 一句就回 nil/空，于是"库挂了"在调用方与
+// "这个销售今天没有待确认草稿"逐字相同 —— 后者是一句业务结论，会被写进首页、
+// 被读成"不用跟"。
+func TestOrderDraftService_ReadFailureIsDistinctFromEmpty(t *testing.T) {
+	boom := errors.New("connection refused")
+	svc := NewOrderDraftServiceWithRepo(nil, &readFailRepo{err: boom})
+	ctx := context.Background()
+
+	draft, err := svc.GetByID(ctx, "draft_any")
+	if draft != nil {
+		t.Errorf("读失败时不该返回草稿对象，实际 %+v", draft)
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("GetByID 必须把底层错误原样带回（可被 errors.Is 追到），实际 %v", err)
+	}
+
+	list, err := svc.ListPending(ctx, "sales_1", 10)
+	if list != nil {
+		t.Errorf("ListPending 失败时应回 nil 而非空切片（空切片会被 len()==0 读成「没有草稿」），实际 %v", list)
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("ListPending 应回错，实际 %v", err)
+	}
+
+	if l, e := svc.ListByCustomer(ctx, "c"); l != nil || !errors.Is(e, boom) {
+		t.Errorf("ListByCustomer 口径应一致，实际 list=%v err=%v", l, e)
+	}
+	if l, e := svc.ListByOwner(ctx, "o"); l != nil || !errors.Is(e, boom) {
+		t.Errorf("ListByOwner 口径应一致，实际 list=%v err=%v", l, e)
+	}
+	if c, e := svc.DraftStatusCounts(ctx); c != nil || !errors.Is(e, boom) {
+		t.Errorf("DraftStatusCounts 失败时不该回空 map（那是「库里零张草稿」），实际 counts=%v err=%v", c, e)
+	}
+
+	// Confirm 的读也在锁内，失败必须报"读不动"而不是"草稿不存在"
+	if _, e := svc.Confirm(ctx, "draft_any", "sales_1"); !errors.Is(e, boom) {
+		t.Errorf("Confirm 遇到读失败应回底层错误，实际 %v", e)
+	}
+	// 去重查询失败时按"宁缺勿重"丢弃本次意向，且不建草稿
+	if got := svc.CreateFromIntent(ctx, &OrderIntent{
+		CustomerID: "c", ProductName: "P", Quantity: 1, UnitPrice: 10, Confidence: 0.5,
+	}, "o"); got != nil {
+		t.Errorf("去重读失败时不应新建草稿（可能重复），实际 %+v", got)
+	}
+	// 清扫两段同理：出错时不能回 (0, nil)，那会被记成"这一轮扫得很干净"
+	if n, e := svc.ExpireOverdue(ctx); n != 0 || !errors.Is(e, boom) {
+		t.Errorf("ExpireOverdue 应回错，实际 n=%d err=%v", n, e)
+	}
+	if n, e := svc.PurgeTerminal(ctx, time.Hour); n != 0 || !errors.Is(e, boom) {
+		t.Errorf("PurgeTerminal 应回错，实际 n=%d err=%v", n, e)
+	}
+}
+
+// 反方向也要钉：真的没有 ≠ 读失败。这条防止实现被改成"只要不是命中就回错"。
+// 用真库跑，因为假句柄证不出"没命中"这个业务事实来自数据而不是来自桩。
+func TestOrderDraftService_MissingIsNotError(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.OrderDraft{})
+	db.SetTestDB(database)
+	ctx := context.Background()
+	svc := NewOrderDraftServiceWithDB(nil, database)
+
+	got, err := svc.GetByID(ctx, "draft_definitely_not_exists")
+	if err != nil {
+		t.Fatalf("查不到不该回错（那是读失败的事），实际 %v", err)
+	}
+	if got != nil {
+		t.Fatalf("查不到应回 (nil, nil)，实际 %+v", got)
+	}
+	list, err := svc.ListPending(ctx, "owner_with_no_drafts", 10)
+	if err != nil {
+		t.Fatalf("空结果不该回错: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("该销售应无待确认草稿，实际 %d 条", len(list))
+	}
+	counts, err := svc.DraftStatusCounts(ctx)
+	if err != nil {
+		t.Fatalf("计数为空不该回错: %v", err)
+	}
+	for k, v := range counts {
+		if v != 0 {
+			t.Errorf("刚迁移完的表不该有 %s=%d（测试库之间串了）", k, v)
+		}
 	}
 }

@@ -124,16 +124,9 @@ func (t *SalesActionTrigger) TriggerAfterSales(ctx context.Context, customerID, 
 	}
 
 	if t.extractor != nil {
-		textToExtract := resp.Reply
-		if resp.Memory != nil {
-			if resp.Memory.Demand != "" {
-				textToExtract = resp.Memory.Demand + " " + textToExtract
-			}
-			if resp.Memory.Budget != "" {
-				textToExtract = resp.Memory.Budget + " " + textToExtract
-			}
-		}
-		intents := t.extractor.ExtractFromText(ctx, customerID, textToExtract)
+		// 提取文本的拼法与 OrderDraftService.CreateDraftsFromSalesResponse 同源
+		// （draftExtractionText），两处各抄一份的话"AI 谈单产出草稿"就有两个口径。
+		intents := t.extractor.ExtractFromText(ctx, customerID, draftExtractionText(resp))
 		for _, in := range intents {
 			rec.Actions = append(rec.Actions, TriggerAction{
 				Action:     "order_intent_extracted",

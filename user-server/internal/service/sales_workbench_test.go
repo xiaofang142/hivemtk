@@ -425,7 +425,7 @@ func TestWorkbench_FullLoop(t *testing.T) {
 		t.Errorf("应有至少 1 个待办，实际: %d", len(overview.Todos))
 	}
 
-	pending := draft.ListPending(context.Background(), salesID, 1)
+	pending := draftPending(t, context.Background(), draft, salesID, 1)
 	if len(pending) > 0 {
 		d, _ := draft.Confirm(context.Background(), pending[0].ID, salesID)
 		if d != nil {

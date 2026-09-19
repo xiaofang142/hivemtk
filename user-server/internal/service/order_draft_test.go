@@ -35,6 +35,65 @@ func setupDraftEnv(t *testing.T) (*CustomerJourneyService, *FollowUpService, *AI
 	return journey, followup, tagger, extractor, stats, draftSvc, trigger
 }
 
+// ---- T-P2-06 ③ 之后读方法的测试助手：多出来的那个 error 一律判成测试失败。
+//
+// 为什么不各调用点写 `x, _ := ...`：把 error 丢掉正是本卡要修的那个形状 ——
+// 测试里丢一次，"读不动"就会以"列表为空"的身份通过断言。
+
+func draftPending(t *testing.T, ctx context.Context, svc *OrderDraftService, ownerID string, limit int) []*OrderDraft {
+	t.Helper()
+	list, err := svc.ListPending(ctx, ownerID, limit)
+	if err != nil {
+		t.Fatalf("ListPending 读失败（不是空列表，是读不动）: %v", err)
+	}
+	return list
+}
+
+func draftByCustomer(t *testing.T, ctx context.Context, svc *OrderDraftService, customerID string) []*OrderDraft {
+	t.Helper()
+	list, err := svc.ListByCustomer(ctx, customerID)
+	if err != nil {
+		t.Fatalf("ListByCustomer 读失败: %v", err)
+	}
+	return list
+}
+
+func draftByOwner(t *testing.T, ctx context.Context, svc *OrderDraftService, ownerID string) []*OrderDraft {
+	t.Helper()
+	list, err := svc.ListByOwner(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("ListByOwner 读失败: %v", err)
+	}
+	return list
+}
+
+func draftByID(t *testing.T, ctx context.Context, svc *OrderDraftService, id string) *OrderDraft {
+	t.Helper()
+	got, err := svc.GetByID(ctx, id)
+	if err != nil {
+		t.Fatalf("GetByID(%s) 读失败: %v", id, err)
+	}
+	return got
+}
+
+func draftExpireOverdue(t *testing.T, ctx context.Context, svc *OrderDraftService) int {
+	t.Helper()
+	n, err := svc.ExpireOverdue(ctx)
+	if err != nil {
+		t.Fatalf("ExpireOverdue 失败（已翻 %d 条）: %v", n, err)
+	}
+	return n
+}
+
+func draftPurgeTerminal(t *testing.T, ctx context.Context, svc *OrderDraftService, retention time.Duration) int {
+	t.Helper()
+	n, err := svc.PurgeTerminal(ctx, retention)
+	if err != nil {
+		t.Fatalf("PurgeTerminal 失败（已删 %d 条）: %v", n, err)
+	}
+	return n
+}
+
 // TestDraft_CreateManual 手动创建草稿
 func TestDraft_CreateManual(t *testing.T) {
 	_, _, _, _, _, draftSvc, _ := setupDraftEnv(t)
@@ -124,7 +183,7 @@ func TestDraft_Deduplication(t *testing.T) {
 			t.Errorf("应去重到同一草稿，draft1=%s draft2=%s", draft1.ID, draft2.ID)
 		}
 	}
-	all := draftSvc.ListByCustomer(context.Background(), "cust_003")
+	all := draftByCustomer(t, context.Background(), draftSvc, "cust_003")
 	if len(all) != 1 {
 		t.Errorf("应有 1 个草稿（去重），实际: %d", len(all))
 	}
@@ -141,7 +200,7 @@ func TestDraft_MultipleProducts(t *testing.T) {
 	for _, in := range intents {
 		draftSvc.CreateFromIntent(context.Background(), &in, "sales_004")
 	}
-	all := draftSvc.ListByCustomer(context.Background(), "cust_004")
+	all := draftByCustomer(t, context.Background(), draftSvc, "cust_004")
 	if len(all) < 2 {
 		t.Errorf("多产品应有多个草稿，实际: %d", len(all))
 	}
@@ -342,7 +401,7 @@ func TestDraft_Expire(t *testing.T) {
 		CustomerID: "c1", OwnerID: "s1", ProductName: "P", Quantity: 1, UnitPrice: 100,
 	})
 	draft.ExpiresAt = time.Now().Add(-1 * time.Hour)
-	expired := draftSvc.ExpireOverdue(context.Background())
+	expired := draftExpireOverdue(t, context.Background(), draftSvc)
 	if expired < 1 {
 		t.Error("应有 1 个草稿被过期")
 	}
@@ -370,7 +429,7 @@ func TestDraft_ListPending(t *testing.T) {
 	})
 	draftSvc.Cancel(context.Background(), d5.ID, "test", "sales_list")
 
-	pending := draftSvc.ListPending(context.Background(), "sales_list", 0)
+	pending := draftPending(t, context.Background(), draftSvc, "sales_list", 0)
 	if len(pending) != 3 {
 		t.Errorf("应有 3 个 pending，实际: %d", len(pending))
 	}
@@ -397,7 +456,7 @@ func TestDraft_ListPending_Sort(t *testing.T) {
 	d1.Confidence = 0.5
 	d2.Confidence = 0.7
 	d3.Confidence = 0.9
-	pending := draftSvc.ListPending(context.Background(), "s1", 0)
+	pending := draftPending(t, context.Background(), draftSvc, "s1", 0)
 	if len(pending) != 3 {
 		t.Fatalf("应有 3 个")
 	}
@@ -420,11 +479,11 @@ func TestDraft_ListByOwner(t *testing.T) {
 			CustomerID: "c1", OwnerID: "bob", ProductName: "P", Quantity: 1, UnitPrice: 100,
 		})
 	}
-	alice := draftSvc.ListByOwner(context.Background(), "alice")
+	alice := draftByOwner(t, context.Background(), draftSvc, "alice")
 	if len(alice) != 5 {
 		t.Errorf("alice 应有 5 个，实际: %d", len(alice))
 	}
-	bob := draftSvc.ListByOwner(context.Background(), "bob")
+	bob := draftByOwner(t, context.Background(), draftSvc, "bob")
 	if len(bob) != 3 {
 		t.Errorf("bob 应有 3 个，实际: %d", len(bob))
 	}
@@ -438,11 +497,11 @@ func TestDraft_ListByCustomer(t *testing.T) {
 			CustomerID: "alice_cust", OwnerID: "s1", ProductName: "P" + intToStr(i), Quantity: 1, UnitPrice: 100,
 		})
 	}
-	all := draftSvc.ListByCustomer(context.Background(), "alice_cust")
+	all := draftByCustomer(t, context.Background(), draftSvc, "alice_cust")
 	if len(all) != 3 {
 		t.Errorf("应有 3 个，实际: %d", len(all))
 	}
-	empty := draftSvc.ListByCustomer(context.Background(), "not_exist_cust")
+	empty := draftByCustomer(t, context.Background(), draftSvc, "not_exist_cust")
 	if len(empty) != 0 {
 		t.Errorf("不存在的客户应返回空")
 	}
@@ -454,11 +513,11 @@ func TestDraft_GetByID(t *testing.T) {
 	d, _ := draftSvc.CreateManual(context.Background(), &CreateDraftRequest{
 		CustomerID: "c1", OwnerID: "s1", ProductName: "P", Quantity: 1, UnitPrice: 100,
 	})
-	got := draftSvc.GetByID(context.Background(), d.ID)
+	got := draftByID(t, context.Background(), draftSvc, d.ID)
 	if got == nil || got.ID != d.ID {
 		t.Error("应能查到草稿")
 	}
-	notFound := draftSvc.GetByID(context.Background(), "not_exist")
+	notFound := draftByID(t, context.Background(), draftSvc, "not_exist")
 	if notFound != nil {
 		t.Error("不存在应返回 nil")
 	}
@@ -492,7 +551,7 @@ func TestDraft_TriggerAutoCreate(t *testing.T) {
 		t.Error("应自动创建订单草稿")
 	}
 
-	pending := draftSvc.ListPending(context.Background(), ownerID, 0)
+	pending := draftPending(t, context.Background(), draftSvc, ownerID, 0)
 	if len(pending) == 0 {
 		t.Fatal("应有 1 个 pending 草稿")
 	}
@@ -523,7 +582,7 @@ func TestDraft_TriggerCreateAndConfirm(t *testing.T) {
 	}
 	trigger.TriggerAfterSales(context.Background(), custID, ownerID, resp)
 
-	pending := draftSvc.ListPending(context.Background(), ownerID, 0)
+	pending := draftPending(t, context.Background(), draftSvc, ownerID, 0)
 	if len(pending) != 1 {
 		t.Fatalf("应有 1 个待确认草稿，实际: %d", len(pending))
 	}
@@ -572,7 +631,7 @@ func TestDraft_TriggerMultipleIntents(t *testing.T) {
 	}
 	trigger.TriggerAfterSales(context.Background(), custID, ownerID, resp)
 
-	pending := draftSvc.ListPending(context.Background(), ownerID, 0)
+	pending := draftPending(t, context.Background(), draftSvc, ownerID, 0)
 	if len(pending) < 1 {
 		t.Errorf("应至少有 1 个草稿（取决于提取器能力），实际: %d", len(pending))
 	}
@@ -591,7 +650,7 @@ func TestDraft_TriggerNoIntent(t *testing.T) {
 	}
 	trigger.TriggerAfterSales(context.Background(), custID, ownerID, resp)
 
-	pending := draftSvc.ListPending(context.Background(), ownerID, 0)
+	pending := draftPending(t, context.Background(), draftSvc, ownerID, 0)
 	if len(pending) != 0 {
 		t.Errorf("无产品信号不应创建草稿，实际: %d", len(pending))
 	}
@@ -720,7 +779,7 @@ func TestDraft_ConcurrentSafe(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		<-done
 	}
-	all := draftSvc.ListByOwner(context.Background(), "s_concurrent")
+	all := draftByOwner(t, context.Background(), draftSvc, "s_concurrent")
 	if len(all) != 100 {
 		t.Errorf("并发创建后应有 100 个，实际: %d", len(all))
 	}
