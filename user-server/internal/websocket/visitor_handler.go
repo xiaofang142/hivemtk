@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -78,22 +80,37 @@ var upgraderVisitor = websocket.Upgrader{
 			return true
 		}
 
-		privatePatterns := []string{
-			"http://localhost",
-			"http://127.0.0.1",
-			"http://192.168.",
-			"http://10.",
-			"http://172.",
-			"https://localhost",
-			"https://127.0.0.1",
-		}
-		for _, pattern := range privatePatterns {
-			if strings.HasPrefix(origin, pattern) {
-				return true
-			}
-		}
-		return false
+		return isPrivateHostWSOrigin(origin)
 	},
+}
+
+// isPrivateHostWSOrigin 判定 Origin 是否属于本机/内网开发场景（访客 WS 的
+// 第二道 Origin 防线；第一道是 visitor_token 强校验）。
+//
+// 原实现用 strings.HasPrefix(origin, "http://localhost") / "http://10." / "http://172."
+// 等前缀匹配，可被冒牌域名伪造：
+//   - "http://localhost.attacker.tld" 命中 "http://localhost" 前缀
+//   - "http://10.evil.com" 命中 "http://10." 前缀
+//   - "http://172.99.99.99"（公网 IP！）命中 "http://172." 前缀
+//
+// 改为解析 URL 后对 host 部分精确判定：localhost 主机名，或可解析为 IP 且
+// 属于回环/私网段（127/8、10/8、172.16-31、192.168/16、::1）。
+func isPrivateHostWSOrigin(rawOrigin string) bool {
+	u, err := url.Parse(rawOrigin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+	return false
 }
 
 func (h *VisitorWSHandler) HandleVisitorWebSocket(c *gin.Context) {
