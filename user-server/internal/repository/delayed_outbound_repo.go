@@ -65,6 +65,21 @@ func (r *DelayedOutboundRepository) ExpireStale(ctx context.Context, cutoff time
 	return res.RowsAffected, res.Error
 }
 
+// CountStuckSending 只读观测：统计"到期已远超 send_at 却仍卡在 sending"的行数。
+// 行进入 sending 时不另记时间戳，故以 send_at 年龄为代理信号——正常一轮投递在秒级
+// 收敛，阈值外仍为 sending 即意味着进程在投递中途崩溃。本方法不改任何状态，
+// 回收/重投语义待产品拍板后再引入（见 2026-09-19 审计第七轮）。
+func (r *DelayedOutboundRepository) CountStuckSending(ctx context.Context, sendAtBefore time.Time) (int64, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+		Where("status = ? AND send_at < ?", "sending", sendAtBefore).
+		Count(&n).Error
+	return n, err
+}
+
 // PluckDueIDs 无事务 fallback：取到期 pending 记录 ID
 func (r *DelayedOutboundRepository) PluckDueIDs(ctx context.Context, now time.Time, limit int) ([]uint, error) {
 	if r.db == nil {

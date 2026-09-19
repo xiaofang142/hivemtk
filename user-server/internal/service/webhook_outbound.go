@@ -47,6 +47,10 @@ const (
 	// delayedOutboundTTL 免打扰延迟出站的存活期：send_at 超期 24h 仍 pending 的 AI 回复
 	// 判 expired 不再补投（服务长时间停摆后集中重放时，过期回复的打扰大于价值）。
 	delayedOutboundTTL = 24 * time.Hour
+	// delayedSendingStuckThreshold 悬挂观测阈值：正常一轮派发在秒级收敛，send_at 超期
+	// 1h 仍停在 sending 说明进程在投递中途崩溃。仅打 warn 供运维核对，不回收、不改状态
+	// （回收语义属产品决策，见 2026-09-19 审计第七轮）。
+	delayedSendingStuckThreshold = time.Hour
 )
 
 // DelayedOutboundReply 别名（模型已收敛到 model 层，表 reach_delayed_outbound）
@@ -227,6 +231,12 @@ func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
 		logger.Ctx(ctx).Warn().Err(err).Msg("[H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放")
 	} else if n > 0 {
 		logger.Ctx(ctx).Info().Int64("expired", n).Msg("[H-3] 超 TTL 仍 pending 的延迟出站已判 expired，跳过补投")
+	}
+	if n, err := s.delayedRepo.CountStuckSending(ctx, now.Add(-delayedSendingStuckThreshold)); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Msg("[H-3] sending 悬挂行观测查询失败，忽略（不影响派发）")
+	} else if n > 0 {
+		logger.Ctx(ctx).Warn().Int64("stuck_sending", n).
+			Msg("[H-3] 存在超阈值仍为 sending 的延迟出站行：疑似投递中进程崩溃，需人工核对该会话是否已送达（本日志只观测，未回收）")
 	}
 	picked, err := s.delayedRepo.PickDueForUpdate(ctx, now, delayedOutboundBatchSize)
 	if err != nil {
