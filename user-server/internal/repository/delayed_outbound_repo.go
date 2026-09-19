@@ -53,6 +53,18 @@ func (r *DelayedOutboundRepository) PickDueForUpdate(ctx context.Context, now ti
 	return picked, err
 }
 
+// ExpireStale 把 send_at 早于 cutoff 且仍 pending 的记录判为 expired，返回影响行数。
+// 边界取严格小于：恰好等于 cutoff 的行本轮不动（时间单调前进，下一轮必然覆盖）。
+func (r *DelayedOutboundRepository) ExpireStale(ctx context.Context, cutoff time.Time) (int64, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+		Where("status = ? AND send_at < ?", "pending", cutoff).
+		Update("status", "expired")
+	return res.RowsAffected, res.Error
+}
+
 // PluckDueIDs 无事务 fallback：取到期 pending 记录 ID
 func (r *DelayedOutboundRepository) PluckDueIDs(ctx context.Context, now time.Time, limit int) ([]uint, error) {
 	if r.db == nil {

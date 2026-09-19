@@ -44,6 +44,9 @@ const (
 
 	delayedOutboundPollInterval = 30 * time.Second
 	delayedOutboundBatchSize    = 20
+	// delayedOutboundTTL 免打扰延迟出站的存活期：send_at 超期 24h 仍 pending 的 AI 回复
+	// 判 expired 不再补投（服务长时间停摆后集中重放时，过期回复的打扰大于价值）。
+	delayedOutboundTTL = 24 * time.Hour
 )
 
 // DelayedOutboundReply 别名（模型已收敛到 model 层，表 reach_delayed_outbound）
@@ -145,6 +148,11 @@ func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
 		return
 	}
 	now := time.Now()
+	if n, err := s.delayedRepo.ExpireStale(ctx, now.Add(-delayedOutboundTTL)); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Msg("[H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放")
+	} else if n > 0 {
+		logger.Ctx(ctx).Info().Int64("expired", n).Msg("[H-3] 超 TTL 仍 pending 的延迟出站已判 expired，跳过补投")
+	}
 	picked, err := s.delayedRepo.PickDueForUpdate(ctx, now, delayedOutboundBatchSize)
 	if err != nil {
 
