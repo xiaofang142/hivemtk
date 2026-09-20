@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -308,6 +310,18 @@ type ProxyConfig struct {
 	NoProxy    string `yaml:"no_proxy" json:"no_proxy"`
 }
 
+const (
+	proxyIdleConnTimeout     = 90 * time.Second
+	proxyMaxIdleConns        = 100
+	proxyMaxIdleConnsPerHost = 10
+)
+
+var (
+	proxyTransportMu  sync.Mutex
+	proxyTransportKey string
+	proxyTransport    *http.Transport
+)
+
 // GetProxyTransport 返回配置了代理的 http.Transport
 //
 // 代理优先级（自高到低）：
@@ -316,30 +330,55 @@ type ProxyConfig struct {
 //  3. 直连（无代理）
 //
 // 返回值可直接赋给 http.Client.Transport。
+//
+// 返回的是按当前配置复用的单例，不是每次新建：零值 Transport 的 IdleConnTimeout=0
+// 意味着空闲连接永不过期，而本函数被 tgbot 的每次出站动作（发消息、注册/删除回调）
+// 反复调用，每新建一个就带走一组连接和它钉住的一对 readLoop/writeLoop goroutine。
+// 配置变了键就变，于是下一次调用拿到带新代理决策的实例，不会读到过期选择。
 func GetProxyTransport() *http.Transport {
 	cfg := GetAppConfig().Proxy
+	configured := cfg.Enabled && (cfg.HTTPProxy != "" || cfg.HTTPSProxy != "")
+	envProxy := os.Getenv("HTTP_PROXY") != "" || os.Getenv("HTTPS_PROXY") != "" ||
+		os.Getenv("http_proxy") != "" || os.Getenv("https_proxy") != ""
 
-	if cfg.Enabled && (cfg.HTTPProxy != "" || cfg.HTTPSProxy != "") {
-		return &http.Transport{
-			Proxy: func(req *http.Request) (*url.URL, error) {
-				if req.URL.Scheme == "https" && cfg.HTTPSProxy != "" {
-					return url.Parse(cfg.HTTPSProxy)
-				}
-				if cfg.HTTPProxy != "" {
-					return url.Parse(cfg.HTTPProxy)
-				}
-				return nil, nil
-			},
-		}
+	branch := "direct"
+	switch {
+	case configured:
+		branch = "config:" + cfg.HTTPProxy + "|" + cfg.HTTPSProxy + "|" + cfg.NoProxy
+	case envProxy:
+		branch = "env"
 	}
 
-	if v := os.Getenv("HTTP_PROXY"); v != "" || os.Getenv("HTTPS_PROXY") != "" || os.Getenv("http_proxy") != "" || os.Getenv("https_proxy") != "" {
-		return &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-		}
+	proxyTransportMu.Lock()
+	defer proxyTransportMu.Unlock()
+	if proxyTransport != nil && proxyTransportKey == branch {
+		return proxyTransport
 	}
 
-	return &http.Transport{}
+	t := &http.Transport{
+		IdleConnTimeout:     proxyIdleConnTimeout,
+		MaxIdleConns:        proxyMaxIdleConns,
+		MaxIdleConnsPerHost: proxyMaxIdleConnsPerHost,
+	}
+	switch {
+	case configured:
+		httpProxy, httpsProxy := cfg.HTTPProxy, cfg.HTTPSProxy
+		t.Proxy = func(req *http.Request) (*url.URL, error) {
+			if req.URL.Scheme == "https" && httpsProxy != "" {
+				return url.Parse(httpsProxy)
+			}
+			if httpProxy != "" {
+				return url.Parse(httpProxy)
+			}
+			return nil, nil
+		}
+	case envProxy:
+		t.Proxy = http.ProxyFromEnvironment
+	}
+
+	proxyTransportKey = branch
+	proxyTransport = t
+	return t
 }
 
 // ExternalConfig 外部可达地址配置

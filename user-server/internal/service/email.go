@@ -207,6 +207,10 @@ func sendMailSSL(addr, host string, auth smtp.Auth, from string, to []string, ms
 	if err != nil {
 		return err
 	}
+	// 注册在 smtp.NewClient 之前：NewClient 在"TCP 通但对端不吐 220 问候行"时失败，
+	// 那次 return 走在这里原本唯一关闭点（c.Close 的 defer）之前，TLS conn 就没人关。
+	// LIFO 顺序是 c.Close() 先、conn.Close() 后，双关同一条底层连接是幂等的。
+	defer func() { _ = conn.Close() }()
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return err

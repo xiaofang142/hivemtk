@@ -473,7 +473,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		)
 		bridge.GlobalBridgeReachAdapter = tooluseBridgeAdapter
 
-		douyinLeadMiner := service.NewWebhookService(gormDB).DouyinLeadMiner()
+		douyinLeadMiner := webhookSvc.DouyinLeadMiner()
 		bridgeHandler.SetLeadMiner(douyinLeadMiner)
 
 		bridgeWS := r.Group("/api")
