@@ -22,6 +22,9 @@ type FeedbackService struct {
 	// hostUsersFn 批9 归属门：返回本进程当前持有 Host 连接的用户集（装配见 router 的
 	// SetHostUsersProvider）。nil = 不参与过滤。
 	hostUsersFn func() []uint
+	// ledgerGapFn 批16b（B2）：该任务在本进程是否留有「提交尝试已跨越、写台账却没落成」的缺口。
+	// 接线见 NewExecutor（单点，漏接线即整条抑制静默消失）。nil = 不参与判断。
+	ledgerGapFn func(taskID uint) bool
 }
 
 func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRepo repository.BrowserTaskRepository) *FeedbackService {
@@ -30,6 +33,17 @@ func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRep
 
 // SetHostUsersProvider 注入「本机 Host 连接归属」查询（HostRegistry.ConnectedUserIDs）。
 func (f *FeedbackService) SetHostUsersProvider(fn func() []uint) { f.hostUsersFn = fn }
+
+// SetLedgerGapProvider 注入「本机是否记着该任务的台账缺口」（Executor.HasCrossedLedgerGap）。
+func (f *FeedbackService) SetLedgerGapProvider(fn func(taskID uint) bool) { f.ledgerGapFn = fn }
+
+func (f *FeedbackService) ledgerGapHere(taskID uint) bool {
+	return f.ledgerGapFn != nil && f.ledgerGapFn(taskID)
+}
+
+// ledgerGapNote 写在任务行上的原因（运维面板读不到日志，也读不到进程内存里那张兜底表）。
+const ledgerGapNote = "\n写台账未落库、提交点已跨越：本任务未挂起自动重试——缺口只记在本进程内存里，" +
+	"重启后没有任何东西能挡住重发，自动重跑即双发。请人工核对该内容是否已发布后改文本或换新任务重跑。"
 
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
 //
@@ -47,6 +61,11 @@ func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.Bro
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionFinalWriteBudget)
 	defer cancel()
 
+	// 0. 先算「这次失败能不能交给自动重试」——批16b（B2）。必须在写任务快照之前定案：
+	// 抑制的理由要写在同一行上，否则「为什么没重试」只剩日志里一句 Warn，面板看不到。
+	retryDue := finalStatus == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes
+	gapBlocked := retryDue && f.ledgerGapHere(task.ID)
+
 	// 1. 更新任务快照（状态 + 结果摘要）
 	taskStatus := "done"
 	if finalStatus != "completed" {
@@ -57,14 +76,24 @@ func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.Bro
 	if session.ErrorMsg != "" {
 		errMsg = session.ErrorMsg
 	}
+	if gapBlocked {
+		lastResult += ledgerGapNote
+	}
 	if err := f.taskRepo.UpdateRunResult(writeCtx, task.ID, taskStatus, lastResult, errMsg, task.RetryCount); err != nil {
 		// 这一步失败就是砖化的起点：留给 stale_reconcile 的启动/周期对账收敛
 		logger.Errorf("[BrowserFeedback] 更新任务快照失败 task=%d（待对账器收敛）: %v", task.ID, err)
 	}
 
 	// 2. 失败自动重试（session 级，一次性延迟任务）
-	if finalStatus == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes {
-		f.scheduleRetry(writeCtx, task)
+	// 缺口拦一道：scheduleRetry 落库的挂起态是**持久化**的（重启不丢、任何持连接的实例都能认领），
+	// 而兜底缺口表活在进程内存里、重启即空 ⇒ 挂上去的那次重试会在「没有闸门依据」的时刻被认领，
+	// 库里那条凭据从未存在过 —— 这一跑就是双发。宁可停在这里让人重跑。
+	if retryDue {
+		if gapBlocked {
+			logger.Warnf("[BrowserFeedback] task=%d 存在写台账缺口，自动重试已抑制（原因见任务行）", task.ID)
+		} else {
+			f.scheduleRetry(writeCtx, task)
+		}
 	}
 
 	// 3. 失败通知（邮件；无 SMTP 配置静默跳过）
@@ -198,6 +227,12 @@ var retryRunnerFn retryRunner
 func SetRetryRunner(fn retryRunner) { retryRunnerFn = fn }
 
 func (f *FeedbackService) runRetry(ctx context.Context, task *model.BrowserTask, newCount int) error {
+	// 批16b（B2）第二道：OnSessionFinished 那道判定发生在「上一轮结束时」，而认领发生在
+	// 几分钟后的扫描里——中间这段时间同一任务可能又被跑过一次（人工重跑/另一条会话），
+	// 新缺口正是在那一刻留下的。只查一次就是拿旧结论放行新事实。
+	if f.ledgerGapHere(task.ID) {
+		return fmt.Errorf("重试拒绝起跑:该任务在本进程留有一条写台账缺口（提交尝试已跨越但未落库），自动重跑即双发，请人工核对内容是否已发布")
+	}
 	if retryRunnerFn == nil {
 		return errors.New("retry runner 未装配（SetRetryRunner）")
 	}

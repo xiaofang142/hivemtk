@@ -101,11 +101,24 @@ func taskExecBudget(t *model.BrowserTask) time.Duration {
 	return d
 }
 
+// retryBackoffDelay 第 attempt 次重试前等多久（attempt 从 1 起）。指数退避是刻意的：
+// 同一平台连续吃满 N 次快重试，在风控侧的形状就是脚本。写成纯函数不是为了复用，是为了
+// 这条形状可被单测钉住——就地算式（backoff*(1<<…)）在退化成线性时全套测试全绿。
+func retryBackoffDelay(baseMs, attempt int) time.Duration {
+	return time.Duration(baseMs*(1<<(attempt-1))) * time.Millisecond
+}
+
 // —— 写台账落库（write_ledger.go）——
 // ledgerWriteBudget 单行 submit_state UPDATE 的预算。执行 ctx 此刻常已 Done
 // （「send 刚跨越、execCtx 恰好到期」正是最需要留台账的一刻），故走 WithoutCancel；
 // 单行更新正常 <5ms，给的 3s 全留给连接池重取，再长就不如让步自己失败。
 const ledgerWriteBudget = 3 * time.Second
+
+// —— 步行终态落库（executor.go finishStep，批16b B3）——
+// 与 ledgerWriteBudget 同形（都是单行 UPDATE、都在 execCtx 可能已死的时刻写、都不值得长等），
+// 所以取同一个量级而不另立一套经验值；分两个常量的理由是二者消费者不同：
+// 台账失败要退避重试并降级，步终态失败只需上报（步行没有对账器会补，见 finishStep 注释）。
+const stepFinalWriteBudget = 3 * time.Second
 
 // —— 拦截页探测（executor.go detectBlockedIfFatal）——
 // blockDetectBudget 一次拦截检测的整段预算（snapshot + 弹层选择器逐个 query 共用）。

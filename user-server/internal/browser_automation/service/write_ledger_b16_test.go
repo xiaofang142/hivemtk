@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"hivemtk-user/internal/browser_automation/dto"
 	"hivemtk-user/internal/browser_automation/model"
@@ -70,7 +69,7 @@ func TestWSE2E_LedgerWriteFailureAbortsBeforeSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, session, steps)
 
@@ -105,7 +104,7 @@ func TestWSE2E_LedgerWriteFailureDegradesRestOfSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, session, steps)
 
@@ -156,7 +155,7 @@ func TestWSE2E_SentLedgerGapStillBlocksRetryRound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, first, steps)
 
@@ -205,7 +204,7 @@ func TestWSE2E_GuardQueryFailureFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, session, steps)
 
@@ -247,7 +246,7 @@ func TestWSE2E_UnknownLocatorTableTreatedAsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, session, steps)
 
@@ -277,7 +276,7 @@ func TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly(t *testing.T) {
 {"action":"click","target":"div.nav-search","retry_count":1,"retry_backoff_ms":20}]`
 	task, session := bundle.seedTask(t, stepsJSON, false)
 	steps, _ := ParseSteps([]byte(stepsJSON))
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 	defer cancel()
 	exec.ExecuteSession(ctx, task, session, steps)
 

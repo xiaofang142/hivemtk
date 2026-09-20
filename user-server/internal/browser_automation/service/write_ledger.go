@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"strconv"
 	"strings"
 	"time"
 
@@ -110,19 +111,25 @@ func (e *Executor) clearLedgerBroken(sessionID uint) {
 	e.ledgerMu.Unlock()
 }
 
-// rememberLedgerGap 记一条「不可逆点已跨越但台账没落成」。它是数据库闸门的进程内兜底，
-// 覆盖的恰好是唯一会自动重跑的那条路（scheduleRetry 与 retry scanner 同进程、换 session 跑同任务，
-// 会话级降级挡不住）。跨进程人工重跑挡不住——兜底不落库，所以调用方必须把「需人工核对是否已发布」
-// 写进那一步的错误文案，而不是指望这里。
+// rememberLedgerGap 记一条「提交尝试已跨越、台账却没落成」。它是数据库闸门的进程内兜底，
+// 覆盖面**只有本进程、本进程存活期**（键是 taskID|textHash，与是否换 session 无关）。
+//
+// 两条必须一起记住的边界（批16b 二次审核写清，之前那句「唯一会自动重跑的那条路」说过头了）：
+//   - 自动重试的挂起态是**持久化**的（feedback.go scheduleRetry 只写 task.next_retry_at，
+//     重启不丢、由任何持连接的实例认领），本集合不落库 ⇒ 进程一重启它就空了。
+//     所以缺口不能只靠这里挡：批16b（B2）已把消费方接到反馈层——OnSessionFinished 见到
+//     缺口就不再挂重试（并把原因写进任务行），runRetry 认领后再查一次；调用方仍须把
+//     「需人工核对是否已发布」写进那一步的文案，因为**跨进程**重启后的存量挂起行挡不住。
+//   - 跨进程人工重跑同样挡不住，同一理由。
 func (e *Executor) rememberLedgerGap(taskID uint, textHash string) {
 	if textHash == "" {
 		return
 	}
-	key := fmt.Sprintf("%d|%s", taskID, textHash)
+	key := writeGapKey(taskID, textHash)
 	e.ledgerMu.Lock()
 	defer e.ledgerMu.Unlock()
 	if e.ledgerGaps[key] {
-		return
+		return // 只按不同键增长：集合上限 512 因此是「512 次独立缺口」，不是「512 次写尝试」
 	}
 	e.ledgerGaps[key] = true
 	e.ledgerGapOrder = append(e.ledgerGapOrder, key)
@@ -136,7 +143,26 @@ func (e *Executor) rememberLedgerGap(taskID uint, textHash string) {
 func (e *Executor) ledgerGapHas(taskID uint, textHash string) bool {
 	e.ledgerMu.Lock()
 	defer e.ledgerMu.Unlock()
-	return e.ledgerGaps[fmt.Sprintf("%d|%s", taskID, textHash)]
+	return e.ledgerGaps[writeGapKey(taskID, textHash)]
+}
+
+// HasCrossedLedgerGap 该任务在本进程里是否留有「已跨越提交尝试点、台账却没落成」的缺口
+// （任一文本）。消费方是反馈层：挂自动重试前与认领重试后各查一次——挡不住重启后的
+// 存量挂起行，但能让「本机跑出的缺口」不再变成另一次自动下发。
+func (e *Executor) HasCrossedLedgerGap(taskID uint) bool {
+	prefix := strconv.FormatUint(uint64(taskID), 10) + "|"
+	e.ledgerMu.Lock()
+	defer e.ledgerMu.Unlock()
+	for _, k := range e.ledgerGapOrder {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func writeGapKey(taskID uint, textHash string) string {
+	return strconv.FormatUint(uint64(taskID), 10) + "|" + textHash
 }
 
 // guardResubmit 双发闸：同任务、同文本在历史上（含其它 session、含被重启后重下发、含
@@ -158,7 +184,7 @@ func (e *Executor) guardResubmit(ctx context.Context, task *model.BrowserTask, t
 		return nil
 	}
 	if e.ledgerGapHas(task.ID, textHash) {
-		return fmt.Errorf("写步拒绝执行：同文本此前有一次提交越过不可逆点却未落台账（数据库闸门当时失效，现由进程内兜底拦下），重发即双发，请人工核对该内容是否已发布后再改文本或换新任务")
+		return fmt.Errorf("写步拒绝执行：同文本此前有一次提交跨越了提交尝试点却未落台账（数据库闸门当时失效，现由进程内兜底拦下），重发即双发，请人工核对该内容是否已发布后再改文本或换新任务")
 	}
 	prior, err := e.stepRepo.FindSubmitAttempt(ctx, task.ID, textHash, excludeStepRowID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {

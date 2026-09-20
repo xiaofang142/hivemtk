@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"hivemtk-user/internal/browser_automation/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -84,9 +85,21 @@ func (r *browserStepRepo) DeleteBySessionID(ctx context.Context, sessionID uint)
 	return r.db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&model.BrowserStep{}).Error
 }
 
+// UpdateSubmitState 写台账。0 行受影响**必须报错**：本方法是「重发闸门的唯一事实来源」的
+// 唯一写入口，而 gorm 对 0 行只回 Error==nil。两种真实形态都会命中 0 行——
+// 行不存在（上层拿到过另一个库的 id）与行已软删（BrowserStep 带 DeletedAt，gorm 自动加
+// deleted_at IS NULL；同一条件也让 FindSubmitAttempt 查不到它）。放行即「已记为尝试」
+// 变成一句谎话，下一轮闸门查空 ⇒ 双发。口径同 task.go:125 / cron.go:101 的条件更新。
 func (r *browserStepRepo) UpdateSubmitState(ctx context.Context, id uint, state, textHash string) error {
-	return r.db.WithContext(ctx).Model(&model.BrowserStep{}).Where("id = ?", id).
-		Updates(map[string]any{"submit_state": state, "text_hash": textHash}).Error
+	res := r.db.WithContext(ctx).Model(&model.BrowserStep{}).Where("id = ?", id).
+		Updates(map[string]any{"submit_state": state, "text_hash": textHash})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("台账写入命中 0 行（step=%d state=%s）：该行不存在或已被软删，闸门查不到这次提交", id, state)
+	}
+	return nil
 }
 
 func (r *browserStepRepo) FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error) {

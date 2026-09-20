@@ -76,9 +76,10 @@ type Executor struct {
 
 	// 批16（A7）：台账写失败后的两张降级表，与上面两张同构但语义相反——它们是「不能再派发写」的记录。
 	//   ledgerBroken: sessionID → 最初那次台账写失败的原因，随会话结束清除（会话级降级）；
-	//   ledgerGaps:   "taskID|text_hash" → 不可逆点已跨越但库里没落成，跨会话保留到进程结束
+	//   ledgerGaps:   "taskID|text_hash" → 提交尝试点已跨越但库里没落成，跨会话保留到进程结束
 	//                 （自动重试是同进程换新 session 跑同一任务，会话级降级挡不住它）。
 	// 两张表都只在「台账写失败」这条罕见路径上增长，各自有界（gaps 见 ledgerGapCap）。
+	// gaps 不跨重启 ⇒ 反馈层挂重试前必须查它一次（批16b B2，接线见 NewExecutor）。
 	ledgerMu       sync.Mutex
 	ledgerBroken   map[uint]string
 	ledgerGaps     map[string]bool
@@ -90,7 +91,7 @@ type Executor struct {
 }
 
 func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, stepRepo repository.BrowserStepRepository, brain *BrainService, feedback *FeedbackService) *Executor {
-	return &Executor{
+	e := &Executor{
 		hand:         hand,
 		sessionRepo:  sessionRepo,
 		stepRepo:     stepRepo,
@@ -103,6 +104,28 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 
 		ledgerBroken: make(map[uint]string),
 		ledgerGaps:   make(map[string]bool),
+	}
+	if feedback != nil {
+		// 批16b（B2）单点接线：缺口表长在 Executor 上、挂自动重试的动作在 FeedbackService 上，
+		// 两边互相看不见。接在构造处而不是某个调用点——漏接线时「不重试」的抑制会整条静默消失，
+		// 与批16 A11 那条「把错误就地吞掉等于闸门不存在」是同一个失效形态。
+		feedback.SetLedgerGapProvider(e.HasCrossedLedgerGap)
+	}
+	return e
+}
+
+// finishStep 步行终态落库（唯一写入口）。
+//
+// 为什么不能沿用执行 ctx：超时/中止腿上 ctx 此刻必然已 Done，用它的 UPDATE 会被 DB 驱动取消，
+// 于是这一行永远停在 running——批16 承诺的「写步失败是可见、可人工重跑的」就地失效，
+// 运维在面板上看不到「这一步为什么被拦」，只剩一条日志。R25 只对 session/task 行做了这个
+// 处理（sessionFinalWriteBudget），步行是同一缺陷的第三半。
+// 失败必须上报（旧写法是 `_ =`）：session/task 行有 stale_reconcile 兜底收敛，步行没有。
+func (e *Executor) finishStep(ctx context.Context, stepRowID uint, status string, result []byte, durationMs int64, msg string) {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stepFinalWriteBudget)
+	defer cancel()
+	if err := e.stepRepo.UpdateResult(writeCtx, stepRowID, status, result, durationMs, msg); err != nil {
+		logger.Errorf("[BrowserExec] 步终态落库失败 step=%d status=%s（面板将看不到这一步的结论，需从日志核对）: %v", stepRowID, status, err)
 	}
 }
 
@@ -718,7 +741,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		// 与其赌一次双发，不如把这一步变成可见、可人工重跑的红步。
 		if why, broken := e.ledgerBrokenReason(session.ID); broken {
 			msg := fmt.Sprintf("写步拒绝下发（%s）：%s——台账未落，本会话写能力已降级，请人工核对已下发的步后重跑", writeWhy, why)
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, msg)
+			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, msg)
 			logger.Warnf("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
 			return "failed", msg, nil
 		}
@@ -727,7 +750,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		case errors.Is(err, errRetrySkipped):
 			prior := priorOfSkippedWrite(err)
 			msg := fmt.Sprintf("写步跳过（%s）：%v——同文本已有提交尝试，重发即双发", writeWhy, prior)
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "skipped", nil, 0, msg)
+			e.finishStep(ctx, stepRow.ID, "skipped", nil, 0, msg)
 			logger.Infof("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
 			if prior.verified() {
 				return "skipped", "", nil
@@ -737,7 +760,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			return "skipped", fmt.Sprintf(
 				"重试轮防双发未重发，前一轮提交未验证（%v）——本轮无法证明内容已发布，请人工核对", prior), nil
 		case err != nil:
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, err.Error())
+			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, err.Error())
 			return "failed", err.Error(), nil
 		}
 	}
@@ -753,15 +776,15 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			if out == confirmStoppedByUser {
 				msg = errConfirmAbortedByStop
 			}
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, msg)
+			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, msg)
 			return "failed", msg, nil
 		}
 	}
 	var lastErr string
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
-			if !sleepInterruptible(ctx, stopCh, time.Duration(backoff*(1<<(attempt-1)))*time.Millisecond) {
-				_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, "用户手动中断")
+			if !sleepInterruptible(ctx, stopCh, retryBackoffDelay(backoff, attempt)) {
+				e.finishStep(ctx, stepRow.ID, "failed", nil, 0, "用户手动中断")
 				return "failed", "用户手动中断", nil
 			}
 		}
@@ -782,11 +805,11 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			if ledgerErr != nil {
 				msg := fmt.Sprintf("写步已下发但台账未落（%v）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果", ledgerErr)
 				logger.Warnf("[BrowserExec] %s session=%d idx=%d action=%s", msg, session.ID, index, step.Action)
-				_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", result, dur, msg)
+				e.finishStep(ctx, stepRow.ID, "failed", result, dur, msg)
 				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": msg}, dur, false)
 				return "failed", msg, json.RawMessage(result)
 			}
-			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", result, dur, "")
+			e.finishStep(ctx, stepRow.ID, "success", result, dur, "")
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
 			return "success", "", json.RawMessage(result)
 		}
@@ -807,7 +830,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			break
 		}
 	}
-	_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, lastErr)
+	e.finishStep(ctx, stepRow.ID, "failed", nil, 0, lastErr)
 	return "failed", lastErr, nil
 }
 

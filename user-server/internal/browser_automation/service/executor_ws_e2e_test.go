@@ -724,8 +724,14 @@ func waitConfirmPending(t *testing.T, e *Executor, sessionID uint, want bool) {
 // 假的红（同码单独跑必绿）。放宽只改「多久还没等到判红」，不改「等到后断什么」：
 // 真闸门失效时依旧红，只是晚 30s 知道。
 const (
-	e2eCmdWindow  = defaultCmdTimeout + handConditionGrace        // 一条命令的合法上限
-	e2eExecBudget = 3 * e2eCmdWindow + handCommentSendTimeout + 15*time.Second
+	e2eCmdWindow = defaultCmdTimeout + handConditionGrace // 一条命令的合法上限
+	// e2eExecBudget 一轮 D7 会话的执行 ctx 上限 = **六个命令槽** + 提交点自身 + 收口余量。
+	// 槽位不是估的，是夹具本身：threeStageSteps 的 open_tab / snapshot / markdown / comment_prep
+	// 四条在放行前，放行后还有 comment_send 与 comment_verify。逐条取合法上界 ≈235s
+	// （markdown 自身是 2×defaultCmdTimeout），这里一律按 e2eCmdWindow 放大到 6×40+45+15=300s。
+	// 批16 那版写的是 `3×e2eCmdWindow`（理由句"最多三条命令在途"）——少算一半，负载够高时
+	// 这两条腿照样假红，只是比 3s/5s 时代难得多；「这轮没红」不等于「预算够」，算术要能复算。
+	e2eExecBudget = 6*e2eCmdWindow + handCommentSendTimeout + 15*time.Second
 )
 
 // waitFor 轮询等待条件成立（不引入新依赖，测试内自重）

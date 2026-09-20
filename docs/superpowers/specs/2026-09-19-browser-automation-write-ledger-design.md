@@ -821,13 +821,22 @@ prepared 不在拦阻集合内，它写失败之后若还去 send，下一轮就
 `sent` / 终态 / 通用写步传 `true`。多记一条 gap 只会多拦不会漏拦（终态写失败时 `sent`
 若已成功，库里本来就在拦阻集合内，DB 闸门自己就会拦），所以这个方向不必再收窄。
 
-**为什么还需要进程内兜底（`ledgerGaps`）而不是只置会话降级标志**：自动重试是
-`scheduleRetry` / retry scanner 在**同进程**换新 session 跑同一任务（`feedback.go:66`、`:200`），
-双发闸的查询键是 `(task_id, text_hash)` 而不是 session，所以会话级降级标志恰好挡不住唯一会
-自动重跑的那条路。兜底集合有界（`ledgerGapCap=512`，只在台账写失败时增长，正常路径恒为 0），
-**不落库**——加列要动 DDL 而 `browser_steps` 的口径已经够多；跨进程的人工重跑因此拦不住，
-所以那一步的文案必须自己把「请人工核对该评论是否已发布」说尽（test 3 断言 `error_msg` 含「人工」，
-断的就是这个不能只存在于日志里）。
+**为什么还需要进程内兜底（`ledgerGaps`）而不是只置会话降级标志**：双发闸的查询键是
+`(task_id, text_hash)` 而不是 session，而自动重试是**换新 session 跑同一任务**
+（`scheduleRetry` → retry scanner → `RunTaskWithRetry`），所以会话级降级标志恰好挡不住它。
+兜底集合有界（`ledgerGapCap=512`，**且只按不同 `(task,文本)` 键增长**——重复写同一键先被
+`rememberLedgerGap` 的去重挡掉，所以"512"量的是独立缺口次数而不是写尝试次数，批16b 用
+`TestLedgerGapSetGrowsOnlyPerDistinctKey` 把这句话钉住），**不落库**。
+
+> **批16b 对本段的口径纠正（重要，原文说过头了）**：这里原来写的是「自动重试是同进程换 session、
+> 兜底因此覆盖唯一会自动重跑的那条路」。前半句不成立——`next_retry_at` 是**持久化**的，
+> 认领它的是扫描器，任何持该用户 Host 连接的实例都能领，同进程只是最常见情形而非唯一情形；
+> 后半句因此也不成立：兜底不落库 ⇒ 进程重启即空，而挂起的重试行还在库里。
+> 已落地的收口见 §7.9（B2）：反馈层挂重试前查一次、认领后再查一次，缺口任务不再自动重跑，
+> 原因写进任务行。仍然挡不住的是**跨进程**（重启后认领存量行、或人工换机重跑），
+> 所以那一步的文案必须自己把「请人工核对该评论是否已发布」说尽（test 3 断言 `error_msg` 含「人工」，
+> 断的就是这个不能只存在于日志里）。审查给出的「还有第二条 `time.AfterFunc` 进程内重试路径」
+> 经全仓 grep 证伪（`AfterFunc` 在本泳道 0 命中），未采纳。
 
 **跑出来的两个中间缺陷（都记着，它们是这批的实测收获）**：
 ① 我把重试循环写成 `if err == nil ... { break }`，`break` 出的是 for 而不是"成功返回"，
@@ -835,10 +844,17 @@ prepared 不在拦阻集合内，它写失败之后若还去 send，下一轮就
 就是它的现场（err 是 nil）。它让 5 条腿红了 2 条、剩下 3 条**照样绿**：因为写其实成功了，
 只断言帧数/落库行的腿看不见差别。教训回灌：判"写失败"的分支必须有"失败时步状态"这一侧的断言，
 本批的 test 1/3 正是靠状态断言把它揪出来的。
-② 顺序模式里 `case "failed"` 会 `break loop`（`executor.go:365-376`），所以"同会话后续写步被
-降级挡住"在默认编排下**根本不可达**——降级标志的可达面只有 `continue_on_error: true` 的步和
-Brain 模式同一轮里的多步。据此把 test 2 的夹具改成第一条写步带 `continue_on_error`，
-这才是这个标志真正服务的现场；不改夹具而直接宣布"降级已生效"就是拿测不到的分支充当证据。
+② 顺序模式里失败步是否终止本轮，取决于 `if !step.ContinueOnError { …; break loop }`
+（`executor.go:388-401`，本批落码后的行号），所以"同会话后续写步被降级标志挡住"在默认编排下
+**根本不可达**：一旦首条写步判败且未标 `continue_on_error`，循环当场跳出，那条步头的
+`ledgerBrokenReason` 检查再也没有第二次被读到的机会。据此把可达面精确成三格——① 失败写步带
+`continue_on_error: true`（本会话其后每条写步、含后续 `loop_count` 轮，都在派发前被拦）；
+② Brain 模式一轮计划里的多条步（首条判败后计划仍继续派发）；③ 除此之外都只能靠**单条写步自身**
+的失败把状态报出去，那走的是"步红"这条路而不是"降级"这条路。因此把 test 2 的夹具改成第一条写步带
+`continue_on_error`，这才是这个标志真正服务的现场；不改夹具而直接宣布"降级已生效"就是拿测不到的
+分支充当证据。**注意它与上面那个兜底集合的分工**：`writeLedgerBroken` 以 **session** 为键，
+自动重试换的是 session ⇒ 标志天然不跨 session 生效，跨 session 拦阻的是 `ledgerGaps`
+（以 `(task, 文本)` 为键）。两条腿各挡一侧，把其中一条当成另一条的替身就是 §7.9（B2）修的洞。
 
 **绿（`/tmp/b20_green2.log`）**：7 条腿全 PASS（含纯函数三态表 12 行、对照组、`rc=0`，
 `ok hivemtk-user/internal/browser_automation/service 119.941s`）。
@@ -860,11 +876,28 @@ Brain 模式同一轮里的多步。据此把 test 2 的夹具改成第一条写
   不存在的前提（事件必须 5 秒内到线），它断的其实只是顺序与次数。同仓门禁并行时 load
   均值 73–88，一条 WS 往返秒级起步，于是必红。
   修法是把窗口从预算表推导而不是换个更大的魔数：`e2eCmdWindow = defaultCmdTimeout +
-  handConditionGrace`（40s，一条命令的合法上限）、`e2eExecBudget = 3×e2eCmdWindow +
-  handCommentSendTimeout + 15s`（一轮 D7 会话最多三条命令在途 + 提交点自身）。
-  放宽只改"多久还没等到判红"，不改"等到后断什么"：真闸门失效照样红，只是晚 35s 知道。
+  handConditionGrace`（40s，一条命令的合法上限）、`e2eExecBudget`（一轮 D7 会话的执行 ctx 上限）。
+  放宽只改"多久还没等到判红"，不改"等到后断什么"：真闸门失效照样红——**这句当时是推断，
+  批16b 才把它跑出来**（电池 M9 把 `if task.RequireConfirm {` 摘掉，两条 D7 腿点名红，见 §7.9）。
   其余 E2E 腿的 `60*time.Second` 执行 ctx 同属这一类但**暂不动**——它们的腿命令数少、
   本批全量跑里没红过，改它属于扩大改动面；一旦哪天它假红，直接换成 `e2eExecBudget`。
+
+> **批16b 对本段的两处算术复核**（都是自己重算一遍才露出来的，二手结论不可直接入库）：
+> ① 基线那个 `9200a608` **不是** `3b8ef900^`（父提交是 `4d93ac0b`）。当时的动作是把工作树退回
+> `9200a608` 再全量跑，二者之间差的提交全在旁道——本轮用
+> `git log 9200a608..HEAD -- user-server/internal/browser_automation` 复算，命中只有我自己那条
+> `3b8ef900` ⇒ 对**本泳道**而言 `9200a608` 与 `3b8ef900^` 同码，"预存在"的结论成立；
+> 但原文的写法让人以为退的就是父提交，换一批旁道提交就会得出相反的结论。
+> ② `e2eExecBudget` 当时写作 `3×e2eCmdWindow + handCommentSendTimeout + 15s`，理由句是
+> "一轮 D7 会话最多三条命令在途"——这条算术**不成立**：夹具 `threeStageSteps` 本身就是四条命令
+> （open_tab / snapshot / markdown / post_comment-prep），放行之后还有 send 与 verify，
+> 合计六个命令槽、合法上界 ≈235s，而当时给的是 180s。负载足够高时这两条腿**仍然会假红**，
+> 只是比 3s/5s 时代难得多——我上一步没跑出来，是因为它没红，而"没红"不等于"预算够"。
+> 批16b 按命令槽数重推为 `6×e2eCmdWindow + handCommentSendTimeout + 15s`（=300s），
+> 并把"六个槽、各是什么"写进常量注释：算术要能被下一个人复算，而不是留一个没人敢动的魔数。
+> 顺带否证审查线报来的用量口径（"27 处用 `e2eCmdWindow`、只有 2 处用 `e2eExecBudget`"）：
+> 实测该文件里 `e2eCmdWindow` 出现 6 次（含定义，等待点 3 处 + `waitConfirmPending` 1 处）、
+> `e2eExecBudget` 出现 4 次、`60*time.Second` 出现 4 次。数字对不上就不要拿它当依据。
 
 取证口径的两处自我更正（都写下来，因为它们正是本仓反复踩的那两个）：全量跑的红必须按
 `--- FAIL:` 的名字读，不带 `-test.v` 时 PASS 计数恒为 0（基线那 104 是加了 `-test.v` 才有的）；
@@ -901,6 +934,14 @@ M7 按上面写明理由判为等价类；每腿前后 `ran=8/8 skip=0`、每次
 且**放宽窗口没有拖慢绿路径**——`waitFor` 一到就返回，40s/180s 只是"多久还没等到才判红"的上限，
 真闸门失效时依旧红，只是晚知道。
 
+> 三处措辞按批16b 复核收紧：① 上面这段的"全量"口径是**本泳道三个包**
+> （`./internal/browser_automation/...`）不带 `-run` 过滤，不是仓库级全量（那是 §7.5 那一档，
+> 单 `internal/service` 就要 880s）；两者不能互相代替，本批改动全部落在本泳道内，
+> 仓库级全量留给 §7.5 的口径另跑。② 日志里记的 `executor.go=b5b60cfa`、`write_ledger.go=05d68813`
+> 是 **md5 前 8 位**（脚本只打印短前缀），要比对全文得回 `/tmp/b20_mut2.log` 现场重算。
+> ③ "只是晚知道"的秒数当时写 35s、正文另一处写 30s，同源事实是 `e2eCmdWindow=40s`；
+> 批16b 把 `e2eExecBudget` 从 180s 重推为 300s（见上文算术复核），所以这句里的 180s 已成历史值。
+
 **落地与提交后复验**：批16 七文件本地 commit `3b8ef900`（`write_ledger.go`/`executor.go`/
 `write_ledger_b16_test.go`（新）/`write_ledger_b7_test.go`/`batch14_send_gate_b14_test.go`/
 `executor_ws_e2e_test.go` + 本稿；`git status --porcelain -- user-server/internal/browser_automation`
@@ -914,6 +955,227 @@ ok service 170.416s`，**128 PASS / 0 SKIP**（`/tmp/b22_verify.log`）——克
 即非 force），推后两侧 `0 0` 且三个 rev 同为 `3b8ef900`。
 电池与验证两轮日志（`/tmp/b20_mut2.log`、`/tmp/b21_verify.log`）里每条 `rc=` 都取自紧邻命令自身，
 不经管道——上一段记的那条"grep 冒充 rc"的教训这轮已按新口径执行。
+
+## 7.9 批16b：二次对抗审核的四条发现（0 行台账 / 缺口后的自动重试 / 拦截文案落库 ctx / 闸门 TOCTOU）
+
+审核方式按用户指令再来一遍（审查线 + 我自己逐条回原文复核），落点全在批16 那七文件之内。
+**四条发现里三条改码收口（B1/B2/B3），一条以文档收口（B4 → §8.3-20 的 A12）**，另有一处
+是文档口径本身（B5，已就地改进 §7.8 并标注"批16b 复核"）。审查线交回的条目里有三条不成立，
+否决理由与复算过程全部记在 §7.8 那两段 blockquote 里（`AfterFunc` 第二重试路径 0 命中、
+`e2eCmdWindow` 用量 27/2 实测 6/4、基线 `9200a608` 与父提交的关系），这里不再重复——
+**留否决记录的意义就在于下一轮不必重提**。
+
+**B1（改码）：台账写"命中 0 行"仍然返回 nil。** `UpdateSubmitState` 只看 `res.Error`，
+而 `gorm` 对 `Model(...).Where("id = ?").Updates(...)` 的 0 行不报错。于是"这次提交已记入台账"
+可以是**零行**——两种现实路径都落在这里：步行为手工清理后的不存在 id，以及**软删行**
+（`BrowserStep` 带 `DeletedAt` ⇒ 那条 UPDATE 被自动加 `deleted_at IS NULL` 而命不中，
+而同一条谓词也让闸门查询 `FindSubmitAttempt` 永远查不到它）。两处口径必须一致：
+要么都当作"没有这条凭据"，那就不能返回成功。修：`RowsAffected == 0` 一律上抛，
+文案点名"该行不存在或已被软删，闸门查不到这次提交"。
+
+**B2（改码）：带着"越点未落账"缺口的任务照样被挂上自动重试。** 这一条是 §7.8 里
+我那句"兜底覆盖唯一会自动重跑的路"说过头之后**必然**暴露的洞：`scheduleRetry` 落的
+`next_retry_at` 是**持久化**的，而 `ledgerGaps` 活在进程内存 ⇒ 重启（或换实例认领）之后
+缺口消失、重试照跑，而库里那条凭据从未写进去——**这一跑就是双发**。收口分三处，
+且必须两处都拦（同一道闸门的两个消费方）：
+① `NewExecutor` 里单点接线 `feedback.SetLedgerGapProvider(e.HasCrossedLedgerGap)`
+（接线点选在构造函数，是为了让"装配即生效"这件事本身可被测试面覆盖——
+`ledger_b16b_test.go` 的夹具就是重新 `NewExecutor` 出来跑的，不走旁路注入）；
+② `OnSessionFinished` 里 `gapBlocked` 抑制 `scheduleRetry`，并把原因**写进任务行**
+（`last_result` 追加一段固定文案），因为运维看不到日志；
+③ `runRetry` 起跑前再查一次（缺口可能在挂起期间产生）。
+抑制的**代价**由对照腿钉住：`prepared` 写失败（未跨越）时重试必须照旧挂上
+（`TestPreparedLedgerFailureStillSchedulesRetry`），否则这条修法就把 A7 变成了"台账一抖就永久停摆"。
+
+**B3（改码）：拦截/降级文案的落库走的是已经 Done 的执行 ctx。** 超时腿与中止腿上
+`ctx.Err() != nil` 是**必然**而非偶发，而八处步终态写全部用的这个 ctx ⇒
+"为什么这一步被拦"只留在日志里，面板上那行步还停在 `running`。这与批16 立项的那句
+"闸门的地基不能静默失效"是同一类缺陷，只是这次失效的是**可见性**。
+修：`finishStep` 统一走 `context.WithoutCancel(ctx) + stepFinalWriteBudget(3s)`
+（形状照 `ledgerWriteBudget`，理由写进 `timeouts.go`：步行没有对账器，写完写不上是终局差别），
+写失败要 `Errorf` 上报而不是 `_ =`。
+
+**B4（文档收口，不动码）：双发闸是 check-then-act。** `guardResubmit` 先 `First` 读、
+之后才写 `prepared`，中间隔着 prep 与最长 600s 的 D7 等待；同层三条并发防护
+（`t.Status=="running"`、`CountRunningByTask`、`CountRunningByUser`）也全是同一形状，
+而 `task.go:318` 那句注释自陈"靠 DB 唯一性兜底竞态"——`browser_tasks`/`browser_sessions` 上
+**并不存在**那样一条约束。再补一道 check-then-act 只是复制同一种形状，正解是台账的
+部分唯一索引，那属 DDL 决策（牵动软删语义与 #6 的裁剪口径）⇒ 登记为 §8.3-20（A12），
+并写清它从"可缓"变"必做"的触发条件（放开每用户并发或引入多副本 worker）。
+
+**跑出来的证据链（全部按名字读）：**
+
+- **RED `/tmp/b23_red.log`**：9 腿里 4 红 5 绿，四条红正是三条改码项各自的断言
+  （`ledger_b16b_test.go:67/71` 步行停在 running 且 `error_msg=""`；`:103/107` 缺口任务
+  `next_retry_at` 非 NULL 且任务行没写原因；`:157` 拒绝原因是"retry runner 未装配"而不是缺口；
+  `:183/190` 不存在 id 与软删行的台账写返回 nil）。五条绿的对照腿同样重要——它们证明
+  这批红不是夹具自身塌了（`prepared` 未跨越仍挂重试、缺口集合按键去重、瞬时抖动恢复后不留缺口）。
+- **GREEN `/tmp/b23_full.log`**（`-test.v`）：`rc=0`，**137 PASS / 0 FAIL / 0 SKIP**，
+  `ok controller 0.779s / ok platform 1.243s / ok service 307.675s`；九条新腿按名字逐个绿
+  （最长 `TestPreparedLedgerFailureStillSchedulesRetry 12.81s`）。
+- **GREEN `/tmp/b23_full2.log`**：把 §7.8 里 `e2eExecBudget` 从 180s 重推成 300s 之后，
+  本泳道三包不带 `-run` 过滤再跑一次 `rc=0`（`ok service 272.188s`）。这一跑的权威证据是
+  `ok` + 零 `FAIL` 行——它不带 `-test.v`，所以 PASS 计数恒为 0，那个 0 不是"没跑"。
+
+**为什么这一批的门禁现场是克隆而不是工作树**：动手时旁道 `internal/platform/sync.go`
+正处于半写状态（`"errors" imported and not used` × 6 + `undefined: loadOrInitMerchantKey`），
+而本泳道的 service 包 import 它 ⇒ 工作树里 `FAIL hivemtk-user/internal/browser_automation/service
+[build failed]`（`/tmp/b23_green.log`）。**编译不过不是可以用 `-run` 绕过的小事**：注码电池遇到
+它只能整趟判「无法判定」。于是 RED/GREEN 全打在 `git clone --shared` 出来的
+`/tmp/b23clone`（干净检出 + 只补 gitignore 掉的 `.env` + 覆盖本泳道 7 个文件）。
+批16b 收尾时旁道已把该文件修好（`16163bf2`），本批最终复验改用 `16163bf2` 的新克隆
+`/tmp/b24clone`，`go build ./...` 与 `go vet ./internal/browser_automation/...` 均 `rc=0`。
+
+**批16b 反向电池（`/tmp/b23_mut.log`，11 处变异 M9–M19，`电池终态: OK`、`battery rc=0`）**：
+对照腿与收尾腿各一次 `rc=0 ran=11/11 skip=0`；基线 md5 `executor=ead9e9e7`、
+`feedback=e7cba53e`、`step=5577e92c`、`write_ledger=a7c85746`，每腿还原后逐次比对一致。
+11 处**全部被点名杀掉**，其中三条值得单记：
+- **M9 是给 §7.8 那句话补的证据**：把 `if task.RequireConfirm {` 摘掉 ⇒ 两条 D7 腿同时红，
+  红因 `ConfirmPending 未变为 true`（闸门不存在 ⇒ 挂起点根本注册不上）。
+  原文里"放宽窗口不影响'真闸门失效照样红'"当时是推断，这轮才是跑出来的。
+- **M14 是反向对照腿的变异**：把抑制条件取反 ⇒ `TestPreparedLedgerFailureStillSchedulesRetry`
+  红（"未跨越的失败必须照旧挂起重试"）。少这一刀，B2 的修法可以退化成"台账一抖就永不重试"还全绿。
+- **M17 顺带咬住一条跨批口径**：`writeStepKey` 的兜底键退化成空串时，红的不是它的自家用例，
+  还有 `TestGenericWriteStepLedgerFailureJudgedRed`——空串键会让 `guardResubmit` 就地放行、
+  兜底也记不住，等于批16 整套闸门对"无正文写步"整体失效。
+
+**电池自身的两个缺陷（本轮新增，比"哪条被杀"更值得记）**：
+① **M15 的锚点我写成了注码前（RED 态）的文本** `WithTimeout(ctx, …) // RED`——修复后那行
+永不存在，电池只会在锚点计数上判「无法判定」，一条腿根本没跑。加了 `--check` 预检
+（逐条打 `old` 命中数 + 用例名是否存在）；预检自己也要防过严：**只以 `old` 唯一为硬门**，
+"替身本来出现几次"打印不判坏（`return nil` 这类替身在包里本来就有 7 处，拿它判坏会让
+下一轮把预检当噪声源绕过）。
+② **只看"名字红"判不了是不是负载红**：这三轮门禁与并行会话的审核轮同时在抢同一个测试库
+（load 30+，同机还跑着他们的 `go test -p 1 ./internal/...`），一条腿完全可能因
+`test timed out after` 而红、名字恰好对上，于是"闸门有牙齿"这个结论其实是负载给的。
+现在每条红都把测试自己写的原因行打出口，输出含超时/panic 字样时不判"已杀"。
+
+**电池从 /tmp 搬进仓**：`scripts/mut_ledger_b16.py`（批16 那八刀）与 `scripts/mut_ledger_b16b.py`
+（本批十一刀）。留在 `/tmp` 的电池等于没有电池——它证明过的东西随目录一起消失，而下一轮
+改到同一处代码时无人能重跑。副本相比 /tmp 版多四件事：项目根由 `__file__` 反推（不再硬编码
+克隆路径与仓名，改名克隆里也能跑）、`MUT_ROOT` 覆盖、启动时按遗留 `*.bak` 还原
+（上一趟被 kill 会让"基线 md5"取到**被注码的**文本，此后每次"还原一致"都在一致地还原缺陷）、
+上面那条红因打印。§7.8 记录的批16 电池结论仍属 /tmp 版产物，副本只补口径不改判据。
+
+**本批没跑真机夹具腿，这是明确的取舍而不是遗漏**：批16b 四改动面全部在服务端落库与重试编排里
+（`UpdateSubmitState` 返回值、`OnSessionFinished`/`runRetry`、`finishStep`、文档），
+**扩展侧与 CDP 层零改动**，而夹具腿证的是那两层（§7.6/§7.7 的 L-A/L-B/L-C）。
+另一半原因是现场：本批收尾时夹具那一侧已经不在位（`9333` 无监听、nm-host 进程已退出），
+拉起它要重装扩展 + 换服务端二进制（我这一泳道的 8299 跑的还是批15 那版），而同机并行会话
+正在跑它们自己的变异电池与全量轮（`go test -p 1 ./internal/...` 在跑、load 30+），
+重启 8299 就是打断别人的腿。真实执行证据因此仍由 WS-E2E 那一层给
+（真 Host WS + 真 PG，批16 的双发现象就是它跑出来的）。
+**触发条件写在前面**：批17 一动扩展（`stable` 判定与点后身份复核必然动 `primitives.js`），
+夹具腿就是硬门禁的一部分，且必须按 §7.6 的口径重跑 L-A/L-C 两条。
+
+**批16 电池在批16b 代码上重跑**（证明旧闸门没被新改动松掉）：`--check` 先确认八条锚点
+在改动后的 `executor.go`/`write_ledger.go` 里**仍然唯一命中**（M4 的替身 `return nil` 本来
+出现 7 次，不构成注码歧义），随后在 `/tmp/b24clone`（检出 `16163bf2` + 本泳道七文件，
+`go build ./...` `rc=0`）整趟重跑 ⇒ `/tmp/b24_b16on16b.log`：`电池终态: OK`、`battery rc=0`，
+对照腿与收尾腿各一次 `rc=0 ran=8/8 skip=0`，M1–M6、M8 七处**仍被点名杀掉**、红因与本批
+首次记录逐字一致（M3 仍是"重试轮 `comment_send=2 want 1`"那句双发），M7 仍是同一条等价类。
+基线 md5 与 §7.9 上面那趟电池相同（`executor=ead9e9e7`、`write_ledger=a7c85746`）——
+两趟打的是同一份代码，这一点是由 md5 前缀对上而不是由"我看过文件"保证的。
+
+**批16 电池在批16c 代码上第三次重跑**（同一份 tightened 脚本，`/tmp/b25_mut_a2.log`）：
+`电池终态: OK`、`battery rc=0`，八刀里 M1–M6、M8 七处仍是「红 已杀」且**红集合恰好等于 `must`**
+（新上加的上界口径，见 §7.10），M7 仍是同一条等价类，对照腿/收尾腿 `rc=0 ran=8/8 skip=0`。
+基线 md5 与 §7.9 那两趟对不上（`executor=48abc4e5` vs `ead9e9e7`）是**预期的**：这一趟的树里
+多了批16c 的 `retryBackoffDelay` 抽取，而 `write_ledger=a7c85746` 未动——对不上 md5 的那一格
+恰好是本批唯一改过的那一格，这比"两趟 md5 相同"更能说明打的是哪份代码。
+
+## 7.10 批16c：二次审核线的结论逐条重跑 + 电池自身八条口径收紧
+
+**这一批的输入是外部审核线（同一份代码、行号截至 `73f92fb7`）报回的三份清单**：
+13 处「一行注码、全套测试仍绿」的候选、电池脚本自身 8 条不诚实、以及一条对 §7.8 里
+M7 等价类的保留意见。本批**没有一处按报告原文入库**——§7.9 立的规矩（二手结论先自己复算）
+在这里第二次生效，而且这次连我自己上一轮写下的数字一起复算。判定口径只有一条：
+**把那把刀真注进代码、看有没有腿红**，不看报告怎么说、也不看我怎么说。
+
+### 十三刀逐条判定
+
+| 报告的刀 | 复验方式 | 判定 |
+|---|---|---|
+| A1/A2/A3/A4/B2b/`RowsAffected` 那一族（6 刀） | 批16b 电池在收紧后的脚本下整趟重跑（`/tmp/b25_mut_b3.log`） | **当时是真洞、现已闭**：M9–M19 十一刀全部「红 已杀（红集合恰好等于 must）」，其中就包括这六条对应的落点 |
+| B1「`if writeStep {`→`if effect == effectWrite {` ⇒ unknown 步绕过双发闸」 | 拆成六刀分别下：M20（四道一起）、M27（双发闸+降级那一格）、M28（D7 那一格）、M29（只摘降级拦截）、M30（只钳 retries）、M31（只漏失败路径落账） | **实质成立、表述不成立**：M30/M31 当场被批16 的老腿 `TestWSE2E_UnknownLocatorTableTreatedAsWrite` 点名杀掉（红因原话 `click 到线 3 次 want 1`），所以「**全套**测试仍绿」这句是错的；但同一符号下另外三格（双发闸、降级拒绝、D7）在 unknown 步上确实一条断言都没走过 ⇒ 补三条腿 |
+| B3「摘掉 `defer clearLedgerBroken` 全绿」 | M21 | 成立。批16 那条腿**刻意不读降级表**（表在 `ExecuteSession` 末尾恒被清空，读它就是永远绿的断言），代价是"清除"这个动作本身没有腿——它表现的真形态是**下一个会话还能不能下发写步** |
+| A6「`isNeverExecuted` 的 `_inject_timeout_` 分支没腿」 | M22 | 成立：批7 那几条只打了 `_not_found`。这条分支的语义是「点击从未发生 ⇒ 可安全重下发」，摘掉它就是把一次注入拥堵超时永久钉成不可重跑 |
+| A7「指数退避改成线性全绿」 | M23 | 成立 ⇒ 算式抽成 `retryBackoffDelay`（`timeouts.go`）后补腿。**本批唯一的生产码改动**，且是纯函数抽取、无行为变化（腿里同时钉住调用点仍走它，防止"抽了没人用"） |
+| A8「`FindSubmitAttempt` 的 `Order("id asc")`→`desc` 全绿」 | M24（打在 `repository/step.go`） | 成立：顺序是**确定性**承诺，没腿就等于「同一份库、同一次判定可以给出两种结论」。这一刀同时补掉报告缺陷 #5 的另一半——`step.go` 此前**既没有变异也没有测试文件**（`? …/repository [no test files]`） |
+| B4「`writeStepKey` 丢掉 `Anchor`/`ButtonText` 全绿」 | M25 | 成立：现有腿只断"键非空"，丢字段仍然非空。补的腿断四个面各自换值都要变键、且空白差异仍归一 |
+| gap-cap 的字面量 512 与淘汰方向 | 方向早有腿（`TestLedgerGapSetGrowsOnlyPerDistinctKey` 断最新键必在集合内）；只把 512 改成别的数字注不出红 | **一半成立、按等价类登记**：安全论证是「集合有界」，不是「上界恰好 512」。改上限要同时改那条腿里的 `ledgerGapCap` 引用（腿读的是常量不是字面量），这是**刻意**的——把 N 写进断言只会让人以为 N 有语义 |
+| M7 等价类的保留意见 | 见下一节 | 采纳，且补法改成了可自动失效的锁 |
+
+### 审核线对 M7 的保留意见：等价类的前提要有锁，而不是靠人记得
+
+批16 把「sent 落账点不再标 `crossed`」判成等价类，靠的是一条**控制流事实**：
+`sent` 写与终态写之间没有任何早返、且两次写用同一个 `textHash`，所以 sent 失败要么被终态写补成
+一条库里的提交尝试（DB 闸门照拦），要么两次一起失败（同键去重后仍记一条兜底缺口）。
+报告两点保留：(a) 没有任何东西在"有人往中间插一条早返"的那天变红，spec 只写了"有寿命、要重跑"；
+(b) 现有选靶（`state != prepared`）永远把两次写一起打断，所以等价性的第二支是读码得出的。
+
+(a) 采纳：新增静态锁腿 `TestSentToFinalLedgerWritePathHasNoEarlyReturn`——两个落账点之间一旦长出
+`return`/`break`/`continue`，或尾巴上的实参不再是同一个 `textHash`，当场判红并注明"等价类失效、
+M7 必须重判"。它的牙由 M32 证，且**实测红集合只有这一条腿**：注码是行为不变的 `if false { return nil, nil }`，
+所以除这条锁以外没有第二条腿变红——用会改行为的注码去证明静态锁等于没证明（行为一变全屋皆红，
+锁红不红无从分辨）。(b) 记为**已知不补**：造"只有 sent 失败"的形状要往 `recordSubmitState` 里加
+注码面（三个 state 选靶已覆盖同一条落库路径），而它证明的是"补写可达"，与 (a) 的锁是同一条事实的
+两种写法——留锁不留靶，理由在此写清而不是默默不做。
+
+### 电池自身：报告点出的 8 条，7 条成立并已修，1 条否决
+
+| # | 报告说的 | 判定与处置 |
+|---|---|---|
+| 1 | 对照腿打印「skip=0」却没查它 | **成立**，最直白的一种假绿（库不可达 ⇒ 8 条全跳 ⇒ `ran==set(TESTS)`、无红、`rc=0` ⇒ 宣布"门在位"而一条没跑）。三处脚本都改成 `skip0` 参与判定，收尾腿同 |
+| 2 | `must ⊆ failed` 单向、没有"其余腿必须绿"的上界 | **成立**，本批修完立刻兑现了价值：任何把整包打红的注码（负载红、夹具前提崩、panic 前一地红）以前都会被记成"已杀"。现在要求红集合**恰好**等于 `must`，多一条就判「无法判定」 |
+| 3 | 电池那 7 条腿的执行 ctx 仍是 60s，而同批已把 D7 腿换成从生产预算推导的窗口 | **成立**（我自己上一批留的债：同一条根因两套处置，且留着的那套是反向证据的承重墙）。三趟电池的 `TESTS` 集合里现在**没有一条腿**还用 60s：本批改掉 11 处（`write_ledger_b16_test.go` 6 + `ledger_b16b_test.go` 5），`ledger_b16c_test.go` 从第一行起就用推导值。`go vet` 随即报两个文件 `"time" imported and not used`，删掉导入——**vet 报了这个错，恰好证明替换是真的**。<br>**没做完的部分要记在账上**：本包另有 20 处 `60*time.Second`（`write_ledger_b7_test.go` 8、`executor_ws_e2e_test.go` 4、`ledger_ws_test.go` 4 等）不在这三趟电池的靶上，同一根因仍在；它们的红目前只会红在全量门禁里（那里 `-timeout` 兜得住），不会污染反向证据 |
+| 4 | `rc=1` 却读不到 `--- FAIL:` 名字时仍印「红 已杀」 | **成立**：`ok = rc==1 && failed` 与打印式 `rc==1` 不是同一个式子，"红 已杀 ｜（无红）"是脚本能合法输出的行。改为红而无名 ⇒ 无法判定 |
+| 5 | 备份面窄于结论面 | **一半成立**。「备份只需覆盖被注码的文件」这句本身没错，但结论面确实大过它：`step.go` 从没进过任何一趟电池（见 A8 那行），所以"末次 md5 一致"读起来像全树一致。处置是**扩注码面而不是扩措辞**：本批起 `repository/step.go`（M24）与 `timeouts.go`（M23）第一次进电池目标，三趟合起来的注码面是 `executor.go`/`write_ledger.go`/`feedback.go`/`repository/step.go`/`timeouts.go` 五个文件，每趟日志的基线 md5 行列的正是**该趟真注码的那些**（b16 两格、b16b 四格、b16c 四格）——按趟读，不要跨趟想象 |
+| 6 | `-run` 子集不是门禁，而电池日志正是唯一的落盘证据 | **成立**，改文档不改行为：三处脚本 docstring 各写一句「**本电池不是门禁**；门禁是干净克隆里的 `go build ./... && go vet ./... && go test ./...`」 |
+| 7 | `EQUIV` 逃生口绕开 `must` 检查 | **成立**：判成等价的注码永远不再有条腿会红，而旧代码在 EQUIV 分支直接 `continue`。现在要求该趟"绿且 ran 齐全且 skip==0"才允许登记等价类，否则仍判无法判定 |
+| 8 | 没有「注码真的改到字节」断言 | **成立**：`old==new` 的注码会以"全绿 ⇒ 存活/等价类"的形态出现，而这是电池最省一次跑、也最容易骗自己的一条。现在注码后先比 md5，没变字节直接判无法判定 |
+
+新口径（#2 的上界）第一次跑就抓出三处**多红**，全部逐条单独复现过再判：M26 首轮多红
+`TestInjectTimeoutStepStaysReDispatchable`、批16b 的 M14 多红 `TestCrossedLedgerGapSuppressesAutoRetry`、
+M17 多红 `TestGenericWriteStepLedgerFailureJudgedRed`。判"是真实连带面"而不是"注码打偏"的依据不是推理：
+用 `/tmp/b25_probe_m14_m17.py` 把那两个注码分别只打在**那一条腿**上单独跑，取回原因行原文
+（`挂起重试 next_retry_at=2026-09-20 20:17:23… want NULL` / `通用写步的越点未落账必须进缺口兜底集合`），
+两条都是同一判据的另一面 ⇒ `must` 加名并在脚本里写清原因。M17 那条 §7.9 早就记过（"键退化成空串时红的不是它的自家用例"），
+旧口径容得下它、新口径容不下——这正是加上界的意义。
+
+### 批16c 的实证
+
+- **九条新腿**（`service/ledger_b16c_test.go`，八条覆盖 + 一条静态锁）在干净代码上全绿：
+  批16c 电池 `--check` 先确认 13 处锚点唯一命中、11 个用例名（九条新腿 + 两条老腿）都在包里，
+  对照腿 `rc=0 ran=11/11 skip=0`（`/tmp/b25_mut_c3.log`）。腿 ① 首轮是**我错它不红**：我按"重试轮跳过"预言 `status="skipped"`，
+  真形态是非重试轮被闸门硬判 `failed`（"写步拒绝执行…重发即双发"），闸门是对的、预言是错的，
+  断言改过来并写明两种判法都算拦住。
+- **13 刀全部「红 已杀（红集合恰好等于 must）」**：M20–M32（`/tmp/b25_mut_c3.log`，
+  基线 md5 `executor=48abc4e5 step=5577e92c timeouts=525839d6 write_ledger=a7c85746`，收尾对照腿 `rc=0 ran=11/11 skip=0`）。
+  逐刀拆（M27–M31）而不是只打 M20 一包，是为了**每条新腿各自有牙**：一起摘会红不等于每道闸都有腿。
+- **三趟电池打的是同一棵树**（批16 八刀 8/8、批16b 十一刀 11/11、批16c 十三刀 11/11），
+  串行跑在同一个干净克隆 `/tmp/b25clone`（检出 `7a37f6b8` + 本泳道文件 + `.env`），
+  注码目标目录只在该克隆，共享工作树未被注过一刀。
+- **驱动脚本自己也被抓出一条假绿**：链式驱动先 `echo "battery rc=$?"` 再 `echo ">>> 结束 rc=$?"`，
+  第二个 `$?` 取到的是**上一条 echo 的 rc**，于是 b16b 那趟实际 `rc=1` 在链日志里被记成 `rc=0`。
+  链日志的 rc 一律作废，判定只按电池自己写进日志的 `battery … rc=` 与 `电池终态` 读——
+  这是"exit code 0 不算证据"的又一种形态：**取 rc 的那一行代码本身要审**。
+- **`gofmt -w` 之后的最终复跑**（格式改动只落在 `feedback.go` 与 `ledger_b16c_test.go` 的空白对齐，
+  前者 md5 因此是 `ae2bcaca`）：门禁换到另一个克隆 `/tmp/b26clone`（检出并行会话当时的 `00c7c263` +
+  本泳道文件 + `.env`）跑 `gofmt -l 泳道=空`、`go build ./... rc=0`、`go vet rc=0`、
+  `go test -test.v ./internal/browser_automation/...`（**不带 `-run`**）`rc=0`，
+  计数 `PASS=146 FAIL=0 SKIP=0`（controller 0.437s / platform 0.561s / service 170.558s，`/tmp/b26_test2.log`）；
+  三趟电池在格式化后的同一棵 `/tmp/b25clone` 上整趟重跑（`/tmp/b26_chain.log`）：
+  b16 八刀 = 7 杀 + M7 那条等价类（`/tmp/b26_mut_a.log`，`ran=8/8 skip=0`）、
+  b16b 十一刀全杀（`_b.log`）、b16c 十三刀全杀（`_c.log`），三趟 `电池终态: OK`、
+  对照腿与收尾腿的 `ran/skip` 全对。**两棵树的基线 commit 不同（`7a37f6b8` vs `00c7c263`）而泳道九个文件逐字节相同**
+  ——差的那几个 commit 全在并行会话的文件里（本批跑过一次注码现场核对：三趟结束后 `*.bak` 零残留、
+  九文件 md5 与工作树一致，且等于日志里引用的 `executor=48abc4e5 step=5577e92c timeouts=525839d6 write_ledger=a7c85746 feedback=ae2bcaca`），
+  所以"电池打的就是要提交的这份代码"是由 md5 对上保证的，不是由"我看过文件"保证的。
+
+**本批仍是零生产行为改动**（除 A7 那一处纯函数抽取），扩展与 CDP 层一字未动，
+所以 §7.9 那段"没跑夹具真机腿"的取舍与触发条件原样有效：批17 一动 `primitives.js`，
+L-A/L-C 两条就是硬门禁的一部分。
 
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
@@ -974,7 +1236,7 @@ ok service 170.416s`，**128 PASS / 0 SKIP**（`/tmp/b22_verify.log`）——克
    （换 selector / 新会话回读并匹配作者 + 内容哈希），扩展上报只允许写 `accepted`；
    回读前先比 `PageFingerprint(url, element_count, text_hash)` 式指纹，**指纹未变即判 `unverified`**。
 
-### 8.3 差距矩阵与取舍（19 行，每条左列都经本泳道读码复核，未复核的一律不进；#11 为「被子 agent 证伪故不进矩阵」的反例记录）
+### 8.3 差距矩阵与取舍（21 行，每条左列都经本泳道读码复核，未复核的一律不进；#11 为「被子 agent 证伪故不进矩阵」的反例记录；#20、#21 为批16b/批16c 自审新增、左列不是同行口径而是本仓缺陷形状）
 
 `采纳`=本批改；`拒绝`=给出理由并留档；`BLOCKED`=落点在并行会话在途文件（`git status` 实测仍脏）。
 
@@ -999,3 +1261,5 @@ ok service 170.416s`，**128 PASS / 0 SKIP**（`/tmp/b22_verify.log`）——克
 | 17 | 重投要保留同一身份（Pub/Sub "A redelivered message retains the same message ID"），而**内容当身份**的前提是"同一条内容不会第二次真实出现"——这个前提在聊天里不成立 | `computeMsgID` 就是 `contentHash(channel\|conversationId\|content)`（`user-web/bridge/src/core/uplink.js` `enqueue` 里缺省填 `event_id`），服务端钩子2 按 `msg_id + conversation_id` 判等（`inbox_ingress.go:457-484`）⇒ **同一会话里第二条"好的"必然被吞**，且这是"说了没回"在 B 链路里比 Redis 更早、更永久的一层 | **登记待对齐**：改点在干净的 `uplink.js`，但 `computeMsgID` 与服务端 `ContentHashMsgID` **严格同源**（函数注释自证），单边改会把幂等判定裂成两套；`types.js` 的跨语言契约注释也得同步。验收口径先立：同会话两条同文本 ⇒ 2 行；同一条重投（DOM timestamp 不变）⇒ 仍 1 行 |
 | 18 | "接受但不再执行"是默认档，"根本不落库"几乎没人这么做（sidekiq-unique-jobs 把**锁时机**与**冲突怎么办**拆成两个维度：`until_executing`/`while_executing`… × `on_conflict: :log/:raise/:reject/:replace/:reschedule`） | `decision.Blocked` 时两条分支（单条 `inbox_ingress.go:494-507`、批量 `:944-957`）都在 `persistMessage` **之前** `return` ⇒ 消息**不入库**，只回一个 `Accepted=true` 的好看回执 ⇒ 排障时"客户说了没回"在库里查不到任何痕迹（证据消失） | **BLOCKED**：两文件均为并行会话在途（承 §8.3-9 同一移交面）。移交口径：`IsDup` 分支改"入库 + 抑制 AI"、`IsSelfEcho` 维持不落库（回声落库会污染会话） |
 | 19 | 幂等层命中应**回放首次结果**而不是重新判定，且"是否重复"要由结论决定而非文案（Stripe 存首次 status+body 原样回放） | `IsDuplicateReason` 用子串嗅探 reason，而 reason 里混得进**落库失败原文**（§8.1-7）⇒ 误判方向是"永久停发" | **采纳（P0）批15 已落**：判定收成结论短语前缀 + 永久断言 + 两条反向腿（§7.7）。**正解仍是 outcome 枚举**，要改 `InboxIngressResult` 及全部产出点 ⇒ 落点在在途文件，随 18 一起移交 |
+| 20 | 自审发现（非同行调研轴，批16b 二次审核 B4）：防不可逆动作的"先查后做"若两端都在应用层，两个并发执行流就都能查到"没做过"再各自做一遍——正解是把判定下推到存储层的**唯一约束**（Postgres 部分唯一索引天然具备，本仓该目录却只有 `model/cron.go:15` 一处 `uniqueIndex`） | 双发闸是**读后再写**：`guardResubmit` 先 `FindSubmitAttempt`（`repository/step.go`，一条普通 `First`，无 `FOR UPDATE`、无 advisory lock），通过后才由 `recordSubmitState` 写 `prepared`/`sent`；而同一时刻并发的另一条腿看到的是同一条"查不到"。同层的三条并发防护也全是同一形状：`t.Status == "running"`、`CountRunningByTask`、`CountRunningByUser`（`task.go:312-334`，v1 每用户同时 1 个 running session ⇒ 现实窗口很窄，但注释自陈"**靠 DB 唯一性兜底竞态**"，而 `browser_tasks`/`browser_sessions` 上并不存在那样一条约束） | **不采纳"再补一道 check-then-act"**：那只是把同一形状的闸门复制一遍。诚实收口是给台账加**部分唯一索引** `(task_id, text_hash) WHERE submit_state IN (sent, unattributed, verified) AND deleted_at IS NULL`，把"这次提交是否已被记过"交给插入语句本身判定（撞约束即拒发）——代价是它同时把软删语义变成契约问题（软删行参不参与唯一性、`PruneBefore` 类裁剪会不会腾出键位 ⇒ 与 #6 的"裁剪不等于证据消失"连体），属 DDL 决策而非本泳道随手改。**登记 A12（待拍板，不阻塞本批）**：本轮以文档记账，理由是"当前并发面被 per-user running 闸压到极窄"+"改法牵动软删与裁剪两处口径"。若将来放开并发（每用户 >1 session）或引入多副本 worker，A12 立即从"可缓"变为"必做"，届时必须重跑本批电池再谈 |
+| 21 | 自审发现（非同行调研轴，批16c 二次审核 B1）：**同一个判据符号被多处消费，测试却只覆盖其中一格**——评审里最常见的假绿形状是"摘掉整块会红"，它被当成了"每一格都有腿"的证据；正解是按消费点逐个下刀，让每条腿各自证明它有牙 | `classifyStepEffect` 的三态由一个符号 `writeStep := effect.needsWriteGate()` 同时喂四处（钳 retries、降级+闸门键+双发闸、D7 确认、成功/失败两路落账）。批16 只在"钳 retries"那一格有腿（`TestWSE2E_UnknownLocatorTableTreatedAsWrite` 断 click 只到线 1 次），把符号收窄回 `effect == effectWrite` 时另外三格（双发闸、降级拒绝、D7）在 unknown 步上一条断言都不走过 ⇒ 一次"不知道有没有副作用"的动作被原样重发 | **已落（批16c）**：三条腿逐格钉住 unknown 步的双发闸/降级拒绝/D7 闸门，电池不再打"一包"而是**逐消费点下刀**（M27 双发闸+降级、M28 D7、M29 只摘降级拦截、M30 只钳 retries、M31 只漏失败路径落账，M20 保留为"四道一起摘"的对照），从而证明每条新腿各自有牙。**通用口径回灌记忆**：一次"摘掉整块全红"不能登记为覆盖，必须按消费点拆刀 |
