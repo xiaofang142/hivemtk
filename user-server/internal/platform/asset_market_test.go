@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -115,10 +116,13 @@ func TestAssetMarketClient(t *testing.T) {
 	if err := c.Purchase(ctx, "a9"); err != nil {
 		t.Fatalf("Purchase: %v", err)
 	}
-	// 错误 code 分支：asset_id=a9 时 purchase 通过，改传 aX 触发 4001
+	// 错误 code 分支：asset_id=a9 时 purchase 通过，改传 aX 触发 4001。
+	// R11 起拒绝在传输层就转成 *PlatformError（市场客户端自己的信封判断降为兜底冗余），
+	// 断言也随之从"字符串里含 platform error 4001"升级为按结构化 code 判定。
 	err = c.Purchase(ctx, "aX")
-	if err == nil || !strings.Contains(err.Error(), "platform error 4001") {
-		t.Fatalf("Purchase 错误分支: %v", err)
+	var perr *PlatformError
+	if !errors.As(err, &perr) || perr.Resp == nil || perr.Resp.Code != 4001 {
+		t.Fatalf("Purchase 错误分支应给结构化 code=4001，得到 %T: %v", err, err)
 	}
 
 	payload, err := c.PullData(ctx, "a1")

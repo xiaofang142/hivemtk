@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -41,12 +42,19 @@ func (pc *PlatformController) platformData(c *gin.Context, method, path string, 
 		response.Success(c, resp, "平台未初始化，返回空数据")
 		return false
 	}
-	ok, _ := pc.platformDataRaw(c, method, path, req, resp)
+	ok, err := pc.platformDataRaw(c, method, path, req, resp)
 	if ok {
 		return true
 	}
 
-	response.Success(c, resp, errMsg+"（平台不可达，返回空数据）")
+	// R11 起"平台答话了但拒绝"会上抛 *PlatformError，与"根本没答话"分得开：
+	// 混成一句"平台不可达"会把商户被停用/签名不对推给网络排查。
+	reason := "平台不可达"
+	var perr *platform.PlatformError
+	if errors.As(err, &perr) && perr.Resp != nil && perr.Resp.Code != 0 {
+		reason = fmt.Sprintf("平台拒绝(code=%d): %s", perr.Resp.Code, perr.Resp.Msg)
+	}
+	response.Success(c, resp, errMsg+"（"+reason+"，返回空数据）")
 	return false
 }
 

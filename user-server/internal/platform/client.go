@@ -251,17 +251,48 @@ func (c *Client) doRetry(method, path string, reqData, respData any, retried boo
 	}
 
 	var respBody []byte
+	respBody, err = io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error(err, "读取响应体失败")
+		return err
+	}
+	if perr := envelopeRefusal(respBody); perr != nil {
+		logger.Error(fmt.Errorf("平台业务码 %d", perr.Resp.Code),
+			fmt.Sprintf("商户上报被拒: %s %s, 耗时: %v, 响应: %s", method, url, duration, perr.RawBody))
+		return perr
+	}
 	if respData != nil {
-		var err error
-		respBody, err = io.ReadAll(resp.Body)
-		if err != nil {
-			logger.Error(err, "读取响应体失败")
-			return err
-		}
 		logger.Info(fmt.Sprintf("商户上报请求成功: %s %s, 状态码: %d, 耗时: %v, 响应数据: %s", method, url, resp.StatusCode, duration, string(respBody)))
 		return json.Unmarshal(respBody, respData)
 	}
 	return nil
+}
+
+// envelopeRefusal 认出"平台用 HTTP 200 承载的拒绝"。
+//
+// 平台侧 response.Success 与 response.Error 都写 HTTP 200，真值只在信封 code 里 ——
+// 连 MerchantAuth 的 401/403、注册的 400/409 也一样。所以只看状态码会把
+// "该邮箱已被注册""签名错误"读成成功，调用方连失败原因都拿不到。
+//
+// 两条边界：body 不是信封（非对象 / 无 code 键）时不凭空造失败，原样交回调用方解析；
+// code=0 视为无业务码（既有口径，资产市场客户端同此），只有显式的非 200 码才算拒绝。
+func envelopeRefusal(body []byte) *PlatformError {
+	var probe struct {
+		Code *int   `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil || probe.Code == nil {
+		return nil
+	}
+	switch *probe.Code {
+	case 0, http.StatusOK:
+		return nil
+	}
+	return &PlatformError{
+		StatusCode: http.StatusOK,
+		RawBody:    string(body),
+		Resp:       &BaseResp{Code: *probe.Code, Msg: probe.Msg},
+	}
 }
 
 func (c *Client) RegisterMerchant(req RegisterMerchantReq) error {
@@ -416,6 +447,13 @@ func (c *Client) ReportInstall(req *ReportInstallReq) error {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("上报安装信息返回 %d: %s", resp.StatusCode, string(raw))
 	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("读取安装响应失败: %w", err)
+	}
+	if perr := envelopeRefusal(raw); perr != nil {
+		return fmt.Errorf("上报安装信息被拒: code=%d, msg=%s", perr.Resp.Code, perr.Resp.Msg)
+	}
 	logger.Info("上报安装信息成功")
 	return nil
 }
@@ -457,6 +495,13 @@ func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("上报心跳返回 %d: %s", resp.StatusCode, string(raw))
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("读取心跳响应失败: %w", err)
+	}
+	if perr := envelopeRefusal(raw); perr != nil {
+		return fmt.Errorf("上报心跳被拒: code=%d, msg=%s", perr.Resp.Code, perr.Resp.Msg)
 	}
 	logger.Info("上报心跳成功")
 	return nil
