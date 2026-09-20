@@ -58,8 +58,17 @@ type Opportunity struct {
 	OneID      string `gorm:"type:text" json:"one_id"`
 
 	// ClueID 来源线索（T-P4-05 一键转商机时写入）。可空：手工建的商机没有线索。
-	// 不建索引：今天没有"由线索反查商机"的读方；反查由 clues.is_opportunity 承担
-	// （那一列的语义本卡不动，向后兼容判据在 T-P4-05 的 AC②）。
+	//
+	// **本卡改了这里当初的判断**（原话是"不建索引：今天没有由线索反查商机读方；
+	// 反查由 clues.is_opportunity 承担"）：T-P4-05 的幂等键就是这条反查
+	// （同一条线索第二次投递必须先知道"已经转过了"），而 is_opportunity 承担不了 ——
+	// 它是一个 0/1，答不出"转成了哪一条"，且它的语义是挖掘侧按 intent_score 打的热度标记，
+	// 与"已经变成商机"根本不是同一件事（转换那一步一个字节都不写它，AC②）。
+	//
+	// 索引因此建，但建的是**部分**唯一索引（`WHERE clue_id <> ''`）：空串是本表的合法常态，
+	// 不带谓词的唯一索引会让第二条手工商机插不进去。GORM 标签表达不了 partial，
+	// 所以它不在标签上，而在 internal/pkg/db 的 postMigrateOpportunityClueUniqueIndex()，
+	// 形状与四条判据见该包 opportunity_migration_test.go。
 	ClueID string `gorm:"type:varchar(36)" json:"clue_id"`
 
 	// Stage 推进位置（值域见 OpportunityStages）。

@@ -1122,6 +1122,17 @@ func (f failingOpportunityRepo) ListByOwner(context.Context, string, []string, i
 	return nil, f.err
 }
 
+// GetByClueID / OpenCountByOwner 是 T-P4-05 加进接口的两格。这里补齐而不是嵌入接口：
+// 嵌入会让"接口又加了方法"这件事在这个替身上静默通过，而它守的恰恰是
+// "底座一旦真被问到就必须报错"——编译不过才是这一格该有的反馈。
+func (f failingOpportunityRepo) GetByClueID(context.Context, string) (*model.Opportunity, error) {
+	return nil, f.err
+}
+
+func (f failingOpportunityRepo) OpenCountByOwner(context.Context) (map[string]int, error) {
+	return nil, f.err
+}
+
 // TestOpportunityRoutes_RepositoryFailureIsNotSilent 底座读失败 ⇒ 500 + reason=internal，
 // 且绝不许被翻成 404（"读不到"与"没有这条"在值班手里是两个动作）。
 func TestOpportunityRoutes_RepositoryFailureIsNotSilent(t *testing.T) {

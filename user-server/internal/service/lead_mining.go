@@ -337,10 +337,52 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 			"is_group":        hub.IsGroup,
 			"group_id":        hub.GroupID,
 		})
+		// 更新分支到此为止没有 clueRepo.Create，线索号是查出来的那一条 ——
+		// 本分支的 return 早于新建那一支，是这条接缝最容易只接一半的地方（判据见用例）。
+		s.tryConvertToOpportunity(ctx, existing.ID, customer, jd)
 		return
 	}
 	if err := s.clueRepo.Create(ctx, clue); err != nil {
 		logger.Warnf("[lead-mining] 写入线索失败 account=%s: %v", account, err)
+		// 线索没落库就不转：商机行的 clue_id 是一个没有下家的引用，
+		// 而本表不建外键（T-P4-01），这条断链谁都不会发现。
+		return
+	}
+	s.tryConvertToOpportunity(ctx, clue.ID, customer, jd)
+}
+
+// tryConvertToOpportunity 线索写完之后的那一跳（T-P4-05：达标的线索自动变成有人推进的商机）。
+//
+// 三条口径：
+//  1. 整条路径**可选**：商机竖没装配（无 DB 句柄 ⇒ 全局为 nil）时这里直接返回，
+//     线索写入那一步的既有行为一个字节都不变。这条服务一直是"非侵入异步"的。
+//  2. 拒签不记日志：闸门关着或未达阈值是**运营的选择**，而默认配置就是关 ——
+//     每条线索打一行日志会把挖掘这条路径的日志刷成噪声。转换那一步成功的详单
+//     由转换器自己打（含归属与规则），加上 operation_logs 那一行，两处都在说同一件事。
+//  3. 失败只 Warn，不重试、不回滚线索：判定/写入故障修好之后下一条消息自然再走一遍，
+//     而把一条已落库的线索因为"没转成商机"一起撤掉，是拿既有功能给新功能陪绑。
+//     越界入参（模型给出 0–1 之外的 confidence）也落在这里 —— 它报错，但没人替它归一。
+func (s *Service) tryConvertToOpportunity(ctx context.Context, clueID string, customer *model.Customer, jd *LeadJudgement) {
+	conv := GlobalOpportunityConverter()
+	if !conv.Available() {
+		logger.Debugf("[lead-mining] 商机竖未装配，线索 %s 不转商机（检查 app.InitOpportunityRuntime）", clueID)
+		return
+	}
+	res, err := conv.ConvertFromClue(ctx, OpportunityConversion{
+		ClueID:     clueID,
+		CustomerID: customer.ID,
+		OneID:      customer.UnifiedID,
+		LeadScore:  jd.IntentScore,
+		Confidence: jd.Confidence,
+	})
+	if err != nil {
+		logger.Warnf("[lead-mining] 线索 %s 转商机未完成: %v", clueID, err)
+		return
+	}
+	if res.Created && res.AuditError != "" {
+		// 商机已经落库，缺的是来源记录 —— 这一条必须冒出来：它意味着事后没人答得出
+		// "这单凭什么占我的工作台"，而那一格正是本卡承诺要能回答的问题。
+		logger.Warnf("[lead-mining] 商机 %s 已建但审计缺失: %s", res.Opportunity.ID, res.AuditError)
 	}
 }
 

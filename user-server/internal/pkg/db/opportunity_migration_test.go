@@ -10,6 +10,7 @@
 package db
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -181,10 +182,11 @@ func TestOpportunityHasNoTenantColumnAtDBLevel(t *testing.T) {
 
 // TestOpportunityIndexesOnlyForNamedQueries 索引只跟着**已命名的查询方**走。
 //
-// 三个建索引（customer_id / stage / owner_user_id）的下家是 T-P4-02 卡面点名的
-// "按客户/阶段/负责人查询"，created_at 的下家是 T-P4-04 列表端点的倒序，
-// code 是唯一约束而非查询优化。其余列刻意不建：没有查询方的预留索引只有写放大，
-// 且"有没有用"在今天根本无法验证（T-P2-04 在 sales_events 上同此口径）。
+// 四个建索引（customer_id / stage / owner_user_id / clue_id）的下家分别是：T-P4-02 卡面
+// 点名的"按客户/阶段/负责人查询"、T-P4-04 列表端点的倒序，以及 T-P4-05 的幂等反查
+// （clue_id 那一条是**部分**唯一索引，由 post-migrate 钩子建，形状单独在
+// TestOpportunityClueIDPartialUniqueIndex 里断）。其余列刻意不建：没有查询方的预留索引
+// 只有写放大，且"有没有用"在今天根本无法验证（T-P2-04 在 sales_events 上同此口径）。
 //
 // 本用例把"未建"也做成可断言的状态：将来谁按 one_id 查商机，必须带着自己的下家
 // 来改这里的期望集合，而不是提前把索引铺在暗处。
@@ -196,6 +198,10 @@ func TestOpportunityIndexesOnlyForNamedQueries(t *testing.T) {
 	if err := db.AutoMigrate(&model.Opportunity{}); err != nil {
 		t.Fatalf("AutoMigrate 失败: %v", err)
 	}
+	// 钩子必须一起跑：本用例判的是"启动之后库里有什么"，而 clue_id 那条索引恰恰不在
+	// AutoMigrate 能表达的范围内。不跑它还有一个更坏的副作用 —— 同进程里只要别的用例
+	// 先跑过钩子，这里就会凭空多出一条"没人建过"的索引而红，顺序依赖比断错更难查。
+	postMigrateOpportunityClueUniqueIndex(db)
 	if err := db.Exec(`INSERT INTO opportunities (id, code, stage, status) VALUES ('i','C1','qualification','open')`).Error; err != nil {
 		t.Fatalf("插入索引断言用行失败: %v", err)
 	}
@@ -226,15 +232,141 @@ func TestOpportunityIndexesOnlyForNamedQueries(t *testing.T) {
 			t.Error("id 必须是主键")
 		}
 	}
-	for _, want := range []string{"id", "code", "customer_id", "stage", "owner_user_id", "created_at"} {
+	for _, want := range []string{"id", "code", "customer_id", "stage", "owner_user_id", "created_at", "clue_id"} {
 		if !got[want] {
-			t.Errorf("缺少期望索引 %s（T-P4-02/T-P4-04 的查询下家会退化成全表扫）", want)
+			t.Errorf("缺少期望索引 %s（T-P4-02/T-P4-04/T-P4-05 的查询下家会退化成全表扫）", want)
 		}
 	}
-	for _, none := range []string{"one_id", "clue_id", "status", "amount", "win_probability", "expected_close_at", "lost_reason", "version", "updated_at"} {
+	for _, none := range []string{"one_id", "status", "amount", "win_probability", "expected_close_at", "lost_reason", "version", "updated_at"} {
 		if got[none] {
-			t.Errorf("列 %s 上出现了预留索引：没有已命名的查询方，本卡不建", none)
+			t.Errorf("列 %s 上出现了预留索引：没有已命名的查询方，不建", none)
 		}
+	}
+}
+
+// TestOpportunityClueIDPartialUniqueIndex T-P4-05：一条线索最多一个商机，库级兜底。
+//
+// 四条判据各挡一种坏法：
+//  1. 钩子跑**之前**同 clue_id 能插两条 —— 证明本用例真的在测那个钩子，
+//     而不是测"GORM 顺手建了个索引"（少了这一臂，钩子被删掉用例仍然绿）。
+//  2. 跑之后重复被拒（23505）—— 幂等承诺的最终防线。service 侧的 GetByClueID
+//     是第一层，它在并发下会让两个都通过（读时都没有 ⇒ 两个都插），
+//     真正拦住第二个的只有这一条。
+//  3. 空串与 NULL 各插好几条都合法 —— 谓词存在的理由。手工商机占本表大多数，
+//     一个不带 WHERE 的唯一索引会把第二条手工商机拦死，而那种坏法是**启动之后就一直在报**
+//     的错，比没索引更糟。
+//  4. 钩子可重跑 —— 它挂在每次启动都走的 Migrate() 上。
+func TestOpportunityClueIDPartialUniqueIndex(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	if testDB == nil {
+		t.Fatal("测试库不可达")
+	}
+	if err := testDB.Exec(`DROP TABLE IF EXISTS opportunities`).Error; err != nil {
+		t.Fatalf("清表失败: %v", err)
+	}
+	if err := testDB.AutoMigrate(&model.Opportunity{}); err != nil {
+		t.Fatalf("AutoMigrate 失败: %v", err)
+	}
+	insert := func(id, code, clueID string, useNull bool) error {
+		if useNull {
+			return testDB.Exec(`INSERT INTO opportunities (id, code, stage, status) VALUES (?, ?, 'qualification', 'open')`,
+				id, code).Error
+		}
+		return testDB.Exec(`INSERT INTO opportunities (id, code, clue_id, stage, status) VALUES (?, ?, ?, 'qualification', 'open')`,
+			id, code, clueID).Error
+	}
+
+	// 判据 1：钩子之前，重复就是一个普通的成功写入。
+	for _, id := range []string{"pre_1", "pre_2"} {
+		if err := insert(id, "OPP-PRE-"+id, "clue_dup", false); err != nil {
+			t.Fatalf("钩子之前插重复 clue_id 应当成功（本用例的对照组）: %v", err)
+		}
+	}
+	if err := testDB.Exec(`DELETE FROM opportunities WHERE id IN ('pre_1','pre_2')`).Error; err != nil {
+		t.Fatalf("清掉对照行失败（不清掉的话建索引会被存量重复行挡住）: %v", err)
+	}
+
+	postMigrateOpportunityClueUniqueIndex(testDB)
+	if err := testDB.Exec(`SELECT 1`).Error; err != nil {
+		t.Fatalf("钩子之后库不可用: %v", err)
+	}
+
+	var indexDef string
+	if err := testDB.Raw(`SELECT indexdef FROM pg_indexes
+		WHERE tablename = 'opportunities' AND indexname = 'idx_opportunities_clue_id'`).
+		Scan(&indexDef).Error; err != nil || indexDef == "" {
+		t.Fatalf("索引 idx_opportunities_clue_id 不存在（钩子没跑或名字变了）: err=%v def=%q", err, indexDef)
+	}
+	if !strings.Contains(indexDef, "UNIQUE") {
+		t.Errorf("索引不唯一: %q", indexDef)
+	}
+	if !strings.Contains(indexDef, "(clue_id)") {
+		t.Errorf("索引建的列不对（多一列就不是这条承诺了）: %q", indexDef)
+	}
+	if !strings.Contains(indexDef, "WHERE") {
+		t.Errorf("索引不带 WHERE 谓词 ⇒ 第二条没有来源线索的手工商机会被拦死: %q", indexDef)
+	}
+
+	// 判据 2：重复的 clue_id 现在必须撞墙，且撞的是这个索引。
+	if err := insert("dup_a", "OPP-DUP-A", "clue_dup", false); err != nil {
+		t.Fatalf("先插一条合法行失败: %v", err)
+	}
+	dupErr := insert("dup_b", "OPP-DUP-B", "clue_dup", false)
+	if dupErr == nil {
+		t.Fatal("同一线索的第二行商机插进去了 —— 幂等只剩 service 那一层，并发下会漏")
+	}
+	if msg := dupErr.Error(); !strings.Contains(msg, "23505") || !strings.Contains(msg, "idx_opportunities_clue_id") {
+		t.Errorf("重复行撞的不是预期索引（换个约束报错说明索引没建对）: %v", dupErr)
+	}
+	// 编号那条唯一索引不能被顺带牵连：两条不同线索、不同编号必须照旧能插。
+	if err := insert("ok_a", "OPP-OK-A", "clue_one", false); err != nil {
+		t.Errorf("不同 clue_id 被误拦: %v", err)
+	}
+	if err := insert("ok_b", "OPP-OK-B", "clue_two", false); err != nil {
+		t.Errorf("不同 clue_id 的第二条被误拦: %v", err)
+	}
+
+	// 判据 3：空串与 NULL 都不进索引。
+	for i := 0; i < 3; i++ {
+		if err := insert(fmt.Sprintf("blank_%d", i), fmt.Sprintf("OPP-BLANK-%d", i), "", false); err != nil {
+			t.Errorf("第 %d 条无来源线索的手工商机被拦了（谓词没生效）: %v", i+1, err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := insert(fmt.Sprintf("null_%d", i), fmt.Sprintf("OPP-NULL-%d", i), "", true); err != nil {
+			t.Errorf("第 %d 条 clue_id 为 NULL 的行被拦了: %v", i+1, err)
+		}
+	}
+
+	// 判据 4：钩子可重跑（每次启动都会再执行一遍同一条 DDL）。
+	for i := 0; i < 2; i++ {
+		postMigrateOpportunityClueUniqueIndex(testDB)
+	}
+	if err := insert("after_rerun", "OPP-RERUN", "clue_three", false); err != nil {
+		t.Errorf("重跑钩子后写入坏了: %v", err)
+	}
+	if err := insert("after_rerun_dup", "OPP-RERUN-2", "clue_three", false); err == nil {
+		t.Error("重跑两次钩子后唯一性没了")
+	}
+
+	// 存量真有重复时钩子必须**失败并留下告警**，而不是悄悄跳过：
+	// 这里把它跑在一张已经带重复行的表上，验证的是"它会报错"这一半。
+	if err := testDB.Exec(`DROP INDEX idx_opportunities_clue_id`).Error; err != nil {
+		t.Fatalf("临时删索引失败: %v", err)
+	}
+	if err := insert("legacy_a", "OPP-LEG-A", "clue_legacy", false); err != nil {
+		t.Fatalf("造存量重复行失败: %v", err)
+	}
+	if err := insert("legacy_b", "OPP-LEG-B", "clue_legacy", false); err != nil {
+		t.Fatalf("造第二条存量重复行失败: %v", err)
+	}
+	postMigrateOpportunityClueUniqueIndex(testDB) // 只 Warn，不 panic：这一条断的是"没 panic"
+	var remaining int64
+	if err := testDB.Raw(`SELECT COUNT(*) FROM opportunities`).Scan(&remaining).Error; err != nil {
+		t.Errorf("存量重复让启动路径断掉了: %v", err)
+	}
+	if remaining == 0 {
+		t.Error("建索引失败把表清空了：钩子只该报错，不该动数据")
 	}
 }
 

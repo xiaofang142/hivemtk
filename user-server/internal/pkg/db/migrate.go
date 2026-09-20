@@ -419,8 +419,38 @@ func AutoMigrate() *gorm.DB {
 	}
 
 	postMigrateMessageHubUniqueIndex()
+	postMigrateOpportunityClueUniqueIndex(DB)
 
 	return DB
+}
+
+// postMigrateOpportunityClueUniqueIndex 给"一条线索最多只有一个商机"这条承诺配上库级守卫。
+//
+// 句柄作参数而不是读包级 DB（与上面那条 message_hub 钩子的唯一差别）：这条钩子有真库用例
+// 要跑它，而用例若只能靠 SetTestDB 把全局句柄换掉才能生效，就等于把"全二进制共享一个全局"
+// 那类顺序依赖引进来了。生产调用点仍然传 DB，形状没变。
+//
+// 为什么是裸 DDL 而不是 struct tag：GORM 的索引标签表达不了 **partial**（带 WHERE 谓词）。
+// 而这里必须有谓词 —— opportunities.clue_id 的空串是合法常态（手工建的商机就没有来源线索），
+// 不带 WHERE 的唯一索引会让第二条手工商机当场插不进去：一个把合法形状拦在门外的约束，
+// 比没有约束更坏，因为它逼着人往里写假线索号。
+//
+// 为什么建不成只 Warn 不 panic：本表 T-P4-01 就登记进了 allModels()，已部署的库里
+// 可能已经存在重复的 clue_id（早期由旁路写入的行），CREATE UNIQUE INDEX 撞上就会失败。
+// 建不成的后果是"重复转化没有库级兜底"，而 panic 的后果是"整个服务起不来" ——
+// 前者今天仍由 service 侧 GetByClueID 那道幂等判据兜着（它在，索引是第二层）。
+// 报出来是为了让"第二层没铺上"这件事在启动日志里看得见，而不是等重复行出现才发现。
+func postMigrateOpportunityClueUniqueIndex(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	const ddl = `CREATE UNIQUE INDEX IF NOT EXISTS idx_opportunities_clue_id
+		ON opportunities (clue_id) WHERE clue_id <> ''`
+	if err := db.Exec(ddl).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: CREATE idx_opportunities_clue_id 失败(存量里可能有重复 clue_id，需人工清重后重启): %v", err))
+		return
+	}
+	logger.Info("post-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）")
 }
 
 func postMigrateMessageHubUniqueIndex() {

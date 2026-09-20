@@ -62,6 +62,23 @@ type OpportunityRepository interface {
 	// 把故障读成"没有这条商机"，上层会把它当成"还没建"而重走一遍分配流程。
 	GetByID(ctx context.Context, id string) (*model.Opportunity, error)
 
+	// GetByClueID 由来源线索反查商机（T-P4-05 的幂等键）。
+	// 不存在返回 (nil, nil)、读失败返回 error —— 与上一条同一条判据，但这里的代价更大：
+	// 把"读不到"读成"这条线索还没转化过"，一次抖动就会变成同一线索的两行商机。
+	// 空白 clueID 直接报错：本表允许 clue_id 为空（手工建的商机就是），
+	// 拿空串去查会命中"所有手工商机里的第一条"，一个看着合理的错误答案。
+	GetByClueID(ctx context.Context, clueID string) (*model.Opportunity, error)
+
+	// OpenCountByOwner 每名销售当前**在办**的商机数（T-P4-05 负载均衡的输入）。
+	//
+	// 只数 status=open：把赢单与丢单也计进去的话，一个人业绩越好就越不会再拿到新单，
+	// 那不是均衡而是惩罚业绩。无归属的行（owner_user_id 为空或 NULL）不出现在结果里，
+	// 它不属于任何人的负载。
+	//
+	// 返回 map 里**缺席即为 0**（从没建过单的人不会出现在 GROUP BY 的结果里），
+	// 调用方别把"没有这个键"当成故障或当成"这个人不存在"。
+	OpenCountByOwner(ctx context.Context) (map[string]int, error)
+
 	// Update 按乐观锁改写一行：只写上面那份 map 点名的列，且
 	// `WHERE id = ? AND version = ?` 命中才生效，生效后版本 +1。
 	//
@@ -149,6 +166,56 @@ func (r *opportunityRepo) GetByID(ctx context.Context, id string) (*model.Opport
 		return nil, err
 	}
 	return &o, nil
+}
+
+// GetByClueID 反查走的是 (clue_id) 上的**部分**唯一索引（T-P4-05，DDL 见
+// internal/pkg/db 的 postMigrateOpportunityClueUniqueIndex）。
+//
+// First 而不是 Take：同一条线索正常只有一行，真出现多行（索引被人工绕过）时
+// First 按主键确定性取一行，Take 取到哪一行则取决于计划器，事后没人能复现。
+func (r *opportunityRepo) GetByClueID(ctx context.Context, clueID string) (*model.Opportunity, error) {
+	if err := r.require(); err != nil {
+		return nil, err
+	}
+	clueID = strings.TrimSpace(clueID)
+	if clueID == "" {
+		return nil, errors.New("opportunity repository: 空 clueID 不是查询条件（本表允许无线索的商机）")
+	}
+	var o model.Opportunity
+	err := r.db.WithContext(ctx).Where("clue_id = ?", clueID).First(&o).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (r *opportunityRepo) OpenCountByOwner(ctx context.Context) (map[string]int, error) {
+	if err := r.require(); err != nil {
+		return nil, err
+	}
+	// 结果结构体的字段名按 GORM 的下划线映射写：OwnerUserID ↔ owner_user_id。
+	type ownerCount struct {
+		OwnerUserID string
+		N           int
+	}
+	var rows []ownerCount
+	err := r.db.WithContext(ctx).Model(&model.Opportunity{}).
+		Select("owner_user_id, COUNT(*) AS n").
+		Where("status = ?", model.OpportunityStatusOpen).
+		Where("owner_user_id <> ''").
+		Group("owner_user_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, row := range rows {
+		out[row.OwnerUserID] = row.N
+	}
+	return out, nil
 }
 
 // Update 一条 CAS 语句完成改写，返回三种结果之一（成功 / 版本过期 / 行不存在）。

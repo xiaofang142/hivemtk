@@ -226,7 +226,11 @@ BASELINE=(
   # setupOpportunityRoutes ⇒ 端点根本不在路由树上，而"挂错位置（挂到鉴权组之前）"同样是
   # 这一格红、上面两格绿。台账比 Go 用例更早发现这类破坏，因为用例自己挂自己测的那棵树。
   "16|商机仓储的装配入口（T-P4-04 由 app.InitOpportunityRuntime 接上）|type OpportunityRepository interface|NewOpportunityRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|wired"
-  "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/service internal/controller internal/app|"
+  # 16b 在 T-P4-05 由 UNWIRED 翻成 wired：转换层第一次往这张表写行业务数据
+  # （internal/service/opportunity_convert.go 的 newRow），原注释里"今日没有任何生产写入方"
+  # 已经不成立。翻的不是一个符号，是一句口径：从这张卡起，"商机为 0"只能是真的没有商机，
+  # 不能再解释成"写入方还没来"。
+  "16|商机行的生产写入点（T-P4-05 由转换层接上）|type Opportunity struct|model\\.Opportunity\\{|internal/service internal/controller internal/app|wired"
   "16|商机服务的装配入口（T-P4-04 由 app.InitOpportunityRuntime 接上）|func NewOpportunityService|NewOpportunityService\\(|internal/app cmd/api internal/controller internal/router|wired"
   # 16e 盯的是这一卡的电池里唯一一把 16a/16c/16d 三格都看不见、全套 Go 用例（M33 第一版）也
   # 看不见的刀：router.go 里**没人调用 app.InitOpportunityRuntime**。摘掉之后仓储构造、服务构造、
@@ -235,6 +239,24 @@ BASELINE=(
   # 这一格是同一件事的静态面：台账读起来是"启动路径上没有装配点"，不必依赖用例跑起来才知道。
   "16|商机底座的启动装配点（router.go 里必须有人调用）|func InitOpportunityRuntime|InitOpportunityRuntime\\(|internal/router|wired"
   "16|商机 API 的挂载入口（T-P4-04，摘掉即端点不在路由树上）|func setupOpportunityRoutes|setupOpportunityRoutes\\(|internal/router|wired"
+  # ---- T-P4-05（线索一键转商机 + 自动分配）新增四格 --------------------------------
+  # 这四格各守一把上面所有格子都看不见的刀。共同背景：转换层的用例全在 service 包里
+  # 自己 new 自己测，"生产路径上有没有人把它接上"这件事它们一律看不见（M33 那一课的原形）。
+  #   16f 装配点登记全局转换器：摘掉 SetGlobalOpportunityConverter(conv) 这一行，
+  #       构造、Available()、全套转换用例照绿，而挖掘那条接缝永远读到 nil ⇒ 一条商机都不建。
+  #       defpat 在 internal/service，callpat 只看 internal/app ⇒ 定义自身不会被算成调用。
+  #   16g 挖掘侧那一跳：callpat 特意写全称 `conv := GlobalOpportunityConverter(`，
+  #       因为 `GlobalOpportunityConverter\(` 会先命中它自己的函数定义行（同包，scope 分不开）。
+  #       这一格红 = 线索照写、商机静默不建，是整张卡最坏 also 最安静的一种破坏。
+  #   16h 在册名单接的是哪副底座：接错（或漏接）的症状不是报错而是每一单 owner 恒为空，
+  #       看起来完全像"这个商户还没配销售"。scope 同样只放装配面。
+  #   16i post-migrate 钩子：它是 clue_id 那条部分唯一索引的**唯一**建法（GORM 标签表达不了
+  #       WHERE），摘掉之后幂等的库级防线消失，而 service 侧第一层防线照样绿。
+  #       callpat 锁带全局句柄的那一次调用（`(DB)` 大写），定义行的 `(db *gorm.DB)` 不进账。
+  "16|转换竖的启动登记点（app 装配后全局才有转换器）|func SetGlobalOpportunityConverter|SetGlobalOpportunityConverter\\(conv\\)|internal/app cmd/api|wired"
+  "16|挖掘侧到转换层的接缝（lead_mining 里那一跳）|func GlobalOpportunityConverter|conv := GlobalOpportunityConverter\\(|internal/service|wired"
+  "16|在册销售名单适配器的装配点|func NewSalesEventRoster|NewSalesEventRoster\\(|internal/app cmd/api|wired"
+  "16|clue_id 部分唯一索引的启动调用点|func postMigrateOpportunityClueUniqueIndex|postMigrateOpportunityClueUniqueIndex\\(DB\\)|internal/pkg/db|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go
