@@ -2895,7 +2895,7 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 连带必要项：R11 之后 `platformData` 第一次拿到"通了但被拒"的错误，若继续统一播报"平台不可达"，
 会把商户停用/签名不对推给网络排查 ⇒ 降级文案分流为 `平台拒绝(code=..): <原话>` 与 `平台不可达` 两支。
 交付：`client_test.go` +7 例（含 3 条反向闸门：`code=200` 仍解析、裸 body 原样交回、连不上仍报不可达）
-+ `controller/platform_test.go` 2 例（该控制器此前零测试），**8 处行为变异全被杀死**
+与 `controller/platform_test.go` 2 例（该控制器此前零测试），**8 处行为变异全被杀死**
 （控制组 ran=19/pass=19，X3 的杀死证据是摘守卫后的 nil deref panic，已按"期望用例确实红了"才计入）；
 `./internal/platform/` 整包绿、`-race` 绿。
 
@@ -3087,3 +3087,22 @@ ChannelError"触发，见 HEAD `:269` / `:325`，都是真实投递失败之后�
 - 需要真实 LLM/Embedding Key 的 `rag/core`、`rag/service.Query` 不制造离线假断言。
 - ~~生产代码一行不改：本排期只新增 `*_test.go`；发现缺陷记 Findings 供后续单独批次处理。~~
   **该约束已由用户 2026-09-20 指示解除**，处置见上节；原口径仅对本排期 Task 1–8 的补测提交成立。
+
+## Markdown Lint 这道门：本轮把 3 处红收到 1 处，剩下那处按归属交接
+
+推送 `0d99dc51` 后 `gh run view --log-failed` 读到 `Markdown Lint` 连红六次（`11755c55`→`0d99dc51`，
+跨三条泳道的文档回灌各带一处，**没人把它当自己的账**）。三处同一种形态：中文散文的**续行以 `+ ` 开头**，
+markdownlint 按列表项解析 ⇒ MD004（本仓口径 dash）。本轮处置：
+
+- 修 `本文件:2898`（R11 那段"交付：… + `controller/platform_test.go` 2 例"）⇒ 续行改以"与"起头；
+- 修 `docs/architecture/DATABASE_SCHEMA_DEEP_DIVE.md:997`（T-P4-04 三条路径那句）⇒ 只把换行位置挪到
+  ` +` 之后，**一字未改**，属"谁的文档谁的门"最小介入；
+- **不代改** `docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:797`（HEAD 口径；该行现被该文件的
+  并行泳道未提交改动挪到工作树 `:808`）——该文件整份压着别人的未提交内容，一 `git add` 就会把别人的
+  批次一起提交掉。⇒ 交接给该文件所属泳道：改成同前两条一样的换行挪位即可，不需要动文字。
+
+**判据留档**：门的红要读**逐步结论**而不是只看 workflow 状态（与 [[gate-scope-blind-spots]] ⑧ 同一口径），
+`gh run list --workflow "Markdown Lint" --json headSha,conclusion` 一眼就能看出"连红六次"这件事本身
+比任何一处 MD004 更值得修；而本地没有 `markdownlint-cli2`（未装、不擅自装），
+所以"复现"只能靠推一次看真门 ⇒ 修门的那一刀必须自己过一次门，别只靠 `grep "^[[:space:]]*+ "` 的超集近似
+（它还会命中归档文件里位于代码围栏内的行，那种不是违规）。

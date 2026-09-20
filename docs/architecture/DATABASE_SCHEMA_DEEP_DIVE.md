@@ -993,8 +993,8 @@ P8 攒够 outcome 行之后回标改的是这四个数、式子的形状不动�
 
 ### 4.16.3 `opportunities` 的 HTTP 出口：八条端点、一套分诊词表，以及"摘掉装配点"为什么两边都看不见（T-P4-04）
 
-出口面三条路径（`internal/controller/opportunity.go` + `internal/router/opportunity_routes.go`
-+ `internal/app/opportunity_wiring.go`）：读两条（`GET /api/opportunity/{id}`、`.../moves`）、
+出口面三条路径（`internal/controller/opportunity.go` + `internal/router/opportunity_routes.go` +
+`internal/app/opportunity_wiring.go`）：读两条（`GET /api/opportunity/{id}`、`.../moves`）、
 规则一条（`GET /rules`）、写五条（`PUT /{id}` 整份改写、`POST /{id}/stage`、`/lost`、`/cancel`、
 `/reopen`）。**没有一条能写 `won`** —— 这不是"少做了一个接口"，而是 §4.16.2 那张三元边表在
 HTTP 侧的兑现：`won` 只能由 `collection_completed` 落下，所以它没有按钮。用例
