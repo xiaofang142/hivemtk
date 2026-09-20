@@ -2,6 +2,8 @@ package ragcustomerservice
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -306,8 +308,13 @@ func (dm *InMemoryDialogManager) updateLastActivity(sessionID string) {
 	}
 }
 
+// generateSessionID 后缀里的随机段不可省：本机实测 UnixNano 粒度粗于纳秒（同参连调 20000 次
+// 只得 5136 个不同值），而 sessions 是 map，同 (user,platform) 背靠背两次建会话会撞进同一个 key，
+// 先建的会话被静默覆盖。随机段同时消掉了"按时钟猜他人会话 ID"的面。
 func generateSessionID(userID, platform string) string {
-	return fmt.Sprintf("%s_%s_%d", userID, platform, time.Now().UnixNano())
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	return fmt.Sprintf("%s_%s_%d_%s", userID, platform, time.Now().UnixNano(), hex.EncodeToString(b[:]))
 }
 
 // ContextUnderstandingServiceImpl 上下文理解服务实现
@@ -612,20 +619,40 @@ func extractBrandEntities(message string) []string {
 func calculateSentimentScore(message string) float64 {
 	positiveWords := []string{"好", "棒", "不错", "满意", "喜欢", "推荐", "值得", "惊喜"}
 	negativeWords := []string{"差", "烂", "不好", "失望", "讨厌", "糟糕", "坑", "贵"}
+	negationPrefixes := []string{"不", "没", "无", "未", "非", "别"}
 
 	positiveCount := 0
 	negativeCount := 0
 
 	lowerMsg := toLower(message)
 
-	for _, word := range positiveWords {
+	for _, word := range negativeWords {
 		if contains(lowerMsg, toLower(word)) {
-			positiveCount++
+			negativeCount++
 		}
 	}
 
-	for _, word := range negativeWords {
-		if contains(lowerMsg, toLower(word)) {
+	// 正面词逐次判定"是否被否定前缀紧挨着"：整张负面词表里没有「不喜欢/不满意/不推荐」这些组合，
+	// 只按子串命中会把「不好」里的「好」也计成正面，正负抵消成 0 ⇒ 所有「不+正面词」都判成中性。
+	// 表内固定正面词（「不错」）按整词先命中且前面不是否定前缀，不会被这条规则误伤。
+	for _, word := range positiveWords {
+		w := toLower(word)
+		positiveHit, negatedHit := false, false
+		for start := 0; start+len(w) <= len(lowerMsg); start++ {
+			if lowerMsg[start:start+len(w)] != w {
+				continue
+			}
+			if hasNegationPrefix(lowerMsg, start, negationPrefixes) {
+				negatedHit = true
+				continue
+			}
+			positiveHit = true
+			break
+		}
+		switch {
+		case positiveHit:
+			positiveCount++
+		case negatedHit:
 			negativeCount++
 		}
 	}
@@ -636,6 +663,15 @@ func calculateSentimentScore(message string) float64 {
 	}
 
 	return float64(positiveCount-negativeCount) / float64(total)
+}
+
+func hasNegationPrefix(msg string, start int, prefixes []string) bool {
+	for _, p := range prefixes {
+		if start >= len(p) && msg[start-len(p):start] == p {
+			return true
+		}
+	}
+	return false
 }
 
 func getSentimentLabel(score float64) string {

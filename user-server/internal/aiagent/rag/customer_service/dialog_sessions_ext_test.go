@@ -221,9 +221,10 @@ func TestListUserSessionsFilters(t *testing.T) {
 	dm, _ := newSessionForTest(t, SessionConfig{})
 	ctx := context.Background()
 
-	// 平台互不相同：同 (user,platform) 连建两个会话会因 generateSessionID 时钟粒度相撞而互相覆盖
+	// 故意让 (u-1, wecom2) 出现两次：ID 曾按 UnixNano 生成，同参背靠背会撞 key 静默覆盖，
+	// 计数因此少一条 —— 这里同时充当那条缺陷的回归位。
 	for _, spec := range []struct{ user, platform string }{
-		{"u-1", "wecom2"}, {"u-1", "telegram"}, {"u-2", "wecom2"},
+		{"u-1", "wecom2"}, {"u-1", "wecom2"}, {"u-1", "telegram"}, {"u-2", "wecom2"},
 	} {
 		if _, err := dm.CreateSession(ctx, spec.user, spec.platform, "kb-x", SessionConfig{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
@@ -237,8 +238,8 @@ func TestListUserSessionsFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUserSessions: %v", err)
 	}
-	if len(all) != 3 { // 本用例 u-1 共 1(初始)+2 个
-		t.Fatalf("按用户过滤结果=%d want 3", len(all))
+	if len(all) != 4 { // 本用例 u-1 共 1(初始)+3 个
+		t.Fatalf("按用户过滤结果=%d want 4", len(all))
 	}
 	byPlatform, _ := dm.ListUserSessions(ctx, "u-1", "telegram", "")
 	if len(byPlatform) != 1 || byPlatform[0].Platform != "telegram" {
@@ -321,5 +322,46 @@ func TestGenerateSessionIDShape(t *testing.T) {
 	}
 	if a == b {
 		t.Error("纳秒后缀应保证同参不同 ID")
+	}
+}
+
+// 本机实测 UnixNano 粒度粗于纳秒：连调 20000 次同参只得 5136 个不同值（重复率 ~74%），
+// 只比两次调用的上面那条用例因此本质上是撞运气。这里按突发量级索要唯一性。
+func TestGenerateSessionIDUniqueUnderBurst(t *testing.T) {
+	const n = 5000
+	seen := make(map[string]struct{}, n)
+	for range n {
+		id := generateSessionID("u1", "wx")
+		if _, dup := seen[id]; dup {
+			t.Fatalf("第 %d 次生成与先前结果重复: %s（同参突发必须互不相同）", len(seen)+1, id)
+		}
+		seen[id] = struct{}{}
+	}
+	if len(seen) != n {
+		t.Fatalf("唯一 ID 数=%d, want %d", len(seen), n)
+	}
+}
+
+// ID 会撞的直接后果：sessions 是 map，同一 (user, platform) 背靠背建会话会写入同一个 key
+// ⇒ 先建的会话被静默覆盖，客户侧看就是"会话凭空消失"。
+// 只建两次会因两次调用间隔里时钟前进而侥幸通过（实测本机重复率 ~74% 是突发口径），
+// 故按批量索要：N 次建会话必须在列表里能看到 N 条。
+func TestCreateSessionSameUserPlatformTwiceKeepsBoth(t *testing.T) {
+	const n = 200
+	dm, _ := newSessionForTest(t, SessionConfig{})
+	ctx := context.Background()
+
+	for range n {
+		if _, err := dm.CreateSession(ctx, "u-dup", "wecom", "kb-1", SessionConfig{}); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+
+	list, err := dm.ListUserSessions(ctx, "u-dup", "wecom", SessionActive)
+	if err != nil {
+		t.Fatalf("ListUserSessions: %v", err)
+	}
+	if len(list) != n {
+		t.Fatalf("同 (user,platform) 连建 %d 条会话应全在列表里，got %d（差值即被静默覆盖的会话数）", n, len(list))
 	}
 }

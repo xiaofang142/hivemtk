@@ -266,9 +266,22 @@ func TestPureHelpers(t *testing.T) {
 	if getSentimentLabel(0.9) != "positive" || getSentimentLabel(-0.9) != "negative" || getSentimentLabel(0.0) != "neutral" {
 		t.Error("getSentimentLabel 阈值边界错")
 	}
-	// 纯字节子串匹配使「不好」同时命中正面词「好」与负面词「不好」，两者抵消为 0：否定语义丢失
-	if got := calculateSentimentScore("不好"); got != 0 {
-		t.Errorf("calculateSentimentScore(\"不好\")=%v want 0（既有抵消行为）", got)
+	// 否定语义：命中负面词的区间不再参与正面词计数，否则「不好」里的「好」把分数抵消成 0 判成中性。
+	if got := calculateSentimentScore("不好"); got >= 0 {
+		t.Errorf("calculateSentimentScore(\"不好\")=%v，否定表述应判负", got)
+	}
+	// 同一类的其余形态：整词表里没有「不喜欢/不满意/不推荐/不值得」，靠否定前缀规则收口。
+	for _, s := range []string{"不喜欢", "不满意", "不推荐", "不值得"} {
+		if got := calculateSentimentScore(s); got >= 0 {
+			t.Errorf("calculateSentimentScore(%q)=%v，「否定词+正面词」应判负", s, got)
+		}
+	}
+	// 表内固定正面词不得被否定前缀误伤：「不错」整体是褒义，拆成「不+错」就把褒义判成贬义。
+	if got := calculateSentimentScore("不错"); got <= 0 {
+		t.Errorf("calculateSentimentScore(\"不错\")=%v，应为正", got)
+	}
+	if got := calculateSentimentScore("很好"); got <= 0 {
+		t.Errorf("calculateSentimentScore(\"很好\")=%v，应为正", got)
 	}
 	if got := calculateSentimentScore("太差了"); got >= 0 {
 		t.Errorf("calculateSentimentScore(\"太差了\")=%v 应为负", got)
