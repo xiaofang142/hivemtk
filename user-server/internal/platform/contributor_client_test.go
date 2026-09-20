@@ -3,7 +3,6 @@ package platform
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -151,7 +150,13 @@ func TestNewContributorClientReadsConfig(t *testing.T) {
 	}
 }
 
-// TestEnsureContributorTokenPaths 覆盖：登录即中 / 缓存命中 / 缓存过期 / 登录失败→注册→再登录。
+// loginEnvelope 按平台侧真实信封回登录结果：token 嵌在 data.token。
+func loginEnvelope(w io.Writer, token string) {
+	_, _ = fmt.Fprintf(w, `{"code":200,"msg":"登录成功","data":{"token":%q}}`, token)
+}
+
+// TestEnsureContributorTokenPaths 覆盖：登录即中 / 缓存命中 / 缓存过期。
+// 三条路径共用一个 httptest 实例，因此 logins 计数就是「有没有白白重登」的证据。
 func TestEnsureContributorTokenPaths(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
 	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
@@ -161,10 +166,10 @@ func TestEnsureContributorTokenPaths(t *testing.T) {
 		switch r.URL.Path {
 		case "/contributor-api/v1/auth/login":
 			logins++
-			_ = json.NewEncoder(w).Encode(map[string]any{"token": fmt.Sprintf("ct-%d", logins)})
+			loginEnvelope(w, fmt.Sprintf("ct-%d", logins))
 		case "/contributor-api/v1/auth/register":
 			registers++
-			_, _ = w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{"code":500,"msg":"注册未开放"}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -201,53 +206,88 @@ func TestEnsureContributorTokenPaths(t *testing.T) {
 	if registers != 0 {
 		t.Errorf("重登成功时不应注册: registers=%d", registers)
 	}
+}
 
-	// 4) 登录失败 → 自动注册 → 再登录成功
-	contribToken = ""
-	var firstLoginFailed bool
-	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/contributor-api/v1/auth/login":
-			if !firstLoginFailed {
-				firstLoginFailed = true
-				w.WriteHeader(http.StatusUnauthorized)
-				return
+// TestEnsureContributorTokenProvisioning 首次使用本身份时的两条开户兜底路径：
+// 登录失败 → 注册即签发 token；注册也被拒（同号已由别处建好）→ 再登一次。
+func TestEnsureContributorTokenProvisioning(t *testing.T) {
+	withContributorGlobals(t, "mk-abc")
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+
+	for _, tc := range []struct {
+		name string
+		// 首登是否失败；注册是否失败
+		loginFails, registerFails bool
+		wantTok                   string
+	}{
+		{"注册签发", true, false, "ct-from-register"},
+		{"注册被拒后重登", true, true, "ct-on-retry"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withContributorGlobals(t, "mk-abc")
+			var logins, registers int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/contributor-api/v1/auth/login":
+					logins++
+					if logins == 1 && tc.loginFails {
+						w.WriteHeader(http.StatusUnauthorized) // 账号还不存在：平台 JWT 层给真 401
+						return
+					}
+					loginEnvelope(w, "ct-on-retry")
+				case "/contributor-api/v1/auth/register":
+					registers++
+					if tc.registerFails {
+						_, _ = w.Write([]byte(`{"code":400,"msg":"用户名已存在"}`))
+						return
+					}
+					_, _ = w.Write([]byte(`{"code":200,"msg":"注册成功","data":{"token":"ct-from-register"}}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+
+			tok, err := ensureContributorToken(&ContributorClient{baseURL: srv.URL, httpClient: srv.Client()})
+			if err != nil {
+				t.Fatalf("开户链路应成功: %v", err)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"token": "ct-after-register"})
-		case "/contributor-api/v1/auth/register":
-			registers++
-			_, _ = w.Write([]byte(`{}`))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer srv2.Close()
-
-	tok2, err := ensureContributorToken(&ContributorClient{baseURL: srv2.URL, httpClient: srv2.Client()})
-	if err != nil {
-		t.Fatalf("注册后重登应成功: %v", err)
-	}
-	if tok2 != "ct-after-register" {
-		t.Errorf("tok=%q", tok2)
-	}
-	if registers == 0 {
-		t.Error("首登失败后应触发自动注册")
+			if tok != tc.wantTok {
+				t.Errorf("tok=%q want %q", tok, tc.wantTok)
+			}
+			if registers != 1 {
+				t.Errorf("registers=%d want 1", registers)
+			}
+			if contribToken != tok {
+				t.Errorf("开户成功应写入缓存: %q", contribToken)
+			}
+		})
 	}
 }
 
-// TestEnsureContributorTokenTotalFailure 两条腿都失败时返回聚合错误，且不得留下半截缓存。
+// TestEnsureContributorTokenTotalFailure 两条腿都失败时返回聚合错误（登录/注册原因都要留痕），
+// 且不得留下半截缓存。
 func TestEnsureContributorTokenTotalFailure(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
 	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/contributor-api/v1/auth/register" {
+			_, _ = w.Write([]byte(`{"code":400,"msg":"用户名已存在"}`))
+			return
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 
-	if _, err := ensureContributorToken(&ContributorClient{baseURL: srv.URL, httpClient: srv.Client()}); err == nil ||
-		!strings.Contains(err.Error(), "获取平台贡献者 token 失败") {
-		t.Errorf("全失败应报聚合错误, got %v", err)
+	_, err := ensureContributorToken(&ContributorClient{baseURL: srv.URL, httpClient: srv.Client()})
+	if err == nil {
+		t.Fatal("全失败应报错")
+	}
+	for _, want := range []string{"获取平台贡献者 token 失败", "登录=", "注册=", "用户名已存在"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("聚合错误应含 %q, got %v", want, err)
+		}
 	}
 	if contribToken != "" {
 		t.Errorf("失败后不应写入 token 缓存: %q", contribToken)
@@ -262,7 +302,7 @@ func TestContributorCreateAssetAndSubmitAudit(t *testing.T) {
 	businessCh := make(chan capture, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/contributor-api/v1/auth/login" {
-			_ = json.NewEncoder(w).Encode(map[string]any{"token": "ct"})
+			loginEnvelope(w, "ct")
 			return
 		}
 		b, _ := io.ReadAll(r.Body)
@@ -272,9 +312,9 @@ func TestContributorCreateAssetAndSubmitAudit(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/contributor-api/v1/assets":
-			_, _ = w.Write([]byte(`{"id":77}`))
-		default: // submit 等：200 空体即可
-			_, _ = w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{"code":200,"msg":"创建成功","data":{"id":77,"name":"n1"}}`))
+		default: // submit 等：成功信封，data 为空
+			_, _ = w.Write([]byte(`{"code":200,"msg":"提交成功"}`))
 		}
 	}))
 	defer srv.Close()
@@ -298,13 +338,13 @@ func TestContributorCreateAssetAndSubmitAudit(t *testing.T) {
 		t.Errorf("submit 路径=%q", got.path)
 	}
 
-	// 平台返回 200 但 id 为 0：必须报错，不能把「0 号资产」当成功交回调用方
+	// 平台返回成功信封但 data.id 为 0：必须报错，不能把「0 号资产」当成功交回调用方
 	zeroSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/contributor-api/v1/auth/login" {
-			_ = json.NewEncoder(w).Encode(map[string]any{"token": "ct"})
+			loginEnvelope(w, "ct")
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":0}`))
+		_, _ = w.Write([]byte(`{"code":200,"msg":"创建成功","data":{"id":0}}`))
 	}))
 	defer zeroSrv.Close()
 	contribToken = ""
@@ -329,7 +369,55 @@ func TestContributorCreateAssetAndSubmitAudit(t *testing.T) {
 	}
 }
 
-// TestContributorDoAuthBranches 覆盖 doAuth 的空体 / 非 200 / 非法 JSON / 传输失败四类分支。
+// readAuth 带超时地取一条 Authorization。
+// 直接 <-ch 在用例本就没发第二次请求时会挂到 go test 默认 10min 超时，变异电池会被拖成假红/假挂。
+func readAuth(t *testing.T, ch chan string) string {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待平台侧收到的请求头超时")
+		return ""
+	}
+}
+
+// TestContributorTokenSelfHealOn401 平台轮换 JWT 密钥后旧 token 会被中间件打成真 401。
+// 客户端缓存 24h，若不清缓存重登，本实例的提交链路会一直坏到缓存自然过期。
+func TestContributorTokenSelfHealOn401(t *testing.T) {
+	withContributorGlobals(t, "mk-abc")
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+
+	authCh := make(chan string, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/contributor-api/v1/auth/login" {
+			loginEnvelope(w, "ct-fresh")
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		authCh <- auth
+		if auth != "Bearer ct-fresh" { // 缓存里的 stale token
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":200,"msg":"提交成功"}`))
+	}))
+	defer srv.Close()
+
+	contribToken, contribExpireAt = "ct-stale", time.Now().Add(time.Hour) // 已缓存但平台侧已失效
+	if err := (&ContributorClient{baseURL: srv.URL, httpClient: srv.Client()}).SubmitAudit(77); err != nil {
+		t.Fatalf("401 后应自愈重登并成功: %v", err)
+	}
+	first, second := readAuth(t, authCh), readAuth(t, authCh)
+	if first != "Bearer ct-stale" || second != "Bearer ct-fresh" {
+		t.Errorf("应先带旧 token 再带新 token 重试: %q, %q", first, second)
+	}
+	if contribToken != "ct-fresh" {
+		t.Errorf("自愈后缓存应换成新 token: %q", contribToken)
+	}
+}
+
+// TestContributorDoAuthBranches 覆盖 doAuth 的分支：空体 / code 非 200 / 真 401 / 非法 JSON / 传输失败。
 func TestContributorDoAuthBranches(t *testing.T) {
 	authCh := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +427,11 @@ func TestContributorDoAuthBranches(t *testing.T) {
 			case authCh <- r.Header.Get("Authorization"):
 			default:
 			}
-			// 200 + 空体 + out != nil：不得对空字节流调用 Unmarshal
+			// 200 + 空体：不得对空字节流调用 Unmarshal，应视为成功信封
+		case "/contributor-api/v1/rejected":
+			_, _ = w.Write([]byte(`{"code":403,"msg":"无权限操作该资产"}`))
+		case "/contributor-api/v1/unauthorized":
+			w.WriteHeader(http.StatusUnauthorized)
 		case "/contributor-api/v1/boom":
 			w.WriteHeader(http.StatusTeapot)
 			_, _ = w.Write([]byte(`nope`))
@@ -352,29 +444,104 @@ func TestContributorDoAuthBranches(t *testing.T) {
 	defer srv.Close()
 	cc := &ContributorClient{baseURL: srv.URL, httpClient: srv.Client()}
 
-	var out map[string]any
-	if err := cc.doAuth("GET", "/contributor-api/v1/empty200", nil, &out, "tok-1"); err != nil {
+	env, err := cc.doAuth("GET", "/contributor-api/v1/empty200", nil, "tok-1")
+	if err != nil {
 		t.Fatalf("200 空体应成功: %v", err)
+	}
+	if !env.succeeded() {
+		t.Error("200 空体应视为成功信封")
 	}
 	if got := <-authCh; got != "Bearer tok-1" {
 		t.Errorf("token 非空时应设置 Authorization, got %q", got)
 	}
-	if err := cc.doAuth("GET", "/contributor-api/v1/empty200", nil, nil, ""); err != nil {
-		t.Errorf("无 out 且空 token 应成功: %v", err)
+	// 成功但无 data：取值必须失败，而不是解出零值骗过调用方
+	var out struct {
+		ID int64 `json:"id"`
 	}
-	if err := cc.doAuth("POST", "/contributor-api/v1/boom", []byte(`{}`), nil, ""); err == nil ||
+	if err := env.decodeData(&out); err == nil || !strings.Contains(err.Error(), "缺少 data") {
+		t.Errorf("空体解码应报错, got %v", err)
+	}
+
+	// 无 body 且空 token：不设 Authorization 也能通
+	if _, err := cc.doAuth("GET", "/contributor-api/v1/empty200", nil, ""); err != nil {
+		t.Errorf("空 token 应成功: %v", err)
+	}
+	if got := <-authCh; got != "" {
+		t.Errorf("token 为空时不应设置 Authorization, got %q", got)
+	}
+
+	// HTTP 200 + code 403：平台的拒绝必须回错（这是「假绿灯」的根因）
+	env, err = cc.doAuth("POST", "/contributor-api/v1/rejected", []byte(`{}`), "tok")
+	if err == nil || !strings.Contains(err.Error(), "平台贡献者接口拒绝(code=403): 无权限操作该资产") {
+		t.Errorf("code 非 200 应报错并带出 msg, got %v", err)
+	}
+	if env == nil || env.succeeded() {
+		t.Errorf("拒绝时仍应把信封交回调用方供判定, got %+v", env)
+	}
+
+	if _, err := cc.doAuth("GET", "/contributor-api/v1/unauthorized", nil, "tok"); !errors.Is(err, ErrContributorUnauthorized) {
+		t.Errorf("真 401 应回 ErrContributorUnauthorized, got %v", err)
+	}
+
+	if _, err := cc.doAuth("POST", "/contributor-api/v1/boom", []byte(`{}`), ""); err == nil ||
 		!strings.Contains(err.Error(), "平台贡献者接口返回 418: nope") {
 		t.Errorf("非 200 应带状态码与响应体, got %v", err)
 	}
-	if err := cc.doAuth("POST", "/contributor-api/v1/badjson", nil, &out, ""); err == nil ||
-		!strings.Contains(err.Error(), "invalid character") {
-		t.Errorf("非法 JSON 应报反序列化错误, got %v", err)
+	if _, err := cc.doAuth("POST", "/contributor-api/v1/badjson", nil, ""); err == nil ||
+		!strings.Contains(err.Error(), "解析平台贡献者响应失败") {
+		t.Errorf("非法 JSON 应报解析错误, got %v", err)
 	}
 
 	// 端口不可达：包装成传输层错误
 	ccDead := &ContributorClient{baseURL: "http://127.0.0.1:1", httpClient: NewPlatformClient("k").httpClient}
-	if err := ccDead.doAuth("GET", "/contributor-api/v1/x", nil, nil, ""); err == nil ||
+	if _, err := ccDead.doAuth("GET", "/contributor-api/v1/x", nil, ""); err == nil ||
 		!strings.Contains(err.Error(), "调用平台贡献者接口失败") {
 		t.Errorf("连接失败应包装, got %v", err)
+	}
+}
+
+// TestContributorClientSpeaksPlatformEnvelope 商户端必须按平台侧的真实信封说话。
+//
+// 契约取证自平台实现（hivemtk-platform/platform-server）：
+//   - internal/utils/response/response.go:17-23 成功回 {code:200,msg,data}，
+//     业务失败同样回 HTTP 200、真值写在 code 里（Error 也是 c.JSON(200,...)）；
+//   - internal/controller/asset_market_controller.go:411-437,582-590 登录 token 在 data.token、
+//     创建资产在 data.id、提交审核失败回 {code:400,msg}。
+//
+// 只看 HTTP 状态码 / 只读顶层字段的两处后果：
+//   - 永远取不到 token，开发者资产提交链路 100% 走不通；
+//   - 平台明确拒绝（code 400）被当成「提交成功」，审核环节假绿灯。
+func TestContributorClientSpeaksPlatformEnvelope(t *testing.T) {
+	withContributorGlobals(t, "mk-abc")
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+
+	envelopes := map[string]string{
+		"/contributor-api/v1/auth/login":       `{"code":200,"msg":"登录成功","data":{"token":"ct-env","contributor":{"id":5}}}`,
+		"/contributor-api/v1/assets":           `{"code":200,"msg":"创建成功","data":{"id":77,"name":"n1"}}`,
+		"/contributor-api/v1/assets/77/submit": `{"code":400,"msg":"资产状态不允许提交审核"}`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := envelopes[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	cc := &ContributorClient{baseURL: srv.URL, httpClient: srv.Client()}
+	id, err := cc.CreateAsset(CreateAssetPayload{AssetType: "prompt", Name: "n1"})
+	if err != nil {
+		t.Fatalf("CreateAsset: %v", err)
+	}
+	if id != 77 {
+		t.Errorf("assetID=%d want 77（id 在 data 里，顶层没有）", id)
+	}
+	if contribToken != "ct-env" {
+		t.Errorf("缓存 token=%q want ct-env（token 在 data.token）", contribToken)
+	}
+	if err := cc.SubmitAudit(77); err == nil || !strings.Contains(err.Error(), "资产状态不允许提交审核") {
+		t.Errorf("HTTP 200 + code 400 必须回错, got %v", err)
 	}
 }

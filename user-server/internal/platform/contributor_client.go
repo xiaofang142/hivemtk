@@ -95,6 +95,33 @@ func contributorIdentity() (contributorAuth, error) {
 	return a, nil
 }
 
+// ErrContributorUnauthorized 平台侧判定贡献者 JWT 无效（真 HTTP 401，来自 JWT 中间件）。
+// 与「业务失败」不同：后者平台也用 HTTP 200 + code 表达，见 contributorResp。
+var ErrContributorUnauthorized = errors.New("平台贡献者 token 未通过校验")
+
+// contributorResp 平台贡献者接口的统一信封。
+//
+// 契约取证自平台实现（hivemtk-platform/platform-server/internal/utils/response/response.go:17-23）：
+// 成功回 {code:200,msg,data}，业务失败同样回 HTTP 200、真值写在 code 里，成功数据一律嵌在 data 下。
+// 因此判定必须看 code、取值必须进 data —— 只看 HTTP 状态码会把平台的拒绝读成成功，
+// 只读顶层字段会把平台的成功读成「拿不到 token」。
+type contributorResp struct {
+	Code int             `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data"`
+}
+
+func (r *contributorResp) succeeded() bool { return r.Code == http.StatusOK }
+
+// decodeData 把信封里的 data 解到 out。
+func (r *contributorResp) decodeData(out any) error {
+	if len(r.Data) == 0 || string(r.Data) == "null" {
+		return fmt.Errorf("平台响应缺少 data")
+	}
+	return json.Unmarshal(r.Data, out)
+}
+
+// ensureContributorToken 拿到可用的贡献者 token：登录 → 失败则自动注册（注册即签发 token）→ 再登录一次。
 func ensureContributorToken(cc *ContributorClient) (string, error) {
 	contribMu.Lock()
 	defer contribMu.Unlock()
@@ -105,71 +132,114 @@ func ensureContributorToken(cc *ContributorClient) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if tok, err := cc.login(auth.username, auth.password); err == nil && tok != "" {
+	tok, loginErr := cc.login(auth.username, auth.password)
+	if loginErr == nil {
 		contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
 		return tok, nil
 	}
-	if err := cc.register(auth.username, auth.password, auth.email, auth.displayName); err != nil {
-		logger.Warn(fmt.Sprintf("contributor 自动注册失败(可忽略，登录重试): %v", err))
+	registered, regErr := cc.register(auth.username, auth.password, auth.email, auth.displayName)
+	if regErr == nil {
+		contribToken, contribExpireAt = registered, time.Now().Add(24*time.Hour)
+		return registered, nil
 	}
-	tok, err := cc.login(auth.username, auth.password)
-	if err != nil || tok == "" {
-		return "", fmt.Errorf("获取平台贡献者 token 失败: %v", err)
+	logger.Warn(fmt.Sprintf("contributor 自动注册失败(可忽略，登录重试): %v", regErr))
+	// 注册被拒最常见的原因是同号已由另一实例建好，再登一次
+	if tok, err2 := cc.login(auth.username, auth.password); err2 == nil {
+		contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
+		return tok, nil
 	}
-	contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
-	return tok, nil
+	return "", fmt.Errorf("获取平台贡献者 token 失败: 登录=%v, 注册=%v", loginErr, regErr)
 }
 
+// login 用派生身份换 token；平台把 token 放在 data.token。
 func (cc *ContributorClient) login(username, password string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	var out struct {
-		Token string `json:"token"`
-	}
-	if err := cc.doAuth("POST", "/contributor-api/v1/auth/login", body, &out, ""); err != nil {
+	env, err := cc.doAuth("POST", "/contributor-api/v1/auth/login", body, "")
+	if err != nil {
 		return "", err
 	}
-	return out.Token, nil
+	var data struct {
+		Token string `json:"token"`
+	}
+	if err := env.decodeData(&data); err != nil {
+		return "", err
+	}
+	if data.Token == "" {
+		return "", errors.New("平台登录成功但未返回 data.token")
+	}
+	return data.Token, nil
 }
 
-func (cc *ContributorClient) register(username, password, email, displayName string) error {
+// register 首次使用本身份时自动开户；平台注册成功即签发 token（签发失败会回滚账号）。
+func (cc *ContributorClient) register(username, password, email, displayName string) (string, error) {
 	body, _ := json.Marshal(map[string]string{
 		"username":     username,
 		"password":     password,
 		"email":        email,
 		"display_name": displayName,
 	})
-	return cc.doAuth("POST", "/contributor-api/v1/auth/register", body, nil, "")
+	env, err := cc.doAuth("POST", "/contributor-api/v1/auth/register", body, "")
+	if err != nil {
+		return "", err
+	}
+	var data struct {
+		Token string `json:"token"`
+	}
+	if err := env.decodeData(&data); err != nil {
+		return "", err
+	}
+	if data.Token == "" {
+		return "", errors.New("平台注册成功但未返回 data.token")
+	}
+	return data.Token, nil
+}
+
+// doAuthorized 带贡献者 token 调平台接口；401 时清掉缓存重登一次再试。
+// 没有这条自愈，平台轮换 JWT 密钥后本实例会卡在坏 token 里直到 24h 缓存自然过期。
+func (cc *ContributorClient) doAuthorized(method, path string, body []byte) (*contributorResp, error) {
+	tok, err := ensureContributorToken(cc)
+	if err != nil {
+		return nil, err
+	}
+	env, err := cc.doAuth(method, path, body, tok)
+	if !errors.Is(err, ErrContributorUnauthorized) {
+		return env, err
+	}
+	contribMu.Lock()
+	contribToken, contribExpireAt = "", time.Time{}
+	contribMu.Unlock()
+	if tok, err = ensureContributorToken(cc); err != nil {
+		return nil, err
+	}
+	return cc.doAuth(method, path, body, tok)
 }
 
 // CreateAsset 以贡献者身份在平台创建资产（data 为 OpenAI 兼容 messages 数组），返回平台资产 ID
 func (cc *ContributorClient) CreateAsset(p CreateAssetPayload) (int64, error) {
-	tok, err := ensureContributorToken(cc)
+	body, _ := json.Marshal(p)
+	env, err := cc.doAuthorized("POST", "/contributor-api/v1/assets", body)
 	if err != nil {
 		return 0, err
 	}
-	body, _ := json.Marshal(p)
-	var out struct {
+	var data struct {
 		ID int64 `json:"id"`
 	}
-	if err := cc.doAuth("POST", "/contributor-api/v1/assets", body, &out, tok); err != nil {
+	if err := env.decodeData(&data); err != nil {
 		return 0, err
 	}
-	if out.ID == 0 {
+	if data.ID == 0 {
 		return 0, fmt.Errorf("平台创建资产返回空 ID")
 	}
-	return out.ID, nil
+	return data.ID, nil
 }
 
 // SubmitAudit 将平台资产提交审核上架
 func (cc *ContributorClient) SubmitAudit(assetID int64) error {
-	tok, err := ensureContributorToken(cc)
-	if err != nil {
-		return err
-	}
-	return cc.doAuth("POST", fmt.Sprintf("/contributor-api/v1/assets/%d/submit", assetID), nil, nil, tok)
+	_, err := cc.doAuthorized("POST", fmt.Sprintf("/contributor-api/v1/assets/%d/submit", assetID), nil)
+	return err
 }
 
-func (cc *ContributorClient) doAuth(method, path string, body []byte, out any, token string) error {
+func (cc *ContributorClient) doAuth(method, path string, body []byte, token string) (*contributorResp, error) {
 	url := strings.TrimRight(cc.baseURL, "/") + path
 	req, _ := http.NewRequest(method, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -178,15 +248,24 @@ func (cc *ContributorClient) doAuth(method, path string, body []byte, out any, t
 	}
 	resp, err := cc.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("调用平台贡献者接口失败: %w", err)
+		return nil, fmt.Errorf("调用平台贡献者接口失败: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, ErrContributorUnauthorized
+	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("平台贡献者接口返回 %d: %s", resp.StatusCode, string(raw))
+		return nil, fmt.Errorf("平台贡献者接口返回 %d: %s", resp.StatusCode, string(raw))
 	}
-	if out != nil && len(raw) > 0 {
-		return json.Unmarshal(raw, out)
+	env := &contributorResp{Code: http.StatusOK}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, env); err != nil {
+			return nil, fmt.Errorf("解析平台贡献者响应失败: %w, body=%s", err, string(raw))
+		}
 	}
-	return nil
+	if !env.succeeded() {
+		return env, fmt.Errorf("平台贡献者接口拒绝(code=%d): %s", env.Code, env.Msg)
+	}
+	return env, nil
 }
