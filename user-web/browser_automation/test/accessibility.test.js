@@ -44,13 +44,18 @@ describe('accessibility snapshot', () => {
 
   // 上限常量的声明位置在批14 从模块顶层挪进了注入函数体（见 collectInteractiveNodes 内注释）。
   // 这条用例是那个常量的唯一行为证据：挪错地方/漏掉就是这里先红。
+  // 显式超时不是偷懒：nameOf 读 innerText，而 jsdom 每次 innerText 都要重算整篇样式，成本随节点数
+  // 线性放大。同一台机器上实测：工作树单跑 2.0s（全量跑也 <5s，所以这条一直"看起来"是绿的），
+  // 而 `--shared` 影子克隆树里单跑 7.8s、全量并跑 14.9s ⇒ 撞默认 5s（`Test timed out in 5000ms`，
+  // /tmp/b16_js_clone2.log、/tmp/b16_js_clone3.log）。换台慢机器/CI 上必红，故写死预算而不是调环境。
+  // 真 Chrome 里循环内不改 DOM，布局只算一次，这个成本是测试环境的，不是产品侧的。
   it('节点上限 400：超限页面只带回前 400 个，nodes 与 paths 同步截断', () => {
     document.body.innerHTML = Array.from({ length: 450 },
       (_, i) => `<button id="b${i}">按钮${i}</button>`).join('');
     const collected = collectInteractiveNodes();
     expect(collected.nodes.length).toBe(400);
     expect(collected.paths.length).toBe(400);
-  });
+  }, 30000);
 
   // ---- F6 新元素标记（browser-use *[index] 语义）----
   it('F6 首帧不打标；下一帧新出现的 role|name 行首带 *', () => {

@@ -167,6 +167,46 @@ describe('cdp/input', () => {
     expect(sent.filter((c) => c.params?.type === 'keyDown').length).toBe(1);
   }, 20000);
 
+  // ---- idle detach 定时器（批15 真机全量跑 rc=1 的真因）----
+  // withDebugger 收尾挂了个 3s 定时器，回调里读 chrome.debugger 是**属性访问**：
+  // SW 被回收/测试拆除后 chrome.debugger 不在，`.catch(()=>{})` 挡不住这个 TypeError，
+  // 而它跑在定时器里没人接 ⇒ 未捕获异常。全量跑时用例之间真实时间会流过 3s，
+  // 于是「12 文件 129 用例全绿 + 进程 rc=1」这种自相矛盾的结论就是这么来的。
+  it('idle detach 定时器在 chrome.debugger 已消失时触发：不得抛，且每个 tab 的状态都要清掉', async () => {
+    const m = await loadFresh();
+    await m.clickAt(21, 100, 100);
+    await m.clickAt(22, 120, 120);
+    global.chrome = {}; // SW 上下文没了：chrome.debugger 是 undefined
+    await vi.advanceTimersByTimeAsync(3100); // 修复前：属性访问即抛，循环半途而废且无人接
+    const dbg = makeDebugger();
+    global.chrome = { debugger: dbg };
+    await m.clickAt(21, 300, 300);
+    await m.clickAt(22, 320, 320);
+    // 两个 tab 都必须重新 attach：状态没清就等于"3s 收横幅"从未生效
+    expect(dbg.attach.mock.calls.map((c) => c[0].tabId).sort()).toEqual([21, 22]);
+  }, 20000);
+
+  // 同一个回调里的循环更不许半途而废：一个 tab 的 detach 抛，就把后面的 tab 全憋住
+  // （调试横幅永不收起 = 用户看得见的残留）。
+  it('idle detach 逐个吞错：一个 tab detach 抛不得憋住其余 tab', async () => {
+    const dbg = makeDebugger();
+    dbg.detach = vi.fn(async (t) => {
+      if (t.tabId === 21) throw new Error('detach boom');
+    });
+    global.chrome = { debugger: dbg };
+    vi.resetModules();
+    const m = await import('../src/core/cdp/input.js');
+    await m.clickAt(21, 100, 100);
+    await m.clickAt(22, 120, 120);
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(dbg.detach.mock.calls.map((c) => c[0].tabId).sort()).toEqual([21, 22]);
+    // 两个 tab 的状态都要清掉：下一次命令必须重新 attach
+    dbg.attach = vi.fn(async () => {});
+    sent = [];
+    await m.clickAt(21, 300, 300);
+    expect(dbg.attach).toHaveBeenCalled();
+  }, 20000);
+
   it('bezierPoints 纯函数：步数 10–40、端点收敛到目标', async () => {
     const m = await loadFresh();
     const pts = m.bezierPoints(0, 0, 1000, 0);

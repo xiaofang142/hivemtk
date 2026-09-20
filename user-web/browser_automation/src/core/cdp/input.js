@@ -96,9 +96,21 @@ async function withDebugger(tabId, fn) {
     // idle 复用：3s 内无新命令才 detach，减少横幅闪烁
     if (detachTimer) clearTimeout(detachTimer);
     detachTimer = setTimeout(() => {
-      for (const tid of [...attached]) {
-        chrome.debugger.detach({ tabId: tid }).catch(() => {});
+      detachTimer = null;
+      // 两个坑都由批15 单测照出来：
+      // ① attached 是 Map，`[...attached]` 解出来的是 [tabId, true] **对**——
+      //   detach 于是收到 {tabId:[21,true]}（必然失败又被吞），delete 删的是不存在的键，
+      //   结果是"3s 后收起调试横幅"这个功能从来没生效过。必须显式取 .keys()。
+      // ② 这个回调可能在 chrome.debugger 已经不在的时候才跑（SW 被回收、测试拆除），
+      //   而属性访问本身就抛 TypeError，`.catch()` 挡不住；异常跑在定时器里没人接，
+      //   于是一次动作留下一个未捕获错误（全量跑「129 用例全绿 + 进程 rc=1」的真因），
+      //   并且循环半途而废把后面的 tab 全憋住。收尾路径逐条吞。
+      for (const tid of [...attached.keys()]) {
         attached.delete(tid);
+        try {
+          const p = chrome.debugger?.detach({ tabId: tid });
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch { /* noop：一个 tab 的 detach 失败不影响其余 */ }
       }
     }, 3000);
   }

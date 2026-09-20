@@ -8,8 +8,9 @@
 //
 // 实现取 AST（acorn），不取字符串正则：写第一版时用 `fn.toString()` + \bname\b 粗匹配，
 // 结果注释里写一句「与 injClick 同一份检查」就被判成引用 injClick —— 一个会误报的门
-// 最终等于没人看的门。acorn 是 vitest 传递依赖（未在本包 package.json 声明），
-// 一旦它不在依赖树里这里会直接 import 失败：宁可门红着，不可门悄悄不检查。
+// 最终等于没人看的门。acorn 必须写进本包 devDependencies：它一度只是 vitest 的传递依赖，
+// 而 vitest 把它提到上层 user-web/node_modules，本包独立 `npm ci` 后这里 import 失败、
+// 整条静态门消失却不报错——所以这条门自己也得有一张"独立装能跑"的凭证（提交后克隆复验实测）。
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

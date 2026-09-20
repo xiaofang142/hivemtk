@@ -568,13 +568,20 @@ Enter——富文本框上「键入」和「提交」是两件事，一个 type 
   粗匹配，注释里写一句「与 injClick 同一份检查」就被判成引用，误报的门最终等于没人看的门）：
   把源文件里**每一个** `executeInTab` 的实参函数都查一遍自由变量，覆盖单测不一定跑到的
   `wait_for_selector`/`markdown`/`comment_verify`。枚举面本身也被钉住（手工清单要加两条守卫：
-  成员表达式注入点必须被枚举到、清单成员必须还在导出）。`acorn` 是 vitest 的传递依赖、
-  本包未声明，这里刻意不兜底：宁可门红着，不可门悄悄不检查。
+  成员表达式注入点必须被枚举到、清单成员必须还在导出）。
+  **这条门自己被抓到一次**：`acorn` 头一版只当作 vitest 的传递依赖、没写进本包
+  `devDependencies`，而它其实落在上层 `user-web/node_modules`（兄弟工程独立装过）——
+  工作树里靠 Node 向上查找侥幸能跑，`--shared` 克隆里当场 `Failed to resolve import "acorn"`、
+  整条静态门**消失但不报错**。"换台机器 `cd user-web/browser_automation && npm ci` 就跑不动"的门
+  不算门，所以补声明：`package.json` 加 `"acorn": "^8.18.0"` + lock 同步（净 +15 行、零 churn）。
+  这两次克隆跑正好构成这条声明的**反向测试**：未声明时红（`Failed to resolve import "acorn"`，
+  `/tmp/b16_js_clone.log`）、声明后同一棵树 12 文件 rc=0（`/tmp/b16_js_clone3.log`）。
 - **沙箱层** `test/inject-sandbox.js`：`new Function('(' + fn.toString() + ')')()` 重建注入函数，
   编译出的函数作用域是全局而非模块作用域——真去闭包，任何自由引用在测试里当场
   `ReferenceError`。旧测试直接 `func(...args)` 调用，闭包全在，这条断链在单测里永远不可能露出来。
-  扩展侧全量 **12 文件 129 用例全绿**（含新增 `batch14-click-single-fire` / `batch14-comment-send-gate`
-  / `batch14-inject-selfcontained` 三组）。
+  扩展侧全量首轮 **12 文件 129 用例全绿**（含新增 `batch14-click-single-fire` /
+  `batch14-comment-send-gate` / `batch14-inject-selfcontained` 三组）；
+  本轮收尾又补 2 条 idle-detach 用例 ⇒ 终态 **131 用例 rc=0**（见下面「全绿却 rc=1」那条）。
 - **真机层** `/tmp/b15_device_legs.py` → **15/15 PASS**（本地夹具页 18611/18612/18613，
   18611/18613 记录 pointerover/pointerdown/mousedown/pointerup/mouseup/click 及 `isTrusted`
   到 `#log`、click 计数到 `#hits`、标题写成 `CLICKED-n`；18612 是带全屏 `#mask` 的发送夹具，
@@ -618,23 +625,89 @@ send_button_not_interactable: covered`、`submit_state='prepared'`（psql 直读
 附带一条环境事实：夹具扩展必须**临装**（`onInstalled` 是唯一可靠唤醒点，MV3 SW 30s 空闲即回收，
 本扩展系没有 `alarms` 权限），提前装好等到跑腿时它已经死了——上一轮 L-D1 绿成 cdp 就是这么来的。
 
-**变异电池（新写：`/tmp/b15_mut_gate.py`，替掉取证口径弱的旧版）** G1–G4 **全部被具名用例杀掉**
-（`/tmp/b15_mut_gate.log`）：G1 去掉闸门早返分支 → `TestWSE2E_SendGateRejectStaysPrepared`、
-`TestSendGateOrderedBeforeSentLedger`；G2 谓词放宽成含 `not_` → `TestIsSendGateReject`
-（把定位失效/WS 超时误判成未发生）；G3 去掉 `disabled` 判 → disabled + aria-disabled 两条用例；
-G4 去掉遮挡判 → covered 用例。每条都带正向对照（可点按钮仍恰好一次坐标点击，闸门不得过修正成永不提交）。
+**变异电池（新写：`/tmp/b15_mut_gate.py`，替掉取证口径弱的旧版；收尾扩到 G1–G6）**
+**全部被具名用例杀掉**（终态 `/tmp/b16_mut_gate2.log`，电池 rc=0）：G1 去掉闸门早返分支 →
+`TestWSE2E_SendGateRejectStaysPrepared`、`TestSendGateOrderedBeforeSentLedger`；G2 谓词放宽成含
+`not_` → `TestIsSendGateReject`（把定位失效/WS 超时误判成未发生）；G3 去掉 `disabled` 判 →
+disabled + aria-disabled 两条用例；G4 去掉遮挡判 → covered 用例；G5 把 `.keys()` 退回
+`[...attached]` → 两条 idle detach 用例同时红；G6 撤掉整段守卫（`?.` 与 `try/catch` **必须一起去掉**，
+单独去掉任一个都留下等价类、另一条路仍能吞掉，这是有意为之的变异而不是漏掉）。每条都带正向对照
+（可点按钮仍恰好一次坐标点击，闸门不得过修正成永不提交）。
 **电池自己被审出一个洞**（这一轮第二值钱的一条）：旧版按「`go test` 非 0」判红，而它还有第二种成因——
 包根本编不过。本泳道并行会话一个未跟踪的 `internal/service/ltc_config.go`（mtime 10:21:16）让
 所有传递编译 `internal/service` 的包 `[build failed]`，四条 Go 腿于是集体"红"却**报不出被杀的用例名**。
 处置：① 严格判据——`[build failed]`/`cannot find package`/`undefined:` 一律判「无法判定」，
 击杀必须 `re.findall(r"^--- FAIL: (\S+)", out, re.M)` 有名字；② Go 腿改跑 `--shared` 克隆
 （`/tmp/b15gate`，HEAD + 只含本泳道 diff 的树）而不是别人的工作树；③ 每处源码改动 `cp` 备份 +
-逐次 md5 比对还原（严禁对未提交文件 `git checkout`）。**这条规矩是给所有变异驱动器立的**：
-红但没有名字，就不算证据。
+逐次 md5 比对还原（严禁对未提交文件 `git checkout`）；④ **每腿带对照组自证**——驱动器统计并打印
+本腿实际跑了几个用例、跳过几个（`ran=2/2 skip=0`、`ran=6/6 skip=0`、`ran=12/12 skip=0`），
+`skip>0` 或 `ran<期望` 一律判「无法判定」而不是「已杀」。**这条规矩是给所有变异驱动器立的**：
+红但没有名字，就不算证据；绿但没证明跑过，同样不算。
 
 **门禁**：`go vet` 干净；`browser_automation` 三包 `controller ok 0.849s / platform ok 0.451s /
 service ok 131.868s`；架构门 clone-at-HEAD 绿、clone+本泳道 diff 绿，工作树里唯一那一条报错来自
 并行会话未跟踪的 `dingtalk_media.go`（mtime 10:20:31），与本泳道 0 个 `internal/service` 文件改动一致。
+
+**产物自洽复验（真机腿对的是哪份码）**：`src/core/primitives.js` 的 mtime（10:37）晚于
+`dist/background.js`（09:36）——单看 mtime 会以为跑的是旧产物。做法是把 dist 整体快照到
+`/tmp/dist_before_b16` 后重编逐文件比 md5：`background.js`、`popup.js`、`manifest.json`、
+`icons/128.png` **全部逐字节相同**，只有 `build-info.json` 差一个 `builtAt` 时间戳（version 均 `1.5.0`）。
+原因：10:37 那次改动是注释，esbuild 会把注释剥掉。**结论：真机腿跑的正是已提交这份码**
+（`grep -c send_button_not_interactable dist/background.js` = 1，`dom_fallback` 也在）。
+顺带一条口径：mtime 只能证明"改过"，不能证明"改到产物里"——产物新鲜度要以重新构建后的字节比对为准。
+
+**提交后自洽复验（`2a75cee9` → 影子克隆 `/tmp/b16gate`）**：Go 侧在只含已提交内容的树里
+`go build ./...` rc=0、`go vet ./internal/browser_automation/...` rc=0、
+`controller ok 2.898s / platform ok 0.916s / service ok 219.871s`（`/tmp/b16_go_clone.log`）。
+**JS 侧在克隆里跑出两次红，两次都是本泳道自己的缺陷**（这正是克隆复验的价值——工作树全绿骗过了它们）：
+
+1. **静态闸门自己不可运行**：`Failed to resolve import "acorn" from "test/inject-lint.js"`。
+   见上面静态层那条：`acorn` 未声明在本包，工作树靠上层 `user-web/node_modules` 侥幸解析得到，
+   克隆树里整条门静默消失。补 `devDependencies` + lock 后同树 **12 文件 129 用例 rc=0**。
+2. **一条用例的预算写错了环境**：`节点上限 400` 在克隆树里 `Test timed out in 5000ms`
+   （单跑 7.8s、全量并跑 14.9s，而工作树单跑只有 2.0s，所以从未暴露）。根因是 `nameOf` 读
+   `innerText` 而 **jsdom 每次访问都重算整篇样式**，成本随节点数线性放大——这是测试环境的成本，
+   不是产品侧的（真 Chrome 循环内不改 DOM，布局只算一次）。按本仓 `cdp-input.test.js` 的既有
+   做法给该用例显式 30s 预算，并把三个实测数字写进注释。
+   反向测试跟着做了一遍：把 `MAX_NODES` 改小 → 该用例以
+   `AssertionError: expected 300 to be 400` 红（不是超时红），证明加超时没把它变成永不失败的空壳。
+
+**顺着「全绿却 rc=1」挖出的两条真缺陷（本轮最值钱的收尾）**：补完 acorn 后工作树全量跑出
+`Test Files 12 passed / Tests 129 passed` 而 **`worktree_rc=1`** —— vitest 报
+`Unhandled Errors / This might cause false positive tests`，栈顶是
+`TypeError: Cannot read properties of undefined (reading 'detach')  src/core/cdp/input.js:100`。
+读码定因，两条独立缺陷都在 `withDebugger` 的 idle-detach 收尾回调里：
+
+- **缺陷 A（功能从未生效）**：`attached` 是 `Map`，而回调写的是 `for (const tid of [...attached])`——
+  Map 展开给出的是 `[key, value]` **对**，于是 `chrome.debugger.detach({ tabId: [21, true] })`
+  必定失败（又被 `.catch` 吞掉），`attached.delete([21,true])` 删的是一个不存在的键。
+  净效果：**「3s 无命令就收起调试横幅」这个功能从上线起一次都没做成**，Map 里的 tab 只增不减。
+  单测此前只断言"发过命令"，从不检查 detach 的实参形状，所以照不出来。
+- **缺陷 B（清理路径不容错）**：该回调可能在 `chrome.debugger` 已经不在时才跑（测试拆除全局；
+  真机上等价形态是 SW 上下文消失），而 `chrome.debugger.detach` 是**属性访问**，`.catch(()=>{})`
+  挡不住这个同步 TypeError；异常跑在定时器里无人接 ⇒ 整轮 rc=1，且循环半途而废把后面的 tab 全憋住。
+
+处置：`.keys()` + `chrome.debugger?.detach(...)` + 逐条 `try/catch`，并且**先让用例红再修**
+（`cdp-input.test.js` 新增 2 条：① 全局拆除后触发定时器必须不抛且把状态清干净（用"下一条命令必须
+重新 attach"作为可观测判据），② 一个 tab 的 detach 抛错不得憋住其余 tab，断言
+`detach.mock.calls` 的 tabId 集合）。反向测试：把 `input.js` 还原成修复前形态 → 两条同时红
+（第 ② 条红成 `expected [ [ 21, true ], [ 22, true ] ] to deeply equal [ 21, 22 ]`，
+正好把缺陷 A 的形状摊在失败信息里），还原后 md5 与修复版逐字节一致。
+修完全量 **12 文件 131 用例 rc=0、Unhandled Errors 段消失**（`/tmp/b16_js_worktree2.log`）。
+因为改的是 attach 生命周期（真机上现在真的会在空闲 3s 后 detach），**产物重编 + 冷装 + 真机腿整轮复跑**
+（见下条），不是在旧结论上打补丁。
+
+**收尾后的整轮复跑（改生命周期必须重跑的那一条）**：`npm run build` → `dist/background.js`
+26703 → **26771 B**，且修复确实进了产物（bundle 里 `keys()]){v.delete(o)`，`attached` 被压成 `v`；
+只看 mtime 得不到这个结论）；再重编一次逐文件 md5 与快照 `dist` **全等**（`background.js`
+`a1848758…`、`popup.js`、`manifest.json` 三条一致）。扩展冷装 + nm-host 重启（pid 2519，
+`host/status` = `online:true / servable:true / version:1.5.0 / last_cmd_ok_at 12:14:53`），
+`/tmp/b15_device_legs.py` 整轮复跑 → **15/15 PASS**（`/tmp/b16_legs_rerun.log`，
+session 561/562/564、step 2178–2199）：L-A1 依旧 `channel:"cdp"`、L-A2 页面侧恰好 1 个 click、
+L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**：这轮复跑证明的是
+「attach 生命周期改了没打断任何一条真机腿」；「空闲 3s 真的 detach」本身在真机侧**没有观测点**
+（夹具页看不见横幅），它的证据仍是那条单测（以"下一条命令必须重新 attach"为可观测判据）
+加 G5/G6 两条击杀。
 
 **未落地（不写成已验证）**：§8.2-1 / §8.3-1 的两小步里只落了「闸门不被绕过」这半边——
 (a) `actionabilityCheck` 加 `stable`（注入函数内部 rAF 双帧比盒）与 (b) **仅 `is_write` 步**在
