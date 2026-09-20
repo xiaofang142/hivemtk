@@ -25,9 +25,6 @@ var knownFailingVersions = map[string]string{
 	// v3_22_0:53-63 把 information_schema.columns.character_maximum_length 扫进非空 int，
 	// 而 text/uuid 型 customer_id 列该字段为 NULL → 整个迁移在 ALTER 之前即中止。
 	"v3.22.0": "Scan NULL→int：character_maximum_length 需用 sql.NullInt64 承接",
-	// v3_36_0 stmts 顺序错：第 73 行 CREATE TRIGGER 引用 fn_guard_initial_admin_delete()，
-	// 该函数却在第 77 行才 CREATE。首错即 return ⇒ 删除保护触发器与函数在任何库上都从未建立成功。
-	"v3.36.0": "语句顺序缺陷：CREATE TRIGGER 早于其依赖的 CREATE FUNCTION",
 }
 
 // TestFullMigrationChainUpThenRollback 在测试库上按生产建表路径铺好基表，再按序执行全部迁移的 Up()，

@@ -69,16 +69,17 @@ func (m *AdminPasswordGuardMigration) Up(ctx context.Context) error {
 		`CREATE TRIGGER trg_guard_initial_admin_password
 			BEFORE UPDATE ON system_users
 			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()`,
-		`DROP TRIGGER IF EXISTS trg_guard_initial_admin_delete ON system_users`,
-		`CREATE TRIGGER trg_guard_initial_admin_delete
-			BEFORE DELETE ON system_users
-			FOR EACH ROW WHEN (OLD.id = 1)
-			EXECUTE FUNCTION fn_guard_initial_admin_delete()`,
+		// PG 在 CREATE TRIGGER 时就解析触发器函数签名，函数必须先于引用它的触发器建好
 		`CREATE OR REPLACE FUNCTION fn_guard_initial_admin_delete() RETURNS trigger AS $$
 		BEGIN
 			RAISE EXCEPTION '初始超管账号(id=1)不允许被删除';
 		END;
 		$$ LANGUAGE plpgsql`,
+		`DROP TRIGGER IF EXISTS trg_guard_initial_admin_delete ON system_users`,
+		`CREATE TRIGGER trg_guard_initial_admin_delete
+			BEFORE DELETE ON system_users
+			FOR EACH ROW WHEN (OLD.id = 1)
+			EXECUTE FUNCTION fn_guard_initial_admin_delete()`,
 	}
 	for _, s := range stmts {
 		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
