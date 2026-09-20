@@ -26,11 +26,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// scenarioNow 场景里所有"当前时间"的唯一来源。
+// scenarioNow 场景里所有"当前时间"的唯一来源，取"进程启动那一刻"而不是某个历史时刻。
 //
 // 两副底座必须用**同一个** now 去过期/改动，否则 expireOverdue 写进去的 updated_at
-// 只差几纳秒也会被比对成不等 —— 那种差异是测试自己的噪声，不是被测行为。
-var scenarioNow = time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+// 只差几纳秒也会被比对成不等 —— 那种差异是测试自己的噪声，不是被测行为；截到秒同理。
+// 而这个 now 绝不能写死：夹具里满是 expires_at = scenarioNow+24h，写死的话 24 小时
+// 之后整批用例集体过期（2026-09-20 实测 8 个并发 Confirm 全判"草稿已过期"、pending
+// 归零），用例从"被测行为红"退化成"日历红"，且此后每天必红。
+var scenarioNow = time.Now().UTC().Truncate(time.Second)
 
 func seedDraft(id, customer, owner, product string, status DraftStatus, conf, amount float64, createdAt, expiresAt time.Time) *OrderDraft {
 	return &OrderDraft{
