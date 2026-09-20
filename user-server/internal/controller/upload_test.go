@@ -315,17 +315,20 @@ func TestIsValidExtension(t *testing.T) {
 }
 
 func TestDetectFileTypeByMagicNumber(t *testing.T) {
+	// want 一律是**单值**：原来 .jpg/.zip 两行写成 "a|b|c" + 「命中任一即通过」，
+	// 那是把「map 遍历顺序随机 ⇒ 同一文件检成不同扩展名」的缺陷固化进断言，
+	// 无论实现怎样都绿（假绿）。规范名唯一，就钉唯一。
 	tests := []struct {
 		name string
 		data []byte
 		want string
 	}{
-		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0}, ".jpg|.jpeg"},
+		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0}, ".jpg"},
 		{"png", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, ".png"},
 		{"gif87", []byte{0x47, 0x49, 0x46, 0x38, 0x37, 0x61}, ".gif"},
 		{"gif89", []byte{0x47, 0x49, 0x46, 0x38, 0x39, 0x61}, ".gif"},
 		{"pdf", []byte{0x25, 0x50, 0x44, 0x46, 0x2D}, ".pdf"},
-		{"zip_docx_format", []byte{0x50, 0x4B, 0x03, 0x04}, ".zip|.docx|.xlsx|.pptx"},
+		{"zip_family_canonical", []byte{0x50, 0x4B, 0x03, 0x04}, ".zip"},
 		{"rar", []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00}, ".rar"},
 		{"webp", []byte{0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50}, ".webp"},
 		{"empty", []byte{}, ""},
@@ -333,25 +336,31 @@ func TestDetectFileTypeByMagicNumber(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if strings.Contains(tt.want, "|") {
-				parts := strings.Split(tt.want, "|")
-				got := detectFileTypeByMagicNumber(tt.data)
-				found := false
-				for _, p := range parts {
-					if got == p {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("detectFileTypeByMagicNumber() = %v, want one of %v", got, parts)
-				}
-			} else {
-				if got := detectFileTypeByMagicNumber(tt.data); got != tt.want {
-					t.Errorf("detectFileTypeByMagicNumber() = %v, want %v", got, tt.want)
-				}
+			if got := detectFileTypeByMagicNumber(tt.data); got != tt.want {
+				t.Errorf("detectFileTypeByMagicNumber() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestDetectFileTypeByMagicNumber_Deterministic 同一段字节反复检必须每次同结果。
+// 命中的键曾有两个（zip 家族四键共用 magic、jpg/jpeg 共用 magic），map 遍历顺序
+// 随机 ⇒ 单次断言侥幸绿，重试就换值。这里把「唯一命中」这一不变量本身钉住。
+func TestDetectFileTypeByMagicNumber_Deterministic(t *testing.T) {
+	data := map[string][]byte{
+		"zip":  {0x50, 0x4B, 0x03, 0x04},
+		"jpeg": {0xFF, 0xD8, 0xFF, 0xE0},
+	}
+	for name, b := range data {
+		first := detectFileTypeByMagicNumber(b)
+		if first == "" {
+			t.Fatalf("%s: 未检出类型", name)
+		}
+		for i := 0; i < 200; i++ {
+			if got := detectFileTypeByMagicNumber(b); got != first {
+				t.Fatalf("%s: 第 %d 次检出 %q，与首次 %q 不一致（magic 表有多键命中）", name, i+1, got, first)
+			}
+		}
 	}
 }
 
@@ -503,10 +512,11 @@ func TestUploadFile_Docx_Uses_ZIP_Format(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code == http.StatusOK {
-		t.Log("PASS: .docx with ZIP magic accepted")
-	} else {
-		t.Logf("KNOWN BUG: .docx with ZIP magic rejected: %s", w.Body.String())
+	// 这段字节在 detectMimeType 里就是 application/zip；上传闸门靠
+	// upload.go 的 "zip + isOfficeDocument ⇒ 换成扩展名自己的 MIME" 一条把它救回来。
+	// 原来两个分支都只 t.Log，等于删掉那条救回逻辑也照样绿 —— 现在钉住必须 200。
+	if w.Code != http.StatusOK {
+		t.Errorf("docx（内容是 ZIP magic）应被放行，实际 code=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -519,32 +529,20 @@ func TestUploadFile_DangerousExtensions_AreDeadCode(t *testing.T) {
 	}
 }
 
-func TestUploadFile_MP4_NotInAllowedMIME(t *testing.T) {
-
+// TestUploadFile_AllowedTypes_ExcludeRemovedMedia 钉住 DefaultUploadConfig.AllowedTypes
+// 的内容：它是 upload.go:150 isAllowedMimeType 的唯一判据，而三组 t.Log 版用例
+// （视频 MP4 / SVG 存储型 XSS / RAR）在两个分支里都不产生失败，改坏白名单无人可查。
+func TestUploadFile_AllowedTypes_ExcludeRemovedMedia(t *testing.T) {
 	allowed := DefaultUploadConfig.AllowedTypes
-	if strings.Contains(allowed, "video/mp4") {
-		t.Log("video/mp4 is in allowed types")
-	} else {
-		t.Log("OK: video/mp4 correctly removed from allowed types (P0-26)")
+	for _, forbidden := range []string{"video/mp4", "image/svg+xml", "rar"} {
+		if strings.Contains(allowed, forbidden) {
+			t.Errorf("AllowedTypes 又出现了 %q（MP4 与 RAR 于 P0-26、SVG 于 M9 被移出白名单）：当前值=%s", forbidden, allowed)
+		}
 	}
-}
-
-func TestUploadFile_SVG_NotInAllowedMIME(t *testing.T) {
-
-	allowed := DefaultUploadConfig.AllowedTypes
-	if strings.Contains(allowed, "image/svg+xml") {
-		t.Log("image/svg+xml is in allowed types")
-	} else {
-		t.Log("OK: image/svg+xml correctly removed from allowed types (M9)")
-	}
-}
-
-func TestUploadFile_RAR_NotInAllowedMIME(t *testing.T) {
-
-	allowed := DefaultUploadConfig.AllowedTypes
-	if strings.Contains(allowed, "rar") {
-		t.Log("rar type is in allowed types")
-	} else {
-		t.Log("OK: rar MIME correctly removed from allowed types (P0-26)")
+	// 反向半句：白名单被整体清空/写错时，上面三条缺席断言会集体哑掉。
+	for _, required := range []string{"image/png", "application/pdf"} {
+		if !strings.Contains(allowed, required) {
+			t.Errorf("AllowedTypes 缺了基线项 %q：当前值=%s", required, allowed)
+		}
 	}
 }
