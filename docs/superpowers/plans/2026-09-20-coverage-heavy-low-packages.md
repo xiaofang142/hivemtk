@@ -2841,7 +2841,7 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 | R8 | 离线回扫 SQL 引用无人建立的列 | `62445d10` | 见下 |
 | R10 | `order_draft` 用例把"当前时间"写死成 2026-09-19 → 24h 后整批日历红 | `00c7c263` | `scenarioNow` 改回 `time.Now().UTC().Truncate(time.Second)`，两副底座共用同一 now 的原意保留；`TestOrderDraft*` 20 例全绿 |
 | R11 | 商户客户端只认 HTTP 200：平台拒绝被当成功 | `396b057d`（传输层+控制器）+ `e0e857fa`（`purchaseFailMsg` 文案与死分支） | 见下两段 |
-| R13 | 清扫 E2E 用例把"逐轮覆盖"的报告当末轮断言，机器一忙就红 | 本次 | 见下 |
+| R13 | 清扫 E2E 用例把"逐轮覆盖"的报告当末轮断言，机器一忙就红 | `9903baaf` | 见下 |
 
 **R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
 真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
