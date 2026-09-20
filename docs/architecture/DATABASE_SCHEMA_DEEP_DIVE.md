@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.11（2026-09-21，T-P4-05 新增 §4.16.4 线索→商机的转换层与自动分配；上一版 v1.10 是 T-P4-04 的 §4.16.3）
+> **版本**：v1.12（2026-09-21，T-P4-06 新增 §4.16.5 漏斗第五段接入 `opportunities`；上一版 v1.11 是 T-P4-05 的 §4.16.4）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -534,21 +534,28 @@ erDiagram
 
 | 指标 | 真实源（线上读数走这条） | 演示表（只有 `cmd/seed` 在写） |
 |---|---|---|
-| 转化漏斗 | `internal/ops/service/conversion_funnel.go` `BuildFunnel` 对 `customer_events` / `clues` / `intent_records` / `customer_sessions` 的**实时聚合** | `conversion_funnels`（**全仓无读路径**） |
+| 转化漏斗 | `internal/ops/service/conversion_funnel.go` `BuildFunnel` 对 `customer_events` / `clues` / `intent_records` / `customer_sessions` / `opportunities` 的**实时聚合** | `conversion_funnels`（**全仓无读路径**） |
 
 两套阶段名**刻意不同**，这是判定"表是死的"的关键证据：
 
 | 侧 | 阶段名 |
 |---|---|
-| 真实源（词表在 `internal/ops/repository.FunnelStageKey`，代码里是唯一真源） | `visit` 访问 → `clue` 线索 → `intent` 意向 → `session` 会话 |
+| 真实源（词表在 `internal/ops/repository.FunnelStageKey`，代码里是唯一真源） | `visit` 访问 → `clue` 线索 → `intent` 意向 → `session` 会话 → `opportunity` 商机（末位自 T-P4-06） |
 | 演示表（`cmd/seed/seed_stats.go` 自造） | `exposure` → `click` → `consult` → `add_wecom` → `deal` |
+
+两套名字**到今天仍然互不相交**，这一点在 T-P4-06 之后更需要明说：真实源新加的键叫
+`opportunity`、演示表最后一段叫 `deal`，中文都近似"商机/成交"，看中文会以为两套并起来了。
+`_DemoTableStaysOutOfVocabulary` 守的就是这条（它把 `deal` 连同 `exposure/click/consult/add_wecom`
+一起列成"不得进词表"，所以"判定表是死的"那把证据没因为接了商机段而失效）。
 
 规则（写进 `model.ConversionFunnel` 的注释，同时由 `conversion_funnel_stage_test.go` 的
 `_DemoTableStaysOutOfVocabulary` 守着）：
 
 - **新域不得往 `conversion_funnels` 写数据**。报价/商机漏斗（T-P4、T-P7-02）的阶段维度一律
-  以 `FunnelStageKey` 为准；`opportunity`（商机）已作为**预留位定名、尚未产出**——定名而不产出，
-  是为了让回款域能引用同一个键，又不会在响应里凭空多出一个恒为 0 的阶段。
+  以 `FunnelStageKey` 为准。`opportunity`（商机）在 T-P2-03 是"**定名而不产出**"的预留位，
+  T-P4-06 已把它接成第五段（读 `opportunities`，见 §4.16.5）；预留机制本身留着
+  （`reservedFunnelStages` 现为空），因为下次再出现"先定名、后接待"的阶段仍该登记在那里，
+  而不是在服务层凭空多画一段。
 - 演示行自带 `extra.demo_only = true` 与 `extra.real_source` 指针，供临时 SQL/BI 的使用者辨真伪。
 
 **为什么不删这张表（"未证伪不删"）**：它仍在 `internal/pkg/db/migrate.go allModels()` 的建表清单里，
@@ -556,10 +563,12 @@ erDiagram
 三条同时成立时另立卡删除：① 仓外读取方确认为零；② 表内行只来自 seed；③ 已决定归档方式。
 
 **顺带登记的两处真实源口径问题**（不改，属"改变现网读数"，见短板 G16）：
-`BuildFunnel` 把四个 count 的错误全部吞掉 ⇒ 某个数据源表不可用时，接口回 200 且该阶段显示为 0，
+`BuildFunnel` 把**前四个** count 的错误全部吞掉 ⇒ 某个数据源表不可用时，接口回 200 且该阶段显示为 0，
 报表看起来"只是转化率低"；阶段之间不保证单调 ⇒ `rate` 可以 >100、`drop_rate` 可以为负
 （`conversion_funnel_baseline_test.go` 的 `_NonMonotonicStagesBaseline` 把这个现状钉在那里）。
 未知阶段名走 `GET /conversion-funnel/stage` 也回 200 + 空名字 + 0 计数，而不是 404。
+（"前四个"是 T-P4-06 改的措辞：第五段商机**同样**回 200 + 0，但它是这条链上唯一会把取数失败
+打进日志的一段，理由见 §4.16.5。吞错误的老四条腿本卡刻意没动。）
 
 ### 4.12 销售事件流 `sales_events`：给 LTC 开的预留列（T-P2-04）
 
@@ -1293,6 +1302,162 @@ app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 43
 （见上文"本卡被真跑纠正的三处"第 3 条），补成可编译的语义变异后才计入这 18 把。
 台账那五行另有独立的反向脚本（见上文台账段）。
 
+### 4.16.5 漏斗的第五段：把 `opportunities` 接进实时聚合，以及"按位置取段"为什么会静默换口径（T-P4-06）
+
+> 卡面（`docs/replan-2026-09/新规划任务清单.md:234`）：「漏斗接入商机阶段：扩展 **ops 实时聚合器**
+> （R-4 裁定），**不写僵尸表**」。AC① `GET /conversion-funnel` 返回含商机阶段；AC②
+> `conversion_funnels` 表写入路径仍为零（守 D-9）；AC③ seed 假数据不影响真实视图。
+> 依赖 T-P4-03（商机服务）与 T-P2-03（阶段词表 + 黄金用例），二者都已在册。
+
+#### 落点（四改两增，没有一处写那张表）
+
+| 文件 | 改了什么 |
+|---|---|
+| `ops/repository/conversion_funnel.go` | 加 `CountOpportunitiesByTimeRange`（**唯一**碰 SQL 处）；`liveFunnelStages` 末尾加 `StageOpportunity`，`reservedFunnelStages` 清空 |
+| `ops/service/conversion_funnel.go` | `BuildFunnel` 追加第五段；`GetStageDetails` 加 `case StageOpportunity`；两条腿各自把取数失败打成 `Warn` |
+| `ops/repository/conversion_funnel_stage_test.go` | 词表三条改期望（产出五段、保留清单为空、副本用例适配空表） |
+| `ops/service/conversion_funnel_baseline_test.go` | 黄金串加第 5 段、夹具补 4 行商机、AC③ 新增一条"演示表灌 99999 读数不变"、新增一条"表没了仍回五段" |
+| `ops/service/conversion_funnel_opportunity_log_test.go`（新增） | 两条告警各锁一条：删掉 `Warnf` 必须有用例红 |
+| `ops/controller/conversion_funnel_http_test.go`（新增） | AC①/②/③ 各一条打到真实 gin 路由 + `{code,message,data}` 外壳 |
+
+**这条端点上原先一条 controller 用例都没有**，而 AC① 说的是"接口返回"。`parseTimeRange`
+只认 RFC3339、外壳的 `data` 带 `omitempty` —— 两处任何一处坏了，service 的黄金用例全都不会红。
+
+> **本卡文档里被真跑纠正的一处（而且是第二次读码不足）**：上面这段的初稿还写着"路由挂在
+> `/conversion-funnels` 而非 `/conversion-funnel`（卡面写的是后者）"，据此把卡面判成笔误。
+> **读全之后：两条都在。** `internal/router/frontend_aliases.go:409-414` 用 `doReg` 同时注册了
+> 复数与单数各三条（`/conversion-funnels`、`/conversion-funnels/list`、`/conversion-funnels/stage`
+> 与 `/conversion-funnel`、`/conversion-funnel/list`、`/conversion-funnel/stage`），
+> 所以 AC① 那句 `GET /conversion-funnel` **字面就能命中**，卡面没有错。
+> 我错在拿了两条弱证据当结论：① 只看到自己测试里手写的那两条路径；② `api-inventory.md` 的
+> **后端路由段里根本没有这两组路径** —— 而它漏这两组是**两种不同的漏法**（本卡现场读脚本读出来的）：
+> 别名走 `doReg("GET", path)`，方法名是**参数**，脚本抽后端用的正则 `\.(GET|POST|PUT|DELETE|PATCH)\("`
+> 压根不匹配；商机/待办那两族走 `controller` 里的 `g.GET("/rules")` + `router.Group("/opportunity")`，
+> 正则匹配得上却只拿到**相对片段**，组前缀写在另一个文件里，全文拼不出 `/api/opportunity/...`
+> （实测 `grep -c -i opportunit api-inventory.md` = **0**（**全文**都没有，因为前端还没调过这套 API）；
+> `human-task` 出现 2 次，但两条都在**前端调用段**（1426、2241 行），后端路由段同样为零）。
+> ⇒ 连带更正本卡"实跑"段那句"api-inventory 生成物无 diff ⇒ 本卡未动路由"：**它无 diff 只说明
+> 前端调用与 `.GET("全路径")` 那一族没变**，别名与"控制器内相对路径"两族本来就不在它的眼界里，
+> 这条证据比初稿写的弱一档。脚本自身在头部已声明它是非阻塞快照、真正的门是
+> `audit_api_contract.py --strict`，本卡不动它，盲区登记在此。
+
+#### 判据一：这一段答的是"这一期进了多少单"，不是"此刻各格停着几单"
+
+`opportunities` 上有两个能数出"商机数"的东西：`created_at`（进表时间）与 `stage`（当前格）。
+取前者，三条理由：① 其余四段全是**流量**口径（某窗口内发生了几次），混一格**状态**读数进去，
+逐段相除算出的"阶段转化率"就失去意义（§4.11 那条 `_NonMonotonic` 登记的正是流量口径下的
+非单调，状态口径连非单调都不是同一件事）；② 模型的 `idx_opp_created` 注释已经点名"要按它切
+时间窗"，索引就在这一列上；③ 后者需要为看板新增一套"按 stage 分组"的口径，那是 T-P7-02
+回款域的活，不是本卡。
+
+口径写在方法名的注释里，不只写在代码里：`CountOpportunitiesByTimeRange` 的注释第一句就是
+"统计时间范围内**新建**的商机数"，并明确"答的不是此刻各格停着几单"。
+
+#### 判据二：错误上抛到仓储层为止，服务层降级为 0 + 一条 Warn
+
+仓储那条新方法把 `err` 原样返回（可单测、可反证）；服务层两条腿各自吞成 0 并打
+`logger.Warnf`。这与前四段"吞成 0 且不出声"不同，差别不在洁癖而在**blast radius 与歧义度**：
+
+- 外抛会让整份 200 变 500，一份故障挪走四段的可见性（`_OpportunityLegFailureKeepsTheOtherFour`
+  把这条锁住：删表之后 `err` 必须是 nil、五段必须在、其余四段数字必须是 4/3/1/4）。
+- 但"商机=0"这一格**独有一种歧义**：T-P4-05 之后这张表只有一个生产者（挖掘达标那一跳），
+  所以 0 既可能是"真没转化出商机"，也可能是"表没建起来/接缝没装配"。前四段答 0 时没人会拿它
+  做经营决策，这一段答 0 会被读成"我们线索转不动"，而那条结论会一路走进 P8 的归因。
+  告警是把这两种来路分开的唯一手段，因此它是行为而不是日志。
+
+于是"未告警即视同成功"（验收口径 R-①）在这里落成一条用例：
+`_OpportunityLegFailureIsWarned` 抓 stdout（照 `internal/app` 那套：换 `os.Stdout` 之后**必须**
+重建全局日志器，`GetLogger` 会连当时 stdout 一起缓存），断两条告警各恰好 1 条、级别 `warn`、
+内容含失败表名，且返回值不受影响。删任一条 `Warnf` 都把它打红（变异 M3/M7）。
+
+#### 判据三：第五段追加在末位，因为"下标即契约"的读者不止一个
+
+词表把 `opportunity` 加在末尾而不是插在 `session` 前，是为了一句不改的话：看板按下标绘制。
+但**加一段本身就是口径变更**，因为有两处读者在按位置取段：
+
+| 读者 | 位置式取法 | 加段之后实际读到 |
+|---|---|---|
+| `conversion_funnel_baseline_test.go` 的 `_NonMonotonic` | `Stages[len-1]` | 从会话（rate 400 / drop −300）变成商机（75 / 25）——**用例仍绿但断言的已不是它登记的那件事** |
+| `user-web/.../conversionFunnel/List.vue` 摘要区 | `stages[0]`、`stages[stages.length-1]` | 标题「转化量(会话)」显示商机数、「端到端转化率」从 访问→会话 变成 访问→商机 |
+
+两处都改成**按阶段名取**。后端那条的改动没有争议；前端这条要说清保留了什么口径：
+三块 KPI 仍是 `访问` 与 `访问→会话`（与服务端 `total`/`conversion` 同向，那两个字段本卡没动、
+黄金用例也新加了断言钉住），**没有**改成"访问→商机"。改成后者是一次产品口径变更，
+不在本卡，登记进下面的欠账。
+
+前端这条不是推断：把 `List.vue` 反向打回位置式取法（`cp` 备份 + md5 校验还原），
+`tests/unit/conversionFunnel_summary.test.js` 五条里 **4 红 1 绿**，红因就是那两个数字——
+`AssertionError: expected '1' to contain '2'`（把商机的 1 显示成了"会话数"）与
+`expected '10%' to contain '20'`。绿的那条是"阶段明细列出第五段"——明细用 `map` 生成，
+本来就不按位置取，这正说明**只有摘要区**有这把刀。
+
+#### 本卡被真跑纠正的一处（写下来是因为它会让"登记"变成假安全）
+
+台账最初把这条腿登记成**一行**（callpat = `CountOpportunitiesByTimeRange\(`），
+反向验证时把汇总腿整个删掉，实测 **rc=0、行仍报 WIRED**：`wired` 只要求命中 ≥1，
+而 service 里有**两个**消费点（`BuildFunnel` 与 `GetStageDetails`），删一个还剩一个。
+那等于登记了一把永不变红的锁。按消费点拆成两行之后，四种删除口径
+（删汇总腿 / 删详情腿 / 都删 / 定义改名）分别实测 rc=1 / rc=1 / rc=1 / rc=2。
+拆行的代价也写进注释：两行的 callpat 各自锚在赋值左侧的局部变量名上（同包内两次调用文本
+几乎相同，不锚名字分不开），**改局部变量名会让对应行报"未接线"**——方向是变红不是变哑，
+红了回来改这两行即可。
+
+#### 台账：新增两行（现值 **49/55**，`check-unwired-assets.sh` rc=0）
+
+| 行 | 盯的破坏 |
+|---|---|
+| 17a `漏斗汇总腿的商机取数调用点` | 摘掉 `BuildFunnel` 那一次调用 ⇒ 响应仍五段、名字全对，只有商机数永久 0 |
+| 17b `漏斗详情腿的商机取数调用点` | 摘掉 `GetStageDetails` 的分支 ⇒ `stage=opportunity` 退化成"未登记阶段"的空名 0，与真 0 无法区分 |
+
+两行都是 `defpat` 在 `internal/ops/repository`、`callpat` 只看 `internal/ops/service`
+（定义自身不进账）；反向验证的四个删除口径见上一节，`expect` 记 `wired`（防回退）。
+
+#### 本卡的欠账（登记，不当作已完成）
+
+- **端到端转化率要不要走到商机**：三块 KPI 与服务端 `total`/`conversion` 现在都停在 访问→会话。
+  商机已是第五段，"转化率"要不要改成末段是产品决策；改了会同时动服务端两个字段与前端两块卡片。
+- `GetStageDetails` 的 `avg_duration_seconds` 与 `top_sources` 对商机段仍是零值 —— 详情里
+  "商机平均停留多久""商机来自哪几个账号"两条都要 `sales_events` 的口径（T-P7 域）。
+- 阶段非单调的老问题继续存在，且现在多了一格可能 >100%（本卡夹具里就是 会话 4 → 商机 3 与
+  会话 1 → 商机 2 两种都测过）。`_NonMonotonicStagesBaseline` 只登记会话那一格。
+- 演示表 `conversion_funnels` 仍未下线：本卡的 AC② 只证明"新代码零写入"，删表判据三条
+  （§4.11）一条都没消掉。
+- 真机/浏览器那条腿本轮**没跑**：8204 上活着的是 `bin/user-server.r39`（9-19 起的旧二进制，
+  不含本卡改动、也不是本会话启动的），为它另起一套前后端会污染并行会话的证据，故 AC① 的
+  HTTP 证据取自 `httptest` + 真路由 handler + 真 PG。看板截图口径待下一次真机回归补。
+
+#### 实跑（分树记，别混读）
+
+主工作树未提交态（HEAD `39be6824` + 本卡改动）。**同一棵树**上：
+
+- 变异电池·第一轮（`-test.v` 计 `^--- PASS` 与缩进的子测试行）：控制组 **455 条全绿 / 0 skip**；
+  M2 读演示表 red=8、M3 删汇总告警 red=1、M4 词表调序 red=2、M5 详情不认商机名 red=1、
+  M7 删详情告警 red=1。**M1、M6 第一版是坏的**（ perl 替换把整行留成了半截语句 ⇒
+  `[build failed]`，`--- FAIL` 计数为 0 看着像"没抓到"）—— 修变异不修期望。
+- 第二轮（同两包）：M1r 摘掉取数调用点 red=4（黄金串、窗口过滤、"演示表灌 99999 读数不变"、
+  以及那条告警用例全红）、M6r 仓储吞错误 red=2（仓储自己那条 + 服务侧告警那条，跨层同因）。
+- 第三轮（只跑 controller，控制组 **106 条全绿**）：H1 摘汇总腿、H2 摘详情分支、
+  H3 改读演示表三条各打红 `TestConversionFunnelHTTP_FunnelContainsOpportunityStage`；
+  H4「取数时顺手往演示表写一行」打红 `TestConversionFunnelHTTP_DemoTableStaysEmpty`。
+  ⇒ 新加的三条 HTTP 用例不是摆设，每条都被对应的破坏抓到。
+- 三轮共 11 次变异，每次 `cp` 备份写回、收尾比 md5：全部一致，`MUT` 残留 0。
+- 受影响包：`go test ./internal/ops/...` 四包 ok（controller/model/repository/service）；
+  `TZ=UTC` 与 `TZ=Asia/Shanghai` 各跑一遍三包全 ok（日期分桶门 `check-date-bucket-tz.sh` rc=0，
+  命中数与基线同为 21，本卡未新增分桶写法）。
+- `go build ./...` 与 `go vet ./...` 各自单独取 rc：双 0、输出 0 字节。
+- `-race` 跑 ops 三包：`DATA RACE` 计数 0，三包 ok（含新加的 stdout 管道用例；该包内
+  `t.Parallel()` 计数 0，且它是唯一换 `os.Stdout` 的用例，还原放在 `t.Cleanup` 里）。
+- 其余门：`check-enum-consistency`、`check-doc-consistency`、`check-feature-doc`（失败 0）、
+  `api-inventory`（生成的 `api-inventory.md` **无 diff** ⇒ 只支持"前端调用与 `.GET(` 全路径那一族未变"，
+  比初稿写的弱一档，见上文"被真跑纠正的一处"）、
+  `audit-cross-package-ports` rc=0（Errors 0 / Warns 0）全绿；
+  `check-architecture` rc=1 的**唯一红是并行会话的** `internal/service/dingtalk_media.go:191/204`
+  （`[L4] service 直接调 db`），与本卡无关、非本会话引入。
+  `check-secrets-artifacts.sh` 需要 `<env文件> <产物目录...>` 参数，单独跑必 rc=2（用法而非门禁）。
+- 前端：`vite build` rc=0；`eslint` 对本文件 0 error，且改动前后**同为 53 warning**
+  （把 HEAD 版临时复制成同目录下的 `_baseline_tmp.vue` 跑了一遍，计数一字不差 ⇒ 本卡零新增告警；
+  跑完即删）；`vitest run` 全量 **14 文件 / 238 用例全绿**（本卡 +1 文件 +5 用例；改前基线 13/233）。
+
 ---
 
 ## 五、索引策略
@@ -1461,3 +1626,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.9 | 2026-09-20 | @backend | 新增 §4.16.2 商机**服务层**（N-1 / T-P4-03）：§4.16「本卡欠三件」改为两件已交付（跃迁合法表与赢率计算式 → 已随 T-P4-03 交付）。三条实测口径进文档：① 跃迁规则「阶段向前恰好一步、向后任意步、**同格不算跃迁**」+ status 按 **(来源, 起点, 终点)** 三元边表存 —— AC③ 那句「本层写 won 的唯一入口」是靠这张表实现的，不是靠「源码里只有一处赋值」；终态不重算赢率，幂等只给「事实的重复上报」（同一条回款完成第二次到达＝成功且零改写）。② 赢率式 `p = round₂(base(阶段) − 无归属 0.10 − 已逾期 0.15)`、下限 0.05：**可证明的只有单调形状**（逐格向前 ⇒ 集合嵌套 ⇒ `P(赢|到第 k 格)` 递增），四个 base 是显式登记的**先验刻度而非标定值**（全表零生产写入方，没有可回标的收口行），惩罚只做常数不做逾期梯度，且禁止与 `confidence`/`lead_score` 跨域乘算（C5；`OpportunityWinInput` 三字段由反射用例钉住）。③「谁负责把值舍到两位」这条接口判据：真库用例**证不出**（numeric 列自己会舍，读回来两边一样），第一版变异电池里「摘掉落库前舍入」就是这么活下来的，补一条绕开 PG、直接断 `Update` 收到的浮点 payload 的用例后才杀掉。未接线台账项 16 加 **16c 商机服务的装配入口**（与 16a 分开登记：接线有两个断点，只盯一个则另一个断了没人知道），16b 本卡刻意不翻；现值与实跑数字见变更记录 r43。本卡用例 17 条、变异 31 条全部被杀 |
 | v1.10 | 2026-09-21 | @backend | 新增 §4.16.3 商机 **HTTP 出口**（N-1 / T-P4-04）：八条端点（读二 + 规则一 + 写五），**没有一条能写 `won`** —— 那是 §4.16.2 三元边表在 HTTP 侧的兑现，由路由表逐条比对的用例守着（加一条 `POST /{id}/won` 即红）。四条判据进文档：① 绑定 `DisallowUnknownFields` + 请求体封顶 4KB（派生量与身份列在入参结构里根本没有格子，默认丢弃未知字段会让 `{"win_probability":0.99` 静默成功、两边各持一套账；`MaxBytesError` 单列一臂，不混进"形状不对"）；② 写入口必须带 `version`，缺字段判 400 而不是取零值（0 恰好是新行的合法期望版本）；③ 400/404/409/503 共用一套分诊词表，503 的判据是"不许有看起来像结果的 data"（`{} [] null` 都会被前端长成"查过了，没有"）；④ `GET /rules` 未装配时照样答，且给出"存在但不暴露"的机器动作清单，否则这套规则在契约面上读成"产品没有赢单"。controller 不 import repository（架构门 [1/10]），两种 404/409 判定的事实来源由**服务层别名**送出（同款先例 `human_task.go`）。**本卡三把被真跑纠正的断言**（变异电池 38 刀 → 37 CAUGHT / 1 把 M27 登记为等价）：M11 的夹具自己是个语法错误的 JSON，那句 400 来自"我打错了"而不是体积 ⇒ 用例从第一天起假绿，现在夹具先自证能 `Unmarshal` 且确实 >4KB；M17 摘掉控制器空 id 关在**读口**看不出差（服务层 `Get` 也拒空），差别只在写口（`transition` 不判空 ⇒ `PUT /api/opportunity/%20` 白查一趟并回 404"这条不存在"），改用 `failingOpportunityRepo` 断"根本没查"（一查就是 500）；M21（`closed` 与 `stale_version` 换序）查下来是**真等价变异**（服务层一次只返回一个 sentinel，两条 `errors.Is` 永不同时为真），换成同族里有牙的那把（把已收口的行贴成 `stale_version` 的 reason）。另登记一处两边都看不见的刀：`router.go` 摘掉 `app.InitOpportunityRuntime` 之后装配函数、控制器、挂载函数三个字面量全在、端点也在树上，只是运行时全局句柄永远 nil ⇒ 八条端点全退 503；旧路由用例漏它有两个原因（只看 `engine.Routes()` ⇒ 挂上≠活的；匿名探针判"非 2xx" ⇒ 503 也是非 2xx），现由带合法令牌真读一行的用例 + 台账新增 **16e 启动装配点** 双守，两把都反向验过。未接线台账：16a/16c 比 §4.16.2 的原计划**早一张卡**同时翻 wired（出口必须自带底座，一次装配接上两个断点，判据仍分开跑），新增 16d 挂载入口 + 16e 启动装配点，16b 仍按 UNWIRED 登记（兑现点 T-P4-05）；台账现值 **42/49**（rc=0）。**列表端点刻意不交付**：仓储 `List` 不返回 `total`，用 `len(list)` 凑数会把"一共多少条"从"查过"变成"猜的"，登记为欠账。`swag` 未随本卡重生成（前几张卡同一口径：工作树里有并行会话未审阅的注解，重生成会一并灌入），Swagger 判据为静态的八行 `@Router` 逐条锁。实跑（提交 292c92e3 的 --shared 克隆）：router 150 / controller 781 / app 164 / service 3509 全绿、失败 0，`TZ=UTC` 复跑四包同数同绿；`-race` 四腿：router 150 / app 164 / controller 781 三腿 **race=0**，service 腿 **rc=1 pass=3507 fail=2 race=2** —— 两处 DATA RACE 在**父提交 `11755c55` 的全量 `-race` 实跑里复现同一对栈**（那里 race=1 fail=1），判为既有缺陷、非本卡引入，取证与口径见 §4.16.3 末段 |
 | v1.11 | 2026-09-21 | @backend | 新增 §4.16.4 **线索→商机的转换层与自动分配**（N-1 / T-P4-05）：`opportunities` 的第一个生产写入方落地，P4 出口条件里「商机已入库」那句话从此成立。三道串行判据（量程 → 阶段 → 双阈值；两个同名 `confidence` 量程不同 ⇒ 硬拒不归一；`StageActive` 排在 nil 不安全的 `LeadQualified` 之前；配置降级按「关」处理）；AC② 落成「转换那一步对 `clues.is_opportunity` **零写入**」，并**就地推翻 T-P4-01 写在自己代码注释里的那句「不建索引、反查由 is_opportunity 承担」**（0/1 答不出「转成了哪一条」，且那一列是挖掘侧的热度标记、不是转化事实）⇒ 反查走 `clue_id` + **部分**唯一索引 `WHERE clue_id <> ''`，DDL 落在只 Warn 不清数据的 `postMigrateOpportunityClueUniqueIndex()`；AC③ 落成返回值而不是日志行（规则名 + 候选集 + 每人负载一起出，候选必须按 `SalesID` 升序是平票裁决的前提），三条规则顺序与「故障绝不退到 `no_roster`」严格分开；名单真源 `sales_events`/`sales_profile`（候选 `sales_personas` 实测零写入方被否），「在册」只能等于「注册过档案」（无停用事件，登记为边界而非现场补一个没有写者的死列）；接缝只在 `lead_mining.persistLead` 两条分支、且都在线索行落库之后（`Create` 失败不转 —— 本表不建外键，断链无人发现），未装配静默、报错只 Warn 不重试不回滚；装配点一次登记**两半**、`db == nil` 时两半一起清，刻意不做惰性构造。三处被真跑纠正：夹具的 `Create` 失败不填 id（真行为是 `BeforeCreate` 在 INSERT 之前就赋 uuid，失败照样留下填好的 id）/ 台账 `callpat` 被「清空那半」命中致接线数=2 的假绿 / 两把变异退化成构建红后补成可编译的语义变异 —— **只在编译期红的变异不算捕获**。台账：16b 兑现翻 wired + 新增四行（现值 **47/53**，五行逐行反向验过、控制组 rc=0）。实跑分树记：克隆 `478ef1c4` 六包 `fail=0`、`TZ=UTC` 同数同绿（计数含子用例，不与上一卡的顶层口径比大小），`-race` 四腿 race=0、service 腿五跑三结局（最多 2 race / 2 fail，也可全绿）且**受害用例名不唯一** ⇒ 上一卡登记的既有 flaky 再证一次，并否掉"归因到单条用例"的读法；工作树的 `TestValidPlatform_Unsupported` 红、架构门 1 处红、secrets 3 处红**全部**落在并行会话未提交/未跟踪的文件上，不代修不代提交，同一棵树换成克隆后同门 rc=0 即为归属证据。刻意不交付：HTTP 手工转商机口、`lead_miner_unified.go` 那条链（无 confidence 生产者）、`ltc.config` 的 `win_probability` 阈值读者。 |
+| v1.12 | 2026-09-21 | @backend | 新增 §4.16.5 **漏斗的第五段**（N-1 / T-P4-06）：`conversion-funnels` 从四段变五段，商机段接 `opportunities` 的实时聚合，**没写那张僵尸表**（AC② 由用例锁「取数时顺手往演示表写一行」必红，AC③ 锁「演示表灌 99999 读数不变」）。三条判据：① 口径取 `created_at`（流量）而非 `stage`（状态）—— 混一格状态读数进四条流量腿，逐段相除的「阶段转化率」失去意义，且 `idx_opp_created` 的注释本来就点名按它切时间窗；② 错误只上抛到仓储层，服务层降级成 0 **外加一条 Warn**（这条腿独有一种歧义：T-P4-05 之后 `opportunities` 只有一个生产者，0 既可能是「真没转出来」也可能是「表没建/接缝没装配」；四段老腿答 0 没人拿它做决策，这段答 0 会一路走进 P8 的归因），因此告警是行为不是日志，由抓 `os.Stdout` + 重建全局日志器的用例守着（只换 stdout 不够，`GetLogger` 连 writer 一起缓存）；③ 第五段**追加在末位**，因为「下标即契约」的读者有两处（后端 `_NonMonotonic` 的 `Stages[len-1]`、前端 `List.vue` 摘要区的 `stages[0]`/`stages[length-1]`），加段会让前者**绿着失去意义**、后者把「转化量(会话)」显示成商机数 —— 两处一并改按阶段名取，`total`/`conversion` 与服务端口径刻意仍停在 访问→会话（改成 访问→商机 是产品决策，登记为欠账）。**本卡被真跑纠正的一处**会让「登记」变成假安全：台账最初只加**一行**，反向删掉汇总腿实测 rc=0 仍报 WIRED —— `wired` 只要求命中 ≥1，而 service 里有两个消费点，删一个剩一个，等于装了一把永不变红的锁；按消费点拆成 17a/17b 后四种删除口径（删汇总/删详情/都删/定义改名）分别 rc=1/1/1/2。**第二处纠正落在本卡自己的文档上**：初稿把卡面的 `GET /conversion-funnel` 判成笔误（"真实路径是复数"），读全 `frontend_aliases.go:409-414` 后**推翻** —— 单复数各三条一起注册、卡面字面可命中；我错在拿"测试里只手写了复数两条"+"api-inventory 后端段没有这两组"当结论，而后者本身就是该脚本的盲区（详见 §4.16.5 那段更正与其下的两族漏法）。台账现值 **49/55**（rc=0）。**这条端点原先一条 controller 用例都没有**，而 AC① 说的正是「接口返回」，故新增 `conversion_funnel_http_test.go`（真 gin 路由 + `{code,message,data}` 外壳），H1–H4 四把变异各打红一条，证明不是摆设。实跑（主工作树未提交态，HEAD `39be6824`）：三轮 11 把变异，控制组 service+repository **455 全绿 / 0 skip**、controller **106 全绿**，red 计数逐把记在 §4.16.5；`go test ./internal/ops/...` 四包 ok，`TZ=UTC` 与 `TZ=Asia/Shanghai` 同数同绿，`-race` 三包 DATA RACE 计数 0，`go build` / `go vet` 双 rc=0 且输出 0 字节；`check-date-bucket-tz`（命中 21，与基线同）、`check-enum-consistency`、`check-doc-consistency`、`check-feature-doc`、`api-inventory`（生成物无 diff —— 本卡把这条**下调一档**：该快照抽后端只认 `.GET("全路径")` 形状，`doReg("GET", path)` 那族别名与"控制器内相对路径 + `Group` 前缀"那族都不进账，`grep -c -i opportunit api-inventory.md` 全文为 0）、`audit-cross-package-ports`（Errors 0 / Warns 0）、`check-unwired-assets` 全 rc=0，`check-architecture` 唯一红是并行会话的 `dingtalk_media.go:191/204`。前端：`vite build` rc=0，`eslint` 对本文件 0 error 且改前改后**同为 53 warning**（HEAD 版临时复制到同目录对拍计数，跑完即删），`vitest run` **14 文件 / 238 用例全绿**（本卡 +1 文件 +5 用例，改前 13/233；那份组件用例对改前的 `List.vue` 实跑过 **4 红 1 绿**，绿的那条是本来就不按位置取的明细表）。刻意不交付：端到端转化率延伸到商机、商机段的 `avg_duration_seconds`/`top_sources`（要 `sales_events` 口径，属 T-P7 域）、演示表下线（§4.11 三条删表判据一条未消）、真机看板截图（8204 上活着的是 9-19 起的旧二进制 `bin/user-server.r39`，不含本卡改动且非本会话启动，不为它污染并行会话的证据）。 |
