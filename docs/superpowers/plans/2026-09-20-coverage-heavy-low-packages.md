@@ -2842,6 +2842,9 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 | R10 | `order_draft` 用例把"当前时间"写死成 2026-09-19 → 24h 后整批日历红 | `00c7c263` | `scenarioNow` 改回 `time.Now().UTC().Truncate(time.Second)`，两副底座共用同一 now 的原意保留；`TestOrderDraft*` 20 例全绿 |
 | R11 | 商户客户端只认 HTTP 200：平台拒绝被当成功 | `396b057d`（传输层+控制器）+ `e0e857fa`（`purchaseFailMsg` 文案与死分支） | 见下两段 |
 | R13 | 清扫 E2E 用例把"逐轮覆盖"的报告当末轮断言，机器一忙就红 | `9903baaf` | 见下 |
+| R12 | 平台连通性探测打的是平台从未实现的 license 端点 ⇒ 平台健康也报故障 | `27d1dc14` | 改探 `GET {APIURL}/health`，死链与三处调用点一并迁；见下 |
+| R14 | 离线回扫的**渠道检测** SQL 引用无人建立的列 ⇒ 回扫从未跑过 | `2bf9e339` | 改读 `bridge_accounts` 实有列 + service 侧在线/离线分区；见下 |
+| R15 | SSE 建流的 `channel` 从不归一（ingest 侧归一）⇒ 别名客户端订阅挂在无人广播的键上 | `7683e10a` | 建流处归一 + 生命周期写在线位 + 补投门读订阅真值；见下 |
 
 **R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
 真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
@@ -2924,18 +2927,69 @@ M4 无 msg 时塌成 `"平台购买失败: "`；控制组 3 pass / 0 fail，逐 
 `9903baaf` 影子克隆整包门 **`ok hivemtk-user/internal/service 453.126s`（rc=0，整包无 `-run` 过滤，
 `--- FAIL` 行数 0）** —— 这就是 R11 那句"改动无行为回归"的收口证据（首跑红在 R13，不是 R11）。
 
-**本轮新登记（未处置）**
-- **`GetLicenseStatus` 打的端点平台从未实现**（R12，交产品口径）：`/merchant-api/license/status`
-  在 `platform-server/internal/router/router.go` 的路由枚举里**不存在**，平台侧开源版已按
-  「移除 License」把相关字段/接口一并删掉（`merchant_domain_service.go:118` 的 `licenseDays` 只留形参）。
-  于是 user-server 三处调用（`app_config.go:98/168/227`）恒拿 404 → `DegradeReason` 判 `unreachable`
-  ⇒ `/health` 的 `platform_connection` 与 app-config 的 `platform_available` 在平台**明明健康**时也报故障，
-  且每个 app-config 请求刷一条 Error 日志。收敛有两个方向且都改变对外语义：① 探测改打平台真实存在的
-  `r.GET("/health")`（纯连通性，不再假称"授权状态"）；② 承认 License 属商业版契约，开源平台补端点。
-  未擅自选边。
+**R12 实况**（`internal/platform/client.go` + `internal/controller/app_config.go`，`27d1dc14`）：
+登记时的两个方向里，①（改探真实存活性端点）被采纳。`CheckConnection()` 现在只打
+`GET {APIURL}/health` —— 该端点在平台侧鉴权之外（`platform-server` 的路由枚举里它就在中间件组之前），
+所以探测**不带签名也不带 JWT**：带不上就是"平台没起来"与"我方没凭证"两类原因混成一个信号，
+而后者不该由连通性探测报。`GetLicenseStatus` 与其 `LicenseStatusResp` 一并删除（平台开源版已移除
+License 域，端点从未存在），三处调用点的降级原因从 `license_unavailable` 收敛为纯连通性判定。
+静态门：`grep -rn "GetLicenseStatus\|LicenseStatusResp\|license_status"` 在影子克隆里
+**非测试命中 0、测试命中 0**（连例子一起删净，不留"引用一个不存在的端点"的测试）。
+
+**R14 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`，`2bf9e339`）：
+R8 修的是回扫**取行/收口**那两条 SQL 的假列，这次红在同一文件的**渠道检测**那两条：
+`bridge_accounts` 的渠道列叫 `channel` 不叫 `platform`，而 `bridge_metrics` 是指标时间序列
+（`metric_name/labels/value/metric_type/ts`），根本没有渠道维度 —— 拿它当"渠道最近活跃"的数据源，
+两条查询都撞 `42703`（取证用两条原文 SQL 在真库逐条跑出来），`DetectOfflineChannels` 于是恒返回 error，
+`RunOnce` 恒在检测这一步拿到空集合 ⇒ **离线回扫这条腿从上线起一条消息都没投过**，
+只在日志里留一行 Warn。处置不是补列，是把检测改读一张实有列的快照（`ListBridgeAccounts`：
+`channel/account_id/status/last_sync_at/updated_at`），在线/离线分区挪到 service 侧按 `status` 划，
+`ReplayStats` 补 `OnlineChannels` 让两侧不再混报一个数。整条腿用例（真库 + 真出站管道）
+断 `scanned/online/offline/replayed` 与落库行，修前该用例读到 `scanned=0`（RED 证据取自
+`git show HEAD:` 的旧码现场，避免"编译红"冒充"行为红"）。
+
+**R15 实况与补投门定稿**（`internal/bridge/{sse.go,account_repo.go}` + 上面两个 service 文件，`7683e10a`）：
+上一段登记的"两条 drain 并存、回扫会在渠道确实离线时投递，是否改成恢复在线才补投属产品口径"——
+这条口径问题的答案现在有了事实依据，按"门该建在哪"记：
+
+1. **`status`/`last_sync_at` 当时都是假值，所以那道门当时确实建不了。** `status` 只在入站
+   `Upsert` 里被刷（按该 token 最后收到的渠道键，把整串账号一起刷成 online），SSE 流的建立与断开
+   从不改写它；`TouchLastSync`（唯一的"心跳"写口）**生产零调用方**。于是
+   `SetOffline` 落下的 `offline` 永久无人翻回 —— 读 `status` 的门等于没有门。
+   本批把 SSE 生命周期接上：建流 + 每次心跳 `TouchLastSync`（连带翻 `status=online`，
+   它是 `SetOffline` 的对偶），流退出**且该账号无其他活订阅**时 `SetOffline`；
+   写库失败只报警不断流（2s 写超时），`defer` 注册顺序被显式钉住（先摘订阅再判离线）。
+2. **门不建在 `status` 上，建在进程内订阅真值。** `SSEBus.HasSubscribers(channel, accountID)`
+   与 `Subscribe` 同 key 口径，是唯一权威来源；`RunOnce` 逐渠道问一次（不是逐行问，
+   否则几十万历史行规模下把订阅表读成热点），无活订阅的渠道**整条跳过、一行不碰**，
+   行留在 `pending` 等重连后那一轮。探针与推送认领器在 `SetOutboundClaimer` 同一处注入，
+   两条路读同一张订阅表，不留"一处以为可达、另一处判无人在线"的漂移面；
+   探针缺件时**放行 + 一次性 Warn**——装配缺件只能退化成"照旧补投"，不能退化成"所有渠道都离线"。
+3. **顺带修掉一条会让门失真成静默丢消息的旧缺陷（登记为 R15）**：`HandleOutboxSSE` 的 `channel`
+   从不归一，而 ingest 侧处处 `NormalizeBridgeChannel`。扩展用别名（`douyin_web`）建流时订阅挂在
+   `"douyin_web:acc"`，而 `Publish` 按规范渠道 `"douyin:acc"` 广播 ⇒ 低延迟路永远投不到它，
+   只剩 4×心跳的慢轮询兜底；且在线位按别名写 `bridge_accounts`（存的是规范渠道）而**静默 no-op**。
+   归一之后在线判定、认领、补投门与账号行落在同一个键上。
+4. **由此新增一条耦合，已钉住**：心跳是在线位的唯一续期来源，故 `SSEDefaultHeartbeatInterval`
+   必须 `< OnlineGraceWindow`（15s < 30s），否则挂着的流会按心跳周期在管理面闪烁成掉线。
+   两侧都有运行时配置覆盖口，静态用例只钉默认值，配小了的核对口径写在用例注释里。
+
+交付：`sse_online_state_test.go`（`HasSubscribers` 口径 + 3 条 httptest 真跑流的生命周期用例 +
+别名渠道用例）、`account_repo_online_test.go`（`TouchLastSync` 翻位在真库上、
+`isOnlineByLastSync` 的 status 一票离线读法、心跳节拍与宽限窗耦合）、
+`bridge_offline_replay_online_gate_test.go`（跳过/放行/每渠道一次/缺件放行/参数透传 5 例）。
+变异电池 13 格全杀（bridge 5 + service 5 + 在线读法 3；含 `defer` 顺序反接、门条件反号、
+缺件改拦截、跳过不计数、探针参数换位、心跳不刷新、别名不归一），控制组 bridge ran=7 /
+service ran=10 全绿，逐格还原后 md5 比对；`--- FAIL: panic: test timed out` 这种"以挂代红"
+的杀法不计，已把测试里的阻塞读键改成限时读，重跑后 T4 以 `--- FAIL (2.25s)` 干净杀死。
+
+**复核后修订的两条登记**
+- ~~R12 交产品口径~~ → 已按方向①处置（见 R12 实况）。
 - **`reach_delayed_outbound` 上并存两条 drain**：H-3 主链路（按 `send_at` 全局到期投递）与离线回扫
-  （按"渠道 10 分钟无消息"判定后补投）。抢占票已让两者互斥，但回扫仍会在渠道**确实离线**时投递，
-  是否该改成"渠道恢复在线才补投"属产品口径，未擅动。
+  （按渠道判定后补投）。抢占票已让两者互斥；本批把"渠道确实离线仍投递"这一半收掉——
+  回扫加了在线门，无活订阅的渠道整条不进状态机。**剩下的口径**：富卡行仍整体让给主链路
+  （桥接管道只发文本），而主链路的判弃不看渠道是否可达 ⇒ 富卡延后回复在渠道长期离线时仍会被烧成
+  `failed`。这半条属主链路（`webhook_outbound.go`，本批由并行会话持有未提交改动），未擅动。
 
 ## 阻塞与不做什么
 
