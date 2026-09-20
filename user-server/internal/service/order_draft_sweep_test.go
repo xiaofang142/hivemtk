@@ -350,9 +350,37 @@ func TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows(t *testing.T) {
 		t.Fatalf("预置终态行失败: %v", err)
 	}
 
-	w := NewOrderDraftSweepWorker(svc, 20*time.Millisecond, time.Second)
+	// 节拍取 100ms：lastReport 是**逐轮覆盖**的，20ms 一轮比 5ms 一轮的轮询窗口还短，
+	// "抓到干活那一轮"就成了运气（本机 -count=12 实测 3 次红在计数断言）。100ms 让每份报告至少活 20 个轮询。
+	w := NewOrderDraftSweepWorker(svc, 100*time.Millisecond, time.Second)
 	w.Start(ctx)
 	t.Cleanup(func() { w.Stop(context.Background()) })
+
+	// 到期段与清理段各自在哪一轮记到数不作要求（预置行的可见性、DB 往返都会把两段拆进相邻轮），
+	// 要求的是"两段都记到过数" ⇒ 跨轮累加观测，而不是押末轮恰好同时装着两段。
+	var sawExpired, sawPurged, errRounds int
+	var lr *OrderDraftSweepReport
+	if !waitUntil(t, 5*time.Second, func() bool {
+		r := w.LastReport()
+		if r == nil {
+			return false
+		}
+		lr = r
+		if r.Expired >= 1 {
+			sawExpired++
+		}
+		if r.Purged >= 1 {
+			sawPurged++
+		}
+		if r.ExpireError != "" || r.PurgeError != "" {
+			errRounds++
+			t.Logf("清扫轮报错：expire=%q purge=%q", r.ExpireError, r.PurgeError)
+		}
+		return sawExpired >= 1 && sawPurged >= 1
+	}) {
+		t.Fatalf("若干轮内没等到到期段与清理段各自记到数（sawExpired=%d sawPurged=%d 轮次=%d）",
+			sawExpired, sawPurged, w.Rounds())
+	}
 
 	// 到期翻转
 	if !waitUntil(t, 5*time.Second, func() bool {
@@ -366,7 +394,7 @@ func TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows(t *testing.T) {
 		t.Fatalf("定时节拍没把库里到期草稿翻成 expired，实际状态=%v 轮次=%d", m.Status, w.Rounds())
 	}
 
-	// 终态清理（保留期 1s，那行的 updated_at 在 100 天前 ⇒ 第一轮就该删掉）
+	// 终态清理（保留期 1s，那行的 updated_at 在 100 天前 ⇒ 首轮就该删掉）
 	if !waitUntil(t, 5*time.Second, func() bool {
 		m, err := repo.GetByID(ctx, stale.ID)
 		return err == nil && m == nil
@@ -374,17 +402,10 @@ func TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows(t *testing.T) {
 		t.Fatalf("定时节拍没删掉过保留期的终态行（表仍在无界增长）；轮次=%d", w.Rounds())
 	}
 
-	lr := w.LastReport()
-	if lr == nil {
-		t.Fatal("至少跑过一轮，LastReport 不该为 nil")
-	}
-	if lr.Expired < 1 || lr.Purged < 1 {
-		t.Errorf("末轮报告应记到 expired>=1 且 purged>=1，实际 %+v", lr)
-	}
 	if lr.Store != DraftStoreKindDB || !lr.Durable {
-		t.Errorf("末轮报告应回显 db/durable=true，实际 store=%s durable=%t", lr.Store, lr.Durable)
+		t.Errorf("报告应回显 db/durable=true，实际 store=%s durable=%t", lr.Store, lr.Durable)
 	}
-	if lr.ExpireError != "" || lr.PurgeError != "" {
-		t.Errorf("端到端清扫不该有失败：expire=%q purge=%q", lr.ExpireError, lr.PurgeError)
+	if errRounds != 0 {
+		t.Errorf("端到端清扫不该有失败，却观测到 %d 次带错误的轮次报告", errRounds)
 	}
 }

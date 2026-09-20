@@ -2840,7 +2840,8 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 | R9 | 贡献者客户端不接平台信封 | `e4e36f77` | 严格 `{code,msg,data}`：token 从 `data.token` 取（旧实现读顶层 ⇒ 提交链路从未通）；`code!=200` 判失败（旧实现 HTTP 200 即成功 ⇒ 拒绝被当成功）；注册即签发 + 401 自愈重登（平台 JWT 中间件发真 401，而本客户端缓存 24h） |
 | R8 | 离线回扫 SQL 引用无人建立的列 | `62445d10` | 见下 |
 | R10 | `order_draft` 用例把"当前时间"写死成 2026-09-19 → 24h 后整批日历红 | `00c7c263` | `scenarioNow` 改回 `time.Now().UTC().Truncate(time.Second)`，两副底座共用同一 now 的原意保留；`TestOrderDraft*` 20 例全绿 |
-| R11 | 商户客户端只认 HTTP 200：平台拒绝被当成功 | `396b057d`（传输层+控制器）+ 本次（`purchaseFailMsg` 文案与死分支） | 见下两段 |
+| R11 | 商户客户端只认 HTTP 200：平台拒绝被当成功 | `396b057d`（传输层+控制器）+ `e0e857fa`（`purchaseFailMsg` 文案与死分支） | 见下两段 |
+| R13 | 清扫 E2E 用例把"逐轮覆盖"的报告当末轮断言，机器一忙就红 | 本次 | 见下 |
 
 **R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
 真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
@@ -2905,6 +2906,21 @@ R11 一落地，错误文本换成 `platform request failed: status=200, code=40
 M4 无 msg 时塌成 `"平台购买失败: "`；控制组 3 pass / 0 fail，逐 mutant md5 比对还原）；
 `gofmt -l` 静默、`go vet ./internal/service/` 静默。全仓再扫 `platform error|platform request failed`
 只剩 `client.go` 里 `PlatformError.Error()` 自身的两个格式化分支，无第二个字符串切片消费方。
+
+**R13 实况**（`internal/service/order_draft_sweep_test.go:319`）：`e0e857fa` 的整包门（影子克隆，带 env）
+唯一 FAIL 就是这个用例 —— 与 R11 无关，是 `TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows`
+在 `末轮报告应记到 expired>=1 且 purged>=1` 上读到 `{Expired:0 Purged:0}`。机理：`lastReport` 是
+**逐轮整体覆盖**的（`order_draft_sweep.go:208`），到期段与清理段各自在哪一轮记到数并不由测试决定，
+而用例把两段行断言（各带 5s 轮询）**跑完之后**才读一次报告 ⇒ 断的其实是"读报告的时机恰好压在干活那一轮"。
+单独跑能过；`-count=12` 连跑 3 次红（每轮 20ms 节拍，行断言一慢，活干完后的轮次早把报告刷成 0）。
+修法两条，都在测试侧（生产语义一行未动）：① 节拍 20ms→100ms，让每份报告至少活过 20 次 5ms 轮询；
+② 计数断言改成**跨轮累加观测**（`sawExpired`/`sawPurged` 各自记到过数即成立），底座/错误字段照旧断，
+两段行效果断言（库里真翻了、真删了）全部保留。**不弱化**：新增的反向依据是 4 处生产变异全杀
+（Y1 过期段计数恒 0、Y2 清理段计数恒 0、Y3b 保留期放大到 1000 天 ⇒ 行删不掉、Y4 报告谎报 memory 底座），
+控制组 `-count=3` 3/3 绿。**记一条等价变异**：最初把 Y3 写成 `PurgeTerminal(ctx, 0)`，测试照样绿 ——
+不是断言漏了，是 `retention<=0` 在 `order_draft.go:843` 会兜回 `defaultDraftRetention`（90 天），
+100 天前的预置行仍然可删，这个变异**没改变可观察行为**；换成 1000 天才真正断掉清理段。
+复验：`-run TestOrderDraftSweepWorker_EndToEnd -count=30` 30/30 绿、`-run TestOrderDraft -count=3` 绿。
 
 **本轮新登记（未处置）**
 - **`GetLicenseStatus` 打的端点平台从未实现**（R12，交产品口径）：`/merchant-api/license/status`
