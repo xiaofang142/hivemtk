@@ -381,14 +381,14 @@ func TestWSE2E_D7GateHoldsSendUntilConfirmed(t *testing.T) {
 	}
 	done := make(chan struct{})
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 		defer cancel()
 		exec.ExecuteSession(ctx, task, session, steps)
 		close(done)
 	}()
 
 	waitConfirmPending(t, exec, session.ID, true)
-	if !waitFor(3*time.Second, func() bool { return ext.countOf("comment_prep") >= 1 }) {
+	if !waitFor(e2eCmdWindow, func() bool { return ext.countOf("comment_prep") >= 1 }) {
 		t.Fatal("comment_prep 未到达扩展侧")
 	}
 	if n := ext.countOf("comment_send"); n != 0 {
@@ -401,7 +401,7 @@ func TestWSE2E_D7GateHoldsSendUntilConfirmed(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(30 * time.Second):
+	case <-time.After(e2eExecBudget):
 		t.Fatal("放行后会话未在时限内收敛")
 	}
 	if n := ext.countOf("comment_send"); n != 1 {
@@ -425,14 +425,14 @@ func TestWSE2E_D7AbortBeforeConfirmNeverSends(t *testing.T) {
 	}
 	done := make(chan struct{})
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
 		defer cancel()
 		exec.ExecuteSession(ctx, task, session, steps)
 		close(done)
 	}()
 
 	waitConfirmPending(t, exec, session.ID, true)
-	if !waitFor(3*time.Second, func() bool { return ext.countOf("comment_prep") >= 1 }) {
+	if !waitFor(e2eCmdWindow, func() bool { return ext.countOf("comment_prep") >= 1 }) {
 		t.Fatal("comment_prep 未到达扩展侧")
 	}
 	if !exec.SignalStop(session.ID) {
@@ -441,7 +441,7 @@ func TestWSE2E_D7AbortBeforeConfirmNeverSends(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(30 * time.Second):
+	case <-time.After(e2eExecBudget):
 		t.Fatal("中断后会话未在时限内收敛")
 	}
 	if n := ext.countOf("comment_send"); n != 0 {
@@ -709,11 +709,24 @@ func TestWSE2E_RegisterProbeErrorReplyStaysOnline(t *testing.T) {
 
 func waitConfirmPending(t *testing.T, e *Executor, sessionID uint, want bool) {
 	t.Helper()
-	ok := waitFor(5*time.Second, func() bool { return e.ConfirmPending(sessionID) == want })
+	ok := waitFor(e2eCmdWindow, func() bool { return e.ConfirmPending(sessionID) == want })
 	if !ok {
 		t.Fatalf("ConfirmPending 未变为 %v", want)
 	}
 }
+
+// e2eCmdWindow / e2eExecBudget D7 两条 E2E 腿的等待上限，从生产预算推导而非就地字面量。
+//
+// 这两条腿断的全是**顺序与次数**（先挂起后提交、整场 send 恰好一次、中止后零提交），
+// 从来不是「事件在 N 秒内发生」。原窗口写死 3s/5s/30s/60s，短于生产里单条命令的合法
+// 预算 defaultCmdTimeout=30s（见 timeouts.go）——等于测试在要求一个代码里不存在的前提。
+// 本机与同仓门禁并行时 load 可达 80+，一条 WS 往返秒级起步，HEAD 全量跑里这两条腿就是这么
+// 假的红（同码单独跑必绿）。放宽只改「多久还没等到判红」，不改「等到后断什么」：
+// 真闸门失效时依旧红，只是晚 30s 知道。
+const (
+	e2eCmdWindow  = defaultCmdTimeout + handConditionGrace        // 一条命令的合法上限
+	e2eExecBudget = 3 * e2eCmdWindow + handCommentSendTimeout + 15*time.Second
+)
 
 // waitFor 轮询等待条件成立（不引入新依赖，测试内自重）
 func waitFor(timeout time.Duration, cond func() bool) bool {

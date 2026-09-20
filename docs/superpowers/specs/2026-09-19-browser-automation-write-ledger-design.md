@@ -795,6 +795,112 @@ middleware` 命中即"停发但库里根本没这条"，那是 §8.3-18 的 C2 �
 rc=0、两包 `-count=1` `ok 20.835s / ok 17.205s`（`/tmp/b19_clone.log`）。提交前一轮同口径的
 `gofmt -l` 为空 + 两包 ok 记在 `/tmp/b18_gate.log`。
 
+## 7.8 批16：闸门的地基不能静默失效（A7 写失败降级 / A8 fail-close / A11 副作用第三态）
+
+立项依据是 §8.3-12/13/16 三条，共同形状是「防双发那一整套结论，建立在一件从来没人检查它有没有
+真的写进去的东西上」。三处现状全部朝「继续执行」倒：`recordSubmitState` 写失败只 Warn
+（四个调用点拿不到失败事实）、`guardResubmit` 查询失败按放行处理（`:61-62` 注释还把它写成刻意的
+取舍）、`isWriteStep` 在 `:123` 用 `locs, _ :=` 把取表错误丢掉。
+
+**先跑红（`/tmp/b20_red.log`，5 红 1 对照组绿）**：注入 `UpdateSubmitState` 恒失败 ⇒
+`comment_send=1 want 0`（照样把不可逆帧发出去了）；两条写步都失败 ⇒ `comment_send=2`；
+只让 `sent` 那次写失败 ⇒ **重试轮 `comment_send=2 want 1`，双发在同一台机器上真发生了**；
+注入 `FindSubmitAttempt` 报错 ⇒ `comment_prep=1 want 0`；平台未注册 + `retry_count=2` 的 click ⇒
+**到线 3 次**（retries 没钳住，因为写步判定整个失效了）。对照组（平台已注册、未命中发送位）
+今日绿——批7 的收窄口径不许被本批改宽，这条就是它的看门腿。
+
+**A11 的推理要写清楚，否则第三态会被当成"什么都判成写"**：`effectUnknown` 只在
+`platform.Get` **报错**时出现，且只升级本来可能被推导成提交的动作形态（`type`+回车 / `click` /
+带按钮文案的 `click_near`）；单纯"没命中 locator"仍是 `effectNone`，`scroll`/`open_tab` 这类
+与表内容无关的形态也不受牵连。落库 `is_write=true`——降级判的也要事后看得出来是被降级判的。
+
+**A7 的 `crossed` 判据（本批唯一一处需要证明的推理）**：`UpdateSubmitState` 失败不会动旧值，
+所以「跨越不可逆点之后、库里那行仍不在拦阻集合内」等价于「`sent` 那一次写失败」。
+于是 `prepared` 传 `crossed=false`（未跨越，拦下即可，且这是**最有价值的一格**：
+prepared 不在拦阻集合内，它写失败之后若还去 send，下一轮就完全查不到凭据）；
+`sent` / 终态 / 通用写步传 `true`。多记一条 gap 只会多拦不会漏拦（终态写失败时 `sent`
+若已成功，库里本来就在拦阻集合内，DB 闸门自己就会拦），所以这个方向不必再收窄。
+
+**为什么还需要进程内兜底（`ledgerGaps`）而不是只置会话降级标志**：自动重试是
+`scheduleRetry` / retry scanner 在**同进程**换新 session 跑同一任务（`feedback.go:66`、`:200`），
+双发闸的查询键是 `(task_id, text_hash)` 而不是 session，所以会话级降级标志恰好挡不住唯一会
+自动重跑的那条路。兜底集合有界（`ledgerGapCap=512`，只在台账写失败时增长，正常路径恒为 0），
+**不落库**——加列要动 DDL 而 `browser_steps` 的口径已经够多；跨进程的人工重跑因此拦不住，
+所以那一步的文案必须自己把「请人工核对该评论是否已发布」说尽（test 3 断言 `error_msg` 含「人工」，
+断的就是这个不能只存在于日志里）。
+
+**跑出来的两个中间缺陷（都记着，它们是这批的实测收获）**：
+① 我把重试循环写成 `if err == nil ... { break }`，`break` 出的是 for 而不是"成功返回"，
+于是**每一次正常的台账写都被当成失败**——`/tmp/b20_green.log` 里 `写台账落库失败 state=prepared: <nil>`
+就是它的现场（err 是 nil）。它让 5 条腿红了 2 条、剩下 3 条**照样绿**：因为写其实成功了，
+只断言帧数/落库行的腿看不见差别。教训回灌：判"写失败"的分支必须有"失败时步状态"这一侧的断言，
+本批的 test 1/3 正是靠状态断言把它揪出来的。
+② 顺序模式里 `case "failed"` 会 `break loop`（`executor.go:365-376`），所以"同会话后续写步被
+降级挡住"在默认编排下**根本不可达**——降级标志的可达面只有 `continue_on_error: true` 的步和
+Brain 模式同一轮里的多步。据此把 test 2 的夹具改成第一条写步带 `continue_on_error`，
+这才是这个标志真正服务的现场；不改夹具而直接宣布"降级已生效"就是拿测不到的分支充当证据。
+
+**绿（`/tmp/b20_green2.log`）**：7 条腿全 PASS（含纯函数三态表 12 行、对照组、`rc=0`，
+`ok hivemtk-user/internal/browser_automation/service 119.941s`）。
+
+**但这条"绿"用的是 `-run` 过滤，它不是门禁**：全量包一跑（`/tmp/b20_pkg.log`，
+`FAIL … service 374.697s`）立刻点出两条红，一条是我的、一条不是。
+
+- **我的一条**：`TestSendGateOrderedBeforeSentLedger` 是批14 的**静态顺序锁**，锚点写的是
+  `model.StepSubmitSent, textHash)`——本批给 `recordSubmitState` 加了 `crossed` 实参，尾巴
+  字面量随之消失（`sent=-1`）。锚点收窄成只认状态 token（`:93`），顺序语义一字未减。
+  收窄后的锁必须重新被反向验证，否则就是假锁：电池里加 M8，把闸门早返整块挪到落 `sent`
+  之后，区域文本**运行时从 executor.go 里取**（硬抄一个标点就是假「无法判定」）。
+- **不是我的一条，但确实是个洞**：D7 两条 E2E 腿在全量跑里红。归因不靠推断——把克隆
+  退回 HEAD（`9200a608`，批16 四文件移开）同口径全量再跑一次（`/tmp/b20_head_base.log`，
+  104 PASS / 2 named FAIL，`FAIL … 404.326s`）：**同一台机器、同一负载下 HEAD 也红**
+  （`D7GateHoldsSendUntilConfirmed` 17.49s、`D7AbortBeforeConfirmNeverSends` 10.50s），
+  批16 就此清白。但"预存在"不是免修：红的根因是断言窗口写死 3s/5s，而**同一个包的
+  `timeouts.go` 里单条命令的合法预算是 `defaultCmdTimeout=30s`**——测试在要求一个代码里
+  不存在的前提（事件必须 5 秒内到线），它断的其实只是顺序与次数。同仓门禁并行时 load
+  均值 73–88，一条 WS 往返秒级起步，于是必红。
+  修法是把窗口从预算表推导而不是换个更大的魔数：`e2eCmdWindow = defaultCmdTimeout +
+  handConditionGrace`（40s，一条命令的合法上限）、`e2eExecBudget = 3×e2eCmdWindow +
+  handCommentSendTimeout + 15s`（一轮 D7 会话最多三条命令在途 + 提交点自身）。
+  放宽只改"多久还没等到判红"，不改"等到后断什么"：真闸门失效照样红，只是晚 35s 知道。
+  其余 E2E 腿的 `60*time.Second` 执行 ctx 同属这一类但**暂不动**——它们的腿命令数少、
+  本批全量跑里没红过，改它属于扩大改动面；一旦哪天它假红，直接换成 `e2eExecBudget`。
+
+取证口径的两处自我更正（都写下来，因为它们正是本仓反复踩的那两个）：全量跑的红必须按
+`--- FAIL:` 的名字读，不带 `-test.v` 时 PASS 计数恒为 0（基线那 104 是加了 `-test.v` 才有的）；
+`go test … | grep …; echo rc=$?` 报的是 **grep** 的状态，基线日志里那行 `test rc=0` 就是这么来的
+假绿——那里的权威证据只能是 `FAIL … 404.326s` 本身。
+
+**反向电池跑了两轮，第一轮是电池自己的问题（`/tmp/b20_mut.log`，`电池终态: 有存活/无法判定`、`battery rc=1`）**：
+- M8（把闸门早返整块挪到落 `sent` 之后）**注码无效**：区域文本从文件里现取时我把 `tail` 结尾的
+  缩进 `rstrip` 掉再拼回 `sent` 行，锚点当场 0 命中；上一版更糟——`old` 截到 `sentLedgerErr` 那行
+  之前却在 `new` 里复制了一遍该行，于是声明两次，`executor.go:1010: no new variables on left side of :=`
+  被编译期抬走。**编译期红不是"锁抓住了缺陷"**，判据改成 `old` 必须是 `src[i:j_end+1]` 连续片段，
+  并在跑电池之前先把变异后的文本打出来目视核对（命中 1 次、声明 1 次、顺序确实翻了）。
+- M7（`sent` 调用点改传 `crossed=false`）**8/8 全绿=变异存活**。判下来是等价类而不是漏：
+  `post_comment` 从 `sent` 到终态写之间**没有任何提前 return**，两次写用同一个 `(taskID|textHash)` 键，
+  于是「`sent` 失败 + 终态也失败」两处记同一键（`rememberLedgerGap` 去重）、「`sent` 失败 + 终态成功」
+  库里那行本来就在拦阻集合内、DB 闸门自己拦。所以该处实参今天是**冗余但语义正确**的一格——
+  它声明的是"这次写跨越了不可逆点"这个事实，不因后一次写存在而失效，保留。
+  **但这条判据是有寿命的**：一旦将来在这两次写之间插入提前 return，M7 立刻从等价变成真漏，
+  届时必须重跑本电池，不许沿用本轮结论。
+
+**绿（电池第二轮 `/tmp/b20_mut2.log`，`电池终态: OK`、`battery rc=0`）**：8 处变异 —— M1–M6、M8 共
+**7 处各被点名杀掉**（每条 `rc=1 ran=8/8 skip=0`，击杀用例名逐条落日志；M1 被两条腿同时抓住），
+M7 按上面写明理由判为等价类；每腿前后 `ran=8/8 skip=0`、每次还原 md5 与注码前一致
+（`executor.go=b5b60cfa`、`write_ledger.go=05d68813`），对照腿首尾各一次均 `rc=0`。
+电池集合里除了本批 7 条新腿，还**拉进批14 的静态顺序锁**——M8 就是专门为它设的反向验证：
+锚点收窄之后必须仍然杀得掉顺序交换，否则收窄等于把锁拆了。
+
+**绿（全量无过滤，`/tmp/b21_verify.log`）**：`go build ./...` `build rc=0`、
+`go vet ./internal/browser_automation/...` `vet rc=0`、
+`go test -count=1 -timeout 1500s -test.v ./internal/browser_automation/...` `test rc=0` ⇒
+`ok controller 0.930s`、`ok platform 1.354s`、`ok service 214.617s`，**128 PASS / 0 SKIP**，
+`--- FAIL` 零命中。上一轮假红的两条 D7 腿这次按名字绿
+（`TestWSE2E_D7GateHoldsSendUntilConfirmed 5.01s`、`TestWSE2E_D7AbortBeforeConfirmNeverSends 4.29s`），
+且**放宽窗口没有拖慢绿路径**——`waitFor` 一到就返回，40s/180s 只是"多久还没等到才判红"的上限，
+真闸门失效时依旧红，只是晚知道。
+
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
 取证方法：六路并行 agent，每路给「本仓现状线索 + 待查同行清单」，要求每条机制带真实字段名与来源 URL、
@@ -871,11 +977,11 @@ rc=0、两包 `-count=1` `ok 20.835s / ok 17.205s`（`/tmp/b19_clone.log`）。�
 | 9 | 入口去重键必须带会话维度、窗口必须 ≥ 上游重投窗、且与副作用同事务（Stripe/Azure/企微/飞书一致否证现状） | `inbox_ingress_ingest.go:126-132` 键内无 `conversation_id`、`InboxContentDedupTTL=5min`；hub 层内容命中无时间界 | **BLOCKED**：两文件 `git status` 实测仍为并行会话在途（`M` / `??`），本泳道不改，维持 §6 移交 |
 | 10 | `officialEventID` 优先级高于内容哈希 | `webhook_event_key.go` 未跟踪（在途），且它含 `event_type` → 同一次推送多事件会算多条；`self/agent` 巡逻回环消息根本无 event_id，仍需内容兜底 | **BLOCKED + 认知修正**：§6-3 说的"正确方向"不等于"能覆盖我们主要流量" |
 | 11 | agent 报告称 `BridgeOutboxMessage.Extra` 是 `json:"-"`（扩展拿不到 `dm_target`）、称存在 `reAckDeliveredOnCacheHit`/`InboxConversationID`/`ErrOutboundAckScopeMismatch` | 实测：`Extra map[string]any json:"extra,omitempty"`（`channelgw/protocol.go:157`）且 HTTP 侧 `handler_http.go:770` 真的带出 `extra`；后三个符号**全仓 0 命中** | **不进矩阵**：子 agent 对本仓的断言被证伪，本轮第 2 次。教训回灌记忆 |
-| 12 | 「闸门所依据的记录本身可以静默失败」是同一类缺陷：K8s `sideEffects` 把 `Unknown` 与 `Some` 同等对待、admission `failurePolicy` 默认 `Fail`；审批/幂等建立在"可能没写进去的行"上等于没有 | `recordSubmitState`（`write_ledger.go:39-48`）写失败**只 Warn、不返回 error**，四个调用点（`executor.go:939/969/982`、`write_ledger.go:207`）拿不到失败事实 ⇒ 「send 已跨越但台账没落」时下一轮 `FindSubmitAttempt` 查空，双发闸门整体消失，而 §3.1 给这张表的定性是"重发闸门的唯一事实来源" | **采纳（P1）** A7：`recordSubmitState` 返回 error，写失败即给该 session 置 `writeLedgerBroken`，其后所有写步**在派发前**拒绝（零帧下发）、错误文案含"台账未落，本会话写能力已降级"。不对称决定取舍：写步失败**可见、可人工重跑**，双发**不可见、不可撤销** |
-| 13 | 闸门查询失败要 fail-close（同上，`failurePolicy: Fail` 就是这条默认值） | `guardResubmit`（`write_ledger.go:71-74`）`err != nil` 时 `Warnf` + `return nil` **放行**；`:61-62` 注释明写这是刻意的（"DB 抖动不该把整条自动化链路锁死"）⇒ 属**决策复审**而非隐藏 bug：同行口径下"抖动期闸门消失"正是它付不起的那一侧 | **采纳（P1）** A8：写步判定的这条分支改 fail-close，与 A2 的 `send_gate` 早返同形（步判 failed、不记尝试）；只改这一条，`appendCommandLog` 的 Ignore 语义不动（那是增强件不是闸门） |
+| 12 | 「闸门所依据的记录本身可以静默失败」是同一类缺陷：K8s `sideEffects` 把 `Unknown` 与 `Some` 同等对待、admission `failurePolicy` 默认 `Fail`；审批/幂等建立在"可能没写进去的行"上等于没有 | `recordSubmitState`（`write_ledger.go:39-48`）写失败**只 Warn、不返回 error**，四个调用点（`executor.go:939/969/982`、`write_ledger.go:207`）拿不到失败事实 ⇒ 「send 已跨越但台账没落」时下一轮 `FindSubmitAttempt` 查空，双发闸门整体消失，而 §3.1 给这张表的定性是"重发闸门的唯一事实来源" | **采纳（P1）** A7：`recordSubmitState` 返回 error，写失败即给该 session 置 `writeLedgerBroken`，其后所有写步**在派发前**拒绝（零帧下发）、错误文案含"台账未落，本会话写能力已降级"。不对称决定取舍：写步失败**可见、可人工重跑**，双发**不可见、不可撤销**。**批16 已落（§7.8）**：另加两条定稿时才想清楚的收口——`sent` 写失败按「越点未落账」记进程内兜底（会话级标志挡不住同进程换 session 的自动重试），且台账没落成的写步**不得再报 success** |
+| 13 | 闸门查询失败要 fail-close（同上，`failurePolicy: Fail` 就是这条默认值） | `guardResubmit`（`write_ledger.go:71-74`）`err != nil` 时 `Warnf` + `return nil` **放行**；`:61-62` 注释明写这是刻意的（"DB 抖动不该把整条自动化链路锁死"）⇒ 属**决策复审**而非隐藏 bug：同行口径下"抖动期闸门消失"正是它付不起的那一侧 | **采纳（P1）** A8：写步判定的这条分支改 fail-close，与 A2 的 `send_gate` 早返同形（步判 failed、不记尝试）；只改这一条，`appendCommandLog` 的 Ignore 语义不动（那是增强件不是闸门）。**批16 已落（§7.8）**：查询失败上抛「双发闸查询失败……拒绝下发」，走既有"步判 failed、台账不动"分支 |
 | 14 | 审批必须进审计链：GitHub deployment review / CloudTrail 的"谁、何时、对哪份载荷" | `SessionService.Confirm`（`service/session.go:99-108`）只调 `SignalConfirm`，**一帧都不落**；而 `direction=judge` 这一类**早就存在**（`executor.go:527-529` 写 judge 帧、`controller/session.go:79` 已支持 `?direction=judge` 过滤、I5 导出取全量） ⇒ 缺口只是"没人给它写"，不是"没地方写" | **采纳（P2）** A9：放行成功补一帧 `judge`，payload **只放 `text_hash`**（`HashWriteText`）不放正文——I5 导出会把正文带进离线件 |
 | 15 | 挂起态要可跨进程查证：Temporal 的 signal 落 history、任何 worker 都能投递；LangGraph 的 interrupt 进 checkpoint store | D7 挂起是**进程内**裸 map（`executor.go:74-75` `confirmRegistry`）+ `ConfirmPending bool gorm:"-"`（`model/session.go:37` 不落库）⇒ 多副本时 confirm 落到别的副本只会得"没有待确认的提交点"，与"根本没开闸门"同一句文案；进程重启后挂起协程消失，靠 `stale_reconcile.go` 对账收敛（不砖化，但人看不到原因） | **采纳（P2）** A10：挂起时补一帧 `d7_wait{expires_at, step_index, text_hash}`，`SignalConfirm=false` 且库里存在**未到期** `d7_wait` ⇒ 回 `gate_on_another_instance`。**零 DDL**（`browser_sessions` 连 `updated_at` 都没有，加列会牵动 `completed_at` 口径）；`expires_at` 只当"写下的期望"，必须与内存真值 AND 起来用 |
-| 16 | 「取不到副作用分类」不等于「无副作用」（承 12 的 K8s `Unknown`） | `isWriteStep`（`write_ledger.go:119-142`）在 `:123` 写作 `locs, _ := platformStepLocators(task)` **把错误丢掉**：平台适配器未注册/取表失败时三条推导全体不命中，只剩 `post_comment` 与显式 `is_write` 声明 ⇒ **retries=0、双发闸、D7 三道同时静默消失**。`:153-154` 注释只论证了"不会误判成写"，没论证漏判的代价 | **采纳（P1）** A11：取表错误升为第三态 `unknown`，处置等同 `irreversible`；**收窄条件**：只有"取表报错"才是 `unknown`，单纯没命中 locator 仍判 `none`（保住批7 刻意收窄的那条：交互搜索腿不得被判写而白丢重试能力） |
+| 16 | 「取不到副作用分类」不等于「无副作用」（承 12 的 K8s `Unknown`） | `isWriteStep`（`write_ledger.go:119-142`）在 `:123` 写作 `locs, _ := platformStepLocators(task)` **把错误丢掉**：平台适配器未注册/取表失败时三条推导全体不命中，只剩 `post_comment` 与显式 `is_write` 声明 ⇒ **retries=0、双发闸、D7 三道同时静默消失**。`:153-154` 注释只论证了"不会误判成写"，没论证漏判的代价 | **采纳（P1）** A11：取表错误升为第三态 `unknown`，处置等同 `irreversible`；**收窄条件**：只有"取表报错"才是 `unknown`，单纯没命中 locator 仍判 `none`（保住批7 刻意收窄的那条：交互搜索腿不得被判写而白丢重试能力）。**批16 已落（§7.8）**：`classifyStepEffect` 三态 + `stepCouldBeSubmit` 只升级"本来可能被推导出写"的形态，`is_write` 落库为真 |
 | 17 | 重投要保留同一身份（Pub/Sub "A redelivered message retains the same message ID"），而**内容当身份**的前提是"同一条内容不会第二次真实出现"——这个前提在聊天里不成立 | `computeMsgID` 就是 `contentHash(channel\|conversationId\|content)`（`user-web/bridge/src/core/uplink.js` `enqueue` 里缺省填 `event_id`），服务端钩子2 按 `msg_id + conversation_id` 判等（`inbox_ingress.go:457-484`）⇒ **同一会话里第二条"好的"必然被吞**，且这是"说了没回"在 B 链路里比 Redis 更早、更永久的一层 | **登记待对齐**：改点在干净的 `uplink.js`，但 `computeMsgID` 与服务端 `ContentHashMsgID` **严格同源**（函数注释自证），单边改会把幂等判定裂成两套；`types.js` 的跨语言契约注释也得同步。验收口径先立：同会话两条同文本 ⇒ 2 行；同一条重投（DOM timestamp 不变）⇒ 仍 1 行 |
 | 18 | "接受但不再执行"是默认档，"根本不落库"几乎没人这么做（sidekiq-unique-jobs 把**锁时机**与**冲突怎么办**拆成两个维度：`until_executing`/`while_executing`… × `on_conflict: :log/:raise/:reject/:replace/:reschedule`） | `decision.Blocked` 时两条分支（单条 `inbox_ingress.go:494-507`、批量 `:944-957`）都在 `persistMessage` **之前** `return` ⇒ 消息**不入库**，只回一个 `Accepted=true` 的好看回执 ⇒ 排障时"客户说了没回"在库里查不到任何痕迹（证据消失） | **BLOCKED**：两文件均为并行会话在途（承 §8.3-9 同一移交面）。移交口径：`IsDup` 分支改"入库 + 抑制 AI"、`IsSelfEcho` 维持不落库（回声落库会污染会话） |
 | 19 | 幂等层命中应**回放首次结果**而不是重新判定，且"是否重复"要由结论决定而非文案（Stripe 存首次 status+body 原样回放） | `IsDuplicateReason` 用子串嗅探 reason，而 reason 里混得进**落库失败原文**（§8.1-7）⇒ 误判方向是"永久停发" | **采纳（P0）批15 已落**：判定收成结论短语前缀 + 永久断言 + 两条反向腿（§7.7）。**正解仍是 outcome 枚举**，要改 `InboxIngressResult` 及全部产出点 ⇒ 落点在在途文件，随 18 一起移交 |

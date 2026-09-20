@@ -74,6 +74,16 @@ type Executor struct {
 	confirmMu       sync.Mutex
 	confirmRegistry map[uint]chan struct{}
 
+	// 批16（A7）：台账写失败后的两张降级表，与上面两张同构但语义相反——它们是「不能再派发写」的记录。
+	//   ledgerBroken: sessionID → 最初那次台账写失败的原因，随会话结束清除（会话级降级）；
+	//   ledgerGaps:   "taskID|text_hash" → 不可逆点已跨越但库里没落成，跨会话保留到进程结束
+	//                 （自动重试是同进程换新 session 跑同一任务，会话级降级挡不住它）。
+	// 两张表都只在「台账写失败」这条罕见路径上增长，各自有界（gaps 见 ledgerGapCap）。
+	ledgerMu       sync.Mutex
+	ledgerBroken   map[uint]string
+	ledgerGaps     map[string]bool
+	ledgerGapOrder []string
+
 	// R-A4（2026-09-19）：原 lastStepResult 字段已删——Executor 是进程级单例、
 	// 多 session 并发触达，字段传值既是数据竞态又会跨 session 串包；
 	// 回包改由 dispatchStep 返回值沿调用栈传递。
@@ -90,6 +100,9 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 		stopRegistry: make(map[uint]chan struct{}),
 
 		confirmRegistry: make(map[uint]chan struct{}),
+
+		ledgerBroken: make(map[uint]string),
+		ledgerGaps:   make(map[string]bool),
 	}
 }
 
@@ -294,6 +307,7 @@ func isSendGateReject(err error) bool {
 func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, steps []parsedStep) {
 	stopCh := e.registerStop(session.ID)
 	defer e.unregisterStop(session.ID)
+	defer e.clearLedgerBroken(session.ID)
 
 	_ = e.sessionRepo.UpdateStatus(ctx, session.ID, "active", "")
 	_ = steps // Brain 模式忽略显式编排，由 LLM 生成
@@ -664,7 +678,10 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string, json.RawMessage) {
 	// 批7：写步判定先于落库——is_write 要作为事实随步行一起存，
 	// 事后从 action 名字反推会把「type+回车提交」这类隐形写漏掉。
-	writeStep, writeWhy := isWriteStep(task, step)
+	// 批16（A11）：三态分类。effectUnknown（平台定位表取不到）与 effectWrite 同样进闸门，
+	// 落库 is_write=true——判不出副作用时宣称「没有副作用」就是三道闸门一起消失。
+	effect, writeWhy := classifyStepEffect(task, step)
+	writeStep := effect.needsWriteGate()
 	stepRow := &model.BrowserStep{
 		SessionID: session.ID,
 		TaskID:    task.ID,
@@ -696,6 +713,15 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	// （把草稿塞进输入框），不是「零副作用探测」。
 	writeKey := ""
 	if writeStep {
+		// 批16（A7）：本会话台账已经写失败过一次 ⇒ 之后的写步一帧都不下发。
+		// 闸门依据的是库里的台账，台账自己写不进去时「过闸」只是走过场——
+		// 与其赌一次双发，不如把这一步变成可见、可人工重跑的红步。
+		if why, broken := e.ledgerBrokenReason(session.ID); broken {
+			msg := fmt.Sprintf("写步拒绝下发（%s）：%s——台账未落，本会话写能力已降级，请人工核对已下发的步后重跑", writeWhy, why)
+			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", nil, 0, msg)
+			logger.Warnf("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
+			return "failed", msg, nil
+		}
 		writeKey = writeStepKey(step)
 		switch err := e.guardResubmit(ctx, task, writeKey, stepRow.ID); {
 		case errors.Is(err, errRetrySkipped):
@@ -747,17 +773,30 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		result, err := e.dispatchStep(ctx, task, session, step, stepRow)
 		dur := time.Since(start).Milliseconds()
 		if err == nil {
+			// 批16（A7）：写步的「成功」必须以台账落成前提。命令确实下发了，但库里没有这次
+			// 提交的凭据 ⇒ 下一轮无从得知它发生过 ⇒ 让整轮绿就是拿不可逆动作换一次好看的状态。
+			var ledgerErr error
 			if writeStep {
-				e.recordGenericWriteLedger(ctx, step, stepRow.ID, writeKey, nil)
+				ledgerErr = e.recordGenericWriteLedger(ctx, task.ID, session.ID, step, stepRow.ID, writeKey, nil)
+			}
+			if ledgerErr != nil {
+				msg := fmt.Sprintf("写步已下发但台账未落（%v）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果", ledgerErr)
+				logger.Warnf("[BrowserExec] %s session=%d idx=%d action=%s", msg, session.ID, index, step.Action)
+				_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "failed", result, dur, msg)
+				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": msg}, dur, false)
+				return "failed", msg, json.RawMessage(result)
 			}
 			_ = e.stepRepo.UpdateResult(ctx, stepRow.ID, "success", result, dur, "")
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
 			return "success", "", json.RawMessage(result)
 		}
-		if writeStep {
-			e.recordGenericWriteLedger(ctx, step, stepRow.ID, writeKey, err)
-		}
 		lastErr = err.Error()
+		if writeStep {
+			// 步本身已判败，台账再写不进去只加一句因由：缺口由进程内兜底与降级表接管（A7）。
+			if ledgerErr := e.recordGenericWriteLedger(ctx, task.ID, session.ID, step, stepRow.ID, writeKey, err); ledgerErr != nil {
+				lastErr = fmt.Sprintf("%s；且写台账未落（%v）——重跑本任务前请人工核对该步是否已生效", lastErr, ledgerErr)
+			}
+		}
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, false)
 		logger.Warnf("[BrowserExec] step 失败 session=%d idx=%d action=%s attempt=%d: %s", session.ID, index, step.Action, attempt, lastErr)
 		// F7（G16）：重试按平台错误归因分线（MediaCrawler 处置矩阵语义）——
@@ -936,7 +975,11 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		// prep 成功=文本已进输入框，点击仍未发生 → prepared（可安全重下发态，也是
 		// 「闸门/中止腿从未提交」的正面证据）
-		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitPrepared, textHash)
+		// 批16（A7）：这一行写不进去就不再往下走一格。prepared 不在拦阻集合内，send 之后
+		// 库里若还是空的，下一轮（含同进程自动重试）就查不到任何尝试——那正是双发的形状。
+		if err := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, model.StepSubmitPrepared, textHash, false); err != nil {
+			return nil, fmt.Errorf("post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: %w", err)
+		}
 		// D7 人工确认闸门：require_confirm=true 的任务在此挂起，等 POST /sessions/:id/confirm
 		// 放行后才进不可逆提交点。挂起期间只有 prep（填文本，页面内可撤销、零平台副作用）；
 		// 未放行即中止=从未提交，可安全重下发。
@@ -966,7 +1009,9 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
 		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。
 		// 注入超时/闸门两个分支在上面提前返回、台账留在 prepared：那两支点击从未发生。
-		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitSent, textHash)
+		// 批16（A7）：这次写失败=「越点未落账」，recordSubmitState 会同时记下进程内兜底缺口，
+		// 本步最终判红（见下面 sentLedgerErr）——撤不回了，但至少不再有人替我们假设它没发生。
+		sentLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, model.StepSubmitSent, textHash, true)
 		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
 		// 重发不违「单次提交禁重试」红线；其余错误结局未知，交 finalize 回查绝不重发。
 		if sendErr != nil && e.healCommentSendButton(ctx, task, session, tabID, prepReq, sendErr) {
@@ -979,7 +1024,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if verified {
 			finalState = model.StepSubmitVerified
 		}
-		e.recordSubmitState(ctx, stepRow.ID, finalState, textHash)
+		finalLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, finalState, textHash, true)
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
 		e.mergeExtract(ctx, session, "post_comment", map[string]any{
 			"text":       step.Value,
@@ -988,6 +1033,16 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			"evidence":   evidence,
 			"posted_at":  time.Now().Format(time.RFC3339),
 		})
+		// 台账缺口优先于「看起来成功」：verified 的回查证据是真的，但库里没有这次提交，
+		// 下一轮的同文本重发就不会被拦——所以这一格不能给绿。判红不等于宣称失败，
+		// 文案里把「回查见/未见」原样带上，人一眼能判该不该补这条台账。
+		if ledgerErr := errors.Join(sentLedgerErr, finalLedgerErr); ledgerErr != nil {
+			seen := "回查未见评论（结果未知）"
+			if verified {
+				seen = "回查已见评论（内容确已发布）"
+			}
+			return nil, fmt.Errorf("post_comment %s，但提交台账未落全（%v）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布", seen, ledgerErr)
+		}
 		if verified {
 			return recordResultPayload(map[string]any{"posted": true, "verified": true, "evidence": evidence})
 		}

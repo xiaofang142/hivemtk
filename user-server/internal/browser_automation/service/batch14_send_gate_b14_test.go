@@ -87,7 +87,9 @@ func TestSendGateOrderedBeforeSentLedger(t *testing.T) {
 	src := readSrc(t, "executor.go")
 	iSend := strings.Index(src, "e.hand.commentSend(")
 	iGate := strings.Index(src, "isSendGateReject(sendErr)")
-	iSent := strings.Index(src, "model.StepSubmitSent, textHash)")
+	// 只锁状态 token、不锁参数尾巴：recordSubmitState 的签名会变（批16 加了 crossed），
+	// 锁尾巴等于把断言绑在参数列表上，改签名就假红，而本测试要断的从来只有顺序。
+	iSent := strings.Index(src, "model.StepSubmitSent")
 	iHeal := strings.Index(src, "e.healCommentSendButton(")
 	if !(0 <= iSend && iSend < iGate && iGate < iSent) {
 		t.Errorf("顺序必须 send→闸门早返→落 sent，got send=%d gate=%d sent=%d", iSend, iGate, iSent)

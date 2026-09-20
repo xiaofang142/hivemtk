@@ -35,11 +35,14 @@ func TestIsWriteStepAttribution(t *testing.T) {
 		{"scroll 恒非写", parsedStep{StepItem: dto.StepItem{Action: "scroll", Direction: "down", Amount: 5}}, false},
 	}
 	for _, c := range cases {
-		got, why := isWriteStep(task, c.step)
-		if got != c.want {
-			t.Errorf("%s: isWriteStep=%v want %v（why=%q）", c.name, got, c.want, why)
+		got, why := classifyStepEffect(task, c.step)
+		if got.needsWriteGate() != c.want {
+			t.Errorf("%s: 写闸门=%v want %v（effect=%d why=%q）", c.name, got.needsWriteGate(), c.want, got, why)
 		}
-		if got && why == "" {
+		if got == effectUnknown {
+			t.Errorf("%s: 平台已注册却判成未知态（批16 的第三态只该在取表报错时出现）：%s", c.name, why)
+		}
+		if c.want && why == "" {
 			t.Errorf("%s: 判成写却不给归因 why", c.name)
 		}
 	}
