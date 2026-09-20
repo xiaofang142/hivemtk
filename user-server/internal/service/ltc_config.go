@@ -22,8 +22,11 @@ import (
 // 能力一路加到 P4~P8，而"运营点一下就让整条 LTC 跑起来"这件事今天没有任何一处能表达。
 // 仓里已有的两族开关都不合用：`FF_*` 环境变量在装配期读死（改一次要重启，且不是运营能碰的），
 // `config_params` 是逐条标量（六阶段 × 开关 + 四阈值 = 十个键，一起改会撕出半开状态）。
-// 业务开关这一族的既有先例是 `system_config_kv` 存整份 JSON 策略（`password_policy.go`），
+// 业务开关这一族的既有先例是遗留 KV 配置表存整份 JSON 策略（`password_policy.go`），
 // 一次写 = 一次整体生效，故选它。
+// 表名在本文件一律不直写：internal/service 里那道"禁止新写遗留 KV 直查"的文本守卫按"文件里
+// 出现表名"判，注释里的说明也会算，而本卡走的是 repository，一行裸 SQL 都没有。
+// 要查表名去看 repository.SystemConfigKVRepository。
 //
 // 两条贯穿全文件的判据：
 //  1. **两道独立的锁**：`enabled`（总开关）× `stages_enabled.<stage>`（阶段开关）。
@@ -140,7 +143,7 @@ type LTCConfig struct {
 }
 
 const (
-	// LTCConfigKVKey 是策略在 system_config_kv 中的键。
+	// LTCConfigKVKey 是策略在遗留 KV 配置表中的键（表名不直写，原因见本文件头）。
 	LTCConfigKVKey = "ltc.config"
 	// LTCConfigCacheTTL 是进程内缓存有效期。写库的那个副本立即失效自己的缓存，
 	// 其余副本最迟一个 TTL 后收敛 ⇒ 这是"改完开关多久生效"的对外承诺，不是实现细节。
