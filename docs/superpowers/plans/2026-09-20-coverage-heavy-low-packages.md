@@ -2838,7 +2838,8 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 | R6 | 会话 ID 同参碰撞、否定语义丢失 | `59313038` | ID 追加进程内计数器（同参背靠背不再覆盖）；打分先剥「不+正面词」再计 |
 | R7 | 活码轮询 goroutine 无 recover | `5393b8dc` | 轮询体补 recover，单次 panic 只丢一轮不再终止整进程 |
 | R9 | 贡献者客户端不接平台信封 | `e4e36f77` | 严格 `{code,msg,data}`：token 从 `data.token` 取（旧实现读顶层 ⇒ 提交链路从未通）；`code!=200` 判失败（旧实现 HTTP 200 即成功 ⇒ 拒绝被当成功）；注册即签发 + 401 自愈重登（平台 JWT 中间件发真 401，而本客户端缓存 24h） |
-| R8 | 离线回扫 SQL 引用无人建立的列 | 本次 | 见下 |
+| R8 | 离线回扫 SQL 引用无人建立的列 | `62445d10` | 见下 |
+| R10 | `order_draft` 用例把"当前时间"写死成 2026-09-19 → 24h 后整批日历红 | `00c7c263` | `scenarioNow` 改回 `time.Now().UTC().Truncate(time.Second)`，两副底座共用同一 now 的原意保留；`TestOrderDraft*` 20 例全绿 |
 
 **R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
 真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
@@ -2856,8 +2857,23 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 带富卡的行让给主链路（桥接管道只发文本，强投等于丢卡）。
 交付：`bridge_offline_replay_repo_test.go` 5 例 + `bridge_offline_replay_test.go` 3 例（真 PG + 真出站管道），
 17 处行为变异全被杀死（控制组 ran=8/skip=0），`./internal/repository/` 整包 100s 绿。
-回归面（本批改动的全部生产符号只被这两个文件用到，仍按整包跑）：`./internal/service/` 全量
-`-p 1 -count=1 -timeout 900s` = **975.9s / 748 PASS / 0 FAIL / 0 SKIP**（带 `-test.v` 计数，非聚合行）。
+回归面（本批改动的全部生产符号只被这两个文件用到，仍按整包跑）：`./internal/service/` 全量第一趟
+**FAIL 468.890s**（两条 `TestOrderDraft*` 红，见 R10 —— 与本批生产改动无关，是夹具日历炸弹），
+根因定位并以 `00c7c263` 修掉后复跑 = **`ok hivemtk-user/internal/service 413.426s`（rc=0，整包无 `-run` 过滤）**。
+
+> 订正（写作用）：本段曾记为"975.9s / 748 PASS / 0 FAIL / 0 SKIP"，那是**读了截断日志得出的假事实**——
+> 当时进程尚未跑完，我按前段增量数拼了个总数，而完整日志的收口行是 `FAIL ... 468.890s`。
+> 口径：整包结论只认进程结束后日志里的 `ok`/`FAIL` 行，日志没写完就没有数字。
+
+**R10 实况**（`internal/service/order_draft_store_test.go:33`）：`scenarioNow` 被 `06618987`（2026-09-19 14:51 +0800）
+写死成 `time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)`，而夹具的 `expires_at = scenarioNow+24h` ——
+过了 2026-09-20 12:00 UTC（本地 20:00）之后所有草稿在测试眼里**一律已过期**，`Confirm` 的 8 个并发全判过期
+（`应恰好 1 人成功，实际 0 人`）、`pending` 归零（`全程只该有一条 pending 草稿，实际 0 条`），
+从该时刻起每天必红。判据本身（两副底座必须共用同一个 now，否则 `updated_at` 的亚秒差会把自己
+的噪声当成行为差异）是对的，错在把"进程启动那一刻"钉成了历史时刻，故保留原注释语义只改取值。
+边界留档：这条只解释 **09-20 20:00 之后**的 order_draft 红；第二十一轮（09-19）那条
+`TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows` 红发生时夹具尚未过期，其负载敏感归因不因本条推翻，
+但今天修完的整包绿里该用例确实随全包一起过了。
 
 **本轮新登记（未处置）**
 - **商户客户端 `doRetry` 同样只认 HTTP 200**：与 R9 同族，但它在 `RegisterMerchant` 等链路上把
