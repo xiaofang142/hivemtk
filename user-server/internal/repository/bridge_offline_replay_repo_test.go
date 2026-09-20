@@ -58,6 +58,71 @@ func readDelayedStatus(t *testing.T, database *gorm.DB, id uint) (string, int) {
 	return got.Status, got.Attempts
 }
 
+// seedBridgeAccount 造一条桥接渠道账号行（R14：检测的数据源就是这张表）。
+func seedBridgeAccount(t *testing.T, database *gorm.DB, channel, accountID, status string, lastSyncAt *time.Time) {
+	t.Helper()
+	acc := &model.BridgeAccount{
+		Channel:    channel,
+		AccountID:  accountID,
+		Status:     status,
+		LastSyncAt: lastSyncAt,
+	}
+	if err := database.WithContext(context.Background()).Create(acc).Error; err != nil {
+		t.Fatalf("造渠道账号行失败 channel=%s account=%s: %v", channel, accountID, err)
+	}
+}
+
+// TestListBridgeAccounts_ReadsRealColumns 渠道快照必须取自 bridge_accounts 的实有列。
+//
+// 旧实现的两条渠道查询分别引用 bridge_metrics（指标时间序列，没有 platform /
+// account_id / updated_at）与 bridge_accounts.platform（该表的渠道列叫 channel），
+// 在真库上必然 42703 ⇒ DetectOfflineChannels 恒报错返回 ⇒ 离线回扫从未投过一条。
+func TestListBridgeAccounts_ReadsRealColumns(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.BridgeAccount{})
+	repo := NewBridgeOfflineReplayRepositoryWithDB(database)
+	ctx := context.Background()
+
+	now := time.Now()
+	stale := now.Add(-time.Hour)
+	seedBridgeAccount(t, database, "douyin", "acc-online", "online", &now)
+	seedBridgeAccount(t, database, "xiaohongshu", "acc-off", "offline", &stale)
+
+	rows, err := repo.ListBridgeAccounts(ctx)
+	if err != nil {
+		t.Fatalf("读渠道快照失败（R14 复现：SQL 引用的列无人建立）: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("渠道快照=%d 行，want 2：%+v", len(rows), rows)
+	}
+	byAcc := make(map[string]BridgeChannelRow, len(rows))
+	for _, r := range rows {
+		byAcc[r.AccountID] = r
+	}
+	online := byAcc["acc-online"]
+	if online.Channel != "douyin" || online.Status != "online" {
+		t.Errorf("acc-online 快照错：channel=%q status=%q", online.Channel, online.Status)
+	}
+	off := byAcc["acc-off"]
+	if off.Channel != "xiaohongshu" {
+		t.Errorf("acc-off channel=%q want xiaohongshu", off.Channel)
+	}
+	if off.LastSyncAt == nil {
+		t.Fatal("acc-off last_sync_at 为空 ⇒ 报告里的离线时刻无从计算")
+	}
+	if !off.LastSyncAt.Equal(stale.Truncate(time.Microsecond)) {
+		t.Errorf("acc-off last_sync_at=%v，want 造出的离线时刻 %v", off.LastSyncAt, stale)
+	}
+}
+
+// TestListBridgeAccounts_NoDBGuardReturnsNil 无库时必须返回空快照而非 panic：
+// 回扫由 cron 调用，DB 未装配的进程里它应当静默无事可做。
+func TestListBridgeAccounts_NoDBGuardReturnsNil(t *testing.T) {
+	rows, err := NewBridgeOfflineReplayRepositoryWithDB(nil).ListBridgeAccounts(context.Background())
+	if err != nil || rows != nil {
+		t.Errorf("无库守卫失效: rows=%v err=%v", rows, err)
+	}
+}
+
 // TestOfflineReplayListReadsRealColumns 列表查询必须落在真实列上：
 // 引用不存在的列时 gorm 的 SELECT * 不会报错，只会把那几个字段永远留成零值，
 // 于是重放带着空 msg_type / 空 event_id 出站，且没有任何报警。

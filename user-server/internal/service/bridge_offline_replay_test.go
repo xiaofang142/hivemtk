@@ -175,3 +175,98 @@ func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 		t.Errorf("全程未成功，出站管道不该有落库行, got %d", n)
 	}
 }
+
+// seedSvcBridgeAccount 造一条渠道账号行（回扫的检测数据源）。
+func seedSvcBridgeAccount(t *testing.T, db *gorm.DB, channel, accountID, status string, lastSyncAt *time.Time) {
+	t.Helper()
+	acc := &model.BridgeAccount{Channel: channel, AccountID: accountID, Status: status, LastSyncAt: lastSyncAt}
+	if err := db.WithContext(context.Background()).Create(acc).Error; err != nil {
+		t.Fatalf("造渠道账号行失败: %v", err)
+	}
+}
+
+// TestOfflineReplayService_RunOnce_ActuallyReplays 钉 R14 的后果面：渠道检测的两条 SQL
+// 引用了无人建立的列（bridge_metrics 没有渠道维度、bridge_accounts 的渠道列叫 channel），
+// 于是 RunOnce 恒在检测这一步拿到空集合 ⇒ 到期 pending 行一条都不投，且只在日志里留一行 Warn。
+func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.DelayedOutboundReply{}, &model.MessageHub{}, &model.BridgeAccount{})
+	setupBridgeWhitelistForTest(t, "tg")
+	ingress := NewInboxIngressServiceWithDB(db, newIsolatedCacheForTest(t))
+	prev := GlobalInboxIngressService()
+	SetGlobalInboxIngressService(ingress)
+	t.Cleanup(func() { SetGlobalInboxIngressService(prev) })
+	svc := NewBridgeOfflineReplayService().WithDB(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	stale := now.Add(-time.Hour)
+	seedSvcBridgeAccount(t, db, "tg", "acc_run", "online", &now)
+	seedSvcBridgeAccount(t, db, "tg", "acc_backlog", "offline", &stale)
+	id := seedDelayed(t, db, &model.DelayedOutboundReply{
+		Platform: "tg", AccountID: "acc_run", ConversationID: "conv_run",
+		Content: "回扫整腿应投递的历史回复", Kind: model.DelayedKindQuietHours,
+	})
+
+	stats := svc.RunOnce(ctx)
+	if stats.ScannedChannels != 2 {
+		t.Fatalf("渠道检测未取到已注册的渠道: scanned=%d（R14：SQL 引用无人建立的列 ⇒ 恒 0）", stats.ScannedChannels)
+	}
+	if stats.OnlineChannels != 1 || stats.OfflineChannels != 1 {
+		t.Errorf("报告未区分两侧: online=%d offline=%d want 1/1", stats.OnlineChannels, stats.OfflineChannels)
+	}
+	if len(stats.OfflineSnapshots) != 1 || stats.OfflineSnapshots[0].AccountID != "acc_backlog" {
+		t.Errorf("离线快照错: %+v", stats.OfflineSnapshots)
+	}
+	if stats.ReplayedMessages != 1 {
+		t.Fatalf("RunOnce 应重放 1 条, got %d", stats.ReplayedMessages)
+	}
+	if got := readDelayed(t, db, id); got.Status != model.DelayedStatusSent {
+		t.Errorf("重放后 status=%q want %q", got.Status, model.DelayedStatusSent)
+	}
+	if n := len(hubOutbound(t, db, "conv_run")); n != 1 {
+		t.Errorf("出站管道应收到 1 条, got %d", n)
+	}
+}
+
+// TestOfflineReplayService_DetectPartitionsByStatus 在线/离线两侧必须互斥且各归其位：
+// 两侧同源于同一份 bridge_accounts 快照，旧实现里"在线"这一侧根本不存在（只有恒报错的检测）。
+func TestOfflineReplayService_DetectPartitionsByStatus(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.BridgeAccount{})
+	svc := NewBridgeOfflineReplayService().WithDB(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	stale := now.Add(-time.Hour)
+	seedSvcBridgeAccount(t, db, "douyin", "acc-on", "online", &now)
+	seedSvcBridgeAccount(t, db, "xiaohongshu", "acc-off", "offline", &stale)
+	// status 是唯一判据：last_sync_at 陈旧但未被置离线的渠道仍算在线
+	// （刷新在线位由 SSE 连接/心跳负责，回扫不得用时间窗自己发明一套判定）。
+	seedSvcBridgeAccount(t, db, "tiktok", "acc-stale-online", "online", &stale)
+
+	on, err := svc.DetectOnlineChannels(ctx)
+	if err != nil {
+		t.Fatalf("DetectOnlineChannels: %v", err)
+	}
+	off, err := svc.DetectOfflineChannels(ctx)
+	if err != nil {
+		t.Fatalf("DetectOfflineChannels: %v", err)
+	}
+	if len(on)+len(off) != 3 {
+		t.Fatalf("两侧并集应覆盖全部渠道: on=%d off=%d", len(on), len(off))
+	}
+	onIDs := map[string]string{}
+	for _, c := range on {
+		onIDs[c.AccountID] = c.Platform
+	}
+	for _, c := range off {
+		if _, dup := onIDs[c.AccountID]; dup {
+			t.Errorf("渠道 %s 同时出现在在线与离线两侧", c.AccountID)
+		}
+	}
+	if onIDs["acc-on"] != "douyin" || onIDs["acc-stale-online"] != "tiktok" {
+		t.Errorf("在线侧错: %+v", onIDs)
+	}
+	if len(off) != 1 || off[0].AccountID != "acc-off" || off[0].Platform != "xiaohongshu" {
+		t.Errorf("离线侧错: %+v", off)
+	}
+}

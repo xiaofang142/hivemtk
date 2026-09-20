@@ -36,6 +36,7 @@ type OfflineChannel struct {
 // ReplayStats 回扫统计
 type ReplayStats struct {
 	ScannedChannels  int              `json:"scanned_channels"`
+	OnlineChannels   int              `json:"online_channels"`
 	OfflineChannels  int              `json:"offline_channels"`
 	ReplayedMessages int64            `json:"replayed_messages"`
 	FailedMessages   int64            `json:"failed_messages"`
@@ -44,49 +45,49 @@ type ReplayStats struct {
 	FinishedAt       time.Time        `json:"finished_at"`
 }
 
-// DetectOfflineChannels 检测离线渠道
+// partitionBridgeChannels 按 status 把渠道划成在线/离线两批。
 //
-// 判定规则：bridge_metrics 中最近 10 分钟内无新消息到达 → 视为离线
-// （同时 fallback 到 bridge_accounts 中 status != "online" 的渠道）
-func (s *BridgeOfflineReplayService) DetectOfflineChannels(ctx context.Context) ([]OfflineChannel, error) {
+// 两侧必须互斥且并集为全集：旧实现里"离线"取自一条永远报 42703 的 bridge_metrics
+// 聚合查询、"在线"根本没有这一侧，于是回扫既检不出渠道，也谈不上投递。
+// status 的可靠性由 SSE 生命周期写在线位负责（连接/心跳刷新、断开置离线）。
+func partitionBridgeChannels(rows []repository.BridgeChannelRow) (on, off []OfflineChannel) {
+	for _, a := range rows {
+		ch := OfflineChannel{Platform: a.Channel, AccountID: a.AccountID, OfflineSince: a.UpdatedAt}
+		if a.Status == bridgeStatusOffline {
+			off = append(off, ch)
+			continue
+		}
+		on = append(on, ch)
+	}
+	return on, off
+}
+
+// bridgeStatusOffline bridge_accounts.status 的离线态字面量（与 bridge 包 Upsert/SetOffline 同值）
+const bridgeStatusOffline = "offline"
+
+// detectBridgeChannels 取一次渠道账号快照，切成在线/离线两批。
+func (s *BridgeOfflineReplayService) detectBridgeChannels(ctx context.Context) (on, off []OfflineChannel, err error) {
 	if s.repo == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-
-	stats, err := s.repo.GroupBridgeMetricsLastSeen(ctx)
+	rows, err := s.repo.ListBridgeAccounts(ctx)
 	if err != nil {
-
-		logger.Warnf("[BridgeReplay] bridge_metrics 查询失败，fallback bridge_accounts: %v", err)
-		accs, err2 := s.repo.ListNonOnlineBridgeAccounts(ctx)
-		if err2 != nil {
-			return nil, err2
-		}
-		now := time.Now()
-		out := make([]OfflineChannel, 0, len(accs))
-		for _, a := range accs {
-			if now.Sub(a.UpdatedAt) > 10*time.Minute {
-				out = append(out, OfflineChannel{
-					Platform:     a.Platform,
-					AccountID:    a.AccountID,
-					OfflineSince: a.UpdatedAt,
-				})
-			}
-		}
-		return out, nil
+		return nil, nil, err
 	}
+	on, off = partitionBridgeChannels(rows)
+	return on, off, nil
+}
 
-	threshold := time.Now().Add(-10 * time.Minute)
-	out := make([]OfflineChannel, 0)
-	for _, st := range stats {
-		if st.LastSeen.Before(threshold) {
-			out = append(out, OfflineChannel{
-				Platform:     st.Platform,
-				AccountID:    st.AccountID,
-				OfflineSince: st.LastSeen,
-			})
-		}
-	}
-	return out, nil
+// DetectOfflineChannels 判定为离线的渠道（供报告与观测）。
+func (s *BridgeOfflineReplayService) DetectOfflineChannels(ctx context.Context) ([]OfflineChannel, error) {
+	_, off, err := s.detectBridgeChannels(ctx)
+	return off, err
+}
+
+// DetectOnlineChannels 判定为在线的渠道（补投目标）。
+func (s *BridgeOfflineReplayService) DetectOnlineChannels(ctx context.Context) ([]OfflineChannel, error) {
+	on, _, err := s.detectBridgeChannels(ctx)
+	return on, err
 }
 
 // ReplayDelayedOutbound 重放某个渠道累积的离线消息
@@ -150,13 +151,17 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 	startedAt := time.Now()
 	stats := ReplayStats{StartedAt: startedAt}
 
-	channels, err := s.DetectOfflineChannels(ctx)
+	online, offline, err := s.detectBridgeChannels(ctx)
 	if err != nil {
-		logger.Warnf("[BridgeReplay] DetectOfflineChannels 出错: %v", err)
+		logger.Warnf("[BridgeReplay] 渠道快照读取失败: %v", err)
 	}
+	channels := make([]OfflineChannel, 0, len(online)+len(offline))
+	channels = append(channels, online...)
+	channels = append(channels, offline...)
 	stats.ScannedChannels = len(channels)
-	stats.OfflineChannels = len(channels)
-	stats.OfflineSnapshots = channels
+	stats.OnlineChannels = len(online)
+	stats.OfflineChannels = len(offline)
+	stats.OfflineSnapshots = offline
 
 	perChannelLimit := 50
 	for _, ch := range channels {
@@ -166,8 +171,9 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 	}
 
 	stats.FinishedAt = time.Now()
-	logger.Infof("[BridgeReplay] 离线回扫完成: offline=%d replayed=%d failed=%d duration=%s",
-		stats.OfflineChannels, stats.ReplayedMessages, stats.FailedMessages,
+	logger.Infof("[BridgeReplay] 回扫完成: scanned=%d online=%d offline=%d replayed=%d failed=%d duration=%s",
+		stats.ScannedChannels, stats.OnlineChannels, stats.OfflineChannels,
+		stats.ReplayedMessages, stats.FailedMessages,
 		stats.FinishedAt.Sub(startedAt).Round(time.Millisecond))
 	return stats
 }

@@ -27,46 +27,30 @@ func NewBridgeOfflineReplayRepositoryWithDB(db *gorm.DB) *BridgeOfflineReplayRep
 	return &BridgeOfflineReplayRepository{db: db}
 }
 
-// OfflineChannelStat bridge_metrics 按渠道聚合的最近活跃时间
-type OfflineChannelStat struct {
-	Platform  string    `gorm:"column:platform"`
-	AccountID string    `gorm:"column:account_id"`
-	LastSeen  time.Time `gorm:"column:last_seen"`
+// BridgeChannelRow 桥接渠道账号快照。
+//
+// 列集合必须与 model.BridgeAccount 一致：bridge_accounts 的渠道列叫 channel 不叫 platform，
+// 而 bridge_metrics 是指标时间序列（metric_name/labels/value/ts），根本没有渠道维度 ——
+// 拿它当"渠道最近活跃"的数据源，两条查询都撞 42703，回扫于是永远静默空转。
+type BridgeChannelRow struct {
+	Channel    string     `gorm:"column:channel"`
+	AccountID  string     `gorm:"column:account_id"`
+	Status     string     `gorm:"column:status"`
+	LastSyncAt *time.Time `gorm:"column:last_sync_at"`
+	UpdatedAt  time.Time  `gorm:"column:updated_at"`
 }
 
-// OfflineAccountRow bridge_accounts 非 online 渠道快照
-type OfflineAccountRow struct {
-	Platform  string    `gorm:"column:platform"`
-	AccountID string    `gorm:"column:account_id"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
-}
-
-// GroupBridgeMetricsLastSeen bridge_metrics 按 (platform, account_id) 聚合最近更新时间
-func (r *BridgeOfflineReplayRepository) GroupBridgeMetricsLastSeen(ctx context.Context) ([]OfflineChannelStat, error) {
+// ListBridgeAccounts 全量渠道账号快照（在线/离线两批由 service 侧划分）。
+func (r *BridgeOfflineReplayRepository) ListBridgeAccounts(ctx context.Context) ([]BridgeChannelRow, error) {
 	if r.db == nil {
 		return nil, nil
 	}
-	var stats []OfflineChannelStat
-	err := r.db.WithContext(ctx).
-		Table("bridge_metrics").
-		Select("platform, account_id, MAX(updated_at) as last_seen").
-		Group("platform, account_id").
-		Scan(&stats).Error
-	return stats, err
-}
-
-// ListNonOnlineBridgeAccounts bridge_accounts 中 status != online 的渠道
-func (r *BridgeOfflineReplayRepository) ListNonOnlineBridgeAccounts(ctx context.Context) ([]OfflineAccountRow, error) {
-	if r.db == nil {
-		return nil, nil
-	}
-	var accs []OfflineAccountRow
-	err := r.db.WithContext(ctx).
-		Table("bridge_accounts").
-		Select("platform, account_id, updated_at").
-		Where("status != ?", "online").
-		Scan(&accs).Error
-	return accs, err
+	var rows []BridgeChannelRow
+	err := r.db.WithContext(ctx).Table("bridge_accounts").
+		Select("channel, account_id, status, last_sync_at, updated_at").
+		Order("channel ASC, account_id ASC").
+		Scan(&rows).Error
+	return rows, err
 }
 
 // DelayedOutboundRow reach_delayed_outbound 待重放消息行
