@@ -28,7 +28,37 @@ var (
 	ErrDoNotContact = errors.New("do-not-contact")
 	// ErrReachCooldown 冷却期内已发过：稍后可重试
 	ErrReachCooldown = errors.New("cooldown")
+	// ErrReachApprovalDenied 未获外发授权：与 DNC 相反，它是**可补的**（加白名单即可重发），
+	// 所以调用方必须能与另两个哨兵区分开——队列侧据此决定"退避重试"还是"终止"。
+	ErrReachApprovalDenied = errors.New("reach_approval_denied")
 )
+
+// ReachSubject 发送前审批的判定对象。
+//
+// Key 是裁决用的唯一键，其余字段是给人看的上下文：闸门报告要能回答"这次要发到哪"，
+// 只有一把 one_id 不够。
+type ReachSubject struct {
+	// Key 判定键，见 reachApprovalKey：one_id > customer_id > "渠道:收件人"，恒非空才有效
+	Key string
+	// OneID 客户 OneID（可能为空：直发手机号/邮箱时不查客户）
+	OneID string
+	// CustomerID 客户主键（可能为空，同上）
+	CustomerID string
+	// Channel 已选定的外发渠道
+	Channel string
+	// Recipient 已选定的收件人标识
+	Recipient string
+	// AccountID 渠道账号ID；短信/邮箱/钉钉渠道恒为空，**因此它不参与判定键**
+	AccountID string
+}
+
+// ReachPreSendChecker 发送前审批钩子：在所有外发渠道的唯一出口上决定是否放行。
+//
+// 裁决来源对 service 层不可见（当前是 internal/app 接的 W-1 白名单，将来可以是审批工单表），
+// 所以这里只有一个布尔 + 一个理由串。
+type ReachPreSendChecker interface {
+	CheckReachPreSend(ctx context.Context, sub ReachSubject) (allowed bool, reason string)
+}
 
 // ProactiveReachRequest 主动触达请求（按 OneID 智能选渠道）
 type ProactiveReachRequest struct {
@@ -80,6 +110,9 @@ type ProactiveReachService struct {
 	accountLookup AccountLookup
 
 	dnc *DoNotContactService
+
+	// preSendGate 发送前审批钩子；nil 表示"没装闸门"，外发行为与接线前逐字一致。
+	preSendGate ReachPreSendChecker
 
 	smsRegistry      func() (func(ctx context.Context, phone, content, templateID string, params map[string]string) (string, error), error)
 	emailRegistry    func(ctx context.Context, accountID uint, to, subject, content string, attachments []string) (string, error)
@@ -146,13 +179,75 @@ func NewProactiveReachService(db *gorm.DB, lookup AccountLookup) *ProactiveReach
 		repo:          repository.NewProactiveReachRepository(db),
 		customerRepo:  newCustomerRepo(db),
 		accountLookup: lookup,
-		dnc:           NewDoNotContactService(nil),
+		// 传 db 而不是 nil：NewCustomerDoNotContactRepository(nil) 会退到进程全局句柄，
+		// 于是"注入式装配"在本服务里名不副实——同一个服务读客户用参数库、读退订用全局库，
+		// 两个库不是同一个句柄时退订检查会打到错的库（单测里全局未初始化则直接 panic）。
+		// 传 db 后：db 为 nil 时行为与之前逐字一致，非 nil 时用调用方给的那个库。
+		dnc: NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db)),
 	}
 }
 
 // SetDoNotContact 注入全局退订标志位服务（测试或自定义装配时使用）
 func (s *ProactiveReachService) SetDoNotContact(dnc *DoNotContactService) {
 	s.dnc = dnc
+}
+
+// SetPreSendApprovalChecker 注入发送前审批闸门（T-P3-07）。
+//
+// 为什么是注入而不是构造参数：闸门依赖 W-1 的白名单与旗子，那些在 main 启动序列里
+// 晚于本服务构造才就绪；与 SetSMSRegistry 等 8 个外发器同一套装配时序。
+func (s *ProactiveReachService) SetPreSendApprovalChecker(gate ReachPreSendChecker) {
+	s.preSendGate = gate
+}
+
+// PreSendApprovalChecker 读回当前装的闸门（nil = 未装），供接线层与快照接口判断"到底装上没"。
+//
+// 装配是否真的生效必须有可读回的地方，否则「测试里手动接、生产里没接」这类断链在进程内不可见
+// ——W-1 当年的 AC③ 就是靠"生产可达性"断言堵的这个口。
+func (s *ProactiveReachService) PreSendApprovalChecker() ReachPreSendChecker {
+	return s.preSendGate
+}
+
+// reachApprovalKey 判定键：客户身份优先，退到"渠道:收件人"。
+//
+// 刻意不含 AccountID：短信/邮箱/钉钉渠道的 accountID 在装配里恒为空，用它当键会得到
+// 一把恒空的白名单——判了等于没判（T-P1-05 的教训，本卡的 AC②）。
+func reachApprovalKey(oneID, customerID, channel, recipient string) string {
+	if oneID != "" {
+		return oneID
+	}
+	if customerID != "" {
+		return customerID
+	}
+	if recipient == "" {
+		return ""
+	}
+	return channel + ":" + recipient
+}
+
+// enforcePreSendApproval 外发前的最后一道授权判定。
+//
+// 返回非 nil 时调用方**必须**放弃外发：本函数在所有渠道的出口处被调用，
+// 所以三个非工具路径（直接 API / cron / 工具）自动同受约束，不需要各自记得接。
+func (s *ProactiveReachService) enforcePreSendApproval(ctx context.Context, sub ReachSubject) error {
+	if s.preSendGate == nil {
+		return nil
+	}
+	if sub.Key == "" {
+		// 走到这里说明调用方没给出任何身份——fail-closed：宁可不发，也不能凭空放行。
+		return fmt.Errorf("%w: 无法确定判定对象（缺少 one_id / customer_id / 收件人），外发已跳过", ErrReachApprovalDenied)
+	}
+	allowed, reason := s.preSendGate.CheckReachPreSend(ctx, sub)
+	if allowed {
+		return nil
+	}
+	if reason == "" {
+		reason = "unspecified"
+	}
+	// 理由与渠道进日志（不含收件人），错误串里只带理由：这条错误会被调用方写进
+	// recovery_queue.last_result 与 HTTP 响应，收件人标识一旦进串就等于落进台账。
+	logger.Warnf("[ReachGate] 外发被拒 channel=%s key=%s reason=%s", sub.Channel, sub.Key, reason)
+	return fmt.Errorf("%w: 收件对象未获外发授权（%s）", ErrReachApprovalDenied, reason)
 }
 
 func (s *ProactiveReachService) dncService() *DoNotContactService {
@@ -197,11 +292,26 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		if s.checkDoNotContact(ctx, "", "sms", req.Phone) {
 			return nil, fmt.Errorf("%w: phone %s has opted out globally, send skipped", ErrDoNotContact, req.Phone)
 		}
+		if err := s.enforcePreSendApproval(ctx, ReachSubject{
+			Key:   reachApprovalKey(req.OneID, req.CustomerID, "sms", req.Phone),
+			OneID: req.OneID, CustomerID: req.CustomerID,
+			Channel: "sms", Recipient: req.Phone, AccountID: req.AccountID,
+		}); err != nil {
+			return nil, err
+		}
 		return s.sendSMS(ctx, req, req.Phone)
 	}
 	if req.Email != "" {
-		if s.checkDoNotContact(ctx, "", "email", "email:"+NormalizeEmail(req.Email)) {
+		normalized := NormalizeEmail(req.Email)
+		if s.checkDoNotContact(ctx, "", "email", "email:"+normalized) {
 			return nil, fmt.Errorf("%w: email %s has opted out globally, send skipped", ErrDoNotContact, req.Email)
+		}
+		if err := s.enforcePreSendApproval(ctx, ReachSubject{
+			Key:   reachApprovalKey(req.OneID, req.CustomerID, "email", normalized),
+			OneID: req.OneID, CustomerID: req.CustomerID,
+			Channel: "email", Recipient: normalized, AccountID: req.AccountID,
+		}); err != nil {
+			return nil, err
 		}
 		return s.sendEmail(ctx, req, req.Email)
 	}
@@ -245,13 +355,27 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		}, nil
 	}
 
-	if !s.checkCooldown(ctx, customer.UnifiedID) {
-		return nil, fmt.Errorf("%w: customer %s recently received a message, please wait", ErrReachCooldown, customer.UnifiedID)
-	}
-
 	channel, recipient, accountID, err := s.pickChannel(ctx, available, customer)
 	if err != nil {
 		return nil, err
+	}
+
+	// 闸门问在选路之后、写冷却键之前：
+	//   · 之后 —— 闸门要看得见最终渠道与收件人，否则报告答不上"这次发到哪"；
+	//   · 之前 —— 拒发不能占用冷却窗。占了窗等于一次没发生的外发产生与真外发相同的后续效果，
+	//     运营补完授权还得再等一小时（有测试钉住这条）。
+	// 顺带的口径变化：选不出渠道（no active account）时，以前若正处冷却会先报 cooldown，
+	// 现在先报选路失败。两者都是"这条没发出去"，队列处置同为退避，不影响外发次数。
+	if err := s.enforcePreSendApproval(ctx, ReachSubject{
+		Key:   reachApprovalKey(customer.UnifiedID, customer.ID, channel, recipient),
+		OneID: customer.UnifiedID, CustomerID: customer.ID,
+		Channel: channel, Recipient: recipient, AccountID: accountID,
+	}); err != nil {
+		return nil, err
+	}
+
+	if !s.checkCooldown(ctx, customer.UnifiedID) {
+		return nil, fmt.Errorf("%w: customer %s recently received a message, please wait", ErrReachCooldown, customer.UnifiedID)
 	}
 
 	switch channel {

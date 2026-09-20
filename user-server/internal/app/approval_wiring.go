@@ -153,16 +153,26 @@ func approvalDenialBlocks(mode approvalGateMode, reason string) bool {
 // would_deny 与 blocked 是两个字段，刻意不合并：前者是"切阻断后会被拦的量"（观察期的
 // 核心指标，shadow 态也照样累加），后者是"这一次真的拦下来了"。只在 block 态且不被
 // 刹车豁免时才为 true。合并成一个字段会让 T-P1-05 攒下的报告口径在转阻断后失效。
+//
+// 分流按 toolName：T-P3-07 之后同一个 checker 会被两条路径问（工具链上的冷触达工具、
+// 与 ReachByCustomer 出口上的外发闸门，后者用 ReachApprovalToolKey 作入口名）。
+// 两份报告各有各的用途 —— 工具侧那份是 T-P1-06 转阻断的准入证据，外发侧那份是
+// 非工具路径的，混计会让任一侧的结论被另一侧的量推歪，所以各进各的计数器、各打各的
+// mode 与事件名。今天非 reach 的工具名不可能等于那个 key（工具名不带 reach. 前缀），
+// 判定条件因此是充分的。
 func observeApprovalDecision(ctx context.Context, toolName, accountID string, d approval.Decision) {
-	mode := approvalGateMode(approvalModeValue)
-	approvalDecisions.Observe(ctx, toolName, accountID, d)
+	counter, mode, event := approvalDecisions, approvalGateMode(approvalModeValue), "tool_approval_decision"
+	if toolName == ReachApprovalToolKey {
+		counter, mode, event = reachDecisions, approvalGateMode(reachGateModeValue), "reach_approval_decision"
+	}
+	counter.Observe(ctx, toolName, accountID, d)
 
 	ev := logger.Ctx(ctx).Info()
 	if !d.Allowed {
 		ev = logger.Ctx(ctx).Warn()
 	}
-	ev.Str("event", "tool_approval_decision").
-		Str("mode", approvalModeValue).
+	ev.Str("event", event).
+		Str("mode", string(mode)).
 		Bool("allowed", d.Allowed).
 		Bool("would_deny", !d.Allowed).
 		Bool("blocked", !d.Allowed && approvalDenialBlocks(mode, d.Reason)).

@@ -116,6 +116,27 @@ func (w *WhiteListApprovalChecker) ActiveEntryCount() int {
 	return n
 }
 
+// ActiveEntryCountFor 某个入口（toolName）名下仍有效的授权条数。
+//
+// 与 ActiveEntryCount 同口径（过期不计、nil 接收者返回 0），只是把遍历收在这一个 key 上。
+// 需要分项的原因：冷触达工具与外发闸门共用同一张表，只报总数会让运维看不出
+// "reach 一条授权都没有，那 3 条在别的入口上"——block 态下这个差别就是全拦与全放。
+func (w *WhiteListApprovalChecker) ActiveEntryCountFor(toolName string) int {
+	if w == nil {
+		return 0
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	now := w.nowFn()
+	n := 0
+	for _, exp := range w.whitelist[toolName] {
+		if exp.IsZero() || now.Before(exp) {
+			n++
+		}
+	}
+	return n
+}
+
 func (w *WhiteListApprovalChecker) decide(ctx context.Context, toolName, accountID string, flagOn bool) Decision {
 	if !flagOn {
 		return Decision{Allowed: false, Reason: ReasonDisabledByFlag}

@@ -174,3 +174,43 @@ func TestActiveEntryCountCountsOnlyUsableEntries(t *testing.T) {
 		t.Errorf("时钟前进后有效条目 = %d, want 0", got)
 	}
 }
+
+// TestActiveEntryCountForIsolatesByTool 按入口拆开的有效条目数。
+//
+// 存在的理由：W-1 的冷触达工具与 T-P3-07 的 reach 外发门**共用同一张白名单表**，
+// 只报总数会让运维在"我只给 reach 放了 3 个账号"和"reach 一条授权都没有、
+// 另外 3 条在工具侧"之间读不出差别 —— 而 block 态下后者意味着所有外发都会被拒。
+// 口径与 ActiveEntryCount 一致：过期不计、nil 接收者返回 0。
+func TestActiveEntryCountForIsolatesByTool(t *testing.T) {
+	var nilChecker *WhiteListApprovalChecker
+	if got := nilChecker.ActiveEntryCountFor("reach.proactive.send"); got != 0 {
+		t.Errorf("nil 接收者应返回 0，实际 %d", got)
+	}
+	if got := NewWhiteList(nil, time.Now).ActiveEntryCountFor("reach.proactive.send"); got != 0 {
+		t.Errorf("空表应为 0，实际 %d", got)
+	}
+
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	w := NewWhiteList(nil, func() time.Time { return now })
+	w.Whitelist("reach.proactive.send", "uid-a", time.Time{})
+	w.Whitelist("reach.proactive.send", "uid-b", now.Add(time.Hour))
+	w.Whitelist("reach.proactive.send", "uid-gone", now.Add(-time.Second))
+	w.Whitelist("reach.batch", "acct-1", time.Time{})
+	w.Whitelist("reach.batch", "acct-2", time.Time{})
+
+	if got := w.ActiveEntryCountFor("reach.proactive.send"); got != 2 {
+		t.Errorf("reach 入口有效条目 = %d, want 2（过期那条与其他入口的都不该计入）", got)
+	}
+	if got := w.ActiveEntryCountFor("reach.batch"); got != 2 {
+		t.Errorf("reach.batch 有效条目 = %d, want 2", got)
+	}
+	// 没授权过的入口读 0 而不是"和总数一样"：读成总数就是把"没配"显示成"配满了"
+	if got := w.ActiveEntryCountFor("reach.never.granted"); got != 0 {
+		t.Errorf("未授权入口应读 0，实际 %d", got)
+	}
+	// 总数 = 两个入口的有效条目相加（过期那条两边都不计）：分项读数必须能被总数校验，
+	// 否则"分项各自报个好看的数、总数另说"就是两份互不相干的口径。
+	if total := w.ActiveEntryCount(); total != 4 {
+		t.Errorf("总有效条目 = %d, want 4（2+2，过期那条两边都不计）", total)
+	}
+}

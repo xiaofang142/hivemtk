@@ -26,6 +26,14 @@ import (
 //
 // 触达服务在这里单独构造一份：它无状态（只有 sender 注册表 + repo），与 router 里那份
 // 互不影响，避免与 HTTP 侧共享可变量。
+//
+// 这里同时要装 T-P3-07 的外发闸门：worker 这条 cron 路径是"非工具外发"的第一条，
+// 它与 HTTP 侧那份 service 各自独立构造，闸门少装一边就是留一条盲区
+// （快照里的 attached_services 就是用来发现"只装了一边"的）。
+//
+// 装配顺序有硬依赖：AttachReachGate 要读 W-1 的 checker，而那个是在 router.Setup 里的
+// InitGlobalToolExecutor 才建的 ⇒ 本函数**必须**在 router.Setup 之后调用（见 cmd/api/main.go
+// 里那句注释）。顺序错了不会 panic，只会静默"不装门 + 一条告警"，这正是最难发现的那种失效。
 func InitRecoveryWorker(db *gorm.DB) *service.RecoveryQueueWorker {
 	if db == nil {
 		logger.Warn("[RecoveryWorker] ⚠️ db 为 nil，挽回队列消费者未装配（入队照常，到期项无人消费）")
@@ -33,11 +41,15 @@ func InitRecoveryWorker(db *gorm.DB) *service.RecoveryQueueWorker {
 	}
 	reach := service.NewProactiveReachService(db, nil)
 	service.BindProactiveReachSenders(reach, db)
+	gated := AttachReachGate(reach)
 
 	worker := service.NewRecoveryQueueWorker(service.NewRecoveryQueueService(), reach)
 	worker.Start(context.Background())
 	logger.Infof("[RecoveryWorker] ✅ 挽回队列消费者已装配：mode=%s（开关 %s；off 时不启动，"+
 		"shadow 只试发不外发，enforce 才真发；外发受全局退订与触达频控约束）",
 		worker.Mode(), service.RecoveryWorkerFlagEnv)
+	if !gated {
+		LogReachGateSkippedAssemblyPoint("app.InitRecoveryWorker")
+	}
 	return worker
 }

@@ -360,6 +360,12 @@ func setupProactiveReachRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	reachSvc := service.NewReachPipelineService(db)
 	proactiveSvc := service.NewProactiveReachService(db, nil)
 	service.BindProactiveReachSenders(proactiveSvc, db)
+	// T-P3-07：直接 API 这条非工具外发路径在同一处装上闸门。装在装配点而不是每个
+	// handler 里，是因为这个控制器有 5 个外发入口（单发/快速/按客户/批量/校验），
+	// 逐个包等于把"新加一个入口就新漏一条路径"这件事留给下一个改代码的人。
+	if !app.AttachReachGate(proactiveSvc) {
+		app.LogReachGateSkippedAssemblyPoint("router.setupProactiveReachRoutes")
+	}
 	proactiveCtrl := controller.NewProactiveReachController(proactiveSvc)
 
 	auth.POST("/reach/proactive/send", proactiveCtrl.ProactiveSend)

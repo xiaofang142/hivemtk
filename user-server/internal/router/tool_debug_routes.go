@@ -23,6 +23,7 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/tools/cost", handleToolCost)
 	auth.GET("/agent/tools/circuit", handleToolCircuitState)
 	auth.GET("/agent/tools/approval", handleToolApprovalState)
+	auth.GET("/agent/tools/reach-gate", handleReachGateState)
 	auth.GET("/agent/tools/risk", handleToolRiskReport)
 	auth.GET("/agent/tools/providers", handleToolProviders)
 
@@ -518,6 +519,84 @@ func approvalStatePayload(snap app.ApprovalGateSnapshot) gin.H {
 func handleToolApprovalState(c *gin.Context) {
 	snap, decisions := app.GetApprovalSnapshot()
 	out := approvalStatePayload(snap)
+	if decisions != nil {
+		rep := decisions.Report()
+		per := make([]gin.H, 0, len(rep.PerTool))
+		for _, st := range rep.PerTool {
+			per = append(per, gin.H{
+				"tool_name":   st.ToolName,
+				"total":       st.Total,
+				"would_deny":  st.WouldDeny,
+				"last_reason": st.LastReason,
+			})
+		}
+		out["decision_report"] = gin.H{
+			"total":               rep.Total,
+			"would_deny":          rep.WouldDeny,
+			"would_deny_rate_pct": rep.WouldDenyRatePct,
+			"by_reason":           rep.ByReason,
+			"per_tool":            per,
+		}
+	}
+	response.Success(c, out, "ok")
+}
+
+// reachGateStatePayload 外发闸门的回显口径（T-P3-07）。
+//
+// 与 approvalStatePayload 同形，但三个读数是 reach 专属的、缺一不可：
+//   - whitelist_entries_for_reach：授权表两条路径共用，只看总数会把"工具侧批了 5 个"
+//     读成"外发也批了"，而 block 态下真实结果可能是所有外发都被拒；
+//   - attached_services：几个外发装配点拿到了钩子。漏接一个 = 留一条盲区，
+//     而这个数字是唯一能从进程内部看出来的东西；
+//   - dependency_unmet：mode 不是 off 却没装上门，只有一种成因（W-1 没接线），
+//     不点名的话端点上就是"旗子开了却没生效"这种查不出所以然的形状。
+func reachGateStatePayload(snap app.ReachGateSnapshot) gin.H {
+	out := gin.H{
+		"mode":                        snap.Mode,
+		"wired":                       snap.Wired,
+		"blocks_when_denied":          snap.BlocksWhenDenied,
+		"dependency_unmet":            snap.DependencyUnmet,
+		"dependency_flag_env":         snap.DependencyFlagEnv,
+		"reach_tool_key":              snap.ReachToolKey,
+		"attached_services":           snap.AttachedServices,
+		"whitelist_active_entries":    snap.WhitelistActiveEntries,
+		"whitelist_entries_for_reach": snap.WhitelistEntriesForReach,
+		"flags": gin.H{
+			"gate":              snap.GateFlagEnv,
+			"whitelist_env":     snap.WhitelistFlagEnv,
+			"whitelist_flag_on": snap.WhitelistFlagOn,
+		},
+		"env_hint": app.ReachGateFlagEnv + "=off|shadow|block（shadow 只记 would_deny、外发照常；" +
+			"block 才真的拒，且需同时开白名单旗子 " + snap.WhitelistFlagEnv +
+			"；依赖 " + snap.DependencyFlagEnv + "=shadow|block，装配期各读一次，改完须重启）",
+		"reading_hint": "would_deny = 切阻断后会被拦的外发次数（与实不实际拦无关），判定键是客户身份 " +
+			"（one_id → customer_id → 渠道:收件人），不是恒空的 account_id。by_reason 里 disabled_by_flag " +
+			"占多数时结论是「白名单旗子没开」，不是「对象没被批准」；block 态这一类还会被刹车放行。" +
+			"白名单与工具门共用，所以要看 whitelist_entries_for_reach 而不是总数",
+	}
+	if snap.DependencyUnmet {
+		out["dependency_note"] = "本门未装：W-1 的裁决来源不存在 ⇒ 先开 " + snap.DependencyFlagEnv +
+			"=shadow|block 再开 " + snap.GateFlagEnv + "；没有裁决来源的闸门只能恒放或恒拒，两种都长得像在拦"
+	}
+	if snap.BlocksWhenDenied && !snap.WhitelistFlagOn {
+		out["brake_engaged"] = true
+		out["brake_note"] = "block 态但白名单旗子未开 ⇒ reason=disabled_by_flag 的拒绝不拦，当前实际等价于 shadow；" +
+			"要真拦请开白名单旗子，并先按 tool=" + snap.ReachToolKey + " 灌好授权"
+	}
+	if snap.BlocksWhenDenied && snap.WhitelistFlagOn && snap.WhitelistEntriesForReach == 0 {
+		out["no_grant_for_reach"] = true
+		out["grant_warning"] = "block 态且 reach 名下有效授权=0 ⇒ 所有非工具外发都会被拒（denied_default）。" +
+			"放量前用 POST /agent/tools/approval/whitelist 以 tool=" + snap.ReachToolKey +
+			"、account_id=客户身份 灌入；该表只在进程内存里，重启即空"
+	}
+	return out
+}
+
+// handleReachGateState 读取非工具外发闸门的接线状态与判定累计（T-P3-07）。
+// 回显口径见 reachGateStatePayload。
+func handleReachGateState(c *gin.Context) {
+	snap, decisions := app.GetReachGateSnapshot()
+	out := reachGateStatePayload(snap)
 	if decisions != nil {
 		rep := decisions.Report()
 		per := make([]gin.H, 0, len(rep.PerTool))

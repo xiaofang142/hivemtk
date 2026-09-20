@@ -170,6 +170,30 @@ BASELINE=(
   # callpat 里的 `LTCStageGate\(` 之所以不会被本包测试污染：hits() 一律跳过 _test.go。
   "14|LTC 阶段闸门的业务路由挂载点（今日六阶段无一条业务路由）|func LTCStageGate|LTCStageGate\\(|internal/router cmd/api|"
   "14|LTC 运营开关管理 API 的挂载入口|func setupLTCRoutes|setupLTCRoutes\\(|internal/router|wired"
+  # 项15 = T-P3-07 新增：非工具外发路径的发送前闸门（G13 补盲）。五行全 wired（防回退）。
+  # 本卡的失败面与项1 是同一类，只是换了条路：闸门装在 ReachByCustomer 内部，
+  # 一旦哪半被删，外发**照样成功**、日志照样漂亮，只有"客户收到了一条没被批准的消息"
+  # 这个事实消失了 —— 编译与既有测试全绿。每行守一个"删掉之后别处不红"的点：
+  #   15a 出口处的判据调用：删掉 enforcePreSendApproval 的调用 = 钩子还挂着但没人问，
+  #       这是最纯粹的假闸门形态（service 侧的 g 侧用例守行为，这一格守"调用还在"）。
+  #   15b/15c 两个装配点各一行。分开而不是合并成"AttachReachGate 有人调"：
+  #       合并后删掉任意一边都仍显示 WIRED，而"只接了 HTTP、cron 那条照发"恰是
+  #       本卡最容易发生又最难发现的漏法（快照 attached_services 只数当前进程装了几个，
+  #       数不出生产里该接的几个）。callpat 用各自的实参名锁定那一条调用。
+  #   15d 观察端点：删掉路由 = 转阻断前的 would_deny 报告无处可看，准入证据链断掉，
+  #       而 shadow 态一切照跑、没人会察觉。
+  #   15e 队列侧的"拒发不烧尝试次数"分支：删掉它 ⇒ 被拒的挽回项会被算成失败并耗尽
+  #       重试后终止（与补授权可重发的语义相反），而 sent 计数照样是零、看不出差别。
+  #       defpat 必须容忍空白：gofmt 会把结构体字段对齐成多个空格，写死单空格的式样
+  #       会在一次纯格式化之后判成"定义缺失"（本轮就踩到了：gofmt -w 之后 15e 立刻红，
+  #       而字段与分支都还在）。这里守的是资产存在，不是它对齐成什么样。
+  # 已知的未接线端（留此登记，不留白）：reach 流水线 dispatchOutbound → sender.SendReach
+  # 那条批量群发路**不经过** ReachByCustomer，今日仍不受闸门约束，由达阈值时的卡另登。
+  "15|外发出口处的发送前判据调用|func \\(s \\*ProactiveReachService\\) enforcePreSendApproval|enforcePreSendApproval\\(|internal/service|wired"
+  "15|挽回队列侧的外发闸门装配点|func AttachReachGate|AttachReachGate\\(reach\\)|internal/app|wired"
+  "15|直接 API 侧的外发闸门装配点|func setupProactiveReachRoutes|AttachReachGate\\(proactiveSvc\\)|internal/router|wired"
+  "15|外发闸门观察端点的挂载入口|func handleReachGateState|/agent/tools/reach-gate|internal/router|wired"
+  "15|被拒挽回项不烧尝试次数的分支|BlockedByApproval[[:space:]]+int|errors\\.Is\\(sendErr, ErrReachApprovalDenied\\)|internal/service|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

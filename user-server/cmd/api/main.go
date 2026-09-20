@@ -83,7 +83,7 @@ func (a redisPingerAdapter) Ping(ctx context.Context) error {
 }
 
 // @title						HiveMtk 用户端 API
-// @version					3.41.0
+// @version					3.42.0
 // @description				HiveMtk 用户端（私域独立部署）RESTful API。认证采用 JWT：请求头 Authorization: Bearer <token>。
 // @description				仅当 ENABLE_SWAGGER=true 时，通过 http://localhost:8204/swagger/index.html 本地访问。
 // @BasePath					/
@@ -354,11 +354,8 @@ func main() {
 	defer churnCron.Stop(context.Background())
 	logger.Info("[ChurnScoreCron] BG/NBD 流失评分周批已装配")
 
-	// W-5 挽回队列消费：入队侧（RFM/Churn → Enqueue）早已就绪，缺的是把到期项发出去的人。
-	// 装配落在 internal/app（见 recovery_worker_wiring.go），开关 off 时 Start 直接 no-op。
-	if recoveryWorker := app.InitRecoveryWorker(db.GetDB()); recoveryWorker != nil {
-		defer recoveryWorker.Stop(context.Background())
-	}
+	// W-5 挽回队列消费的装配点在这里（不在下面）：入队侧（RFM/Churn → Enqueue）早已就绪，
+	// 缺的是把到期项发出去的人。**真正的启动挪到了 router.Setup 之后**，原因见那里。
 
 	ragEvalCron := service.NewRagEvalCron()
 	ragEvalCron.Start(context.Background())
@@ -446,6 +443,18 @@ func main() {
 	app.InitAgentCheckpointStore(db.GetDB())
 
 	router.Setup(r, db.GetDB())
+
+	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），
+	// 开关 FF_LTC_RECOVERY_WORKER=off（默认）时 Start 直接 no-op。
+	//
+	// 为什么必须排在 router.Setup **之后**：worker 的外发要挂 T-P3-07 的闸门，
+	// 而闸门的裁决来源（W-1 白名单 checker）是 router.Setup 里的 InitGlobalToolExecutor
+	// 才建的。排在前面不会 panic、也不会报错，只会留下一条"依赖未成立 ⇒ 不装门"的告警 ——
+	// 也就是 cron 这条外发路径静默地不受审批约束。启动顺序在这里是**功能的一部分**，
+	// 不是可挪动的细节。
+	if recoveryWorker := app.InitRecoveryWorker(db.GetDB()); recoveryWorker != nil {
+		defer recoveryWorker.Stop(context.Background())
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -20,16 +20,16 @@ package service
 //     "系统自己想话说"不是本卡的范围，那是 AI 生成内容的合规问题，不该由一个 cron 顺带解决。
 //  3. **频控与 DNC**（AC②）：交给 `ProactiveReachService.ReachByCustomer` 里既有的两道
 //     （ReachByCustomer 里的 `filterDoNotContactChannels` / `checkCooldown`），worker 不另起一套判重。
+//     T-P3-07 后同一出口还有第三道：发送前审批门 `ErrReachApprovalDenied`，处置见 processOne 的分支。
 //  4. **单轮上限**（AC④）：`LTC_RECOVERY_WORKER_BATCH`，默认 20。
 //
-// 一件必须写下来的边界：**本 worker 不经过 W-1 审批门**。
-// W-1（internal/app/approval_wiring.go）挂在工具执行链的 buildHandler 上，
-// 而这里是 cron 直调 service —— 那条链压根不会被走到。想让它也过闸门，需要给
-// ProactiveReachService 加一个"已选完渠道、尚未发送"的 pre-send 钩子（今天的
-// pickChannel 在 cooldown 写键之后、send 之前，没有可注入点；且短信/邮件渠道
-// 的 accountID 恒为空，白名单的 (tool, account) 维度在这里没有对应物）。
-// 这是已知缺口，已按 T-P1-07 的结论登记进任务清单，不在本卡里顺手糊一个假闸门：
-// 用一个语义不对的 key 去查白名单，看起来"过了闸门"，实际是永远拒绝或永远放行。
+// 一条曾经写着的边界已在 T-P3-07 收口：本 worker 从前**不经过**任何审批门。
+// W-1（internal/app/approval_wiring.go）挂在工具执行链的 buildHandler 上，而这里是 cron
+// 直调 service，那条链压根不会被走到。现在的口径是：闸门落在 `ReachByCustomer` 内部
+// （SetPreSendApprovalChecker，见 proactive_reach.go），所以 cron 与直接 API 两条非工具路径
+// 自动同受约束，不需要各自的调用方记得接。判定键用客户身份（one_id 优先）而不是渠道账号 ——
+// 本 worker 走的短信/邮箱渠道 accountID 恒为空，用它的白名单判了等于没判，这正是当年
+// 拒绝在这里"顺手糊一个假闸门"的理由，那句话仍然成立。
 //
 // 另一件：**取锁失败必须拒绝发送（fail-closed）**。触达服务自己的冷却 `checkCooldown`
 // 在缓存出错时是 fail-open（checkCooldown 里 err != nil 直接返回 true 照发），因为它的定位是
@@ -110,6 +110,7 @@ type RecoveryWorkerRoundReport struct {
 	Sent                int       `json:"sent"`
 	SkippedNoContent    int       `json:"skipped_no_content"`
 	BlockedByDNC        int       `json:"blocked_by_dnc"`
+	BlockedByApproval   int       `json:"blocked_by_approval"`
 	BlockedByCooldown   int       `json:"blocked_by_cooldown"`
 	Failed              int       `json:"failed"`
 	ClaimHeld           int       `json:"claim_held"`
@@ -433,6 +434,19 @@ func (w *RecoveryQueueWorker) processItem(ctx context.Context, item *model.Recov
 			Str("customer_id", item.CustomerID).
 			Msg("[RecoveryWorker] 命中全局退订 ⇒ 本条终止（cancelled，不再重试）")
 		w.recordAttempt(ctx, r, item.ID, "", "blocked_do_not_contact", model.RecoveryStageCancelled, 0)
+
+	case errors.Is(sendErr, ErrReachApprovalDenied):
+		// 授权是**可补的**（与退订相反）⇒ 既不终止也不烧尝试次数：留在 queued，按 worker
+		// 自己的节奏再来一次。这里刻意不写 last_result：与冷却分支同一条口径——什么都没发出去
+		// 就不往外发台账里落字，被拦的原因由日志与本行计数承载。
+		//
+		// 走 default 会怎样：attempts 被三次烧光 → stage=failed，一个字节都没发出去的客户
+		// 被记成"挽回失败"，而失败计数正是排障时用来发现真实发送故障的信号。
+		r.BlockedByApproval++
+		logger.Ctx(ctx).Warn().Err(sendErr).Uint64("recovery_id", item.ID).
+			Str("customer_id", item.CustomerID).
+			Msg("[RecoveryWorker] 命中发送前审批门 ⇒ 本条本轮不发、不记尝试（补授权后仍可发）")
+		w.deferOnly(ctx, r, item, w.backoff, "blocked_approval")
 
 	case errors.Is(sendErr, ErrReachCooldown):
 		// 什么都没发出去 ⇒ 不消耗尝试次数，只推离队首（同无文案项，见 DeferAttempt 注释）。

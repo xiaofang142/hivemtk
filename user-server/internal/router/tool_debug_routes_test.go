@@ -430,6 +430,7 @@ func TestSetup_ToolDebugRoutesRegistered(t *testing.T) {
 		"POST-/api/agent/tools/circuit/reset",
 		"GET-/api/agent/tools/approval",
 		"POST-/api/agent/tools/approval/whitelist",
+		"GET-/api/agent/tools/reach-gate",
 		"GET-/api/agent/tools/risk",
 		"GET-/api/agent/tools/providers",
 	}
@@ -803,6 +804,162 @@ func TestApprovalStatePayload_BlockEcho(t *testing.T) {
 		hint, _ := out["env_hint"].(string)
 		if !strings.Contains(hint, blockOn.WhitelistFlagEnv) {
 			t.Errorf("env_hint 未引用快照里的白名单 env 名：%q", hint)
+		}
+	})
+}
+
+// TestHandleReachGateState_HTTP_Unwired 外发闸门未接线时的自述（T-P3-07）。
+//
+// 与 /agent/tools/approval 同形：wired=false 就不给 decision_report（"一次都没发生"
+// 与"没装门"是两个相反的结论），false/0 这类有效读数必须照样回显，旗子名与 app 侧常量同源。
+func TestHandleReachGateState_HTTP_Unwired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/reach-gate", nil)
+
+	handleReachGateState(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200；body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Code int            `json:"code"`
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body not JSON: %v; body=%s", err, w.Body.String())
+	}
+	if resp.Code != 0 {
+		t.Fatalf("envelope code = %d, want 0；body=%s", resp.Code, w.Body.String())
+	}
+	if wired, ok := resp.Data["wired"].(bool); !ok || wired {
+		t.Errorf("wired = %v, want false（本测试进程没跑过 reach 门装配）", resp.Data["wired"])
+	}
+	if _, exists := resp.Data["decision_report"]; exists {
+		t.Errorf("未接线时不应出现 decision_report，否则 0 会读成「零次外发」：实际 %v", resp.Data["decision_report"])
+	}
+	flags, ok := resp.Data["flags"].(map[string]any)
+	if !ok {
+		t.Fatalf("flags 缺失或类型不对：%v", resp.Data["flags"])
+	}
+	for _, k := range []string{"gate", "whitelist_env", "whitelist_flag_on"} {
+		if _, ok := flags[k]; !ok {
+			t.Errorf("flags 缺 %q：%v", k, flags)
+		}
+	}
+	if flags["gate"] != app.ReachGateFlagEnv {
+		t.Errorf("flags.gate = %v, want %s（与 app 侧常量漂移）", flags["gate"], app.ReachGateFlagEnv)
+	}
+	if flags["whitelist_env"] != "FF_AI.SAFETY.TOOL_APPROVAL_GATE" {
+		t.Errorf("flags.whitelist_env = %v", flags["whitelist_env"])
+	}
+	if resp.Data["reach_tool_key"] != app.ReachApprovalToolKey {
+		t.Errorf("reach_tool_key = %v, want %s（授权要按这个入口名灌）", resp.Data["reach_tool_key"], app.ReachApprovalToolKey)
+	}
+	// 依赖旗子的名字也要回显：运维在这里看到"没装门"，下一步要知道去开哪一把
+	if resp.Data["dependency_flag_env"] != app.ApprovalGateFlagEnv {
+		t.Errorf("dependency_flag_env = %v, want %s", resp.Data["dependency_flag_env"], app.ApprovalGateFlagEnv)
+	}
+	hint, _ := resp.Data["env_hint"].(string)
+	if !strings.HasPrefix(hint, app.ReachGateFlagEnv+"=") || !strings.Contains(hint, "off|shadow|block") {
+		t.Errorf("env_hint 未以旗子名开头或没列三态：%q", hint)
+	}
+	if !strings.Contains(hint, app.ApprovalGateFlagEnv) {
+		t.Errorf("env_hint 要写明依赖哪把旗子：%q", hint)
+	}
+	for _, k := range []string{"blocks_when_denied", "whitelist_entries_for_reach", "attached_services", "mode"} {
+		if _, ok := resp.Data[k]; !ok {
+			t.Errorf("未接线快照也须回显 %s（false/0 是有效读数，缺字段会被读成没实现）", k)
+		}
+	}
+	if b, _ := resp.Data["blocks_when_denied"].(bool); b {
+		t.Error("off 态 blocks_when_denied 必须为 false")
+	}
+	if n, _ := resp.Data["attached_services"].(float64); n != 0 {
+		t.Errorf("off 态 attached_services = %v, want 0", resp.Data["attached_services"])
+	}
+	if _, exists := resp.Data["brake_engaged"]; exists {
+		t.Error("off 态没有刹车可言，brake_engaged 不该出现")
+	}
+}
+
+// TestReachGateStatePayload_Echo 喂构造快照，锁住端点回显的分叉。
+//
+// 装配只在启动时跑一次，handle 在本进程只能测到 off。这里必须锁的是三种"读数会误导人"的
+// 组合：block 但白名单旗子没开（其实一单不拦）、block 且 reach 名下零授权（一开内层旗子
+// 就全拒）、mode 非 off 却没装上门（W-1 没接线）。三种都要在响应里自带解释。
+func TestReachGateStatePayload_Echo(t *testing.T) {
+	base := app.ReachGateSnapshot{
+		Mode:                     "block",
+		Wired:                    true,
+		BlocksWhenDenied:         true,
+		GateFlagEnv:              app.ReachGateFlagEnv,
+		DependencyFlagEnv:        app.ApprovalGateFlagEnv,
+		ReachToolKey:             app.ReachApprovalToolKey,
+		WhitelistFlagEnv:         "FF_AI.SAFETY.TOOL_APPROVAL_GATE",
+		WhitelistFlagOn:          true,
+		WhitelistActiveEntries:   5,
+		WhitelistEntriesForReach: 2,
+		AttachedServices:         2,
+	}
+
+	t.Run("block+白名单旗子未开 ⇒ 报刹车", func(t *testing.T) {
+		snap := base
+		snap.WhitelistFlagOn = false
+		out := reachGateStatePayload(snap)
+		if out["brake_engaged"] != true {
+			t.Errorf("brake_engaged = %v, want true", out["brake_engaged"])
+		}
+		note, _ := out["brake_note"].(string)
+		if !strings.Contains(note, "disabled_by_flag") || !strings.Contains(note, app.ReachApprovalToolKey) {
+			t.Errorf("brake_note 没说清刹车与下一步：%q", note)
+		}
+	})
+
+	t.Run("block+reach 名下零授权 ⇒ 单独告警（总数不为零也不行）", func(t *testing.T) {
+		snap := base
+		snap.WhitelistEntriesForReach = 0
+		out := reachGateStatePayload(snap)
+		if out["no_grant_for_reach"] != true {
+			t.Errorf("no_grant_for_reach = %v, want true（工具侧有授权不代表外发侧有）", out["no_grant_for_reach"])
+		}
+		warn, _ := out["grant_warning"].(string)
+		if !strings.Contains(warn, "所有") || !strings.Contains(warn, "whitelist") {
+			t.Errorf("grant_warning 没说清后果与灌授权的入口：%q", warn)
+		}
+	})
+
+	t.Run("shadow ⇒ 不报刹车也不报空授权", func(t *testing.T) {
+		snap := base
+		snap.Mode = "shadow"
+		snap.BlocksWhenDenied = false
+		snap.WhitelistFlagOn = false
+		snap.WhitelistEntriesForReach = 0
+		out := reachGateStatePayload(snap)
+		if _, exists := out["brake_engaged"]; exists {
+			t.Error("shadow 本来就只记录，不该报刹车")
+		}
+		if _, exists := out["no_grant_for_reach"]; exists {
+			t.Error("shadow 态零授权不会拦下任何东西，不该报空授权告警")
+		}
+	})
+
+	t.Run("依赖没接上 ⇒ 说清为什么没装", func(t *testing.T) {
+		snap := base
+		snap.Mode = "block"
+		snap.Wired = false
+		snap.BlocksWhenDenied = false
+		snap.AttachedServices = 0
+		snap.DependencyUnmet = true
+		out := reachGateStatePayload(snap)
+		if out["dependency_unmet"] != true {
+			t.Fatal("dependency_unmet 字段必须原样回显")
+		}
+		dep, _ := out["dependency_note"].(string)
+		if !strings.Contains(dep, app.ApprovalGateFlagEnv) {
+			t.Errorf("dependency_note 要点名先开哪把旗子：%q", dep)
 		}
 	})
 }
