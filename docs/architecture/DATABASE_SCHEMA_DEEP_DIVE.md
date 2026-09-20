@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.8（2026-09-20，T-P4-02 新增 §4.16.1 商机仓储层；v1.7 是 T-P4-01 的 §4.16 —— 那张卡当日只加了正文小节、漏了本行与修订历史，v1.7 一并补登记）
+> **版本**：v1.10（2026-09-21，T-P4-04 新增 §4.16.3 商机 HTTP 出口；v1.9 那一行只进了下面的修订历史、漏改本行，本次一并对齐 —— 上一版 v1.8 是 T-P4-02 的 §4.16.1）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -865,7 +865,8 @@ T-P4-01 时实测只有 `id` 是 `NOT NULL`，T-P4-02 补 `version` 后是 `id` 
 T-P4-05），未接线台账 **项 16** 已按此登记旗子（现值 38/45，`&model.Opportunity{}` 在
 `internal/pkg/db` 的是建表登记、不算写入路径，故被该项的搜索范围排除）。本卡欠三件、各有名主：
 乐观锁版本列 → T-P4-02（**已随 T-P4-02 交付**，见下一段），跃迁合法表与赢率计算式 → T-P4-03
-（**已随 T-P4-03 交付**，见 §4.16.2），列表/详情端点 → T-P4-04。
+（**已随 T-P4-03 交付**，见 §4.16.2），详情与五条写入口**已随 T-P4-04 交付**（见 §4.16.3），
+**列表端点仍欠** —— 仓储的 `List` 今日不返回 `total`，凑不出 `{list,total}` 那句业务判断。
 `win_probability` 与 ltc.config 的 `win_probability` 阈值**同量程 0–1**（默认 0.50），
 所以比较不需要换算；那枚阈值今天在生产代码里仍零读者，消费方就是本卡的这一列 + T-P4-05/T-P6-04。
 
@@ -973,9 +974,108 @@ P8 攒够 outcome 行之后回标改的是这四个数、式子的形状不动�
 **接线现状（T-P4-03，2026-09-20 实跑）**：本层今日同样**零生产调用方**，未接线台账因此加了一行
 **16c 商机服务的装配入口**（`NewOpportunityService(`，scope 只覆盖装配面），与 16a（谁构造仓储）
 分开登记 —— 接线有两个断点（装配仓储 / 挂路由），只盯一个会让另一个断了也没人知道。
-台账现值 **38/47**（`check-unwired-assets.sh` rc=0，16a/16b/16c 三行均按 UNWIRED 登记）。
+台账**当时**值 **38/47**（`check-unwired-assets.sh` rc=0，16a/16b/16c 三行均按 UNWIRED 登记；本行记的是 T-P4-03 收尾那一刻，现值见 §4.16.3 末段的 42/49）。
 16b（`model.Opportunity{` 在 `internal/service` 的商机行写入点）本卡**刻意不翻**：本层只发
 `*model.Opportunity` 指针、不构造新行，构造与一键转商机在 T-P4-05。读端点与 409/400 的映射在 T-P4-04。
+
+### 4.16.3 `opportunities` 的 HTTP 出口：八条端点、一套分诊词表，以及"摘掉装配点"为什么两边都看不见（T-P4-04）
+
+出口面三条路径（`internal/controller/opportunity.go` + `internal/router/opportunity_routes.go`
++ `internal/app/opportunity_wiring.go`）：读两条（`GET /api/opportunity/{id}`、`.../moves`）、
+规则一条（`GET /rules`）、写五条（`PUT /{id}` 整份改写、`POST /{id}/stage`、`/lost`、`/cancel`、
+`/reopen`）。**没有一条能写 `won`** —— 这不是"少做了一个接口"，而是 §4.16.2 那张三元边表在
+HTTP 侧的兑现：`won` 只能由 `collection_completed` 落下，所以它没有按钮。用例
+`TestOpportunityRoutes_NoEndpointCanWriteWon` 按路由表逐条比对，加一条 `POST /{id}/won` 就红（变异 M24）。
+
+四条判据值得单独记：
+
+**① 绑定一律 `DisallowUnknownFields`，且请求体封顶 4KB。** 派生量（`win_probability`）与身份列
+（`id`/`code`/`customer_id`）在服务层的入参结构里**根本没有格子**，"默认丢弃未知字段"会让
+`{"win_probability":0.99}` 静默成功 —— 前端以为写了，服务层以为没让写，两边各持一套账。
+体积上限也不是防打爆内存（4KB 打不爆），是因为不封顶的请求体让"改一行商机的金额"这个动作的
+开销由调用方决定。`http.MaxBytesError` 单列一臂：混进"请求体形状不对"里，运维读到的是
+"调用方字段写错了"，实际发生的是"这一格被封顶了"，两种情形的处置动作完全不同。
+
+**② 写入口必须带 `version`，缺字段在本层判 400 而不是让它取零值。** 服务层签名收 `int64`，
+传不进来只能是"调用方忘了"，而忘了的默认值 0 恰好是**新行的合法期望版本** —— 放行等于第一次
+并发改写永远撞不上锁。乐观锁的"期望版本"必须是**调用方看到的那一格**，本层不重读、不采用最新值。
+
+**③ `400/404/409/503` 共用一套分诊词表**：`input_invalid` / `not_found` / `stale_version` /
+`closed` / `transition_illegal` / `state_invalid` / `unavailable` / `internal`。三种 409 分不开
+就等于没有乐观锁（"重读再改"与"这单已经收口"与"库里那一行本身越界"是三种完全不同的动作）。
+503 的判据不是"错误响应不许带 `data`"，而是**不许有看起来像结果的 `data`**：`{}`、`[]`、`null`
+都会被前端长成一句"查过了，没有"，而此刻的事实是"一次都没查" —— 所以 503 带 `reason=unavailable`
+而 `data` 整段缺席。
+
+**④ `GET /rules` 在未装配时照样答。** 机器规则不碰库，前端渲染按钮要的就是这份规则；底座挂了
+就把规则一起摘掉，等于用一次故障换来"销售流程不存在"的假象。清单里同时给出
+`ServerOnlyOpportunityMoves()` —— "存在但不对 HTTP 暴露"那几条边（`collection_completed → won`），
+否则这条规则在契约面上读成"产品没有赢单"。
+
+**分层门决定的一个写法**：controller 不许 import repository（架构门 [1/10]），而"这一行不在了"
+与"手里那份是旧的"这两种判定的事实来源就是仓储的 CAS 返回值 —— 于是在**服务层**给
+`ErrOpportunityNotFound` / `ErrOpportunityStaleVersion` 做**别名**（同款先例见 `human_task.go`），
+而不是在 HTTP 侧再造一组 sentinel（那要多一处映射，而映射才是会分家的地方）。
+
+**本卡最值钱的产出是三把我自己写错、被真跑纠正的断言**（变异电池 38 刀，最终 **37 CAUGHT / 1 等价**，
+控制组 router ran=29 skip=0 red=0）：
+
+- **M11（摘掉体积上限）跑出来 MISSED，根因是夹具自己是个语法错误的 JSON**：`{"` 再拼一个
+  `"version"` ⇒ `{""version"`，那句 400 来自"我打错了"而不是体积 —— 整条用例从第一天起就是假绿。
+  现在夹具先自证（能 `Unmarshal`、且确实 >4KB），再断拒因里必须出现"上限"、不许出现 Go 的错误串。
+  填充体只用**已声明的字段**重复堆量（JSON 允许同键重复）；若塞一个 `{"pad":"…"}`，
+  `DisallowUnknownFields` 会替体积上限挡住那一刀，用例照样永远绿。
+- **M17（摘掉控制器的空 id 关）照样全绿**：服务层 `Get` 自己也 `TrimSpace` 拒空，**读口**看不出差别；
+  差别只在**写口** —— `transition` 不判空，摘关之后 `PUT /api/opportunity/%20` 会拿一个空白串去
+  库里查一趟、落空后回 **404「这条商机不存在」**，而事实是"这次请求根本没给 id"。新增用例用
+  `failingOpportunityRepo` 把"根本没查"断出来：一查就是 500，绝不会是 400。
+- **M21（把 `closed` 与 `stale_version` 两条 case 换个顺序）是真正的等价变异**：服务层一次只返回
+  一个 sentinel（§4.16.2 的 `opportunity.go:509` 收口、`:512` 版本撞车，且 `:506` 的先验校验在前），
+  两条 `errors.Is` 永不同时为真，换序改不了任何输出。留着它只会让 MISSED 名单里混进一把本来没牙的刀，
+  故换成同族里有牙的那把：把已收口的行贴成 `stale_version` 的 reason（那正是"刷新一下就好"的误导本身）。
+- **M33（`router.go` 摘掉 `app.InitOpportunityRuntime`）Go 与台账两边都看不见**：装配函数、控制器、
+  挂载函数三个字面量全都还在，端点也照样挂在树上，只是运行时全局句柄永远是 nil ⇒ 八个端点全部退成
+  503。旧的两条路由用例为什么一起漏：`MountedBySetup` 只看 `engine.Routes()`（挂上 ≠ 活的），
+  匿名探针判"非 2xx"（503 恰好也是非 2xx）。现在两把一起守：`TestOpportunityRoutes_LiveThroughRealSetup`
+  带合法令牌真读得到那一行（并先把全局句柄洗成 nil —— 不清这一把的话，同进程前一条用例留下的实例
+  会让摘刀在**全量跑**里照样读得到 200），台账加 **16e 启动装配点**。两把都反向验过。
+- **M27（未装配分支只改一句启动日志）判为等价**，理由登记而不降级成"已覆盖"：两个分支都只是打日志，
+  `return` 摘掉也不改变任何响应；本仓今日没有可断日志行的采集面，为一句话日志新开一个采集层不划算。
+
+**台账现值 42/49**（`check-unwired-assets.sh` rc=0）：16a（仓储装配入口）与 16c（服务装配入口）
+比 §4.16.2 的原计划**早一张卡**同时翻 wired —— 这一卡交付的是 HTTP 出口，而出口必须自带底座，
+`app.InitOpportunityRuntime` 一行同时接上两个断点；判据仍分开跑，因为"摘掉仓储那一行"与"摘掉路由
+那一行"是两种不同的破坏。新增 **16d 挂载入口**、**16e 启动装配点**。16b（商机行的生产写入点）
+**仍按 UNWIRED 登记**，兑现点 T-P4-05。
+
+**列表端点刻意不交付**（登记为欠账而不是"已完成"）：仓储的 `List` 今日不返回 `total`，
+而 CLAUDE.md 的列表契约要求 `{list,total}` —— 用 `len(list)` 凑一个 `total` 会让"这页是第 3 页、
+一共多少条"这句业务判断从"查过"变成"猜的"。详情页因此也只给单行读口。
+
+**swag 未随本卡重生成**（与前几张卡同一口径）：工作树里另有并行会话未审阅的注解，
+一次重生成会把它们一并灌进 `docs/`。本卡的 Swagger 判据是静态的：`opportunity_routes_test.go`
+逐条断言八条端点各有一行 `@Router` 注解，摘掉任一条即红。
+
+**实跑口径（两种树分开记，别混读）**。本卡的验收数字一律取自 **`--shared` 克隆、HEAD `292c92e3`**：
+router 150 / app 164 / controller 781 / service 3509，`TZ=America/Shanghai` 与 `TZ=UTC` **同数同绿、失败 0**，
+`go build` / `go vet` rc=0，`git archive HEAD` 独立解包可编译 rc=0，八条结构门 rc=0。
+**同一天的工作树**另有一组数（controller 797 / service 3722），差额 16 / 213 逐条对上并行会话**未提交**的测试文件
+（工作树 `^func Test` 计数 controller 797、service 3741，克隆 781、3528）⇒ 引用任何一个数都要先说哪棵树；
+本卡提交信息里那句"controller 797 / service 3722"是工作树口径而未标树，**以本段的克隆口径为准**。
+
+**`-race` 四腿是本卡顺手扩的一表面，且量出一条既有缺陷**：router 150 / app 164 / controller 781 三腿 race=0；
+service 腿 rc=1 pass=3507 fail=2 race=2。两处竞态同根：测试用 `db.SetTestDB()` **写包级全局 DB 句柄**
+（`customer_session_blacklist_test.go:24`），而上一个用例留下的 **fire-and-forget goroutine** 正在读同一个句柄
+（`customer_service_plus.go:487` 的 `MaybeSendAwayReply` → `office_hours.go:45` → `NewSystemConfigKVRepository`；
+`customer_session.go:463` 的 `DispatchSessionEventAsync` → `session_chain.go:202` → `NewAutomationRuleRepository`）。
+**判为既有、不是本卡引入**，且这条判断是量出来的不是推出来的：同一份全量 `-race` 在父提交 `11755c55`
+（不含本卡八个文件）上跑出 **1 处 DATA RACE / 1 个 FAIL（`TestCreateSession_AnonymousUser`）**，写方与读方的栈
+与本卡第二处**逐帧相同**。两处 vs 一处的差额**不解释成"本卡多引入一处"**：这两个读方都由 `CreateSession`
+同一条路派出，检测器在一个用例里只报它先撞上的那一队，命中哪一队取决于调度。本卡**不修它** —— 涉及的四个文件
+（`customer_session.go`、`customer_service_plus.go`、`office_hours.go`、`session_chain.go`）都不在本卡交付面里，
+且这类"全局句柄 + 异步读"的修法要动测试底座、会撞上并行会话正在改的同一批文件；登记为**待处置项**
+（与既有的"service 用例共享进程状态"同族）。另登记一条口径事实：**`-race` 不在本仓任何门禁脚本里**
+（`scripts/` 下只有审计轨的记录文档提到 `-race`），所以这条红不会被默认门拦住 —— 第六步全量回归若沿用现有门，同样看不见它。
 
 
 ---
@@ -1144,3 +1244,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.7 | 2026-09-20 | @backend | **补登记**（v1.3 那行的反向形状：那张卡只加了正文小节 §4.16，既没改文档头版本号也没进本表）：新增商机表 `opportunities`（N-1 / T-P4-01）。内容为直读 `information_schema` + `pg_indexes` 的列/索引实测形状，核心是 `stage`（四格过程）与 `status`（四态结果）**分列不许合并** —— 合成一列的后果是漏斗末格与赢单率塌成同一个数（C5 在字段层的翻版），`OpportunityClosed`（含 cancelled）与 `OpportunityOutcomes`（不含）因此拆成两个判据；另登记本卡唯一一处被测试逼出来的改设计：首版给 `status` 写了 `index`，被自家「每条索引必须点名一个已存在下家」的用例当场判红后摘掉 |
 | v1.8 | 2026-09-20 | @backend | 新增 §4.16.1 商机仓储层（N-1 / T-P4-02）：补 `version bigint not null default 0`（§4.16 表随三处更新 —— 可空性由「只有 `id` 是 NOT NULL」改为「`id` 与 `version`」、`currency` 改称「唯一带**语义**默认值」的列并注明 `version` 的默认是补列前提、反向无索引列由 7 增至 9），写明并发口径选 **CAS 而不是 `FOR UPDATE`** 的失败面差别、改写白名单就是那个 10 键 map（附两条只有真跑才暴露的 GORM 静默失效：`Select(清单)` 会吃掉 `version + 1`、struct 形式 `Updates` 跳零值），以及读侧三条纪律（空状态集报错而非回全表 / `limit<=0`、`offset<0` 由本层拒且判据写成「错误来自本层」 / 排序带 `id DESC` 兜底键、并列行逐位比对次序）。变异电池 25/25 捕获、存活 0、坏变异 0；未接线台账项 16 拆为 16a/16b 两行（现值 38/46） |
 | v1.9 | 2026-09-20 | @backend | 新增 §4.16.2 商机**服务层**（N-1 / T-P4-03）：§4.16「本卡欠三件」改为两件已交付（跃迁合法表与赢率计算式 → 已随 T-P4-03 交付）。三条实测口径进文档：① 跃迁规则「阶段向前恰好一步、向后任意步、**同格不算跃迁**」+ status 按 **(来源, 起点, 终点)** 三元边表存 —— AC③ 那句「本层写 won 的唯一入口」是靠这张表实现的，不是靠「源码里只有一处赋值」；终态不重算赢率，幂等只给「事实的重复上报」（同一条回款完成第二次到达＝成功且零改写）。② 赢率式 `p = round₂(base(阶段) − 无归属 0.10 − 已逾期 0.15)`、下限 0.05：**可证明的只有单调形状**（逐格向前 ⇒ 集合嵌套 ⇒ `P(赢|到第 k 格)` 递增），四个 base 是显式登记的**先验刻度而非标定值**（全表零生产写入方，没有可回标的收口行），惩罚只做常数不做逾期梯度，且禁止与 `confidence`/`lead_score` 跨域乘算（C5；`OpportunityWinInput` 三字段由反射用例钉住）。③「谁负责把值舍到两位」这条接口判据：真库用例**证不出**（numeric 列自己会舍，读回来两边一样），第一版变异电池里「摘掉落库前舍入」就是这么活下来的，补一条绕开 PG、直接断 `Update` 收到的浮点 payload 的用例后才杀掉。未接线台账项 16 加 **16c 商机服务的装配入口**（与 16a 分开登记：接线有两个断点，只盯一个则另一个断了没人知道），16b 本卡刻意不翻；现值与实跑数字见变更记录 r43。本卡用例 17 条、变异 31 条全部被杀 |
+| v1.10 | 2026-09-21 | @backend | 新增 §4.16.3 商机 **HTTP 出口**（N-1 / T-P4-04）：八条端点（读二 + 规则一 + 写五），**没有一条能写 `won`** —— 那是 §4.16.2 三元边表在 HTTP 侧的兑现，由路由表逐条比对的用例守着（加一条 `POST /{id}/won` 即红）。四条判据进文档：① 绑定 `DisallowUnknownFields` + 请求体封顶 4KB（派生量与身份列在入参结构里根本没有格子，默认丢弃未知字段会让 `{"win_probability":0.99` 静默成功、两边各持一套账；`MaxBytesError` 单列一臂，不混进"形状不对"）；② 写入口必须带 `version`，缺字段判 400 而不是取零值（0 恰好是新行的合法期望版本）；③ 400/404/409/503 共用一套分诊词表，503 的判据是"不许有看起来像结果的 data"（`{} [] null` 都会被前端长成"查过了，没有"）；④ `GET /rules` 未装配时照样答，且给出"存在但不暴露"的机器动作清单，否则这套规则在契约面上读成"产品没有赢单"。controller 不 import repository（架构门 [1/10]），两种 404/409 判定的事实来源由**服务层别名**送出（同款先例 `human_task.go`）。**本卡三把被真跑纠正的断言**（变异电池 38 刀 → 37 CAUGHT / 1 把 M27 登记为等价）：M11 的夹具自己是个语法错误的 JSON，那句 400 来自"我打错了"而不是体积 ⇒ 用例从第一天起假绿，现在夹具先自证能 `Unmarshal` 且确实 >4KB；M17 摘掉控制器空 id 关在**读口**看不出差（服务层 `Get` 也拒空），差别只在写口（`transition` 不判空 ⇒ `PUT /api/opportunity/%20` 白查一趟并回 404"这条不存在"），改用 `failingOpportunityRepo` 断"根本没查"（一查就是 500）；M21（`closed` 与 `stale_version` 换序）查下来是**真等价变异**（服务层一次只返回一个 sentinel，两条 `errors.Is` 永不同时为真），换成同族里有牙的那把（把已收口的行贴成 `stale_version` 的 reason）。另登记一处两边都看不见的刀：`router.go` 摘掉 `app.InitOpportunityRuntime` 之后装配函数、控制器、挂载函数三个字面量全在、端点也在树上，只是运行时全局句柄永远 nil ⇒ 八条端点全退 503；旧路由用例漏它有两个原因（只看 `engine.Routes()` ⇒ 挂上≠活的；匿名探针判"非 2xx" ⇒ 503 也是非 2xx），现由带合法令牌真读一行的用例 + 台账新增 **16e 启动装配点** 双守，两把都反向验过。未接线台账：16a/16c 比 §4.16.2 的原计划**早一张卡**同时翻 wired（出口必须自带底座，一次装配接上两个断点，判据仍分开跑），新增 16d 挂载入口 + 16e 启动装配点，16b 仍按 UNWIRED 登记（兑现点 T-P4-05）；台账现值 **42/49**（rc=0）。**列表端点刻意不交付**：仓储 `List` 不返回 `total`，用 `len(list)` 凑数会把"一共多少条"从"查过"变成"猜的"，登记为欠账。`swag` 未随本卡重生成（前几张卡同一口径：工作树里有并行会话未审阅的注解，重生成会一并灌入），Swagger 判据为静态的八行 `@Router` 逐条锁。实跑（提交 292c92e3 的 --shared 克隆）：router 150 / controller 781 / app 164 / service 3509 全绿、失败 0，`TZ=UTC` 复跑四包同数同绿；`-race` 四腿：router 150 / app 164 / controller 781 三腿 **race=0**，service 腿 **rc=1 pass=3507 fail=2 race=2** —— 两处 DATA RACE 在**父提交 `11755c55` 的全量 `-race` 实跑里复现同一对栈**（那里 race=1 fail=1），判为既有缺陷、非本卡引入，取证与口径见 §4.16.3 末段 |
