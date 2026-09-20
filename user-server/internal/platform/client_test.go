@@ -144,24 +144,6 @@ func TestClient_RegisterMerchant_RefusalIsError(t *testing.T) {
 	}
 }
 
-// TestClient_GetLicenseStatus_RefusalIsError 防的是"授权检查被绕过"：
-// 拒绝时 Data 为空，旧实现把零值 LicenseStatusResp 当成功返回，调用方读到 status=""。
-func TestClient_GetLicenseStatus_RefusalIsError(t *testing.T) {
-	t.Setenv("MERCHANT_API_SECRET", "test-secret")
-	srv, paths := refusalServer(t, http.StatusForbidden, "商户状态异常，禁止访问")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL})
-
-	c := NewPlatformClient("test-key")
-	got, err := c.GetLicenseStatus()
-	mustHaveHit(t, paths, "/merchant-api/license/status")
-	if err == nil {
-		t.Fatalf("平台拒绝必须上抛，得到 %+v", got)
-	}
-	if got != nil {
-		t.Fatalf("失败时不应返回结构体，得到 %+v", got)
-	}
-}
-
 // TestClient_Do_EnvelopeSuccessStillParsesData 反向闸门：严格化不能把成功响应一起打死。
 func TestClient_Do_EnvelopeSuccessStillParsesData(t *testing.T) {
 	t.Setenv("MERCHANT_API_SECRET", "test-secret")
@@ -204,8 +186,11 @@ func TestClient_Do_BareBodyWithoutCodePassesThrough(t *testing.T) {
 	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL})
 
 	c := NewPlatformClient("test-key")
-	var out LicenseStatusResp
-	if err := c.Do("GET", "/merchant-api/license/status", nil, &out); err != nil {
+	var out struct {
+		Status    string `json:"status"`
+		Remaining int    `json:"remaining_days"`
+	}
+	if err := c.Do("GET", "/merchant-api/profile", nil, &out); err != nil {
 		t.Fatalf("裸 body 无 code 键时应原样交回调用方，得到 %v", err)
 	}
 	if out.Status != "active" || out.Remaining != 3 {

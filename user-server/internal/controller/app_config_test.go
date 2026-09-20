@@ -251,3 +251,70 @@ func TestAppConfigController_HealthCheck_DistinguishesNotConfigured(t *testing.T
 		t.Errorf("platform_connection=%v want not_configured", got)
 	}
 }
+
+// livenessOnlyPlatform 复刻开源平台的真实路由集：只有 /health 存活，其余路径 404。
+// /merchant-api/license/status 就是"其余路径"之一 —— 平台从未实现它（R12）。
+func livenessOnlyPlatform(t *testing.T) *httptest.Server {
+	t.Helper()
+	paths := make(chan string, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths <- r.URL.Path
+		if r.URL.Path == "/health" {
+			_, _ = w.Write([]byte(`{"status":"alive","timestamp":1700000000}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestAppConfigController_LivenessOnlyPlatformReportsConnected 钉的是 R12 本体：
+// 平台明明健康（存活性端点 200）时三处探针都必须报 connected。
+// 修复前它们打 /merchant-api/license/status 拿 404 ⇒ platform_connection=unreachable、
+// sync 判"平台不可达"，即把一个健康平台长期报成故障，并每请求刷一条 Error 日志。
+func TestAppConfigController_LivenessOnlyPlatformReportsConnected(t *testing.T) {
+	setupAppConfigTestDB(t)
+	gin.SetMode(gin.TestMode)
+	srv := livenessOnlyPlatform(t)
+	withPlatformCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s"})
+	t.Setenv("MERCHANT_API_SECRET", "s")
+
+	t.Run("健康检查", func(t *testing.T) {
+		router := gin.New()
+		router.GET("/app/config/health", NewAppConfigController().HealthCheck)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("GET", "/app/config/health", nil))
+
+		var out struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatalf("响应解析失败: %v body=%s", err, w.Body.String())
+		}
+		if got := out.Data["platform_connection"]; got != "connected" {
+			t.Errorf("platform_connection=%v want connected（可达平台被判故障即 R12）", got)
+		}
+	})
+
+	t.Run("配置同步", func(t *testing.T) {
+		router := gin.New()
+		router.POST("/app/config/sync", NewAppConfigController().SyncWithPlatform)
+		req := httptest.NewRequest("POST", "/app/config/sync", bytes.NewReader([]byte(`{}`)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		var out struct {
+			Data struct {
+				Extra map[string]any `json:"extra"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatalf("响应解析失败: %v body=%s", err, w.Body.String())
+		}
+		if got := out.Data.Extra["platform_available"]; got != true {
+			t.Errorf("platform_available=%v want true，reason=%v", got, out.Data.Extra["platform_reason"])
+		}
+	})
+}

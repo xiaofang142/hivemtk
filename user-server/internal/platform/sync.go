@@ -116,10 +116,10 @@ func registerMerchantAs(key string, req RegisterMerchantReq) error {
 	return NewPlatformClient(key).RegisterMerchant(req)
 }
 
-// GetLicenseStatus 获取授权状态
-func GetLicenseStatus() (*LicenseStatusResp, error) {
-	cli := NewPlatformClient(merchantKey)
-	return cli.GetLicenseStatus()
+// CheckConnection 探测平台连通性。三处调用点（app-config / 同步 / 健康检查）要的都是
+// "平台在不在"，不是"授权状态"——后者属商业版契约，开源平台从未实现该端点（R12）。
+func CheckConnection() error {
+	return NewPlatformClient(merchantKey).CheckConnection()
 }
 
 // GetMerchantKey 返回当前部署实例的 merchant key

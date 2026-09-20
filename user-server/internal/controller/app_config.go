@@ -95,13 +95,13 @@ func (c *AppConfigController) GetAppConfig(ctx *gin.Context) {
 		return
 	}
 
-	licenseStatus, err := platform.GetLicenseStatus()
-	if err != nil {
+	connErr := platform.CheckConnection()
+	if connErr != nil {
 		// 私域独立部署里"没接平台"是常态，每请求刷一条 Error 会把常态伪装成故障
-		if platform.DegradeReason(err) == "unreachable" {
-			logger.Errorf("获取授权状态失败: %v", err)
+		if platform.DegradeReason(connErr) == "unreachable" {
+			logger.Errorf("平台连通性探测失败: %v", connErr)
 		} else {
-			logger.Debugf("未接入平台，跳过授权状态: %v", err)
+			logger.Debugf("未接入平台，跳过连通性探测: %v", connErr)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (c *AppConfigController) GetAppConfig(ctx *gin.Context) {
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
 
-	if licenseStatus != nil {
+	if connErr == nil {
 		resp.Config.PlatformSync.MerchantKey = "HIDDEN_FOR_SECURITY"
 		resp.Config.PlatformSync.PlatformURL = sysConfig.WebsiteURL
 	}
@@ -165,13 +165,13 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 
 	platformAvailable := true
 	platformReason := "connected"
-	if _, licErr := platform.GetLicenseStatus(); licErr != nil {
+	if connErr := platform.CheckConnection(); connErr != nil {
 		platformAvailable = false
-		platformReason = platform.DegradeReason(licErr)
+		platformReason = platform.DegradeReason(connErr)
 		if platformReason == "unreachable" {
-			logger.Errorf("[app-config/sync] 平台不可达，降级处理: %v", licErr)
+			logger.Errorf("[app-config/sync] 平台不可达，降级处理: %v", connErr)
 		} else {
-			logger.Warnf("[app-config/sync] 未接入平台，跳过 API 日志上报: %v", licErr)
+			logger.Warnf("[app-config/sync] 未接入平台，跳过 API 日志上报: %v", connErr)
 		}
 	}
 
@@ -224,7 +224,7 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 // HealthCheck 健康检查
 func (c *AppConfigController) HealthCheck(ctx *gin.Context) {
 	platformConnection := "connected"
-	if _, err := platform.GetLicenseStatus(); err != nil {
+	if err := platform.CheckConnection(); err != nil {
 		// 分开"没接"和"接了但挂了"：健康检查里两者都显示 disconnected 会引出假故障单
 		platformConnection = platform.DegradeReason(err)
 	}

@@ -463,64 +463,6 @@ func TestRegisterMerchantFailureKeepsSecret(t *testing.T) {
 	}
 }
 
-func TestGetLicenseStatusParsesData(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/merchant-api/license/status" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
-			"status": "active", "expire_at": "2027-01-02T03:04:05Z", "remaining_days": 200,
-		}})
-	}))
-	defer srv.Close()
-	t.Setenv("MERCHANT_API_SECRET", "s")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s"})
-
-	c := NewPlatformClient("mk")
-	lic, err := c.GetLicenseStatus()
-	if err != nil {
-		t.Fatalf("GetLicenseStatus: %v", err)
-	}
-	if lic.Status != "active" || lic.Remaining != 200 || lic.ExpireAt.Year() != 2027 {
-		t.Errorf("授权状态解析错: %+v", lic)
-	}
-
-	// 平台侧业务失败：非 200 → 原样返回 *PlatformError，不吞成解析错误
-	brokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"code":403,"msg":"license expired"}`))
-	}))
-	defer brokenSrv.Close()
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: brokenSrv.URL, Secret: "s"})
-	if _, err := NewPlatformClient("mk").GetLicenseStatus(); err == nil {
-		t.Error("403 应返回错误")
-	} else {
-		var pe *PlatformError
-		if !errors.As(err, &pe) || pe.Resp.Msg != "license expired" {
-			t.Errorf("应透传结构化错误, got %T %v", err, err)
-		}
-	}
-}
-
-// TestGetLicenseStatusUnmarshalFailure 覆盖 GetLicenseStatus 内部的
-// `json.Unmarshal(resp.Data, &LicenseStatusResp{})` 失败分支：请求路径固定为
-// /merchant-api/license/status，无法靠改 path 触发，故用第二个 server 让该路径返回
-// data:"不是对象"（合法 JSON、但类型不是对象）。
-func TestGetLicenseStatusUnmarshalFailure(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": "不是对象"})
-	}))
-	defer srv.Close()
-	t.Setenv("MERCHANT_API_SECRET", "s")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s"})
-
-	if _, err := NewPlatformClient("mk").GetLicenseStatus(); err == nil ||
-		!strings.Contains(err.Error(), "cannot unmarshal string into Go value of type") {
-		t.Errorf("data 非对象时应返回类型错误, got %v", err)
-	}
-}
-
 func TestReportInstallAndHeartbeatBranches(t *testing.T) {
 	installCh, heartbeatCh := make(chan string, 4), make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

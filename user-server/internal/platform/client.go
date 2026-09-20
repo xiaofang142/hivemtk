@@ -350,22 +350,29 @@ func (c *Client) loadMerchantSecret() error {
 	}
 }
 
-// GetLicenseStatus 获取授权状态
-func (c *Client) GetLicenseStatus() (*LicenseStatusResp, error) {
-	logger.Info("开始获取授权状态")
-	var resp BaseResp
-	if err := c.do("GET", "/merchant-api/license/status", nil, &resp); err != nil {
-		logger.Error(err, "获取授权状态失败")
-		return nil, err
+// CheckConnection 探测平台是否可达：只打平台真实存在的存活性端点 GET {APIURL}/health。
+//
+// 不走 doRetry —— 那条路会做商户签名并可能拉 JWT，把一个连通性探针绑到鉴权链上等于
+// 多造两类假故障（签名没配好 / 登录不上都会被判成"平台挂了"）。
+// 也不要恢复成"查授权状态"：平台从未实现授权端点（开源版连 License 概念都移除了），
+// 拿它做探针会让健康平台恒被判成 unreachable（R12）。
+func (c *Client) CheckConnection() error {
+	if config.PlatformCfg == nil {
+		return fmt.Errorf("%w: 未配置平台地址，连通性探测无从发出", ErrPlatformNotConfigured)
 	}
-	var data LicenseStatusResp
-	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		logger.Error(err, "解析授权状态响应失败")
-		return nil, err
+	req, err := http.NewRequest(http.MethodGet, config.PlatformCfg.APIURL+"/health", nil)
+	if err != nil {
+		return fmt.Errorf("平台连通性探测请求构造失败: %w", err)
 	}
-	logger.Info(fmt.Sprintf("获取授权状态成功: 状态=%s, 到期时间=%s, 剩余天数=%d",
-		data.Status, data.ExpireAt.Format("2006-01-02 15:04:05"), data.Remaining))
-	return &data, nil
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("平台连通性探测失败: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return &PlatformError{StatusCode: resp.StatusCode}
+	}
+	return nil
 }
 
 type BaseResp struct {
@@ -405,12 +412,6 @@ type RegisterMerchantReq struct {
 	ContactEmail string `json:"contact_email"`
 	ContactPhone string `json:"contact_phone"`
 	DeviceInfo   string `json:"device_info"`
-}
-
-type LicenseStatusResp struct {
-	Status    string    `json:"status"`
-	ExpireAt  time.Time `json:"expire_at"`
-	Remaining int       `json:"remaining_days"`
 }
 
 // ReportInstallReq 安装信息上报请求（开源版：一个安装信息 = 一个商户）
