@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -90,8 +91,10 @@ func (s *BridgeOfflineReplayService) DetectOfflineChannels(ctx context.Context) 
 
 // ReplayDelayedOutbound 重放某个渠道累积的离线消息
 //
-// 从 reach_delayed_outbound 取 status="pending" 的消息，
-// 重新投送到 DeliverBridgeOutbound 出站管道，然后标记为 replayed。
+// 从 reach_delayed_outbound 取到期的 pending 行，先抢占（pending→sending）再投到
+// DeliverBridgeOutbound 出站管道，成功收口 sent、失败回到 pending 累计 attempts。
+// 收口写失败必须报警：旧实现用 `_ =` 吞掉 42703，行永远停在 pending，
+// 同一条消息每 5 分钟重投一次。
 func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, platform, accountID string, limit int) (replayed, failed int64) {
 	if s.repo == nil {
 		return 0, 0
@@ -102,16 +105,41 @@ func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, 
 		return 0, 0
 	}
 	for _, m := range msgs {
-
-		err := DeliverBridgeOutbound(ctx, m.Platform, m.AccountID, m.ConversationID, m.MsgType, m.Content, m.EventID)
+		if len(m.Cards) > 0 {
+			// 带富卡体的回复交给 H-3 主链路投递：桥接管道只发文本，这里强投等于丢卡。
+			continue
+		}
+		if m.Attempts >= sendRetryMaxAttempts {
+			if aerr := s.repo.MarkDelayedOutboundAbandoned(ctx, m.ID,
+				fmt.Sprintf("离线回扫重投次数用尽（%d 次）", m.Attempts)); aerr != nil {
+				failed++
+				logger.Warnf("[BridgeReplay] 判弃失败 id=%d: %v", m.ID, aerr)
+			}
+			continue
+		}
+		won, cerr := s.repo.ClaimDelayedOutboundForReplay(ctx, m.ID)
+		if cerr != nil {
+			failed++
+			logger.Warnf("[BridgeReplay] 抢占失败 id=%d: %v", m.ID, cerr)
+			continue
+		}
+		if !won {
+			// 主链路已把这条抢去投递了，这里再投就是双发。
+			continue
+		}
+		err := DeliverBridgeOutbound(ctx, m.Platform, m.AccountID, m.ConversationID, "text", m.Content, "")
 		if err != nil {
 			failed++
 			logger.Warnf("[BridgeReplay] 重放失败 id=%d err=%v", m.ID, err)
-			_ = s.repo.MarkDelayedOutboundReplayFailed(ctx, m.ID, err.Error())
+			if werr := s.repo.MarkDelayedOutboundReplayFailed(ctx, m.ID, err.Error()); werr != nil {
+				logger.Warnf("[BridgeReplay] 失败回写未落库 id=%d: %v（行留在 sending，由主链路观测回收）", m.ID, werr)
+			}
 			continue
 		}
 		replayed++
-		_ = s.repo.MarkDelayedOutboundReplayed(ctx, m.ID)
+		if werr := s.repo.MarkDelayedOutboundReplayed(ctx, m.ID); werr != nil {
+			logger.Warnf("[BridgeReplay] 成功回写未落库 id=%d: %v（已送达客户，行留在 sending 仅为状态漂移）", m.ID, werr)
+		}
 	}
 	return replayed, failed
 }
