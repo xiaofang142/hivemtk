@@ -491,7 +491,7 @@ graph TD
     DispInit[4. llm.InitGlobalDispatcherWithDB<br/>+ service.SetAgentLoopTimeout]
     IntentInit[5. service.InitIntentRecognizer<br/>+ llm.InitDefaultAlertHook]
     Janitor[6. llm.GetGlobalDispatcher<br/>.StartCacheJanitor 60s]
-    PlatformInit[7. platform.InitSync<br/>+ platformconfig.LoadPlatform]
+    PlatformInit[7. platformconfig.LoadPlatform<br/>+ platform.InitSync（注册协程读 PlatformCfg，须在后）]
     License[8. middleware.InitLicenseChecker<br/>+ platform.StartHeartbeat]
     Migrate[9. migration.NewMigrationService<br/>同步等待迁移完成]
     Failover[10. llm.InitGlobalFailover<br/>+ Start]

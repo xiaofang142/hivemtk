@@ -196,10 +196,6 @@ func main() {
 	defer cacheJanitorCancel()
 	llm.GetGlobalDispatcher().StartCacheJanitor(cacheJanitorCtx, 60*time.Second)
 
-	if err := platform.InitSync(); err != nil {
-		logger.Errorf("平台同步初始化失败：%v", err)
-	}
-
 	if err := config.LoadPlatform("config/platform.yaml"); err != nil {
 		logger.Errorf("平台配置加载失败（PlatformCfg 未初始化，商户上报/授权同步将不可用）：%v", err)
 	} else {
@@ -208,6 +204,11 @@ func main() {
 			source = "PLATFORM_URL 环境变量"
 		}
 		logger.Infof("[平台配置] api_url=%s（来源：%s）", config.PlatformCfg.APIURL, source)
+	}
+
+	// 必须在 LoadPlatform 之后：InitSync 的注册协程要读 PlatformCfg
+	if err := platform.InitSync(); err != nil {
+		logger.Errorf("平台同步初始化失败：%v", err)
 	}
 
 	platformURL := ""

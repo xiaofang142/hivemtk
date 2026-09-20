@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,83 +32,112 @@ func withContributorGlobals(t *testing.T, mk string) {
 	contribExpireAt = time.Time{}
 }
 
-func assertPanics(t *testing.T, want string, fn func()) {
-	t.Helper()
-	got := func() (v any) {
-		defer func() { v = recover() }()
-		fn()
-		return nil
-	}()
-	if got == nil {
-		t.Fatalf("期望 panic(%s)，实际未 panic", want)
-	}
-	if !strings.Contains(fmt.Sprintf("%v", got), want) {
-		t.Errorf("panic 信息=%v want 含 %q", got, want)
-	}
-}
-
 // TestContributorIdentityDerivation 贡献者身份完全由 (merchantKey, platform.secret) 派生：
 // 平台侧不存明文口令，商户端重装后必须得到同一身份，故派生式必须钉死。
 func TestContributorIdentityDerivation(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
 	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
 
-	user, pass, email, display := contributorIdentity()
-	if user != "mtk_mk-abc" {
-		t.Errorf("username=%q", user)
+	auth, err := contributorIdentity()
+	if err != nil {
+		t.Fatalf("contributorIdentity: %v", err)
 	}
-	if email != "mtk_mk-abc@mtk.local" {
-		t.Errorf("email=%q", email)
+	if auth.username != "mtk_mk-abc" {
+		t.Errorf("username=%q", auth.username)
 	}
-	if display != "商户-mk-abc" {
-		t.Errorf("displayName=%q", display)
+	if auth.email != "mtk_mk-abc@mtk.local" {
+		t.Errorf("email=%q", auth.email)
+	}
+	if auth.displayName != "商户-mk-abc" {
+		t.Errorf("displayName=%q", auth.displayName)
 	}
 	sum := sha256.Sum256([]byte("mk-abc|s3cr3t"))
-	if want := hex.EncodeToString(sum[:])[:16]; pass != want {
-		t.Errorf("password 派生式变了: %q want %q", pass, want)
+	if want := hex.EncodeToString(sum[:])[:16]; auth.password != want {
+		t.Errorf("password 派生式变了: %q want %q", auth.password, want)
 	}
 
-	// merchantKey 为空时回落 anonymous（否则 username 会变成裸前缀 "mtk_"，多实例撞号）
+	// merchantKey 为空说明本机身份没落地。此时任何派生结果都是拿别人的号：
+	// 回落 "anonymous" 会让所有坏实例共用一个平台账号，口令还能被任何知道 secret 的人复现。
 	withContributorGlobals(t, "")
 	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
-	u2, p2, _, _ := contributorIdentity()
-	if u2 != "mtk_anonymous" {
-		t.Errorf("空 key 应回落 anonymous, got %q", u2)
-	}
-	sum2 := sha256.Sum256([]byte("anonymous|s3cr3t"))
-	if p2 != hex.EncodeToString(sum2[:])[:16] {
-		t.Errorf("anonymous 口令派生错: %q", p2)
+	if _, err := contributorIdentity(); err == nil || !strings.Contains(err.Error(), "merchant key 未初始化") {
+		t.Errorf("空 merchantKey 应报错, got %v", err)
 	}
 
 	// 口令必须随 secret 变化，否则派生身份失去意义
 	withContributorGlobals(t, "mk-abc")
 	withPlatformConfig(t, &config.PlatformConfig{Secret: "another"})
-	_, pOther, _, _ := contributorIdentity()
-	if pOther == pass {
+	other, err := contributorIdentity()
+	if err != nil {
+		t.Fatalf("contributorIdentity(another): %v", err)
+	}
+	if other.password == auth.password {
 		t.Error("不同 platform.secret 应派生出口令不同的身份")
 	}
 }
 
-// TestContributorIdentityEmptySecret 空 secret 时 fail-closed：无 CONTRIBUTOR_DEV 直接 panic，
-// 有 CONTRIBUTOR_DEV=1 才允许占位口令。
+// TestContributorIdentityEmptySecret 缺 secret 时 fail-closed：报包装了 ErrPlatformNotConfigured
+// 的 error，只有 CONTRIBUTOR_DEV=1 才允许占位口令。
 func TestContributorIdentityEmptySecret(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: ""})
 	t.Setenv("CONTRIBUTOR_DEV", "")
 
-	assertPanics(t, "platform.secret is empty", func() { _, _, _, _ = contributorIdentity() })
-
-	t.Setenv("CONTRIBUTOR_DEV", "1")
-	_, pass, _, _ := contributorIdentity() // 不应 panic
-	sum := sha256.Sum256([]byte("mk-abc|dev-only-placeholder-secret-do-not-use-in-prod"))
-	if got := hex.EncodeToString(sum[:])[:16]; pass != got {
-		t.Errorf("CONTRIBUTOR_DEV 占位口令派生错: %q want %q", pass, got)
+	for _, tc := range []struct {
+		name string
+		cfg  *config.PlatformConfig
+		want string
+	}{
+		// 平台配置整体缺失时必须报可读错误，而不是对 nil 指针取字段
+		{"配置未加载", nil, "请先加载平台配置"},
+		{"secret 为空", &config.PlatformConfig{Secret: ""}, "platform.secret 为空"},
+	} {
+		withPlatformConfig(t, tc.cfg)
+		_, err := contributorIdentity()
+		if !errors.Is(err, ErrPlatformNotConfigured) {
+			t.Errorf("%s: err=%v，应包装 ErrPlatformNotConfigured", tc.name, err)
+		}
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: 错误信息应含 %q, got %v", tc.name, tc.want, err)
+		}
 	}
 
-	// 平台配置整体缺失时同样必须炸，而不是静默用空串派生出「人人可复现」的身份。
-	// 注：这里抛出的是运行时空指针而非可读错误 —— 见计划 Findings。
+	t.Setenv("CONTRIBUTOR_DEV", "1")
+	auth, err := contributorIdentity() // 不应 panic，也不应报错
+	if err != nil {
+		t.Fatalf("CONTRIBUTOR_DEV=1 时应允许占位派生: %v", err)
+	}
+	sum := sha256.Sum256([]byte("mk-abc|" + devPlaceholderSecret))
+	if got := hex.EncodeToString(sum[:])[:16]; auth.password != got {
+		t.Errorf("CONTRIBUTOR_DEV 占位口令派生错: %q want %q", auth.password, got)
+	}
+}
+
+// TestEnsureContributorTokenFailsLoudly 派生失败必须止于 error：这条链路的调用方是资产上传的
+// 请求协程（CreateAsset/SubmitAudit → ensureContributorToken），panic 会直接把请求打挂。
+func TestEnsureContributorTokenFailsLoudly(t *testing.T) {
+	withContributorGlobals(t, "mk-abc")
 	withPlatformConfig(t, nil)
-	assertPanics(t, "invalid memory address", func() { _, _, _, _ = contributorIdentity() })
+
+	cc := &ContributorClient{baseURL: "http://127.0.0.1:1", httpClient: NewPlatformClient("k").httpClient}
+	var tok string
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("取 token 链路 panic(%v)，应返回 error", r)
+			}
+		}()
+		tok, err = ensureContributorToken(cc)
+	}()
+	if !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("err=%v，应包装 ErrPlatformNotConfigured", err)
+	}
+	if tok != "" {
+		t.Errorf("失败时不应返回 token: %q", tok)
+	}
+	if contribToken != "" {
+		t.Errorf("失败后不应写入 token 缓存: %q", contribToken)
+	}
 }
 
 func TestNewContributorClientReadsConfig(t *testing.T) {

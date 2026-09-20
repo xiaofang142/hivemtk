@@ -128,3 +128,5 @@ internal/aiagent/knowledge/controller/uploads/
 
 # ---------- 运行时密钥（平台商户 api_secret，user-server 启动时写回）----------
 config/.merchant_api_secret
+# 本机商户身份锚点（决定平台侧 merchant key 与贡献者账号），入库等于把身份交给克隆者
+config/.merchant_key

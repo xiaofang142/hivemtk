@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -48,27 +49,50 @@ func NewContributorClient() *ContributorClient {
 	return &ContributorClient{baseURL: apiURL, httpClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
-func contributorIdentity() (username, password, email, displayName string) {
+// contributorAuth 派生出的贡献者账号凭证。
+type contributorAuth struct {
+	username    string
+	password    string
+	email       string
+	displayName string
+}
+
+const devPlaceholderSecret = "dev-only-placeholder-secret-do-not-use-in-prod"
+
+// contributorIdentity 由 (merchantKey, platform.secret) 派生贡献者身份。
+//
+// 派生式必须可复现：同一台商户端重启/重装后要落回平台上的同一个账号，否则每次提交都是新用户。
+// 因此「拿不到锚点」的三种情况（无 merchantKey / 无平台配置 / secret 为空）一律回 error，
+// 而不是带着空值继续派生出一个跨实例撞号、或拿到配置后静默换人的身份。
+// 调用方是资产上传的请求协程，这里 panic 会直接把请求打挂，必须走 error。
+func contributorIdentity() (contributorAuth, error) {
+	var a contributorAuth
 	mk := GetMerchantKey()
 	if mk == "" {
-		mk = "anonymous"
+		return a, errors.New("贡献者身份无法派生: merchant key 未初始化（platform.InitSync 未执行或状态目录不可用）")
 	}
-	username = "mtk_" + mk
+	a.username = "mtk_" + mk
 
-	secret := config.PlatformCfg.Secret
+	secret := ""
+	if config.PlatformCfg != nil {
+		secret = config.PlatformCfg.Secret
+	}
 	if secret == "" {
 		if os.Getenv("CONTRIBUTOR_DEV") == "1" {
-			secret = "dev-only-placeholder-secret-do-not-use-in-prod"
+			secret = devPlaceholderSecret
 			logger.Warn("contributor_identity: CONTRIBUTOR_DEV=1 detected, using placeholder secret. NEVER set this in production.")
+		} else if config.PlatformCfg == nil {
+			return a, fmt.Errorf("%w: 无法派生贡献者身份，请先加载平台配置", ErrPlatformNotConfigured)
 		} else {
-			panic("contributor_identity: platform.secret is empty. Set platform.secret in config or CONTRIBUTOR_DEV=1 for local dev only.")
+			return a, fmt.Errorf("%w: platform.secret 为空，无法派生贡献者身份（本地调试可设 CONTRIBUTOR_DEV=1）", ErrPlatformNotConfigured)
 		}
 	}
+
 	sum := sha256.Sum256([]byte(mk + "|" + secret))
-	password = hex.EncodeToString(sum[:])[:16]
-	email = username + "@mtk.local"
-	displayName = "商户-" + mk
-	return
+	a.password = hex.EncodeToString(sum[:])[:16]
+	a.email = a.username + "@mtk.local"
+	a.displayName = "商户-" + mk
+	return a, nil
 }
 
 func ensureContributorToken(cc *ContributorClient) (string, error) {
@@ -77,15 +101,18 @@ func ensureContributorToken(cc *ContributorClient) (string, error) {
 	if contribToken != "" && time.Now().Before(contribExpireAt.Add(-60*time.Second)) {
 		return contribToken, nil
 	}
-	username, password, email, displayName := contributorIdentity()
-	if tok, err := cc.login(username, password); err == nil && tok != "" {
+	auth, err := contributorIdentity()
+	if err != nil {
+		return "", err
+	}
+	if tok, err := cc.login(auth.username, auth.password); err == nil && tok != "" {
 		contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
 		return tok, nil
 	}
-	if err := cc.register(username, password, email, displayName); err != nil {
+	if err := cc.register(auth.username, auth.password, auth.email, auth.displayName); err != nil {
 		logger.Warn(fmt.Sprintf("contributor 自动注册失败(可忽略，登录重试): %v", err))
 	}
-	tok, err := cc.login(username, password)
+	tok, err := cc.login(auth.username, auth.password)
 	if err != nil || tok == "" {
 		return "", fmt.Errorf("获取平台贡献者 token 失败: %v", err)
 	}
