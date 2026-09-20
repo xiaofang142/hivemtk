@@ -212,9 +212,29 @@ BASELINE=(
   # 断点（装配仓储 / 挂路由），只盯一个会让另一个断了也没人知道。scope 沿用项12
   # （审批服务的同一格）的形状：只看装配面 internal/app + cmd/api + controller + router，
   # **不含 internal/service** —— 服务自己的构造函数定义不算接线，测试文件由 hits 剔除。
-  "16|商机仓储的装配入口（今日无人构造，接线在 T-P4-05）|type OpportunityRepository interface|NewOpportunityRepository\\(|internal/app cmd/api internal/service internal/controller|"
+  #
+  # T-P4-04 之后 16a 与 16c **同时**翻 wired，比原计划（16a 在 T-P4-05 翻）早一张卡。
+  # 起因是这一卡交付的是 HTTP 出口，而出口必须自带底座：app.InitOpportunityRuntime 一行
+  # 同时构造了仓储与服务，两个断点在同一次装配里接上了。这不是把两格并成一格 ——
+  # 判据仍然分开跑，因为"摘掉仓储那一行"与"摘掉路由那一行"是两种不同的破坏，
+  # 合并之后只剩一条能红。
+  # 16a 的 callpat 一并放宽成 (WithDB)?：装配点用的是带句柄的那个构造函数（本竖刻意
+  # 不走全局 DB），原写法只看得到 `NewOpportunityRepository()`，会漏掉真实的接线形状。
+  #
+  # 16d 是这一卡新加的第三格：**路由挂载点有没有人调**。它盯的是 16a/16c 都看不见的那把刀 ——
+  # 装配函数与控制器都在、构造函数照跑、全套 Go 用例照绿，但 router.go 里没人调
+  # setupOpportunityRoutes ⇒ 端点根本不在路由树上，而"挂错位置（挂到鉴权组之前）"同样是
+  # 这一格红、上面两格绿。台账比 Go 用例更早发现这类破坏，因为用例自己挂自己测的那棵树。
+  "16|商机仓储的装配入口（T-P4-04 由 app.InitOpportunityRuntime 接上）|type OpportunityRepository interface|NewOpportunityRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|wired"
   "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/service internal/controller internal/app|"
-  "16|商机服务的装配入口（今日无人构造，路由在 T-P4-04）|func NewOpportunityService|NewOpportunityService\\(|internal/app cmd/api internal/controller internal/router|"
+  "16|商机服务的装配入口（T-P4-04 由 app.InitOpportunityRuntime 接上）|func NewOpportunityService|NewOpportunityService\\(|internal/app cmd/api internal/controller internal/router|wired"
+  # 16e 盯的是这一卡的电池里唯一一把 16a/16c/16d 三格都看不见、全套 Go 用例（M33 第一版）也
+  # 看不见的刀：router.go 里**没人调用 app.InitOpportunityRuntime**。摘掉之后仓储构造、服务构造、
+  # 挂载函数三个字面量全都还在，端点也照样在路由树上，只是运行时全局句柄永远是 nil ⇒ 八个端点
+  # 全部回 503。Go 侧现在由 TestOpportunityRoutes_LiveThroughRealSetup 守（带合法令牌读得到那一行）；
+  # 这一格是同一件事的静态面：台账读起来是"启动路径上没有装配点"，不必依赖用例跑起来才知道。
+  "16|商机底座的启动装配点（router.go 里必须有人调用）|func InitOpportunityRuntime|InitOpportunityRuntime\\(|internal/router|wired"
+  "16|商机 API 的挂载入口（T-P4-04，摘掉即端点不在路由树上）|func setupOpportunityRoutes|setupOpportunityRoutes\\(|internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

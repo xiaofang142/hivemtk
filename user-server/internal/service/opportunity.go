@@ -90,6 +90,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -132,6 +133,19 @@ var (
 	// ErrOpportunityStateInvalid 库里这一行本身越界，本层拒绝在它之上继续计算。
 	// 方向刻意选"停"而不是"按默认值续"：猜出来的规则盖掉现场，事后没人看得出哪一列是被猜的。
 	ErrOpportunityStateInvalid = errors.New("opportunity service: 这一行本身不合法（值域越界），拒绝继续计算")
+)
+
+// 与仓储同一 sentinel 的**别名**（同款先例见 human_task.go 的 ErrHumanTaskInputInvalid）。
+//
+// 为什么要别名而不是让 controller 直接 import repository：分层门（arch gate [1/10]）禁止
+// controller 摸仓储包，而"这一行不在了"和"手里那份是旧的"这两种判定的**事实来源就是
+// 仓储的 CAS 返回值**——本层不重新解释它，重新造一个 sentinel 反而要多一处映射，
+// 而那处映射才是会分家的地方。别名让 HTTP 侧只依赖服务层的门面，语义仍然一一对得上。
+var (
+	// ErrOpportunityNotFound 行不存在（400 面之外的 404）。
+	ErrOpportunityNotFound = repository.ErrOpportunityNotFound
+	// ErrOpportunityStaleVersion 乐观锁撞上：别人先改过（409，重读后可重试）。
+	ErrOpportunityStaleVersion = repository.ErrOpportunityStaleVersion
 )
 
 // OpportunityMoveKind 一次可请求动作改的是哪一维。
@@ -235,6 +249,35 @@ func AllowedOpportunityMoves(stage, status string) []OpportunityMove {
 	return moves
 }
 
+// OpportunityServerOnlyMove 一条"存在但不对 HTTP 暴露"的动作，连同它的触发来源。
+type OpportunityServerOnlyMove struct {
+	Kind        OpportunityMoveKind   `json:"kind"`
+	From        string                `json:"from"`
+	Target      string                `json:"target"`
+	Cause       OpportunityCloseCause `json:"cause"`
+	HTTPExposed bool                  `json:"http_exposed"`
+}
+
+// ServerOnlyOpportunityMoves 机器专属动作清单（今日只有一条：回款完成 → 赢单）。
+//
+// 它存在的理由是**诚实**：AllowedOpportunityMoves 里查不到 won，读的人若只看见那张表，
+// 会得出"这套状态机到不了赢单"的结论，而事实是"到得了，但不是由点按钮的人决定"。
+// 顺序按 model.OpportunityStatuses 的起点状态走，不遍历 map —— 否则同一份配置
+// 两次渲染出的数组顺序不同，读方要靠它做幂等渲染时就会拿到一个"每刷一次动一次"的响应面。
+func ServerOnlyOpportunityMoves() []OpportunityServerOnlyMove {
+	var out []OpportunityServerOnlyMove
+	edges := opportunityStatusEdges[OpportunityCauseCollection]
+	for _, from := range model.OpportunityStatuses {
+		for _, target := range edges[from] {
+			out = append(out, OpportunityServerOnlyMove{
+				Kind: OpportunityMoveStatus, From: from, Target: target,
+				Cause: OpportunityCauseCollection, HTTPExposed: false,
+			})
+		}
+	}
+	return out
+}
+
 // OpportunityWinInput 赢率计算式的全部输入（依据见文件头）。
 //
 // 字段集合由用例钉成"只有这三个"：多一个字段本身无害，
@@ -289,6 +332,37 @@ func (s *OpportunityService) SetClock(now func() time.Time) {
 func (s *OpportunityService) Available() bool {
 	return s != nil && s.repo != nil && s.repo.Available()
 }
+
+// Get 按业务主键读一行（T-P4-04 的详情读口，也是 /:id/moves 的前置读）。
+//
+// 两件事刻意不做：
+//  1. 不做值域校验 —— validateOpportunityRow 守的是"本层要在这行上动手"，只读不改写时
+//     把越界行说成"不存在"，等于替读方决定这一行不该被看见；而坏数据恰恰要先能被看见才修得掉。
+//  2. 不把"读不到"翻成错误 —— 仓储给 (nil, nil) 就原样上抛，404 是 HTTP 的判断，
+//     本层没有状态码可给。
+func (s *OpportunityService) Get(ctx context.Context, id string) (*model.Opportunity, error) {
+	if s == nil || s.repo == nil {
+		return nil, errors.New("opportunity service: 未装配仓储句柄")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("%w: 空 id 不是一个商机键", ErrOpportunityInputInvalid)
+	}
+	return s.repo.GetByID(ctx, id)
+}
+
+// globalOpportunitySvc 全局商机服务实例（与 globalHumanTaskSvc 同一口径：atomic.Pointer）。
+//
+// 装配点写、请求路径读，两者不在同一个 goroutine；用互斥锁是同一份判据，
+// 但 atomic 让"取一次、判一次空"这条链没有可插队的中间态。
+var globalOpportunitySvc atomic.Pointer[OpportunityService]
+
+// SetGlobalOpportunityService 登记全局实例（装配点：internal/app/opportunity_wiring.go）。
+// 传 nil 等于撤掉 —— 撤掉之后端点回 503，这是本卡天然的关闸。
+func SetGlobalOpportunityService(s *OpportunityService) { globalOpportunitySvc.Store(s) }
+
+// GlobalOpportunityService 取全局实例（可能为 nil；调用方必须判空并给出"未装配"的答复）。
+func GlobalOpportunityService() *OpportunityService { return globalOpportunitySvc.Load() }
 
 // MoveStage 把在跑的商机推到另一个阶段（向前一步或向后任意步，见文件头）。
 //

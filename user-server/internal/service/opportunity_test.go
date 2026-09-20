@@ -239,7 +239,7 @@ func TestOpportunityStatusMoveIsGatedByCause(t *testing.T) {
 // 同时改这张清单，而改清单意味着有人得在评审里回答"这个入口谁调、它凭什么改这列"。
 func TestOpportunityServiceSurfaceIsFrozen(t *testing.T) {
 	want := []string{
-		"Available", "Cancel", "Edit", "MarkLost", "MarkWonByCollection",
+		"Available", "Cancel", "Edit", "Get", "MarkLost", "MarkWonByCollection",
 		"MoveStage", "Reopen", "SetClock",
 	}
 	got := make([]string, 0, len(want))
@@ -993,5 +993,137 @@ func TestOpportunityService_HandsRepositoryColumnScaledValues(t *testing.T) {
 	if got.Amount != written.Amount || got.WinProbability != written.WinProbability {
 		t.Errorf("返回体 (%.20g,%.20g) 与写出的一份 (%.20g,%.20g) 不同源",
 			got.Amount, got.WinProbability, written.Amount, written.WinProbability)
+	}
+}
+
+// —— T-P4-04 追加：只读入口、机器动作清单、全局登记 ————————————————
+
+// TestOpportunityService_GetDoesNotHideOrInvent 只读入口的三条边界，每条都对应一种真实的误读：
+//
+//   - 读不到 ⇒ (nil, nil)。本层没有状态码可给，把"没有这一行"报成错误，出口就只能靠
+//     匹配错误文案来区分 404 与 500 —— 而文案是最先被改写的那一样东西。
+//   - 空 id ⇒ InputInvalid，且不碰库。空串在仓储那里是 `WHERE id = ”`：一次必然落空的查询，
+//     于是坏请求与缺行共用同一个答案。
+//   - 越界行 ⇒ **照样读得出来**。这是与 transition 刻意相反的一条口径：只读时把坏行说成
+//     "不存在"，等于替读方决定这一行不该被看见，而坏数据恰恰要先能被看见才修得掉。
+func TestOpportunityService_GetDoesNotHideOrInvent(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, database := newOpportunityServiceWithDB(t)
+
+	row := seedOpportunity(t, repo, "opp_get_ok", model.OpportunityStageProposal, model.OpportunityStatusOpen)
+	got, err := svc.Get(ctx, row.ID)
+	if err != nil {
+		t.Fatalf("Get(%s): %v", row.ID, err)
+	}
+	if got == nil {
+		t.Fatal("刚种下的行读回来是 nil")
+	}
+	if got.Stage != row.Stage || got.Status != row.Status || got.WinProbability != 0.42 || got.Version != 0 {
+		t.Errorf("读回的一行与种下的不是同一份：stage=%s status=%s win=%v version=%d",
+			got.Stage, got.Status, got.WinProbability, got.Version)
+	}
+
+	got, err = svc.Get(ctx, "opp_get_absent")
+	if err != nil {
+		t.Errorf("缺行被报成错误：%v —— 「没有这一行」不是故障，出口要的是能返回 nil", err)
+	}
+	if got != nil {
+		t.Errorf("缺行读出了内容：%v", got)
+	}
+
+	for _, blank := range []string{"", "   ", "\t"} {
+		if _, err := svc.Get(ctx, blank); !errors.Is(err, ErrOpportunityInputInvalid) {
+			t.Errorf("空 id %q 没有被判成入参不合法，得到 %v —— 它会变成库里一次必然落空的查询", blank, err)
+		}
+	}
+
+	// 越界行：读口出声，写口拒改。两条同时断，才分得开"读不到"与"不敢改"。
+	bad := seedOpportunity(t, repo, "opp_get_bad", model.OpportunityStageProposal, model.OpportunityStatusOpen)
+	if err := database.Model(&model.Opportunity{}).Where("id = ?", bad.ID).
+		Update("win_probability", 7.5).Error; err != nil { // 越出 0–1：仓储不拦，服务读口才看得见
+		t.Fatalf("把赢率改越界: %v", err)
+	}
+	readable, err := svc.Get(ctx, bad.ID)
+	if err != nil {
+		t.Errorf("越界行读不出来：%v —— 坏数据先要被看见才修得掉", err)
+	} else if readable == nil || readable.WinProbability != 7.5 {
+		t.Errorf("越界行被读口藏起来了：%+v", readable)
+	}
+	if _, err := svc.MoveStage(ctx, bad.ID, 0, model.OpportunityStageNegotiation); !errors.Is(err, ErrOpportunityStateInvalid) {
+		t.Errorf("同一行在写口得到 %v，期望 ErrOpportunityStateInvalid", err)
+	}
+
+	// 未装配：报错而不是返回 nil —— 这里"没句柄"与"没有这行"是两件事，混成一个
+	// 出口就会对着未装配的底座回 404，把故障说成数据问题。
+	if _, err := (&OpportunityService{}).Get(ctx, "anything"); err == nil {
+		t.Error("未装配句柄的 Get 回了 nil 错误：出口分不清「读不到」与「没装底座」")
+	}
+	// 同一道关的另一臂：整个服务指针为 nil（GlobalOpportunityService() 未装配时就是这个值）。
+	// 只测"有指针、没仓储"那一臂，`s == nil` 这半句就是没人验证过的装饰。
+	var nilSvc *OpportunityService
+	if _, err := nilSvc.Get(ctx, "anything"); err == nil {
+		t.Error("nil 服务上的 Get 回了 nil 错误：这道关的第二臂没人守")
+	}
+}
+
+// TestServerOnlyOpportunityMoves 只走机器动作那一条边的对外清单（AC③ 在契约面上的兑现）。
+//
+// /rules 里必须能读到"won 是存在的、但它不经 HTTP"这件事。清单为空 = 这套规则看起来
+// 根本没有 won 这条路，前端会以为产品没有赢单；清单里冒出 HTTPExposed=true = 有人把
+// 机器动作开成了按钮，那张 (来源,起点)→终点 的三元边表当场退化回二元表。
+func TestServerOnlyOpportunityMoves(t *testing.T) {
+	out := ServerOnlyOpportunityMoves()
+	if len(out) == 0 {
+		t.Fatal("机器动作清单为空：/rules 就说不清「won 存在但不经 HTTP」这件事")
+	}
+	for _, m := range out {
+		if m.HTTPExposed {
+			t.Errorf("机器动作 %s: %s→%s 被标成可经 HTTP 暴露：写 won 的入口只能来自回款完成", m.Cause, m.From, m.Target)
+		}
+		if m.Cause != OpportunityCauseCollection {
+			t.Errorf("机器动作的 cause=%q，期望 %q：落到这个终点的来源只有这一个", m.Cause, OpportunityCauseCollection)
+		}
+		if m.Target != model.OpportunityStatusWon {
+			t.Errorf("机器动作终点 %q 不是 won：边表里除它以外没有第二格是机器独占的", m.Target)
+		}
+		if m.Kind != OpportunityMoveStatus {
+			t.Errorf("机器动作 kind=%q，期望 status：机器独占的是状态维，不是阶段维", m.Kind)
+		}
+		if got := AllowedOpportunityMoves(model.OpportunityStageNegotiation, m.From); containsOpportunityMove(got, OpportunityMoveStatus, m.Target) {
+			t.Errorf("%s 同时出现在可请求动作与机器动作里：HTTP 侧多了一条能写 won 的路", m.Target)
+		}
+	}
+}
+
+func containsOpportunityMove(list []OpportunityMove, kind OpportunityMoveKind, target string) bool {
+	for _, m := range list {
+		if m.Kind == kind && m.Target == target {
+			return true
+		}
+	}
+	return false
+}
+
+// TestGlobalOpportunityServiceRoundTrip 全局登记处的三件事：写什么读什么、是同一份对象、
+// 写 nil 真的清得回 nil。第三条是装配层"无 DB 句柄"分支的唯一判据 —— 清不干净时，
+// 路由会对着一句"未装配"的告警继续回 200，那声告警就成了假的。
+func TestGlobalOpportunityServiceRoundTrip(t *testing.T) {
+	restore := GlobalOpportunityService()
+	defer SetGlobalOpportunityService(restore)
+
+	SetGlobalOpportunityService(nil)
+	if got := GlobalOpportunityService(); got != nil {
+		t.Errorf("清空之后全局仍是 %p", got)
+	}
+
+	svc, _, _ := newOpportunityServiceWithDB(t)
+	SetGlobalOpportunityService(svc)
+	if got := GlobalOpportunityService(); got != svc {
+		t.Errorf("取回的不是登记的那一份（%p vs %p）：两套缓存口径迟早分家", got, svc)
+	}
+
+	SetGlobalOpportunityService(nil)
+	if got := GlobalOpportunityService(); got != nil {
+		t.Errorf("重复装配传 nil 没清掉上一份（%p）⇒ 路由会在底座缺失时继续回 200", got)
 	}
 }
