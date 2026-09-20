@@ -207,8 +207,14 @@ BASELINE=(
   # 仓储自己的实现文件永远不含那个调用。两格今天都是 UNWIRED。
   # scope 也刻意排除 internal/pkg/db：那里的 `&model.Opportunity{}` 是**建表登记**
   # 而不是写入，把它算成接线会让这一格从第一天起就是假绿。
+  # 16c 是 T-P4-03 新加的一格：服务层（跃迁表 + 赢率式）今天落地，但它与 16a 是两件事 ——
+  # 16a 盯"有没有人构造仓储"，16c 盯"有没有人构造这个服务"。判据分开是因为接线有两个
+  # 断点（装配仓储 / 挂路由），只盯一个会让另一个断了也没人知道。scope 沿用项12
+  # （审批服务的同一格）的形状：只看装配面 internal/app + cmd/api + controller + router，
+  # **不含 internal/service** —— 服务自己的构造函数定义不算接线，测试文件由 hits 剔除。
   "16|商机仓储的装配入口（今日无人构造，接线在 T-P4-05）|type OpportunityRepository interface|NewOpportunityRepository\\(|internal/app cmd/api internal/service internal/controller|"
   "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/service internal/controller internal/app|"
+  "16|商机服务的装配入口（今日无人构造，路由在 T-P4-04）|func NewOpportunityService|NewOpportunityService\\(|internal/app cmd/api internal/controller internal/router|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go
