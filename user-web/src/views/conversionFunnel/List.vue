@@ -4,7 +4,7 @@
       <div class="page-header">
         <div>
           <h2 class="page-title">转化漏斗</h2>
-          <p class="page-sub">访问 → 线索 → 意向 → 会话 全链路转化分析</p>
+          <p class="page-sub">访问 → 线索 → 意向 → 会话 → 商机 全链路转化分析</p>
         </div>
         <el-button type="primary" @click="loadAll">刷新</el-button>
       </div>
@@ -78,6 +78,18 @@ import { safeInit } from '@/utils/echarts'
 import ConversionFunnelApi from '@/api/conversionFunnel'
 import { getChannelLabel } from '@/constants/channel'
 
+// 按阶段名取计数，不按数组下标取。
+//
+// 这里原先读的是 stages[0] 与 stages[stages.length - 1]：T-P4-06 在末尾接上商机段之后，
+// 「最后一段」从会话变成了商机，于是「转化量(会话)」这块 KPI 会把商机数当会话数显示，
+// 端到端转化率同时从 访问→会话 悄悄变成 访问→商机 —— 标签没动、口径动了，
+// 而且后端加段不会让前端任何一处变红。阶段名是后端的对外契约（词表与响应各有测试钉住），
+// 下标不是。
+function countByStage(stages, key) {
+  const leg = stages.find((s) => s.stage === key)
+  return leg ? leg.count || 0 : 0
+}
+
 export default {
   name: 'ConversionFunnelList',
   data() {
@@ -116,13 +128,12 @@ export default {
         rate: s.rate || 0,
         dropRate: s.drop_rate || 0
       }))
-      const firstStage = stages[0]
-      const lastStage = stages[stages.length - 1]
-      const firstCount = firstStage ? firstStage.count : 0
+      const enterCount = countByStage(stages, 'visit')
+      const convertCount = countByStage(stages, 'session')
       this.summary = {
-        totalEnter: firstCount,
-        totalConvert: lastStage ? lastStage.count : 0,
-        overallRate: firstCount && lastStage ? (lastStage.count / firstCount) * 100 : 0,
+        totalEnter: enterCount,
+        totalConvert: convertCount,
+        overallRate: enterCount ? (convertCount / enterCount) * 100 : 0,
         avgLossRate: stages.length ? stages.reduce((a, s) => a + (s.drop_rate || 0), 0) / stages.length : 0
       }
       this.renderFunnel()

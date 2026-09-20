@@ -257,6 +257,21 @@ BASELINE=(
   "16|挖掘侧到转换层的接缝（lead_mining 里那一跳）|func GlobalOpportunityConverter|conv := GlobalOpportunityConverter\\(|internal/service|wired"
   "16|在册销售名单适配器的装配点|func NewSalesEventRoster|NewSalesEventRoster\\(|internal/app cmd/api|wired"
   "16|clue_id 部分唯一索引的启动调用点|func postMigrateOpportunityClueUniqueIndex|postMigrateOpportunityClueUniqueIndex\\(DB\\)|internal/pkg/db|wired"
+  # ---- T-P4-06（漏斗接入商机阶段）新增两格 ----------------------------------------
+  # 17a/17b 商机段的两个取数调用点。这一格守的是本卡**唯一**能把整条腿拆干的方法：把 service 里
+  #     那一次 CountOpportunitiesByTimeRange 调用删掉、只留一个 `var oppCount int64`，
+  #     响应仍是五段、阶段名与中文名全对（词表没动），只有商机的数字永久停在 0，
+  #     而看板读起来像"线索转不动商机"。它同时躲过 §4.11 的演示表判据（没读那张表）、
+  #     躲过全部 SQL 断言（没有 SQL 可断）。所以 defpat 在 ops/repository、
+  #     callpat 只看 ops/service —— 定义自身不进账。
+  #     **为什么拆成两格**（反向验证实测出来的，不是设计洁癖）：一个 `wired` 只要求命中 ≥1，
+  #     而商机这一格在 service 里有**两个**消费点（BuildFunnel 的第五段、GetStageDetails 的
+  #     详情分支）。合写成一行时"把汇总腿删干净"仍报 wired（详情那一处还在），实测 rc=0 ——
+  #     那等于登记了一行永不变红的锁。故按消费点各一行；两行的 callpat 各自锚在赋值左侧的
+  #     局部变量名上（同一包里两次调用文本几乎相同，不锚名字分不开）。代价：改局部变量名
+  #     会让对应行报"未接线" ⇒ 是**变红**而不是变哑，红了回来改这两行即可。
+  "17|漏斗汇总腿的商机取数调用点（摘掉即看板少一格真数据、且无声）|func \\(r \\*ConversionFunnelRepository\\) CountOpportunitiesByTimeRange|oppCount, oppErr := s\\.repo\\.CountOpportunitiesByTimeRange|internal/ops/service|wired"
+  "17|漏斗详情腿的商机取数调用点（摘掉即 stage=opportunity 回空名 0 计数、与未知阶段无法区分）|func \\(r \\*ConversionFunnelRepository\\) CountOpportunitiesByTimeRange|count, err := s\\.repo\\.CountOpportunitiesByTimeRange|internal/ops/service|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

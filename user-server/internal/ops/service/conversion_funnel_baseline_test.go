@@ -9,6 +9,12 @@ package service
 // 两边输出逐字相等才算 AC① 成立（执行结果里报的正是这个差分）。
 //
 // 因此本文件**刻意不引用** `repository.FunnelStageKey` 等新符号 —— 引了就编译不到基线树。
+//
+// 【T-P4-06 起本文件的判据换了一次】上面那句"两边输出逐字相等才算 AC① 成立"是 R-4 那张卡
+// 的 AC，它的验收对象是"机械改写不改行为"。本卡的 AC① 要的是**响应必须多出一段**，
+// 那条差分从此不再成立（黄金期望里第五段就是它变更的地方）。不引用新符号这条**保留**，
+// 但理由换了：期望值写**字面值**才钉得住契约 —— 引用常量的话，有人把常量值从
+// "opportunity" 改成 "opp"，用例仍会跟着一起绿，而那已经是改契约了。
 
 import (
 	"encoding/json"
@@ -40,6 +46,7 @@ func setupFunnelTestDB(t *testing.T) *gorm.DB {
 		&sysmodel.CustomerEvent{},
 		&sysmodel.Clue{},
 		&sysmodel.CustomerSession{},
+		&sysmodel.Opportunity{},
 	)
 	// intent_records 由迁移建表、被明确禁止进 AutoMigrate 清单（见 model/intent_log.go 头部
 	// 那句"否则会重建 intent_logs 造成双表回潮"）⇒ 这里自建一个最小列集，
@@ -67,7 +74,7 @@ func setupFunnelTestDB(t *testing.T) *gorm.DB {
 }
 
 // seedFunnelRows 种下窗口内 5 访问 / 3 线索 / 2 意向（其中只有 1 条命中购买意向词表）
-// / 4 会话，窗口外各 1 条。这组数字是下面所有断言的分母，改一行就要一起改期望值。
+// / 4 会话 / 3 商机，窗口外各 1 条。这组数字是下面所有断言的分母，改一行就要一起改期望值。
 func seedFunnelRows(t *testing.T, database *gorm.DB) {
 	t.Helper()
 
@@ -133,6 +140,24 @@ func seedFunnelRows(t *testing.T, database *gorm.DB) {
 			"resolved_at": at,
 		})
 	}
+
+	// 商机（T-P4-06 加的第五段）：窗口内 3 条 + 窗口外 1 条。
+	// 时间戳必须显式给：这一列是本段的**切窗依据**，交给 GORM 的 autoCreateTime 就等于
+	// 用"这条用例什么时候跑"当期望值。
+	for i, at := range []time.Time{funnelIn1, funnelIn2, funnelIn2, funnelOut} {
+		mustCreate("opportunities", map[string]any{
+			"id":            funnelLabel + "-opp-" + string(rune('a'+i)),
+			"code":          funnelLabel + "-CODE-" + string(rune('a'+i)),
+			"customer_id":   funnelLabel + "-cust",
+			"stage":         "qualification",
+			"status":        "open",
+			"amount":        1000,
+			"currency":      "CNY",
+			"owner_user_id": funnelLabel + "-sales",
+			"created_at":    at,
+			"updated_at":    at,
+		})
+	}
 }
 
 func TestConversionFunnel_BuildFunnel_GoldenContract(t *testing.T) {
@@ -151,10 +176,21 @@ func TestConversionFunnel_BuildFunnel_GoldenContract(t *testing.T) {
 		`{"stage":"visit","name":"访问","count":4,"rate":100,"drop_rate":0},` +
 		`{"stage":"clue","name":"线索","count":3,"rate":75,"drop_rate":25},` +
 		`{"stage":"intent","name":"意向","count":1,"rate":33.33333333333333,"drop_rate":66.66666666666667},` +
-		`{"stage":"session","name":"会话","count":4,"rate":400,"drop_rate":-300}],` +
+		`{"stage":"session","name":"会话","count":4,"rate":400,"drop_rate":-300},` +
+		`{"stage":"opportunity","name":"商机","count":3,"rate":75,"drop_rate":25}],` +
 		`"total":4,"conversion":100}`
 	if got != want {
 		t.Fatalf("漏斗响应与基线不一致\n实际：%s\n期望：%s", got, want)
+	}
+	// 第五段**只加段、不改旧账**：total 仍是访问量、conversion 仍是"访问→会话"。
+	// 这两格不是顺带断言 —— 前端摘要区今日读的就是它们（见 user-web 那个 view 里的
+	// stages[0] / stages[len-1]），服务端口径若跟着末段挪，"端到端转化率"会在无人改
+	// 前端的那个发版里从"访问→会话"悄悄变成"访问→商机"。
+	if report.Total != 4 {
+		t.Errorf("total 应仍是访问量 4，实际 %d ⇒ 汇总口径跟着新段漂移了", report.Total)
+	}
+	if report.Conversion != 100 {
+		t.Errorf("conversion 应仍是 访问→会话 = 100，实际 %v ⇒ 末段变更把 KPI 换了定义", report.Conversion)
 	}
 }
 
@@ -162,6 +198,12 @@ func TestConversionFunnel_BuildFunnel_GoldenContract(t *testing.T) {
 // 阶段之间不保证单调（会话数可以大于意向数），于是 Rate 可以 >100、DropRate 可以为负
 // —— 上面那条黄金期望里的 400 / -300 就是它。本卡不改（改了就是改现网读数），
 // 登记见 docs/architecture/DATABASE_SCHEMA_DEEP_DIVE.md §4.11 与短板 G16。
+//
+// T-P4-06 把"取最后一段"改成"按键名取会话段"，这不是风格调整：加了第五段之后
+// `Stages[len-1]` 会从会话变成商机（rate 75、drop 25），这条登记现状的用例会
+// **因为绿着而失去意义** —— 它断的已经不是它说的那件事了。同一把刀也砍在前端摘要区，
+// 那里原先同样按下标取首末段（`stages[0]` / `stages[stages.length-1]`），本卡一并改成
+// 按阶段名取，见 user-web/src/views/conversionFunnel/List.vue。
 func TestConversionFunnel_BuildFunnel_NonMonotonicStagesBaseline(t *testing.T) {
 	database := setupFunnelTestDB(t)
 	seedFunnelRows(t, database)
@@ -170,7 +212,15 @@ func TestConversionFunnel_BuildFunnel_NonMonotonicStagesBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFunnel 出错：%v", err)
 	}
-	last := report.Stages[len(report.Stages)-1]
+	var last *FunnelStage
+	for i := range report.Stages {
+		if report.Stages[i].Stage == "session" {
+			last = &report.Stages[i]
+		}
+	}
+	if last == nil {
+		t.Fatal("响应里没有会话段，本条断言无从落点（阶段名漂移了？）")
+	}
 	if last.Rate <= 100 || last.DropRate >= 0 {
 		t.Fatalf("期望登记住「比率超 100 / 跌幅为负」的现状，实际 rate=%v drop=%v ⇒ 口径已变，回灌本卡",
 			last.Rate, last.DropRate)
@@ -212,8 +262,8 @@ func TestConversionFunnel_BuildFunnel_WindowFilter(t *testing.T) {
 	// 全年窗口 = 窗口内 + 各自那一条窗口外数据。
 	// intent 走 BuildFunnel 自己的词表（buy/purchase/order/interested），
 	// 故全年 = 当月 1 条 buy + 窗口外 1 条 buy = 2，那条 question 两边都不算。
-	wantAll := map[string]int64{"visit": 5, "clue": 4, "intent": 2, "session": 5}
-	wantMonth := map[string]int64{"visit": 4, "clue": 3, "intent": 1, "session": 4}
+	wantAll := map[string]int64{"visit": 5, "clue": 4, "intent": 2, "session": 5, "opportunity": 4}
+	wantMonth := map[string]int64{"visit": 4, "clue": 3, "intent": 1, "session": 4, "opportunity": 3}
 	for stage, want := range wantAll {
 		if allCount[stage] != want {
 			t.Errorf("全年窗口下 %s 应为 %d（含窗口外那条），实际 %d", stage, want, allCount[stage])
@@ -227,7 +277,7 @@ func TestConversionFunnel_BuildFunnel_WindowFilter(t *testing.T) {
 	}
 }
 
-// TestConversionFunnel_GetStageDetails_EachStage 覆盖详情的四个分支：
+// TestConversionFunnel_GetStageDetails_EachStage 覆盖详情的五个分支：
 // 意向分支刻意传 nil 词表 ⇒ 它是 2（不筛 intent_type），与漏斗里的 1 形成对照；
 // 线索分支还要看 TopSources 的排序（按 count 降序）。
 func TestConversionFunnel_GetStageDetails_EachStage(t *testing.T) {
@@ -245,6 +295,7 @@ func TestConversionFunnel_GetStageDetails_EachStage(t *testing.T) {
 		{"clue", "线索", 3, 2},
 		{"intent", "意向", 2, 0},
 		{"session", "会话", 4, 0},
+		{"opportunity", "商机", 3, 0},
 	}
 	for _, c := range cases {
 		det, err := svc.GetStageDetails(c.stage, funnelFrom, funnelTo)
@@ -271,14 +322,18 @@ func TestConversionFunnel_GetStageDetails_EachStage(t *testing.T) {
 	}
 }
 
-// TestConversionFunnel_GetStageDetails_UnknownStageIsBaseline 未知阶段名（含演示表那套
-// exposure/click、以及只定名未产出的 opportunity）保持现状：200 + 空名字 + 0 计数，
-// **不判 404**。本卡若改成报错就是行为变更，故把现状锁在这里，
-// 要动它得先有一次"前端能否接受报错"的判定（短板 G16 一并登记）。
+// TestConversionFunnel_GetStageDetails_UnknownStageIsBaseline 未知阶段名（演示表那套
+// exposure/click 等）保持现状：200 + 空名字 + 0 计数，**不判 404**。本卡若改成报错就是
+// 行为变更，故把现状锁在这里，要动它得先有一次"前端能否接受报错"的判定（短板 G16 一并登记）。
+//
+// T-P4-06 之前这份名单里还有 "opportunity"：那时它**只是定名未产出**，回空详情是正确现状。
+// 现在它已经有取数腿（见上面 EachStage 那条的第五行），留在未登记名单里会让这条用例把
+// "商机详情回空"重新扶成期望 —— 那是拿一条过期判据去否决本卡的 AC①，所以是**移出去**
+// 而不是把断言改松。
 func TestConversionFunnel_GetStageDetails_UnknownStageIsBaseline(t *testing.T) {
 	setupFunnelTestDB(t)
 
-	for _, stage := range []string{"exposure", "click", "opportunity", "", "VISIT"} {
+	for _, stage := range []string{"exposure", "click", "consult", "add_wecom", "deal", "", "VISIT"} {
 		det, err := NewConversionFunnelService().GetStageDetails(stage, funnelFrom, funnelTo)
 		if err != nil {
 			t.Fatalf("未知阶段 %q 竟返回错误：%v（现状应是 200 + 空详情）", stage, err)
@@ -302,6 +357,95 @@ func TestConversionFunnel_BuildFunnel_DefaultWindow(t *testing.T) {
 	if d := time.Duration(30) * 24 * time.Hour; span < d-time.Minute || span > d+time.Minute {
 		t.Fatalf("默认窗口应约 30 天，实际 %s", span)
 	}
+}
+
+// TestConversionFunnel_DemoTableRowsNeverMoveTheRealView 是 AC③ 的**视图层**落点。
+// 取数层那条同名用例只证明"计数来自真表"，这一条要证明的是整份响应：
+// 演示表里那些 stage='opportunity'、count=99999 的行就算存在（`cmd/seed` 天天在造），
+// 真实视图也一个字都不许变 —— 包括别把已经存在的那几个演示段名扶成"看得见的阶段"。
+//
+// 与取数层那条**不能合并成一条**：这里的失败面不是"读错表"，是"读对了表但把演示表当补充"
+// （比如有人加一段 `if 真表为 0 { 回退读演示表 }`）—— 那条在取数层用例里种的是假行，
+// 真表恰好也有数，照样绿。
+func TestConversionFunnel_DemoTableRowsNeverMoveTheRealView(t *testing.T) {
+	database := setupFunnelTestDB(t)
+	seedFunnelRows(t, database)
+	if err := database.AutoMigrate(&sysmodel.ConversionFunnel{}); err != nil {
+		t.Fatalf("建演示表失败：%v", err)
+	}
+	for i, st := range []string{"opportunity", "deal", "visit", "clue"} {
+		row := &sysmodel.ConversionFunnel{
+			StatDate: "2019-03-05", FunnelType: "sales", Stage: st, StageOrder: i,
+			Count: 99999, ConversionRate: 99.99, DropOffRate: 99.99,
+		}
+		if err := database.Create(row).Error; err != nil {
+			t.Fatalf("写演示表行 %s 失败：%v", st, err)
+		}
+	}
+
+	report, err := NewConversionFunnelService().BuildFunnel(funnelFrom, funnelTo)
+	if err != nil {
+		t.Fatalf("BuildFunnel 出错：%v", err)
+	}
+	got := stripGeneratedAt(t, report)
+	want := `{"start_time":"2019-03-01T00:00:00Z","end_time":"2019-03-31T23:59:59Z",` +
+		`"stages":[` +
+		`{"stage":"visit","name":"访问","count":4,"rate":100,"drop_rate":0},` +
+		`{"stage":"clue","name":"线索","count":3,"rate":75,"drop_rate":25},` +
+		`{"stage":"intent","name":"意向","count":1,"rate":33.33333333333333,"drop_rate":66.66666666666667},` +
+		`{"stage":"session","name":"会话","count":4,"rate":400,"drop_rate":-300},` +
+		`{"stage":"opportunity","name":"商机","count":3,"rate":75,"drop_rate":25}],` +
+		`"total":4,"conversion":100}`
+	if got != want {
+		t.Fatalf("演示表里灌了 4×99999 行之后真实视图变了（AC③ 破了）\n实际：%s\n期望：%s", got, want)
+	}
+}
+
+// TestConversionFunnel_OpportunityLegFailureKeepsTheOtherFour 定住本卡的失败面形状：
+// 商机段取数失败（表没建 / 列漂移 / 连接断）时，响应**照样 200、照样五段**，那一段读 0。
+//
+// 为什么不是 500：四段既有腿今日就是同一个口径（错误在 service 层被吞，短板 G16 已登记），
+// 把第五段做成"它挂了整页挂"会让一个刚接上的读方拥有比四个老的更大的爆炸半径，
+// 而看板的代价是不对称的 —— 报错是**四段都看不见**，回 0 只是**一段读成零**。
+// 两边的分工因此是：取数层必须报错（见 ops/repository 那条同名判据），
+// 服务层把"报出来的错"变成可观测的一条 Warn 而不是一个静默零。
+// 这条用例正是那把变异（把错误 `continue` 掉、连 Warn 都不打）与"错误直接上抛"两种改法共同的绊线。
+func TestConversionFunnel_OpportunityLegFailureKeepsTheOtherFour(t *testing.T) {
+	database := setupFunnelTestDB(t)
+	seedFunnelRows(t, database)
+	if err := database.Exec(`DROP TABLE IF EXISTS opportunities`).Error; err != nil {
+		t.Fatalf("移除 opportunities 失败：%v", err)
+	}
+
+	report, err := NewConversionFunnelService().BuildFunnel(funnelFrom, funnelTo)
+	if err != nil {
+		t.Fatalf("商机段取数失败被上抛成整份报告的错误：%v ⇒ 一段故障挪用了四段的可见性", err)
+	}
+	if len(report.Stages) != 5 {
+		t.Fatalf("失败时段的段数变了：%d 段（%v）⇒ 少一段会把前端按下标取的末段整体挪位", len(report.Stages), stageKeys(report))
+	}
+	counts := map[string]int64{}
+	for _, s := range report.Stages {
+		counts[s.Stage] = s.Count
+	}
+	if counts["opportunity"] != 0 {
+		t.Errorf("表不存在却报出 %d 条商机", counts["opportunity"])
+	}
+	// 其余四段必须**照旧有数**：这条断言防的是"一遇到错就把整份报告清零"那种修法，
+	// 它能让上面两条都绿，代价是把四个真数换成四个假零。
+	for stage, want := range map[string]int64{"visit": 4, "clue": 3, "intent": 1, "session": 4} {
+		if counts[stage] != want {
+			t.Errorf("%s 段应为 %d，实际 %d ⇒ 一段故障波及到了别的段", stage, want, counts[stage])
+		}
+	}
+}
+
+func stageKeys(report *FunnelReport) []string {
+	out := make([]string, 0, len(report.Stages))
+	for _, s := range report.Stages {
+		out = append(out, s.Stage)
+	}
+	return out
 }
 
 // stripGeneratedAt 把报告序列化成 JSON 后摘掉 generated_at（每次调用都不同，留着就是噪声），

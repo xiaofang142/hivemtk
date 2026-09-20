@@ -69,6 +69,24 @@ func (r *ConversionFunnelRepository) CountCustomerSessionsByTimeRange(ctx contex
 	return count, err
 }
 
+// CountOpportunitiesByTimeRange 统计时间范围内新建的商机数（商机阶段，T-P4-06）。
+//
+// 取的是 `opportunities.created_at` 而不是 `stage`：这一段回答的是"这一期有多少单进了
+// 商机格"，而 `stage` 答的是"此刻各格还停着几单"—— 后者是一批已经离开的行不会被数到，
+// 于是"推进得越好，漏斗这一段越小"。切窗列与模型注释里那句"新建商机数按 created_at
+// 切时间窗"同一条（C6 北极星的分母用的也是它）。
+//
+// 错误一律原样上抛，不在这层吞成 0：表缺失、列漂移、连接断都会读成"这个月没有商机"，
+// 而那与它要掩盖的故障在响应里逐字节相同。怎么报由服务层决定（见 ops/service 那一腿）。
+func (r *ConversionFunnelRepository) CountOpportunitiesByTimeRange(ctx context.Context, startTime, endTime time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&sysmodel.Opportunity{}).
+		Where("created_at BETWEEN ? AND ?", startTime, endTime).
+		Count(&count).Error
+	return count, err
+}
+
 // GetClueSourceStats 线索来源分布（按 account 分组，取 Top 10）
 func (r *ConversionFunnelRepository) GetClueSourceStats(ctx context.Context, startTime, endTime time.Time) ([]FunnelSourceStat, error) {
 	var rows []FunnelSourceStat
@@ -110,12 +128,15 @@ const (
 
 // liveFunnelStages 真实产出、构成 GET /conversion-funnel 响应 stages[] 的阶段清单。
 // 顺序即对外契约：看板按下标绘制漏斗，调顺序等于改响应。
-var liveFunnelStages = []FunnelStageKey{StageVisit, StageClue, StageIntent, StageSession}
+//
+// 商机段是 T-P4-06 从保留清单里挪进来的，挪到**末位**而不是插进中间：
+// 前四段的下标就是现网看板的绘图位置，插入等于把别人的柱子往后挪一格。
+var liveFunnelStages = []FunnelStageKey{StageVisit, StageClue, StageIntent, StageSession, StageOpportunity}
 
 // reservedFunnelStages 是「键名已定、数据源未接」的阶段，只登记不产出。
-// 商机位登记在此，是为了让 T-P7-02 复用同一个字面值，而不是在本卡里凭空多画
-// 一个恒为 0 的阶段——那是改变现网响应。
-var reservedFunnelStages = []FunnelStageKey{StageOpportunity}
+// 本清单自 T-P4-06 起为空 —— 机制留着而不是删掉：下次再出现"先定名、后接待"的阶段，
+// 仍然该登记在这里，而不是在服务层凭空多画一段（那正是本卡之前的商机位）。
+var reservedFunnelStages = []FunnelStageKey{}
 
 var funnelStageLabels = map[FunnelStageKey]string{
 	StageVisit:       "访问",
