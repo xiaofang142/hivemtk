@@ -57,3 +57,41 @@ func TestTouchLastSync_UnknownAccountNoop(t *testing.T) {
 		t.Errorf("无对应账号行时 TouchLastSync 报错: %v", err)
 	}
 }
+
+// TestIsOnlineByLastSync_StatusShortCircuits 管理面在线读法：status=offline 一票判离线
+// （哪怕时间戳是刚刚写的），status=online 才看宽限窗。
+//
+// 这一条决定 Task 3 的接线是否真的可读：SSE 断开时 SetOffline 落的正是"刚刚"的时间戳，
+// 若时间戳优先，断开后会再假在线 30s。
+func TestIsOnlineByLastSync_StatusShortCircuits(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	fresh := now.Add(-2 * time.Second)
+	older := now.Add(-2 * time.Minute)
+
+	if isOnlineByLastSync(ctx, &fresh, "offline", now) {
+		t.Error("status=offline 仍被判在线（刚断开的时间戳会盖掉断开事实）")
+	}
+	if !isOnlineByLastSync(ctx, &fresh, "online", now) {
+		t.Error("在线且时间戳新鲜却判离线")
+	}
+	if isOnlineByLastSync(ctx, &older, "online", now) {
+		t.Error("超出宽限窗仍判在线")
+	}
+	if isOnlineByLastSync(ctx, nil, "online", now) {
+		t.Error("从未同步过的账号判在线")
+	}
+}
+
+// TestHeartbeatCadenceWithinOnlineGraceWindow 心跳间隔必须落在在线宽限窗内：
+// 心跳是在线位的唯一续期来源，间隔 > 窗口 ⇒ 明明挂着的流会被管理面判成掉线闪烁。
+//
+// 两侧默认值（15s / 30s）都有运行时配置覆盖口（sse.heartbeat_interval、
+// bridge.online_grace_window），这里只能钉住默认值；配成违反关系时的现象是
+// 在线态按心跳周期闪烁，不是静默失效——改配置时按这条口径核对。
+func TestHeartbeatCadenceWithinOnlineGraceWindow(t *testing.T) {
+	if SSEDefaultHeartbeatInterval >= OnlineGraceWindow {
+		t.Errorf("心跳 %v ≥ 在线宽限窗 %v ⇒ 在线位会在两次心跳之间掉成离线",
+			SSEDefaultHeartbeatInterval, OnlineGraceWindow)
+	}
+}

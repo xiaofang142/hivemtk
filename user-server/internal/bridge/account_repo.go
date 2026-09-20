@@ -148,6 +148,9 @@ func (r *BridgeAccountRepository) TouchLastSync(ctx context.Context, channel, ac
 		Updates(map[string]any{"last_sync_at": now, "status": "online"}).Error
 }
 
+// OnlineGraceWindow status 为 online 时，last_sync_at 距今多久内仍算在线。
+// 必须大于 SSE 心跳间隔——心跳是在线位的唯一续期来源，小于它会让活着的流按心跳周期闪烁成离线
+// （由 TestHeartbeatCadenceWithinOnlineGraceWindow 钉住默认值）。
 const OnlineGraceWindow = 30 * time.Second
 
 func runtimeOnlineGraceWindow(ctx context.Context) time.Duration {
