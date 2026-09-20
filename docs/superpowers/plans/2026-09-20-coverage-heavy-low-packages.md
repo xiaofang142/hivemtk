@@ -15,6 +15,8 @@
 
 **Spec:** 无独立 spec 文档；需求来源是覆盖率基线扫描（`go tool cover -func`）与本计划 §「基线与目标」表。
 
+**Status:** 8/8 任务完成并推送（`f76c39bf`…`4afd9c66`），目标达成情况与未达成口径见文末「收尾」段的实况表。
+
 ## Global Constraints
 
 - 测试命令一律在 `hivemtk/user-server/` 目录执行，且先加载 env：`set -a; source ../.env; set +a`。
@@ -2738,12 +2740,36 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 
 ## 收尾（全部任务完成后）
 
-1. `cd hivemtk/user-server && set -a; source ../.env; set +a && go vet ./... && gofmt -l . | head` → 均无输出。
-2. 逐包覆盖率重测并汇总成表贴给用户：8 个包的 before/after。
-3. 回灌 memory：`project-audit-backlog-2026-09.md` 的「已结」追加本排期 commit 列表；
-   新 finding（live-code 无 recover、订单号假值、UpdateContext 浅拷贝、迁移 Down 不完备、
-   v3.36.0 触发器建不起来、v3.22.0 Scan NULL 中止、v3.3.0 列名漂移、两迁移未注册、`generateSessionID` 碰撞）写进同一文件的 Findings 段。
-4. 双远端 `git rev-list --left-right --count master...<remote>/master` 最终 `0/0`。
+> **执行实况（2026-09-20 收口）**：四条全部完成，其中第 1 条按包范围口径达成，草稿的全仓口径在当前
+> 共享工作树里不可满足（并行会话有 ~40 个未提交 WIP 文件）。逐条实况：
+>
+> 1. **包范围门绿、全仓门不适用**：`gofmt -l` + `go vet` 只跑本排期 7 个包
+>    （`internal/cron`、`internal/pkg/tracing`、`aiagent/knowledge/service`、`aiagent/rag/service`、
+>    `aiagent/rag/customer_service`、`internal/migration/migrations`、`internal/platform`）→ **两者均无输出**。
+>    草稿写的 `go vet ./...` 会把他人 WIP 的编译状态算进本排期的结论，故不按字面执行。
+> 2. **覆盖率收口复跑**（`-p 1 -count=1 -cover`，非任务内增量数）：
+>    | 包 | before | after（本轮复跑） |
+>    |---|---|---|
+>    | `internal/cron` | 3.0% | **97.0%** |
+>    | `internal/pkg/tracing` | 26.7% | **92.7%** |
+>    | `aiagent/knowledge/service` | 7.6% | 9.9%（包级；卡内目标 constants.go getter **15/15 = 100%**） |
+>    | `aiagent/rag/service` | 13.1% | **31.3%**（3 个 prompt 构造器 100%） |
+>    | `aiagent/rag/customer_service` | 6.7% | **35.6%** |
+>    | `internal/migration/migrations` | 23% | **77.1%**（62.3s，含全链路 Up→Down） |
+>    | `internal/platform` | 33.7% | **82.0%** |
+>
+>    交付规模：8 个提交 / 11 个测试文件 / 65 个 Test 函数 / +3315 行，生产代码零改动。
+> 3. **回灌完成**：本文件「执行中发现」14 条 Findings（Task 5/6/7/8）；
+>    `docs/replan-2026-09/新规划任务清单.md` 变更记录 **r34**（含 4 条方法学）；
+>    项目记忆 `project-audit-backlog-2026-09.md` 新增「第二十五轮」并把「覆盖率面上推进」改为剩余范围；
+>    用户记忆新增 `cli-toolchain-gotchas` #27（覆盖率只认 `cover -func`、复选框 old_string 不唯一）
+>    与 `async-and-global-state-tests` #10（httptest channel、包级全局成对还原）。
+>    草稿第 3 条列的 9 项 finding 里「live-code 无 recover / 订单号假值 / UpdateContext 浅拷贝」
+>    属 Task 1–4 与上一批（`de994fd0`）的任务内 Findings，未重复搬进「执行中发现」段。
+> 4. **双远端 `0 0`**：`4afd9c66` 之后 gitee-upstream 与 upstream 均 `git rev-list --left-right --count` = `0 0`；
+>    提交自洽性在 `git clone --shared` 影子树复验（`git status --porcelain` 0 行、
+>    **不带 `../.env`** 跑 `go test ./internal/platform/` 仍 ok ⇒ 用例不依赖本机 env），影子树跑完已删除，
+>    且核对影子树 `user-server/config/` 未被写出 `.merchant_api_secret`。
 
 ## 执行中发现（仅记录，本批不改生产代码）
 
