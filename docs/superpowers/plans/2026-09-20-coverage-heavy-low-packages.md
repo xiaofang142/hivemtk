@@ -2172,6 +2172,7 @@ git commit -m "test: 迁移注册表元信息校验与全链路升降级用例"
 
 **Files:**
 - Create: `user-server/internal/platform/client_internals_test.go`
+- Create: `user-server/internal/platform/contributor_client_test.go`（**交付时新增**，理由见 Step 1 差异第 5 条）
 - 参考（只读）：`internal/platform/client.go:22-74`（`sign` 三级取密钥）、`82-153`（`ensureJWTToken` 分支）、
   `249-292`（`RegisterMerchant` + `saveMerchantSecret`/`loadMerchantSecret`，路径 `config/.merchant_api_secret`）、
   `294-342`（`GetLicenseStatus` + `PlatformError.Error/Msg`）、`371-441`（`ReportInstall`/`ReportHeartbeat` 及 Default 包装）
@@ -2182,7 +2183,7 @@ git commit -m "test: 迁移注册表元信息校验与全链路升降级用例"
   `saveMerchantSecret/loadMerchantSecret/merchantSecretFilePath`、`PlatformError`、`config.PlatformCfg`、`t.Chdir`（Go 1.24+，本仓 go1.26.6）。
 - Produces: 无。
 
-- [ ] **Step 1: 写用例**
+- [x] **Step 1: 写用例**
 
 创建 `user-server/internal/platform/client_internals_test.go`：
 
@@ -2640,13 +2641,42 @@ func TestPlatformErrorFormatting(t *testing.T) {
 `/merchant-api/license/status`，无法通过改 path 触发，因此用第二个 httptest server 让该路径直接返回
 `data: "不是对象"`（合法 JSON、但类型不是对象），再断言整个方法报错。
 
-- [ ] **Step 2: 跑绿**
+> **交付与草稿差异（Step 1）**：
+> 1. **handler 写变量 → 改用带缓冲 channel 回传**。草稿里 `authHeader`/`regBody`/`installBody`/`heartbeatBody`
+>    都是「httptest handler goroutine 写、test goroutine 读」的裸共享变量；`-race` 下这属于未同步访问。
+>    交付版一律用 `make(chan T, 4)` + 非阻塞 send，读侧在 `Do` 返回后取一次。
+>    顺带修掉草稿里 `<-installCh` 读两次的写法（第二次会阻塞或取到下一条）。
+> 2. **`signTwice(pathA, pathB)` 扩成 `sameSecond(sigA, sigB func() (string,string,error))`**：
+>    草稿形态只能变 path，钉不住 method/body 是否进签名串。交付版加了 4 组同秒对照：
+>    query 不参与、path 参与、method 参与、body 参与，外加「同参两次必相同」（钉 HMAC 确定性、排除 nonce）。
+> 3. **草稿末条断言本身是错的**：`signTwice("/api/a", "/api/a")` 断言 `a == b` 判红 —— 同 method/path/body/秒
+>    的两次签名按定义**必然相同**，照抄会得到一条恒红用例。反转为 `a != b` 判红，并把语义写进注释。
+> 4. **`GetLicenseStatus` 拆成两条用例**：草稿的 `brokenSrv` 名字与实际行为不符（它测的是 `data` 类型不匹配）。
+>    交付版 `TestGetLicenseStatusParsesData` 测 403 → 透传 `*PlatformError`，
+>    另立 `TestGetLicenseStatusUnmarshalFailure` 专测 `data:"不是对象"` 的反序列化分支，
+>    并把断言收紧到 `cannot unmarshal string into Go value of type`（草稿只断言 `err != nil`，任何错误都能让它绿）。
+> 5. **新增 `contributor_client_test.go`**：草稿的 `client_internals_test.go` 跑完后全包只有 **64.0%**，
+>    距本节 ≥65% 目标差 1 个点，缺口全在 `contributor_client.go`（9 个函数 0%，且它是**唯一没有任何测试的
+>      平台登录/注册/资产上架链路**）。该文件可用 httptest 完全离线覆盖，故补齐而非报告"差 1%"。
+>    其中 `contributorIdentity` 的派生式（`sha256(mk+"|"+secret)[:16]`）与
+>    「空 secret → panic、`CONTRIBUTOR_DEV=1` → 占位口令」两条 fail-closed 分支是本轮最有价值的钉子。
+> 6. 全局状态按 [[feedback-async-and-global-state-tests]] 处理：`withContributorGlobals` 保存并还原
+>    `merchantKey` / `contribToken` / `contribExpireAt`，`withPlatformConfig` 保存并还原 `config.PlatformCfg`；
+>    因此 `-shuffle=on -count=2` 稳定绿（既有用例 `client_test.go` 直接赋值不还原，不受影响）。
+> 7. 未纳入：`InitSync`（会 spawn 协程向真实平台注册）、`StartHeartbeat`/`sendHeartbeat`/`collectMetrics`、
+>    `sync.go` 其余包装 —— 前者有外部副作用，后者属另一条链路，本任务不扩范围。
+
+- [x] **Step 2: 跑绿**
 
 Run: `set -a; source ../.env; set +a && go test -p 1 -count=1 -coverprofile=/tmp/plat.cov ./internal/platform/ && go tool cover -func=/tmp/plat.cov | tail -25`
-Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerchantSecret/saveMerchantSecret/ReportInstall/ReportHeartbeat/PlatformError.Error/Msg` 非 0%。
-注意：本包测试禁用 `t.Parallel`（`config.PlatformCfg` 与 `t.Chdir` 都是进程级）。
+实跑：全包 **82.0%**（基线 33.7%，目标 ≥65%）。逐函数：
+`sign/Do/do/loadMerchantSecret/GetLicenseStatus/Error/Msg/NewContributorClient/contributorIdentity/
+ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
+`ensureJWTToken 95.1%`、`RegisterMerchant 93.3%`、`ReportInstall/ReportHeartbeat 94.4%`、
+`CreateAsset 90%`、`doRetry 87.5%`、`saveMerchantSecret 75%`（错误分支需只读文件系统，不值当）。
+控制组：`-v` 计数 **RUN=21 PASS=21 SKIP=0 FAIL=0**；`-race -count=2` 与 `-race -count=2 -shuffle=on` 均 ok。
 
-- [ ] **Step 3: 反向验证**
+- [x] **Step 3: 反向验证**
 
 备份 `internal/platform/client.go` → 注入：
 1. `sign` 里删掉 `if i := strings.IndexByte(path, '?')` 的截断 → `TestSignSecretPrecedence` 的 query 断言 FAIL。
@@ -2655,10 +2685,54 @@ Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerc
    既有 `TestClient_Do_401SelfHeal` 红（证明本任务的门会保护既有用例）。
 逐次 `cp` 还原后复绿。
 
-- [ ] **Step 4: 提交并推送**
+> **实跑变异（5 针；`client.go` md5 `5ca0feb091b9b7fc1ed643d804273f6f`、
+> `contributor_client.go` md5 `98785b0801d0d252053a7bf8bc84c3f5` 每次还原后逐次比对一致）**：
+>
+> | # | 注入 | 实跑结果 |
+> |---|---|---|
+> | I1 | `sign` 的 `i >= 0` 改 `i > 999`（query 不再截断） | `client_internals_test.go:99: query 部分不应参与签名串` FAIL |
+> | I2 | `if loginResp.Data.Token == ""` 加 `&& loginResp.Code == -1` | `:160 响应无 token 应报错, got <nil>` FAIL |
+> | I3 | `&& !retried` 改 `&& retried`（401 自愈失效） | **既有** `client_test.go:33 expected success after 401 retry` FAIL —— 证明新门也护住老用例 |
+> | I4 | `contributorIdentity` 口令切片 `[:16]` 改 `[:12]` | 3 条断言同时红（主用例、anonymous、CONTRIBUTOR_DEV 占位），派生式确实被钉住 |
+> | I5 | `CreateAsset` 的 `if out.ID == 0` 改 `if out.ID < 0` | `:283 空 ID 应报错, got <nil>` FAIL |
+>
+> 过程教训（同 Task 6/7）：I1 第一次注入写成 `if false { pathNoQuery = path[:i] }`，
+> `i` 变未定义 → **编译失败**。编译失败不是变异（红得没有信息量，且测不到断言），
+> 一律改成能编译、只改行为的最小形式（`i >= 0` → `i > 999`）。
+> I2/I5 同样刻意用「附加恒假条件 / 改阈值」而非删分支：删语句会改变局部变量与返回值的可达性，
+> 容易把变异变成编译错误或顺带删掉别的行为，红点就归不了因。
+> 另：草稿把 I1 描述成「删掉截断」，实操必须保留语句只改阈值，理由同上。
+
+- [x] **Step 4: 提交并推送**
 
 `git add user-server/internal/platform/client_internals_test.go`
 → `git commit -m "test: 平台客户端签名优先级/JWT 分支与安装心跳上报补测"` → 双远端推送。
+
+实际 add 两个文件（`client_internals_test.go` + `contributor_client_test.go`），commit 主题不变。
+
+**Findings（只记录不修）：**
+1. `contributorIdentity` 在 `config.PlatformCfg == nil` 时抛**运行时空指针 panic**（`contributor_client.go:58`
+   直接取 `.Secret`），而 `NewContributorClient` 明确容忍 nil 配置（`client.go` 侧同类情形返回可读的
+   "平台配置未初始化"）。panic 位于 `CreateAsset`/`SubmitAudit` 的调用链上，不是启动期 ⇒
+   未配置平台的环境里一次资产上架请求就能把请求打崩。已由用例把「panic 的是空指针而非可读错误」钉成现状。
+2. `contribToken` 是**包级 24h 缓存**，切换平台地址/`platform.secret` 时不失效；
+   而 `merchantKey` 由 `InitSync`（`sync.go:31`）在**每次进程启动时随机生成**且只落在这里
+   （全仓另一处赋值是测试 setter）。组合后果：贡献者身份 `mtk_<merchantKey>` 每次重启都换一个新人，
+   平台侧看到的商户与已上架资产的归属会随重启漂移。
+3. `doRetry` 只把 **200** 当成功：204 No Content 会走非 200 分支返回 `*PlatformError{StatusCode:204}`。
+   若平台侧任何端点按 REST 习惯用 204 表示"成功且无内容"，本客户端会把它当错误上报给上层。
+   用例已把这条口径显式化（`204 应返回 *PlatformError{StatusCode:204}`），改动需同步测试。
+4. `ErrPlatformNotConfigured` 哨兵（`client.go:22`，注释称"轮询型端点静默降级判定用"）
+   实际只在 `controller/platform.go:55` 被返回一次，**全仓无任何 `errors.Is` 消费方**；
+   而客户端自身三处"平台配置未初始化"都是新建的 `fmt.Errorf`，与该哨兵**文本相同但不是同一个值**。
+   ⇒ 任何据此写静默降级的代码都会漏判客户端来源的未配置错误。
+5. `saveMerchantSecret`/`loadMerchantSecret` 用**进程 CWD 相对路径** `config/.merchant_api_secret`；
+   `loadMerchantSecret` 对读失败静默忽略。若服务从别的工作目录启动，per-merchant 密钥既读不到也写不回，
+   签名会静默回落到全局 `MERCHANT_API_SECRET`（与 §1 契约"每商户独立密钥"不符）且无任何日志。
+   已核验泄漏面：仓库里确有该文件（`user-server/config/.merchant_api_secret`，48B / `0600` / 9-4 生成，
+   说明真实运行时的 CWD 是 `user-server/`），但它**未被 git 跟踪**且由
+   `user-server/.gitignore:130 config/.merchant_api_secret` 显式忽略 ⇒ 无提交泄漏风险。
+   本任务用例一律 `t.Chdir(t.TempDir())`，不落该文件到仓库目录。
 
 ---
 
@@ -2673,6 +2747,19 @@ Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerc
 
 ## 执行中发现（仅记录，本批不改生产代码）
 
+- **Task 8 / 贡献者身份每次重启漂移**（`sync.go:31` + `contributor_client.go:47`）：
+  `merchantKey` 由 `InitSync` 用 `crypto/rand` 随机生成且只存包级变量，贡献者用户名派生为 `mtk_<merchantKey>` ⇒
+  每次进程重启就是一个新贡献者，平台侧资产归属随重启漂移，24h 的包级 `contribToken` 缓存又不随地址/密钥变更失效。
+- **Task 8 / `contributorIdentity` 空配置运行期 panic**（`contributor_client.go:58`）：
+  `config.PlatformCfg == nil` 时直接取 `.Secret` 抛空指针，而 `NewContributorClient` 明确容忍 nil；
+  panic 在 `CreateAsset`/`SubmitAudit` 调用链上（非启动期），未配置平台的环境一次资产上架请求即可打崩该请求。
+- **Task 8 / `doRetry` 只认 200**：204 No Content 落入非 200 分支返回 `*PlatformError{StatusCode:204}`，
+  平台侧任一按 REST 习惯用 204 表"成功无内容"的端点都会被本客户端当错误上抛。用例已把该口径显式钉住。
+- **Task 8 / `ErrPlatformNotConfigured` 无消费方**（`client.go:22`）：全仓无 `errors.Is` 判定，
+  而客户端自身三处"平台配置未初始化"是文本相同但值不同的 `fmt.Errorf` ⇒ 据哨兵写静默降级的代码会漏判客户端来源。
+- **Task 8 / per-merchant 密钥文件是 CWD 相对路径**（`config/.merchant_api_secret`）：
+  从别的工作目录启动则读写双失效、`loadMerchantSecret` 又静默忽略错误，签名悄悄回落到全局 `MERCHANT_API_SECRET` 且无日志。
+  已核验该文件在仓库里存在但未被跟踪、由 `user-server/.gitignore:130` 显式忽略 ⇒ 无提交泄漏风险；本批用例一律 `t.Chdir(t.TempDir())`。
 - **Task 7 / 初始管理员删除保护从未生效**（`v3_36_0_admin_password_guard_migration.go:73,77`）：
   `stmts` 里 `CREATE TRIGGER trg_guard_initial_admin_delete ... EXECUTE FUNCTION fn_guard_initial_admin_delete()`
   排在 `CREATE FUNCTION` 之前，迁移首错即 `return` ⇒ **函数与触发器在任何环境都未建立**，
