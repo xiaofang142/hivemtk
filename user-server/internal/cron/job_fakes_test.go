@@ -127,10 +127,11 @@ func TestDomainHealthStartTickerLoops(t *testing.T) {
 type fakeLiveCode struct {
 	service.LiveCodeService
 
-	mu     sync.Mutex
-	calls  int
-	err    error
-	notify chan struct{}
+	mu        sync.Mutex
+	calls     int
+	err       error
+	panicWith any
+	notify    chan struct{}
 }
 
 func (f *fakeLiveCode) RotateLiveCodes(ctx context.Context) error {
@@ -142,6 +143,9 @@ func (f *fakeLiveCode) RotateLiveCodes(ctx context.Context) error {
 		case f.notify <- struct{}{}:
 		default:
 		}
+	}
+	if f.panicWith != nil {
+		panic(f.panicWith)
 	}
 	return f.err
 }
@@ -162,6 +166,16 @@ func TestLiveCodeRotateSuccess(t *testing.T) {
 
 func TestLiveCodeRotateFailureDoesNotPanic(t *testing.T) {
 	f := &fakeLiveCode{err: errors.New("轮询锁不可用")}
+	NewLiveCodeRotator(f).rotate()
+	if f.count() != 1 {
+		t.Fatalf("RotateLiveCodes 调用次数=%d, want 1", f.count())
+	}
+}
+
+// rotate() 由裸 goroutine 调用：未捕获的 panic 会终止整个进程（同包 domain_health_job.go
+// 的 runOnce 早就有 recover，此处口径必须一致）。
+func TestLiveCodeRotateServicePanicIsRecovered(t *testing.T) {
+	f := &fakeLiveCode{panicWith: "活码数据不一致"}
 	NewLiveCodeRotator(f).rotate()
 	if f.count() != 1 {
 		t.Fatalf("RotateLiveCodes 调用次数=%d, want 1", f.count())

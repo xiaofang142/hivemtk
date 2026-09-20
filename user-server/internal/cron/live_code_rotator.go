@@ -33,6 +33,11 @@ func (r *LiveCodeRotator) Start() {
 }
 
 func (r *LiveCodeRotator) rotate() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Errorf("[live-code] rotate panic recovered: %v", rec)
+		}
+	}()
 	logger.Info("开始执行活码轮询任务...")
 
 	err := r.liveCodeService.RotateLiveCodes(context.Background())
