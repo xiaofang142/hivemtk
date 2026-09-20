@@ -128,7 +128,7 @@ func TestOpportunitySchemaShape(t *testing.T) {
 		"ID", "Code", "CustomerID", "OneID", "ClueID",
 		"Stage", "Status", "Amount", "Currency", "WinProbability",
 		"OwnerUserID", "ExpectedCloseAt", "LostReason",
-		"CreatedAt", "UpdatedAt",
+		"Version", "CreatedAt", "UpdatedAt",
 	}
 	for _, name := range wantFields {
 		if _, ok := st.FieldByName(name); !ok {
@@ -304,4 +304,35 @@ func columnName(f reflect.StructField) string {
 		return strings.Split(j, ",")[0]
 	}
 	return f.Name
+}
+
+// TestOpportunityVersionIsBackfillableCounter 乐观锁版本列的形状（T-P4-02 欠 T-P4-01 的那一列）。
+//
+// 两条判据各拦一种"今天在开发库看不出来"的坏法：
+//
+//   - 必须是有符号 int64 而不是 uint：CAS 的判据是 `WHERE version = ?`，而"回绕"在
+//     无符号上是一个合法值 —— 一旦回绕，一条老读到的版本号和一条新写入的版本号会相等，
+//     后写就静默覆盖了前写（AC① 正面要拦的事）。64 位不需要回绕担忧，32 位在
+//     高频改单下不是不可能，所以宽度也算判据。
+//   - `not null` 与 `default:0` 必须成对：本列是给**存量表**补的（T-P4-01 已经在
+//     allModels() 里，任何已经建过表的部署都会走到 AutoMigrate 的 ADD COLUMN 分支）。
+//     PG 的 `ADD COLUMN ... NOT NULL` 不带默认值会当场失败（老行没有值可填），
+//     而开发库里这张表是空的，永远跑不出这条路径。真正的断言在
+//     internal/pkg/db/opportunity_migration_test.go 的补列用例（先按 T-P4-01 的列集建表、
+//     插一行、再 AutoMigrate），这里只钉标签层。
+func TestOpportunityVersionIsBackfillableCounter(t *testing.T) {
+	st := reflect.TypeOf(Opportunity{})
+	if kindOf(t, st, "Version") != reflect.Int64 {
+		t.Error("Version 必须是 int64：无符号会让\"回绕\"变成合法版本号，CAS 判据随之失效")
+	}
+	tag := gormTagOf(t, st, "Version")
+	if !strings.Contains(tag, "not null") || !strings.Contains(tag, "default:0") {
+		t.Errorf("Version 缺 `not null`+`default:0` 这一对，存量表补列会直接失败：%s", tag)
+	}
+	// 版本对外可见：客户端要能把"我读到的那一版"带回来才能做 CAS。
+	// 它与 resume_token 的区别是——它不授予任何权限，只是一个过期判据。
+	f, _ := st.FieldByName("Version")
+	if got := strings.Split(f.Tag.Get("json"), ",")[0]; got != "version" {
+		t.Errorf(`Version 的 json 名是 %q，期望 version（读回后原样带回才能做 CAS）`, got)
+	}
 }

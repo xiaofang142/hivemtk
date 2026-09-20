@@ -27,7 +27,7 @@ import (
 var opportunityWantColumns = []string{
 	"amount", "clue_id", "code", "created_at", "currency", "customer_id",
 	"expected_close_at", "id", "lost_reason", "one_id", "owner_user_id",
-	"stage", "status", "updated_at", "win_probability",
+	"stage", "status", "updated_at", "version", "win_probability",
 }
 
 func TestOpportunityRegisteredInAllModels(t *testing.T) {
@@ -231,7 +231,7 @@ func TestOpportunityIndexesOnlyForNamedQueries(t *testing.T) {
 			t.Errorf("缺少期望索引 %s（T-P4-02/T-P4-04 的查询下家会退化成全表扫）", want)
 		}
 	}
-	for _, none := range []string{"one_id", "clue_id", "status", "amount", "win_probability", "expected_close_at", "lost_reason"} {
+	for _, none := range []string{"one_id", "clue_id", "status", "amount", "win_probability", "expected_close_at", "lost_reason", "version", "updated_at"} {
 		if got[none] {
 			t.Errorf("列 %s 上出现了预留索引：没有已命名的查询方，本卡不建", none)
 		}
@@ -247,4 +247,109 @@ func opportunityColumns(t *testing.T, db *gorm.DB) []string {
 	}
 	sort.Strings(cols)
 	return cols
+}
+
+// TestOpportunityAutoMigrate_BackfillsVersionOnExistingTable 给存量表补 version 列这条路径，
+// 今天必须真跑一遍（T-P4-02）。
+//
+// 为什么单独立一条：T-P4-01 已经把 opportunities 登记进 allModels()，所以真实升级路径不是
+// "新建一张空表"，而是"表已经在了、行也已经在了，AutoMigrate 走 ADD COLUMN 分支"。
+// PG 的 `ADD COLUMN ... NOT NULL` 不带默认值会当场失败（老行没有值可填），而只带
+// `default:0` 不带 `not null` 又会让老行留下 NULL —— 两种坏法在**空表**上都看不出来，
+// 开发库里的这张表恰恰是空的。
+//
+// 建表语句照 T-P4-01 那次交付的实测形状手写（不是从今天的 struct 少抄一列）：
+// 抄错等于把"当年的形状"也改了，那样这条用例证明的就不是升级路径而是现状。
+func TestOpportunityAutoMigrate_BackfillsVersionOnExistingTable(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	if testDB == nil {
+		t.Fatal("测试库不可达")
+	}
+	if err := testDB.Exec(`DROP TABLE IF EXISTS opportunities`).Error; err != nil {
+		t.Fatalf("清表失败: %v", err)
+	}
+	const t40DDL = `CREATE TABLE opportunities (
+		id text NOT NULL PRIMARY KEY,
+		code varchar(32),
+		customer_id varchar(64),
+		one_id text,
+		clue_id varchar(36),
+		stage varchar(32),
+		status varchar(16),
+		amount numeric(12,2),
+		currency varchar(3) DEFAULT 'CNY',
+		win_probability numeric(5,2),
+		owner_user_id varchar(64),
+		expected_close_at timestamptz,
+		lost_reason text,
+		created_at timestamptz,
+		updated_at timestamptz
+	)`
+	if err := testDB.Exec(t40DDL).Error; err != nil {
+		t.Fatalf("按 T-P4-01 形状建表失败: %v", err)
+	}
+	// 两行存量数据：没有它们，ADD COLUMN NOT NULL 一律成功，本用例就白写。
+	for _, id := range []string{"opp_old_1", "opp_old_2"} {
+		if err := testDB.Exec(
+			`INSERT INTO opportunities (id, code, stage, status, amount) VALUES (?, ?, 'qualification', 'open', 100)`,
+			id, "C-"+id).Error; err != nil {
+			t.Fatalf("写入存量行失败: %v", err)
+		}
+	}
+
+	if err := testDB.AutoMigrate(&model.Opportunity{}); err != nil {
+		t.Fatalf("给存量表补 version 列失败（not null 与 default 少一个就是这个报错）: %v", err)
+	}
+
+	var nullable, def, dataType string
+	if err := testDB.Raw(`SELECT is_nullable FROM information_schema.columns
+		WHERE table_name='opportunities' AND column_name='version'`).
+		Scan(&nullable).Error; err != nil {
+		t.Fatalf("查 is_nullable 失败: %v", err)
+	}
+	if err := testDB.Raw(`SELECT COALESCE(column_default,'') FROM information_schema.columns
+		WHERE table_name='opportunities' AND column_name='version'`).
+		Scan(&def).Error; err != nil {
+		t.Fatalf("查 column_default 失败: %v", err)
+	}
+	if err := testDB.Raw(`SELECT data_type FROM information_schema.columns
+		WHERE table_name='opportunities' AND column_name='version'`).
+		Scan(&dataType).Error; err != nil {
+		t.Fatalf("查 data_type 失败: %v", err)
+	}
+	if nullable != "NO" {
+		t.Errorf("补出来的 version 可空（=%q）：NULL 读进 int64 会在查询当场报错", nullable)
+	}
+	if !strings.HasPrefix(def, "0") {
+		t.Errorf("version 默认值 %q：没有 0 这个默认值，补列那一步本身就过不去", def)
+	}
+	// 有符号整型且够宽：CAS 的比较是 `=` 而不是 `<`，但回绕成负数会让"老读到的那版"
+	// 与"库里的新版"在 int4 上撞成同一个值（同 T-P4-01 对主键不用 serial 的同一类理由）。
+	if dataType != "bigint" {
+		t.Errorf("version 列类型 %q，期望 bigint", dataType)
+	}
+
+	// 老行必须能被读回来，且读到的版本是 0（= "这一列存在之前它一次都没改过"）。
+	// 这里刻意用一个独立零值 struct 读，不复用上面插入时那个实例。
+	var back model.Opportunity
+	if err := testDB.Where("id = ?", "opp_old_1").First(&back).Error; err != nil {
+		t.Fatalf("补列后读存量行失败（NULL 读不进 int64 就在这里红）: %v", err)
+	}
+	if back.Version != 0 {
+		t.Errorf("存量行的 version = %d，期望 0：非零意味着补列时被填上了某个真实版本号，CAS 会漏掉第一次改写", back.Version)
+	}
+	if back.Amount != 100 || back.Status != model.OpportunityStatusOpen {
+		t.Errorf("补列顺带动了别的列：amount=%v status=%q（AutoMigrate 只做 ADD COLUMN 才叫幂等）", back.Amount, back.Status)
+	}
+
+	// 再跑两次：补列之后再重跑必须是 no-op（幂等可重跑这条 AC 从 T-P4-01 延续到本卡）。
+	for i := 0; i < 2; i++ {
+		if err := testDB.AutoMigrate(&model.Opportunity{}); err != nil {
+			t.Fatalf("补列后再跑第 %d 次 AutoMigrate 失败: %v", i+1, err)
+		}
+	}
+	cols := opportunityColumns(t, testDB)
+	if len(cols) != len(opportunityWantColumns) {
+		t.Errorf("存量表升级后的列数 %d ≠ %d", len(cols), len(opportunityWantColumns))
+	}
 }

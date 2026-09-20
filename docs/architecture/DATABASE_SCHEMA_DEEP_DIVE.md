@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.6（2026-09-20，T-P3-03 新增 §4.15 统一人工待办 `human_tasks`；v1.5 为 T-P3-02 对 §4.14 接线现状的改写）
+> **版本**：v1.8（2026-09-20，T-P4-02 新增 §4.16.1 商机仓储层；v1.7 是 T-P4-01 的 §4.16 —— 那张卡当日只加了正文小节、漏了本行与修订历史，v1.7 一并补登记）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -818,6 +818,7 @@ C5 裁定三套评分是三个不同的条件概率、**禁止合并**，落到�
 | `owner_user_id` | `varchar(64);index` | `character varying(64)` | 是 | `idx_opportunities_owner_user_id` |
 | `expected_close_at` | `*time.Time` | `timestamp with time zone` | 是 | 无 |
 | `lost_reason` | `type:text` | `text` | 是 | 无 |
+| `version` | `bigint;not null;default:0` | `bigint` | **否**（本表除 `id` 外唯一） | 无 |
 | `created_at` / `updated_at` | 时间 | `timestamp with time zone` | 是 | `idx_opportunities_created_at`（仅 created_at） |
 
 **`stage` 与 `status` 必须是两列，这是 AC① 的全部落点。** 过程侧 `stage` 只有四格
@@ -835,22 +836,25 @@ T-P4-06 的漏斗按 `stage` 算，两者必须能同时成立（"停在 proposa
 `WHERE owner_user_id = ? AND status = 'open'` —— 由 owner 索引取行、status 只做过滤。
 真出现"全站按 status 捞"的读方时该建的是**复合**索引，随那张卡一起改这里。
 `TestOpportunityIndexesOnlyForNamedQueries` 两侧都断：正向 6 个（`id/code/customer_id/stage/
-owner_user_id/created_at`）逐个要点名下家，反向 7 列（含 status、amount、win_probability）
-不得有任何索引（变异 M9 摘掉已命名下家、M10 凭空铺预留索引，各自被抓）。
+owner_user_id/created_at`）逐个要点名下家，反向 9 列（含 status、amount、win_probability、
+version）不得有任何索引（变异 M9 摘掉已命名下家、M10 凭空铺预留索引，各自被抓）。
 
 **两处与相邻表结论相反、但都刻意的选择**：① `code` 的唯一索引**不带谓词**，与
 `approval_requests.resume_token`（§4.14）恰好相反 —— 那里的空值是合法常态，这里"没编号的
-商机"第二条就撞死，因为编号是对人承诺的键，不该悄悄积累。② `currency` 是本表**唯一**带 DB
+商机"第二条就撞死，因为编号是对人承诺的键，不该悄悄积累。② `currency` 是本表**唯一带语义**
 默认值的列（`'CNY'`）：金额不带币种不可算，而空串会让报表静默算错；`stage`/`status` 不设默认
 也不矛盾 —— 那两列的空值是**可诊断的形状**，值域校验会抓住它。默认值顺带保住"将来补列能填老行"。
+（T-P4-02 起 `version` 也带 `DEFAULT 0`，但那是**补列能过去**的前提而不是语义默认，
+两者理由不同，别读成同一类。）
 
 **键宽与"归属 ≠ 权限"**：`customer_id`/`owner_user_id` 定宽 64 是被下游抄写列（`sales_events`）
 反推的，本表更宽 ⇒ 到事件写入那一步才炸、且 `CreateInBatches` 整批回滚；`clue_id` 取 `clues.id`
 的真实宽度 36；`owner_user_id` 用 string 而非 uint，因为销售身份的真源是 `SalesProfile.SalesID`
 （`feishu.go` 的 `OwnerUserID uint` 是另一族，不构成本列先例）。X3 单商户 ⇒ **无租户列**
 （标签层与真库层各一条用例，变异 M3 塞列即两包同红），`owner_user_id` 只是归属不是权限。
-可空性的现实与 §4.14/§4.15 同：实测只有 `id` 是 `NOT NULL`，GORM 不给非指针 `string` 发约束，
-值域一律在 `service`。
+可空性的现实与 §4.14/§4.15 同：GORM 不给非指针 `string` 发约束，值域一律在 `service` ——
+T-P4-01 时实测只有 `id` 是 `NOT NULL`，T-P4-02 补 `version` 后是 `id` 与 `version` 两列
+（后者是**显式**写了 `not null`，理由见下面那段补列）。
 
 **建表登记走 `allModels()`，卡面写的 `v3_48_0_opportunity_migration.go` 不存在**（第 7 次撞上
 同一形状）：本仓启动时的版本化迁移固定空跑（`v1.0.0→v1.0.0`），生产 schema 由 GORM AutoMigrate
@@ -860,9 +864,66 @@ owner_user_id/created_at`）逐个要点名下家，反向 7 列（含 status、
 **接线现状（T-P4-01，2026-09-20）**：本卡只有**列与值域**，今日**零生产写入方**（构造与分配在
 T-P4-05），未接线台账 **项 16** 已按此登记旗子（现值 38/45，`&model.Opportunity{}` 在
 `internal/pkg/db` 的是建表登记、不算写入路径，故被该项的搜索范围排除）。本卡欠三件、各有名主：
-乐观锁版本列 → T-P4-02，跃迁合法表与赢率计算式 → T-P4-03，列表/详情端点 → T-P4-04。
+乐观锁版本列 → T-P4-02（**已随 T-P4-02 交付**，见下一段），跃迁合法表与赢率计算式 → T-P4-03，
+列表/详情端点 → T-P4-04。
 `win_probability` 与 ltc.config 的 `win_probability` 阈值**同量程 0–1**（默认 0.50），
 所以比较不需要换算；那枚阈值今天在生产代码里仍零读者，消费方就是本卡的这一列 + T-P4-05/T-P6-04。
+
+### 4.16.1 `opportunities` 的仓储层：CAS 拒整份、白名单是 map、排序带兜底键（T-P4-02）
+
+`internal/repository/opportunity.go` 是 `service.OpportunityService`（T-P4-03）与这张表之间唯一
+一层，只做三件事：写进去、按已命名的三个维度读出来、改写时保证"后写不静默覆盖先写"。
+**刻意没有内存版底座**（同 §4.14 的审批表）：商机一旦有内存影子，"库里那条已经被别人改到 v5"
+这件事就永远测不出来，而 AC① 要的正是它；句柄不可用 ⇒ 每个方法明确报错（"句柄没了 ⇒ 列表回空"
+会被上层读成"这个客户没有商机"，继而把在跑的商机重建一遍）。
+
+**`version` 为什么写成 `bigint;not null;default:0` 三件套**：`not null` 与 `default` 是**成对**
+才有意义的 —— 给存量表补一个 `NOT NULL` 且无默认的列，PG 那一步就直接失败，而本仓的生产建表走
+AutoMigrate，"补列"是必然会发生的一次演进。判据不是推理：
+`TestOpportunityAutoMigrate_BackfillsVersionOnExistingTable` 先按 **T-P4-01 的形状**手写一张没有
+version 的表、塞两行存量数据，再跑 `AutoMigrate`，然后按 `information_schema` 断
+`is_nullable='NO'` / `column_default` 以 0 开头 / `data_type='bigint'`，并用一个**独立零值 struct**
+读回老行（复用插过值的实例读会因 GORM 把旧字段并入 WHERE 而假红）。有符号也是判据的一部分：
+无符号回绕会让"很久以前读到的那版"与"新写入的那版"撞成同一个值。
+
+**并发口径选 CAS 而不是 `SELECT … FOR UPDATE`**：卡面 AC① 写的是"版本控制"。行锁会让第二个
+写者**等**到第一个提交、再拿着刚读到的新值改成功，于是"两人各改不同字段"变成两次都成功、
+彼此的改动都在 —— 这要求每个调用方只改自己那一格，而"改了哪几格"没有任何一层能证明。
+CAS 的口径更硬：手里那份不是最新就整个拒绝，丢改动**可见**，静默混合不可见。
+`_ConcurrentUpdateSingleWinner` 是 8 协程打同一行、栅栏放行，恰好 1 个成功 7 个
+`ErrOpportunityStaleVersion`、末态 `version=1`。
+
+**改写白名单就是那个 map**（10 个键），map 之外的列改不动，各自对应一处真实破坏：`id` 被下游表
+抄走（改它 = 让所有引用指向不存在的行）、`code` 出现在工单与口述里、`customer_id`/`one_id`/
+`clue_id` 是客户身份与来源（要换客户只能 `cancelled` + 重建，"挪到另一个客户名下"这段历史必须
+留下）、`created_at` 是北极星分母的时间尺、`version` 只由 `version + 1` 这一个表达式走。
+两处**只有真跑才会暴露**的静默失效记在代码注释里：① 首版在这里另加了 `Select(白名单)`，
+SET 语句被那份清单过滤了一遍 —— 不在清单里的 `version = version + 1` 被静默丢弃，版本永远停在
+0，八个写者八个全赢，症状是"改写都成功、并发全通过"，正是 AC① 最坏的那种烂法；② struct 形式的
+`Updates` **默认跳过零值字段**，"把金额改成 0""把输单原因清空"会当场失效而函数返回成功，
+所以走 map。`_UpdateCannotTouchIdentityColumns` 切成两刀测（伪造版本号 → StaleVersion；
+换主键 → NotFound 且不许出现新行），`_WritesZeroAndNull` 里 `lost_reason` 先写非空再清空 ——
+从"本来就是空串"出发的话，"写不进去"和"写进去了"给出同一个读后值。
+
+**空币种兜底只在空值上生效**：白名单会**强制**写 `currency` 列，照抄 struct 里的空串会把老行的
+CNY 冲成空串（金额不带币种不可算）；`currencyOrDefault` 补这一格，同时用例反向钉"改成 USD 必须
+落 USD" —— 把兜底写成无条件，一次正常的换结算币种会静默失败并返回成功。
+
+**0 行有两种来路，标签分开**：`WHERE` 命中 0 行后补一次存在性探测，行还在 ⇒
+`ErrOpportunityStaleVersion`（该重试）、不在 ⇒ `ErrOpportunityNotFound`（不该重试）。
+分错的代价不对称，所以探测保留；它**不参与**并发正确性，决定权在那一条 UPDATE 上。
+
+**读侧三条纪律**：① `statuses` 传空切片**报错**而不是回全表（本表同时装在跑的与已收口的，
+"忘了传"如果读成"不过滤"，待推进列表会混进已赢单的行，不报错、不写日志，只在数字上多一截）；
+② `limit<=0` 与 `offset<0` 由本层拒 —— 负 offset 的判据写的是**错误来自本层**，漏了守卫时 PG
+也会报错（`OFFSET must not be negative`），只查"有没有报错"会绿，而调用方拿到的是听不懂的驱动错；
+③ 排序 `created_at DESC, id DESC` 的兜底键由**并列行逐位比对**钉住：变异实测摘掉 `, id DESC`
+后三行按插入顺序返回、`limit=1` 翻三页仍然不重不漏（并集那条断言照绿），只有次序断言红了。
+
+**AC②（铁律：仓储无业务判断）** 的反面证明是 `TestOpportunityRepo_DoesNotValidate`：越界的
+stage/status、负金额、赢率 42 全原样落库。它红了的含义是"有人在这层加了校验"，修法是把校验搬去
+service，不是改掉用例 —— 跃迁表与赢率算法是 T-P4-03 的判据，抄两份迟早分家，而分家之后
+"哪一份说了算"取决于请求先撞上哪个方法。
 
 
 ---
@@ -1028,3 +1089,5 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.4 | 2026-09-19 | @backend | 新增 §4.14 审批检查点 `approval_requests`（N-4 / T-P3-01）：直读 `information_schema` + `pg_indexes` 给出列/索引实测形状，写明两条唯一索引**必须**是部分的（丢了谓词会把闸门锁死 / 让第二条 auto-approve 撞空串）、身份四列在 PG 可空而判据在 `normalize()`、裁决写回的列白名单与 CAS，以及本卡"零构造零读取、`ExpireOverdue` 暂无按节拍调用方"的前置事实（项 12 / 短板 G20）；同时补记 GORM `tx.Model(&a)` 会追加主键条件、必须传空壳这条实测坑 |
 | v1.5 | 2026-09-20 | @backend | §4.14 的接线现状改写（N-4 / T-P3-02）：装配入口/恢复读入口/到期清扫三处生产调用点落地，`check-unwired-assets.sh` 项 12 由两行 `unwired` 扩为三行并全部翻 `wired`（`ExpireOverdue` 那条用"两个实参"的形状与草稿侧同名方法分开，否则删掉清扫器不会红）；同时写清旗子边界 —— `FF_LTC_APPROVAL_RESUME` 默认 `off`（该档下运行时不构造、表仍零写入），`shadow` 只清扫不挂起，布尔真值降档到 `shadow`，所以"这张表有生产写入方"只在推 `on` 之后成立。v1.4 那句"零构造零读取"作为历史事实保留在修订历史里，正文已按其被推翻的部分改写 |
 | v1.6 | 2026-09-20 | @backend | 新增 §4.15 统一人工待办 `human_tasks`（N-9 / T-P3-03）：直读 `information_schema` + `pg_indexes` 给出 19 列 9 索引的实测形状，写明 C3"统一模型 + 分离视图"落到库里就是**一条状态机 + 三列互斥 SLA**（为什么不是一列 `sla_due_at`：AC④ 的指标隔离必须能被查询表达），开放唯一索引 `uq_human_task_open` 为什么**只能**写成"排除两个终态"的否定式（GORM tag 用逗号切段，`IN ('a','b')` 放不进去），四个状态里为什么刻意没有 `expired`（逾期是读数不是状态，落成终态等于指标把自己要暴露的问题抹平），以及长度上限为什么分"身份即拒 / 展示裁断"两档、且裁断按字符不按字节。同时登记一条与卡面的**偏离**：卡面要求的 `v3_47_0_human_task_migration.go` 不存在且不该存在 —— 本仓版本化迁移在启动路径上固定空跑，建表登记只有 `allModels()` + `migrate_test.go` 的 `mustCover` 两个落点 |
+| v1.7 | 2026-09-20 | @backend | **补登记**（v1.3 那行的反向形状：那张卡只加了正文小节 §4.16，既没改文档头版本号也没进本表）：新增商机表 `opportunities`（N-1 / T-P4-01）。内容为直读 `information_schema` + `pg_indexes` 的列/索引实测形状，核心是 `stage`（四格过程）与 `status`（四态结果）**分列不许合并** —— 合成一列的后果是漏斗末格与赢单率塌成同一个数（C5 在字段层的翻版），`OpportunityClosed`（含 cancelled）与 `OpportunityOutcomes`（不含）因此拆成两个判据；另登记本卡唯一一处被测试逼出来的改设计：首版给 `status` 写了 `index`，被自家「每条索引必须点名一个已存在下家」的用例当场判红后摘掉 |
+| v1.8 | 2026-09-20 | @backend | 新增 §4.16.1 商机仓储层（N-1 / T-P4-02）：补 `version bigint not null default 0`（§4.16 表随三处更新 —— 可空性由「只有 `id` 是 NOT NULL」改为「`id` 与 `version`」、`currency` 改称「唯一带**语义**默认值」的列并注明 `version` 的默认是补列前提、反向无索引列由 7 增至 9），写明并发口径选 **CAS 而不是 `FOR UPDATE`** 的失败面差别、改写白名单就是那个 10 键 map（附两条只有真跑才暴露的 GORM 静默失效：`Select(清单)` 会吃掉 `version + 1`、struct 形式 `Updates` 跳零值），以及读侧三条纪律（空状态集报错而非回全表 / `limit<=0`、`offset<0` 由本层拒且判据写成「错误来自本层」 / 排序带 `id DESC` 兜底键、并列行逐位比对次序）。变异电池 25/25 捕获、存活 0、坏变异 0；未接线台账项 16 拆为 16a/16b 两行（现值 38/46） |

@@ -10,7 +10,7 @@
 // 卡面写的 `v3_48_0_opportunity_migration.go` 因此不产出，理由与落点回灌在执行结果里）。
 //
 // 本卡只交付**列与值域**：跃迁表在 T-P4-03（业务规则随旗子与流程演进，不放 schema），
-// 乐观锁版本列在 T-P4-02（它的下家是并发用例，本卡没有并发面）。
+// 乐观锁版本列本卡交付时**没有**、由 T-P4-02 补上（它的下家是并发用例，本卡没有并发面）。
 package model
 
 import "time"
@@ -91,11 +91,13 @@ type Opportunity struct {
 
 	// Currency 币种（ISO 4217 三位码）。
 	//
-	// 本表**唯一**带 DB 默认值的列，且必须有：金额不带币种就没有语义
+	// 本卡交付时它是本表**唯一带语义默认值**的列，且必须有：金额不带币种就没有语义
 	// （12.50 既可能是人民币也可能是美元），而空串不可算。
 	// 与 stage/status「不设默认值」并不矛盾 —— 那两列的空值是**可诊断的形状**
 	// （值域校验会拒绝它），这一列的空值只会让报表悄悄算错。
 	// 默认值同时保证：将来给存量表补这一列时，AutoMigrate 能填上老行（NOT NULL 无默认 = 补列直接失败）。
+	// （T-P4-02 起 `version` 也带 `default:0`，但那是**补列过得去**的前提、不是语义默认，
+	// 两者理由不同；UPDATE 路径上这一列还有一个空值兜底，见 repository 侧的 currencyOrDefault。）
 	Currency string `gorm:"type:varchar(3);default:'CNY'" json:"currency"`
 
 	// WinProbability 赢单概率，C5 三评分里的第三套（"这个商机能不能成"）。
@@ -128,6 +130,24 @@ type Opportunity struct {
 	// 自由文本而不是码表：原因给人看，而 P8 的归因口径要到 T-P8-05 才定，
 	// 现在建一张码表 = 替那张卡写死分类。收口时该不该清空由 T-P4-03 的跃迁表负责。
 	LostReason string `gorm:"type:text" json:"lost_reason"`
+
+	// Version 乐观锁版本号（T-P4-02 欠 T-P4-01 的那一列：并发用例的下家）。
+	//
+	// 语义是"这条商机被成功改过几次"，只在写侧 +1（repository 的 CAS 语句里
+	// `SET version = version + 1`），读侧带回来当下一次的期望值。它的存在理由不是
+	// 审计（谁改的由 operation_logs / 跃迁表管），是**让"后写静默覆盖前写"变成一个
+	// 可报告的错误**：两名销售各自读到 v=3、各自改一处，没有这一列就是第二个人
+	// 把第一个人的改动抹平，而两边都以为保存成功了。
+	//
+	// `not null` + `default:0` 必须成对，且这对标签是为**存量表补列**准备的：
+	// T-P4-01 已经把本表登记进 allModels()，任何已建过表并写过行的部署，
+	// 本列走的是 AutoMigrate 的 `ADD COLUMN` 分支，而 PG 的 `ADD COLUMN ... NOT NULL`
+	// 不带默认值会当场失败（老行没有值可填）。空表上看不出任何差别，所以真正的
+	// 断言在 internal/pkg/db/opportunity_migration_test.go 的补列用例里。
+	//
+	// 类型是有符号 int64 不是 uint：CAS 的判据是 `WHERE version = ?`，无符号一旦
+	// 回绕就会让"老读到的版本"与"新写入的版本"相等，而这正是本列要拦的那件事。
+	Version int64 `gorm:"type:bigint;not null;default:0" json:"version"`
 
 	// CreatedAt 带索引：T-P4-04 的列表端点按创建时间倒序，是本索引的已命名下家；
 	// 「新建商机数」（C6 北极星的分母）也要按它切时间窗。

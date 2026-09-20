@@ -199,11 +199,16 @@ BASELINE=(
   # 按 UNWIRED 登记而不是留白：这张表今天的真实形状就是"能建、没人往里写"，
   # 而它下一步要长出的读方（漏斗按 stage 计数、闭环率按 status 计数）会直接把这格
   # 读成"商机为 0"，与"取数失败"同形（G16 那一类）。
-  # scope 刻意排除 internal/pkg/db：那里今日这一处 `&model.Opportunity{}` 是**建表登记**
+  # 16a/16b 两格在 T-P4-02 之后必须**分开**，起因是实测：仓储层一落地（internal/repository/
+  # opportunity.go 里的 `Model(&model.Opportunity{})` 两处）就把原来那一格推成 WIRED、
+  # 门 rc=1 —— 而今天依然没有任何人往这张表写行业务数据。一个文件提到自己的模型
+  # 不等于接线，所以 16b 的 scope 里**没有** internal/repository。
+  # 同理 16a 盯的是"谁构造了这个仓储"（装配入口在 internal/app 或 main），
+  # 仓储自己的实现文件永远不含那个调用。两格今天都是 UNWIRED。
+  # scope 也刻意排除 internal/pkg/db：那里的 `&model.Opportunity{}` 是**建表登记**
   # 而不是写入，把它算成接线会让这一格从第一天起就是假绿。
-  # 等第一条真插入落在 repository/service/controller 任一处，这一格自己变红（DRIFT_NEW），
-  # 逼着那次接线回来把 expect 改成 wired 并回灌文档。
-  "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/repository internal/service internal/controller|"
+  "16|商机仓储的装配入口（今日无人构造，接线在 T-P4-05）|type OpportunityRepository interface|NewOpportunityRepository\\(|internal/app cmd/api internal/service internal/controller|"
+  "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/service internal/controller internal/app|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go
