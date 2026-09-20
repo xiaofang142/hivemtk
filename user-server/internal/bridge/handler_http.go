@@ -774,7 +774,9 @@ func _bridgeOutboxHubsForLog(hubs []*model.MessageHub) []map[string]any {
 }
 
 func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
-	channel := c.Query("channel")
+	// 渠道必须归一（与 HandleOutboxSSE 同一条口径）：message_hub 与 bridge_accounts 都只存
+	// 规范渠道，别名入参会让 ClaimPendingOutbound 查不到行、在线位也刷不到账号行。
+	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
 	start := time.Now()
 	bm := metrics.GetBridge()
@@ -801,6 +803,10 @@ func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	// 轮询本身就是「这个账号还在同步」的证据，必须刷在线位：长轮询模式下扩展不建 SSE 订阅，
+	// 不刷的话补投门（订阅 OR 最近同步）两个信号都读不到，延后出站会被逐轮跳过、永不补投。
+	// 放在取消息之前：outbox 空与「有待投」在这里语义相同，都是"客户端活着"。
+	touchBridgeAccountOnline(ctx, channel, accountID)
 	logger.Ctx(ctx).Info().
 		Str("module", "bridge").
 		Str("event", "http_outbox_request").

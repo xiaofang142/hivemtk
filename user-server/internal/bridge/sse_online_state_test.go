@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/service"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -69,14 +73,23 @@ func TestSSEBus_HasSubscribers_MultiSubscriberLastOneOut(t *testing.T) {
 type recordingBridgeAccountRepo struct {
 	touches     atomic.Int64
 	offlines    atomic.Int64
+	onlineCalls atomic.Int64
 	touchKeys   chan string
 	offlineKeys chan string
+	onlineKeys  chan string
+	// onlineByChannel 逐项回答「这个渠道账号在线吗」；未列出的键返回 onlineDefault。
+	// onlineErr 非空时 IsOnline 一律失败——用来验探针读不到真值时的退化方向。
+	onlineByChannel map[string]bool
+	onlineDefault   bool
+	onlineErr       error
 }
 
 func newRecordingBridgeAccountRepo() *recordingBridgeAccountRepo {
 	return &recordingBridgeAccountRepo{
-		touchKeys:   make(chan string, 64),
-		offlineKeys: make(chan string, 8),
+		touchKeys:       make(chan string, 64),
+		offlineKeys:     make(chan string, 8),
+		onlineKeys:      make(chan string, 32),
+		onlineByChannel: map[string]bool{},
 	}
 }
 
@@ -94,8 +107,17 @@ func (f *recordingBridgeAccountRepo) TouchLastSync(_ context.Context, channel, a
 func (f *recordingBridgeAccountRepo) ListByUser(context.Context, uint) ([]BridgeAccountView, error) {
 	return nil, nil
 }
-func (f *recordingBridgeAccountRepo) IsOnline(context.Context, string, string) (bool, error) {
-	return false, nil
+func (f *recordingBridgeAccountRepo) IsOnline(_ context.Context, channel, accountID string) (bool, error) {
+	f.onlineCalls.Add(1)
+	f.onlineKeys <- channel + ":" + accountID
+	if f.onlineErr != nil {
+		return false, f.onlineErr
+	}
+	key := channel + ":" + accountID
+	if on, ok := f.onlineByChannel[key]; ok {
+		return on, nil
+	}
+	return f.onlineDefault, nil
 }
 
 // startOnlineSignalSSEServer 起一条短命 SSE 流：心跳 40ms、最长 240ms，跑完自行收尾。
@@ -268,5 +290,98 @@ func TestHandleOutboxSSE_QueryChannelAliasSharesCanonicalKey(t *testing.T) {
 	}
 	if k := nextKey(t, fake.offlineKeys, 2*time.Second); k != "douyin:acc-alias" {
 		t.Errorf("离线位落在别名渠道上: %q", k)
+	}
+}
+
+// TestGetBridgeOutbox_RefreshesOnlineSignal 轮询拉取本身就是「这个账号还在同步」的证据，
+// 必须按规范渠道刷一次在线位。
+//
+// 修之前只有 SSE 建流/心跳写在线位：轮询模式下 last_sync_at 永不刷新，
+// 补投门（订阅 OR 最近同步）两个信号都读不到，延后出站被逐轮跳过且没有任何报错面。
+func TestGetBridgeOutbox_RefreshesOnlineSignal(t *testing.T) {
+	fake := useRecordingRepo(t)
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewTestDB(t, &model.MessageHub{})
+	h := NewBridgeIngestHandler(service.NewInboxIngressServiceWithDB(db, nil))
+	r := gin.New()
+	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=acc-poll")
+	if err != nil {
+		t.Fatalf("轮询请求失败: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("轮询返回 %d: %s", resp.StatusCode, body)
+	}
+	if got := fake.touches.Load(); got != 1 {
+		t.Fatalf("一次轮询应刷 1 次在线位, got %d", got)
+	}
+	if k := nextKey(t, fake.touchKeys, 2*time.Second); k != "douyin:acc-poll" {
+		t.Errorf("轮询在线位落在别名渠道上（bridge_accounts 无此行 ⇒ 刷新静默丢失）: %q", k)
+	}
+}
+
+// TestGetBridgeOutbox_AliasChannelClaimsCanonicalOutbound 别名渠道键的轮询必须取到规范渠道下
+// 挂着的待投出站：message_hub 只存规范渠道（现网 outbound 实测 douyin/telegram/xiaohongshu），
+// 原样透传别名会让这条轮询恒拿 0 行、扩展以为服务端没消息。
+func TestGetBridgeOutbox_AliasChannelClaimsCanonicalOutbound(t *testing.T) {
+	useRecordingRepo(t)
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewTestDB(t, &model.MessageHub{})
+	hub := &model.MessageHub{
+		Platform: "douyin", AccountID: "acc-aliasclaim", ConversationID: "conv_alias_claim",
+		MsgID: "mh:alias_claim_1", MsgType: "text", Content: "别名轮询该拿到的回复",
+		Direction: "outbound", Status: "pending", SenderID: "acc-aliasclaim", ReceiverID: "conv_alias_claim",
+	}
+	if err := db.Create(hub).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := NewBridgeIngestHandler(service.NewInboxIngressServiceWithDB(db, nil))
+	r := gin.New()
+	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=acc-aliasclaim")
+	if err != nil {
+		t.Fatalf("轮询请求失败: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("轮询返回 %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "别名轮询该拿到的回复") {
+		t.Errorf("别名入参未归一 ⇒ 取不到规范渠道下的待投出站: %s", body)
+	}
+}
+
+// TestGetBridgeOutbox_KeepsServingWhenRepoMissing 未装配账号仓储时轮询不得被打断：
+// 在线位是附加信号，写不了只报警。
+func TestGetBridgeOutbox_KeepsServingWhenRepoMissing(t *testing.T) {
+	prev := GlobalBridgeAccountRepo
+	GlobalBridgeAccountRepo = nil
+	t.Cleanup(func() { GlobalBridgeAccountRepo = prev })
+
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewTestDB(t, &model.MessageHub{})
+	h := NewBridgeIngestHandler(service.NewInboxIngressServiceWithDB(db, nil))
+	r := gin.New()
+	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin&account_id=acc-norepo")
+	if err != nil {
+		t.Fatalf("轮询请求失败: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("仓储未装配时轮询被中断: %d %s", resp.StatusCode, body)
 	}
 }

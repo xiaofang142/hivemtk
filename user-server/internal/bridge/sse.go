@@ -241,9 +241,7 @@ func (b *SSEBus) SetOutboundClaimer(c OutboundPushClaimer) {
 	// 测试换总线实例也不会指向旧对象。认领器撤走（装配缺件）时探针一并撤走，
 	// 让 service 侧走「缺探针 ⇒ 放行 + 一次性 Warn」的退化路径。
 	if c != nil {
-		service.SetBridgeChannelOnlineProbe(func(channel, accountID string) bool {
-			return GlobalSSEBus.HasSubscribers(channel, accountID)
-		})
+		service.SetBridgeChannelOnlineProbe(BridgeChannelOnline)
 	} else {
 		service.SetBridgeChannelOnlineProbe(nil)
 	}
@@ -288,6 +286,39 @@ func (b *SSEBus) HasSubscribers(channel, accountID string) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.subs[key]) > 0
+}
+
+// BridgeChannelOnline 这条渠道账号此刻收不收得到消息——回扫补投门的唯一真值。
+//
+// 两个信号取或，缺一不可：
+//   - SSE 订阅：默认下行就挂在流上，最确切，且命中就不必再读库（回扫每轮每渠道问一次）；
+//   - 账号行在线位（status + last_sync_at 宽限窗）：长轮询下行（FF_SSE_BRIDGE=0，
+//     或 SSE 启动失败回退的那条路，见 user-web/bridge/src/core/polling-loop.js）
+//     根本不建订阅，只留得下轮询刷新过的同步时间。只认订阅会让这种模式下所有延后出站
+//     被逐轮跳过、一行都不碰，而且不报错——门从"少烧几条判弃"变成"永不补投"。
+//
+// 渠道先归一再查：订阅键与 bridge_accounts 都存规范渠道，回扫读来的可能是历史别名值。
+// 真值读不到（仓储未装配 / 查询失败）时放行，与探针缺件同一口径：
+// 门建不起来只能退化成"照旧补投"，不能变成"谁都不投"。
+func BridgeChannelOnline(ctx context.Context, channel, accountID string) bool {
+	ch := NormalizeBridgeChannel(channel)
+	if ch == "" || accountID == "" {
+		return false
+	}
+	if GlobalSSEBus.HasSubscribers(ch, accountID) {
+		return true
+	}
+	if GlobalBridgeAccountRepo == nil {
+		return true
+	}
+	online, err := GlobalBridgeAccountRepo.IsOnline(ctx, ch, accountID)
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).
+			Str("channel", ch).Str("account_id", accountID).
+			Msg("[BridgeReplay] 在线位读取失败，本轮按可达放行（读不到真值不能当成所有人离线）")
+		return true
+	}
+	return online
 }
 
 // claimForPush 判定这条 new_outbound 此刻归不归本次推送，并把行置 inflight。

@@ -198,7 +198,7 @@ func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
 	svc := NewBridgeOfflineReplayService().WithDB(db)
 	ctx := context.Background()
 	// 本用例只钉检测腿（R14）：补投门显式全放行，免得探针默认值变化把它变成门的用例。
-	useOnlineProbe(t, func(string, string) bool { return true })
+	useOnlineProbe(t, func(context.Context, string, string) bool { return true })
 
 	now := time.Now()
 	stale := now.Add(-time.Hour)

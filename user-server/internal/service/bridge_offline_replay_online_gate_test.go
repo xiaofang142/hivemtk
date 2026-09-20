@@ -11,7 +11,7 @@ import (
 )
 
 // useOnlineProbe 换掉进程级在线探针，跑完还原（探针是全局态，不清理会串到别的用例）。
-func useOnlineProbe(t *testing.T, fn func(channel, accountID string) bool) {
+func useOnlineProbe(t *testing.T, fn func(ctx context.Context, channel, accountID string) bool) {
 	t.Helper()
 	prev := bridgeChannelOnlineProbe
 	bridgeChannelOnlineProbe = fn
@@ -26,13 +26,13 @@ func useOnlineProbe(t *testing.T, fn func(channel, accountID string) bool) {
 // 时必须放行并留一次 Warn：门缺件只能退化成"照旧补投"，不能变成"谁都不投"。
 func TestBridgeChannelOnline_UninjectedProbeFailsOpen(t *testing.T) {
 	useOnlineProbe(t, nil)
-	if !bridgeChannelOnline("douyin", "acc-any") {
+	if !bridgeChannelOnline(context.Background(), "douyin", "acc-any") {
 		t.Error("探针缺件时判离线（延后出站会被永久扣住）")
 	}
 	if !probeWarned.Load() {
 		t.Error("探针缺件未在日志留痕（退化会被无声吞掉）")
 	}
-	if !bridgeChannelOnline("douyin", "acc-again") {
+	if !bridgeChannelOnline(context.Background(), "douyin", "acc-again") {
 		t.Error("已告警过一次后不再放行")
 	}
 }
@@ -41,18 +41,18 @@ func TestBridgeChannelOnline_UninjectedProbeFailsOpen(t *testing.T) {
 // 且渠道/账号必须原样透传（回扫按渠道遍历，串了键就判错人）。
 func TestBridgeChannelOnline_ReportsProbeVerbatim(t *testing.T) {
 	var gotChannel, gotAccount string
-	useOnlineProbe(t, func(channel, accountID string) bool {
+	useOnlineProbe(t, func(_ context.Context, channel, accountID string) bool {
 		gotChannel, gotAccount = channel, accountID
 		return channel == "douyin" && accountID == "acc-live"
 	})
 
-	if !bridgeChannelOnline("douyin", "acc-live") {
+	if !bridgeChannelOnline(context.Background(), "douyin", "acc-live") {
 		t.Fatal("在线渠道被判离线")
 	}
 	if gotChannel != "douyin" || gotAccount != "acc-live" {
 		t.Fatalf("透传错账号: %s/%s", gotChannel, gotAccount)
 	}
-	if bridgeChannelOnline("xiaohongshu", "acc-live") {
+	if bridgeChannelOnline(context.Background(), "xiaohongshu", "acc-live") {
 		t.Error("非在线渠道被判在线")
 	}
 	if probeWarned.Load() {
@@ -81,7 +81,7 @@ func TestOfflineReplay_RunOnce_SkipsChannelsWithoutLiveSubscriber(t *testing.T) 
 		Platform: "douyin", AccountID: "acc-dark", ConversationID: "conv_dark",
 		Content: "扩展掉线期间攒下的回复", Kind: model.DelayedKindQuietHours,
 	})
-	useOnlineProbe(t, func(string, string) bool { return false })
+	useOnlineProbe(t, func(context.Context, string, string) bool { return false })
 
 	stats := svc.RunOnce(ctx)
 	if stats.ScannedChannels != 1 || stats.SkippedOffline != 1 {
@@ -120,7 +120,7 @@ func TestOfflineReplay_RunOnce_ReplaysWhenSubscriberLive(t *testing.T) {
 		Platform: "douyin", AccountID: "acc-live", ConversationID: "conv_live",
 		Content: "重连后补投的回复", Kind: model.DelayedKindQuietHours,
 	})
-	useOnlineProbe(t, func(_, accountID string) bool { return accountID == "acc-live" })
+	useOnlineProbe(t, func(_ context.Context, _, accountID string) bool { return accountID == "acc-live" })
 
 	stats := svc.RunOnce(ctx)
 	if stats.SkippedOffline != 1 {
@@ -160,12 +160,37 @@ func TestOfflineReplay_RunOnce_ProbeReadOncePerChannel(t *testing.T) {
 	seedSvcBridgeAccount(t, db, "douyin", "acc-count", "online", nil)
 
 	var calls int
-	useOnlineProbe(t, func(string, string) bool {
+	useOnlineProbe(t, func(context.Context, string, string) bool {
 		calls++
 		return false
 	})
 	svc.RunOnce(context.Background())
 	if calls != 1 {
 		t.Errorf("每渠道应只问一次在线位, got %d（整轮 3 条历史行）", calls)
+	}
+}
+
+type replayProbeCtxKey struct{}
+
+// TestOfflineReplay_RunOnce_ForwardsCtxToProbe 回扫自己的 ctx 必须原样交给探针：
+// 探针如今要读账号行（轮询模式的在线位落在 DB 里），中途换成 context.Background()
+// 就同时丢掉调用方的截止时间与 trace 链路——停用信号传不进去，这轮读会跑完才回。
+func TestOfflineReplay_RunOnce_ForwardsCtxToProbe(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.DelayedOutboundReply{}, &model.MessageHub{}, &model.BridgeAccount{})
+	svc := NewBridgeOfflineReplayService().WithDB(db)
+	seedSvcBridgeAccount(t, db, "douyin", "acc-ctx", "online", nil)
+
+	var gotCtx context.Context
+	useOnlineProbe(t, func(ctx context.Context, _, _ string) bool {
+		gotCtx = ctx
+		return false
+	})
+	svc.RunOnce(context.WithValue(context.Background(), replayProbeCtxKey{}, "marker"))
+
+	if gotCtx == nil {
+		t.Fatal("探针没拿到 ctx")
+	}
+	if gotCtx.Value(replayProbeCtxKey{}) != "marker" {
+		t.Error("回扫的 ctx 未透传给探针（读库会脱离调用方的截止与链路）")
 	}
 }
