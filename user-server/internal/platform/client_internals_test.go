@@ -145,8 +145,10 @@ func TestEnsureJWTTokenBranches(t *testing.T) {
 	// 配置未初始化
 	withPlatformConfig(t, nil)
 	c := NewPlatformClient("mk")
-	if err := c.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "平台配置未初始化") {
-		t.Errorf("nil 配置应报未初始化, got %v", err)
+	// 「未配置」必须是哨兵错误：调用方（轮询型端点、独立部署的降级判定）只能靠 errors.Is 分支，
+	// 字符串匹配会在改文案的那一刻静默失效。
+	if err := c.ensureJWTToken(); !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("nil 配置应报 ErrPlatformNotConfigured, got %v", err)
 	}
 
 	// 管理员密码未配置
@@ -246,10 +248,15 @@ func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
 		t.Errorf("200 空响应体应报反序列化错误, got %v", err)
 	}
 	// 配置缺失时 doRetry 直接短路报错（不发出任何请求）
+	// 配置缺失时 doRetry 直接短路报错（不发出任何请求），且必须是哨兵错误：
+	// 调用方靠 errors.Is 区分「本机没接平台」与「接了但挂了」，裸 fmt.Errorf 同文案也匹配不上。
 	withPlatformConfig(t, nil)
-	if err := c.do("GET", "/merchant-api/ping", nil, &BaseResp{}); err == nil ||
-		!strings.Contains(err.Error(), "平台配置未初始化") {
-		t.Errorf("nil 配置应短路报错, got %v", err)
+	err := c.do("GET", "/merchant-api/ping", nil, &BaseResp{})
+	if !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("nil 配置应回 ErrPlatformNotConfigured, got %v", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "平台配置未初始化") {
+		t.Errorf("错误文案应保留可读原因, got %v", err)
 	}
 
 	// /merchant-api/ 前缀走签名分支：X-Merchant-Key 与 X-Signature 必须都在
@@ -282,7 +289,7 @@ func TestRegisterMerchantPersistsSecret(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "config"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	t.Chdir(dir) // loadMerchantSecret/saveMerchantSecret 用相对路径 config/.merchant_api_secret
+	t.Chdir(dir) // 未设 MERCHANT_STATE_DIR 时，两份身份状态默认落在 CWD 下的 config/
 
 	regBodyCh := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -334,8 +341,9 @@ func TestRegisterMerchantPersistsSecret(t *testing.T) {
 		t.Errorf("loadMerchantSecret 未读回: %q", c2.merchantSecret)
 	}
 
+	// 未设 MERCHANT_STATE_DIR 时的默认落点：钉住它，已有安装升级后不必重新注册拿密钥
 	if p := merchantSecretFilePath(); p != filepath.Join("config", ".merchant_api_secret") {
-		t.Errorf("secret 文件路径变了: %s", p)
+		t.Errorf("secret 默认路径变了: %s", p)
 	}
 	// 注册响应 data 里无 secret 时不得覆盖已有密钥，也不得落盘
 	if err := os.Remove(secretPath); err != nil {
@@ -358,6 +366,59 @@ func TestRegisterMerchantPersistsSecret(t *testing.T) {
 	}
 	if _, err := os.Stat(secretPath); err != nil {
 		t.Errorf("saveMerchantSecret 未建文件: %v", err)
+	}
+}
+
+// TestMerchantSecretFollowsStateDir 两份本机身份锚点（merchant key 与 per-merchant 签名密钥）
+// 必须共用 MERCHANT_STATE_DIR 落盘。否则换工作目录启动（systemd 的 WorkingDirectory、
+// 容器 WORKDIR、从别的目录跑迁移命令）时，key 找得回、secret 找不到，
+// 所有平台调用会静默退回 env/全局 secret 签名而被平台判 401。
+func TestMerchantSecretFollowsStateDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MERCHANT_STATE_DIR", dir)
+
+	want := filepath.Join(dir, ".merchant_api_secret")
+	if p := merchantSecretFilePath(); p != want {
+		t.Fatalf("secret 路径未跟随状态目录: got %s want %s", p, want)
+	}
+	if err := saveMerchantSecret("state-dir-secret"); err != nil {
+		t.Fatalf("saveMerchantSecret: %v", err)
+	}
+	b, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("secret 未写进状态目录: %v", err)
+	}
+	if string(b) != "state-dir-secret" {
+		t.Errorf("落盘内容=%q", string(b))
+	}
+	if fi, sErr := os.Stat(want); sErr != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("secret 文件权限应为 0600, got %v %v", fi.Mode(), sErr)
+	}
+	// 同一目录构造的客户端要读得回来（不依赖 CWD）
+	if got := NewPlatformClient("mk").merchantSecret; got != "state-dir-secret" {
+		t.Errorf("构造时未从状态目录读回 secret: %q", got)
+	}
+}
+
+// TestLoadMerchantSecretFailsLoudOnUnreadable 状态目录里的 secret 文件读不了（被换成目录、
+// 权限错、IO 故障）不是「首次安装还没密钥」：静默吞掉会让实例带着错误身份继续签名，
+// 表现为平台侧成片 401，事后无从定位。ENOENT 才是可静默的正常态。
+func TestLoadMerchantSecretFailsLoudOnUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MERCHANT_STATE_DIR", dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".merchant_api_secret"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	c := NewPlatformClient("mk")
+	if err := c.loadMerchantSecret(); err == nil {
+		t.Error("secret 路径不可读时应上报错误（调用方记日志），不得静默")
+	}
+
+	empty := t.TempDir()
+	t.Setenv("MERCHANT_STATE_DIR", empty)
+	if err := NewPlatformClient("mk").loadMerchantSecret(); err != nil {
+		t.Errorf("文件不存在属首次安装，应静默返回 nil, got %v", err)
 	}
 }
 
@@ -496,13 +557,15 @@ func TestReportInstallAndHeartbeatBranches(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("MERCHANT_API_SECRET", "s")
 
-	// 两个上报端点都是公开统计接口：既不签名也不带 JWT，故 nil 配置时必须自己短路报错。
+	// 两个上报端点都是公开统计接口：既不签名也不带 JWT，故 nil 配置时必须自己短路报错，
+	// 且报的是同一个哨兵错误——cron 每 3 分钟打一次心跳，调用方要能区分「没接平台」与「平台挂了」，
+	// 否则独立部署的实例会周期性地为一条并不存在的故障刷 Error 日志。
 	withPlatformConfig(t, nil)
-	if err := ReportInstallDefault(&ReportInstallReq{}); err == nil || !strings.Contains(err.Error(), "平台配置未初始化") {
-		t.Errorf("install 无配置应报错, got %v", err)
+	if err := ReportInstallDefault(&ReportInstallReq{}); !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("install 无配置应报 ErrPlatformNotConfigured, got %v", err)
 	}
-	if err := ReportHeartbeatDefault(&ReportHeartbeatReq{}); err == nil || !strings.Contains(err.Error(), "平台配置未初始化") {
-		t.Errorf("heartbeat 无配置应报错, got %v", err)
+	if err := ReportHeartbeatDefault(&ReportHeartbeatReq{}); !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("heartbeat 无配置应报 ErrPlatformNotConfigured, got %v", err)
 	}
 
 	// APIURL 末尾带斜杠：拼 URL 前须 TrimRight，否则得到 //api/platform/install
@@ -567,5 +630,26 @@ func TestPlatformErrorFormatting(t *testing.T) {
 	}
 	if !strings.Contains(fmt.Sprintf("%v", empty), "status=502") {
 		t.Error("Error 应含状态码")
+	}
+}
+
+// TestDegradeReason 分类必须只看哨兵：传输错误、平台 401、裸 error 都不是"未配置"。
+// 判据若退回字符串匹配，改文案即静默错分类。
+func TestDegradeReason(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"无错", nil, ""},
+		{"裸哨兵", ErrPlatformNotConfigured, "not_configured"},
+		{"包装后的哨兵", fmt.Errorf("%w: 商户上报请求未发出", ErrPlatformNotConfigured), "not_configured"},
+		{"传输失败", errors.New("dial tcp 127.0.0.1:1: connect: connection refused"), "unreachable"},
+		{"平台拒绝", &PlatformError{StatusCode: 401}, "unreachable"},
+		{"同文案但非哨兵", errors.New("平台配置未初始化"), "unreachable"},
+	} {
+		if got := DegradeReason(tc.err); got != tc.want {
+			t.Errorf("%s: DegradeReason=%q want %q", tc.name, got, tc.want)
+		}
 	}
 }

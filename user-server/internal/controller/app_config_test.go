@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 
@@ -157,5 +159,95 @@ func TestAppConfigController_NewAppConfigController(t *testing.T) {
 	ctrl := NewAppConfigController()
 	if ctrl == nil {
 		t.Error("Expected controller instance, got nil")
+	}
+}
+
+// withPlatformCfg 替换进程级平台配置并在用例结束时还原。
+// 控制器读的是 config.PlatformCfg 这个包级指针，不还原会污染同包其余用例。
+func withPlatformCfg(t *testing.T, cfg *config.PlatformConfig) {
+	t.Helper()
+	orig := config.PlatformCfg
+	config.PlatformCfg = cfg
+	t.Cleanup(func() { config.PlatformCfg = orig })
+}
+
+// TestAppConfigController_SyncWithPlatform_ReportsDegradeReason 私域部署里"平台没接"是常态，
+// "接了但挂了"才是故障：两者都只回 platform_available=false 时，运维会去查一个并不存在的故障，
+// 前端也会把未配置显示成平台异常。降级原因必须分开回给调用方。
+func TestAppConfigController_SyncWithPlatform_ReportsDegradeReason(t *testing.T) {
+	setupAppConfigTestDB(t)
+	gin.SetMode(gin.TestMode)
+	ctrl := NewAppConfigController()
+	router := gin.New()
+	router.POST("/app/config/sync", ctrl.SyncWithPlatform)
+
+	for _, tc := range []struct {
+		name       string
+		cfg        *config.PlatformConfig
+		want       string
+		wantMsgSub string
+	}{
+		{"未配置平台", nil, "not_configured", "未接入平台"},
+		{"配置指向不可达平台", &config.PlatformConfig{APIURL: "http://127.0.0.1:1", Secret: "s"}, "unreachable", "平台已跳过"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withPlatformCfg(t, tc.cfg)
+			req, _ := http.NewRequest("POST", "/app/config/sync", bytes.NewReader([]byte(`{}`)))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("状态码=%d body=%s", w.Code, w.Body.String())
+			}
+			var out struct {
+				Data struct {
+					Extra map[string]any `json:"extra"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+				t.Fatalf("响应解析失败: %v body=%s", err, w.Body.String())
+			}
+			if got := out.Data.Extra["platform_available"]; got != false {
+				t.Errorf("platform_available=%v want false", got)
+			}
+			if got := out.Data.Extra["platform_reason"]; got != tc.want {
+				t.Errorf("platform_reason=%v want %q", got, tc.want)
+			}
+			var msg struct {
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
+				t.Fatalf("响应解析失败: %v", err)
+			}
+			if !strings.Contains(msg.Message, tc.wantMsgSub) {
+				t.Errorf("message=%q 应含 %q（两种降级原因不得回同一句文案）", msg.Message, tc.wantMsgSub)
+			}
+		})
+	}
+}
+
+// TestAppConfigController_HealthCheck_DistinguishesNotConfigured 健康检查同理：
+// 未配置平台的实例不该显示成"平台断开"。
+func TestAppConfigController_HealthCheck_DistinguishesNotConfigured(t *testing.T) {
+	setupAppConfigTestDB(t)
+	gin.SetMode(gin.TestMode)
+	ctrl := NewAppConfigController()
+	router := gin.New()
+	router.GET("/app/config/health", ctrl.HealthCheck)
+
+	withPlatformCfg(t, nil)
+	req, _ := http.NewRequest("GET", "/app/config/health", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var out struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("响应解析失败: %v body=%s", err, w.Body.String())
+	}
+	if got := out.Data["platform_connection"]; got != "not_configured" {
+		t.Errorf("platform_connection=%v want not_configured", got)
 	}
 }

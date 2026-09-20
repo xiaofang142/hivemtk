@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +22,20 @@ import (
 
 // ErrPlatformNotConfigured 平台客户端未配置哨兵错误（轮询型端点静默降级判定用）
 var ErrPlatformNotConfigured = errors.New("平台配置未初始化")
+
+// DegradeReason 把降级原因分类给调用方：
+// 「本机根本没接平台」(not_configured) 是私域独立部署的常态，「接了但挂了」(unreachable) 才是故障。
+// 二者都只有一个 error 时，消费方要么把常态刷成 Error 日志，要么把故障静默掉，只能二选一错。
+func DegradeReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrPlatformNotConfigured):
+		return "not_configured"
+	default:
+		return "unreachable"
+	}
+}
 
 type Client struct {
 	merchantSecret string
@@ -37,7 +52,9 @@ func NewPlatformClient(merchantKey string) *Client {
 		httpClient:  &http.Client{Timeout: 5 * time.Second},
 	}
 
-	c.loadMerchantSecret()
+	if err := c.loadMerchantSecret(); err != nil {
+		logger.Warn(err.Error())
+	}
 	return c
 }
 
@@ -88,7 +105,7 @@ func (c *Client) ensureJWTToken() error {
 	}
 
 	if config.PlatformCfg == nil {
-		return fmt.Errorf("平台配置未初始化")
+		return fmt.Errorf("%w: 无法获取平台 JWT", ErrPlatformNotConfigured)
 	}
 
 	username := config.PlatformCfg.AdminUsername
@@ -158,8 +175,9 @@ func (c *Client) do(method, path string, reqData, respData any) error {
 
 func (c *Client) doRetry(method, path string, reqData, respData any, retried bool) error {
 	if config.PlatformCfg == nil {
-		logger.Error(fmt.Errorf("平台配置未初始化"), "商户上报请求失败")
-		return fmt.Errorf("平台配置未初始化")
+		err := fmt.Errorf("%w: 商户上报请求未发出", ErrPlatformNotConfigured)
+		logger.Error(err, "商户上报请求失败")
+		return err
 	}
 	url := config.PlatformCfg.APIURL + path
 	var body []byte
@@ -273,7 +291,7 @@ func (c *Client) RegisterMerchant(req RegisterMerchantReq) error {
 }
 
 func merchantSecretFilePath() string {
-	return filepath.Join("config", ".merchant_api_secret")
+	return filepath.Join(merchantStateDir(), ".merchant_api_secret")
 }
 
 func saveMerchantSecret(secret string) error {
@@ -284,10 +302,20 @@ func saveMerchantSecret(secret string) error {
 	return os.WriteFile(p, []byte(secret), 0o600)
 }
 
-func (c *Client) loadMerchantSecret() {
-	b, err := os.ReadFile(merchantSecretFilePath())
-	if err == nil {
+// loadMerchantSecret 读回本商户独立的签名密钥。
+// 文件不存在是首次安装的正常态，静默即可；其余读取失败意味着签名会用错密钥，
+// 必须上报给调用方记日志——吞掉它会把故障推到平台侧的成片 401 上，事后无从定位。
+func (c *Client) loadMerchantSecret() error {
+	p := merchantSecretFilePath()
+	b, err := os.ReadFile(p)
+	switch {
+	case err == nil:
 		c.SetMerchantSecret(strings.TrimSpace(string(b)))
+		return nil
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf("读取 per-merchant secret(%s) 失败: %w", p, err)
 	}
 }
 
@@ -370,7 +398,7 @@ type ReportInstallReq struct {
 // 该接口为公开统计接口，不要求 JWT / 商户签名。
 func (c *Client) ReportInstall(req *ReportInstallReq) error {
 	if config.PlatformCfg == nil {
-		return fmt.Errorf("平台配置未初始化")
+		return fmt.Errorf("%w: 上报请求未发出", ErrPlatformNotConfigured)
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -412,7 +440,7 @@ type ReportHeartbeatReq struct {
 // ReportHeartbeat 上报心跳到平台（公开统计接口，不要求签名/JWT）
 func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 	if config.PlatformCfg == nil {
-		return fmt.Errorf("平台配置未初始化")
+		return fmt.Errorf("%w: 上报请求未发出", ErrPlatformNotConfigured)
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
