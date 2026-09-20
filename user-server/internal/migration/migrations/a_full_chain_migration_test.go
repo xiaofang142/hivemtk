@@ -15,17 +15,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// knownFailingVersions 逐条登记「Up 目前必然失败」的版本与已核实的根因（本排期只显式化、不修生产码）。
+// knownFailingVersions 逐条登记「Up 目前必然失败」的版本与已核实的根因。
 // 修好后这里必须删条：用例会在登记项不再失败时报错，防止豁免表长期滞留。
-var knownFailingVersions = map[string]string{
-	// l_p1_migration.go:60 在 integration_templates 上建 is_built_in 索引，
-	// 但模型列名实为 built_in（model/integration_template.go:27 BuiltIn）。
-	// 生产建表走 AutoMigrate，表已按模型名建好，CREATE TABLE IF NOT EXISTS 不补列 → 索引必红。
-	"v3.3.0": "列名口径不一致：迁移建 is_built_in 索引，AutoMigrate 建的列叫 built_in",
-	// v3_22_0:53-63 把 information_schema.columns.character_maximum_length 扫进非空 int，
-	// 而 text/uuid 型 customer_id 列该字段为 NULL → 整个迁移在 ALTER 之前即中止。
-	"v3.22.0": "Scan NULL→int：character_maximum_length 需用 sql.NullInt64 承接",
-}
+// 2026-09-20：v3.3.0 / v3.22.0 / v3.36.0 三条已修完并各自补上真库用例，当前为空。
+var knownFailingVersions = map[string]string{}
 
 // TestFullMigrationChainUpThenRollback 在测试库上按生产建表路径铺好基表，再按序执行全部迁移的 Up()，
 // 最后逆序执行 Down()。这是唯一能在一次运行里驱动 70+ 个 Up 体的用例。

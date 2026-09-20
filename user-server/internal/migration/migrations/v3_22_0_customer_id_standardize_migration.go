@@ -2,7 +2,9 @@ package migrations
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log"
 
 	"hivemtk-user/internal/migration"
 
@@ -53,7 +55,9 @@ func (m *CustomerIDStandardizeMigration) Up(ctx context.Context) error {
 		Schema string
 		Table  string
 		Type   string
-		MaxLen int
+		// text / uuid 型列的 character_maximum_length 是 NULL，非空 int 承接会在
+		// 第一条 ALTER 之前就把整个迁移打停（NULL ⇒ 恰恰是「还没收敛」，必须继续处理）
+		MaxLen sql.NullInt64
 	}
 	var cols []colInfo
 	for rows.Next() {
@@ -67,27 +71,25 @@ func (m *CustomerIDStandardizeMigration) Up(ctx context.Context) error {
 	var altered int
 	for _, c := range cols {
 
-		if c.Type == "character varying" && c.MaxLen == 64 {
-			commentSQL := fmt.Sprintf(
-				`COMMENT ON COLUMN %q.%q.customer_id IS '统一 varchar(64)：客户 ID，JOIN 键'`,
+		if c.Type != "character varying" || c.MaxLen.Int64 != 64 {
+			alterSQL := fmt.Sprintf(
+				`ALTER TABLE %q.%q ALTER COLUMN customer_id TYPE varchar(64)`,
 				c.Schema, c.Table)
-			_ = m.db.WithContext(ctx).Exec(commentSQL).Error
-			continue
+			if err := m.db.WithContext(ctx).Exec(alterSQL).Error; err != nil {
+				return fmt.Errorf("ALTER %q.%q.customer_id 失败: %w", c.Schema, c.Table, err)
+			}
+			altered++
 		}
 
-		alterSQL := fmt.Sprintf(
-			`ALTER TABLE %q.%q ALTER COLUMN customer_id TYPE varchar(64)`,
+		commentSQL := fmt.Sprintf(
+			`COMMENT ON COLUMN %q.%q.customer_id IS '统一 varchar(64)：客户 ID，JOIN 键'`,
 			c.Schema, c.Table)
-		if err := m.db.WithContext(ctx).Exec(alterSQL).Error; err != nil {
-			return fmt.Errorf("ALTER %q.%q.customer_id 失败: %w", c.Schema, c.Table, err)
+		if err := m.db.WithContext(ctx).Exec(commentSQL).Error; err != nil {
+			log.Printf("[v3.22.0] %s.%s customer_id 注释写入失败（不影响类型收敛）: %v", c.Schema, c.Table, err)
 		}
-		altered++
 	}
 
-	if altered > 0 {
-		m.db.WithContext(ctx).Exec(
-			`COMMENT ON COLUMN information_schema.columns.column_name IS '统一 varchar(64) 迁移完成'`)
-	}
+	log.Printf("[v3.22.0] customer_id 列共 %d 个，本次收敛 %d 个为 varchar(64)", len(cols), altered)
 
 	return nil
 }

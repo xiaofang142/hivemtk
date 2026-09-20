@@ -36,6 +36,8 @@ func (m *LP1Migration) Up(ctx context.Context) error {
 		return fmt.Errorf("db is nil")
 	}
 	stmts := []string{
+		// 列名以模型为准：BuiltIn ⇒ built_in，is_built_in 只是 JSON tag。
+		// 生产建表走 AutoMigrate，这里写错列名会让下面的索引必红。
 		`CREATE TABLE IF NOT EXISTS integration_templates (
 			id          BIGSERIAL PRIMARY KEY,
 			code        VARCHAR(64) NOT NULL UNIQUE,
@@ -49,7 +51,7 @@ func (m *LP1Migration) Up(ctx context.Context) error {
 			doc_url     VARCHAR(255) NOT NULL DEFAULT '',
 			field_maps  TEXT NOT NULL DEFAULT '[]',
 			endpoints   TEXT NOT NULL DEFAULT '[]',
-			is_built_in BOOLEAN NOT NULL DEFAULT FALSE,
+			built_in    BOOLEAN NOT NULL DEFAULT FALSE,
 			enabled     BOOLEAN NOT NULL DEFAULT TRUE,
 			remark      VARCHAR(500) NOT NULL DEFAULT '',
 			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -57,7 +59,7 @@ func (m *LP1Migration) Up(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_integration_templates_platform ON integration_templates(platform)`,
 		`CREATE INDEX IF NOT EXISTS idx_integration_templates_category ON integration_templates(category)`,
-		`CREATE INDEX IF NOT EXISTS idx_integration_templates_builtin ON integration_templates(is_built_in)`,
+		`CREATE INDEX IF NOT EXISTS idx_integration_templates_builtin ON integration_templates(built_in)`,
 		`CREATE INDEX IF NOT EXISTS idx_integration_templates_enabled ON integration_templates(enabled)`,
 	}
 	return execAllMP1(ctx, m.db, stmts)
