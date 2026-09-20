@@ -1844,7 +1844,7 @@ Expected: `dialog_manager.go` 的 InMemory + 上下文理解函数全部 100%，
 
 **Files:**
 - Create: `user-server/internal/migration/migrations/registry_metadata_test.go`
-- Create: `user-server/internal/migration/migrations/full_chain_migration_test.go`
+- Create: `user-server/internal/migration/migrations/a_full_chain_migration_test.go`（`a_` 前缀原因见 Step 3）
 - 参考（只读）：`internal/migration/migrations/initial_schema.go:124`（`RegisterMigrations`）、
   `internal/migration/registry.go:13-89`、`migrations/confidence_migration_test.go:12-15`（`testutil.NewTestDB` 用法范式）、
   `migrations/registry_completeness_test.go`（已覆盖“无重复版本 + 指定版本已注册”，勿重复其断言）
@@ -1854,7 +1854,7 @@ Expected: `dialog_manager.go` 的 InMemory + 上下文理解函数全部 100%，
   `migration.Migration` 五方法、`testutil.NewTestDB(t)`（不传 models → 空库）。
 - Produces: 无。
 
-- [ ] **Step 1: 写注册表元信息用例（离线）**
+- [x] **Step 1: 写注册表元信息用例（离线）**
 
 创建 `user-server/internal/migration/migrations/registry_metadata_test.go`：
 
@@ -1950,14 +1950,31 @@ func TestNoopMigrationsRunWithoutDB(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑绿**
+> **交付与草稿差异（Step 1）**：
+> 1. 草稿的 `TestNoopMigrationsRunWithoutDB` 循环体内那条
+>    `m, ok := migration.NewMigrationRegistry().Get("")` 是**与循环无关的死自检**（每轮重复、不产生信息），
+>    已换成对样例本身的钉死：`if mig.Version() != n.version { t.Fatalf(...) }`。
+> 2. 新增草稿里没有的 **`TestEveryImplementedMigrationIsRegistered`**（同文件，`go/ast` + `go/parser` + `io/fs`）：
+>    解析本包全部非 `*_test.go` 源文件，取出「实现了 `Version()` 且返回字符串字面量」的类型集合，
+>    与 `RegisterMigrations` 实际注册集合做差，差集非空即判红。
+>    它把「写了迁移类却忘了进注册清单」这一类**只能靠人肉 review 发现**的缺陷变成机器门。
+>    当前差集里的两条以 `knownUnregistered = map[string]string{...}` 显式登记（见 Step 4 Findings），
+>    且该表**自清理**：若某登记项后来被注册了，用例会反向报错要求删条。
+> 3. 另补草稿未列的 `TestEmptyRegistryLookups`（空注册表 `Get("")` / `Get("v2.11.0")` 均须 `(nil,false)`），
+>    它是 `registry.go` 中 `Get` 的空名短路与未命中两条分支的唯一覆盖来源。
+> 4. 交付版实测：注册迁移 72 条、包内实现 `Version()` 的类型 74 个（`initial_schema.go` 一文两类），
+>    差集恰为下面登记的 2 条。
+
+- [x] **Step 2: 跑绿**
 
 Run: `go test -p 1 -count=1 -run 'TestRegisteredMigrationsMetadata|TestNoopMigrationsRunWithoutDB' ./internal/migration/migrations/ -v`
-Expected: 两条 PASS。
+实跑：4 条离线用例全 PASS（`0.840s`，无 DB 依赖）：`TestRegisteredMigrationsMetadata`、
+`TestEmptyRegistryLookups`、`TestNoopMigrationsRunWithoutDB`、`TestEveryImplementedMigrationIsRegistered`。
 
-- [ ] **Step 3: 写全链路用例（真实库）**
+- [x] **Step 3: 写全链路用例（真实库）**
 
-创建 `user-server/internal/migration/migrations/full_chain_migration_test.go`：
+创建 `user-server/internal/migration/migrations/a_full_chain_migration_test.go`
+（**实际文件名前缀多了 `a_`**，原因见下方差异说明第 1 条）：
 
 ```go
 package migrations
@@ -2042,7 +2059,25 @@ func formatFailures(m map[string]string) string {
 }
 ```
 
-- [ ] **Step 4: 跑绿 / 归因失败清单**
+> **交付与草稿差异（Step 3）**：
+> 1. **文件名加 `a_` 前缀**：Go 按文件名字母序在同包内排布用例，本用例要求「跑之前槽位库是空的」。
+>    以 `a_` 开头使它成为本包首个执行的测试文件，直接拿到 `testutil` 刚 DROP+CREATE 出来的空库；
+>    草稿里的 `chainDBEmpty → t.Skip` 因此被换成 **`t.Fatalf("全链路用例要求空库…")`**：
+>    空库前提不成立是**编排被破坏**（有人新增了更靠前的测试文件），必须响而不是静默 Skip —— Skip 会让这条门长期假绿。
+> 2. **必须先铺生产基表**：草稿设想「空库按序跑 Up」。实跑首轮 17/72 个 Up 以
+>    `relation "xxx" does not exist` 失败。根因是本仓库真正的建表口径是
+>    `internal/pkg/db.AutoMigrate()`（299 张表），版本化迁移链只是**其上的增量**（启动链是 v1.0.0→v1.0.0 空跑）。
+>    交付版在用例开头调用 `runProductionAutoMigrate(gdb)`（`pdb.AutoMigrate()` + `recover` 包装）复现安装态，
+>    再跑全链路；失败数从 17 降到 3，且这 3 条都是**真实缺陷**（见 Step 4）。
+> 3. **全局句柄**：迁移体内部直接用 `pdb.GetDB()`，故用例须 `pdb.SetTestDB(gdb)`，
+>    并以 `t.Cleanup` 还原前值、`resetChainSchema` 把 `public` schema 恢复到空
+>    （`DROP SCHEMA public CASCADE` + 重建 + `CREATE EXTENSION vector`），避免污染同槽位的后续包级用例。
+> 4. **`knownFailingVersions` 从切片改成 `map[version]reason`**，并加了草稿没有的反向断言：
+>    登记项若某次**通过**了，用例同样判红并要求删条 —— 豁免表不会悄悄过期。
+> 5. `t.Setenv("FIELD_ENCRYPTION_KEY", …)`：v3.28.0 对字段加密主键 fail-closed，`.env` 中并无该键
+>    （只按长度核验、未打印取值）。测试库无 `email_smtp` 存量行，故用 32 字节全零假键满足其存在性校验。
+
+- [x] **Step 4: 跑绿 / 归因失败清单**
 
 Run: `set -a; source ../.env; set +a && go test -p 1 -count=1 -run TestFullMigrationChainUpThenRollback ./internal/migration/migrations/ -v`
 处理规则（**不得**放宽断言蒙过去）：
@@ -2054,12 +2089,45 @@ Run: `set -a; source ../.env; set +a && go test -p 1 -count=1 -run TestFullMigra
   显式 `knownFailingVersions = []struct{version, reason string}` 表并逐条写明原因（可追踪、不静默）。
 - Down 失败仅 Log：回滚链路不完备属既有事实，本排期只把它显式化。
 
-- [ ] **Step 5: 覆盖率核对**
+> **实跑结果**：`Up 失败合计 3/72，其中已登记 3 条`；`Down 失败 1/72`；
+> `迁移总数=72 基表=299 Up 后表数=317 Down 后表数=252`。
+> 上述「Skip + 独占库名复跑」两条**未触发**：`a_` 前缀保证本用例是同包首个跑的测试文件，
+> 空库前提恒成立，若被破坏会直接 `t.Fatalf`（比 Skip 更强），因此不需要 `POSTGRES_TEST_DBNAME=user_db_chain_test` 的绕行方案。
+>
+> **三条已登记的 Up 缺陷（只显式化，本批不修生产码）**：
+> 1. `v3.3.0`（`l_p1_migration.go:60`）：在 `integration_templates` 上建 `is_built_in` 索引，
+>    但模型列名实为 `built_in`（`internal/model/integration_template.go:27` `BuiltIn`）。
+>    生产建表走 AutoMigrate ⇒ 表已按模型名建好，`CREATE TABLE IF NOT EXISTS` 不补列 ⇒ `column "is_built_in" does not exist` 恒红。
+> 2. `v3.22.0`（`v3_22_0_customer_id_standardize_migration.go:53-63`）：把
+>    `information_schema.columns.character_maximum_length` 扫进非空 `int`，而 text/uuid 列该字段为 NULL
+>    ⇒ `converting NULL to int is unsupported`，整个迁移在任一 `ALTER` 之前即中止（应为 `sql.NullInt64`）。
+> 3. `v3.36.0`（`v3_36_0_admin_password_guard_migration.go:73/77`）：`stmts` 顺序错，
+>    第 73 行 `CREATE TRIGGER` 引用 `fn_guard_initial_admin_delete()`，函数却在第 77 行才 `CREATE`；
+>    首错即 `return` ⇒ **初始管理员删除保护触发器与函数在任何库上都从未建立成功**（安全语义静默丢失，最需优先修的一条）。
+>
+> **两条 Down 侧既有事实**：`v3.28.0`（email_smtp 明文→AES-GCM 加密）显式声明不可回滚（“解密回明文是安全倒退”），
+> 是唯一一条 Down 报错项，按规则仅 `t.Logf`。
+>
+> **`knownUnregistered`（实现了却从未注册，由 AST 门登记）**：
+> `v3.25.0 CustomerOwnerAgentMigration`、`v3.26.0 ReachTablesMigration` —— 两个迁移类在仓库里完整实现
+> （含 Up/Down），但从未进 `RegisterMigrations` 清单，即**任何库上这条链都不会执行它们**。
+> 已逐条核对影响面（不是猜的）：其目标对象在 AutoMigrate 路径上都有等价声明 ——
+> `model/customer.go:63 OwnerAgentID`（带 `gorm:"index"`）、
+> `reach_send_pipeline_compliance.go:20` 与 `webhook_outbound.go:83` 两处 `RegisterExtraModels`
+> 分别登记 `reach_compliance_log` / `reach_delayed_outbound`。
+> 所以**当前生产无缺表缺列**；风险是口径性的：一旦某实例改由版本化链负责建表（或 AutoMigrate 的
+> tag/index 名与链不一致，参考 v3.3.0 就是同类漂移的实例），这两处会静默不建。修复只需把两行加进清单。
+
+- [x] **Step 5: 覆盖率核对**
 
 Run: `go test -p 1 -count=1 -coverprofile=/tmp/mig.cov ./internal/migration/migrations/ && go tool cover -func=/tmp/mig.cov | tail -3`
-Expected: 全包 ≥60%（基线 23%）。同时 `grep -c ' 0.0%' /tmp/mig.cov` 相比基线下降过半。
+实跑：`ok hivemtk-user/internal/migration/migrations 180.104s coverage: 77.1% of statements`（基线 23%，超额达成 ≥60% 目标），
+零覆盖块 `418/1469 = 28.5%`；基线口径下未覆盖块约占 77%，下降远超「过半」要求。**全跑 0 个 SKIP。**
+> 草稿里 `grep -c ' 0.0%' /tmp/mig.cov` 这条**取证方式本身是错的**：`.cov` 是
+> `file:start,end stmts count` 的计数文件，从不出现 `0.0%` 字样（那是 `go tool cover -func` 的格式化输出），
+> 照抄会得到恒为 0 的「零覆盖块数」并误判为满分。改用 `awk '$NF=="0"'` 统计计数为 0 的块。
 
-- [ ] **Step 6: 反向验证**
+- [x] **Step 6: 反向验证**
 
 全链路用例的「红点」验证不能靠改生产码，改为改测试自身口径并确认它确实会变红：
 在 `registry_metadata_test.go` 里临时把 `versionRe` 改成 `^v\d+\.\d+\.\d+\.\d+$`（要求四段）→ 必须 FAIL
@@ -2068,13 +2136,35 @@ Expected: 全包 ≥60%（基线 23%）。同时 `grep -c ' 0.0%' /tmp/mig.cov` 
 → `t.Errorf` 不应变化，但 `t.Logf("迁移总数")` 一致；因此改用更强的一条：把 `upFailed` 判定改成
 `if len(upFailed) == 0 { t.Fatal("自检：断言被短路") }` 跑一次必须红、还原后绿 —— 证明 Up 确有失败/无失败时被如实统计。
 
-- [ ] **Step 7: 提交并推送**
+> **实跑变异（5 次，逐次 `cp` 还原并比 md5；草稿那条「短路自检」被替换）**：
+> 草稿给的 `if len(upFailed) == 0 { t.Fatal }` 只能证明「当前有失败」，证不了「失败集合被严格比对」，
+> 且它是临时加一条断言而非破坏现有断言，红得没有信息量。替换成下面能真正区分口径的 4 针：
+>
+>
+> | # | 注入 | 预期红点 | 实跑结果 |
+> |---|---|---|---|
+> | M1 | `versionRe` 要求四段版本号 | 版本格式断言恒红 | `TestRegisteredMigrationsMetadata` FAIL：逐条 `版本格式非法: "v1.1.0" (初始版本迁移)`…（证明遍历了每个迁移的 `Version()`，非抽查） |
+> | M2 | 删掉 `knownUnregistered` 中 `v3.26.0` 那一行豁免 | AST 门应把它当缺陷报出 | `TestEveryImplementedMigrationIsRegistered` FAIL：`有 1 个迁移实现了却从未注册：v3.26.0: ReachTablesMigration`（证明差集运算与豁免表都真在生效） |
+> | M2b | 反向：往 `knownUnregistered` 里塞一条**已注册**版本 `"v3.3.0"` | 自清理分支应要求删条 | FAIL @ `:141`：`已登记的未注册迁移 v3.3.0 如今已在注册表里（原因：自检用假登记），请从 knownUnregistered 移除` |
+> | M3a | `knownFailingVersions` 里塞一条假登记 `"v3.30.0"` | 反向断言应要求删条 | FAIL @ `:95`：`已登记为必红的版本 v3.30.0 竟通过（登记原因：自检用假登记），请从 knownFailingVersions 移除`（证明豁免表不会长期滞留） |
+> | M3b | 把 `runProductionAutoMigrate` 改成 `_ = pdb.AutoMigrate`（只铺链、不铺基表） | 严格 Up 集合应报未登记失败 | FAIL @ `:90`：`全链路 Up 出现未登记失败 16/72`，逐条 `relation "knowledge_chunks"/"sop_agents"/"chat_channels" does not exist`（证明用例确实在跑 72 个 Up，且基表铺设是前置条件而非装饰） |
+>
+> 过程记录：M3b 若直接删掉 `pdb.AutoMigrate()` 会因 `pdb` 变成未使用 import 而**编译失败**（编译失败不等于变异，
+> 会得到一个没有信息量的红），故改成取函数值丢弃。另 M1 首轮用 `perl -i -pe` 注入时把正则反斜杠双重转义、
+> 且误伤目标文件，此后变异一律走 Edit 工具并 `diff`/`md5` 双验。
+> 还有一条**非注入的天然红**：登记 `knownFailingVersions` 之前，同一用例即以
+> `全链路 Up 失败 3/72` 判红（`:69`），说明严格集合从一开始就在起作用。
+> 全部还原后：`registry_metadata_test.go` md5 `4ed38f53c1427801a27f93d98f960dec`、
+> `a_full_chain_migration_test.go` md5 `5f41adb7119ccf9fd6dcbf025b0b6185`，`gofmt -l` 无输出，整包复绿。
+
+- [x] **Step 7: 提交并推送**
 
 ```bash
-git add user-server/internal/migration/migrations/registry_metadata_test.go user-server/internal/migration/migrations/full_chain_migration_test.go
+git add user-server/internal/migration/migrations/registry_metadata_test.go user-server/internal/migration/migrations/a_full_chain_migration_test.go
 git commit -m "test: 迁移注册表元信息校验与全链路升降级用例"
 ```
 双远端推送。若 Step 4 产生 `knownFailingVersions`，commit body 必须逐条列出该版本与原因。
+实跑：commit body 已逐条列出 3 条 `knownFailingVersions` 与 2 条 `knownUnregistered`，并写明标准复跑命令与「必须空库」前提。
 
 ---
 
@@ -2577,11 +2667,36 @@ Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerc
 1. `cd hivemtk/user-server && set -a; source ../.env; set +a && go vet ./... && gofmt -l . | head` → 均无输出。
 2. 逐包覆盖率重测并汇总成表贴给用户：8 个包的 before/after。
 3. 回灌 memory：`project-audit-backlog-2026-09.md` 的「已结」追加本排期 commit 列表；
-   新 finding（live-code 无 recover、订单号假值、UpdateContext 浅拷贝、迁移 Down 不完备）写进同一文件的 Findings 段。
+   新 finding（live-code 无 recover、订单号假值、UpdateContext 浅拷贝、迁移 Down 不完备、
+   v3.36.0 触发器建不起来、v3.22.0 Scan NULL 中止、v3.3.0 列名漂移、两迁移未注册、`generateSessionID` 碰撞）写进同一文件的 Findings 段。
 4. 双远端 `git rev-list --left-right --count master...<remote>/master` 最终 `0/0`。
 
 ## 执行中发现（仅记录，本批不改生产代码）
 
+- **Task 7 / 初始管理员删除保护从未生效**（`v3_36_0_admin_password_guard_migration.go:73,77`）：
+  `stmts` 里 `CREATE TRIGGER trg_guard_initial_admin_delete ... EXECUTE FUNCTION fn_guard_initial_admin_delete()`
+  排在 `CREATE FUNCTION` 之前，迁移首错即 `return` ⇒ **函数与触发器在任何环境都未建立**，
+  且启动链为 v1.0.0→v1.0.0 空跑、无人执行该迁移，故无任何报错。安全语义静默丢失，本批最高优先级修复项。
+- **Task 7 / v3.22.0 _customer_id 标准化整段失效**（`v3_22_0_customer_id_standardize_migration.go:53-63`）：
+  `character_maximum_length` 用非空 `int` 承接，而 text/uuid 列该字段为 NULL ⇒ `converting NULL to int is unsupported`，
+  在任一 `ALTER` 之前中止。应使用 `sql.NullInt64`。
+- **Task 7 / v3.3.0 列名口径漂移**（`l_p1_migration.go:60` vs `internal/model/integration_template.go:27`）：
+  迁移建 `is_built_in` 索引，模型列叫 `built_in`；因生产建表走 AutoMigrate，`CREATE TABLE IF NOT EXISTS` 不补列 ⇒ 恒红。
+  与「已结」清单里的字段命名漂移同源，属可复现的口径类缺陷。
+- **Task 7 / 两个迁移实现了却从未注册**（`v3.25.0 CustomerOwnerAgentMigration`、`v3.26.0 ReachTablesMigration`）：
+  漏 `register(...)` 一行不会有任何报错。当前其目标对象由 AutoMigrate 侧的模型 tag / `RegisterExtraModels`
+  等价覆盖（`model/customer.go:63`、`reach_send_pipeline_compliance.go:20`、`webhook_outbound.go:83`），
+  故**暂无生产缺表风险**，但链与模型两处口径一旦漂移（v3.3.0 就是先例）即静默失效。
+  已由 `TestEveryImplementedMigrationIsRegistered` 这道 AST 门长期盯着。
+- **Task 7 / 迁移链不是安装路径**（`internal/pkg/db/migrate.go` 的 `AutoMigrate()` 299 表 vs 链上 72 个迁移）：
+  本排期最重要的架构事实。任何人以为「跑迁移链即可建库」都会得到 16 个 `relation does not exist`；
+  全链路用例因此必须先铺基表（M3b 变异即为此而设）。
+- **Task 7 / 回滚链会把库降到「比安装基线还少表」的状态**：一次完整 Up→Down 后
+  `public` schema 表数为 **252**，而 Up 前基线是 **299**、Up 后是 317。
+  即 72 个 Down 逆序跑完不仅没把库还原到 299，反而**净删了 47 张基线表**
+  （多个迁移的 Down 用 `DROP TABLE IF EXISTS` 删的是 AutoMigrate 建的基线表，而非自己 Up 建的表）。
+  唯一显式拒绝回滚的是 `v3.28.0`（明文→AES-GCM 加密，理由「解密回明文是安全倒退」），属正确设计。
+  结论：本项目的「降级」在数据层面不可用，Down 失败仅 `t.Logf` 的口径据此维持，但数值本身要报出来。
 - **Task 6 / 否定语义丢失**（`dialog_manager.go:612-639`）：`calculateSentimentScore` 用纯字节子串匹配，
   「不好」同时命中正面词「好」与负面词「不好」，两者抵消后 score 恰好为 0（判中性），
   即所有「不+正面词」的表述都会被误判为中性。用例按实际行为断言 `== 0` 并在注释里标明该抵消行为。
