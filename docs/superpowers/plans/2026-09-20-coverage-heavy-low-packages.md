@@ -3106,3 +3106,20 @@ markdownlint 按列表项解析 ⇒ MD004（本仓口径 dash）。本轮处置�
 比任何一处 MD004 更值得修；而本地没有 `markdownlint-cli2`（未装、不擅自装），
 所以"复现"只能靠推一次看真门 ⇒ 修门的那一刀必须自己过一次门，别只靠 `grep "^[[:space:]]*+ "` 的超集近似
 （它还会命中归档文件里位于代码围栏内的行，那种不是违规）。
+
+### 另一道常红门 `Lint` 的归因（本泳道不认领、给精确指针交接）
+
+`Lint` workflow 自 `478ef1c4` 起连红，读**逐步结论**得到的是两件事：
+① 阻断项只有 **2 个 error**，都在 `user-web/browser_automation/` ——
+`src/core/cdp/input.js:216`（`preserve-caught-error`：catch 里重抛没带 `cause`）与
+`src/core/primitives.js:821`（`no-useless-assignment`：赋给 `navigated` 的值后续没人读）；
+② 该 job 因这一步红而把后面的 **`LICENSE Compliance Scan` 整步 `skipped`** ⇒ "扫描通过"这句
+在最近的每一次运行里都是**没有证据的**（⑧ 的同族形态）。
+本地复现口径要连版本一起记：`user-web/node_modules/.bin/eslint` **v10.10.0**、`npm run lint:check`
+**rc=1**、`18746 problems (2 errors, 18744 warnings)`；活树跑出来是 **3** 个 error（多出
+`primitives.js:908`），因为 `primitives.js` 正被并行泳道改着 —— **活树计数 ≠ HEAD 计数**，
+拿本地数字去核对 CI 前先 `git status` 看落点文件脏不脏。
+**为什么不代改**：`browser_automation` 整目录是本排期白纸黑字的"不碰其文件"面（该目录仍有并行会话未提交
+改动，含 `src/core/primitives.js`、`test/batch18-submit-enter.test.js`），两处 error 又不属本泳道任何改动
+（我的提交只碰 `internal/bridge`、`internal/service` 与文档）。⇒ 交接条件：该目录回 clean 后由 owner 泳道
+补 `cause: err` 并删掉那次多余赋值，`Lint` 绿即连带把 license 那步放回来。
