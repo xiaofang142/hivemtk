@@ -2920,7 +2920,9 @@ M4 无 msg 时塌成 `"平台购买失败: "`；控制组 3 pass / 0 fail，逐 
 控制组 `-count=3` 3/3 绿。**记一条等价变异**：最初把 Y3 写成 `PurgeTerminal(ctx, 0)`，测试照样绿 ——
 不是断言漏了，是 `retention<=0` 在 `order_draft.go:843` 会兜回 `defaultDraftRetention`（90 天），
 100 天前的预置行仍然可删，这个变异**没改变可观察行为**；换成 1000 天才真正断掉清理段。
-复验：`-run TestOrderDraftSweepWorker_EndToEnd -count=30` 30/30 绿、`-run TestOrderDraft -count=3` 绿。
+复验：`-run TestOrderDraftSweepWorker_EndToEnd -count=30` 30/30 绿、`-run TestOrderDraft -count=3` 绿；
+`9903baaf` 影子克隆整包门 **`ok hivemtk-user/internal/service 453.126s`（rc=0，整包无 `-run` 过滤，
+`--- FAIL` 行数 0）** —— 这就是 R11 那句"改动无行为回归"的收口证据（首跑红在 R13，不是 R11）。
 
 **本轮新登记（未处置）**
 - **`GetLicenseStatus` 打的端点平台从未实现**（R12，交产品口径）：`/merchant-api/license/status`
