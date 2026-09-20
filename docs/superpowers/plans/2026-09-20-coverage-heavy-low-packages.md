@@ -64,12 +64,12 @@
   `.Start()`、可注入字段 `.interval`；`NewLiveCodeRotator(service.LiveCodeService) *LiveCodeRotator`、`.rotate()`、`.Start()`。
 - Produces: fake 类型 `fakeDomainHealth` / `fakeLiveCode` 仅本包内使用，后续任务不依赖。
 
-- [ ] **Step 1: 确认目标目录无并行会话在改**
+- [x] **Step 1: 确认目标目录无并行会话在改**
 
 Run: `cd hivemtk && git status --porcelain user-server/internal/cron`
 Expected: 空输出。非空则**停手**，改排到该文件干净后再做。
 
-- [ ] **Step 2: 写 fake 与用例**
+- [x] **Step 2: 写 fake 与用例**
 
 创建 `user-server/internal/cron/job_fakes_test.go`：
 
@@ -257,17 +257,17 @@ func TestLiveCodeStartRotatesImmediately(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: 跑红→跑绿**
+- [x] **Step 3: 跑红→跑绿**
 
 Run: `cd hivemtk/user-server && set -a; source ../.env; set +a && go test -p 1 -count=1 -cover ./internal/cron/`
 Expected: `ok hivemtk-user/internal/cron coverage: ≥85.0%`（首跑若编译报错按报错改 fake 方法签名，不改生产码）
 
-- [ ] **Step 4: 逐函数核对新增覆盖**
+- [x] **Step 4: 逐函数核对新增覆盖**
 
 Run: `go test -p 1 -count=1 -coverprofile=/tmp/cron.cov ./internal/cron/ && go tool cover -func=/tmp/cron.cov`
 Expected: `runOnce` / `Start`（job）/ `rotate` / `Start`（rotator）均非 0.0%；剩余 0% 只允许是 `main` 风格未使用函数。
 
-- [ ] **Step 5: 反向验证（三次注入，逐次还原）**
+- [x] **Step 5: 反向验证（三次注入，逐次还原）**
 
 备份：`cp internal/cron/domain_health_job.go /tmp/dhj.bak && cp internal/cron/live_code_rotator.go /tmp/lcr.bak`
 
@@ -280,7 +280,7 @@ Expected: `runOnce` / `Start`（job）/ `rotate` / `Start`（rotator）均非 0.
 每次注入后 `cp /tmp/*.bak internal/cron/` 还原，最后 `go test -p 1 -count=1 ./internal/cron/` 复绿。
 **禁止**用 `git checkout --` 还原（该文件此时已无未提交改动才可用，但本工作树共享，一律用 cp）。
 
-- [ ] **Step 6: 提交并推送**
+- [x] **Step 6: 提交并推送**
 
 ```bash
 cd hivemtk
@@ -326,7 +326,7 @@ git push upstream master:master
 因此顺序无关性是设计约束：纯函数用例**只调 `toPending/toModelFromPending`**（`Publish` 的两段各自单测），
 落库用例**独占** `Init/Stop`，并按唯一 trace_id 过滤断言。
 
-- [ ] **Step 1: 写纯函数用例**
+- [x] **Step 1: 写纯函数用例**
 
 创建 `user-server/internal/pkg/tracing/tracing_span_test.go`：
 
@@ -639,12 +639,12 @@ func TestTextHelpers(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑绿（只此文件）**
+- [x] **Step 2: 跑绿（只此文件）**
 
 Run: `cd hivemtk/user-server && go test -p 1 -count=1 -run 'TestNode|TestCarrier|TestRecalled|TestSpan|TestToModel|TestPublish|TestEnd|TestRecord|TestTraceIDGen|TestTextHelpers' ./internal/pkg/tracing/ -v`
 Expected: 全 PASS，且**无** `--- SKIP`。
 
-- [ ] **Step 3: 写真实库 sink 用例**
+- [x] **Step 3: 写真实库 sink 用例**
 
 创建 `user-server/internal/pkg/tracing/tracing_sink_db_test.go`：
 
@@ -749,13 +749,13 @@ func nodeKeys(rows []model.MessageTrace) []string {
 }
 ```
 
-- [ ] **Step 4: 跑绿并核对覆盖率**
+- [x] **Step 4: 跑绿并核对覆盖率**
 
 Run: `set -a; source ../.env; set +a && go test -p 1 -count=1 -coverprofile=/tmp/tr.cov ./internal/pkg/tracing/ && go tool cover -func=/tmp/tr.cov | tail -40`
 Expected: 全包 coverage ≥70%，且 `go tool cover -func` 里 `Init/flushLoop/Stop/Publish/RecordDownlinkFetchBatch/toPending/toModelFromPending/toJSON/sha1Sum` 均非 0.0%；
 运行日志中 `TestSinkPersistsSpansToMessageTrace` 必须是 PASS 而非 SKIP。
 
-- [ ] **Step 5: 反向验证**
+- [x] **Step 5: 反向验证**
 
 备份：`cp internal/pkg/tracing/tracing.go /tmp/tracing.bak`
 
@@ -766,7 +766,7 @@ Expected: 全包 coverage ≥70%，且 `go tool cover -func` 里 `Init/flushLoop
 
 每次 `cp /tmp/tracing.bak internal/pkg/tracing/tracing.go` 还原后复绿。
 
-- [ ] **Step 6: 提交并推送**
+- [x] **Step 6: 提交并推送**
 
 ```bash
 git add user-server/internal/pkg/tracing/tracing_span_test.go user-server/internal/pkg/tracing/tracing_sink_db_test.go
@@ -789,7 +789,7 @@ git commit -m "test: tracing 载体/Span 纯函数与异步落库端到端补测
   `DefaultRequestTimeoutSeconds/DefaultMaxRetries`。
 - Produces: 无。
 
-- [ ] **Step 1: 写用例**
+- [x] **Step 1: 写用例**
 
 创建 `user-server/internal/aiagent/knowledge/service/constants_config_test.go`：
 
@@ -987,17 +987,17 @@ func TestSetConfigReaderNilIsIdempotent(t *testing.T) {
 `want.fb` 的期望串取 `1024 / 15m0s / 30m0s / 5s / 5 / 500 / 1000 / 10000 / 0.5 / 0.7 / 1000 / 0.9 / 1m0s / 3`，
 与 `constants.go` 里的兜底字面量一一对应（键名与兜底值同时被钉住，改任一处都会红）。
 
-- [ ] **Step 2: 跑绿**
+- [x] **Step 2: 跑绿**
 
 Run: `go test -p 1 -count=1 -cover ./internal/aiagent/knowledge/service/`
 Expected: ok；`go tool cover -func` 中 constants.go 全部 getter 100.0%。
 
-- [ ] **Step 3: 反向验证**
+- [x] **Step 3: 反向验证**
 
 备份 `constants.go` → 把 `DefaultTopK` 的 key `"default_top_k"` 改成 `"top_k"` → `TestConfigGettersReadInjectedKeys`
 必须 FAIL（键名断言）；把 `SSRFCheckTimeout` 兜底 `5*time.Second` 改成 `500*time.Millisecond` → 两个用例都 FAIL。还原复绿。
 
-- [ ] **Step 4: 提交并推送**
+- [x] **Step 4: 提交并推送**
 
 `git add user-server/internal/aiagent/knowledge/service/constants_config_test.go`
 → `git commit -m "test: 知识库运行时配置读取器注入与兜底默认值补测"` → 双远端推送。
@@ -1018,7 +1018,7 @@ Expected: ok；`go tool cover -func` 中 constants.go 全部 getter 100.0%。
 - Produces: 无。
 - **不得**重名：`rag_test.go` 已定义 `mockThreeTier`、`dummyError`、`requireRealAPIKey`。
 
-- [ ] **Step 1: 写用例**
+- [x] **Step 1: 写用例**
 
 创建 `user-server/internal/aiagent/rag/service/rag_prompt_builders_test.go`：
 
@@ -1133,19 +1133,19 @@ func TestBuildStructuredRAGPromptEmbedsSchema(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑绿**
+- [x] **Step 2: 跑绿**
 
 Run: `go test -p 1 -count=1 -cover ./internal/aiagent/rag/service/ && go test -p 1 -count=1 -coverprofile=/tmp/rag.cov ./internal/aiagent/rag/service/ && go tool cover -func=/tmp/rag.cov | grep -E 'buildContextString|buildRAGPrompt|buildStructuredRAGPrompt'`
 Expected: 三个构造器 100.0%。
 （`buildStructuredRAGPrompt(nil schema)` 的 `json.Marshal(nil)` 结果是 `"null"`；`make(chan int)` 同理走 err→`schemaJSON` 为 nil→`string(nil)` 为空串。
 若实际行为与断言不符，**以实际为准改断言并在 commit body 记录该分支的真实行为**，不得反向改生产码。）
 
-- [ ] **Step 3: 反向验证**
+- [x] **Step 3: 反向验证**
 
 备份 `rag.go` → 把 `buildContextString` 的 `%.2f` 改成 `%.1f` → `TestBuildContextStringNumbersAndFormatsScore` FAIL；
 把 `if len(contextData) > 0` 改成 `if len(contextData) >= 0`（nil 也追加）→ `TestBuildRAGPromptStructure` FAIL。还原复绿。
 
-- [ ] **Step 4: 提交并推送**
+- [x] **Step 4: 提交并推送**
 
 `git add user-server/internal/aiagent/rag/service/rag_prompt_builders_test.go`
 → `git commit -m "test: RAG 上下文与提示词构造器分支补测"` → 双远端推送。
@@ -1165,7 +1165,7 @@ Expected: 三个构造器 100.0%。
   `generateSessionID`、`NewInMemoryDialogManager(*DialogManagerConfig)`、`Session/Message/Conversation/SessionConfig/SessionStatus` 常量。
 - Produces: 无。
 
-- [ ] **Step 1: 写用例**
+- [x] **Step 1: 写用例**
 
 创建 `user-server/internal/aiagent/rag/customer_service/dialog_sessions_ext_test.go`：
 
@@ -1390,8 +1390,9 @@ func TestListUserSessionsFilters(t *testing.T) {
 	dm, _ := newSessionForTest(t, SessionConfig{})
 	ctx := context.Background()
 
+	// 平台互不相同：同 (user,platform) 连建两个会话会因 generateSessionID 时钟粒度相撞而互相覆盖
 	for _, spec := range []struct{ user, platform string }{
-		{"u-1", "wecom"}, {"u-1", "telegram"}, {"u-2", "wecom"},
+		{"u-1", "wecom2"}, {"u-1", "telegram"}, {"u-2", "wecom2"},
 	} {
 		if _, err := dm.CreateSession(ctx, spec.user, spec.platform, "kb-x", SessionConfig{}); err != nil {
 			t.Fatalf("CreateSession: %v", err)
@@ -1463,12 +1464,12 @@ func TestGenerateSessionIDShape(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑绿**
+- [x] **Step 2: 跑绿**
 
 Run: `go test -p 1 -count=1 -cover ./internal/aiagent/rag/customer_service/`
 Expected: ok（该包此时不连 DB、不起 HTTP）。
 
-- [ ] **Step 3: 反向验证**
+- [x] **Step 3: 反向验证**
 
 备份 `dialog_manager.go` → 三处注入，各跑对应用例：
 1. `AddMessage` 去掉裁剪分支（`if len(...) > MaxHistoryLength {` 改 `if false &&`）→ `TestAddMessageTrimsToMaxHistory` FAIL。
@@ -1476,7 +1477,7 @@ Expected: ok（该包此时不连 DB、不起 HTTP）。
 3. `ListUserSessions` 去掉 `platform == "" ||` 短路 → `TestListUserSessionsFilters` FAIL。
 逐次 `cp` 还原后复绿。
 
-- [ ] **Step 4: 提交并推送**
+- [x] **Step 4: 提交并推送**
 
 `git add user-server/internal/aiagent/rag/customer_service/dialog_sessions_ext_test.go`
 → `git commit -m "test: 内存对话管理器历史裁剪与会话过滤补测"` → 双远端推送。
@@ -2564,6 +2565,15 @@ Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerc
 3. 回灌 memory：`project-audit-backlog-2026-09.md` 的「已结」追加本排期 commit 列表；
    新 finding（live-code 无 recover、订单号假值、UpdateContext 浅拷贝、迁移 Down 不完备）写进同一文件的 Findings 段。
 4. 双远端 `git rev-list --left-right --count master...<remote>/master` 最终 `0/0`。
+
+## 执行中发现（仅记录，本批不改生产代码）
+
+- **Task 5 / `generateSessionID` 会话 ID 会碰撞**（`dialog_manager.go:309`）：ID 为 `user_platform_<UnixNano>`，
+  本机实测连调 20000 次同参只得 5136 个不同值（重复率 ~74%），时钟粒度粗于纳秒。
+  同一 (user, platform) 背靠背两次 `CreateSession` 会写入同一个 map key，**先建的会话被静默覆盖丢失**。
+  影响面：仅内存版 `InMemoryDialogManager`（PG 版走 `pg_dialog_manager.go`）。
+  用例规避方式：`TestListUserSessionsFilters` 内各会话 platform 取值互异，不依赖 ID 唯一性；
+  `-count=10` 已稳定绿。真正修复（追加随机后缀/计数器）留待单独批次。
 
 ## 阻塞与不做什么
 
