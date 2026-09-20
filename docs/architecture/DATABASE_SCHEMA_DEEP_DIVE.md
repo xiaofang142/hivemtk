@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.12（2026-09-21，T-P4-06 新增 §4.16.5 漏斗第五段接入 `opportunities`；上一版 v1.11 是 T-P4-05 的 §4.16.4）
+> **版本**：v1.13（2026-09-21，T-P4-06 **交付后复查**：§4.16.5 落点表补登记漏掉的一个新增测试文件并改正计数、该文件补过 `make fmt-check`；上一版 v1.12 首次写入 §4.16.5）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -1309,7 +1309,7 @@ app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 43
 > `conversion_funnels` 表写入路径仍为零（守 D-9）；AC③ seed 假数据不影响真实视图。
 > 依赖 T-P4-03（商机服务）与 T-P2-03（阶段词表 + 黄金用例），二者都已在册。
 
-#### 落点（四改两增，没有一处写那张表）
+#### 落点（ops 侧四改三增；前端一改一增、台账一行、文档两篇，全卡共 12 路径。没有一处写那张表）
 
 | 文件 | 改了什么 |
 |---|---|
@@ -1317,8 +1317,14 @@ app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 43
 | `ops/service/conversion_funnel.go` | `BuildFunnel` 追加第五段；`GetStageDetails` 加 `case StageOpportunity`；两条腿各自把取数失败打成 `Warn` |
 | `ops/repository/conversion_funnel_stage_test.go` | 词表三条改期望（产出五段、保留清单为空、副本用例适配空表） |
 | `ops/service/conversion_funnel_baseline_test.go` | 黄金串加第 5 段、夹具补 4 行商机、AC③ 新增一条"演示表灌 99999 读数不变"、新增一条"表没了仍回五段" |
+| `ops/repository/conversion_funnel_opportunity_test.go`（新增） | 取数层三条：两侧窗口都读到差值、往演示表种巨量假行真实源不动、`err` 必须上抛（不吞成 `(0, nil)`） |
 | `ops/service/conversion_funnel_opportunity_log_test.go`（新增） | 两条告警各锁一条：删掉 `Warnf` 必须有用例红 |
 | `ops/controller/conversion_funnel_http_test.go`（新增） | AC①/②/③ 各一条打到真实 gin 路由 + `{code,message,data}` 外壳 |
+
+（表内"四改三增"只数 `internal/ops/` 下的 Go 文件；`user-web/src/views/conversionFunnel/List.vue`
+与 `user-web/tests/unit/conversionFunnel_summary.test.js`、`scripts/check-unwired-assets.sh`
+两行台账、以及本仓这两篇文档，合计 12 个路径 —— 以 `git show --name-status d52434c2 cc065b02`
+为准：4 个 `A` + 8 个 `M`。）
 
 **这条端点上原先一条 controller 用例都没有**，而 AC① 说的是"接口返回"。`parseTimeRange`
 只认 RFC3339、外壳的 `data` 带 `omitempty` —— 两处任何一处坏了，service 的黄金用例全都不会红。
@@ -1401,6 +1407,40 @@ app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 43
 拆行的代价也写进注释：两行的 callpat 各自锚在赋值左侧的局部变量名上（同包内两次调用文本
 几乎相同，不锚名字分不开），**改局部变量名会让对应行报"未接线"**——方向是变红不是变哑，
 红了回来改这两行即可。
+
+#### 交付后复查再纠正两处（同一张卡的第三次、第四次；都在"自己写的登记"上）
+
+双推之后按「彻底深入检查」重跑了一遍本卡，抓到两处：
+
+1. **上面的落点表少登记一个文件，标题的计数也因此错**。`ops/repository/conversion_funnel_opportunity_test.go`
+   （新增，三条取数层用例）当初既不在表里，"四改两增"这个数也不对 —— 实数按
+   `git show --name-status d52434c2 cc065b02` 是 **4 个 `A` + 8 个 `M`**，ops 侧是四改三增。
+   漏登记的代价不是"表格不齐"，是**下一次读这张表的人少找一个测试入口**：那三条里有一条
+   正是"往演示表种巨量假行、真实源读数不动"，即 §4.11 判 D-9 的仓储侧证据。
+2. **那个文件根本没通过 gofmt，而 gofmt 是真门**。`make fmt-check`（CI `Static gates` 里那一步，
+   判据与本地同源）在 HEAD 上报两条红，其中一条就是这个新文件：包注释里 `①②③` 三条用了
+   **四空格续行**，Go 1.19+ 的 gofmt 把注释里缩进 ≥4 空格判成代码块并重排。修法是把续行顶格
+   （不跑 `gofmt -w`，它会把这段散文重排成 tab 代码块，读起来更差），改后
+   `gofmt -l` 对该文件空、`git diff` 该文件**非注释改动行数 0**、`ops/repository` 包
+   重跑 76 条全绿。另一条红 `internal/controller/wechat_batchf4_m01_inbound_test.go`
+   属并行会话未提交文件，不代改。
+
+⇒ 这两处合起来是一条口径：**"新增文件"这一步的门不是"测试绿"，是 `make fmt-check` 也绿**。
+本卡的验证清单里当初列了 build/vet/六门/-race，唯独没列 fmt-check —— 因为它是 `make` 目标、
+不在 `scripts/*.sh` 那一排里，于是**门的清单按"脚本目录"枚举就会漏掉按"make 目标"存在的那道门**。
+
+同一轮复查里**复核成立**（不是推断，逐项重跑）：`ops/service`+`ops/repository` 在
+`TZ=Asia/Shanghai` 与 `TZ=UTC` 各 **455 / 0 fail / 0 skip**、`ops/controller` **106 / 0 / 0**；
+命名六门在 `--shared` 克隆（HEAD `cc065b02`，干净树）**六条全 rc=0**，同一批脚本在工作树是
+**五绿一红**（红＝`check-architecture`）；那处红的归属这次是**直接证据**而不是"克隆转绿"的间接推断 ——
+`git status --short` 显示 `internal/service/dingtalk_media.go` 是 `??`（未跟踪 ⇒ **HEAD 里没有这个文件**，
+红只可能来自工作树未提交内容，而 `git log -- <该路径>` 亦无任何提交）。
+`check-secrets.sh` rc=1 的三处命中文件名与提交清单里 12 个路径求交集为**空**（`comm -12` 实算，
+不是"打印列表里没看到"）。台账 49/55、项17 两行各自 `接线数=1`；
+`api-inventory.md` `grep -c -i opportunit` 全文 0、`human-task` 两条都在 1426/2241 的前端调用段；
+`闭环完成率` 全仓 `*.go` 仍只命中 `internal/model/opportunity.go:85` 一句注释、前端零读者；
+`frontend_aliases.go:409-414` 逐字重读确为单复数各三条；`List.vue` md5 与提交时一致
+（`f31a7610a61da8143def69e4e839cfc7`）、`vitest run` 14 文件 / 238 用例全绿。
 
 #### 台账：新增两行（现值 **49/55**，`check-unwired-assets.sh` rc=0）
 
@@ -1627,3 +1667,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.10 | 2026-09-21 | @backend | 新增 §4.16.3 商机 **HTTP 出口**（N-1 / T-P4-04）：八条端点（读二 + 规则一 + 写五），**没有一条能写 `won`** —— 那是 §4.16.2 三元边表在 HTTP 侧的兑现，由路由表逐条比对的用例守着（加一条 `POST /{id}/won` 即红）。四条判据进文档：① 绑定 `DisallowUnknownFields` + 请求体封顶 4KB（派生量与身份列在入参结构里根本没有格子，默认丢弃未知字段会让 `{"win_probability":0.99` 静默成功、两边各持一套账；`MaxBytesError` 单列一臂，不混进"形状不对"）；② 写入口必须带 `version`，缺字段判 400 而不是取零值（0 恰好是新行的合法期望版本）；③ 400/404/409/503 共用一套分诊词表，503 的判据是"不许有看起来像结果的 data"（`{} [] null` 都会被前端长成"查过了，没有"）；④ `GET /rules` 未装配时照样答，且给出"存在但不暴露"的机器动作清单，否则这套规则在契约面上读成"产品没有赢单"。controller 不 import repository（架构门 [1/10]），两种 404/409 判定的事实来源由**服务层别名**送出（同款先例 `human_task.go`）。**本卡三把被真跑纠正的断言**（变异电池 38 刀 → 37 CAUGHT / 1 把 M27 登记为等价）：M11 的夹具自己是个语法错误的 JSON，那句 400 来自"我打错了"而不是体积 ⇒ 用例从第一天起假绿，现在夹具先自证能 `Unmarshal` 且确实 >4KB；M17 摘掉控制器空 id 关在**读口**看不出差（服务层 `Get` 也拒空），差别只在写口（`transition` 不判空 ⇒ `PUT /api/opportunity/%20` 白查一趟并回 404"这条不存在"），改用 `failingOpportunityRepo` 断"根本没查"（一查就是 500）；M21（`closed` 与 `stale_version` 换序）查下来是**真等价变异**（服务层一次只返回一个 sentinel，两条 `errors.Is` 永不同时为真），换成同族里有牙的那把（把已收口的行贴成 `stale_version` 的 reason）。另登记一处两边都看不见的刀：`router.go` 摘掉 `app.InitOpportunityRuntime` 之后装配函数、控制器、挂载函数三个字面量全在、端点也在树上，只是运行时全局句柄永远 nil ⇒ 八条端点全退 503；旧路由用例漏它有两个原因（只看 `engine.Routes()` ⇒ 挂上≠活的；匿名探针判"非 2xx" ⇒ 503 也是非 2xx），现由带合法令牌真读一行的用例 + 台账新增 **16e 启动装配点** 双守，两把都反向验过。未接线台账：16a/16c 比 §4.16.2 的原计划**早一张卡**同时翻 wired（出口必须自带底座，一次装配接上两个断点，判据仍分开跑），新增 16d 挂载入口 + 16e 启动装配点，16b 仍按 UNWIRED 登记（兑现点 T-P4-05）；台账现值 **42/49**（rc=0）。**列表端点刻意不交付**：仓储 `List` 不返回 `total`，用 `len(list)` 凑数会把"一共多少条"从"查过"变成"猜的"，登记为欠账。`swag` 未随本卡重生成（前几张卡同一口径：工作树里有并行会话未审阅的注解，重生成会一并灌入），Swagger 判据为静态的八行 `@Router` 逐条锁。实跑（提交 292c92e3 的 --shared 克隆）：router 150 / controller 781 / app 164 / service 3509 全绿、失败 0，`TZ=UTC` 复跑四包同数同绿；`-race` 四腿：router 150 / app 164 / controller 781 三腿 **race=0**，service 腿 **rc=1 pass=3507 fail=2 race=2** —— 两处 DATA RACE 在**父提交 `11755c55` 的全量 `-race` 实跑里复现同一对栈**（那里 race=1 fail=1），判为既有缺陷、非本卡引入，取证与口径见 §4.16.3 末段 |
 | v1.11 | 2026-09-21 | @backend | 新增 §4.16.4 **线索→商机的转换层与自动分配**（N-1 / T-P4-05）：`opportunities` 的第一个生产写入方落地，P4 出口条件里「商机已入库」那句话从此成立。三道串行判据（量程 → 阶段 → 双阈值；两个同名 `confidence` 量程不同 ⇒ 硬拒不归一；`StageActive` 排在 nil 不安全的 `LeadQualified` 之前；配置降级按「关」处理）；AC② 落成「转换那一步对 `clues.is_opportunity` **零写入**」，并**就地推翻 T-P4-01 写在自己代码注释里的那句「不建索引、反查由 is_opportunity 承担」**（0/1 答不出「转成了哪一条」，且那一列是挖掘侧的热度标记、不是转化事实）⇒ 反查走 `clue_id` + **部分**唯一索引 `WHERE clue_id <> ''`，DDL 落在只 Warn 不清数据的 `postMigrateOpportunityClueUniqueIndex()`；AC③ 落成返回值而不是日志行（规则名 + 候选集 + 每人负载一起出，候选必须按 `SalesID` 升序是平票裁决的前提），三条规则顺序与「故障绝不退到 `no_roster`」严格分开；名单真源 `sales_events`/`sales_profile`（候选 `sales_personas` 实测零写入方被否），「在册」只能等于「注册过档案」（无停用事件，登记为边界而非现场补一个没有写者的死列）；接缝只在 `lead_mining.persistLead` 两条分支、且都在线索行落库之后（`Create` 失败不转 —— 本表不建外键，断链无人发现），未装配静默、报错只 Warn 不重试不回滚；装配点一次登记**两半**、`db == nil` 时两半一起清，刻意不做惰性构造。三处被真跑纠正：夹具的 `Create` 失败不填 id（真行为是 `BeforeCreate` 在 INSERT 之前就赋 uuid，失败照样留下填好的 id）/ 台账 `callpat` 被「清空那半」命中致接线数=2 的假绿 / 两把变异退化成构建红后补成可编译的语义变异 —— **只在编译期红的变异不算捕获**。台账：16b 兑现翻 wired + 新增四行（现值 **47/53**，五行逐行反向验过、控制组 rc=0）。实跑分树记：克隆 `478ef1c4` 六包 `fail=0`、`TZ=UTC` 同数同绿（计数含子用例，不与上一卡的顶层口径比大小），`-race` 四腿 race=0、service 腿五跑三结局（最多 2 race / 2 fail，也可全绿）且**受害用例名不唯一** ⇒ 上一卡登记的既有 flaky 再证一次，并否掉"归因到单条用例"的读法；工作树的 `TestValidPlatform_Unsupported` 红、架构门 1 处红、secrets 3 处红**全部**落在并行会话未提交/未跟踪的文件上，不代修不代提交，同一棵树换成克隆后同门 rc=0 即为归属证据。刻意不交付：HTTP 手工转商机口、`lead_miner_unified.go` 那条链（无 confidence 生产者）、`ltc.config` 的 `win_probability` 阈值读者。 |
 | v1.12 | 2026-09-21 | @backend | 新增 §4.16.5 **漏斗的第五段**（N-1 / T-P4-06）：`conversion-funnels` 从四段变五段，商机段接 `opportunities` 的实时聚合，**没写那张僵尸表**（AC② 由用例锁「取数时顺手往演示表写一行」必红，AC③ 锁「演示表灌 99999 读数不变」）。三条判据：① 口径取 `created_at`（流量）而非 `stage`（状态）—— 混一格状态读数进四条流量腿，逐段相除的「阶段转化率」失去意义，且 `idx_opp_created` 的注释本来就点名按它切时间窗；② 错误只上抛到仓储层，服务层降级成 0 **外加一条 Warn**（这条腿独有一种歧义：T-P4-05 之后 `opportunities` 只有一个生产者，0 既可能是「真没转出来」也可能是「表没建/接缝没装配」；四段老腿答 0 没人拿它做决策，这段答 0 会一路走进 P8 的归因），因此告警是行为不是日志，由抓 `os.Stdout` + 重建全局日志器的用例守着（只换 stdout 不够，`GetLogger` 连 writer 一起缓存）；③ 第五段**追加在末位**，因为「下标即契约」的读者有两处（后端 `_NonMonotonic` 的 `Stages[len-1]`、前端 `List.vue` 摘要区的 `stages[0]`/`stages[length-1]`），加段会让前者**绿着失去意义**、后者把「转化量(会话)」显示成商机数 —— 两处一并改按阶段名取，`total`/`conversion` 与服务端口径刻意仍停在 访问→会话（改成 访问→商机 是产品决策，登记为欠账）。**本卡被真跑纠正的一处**会让「登记」变成假安全：台账最初只加**一行**，反向删掉汇总腿实测 rc=0 仍报 WIRED —— `wired` 只要求命中 ≥1，而 service 里有两个消费点，删一个剩一个，等于装了一把永不变红的锁；按消费点拆成 17a/17b 后四种删除口径（删汇总/删详情/都删/定义改名）分别 rc=1/1/1/2。**第二处纠正落在本卡自己的文档上**：初稿把卡面的 `GET /conversion-funnel` 判成笔误（"真实路径是复数"），读全 `frontend_aliases.go:409-414` 后**推翻** —— 单复数各三条一起注册、卡面字面可命中；我错在拿"测试里只手写了复数两条"+"api-inventory 后端段没有这两组"当结论，而后者本身就是该脚本的盲区（详见 §4.16.5 那段更正与其下的两族漏法）。台账现值 **49/55**（rc=0）。**这条端点原先一条 controller 用例都没有**，而 AC① 说的正是「接口返回」，故新增 `conversion_funnel_http_test.go`（真 gin 路由 + `{code,message,data}` 外壳），H1–H4 四把变异各打红一条，证明不是摆设。实跑（主工作树未提交态，HEAD `39be6824`）：三轮 11 把变异，控制组 service+repository **455 全绿 / 0 skip**、controller **106 全绿**，red 计数逐把记在 §4.16.5；`go test ./internal/ops/...` 四包 ok，`TZ=UTC` 与 `TZ=Asia/Shanghai` 同数同绿，`-race` 三包 DATA RACE 计数 0，`go build` / `go vet` 双 rc=0 且输出 0 字节；`check-date-bucket-tz`（命中 21，与基线同）、`check-enum-consistency`、`check-doc-consistency`、`check-feature-doc`、`api-inventory`（生成物无 diff —— 本卡把这条**下调一档**：该快照抽后端只认 `.GET("全路径")` 形状，`doReg("GET", path)` 那族别名与"控制器内相对路径 + `Group` 前缀"那族都不进账，`grep -c -i opportunit api-inventory.md` 全文为 0）、`audit-cross-package-ports`（Errors 0 / Warns 0）、`check-unwired-assets` 全 rc=0，`check-architecture` 唯一红是并行会话的 `dingtalk_media.go:191/204`。前端：`vite build` rc=0，`eslint` 对本文件 0 error 且改前改后**同为 53 warning**（HEAD 版临时复制到同目录对拍计数，跑完即删），`vitest run` **14 文件 / 238 用例全绿**（本卡 +1 文件 +5 用例，改前 13/233；那份组件用例对改前的 `List.vue` 实跑过 **4 红 1 绿**，绿的那条是本来就不按位置取的明细表）。刻意不交付：端到端转化率延伸到商机、商机段的 `avg_duration_seconds`/`top_sources`（要 `sales_events` 口径，属 T-P7 域）、演示表下线（§4.11 三条删表判据一条未消）、真机看板截图（8204 上活着的是 9-19 起的旧二进制 `bin/user-server.r39`，不含本卡改动且非本会话启动，不为它污染并行会话的证据）。 |
+| v1.13 | 2026-09-21 | @backend | **T-P4-06 交付后复查（双推之后按「彻底深入检查」重跑本卡）**，抓到并当场修掉两处，都在"自己写的登记"上：① §4.16.5 落点表**漏登记** `ops/repository/conversion_funnel_opportunity_test.go`（新增，三条取数层用例，含"往演示表种巨量假行而真实源读数不动"这条 D-9 的仓储侧证据），标题计数也随之下修 —— 实数按 `git show --name-status d52434c2 cc065b02` 为 **4 个 `A` + 8 个 `M`**（ops 侧四改三增、前端一改一增、台账一行、文档两篇），表下已把口径边界写清；② 那个文件**没过 gofmt**，而 gofmt 是真门（CI `Static gates` 调 `make fmt-check`，与本地同判据）—— 红因是包注释里 `①②③` 用了四空格续行，Go 1.19+ 把注释内 ≥4 空格缩进判成代码块。修法是把续行顶格而**不跑** `gofmt -w`（它会把散文重排成 tab 代码块，更难读）；改后 `gofmt -l` 对该文件空、`git diff` 该文件非注释改动 **0 行**、`ops/repository` 包重跑 **76 条全绿**。同批另一条 fmt 红 `internal/controller/wechat_batchf4_m01_inbound_test.go` 属并行会话未提交文件，不代改。**由此得一条门禁口径**：新增文件的验收清单不能只按 `scripts/*.sh` 枚举门，`make fmt-check` 这类**以 make 目标存在的门**会被整批漏掉（本卡当初的清单列了 build/vet/六门/-race，唯独没有它）。**同轮复核成立项（逐项重跑，非推断）**：`ops/service`+`ops/repository` 双时区各 455 / 0 fail / 0 skip、`ops/controller` 106 / 0 / 0；命名六门在 `--shared` 干净克隆六条全 rc=0，工作树五绿一红，那处架构红这次拿到**直接归属证据**（`dingtalk_media.go` 状态为 `??`、`git log -- <路径>` 零提交 ⇒ HEAD 无此文件）；`check-secrets.sh` rc=1 的三处命中文件名与本卡 12 路径求交集为空（`comm -12` 实算）；台账 49/55 且项17 两行各自 `接线数=1`；`api-inventory.md` 全文 `opportunit` 命中 0、`human-task` 两条均在 1426/2241 的前端调用段；`闭环完成率` 全仓 `*.go` 仍只命中 `internal/model/opportunity.go:85`；`frontend_aliases.go:409-414` 逐字重读确为单复数各三条；`List.vue` md5 与提交时一致、`vitest run` 14 文件 / 238 用例全绿。**另修规划文档（git 外）的表格完整性**：7 行表格行补回收尾管道、12 行两列修订条目里的裸 `\|` 转义（逐行按插入位置反删验证无损）；多列表格里**另有 14 行**"列数与表头不符"的**历史**条目**刻意未动**（12 行是列数比表头多、2 行少一格，行号与逐行判读留在任务清单 r48）—— 那种行分不清"多出的单元格分隔符"与"散文里的裸管道"，盲改会把真实列并掉，属渲染问题不属事实错误，留待人工逐行判读。**本文件其余内容零改动**。 |
