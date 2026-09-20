@@ -161,6 +161,11 @@ func TestFrame_ProtocolVersionAndEventID(t *testing.T) {
 }
 
 // TestIsDuplicateReason 幂等/拦截原因判定。
+// 批15 起判定改成「只认结论前缀」（见 protocol.go 注释），因此原先靠子串命中的两行翻面：
+//   - "skip: locked"：人工接管根本不是重复（该分支 Accepted=true 且已落库），
+//     判重只是碰巧撞上了 "skip" 这个词。
+//   - "record already exists"：不是任何产出方会写的结论短语；真重复走
+//     "msg_id already exists…"。留在这儿只会让嗅探表重新变成"任意文案都可能命中"。
 func TestIsDuplicateReason(t *testing.T) {
 	cases := map[string]bool{
 		"":                          false,
@@ -169,8 +174,8 @@ func TestIsDuplicateReason(t *testing.T) {
 		"intercepted by middleware": true,
 		"self echo detected":        true,
 		"duplicate delivery":        true,
-		"skip: locked":              true,
-		"record already exists":     true,
+		"skip: locked":              false,
+		"record already exists":     false,
 	}
 	for reason, want := range cases {
 		if got := IsDuplicateReason(reason); got != want {

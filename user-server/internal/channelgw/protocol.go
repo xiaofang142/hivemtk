@@ -330,22 +330,37 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 	return ev
 }
 
+// duplicateOutcomePrefixes 服务端「这条已处理过」的**结论短语**，按前缀认。
+// 与产出方逐字对齐：`inbox_ingress.go` 钩子2（msg_id 命中 / 方向冲突 / content_hash 回声）、
+// 中间件拦截包装（其内层 self-echo/duplicate 两类结论），以及夹具 mock 的同形文案。
+var duplicateOutcomePrefixes = []string{
+	"msg_id already exists",
+	"msg_id exists with different direction",
+	"content_hash already exists",
+	"intercepted by middleware",
+	"self-echo",
+	"self echo",
+	"duplicate",
+}
+
 // IsDuplicateReason 判断入站处理结果原因是否属于「已被服务端幂等/拦截确认为重复」。
 // 命中则传输层把该 event_id 标记 Duplicate，客户端据此停止重发（允许重复上报，
 // 服务端用 ack 确认去重）。
+//
+// 只认结论前缀、不认任意子串：这条判定的下游是「客户端从此不再上报该 event_id」
+// （`user-web/bridge/src/core/uplink.js` 的 `accepted || duplicate`），判错的代价是
+// 一条消息永久消失。而 reason 里混得进**失败原文**——`inbox_ingress.go` 的批量分支会把
+// 落库错误包成 `batch handle error: 持久化消息失败: <DB 原文>`，PG 唯一键冲突原文天然带
+// "duplicate key value violates unique constraint"。用子串嗅探时「没存进去」就成了
+// 「已经存过」，一次 DB 抖动替客户端做了永久决定。宁可漏判（客户端重报，服务端下一轮
+// 用真结论短语作答）也不可误判。
 func IsDuplicateReason(reason string) bool {
+	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return false
 	}
-	for _, kw := range []string{
-		"msg_id already exists",
-		"intercepted",
-		"echo",
-		"duplicate",
-		"skip",
-		"already exists",
-	} {
-		if strings.Contains(reason, kw) {
+	for _, prefix := range duplicateOutcomePrefixes {
+		if strings.HasPrefix(reason, prefix) {
 			return true
 		}
 	}

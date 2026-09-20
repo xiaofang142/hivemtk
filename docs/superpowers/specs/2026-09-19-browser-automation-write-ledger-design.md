@@ -717,12 +717,71 @@ L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**
 贝塞尔飞行时间（可达数百毫秒）内页面挪动仍会点到从未被探测过的元素而返回 `{ok:true, channel:'cdp'}`。
 这是 §8.3 A1 的剩余半径，归下一批。
 
+## 7.7 批15 验收实证（提交后复验做实 + B 链路「重复」判定的一处静默丢消息入口）
+
+**先结清批14 的账**：收尾 commit `32d1bce4`（7 个路径）之后按同一规矩回 `--shared` 影子克隆复验，
+这一轮把「独立装」做透了——删掉那根指向工作树的 `node_modules` 软链，在克隆里真跑
+`npm ci`（111 包 / 3s / `acorn@8.18.0` 落地），再跑全量 ⇒ **12 文件 131 用例 rc=0、无
+Unhandled Errors**（`/tmp/b17_npm_ci.log`、`/tmp/b17_js_ci.log`）。比上一轮强一档：上一轮仍是
+「借工作树的依赖树跑克隆的代码」，这一轮才是「换台机器 `npm ci` 能不能跑」。Go 侧同树
+`go build ./...` rc=0、`go vet ./internal/browser_automation/...` rc=0、
+`browser_automation` 三包 `controller 1.750s / platform 0.704s / service 138.045s` 全 ok
+（`/tmp/b17_go_build.log`、`/tmp/b17_go_clone_test.log`）。**一条环境成因先记下**：第一次跑
+`internal/bridge` 十余条红，根因是我这次漏导出 `POSTGRES_TEST_PASSWORD`
+（`FATAL: password authentication failed for user "admin"`），补 env 后同树两包全绿 ⇒ 红先排环境前提，
+别急着改代码。
+
+**同一份调研的另一条腿照出真缺陷（读码 → 跑出来 → 修 → 反向验证，一轮走完）**：
+`channelgw.IsDuplicateReason` 用 `strings.Contains` 嗅探 6 个关键词（`msg_id already exists` /
+`intercepted` / `echo` / `duplicate` / `skip` / `already exists`），命中即让 HTTP 与 WS 两条传输层
+回 `Duplicate=true`；而扩展侧的确认条件是 `accepted || duplicate`
+（`user-web/bridge/src/core/uplink.js:65`）——**一次误判的代价是那条 event_id 永久不再上报**。
+子串嗅探的入口不在别处，就在错误文案里：`internal/service/inbox_ingress.go:856` 把 per-event
+失败整段包成 `"batch handle error: %v"`（此时 `Accepted=false`），而 `persistMessage` 的失败原文是
+`持久化消息失败: <DB 原文>`，**PG 唯一键冲突的原文天然含 `duplicate key value violates unique
+constraint`**。⇒ 一次「没存进去」被翻成「已经存过了」，客户端从此闭嘴。
+
+这不是推演：在影子克隆里把真文案喂进函数跑出来 `true`（临时用例
+`zz_b17_sniff_proof_test.go`，证完即删；永久版进
+`internal/channelgw/dup_outcome_b17_test.go`，其中一条断言就是这段 PG 原文）。
+
+**修法（本泳道可改的三个文件，零跨协议改动）**：判定权从「任意子串」收成「**结论短语前缀**」——
+`duplicateOutcomePrefixes` 逐字对齐真实产出方（`msg_id already exists` /
+`msg_id exists with different direction` / `content_hash already exists` /
+`intercepted by middleware` / `self-echo` / `self echo` / `duplicate`），任意位置命中一律不算。
+收紧方向刻意选**漏判侧**：漏判 = 客户端重报，服务端下一轮用真结论短语作答，**收敛**；
+误判 = 客户端停发，**不可恢复**。顺带修掉一条旧漏判：`:474` 的「msg_id 命中但方向冲突」分支
+不含任何关键词，旧实现判非重复 ⇒ 客户端每轮巡逻都重报同一条、服务端每次再走一遍钩子2。
+
+两条行为变化之外的都保持原样：`IsDuplicateReason` 签名与两条调用点未动，`webhook.go` 那两处
+直接置 `Duplicate: true` 的路径不经此函数。测试面：`internal/channelgw` 与 `internal/bridge`
+各有一张**假设文案关键词表**（`protocol_test.go`、`handler_http_ack_test.go`）随契约一起改，
+理由写在测试注释里（`skip due to cooldown` 冷却跳过根本不是重复；`record already exists` 不是任何
+产出方会写的文案，留着就等于把"任意文案都可能命中"写进契约）。
+
+**反向测试（`/tmp/b17_mut_gate.py`，跑在克隆树）**：M1 把实现退回旧的子串嗅探 →
+`TestIsDuplicateReason`、`TestIsDuplicateReason_只认重复结论短语不认任意子串`、
+`TestIsIngestDuplicate_ReasonKeywords` 三条同时红；M2 抽掉 `content_hash already exists` 前缀
+（收紧过头的等价变异）→ 后两条红。两条都带 `ran=3/3 skip=0` 对照，每处注码 `cp` 备份 +
+逐次 md5 比对还原（`1a86e01b…` 三次一致），还原后对照腿 rc=0。**门禁**：`gofmt -l` 两包为空、
+`go vet ./internal/channelgw/... ./internal/bridge/...` rc=0、两包 `-count=1` 全 ok。
+
+**仍未了结（不当作已修完）**：① 正解是**结构化 outcome 枚举**（`IngestResult.Outcome`），
+把"是否重复"从文案里拿出来——它要改 `service.InboxIngressResult` 与全部产出点，
+落在 `internal/service/inbox_ingress*.go`（并行会话在途文件，本泳道不改）；
+② 前缀表是**穷举式契约**，新增产出方写新文案时会静默漏判（方向安全，但要有门）：
+`grep` 过一次全仓 `(result|res|r|decision)\.Reason = "`，当前命中集已全部覆盖，
+新增文案时必须同步 `duplicateOutcomePrefixes`；③ 调研1 的 C1（`event_id` 用内容哈希 ⇒
+同会话同文本第二条被永久吞）与 C2（中间件拦截 ⇒ 消息**根本不入库**，`:494-507` 在
+`persistMessage` 之前 return，"证据消失"）两条经读码复核为真，但落点全在
+`inbox_ingress*.go`（BLOCKED），维持 §8.3-9 的移交口径，不在本轮动。
+
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
 取证方法：六路并行 agent，每路给「本仓现状线索 + 待查同行清单」，要求每条机制带真实字段名与来源 URL、
 自标 `[doc]/[src]/[blog]/[unverified]`、并列 `未取到`。报告落盘 `/tmp/peer-research/0{1..6}-*.md`（六份）。
 
-### 8.1 先记账：agent 报来的「本仓现状」有五条是错的，逐条读码纠正
+### 8.1 先记账：agent 报来的「本仓现状」有七条不成立，逐条读码纠正
 
 **规则：同行证据可信，agent 对本仓的 file:line 断言一律自己读一遍再用。** 这一轮里 6 份报告有 2 份
 给我们仓库编了不存在的锚点，其中一份的「P0 结论」整个建立在假锚点上。
@@ -734,6 +793,8 @@ L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**
 | 3 | "动作前只判 `length>0`，没有 visible/enabled/hit-test" | `actionabilityCheck`（`primitives.js:12-26`）已覆盖 `display/visibility/opacity`、零尺寸盒、`disabled`/`aria-disabled`、**`elementFromPoint` 遮挡**四项；缺的只有 `stable`，且代码里已写明为什么缺与替代手段 | `primitives.js:12-26`（含 23-24 行注释） |
 | 4 | "桥接扩展 SentCache 是内存态，扩展重启即失效" | **持久化到 `chrome.storage.local`**（key `bridge_sent_${channel}`），`load()`/`flush()` 成对；只有条数上限 `sentCacheMax:2000`、无 TTL | `user-web/bridge/src/core/downlink.js:11-53`、`constants.js:248` |
 | 5 | "90 天保留期清理会截断 `browser_command_log` 内容字段" | command_log 是**整行删除**（`PruneBefore` 分批 5000）；被"清空文本、保留行"的是 `llm_plans` 的快照大字段 | `repository/command_log.go:45-60`、`service/retention.go:44-56` |
+| 6 | 调研1-C4："嗅探表里的 `skip`/`already exists` 会命中**非重复**语义的 reason，例如 `inbox_ingress.go:700` '跳过本次（前端将重新上报…）' 与 `:516` 'persisted only'" | **两处举证都不成立**：`:516` 的文案是 `sender_type=system; persisted only (系统消息不触发 AI)`，不含任何英文关键词；中文 reason 更不命中；而 `handler_http.go:617` 那条 `internal_only: persisted only` 在 `:619` 直接 `continue`，**根本走不到** `isIngestDuplicate`。报告把"关键词表很脆"这个正确的直觉，配上了三个不存在的实例 | `inbox_ingress.go:450-570`、`handler_http.go:605-660` 逐行读 |
+| 7 | （承 6，替代结论）真正的命中面在**错误文案**上，不在业务文案上 | `inbox_ingress.go:856` 把 per-event 失败包成 `batch handle error: <原因原文>` 且 `Accepted=false`，PG 唯一键冲突原文自带 `duplicate key value violates unique constraint` ⇒ 子串命中 ⇒ 前端 `accepted\|\|duplicate` 停发一条从未落库的消息。**跑出来的**：把真文案喂进函数返回 `true` | `/tmp/b16gate` 临时用例（跑完删除）→ 永久断言 `channelgw/dup_outcome_b17_test.go`；详见 §7.7 |
 
 自我纠正第 5 条也说明：§7.5 里"命令日志截断"的措辞不准，正确表述是"整行删除 + llm_plans 清文本"。
 
@@ -774,7 +835,7 @@ L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**
    （换 selector / 新会话回读并匹配作者 + 内容哈希），扩展上报只允许写 `accepted`；
    回读前先比 `PageFingerprint(url, element_count, text_hash)` 式指纹，**指纹未变即判 `unverified`**。
 
-### 8.3 差距矩阵与取舍（每条左列都经本泳道读码复核，未复核的一律不进）
+### 8.3 差距矩阵与取舍（19 行，每条左列都经本泳道读码复核，未复核的一律不进；#11 为「被子 agent 证伪故不进矩阵」的反例记录）
 
 `采纳`=本批改；`拒绝`=给出理由并留档；`BLOCKED`=落点在并行会话在途文件（`git status` 实测仍脏）。
 
@@ -791,3 +852,11 @@ L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**
 | 9 | 入口去重键必须带会话维度、窗口必须 ≥ 上游重投窗、且与副作用同事务（Stripe/Azure/企微/飞书一致否证现状） | `inbox_ingress_ingest.go:126-132` 键内无 `conversation_id`、`InboxContentDedupTTL=5min`；hub 层内容命中无时间界 | **BLOCKED**：两文件 `git status` 实测仍为并行会话在途（`M` / `??`），本泳道不改，维持 §6 移交 |
 | 10 | `officialEventID` 优先级高于内容哈希 | `webhook_event_key.go` 未跟踪（在途），且它含 `event_type` → 同一次推送多事件会算多条；`self/agent` 巡逻回环消息根本无 event_id，仍需内容兜底 | **BLOCKED + 认知修正**：§6-3 说的"正确方向"不等于"能覆盖我们主要流量" |
 | 11 | agent 报告称 `BridgeOutboxMessage.Extra` 是 `json:"-"`（扩展拿不到 `dm_target`）、称存在 `reAckDeliveredOnCacheHit`/`InboxConversationID`/`ErrOutboundAckScopeMismatch` | 实测：`Extra map[string]any json:"extra,omitempty"`（`channelgw/protocol.go:157`）且 HTTP 侧 `handler_http.go:770` 真的带出 `extra`；后三个符号**全仓 0 命中** | **不进矩阵**：子 agent 对本仓的断言被证伪，本轮第 2 次。教训回灌记忆 |
+| 12 | 「闸门所依据的记录本身可以静默失败」是同一类缺陷：K8s `sideEffects` 把 `Unknown` 与 `Some` 同等对待、admission `failurePolicy` 默认 `Fail`；审批/幂等建立在"可能没写进去的行"上等于没有 | `recordSubmitState`（`write_ledger.go:39-48`）写失败**只 Warn、不返回 error**，四个调用点（`executor.go:939/969/982`、`write_ledger.go:207`）拿不到失败事实 ⇒ 「send 已跨越但台账没落」时下一轮 `FindSubmitAttempt` 查空，双发闸门整体消失，而 §3.1 给这张表的定性是"重发闸门的唯一事实来源" | **采纳（P1）** A7：`recordSubmitState` 返回 error，写失败即给该 session 置 `writeLedgerBroken`，其后所有写步**在派发前**拒绝（零帧下发）、错误文案含"台账未落，本会话写能力已降级"。不对称决定取舍：写步失败**可见、可人工重跑**，双发**不可见、不可撤销** |
+| 13 | 闸门查询失败要 fail-close（同上，`failurePolicy: Fail` 就是这条默认值） | `guardResubmit`（`write_ledger.go:71-74`）`err != nil` 时 `Warnf` + `return nil` **放行**；`:61-62` 注释明写这是刻意的（"DB 抖动不该把整条自动化链路锁死"）⇒ 属**决策复审**而非隐藏 bug：同行口径下"抖动期闸门消失"正是它付不起的那一侧 | **采纳（P1）** A8：写步判定的这条分支改 fail-close，与 A2 的 `send_gate` 早返同形（步判 failed、不记尝试）；只改这一条，`appendCommandLog` 的 Ignore 语义不动（那是增强件不是闸门） |
+| 14 | 审批必须进审计链：GitHub deployment review / CloudTrail 的"谁、何时、对哪份载荷" | `SessionService.Confirm`（`service/session.go:99-108`）只调 `SignalConfirm`，**一帧都不落**；而 `direction=judge` 这一类**早就存在**（`executor.go:527-529` 写 judge 帧、`controller/session.go:79` 已支持 `?direction=judge` 过滤、I5 导出取全量） ⇒ 缺口只是"没人给它写"，不是"没地方写" | **采纳（P2）** A9：放行成功补一帧 `judge`，payload **只放 `text_hash`**（`HashWriteText`）不放正文——I5 导出会把正文带进离线件 |
+| 15 | 挂起态要可跨进程查证：Temporal 的 signal 落 history、任何 worker 都能投递；LangGraph 的 interrupt 进 checkpoint store | D7 挂起是**进程内**裸 map（`executor.go:74-75` `confirmRegistry`）+ `ConfirmPending bool gorm:"-"`（`model/session.go:37` 不落库）⇒ 多副本时 confirm 落到别的副本只会得"没有待确认的提交点"，与"根本没开闸门"同一句文案；进程重启后挂起协程消失，靠 `stale_reconcile.go` 对账收敛（不砖化，但人看不到原因） | **采纳（P2）** A10：挂起时补一帧 `d7_wait{expires_at, step_index, text_hash}`，`SignalConfirm=false` 且库里存在**未到期** `d7_wait` ⇒ 回 `gate_on_another_instance`。**零 DDL**（`browser_sessions` 连 `updated_at` 都没有，加列会牵动 `completed_at` 口径）；`expires_at` 只当"写下的期望"，必须与内存真值 AND 起来用 |
+| 16 | 「取不到副作用分类」不等于「无副作用」（承 12 的 K8s `Unknown`） | `isWriteStep`（`write_ledger.go:119-142`）在 `:123` 写作 `locs, _ := platformStepLocators(task)` **把错误丢掉**：平台适配器未注册/取表失败时三条推导全体不命中，只剩 `post_comment` 与显式 `is_write` 声明 ⇒ **retries=0、双发闸、D7 三道同时静默消失**。`:153-154` 注释只论证了"不会误判成写"，没论证漏判的代价 | **采纳（P1）** A11：取表错误升为第三态 `unknown`，处置等同 `irreversible`；**收窄条件**：只有"取表报错"才是 `unknown`，单纯没命中 locator 仍判 `none`（保住批7 刻意收窄的那条：交互搜索腿不得被判写而白丢重试能力） |
+| 17 | 重投要保留同一身份（Pub/Sub "A redelivered message retains the same message ID"），而**内容当身份**的前提是"同一条内容不会第二次真实出现"——这个前提在聊天里不成立 | `computeMsgID` 就是 `contentHash(channel\|conversationId\|content)`（`user-web/bridge/src/core/uplink.js` `enqueue` 里缺省填 `event_id`），服务端钩子2 按 `msg_id + conversation_id` 判等（`inbox_ingress.go:457-484`）⇒ **同一会话里第二条"好的"必然被吞**，且这是"说了没回"在 B 链路里比 Redis 更早、更永久的一层 | **登记待对齐**：改点在干净的 `uplink.js`，但 `computeMsgID` 与服务端 `ContentHashMsgID` **严格同源**（函数注释自证），单边改会把幂等判定裂成两套；`types.js` 的跨语言契约注释也得同步。验收口径先立：同会话两条同文本 ⇒ 2 行；同一条重投（DOM timestamp 不变）⇒ 仍 1 行 |
+| 18 | "接受但不再执行"是默认档，"根本不落库"几乎没人这么做（sidekiq-unique-jobs 把**锁时机**与**冲突怎么办**拆成两个维度：`until_executing`/`while_executing`… × `on_conflict: :log/:raise/:reject/:replace/:reschedule`） | `decision.Blocked` 时两条分支（单条 `inbox_ingress.go:494-507`、批量 `:944-957`）都在 `persistMessage` **之前** `return` ⇒ 消息**不入库**，只回一个 `Accepted=true` 的好看回执 ⇒ 排障时"客户说了没回"在库里查不到任何痕迹（证据消失） | **BLOCKED**：两文件均为并行会话在途（承 §8.3-9 同一移交面）。移交口径：`IsDup` 分支改"入库 + 抑制 AI"、`IsSelfEcho` 维持不落库（回声落库会污染会话） |
+| 19 | 幂等层命中应**回放首次结果**而不是重新判定，且"是否重复"要由结论决定而非文案（Stripe 存首次 status+body 原样回放） | `IsDuplicateReason` 用子串嗅探 reason，而 reason 里混得进**落库失败原文**（§8.1-7）⇒ 误判方向是"永久停发" | **采纳（P0）批15 已落**：判定收成结论短语前缀 + 永久断言 + 两条反向腿（§7.7）。**正解仍是 outcome 枚举**，要改 `InboxIngressResult` 及全部产出点 ⇒ 落点在在途文件，随 18 一起移交 |
