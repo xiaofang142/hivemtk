@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -40,6 +41,7 @@ type ReplayStats struct {
 	OfflineChannels  int              `json:"offline_channels"`
 	ReplayedMessages int64            `json:"replayed_messages"`
 	FailedMessages   int64            `json:"failed_messages"`
+	SkippedOffline   int              `json:"skipped_offline_channels"`
 	OfflineSnapshots []OfflineChannel `json:"offline_snapshots,omitempty"`
 	StartedAt        time.Time        `json:"started_at"`
 	FinishedAt       time.Time        `json:"finished_at"`
@@ -64,6 +66,40 @@ func partitionBridgeChannels(rows []repository.BridgeChannelRow) (on, off []Offl
 
 // bridgeStatusOffline bridge_accounts.status 的离线态字面量（与 bridge 包 Upsert/SetOffline 同值）
 const bridgeStatusOffline = "offline"
+
+// --- 补投门：扩展此刻是否挂在 SSE 上 -------------------------------------
+//
+// status/last_sync_at 都不能当这道门的判据：
+//   - 入站通道的 upsert 与心跳会按「最后收到的渠道键」把整串账号刷成 online，
+//     扩展只是没连 SSE 时它们照样显示在线（webhook 类渠道甚至根本没有 SSE）；
+//   - last_sync_at 只反映最后一次写入，不反映能不能推。
+//
+// 唯一权威来源是 SSEBus 的订阅表——流活着才推得出去。service 不能 import bridge
+// （循环依赖），故由 bridge 的装配口 SetOutboxQuerier 注入探针，与认领器同一处、同一口径。
+
+// bridgeChannelOnlineProbe 该渠道账号此刻是否有活着的 SSE 流。
+var bridgeChannelOnlineProbe func(channel, accountID string) bool
+
+// probeWarned 探针缺件是否已告警过：缺件是一次性装配问题，不该每轮每渠道刷一条。
+var probeWarned atomic.Bool
+
+// SetBridgeChannelOnlineProbe 由 bridge 包在装配 SSE 出站口时调用一次。
+func SetBridgeChannelOnlineProbe(fn func(channel, accountID string) bool) {
+	bridgeChannelOnlineProbe = fn
+	logger.Info("[BridgeReplay] SSE 在线探针已注册：延后出站仅补投给有活连接的渠道")
+}
+
+// bridgeChannelOnline 探针缺件时放行：装配缺件是「门没加」，不是「所有渠道都离线」，
+// 后者会把可达的延后出站永久扣在待办集合里。缺件必须留痕而不是静默兜底。
+func bridgeChannelOnline(channel, accountID string) bool {
+	if bridgeChannelOnlineProbe == nil {
+		if !probeWarned.Swap(true) {
+			logger.Warn("[BridgeReplay] SSE 在线探针未注册，补投门退化为全量放行（掉线渠道的历史行会被烧进判弃）")
+		}
+		return true
+	}
+	return bridgeChannelOnlineProbe(channel, accountID)
+}
 
 // detectBridgeChannels 取一次渠道账号快照，切成在线/离线两批。
 func (s *BridgeOfflineReplayService) detectBridgeChannels(ctx context.Context) (on, off []OfflineChannel, err error) {
@@ -165,14 +201,20 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 
 	perChannelLimit := 50
 	for _, ch := range channels {
+		// 补投门：扩展没挂着 SSE 流就没人在另一端收。这一条渠道整串跳过、一行都不碰，
+		// 行留在 pending 等重连后的那一轮；进去走一遍状态机只会把历史行烧成判弃。
+		if !bridgeChannelOnline(ch.Platform, ch.AccountID) {
+			stats.SkippedOffline++
+			continue
+		}
 		r, f := s.ReplayDelayedOutbound(ctx, ch.Platform, ch.AccountID, perChannelLimit)
 		stats.ReplayedMessages += r
 		stats.FailedMessages += f
 	}
 
 	stats.FinishedAt = time.Now()
-	logger.Infof("[BridgeReplay] 回扫完成: scanned=%d online=%d offline=%d replayed=%d failed=%d duration=%s",
-		stats.ScannedChannels, stats.OnlineChannels, stats.OfflineChannels,
+	logger.Infof("[BridgeReplay] 回扫完成: scanned=%d online=%d offline=%d skipped_no_subscriber=%d replayed=%d failed=%d duration=%s",
+		stats.ScannedChannels, stats.OnlineChannels, stats.OfflineChannels, stats.SkippedOffline,
 		stats.ReplayedMessages, stats.FailedMessages,
 		stats.FinishedAt.Sub(startedAt).Round(time.Millisecond))
 	return stats

@@ -236,6 +236,17 @@ func (b *SSEBus) SetOutboundClaimer(c OutboundPushClaimer) {
 		b.claimTimeout = service.InboxOutboundClaimTimeout
 	}
 	b.mu.Unlock()
+	// 同一处把「谁在线」交给回扫补投门：推送认领与补投门必须读同一张订阅表，
+	// 分两处注入就会漂移（一处以为可达、另一处判无人在线）。闭包晚绑定 GlobalSSEBus，
+	// 测试换总线实例也不会指向旧对象。认领器撤走（装配缺件）时探针一并撤走，
+	// 让 service 侧走「缺探针 ⇒ 放行 + 一次性 Warn」的退化路径。
+	if c != nil {
+		service.SetBridgeChannelOnlineProbe(func(channel, accountID string) bool {
+			return GlobalSSEBus.HasSubscribers(channel, accountID)
+		})
+	} else {
+		service.SetBridgeChannelOnlineProbe(nil)
+	}
 	if c == nil {
 		logger.GetLogger().Warn().
 			Msg("[SSE] 出站认领器未注入，new_outbound 退回不认领直推（SSE/轮询双路重投面未收口）")
@@ -263,6 +274,20 @@ func (b *SSEBus) hasSubscribersFor(ev SSEEvent) bool {
 		return true
 	}
 	return key != "" && len(b.subs[key]) > 0
+}
+
+// HasSubscribers 该账号此刻是否有活的 SSE 连接（只看账号级维度，与 Subscribe 同 key 口径）。
+//
+// 这是「扩展在线」的唯一权威信号：bridge_accounts.status 要靠 SSE 生命周期去翻，
+// last_sync_at 只反映最后一次写入，二者都不能当门用。
+func (b *SSEBus) HasSubscribers(channel, accountID string) bool {
+	if channel == "" || accountID == "" {
+		return false
+	}
+	key := channel + ":" + accountID
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subs[key]) > 0
 }
 
 // claimForPush 判定这条 new_outbound 此刻归不归本次推送，并把行置 inflight。
@@ -411,8 +436,48 @@ func (h *SSEHandler) SetMaxDuration(d time.Duration) {
 	}
 }
 
+// bridgeAccountStateWriteTimeout 在线位落库的写超时：状态写不进去只报警，绝不断流。
+const bridgeAccountStateWriteTimeout = 2 * time.Second
+
+// touchBridgeAccountOnline 刷新账号在线位（建流时一次，此后每次心跳一次）。
+func touchBridgeAccountOnline(ctx context.Context, channel, accountID string) {
+	if GlobalBridgeAccountRepo == nil || channel == "" || accountID == "" {
+		return
+	}
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bridgeAccountStateWriteTimeout)
+	defer cancel()
+	if err := GlobalBridgeAccountRepo.TouchLastSync(wctx, channel, accountID); err != nil {
+		logger.Ctx(wctx).Warn().Err(err).
+			Str("channel", channel).Str("account_id", accountID).
+			Msg("[SSE] 在线位刷新失败（status/last_sync_at 未落库）")
+	}
+}
+
+// markBridgeAccountOffline 账号的最后一条流退出时置离线。
+//
+// 必须先看总线还有没有别的活订阅：同一账号常有多条并发流（多标签页/重连重叠），
+// 无条件置离线会让还在收消息的渠道看起来掉线。
+func markBridgeAccountOffline(ctx context.Context, channel, accountID string) {
+	if GlobalBridgeAccountRepo == nil || channel == "" || accountID == "" {
+		return
+	}
+	if GlobalSSEBus.HasSubscribers(channel, accountID) {
+		return
+	}
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bridgeAccountStateWriteTimeout)
+	defer cancel()
+	if err := GlobalBridgeAccountRepo.SetOffline(wctx, channel, accountID); err != nil {
+		logger.Ctx(wctx).Warn().Err(err).
+			Str("channel", channel).Str("account_id", accountID).
+			Msg("[SSE] 离线位置写入失败（status 将停在 online 直到下次心跳刷新）")
+	}
+}
+
 func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
-	channel := c.Query("channel")
+	// 渠道必须归一：ingest 侧写 bridge_accounts / 广播 SSE 都用规范渠道，
+	// 这里原样透传别名（douyin_web）会让订阅挂在另一个键上——既收不到广播，
+	// 在线位也刷新不到账号行，补投门再把这条明显在线的流判成离线。
+	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
 	lastEventID := c.GetHeader("Last-Event-ID")
 	if lastEventID == "" {
@@ -482,7 +547,13 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 		Str("account_id", accountID).
 		Str("bus_key", channel+":"+accountID).
 		Msg("[SSE] subscribed to SSEBus")
+	// defer 顺序即语义：LIFO 下后注册的先执行 —— 必须先摘掉本流订阅，再判
+	// 「该账号最后一条流是否退出了」。反序注册时判离线会看见自己那条还挂着的订阅，
+	// 账号永远摘不掉 online，补投门就此失真。
+	defer markBridgeAccountOffline(ctx, channel, accountID)
 	defer busCancel()
+
+	touchBridgeAccountOnline(ctx, channel, accountID)
 
 	if h.fetcher != nil {
 		events, newID, err := h.fetcher.FetchOutboxSince(ctx, channel, accountID, newLastID)
@@ -545,7 +616,9 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 				return
 			}
 			flusher.Flush()
-
+			// 心跳即「这条流还活着」的证据，顺手刷新在线位：只在建流时刷一次的话，
+			// 长连接稳定运行的账号会随 last_sync_at 老化看起来重新掉线。
+			touchBridgeAccountOnline(ctx, channel, accountID)
 		case ev, ok := <-busCh:
 			if !ok {
 				// channel 被关闭：若继续 select 会立即变 hot-spin 空转烧 CPU，直接结束流

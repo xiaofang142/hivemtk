@@ -132,6 +132,11 @@ func (r *BridgeAccountRepository) SetOffline(ctx context.Context, channel, accou
 		Updates(map[string]any{"status": "offline", "last_sync_at": now}).Error
 }
 
+// TouchLastSync 心跳/活跃：刷新最后同步时间，并连带翻回在线位。
+//
+// 只写时间戳不够：status 停在 SetOffline 写下的 "offline" 后再无人改写，
+// 于是 isOnlineByLastSync 第一句就判离线，管理面与回扫的在线门读到的都是假值。
+// 心跳即在线是 SetOffline 的对偶。
 func (r *BridgeAccountRepository) TouchLastSync(ctx context.Context, channel, accountID string) error {
 	now := time.Now()
 	dbCtx := context.Background()
@@ -140,7 +145,7 @@ func (r *BridgeAccountRepository) TouchLastSync(ctx context.Context, channel, ac
 	}
 	return r.db.WithContext(dbCtx).Model(&model.BridgeAccount{}).
 		Where("channel = ? AND account_id = ?", channel, accountID).
-		Update("last_sync_at", now).Error
+		Updates(map[string]any{"last_sync_at": now, "status": "online"}).Error
 }
 
 const OnlineGraceWindow = 30 * time.Second
