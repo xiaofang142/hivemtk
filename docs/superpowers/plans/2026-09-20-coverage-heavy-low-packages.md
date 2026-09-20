@@ -2823,9 +2823,54 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
   用例规避方式：`TestListUserSessionsFilters` 内各会话 platform 取值互异，不依赖 ID 唯一性；
   `-count=10` 已稳定绿。真正修复（追加随机后缀/计数器）留待单独批次。
 
+## Findings 处置（2026-09-20 第二轮：用户指示「发现问题全部处理 处理后提交推送」，本段起解除"生产代码一行不改"）
+
+上面每条 Finding 的处置结果。全部走「真库/真 HTTP 现场先跑出红 → 最小实现转绿 → 行为级变异逐条杀死 →
+`--shared` 影子克隆复验 → 双远端推送」，变异不复用编译期错误（除签名变更这一类只能编译红的除外）。
+
+| 号 | Finding | 提交 | 处置 |
+|---|---|---|---|
+| R1 | v3.36.0 触发器早于其依赖函数 | `a3054f6d` | 语句顺序修正 + 建表后回读 `pg_trigger`/`pg_proc` 断言对象真存在；函数体不存在即报错 |
+| R2 | v3.22.0 NULL→int 中止、v3.3.0 列名漂移 | `136b97aa` | `sql.NullInt64` 承接长度列；索引列名对齐模型 `built_in`；迁移链 Up 首次全绿 |
+| R3 | v3.25.0 / v3.26.0 从未注册 | `0cb35ee5` | 补 `register(...)`，建表 DDL 与模型逐列对齐（回扫用的 `attempts`/`sent_at` 即在此列） |
+| R4 | merchant key 每次重启随机 → 身份漂移、`contributorIdentity` nil panic | `16163bf2` | merchant key 落盘复用；派生失败以 `error` 收口并上抛，不再 panic |
+| R5 | 哨兵无消费方 + 密钥文件 CWD 依赖 + 204 口径 | `7a37f6b8` | `%w` 包进 4 处抛点；新增 `DegradeReason` 给 sync/health 两口用（"没接平台"≠"接了挂了"）；密钥改随 `MERCHANT_STATE_DIR`；读失败上抛。**204 子项经平台侧源码复核否决**：`response.Error` 也写 HTTP 200，204 只出现在 CORS OPTIONS 预检，不在任何业务响应上 |
+| R6 | 会话 ID 同参碰撞、否定语义丢失 | `59313038` | ID 追加进程内计数器（同参背靠背不再覆盖）；打分先剥「不+正面词」再计 |
+| R7 | 活码轮询 goroutine 无 recover | `5393b8dc` | 轮询体补 recover，单次 panic 只丢一轮不再终止整进程 |
+| R9 | 贡献者客户端不接平台信封 | `e4e36f77` | 严格 `{code,msg,data}`：token 从 `data.token` 取（旧实现读顶层 ⇒ 提交链路从未通）；`code!=200` 判失败（旧实现 HTTP 200 即成功 ⇒ 拒绝被当成功）；注册即签发 + 401 自愈重登（平台 JWT 中间件发真 401，而本客户端缓存 24h） |
+| R8 | 离线回扫 SQL 引用无人建立的列 | 本次 | 见下 |
+
+**R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
+真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
+（`v3_26_0_reach_tables_migration.go` / `model/reach_delayed_outbound.go`）从来没有
+`receiver_id`/`msg_type`/`event_id`/`retry_count`/`replayed_at` 这五列，而仓储的两条 `UPDATE` 写后两列、
+行结构体宣称有前三列。后果不是"报错"而是**静默不收敛**：调用方用 `_ =` 吞掉 42703，行永远停在
+`pending`，cron 每 5 分钟（`internal/pkg/cron/cron.go:95`）把同一条 AI 回复再投一次；
+同时 `msg_type` 恒为空 ⇒ 落进 `message_hub` 的出站行没有类型，前端渲染成空气泡。
+
+处置：行结构体收敛到真实列（含 `kind`/`cards`/`attempts`）、列表查询写全列名并加
+`send_at <= now`（原来不看 `send_at`，等于在免打扰时段把"次日窗口开放"的回复提前推出去）、
+新增 `ClaimDelayedOutboundForReplay` 把 `pending→sending` 的 `RowsAffected` 当入场券
+（H-3 主链路 drain 同一批行，两边直接投递就是同一份内容双发）、成功收口 `sent`+`sent_at`、
+失败回 `pending` 并 `attempts+1`+`last_error`、次数用尽判 `failed` 终态、四处回写错误全部打日志；
+带富卡的行让给主链路（桥接管道只发文本，强投等于丢卡）。
+交付：`bridge_offline_replay_repo_test.go` 5 例 + `bridge_offline_replay_test.go` 3 例（真 PG + 真出站管道），
+17 处行为变异全被杀死（控制组 ran=8/skip=0），`./internal/repository/` 整包 100s 绿。
+回归面（本批改动的全部生产符号只被这两个文件用到，仍按整包跑）：`./internal/service/` 全量
+`-p 1 -count=1 -timeout 900s` = **975.9s / 748 PASS / 0 FAIL / 0 SKIP**（带 `-test.v` 计数，非聚合行）。
+
+**本轮新登记（未处置）**
+- **商户客户端 `doRetry` 同样只认 HTTP 200**：与 R9 同族，但它在 `RegisterMerchant` 等链路上把
+  平台拒绝（HTTP 200 + `code 400`）读成成功。影响面比 R9 宽——现有用例与若干 handler 直接回裸 body，
+  严格化前需先分清"哪些端点走信封"，故单独排期而非顺手改。
+- **`reach_delayed_outbound` 上并存两条 drain**：H-3 主链路（按 `send_at` 全局到期投递）与离线回扫
+  （按"渠道 10 分钟无消息"判定后补投）。抢占票已让两者互斥，但回扫仍会在渠道**确实离线**时投递，
+  是否该改成"渠道恢复在线才补投"属产品口径，未擅动。
+
 ## 阻塞与不做什么
 
 - `user-web/vite.config.js` 的 SPA chunk 拆分、`browser_automation` 冷启动明文（该目录仍有并行会话未提交改动）、
   TTL 产品口径、chain 复跑（需重启共享服务）—— 均**不在**本排期内，不碰其文件。
 - 需要真实 LLM/Embedding Key 的 `rag/core`、`rag/service.Query` 不制造离线假断言。
-- 生产代码一行不改：本排期只新增 `*_test.go`；发现缺陷记 Findings 供后续单独批次处理。
+- ~~生产代码一行不改：本排期只新增 `*_test.go`；发现缺陷记 Findings 供后续单独批次处理。~~
+  **该约束已由用户 2026-09-20 指示解除**，处置见上节；原口径仅对本排期 Task 1–8 的补测提交成立。
