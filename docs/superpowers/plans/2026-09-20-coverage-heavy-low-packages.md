@@ -2983,6 +2983,59 @@ R8 修的是回扫**取行/收口**那两条 SQL 的假列，这次红在同一�
 service ran=10 全绿，逐格还原后 md5 比对；`--- FAIL: panic: test timed out` 这种"以挂代红"
 的杀法不计，已把测试里的阻塞读键改成限时读，重跑后 T4 以 `--- FAIL (2.25s)` 干净杀死。
 
+**R16 实况：R15 那道门把下行读漏了一半**（`internal/bridge/{sse.go,handler_http.go}` + `internal/service/bridge_offline_replay.go`，`3693e1da`）：
+R15 把可达性等价于"这个账号在本进程的 SSE 订阅表里"，但下行有两条路，另一条不留订阅：
+
+1. **轮询下发是产品的一部分，不是历史残留。** `user-web/bridge/src/core/polling-loop.js`
+   在服务端 `capabilities.sse_enabled=false`、或所有渠道的 SSE 都启动失败时回退到
+   每 1.5s `GET /api/bridge/outbox`（`BRIDGE_THREE_CHANNEL.outboxPollIntervalMs`）；
+   `docs/TROUBLESHOOTING.md:259` 还给运维写了主动这么配的路子（`FF_SSE_BRIDGE=0` 验证反代缓冲，
+   flag 默认开见 `internal/pkg/featureflag/flag.go:69`）。而 `GetBridgeOutbox` 既不建订阅、
+   也不刷 `last_sync_at`（当时全仓 `TouchLastSync` 只有 SSE 那一个调用方）⇒
+   这串渠道在门眼里永远不可达：延后出站**逐轮整条跳过、一行不碰**，而且不报错——
+   R15 想躲的"烧成判弃"没发生，发生的是"永不补投"，两者都不可观测。
+   这条不是推测：门改完之后 `reach_delayed_outbound` 的唯一读者就只剩这道门。
+2. **修法是把真值做成两个信号取或**，落在 bridge 侧的 `BridgeChannelOnline(ctx, channel, accountID)`：
+   活 SSE 订阅（命中就不读库）OR 账号行在宽限窗内同步过（`IsOnline` = `status != offline` 且
+   `last_sync_at` 距今 < `OnlineGraceWindow`）。渠道先归一再查两边；
+   仓储未装配 / 读库失败一律**放行**，与"探针缺件放行"同一口径。
+   `GetBridgeOutbox` 补上 `touchBridgeAccountOnline`（轮询即同步，语义与 SSE 心跳对偶），
+   顺带把入参渠道归一——`message_hub` 只存规范渠道，别名入参会让轮询恒拿 0 行。
+   写在线位是这次请求里的第 3 次写：`ClaimPendingOutbound` 本来就无条件先跑一次
+   inflight 回收 UPDATE 再跑认领 UPDATE（`message_hub_inbox_outbound.go:43-67`），
+   故没有为省这一次写再加"订阅在场就不刷"的分支。
+3. **探针签名带 ctx**：探针如今要读库，`RunOnce` 的 ctx 半路换成 `context.Background()`
+   就同时丢掉调用方的截止时间与 trace 链路（S1 变异格钉住）。
+4. **别名键那一半：现网取证后降级为防御性收口。** 本条最初的怀疑是"`bridge_accounts` 里可能有
+   历史别名渠道行，被新门永久跳过"。查下来不成立：`bridge_accounts` 70 行渠道全为规范值
+   （`douyin/kuaishou/tiktok/xianyu/xiaohongshu`，零别名；`v3.17.1` 曾把旧基础值改成 `*_web`、
+   `v3.18.0` 又统一回规范值，两版都注册），`reach_delayed_outbound` 与 `message_hub` outbound
+   的 `platform` 同样只有规范值 ⇒ 归一仍然做（订阅键与账号行都以规范渠道为唯一键，
+   留着别名入参就是留一条静默 no-op 的路），但**它不是会丢消息的那一半**。
+5. **多实例部署下这道门不会把行永久卡住**（登记时的另一条怀疑）：回扫 cron 在
+   `internal/pkg/cron/cron.go:96` 以 `0 */5 * * * *` 注册，`InitCron()` 由 `cmd/api/main.go:415`
+   无条件调用 ⇒ 每个副本都跑，而全仓没有任何 advisory lock / leader 选举
+   （`grep -rn "advisory|pg_advisory|leader|SetNX" internal/`，非测试命中 0）。
+   互斥靠行级 CAS 门票（`ClaimDelayedOutboundForReplay` 只认 `RowsAffected==1`），
+   不靠"谁有资格跑"；门判错的最坏结果是这一轮跳过、行留在 `pending`，下一轮由持有连接的
+   那个副本或刷新过在线位的任一副本补上 ⇒ 少投一轮，不会永久扣住，也不会双发。
+   R15 版本里"订阅在副本 A、跑 cron 的只有副本 B"确实会永久跳过，这条被第 2 点的 DB 信号一起收掉。
+6. **`ReplayStats` 仍无人消费（登记不修，口径更新）**：`cron.go:96` 丢弃返回值，
+   `Detect{Online,Offline}Channels` 在非测试代码里零读者 ⇒ 管理面看不到回扫结果。
+   本轮只把日志计数改名 `skipped_no_subscriber` → `unreachable_channels`
+   （旧名会把取证方向带到"没连 SSE"上，而轮询客户端是在线位过期才落到这一格的），
+   不新建端点。触发条件：有人开始要这块的数，就照 `order_draft_sweep` 的"导出报告结构体"先例办。
+
+交付：`channel_liveness_test.go`（可达性真值 6 例：订阅优先/别名归一/轮询放行/两信号皆假才算离线/
+读不到真值放行/缺参不可达）+ `sse_online_state_test.go` 增 3 例（轮询刷在线位、别名轮询取到规范渠道的待投件、
+仓储缺件不断轮询）+ service 侧 ctx 透传 1 例；探针签名变更后原有 5 例门用例随之调整。
+变异电池 10 格全杀（B1 摘归一、B2 订阅不再优先、B3 恒放行、B4/B5 两处 fail-open 反向、
+B6 摘缺参守卫、B8 轮询不刷、B9 按别名刷、B10 入参不归一、S1 ctx 换 Background），
+控制组 bridge pass=10 / service pass=3、skip=0，逐格还原 md5 比对，红因逐格读到断言行。
+**未钉住的一格**：`SetOutboundClaimer` 里"探针 = `BridgeChannelOnline`"这一行注入本身没有断言
+（把探针退回裸订阅闭包不会有用例红）——补它需要在 service 侧开一个只给测试用的读口，
+按"生产代码不为测试让路"的既有规矩放弃，改以注释与同源注入约束兜住。
+
 **复核后修订的两条登记**
 - ~~R12 交产品口径~~ → 已按方向①处置（见 R12 实况）。
 - **`reach_delayed_outbound` 上并存两条 drain**：H-3 主链路（按 `send_at` 全局到期投递）与离线回扫
@@ -2990,6 +3043,42 @@ service ran=10 全绿，逐格还原后 md5 比对；`--- FAIL: panic: test time
   回扫加了在线门，无活订阅的渠道整条不进状态机。**剩下的口径**：富卡行仍整体让给主链路
   （桥接管道只发文本），而主链路的判弃不看渠道是否可达 ⇒ 富卡延后回复在渠道长期离线时仍会被烧成
   `failed`。这半条属主链路（`webhook_outbound.go`，本批由并行会话持有未提交改动），未擅动。
+
+## R16-b（2026-09-21 复查两条阻塞项：一条已修、一条口径不成立并换成一条真问题）
+
+**1) QQ `expires_in` 字符串形态 —— 复核结论：HEAD 已修毕，本条从"登记不修"降为"已闭"。**
+`qq.go:72` 起 `ExpiresIn json.RawMessage` + `:78 expiresInSeconds()` 双形态兼容，落在
+`092f8cf1 fix(qq): 全链路审核修复`。取证口径不是"看着像修了"：`qq_test.go` 有三处 fake
+（:253 / :300 / :325）把 `expires_in` 以**字符串** `"7200"` 返回，用例断言的是取 token 后
+发送成功——若解析器退回 `int64`，解码即失败、token 取不到、这三条必红，所以形态兼容是
+**被既有用例承载的**，不是一条只在注释里的承诺。残留缺口只有一格：没有一条用例直接断言
+"解析出的秒数"（也没喂过数字形态）。要补得动 `qq.go`/`qq_test.go`，两者当前都被并行会话
+持有未提交改动（`qq.go` +253），且价值低于冲突成本 ⇒ 不擅动，等该文件回到 clean 再议。
+
+**2) "主链路的判弃不看渠道是否可达" —— 复核结论：登记的机制描述不成立，予以否证。**
+判据是 `bridge_outbound.go:144-149`：`bridgeOutboundUndeliverable` 只在 `accountID` 以
+`-unknown` 结尾时判不可达，**从未读过 SSE 订阅表、也从未读过 `bridge_accounts` 在线位**。
+因此"渠道长期离线 ⇒ 富卡延后回复被烧成 `failed`"这条推断不成立：离线时 bridge 分支照样落
+`status=pending` 行（HEAD `webhook_outbound.go:654`），交给补投门接——而补投门只看订阅、
+漏掉轮询那一半恰好是 R16 本轮修掉的东西。两条登记在这一点上是同一个洞的两个说法，现已同源收口。
+（`failed` 只在两处真发生：`abandonReplay` 由"重投次数用尽"或" sendOutbound 返回**不可重试**的
+ChannelError"触发，见 HEAD `:269` / `:325`，都是真实投递失败之后，不是可达性预判。）
+
+**3) 复查中查出的真问题（换这条登记，替换第 2 条）**：桥接渠道整条**不支持富卡，且丢弃完全静默**。
+证据（全部对 HEAD 复算，非工作树）：
+- `webhook_outbound.go:301` 延迟重放明确把 `cards` 传进 `sendOutbound`；
+- bridge 分支 `:646`（`ChannelDouyin|Xiaohongshu|Tiktok|Xianyu|Kuaishou`）里
+  `MsgType` 硬编码 `"text"`（`:655`），**整段 646–813 内 `cards` 出现 0 次**（`awk|grep -c` 实测）；
+- 分支末尾 `:813` 无条件 `sent = true` ⇒ 调用方 `replayDelayedOutbound` 走 `MarkSent` 收口。
+合起来：一条带富卡的 AI 回复投给桥接渠道时，只有文本出去，富卡被丢掉，而队列表把这一行记成
+**已送达**，日志/轨迹/`Extra` 三处都没有任何痕迹。它比原登记的那半条更坏——原口径至少会留下
+`failed` 供人查，这条是把丢失写成成功。
+**为什么仍不在本批修**：落点在 `service/webhook_outbound.go`，该文件正被并行会话重写
+（未提交 `+97/-11`，改的正是 `nextSendRetryAt`/`sendOutbound` 的错误语义与 N-11④），叠改必冲突。
+**触发条件与最小改法（交给下一刀，含本泳道）**：等该文件回到 clean 后，先做"把静默变成可观测"这一格——
+在 bridge 分支 persist 之前加 `if len(cards) > 0` 的 warn + `outMsg.Extra["cards_dropped"] = len(cards)`，
+配套用例断言"带卡投递桥接渠道 ⇒ 轨迹里能看到丢弃"（反向测试：摘掉 warn 必红）。
+至于富卡要不要降级渲染成文本（抖音/小红书卡片能否用图文消息承载）属**产品口径**，不在测试排期内擅自定。
 
 ## 阻塞与不做什么
 
