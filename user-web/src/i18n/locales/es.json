@@ -305,6 +305,7 @@
     "backupEnhanced": "Copia avanzada",
     "automationCenter": "Centro de automatización",
     "dynamicThreshold": "Umbrales dinámicos",
+    "ltcConfig": "Interruptor de operaciones LTC",
     "opsOverview": "Vista de operaciones",
     "knowledgeRagEval": "Evaluación RAG",
     "oneidMergeRules": "Reglas de fusión",

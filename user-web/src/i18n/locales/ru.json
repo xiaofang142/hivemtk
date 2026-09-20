@@ -305,6 +305,7 @@
     "backupEnhanced": "Расширенное резервное копирование",
     "automationCenter": "Центр автоматизации",
     "dynamicThreshold": "Динамические пороги",
+    "ltcConfig": "Переключатель операций LTC",
     "opsOverview": "Обзор операций",
     "knowledgeRagEval": "Оценка RAG",
     "oneidMergeRules": "Правила слияния",

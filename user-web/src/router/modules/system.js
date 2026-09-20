@@ -52,5 +52,13 @@ export default [
     name: 'ConfigParams',
     component: () => import('@/views/system/ConfigParams.vue'),
     meta: { title: '动态阈值参数', group: 'system', icon: 'DataAnalysis', requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/system/ltc-config',
+    name: 'LTCConfig',
+    component: () => import('@/views/system/LTCConfig.vue'),
+    // requiresAdmin 与后端一致：这两个端点挂在 AdminAuthMiddleware 之后。
+    // /system/config-params 那族参数今天只要求登录（遗留口径），本卡不跟它。
+    meta: { title: 'LTC 运营开关', group: 'system', icon: 'Open', requiresAuth: true, requiresAdmin: true }
   }
 ]

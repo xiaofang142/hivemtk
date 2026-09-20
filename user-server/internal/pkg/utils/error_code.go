@@ -55,6 +55,17 @@ const (
 	// 而这里是「你点早了」。今天前端 default 分支只看文案所以不出错，可码域一旦混用，
 	// 任何按码分流的改动都会把误操作当成重复提交（同族两条 409 已经栽过一次）。
 	ErrorCodeBrowserStateConflict ErrorCode = "BROWSER_STATE_CONFLICT_8003"
+
+	// LTC 运营开关域（T-P3-06）。闸门拦截落 409，但绝不能走 response.Error(c, 409, …)：
+	// 那会被 errorCodeFromHTTPCode 折成 DUPLICATE_ENTRY_3003（「重复的记录」），
+	// 而闸门拦下时**一个键都没写、一条记录都没碰**——码在说一件根本没发生的事。
+	// 三个码对应三种修法，合成一个就把三件事办成一件：
+	//   - 没开：运营去 LTC 配置页点开关
+	//   - 读坏了：点开关没用，得修存储/告警
+	//   - 挂错阶段：路由写错了，是装配 bug，运营与运维都修不了
+	ErrorCodeLTCStageDisabled  ErrorCode = "LTC_STAGE_DISABLED_8101"
+	ErrorCodeLTCConfigDegraded ErrorCode = "LTC_CONFIG_DEGRADED_8102"
+	ErrorCodeLTCStageUnknown   ErrorCode = "LTC_STAGE_UNKNOWN_8103"
 )
 
 // ErrorCodeConfig 错误码配置
@@ -107,6 +118,10 @@ var errorCodeRegistry = map[ErrorCode]ErrorCodeConfig{
 	ErrorCodeBrowserHostOffline:   {Code: ErrorCodeBrowserHostOffline, HTTPCode: 409, Message: "浏览器 Host 未连接"},
 	ErrorCodeBrowserTaskBusy:      {Code: ErrorCodeBrowserTaskBusy, HTTPCode: 409, Message: "已有浏览器任务执行中"},
 	ErrorCodeBrowserStateConflict: {Code: ErrorCodeBrowserStateConflict, HTTPCode: 409, Message: "任务状态不满足该操作"},
+
+	ErrorCodeLTCStageDisabled:  {Code: ErrorCodeLTCStageDisabled, HTTPCode: 409, Message: "LTC 阶段未启用"},
+	ErrorCodeLTCConfigDegraded: {Code: ErrorCodeLTCConfigDegraded, HTTPCode: 409, Message: "LTC 运营配置读不动，已按关闭处理"},
+	ErrorCodeLTCStageUnknown:   {Code: ErrorCodeLTCStageUnknown, HTTPCode: 409, Message: "LTC 阶段名未注册"},
 }
 
 // GetErrorCodeConfig 获取错误码配置

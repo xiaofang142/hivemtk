@@ -649,6 +649,7 @@ const topMenus = ref([
           { key: 'backupEnhanced', title: '备份高级版', icon: 'FolderChecked', path: '/backup/enhanced' },
           { key: 'automationCenter', title: '自动化中心', icon: 'Operation', path: '/system/automation-hub', roles: ['admin'] },
           { key: 'dynamicThreshold', title: '动态阈值参数', icon: 'DataLine', path: '/system/config-params', roles: ['admin'] },
+          { key: 'ltcConfig', title: 'LTC 运营开关', icon: 'Open', path: '/system/ltc-config', roles: ['admin'] },
           { key: 'opsOverview', title: '运维总览', icon: 'Monitor', path: '/ops-overview', roles: ['admin'] }
         ]
       },

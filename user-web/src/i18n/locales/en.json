@@ -304,6 +304,7 @@
     "backupEnhanced": "Advanced Backup",
     "automationCenter": "Automation Hub",
     "dynamicThreshold": "Dynamic Thresholds",
+    "ltcConfig": "LTC Operations Switch",
     "opsOverview": "Ops Overview",
     "knowledgeRagEval": "RAG Evaluation",
     "oneidMergeRules": "Merge Rules",

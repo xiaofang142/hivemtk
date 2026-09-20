@@ -304,6 +304,7 @@
     "backupEnhanced": "备份高级版",
     "automationCenter": "自动化中心",
     "dynamicThreshold": "动态阈值参数",
+    "ltcConfig": "LTC 运营开关",
     "opsOverview": "运维总览",
     "knowledgeRagEval": "RAG 评测",
     "oneidMergeRules": "合并规则配置",

@@ -311,6 +311,7 @@
     "backupEnhanced": "高度なバックアップ",
     "automationCenter": "自動化ハブ",
     "dynamicThreshold": "動的しきい値",
+    "ltcConfig": "LTC運用スイッチ",
     "opsOverview": "運用オーバービュー",
     "knowledgeRagEval": "RAG評価",
     "oneidMergeRules": "マージルール",

@@ -305,6 +305,7 @@
     "backupEnhanced": "Erweiterte Sicherung",
     "automationCenter": "Automatisierungs-Hub",
     "dynamicThreshold": "Dynamische Schwellenwerte",
+    "ltcConfig": "LTC-Betriebsschalter",
     "opsOverview": "Betriebsübersicht",
     "knowledgeRagEval": "RAG-Bewertung",
     "oneidMergeRules": "Merge-Regeln",

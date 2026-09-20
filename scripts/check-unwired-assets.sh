@@ -160,6 +160,16 @@ BASELINE=(
   "13|审批→统一待办的出口装配点|func \\(s \\*ApprovalRequestService\\) SetTaskSink|SetTaskSink\\(|internal/app|wired"
   "13|审批服务的全局登记调用方|func SetGlobalApprovalRequestService|SetGlobalApprovalRequestService\\(svc\\)|internal/app|wired"
   "13|审批裁决 API 的挂载入口|func setupApprovalRoutes|setupApprovalRoutes\\(|internal/router|wired"
+  # 项14 = T-P3-06 新增：LTC-25「运营一键开启」的落点。
+  # 14a 是**刻意留的绊线**：闸门中间件今日零业务挂载点（六阶段的业务路由要到 P4~P7 才逐段建）
+  #     ⇒ 按 UNWIRED 登记。等第一条 LTC 路由挂上闸门时，这一格会自己变红（DRIFT_NEW），
+  #     逼着那次接线回来把 expect 改成 wired 并回灌文档 —— 在此之前"运营一键开启 LTC"
+  #     成立的只是"落点与判据已定"，不是"现网有开关面"。
+  # 14b 管理端点已经挂进 router.go ⇒ wired（防回退）：删掉 router.go 里那一行时
+  #     setupLTCRoutes 函数还在、编译与单测都不会红，只有这一行会红。
+  # callpat 里的 `LTCStageGate\(` 之所以不会被本包测试污染：hits() 一律跳过 _test.go。
+  "14|LTC 阶段闸门的业务路由挂载点（今日六阶段无一条业务路由）|func LTCStageGate|LTCStageGate\\(|internal/router cmd/api|"
+  "14|LTC 运营开关管理 API 的挂载入口|func setupLTCRoutes|setupLTCRoutes\\(|internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

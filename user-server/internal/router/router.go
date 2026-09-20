@@ -617,6 +617,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupOrderDraftRoutes(auth)
 
+		setupLTCRoutes(auth)
+
 		app.SetupToolPermissionRoutes(auth)
 
 		setupAIToolConfigRoutes(auth, gormDB)
