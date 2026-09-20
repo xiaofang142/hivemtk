@@ -901,6 +901,20 @@ M7 按上面写明理由判为等价类；每腿前后 `ran=8/8 skip=0`、每次
 且**放宽窗口没有拖慢绿路径**——`waitFor` 一到就返回，40s/180s 只是"多久还没等到才判红"的上限，
 真闸门失效时依旧红，只是晚知道。
 
+**落地与提交后复验**：批16 七文件本地 commit `3b8ef900`（`write_ledger.go`/`executor.go`/
+`write_ledger_b16_test.go`（新）/`write_ledger_b7_test.go`/`batch14_send_gate_b14_test.go`/
+`executor_ws_e2e_test.go` + 本稿；`git status --porcelain -- user-server/internal/browser_automation`
+提交后为空 ⇒ 暂存面只有本泳道路径）。提交**不是终点**：另起 `git clone --shared` 于
+`/tmp/b22clone`（干净检出 `3b8ef900`，只补 gitignore 掉的 `user-server/.env`）复验自洽 ⇒
+`build rc=0`、`vet rc=0`、`test rc=0`，`ok controller 1.862s / ok platform 0.651s /
+ok service 170.416s`，**128 PASS / 0 SKIP**（`/tmp/b22_verify.log`）——克隆里没有工作树里那些
+未提交的旁道文件，这一跑证明本批提交自身完备。随后双远端各自 `git fetch <remote> master`
+分开复算 `0 1`（远端零独有、fast-forward 成立，且待推集合只有我这一个提交），
+`git push upstream master` 与 `git push gitee-upstream master` 均 `4d93ac0b..3b8ef900`（无 `+`
+即非 force），推后两侧 `0 0` 且三个 rev 同为 `3b8ef900`。
+电池与验证两轮日志（`/tmp/b20_mut2.log`、`/tmp/b21_verify.log`）里每条 `rc=` 都取自紧邻命令自身，
+不经管道——上一段记的那条"grep 冒充 rc"的教训这轮已按新口径执行。
+
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
 取证方法：六路并行 agent，每路给「本仓现状线索 + 待查同行清单」，要求每条机制带真实字段名与来源 URL、
