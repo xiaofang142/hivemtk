@@ -73,6 +73,7 @@ func NewBrowserOpenTaskTool(deps BrowserToolDeps) *BrowserOpenTaskTool {
 	return &BrowserOpenTaskTool{
 		BaseTool: BaseTool{
 			NameVal:        "browser_open_task",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "触发一个浏览器自动化任务在用户 Chrome 浏览器中执行（寄生式，复用已登录会话）。返回任务信息并异步派发执行；执行进度用 browser_task_status 查询。",
 			ParamsVal: ToolParameters{
@@ -87,9 +88,6 @@ func NewBrowserOpenTaskTool(deps BrowserToolDeps) *BrowserOpenTaskTool {
 		deps: deps,
 	}
 }
-
-// RiskLevel 触发执行 = 写操作
-func (t *BrowserOpenTaskTool) RiskLevel() ToolRiskLevel { return RiskLevelWrite }
 
 // Execute 触发任务执行
 func (t *BrowserOpenTaskTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
@@ -163,6 +161,7 @@ func NewBrowserTaskStatusTool(deps BrowserToolDeps) *BrowserTaskStatusTool {
 	return &BrowserTaskStatusTool{
 		BaseTool: BaseTool{
 			NameVal:        "browser_task_status",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "查询浏览器自动化任务状态及其最近一次执行的会话（session）详情：执行状态、步骤成败数、耗时、错误信息、AI 总结。",
 			ParamsVal: ToolParameters{
@@ -253,6 +252,7 @@ func NewBrowserTaskListTool(deps BrowserToolDeps) *BrowserTaskListTool {
 	return &BrowserTaskListTool{
 		BaseTool: BaseTool{
 			NameVal:        "browser_task_list",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "列出浏览器自动化任务（可按 user_id/status/platform 过滤），用于发现可执行任务后配合 browser_open_task 触发。",
 			ParamsVal: ToolParameters{

@@ -17,6 +17,7 @@ func NewReachSMSSendTool(deps ReachToolDeps) *ReachSMSSendTool {
 	return &ReachSMSSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.sms.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "发送短信。支持模板短信（传 template_id + params）和直发（传 content）。",
 			ParamsVal: ToolParameters{

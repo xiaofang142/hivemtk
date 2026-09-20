@@ -37,6 +37,7 @@ func NewReachDouyinSendTool(deps ReachToolDeps) *ReachDouyinSendTool {
 	return &ReachDouyinSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.douyin.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过抖音私信向用户发送消息。",
 			ParamsVal: ToolParameters{
@@ -68,6 +69,7 @@ func NewReachKuaishouSendTool(deps ReachToolDeps) *ReachKuaishouSendTool {
 	return &ReachKuaishouSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.kuaishou.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过快手私信向用户发送消息。",
 			ParamsVal: ToolParameters{
@@ -99,6 +101,7 @@ func NewReachXHSSendTool(deps ReachToolDeps) *ReachXHSSendTool {
 	return &ReachXHSSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.xhs.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过小红书私信向用户发送消息。",
 			ParamsVal: ToolParameters{
@@ -130,6 +133,7 @@ func NewReachDingTalkSendTool(deps ReachToolDeps) *ReachDingTalkSendTool {
 	return &ReachDingTalkSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.dingtalk.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过钉钉机器人或群消息发送消息。",
 			ParamsVal: ToolParameters{

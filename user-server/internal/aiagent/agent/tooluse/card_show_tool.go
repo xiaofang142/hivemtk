@@ -78,6 +78,7 @@ func NewCardShowTool() *CardShowTool {
 	return &CardShowTool{
 		BaseTool: BaseTool{
 			NameVal:        "card.show",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCard,
 			DescriptionVal: "向用户展示一张结构化富卡片（商品卡/订单卡/优惠卡/通用卡）。当需要在对话中以更直观的方式呈现商品、订单、优惠活动或任何结构化信息时调用，提升可读性。需提供 title(必填)，可选项包括 type/subtitle/description/image_url/fields(键值对)/buttons(按钮列表)。",
 			ParamsVal:      params,

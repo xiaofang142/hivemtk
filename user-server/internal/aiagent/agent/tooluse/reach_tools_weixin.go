@@ -17,6 +17,7 @@ func NewReachWeixinSendTool(deps ReachToolDeps) *ReachWeixinSendTool {
 	return &ReachWeixinSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.weixin.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过微信公众号向用户发送消息（客服消息）。",
 			ParamsVal: ToolParameters{

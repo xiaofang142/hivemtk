@@ -130,6 +130,10 @@ func (g *permissionGuardedTool) Execute(ctx context.Context, args map[string]any
 	return g.Tool.Execute(ctx, args)
 }
 
+func (g *permissionGuardedTool) RiskLevel() tooluse.ToolRiskLevel {
+	return tooluse.DeclaredRisk(g.Tool)
+}
+
 func rewirePermissionDecorators(registry *tooluse.ToolRegistry) {
 	if registry == nil {
 		return

@@ -23,6 +23,7 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/tools/cost", handleToolCost)
 	auth.GET("/agent/tools/circuit", handleToolCircuitState)
 	auth.GET("/agent/tools/approval", handleToolApprovalState)
+	auth.GET("/agent/tools/risk", handleToolRiskReport)
 	auth.GET("/agent/tools/providers", handleToolProviders)
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
@@ -608,6 +609,25 @@ var errInvalidInteger = &simpleError{"invalid integer"}
 type simpleError struct{ msg string }
 
 func (e *simpleError) Error() string { return e.msg }
+
+// handleToolRiskReport 输出工具后果分级报告（T-P3-05 AC③，P9 转阻断前的评审材料）。
+//
+// 与 /agent/tools/approval 的分工：那份读的是"这次冷触达有没有被批准"（按工具名
+// 启发式圈定范围、按账号判定），这份读的是"这个工具的后果能不能撤回"（按声明分级、
+// 按 Agent 自己的白名单找授权依据）。两个端点的 would_deny 数不相等是预期的，
+// 差别本身（尤其 high_write_in_approval_gate）就是 G-3 要补的盲区大小。
+//
+// 旗子关着时也可以读：静态声明面与授权面不依赖观察层，P9 评审恰恰要在开旗之前看它。
+func handleToolRiskReport(c *gin.Context) {
+	report := app.GetToolRiskReport()
+	if report.Total == 0 {
+		// 注册中心为空 = 工具链还没装配（启动顺序问题），不是"45 个工具都低风险"。
+		// 不显式区分的话，一份 total=0 的报告会被读成"没有任何高危工具需要管控"。
+		response.Error(c, 503, "tool registry not initialized：分级报告需要已装配的工具注册中心")
+		return
+	}
+	response.Success(c, report, "ok")
+}
 
 func handleToolProviders(c *gin.Context) {
 	if app.GetGlobalProviderRegistry() == nil {

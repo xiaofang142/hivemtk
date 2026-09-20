@@ -134,12 +134,22 @@ type BaseTool struct {
 	CategoryVal    ToolCategory
 	DescriptionVal string
 	ParamsVal      ToolParameters
+
+	// RiskVal 是本工具的后果分级（见 tool_risk.go）。
+	// 留空 == 未声明 == 按 high_write 处理，不会因嵌入了 BaseTool 就自动获得放行。
+	RiskVal ToolRiskLevel
 }
 
 func (b *BaseTool) Name() string               { return b.NameVal }
 func (b *BaseTool) Category() ToolCategory     { return b.CategoryVal }
 func (b *BaseTool) Description() string        { return b.DescriptionVal }
 func (b *BaseTool) Parameters() ToolParameters { return b.ParamsVal }
+
+// RiskLevel 让嵌入了 BaseTool 的工具天然实现 RiskDeclared。
+//
+// 注意这与"实现了就等于声明了"是两件事：判据是返回值的字面量合不合法，
+// 不是方法在不在（EffectiveRisk）。
+func (b *BaseTool) RiskLevel() ToolRiskLevel { return b.RiskVal }
 
 // LLMFunction LLM Function Calling 格式（OpenAI 兼容）
 type LLMFunction struct {

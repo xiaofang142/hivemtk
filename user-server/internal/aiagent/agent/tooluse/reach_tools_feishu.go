@@ -18,6 +18,7 @@ func NewReachFeishuSendTool(deps ReachToolDeps) *ReachFeishuSendTool {
 	return &ReachFeishuSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.feishu.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过飞书 Open API 发送消息。receive_id 需为 open_id（ou_xxx）或 chat_id（oc_xxx）。限流 50 QPS 全局 + 5 QPS/用户。",
 			ParamsVal: ToolParameters{

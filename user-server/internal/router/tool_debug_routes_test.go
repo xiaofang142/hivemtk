@@ -430,6 +430,7 @@ func TestSetup_ToolDebugRoutesRegistered(t *testing.T) {
 		"POST-/api/agent/tools/circuit/reset",
 		"GET-/api/agent/tools/approval",
 		"POST-/api/agent/tools/approval/whitelist",
+		"GET-/api/agent/tools/risk",
 		"GET-/api/agent/tools/providers",
 	}
 	routes := r.Routes()
@@ -1050,5 +1051,118 @@ func TestHandleToolCost_MemorySourceStillWorks_HTTP(t *testing.T) {
 	data, _ := resp["data"].(map[string]any)
 	if data["source"] != "memory" {
 		t.Errorf("回显应标明数据源，实际 %v", data["source"])
+	}
+}
+
+// --- T-P3-05 /api/agent/tools/risk -----------------------------------------
+
+// drainGlobalToolRegistry 把全局注册中心清空并在用例结束后原样装回。
+//
+// 需要它是因为报告读的就是这一个单例：同进程里别的用例（或将来新增的接线用例）
+// 装配过工具的话，"注册中心为空 ⇒ 503"这条分支就永远走不到，用例会静默变成
+// 只测 happy path。清空/装回让两条分支各自拿到确定的前置状态。
+func drainGlobalToolRegistry(t *testing.T) {
+	t.Helper()
+	reg := tooluse.GetGlobalRegistry()
+	tools := reg.List()
+	for _, tool := range tools {
+		if err := reg.Unregister(tool.Name()); err != nil {
+			t.Fatalf("清空注册中心失败：%v", err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, tool := range tools {
+			if err := reg.Register(tool); err != nil {
+				t.Errorf("装回工具 %s 失败：%v（残留会让后续用例读到空注册中心）", tool.Name(), err)
+			}
+		}
+	})
+}
+
+// 注册中心为空时必须 503 并说清原因：一份 total=0 的 200 会被读成"没有高危工具要管"。
+func TestHandleToolRiskReport_EmptyRegistryIs503_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv(app.RiskGateFlagEnv, "off")
+	drainGlobalToolRegistry(t)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/risk", nil)
+	handleToolRiskReport(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("空注册中心应回 HTTP 503，实际 %d；body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v body=%s", err, w.Body.String())
+	}
+	if _, ok := resp["data"]; ok {
+		t.Errorf("503 不该带 data（否则前端会渲染一份空报告）：%s", w.Body.String())
+	}
+}
+
+// AC③：有工具时必须给出分级报告，且"当前拦不拦"在数据上无法被误读。
+func TestHandleToolRiskReport_ReportsLevelsAndHints_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv(app.RiskGateFlagEnv, "off")
+	drainGlobalToolRegistry(t)
+	// mockTool 不声明分级 ⇒ 走 safe-by-default 兜底，正好把 undeclared_tools 这条口径也压上。
+	const name = "risk.report.demo"
+	if err := tooluse.GetGlobalRegistry().Register(newMockEchoTool(name)); err != nil {
+		t.Fatalf("注册演示工具失败：%v", err)
+	}
+	// drain 的 Cleanup 先注册、后执行 ⇒ 它会把这个工具一并装回，这里无需再管。
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/risk", nil)
+	handleToolRiskReport(c)
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body 非 JSON：%v body=%s", err, w.Body.String())
+	}
+	if code, ok := resp["code"].(float64); !ok || code != 0 {
+		t.Fatalf("应正常返回，body=%s", w.Body.String())
+	}
+	data, _ := resp["data"].(map[string]any)
+	if data["mode"] != "off" {
+		t.Errorf("mode=%v，期望 off（本用例没挂观察层；报告里的 mode 必须是真实接线态）", data["mode"])
+	}
+	if denied, ok := data["blocks_when_denied"].(bool); !ok || denied {
+		t.Errorf("blocks_when_denied=%v：本构建的分级层没有拒绝路径，这个字段必须是 false", data["blocks_when_denied"])
+	}
+	if data["enforce_flag_env"] != app.RiskGateFlagEnv {
+		t.Errorf("enforce_flag_env=%v，期望回显旗子名 %s", data["enforce_flag_env"], app.RiskGateFlagEnv)
+	}
+	if n, ok := data["total_tools"].(float64); !ok || n < 1 {
+		t.Errorf("total_tools=%v，期望 ≥1", data["total_tools"])
+	}
+	undeclared, _ := data["undeclared_tools"].([]any)
+	found := false
+	for _, u := range undeclared {
+		if u == name {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("undeclared_tools=%v，期望含未声明分级的 %s（兜底规则必须可见）", undeclared, name)
+	}
+	hints, _ := data["reading_hint"].([]any)
+	if len(hints) == 0 {
+		t.Fatal("reading_hint 为空：报告必须自己说出容易读错的地方")
+	}
+	var hasObserveHint bool
+	for _, h := range hints {
+		if s, _ := h.(string); strings.Contains(s, "没在观察") {
+			hasObserveHint = true
+		}
+	}
+	if !hasObserveHint {
+		t.Errorf("mode=off 时提示里必须写明「counts 为空是没在观察、不是零次会被拦」：%v", hints)
+	}
+	if persisted, ok := data["observations_persisted"].(bool); !ok || persisted {
+		t.Errorf("observations_persisted=%v，期望 false（观察数据只在内存）", data["observations_persisted"])
 	}
 }

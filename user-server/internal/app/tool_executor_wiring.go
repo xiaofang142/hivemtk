@@ -28,6 +28,9 @@ import (
 //   - CircuitBreaker:     按 FF_TOOL_CIRCUIT_BREAKER 三态挂载（默认 off = 不接，见 tool_circuit_breaker_wiring.go）
 //   - ApprovalGate:       按 FF_LTC_APPROVAL_GATE 三态挂载（off|shadow|block，默认 off；
 //     block 还要白名单旗子 ai.safety.tool_approval_gate 同时为真才会真的拦，见 approval_wiring.go）
+//   - RiskGate:           按 FF_TOOL_PERMISSION_ENFORCE 挂载工具后果分级判定（off|shadow，默认 off；
+//     本层**只有观察态**，阻断排在 P9，见 permission_wiring.go）。判定依据是 Agent 自己的
+//     白名单，不读全局白名单/"*"/defaultAllow；与上面两道门的判据（工具名、账号）互不重叠。
 //
 // 优化：本地持有 memAuditLogger / memCostTracker 引用，
 // 通过 GetGlobalMemoryAuditLogger / GetGlobalMemoryCostTracker 暴露给调试 API（/agent/tools/audit /cost）。
@@ -50,10 +53,12 @@ func InitGlobalToolExecutor() {
 	}
 	circuitMode := applyToolCircuitBreaker(&config)
 	approvalMode := applyApprovalGate(&config)
+	riskMode := applyRiskGate(&config)
 	auditMode := applyToolAuditPersistence(&config, db.GetDB())
 	exec := tooluse.NewToolExecutor(tooluse.GetGlobalRegistry(), config)
 	tooluse.SetGlobalExecutor(exec)
-	logger.Infof("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=%s 审批门=%s 审计落库=%s）", circuitMode, approvalMode, auditMode)
+	logger.Infof("[agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=%s 审批门=%s 分级判定=%s 审计落库=%s）",
+		circuitMode, approvalMode, riskMode, auditMode)
 }
 
 var (

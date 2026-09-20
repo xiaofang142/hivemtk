@@ -77,6 +77,13 @@ type ToolExecutorConfig struct {
 	// 由接线方设定；本字段为 true 时 ApprovalGateDecorator 不存在任何拒绝路径。
 	ApprovalShadow bool
 
+	// RiskGrants/RiskObserver 工具后果分级判定（T-P3-05 / G-3）。任一为 nil 时该层不挂。
+	// 与熔断/审批门的关键差别：**这一层没有阻断开关也没有 shadow 布尔字段**，
+	// 因为 RiskGateDecorator 里根本不存在返回拒绝的代码路径。FF_TOOL_PERMISSION_ENFORCE
+	// 只决定"挂不挂、留不留痕"，转阻断是 P9 的事。
+	RiskGrants   AgentGrantReader
+	RiskObserver RiskObserver
+
 	FeedbackSink FeedbackSink
 }
 
@@ -335,6 +342,13 @@ func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 		// 不进重试"这些性质随之外层成立——所以拦与不拦用的是同一个位置，观察期攒下的
 		// would_deny 与阻断期的实际拦截量因此可比。
 		chain = ApprovalGateDecorator(tool, e.config.ApprovalChecker, e.config.ApprovalShadow)(chain)
+	}
+	if e.config.RiskGrants != nil && e.config.RiskObserver != nil {
+		// 分级判定放在**比审批门还外层**：它要观察到的是"有人发起了这次调用"，
+		// 与调用最终是被审批门拒了还是被执行了无关。挪到里层会让被审批拒掉的高危调用
+		// 从 would_deny 统计里消失，P9 拿到的破坏面因此偏小。
+		// 这一层永远透传（见 RiskGateDecorator），所以外层与否不改变任何放行结果。
+		chain = RiskGateDecorator(tool, e.config.RiskGrants, e.config.RiskObserver)(chain)
 	}
 	return chain
 }

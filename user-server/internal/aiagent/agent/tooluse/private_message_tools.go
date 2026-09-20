@@ -55,7 +55,8 @@ type openPrivateSessionTool struct {
 	sessionPort portcontract.SessionPort
 }
 
-func (t *openPrivateSessionTool) Name() string { return "pm.session.open" }
+func (t *openPrivateSessionTool) Name() string             { return "pm.session.open" }
+func (t *openPrivateSessionTool) RiskLevel() ToolRiskLevel { return RiskLowWrite }
 func (t *openPrivateSessionTool) Category() ToolCategory {
 	return CategoryPrivateMessage
 }
@@ -112,7 +113,8 @@ type readPrivateSessionTool struct {
 	sessionPort portcontract.SessionPort
 }
 
-func (t *readPrivateSessionTool) Name() string { return "pm.session.read" }
+func (t *readPrivateSessionTool) Name() string             { return "pm.session.read" }
+func (t *readPrivateSessionTool) RiskLevel() ToolRiskLevel { return RiskReadonly }
 func (t *readPrivateSessionTool) Category() ToolCategory {
 	return CategoryPrivateMessage
 }
@@ -167,7 +169,8 @@ type sendPrivateMessageTool struct {
 	sessionPort portcontract.SessionPort
 }
 
-func (t *sendPrivateMessageTool) Name() string { return "pm.message.send" }
+func (t *sendPrivateMessageTool) Name() string             { return "pm.message.send" }
+func (t *sendPrivateMessageTool) RiskLevel() ToolRiskLevel { return RiskHighWrite }
 func (t *sendPrivateMessageTool) Category() ToolCategory {
 	return CategoryPrivateMessage
 }

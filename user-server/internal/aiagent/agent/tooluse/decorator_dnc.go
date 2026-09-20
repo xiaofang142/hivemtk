@@ -84,6 +84,9 @@ func (d *dncTool) Category() ToolCategory     { return d.inner.Category() }
 func (d *dncTool) Description() string        { return d.inner.Description() }
 func (d *dncTool) Parameters() ToolParameters { return d.inner.Parameters() }
 
+// RiskLevel 原样透出内层分级（含"内层没声明"）。
+func (d *dncTool) RiskLevel() ToolRiskLevel { return DeclaredRisk(d.inner) }
+
 func (d *dncTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
 	name := d.inner.Name()
 	if !IsColdOutreachTool(d.inner) {

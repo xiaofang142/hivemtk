@@ -102,6 +102,7 @@ func NewRagSearchTool(deps KnowledgeToolDeps) *RagSearchTool {
 	return &RagSearchTool{
 		BaseTool: BaseTool{
 			NameVal:        "rag.search",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryKnowledge,
 			DescriptionVal: "在指定知识库（RAG 产品）中检索与查询相关的文档分段。返回 top_k 个最相关的分段（含 score、content、document_id）。用于客服答疑、销售话术推荐、知识查询等场景。",
 			ParamsVal: ToolParameters{
@@ -284,6 +285,7 @@ func NewKnowledgeFeedbackTool(deps KnowledgeToolDeps) *KnowledgeFeedbackTool {
 	return &KnowledgeFeedbackTool{
 		BaseTool: BaseTool{
 			NameVal:        "knowledge.feedback",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryKnowledge,
 			DescriptionVal: "对 RAG 检索结果进行反馈（helpful/bad/补充评论），用于持续学习优化召回质量。可在客服结束对话后由智能体自动调用，或由用户主动标记。",
 			ParamsVal: ToolParameters{
@@ -304,10 +306,6 @@ func NewKnowledgeFeedbackTool(deps KnowledgeToolDeps) *KnowledgeFeedbackTool {
 		deps: deps,
 	}
 }
-
-// RiskLevel 覆盖为 RiskLevelWrite
-// 知识反馈会写入 knowledge_feedbacks 表，影响召回质量优化；可回滚（删除反馈即可）
-func (t *KnowledgeFeedbackTool) RiskLevel() ToolRiskLevel { return RiskLevelWrite }
 
 // Execute 执行反馈
 func (t *KnowledgeFeedbackTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
@@ -388,6 +386,7 @@ func NewKnowledgeAddDocTool(deps KnowledgeToolDeps) *KnowledgeAddDocTool {
 	return &KnowledgeAddDocTool{
 		BaseTool: BaseTool{
 			NameVal:        "knowledge.add_doc",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryKnowledge,
 			DescriptionVal: "向指定知识库添加文档（文本/URL）。添加后自动触发异步分片+向量化+入索引流水线。用于销售/客服在对话中即时沉淀知识、补充产品FAQ等场景。",
 			ParamsVal: ToolParameters{
@@ -408,10 +407,6 @@ func NewKnowledgeAddDocTool(deps KnowledgeToolDeps) *KnowledgeAddDocTool {
 		deps: deps,
 	}
 }
-
-// RiskLevel 覆盖为 RiskLevelWrite
-// 添加知识文档会写入 DB + 触发异步索引流水线，可回滚（删除文档 + 清理索引即可）
-func (t *KnowledgeAddDocTool) RiskLevel() ToolRiskLevel { return RiskLevelWrite }
 
 // Execute 执行添加文档
 func (t *KnowledgeAddDocTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
@@ -494,6 +489,7 @@ func NewKnowledgeListKBTool(deps KnowledgeToolDeps) *KnowledgeListKBTool {
 	return &KnowledgeListKBTool{
 		BaseTool: BaseTool{
 			NameVal:        "knowledge.list_kb",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryKnowledge,
 			DescriptionVal: "列出当前部署实例下所有可用的知识库（RAG 产品），含文档数、分段数、最近导入/检索时间。用于智能体选择目标知识库、运营查看知识库健康度等场景。",
 			ParamsVal: ToolParameters{

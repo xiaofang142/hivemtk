@@ -487,6 +487,7 @@ func NewReachCardSendTool(deps ReachToolDeps) *ReachCardSendTool {
 	return &ReachCardSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.card.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "发送客户卡片（如抖音卡片、快手卡片）。支持指定渠道和卡片模板。",
 			ParamsVal: ToolParameters{
@@ -565,6 +566,7 @@ func NewReachBatchTool(deps ReachToolDeps) *ReachBatchTool {
 	return &ReachBatchTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.batch",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过触达 Pipeline 批量发送消息。需要指定 pipeline_id，会为每个 customer 创建一个 job。",
 			ParamsVal: ToolParameters{
@@ -673,6 +675,7 @@ func NewReachScheduleTool(deps ReachToolDeps) *ReachScheduleTool {
 	return &ReachScheduleTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.schedule",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "定时触发触达任务。通过 Pipeline 在指定时间执行。",
 			ParamsVal: ToolParameters{
@@ -752,6 +755,7 @@ func NewReachRecallTool(deps ReachToolDeps) *ReachRecallTool {
 	return &ReachRecallTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.recall",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "撤回已发送的消息。并非所有渠道都支持撤回。",
 			ParamsVal: ToolParameters{
@@ -799,6 +803,7 @@ func NewReachHealthTool(deps ReachToolDeps) *ReachHealthTool {
 	return &ReachHealthTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.health",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "查询账号健康度。返回账号状态、剩余配额、风险等级等信息。",
 			ParamsVal: ToolParameters{
@@ -842,6 +847,7 @@ func NewReachHistoryTool(deps ReachToolDeps) *ReachHistoryTool {
 	return &ReachHistoryTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.history",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "查询触达历史。可按渠道、客户 ID、状态筛选。",
 			ParamsVal: ToolParameters{
@@ -908,6 +914,7 @@ func NewReachTemplateApplyTool(deps ReachToolDeps) *ReachTemplateApplyTool {
 	return &ReachTemplateApplyTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.template.apply",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "应用模板参数生成最终消息内容。支持 {{var}} 占位符替换。",
 			ParamsVal: ToolParameters{
@@ -982,6 +989,7 @@ func NewReachAccountListTool(deps ReachToolDeps) *ReachAccountListTool {
 	return &ReachAccountListTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.account.list",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "查询指定渠道下的可用账号列表（含健康状态）。",
 			ParamsVal: ToolParameters{

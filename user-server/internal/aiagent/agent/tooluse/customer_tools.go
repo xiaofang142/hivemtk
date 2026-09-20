@@ -102,6 +102,7 @@ func NewCustomerSearchTool(deps CustomerToolDeps) *CustomerSearchTool {
 	return &CustomerSearchTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.search",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "按身份标识（phone/email/wechat_open_id/douyin_open_id/xiaohongshu_id）搜索客户。返回匹配的客户列表。",
 			ParamsVal: ToolParameters{
@@ -186,6 +187,7 @@ func NewCustomerGetTool(deps CustomerToolDeps) *CustomerGetTool {
 	return &CustomerGetTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.get",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "按客户 ID 获取客户详情，包含基本信息、最近事件和标签。",
 			ParamsVal: ToolParameters{
@@ -254,6 +256,7 @@ func NewCustomerCreateTool(deps CustomerToolDeps) *CustomerCreateTool {
 	return &CustomerCreateTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.create",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "创建新客户（如果身份标识已存在则更新）。至少需要提供一种身份标识。",
 			ParamsVal: ToolParameters{
@@ -305,6 +308,7 @@ func NewCustomerUpdateTool(deps CustomerToolDeps) *CustomerUpdateTool {
 	return &CustomerUpdateTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.update",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "更新客户基本信息（phone/email/wechat/douyin/xiaohongshu）。仅更新非空字段。",
 			ParamsVal: ToolParameters{
@@ -374,6 +378,7 @@ func NewCustomerMergeTool(deps CustomerToolDeps) *CustomerMergeTool {
 	return &CustomerMergeTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.merge",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "合并两个客户（将 secondary 合并到 primary）。secondary 的身份标识和标签会合并到 primary，secondary 会被删除。",
 			ParamsVal: ToolParameters{
@@ -423,6 +428,7 @@ func NewCustomerAddTagTool(deps CustomerToolDeps) *CustomerAddTagTool {
 	return &CustomerAddTagTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.add_tag",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "给客户添加一个或多个标签。已存在的标签会被自动去重。",
 			ParamsVal: ToolParameters{
@@ -488,6 +494,7 @@ func NewCustomerRemoveTagTool(deps CustomerToolDeps) *CustomerRemoveTagTool {
 	return &CustomerRemoveTagTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.remove_tag",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "从客户身上移除一个或多个标签。不存在的标签会被忽略。",
 			ParamsVal: ToolParameters{
@@ -553,6 +560,7 @@ func NewCustomerSegmentTool(deps CustomerToolDeps) *CustomerSegmentTool {
 	return &CustomerSegmentTool{
 		BaseTool: BaseTool{
 			NameVal:        "customer.segment",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryCustomer,
 			DescriptionVal: "按标签、RFM 分数、流失风险等条件筛选客户。返回匹配的客户列表和总数。",
 			ParamsVal: ToolParameters{

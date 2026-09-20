@@ -110,6 +110,9 @@ func (a *approvalTool) Category() ToolCategory     { return a.inner.Category() }
 func (a *approvalTool) Description() string        { return a.inner.Description() }
 func (a *approvalTool) Parameters() ToolParameters { return a.inner.Parameters() }
 
+// RiskLevel 原样透出内层分级（含"内层没声明"）。
+func (a *approvalTool) RiskLevel() ToolRiskLevel { return DeclaredRisk(a.inner) }
+
 func (a *approvalTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
 	if IsColdOutreachTool(a.inner) {
 		checker := a.checker

@@ -184,6 +184,39 @@ func (c *WhitelistPermissionChecker) ListAgentWhitelist(agentID string) []string
 	return out
 }
 
+// AgentHasTool 查询"这个 Agent 的白名单里有没有这一个工具"，不走任何兜底。
+//
+// 与 Check 的差别是这条查询存在的理由：Check 在白名单未命中时还会看全局白名单、
+// tc.Permissions 里的 "*" 和 defaultAllow，任何一级命中都返回 nil（放行）。
+// 分级判定（RiskVerdict）要的是"这个 Agent 被逐条授权过这个工具吗"，
+// 兜底出来的"放行"不是授权。因此这里只查 agentWhitelist 这一张表。
+//
+// 注意 ["*"] 也返回 false：Agent 白名单里写 "*" 是授权层的通配写法，
+// 不构成"reach.sms.send 已被逐条授权"。是否为通配由 AgentWildcard 单独观测。
+func (c *WhitelistPermissionChecker) AgentHasTool(agentID, toolName string) bool {
+	if c == nil || agentID == "" || toolName == "" {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	allowed, ok := c.agentWhitelist[agentID]
+	return ok && allowed[toolName]
+}
+
+// AgentWhitelistConfigured 该 Agent 是否配置过白名单（配过又清空视为未配置）。
+//
+// 单独可判是必要的：未配置与"配了但没包含这个工具"在阻断时是两个后果 ——
+// 前者要给运营补配置，后者是明确的不授权决定。
+func (c *WhitelistPermissionChecker) AgentWhitelistConfigured(agentID string) bool {
+	if c == nil || agentID == "" {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.agentWhitelist[agentID]
+	return ok
+}
+
 // ListGlobalWhitelist 返回全局白名单工具列表（只读快照）
 func (c *WhitelistPermissionChecker) ListGlobalWhitelist() []string {
 	if c == nil {

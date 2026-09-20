@@ -9,21 +9,15 @@ import (
 	"time"
 )
 
-// ToolRiskLevel 工具风险级别
+// ToolRiskLevel（原 read/write/admin）已随 T-P3-05 迁到 tool_risk.go，
+// 换成 G-3 的三档 readonly / low_write / high_write。
 //
-// 用于反馈加权：写工具的反馈信号权重高于读工具（写操作影响持久状态，
-// 失败代价更高；读操作失败可重试，影响有限）。
-//
-// 可选方法：Tool 实现可实现 RiskLevel() ToolRiskLevel，未实现时默认为 RiskLevelRead。
-type ToolRiskLevel string
-
-const (
-	RiskLevelRead ToolRiskLevel = "read"
-
-	RiskLevelWrite ToolRiskLevel = "write"
-
-	RiskLevelAdmin ToolRiskLevel = "admin"
-)
+// 迁移而不是并存的原因：旧那套是**死元数据** —— 全仓只有 3 个工具实现过
+// RiskLevel()，而唯一的潜在读取方 ToolCallEvent.RiskLevel 在构造事件时根本不赋值
+// （见下方 FeedbackCollectorDecorator），feedback_sink_adapter 里那个
+// metadata["risk_level"] 分支因此从未进过任何一行。留着两套同名方法
+// （BaseTool.RiskLevel 与旧实现的覆盖方法）只会让"分级"这件事有两个答案。
+// 另注：旧注释写的默认值是 RiskLevelRead，方向与 G-3 要的 safe-by-default 相反。
 
 // FeedbackSink 反馈回流接口
 //

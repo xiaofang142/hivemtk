@@ -17,6 +17,7 @@ func NewReachWeComSendTool(deps ReachToolDeps) *ReachWeComSendTool {
 	return &ReachWeComSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.wecom.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过企业微信向客户发送消息。支持 text/image/link/textcard 等消息类型。",
 			ParamsVal: ToolParameters{

@@ -17,6 +17,7 @@ func NewReachEmailSendTool(deps ReachToolDeps) *ReachEmailSendTool {
 	return &ReachEmailSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.email.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "发送邮件。支持附件。",
 			ParamsVal: ToolParameters{

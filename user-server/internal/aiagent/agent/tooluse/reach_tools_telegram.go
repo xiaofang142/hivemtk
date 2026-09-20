@@ -18,6 +18,7 @@ func NewReachTelegramSendTool(deps ReachToolDeps) *ReachTelegramSendTool {
 	return &ReachTelegramSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.telegram.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过 Telegram Bot API 发送消息。支持私聊（chat_id 为正）和群组（chat_id 为负）。限流 1 QPS/chat + 30 msg/s 全局。",
 			ParamsVal: ToolParameters{

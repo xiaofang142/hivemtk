@@ -204,6 +204,7 @@ func NewFollowTaskCreateTool(deps BusinessToolDeps) *FollowTaskCreateTool {
 	return &FollowTaskCreateTool{
 		BaseTool: BaseTool{
 			NameVal:        "follow_task.create",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "创建客户跟进任务（提醒）。联动客户旅程阶段自动推进 + 销售仪表盘。用于智能体识别意向后自动排程跟进、销售手动安排回访。",
 			ParamsVal: ToolParameters{
@@ -309,6 +310,7 @@ func NewFollowTaskUpdateTool(deps BusinessToolDeps) *FollowTaskUpdateTool {
 	return &FollowTaskUpdateTool{
 		BaseTool: BaseTool{
 			NameVal:        "follow_task.update",
+			RiskVal:        RiskLowWrite,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "更新跟进任务状态：完成（带结果，自动推进客户旅程）/ 取消。完成时必须提供 result 参数，系统将自动推进客户旅程阶段并更新销售仪表盘。",
 			ParamsVal: ToolParameters{
@@ -398,6 +400,7 @@ func NewOrderLookupTool(deps BusinessToolDeps) *OrderLookupTool {
 	return &OrderLookupTool{
 		BaseTool: BaseTool{
 			NameVal:        "order.lookup",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "查询客户订单（只读）。支持按订单号查单笔，或按客户手机/姓名查近期订单，用于回答\"我的订单到哪了/什么状态/物流\"等高频客服问题。订单数据来自外部电商同步镜像，客服系统不创建或变更订单。",
 			ParamsVal: ToolParameters{
@@ -470,6 +473,7 @@ func NewAfterSaleCreateTool(deps BusinessToolDeps) *AfterSaleCreateTool {
 	return &AfterSaleCreateTool{
 		BaseTool: BaseTool{
 			NameVal:        "aftersale.create",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "为客户发起售后（退款/退货退款/换货）。这是客服系统对订单唯一允许写入的操作：创建售后请求并回写电商，由电商执行落地，本系统只记录售后单与状态。下单、支付、履约不属于客服职责。",
 			ParamsVal: ToolParameters{
@@ -539,6 +543,7 @@ func NewAfterSaleQueryTool(deps BusinessToolDeps) *AfterSaleQueryTool {
 	return &AfterSaleQueryTool{
 		BaseTool: BaseTool{
 			NameVal:        "aftersale.query",
+			RiskVal:        RiskReadonly,
 			CategoryVal:    CategoryBusiness,
 			DescriptionVal: "查询客户售后单进度（按 平台+订单号 或 客户手机）。用于回答\"我的退款到哪了/退货收了吗\"等售后跟进问题。",
 			ParamsVal: ToolParameters{
@@ -588,6 +593,7 @@ func NewLogisticsTrackTool(deps BusinessToolDeps) *LogisticsTrackTool {
 	return &LogisticsTrackTool{
 		BaseTool: BaseTool{
 			NameVal:     "logistics.track",
+			RiskVal:     RiskReadonly,
 			CategoryVal: CategoryBusiness,
 			DescriptionVal: "查询快递/物流轨迹：用于回答“我的快递到哪了 / 什么时候发货 / 物流停在哪了”。" +
 				"优先用运单号 tracking_no + 快递公司 carrier 查实时轨迹（凭证需在后台「工具集成配置」填写物流接口 base_url）；" +

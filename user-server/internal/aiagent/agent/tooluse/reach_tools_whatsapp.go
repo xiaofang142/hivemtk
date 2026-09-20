@@ -18,6 +18,7 @@ func NewReachWhatsAppSendTool(deps ReachToolDeps) *ReachWhatsAppSendTool {
 	return &ReachWhatsAppSendTool{
 		BaseTool: BaseTool{
 			NameVal:        "reach.whatsapp.send",
+			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
 			DescriptionVal: "通过 WhatsApp Cloud API 发送消息。主动触达需使用 Meta 审批模板；24h 客服窗口内可发自由文本。限流 5 msg/s/号。",
 			ParamsVal: ToolParameters{
