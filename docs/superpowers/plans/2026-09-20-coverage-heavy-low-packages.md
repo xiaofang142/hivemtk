@@ -2840,6 +2840,7 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 | R9 | 贡献者客户端不接平台信封 | `e4e36f77` | 严格 `{code,msg,data}`：token 从 `data.token` 取（旧实现读顶层 ⇒ 提交链路从未通）；`code!=200` 判失败（旧实现 HTTP 200 即成功 ⇒ 拒绝被当成功）；注册即签发 + 401 自愈重登（平台 JWT 中间件发真 401，而本客户端缓存 24h） |
 | R8 | 离线回扫 SQL 引用无人建立的列 | `62445d10` | 见下 |
 | R10 | `order_draft` 用例把"当前时间"写死成 2026-09-19 → 24h 后整批日历红 | `00c7c263` | `scenarioNow` 改回 `time.Now().UTC().Truncate(time.Second)`，两副底座共用同一 now 的原意保留；`TestOrderDraft*` 20 例全绿 |
+| R11 | 商户客户端只认 HTTP 200：平台拒绝被当成功 | `396b057d` | 见下 |
 
 **R8 实况**（`internal/repository/bridge_offline_replay_repo.go` + `internal/service/bridge_offline_replay.go`）：
 真库跑出的红是 `ERROR: column "retry_count" does not exist (SQLSTATE 42703)` —— 该链路的建表 DDL
@@ -2875,10 +2876,32 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
 `TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows` 红发生时夹具尚未过期，其负载敏感归因不因本条推翻，
 但今天修完的整包绿里该用例确实随全包一起过了。
 
+**R11 实况**（`internal/platform/client.go`）：平台侧 `response.Success` 与 `response.Error` **都写 HTTP 200**，
+真值只在信封 `code` 里；连 `MerchantAuth` 的 401/403、注册的 400/409 也走这条路。而商户客户端 `doRetry`
+的成功分支只做 `json.Unmarshal(respBody, respData)` 后 `return nil`，于是：`RegisterMerchant` 对
+"该邮箱已被注册"打出「商户注册成功」且不落密钥、`ReportInstall`/`ReportHeartbeat` 对 `code=400` 打出
+「上报成功」（respData 为 nil 时连响应体都不读）。修法落在**唯一出口**：新增 `envelopeRefusal(body)`，
+非信封（非对象 / 无 `code` 键）不凭空造失败、`code=0` 与 `200` 视为成功、其余转成带
+`StatusCode`+业务码+平台原话的 `*PlatformError`；`doRetry` 成功路径改为无条件读体后过这道闸，
+两条上报口各自补一次 `envelopeRefusal`。资产市场客户端原有的 `env.Code != 0 && != 200` 判断降为兜底冗余
+（其用例断言随之从字符串匹配升级为按结构化 `perr.Resp.Code` 判定，与 `PlatformError` 文档里
+"别再依赖脆弱的字符串匹配"的初衷一致）。
+连带必要项：R11 之后 `platformData` 第一次拿到"通了但被拒"的错误，若继续统一播报"平台不可达"，
+会把商户停用/签名不对推给网络排查 ⇒ 降级文案分流为 `平台拒绝(code=..): <原话>` 与 `平台不可达` 两支。
+交付：`client_test.go` +7 例（含 3 条反向闸门：`code=200` 仍解析、裸 body 原样交回、连不上仍报不可达）
++ `controller/platform_test.go` 2 例（该控制器此前零测试），**8 处行为变异全被杀死**
+（控制组 ran=19/pass=19，X3 的杀死证据是摘守卫后的 nil deref panic，已按"期望用例确实红了"才计入）；
+`./internal/platform/` 整包绿、`-race` 绿。
+
 **本轮新登记（未处置）**
-- **商户客户端 `doRetry` 同样只认 HTTP 200**：与 R9 同族，但它在 `RegisterMerchant` 等链路上把
-  平台拒绝（HTTP 200 + `code 400`）读成成功。影响面比 R9 宽——现有用例与若干 handler 直接回裸 body，
-  严格化前需先分清"哪些端点走信封"，故单独排期而非顺手改。
+- **`GetLicenseStatus` 打的端点平台从未实现**（R12，交产品口径）：`/merchant-api/license/status`
+  在 `platform-server/internal/router/router.go` 的路由枚举里**不存在**，平台侧开源版已按
+  「移除 License」把相关字段/接口一并删掉（`merchant_domain_service.go:118` 的 `licenseDays` 只留形参）。
+  于是 user-server 三处调用（`app_config.go:98/168/227`）恒拿 404 → `DegradeReason` 判 `unreachable`
+  ⇒ `/health` 的 `platform_connection` 与 app-config 的 `platform_available` 在平台**明明健康**时也报故障，
+  且每个 app-config 请求刷一条 Error 日志。收敛有两个方向且都改变对外语义：① 探测改打平台真实存在的
+  `r.GET("/health")`（纯连通性，不再假称"授权状态"）；② 承认 License 属商业版契约，开源平台补端点。
+  未擅自选边。
 - **`reach_delayed_outbound` 上并存两条 drain**：H-3 主链路（按 `send_at` 全局到期投递）与离线回扫
   （按"渠道 10 分钟无消息"判定后补投）。抢占票已让两者互斥，但回扫仍会在渠道**确实离线**时投递，
   是否该改成"渠道恢复在线才补投"属产品口径，未擅动。
