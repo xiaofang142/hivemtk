@@ -950,14 +950,22 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 不能把「不知道」写成 false，也不能反过来把 false 洗成 true）。
 		return recordResultPayload(map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]})
 	case "click":
-		res, err := e.hand.click(ctx, userID, tabID, step.Target)
+		// 写步才请求点后身份复核（批17(b)）。判据取 stepRow.IsWrite 而不是在这里重算
+		// classifyStepEffect：那一列是本步落库时写死的事实，重试轮、双发闸、D7 都读它——
+		// 在这里重算就等于允许「闸门认它是写、请求复核时认它不是写」这种裂脑存在。
+		res, err := e.hand.click(ctx, userID, tabID, step.Target, stepRow.IsWrite)
 		if err != nil {
 			return nil, err
 		}
 		// channel 如实透传：cdp / dom_fallback / null（老扩展没这个字段）。
 		// 兜底本身不是失败，但「一片绿里全是 dom_fallback」= trusted 通道死了，
 		// 这一列就是用来发现它死了的（批14 实证形态）。
-		return recordResultPayload(map[string]any{"navigated": res["navigated"] == true, "channel": res["channel"]})
+		// identity_checked 同口径：true=这次写步点击真的过了点后复核；null=旧扩展没这个概念。
+		// 不加这一列，「复核跑过」与「复核从没被请求」在库里长得一样（批17 立项理由）。
+		return recordResultPayload(map[string]any{
+			"navigated": res["navigated"] == true, "channel": res["channel"],
+			"identity_checked": res["identity_checked"],
+		})
 	case "type":
 		res, err := e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
 		if err != nil {
@@ -966,11 +974,14 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		return recordResultPayload(map[string]any{"channel": res["channel"]})
 	case "click_near":
 		// 以 Anchor CSS 为基准点击容器内指定文本的 button（发送/提交按钮无稳定 class 场景）
-		res, err := e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
+		res, err := e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText, stepRow.IsWrite)
 		if err != nil {
 			return nil, err
 		}
-		return recordResultPayload(map[string]any{"clicked": res["clicked"] == true, "channel": res["channel"]})
+		return recordResultPayload(map[string]any{
+			"clicked": res["clicked"] == true, "channel": res["channel"],
+			"identity_checked": res["identity_checked"],
+		})
 	case "post_comment":
 		// F2②（G11 正确版）：三段式拆分——prep（可重入）→ send（唯一不可逆点，F2① 已禁重试）
 		// → verify 轮询 finalize（只读、可中断、可归因）。提交与验证彻底分离：

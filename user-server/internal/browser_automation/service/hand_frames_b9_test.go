@@ -140,7 +140,7 @@ func TestHandTabScopedPrimitivesCarryTabID(t *testing.T) {
 	defer cancel()
 	const tab = 777
 
-	if _, err := hand.click(ctx, 9501, tab, "#send"); err != nil {
+	if _, err := hand.click(ctx, 9501, tab, "#send", false); err != nil {
 		t.Fatalf("click: %v", err)
 	}
 	if _, err := hand.typeText(ctx, 9501, tab, "#input", "hi", true, false); err != nil {

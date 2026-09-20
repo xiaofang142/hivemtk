@@ -716,6 +716,8 @@ L-C2 台账依旧 `prepared`、L-C4 依旧 `send=0 mask=0`。**口径说清楚**
 「探测到的那一次点击确实发生了、且只发生一次」，但**证不了**「点的就是探测的那个元素」——
 贝塞尔飞行时间（可达数百毫秒）内页面挪动仍会点到从未被探测过的元素而返回 `{ok:true, channel:'cdp'}`。
 这是 §8.3 A1 的剩余半径，归下一批。
+> （批17 状态回写：本段描述的"仍未做"已结，(a)(b) 两条落地、真机与电池实证见 **§7.11**；
+> 本段保留为批14 当时的取证边界，不作为现状描述读。）
 
 ## 7.7 批15 验收实证（提交后复验做实 + B 链路「重复」判定的一处静默丢消息入口）
 
@@ -1177,6 +1179,125 @@ M17 多红 `TestGenericWriteStepLedgerFailureJudgedRed`。判"是真实连带面
 所以 §7.9 那段"没跑夹具真机腿"的取舍与触发条件原样有效：批17 一动 `primitives.js`，
 L-A/L-C 两条就是硬门禁的一部分。
 
+## 7.11 批17：可点性补 `stable` + 写步点击后身份复核（§8.2-1 两条落地，含二次检查抓出的一处闸门误伤）
+
+**本批动了 `primitives.js`**——§7.10 末尾立的那条触发条件当场生效，所以真机腿 L-A/L-C 不是加分项，
+而是门禁的一部分。生产改动面比前几批大：扩展侧三处（三份内联 `settleBox`、`injClickIdentityCheck`、
+`asIdentityVerdict`）+ Go 侧三个文件（`hand.go` 打帧标志、`executor.go` 把 `is_write` 喂给复核并落
+`identity_checked`、`write_ledger.go` 的 `isNeverExecuted` 补一族）。
+
+### 一、(a) `stable`：判据一份、内联三份，且拒在零副作用上
+
+`settleBox`（`primitives.js:44-59` / `:286-301` / `:514-529`，三份内联）的判据是 Playwright 口径的形状：
+**连续两帧 `getBoundingClientRect()` 完全一致**才算落位，不等即 `{error:'unstable'}`。三处设计细节都有理由：
+
+- **节拍用 rAF、并挂 `setTimeout(fin, 50)` 兜底**：真机取证 tab 是 `active=false` 的隐藏页，隐藏页不出
+  rAF 帧，只等 rAF 的版本会在隐藏页里**永挂**到 15s 注入竞速窗超时。真机腿 ALIVE-3 直接把这条读成证据
+  （`document.visibilityState == 'hidden'`），所以**定时器兜底才是本批真机上实际在跑的那条分支**——
+  它不是"rAF 之外的备胎"。
+- **先比盒、后查 deadline**：被节流的隐藏页里两帧之间就是 50ms，静止元素第一轮即通过；把 deadline
+  查在前面会让"隐藏页里的静止元素"永远多等一轮。
+- **500ms 上限远小于 15s 注入窗**：超窗会被切成 `*_inject_timeout_`，那是"点击从未发生"的归因，
+  被 `stable` 借用就是假归因（文案不同、台账后果也不同）。
+- **拒了还要重查一次可点性**（`:71-73`）：等待期间浮层可能刚渲染完，拿旧那帧的遮挡结论去点新位置的
+  坐标等于把 hit-target 作废。
+
+拒绝的形状是**派发前**拒绝：`{error:'unstable'}` → `element_not_interactable: unstable`（第三份是
+`send_button_not_interactable: unstable`），**一帧坐标都不下发**。真机腿钉住两面：页面侧
+`#moved` 零事件（L-A2/L-A6，证明确实没点）+ 命令帧恰好 1 条（L-A3，证明没被降级成兜底下发）+
+同页静止按钮照常一次 `isTrusted=true` 的 click（L-A4/A5，证明没误伤）。
+
+**为什么内联三份而不是抽共享函数**：注入函数跨序列化边界只过 `func.toString()`（§8.1-3 / 记忆里的
+批14 链头教训），共享函数会在真机上静默断链。代价是三份会漏改，所以补了两样牙：
+JS 侧断言"`unstable` 判据在三处 probe 里各出现一次"，加上电池**逐格下刀**（M1/M2/M3 分别在
+`injClick`/`injClickNear`/`injPostCommentSend` 那一格装死），避免"摘一份会红"被当成"三份都有腿"。
+
+### 二、(b) 点后身份复核：只给写步、只跑在 CDP 之外、失败绝不回头再点
+
+`injClickIdentityCheck(target, probeX, probeY, tolerancePx)`（`:234`）只复核页面侧此刻观测得到的三件事：
+selector 仍可解析、中心点未挪出 `IDENTITY_RECHECK_TOLERANCE_PX = 5`、该点 hit-target 未被别的节点接管；
+任一不过即 `element_moved: …`。接线三段各有理由：
+
+- **`cmd.verify_identity` 由 Go 侧的 `stepRow.IsWrite` 喂**（`hand.go` 的 click/click_near 帧 +
+  `executor.go:956/977`）：读步不付这次额外注入的时延预算（电池 M9 / 真机 L-C1：只读步
+  `identity_checked` 缺省且照样点了一次）。判据本身也要可信，所以 L-C3 直接读库比 `is_write`。
+- **复核跑在 CDP 的 `try` 之外**。这是本批最要紧的一条形状：复核若放在同一个 `try` 里，
+  "复核不过"会被 catch 误读成"CDP 不可用"→ 走 DOM 兜底**再点一次**——正是批14 花一整批消灭的
+  双发形状。`asIdentityVerdict`（`:747`）因此单独归因：复核自己给出 `element_moved` 就原样上抛
+  （那是结论），其余异常切成 `identity_recheck_failed`，**都不回落到兜底**。电池 M4/M5/M6 三格
+  分别钉"删掉复核""复核失败改走兜底""复核跑不动时静默 ok"。
+- **`navigated` 时跳过中心点判据**（`:850`）：页面跳走不是元素挪位，用中心点判它会把一次成功的
+  提交报成 `element_moved`。这条腿的注码（M8）一开始**存活**，原因是测试自己的 DOM 没变——
+  去掉 `!navigated` 后没有任何可观测差异，是**我错它不红**的反面（测试不够真）。修测试
+  （在 `cdp.clickAt` 里换掉 `document.body.innerHTML`）后 M8 才被杀。
+- **`click_near` 是第二个消费点**，用 probe 自己回传的 `probe.selector` 再解析（`injClickNear` 新增
+  `pathOf()`：优先 `#id`，否则 `tag:nth-of-type` 路径）。单独下刀（M10/G5/G6），因为"click 有复核"
+  推不出"click_near 也有"。
+
+真机 L-B 组钉的是最坏形状的否定面：元素在 `pointerdown` 上自己挪走 ⇒ 报 `element_moved`（不是
+`identity_recheck_failed`）、台账 `unattributed`、命令帧恰好 1 条、页面侧 `pointerdown=1` 而
+`click=0` ⇒ **复核失败没有换来第二次点击**。
+
+### 三、二次检查抓出的真缺陷：派发前的拒绝被记成了"提交尝试"
+
+第一轮 27 条腿全绿之后，深查把 `*_not_interactable` 的台账后果读了一遍，发现一处**闸门误伤**：
+
+| 事实 | 证据 |
+|---|---|
+| 一次被浮层遮住的写步，步判 `failed` 但 `submit_state=unattributed` | 真机库读 step **2287**（`element_not_interactable: covered`） |
+| 同一种"派发前拒绝"在另一条路径上却是 `prepared` | step **2308**（`post_comment` 发送闸门）⇒ 同一事实两套口径，说明 `unattributed` 不是设计而是漏 |
+| `unattributed` ∈ `StepSubmitAttemptedStates()`，而 `guardResubmit` 明写"unattributed 也拦" | `write_ledger.go` 双发闸 ⇒ 唯一正确的处置（等页面停下再跑一次）被**永久**拦死，直到人工改文本或换新任务 |
+
+修法是一行判据（`isNeverExecuted` 补 `strings.Contains(msg, "_not_interactable")`）+ 两处锁：
+
+- **前提要可查，不能靠猜**：这些文案只由三份页面内 probe 产出，且产出点全在 `cdpInput.clickAt`
+  之前——所以补一条 JS 静态腿锁死"SW 侧 `dispatch` 那一段不许出现 `*_not_interactable`"
+  （同时断源码别处确有命中，防"因为不存在所以永远绿"）。它的牙由电池 M11 证：在 SW 侧合成一句
+  `*_not_interactable` 即判红。
+- **Go 侧三例反证**（`TestPreDispatchRefusalRecordsNoAttempt`：`unstable` / `covered` /
+  `send_button_not_interactable`）先跑出 RED（三格都打
+  `submit_state="unattributed" 落在「已尝试」集合里`），加那一行后 GREEN；电池 G7 再证明
+  "把 `element_moved` 也一并判成从未发生"会红（`unattributed` 那一族不许顺手扩大）。
+
+**刻意不修的三处**（写清楚，不算漏）：① **写步点击后发生跳转 ⇒ 复核按设计跳过**
+（`:850` 的 `!navigated`），此时 `identity_checked` 如实留空——"点中了什么"在跳转之后没有页面侧
+观测点，那条事实归 §7.7 的提交后复验负责，中心点判据不冒充它。M8 与那条 navigated 腿
+（断 `identity_checked` 为 `undefined`）一起钉住这个形状，防止有人把"跳过"读成"漏了"。
+② `element_moved` 继续留 `unattributed`——它发生在派发**之后**，动作已经发生、结果未知，
+记成"从未发生"就是把双发留给下一轮（G4 专门钉这一条：把它并进 `isNeverExecuted` 那族会当场红）。
+③ `click_near` 没有导航探测（批14 之前就有的形状，本批不扩半径），所以"发送后跳转"的站点上
+它可能报 `element_moved` → `unattributed`；方向是保守的（宁可判红也不假绿），要改得先给
+`click_near` 补 `navigated` 判定，属另一批。
+
+另有一类**观测不到**的：同位置被换成同 selector 的另一节点，除非页内埋身份令牌，无从分辨——
+`injClickIdentityCheck` 的注释里原样记着这条边界（§8.2-1 的状态块也记了，防止下一批以为它已覆盖）。
+
+### 四、证据（全部跑出来的）
+
+| 层 | 跑法 | 读数 |
+|---|---|---|
+| 扩展单测 | `user-web/browser_automation` 全量 vitest（不带过滤） | 13 文件 / **149 条全绿**（含批17 的 `batch17-actionability.test.js` 18 条）；`npm run build` 后 `dist/background.js` 与构建前那份逐字节相同（md5 `6371b327…`）⇒ dist 可复现 |
+| Go 门禁 | 干净 `git clone --shared` @ HEAD `8f07f792` + 泳道八文件覆盖（逐文件 md5 与工作树对得上）；`gofmt -l` 泳道**空**、`go build ./...` rc=0、`go vet` rc=0、`go test -test.v ./internal/browser_automation/...`（**不带 `-run`**） | rc=0，`PASS=152 FAIL=0 SKIP=0`（controller 1.178s / platform 1.573s / service 175.360s） |
+| 反向证据 | `scripts/mut_actionability_b17.py`：JS M1–M11（三份内联各自一格 + 复核的六种坏形状各一格）+ Go G1–G7（帧标志 / 传参 / 落库列 / 两类误判成"从未发生"） | 控制组 JS `passed=18 skipped=0`、Go `ran=15 skip=0`；**18 格逐格被杀、无存活**，每格还原后 md5 与基线一致；**最终树（门禁与真机腿跑完之后）整趟重跑一次**：18 格仍逐格被杀、
+控制组读数不变（`/tmp/b17_mut_final.log`，`battery rc=0`）。同族提示只有一条：G1 与 G2 杀掉同一用例——它们是同一事实的两条线（帧里有没有 `verify_identity` / Go 有没有把 `is_write` 传进去），登记不拆 |
+| 真机腿 | 真实夹具 Chrome + 真实扩展 + 该克隆构建的服务端（`/tmp/user-server.b17`，起服后 `host/status` 报 `online/servable=true`、pid 16732、version 1.5.0）；只打 `127.0.0.1:1864x` 本地夹具页，**不碰真实平台** | **29/29 PASS**（session 592–596，`/tmp/b17_device_legs6.log`） |
+
+**门禁为什么必须在克隆里跑**（本批现场撞到的）：共享工作树此刻 `go build ./...` 直接红
+（`internal/service/bridge_offline_replay.go:83 undefined: atomic`，并行会话在途文件），
+在真树上跑门只能得到"整树红"这一条无归属信息。克隆里 `HEAD + 泳道八文件` 才是本批的树，
+md5 逐文件核过才算"电池/门禁打的就是要提交的那份"。
+
+### 五、取证侧自己被抓的两处（不记下来，这条腿下次还会红得没道理）
+
+- **`sql()` 把"读数为空串"和"psql 失败"糊成同一个 `ERR `**：L-A7 断的恰恰就是空串
+  （台账留空 = 不算提交尝试），于是那条腿**永远 FAIL**。改成按 `returncode` 分流，并用
+  `CASE` 把 `''` 与 `NULL` 分辨出来（两者对闸门含义相同，但读数不能把形状糊掉）。
+  这是 §7.10「取 rc 的那一行代码本身要审」的同一族——**取读数的 helper 也不能把两种形状并成一种**。
+- **夹具会自己盖住自己要测的元素**：`#moved` 的位移幅度（x≤38px）在三个按钮同行紧排时
+  恰好盖住相邻 `#still` 的中心点 ⇒ L-A4/ALIVE-2 随机红，红因 `element_not_interactable: covered`。
+  **红的是取证面，闸门在正确地工作**（中间那趟 26/29 反过来白送了一条遮挡腿的真机证据：
+  step 2358 与 2356 一样留空 `submit_state`）。三按钮分行后 29/29 稳定复现。
+
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
 取证方法：六路并行 agent，每路给「本仓现状线索 + 待查同行清单」，要求每条机制带真实字段名与来源 URL、
@@ -1217,6 +1338,14 @@ L-A/L-C 两条就是硬门禁的一部分。
    > 在真机上从未成功过（§7.6 链头），所以「探测 → 真点之间」这段时间此前**根本不存在**。
    > 批14 落了「probe 不被兜底绕过」+「兜底不双发」（§7.6），(a) `stable` 与 (b) 点后身份复核
    > 两条仍开放，且现在才真正可测（真机 `channel=cdp` 已是可断言的列）。
+   > 状态（批17 后）：**两条都已落地，实证见 §7.11**。三处与本文原口径不同，按实测改：
+   > ① `stable` 的节拍不能照抄"rAF ~16ms 轮询"——取证 tab 是隐藏页，隐藏页**不出 rAF 帧**，
+   > 只等 rAF 会在隐藏页里永挂到注入超时；真机在跑的是 `setTimeout(fin,50)` 那条兜底分支
+   > （ALIVE-3 把可见性读成证据）。② 复核必须跑在 CDP 的 `try` **之外**，否则"复核不过"会被
+   > catch 误读成"CDP 不可用"→ DOM 兜底**再点一次**，正好把本条要修的假绿换成双发。
+   > ③ 中心点判据在 `navigated` 时必须跳过（页面跳走≠元素挪位）。
+   > 另记一条观测边界（原口径没写）：**同位置被换成同 selector 的另一个节点**无从分辨，
+   > 除非页内埋身份令牌——本批如实留在注释与 §7.11 里，不声称覆盖。
 2. **审批没绑载荷**（P1，D7 闸门）。我们的放行是一条布尔/行状态，同行一致把审批绑到"被批的具体载荷 + 版本"上：
    GitHub `dismiss_stale_reviews` + "records the state of the diff at the point when a pull request is approved"、
    Salesforce "Approvers see the values at submission time, not current changes"、
@@ -1242,7 +1371,7 @@ L-A/L-C 两条就是硬门禁的一部分。
 
 | # | 同行口径（证据） | 本仓实测 | 取舍 |
 |---|---|---|---|
-| 1 | 派发前必须在**同一动作事务内**重算可点性，`stable` = 连续两帧 boundingBox 一致（Playwright `_retryPointerAction`: `scrollIntoViewIfNeeded`→`checkElementStates(['visible','enabled','stable'])`→`_clickablePoint`→`_checkFrameIsHitTarget`；Skyvern `classify_element_state` 的 `occluded` 用 `elementFromPoint(center)` 且 `top!==el && !el.contains(top)`） | `actionabilityCheck`（`primitives.js:12-26`）已有 visible / 零盒 / disabled / **遮挡**四项，**只缺 `stable`**（23-24 行注释自陈理由）。更关键：`injClick('probe')` 返回 `{x,y}` 后，真点击走 `cdpInput.clickAt(tabId, probe.x, probe.y)`（`:646-647`），**中间隔着拟人贝塞尔飞行时间**，这期间页面挪动即点到从未探测过的元素，返回值仍是 `{ok:true, channel:'cdp'}` | **采纳（P1）** A1（批14 落「闸门不被兜底绕过」+「兜底单发」并真机立证 `channel=cdp`；`stable` 与点后身份复核两条开放，见 §7.6 未落地段） |
+| 1 | 派发前必须在**同一动作事务内**重算可点性，`stable` = 连续两帧 boundingBox 一致（Playwright `_retryPointerAction`: `scrollIntoViewIfNeeded`→`checkElementStates(['visible','enabled','stable'])`→`_clickablePoint`→`_checkFrameIsHitTarget`；Skyvern `classify_element_state` 的 `occluded` 用 `elementFromPoint(center)` 且 `top!==el && !el.contains(top)`） | `actionabilityCheck`（`primitives.js:12-26`）已有 visible / 零盒 / disabled / **遮挡**四项，**只缺 `stable`**（23-24 行注释自陈理由）。更关键：`injClick('probe')` 返回 `{x,y}` 后，真点击走 `cdpInput.clickAt(tabId, probe.x, probe.y)`（`:646-647`），**中间隔着拟人贝塞尔飞行时间**，这期间页面挪动即点到从未探测过的元素，返回值仍是 `{ok:true, channel:'cdp'}` | **采纳（P1）** A1（批14 落「闸门不被兜底绕过」+「兜底单发」并真机立证 `channel=cdp`；**批17 落 `stable` 三份内联 + 写步点后身份复核，实证 §7.11**） |
 | 2 | "跑了"与"成了"永不共列：GitHub Checks `status`×`conclusion`、K8s `phase`×`conditions[]`、Stripe PI `processing`≠`succeeded`、OTel recording-errors "无错时 status MUST 留 Unset" | `browser_command_log` 只有 `Ok bool`（`model/command_log.go:22`） | **采纳（P1）** A2 |
 | 3 | 重试必须有上界并落终态：Sidekiq `DEFAULT_MAX_RETRY_ATTEMPTS=25` → `dead` ZSET（`dead_timeout_in_seconds` 6 月、`dead_max_jobs=10000`）、SQS `redrivePolicy.maxReceiveCount` → DLQ、River `discarded` | 出站集合语义本身正确（`FetchOutboundUndelivered` 只取 `pending` 或 `inflight && claimed_at<now()-30s`，`delivered/failed` 自然离开；`handler_http.go:236` 证实 SSE 轮询定时器确走此函数，未注入时按 `:211` 显式 Warn 回退游标）。但**没有任何尝试计数列**，于是"扩展每次都发不出去"（目标会话已不存在等）的行会以 30s 周期**永久重推**，无人升级为终态 | **采纳（P1）** A3 |
 | 4 | 去重必须有界：SQS `MessageDeduplicationId` 5 分钟窗、Stripe 幂等键 24h、Azure "Retain each record at least as long as the broker can still redeliver" | 桥接扩展 `SentCache` 持久化到 `chrome.storage.local`（`downlink.js:24,48`，**非内存态**），但**只有条数上限 `sentCacheMax:2000`、无时间界**（`constants.js:248`），且 `add()` 命中已有 key 不刷新插入位（Set 语义）→ 淘汰纯按插入序 | **采纳（P2）** A4：加 **24h** TTL，不是 5min（服务端重推窗取决于浏览器离线时长，界必须 ≥ 上游仍能重投的时长，否则反而放大重复风险） |

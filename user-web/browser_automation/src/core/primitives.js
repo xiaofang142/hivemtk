@@ -8,12 +8,17 @@ const WAIT_SELECTOR_INTERVAL_MS = 200;
 // 铁律（批14 真机实证，闸门见 test/inject-sandbox.js）：chrome.scripting.executeScript
 // 只把 func.toString() 送进页面，模块作用域里的任何自由变量在页面侧都是 ReferenceError，
 // 且 Chrome 回包 result:null —— 调用方会把它误读成「注入没返回/CDP 不可用」。
-// 下面的 actionability 检查因此在 injClick 与 injClickNear 里各内联一份（两处必须同步改）；
-// 语义对齐 Playwright _retryPointerAction 的 visible/stable/enabled/hit-target/box 五项。
-// 注：stable（两帧同 box）在注入函数单帧执行模型里无法低成本实现；
-// trusted 路径的 infobar 500ms 等待 + CDP press 前 pointerSettle 时序已覆盖主要动画窗口。
+// 下面的 actionability 检查因此在 injClick / injClickNear / injPostCommentSend 里各内联一份
+//（三处必须同步改）；语义对齐 Playwright _retryPointerAction 的 visible/stable/enabled/hit-target/box 五项。
+// stable（批17 §8.2-1a）也在注入函数内部实现：rAF 双帧比盒，直到连续两帧同 box 才交坐标。
+// 单帧模型不是障碍——Chrome 会等注入函数返回的 Promise 结算（injWaitForSelector 早就靠这条），
+// 所以「等落位」仍是一次 evaluate、零额外往返。结算窗上限（500ms）与帧间隔（16ms）随检查逻辑
+// 一起内联在各份 probe 里：注入函数引用不到模块作用域，改数值同样是三处一起改。
+// 点后身份复核的位移容差（视口像素）：抖动落点与 1px 布局误差不算移动，真挪位算。
+// 这个值在 SW 侧作为参数下发，所以只有一份。
+const IDENTITY_RECHECK_TOLERANCE_PX = 5;
 
-function injClick(target, mode) {
+async function injClick(target, mode) {
   const el = document.querySelector(target);
   if (!el) return { ok: false, error: 'element_not_found: ' + target };
   if (mode === 'probe') {
@@ -31,13 +36,42 @@ function injClick(target, mode) {
       } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
       return null;
     };
+    // stable（批17 §8.2-1a，三份内联同步改）：连续两帧同 box 才算落位；一直动就一帧坐标都不下发。
+    // 节拍用 rAF，但真机后台 tab（open_tab active=false）不出帧，所以并挂 setTimeout 兜底——
+    // 只等 rAF 的版本会在隐藏页里永挂。先比盒后查 deadline：被节流的静止元素照样一次通过。
+    // 500ms 上限远小于 comment_send 的 15s 注入竞速窗：超窗会被切成 *_inject_timeout，
+    // 那是「点击从未发生」的归因，被 stable 借用就是假归因。
+    const settleBox = async (node) => {
+      const same = (a, b) => a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+      const frame = () => new Promise((res) => {
+        let done = false;
+        const fin = () => { if (!done) { done = true; res(); } };
+        try { requestAnimationFrame(fin); } catch { /* 无 rAF 的引擎：只靠定时器 */ }
+        setTimeout(fin, 50);
+      });
+      const deadline = Date.now() + 500;
+      let prev = node.getBoundingClientRect();
+      for (;;) {
+        await frame();
+        const cur = node.getBoundingClientRect();
+        if (same(prev, cur)) return { box: cur };
+        prev = cur;
+        if (Date.now() >= deadline) return { error: 'unstable' };
+      }
+    };
     let err = check(el);
     if (err === 'covered' || err === 'zero_box') {
       try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
       err = check(el);
     }
     if (err) return { ok: false, error: 'element_not_interactable: ' + err };
-    const r = el.getBoundingClientRect();
+    const settled = await settleBox(el);
+    if (settled.error) return { ok: false, error: 'element_not_interactable: ' + settled.error };
+    // 落位后重查一次可点性：等待期间浮层可能才渲染完，用旧那帧的遮挡结论点新位置的坐标
+    // 等于把 hit-target 检查作废——而中心点判据用的是结算后的 box。
+    err = check(el);
+    if (err) return { ok: false, error: 'element_not_interactable: ' + err };
+    const r = settled.box;
     return {
       ok: true,
       x: Math.round(r.left + r.width / 2),
@@ -191,6 +225,30 @@ function injNavigatedCheck(probePageUrl) {
   } catch { return { ok: true, navigated: false }; }
 }
 
+// injClickIdentityCheck 批17 §8.2-1b：trusted 点击**之后**的身份复核（只有写步下发这条）。
+// 探测与真点之间隔着拟人贝塞尔轨迹的飞行时间（可达数百 ms），这期间轮播/懒加载/toast 挪动页面，
+// 就会点到一个从未被探测过的元素，而旧回包仍是 {ok:true, channel:'cdp'}——静默假绿。
+// 只复核「页面侧此刻还观测得到」的三件事：selector 仍可解析、中心点未挪出容差、
+// 该点 hit-target 仍是这个元素。观测不到的那一类如实记在 spec §8.2-1(b)：
+// 同位置被换成同 selector 的另一个节点，除非页内埋身份令牌，否则无从分辨。
+function injClickIdentityCheck(target, probeX, probeY, tolerancePx) {
+  const el = document.querySelector(target);
+  if (!el) return { ok: false, error: 'element_moved: 点后目标已不可解析（被移除或被改版换掉定位）' };
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  if (Math.abs(cx - probeX) > tolerancePx || Math.abs(cy - probeY) > tolerancePx) {
+    return { ok: false, error: 'element_moved: 中心点从 ' + probeX + ',' + probeY + ' 挪到 ' + Math.round(cx) + ',' + Math.round(cy) };
+  }
+  try {
+    const hit = document.elementFromPoint(probeX, probeY);
+    if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) {
+      return { ok: false, error: 'element_moved: 落点已被 ' + (hit.id || hit.tagName) + ' 接管' };
+    }
+  } catch { /* 无 elementFromPoint 的环境：该项按现状跳过（与 probe 同口径） */ }
+  return { ok: true };
+}
+
 function injScroll(direction, amount) {
   const dx = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
   const dy = direction === 'up' ? -amount : direction === 'down' ? amount : 0;
@@ -200,7 +258,7 @@ function injScroll(direction, amount) {
 
 // 以锚元素为基准点击「同容器内的 button」——应对发送/提交按钮无稳定 class、
 // 且 @e ref 每次快照重排导致硬编码 ref 不可靠的场景（如小红书评论发送按钮）
-function injClickNear(anchorSelector, buttonText, mode) {
+async function injClickNear(anchorSelector, buttonText, mode) {
   const anchor = document.querySelector(anchorSelector);
   if (!anchor) return { ok: false, error: 'anchor_not_found: ' + anchorSelector };
   let root = anchor.parentElement;
@@ -224,19 +282,61 @@ function injClickNear(anchorSelector, buttonText, mode) {
           } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
           return null;
         };
+        // stable：与 injClick 同一份，内联（口径与预算的理由见彼处注释）
+        const settleBox = async (node) => {
+          const same = (a, b) => a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+          const frame = () => new Promise((res) => {
+            let done = false;
+            const fin = () => { if (!done) { done = true; res(); } };
+            try { requestAnimationFrame(fin); } catch { /* 无 rAF 的引擎：只靠定时器 */ }
+            setTimeout(fin, 50);
+          });
+          const deadline = Date.now() + 500;
+          let prev = node.getBoundingClientRect();
+          for (;;) {
+            await frame();
+            const cur = node.getBoundingClientRect();
+            if (same(prev, cur)) return { box: cur };
+            prev = cur;
+            if (Date.now() >= deadline) return { error: 'unstable' };
+          }
+        };
+        // 一条能再解析回同一个节点的路径：有 id 用 id，否则逐层 tag + nth-of-type。
+        const pathOf = (node) => {
+          if (node.id) return '#' + node.id;
+          const parts = [];
+          let cur = node;
+          while (cur && cur.nodeType === 1 && cur.tagName !== 'HTML') {
+            const parent = cur.parentElement;
+            if (!parent) break;
+            const sameTag = Array.from(parent.children).filter((c) => c.tagName === cur.tagName);
+            const suffix = sameTag.length > 1 ? ':nth-of-type(' + (sameTag.indexOf(cur) + 1) + ')' : '';
+            parts.unshift(cur.tagName.toLowerCase() + suffix);
+            cur = parent;
+          }
+          return parts.join(' > ');
+        };
         let err = check(hit);
         if (err === 'covered' || err === 'zero_box') {
           try { hit.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
           err = check(hit);
         }
         if (err) return { ok: false, error: 'element_not_interactable: ' + err };
-        const r = hit.getBoundingClientRect();
+        const settled = await settleBox(hit);
+        if (settled.error) return { ok: false, error: 'element_not_interactable: ' + settled.error };
+        err = check(hit);
+        if (err) return { ok: false, error: 'element_not_interactable: ' + err };
+        const r = settled.box;
         return {
           ok: true,
           x: Math.round(r.left + r.width / 2),
           y: Math.round(r.top + r.height / 2),
           jitter_radius: Math.min(r.width, r.height) / 2,
           clicked: (hit.innerText || 'button').trim(),
+          // 点后身份复核要把「这次点的是哪个元素」再解析一遍，而 click_near 的定位本来就是
+          // 锚点+文本现算的（没有调用方持有的 selector）——回传一条可再解析的路径，
+          // 复核才有对象。没有它就只能「无从复核却照样 ok」，那正是本批要堵的静默绿。
+          selector: pathOf(hit),
         };
       }
       try { hit.scrollIntoView?.({ block: 'center' }); } catch { /* noop */ }
@@ -358,7 +458,7 @@ function injPostCommentPrep(text, inputSelector) {
  * injPostCommentSend 阶段二：定位 发送/发布 button 的**视口坐标**（供 CDP trusted 点击），
  * 并返回输入框引用供后续验证。按钮文本由平台适配器下发。
  */
-function injPostCommentSend(inputSelector, sendButtonText) {
+async function injPostCommentSend(inputSelector, sendButtonText) {
   const CANDIDATE_INPUT = inputSelector || '.content-textarea, p.content-input, [contenteditable="true"], div[contenteditable], .comments-container textarea, textarea[placeholder]';
   const el = (() => {
     const nodes = document.querySelectorAll(CANDIDATE_INPUT);
@@ -409,7 +509,32 @@ function injPostCommentSend(inputSelector, sendButtonText) {
     blocked = check(btn);
   }
   if (blocked) return { ok: false, error: 'send_button_not_interactable: ' + blocked };
-  const r = btn.getBoundingClientRect();
+  // stable（内联第三份）：发送按钮最常在提交瞬间被禁用/重排/被确认弹层接管，
+  // 落位前拿到的坐标点下去 = 提交动作落在一个从未被探测过的元素上，且回包仍写 sent=true。
+  const settleBox = async (node) => {
+    const same = (a, b) => a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+    const frame = () => new Promise((res) => {
+      let done = false;
+      const fin = () => { if (!done) { done = true; res(); } };
+      try { requestAnimationFrame(fin); } catch { /* 无 rAF 的引擎：只靠定时器 */ }
+      setTimeout(fin, 50);
+    });
+    const deadline = Date.now() + 500;
+    let prev = node.getBoundingClientRect();
+    for (;;) {
+      await frame();
+      const cur = node.getBoundingClientRect();
+      if (same(prev, cur)) return { box: cur };
+      prev = cur;
+      if (Date.now() >= deadline) return { error: 'unstable' };
+    }
+  };
+  const settled = await settleBox(btn);
+  if (settled.error) return { ok: false, error: 'send_button_not_interactable: ' + settled.error };
+  // 落位后重判一次：等待期间才挂上来的浮层/按钮 disabled 都必须拦下这次提交
+  blocked = check(btn);
+  if (blocked) return { ok: false, error: 'send_button_not_interactable: ' + blocked };
+  const r = settled.box;
   return { ok: true, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
 }
 
@@ -616,6 +741,15 @@ function isUnackedClick(msg) {
   return String(msg || '').includes('click_unacked');
 }
 
+// asIdentityVerdict 批17(b) 点后复核的归因：复核自己给出 element_moved 就原样上抛（那是结论）；
+// 复核跑不动（注入没回包/该帧被销毁）必须换名成 identity_recheck_failed——未知态既不能顺着
+// 「没抛错就是 ok」变成静默绿，也不能冒充「元素挪位」这个已经查明成因的具体结论。
+function asIdentityVerdict(e) {
+  const msg = String(e?.message || e);
+  if (msg.includes('element_moved')) return new Error(msg);
+  return new Error('identity_recheck_failed(点后复核未能给出结论): ' + msg);
+}
+
 /**
  * dispatch 执行一条命令帧（server → Host → 扩展）
  * @param {Map<string,Function>} deps 依赖注入（tab-manager / accessibility），便于测试
@@ -684,12 +818,12 @@ export async function dispatch(cmd, deps) {
           // 生效的那一刻被自己绕过（浮层还压着，按钮已经被点掉了）。
           const sel = resolveTarget(cmd.target);
           const probe = await executeInTab(tabId, injClick, [sel, 'probe']);
+          let navigated = false;
           try {
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             // R25-Q1：点击生效帧后短暂等路由，再纯读 location 对比判定同页导航；
             // 检测注入失败通常=页面正在导航中，按已导航处理。不再主动接管 href。
             await new Promise((r) => setTimeout(r, 300));
-            let navigated = false;
             try {
               const nav = await executeInTab(tabId, injNavigatedCheck, [probe.page_url]);
               navigated = !!nav.navigated;
@@ -697,7 +831,6 @@ export async function dispatch(cmd, deps) {
               navigated = true;
             }
             if (navigated) resetBaseline(tabId);
-            return { ok: true, navigated, channel: 'cdp' };
           } catch (e) {
             const msg = String(e?.message || e);
             if (isUnackedClick(msg)) throw e; // 可能已点中：兜底=双发，直接上抛交裁决
@@ -710,13 +843,25 @@ export async function dispatch(cmd, deps) {
             }
             throw e;
           }
+          // 批17(b)：写步的点后身份复核。**必须落在上面那个 try 之外**——复核失败若在 try 内
+          // 抛出，会被 catch 当成「CDP 不可用」而走 DOM 兜底再点一次：那是「已经发生的动作」
+          // 之上再动一次（双发），正是本批要消灭的形状。DOM 兜底不做复核：兜底点的是元素本身，
+          // 复核只会把真动作误判成移动。导航已发生同样跳过：那是跳转，不是元素挪位。
+          if (cmd.verify_identity && !navigated) {
+            try {
+              await executeInTab(tabId, injClickIdentityCheck, [sel, probe.x, probe.y, IDENTITY_RECHECK_TOLERANCE_PX]);
+            } catch (e) {
+              throw asIdentityVerdict(e);
+            }
+            return { ok: true, navigated, channel: 'cdp', identity_checked: true };
+          }
+          return { ok: true, navigated, channel: 'cdp' };
         }
         case 'click_near': {
           const anchorSel = resolveTarget(cmd.anchor);
           const probe = await executeInTab(tabId, injClickNear, [anchorSel, cmd.button_text || '', 'probe']);
           try {
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
-            return { ok: true, clicked: probe.clicked, channel: 'cdp' };
           } catch (e) {
             const msg = String(e?.message || e);
             if (isUnackedClick(msg)) throw e;
@@ -724,6 +869,16 @@ export async function dispatch(cmd, deps) {
             if (r?.ok) return { ...r, channel: 'dom_fallback' };
             throw e;
           }
+          // 同 click：复核在 try 之外，落点身份由 probe 回传的 selector 再解析一次
+          if (cmd.verify_identity) {
+            try {
+              await executeInTab(tabId, injClickIdentityCheck, [probe.selector, probe.x, probe.y, IDENTITY_RECHECK_TOLERANCE_PX]);
+            } catch (e) {
+              throw asIdentityVerdict(e);
+            }
+            return { ok: true, clicked: probe.clicked, channel: 'cdp', identity_checked: true };
+          }
+          return { ok: true, clicked: probe.clicked, channel: 'cdp' };
         }
         case 'type': {
           const sel = resolveTarget(cmd.target);

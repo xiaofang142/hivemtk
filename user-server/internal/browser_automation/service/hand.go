@@ -32,9 +32,13 @@ func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool
 
 // click 原语。回包含扩展侧 injClick 的 navigated 标志（是否发生页面跳转）——
 // F6a 轮内截断的证据来源（browser-use「页面变即截断剩余动作」语义，零额外往返）。
-func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string) (map[string]any, error) {
+// verifyIdentity（批17(b)）：是否请求「trusted 真点之后的身份复核」。这个开关只有写步该付——
+// 复核是一次额外的页内注入，且它的产物 element_moved 对读步毫无意义（读步 retries 还在，
+// 一次布局抖动就会被记成失败）。请求侧在 Go、执行侧在扩展，所以它必须出现在帧上。
+func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string, verifyIdentity bool) (map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "click", "tab_id": tabID, "target": target,
+		"verify_identity": verifyIdentity,
 	})
 	if err != nil {
 		return nil, err
@@ -137,10 +141,12 @@ func (h *Hand) scroll(ctx context.Context, userID uint, tabID int, direction str
 }
 
 // clickNear 原语：以锚元素为基准点击容器内文本含 buttonText 的 button。
-// 回包同 typeText 交回上层（channel 审计面，批14）。
-func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, buttonText string) (map[string]any, error) {
+// 回包同 typeText 交回上层（channel 审计面，批14）。verifyIdentity 同 click（批17(b)）：
+// 这一步的定位是「锚点+文本」现场算出来的，复核要拿 probe 回传的 selector 再解析一次。
+func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, buttonText string, verifyIdentity bool) (map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "click_near", "tab_id": tabID, "anchor": anchor, "button_text": buttonText,
+		"verify_identity": verifyIdentity,
 	})
 	if err != nil {
 		return nil, err

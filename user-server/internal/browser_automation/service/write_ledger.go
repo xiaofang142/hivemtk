@@ -347,14 +347,23 @@ func locatorMatches(locatorList, target string) bool {
 }
 
 // isNeverExecuted 错误是否证明「这一步从未在页面上发生」——*_not_found 是元素从未命中、
-// *_inject_timeout_ 是注入从未执行，两者都没有副作用，台账因此留空（= 不算尝试，可安全重下发）。
-// 反过来，WS 超时/未知错误一律不算：超时不等于没发生，那正是双发的形状。
+// *_inject_timeout_ 是注入从未执行、*_not_interactable 是可点性判定在**拿坐标之前**就把这次
+// 动作拒了（遮挡 / 零尺寸 / disabled / 抖动未落位），三者都没有副作用，台账因此留空
+// （= 不算尝试，可安全重下发）。反过来，WS 超时/未知错误一律不算：超时不等于没发生，
+// 那正是双发的形状。
+//
+// *_not_interactable 这条前提是可查的，不是猜的：这些文案只由页面内的三份 probe
+// （injClick / injClickNear / injPostCommentSend）产出，且产出点全在 `cdpInput.clickAt`
+// 之前——SW 侧的 dispatch 一句都不合成它（锁在 user-web 的批17 静态腿上）。
+// 把它算成「已尝试」的后果是具体的：一次被浮层遮住的写步会把唯一正确的处置
+// （等页面停下再跑一次）永久拦死在双发闸外（批17 真机腿实读 step 2287）。
 func isNeverExecuted(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "_inject_timeout_") || strings.Contains(msg, "_not_found")
+	return strings.Contains(msg, "_inject_timeout_") || strings.Contains(msg, "_not_found") ||
+		strings.Contains(msg, "_not_interactable")
 }
 
 // recordGenericWriteLedger 非 post_comment 写步的台账落点。post_comment 有自己的
