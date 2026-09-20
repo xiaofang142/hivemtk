@@ -182,6 +182,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewSessionIDLengthMigration(db))
 	register(NewAlertRuleMigration(db))
 	register(NewUnifiedIDWidenMigration(db))
+	register(NewCustomerOwnerAgentMigration(db))
+	register(NewReachTablesMigration(db))
 	register(NewSOPTimerSinkColumnsMigration(db))
 	register(NewSOPHeatmapIndexMigration(db))
 	register(NewEmailSmtpPasswordEncryptMigration(db))

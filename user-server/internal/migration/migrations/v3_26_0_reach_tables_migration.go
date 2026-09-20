@@ -11,9 +11,11 @@ import (
 
 // ReachTablesMigration R-4/R-8/H-3 触达域两张表迁移 v3.26.0
 //
-// reach_compliance_log（R-8 合规审计）与 reach_delayed_outbound（H-3 AI 回复延迟出站）
-// 的 model 定义在 internal/service 包（service → db 单向依赖），无法反向注册进
-// internal/pkg/db/allModels()，故按本目录 SQL 迁移风格落地。
+// reach_compliance_log（R-8 合规审计）与 reach_delayed_outbound（H-3 AI 回复延迟出站）。
+// 两张表的 model 在 internal/model，由 internal/service 的 init() 经
+// db.RegisterExtraModels 挂进启动 AutoMigrate——所以现网是模型建表，本迁移负责
+// 纯迁移链恢复路径。两边列名必须同步：模型加字段而这里漏了，链恢复出来的库
+// 第一次读写就报「列不存在」，v3_26_0_reach_tables_migration_test.go 会当场红。
 type ReachTablesMigration struct {
 	db *gorm.DB
 }
@@ -63,6 +65,9 @@ func (m *ReachTablesMigration) Up(ctx context.Context) error {
 			send_at TIMESTAMPTZ,
 			status VARCHAR(20) DEFAULT 'pending',
 			sent_at TIMESTAMPTZ,
+			kind VARCHAR(20) NOT NULL DEFAULT 'quiet_hours',
+			attempts INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_reach_delayed_outbound_platform ON reach_delayed_outbound(platform)`,

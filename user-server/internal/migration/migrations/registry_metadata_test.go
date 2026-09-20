@@ -109,10 +109,8 @@ func TestNoopMigrationsRunWithoutDB(t *testing.T) {
 // 注册靠手写 register(...) 清单，漏一行 = 该迁移在任何环境都永不执行，且不会有任何报错。
 func TestEveryImplementedMigrationIsRegistered(t *testing.T) {
 	// knownUnregistered 登记「已实现但未注册」的历史欠账；一旦补注册必须从这里删条。
-	knownUnregistered := map[string]string{
-		"v3.25.0": "CustomerOwnerAgentMigration 从未进 RegisterMigrations 清单",
-		"v3.26.0": "ReachTablesMigration 从未进 RegisterMigrations 清单",
-	}
+	// 2026-09-20：v3.25.0 / v3.26.0 已补进 RegisterMigrations 清单，当前为空。
+	knownUnregistered := map[string]string{}
 
 	implemented, err := implementedVersions(".")
 	if err != nil {
