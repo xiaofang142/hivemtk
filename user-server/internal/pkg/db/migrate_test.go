@@ -56,6 +56,10 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		// 不列进这里的后果正是本测试要拦的那类：allModels() 里少一行，
 		// 全新部署不建表，而 service 侧只在日志里说一句话。
 		&model.OrderDraft{},
+		// Opportunity：T-P4-01 新增。本卡只有列与值域、还没有生产者，
+		// 列进 mustCover 是为了拦"下张卡接了写入却没人回来登记"——
+		// 建表登记这一行如果漂掉，T-P4-05 的建商机只会在日志里留一句话。
+		&model.Opportunity{},
 		&model.PasswordHistory{},
 		&model.RagMetricsDaily{},
 		&model.RecoveryQueue{},

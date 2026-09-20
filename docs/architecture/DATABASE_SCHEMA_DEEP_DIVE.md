@@ -792,6 +792,79 @@ nil ⇒ 编排器不挂生产者"，此时 `transferToHuman` 与本卡之前逐�
 §4.14 那张表，催收竖未开工），所以"三类统一收口"这句话只成立一类，边界清点见
 `AI_CORE_FEATURE_INVENTORY.md` 短板 **G21**。
 
+### 4.16 商机 `opportunities`：一列"到哪一格"、一列"成没成"，两列不许合并（T-P4-01）
+
+开工前实测：全仓对商机的表达只有 `clues.is_opportunity` 一个 0/1 布尔位，model 层对
+`opportunity` 零命中 —— 所以本节不是"给已有表补字段"，而是商机第一次进 schema。
+C5 裁定三套评分是三个不同的条件概率、**禁止合并**，落到本表就是：这张表只带
+`win_probability`（"这单能不能成"），`confidence`（回答对不对）留在会话侧、
+`lead_score`/RFM/churn（这个客户值不值得投入）留在客户侧。
+`TestOpportunityCarriesOnlyWinProbability` 专门拦"往本表再加一列评分"，变异 M4 已证摘掉即红。
+
+列与索引全部为实测值（`information_schema.columns` + `pg_indexes` 直读，非从标签推断）：
+
+| 列 | GORM 声明 | PG 实测 | 可空 | 索引 |
+|---|---|---|---|---|
+| `id` | `type:text;primaryKey` | `text` | **否** | `opportunities_pkey` |
+| `code` | `varchar(32);uniqueIndex` | `character varying(32)` | 是 | `idx_opportunities_code`（唯一，**不带谓词**） |
+| `customer_id` | `varchar(64);index` | `character varying(64)` | 是 | `idx_opportunities_customer_id` |
+| `one_id` | `type:text` | `text` | 是 | 无 |
+| `clue_id` | `varchar(36)` | `character varying(36)` | 是 | 无 |
+| `stage` | `varchar(32);index` | `character varying(32)` | 是 | `idx_opportunities_stage` |
+| `status` | `varchar(16)` | `character varying(16)` | 是 | **无**（理由见下） |
+| `amount` | `numeric(12,2)` | `numeric(12, 2)` | 是 | 无 |
+| `currency` | `varchar(3);default:'CNY'` | `character varying(3)`，默认 `'CNY'::character varying` | 是 | 无 |
+| `win_probability` | `numeric(5,2)` | `numeric(5, 2)` | 是 | 无 |
+| `owner_user_id` | `varchar(64);index` | `character varying(64)` | 是 | `idx_opportunities_owner_user_id` |
+| `expected_close_at` | `*time.Time` | `timestamp with time zone` | 是 | 无 |
+| `lost_reason` | `type:text` | `text` | 是 | 无 |
+| `created_at` / `updated_at` | 时间 | `timestamp with time zone` | 是 | `idx_opportunities_created_at`（仅 created_at） |
+
+**`stage` 与 `status` 必须是两列，这是 AC① 的全部落点。** 过程侧 `stage` 只有四格
+（`qualification → needs_confirmed → proposal → negotiation`），结果侧 `status` 四态
+（`open/won/lost/cancelled`），两族字面值互斥由用例逐字钉住（`OpportunityStageIndex` 对任何
+status 值都回 `-1`）。把 won/lost 塞进 stage 的后果不是难看，是**漏斗最后一格与赢单率塌成
+同一个数** —— 而 C6 的北极星（闭环完成率 = 完成回款的商机数 / 新建商机数）按 `status` 算、
+T-P4-06 的漏斗按 `stage` 算，两者必须能同时成立（"停在 proposal 就成了"是合法的商机）。
+`OpportunityClosed` 与 `OpportunityOutcomes` 的差别同样是被测出来的口径：closed 回答"还需要
+有人推进吗"，outcome 回答"这单最后怎么样了"；**`cancelled` 只在前者里**，误建的商机不该进
+丢单归因（P8 看板要拿它给销售团队定改进项）。
+
+**`status` 刻意不建单列索引**（首版写了 `index`，被本卡自己的索引纪律用例当场判红后摘掉）：
+四个取值的大表上规划器多半仍顺序扫，而"只看还在跑的商机"实际形状是
+`WHERE owner_user_id = ? AND status = 'open'` —— 由 owner 索引取行、status 只做过滤。
+真出现"全站按 status 捞"的读方时该建的是**复合**索引，随那张卡一起改这里。
+`TestOpportunityIndexesOnlyForNamedQueries` 两侧都断：正向 6 个（`id/code/customer_id/stage/
+owner_user_id/created_at`）逐个要点名下家，反向 7 列（含 status、amount、win_probability）
+不得有任何索引（变异 M9 摘掉已命名下家、M10 凭空铺预留索引，各自被抓）。
+
+**两处与相邻表结论相反、但都刻意的选择**：① `code` 的唯一索引**不带谓词**，与
+`approval_requests.resume_token`（§4.14）恰好相反 —— 那里的空值是合法常态，这里"没编号的
+商机"第二条就撞死，因为编号是对人承诺的键，不该悄悄积累。② `currency` 是本表**唯一**带 DB
+默认值的列（`'CNY'`）：金额不带币种不可算，而空串会让报表静默算错；`stage`/`status` 不设默认
+也不矛盾 —— 那两列的空值是**可诊断的形状**，值域校验会抓住它。默认值顺带保住"将来补列能填老行"。
+
+**键宽与"归属 ≠ 权限"**：`customer_id`/`owner_user_id` 定宽 64 是被下游抄写列（`sales_events`）
+反推的，本表更宽 ⇒ 到事件写入那一步才炸、且 `CreateInBatches` 整批回滚；`clue_id` 取 `clues.id`
+的真实宽度 36；`owner_user_id` 用 string 而非 uint，因为销售身份的真源是 `SalesProfile.SalesID`
+（`feishu.go` 的 `OwnerUserID uint` 是另一族，不构成本列先例）。X3 单商户 ⇒ **无租户列**
+（标签层与真库层各一条用例，变异 M3 塞列即两包同红），`owner_user_id` 只是归属不是权限。
+可空性的现实与 §4.14/§4.15 同：实测只有 `id` 是 `NOT NULL`，GORM 不给非指针 `string` 发约束，
+值域一律在 `service`。
+
+**建表登记走 `allModels()`，卡面写的 `v3_48_0_opportunity_migration.go` 不存在**（第 7 次撞上
+同一形状）：本仓启动时的版本化迁移固定空跑（`v1.0.0→v1.0.0`），生产 schema 由 GORM AutoMigrate
+遍历 `internal/pkg/db/migrate.go` 的 `allModels()` 得出，登记处是那里 + `migrate_test.go` 的
+`mustCover` 各一行。少后一行的失败面与 §4.14/§4.15 同形：代码全对、表不存在。
+
+**接线现状（T-P4-01，2026-09-20）**：本卡只有**列与值域**，今日**零生产写入方**（构造与分配在
+T-P4-05），未接线台账 **项 16** 已按此登记旗子（现值 38/45，`&model.Opportunity{}` 在
+`internal/pkg/db` 的是建表登记、不算写入路径，故被该项的搜索范围排除）。本卡欠三件、各有名主：
+乐观锁版本列 → T-P4-02，跃迁合法表与赢率计算式 → T-P4-03，列表/详情端点 → T-P4-04。
+`win_probability` 与 ltc.config 的 `win_probability` 阈值**同量程 0–1**（默认 0.50），
+所以比较不需要换算；那枚阈值今天在生产代码里仍零读者，消费方就是本卡的这一列 + T-P4-05/T-P6-04。
+
+
 ---
 
 ## 五、索引策略

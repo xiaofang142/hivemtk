@@ -194,6 +194,16 @@ BASELINE=(
   "15|直接 API 侧的外发闸门装配点|func setupProactiveReachRoutes|AttachReachGate\\(proactiveSvc\\)|internal/router|wired"
   "15|外发闸门观察端点的挂载入口|func handleReachGateState|/agent/tools/reach-gate|internal/router|wired"
   "15|被拒挽回项不烧尝试次数的分支|BlockedByApproval[[:space:]]+int|errors\\.Is\\(sendErr, ErrReachApprovalDenied\\)|internal/service|wired"
+  # 项16 = T-P4-01 新增：商机域的第一层（opportunities 表 + 两套值域）交付了，
+  # 但**今日没有任何生产写入方** —— 构造与自动分配在 T-P4-05、跃迁与赢率在 T-P4-03。
+  # 按 UNWIRED 登记而不是留白：这张表今天的真实形状就是"能建、没人往里写"，
+  # 而它下一步要长出的读方（漏斗按 stage 计数、闭环率按 status 计数）会直接把这格
+  # 读成"商机为 0"，与"取数失败"同形（G16 那一类）。
+  # scope 刻意排除 internal/pkg/db：那里今日这一处 `&model.Opportunity{}` 是**建表登记**
+  # 而不是写入，把它算成接线会让这一格从第一天起就是假绿。
+  # 等第一条真插入落在 repository/service/controller 任一处，这一格自己变红（DRIFT_NEW），
+  # 逼着那次接线回来把 expect 改成 wired 并回灌文档。
+  "16|商机行的生产写入点（今日零，构造在 T-P4-05）|type Opportunity struct|model\\.Opportunity\\{|internal/repository internal/service internal/controller|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

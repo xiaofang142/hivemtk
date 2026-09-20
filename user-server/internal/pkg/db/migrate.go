@@ -336,6 +336,11 @@ func allModels() []any {
 		// 全仓无 model 无 repo，所以这里是第一次建表登记（走版本化迁移在本仓不生效，
 		// 见本文件头部关于 ExecuteUpgrade 固定空跑的说明）。
 		&model.OrderDraft{},
+		// Opportunity（表 opportunities）：T-P4-01 / N-1 商机域第一层。
+		// 今天还没有生产写入方（构造与分配在 T-P4-05），但登记建表与登记写入路径是
+		// 两件事：这张表的失败面是"表没建、代码全对"——建商机那一步只会在日志里留一句
+		// 话，而商机的下游（漏斗、闭环率）全部读成 0 且无人报错（ApprovalRequest/HumanTask 同此）。
+		&model.Opportunity{},
 		&model.PasswordHistory{},
 		&model.RagMetricsDaily{},
 		&model.RecoveryQueue{},
