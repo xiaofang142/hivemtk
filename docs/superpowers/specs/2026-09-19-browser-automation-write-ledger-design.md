@@ -535,3 +535,186 @@ A 链路扩展，桥接扩展未加载，而真跑它要把消息发到真实平
 它的证据面因此是：12 条变异击杀的单测（`/tmp/b11_js_battery.log`）+ 服务端活腿把「认领 / 互斥 /
 超时重投 / ack 了结」这一整圈闭环真跑出来（`/tmp/b12_leg_new_rerun.log` 9/9）；
 「扩展真的会去调那第二次幂等 ack POST」这一跳，属真机待用户侧回归项。
+
+## 7.6 批14 验收实证（一次 click 只点一次：三层证据 + 真机 trusted 通道首次立证）
+
+批14 修的是同一条因果链上的三个缺陷，链头不在 `primitives.js` 而在**测试环境本身**：
+
+1. **链头（藏得最深的一条）**：`actionabilityCheck` 是模块顶层函数，`injClick('probe')` 通过
+   `chrome.scripting.executeScript` 注入时只有 `func.toString()` 过线，自由变量在页面侧是
+   `ReferenceError`，而 Chrome 的回包形态是 `result:null`（不报引用错误）。真机上 probe 分支
+   **从未成功过一次**。
+2. **放大器**：`dispatch` 的 `case 'click'` 把 probe 和 `cdpInput.clickAt` 写在**同一个 try 里**，
+   于是 `inject_no_result` 被 catch 成「CDP 不可用 → 事件从未下发 → DOM 兜底安全」，每一次点击
+   都静默降级（`channel:'dom_fallback'`），而兜底路径不重查可见性与遮挡。
+   同一段代码里 `probe` 报 `element_not_interactable: covered` 也会被同一 catch 吞掉——
+   **闸门在它最该生效的那一刻被自己绕过**（浮层还压着，按钮已经被点掉了）。
+3. **落点**：兜底路径 `el.click()` 之外又 `dispatchEvent(new MouseEvent('click'))`，一次步骤 =
+   页面侧两个 click。真机取证（session 536/537，`/tmp/b14_ev537.txt`）：6 个事件全
+   `isTrusted=false`、其中 `click` 两个（t=3460 / t=3461）、按钮计数 `CLICKED-2`。
+   对「发送」按钮这等于双发公开内容且不可撤回。
+
+修复后的动作形状：一次兜底 = 一轮指针事件（pointerdown/mousedown/pointerup/mouseup）+
+**一个** `el.click()` 收尾（它既是唯一那个 click，又带浏览器激活行为）；probe 移到 try 外面，
+只有「probe 已通过、坐标已拿到、CDP 命令本身失败」才允许兜底；`click_unacked` 单独上抛
+（`isUnackedClick`）绝不兜底。`injType` 顺带收掉一处：`submitOnEnter=false` 时不再无条件派发
+Enter——富文本框上「键入」和「提交」是两件事，一个 type 步骤不该带不可逆语义。
+`clickNear` 的三处同规格内联（`injClick` / `injClickNear` / `injPostCommentSend`）是**自包含约束逼出来的
+重复**，注释里写明两处必须同步改；这也是 G4 变异锚点必须带尾部上下文的原因（只截中间四行命中 2 次）。
+
+**三层证据面（各挡一类，缺一不可）**
+
+- **静态层** `test/inject-lint.js`（acorn AST，不是字符串正则——第一版用 `fn.toString()+\bname\b`
+  粗匹配，注释里写一句「与 injClick 同一份检查」就被判成引用，误报的门最终等于没人看的门）：
+  把源文件里**每一个** `executeInTab` 的实参函数都查一遍自由变量，覆盖单测不一定跑到的
+  `wait_for_selector`/`markdown`/`comment_verify`。枚举面本身也被钉住（手工清单要加两条守卫：
+  成员表达式注入点必须被枚举到、清单成员必须还在导出）。`acorn` 是 vitest 的传递依赖、
+  本包未声明，这里刻意不兜底：宁可门红着，不可门悄悄不检查。
+- **沙箱层** `test/inject-sandbox.js`：`new Function('(' + fn.toString() + ')')()` 重建注入函数，
+  编译出的函数作用域是全局而非模块作用域——真去闭包，任何自由引用在测试里当场
+  `ReferenceError`。旧测试直接 `func(...args)` 调用，闭包全在，这条断链在单测里永远不可能露出来。
+  扩展侧全量 **12 文件 129 用例全绿**（含新增 `batch14-click-single-fire` / `batch14-comment-send-gate`
+  / `batch14-inject-selfcontained` 三组）。
+- **真机层** `/tmp/b15_device_legs.py` → **15/15 PASS**（本地夹具页 18611/18612/18613，
+  18611/18613 记录 pointerover/pointerdown/mousedown/pointerup/mouseup/click 及 `isTrusted`
+  到 `#log`、click 计数到 `#hits`、标题写成 `CLICKED-n`；18612 是带全屏 `#mask` 的发送夹具，
+  计数器 `send=`/`mask=`）。L-A1 **`channel:"cdp"`**、L-A2 页面侧恰好 1 个 click + 1 个 pointerdown、
+  L-A3 事件全 `isTrusted=true`。**这是本项目第一次拿到「trusted 输入通道在真机上是活的」的证据**
+  ——它同时是链头修好的证据：老代码 probe 必然 `result:null`，`channel` 只会是 `dom_fallback`。
+  顺带纠正一处历史口径：批2/批5g 那些「点击腿」都跑在这次修复之前，它们是**兜底通道**的结论，
+  当时没有 `channel` 这一列因而看不出来（详见记忆回灌）。
+- **降级通道审计面**：`navigated`/`type`/`click_near` 的回包必须交回上层——`hand.go` 里
+  `typeText`/`clickNear` 旧签名 `) error` 把整个回包丢在 hand 层，降级在审计面上完全不可见；
+  现在 executor 落 `channel` 如实透传（`cdp` / `dom_fallback` / `null`=老扩展无此字段）。
+  兜底本身不是失败，「一片绿里全是 dom_fallback」才是它要发现的东西。
+
+**`comment_send` 提交闸门（比一次普通 click 更该严）**：`injPostCommentSend` 找到按钮后先
+`scrollIntoView` 再跑同一份 `check`，判死返回 `send_button_not_interactable: {covered|zero_box|disabled}`，
+**坐标不下发**；`aria-disabled` 与 `disabled` 同权（组件库常用 aria 而非原生 disabled）。
+Go 侧 `isSendGateReject`（`executor.go:284`）把它与注入超时归为同一类「零副作用」：
+台账留在 `prepared`、不进 finalize 白轮、不自愈重发（换文本重选对一个「存在但不可点」的按钮没有依据）。
+真机 L-C1..C6：错误文案为 `post_comment 未提交（发送按钮不可点，点击未发生）:
+send_button_not_interactable: covered`、`submit_state='prepared'`（psql 直读，steps API 不暴露该列）、
+该步 `direction='command'` 帧 1 条 / `'event'` 帧 1 条 / `duration_ms=0`（远小于 finalize 白轮预算
+`rounds=[6000,5000,5000]`，证明确实没进白轮）、页面侧 `send=0 mask=0`（浮层一次都没被点到），
+第二轮跑到同一闸门依旧 `prepared`。L-B1/B2/B3 另外挡住一条本次真机才露出来的面：
+带遮挡层的页面快照必须非空且含 `textbox "写评论" @e1` / `button "发送" @e2`。
+
+**取证口径纠偏（我自己先踩）**：三段式子命令帧（`comment_prep`/`comment_send`/`comment_verify`）
+只到扩展，`browser_command_log` 记的是**步级**帧（`action=post_comment`），
+所以「发送帧到线恰好一次」**不能靠帧计数证明**；它由状态机保证——`prepared` 只能由
+「`comment_prep` 成功之后、`comment_send` 下发之前」那一次台账写产生，而写步强制 `retries=0`
+（`executor.go:692-694`）。另两条纪律：① 同页计数器要留在同一 tab，而 session 是 fail-fast 的，
+所以取证步必须显式 `continue_on_error`（这是取证前提，不是被测行为）；② `continue_on_error` 只影响
+后续步，计数器归零要靠新 tab，不靠重置。
+
+**L-D（负结果，写进台账而不是删掉）**：想构造「调试器被占」逼出 DOM 兜底、在真机上复验兜底单发。
+三条尝试全部证伪：外部 CDP 客户端 `Target.attachToTarget` 与 `chrome.debugger` **不互斥**；
+临装的第二条 MV3 扩展也确实 attach 成功（从它自己的 SW 调 `chrome.debugger.getTargets()`，
+输出 `attached:true`，`/tmp/b15_grab_probe.mjs`），但被测腿依旧 `channel=cdp`。
+⇒ **`chrome.debugger` 在本机不可排他占用，DOM 兜底路径在真机不可构造**。
+兜底路径的单发性因此只在沙箱层被证（`inject-sandbox.js` + batch14 用例），这是本批诚实的边界；
+它不再是线上的活跃风险，因为链头修好后真机走的就是 trusted 通道。
+附带一条环境事实：夹具扩展必须**临装**（`onInstalled` 是唯一可靠唤醒点，MV3 SW 30s 空闲即回收，
+本扩展系没有 `alarms` 权限），提前装好等到跑腿时它已经死了——上一轮 L-D1 绿成 cdp 就是这么来的。
+
+**变异电池（新写：`/tmp/b15_mut_gate.py`，替掉取证口径弱的旧版）** G1–G4 **全部被具名用例杀掉**
+（`/tmp/b15_mut_gate.log`）：G1 去掉闸门早返分支 → `TestWSE2E_SendGateRejectStaysPrepared`、
+`TestSendGateOrderedBeforeSentLedger`；G2 谓词放宽成含 `not_` → `TestIsSendGateReject`
+（把定位失效/WS 超时误判成未发生）；G3 去掉 `disabled` 判 → disabled + aria-disabled 两条用例；
+G4 去掉遮挡判 → covered 用例。每条都带正向对照（可点按钮仍恰好一次坐标点击，闸门不得过修正成永不提交）。
+**电池自己被审出一个洞**（这一轮第二值钱的一条）：旧版按「`go test` 非 0」判红，而它还有第二种成因——
+包根本编不过。本泳道并行会话一个未跟踪的 `internal/service/ltc_config.go`（mtime 10:21:16）让
+所有传递编译 `internal/service` 的包 `[build failed]`，四条 Go 腿于是集体"红"却**报不出被杀的用例名**。
+处置：① 严格判据——`[build failed]`/`cannot find package`/`undefined:` 一律判「无法判定」，
+击杀必须 `re.findall(r"^--- FAIL: (\S+)", out, re.M)` 有名字；② Go 腿改跑 `--shared` 克隆
+（`/tmp/b15gate`，HEAD + 只含本泳道 diff 的树）而不是别人的工作树；③ 每处源码改动 `cp` 备份 +
+逐次 md5 比对还原（严禁对未提交文件 `git checkout`）。**这条规矩是给所有变异驱动器立的**：
+红但没有名字，就不算证据。
+
+**门禁**：`go vet` 干净；`browser_automation` 三包 `controller ok 0.849s / platform ok 0.451s /
+service ok 131.868s`；架构门 clone-at-HEAD 绿、clone+本泳道 diff 绿，工作树里唯一那一条报错来自
+并行会话未跟踪的 `dingtalk_media.go`（mtime 10:20:31），与本泳道 0 个 `internal/service` 文件改动一致。
+
+**未落地（不写成已验证）**：§8.2-1 / §8.3-1 的两小步里只落了「闸门不被绕过」这半边——
+(a) `actionabilityCheck` 加 `stable`（注入函数内部 rAF 双帧比盒）与 (b) **仅 `is_write` 步**在
+`clickAt` 之后、返回 `ok` 之前补一次身份复核（selector 仍可解析 + 中心点未变 + 该点 hit-target
+命中同一元素，不满足改写为 `element_moved` 交自愈）**仍未做**。真机 L-A 组现在能证明
+「探测到的那一次点击确实发生了、且只发生一次」，但**证不了**「点的就是探测的那个元素」——
+贝塞尔飞行时间（可达数百毫秒）内页面挪动仍会点到从未被探测过的元素而返回 `{ok:true, channel:'cdp'}`。
+这是 §8.3 A1 的剩余半径，归下一批。
+
+## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
+
+取证方法：六路并行 agent，每路给「本仓现状线索 + 待查同行清单」，要求每条机制带真实字段名与来源 URL、
+自标 `[doc]/[src]/[blog]/[unverified]`、并列 `未取到`。报告落盘 `/tmp/peer-research/0{1..6}-*.md`（六份）。
+
+### 8.1 先记账：agent 报来的「本仓现状」有五条是错的，逐条读码纠正
+
+**规则：同行证据可信，agent 对本仓的 file:line 断言一律自己读一遍再用。** 这一轮里 6 份报告有 2 份
+给我们仓库编了不存在的锚点，其中一份的「P0 结论」整个建立在假锚点上。
+
+| # | agent 断言 | 实测 | 证据 |
+|---|---|---|---|
+| 1 | 定位 P0："`backendNodeId` 被跨命令持久化复用，落点 `src/core/cdp/cdp-page-actions.js:56-64`" | **该文件不存在**（`src/core/cdp/` 下只有 `input.js`），且 `backendNodeId` 在整个扩展源码里 **0 命中**。真机制是 `@eN → cssPath` 存 SW 内存 | `find src -name '*.js'`；`grep -rn backendNodeId src/` 无命中；`accessibility.js:144-165` |
+| 2 | "refs 只有 TTL 兜底，DOM 变更后旧 ref 静默指错" | 每次 `assembleSnapshot` **整桶清空**（`accessibility.js:146`），导航/`open_tab` 也清（`:171-179`）；解析不到时抛**结构化** `element_not_found`，正是为了让 Go 侧自愈 `isSelectorMiss` 接住（`primitives.js:630-640` 注释即此因） | `accessibility.js:144-179`、`primitives.js:635-640` |
+| 3 | "动作前只判 `length>0`，没有 visible/enabled/hit-test" | `actionabilityCheck`（`primitives.js:12-26`）已覆盖 `display/visibility/opacity`、零尺寸盒、`disabled`/`aria-disabled`、**`elementFromPoint` 遮挡**四项；缺的只有 `stable`，且代码里已写明为什么缺与替代手段 | `primitives.js:12-26`（含 23-24 行注释） |
+| 4 | "桥接扩展 SentCache 是内存态，扩展重启即失效" | **持久化到 `chrome.storage.local`**（key `bridge_sent_${channel}`），`load()`/`flush()` 成对；只有条数上限 `sentCacheMax:2000`、无 TTL | `user-web/bridge/src/core/downlink.js:11-53`、`constants.js:248` |
+| 5 | "90 天保留期清理会截断 `browser_command_log` 内容字段" | command_log 是**整行删除**（`PruneBefore` 分批 5000）；被"清空文本、保留行"的是 `llm_plans` 的快照大字段 | `repository/command_log.go:45-60`、`service/retention.go:44-56` |
+
+自我纠正第 5 条也说明：§7.5 里"命令日志截断"的措辞不准，正确表述是"整行删除 + llm_plans 清文本"。
+
+### 8.2 纠正之后，仍然成立的三个真缺口（本泳道可改，已读码定位）
+
+1. **写步点击的"探测 → 真点"之间没有再校验**（P1）。`injClick('probe')` 在页面里算完中心点后返回
+   `{x,y}`，真事件由 `cdpInput.clickAt(tabId, probe.x, probe.y, {jitterRadius})` 注入（`primitives.js:646-647`），
+   中间隔着**拟人贝塞尔轨迹的飞行时间**（可达数百毫秒）。这期间轮播/懒加载/toast 挪动页面，就会
+   **点到一个从未被探测过的元素**，而返回值仍是 `{ok:true, channel:'cdp'}`。
+   同行同题的答案：Playwright `_retryPointerAction` 在派发前 `scrollIntoViewIfNeeded`→
+   `checkElementStates(['visible','enabled','stable'])`→`_clickablePoint`→`_checkFrameIsHitTarget`
+   一连串都在**同一动作事务内**完成，且 `stable` 定义为**连续两帧 boundingBox 一致**（rAF ~16ms 轮询）；
+   Skyvern 把 `elementFromPoint(center)` 的 `occluded` 判定做成动作失败后的一等探针，
+   并把 remediation 文本写成"act on a freshly reported selector rather than retrying this one"。
+   → 落地两小步：(a) `actionabilityCheck` 加 `stable`（在注入函数内部 rAF 双帧比盒，仍是单次 evaluate）；
+   (b) **仅对 `is_write` 步**，在 `clickAt` 之后、返回 `ok` 之前补一次身份复核（selector 仍可解析 +
+   中心点未变 + 该点 hit-target 命中同一元素），不满足则改写为 `element_moved` 交自愈，**不允许静默 ok**。
+   > 状态（批14 后）：本条的**前提**被推翻了三分之一——读码 + 真机发现 probe 因为注入自包含断链
+   > 在真机上从未成功过（§7.6 链头），所以「探测 → 真点之间」这段时间此前**根本不存在**。
+   > 批14 落了「probe 不被兜底绕过」+「兜底不双发」（§7.6），(a) `stable` 与 (b) 点后身份复核
+   > 两条仍开放，且现在才真正可测（真机 `channel=cdp` 已是可断言的列）。
+2. **审批没绑载荷**（P1，D7 闸门）。我们的放行是一条布尔/行状态，同行一致把审批绑到"被批的具体载荷 + 版本"上：
+   GitHub `dismiss_stale_reviews` + "records the state of the diff at the point when a pull request is approved"、
+   Salesforce "Approvers see the values at submission time, not current changes"、
+   Stripe `confirmation_token.expires_at` 且服务端只 redeem、browser-use `compute_action_hash()` /
+   `_normalize_action_for_hash()`（非 None 参数 + `sort_keys` + `sha256[:12]`）。
+   → 最小形态：审批行存 `approved_payload_hash`，执行前对**即将发出的**参数重算，不等即 **fail-closed**
+   （拒绝并留痕，不是"再问一次"）；审批消费用
+   `UPDATE approvals SET used_at=now() WHERE id=$1 AND used_at IS NULL AND expires_at>now() AND payload_hash=$2`
+   的 0 行即不执行（LangChain `HumanInTheLoopMiddleware` 用 `tool_call["id"]` 回填、
+   LangGraph `interrupt` 对 resume 值**完全不校验**是两个方向的正反教材）。
+3. **`ok bool` 一列混装"跑了"和"成了"**（P1）。同行没有一家用单布尔：GitHub Checks `status` × `conclusion`
+   两列、K8s `phase` × `conditions[]`、Stripe PI 七态（`processing` ≠ `succeeded`）、
+   WhatsApp/Twilio `sent/accepted/delivered/read/failed`、OTel recording-errors 明令
+   **"无错时 status MUST 留 Unset"**（OK 要调用方显式写）。我们 `browser_command_log` 只有 `ok bool`
+   （`model/command_log.go:22`），而 §7.x 一路在防的"读页面自证成功"假绿，本质就是把 Unset 当成功。
+   → 最小形态：命令日志加 `attempted/accepted/confirmed` 三态，`confirmed` 只能由**第二条通道**置位
+   （换 selector / 新会话回读并匹配作者 + 内容哈希），扩展上报只允许写 `accepted`；
+   回读前先比 `PageFingerprint(url, element_count, text_hash)` 式指纹，**指纹未变即判 `unverified`**。
+
+### 8.3 差距矩阵与取舍（每条左列都经本泳道读码复核，未复核的一律不进）
+
+`采纳`=本批改；`拒绝`=给出理由并留档；`BLOCKED`=落点在并行会话在途文件（`git status` 实测仍脏）。
+
+| # | 同行口径（证据） | 本仓实测 | 取舍 |
+|---|---|---|---|
+| 1 | 派发前必须在**同一动作事务内**重算可点性，`stable` = 连续两帧 boundingBox 一致（Playwright `_retryPointerAction`: `scrollIntoViewIfNeeded`→`checkElementStates(['visible','enabled','stable'])`→`_clickablePoint`→`_checkFrameIsHitTarget`；Skyvern `classify_element_state` 的 `occluded` 用 `elementFromPoint(center)` 且 `top!==el && !el.contains(top)`） | `actionabilityCheck`（`primitives.js:12-26`）已有 visible / 零盒 / disabled / **遮挡**四项，**只缺 `stable`**（23-24 行注释自陈理由）。更关键：`injClick('probe')` 返回 `{x,y}` 后，真点击走 `cdpInput.clickAt(tabId, probe.x, probe.y)`（`:646-647`），**中间隔着拟人贝塞尔飞行时间**，这期间页面挪动即点到从未探测过的元素，返回值仍是 `{ok:true, channel:'cdp'}` | **采纳（P1）** A1（批14 落「闸门不被兜底绕过」+「兜底单发」并真机立证 `channel=cdp`；`stable` 与点后身份复核两条开放，见 §7.6 未落地段） |
+| 2 | "跑了"与"成了"永不共列：GitHub Checks `status`×`conclusion`、K8s `phase`×`conditions[]`、Stripe PI `processing`≠`succeeded`、OTel recording-errors "无错时 status MUST 留 Unset" | `browser_command_log` 只有 `Ok bool`（`model/command_log.go:22`） | **采纳（P1）** A2 |
+| 3 | 重试必须有上界并落终态：Sidekiq `DEFAULT_MAX_RETRY_ATTEMPTS=25` → `dead` ZSET（`dead_timeout_in_seconds` 6 月、`dead_max_jobs=10000`）、SQS `redrivePolicy.maxReceiveCount` → DLQ、River `discarded` | 出站集合语义本身正确（`FetchOutboundUndelivered` 只取 `pending` 或 `inflight && claimed_at<now()-30s`，`delivered/failed` 自然离开；`handler_http.go:236` 证实 SSE 轮询定时器确走此函数，未注入时按 `:211` 显式 Warn 回退游标）。但**没有任何尝试计数列**，于是"扩展每次都发不出去"（目标会话已不存在等）的行会以 30s 周期**永久重推**，无人升级为终态 | **采纳（P1）** A3 |
+| 4 | 去重必须有界：SQS `MessageDeduplicationId` 5 分钟窗、Stripe 幂等键 24h、Azure "Retain each record at least as long as the broker can still redeliver" | 桥接扩展 `SentCache` 持久化到 `chrome.storage.local`（`downlink.js:24,48`，**非内存态**），但**只有条数上限 `sentCacheMax:2000`、无时间界**（`constants.js:248`），且 `add()` 命中已有 key 不刷新插入位（Set 语义）→ 淘汰纯按插入序 | **采纳（P2）** A4：加 **24h** TTL，不是 5min（服务端重推窗取决于浏览器离线时长，界必须 ≥ 上游仍能重投的时长，否则反而放大重复风险） |
+| 5 | 审批绑载荷 + 一次性 redeem：GitHub `dismiss_stale_reviews` / "records the state of the diff at the point when a pull request is approved"、Salesforce "Approvers see the values at submission time"、Stripe `confirmation_token.expires_at`、LangChain `HumanInTheLoopMiddleware` 用 `tool_call["id"]` 回填、browser-use `_normalize_action_for_hash`（非 None 参数 + `sort_keys` + `sha256[:12]`）；反例：LangGraph `interrupt` 对 resume 值**完全不校验** | D7 放行不携载荷指纹（待读码定锚点后实现） | **采纳（P2）** A5 |
+| 6 | 裁剪不等于证据消失：CloudTrail digest `logFiles[].{hashValue,hashAlgorithm}` + `previousDigestHashValue` + **`logFiles:[]` 空摘要可断言"该时段无事件"**；RFC6962 `inclusionProof{treeSize,rootHash,hashes}`；pg_partman `retention_keep_table=true`（detach 不 drop） | `PruneBefore` 整行删除（`command_log.go:45-60`），90 天界由 `BROWSER_AUDIT_RETENTION_DAYS` 定（`retention.go:20-27`）；删后**无任何自证手段** | **采纳（P2）** A6：删除前把 `(seq, row_hash, prev_row_hash)` 沉进永不裁剪的小表 |
+| 7 | 租约靠心跳续期而非固定 TTL：pg-boss `heartbeatSeconds`/`heartbeatRefreshSeconds=hb/2`、SQS `ChangeMessageVisibility`、Temporal `HeartbeatTimeout`；且"完成写必须与租约同事务，被抢即回滚" | 需扩展每 10s 回写 `claimed_at`，是**双端协议改动**（HTTP 端点 + 扩展定时器 + 权限面），而现 30s 认领 + 命中缓存补确认已收敛，收益只是"少重推几轮"的延迟 | **拒绝**（半径/收益不划算，留档） |
+| 8 | 发送前先落本地台账、事后去 DOM 核对自己的气泡（"已发出但 ack 丢失"的同行正解） | `SentCache` 已是持久化台账且 `reAckSentDuplicates` 两条路径都挂（轮询 `:315`、SSE `:804`），SW 重启场景已兜住；缺的只是"发成功后回 DOM 复核" | **暂缓**：需每个平台各写一条"我的气泡"判据，半径在 5 个适配器；列为下一批候选 |
+| 9 | 入口去重键必须带会话维度、窗口必须 ≥ 上游重投窗、且与副作用同事务（Stripe/Azure/企微/飞书一致否证现状） | `inbox_ingress_ingest.go:126-132` 键内无 `conversation_id`、`InboxContentDedupTTL=5min`；hub 层内容命中无时间界 | **BLOCKED**：两文件 `git status` 实测仍为并行会话在途（`M` / `??`），本泳道不改，维持 §6 移交 |
+| 10 | `officialEventID` 优先级高于内容哈希 | `webhook_event_key.go` 未跟踪（在途），且它含 `event_type` → 同一次推送多事件会算多条；`self/agent` 巡逻回环消息根本无 event_id，仍需内容兜底 | **BLOCKED + 认知修正**：§6-3 说的"正确方向"不等于"能覆盖我们主要流量" |
+| 11 | agent 报告称 `BridgeOutboxMessage.Extra` 是 `json:"-"`（扩展拿不到 `dm_target`）、称存在 `reAckDeliveredOnCacheHit`/`InboxConversationID`/`ErrOutboundAckScopeMismatch` | 实测：`Extra map[string]any json:"extra,omitempty"`（`channelgw/protocol.go:157`）且 HTTP 侧 `handler_http.go:770` 真的带出 `extra`；后三个符号**全仓 0 命中** | **不进矩阵**：子 agent 对本仓的断言被证伪，本轮第 2 次。教训回灌记忆 |

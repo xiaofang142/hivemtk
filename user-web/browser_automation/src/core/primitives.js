@@ -5,37 +5,38 @@
 const WAIT_SELECTOR_INTERVAL_MS = 200;
 
 // ---- 页面上下文函数（序列化注入，禁止引用外部闭包）----
-
-// actionability 五项检查（F4/G13，对齐 Playwright 语义：visible/stable/enabled/hit-target/box）。
-// mode='probe'：只做可点性检查+返回中心视口坐标（trusted 路径用）；
-// 非 probe 路径（DOM 兜底）失败=element_not_interactable（服务端 ClassifyError=retry 类）。
-function actionabilityCheck(el) {
-  const style = window.getComputedStyle(el);
-  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return 'not_visible';
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 || r.height === 0) return 'zero_box';
-  if (el.disabled || el.getAttribute('aria-disabled') === 'true') return 'disabled';
-  // hit-target：中心点被什么接管（浮层遮挡检测，browser-use occlusion check 同构）
-  try {
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) return 'covered';
-  } catch { /* jsdom 等无 elementFromPoint 环境：跳过该项 */ }
-  // 注：stable（两帧同 box）在注入函数单帧执行模型里无法低成本实现；
-  // trusted 路径的 infobar 500ms 等待 + CDP press 前 pointerSettle 时序已覆盖主要动画窗口。
-  return null;
-}
+// 铁律（批14 真机实证，闸门见 test/inject-sandbox.js）：chrome.scripting.executeScript
+// 只把 func.toString() 送进页面，模块作用域里的任何自由变量在页面侧都是 ReferenceError，
+// 且 Chrome 回包 result:null —— 调用方会把它误读成「注入没返回/CDP 不可用」。
+// 下面的 actionability 检查因此在 injClick 与 injClickNear 里各内联一份（两处必须同步改）；
+// 语义对齐 Playwright _retryPointerAction 的 visible/stable/enabled/hit-target/box 五项。
+// 注：stable（两帧同 box）在注入函数单帧执行模型里无法低成本实现；
+// trusted 路径的 infobar 500ms 等待 + CDP press 前 pointerSettle 时序已覆盖主要动画窗口。
 
 function injClick(target, mode) {
   const el = document.querySelector(target);
   if (!el) return { ok: false, error: 'element_not_found: ' + target };
   if (mode === 'probe') {
     // trusted 主通道（F1）：只做可点性检查 + 滚入视口 + 返回中心坐标，真实事件由 CDP 注入
-    const err = actionabilityCheck(el);
+    const check = (node) => {
+      const st = window.getComputedStyle(node);
+      if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return 'not_visible';
+      const box = node.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) return 'zero_box';
+      if (node.disabled || node.getAttribute('aria-disabled') === 'true') return 'disabled';
+      // hit-target：中心点被什么接管（浮层遮挡检测，browser-use occlusion check 同构）
+      try {
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        if (hit && hit !== node && !node.contains(hit) && !hit.contains(node)) return 'covered';
+      } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
+      return null;
+    };
+    let err = check(el);
     if (err === 'covered' || err === 'zero_box') {
       try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
+      err = check(el);
     }
-    const retry = actionabilityCheck(el);
-    if (retry) return { ok: false, error: 'element_not_interactable: ' + retry };
+    if (err) return { ok: false, error: 'element_not_interactable: ' + err };
     const r = el.getBoundingClientRect();
     return {
       ok: true,
@@ -46,19 +47,24 @@ function injClick(target, mode) {
       page_url: location.href,
     };
   }
-  // DOM 兜底路径保持宽松（旧语义）：jsdom/无几何环境也能走通；仅 disabled 硬失败
+  // DOM 兜底路径保持宽松（旧语义）：jsdom/无几何环境也能走通；仅 disabled 硬失败。
+  // 可见性/遮挡一项不在这里重判——那是 probe 的职责，且 dispatch 层已保证
+  // probe 不通过就不会走到这条路径（批14：闸门不得被兜底绕过）。
   if (el.disabled) return { ok: false, error: 'element_not_interactable: disabled' };
   try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* jsdom/不可滚动时忽略 */ }
-  el.click();
-  // SPA（React/Vue 合成事件）常忽略程序化 el.click()：补发真实指针事件序列。
+  // SPA（React/Vue 合成事件）监听的是指针序列，所以一次动作 = 一轮指针事件 + 一个 click。
+  // click 由 el.click() 收尾：它既是唯一的那个 click 事件，又带浏览器激活行为
+  //（表单提交 / 链接跳转 / 勾选切换）。批14 真机证据（session 536/537）：原先在
+  // el.click() 之外又 dispatchEvent(new MouseEvent('click'))，页面收到两个 click，
+  // 「发送」按钮的 handler 跑了两遍 = 公开内容双发且不可撤回。
   const opts = { bubbles: true, cancelable: true, view: window, pointerId: 1, isPrimary: true };
   try {
     el.dispatchEvent(new PointerEvent('pointerdown', opts));
     el.dispatchEvent(new MouseEvent('mousedown', opts));
     el.dispatchEvent(new PointerEvent('pointerup', opts));
     el.dispatchEvent(new MouseEvent('mouseup', opts));
-    el.dispatchEvent(new MouseEvent('click', opts));
-  } catch { /* PointerEvent 不可用时忽略（el.click() 已发过一次） */ }
+  } catch { /* 无 PointerEvent 的内核：指针层整体跳过，click 仍由 el.click() 给出 */ }
+  el.click();
   // 链接兜底：上述仍不触发导航时直接跳 href（新标签链接也改为当前页打开，
   // 保持自动化会话 tab 稳定）。但 target=@e ref 的非链接元素不动。
   let navigated = false;
@@ -150,7 +156,11 @@ function injType(target, value, clearFirst, submitOnEnter, mode) {
         el.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+    // Enter 只在被要求时发：富文本评论框上「键入」和「提交」是两件事，
+    // 无条件派发等于让一个 type 步骤带上不可撤回的提交语义（批14）。
+    if (submitOnEnter) {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+    }
     return { ok: true, editable: true };
   }
   if (clearFirst || el.value) {
@@ -201,12 +211,25 @@ function injClickNear(anchorSelector, buttonText, mode) {
       : btns[0];
     if (hit) {
       if (mode === 'probe') {
-        const err = actionabilityCheck(hit);
-        if (err) {
+        // 与 injClick 同一份可点性检查，内联第二次：注入函数不得引用模块作用域的自由变量
+        const check = (node) => {
+          const st = window.getComputedStyle(node);
+          if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return 'not_visible';
+          const box = node.getBoundingClientRect();
+          if (box.width === 0 || box.height === 0) return 'zero_box';
+          if (node.disabled || node.getAttribute('aria-disabled') === 'true') return 'disabled';
+          try {
+            const taken = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+            if (taken && taken !== node && !node.contains(taken) && !taken.contains(node)) return 'covered';
+          } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
+          return null;
+        };
+        let err = check(hit);
+        if (err === 'covered' || err === 'zero_box') {
           try { hit.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* noop */ }
+          err = check(hit);
         }
-        const retry = actionabilityCheck(hit);
-        if (retry) return { ok: false, error: 'element_not_interactable: ' + retry };
+        if (err) return { ok: false, error: 'element_not_interactable: ' + err };
         const r = hit.getBoundingClientRect();
         return {
           ok: true,
@@ -217,15 +240,15 @@ function injClickNear(anchorSelector, buttonText, mode) {
         };
       }
       try { hit.scrollIntoView?.({ block: 'center' }); } catch { /* noop */ }
-      hit.click();
+      // 一次动作一轮指针事件 + 一个 click（el.click() 收尾，理由见 injClick 同处注释）
       const opts = { bubbles: true, cancelable: true, view: window, pointerId: 1, isPrimary: true };
       try {
         hit.dispatchEvent(new PointerEvent('pointerdown', opts));
         hit.dispatchEvent(new MouseEvent('mousedown', opts));
         hit.dispatchEvent(new PointerEvent('pointerup', opts));
         hit.dispatchEvent(new MouseEvent('mouseup', opts));
-        hit.dispatchEvent(new MouseEvent('click', opts));
-      } catch { /* PointerEvent 不可用时忽略 */ }
+      } catch { /* 无 PointerEvent 的内核：指针层整体跳过，click 仍由 hit.click() 给出 */ }
+      hit.click();
       return { ok: true, clicked: (hit.innerText || 'button').trim() };
     }
     root = root.parentElement;
@@ -364,17 +387,30 @@ function injPostCommentSend(inputSelector, sendButtonText) {
     root = root.parentElement;
   }
   if (!btn) return { ok: false, error: 'send_button_not_found' };
-  const rect = btn.getBoundingClientRect();
-  // 触发前先滚到按钮可见处（CDP 坐标是视口坐标）
-  btn.scrollIntoView?.({ block: 'center' });
-  const rect2 = btn.getBoundingClientRect();
-  return {
-    ok: true,
-    x: Math.round(rect2.left + rect2.width / 2),
-    y: Math.round(rect2.top + rect2.height / 2),
-    legacy_xy: [Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height / 2)],
-    input_ref_marker: true,
+  // 可点性检查与 injClick probe 同规格，内联第三份（注入函数不得引用模块作用域的自由变量）。
+  // 提交点比一次普通 click 更该严：往浮层上落一次坐标 = 未知副作用还被记成「提交已跨越」。
+  const check = (node) => {
+    const st = window.getComputedStyle(node);
+    if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return 'not_visible';
+    const box = node.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) return 'zero_box';
+    if (node.disabled || node.getAttribute('aria-disabled') === 'true') return 'disabled';
+    try {
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      if (hit && hit !== node && !node.contains(hit) && !hit.contains(node)) return 'covered';
+    } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
+    return null;
   };
+  // CDP 坐标是视口坐标：先滚进视口再判，遮挡/零框可能只是滚动前的假象
+  btn.scrollIntoView?.({ block: 'center' });
+  let blocked = check(btn);
+  if (blocked === 'covered' || blocked === 'zero_box') {
+    btn.scrollIntoView?.({ block: 'center', inline: 'center' });
+    blocked = check(btn);
+  }
+  if (blocked) return { ok: false, error: 'send_button_not_interactable: ' + blocked };
+  const r = btn.getBoundingClientRect();
+  return { ok: true, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
 }
 
 /**
@@ -642,8 +678,13 @@ export async function dispatch(cmd, deps) {
         case 'click': {
           // F1 铁律 2 收口：写操作主通道=CDP trusted（probe 定位坐标→贝塞尔轨迹点击）；
           // CDP 不可用（调试器被占/扩展受限）才降级 DOM 合成兜底——兜底结果标注 channel。
+          // 批14：probe 必须在 try 外面。原实现把 probe 和 CDP 点击放同一个 try，
+          // probe 报「元素不可交互（被浮层遮挡/不可见/零尺寸）」时被 catch 当成
+          // 「CDP 不可用」而降级 DOM 兜底——兜底不重查可见性，闸门恰好在它最该
+          // 生效的那一刻被自己绕过（浮层还压着，按钮已经被点掉了）。
+          const sel = resolveTarget(cmd.target);
+          const probe = await executeInTab(tabId, injClick, [sel, 'probe']);
           try {
-            const probe = await executeInTab(tabId, injClick, [resolveTarget(cmd.target), 'probe']);
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             // R25-Q1：点击生效帧后短暂等路由，再纯读 location 对比判定同页导航；
             // 检测注入失败通常=页面正在导航中，按已导航处理。不再主动接管 href。
@@ -660,29 +701,27 @@ export async function dispatch(cmd, deps) {
           } catch (e) {
             const msg = String(e?.message || e);
             if (isUnackedClick(msg)) throw e; // 可能已点中：兜底=双发，直接上抛交裁决
-            if (!msg.includes('element_not_found')) {
-              // 元素在但 CDP 失败（attach 被拒/调试器占用）：事件从未下发，DOM 兜底安全
-              const r = await executeInTab(tabId, injClick, [resolveTarget(cmd.target), 'fallback']).catch(() => null);
-              if (r?.ok) {
-                if (r.navigated) resetBaseline(tabId);
-                return { ...r, channel: 'dom_fallback' };
-              }
+            // 走到这里 = probe 已通过、坐标已拿到、CDP 命令本身失败（事件从未下发）：
+            // DOM 兜底是这次动作的第一次下发，安全。
+            const r = await executeInTab(tabId, injClick, [sel, 'fallback']).catch(() => null);
+            if (r?.ok) {
+              if (r.navigated) resetBaseline(tabId);
+              return { ...r, channel: 'dom_fallback' };
             }
             throw e;
           }
         }
         case 'click_near': {
+          const anchorSel = resolveTarget(cmd.anchor);
+          const probe = await executeInTab(tabId, injClickNear, [anchorSel, cmd.button_text || '', 'probe']);
           try {
-            const probe = await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '', 'probe']);
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             return { ok: true, clicked: probe.clicked, channel: 'cdp' };
           } catch (e) {
             const msg = String(e?.message || e);
             if (isUnackedClick(msg)) throw e;
-            if (!msg.includes('anchor_not_found') && !msg.includes('button_not_found')) {
-              const r = await executeInTab(tabId, injClickNear, [resolveTarget(cmd.anchor), cmd.button_text || '', 'fallback']).catch(() => null);
-              if (r?.ok) return { ...r, channel: 'dom_fallback' };
-            }
+            const r = await executeInTab(tabId, injClickNear, [anchorSel, cmd.button_text || '', 'fallback']).catch(() => null);
+            if (r?.ok) return { ...r, channel: 'dom_fallback' };
             throw e;
           }
         }

@@ -42,6 +42,16 @@ describe('accessibility snapshot', () => {
     expect(snap.text).toBe('');
   });
 
+  // 上限常量的声明位置在批14 从模块顶层挪进了注入函数体（见 collectInteractiveNodes 内注释）。
+  // 这条用例是那个常量的唯一行为证据：挪错地方/漏掉就是这里先红。
+  it('节点上限 400：超限页面只带回前 400 个，nodes 与 paths 同步截断', () => {
+    document.body.innerHTML = Array.from({ length: 450 },
+      (_, i) => `<button id="b${i}">按钮${i}</button>`).join('');
+    const collected = collectInteractiveNodes();
+    expect(collected.nodes.length).toBe(400);
+    expect(collected.paths.length).toBe(400);
+  });
+
   // ---- F6 新元素标记（browser-use *[index] 语义）----
   it('F6 首帧不打标；下一帧新出现的 role|name 行首带 *', () => {
     const key = 'tab-f6';

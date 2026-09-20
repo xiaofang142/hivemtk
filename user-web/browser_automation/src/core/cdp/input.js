@@ -81,12 +81,15 @@ async function withDebugger(tabId, fn) {
     return await fn(target);
   } catch (e) {
     const msg = String(e?.message || e);
-    // detach 类错误：清状态后重 attach 重试一次（midscene 模式）
+    // detach 类错误：只修状态（清掉 + 重 attach），**绝不重跑 fn**。
+    // 批14 真机语义：本模块的 fn 全是输入类命令（键入/点击），一条事件入队后
+    // 页面可能已经消费掉它；重跑=把整个动作再来一遍（单测实测：一次 typeText('ab')
+    // 在中途 detach 后发出两遍 keyDown('a')）。恢复动作交上层按「结局未知」裁决，
+    // 不在这里赌「大概没生效」。
     if (msg.includes('Debugger is not attached') || msg.includes('Cannot access') || msg.includes('No target with given id')) {
       attached.delete(tabId);
       await chrome.debugger.attach(target, '1.3').catch(() => {});
       attached.set(tabId, true);
-      return await fn(target);
     }
     throw e;
   } finally {
@@ -189,8 +192,18 @@ async function clickAt(tabId, x, y, opts = {}) {
     const release = send(target, 'Input.dispatchMouseEvent', {
       type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1, modifiers: 0,
     });
-    const { done } = await awaitAcks([press, release], CLICK_ACK_BUDGET_MS);
-    if (!done) throw new Error('click_unacked');
+    // press/release 已入队 = 这一页面上很可能已经发生了这次点击。此后**任何**失败
+    // （ack 超时、CDP 直接拒、debugger 掉线）都必须收敛成 click_unacked：
+    // 原样上抛会被上层当成「CDP 不可用 → 事件从未下发」而降级 DOM 兜底，
+    // 在同一个目标上再点一次 = 双发（批14：写按钮的 handler 跑了两遍、评论不可撤回）。
+    // 轨迹段的失败不走这条：那时 press 还没入队，兜底是第一次下发，安全。
+    let acked;
+    try {
+      acked = await awaitAcks([press, release], CLICK_ACK_BUDGET_MS);
+    } catch (e) {
+      throw new Error(`click_unacked: press/release 失败原因 ${String(e?.message || e)}`);
+    }
+    if (!acked.done) throw new Error('click_unacked');
     await sleep(TIMING.afterClick());
     return { ok: true };
   });

@@ -18,6 +18,22 @@ function makeDebugger(attachImpl) {
   };
 }
 
+// 自定义 sendCommand 行为（其余保持桩实现）；tally 记录每次实际下发的方法+事件类型
+function makeDebuggerWith(sendImpl, attachImpl) {
+  const d = makeDebugger(attachImpl);
+  d.sendCommand = vi.fn(async (target, method, params) => {
+    sent.push({ method, params });
+    return sendImpl(method, params);
+  });
+  return d;
+}
+
+async function loadWithDebugger(dbg) {
+  global.chrome = { debugger: dbg };
+  vi.resetModules();
+  return await import('../src/core/cdp/input.js');
+}
+
 describe('cdp/input', () => {
   beforeEach(() => {
     sent = [];
@@ -119,6 +135,37 @@ describe('cdp/input', () => {
     await m.typeText(9, 'x'); // 不应 reject
     expect(sent.some((c) => c.method === 'Input.dispatchKeyEvent' && c.params.type === 'keyDown')).toBe(true);
   });
+
+  // ---- 批14：按下之后的任何失败都只能是「结局未知」，绝不能重放或原样上抛 ----
+  // 理由：press 一旦入队，页面上这个动作就可能已经发生。此时
+  //  ① 原始错误上抛 → 上层判「CDP 不可用」→ DOM 兜底再点一次 = 双发；
+  //  ② withDebugger 的 detach 恢复重跑整个函数体 → 第二遍 press = 双发。
+  // 两条路都必须堵死：统一收敛为 click_unacked，且输入类命令不重放。
+  it('mousePressed 被 CDP 拒绝：上抛 click_unacked 而非原始错误', async () => {
+    const m = await loadWithDebugger(makeDebuggerWith(async (_method, params) => {
+      if (params?.type === 'mousePressed') throw new Error('Internal error');
+      return {};
+    }));
+    await expect(m.clickAt(11, 200, 300)).rejects.toThrow(/click_unacked/);
+  }, 20000);
+
+  it('mouseReleased 报 detach 类错误：上抛 click_unacked 且不重放第二次 press', async () => {
+    const m = await loadWithDebugger(makeDebuggerWith(async (_method, params) => {
+      if (params?.type === 'mouseReleased') throw new Error('Debugger is not attached');
+      return {};
+    }));
+    await expect(m.clickAt(12, 200, 300)).rejects.toThrow(/click_unacked/);
+    expect(sent.filter((c) => c.params?.type === 'mousePressed').length).toBe(1);
+  }, 20000);
+
+  it('键入中途 detach 报错：已发的按键不重放（一次字符 = 一次 keyDown）', async () => {
+    const m = await loadWithDebugger(makeDebuggerWith(async (_method, params) => {
+      if (params?.type === 'keyUp') throw new Error('Cannot access a chrome:// URL');
+      return {};
+    }));
+    await expect(m.typeText(13, 'ab')).rejects.toThrow(/Cannot access/);
+    expect(sent.filter((c) => c.params?.type === 'keyDown').length).toBe(1);
+  }, 20000);
 
   it('bezierPoints 纯函数：步数 10–40、端点收敛到目标', async () => {
     const m = await loadFresh();

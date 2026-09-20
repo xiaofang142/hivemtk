@@ -4,10 +4,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dispatch } from '../src/core/primitives.js';
 import { assembleSnapshot, getRefSelector } from '../src/core/accessibility.js';
+import { strictExecuteScript } from './inject-sandbox.js';
 
 const fakeChrome = {
   scripting: {
-    executeScript: vi.fn(async ({ func, args }) => [{ result: func(...(args || [])) }]),
+    executeScript: strictExecuteScript,
   },
   tabs: {
     create: vi.fn(async (opts) => ({ id: 42, ...opts })),

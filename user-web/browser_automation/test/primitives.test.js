@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dispatch } from '../src/core/primitives.js';
+import { strictExecuteScript } from './inject-sandbox.js';
 
 // mock chrome.scripting / chrome.tabs
 const fakeChrome = {
   scripting: {
-    executeScript: vi.fn(async ({ func, args }) => {
-      // 直接以 document 为 this 执行注入函数（jsdom 环境）
-      return [{ result: func(...(args || [])) }];
-    }),
+    executeScript: strictExecuteScript,
   },
   tabs: {
     create: vi.fn(async (opts) => ({ id: 42, ...opts })),
@@ -35,6 +33,13 @@ Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
   get() { return this.parentElement ? document.body : null; },
   configurable: true,
 });
+// 同样必须给几何：批14 起 probe 真的能在页面里跑（此前它稳定抛 ReferenceError，
+// 所有 click 都被误判成「CDP 不可用」而降级），零尺寸现在会如实被判 zero_box 挡下。
+// 本文件里这些用例要测的是「无 chrome.debugger → 降级兜底」，不是「零尺寸可点」，
+// 所以按浏览器事实给一个非零 box。
+global.HTMLElement.prototype.getBoundingClientRect = function () {
+  return { x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 40, width: 100, height: 40, toJSON() {} };
+};
 
 const makeDeps = () => ({
   tabManager: {

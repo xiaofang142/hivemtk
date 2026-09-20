@@ -45,13 +45,20 @@ func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string)
 	return res, nil
 }
 
-// typeText 原语
-func (h *Hand) typeText(ctx context.Context, userID uint, tabID int, target, value string, clearFirst, submitOnEnter bool) error {
-	_, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+// typeText 原语。回包必须交回上层：批14 起 type 也带 channel（trusted 键入 vs DOM 兜底），
+// 早前的 `) error` 签名把整个回包丢在 hand 层，降级在审计面上完全不可见。
+func (h *Hand) typeText(ctx context.Context, userID uint, tabID int, target, value string, clearFirst, submitOnEnter bool) (map[string]any, error) {
+	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "type", "tab_id": tabID, "target": target, "value": value,
 		"clear_first": clearFirst, "submit_on_enter": submitOnEnter,
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		res = map[string]any{}
+	}
+	return res, nil
 }
 
 // snapshot 原语（accessibility @e{N} refs）。
@@ -129,12 +136,19 @@ func (h *Hand) scroll(ctx context.Context, userID uint, tabID int, direction str
 	return err
 }
 
-// clickNear 原语：以锚元素为基准点击容器内文本含 buttonText 的 button
-func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, buttonText string) error {
-	_, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+// clickNear 原语：以锚元素为基准点击容器内文本含 buttonText 的 button。
+// 回包同 typeText 交回上层（channel 审计面，批14）。
+func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, buttonText string) (map[string]any, error) {
+	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
 		"action": "click_near", "tab_id": tabID, "anchor": anchor, "button_text": buttonText,
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		res = map[string]any{}
+	}
+	return res, nil
 }
 
 // assert 原语：断言类（contains_text / selector_exists），失败即抛错

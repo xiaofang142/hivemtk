@@ -5,8 +5,6 @@
 //   *button "发送" @e3          ← 相对上一快照新出现的元素（browser-use *[index] 语义）
 // refs 映射缓存在扩展 SW 内存（Map<ref, selector>）；页面导航即失效。
 
-const MAX_NODES = 400;
-
 // ref 分配器（SW 单例内存，按 tab 分桶）
 // 批9：旧实现是**全局单桶 + 每次快照清空**，多 tab 编排时两条错路都会发生——
 // ① tab B 拍一帧就把 tab A 的 @eN 全清了，A 的后续定位凭空失效；
@@ -45,6 +43,11 @@ export function getRefSelector(ref, tabKey) {
  * 在页面上下文（executeScript）中执行后把 nodes/paths 传回 SW 组装。
  */
 export function collectInteractiveNodes() {
+  // 上限刻意声明在函数体内：本函数以 func.toString() 的形态送进页面，
+  // 引用模块顶层 const 今天能跑只是因为 esbuild 把它折成了字面量——
+  // 一旦它变成可配置值或关掉折叠，页面侧就是 ReferenceError + result:null，
+  // 上层读成 inject_no_result，快照静默变空（批14 静态闸门把这类都拦下）。
+  const MAX_NODES = 400;
   const cssEscape = (s) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : String(s).replace(/([^\w-])/g, '\\$1'));
   const selectorOf = (el) => {
     if (el.id) return `#${cssEscape(el.id)}`;

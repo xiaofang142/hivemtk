@@ -6,47 +6,69 @@
 
 export const NM_HOST_NAME = 'com.hivemtk.browser';
 
+// 证活窗口：端口建立后活满这段时间才算「连上了」。connectNative 是同步返回 port 对象的，
+// Host 进程起不来/秒退（清单缺失、二进制没装、服务端没起）都表现为返回成功后的异步
+// onDisconnect——所以「返回了」不等于「连上了」，先报 online 就是假绿。
+const PROVE_ONLINE_MS = 1500;
+const RECONNECT_BASE_MS = 2000;
+const RECONNECT_MAX_MS = 30000;
+// giveup 之后并不真的停：本扩展没有 alarms 权限，SW 一旦没有这个重试循环就再也没人
+// 拉起 Host（实测：服务端重启窗口超过退避预算后设备永久离线，只能重启浏览器）。
+// 所以到上限只播报一次 giveup 给人看，重试降到长间隔继续跑。
+const GIVEUP_RETRY_MS = 300000;
+const MAX_RECONNECT = 5;
+
 export function createNativePort(chromeAPI = chrome, onCommand, onStatusChange) {
   let port = null;
   let reconnectAttempts = 0;
-  const MAX_RECONNECT = 5;
   let closedByUs = false;
+  let gaveUp = false;
 
   function connect() {
     closedByUs = false;
+    let p;
     try {
-      port = chromeAPI.runtime.connectNative(NM_HOST_NAME);
+      p = chromeAPI.runtime.connectNative(NM_HOST_NAME);
     } catch (e) {
       onStatusChange?.('offline', String(e));
       scheduleReconnect();
       return;
     }
+    port = p;
+    const proveTimer = setTimeout(() => {
+      reconnectAttempts = 0; // 计数只在「确实连上了」时清零
+      gaveUp = false;
+      onStatusChange?.('online', '');
+    }, PROVE_ONLINE_MS);
 
-    port.onMessage.addListener((msg) => {
+    p.onMessage.addListener((msg) => {
       // Host 回包/命令帧都走这里；命令帧带 action 字段
       if (msg && msg.action) {
         onCommand?.(msg);
       }
     });
 
-    port.onDisconnect.addListener(() => {
+    p.onDisconnect.addListener(() => {
       const err = chromeAPI.runtime.lastError ? String(chromeAPI.runtime.lastError.message || '') : '';
-      port = null;
+      clearTimeout(proveTimer);
+      if (port === p) port = null;
       onStatusChange?.('offline', err);
       if (!closedByUs) scheduleReconnect();
     });
-
-    reconnectAttempts = 0;
-    onStatusChange?.('online', '');
   }
 
   function scheduleReconnect() {
     if (reconnectAttempts >= MAX_RECONNECT) {
-      onStatusChange?.('giveup', '重连次数用尽，请检查 Host 安装');
+      if (!gaveUp) {
+        gaveUp = true;
+        onStatusChange?.('giveup', '重连次数用尽，请检查 Host 安装（仍以长间隔自动重试）');
+      }
+      reconnectAttempts += 1;
+      setTimeout(() => connect(), GIVEUP_RETRY_MS);
       return;
     }
     reconnectAttempts += 1;
-    const delay = Math.min(2000 * 2 ** (reconnectAttempts - 1), 30000);
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** (reconnectAttempts - 1), RECONNECT_MAX_MS);
     setTimeout(() => connect(), delay);
   }
 

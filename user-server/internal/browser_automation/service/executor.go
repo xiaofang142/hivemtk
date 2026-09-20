@@ -281,6 +281,14 @@ func isInjectTimeout(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "_inject_timeout_")
 }
 
+// isSendGateReject 扩展侧 comment_send 的可点性闸门在把坐标交给 CDP **之前**就把按钮判死
+// （send_button_not_interactable: covered/zero_box/disabled，见 primitives.js injPostCommentSend）。
+// 与注入超时同属「零副作用」一类：页面从未收到那次点击，所以台账停在 prepared、
+// 不进 finalize 白轮、不自愈重发（换文本重选对一个「存在但不可点」的按钮没有依据）。
+func isSendGateReject(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "send_button_not_interactable")
+}
+
 // ExecuteSession 执行一个 session（在独立 goroutine 中运行）。
 // ctx 由调用方包上 task.TimeoutSec 超时。
 func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, steps []parsedStep) {
@@ -884,12 +892,23 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			return nil, err
 		}
-		return recordResultPayload(map[string]any{"navigated": res["navigated"] == true})
+		// channel 如实透传：cdp / dom_fallback / null（老扩展没这个字段）。
+		// 兜底本身不是失败，但「一片绿里全是 dom_fallback」= trusted 通道死了，
+		// 这一列就是用来发现它死了的（批14 实证形态）。
+		return recordResultPayload(map[string]any{"navigated": res["navigated"] == true, "channel": res["channel"]})
 	case "type":
-		return nil, e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
+		res, err := e.hand.typeText(ctx, userID, tabID, step.Target, step.Value, p.ClearFirst, p.SubmitOnEnter)
+		if err != nil {
+			return nil, err
+		}
+		return recordResultPayload(map[string]any{"channel": res["channel"]})
 	case "click_near":
 		// 以 Anchor CSS 为基准点击容器内指定文本的 button（发送/提交按钮无稳定 class 场景）
-		return nil, e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
+		res, err := e.hand.clickNear(ctx, userID, tabID, step.Anchor, step.ButtonText)
+		if err != nil {
+			return nil, err
+		}
+		return recordResultPayload(map[string]any{"clicked": res["clicked"] == true, "channel": res["channel"]})
 	case "post_comment":
 		// F2②（G11 正确版）：三段式拆分——prep（可重入）→ send（唯一不可逆点，F2① 已禁重试）
 		// → verify 轮询 finalize（只读、可中断、可归因）。提交与验证彻底分离：
@@ -941,9 +960,12 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if isInjectTimeout(sendErr) {
 			return nil, fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
 		}
+		if isSendGateReject(sendErr) {
+			return nil, fmt.Errorf("post_comment 未提交（发送按钮不可点，点击未发生）: %w", sendErr)
+		}
 		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
 		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。
-		// 注入超时分支在上面提前返回、台账留在 prepared：那一支点击从未发生。
+		// 注入超时/闸门两个分支在上面提前返回、台账留在 prepared：那两支点击从未发生。
 		e.recordSubmitState(ctx, stepRow.ID, model.StepSubmitSent, textHash)
 		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
 		// 重发不违「单次提交禁重试」红线；其余错误结局未知，交 finalize 回查绝不重发。
