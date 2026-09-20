@@ -770,11 +770,30 @@ constraint`**。⇒ 一次「没存进去」被翻成「已经存过了」，客
 把"是否重复"从文案里拿出来——它要改 `service.InboxIngressResult` 与全部产出点，
 落在 `internal/service/inbox_ingress*.go`（并行会话在途文件，本泳道不改）；
 ② 前缀表是**穷举式契约**，新增产出方写新文案时会静默漏判（方向安全，但要有门）：
-`grep` 过一次全仓 `(result|res|r|decision)\.Reason = "`，当前命中集已全部覆盖，
-新增文案时必须同步 `duplicateOutcomePrefixes`；③ 调研1 的 C1（`event_id` 用内容哈希 ⇒
+产出面**跑过普查**（克隆树 `grep -rnE '\.Reason[[:space:]]*=[[:space:]]' --include='*.go'`，
+非测试文件 52 处），其中会流进 `InboxIngressResult.Reason` 的只有 `inbox_ingress.go` 的
+14 条字面量 + `channelgw/ws.go:315` 的透传赋值；其余（`feature_flag` / `agent_co_pilot` /
+`layer` / `risk_gate` / `sms·email_unsubscribe` / `sop_compensation` / `human_task` /
+`user_blacklist` / `chat_public`）是别的类型，**不经这条判定**。14 条里恰好 3 条命中前缀
+（`msg_id already exists` / `msg_id exists with different direction` /
+`content_hash already exists`）+ `intercepted by middleware`，其余 10 条（human-locked、
+system/agent persisted-only、outbound-last、5min 窗外、trigger AI、batch merged/batched、
+webhook 门控、`batch handle error`）全不命中——正是想要的形状。**注**：`intercepted by
+middleware` 命中即"停发但库里根本没这条"，那是 §8.3-18 的 C2 问题，本轮**刻意不改现状**
+（改判定只会把"丢得更快"说成修好），前缀表与它一起留给 outcome 枚举那一批；
+新增文案时必须同步 `duplicateOutcomePrefixes`。另外 `bridge.isIngestDuplicate` 实测只是
+`channelgw.IsDuplicateReason` 的一行转发（`handler_http.go:725-727`），**单一事实源**，
+两处不会漂移；③ 调研1 的 C1（`event_id` 用内容哈希 ⇒
 同会话同文本第二条被永久吞）与 C2（中间件拦截 ⇒ 消息**根本不入库**，`:494-507` 在
 `persistMessage` 之前 return，"证据消失"）两条经读码复核为真，但落点全在
 `inbox_ingress*.go`（BLOCKED），维持 §8.3-9 的移交口径，不在本轮动。
+
+**落地与提交后复验**：本批改 5 个路径本地 commit `9200a608`（+171/-19，未推送）。提交前先确认
+克隆树里待测的四份 Go 文件与本仓工作树**逐只 md5 相同**（"同 ×4"），随后 `--force --detach` 到
+`9200a608`（该提交叠加了并行会话的 `f837effa` 等，因此复验同时是对"我的改动 + 他们的已提交代码"
+这一组合的检验），再跑：`go build ./...` rc=0、`go vet ./internal/channelgw/ ./internal/bridge/`
+rc=0、两包 `-count=1` `ok 20.835s / ok 17.205s`（`/tmp/b19_clone.log`）。提交前一轮同口径的
+`gofmt -l` 为空 + 两包 ok 记在 `/tmp/b18_gate.log`。
 
 ## 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正）
 
