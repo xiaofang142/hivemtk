@@ -46,11 +46,10 @@ type assetEnvelope struct {
 
 func (c *AssetMarketClient) doData(method, path string, req any, out any) error {
 	var env assetEnvelope
+	// 信封 code 不在这里判：商户客户端的传输层已把"HTTP 200 + code 非 200"统一转成
+	// *PlatformError（R11），此处再判一次就是一段永不命中的死分支。
 	if err := c.client.Do(method, path, req, &env); err != nil {
 		return err
-	}
-	if env.Code != 0 && env.Code != 200 {
-		return fmt.Errorf("platform error %d: %s", env.Code, env.Msg)
 	}
 	if out == nil || len(env.Data) == 0 {
 		return nil

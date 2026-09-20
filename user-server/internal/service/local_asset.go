@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"errors"
 	"sync"
 	"time"
 
@@ -14,6 +14,7 @@ import (
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
 )
 
@@ -78,16 +79,15 @@ type UpdateAssetInput struct {
 	Data      json.RawMessage `json:"data"`
 }
 
+// purchaseFailMsg 把平台购买失败的原因转成产品文案。
+// 原因只能从 *platform.PlatformError 的结构化字段取：R11 起拒绝在传输层统一成该类型，
+// 老的 "platform error <code>: <msg>" 字符串切片口径已随之失效，切不到就会把内部格式吐给用户。
 func purchaseFailMsg(err error) string {
-	msg := err.Error()
-	if i := strings.Index(msg, "platform error "); i >= 0 {
-		if j := strings.Index(msg[i:], ": "); j >= 0 {
-			if reason := strings.TrimSpace(msg[i+j+2:]); reason != "" {
-				return "平台购买失败: " + reason
-			}
-		}
+	var perr *platform.PlatformError
+	if errors.As(err, &perr) {
+		return "平台购买失败: " + perr.Msg()
 	}
-	return "平台购买失败: " + msg
+	return "平台购买失败: " + err.Error()
 }
 
 func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID string) error {
