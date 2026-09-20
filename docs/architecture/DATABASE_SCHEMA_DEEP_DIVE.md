@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.10（2026-09-21，T-P4-04 新增 §4.16.3 商机 HTTP 出口；v1.9 那一行只进了下面的修订历史、漏改本行，本次一并对齐 —— 上一版 v1.8 是 T-P4-02 的 §4.16.1）
+> **版本**：v1.11（2026-09-21，T-P4-05 新增 §4.16.4 线索→商机的转换层与自动分配；上一版 v1.10 是 T-P4-04 的 §4.16.3）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -869,6 +869,8 @@ T-P4-05），未接线台账 **项 16** 已按此登记旗子（现值 38/45，`
 **列表端点仍欠** —— 仓储的 `List` 今日不返回 `total`，凑不出 `{list,total}` 那句业务判断。
 `win_probability` 与 ltc.config 的 `win_probability` 阈值**同量程 0–1**（默认 0.50），
 所以比较不需要换算；那枚阈值今天在生产代码里仍零读者，消费方就是本卡的这一列 + T-P4-05/T-P6-04。
+（**状态迁移 2026-09-21**：上段的"今日零生产写入方"到 T-P4-05 结束 —— 转换层是这张表的第一个
+生产写入方，见 §4.16.4；`win_probability` 阈值那一格**本卡没接**，兑现点仍在 T-P6-04/P7。）
 
 ### 4.16.1 `opportunities` 的仓储层：CAS 拒整份、白名单是 map、排序带兜底键（T-P4-02）
 
@@ -947,7 +949,9 @@ cause，而放行它的只有回款完成；外部另有一条：架构门 [1/10
 下限 0.05；base 为 `qualification 0.10 / needs_confirmed 0.30 / proposal 0.55 / negotiation 0.75`。
 **能被证明的只有形状**：本层的阶段跃迁要求逐格向前 ⇒ `{赢单} ⊆ {到达第 k+1 格} ⊆ {到达第 k 格}`
 ⇒ `P(赢|到第 k 格) = P(赢)/P(到第 k 格)` 随 k 单调不减。这条推导锁不死任何具体数字，所以四个
-base 是显式登记的**先验刻度**而非标定值（今日全表零生产写入方，没有任何收口行可回标），
+base 是显式登记的**先验刻度**而非标定值（T-P4-05 起这张表**有**生产写入方了，但转换层写进去的行
+一律是 `status=open`，而回标要的是收口行 ⇒ 可回标的样本今日仍为 0；`won` 那一条路仍然只有
+P7 的回款完成，不经 HTTP），没有任何收口行可回标，
 P8 攒够 outcome 行之后回标改的是这四个数、式子的形状不动。惩罚只做常数、**不做逾期梯度**
 （梯度需要一条"逾期时长→概率"的曲线，而它没有任何数据支撑，比常数先验更假）。
 输入结构 `OpportunityWinInput` 只有三个字段且字段名不得含 `confidence/lead/score/churn/rfm/probability/value`
@@ -1046,7 +1050,8 @@ HTTP 侧的兑现：`won` 只能由 `collection_completed` 落下，所以它没
 比 §4.16.2 的原计划**早一张卡**同时翻 wired —— 这一卡交付的是 HTTP 出口，而出口必须自带底座，
 `app.InitOpportunityRuntime` 一行同时接上两个断点；判据仍分开跑，因为"摘掉仓储那一行"与"摘掉路由
 那一行"是两种不同的破坏。新增 **16d 挂载入口**、**16e 启动装配点**。16b（商机行的生产写入点）
-**仍按 UNWIRED 登记**，兑现点 T-P4-05。
+**仍按 UNWIRED 登记**，兑现点 T-P4-05。（**本段是 T-P4-04 收尾那一刻的值**；下一卡兑现之后
+台账变成 **47/53**，四行新增绊线见 §4.16.4 末段。）
 
 **列表端点刻意不交付**（登记为欠账而不是"已完成"）：仓储的 `List` 今日不返回 `total`，
 而 CLAUDE.md 的列表契约要求 `{list,total}` —— 用 `len(list)` 凑一个 `total` 会让"这页是第 3 页、
@@ -1077,6 +1082,216 @@ service 腿 rc=1 pass=3507 fail=2 race=2。两处竞态同根：测试用 `db.Se
 （与既有的"service 用例共享进程状态"同族）。另登记一条口径事实：**`-race` 不在本仓任何门禁脚本里**
 （`scripts/` 下只有审计轨的记录文档提到 `-race`），所以这条红不会被默认门拦住 —— 第六步全量回归若沿用现有门，同样看不见它。
 
+
+### 4.16.4 `clues → opportunities` 的转换层：三道判据、三条分配规则，以及"为什么一个字节都不写 `is_opportunity`"（T-P4-05）
+
+**§4.16 那句"商机已入库"到这一节才成立**：前面三张卡交付的是表、仓储、状态机与 HTTP 面，
+`opportunities` 在生产路径上的写入数一直是零（台账 16b 按 UNWIRED 登记就是为这件事留的绊线）。
+本节交付的是那第一个写入方，以及它背后的两件判据：**什么算"达标到该建商机"**（AC①）与
+**建出来归谁、凭什么归他**（AC③），外加一条本卡自己新增的向后兼容判据（AC②）。
+
+**"一键"指的是运营的那一个开关，不是页面上的一个按钮**。依据是三方调研成果.md 对 AC1 的原话
+"一键开启 LTC 后，新线索可**无人值守**走完…"，所以本层的调用方是线索挖掘那条写路径，人在链路里
+不需要点任何东西。HTTP 侧的手工"一键转商机"入口今天**仍不存在**，登记在下面的欠账里。
+
+#### 落点（五层，比 HTTP 面那一竖多出两个文件）
+
+| 层 | 文件 | 职责 |
+|------|------|------|
+| 转换层 | `internal/service/opportunity_convert.go` | 量程校验 → LTC 闸门 → 幂等反查 → 分配 → 落库 → 审计；全局登记点 |
+| 分配层 | `internal/service/opportunity_assign.go` | 三条规则的顺序裁决 + 每次分配自带解释（规则名、候选集、每人负载） |
+| 名单层 | `internal/service/opportunity_roster.go` | "谁在册"的生产实现（`sales_events` / `sales_profile`） |
+| 接缝 | `internal/service/lead_mining.go: persistLead` | 线索落库之后那一跳，新建支与更新支各一处 |
+| 装配 | `internal/app/opportunity_wiring.go` | `InitOpportunityRuntime` 一次登记**两半**（读口服务 + 转换器） |
+
+#### 判据一：闸门顺序是"量程 → 阶段 → 双阈值"，不是三个并列 if
+
+1. **入参量程先判，越界一律 `ErrOpportunityInputInvalid` 且不进闸门**。本仓有**两个都叫
+   `confidence` 的数**：`ClueScore.Confidence` 是 0–100 的维度覆盖度，`LeadJudgement.Confidence`
+   是 0–1 的模型把握。量程错位如果被闸门判成"不达标"，症状是"每条线索都不达标"而那道闸门
+   每天都绿 —— 比"错放"隐蔽得多，所以这里**硬拒而不归一**（归一就是把两个不同量程的事实合并成
+   一个没人能追溯的数）。`lead_score` 同理，界外（负数、>100）直接拒。
+2. **阶段闸门在阈值之前**：`cfg.StageActive(LTCStageOpportunity)`（nil 安全）先跑，再跑
+   `cfg.LeadQualified(leadScore, confidence)`（nil **不**安全）。这个顺序不是风格，是"配置缺失时
+   不能 panic"与"不能凭猜放行"两件事的唯一交集。
+3. **配置读不到按"关"处理**：`DegradeReason != ""` 时那份是回落默认（默认全关）。把它读成
+   "默认值挺宽松"，等于库里存储故障的当晚凭空多出一批商机。
+4. 拒绝必须说清是**哪一道**拦的：`LTCReasonMasterOff / StageOff / UnknownStage / Degraded`
+   透传配置层，本层只补两个配置层表达不出来的形状 —— `threshold_unmet`（门开着但分数不够）与
+   `already_converted`（这条线索已经有商机了）。前者与后者的动作在值班手里是两件事：一个是
+   "运营该调阈值"，一个是"该有人去推进那一条已存在的商机"。
+
+#### 判据二（AC②）：转换那一步对 `clues.is_opportunity` 零写入
+
+`model/opportunity.go` 的 `clue_id` 注释在 T-P4-01 写的是"不建索引：今天没有由线索反查商机的读方，
+反查由 `clues.is_opportunity` 承担"。**本卡把这句判断就地改掉了**，理由是实测出来的两件事：
+
+- 幂等键就是这条反查（同一条线索第二次投递必须先知道"已经转过了"），而 `is_opportunity` 是一个 0/1，
+  它答不出"转成了哪一条"；
+- 那一列的语义是挖掘侧按 `intent_score` 顺手打上的**热度标记**（`lead_mining.go` 与
+  `lead_miner_unified.go` 两处都在写），与"已经变成商机"根本不是同一件事。两处都写 ⇒ 同一列承载
+  两个判据、取值时刻还不同 ⇒ 旧读取方（列表筛 `COALESCE(is_opportunity,0)>=1`）看到的人群会凭空换一批。
+
+这条"零写入"不是靠读代码保证的：`TestConvertNeverWritesClueIsOpportunity` 有**两臂**（线索原本
+`is_opportunity=0` 与原本 `=1` 各一次），每臂都在转换之后**从库里读回那一行**比原值，并顺带钉住
+`intent_score` 与 `level` 也没被"顺手"改掉 —— 只断 `is_opportunity` 的用例会放过"转换层开始替挖掘侧
+打热度标记"这件事，而那正是本判据要防的那一步。
+
+于是反查走 `opportunities.clue_id`，索引建了，但建的是**部分**唯一索引
+（`ON opportunities (clue_id) WHERE clue_id <> ''`）：空串是本表的合法常态（手工商机就没有来源线索），
+不带谓词的唯一索引会让第二条手工商机插不进去。GORM 标签表达不了 partial，所以它不在标签上，
+而在 `internal/pkg/db` 的 `postMigrateOpportunityClueUniqueIndex()` —— 一条**只 Warn 不 panic、
+且绝不清数据**的启动钩子，用例同时钉住"存量重复不会把启动路径断掉"和"建索引失败不许把表清空"。
+
+#### 判据三（AC③）：三条规则的顺序是判据，分配结果是返回值而不是日志行
+
+`customer_owner`（同一客户已有归属销售则沿用，哪怕他正忙到冒烟）→ `least_loaded`（在册销售里
+**只数 `status=open`** 的在办数，平票按 `SalesID` 字典序，不随机）→ `no_roster`（真的一个在册销售
+都没有 ⇒ 商机照样建，只是暂时无归属）。三条规则各有一句"为什么压过下一条"，写在文件头而不是
+散在 if 里。
+
+**与规则三相对的是故障**：名单读不到、负载读不到，一律原样上抛，绝不"退到规则三"。
+把"我们不知道有没有人"伪装成"确实没人"，后果是一批商机带着空归属与一条**从未发生过的**
+"名单为空"记录落库 —— 那条解释比故障本身更难排除。这条判据不是假设：本卡的名单适配器
+（`opportunity_roster.go`）与它的同名先例（`SalesEventStatsService.allProfiles`）**唯一的差别就是这一条**
+（那边把读失败吞成 nil，看板少几行没人出事；这边吞掉就直接喂给分配决策）。
+
+**可解释性落成结构而不是文案**：`OwnerAssignment` 同时带出规则名、参与比较的候选集、每人被比较时的
+负载数，并且候选集**必须按 `SalesID` 升序** —— 排序在这里是判据不是美观，因为 `leastLoaded` 靠
+"先遇到者胜"实现平票裁决，那前提是输入已有序。这一条被变异验过（把 `sort.Strings` 换成倒序排，
+`TestAssignOwnerCandidatesAreStableAndSorted` 报的是"候选第 0 位是 gamma"而**不是**"没人被选中"，
+即它抓的是裁决前提，不是抓一个恰好可见的表面）。
+
+**名单真源**：`sales_events` 里 `event_type='sales_profile'` 的事件，与业绩看板同一处。另一条候选
+`sales_personas` 在本仓**零写入方**，拿它当名单会让分配永远走到 `no_roster` 那一支 —— 那是一支
+"看起来正常工作"的错。代价一并记下：本仓没有停用类事件，所以"在册"只能定义为"注册过档案"，
+离职销售不会自动出名单。这一条登记为边界而不是现场补一列 `status`：那个列今天没有任何写者，
+只会被 AutoMigrate 建成恒为零值的死列。
+
+#### 幂等：反查在写之前，且"读不到"不等于"没转过"
+
+`GetByClueID` 空 `clueID` **直接报错而不是返回 nil** —— 本表允许 `clue_id` 为空，拿空串去查会命中
+"所有手工商机里的第一条"，那是一个看着合理的错误答案。读失败原样上抛：把"读不到"读成
+"这条线索还没转化过"，一次数据库抖动就变成同一条线索的两行商机。
+
+#### 审计：记系统身份，且审计失败不回滚转换
+
+成功转换写一行 `operation_logs`（`module=opportunity_convert`）。两个选择值得记：
+① `actor` 写在 `username` 而不是 `user_id` 上 —— 无人值守的动作没有一个对应的人，塞某个真人的 id
+等于把系统的行为记成他的操作，而 `users` 里 `id=0` 那一行本来不存在，join 过去是空的；
+② **审计写失败时转换仍然算成功**（`res.AuditError` 非空并由调用方 Warn）—— 反过来做就等于
+"日志表抖一下，客户的商机就没建"，那是把可观测性设施抬到了业务事实源的位置。
+
+#### 接缝：为什么那一跳在 `Create` 之后，以及为什么未装配时它不出声
+
+`s.tryConvertToOpportunity(...)` 在 `persistLead` 的**两条分支各一处**，且都在线索行**已经落库**之后：
+`Create` 失败就 `return`，绝不带着一个没有下家的 `clueID` 去建商机 —— 本表刻意不建外键（T-P4-01 的
+裁定），这条断链谁都不会发现。这一处形状是这条接缝最容易只接一半的地方（更新分支没有 `Create`，
+它的"已落库"是那条 `UpdateByID` 成功），所以两支各有一条用例、且各配一把"摘掉这一跳"的变异。
+
+未装配 ⇒ `Debugf` 一行就返回，不 `Warn`：默认配置下阶段是关的，每条达标线索都打一行 Warn 会把
+日志刷成噪声，而"未装配"是一次部署状态、不是每条目事件。转换报错 ⇒ 只 `Warn`、不重试、
+不回滚线索：这条路径的失败处理若升级为重试，就要引入投递语义（谁负责重投、幂等窗口多长），
+那是另一张卡的事，今天先保证**不静默**。
+
+#### 装配：一个函数登记两半，`db == nil` 时两半一起清
+
+`InitOpportunityRuntime` 现在同时 `SetGlobalOpportunityService`（HTTP 读口/写口用）与
+`SetGlobalOpportunityConverter`（挖掘接缝用）。**两半必须一起清**：只清一半的话，路由对着 503 告警
+继续答，而挖掘侧还在往一张没人读的表里写。刻意**不做惰性构造** —— 惰性建要走全局 DB 句柄，
+而第一个调用方是挖掘 worker 的协程，那等于让"建句柄的时刻"由一条后台消息的到达时间决定。
+本竖仍不加旗子（与 T-P4-04 同一理由：写的是新表的新行，不改动任何既有读写路径；真正的总闸
+是 `ltc.config`，它在数据里、改了立刻生效，不需要再套一层进程启动期才读的 env）。
+
+#### 本卡被真跑纠正的三处
+
+- **测试夹具的保真度**：`miningClueCreateFails.Create` 的第一版直接返回 error 而不填 `c.ID`，
+  于是"线索没落库照样转"那把变异会以**错得多的理由**被抓住（转换器在空 `clueID` 处就拒了，
+  根本走不到"断链"那一步）。真因：`model.Clue.BeforeCreate` 在 INSERT **之前**就赋了 uuid，
+  所以真仓库里一次失败的 `Create` 照样留下一个填好的 id。夹具照真行为改掉之后，那把变异才真的
+  打在接缝上。
+- **台账的 `callpat` 会被"清空那半"命中**：16f（转换竖的启动登记点）第一版接线数=2 —— 因为
+  `SetGlobalOpportunityConverter(nil)` 那一行也算调用。收紧到 `\(conv\)` 之后接线数=1，
+  摘掉真登记行才会红。这是"定义行/无关行自匹配 ⇒ 假绿"这个老形状在本仓的又一次现身。
+- **两条变异退化成了构建红**（事件类型常量换成不存在的字面量、`sort.Reverse` 的切片拼接写法不合法），
+  补成可编译的同量程语义变异（`model.SalesEventTypeOrder` / `sort.Sort(sort.Reverse(sort.StringSlice(out)))`）
+  之后，红因分别是"查询事件类型 `\"order\"`"与"候选第 0 位是 `gamma`" —— **一条只在编译期红的变异
+  不能算行为捕获**，它只证明类型系统挡住了拼写错误，不证明用例认得这个业务结论。
+
+#### 台账：16b 翻 wired，另新增四行（现值 **47/53**，`check-unwired-assets.sh` rc=0）
+
+原计划"16b 由本卡翻 wired"兑现了（`model.Opportunity{` 在 `internal/service` 里有生产构造点）。
+另加四行，各自盯一把前一行看不见的刀：
+
+| 行 | 盯的是 | 摘掉之后的症状 |
+|------|------|------|
+| 转换竖的启动登记点 | `SetGlobalOpportunityConverter(conv)` 在 `internal/app` 里有没有人调 | 端点、读口、路由全正常，只有挖掘侧永远不转，且**不报错** |
+| 挖掘侧到转换层的接缝 | `conv := GlobalOpportunityConverter(` 在 `internal/service` 里有没有人调 | 装配、转换层单测全绿，真实线索落库不再产生商机 |
+| 在册销售名单适配器的装配点 | `NewSalesEventRoster(` 在 `internal/app` 里有没有人调 | 分配永远走 `no_roster`，每张商机都写着"在册销售为空" |
+| `clue_id` 部分唯一索引的启动调用点 | `postMigrateOpportunityClueUniqueIndex(DB)` 在 `internal/pkg/db` 里有没有人调 | AutoMigrate 只建普通索引 ⇒ 同一条线索可以转出两行 |
+
+五行（16b + 上面四行）**逐行反向验过**：把各自那一行的调用改成同文件里的非法符号 ⇒ 台账 rc=1 且
+该行报"接线数=0"，控制组 rc=0，跑完工作树 `git status` 无残留（变异用 cp 备份 + md5 比对写回）。
+`defpat`/`callpat` 的写法都避开了定义行与"清空那半"自匹配。
+
+#### 本卡的欠账（登记，不当作已完成）
+
+- **HTTP 手工"一键转商机"入口未交付**：今天唯一的转换方是挖掘链路自动那一跳。运营拿着一条
+  达标线索想手建商机，仍然没有口。
+- **`lead_miner_unified.go` 那条通用挖掘链未接本接缝**（刻意）：它只有关键词派生的 `intent_score`，
+  **没有 confidence 生产者**。给它喂一个数才能过 C5 的双阈值，等于凭空造一个业务判据；
+  等 bridge/统一链有真的把握度信号再接。
+- **`ltc.config` 的 `win_probability` 阈值仍然零读者**（与 §4.16.3 同一格，本卡只接了
+  `lead_score` 与 `confidence` 两个阈值）。
+- **赢单概率与漏斗的 stage 读者未接**：T-P4-06。
+- **`actor`（谁做的这次跃迁）不落表**：本卡的审计行记的是"系统转的"，而状态机那五次写入口
+  仍无操作者列 —— 与 §4.16.2 那格同源，下家未指派。
+
+#### 实跑口径（分树记，别混读）
+
+本卡验收数字一律取自 **`--shared` 克隆、HEAD `478ef1c4`**（克隆里没有并行会话的未提交文件，
+所以这才是"我这一个提交自洽吗"的答案）：`go build ./...` 与 `go vet ./...` rc=0；
+app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 4305，
+`fail=0`（service 另有 `skip=3`，实跑点名：`TestAIAgent_AssetBundleBinding` 与 `TestAIAgent_FullChain`
+跳过在 `login()` 那句"集成测试跳过：user-server 未运行"上，`TestPlatformAccountService_Login`
+跳过在 chromedp/真浏览器门上 —— 三条都是既有环境门，与本卡无关）；**`TZ=UTC` 复跑同数同绿**。
+**计数口径**：`-test.v` 下顶层与子用例一并计数（`^--- PASS` 加 `^    --- PASS`），
+所以这些数**不能**与 §4.16.3 那组"顶层口径"的数（app 164 / router 150 / service 3509）直接比大小。
+
+`-race` 五腿：app / router / pkg-db / repository 四腿 **race=0**；service 腿一共跑了**五次**，
+结果分别是 `2 race / 2 fail`（门禁脚本那一轮）、`race=0 / fail=0 / pass=4305`（复跑第一轮）、
+`1 race / 1 fail`（复跑第二轮，红的是 `TestCreateSession_AllowDifferentPlatform`，
+`pass=4304`）、`1 race / 1 fail` 同一条用例（补跑第一轮，607.894s）、
+`2 race / 2 fail`（补跑第二轮，602.926s，第二条红的是 `TestCreateSession_AnonymousUser`）——
+**同一棵克隆、同一个 HEAD、五种跑法三种结局**，就是 §4.16.3 末段那句"命中哪一队取决于调度"的又一次实测。
+补跑多出来的那条受害用例同时**否掉了"只有 `AllowDifferentPlatform` 这一条有问题"的读法**：
+受害名不唯一 ⇒ 这是"谁恰好排在写句柄那条之后"的问题，不是某条用例自己的问题。
+抓到的栈与上一卡逐帧相同：写方 `db.SetTestDB()`（`customer_session_blacklist_test.go:24`），
+读方 `repository/system_config_kv.go:32` ← `office_hours.go:45/81/97/107` ←
+`customer_service_plus.go:487` 的 `MaybeSendAwayReply.func1`，**本卡八个文件一个都不在里面**。
+本卡不修，同一理由（修法要动测试底座、且会撞上并行会话正在改的同一批文件）。同一口径事实再记一次：
+**`-race` 不在本仓任何门禁脚本里**，这条红不会被默认门看见。
+
+**工作树**（同日，含并行会话未提交的文件）另有一组结果，且**红因不在本卡**：`internal/service`
+全量 485s 一处 FAIL —— `TestValidPlatform_Unsupported`（`message_hub_test.go:64`），红因是一处
+**未提交**的 `+ "wechat": true` 落在 `ValidPlatform` 里，而那条用例仍把 `wechat` 列在"应判非法"的名单中。
+`check-architecture.sh` 在工作树报 1 处 `[L4] service 直接调 db`，同样来自未跟踪的
+`internal/service/dingtalk_media.go`；`check-secrets.sh` 在工作树的 3 处命中也全在未跟踪的
+`webhook_batchc_*` / `webhook_batchg2b_*` 测试文件上。**三处都不代修、不代提交**，
+只在台账外登记：同一棵克隆里 `check-architecture.sh` 是 rc=0 的，这就是"红不属于本卡"的证据。
+
+**门禁（克隆内）**：`check-architecture` rc=0 / `check-unwired-assets` **47/53** rc=0 /
+`check-enum-consistency` rc=0（3 警告为既有）/ `check-date-bucket-tz` rc=0（21 处持平）/
+`check-doc-consistency` rc=0（3 警告）/ `check-feature-doc` rc=0 /
+`audit-cross-package-ports` Errors 0 / Warns 6。
+`check-secrets.sh` 在克隆里是 **rc=2**（"找不到 `<克隆>/.env`"）—— 那是**环境前提不成立**而不是通过，
+本卡的凭证面判据以工作树那次为准（本卡文件零命中）。
+
+**变异电池（18 把，全部行为捕获）**：`捕获=18 / NOT-CAUGHT=0 / RED-BUILD=0`，
+覆盖名单适配器 4 把、分配器 4 把、转换层 5 把、挖掘接缝 4 把、库级索引 1 把；
+每把都 `cp` 备份 + `md5` 比对写回，还原失败会自报。第一版有 **2 把退化成构建红**
+（见上文"本卡被真跑纠正的三处"第 3 条），补成可编译的语义变异后才计入这 18 把。
+台账那五行另有独立的反向脚本（见上文台账段）。
 
 ---
 
@@ -1245,3 +1460,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.8 | 2026-09-20 | @backend | 新增 §4.16.1 商机仓储层（N-1 / T-P4-02）：补 `version bigint not null default 0`（§4.16 表随三处更新 —— 可空性由「只有 `id` 是 NOT NULL」改为「`id` 与 `version`」、`currency` 改称「唯一带**语义**默认值」的列并注明 `version` 的默认是补列前提、反向无索引列由 7 增至 9），写明并发口径选 **CAS 而不是 `FOR UPDATE`** 的失败面差别、改写白名单就是那个 10 键 map（附两条只有真跑才暴露的 GORM 静默失效：`Select(清单)` 会吃掉 `version + 1`、struct 形式 `Updates` 跳零值），以及读侧三条纪律（空状态集报错而非回全表 / `limit<=0`、`offset<0` 由本层拒且判据写成「错误来自本层」 / 排序带 `id DESC` 兜底键、并列行逐位比对次序）。变异电池 25/25 捕获、存活 0、坏变异 0；未接线台账项 16 拆为 16a/16b 两行（现值 38/46） |
 | v1.9 | 2026-09-20 | @backend | 新增 §4.16.2 商机**服务层**（N-1 / T-P4-03）：§4.16「本卡欠三件」改为两件已交付（跃迁合法表与赢率计算式 → 已随 T-P4-03 交付）。三条实测口径进文档：① 跃迁规则「阶段向前恰好一步、向后任意步、**同格不算跃迁**」+ status 按 **(来源, 起点, 终点)** 三元边表存 —— AC③ 那句「本层写 won 的唯一入口」是靠这张表实现的，不是靠「源码里只有一处赋值」；终态不重算赢率，幂等只给「事实的重复上报」（同一条回款完成第二次到达＝成功且零改写）。② 赢率式 `p = round₂(base(阶段) − 无归属 0.10 − 已逾期 0.15)`、下限 0.05：**可证明的只有单调形状**（逐格向前 ⇒ 集合嵌套 ⇒ `P(赢|到第 k 格)` 递增），四个 base 是显式登记的**先验刻度而非标定值**（全表零生产写入方，没有可回标的收口行），惩罚只做常数不做逾期梯度，且禁止与 `confidence`/`lead_score` 跨域乘算（C5；`OpportunityWinInput` 三字段由反射用例钉住）。③「谁负责把值舍到两位」这条接口判据：真库用例**证不出**（numeric 列自己会舍，读回来两边一样），第一版变异电池里「摘掉落库前舍入」就是这么活下来的，补一条绕开 PG、直接断 `Update` 收到的浮点 payload 的用例后才杀掉。未接线台账项 16 加 **16c 商机服务的装配入口**（与 16a 分开登记：接线有两个断点，只盯一个则另一个断了没人知道），16b 本卡刻意不翻；现值与实跑数字见变更记录 r43。本卡用例 17 条、变异 31 条全部被杀 |
 | v1.10 | 2026-09-21 | @backend | 新增 §4.16.3 商机 **HTTP 出口**（N-1 / T-P4-04）：八条端点（读二 + 规则一 + 写五），**没有一条能写 `won`** —— 那是 §4.16.2 三元边表在 HTTP 侧的兑现，由路由表逐条比对的用例守着（加一条 `POST /{id}/won` 即红）。四条判据进文档：① 绑定 `DisallowUnknownFields` + 请求体封顶 4KB（派生量与身份列在入参结构里根本没有格子，默认丢弃未知字段会让 `{"win_probability":0.99` 静默成功、两边各持一套账；`MaxBytesError` 单列一臂，不混进"形状不对"）；② 写入口必须带 `version`，缺字段判 400 而不是取零值（0 恰好是新行的合法期望版本）；③ 400/404/409/503 共用一套分诊词表，503 的判据是"不许有看起来像结果的 data"（`{} [] null` 都会被前端长成"查过了，没有"）；④ `GET /rules` 未装配时照样答，且给出"存在但不暴露"的机器动作清单，否则这套规则在契约面上读成"产品没有赢单"。controller 不 import repository（架构门 [1/10]），两种 404/409 判定的事实来源由**服务层别名**送出（同款先例 `human_task.go`）。**本卡三把被真跑纠正的断言**（变异电池 38 刀 → 37 CAUGHT / 1 把 M27 登记为等价）：M11 的夹具自己是个语法错误的 JSON，那句 400 来自"我打错了"而不是体积 ⇒ 用例从第一天起假绿，现在夹具先自证能 `Unmarshal` 且确实 >4KB；M17 摘掉控制器空 id 关在**读口**看不出差（服务层 `Get` 也拒空），差别只在写口（`transition` 不判空 ⇒ `PUT /api/opportunity/%20` 白查一趟并回 404"这条不存在"），改用 `failingOpportunityRepo` 断"根本没查"（一查就是 500）；M21（`closed` 与 `stale_version` 换序）查下来是**真等价变异**（服务层一次只返回一个 sentinel，两条 `errors.Is` 永不同时为真），换成同族里有牙的那把（把已收口的行贴成 `stale_version` 的 reason）。另登记一处两边都看不见的刀：`router.go` 摘掉 `app.InitOpportunityRuntime` 之后装配函数、控制器、挂载函数三个字面量全在、端点也在树上，只是运行时全局句柄永远 nil ⇒ 八条端点全退 503；旧路由用例漏它有两个原因（只看 `engine.Routes()` ⇒ 挂上≠活的；匿名探针判"非 2xx" ⇒ 503 也是非 2xx），现由带合法令牌真读一行的用例 + 台账新增 **16e 启动装配点** 双守，两把都反向验过。未接线台账：16a/16c 比 §4.16.2 的原计划**早一张卡**同时翻 wired（出口必须自带底座，一次装配接上两个断点，判据仍分开跑），新增 16d 挂载入口 + 16e 启动装配点，16b 仍按 UNWIRED 登记（兑现点 T-P4-05）；台账现值 **42/49**（rc=0）。**列表端点刻意不交付**：仓储 `List` 不返回 `total`，用 `len(list)` 凑数会把"一共多少条"从"查过"变成"猜的"，登记为欠账。`swag` 未随本卡重生成（前几张卡同一口径：工作树里有并行会话未审阅的注解，重生成会一并灌入），Swagger 判据为静态的八行 `@Router` 逐条锁。实跑（提交 292c92e3 的 --shared 克隆）：router 150 / controller 781 / app 164 / service 3509 全绿、失败 0，`TZ=UTC` 复跑四包同数同绿；`-race` 四腿：router 150 / app 164 / controller 781 三腿 **race=0**，service 腿 **rc=1 pass=3507 fail=2 race=2** —— 两处 DATA RACE 在**父提交 `11755c55` 的全量 `-race` 实跑里复现同一对栈**（那里 race=1 fail=1），判为既有缺陷、非本卡引入，取证与口径见 §4.16.3 末段 |
+| v1.11 | 2026-09-21 | @backend | 新增 §4.16.4 **线索→商机的转换层与自动分配**（N-1 / T-P4-05）：`opportunities` 的第一个生产写入方落地，P4 出口条件里「商机已入库」那句话从此成立。三道串行判据（量程 → 阶段 → 双阈值；两个同名 `confidence` 量程不同 ⇒ 硬拒不归一；`StageActive` 排在 nil 不安全的 `LeadQualified` 之前；配置降级按「关」处理）；AC② 落成「转换那一步对 `clues.is_opportunity` **零写入**」，并**就地推翻 T-P4-01 写在自己代码注释里的那句「不建索引、反查由 is_opportunity 承担」**（0/1 答不出「转成了哪一条」，且那一列是挖掘侧的热度标记、不是转化事实）⇒ 反查走 `clue_id` + **部分**唯一索引 `WHERE clue_id <> ''`，DDL 落在只 Warn 不清数据的 `postMigrateOpportunityClueUniqueIndex()`；AC③ 落成返回值而不是日志行（规则名 + 候选集 + 每人负载一起出，候选必须按 `SalesID` 升序是平票裁决的前提），三条规则顺序与「故障绝不退到 `no_roster`」严格分开；名单真源 `sales_events`/`sales_profile`（候选 `sales_personas` 实测零写入方被否），「在册」只能等于「注册过档案」（无停用事件，登记为边界而非现场补一个没有写者的死列）；接缝只在 `lead_mining.persistLead` 两条分支、且都在线索行落库之后（`Create` 失败不转 —— 本表不建外键，断链无人发现），未装配静默、报错只 Warn 不重试不回滚；装配点一次登记**两半**、`db == nil` 时两半一起清，刻意不做惰性构造。三处被真跑纠正：夹具的 `Create` 失败不填 id（真行为是 `BeforeCreate` 在 INSERT 之前就赋 uuid，失败照样留下填好的 id）/ 台账 `callpat` 被「清空那半」命中致接线数=2 的假绿 / 两把变异退化成构建红后补成可编译的语义变异 —— **只在编译期红的变异不算捕获**。台账：16b 兑现翻 wired + 新增四行（现值 **47/53**，五行逐行反向验过、控制组 rc=0）。实跑分树记：克隆 `478ef1c4` 六包 `fail=0`、`TZ=UTC` 同数同绿（计数含子用例，不与上一卡的顶层口径比大小），`-race` 四腿 race=0、service 腿五跑三结局（最多 2 race / 2 fail，也可全绿）且**受害用例名不唯一** ⇒ 上一卡登记的既有 flaky 再证一次，并否掉"归因到单条用例"的读法；工作树的 `TestValidPlatform_Unsupported` 红、架构门 1 处红、secrets 3 处红**全部**落在并行会话未提交/未跟踪的文件上，不代修不代提交，同一棵树换成克隆后同门 rc=0 即为归属证据。刻意不交付：HTTP 手工转商机口、`lead_miner_unified.go` 那条链（无 confidence 生产者）、`ltc.config` 的 `win_probability` 阈值读者。 |
