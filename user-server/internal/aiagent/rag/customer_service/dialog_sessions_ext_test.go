@@ -98,6 +98,9 @@ func TestAddMessageAndHistoryErrorBranches(t *testing.T) {
 	if err := dm.AddMessage(ctx, "nope", Message{}); err == nil {
 		t.Error("不存在的会话应报错")
 	}
+	if _, err := dm.GetSession(ctx, ""); err == nil {
+		t.Error("空 sessionID 取会话应报错")
+	}
 	if _, err := dm.GetConversationHistory(ctx, "", 5); err == nil {
 		t.Error("空 sessionID 查询历史应报错")
 	}
@@ -278,6 +281,36 @@ func TestCloseSessionErrorBranchesAndActivity(t *testing.T) {
 		t.Error("GetSession 应刷新活跃时间")
 	}
 	dm.updateLastActivity("不存在的会话") // 覆盖 exists=false 分支，不应 panic
+}
+
+// 后台清理协程（startSessionCleanup 的 ticker 分支）应回收过期会话。
+// 轮询时只能裸读 map：GetSession 会刷新 last_activity，反而让会话永不过期。
+func TestBackgroundCleanupReapsExpiredSession(t *testing.T) {
+	dm := NewInMemoryDialogManager(&DialogManagerConfig{
+		DefaultMaxHistoryLength: 2,
+		DefaultSessionTimeout:   time.Second,
+		SessionCleanupInterval:  5 * time.Millisecond,
+	})
+	ctx := context.Background()
+	s, err := dm.CreateSession(ctx, "u-bg", "wecom", "kb-bg", SessionConfig{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := dm.UpdateSessionMetadata(ctx, s.ID, map[string]any{"last_activity": time.Now().Add(-time.Minute)}); err != nil {
+		t.Fatalf("UpdateSessionMetadata: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		dm.mutex.RLock()
+		_, ok := dm.sessions[s.ID]
+		dm.mutex.RUnlock()
+		if !ok {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Error("后台清理未在 3s 内回收过期会话")
 }
 
 func TestGenerateSessionIDShape(t *testing.T) {

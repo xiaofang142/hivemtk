@@ -1496,7 +1496,7 @@ Expected: ok（该包此时不连 DB、不起 HTTP）。
   `calculateSentimentScore/getSentimentLabel/detectEmotions/hasAnyWords/isRelatedTopic/extractOrderNumber/extractProductName`。
 - Produces: 无。
 
-- [ ] **Step 1: 写用例**
+- [x] **Step 1: 写用例**
 
 创建 `user-server/internal/aiagent/rag/customer_service/context_understanding_test.go`：
 
@@ -1794,27 +1794,41 @@ func TestPureHelpers(t *testing.T) {
 }
 ```
 
-`TestPureHelpers` 里 `calculateSentimentScore("还好，就是有点贵")` 与 `getSentimentLabel` 的期望值，
+`TestPureHelpers` 里 `calculateSentimentScore` 与 `getSentimentLabel` 的期望值，
 均以 `dialog_manager.go:612-648` 的词表与阈值为准（正负各一次 → score 恰好 0 → neutral）。
 若实跑红，按实际行为修断言并在 commit body 记录该行为，不改生产码。
 
-- [ ] **Step 2: 跑绿**
+> 相对上面草稿的实跑落地差异（已全部写进文件）：
+> `calculateSentimentScore("不好")` 的期望由 `>= 0 判负` 改为 **`== 0`**（正面词「好」被「不好」子串命中后抵消，见 Findings）；
+> 另补 `"太差了" < 0` 作为纯负面语料断言；
+> `TestAnalyzeSentimentScoring` 增 `"很难过，也很害怕"` 命中 sadness/fear，把 `detectEmotions` 从 86.7% 抬到 100%；
+> `TestUpdateContextAndTopicDetection` 增两处错误分支：`DetectTopicChange(空消息)` 透传 `AnalyzeIntent` 错误、
+> 以及 `UpdateContext` 在子调用报错时既不改话题也不写情感（覆盖 `err == nil` 的两个 false 分支）；
+> Task 5 文件同步补 `GetSession(空 ID)` 与后台清理协程用例（`TestBackgroundCleanupReapsExpiredSession`）。
 
-Run: `go test -p 1 -count=1 -coverprofile=/tmp/cs.cov ./internal/aiagent/rag/customer_service/ && go tool cover -func=/tmp/cs.cov | grep -E 'dialog_manager.go' | grep ' 0.0%' | wc -l`
-Expected: 输出 `0`（dialog_manager.go 内不再有 0% 函数），且全包 coverage ≥60%。
+- [x] **Step 2: 跑绿**
+
+Run: `go test -p 1 -count=1 -coverprofile=/tmp/cs.cov ./internal/aiagent/rag/customer_service/ && go tool cover -func=/tmp/cs.cov | grep -E 'customer_service/dialog_manager.go' | awk '$3!="100.0%"'`
+Expected: `dialog_manager.go` 的 InMemory + 上下文理解函数全部 100%，只剩 `startSessionCleanup`（不可达错误分支，上限 83.3%）。
 若个别关键词用例因中文分词/字节长度差异红，按实际行为校正断言并保留注释说明该行为，不改生产码。
 
-- [ ] **Step 3: 反向验证**
+> 实跑结果：全包 35.6%（不是本节先前写的 60%）。差额全部来自本排期范围外的
+> `pg_dialog_manager.go` / `rag_customer.go` / `quality_assessor.go` / `response_generator.go`，
+> 这些文件的 DB 与 LLM 分支需真实依赖，按「不制造离线假断言」原则不补。
 
-备份 `dialog_manager.go` → 注入：
-1. `AnalyzeIntent` 的兜底分支 `Confidence = 0.6` 改成 `0.8` → `TestAnalyzeIntentCategories` 最后一行 FAIL。
-2. `getSentimentLabel` 阈值 `> 0.1` 改成 `>= 0.1` → `TestPureHelpers` 的 `getSentimentLabel(0.0)` 仍绿但
-   `calculateSentimentScore("还行吧")==0` + `TestAnalyzeSentimentScoring` 的 neutral 分支红（若红点不明确，
-   改为注入 `getSentimentLabel` 里 `< -0.1` → `< 0` 使 negative 判定失效）。
-3. `isRelatedTopic` 的 `if currentTopic == "" { return false }` 改成 `return true` → `TestPureHelpers` FAIL。
-逐次还原复绿。
+- [x] **Step 3: 反向验证**
 
-- [ ] **Step 4: 提交并推送**
+备份 `dialog_manager.go` → 注入（实跑三次均按预期红，逐次 `cp` 还原并比 md5）：
+1. `AnalyzeIntent` 兜底分支 `intent.Confidence = 0.6` 改 `0.8` → `TestAnalyzeIntentCategories` FAIL
+   （`msg="随便看看天气" conf=0.8 want 0.6`）。
+2. `getSentimentLabel` 的 `score > 0.1` 改 `score > -0.1` → `TestAnalyzeSentimentScoring`（mixed + neutral 两处）
+   与 `TestPureHelpers`（阈值边界）同时 FAIL。
+   注：原计划的 `> 0.1` → `>= 0.1` 与 `< -0.1` → `< 0` 两种注入都不会让任何断言变红
+   （现有语料 score 恰好为 0 或 ±1），故换用能真正区分阈值的最小变异。
+3. `isRelatedTopic` 的 `if currentTopic == "" { return false }` 改 `return true` → `TestPureHelpers` FAIL
+   （空话题不应判相关）。
+
+- [x] **Step 4: 提交并推送**
 
 `git add user-server/internal/aiagent/rag/customer_service/context_understanding_test.go`
 → `git commit -m "test: 上下文理解意图/实体/情感与关键词启发式补测"` → 双远端推送。
@@ -2568,6 +2582,12 @@ Expected: 全包 ≥65%；`sign/ensureJWTToken/doRetry/RegisterMerchant/loadMerc
 
 ## 执行中发现（仅记录，本批不改生产代码）
 
+- **Task 6 / 否定语义丢失**（`dialog_manager.go:612-639`）：`calculateSentimentScore` 用纯字节子串匹配，
+  「不好」同时命中正面词「好」与负面词「不好」，两者抵消后 score 恰好为 0（判中性），
+  即所有「不+正面词」的表述都会被误判为中性。用例按实际行为断言 `== 0` 并在注释里标明该抵消行为。
+- **Task 6 / `startSessionCleanup` 的错误分支不可达**（`dialog_manager.go:293-295`）：
+  `CleanupExpiredSessions` 恒返回 nil，`if err != nil { logger.Warnf(...) }` 永不触发，
+  该函数覆盖上限为 83.3%（ticker 体已由后台用例覆盖）。
 - **Task 5 / `generateSessionID` 会话 ID 会碰撞**（`dialog_manager.go:309`）：ID 为 `user_platform_<UnixNano>`，
   本机实测连调 20000 次同参只得 5136 个不同值（重复率 ~74%），时钟粒度粗于纳秒。
   同一 (user, platform) 背靠背两次 `CreateSession` 会写入同一个 map key，**先建的会话被静默覆盖丢失**。
