@@ -136,6 +136,7 @@ type LTCConfig struct {
 	Enabled       bool          `json:"enabled"`
 	StagesEnabled LTCStages     `json:"stages_enabled"`
 	Thresholds    LTCThresholds `json:"thresholds"`
+	ReachRollout  ReachRollout  `json:"reach_rollout"`
 
 	Degraded      bool   `json:"-"`
 	DegradeReason string `json:"-"`
@@ -249,7 +250,10 @@ func DefaultLTCConfig() *LTCConfig {
 			DiscountPercent: 15,
 			WinProbability:  0.50,
 		},
-		Source: SourceDefault,
+		// 放量档停在第一段（只观察）：现网逐字不变，是"这份配置被打开之前不该有任何拦截"
+		// 的形状。注意它与 degraded 读不是一回事 —— 后者必须取严，见 ReachRolloutAllows。
+		ReachRollout: ReachRollout{Mode: ReachRolloutShadow},
+		Source:       SourceDefault,
 	}
 }
 
@@ -257,6 +261,11 @@ func DefaultLTCConfig() *LTCConfig {
 // discount_percent 的 0 是"任何折扣都要审批"（朝严），另三个的 0 是拆闸（朝松），
 // 同一个数值在两个字段上方向相反，一刀切的 `> 0` 会把合法配置拒掉。
 func (c LTCConfig) Validate() error {
+	// 放量档单独先判、单独一个前缀：把它塞进"阈值非法"里，运营改的是档位却被告知
+	// 阈值有问题，等于把一次 400 的归因指错方向。
+	if err := c.ReachRollout.validateReachRollout(); err != nil {
+		return fmt.Errorf("放量档非法：%w", err)
+	}
 	var bad []string
 	checkFloat := func(name string, v float64, lo float64, hi float64, zeroLegal bool) {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -330,6 +339,157 @@ func (c *LTCConfig) LeadQualified(leadScore int, confidence float64) (bool, stri
 		return false, fmt.Sprintf("confidence %v < 阈值 %v", confidence, c.Thresholds.Confidence)
 	}
 	return true, ""
+}
+
+// ReachRolloutAllows 供闸门调用：一次读（走缓存）+ 一次档位判定，与 StageActive 同一形状。
+//
+// 刻意不给闸门"装配期抄一份档位"的余地：AC② 要的是一键回滚，而抄快照的那把门
+// 改完档位要等下次重启才咬人 —— 那正好是出事故时最没用的时候。
+func (s *LTCConfigService) ReachRolloutAllows(ctx context.Context, key string) (bool, string) {
+	return s.Config(ctx).ReachRolloutAllows(key)
+}
+
+// ---- T-P5-04 外联放量档位（shadow → 白名单 → 全量，另带回滚位 halt）--------------
+//
+// 为什么这一族旗子住在 ltc.config 而不是继续住 `FF_LTC_REACH_GATE`：环境变量在装配期读死，
+// 改一次 = 发一次部署，而 AC② 要的"一键回滚 = 关开关、不回滚代码"在现网出事故时
+// 根本来不及。搬进这份策略后，改档 = 一次带审计的写库，最迟一个缓存 TTL 在全副本收敛。
+//
+// 四档各自的语义（前三档就是卡面要的三段）：
+//   - shadow    门只记录不拦 ⇒ 现网行为逐字不变。**缺省档**（也是开箱档）。
+//   - whitelist 只放行名单里的判定键，其余一律拒。
+//   - full      全量放行：放量走完之后退化成观察，不是"又开了一道新权"。
+//   - halt      回滚位：一个都不放。它与 whitelist＋空名单做的是同一件事，
+//     但后者是"以为在灰度、其实全停"的事故形状 ⇒ 全停必须是显式写出来的一个值。
+//
+// 与那两把旧旗子的关系（三条都是读数面上的坑，见 ReadingHints）：
+//   - 档位只管"门怎么判"，**不管"门挂没挂链"**：链由 `FF_LTC_REACH_GATE` 决定，
+//     它不在 shadow 之外的任何一档里能改；env 停在 off/shadow 时这里写什么都只改变记账。
+//   - 与 `enabled`（LTC 总开关）互不影响：总开关管的是六阶段，外联闸门不属于任何阶段。
+//   - 名单里存的是**闸门判定键本身**（`reachApprovalKey` 的形状：one_id → customer_id →
+//     "渠道:收件人"），不是第二套身份系统 —— 两套授权早晚会"这里批过、那里没批过"。
+
+type ReachRolloutMode string
+
+const (
+	ReachRolloutShadow    ReachRolloutMode = "shadow"
+	ReachRolloutWhitelist ReachRolloutMode = "whitelist"
+	ReachRolloutFull      ReachRolloutMode = "full"
+	ReachRolloutHalt      ReachRolloutMode = "halt"
+)
+
+var ltcReachRolloutModes = []string{"shadow", "whitelist", "full", "halt"}
+
+const (
+	// ltcReachWhitelistMaxEntries 是名单条数上限。留上限不是为了省内存，是为了让
+	// "整份 8KB 装不下"这一类错误先以"名单太长"这种能看懂的形式报出来。
+	ltcReachWhitelistMaxEntries = 200
+	// ltcReachWhitelistMaxEntryBytes 是单条判定键上限，对齐 one_id 的 varchar(128)。
+	ltcReachWhitelistMaxEntryBytes = 128
+)
+
+// 放行原因逐档分开：观测面上"这条放行了"有四种成因，塌成一个 true 就等于
+// 把"还在观察""已全量""名单里点名""配置读坏了"四件事读成同一件。
+const (
+	ReachRolloutReasonShadow         = "rollout_shadow"
+	ReachRolloutReasonWhitelisted    = "rollout_whitelisted"
+	ReachRolloutReasonFull           = "rollout_full"
+	ReachRolloutReasonHeld           = "rollout_halted"
+	ReachRolloutReasonNotWhitelisted = "rollout_not_whitelisted"
+	ReachRolloutReasonDegraded       = "rollout_config_degraded"
+)
+
+type ReachRollout struct {
+	Mode      ReachRolloutMode `json:"mode"`
+	Whitelist []string         `json:"whitelist,omitempty"`
+}
+
+// reachRolloutEnvelope 是这一节的**解析形状**，与上面的结构体分开是必要的：
+// 指针才能区分"这一节没写"（整节缺省 = 第一档）与"写了节但没写 mode"（看起来配了、
+// 其实一行没生效 ⇒ 拒收），名单同理要能区分缺省与非空。
+type reachRolloutEnvelope struct {
+	Mode      *string   `json:"mode"`
+	Whitelist *[]string `json:"whitelist"`
+}
+
+// ReachRolloutAllows 判定一个外发对象在当前档位下是否放行，并给出可上报的原因。
+//
+// 故障方向刻意与整份文件的"缺省与异常一律朝关"对齐成**拒绝**：degraded 时这份的
+// 内容恰恰是默认值 shadow（放行），若照默认判定，一次存储抖动就会把"白名单灰度中"
+// 静默升级成"全量放行"。
+func (c *LTCConfig) ReachRolloutAllows(key string) (bool, string) {
+	if c == nil || c.Degraded {
+		return false, ReachRolloutReasonDegraded
+	}
+	switch c.ReachRollout.Mode {
+	case ReachRolloutWhitelist:
+		for _, allowed := range c.ReachRollout.Whitelist {
+			if allowed == key {
+				return true, ReachRolloutReasonWhitelisted
+			}
+		}
+		return false, ReachRolloutReasonNotWhitelisted
+	case ReachRolloutFull:
+		return true, ReachRolloutReasonFull
+	case ReachRolloutHalt:
+		return false, ReachRolloutReasonHeld
+	case "", ReachRolloutShadow:
+		return true, ReachRolloutReasonShadow
+	}
+	// 写侧已经把值域钉死，走到这里只剩"有人绕过解析器手搭了一份配置"这一种可能 ⇒ 取严。
+	return false, ReachRolloutReasonDegraded
+}
+
+// validateReachRollout 校验档位与名单的形状。归一化（trim＋去重）在 ParseLTCConfig 里做，
+// 这里只负责拒绝：两者分开是因为 Validate 也被"进程内手搭的 struct"这条路调用（Save），
+// 那条路没有"缺节"可言，只判值本身合不合法。
+func (r ReachRollout) validateReachRollout() error {
+	mode := string(r.Mode)
+	if mode == "" {
+		mode = string(ReachRolloutShadow)
+	}
+	known := false
+	for _, m := range ltcReachRolloutModes {
+		if m == mode {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return fmt.Errorf("reach_rollout.mode=%q 不是合法档位（四档：%s）", r.Mode, strings.Join(ltcReachRolloutModes, "/"))
+	}
+	switch ReachRolloutMode(mode) {
+	case ReachRolloutWhitelist:
+		if len(r.Whitelist) == 0 {
+			return errors.New("whitelist 档的名单是空的 ⇒ 这等于一个都不放，而\"全停\"请显式写 mode=halt（halt 档）而不是靠空名单凑出来")
+		}
+	case ReachRolloutShadow, ReachRolloutFull, ReachRolloutHalt:
+		if len(r.Whitelist) > 0 {
+			return fmt.Errorf("%s 档不读名单，这里却给了 %d 条 ⇒ 这些条目永远不会生效，先清掉名单再改档", mode, len(r.Whitelist))
+		}
+	}
+	seen := make(map[string]bool, len(r.Whitelist))
+	for i, entry := range r.Whitelist {
+		if entry == "" {
+			return fmt.Errorf("名单第 %d 条是空条目：空串永远匹配不上任何判定键，只会让人以为已经放行了一批", i+1)
+		}
+		if entry != strings.TrimSpace(entry) {
+			return fmt.Errorf("名单第 %d 条带首尾空格（%q）：判定键是精确等值比较，空格会让它静默失配", i+1, entry)
+		}
+		if len(entry) > ltcReachWhitelistMaxEntryBytes {
+			return fmt.Errorf("名单第 %d 条 %d 字节，超过单条上限 %d（判定键最长就是 one_id 的 %d）",
+				i+1, len(entry), ltcReachWhitelistMaxEntryBytes, ltcReachWhitelistMaxEntryBytes)
+		}
+		if seen[entry] {
+			return fmt.Errorf("名单里有重复条目 %q：重复会让\"我放行了几个对象\"这个数对不上，先去重", entry)
+		}
+		seen[entry] = true
+	}
+	if len(r.Whitelist) > ltcReachWhitelistMaxEntries {
+		return fmt.Errorf("名单 %d 条，超过上限 %d 条：白名单灰度不是批量导入的入口，规模上来了该走 whitelist→full 这一档",
+			len(r.Whitelist), ltcReachWhitelistMaxEntries)
+	}
+	return nil
 }
 
 // ReadingHints 把这份数字最容易被读错的三处写在响应里（与 /agent/tools/risk 同形制）。
@@ -507,9 +667,7 @@ func (s *LTCConfigService) Save(ctx context.Context, cfg *LTCConfig, actorID uin
 	s.cachedAt = s.now()
 	s.mu.Unlock()
 
-	detail := fmt.Sprintf("enabled=%t stages_on=[%s] thresholds={lead_score=%d confidence=%v discount_percent=%v win_probability=%v}",
-		out.Enabled, strings.Join(res.StagesOn, ","), out.Thresholds.LeadScore, out.Thresholds.Confidence,
-		out.Thresholds.DiscountPercent, out.Thresholds.WinProbability)
+	detail := out.AuditDetail()
 
 	if s.audit == nil {
 		// 不静默补装一个全局仓储：那样"审计没落库"会被伪装成"审计写成功了"。
@@ -537,6 +695,21 @@ func (s *LTCConfigService) Save(ctx context.Context, cfg *LTCConfig, actorID uin
 	return res, nil
 }
 
+// AuditDetail 是 operation_logs.detail 那一行的内容，同时也是 Save 失败路径的日志正文。
+// 单独成方法而不是留在 Save 里拼：改一个字段就得同时改审计与日志，两处措辞迟早分叉。
+//
+// 档位与名单条数必须出现在这里 —— 运营这次改的**就是**放量档时，审计面上只记着
+// enabled/stages/thresholds 等于这次变更在审计上没发生过。
+func (c LTCConfig) AuditDetail() string {
+	mode := c.ReachRollout.Mode
+	if mode == "" {
+		mode = ReachRolloutShadow
+	}
+	return fmt.Sprintf("enabled=%t stages_on=[%s] thresholds={lead_score=%d confidence=%v discount_percent=%v win_probability=%v} reach_rollout=%s 名单 %d 条",
+		c.Enabled, strings.Join(c.StagesEnabled.OnList(), ","), c.Thresholds.LeadScore, c.Thresholds.Confidence,
+		c.Thresholds.DiscountPercent, c.Thresholds.WinProbability, mode, len(c.ReachRollout.Whitelist))
+}
+
 // Normalized 返回一份"存得回去"的副本：剥掉读路径元信息（degraded/source），
 // 否则一次故障读会被写回成配置继承给下一个副本。
 func (c *LTCConfig) Normalized() *LTCConfig {
@@ -544,6 +717,12 @@ func (c *LTCConfig) Normalized() *LTCConfig {
 	out.Degraded = false
 	out.DegradeReason = ""
 	out.Source = ""
+	// 档位落库前补成显式值：读侧把 `"mode":""` 判成非法档位（那是"看起来配了、其实
+	// 没配"的形状），而写侧的 struct 零值恰恰是 ""。不补这一步，一次 Save 就把整份
+	// 配置打成 degraded —— 连带把六个阶段一起关掉。
+	if out.ReachRollout.Mode == "" {
+		out.ReachRollout.Mode = ReachRolloutShadow
+	}
 	return &out
 }
 
@@ -568,6 +747,7 @@ func ParseLTCConfig(raw []byte) (*LTCConfig, error) {
 		Enabled       bool                       `json:"enabled"`
 		StagesEnabled map[string]bool            `json:"stages_enabled"`
 		Thresholds    map[string]json.RawMessage `json:"thresholds"`
+		ReachRollout  *reachRolloutEnvelope      `json:"reach_rollout"`
 	}
 	if err := decodeStrict(raw, &envelope); err != nil {
 		return nil, err
@@ -613,6 +793,46 @@ func ParseLTCConfig(raw []byte) (*LTCConfig, error) {
 	}
 	if err := decodeStrict(encoded, &cfg.Thresholds); err != nil {
 		return nil, err
+	}
+
+	// 放量档：整节缺省 = 第一档 shadow（今天库里的存量配置就没有这一节，
+	// 把"缺节"判成拒收会让下一次读整份回落默认，连带关掉已上线的六阶段开关）。
+	// 但"写了这一节却没写 mode"必须拒 —— 那是"看起来配了、其实一行没生效"的形状。
+	cfg.ReachRollout = ReachRollout{Mode: ReachRolloutShadow}
+	if e := envelope.ReachRollout; e != nil {
+		if e.Mode == nil {
+			return nil, fmt.Errorf("reach_rollout 缺 mode：四档 %s 必须显式选一档（缺字段不等于\"沿用默认\"，这一档现在没定）",
+				strings.Join(ltcReachRolloutModes, "/"))
+		}
+		mode := ReachRolloutMode(strings.ToLower(strings.TrimSpace(*e.Mode)))
+		known := false
+		for _, m := range ltcReachRolloutModes {
+			if string(mode) == m {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return nil, fmt.Errorf("reach_rollout.mode=%q 不是合法档位（四档：%s）；这个值不会被采信成任何一档，故整份拒收",
+				*e.Mode, strings.Join(ltcReachRolloutModes, "/"))
+		}
+		cfg.ReachRollout.Mode = mode
+		if e.Whitelist != nil {
+			// trim 后按首次出现顺序去重：写进去的形状就是生效的形状。
+			// 空条目原样带着走，交给 Validate 点名 —— 在这儿悄悄删掉会让响应里的
+			// "名单 3 条"变成"名单 2 条"，而运营需要知道自己多写了一条空的。
+			seen := make(map[string]bool, len(*e.Whitelist))
+			entries := make([]string, 0, len(*e.Whitelist))
+			for _, raw := range *e.Whitelist {
+				entry := strings.TrimSpace(raw)
+				if entry != "" && seen[entry] {
+					continue
+				}
+				seen[entry] = true
+				entries = append(entries, entry)
+			}
+			cfg.ReachRollout.Whitelist = entries
+		}
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err

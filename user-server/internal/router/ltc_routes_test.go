@@ -182,6 +182,41 @@ func TestLTCConfigView_ShowsBothLocksAndMountCount(t *testing.T) {
 	}
 }
 
+// 放量档必须出现在这份"读回来的配置"里（T-P5-04）。
+//
+// PUT 收得下 reach_rollout、GET 却不回显它，等于让运营在两个方向上都会读错：
+// 写过的档位看不见 ⇒ 以为没生效而重复写一遍；看不见 ⇒ 也没法改（PUT 是整份替换，
+// 看不到名单就只能连名单一起重写，一次改档位顺手把灰度批次清空）。
+func TestLTCConfigView_ShowsRolloutModeAndCohort(t *testing.T) {
+	cfg := service.DefaultLTCConfig()
+	cfg.ReachRollout = service.ReachRollout{
+		Mode:      service.ReachRolloutWhitelist,
+		Whitelist: []string{"sms:13800000000", "one:u-42"},
+	}
+	view := ltcConfigView(cfg, nil)
+
+	section, _ := view["reach_rollout"].(gin.H)
+	if section == nil {
+		t.Fatalf("缺 reach_rollout 这一节（PUT 收得下、GET 却不回显）：%v", view["reach_rollout"])
+	}
+	if mode, _ := section["mode"].(service.ReachRolloutMode); mode != service.ReachRolloutWhitelist {
+		// gin.H 里存的是原类型（命名类型 ReachRolloutMode），拿 string 去比永远不等。
+		t.Errorf("mode=%v，期望 %s", section["mode"], service.ReachRolloutWhitelist)
+	}
+	list, _ := section["whitelist"].([]string)
+	if len(list) != 2 {
+		t.Fatalf("whitelist=%v，期望原样给出 2 条（整份替换的写入口必须读得回上一份）", section["whitelist"])
+	}
+	if n, _ := section["whitelist_entries"].(int); n != 2 {
+		t.Errorf("whitelist_entries=%v, want 2", section["whitelist_entries"])
+	}
+	// 这一节只回答"配成了什么"。"现在到底拦不拦"要看闸门那个端点，措辞不能越界。
+	blob, _ := json.Marshal(section)
+	if s := string(blob); strings.Contains(s, "拦") || strings.Contains(s, "生效") {
+		t.Errorf("配置视图里不该断言生效与否（那是 /agent/tools/reach-gate 的口径）：%s", s)
+	}
+}
+
 // 交付态的真实形状：一条业务路由都没挂。这条断言是"本卡没让开关悄悄冒充已生效"的证据。
 func TestLTCConfigView_ZeroMountedSaysItOutLoud(t *testing.T) {
 	view := ltcConfigView(service.DefaultLTCConfig(), middleware.LTCGuardedRoutes())

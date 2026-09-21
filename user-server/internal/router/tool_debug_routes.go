@@ -561,6 +561,11 @@ func reachGateStatePayload(snap app.ReachGateSnapshot) gin.H {
 		"attached_services":           snap.AttachedServices,
 		"whitelist_active_entries":    snap.WhitelistActiveEntries,
 		"whitelist_entries_for_reach": snap.WhitelistEntriesForReach,
+		// T-P5-04：durable 放量档。三个读数一起给，是因为"档位写成了 halt/whitelist"
+		// 与"这一档现在真的在拦"是两件事（后者还要 env=block），只看 mode 会把前者读成后者。
+		"rollout_mode":              snap.RolloutMode,
+		"rollout_whitelist_entries": snap.RolloutWhitelistEntries,
+		"rollout_degraded":          snap.RolloutDegraded,
 		"flags": gin.H{
 			"gate":              snap.GateFlagEnv,
 			"whitelist_env":     snap.WhitelistFlagEnv,
@@ -589,6 +594,11 @@ func reachGateStatePayload(snap app.ReachGateSnapshot) gin.H {
 			"放量前用 POST /agent/tools/approval/whitelist 以 tool=" + snap.ReachToolKey +
 			"、account_id=客户身份 灌入；该表只在进程内存里，重启即空"
 	}
+	// T-P5-04：durable 档位与 env 旗子的关系单独一句。少了它，"库里已写 whitelist"
+	// 与"灰度已经在拦"在端点上长同一个样。
+	if note := app.ReachRolloutCouplingNote(snap); note != "" {
+		out["rollout_note"] = note
+	}
 	return out
 }
 
@@ -597,6 +607,8 @@ func reachGateStatePayload(snap app.ReachGateSnapshot) gin.H {
 func handleReachGateState(c *gin.Context) {
 	snap, decisions := app.GetReachGateSnapshot()
 	out := reachGateStatePayload(snap)
+	// 观测块无论装没装门都要出现：未接线是"这个数现在没有"，不是"这个数不用看"。
+	out["rollout_observation"] = app.ObserveReachRollout(snap, decisions)
 	if decisions != nil {
 		rep := decisions.Report()
 		per := make([]gin.H, 0, len(rep.PerTool))

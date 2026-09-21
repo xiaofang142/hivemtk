@@ -49,10 +49,18 @@ func ltcConfigView(cfg *service.LTCConfig, guarded map[service.LTCStage]int) gin
 	}
 
 	view := gin.H{
-		"enabled":           cfg.Enabled,
-		"stages_enabled":    stages,
-		"stage_status":      stageStatus,
-		"thresholds":        cfg.Thresholds,
+		"enabled":        cfg.Enabled,
+		"stages_enabled": stages,
+		"stage_status":   stageStatus,
+		"thresholds":     cfg.Thresholds,
+		// T-P5-04：durable 放量档。整份配置是"读回来再整体写回"的形状，
+		// 这一节不在 GET 里出现，改档位就会顺手把灰度名单清空。
+		// 这里只回答"配成了什么"；"现在到底拦不拦"在 /agent/tools/reach-gate（它才知道旗子）。
+		"reach_rollout": gin.H{
+			"mode":              cfg.ReachRollout.Mode,
+			"whitelist":         cfg.ReachRollout.Whitelist,
+			"whitelist_entries": len(cfg.ReachRollout.Whitelist),
+		},
 		"source":            cfg.Source,
 		"degraded":          cfg.Degraded,
 		"guarded_routes":    guardedRoutes,

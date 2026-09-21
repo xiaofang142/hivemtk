@@ -130,11 +130,16 @@ func TestLTCConfig_TwoLocksNotCollapsed(t *testing.T) {
 }
 
 // newLTCSvcWithKV 造一个只读内存 KV 的服务实例（不碰 DB）。
+//
+// 夹具走 Normalized() 而不是直接 Marshal 原 struct：这一行的语义是"库里躺着这么一份配置"，
+// 而生产写侧（Save）写进去的就是 Normalized() 的字节。手搭 struct 的 reach_rollout.mode
+// 零值是 ""，那是"看起来配了、其实没配"的形状 ⇒ 读侧按严格解析整份拒收（degraded 全关）。
+// 少了这一步，夹具就在测一条生产永远产不出来的字节。
 func newLTCSvcWithKV(t *testing.T, cfg *LTCConfig) *LTCConfigService {
 	t.Helper()
 	kv := newFakeKV()
 	if cfg != nil {
-		b, err := json.Marshal(cfg)
+		b, err := json.Marshal(cfg.Normalized())
 		if err != nil {
 			t.Fatalf("夹具序列化失败：%v", err)
 		}

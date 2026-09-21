@@ -40,11 +40,20 @@ import (
 
 // restoreReachGateState 保存/还原 reach 门的包级状态。
 // 与 restoreApprovalState 同一条理由：包级变量没有锁，靠"只在装配期写"成立。
+//
+// 这里顺带把全局 ltc.config 换成一份"运营从没配过放量档"的存储：从 T-P5-04 起
+// 闸门每请求读那份档位（见 reach_gate_wiring.go 的 CheckReachPreSend），而本文件的
+// 夹具都不经过去建那套库 ⇒ 不装它就会读到 degraded，闸门按"取严"一律拒，
+// 于是这些用例测的就不再是 T-P3-07 那把门本身。装完之后 shadow 档放行，
+// 与档位这一层存在时的行为逐字一致（这条正是 TestReachRolloutShadowLeavesW1InCharge 钉的）。
 func restoreReachGateState(t *testing.T) {
 	t.Helper()
 	m, c, n := reachGateModeValue, reachDecisions, reachAttached
+	prevLTC := service.GlobalLTCConfig()
+	service.SetGlobalLTCConfig(service.NewLTCConfigServiceWithStore(&rolloutKV{}))
 	t.Cleanup(func() {
 		reachGateModeValue, reachDecisions, reachAttached = m, c, n
+		service.SetGlobalLTCConfig(prevLTC)
 	})
 }
 

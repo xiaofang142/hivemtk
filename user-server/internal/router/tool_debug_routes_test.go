@@ -885,6 +885,76 @@ func TestHandleReachGateState_HTTP_Unwired(t *testing.T) {
 	}
 }
 
+// TestHandleReachGateState_RolloutObservation 放量观测块（T-P5-04 / LTC-29）。
+//
+// 这一格要锁的是端点的口径，不是指标算法（后者在 internal/app 的
+// TestReachRolloutObservation* 里）：**未接线的进程里这个端点也必须答话**，
+// 且答的是"因为没装所以没有"，不是把四个指标都填 0。
+// 0 会被读成"这一档零投诉、零拒绝 ⇒ 可以进下一档"，那是用不存在的证据做不可逆的放量决定。
+func TestHandleReachGateState_RolloutObservation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/agent/tools/reach-gate", nil)
+	handleReachGateState(c)
+
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("body not JSON: %v; body=%s", err, w.Body.String())
+	}
+	raw, ok := resp.Data["rollout_observation"]
+	if !ok {
+		t.Fatal("缺 rollout_observation：AC① 的读数没有出口，运营只能猜")
+	}
+	obs, _ := raw.(map[string]any)
+	if obs == nil {
+		t.Fatalf("rollout_observation 不是对象：%v", raw)
+	}
+	if wired, _ := obs["wired"].(bool); wired {
+		t.Error("本进程没装 reach 门，观测块不得声称已接线")
+	}
+	metrics, _ := obs["metrics"].([]any)
+	if len(metrics) == 0 {
+		t.Fatal("观测块一个指标都没有 ⇒ 这个端点什么都没回答")
+	}
+	var sawGate bool
+	for _, m := range metrics {
+		metric, _ := m.(map[string]any)
+		if metric == nil {
+			t.Fatalf("metrics 里出现非对象项：%v", m)
+		}
+		status, _ := metric["status"].(string)
+		switch status {
+		case app.ReachRolloutMetricComputable, app.ReachRolloutMetricUnavailable:
+		default:
+			t.Errorf("指标 %v 的 status=%q 不在两值之内", metric["name"], status)
+		}
+		if status == app.ReachRolloutMetricUnavailable {
+			if v, exists := metric["value"]; exists && v != nil {
+				t.Errorf("unavailable 的指标 %v 不许带值：%v", metric["name"], v)
+			}
+			reason, _ := metric["reason"].(string)
+			unblocker, _ := metric["unblocker"].(string)
+			if reason == "" || unblocker == "" {
+				t.Errorf("指标 %v unavailable 却没给原因或补法：%v", metric["name"], metric)
+			}
+		}
+		if metric["name"] == "gate_decisions_in_process" {
+			sawGate = true
+			reason, _ := metric["reason"].(string)
+			if status != app.ReachRolloutMetricUnavailable || !strings.Contains(reason, "没装") {
+				t.Errorf("闸门未接线时判定数要说成没装，实得 status=%q reason=%q", status, reason)
+			}
+		}
+	}
+	if !sawGate {
+		t.Error("观测块缺 gate_decisions_in_process：放量期唯一真有的数没出口")
+	}
+}
+
 // TestReachGateStatePayload_Echo 喂构造快照，锁住端点回显的分叉。
 //
 // 装配只在启动时跑一次，handle 在本进程只能测到 off。这里必须锁的是三种"读数会误导人"的
@@ -960,6 +1030,62 @@ func TestReachGateStatePayload_Echo(t *testing.T) {
 		dep, _ := out["dependency_note"].(string)
 		if !strings.Contains(dep, app.ApprovalGateFlagEnv) {
 			t.Errorf("dependency_note 要点名先开哪把旗子：%q", dep)
+		}
+	})
+
+	// T-P5-04：durable 档位的三个读数要原样到响应里，且"库里写了 ≠ 现在在拦"要有一句解释。
+	// 少了这句，whitelist/halt 配在库里而闸门还在 shadow 的形状，与"灰度已经在拦"完全同形。
+	t.Run("档位已写库但闸门不在 block ⇒ 只改变记账", func(t *testing.T) {
+		snap := base
+		snap.Mode = "shadow"
+		snap.BlocksWhenDenied = false
+		snap.RolloutMode = "whitelist"
+		snap.RolloutWhitelistEntries = 3
+		out := reachGateStatePayload(snap)
+		if out["rollout_mode"] != "whitelist" || out["rollout_whitelist_entries"] != 3 {
+			t.Errorf("档位读数没到响应里: %v / %v", out["rollout_mode"], out["rollout_whitelist_entries"])
+		}
+		note, _ := out["rollout_note"].(string)
+		if !strings.Contains(note, "只改变记账") || !strings.Contains(note, app.ReachGateFlagEnv) {
+			t.Errorf("rollout_note 要说清这一档现在不拦、以及要改哪把旗子：%q", note)
+		}
+	})
+
+	// 两层都在拦时，最容易被读错的是"谁拒的"：名单外的对象拿到的理由是 rollout_not_whitelisted，
+	// 运营若按 denied_default 的老思路去灌授权，白做一次变更。
+	t.Run("whitelist + block ⇒ 点名现在同时在拦的两层与各自的数", func(t *testing.T) {
+		snap := base
+		snap.RolloutMode = "whitelist"
+		snap.RolloutWhitelistEntries = 1
+		out := reachGateStatePayload(snap)
+		note, _ := out["rollout_note"].(string)
+		if !strings.Contains(note, "rollout_not_whitelisted") {
+			t.Errorf("要说清名单外对象的理由名（否则归因指错）：%q", note)
+		}
+		if !strings.Contains(note, "1 条") || !strings.Contains(note, "2 条") {
+			t.Errorf("两层的条数都要报出来（各自 1 与 2）：%q", note)
+		}
+	})
+
+	t.Run("degraded ⇒ 报成取严而不是报成运营选的档", func(t *testing.T) {
+		snap := base
+		snap.RolloutDegraded = true
+		out := reachGateStatePayload(snap)
+		if out["rollout_degraded"] != true {
+			t.Error("rollout_degraded 字段必须原样回显")
+		}
+		note, _ := out["rollout_note"].(string)
+		if !strings.Contains(note, "degraded") {
+			t.Errorf("要一眼看出是存储故障：%q", note)
+		}
+	})
+
+	t.Run("shadow 档 ⇒ 不多嘴", func(t *testing.T) {
+		snap := base
+		snap.RolloutMode = "shadow"
+		out := reachGateStatePayload(snap)
+		if _, exists := out["rollout_note"]; exists {
+			t.Error("开箱档位没有错位可提醒，多一句是一句噪音")
 		}
 	})
 }
