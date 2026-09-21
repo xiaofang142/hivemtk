@@ -55,6 +55,9 @@ type SmsService interface {
 
 type smsService struct {
 	repo repository.SmsRepository
+
+	// unsubSvc 退订查询的注入位；nil 时沿用包级单例（见 unsub()）。
+	unsubSvc *SmsUnsubscribeService
 }
 
 // NewSmsService 创建短信服务
@@ -77,10 +80,21 @@ var (
 )
 
 func (s *smsService) unsub() *SmsUnsubscribeService {
+	if s.unsubSvc != nil {
+		return s.unsubSvc
+	}
 	smsUnsubOnce.Do(func() {
 		smsUnsubSvc = NewSmsUnsubscribeService(nil)
 	})
 	return smsUnsubSvc
+}
+
+// SetSmsUnsubscribe 注入退订查询（测试与自定义装配）。
+//
+// 合规闸门读的是哪一份名单必须可指定：包级单例在**第一次调用时**才解析全局 DB 句柄，
+// 于是它读到的是"谁先跑"而不是"配了哪套库"，这条判据在测试里就无法稳定成立。
+func (s *smsService) SetSmsUnsubscribe(u *SmsUnsubscribeService) {
+	s.unsubSvc = u
 }
 
 func (s *smsService) GetConfig(ctx context.Context) (*dto.SmsConfigResponse, error) {
@@ -224,7 +238,10 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 	}
 
 	if s.unsub().IsUnsubscribed(ctx, req.Phone) {
-		return nil
+		// 这里返回哨兵而不是 nil：nil 会被每一个调用方读成"发成功了"
+		// （外发链据此记成功、烧幂等键、把这条算进送达率分母）。错误串不带手机号，理由见
+		// service/proactive_reach.go 里同一族哨兵的注释——这条串会落进队列台账。
+		return fmt.Errorf("%w: 该号码已在短信退订名单里，未向渠道提交任何内容", ErrDoNotContact)
 	}
 	config, err := s.repo.GetConfig(ctx)
 	if err != nil {
@@ -487,6 +504,13 @@ func (s *smsService) ResendSms(ctx context.Context, id uint) error {
 
 	if record.Status != "failed" {
 		return errors.New("只有失败的短信可以重发")
+	}
+
+	// 重发是同一条判据的第二个入口：首次发送之后号码才回复 TD 的情况很常见，
+	// 而这里直连 dispatchToProvider，绕过了 SendSms 那道检查。
+	// 放在改状态之前：拦下时不该在台账上留一条"正在发"。
+	if s.unsub().IsUnsubscribed(ctx, record.Phone) {
+		return fmt.Errorf("%w: 该号码已在短信退订名单里，重发同样不提交给渠道", ErrDoNotContact)
 	}
 
 	record.Status = "sending"
