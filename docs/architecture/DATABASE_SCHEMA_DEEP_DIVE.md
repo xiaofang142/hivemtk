@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.14（2026-09-21，T-P5-01 **N-2 动态人群圈选交付**：新增 §4.17 —— 开工名单的三个权威源、"0 人"为什么必须分两种报、上限为什么要夹两次、台账项18 三格与两处刻意欠账；上一版 v1.13 是 T-P4-06 的交付后复查）
+> **版本**：v1.15（2026-09-21，T-P5-02 **N-3 Active 生命周期交付**：新增 §4.18 —— `agent_mode` 怎么从"有列、有索引、零读取方"变成运行时分派输入、归因塞进 `execution_data` 那列 `text` 的代价、合成会话键为什么改用 `agent_id`、刻意不接的四格；上一版 v1.14 是 T-P5-01 的交付）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -1708,6 +1708,199 @@ RFM 那副底座另有 `customer_360.go:57` 一个消费点，并格之后那一
 
 ---
 
+### 4.18 `agent_mode` 的第一次真实读取：模式列怎么变成分派输入，以及归因写进 `text` 的代价（T-P5-02）
+
+> 卡面（`docs/replan-2026-09/新规划任务清单.md:258`）：「**N-3 Active 生命周期实现**：
+> `lifecycle.Resolver` 现零调用。实现 `ActiveAgentLifecycle`，编排"选材→决策→工具链→触达→归因
+> OneID"」。落点 N `internal/aiagent/agent/lifecycle/active.go` ＋ M `internal/app/`（装配 Resolver
+> 并按 `model.AgentMode` 分派，兑现 W-4）。AC① `agent_mode='active'` 的智能体走 Active、未知回退
+> Passive；AC② Active 不新建自由 Agent 循环、**编排走 SOP**（C7 裁定）；AC③ Passive 行为零变化。
+
+#### 落点（四新增 ＋ 五修改，共 9 个代码路径；没有一张新表、没有一个新列）
+
+| 文件 | 改了什么 |
+|---|---|
+| `internal/aiagent/agent/lifecycle/active.go`（新增） | `PassiveAgentLifecycle` / `ActiveAgentLifecycle` 两个实现 ＋ 三个单方法依赖接口（`ConversationRunner` / `SOPExecutor` / `CustomerLookup`）＋ `firstParsableSOPID` |
+| `internal/aiagent/agent/lifecycle/active_test.go`（新增） | 14 条：编排形状一条、会话键列宽一条、选材/决策/依赖的拒绝路径若干、模式常量稳定性一条、**import 静态锁**一条（go/parser 扫本包非测试文件）。另有既有 `lifecycle_test.go` 的 `TestResolver`（6 子用例）不动，整包 15 条顶层 |
+| `internal/aiagent/agent/lifecycle/lifecycle.go` | `LifecycleRequest` 加 `SessionID`/`OneID`、`LifecycleResult` 加 `Mode`/`ExecutionID`/`OneID`；头部那段"两个实现还没有"的过期说明改成现状 |
+| `internal/app/agent_lifecycle_wiring.go`（新增） | `AgentLifecycleRuntime`（`Resolver` 的**第一处**生产调用方）＋ `InitAgentLifecycles` 装配 ＋ `POST /api/agent/lifecycle/run` ＋ 三条编译期接口实现断言 |
+| `internal/app/agent_lifecycle_wiring_test.go`（新增） | 10 条：分派表（含脏值 `"  Active  "`）、Active 未装配回退 Passive、按 `agent_id` 读取模式再分派、三条错误出口、路由在册、两种模式端到端、坏请求体 4 种、未装配回 503 |
+| `internal/service/ai_agent.go` | `LoadContext` 的上下文构造里补 `AgentMode: agent.AgentMode` 一行 —— **W-4 的根因就在这一行不存在** |
+| `internal/service/ai_agent_test.go` | ＋1 条：模式要能从上下文读回、缓存路径也读得到、`Update` 改模式后**立刻**生效（不等缓存 TTL） |
+| `internal/router/router.go` | 两跳：`BuildSalesEngine` 之后 `app.InitAgentLifecycles(gormDB, engine)`；auth 组内 `app.SetupAgentLifecycleRoutes(auth)` |
+| `scripts/check-unwired-assets.sh` | **项5** 由 `unwired` 转 `wired`（防回退）＋ 新增**项19 六格**：49/55 → 52/58 → 现 **55/64** |
+
+#### `ai_agents` 这三列今天到底被谁读
+
+| 列 | 物理形状（`internal/model/ai_agent.go`） | 本卡之前的真实读取方 | 现在 |
+|---|---|---|---|
+| `agent_mode` | `varchar(32) not null default 'passive'` ＋ **`index`**（:38） | **0**。写侧有两条（`controller/ai_agent.go:168` 建、:269 改），读侧一条都没有：`LoadContext` 压根不往 `AgentContext` 里抄这个字段，于是四处既有 `LoadContext` 调用点实测读回的都是 `""` | `AgentLifecycleRuntime.Run` 按它分派（`agent_lifecycle_wiring.go:86`）—— `AgentContext.AgentMode` 这个**字段**的非测试读点就此唯一 |
+| `sop_ids` | `text[]`，无索引（:50） | 只被抄进上下文，没有任何执行方拿它决定"跑哪个 SOP" | Active 的决策输入：取**第一个可解析且非零**的项 |
+| `decision_strategy_ids` | `text[]`，无索引（:54） | **0**，且 `LoadContext` 连抄都没抄 | 仍 0 —— 台账项19 按 `unwired` 登记，见下文「刻意不接的四格」 |
+
+那行 `index` 要说清一句，免得下一个人以为"有索引＝按模式查过"：本卡读模式走的是**主键取行后在内存里比字符串**（`AIAgentRepository.GetByID` :54 → `agentCtx.AgentMode`，且 `agent.Status != 1` 时直接 `(nil, nil)`），没有任何 `WHERE agent_mode = ?`。这个索引仍然只为"将来按模式批量取智能体"预备着，本卡没消费它。
+
+#### 归因落在 `execution_data` 里，代价要写在账上
+
+`sop_executions` 侧本卡零列变更，归因全部塞进既有那列：
+
+- `ExecutionData JSONMap` 的 gorm tag 是 **`type:text`**（`model/ai_sales_champion.go:146`），不是 `jsonb`；
+  写值由 `JSONMap.Value()`（:467-472）做 `json.Marshal`，`nil` 时写 `"{}"`。⇒ 库里是**一串 JSON 文本**。
+- 于是本卡写进去的三个键（`_trigger` / `agent_id` / `one_id`）的读法是：**逐行看得见，按值查不动**。
+  要按 OneID 取回"这个客户被主动跑过哪些 SOP"得 `execution_data::jsonb ->> 'one_id' = ?`，
+  而这列既没有 `jsonb` 类型也没有表达式索引 ⇒ 那是一次全表扫。
+  P8 的"OneID 归因看板"若直接建在这个键上会踩到它 —— 本卡按 C7 不建列不建表，是**有意识的欠账**，
+  不是"归因已经可查了"。这两句话的差别就是这块账接下来值不值一张表。
+- `agent_id` 比 `one_id` 更必要：`sop_executions` 只有 `sop_id`（:140，`index;not null`），
+  一张 SOP 被两个智能体挂上时，没有这个键就回不去"谁发起的"。
+- `_trigger` **不是本卡发明的键**：`sop_scheduler.go:236` 写 `"scheduler"`、
+  `intent_recognition.go:598` 写 `"intent"`，而 `StartExecutor`（`sop_node_executors.go:42`）会把它
+  原样并进节点输出留痕（:51 的补偿说明就写着"删掉它反而抹掉证据"）⇒ 本卡写 `"active_lifecycle"`
+  是让三条入口在执行记录里长得一样。**但值域没有任何门登记**（`check-enum-consistency` 不读这三个
+  字面量），所以"按触发源统计"是纯文本约定，改一个拼写不会有任何门变红。
+
+#### 归因值取自哪一列，以及 `one_id` 在本仓的三种宽度
+
+进 `one_id` 的值取自**客户行**的 `customers.unified_id`（`varchar(128)`，`model/customer.go:36`），
+**不是**请求里那个 `req.OneID`。理由：一次错填的归因值会把这轮外联挂到另一个人身上，
+而执行记录里的归因是事后要拿来做经营判断的。这条边界由
+`TestActiveRunOrchestratesAgentSOP` 的夹具钉住（fixture 里 `req.OneID` 为空、客户行是 `one-1`）：
+**实跑变异**把生产代码改成读 `req.OneID` ⇒ 该包 **1 条红**（`active_test.go:86 归因 OneID 没进名单: <nil>`），
+改回后整包 15 条顶层全绿（本卡 14 ＋ 既有 `TestResolver`；`active.go` 改动前后 md5 一致：`116d2683…`）。
+
+`customer.UnifiedID == ""` 时**不写这个键**，而不是写空串：`unified_id` 对历史客户行确实可能为空，
+而"键不存在"和"键为空串"在 JSON 里是两件事 —— 按空串归因会把所有无主执行并成同一个人。
+
+顺带实测到的一处漂移（本卡只登记不统一）：物理列 `one_id` 在本仓有**三种宽度** ——
+`customer_sessions` / `clues` / `human_tasks` 是 `varchar(100)`，`customer_channels` /
+`customer_do_not_contact` / `csat_surveys` / `script_exposure_logs` 是 `varchar(128)`，`opportunities` /
+`order_drafts` 是 `text`；而权威源 `customers.unified_id` 是 **128**（且 `script_exposure_logs`
+的类型注释就写着"与 `customers.unified_id` 对齐为 varchar(128)：手机号型 OneID 长 70 字符，
+varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，本仓已经踩过一次）。
+归因值今天躺在 `text` 里不受影响，但**任何"把 `one_id` 从 JSON 提成列"的后续卡必须先定一个宽度**：
+按 100 建就会把 128 的源顶到 INSERT 报错（PG 是拒绝、不是截断）。
+
+#### 合成会话键：为什么押在 `agent_id` 而不是 `agent_code`
+
+- `sop_executions.session_id` 是 `varchar(120)` 且**无 index**（:142），`customer_id` 是
+  `varchar(64) not null` **带 index**（:141）。
+- 第一版键形如 `active-<agent_code>-<customers.id>`：最坏 `7+64+1+36 = ` **108 字节** ——
+  今天不炸，但那 12 字节余量押在**另外两张表的列宽**上（`ai_agents.agent_code varchar(64)` :33
+  ＋ `customers.id varchar(36)` :35）。谁把 `agent_code` 放宽到 128，"可读的键"就变成一次 INSERT 报错，
+  而报错点在没人盯的主动链路上。
+- 现用 `active-<agent_id>-<customer_id>`：`7 + ≤20 + 1 + 36`，与那两列彻底解耦，
+  且与调度器同形状（`"scheduler-"+agent_id`，`sop_scheduler.go:231-238`）。
+- `TestActiveSessionKeyStaysWithinColumn` 有**两条腿，有牙的是第二条**：
+  第一条（`len ≤ 120`）在旧实现下也过，单独看它是条假锁；第二条断言"键里不许出现 `agent_code`"
+  才是防回退那条。注释里写明了这一点，免得下一个人把整个用例读成"长度检查"。
+
+#### 刻意不接的四格（台账项19 的另外四行）
+
+本卡**没**接这四样，登记在此是因为"Active 现在真的能跑了"会让人以为这一族字段都通了：
+
+| 格子 | 实测 | 为什么刻意不接 |
+|---|---|---|
+| `agent.ModeOf` / `agent.IsActive`（`agent/agent.go:35`） | 包外调用 0（唯一"消费"是同文件自调） | 运行期判模式走的是 app 侧 `Resolver`；这两个 helper 读的是 `*model.AIAgent` 整行，而分派点手上只有上下文 DTO |
+| `SalesRequest.AutoExecute` | **写入 5 处、读取 0 处** | 真正的自动回复开关是编排器里的进程内 `o.enableAutoReply`。接上它等于给运营第二个开关，两个源必然漂移 |
+| `AgentContext.DecisionStrategyIDs` | 读方 0，`LoadContext` 连抄都没抄 | 接进来就是凭空造一套"策略怎么选"的语义，超出卡面 |
+| `sop_executions.one_id`（不存在） | —— | 见上文：按 C7 不建列，代价一起写在账上 |
+
+#### 索引与迁移
+
+本卡零新表零新列 ⇒ `allModels()`（`internal/pkg/db/migrate.go`，`&model.SOPExecution{}` 已在 :175）
+无新增条目、`AutoMigrate` 无 diff、无迁移文件。唯一与 schema 有关的动作是**读**：`agent_mode` 从
+"有列、有索引、零读取方"变成"有列、有索引、一个内存读点"。
+
+#### 交付口径：三条 AC 各自被什么钉住
+
+| AC | 用例 | 这一条到底在防什么 |
+|---|---|---|
+| ① `agent_mode='active'` 走 Active，未知回退 Passive | `TestAgentLifecycleDispatchByMode`（5 个输入：`active` / `passive` / `""` / `hybrid` / `"  Active  "`）＋ `TestActiveModeFallsBackWhenActiveNotAssembled` ＋ `TestRunByIDDispatchesOnLoadedMode` | 第二行比第一行重要：**Active 没装配时回退的是 Passive，而不是"报错"**。回退方向是刻意的 —— 装配失败时用户侧只是"没被主动联系"；反过来把被动请求当主动跑，就是拿一个没有入站消息的口子去外发。脏值先 `TrimSpace`＋`ToLower` 再比，因为这一列是运营手填的 `varchar(32)` |
+| ② Active 不新建自由 Agent 循环，编排走 SOP | `TestActiveNeverImportsConversationEngine`（go/parser 读**本包所有非测试文件**的 import 集，按后缀禁 `/internal/service`、`/agent/runtime`、`/agent/bridge`）＋ `TestActiveRunOrchestratesAgentSOP` 断言唯一的编排出口是 `SOPExecutor.Execute` | 这是一条**静态锁**，防的是"以后有人图方便在 Active 里直接调会话引擎" —— 那样闸门（T-P5-03）与归因（P8）就多出第二条不经过 SOP 的外发路径，而它在测试里长得和正路一样。锁的边界也说清：它只保证"这一包不 import"，**不保证"这条路上的闸门真的生效"** |
+| ③ Passive 行为零变化 | 实测口径：`LoadContext` 的非测试调用点本卡之前 **4** 处（`service/ai_agent.go:241` TestAgent、:416 渠道账号→绑定→上下文、:553 座席挂载、`controller/ai_agent.go:446` HTTP 直读；另有两处同名 `noopAssetLoader.LoadContext` 属另一个接口，不计），本卡 ＋1 处 ⇒ **5**；而这四处旧调用点里读 `AgentMode` 的**一处都没有**（`AgentContext.AgentMode` 非测试读点只剩新分派点 `agent_lifecycle_wiring.go:86`，同文件 :88 只是把同一个值打进错误消息） | 于是"补上 `LoadContext` 那一行"改变的是一个**没人读的字段**的值，既有行为逐字节不变；`PassiveAgentLifecycle` 今天也不在渠道入站的路上（它只服务 `/api/agent/lifecycle/run`）。这条 AC 是"本卡不破坏现网"的表述，不是"被动模式已收口到统一入口" |
+
+#### 本卡之后仍不成立的四件事
+
+1. **渠道入站一行未动**。被动模式在生产上仍走 `SmartCSOrchestrator`，本卡没把它改道，
+   也没有任何一条路让入站消息经过 `AgentLifecycleRuntime`。
+2. **新端点没有渠道上下文**。`POST /api/agent/lifecycle/run` 收 `agent_id` ＋ `customer_id`
+   （`content` 刻意不 `binding:"required"`，因为主动模式没有入站消息），回 `mode` / `execution_id` /
+   `one_id` / `reply` / `handoff` / `stop_reason` / `tools_called`；它不代表"从某个 IM 进来的一条消息"。
+3. **Active → SOP 这条路上闸门是否生效，本卡零判据**。出域必经 `approval_request` ＋
+   `checkCooldown` ＋ `checkDoNotContact`（X5 不得旁路）是 **T-P5-03** 的验收条件，
+   那张卡的依赖里就写着本卡。本卡只保证"编排出口只有一个"，不保证"那一个出口上有闸门"。
+4. **四格仍 UNWIRED**：`agent.ModeOf` / `agent.IsActive` / `SalesRequest.AutoExecute` /
+   `AgentContext.DecisionStrategyIDs` —— 台账项19 那四行按 `unwired` 站着，它们红着才是对的。
+
+#### 实跑（全部取自本轮闭包前的最终态，数字后面点名"测的是哪个对象"）
+
+- 三张包级全量：`internal/aiagent/agent/lifecycle` **ok 0.255s / rc=0**（TZ=UTC，带 `-test.v` 实数：
+  顶层 `--- PASS` **15**、子用例 `    --- PASS` **6**（即既有 `TestResolver` 的 5 表项 ＋ 1 条独立 `t.Run`）、
+  FAIL **0**、SKIP **0** ⇒ 15 与两文件 `^func Test` 实数（14 ＋ 1）逐一对上，不是"少跑了还全绿"）；
+  `go test ./internal/app/ ./internal/router/ -p 1`（TZ=UTC）**rc=0**，app **55.278s** / router **20.009s**
+  / lifecycle **0.509s**（同一条命令把 lifecycle 带进去重跑了一遍，三轮数不通用，引哪轮认哪轮）；
+  `internal/service` 全量 **ok 824.621s / rc=0**（TZ=UTC，`-timeout 2400s`，**不带 `-v`** ⇒ 本轮 PASS 计数为 0，
+  只报"整包绿"不报条数）。`go build ./...` **rc=0**。
+  ⇒ 前两跑各有一次**假红在前**：600s 默认超时那次 `FAIL 601.055s`、加 `-v` 那次跑到 1503.713s 才超时
+  （342 条 PASS、0 FAIL，停在 `TestE2E_WebhookService_DispatchWhatsApp` 中间）—— 两次红因都是**旁边同时挂着
+  golangci-lint 与 npx** 的负载，不是代码（项目记忆「Go 全量门禁耗时口径」的 450–880s 摆动区间，本轮实测 824.621s 落在上沿）。
+  单独跑、给足超时才是这一包的口径。
+- 台账两格 wired 的**有牙证明**（router.go 两跳各摘一行，`cp` 备份、写回后比 md5）：
+  ① 注释掉 :244 `app.InitAgentLifecycles(gormDB, engine)` ⇒ `check-unwired-assets.sh` **rc=1**，
+  log 第 **60** 行为 `[项19] 回退（登记为已接线却无调用点） 接线数=0 双模式运行时的启动装配点（摘掉即线上每次运行稳定回 503、app 用例全绿）`
+  （列间是脚本的对齐空格；引号内文字与台账 `check-unwired-assets.sh:325` 那行的说明列原文一致），
+  第 **67** 行按 `项19:<说明>` 再点名一次同一行；
+  **同一份变异下** `go test ./internal/app/ ./internal/router/ -p 1`（TZ=UTC）**rc=0**（app **19.653s** / router
+  **10.744s**，热缓存复跑；本轮之前那次冷缓存同判据是 82.667s / 27.410s —— 两轮的**结论**一致，秒数不可混引）
+  ⇒ 这两句合起来才是这一格的代价陈述：**装配点断线时测试全绿、线上每次运行稳定回 503**，台账是**唯一**看得见它的东西。
+  ② 注释掉 :640 `app.SetupAgentLifecycleRoutes(auth)` ⇒ **rc=1**，第 61 行点名「双模式运行入口的路由登记点」。
+  两把还原后 md5 回到 `eea246b4f07f8d37b3620e5de82a87e5`、`grep -c "MUT:"` ＝ **0**、目录无 `.bak`/`p502r` 残留，
+  门复跑 **rc=0 / 「✅ 与登记一致（exit 0）：55/64 行已接线」**。
+- 归因边界那一条（"值取自客户行而非 `req.OneID`"）由**单测变异**证过：把生产代码改成读 `req.OneID`
+  ⇒ 恰好 **1 条红**，红因逐字 `active_test.go:86: 归因 OneID 没进名单: <nil>`；改回后整包 **ok 2.035s**、
+  `active.go` md5 与改动前一致（`116d26838a9e7047a45ca899c4dfbbf0`）。
+  会话键那条用例的第二腿同样有牙（它断言"键里不许出现 `agent_code`"），第一腿（`len ≤ 120`）在旧实现下也绿 —— 已在上文写明，不重复。
+- **本轮抓到的一处口径错误（写在这里，因为它改的是本文件既有的一句话）**：`api-inventory.sh:32` 只在
+  `user-server/internal/router/**` 里 grep 路由字面量，**从 `internal/app` 注册的路由它看不见**。
+  本卡真实新增 `POST /api/agent/lifecycle/run`，而 `api-inventory.md` **零 diff** ——
+  同族的 `/agent/inference/run`、`/tools/permission/*` 也都不在那份清单里（`grep agent/inference` 命中 **0**）。
+  ⇒ "清单无 diff ⇒ 本卡零新端点"这个推论**不成立**。§4.17 里那句"本卡零新端点"**结论为真**
+  （已核：`git show --stat 00aeff61` 六路径、`git show` 里零路由注册），但它当时是靠这道**看不见证据**的门立起来的 ——
+  本卡是第一张"如果照抄那条推论就会说错"的卡。门本身**没有改**（改共享门禁超出卡面），按欠账登记，
+  与项目记忆「门禁口径盲区」同一族（第 ⑨ 轴：注册形状）。
+- 两处**假绿在前**的取证缺陷，红因都在脚本不在代码：
+  ① 第一批门写成 `out=$(cmd | tail -n); rc=$?` ⇒ 取到的是 `tail` 的退出码，十条门**齐刷刷显示 rc=0**；
+  改成 `cmd >log; rc=$?` 后真实红才露出来（`check-architecture` / `check-secrets` / `make fmt-check`）。
+  ② `pg_isready -h 127.0.0.1 -p 8232` 瞬时报"不接受连接"，同一分钟 `lsof` 显示 OrbStack 在听、立刻复检即 rc=0
+  ⇒ 复检一次再判环境。（与「CLI 工具链陷阱」「取证脚本自身要审」两条记忆同一族。）
+  ③ `go vet ./...` **rc=1** 报 `internal/browser_automation/service/executor.go:117`（`cannot slice make(map[string]*string)`），
+  而同一分钟 `go build ./...` **rc=0** ⇒ 该文件是并行会话**正在编辑**的（状态 `M`，那一行现已是 `ledgerGaps: make(map[string]bool),`）。
+  共享工作树的 vet 只能证"这一分钟没人改文件"，所以闭包判定留给 `--shared` 克隆。
+
+- 门（每条都取真实退出码，方法见上）：`check-date-bucket-tz` rc=**0**（命中 **21**，与基线 21 同）、
+  `check-enum-consistency` rc=**0**（3 条 warn，均非本卡字面量 —— `_trigger` 那三个值本来就**不在**它的读集里，
+  上文"值域无门登记"说的就是这件事）、`check-doc-consistency` rc=**0**、`check-feature-doc` rc=**0**（通过 1 / 失败 0 / 跳过 1）、
+  `check-unwired-assets` rc=**0**（**55/64**）、`api-inventory` rc=**0**（但见上条：它对端点看不见）、
+  `audit-cross-package-ports` rc=**0**；`check-architecture` rc=**1**、`check-secrets.sh` rc=**1**、
+  `make fmt-check` rc=**2** —— 三条红的归属逐条核过：前两条命中文件分别是 `??` 未跟踪的 `dingtalk_media.go`
+  与三个 `webhook_batch*` 测试文件，与本卡 9 个路径 `comm -12` 交集 **0**；`fmt-check` 唯一 offender 也是
+  `??` 未跟踪文件（零提交），本卡 9 文件 `gofmt -l` 输出**空**。
+  markdown lint（`npx -y markdownlint-cli2`，CI 的同一条）**rc=1 / 161 文件 2 issue**，两条都不在本文件：
+  `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808` 与并行会话新写的 `docs/superpowers/specs/2026-09-21-offline-deployment-design.md:34`
+  （均 MD004，`git status` 一条 `M` 一条 `??`），§4.18 全文 **0 命中**。
+  ⇒ 比 T-P5-01 那轮的"1 issue"多一条，多的那条是别人这一小时里新加的；这条门的计数**会随并行会话摆动**，引用时连文件总数一起报。
+  `-race` 仍**不是**任何命名门的一步（口径见 `新规划任务清单.md` r34，本卡不扩大）。
+- 前端零改动：本卡 9 个路径全在 `user-server/` 的 Go 源码、`scripts/` 与文档 ⇒ 无 `vite build` / `eslint` / `vitest` 腿。
+- 闭包计数：任务清单 **2** 行（P5 表下的执行结果 ＋ 修订 r54，P5 进度 1/4 → 2/4）、本项目调研 **3** 处
+  （判定 A 项5 ＋ 接线进度那行的 r27 追加 ＋ 修订 r27）、新规划 **3** 处（N-3 状态行 ＋ LTC-07 现状列 ＋ 修订 r16）、
+  本文件 **3** 处（版本行 v1.15 ＋ §4.18 ＋ 修订历史一行）。三篇规划文档在 git 外，仓库里 `grep` 不到属预期。
+  **命中数复验（改完在磁盘上数的，不是按写了几个 heading 推的）**：`新规划.md` 里 `r16` **3 行 / 5 处**、
+  `T-P5-02` **4** 处；`本项目调研.md` 里 `r27` **4** 处；本文件 `4.18` 与 `T-P5-02` 各按 `grep -c` 取数。
+  提交计划分两笔：代码 ＋ 台账脚本（8 个 Go 路径 ＋ `AI_CORE_FEATURE_INVENTORY.md`）、本文档单独一笔；
+  `api-inventory.md` **不进账**（它对本卡零 diff，而理由就是上面那条门盲区 —— 不拿一个看不见证据的东西当交付物）。
+
+---
+
 ## 五、索引策略
 
 ### 5.1 单列索引
@@ -1877,3 +2070,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.12 | 2026-09-21 | @backend | 新增 §4.16.5 **漏斗的第五段**（N-1 / T-P4-06）：`conversion-funnels` 从四段变五段，商机段接 `opportunities` 的实时聚合，**没写那张僵尸表**（AC② 由用例锁「取数时顺手往演示表写一行」必红，AC③ 锁「演示表灌 99999 读数不变」）。三条判据：① 口径取 `created_at`（流量）而非 `stage`（状态）—— 混一格状态读数进四条流量腿，逐段相除的「阶段转化率」失去意义，且 `idx_opp_created` 的注释本来就点名按它切时间窗；② 错误只上抛到仓储层，服务层降级成 0 **外加一条 Warn**（这条腿独有一种歧义：T-P4-05 之后 `opportunities` 只有一个生产者，0 既可能是「真没转出来」也可能是「表没建/接缝没装配」；四段老腿答 0 没人拿它做决策，这段答 0 会一路走进 P8 的归因），因此告警是行为不是日志，由抓 `os.Stdout` + 重建全局日志器的用例守着（只换 stdout 不够，`GetLogger` 连 writer 一起缓存）；③ 第五段**追加在末位**，因为「下标即契约」的读者有两处（后端 `_NonMonotonic` 的 `Stages[len-1]`、前端 `List.vue` 摘要区的 `stages[0]`/`stages[length-1]`），加段会让前者**绿着失去意义**、后者把「转化量(会话)」显示成商机数 —— 两处一并改按阶段名取，`total`/`conversion` 与服务端口径刻意仍停在 访问→会话（改成 访问→商机 是产品决策，登记为欠账）。**本卡被真跑纠正的一处**会让「登记」变成假安全：台账最初只加**一行**，反向删掉汇总腿实测 rc=0 仍报 WIRED —— `wired` 只要求命中 ≥1，而 service 里有两个消费点，删一个剩一个，等于装了一把永不变红的锁；按消费点拆成 17a/17b 后四种删除口径（删汇总/删详情/都删/定义改名）分别 rc=1/1/1/2。**第二处纠正落在本卡自己的文档上**：初稿把卡面的 `GET /conversion-funnel` 判成笔误（"真实路径是复数"），读全 `frontend_aliases.go:409-414` 后**推翻** —— 单复数各三条一起注册、卡面字面可命中；我错在拿"测试里只手写了复数两条"+"api-inventory 后端段没有这两组"当结论，而后者本身就是该脚本的盲区（详见 §4.16.5 那段更正与其下的两族漏法）。台账现值 **49/55**（rc=0）。**这条端点原先一条 controller 用例都没有**，而 AC① 说的正是「接口返回」，故新增 `conversion_funnel_http_test.go`（真 gin 路由 + `{code,message,data}` 外壳），H1–H4 四把变异各打红一条，证明不是摆设。实跑（主工作树未提交态，HEAD `39be6824`）：三轮 11 把变异，控制组 service+repository **455 全绿 / 0 skip**、controller **106 全绿**，red 计数逐把记在 §4.16.5；`go test ./internal/ops/...` 四包 ok，`TZ=UTC` 与 `TZ=Asia/Shanghai` 同数同绿，`-race` 三包 DATA RACE 计数 0，`go build` / `go vet` 双 rc=0 且输出 0 字节；`check-date-bucket-tz`（命中 21，与基线同）、`check-enum-consistency`、`check-doc-consistency`、`check-feature-doc`、`api-inventory`（生成物无 diff —— 本卡把这条**下调一档**：该快照抽后端只认 `.GET("全路径")` 形状，`doReg("GET", path)` 那族别名与"控制器内相对路径 + `Group` 前缀"那族都不进账，`grep -c -i opportunit api-inventory.md` 全文为 0）、`audit-cross-package-ports`（Errors 0 / Warns 0）、`check-unwired-assets` 全 rc=0，`check-architecture` 唯一红是并行会话的 `dingtalk_media.go:191/204`。前端：`vite build` rc=0，`eslint` 对本文件 0 error 且改前改后**同为 53 warning**（HEAD 版临时复制到同目录对拍计数，跑完即删），`vitest run` **14 文件 / 238 用例全绿**（本卡 +1 文件 +5 用例，改前 13/233；那份组件用例对改前的 `List.vue` 实跑过 **4 红 1 绿**，绿的那条是本来就不按位置取的明细表）。刻意不交付：端到端转化率延伸到商机、商机段的 `avg_duration_seconds`/`top_sources`（要 `sales_events` 口径，属 T-P7 域）、演示表下线（§4.11 三条删表判据一条未消）、真机看板截图（8204 上活着的是 9-19 起的旧二进制 `bin/user-server.r39`，不含本卡改动且非本会话启动，不为它污染并行会话的证据）。 |
 | v1.13 | 2026-09-21 | @backend | **T-P4-06 交付后复查（双推之后按「彻底深入检查」重跑本卡）**，抓到并当场修掉两处，都在"自己写的登记"上：① §4.16.5 落点表**漏登记** `ops/repository/conversion_funnel_opportunity_test.go`（新增，三条取数层用例，含"往演示表种巨量假行而真实源读数不动"这条 D-9 的仓储侧证据），标题计数也随之下修 —— 实数按 `git show --name-status d52434c2 cc065b02` 为 **4 个 `A` + 8 个 `M`**（ops 侧四改三增、前端一改一增、台账一行、文档两篇），表下已把口径边界写清；② 那个文件**没过 gofmt**，而 gofmt 是真门（CI `Static gates` 调 `make fmt-check`，与本地同判据）—— 红因是包注释里 `①②③` 用了四空格续行，Go 1.19+ 把注释内 ≥4 空格缩进判成代码块。修法是把续行顶格而**不跑** `gofmt -w`（它会把散文重排成 tab 代码块，更难读）；改后 `gofmt -l` 对该文件空、`git diff` 该文件非注释改动 **0 行**、`ops/repository` 包重跑 **76 条全绿**。同批另一条 fmt 红 `internal/controller/wechat_batchf4_m01_inbound_test.go` 属并行会话未提交文件，不代改。**由此得一条门禁口径**：新增文件的验收清单不能只按 `scripts/*.sh` 枚举门，`make fmt-check` 这类**以 make 目标存在的门**会被整批漏掉（本卡当初的清单列了 build/vet/六门/-race，唯独没有它）。**同轮复核成立项（逐项重跑，非推断）**：`ops/service`+`ops/repository` 双时区各 455 / 0 fail / 0 skip、`ops/controller` 106 / 0 / 0；命名六门在 `--shared` 干净克隆六条全 rc=0，工作树五绿一红，那处架构红这次拿到**直接归属证据**（`dingtalk_media.go` 状态为 `??`、`git log -- <路径>` 零提交 ⇒ HEAD 无此文件）；`check-secrets.sh` rc=1 的三处命中文件名与本卡 12 路径求交集为空（`comm -12` 实算）；台账 49/55 且项17 两行各自 `接线数=1`；`api-inventory.md` 全文 `opportunit` 命中 0、`human-task` 两条均在 1426/2241 的前端调用段；`闭环完成率` 全仓 `*.go` 仍只命中 `internal/model/opportunity.go:85`；`frontend_aliases.go:409-414` 逐字重读确为单复数各三条；`List.vue` md5 与提交时一致、`vitest run` 14 文件 / 238 用例全绿。**另修规划文档（git 外）的表格完整性**：7 行表格行补回收尾管道、12 行两列修订条目里的裸 `\|` 转义（逐行按插入位置反删验证无损）；多列表格里**另有 14 行**"列数与表头不符"的**历史**条目**刻意未动**（12 行是列数比表头多、2 行少一格，行号与逐行判读留在任务清单 r48）—— 那种行分不清"多出的单元格分隔符"与"散文里的裸管道"，盲改会把真实列并掉，属渲染问题不属事实错误，留待人工逐行判读。**本文件其余内容零改动**。 |
 | v1.14 | 2026-09-21 | @backend | 新增 §4.17 **SOP 开工名单的三个权威源**（N-2 / T-P5-01）：`sop_scheduler.go` 那条"名单为空就把 SOP 跑到创建者本人身上"的回退**删掉了**，换成按 `trigger_config.audience` 实时圈选，读 `customer_rfms.segment` / `customer_tag_assignments.tag` / `churn_scores.p_alive` 三张既有权威表 —— **没建人群表**（C7）。四条判据：① 条件是**交集**不是并集（并集规模直接顶穿 AC② 想夹的那个东西）；② **`0 人` 有两种、必须分开报** —— `no_match:<条件>` 让人去改条件，`source_empty:<源>` 让人去查数据源，而 churn 今天恰恰是后者（`defaultChurnStatsQuery` 是 T-P1-07 登记在册的桩，`ComputeAll` 读到空统计就一行不写），只报"0 人"会把"这个域还没有生产者"读成"我条件写得太严"，两种处置动作完全相反；③ 上限**夹两次**：`limit()` 夹到 `MaxAudienceLimit=500` 防手滑，`tryExecute` 再按 `maxRunningPerSOP` 的**剩余额度**夹一次防"阈值只在上轮已跑满时才生效"（原实现 49 在跑 ＋ 名单 3 人 ＝ 52 并发）；④ 翻页步长钉死 200，因为 `ListBySegment` 把 `pageSize>200` **静默改成 20**（`customer_rfm.go:65-66`），直传 500 实测只回 20 行。**AC③ 与卡面差一处、按实际落法登记**：这条链路上根本没有 `ProactiveReachService` 可调（调度器只建 `SOPExecution`，出域发送在执行体工具节点里、闸门属 T-P5-03），所以交付的是 AC③ 的**语义**（未经 `audience_confirmed` 时一条执行都不建、名单写回 `trigger_config.audience_preview`）而不是"复用 DryRun"那句**调用** —— 宁可留这条偏差，也不在 FEATURES 写一句代码里不存在的复用。**三处被真跑纠正、第四处被提交前的 `gofmt -l` 纠正、第五处由回读源码纠正（它躲过了全部实跑：反向验证只证明 grep 锚点会红，证明不了我替那一格写下的症状句）**：假绿那条最贵 —— `TestAudience_PropagatesQueryError` 第一版**没改生产代码就绿了**，因为 `NewTestDB` 同进程共用一个库、前一个用例建的 `customer_rfm` 还在原地，"表不存在"必须显式 `DropTable` 构造（调度器侧同类用例同改）；`setJSONMapValue` 只能塞字符串值，预览是对象会被写成 `""` ⇒ 改 `json.Marshal` 整体回写；schedule 型一次 tick 回写两次、后一次序列化的是**内存里那份 map** ⇒ 预览必须就地改那份 map，"只落库不落内存"这把变异被专门用例打红。第四处是**新写文件**的注释续行又用 4 空格、被 `gofmt -l` 在提交前抓到（与 `7a7c99ad` 同一坑的第二次，修法同前：顶格 `// ` 单空格、不跑 `gofmt -w`）。另抓到**自己文档里的数**：落点表写"追加 8 条用例"实为 **9** 条、selector 那格把 10 条函数与其子用例混成"11 条判据"。台账新增**项18 三格**（49/55 ⇒ **52/58**，`接线数` 恒为 1）：18a 调度器启动入口在 `cmd/api`（摘掉即两类 SOP 一起静默停摆、`internal/service` 全绿）、18b `audience:` 字段赋值、18c 标签腿那一跳（18c 与 17 同一课：刻意不写成 `New.*RepositoryWithDB\(` 那种并格宽式，因为 RFM 底座另有 `customer_360.go:57` 消费点，并格即死锁）。**两处刻意欠账按原样登记不粉饰**：FEATURES.md 那条**本卡没加**（该文件正被并行会话整表重写，`git diff` 32 行全在 webhook 渠道表、与本卡 7 路径 `comm -12` 命中 0），§4.17 两处 nil 守卫**无用例覆盖**（`NewSOPScheduler` 传 nil db 会连 `execRepo` 一起置 nil、`tryExecute` 第一行就返回 ⇒ 生产构造路径走不到；留它是为 `NewAudienceSelectorWithDB(nil)` 这个公开可判空契约，为"手工组装结构体才能触发"的分支写测试＝测夹具）。实跑（工作树未提交态，HEAD `9859e2b9`；全量跑完后本卡对这两包 Go 源码零再编辑，逐文件 `gofmt -l` 空 ⇒ 这些数就是最终态）：`go build` / `go vet` 双 rc=0；两时区全量 `internal/service` + `internal/repository` **各双 rc=0**（CST 668.174s / 231.338s；UTC 487.782s / 143.255s）；本卡 34 条用例 `-test.v` 实数顶层 **34**（＝ selector 10 ＋ scheduler 24，与 `^func Test` 逐字对上）＋ 子用例 **20**、FAIL 0、SKIP 0；反向电池 **9 把全 KILLED**（逐把 `cp` 备份、写回比 md5 一致），台账三格**逐格摘装 rc=1 且各点名 1 行**、还原后 md5 一致、`p501mut` 与 `.p501*` 残留 0；门 `check-date-bucket-tz`（命中 **21** ＝ 基线 21）/`enum`/`doc-consistency`/`feature-doc`/`unwired-assets`(52/58)/`api-inventory`（生成物无 diff ⇒ 零新端点）/`ports`（Errors 0 Warns 0）七条 rc=0；`make fmt-check` **rc=2** 未过文件**恰 1 个**（`wechat_batchf4_m01_inbound_test.go`，`??` 未跟踪）、本卡 5 文件 `gofmt -l` **空**；`check-architecture` **rc=1** 唯一红 `dingtalk_media.go:191/204`（`??`）、`check-secrets.sh` **rc=1** 三处命中与本卡 7 路径交集 **0**、markdown lint **rc=1 / 1 issue** 属并行会话正在改的 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808` 而 §4.17 全文 **0 命中**。`-race` **rc=1**：repository ok(149.126s)、service FAIL(653.562s)，`WARNING: DATA RACE` **6** 处、`--- FAIL` **3** 条 —— **0 帧**涉本卡三个 Go 文件，两组红各自归属：① `TestCreateSession_AllowDifferentPlatform` 与 `_AnonymousUser` 同一地址 `0x…75bc60`、写方 `db.SetTestDB()` 读方 `MaybeSendAwayReply` 的 `SafeGo` 后台 goroutine，涉事 4 文件 `git status` **全 clean** ⇒ HEAD 自带那族既有缺陷；② 另 4 处属并行会话**未跟踪**的 `webhook_batchf4_m01_qq_test.go:342` 对 `qq_media.go` 的 `FetchQQAttachment`/`persistQQMediaAsync` ⇒ 不同文件不同键，均不代修不代提交。前端**零改动**（7 路径全在 `user-server/` 与 `scripts/` 与文档），所以没有 `vite`/`eslint`/`vitest` 腿 —— 是没对象，不是跳过。 |
+| v1.15 | 2026-09-21 | @backend | 新增 §4.18 **`agent_mode` 的第一次真实读取**（N-3 / T-P5-02）：`lifecycle.Resolver` 从零调用方变成有第一处生产调用点，`agent_lifecycle_wiring.go` 按 `agent_mode` 分派 passive/active，主动那侧**只编排 SOP**（C7 裁定，`TestActiveNeverImportsConversationEngine` 用 go/parser 静态钉住本包 import 集）。schema 侧本卡**零新表零新列**，所以登记的重点全在代价：① `ai_agents.agent_mode` 有 `index` 但没有任何 `WHERE agent_mode = ?`，本卡读的是主键取行后的内存字符串比对（那行索引仍然只是将来按模式批量取的预备）；② 归因三个键写进 `sop_executions.execution_data`，而那列 gorm tag 是 `type:text` 不是 `jsonb` ⇒ 逐行看得见、按值查不动，P8 看板若建在 `one_id` 上会撞全表扫（按 C7 不建列，**有意识欠账**）；③ `one_id` 在本仓实测**三种宽度**（100 / 128 / `text`，权威源 `customers.unified_id` 是 128，且 `script_exposure_logs` 的注释就记着 varchar(64) 曾溢出）⇒ 任何把 one_id 提成列的后续卡必须先定宽度，按 100 建会把 128 的源顶到 INSERT 报错；④ 合成会话键从 `agent_code` 换成 `agent_id`，因为 `session_id varchar(120)` 的 12 字节余量押在另外两张表的列宽上。另登记一处**本文件既有口径的错**：`api-inventory.sh:32` 只 grep `internal/router/**`，从 `internal/app` 注册的路由它看不见 ⇒ §4.17 那句清单无 diff ⇒ 零新端点的**结论**为真（已核 `00aeff61` 零路由）但**证据**是道看不见证据的门，本卡的新端点就是它漏掉的第一个。台账 49/55 → 52/58 → **55/64**，项5 转 wired、项19 六格（两 wired 各用一把 router.go 变异证过有牙，且摘掉装配点后 app＋router 测试全绿、线上稳定回 503 ⇒ 台账是唯一看得见它的东西） |
