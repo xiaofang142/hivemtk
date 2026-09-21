@@ -3339,9 +3339,21 @@ helper"这条枚举路径才抓到的。三条判据（文档面 / 自动豁免 
 配套把 14 + 13 个"只能读源码才知道存在"的危险键补进 §6.1（含 `APP_ENV`/`MODE`/`GIN_MODE` 那条
 "**都不设 ⇒ 按生产姿态走**，别指望没设就是开发"）。
 
+**订正（提交后实测，第一版数字作废）**：上面那组 71/16/92 是在**我的测试克隆**里跑的，
+`63b57627` 提交后在干净克隆跑已提交树，门当场 rc=1：`基线登记 91 · 红 1 ·
+UNDOCUMENTED PLATFORM_URL <- user-server/cmd/api/main.go` —— 我在测试树里给 `PLATFORM_URL`
+手工加的那条基线债务行**从未被写进活树的 `scripts/env-coverage.baseline`**（提交 99 行、测试树 100 行），
+即"门绿"的口径只对我自己那棵克隆成立。第二版处置是补那行基线，**被否**：`PLATFORM_URL` 的读取点
+`user-server/cmd/api/main.go` 正被并行会话改脏（`git status` = ` M`；活树 `grep -rn PLATFORM_URL --include="*.go" user-server/`（去测试）
+0 命中，HEAD 同一文件里仍有 3 处读取），一旦对方落地，基线条目立刻踩 STALE 判据红 ⇒ 等于往别人的提交里埋雷。
+最终走文档面：`DEPLOYMENT_GUIDE.md` §6.2 补 `PLATFORM_URL` 一行（说明它是 `platform.yaml api_url`
+→ `PLATFORM_API_URL` 之后的末位回落）。已提交树复跑 ⇒ **179 = 已文档化 72 + 工具豁免 16 + 基线 91，红 0**，
+活树（含并行改动）180 键同样红 0；文档面不受 STALE 判据约束，两种树都稳定绿。
+差值只在 71↔72 / 92↔91 这一条键的归属，**下面凡引"92 条基线"的地方按 91 读**。
+
 ### 5 收尾时另一道门的缺陷：工作区凭证门的豁免表从未生效
 
-`scripts/check-secrets-workspace.sh:50` 的 `is_allowed` 写成一行
+`scripts/check-secrets-workspace.sh:54` 的 `is_allowed` 写成一行
 `[[ -n $ALLOW_RE ]] && printf … | grep -qE "$ALLOW_RE"; return 1;` —— 末尾的 `return 1` 无条件执行
 ⇒ 函数恒返回"未豁免"，**豁免表整张是死代码**，而脚本报错文案恰恰指示"确属公开常量再加
 `.workspace-secret-allowlist`"，处置路径走不通。判据证据：登记豁免后门仍 rc=1（2 命中），
@@ -3383,7 +3395,7 @@ helper"这条枚举路径才抓到的。三条判据（文档面 / 自动豁免 
   这一条**部分否证我上一轮的登记**：退订表并非"无消费方"，`email_send.go:98` 的即时发送分支确实查它。
   要接的是"把链接注入外发正文"，那属产品口径（正文文案/品牌/对收件人的披露姿态），不擅自改真人收件内容。
 - `.env-example` 那半张面被并行会话的 `PLATFORM_ENABLED` 改动占着（对方已 stage）；新门的 CI 接线被
-  `.github/workflows/user-server-ci.yml` 的并行改动挡住；92 条基线键 = 存量文档债（门的职责是挡新增）；
+  `.github/workflows/user-server-ci.yml` 的并行改动挡住；91 条基线键 = 存量文档债（门的职责是挡新增）；
   `ONEID_SALT` 改值即让存量 one_id 错位 ⇒ 重哈希属产品口径。
 - 活树独有红：并行会话脏文件 `internal/config/ports.go` 新读 `GEO_SITE_BASE_URL`，被新门当场抓到
   （HEAD 克隆无此键）⇒ 按归属交接，不代写文档行。
@@ -3392,6 +3404,7 @@ helper"这条枚举路径才抓到的。三条判据（文档面 / 自动豁免 
   `EMAIL_DELIVERY_CUTOVER_DATE`、`SMS_LINK_BASE_URL`、`GEO_ADMIN_TOKEN`、`GEO_UPSTREAM_TOKEN`），
   第 7 个 `ALLOW_INSECURE_WEBHOOK` 确实在读且已在 `DEPLOYMENT_GUIDE.md`（2 处）⇒ 整条不成立，
   正规证据是门自己打印的分类计数 71+16+92=179、红 0。清单类结论必须当场由命令算出来。
+  （该次计数出自我的测试克隆；已提交树的口径是 72+16+91，差异原因与订正见 §4 末"订正"段。）
 
 **勿放松**：`ingressAPIKeyEnv` 必须同时被读取处与 503 文案引用（拆回两个字面量即回到本轮起点）；
 `sign()` 返回空串 ⇒ 调用方必须 fail-closed，不得把空密钥当成一个可用 HMAC key；SSRF 豁免必须是
