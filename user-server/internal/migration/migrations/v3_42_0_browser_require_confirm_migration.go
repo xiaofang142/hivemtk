@@ -50,9 +50,6 @@ func (m *BrowserRequireConfirmMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	if err := m.db.WithContext(ctx).
-		Exec(`ALTER TABLE browser_tasks DROP COLUMN IF EXISTS require_confirm`).Error; err != nil {
-		return err
-	}
+	declineColumnDrop(m.Version(), "browser_tasks.require_confirm")
 	return nil
 }

@@ -56,13 +56,8 @@ func (m *HandoffOutcomeMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	for _, q := range []string{
-		`DROP INDEX IF EXISTS idx_sessions_handoff_at`,
-		`ALTER TABLE customer_sessions DROP COLUMN IF EXISTS first_human_reply_at`,
-		`ALTER TABLE customer_sessions DROP COLUMN IF EXISTS handoff_reason`,
-		`ALTER TABLE customer_sessions DROP COLUMN IF EXISTS handoff_at`,
-	} {
-		_ = m.db.WithContext(ctx).Exec(q).Error
-	}
+	declineIndexDrop(m.Version(), "idx_sessions_handoff_at")
+	declineColumnDrop(m.Version(), "customer_sessions.first_human_reply_at",
+		"customer_sessions.handoff_reason", "customer_sessions.handoff_at")
 	return nil
 }

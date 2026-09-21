@@ -61,7 +61,6 @@ func (m *SOPExecutedNodesMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(
-		`ALTER TABLE sop_executions DROP COLUMN IF EXISTS executed_nodes`,
-	).Error
+	declineColumnDrop(m.Version(), "sop_executions.executed_nodes")
+	return nil
 }

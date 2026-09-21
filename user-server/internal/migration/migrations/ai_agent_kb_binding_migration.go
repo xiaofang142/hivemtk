@@ -54,15 +54,7 @@ func (m *AIAgentKBBindingMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		`ALTER TABLE ai_agents DROP COLUMN IF EXISTS sop_template_ids`,
-		`ALTER TABLE ai_agents DROP COLUMN IF EXISTS faq_entry_ids`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return fmt.Errorf("ai_agent_kb_binding 回滚失败: %w (SQL: %s)", err, s)
-		}
-	}
+	declineColumnDrop(m.Version(), "ai_agents.sop_template_ids", "ai_agents.faq_entry_ids")
 	return nil
 }
 

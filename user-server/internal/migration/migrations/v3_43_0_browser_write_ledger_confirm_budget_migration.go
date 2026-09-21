@@ -68,18 +68,8 @@ func (m *BrowserWriteLedgerConfirmBudgetMigration) Down(ctx context.Context) err
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		`DROP INDEX IF EXISTS idx_browser_steps_text_hash`,
-		`DROP INDEX IF EXISTS idx_browser_steps_submit_state`,
-		`ALTER TABLE browser_tasks DROP COLUMN IF EXISTS confirm_wait_sec`,
-		`ALTER TABLE browser_steps DROP COLUMN IF EXISTS is_write`,
-		`ALTER TABLE browser_steps DROP COLUMN IF EXISTS text_hash`,
-		`ALTER TABLE browser_steps DROP COLUMN IF EXISTS submit_state`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return err
-		}
-	}
+	declineIndexDrop(m.Version(), "idx_browser_steps_text_hash", "idx_browser_steps_submit_state")
+	declineColumnDrop(m.Version(), "browser_tasks.confirm_wait_sec", "browser_steps.is_write",
+		"browser_steps.text_hash", "browser_steps.submit_state")
 	return nil
 }

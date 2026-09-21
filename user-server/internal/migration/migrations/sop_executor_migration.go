@@ -102,11 +102,9 @@ func (m *SOPExecutorMigration) Up(ctx context.Context) error {
 
 // Down 回滚
 func (m *SOPExecutorMigration) Down(ctx context.Context) error {
-	_ = m.db.Exec(`DROP INDEX IF EXISTS idx_sop_executions_wait`)
-	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS wait_event`)
-	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS trace_id`)
-	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS attempt_count`)
-	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS last_event_at`)
+	declineIndexDrop(m.Version(), "idx_sop_executions_wait")
+	declineColumnDrop(m.Version(), "sop_executions.wait_event", "sop_executions.trace_id",
+		"sop_executions.attempt_count", "sop_executions.last_event_at")
 	declineTableDrop(m.Version(), "sop_outbox", "sop_timers", "sop_exec_events")
 	return nil
 }

@@ -85,11 +85,8 @@ func (m *WecomWebhookFieldsMigration) Down(ctx context.Context) error {
 	if !m.db.Migrator().HasTable("wecom_accounts") {
 		return nil
 	}
-	_ = m.db.Exec("ALTER TABLE wecom_accounts DROP COLUMN IF EXISTS ai_agent_enabled").Error
-	_ = m.db.Exec("ALTER TABLE wecom_accounts DROP COLUMN IF EXISTS webhook_path").Error
-	_ = m.db.Exec("ALTER TABLE wecom_accounts DROP COLUMN IF EXISTS webhook_enabled").Error
-	_ = m.db.Exec("ALTER TABLE wecom_accounts DROP COLUMN IF EXISTS encoding_aes_key").Error
-	_ = m.db.Exec("ALTER TABLE wecom_accounts DROP COLUMN IF EXISTS callback_token").Error
+	declineColumnDrop(m.Version(), "wecom_accounts.ai_agent_enabled", "wecom_accounts.webhook_path",
+		"wecom_accounts.webhook_enabled", "wecom_accounts.encoding_aes_key", "wecom_accounts.callback_token")
 	return nil
 }
 

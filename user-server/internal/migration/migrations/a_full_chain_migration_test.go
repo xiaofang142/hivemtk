@@ -58,29 +58,51 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 	}
 	baseTables := chainTableCount(gdb)
 	baselineSet := chainTables(gdb)
-	t.Logf("基表铺设完成 用时=%v 表数=%d", time.Since(seedStart).Round(time.Millisecond), baseTables)
+	baselineIdx := chainIndexes(gdb)
+	baselineCol := chainColumns(gdb)
+	t.Logf("基表铺设完成 用时=%v 表数=%d 索引数=%d 列数=%d",
+		time.Since(seedStart).Round(time.Millisecond), baseTables, len(baselineIdx), len(baselineCol))
 
 	reg := migration.NewMigrationRegistry()
 	RegisterMigrations(reg, gdb)
 	all := reg.GetAll()
 	ctx := context.Background()
 
-	// owned[版本] = 该迁移 Up 真正新建的表。Down 只允许撤销自己建的表：
-	// 本项目建表事实源是 AutoMigrate，基线里的表在降级后仍被当前代码声明并使用。
+	// owned/ownedIdx[版本] = 该迁移 Up 真正新建的表与索引。Down 只允许撤销自己建的对象：
+	// 本项目建表事实源是 AutoMigrate，基线里的表与索引在降级后仍被当前代码声明并使用。
 	owned := map[string]map[string]bool{}
+	ownedIdx := map[string]map[string]bool{}
+	ownedCol := map[string]map[string]bool{}
 	upFailed := map[string]string{}
 	for _, m := range all {
-		before := chainTables(gdb)
+		beforeTables := chainTables(gdb)
+		beforeIndexes := chainIndexes(gdb)
+		beforeColumns := chainColumns(gdb)
 		if err := m.Up(ctx); err != nil {
 			upFailed[m.Version()] = err.Error()
 		}
 		created := map[string]bool{}
 		for table := range chainTables(gdb) {
-			if !before[table] {
+			if !beforeTables[table] {
 				created[table] = true
 			}
 		}
-		owned[m.Version()+"/"+m.Name()] = created
+		createdIdx := map[string]bool{}
+		for index := range chainIndexes(gdb) {
+			if _, seen := beforeIndexes[index]; !seen {
+				createdIdx[index] = true
+			}
+		}
+		createdCol := map[string]bool{}
+		for column := range chainColumns(gdb) {
+			if !beforeColumns[column] {
+				createdCol[column] = true
+			}
+		}
+		key := m.Version() + "/" + m.Name()
+		owned[key] = created
+		ownedIdx[key] = createdIdx
+		ownedCol[key] = createdCol
 	}
 	unexpected := map[string]string{}
 	for v, e := range upFailed {
@@ -104,23 +126,59 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 
 	downFailed := map[string]string{}
 	dropsForeign := map[string]string{}
+	dropsForeignIdx := map[string]string{}
+	dropsForeignCol := map[string]string{}
 	for i := len(all) - 1; i >= 0; i-- {
 		m := all[i]
 		key := m.Version() + "/" + m.Name()
-		before := chainTables(gdb)
+		beforeTables := chainTables(gdb)
+		beforeIndexes := chainIndexes(gdb)
+		beforeColumns := chainColumns(gdb)
 		if err := m.Down(ctx); err != nil {
 			downFailed[key] = err.Error()
 		}
-		after := chainTables(gdb)
+		afterTables := chainTables(gdb)
+		afterIndexes := chainIndexes(gdb)
+		afterColumns := chainColumns(gdb)
 		victims := []string{}
-		for table := range before {
-			if !after[table] && !owned[key][table] {
+		for table := range beforeTables {
+			if !afterTables[table] && !owned[key][table] {
 				victims = append(victims, table)
 			}
 		}
 		if len(victims) > 0 {
 			sort.Strings(victims)
 			dropsForeign[key] = strings.Join(victims, ",")
+		}
+		idxVictims := []string{}
+		for index := range beforeIndexes {
+			_, stillThere := afterIndexes[index]
+			if stillThere || ownedIdx[key][index] {
+				continue
+			}
+			// 随本迁移自有表一起消失的索引不是越权删除：删一张自己建的表必然带走它上面的索引。
+			if owned[key][beforeIndexes[index]] {
+				continue
+			}
+			idxVictims = append(idxVictims, index)
+		}
+		if len(idxVictims) > 0 {
+			sort.Strings(idxVictims)
+			dropsForeignIdx[key] = strings.Join(idxVictims, ",")
+		}
+		colVictims := []string{}
+		for column := range beforeColumns {
+			if afterColumns[column] || ownedCol[key][column] {
+				continue
+			}
+			if owned[key][column[:strings.Index(column, ".")]] {
+				continue
+			}
+			colVictims = append(colVictims, column)
+		}
+		if len(colVictims) > 0 {
+			sort.Strings(colVictims)
+			dropsForeignCol[key] = strings.Join(colVictims, ",")
 		}
 	}
 	// 回滚链路不完备属既有事实（见计划 Findings），本排期只把它显式化，不据此判红。
@@ -130,6 +188,14 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 	if len(dropsForeign) > 0 {
 		t.Errorf("Down 删掉了不属于它的表 %d/%d（本项目表由 AutoMigrate 与模型持有，降级删表＝销毁在用数据）：%s",
 			len(dropsForeign), len(all), formatFailures(dropsForeign))
+	}
+	if len(dropsForeignIdx) > 0 {
+		t.Errorf("Down 删掉了不属于它的索引 %d/%d（AutoMigrate 只按模型声明补索引，删掉在用索引＝降级后长期 seq scan）：%s",
+			len(dropsForeignIdx), len(all), formatFailures(dropsForeignIdx))
+	}
+	if len(dropsForeignCol) > 0 {
+		t.Errorf("Down 删掉了不属于它的列 %d/%d（列由模型声明，降级删列＝销毁在用数据且当前进程不再补回）：%s",
+			len(dropsForeignCol), len(all), formatFailures(dropsForeignCol))
 	}
 	// 整轮 Up→Down 后库不得比 AutoMigrate 基线更少：这是上面逐条归属的总量口径。
 	afterDown := chainTables(gdb)
@@ -143,8 +209,66 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 		sort.Strings(lostBaseline)
 		t.Errorf("一轮 Up→Down 后基线表净丢失 %d 张：%s", len(lostBaseline), strings.Join(lostBaseline, ","))
 	}
-	t.Logf("迁移总数=%d 基表=%d Up 后表数=%d Down 后表数=%d Down 失败数=%d",
-		len(all), baseTables, afterUp, chainTableCount(gdb), len(downFailed))
+	afterDownIdx := chainIndexes(gdb)
+	lostBaselineIdx := []string{}
+	for index := range baselineIdx {
+		if _, stillThere := afterDownIdx[index]; !stillThere {
+			lostBaselineIdx = append(lostBaselineIdx, index)
+		}
+	}
+	if len(lostBaselineIdx) > 0 {
+		sort.Strings(lostBaselineIdx)
+		t.Errorf("一轮 Up→Down 后基线索引净丢失 %d 个：%s", len(lostBaselineIdx), strings.Join(lostBaselineIdx, ","))
+	}
+	afterDownCols := chainColumns(gdb)
+	lostBaselineCol := []string{}
+	for column := range baselineCol {
+		if !afterDownCols[column] {
+			lostBaselineCol = append(lostBaselineCol, column)
+		}
+	}
+	if len(lostBaselineCol) > 0 {
+		sort.Strings(lostBaselineCol)
+		t.Errorf("一轮 Up→Down 后基线列净丢失 %d 列：%s", len(lostBaselineCol), strings.Join(lostBaselineCol, ","))
+	}
+	t.Logf("迁移总数=%d 基表=%d 基线索引=%d 基线列=%d Up 后表数=%d Down 后表数=%d Down 后索引数=%d Down 后列数=%d Down 失败数=%d",
+		len(all), baseTables, len(baselineIdx), len(baselineCol), afterUp,
+		chainTableCount(gdb), len(afterDownIdx), len(afterDownCols), len(downFailed))
+}
+
+// chainColumns 取 public schema 下的「表.列」全集，用于逐迁移比对 Down 是否删掉了不归它撤销的列。
+func chainColumns(gdb *gorm.DB) map[string]bool {
+	var names []string
+	if err := gdb.Raw(`SELECT table_name || '.' || column_name FROM information_schema.columns
+		WHERE table_schema = 'public'`).Scan(&names).Error; err != nil {
+		return map[string]bool{}
+	}
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
+}
+
+// chainIndexes 取 public schema 下「索引名 → 所属表」的映射，排除约束（主键/唯一）自身支撑的索引：
+// 那类索引随约束走，回滚删列时的连带消失不属"删在用索引"这一判据的范围。
+func chainIndexes(gdb *gorm.DB) map[string]string {
+	type row struct {
+		IndexName string
+		TableName string
+	}
+	var rows []row
+	if err := gdb.Raw(`SELECT i.indexname AS index_name, i.tablename AS table_name FROM pg_indexes i
+		WHERE i.schemaname = 'public'
+		  AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conname = i.indexname)`).
+		Scan(&rows).Error; err != nil {
+		return map[string]string{}
+	}
+	set := make(map[string]string, len(rows))
+	for _, r := range rows {
+		set[r.IndexName] = r.TableName
+	}
+	return set
 }
 
 // chainTables 取 public schema 当前的表名集合，用于逐迁移比对 Up/Down 前后的对象差。

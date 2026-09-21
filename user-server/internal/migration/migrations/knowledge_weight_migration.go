@@ -53,14 +53,7 @@ func (m *KnowledgeWeightMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS weight`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return fmt.Errorf("knowledge_weight 回滚失败 (%s): %w", truncate(s, 60), err)
-		}
-	}
+	declineColumnDrop(m.Version(), "knowledge_chunks.weight")
 	return nil
 }
 

@@ -78,28 +78,17 @@ func (m *MultilingualI18nMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
+	declineIndexDrop(m.Version(), "idx_knowledge_chunks_source_language",
+		"idx_llm_routing_logs_target_lang", "idx_llm_routing_logs_cross_lingual")
+	declineColumnDrop(m.Version(), "asset_bundles.supported_languages", "asset_bundles.examples",
+		"knowledge_chunks.source_language",
+		"llm_routing_logs.validation_issues", "llm_routing_logs.quality_score", "llm_routing_logs.cache_hit",
+		"llm_routing_logs.glossary_version", "llm_routing_logs.cross_lingual", "llm_routing_logs.target_lang",
+		"llm_routing_logs.internal_lang",
+		"chat_channels.target_language",
+		"ai_agents.target_language", "ai_agents.internal_language")
+
 	stmts := []string{
-		`ALTER TABLE asset_bundles DROP COLUMN IF EXISTS supported_languages`,
-		`ALTER TABLE asset_bundles DROP COLUMN IF EXISTS examples`,
-
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_source_language`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS source_language`,
-
-		`DROP INDEX IF EXISTS idx_llm_routing_logs_target_lang`,
-		`DROP INDEX IF EXISTS idx_llm_routing_logs_cross_lingual`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS validation_issues`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS quality_score`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS cache_hit`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS glossary_version`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS cross_lingual`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS target_lang`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS internal_lang`,
-
-		`ALTER TABLE chat_channels DROP COLUMN IF EXISTS target_language`,
-
-		`ALTER TABLE ai_agents DROP COLUMN IF EXISTS target_language`,
-		`ALTER TABLE ai_agents DROP COLUMN IF EXISTS internal_language`,
-
 		`DROP TABLE IF EXISTS glossaries`,
 	}
 	for _, s := range stmts {

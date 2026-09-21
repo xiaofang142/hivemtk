@@ -70,27 +70,12 @@ func min(a, b int) int {
 
 // Down 回滚
 func (m *LLMRoutingLogsExtendMigration) Down(ctx context.Context) error {
-	stmts := []string{
-		"DROP INDEX IF EXISTS idx_llm_routing_logs_vendor",
-		"DROP INDEX IF EXISTS idx_llm_routing_logs_token_source",
-		"DROP INDEX IF EXISTS idx_llm_routing_logs_model_type_created",
-		"DROP INDEX IF EXISTS idx_llm_routing_logs_scenario_provider",
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS scenario_provider`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS source`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS estimator`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS token_source`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS completion_cost`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS prompt_cost`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS is_fallback`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS base_url`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS vendor`,
-		`ALTER TABLE llm_routing_logs DROP COLUMN IF EXISTS model_type`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return fmt.Errorf("llm_routing_logs 扩展回滚失败: %w", err)
-		}
-	}
+	declineIndexDrop(m.Version(), "idx_llm_routing_logs_vendor", "idx_llm_routing_logs_token_source",
+		"idx_llm_routing_logs_model_type_created", "idx_llm_routing_logs_scenario_provider")
+	declineColumnDrop(m.Version(), "llm_routing_logs.scenario_provider", "llm_routing_logs.source",
+		"llm_routing_logs.estimator", "llm_routing_logs.token_source", "llm_routing_logs.completion_cost",
+		"llm_routing_logs.prompt_cost", "llm_routing_logs.is_fallback", "llm_routing_logs.base_url",
+		"llm_routing_logs.vendor", "llm_routing_logs.model_type")
 	return nil
 }
 

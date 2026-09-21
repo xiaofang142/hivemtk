@@ -45,7 +45,6 @@ func (m *EmbeddingSourceMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS embedding_source`,
-	).Error
+	declineColumnDrop(m.Version(), "knowledge_chunks.embedding_source")
+	return nil
 }

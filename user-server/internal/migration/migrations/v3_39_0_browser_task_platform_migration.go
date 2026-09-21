@@ -45,5 +45,6 @@ func (m *BrowserTaskPlatformMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(`ALTER TABLE browser_tasks DROP COLUMN IF EXISTS platform`).Error
+	declineColumnDrop(m.Version(), "browser_tasks.platform")
+	return nil
 }

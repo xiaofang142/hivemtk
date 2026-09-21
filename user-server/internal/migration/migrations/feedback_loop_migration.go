@@ -299,18 +299,16 @@ END $$`,
 //   - sop_agents.use_bandit 字段删除（不丢业务数据）
 //   - script_templates 的扩展字段删除（不丢业务数据）
 func (m *FeedbackLoopMigration) Down(ctx context.Context) error {
-	stmts := []string{
-		`DROP INDEX IF EXISTS idx_script_templates_source`,
-		`ALTER TABLE script_templates DROP COLUMN IF EXISTS champion_dialogue_id`,
-		`ALTER TABLE script_templates DROP COLUMN IF EXISTS journey_stage`,
-		`ALTER TABLE script_templates DROP COLUMN IF EXISTS trigger_keywords`,
-		`ALTER TABLE script_templates DROP COLUMN IF EXISTS effectiveness_score`,
-		`ALTER TABLE script_templates DROP COLUMN IF EXISTS source`,
-		`ALTER TABLE sop_agents DROP COLUMN IF EXISTS use_bandit`,
+	if m.db == nil {
+		return fmt.Errorf("db is nil")
 	}
 	declineTableDrop(m.Version(), "prompt_ab_tests", "bandit_arms", "prompt_candidates",
 		"champion_dialogues", "feedback_signals", "feedback_events")
-	return execAllFeedbackLoop(ctx, m.db, stmts)
+	declineIndexDrop(m.Version(), "idx_script_templates_source")
+	declineColumnDrop(m.Version(), "script_templates.champion_dialogue_id", "script_templates.journey_stage",
+		"script_templates.trigger_keywords", "script_templates.effectiveness_score", "script_templates.source",
+		"sop_agents.use_bandit")
+	return nil
 }
 
 func execAllFeedbackLoop(ctx context.Context, db *gorm.DB, stmts []string) error {

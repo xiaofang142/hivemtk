@@ -63,8 +63,7 @@ func (m *AIAgentExtensionMigration) Down(ctx context.Context) error {
 	if !m.db.Migrator().HasTable("ai_agents") {
 		return nil
 	}
-	_ = m.db.Exec("ALTER TABLE ai_agents DROP COLUMN IF EXISTS ab_experiment_ids").Error
-	_ = m.db.Exec("ALTER TABLE ai_agents DROP COLUMN IF EXISTS decision_strategy_ids").Error
+	declineColumnDrop(m.Version(), "ai_agents.ab_experiment_ids", "ai_agents.decision_strategy_ids")
 	return nil
 }
 

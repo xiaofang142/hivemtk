@@ -62,18 +62,8 @@ func (m *BrowserAuditRetryTzMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		`ALTER TABLE browser_cron_triggers DROP COLUMN IF EXISTS time_zone`,
-		`DROP INDEX IF EXISTS idx_browser_tasks_next_retry`,
-		`ALTER TABLE browser_tasks DROP COLUMN IF EXISTS next_retry_at`,
-		`DROP INDEX IF EXISTS idx_browser_llm_plans_session`,
-		`ALTER TABLE browser_llm_plans DROP COLUMN IF EXISTS kind`,
-		`ALTER TABLE browser_llm_plans DROP COLUMN IF EXISTS session_id`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return err
-		}
-	}
+	declineIndexDrop(m.Version(), "idx_browser_tasks_next_retry", "idx_browser_llm_plans_session")
+	declineColumnDrop(m.Version(), "browser_cron_triggers.time_zone", "browser_tasks.next_retry_at",
+		"browser_llm_plans.kind", "browser_llm_plans.session_id")
 	return nil
 }

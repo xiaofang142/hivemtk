@@ -268,8 +268,10 @@ func TestRagHybridMigration_DownCleansUp(t *testing.T) {
 	}
 
 	var hasCol bool
-	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'knowledge_chunks' AND column_name = 'content_tsv')`).Scan(&hasCol).Error; err != nil || hasCol {
-		t.Errorf("content_tsv column should be dropped after Down(): hasCol=%v", hasCol)
+	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'knowledge_chunks' AND column_name = 'content_tsv')`).Scan(&hasCol).Error; err != nil || !hasCol {
+		// 本包口径：Down 不销毁 knowledge_chunks 上的列——该表由模型/AutoMigrate 持有，
+		// 降级删列等于销毁在用数据（判据见 a_full_chain_migration_test.go）。
+		t.Errorf("content_tsv column must survive Down(): hasCol=%v", hasCol)
 	}
 
 	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'knowledge_chunks')`).Scan(&exists).Error; err != nil || !exists {

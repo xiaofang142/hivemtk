@@ -108,7 +108,9 @@ func TestBrowserRequireConfirmMigration_UpAndIdempotent(t *testing.T) {
 	if err := m.Down(ctx); err != nil {
 		t.Fatalf("二次 Down() 应幂等: %v", err)
 	}
-	if hasRequireConfirm(t, db) {
-		t.Error("Down 后列应已删除")
+	if !hasRequireConfirm(t, db) {
+		// browser_tasks 由模型/AutoMigrate 持有：降级删它的列等于销毁在用数据（本包口径，
+		// 判据见 a_full_chain_migration_test.go）。
+		t.Error("Down 后 require_confirm 必须仍在（降级不销毁在用列）")
 	}
 }

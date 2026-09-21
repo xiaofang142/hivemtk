@@ -168,22 +168,14 @@ func (m *KBUnificationMigration) Down(ctx context.Context) error {
 	}
 	log.Println("[v3.15] DOWN: 知识库统一迁移回滚 ...")
 
+	declineIndexDrop(m.Version(), "idx_channel_binding", "idx_knowledge_doc_agent_id", "idx_sop_agent_id",
+		"idx_faq_agent_id", "idx_agent_kb_enabled", "idx_agent_kb_type", "idx_agent_kb_kb", "idx_agent_kb_agent",
+		"idx_kb_enabled", "idx_kb_owner_agent", "idx_kb_type")
+	declineColumnDrop(m.Version(), "knowledge_documents.agent_id", "sop_templates.agent_id",
+		"faq_entries.agent_id")
+
 	stmts := []string{
-		`DROP INDEX IF EXISTS idx_channel_binding`,
-		`DROP INDEX IF EXISTS idx_knowledge_doc_agent_id`,
-		`ALTER TABLE knowledge_documents DROP COLUMN IF EXISTS agent_id`,
-		`DROP INDEX IF EXISTS idx_sop_agent_id`,
-		`ALTER TABLE sop_templates DROP COLUMN IF EXISTS agent_id`,
-		`DROP INDEX IF EXISTS idx_faq_agent_id`,
-		`ALTER TABLE faq_entries DROP COLUMN IF EXISTS agent_id`,
-		`DROP INDEX IF EXISTS idx_agent_kb_enabled`,
-		`DROP INDEX IF EXISTS idx_agent_kb_type`,
-		`DROP INDEX IF EXISTS idx_agent_kb_kb`,
-		`DROP INDEX IF EXISTS idx_agent_kb_agent`,
 		`DROP TABLE IF EXISTS agent_kb_bindings`,
-		`DROP INDEX IF EXISTS idx_kb_enabled`,
-		`DROP INDEX IF EXISTS idx_kb_owner_agent`,
-		`DROP INDEX IF EXISTS idx_kb_type`,
 		`DROP TABLE IF EXISTS knowledge_bases`,
 	}
 	for _, s := range stmts {

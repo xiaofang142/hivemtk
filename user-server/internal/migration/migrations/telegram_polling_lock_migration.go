@@ -74,9 +74,8 @@ func (m *TelegramPollingLockMigration) Down(ctx context.Context) error {
 	if !m.db.Migrator().HasTable("telegram_accounts") {
 		return nil
 	}
-	_ = m.db.Exec("DROP INDEX IF EXISTS idx_telegram_accounts_polling_owner").Error
-	_ = m.db.Exec("ALTER TABLE telegram_accounts DROP COLUMN IF EXISTS polling_heartbeat_at").Error
-	_ = m.db.Exec("ALTER TABLE telegram_accounts DROP COLUMN IF EXISTS polling_owner").Error
+	declineIndexDrop(m.Version(), "idx_telegram_accounts_polling_owner")
+	declineColumnDrop(m.Version(), "telegram_accounts.polling_heartbeat_at", "telegram_accounts.polling_owner")
 	return nil
 }
 

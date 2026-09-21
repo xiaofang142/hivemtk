@@ -111,27 +111,12 @@ func (m *AIPerfFAQSOPLayerMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		"DROP INDEX IF EXISTS idx_layer_decision_logs_intent",
-		"DROP INDEX IF EXISTS idx_layer_decision_logs_layer",
-		"DROP INDEX IF EXISTS idx_layer_decision_logs_created_at",
-		"DROP INDEX IF EXISTS idx_layer_decision_logs_session_id",
-		"DROP INDEX IF EXISTS idx_layer_decision_logs_trace_id",
-		"DROP INDEX IF EXISTS idx_sop_templates_priority",
-		"DROP INDEX IF EXISTS idx_sop_templates_enabled",
-		"DROP INDEX IF EXISTS idx_sop_templates_intent_stage",
-		"DROP INDEX IF EXISTS idx_faq_entries_question_gin",
-		"DROP INDEX IF EXISTS idx_faq_entries_hit_count",
-		"DROP INDEX IF EXISTS idx_faq_entries_category",
-		"DROP INDEX IF EXISTS idx_faq_entries_intent",
-		"DROP INDEX IF EXISTS idx_faq_entries_enabled",
-	}
 	declineTableDrop(m.Version(), "layer_decision_logs", "sop_templates", "faq_entries")
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return fmt.Errorf("ai_perf_faq_sop_layer 回滚失败: %w (SQL: %s)", err, s)
-		}
-	}
+	declineIndexDrop(m.Version(), "idx_layer_decision_logs_intent", "idx_layer_decision_logs_layer",
+		"idx_layer_decision_logs_created_at", "idx_layer_decision_logs_session_id",
+		"idx_layer_decision_logs_trace_id", "idx_sop_templates_priority", "idx_sop_templates_enabled",
+		"idx_sop_templates_intent_stage", "idx_faq_entries_question_gin", "idx_faq_entries_hit_count",
+		"idx_faq_entries_category", "idx_faq_entries_intent", "idx_faq_entries_enabled")
 	return nil
 }
 

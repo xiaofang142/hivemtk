@@ -174,17 +174,19 @@ func TestBrowserWriteLedgerConfirmBudgetMigration_UpAndIdempotent(t *testing.T) 
 	if err := m.Down(ctx); err != nil {
 		t.Fatalf("二次 Down() 应幂等: %v", err)
 	}
+	// browser_steps / browser_tasks 由模型与 AutoMigrate 持有：降级只撤销自己建的对象，
+	// 删在用的列/索引等于销毁数据与制造长期 seq scan（本包口径，判据见 a_full_chain_migration_test.go）。
 	for _, c := range b43StepCols {
-		if hasColumn(t, db, "browser_steps", c) {
-			t.Errorf("Down 后 browser_steps.%s 应已删除", c)
+		if !hasColumn(t, db, "browser_steps", c) {
+			t.Errorf("Down 后 browser_steps.%s 必须仍在（降级不销毁在用列）", c)
 		}
 	}
-	if hasColumn(t, db, "browser_tasks", "confirm_wait_sec") {
-		t.Error("Down 后 confirm_wait_sec 应已删除")
+	if !hasColumn(t, db, "browser_tasks", "confirm_wait_sec") {
+		t.Error("Down 后 confirm_wait_sec 必须仍在（降级不销毁在用列）")
 	}
 	for _, idx := range []string{"idx_browser_steps_submit_state", "idx_browser_steps_text_hash"} {
-		if hasIndex(t, db, idx) {
-			t.Errorf("Down 后索引 %s 应已删除", idx)
+		if !hasIndex(t, db, idx) {
+			t.Errorf("Down 后索引 %s 必须仍在（降级不销毁在用索引）", idx)
 		}
 	}
 }

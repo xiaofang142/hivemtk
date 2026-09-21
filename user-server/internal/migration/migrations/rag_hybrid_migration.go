@@ -315,27 +315,10 @@ func (m *RagHybridMigration) Down(ctx context.Context) error {
 	_ = m.db.WithContext(ctx).Exec(`DROP TRIGGER IF EXISTS knowledge_chunks_tsv_update ON knowledge_chunks`).Error
 	_ = m.db.WithContext(ctx).Exec(`DROP FUNCTION IF EXISTS knowledge_chunks_tsv_trigger()`).Error
 
-	indexes := []string{
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_content_hash`,
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_embedding_id`,
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_embed_status`,
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_content_tsv`,
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_contextual_tsv`,
-	}
-	for _, sql := range indexes {
-		_ = m.db.WithContext(ctx).Exec(sql).Error
-	}
-
-	cols := []string{
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS content_tsv`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS contextual_context`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS contextual_tsv`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS content_hash`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS embed_status`,
-	}
-	for _, sql := range cols {
-		_ = m.db.WithContext(ctx).Exec(sql).Error
-	}
+	declineIndexDrop(m.Version(), "idx_knowledge_chunks_content_hash", "idx_knowledge_chunks_embedding_id",
+		"idx_knowledge_chunks_embed_status", "idx_knowledge_chunks_content_tsv", "idx_knowledge_chunks_contextual_tsv")
+	declineColumnDrop(m.Version(), "knowledge_chunks.content_tsv", "knowledge_chunks.contextual_context",
+		"knowledge_chunks.contextual_tsv", "knowledge_chunks.content_hash", "knowledge_chunks.embed_status")
 
 	_ = m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS query_rewrite_cache`).Error
 	_ = m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS embedding_cache`).Error

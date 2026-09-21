@@ -56,9 +56,6 @@ func (m *AgentAssetBindingMigration) Down(ctx context.Context) error {
 	if !m.db.Migrator().HasTable("ai_agents") {
 		return nil
 	}
-	if err := m.db.WithContext(ctx).
-		Exec(`ALTER TABLE ai_agents DROP COLUMN IF EXISTS asset_bundle_id`).Error; err != nil {
-		return fmt.Errorf("移除 ai_agents.asset_bundle_id 失败: %w", err)
-	}
+	declineColumnDrop(m.Version(), "ai_agents.asset_bundle_id")
 	return nil
 }

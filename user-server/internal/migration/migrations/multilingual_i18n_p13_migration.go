@@ -54,15 +54,8 @@ func (m *MultilingualI18nP13Migration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	stmts := []string{
-		`DROP INDEX IF EXISTS idx_knowledge_chunks_translated_versions`,
-		`ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS translated_versions`,
-	}
-	for _, s := range stmts {
-		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
-			return fmt.Errorf("multilingual_i18n_p13 回滚失败 (%s): %w", truncate(s, 60), err)
-		}
-	}
+	declineIndexDrop(m.Version(), "idx_knowledge_chunks_translated_versions")
+	declineColumnDrop(m.Version(), "knowledge_chunks.translated_versions")
 	return nil
 }
 
