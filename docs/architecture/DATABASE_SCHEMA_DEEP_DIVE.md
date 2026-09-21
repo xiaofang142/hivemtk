@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.17（2026-09-21，T-P5-04 **放量三段灰度 + LTC-29 观测交付**：新增 §4.20 —— 三档配置在物理上是 `system_config_kv` 那一行 `text` 里的几个字节（8KB 整份预算、名单 200×128、缓存 TTL 60s 让"改档不重启"不等于"改完即全网生效"）、送达率为什么**根本没有 join 键**（`sms_records` 缺单号列、`sms_delivery_statuses` 只由 webhook 建行、provider 把 BizId 解析完又丢掉）、以及退订判据在 SMS 域原来有两个入口漏了；上一版 v1.16 是 T-P5-03 的交付）
+> **版本**：v1.18（2026-09-21，T-P6-01 **报价域两张表交付**：新增 §4.21 —— 一行 = 一个版本的 `quotes`（10 列 4 索引，`uq_quotes_quote_version` 是 AC① 的唯一硬保证，且**刻意没有**单列 `quote_id` 唯一索引）与 `(quote_row_id, line_no)` 复合主键、无代理键的 `quote_line_items`（"旧版不可变"因此是形状的结果而不是规矩），表头上合计/审批列/行内币种/租户列四样一律不建的理由，版本链的三条写路径与八个并发写者恰好一个赢的实测；上一版 v1.17 是 T-P5-04 的交付）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -2091,6 +2091,104 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
 - **aliyun 发送用的是硬编码测试模板** `TemplateCode = "SMS_000000001"`（`sms.go:305`）：不在本卡范围（改了要真号验证），但送达率这条链上它是"外发根本发不出去"级别的前提，登记不修。
 - 台账 58/68 一字未动 ⇒ 本卡没有新增"接了线没人读"的资产，也没有把任何一格转成 wired。
 
+### 4.21 报价的两张表：一行 = 一个版本，"旧版不可变"是主键形状的结果而不是一条规矩（T-P6-01）
+
+卡面两条 AC：①"同一 `quote_id` 多版本共存、版本单调递增、旧版不可变"；②"客户还价 → 新版本由系统生成而非覆盖（LTC-12）"。本卡交付 **2 张新表、19 列、5 条索引、`migrations/` 零变更**；下面先给直读 `information_schema` / `pg_indexes` 的实测形状，再说清每一格为什么长成这样。
+
+#### 落点（2 新增表 ＋ 5 个文件；建表登记走 `allModels()`）
+
+| 路径 | 增/改 | 与库的关系 |
+|---|---|---|
+| `internal/model/quote.go` | **新增** 202 行 | 两张表的列、值域、索引标签 |
+| `internal/model/quote_test.go` | **新增** 317 行 | 9 条标签层判据 |
+| `internal/pkg/db/quote_migration_test.go` | **新增** 420 行 | 6 条真库判据（列集合、复合索引、主键、numeric） |
+| `internal/repository/quote.go` | **新增** 436 行 | 版本链的唯一写路径 |
+| `internal/repository/quote_test.go` | **新增** 665 行 | 12 条仓储判据（含 8 协程并发追加） |
+| `internal/pkg/db/migrate.go` | ＋6 | `&model.Quote{}` 与 `&model.QuoteLineItem{}` 两处登记 |
+| `scripts/check-unwired-assets.sh` | ＋14 | 项 21 两行，均按 `UNWIRED` 登记 |
+
+`migrations/` 零变更：本仓生产建表只跑 GORM `AutoMigrate`（启动期版本化迁移固定 `v1.0.0→v1.0.0` 是空跑，T-P2-01/04/05/06、T-P3-01/03、T-P4-01 七次实测同源）。卡面写的 `v3_49_0_quote_migration.go` 因此**不产出**，与 T-P4-01 的 `v3_48_0_...` 同一处置。
+
+#### `quotes` 实测形状（10 列 4 索引）
+
+| 列 | PG 实测 | 默认 | 为什么是这个形状 |
+|---|---|---|---|
+| `id` | `text NOT NULL`（`quotes_pkey`） | — | 版本行的主键。它被明细表的 `quote_row_id` 抄走，所以必须是**自生成的稳定键**，不能是 serial |
+| `quote_id` | `varchar(64)` | — | 一条链的对外身份。**故意不带唯一索引**（见下） |
+| `opportunity_id` | `varchar(64)` + `idx_quotes_opportunity_id` | — | 宽度由下游 `sales_events.opportunity_id` 的 varchar(64) 定；索引给它是为了按商机取报价 |
+| `version` | `bigint NOT NULL DEFAULT 1` | `1` | 与 `quote_id` 共一条复合唯一索引。`not null`+`default` 成对是**存量表补列**过得去的前提（PG 的 `ADD COLUMN … NOT NULL` 不带默认值会当场失败） |
+| `status` | `varchar(16)`，**无索引** | — | 五个取值（draft/sent/accepted/rejected/expired）。不建索引的判据与 `opportunities.status` 同一条：本卡没有"全站按状态捞"的读方 |
+| `source_id` | `text` + `idx_quotes_source_id` | — | 指向**基准版本行**的 `id`。它是 AC② 的物证：这一版是从哪一版长出来的 |
+| `valid_until` | `timestamptz` 可空 | — | 指针类型：未设有效期必须是 `NULL`，不能是零值时间 —— 后者会被"过期报价"的聚合读成"公元 1 年就过期了" |
+| `currency` | `varchar(3)` | `'CNY'::varchar` | 只在表头。行项目上**没有**币种列：一版里混两种币种时"合计"这个概念当场没有定义 |
+| `created_at`/`updated_at` | `timestamptz` | — | — |
+
+```
+quotes :: quotes_pkey                 UNIQUE (id)
+quotes :: uq_quotes_quote_version     UNIQUE (quote_id, version)     ← AC① 的唯一硬保证
+quotes :: idx_quotes_opportunity_id   (opportunity_id)
+quotes :: idx_quotes_source_id        (source_id)
+```
+
+四条索引，**没有一条**是单列 `quote_id` 唯一。那条索引是 AC① 的反面：它表达的是"一版一号"，装上之后同一张报价单的第二版永远插不进去。这也是本卡必须在**真库**里点名列集合的原因 —— GORM 对"两列各写一次同名 `uniqueIndex:`"的处理是它自己拼一个复合索引，两列的名字只要差一个字符，它就建成两个单列索引：**表能建、插入照样重复、测试全绿**。判据写在 `TestQuoteCompositeUniqueIndexIsReallyComposite` 的四臂（pg_index 列集合、v1/v2 共存、同版本第二次被拒且报的是这条索引名、不同 `quote_id` 复用版本号必须允许）。
+
+#### `quote_line_items` 实测形状（9 列 1 索引）
+
+```
+quote_line_items :: quote_line_items_pkey  UNIQUE (quote_row_id, line_no)
+```
+
+| 列 | PG 实测 | 为什么 |
+|---|---|---|
+| `quote_row_id` | `text NOT NULL`（主键之一） | 指向**某一版**，不是指向"这张报价单"。所以新版必须重抄一遍自己的行 |
+| `line_no` | `bigint NOT NULL`（主键之一） | 同一版内唯一。**不同版复用同一行号是必须的** —— 否则"第二版的第一行"插不进去，链直接断在明细上（这一臂是 `TestQuoteLineItemPrimaryKeyIsPerVersionRow` 的全部价值） |
+| `product_id` | `varchar(64)` | 与 `rag_products` 那边的 `id size:64` 同宽，不另起口径 |
+| `title` | `text` | 商品名的副本：报价要能重放**当时**的名称，不能靠 join 现值 |
+| `quantity` | `numeric(12,2)` | 数量可以是 0.5 个套餐年，所以不是整数 |
+| `unit_price` / `amount` | `numeric(14,2)` | 与 `order_drafts` 同宽（草稿与报价明细装的是同一类东西）；`quotes` 表头**没有**金额列 |
+| `discount_percent` | `numeric(5,2)` | 上限 999.99 足够装折扣百分比 |
+| `created_at` | `timestamptz` | — |
+
+**这张表没有代理主键**，而这正是"旧版不可变"最省事的表达：一行明细的身份是"哪一版的第几行"，于是**原地改一行在物理上不成立**（改 = 换主键 = 换一行）。所以"旧版不可变"不是一条要人守的规矩，而是形状的直接结果；仓储接口里也没有任何 `Set*`/`Replace*`/`Delete*` 方法（`TestQuoteRepo_InterfaceHasNoContentRewriter` 钉住接口形状，唯一的 `Update` 是 `UpdateStatus`）。
+
+#### 表头上刻意没有的四样东西
+
+| 没建 | 理由（都是别的表已经有的东西，抄过来会立刻分家） |
+|---|---|
+| 任何合计列（`total`/`subtotal`/`amount`） | 唯一事实源是行项目之和（T-P6-02 AC③ 要断言"合计与落库一致"，两处各存一份就没有"一致"可言） |
+| 任何审批列（`approval_id`/`approved_by`） | `approval_requests` 是审批状态唯一来源；在报价上再放一份就是 §G13/G20 那一类"两份判据谁说了算"的翻版 |
+| 行项目上的 `currency` | 混币种时合计没有定义；换币种只能另起一版 |
+| 租户列（`tenant`/`org_id`/`corp`/`workspace`/…） | X3 单商户（ADR-014 已 Simplified）。真库侧也有一条负判据守着（`TestQuoteHasNoTenantColumnAtDBLevel`） |
+
+#### 版本链的写路径（`internal/repository/quote.go`）
+
+三条且只有三条：`Create`（第一版，`Version` 由本层补成 1、`SourceID` 强制清空）、`Append`（`Version = 基准 +1`、`SourceID = 基准行 id`，两者都不取调用方那份）、`UpdateStatus`（`WHERE id = ? AND status = ?` 的 CAS，写集合只有 `status` + `updated_at`，**`version` 不动** —— 改状态不产生新内容）。
+
+- 调用方自带版本号 ⇒ `ErrQuoteVersionReserved`（报错而不是静默换算：那说明它想做的是"覆盖"，本层不支持这件事）。
+- 并发以同一基准追加 ⇒ 八个里恰好一个赢，其余七个收 `ErrQuoteVersionConflict`（`23505` **且** 索引名两个条件都命中才算，把主键冲突读成版本冲突会让重复提交变成链上多一版）。裁决权在库级索引而不是进程内锁：多实例部署下锁只管得住半个链。
+- 跨链追加（`quote_id` 或 `opportunity_id` 与基准不符）整条拒；基准行不存在 ⇒ `ErrQuoteNotFound`，且被拒的调用**一行不留**。
+- 明细的存在性探针在写入**之前**、整批一个事务：孤儿明细让报表显示"这张报价没有行项目、合计 0"，半截批次让合计变成一个**看起来合理**的错误数字。
+- `Latest` 按 `version DESC` 选版，不按 `created_at` —— 补录一版旧内容时两者会分家，而"当前报给客户的是哪一版"只能有一个答案。
+
+#### 值域（Go 侧，库里无 ENUM）
+
+`draft / sent / accepted / rejected / expired` 五取一，`QuoteStatusKnown()` 逐字比、不做规范化。库里没有 CHECK 约束，与全仓取向一致（值域散在 PG ENUM、CHECK、Go 常量三处是 §八 记的债，本卡不再加第四种形状）。
+
+#### 本卡实跑
+
+- 三层 **27 条顶层判据全绿**：`internal/model` 9 条、`internal/pkg/db` 6 条、`internal/repository` 12 条（`-count=1 -v` 的锚定 `^--- PASS` 计数）。
+- 三包全量在 **`TZ=UTC` 与 `TZ=Asia/Shanghai` 两条腿都绿**（db 81.3s / repository 83.1s；第二腿 70.0s / 79.2s），`go build ./...` rc=0。
+- 变异电池 8 格（冲突判定、版本递增、存在性探针、CAS 条件、行序、选版依据、跨链守卫、白名单外溢）**全部 KILLED**，红因逐条点名到用例；还原后 `quote.go` md5 与基线一致。其中两格第一版是**变异脚本自己写坏**（`msg` 变量失去唯一引用 ⇒ 编译错；一处多敲的空格 ⇒ 语法错），修变异不修期望后重跑才拿到 KILLED。
+- 台账 **58/70**（本卡 +2 行，均为 `UNWIRED`）；反向验证：把其中一格改成 `wired` 后门立即 rc=1 报"登记为已接线却无调用点"，改回 rc=0。
+
+#### 本卡之后仍不成立（写清不藏着）
+
+- **零生产写入方**：`quotes` 表今天只有测试在写。台账项 21 两格就是登记这件事的，翻 `wired` 的条件是 T-P6-02 的装配点出现。
+- **没有 HTTP 出口、没有前端**：报价的读方要等 T-P6-03/04。所以"报价域已落地"这句话今天的准确形状是"schema 与仓储已落地"。
+- **版本链的"作废"没有表达**：五个状态里没有 `withdrawn`/`obsolete`。当前口径是"被取代"由链本身表达（`Latest()` 之外皆历史），若 T-P6-03 判定需要一个显式状态，那是加一次值域、不是加一列。
+- `quote_id` 与 `id` 的**生成器还没有**（本卡只交付容器）：宽度上限 64 由 `quotes.quote_id varchar(64)` 与 `quote_line_items.product_id varchar(64)` 定死，构造器落在 T-P6-02。
+- 一版里行的**数量与金额区间**没有任何校验（仓储无业务判断，`TestQuoteRepo_DoesNotValidate` 钉住）：`discount_percent` 现在写得进 12.34 也写得进 500，阈值归 T-P6-04。
+
 ---
 
 ## 五、索引策略
@@ -2112,6 +2210,7 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
 | 客户列表 | `(status, created_at DESC)` | status 选择性高 |
 | 触达历史 | `(customer_id, platform, created_at DESC)` | 客户维度高 |
 | 知识库内容检索 | 无复合索引；实为 `idx_knowledge_chunks_product_id` 等**单列** btree | 登记的 `(kb_id, doc_type, status)` 经 T-P2-05 实测**在库里不存在、列名也对不上**：`knowledge_documents` / `knowledge_chunks` 两张内容表都没有 kb_id 列（检索按 `product_id` 过滤，见 G18），2026-08-25 快照照抄了别的系统的索引口径。直读 `pg_indexes` 的实算是：这两张表上全部是 GORM tag 生成的单列索引（`product_id` / `document_id` / `embed_status` / `content_hash` / `source_language` …）加 `content_tsv` 系 GIN 与 `embedding` 的 HNSW，**零条复合索引** |
+| 报价版本链（`quotes`） | `uq_quotes_quote_version (quote_id, version)` **唯一** | `quote_id` 定链、`version` 定链内第几版；两列**必须**一起唯一 —— 单列 `quote_id` 唯一等于"一版一号"（第二版插不进去），单列 `version` 唯一等于"全站版本号不许重复"（第二张单的第一版插不进去）。明细表 `quote_line_items` 反过来**没有**任何单列索引：它的 `(quote_row_id, line_no)` 复合主键就是全部，而"同版本重复行号被拒、不同版本复用行号必须允许"这两臂正是钉在这条主键上的（T-P6-01） |
 
 ### 5.3 JSONB 字段（必须 GIN 索引）
 
@@ -2265,3 +2364,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.15 | 2026-09-21 | @backend | 新增 §4.18 **`agent_mode` 的第一次真实读取**（N-3 / T-P5-02）：`lifecycle.Resolver` 从零调用方变成有第一处生产调用点，`agent_lifecycle_wiring.go` 按 `agent_mode` 分派 passive/active，主动那侧**只编排 SOP**（C7 裁定，`TestActiveNeverImportsConversationEngine` 用 go/parser 静态钉住本包 import 集）。schema 侧本卡**零新表零新列**，所以登记的重点全在代价：① `ai_agents.agent_mode` 有 `index` 但没有任何 `WHERE agent_mode = ?`，本卡读的是主键取行后的内存字符串比对（那行索引仍然只是将来按模式批量取的预备）；② 归因三个键写进 `sop_executions.execution_data`，而那列 gorm tag 是 `type:text` 不是 `jsonb` ⇒ 逐行看得见、按值查不动，P8 看板若建在 `one_id` 上会撞全表扫（按 C7 不建列，**有意识欠账**）；③ `one_id` 在本仓实测**三种宽度**（100 / 128 / `text`，权威源 `customers.unified_id` 是 128，且 `script_exposure_logs` 的注释就记着 varchar(64) 曾溢出）⇒ 任何把 one_id 提成列的后续卡必须先定宽度，按 100 建会把 128 的源顶到 INSERT 报错；④ 合成会话键从 `agent_code` 换成 `agent_id`，因为 `session_id varchar(120)` 的 12 字节余量押在另外两张表的列宽上。另登记一处**本文件既有口径的错**：`api-inventory.sh:32` 只 grep `internal/router/**`，从 `internal/app` 注册的路由它看不见 ⇒ §4.17 那句清单无 diff ⇒ 零新端点的**结论**为真（已核 `00aeff61` 零路由）但**证据**是道看不见证据的门，本卡的新端点就是它漏掉的第一个。台账 49/55 → 52/58 → **55/64**，项5 转 wired、项19 六格（两 wired 各用一把 router.go 变异证过有牙，且摘掉装配点后 app＋router 测试全绿、线上稳定回 503 ⇒ 台账是唯一看得见它的东西） |
 | v1.16 | 2026-09-21 | @backend | 新增 §4.19 **`reach_send` 节点：图上多一步"先批准才出域"**（T-P5-03）：Active 外联从"代码里的一段 if"变成"图上的一步"。**schema 侧零新表、零新列、零新索引、`migrations/` 零变更**，所以登记面全在"值落在哪一列、谁按值查得动"：① 四个新键全挤在 `sop_executions.execution_data`（`type:text`）里 —— `_reach_skipped`（值域 `dnc`/`cooldown`/`already_sent`/`approval:<状态>`，四种"没发出去"的处置动作完全不同，合并成一个 `skipped` 等于把三件事混成一件）、`_reach_channel`、`_reach_message_id`，以及沿 `message_sent:` 同族命名空间的幂等键 `reach_sent:<execution_id>:<node_id>`；② **挂起期在库里是四行四个状态的组合** —— `handleNodeWaiting` 从不写 `sop_executions.status`，所以"卡在哪儿"只能读 `wait_event=approval` 那一列，配 `approval_requests=pending` ＋ `sop_timers=pending` ＋ `sop_executions=running`；③ **一条既有 DB 约束顺手当了兜底**：`uq_approval_request_open (subject_type, subject_id) WHERE status='pending'` ＋ `subject_id=<exec>--<node>` ⇒ 同一步挂起期不可能有两条 pending 审批行（约束来自库、不是应用层），与节点自己那枚跨重启的幂等键各管一件事；④ **对 §4.18 一句口径的收窄**："归因/产物值按值查不动"说重了 —— 这些值在 `sop_exec_events` 的 `input`/`output`/`side_effects` 三列各有一份 **jsonb 镜像**（`writeExecEvent` 每次把整份 `execution_data` 塞进 `input`）⇒ 查得动，真正的代价是那三列**没有任何 GIN 索引**，按值查＝扫一张比执行表大一到两个量级的事件表；结论（P8 建在这些键上会撞全表扫）不变，措辞要换；⑤ 两个审批主体的键**刻意不合成一枚**（图上腿源自执行行 `<exec>--<node>`、服务侧 W-1 门源自客户行 `unified_id`＋渠道＋收件人），合成即"改图＝改归因"，由 P1 变异格背书；⑥ `sop_executions.customer_id` 是 `varchar(64) NOT NULL` **无 default** ⇒ 空串是合法存量形状，这一条列定义直接立了一条用例（无 customer_id 时靠 `one_id` 找回身份）。**卡面落点偏差如实登记**：卡上写"M `proactive_reach.go`（接入检查点）"，实际该文件**零 diff**（三判据早在 `ReachByCustomer` 里，缺的是图上那一腿）。另有两道静态锁各写明自己看不见什么（出域符号扫描看不见"不被 `NodeType()` 认出来的执行器"；装配点源码锁看不见"这一行是否真被执行"），台账项 20 四行、现值 **55/64 → 58/68**（两个端点在同一棵克隆里分别用 HEAD 版与工作树版脚本各实测一次），行为变异电池 **24 格全 KILLED、无未登记存活** |
 | v1.17 | 2026-09-21 | @backend | 新增 §4.20 **放量三档落在哪一列**（T-P5-04）：**仍是零新表、零新列、零索引、`migrations/` 零变更**，但这一节的中心结论是"**没有一列可加**"式的缺：① 档位是 `system_config_kv` 里 `key='ltc.config'` 那一行 `value text` 内的一个 JSON 节（`model/system_config_kv.go:6-11`）⇒ 预算是整份文档 8KB、名单 ≤200 条且单条 ≤128 字节（对齐 `one_id` 最大宽度）、判定键精确等值所以空串/带空格/重复条目在写侧就被拒，**且没有任何 SQL 能按档位查历史**；② "改档不需要重启"要说准成"每请求读＋60s 进程内缓存 ⇒ 多副本对其余副本最迟 60s 生效"，这条本来就是 `ReadingHints` 第一条，写档位的注释不许对它例外；③ **送达率不是接错线、是根本没有 join 键**：`sms_delivery_statuses.message_id` 是唯一归因键且这张表**只由 webhook 建行**，而 `sms_records` 没有单号列、`SmsService.SendSms` 只回 `error`、`sendAliyun` 把 `BizId` 解析进 `result.BizID` 后在成功分支**原样丢弃**、tencent/huawei 成功分支返回硬编码 `"OK","OK"` ⇒ 外发上行的是常量 `sms_out`，它**一个字符都没进过送达表**（"照它建行会挤成一行"是给未来接线的警告，不是现网事实）；④ 退订判据在 SMS 域原有两个入口漏了 ——`SendSms` 命中退订 `return nil`（每个调用方读成"发成功了"：记成功、烧幂等键、进送达率分母）改回 `ErrDoNotContact` 哨兵（复用既有错误 ⇒ 队列/SOP 已有的 DNC 处置自动接上，零新分支），`ResendSms` **从来不查退订**（直连 `dispatchToProvider`）补同一道检查且放在改状态之前；⑤ **一处自家叙述的实测纠偏**：初版 reason 串写"外发链路写进去的 message_id 是常量 sms_out"，逐条重验后不成立（表只由 webhook 按运营商单号建行）⇒ reason/unblocker 与包注释改成实测形状，并给用例加一条"不许把推断写成实测事实"的反向断言（`6897d5c3`）；⑥ 实跑：`--shared` 克隆 `/tmp/p504gate/hivemtk`（HEAD `d94810d8`、0 脏文件）里 build/vet/gofmt rc=0、十道门 **rc 全 0**（台账 **58/68 与本卡开工前同值 ⇒ 本卡零台账行变更**、`api-inventory` 生成物零 diff ⇒ 无新端点），`app`＋`router` 两时区各 rc=0，`service` 本卡子集两时区各 **232 条顶层全 PASS**（该 232 与活树静态同名集合逐条比对 diff 为空；早前那个 280 是**非锚定** grep 含子用例的另一个数，不可混引），`service` 全量 CST **rc=0 pass=3617 fail=0 skip=3（451.778s）**、UTC rc=1 且唯一一条红是**负载相关假红**（`ab_experiment_test.go:50` 断"5 写 2 缓冲⇒恰丢 3"，而构造函数里就起了消费协程 ⇒ 单跑 20/20 绿、带负载 2 FAIL/400 复现，用例由 `8fecb6ad` 引入、与本卡无交集）；10 格变异电池 **KILLED=10／SURVIVED=0**、还原逐文件 md5 一致 |
+| v1.18 | 2026-09-21 | @backend | 新增 §4.21 **报价的两张表：一行 = 一个版本**（N-5 / T-P6-01）：直读 `information_schema` + `pg_indexes` 给出 `quotes`（10 列 4 索引，`uq_quotes_quote_version (quote_id, version)` 是 AC① 的唯一硬保证，且**刻意不建**单列 `quote_id` 唯一索引 —— 那条索引表达的是"一版一号"，装上后同一张单的第二版永远插不进去）与 `quote_line_items`（`(quote_row_id, line_no)` 复合主键、**无代理键**，所以"原地改一行"在物理上不成立，"旧版不可变"是形状的结果而不是规矩）的实测形状；写明表头上合计列／审批列／行内币种／租户列四样一律不建的理由（各有既成事实源：行项目之和、`approval_requests`、混币种时合计没有定义、X3）、版本链只有三条写路径（`Create`/`Append`/`UpdateStatus`，后者的写集合是 `status`+`updated_at` 且 `version` 不动）、八个并发追加恰好一个赢且其余七个收 `ErrQuoteVersionConflict`（裁决权在库级索引而不是进程内锁：多实例下锁只管得住半个链），并登记本卡**零生产写入方**为台账项 21 的两行 `UNWIRED`。GORM 那条实测坑一并记下：两列各写一次同名 `uniqueIndex:` 时它自己拼复合索引，**名字差一个字符就退化成两个单列索引，表能建、插入照样重复、测试全绿** ⇒ 复合索引的唯一性只能在 pg_index 里点名列集合来断 |

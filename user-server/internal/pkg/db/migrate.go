@@ -343,6 +343,12 @@ func allModels() []any {
 		&model.Opportunity{},
 		&model.PasswordHistory{},
 		&model.RagMetricsDaily{},
+		// Quote / QuoteLineItem（表 quotes / quote_line_items）：T-P6-01 / N-5 报价域第一层。
+		// 与 Opportunity 同一句理由登记：本卡只交付列与索引形状，生成方在 T-P6-02。
+		// 这里少登记一张会是一种**不对称**的坏法：quotes 建了、明细没建 ⇒ 报价存得下、
+		// 行项目写不进去，而"合计对不对"的用例连不上明细表时是 Skip 不是 Fail。
+		&model.Quote{},
+		&model.QuoteLineItem{},
 		&model.RecoveryQueue{},
 		&model.SecurityAlert{},
 		&model.SystemConfigKV{},

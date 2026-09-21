@@ -363,6 +363,20 @@ BASELINE=(
   "20|SOP 外发出口的装配点（摘掉即图上每一步都能走完、只有最后发送永久失败）|func SetSOPReachSender|service\\.SetSOPReachSender\\(|internal/router|wired"
   "20|退订检查在生产构造点上的装配（setter 侧零生产调用方，摘掉这行退订用例仍全绿）|func NewDoNotContactService|dnc:[[:space:]]*NewDoNotContactService\\(|internal/service|wired"
   "20|节点 Tools 字段的执行器读取方（写入靠深拷贝原样抄、读取 0 处，外发因此走独立节点类型）|Tools +\\[\\]string|\\.Node\\.Tools|"
+  # ---- T-P6-01（报价模型 + 版本链）新增两格 --------------------------------------
+  # 两格今天都是 UNWIRED，而且**必须**按 UNWIRED 登记：这一卡交付的是 schema 与仓储，
+  # 全仓还没有一个人构造报价。留白的话下一次读到"报价域已落地"就是假的。
+  #   21a 盯"有没有人构造报价仓储"。scope 刻意排除 internal/repository —— 实现文件里
+  #       两个构造函数的**定义**永远在，把它算成接线就从第一天起假绿（项16 的 16a 同一课）。
+  #       翻 wired 的条件是 T-P6-02 的装配点出现（app 侧或 service 侧真赋值）。
+  #   21b 盯"有没有人往 quotes 里写行业务数据"。scope 同样排除 internal/pkg/db：
+  #       那里的 `&model.Quote{}` 是**建表登记**不是写入。这一格与 21a 分开是因为接线
+  #       有两个断点（装配仓储 / 真的产生一行报价），只盯一个会让另一个断了也没人知道。
+  #       两格一起红才是"报价域整条腿没了"，单独红各有各的修法。
+  # 读方的口径（回灌进文档的那句）：从今天起 quotes 表里有行 = 有人显式建过，
+  # 而"表是空的"仍同时可能是"取数失败"—— 那是 T-P6-04 的出口要分的事，不是这两格。
+  "21|报价仓储的装配入口（T-P6-02 起才该翻 wired）|type QuoteRepository interface|NewQuoteRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|"
+  "21|报价行的生产写入点（今日零写入方：全仓还没有人构造过一条报价）|type Quote struct|model\\.Quote\\{|internal/service internal/controller internal/app|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go
