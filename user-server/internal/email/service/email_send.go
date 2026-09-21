@@ -8,12 +8,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/mail"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/service"
 
 	"github.com/google/uuid"
 	"gopkg.in/gomail.v2"
@@ -45,14 +48,33 @@ const (
 	emailDrainBatch = 100
 )
 
+// UnsubscribeLinker 签发退订链接的能力（由 *service.EmailUnsubscribeService 满足）。
+//
+// 接口写在本包而不是直接用 internal/service 的类型：本包对外只依赖"能签出一条链接"这件事。
+// jobID 目前恒为空 —— EmailSend 这张表没有任务归属（群发侧的归属在 email_lists.jobs_id）。
+type UnsubscribeLinker interface {
+	GenerateUnsubscribeLink(ctx context.Context, email, jobID string) (string, error)
+}
+
 type EmailSendService struct {
 	repo      repository.EmailSendRepository
 	smtpRepo  repository.EmailSmtpRepository
 	unsubRepo repository.EmailUnsubscribeRepository
 
+	// unsubLinker 退订链接签发器，默认构造即带（见 NewEmailSendService）。
+	unsubLinker UnsubscribeLinker
+	// unsubWarnOnce 让"签发失败"只出声一次：缺密钥是配置错误，看第一行就够，
+	// 每封一行只会把别的日志埋掉。
+	unsubWarnOnce sync.Once
+
 	// deliver 是"把这一封真的投出去"的接缝，默认为 sendActualEmail（连真 SMTP）。
 	// 抽出来的理由与 SMS 侧同源：合规判据与节拍逻辑要在测试里跑，而测试不该连 SMTP。
 	deliver func(ctx context.Context, email *model.EmailSend) error
+}
+
+// SetUnsubscribeLinker 替换退订链接签发器（传 nil = 明确不要退订出口）。
+func (s *EmailSendService) SetUnsubscribeLinker(linker UnsubscribeLinker) {
+	s.unsubLinker = linker
 }
 
 // SetEmailUnsubscribeRepository 注入退订名单读取句柄。
@@ -85,6 +107,10 @@ func NewEmailSendService() *EmailSendService {
 	return &EmailSendService{
 		repo:     repository.NewEmailSendRepository(),
 		smtpRepo: repository.NewEmailSmtpRepository(),
+		// 默认就带签发器：本构造函数有三个调用点（排水装配、HTTP controller、reach 适配器），
+		// 只在装配层注入会让"客户点一下立即发送"这条路没有退订出口 —— 而那条路恰恰是
+		// Gmail/Yahoo 会抽样看到的那条路。退订链接只依赖 HMAC 密钥与 base URL，不碰 DB。
+		unsubLinker: service.NewEmailUnsubscribeService(nil),
 	}
 }
 
@@ -262,11 +288,27 @@ func (s *EmailSendService) sendActualEmail(ctx context.Context, email *model.Ema
 		return fmt.Errorf("邮件发送失败：未找到可用的 SMTP 配置（请配置 SmtpID 或 EMAIL_163_*/QQ_EMAIL_*/SMTP_* 环境变量）")
 	}
 
+	m := s.buildEmailMessage(ctx, smtpConfig, email)
+
+	d := gomail.NewDialer(smtpConfig.Server, smtpConfig.Port, smtpConfig.Username, smtpConfig.Password)
+
+	return d.DialAndSend(m)
+}
+
+// buildEmailMessage 组装一封外发的信：头、正文、附件。
+//
+// 单独成函数是因为"这封信长什么样"是能断言的（本包其余部分的判据都要连 SMTP 或 DB），
+// 而退订出口恰恰是最需要被断言的那部分 —— 它错了不会报错，只会让收件人找不到退订入口，
+// 然后以举报率的形式打在发信域信誉上。
+func (s *EmailSendService) buildEmailMessage(ctx context.Context, smtpConfig *model.EmailSmtp, email *model.EmailSend) *gomail.Message {
+	unsub := s.unsubscribeLink(ctx, email.To)
+
 	m := gomail.NewMessage()
 	m.SetHeader("From", smtpConfig.Username)
 	m.SetHeader("To", email.To)
 	m.SetHeader("Subject", email.Subject)
-	m.SetBody("text/html", email.Content)
+	mail.Unsubscribe(unsub)(m)
+	m.SetBody("text/html", s.emailBody(email, unsub))
 
 	if email.Attachments != "" {
 		attachments := strings.Split(email.Attachments, ",")
@@ -287,10 +329,34 @@ func (s *EmailSendService) sendActualEmail(ctx context.Context, email *model.Ema
 			m.Attach(safePath)
 		}
 	}
+	return m
+}
 
-	d := gomail.NewDialer(smtpConfig.Server, smtpConfig.Port, smtpConfig.Username, smtpConfig.Password)
+// emailBody 正文 = 用户录入的内容 + 系统追加的退订页脚。
+//
+// 页脚与头部链接同源（都来自这一次 unsubscribeLink 的结果）：两边各签一条的话，
+// 收件人点的和客户端读到的是两个 token，退订落库时归属就对不上。
+func (s *EmailSendService) emailBody(email *model.EmailSend, unsub string) string {
+	return mail.AppendUnsubscribeFooter(email.Content, unsub)
+}
 
-	return d.DialAndSend(m)
+// unsubscribeLink 现签一条退订链接，空串 = 这封信没有退订出口。
+//
+// 走 fail-open（签不出来也照发）的理由：签发失败几乎总是 EMAIL_UNSUBSCRIBE_SECRET 没配，
+// 那是配置缺陷。把它放大成"整批发不出去"是一句 503 能查的事，而"信发出去了但没退订出口"
+// 要靠收件人举报才发现 —— 所以这里既不能阻断发信，也不能不出声。
+func (s *EmailSendService) unsubscribeLink(ctx context.Context, to string) string {
+	if s.unsubLinker == nil {
+		return ""
+	}
+	link, err := s.unsubLinker.GenerateUnsubscribeLink(ctx, to, "")
+	if err != nil {
+		s.unsubWarnOnce.Do(func() {
+			logger.Warnf("邮件退订链接签发失败（本进程只报这一次），后续邮件将不带 List-Unsubscribe 头发出: %v", err)
+		})
+		return ""
+	}
+	return link
 }
 
 func resolveSmtpFromEnv() *model.EmailSmtp {
