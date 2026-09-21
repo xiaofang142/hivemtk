@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.16（2026-09-21，T-P5-03 **Active 外联闸门串联交付**：新增 §4.19 —— SOP 图上多出的 `reach_send` 这一步在库里留下哪四个键、挂起期为什么是"四行四个状态的组合"而不是"一条 pending 记录"、`approval_requests` 那条部分唯一索引怎么顺手当了重复挂起的兜底、以及把 §4.18 那句"按值查不动"收窄成"查得动、但没有索引"；上一版 v1.15 是 T-P5-02 的交付）
+> **版本**：v1.17（2026-09-21，T-P5-04 **放量三段灰度 + LTC-29 观测交付**：新增 §4.20 —— 三档配置在物理上是 `system_config_kv` 那一行 `text` 里的几个字节（8KB 整份预算、名单 200×128、缓存 TTL 60s 让"改档不重启"不等于"改完即全网生效"）、送达率为什么**根本没有 join 键**（`sms_records` 缺单号列、`sms_delivery_statuses` 只由 webhook 建行、provider 把 BizId 解析完又丢掉）、以及退订判据在 SMS 域原来有两个入口漏了；上一版 v1.16 是 T-P5-03 的交付）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -2004,6 +2004,95 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
 ---
 ---
 
+### 4.20 放量三档落在哪一列：`system_config_kv` 那一行 JSON 的 8KB 预算，与"送达率根本没有 join 键"的两张表（T-P5-04）
+
+卡面两条 AC：①"每阶段有投诉率/送达率对比数据"；②"一键回滚 = 关开关，不回滚代码"。**schema 侧结论是零新表、零新列、零索引、`migrations/` 零变更** —— 档位落在既有那一行 KV 里。但 AC① 的两项指标今天**算不出来**，而缺的恰好就是"列"：一张表缺一列、另一张表缺一个写入方。所以这一节登记的既是"档位在物理上是哪一行的哪几个字节"，也是"要按档取数还差哪一列"。
+
+#### 落点（3 新增 ＋ 7 修改，共 10 个代码路径；`migrations/` 零变更）
+
+| 路径 | 增/删 | 与库的关系 |
+|---|---|---|
+| `internal/service/ltc_reach_rollout_test.go` | **新增** 333 行 | 15 条顶层判据：值域、归一化、四档各自的方向、degraded 取严、JSON 往返 |
+| `internal/app/reach_rollout_wiring_test.go` | **新增** 517 行 | 11 条：闸门按档判定、两把旗子各管一段、观测面把"算得出来/算不出来"分开 |
+| `internal/service/sms_unsubscribed_send_test.go` | **新增** 155 行 | 4 条：退订号码在首发与重发两个入口都不许被记成"已发送" |
+| `internal/service/ltc_config.go` | ＋228 −1 | `reach_rollout` 节的解析/校验/归一化/判定与读数口径 |
+| `internal/app/reach_gate_wiring.go` | ＋204 −8 | 闸门先问档位再问 W-1；LTC-29 观测面 |
+| `internal/router/ltc_routes.go` | ＋16 −1 | GET 回显 `reach_rollout`（PUT 是整份替换，读不回来就改不了档位） |
+| `internal/router/tool_debug_routes.go` | ＋12 | `/agent/tools/reach-gate` 载荷里恒带 `rollout_observation` |
+| `internal/service/sms.go` | ＋26 −1 | 退订在两处发送口的处置与可注入 |
+| 三个 `_test.go`（app 装配基线 / service 台账夹具 / router 两条视图判据） | ＋51 | 夹具与判据，不落库 |
+
+#### 档位的物理形状：一行 `text`，不是十个开关
+
+| 事实 | 实测出处 | 后果 |
+|---|---|---|
+| 表 `system_config_kv` 只有 `key varchar(100) PRIMARY KEY` ＋ `value text NOT NULL` ＋ 两个时间戳 | `internal/model/system_config_kv.go:6-11` | `reach_rollout` 不是列、不是行，是 `ltc.config` 那一行 JSON 里的一个节 ⇒ **没有任何 SQL 能按档位查历史** |
+| 整份文档序列化后 ≤ `LTCConfigMaxBytes = 8 * 1024` | `ltc_config.go:157`、写侧 `Save` 超限即拒 | 8KB 是**整份 LTC 配置**的预算，白名单要从中自己挤；上限存在但不是"想加多少加多少" |
+| 名单 ≤ `ltcReachWhitelistMaxEntries = 200` 条、单条 ≤ `ltcReachWhitelistMaxEntryBytes = 128` | `ltc_config.go:386/388`（128 那个数注释里写明取自 `one_id` 的最大宽度） | 白名单档天花板是 200 个对象，超了报错文案直接指路"该走 whitelist→full 这一档"；**它不是批量导入的入口** |
+| 判定键形状 `one_id → customer_id → "渠道:收件人"` | `proactive_reach.go:296/310/370` 经 `reachApprovalKey` | 名单条目是**精确等值**比对的键 ⇒ 写侧把三种"看着一样但比不上"的形状全拒：空串、带首尾空格、重复条目（每条错误文案都在说"这样会让哪个数读错"） |
+| 档位由闸门每次判定读一次 `Config(ctx)`，进程内缓存 `LTCConfigCacheTTL = 60 * time.Second`，写侧 `Save` 立即失效自己那份 | `ltc_config.go:149-151/577-590`、`reach_gate_wiring.go:290-320` | AC② 的准确表述是**"改档不需要重启、也不需要重新装配"**，不是"改完即全网生效"—— 多副本下对其余副本最迟 60s。这条口径本来就是 `ReadingHints` 的第一条（`ltc_config.go:499`），档位不能对它例外 |
+
+#### 两把旗子各管一段，且这段不许越界
+
+`FF_LTC_REACH_GATE`（env）决定**挂不挂钩子**，`ltc.config` 里的 `reach_rollout.mode`（DB）决定**拦谁**。合起来的四条判据，每条都对应一处"少一档就会读错"：
+
+- **`env=shadow` 时档位只改变记账**（`approvalDenialBlocks` 那道刹车共用），因为三段灰度的对比数据只在"观察期不拦"这个前提下才存在 —— 一边观察一边拦，观察期就白过。
+- **`halt` 盖过 W-1 里已有的授权**：判定顺序是"先档位、再 W-1"（`reach_gate_wiring.go:324-336`）⇒ 回滚位真的能把已经放出去那批停下来，而不是"从此不再新授权"。
+- **degraded ⇒ 拒**。这是全份 `ltc.config` 里唯一一处"缺省与异常方向不一致"的地方，且是刻意的：读坏时这份内容恰恰就是默认值 `shadow`（= 放行），照默认判等于让一次存储抖动把"白名单灰度中"静默升级成"全量放行"（`ltc_config.go:411-441` 的注释写死了这个理由）。
+- **档位挡下的那一笔自己补记一次决策**（W-1 没被问到，它的回调就不会触发），归因只记一次 ⇒ 观测面上 `rollout_not_whitelisted` 与 `denied_default` 是分开的两个理由，运营看到前者不会去灌授权。
+
+#### 送达率不是"接错了线"，是"根本没有 join 键"
+
+观测面把 `delivery_rate_by_cohort` 标成 `unavailable` 而不是给个 0，理由是两张表各缺一样（这一处口径在提交后又被逐条重验过一遍，因为初版把推断写成了事实，见"修订 v1.17"）：
+
+| 事实 | 实测出处 |
+|---|---|
+| `sms_delivery_statuses.message_id` 是 `varchar(64) uniqueIndex NOT NULL`，全表唯一的归因键 | `internal/model/sms_tracking.go:41` |
+| 这张表**只由 webhook 建行**，且入口先 `GetByMessageID` | `service/sms_tracking.go:60-90`（`message_id` 为空直接报错）；路由 `POST /api/sms/delivery/webhook` 由 controller 自注册（`controller/sms_delivery_tracker.go:202`）⇒ 走的是 app 层注册面，`api-inventory` 看不见（§T-P5-02 记过的那条盲区，同一族） |
+| `sms_records` **没有存单号的列**（实测列：id/phone/content/provider/status/error_code/error_msg/send_time/created_at/updated_at/deleted_at） | `internal/model/sms.go:53-66` |
+| `SmsService.SendSms` 的签名只回 `error` ⇒ 单号在这道边界上就没了 | `internal/service/sms.go:36` |
+| 三家 provider 里只有一家解析了单号，**解析完原样丢弃**：`sendAliyun` 把 `BizId` 反序列化进 `result.BizID`，成功分支返回的却是 `time.Now(), Code, Message`；tencent / huawei 连解析都没有，成功分支返回硬编码 `"OK", "OK"` | `sms.go:346-358`、`:442`、`:492`（`dispatchToProvider` 的四元组是 `(sentTime, errCode, errMsg, err)`，第二三个是错误码不是单号） |
+| 外发链路上行的是常量 `sms_out`，或 `"sms-"＋手机号` | `app/reach_sender_wiring.go:119`、`service/proactive_reach.go:754`；`app/integration_reach_adapter.go:224`（后者把手机号编进了"单号"，本卡登记未改） |
+
+⇒ **外发链路一个字符都没往 `sms_delivery_statuses` 写过**；那个常量 `sms_out` 是"算不出来"的原因之一，不是"已经写坏"的证据。真要照它建行，唯一索引会把所有外发挤成同一行 —— 这一句是**对未来接线的警告**，不是对现网的描述，写在 unblocker 里而不是 reason 里。补的顺序是：provider 侧先把单号取出来 → `SendSms` 改回传签名 → `sms_records` 加单号列 → 才谈得上按单号 join 送达表。
+
+另两项同理都缺"一行/一列"：`complaint_rate_by_cohort` 的分子**全仓没有持久化写入方**（complaint 只作为常量与瞬时的意图标签存在）；`sends_by_cohort` 没有发送账本，闸门判定只进进程内计数器（重启即空、多副本不合并 ⇒ 那格即便可算，口径也只是**下界**）。
+
+#### 顺手补上的两处合规缺口：退订判据原来有两个入口漏了
+
+这两处在 schema 上的意义是**"送达率的分子不该有它们"**：退订号码一条都不该发出去，因此也不该进任何按档对比的分母。
+
+- `smsService.SendSms` 命中退订名单时原先 `return nil` ⇒ 每个调用方都读成"发成功了"（外发链据此记成功、烧幂等键、把它算进送达率分母）。改为返回既有哨兵 `ErrDoNotContact`（`sms.go:240-245`），**不需要新增任何下游分支**：队列 worker 与 SOP 节点早就按 DNC 处置（cancelled ／ `skip:dnc` 且**不烧** `reach_sent:` 幂等键）。错误串不带手机号 —— 这条串会落进队列台账。
+- `ResendSms` **从来不查退订**（`sms.go:278` 起它直连 `dispatchToProvider`，绕过了首发那道检查），而"首发之后用户才回 TD"是常态 ⇒ 补同一条判据，且放在改状态**之前**：拦下时不该在 `sms_records` 上留一条"正在发"。
+- 配套把退订查询做成可注入（`SetSmsUnsubscribe`）：包级单例在**第一次调用时**才解析全局 DB 句柄，于是这条判据读到的是"谁先跑"而不是"配了哪套库"（`sms.go:200-228`）。这是本仓既有测试口径老问题的一个具体实例，登记在此而不是当成风格改动。
+
+#### 交付口径：AC 各被什么钉住
+
+- **AC②（一键回滚 = 关开关，不回滚代码）** —— 由"`halt` 盖过已有授权"＋"档位每请求读（≤60s 缓存窗口）"两条判据合起来钉住；`TestLTCReachRollout_HaltDeniesEverythingWithItsOwnReason`、`TestLTCReachRollout_DegradedReadDeniesAndSaysWhy`、`TestReachRollout_*`（app 侧 11 条）。
+- **AC①（每阶段有对比数据）** —— **交付的是口径而不是四个数**：`/agent/tools/reach-gate` 的 `rollout_observation` 明写"哪一条算得出来、哪一条算不出来、各缺哪一行代码"，`unavailable` 三项一律**不带值**（0 投诉率会被直接读成"这一档安全，可以进下一档"）。判据句由指标列表**推出来**（`rolloutComparisonVerdict`），不是写死的措辞 —— 否则补上一列之后那句话还在说"缺三项"。
+- **读/写对称** —— `GET /manage/ltc/config` 必须回显 `reach_rollout`：PUT 是"读回来改一处再整体写回"的形状，这一节不在 GET 里 ⇒ 改档位会顺手把灰度名单清空（`TestLTCConfigView_ShowsRolloutModeAndCohort` 钉住，含"`gin.H` 存的是命名类型 `service.ReachRolloutMode`"这个断言坑）。
+
+#### 实跑（`--shared` 克隆 `/tmp/p504gate/hivemtk`，HEAD `d94810d8`，克隆工作树 0 脏文件）
+
+- `go build ./...` rc=0、`gofmt -l` 对本卡 3 个包无输出、`go vet ./internal/service ./internal/app ./internal/router` rc=0。
+- `./internal/app ./internal/router -p 1` **两时区各 rc=0**（CST 27.156s／6.022s，UTC 17.431s／7.461s）。
+- `./internal/service -run 'TestSms|TestMarketing|TestSop|TestRecovery|TestProactive|TestReach|TestLTC|TestDoNotContact'` **两时区各 rc=0，锚定 `^--- PASS` 各 232 条顶层**（27.086s／23.735s）。这 232 与静态同名集合逐条比对：活树与克隆**各 232、diff 为空**。（另记一次口径纠正：活树早前用**非锚定** `grep -c '--- PASS'` 量到 280，那是含缩进子用例行的另一个数，不能与本卡的 232 混引。）
+- `./internal/controller -p 1` 两时区各 rc=0（125.451s／110.583s）。
+- `./internal/service` **全量**：`TZ=Asia/Shanghai` **rc=0，pass=3617 fail=0 skip=3，451.778s**；`TZ=UTC` **rc=1，pass=3616 fail=1 skip=3**。唯一一条红**不是本卡的**：`TestAbExperiment_LogExposureFireAndForget`（`ab_experiment_test.go:50`）断"5 次写进 2 格缓冲 ⇒ 恰好丢 3"，而 `NewABExperiment` 在构造函数里就起了消费协程（`ab_experiment.go:79-90`）⇒ 消费方抢到一次时间片就少丢一个（实得 2）。归因证据：单跑 `-count=20` 全绿、**带并发负载 `-count=400` 复现 2 次同一条红**、该用例由 `8fecb6ad` 引入（与 P5 无交集）。登记为负载相关假红，修法要动生产构造入口（不该在这条路上顺手改别人的测试），见"仍不成立"。
+- 十道门 **rc 全 0**：`make fmt-check`／`check-unwired-assets`（**58/68，与本卡开工前同值 ⇒ 本卡零台账行变更**）／`check-date-bucket-tz`（21/21）／`check-enum-consistency`（3 警告）／`audit-cross-package-ports`（E0／W6）／`check-architecture`／`check-doc-consistency`（3 警告全是同 workspace 下 `hivemtk-platform/` 缺文件）／`check-feature-doc`（通过 1／失败 0／跳过 1）／`check-secrets`／`api-inventory`（**生成物零 diff** ⇒ 本卡无新端点，两处新载荷都挂在既有端点上）。
+- 变异电池（10 格，覆盖两条发送口、档位短接、判据推导、degraded 方向、halt 放行、白名单反向、router 少观测块）：**控制组各自 ran=登记数、0 fail 0 skip（service 4／app 11／router 11），KILLED=10／SURVIVED=0**，还原后逐文件 md5 与基线一致（独立复查：10 个文件全部 "restored"，`RESTORE_CHECK_BAD=0`）。
+
+#### 本卡之后仍不成立（写清不藏着）
+
+- **三项指标仍算不出来**，各自的 unblocker 就在 API 载荷里；补它们要动的是 `SmsService` 接口签名与三家 provider 的响应解析，属独立一张卡。
+- **`one_id` 三种宽度**（100/128/`text`，§4.18 记的债）在本卡多了一处消费点：白名单条目上限取 128 就是照它定的，**但列本身没合流**，所以同一份名单在窄列那两桌上仍然装得下、在 `text` 那桌上口径最松。
+- **没有前端编辑面**：`grep -rn reach_rollout user-web/src` 命中 **0** ⇒ 档位与名单只能经 `PUT /manage/ltc/config` 改，且那是整份替换的写口。
+- `BlockFromPhone` 之外仍有一处 **PII 进"单号"**：`integration_reach_adapter.go:224` 返回 `"sms-"+手机号`。
+- **aliyun 发送用的是硬编码测试模板** `TemplateCode = "SMS_000000001"`（`sms.go:305`）：不在本卡范围（改了要真号验证），但送达率这条链上它是"外发根本发不出去"级别的前提，登记不修。
+- 台账 58/68 一字未动 ⇒ 本卡没有新增"接了线没人读"的资产，也没有把任何一格转成 wired。
+
+---
+
 ## 五、索引策略
 
 ### 5.1 单列索引
@@ -2175,3 +2264,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.14 | 2026-09-21 | @backend | 新增 §4.17 **SOP 开工名单的三个权威源**（N-2 / T-P5-01）：`sop_scheduler.go` 那条"名单为空就把 SOP 跑到创建者本人身上"的回退**删掉了**，换成按 `trigger_config.audience` 实时圈选，读 `customer_rfms.segment` / `customer_tag_assignments.tag` / `churn_scores.p_alive` 三张既有权威表 —— **没建人群表**（C7）。四条判据：① 条件是**交集**不是并集（并集规模直接顶穿 AC② 想夹的那个东西）；② **`0 人` 有两种、必须分开报** —— `no_match:<条件>` 让人去改条件，`source_empty:<源>` 让人去查数据源，而 churn 今天恰恰是后者（`defaultChurnStatsQuery` 是 T-P1-07 登记在册的桩，`ComputeAll` 读到空统计就一行不写），只报"0 人"会把"这个域还没有生产者"读成"我条件写得太严"，两种处置动作完全相反；③ 上限**夹两次**：`limit()` 夹到 `MaxAudienceLimit=500` 防手滑，`tryExecute` 再按 `maxRunningPerSOP` 的**剩余额度**夹一次防"阈值只在上轮已跑满时才生效"（原实现 49 在跑 ＋ 名单 3 人 ＝ 52 并发）；④ 翻页步长钉死 200，因为 `ListBySegment` 把 `pageSize>200` **静默改成 20**（`customer_rfm.go:65-66`），直传 500 实测只回 20 行。**AC③ 与卡面差一处、按实际落法登记**：这条链路上根本没有 `ProactiveReachService` 可调（调度器只建 `SOPExecution`，出域发送在执行体工具节点里、闸门属 T-P5-03），所以交付的是 AC③ 的**语义**（未经 `audience_confirmed` 时一条执行都不建、名单写回 `trigger_config.audience_preview`）而不是"复用 DryRun"那句**调用** —— 宁可留这条偏差，也不在 FEATURES 写一句代码里不存在的复用。**三处被真跑纠正、第四处被提交前的 `gofmt -l` 纠正、第五处由回读源码纠正（它躲过了全部实跑：反向验证只证明 grep 锚点会红，证明不了我替那一格写下的症状句）**：假绿那条最贵 —— `TestAudience_PropagatesQueryError` 第一版**没改生产代码就绿了**，因为 `NewTestDB` 同进程共用一个库、前一个用例建的 `customer_rfm` 还在原地，"表不存在"必须显式 `DropTable` 构造（调度器侧同类用例同改）；`setJSONMapValue` 只能塞字符串值，预览是对象会被写成 `""` ⇒ 改 `json.Marshal` 整体回写；schedule 型一次 tick 回写两次、后一次序列化的是**内存里那份 map** ⇒ 预览必须就地改那份 map，"只落库不落内存"这把变异被专门用例打红。第四处是**新写文件**的注释续行又用 4 空格、被 `gofmt -l` 在提交前抓到（与 `7a7c99ad` 同一坑的第二次，修法同前：顶格 `// ` 单空格、不跑 `gofmt -w`）。另抓到**自己文档里的数**：落点表写"追加 8 条用例"实为 **9** 条、selector 那格把 10 条函数与其子用例混成"11 条判据"。台账新增**项18 三格**（49/55 ⇒ **52/58**，`接线数` 恒为 1）：18a 调度器启动入口在 `cmd/api`（摘掉即两类 SOP 一起静默停摆、`internal/service` 全绿）、18b `audience:` 字段赋值、18c 标签腿那一跳（18c 与 17 同一课：刻意不写成 `New.*RepositoryWithDB\(` 那种并格宽式，因为 RFM 底座另有 `customer_360.go:57` 消费点，并格即死锁）。**两处刻意欠账按原样登记不粉饰**：FEATURES.md 那条**本卡没加**（该文件正被并行会话整表重写，`git diff` 32 行全在 webhook 渠道表、与本卡 7 路径 `comm -12` 命中 0），§4.17 两处 nil 守卫**无用例覆盖**（`NewSOPScheduler` 传 nil db 会连 `execRepo` 一起置 nil、`tryExecute` 第一行就返回 ⇒ 生产构造路径走不到；留它是为 `NewAudienceSelectorWithDB(nil)` 这个公开可判空契约，为"手工组装结构体才能触发"的分支写测试＝测夹具）。实跑（工作树未提交态，HEAD `9859e2b9`；全量跑完后本卡对这两包 Go 源码零再编辑，逐文件 `gofmt -l` 空 ⇒ 这些数就是最终态）：`go build` / `go vet` 双 rc=0；两时区全量 `internal/service` + `internal/repository` **各双 rc=0**（CST 668.174s / 231.338s；UTC 487.782s / 143.255s）；本卡 34 条用例 `-test.v` 实数顶层 **34**（＝ selector 10 ＋ scheduler 24，与 `^func Test` 逐字对上）＋ 子用例 **20**、FAIL 0、SKIP 0；反向电池 **9 把全 KILLED**（逐把 `cp` 备份、写回比 md5 一致），台账三格**逐格摘装 rc=1 且各点名 1 行**、还原后 md5 一致、`p501mut` 与 `.p501*` 残留 0；门 `check-date-bucket-tz`（命中 **21** ＝ 基线 21）/`enum`/`doc-consistency`/`feature-doc`/`unwired-assets`(52/58)/`api-inventory`（生成物无 diff ⇒ 零新端点）/`ports`（Errors 0 Warns 0）七条 rc=0；`make fmt-check` **rc=2** 未过文件**恰 1 个**（`wechat_batchf4_m01_inbound_test.go`，`??` 未跟踪）、本卡 5 文件 `gofmt -l` **空**；`check-architecture` **rc=1** 唯一红 `dingtalk_media.go:191/204`（`??`）、`check-secrets.sh` **rc=1** 三处命中与本卡 7 路径交集 **0**、markdown lint **rc=1 / 1 issue** 属并行会话正在改的 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808` 而 §4.17 全文 **0 命中**。`-race` **rc=1**：repository ok(149.126s)、service FAIL(653.562s)，`WARNING: DATA RACE` **6** 处、`--- FAIL` **3** 条 —— **0 帧**涉本卡三个 Go 文件，两组红各自归属：① `TestCreateSession_AllowDifferentPlatform` 与 `_AnonymousUser` 同一地址 `0x…75bc60`、写方 `db.SetTestDB()` 读方 `MaybeSendAwayReply` 的 `SafeGo` 后台 goroutine，涉事 4 文件 `git status` **全 clean** ⇒ HEAD 自带那族既有缺陷；② 另 4 处属并行会话**未跟踪**的 `webhook_batchf4_m01_qq_test.go:342` 对 `qq_media.go` 的 `FetchQQAttachment`/`persistQQMediaAsync` ⇒ 不同文件不同键，均不代修不代提交。前端**零改动**（7 路径全在 `user-server/` 与 `scripts/` 与文档），所以没有 `vite`/`eslint`/`vitest` 腿 —— 是没对象，不是跳过。 |
 | v1.15 | 2026-09-21 | @backend | 新增 §4.18 **`agent_mode` 的第一次真实读取**（N-3 / T-P5-02）：`lifecycle.Resolver` 从零调用方变成有第一处生产调用点，`agent_lifecycle_wiring.go` 按 `agent_mode` 分派 passive/active，主动那侧**只编排 SOP**（C7 裁定，`TestActiveNeverImportsConversationEngine` 用 go/parser 静态钉住本包 import 集）。schema 侧本卡**零新表零新列**，所以登记的重点全在代价：① `ai_agents.agent_mode` 有 `index` 但没有任何 `WHERE agent_mode = ?`，本卡读的是主键取行后的内存字符串比对（那行索引仍然只是将来按模式批量取的预备）；② 归因三个键写进 `sop_executions.execution_data`，而那列 gorm tag 是 `type:text` 不是 `jsonb` ⇒ 逐行看得见、按值查不动，P8 看板若建在 `one_id` 上会撞全表扫（按 C7 不建列，**有意识欠账**）；③ `one_id` 在本仓实测**三种宽度**（100 / 128 / `text`，权威源 `customers.unified_id` 是 128，且 `script_exposure_logs` 的注释就记着 varchar(64) 曾溢出）⇒ 任何把 one_id 提成列的后续卡必须先定宽度，按 100 建会把 128 的源顶到 INSERT 报错；④ 合成会话键从 `agent_code` 换成 `agent_id`，因为 `session_id varchar(120)` 的 12 字节余量押在另外两张表的列宽上。另登记一处**本文件既有口径的错**：`api-inventory.sh:32` 只 grep `internal/router/**`，从 `internal/app` 注册的路由它看不见 ⇒ §4.17 那句清单无 diff ⇒ 零新端点的**结论**为真（已核 `00aeff61` 零路由）但**证据**是道看不见证据的门，本卡的新端点就是它漏掉的第一个。台账 49/55 → 52/58 → **55/64**，项5 转 wired、项19 六格（两 wired 各用一把 router.go 变异证过有牙，且摘掉装配点后 app＋router 测试全绿、线上稳定回 503 ⇒ 台账是唯一看得见它的东西） |
 | v1.16 | 2026-09-21 | @backend | 新增 §4.19 **`reach_send` 节点：图上多一步"先批准才出域"**（T-P5-03）：Active 外联从"代码里的一段 if"变成"图上的一步"。**schema 侧零新表、零新列、零新索引、`migrations/` 零变更**，所以登记面全在"值落在哪一列、谁按值查得动"：① 四个新键全挤在 `sop_executions.execution_data`（`type:text`）里 —— `_reach_skipped`（值域 `dnc`/`cooldown`/`already_sent`/`approval:<状态>`，四种"没发出去"的处置动作完全不同，合并成一个 `skipped` 等于把三件事混成一件）、`_reach_channel`、`_reach_message_id`，以及沿 `message_sent:` 同族命名空间的幂等键 `reach_sent:<execution_id>:<node_id>`；② **挂起期在库里是四行四个状态的组合** —— `handleNodeWaiting` 从不写 `sop_executions.status`，所以"卡在哪儿"只能读 `wait_event=approval` 那一列，配 `approval_requests=pending` ＋ `sop_timers=pending` ＋ `sop_executions=running`；③ **一条既有 DB 约束顺手当了兜底**：`uq_approval_request_open (subject_type, subject_id) WHERE status='pending'` ＋ `subject_id=<exec>--<node>` ⇒ 同一步挂起期不可能有两条 pending 审批行（约束来自库、不是应用层），与节点自己那枚跨重启的幂等键各管一件事；④ **对 §4.18 一句口径的收窄**："归因/产物值按值查不动"说重了 —— 这些值在 `sop_exec_events` 的 `input`/`output`/`side_effects` 三列各有一份 **jsonb 镜像**（`writeExecEvent` 每次把整份 `execution_data` 塞进 `input`）⇒ 查得动，真正的代价是那三列**没有任何 GIN 索引**，按值查＝扫一张比执行表大一到两个量级的事件表；结论（P8 建在这些键上会撞全表扫）不变，措辞要换；⑤ 两个审批主体的键**刻意不合成一枚**（图上腿源自执行行 `<exec>--<node>`、服务侧 W-1 门源自客户行 `unified_id`＋渠道＋收件人），合成即"改图＝改归因"，由 P1 变异格背书；⑥ `sop_executions.customer_id` 是 `varchar(64) NOT NULL` **无 default** ⇒ 空串是合法存量形状，这一条列定义直接立了一条用例（无 customer_id 时靠 `one_id` 找回身份）。**卡面落点偏差如实登记**：卡上写"M `proactive_reach.go`（接入检查点）"，实际该文件**零 diff**（三判据早在 `ReachByCustomer` 里，缺的是图上那一腿）。另有两道静态锁各写明自己看不见什么（出域符号扫描看不见"不被 `NodeType()` 认出来的执行器"；装配点源码锁看不见"这一行是否真被执行"），台账项 20 四行、现值 **55/64 → 58/68**（两个端点在同一棵克隆里分别用 HEAD 版与工作树版脚本各实测一次），行为变异电池 **24 格全 KILLED、无未登记存活** |
+| v1.17 | 2026-09-21 | @backend | 新增 §4.20 **放量三档落在哪一列**（T-P5-04）：**仍是零新表、零新列、零索引、`migrations/` 零变更**，但这一节的中心结论是"**没有一列可加**"式的缺：① 档位是 `system_config_kv` 里 `key='ltc.config'` 那一行 `value text` 内的一个 JSON 节（`model/system_config_kv.go:6-11`）⇒ 预算是整份文档 8KB、名单 ≤200 条且单条 ≤128 字节（对齐 `one_id` 最大宽度）、判定键精确等值所以空串/带空格/重复条目在写侧就被拒，**且没有任何 SQL 能按档位查历史**；② "改档不需要重启"要说准成"每请求读＋60s 进程内缓存 ⇒ 多副本对其余副本最迟 60s 生效"，这条本来就是 `ReadingHints` 第一条，写档位的注释不许对它例外；③ **送达率不是接错线、是根本没有 join 键**：`sms_delivery_statuses.message_id` 是唯一归因键且这张表**只由 webhook 建行**，而 `sms_records` 没有单号列、`SmsService.SendSms` 只回 `error`、`sendAliyun` 把 `BizId` 解析进 `result.BizID` 后在成功分支**原样丢弃**、tencent/huawei 成功分支返回硬编码 `"OK","OK"` ⇒ 外发上行的是常量 `sms_out`，它**一个字符都没进过送达表**（"照它建行会挤成一行"是给未来接线的警告，不是现网事实）；④ 退订判据在 SMS 域原有两个入口漏了 ——`SendSms` 命中退订 `return nil`（每个调用方读成"发成功了"：记成功、烧幂等键、进送达率分母）改回 `ErrDoNotContact` 哨兵（复用既有错误 ⇒ 队列/SOP 已有的 DNC 处置自动接上，零新分支），`ResendSms` **从来不查退订**（直连 `dispatchToProvider`）补同一道检查且放在改状态之前；⑤ **一处自家叙述的实测纠偏**：初版 reason 串写"外发链路写进去的 message_id 是常量 sms_out"，逐条重验后不成立（表只由 webhook 按运营商单号建行）⇒ reason/unblocker 与包注释改成实测形状，并给用例加一条"不许把推断写成实测事实"的反向断言（`6897d5c3`）；⑥ 实跑：`--shared` 克隆 `/tmp/p504gate/hivemtk`（HEAD `d94810d8`、0 脏文件）里 build/vet/gofmt rc=0、十道门 **rc 全 0**（台账 **58/68 与本卡开工前同值 ⇒ 本卡零台账行变更**、`api-inventory` 生成物零 diff ⇒ 无新端点），`app`＋`router` 两时区各 rc=0，`service` 本卡子集两时区各 **232 条顶层全 PASS**（该 232 与活树静态同名集合逐条比对 diff 为空；早前那个 280 是**非锚定** grep 含子用例的另一个数，不可混引），`service` 全量 CST **rc=0 pass=3617 fail=0 skip=3（451.778s）**、UTC rc=1 且唯一一条红是**负载相关假红**（`ab_experiment_test.go:50` 断"5 写 2 缓冲⇒恰丢 3"，而构造函数里就起了消费协程 ⇒ 单跑 20/20 绿、带负载 2 FAIL/400 复现，用例由 `8fecb6ad` 引入、与本卡无交集）；10 格变异电池 **KILLED=10／SURVIVED=0**、还原逐文件 md5 一致 |
