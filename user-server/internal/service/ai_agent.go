@@ -173,6 +173,7 @@ func (s *AIAgentService) LoadContext(ctx context.Context, agentID uint) (*AgentC
 		AgentCode:            agent.AgentCode,
 		Name:                 agent.Name,
 		AgentType:            agent.AgentType,
+		AgentMode:            agent.AgentMode,
 		Persona:              agent.Persona,
 		SystemPrompt:         agent.SystemPrompt,
 		Greeting:             agent.Greeting,

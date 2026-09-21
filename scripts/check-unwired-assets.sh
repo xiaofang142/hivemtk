@@ -60,7 +60,14 @@ BASELINE=(
   "4|工具审计 DB 持久化|func NewDBAuditLogger|NewDBAuditLogger\(|internal/app|wired"
   "4|工具审计 内存+DB+告警 组合器|func NewCompositeAuditLogger|NewCompositeAuditLogger\(|internal/app|wired"
   "4|工具审计落库装配入口（executor 配置真赋值）|func applyToolAuditPersistence|applyToolAuditPersistence\(|internal/app|wired"
-  "5|Agent 双模式分派（passive/active）|func Resolver|lifecycle\\.Resolver\\(|"
+  # 项5 = T-P0-04 登记、T-P5-02 接线。登记时它是全仓最典型的"名义字段"：`Resolver` 有实现、
+  # 有单测，却没有任何装配点调用它；更要命的是 `LoadContext` 压根不往上下文里写 agent_mode
+  # （读出来恒为空串）⇒ 就算有人接了 Resolver 也只能拿到空模式。两处一起修才算接线：
+  # service 侧带上模式（TestAIAgentService_LoadContextCarriesAgentMode）＋ app 侧用 Resolver
+  # 分派（internal/app/agent_lifecycle_wiring.go 的 NewAgentLifecycleRuntime）。
+  # scope 刻意收成 internal/app：这一行盯的是"装配点还在用 Resolver"，不是"全仓某处调过它" ——
+  # 装配点被删、别处留下一个测试之外的调用，也算回退。
+  "5|Agent 双模式分派（passive/active）|func Resolver|lifecycle\\.Resolver\\(|internal/app|wired"
   "6|挽回队列的定时消费者|type RecoveryQueue struct|RecoveryQueue|internal/cron internal/app|wired"
   "7|Agent 断点续跑 存点|func SaveCheckpoint|SaveCheckpoint\(||wired"
   "7|Agent 断点续跑 取点|func LoadLatestCheckpoint|LoadLatestCheckpoint\(||wired"
@@ -294,6 +301,33 @@ BASELINE=(
   "18|SOP 调度器的启动入口（摘掉即 auto/schedule 两类 SOP 一起静默停摆、service 包全绿）|func InitSOPScheduler|InitSOPScheduler\\(|cmd/api|wired"
   "18|圈选器在调度器构造点的注入（摘掉即 audience 型 SOP 永久零开工、只剩一行 Warn）|func NewAudienceSelectorWithDB|audience:[[:space:]]*NewAudienceSelectorWithDB\\(|internal/service|wired"
   "18|标签条件取数在圈选器里的那一跳（换成就地拼 SQL 即让新仓储读法变成零消费方资产、用例全绿）|func \\(r \\*customerTagAssignmentRepository\\) ListCustomerIDsByTag|ListCustomerIDsByTag\\(|internal/service|wired"
+  # ---- T-P5-02（Active 生命周期 + 按 agent_mode 分派）新增六格 ------------------------
+  # 前两格守"入口这一侧"：app 包自己的用例是**直接调** SetupAgentLifecycleRoutes /
+  # NewAgentLifecycleRuntime 的，所以它们证明不了 router.Setup 里还挂着这两跳。
+  #   19a 删掉 `app.InitAgentLifecycles(gormDB, engine)`：路由照挂、编译照过、app 用例照绿，
+  #       而线上每一次运行都稳定回 503 —— 一个"永远没装配"的端点比没有端点更难被发现，
+  #       因为它看起来是在工作的（有响应、有 JSON、有 code）。
+  #   19b 删掉 `app.SetupAgentLifecycleRoutes(auth)`：运行时装配着、没有任何路由指向它，
+  #       双模式重新回到本卡的起点"有实现、零调用方"。
+  # 后四格是**本卡刻意没接**的兄弟字段，登记在这里防止下一个读代码的人以为它们活着 ——
+  # 尤其现在 Active 真的能跑了，"这一族字段肯定都通了"是最自然的误判。
+  #   19c/19d `agent.ModeOf` 与 `agent.IsActive`：唯一"消费"是同文件里 IsActive 调 ModeOf，
+  #       包外零调用（callpat 只认包限定形式，包内自调不算接线）。运行期判模式走 app 侧 Resolver。
+  #       为什么不并成一格：账本的字段分隔符就是 `|`，callpat 里写 `(a|b)` 会被劈成两截 ——
+  #       第一版就因此把 scope 读成了半截正则，报 exit 2「scope 目录缺失」。
+  #   19e `SalesRequest.AutoExecute`：**写入 5 处、读取 0 处**（实测口径：`AutoExecute bool`
+  #       命中 1、`\.AutoExecute` 命中 0）。写它的都是各条入站链路，没有任何一条读它决定
+  #       走不走自动回复 —— 真正的开关是 SmartCSOrchestrator 里那个进程内的 o.enableAutoReply。
+  #       这是本卡顺带查出来的、比"未接线"更糟的一格：它会让人以为改这个字段就能开关自动回复。
+  #   19f `AgentContext.DecisionStrategyIDs`：从 model 到 dto 这一跳 LoadContext 就没抄
+  #       （defpat 命中 2 处：dto 与 runtime/types.go 各一份声明，读方 0 处），
+  #       所以 Active 的"决策"只能取智能体挂的第一个可解析 SOP（见 active.go 头部）。
+  "19|双模式运行时的启动装配点（摘掉即线上每次运行稳定回 503、app 用例全绿）|func InitAgentLifecycles|InitAgentLifecycles\\(|internal/router|wired"
+  "19|双模式运行入口的路由登记点（摘掉即重新回到「有实现、零调用方」）|func SetupAgentLifecycleRoutes|SetupAgentLifecycleRoutes\\(|internal/router|wired"
+  "19|模式判读 helper ModeOf 的包外调用方（运行期分派走 app 侧 Resolver）|func ModeOf\\(|agent\\.ModeOf\\(|"
+  "19|主动模式判定 IsActive 的包外调用方（唯一消费是同文件里它调 ModeOf）|func IsActive\\(|agent\\.IsActive\\(|"
+  "19|SalesRequest.AutoExecute 的读取方（写入 5 处、读取 0 处，开关其实在编排器里）|AutoExecute bool|\\.AutoExecute|"
+  "19|决策策略 ID 列表的读取方（Active 因此只能取第一个可解析 SOP）|DecisionStrategyIDs \\[\\]string|\\.DecisionStrategyIDs|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

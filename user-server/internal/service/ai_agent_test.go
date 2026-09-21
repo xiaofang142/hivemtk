@@ -254,6 +254,60 @@ func TestAIAgentService_LoadContextCache(t *testing.T) {
 	}
 }
 
+// TestAIAgentService_LoadContextCarriesAgentMode 兑现 W-4 的根因。
+//
+// 「双模式」在 model.AIAgent 和 dto.AgentContext 两侧都有字段，但 LoadContext 组装上下文时
+// 唯独没带 AgentMode —— 于是任何按模式分派的代码拿到的永远是空串，只能走被动。
+// 本用例把"上下文必须带上库里那台智能体的模式"钉住，否则 app 层的分派是无源之水。
+func TestAIAgentService_LoadContextCarriesAgentMode(t *testing.T) {
+	setupAgentTestDB(t)
+	svc := NewAIAgentServiceWithDB(db.GetDB())
+	ctx := context.Background()
+
+	active := makeAgent("mode_active", "主动型", "sales")
+	active.AgentMode = string(model.AgentModeActive)
+	active.SOPIDs = pq.StringArray{"17"}
+	if err := svc.Create(ctx, active); err != nil {
+		t.Fatalf("创建 active 智能体失败: %v", err)
+	}
+
+	loaded, err := svc.LoadContext(ctx, active.ID)
+	if err != nil || loaded == nil {
+		t.Fatalf("LoadContext 失败: err=%v ctx=%v", err, loaded)
+	}
+	if loaded.AgentMode != string(model.AgentModeActive) {
+		t.Errorf("AgentMode = %q, want %q（没带上模式 ⇒ 按模式分派永远走不到 Active）",
+			loaded.AgentMode, model.AgentModeActive)
+	}
+	if len(loaded.SOPIDs) != 1 || loaded.SOPIDs[0] != "17" {
+		t.Errorf("SOPIDs = %v, want [17]（Active 无 SOP 可编排）", loaded.SOPIDs)
+	}
+
+	// 缓存命中路径必须同样带上模式：分派读的是同一份上下文，
+	// 第一次带、第二次不带，就成了"跑第几次"决定的行为差异。
+	cached, err := svc.LoadContext(ctx, active.ID)
+	if err != nil || cached == nil {
+		t.Fatalf("二次 LoadContext 失败: err=%v", err)
+	}
+	if cached.AgentMode != string(model.AgentModeActive) {
+		t.Errorf("缓存路径 AgentMode = %q, want active", cached.AgentMode)
+	}
+
+	// 运营在控制台把模式从 active 改回 passive 后，下一次读取必须立刻反映，
+	// 否则"关掉主动外发"这条操作要等缓存 TTL 才生效。
+	active.AgentMode = string(model.AgentModePassive)
+	if err := svc.Update(ctx, active); err != nil {
+		t.Fatalf("改回 passive 失败: %v", err)
+	}
+	afterFlip, err := svc.LoadContext(ctx, active.ID)
+	if err != nil || afterFlip == nil {
+		t.Fatalf("模式翻转后 LoadContext 失败: err=%v", err)
+	}
+	if afterFlip.AgentMode != string(model.AgentModePassive) {
+		t.Errorf("模式翻转后 AgentMode = %q, want passive", afterFlip.AgentMode)
+	}
+}
+
 // TestChannelBinding_CreateAndList 测试渠道绑定创建和查询
 func TestChannelBinding_CreateAndList(t *testing.T) {
 	setupAgentTestDB(t)

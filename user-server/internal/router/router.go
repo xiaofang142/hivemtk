@@ -239,6 +239,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	app.InitOpportunityRuntime(gormDB)
 
 	engine := app.BuildSalesEngine(gormDB)
+	// 双模式生命周期（T-P5-02 / W-4）：被动复用上面这个会话引擎实例，主动走 SOP 编排出口。
+	// 放在 BuildSalesEngine 之后、路由之前 —— 路由挂的必须是这个已装配的运行时。
+	app.InitAgentLifecycles(gormDB, engine)
 	kbRepo := repository.NewKnowledgeBaseRepository(gormDB)
 	orchestrator := app.BuildSmartOrchestrator(engine, kbRepo, gormDB)
 	aiAgentSvcGlobal := service.NewAIAgentService()
@@ -632,6 +635,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupAIToolConfigRoutes(auth, gormDB)
 
 		app.SetupInferenceRoutes(auth)
+
+		// 智能体双模式运行入口（T-P5-02）：按 agent_id 读出 agent_mode 再分派。
+		app.SetupAgentLifecycleRoutes(auth)
 
 		aiAgentCtrl := controller.NewAIAgentControllerWithService(aiAgentSvcGlobal)
 		aiAgentCtrl.SetSalesEngine(engine)

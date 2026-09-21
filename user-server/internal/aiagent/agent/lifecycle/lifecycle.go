@@ -20,8 +20,10 @@
 //	│   归属：营销唤起、沉睡唤醒、主动跟进（更多由人工策略编排）       │
 //	└─────────────────────────────────────────────────────────────┘
 //
-// 说明：本文件为双模式领域骨架，确立命名与接口边界；具体编排逻辑复用
-// agent/runtime 与 service.SmartCSOrchestrator，新增主动触达引擎在后续阶段落地。
+// 说明：本文件是双模式的领域契约（命名与接口边界）；两个实现都在 active.go：
+// 被动复用既有会话引擎，主动**只编排 SOP**（C7 裁定 —— 不新建自由 Agent 循环）。
+// 因此本包不许 import 会话引擎所在的包，由
+// TestActiveNeverImportsConversationEngine 静态钉住；装配与按模式分派在 internal/app。
 package lifecycle
 
 import (
@@ -43,8 +45,12 @@ type LifecycleRequest struct {
 	AccountID  string
 	CustomerID string
 	Content    string
-	TraceID    string
-	Raw        map[string]any
+	// SessionID 仅被动模式用：既有会话引擎靠它串上下文。主动模式自己生成执行会话键。
+	SessionID string
+	// OneID 已知的客户唯一键（可为空；主动模式会回查客户行补上，见 active.go）。
+	OneID   string
+	TraceID string
+	Raw     map[string]any
 }
 
 // LifecycleResult 生命周期结果。
@@ -53,6 +59,14 @@ type LifecycleResult struct {
 	ToolsCalled  []string
 	Handoff      bool
 	StopReason   string
+
+	// Mode 实际执行的是哪个生命周期 —— 必须回显，因为"未知模式回退 Passive"
+	// 是本卡的验收条件之一，而不回显时运营分不清"它真跑了主动"与"它悄悄回退了"。
+	Mode string
+	// ExecutionID 主动模式产出的 SOP 执行记录 ID；被动模式恒为 0（它不建执行）。
+	ExecutionID uint
+	// OneID 本次运行归因到的客户唯一键，空 = 该客户行还没有 OneID。
+	OneID string
 }
 
 // Resolver 按智能体模式选择生命周期实现。
