@@ -233,68 +233,9 @@ func TestEmailSendRepository_UpdateStatus(t *testing.T) {
 	}
 }
 
-// TestEmailSendRepository_GetPendingEmails 测试获取待发送的邮件
-func TestEmailSendRepository_GetPendingEmails(t *testing.T) {
-	repo := setupEmailSendRepository(t)
-	ctx := context.Background()
-
-	pastTime := time.Now().Add(-time.Hour)
-	repo.Create(ctx, &model.EmailSend{
-		To:       "pending1@example.com",
-		Subject:  "Pending Email 1",
-		Content:  "Content 1",
-		Status:   0,
-		SendTime: &pastTime,
-	})
-
-	repo.Create(ctx, &model.EmailSend{
-		To:       "pending2@example.com",
-		Subject:  "Pending Email 2",
-		Content:  "Content 2",
-		Status:   0,
-		SendTime: &pastTime,
-	})
-
-	repo.Create(ctx, &model.EmailSend{
-		To:       "sent@example.com",
-		Subject:  "Sent Email",
-		Content:  "Sent content",
-		Status:   1,
-		SendTime: &pastTime,
-	})
-
-	futureTime := time.Now().Add(time.Hour)
-	repo.Create(ctx, &model.EmailSend{
-		To:       "future@example.com",
-		Subject:  "Future Email",
-		Content:  "Future content",
-		Status:   0,
-		SendTime: &futureTime,
-	})
-
-	results, err := repo.GetPendingEmails(context.Background())
-	if err != nil {
-		t.Errorf("GetPendingEmails() error = %v", err)
-	}
-
-	if len(results) != 2 {
-		t.Errorf("Expected 2 pending emails, got %d", len(results))
-	}
-}
-
-// TestEmailSendRepository_GetPendingEmails_EmptyResult 测试获取空结果
-func TestEmailSendRepository_GetPendingEmails_EmptyResult(t *testing.T) {
-	repo := setupEmailSendRepository(t)
-
-	results, err := repo.GetPendingEmails(context.Background())
-	if err != nil {
-		t.Errorf("GetPendingEmails() error = %v", err)
-	}
-
-	if len(results) != 0 {
-		t.Errorf("Expected 0 pending emails, got %d", len(results))
-	}
-}
+// GetPendingEmails 那两条旧用例随该谓词一并退役：`status = 0 AND send_time <= now`
+// 既没有认领（多副本会双投）、也没有龄上限（停机一周后重启会把老邮件一次性群发），
+// 更漏掉 send_time IS NULL 的行。替代判据在 email_drain_test.go。
 
 // TestEmailSendRepository_GetByID_NotFound 测试获取不存在的邮件
 func TestEmailSendRepository_GetByID_NotFound(t *testing.T) {

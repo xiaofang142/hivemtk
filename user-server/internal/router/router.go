@@ -244,6 +244,12 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 不装配就是 /api/opportunity/* 全部回 503，不会回一个空列表骗人。
 	app.InitOpportunityRuntime(gormDB)
 
+	// 邮件排水运行时（R21）：必须在路由之前 —— /api/email/* 读的是同一个 status 字段的
+	// 那一列，装配点晚于流量的话，列表里会出现"排水器刚把它改成发送中、读侧还在按待发送
+	// 统计"的错位。本竖没有旗子：拿不到 DB 句柄就是不装配，不装配就是回到 R21 之前的
+	// 存量状态（行永远停在 status=0），不会假装自己在发。
+	app.InitEmailRuntime(gormDB)
+
 	engine := app.BuildSalesEngine(gormDB)
 	// 双模式生命周期（T-P5-02 / W-4）：被动复用上面这个会话引擎实例，主动走 SOP 编排出口。
 	// 放在 BuildSalesEngine 之后、路由之前 —— 路由挂的必须是这个已装配的运行时。
