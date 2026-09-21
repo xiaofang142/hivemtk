@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	"hivemtk-user/internal/storage"
 
 	"github.com/google/uuid"
 	"gopkg.in/gomail.v2"
@@ -70,6 +70,9 @@ type EmailSendService struct {
 	// deliver 是"把这一封真的投出去"的接缝，默认为 sendActualEmail（连真 SMTP）。
 	// 抽出来的理由与 SMS 侧同源：合规判据与节拍逻辑要在测试里跑，而测试不该连 SMTP。
 	deliver func(ctx context.Context, email *model.EmailSend) error
+
+	// attachments 附件列 → 磁盘路径的解析器，nil = 按环境变量现推（见 attachmentResolver）。
+	attachments mail.AttachmentResolver
 }
 
 // SetUnsubscribeLinker 替换退订链接签发器（传 nil = 明确不要退订出口）。
@@ -310,26 +313,34 @@ func (s *EmailSendService) buildEmailMessage(ctx context.Context, smtpConfig *mo
 	mail.Unsubscribe(unsub)(m)
 	m.SetBody("text/html", s.emailBody(email, unsub))
 
-	if email.Attachments != "" {
-		attachments := strings.Split(email.Attachments, ",")
-		for _, attachment := range attachments {
-			attachment = strings.TrimSpace(attachment)
-			if attachment == "" {
-				continue
-			}
-
-			attachment = filepath.Base(strings.ReplaceAll(strings.ReplaceAll(attachment, "\\", "/"), "/", ""))
-			if attachment == "" || attachment == "." || attachment == ".." {
-				continue
-			}
-			safePath := filepath.Join("uploads", "attachments", attachment)
-			if _, err := os.Stat(safePath); err != nil {
-				continue
-			}
-			m.Attach(safePath)
-		}
-	}
+	mail.AttachmentsFromPaths(s.attachmentPaths(email.Attachments))(m)
 	return m
+}
+
+// attachmentPaths 把附件列换成"真能挂上的磁盘路径"，并在填了却一项都挂不上时出声。
+//
+// 静默丢弃是这一格的历史病：上传侧落盘 {baseDir}/attachments/{yyyy}/{mm}/{uuid}.{ext}，
+// 旧实现却把值抹掉全部斜杠后拼一个扁平根下的文件名，Stat 永远不中 ⇒ 用户的附件从来没
+// 跟着邮件出去过，而邮件状态写着"已发送"。挂不上仍然照发是对的（附件是增值项），
+// 但不能连"一个都没挂上"都不说。
+func (s *EmailSendService) attachmentPaths(csv string) []string {
+	paths := mail.AttachmentPaths(csv, s.attachmentResolver())
+	if mail.AttachmentsDropped(csv, paths) {
+		logger.Warnf("邮件附件列非空但没有一项能挂上（只认本站上传落盘的 /files/attachments/{yyyy}/{mm}/{文件名}）")
+	}
+	return paths
+}
+
+// attachmentResolver 未注入时按上传侧同一组环境变量现推。
+//
+// 与 unsubRepo 同一形状：NewEmailSendService 有三个调用点，只在装配层注入会让其中
+// 某条路的附件列被整段忽略，而表现是"静静少个附件"。
+func (s *EmailSendService) attachmentResolver() mail.AttachmentResolver {
+	if s.attachments != nil {
+		return s.attachments
+	}
+	dir, urlPrefix := storage.LocalAttachmentSource()
+	return mail.LocalAttachments(dir, urlPrefix)
 }
 
 // emailBody 正文 = 用户录入的内容 + 系统追加的退订页脚。

@@ -2,9 +2,12 @@
 package cron
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,6 +62,8 @@ type recordedSend struct {
 	subject string
 	body    string
 	headers map[string]string
+	// mime 是这些选项作用到一条消息之后渲染出的原文：附件的唯一可观察面就是发出去的那串字节。
+	mime string
 }
 
 type fakeMailer struct {
@@ -78,6 +83,12 @@ func (f *fakeMailer) SendMail(cfg mail.Config, to []string, subject, body string
 		if got := m.GetHeader(field); len(got) > 0 {
 			rec.headers[field] = got[0]
 		}
+	}
+	var buf bytes.Buffer
+	if _, err := m.WriteTo(&buf); err != nil {
+		rec.mime = "渲染失败: " + err.Error()
+	} else {
+		rec.mime = buf.String()
 	}
 	f.sends = append(f.sends, rec)
 	return f.err
@@ -141,17 +152,38 @@ type rowFixture struct {
 	links *fakeLinkSigner
 	lists *fakeLists
 	jobs  *fakeJobs
+	// attachmentURL 是附件树里那个真存在的文件对外的 URL（与上传接口同形状）。
+	attachmentURL string
 }
 
-func newRowFixture() rowFixture {
+// attachmentTree 铺一棵与上传侧同构的附件树，返回附件根与那个文件的 URL。
+//
+// 形状必须照抄 {root}/{yyyy}/{mm}/{name}：本用例要判的是"运营粘贴进来的地址挂不挂得上"，
+// 夹具铺成扁平文件就是在验一个生产里不存在的形状。
+func attachmentTree(t *testing.T) (dir, url string) {
+	t.Helper()
+	root := t.TempDir()
+	dir = filepath.Join(root, "attachments")
+	if err := os.MkdirAll(filepath.Join(dir, "2026", "09"), 0o750); err != nil {
+		t.Fatalf("建附件目录失败: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "2026", "09", "quote.pdf"), []byte("报价单"), 0o600); err != nil {
+		t.Fatalf("写附件失败: %v", err)
+	}
+	return dir, "/files/attachments/2026/09/quote.pdf"
+}
+
+func newRowFixture(t *testing.T) rowFixture {
 	m := &fakeMailer{}
 	s := &fakeSubscriber{}
 	l := &fakeLinkSigner{link: "https://crm.example.com/u?t=1"}
 	lst := &fakeLists{}
 	j := &fakeJobs{}
 	sm := &fakeSmtp{cfg: smtpFixture()}
-	deps := emailRowDeps{smtp: sm, subs: s, links: l, mailer: m.SendMail, lists: lst, jobs: j}
-	return rowFixture{deps: deps, mails: m, subs: s, links: l, lists: lst, jobs: j}
+	dir, url := attachmentTree(t)
+	deps := emailRowDeps{smtp: sm, subs: s, links: l, mailer: m.SendMail, lists: lst, jobs: j,
+		attachments: mail.LocalAttachments(dir, "/files")}
+	return rowFixture{deps: deps, mails: m, subs: s, links: l, lists: lst, jobs: j, attachmentURL: url}
 }
 
 // TestDeliverEmailListRowSkipsUnsubscribed 退订名单必须拦得住群发。
@@ -161,7 +193,7 @@ func newRowFixture() rowFixture {
 // 记账口径：合规跳过既不进 send_total 也不进 fail_total。send_total 的语义是"拨过 SMTP 的信"，
 // 把退订跳过计成失败，运营会去查一条根本没坏过的 SMTP 链路。
 func TestDeliverEmailListRowSkipsUnsubscribed(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	f.subs.unsubscribed = true
 	row := emailRowFixture()
 
@@ -192,7 +224,7 @@ func TestDeliverEmailListRowSkipsUnsubscribed(t *testing.T) {
 // 这一条一分钟一波、每波最多 10 行且标完 IsSend=1 就永远不再重投 —— 读失败照发等于
 // "数据库抖一下，退订名单作废一波"。所以这里判 fail-closed：不发、也不给行打完结标记，下一轮再看。
 func TestDeliverEmailListRowFailsClosedWhenListUnreadable(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	f.subs.err = errors.New("db down")
 	row := emailRowFixture()
 
@@ -209,7 +241,7 @@ func TestDeliverEmailListRowFailsClosedWhenListUnreadable(t *testing.T) {
 // TestDeliverEmailListRowCarriesUnsubscribeAndRealSmtp 正常一行的两个形状：
 // SMTP 用记录里配的那台（不是按域名猜的），退订出口带 job 归属。
 func TestDeliverEmailListRowCarriesUnsubscribeAndRealSmtp(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	row := emailRowFixture()
 
 	deliverEmailListRow(context.Background(), row, f.deps)
@@ -272,7 +304,7 @@ func TestDeliverEmailListRowCarriesUnsubscribeAndRealSmtp(t *testing.T) {
 //
 // 与单封路径同一条取舍：配置缺陷不该放大成整波停摆。
 func TestDeliverEmailListRowStillSendsWithoutLink(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	f.links.err = errors.New("EMAIL_UNSUBSCRIBE_SECRET 未配置")
 	f.links.link = ""
 
@@ -292,7 +324,7 @@ func TestDeliverEmailListRowStillSendsWithoutLink(t *testing.T) {
 
 // TestDeliverEmailListRowMarksFailure 投递失败：行标已发未成功、只进 fail_total。
 func TestDeliverEmailListRowMarksFailure(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	f.mails.err = errors.New("smtp dial refused")
 	row := emailRowFixture()
 
@@ -311,7 +343,7 @@ func TestDeliverEmailListRowMarksFailure(t *testing.T) {
 
 // TestDeliverEmailListRowWithoutSmtpQuota 一台可用 SMTP 都没有时不发、不记账、不标行。
 func TestDeliverEmailListRowWithoutSmtpQuota(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	f.deps.smtp = &fakeSmtp{err: errors.New("没有找到可用的smtp")}
 
 	deliverEmailListRow(context.Background(), emailRowFixture(), f.deps)
@@ -367,7 +399,7 @@ func compactLines(lines []string) []string {
 // 计数器无处可加（加到 uuid.Nil 上等于给一个不存在的 job 记功），但发信本身不该被这件事阻断 ——
 // 地址是运营自己导进来的，指标只是记账。签发同理：job 字段留空，退订落库时不该记一个全零归属。
 func TestDeliverEmailListRowWithoutJob(t *testing.T) {
-	f := newRowFixture()
+	f := newRowFixture(t)
 	row := emailRowFixture()
 	row.JobsID = uuid.Nil
 
@@ -404,6 +436,9 @@ func TestEmailListCronWiresComplianceRead(t *testing.T) {
 		"mailer:mail.SendMail,",
 		"lists:emailListService,",
 		"jobs:email.NewEmailJobsService(),",
+		// 附件解析器也必须真的接上环境派生的那棵树：deps 里有这个键、装配时给 nil，
+		// 表现是"运营粘了附件、邮件照样已发送"，与 R21 同一形状。
+		"attachments:mail.LocalAttachments(storage.LocalAttachmentSource()),",
 	} {
 		if got := countLinesContaining(src, wiring); got != 1 {
 			t.Errorf("deps 装配里 %s 命中 %d 次，期望恰好 1 次", wiring, got)
@@ -412,5 +447,50 @@ func TestEmailListCronWiresComplianceRead(t *testing.T) {
 	// 入口本身也得还挂着：R21 的形状就是"判据在、非测试调用点为 0"。
 	if got := countLinesContaining(compactLines(readNonCommentLines(t, "cron.go")), "EmailListCron("); got != 1 {
 		t.Errorf("cron.go 里 EmailListCron 的注册命中 %d 次，期望 1 次 ⇒ 群发排水没人触发", got)
+	}
+}
+
+// TestDeliverEmailListRowCarriesAttachments 群发行上的附件列要真的挂进信里。
+//
+// 这条判据历史上不存在，是因为两条外发路径各写了一份"附件在哪"的猜测（扁平根 + 抹掉斜杠），
+// 而那个猜测与上传侧的落盘形状不同 ⇒ Stat 永不命中、附件被静默丢掉。
+func TestDeliverEmailListRowCarriesAttachments(t *testing.T) {
+	f := newRowFixture(t)
+	row := emailRowFixture()
+	// 混一条挂不上的值：合法项不该被连坐。
+	row.Attachments = f.attachmentURL + ", https://elsewhere.example/files/attachments/x.pdf"
+
+	deliverEmailListRow(context.Background(), row, f.deps)
+
+	if len(f.mails.sends) != 1 {
+		t.Fatalf("投递 %d 次，期望 1 次", len(f.mails.sends))
+	}
+	mime := f.mails.sends[0].mime
+	if !strings.Contains(mime, "quote.pdf") {
+		t.Errorf("自家存储 URL 没被挂成附件 ⇒ 群发侧附件出口仍是死的：%s", mime)
+	}
+	if !strings.Contains(mime, base64.StdEncoding.EncodeToString([]byte("报价单"))) {
+		t.Errorf("附件字节没进消息：%s", mime)
+	}
+}
+
+// TestDeliverEmailListRowSendsWithoutResolvableAttachments 附件一项都挂不上时，信照发。
+//
+// 附件是增值项：把它升级成"整封发不出去"会让一个粘错的地址堵住一波群发。
+func TestDeliverEmailListRowSendsWithoutResolvableAttachments(t *testing.T) {
+	f := newRowFixture(t)
+	row := emailRowFixture()
+	row.Attachments = "/files/attachments/2026/09/gone.pdf, ../../etc/passwd"
+
+	deliverEmailListRow(context.Background(), row, f.deps)
+
+	if len(f.mails.sends) != 1 {
+		t.Fatalf("投递 %d 次，期望 1 次（挂不上附件不该阻断投递）", len(f.mails.sends))
+	}
+	if strings.Contains(f.mails.sends[0].mime, "Content-Disposition") {
+		t.Errorf("解析不出的值仍被挂成了附件：%s", f.mails.sends[0].mime)
+	}
+	if !strings.Contains(f.mails.sends[0].mime, "List-Unsubscribe") {
+		t.Error("附件这一格把退订头带坏了")
 	}
 }

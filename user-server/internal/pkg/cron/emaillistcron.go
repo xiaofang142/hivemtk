@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	"hivemtk-user/internal/storage"
 	"strings"
 	"sync"
 	"time"
@@ -50,7 +51,14 @@ type emailRowDeps struct {
 	mailer sendFunc
 	lists  emailListStore
 	jobs   jobTotaller
+	// attachments 附件列 → 磁盘路径的解析器。群发行与单封共用 mail 包里那一份判据，
+	// 两边各写一套就会有一边悄悄挂不上附件。
+	attachments mail.AttachmentResolver
 }
+
+// bulkAttachWarnOnce 附件一项都没挂上这件事只在进程内出声一次：一波最多 10 行，
+// 逐行报只会把别的日志埋掉，而原因（录入值不是本站形状）不会自己变。
+var bulkAttachWarnOnce sync.Once
 
 // bulkLinkWarnOnce 缺密钥这条只在进程内出一次声（配置缺陷不会自己变，也不该刷满日志）。
 var bulkLinkWarnOnce sync.Once
@@ -70,12 +78,13 @@ func EmailListCron() {
 	}
 
 	deps := emailRowDeps{
-		smtp:   email.NewEmailSmtpService(),
-		subs:   repository.NewEmailUnsubscribeRepository(nil),
-		links:  service.NewEmailUnsubscribeService(nil),
-		mailer: mail.SendMail,
-		lists:  emailListService,
-		jobs:   email.NewEmailJobsService(),
+		smtp:        email.NewEmailSmtpService(),
+		subs:        repository.NewEmailUnsubscribeRepository(nil),
+		links:       service.NewEmailUnsubscribeService(nil),
+		mailer:      mail.SendMail,
+		lists:       emailListService,
+		jobs:        email.NewEmailJobsService(),
+		attachments: mail.LocalAttachments(storage.LocalAttachmentSource()),
 	}
 
 	for _, emailList := range emailListList {
@@ -150,6 +159,15 @@ func deliverEmailListRow(ctx context.Context, row *model.EmailList, deps emailRo
 	if unsub != "" {
 		opts = append(opts, mail.Unsubscribe(unsub))
 	}
+	// 附件挂不上不阻断投递（与单封侧同一口径），但"填了却一项都没挂上"必须出声一次：
+	// 历史上这里静默丢附件丢了很久，因为邮件状态只记发送结果、不记部件。
+	paths := mail.AttachmentPaths(row.Attachments, deps.attachments)
+	if mail.AttachmentsDropped(row.Attachments, paths) {
+		bulkAttachWarnOnce.Do(func() {
+			logger.Warnf("[email_list_cron] 附件列非空但没有一项能挂上（只认本站上传落盘的 {yyyy}/{mm}/{文件名}），后续群发将不带附件发出")
+		})
+	}
+	opts = append(opts, mail.AttachmentsFromPaths(paths))
 	body := mail.AppendUnsubscribeFooter(row.Content, unsub)
 
 	// RCPT TO 用表里的原值：归一化只服务于合规查询与签发，不该悄悄改写投递地址。

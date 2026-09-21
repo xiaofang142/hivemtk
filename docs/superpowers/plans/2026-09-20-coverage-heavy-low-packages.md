@@ -3385,12 +3385,17 @@ UNDOCUMENTED PLATFORM_URL <- user-server/cmd/api/main.go` —— 我在测试树
 
 ### 登记为残项、本卡不动
 
-- **R21（新发现，已建卡 task #56）**：`internal/email/service/email_send.go` 的排队发送**从未有排水循环**
+- **R21（新发现，已建卡 task #56）**【已修：`f4a78dae`，判据与取证见文末"#56 R21 排水循环"一节】：
+  `internal/email/service/email_send.go` 的排队发送**从未有排水循环**
   —— `ProcessPendingEmails` 全仓无生产调用方，`GetPendingEmails` 只被自家测试调用，cron 统一入口
   `TaskManager.AddTask` 的 263 个调用点里 grep email/mail 零命中；而 `dto.SendEmailRequest` 同时暴露
   `sendTime` 与 `immediateSend` ⇒ 定时邮件合法落 Pending 后永不发送、不报错、状态不流转。
   连带：`ProcessPendingEmails` 分支没有 `isUnsubscribed`（即时分支有）。
-- 追踪像素 / 退订链接的**签发侧无生产调用方**：三个生成函数只被测试与彼此调用，邮件正文里既无像素
+- 追踪像素 / 退订链接的**签发侧无生产调用方**：【退订那一半已接：`967e378e` 把 `List-Unsubscribe`
+  两头与正文页脚落到外发信上、`2ac07fe3` 让群发也带；**追踪像素那一半仍是残项** ——
+  `EmailOpenTrackerService.GenerateOpenPixelURL`（`internal/service/email_open_tracker.go:62`）
+  非测试调用点为 0，正文里仍不含像素，只有校验侧 `TrackingPixel` 控制器在收］：
+  三个生成函数只被测试与彼此调用，邮件正文里既无像素
   也无退订页脚，`List-Unsubscribe` 头 0 处出现 ⇒ 校验侧控制器在读一张生产里唯一写入来源不可达的表。
   这一条**部分否证我上一轮的登记**：退订表并非"无消费方"，`email_send.go:98` 的即时发送分支确实查它。
   要接的是"把链接注入外发正文"，那属产品口径（正文文案/品牌/对收件人的披露姿态），不擅自改真人收件内容。
@@ -3414,3 +3419,129 @@ UNDOCUMENTED PLATFORM_URL <- user-server/cmd/api/main.go` —— 我在测试树
 `check-secrets-workspace.sh` 的 `is_allowed` 不得再压回一行形（`return 1` 会无条件执行）；
 env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里的 `t.Setenv` 不得删（删了那 5 例
 会退回"靠空密钥侥幸绿"）。
+
+---
+
+## 邮件外发四张卡（task #56 / #58 / #60 / #61，2026-09-21 ~ 09-22）
+
+四张卡是同一个病灶的四个面：**外发邮件的"能力在、没人接"**。判据（查退订、签发退订出口、挂附件）
+都写在某处，但真正做营销群发与定时投递的那两条路一条都不经过它们；表现统一是"行标已发送、
+状态不报错、少掉的东西没人知道"。
+
+### #56 R21 排水循环（`f4a78dae`，已推双远端）
+
+`ProcessPendingEmails` 全仓无生产调用方 ⇒ 排了 `sendTime` 的邮件永远停在 Pending。新增
+`internal/pkg/cron/emaillistcron.go` 的分钟波次排水（每波 ≤10 行、panic 有 recover、
+`cron.go` 注册），并把行处理抽成 `deliverEmailListRow(ctx, row, deps)`：四个外部面
+（`smtpSource` / `unsubscribeReader` / `emailListStore` / `jobTotaller`）全是本包声明的小接口，
+排水判据顺序（先 SMTP、再退订、最后签发）与记账口径（合规跳过不占日限额度、不打 job 计数）
+都能在 fake 上跑。上面"登记为残项"段里的 R21 那一条到此结掉。
+
+### #58 退订出口签发（`967e378e`）
+
+`mail.Unsubscribe(link)`（`List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+两个头一起上或一起不上）与 `mail.AppendUnsubscribeFooter(body, link)`（正文页脚）落到外发信上，
+头与页脚**同源**于同一次 `GenerateUnsubscribeLink`；签发失败（典型是 `EMAIL_UNSUBSCRIBE_SECRET`
+未配）选 fail-open：信照发、头不上、进程内只出声一次。判据在
+`internal/email/service/email_unsubscribe_header_test.go`（含"无 linker 时两个头都不许出现"——
+只声明一键退订而不给链接，比两个头都没有更糟）。
+
+### #60 群发路径查退订 + SMTP 归属（`2ac07fe3`）
+
+`deliverEmailListRow` 补退订名单检查（**fail-closed**：读失败本行不发、也不打完结标记，下一轮再判 ——
+与排水路径相反，因为群发一行打完 `IsSend=1` 就永不重投，"照发"等于"数据库抖一下退订名单作废一波"），
+改用记录里配的那台 SMTP（`Server`/`Port`/`SSL=Port==465`，不再按发信域名猜），
+`RCPT TO` 用表里的原值（归一化只服务于合规查询与签发，不该悄悄改写投递地址），
+限流键回到记账字段 `From`。
+
+### #61 附件出口（本轮，`internal/pkg/mail/attachment.go` 新建）
+
+两条外发路径的附件列**从来没有真的挂上过**：单封侧把值 `strings.ReplaceAll(attachment,"/","")`
+抹掉全部斜杠再 `filepath.Base`，拼到写死的扁平根 `uploads/attachments` 下；群发侧更直接 ——
+`smtpSend` 与 `buildEmailMessage` 之外那条 `opts` 里根本没有附件这一项。而上传侧
+（`LocalDriver`）落盘是 `{baseDir}/{folder}/{yyyy}/{mm}/{uuid}.{ext}` ⇒ 那个猜测与真实形状不同构，
+`Stat` 永不命中、`continue` 静默跳过，**邮件照样标成已发送**。
+
+收口方式（三段，都为了"两份实现不再各自漂移"）：
+
+1. `internal/pkg/mail/attachment.go` —— 唯一的附件判定：`AttachmentPaths(csv, resolve)` 拆列逐条解析、
+   `AttachmentsDropped(csv, paths)` 判"填了却一项都没挂上"、`AttachmentsFromPaths(paths)` 只把已解析
+   的路径挂上消息、`LocalAttachments(dir, urlPrefix)` 是那个只认本站落盘形状的解析器
+   （`attachment.go:30/55/63/82`）。`internal/pkg/mail` 仍是叶子包（不 import 本仓任何包），
+   环境派生值由调用方注入。
+   形状判定是三条腿：`{prefix}/{folder}/` 前缀切得出相对段、段数 `==3` 且年 4 位数字、月 2 位数字
+   （`isStorageLayout`，`attachment.go:133`）、落点必须是常规文件且**不跟随软链接**
+   （`os.Lstat` + `IsRegular`）。段数与数字段一钉死之后最后一段不可能带目录分隔符，
+   越界由形状本身挡住 ⇒ 不再需要"抹掉斜杠"那种把合法值一起废掉的防越界，也不需要额外一道越界检查。
+   前缀比对**只看路径段**（`publicPath` 先剥 scheme/host 再截 `?`/`#`，`attachment.go:113`）：
+   公开地址可配成绝对地址或裸源站，认原样比对就又回到静默不附；host 不参与比对（越界不靠"认得自家域名"兜）。
+   **不解码** `%2f`：编码斜杠在这里就只是普通字符，不会变成路径分隔符。
+2. `internal/storage/attachment_source.go` —— 上传侧那三个环境键（`STORAGE_LOCAL_BASE_DIR` →
+   `UPLOAD_DIR` → `./uploads`；`STORAGE_LOCAL_PUBLIC_URL` → `/files`；`UPLOAD_FOLDER` → `attachments`）
+   的**唯一**读取点（`LocalSource` `attachment_source.go:19`、`LocalAttachmentSource` `:44`）。
+   `internal/controller/upload.go:166` 由内联读 env 改为调它，外发侧调 `LocalAttachmentSource()`：
+   两处同源，否则一改 `STORAGE_LOCAL_BASE_DIR` 就是"上传成功、发信时附件静静消失"。
+3. 两条外发路径接同一份判定：单封 `email_send.go:316/326/338`（`attachments` 字段是注入接缝，
+   nil 时按环境现推），群发 `emaillistcron.go:87` 装配 + `:164-170` 行处理。
+   两边都：挂不上不阻断投递（附件是增值项，一个粘错的地址不该堵一波群发），
+   但"列非空而一项都没挂上"必须出声（各一次 `sync.Once`，一波 10 行不该刷满日志）。
+
+**测试与门禁（活树真跑，load 6.8 / 3.8）**：`internal/pkg/mail` 9 例新用例 + `internal/storage` 4 例
+（含静态锁 `TestUploadHandlerReadsEnvThroughLocalSource`：`upload.go` 里 `LocalSource()` 恰好 1 次、
+那四个 `os.Getenv` 键各 0 次）+ 群发 2 例（`TestDeliverEmailListRowCarriesAttachments` /
+`...SendsWithoutResolvableAttachments`，fakeMailer 走 `m.WriteTo` 渲染后断 MIME）+ 单封 3 例 =
+四包全绿（mail 2.0s / storage 0.5s / cron 2.6s / email·service 19.2s / controller 75.0s / app 16.4s），
+`go build ./...` rc=0、`go vet` 四包 rc=0、`gofmt -l` 本泳道文件全静默。
+附件字节断言一律断 base64（`m.WriteTo` 出来的正文是 base64 的），空附件用例断结构面（不含
+`multipart`、正文头仍在）而不是逐字节比 —— MIME boundary 每次随机。
+
+**变异电池**：`/tmp/b61-1790009676/battery.py`，21 格 **全杀**（首轮 17 杀，其余 4 格修完 expect /
+变异本身后复跑杀）。分组：M1–M9 解析器（前缀丢目录段、段数 `==3`→`>=3`、年段腿、月段腿、
+忽略 `ok`、不 trim 条目、`AttachmentsDropped` 恒假、不截 query、不剥 scheme、`Lstat`→`Stat`、
+不要求 `IsRegular`）／S1–S5 环境派生值（两键优先级互换、不 TrimRight、不读 `UPLOAD_FOLDER`、
+附件根少目录段、`upload.go` 退回内联读 env 以证静态锁有牙）／C1–C2b 群发装配（解析结果不挂上、
+写死扁平根、同一判据接两处）／E1–E2 单封（算完不挂、忽略注入的 resolver）。
+四处修正是电池自己的账，不是判据没牙：① M1 的 expect 欠写一条 —— 红因显示丢掉目录段之后
+`/files/{yyyy}/{mm}/x` 反而能挂上，拒判用例本就该红；② S4 第一版变异写成 `filepath.Join(baseDir)`
+把 `folder` 变成未使用声明 ⇒ BUILD-BROKEN 不算杀，换成 `strings.ReplaceAll(folder,"attachments","")`
+才是可编译的等价破坏；③ C2 的 expect 欠写 —— 行处理用例走**注入**的 resolver、不经装配线，
+所以只有静态锁该红（装配线的值只有静态锁这一道牙，这是有意为之）；④ C2b 锚点因 gofmt 对齐漂移
+命中 0，重取锚点。诱饵夹具（`abcd/09/decoy.pdf`、`2026/ab/decoy.pdf`）与根外真文件
+（`root/outside.pdf`）是那三条形状腿与越界腿的牙：只断"名字被改过"是没牙的。
+
+**取证假象一条（防下一轮重演）**：工具的文本回显会把 `2026/09/19` 这类日期形状显示成
+`2026-09-19`，我据此一度判"夹具铺成了扁平文件名、而用例却绿 ⇒ 生产码没在判形状"。真状态用
+`python3` 打印时把 `/` 换成 `<SL>` 才看出来：夹具本来就是 `2026/09/19fc1d70.jpg`（三段）。
+读源码字面量做判据推理前，含斜杠的日期形状要用可逆编码再核一遍。
+
+**决策与不做什么**：
+
+- `internal/service/email.go:159` 的 `_ = attachments`（会话式/reach 那条手写单部件 SMTP 出口）
+  **本轮不接附件**，只加注释说明为什么。取证：活调用点 4 处（欢迎、密码重置×2、增长订阅）
+  全传 `nil`；`proactive_reach.go` 的 `emailRegistry` 唯一调用点（`sendEmail`）也传 `nil`；
+  唯一会往下传非 nil 的 `ProductionReachAdapter.SendEmail` 依赖 `NewProductionReachAdapter()`，
+  而该构造函数全仓非测试调用点为 0（grep 仅命中定义处）⇒ 死装配。为一条不可达路径重写
+  握手报文（multipart + 另一套 TLS/auth 行为）不划算，且会动到在用的事务邮件出口。
+- reach / agent 的邮件出口不走那条：`IntegrationReachAdapter.SendEmail`
+  → `email/service.EmailSendService.SendEmail` → `buildEmailMessage` ⇒ 已被本轮修好。
+- 不做"兼容旧的扁平附件值"：历史行里那些扁平文件名（`file1.pdf`）本来就永远挂不上，
+  给它们加一层猜测等于把刚清掉的第二份实现再请回来。现在填了会出声，不静默。
+
+**登记为残项（本轮不动）**：
+
+- `internal/router/router.go:159` 的 `/files` 静态托管根仍自己读 env（只看 `STORAGE_LOCAL_BASE_DIR`，
+  兜底 `./uploads`），而上传侧 `LocalSource()` 的兜底链里还夹着 `UPLOAD_DIR` ⇒ 只配 `UPLOAD_DIR` 的部署
+  会"写到 `$UPLOAD_DIR`、从 `./uploads` 公开"，公开链接 404（邮件附件不受影响，它读磁盘本身）。
+  收口动作就是把那半段也换成 `storage.LocalSource()`；**该文件被并行会话占着未提交改动 ⇒ 按归属交接**。
+- 两条路径的"附件列非空却一项都没挂上"出声只经 `AttachmentsDropped` 这个判定函数锁（它在
+  `internal/pkg/mail` 有独立用例），**没有**对日志串本身加静态锁：`sync.Once` + 文案两处各一份，
+  锁文案等于锁一个随时会润色的字符串，收益不抵成本。
+
+**勿放松**：`isStorageLayout` 三条腿（段数 `==3`、年 4 位数字、月 2 位数字）不得放松成"文件存在即挂"，
+诱饵夹具与 `root/outside.pdf` 是这三腿与越界腿的牙，删夹具＝删判据；`Lstat` + `IsRegular` 不得退回
+`Stat`（跟软链接出根外）；`publicPath` 的"先剥 scheme/host、再截 `?`/`#`、**不解码**"三步顺序不得只留一步；
+`storage.LocalSource()` 必须是 `upload.go` 里那三个键的唯一读取点（静态锁在
+`internal/storage/attachment_source_test.go:96`）；`AttachmentPaths` 的返回值不得改回"未解析也占位"
+（空串会让 `AttachmentsDropped` 永远不响）；两处 `AttachmentsDropped` 出声保持"进程内一次"，
+既不得删也不得改成每行都打；`internal/service/email.go` 的 `_ = attachments` 若哪天有活调用点
+传非 nil，必须走 `mail` 包那套解析，而不是在手写报文上补 multipart。

@@ -163,16 +163,7 @@ func UploadFile(ctx *gin.Context) {
 		}
 	}
 
-	uploadFolder := os.Getenv("UPLOAD_FOLDER")
-	if uploadFolder == "" {
-		uploadFolder = "attachments"
-	}
-	baseDir := os.Getenv("STORAGE_LOCAL_BASE_DIR")
-	if baseDir == "" {
-
-		baseDir = os.Getenv("UPLOAD_DIR")
-	}
-	publicURLPrefix := os.Getenv("STORAGE_LOCAL_PUBLIC_URL")
+	baseDir, publicURLPrefix, uploadFolder := storage.LocalSource()
 	driver := storage.NewLocalDriver(baseDir, publicURLPrefix)
 
 	publicURL, _, err := driver.UploadReader(ctx, bytes.NewReader(fileBytes), header.Size, uploadFolder, header.Filename)
