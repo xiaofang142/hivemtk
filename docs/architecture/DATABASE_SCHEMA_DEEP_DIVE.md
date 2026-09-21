@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.13（2026-09-21，T-P4-06 **交付后复查**：§4.16.5 落点表补登记漏掉的一个新增测试文件并改正计数、该文件补过 `make fmt-check`；上一版 v1.12 首次写入 §4.16.5）
+> **版本**：v1.14（2026-09-21，T-P5-01 **N-2 动态人群圈选交付**：新增 §4.17 —— 开工名单的三个权威源、"0 人"为什么必须分两种报、上限为什么要夹两次、台账项18 三格与两处刻意欠账；上一版 v1.13 是 T-P4-06 的交付后复查）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -1500,6 +1500,198 @@ app 234 / repository 1171 / router 177 / pkg-db 24 / controller 913 / service 43
 
 ---
 
+### 4.17 SOP 开工名单的三张权威表：圈选读的是谁，以及"0 人"为什么必须有两种（T-P5-01）
+
+> 卡面（`docs/replan-2026-09/新规划任务清单.md:257`）：「**N-2 动态人群圈选**：`sop_scheduler.go`
+> 现只读静态 `customer_ids`，为空回退到 SOP 创建者本人（误伤风险）。改为按 `TriggerConfig`
+> 的圈选条件（churn/RFM/segment/tag）实时取名单」。落点 M `internal/service/sop_scheduler.go`
+> ＋ N `internal/service/audience_selector.go`（**不新建人群表** C7）。
+> AC① 空配置**不再**回退到创建者（坏例锁定）；AC② 圈选结果规模有上限；
+> AC③ 首轮 DryRun 产出名单预览，人工确认前不外发（RK-6）。
+
+#### 落点（四改两增，共 6 个路径；没有任何一张新表）
+
+| 文件 | 改了什么 |
+|---|---|
+| `internal/service/audience_selector.go`（新增） | `AudienceConfig` / `AudienceSelection` / `AudienceSelector.Select` / `parseAudienceConfig`，上限常量与三类 reason |
+| `internal/service/audience_selector_test.go`（新增） | 10 条用例：三源各一条（segment / tag / churn）、"死源不等于空结果"一条（2 子）、segment 侧诊断一条（3 子）、交集一条、上限夹取＋截断一条、无条件一条、报错上抛一条、配置形状解析一条 |
+| `internal/service/sop_scheduler.go` | `tryExecute` 的名单来源换成 `resolveTargets`（删掉回退创建者那三行）、新增 `recordAudiencePreview`、本轮额度截断 |
+| `internal/service/sop_scheduler_test.go` | 追加 9 条（原 15 条 → 现 24 条）：AC①②③ 七条 ＋ 本轮额度截断、预览跨 tick 存活各一条 |
+| `internal/repository/customer_tag_assignment.go` | 加 `ListCustomerIDsByTag`（读方法，带 total）＋ `...WithDB` 构造器，六个既有方法改走 `r.database()` |
+| `scripts/check-unwired-assets.sh` | 未接线台账加**项18 三格**（防回退登记，见下文「台账」小节）：49/55 ⇒ **52/58** |
+
+#### 三个源、四道判据
+
+| 条件键 | 读的表 | 排序（决定截断时留下谁） |
+|---|---|---|
+| `segments` | `customer_rfms.segment`（`determineSegment` 是唯一写入口，五值词表见 `model.RFMSegment*`） | `composite_score DESC, monetary_total DESC` |
+| `tags` | `customer_tag_assignments.tag` | `created_at DESC` |
+| `max_p_alive` | `churn_scores.p_alive` | `p_alive ASC` |
+
+- **交集，不是并集**。勾了 `champion` 又勾了 `vip`，语义是"既是 champion 又打了 vip 标"；
+  并集会让规模变成两拨人之和，而规模正是 AC② 要夹的那个东西。所有条件都会跑完再交，
+  不因前面空手而提前 return —— 否则"另一个条件其实也没人"这条信息被藏掉。
+- **`0 人` 有两种，必须分开报**：`no_match:<条件>`（改条件）与 `source_empty:<源>`（去查数据源）。
+  这不是洁癖：`churn_scores` 的统计源 `defaultChurnStatsQuery` 现为 `return nil, nil`
+  （`churn_score_job.go:115-117`），而周批**是装配着的**（`cmd/api/main.go:353`），
+  `ComputeAll` 读到空统计就自己打一行"本轮空跑"退出、**一行都不写**。
+  于是 churn 条件在真实环境永远圈不到人。如果只回"0 人"，运营读到的是"我条件写得太严"，
+  真实原因是"这个域还没有生产者"—— 两种处置动作完全相反。
+- **上限要夹两次，各防一件事**：`AudienceConfig.limit()` 把配置值夹到 `MaxAudienceLimit=500`
+  （防一个手滑的 limit 把一轮变成几千条执行）；`tryExecute` 再按 `maxRunningPerSOP` 的**剩余额度**
+  截一次（防"阈值只在上轮已跑满时才生效"—— 原实现里 49 在跑 + 名单 3 人 = 52 条并发）。
+  夹取用 `Truncated` 留痕。
+- **`ListBySegment` 的 `pageSize` 是个陷阱**：`pageSize>200` 会被它**静默改成 20**
+  （`repository/customer_rfm.go:65-66`），所以"上限 500"绝不能直接当 pageSize 传，
+  必须按 200 一页翻。第一次写成直传时，用例的 501 行夹具会拿到 20 而不是 500。
+
+#### AC③ 的落法，以及它与卡面差在哪（不许声称复用了没调的代码）
+
+卡面写「首轮 **DryRun**（复用 `proactive_reach.go` 既有能力）」。实测这条链路上
+**没有 `ProactiveReachService` 可调**：调度器只做一件事 —— 建 `SOPExecution`；真正的出域发送发生在
+执行体的工具节点里，那条腿的闸门是 T-P5-03 的范围。`ProactiveReachRequest.DryRun` 也存在，
+但 `ProactiveReachService` 只在 `internal/app` 装配、无全局入口，调度器拿不到它。
+⇒ 本卡实现的是 AC③ 的**语义**而非那句**调用**：`audience` 未经 `audience_confirmed` 时
+零开工（`SOPExecution` 一条都不建，因此下游根本没有可发送的东西），名单写回
+`trigger_config.audience_preview`（`generated_at / count / customer_ids / truncated / reasons`）。
+这条偏差连同理由登记在此，比在 FEATURES 里写一句"已复用 DryRun"可信。
+
+人工确认的通路是**既有**的 `PUT /sop-agents/:id`（`frontend_aliases.go:202` 与
+`service_routes.go:300`，admin）：`sop.go:253` 把 `req.TriggerConfig` 整体覆盖回库。
+⇒ 两个必须知道的后果：① 确认时要**整份回传**（`Update` 是覆盖不是合并，只塞一个
+`audience_confirmed` 会把 `audience` 块 itself 抹掉）；② 任何一次不带 `audience` 的更新会让圈选条件
+消失 —— 方向是"零开工"，不是"回退到某个人"，这个不对称是本卡故意留的安全侧。
+
+#### 取数层的 customer_key 语义未证（接生产者前必须先对齐）
+
+`churn_scores.customer_key` 被本卡**直接当 customer_id 用**。这个映射在仓库里**无法核对**：
+生产者既然是桩，就没有一行真实数据能证明它写的是 `customers.customer_id` 而不是 oneid / 渠道键，
+而列宽也各说各话（`varchar(120)` vs `customer_id` 的 `varchar(64)`）。
+代码里那段注释就是留给接驳者的：先对齐，再启用 churn 条件。
+
+#### 台账：项18 三格（`scripts/check-unwired-assets.sh`）
+
+本卡给未接线台账加了三格，判据是"这一格能不能被 `internal/service` 自己的用例看见"：
+
+| 格 | 锚点 | 摘掉之后的症状 | 用例看得见吗 |
+|---|---|---|---|
+| 18a | `cmd/api/main.go:291` 的 `InitSOPScheduler(` | auto 与 schedule 两类 SOP **一起**停摆，圈选根本不跑 | 看不见 —— 全仓 service 用例都就地 new 一个调度器，没有任何一条读得到 `main.go` |
+| 18b | `sop_scheduler.go:77` 的 `audience:` 字段赋值 | 静态名单通道照常（那条用例照绿），只有声明 `audience` 的 SOP 永久零开工，症状是一行 Warn | 看得见，但**红得很晚**且不指名字段 —— 登记为防回退 |
+| 18c | `audience_selector.go:150` 的 `s.tags.ListCustomerIDsByTag(` | **这一格与 18a/18b 不同类，登记时必须说清**：把那一行整个删掉会同时让 `TestAudience_SelectByTag` 转红（它断言打了 `vip` 的那两个人必须回来、没打标的 c-3 不许进来），所以它守的**不是**"静默停摆"。它守的是**换路** —— 谁把这一跳换成就地拼一条 `WHERE name = ?`，全部既有用例照绿，而 `ListCustomerIDsByTag` 就此变成零消费方的未接线资产，那正是本台账记的东西。附带一条读码事实：tags 腿**没有死源判据**（segment 腿查 `rfmHasAnyRow`、churn 腿查 `Count`，tags 腿空手只报 `no_match:tag=…`，:154-155）⇒ 换路之后它连"源死了"都说不出来，报出来的永远是"这个条件没人" | 看不见 —— 用例断的是"取回谁"，不是"经哪个仓储取" |
+
+18c 与 §4.16.5 那一课同源，所以刻意不写成 `New.*RepositoryWithDB\(` 那种"三个源并一格"的宽式：
+RFM 那副底座另有 `customer_360.go:57` 一个消费点，并格之后那一行永远命中 ≥1 —— 等于登记一把
+永不变红的锁。三格各自锚在一个**只在此处出现**的名字上（18a 锚 `cmd/api` 里的调用、18b 锚结构体
+字段的赋值左侧、18c 锚圈选器里的那一跳），`接线数` 实测三行恒为 1（见上面那次 rc=0 的复跑输出）。
+
+#### 本卡刻意不交付的三件事（都带重启判据）
+
+| 不交付 | 为什么 | 什么时候必须做 |
+|---|---|---|
+| churn 源的**生产者** | 桩在 T-P1-07 就是登记过的边界（`defaultChurnStatsQuery` 回 `nil, nil`），补它属数据管线不属圈选 | churn 条件要真正可用之前；在那之前 `source_empty:churn` 是**预期红**，不是缺陷 |
+| 上限的**运营可配** | `MaxAudienceLimit` 是"误伤半径"，配置面一开就等于把 RK-6 的一半交给填表的人 | 外联投诉率（LTC-29）有 ≥2 周真实基线之后 |
+| 条件的**并集**语义 | 交集规模 ≤ 每个源，并集规模 ≥ 每个源 —— 后者直接顶穿 AC② 想夹的那个东西 | 若产品明确要"任一命中即开工"，那是**改 AC② 的口径**（需分池＋逐池上限），不是在本函数里换个循环 |
+
+#### 本卡的两处刻意欠账
+
+1. **FEATURES.md 那条本卡没加**。不是漏了 —— 该文件在工作树里正被并行会话整表重写
+   （`git status` 为 ` M`、`git diff` 的 32 行全在 webhook 渠道表上，与本卡零交集）。
+   在它上面再叠一段圈选说明，等于把两拨未审阅的改动缝进同一个提交。
+   ⇒ 这条功能登记**推后**到那份重写落地之后单独补一行；判据是"文档里出现的调用面，
+   必须能在同一棵树里被 `grep` 命中"，而现在两条都还站不稳。
+2. **两处 nil 守卫没有用例覆盖**：`resolveTargets` 的 `s.audience == nil` 与 `Select` 的
+   `s == nil || s.rfm == nil ...`。**都没有生产构造路径可达** —— `NewSOPScheduler(svc, nil, ...)`
+   同时把 `execRepo` 置 nil，而 `tryExecute` 第一行就 `if s.execRepo == nil { return }` 退出，
+   根本走不到圈选。留着是因为构造器 `NewAudienceSelectorWithDB(nil)` 返回 nil 是**公开的**
+   可判空契约（`Select` 遇 nil receiver 必须回错误而不是 panic）。登记为冗余守卫、
+   **不为其写用例** —— 为一个只能靠手工组装结构体才可达的分支写测试，测的是夹具不是行为。
+
+#### 本卡被实测纠正的五处
+
+1. **"表不存在"不能靠"建库时少列一张表"来构造**。`testutil.NewTestDB` 是**同进程共用一个库**、
+   只 Drop+AutoMigrate 自己列出的那几张模型 —— 前一个用例建的 `customer_rfm` 还在原地。
+   第一版 `TestAudience_PropagatesQueryError` 就因此**直接绿了**（假绿，且绿得毫无痕迹）。
+   两条同类用例（调度器侧那条也一样）都改成显式 `Migrator().DropTable(...)`。
+2. **`setJSONMapValue` 只能塞字符串值**。预览是对象，走它会被写成 `""`。改用 `json.Marshal` 整体回写。
+3. **schedule 型一次 tick 会回写两次**（`recordAudiencePreview` 一次、`last_run_at` 一次），
+   而后者序列化的是**内存里那份 map** —— 预览若只落库不落 map，同一次 tick 内就被覆盖掉。
+   修法是就地改那份 map；这一条有专门用例，且"只落库不落内存"这个变异被它打红。
+4. **注释续行 4 空格又被 gofmt 判成代码块**（与 `7a7c99ad` 同一处坑的第二次）。差别只在于这次是
+   **新写的文件**、在提交前被 `gofmt -l` 抓到，而不是等 CI 的 `make fmt-check` 报红。
+   修法同前：顶格 `// ` 单空格，不跑 `gofmt -w`（它会把这段中文散文重排成 tab 代码块）。
+5. **台账 18c 的"摘掉即静默停摆"是我写错的，而且是**跑不出来**的那类错**。初稿（同时写在
+   `check-unwired-assets.sh` 的注释里和本节表格的"症状"列）说：拆掉 `ListCustomerIDsByTag`
+   那一跳 ⇒ tags 条件永久空手、用例看不见。回读 `audience_selector.go:149-160` 与
+   `TestAudience_SelectByTag` 后两头都不成立 —— 该用例断言"打了 `vip` 的两人必须回来、没打标的
+   c-3 不许进来"，腿一拆它就**转红**；而 tags 腿**根本没有死源判据**（segment 腿查
+   `rfmHasAnyRow`、churn 腿查 `Count`，tags 腿空手只报 `no_match:tag=…`，:154-155），所以"reason
+   说谎"那句连触发条件都不存在。这一格真正守的是**换路**（就地拼一条 `WHERE name = ?` 会让全部
+   用例照绿、同时把新仓储读法变成零消费方资产），措辞已按此改写。**为什么它躲过了本卡全部实跑**：
+   反向验证证的是"grep 锚点会红"（rc=1、点名 1 行），这条为真、我也照它登记了，但我由它**推出**了
+   一句关于运行时行为的陈述句写进文档 —— 门跑的是文本，我记录的却是语义，中间那一跳没人验。
+   ⇒ 与"二手审查结论要自己复核"同一族，新登记一条口径：**台账每格"摘掉之后的症状"必须回读被测
+   函数与对应用例各一遍，不得由反向验证的结果代推。**
+
+> **一处口径**：第 1…3 条只有跑才知道；第 4 条能"提交前抓到"，靠的是把 `make fmt-check` 放进交付清单 ——
+> 这个门在 `scripts/*.sh` 里**不存在**（它是 Makefile 目标），按脚本目录列门禁清单会整批漏掉它，
+> 见 `新规划任务清单.md` r48 与项目记忆「门禁口径盲区」第 ⑪ 轴。第 5 条**不在任何门的覆盖面里**，
+> 五条里只有它是"回读源码"抓到的：门能证明锚点会红，证明不了我替它写的那句症状。
+
+#### 实跑（全部取自闭包后的最终态；HEAD `9859e2b9` ＋ 本卡未提交改动）
+
+- 反向测试电池（`/tmp/p501_mutation_battery.sh`，九把行为变异，每把 `cp` 备份 ＋ 写回后比 md5）：
+  **9 KILLED / 0 SURVIVED**，还原后 `sop_scheduler.go` 与 `audience_selector.go` 的 md5
+  与基线一字不差。九把各对应一处"如果实现写歪了，谁会静默通过"：回退创建者、取消硬上限、
+  死源判据、交集退化成取首集合、取数报错吞成空名单、无条件不报因、确认门旁路、
+  预览只落库不落内存、本轮额度截断失效。
+- 台账三格（项18）的反向验证另跑一轮：逐格把调用点那一行注释掉，门 **rc=1** 且**恰好**点名
+  被摘的那一行（`回退` 行数 1/1/1），三格还原后 md5 一致、`p501mut` 与 `.p501*` 残留均为 0；
+  还原后台门复跑 **rc=0、52/58**（基线 49/55 ＋ 本卡三格）。静态锁与行为锁同一口径：
+  没有牙的登记不算锁。
+- 先红后绿：AC①②③ 那批 7 条用例在**未改生产代码前**跑，5 条红且红因逐字为
+  `空配置应零开工, got [7]` / `期望 3 条执行, got 1 ([7])`（`7` 就是 `CreatedBy`），
+  另 2 条（去重、静态名单通道）本就该绿 —— 它们是"零变化"的护栏，不是新行为的证明。
+  第二批 2 条（额度截断、预览跨 tick 存活）在实现已就位后写，各自被电池里对应那把变异打红过。
+- 受影响两包全量（`-count=1`，两时区各一遍，含并行会话的全部未提交改动）：
+  `TZ=Asia/Shanghai` service **668.174s** ＋ repository **231.338s**、rc=0；
+  `TZ=UTC` service **487.782s** ＋ repository **143.255s**、rc=0（时区裂脑门同口径复跑，见下条）。
+  ⇒ 这一跑的树**就是**闭包后的最终树：期间本卡只动过 markdown 与台账脚本，两包 Go 源码零改动，
+  编译产物未变 —— 所以不必为"数出在改动前"再烧一轮 670s。
+- 本卡 34 条用例（`TestAudience_*` 10 ＋ `TestSOPScheduler_*` 24）单独 `-test.v` 计数：
+  顶层 `--- PASS` **34**、子用例 `    --- PASS` **20**、FAIL **0**、SKIP **0**（4.539s）。
+  计数按前缀正则取，34 与两文件里的 `^func Test` 实数（10 ＋ 24）逐一对上 ⇒ 不是"少跑了还全绿"。
+- `-race` 两包：repository **ok 149.126s**；service **rc=1 / 653.562s**，log 里
+  `WARNING: DATA RACE` **6** 处、`--- FAIL` **3** 条（`TestCreateSession_AllowDifferentPlatform`、
+  `TestCreateSession_AnonymousUser`、`TestM01_QQFetchUsesRealAttachmentURLAndBytes`）。
+  **0 帧**涉及本卡三个 Go 文件（全 log `grep -ac "audience_selector\|sop_scheduler\|customer_tag_assignment"` ＝ 0）。
+  两组红各自归属：① 前两条同一地址 `0x…75bc60`，写方 `db.SetTestDB()`、读方
+  `MaybeSendAwayReply` 的 `SafeGo` 后台 goroutine —— 涉事四个文件（`customer_session_blacklist_test.go`、
+  `main_test.go`、`office_hours.go`、`customer_service_plus.go`）`git status` **全 clean** ⇒ HEAD 自带，
+  即已登记的 `SetTestDB` 全局句柄那族；② 后四条属并行会话**未跟踪**的
+  `webhook_batchf4_m01_qq_test.go:342`（`git log --` 该路径零提交）对 `qq_media.go` 的
+  `FetchQQAttachment` / `persistQQMediaAsync` —— 与本卡不同文件、不同键。⇒ 均不代修。
+- 门：`check-date-bucket-tz`（命中 **21**，与基线 21 同）、`check-enum-consistency`、
+  `check-doc-consistency`、`check-feature-doc`、`check-unwired-assets`（52/58）、
+  `api-inventory`（生成物 `git status` 无 diff ⇒ 本卡零新端点）、`audit-cross-package-ports`
+  （Errors 0 / Warns 0）七条 **rc=0**；`make fmt-check` **rc=2**，未通过文件**恰 1 个**
+  （`internal/controller/wechat_batchf4_m01_inbound_test.go`，`??` 未跟踪）—— 本卡 5 个 Go 文件
+  `gofmt -l` 输出**空**，即这条红与本卡零交集（同判据独立复验）；`check-architecture` **rc=1**
+  唯一红仍是 `dingtalk_media.go:191/204`（该文件 `??`）；`check-secrets.sh` **rc=1** 三处命中文件名
+  与本卡 7 路径 `comm -12` 交集 **0**；markdown lint（`npx -y markdownlint-cli2`，CI `Markdown Lint`
+  的同一条）**rc=1 / 1 issue**，仍属并行会话正在改的 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808`，
+  §4.17 全文 **0 命中**。`check-secrets-artifacts.sh` 需 `<env文件> <产物目录…>` 参数、无参必 rc=2，
+  属用法而非门禁；`-race` **不是**任何命名门的一步（口径见 `新规划任务清单.md` r34，本卡只报数不扩大）。
+- 前端零改动：本卡 7 个路径全在 `user-server/` 与 `scripts/` 与文档 ⇒ 无 `vite build` /
+  `eslint` / `vitest` 腿，不是跳过而是没有对象。
+- 闭包计数：任务清单 **2** 行（P5 表下的执行结果 ＋ 修订 r51）、本项目调研 **3** 处
+  （§3.5 叙述 ＋ GAP-02 ＋ DRIFT-06）＋ 修订 r26、新规划 **3** 处（N-2 状态行 ＋ RK-6 缓解列
+  ＋ LTC-07 现状列）＋ 修订 r15、本文件改 3 处（版本行 ＋ §4.17 ＋ 修订 v1.14 行）—— 三篇规划文档在 git 外，
+  在仓库里 `grep` 不到属预期；**1** 个 git 内文档（本文件）。改完逐条 `grep` 命中数复验，
+  两个数一起报：文件数 1（git 内）／7（含 git 外三篇与本卡全部落点）。
+
+
+---
+
 ## 五、索引策略
 
 ### 5.1 单列索引
@@ -1668,3 +1860,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.11 | 2026-09-21 | @backend | 新增 §4.16.4 **线索→商机的转换层与自动分配**（N-1 / T-P4-05）：`opportunities` 的第一个生产写入方落地，P4 出口条件里「商机已入库」那句话从此成立。三道串行判据（量程 → 阶段 → 双阈值；两个同名 `confidence` 量程不同 ⇒ 硬拒不归一；`StageActive` 排在 nil 不安全的 `LeadQualified` 之前；配置降级按「关」处理）；AC② 落成「转换那一步对 `clues.is_opportunity` **零写入**」，并**就地推翻 T-P4-01 写在自己代码注释里的那句「不建索引、反查由 is_opportunity 承担」**（0/1 答不出「转成了哪一条」，且那一列是挖掘侧的热度标记、不是转化事实）⇒ 反查走 `clue_id` + **部分**唯一索引 `WHERE clue_id <> ''`，DDL 落在只 Warn 不清数据的 `postMigrateOpportunityClueUniqueIndex()`；AC③ 落成返回值而不是日志行（规则名 + 候选集 + 每人负载一起出，候选必须按 `SalesID` 升序是平票裁决的前提），三条规则顺序与「故障绝不退到 `no_roster`」严格分开；名单真源 `sales_events`/`sales_profile`（候选 `sales_personas` 实测零写入方被否），「在册」只能等于「注册过档案」（无停用事件，登记为边界而非现场补一个没有写者的死列）；接缝只在 `lead_mining.persistLead` 两条分支、且都在线索行落库之后（`Create` 失败不转 —— 本表不建外键，断链无人发现），未装配静默、报错只 Warn 不重试不回滚；装配点一次登记**两半**、`db == nil` 时两半一起清，刻意不做惰性构造。三处被真跑纠正：夹具的 `Create` 失败不填 id（真行为是 `BeforeCreate` 在 INSERT 之前就赋 uuid，失败照样留下填好的 id）/ 台账 `callpat` 被「清空那半」命中致接线数=2 的假绿 / 两把变异退化成构建红后补成可编译的语义变异 —— **只在编译期红的变异不算捕获**。台账：16b 兑现翻 wired + 新增四行（现值 **47/53**，五行逐行反向验过、控制组 rc=0）。实跑分树记：克隆 `478ef1c4` 六包 `fail=0`、`TZ=UTC` 同数同绿（计数含子用例，不与上一卡的顶层口径比大小），`-race` 四腿 race=0、service 腿五跑三结局（最多 2 race / 2 fail，也可全绿）且**受害用例名不唯一** ⇒ 上一卡登记的既有 flaky 再证一次，并否掉"归因到单条用例"的读法；工作树的 `TestValidPlatform_Unsupported` 红、架构门 1 处红、secrets 3 处红**全部**落在并行会话未提交/未跟踪的文件上，不代修不代提交，同一棵树换成克隆后同门 rc=0 即为归属证据。刻意不交付：HTTP 手工转商机口、`lead_miner_unified.go` 那条链（无 confidence 生产者）、`ltc.config` 的 `win_probability` 阈值读者。 |
 | v1.12 | 2026-09-21 | @backend | 新增 §4.16.5 **漏斗的第五段**（N-1 / T-P4-06）：`conversion-funnels` 从四段变五段，商机段接 `opportunities` 的实时聚合，**没写那张僵尸表**（AC② 由用例锁「取数时顺手往演示表写一行」必红，AC③ 锁「演示表灌 99999 读数不变」）。三条判据：① 口径取 `created_at`（流量）而非 `stage`（状态）—— 混一格状态读数进四条流量腿，逐段相除的「阶段转化率」失去意义，且 `idx_opp_created` 的注释本来就点名按它切时间窗；② 错误只上抛到仓储层，服务层降级成 0 **外加一条 Warn**（这条腿独有一种歧义：T-P4-05 之后 `opportunities` 只有一个生产者，0 既可能是「真没转出来」也可能是「表没建/接缝没装配」；四段老腿答 0 没人拿它做决策，这段答 0 会一路走进 P8 的归因），因此告警是行为不是日志，由抓 `os.Stdout` + 重建全局日志器的用例守着（只换 stdout 不够，`GetLogger` 连 writer 一起缓存）；③ 第五段**追加在末位**，因为「下标即契约」的读者有两处（后端 `_NonMonotonic` 的 `Stages[len-1]`、前端 `List.vue` 摘要区的 `stages[0]`/`stages[length-1]`），加段会让前者**绿着失去意义**、后者把「转化量(会话)」显示成商机数 —— 两处一并改按阶段名取，`total`/`conversion` 与服务端口径刻意仍停在 访问→会话（改成 访问→商机 是产品决策，登记为欠账）。**本卡被真跑纠正的一处**会让「登记」变成假安全：台账最初只加**一行**，反向删掉汇总腿实测 rc=0 仍报 WIRED —— `wired` 只要求命中 ≥1，而 service 里有两个消费点，删一个剩一个，等于装了一把永不变红的锁；按消费点拆成 17a/17b 后四种删除口径（删汇总/删详情/都删/定义改名）分别 rc=1/1/1/2。**第二处纠正落在本卡自己的文档上**：初稿把卡面的 `GET /conversion-funnel` 判成笔误（"真实路径是复数"），读全 `frontend_aliases.go:409-414` 后**推翻** —— 单复数各三条一起注册、卡面字面可命中；我错在拿"测试里只手写了复数两条"+"api-inventory 后端段没有这两组"当结论，而后者本身就是该脚本的盲区（详见 §4.16.5 那段更正与其下的两族漏法）。台账现值 **49/55**（rc=0）。**这条端点原先一条 controller 用例都没有**，而 AC① 说的正是「接口返回」，故新增 `conversion_funnel_http_test.go`（真 gin 路由 + `{code,message,data}` 外壳），H1–H4 四把变异各打红一条，证明不是摆设。实跑（主工作树未提交态，HEAD `39be6824`）：三轮 11 把变异，控制组 service+repository **455 全绿 / 0 skip**、controller **106 全绿**，red 计数逐把记在 §4.16.5；`go test ./internal/ops/...` 四包 ok，`TZ=UTC` 与 `TZ=Asia/Shanghai` 同数同绿，`-race` 三包 DATA RACE 计数 0，`go build` / `go vet` 双 rc=0 且输出 0 字节；`check-date-bucket-tz`（命中 21，与基线同）、`check-enum-consistency`、`check-doc-consistency`、`check-feature-doc`、`api-inventory`（生成物无 diff —— 本卡把这条**下调一档**：该快照抽后端只认 `.GET("全路径")` 形状，`doReg("GET", path)` 那族别名与"控制器内相对路径 + `Group` 前缀"那族都不进账，`grep -c -i opportunit api-inventory.md` 全文为 0）、`audit-cross-package-ports`（Errors 0 / Warns 0）、`check-unwired-assets` 全 rc=0，`check-architecture` 唯一红是并行会话的 `dingtalk_media.go:191/204`。前端：`vite build` rc=0，`eslint` 对本文件 0 error 且改前改后**同为 53 warning**（HEAD 版临时复制到同目录对拍计数，跑完即删），`vitest run` **14 文件 / 238 用例全绿**（本卡 +1 文件 +5 用例，改前 13/233；那份组件用例对改前的 `List.vue` 实跑过 **4 红 1 绿**，绿的那条是本来就不按位置取的明细表）。刻意不交付：端到端转化率延伸到商机、商机段的 `avg_duration_seconds`/`top_sources`（要 `sales_events` 口径，属 T-P7 域）、演示表下线（§4.11 三条删表判据一条未消）、真机看板截图（8204 上活着的是 9-19 起的旧二进制 `bin/user-server.r39`，不含本卡改动且非本会话启动，不为它污染并行会话的证据）。 |
 | v1.13 | 2026-09-21 | @backend | **T-P4-06 交付后复查（双推之后按「彻底深入检查」重跑本卡）**，抓到并当场修掉两处，都在"自己写的登记"上：① §4.16.5 落点表**漏登记** `ops/repository/conversion_funnel_opportunity_test.go`（新增，三条取数层用例，含"往演示表种巨量假行而真实源读数不动"这条 D-9 的仓储侧证据），标题计数也随之下修 —— 实数按 `git show --name-status d52434c2 cc065b02` 为 **4 个 `A` + 8 个 `M`**（ops 侧四改三增、前端一改一增、台账一行、文档两篇），表下已把口径边界写清；② 那个文件**没过 gofmt**，而 gofmt 是真门（CI `Static gates` 调 `make fmt-check`，与本地同判据）—— 红因是包注释里 `①②③` 用了四空格续行，Go 1.19+ 把注释内 ≥4 空格缩进判成代码块。修法是把续行顶格而**不跑** `gofmt -w`（它会把散文重排成 tab 代码块，更难读）；改后 `gofmt -l` 对该文件空、`git diff` 该文件非注释改动 **0 行**、`ops/repository` 包重跑 **76 条全绿**。同批另一条 fmt 红 `internal/controller/wechat_batchf4_m01_inbound_test.go` 属并行会话未提交文件，不代改。**由此得一条门禁口径**：新增文件的验收清单不能只按 `scripts/*.sh` 枚举门，`make fmt-check` 这类**以 make 目标存在的门**会被整批漏掉（本卡当初的清单列了 build/vet/六门/-race，唯独没有它）。**同轮复核成立项（逐项重跑，非推断）**：`ops/service`+`ops/repository` 双时区各 455 / 0 fail / 0 skip、`ops/controller` 106 / 0 / 0；命名六门在 `--shared` 干净克隆六条全 rc=0，工作树五绿一红，那处架构红这次拿到**直接归属证据**（`dingtalk_media.go` 状态为 `??`、`git log -- <路径>` 零提交 ⇒ HEAD 无此文件）；`check-secrets.sh` rc=1 的三处命中文件名与本卡 12 路径求交集为空（`comm -12` 实算）；台账 49/55 且项17 两行各自 `接线数=1`；`api-inventory.md` 全文 `opportunit` 命中 0、`human-task` 两条均在 1426/2241 的前端调用段；`闭环完成率` 全仓 `*.go` 仍只命中 `internal/model/opportunity.go:85`；`frontend_aliases.go:409-414` 逐字重读确为单复数各三条；`List.vue` md5 与提交时一致、`vitest run` 14 文件 / 238 用例全绿。**另修规划文档（git 外）的表格完整性**：7 行表格行补回收尾管道、12 行两列修订条目里的裸 `\|` 转义（逐行按插入位置反删验证无损）；多列表格里**另有 14 行**"列数与表头不符"的**历史**条目**刻意未动**（12 行是列数比表头多、2 行少一格，行号与逐行判读留在任务清单 r48）—— 那种行分不清"多出的单元格分隔符"与"散文里的裸管道"，盲改会把真实列并掉，属渲染问题不属事实错误，留待人工逐行判读。**本文件其余内容零改动**。 |
+| v1.14 | 2026-09-21 | @backend | 新增 §4.17 **SOP 开工名单的三个权威源**（N-2 / T-P5-01）：`sop_scheduler.go` 那条"名单为空就把 SOP 跑到创建者本人身上"的回退**删掉了**，换成按 `trigger_config.audience` 实时圈选，读 `customer_rfms.segment` / `customer_tag_assignments.tag` / `churn_scores.p_alive` 三张既有权威表 —— **没建人群表**（C7）。四条判据：① 条件是**交集**不是并集（并集规模直接顶穿 AC② 想夹的那个东西）；② **`0 人` 有两种、必须分开报** —— `no_match:<条件>` 让人去改条件，`source_empty:<源>` 让人去查数据源，而 churn 今天恰恰是后者（`defaultChurnStatsQuery` 是 T-P1-07 登记在册的桩，`ComputeAll` 读到空统计就一行不写），只报"0 人"会把"这个域还没有生产者"读成"我条件写得太严"，两种处置动作完全相反；③ 上限**夹两次**：`limit()` 夹到 `MaxAudienceLimit=500` 防手滑，`tryExecute` 再按 `maxRunningPerSOP` 的**剩余额度**夹一次防"阈值只在上轮已跑满时才生效"（原实现 49 在跑 ＋ 名单 3 人 ＝ 52 并发）；④ 翻页步长钉死 200，因为 `ListBySegment` 把 `pageSize>200` **静默改成 20**（`customer_rfm.go:65-66`），直传 500 实测只回 20 行。**AC③ 与卡面差一处、按实际落法登记**：这条链路上根本没有 `ProactiveReachService` 可调（调度器只建 `SOPExecution`，出域发送在执行体工具节点里、闸门属 T-P5-03），所以交付的是 AC③ 的**语义**（未经 `audience_confirmed` 时一条执行都不建、名单写回 `trigger_config.audience_preview`）而不是"复用 DryRun"那句**调用** —— 宁可留这条偏差，也不在 FEATURES 写一句代码里不存在的复用。**三处被真跑纠正、第四处被提交前的 `gofmt -l` 纠正、第五处由回读源码纠正（它躲过了全部实跑：反向验证只证明 grep 锚点会红，证明不了我替那一格写下的症状句）**：假绿那条最贵 —— `TestAudience_PropagatesQueryError` 第一版**没改生产代码就绿了**，因为 `NewTestDB` 同进程共用一个库、前一个用例建的 `customer_rfm` 还在原地，"表不存在"必须显式 `DropTable` 构造（调度器侧同类用例同改）；`setJSONMapValue` 只能塞字符串值，预览是对象会被写成 `""` ⇒ 改 `json.Marshal` 整体回写；schedule 型一次 tick 回写两次、后一次序列化的是**内存里那份 map** ⇒ 预览必须就地改那份 map，"只落库不落内存"这把变异被专门用例打红。第四处是**新写文件**的注释续行又用 4 空格、被 `gofmt -l` 在提交前抓到（与 `7a7c99ad` 同一坑的第二次，修法同前：顶格 `// ` 单空格、不跑 `gofmt -w`）。另抓到**自己文档里的数**：落点表写"追加 8 条用例"实为 **9** 条、selector 那格把 10 条函数与其子用例混成"11 条判据"。台账新增**项18 三格**（49/55 ⇒ **52/58**，`接线数` 恒为 1）：18a 调度器启动入口在 `cmd/api`（摘掉即两类 SOP 一起静默停摆、`internal/service` 全绿）、18b `audience:` 字段赋值、18c 标签腿那一跳（18c 与 17 同一课：刻意不写成 `New.*RepositoryWithDB\(` 那种并格宽式，因为 RFM 底座另有 `customer_360.go:57` 消费点，并格即死锁）。**两处刻意欠账按原样登记不粉饰**：FEATURES.md 那条**本卡没加**（该文件正被并行会话整表重写，`git diff` 32 行全在 webhook 渠道表、与本卡 7 路径 `comm -12` 命中 0），§4.17 两处 nil 守卫**无用例覆盖**（`NewSOPScheduler` 传 nil db 会连 `execRepo` 一起置 nil、`tryExecute` 第一行就返回 ⇒ 生产构造路径走不到；留它是为 `NewAudienceSelectorWithDB(nil)` 这个公开可判空契约，为"手工组装结构体才能触发"的分支写测试＝测夹具）。实跑（工作树未提交态，HEAD `9859e2b9`；全量跑完后本卡对这两包 Go 源码零再编辑，逐文件 `gofmt -l` 空 ⇒ 这些数就是最终态）：`go build` / `go vet` 双 rc=0；两时区全量 `internal/service` + `internal/repository` **各双 rc=0**（CST 668.174s / 231.338s；UTC 487.782s / 143.255s）；本卡 34 条用例 `-test.v` 实数顶层 **34**（＝ selector 10 ＋ scheduler 24，与 `^func Test` 逐字对上）＋ 子用例 **20**、FAIL 0、SKIP 0；反向电池 **9 把全 KILLED**（逐把 `cp` 备份、写回比 md5 一致），台账三格**逐格摘装 rc=1 且各点名 1 行**、还原后 md5 一致、`p501mut` 与 `.p501*` 残留 0；门 `check-date-bucket-tz`（命中 **21** ＝ 基线 21）/`enum`/`doc-consistency`/`feature-doc`/`unwired-assets`(52/58)/`api-inventory`（生成物无 diff ⇒ 零新端点）/`ports`（Errors 0 Warns 0）七条 rc=0；`make fmt-check` **rc=2** 未过文件**恰 1 个**（`wechat_batchf4_m01_inbound_test.go`，`??` 未跟踪）、本卡 5 文件 `gofmt -l` **空**；`check-architecture` **rc=1** 唯一红 `dingtalk_media.go:191/204`（`??`）、`check-secrets.sh` **rc=1** 三处命中与本卡 7 路径交集 **0**、markdown lint **rc=1 / 1 issue** 属并行会话正在改的 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808` 而 §4.17 全文 **0 命中**。`-race` **rc=1**：repository ok(149.126s)、service FAIL(653.562s)，`WARNING: DATA RACE` **6** 处、`--- FAIL` **3** 条 —— **0 帧**涉本卡三个 Go 文件，两组红各自归属：① `TestCreateSession_AllowDifferentPlatform` 与 `_AnonymousUser` 同一地址 `0x…75bc60`、写方 `db.SetTestDB()` 读方 `MaybeSendAwayReply` 的 `SafeGo` 后台 goroutine，涉事 4 文件 `git status` **全 clean** ⇒ HEAD 自带那族既有缺陷；② 另 4 处属并行会话**未跟踪**的 `webhook_batchf4_m01_qq_test.go:342` 对 `qq_media.go` 的 `FetchQQAttachment`/`persistQQMediaAsync` ⇒ 不同文件不同键，均不代修不代提交。前端**零改动**（7 路径全在 `user-server/` 与 `scripts/` 与文档），所以没有 `vite`/`eslint`/`vitest` 腿 —— 是没对象，不是跳过。 |
