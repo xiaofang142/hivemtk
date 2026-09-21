@@ -3231,3 +3231,62 @@ GORM AutoMigrate 会在下次启动时补回缺失的表/列/索引，但补回�
 ——上面 ② 那一格就是证据（装回自己建的索引判据不红，说明那几处本可安全回退）。多留一个对象的代价是
 schema 上冗余一行、下次启动 AutoMigrate 也不清理；误删一个在用对象的代价是不可逆的数据丢失，
 两边不对称，故取"宁可多留"。本轮不动 Up 面（Up 仍按幂等建对象），也不动 `v3.28.0` 的显式拒绝。
+
+
+## R19（2026-09-21 第三十四轮：user-server 全局请求体封顶，把第十六轮那条"只封了个别入口"的残项收掉）
+
+第十六轮交付时明确登记过：那一轮只补了 **etl 解压 / `service.ReadAll` / 微信回调** 三处，
+而 gin 引擎层对 JSON 请求体**没有默认上限** ⇒ 剩下的口子（以 authed 内部口为主）一直没人管。
+本轮把它从"登记"变成"有牙的门"：提交 `4d9a13c5`（5 路径 +496）双推 `6326a1bb..4d9a13c5` → upstream + gitee-upstream。
+
+**落地两件事**（`internal/middleware/body_limit.go` + `internal/router/router.go`）：
+
+1. `middleware.BodyLimit` 两条防线：Content-Length 预检给**真实 HTTP 413**（走 `response.Error`
+   的 int 分支 ⇒ 状态码与信封 code 同源，handler 一次都不进）；无长度/chunked 的请求由
+   `http.MaxBytesReader` 兜住读取。**已知取舍照实写**：兜底触发时错误由 handler 自己返回
+   （通常是 4xx 而非 413），但内存已经被限住 —— 那才是本中间件的首要目标。
+   multipart **跳过**（本仓上传通道走 multipart，一刀切会打断合法大文件上传）。
+   旋钮 `MAX_JSON_BODY_MB`：未设置/非法 → 默认，显式 `0` 或负数 → 不限制（迁移期应急开关）。
+2. 装配点必须在 `router.Setup` 全局链**最前部**（`gin.Recovery()` 之后、任何会读 body 的
+   中间件与 JWT 之前）：gin 的引擎级 `Use` 只对注册在它之后的路由生效，晚一步等于给先注册的路由留口子。
+
+**两个数都是自己仓里推出来的，不是抄平台端**：
+
+- 默认 8MB：逐个 grep 出来的既有上界是 webhook 可调顶格 4MB（`maxWebhookMaxBody`）、
+  `service.ReadAll` 2MB、MCP 口 1MB、bridge 入站 1MB（`handler_http.go:866`）、微信回调 1MB、
+  商机口 4KB（`opportunityBodyMaxBytes`）⇒ 全局值必须**高于**它们，否则这条 env 的高段被静默吃掉
+  （方向由 `TestGlobalDefaultDoesNotTightenExistingCaps` 钉住，它直接引用同包的 `maxWebhookMaxBody`）。
+- `MaxMultipartMemory` 从 gin 默认的 **32MB 收到 8MB**：本仓最大合法单文件是 50MB（知识库导入
+  `MaxUploadFileSize`）、次为聊天媒体 20MB、素材/通用上传 10MB，没有任何一档需要把整份文件留在内存里。
+  判据读的是 `gin.New()` 的真实默认值而不是硬编码 32MB —— 升级 gin 改了默认也会测出来。
+  （首版这里是照抄的 64MB，被这条腿当场打红：**抬高**默认缓冲等于给每个并发上传请求多发一份内存。）
+
+**判据与证据（全部真跑）**：
+
+- 单元 9 例 + 装配 3 例（`internal/router/body_limit_wiring_test.go` 走真实 `Setup(r, testdb)`）。
+  装配腿打的是 `POST /api/users`：超限 ⇒ **413 而不是 401**，一条断言同时钉住"挂上了全局链"与
+  "挂在 JWT 之前"；对照组小 body ⇒ 仍是既有的 401，证明没误伤正常载荷。
+- 变异电池 10 格：**9 杀 + 1 格等价性探针**。预检阈值翻倍、摘掉 `MaxBytesReader`、multipart 前缀改认不出、
+  `maxBytes<=0`→`<0`、env 显式 0 回落默认、默认降到 2MB、缓冲抬到 64MB、摘掉 `r.Use(BodyLimit)`、
+  摘掉 `r.MaxMultipartMemory` —— 每格红因都读过且互不重叠。
+  `M5` 那格（`mb <= 0` → `mb < 0`）实测**存活**：`0*MiB` 与 `return 0` 同值、负 MB 进 `BodyLimit` 又落回
+  同一道放行 ⇒ 经公开 API 观察不到差别，属等价变异，**不为它编断言**；换成"显式 0 被当成未设置"才杀得掉。
+- 一条前提用例：`TestMultipartUploadLargerThanMemoryBufferSurvives` 真造 9MB multipart 打 8MB 缓冲，
+  断言 `SaveUploadedFile` 落盘字节数与原件一致 —— 它自带前置（9MB 必须大于缓冲），缓冲被抬到 64MB 时
+  按设计 `Fatalf` 自证"这格测不到了"，而不是悄悄绿着。
+- 门：`./internal/... ./cmd/...` 全量 `-p 1 -count=1` 在 `--shared` 克隆 **rc=0 / 121 包 ok / FAIL 0**
+  （跑时 load 9.5–11、并发 `go test` 1–2 个）；收口态两包复跑 + `go build ./...` + `go vet` 在
+  新 HEAD 克隆里复验自洽（380 条 PASS 行含子用例）。静态门：架构 rc=0、文档一致性 rc=0（活树工作区布局）、
+  离线链接 rc=0（153 md / 断链 0）、凭证门在 HEAD 克隆 rc=0。
+- 环境归因（不是本卡的红）：① 活树 `./internal/router/` 一度**编译不过**，红因是并行会话 in-flight 的
+  `internal/browser_automation/service/executor.go`+`session.go` 类型不匹配 ⇒ 本卡门全部改在克隆里跑；
+  ② 工作区凭证门 4 处命中全在 `??` 未追踪的 `webhook_batchc_*` / `webhook_batchg2b_*` 测试夹具里
+  （HEAD 克隆 0 命中）⇒ 登记不碰；③ markdownlint 的 MD004 与 CI 侧 ESLint 两 error 仍按归属交接。
+
+**登记为残项、本卡不动**：`middleware/sanitize.go` 的 `SanitizeInput`（自带 `MaxBodyBytes 1MB`）
+在仓内**零调用方** ⇒ 一道没接线的封顶。删前要按"grep 未命中≠无用"的规矩证伪动态引用面，
+且它和 `BodyLimit` 语义不同（它截断读取、不报错），是否接线属产品口径 ⇒ 只登记。
+
+**勿放松**：`r.Use(BodyLimit(...))` 必须留在 `router.Setup` 的全局链前部（挪到 `auth` 组之后即漏掉
+先注册的路由）；`DefaultMaxJSONBodyMB` 不得低于任何按端点上界；`maxMultipartMemoryMB` 只能是**收紧**
+gin 默认的方向；multipart 跳过这条不能改成"一并 413"（会打断 10–50MB 的合法上传）。
