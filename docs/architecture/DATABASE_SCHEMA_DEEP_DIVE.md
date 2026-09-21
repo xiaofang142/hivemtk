@@ -1832,19 +1832,21 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
 4. **四格仍 UNWIRED**：`agent.ModeOf` / `agent.IsActive` / `SalesRequest.AutoExecute` /
    `AgentContext.DecisionStrategyIDs` —— 台账项19 那四行按 `unwired` 站着，它们红着才是对的。
 
-#### 实跑（全部取自本轮闭包前的最终态，数字后面点名"测的是哪个对象"）
+#### 实跑（数字取自工作树最终态：HEAD `cc0166b4` ＋ 本卡未提交改动 ⇒ 即闭包后 `b7fcedf3` 的内容；每个数都点名测的是哪个对象）
 
 - 三张包级全量：`internal/aiagent/agent/lifecycle` **ok 0.255s / rc=0**（TZ=UTC，带 `-test.v` 实数：
   顶层 `--- PASS` **15**、子用例 `    --- PASS` **6**（即既有 `TestResolver` 的 5 表项 ＋ 1 条独立 `t.Run`）、
   FAIL **0**、SKIP **0** ⇒ 15 与两文件 `^func Test` 实数（14 ＋ 1）逐一对上，不是"少跑了还全绿"）；
   `go test ./internal/app/ ./internal/router/ -p 1`（TZ=UTC）**rc=0**，app **55.278s** / router **20.009s**
   / lifecycle **0.509s**（同一条命令把 lifecycle 带进去重跑了一遍，三轮数不通用，引哪轮认哪轮）；
-  `internal/service` 全量 **ok 824.621s / rc=0**（TZ=UTC，`-timeout 2400s`，**不带 `-v`** ⇒ 本轮 PASS 计数为 0，
-  只报"整包绿"不报条数）。`go build ./...` **rc=0**。
-  ⇒ 前两跑各有一次**假红在前**：600s 默认超时那次 `FAIL 601.055s`、加 `-v` 那次跑到 1503.713s 才超时
+  `internal/service` 全量 **ok 744.237s / rc=0**（TZ=UTC，`-timeout 2400s`，**不带 `-v`** ⇒ 本轮 PASS 计数为 0，
+  只报"整包绿"不报条数；log 里 `^--- FAIL` / `^FAIL` / `DATA RACE` 各 **0**）。这一跑的工作树**就是闭包后的最终树**
+  （HEAD `cc0166b4` ＋ 本卡改动，含并行会话刚落的 R17/R18 迁移代码），跑前一次同口径是 **824.621s** ⇒
+  两数都记，别只引一个：这一包的秒数**天然摆动**（见下条）。`go build ./...` **rc=0**。
+  ⇒ **这一包的数前面有两次假红**：600s 默认超时那次 `FAIL 601.055s`、加 `-v` 那次跑到 1503.713s 才超时
   （342 条 PASS、0 FAIL，停在 `TestE2E_WebhookService_DispatchWhatsApp` 中间）—— 两次红因都是**旁边同时挂着
-  golangci-lint 与 npx** 的负载，不是代码（项目记忆「Go 全量门禁耗时口径」的 450–880s 摆动区间，本轮实测 824.621s 落在上沿）。
-  单独跑、给足超时才是这一包的口径。
+  golangci-lint 与 npx** 的负载，不是代码（项目记忆「Go 全量门禁耗时口径」的 450–880s 摆动区间，本轮两次实测
+  744.237s / 824.621s 都落在区间内）。单独跑、给足超时才是这一包的口径。
 - 台账两格 wired 的**有牙证明**（router.go 两跳各摘一行，`cp` 备份、写回后比 md5）：
   ① 注释掉 :244 `app.InitAgentLifecycles(gormDB, engine)` ⇒ `check-unwired-assets.sh` **rc=1**，
   log 第 **60** 行为 `[项19] 回退（登记为已接线却无调用点） 接线数=0 双模式运行时的启动装配点（摘掉即线上每次运行稳定回 503、app 用例全绿）`
@@ -1868,7 +1870,7 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
   （已核：`git show --stat 00aeff61` 六路径、`git show` 里零路由注册），但它当时是靠这道**看不见证据**的门立起来的 ——
   本卡是第一张"如果照抄那条推论就会说错"的卡。门本身**没有改**（改共享门禁超出卡面），按欠账登记，
   与项目记忆「门禁口径盲区」同一族（第 ⑨ 轴：注册形状）。
-- 两处**假绿在前**的取证缺陷，红因都在脚本不在代码：
+- 三处**取证侧自身**的坑（红与绿都不由被测代码决定，故单列一条）：
   ① 第一批门写成 `out=$(cmd | tail -n); rc=$?` ⇒ 取到的是 `tail` 的退出码，十条门**齐刷刷显示 rc=0**；
   改成 `cmd >log; rc=$?` 后真实红才露出来（`check-architecture` / `check-secrets` / `make fmt-check`）。
   ② `pg_isready -h 127.0.0.1 -p 8232` 瞬时报"不接受连接"，同一分钟 `lsof` 显示 OrbStack 在听、立刻复检即 rc=0
