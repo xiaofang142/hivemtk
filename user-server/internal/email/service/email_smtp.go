@@ -67,7 +67,9 @@ func (s *EmailSmtpService) GetRandEmailSmtp(ctx context.Context) (*model.EmailSm
 	}
 	emailListService := NewEmailListService()
 	for _, emailSmtp := range emailSmtpList {
-		todayCount, err := emailListService.GetTodayCountByFrom(ctx, emailSmtp.Name)
+		// 记账键必须是 Username：email_list.from 落的是发信账号，读展示名等于永远数到 0，
+		// Limit 形同不存在（日上限是唯一挡着发信域被拉黑的闸门）。
+		todayCount, err := emailListService.GetTodayCountByFrom(ctx, emailSmtp.Username)
 		if err != nil {
 			return nil, err
 		}

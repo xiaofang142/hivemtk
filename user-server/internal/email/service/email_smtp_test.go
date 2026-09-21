@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
@@ -318,6 +319,43 @@ func TestEmailSmtpService_GetRandEmailSmtp_WithLimit(t *testing.T) {
 
 	if retrieved.Name != "limit1@qq.com" {
 		t.Errorf("Expected name 'limit1@qq.com', got %s", retrieved.Name)
+	}
+}
+
+// TestEmailSmtpService_GetRandEmailSmtpQuotaCountedByAccount 限流额度的记账键必须是登录账号。
+//
+// email_list.from 落的是发信账号（Username），而额度统计读的是展示名（Name）。两者是运营
+// 各填一格的字段，正常就不相等 —— 于是 GetTodayCountByFrom(展示名) 永远数到 0，
+// `todayCount < Limit` 恒真，Limit 形同不存在：一台日限 500 的账号可以被拨穿任意多封。
+// 这不是"多算几封"的口径问题，营销外发的日上限恰恰是唯一挡着发信域被拉黑的闸门。
+//
+// 上面几条既有用例把 Name 与 Username 写成同一个值，所以这个键漂移在测试里看不出来 ——
+// 本用例刻意让两者不同。
+func TestEmailSmtpService_GetRandEmailSmtpQuotaCountedByAccount(t *testing.T) {
+	database := setupEmailSmtpServiceTestDB(t)
+	service := NewEmailSmtpService()
+
+	database.Create(&model.EmailSmtp{
+		ID:       "ratelimit-by-account",
+		Name:     "运营小号",
+		Server:   "smtp.example.com",
+		Port:     465,
+		Username: "ops@example.com",
+		Password: "pwd",
+		Limit:    1,
+	})
+	// 今日已用满的那一封：记账列是 from + send_time，与 cron 发完后写的值同源。
+	database.Create(&model.EmailList{
+		Subject:   "上一波",
+		To:        "lead@example.com",
+		From:      "ops@example.com",
+		IsSend:    1,
+		IsSuccess: 1,
+		SendTime:  time.Now(),
+	})
+
+	if _, err := service.GetRandEmailSmtp(context.Background()); err == nil {
+		t.Fatal("该账号今日已发满 1 封（Limit=1）仍被选中 ⇒ 额度统计读的不是记账用的那个字段")
 	}
 }
 

@@ -16,21 +16,16 @@ type Config struct {
 	SSL      bool   `json:"ssl"`
 }
 
-func SendMail(cfg Config, to []string, subject, body string, isHTML bool) error {
-	if cfg.Host == "" || cfg.Port == 0 {
-		autoConfig(&cfg)
-	}
+// ImplicitTLSPort 隐式 TLS（SMTPS）的标准端口。其余端口走 STARTTLS —— gomail.NewDialer
+// 用的也是这一条判据，两处一致才不会让同一条 SMTP 记录在两条外发路径上表现不同。
+const ImplicitTLSPort = 465
 
-	m := gomail.NewMessage()
-	m.SetHeader("From", cfg.From)
-	m.SetHeader("To", to...)
-	m.SetHeader("Subject", subject)
+// SendMail 发一封信。opts 是给合规头部（List-Unsubscribe 等）留的接缝：
+// 可变参数让既有调用方一行不改，新调用方能拿到"这封信真发出去时头会长什么样"的控制点。
+func SendMail(cfg Config, to []string, subject, body string, isHTML bool, opts ...Option) error {
+	cfg = resolveSendConfig(cfg)
 
-	contentType := "text/plain"
-	if isHTML {
-		contentType = "text/html"
-	}
-	m.SetBody(contentType, body)
+	m := buildMessage(cfg, to, subject, body, isHTML, opts)
 
 	d := &gomail.Dialer{
 		Host:      cfg.Host,
@@ -48,6 +43,32 @@ func SendMail(cfg Config, to []string, subject, body string, isHTML bool) error 
 	}
 
 	return d.DialAndSend(m)
+}
+
+// resolveSendConfig 记录里给了地址就照用，缺哪一项才按发信域名兜底。
+func resolveSendConfig(cfg Config) Config {
+	if cfg.Host == "" || cfg.Port == 0 {
+		autoConfig(&cfg)
+	}
+	return cfg
+}
+
+// buildMessage 组装一封信的头与正文，最后才作用 opts —— 顺序让选项能覆盖前面任何一项。
+func buildMessage(cfg Config, to []string, subject, body string, isHTML bool, opts []Option) *gomail.Message {
+	m := gomail.NewMessage()
+	m.SetHeader("From", cfg.From)
+	m.SetHeader("To", to...)
+	m.SetHeader("Subject", subject)
+
+	contentType := "text/plain"
+	if isHTML {
+		contentType = "text/html"
+	}
+	m.SetBody(contentType, body)
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 func autoConfig(cfg *Config) {
@@ -87,7 +108,7 @@ func autoConfig(cfg *Config) {
 	case "":
 		cfg.Port = 587
 	default:
-		cfg.Port = 465
+		cfg.Port = ImplicitTLSPort
 		cfg.SSL = true
 	}
 }

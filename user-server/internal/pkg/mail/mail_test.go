@@ -123,6 +123,51 @@ func TestConfigStruct(t *testing.T) {
 	}
 }
 
+// TestBuildMessageAppliesOptions 可变参数必须真的作用到消息上。
+//
+// SendMail 本体连的是真 SMTP，测试碰不到它，于是"opts 收了没人用"这种形状不会有任何症状 ——
+// 而这里被"用"掉的正是 List-Unsubscribe：头没了不会报错，只会让收件人找不到退订入口，
+// 最后以举报率的形式打在发信域信誉上。所以把组装步单独抽出来，让头能被断言。
+func TestBuildMessageAppliesOptions(t *testing.T) {
+	link := "https://crm.example.com/u?t=1"
+	m := buildMessage(Config{From: "ops@example.com"}, []string{"lead@example.com"}, "本月新品", "<p>正文</p>", true,
+		[]Option{Unsubscribe(link)})
+
+	if got := m.GetHeader("List-Unsubscribe"); len(got) != 1 || got[0] != "<"+link+">" {
+		t.Errorf("选项没被作用到消息上，List-Unsubscribe = %v", got)
+	}
+	if got := m.GetHeader("List-Unsubscribe-Post"); len(got) != 1 || got[0] != "List-Unsubscribe=One-Click" {
+		t.Errorf("一键退订声明缺失：%v", got)
+	}
+	if got := m.GetHeader("To"); len(got) != 1 || got[0] != "lead@example.com" {
+		t.Errorf("收件人 = %v", got)
+	}
+	if got := m.GetHeader("From"); len(got) != 1 || got[0] != "ops@example.com" {
+		t.Errorf("发信人 = %v，期望取 Config.From", got)
+	}
+}
+
+// TestResolveSendConfig 服务器地址的兜底只在记录本身不全时才生效。
+//
+// 群发路径把 SMTP 记录里的 Server/Port 原样传进来，靠的就是"给了就别猜"这一条；
+// 反过来（记录不全时按域名猜）是历史行为，两边都要能被断言 —— 否则改一句判空条件，
+// 表现是"自建域名的信悄悄发到猜测的公共服务器上"或"记录齐全的连接被重写成 587"。
+func TestResolveSendConfig(t *testing.T) {
+	got := resolveSendConfig(Config{
+		Host: "smtp.custom.example",
+		Port: 2525,
+		From: "ops@example.com",
+	})
+	if got.Host != "smtp.custom.example" || got.Port != 2525 {
+		t.Errorf("记录齐全却被重写成了 %s:%d", got.Host, got.Port)
+	}
+
+	fallback := resolveSendConfig(Config{From: "ops@qq.com"})
+	if fallback.Host != "smtp.qq.com" || fallback.Port != 465 || !fallback.SSL {
+		t.Errorf("记录不全时应按域名兜底，实际得到 %s:%d ssl=%v", fallback.Host, fallback.Port, fallback.SSL)
+	}
+}
+
 func TestParse(t *testing.T) {
 	tests := []struct {
 		name     string
