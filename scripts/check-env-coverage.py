@@ -24,6 +24,10 @@
   - 只扫 `*_test.go` 之外的文件（测试夹具不算运维配置面）；
   - "出现在文档面"只做整词存在性检查，不核对文档描述与代码语义是否一致（那是人工审查面）；
     旗子登记表按 `FF_` 前缀收紧，否则文档里一句"看 MODE"就能替一个叫 `MODE` 的必配项作证。
+
+执行入口：`make audit`（本地聚合门，该 target 不被任何 workflow 调用）。CI 接线待
+`.github/workflows/user-server-ci.yml` 上的并行改动回 clean 再补，补时**触发 paths 必须含本脚本与基线文件**
+（否则改判据不触发这道门，同第二十二轮 platform `docs-link-check.yml` 的教训）。
 """
 
 from __future__ import annotations

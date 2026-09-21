@@ -3395,7 +3395,9 @@ UNDOCUMENTED PLATFORM_URL <- user-server/cmd/api/main.go` —— 我在测试树
   这一条**部分否证我上一轮的登记**：退订表并非"无消费方"，`email_send.go:98` 的即时发送分支确实查它。
   要接的是"把链接注入外发正文"，那属产品口径（正文文案/品牌/对收件人的披露姿态），不擅自改真人收件内容。
 - `.env-example` 那半张面被并行会话的 `PLATFORM_ENABLED` 改动占着（对方已 stage）；新门的 CI 接线被
-  `.github/workflows/user-server-ci.yml` 的并行改动挡住；91 条基线键 = 存量文档债（门的职责是挡新增）；
+  `.github/workflows/user-server-ci.yml` 的并行改动挡住（⇒ 本轮先把门接进本地聚合入口 `make audit`，该 target
+  不被任何 workflow 调用、`Makefile` 开工时干净，零冲突；反向验证：在 HEAD 克隆里删掉 §6.2 那行 `PLATFORM_URL`
+  ⇒ `make audit` rc=2 且红因正是这条门，`cp` 还原后 md5 与备份一致、rc=0）；91 条基线键 = 存量文档债（门的职责是挡新增）；
   `ONEID_SALT` 改值即让存量 one_id 错位 ⇒ 重哈希属产品口径。
 - 活树独有红：并行会话脏文件 `internal/config/ports.go` 新读 `GEO_SITE_BASE_URL`，被新门当场抓到
   （HEAD 克隆无此键）⇒ 按归属交接，不代写文档行。

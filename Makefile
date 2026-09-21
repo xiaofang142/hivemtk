@@ -441,6 +441,8 @@ audit:
 	@python3 scripts/check-md-links-offline.py .
 	@echo "── workflow 引用完整性（with.file/steps.id/needs/artifact 配对）──"
 	@python3 scripts/check_workflow_refs.py --repo .
+	@echo "── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──"
+	@python3 scripts/check-env-coverage.py
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——
