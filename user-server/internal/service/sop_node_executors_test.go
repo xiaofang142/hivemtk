@@ -717,6 +717,9 @@ func TestRegisterAllNodeExecutors_AllTypesRegistered(t *testing.T) {
 		SOPNodeTypeCondition, SOPNodeTypeLLM, SOPNodeTypeWait,
 		SOPNodeTypeMessage, SOPNodeTypeAction, SOPNodeTypeSendOffer,
 		SOPNodeTypeAIDecide, SOPNodeTypeBranch,
+		// T-P5-03：主动外发节点。计数是**上界**断言（下面那句），
+		// 少这一项就是「注册了但没进契约表」。
+		SOPNodeTypeReachSend,
 	}
 	registered := map[string]bool{}
 	for _, t := range r.AllRegistered(context.Background()) {

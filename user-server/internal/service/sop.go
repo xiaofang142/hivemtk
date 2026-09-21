@@ -84,6 +84,11 @@ const (
 
 	SOPNodeTypeLLM = "llm"
 
+	// SOPNodeTypeReachSend 主动外发节点（T-P5-03）：图上唯一真的把内容送到客户手上的类型。
+	// 它自己不碰渠道 —— 发送整包交给 ProactiveReachService.ReachByCustomer，
+	// 于是退订/频控/发送前闸门三判据只有一处实现。见 sop_reach_send.go 文件头。
+	SOPNodeTypeReachSend = "reach_send"
+
 	SOPTriggerManual = "manual"
 
 	SOPTriggerAuto = "auto"
@@ -101,6 +106,9 @@ var SOPNodeSupportedTypes = map[string]bool{
 	SOPNodeTypeHandle: true, SOPNodeTypeClose: true, SOPNodeTypeInvite: true,
 	SOPNodeTypeFollowUp: true, SOPNodeTypeActivate: true, SOPNodeTypeNurture: true,
 	SOPNodeTypeCondition: true, SOPNodeTypeLLM: true,
+	// 外发节点必须同时进这张表，否则图存不下来（:625 的校验）而执行器却已注册 ——
+	// 两侧不一致时先红的是 sop_reach_send_test.go 的端到端用例。
+	SOPNodeTypeReachSend: true,
 }
 
 var (

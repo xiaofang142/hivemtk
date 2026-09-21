@@ -129,8 +129,13 @@ BASELINE=(
   #   12c 到期清扫有节拍器调用（T-P3-01 移交项：方法写得再完整，零调用方就等于
   #       pending 只增不减）。callpat 用"两个实参"这一形状与草稿侧的 ExpireOverdue(ctx)
   #       分开 —— 两条竖的 ExpireOverdue 同名不同签名，不区分的话删掉清扫器也不会红。
-  # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P5-03 外联闸门、
-  # T-P6-03 报价发送、T-P9-02 知识库变更 —— 它们的 subject_type 今天没有任何生产 Submit。
+  # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P6-03 报价发送、
+  # T-P9-02 知识库变更 —— 它们的 subject_type（quote / …）今天没有任何生产 Submit。
+  # 【T-P5-03 后更正】这一行原先把"T-P5-03 外联闸门"也列在零 Submit 名单里，判据本身没错、
+  #   名字点错了：外发节点走的是**已有 Submit 的 `sop_node` 这一 subject_type**（图上挂起
+  #   复用 T-P3-02 那座桥），所以本卡交付后它不该再出现在这张"待接的 subject_type"清单上。
+  #   本卡的闸门是**发送前那道 W-1 进程内门**（判定键=客户身份），它压根不落 approval_requests
+  #   行 —— 那是设计而非漏接，两处判据的区别写在 sop_reach_send.go 文件头。
   "12|审批检查点服务的装配入口（开关 FF_LTC_APPROVAL_RESUME，默认 off）|func NewApprovalRequestService|NewApprovalRequestService\(|internal/app cmd/api internal/controller internal/router|wired"
   "12|审批挂起流程的恢复读入口（点火时回读结论）|func \\(s \\*ApprovalRequestService\\) ByResumeToken|\\.ByResumeToken\\(|internal/service internal/app cmd/api internal/controller internal/router|wired"
   "12|到期 pending 审批的清扫调用方|func \\(s \\*ApprovalRequestService\\) ExpireOverdue|\\.ExpireOverdue\\([^)]*,|internal/service internal/app cmd/api internal/controller internal/router|wired"
@@ -328,6 +333,36 @@ BASELINE=(
   "19|主动模式判定 IsActive 的包外调用方（唯一消费是同文件里它调 ModeOf）|func IsActive\\(|agent\\.IsActive\\(|"
   "19|SalesRequest.AutoExecute 的读取方（写入 5 处、读取 0 处，开关其实在编排器里）|AutoExecute bool|\\.AutoExecute|"
   "19|决策策略 ID 列表的读取方（Active 因此只能取第一个可解析 SOP）|DecisionStrategyIDs \\[\\]string|\\.DecisionStrategyIDs|"
+  # ---- T-P5-03（外联闸门串联 / reach_send 节点）新增四格 ------------------------------
+  # 前两格守"这一族能力在启动路径上真的被接上"：本卡的行为用例全在 internal/service 里
+  # 就地 new 调度器、就地 SetSOPReachSender，它们证明不了生产装配点还挂着这两跳。
+  #   20a `service.InitSOPExecutionDispatcher(...)`（cmd/api 启动段）：摘掉这一行，
+  #       编译照过、包内用例照绿，而**每一种**节点执行器都不再注册 —— 未登记类型走 NoopExecutor，
+  #       直接报"完成"。于是 Active 出域从"发不出去"变成"发不出去且图上显示已发"，
+  #       比报错更糟（同 18a 那一课，只是这次连"没跑"的日志都没有）。
+  #       与 18a 分开登记是因为它们是两条独立的启动跳：InitSOPScheduler 决定"要不要跑"，
+  #       InitSOPExecutionDispatcher 决定"跑起来那一步由谁执行"。
+  #   20b `service.SetSOPReachSender(proactiveSvc)`（router 触达装配步）：摘掉这一行，
+  #       reach_send 仍在图上、审批腿仍会挂起、人照样会在待办中心点"同意"，
+  #       只有最后那一跳永久回"外发服务未装配"。本卡给它另有一道源码形状锁
+  #       （internal/router/reach_sender_assembly_test.go），这一格是第二把刀：
+  #       锁会被删文件绕过，台账不会。
+  #   20c 生产唯一生效的退订装配在**构造器里**那一行。锚为什么必须选它而不是选
+  #       `SetDoNotContact`：实测 setter 的**非测试调用点为 0**（它自己的注释就写着
+  #       "测试或自定义装配时使用"），而本卡每一条退订用例都显式调 setter ⇒
+  #       **摘掉构造器里那行，用例照样全绿、线上退订客户照发**。这是三判据里唯一一条
+  #       "测试面完全看不见"的连线，台账是仅有的判据（17 那一课：wired 只要求命中 ≥1，
+  #       所以一格只锚一个消费点，不把"setter 与构造器"并成一格）。
+  #   20d 节点上的 `Tools`，本卡**查出来、刻意不接**的字段，登记在此防止误判：
+  #       唯一的"消费"是 `deepCopySOPNode` 把它原样抄一份，执行器侧读取数为 **0**
+  #       （实测 `\.Node\.Tools` 非测试命中 0）。这正是本卡把外发做成**新节点类型**
+  #       而不是"给既有节点配一个工具"的原因 —— 后者写进图里就永不会被执行，
+  #       且看起来完全像配好了。defpat 用 `Tools +\[\]string`（字段对齐是多空格，
+  #       写 `Tools \[\]string` 会一格都不命中，判成 exit 2）。
+  "20|SOP 节点执行器的注册链入口（摘掉即未登记类型静默按\"完成\"处置、包内用例全绿）|func InitSOPExecutionDispatcher|InitSOPExecutionDispatcher\\(|cmd/api|wired"
+  "20|SOP 外发出口的装配点（摘掉即图上每一步都能走完、只有最后发送永久失败）|func SetSOPReachSender|service\\.SetSOPReachSender\\(|internal/router|wired"
+  "20|退订检查在生产构造点上的装配（setter 侧零生产调用方，摘掉这行退订用例仍全绿）|func NewDoNotContactService|dnc:[[:space:]]*NewDoNotContactService\\(|internal/service|wired"
+  "20|节点 Tools 字段的执行器读取方（写入靠深拷贝原样抄、读取 0 处，外发因此走独立节点类型）|Tools +\\[\\]string|\\.Node\\.Tools|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

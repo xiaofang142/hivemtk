@@ -74,6 +74,17 @@ type ExecutionContext struct {
 	TraceID       string
 	StartedAt     time.Time
 	Attempt       int
+
+	// ApprovalOutcome 审批定时器点火后回读到的结论（T-P5-03）。
+	//
+	// 只有"这一条任务由 wait_event=approval 的定时器点火派生、且目标节点不是 wait 节点"
+	// 时非空。为什么要分这一格而不是把结论并进 ExecutionData：wait 节点的既有语义是
+	// "点火即推进、不重跑执行器"，并进 ExecutionData 对它够用；而外发节点必须重跑
+	// （发送这一步在它自己身上），它需要的是"**这一次**重入是带着谁的结论回来的"。
+	// 并进 ExecutionData 会让上游任何一条审批等待的结论被下游节点误读成自己的
+	// （图里两条审批等待共用一格 = 第二条永远不需要批）。
+	// 键值形状见 sop_approval_resume.go 的 approvalOutcomeFromRow。
+	ApprovalOutcome model.JSONMap
 }
 
 // NodeExecResult 节点执行结果

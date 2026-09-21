@@ -29,7 +29,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// allSOPNodeTypes RegisterAllNodeExecutors 注册的全部类型（19 个）。
+// allSOPNodeTypes RegisterAllNodeExecutors 注册的全部类型（20 个）。
 // 新增/删除注册项时此表必须同步改，否则本文件的分区断言先红——这是有意的摩擦。
 var allSOPNodeTypes = []string{
 	SOPNodeTypeStart, SOPNodeTypeEnd, SOPNodeTypeWait,
@@ -39,9 +39,13 @@ var allSOPNodeTypes = []string{
 	SOPNodeTypeHandle, SOPNodeTypeClose, SOPNodeTypeInvite,
 	SOPNodeTypeFollowUp, SOPNodeTypeActivate, SOPNodeTypeNurture,
 	SOPNodeTypeMessage, SOPNodeTypeAction, SOPNodeTypeSendOffer,
+	SOPNodeTypeReachSend,
 }
 
 // compensableSOPNodeTypes 会真正下发撤销动作的类型。
+//
+// reach_send 刻意不在这里：它的 `reach_sent:` 幂键就是防重跑的全部机制，
+// 清掉等于允许对同一客户二次外联 —— 见该类型在 RegisterAllNodeExecutors 表头的登记。
 var compensableSOPNodeTypes = map[string]bool{
 	SOPNodeTypeLLM:       true,
 	SOPNodeTypeAIDecide:  true,

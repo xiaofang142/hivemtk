@@ -752,7 +752,7 @@ func (e *WaitExecutor) Compensate(ctx context.Context, execCtx *ExecutionContext
 	return err
 }
 
-// RegisterAllNodeExecutors 注册所有 14 种节点执行器 + 5 种旧版兼容执行器
+// RegisterAllNodeExecutors 注册所有 15 种节点执行器 + 5 种旧版兼容执行器
 //
 // 应在 SOPExecutionDispatcher 初始化时调用一次。
 // 重复注册会 panic（启动期错误）。
@@ -763,6 +763,9 @@ func (e *WaitExecutor) Compensate(ctx context.Context, execCtx *ExecutionContext
 //   - 9 种 message / message / action / send_offer → **部分可补偿**：清 ExecutionData 内话术产物
 //     （MessageNodeBase.Compensate）；已出域的消息不撤回（出域动作须过 T-P3 审批闸门），
 //     `message_sent:` 幂等键有意保留，防重跑对同一节点二次发送
+//   - reach_send → **不补偿**：主动外联一旦出域即不可撤回（同消息类节点的"不撤回"那一半），
+//     但它连"清产物"也不做 —— 它的 `reach_sent:` 幂键就是防重跑的全部机制，清掉等于允许二次发送。
+//     因此它只实现 CompensationNoter 自述理由，故意不实现 Compensable。
 //   - start / end / condition / branch → 控制流，无可撤销状态（skipped）
 //
 // 上表的每一行都有代码侧凭据：类型要么实现 Compensable，要么实现 CompensationNoter
@@ -801,6 +804,10 @@ func RegisterAllNodeExecutors(registry *NodeExecutorRegistry, deps *SOPNodeExecu
 	reg(NewMessageNodeExecutor(SOPNodeTypeSendOffer, llm.ScenarioObjection, deps))
 	reg(NewLLMNodeExecutor(SOPNodeTypeAIDecide, deps))
 	reg(&ConditionExecutor{nodeType: SOPNodeTypeBranch})
+
+	// reach_send 是唯一"真把内容送到客户手上"的类型，注册即开闸：它内部只有
+	// ProactiveReachService 一个出口，未装配 sender 时 fail-closed（见 sop_reach_send.go）。
+	reg(NewReachSendExecutor())
 
 	logger.GetLogger().Info().
 		Strs("registered_types", registry.AllRegistered(context.Background())).

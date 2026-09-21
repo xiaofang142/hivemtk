@@ -366,6 +366,11 @@ func setupProactiveReachRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	if !app.AttachReachGate(proactiveSvc) {
 		app.LogReachGateSkippedAssemblyPoint("router.setupProactiveReachRoutes")
 	}
+	// T-P5-03：SOP 的 reach_send 节点复用**这同一个**已装闸门实例，而不是自己 new 一个。
+	// 注册节点执行器发生在 cmd/api 启动期的 InitSOPExecutionDispatcher 调用点（早于此处），
+	// 所以只能像上面那样事后注入全局；
+	// 若这里改成新建实例，退订/频控/闸门三判据就会出现两套互相看不见对方状态的手工装配路径。
+	service.SetSOPReachSender(proactiveSvc)
 	proactiveCtrl := controller.NewProactiveReachController(proactiveSvc)
 
 	auth.POST("/reach/proactive/send", proactiveCtrl.ProactiveSend)
