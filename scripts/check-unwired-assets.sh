@@ -272,6 +272,28 @@ BASELINE=(
   #     会让对应行报"未接线" ⇒ 是**变红**而不是变哑，红了回来改这两行即可。
   "17|漏斗汇总腿的商机取数调用点（摘掉即看板少一格真数据、且无声）|func \\(r \\*ConversionFunnelRepository\\) CountOpportunitiesByTimeRange|oppCount, oppErr := s\\.repo\\.CountOpportunitiesByTimeRange|internal/ops/service|wired"
   "17|漏斗详情腿的商机取数调用点（摘掉即 stage=opportunity 回空名 0 计数、与未知阶段无法区分）|func \\(r \\*ConversionFunnelRepository\\) CountOpportunitiesByTimeRange|count, err := s\\.repo\\.CountOpportunitiesByTimeRange|internal/ops/service|wired"
+  # ---- T-P5-01（动态人群圈选）新增三格 --------------------------------------------
+  # 这三格各守一把 internal/service 自己的用例看不见（或只看半边）的刀：
+  #   18a 调度器的启动入口在 cmd/api。全仓 service 用例都是就地 new 一个调度器再调它，
+  #       没有任何一条能回答"启动路径上有没有人调它"。摘掉这一行 ⇒ auto/schedule 两类 SOP
+  #       一起静默停摆（连圈选都不会跑），而 internal/service 包**全绿**。defpat 在 service、
+  #       callpat 只看 cmd/api，正是为了把"定义自身"和"测试里的调用"都挡在外面。
+  #   18b 圈选器在调度器构造点的注入。摘掉 `audience:` 那一行，静态名单通道照常工作
+  #       （所以 StaticCustomerIDsStillWork 那条照绿），只有声明了 audience 的 SOP 永久零开工，
+  #       表现是一行 Warn，读起来像"条件写得太严"。故锚在赋值左侧的字段名上。
+  #   18c 标签源取数在圈选器里的那一跳。**这一格与 18a/18b 不同类，登记时必须说清**：
+  #       把那一行整个删掉会同时让 TestAudience_SelectByTag 转红（它断言 vip 那两个人必须回来），
+  #       所以这一格守的不是"静默停摆"。它守的是**换路**：谁把这一跳换成圈选器里自己拼一条
+  #       `WHERE name = ?`（或换成另一个批量读法），既有全部用例照绿，而 repository 那个新方法
+  #       ListCustomerIDsByTag 就此变成零消费方的未接线资产 —— 那正是本台账要记的东西。
+  #       顺带一条读码事实：tags 腿**没有死源判据**（segment 腿查 rfmHasAnyRow、churn 腿查 Count，
+  #       tags 腿空手时只会报 `no_match:tag=…`，:154-155）⇒ 换路之后它连"源死了"都说不出，
+  #       报出来的永远是"这个条件没人"，运营会去改条件，而没人会去查那条腿。
+  #       与 17 同一课：`wired` 只要求命中 ≥1，所以这里刻意不写成 `New.*RepositoryWithDB\(`
+  #       那种"三个源一起算一格"的宽式（RFM 那副底座另有 customer_360 的消费点，会永远命中）。
+  "18|SOP 调度器的启动入口（摘掉即 auto/schedule 两类 SOP 一起静默停摆、service 包全绿）|func InitSOPScheduler|InitSOPScheduler\\(|cmd/api|wired"
+  "18|圈选器在调度器构造点的注入（摘掉即 audience 型 SOP 永久零开工、只剩一行 Warn）|func NewAudienceSelectorWithDB|audience:[[:space:]]*NewAudienceSelectorWithDB\\(|internal/service|wired"
+  "18|标签条件取数在圈选器里的那一跳（换成就地拼 SQL 即让新仓储读法变成零消费方资产、用例全绿）|func \\(r \\*customerTagAssignmentRepository\\) ListCustomerIDsByTag|ListCustomerIDsByTag\\(|internal/service|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

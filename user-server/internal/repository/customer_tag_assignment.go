@@ -18,12 +18,21 @@ type CustomerTagAssignmentRepository interface {
 	Update(ctx context.Context, assignment *model.CustomerTagAssignment) error
 	DeleteByCustomerAndTag(ctx context.Context, customerID, tag string) error
 	Upsert(ctx context.Context, assignment *model.CustomerTagAssignment) error
+	ListCustomerIDsByTag(ctx context.Context, tag string, limit int) ([]string, int64, error)
 }
 
-type customerTagAssignmentRepository struct{}
+type customerTagAssignmentRepository struct {
+	db *gorm.DB
+}
 
 func NewCustomerTagAssignmentRepository() CustomerTagAssignmentRepository {
 	return &customerTagAssignmentRepository{}
+}
+
+// NewCustomerTagAssignmentRepositoryWithDB 注入指定库（测试与圈选侧使用）；
+// 不带 db 的构造函数保持原样走全局句柄，既有调用方零变化。
+func NewCustomerTagAssignmentRepositoryWithDB(database *gorm.DB) CustomerTagAssignmentRepository {
+	return &customerTagAssignmentRepository{db: database}
 }
 
 func assignmentDB() (*gorm.DB, error) {
@@ -34,8 +43,16 @@ func assignmentDB() (*gorm.DB, error) {
 	return database, nil
 }
 
+// database 取本实例应使用的句柄：注入了用注入的，否则回落到全局。
+func (r *customerTagAssignmentRepository) database() (*gorm.DB, error) {
+	if r.db != nil {
+		return r.db, nil
+	}
+	return assignmentDB()
+}
+
 func (r *customerTagAssignmentRepository) GetByCustomerAndTag(ctx context.Context, customerID, tag string) (*model.CustomerTagAssignment, error) {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +67,7 @@ func (r *customerTagAssignmentRepository) GetByCustomerAndTag(ctx context.Contex
 }
 
 func (r *customerTagAssignmentRepository) ListByCustomerID(ctx context.Context, customerID string) ([]*model.CustomerTagAssignment, error) {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +82,7 @@ func (r *customerTagAssignmentRepository) ListByCustomerID(ctx context.Context, 
 }
 
 func (r *customerTagAssignmentRepository) Create(ctx context.Context, assignment *model.CustomerTagAssignment) error {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return err
 	}
@@ -73,7 +90,7 @@ func (r *customerTagAssignmentRepository) Create(ctx context.Context, assignment
 }
 
 func (r *customerTagAssignmentRepository) Update(ctx context.Context, assignment *model.CustomerTagAssignment) error {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return err
 	}
@@ -81,7 +98,7 @@ func (r *customerTagAssignmentRepository) Update(ctx context.Context, assignment
 }
 
 func (r *customerTagAssignmentRepository) DeleteByCustomerAndTag(ctx context.Context, customerID, tag string) error {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return err
 	}
@@ -89,7 +106,7 @@ func (r *customerTagAssignmentRepository) DeleteByCustomerAndTag(ctx context.Con
 }
 
 func (r *customerTagAssignmentRepository) Upsert(ctx context.Context, assignment *model.CustomerTagAssignment) error {
-	database, err := assignmentDB()
+	database, err := r.database()
 	if err != nil {
 		return err
 	}
@@ -105,4 +122,32 @@ func (r *customerTagAssignmentRepository) Upsert(ctx context.Context, assignment
 			"confidence": gorm.Expr("GREATEST(customer_tag_assignments.confidence, ?)", assignment.Confidence),
 		}),
 	}).Create(assignment).Error
+}
+
+// ListCustomerIDsByTag 按标签取客户 ID（T-P5-01 圈选侧消费），按最近打标时间倒序。
+//
+// total 是"打过该标的总行数"，与 ids 是否被 limit 截断无关 —— 调用方要据此区分
+// "这个标签根本没人打"（total=0）和"有人但一轮取不完"（len(ids)<total）。
+func (r *customerTagAssignmentRepository) ListCustomerIDsByTag(ctx context.Context, tag string, limit int) ([]string, int64, error) {
+	database, err := r.database()
+	if err != nil {
+		return nil, 0, err
+	}
+	if limit < 1 {
+		limit = 100
+	}
+	var total int64
+	if err := database.Model(&model.CustomerTagAssignment{}).
+		Where("tag = ?", tag).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var ids []string
+	if err := database.Model(&model.CustomerTagAssignment{}).
+		Where("tag = ?", tag).
+		Order("created_at DESC").
+		Limit(limit).
+		Pluck("customer_id", &ids).Error; err != nil {
+		return nil, 0, err
+	}
+	return ids, total, nil
 }
