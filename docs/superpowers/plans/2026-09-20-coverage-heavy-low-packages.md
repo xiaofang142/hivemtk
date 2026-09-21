@@ -3107,6 +3107,12 @@ markdownlint 按列表项解析 ⇒ MD004（本仓口径 dash）。本轮处置�
 所以"复现"只能靠推一次看真门 ⇒ 修门的那一刀必须自己过一次门，别只靠 `grep "^[[:space:]]*+ "` 的超集近似
 （它还会命中归档文件里位于代码围栏内的行，那种不是违规）。
 
+**推一次看真门的实测结果**（run `35546266388`，HEAD `3d360e89`）：`Linting: 153 file(s)` →
+`Summary: 1 error(s)`，唯一一条正是上面点名"不代改"的
+`docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:797:3 MD004/ul-style [Expected: dash; Actual: plus]`
+⇒ 本泳道两处修改都过了门、本轮新增段零违规，"3 处收到 1 处"至此才是跑出来的数而非推断。
+引入那一行的是该文件首版提交 `7329590d`（`git blame -L 797,797 HEAD`），不属本泳道任何提交。
+
 ### 另一道常红门 `Lint` 的归因（本泳道不认领、给精确指针交接）
 
 `Lint` workflow 自 `478ef1c4` 起连红，读**逐步结论**得到的是两件事：
