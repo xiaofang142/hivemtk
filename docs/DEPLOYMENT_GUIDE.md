@@ -205,6 +205,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 |------|------|-----------|
 | `PUBLIC_BASE_URL` | 空 | **部署 Telegram/飞书/钉钉等被动回调渠道时必填**。格式 `https://域名`（不带路径、不带尾斜杠），系统会用它注册 Webhook；留空则这些渠道自动降级 polling 模式（仅单实例可用） |
 | `PLATFORM_API_HOST` | `http://127.0.0.1:8205` | 平台端不在本机时改为其实际地址。注意实际读取的是 `PLATFORM_API_HOST` 不是 `PLATFORM_API_URL` |
+| `PLATFORM_URL` | 空 | 平台地址的**末位回落**：`platform.yaml` 的 `api_url` 为空、`PLATFORM_API_URL` 也为空时才轮到它，再为空则用编译期默认值。平时不需要设；它同时决定启动日志里"平台配置来源"标注成哪一档 |
 | `CORS_ALLOW_ORIGINS_USER` | 见 .env-example | 前端域名与 API 不同源时，把前端 Origin 加入白名单 |
 | `DEEPL_API_KEY` | 空 | 启用低资源语言（ar/th/vi/hi/tr）DeepL 翻译降级时 |
 | `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
