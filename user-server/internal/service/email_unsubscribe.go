@@ -136,7 +136,7 @@ func (s *EmailUnsubscribeService) GenerateUnsubscribeLink(ctx context.Context, e
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 	sig := s.sign(ctx, []byte(payloadB64))
 	if sig == "" {
-		return "", errors.New("EMAIL_UNSUBSCRIBE_SECRET 未配置，无法签发退订链接")
+		return "", errors.New(emailUnsubscribeSecretEnv + " 未配置，无法签发退订链接")
 	}
 	token := payloadB64 + "." + sig
 
@@ -154,6 +154,11 @@ func (s *EmailUnsubscribeService) VerifyUnsubscribeToken(ctx context.Context, to
 		return nil, errors.New("token 格式错误")
 	}
 	payloadB64, sig := parts[0], parts[1]
+	// fail-closed：缺密钥时既不签发也不校验。否则服务退化成"无密钥校验"，
+	// 且 `payload.`（空签名）这条腿会因 hmac.Equal(空,空)=true 被放行。
+	if s.secret(ctx) == "" {
+		return nil, errors.New(emailUnsubscribeSecretEnv + " 未配置，拒绝校验退订 token")
+	}
 
 	expectedSig := s.sign(ctx, []byte(payloadB64))
 	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
@@ -192,6 +197,8 @@ func (s *EmailUnsubscribeService) ListAllUnsubscribes(ctx context.Context) ([]*m
 	return s.repo.ListAll(ctx)
 }
 
+// sign 用 EMAIL_UNSUBSCRIBE_SECRET 对 payload 签名；空串是"密钥未配置"的信号，
+// 调用方（签发与校验）都必须据此 fail-closed。
 func (s *EmailUnsubscribeService) sign(ctx context.Context, data []byte) string {
 	sec := s.secret(ctx)
 	if sec == "" {

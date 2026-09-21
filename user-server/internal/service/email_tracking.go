@@ -88,6 +88,9 @@ func (s *EmailTrackingService) generateToken(ctx context.Context, email, jobID, 
 	}
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 	sig := s.sign(ctx, []byte(payloadB64))
+	if sig == "" {
+		return "", errors.New(emailTrackingSecretEnv + " 未配置，无法签发追踪链接")
+	}
 	return payloadB64 + "." + sig, nil
 }
 
@@ -101,6 +104,11 @@ func (s *EmailTrackingService) VerifyTrackingToken(ctx context.Context, token st
 		return nil, errors.New("token 格式错误")
 	}
 	payloadB64, sig := parts[0], parts[1]
+	// fail-closed：缺密钥时既不校验也不放行。否则服务退化成"无密钥校验"，
+	// 任何人都能按公开的 claim 结构自签一个合法 token。
+	if s.secret(ctx) == "" {
+		return nil, errors.New(emailTrackingSecretEnv + " 未配置，拒绝校验追踪 token")
+	}
 	expectedSig := s.sign(ctx, []byte(payloadB64))
 	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
 		return nil, errors.New("token 签名校验失败")
@@ -318,8 +326,15 @@ func (s *EmailTrackingService) ListJobEvents(ctx context.Context, jobID string, 
 	return s.repo.ListEventsByJob(ctx, jobID, page, limit)
 }
 
+// sign 用 EMAIL_TRACKING_SECRET 对 payload 签名。
+// 返回空串即"密钥未配置"这一信号，调用方（签发/校验两条路径）都必须据此 fail-closed，
+// 不得把空密钥当成一个可用的 HMAC key —— 那等于任何人都能自签。
 func (s *EmailTrackingService) sign(ctx context.Context, data []byte) string {
-	mac := hmac.New(sha256.New, []byte(s.secret(ctx)))
+	sec := s.secret(ctx)
+	if sec == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, []byte(sec))
 	mac.Write(data)
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

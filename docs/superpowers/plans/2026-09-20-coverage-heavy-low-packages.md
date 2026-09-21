@@ -3290,3 +3290,112 @@ schema 上冗余一行、下次启动 AutoMigrate 也不清理；误删一个在
 **勿放松**：`r.Use(BodyLimit(...))` 必须留在 `router.Setup` 的全局链前部（挪到 `auth` 组之后即漏掉
 先注册的路由）；`DefaultMaxJSONBodyMB` 不得低于任何按端点上界；`maxMultipartMemoryMB` 只能是**收紧**
 gin 默认的方向；multipart 跳过这条不能改成"一并 413"（会打断 10–50MB 的合法上传）。
+
+---
+
+## R20（2026-09-21 第三十五轮：入站 503 文案指向一个不存在的键，顺手把"没人知道的配置键"变成有牙的门）
+
+**四处独立缺陷 + 两道新门 + 一处门的死豁免表**，16 路径（含本段）。
+
+### 1 入站鉴权的键名漂移（本卡起点）
+
+`middleware/app_key_auth.go` 的 503 提示印 `INGRESS_SECRET`，代码读的是 `INGRESS_API_KEY`
+⇒ 运维照提示配好键仍然 503，且这条提示本身不可诊断（照着它配永远配不出来）。
+收成一个常量 `ingressAPIKeyEnv`，**读取处与文案共用同一符号**（改任何一侧另一侧就跟着红），
+文案印真实键名。红先行两例（`app_key_auth_test.go`）：未配置必须 503；503 消息里出现的键名
+必须等于代码实际读取的键名。
+
+### 2 邮件追踪 / 退订 token：空密钥退化成"自签自验"
+
+`hmac.Equal([]byte(""), []byte(""))` 为真。`EMAIL_TRACKING_SECRET` / `EMAIL_UNSUBSCRIBE_SECRET`
+未配置时，`sign()` 拿空串当 HMAC key ⇒ 任何人按公开的 claim 结构都能算出合法签名
+= 伪造打开/点击事件 + 伪签任意收件人的退订链接。改为**签发与校验双双 fail-closed**，
+错误文案绑定同一个 env 常量。新 `email_secret_guard_test.go` 四条腿（缺密钥拒签、缺密钥拒验、
+伪造 token 被拒且报错点名 env；配好密钥的正常往返 + 空签名 token 必拒）。
+
+- **删掉一条死腿**：首版在校验里加了 `if sig == ""` 的"token 缺少签名"分支，变异电池 M6 实测
+  **它在两个文件里都不可达**（空密钥已被更早的腿拒掉，非空密钥下 sign() 恒非空）⇒ 删除，
+  并把 M6/M8 重定向到 `hmac.Equal` 比较本身，复跑 10 格 ALL-KILLED。留着它就是"看着有牙、
+  实际咬不到"的那类代码。
+- 5 个既有用例写成 `token, _ := Generate...` 把签发错误吞了，此前**靠空密钥自签自验才侥幸绿**
+  ⇒ 在夹具里显式 `t.Setenv`，不再依赖进程环境。
+
+### 3 营销流 webhook 的 SSRF 豁免只在开发姿态生效
+
+旧实现只看 `MARKETING_WEBHOOK_ALLOW_INSECURE=="true"` ⇒ 一个既不在 `.env-example` 也不在任何文档里的键
+能把 https/内网校验整个关掉，且**生产进程里静默生效**。改成「显式开关 && `config.IsDevelopmentEnv()`」
+双条件（复用仓内既有谓词，与 `ALLOW_INSECURE_WEBHOOK`、`MASTER_KEY` 护栏同一个判定），每次豁免打 warn。
+红先行 `marketing_flow_ssrf_guard_test.go`。
+
+### 4 配置面可发现性门（新）`scripts/check-env-coverage.py` + `scripts/env-coverage.baseline`
+
+生产代码读取的每个 env 键必须出现在运维看得到的地方。实测：**179 个被读取键 =
+已文档化 71 + 工具进程自动豁免 16 + 基线登记 92，红 0**；其中 24 个键名是靠"形参直通 os.Getenv 的
+helper"这条枚举路径才抓到的。三条判据（文档面 / 自动豁免 / 带理由基线；基线条目失效判 STALE 红；
+无理由条目判红），rc=2 留给环境前提缺失。文档面按**键前缀**收紧：`.env-example` 与
+`DEPLOYMENT_GUIDE.md` 认全部、`AI_CORE_FEATURE_INVENTORY.md` 只认 `FF_` —— 起因是实测 `MODE`
+被一份旗子登记表"整词命中"蒙过（整词存在 ≠ 语义一致，那是人工审查面）。
+反向测试 8 格 + 控制组全过：新增一个没人知道的键必红、基线烂掉必红、豁免面放宽必红。
+配套把 14 + 13 个"只能读源码才知道存在"的危险键补进 §6.1（含 `APP_ENV`/`MODE`/`GIN_MODE` 那条
+"**都不设 ⇒ 按生产姿态走**，别指望没设就是开发"）。
+
+### 5 收尾时另一道门的缺陷：工作区凭证门的豁免表从未生效
+
+`scripts/check-secrets-workspace.sh:50` 的 `is_allowed` 写成一行
+`[[ -n $ALLOW_RE ]] && printf … | grep -qE "$ALLOW_RE"; return 1;` —— 末尾的 `return 1` 无条件执行
+⇒ 函数恒返回"未豁免"，**豁免表整张是死代码**，而脚本报错文案恰恰指示"确属公开常量再加
+`.workspace-secret-allowlist`"，处置路径走不通。判据证据：登记豁免后门仍 rc=1（2 命中），
+而把同一条 ERE 单独拿去 `grep -qE` 是命中的 —— 即红因在函数形状、不在正则。
+修成与仓内那道门（`check-secrets.sh`）逐字一致的多行形。配套新建 `scripts/.workspace-secret-allowlist`，
+唯一条目按"文件 + 变量名 + 值前缀"三段锚定 `docs/audit-2026-09-19-sessionC.md` 引用的 nm-host 假夹具值
+（与 `scripts/.secret-allowlist` 已登记的同一个值，不开整文件/整目录口子）。三格探针
+`/tmp/r20_allowlist_probe.sh`：修复前 case1 红 ⇒ 修复后 `ALLOW-EFFECTIVE` rc=0、
+`NARROWNESS`（同目录另造一个未登记的凭证形状值）仍 rc=1 且红因是探针文件本身、
+`NO-ALLOWLIST`（移走表）仍 rc=1（2 命中）⇒ 门没被放宽成恒绿。
+
+### 门与证据（全部真跑）
+
+- 影子克隆 = HEAD `c7402202` + 我的 16 路径，逐文件 md5 与活树一致；`go build ./...` rc=0、
+  `go vet ./...` rc=0、`gofmt -l` 0 项；全量 `go test -p 1 -count=1 ./internal/... ./cmd/...`
+  **rc=0 / 121 包 ok / FAIL 0 / 无 timed out 字样**（跑时 load 11.9–23.1）。
+  ⚠️ 口径：这一趟没给 `-timeout`，`internal/service` 用掉 **592.665s**、距 Go 默认 600s 只剩 7.3s
+  ⇒ 属**压线绿**。同一棵克隆里用 `-timeout 2400s` 复跑该包：`ok 560.089s` rc=0（load 14.7–18.1）。
+  以后跑全包必须显式给预算，别再拿默认 600s 当门。
+- 静态门（克隆内，从 `hivemtk/` 根跑）：env 可发现性 rc=0、架构 rc=0、文档一致性 rc=0（3 处警告是
+  工作区缺 `hivemtk-platform/` 的布局前提）、离线链接 rc=0（153 md / 断链 0）、markdownlint 只剩
+  既存 1 处 MD004（他泳道文件 `docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:797`）、
+  仓内凭证门在克隆 rc=0（用活树 `.env` 作 ENV_FILE）、工作区凭证门在活树 rc=0。
+- 变异电池 10 格 ALL-KILLED，控制组 rc=0（每格红因都读过；4 格首版是 WRONG-REASON，
+  按"BROKEN 修 expect 不修变异"的规矩放宽期望子串后复跑）。
+- 环境归因（不是本卡的红）：仓内凭证门在**活树** rc=1，3 处命中全在 `??` 未追踪的并行 WIP 夹具
+  （`webhook_batchc_d04_tiktok_http_test.go:25`、`webhook_batchc_d04_tiktok_test.go:27`、
+  `webhook_batchg2b_douyin_media_test.go:208`）⇒ 不碰对方文件、只登记，对方提交前自己会撞这道门。
+
+### 登记为残项、本卡不动
+
+- **R21（新发现，已建卡 task #56）**：`internal/email/service/email_send.go` 的排队发送**从未有排水循环**
+  —— `ProcessPendingEmails` 全仓无生产调用方，`GetPendingEmails` 只被自家测试调用，cron 统一入口
+  `TaskManager.AddTask` 的 263 个调用点里 grep email/mail 零命中；而 `dto.SendEmailRequest` 同时暴露
+  `sendTime` 与 `immediateSend` ⇒ 定时邮件合法落 Pending 后永不发送、不报错、状态不流转。
+  连带：`ProcessPendingEmails` 分支没有 `isUnsubscribed`（即时分支有）。
+- 追踪像素 / 退订链接的**签发侧无生产调用方**：三个生成函数只被测试与彼此调用，邮件正文里既无像素
+  也无退订页脚，`List-Unsubscribe` 头 0 处出现 ⇒ 校验侧控制器在读一张生产里唯一写入来源不可达的表。
+  这一条**部分否证我上一轮的登记**：退订表并非"无消费方"，`email_send.go:98` 的即时发送分支确实查它。
+  要接的是"把链接注入外发正文"，那属产品口径（正文文案/品牌/对收件人的披露姿态），不擅自改真人收件内容。
+- `.env-example` 那半张面被并行会话的 `PLATFORM_ENABLED` 改动占着（对方已 stage）；新门的 CI 接线被
+  `.github/workflows/user-server-ci.yml` 的并行改动挡住；92 条基线键 = 存量文档债（门的职责是挡新增）；
+  `ONEID_SALT` 改值即让存量 one_id 错位 ⇒ 重哈希属产品口径。
+- 活树独有红：并行会话脏文件 `internal/config/ports.go` 新读 `GEO_SITE_BASE_URL`，被新门当场抓到
+  （HEAD 克隆无此键）⇒ 按归属交接，不代写文档行。
+- 一条**自我否证**（防止下一轮重复提出）：本轮我曾报"7 个键既不在文档面也不在基线里"并列出 7 个键名，
+  回磁盘 `grep -w` 一查**其中 6 个键在本仓根本不存在**（`DEBUG_CACHE`、`DINGTALK_UNIQUID_FALLBACK`、
+  `EMAIL_DELIVERY_CUTOVER_DATE`、`SMS_LINK_BASE_URL`、`GEO_ADMIN_TOKEN`、`GEO_UPSTREAM_TOKEN`），
+  第 7 个 `ALLOW_INSECURE_WEBHOOK` 确实在读且已在 `DEPLOYMENT_GUIDE.md`（2 处）⇒ 整条不成立，
+  正规证据是门自己打印的分类计数 71+16+92=179、红 0。清单类结论必须当场由命令算出来。
+
+**勿放松**：`ingressAPIKeyEnv` 必须同时被读取处与 503 文案引用（拆回两个字面量即回到本轮起点）；
+`sign()` 返回空串 ⇒ 调用方必须 fail-closed，不得把空密钥当成一个可用 HMAC key；SSRF 豁免必须是
+"开关 && 开发姿态"双条件（摘掉 `config.IsDevelopmentEnv()` 等于生产可静默关闸）；
+`check-secrets-workspace.sh` 的 `is_allowed` 不得再压回一行形（`return 1` 会无条件执行）；
+env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里的 `t.Setenv` 不得删（删了那 5 例
+会退回"靠空密钥侥幸绿"）。

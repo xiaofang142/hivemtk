@@ -167,11 +167,15 @@ func extractBodyChannelID(c *gin.Context) string {
 // 私域部署：单租户，所有未指定 channel 的访客都归入此 channel
 const DefaultChannelID = "default"
 
+// ingressAPIKeyEnv 是入口密钥的环境变量名。读取处与 503 文案**共用这一个符号**：
+// 此前文案印的是 INGRESS_SECRET、代码读的是 INGRESS_API_KEY，运维照提示配置后仍然 503。
+const ingressAPIKeyEnv = "INGRESS_API_KEY"
+
 // IngressSecretAuth 强制校验 X-Ingress-Secret Header 的中间件
 // 用于保护内部消息入口（如 /api/chat/ingress），防匿名消息注入 AI 管道
-// 密钥来源：环境变量 INGRESS_API_KEY（未配置时开发环境默认放行，生产需配置）
+// 密钥来源：环境变量 INGRESS_API_KEY —— 未配置时**一律拒绝**（503），不存在"开发环境默认放行"
 func IngressSecretAuth() gin.HandlerFunc {
-	secret := strings.TrimSpace(os.Getenv("INGRESS_API_KEY"))
+	secret := strings.TrimSpace(os.Getenv(ingressAPIKeyEnv))
 	return func(c *gin.Context) {
 		if IsTestMode && testModeGate() {
 			c.Next()
@@ -181,7 +185,7 @@ func IngressSecretAuth() gin.HandlerFunc {
 		if secret == "" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"code":    503,
-				"message": "入口 secret 未配置（INGRESS_SECRET），已拒绝访问",
+				"message": "入口密钥未配置（" + ingressAPIKeyEnv + "），已拒绝访问",
 			})
 			c.Abort()
 			return

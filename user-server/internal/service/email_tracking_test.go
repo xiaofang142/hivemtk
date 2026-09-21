@@ -15,6 +15,10 @@ import (
 )
 
 func setupEmailTrackingTestDB(t *testing.T) *gorm.DB {
+	// EMAIL_TRACKING_SECRET 未配置时签发/校验一律 fail-closed（见 email_secret_guard_test.go）。
+	// 本文件多数用例写成 `token, _ := Generate...` 把签发错误吞掉了 —— 缺密钥时它们
+	// 只能靠空密钥自签自验才侥幸绿，故这里显式配好密钥，不再依赖进程环境。
+	t.Setenv("EMAIL_TRACKING_SECRET", "test-tracking-secret")
 	database := testutil.NewTestDB(t,
 		&model.EmailTrackingEvent{},
 		&model.EmailJobMetric{},

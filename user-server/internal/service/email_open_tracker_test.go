@@ -38,6 +38,8 @@ func TestEmailOpenTracker_NewService(t *testing.T) {
 
 // 2) GenerateOpenPixelURL
 func TestEmailOpenTracker_GenerateOpenPixelURL(t *testing.T) {
+	// 缺 EMAIL_TRACKING_SECRET 时签发会 fail-closed 报错，这里要的是"能签出像素 URL"
+	t.Setenv("EMAIL_TRACKING_SECRET", "test-open-tracker-secret")
 	s := newOpenTracker(t)
 	url, err := s.GenerateOpenPixelURL(context.Background(), "user@demo.com", "job-1")
 	if err != nil {

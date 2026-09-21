@@ -780,6 +780,9 @@ func TestMarketingFlowService_sendActionAddTag_Idempotency(t *testing.T) {
 
 // TestMarketingFlowService_sendActionWebhook 测试 Webhook 动作
 func TestMarketingFlowService_sendActionWebhook(t *testing.T) {
+	// SSRF 豁免开关只在**开发姿态**下生效（见 insecureWebhookBypassAllowed），
+	// 本用例的 httptest 服务是 127.0.0.1，故必须显式声明开发环境。
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("MARKETING_WEBHOOK_ALLOW_INSECURE", "true")
 	service := setupMarketingFlowService(t)
 

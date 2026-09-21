@@ -47,7 +47,14 @@ if [[ -f "$ALLOWLIST" ]]; then
     ALLOW_RE="${ALLOW_RE:+$ALLOW_RE|}($line)"
   done < "$ALLOWLIST"
 fi
-is_allowed() { [[ -n $ALLOW_RE ]] && printf '%s' "$1" | grep -qE "$ALLOW_RE"; return 1; }
+# 判据与仓内那道门（check-secrets.sh 同名函数）逐字一致：空表 ⇒ 一律不豁免，非空 ⇒ 整串命中 ERE 才豁免。
+# 2026-09-21 实测本函数曾写成一行 `[[ -n $ALLOW_RE ]] && grep -qE ...; return 1` —— 末尾的
+# return 1 无条件执行，函数恒返回"未豁免"，于是本脚本报错文案里"确属公开常量再加豁免表"这条
+# 处置路径是死路（登记后门照样红）。改回多行形，别再压回去。
+is_allowed() { # $1 = "path:lineno:content"
+  [[ -z $ALLOW_RE ]] && return 1
+  printf '%s' "$1" | grep -qE "$ALLOW_RE"
+}
 
 FAIL=0
 PAIRS=$(mktemp); PATTERNS=$(mktemp); FILELIST=$(mktemp)

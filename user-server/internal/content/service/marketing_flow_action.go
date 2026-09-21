@@ -12,6 +12,7 @@ import (
 
 	"fmt"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/content/model"
 
 	reachmodel "hivemtk-user/internal/model"
@@ -29,6 +30,7 @@ import (
 	"net/smtp"
 
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 func (s *MarketingFlowService) executeAction(ctx context.Context, node model.FlowNode, userID string, data map[string]any) (map[string]any, error) {
@@ -692,9 +694,23 @@ func (s *MarketingFlowService) sendActionSendEmail(ctx context.Context, config m
 	}, nil
 }
 
+// insecureWebhookBypassAllowed 判定 SSRF 校验是否可豁免。
+//
+// 豁免必须同时满足「显式设了开关」与「进程处于开发姿态」（APP_ENV/MODE/GIN_MODE 判定，
+// 与 ALLOW_INSECURE_WEBHOOK、secrets MASTER_KEY 护栏复用同一个 config.IsDevelopmentEnv）。
+// 旧实现只看开关 ⇒ 一个既不在 .env-example 也不在文档里的变量能把 SSRF 闸门整个关掉，
+// 且在进程上留了生产环境也照样静默生效。
+func insecureWebhookBypassAllowed() bool {
+	if os.Getenv("MARKETING_WEBHOOK_ALLOW_INSECURE") != "true" {
+		return false
+	}
+	return config.IsDevelopmentEnv()
+}
+
 func validateWebhookURL(raw string) error {
 
-	if os.Getenv("MARKETING_WEBHOOK_ALLOW_INSECURE") == "true" {
+	if insecureWebhookBypassAllowed() {
+		logger.Warnf("[MarketingFlow] MARKETING_WEBHOOK_ALLOW_INSECURE=true 且当前为开发环境，跳过 webhook URL 的 https/内网校验 url=%s", raw)
 		return nil
 	}
 	u, err := url.Parse(raw)

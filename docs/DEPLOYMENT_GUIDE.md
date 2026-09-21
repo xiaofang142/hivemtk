@@ -194,7 +194,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 |------|------|--------------|
 | `POSTGRES_PASSWORD` | 强密码 | mtk-postgres 容器拒绝启动 |
 | `REDIS_PASSWORD` | 强密码 | mtk-redis 容器拒绝启动 |
-| `JWT_SECRET` | ≥32 字符 | user-server 启动 panic（测试专用短密钥仅在 test 模式放行） |
+| `JWT_SECRET` | ≥32 字符 | user-server 启动 panic（测试专用短密钥仅在 test 模式放行）。代码先读 **`USER_JWT_SECRET`**，为空才回落到 `JWT_SECRET`（`internal/pkg/utils/jwt.go`）；两个都没有或都短于 32 字符即 panic，**不存在硬编码兜底密钥** |
 | `FIELD_ENCRYPTION_KEY` | ≥32 字符 | 加密字段功能不可用；**轮换会使既有加密数据失效** |
 | `MERCHANT_API_SECRET` | ≥32 字符 | merchant-api 签名鉴权失败（user-server 经 config/platform.yaml `secret: "${MERCHANT_API_SECRET}"` 消费） |
 | `DB_HOST` / `DB_PORT` | 默认 `127.0.0.1:8202` | 连不上库直接启动失败 |
@@ -210,6 +210,37 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
 | `LLM_*` / `EMBEDDING_*` / `RERANK_*` | 见 .env-example | 控制推理栈下载哪个模型、监听哪个端口 |
 | `MAX_JSON_BODY_MB` | `8` | 全局 JSON/表单请求体上限（MB），超限直接 413。只兜"没另设上界的内部口"，比各端点自己的封顶更宽时不参与；迁移期要灌大 payload 时**显式设 0 关闭**（负数同义），别改成改代码 |
+
+以下这些键此前**只存在于代码里**（`.env-example` 与本文都没提），列出来是因为每一个都会改变安全姿态或身份口径，运维不知道它们存在比知道更危险。默认值一律取最严/最窄的一侧。
+
+| 变量 | 默认 | 作用与设置后果 |
+|------|------|-----------|
+| `INGRESS_API_KEY` | 空 | 统一入站口 `POST /api/chat/ingress` 的 `X-Ingress-Secret` 密钥。**空即 503 拒绝**（fail-closed），要用该入口必须配。503 文案一度误印 `INGRESS_SECRET`（全仓无人读该键），照提示配置会永远 503 —— 以代码读取的 `INGRESS_API_KEY` 为准 |
+| `BRIDGE_INGEST_TOKEN` / `BRIDGE_INGEST_TOKEN_PREV` | 空 | 桥接 WS 入站鉴权 token。DB 里的 `bridge_ingest_token` 优先，DB 无值才读 env；`_PREV` 供轮换期同时接受旧 token。两者都缺 ⇒ 接口 503 拒绝 |
+| `BRIDGE_INGEST_AUTH` | 非 `off` | 只有在上面两个 token 全缺、且该端口**只暴露于可信内网**时才设 `off`，它把入站退回"无鉴权放行"。别拿它当配置缺失的 workaround |
+| `ONEID_SALT` | 源码固定串 | OneID 手机号/邮箱哈希的盐。**只能在库里还没有客户之前设定**：换值会让存量 `customers.phone_hash` 与 `unified_id` 全体错位（按哈希查不到人 ⇒ 同一客户被建成第二条记录）。多实例必须同值，否则两台机器给同一手机号算出两个 OneID |
+| `BRUTE_FORCE_DISABLED` | 关 | `1`/`true` 关闭登录爆破锁定。该判定在**包级变量初始化时求值**，运行中改环境变量无效，只能改完重启 |
+| `ALLOW_INSECURE_WEBHOOK` | 关 | `true` 时对"渠道账号压根没配密钥"的回调跳过验签（每次跳过打 warn；已配密钥的账号不受该开关影响）。受启动护栏约束：`APP_ENV` 非开发值时进程**直接拒绝启动** |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 关 | Telegram 专用：`true` 跳过 secret 校验，同样只在联调用 |
+| `MARKETING_WEBHOOK_ALLOW_INSECURE` | 关 | 营销流 webhook 动作的 SSRF 闸门（只允许 https + 非内网地址）豁免开关。**只在 `APP_ENV=development`（或 `GIN_MODE=debug`）下生效**；生产设了也不放行，每次豁免打 warn |
+| `ALLOW_SELF_RESTART` | 关 | `true` 才允许「系统运维」接口让本进程退出重启 |
+| `WS_AGENT_ALLOW_ALL_USERS` | 关 | `true` 放开坐席通知订阅的角色限制（默认仅 admin/manager/staff/customer_service，见 R14-3 的 403 重连循环） |
+| `TOOL_PERMISSION_DEFAULT_DENY` | 关 | 工具权限白名单的缺省姿态：**不设＝白名单外放行**，设 `true` 才拒绝。生产建议设 |
+| `ORDER_WEBHOOK_NONCE_STRICT` | 关 | 设 `on` 开启商机回调 nonce 严格重放校验 |
+| `SMS_ALLOW_NIGHT_SEND` | 关 | `true` 绕开 22:00–08:00（CST）夜间不发短信的限制 |
+| `APP_ENV` / `MODE` / `GIN_MODE` | 无 | **开发环境判定**（`config.IsDevelopmentEnv`）：按 `APP_ENV` → `MODE` 取第一个非空值，`dev|development|debug|test|testing|local` 算开发；三者都空时再看 `GIN_MODE=debug`。都不设 ⇒ 按**生产**姿态走，这决定了多把安全闸的强度：`MASTER_KEY` 缺失时生产拒绝启动、`ALLOW_INSECURE_WEBHOOK=true` 时生产拒绝启动、`MARKETING_WEBHOOK_ALLOW_INSECURE` 只在开发姿态下才放行内网 webhook。**别指望"没设就是开发"**——没设恰恰是最严的那一侧 |
+| `EMAIL_TRACKING_SECRET` | 空 | 邮件追踪 token 的 HMAC-SHA256 密钥（`internal/service/email_tracking.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验直接拒。此前它退化成"空密钥自签自验"，任何人按公开的 claim 结构都能算出合法签名 ⇒ 伪造打开/点击事件、伪签他人邮箱的退订。token 有效期 90 天，轮换即让存量追踪链接失效 |
+| `EMAIL_UNSUBSCRIBE_SECRET` | 空 | 邮件退订链接 token 的 HMAC-SHA256 密钥（`internal/service/email_unsubscribe.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验侧拒绝**所有** token（包括 `payload.` 这种空签名——空密钥下 `hmac.Equal(空,空)` 为真，所以"没配密钥"绝不能当成一种校验，否则任何人都能伪签别人的退订链接）。有效期 30 天，轮换即让存量退订链接失效 |
+| `MASTER_KEY` | 空 | 凭证盘 AES-256-GCM 主密钥，**≥32 字节**（`internal/secrets/aesgcm.go`）。缺失/过短时 `Ready()` 为 false，加解密降级为明文读写 + WARN；**生产环境（`APP_ENV`/`MODE` 非开发值）装配层据此拒绝启动**。任意路径泄露即整盘作废，建议由 secret manager 注入；改值不会自动重加密存量 |
+| `FF_LTC_REACH_GATE` | `off` | 外发审批闸门模式 `off|shadow|block`（`internal/app/reach_gate_wiring.go`）。`shadow` 只留痕不拦，`block` 真拦；写布尔真值（`true`/`1`）一律按 `shadow` 处理并告警——给真人发短信不可撤回，转阻断必须在 env 里写出 `block` 这个词。依赖 `FF_LTC_APPROVAL_GATE` 未接线时**拒绝装门**（没有裁决来源的门只能恒放或恒拒，两种都长得像在拦） |
+| `FF_TOOL_PERMISSION_ENFORCE` | `off` | 工具风险判定层 `off|shadow`（`internal/app/permission_wiring.go`）。**这个构建里没有阻断态**：写 `enforce`/`block`/`true` 一律按 `shadow` 挂载并显式告警"它拦不住任何东西"（转阻断排在 P9）。别以为写了 `enforce` 就在拦 |
+| `LTC_RECOVERY_WORKER_BATCH` | `20` | 挽回队列单轮处理上限，可用区间 `[1,500]`；非整数或超界 ⇒ 告警并沿用默认（`internal/service/recovery_queue_worker.go`）。前提是 `FF_LTC_RECOVERY_WORKER=enforce` |
+| `LTC_RECOVERY_WORKER_INTERVAL` | `5m` | 挽回队列轮询间隔（Go duration 写法，如 `30s`/`5m`）。低于 `30s` 抬到 `30s`，否则一轮没跑完下一轮就起、同一条会被两轮领走 |
+| `LTC_RECOVERY_WORKER_BACKOFF` | `24h` | 重试退避基数（同时是无文案项的推后幅度）。小于触达冷却窗口时抬到"冷却窗口 + 余量"，否则每次到期都只换来一次 cooldown 拒绝，白耗一轮 |
+| `TOOL_CIRCUIT_BASE_COOLDOWN` | `30s` | 按工具熔断的起始冷却，可用区间 `[1ms,1h]`。非法时长或超界 ⇒ 告警并沿用默认；五项参数各自校验，配错一项不拖累其余（`internal/app/tool_circuit_breaker_wiring.go`） |
+| `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
+| `TOOL_CIRCUIT_BACKOFF_MULTIPLIER` | `2.0` | 每多熔断一次的冷却倍率，可用区间 `[1,100]`；非数字或超界 ⇒ 沿用默认 |
+| `TELEGRAM_POLLING_ENABLED` | 未设置 | `1`/`true`/`yes` 强制启用 polling，`0`/`false`/`no` 强制禁用；**未设置则自动判定**：配了 `external.public_base_url` 就注册 webhook 并禁用 polling，没配（内网/本地）自动启用 polling（`internal/service/telegram_polling.go`）。polling 只能单实例跑，多实例部署须显式设 `0`，否则同一消息被多台机器各拉一遍 |
 
 ### 6.3 config.yaml 要点（user-server/config.yaml）
 
