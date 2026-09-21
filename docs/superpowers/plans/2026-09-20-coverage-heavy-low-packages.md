@@ -2810,6 +2810,7 @@ ensureContributorToken/login/register/doAuth/SubmitAudit = 100%`，
   （多个迁移的 Down 用 `DROP TABLE IF EXISTS` 删的是 AutoMigrate 建的基线表，而非自己 Up 建的表）。
   唯一显式拒绝回滚的是 `v3.28.0`（明文→AES-GCM 加密，理由「解密回明文是安全倒退」），属正确设计。
   结论：本项目的「降级」在数据层面不可用，Down 失败仅 `t.Logf` 的口径据此维持，但数值本身要报出来。
+  **⇒ 第三十二轮（2026-09-21）这条从"口径"改成了判据并修完**：见文末「R17 降级销毁在用表」。
 - **Task 6 / 否定语义丢失**（`dialog_manager.go:612-639`）：`calculateSentimentScore` 用纯字节子串匹配，
   「不好」同时命中正面词「好」与负面词「不好」，两者抵消后 score 恰好为 0（判中性），
   即所有「不+正面词」的表述都会被误判为中性。用例按实际行为断言 `== 0` 并在注释里标明该抵消行为。
@@ -3135,3 +3136,46 @@ markdownlint 按列表项解析 ⇒ MD004（本仓口径 dash）。本轮处置�
 改动，含 `src/core/primitives.js`、`test/batch18-submit-enter.test.js`），两处 error 又不属本泳道任何改动
 （我的提交只碰 `internal/bridge`、`internal/service` 与文档）。⇒ 交接条件：该目录回 clean 后由 owner 泳道
 补 `cause: err` 并删掉那次多余赋值，`Lint` 绿即连带把 license 那步放回来。
+
+## R17（2026-09-21 第三十二轮：把「降级在数据层面不可用」这条口径改成判据并修完）
+
+用户指示「任何残留的问题都要找出来 解决并修复」⇒ 回到 Task 7 那条被写成"口径"的登记，
+问的是它能不能修而不是它有多合理。判据先跑出来：临时探针用例（跑完即删）在测试库上按
+AutoMigrate 基线 → 逐个 `Up()`（记录每个迁移真正新建了哪些表）→ 逆序逐个 `Down()`
+（记录每个迁移删掉了哪些表）逐格比对，实测 **74 个迁移里 21 个的 Down 删了不属于它的表，
+一轮 Up→Down 净丢 53 张基线表**（基线 300 → Up 后 320 → Down 后 253）。
+
+**根因不是某个人写错了 SQL，是两处所有权口径叠在一起**：本项目建表事实源是 GORM AutoMigrate
+（`internal/pkg/db/migrate.go`，299–300 张），版本化迁移只是其上的增量层；而这些迁移的 Up 与
+Down 按"这表是我建的"写（`CREATE TABLE IF NOT EXISTS` / `DropTable`），降级那一半的独占假设不成立。
+可达性也核过：启动链只跑 Up（`v1.0.0→v1.0.0` 空跑，所以平时无感），而
+`POST /api/migration/rollback`（admin 组，`migrationCtrl.Rollback`）一次调用即取
+`registry.Get(target)` 直接 `migration.Down(ctx)` ⇒ 一次请求销毁一张在用表，且当前进程不会重建它
+（AutoMigrate 只在启动时跑），要等下次重启才回来——回来时是空表。
+
+**修法**：Down 只撤销自己 Up 造成的变化。列与索引的回退保留（`script_templates`、`sop_agents`、
+`llm_routing_audit`、`customer_rfm` 这些确由本迁移新建/新增的对象照常回退），
+21 处删表统一改为包级 `declineTableDrop(version, tables...)` 记一条日志放弃。
+新增 `down_table_policy.go` 把这条口径写在一处，注释里同时写明可达路径与判据位置。
+
+**判据（写进 `a_full_chain_migration_test.go`，两道）**：① 逐迁移「Down 删掉的表 ⊆ 该迁移 Up 新建的表」；
+② 总量「一轮 Up→Down 后基线表不得净丢失」。先跑红：`21/74` + `53 张`（两道同时红，红因一致）；
+修完跑绿：违规 `0/74`、Down 后表数 **253 → 306**、`Down 失败 1/74` 仍是 `v3.28.0` 那句显式拒绝（既有设计，只记不判）。
+反向验证（新门必须能红）：把 `bridge_accounts` 的 `DROP` 装回一处 ⇒ 两道判据同时红并点名该表，
+`cp` 还原后 md5 `5913d51e…` 与装变异前一致。
+
+**三处把旧行为钉住的用例随之搬正**：`confidence` / `humanize` / `feedback_loop` 的 `TestXxxDown`
+原本断言"Down 后表应被删除"，改成"降级后表必须还在"（`deletedTables` → `preservedTables`）；
+`nil db Down() 应返回错误` 这类负例保住（改法是在 Down 开头留 `if m.db == nil` 那道守卫，
+而不是把空 `stmts` 传给 `execAll`）。
+
+**本轮一并收的两条环境账**：① `internal/aiagent/knowledge/service` 的
+`TestRagSearcher_RealVectorSearch` 在干净克隆里同红 ⇒ 红因是测试库口令漂移（`28P01`），
+带 `POSTGRES_TEST_PASSWORD` + `POSTGRES_TEST_PORT=8232` 复跑 **rc=0**（5 子用例全绿），不是回归；
+② 变异脚本自身的一次假证据：`if X != nil {` 换成 `false && X != nil {` 时把 `if ` 前缀一起吃掉 ⇒
+两格"红"其实是 `build failed`（syntax error），读红因才没把它当成行为杀；修正后的两格短路变异
+互杀（摘 Entities 复制只有 Entities 用例红、摘 PreviousTopics 复制只有另一条红）。
+
+**留下的、写清边界的残项**：`ai_perf_faq_sop_layer` 与 `llm_routing_logs` 这两处**保留**了索引回退
+（索引确由本迁移建），于是降级后表还在但其上新建过的索引会缺，直到下次启动 AutoMigrate 补齐 ⇒
+性能面自愈、不丢数据，与删表不是一类，故不在本刀内。
