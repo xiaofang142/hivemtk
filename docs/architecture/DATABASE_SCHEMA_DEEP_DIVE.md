@@ -1660,6 +1660,17 @@ RFM 那副底座另有 `customer_360.go:57` 一个消费点，并格之后那一
 - 本卡 34 条用例（`TestAudience_*` 10 ＋ `TestSOPScheduler_*` 24）单独 `-test.v` 计数：
   顶层 `--- PASS` **34**、子用例 `    --- PASS` **20**、FAIL **0**、SKIP **0**（4.539s）。
   计数按前缀正则取，34 与两文件里的 `^func Test` 实数（10 ＋ 24）逐一对上 ⇒ 不是"少跑了还全绿"。
+- **提交后在 `--shared` 克隆（`/tmp/p501_clone`，`f281dc0c`，工作树 0 脏文件）复验自洽**：
+  `make fmt-check` **rc=0**（工作树那次 rc=2 只剩并行会话未跟踪的 `wechat_batchf4_m01_inbound_test.go`
+  一个 offender，克隆里没有它 ⇒ 证明本卡两条提交单独就过这道门，不是被别人的树救过的）、
+  `go build ./...` **rc=0**、`go vet ./internal/service ./internal/repository` **rc=0**、
+  台账门 **rc=0 / 52/58**（与工作树同数）。定向用例在克隆里换**宽**正则 `-run "Audience|SOPScheduler"`
+  跑：**rc=0、顶层 PASS 36、FAIL 0** —— 比工作树那轮多 2 条，差的 2 条是既有
+  `reach_pipeline_test.go:1006/1015` 的 `TestRunStep_Audience_*`（宽正则按子串命中，与我的 34 条
+  无交集，`comm -13` 实测点名）；本轮数与上轮数不是同一把 ` -run` 的口径，**引用时先认正则**。
+  该轮第一次跑成红是**取证脚本自身**造成的：`source /tmp/p501_env.sh 2>/dev/null` 里那个文件当时
+  已不存在，`2>/dev/null` 把"没 source 上"吞了 ⇒ 全部用例以 `SQLSTATE 28P01` 认证失败收场，
+  红因是环境不是代码（重建同长度口令后 rc=0）。⇒ 又一条：`source` 失败不许被静音。
 - `-race` 两包：repository **ok 149.126s**；service **rc=1 / 653.562s**，log 里
   `WARNING: DATA RACE` **6** 处、`--- FAIL` **3** 条（`TestCreateSession_AllowDifferentPlatform`、
   `TestCreateSession_AnonymousUser`、`TestM01_QQFetchUsesRealAttachmentURLAndBytes`）。
@@ -1675,7 +1686,8 @@ RFM 那副底座另有 `customer_360.go:57` 一个消费点，并格之后那一
   `api-inventory`（生成物 `git status` 无 diff ⇒ 本卡零新端点）、`audit-cross-package-ports`
   （Errors 0 / Warns 0）七条 **rc=0**；`make fmt-check` **rc=2**，未通过文件**恰 1 个**
   （`internal/controller/wechat_batchf4_m01_inbound_test.go`，`??` 未跟踪）—— 本卡 5 个 Go 文件
-  `gofmt -l` 输出**空**，即这条红与本卡零交集（同判据独立复验）；`check-architecture` **rc=1**
+  `gofmt -l` 输出**空**，即这条红与本卡零交集（同判据独立复验；且上一条克隆复验里这道门 **rc=0**
+  ⇒ 本卡两条提交单独就过它，不必等别人把那个文件改掉）；`check-architecture` **rc=1**
   唯一红仍是 `dingtalk_media.go:191/204`（该文件 `??`）；`check-secrets.sh` **rc=1** 三处命中文件名
   与本卡 7 路径 `comm -12` 交集 **0**；markdown lint（`npx -y markdownlint-cli2`，CI `Markdown Lint`
   的同一条）**rc=1 / 1 issue**，仍属并行会话正在改的 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:808`，
@@ -1688,6 +1700,10 @@ RFM 那副底座另有 `customer_360.go:57` 一个消费点，并格之后那一
   ＋ LTC-07 现状列）＋ 修订 r15、本文件改 3 处（版本行 ＋ §4.17 ＋ 修订 v1.14 行）—— 三篇规划文档在 git 外，
   在仓库里 `grep` 不到属预期；**1** 个 git 内文档（本文件）。改完逐条 `grep` 命中数复验，
   两个数一起报：文件数 1（git 内）／7（含 git 外三篇与本卡全部落点）。
+  **命中数复验跑出来的**：任务清单 `T-P5-01` **7** 处 ＋ `r51` **1** 处、本项目调研 `r26` **4** 处
+  （三处就地标注 ＋ 修订行）、新规划 `r15` **4** 处（三处就地标注 ＋ 修订行）—— 三篇各用自己的
+  修订号，别拿一个号去另一篇找。分两笔提交：代码 ＋ 台账脚本 `00aeff61`（6 路径），本文档
+  `f281dc0c`；git 外三篇不进账（它们本来就不在版本管理内，见项目记忆「规划文档在 git 外」）。
 
 
 ---
