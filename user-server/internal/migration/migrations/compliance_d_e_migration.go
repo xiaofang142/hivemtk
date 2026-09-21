@@ -211,13 +211,11 @@ func (m *ComplianceDEMigration) createSmsJobMetrics(ctx context.Context) error {
 
 // Down 执行降级（删除 6 张表）
 func (m *ComplianceDEMigration) Down(ctx context.Context) error {
+	declineTableDrop(m.Version(), "sms_delivery_statuses", "sms_unsubscribes", "email_unsubscribes")
 	stmts := []string{
 		`DROP TABLE IF EXISTS sms_job_metrics`,
-		`DROP TABLE IF EXISTS sms_delivery_statuses`,
-		`DROP TABLE IF EXISTS sms_unsubscribes`,
 		`DROP TABLE IF EXISTS email_job_metrics`,
 		`DROP TABLE IF EXISTS email_tracking_events`,
-		`DROP TABLE IF EXISTS email_unsubscribes`,
 	}
 	return execAllComplianceDE(ctx, m.db, stmts)
 }

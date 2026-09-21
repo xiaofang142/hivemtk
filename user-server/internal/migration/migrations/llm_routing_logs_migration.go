@@ -92,8 +92,8 @@ func (m *LLMRoutingLogsMigration) Down(ctx context.Context) error {
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_created_at",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_provider",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_scenario",
-		"DROP TABLE IF EXISTS llm_routing_logs",
 	}
+	declineTableDrop(m.Version(), "llm_routing_logs")
 	for _, s := range stmts {
 		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
 			return fmt.Errorf("llm_routing_logs/audit 回滚失败: %w", err)

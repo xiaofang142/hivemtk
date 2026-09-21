@@ -48,9 +48,7 @@ func (m *UserBlacklistMigration) Up(ctx context.Context) error {
 
 // Down 回滚
 func (m *UserBlacklistMigration) Down(ctx context.Context) error {
-	if err := m.db.WithContext(ctx).Migrator().DropTable(&model.UserBlacklist{}); err != nil {
-		return fmt.Errorf("user_blacklist 回滚失败: %w", err)
-	}
+	declineTableDrop(m.Version(), "user_blacklist")
 	return nil
 }
 

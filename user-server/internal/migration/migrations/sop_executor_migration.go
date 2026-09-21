@@ -107,9 +107,7 @@ func (m *SOPExecutorMigration) Down(ctx context.Context) error {
 	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS trace_id`)
 	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS attempt_count`)
 	_ = m.db.Exec(`ALTER TABLE sop_executions DROP COLUMN IF EXISTS last_event_at`)
-	_ = m.db.Exec(`DROP TABLE IF EXISTS sop_outbox`)
-	_ = m.db.Exec(`DROP TABLE IF EXISTS sop_timers`)
-	_ = m.db.Exec(`DROP TABLE IF EXISTS sop_exec_events`)
+	declineTableDrop(m.Version(), "sop_outbox", "sop_timers", "sop_exec_events")
 	return nil
 }
 

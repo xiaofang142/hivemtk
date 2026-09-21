@@ -111,9 +111,7 @@ func (m *WorkflowVisualOrchestratorMigration) Up(ctx context.Context) error {
 
 // Down 执行降级
 func (m *WorkflowVisualOrchestratorMigration) Down(ctx context.Context) error {
-	m.db.Exec("DROP TABLE IF EXISTS workflow_node_executions")
-	m.db.Exec("DROP TABLE IF EXISTS workflow_executions")
-	m.db.Exec("DROP TABLE IF EXISTS workflow_versions")
+	declineTableDrop(m.Version(), "workflow_node_executions", "workflow_executions", "workflow_versions")
 	return nil
 }
 

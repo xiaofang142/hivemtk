@@ -65,5 +65,6 @@ func (m *BanditRefluxLogMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS bandit_reflux_log`).Error
+	declineTableDrop(m.Version(), "bandit_reflux_log")
+	return nil
 }

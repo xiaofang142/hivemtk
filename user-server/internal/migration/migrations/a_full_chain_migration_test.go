@@ -57,6 +57,7 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 		t.Fatalf("生产建表路径（AutoMigrate）失败，迁移链前置条件不成立: %v", err)
 	}
 	baseTables := chainTableCount(gdb)
+	baselineSet := chainTables(gdb)
 	t.Logf("基表铺设完成 用时=%v 表数=%d", time.Since(seedStart).Round(time.Millisecond), baseTables)
 
 	reg := migration.NewMigrationRegistry()
@@ -64,11 +65,22 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 	all := reg.GetAll()
 	ctx := context.Background()
 
+	// owned[版本] = 该迁移 Up 真正新建的表。Down 只允许撤销自己建的表：
+	// 本项目建表事实源是 AutoMigrate，基线里的表在降级后仍被当前代码声明并使用。
+	owned := map[string]map[string]bool{}
 	upFailed := map[string]string{}
 	for _, m := range all {
+		before := chainTables(gdb)
 		if err := m.Up(ctx); err != nil {
 			upFailed[m.Version()] = err.Error()
 		}
+		created := map[string]bool{}
+		for table := range chainTables(gdb) {
+			if !before[table] {
+				created[table] = true
+			}
+		}
+		owned[m.Version()+"/"+m.Name()] = created
 	}
 	unexpected := map[string]string{}
 	for v, e := range upFailed {
@@ -91,18 +103,62 @@ func TestFullMigrationChainUpThenRollback(t *testing.T) {
 	afterUp := chainTableCount(gdb)
 
 	downFailed := map[string]string{}
+	dropsForeign := map[string]string{}
 	for i := len(all) - 1; i >= 0; i-- {
 		m := all[i]
+		key := m.Version() + "/" + m.Name()
+		before := chainTables(gdb)
 		if err := m.Down(ctx); err != nil {
-			downFailed[fmt.Sprintf("%s/%s", m.Version(), m.Name())] = err.Error()
+			downFailed[key] = err.Error()
+		}
+		after := chainTables(gdb)
+		victims := []string{}
+		for table := range before {
+			if !after[table] && !owned[key][table] {
+				victims = append(victims, table)
+			}
+		}
+		if len(victims) > 0 {
+			sort.Strings(victims)
+			dropsForeign[key] = strings.Join(victims, ",")
 		}
 	}
 	// 回滚链路不完备属既有事实（见计划 Findings），本排期只把它显式化，不据此判红。
 	if len(downFailed) > 0 {
 		t.Logf("Down 失败 %d/%d：%s", len(downFailed), len(all), formatFailures(downFailed))
 	}
+	if len(dropsForeign) > 0 {
+		t.Errorf("Down 删掉了不属于它的表 %d/%d（本项目表由 AutoMigrate 与模型持有，降级删表＝销毁在用数据）：%s",
+			len(dropsForeign), len(all), formatFailures(dropsForeign))
+	}
+	// 整轮 Up→Down 后库不得比 AutoMigrate 基线更少：这是上面逐条归属的总量口径。
+	afterDown := chainTables(gdb)
+	lostBaseline := []string{}
+	for table := range baselineSet {
+		if !afterDown[table] {
+			lostBaseline = append(lostBaseline, table)
+		}
+	}
+	if len(lostBaseline) > 0 {
+		sort.Strings(lostBaseline)
+		t.Errorf("一轮 Up→Down 后基线表净丢失 %d 张：%s", len(lostBaseline), strings.Join(lostBaseline, ","))
+	}
 	t.Logf("迁移总数=%d 基表=%d Up 后表数=%d Down 后表数=%d Down 失败数=%d",
 		len(all), baseTables, afterUp, chainTableCount(gdb), len(downFailed))
+}
+
+// chainTables 取 public schema 当前的表名集合，用于逐迁移比对 Up/Down 前后的对象差。
+func chainTables(gdb *gorm.DB) map[string]bool {
+	var names []string
+	if err := gdb.Raw(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`).
+		Scan(&names).Error; err != nil {
+		return map[string]bool{}
+	}
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
 }
 
 // nameOf 取版本对应的迁移名，仅用于失败信息可读化。

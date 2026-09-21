@@ -82,8 +82,6 @@ func (m *TelegramGroupGateMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	if err := m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS telegram_group_members`).Error; err != nil {
-		return err
-	}
-	return m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS telegram_group_gates`).Error
+	declineTableDrop(m.Version(), "telegram_group_members", "telegram_group_gates")
+	return nil
 }

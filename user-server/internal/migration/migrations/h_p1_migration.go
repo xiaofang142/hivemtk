@@ -165,11 +165,9 @@ func (m *HP1Migration) createRecoveryQueue(ctx context.Context) error {
 
 // Down 回滚
 func (m *HP1Migration) Down(ctx context.Context) error {
+	declineTableDrop(m.Version(), "recovery_queue", "clue_engagement_events", "clue_scores")
 	stmts := []string{
-		`DROP TABLE IF EXISTS recovery_queue`,
 		`DROP TABLE IF EXISTS customer_rfm`,
-		`DROP TABLE IF EXISTS clue_engagement_events`,
-		`DROP TABLE IF EXISTS clue_scores`,
 	}
 	return execAllMP1(ctx, m.db, stmts)
 }

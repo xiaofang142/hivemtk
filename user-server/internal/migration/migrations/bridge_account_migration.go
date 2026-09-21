@@ -38,9 +38,7 @@ func (m *BridgeAccountMigration) Up(ctx context.Context) error {
 }
 
 func (m *BridgeAccountMigration) Down(ctx context.Context) error {
-	if err := m.db.WithContext(ctx).Migrator().DropTable(&model.BridgeAccount{}); err != nil {
-		return fmt.Errorf("bridge_accounts 回滚失败: %w", err)
-	}
+	declineTableDrop(m.Version(), "bridge_accounts")
 	return nil
 }
 

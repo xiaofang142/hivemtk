@@ -67,10 +67,11 @@ func (m *LP1Migration) Up(ctx context.Context) error {
 
 // Down 回滚
 func (m *LP1Migration) Down(ctx context.Context) error {
-	stmts := []string{
-		`DROP TABLE IF EXISTS integration_templates`,
+	if m.db == nil {
+		return fmt.Errorf("db is nil")
 	}
-	return execAllMP1(ctx, m.db, stmts)
+	declineTableDrop(m.Version(), "integration_templates")
+	return nil
 }
 
 var _ migration.Migration = (*LP1Migration)(nil)

@@ -112,8 +112,7 @@ func (m *MarketingFlowSchemaMigration) Up(ctx context.Context) error {
 
 // Down 执行降级
 func (m *MarketingFlowSchemaMigration) Down(ctx context.Context) error {
-	m.db.Exec("DROP TABLE IF EXISTS flow_executions")
-	m.db.Exec("DROP TABLE IF EXISTS marketing_flows")
+	declineTableDrop(m.Version(), "flow_executions", "marketing_flows")
 	return nil
 }
 

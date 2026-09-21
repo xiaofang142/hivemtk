@@ -50,12 +50,7 @@ func (m *AssetBundleMigration) Up(ctx context.Context) error {
 
 // Down 回滚
 func (m *AssetBundleMigration) Down(ctx context.Context) error {
-	if m.db.Migrator().HasTable("asset_bundle_version_logs") {
-		_ = m.db.Migrator().DropTable("asset_bundle_version_logs")
-	}
-	if m.db.Migrator().HasTable("asset_bundles") {
-		_ = m.db.Migrator().DropTable("asset_bundles")
-	}
+	declineTableDrop(m.Version(), "asset_bundle_version_logs", "asset_bundles")
 	return nil
 }
 

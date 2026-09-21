@@ -171,18 +171,7 @@ func (m *BrowserAutomationMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	// 子表先删，父表后删
-	drops := []string{
-		`DROP TABLE IF EXISTS browser_steps`,
-		`DROP TABLE IF EXISTS browser_llm_plans`,
-		`DROP TABLE IF EXISTS browser_cron_triggers`,
-		`DROP TABLE IF EXISTS browser_sessions`,
-		`DROP TABLE IF EXISTS browser_tasks`,
-	}
-	for _, stmt := range drops {
-		if err := m.db.WithContext(ctx).Exec(stmt).Error; err != nil {
-			return err
-		}
-	}
+	declineTableDrop(m.Version(), "browser_steps", "browser_llm_plans", "browser_cron_triggers",
+		"browser_sessions", "browser_tasks")
 	return nil
 }

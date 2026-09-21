@@ -79,7 +79,7 @@ func TestHumanizeMigration_UpIdempotent(t *testing.T) {
 	}
 }
 
-// TestHumanizeMigration_Down 集成测试：Down 回滚 5 张表
+// TestHumanizeMigration_Down 集成测试：Down 不删模型持有的 5 张表（降级销毁在用数据）
 func TestHumanizeMigration_Down(t *testing.T) {
 	db := setupHumanizeMigrationTestDB(t)
 
@@ -91,18 +91,18 @@ func TestHumanizeMigration_Down(t *testing.T) {
 		t.Fatalf("Down() failed: %v", err)
 	}
 
-	deletedTables := []string{
+	preservedTables := []string{
 		"humanize_scores",
 		"humanize_dimensions",
 		"champion_baselines",
 		"champion_phrases",
 		"ab_test_stats",
 	}
-	for _, table := range deletedTables {
+	for _, table := range preservedTables {
 		var exists bool
 		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = ?)`, table).Scan(&exists)
-		if exists {
-			t.Errorf("Down() 后表 %s 应被删除", table)
+		if !exists {
+			t.Errorf("Down() 后表 %s 应保留：降级删它等于销毁当前代码在用的数据", table)
 		}
 	}
 }

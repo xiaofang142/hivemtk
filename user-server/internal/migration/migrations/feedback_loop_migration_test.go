@@ -119,7 +119,7 @@ func TestFeedbackLoopMigration_UpIdempotent(t *testing.T) {
 	}
 }
 
-// TestFeedbackLoopMigration_Down 集成测试：Down 回滚 6 张表
+// TestFeedbackLoopMigration_Down 集成测试：Down 只回退列/索引，6 张模型持有的表不得被删
 func TestFeedbackLoopMigration_Down(t *testing.T) {
 	db := setupFeedbackLoopMigrationTestDB(t)
 	dropDependencyTables(t, db)
@@ -134,7 +134,7 @@ func TestFeedbackLoopMigration_Down(t *testing.T) {
 		t.Fatalf("Down() failed: %v", err)
 	}
 
-	deletedTables := []string{
+	preservedTables := []string{
 		"feedback_events",
 		"feedback_signals",
 		"champion_dialogues",
@@ -142,11 +142,11 @@ func TestFeedbackLoopMigration_Down(t *testing.T) {
 		"bandit_arms",
 		"prompt_ab_tests",
 	}
-	for _, table := range deletedTables {
+	for _, table := range preservedTables {
 		var exists bool
 		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = ?)`, table).Scan(&exists)
-		if exists {
-			t.Errorf("Down() 后表 %s 应被删除", table)
+		if !exists {
+			t.Errorf("Down() 后表 %s 应保留：降级删它等于销毁当前代码在用的数据", table)
 		}
 	}
 }

@@ -72,15 +72,7 @@ func (m *AIAgentSchemaMigration) Up(ctx context.Context) error {
 
 // Down 回滚
 func (m *AIAgentSchemaMigration) Down(ctx context.Context) error {
-	if m.db.Migrator().HasTable("customer_service_agents") {
-		_ = m.db.Migrator().DropTable("customer_service_agents")
-	}
-	if m.db.Migrator().HasTable("channel_agent_bindings") {
-		_ = m.db.Migrator().DropTable("channel_agent_bindings")
-	}
-	if m.db.Migrator().HasTable("ai_agents") {
-		_ = m.db.Migrator().DropTable("ai_agents")
-	}
+	declineTableDrop(m.Version(), "customer_service_agents", "channel_agent_bindings", "ai_agents")
 	return nil
 }
 

@@ -192,7 +192,7 @@ func TestConfidenceMigration_DefaultPoliciesFields(t *testing.T) {
 	}
 }
 
-// TestConfidenceMigration_Down 集成测试：Down 回滚 6 张表
+// TestConfidenceMigration_Down 集成测试：Down 只回退自己新建的对象，模型持有的 4 张表不得被删
 func TestConfidenceMigration_Down(t *testing.T) {
 	db := setupConfidenceMigrationTestDB(t)
 
@@ -204,17 +204,17 @@ func TestConfidenceMigration_Down(t *testing.T) {
 		t.Fatalf("Down() failed: %v", err)
 	}
 
-	deletedTables := []string{
+	preservedTables := []string{
 		"confidence_signals",
 		"handoff_decisions",
 		"ab_tests",
 		"ab_test_metrics",
 	}
-	for _, table := range deletedTables {
+	for _, table := range preservedTables {
 		var exists bool
 		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = ?)`, table).Scan(&exists)
-		if exists {
-			t.Errorf("Down() 后表 %s 应被删除", table)
+		if !exists {
+			t.Errorf("Down() 后表 %s 应保留：降级删它等于销毁当前代码在用的数据", table)
 		}
 	}
 }

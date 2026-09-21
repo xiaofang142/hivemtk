@@ -188,14 +188,12 @@ func (m *HumanizeEvaluatorMigration) createABTestStats(ctx context.Context) erro
 // 不删除 low_quality_samples（与 共享）
 //   - 5 张新表可安全删除
 func (m *HumanizeEvaluatorMigration) Down(ctx context.Context) error {
-	stmts := []string{
-		`DROP TABLE IF EXISTS ab_test_stats`,
-		`DROP TABLE IF EXISTS champion_phrases`,
-		`DROP TABLE IF EXISTS champion_baselines`,
-		`DROP TABLE IF EXISTS humanize_dimensions`,
-		`DROP TABLE IF EXISTS humanize_scores`,
+	if m.db == nil {
+		return fmt.Errorf("db is nil")
 	}
-	return execAllHumanize(ctx, m.db, stmts)
+	declineTableDrop(m.Version(), "ab_test_stats", "champion_phrases", "champion_baselines",
+		"humanize_dimensions", "humanize_scores")
+	return nil
 }
 
 func execAllHumanize(ctx context.Context, db *gorm.DB, stmts []string) error {

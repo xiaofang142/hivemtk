@@ -68,5 +68,6 @@ func (m *BrowserCommandLogMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS browser_command_log`).Error
+	declineTableDrop(m.Version(), "browser_command_log")
+	return nil
 }

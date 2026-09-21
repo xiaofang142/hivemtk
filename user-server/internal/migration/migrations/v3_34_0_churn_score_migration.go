@@ -63,5 +63,6 @@ func (m *ChurnScoreMigration) Down(ctx context.Context) error {
 	if m.db == nil {
 		return fmt.Errorf("db is nil")
 	}
-	return m.db.WithContext(ctx).Exec(`DROP TABLE IF EXISTS churn_scores`).Error
+	declineTableDrop(m.Version(), "churn_scores")
+	return nil
 }

@@ -117,18 +117,16 @@ func (m *AIPerfFAQSOPLayerMigration) Down(ctx context.Context) error {
 		"DROP INDEX IF EXISTS idx_layer_decision_logs_created_at",
 		"DROP INDEX IF EXISTS idx_layer_decision_logs_session_id",
 		"DROP INDEX IF EXISTS idx_layer_decision_logs_trace_id",
-		"DROP TABLE IF EXISTS layer_decision_logs",
 		"DROP INDEX IF EXISTS idx_sop_templates_priority",
 		"DROP INDEX IF EXISTS idx_sop_templates_enabled",
 		"DROP INDEX IF EXISTS idx_sop_templates_intent_stage",
-		"DROP TABLE IF EXISTS sop_templates",
 		"DROP INDEX IF EXISTS idx_faq_entries_question_gin",
 		"DROP INDEX IF EXISTS idx_faq_entries_hit_count",
 		"DROP INDEX IF EXISTS idx_faq_entries_category",
 		"DROP INDEX IF EXISTS idx_faq_entries_intent",
 		"DROP INDEX IF EXISTS idx_faq_entries_enabled",
-		"DROP TABLE IF EXISTS faq_entries",
 	}
+	declineTableDrop(m.Version(), "layer_decision_logs", "sop_templates", "faq_entries")
 	for _, s := range stmts {
 		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
 			return fmt.Errorf("ai_perf_faq_sop_layer 回滚失败: %w (SQL: %s)", err, s)

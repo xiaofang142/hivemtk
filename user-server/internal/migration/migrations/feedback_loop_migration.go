@@ -307,13 +307,9 @@ func (m *FeedbackLoopMigration) Down(ctx context.Context) error {
 		`ALTER TABLE script_templates DROP COLUMN IF EXISTS effectiveness_score`,
 		`ALTER TABLE script_templates DROP COLUMN IF EXISTS source`,
 		`ALTER TABLE sop_agents DROP COLUMN IF EXISTS use_bandit`,
-		`DROP TABLE IF EXISTS prompt_ab_tests`,
-		`DROP TABLE IF EXISTS bandit_arms`,
-		`DROP TABLE IF EXISTS prompt_candidates`,
-		`DROP TABLE IF EXISTS champion_dialogues`,
-		`DROP TABLE IF EXISTS feedback_signals`,
-		`DROP TABLE IF EXISTS feedback_events`,
 	}
+	declineTableDrop(m.Version(), "prompt_ab_tests", "bandit_arms", "prompt_candidates",
+		"champion_dialogues", "feedback_signals", "feedback_events")
 	return execAllFeedbackLoop(ctx, m.db, stmts)
 }
 

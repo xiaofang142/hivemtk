@@ -269,13 +269,11 @@ func (m *ConfidenceMigration) seedDefaultPolicies(ctx context.Context) error {
 //   - 不删除 threshold_policies（策略配置有价值）
 //   - 其他表可安全删除
 func (m *ConfidenceMigration) Down(ctx context.Context) error {
-	stmts := []string{
-		`DROP TABLE IF EXISTS ab_test_metrics`,
-		`DROP TABLE IF EXISTS ab_tests`,
-		`DROP TABLE IF EXISTS handoff_decisions`,
-		`DROP TABLE IF EXISTS confidence_signals`,
+	if m.db == nil {
+		return fmt.Errorf("db is nil")
 	}
-	return execAll(ctx, m.db, stmts)
+	declineTableDrop(m.Version(), "ab_test_metrics", "ab_tests", "handoff_decisions", "confidence_signals")
+	return nil
 }
 
 func execAll(ctx context.Context, db *gorm.DB, stmts []string) error {

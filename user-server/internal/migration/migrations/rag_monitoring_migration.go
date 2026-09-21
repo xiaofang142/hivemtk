@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"hivemtk-user/internal/migration"
-	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
@@ -101,12 +100,7 @@ func (m *RagMonitoringMigration) createRagMetricsDaily(ctx context.Context) erro
 // 注意：删除监控表会丢失历史数据，但业务核心数据（knowledge_documents 等）不受影响
 // 私域部署: rag_alerts 由 v3.17 单独 DROP, 本 Down 不再处理
 func (m *RagMonitoringMigration) Down(ctx context.Context) error {
-	tables := []string{"rag_metrics_daily", "rag_query_logs"}
-	for _, tbl := range tables {
-		if err := m.db.WithContext(ctx).Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl)).Error; err != nil {
-			logger.Infof("[RagMonitoringMigration] drop %s 提示: %v", tbl, err)
-		}
-	}
+	declineTableDrop(m.Version(), "rag_metrics_daily", "rag_query_logs")
 	return nil
 }
 
