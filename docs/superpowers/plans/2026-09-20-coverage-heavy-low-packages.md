@@ -3179,3 +3179,55 @@ Down 按"这表是我建的"写（`CREATE TABLE IF NOT EXISTS` / `DropTable`）�
 **留下的、写清边界的残项**：`ai_perf_faq_sop_layer` 与 `llm_routing_logs` 这两处**保留**了索引回退
 （索引确由本迁移建），于是降级后表还在但其上新建过的索引会缺，直到下次启动 AutoMigrate 补齐 ⇒
 性能面自愈、不丢数据，与删表不是一类，故不在本刀内。
+
+---
+
+## R18（2026-09-21 第三十三轮：R17 留下的那条"残项"实测后比删表更严重，一并收口）
+
+R17 末尾把"列与索引的回退保留"写成一条边界清晰的残项，理由是"性能面自愈、不丢数据"。
+本轮按用户指示（「任何残留的问题都要找出来 解决并修复」）回去核这句话，**它只对索引成立，对列不成立**：
+GORM AutoMigrate 会在下次启动时补回缺失的表/列/索引，但补回的列是**空列**——降级删掉的列连同其
+数据一起消失，重启只是把 schema 复原，值无处可回。于是同一把可达钥匙（`POST /api/migration/rollback`
+一次调用 ⇒ `registry.Get(target).Down(ctx)`）销毁的东西比 R17 记的多得多。
+
+**先把口径跑成数字**（探针判据即 R17 那道全链路用例，本轮把它的比对轴从"表"扩到"表/列/索引"）：
+在同一条 AutoMigrate 基线（300 表 / 3868 列 / 795 非约束索引）上逐迁移比对 Up 新建与 Down 撤销的集合，
+实测 **20/74 的 Down 删掉模型声明的列，一轮 Up→Down 净丢 66 列；8/74 删掉模型声明的索引，净丢 16 个**。
+红因样本（`/tmp/r18_col.log`、`/tmp/r18_red.log`）：`llm_routing_logs` 一处删 10 列、`script_templates`
+删 5 列、`sop_executions` 删 4 列 + 2 索引，`layer_decision_logs` 一处删 5 个索引。
+
+**修法沿用 R17 的口径，不新立规矩**：Down 只撤销自己 Up 造成的变化。21 个迁移文件里的列/索引回退
+统一改走 `declineColumnDrop` / `declineIndexDrop` 记一条日志放弃；R17 那个只讲表的
+`down_table_policy.go` 随之改名 `down_drop_policy.go`，内部收敛成一个 `declineDrop(version, kind, objects...)`
+加表/列/索引三个包装，判据位置与可达路径仍只写在文件头注释一处。
+确由本迁移建出的对象照旧回退：`v2.7.0` 仍删自己建的 `query_rewrite_cache`/`embedding_cache`，
+`v3.15.0` 的 Down 从 16 条 SQL 缩到只剩自己那两张表。
+
+**判据从两道扩成六道**（`a_full_chain_migration_test.go`）：逐迁移「Down 删掉的 ⊆ Up 新建的」× 表/列/索引，
+加基线三轴总量「一轮 Up→Down 后不得净丢失」。新增一处**连带豁免**并写明理由：
+删一张确由本迁移建出的表，必然带走其上的索引与列，那不是越权删除，故
+`if owned[key][beforeIndexes[index]] { continue }`（列同理按 `table` 前缀判）。
+豁免不是放水：基数守恒可核，修完 Down 后 306 表 / 910 索引 / 3930 列，三轴相对基线**只增不减**。
+
+**反向验证（新判据必须能红，且两轴互相独立）**三格：
+① 装回一处列 DROP（`v3.15` 的 `ALTER TABLE knowledge_documents DROP COLUMN agent_id`）⇒ 列轴与索引轴同红
+（各 `1/74`，基线净丢失 1 列 `knowledge_documents.agent_id` + 1 索引 `idx_knowledge_documents_agent_id`）——
+索引那条是"删列隐含删其索引"的真实连带，不是判据串扰；
+② 两处只装回索引 DROP 的变异**跑绿**，读红因后确认是判据正确放行：`v2.1.2` 的
+`idx_telegram_accounts_polling_owner`、`v3_32` 的 `idx_sessions_handoff_at` 确由本迁移 Up 建出（后者被点名
+的损失其实是 `idx_customer_sessions_handoff_at`，GORM 自动命名与手写名不同族，属列删的连带）；
+③ 换到**基线自有**的索引上装回（`rag_hybrid` 的 `idx_knowledge_chunks_content_hash` +
+`v3_43` 的 `idx_browser_steps_text_hash`）⇒ **索引轴单独红**（`2/74`、基线索引净丢失 2）而列轴不红，
+证明两轴各判各的。三格全部 `cp` 自 `.bak-r18c` 还原，逐文件 md5 与变异前一致
+（`25ba4777…` / `5f85b19f…`），`grep` 复核无变异残留，`.bak` 已删净（未跟踪文件不得留，否则污染下轮基线）。
+
+**门（各记各的）**：修完带 `-test.v` 单跑与整包复跑均绿（整包 `42.017s`，91 个声明用例，
+`Down 失败 1/74` 仍是 `v3.28.0/email_smtp` 那句显式拒绝"密码解密回明文是安全倒退"，既有设计只记不判）；
+还原变异后再跑整包 `rc=0 / 76.400s`——这一跑没带 `-test.v`，故其 `--- FAIL` 计数恒 0 属空证据，
+证据只认 rc=0 与前一跑 `-test.v` 明细。两轮之间 `vm.loadavg` 48 → 79、并发 `go test` 进程 3 → 4，
+时长 42s → 76s 的摆动归负载，不据此改判据。`gofmt -l` 0 行、`go vet ./internal/migration/...` 输出 0 字节。
+
+**代价与边界（写清，不说成无损）**：本轮的降级面按文件粒度统一放弃，会**多放弃**一些确归本迁移的对象
+——上面 ② 那一格就是证据（装回自己建的索引判据不红，说明那几处本可安全回退）。多留一个对象的代价是
+schema 上冗余一行、下次启动 AutoMigrate 也不清理；误删一个在用对象的代价是不可逆的数据丢失，
+两边不对称，故取"宁可多留"。本轮不动 Up 面（Up 仍按幂等建对象），也不动 `v3.28.0` 的显式拒绝。
