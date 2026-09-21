@@ -367,18 +367,26 @@ func TestReachRolloutObservationSeparatesComputableFromNot(t *testing.T) {
 		t.Errorf("累计判定数应为 2，实得 %v", val["total"])
 	}
 
-	// 送达率：表与 webhook 都在，缺的是外发链路写进去的 message_id（恒为常量 ⇒ 唯一索引下
-	// 所有外发挤成一行）。这一条被标成 computable 的话，读的人以为放量有依据了。
+	// 送达率：表与 webhook 都在，缺的是**一条真单号**。理由必须点名实测到的那三处根因，
+	// 而不是含糊一句"数据不够"：① `SmsService.SendSms` 只回 error，单号在这道边界上就没了；
+	// ② `sms_records` 连存单号的列都没有；③ 外发链路上行的是常量 sms_out。
+	// 这一条被标成 computable 的话，读的人以为放量有依据了。
 	if m := byName["delivery_rate_by_cohort"]; m.Status != ReachRolloutMetricUnavailable {
 		t.Errorf("送达率此刻算不出来，实得 %+v", m)
 	} else {
 		if m.Value != nil {
 			t.Errorf("unavailable 的项不许带值（0 会被读成「送达率为 0」）：%+v", m)
 		}
-		for _, want := range []string{"message_id", "sms_out"} {
+		for _, want := range []string{"SendSms", "sms_records", "sms_out", "webhook"} {
 			if !strings.Contains(m.Reason, want) {
 				t.Errorf("送达率的理由要点名 %s（这是实测出来的根因），实得：%q", want, m.Reason)
 			}
+		}
+		// "外发把 sms_out 写进了送达表"是一句会说谎的因果：那张表只由 webhook 按运营商
+		// 回传的单号建行，外发链路一个字符都没往里写过。常量单号是**算不出来的原因**，
+		// 不是**已经写坏的事实**。
+		if strings.Contains(m.Reason, "外发链路写进去") {
+			t.Errorf("理由把推断当成了实测事实：%q", m.Reason)
 		}
 		if m.Unblocker == "" {
 			t.Error("要说清补哪一行代码才算得出来，否则这条 unavailable 等于一次投诉")

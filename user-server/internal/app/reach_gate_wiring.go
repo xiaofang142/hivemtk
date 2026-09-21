@@ -132,9 +132,12 @@ func reachRolloutReadout() (mode string, entries int, degraded bool) {
 //
 // 卡面 AC① 要的是"每阶段有投诉率/送达率对比数据"。实测两处都**算不出来**，理由不是
 // "还没接"而是缺上游数据：
-//   - 送达率：表与 webhook 都在（`sms_delivery_statuses` / `POST /api/sms/delivery/webhook`），
-//     但外发链路写进去的 message_id 是常量 `sms_out`（`BindProactiveReachSenders` 的短信闭包
-//     不回传 provider BizId）⇒ 唯一索引下所有外发挤成一行，按批次切不开；
+//   - 送达率：表与 webhook 都在（`sms_delivery_statuses` 只由 `POST /api/sms/delivery/webhook`
+//     按运营商回传的 message_id 建行），缺的是一条真单号：`SmsService.SendSms` 只回 error，
+//     `sms_records` 没有单号列，provider 成功分支把单号丢掉或硬编码成 "OK"，外发链路上行的
+//     是常量 `sms_out` ⇒ 两边没有可比字段。**注意口径**：常量单号是"算不出来"的原因之一，
+//     不是一句"外发已经把 sms_out 写进了送达表"——那张表外发一个字符都没写过，
+//     照它建行才会把所有外发挤成同一行（唯一索引）。
 //   - 投诉率：全仓没有任何投诉信号的持久化写入方（complaint 只有常量与瞬时的意图标签）。
 //
 // 所以这里交付的不是四个填好的数，而是"哪一条算得出来、哪一条算不出来、各缺哪一行代码"。
@@ -219,11 +222,13 @@ func ObserveReachRollout(snap ReachGateSnapshot, counter *approval.DecisionCount
 		{
 			Name:   "delivery_rate_by_cohort",
 			Status: ReachRolloutMetricUnavailable,
-			Reason: "送达率有表也有 webhook（sms_delivery_statuses / POST /api/sms/delivery/webhook），" +
-				"但外发链路写进去的 message_id 是常量 sms_out：唯一索引下所有外发挤成一行，" +
-				"回传的状态报告落不回具体批次 ⇒ 只能算全局 job 维度送达率，与放量档无关",
-			Unblocker: "让 SmsService.SendSms 回传 provider 的 message_id/BizId，并用它建 SmsDeliveryStatus 行" +
-				"（三个 provider 的响应解析都要一起改，见本卡登记的欠账）",
+			Reason: "送达率的表与 webhook 都在，缺的是**一条真单号**：sms_delivery_statuses 只由 " +
+				"POST /api/sms/delivery/webhook 按运营商回传的 message_id 建行，而外发链路一个单号都拿不到" +
+				"（SmsService.SendSms 只回 error、sms_records 没有存单号的列、三家 provider 的成功分支返回硬编码状态码），" +
+				"往上交的是常量 sms_out ⇒ 状态报告与外发记录之间没有可比字段，只能算全局 job 维度送达率，与放量档无关",
+			Unblocker: "先在 provider 侧把单号取出来（aliyun 的 BizId 已反序列化进 result.BizID 却被丢弃，" +
+				"tencent/huawei 连解析都没有）⇒ 再改 SmsService.SendSms 的回传签名并给 sms_records 加单号列，" +
+				"最后才谈得上按单号 join 送达表",
 		},
 		{
 			Name:   "complaint_rate_by_cohort",
