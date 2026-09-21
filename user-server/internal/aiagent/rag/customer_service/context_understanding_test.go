@@ -55,8 +55,8 @@ func TestAnalyzeIntentCategories(t *testing.T) {
 		t.Error("空消息应报错")
 	}
 	withParams, _ := newCUSSvc().AnalyzeIntent(ctx, "订单号 12345 有货吗", nil)
-	if withParams.Parameters["order_number"] != "ORDER123456" {
-		t.Errorf("参数抽取应命中订单号（当前为固定样例值）, got %v", withParams.Parameters)
+	if withParams.Parameters["order_number"] != "12345" {
+		t.Errorf("参数抽取应取消息里的订单号本身, got %v", withParams.Parameters)
 	}
 }
 
@@ -192,14 +192,11 @@ func TestUpdateContextAndTopicDetection(t *testing.T) {
 		t.Errorf("空 PrimaryIntent 不应覆盖, got %q", kept.Intent)
 	}
 
-	// 已有 Entities 时原地合并；浅拷贝共享底层 map 属既有行为（见 Findings 3），在此钉住
+	// 已有 Entities 时合并而不丢既有键（不与调用方共享存储这一点由 context_isolation_test.go 守）
 	seeded := Context{Topic: "greeting", Entities: map[string][]string{"a": {"1"}}}
 	merged, _ := svc.UpdateContext(ctx, seeded, orderMsg, orderIntent)
 	if len(merged.Entities["order_number"]) != 1 || merged.Entities["a"] == nil {
 		t.Errorf("应合并进已有 Entities 且不丢既有键: %v", merged.Entities)
-	}
-	if _, aliased := seeded.Entities["order_number"]; !aliased {
-		t.Error("UpdateContext 与调用方共享同一 Entities map（既有行为），若改为深拷贝需同步更新本断言")
 	}
 
 	if changed, topic, err := svc.DetectTopicChange(ctx, "complaint_support", Message{Content: "我要投诉"}); changed || topic != "complaint_support" || err != nil {
@@ -299,15 +296,15 @@ func TestPureHelpers(t *testing.T) {
 	if got := extractBrandEntities("阿迪达斯和优衣库"); len(got) != 2 || got[1] != "优衣库" {
 		t.Errorf("extractBrandEntities=%v", got)
 	}
-	if extractOrderNumber("号") != "ORDER123456" || extractOrderNumber("无") != "" {
-		t.Error("extractOrderNumber 分支错（当前实现返回固定样例号）")
+	if extractOrderNumber("号") != "" || extractOrderNumber("无") != "" {
+		t.Error("无单号形态时不得凭空造号")
 	}
 	if extractProductName("我想买裙子") != "裙子" || extractProductName("买个手机") != "手机" || extractProductName("无") != "" {
 		t.Error("extractProductName 分支错")
 	}
 
 	params := extractParameters("订单号 123 商品 裙子 到货")
-	if params["order_number"] != "ORDER123456" || params["product_name"] != "裙子" {
+	if params["order_number"] != "123" || params["product_name"] != "裙子" {
 		t.Errorf("extractParameters=%v", params)
 	}
 	if len(extractParameters("无关文本")) != 0 {

@@ -443,6 +443,20 @@ func (cus *ContextUnderstandingServiceImpl) AnalyzeSentiment(ctx context.Context
 func (cus *ContextUnderstandingServiceImpl) UpdateContext(ctx context.Context, currentContext Context, newMessage Message, intent IntentAnalysis) (Context, error) {
 	updatedContext := currentContext
 
+	// 值拷贝共享 map 与切片底层数组：本函数往两者里写，调用方持有的原 Context 会被无赋值改写。
+	if currentContext.Entities != nil {
+		entities := make(map[string][]string, len(currentContext.Entities))
+		for key, values := range currentContext.Entities {
+			entities[key] = values
+		}
+		updatedContext.Entities = entities
+	}
+	if currentContext.PreviousTopics != nil {
+		previousTopics := make([]string, len(currentContext.PreviousTopics), len(currentContext.PreviousTopics)+1)
+		copy(previousTopics, currentContext.PreviousTopics)
+		updatedContext.PreviousTopics = previousTopics
+	}
+
 	if cus.config.TopicDetectionEnabled {
 		changed, newTopic, err := cus.DetectTopicChange(ctx, currentContext.Topic, newMessage)
 		if err == nil && changed {
@@ -738,10 +752,18 @@ func isRelatedTopic(currentTopic, newIntent string) bool {
 }
 
 func extractOrderNumber(text string) string {
-	if contains(text, "号") {
-		return "ORDER123456"
+	var run []byte
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			run = append(run, c)
+			continue
+		}
+		if len(run) > 0 {
+			break
+		}
 	}
-	return ""
+	return string(run)
 }
 
 func extractProductName(text string) string {
