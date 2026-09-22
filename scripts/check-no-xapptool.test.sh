@@ -209,7 +209,7 @@ else
   fi
   DUAL_AFTER="$(read_count /tmp/nxt-dual-after.log)"
   if [[ "$DUAL_AFTER_RC" != "$BASE_RC" || "$DUAL_AFTER" != "$BASE_COUNT" ]]; then
-    echo "BROKEN: 撤掉 $DUAL 的夹具后未回到基线（rc $BASE_RC→$DUAL_AFTER_RC，命中 $BASE_COUNT→$DUAL_AFTER）" >&2
+    echo "BROKEN: 撤掉 ${DUAL} 的夹具后未回到基线（rc ${BASE_RC}→${DUAL_AFTER_RC}，命中 ${BASE_COUNT}→${DUAL_AFTER}）" >&2
     exit 1
   fi
   echo "  ✓ 双份枚举：$DUAL 注入 1 行 → 命中恰 +1 且只点名 1 次；还原 md5 全等、闸回基线"

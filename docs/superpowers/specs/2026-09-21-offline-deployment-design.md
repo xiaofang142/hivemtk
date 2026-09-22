@@ -1723,3 +1723,16 @@ platform 印同型句（`platform-contributor/.env.example`，应为 1 实为 2�
 platform 用自己的闸副本 `scanned=264 / 0 hits`（从 platform 目录调 hivemtk 那份闸同样是 264，
 只是白名单条数印 6 —— 定根跟着调用者走这件事再次自证）。
 双源交集文件数本仓 5 个、platform 4 个，与 §7.5 的清单一致。
+
+**邻门当场咬了这条新腿一口（记录以免被当成"门之间不相关"）**：新腿那句 BROKEN 文案里写了
+`rc $BASE_RC→$DUAL_AFTER_RC，命中 $BASE_COUNT→$DUAL_AFTER）` —— 四个 `$VAR` 紧邻中文/全角标点，
+正是 §7.3 Task 25 收口过的那族 bash 3.2 展开隐患。`scripts/check-shell-cjk-expansion.sh` 由 2 处基线跳到 6 处、
+rc 1→红，并点名"基线里没有这个文件（新落点）"⇒ 那道门是独立作业（`lint.yml` 的
+`Shell $VAR+CJK expansion guard`，与 ESLint 那两个红作业不同 job，不会被藏成 skipped），
+且 `lint.yml` 的 `on: push` 无 paths 过滤 ⇒ 每次推送都跑。改法照门自己的提示：四处加花括号，语义不变，
+复跑回 `命中 2 处（基线 2 处）` rc=0。**代价**：加括号后两份副本的字节数变了，
+"两仓逐字一致"必须重新 `cmp` 重新记 md5（见下），不能沿用上一笔里的哈希。
+
+顺带被这次 `cmp` 抓出来的一条 stale 断言：§7.5 结尾写"两仓副本逐字一致"，实测在补腿**之前**
+两份已提交的反向测试就差了 10 行（hivemtk 那份在 §7.3 Task 25 收口时被花括号化过 5 处，platform 那份没跟上）。
+两仓没有互相可见的门 ⇒ "逐字一致"这句在每个同步点都得重跑 `cmp -s` 才算数，写完不等于成立。
