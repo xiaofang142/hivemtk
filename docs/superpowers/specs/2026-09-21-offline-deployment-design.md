@@ -737,7 +737,23 @@ docs2.js 里本批早先的 13 个新键未受影响（diff 只剩预期内的�
 `node --check` 过 `dev-server.cjs`、`postbuild.mjs` 与 5 个词典模块。
 
 **留给后面的**
-- 百度统计 `hm.js?99bc4d…` 是本批唯一保留的出站依赖（站点本身零后端），留删由用户处置（Task 11）。
+- ~~百度统计 `hm.js?99bc4d…` 是本批唯一保留的出站依赖（站点本身零后端），留删由用户处置（Task 11）。~~
+  **2026-09-22 已裁定并摘除（用户指示"你自己决策执行"）**：摘的理由不是"它坏了"，而是三条叠加——
+  ① 它是站内唯一第三方 beacon，与本批"官网零线上依赖"的口径直接冲突；② 它的站点属性绑在
+  `hive.xapptool.cn` 上，而该域名已决定不续费，换到 github.io 后绑不绑得上**未经核实**（实测本机连它
+  就是 `http=000 / ERR_CONNECTION_CLOSED`，无法读脚本自证），即"保留价值不确定、清除成本一次提交"；
+  ③ 它每次加载在访客控制台留一条 error。**删除面有两处，不止 index.html**（先前口径只记了一处，本轮重验修正）：
+  `website/index.html` 删 11 行（空行 + `<!-- 百度统计 -->` + 整个 script 块）
+  ＋ `website/src/router/index.js` 删 7 行——配套的 SPA PV 上报
+  （`afterEach` 内的 `window._hmt.push(['_trackPageview', …])`、`isFirstNavigation` 的声明与末尾赋值、那行注释）；
+  只摘 index.html 会在路由里留下读 `window._hmt` 的死代码，违反本批"删干净不留占位"。
+  `afterEach` 的 title/meta/canonical 三段是本批 Pages 适配的产物，**保留**。
+  复验（本地起服 + 浏览器实测，非推断）：`npm run build` rc=0（99 modules，postbuild 7 个路由目录 + 404.html 全 ✓）、
+  `dist` 内 `hm.baidu.com` 命中 0（唯一 `_hmt` 命中在 `assets/manrope-latin-ext-700-normal-*.woff` 里，
+  是字体二进制的巧合字节，非引用）、首页与 `/hivemtk/features` 两条路径的 script/xhr/fetch 请求 7/7 全是
+  `127.0.0.1`、控制台消息 0 条（摘前是 1 条 error）、`window._hmt` 为 `undefined` 而
+  `document.title`/canonical 随路由正常更新（证明摘的是埋点不是 SEO 段）、
+  `make audit-artifacts` rc=0（716 个产物文件零真凭证、无 .map）、`scripts/check-no-xapptool.sh` rc=0（scanned=4265）。
 - `website/README.md` 与 `website/docs/dev/*.md` 里仍有 17 处旧域名/商户授权叙述（含 `VITE_*` 环境变量表、
   "`/public` 反代到 8205"、`/pricing?lang=` 这种不存在的路由示例）→ Task 10 全量清。
 - `website-pages.yml` 不存在，`deploy.sh` 头注释已按"推送后由它发布"写；实际创建在 Task 9。

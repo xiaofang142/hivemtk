@@ -198,7 +198,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `REDIS_PASSWORD` | 强密码 | mtk-redis 容器拒绝启动 |
 | `JWT_SECRET` | ≥32 字符 | user-server 启动 panic（测试专用短密钥仅在 test 模式放行）。代码先读 **`USER_JWT_SECRET`**，为空才回落到 `JWT_SECRET`（`internal/pkg/utils/jwt.go`）；两个都没有或都短于 32 字符即 panic，**不存在硬编码兜底密钥** |
 | `FIELD_ENCRYPTION_KEY` | ≥32 字符 | 加密字段功能不可用；**轮换会使既有加密数据失效** |
-| `MERCHANT_API_SECRET` | ≥32 字符 | merchant-api 签名鉴权失败（user-server 经 config/platform.yaml `secret: "${MERCHANT_API_SECRET}"` 消费） |
+| `MERCHANT_API_SECRET` | ≥32 字符 | **仅 `PLATFORM_ENABLED=true` 时才是必须**（离线部署默认关态，整条签名链路不装配，此键不参与读取）。开启后缺失/与平台端不一致 ⇒ merchant-api HMAC 签名鉴权失败（user-server 经 config/platform.yaml `secret: "${MERCHANT_API_SECRET}"` 消费） |
 | `DB_HOST` / `DB_PORT` | 默认 `127.0.0.1:8202` | 连不上库直接启动失败 |
 
 ### 6.2 按需设置
@@ -213,6 +213,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
 | `LLM_*` / `EMBEDDING_*` / `RERANK_*` | 见 .env-example | 控制推理栈下载哪个模型、监听哪个端口 |
 | `MAX_JSON_BODY_MB` | `8` | 全局 JSON/表单请求体上限（MB），超限直接 413。只兜"没另设上界的内部口"，比各端点自己的封顶更宽时不参与；迁移期要灌大 payload 时**显式设 0 关闭**（负数同义），别改成改代码 |
+| `SEED_PASSWORD` | `Seed@123456` | seed 写进 `system_users` 的 admin 与演示坐席统一口令，优先级 `SEED_PASSWORD` > `ADMIN_PASSWORD` > 该默认值（`cmd/seed/seed_users.go:32`）。**只有跑 `scripts/bootstrap.sh` 或 `go run ./cmd/seed` 才会写入它**——`make install` / `make dev` 不 seed（docker-compose 里的 `admin` 是数据库用户，不是后台账号）。这个默认值随开源仓库公开（文档与 FAQ 种子数据里都写着），**装到别人连得上的机器上就必须显式设**；bootstrap 用默认值启动时会打 warn（`scripts/bootstrap.sh:85`），直接 `go run ./cmd/seed` 则不会。取值走 `SEED_PASSWORD="…"` 注入，勿改成代码常量 |
 
 以下这些键此前**只存在于代码里**（`.env-example` 与本文都没提），列出来是因为每一个都会改变安全姿态或身份口径，运维不知道它们存在比知道更危险。默认值一律取最严/最窄的一侧。
 

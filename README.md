@@ -140,8 +140,9 @@ git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk
 # 2. 一键安装:.env 模板 + 构建前后端 + 下载模型 + 拉起数据层与推理栈
 make install
 
-# 3. 改 4 个密钥
-vim .env   # POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET / PLATFORM_ADMIN_PASSWORD
+# 3. 改密钥
+vim .env   # 必改：POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET
+           # 只有把平台端跑起来（PLATFORM_ENABLED=true）才用到：PLATFORM_ADMIN_PASSWORD / MERCHANT_API_SECRET
 
 # 4. 启动
 make dev                    # user-server 热更新 → http://localhost:8204

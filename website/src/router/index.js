@@ -123,8 +123,6 @@ function setCanonical(href) {
   }
   link.setAttribute('href', href)
 }
-// 百度统计：SPA 路由切换上报 PV（首次加载由 hm.js 自动统计，跳过避免重复计数）
-let isFirstNavigation = true
 router.afterEach((to) => {
   const meta = to.meta || {}
   const title = meta.title ? `${meta.title} | ${SITE}` : SITE
@@ -143,11 +141,6 @@ router.afterEach((to) => {
   setMeta('name', 'twitter:title', title)
   setMeta('name', 'twitter:description', desc)
   setCanonical(url)
-
-  if (!isFirstNavigation && Array.isArray(window._hmt)) {
-    window._hmt.push(['_trackPageview', to.fullPath])
-  }
-  isFirstNavigation = false
 })
 
 export default router
