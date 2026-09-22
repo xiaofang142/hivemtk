@@ -190,7 +190,14 @@ func TestKnowledgeBaseRepository_Update(t *testing.T) {
 	if err := repo.Update(ctx, kb.ID, kb); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByID(ctx, kb.ID)
+	got, err := repo.GetByID(ctx, kb.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got == nil {
+		// GetByID 把 record-not-found 归成 (nil, nil)：没有这一判，下一行 panic 掉整个二进制。
+		t.Fatalf("GetByID 交回 (nil, nil) ⇒ 按 id=%d 没查到行", kb.ID)
+	}
 	if got.Name != "updated name" {
 		t.Errorf("expected updated name, got %q", got.Name)
 	}

@@ -339,7 +339,15 @@ func TestAgentKBBindingRepository_Update_Priority(t *testing.T) {
 	if err := repo.Update(ctx, b.ID, b); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.GetByAgentKB(ctx, 1, 100)
+	got, err := repo.GetByAgentKB(ctx, 1, 100)
+	if err != nil {
+		t.Fatalf("GetByAgentKB: %v", err)
+	}
+	if got == nil {
+		// GetByAgentKB 把 record-not-found 归成 (nil, nil)：没有这一判，下一行的
+		// nil 解引用会 panic 掉整个测试二进制，把「没查到」伪装成崩溃、连带带走同包其它用例。
+		t.Fatal("GetByAgentKB 交回 (nil, nil) ⇒ 按 (agent_id,kb_id)=(1,100) 没查到行")
+	}
 	if got.Priority != 99 {
 		t.Errorf("expected priority=99, got %d", got.Priority)
 	}

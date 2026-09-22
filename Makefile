@@ -443,6 +443,8 @@ audit:
 	@python3 scripts/check_workflow_refs.py --repo .
 	@echo "── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──"
 	@python3 scripts/check-env-coverage.py
+	@echo "── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──"
+	@python3 scripts/check-test-nil-deref.py
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——

@@ -128,6 +128,9 @@ func TestM01_QQImageIsStoredAndBackfilled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatchQQ: %v", err)
 	}
+	if hub == nil {
+		t.Fatalf("dispatchQQ 报错为 nil 却交回 nil 行（(nil, nil) 那一支被走到 ⇒ 用例前置没满足）")
+	}
 	if hub.MsgType != model.MsgTypeImage {
 		t.Errorf("hub.msg_type = %q, want image（官方 content 非空但附件是图片）", hub.MsgType)
 	}
@@ -177,6 +180,9 @@ func TestM01_QQMultiAttachmentStoresEveryOne(t *testing.T) {
 	hub, err := ws.dispatchQQ(context.Background(), "1", &ParsedPayload{}, raw)
 	if err != nil {
 		t.Fatalf("dispatchQQ: %v", err)
+	}
+	if hub == nil {
+		t.Fatalf("dispatchQQ 报错为 nil 却交回 nil 行（(nil, nil) 那一支被走到 ⇒ 用例前置没满足）")
 	}
 	if hub.Content != "对比下[图片][图片]" {
 		t.Errorf("正文 = %q, want 对比下[图片][图片]（第二张的痕不能丢）", hub.Content)
@@ -229,6 +235,9 @@ func TestM01_QQTextOnlyDoesNotFetchMedia(t *testing.T) {
 	hub, err := ws.dispatchQQ(context.Background(), "1", &ParsedPayload{}, raw)
 	if err != nil {
 		t.Fatalf("dispatchQQ: %v", err)
+	}
+	if hub == nil {
+		t.Fatalf("dispatchQQ 报错为 nil 却交回 nil 行（(nil, nil) 那一支被走到 ⇒ 用例前置没满足）")
 	}
 	if hub.MsgType != model.MsgTypeText || hub.Content != "就一句话" {
 		t.Errorf("纯文本被改写了: type=%q content=%q", hub.MsgType, hub.Content)
@@ -284,6 +293,9 @@ func TestM01_QQOutboundMsgIDIsOfficialDID(t *testing.T) {
 	hub, err := ws.dispatchQQ(context.Background(), "1", &ParsedPayload{}, raw)
 	if err != nil {
 		t.Fatalf("dispatchQQ: %v", err)
+	}
+	if hub == nil {
+		t.Fatalf("dispatchQQ 报错为 nil 却交回 nil 行（(nil, nil) 那一支被走到 ⇒ 用例前置没满足）")
 	}
 	if got := QQOutboundMsgID(hub); got != msgID {
 		t.Errorf("M-01 未达成：QQOutboundMsgID = %q, want %q"+

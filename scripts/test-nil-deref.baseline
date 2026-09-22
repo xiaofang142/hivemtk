@@ -1,0 +1,16 @@
+# 测试解引用门基线 —— `scripts/check-test-nil-deref.py` 的比对表
+#
+# 格式：`<相对仓库根的测试文件路径><TAB><该文件允许的确证站点数>`；空行与 `#` 开头行忽略。
+# 判据：现算 > 登记 ⇒ OVER 红；文件不在本表却出现站点 ⇒ NEW 红；
+#       登记数额大于现算 ⇒ STALE 红（修掉就划掉，不许留旧数额养僵尸条目）。
+#
+# 当前是**零条目**（2026-09-22 批M-10 建门时）：门首跑实测到的 8 处确证站点，本轮全部就地判空收口，
+# 没有留下一处需要登记的存量——
+#   · internal/service/webhook_batchf4_m01_qq_test.go 4 处（dispatchQQ 的 `lazyDB()==nil` 那一支）
+#   · internal/service/handoff_cond_tree_test.go 2 处（ParseCondTree 的空串那一支；:50 那处的期望值
+#     与 nil 守卫的返回值同为 false，不钉非 nil 就是**假绿**，比 panic 更阴）
+#   · internal/repository/agent_kb_binding_test.go 1 处、knowledge_base_test.go 1 处
+#     （GetByAgentKB／GetByID 把 ErrRecordNotFound 归成 (nil, nil)）
+# 取证与四档收紧口径见脚本 docstring 与审计文档 §23.17 第 2 段（来路登记在 §23.16 第 8 条）。
+#
+# 注意：本文件**必须存在**（可以是零条目）。缺文件时门退 2 报 ENV-BROKEN，而不是"没基线 ⇒ 全绿"。
