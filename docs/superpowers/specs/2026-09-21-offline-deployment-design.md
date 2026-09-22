@@ -1622,3 +1622,28 @@ R5 显式 `/bin/bash` 3.2.57 跑 R0 → `PASS=1`。R4 第一次跑出的"REPO_RO
 没做到的：本轮改动是文档/注释 + 一个 e2e 脚本的断言步，未跑 Go 全量套件（本机 `/System/Volumes/Data` 已 99%、仅剩 ~7Gi，全量 `-race` 跑不下），
 门禁层面只跑到"文档四门 + markdownlint + bridge eslint + shell 形状闸"这一层；`docs/operations/KNOWLEDGE_GROUP_DEPLOY.md` 的示例 Dockerfile
 **未真实 `docker build`**（本机无该构建上下文），它是"照着今天的事实重写的示例"，其 `./cmd/api`、`PORT`、`/healthz` 三处逐条对过源码。
+
+### 推送后 CI 归属（`be4f3f73`，2026-09-22）
+
+本笔 push 触发 7 个工作流：`Docs Consistency` run 91 / `Docs Link Check` run 100 / `Markdown Lint` run 95 / `SBOM` run 595 全 success；
+`Lint` run 635 与 `ci-bridge` run 28 failure；`user-server-ci` run 475 在写这段时仍 `in_progress`（`Coverage`、两格 `-race` 未回）。
+本批名下路径的门全绿：`markdownlint-cli2`、`文档一致性 + 模板结构`、`Static gates`、`Shell $VAR+CJK expansion guard`、
+`Security scans`、`ESLint (Bridge)`、`Bridge Extension Tests (vitest)`、`Build (user-web)`；`Lint` 那两格 ESLint (user-web ×2) 是
+既有别线红（与 `cf71ba60` 的 4 红同族，2 处 ESLint error 归 user-web 主应用泳道）。
+
+`ci-bridge` run 28 的红**不是本批引入，本批只是触发者**（`on.push.paths` 含 `user-web/bridge/**`，本批改了 popup 两个文件）。
+步骤表读数：`ESLint` success → `Vitest (全量测试)` success → **`Vitest coverage` failure** → `Build (打包校验)` skipped（skipped 不是 failed），
+job 日志自第 1338 行起是 `MISSING DEPENDENCY Cannot find dependency '@vitest/coverage-v8'`。
+工作流自 2026-08-15 建立以来 **run 1…28 共 28 次运行全部 failure，没有一次绿过**；失败步骤有两种：run 1、21 停在 `npm ci`（这两次的红因
+**未取证**，只知步骤名），run 16、28 停在 `Vitest coverage`。tip `521e4f80` 不碰 bridge 路径 ⇒ 该工作流干脆不触发，这格红就此藏住。
+
+已提交事实源：`git show HEAD:user-web/bridge/package.json`（760 字节）与 `package-lock.json`（124509 字节）里 `coverage-v8` 各 **0 命中**，
+最后一次改该 `package.json` 的提交是 `95be10ca`（2026-08-15）⇒ 覆盖率依赖声明从未入库，CI 的 `npm ci` 自然装不到。
+本机 `node_modules/@vitest/coverage-v8` 已装（4.1.11），所以四步在 `--shared` 克隆里逐个复跑**都是 rc=0**
+（eslint 68 warnings / 0 errors，vitest 52 files、732 passed、7 skipped，`--coverage` rc=0，build 产出 `dist/manifest.json`+`popup.html`+`background.js`）
+⇒ **本地全绿把这格红完全盖住**；判绿要认"它装的是哪份依赖表"，仓库里那份没有它。
+
+修法已压在别的泳道工作树里：`user-web/bridge/package.json:18` 写着 `"@vitest/coverage-v8": "^4.1.10"`、`package-lock.json` 5 处命中，
+两文件状态均为 `M`（bridge 泳道在途）。本批不代改、不代发（把别人在途的 hunk 一起 add ＝ 替该泳道发布）；
+该泳道下一笔 `521e4f80` 也未带上这两个文件 ⇒ 修复仍在途。**移交**：该泳道把两文件入库后，需要一次 bridge 路径的 push
+（或 `workflow_dispatch`）才会再跑 `ci-bridge`，届时看 `Vitest coverage` 是否转正。
