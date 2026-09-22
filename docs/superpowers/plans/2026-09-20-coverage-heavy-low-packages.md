@@ -3695,10 +3695,21 @@ P2（不转义，引号逃出 `src` 属性）主跑 **BUILD-BROKEN**（变异把
 钉成既成事实。
 
 **门**：`gofmt -l internal/` 空；`go vet ./internal/pkg/mail/ ./internal/pkg/cron/ ./internal/email/service/` rc=0；
-活树三包 `ok internal/pkg/mail` / `ok internal/pkg/cron 3.079s` / `ok internal/email/service 18.316s`；
+活树三包（树＝工作树 @ `669169b9`，含并行会话未提交文件；`-run` 收窄到 R25 本轮改名/受影响的用例名单，
+含 `TestUnsubscribe` 系，故 **28 PASS / 0 FAIL / 0 SKIP**，`-timeout 900s`，load `16.71 → 18.42`）
+`ok internal/pkg/mail 0.534s` / `ok internal/pkg/cron 0.804s` / `ok internal/email/service 1.365s`；
 **影子克隆**（`--shared --no-checkout` + `checkout 1d222e77`，克隆里确认那两个未跟踪文件不存在）
 `go build ./...` rc=0、`go vet ./internal/...` rc=0（含测试文件编译，这一层才是"已提交的测试引用了未提交的符号"
-的探测器，`go build ./...` 看不见）、R24/R25 用例集在七包上 23 PASS / 0 FAIL / 0 SKIP。
+的探测器，`go build ./...` 看不见）、R24/R25 用例集在七包上（`-run` 为 R24 + R25 全名单，与活树那一跑名单不同，
+23 与 28 不是矛盾而是两个过滤器）23 PASS / 0 FAIL / 0 SKIP。
+本轮**没有** 40m 整包超时：今日新增/改动的 180 个 `.log`（`.tmp_files/` 下）加 `/tmp/*.log` 里
+`grep '40m0s'` **0 命中**（上一轮记忆里"整包 40m 超时未归因完"那句是把别人命令行里的 `-timeout 40m` **参数**
+当成了**观测值**结转过来）。今天该包确实红过一次，但是 **10m 默认预算**那一档：
+`r46-gotest.log:4373` `panic: test timed out after 10m0s` → `:4798 FAIL hivemtk-user/internal/service 601.261s`，
+即已归因过的环境假红（默认 600s < 该包自然耗时），机理在 2026-09-20/21 记录：
+同口径 `-timeout 25m` 下 `ok 880.567s`（`watch.log:16`，2026-09-20 归因轮）、影子克隆整包门下单跑
+`ok 459.736s`（`/tmp/r45-gate.log:9`），随负载在 ~450–880s 摆动，
+口径见项目记忆 `project-go-test-suite-timing.md`；本批未触碰 `internal/service` 目录。
 双远端 `b75c9939..1d222e77` fast-forward 推送，推后 `git fetch` 复核 local / upstream / gitee 三个 SHA 一致。
 
 **勿放松**：`password_reset_tokens.token` 不得再接受任何非哈希输入（`BeforeCreate` 里"已有值就返回"是最自然的
