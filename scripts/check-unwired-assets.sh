@@ -138,8 +138,15 @@ BASELINE=(
   # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P9-02 知识库变更 ——
   # 它的 subject_type 今天没有任何生产 Submit。
   # 【T-P6-03 后更正】这一行原先还列着"T-P6-03 报价发送"：本卡交付后 subject_type=quote
-  #   有了唯一的生产 Submit（service/quote_send.go 的 verdict：没带结论号时入队一条待办），
+  #   有了唯一的生产 Submit（service/quote_send.go 的 submitGate：没带结论号时入队一条待办），
   #   所以它从这张"待接的 subject_type"清单上划掉，改由下面 21c/21d 两格守装配点。
+  #   符号名当时写的是 verdict，T-P6-04 把它重构成了 submitGate —— 注释里的符号名也是证据，
+  #   留着旧名等于让人照着它去 grep 一个已经不存在的东西。
+  # 【T-P6-04 后补充】"唯一的生产 Submit"说的是**入口唯一**，不是"每个 subject 只有一条
+  #   pending"：同一 subject 今天可以有两道门（policy_key = quote.send 与
+  #   quote.discount_high），串行 —— 前一道批完、再点一次发送，才开出后一道。挡重复的是
+  #   uq_approval_request_open 那条 (subject_type, subject_id, policy_key) 的 partial
+  #   unique index，两档互不挡 —— 别把"入口唯一"读成"每 subject 至多一条待办"。
   # 【T-P5-03 后更正】这一行原先把"T-P5-03 外联闸门"也列在零 Submit 名单里，判据本身没错、
   #   名字点错了：外发节点走的是**已有 Submit 的 `sop_node` 这一 subject_type**（图上挂起
   #   复用 T-P3-02 那座桥），所以本卡交付后它不该再出现在这张"待接的 subject_type"清单上。
@@ -392,8 +399,14 @@ BASELINE=(
   #      HTTP 面上读不到（前端 404）；挂载了但没装配 = 端点在、每问一句回 503。
   #      两种坏法在响应面上毫无重叠，合成一格就只守得住一半。
   #      callpat 只扫 internal/router：定义与调用同包，靠 wiring 过滤掉 `func ` 那一行。
-  # 读方的口径（回灌进文档的那句）：quotes 表里有行 = 有人显式建过，
-  # 而"表是空的"仍同时可能是"取数失败"—— 那是 T-P6-04 的出口要分的事，不是这几格。
+  # 读方的口径（回灌进文档的那句）：这几格只数"源码里有没有构造点"，不数库里有几行。
+  # "明细一条都没有"与"明细读失败"这一对区分落在**发送出口**：T-P6-04 把明细提到开审批
+  # 之前读（门序要从那几行的折扣算出来），于是读故障上抛包装错误、一条明细都没有回
+  # ErrQuoteSendLinesMissing（不开待办、不认领、不外发），两种坏法在响应面上不再重叠。
+  # 口径当时写的是"那是下一张卡要分的事"，本卡分掉了它 —— 但只分掉发送这一头：
+  # 读端点（View / ViewAt / LatestView 共用的 buildView）对"明细一条都没有"仍照算照回
+  # （Lines 为空、合计 0.00），只有读故障上抛包装错误。这不是漏项 —— 要把那条数据事故
+  # 交给人工处置，人得先能把那一版的其余字段读出来。
   "21|报价仓储的装配入口（T-P6-03 起 app/quote_wiring.go 有真实构造点；接线数回到 0 = 报价两条腿都没人装）|type QuoteRepository interface|NewQuoteRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|wired"
   "21|报价行的生产写入点（T-P6-02 起 service 侧有真实写入方：Generate 与 Revise 各构造一版；接线数回到 0 = 报价生成整条腿没了）|type Quote struct|model\\.Quote\\{|internal/service internal/controller internal/app|wired"
   "21|报价两条腿在启动路径上的装配点（摘掉 router 那一行，端点全退 503 而 Go 用例全绿）|func InitQuoteRuntime|InitQuoteRuntime\\(|internal/router|wired"

@@ -1114,6 +1114,10 @@ func TestQuoteSend_ScriptIsReResolvedAtSendTime(t *testing.T) {
 // 这一格的来路很具体：T-P6-02 的 persistLines 失败面就是"版本行已落库、行项目没跟上"，
 // 那条错写的是"必须人工处置，不得当成可发对象"。发送腿若不读行、只读那一行 quotes，
 // 就会把一个合计 0.00 的价格文件发给客户，而库里它是个完全正常的 sent。
+//
+// T-P6-04 之后判据往前挪了一格：明细是**门序**的输入（折扣取所有行里最大的那个），
+// 所以它必须在开审批之前读 ⇒ 这种版本现在连一条待办都开不出来。方向朝严：
+// 一件永远发不出去的东西不该进审批人的收件箱，而"批一条空报价"这条路就此不存在。
 func TestQuoteSend_VersionWithNoLinesIsNotSendable(t *testing.T) {
 	db := qssSetupDB(t)
 	rowID := qssDraft(t, db)
@@ -1124,10 +1128,7 @@ func TestQuoteSend_VersionWithNoLinesIsNotSendable(t *testing.T) {
 	}
 
 	p := qssSvc(t, db)
-	first := qssMustSend(t, p, ctx, qssSendInput(rowID))
-	qssApprove(t, p, first.ApprovalID)
-
-	_, err := p.svc.Send(ctx, qssSendWith(rowID, first.ApprovalID))
+	_, err := p.svc.Send(ctx, qssSendInput(rowID))
 	if !errors.Is(err, ErrQuoteSendLinesMissing) {
 		t.Fatalf("空版本应报 %v，实际 %v", ErrQuoteSendLinesMissing, err)
 	}
@@ -1139,6 +1140,12 @@ func TestQuoteSend_VersionWithNoLinesIsNotSendable(t *testing.T) {
 	}
 	if p.store.updateCalls != 0 {
 		t.Errorf("状态跃迁被调了 %d 次，期望 0（明细判据必须落在认领之前）", p.store.updateCalls)
+	}
+	if n := qssCountApprovals(t, db); n != 0 {
+		t.Errorf("审批行数=%d，期望 0（读不出门序就不该开待办：那是一条批了也发不出去的僵尸待办）", n)
+	}
+	if _, err := p.svc.OpenApproval(ctx, rowID); err != nil {
+		t.Errorf("空版本的 OpenApproval 报错：%v（读口不该被明细缺失带崩，它只查审批表）", err)
 	}
 }
 
