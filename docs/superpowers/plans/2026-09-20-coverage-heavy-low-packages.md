@@ -4221,3 +4221,104 @@ HEAD 版 `user-server/internal/service/config_param_guard_test.go:65` 那句
 来源是 `asset_bundle` hotplug / `backup` 状态回写这些**后台协程**在用例把全局句柄 `Close()` 之后继续跑的
 日志噪声（`[asset_bundle] hotplug persist FAILED ... err=sql: database is closed`），没有 `--- FAIL` 挂在它们身上。
 两个数（97 与 585）一个属容量事件、一个属既有句柄生命周期噪声，混着报会把后者说成前者的后果。
+
+## R32（2026-09-23 第四十六轮：门的门有一个洞，CI 的运行时今天到期 —— 两件事都是查"没跑过的东西"查出来的）
+
+**门账（`1bce38c3`，`make audit` 之外全部补跑）**：0 脏的 `--shared` 克隆 `/tmp/r45-gates` 上 17 道逐工作流门
+**全 rc=0**（`/tmp/r46_sweep.log`，退出码逐部落文件不用管道），`make audit` 同树 rc=0
+（`/tmp/r45_audit.log:871` `AUDIT-RC=0`；端口门 `Errors: 0 / Warns: 5`、md 链 162/0 断、env 覆盖 180/红 0、
+异步裸读门「扫 153 个 package，站点 0」、seam 门「17 个全局 ⇒ accessor 之外 0 处访问」），
+`golangci-lint run --timeout=12m ./...` ⇒ `0 issues.`（`/tmp/r46_golint.log`），
+两条凭证门在**活树**上跑（工作树面才是泄露面）也 rc=0。⇒ 这一档"本地能证的"已经见底。
+
+**① 诊断门自己的洞：步骤轴看不见"整作业被跳过"**。`scripts/check-ci-step-coverage.py` 的立论是
+"找出从没产生过证据的门"，可它只数步骤 —— 一个结论为 `skipped` 的作业，API 给的 `steps` 是**空表**，
+于是它在窗口里贡献 0 行，**恰好是这道门最该抓的那个形状**。实测账：25 次 master run 里
+步骤轴只有 22 个 (workflow, job) 分组，补上作业轴后是 **23** 个，差的那 1 组就是
+`Lint / LICENSE Compliance Scan`（修好前那份输出里 `LICENSE` 全文命中 **1** 次＝它自己的结论行）。
+补轴（`job_guards()` 在 :78、作业统计在 :200-215 步骤循环**之前**填、判定在 :232-270）必须同时读
+`.github/workflows/*.yml` 的 `if:` 并沿 `needs` 传到定点，否则会把**节奏门**（月度 cron、只在 tag 上跑的
+发布作业）一起判红 —— 那等于亲手把这道门变成它要查的东西。守卫读不到（无 PyYAML／目录不在）时
+**按"守卫未知"计红**，退让方向朝红。PyYAML 在 ubuntu-latest 可用不是赌的：`check_workflow_refs.py:31-35`
+缺它就 rc=2，而它在 CI 是 `success`。
+**它自己有用例**＝新文件 `scripts/check-ci-step-coverage.test.sh`（假 `gh` 夹具、不联网、220 行）：
+先看到 RED（`PASS=7 FAIL=11`）再实现，四格含**两把反向刀**（摘掉 yml 里那行 `if:` ⇒ 该作业必须从"节奏门"
+挪进 `NEVER_RUN_JOB`；不摘 ⇒ 必须不计红）与一格控制组（作业真的跑过 ⇒ `NEVER_RUN_JOB 0`），终态
+`PASS=18 FAIL=0`，克隆里复跑同结果（`/tmp/r46_v_cistep-test.log`）。真实数据读数＝
+`统计步骤 182 个 / 作业 23 个；NEVER_RUN 1 个；NEVER_RUN_JOB 0 个；ALWAYS_RED 1 个` ＋
+`节奏门 Lint / LICENSE Compliance Scan（窗口内出现 5 次，全被跳过）`。
+诊断脚本本身**依旧不进 CI**（理由见它文档头的局限 1），进 CI 的是**它的用例**：
+`lint.yml:106-111`（`Workflow refs integrity` 作业里新的一步）。CI 直读它跑过且绿：
+run `35763308976` 的步骤名单里 `check-ci-step-coverage 用例（假 gh，不联网） => success`。
+自己的两次假红也记在这里：① 计数用了 `NEVER_RUN_JOB` 裸串，把结论头那行一起数了进去（差一误判格 4），
+锚成整行 `'^  · NEVER_RUN_JOB '` 才对；② 期望串写成单空格，而门印的是 `NEVER_RUN  两项` 双空格。
+
+**② 一条结转结论被否证：license 门从来不是被 ESLint 遮挡**。第三十一/四十一轮写的是
+"`Lint` 因 ESLint 红把后面的 `LICENSE Compliance Scan` 整步 skipped ⇒ `Lint` 转绿即自动把它放回来"。
+磁盘不认这句话：`lint.yml:131` 是 `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`，
+`:19` 是 `cron: '0 3 1 * *'`，两者由 `610f85db`（2026-09-15）引入，且它是个**独立作业**、不在 ESLint 后面；
+窗口内 schedule run **0** 次（300 次里也没有）。⇒ 恒跳过是设计如此，与 ESLint 无因果关系，
+"转绿自动放回"这个触发条件根本不成立。补齐证据：`gh workflow run lint.yml` 两次（`35761173417`、
+分支上的 `35763308976`）都给出 `LICENSE Compliance Scan => success` —— **这道门第一次有运行证据**。
+教训不是"结转写错了"，而是**结转里"被 X 遮挡"这种因果句，要拿 yml 的 `if:` 与作业拓扑重核一遍再抄**，
+步骤顺序只说明"没跑到"，不说明"谁挡的"。
+
+**③ 本轮真正的存量风险：CI 的 Node 20 运行时今天就到期**（GitHub changelog 2025-09-19：Node20 EOL 2026-04，
+2026-06-16 起默认迁 Node24，**2026-09-23 移除**）。发现路径不是查文档，是读注解：
+`check-runs/<id>/annotations` 里那句 `The following actions target Node.js 20 but are being forced to run on
+Node.js 24: actions/checkout@v4, actions/setup-node@v4`，另一趟里是 `actions/setup-go@v5`。
+按告警清单收尾会漏，所以改成**对 20 个 `uses:` 逐个反查它自己 `action.yml` 里的 `runs.using`**（磁盘真值）：
+命中 node20 的有 **11 个 pin** —— `checkout@v4`、`setup-node@v4`、`setup-go@v5`、`upload-artifact@v4`、
+`download-artifact@v4`、`setup-python@v5`、`configure-pages@v5`、`deploy-pages@v4`、`codecov-action@v4`、
+`markdownlint-cli2-action@v19`、`release-drafter@v6`。全部抬到"最低 node24 主版本＝当前 latest"那一档
+（`v7 / v7 / v7 / v7 / v8 / v7 / v6 / v5 / v7 / v24 / v7`），**14 个干净文件 36 个站点**。
+`user-server-ci.yml` 里剩 **27** 个 node20 站点没动 —— 该文件是并行泳道的 ` M`（它那笔 8+/4- 的
+未接线台账注释），共享索引下 `git add` 会把对方的行一起带走，同一条口径第三十一轮起没变过。
+输入面先核过再抬（不是"抬完祈祷"）：`download-artifact@v8` 仍声明 `name/pattern/path/merge-multiple`，
+其 README 明写"不给 `name` 就下载全部、`merge-multiple` 改目录形状"＝`slsa.yml:130` 那一步的用法；
+`upload-artifact@v7` 仍声明 `name/path/retention-days/if-no-files-found`；`markdownlint-cli2-action@v24`
+**只有** `globs` 一个输入＝我们只用它；`codecov-action@v5+` 是 `composite`（不再依赖 runner 的 node）且
+`files/flags/name/fail_ci_if_error` 四个输入都还在，仓又是 public ⇒ 无 token 面。
+验证走**分支 `r46-node24` + 10 次 dispatch**，不拿 master 当试验台：7 绿；
+`Lint` 只剩那朵已知红（`ESLint (user-web 主应用)`）；`SBOM` 首趟红＝`Install syft` 那一步读到
+anchore 的 `..._checksums.txt` **HTTP 500**（上游抖动，与 pin 无关），重跑 `35763759853` 全绿并给出
+`Upload SBOM artifacts => success` ⇒ **`upload-artifact@v7` 拿到 CI 证据**；
+`ci-bridge` 首趟红是**既有缺陷**（见 ④），修完 `35763951059` 全绿。
+落点判据不写"绿了"，写"注解清零"：**分支 10 趟作业的 deprecation 注解行数 = 0**。
+CI 结构上够不到的四家照实写明：`download-artifact@v8` 与 `release-drafter@v7` 在 tag-only 路径上
+（本仓 `git tag` **0** 个、`gh release list` **0** 条 ⇒ 整条发布链没有任何运行证据，这不是本轮新增的猜测，
+是诊断门 `NEVER_RUN` 那一行早说过的事），pages 三件套 dispatch 会把分支内容推上线＝用户可见副作用，不试；
+`codecov@v7` 那一步的 `if:` 只认 push/同仓 PR，dispatch 恒 skipped ⇒ 由**这一笔推送本身**给证据。
+
+**④ `ci-bridge` 的红挡住了两道从没跑过的门，且它的修法活在别人的未提交字节里**。
+`Test Files 52 passed (52)` 之后 `MISSING DEPENDENCY Cannot find dependency '@vitest/coverage-v8'` 退 1，
+于是同作业里它下面的 `Build (打包校验)`（esbuild 产物存在性）与 `Upload coverage to Codecov` **全被 skip** ——
+`[[gate-scope-blind-spots]]` ⑧ 那一族在 CI 上的第二次现形。判据来自 HEAD 自己：
+`git show HEAD:user-web/bridge/package.json` 里 vitest 是 `^1.6.0` 且**没有** provider，
+而活树版本第 18 行已经有 `"@vitest/coverage-v8": "^4.1.10"`（`package.json`/`package-lock.json` 都是 ` M`）
+⇒ 泳道那批一提交它就自愈。本轮不等他们：**让 CI 自带 provider**（`ci-bridge.yml:57-67`），
+版本从 `node_modules/vitest/package.json` 现读而不是写死，这样 `package.json` 抬 vitest 时这里跟着走。
+证据＝分支上 `Vitest coverage => success` ＋ **`Build (打包校验) => success`（这一步在 CI 上第一次有运行证据）**。
+
+**⑤ 两条回读口径（都在这轮踩过）**：判"master 的 CI"必须过 `.event=="push"` —— `aaedac22` 是 Dependabot
+PR #22 的 head，那趟作业日志读的是 **PR 树**，直接按 `head_sha` 取会拿到解释不了的漂移
+（`too many clients` 在相邻两版树间从 **97** 摆到 **2**、受害用例同时消失 ⇒ 更坐实"抽签"而不是"某条用例"，
+落判据仍用服务端计数 0，见上一条 R29-A 收口的 ② 决断）；**恒被跳过的步骤不会产生 deprecation 告警**，
+"告警里没有它"不等于"它没事"（`codecov@v4` 正是这样，只能靠 ③ 那次按 `uses:` 全量反查抓到）。
+
+**⑥ 还压在同一批里、但性质不同的第二条到期线**：workflow 给**被测应用**装的也是 Node 20 ——
+`node-version` 写死 `'20'` 共 **12** 处（`user-server-ci.yml:515/542/613/636/682`、`lint.yml:39/65/85`、
+`ci-bridge.yml:44`、`slsa.yml:62`、`release.yml:42`、`website-pages.yml:58`），
+而 Node 20 的 EOL 是 2026-04（已过期半年）。**这一刀本轮故意不跟 ③ 一起落**：③ 换的是"动作跑在哪套 node 上"，
+行为面由 CI 直接可证；这一刀换的是"前端在哪套 node 上构建/测试"，会把 vite 5 / eslint 9 一起推进
+未验证的行为区间，且 12 处里 5 处在泳道那份脏文件里，只改其余七处会造出"站点用 22 构建、
+测试用 20 跑"的裂口径 ⇒ 该改动要一次落全并配前端回归，落点仍等 `user-server-ci.yml` 回 clean。
+
+**⑦ 结转（都是别人的字节挡的，不是没查）**：`user-server-ci.yml` 回 clean 后同一笔落三件 ——
+27 处 node20 pin 抬版、4 处 postgres `options:` 加 `--max-connections=400`、`:68-71` 那条
+`<前缀>_<pid>` 的 stale 注释改回 `<前缀>_slot<N>`；`config_param_guard_test.go` 的 D12 由 owner 那处
+`goCodeOnly` 改造消解；`ESLint (user-web 主应用)` 两个 error 与 bridge provider 由 task #59 那批带走。
+另有一件**要人拍板**的：Dependabot 9 张开放票（#20–#28，含 go-minor 一次 18 包、vite 5→8、vitest 1→5、
+eslint 9→10）—— 合票是共享分支上的可见动作且每张都要重跑锁文件与全套前端门，本轮把事实与风险写清，
+不代拍；其中 #22（checkout 4→7）、#20（markdownlint 19→24）、#21（release-drafter 6→7）已被 ③ 覆盖，
+可直接关票。
