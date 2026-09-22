@@ -20,9 +20,9 @@ import (
 // 否则用例结论随挂钟时间与 DISABLE_AI_QUIET_HOURS 环境变量漂移。
 func quietHoursOffForTest(t *testing.T) {
 	t.Helper()
-	orig := aiReplyQuietHoursFn
-	aiReplyQuietHoursFn = func(time.Time) bool { return false }
-	t.Cleanup(func() { aiReplyQuietHoursFn = orig })
+	orig := loadAIReplyQuietHoursFn()
+	storeAIReplyQuietHoursFn(func(time.Time) bool { return false })
+	t.Cleanup(func() { storeAIReplyQuietHoursFn(orig) })
 }
 
 // seedInboundHub 落一条入站 hub 记录，返回可直接用于 sendOutbound 的会话上下文。

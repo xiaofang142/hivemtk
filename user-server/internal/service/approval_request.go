@@ -163,16 +163,47 @@ type AutoApprovalPolicy interface {
 }
 
 // 时钟与凭证生成走包级函数变量，判据同 checkpointEnabledFn（测试可替换、生产走默认）。
+//
+// 前两个的读写只走紧随其后的四扇 accessor（approvalSeamMu 守，包内其余位置直读 0 处）：
+// Submit 挂在入站闸门链上、Decide/ExpireOverdue 挂在 cron 的 RunOnce 协程上，两处读的都是
+// 全局地址本身，而审批用例逐格换时钟。approvalRequestSeq/IDFn 不在门口径里：前者只走 atomic，
+// 后者今日无用例改写（脚本按"测试会写"取候选）。
 var (
+	approvalSeamMu sync.RWMutex
+
 	approvalNowFn       = time.Now
 	approvalResumeTokFn = newApprovalResumeToken
 	approvalRequestSeq  int64
 	approvalRequestIDFn = newApprovalRequestID
 )
 
+func loadApprovalNowFn() func() time.Time {
+	approvalSeamMu.RLock()
+	defer approvalSeamMu.RUnlock()
+	return approvalNowFn
+}
+
+func storeApprovalNowFn(fn func() time.Time) {
+	approvalSeamMu.Lock()
+	defer approvalSeamMu.Unlock()
+	approvalNowFn = fn
+}
+
+func loadApprovalResumeTokFn() func() (string, error) {
+	approvalSeamMu.RLock()
+	defer approvalSeamMu.RUnlock()
+	return approvalResumeTokFn
+}
+
+func storeApprovalResumeTokFn(fn func() (string, error)) {
+	approvalSeamMu.Lock()
+	defer approvalSeamMu.Unlock()
+	approvalResumeTokFn = fn
+}
+
 func newApprovalRequestID() string {
 	n := atomic.AddInt64(&approvalRequestSeq, 1)
-	return fmt.Sprintf("apr_%d_%d", approvalNowFn().UnixNano(), n)
+	return fmt.Sprintf("apr_%d_%d", loadApprovalNowFn()().UnixNano(), n)
 }
 
 // newApprovalResumeToken 生成恢复凭证。
@@ -378,7 +409,7 @@ func (s *ApprovalRequestService) Submit(ctx context.Context, in ApprovalSubmitIn
 	if ttl > MaxApprovalRequestTTL {
 		return nil, false, ErrApprovalTTLTooLong
 	}
-	now := approvalNowFn()
+	now := loadApprovalNowFn()()
 
 	// 幂等：同一 (subject, policy) 已有 pending 就复用那一条（连 token 都保持原值，
 	// 否则挂起流程手里那份凭证会莫名其妙失效）。
@@ -425,7 +456,7 @@ func (s *ApprovalRequestService) Submit(ctx context.Context, in ApprovalSubmitIn
 			req.DecisionNote = "auto_unspecified"
 		}
 	} else {
-		token, terr := approvalResumeTokFn()
+		token, terr := loadApprovalResumeTokFn()()
 		if terr != nil {
 			return nil, false, terr
 		}
@@ -514,7 +545,7 @@ func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict 
 		a.Status = target
 		a.DecidedBy = decidedBy
 		a.DecisionNote = strings.TrimSpace(note)
-		at := approvalNowFn()
+		at := loadApprovalNowFn()()
 		a.DecidedAt = &at
 	})
 	if err != nil {
@@ -607,7 +638,7 @@ func (s *ApprovalRequestService) ExpireOverdue(ctx context.Context, limit int) (
 	if s == nil || s.repo == nil || !s.repo.Available() {
 		return nil, errors.New("approval_request service: 未接仓储或句柄不可用")
 	}
-	flipped, err := s.repo.ExpirePendingBatch(ctx, approvalNowFn(), limit)
+	flipped, err := s.repo.ExpirePendingBatch(ctx, loadApprovalNowFn()(), limit)
 	if err != nil {
 		return nil, err
 	}

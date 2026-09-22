@@ -447,6 +447,8 @@ audit:
 	@python3 scripts/check-test-nil-deref.py
 	@echo "── 协程体不得直读「测试会改写」的包级注入点（进协程前快照成本地值）──"
 	@python3 scripts/check-async-global-read.py
+	@echo "── 第二跳：被异步链经默认实现读到的全局，读写必须各走自己的 accessor（注册表 seam-guard.registry）──"
+	@python3 scripts/check-seam-guard.py
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——

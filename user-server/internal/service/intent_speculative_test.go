@@ -27,8 +27,8 @@ func TestRecognizeSpeculative_EmptyText(t *testing.T) {
 }
 
 func TestRecognizeSpeculative_DisabledFlag(t *testing.T) {
-	IntentEnabled = false
-	defer func() { IntentEnabled = true }()
+	storeIntentEnabled(false)
+	defer func() { storeIntentEnabled(true) }()
 	rec := &IntentRecognizer{}
 	ctx := context.Background()
 	result, ch, err := rec.RecognizeSpeculative(ctx, "s1", "c1", "你好")

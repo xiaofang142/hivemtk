@@ -3877,3 +3877,179 @@ build/vet/gofmt/门：rc=0 / rc=0 / 0 行 / 站点 0。双远端各核 `1 ahead 
 会把真站点丢掉）；新渠道加异步体要读 seam 就照同款先快照；不要把门的口径扩到"运行期无人写的常量式全局"
 （那是另一类判据，混进来基线就数不出同一个缺陷）；也别把 seam 换成"本地别名指向全局"的写法绕过门 ——
 本地别名会**断掉调用图一跳**，这正是 R28 传递层要单独锁的原因。
+
+## R28（2026-09-22 第四十三轮：快照挡不住第二跳 —— 16 个全局逐个上锁，电池的判据从"栈里有没有变量名"换成"这条竞争归谁"）
+
+**缺陷形状**：R27（`521e4f80`）把"协程体裸读包级注入点"收口成"进协程前快照成本地值"，但快照只冻得住
+**第一跳**。协程体调的是 seam 的**默认实现**（`FetchTelegramMedia` / `FetchQQAttachment` /
+`FetchDingTalkRobotMedia` / `sendOutbound` / cron 的 `RunOnce` / `replayDelayedOutbound` …），
+默认实现函数体里那一句读的还是**另一个**全局地址 —— 快照把函数本身冻进本地变量了，函数里面那一句没冻。
+这类全局比 R27 那批更阴：它**只在装桩没装上时**被读到（用例一换 `tgMediaFetchFn` 为替身，默认实现就
+走不到），所以整包 `-race` 大概率不红，只有真实链路的用例（或生产的热更新口与入站协程同场）才撞上。
+
+**枚举（先量再改，口径要能复跑）**：候选＝"该包非测试文件声明的包级 `var`" ∩ "同包 `*_test.go` 里出现在
+`=` 左边的名字"（与 `check-async-global-read.py` 同一个"测试会改写"判据）；种子＝71 处协程区域
+（`utils.SafeGo(` / `utils.SafeGoDetached(` / `go func(` 到块末）里出现的调用名；沿调用图走 ≤5 层，
+外加两条扩展边 —— ① `a, b := x, yFn` 把本地别名接回它快照的全局，② `xxFn = SomeFunc` 把 seam 全局
+接回它的**默认实现**（不限"测试会改写"：wechat 那条正是无人换的 seam，其默认实现里读到测试可写全局）；
+快照行（纯标识符多元 `:=`）两侧的名字都不算站点，因为那一句跑在 spawning 协程上。**同名方法不同
+receiver 会合并 ⇒ 这是上界枚举，每一条都要回代码核那条链真不真**。
+在"只有已提交内容"的 `66964f9e` 版 `internal/service`（648 个 .go 文件逐字抽出）上实测：
+包级 var 331、测试可写候选 40、可达函数 1568、**可达全局 16** ——
+`IntentEnabled`、`aiReplyQuietHoursFn`、`approvalNowFn`、`approvalResumeTokFn`、`bridgeChannelOnlineProbe`、
+`dingtalkOpenAPIBase`、`dingtalkWebhookHostAllowed`、`dyAPIBaseOverride`、`dyMediaRetryBackoff`、
+`humanTaskNowFn`、`pollingLockRepoOnce`、`qqAttachmentURLGuard`、`qqMaxMediaBytes`、`tgAPIBaseOverride`、
+`tgMaxMediaBytes`、`wechatAPIBase`。链的形状各不一样，最能说明"为什么必须上锁而不是快照"的三条：
+`IntentEnabled ← Recognize ← Handle ← HandleIncomingWithAgent ← SendMessage ← RecoverStalled ← 协程体`
+（入站与恢复两条协程都在读，而 router 的热更新口在写）、
+`aiReplyQuietHoursFn ← nextSendRetryAt ← replayDelayedOutbound ← 协程体`、
+`bridgeChannelOnlineProbe ← …`（补投门）。⇒ 16 个全部收口，一个不留推测。
+
+**修法（沿本仓 `eada12ba` 的 `internal/pkg/db` 三扇门，不另创口径）**：全局旁边一把 `sync.RWMutex`，
+读写各收进一扇 accessor（`loadX()` / `storeX(v)`），锁内只做取值/赋值 ——
+**不在持锁期间调用取到的可换函数值**（`fn := loadX(); fn(args)`，见 `webhook_outbound.go:674`
+那句 `!loadDingtalkWebhookHostAllowed()(u)`：accessor 已在自己体内放锁，调用发生在锁外）。
+竞态要断开必须**全部**访问都被同一把锁 synchronize ⇒ 测试侧的 49 处装桩改写点一并换成 setter。
+
+**产码**：14 个文件、新增 416 行，内含 **12 把锁 + 32 扇 accessor 声明**、锁内取值/赋值之外的调用点 0 处
+（新增行里 69 处 accessor 名字命中，其余是注释与调用）；一把锁守多个全局是允许的
+（`tgSeamMu` 同守 `tgAPIBaseOverride` 与 `tgMaxMediaBytes`）。测试改写 15 个文件、新增 90 行
+（setter 49 处 + loader 23 处）。`wechat_inbound_media.go` 顺手补了 R27 只快照一半的那条腿
+（`mediaFetchFn, mediaStoreFn := wxMediaFetchFn, wxMediaStoreFn`）—— 今日没有用例改写
+`wxMediaFetchFn` 所以撞不上，但"没人写"不是同步关系，第一个换下载桩的用例就会把它点亮。
+
+**四处"读两遍"陷阱（本轮真正的产码风险，全在收口途中自己引入又自己拆掉）**：把裸读换成 accessor 时，
+同一句里读两遍就是两个不同时刻的两份值 ——
+`telegram_media.go:94`（`maxBytes` 判完大小还要传给 `DownloadFile`）、
+`qq_media.go:93-94`（`guard := loadQQAttachmentURLGuard()` 再 `guard(trimmed)`）、
+`douyin_media.go:150-151`（`attempt >= len(backoff)` 用一份、`backoff[attempt]` 用另一份 ⇒ 越界 panic）、
+`bridge_offline_replay.go:123-124`（`probe == nil` 判过时非空、调用时已被换回 nil ⇒ 当场 panic）。
+一律收成"取一次到本地名再用"。这类红**不是**竞态红，是修法自己造出来的 panic，
+`-race` 未必抓得到、普通用例必红 —— 所以四条链各自都要跑到有断言的那一行，不能只靠腿。
+
+**门（新）`scripts/check-seam-guard.py` + `scripts/seam-guard.registry`**：注册表 17 行 = 枚举到的 16 个
+全局 + `pollingLockRepo`（它与 `pollingLockRepoOnce` 是同一条链的两块内存，一起上锁、共用那对 accessor，
+所以两行同锁）。三条判据（任一不成立 rc=1）：注册表指向的东西不在树里、两扇门没真上锁、
+全局名出现在"声明它的 var 块 ∪ 它那两扇 accessor"**之外**任意 .go 文件（含跨包直读与 `_test.go`）；
+格式格：列数不对 / 字段全空白 / 同一全局登记两遍；**缺注册表退 rc=2**（同 async-global-read 门口径：
+缺基线时"零命中"和"没扫"分不开）。现跑：`登记 17 个全局，扫 2776 个 .go 文件 ⇒ accessor 之外 0 处访问`，
+2 秒（第一版逐文件 × 逐全局各跑一次 `findall` 实测 40 秒，换成一条合取正则 + 按文件切块后掉到 2 秒）。
+跨包那一格是真有事可做：`IntentEnabled` 是本批唯一的导出全局，
+此刻全树除 `internal/service/` 外只有两处**注释**提到它（`controller/intent.go:290`、
+`app/sales_engine_factory.go:28`）⇒ "包外零直读"从此有门盯着，不再靠自觉。
+
+**`-race` 腿（新）`internal/service/seam_guard_race_test.go`（297 行 / 16 条腿）**：不补"跑一遍真实异步链"
+的站点探针 —— 摘掉锁之后异步体读的仍是那个全局，只是没有同步关系，时序上未必撞上，探针照绿；
+判据必须是"同一地址上的并发读写有没有被锁住"。`hammerSeam` 四条协程只写 probe、四条只读并校验、跑 120ms；
+末尾 `loads.Load() == 0 ⇒ t.Fatalf` —— 少这一句，把腿改成空函数也能绿。
+值断言只在"写方只写这一个值 + spawn 前本协程先落一次"的前提下成立（`pkg/db` 那条
+`TestConcurrentGetDBAndSetTestDBAreRaceFree` 的教训：否则红的是腿不是锁）。
+**最终字节上的闭环读数**（`66964f9e` 版影子克隆，本批 35 个文件已 `cp` 同步且 md5 与活树一致；HEAD 又动过之后
+在 `1713110b` 上重跑的那一遍见下文"回归取证"）：
+`go test -race -count=1 -v -run 'TestSeamGuard' ./internal/service/` ⇒ `--- PASS` 16 / `--- FAIL` 0 /
+`WARNING: DATA RACE` 0、`ok … 3.622s`（`/tmp/r28_clone_legs_race.log`，RUN 计数同为 16 ⇒ 没有静默少跑）。
+
+**牙齿证据 `scripts/mut_seam_guard_r28.py`：28 格（判 27 格 + 合并 SKIP 1 格），全杀**
+（日志 `/tmp/r28_seam_battery_20260922-214451`，结束打印 `树残留：无（全部还原且 md5 与开刀前一致）`）：
+控制组现测（门绿 + 16 条腿全绿 + 0 竞争）；族 A＝16 格**逐格摘锁**（不需编译）⇒ 门每格都 rc=1 且点名
+该全局的那扇门；族 R＝9 格注册表面与绕门（缺表 / 只剩注释 / 列数不对 / 字段全空白 / 重复登记 /
+指向不存在的文件 / 指向被改名的 accessor / 同文件锁外直读 / 跨包直读）；
+族 B（窄）＝只摘 `tgMaxMediaBytes` ⇒ 2 条竞争块**全部**归 `TestSeamGuard_TelegramMaxBytesIsLocked` 一条腿、
+栈里点到 `telegram_media.go`、本家 FAIL、**共锁邻居 `TelegramAPIBaseIsLocked` 与其余 14 条仍 PASS**；
+族 C（全摘）＝16 家一起摘 ⇒ 16 条腿各自 FAIL、0 PASS、59 条竞争块无一未归属、每家都在自己那条栈里
+点到本家产码文件（**块数不钉死**：同树两跑分别 59 / 60，钉死会把抖当成红；`pollingLockRepoOnce`
+那一格另计 SKIP，因为注册表里它与 `pollingLockRepo` 同锁同 accessor，摘一次即同时覆盖两家 ⇒ 判 27 格 + SKIP 1）。
+窄格证"不会假红"，全摘格证"没有漏网的腿" —— 两界合起来才是完整证据。
+
+**为什么竞争判据认"腿名 + 文件名"而不认全局变量名（v2 的 3 个 SURVIVED 全是判据缺陷，不是门的缺陷）**：
+`-race` 报告印的是**地址 + 调用栈帧（函数名 + file:line）**，从不印被竞争的**变量名**；而摘锁后
+`return tgMaxMediaBytes` 这样的一扇门会被**内联**，栈里连函数名都没了（实测窄格 2 条块的读方只到
+`seam_guard_race_test.go:101`）⇒ "栈里必须出现全局名/getter 名"是不可满足的判据，会把好证据误判成
+SURVIVED。第三个 SURVIVED 是 `registry-malformed`：它注入的其实是一条**格式正确但文件不存在**的行，
+证的是"unknown-file"那条判据，而"格式坏"那两条**一直没有格** ⇒ 拆成 short-row / blank-field /
+unknown-file 三格。**名字与它所证的判据不符，比没格更坏：前者会让人以为已经证过了。**
+
+**修后再跑同一份枚举**（活树）：候选 40 → **24**（正好少 16 —— 这 16 个从此不再被测试直接赋值，
+赋值点全在 setter 里），可达 16 → **4**，剩下那 4 个是 `qq/tg` 的 `MediaFetchFn` / `MediaStoreFn`，
+读点是**协程外**那行快照（`telegram_media.go:116`、`qq_media.go:132`）。⇒ 两条读数都得解释：
+快照行原来写作 `… := tgMaxMediaBytes, tgMediaFetchFn, tgMediaStoreFn`（纯标识符，枚举脚本按快照行跳过），
+本批把它改成 `… := loadTGMaxMediaBytes(), tgMediaFetchFn, tgMediaStoreFn` 后带上了调用 ⇒ 不再匹配那条
+豁免，右侧两个名字就被当成"站点"数进来了。**R27 那道门不受影响**（它只数协程体内，整树站点仍 0）。
+⇒ 以后复跑枚举先按这条对表，别把 4 当成漏网。
+合并后再复跑同一脚本（活树已到 `1713110b`，并行泳道那两笔新提交动了 `order_draft_sweep.go` 等 7 个文件、
+与本批 35 个文件**零重叠**）：候选 24 / 可达 4，名单与上一致 ⇒ 本批收口没被新提交推翻，也没有新增同类全局。
+
+**门自己也曾被盘写满打败过一次**：v1 版电池真按"逐格跑 `-race`"实现，跑到第 6 格
+（`/tmp/r28_seam_battery_20260922-211058/06-unlocked-dingtalkOpenAPIBase-gate.log` 是 0 字节的那一份）
+把共享机器的数据盘写到 100%、只剩 1.7 GB 而中断，且**中断把一棵没还原的树留在原地**
+（`dingtalk_media.go` 还带着摘锁的字节，门当场红两条：getter 缺 `RLock`、setter 缺 `Lock`）——
+从 `/tmp/r28_residue_dingtalk_media.go.bak` 写回后门复绿（`/tmp/r28_afterrepair_gate.txt`）。
+⇒ 这不是产码缺陷，是电池的账没收干净；v2 起驱动在结尾强制 `residue()` + 逐格 md5 比对，
+注册表备份也进同一张表。清理盘只删自己名下的东西（上一轮影子克隆 `/tmp/r2[0-7]*` 1.7 GB、
+本会话两轮电池缓存 `/tmp/gocache-r22teeth`、`/tmp/gocache-r23dedup` 共 4.6 GB，删前 `lsof +D` 确认闲置），
+别人泳道的 `gocache-b23mut|a6mut|b20dmut|a12mut` 与共享 `~/Library/Caches/go-build` 一律没碰。
+
+**持锁期间有没有跑外部调用（对 17 行逐格扫 accessor 函数体）**：命中 6 处，全在 `pollingLockRepo` 一家
+（`getPollingLockRepo` 与 `resetPollingLockRepoForTest` 里的 `pollingLockRepoOnce.Do(func(){ … })`）。
+这是**故意保留**的例外，文件里 51-57 行写了原因：`sync.Once` 与指针必须一起换 —— 装桩若只换指针，
+`Once` 已烧过 ⇒ setter 白写；只重置 `pollingLockRepoOnce = sync.Once{}` 又是数据竞争。
+`Do` 里执行的是 `repository.NewTelegramPollingLockRepository()`（建 struct，不落库、不发网络，
+且 `repository` 不 import `service` ⇒ 无环），所以它不构成"持锁跑外部调用"那一类。
+其余 15 家锁内 0 调用。
+
+**回归取证（影子克隆 `/tmp/r28-verify2` = `66964f9e` 的全部内容 + 本批 35 个文件逐字节 `cp`，md5 35/35 一致）**：
+`go build ./...` rc=0、`go vet ./internal/service/` rc=0、`gofmt -l internal/service/` 0 行、
+两道门 站点 0 / accessor 之外 0；整包非 -race `go test ./internal/service/ -count=1 -timeout 40m`
+⇒ rc=1 / 582.935s（real 587.20s，起跑 load 4.67）、`--- FAIL` 全库只有 1 条
+＝ `TestD12_NoNewLegacyKVDirectQuery`（`config_param_guard_test.go:77` 报 `../service/quote.go`，
+§23.17 第 12 段定性的并行泳道既有红；克隆里只有已提交内容也复现 ⇒ 与本批无关，D12 属"不碰"面）；
+整包 `-race` ⇒ rc=1 / 769.257s（real 772.63s，22:09:00→22:21:53，load 4.53→6.58，收尾空闲 4.4 Gi）、
+**`WARNING: DATA RACE` 计数 0**、`--- FAIL` 仍只有 `TestD12_NoNewLegacyKVDirectQuery` 那一条（0.28s），
+与不竞态那一跑同一条红；`failed SASL auth` 计数 0（env 带上了才有的这个 0，见下一段）。
+两跑的 `--- FAIL` 名单逐字相同 ⇒ 本批的 16 条腿在整包（含并行会话既有红的树）里既没引入竞争也没引入红。
+**HEAD 又往前跳了两笔之后重测一遍**（克隆 `git merge --ff-only` 到 `1713110b`，本批 35 个文件重新逐字节 `cp`、
+md5 35/35 一致）：`gofmt -l internal/service/` 0 行、`go vet ./internal/service/` rc=0、`go build ./...` rc=0、
+两道门 站点 0 / accessor 之外 0（门自己打印的"项目根 `/private/tmp/r28-verify2`"证明扫的是克隆而不是同名活树），
+16 条腿 `-race` ⇒ `--- PASS` 16 / `--- FAIL` 0 / `WARNING: DATA RACE` 0、`ok … 3.897s`
+（`/tmp/r28_clone3_legs_race.log`）。⇒ "基线核过"不等于"合并后仍核过"，HEAD 一动就要重跑一遍便宜的格。
+
+**"没有竞争"的跑可能压根没连上库（判据要连 env 一起取证）**：克隆里 `POSTGRES_TEST_*` 从来没人导出过，
+所以第一轮整包 `-race` 是零证据的跑。这一条现在有两个可回读的产物撑着：
+① 机理单点 `/tmp/r28_clone_envless_sasl.log` —— 只去掉 env 跑一条库用例
+`TestTouchHeartbeat_UpdatesLastActiveAt` ⇒ `testdb.go:288: 初始化进程级测试库失败: failed to connect to
+\`user=admin database=postgres\`: 127.0.0.1:8232 … failed SASL auth: FATAL: password authentication failed
+for user "admin" (SQLSTATE 28P01)`，0.02s 就红；
+② 同形状整包复跑 `/tmp/r28_clone_envless_full_race.log`（`env -u POSTGRES_TEST_* -u POSTGRES_* go test -race
+-count=1 ./internal/service/`）⇒ rc=1、包时间 33.277s（real 37.00s）、18,448 行输出、其中 SASL 2,315 处、
+**`WARNING: DATA RACE` 计数 0**。⇒ 一个"0 竞争"的结论如果来自每条用例都死在建连上的跑，它就是零证据，
+所以上一段那个 0 必须来自带 env 的那一跑（`failed SASL auth` 计数 0 就是用来证明那一跑真连上了库）。
+`internal/pkg/testutil/testdb.go` 只读进程 env（`getEnvOr("POSTGRES_TEST_PASSWORD",
+os.Getenv("POSTGRES_PASSWORD"))`），**从不回退 `.env`**。凭证只按长度核验（user 5 / password 48），
+`psql -p 8232 -tAc 'select current_user, version()'` ⇒ `admin|PostgreSQL 15.19` 证可用，然后带 env 重跑。
+（另记一笔取证卫生：首跑的日志我写在**同一个路径**上，被带 env 的重跑覆盖 ⇒ 那 18,450 行/29.452s 的读数
+当场失去产物，只能按上面②重新测一遍并把新读数入库。**"复跑覆盖同名日志"会毁掉自己上一轮的取证**，
+分轮命名不是洁癖。）
+
+**装配面**：`make audit` 末位新增本门（`Makefile:450-451`，排在 `check-async-global-read.py`（`Makefile:449`）之后、
+`✅ 静态审计通过` 之前，`make -n audit` 已核顺序）。CI 仍**不**执行 `make audit`
+（`grep -rn 'make audit' .github/workflows/` 零命中），照 `static-gates` 的挂法补一步要改
+`.github/workflows/user-server-ci.yml`，而该文件此刻压着并行会话关于 `check-unwired-assets` 的
+未提交改动（`git diff --stat` = +8/−4）⇒ 待其回 clean 后补 `run: python3 scripts/check-seam-guard.py`，
+并把 `scripts/check-seam-guard.py` / `scripts/seam-guard.registry` /
+`user-server/internal/service/seam_guard_race_test.go` 三个路径加进 `on.push.paths` 与
+`on.pull_request.paths`（触发 paths 不含判据文件＝改判据不触发这道门）。
+
+**门的已知盲区（登记在册，别当已闭）**：① **注册表是穷举口径** —— 新增一个同类全局必须显式加行，
+两道门都不会自动发现"又一个测试可写全局被异步链读到"，那要按本节的枚举口径重跑一次（脚本是一次性取证，
+未入库；口径已写到能照着重写）；② 判的是**标识符出现位置**，不看控制流（注释与字符串字面量不算访问点）；
+③ 一把锁守多个全局允许，但**锁序**没有任何门在管（本批未引入新的持锁调用，唯一的锁内调用见上面那条
+`Do` 例外）；④ 本门只管注册表里这些全局**有没有走门**，"门里真上锁没上锁"由 16 条腿管，
+两道门钉的是同一件事的两面，缺一面就有假绿。
+
+**勿放松**：新增同类全局是**三步**（accessor 对 + 注册表加行 + 补一条腿）—— 只加行不补腿，本门绿但
+族 C 会指出那条腿没牙；测试装桩必须走 setter（`_test.go` 一并扫，直接赋值当场点名）；
+切片型全局（`dyMediaRetryBackoff`）的 getter 返回的是切片头，成立前提是**没人就地改元素**
+（全树 `dyMediaRetryBackoff[` 命中 0 处，写点只有 setter 的整体替换）—— 将来引入就地写必须改成返回拷贝；
+R27 的快照行如果被改成"快照 + accessor 混写"，枚举脚本的 SNAPSHOT 豁免就不认它了（本轮那 4 个的成因），
+新增快照行尽量保持纯标识符右侧；腿末尾那句 `loads` 兜底不许删；
+`-race` 电池的窄格必须**同时**判上界（只有本家红）与下界（共锁邻居必须绿），只判一边等于没判。

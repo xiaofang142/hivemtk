@@ -198,9 +198,9 @@ func newG2BAPI(t *testing.T, clientKey string) *g2bAPI {
 	}))
 	t.Cleanup(a.srv.Close)
 
-	prev := dyAPIBaseOverride
-	dyAPIBaseOverride = a.srv.URL
-	t.Cleanup(func() { dyAPIBaseOverride = prev })
+	prev := loadDyAPIBaseOverride()
+	storeDyAPIBaseOverride(a.srv.URL)
+	t.Cleanup(func() { storeDyAPIBaseOverride(prev) })
 	return a
 }
 
@@ -590,9 +590,9 @@ func TestG2B_NonZeroErrNoIsNotASuccess(t *testing.T) {
 // 生产是 200ms/600ms，不为瞬时错误在测试里真等近一秒。
 func g2bFastRetry(t *testing.T) func() {
 	t.Helper()
-	prev := dyMediaRetryBackoff
-	dyMediaRetryBackoff = []time.Duration{time.Millisecond, time.Millisecond}
-	return func() { dyMediaRetryBackoff = prev }
+	prev := loadDyMediaRetryBackoff()
+	storeDyMediaRetryBackoff([]time.Duration{time.Millisecond, time.Millisecond})
+	return func() { storeDyMediaRetryBackoff(prev) }
 }
 
 // TestG2B_RetryableCodesRetryWithSameToken 官方对 28001005（系统繁忙）/28001006（网络调用错误）
@@ -636,8 +636,11 @@ func TestG2B_RetryBudgetIsBoundedAndTerminal(t *testing.T) {
 	api := newG2BAPI(t, clientKey)
 	_, ctx, _ := g2bSetup(t, clientKey)
 
-	replies := make([]string, 0, len(dyMediaRetryBackoff)+1)
-	for i := 0; i <= len(dyMediaRetryBackoff); i++ {
+	// 取一次退避表当预算：读三遍的话「造回复用一张表、断言尝试次数用另一张表」在表被换掉时
+	// 会拼出一个自相矛盾的绿。
+	backoff := loadDyMediaRetryBackoff()
+	replies := make([]string, 0, len(backoff)+1)
+	for i := 0; i <= len(backoff); i++ {
 		replies = append(replies, `{"err_no":28001006,"err_msg":"网络调用错误,请重试","log_id":"lg-b","data":{}}`)
 	}
 	api.resReplies = replies
@@ -651,7 +654,7 @@ func TestG2B_RetryBudgetIsBoundedAndTerminal(t *testing.T) {
 		t.Errorf("报错要带官方 err_no 便于对 log_id 报障，got %v", err)
 	}
 	token, res, dl := api.counts()
-	if want := len(dyMediaRetryBackoff) + 1; res != want {
+	if want := len(backoff) + 1; res != want {
 		t.Errorf("resources 尝试次数应等于 1+退避表长度=%d，got %d", want, res)
 	}
 	if token != 1 || dl != 0 {

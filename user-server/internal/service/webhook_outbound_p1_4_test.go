@@ -310,7 +310,7 @@ func TestDelayedReplayContext(t *testing.T) {
 }
 
 func init() {
-	aiReplyQuietHoursFn = func(time.Time) bool { return false }
+	storeAIReplyQuietHoursFn(func(time.Time) bool { return false })
 }
 
 // TestSendOutbound_QuietHoursDefersToQueue H-3 端到端：窗口内 AI 回复不直发，入延迟队列
@@ -319,9 +319,9 @@ func TestSendOutbound_QuietHoursDefersToQueue(t *testing.T) {
 	svc := NewWebhookService(db)
 	defer svc.Stop(context.Background())
 
-	orig := aiReplyQuietHoursFn
-	aiReplyQuietHoursFn = func(time.Time) bool { return true }
-	defer func() { aiReplyQuietHoursFn = orig }()
+	orig := loadAIReplyQuietHoursFn()
+	storeAIReplyQuietHoursFn(func(time.Time) bool { return true })
+	defer func() { storeAIReplyQuietHoursFn(orig) }()
 
 	const (
 		platform = "xiaohongshu"

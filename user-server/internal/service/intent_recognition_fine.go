@@ -204,7 +204,7 @@ func (s *IntentRecognizer) RecognizeIntent(ctx context.Context, message, custome
 		}, nil
 	}
 
-	if !IntentEnabled {
+	if !loadIntentEnabled() {
 		return &IntentResult{
 			Major:      IntentMajorConsult,
 			Minor:      IntentMinorConsultGeneral,

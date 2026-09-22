@@ -19,8 +19,8 @@ import (
 // （审计 §6 已记），所以这里钉的是"取不到凭证必须报错、且把响应体带出来"这一
 // 形状无关的口径。
 func TestBatchJ_DingTalkTokenLegShapes(t *testing.T) {
-	prevBase := dingtalkOpenAPIBase
-	t.Cleanup(func() { dingtalkOpenAPIBase = prevBase })
+	prevBase := loadDingtalkOpenAPIBase()
+	t.Cleanup(func() { storeDingtalkOpenAPIBase(prevBase) })
 
 	cases := []struct {
 		name            string
@@ -83,7 +83,7 @@ func TestBatchJ_DingTalkTokenLegShapes(t *testing.T) {
 				}
 			}))
 			defer srv.Close()
-			dingtalkOpenAPIBase = srv.URL
+			storeDingtalkOpenAPIBase(srv.URL)
 
 			_, _, err := FetchDingTalkRobotMedia(context.Background(), "appkey-j", "secret-j", "robot-j", "code-j")
 			if err == nil {
@@ -114,14 +114,14 @@ func TestBatchJ_DingTalkTokenLegShapes(t *testing.T) {
 // 也不能因为 Unknown 而漏掉轨迹。真正的"该判 auth、不重试"需要钉钉错误码 A 档原文，
 // 已按批J 登记为未证项（见审计 §17.7），拿到原文前不凭猜改判据。
 func TestBatchJ_DingTalkTokenErrorIsNotRetryable(t *testing.T) {
-	prevBase := dingtalkOpenAPIBase
-	t.Cleanup(func() { dingtalkOpenAPIBase = prevBase })
+	prevBase := loadDingtalkOpenAPIBase()
+	t.Cleanup(func() { storeDingtalkOpenAPIBase(prevBase) })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"accessToken":"","expireIn":7200}`))
 	}))
 	defer srv.Close()
-	dingtalkOpenAPIBase = srv.URL
+	storeDingtalkOpenAPIBase(srv.URL)
 
 	_, _, err := FetchDingTalkRobotMedia(context.Background(), "appkey-j", "secret-j", "robot-j", "code-j")
 	if err == nil {
@@ -145,8 +145,8 @@ func TestBatchJ_DingTalkTokenErrorIsNotRetryable(t *testing.T) {
 // 而链接在有效期内任何人拿到都能直接下载客户的原始文件。
 // 拒绝非 https 的形态本身要保留（域名可判因），要抹掉的只有查询部分。
 func TestBatchJ_DingTalkPresignedURLQueryNeverReachesError(t *testing.T) {
-	prevBase := dingtalkOpenAPIBase
-	t.Cleanup(func() { dingtalkOpenAPIBase = prevBase })
+	prevBase := loadDingtalkOpenAPIBase()
+	t.Cleanup(func() { storeDingtalkOpenAPIBase(prevBase) })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -159,7 +159,7 @@ func TestBatchJ_DingTalkPresignedURLQueryNeverReachesError(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	dingtalkOpenAPIBase = srv.URL
+	storeDingtalkOpenAPIBase(srv.URL)
 
 	_, _, err := FetchDingTalkRobotMedia(context.Background(), "appkey-j", "secret-j", "robot-j", "code-j")
 	if err == nil {
@@ -181,14 +181,14 @@ func TestBatchJ_DingTalkPresignedURLQueryNeverReachesError(t *testing.T) {
 // 但那把 accessToken 本身不能跟着进去：它有效期 7200s，落进日志等于泄露一把可用凭证。
 // 空值必须照常带出（批J 的 200-空accessToken 那格靠它判因），所以抹的是"非空凭证值"。
 func TestBatchJ_DingTalkAccessTokenNeverReachesParseError(t *testing.T) {
-	prevBase := dingtalkOpenAPIBase
-	t.Cleanup(func() { dingtalkOpenAPIBase = prevBase })
+	prevBase := loadDingtalkOpenAPIBase()
+	t.Cleanup(func() { storeDingtalkOpenAPIBase(prevBase) })
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"accessToken":"TK-LEAK-J","expireIn":`)) // 被截断 ⇒ JSON 解析失败
 	}))
 	defer srv.Close()
-	dingtalkOpenAPIBase = srv.URL
+	storeDingtalkOpenAPIBase(srv.URL)
 
 	_, _, err := FetchDingTalkRobotMedia(context.Background(), "appkey-j", "secret-j", "robot-j", "code-j")
 	if err == nil {

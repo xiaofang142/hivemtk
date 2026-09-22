@@ -31,17 +31,21 @@
     （元组赋值左右两侧的名字都算）。`:=` **不算**——那是造局部遮蔽，不构成"测试会并发写这个全局"。
     运行期无人写、测试也不写的常量式全局（自带锁的 `versionCache` 之类）不在本门口径里——那是另一类判据
     （要看它的守卫是否真守），混进来基线就数不出同一个缺陷；
-  - **只数体内直读**：体内调用的那个函数**它自己**再读测试可改写的全局，属本门的**已知盲区**。
-    建门时只点了默认实现层的四处（`FetchQQAttachment` 读 `qqAttachmentURLGuard`、`FetchTelegramMedia` 读
-    `tgAPIBaseOverride`、`FetchDingTalkRobotMedia` 读 `dingtalkOpenAPIBase`、抖音取址 helper 读
-    `dyAPIBaseOverride`），**这个"四处"是抽查不是枚举** —— 本轮收口后另做一次上界枚举（从本包 71 处协程区域
-    沿调用图走 ≤5 层，键为"可达函数"）：40 个测试可写全局里 **16** 个可达，其中多数只经各家 seam 的
-    **默认实现**（用例一装替身就走不到），另有经 `replayDelayedOutbound` 与 cron `RunOnce` 循环的链。
+  - **只数体内直读**：体内调用的那个函数**它自己**再读测试可改写的全局，属本门的**已知盲区** ——
+    这一类不在本门里判，由 `scripts/check-seam-guard.py` 接手（口径见该文件）。建门时只点了默认实现层的
+    四处（`FetchQQAttachment` 读 `qqAttachmentURLGuard`、`FetchTelegramMedia` 读 `tgAPIBaseOverride`、
+    `FetchDingTalkRobotMedia` 读 `dingtalkOpenAPIBase`、抖音取址 helper 读 `dyAPIBaseOverride`），
+    **这个"四处"是抽查不是枚举** —— 随后一轮做了上界枚举（从本包 71 处协程区域沿调用图走 ≤5 层，
+    键为"可达函数"）：40 个测试可写全局里 **16** 个可达，其中多数只经各家 seam 的**默认实现**
+    （用例一装替身就走不到），另有经 `replayDelayedOutbound` 与 cron `RunOnce` 循环的链。
     ⇒ 本门绿**不等于**这类竞态已全闭；传递层的收口口径是"锁住被读的那个全局本身"（读写各收进一对
     accessor、由 `sync.RWMutex` 守，与本仓 `eada12ba` 的 `pkg/db` 三扇门同款），**不是**改这些 Fetch 的签名
     把值当参数传进去 —— `FetchTelegramMedia` 的三参签名被
     `webhook_batchf4_m01_telegram_test.go:770` 一行 `var f func(context.Context, string, string) (...) = FetchTelegramMedia`
-    钉成了契约，不擅动别人的契约。进度见计划文档 `## R27` / `## R28` 两节；
+    钉成了契约，不擅动别人的契约。那 16 个全局已逐个上锁并由 `check-seam-guard.py` +
+    `internal/service/seam_guard_race_test.go` 的 16 条 `-race` 腿钉住（枚举与收口过程见计划文档
+    `## R27` / `## R28` 两节）；**但两道门都不自动发现"又一个同类全局"** —— 那要重跑一次上界枚举再往
+    `scripts/seam-guard.registry` 加行；
   - **协程体识别**＝以 `utils.SafeGo(`/`utils.SafeGoDetached(`/`go func(` 开头的行，按大括号配平吃到
     该语法块结束；`defer func()`／`time.AfterFunc` 里再启协程的嵌套形状按同法处理，但**不外扩到整函数**；
   - 站点＝协程体内出现的"该包可测改写全局"的名字（词边界匹配），**行首是注释的行不算**；

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/telegram"
@@ -32,34 +33,69 @@ var (
 	tgMediaStoreFn = channelMediaPersist
 )
 
-// tgMaxMediaBytes 入站媒体字节上限，默认用官方那条 20 MB。
-// 做成变量而不是常量：超限/读残两条判定要能在测试里用小数值真跑一遍（没人愿意传 20MB 夹具）。
-var tgMaxMediaBytes int64 = telegram.MaxDownloadFileBytes
-
-// tgAPIBaseOverride 换取/下载两步的接口域覆盖，仅测试用（生产留空即官方 api.telegram.org）。
+// tgSeamMu 守住下面两个全局的每一次读和每一次写（accessor 在本文件末尾，包内其余位置直读 0 处）。
 //
-// 为什么要有这个 seam：QQ 那条腿的下载 URL 本来就来自事件报文，测试指向环回服务是顺路的；
-// TG 的 file_path 是相对路径、域由客户端自己拼 ⇒ 不给这一个口子，「账号 token → getFile →
-// 下载 → 转存」整条真实 HTTP 链路就没有任何端到端证据，只剩两处桩互证（桩说它调了就绿了）。
-var tgAPIBaseOverride = ""
+// 要收这一口的理由是异步链上的**第二跳**：入站媒体转存在协程里调本文件的默认实现
+// FetchTelegramMedia，而它读的就是 tgAPIBaseOverride 与 tgMaxMediaBytes。协程前快照 seam 函数
+// （521e4f80）挡不住这一跳 —— 快照冻的是"调哪个函数"，函数体里那一句读的仍是全局地址 ⇒
+// 上一条用例残留的协程和下一条用例装替身的写在同一地址上并发访问就是数据竞争。
+var (
+	tgSeamMu sync.RWMutex
+
+	// tgMaxMediaBytes 入站媒体字节上限，默认用官方那条 20 MB。
+	// 做成变量而不是常量：超限/读残两条判定要能在测试里用小数值真跑一遍（没人愿意传 20MB 夹具）。
+	tgMaxMediaBytes int64 = telegram.MaxDownloadFileBytes
+
+	// tgAPIBaseOverride 换取/下载两步的接口域覆盖，仅测试用（生产留空即官方 api.telegram.org）。
+	//
+	// 为什么要有这个 seam：QQ 那条腿的下载 URL 本来就来自事件报文，测试指向环回服务是顺路的；
+	// TG 的 file_path 是相对路径、域由客户端自己拼 ⇒ 不给这一个口子，「账号 token → getFile →
+	// 下载 → 转存」整条真实 HTTP 链路就没有任何端到端证据，只剩两处桩互证（桩说它调了就绿了）。
+	tgAPIBaseOverride = ""
+)
+
+func loadTGAPIBase() string {
+	tgSeamMu.RLock()
+	defer tgSeamMu.RUnlock()
+	return tgAPIBaseOverride
+}
+
+func storeTGAPIBase(base string) {
+	tgSeamMu.Lock()
+	defer tgSeamMu.Unlock()
+	tgAPIBaseOverride = base
+}
+
+func loadTGMaxMediaBytes() int64 {
+	tgSeamMu.RLock()
+	defer tgSeamMu.RUnlock()
+	return tgMaxMediaBytes
+}
+
+func storeTGMaxMediaBytes(limit int64) {
+	tgSeamMu.Lock()
+	defer tgSeamMu.Unlock()
+	tgMaxMediaBytes = limit
+}
 
 // FetchTelegramMedia file_id → getFile → 下载。返回字节与响应 Content-Type。
 //
 // 凭证只出现在拼出来的 URL 里，因此三条错误串都不带 URL 原文（会进日志）。
 func FetchTelegramMedia(ctx context.Context, token, fileID string) ([]byte, string, error) {
 	opts := []core.ClientOption{core.WithHTTPClient(httpclient.Client)}
-	if tgAPIBaseOverride != "" {
-		opts = append(opts, core.WithBaseURL(tgAPIBaseOverride))
+	if base := loadTGAPIBase(); base != "" {
+		opts = append(opts, core.WithBaseURL(base))
 	}
 	cli := telegram.NewTelegramClient(token, opts...)
 	f, err := cli.GetFile(ctx, fileID)
 	if err != nil {
 		return nil, "", err
 	}
-	if tgMaxMediaBytes > 0 && f.FileSize > tgMaxMediaBytes {
-		return nil, "", fmt.Errorf("tg media declared size %d exceeds limit %d", f.FileSize, tgMaxMediaBytes)
+	maxBytes := loadTGMaxMediaBytes()
+	if maxBytes > 0 && f.FileSize > maxBytes {
+		return nil, "", fmt.Errorf("tg media declared size %d exceeds limit %d", f.FileSize, maxBytes)
 	}
-	data, contentType, derr := cli.DownloadFile(ctx, f.FilePath, tgMaxMediaBytes)
+	data, contentType, derr := cli.DownloadFile(ctx, f.FilePath, maxBytes)
 	if derr != nil {
 		return nil, "", derr
 	}
@@ -77,7 +113,7 @@ func (s *WebhookService) persistTelegramMediaAsync(ctx context.Context, accountI
 	}
 	// 队列路径（Receive → queue → worker → handleJob → dispatchTelegram），ctx 是服务生命周期 ctx。
 	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
-	maxBytes, mediaFetchFn, mediaStoreFn := tgMaxMediaBytes, tgMediaFetchFn, tgMediaStoreFn
+	maxBytes, mediaFetchFn, mediaStoreFn := loadTGMaxMediaBytes(), tgMediaFetchFn, tgMediaStoreFn
 	utils.SafeGo(ctx, "telegram.media_persist", func(gctx context.Context) {
 		token, terr := s.tgBotToken(gctx, accountID)
 		if terr != nil || token == "" {

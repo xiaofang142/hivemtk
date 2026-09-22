@@ -29,7 +29,7 @@ func (s *IntentRecognizer) RecognizeSpeculative(
 		return empty, ch, nil
 	}
 
-	if !IntentEnabled {
+	if !loadIntentEnabled() {
 		placeholder := &dto.RecognizeResult{
 			IntentType:      IntentUnknown,
 			IntentName:      "未知",

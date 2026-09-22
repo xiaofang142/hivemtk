@@ -1,0 +1,27 @@
+# seam-guard 注册表 —— 被异步链路经「默认实现」读到的测试可写全局，逐个登记它的锁与两扇 accessor。
+#
+# 列（TAB 分隔）：`全局名 <TAB> 文件 <TAB> 锁名 <TAB> getter <TAB> setter`
+# `文件` 相对 `user-server/`。判据见 scripts/check-seam-guard.py。
+# 新增一个这类全局 = 在这里加一行，同时必须补一条 -race 腿
+# （internal/service/seam_guard_race_test.go）；只加行不补腿，本门绿但电池会指出没牙。
+#
+# 前 16 行来自 2026-09-22 的上界枚举（从本包协程区域沿调用图走 ≤5 层，见计划文档 ## R28）：
+# 每一个都能被某条真实异步链读到，而测试会改写它 ⇒ 第二跳竞态。
+# pollingLockRepo 与 pollingLockRepoOnce 是同一条链的两块内存，一起上锁、一起登记。
+IntentEnabled	internal/service/intent_recognition.go	intentEnabledMu	loadIntentEnabled	storeIntentEnabled
+aiReplyQuietHoursFn	internal/service/webhook_outbound.go	aiReplyQuietHoursMu	loadAIReplyQuietHoursFn	storeAIReplyQuietHoursFn
+approvalNowFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalNowFn	storeApprovalNowFn
+approvalResumeTokFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalResumeTokFn	storeApprovalResumeTokFn
+bridgeChannelOnlineProbe	internal/service/bridge_offline_replay.go	bridgeProbeMu	loadBridgeChannelOnlineProbe	storeBridgeChannelOnlineProbe
+dingtalkOpenAPIBase	internal/service/dingtalk_media.go	dingtalkSeamMu	loadDingtalkOpenAPIBase	storeDingtalkOpenAPIBase
+dingtalkWebhookHostAllowed	internal/service/webhook_outbound.go	dingtalkHostMu	loadDingtalkWebhookHostAllowed	storeDingtalkWebhookHostAllowed
+dyAPIBaseOverride	internal/service/douyin_media.go	dySeamMu	loadDyAPIBaseOverride	storeDyAPIBaseOverride
+dyMediaRetryBackoff	internal/service/douyin_media.go	dySeamMu	loadDyMediaRetryBackoff	storeDyMediaRetryBackoff
+humanTaskNowFn	internal/service/human_task.go	humanTaskSeamMu	loadHumanTaskNowFn	storeHumanTaskNowFn
+pollingLockRepo	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	resetPollingLockRepoForTest
+pollingLockRepoOnce	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	resetPollingLockRepoForTest
+qqAttachmentURLGuard	internal/service/qq_media.go	qqSeamMu	loadQQAttachmentURLGuard	storeQQAttachmentURLGuard
+qqMaxMediaBytes	internal/service/qq_media.go	qqSeamMu	loadQQMaxMediaBytes	storeQQMaxMediaBytes
+tgAPIBaseOverride	internal/service/telegram_media.go	tgSeamMu	loadTGAPIBase	storeTGAPIBase
+tgMaxMediaBytes	internal/service/telegram_media.go	tgSeamMu	loadTGMaxMediaBytes	storeTGMaxMediaBytes
+wechatAPIBase	internal/service/wechat.go	wechatSeamMu	loadWechatAPIBase	storeWechatAPIBase

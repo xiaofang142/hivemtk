@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -84,27 +85,49 @@ const bridgeStatusOffline = "offline"
 
 // bridgeChannelOnlineProbe 该渠道账号此刻是否收得到消息。带 ctx：探针在 bridge 侧
 // 要读账号行的在线位（轮询式下发不留订阅，只有 DB 里刷过的同步时间），读库得挂在调用方 ctx 上。
-var bridgeChannelOnlineProbe func(ctx context.Context, channel, accountID string) bool
+//
+// 读写只走紧随其后的三扇 accessor（bridgeProbeMu 守，包内其余位置直读 0 处）：补投门在
+// cron 的 RunOnce 协程里逐渠道读它，而用例逐格装/拆探针。
+var (
+	bridgeProbeMu sync.RWMutex
+
+	bridgeChannelOnlineProbe func(ctx context.Context, channel, accountID string) bool
+)
+
+func loadBridgeChannelOnlineProbe() func(ctx context.Context, channel, accountID string) bool {
+	bridgeProbeMu.RLock()
+	defer bridgeProbeMu.RUnlock()
+	return bridgeChannelOnlineProbe
+}
+
+func storeBridgeChannelOnlineProbe(fn func(ctx context.Context, channel, accountID string) bool) {
+	bridgeProbeMu.Lock()
+	defer bridgeProbeMu.Unlock()
+	bridgeChannelOnlineProbe = fn
+}
 
 // probeWarned 探针缺件是否已告警过：缺件是一次性装配问题，不该每轮每渠道刷一条。
 var probeWarned atomic.Bool
 
 // SetBridgeChannelOnlineProbe 由 bridge 包在装配 SSE 出站口时调用一次。
 func SetBridgeChannelOnlineProbe(fn func(ctx context.Context, channel, accountID string) bool) {
-	bridgeChannelOnlineProbe = fn
+	storeBridgeChannelOnlineProbe(fn)
 	logger.Info("[BridgeReplay] 可达性探针已注册：延后出站仅补投给收得到的渠道")
 }
 
 // bridgeChannelOnline 探针缺件时放行：装配缺件是「门没加」，不是「所有渠道都离线」，
 // 后者会把可达的延后出站永久扣在待办集合里。缺件必须留痕而不是静默兜底。
 func bridgeChannelOnline(ctx context.Context, channel, accountID string) bool {
-	if bridgeChannelOnlineProbe == nil {
+	// 取一次再判空再调用：读两遍的话「判空时非空、调用时已被换回 nil」会当场 panic ——
+	// 拆探针的用例与跑在协程里的补投门正是这种形状。
+	probe := loadBridgeChannelOnlineProbe()
+	if probe == nil {
 		if !probeWarned.Swap(true) {
 			logger.Warn("[BridgeReplay] SSE 在线探针未注册，补投门退化为全量放行（掉线渠道的历史行会被烧进判弃）")
 		}
 		return true
 	}
-	return bridgeChannelOnlineProbe(ctx, channel, accountID)
+	return probe(ctx, channel, accountID)
 }
 
 // detectBridgeChannels 取一次渠道账号快照，切成在线/离线两批。

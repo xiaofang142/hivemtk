@@ -35,7 +35,28 @@ import (
 // 持久化：存于 system_config_kv 表，key=intent_recognition_config；
 // 由 InitIntentRecognizer 启动加载、UpdateIntentConfig 写入更新。
 // 前端 user-web 意图识别页面可在线开关，无需重启服务。
-var IntentEnabled = true
+//
+// 读写只走紧随其后的那对 accessor（intentEnabledMu 守，包内与包外其余位置直读 0 处）：
+// Recognize / RecognizeIntent / RecognizeSpeculative 三条都在入站与恢复协程上读它，
+// 而 router 的热更新口与用例的开关用例都在写它 —— 它是这批里唯一一个导出全局，
+// 所以"包外零直读"这条由 scripts/check-seam-guard.py 扫整棵 user-server 树来兜。
+var (
+	intentEnabledMu sync.RWMutex
+
+	IntentEnabled = true
+)
+
+func loadIntentEnabled() bool {
+	intentEnabledMu.RLock()
+	defer intentEnabledMu.RUnlock()
+	return IntentEnabled
+}
+
+func storeIntentEnabled(enabled bool) {
+	intentEnabledMu.Lock()
+	defer intentEnabledMu.Unlock()
+	IntentEnabled = enabled
+}
 
 // IntentConfigKey system_config_kv 表的存储 key
 const IntentConfigKey = "intent_recognition_config"
@@ -515,7 +536,7 @@ func (s *IntentRecognizer) Recognize(ctx context.Context, sessionID, customerID,
 		return &dto.RecognizeResult{IntentType: IntentUnknown, Confidence: 0, Method: "rule"}, nil
 	}
 
-	if !IntentEnabled {
+	if !loadIntentEnabled() {
 		return &dto.RecognizeResult{
 			IntentType:      IntentUnknown,
 			IntentName:      "未知",
@@ -941,7 +962,7 @@ func GetIntentRecognizer() *IntentRecognizer {
 
 // SetIntentEnabled 设置意图识别开关（仅更新内存态，供 router/main 注入或热更新）
 func SetIntentEnabled(enabled bool) {
-	IntentEnabled = enabled
+	storeIntentEnabled(enabled)
 }
 
 // LoadIntentConfig 从 system_config_kv 表加载意图识别配置
@@ -1009,10 +1030,10 @@ func InitIntentRecognizer(db *gorm.DB, dispatcher *llm.Dispatcher, cache *redis.
 		cfg, err := LoadIntentConfig(ctx)
 		if err != nil {
 			logger.Errorf("[intent] 加载意图识别配置失败：%v，使用默认 Enabled=true", err)
-			IntentEnabled = true
+			storeIntentEnabled(true)
 		} else {
-			IntentEnabled = cfg.Enabled
-			logger.Infof("[intent] 已从 DB 加载意图识别配置：Enabled=%v", IntentEnabled)
+			storeIntentEnabled(cfg.Enabled)
+			logger.Infof("[intent] 已从 DB 加载意图识别配置：Enabled=%v", cfg.Enabled)
 		}
 
 		intentRecognizer = NewIntentRecognizer(db, dispatcher, cache)

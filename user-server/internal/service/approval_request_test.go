@@ -125,9 +125,9 @@ func countApprovalRows(t *testing.T, database *gorm.DB) int64 {
 func freezeApprovalClock(t *testing.T, at time.Time) func(time.Duration) {
 	t.Helper()
 	current := at
-	previous := approvalNowFn
-	approvalNowFn = func() time.Time { return current }
-	t.Cleanup(func() { approvalNowFn = previous })
+	previous := loadApprovalNowFn()
+	storeApprovalNowFn(func() time.Time { return current })
+	t.Cleanup(func() { storeApprovalNowFn(previous) })
 	return func(d time.Duration) { current = current.Add(d) }
 }
 
@@ -581,9 +581,9 @@ func TestApprovalService_SubmitTreatsReadFailureAsFailure(t *testing.T) {
 }
 
 func TestApprovalService_SubmitWithoutTokenDoesNotCreateSleepingRow(t *testing.T) {
-	previous := approvalResumeTokFn
-	approvalResumeTokFn = func() (string, error) { return "", errors.New("rand unavailable") }
-	t.Cleanup(func() { approvalResumeTokFn = previous })
+	previous := loadApprovalResumeTokFn()
+	storeApprovalResumeTokFn(func() (string, error) { return "", errors.New("rand unavailable") })
+	t.Cleanup(func() { storeApprovalResumeTokFn(previous) })
 
 	repo := &fakeApprovalRepo{available: true}
 	svc := NewApprovalRequestService(repo, nil)

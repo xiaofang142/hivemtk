@@ -50,7 +50,7 @@ func FetchWeChatMedia(ctx context.Context, accessToken, mediaID string) (io.Read
 		return nil, "", fmt.Errorf("wechat media id empty")
 	}
 	u := fmt.Sprintf("%s/cgi-bin/media/get?access_token=%s&media_id=%s",
-		wechatAPIBase, url.QueryEscape(accessToken), url.QueryEscape(mediaID))
+		loadWechatAPIBase(), url.QueryEscape(accessToken), url.QueryEscape(mediaID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, "", err
@@ -134,7 +134,9 @@ func (s *WechatService) PersistInboundMediaAsync(ctx context.Context, accountID 
 	// SafeGoDetached 而不是 SafeGo：调用方 handleIncomingMessage 用的是 30s 超时 ctx 并 defer cancel()，
 	// 方法一返回就取消，沿用会让转存在起跑线上被杀掉（用例传 Background() 时看不出来）。
 	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
-	mediaStoreFn := wxMediaStoreFn
+	// 两条腿都要快照：只快照 store 那条时，fetch 这一句仍是协程体内的裸读全局 —— 今日没有用例改写
+	// wxMediaFetchFn 所以撞不上，但"没人写"不是同步关系，第一个换下载桩的用例就会把它点亮。
+	mediaFetchFn, mediaStoreFn := wxMediaFetchFn, wxMediaStoreFn
 	utils.SafeGoDetached(ctx, "wechat.media_persist", 5*time.Minute, func(gctx context.Context) {
 		client, err := s.getTokenClient(gctx, accountID)
 		if err != nil {
@@ -148,7 +150,7 @@ func (s *WechatService) PersistInboundMediaAsync(ctx context.Context, accountID 
 				Msg("[Wechat] 媒体转存跳过：accessToken 获取失败")
 			return
 		}
-		rc, contentType, ferr := wxMediaFetchFn(gctx, token, mediaID)
+		rc, contentType, ferr := mediaFetchFn(gctx, token, mediaID)
 		if ferr != nil {
 			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", mediaID).Msg("[Wechat] 媒体下载失败（占位符保留）")
 			return

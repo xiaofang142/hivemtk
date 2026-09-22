@@ -42,9 +42,9 @@ var humanTaskFixedNow = time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC)
 // useHumanTaskClock 换掉服务层的时钟，用例结束自动还原。
 func useHumanTaskClock(t *testing.T, at time.Time) {
 	t.Helper()
-	prev := humanTaskNowFn
-	humanTaskNowFn = func() time.Time { return at }
-	t.Cleanup(func() { humanTaskNowFn = prev })
+	prev := loadHumanTaskNowFn()
+	storeHumanTaskNowFn(func() time.Time { return at })
+	t.Cleanup(func() { storeHumanTaskNowFn(prev) })
 }
 
 // stubHumanTaskCfg 记录被问到的 group/key —— 这一条不是形式主义：

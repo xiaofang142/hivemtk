@@ -13,11 +13,11 @@ import (
 // useOnlineProbe 换掉进程级在线探针，跑完还原（探针是全局态，不清理会串到别的用例）。
 func useOnlineProbe(t *testing.T, fn func(ctx context.Context, channel, accountID string) bool) {
 	t.Helper()
-	prev := bridgeChannelOnlineProbe
-	bridgeChannelOnlineProbe = fn
+	prev := loadBridgeChannelOnlineProbe()
+	storeBridgeChannelOnlineProbe(fn)
 	probeWarned.Store(false)
 	t.Cleanup(func() {
-		bridgeChannelOnlineProbe = prev
+		storeBridgeChannelOnlineProbe(prev)
 		probeWarned.Store(false)
 	})
 }

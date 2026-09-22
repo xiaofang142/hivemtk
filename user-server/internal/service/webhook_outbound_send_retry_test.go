@@ -91,9 +91,9 @@ func TestNextSendRetryAt_BackoffAndQuietHours(t *testing.T) {
 		}
 	}
 
-	orig := aiReplyQuietHoursFn
-	aiReplyQuietHoursFn = func(time.Time) bool { return true }
-	defer func() { aiReplyQuietHoursFn = orig }()
+	orig := loadAIReplyQuietHoursFn()
+	storeAIReplyQuietHoursFn(func(time.Time) bool { return true })
+	defer func() { storeAIReplyQuietHoursFn(orig) }()
 
 	at := nextSendRetryAt(now, 0, nil)
 	if at.In(cstZone).Hour() != aiReplyQuietEndHour || at.In(cstZone).Minute() != 0 {

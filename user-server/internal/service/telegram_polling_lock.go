@@ -48,16 +48,43 @@ func GetPollingWorkerID() string {
 	return pollingWorkerID
 }
 
+// pollingLockRepo/pollingLockRepoOnce 的读写只走紧随其后的两扇 accessor
+// （pollingLockMu 守，包内其余位置直读 0 处）。要上锁的理由同 tgSeamMu：polling 降级链在
+// SafeGo 协程里经 TryAcquirePollingLock 取这个仓储，而用例逐格装桩/还原。
+//
+// 装桩刻意不原地改 `*pollingLockRepoOnce = sync.Once{}`：那是**透过指针**写一个别的协程
+// 正在 Do 的对象，锁住指针变量本身也拦不住那种写。resetPollingLockRepoForTest 换成换指针，
+// 于是锁内的一次赋值就是全部并发可见的边界。
 var (
+	pollingLockMu sync.Mutex
+
 	pollingLockRepo     *repository.TelegramPollingLockRepository
 	pollingLockRepoOnce = &sync.Once{}
 )
 
 func getPollingLockRepo() *repository.TelegramPollingLockRepository {
+	pollingLockMu.Lock()
+	defer pollingLockMu.Unlock()
 	pollingLockRepoOnce.Do(func() {
 		pollingLockRepo = repository.NewTelegramPollingLockRepository()
 	})
 	return pollingLockRepo
+}
+
+// resetPollingLockRepoForTest 测试装桩：锁内一次完成「换仓储 + 让下一次取用看到它」，
+// 返回还原函数（同 pkg/db 的 SetTestDB 一条路走 accessor 的口径）。
+func resetPollingLockRepoForTest(repo *repository.TelegramPollingLockRepository) func() {
+	pollingLockMu.Lock()
+	defer pollingLockMu.Unlock()
+	prev, prevOnce := pollingLockRepo, pollingLockRepoOnce
+	pollingLockRepo = repo
+	pollingLockRepoOnce = &sync.Once{}
+	pollingLockRepoOnce.Do(func() { pollingLockRepo = repo })
+	return func() {
+		pollingLockMu.Lock()
+		defer pollingLockMu.Unlock()
+		pollingLockRepo, pollingLockRepoOnce = prev, prevOnce
+	}
 }
 
 // TryAcquirePollingLock 原子抢占 Telegram 账号的 polling 锁（service 门面）

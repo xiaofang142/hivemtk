@@ -319,9 +319,9 @@ func TestM01_QQOutboundMsgIDIsOfficialDID(t *testing.T) {
 // 就永远没有证据），证明事件里那条 url 真的被 GET、字节完整到手（不截断、不串号）。
 func TestM01_QQFetchUsesRealAttachmentURLAndBytes(t *testing.T) {
 	ws, db := f4QQSetup(t)
-	prevGuard := qqAttachmentURLGuard
-	t.Cleanup(func() { qqAttachmentURLGuard = prevGuard })
-	qqAttachmentURLGuard = func(string) error { return nil }
+	prevGuard := loadQQAttachmentURLGuard()
+	t.Cleanup(func() { storeQQAttachmentURLGuard(prevGuard) })
+	storeQQAttachmentURLGuard(func(string) error { return nil })
 
 	payload := strings.Repeat("Q", 4096)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -443,11 +443,11 @@ func TestM01_QQOversizedAttachmentSkippedBeforeDownload(t *testing.T) {
 // f4QQOpenGuardAndLimit 放开取址策略并按需压低字节上限（两条腿都要真 HTTP 才有效）。
 func f4QQOpenGuard(t *testing.T, limit int64) {
 	t.Helper()
-	prevGuard, prevLimit := qqAttachmentURLGuard, qqMaxMediaBytes
-	t.Cleanup(func() { qqAttachmentURLGuard, qqMaxMediaBytes = prevGuard, prevLimit })
-	qqAttachmentURLGuard = func(string) error { return nil }
+	prevGuard, prevLimit := loadQQAttachmentURLGuard(), loadQQMaxMediaBytes()
+	t.Cleanup(func() { storeQQAttachmentURLGuard(prevGuard); storeQQMaxMediaBytes(prevLimit) })
+	storeQQAttachmentURLGuard(func(string) error { return nil })
 	if limit > 0 {
-		qqMaxMediaBytes = limit
+		storeQQMaxMediaBytes(limit)
 	}
 }
 

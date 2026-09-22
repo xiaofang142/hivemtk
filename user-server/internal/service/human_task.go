@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -224,8 +225,29 @@ func humanTaskPlaceSLA(t *model.HumanTask, col string, due time.Time) error {
 }
 
 // 时钟与 ID 生成走包级变量（判据同 approval_*）：测试可替换、生产走默认。
+//
+// humanTaskNowFn 的读写只走紧随其后的那对 accessor（humanTaskSeamMu 守，包内其余位置直读 0 处）：
+// Submit 挂在入站闸门链的协程上，判定期/心跳期的时钟读同样在 cron 的 RunOnce 里，而待办用例
+// 逐格换时钟。理由同 approvalNowFn。
 var (
-	humanTaskNowFn     = time.Now
+	humanTaskSeamMu sync.RWMutex
+
+	humanTaskNowFn = time.Now
+)
+
+func loadHumanTaskNowFn() func() time.Time {
+	humanTaskSeamMu.RLock()
+	defer humanTaskSeamMu.RUnlock()
+	return humanTaskNowFn
+}
+
+func storeHumanTaskNowFn(fn func() time.Time) {
+	humanTaskSeamMu.Lock()
+	defer humanTaskSeamMu.Unlock()
+	humanTaskNowFn = fn
+}
+
+var (
 	humanTaskIDSeq     int64
 	humanTaskIDFn      = newHumanTaskID
 	globalHumanTaskSvc atomic.Pointer[HumanTaskService]
@@ -233,7 +255,7 @@ var (
 
 func newHumanTaskID() string {
 	n := atomic.AddInt64(&humanTaskIDSeq, 1)
-	return fmt.Sprintf("ht_%d_%d", humanTaskNowFn().UnixNano(), n)
+	return fmt.Sprintf("ht_%d_%d", loadHumanTaskNowFn()().UnixNano(), n)
 }
 
 // HumanTaskService 统一待办服务。
@@ -298,7 +320,7 @@ func (s *HumanTaskService) Submit(ctx context.Context, in HumanTaskSubmitInput) 
 		return existing, false, nil
 	}
 
-	now := humanTaskNowFn()
+	now := loadHumanTaskNowFn()()
 	row := &model.HumanTask{
 		ID:          humanTaskIDFn(),
 		Kind:        in.Kind,
@@ -350,7 +372,7 @@ func (s *HumanTaskService) slaFor(ctx context.Context, in HumanTaskSubmitInput) 
 			return zero, fmt.Errorf("%w: sla_due_at 不该由调用方给，sla_first_response_at 由本服务按 %s.%s 统一计算",
 				ErrHumanTaskInputInvalid, HumanTaskConfigGroup, HumanTaskHandoffSlaKey)
 		}
-		return humanTaskNowFn().Add(time.Duration(s.handoffSlaMinutes(ctx)) * time.Minute), nil
+		return loadHumanTaskNowFn()().Add(time.Duration(s.handoffSlaMinutes(ctx)) * time.Minute), nil
 	default:
 		if in.SlaDueAt == nil {
 			// 报错而不是"那就先不设截止"：没有截止的审批待办永远不会出现在逾期读数里，
@@ -497,7 +519,7 @@ func (s *HumanTaskService) Counts(ctx context.Context) (*HumanTaskCounts, error)
 	if err := s.require(); err != nil {
 		return nil, err
 	}
-	now := humanTaskNowFn()
+	now := loadHumanTaskNowFn()()
 	open, err := s.repo.CountOpenByKind(ctx)
 	if err != nil {
 		return nil, err
@@ -524,7 +546,7 @@ func (s *HumanTaskService) Counts(ctx context.Context) (*HumanTaskCounts, error)
 func (s *HumanTaskService) Claim(ctx context.Context, id, operator string) (*model.HumanTask, error) {
 	return s.transition(ctx, id, model.HumanTaskActionClaim, operator, nil,
 		func(m *model.HumanTask, op string) error {
-			now := humanTaskNowFn()
+			now := loadHumanTaskNowFn()()
 			m.AssigneeUserID = op
 			m.ClaimedAt = &now
 			return nil
@@ -564,7 +586,7 @@ func humanTaskCheckHolder(cur *model.HumanTask, op string) error {
 func (s *HumanTaskService) Complete(ctx context.Context, id, operator string) (*model.HumanTask, error) {
 	return s.transition(ctx, id, model.HumanTaskActionComplete, operator, nil,
 		func(m *model.HumanTask, op string) error {
-			now := humanTaskNowFn()
+			now := loadHumanTaskNowFn()()
 			// 记下**做完的人**，即使他不是认领人（"我认领了同事替我做了"若仍挂在
 			// 认领人名下，坐席工作量当场虚高）。认领时间不动：那是响应时长的起点。
 			m.AssigneeUserID = op
@@ -589,7 +611,7 @@ func (s *HumanTaskService) Cancel(ctx context.Context, id, operator, reason stri
 	}
 	return s.transition(ctx, id, model.HumanTaskActionCancel, operator, nil,
 		func(m *model.HumanTask, _ string) error {
-			now := humanTaskNowFn()
+			now := loadHumanTaskNowFn()()
 			m.CancelReason = reason
 			m.CancelledAt = &now
 			return nil
@@ -630,7 +652,7 @@ func (s *HumanTaskService) CancelOpenBySubject(ctx context.Context, subjectType,
 		// 已落定的行不该被这条路径再动一次（与 ApplyAction 的期望态判据同方向）。
 		return cur, false, nil
 	}
-	now := humanTaskNowFn()
+	now := loadHumanTaskNowFn()()
 	applied, err := s.repo.ApplyAction(ctx, cur.ID, cur.Status, func(m *model.HumanTask) error {
 		m.Status = to
 		m.CancelReason = reason
@@ -678,7 +700,7 @@ func (s *HumanTaskService) CompleteOpenBySubject(ctx context.Context, subjectTyp
 	if !ok {
 		return cur, false, nil
 	}
-	now := humanTaskNowFn()
+	now := loadHumanTaskNowFn()()
 	applied, err := s.repo.ApplyAction(ctx, cur.ID, cur.Status, func(m *model.HumanTask) error {
 		m.Status = to
 		m.AssigneeUserID = operator // 与 Complete 同一口径：记下给出结论的人，即使他不是认领人

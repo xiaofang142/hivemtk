@@ -63,7 +63,29 @@ func isAIReplyQuietHours(t time.Time) bool {
 	return inQuietHoursWindow(t, aiReplyQuietStartHour, aiReplyQuietEndHour)
 }
 
-var aiReplyQuietHoursFn = isAIReplyQuietHours
+// aiReplyQuietHoursFn 免打扰判定的可换点（测试装替身，生产走 isAIReplyQuietHours）。
+//
+// 读写只走下面那对 accessor（aiReplyQuietHoursMu 守，包内其余位置直读 0 处）：它被两条
+// **异步链**读到 —— 延后出站排水循环在协程里经 nextSendRetryAt 与 sendOutbound 各读一次，
+// 而入站用例排队重投时会换掉它。var 本身在协程前快照挡不住：快照冻的是本地变量，
+// 函数体里那一句读的仍是同一个全局地址。
+var (
+	aiReplyQuietHoursMu sync.RWMutex
+
+	aiReplyQuietHoursFn = isAIReplyQuietHours
+)
+
+func loadAIReplyQuietHoursFn() func(time.Time) bool {
+	aiReplyQuietHoursMu.RLock()
+	defer aiReplyQuietHoursMu.RUnlock()
+	return aiReplyQuietHoursFn
+}
+
+func storeAIReplyQuietHoursFn(fn func(time.Time) bool) {
+	aiReplyQuietHoursMu.Lock()
+	defer aiReplyQuietHoursMu.Unlock()
+	aiReplyQuietHoursFn = fn
+}
 
 type delayedReplayCtxKey struct{}
 
@@ -156,7 +178,8 @@ func nextSendRetryAt(now time.Time, attempts int, ce *ChannelError) time.Time {
 	}
 	at := now.Add(delay)
 	// 免打扰时段内重投等于在深夜打扰客户，和首发同规则顺延到窗口开放。
-	if aiReplyQuietHoursFn(at) {
+	// 取一次再调用：不在持锁期间跑可换出去的策略（见 loadAIReplyQuietHoursFn）。
+	if loadAIReplyQuietHoursFn()(at) {
 		at = nextQuietHoursRelease(at, aiReplyQuietEndHour)
 	}
 	return at
@@ -357,7 +380,7 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
 
-	if !isDelayedReplay(ctx) && aiReplyQuietHoursFn(time.Now()) {
+	if !isDelayedReplay(ctx) && loadAIReplyQuietHoursFn()(time.Now()) {
 		if s.enqueueDelayedOutbound(ctx, channel, accountID, p, content, hubMsg, cards) {
 			return false, nil
 		}
@@ -648,7 +671,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 
 		u, perr := url.Parse(webhookURL)
-		if perr != nil || !dingtalkWebhookHostAllowed(u) {
+		if perr != nil || !loadDingtalkWebhookHostAllowed()(u) {
 			logger.Ctx(ctx).Error().Str("channel", "dingtalk").Str("account_id", accountID).
 				Msg("[DingTalk] sessionWebhook 域名非法（仅允许 *.dingtalk.com），拒绝发送")
 			markSendFailed(preSendFailure(channel, CategoryBadRequest,
@@ -940,8 +963,27 @@ func preSendFailure(channel WebhookChannel, category ChannelErrorCategory, reaso
 	return &ChannelError{Channel: string(channel), Category: category, Retryable: false, Raw: reason}
 }
 
-var dingtalkWebhookHostAllowed = func(u *url.URL) bool {
-	return u != nil && (u.Host == "oapi.dingtalk.com" || strings.HasSuffix(u.Host, ".dingtalk.com"))
+// dingtalkWebhookHostAllowed sessionWebhook 域名白名单。读写只走下面那对 accessor
+// （dingtalkHostMu 守，包内其余位置直读 0 处）：sendOutbound 在延后出站的协程里读它，
+// 而它同时是入站用例换主机名时的靶子 —— 同 aiReplyQuietHoursFn 那一类第二跳竞态。
+var (
+	dingtalkHostMu sync.RWMutex
+
+	dingtalkWebhookHostAllowed = func(u *url.URL) bool {
+		return u != nil && (u.Host == "oapi.dingtalk.com" || strings.HasSuffix(u.Host, ".dingtalk.com"))
+	}
+)
+
+func loadDingtalkWebhookHostAllowed() func(*url.URL) bool {
+	dingtalkHostMu.RLock()
+	defer dingtalkHostMu.RUnlock()
+	return dingtalkWebhookHostAllowed
+}
+
+func storeDingtalkWebhookHostAllowed(fn func(*url.URL) bool) {
+	dingtalkHostMu.Lock()
+	defer dingtalkHostMu.Unlock()
+	dingtalkWebhookHostAllowed = fn
 }
 
 // HandleResultToContext 把 HandleResult 注入 ctx，供 sendOutbound 取出补字段。

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/pkg/httpclient"
@@ -32,11 +33,30 @@ var (
 	dtMediaStoreFn = channelMediaPersist
 )
 
-// dingtalkOpenAPIBase 是钉钉 v1.0 开放接口的域名根（取凭证 + 机器人接收文件下载两条腿都拼它）。
-// 必须是变量：这两条腿原先把主机名写死在调用点上，"HTTP 200 但 accessToken 为空"那一格
-// 只能真打外网才碰得到 ⇒ 全仓零用例（批J 实测：既有下载用例是整条换掉 dtMediaFetchFn，
-// 从没执行过这两个 URL 上的任何解析代码）。测试把它指向 httptest。
-var dingtalkOpenAPIBase = "https://api.dingtalk.com"
+// dingtalkSeamMu 守住 dingtalkOpenAPIBase 的每一次读和每一次写（包内其余位置直读 0 处）。
+// 理由同 telegram_media.go 的 tgSeamMu：机器人入站媒体在协程里调默认实现
+// FetchDingTalkRobotMedia → dingTalkNewAccessToken，两处拼的都是这个全局。
+var (
+	dingtalkSeamMu sync.RWMutex
+
+	// dingtalkOpenAPIBase 是钉钉 v1.0 开放接口的域名根（取凭证 + 机器人接收文件下载两条腿都拼它）。
+	// 必须是变量：这两条腿原先把主机名写死在调用点上，"HTTP 200 但 accessToken 为空"那一格
+	// 只能真打外网才碰得到 ⇒ 全仓零用例（批J 实测：既有下载用例是整条换掉 dtMediaFetchFn，
+	// 从没执行过这两个 URL 上的任何解析代码）。测试把它指向 httptest。
+	dingtalkOpenAPIBase = "https://api.dingtalk.com"
+)
+
+func loadDingtalkOpenAPIBase() string {
+	dingtalkSeamMu.RLock()
+	defer dingtalkSeamMu.RUnlock()
+	return dingtalkOpenAPIBase
+}
+
+func storeDingtalkOpenAPIBase(base string) {
+	dingtalkSeamMu.Lock()
+	defer dingtalkSeamMu.Unlock()
+	dingtalkOpenAPIBase = base
+}
 
 // FetchDingTalkRobotMedia 用凭证换回机器人接收文件的字节流与 Content-Type。
 func FetchDingTalkRobotMedia(ctx context.Context, appKey, appSecret, robotCode, downloadCode string) ([]byte, string, error) {
@@ -52,7 +72,7 @@ func FetchDingTalkRobotMedia(ctx context.Context, appKey, appSecret, robotCode, 
 	}
 	body, _ := json.Marshal(map[string]string{"downloadCode": downloadCode, "robotCode": robotCode})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		dingtalkOpenAPIBase+"/v1.0/robot/messageFiles/download", strings.NewReader(string(body)))
+		loadDingtalkOpenAPIBase()+"/v1.0/robot/messageFiles/download", strings.NewReader(string(body)))
 	if err != nil {
 		return nil, "", err
 	}
@@ -113,7 +133,7 @@ func fetchDingTalkTemporaryFile(ctx context.Context, rawURL string) ([]byte, str
 func dingTalkNewAccessToken(ctx context.Context, appKey, appSecret string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"appKey": appKey, "appSecret": appSecret})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		dingtalkOpenAPIBase+"/v1.0/oauth2/accessToken", strings.NewReader(string(body)))
+		loadDingtalkOpenAPIBase()+"/v1.0/oauth2/accessToken", strings.NewReader(string(body)))
 	if err != nil {
 		return "", err
 	}

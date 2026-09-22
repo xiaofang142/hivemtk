@@ -210,11 +210,31 @@ func (c *wechatTokenClient) getAccessToken(ctx context.Context) (string, error) 
 	return c.accessToken, nil
 }
 
-var wechatAPIBase = "https://api.weixin.qq.com"
+// wechatSeamMu 守住 wechatAPIBase 的每一次读和每一次写（accessor 紧随其后，包内其余位置直读 0 处）。
+// 要收这一口的理由同 telegram_media.go 的 tgSeamMu：这个域名根同时被**两条异步链**读到 ——
+// 入站媒体（默认实现 FetchWeChatMedia）与出站下发（sendOutbound → SendCustomMessage /
+// getAccessToken，由延后出站排水循环在协程里驱动），而它是测试装 httptest 时改写的包级变量。
+var (
+	wechatSeamMu sync.RWMutex
+
+	wechatAPIBase = "https://api.weixin.qq.com"
+)
+
+func loadWechatAPIBase() string {
+	wechatSeamMu.RLock()
+	defer wechatSeamMu.RUnlock()
+	return wechatAPIBase
+}
+
+func storeWechatAPIBase(base string) {
+	wechatSeamMu.Lock()
+	defer wechatSeamMu.Unlock()
+	wechatAPIBase = base
+}
 
 func (c *wechatTokenClient) fetchAccessToken(ctx context.Context) (string, int, error) {
 	url := fmt.Sprintf("%s/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
-		wechatAPIBase, c.appID, c.appSecret)
+		loadWechatAPIBase(), c.appID, c.appSecret)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -292,7 +312,7 @@ func (s *WechatService) SendCustomMessage(ctx context.Context, accountID uint, o
 	}
 
 	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("%s/cgi-bin/message/custom/send?access_token=%s", wechatAPIBase, token)
+	url := fmt.Sprintf("%s/cgi-bin/message/custom/send?access_token=%s", loadWechatAPIBase(), token)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

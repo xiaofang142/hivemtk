@@ -63,9 +63,9 @@ func f4WxMediaAPI(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	orig := wechatAPIBase
-	wechatAPIBase = srv.URL
-	t.Cleanup(func() { wechatAPIBase = orig; srv.Close() })
+	orig := loadWechatAPIBase()
+	storeWechatAPIBase(srv.URL)
+	t.Cleanup(func() { storeWechatAPIBase(orig); srv.Close() })
 	return srv
 }
 

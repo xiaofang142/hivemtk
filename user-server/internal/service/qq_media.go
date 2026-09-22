@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/model"
@@ -26,13 +27,48 @@ var (
 	qqMediaStoreFn = channelMediaPersist
 )
 
-// qqAttachmentURLGuard 附件链接的取址策略。默认拒绝非 http(s) 与内网/环回字面量：
-// url 来自事件报文，验签只保证「出自 QQ」，不能把机器人回调端点变成内网探针。
-//
-// 策略单独成变量有两个理由：入站用例要在本机起 http 服务验证真实字节链路（环回地址会被
-// 默认策略挡掉，那样下载腿永远没有正向证据）；以及若某环境要收紧成 QQ CDN 白名单，
-// 替换这一点即可，不必动下载代码。
-var qqAttachmentURLGuard = rejectInternalAttachmentURL
+// qqSeamMu 守住下面两个全局的每一次读和每一次写（accessor 在本文件末尾，包内其余位置直读 0 处）。
+// 理由同 telegram_media.go 的 tgSeamMu：转存在协程里调默认实现 FetchQQAttachment，而它读的就是
+// 这两个全局 —— 协程前快照 seam 函数挡不住函数体里的第二跳。
+var (
+	qqSeamMu sync.RWMutex
+
+	// qqAttachmentURLGuard 附件链接的取址策略。默认拒绝非 http(s) 与内网/环回字面量：
+	// url 来自事件报文，验签只保证「出自 QQ」，不能把机器人回调端点变成内网探针。
+	//
+	// 策略单独成一个可换点有两个理由：入站用例要在本机起 http 服务验证真实字节链路（环回地址会被
+	// 默认策略挡掉，那样下载腿永远没有正向证据）；以及若某环境要收紧成 QQ CDN 白名单，
+	// 替换这一点即可，不必动下载代码。
+	qqAttachmentURLGuard = rejectInternalAttachmentURL
+
+	// qqMaxMediaBytes 入站附件字节上限。默认取全站口径，单独成一个变量而不是直接写常量，
+	// 是为了让「读残」这条判定可测：真去构造 64MB 响应没人愿意跑。
+	qqMaxMediaBytes int64 = maxInboundMediaBytes
+)
+
+func loadQQAttachmentURLGuard() func(string) error {
+	qqSeamMu.RLock()
+	defer qqSeamMu.RUnlock()
+	return qqAttachmentURLGuard
+}
+
+func storeQQAttachmentURLGuard(guard func(string) error) {
+	qqSeamMu.Lock()
+	defer qqSeamMu.Unlock()
+	qqAttachmentURLGuard = guard
+}
+
+func loadQQMaxMediaBytes() int64 {
+	qqSeamMu.RLock()
+	defer qqSeamMu.RUnlock()
+	return qqMaxMediaBytes
+}
+
+func storeQQMaxMediaBytes(limit int64) {
+	qqSeamMu.Lock()
+	defer qqSeamMu.Unlock()
+	qqMaxMediaBytes = limit
+}
 
 func rejectInternalAttachmentURL(rawURL string) error {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
@@ -44,10 +80,6 @@ func rejectInternalAttachmentURL(rawURL string) error {
 	return nil
 }
 
-// qqMaxMediaBytes 入站附件字节上限。默认取全站口径，单独成一个变量而不是直接写常量，
-// 是为了让「读残」这条判定可测：真去构造 64MB 响应没人愿意跑。
-var qqMaxMediaBytes int64 = maxInboundMediaBytes
-
 // FetchQQAttachment 直接 GET 事件携带的附件链接。
 //
 // 不带任何鉴权头是官方口径（链接本身可公开访问）；加 QQBot token 反而会被 CDN 拒。
@@ -56,7 +88,10 @@ func FetchQQAttachment(ctx context.Context, rawURL string) ([]byte, string, erro
 	if trimmed == "" {
 		return nil, "", fmt.Errorf("qq attachment url empty")
 	}
-	if err := qqAttachmentURLGuard(trimmed); err != nil {
+	// 取一次策略再调用：锁只护"读到的是哪个函数"，不在持锁期间跑策略本身（RLock 对挂起的写
+	// 不可重入，边持锁边调用可换出去的东西就是自锁的口子）。
+	guard := loadQQAttachmentURLGuard()
+	if err := guard(trimmed); err != nil {
 		return nil, "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, trimmed, nil)
@@ -72,13 +107,14 @@ func FetchQQAttachment(ctx context.Context, rawURL string) ([]byte, string, erro
 		return nil, "", fmt.Errorf("qq attachment download status %d", resp.StatusCode)
 	}
 	// 多读 1 字节用于判定「恰好被截断」：LimitReader 静默截断会把半张图片当完整件转存，
-	// 比不存更难发现。
-	data, err := io.ReadAll(io.LimitReader(resp.Body, qqMaxMediaBytes+1))
+	// 比不存更难发现。取一次上限而不是读三遍，否则同一次下载内部可能用两个不同的上限。
+	limit := loadQQMaxMediaBytes()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("read qq attachment: %w", err)
 	}
-	if int64(len(data)) > qqMaxMediaBytes {
-		return nil, "", fmt.Errorf("qq attachment larger than %d bytes", qqMaxMediaBytes)
+	if int64(len(data)) > limit {
+		return nil, "", fmt.Errorf("qq attachment larger than %d bytes", limit)
 	}
 	return data, resp.Header.Get("Content-Type"), nil
 }
@@ -93,7 +129,7 @@ func (s *WebhookService) persistQQMediaAsync(ctx context.Context, accountID, hub
 	// 这里是队列路径（Receive → queue → worker → handleJob → dispatchQQ），ctx 是服务生命周期
 	// ctx 而不是请求 ctx，故 SafeGo 足够；钉钉/公众号那两条同步链路才必须用 SafeGoDetached。
 	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
-	maxBytes, mediaFetchFn, mediaStoreFn := qqMaxMediaBytes, qqMediaFetchFn, qqMediaStoreFn
+	maxBytes, mediaFetchFn, mediaStoreFn := loadQQMaxMediaBytes(), qqMediaFetchFn, qqMediaStoreFn
 	utils.SafeGo(ctx, "qq.media_persist", func(gctx context.Context) {
 		urls := make([]string, 0, len(atts))
 		for i, att := range atts {

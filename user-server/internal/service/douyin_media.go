@@ -61,9 +61,43 @@ const (
 	dyErrMismatch = 28001015 // access_token 与 openId 不匹配（同上）
 )
 
-// dyMediaRetryBackoff 重试间隔（长度即额外尝试次数）。
-// 用例把它改小，免得为瞬时错误真的等近一秒；生产用默认值。
-var dyMediaRetryBackoff = []time.Duration{200 * time.Millisecond, 600 * time.Millisecond}
+// dySeamMu 守住 dyMediaRetryBackoff 与 dyAPIBaseOverride 的每一次读和每一次写
+// （accessor 在本文件与 douyinAPIBase 里，包内其余位置直读 0 处）。
+// 理由同 telegram_media.go 的 tgSeamMu：换媒体字节的整条动作在协程里跑，两处读的都是这两个全局。
+var (
+	dySeamMu sync.RWMutex
+
+	// dyMediaRetryBackoff 重试间隔（长度即额外尝试次数）。
+	// 用例把它改小，免得为瞬时错误真的等近一秒；生产用默认值。
+	dyMediaRetryBackoff = []time.Duration{200 * time.Millisecond, 600 * time.Millisecond}
+
+	// dyAPIBaseOverride 只给用例用：把两条腿指向假平台。生产恒为空。
+	dyAPIBaseOverride string
+)
+
+func loadDyMediaRetryBackoff() []time.Duration {
+	dySeamMu.RLock()
+	defer dySeamMu.RUnlock()
+	return dyMediaRetryBackoff
+}
+
+func storeDyMediaRetryBackoff(backoff []time.Duration) {
+	dySeamMu.Lock()
+	defer dySeamMu.Unlock()
+	dyMediaRetryBackoff = backoff
+}
+
+func loadDyAPIBaseOverride() string {
+	dySeamMu.RLock()
+	defer dySeamMu.RUnlock()
+	return dyAPIBaseOverride
+}
+
+func storeDyAPIBaseOverride(base string) {
+	dySeamMu.Lock()
+	defer dySeamMu.Unlock()
+	dyAPIBaseOverride = base
+}
 
 // retryable 官方要我们重试的码：28001005/28001006 写在处置列里，28029014 只写在错误文案里
 // （它的处置列是空的）。凭证类的两个不在此列：它们要的是换 token，不是重投。
@@ -111,11 +145,14 @@ func douyinErrRetryable(err error) bool {
 
 // douyinWaitRetry 退避到下一次尝试；false 表示预算用尽或 ctx 已结束，都不该再重投。
 func douyinWaitRetry(ctx context.Context, attempt int) bool {
-	if attempt >= len(dyMediaRetryBackoff) {
+	// 一次取一次表而不是读三遍：两条腿之间用例（或下一版热更新）换了表，len 判定用的是旧表、
+	// 下标用的是新表，attempt 就可能越界 panic。
+	backoff := loadDyMediaRetryBackoff()
+	if attempt >= len(backoff) {
 		return false
 	}
 	select {
-	case <-time.After(dyMediaRetryBackoff[attempt]):
+	case <-time.After(backoff[attempt]):
 		return true
 	case <-ctx.Done():
 		return false
@@ -127,11 +164,9 @@ var (
 	dyMediaStoreFn = channelMediaPersist
 )
 
-// dyAPIBaseOverride 只给用例用：把两条腿指向假平台。生产恒为空。
-var dyAPIBaseOverride string
-
+// douyinAPIBase 本次取址用的平台域名根。读 dyAPIBaseOverride 收在 dySeamMu 下（见其声明处）。
 func douyinAPIBase() string {
-	if s := strings.TrimSpace(dyAPIBaseOverride); s != "" {
+	if s := strings.TrimSpace(loadDyAPIBaseOverride()); s != "" {
 		return strings.TrimRight(s, "/")
 	}
 	return douyinOfficialAPIBase

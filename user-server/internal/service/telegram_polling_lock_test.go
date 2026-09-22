@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -37,15 +36,7 @@ func seedTelegramAccount(t *testing.T, db *gorm.DB, id uint, name, token string)
 }
 
 func withPollingLockRepo(t *testing.T, repo *repository.TelegramPollingLockRepository) {
-	prev := pollingLockRepo
-	prevOnce := pollingLockRepoOnce
-	pollingLockRepo = repo
-	*pollingLockRepoOnce = sync.Once{}
-	pollingLockRepoOnce.Do(func() { pollingLockRepo = repo })
-	t.Cleanup(func() {
-		pollingLockRepo = prev
-		pollingLockRepoOnce = prevOnce
-	})
+	t.Cleanup(resetPollingLockRepoForTest(repo))
 }
 
 // TestPollingLock_AcquireRelease 测试锁的抢占与释放基本流程
@@ -233,15 +224,7 @@ func TestPollingLock_HeartbeatLoss(t *testing.T) {
 // 传 nil 表示「用全局 pollingLockRepo」。若全局 repo 也未初始化（DB 句柄为 nil），
 // 则应返回 error 而非 panic。
 func TestPollingLock_NilDB(t *testing.T) {
-	prev := pollingLockRepo
-	prevOnce := pollingLockRepoOnce
-	defer func() {
-		pollingLockRepo = prev
-		pollingLockRepoOnce = prevOnce
-	}()
-	pollingLockRepo = repository.NewTelegramPollingLockRepositoryWithDB(nil)
-	*pollingLockRepoOnce = sync.Once{}
-	pollingLockRepoOnce.Do(func() { pollingLockRepo = repository.NewTelegramPollingLockRepositoryWithDB(nil) })
+	defer resetPollingLockRepoForTest(repository.NewTelegramPollingLockRepositoryWithDB(nil))()
 
 	acquired, _, _, err := TryAcquirePollingLock(context.Background(), nil, 999)
 	if err == nil {

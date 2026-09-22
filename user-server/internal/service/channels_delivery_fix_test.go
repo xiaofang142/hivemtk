@@ -56,9 +56,9 @@ func feishuEncryptForTest(encKey, plain string) (string, error) {
 
 func allowAnyDingtalkHostForTest(t *testing.T) {
 	t.Helper()
-	orig := dingtalkWebhookHostAllowed
-	dingtalkWebhookHostAllowed = func(u *url.URL) bool { return u != nil }
-	t.Cleanup(func() { dingtalkWebhookHostAllowed = orig })
+	orig := loadDingtalkWebhookHostAllowed()
+	storeDingtalkWebhookHostAllowed(func(u *url.URL) bool { return u != nil })
+	t.Cleanup(func() { storeDingtalkWebhookHostAllowed(orig) })
 }
 
 func TestSendOutbound_DingTalk_UsesSessionWebhook(t *testing.T) {

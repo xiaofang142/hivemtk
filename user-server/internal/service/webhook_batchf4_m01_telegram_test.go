@@ -355,9 +355,9 @@ func TestM01_TelegramMissingTokenSkipsPersist(t *testing.T) {
 func TestM01_TelegramOversizedMediaSkippedBeforeDownload(t *testing.T) {
 	ws, db := f4TGSetup(t, "777:tok")
 	upd := time.Now().UnixNano() % 1e9
-	prevLimit := tgMaxMediaBytes
-	t.Cleanup(func() { tgMaxMediaBytes = prevLimit })
-	tgMaxMediaBytes = 100
+	prevLimit := loadTGMaxMediaBytes()
+	t.Cleanup(func() { storeTGMaxMediaBytes(prevLimit) })
+	storeTGMaxMediaBytes(100)
 	var called atomic.Int32
 	prevFetch, prevStore := tgMediaFetchFn, tgMediaStoreFn
 	t.Cleanup(func() { tgMediaFetchFn, tgMediaStoreFn = prevFetch, prevStore })
@@ -389,10 +389,10 @@ func TestM01_TelegramOversizedMediaSkippedBeforeDownload(t *testing.T) {
 // f4TGOpenLimit 压低下载上限（真实链路用例用，配合小夹具）。
 func f4TGOpenLimit(t *testing.T, limit int64) {
 	t.Helper()
-	prev := tgMaxMediaBytes
-	t.Cleanup(func() { tgMaxMediaBytes = prev })
+	prev := loadTGMaxMediaBytes()
+	t.Cleanup(func() { storeTGMaxMediaBytes(prev) })
 	if limit > 0 {
-		tgMaxMediaBytes = limit
+		storeTGMaxMediaBytes(limit)
 	}
 }
 
@@ -425,9 +425,9 @@ func f4TGAPIStub(t *testing.T, payload string, declaredSize int64, dlStatus int)
 		}
 	}))
 	t.Cleanup(srv.Close)
-	prevBase := tgAPIBaseOverride
-	t.Cleanup(func() { tgAPIBaseOverride = prevBase })
-	tgAPIBaseOverride = srv.URL
+	prevBase := loadTGAPIBase()
+	t.Cleanup(func() { storeTGAPIBase(prevBase) })
+	storeTGAPIBase(srv.URL)
 	return srv.URL, paths
 }
 

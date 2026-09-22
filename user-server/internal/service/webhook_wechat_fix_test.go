@@ -53,9 +53,9 @@ func TestSendOutbound_WechatChannel_DeliversCustomerServiceMessage(t *testing.T)
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.WechatAccount{}, &model.WechatMessage{})
 	srv, getSent := newFakeWechatAPIServer(t)
 
-	origBase := wechatAPIBase
-	wechatAPIBase = srv.URL
-	t.Cleanup(func() { wechatAPIBase = origBase })
+	origBase := loadWechatAPIBase()
+	storeWechatAPIBase(srv.URL)
+	t.Cleanup(func() { storeWechatAPIBase(origBase) })
 
 	const (
 		accountID = "3"
