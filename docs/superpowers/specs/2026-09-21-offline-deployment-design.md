@@ -1724,6 +1724,15 @@ platform 用自己的闸副本 `scanned=264 / 0 hits`（从 platform 目录调 h
 只是白名单条数印 6 —— 定根跟着调用者走这件事再次自证）。
 双源交集文件数本仓 5 个、platform 4 个，与 §7.5 的清单一致。
 
+**同一棵 committed-only 树上的 A/B（把 §7.5 那句"拿自证数对账前先独立复算"正面兑现）**：
+`git clone --shared` 一份、checkout 到最终 tip `b2d62f22`，先跑修后闸得 `scanned=4262`，
+再用 `git show 6d11065f^:…` 把闸临时换回修前那版跑同一棵树得 `scanned=4267`，跑完还原并核
+`git status --porcelain` = 0 行。差 **5** = 本仓 5 个双源交集文件各被多算一次；
+独立复算同刻为 `git ls-tree -r --name-only` 4268 − 白名单 6 = **4262**，与修后自报逐位相等，
+与 CI 作业日志（同版树、GitHub runner）印的 `scanned=4262` 也逐位相等。
+CI 检出树既无未追踪文件也没有 gitignore 掉的 `.env` 真身 ⇒ 两条枚举源的并集恰好等于被追踪集合，
+这一格因此是"归一化后去重"最纯的一次核账（活树的 4330/4731 那类数只能看趋势，不能当定值引用）。
+
 **邻门当场咬了这条新腿一口（记录以免被当成"门之间不相关"）**：新腿那句 BROKEN 文案里写了
 `rc $BASE_RC→$DUAL_AFTER_RC，命中 $BASE_COUNT→$DUAL_AFTER）` —— 四个 `$VAR` 紧邻中文/全角标点，
 正是 §7.3 Task 25 收口过的那族 bash 3.2 展开隐患。`scripts/check-shell-cjk-expansion.sh` 由 2 处基线跳到 6 处、
