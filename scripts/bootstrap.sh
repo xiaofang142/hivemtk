@@ -4,7 +4,7 @@
 # user-server 一键初始化脚本 —— 固化所有手动初始化步骤，避免每次失效
 #
 # 适用场景:
-#   1. 全新部署：docker compose up -d 启动后跑一次
+#   1. 全新部署：docker compose up -d 起数据层（PG/Redis）+ 宿主机起 user-server 后跑一次
 #   2. 容器重建/数据卷保留：保持数据一致
 #   3. 升级 seed：重新跑可幂等更新种子数据
 #
@@ -12,12 +12,12 @@
 #   bash scripts/bootstrap.sh
 #
 # 步骤:
-#   1. 等待 user-server 容器 healthy（/health 200）
+#   1. 等待 user-server 健康（/health 200）
 #   2. 跑 schema 修复迁移（027 user_blacklist + 028 customer_tags）
 #   3. 创建默认 admin 账号与演示坐席（实际由步骤 4 的 Go seed 写入，口令取 SEED_PASSWORD）
 #   4. 跑 Go seed 全模块（10 模块，含 11 智能体 + 10 绑定）
 #   5. 跑 Python 知识库种子（hivemtk 产品 hivemtk-platform-cs）
-#   6. 写 install.lock 标记已初始化
+#   6. 核对安装态：install.lock 已 initialized 才算装完，否则本脚本失败退出
 #
 # 环境变量:
 #   （常规做法：set -a && . ./.env && set +a 后执行本脚本）
@@ -45,6 +45,12 @@
 #                      两者取其一即可：SEED_PASSWORD 优先，未设时继承 ADMIN_PASSWORD，
 #                      Go seed 与步骤 7 的登录校验用同一个值（历史上 ADMIN_PASSWORD
 #                      只影响登录校验、不影响 seed 实际写入口令，设了也白设）。
+#   INSTALL_LOCK_PATH  可选，本脚本不设置它，但它决定步骤 6 核对的是哪个文件：
+#                      未设时 user-server 把 install.lock 写在**自己的进程 CWD**（./install.lock），
+#                      从哪个目录启动就写在哪个目录，换目录重启＝读不到旧锁、铸一枚新 install_id，
+#                      平台侧（PLATFORM_ENABLED=true）会把它记成一个新装商户。
+#                      生产请设成绝对路径并随实例持久化，详见 .env-example 与
+#                      docs/operations/MERCHANT_INITIALIZATION_FLOW.md §四「落盘位置」。
 # =============================================================================
 
 set -e
@@ -168,21 +174,22 @@ for py in expand_knowledge_base.py expand_knowledge_base_batch2.py expand_knowle
     fi
 done
 
-# 6) 写 install.lock（容器内 /app/data/install.lock）
+# 6) 核对安装态（install.lock 是否已 initialized）
+# 唯一真相源是 user-server 自己的 init-status：它读的就是这个进程实际生效的那份 install.lock，
+# 并把"库里有超管但锁不在"的情况就地回填（见 MERCHANT_INITIALIZATION_FLOW.md §三）。
+# 这里过去还查过 `docker exec mtk-user-server test -f /app/data/install.lock`——那个容器从来不存在
+# （user-server/Dockerfile 已随 94415060 删除，compose 里只有 PG/Redis），所以那条分支恒为假、
+# 只会打一句 warn 让脚本继续报"✅ 完成"。现在按安装态本身判，没装成就是失败。
 log "检查 install.lock..."
 INIT_STATUS=$(curl -fsS "http://127.0.0.1:${USER_SERVER_PORT}/api/system/init-status" 2>/dev/null || echo "{}")
 if echo "$INIT_STATUS" | grep -q '"initialized":true'; then
-    log "  install.lock 已存在，跳过"
+    log "  install.lock 已就绪（initialized=true）"
 else
-    log "  写入 install.lock..."
-    # 通过 admin 创建接口隐式触发 install.lock 写入（auth.go InitAdmin 会调 MarkAdminInitialized）。
-    # 由于 admin 已在步骤 3 创建时写过，理论上这里 is_primary 已为 true。
-    # 若仍为 false，则手动 docker exec 写一份。
-    if docker exec mtk-user-server test -f /app/data/install.lock 2>/dev/null; then
-        log "  install.lock 在容器内已存在"
-    else
-        warn "  install.lock 仍未生成，请检查 admin 写入逻辑"
-    fi
+    err "  安装态未就绪：/api/system/init-status 返回 ${INIT_STATUS}"
+    err "  可能原因：① 步骤 4 的 seed 没建出 role=admin 的超管；② user-server 进程写不了它的 install.lock。"
+    err "  install.lock 默认写在 user-server 的进程 CWD（./install.lock）；生产请显式设 INSTALL_LOCK_PATH"
+    err "  为绝对路径并随实例持久化，否则换目录启动会铸出新 install_id、平台侧按新装实例记账。"
+    exit 1
 fi
 
 # 7) 最终验证

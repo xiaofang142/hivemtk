@@ -4622,3 +4622,64 @@ master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest cove
   为什么不代改：`bill_migration_test.go` 正被并行泳道改着（` M`），
   `quote_migration_test.go`/`payment_migration_test.go` 属其 T-P7-01/02 在飞的同一批
   ⇒ 按"只管自己改动"的泳道边界移交，配方连红因一起写进本条，接收方照抄即可。
+
+- CI 回读（run `35784359694`，作业日志直读）：**core 作业 `DATA RACE` 计数 0**（本卡目标闭，
+  R35 那一跑多出来的那朵并发红正是此处），唯一 `--- FAIL` 是
+  `TestExternalOrderRepository_GetByOrderID/get_non-existing_order`（泳道既有红，修法在其未提交的
+  `integration_test.go`）；service 作业 `DATA RACE` 也是 0、唯一红仍是 `TestD12_NoNewLegacyKVDirectQuery`；
+  `Coverage (user-server)` 随失败作业一起红，`ESLint (user-web)` 两条仍是那两个既有 error。
+  ⇒ 本笔未引入任何新红，且把上一跑那朵 race 红判成了"确有病因、已对症"。
+- 顺带（不代改，见上面结转那条）：`-count=2` 一族红对 CI 永久隐形，因为 CI 固定 `-count=1`。
+
+## R36（2026-09-23 第五十一轮：install.lock 的落盘位置只有两条，文档和 bootstrap 却都写了不存在的第三条）
+
+- 缺陷（两处"文档放行、脚本拦人"的镜像）：
+  ① `docs/operations/MERCHANT_INITIALIZATION_FLOW.md:95` 写"先读 `/app/data/install.lock`"、
+  `:235` 写"在 `/app/data/` 命名卷中，重装不丢"，而同仓 `user-server/docs/dev/DEVELOPMENT.md` §9.2
+  已明说 `user-server/Dockerfile` 随 `94415060`（2026-08-17）删除、根 `docker-compose.yml` 只有
+  `mtk-postgres`/`mtk-redis` —— 没有任何挂载点叫 `/app/data`。代码侧真相只有两条：
+  `INSTALL_LOCK_PATH` > `./install.lock`，后者相对的是**进程 CWD**。
+  ② `scripts/bootstrap.sh:181` 步骤 6 用 `docker exec mtk-user-server test -f /app/data/install.lock`
+  兜底：那个容器不存在 ⇒ 分支恒假 ⇒ 脚本"没装成"也只是 `warn` 一句、照样往下跑到
+  `✅ Bootstrap 完成`（缺产物退绿＝SKIP 当 PASS）。
+- 取证（全部现测，不是推断）：
+  `find . -name install.lock` 在本机实测同时存在 **3 份**且 `install_id` 各不相同
+  （仓库根、`user-server/`、`user-server/internal/controller/`）；对 8204 上跑着的那台
+  `curl /api/system/init-status` 回读到的号与 `user-server/install.lock` 那份一致
+  ⇒ 运行实例的锁就是"它的 CWD 那一份"，换目录启动过的两次各自铸了自己的新号。
+  三份都被 `.gitignore:187` 的 `install.lock` 忽略 ⇒ 在版本控制里完全隐形。
+  代价面在平台侧：`UpsertMerchantByInstallID` 只用 `GetByInstallID(install_id)` 判重
+  （`hivemtk-platform/platform-server/internal/service/merchant_domain_service.go:347`），
+  `device_fingerprint` 仅作为 `device_info` 字段存下、不参与判重 ⇒ 换号必然多出一行商户、
+  旧商户的活跃/版本历史接不上。全仓 grep 确认没有任何部署面设置 `INSTALL_LOCK_PATH`
+  （只有代码读取点、测试夹具和本轮新加的文档面）。
+- 两条否证（写下来免得下次又有人改回去）：
+  ① **不把默认值换成 exe 相对／`HIVEMTK_RUNTIME_DIR`**：那会把存量实例的锁原地留下、
+  下次启动正好铸新号——正是要防的事；且 `go run ./cmd/api` 与 air 的 CWD 就是 `user-server/`，
+  改了反而制造新的不一致。② **不把 `install_id` 收进数据库**：它是"这台主机上的一次安装"的身份，
+  同机多实例共一套库时必须各不相同，进库会把它们并成一个商户。
+  ⇒ 修法＝文档说真话 + 删 bootstrap 死分支并按真值判红 + 把键补进运维看得见的面 + 让重铸可观测。
+- 产码：`user-server/internal/system/install/install.go` 抽出私有
+  `markAdminInitialized(username) (minted bool, err error)`（公开签名不变，三个外部调用方零改动；
+  `minted` 只能在 `Save` 之前由"手里那份有没有 InstallID"判定，因为补铸发生在 `Save` 内部），
+  `Status.Reminted` 带 `json:"-"` 只走进程内，`internal/platform/heartbeat_sender.go` 在
+  `st.Reminted` 时打一条 WARN（一次重铸只响一次：新号已落盘，下次读走正常路径）。
+  之所以是返回值而不是日志：本包没有任何日志面，且"重铸"这件事的可观测性归调用方决定。
+- 配置面：`.env-example` 的「宿主机路径」段加 `INSTALL_LOCK_PATH`（含"默认是进程 CWD 相对的"
+  这句后果），同时把 `scripts/env-coverage.baseline:43` 那条"待补文档"摘掉 —— 不摘的话门会按
+  判据 2 反过来报 STALE 红。
+- 红绿证据：RED＝`st.Reminted undefined` 6 处编译失败（`/tmp/r36_red.log`，rc=1）；
+  GREEN＝`-count=2 -race` 36 条 PASS、0 条 `DATA RACE`（`/tmp/r36_green.log`）。
+  变异两格都有牙：A 把 `return !hadID, nil` 改成 `!hadID && false` ⇒ 2 FAIL，红因正是新写的
+  两句断言（`/tmp/r36_mutA.log`）；B 把 `json:"-"` 换成 `json:"reminted"` ⇒
+  `TestStatusRemintedNeverSerialized` 红并直接印出漏字段的那行响应体（`/tmp/r36_mutB.log`）。
+  两格还原后 md5 均为 `3947e85d1eec0be15014b9f033a2aa3d`。
+  自曝两格取证坑（都是"0 个 PASS"却成因完全不同）：A 的第一版写成 `return false, nil`，
+  `hadID` 随即 declared-and-not-used ⇒ 二进制根本没编译，看到的是编译红不是判据红；
+  第二版又因为 `cd ../../../..` 从 `internal/system/install` 退到了仓库根、
+  拿仓库根去跑 `go test ./internal/...` ⇒ 路径不存在，仍是一副"零 PASS"的样子。
+  见到 `PASS=0` 先问"这条命令跑在哪个目录、编译过没"，别急着当"用例不敏感"。
+- bootstrap 那一步的两格：`bash -n scripts/bootstrap.sh` rc=0；把新判据原样对活服务 8204 跑
+  ⇒ 绿（`install.lock 已就绪`），对 59999 死端口跑同一条 ⇒ 红（`INIT_STATUS={}` 走 err 分支）。
+  旧写法在这两种情形下输出的都是同一句 `warn` 且脚本继续往下跑到底。
+

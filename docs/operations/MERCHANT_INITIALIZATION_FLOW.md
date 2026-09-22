@@ -92,7 +92,8 @@ docker compose up -d user-server
 （`cmd/api/main.go` 里的 `install.SetAdminProbe(...)`）。**启动不写 install.lock，也不铸 `install_id`。**
 
 1. 之后每次判状态（`GetStatus`，InitGuard 每个请求都会走一次）先读
-   `/app/data/install.lock`（路径优先级：`INSTALL_LOCK_PATH` 环境变量 > `./install.lock`），带 2 秒内存缓存，缓存按生效路径记账
+   `install.lock`（路径优先级：`INSTALL_LOCK_PATH` 环境变量 > `./install.lock`；默认值相对的是
+   **进程 CWD**，所以它落在哪取决于从哪里启动，详见 §四「落盘位置」），带 2 秒内存缓存，缓存按生效路径记账
 2. **文件不存在 / 读不懂**：查库
    - 库里**有**超管 → 判 `INITIALIZED`，并把这份 lock 回填落盘（能捞出来的键原样保住，其余重建）
    - 库里**没有**超管 → 判 `NOT_INSTALLED`，磁盘上仍然什么都没有
@@ -204,6 +205,38 @@ http://<your-server-ip>:8204/login
 
 > **不包含**：`license_key` / `expires_at` / `company` / `contact_email` / `signature` 等授权相关字段（本版无授权流程，install.lock 里从未有这些键）。
 
+### 落盘位置：只有两条，且默认那条是 CWD 相对的
+
+`install.GetInstallLockPath()` 的优先级就两条：`INSTALL_LOCK_PATH` 环境变量 > `./install.lock`。
+
+**没有 `/app/data/install.lock` 这一档。** 那是 `user-server/Dockerfile` 时代的形状，该文件已随
+`94415060`「重构宿主机部署」（2026-08-17）删除（见 `user-server/docs/dev/DEVELOPMENT.md` §9.2）；
+今天的根 `docker-compose.yml` 只提供 `mtk-postgres` / `mtk-redis` 两个容器，user-server 跑在宿主机，
+没有任何挂载点叫 `/app/data`。
+
+因为默认值 `./install.lock` 相对的是**进程 CWD**，它实际落在哪里完全由启动位置决定：
+
+| 启动方式 | 锁文件实际位置 |
+|---|---|
+| `cd user-server && ./bin/user-server`、`make dev`（air 工作目录 `user-server/`） | `user-server/install.lock` |
+| 同一二进制在仓库根启动 | 仓库根 `./install.lock` |
+
+这不是假想风险。本仓开发机 `find . -name install.lock` 实测同时存在三份、`install_id` 各不相同
+（仓库根 / `user-server/` / `user-server/internal/controller/`），而 8204 上跑着的那台经
+`GET /api/system/init-status` 回读的正是 `user-server/` 那份对应的号——换 CWD 启动过的那两次，
+各自铸了自己的新号。三份文件都被 `.gitignore` 的 `install.lock` 条目忽略，所以在版本控制里完全隐形。
+
+**结论：生产部署必须显式把 `INSTALL_LOCK_PATH` 设成绝对路径**（例：`/var/lib/hivemtk/install.lock`），
+并确保该目录随实例持久化（放在临时卷里＝每次发布换一次身份）。理由：
+
+- `install_id` 是这台实例在平台侧的唯一身份。平台端 `UpsertMerchantByInstallID` 只按
+  `GetByInstallID(install_id)` 判重，`device_fingerprint` 仅作为字段存下、不参与判重，
+  所以换号必然多出一个新商户行，旧商户的活跃度与版本历史再也接不上。
+- 新进程读不到锁时，`GetStatus` 仍会按上面第 2 条用库里超管回填并**铸新号**，
+  本地业务一切正常、不报任何错——唯一的声音是心跳侧那条 WARN（见 §五）。
+- 平台端关闭（默认离线形态）时换号只影响本机统计，不影响任何功能；上面这条代价仅在
+  `PLATFORM_ENABLED=true` 且平台端在用时才成立。
+
 ---
 
 ## 五、平台端心跳上报（可选，默认关闭）
@@ -223,6 +256,10 @@ http://<your-server-ip>:8204/login
 - 心跳取身份走 `install.GetStatus()` 而不是裸读文件：`install.lock` 坏着时会先自愈再上报。
   早先的写法是 `install.Load()` 一旦解析失败就 `return`，那台实例从此一帧心跳都不发且不留日志
   （`install_id` 为空的"未初始化"仍然不发，这是设计意图）
+- 身份是**刚铸的**（`Status.Reminted`）时，上报前先打一条 WARN：磁盘上没有可用身份而库里已经装着
+  超管，说明这台机器的锁丢了（最常见就是换 CWD 启动，见 §四），平台侧会把它记成一个新装商户。
+  这条告警一次重铸只响一次（新号已落盘，下一次读走的就是正常路径）；`Reminted` 带 `json:"-"`，
+  只在进程内交给告警腿，`/api/system/init-status` 与心跳请求体的字段集都不因它变化。
 
 ---
 
@@ -231,8 +268,11 @@ http://<your-server-ip>:8204/login
 - `install.lock` 不含敏感凭证（无 HMAC 签名、无授权码）
 - 超管密码使用 bcrypt 哈希存储（cost=10）
 - JWT 鉴权：登录后下发 token，后续 API 携带 `Authorization: Bearer <token>`
-- 迁移机器后 `install.lock` 可直接复制（无需重新初始化，但建议重新生成 `install_id`）
-- 卸载软件会保留 `install.lock`（在 `/app/data/` 命名卷中），重装不丢
+- 迁移机器/换启动目录时，把 `install.lock` 一起搬走并把 `INSTALL_LOCK_PATH` 指向它，就仍是同一个
+  安装身份（库里有没有超管都判 `INITIALIZED`，见 §三）。**别顺手重铸 `install_id`**：平台侧纯按它
+  记商户，换号＝旧商户的活跃与版本历史断掉（`device_fingerprint` 不参与判重）
+- 它只是一个普通文件，位置见 §四：没有哪个命名卷、哪次卸载会替你留着它。文件丢了而库里有超管，
+  服务照样正常起（走库兜底回填），代价就是身份换了一枚、心跳侧响一条 WARN
 
 ---
 

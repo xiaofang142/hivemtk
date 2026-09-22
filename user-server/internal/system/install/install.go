@@ -180,15 +180,31 @@ func salvage(re *regexp.Regexp, body string) string {
 	return m[1]
 }
 
-// MarkAdminInitialized 标记"超管已创建"（开源版：创建超管即视为初始化完成）
-func MarkAdminInitialized(username string) error {
+// markAdminInitialized 落盘"超管已创建"，并告知本次是否铸了一枚全新的 install_id。
+//
+// minted 为 true 且调用方是"库里已有超管"那条回填腿，就意味着这台机器的身份换了：
+// 平台侧的商户行纯按 install_id 建，重铸＝一个全新商户、旧历史再也接不上。
+// 之所以单独立一个返回值而不是让调用方自己比 install_id：install_id 是在 Save 里
+// 就地补铸的，调用方手里那份 lr 在 Save 之前根本没有这个信息。
+func markAdminInitialized(username string) (minted bool, err error) {
 	lr := loadForWrite()
 	if lr == nil {
 		lr = &Lock{}
 	}
+	hadID := lr.InstallID != ""
 	lr.AdminUsername = strings.TrimSpace(username)
 	lr.Initialized = true
-	return Save(lr)
+	if err := Save(lr); err != nil {
+		return false, err
+	}
+	// Save 成功后 InstallID 必非空（空值会在其中补铸），所以 hadID 就是唯一的判据。
+	return !hadID, nil
+}
+
+// MarkAdminInitialized 标记"超管已创建"（开源版：创建超管即视为初始化完成）
+func MarkAdminInitialized(username string) error {
+	_, err := markAdminInitialized(username)
+	return err
 }
 
 // MarkAdminInitializedStandalone 兼容旧调用方：标记 install.lock 已初始化
@@ -212,6 +228,11 @@ type Status struct {
 	HasAdmin    bool   `json:"has_admin"`
 	InstallID   string `json:"install_id,omitempty"`
 	Version     string `json:"version,omitempty"`
+	// Reminted 表示这次响应里的 install_id 是刚铸的：磁盘上原先没有可用身份，
+	// 而库里已经装着超管账号——即这台机器的安装身份丢了又重建。
+	// 不参与序列化（`/api/system/init-status` 是公开可读接口，字段集不随内部告警改动），
+	// 只给进程内的告警腿用（见 internal/platform 的心跳上报）。
+	Reminted bool `json:"-"`
 }
 
 // GetStatus 返回当前初始化状态
@@ -222,8 +243,12 @@ type Status struct {
 //     仍判定为 INITIALIZED，并回填 install.lock，使后续请求直接走文件缓存。
 //     这样即便 install.lock 因卷异常/误删/写到一半被杀而丢失或坏掉，
 //     只要库中有超管就不会要求重新初始化，也不会每请求都回查一次库。
+//
+// 回填有代价：旧身份没保下来时本次会铸一枚新 install_id（Status.Reminted），
+// 平台侧会把它记成一个新装商户，所以这条必须能被调用方看见。
 func GetStatus() *Status {
 	lr, err := Load()
+	minted := false
 	if err != nil || lr == nil {
 		name := probeDBAdmin()
 		if name == "" {
@@ -235,7 +260,8 @@ func GetStatus() *Status {
 		}
 		// 回填成功就重新读一次：install_id 与 version 得跟着这次响应走，
 		// 否则前端与心跳拿到的是空身份，而磁盘上明明已经有一份好的了。
-		if MarkAdminInitialized(name) == nil {
+		if m, merr := markAdminInitialized(name); merr == nil {
+			minted = m
 			if healed, healErr := Load(); healErr == nil && healed != nil {
 				lr = healed
 			}
@@ -248,13 +274,16 @@ func GetStatus() *Status {
 		InstallID: lr.InstallID,
 		Version:   lr.Version,
 		HasAdmin:  lr.AdminUsername != "",
+		Reminted:  minted,
 	}
 	if lr.Initialized && lr.AdminUsername != "" {
 		st.State = "INITIALIZED"
 		st.Initialized = true
 	} else if lr.AdminUsername != "" {
 		if name := probeDBAdmin(); name != "" {
-			_ = MarkAdminInitialized(name)
+			if m, merr := markAdminInitialized(name); merr == nil {
+				st.Reminted = m
+			}
 			st.State = "INITIALIZED"
 			st.Initialized = true
 			st.HasAdmin = true
@@ -263,7 +292,9 @@ func GetStatus() *Status {
 		}
 	} else {
 		if name := probeDBAdmin(); name != "" {
-			_ = MarkAdminInitialized(name)
+			if m, merr := markAdminInitialized(name); merr == nil {
+				st.Reminted = m
+			}
 			st.State = "INITIALIZED"
 			st.Initialized = true
 			st.HasAdmin = true

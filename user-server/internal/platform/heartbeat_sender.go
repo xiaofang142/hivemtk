@@ -77,6 +77,16 @@ func sendHeartbeat() {
 	if st.InstallID == "" {
 		return
 	}
+	if st.Reminted {
+		// 磁盘上没有可用身份、库里却装着超管：这台机器的 install.lock 丢了，
+		// 刚才那次回填铸的是全新 install_id。平台侧纯按 install_id 记商户，
+		// 于是同一台机器会多出一个新装商户、旧历史再也接不上——必须说出来。
+		// 最常见成因是换目录启动：默认路径 ./install.lock 相对的是进程 CWD，
+		// 生产应显式设 INSTALL_LOCK_PATH 为绝对路径（见 .env-example）。
+		logger.Warnf("install.lock 缺失，本次回填铸了新安装身份 install_id=%s；"+
+			"平台侧会把它记成一个新装商户。若这是同一台机器在换启动目录后重启，"+
+			"请把原 install.lock 找回并把 INSTALL_LOCK_PATH 指向它", st.InstallID)
+	}
 
 	hostInfo, _ := json.Marshal(map[string]any{
 		"os":            runtime.GOOS,

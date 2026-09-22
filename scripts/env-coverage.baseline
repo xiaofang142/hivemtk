@@ -40,7 +40,6 @@ HEALTH_EMBEDDING_CRITICAL	待补文档（第三十五轮登记为债）；读取
 HIVEMTK_SECRETS_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
 HTTPS_PROXY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/server.go
 HTTP_PROXY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/server.go
-INSTALL_LOCK_PATH	待补文档（第三十五轮登记为债）；读取点 user-server/internal/system/install/install.go
 IS_TEST_MODE	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
 LLM_DEBUG_DUMP_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/llm/llm.go
 MERCHANT_STATE_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/internal/platform/sync.go

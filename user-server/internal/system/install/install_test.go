@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -207,6 +208,87 @@ func TestGetStatusFreshInstallWritesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("NOT_INSTALLED 这条路上不该有 install.lock：%v", err)
+	}
+	resetMemo()
+	if st := GetStatus(); st.Reminted {
+		t.Error("从来没装过 ≠ 身份丢了：首装判读不许报重铸")
+	}
+}
+
+// install.lock 整个没了而库里明明有超管 ⇒ 回填必然铸一枚全新的 install_id，
+// 这台实例在平台侧就变成了一个新装商户（商户行按 install_id 建，历史就此断开）。
+// 最常见成因是换目录启动：默认路径 ./install.lock 是进程 CWD 相对的，
+// 本机就实测同时存在过三份 install_id 各不相同的锁文件。
+// 这件事过去完全无声，所以状态里要带着"这次身份是重铸的"出门，让告警腿有得说。
+func TestGetStatusFlagsRemintWhenLockIsGone(t *testing.T) {
+	useLockFile(t)
+	SetAdminProbe(func(context.Context) (string, error) { return "admin", nil })
+
+	st := GetStatus()
+	if st.State != "INITIALIZED" {
+		t.Fatalf("库里有超管时缺失的 lock 要能回填成 INITIALIZED，实得 %+v", st)
+	}
+	if !st.Reminted {
+		t.Error("磁盘上没有身份而库里已安装＝身份丢了，必须标出来给告警腿用")
+	}
+
+	// 铸完就有文件了：下一次读不该再报重铸，否则心跳每 3 分钟刷一条同义告警。
+	resetMemo()
+	if st2 := GetStatus(); st2.Reminted {
+		t.Errorf("新身份已经落盘，下一次不该再判重铸： %+v", st2)
+	}
+}
+
+// 文件坏着但 install_id 还捞得出来：身份没丢，不许报重铸。
+func TestGetStatusKeepsSalvagedIdentityUnflagged(t *testing.T) {
+	path := useLockFile(t)
+	SetAdminProbe(func(context.Context) (string, error) { return "admin", nil })
+	writeRaw(t, path, `{"install_id":"ins-33333333333333333333333333333333","install_time":"2026-01-01T00:00:00Z","admin_username":"ad`)
+
+	st := GetStatus()
+	if st.InstallID != "ins-33333333333333333333333333333333" {
+		t.Fatalf("还能捞出来的身份必须保着，实得 %q", st.InstallID)
+	}
+	if st.Reminted {
+		t.Errorf("原身份被保下来时不该报重铸： %+v", st)
+	}
+}
+
+// 坏到连 install_id 都捞不出来，和文件整个没了是同一件事：必须报重铸。
+func TestGetStatusFlagsRemintWhenIdentityUnreadable(t *testing.T) {
+	path := useLockFile(t)
+	SetAdminProbe(func(context.Context) (string, error) { return "ops", nil })
+	writeRaw(t, path, "\x00\x01not json at all")
+
+	if st := GetStatus(); !st.Reminted {
+		t.Errorf("旧身份救不回来就是换了身份，不许不报： %+v", st)
+	}
+}
+
+// Reminted 只给进程内的告警腿看，不许混进任何对外响应：
+// 前端与平台侧读到的字段集必须保持原样（这是一份公开可读的接口）。
+func TestStatusRemintedNeverSerialized(t *testing.T) {
+	data, err := json.Marshal(&Status{State: "INITIALIZED", InstallID: "ins-x", Reminted: true})
+	if err != nil {
+		t.Fatalf("序列化失败：%v", err)
+	}
+	body := string(data)
+	if strings.Contains(body, "eminted") {
+		t.Errorf("重铸标记漏进了对外响应：%s", body)
+	}
+	var back map[string]any
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("响应体解不开：%v", err)
+	}
+	keys := make([]string, 0, len(back))
+	for k := range back {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range []string{"state", "initialized", "has_admin", "install_id"} {
+		if _, ok := back[k]; !ok {
+			t.Errorf("对外字段 %q 不该消失，实得 keys=%v", k, keys)
+		}
 	}
 }
 
