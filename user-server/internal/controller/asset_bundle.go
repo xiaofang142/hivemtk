@@ -79,6 +79,10 @@ func (c *AssetBundleController) Register(rg *gin.RouterGroup) {
 
 // SubmitToPlatform 将本地资产包提交平台审核上架（开发者上架链路）
 func (c *AssetBundleController) SubmitToPlatform(ctx *gin.Context) {
+	if rejectPlatformDisabled(ctx) {
+		return
+	}
+
 	assetID := ctx.Param("id")
 	if assetID == "" {
 		response.Error(ctx, http.StatusBadRequest, "invalid asset id")

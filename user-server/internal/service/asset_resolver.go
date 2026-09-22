@@ -6,13 +6,20 @@ import (
 
 	"gorm.io/gorm"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
 )
 
 // ReportUsageBestEffort best-effort 异步上报资产使用到平台（闭环使用统计），
 // 失败静默忽略，绝不阻塞/影响运行时主流程。
+//
+// 平台集成关闭时立即返回：调用方是每次资产命中的运行热路径，
+// 关态下连协程和 10s 超时上下文都不该起。
 func ReportUsageBestEffort(assetID string) {
+	if !config.PlatformEnabled() {
+		return
+	}
 	defer func() { _ = recover() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
