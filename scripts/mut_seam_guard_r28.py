@@ -16,11 +16,18 @@
      窄格证"不会假红"，全摘格证"没有漏网的腿"——两界合起来才是完整证据。
 
 为什么竞争判据认"腿名 + 文件名"而不认全局变量名（第一版在这里判错过一次，记下来免得再犯）：
-`-race` 报告印的是**地址 + 调用栈帧（函数名 + file:line）**，从不印被竞争的**变量名**；而摘锁后
-`return tgMaxMediaBytes` 这种一扇门会被**内联**，栈里连函数名都没了（实测窄格 2 条块里读方只到
-`seam_guard_race_test.go:101`）。所以"栈里必须出现全局名/getter 名"是不可满足的判据 —— 会把好证据
-误判成 SURVIVED。可靠的是测试名（栈里必现，因为它就是运行中的那条用例）与**没被内联的那一侧帧**
-所在的生产文件名。同理，竞争块条数是 2 而不是 1：写vs写、读vs写各算一条，判据只认"块都归本腿"。
+`-race` 报告印的是**地址 + 调用栈帧（函数名 + file:line）**，从不印被竞争的**变量名**；摘锁后
+`return tgMaxMediaBytes` 这种一扇门会被**内联**掉，栈里连函数名都没了。所以"栈里必须出现全局名"
+是不可满足的判据 —— 会把好证据误判成 SURVIVED。可靠的是测试名（栈里必现，因为它就是运行中的那条用例）
+与**没被内联的那一侧帧**所在的生产文件名。同理，竞争块条数是 2 而不是 1：写vs写、读vs写各算一条，
+判据只认"块都归本腿"。
+
+第二版丢过一次文件名锚点，教训记在这里：`734118d9` 把只被测试调用的 setter 移进
+`seam_guard_setters_test.go`（CI 的 golangci-lint 判它们死代码）之后，窄格的两条块里
+**一条产码帧都不剩**（写侧只剩 `storeXxx()` @ 测试文件，读侧被内联 ⇒ B-narrow/C-all 双双 SURVIVED，
+`r28_seam_battery_20260922-232846`）。当时最容易的"修法"是把期望改成"点到 setter 所在文件"——
+那是把判据改松去迁就变异，不算证据。真正的修法是把证据找回来：跑腿时对**被测包**关内联
+（见 `race_legs`），读侧那一帧就回到注册表 `file` 列那个产码文件里，锚点比原来更强（两侧都在）。
 
 为什么不在这里做"逐格 -race"：那要 16 趟整包 `-race` 编译，第一版真这么跑，到第 6 格
 （`r28_seam_battery_20260922-211058/06-unlocked-dingtalkOpenAPIBase-gate.log` 是 0 字节的那一份）
@@ -35,10 +42,14 @@
   - 日志整份落盘，结果行不过 tail/head（管道会吃掉 rc 与排在最前的红因）。
 
 族 R（注册表面）按"门文档串里承诺了几条判据，就几格"配：缺表 rc=2、空表 rc=2、列数不对、
-字段全空白、重复登记、指向不存在的文件、指向不存在的 accessor、锁外直读（同文件）、锁外直读（跨包）
-⇒ 9 格，全部不需编译。第一版只写了 4 格，其中"registry-malformed"实际注入的是一条**格式正确但文件不存在**
+字段全空白、重复登记、指向不存在的文件、指向不存在的 accessor、setter 前缀指向不存在的文件、
+setter 前缀文件里没这个函数、`文件:函数名` 形状坏、锁外直读（同文件）、锁外直读（跨包）
+⇒ 12 格，全部不需编译。第一版只写了 4 格，其中"registry-malformed"实际注入的是一条**格式正确但文件不存在**
 的行（5 列齐全，只是 `nope.go` 不在树里）⇒ 它证的是"unknown-file"那条判据，而"格式坏"那条**一直没有格**。
 名字与它所证的判据不符，比没格更坏：前者会让人以为已经证过了。
+setter 前缀那三格是 `734118d9` 之后补的：CI 的 golangci-lint（`.golangci.yml` 是 `run.tests: false`
++ `unused`）把 14 扇只被测试调用的 setter 判成生产面上的死代码 ⇒ 写侧挪进
+`seam_guard_setters_test.go`，注册表的 setter 列因此多了 `文件:` 前缀这副形状，前缀每开一条新分支就要有自己的格。
 
 用法：
     python3 scripts/mut_seam_guard_r28.py            # 全族（约 3 趟整包 -race 编译）
@@ -97,13 +108,11 @@ def md5(path: Path) -> str:
 
 
 def build_entries() -> list[dict[str, str]]:
-    entries = []
-    for raw in REGISTRY.read_text(encoding="utf-8").splitlines():
-        line = raw.rstrip()
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        g, rel, lock, getter, setter = (p.strip() for p in line.split("\t"))
-        entries.append({"global": g, "file": rel, "lock": lock, "getter": getter, "setter": setter})
+    """注册表由门自己解析（`run.tests:false` 那套 `文件:函数名` 前缀口径不在这里抄第二遍 ——
+    两处各写一遍正是本仓犯过的"同一判据两个口径"）。"""
+    entries = gate.load_registry()
+    if isinstance(entries, int):
+        raise RuntimeError(f"注册表读不出来（门退 rc={entries}），电池不带坏注册表开刀")
     return entries
 
 
@@ -121,25 +130,37 @@ class Mutator:
         return path
 
     def unlocked(self, names: set[str]) -> dict[Path, str]:
-        """返回「把这些全局的锁摘掉」之后的 {文件: 新内容}；同名多全局共文件时叠加。"""
+        """返回「把这些全局的锁摘掉」之后的 {文件: 新内容}；同名多全局共文件时叠加。
+        getter 在全局本家文件、setter 可能登记在另一个文件（`文件:函数名` 前缀 ⇒ 那 14 扇在
+        `seam_guard_setters_test.go`），所以两扇门各自去自己的文件里摘。"""
         staged: dict[Path, list[str]] = {}
+        removed: dict[str, int] = {}
+
+        def load(rel: str) -> tuple[Path, list[str]]:
+            path = self._path(rel)
+            if path not in staged:
+                staged[path] = path.read_text(encoding="utf-8").splitlines()
+            return path, staged[path]
+
         for e in self.entries:
             if e["global"] not in names:
                 continue
-            path = self._path(e["file"])
-            src = staged.get(path)
-            if src is None:
-                src = path.read_text(encoding="utf-8").splitlines()
-                staged[path] = src
-            ranges = gate.func_ranges(src, e["getter"]) + gate.func_ranges(src, e["setter"])
-            drop = {i for a, b in ranges for i in range(a, b + 1)}
             rx = re.compile(LOCK_LINE.format(lock=re.escape(e["lock"])))
-            kept = [line for i, line in enumerate(src, 1) if not (i in drop and rx.match(line))]
-            removed = len(src) - len(kept)
-            if removed < 2:
-                raise RuntimeError(f"{e['global']}：只摘到 {removed} 行锁操作，变异形状不对")
-            e["removed"] = str(removed)
-            staged[path] = kept
+            for rel, fname in ((e["file"], e["getter"]), (e["setter_file"], e["setter"])):
+                path, src = load(rel)
+                ranges = gate.func_ranges(src, fname)
+                if not ranges:
+                    raise RuntimeError(f"{e['global']}：{fname} 不在 {rel}，变异形状不对")
+                drop = {i for a, b in ranges for i in range(a, b + 1)}
+                kept = [line for i, line in enumerate(src, 1) if not (i in drop and rx.match(line))]
+                n = len(src) - len(kept)
+                if n < 2:
+                    raise RuntimeError(f"{e['global']}：{rel} 的 {fname} 只摘到 {n} 行锁操作，变异形状不对")
+                removed[e["global"]] = removed.get(e["global"], 0) + n
+                staged[path] = kept
+        for e in self.entries:
+            if e["global"] in removed:
+                e["removed"] = str(removed[e["global"]])
         return {p: "\n".join(lines) + "\n" for p, lines in staged.items()}
 
     def apply(self, staged: dict[Path, str]) -> None:
@@ -173,7 +194,15 @@ def run(cmd: list[str], log: Path, cwd: Path, timeout: int) -> int:
 
 
 def race_legs(log: Path, pattern: str, timeout: int = 1200) -> int:
-    return run(["go", "test", "-race", "-v", "-run", pattern, "-count=1", "./internal/service/"],
+    """`-gcflags=hivemtk-user/internal/service=-l`：关掉本包内联，让竞争栈留住读侧那一帧。
+
+    摘锁后的 `return tgMaxMediaBytes` 是一扇门，默认会被内联进调用它的闭包 ⇒ 栈里只剩
+    `seam_guard_race_test.go`，族 B/C 的"点到本家产码文件名"就没牙了（`734118d9` 把 setter
+    移进 `_test.go` 之后，写侧那帧也不再落在产码文件里 ⇒ 两帧全没，两族当场 SURVIVED）。
+    只对**被测包**关内联（不是 `all=-l`）⇒ 依赖图不重编，实测整趟多花约 3s。
+    """
+    return run(["go", "test", "-race", "-gcflags=hivemtk-user/internal/service=-l",
+                "-v", "-run", pattern, "-count=1", "./internal/service/"],
                log, SERVER, timeout)
 
 
@@ -290,7 +319,12 @@ def main() -> int:
             tmp.rename(REGISTRY)
         elif kind == "registry-text":
             original = REGISTRY.read_text(encoding="utf-8")
-            REGISTRY.write_text(cell["mut"](original), encoding="utf-8")
+            mutated = cell["mut"](original)
+            if mutated == original:
+                results.append((cell["id"], "BROKEN", "变异没落地（注册表文本一字未改）"))
+                print(f"  [R/{cell['id']}] BROKEN — 变异没落地")
+                continue
+            REGISTRY.write_text(mutated, encoding="utf-8")
             rc = gate_run(log)
             REGISTRY.write_text(original, encoding="utf-8")
         else:
@@ -388,6 +422,14 @@ def registry_cells() -> list[dict]:
         rows = [l for l in txt.splitlines() if l.strip() and not l.lstrip().startswith("#")]
         return txt.rstrip("\n") + "\n" + rows[0] + "\n"
 
+    def setter_row(new: str):
+        """把 `wechatAPIBase` 那一行的 setter 列换成 `new`（那一行的 setter 带 `文件:` 前缀，
+        是注册表里"写侧在另一个文件"的现成样本）。变异没落地时 main 会按"文本没变"判 BROKEN。"""
+        def mut(txt: str) -> str:
+            old = next(l for l in txt.splitlines() if l.startswith("wechatAPIBase\t"))
+            return txt.replace(old, "\t".join(old.split("\t")[:4] + [new]), 1)
+        return mut
+
     def comments_only(txt: str) -> str:
         return "\n".join(l for l in txt.splitlines() if l.strip().startswith("#")) + "\n"
 
@@ -410,6 +452,18 @@ def registry_cells() -> list[dict]:
         {"id": "registry-unknown-accessor", "kind": "registry-text",
          "mut": app("ghost_accessor\tinternal/service/wechat.go\twechatSeamMu\tnopeGetter\tnopeSetter"), "rc": 1,
          "needles": ["accessor 找不到", "nopeGetter"], "desc": "指向被改名/删除的 accessor ⇒ rc=1"},
+        {"id": "setter-prefix-unknown-file", "kind": "registry-text",
+         "mut": setter_row("nope_setters_test.go:storeWechatAPIBase"), "rc": 1,
+         "needles": ["setter 文件不在树里", "wechatAPIBase"],
+         "desc": "setter 的 `文件:` 前缀指向不存在的文件 ⇒ rc=1（14 扇 test-only 写侧都靠这个前缀定位）"},
+        {"id": "setter-prefix-no-such-func", "kind": "registry-text",
+         "mut": setter_row("internal/service/wechat.go:nopeStore"), "rc": 1,
+         "needles": ["accessor 找不到", "nopeStore"],
+         "desc": "前缀文件在树里、那里却没有这个函数 ⇒ rc=1（证的是第二分支，不是上一格那条）"},
+        {"id": "setter-prefix-bad-shape", "kind": "registry-text",
+         "mut": setter_row("internal/service:x:y"), "rc": 1,
+         "needles": ["形状坏", "internal/service:x:y"],
+         "desc": "两个冒号的 `文件:函数名` ⇒ rc=1（否则 split 会把 `x:y` 当函数名，门永远找不到它）"},
         {"id": "bare-read-same-file", "kind": "inject-bare-read", "rc": 1, "global": "tgMaxMediaBytes",
          "needles": ["accessor 之外", "tgMaxMediaBytes"],
          "file": "internal/service/telegram_media.go", "anchor": "func FetchTelegramMedia(",

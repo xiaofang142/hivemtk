@@ -52,22 +52,10 @@ func loadQQAttachmentURLGuard() func(string) error {
 	return qqAttachmentURLGuard
 }
 
-func storeQQAttachmentURLGuard(guard func(string) error) {
-	qqSeamMu.Lock()
-	defer qqSeamMu.Unlock()
-	qqAttachmentURLGuard = guard
-}
-
 func loadQQMaxMediaBytes() int64 {
 	qqSeamMu.RLock()
 	defer qqSeamMu.RUnlock()
 	return qqMaxMediaBytes
-}
-
-func storeQQMaxMediaBytes(limit int64) {
-	qqSeamMu.Lock()
-	defer qqSeamMu.Unlock()
-	qqMaxMediaBytes = limit
 }
 
 func rejectInternalAttachmentURL(rawURL string) error {

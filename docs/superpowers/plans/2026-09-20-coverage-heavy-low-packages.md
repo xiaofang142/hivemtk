@@ -4049,6 +4049,8 @@ os.Getenv("POSTGRES_PASSWORD"))`），**从不回退 `.env`**。凭证只按长�
 并把 `scripts/check-seam-guard.py` / `scripts/seam-guard.registry` /
 `user-server/internal/service/seam_guard_race_test.go` 三个路径加进 `on.push.paths` 与
 `on.pull_request.paths`（触发 paths 不含判据文件＝改判据不触发这道门）。
+**→ 这段"等并行会话回 clean"的口径已被 R29-A 作废**：没有等，改用独立的
+`.github/workflows/seam-guard.yml` 把两道门挂上 CI，见下面 ## R29-A 的"CI 面"一节。
 
 **门的已知盲区（登记在册，别当已闭）**：① **注册表是穷举口径** —— 新增一个同类全局必须显式加行，
 两道门都不会自动发现"又一个测试可写全局被异步链读到"，那要按本节的枚举口径重跑一次（脚本是一次性取证，
@@ -4064,3 +4066,97 @@ os.Getenv("POSTGRES_PASSWORD"))`），**从不回退 `.env`**。凭证只按长�
 R27 的快照行如果被改成"快照 + accessor 混写"，枚举脚本的 SNAPSHOT 豁免就不认它了（本轮那 4 个的成因），
 新增快照行尽量保持纯标识符右侧；腿末尾那句 `loads` 兜底不许删；
 `-race` 电池的窄格必须**同时**判上界（只有本家红）与下界（共锁邻居必须绿），只判一边等于没判。
+
+## R29-A（2026-09-22 第四十四轮：R28 推上去之后 CI 给了两个相反的读数，一个证成、一个打脸）
+
+**CI 对 `734118d9` 说了两件事**：① `-race` 那个作业 `WARNING: DATA RACE` 计数 **0**
+（全量 `./internal/service/`，唯一的红是并行泳道 `TestD12_NoNewLegacyKVDirectQuery` 那条既有断言，
+Coverage 作业的红同因）⇒ R28 的收口在 CI 上拿到正证，"本地 -race 撞不上"不再是依据；
+② `static-gates` 的 golangci-lint **红了，且是本笔引入的** —— 父笔 `1713110b` 同一作业 0 条 `##[error]`。
+"整包 -race 绿"与"lint 红"来自同一笔提交，只引用前者就是把这轮的账赖掉。
+
+**红因（不是风格问题，是判据面问题）**：`.golangci.yml` 是 `run.tests: false` + 开 `unused`
+⇒ **golangci-lint 眼里根本没有 `_test.go`**，于是任何"只被测试调用"的函数在生产面上都是死代码。
+R28 新增的 16 扇 setter 里 14 扇只有测试在调 ⇒ `unused: 14`（`make lint` rc=2，
+`/tmp/r29_lint_before.log` 47 行、末行 `* unused: 14`）。本仓的既有写法本来就是"测试装桩写在
+`_test.go`"（`resetPixelCacheForTest`、`resetSecretsForTest`），是 R28 为了"门能按文件解析 accessor"
+把它们放进了产码文件 —— 门的一便利撞上了 lint 的口径。
+**为什么本地没拦住**：`make audit` 里没有 golangci-lint（它是独立的 `lint:` 目标，`Makefile:346-347`），
+而我那轮只跑了 audit 那串 ⇒ 又一个门口径盲区：**"我跑了全套本地门"里的"全套"要列出是哪几个目标**。
+
+**改动**：14 扇 test-only setter 从 9 个产码文件搬进新文件
+`user-server/internal/service/seam_guard_setters_test.go`（116 行；`storeTGMaxMediaBytes` 在 :78、
+`resetPollingLockRepoForTest` 在 :86）。9 个产码文件**净 −94 行、0 加**（逐文件
+`git diff -U0 | grep -c "^+[^+]"` 全为 0，已核）；**锁、全局、getter 一律留在产码**（门要证的仍是
+"读写各走自己那把锁"），`storeIntentEnabled` 与 `bridgeChannelOnlineProbe` 的 setter 也留在产码
+——它们有产码调用点，不是 test-only。
+注册表 15 行的 setter 列因此带上 `文件:函数名` 前缀（14 个函数，`resetPollingLockRepoForTest`
+同时占 `pollingLockRepo`/`pollingLockRepoOnce` 两行 ⇒ 15≠14，第一版在这里写错断言）；
+门侧 `load_registry` 解析前缀（`scripts/check-seam-guard.py:179`）、按 `setter_file` 独立定位并单列
+"setter 文件不在树里"这条红（`:219-234`），锁外直读的豁免区间也按文件分开算。
+
+**顺序仍是先红后绿**：搬完 + 加前缀 ⇒ 门当场红 **15 条**（`accessor 找不到`，逐条点名，
+`/tmp/r29_gate_red.log`）⇒ 再改门的解析 ⇒ rc=0（`/tmp/r29_gate_green.log`）；`make lint` 14 → 0
+（`/tmp/r29_lint_after.log` "0 issues."）。牙齿电池为前缀的三条新分支各补一格：
+`setter-prefix-unknown-file` / `setter-prefix-no-such-func` / `setter-prefix-bad-shape`
+（两个冒号那格证的是 `split(":", 1)` 的分支，不补就等于"前缀"整条新链路没人踩过）；
+`--only-gate` 那 28 格 + 1 SKIP 全杀（`/tmp/r29_battery_gateonly.log`）。
+
+**搬完立刻被打回原形（这才是本轮真正的收获）**：整电池复跑 ⇒
+`B-narrow SURVIVED`、`C-all SURVIVED`（`{'KILLED': 28, 'SKIP': 1, 'SURVIVED': 2}`，
+`/tmp/r29_battery_full.log`、`/tmp/r28_seam_battery_20260922-232846`，C-all 那格红因＝
+"12 家没点到本家文件、竞争 55 条"）。归因很干净：族 B/C 的"本家产码文件名"锚点原来靠的是
+**写侧那一帧住在产码文件里**；写侧搬进共享测试文件后，读侧那扇 `return tgMaxMediaBytes` 又被内联 ⇒
+两条块里**一条产码帧都不剩**（4 家没受影响，因为它们的 setter 本来就留在产码）。
+最容易的"修法"是把期望改成"点到 setter 所在文件"——那是把判据改松去迁就变异，**没做**；
+`seam_guard_race_test.go` 与电池文档串里那句"栈里点到本家文件"当时也确实变成了假话，一并记账。
+
+**真修法＝把证据找回来**：`race_legs` 对**被测包**关内联
+（`scripts/mut_seam_guard_r28.py:196-205`，`-gcflags=hivemtk-user/internal/service=-l`）。
+两趟取证放刀前先编好二进制是错的 —— **先编后改会跑陈旧二进制 ⇒ 假绿**（第一趟就是这么得到
+`test-rc=0` PASS 的，产物 `/tmp/r29_probe_noinline_attempt1_stale_binary.log` 留着当否证）；
+改成"放刀 → 编译 → 跑 → 还原"后：`all=-l` 与包级 `-l` 都让
+`loadTGMaxMediaBytes() @ internal/service/telegram_media.go:64` 回到栈里（两份日志
+`/tmp/r29_probe_noinline.log`、`/tmp/r29_probe_noinline_pkg.log`），包级那一趟 `real 17.917s`
+且**不重编依赖图** ⇒ 选包级；两把刀各自 `RESTORE-OK`（md5 与放刀前一致）。
+
+**复跑（影子克隆 `/tmp/r30-batt`）**：`git clone --shared` @ `98470a82` + 本轮 15 个文件逐字节 `cp`、
+**md5 15/15 一致**才开刀。整电池 ⇒ `{'KILLED': 30, 'SKIP': 1}`、**全杀 True**、树残留 0
+（C-all：60 条竞争、16 家各有自己的块且都点到本家文件、16 条腿全 FAIL、0 PASS；
+`/tmp/r28_seam_battery_20260922-234410`、`/tmp/r30_battery_full.log`）。
+文件名锚点独立复核过（不靠电池自证）：C-all 日志里 10 个产码文件的 `file:line` 帧逐个 grep 到命中
+（`telegram_media.go:58/62`、`qq_media.go:50/54`、`douyin_media.go:79/83/153`、`wechat.go:224`、
+`webhook_outbound.go:79/970`、`dingtalk_media.go:50`、`human_task.go:239`、`approval_request.go:181/185`、
+`intent_recognition.go:50/54`、`bridge_offline_replay.go:98/102`、`telegram_polling_lock.go:66/67/69`）。
+**这趟为什么挪到克隆**：并行会话在动，而这趟有 18 个"产码被摘锁"的窗口 —— 16 个只喂门的判据
+（放刀到还原几秒，不编译），族 B/C 那 2 个是**摘锁后整包 `-race` 编译再跑 16 条腿**，
+每个几十秒起步。后两个窗口留在共享树里，等于给别人的 `-race` 埋一颗"读到没锁的 seam"的雷，
+红了还回头赖我。
+同克隆独立读数：`go vet ./internal/service/` rc=0（0 行）、`gofmt -l internal/service/` 0 行、
+`go build ./...` rc=0（0 行）、async 门 rc=0「扫 153 个 package，站点 0」、
+seam 门 rc=0「登记 17 个全局，扫 2738 个 .go ⇒ accessor 之外 0」，
+且**门自己打印"项目根 /private/tmp/r30-batt"** ⇒ 证明扫的是克隆不是同名活树；
+`golangci-lint run ./...` rc=0 / "0 issues."（real 13.34s，v2.10.0）。
+
+**活树 vet rc=1 不算我的红**：`user-server/internal/service/order_webhook_payment_test.go` 是并行泳道
+**未跟踪**（`git status` = `??`）的新文件，引用产码里还不存在的 `SetOrderPaymentSink`
+（全树非测试文件 grep 命中 0）⇒ 属"别人的改动没写完"，不碰也不代改；本轮全部绿读数取自克隆。
+
+**CI 面（R28 那句"等并行会话回 clean 再挂门"作废）**：新增 `.github/workflows/seam-guard.yml`
+（`name: Seam Guard`，两步分别跑两道门）。触发 `paths` 收满判据文件本身：两个脚本 +
+`scripts/async-global-read.baseline` + `scripts/seam-guard.registry` + `user-server/*.go` +
+`user-server/**/*.go` + 工作流自身（触发面不含判据文件＝改判据不重跑这道门）。
+为什么不并进 `user-server-ci.yml`：该文件此刻仍压着并行会话的未提交改动，共享索引下 `git add`
+会把对方的行一起带走（本仓踩过的"同一文件里对方的行"）；仓里本来就有 14 个单用途工作流，
+跟着这个形状走。成本实测：活树 async 门 3s / seam 门 5s（2781 个 .go），克隆 1s / 2s（2738 个）；
+`python3 scripts/check_workflow_refs.py .github/workflows/seam-guard.yml` rc=0。
+**本笔的 CI 读数要等推送后回读**：在那之前，lint 这一档的证据只到"克隆里同配置 v2.10.0 ⇒ 0 issues"。
+
+**本机工具版本变动（动的是我的机器，不是项目文件）**：`make lint` 的 `lint-version-check` 钉 CI 版
+v2.10.0，本机原为 v2.1.6 ⇒ 用仓里既有的 `make lint-install-force` 替换了 `~/go/bin/golangci-lint`。
+不装这一版就没法在本地复现 CI 的那条红 —— 而"本地复现不出来"从来不是"红不存在"的证据。
+
+**勿放松**：只被测试调用的函数**不要**留在产码文件里（`run.tests:false` 的 `unused` 判它死代码，
+本仓的既有写法是 `_test.go` 自持装桩）；注册表 setter 列的 `文件:` 前缀每加一条分支就要配一格；
+`-race` 电池的文件名锚点必须显式关内联，且**放刀顺序是先改后编**；改产码文件的门（lint）不在
+`make audit` 里，声称"跑过全套"要写清是哪几个目标。

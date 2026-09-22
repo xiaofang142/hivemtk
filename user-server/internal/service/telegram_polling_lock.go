@@ -71,22 +71,6 @@ func getPollingLockRepo() *repository.TelegramPollingLockRepository {
 	return pollingLockRepo
 }
 
-// resetPollingLockRepoForTest 测试装桩：锁内一次完成「换仓储 + 让下一次取用看到它」，
-// 返回还原函数（同 pkg/db 的 SetTestDB 一条路走 accessor 的口径）。
-func resetPollingLockRepoForTest(repo *repository.TelegramPollingLockRepository) func() {
-	pollingLockMu.Lock()
-	defer pollingLockMu.Unlock()
-	prev, prevOnce := pollingLockRepo, pollingLockRepoOnce
-	pollingLockRepo = repo
-	pollingLockRepoOnce = &sync.Once{}
-	pollingLockRepoOnce.Do(func() { pollingLockRepo = repo })
-	return func() {
-		pollingLockMu.Lock()
-		defer pollingLockMu.Unlock()
-		pollingLockRepo, pollingLockRepoOnce = prev, prevOnce
-	}
-}
-
 // TryAcquirePollingLock 原子抢占 Telegram 账号的 polling 锁（service 门面）
 //
 // 转发到 repository.TelegramPollingLockRepository.TryAcquirePollingLock。

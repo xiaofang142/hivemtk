@@ -60,22 +60,10 @@ func loadTGAPIBase() string {
 	return tgAPIBaseOverride
 }
 
-func storeTGAPIBase(base string) {
-	tgSeamMu.Lock()
-	defer tgSeamMu.Unlock()
-	tgAPIBaseOverride = base
-}
-
 func loadTGMaxMediaBytes() int64 {
 	tgSeamMu.RLock()
 	defer tgSeamMu.RUnlock()
 	return tgMaxMediaBytes
-}
-
-func storeTGMaxMediaBytes(limit int64) {
-	tgSeamMu.Lock()
-	defer tgSeamMu.Unlock()
-	tgMaxMediaBytes = limit
 }
 
 // FetchTelegramMedia file_id → getFile → 下载。返回字节与响应 Content-Type。

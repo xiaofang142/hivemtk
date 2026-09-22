@@ -20,14 +20,22 @@
 
 判据（任一不成立即 rc=1）：
   1. 注册表里 `文件`／`getter`／`setter` 任一找不到 ⇒ 红（注册表指向的东西不在树里了，划它或补它）；
+     `setter` 可写成 `文件:函数名`，指到全局本家文件之外的那个文件（见下面第二条口径边界）；
   2. getter 体内没有对该锁的 `Lock()`/`RLock()` 与配套 `Unlock`/`RUnlock`，或 setter 体内没有
      `Lock()`+`Unlock()` ⇒ 红（两扇门都得真上锁；摘掉任一条腿的锁，本门与那条 `-race` 腿同时红）；
-  3. 全局名出现在「声明它的 var 块 ∪ 它自己那两扇 accessor」**之外**的任意 .go 文件里 ⇒ 红
+  3. 全局名出现在「声明它的 var 块 ∪ 它自己那两扇 accessor（各自所在文件）」**之外**的任意 .go 文件里 ⇒ 红
      （含跨包直读：注册表里 `IntentEnabled` 是导出量，别的包写 `service.IntentEnabled` 就在这里红）。
-  另有格式格：列数不对、重复登记同一全局、数额列含空白 ⇒ 红；**缺注册表退 rc=2**
-  （同 async-global-read 门口径：缺基线时"零命中"和"没扫"分不开）。
+  另有格式格：列数不对、重复登记同一全局、数额列含空白、`setter` 的 `文件:函数名` 形状坏 ⇒ 红；
+  **缺注册表退 rc=2**（同 async-global-read 门口径：缺基线时"零命中"和"没扫"分不开）。
 
 口径边界（按「门禁口径盲区」的规矩写明）：
+  - 写侧只被测试调用的那 14 扇 setter 定义在 `internal/service/seam_guard_setters_test.go`，不在各渠道的
+    生产文件里：`user-server/.golangci.yml` 是 `run.tests: false` 且启用 `unused`，于是「只被 `_test.go`
+    调用的函数」在生产面上算死代码 —— `734118d9` 把 setter 留在生产文件里时，CI 的 golangci-lint 步当场
+    报 14 条 unused（父笔同一作业 0 条红，本地 `make audit` 不含 golangci-lint 所以推上去前没人看见）。
+    **锁与全局仍在生产文件里**：判据是「每一次读和每一次写都被同一把锁 synchronize」，与定义在哪个文件无关。
+    ⇒ 只被测试调用的写侧要登记成 `seam_guard_setters_test.go:storeXxx`；写侧同时被产码调用（`IntentEnabled`、
+    `bridgeChannelOnlineProbe` 那两扇）才留在本家文件。
   - 判的是**标识符出现位置**，不看控制流：注释与字符串字面量里的名字不算访问点（先把串整体抹掉，再切行尾注释）；
   - 只扫 `user-server/` 下的 `*.go`，跳过 `vendor`／`node_modules`／以 `.` 开头的目录；`_test.go` 一并扫，
     测试直接摸全局同样红（装桩必须走 setter）；
@@ -165,7 +173,15 @@ def load_registry() -> list[dict[str, str]] | int:
             print(f"注册表重复登记全局：{g}", file=sys.stderr)
             return 1
         seen.add(g)
-        entries.append({"global": g, "file": rel, "lock": lock, "getter": getter, "setter": setter})
+        # setter 可写成 `文件:函数名`：只被测试调用的写侧必须待在 `_test.go` 里（见文件头第三条口径）。
+        setfile, setname = (rel, setter)
+        if ":" in setter:
+            setfile, setname = (s.strip() for s in setter.split(":", 1))
+            if not setfile or not setname or ":" in setname:
+                print(f"注册表第 {lineno} 行 setter 的 `文件:函数名` 形状坏：{setter}", file=sys.stderr)
+                return 1
+        entries.append({"global": g, "file": rel, "lock": lock, "getter": getter,
+                        "setter": setname, "setter_file": setfile})
     if not entries:
         print("rc=2 注册表是空的（一道常绿门比没有门更误导）", file=sys.stderr)
         return 2
@@ -200,36 +216,45 @@ def main() -> int:
     for e in entries:
         g, lock = e["global"], e["lock"]
         home = SCAN_ROOT / e["file"]
+        sethome = SCAN_ROOT / e["setter_file"]
         if home not in sources:
             rc = 1
             print(f"SEAM-GUARD：{g} 登记的文件不在树里：{e['file']}")
             continue
+        if sethome not in sources:
+            rc = 1
+            print(f"SEAM-GUARD：{g} 登记的 setter 文件不在树里：{e['setter_file']}")
+            continue
         src = sources[home]
         getter = func_ranges(src, e["getter"])
-        setter = func_ranges(src, e["setter"])
+        setter = func_ranges(sources[sethome], e["setter"])
         if not getter or not setter:
             rc = 1
-            print(f"SEAM-GUARD：{g} 的 accessor 找不到（getter {e['getter']} / setter {e['setter']} @ {e['file']}）")
+            print(f"SEAM-GUARD：{g} 的 accessor 找不到（getter {e['getter']} @ {e['file']}"
+                  f" / setter {e['setter']} @ {e['setter_file']}）")
             continue
         # 上锁判据：两扇门各自体内必须出现「对该锁的 Lock/RLock」与配套 Unlock。
-        for label, rng, kinds in (("getter", getter, ("Lock", "RLock")), ("setter", setter, ("Lock",))):
+        for label, rng, kinds, body_src in (("getter", getter, ("Lock", "RLock"), src),
+                                            ("setter", setter, ("Lock",), sources[sethome])):
             want = " 或 ".join(f"{lock}.{k}()" for k in kinds)
-            body = "\n".join(src[rng[0][0] - 1:rng[-1][1]])
+            body = "\n".join(body_src[rng[0][0] - 1:rng[-1][1]])
             if not any(re.search(rf"\b{re.escape(lock)}\.{k}\(\)", body) for k in kinds):
                 rc = 1
                 print(f"SEAM-GUARD：{g} 的 {label} {e['getter' if label == 'getter' else 'setter']} 没对 {lock} 上锁"
-                      f"（要 {want}）@ {e['file']}:{rng[0][0]}")
+                      f"（要 {want}）@ {e['file' if label == 'getter' else 'setter_file']}:{rng[0][0]}")
             elif not re.search(rf"\b{re.escape(lock)}\.(Unlock|RUnlock)\(\)", body):
                 rc = 1
-                print(f"SEAM-GUARD：{g} 的 {label} {e['setter']} 上了 {lock} 却没有配套 Unlock @ {e['file']}:{rng[0][0]}")
+                print(f"SEAM-GUARD：{g} 的 {label} {e['setter']} 上了 {lock} 却没有配套 Unlock"
+                      f" @ {e['file' if label == 'getter' else 'setter_file']}:{rng[0][0]}")
 
         decl = decl_ranges(src, g)
         if not decl:
             rc = 1
             print(f"SEAM-GUARD：{g} 在登记文件 {e['file']} 里找不到 var 声明处")
-        allowed = decl + getter + setter
+        allowed: dict[Path, list[tuple[int, int]]] = {home: decl + getter}
+        allowed[sethome] = allowed.get(sethome, []) + setter
         hits = [f"{f.relative_to(REPO_ROOT)}:{i}" for f, i in mentions.get(g, [])
-                if not (f == home and inside(i, allowed))]
+                if not inside(i, allowed.get(f, []))]
         if hits:
             rc = 1
             print(f"SEAM-GUARD：{g} 在 accessor 之外被直接引用 {len(hits)} 处（读写只走 "

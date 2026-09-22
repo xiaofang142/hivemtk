@@ -1,0 +1,64 @@
+# 异步链上的包级全局：两道静态门接进 CI
+#
+# 为什么要单独一个作业（而不是等 `make audit`）：`make audit` 只在本地跑，CI 从不执行它 ——
+# 于是这两道门自诞生起就只有"有人手动跑过"这一层保障，而恒绿的门与坏掉的门长得一样
+# （`.github/workflows/user-server-ci.yml` 的 A3 注释里记的就是同一件事的另一例）。
+#
+# 守什么：
+#   1. `scripts/check-async-global-read.py` —— 协程体里不许裸读包级注入点（R27，`521e4f80`：
+#      飞书那条跨用例 DATA RACE 就是这一类，CI 的 `-race` 作业撞上了、本地三趟撞不上）；
+#   2. `scripts/check-seam-guard.py` —— 注册表里那 17 个"被异步链经默认实现读到的全局"，
+#      每一次读写都必须走自己那对 accessor、在那把锁底下（R28，`734118d9`）。
+# 两道门都不需要编译、不碰数据库：本机实测扫 2781 个 .go 文件 ⇒ async 门 3s、seam 门 5s。
+#
+# 触发面为什么写 `user-server/**/*.go` 而不是只写脚本自己：门的输入是**整棵 Go 树**，
+# 只登记脚本路径会让"新加一处绕门访问"那一类提交根本不重跑这道门。
+#
+# 与 `-race` 作业的分工：CI 的 `Unit tests -race (user-server service)` 作业跑
+# `user-server/internal/service/seam_guard_race_test.go` 那 16 条腿，证"门里真上锁"；
+# 本作业证"没绕门"。摘掉任一扇门里的锁 ⇒ 两边同时红（牙齿：`python3 scripts/mut_seam_guard_r28.py`）。
+name: Seam Guard
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'scripts/check-async-global-read.py'
+      - 'scripts/async-global-read.baseline'
+      - 'scripts/check-seam-guard.py'
+      - 'scripts/seam-guard.registry'
+      - 'user-server/*.go'
+      - 'user-server/**/*.go'
+      - '.github/workflows/seam-guard.yml'
+  pull_request:
+    paths:
+      - 'scripts/check-async-global-read.py'
+      - 'scripts/async-global-read.baseline'
+      - 'scripts/check-seam-guard.py'
+      - 'scripts/seam-guard.registry'
+      - 'user-server/*.go'
+      - 'user-server/**/*.go'
+      - '.github/workflows/seam-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seam-guard:
+    name: 异步体裸读全局 + seam accessor 注册表
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 协程体裸读包级注入点（R27 门，基线 0 站点）
+        run: python3 scripts/check-async-global-read.py
+
+      - name: seam 全局读写各走自己的 accessor（R28 门，注册表 17 行）
+        run: python3 scripts/check-seam-guard.py

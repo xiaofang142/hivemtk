@@ -241,12 +241,6 @@ func loadHumanTaskNowFn() func() time.Time {
 	return humanTaskNowFn
 }
 
-func storeHumanTaskNowFn(fn func() time.Time) {
-	humanTaskSeamMu.Lock()
-	defer humanTaskSeamMu.Unlock()
-	humanTaskNowFn = fn
-}
-
 var (
 	humanTaskIDSeq     int64
 	humanTaskIDFn      = newHumanTaskID

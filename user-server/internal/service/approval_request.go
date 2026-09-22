@@ -183,22 +183,10 @@ func loadApprovalNowFn() func() time.Time {
 	return approvalNowFn
 }
 
-func storeApprovalNowFn(fn func() time.Time) {
-	approvalSeamMu.Lock()
-	defer approvalSeamMu.Unlock()
-	approvalNowFn = fn
-}
-
 func loadApprovalResumeTokFn() func() (string, error) {
 	approvalSeamMu.RLock()
 	defer approvalSeamMu.RUnlock()
 	return approvalResumeTokFn
-}
-
-func storeApprovalResumeTokFn(fn func() (string, error)) {
-	approvalSeamMu.Lock()
-	defer approvalSeamMu.Unlock()
-	approvalResumeTokFn = fn
 }
 
 func newApprovalRequestID() string {

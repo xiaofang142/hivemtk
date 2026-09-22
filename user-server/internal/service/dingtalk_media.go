@@ -52,12 +52,6 @@ func loadDingtalkOpenAPIBase() string {
 	return dingtalkOpenAPIBase
 }
 
-func storeDingtalkOpenAPIBase(base string) {
-	dingtalkSeamMu.Lock()
-	defer dingtalkSeamMu.Unlock()
-	dingtalkOpenAPIBase = base
-}
-
 // FetchDingTalkRobotMedia 用凭证换回机器人接收文件的字节流与 Content-Type。
 func FetchDingTalkRobotMedia(ctx context.Context, appKey, appSecret, robotCode, downloadCode string) ([]byte, string, error) {
 	if appKey == "" || appSecret == "" {

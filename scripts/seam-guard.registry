@@ -2,6 +2,9 @@
 #
 # 列（TAB 分隔）：`全局名 <TAB> 文件 <TAB> 锁名 <TAB> getter <TAB> setter`
 # `文件` 相对 `user-server/`。判据见 scripts/check-seam-guard.py。
+# `setter` 可写成 `文件:函数名`：写侧只被测试调用时它必须待在 `_test.go` 里（`.golangci.yml` 的
+# `run.tests:false` + `unused` 会把生产面上的 test-only 函数判成死代码，`734118d9` 就被判了 14 条），
+# 前缀即那另一个文件；不带前缀＝与全局同文件。
 # 新增一个这类全局 = 在这里加一行，同时必须补一条 -race 腿
 # （internal/service/seam_guard_race_test.go）；只加行不补腿，本门绿但电池会指出没牙。
 #
@@ -9,19 +12,19 @@
 # 每一个都能被某条真实异步链读到，而测试会改写它 ⇒ 第二跳竞态。
 # pollingLockRepo 与 pollingLockRepoOnce 是同一条链的两块内存，一起上锁、一起登记。
 IntentEnabled	internal/service/intent_recognition.go	intentEnabledMu	loadIntentEnabled	storeIntentEnabled
-aiReplyQuietHoursFn	internal/service/webhook_outbound.go	aiReplyQuietHoursMu	loadAIReplyQuietHoursFn	storeAIReplyQuietHoursFn
-approvalNowFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalNowFn	storeApprovalNowFn
-approvalResumeTokFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalResumeTokFn	storeApprovalResumeTokFn
+aiReplyQuietHoursFn	internal/service/webhook_outbound.go	aiReplyQuietHoursMu	loadAIReplyQuietHoursFn	internal/service/seam_guard_setters_test.go:storeAIReplyQuietHoursFn
+approvalNowFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalNowFn	internal/service/seam_guard_setters_test.go:storeApprovalNowFn
+approvalResumeTokFn	internal/service/approval_request.go	approvalSeamMu	loadApprovalResumeTokFn	internal/service/seam_guard_setters_test.go:storeApprovalResumeTokFn
 bridgeChannelOnlineProbe	internal/service/bridge_offline_replay.go	bridgeProbeMu	loadBridgeChannelOnlineProbe	storeBridgeChannelOnlineProbe
-dingtalkOpenAPIBase	internal/service/dingtalk_media.go	dingtalkSeamMu	loadDingtalkOpenAPIBase	storeDingtalkOpenAPIBase
-dingtalkWebhookHostAllowed	internal/service/webhook_outbound.go	dingtalkHostMu	loadDingtalkWebhookHostAllowed	storeDingtalkWebhookHostAllowed
-dyAPIBaseOverride	internal/service/douyin_media.go	dySeamMu	loadDyAPIBaseOverride	storeDyAPIBaseOverride
-dyMediaRetryBackoff	internal/service/douyin_media.go	dySeamMu	loadDyMediaRetryBackoff	storeDyMediaRetryBackoff
-humanTaskNowFn	internal/service/human_task.go	humanTaskSeamMu	loadHumanTaskNowFn	storeHumanTaskNowFn
-pollingLockRepo	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	resetPollingLockRepoForTest
-pollingLockRepoOnce	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	resetPollingLockRepoForTest
-qqAttachmentURLGuard	internal/service/qq_media.go	qqSeamMu	loadQQAttachmentURLGuard	storeQQAttachmentURLGuard
-qqMaxMediaBytes	internal/service/qq_media.go	qqSeamMu	loadQQMaxMediaBytes	storeQQMaxMediaBytes
-tgAPIBaseOverride	internal/service/telegram_media.go	tgSeamMu	loadTGAPIBase	storeTGAPIBase
-tgMaxMediaBytes	internal/service/telegram_media.go	tgSeamMu	loadTGMaxMediaBytes	storeTGMaxMediaBytes
-wechatAPIBase	internal/service/wechat.go	wechatSeamMu	loadWechatAPIBase	storeWechatAPIBase
+dingtalkOpenAPIBase	internal/service/dingtalk_media.go	dingtalkSeamMu	loadDingtalkOpenAPIBase	internal/service/seam_guard_setters_test.go:storeDingtalkOpenAPIBase
+dingtalkWebhookHostAllowed	internal/service/webhook_outbound.go	dingtalkHostMu	loadDingtalkWebhookHostAllowed	internal/service/seam_guard_setters_test.go:storeDingtalkWebhookHostAllowed
+dyAPIBaseOverride	internal/service/douyin_media.go	dySeamMu	loadDyAPIBaseOverride	internal/service/seam_guard_setters_test.go:storeDyAPIBaseOverride
+dyMediaRetryBackoff	internal/service/douyin_media.go	dySeamMu	loadDyMediaRetryBackoff	internal/service/seam_guard_setters_test.go:storeDyMediaRetryBackoff
+humanTaskNowFn	internal/service/human_task.go	humanTaskSeamMu	loadHumanTaskNowFn	internal/service/seam_guard_setters_test.go:storeHumanTaskNowFn
+pollingLockRepo	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	internal/service/seam_guard_setters_test.go:resetPollingLockRepoForTest
+pollingLockRepoOnce	internal/service/telegram_polling_lock.go	pollingLockMu	getPollingLockRepo	internal/service/seam_guard_setters_test.go:resetPollingLockRepoForTest
+qqAttachmentURLGuard	internal/service/qq_media.go	qqSeamMu	loadQQAttachmentURLGuard	internal/service/seam_guard_setters_test.go:storeQQAttachmentURLGuard
+qqMaxMediaBytes	internal/service/qq_media.go	qqSeamMu	loadQQMaxMediaBytes	internal/service/seam_guard_setters_test.go:storeQQMaxMediaBytes
+tgAPIBaseOverride	internal/service/telegram_media.go	tgSeamMu	loadTGAPIBase	internal/service/seam_guard_setters_test.go:storeTGAPIBase
+tgMaxMediaBytes	internal/service/telegram_media.go	tgSeamMu	loadTGMaxMediaBytes	internal/service/seam_guard_setters_test.go:storeTGMaxMediaBytes
+wechatAPIBase	internal/service/wechat.go	wechatSeamMu	loadWechatAPIBase	internal/service/seam_guard_setters_test.go:storeWechatAPIBase

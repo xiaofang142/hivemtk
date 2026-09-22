@@ -81,22 +81,10 @@ func loadDyMediaRetryBackoff() []time.Duration {
 	return dyMediaRetryBackoff
 }
 
-func storeDyMediaRetryBackoff(backoff []time.Duration) {
-	dySeamMu.Lock()
-	defer dySeamMu.Unlock()
-	dyMediaRetryBackoff = backoff
-}
-
 func loadDyAPIBaseOverride() string {
 	dySeamMu.RLock()
 	defer dySeamMu.RUnlock()
 	return dyAPIBaseOverride
-}
-
-func storeDyAPIBaseOverride(base string) {
-	dySeamMu.Lock()
-	defer dySeamMu.Unlock()
-	dyAPIBaseOverride = base
 }
 
 // retryable 官方要我们重试的码：28001005/28001006 写在处置列里，28029014 只写在错误文案里

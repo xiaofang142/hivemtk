@@ -21,6 +21,10 @@
 // 报 DATA RACE、共锁邻居 `TelegramAPIBase` 仍绿；把 16 家全摘时 16 条腿各自报 DATA RACE，
 // 且每个竞争块都只归属到自己那条腿、栈里点到本家文件。电池 `scripts/mut_seam_guard_r28.py`，
 // 逐格计数见计划文档 ## R28。
+// "栈里点到本家文件"这一条要靠电池对**被测包**关内联（`-gcflags=hivemtk-user/internal/service=-l`）：
+// 摘锁后的 `return tgMaxMediaBytes` 默认会被内联进调用它的闭包，而写侧自 `734118d9` 起住在
+// `seam_guard_setters_test.go`（golangci-lint 的 `run.tests:false` 不容 test-only 函数留在产码面），
+// 两个文件都不是本家产码文件 ⇒ 不关内联就没有产码帧可点。
 package service
 
 import (

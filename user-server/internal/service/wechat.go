@@ -226,12 +226,6 @@ func loadWechatAPIBase() string {
 	return wechatAPIBase
 }
 
-func storeWechatAPIBase(base string) {
-	wechatSeamMu.Lock()
-	defer wechatSeamMu.Unlock()
-	wechatAPIBase = base
-}
-
 func (c *wechatTokenClient) fetchAccessToken(ctx context.Context) (string, int, error) {
 	url := fmt.Sprintf("%s/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
 		loadWechatAPIBase(), c.appID, c.appSecret)

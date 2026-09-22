@@ -81,12 +81,6 @@ func loadAIReplyQuietHoursFn() func(time.Time) bool {
 	return aiReplyQuietHoursFn
 }
 
-func storeAIReplyQuietHoursFn(fn func(time.Time) bool) {
-	aiReplyQuietHoursMu.Lock()
-	defer aiReplyQuietHoursMu.Unlock()
-	aiReplyQuietHoursFn = fn
-}
-
 type delayedReplayCtxKey struct{}
 
 // DelayedReplayToContext 标记 ctx 为延迟队列重放路径
@@ -978,12 +972,6 @@ func loadDingtalkWebhookHostAllowed() func(*url.URL) bool {
 	dingtalkHostMu.RLock()
 	defer dingtalkHostMu.RUnlock()
 	return dingtalkWebhookHostAllowed
-}
-
-func storeDingtalkWebhookHostAllowed(fn func(*url.URL) bool) {
-	dingtalkHostMu.Lock()
-	defer dingtalkHostMu.Unlock()
-	dingtalkWebhookHostAllowed = fn
 }
 
 // HandleResultToContext 把 HandleResult 注入 ctx，供 sendOutbound 取出补字段。
