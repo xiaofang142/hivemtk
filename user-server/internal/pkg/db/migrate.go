@@ -364,25 +364,12 @@ func allModels() []any {
 		&model.WorkflowNodeExecution{},
 		&model.WorkflowVersion{},
 
-		// BrowserAuditDigest / BrowserAuditPruneRun（批22 / A6）：command_log 裁剪前的内容摘要
-		// 与每次扫描的留痕。这两张表是「删掉的那段历史」唯一的凭据，本身永不裁剪；
-		// 没建出来的失效方向是 fail-close（PruneBefore 写不进摘要就整批回滚，一行都不删），
-		// 表现为治理任务天天告警，而不是历史无声消失。
-		&browsermodel.BrowserAuditDigest{},
-		&browsermodel.BrowserAuditPruneRun{},
 		&browsermodel.BrowserCommandLog{},
 		&browsermodel.BrowserCronTrigger{},
 		&browsermodel.BrowserLLMPlan{},
 		&browsermodel.BrowserSession{},
 		&browsermodel.BrowserStep{},
 		&browsermodel.BrowserTask{},
-		// BrowserWriteClaim（批20f / A12）：双发闸的存储层独占声明。这张表没建出来
-		// 不是「少一张审计表」，是写步在 ClaimWriteSlot 处第一条 INSERT 就报错——
-		// 而报错方向恰好是 fail-close 的那一侧（所有写步判红），所以漏登记会在
-		// 「功能全废」而不是「闸门静默失效」上暴露。建表走 allModels 而不是迁移文件
-		// （本泳道口径：**新表**由标签直建、**存量表加列**走版本化迁移，后者见 v3.43.0 的
-		// browser_steps 三列——两者不是同一条路，别拿这句去省存量表的 DDL 文件）。
-		&browsermodel.BrowserWriteClaim{},
 
 		// 表 rag_answer_cache：store_pg.go 的文件头注释原本就写着
 		// 「需在 internal/migration/migrations 注册」并附了 DDL，但一直没接。
