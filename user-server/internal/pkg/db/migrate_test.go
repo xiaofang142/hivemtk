@@ -213,26 +213,77 @@ func TestAutoMigrate_LargeModel(t *testing.T) {
 	}
 }
 
-// TestAutoMigrate_ConcurrentAccess 测试并发迁移调用
-func TestAutoMigrate_ConcurrentAccess(t *testing.T) {
+// 并发迁移用例的夹具表：三张互不引用、列极少的窄表，
+// 让并发 DDL 只各自持自己那张 relation 上的锁。
+type concMigFixtureA struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+}
+
+func (concMigFixtureA) TableName() string { return "zz_concmig_a" }
+
+type concMigFixtureB struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+}
+
+func (concMigFixtureB) TableName() string { return "zz_concmig_b" }
+
+type concMigFixtureC struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+}
+
+func (concMigFixtureC) TableName() string { return "zz_concmig_c" }
+
+// concMigCase 一条并发迁移输入：表名只用于把报错定位到具体那张表。
+type concMigCase struct {
+	table string
+	model interface{}
+}
+
+// TestAutoMigrate_ConcurrentDistinctModels 并发迁移互不引用的表：既不得报错，也不得被 -race 抓到竞态。
+//
+// 为什么不再是"3 个协程迁同一个模型"（原 TestAutoMigrate_ConcurrentAccess）：
+// gorm 每跑一次 AutoMigrate 都会对缓存里那个 *Schema 无锁改写 Indexes
+// （实测栈 schema.(*Schema).ParseIndexes index.go:74 ↔ migrator/migrator.go:140），
+// 同一个句柄上并发迁同一个模型属于"必撞 -race"的断言：本地
+// `-race -count=40` 复现 3/40 红，CI run 486 的 core job 是同一条栈。
+// 生产侧不存在这一形态——pkg/db 的 AutoMigrate() 是 for 循环逐模型串行
+// （migrate.go:424），多实例同时启动时撞已存在的表另由
+// isTolerableMigrateError + createTableFallback 承接，因此这条用例守的是
+// "并发用同一句柄建不同的表"这一层 gorm 真给了的保证。
+func TestAutoMigrate_ConcurrentDistinctModels(t *testing.T) {
 	testDB := testutil.NewTestDB(t, &model.User{})
 	if testDB == nil {
 		t.Fatal("NewTestDB returned nil")
 	}
-	done := make(chan error, 3)
-	for i := 0; i < 3; i++ {
+	fixtures := []concMigCase{
+		{"zz_concmig_a", &concMigFixtureA{}},
+		{"zz_concmig_b", &concMigFixtureB{}},
+		{"zz_concmig_c", &concMigFixtureC{}},
+	}
+
+	type result struct {
+		table string
+		err   error
+	}
+	// release 是起跑栅栏：三个协程都阻塞在这里，close 之后同一刻进 AutoMigrate，
+	// 把并发窗口拉到最大（否则快的那个先跑完，用例退化成串行还不自知）。
+	release := make(chan struct{})
+	done := make(chan result, len(fixtures))
+	for _, f := range fixtures {
 		go func() {
-			err := testDB.AutoMigrate(&model.User{})
-			if err != nil {
-				done <- err
-				return
-			}
-			done <- nil
+			<-release
+			done <- result{table: f.table, err: testDB.AutoMigrate(f.model)}
 		}()
 	}
-	for i := 0; i < 3; i++ {
-		if err := <-done; err != nil {
-			t.Errorf("concurrent migrate: %v", err)
+	close(release)
+
+	for range fixtures {
+		r := <-done
+		if r.err != nil {
+			t.Errorf("并发迁移 %s: %v", r.table, r.err)
 		}
 	}
 }

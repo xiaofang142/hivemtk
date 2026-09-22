@@ -4492,3 +4492,133 @@ master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest cove
   - **task #78**（postgres `max_connections=400`）：前置条件"该文件回 clean"本轮复验
     仍不成立（`user-server-ci.yml` 还是 ` M`）。
   - 前端 `node-version` 剩的 5 处同上，等该文件回 clean 后与 #78 一并原子落地。
+
+## R35（2026-09-23 第四十九轮：一个零测试的热路径包，损坏的 install.lock 会把安装态判死、让心跳静默停发，`3d441385`）
+
+- 起因是排期表里"包级零测试"这一栏：`internal/system/install` 整包 0 覆盖，而它被
+  `InitGuard` **挂在每个 API 请求上**（不是只在安装期跑）。逐个真读后落实四处缺陷，
+  全部先有红用例再有产码：
+  1. `Load()` 解析失败直接抛错 ⇒ `MarkAdminInitialized` 也写不进去（它先读后写），
+     于是那份半截 JSON **永久修不好**：每个请求读→失败→回查数据库，`install.lock`
+     再也不会被修好。改成 `loadForWrite()`：按四个键的正则把还能读出来的值原样捞回来
+     （`install_id` 是安装身份，丢了等于这台实例在平台侧变成新客户），其余字段重建，
+     走"临时文件 + rename"落盘；`GetStatus` 自愈成功后**再 `Load()` 一次**才出响应
+     （否则响应里的 `install_id` 是空的，前端与心跳都读它）。
+  2. `Save()` 原地覆写 ⇒ 进程被杀／盘满就是这次损坏的来源。改 tmp+rename，
+     rename 失败清掉 tmp；顺带把缓存改成存**拷贝**而不是调用方指针（不然调用方
+     拿返回值改一笔就和磁盘分叉）。
+  3. 心跳取身份走裸 `Load()`：文件坏着就 `return`，**一帧都不发且不留任何日志**
+     （`grep` 过，旧写法那条分支没有任何 `Warn`）。改走 `install.GetStatus()`，
+     自愈后再上报；"从未安装过所以没有 install_id"这一档仍然不发（这一条单独钉了用例，
+     否则"改成总是发"也能绿）。
+  4. 2 秒 memo 没按**生效路径**记账：`GetInstallLockPath()` 每次现算（读 `INSTALL_LOCK_PATH`），
+     缓存却只存值和到期时刻 ⇒ 路径一换就把上一份 lock 端过来。这条是**用例逼出来的**：
+     心跳那条自检用例先绿后红，红的形态是"文件已经是新的/坏的，返回值却是旧的/好的"，
+     极易误判成自愈逻辑没生效。
+- `GetStatus` 的两条 DB 自愈分支只写 `Initialized=true` 却漏了 `HasAdmin=true` ⇒
+  响应里"已初始化、has_admin=false"，这是新增覆盖自己撞出来的第五处症状（变异格 M10 杀它）。
+- 删除两个零调用方导出：`EnsureInstallID(version)`（它同时是 `version` 字段唯一的
+  "假想写入方"）、`LoadInstallLockPublic()`。未使用性按 [[prove-nonuse-before-deleting]]
+  验过：`git grep` 全仓零命中，且 `git log --all -S` 只命中定义与文档，没有历史调用方。
+- 文档同一批订正：`MERCHANT_INITIALIZATION_FLOW.md` 写的"启动时 `EnsureInstallID`
+  铸 install_id、写 `initialized=false`"**从来没发生过**——启动只做 `SetAdminProbe`
+  装配，`install.lock` 是 `init-admin` 首次落盘时才创建的。状态机表、`HAS_ADMIN` 分支、
+  `install_id` 长度（36＝`ins-`+32hex）现在逐条对得上代码。`version` 字段写成
+  **无写入方**（全仓无 build 版本常量、无 ldflags、无配置键，三条枚举都跑了），
+  所以心跳里它恒为 `unknown`——这是现状记录，不是"该修"，接版本注入要连
+  release 流水线一起决策，留给用户拍板。
+- 测试面：`install_test.go` 14 条（真实临时文件，不 mock 文件系统）＋
+  `heartbeat_sender_test.go` 2 条（httptest 收帧，用 `srv.Close()` join handler
+  而不是睡一觉再断言）。夹具口径：截断夹具从**真 `json.MarshalIndent` 字节**上切
+  （`realLockBody` + `cutAfter`），不再手写键序——手写那一版把用例证伪了两次
+  （一次红在"自愈把已记录的超管名洗成空"，一次红在"version 应保下来"，而 version
+  根本在切口之后，断言本身无效）。
+- 电池：install 11 刀 / 心跳 2 刀，`KILLED=13 SURVIVED=0 BROKEN=0`，每格断言
+  `FAIL==期望 && FAIL+PASS==控制组总数`（14/2），还原后 md5 与放刀前逐字节一致。
+  其中一格专门钉第 4 条的判据（摘掉 `memoPath == path` ⇒ 用例必须红），否则那条
+  修法只是装饰。
+- 验证树：`git clone --shared` 到 `2091cb07` 后只 apply 本笔 5 个文件（＝"只含已提交
+  内容"的硬判据）⇒ `go build ./...` rc=0、`go vet ./internal/...` 全静默、gofmt 空、
+  `install -count=2 -race` ok、`middleware` ok、`platform -p 1` ok、
+  `make audit` rc=0（打印 `项目根 /private/tmp/r35-shadow`，即门真的扫了这棵树）、
+  `golangci-lint run ./internal/system/install/... ./internal/platform/...` rc=0。
+- 归因记录：本地 `go vet ./internal/...` 在活树上报 `internal/app/collection_wiring.go`
+  红。该文件是**未跟踪**的（`git ls-files --error-unmatch` 失败、`git check-ignore` rc=1、
+  HEAD 里不存在）⇒ 既不属本泳道也不属 HEAD 质量，CI 永远看不见它。我最初是被
+  `git status --porcelain | head -20` 的**截断清单**误导成"这文件没被人动"，
+  口径已进记忆（状态清单接 `head` 会把整个 `??` 面切掉，而剩余部分看着像完整真相）。
+- CI 回读（全 SHA `3d441385042e9603af8e3743796881da8930a5dc`，注意缩写会静默零行）：
+  `Docs Consistency` / `Markdown Lint` / `Docs Link Check` / `Seam Guard` / `SBOM` 全 success；
+  `Lint` failure 仍只在 `ESLint (user-web 主应用)` 那两条既有 error（#31 轮归因、修法在
+  并行泳道未提交字节里），`Workflow refs integrity`（含 R34 那道门）success
+  ⇒ 本笔未引入新红。
+- `user-server-ci`（run 486）回读，基线取同 workflow 上一次 run 485（`5b92525c`，
+  实测是本笔的祖先，`git merge-base --is-ancestor` 通过；`5b92525c..3d441385` 之间
+  共 8 笔）：两 run 都 completed/failure，红作业集合同为 4 条
+  （`ESLint (user-web)` / `service` / `core` / `Coverage`），逐条读红因后定性如下。
+  - `service`：485 红 3 条（`TestAudience_SelectBySegment`、`TestD12_NoNewLegacyKVDirectQuery`、
+    `TestFallbackVersionResolvesDBHandleSynchronously`），486 只剩 D12 一条
+    （`config_param_guard_test.go:77 发现新增遗留 KV 直查: [../service/quote.go]`，
+    quote.go 属并行泳道 T-P7、门文件在不碰清单）⇒ 好转，非新增。
+  - `Coverage`：唯一红因是那一句 `FAIL hivemtk-user/internal/service 204.699s`；
+    总覆盖 47.2% 已过阻断线 20%（60% 那条只是 warning）⇒ 作业红是被 service 拖的。
+    同日志里 `ok hivemtk-user/internal/system/install 0.009s coverage: 86.9%`
+    ⇒ R35 的 14 条用例确实在 CI 跑过（该包此前是 0%）。
+  - `core`：两边共同红 `TestExternalOrderRepository_GetByOrderID/get non-existing order`；
+    486 多出一条 `TestAutoMigrate_ConcurrentAccess` DATA RACE（栈顶
+    `schema.(*Schema).ParseIndexes` index.go:74 ↔ `migrator.go:140/190`，测试侧
+    migrate_test.go:224-225）。`migrate_test.go` 在这 8 笔里没人碰过（该文件最后由
+    `5b92525c` 提交），本地 `-race -count=40` 复现 3/40 红、栈与 CI 一致
+    ⇒ 既有的间歇红在本 run 显形，不是本笔引入；但它确是一条真缺陷，按最高规则
+    本轮直接结掉（见 R37）。
+
+## R37（2026-09-23 第五十轮：并发迁移用例断言了一个 gorm 根本不提供的保证）
+
+- 缺陷：`TestAutoMigrate_ConcurrentAccess` 让 3 个协程共用同一个 `*gorm.DB` 句柄、
+  迁**同一个**模型，并断言"无错、无竞态"。gorm 每跑一次 AutoMigrate 都会对缓存里
+  那个 `*Schema` 无锁改写 `Indexes`（`schema.(*Schema).ParseIndexes` index.go:74 ←
+  `migrator.go:140`，`HasIndex` 那条腿走 `LookIndex` → 同一函数 index.go:82），
+  于是同一个 Schema 对象被并发写 ⇒ `-race` 必撞。这条保证从来不存在，用例只是
+  撞得间歇：本地 `-race -count=40` 3/40 红，CI 侧 485 绿 486 红。
+- 取证口径：`/tmp/r37_repro.log`（3 个 DATA RACE 块、3 条 `--- FAIL`、栈行号与 CI
+  job 106921800943 一致）。**冷 Schema 不算复现**：第一刀变异把夹具改成"三协程迁同一
+  个（未被 NewTestDB 预热过的）模型"，`RACE=0 FAIL=0` 反而绿 —— 差别在 gorm 的
+  `Parse` 只在缓存命中后把同一个对象交给多个协程；夹具预热过才是 CI 那个形态。
+  这条差异本身就是"该用例为什么只能按不同模型判"的依据。
+- 生产侧不存在该形态（逐条查过，不是推测）：`pkg/db` 的 `AutoMigrate()` 是 for 循环
+  逐模型串行（migrate.go:424-430），迁移引擎注册表同样串行（registry.go:52、68），
+  多实例同时启动撞"表已存在"另由 `isTolerableMigrateError` + `createTableFallback`
+  承接；`SetTestDB` 那一族全局句柄竞态早先已由 `dbMu` 收口并另有
+  `db_race_test.go` 守着 ⇒ 本次这条不是同一处，sessionC 记录里"写点 db.go:84"
+  那条已闭，不必重复修。
+- 修法：用例改判 gorm 真给了的那层保证——**并发迁互不引用的不同表**（三个只有一列的
+  夹具表 `zz_concmig_a/b/c`，每个协程只碰一个 Schema，结构性地不存在共享写），
+  并加起跑栅栏 `release`（close 前三协程全部阻塞）把并发窗口拉满，否则快的那个
+  先跑完、用例退化成串行还不自知。注释里写明"为什么不再并发迁同一模型"，
+  防止下一次有人把它改回去。
+- 红绿证据：新用例 `-race -count=60` rc=0、`WARNING: DATA RACE` 计数 0
+  （`/tmp/r37_green.log`，22.7s）；反向两格都要红才算有牙 ——
+  ① 把三个夹具换回"预热的同一模型" ⇒ rc=1、RACE=2、FAIL=2（`/tmp/r37_mutB.log`，
+  证明这个测试二进制里 -race 真开着，绿不是 detector 睡着了）；
+  ② 把其中一格换成非法列类型（`chan int`）⇒ rc=1、FAIL=3、PANIC=0，红因正是本次
+  新写的那句 `并发迁移 zz_concmig_c: failed to parse field`（`/tmp/r37_mutC2.log`，
+  证明错误腿断言不空转）。注意第一版错误腿变异用的是 `42`：gorm 不返回 error 而是
+  `ReorderModels` 里空指针 panic，会带走整个二进制 ⇒ 换列类型才落到"返回错误"这条腿。
+  每格还原后 md5 与放刀前一致（`a107d58a78b7e44d0caa29fc3d7b5770`）。
+- 验证树：`git clone --shared` 到 `3d441385` 后只放本笔 2 个文件 ⇒ `go build ./...` rc=0、
+  `go vet ./internal/pkg/db/` 静默、`gofmt -l` 空、`golangci-lint run ./internal/pkg/db/...`
+  rc=0（0 issues）、新用例 `-race -count=2` ok、`make audit` rc=0（打印
+  `项目根 /private/tmp/r37-shadow`、生产键 180/红 0、异步全局门站点 0、seam 门 0 处）、
+  `markdownlint-cli2` 162 文件 0 issues。活树整包 `-race -count=1` 89.3s ok、0 race。
+- 顺带发现（移交并行泳道，不代改）：`internal/pkg/db` 在 `-count=2` 下有 8 条红
+  （`TestBillAutoMigrate_ShapeAndIdempotent`、`TestBillUniqueIndexIsOnVersionRowKey`、
+  `TestPaymentAutoMigrate_ShapeAndIdempotent`、`TestPaymentChannelRefIsTheIdempotencyKey`、
+  `TestQuoteAutoMigrate_Idempotent`、`TestQuoteCompositeUniqueIndexIsReallyComposite`、
+  `TestQuoteLineItemPrimaryKeyIsPerVersionRow`、`TestQuoteNumericColumnsAreReallyNumeric`），
+  助手那圈 `DropTable` 不执行（testdb.go:185-190 只对传入的 models 逐个 drop），
+  同一进程跑第二趟就撞上趟留下的
+  固定主键行。`-count=1` 全绿（实测 89.3s ok）⇒ CI 看不见这一族。
+  修法是一行/条：把待迁的模型作为参数交给 `NewTestDB(t, &model.Quote{}, ...)`。
+  为什么不代改：`bill_migration_test.go` 正被并行泳道改着（` M`），
+  `quote_migration_test.go`/`payment_migration_test.go` 属其 T-P7-01/02 在飞的同一批
+  ⇒ 按"只管自己改动"的泳道边界移交，配方连红因一起写进本条，接收方照抄即可。
