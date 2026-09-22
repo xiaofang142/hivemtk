@@ -452,9 +452,12 @@ audit:
 #      于是从 .env.local 之类（同样不入仓）被 vite 编进 bundle 的真凭证无人拦截。
 #   产物是"秘密真正对外公开"的那一步，只能在本地构建完、上传/发布前跑。
 #   缺 dist 目录或缺凭证键时脚本 rc=2（宁可报错，不静默零扫描）。
+#   website/dist 是 2026-09-21 官网迁入本仓时补进来的：Pages 发布的就是这份产物，
+#   而它比另外四个更"公开"（另外四份交给客户，这份推上公网 CDN），却一度不在清单里。
 audit-artifacts:
 	@bash scripts/check-secrets-artifacts.sh .env \
-		user-web/dist user-web/bridge/dist user-web/browser_automation/dist embed-sdk/dist
+		user-web/dist user-web/bridge/dist user-web/browser_automation/dist embed-sdk/dist \
+		website/dist
 
 # 提交前专用：待纳管文件（已跟踪 + 未跟踪，即"正要进仓"的那一批）的明文凭证闸门。
 # **不在 audit / CI 里** —— A 项要把本机 .env 的真实凭证值逐个搜进待纳管文件，
