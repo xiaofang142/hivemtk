@@ -36,10 +36,10 @@ jobs:
         working-directory: user-web/bridge
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -55,8 +55,16 @@ jobs:
         run: npx vitest run --reporter=default
 
       - name: Vitest coverage
-        # 覆盖率采集（lcov 上传 Codecov；缺 c8/v8 配置时仍可跑 text）
-        run: npx vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text
+        # 覆盖率采集（lcov 上传 Codecov，text 报告同时打日志）。
+        # provider 要与**已装**的 vitest 同档，否则 vitest 直接退 1 报
+        # `MISSING DEPENDENCY Cannot find dependency '@vitest/coverage-v8'`；
+        # 这一步一红，下面的 Build（dist 产物校验）与 Upload coverage 全被 skip，
+        # 两道门在 CI 上等于从没跑过 —— HEAD 的 bridge/package.json 就没带这个 provider。
+        # 版本号从 node_modules 现读而不是写死：package.json 抬 vitest 时这里跟着走。
+        run: |
+          vitest_version=$(node -p "require('./node_modules/vitest/package.json').version")
+          npm i --no-save --no-audit --no-fund "@vitest/coverage-v8@${vitest_version}"
+          npx vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text
 
       - name: Build (打包校验)
         # esbuild 多入口打包 → dist/，校验 manifest 与 popup.html 产物存在
@@ -70,7 +78,7 @@ jobs:
       - name: Upload coverage to Codecov
         # 缺 CODECOV_TOKEN 时不阻断；仅仓库内部 PR 上传
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: user-web/bridge/coverage/lcov.info
           flags: bridge

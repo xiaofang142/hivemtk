@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 文档引用一致性（OPT-DOC-15）
         run: bash scripts/check-doc-consistency.sh

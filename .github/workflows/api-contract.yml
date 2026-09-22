@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 前后端 API 契约（阻断：UNMATCHED=0 且无通配 key）
         run: python3 scripts/audit_api_contract.py --strict

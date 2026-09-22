@@ -31,10 +31,10 @@ jobs:
         working-directory: user-web/bridge
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -57,10 +57,10 @@ jobs:
         working-directory: user-web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -77,10 +77,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
@@ -98,10 +98,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check workflow references
         run: python3 scripts/check_workflow_refs.py --repo .
+
+      # scripts/check-ci-step-coverage.py 本身是人工核查用的诊断脚本（月度门/tag 门在 push 上
+      # 本就恒跳过，挂成门＝常亮红灯），所以进 CI 的不是它而是**它的用例**：判据一旦退化
+      # （例如把节奏门一起判红、或整作业被跳过的死门又看不见），这里当场红，不用等人翻。
+      # 用例走假 gh 夹具，不联网、不需要 GITHUB_TOKEN。
+      - name: check-ci-step-coverage 用例（假 gh，不联网）
+        run: bash scripts/check-ci-step-coverage.test.sh
 
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
@@ -113,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check shell scripts for the bash 3.2 CJK expansion hazard
         run: bash scripts/check-shell-cjk-expansion.sh
@@ -124,7 +131,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: LICENSE 合规自检（AGPL-3.0 第 13 条）
         run: bash scripts/license-compliance-scan.sh --dry-run --no-color

@@ -45,10 +45,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@v19
+        uses: DavidAnson/markdownlint-cli2-action@v24
         # 阻断：发现违规即失败（非软门槛）。
         # continue-on-error 是步骤级属性，写在 with: 下会被 action 静默忽略。
         continue-on-error: false

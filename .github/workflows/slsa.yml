@@ -39,10 +39,10 @@ jobs:
       hashes: ${{ steps.hash.outputs.hashes }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.25"
           cache: true
@@ -57,7 +57,7 @@ jobs:
             go build -trimpath -o ../dist/user-server-linux-amd64 ./cmd/api/
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -83,7 +83,7 @@ jobs:
           echo "hashes=$(sha256sum user-server-linux-amd64 bridge-extension.zip | base64 -w0)" >> "$GITHUB_OUTPUT"
 
       - name: Upload user-server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: user-server-linux-amd64
           path: dist/user-server-linux-amd64
@@ -91,7 +91,7 @@ jobs:
           retention-days: 90
 
       - name: Upload Bridge artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bridge-extension
           path: dist/bridge-extension.zip
@@ -127,7 +127,7 @@ jobs:
         uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts/
           merge-multiple: true
