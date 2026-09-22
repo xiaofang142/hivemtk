@@ -3283,9 +3283,17 @@ schema 上冗余一行、下次启动 AutoMigrate 也不清理；误删一个在
   ② 工作区凭证门 4 处命中全在 `??` 未追踪的 `webhook_batchc_*` / `webhook_batchg2b_*` 测试夹具里
   （HEAD 克隆 0 命中）⇒ 登记不碰；③ markdownlint 的 MD004 与 CI 侧 ESLint 两 error 仍按归属交接。
 
-**登记为残项、本卡不动**：`middleware/sanitize.go` 的 `SanitizeInput`（自带 `MaxBodyBytes 1MB`）
-在仓内**零调用方** ⇒ 一道没接线的封顶。删前要按"grep 未命中≠无用"的规矩证伪动态引用面，
-且它和 `BodyLimit` 语义不同（它截断读取、不报错），是否接线属产品口径 ⇒ 只登记。
+**当时登记的残项 ⇒ 第三十九轮核清并已修，别照抄这段结论**：这条写的是
+`middleware/sanitize.go` 的 `SanitizeInput` 零调用方。两处都不成立：① **没有 `SanitizeInput` 这个符号**
+（`grep -rn "SanitizeInput" --include="*.go"` 全仓 0 命中；`git log --all -S'SanitizeInput'` 只命中
+`c7402202` 这一条登记自己，改的是本文件 ⇒ 该符号从未进过任何代码），
+真实导出面是 `SanitizeString` / `SanitizeMap` / `SanitizeJSON` / `SanitizeMiddleware` /
+`SanitizeMiddlewareWithConfig` / `SanitizeJSONPooled`；② `SanitizeMiddleware` **并非没接线** ——
+它挂在 `internal/router/chat_routes.go:27` 的匿名公聊口 `/chat/public/*` 上（装配腿 `router.go:283`），
+零非测试引用的是 `SanitizeMiddlewareWithConfig` 与 `DefaultSanitizeConfig`。
+它自带的那份 `MaxBodyBytes = 1<<20` 与全局 `BodyLimit` 默认 8MB 是**两套上限**，而这段登记说的
+"它截断读取、不报错"正是缺陷本身：1~8MB 的 JSON 请求被静默截成半份交给处理器 ⇒ 访客发一条超长消息
+收到一个看不出原因的 400。修法既不是接线也不是删，是把上限收成同一个事实源，见文末 `## R23`。
 
 **勿放松**：`r.Use(BodyLimit(...))` 必须留在 `router.Setup` 的全局链前部（挪到 `auth` 组之后即漏掉
 先注册的路由）；`DefaultMaxJSONBodyMB` 不得低于任何按端点上界；`maxMultipartMemoryMB` 只能是**收紧**
@@ -3556,3 +3564,55 @@ env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里
 （空串会让 `AttachmentsDropped` 永远不响）；两处 `AttachmentsDropped` 出声保持"进程内一次"，
 既不得删也不得改成每行都打；`internal/service/email.go` 的 `_ = attachments` 若哪天有活调用点
 传非 nil，必须走 `mail` 包那套解析，而不是在手写报文上补 multipart。
+
+---
+
+## R23（2026-09-22 第三十九轮：R19 那条"登记不修"的结论自己就是错的，核清之后真缺陷才浮出来）
+
+**起点是复核自己上一轮的登记**，不是新巡网。R19 文末那条残项写的是"`SanitizeInput` 零调用方 ⇒ 一道没接线的封顶，
+删前须证伪动态引用"。两个事实都不成立：
+
+- **符号不存在**：`SanitizeInput` 在全仓 `*.go` 里 0 命中，`git log --all -S'SanitizeInput'` 只命中登记它自己的那条
+  （`c7402202`，改的是本文件）。真实导出面是 `SanitizeString:92` / `SanitizeMap:106` / `SanitizeJSON:119` /
+  `SanitizeMiddleware:208` / `SanitizeMiddlewareWithConfig:216` / `SanitizeJSONPooled:247` / `DEFAULT_PII_RULES:31` /
+  `DefaultSanitizeConfig:200`（行号按本轮改动后的树复算）。抄来的名字一旦进文档，后面每一轮都会拿它当"已核过的事实"。
+- **"零调用方"也不成立**：`SanitizeMiddleware` 有 1 处非测试引用，挂在 `internal/router/chat_routes.go:27`
+  的匿名公聊口 `/chat/public/*` 上（装配腿 `router.go:283`）。真正零非测试引用的是 `SanitizeMiddlewareWithConfig`
+  与 `DefaultSanitizeConfig`。
+
+**把"没接线"这个错判放下之后，读代码才看见真缺陷**：中间件自己在 `io.LimitReader` 上写死 1MB，
+而 R19 落地的全局 `BodyLimit` 默认 8MB（`MAX_JSON_BODY_MB`）—— 同一条链上两份请求体上限。表现不是报错，
+是 **1~8MB 的 JSON 请求被静默截成半份再交给处理器**：脱敏后的半份 JSON 解析不了，处理器回一个看不出原因的 400，
+而这条口是访客聊天入口，"发一条超长消息"就是它。红因是实测出来的，不是推的：
+`原始 body 1048576 字节`（控制组 10 格、放刀前现测）。
+
+**修法**：不接线也不删（那两个选项都建立在"零调用方"这个错判上），而是把上限收成同一个事实源 ——
+`cfg.MaxBodyBytes = BodyLimitFromEnv()`；`MaxBodyBytes <= 0` 改成与 `MAX_JSON_BODY_MB=0` 同语义的"不另设上限"，
+于是全局放行多少，脱敏就读多少，两边不可能再漂。原先那句"它截断读取、不报错"（残项登记里当作与 `BodyLimit`
+的语义差别写下的）其实正是缺陷本身，不是不修的理由。
+
+**牙**（`internal/middleware/sanitize_test.go` 是新建的 —— 这个挂在匿名口上的中间件此前一行测试没有）：
+
+| 用例 | 钉的是 | 哪一格变异能红 |
+| --- | --- | --- |
+| `TestSanitizeMiddlewareDoesNotTruncateBelowGlobalCap` | 1.8MB JSON 完整到达处理器 | P1（写死回 1MB） |
+| `TestSanitizeCapFollowsGlobalCapEnv` | `MAX_JSON_BODY_MB=12` 时 9.6MB 完整到达 | P1、P3（写死 8MB） |
+| `TestSanitizeCapFollowsGlobalCapEnvDownward` | `MAX_JSON_BODY_MB=1` 时读到的仍被收窄 | P2（不赋值＝压根不设限） |
+| `TestOversizedJSONIsRejectedBeforeSanitization` | 真链上超限是 413 且不进处理器 | 摘 `BodyLimit` 装配 |
+| `TestSanitizeMiddlewareSkipsNonJSONBody` | 非 JSON 原样穿过 | P4（摘 Content-Type 门） |
+| `TestSanitizeMiddlewareMasksPIIInJSONBody` + 两条纯函数格 | 脱敏本身（手机号/邮箱/卡号/字段级/嵌套与数组） | 摘任一规则 |
+
+只测"向上不截断"会把"干脆不设上限"判成合格，所以第三格是必须的：**同源**这件事有上下两个方向。
+电池四格 P1/P2/P3/P4 **全杀**（`.tmp_files/mut-evidence-2026-09-22/b64/`，控制组 10/10、每格断言
+PASS+FAIL==控制组、跑时 load 7.3–34.2，还原逐文件 md5 校验）。
+
+**门**：`./internal/middleware/` 活树 137 PASS / 0 FAIL / 0 SKIP，`./internal/router/` 170/0/0；
+提交态影子克隆（`--shared`，`ccbd7b6f`，dirty=0）复验 `go build ./...` rc=0、`go vet ./...` 零输出、
+middleware+router+storage 三包 313 PASS / 0 FAIL / 0 SKIP、`gofmt -l internal/` 空、
+配置面可发现性门 179 = 73+16+90 红 0（键数没变：新读的是同包 helper，不新增 `os.Getenv`）、
+断链门 162 md / 0、架构门 rc=0。
+
+**勿放松**：脱敏中间件不得再自带任何体积常量（上限只有一个事实源 = `BodyLimit`）；`MaxBodyBytes<=0` 的语义
+是"不另设限"，不得改回"回落到某个默认值"（那等于把第二份上限藏进 if 里）；Content-Type 门不得放宽成
+"所有类型都当 JSON 读"（multipart 会被整份读进内存并改写字节流）；`sanitize_test.go` 里"向下跟随"那一格
+不许因为"它在真实链路上够不到"就删 —— 它测的是事实源，用户可见的那一半由 413 那一格测。
