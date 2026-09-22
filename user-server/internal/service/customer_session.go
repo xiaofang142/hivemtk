@@ -452,6 +452,13 @@ func CustomerSessionCanSendMessage(s *model.CustomerSession) bool {
 }
 
 func DispatchSessionEventAsync(event, sessionID string, session *model.CustomerSession) {
+	// 引擎必须在 spawning 之前构造：NewRuleEngineService 一路要读 pkg/db 的包级全局句柄十余次
+	// （repository.NewAutomationRuleRepository、NewCustomerServicePlusService 名下 8 个子仓储等），
+	// 放进下面的异步体就会与"另一条用例改写全局句柄"的 db.SetTestDB() 撞在同一地址上——
+	// 整包 -race 实测到 TestCreateSession_AllowDifferentPlatform / TestCreateSession_AnonymousUser
+	// 两条红（单跑不复现）。同形状先例见 session_chain.go:TriggerCSATOnClose、
+	// objection_handler.go:fallbackVersionOf；回归探针见 async_db_handle_probe_test.go。
+	engine := NewRuleEngineServiceFromGlobal()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -460,6 +467,6 @@ func DispatchSessionEventAsync(event, sessionID string, session *model.CustomerS
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultHTTPTimeout)
 		defer cancel()
-		NewRuleEngineServiceFromGlobal().DispatchWithText(ctx, event, sessionID, "", session)
+		engine.DispatchWithText(ctx, event, sessionID, "", session)
 	}()
 }

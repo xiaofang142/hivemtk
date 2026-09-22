@@ -42,7 +42,13 @@ func TestAbExperiment_AssignBalance1000(t *testing.T) {
 // TestAbExperiment_LogExposureFireAndForget 缓冲满非阻塞丢弃并计数
 func TestAbExperiment_LogExposureFireAndForget(t *testing.T) {
 	a := NewABExperiment(nil, 2)
-	defer a.Stop()
+	// 先把落库 worker 收掉再灌缓冲：worker 一旦在这 5 次 push 之间抢到调度，就从缓冲里
+	// 取走一条 ⇒ 丢弃数变成"5 − 2 − worker 取走的条数"，那是调度而不是判据。Stop() 内含
+	// wg.Wait()，返回时 worker 确实已经退出，"恰好丢 3"于是只由缓冲容量决定。
+	// 复现口径（本机同一棵树）：`-race -count=200` 下改前必红（DroppedCount 读到过 1 和 2），
+	// 不带 -race 的 200 轮全绿 ⇒ 红的是 race 运行时的调度插桩，不是机器负载。
+	a.Stop()
+	defer a.Stop() // stopOnce 幂等，这里只是兜住中途 Fatalf 的退出路径
 	for i := 0; i < 5; i++ {
 		a.LogExposure("exp_x", AbVariantControl, fmt.Sprintf("c%d", i), "s1")
 	}
