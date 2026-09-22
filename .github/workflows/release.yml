@@ -89,6 +89,11 @@ jobs:
         run: |
           syft scan dir:. -o spdx-json=../../sbom-bridge.spdx.json
 
+      - name: Generate SBOM (Frontend)
+        working-directory: user-web
+        run: |
+          syft scan dir:. -o spdx-json=../sbom-frontend.spdx.json
+
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -96,6 +101,7 @@ jobs:
           path: |
             sbom-go.spdx.json
             sbom-bridge.spdx.json
+            sbom-frontend.spdx.json
           retention-days: 90
 
   # ============================================================
@@ -141,7 +147,7 @@ jobs:
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ steps.version.outputs.VERSION }}
@@ -169,3 +175,4 @@ jobs:
             artifacts/bridge-${{ steps.version.outputs.VERSION }}.zip.sha256
             sbom/sbom-go.spdx.json
             sbom/sbom-bridge.spdx.json
+            sbom/sbom-frontend.spdx.json

@@ -50,12 +50,14 @@ jobs:
             sbom-frontend.spdx.json
           retention-days: 90
 
-      - name: Attach SBOM to release (only on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            sbom-go.spdx.json
-            sbom-bridge.spdx.json
-            sbom-frontend.spdx.json
-          fail_on_unmatched_files: true
+  # 原先这里还有一步 `Attach SBOM to release`（`if: startsWith(github.ref,'refs/tags/')`
+  # + softprops/action-gh-release）。它删于第四十七轮，两条理由：
+  #   1) 本工作流的权限只有 `contents: read`（:11），而创建/更新 Release 要 write ⇒
+  #      那一步在 tag 上必然 403；又配了 `fail_on_unmatched_files: true`，等于第一次
+  #      发版就把这道"每次 push 都跑"的工作流整个打红。它从未暴露过，是因为本仓
+  #      **一个 tag 都没有推过**（`git ls-remote --tags` 空），tag-only 步骤零执行史。
+  #   2) Release 由 release.yml 的 create-release 作业创建（那里才是 job 级
+  #      `permissions: contents: write` 的位置，也是本仓既有的最小授权形状）；
+  #      在同一条 tag 上再挂一个会创建 Release 的作业＝两个作业抢同一个 tag。
+  # 因此三份 SPDX 的生成留在本工作流（push 就跑、产物存 90 天），挂载改到 release.yml
+  # 的 SBOM 作业里补齐——那边此前只生成/附带 go 与 bridge 两份，前端那份从未进过发行。
