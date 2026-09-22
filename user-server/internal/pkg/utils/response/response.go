@@ -53,6 +53,21 @@ func Success(c *gin.Context, data any, message string) {
 	})
 }
 
+// Accepted 以 202 返回"已受理、结论未定"的成功响应，body 与 Success 同构（code=0 + data）。
+//
+// 为什么单列一个出口而不是让调用方自己写状态码：本仓的控制器一律禁止 c.JSON
+// （check-architecture.sh 的 [L3] 那条），而 202 与 200 的差别不是"另一个状态码"，
+// 是"这一次调用没有给出终态"。报价发送是本仓第一个用到这一档的动作：
+// 审批没结论时它既不是成功也不是失败，回 200 会被前端渲染成"已发送"，
+// 回 409 会被读成"你的请求被拒了"，两种都是错的结论。
+func Accepted(c *gin.Context, data any, message string) {
+	c.JSON(http.StatusAccepted, Response{
+		Code:    0,
+		Message: i18n.Localize(localeOf(c), message),
+		Data:    data,
+	})
+}
+
 // SuccessWithList 成功响应（带分页列表）
 // data 字段返回 {list, total} 结构，便于前端统一解析 res.list 与 res.total
 func SuccessWithList(c *gin.Context, data any, total int64) {

@@ -27,9 +27,20 @@ type systemConfigKVRepo struct {
 	db *gorm.DB
 }
 
-// NewSystemConfigKVRepository 构造
+// NewSystemConfigKVRepository 构造。
+//
+// 注意它捕获的是**调用那一刻**的 db.GetDB()：装配顺序不对时拿到的是 nil，
+// 而 nil *gorm.DB 在 Get 里不是 error 而是 panic。需要句柄确定性的装配点用下面那个。
 func NewSystemConfigKVRepository() SystemConfigKVRepository {
 	return &systemConfigKVRepo{db: db.GetDB()}
+}
+
+// NewSystemConfigKVRepositoryWithDB 用显式句柄构造（与商机/报价/审批各仓储的 WithDB 同一口径）。
+//
+// 存在的理由是装配点的句柄一致性：报价竖的模板与话术指针读的是这张表，装配函数手里已经
+// 有一把 db，再走全局句柄就等于"版本行读 A 库、模板读 B 库"这种只在多库环境才暴露的错。
+func NewSystemConfigKVRepositoryWithDB(gormDB *gorm.DB) SystemConfigKVRepository {
+	return &systemConfigKVRepo{db: gormDB}
 }
 
 // Available 报告底层 DB 是否可用。
