@@ -3988,6 +3988,13 @@ unknown-file 三格。**名字与它所证的判据不符，比没格更坏：�
 注册表备份也进同一张表。清理盘只删自己名下的东西（上一轮影子克隆 `/tmp/r2[0-7]*` 1.7 GB、
 本会话两轮电池缓存 `/tmp/gocache-r22teeth`、`/tmp/gocache-r23dedup` 共 4.6 GB，删前 `lsof +D` 确认闲置），
 别人泳道的 `gocache-b23mut|a6mut|b20dmut|a12mut` 与共享 `~/Library/Caches/go-build` 一律没碰。
+**收尾清理（本轮账，删前先证明该删）**：影子克隆 `/tmp/r28-verify2`（48 MB）与 HEAD 逐字抽取目录
+`/tmp/r28-head-svc`（8.1 MB）`lsof +D` 均为 0 句柄后删除（要再验随时 `git clone --shared` 重建，成本几秒）；
+6 个中途失败的电池目录删掉（`/tmp/r28_seam_battery_*` 共 8 个），只留文档引用的 `214451`（全杀那趟）与 `211058`（盘满中断、第 6 格 0 字节那份）。
+**`/tmp/r28_residue_dingtalk_media.go.bak` 也删**，理由不是占地方而是它装的是**摘了锁的那份字节**
+（md5 `8187233e…`，与已提交的带锁版 `aabeea18…` 不同）——留着它等于留一个"能把红版本写回树里"的入口，
+这正对应本仓那条老规矩：遗留 `.bak` 会污染基线。`/tmp/bak_*_test.go`（20:49 一批）**没碰**：
+其中有 `bak_odw_test.go`＝`order_draft_wiring_test.go`，那是并行泳道刚提交的文件，归属证明不了就不是我的垃圾。
 
 **持锁期间有没有跑外部调用（对 17 行逐格扫 accessor 函数体）**：命中 6 处，全在 `pollingLockRepo` 一家
 （`getPollingLockRepo` 与 `resetPollingLockRepoForTest` 里的 `pollingLockRepoOnce.Do(func(){ … })`）。
@@ -4006,6 +4013,10 @@ unknown-file 三格。**名字与它所证的判据不符，比没格更坏：�
 整包 `-race` ⇒ rc=1 / 769.257s（real 772.63s，22:09:00→22:21:53，load 4.53→6.58，收尾空闲 4.4 Gi）、
 **`WARNING: DATA RACE` 计数 0**、`--- FAIL` 仍只有 `TestD12_NoNewLegacyKVDirectQuery` 那一条（0.28s），
 与不竞态那一跑同一条红；`failed SASL auth` 计数 0（env 带上了才有的这个 0，见下一段）。
+两跑的整份日志留在 `/tmp/r28_shadow_nr.log`（1,878,598 B）与 `/tmp/r28_shadow_race.log`（1,879,866 B），
+起跑/收尾 load、"env 已导出（user 长度 5、password 长度 48，值不落盘）"与两跑 rc 记在
+`/tmp/r28_shadow_runs.meta` ⇒ 上面每个秒数与计数都有可回读产物，不是抄自终端
+（克隆目录本身收尾已删，见下文"收尾清理"；这三份产物留在原地供回读）。
 两跑的 `--- FAIL` 名单逐字相同 ⇒ 本批的 16 条腿在整包（含并行会话既有红的树）里既没引入竞争也没引入红。
 **HEAD 又往前跳了两笔之后重测一遍**（克隆 `git merge --ff-only` 到 `1713110b`，本批 35 个文件重新逐字节 `cp`、
 md5 35/35 一致）：`gofmt -l internal/service/` 0 行、`go vet ./internal/service/` rc=0、`go build ./...` rc=0、
