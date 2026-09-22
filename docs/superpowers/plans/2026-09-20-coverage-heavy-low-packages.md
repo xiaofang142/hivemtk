@@ -3810,3 +3810,70 @@ V9/V10 **各自只打死 `.../feishu` 与 `.../telegram` 一个子用例**（逐
 **并**把 `TestSendOutbound_CardCapableChannelStaysQuiet` 的渠道表补上，否则"正常发卡"会被成片报成丢弃、
 这条日志在运维侧当场作废；桥接族的 `Extra["cards_dropped"]` 只在 `len(cards) > 0` 时写（V2 那格守的就是它）；
 `hubMsg != nil` 那句判断不许为了"日志字段整齐"去掉（V8 那格是 panic，不是断言红）。
+
+## R27（2026-09-22 第四十二轮：CI -race 撞出来的红本机三趟都复现不了，于是把判据从"能不能复现"换成"这种形状还剩几处"）
+
+**缺陷形状**：master 的 `Run unit tests (with -race)` 在 `7418e489` 上是红的（CI job 106701603664），
+`--- FAIL: TestN17_FeishuMediaFullChainBackfillsHubRow`，两张栈分别是
+写 `webhook_batchf4_msgtype_test.go:522`（下一条用例给 `feishuMediaStoreFn` 装替身）与
+读 `webhook_channel_feishu.go:427`（在 `utils.SafeGo` 的函数体内）。
+**机理不是两个用例同时在跑**，而是**前一条用例留下的协程还没被调度到读那一行**：那条异步体进 `SafeGo`
+之后要先 `feishuRepo.GetByID` 走一趟库才读到 seam，CI 机器 GOMAXPROCS 少、负载高，这一趟足够下一条用例
+开跑并写全局；同一条用例残留的协程因此既可能撞 DATA RACE，也可能读到别人的替身（跨用例串味）。
+
+**为什么不能靠"本地复现"当依据**：本机 `-race -count=12`（81.8s）与 `GOMAXPROCS=1 -count=30`（411.5s）
+两趟**都没撞上** —— PG 在同城、协程调度快，窗口收不到那么宽。所以本轮把判据定成静态的：
+**这个形状在树里还剩几处**，可数、可锁死为零；这些 seam 运行期从不改（生产语义不变），
+"进协程前快照成本地值"是无代价的那一档修法，且本仓 `4176e599` 的 reach 族已经这么修过（不另创口径）。
+
+**产码（8 文件 19 处站点）**：`webhook_channel_feishu.go` 3、`webhook_channel_wecom.go` 3、
+`webhook_channel_whatsapp.go` 2、`wechat_inbound_media.go` 1、`qq_media.go` 3、`telegram_media.go` 3、
+`dingtalk_media.go` 2、`douyin_media.go` 2 —— 全部改成进协程前 `maxBytes, fetchFn, storeFn := tgMaxMediaBytes,
+tgMediaFetchFn, tgMediaStoreFn` 这类快照，体内只认本地名（`telegram_media.go:80`、`dingtalk_media.go:159`
+那两处是最能说明问题的形状：`SafeGo` 与 `SafeGoDetached` 两种封装各一处）。
+`wechat_inbound_media.go` 里只数到 `wxMediaStoreFn` 一处：`wxMediaFetchFn` **至今没有任何用例改写它**，
+按判据（只锁"测试会改写"的全局）不属站点，但它确实是同一形状的裸读，留到 R28 一起收（见下一节）。
+
+**门（新）`scripts/check-async-global-read.py` + `scripts/async-global-read.baseline`**：对每个非测试文件，
+取"包级 `var` 声明集 ∩ 同包 `*_test.go` 里出现在 `=` 左边的名字集"，只在异步体（`go func(` /
+`utils.SafeGo(` / `utils.SafeGoDetached(` 的语法块，按大括号配平取体）内数裸读站点，注释行不算，
+键是"包目录 + 变量名"（跨包同名互不影响）。三条判据：现算 > 登记或出现基线外的新文件 ⇒ NEW/OVER 红；
+登记数 > 现算 ⇒ STALE 红（逼着划掉修掉的）；基线格式坏 ⇒ 红、缺基线文件 ⇒ **rc=2 ENV-BROKEN**。
+基线取**零条目**（修复后树就是 0），门跑在 153 个 package 上，输出行必带"项目根 …"以便核扫描根。
+
+**门的牙齿（6 格全过，注码文件事后逐字节 md5 复原）**：单点回退⇒NEW、`go func(` 形状⇒NEW、
+基线 1 现算 2⇒OVER、基线 3 现算 0⇒STALE、删基线⇒rc=2、复原⇒绿。
+另在 `cf71ba60` 的影子上做红绿对照：只把 `webhook_channel_feishu.go` 换回 HEAD 版本 ⇒ rc=1 且逐点报出
+**427 / 432 / 443** 三处，其中 427 与 CI 记的读点行号**逐字相同**（这条是"门数到的是同一个缺陷"的正面证据）；
+换回修复版 ⇒ rc=0。
+
+**回归取证（影子克隆 `--shared` + 只含已提交内容与本批文件，8 个产码文件与活树 md5 8/8 一致）**：
+`go build ./...` rc=0、`go vet ./internal/service/` rc=0、`gofmt -l internal/service/` 0 行、门 站点 0；
+整包非 -race `go test ./internal/service/ -count=1 -timeout 40m` ⇒ rc=1 / 607.166s、`--- FAIL` 全库只有 1 条
+＝ `TestD12_NoNewLegacyKVDirectQuery`（§23.17 第 12 段已定性的并行泳道既有红，其 `goCodeOnly` 修法至今未进任何提交）；
+整包 `-race`（20:06→20:21，`RACE-FULL-RC=1` / 899.203s / load 9.13→4.42）⇒
+**`WARNING: DATA RACE` 计数 0**、`--- FAIL` 仍只有 D12 一条，与不竞态那一跑同一条红。
+推送后再在只含已提交内容的新克隆（`/tmp/r27-verify` @ `521e4f80`，`git status` 空）上复跑
+build/vet/gofmt/门：rc=0 / rc=0 / 0 行 / 站点 0。双远端各核 `1 ahead / 0 behind` 才推，
+`be4f3f73..521e4f80` fast-forward 到 gitee-upstream 与 upstream。
+
+**顺带结掉一处挡在门前面的存量红**：`env-coverage.baseline` 里 `PORT` 那条在 `cf71ba60` 把 `PORT=8204`
+写进 `.env-example:72` 之后变成 STALE，而 `make audit` 里 `check-env-coverage.py` 排在我的新门**前面** ⇒
+不划掉它，`make audit` 根本走不到新门那一步（"门挂了却没跑到"是最容易看漏的假绿）。划掉后该门读数
+`生产代码读取键 180 · 已文档化 75 · 工具进程自动豁免 16 · 基线登记 89 · 红 0`。
+
+**装配面（两层，别混）**：本门此刻只在本地 `make audit`；① CI 从不执行 `make audit`
+（`grep -rn 'make audit' .github/workflows/` 零命中，仓内静态门在 CI 的挂法是 `static-gates` 里逐步显式调脚本）；
+② 要照那个挂法补一步就得改 `user-server-ci.yml`，而该文件此刻压着并行会话的未提交改动 ⇒ 待其回 clean 后补
+`run: python3 scripts/check-async-global-read.py` 并把脚本与基线两个路径加进 `on.push.paths` /
+`on.pull_request.paths`（触发 paths 不含判据文件＝改判据不触发这道门）。
+
+**门的已知盲区（本轮按上界枚举重核过，订正 docstring 里"实测四处"那句）**：本门只数"体内直读"，
+从 71 处协程区域沿调用图走 ≤5 层，40 个测试可写全局里能走到 **16** 个（多数经 seam 的**默认实现**，
+用例一装替身就走不到；另有经 `replayDelayedOutbound`、cron `RunOnce` 循环的几条）⇒ 收口在 R28。
+
+**勿放松**：快照那一行必须留在 spawning 协程上（它自己就是 R27 的修法，被识别成"体内站点"会把修法判红 ——
+门的 `SNAPSHOT_LINE` 只跳纯快照多标识符行，`if err := guard(...)` 这类形状不跳，一开始整片跳 `:=`
+会把真站点丢掉）；新渠道加异步体要读 seam 就照同款先快照；不要把门的口径扩到"运行期无人写的常量式全局"
+（那是另一类判据，混进来基线就数不出同一个缺陷）；也别把 seam 换成"本地别名指向全局"的写法绕过门 ——
+本地别名会**断掉调用图一跳**，这正是 R28 传递层要单独锁的原因。
