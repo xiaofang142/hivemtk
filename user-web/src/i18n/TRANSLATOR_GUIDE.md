@@ -3,7 +3,7 @@
 > **任务编号**: OPT-MISC-03
 > **创建日期**: 2026-08-16
 > **适用版本**: user-web v0.3+
-> **维护者**: i18n-coordinator@hivemtk.io
+> **维护者**: 走本仓 issue（GitHub `xiaofang142/hivemtk` / Gitee `xhpmayun/hivemtk`）。
 
 ## 一、目的
 
