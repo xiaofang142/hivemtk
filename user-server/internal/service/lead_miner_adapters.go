@@ -84,7 +84,7 @@ func (DouyinLeadAdapter) ExtraKeywords() (high, medium []string) {
 	return []string{"直播间", "小黄车", "链接", "橱窗"}, []string{"推荐", "介绍", "分享"}
 }
 func (a DouyinLeadAdapter) TriggerOutreach(ctx context.Context, s *WebhookService, accountID, fromID, groupID, groupTitle string, score int, originalText string) {
-	s.triggerDouyinDMOutreach(ctx, accountID, fromID, groupID, groupTitle, score, originalText)
+	s.triggerBridgeDMOutreach(ctx, string(ChannelDouyin), accountID, fromID, groupID, groupTitle, score, originalText)
 }
 
 // BridgeLeadAdapter Bridge 网页渠道通用适配器（小红书/TikTok/快手/闲鱼等）
@@ -131,8 +131,7 @@ func (a BridgeLeadAdapter) DisplayName(fromName, username, accountKey string) st
 }
 func (a BridgeLeadAdapter) ExtraKeywords() (high, medium []string) { return nil, nil }
 func (a BridgeLeadAdapter) TriggerOutreach(ctx context.Context, s *WebhookService, accountID, fromID, groupID, groupTitle string, score int, originalText string) {
-
-	s.triggerDouyinDMOutreach(ctx, accountID, fromID, groupID, groupTitle, score, originalText)
+	s.triggerBridgeDMOutreach(ctx, a.ChannelName, accountID, fromID, groupID, groupTitle, score, originalText)
 }
 
 func bridgeLeadAdapterForChannel(channel string) BridgeLeadAdapter {

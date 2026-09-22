@@ -118,6 +118,9 @@ func TestObsConfigRepository_GetByID(t *testing.T) {
 			}
 
 			if !tt.wantErr {
+				if result == nil {
+					t.Fatalf("GetByID 既没报错也没给行（`result.Name` 会 nil 解引用带走整包测试二进制）")
+				}
 				if result.Name != "GetByID Config" {
 					t.Errorf("Expected name 'GetByID Config', got '%s'", result.Name)
 				}
@@ -260,6 +263,9 @@ func TestObsConfigRepository_Update(t *testing.T) {
 	}
 
 	updated, _ := repo.GetByID(ctx, config.ID)
+	if updated == nil {
+		t.Fatalf("GetByID 既没报错也没给行（`updated.Name` 会 nil 解引用带走整包测试二进制）")
+	}
 	if updated.Name != "Updated Name" {
 		t.Errorf("Expected name 'Updated Name', got '%s'", updated.Name)
 	}
@@ -281,7 +287,7 @@ func TestObsConfigRepository_Delete(t *testing.T) {
 	}
 	repo.Create(ctx, config)
 
-	err := repo.Delete(ctx, config.ID)
+	err := repo.DeleteNonDefault(ctx, config.ID)
 	if err != nil {
 		t.Errorf("Delete() error = %v", err)
 	}
@@ -316,6 +322,9 @@ func TestObsConfigRepository_GetDefault(t *testing.T) {
 	if err != nil {
 		t.Errorf("GetDefault() error = %v", err)
 	}
+	if result == nil {
+		t.Fatalf("GetDefault 既没报错也没给行（`result.Name` 会 nil 解引用带走整包测试二进制）")
+	}
 
 	if result.Name != "Default Config" {
 		t.Errorf("Expected name 'Default Config', got '%s'", result.Name)
@@ -349,6 +358,9 @@ func TestObsConfigRepository_SetDefault(t *testing.T) {
 	}
 
 	config1Updated, _ := repo.GetByID(ctx, config1.ID)
+	if config1Updated == nil {
+		t.Fatalf("GetByID 既没报错也没给行（`config1Updated.IsDefault` 会 nil 解引用带走整包测试二进制）")
+	}
 	if !config1Updated.IsDefault {
 		t.Error("Expected config1 to be default")
 	}
@@ -360,6 +372,9 @@ func TestObsConfigRepository_SetDefault(t *testing.T) {
 
 	config1Updated2, _ := repo.GetByID(ctx, config1.ID)
 	config2Updated, _ := repo.GetByID(ctx, config2.ID)
+	if config1Updated2 == nil || config2Updated == nil {
+		t.Fatalf("GetByID 既没报错也没给行（下面两句解引用会带走整包测试二进制）")
+	}
 
 	if config1Updated2.IsDefault {
 		t.Error("Expected config1 to not be default after setting config2")
@@ -369,29 +384,13 @@ func TestObsConfigRepository_SetDefault(t *testing.T) {
 	}
 }
 
-// TestObsConfigRepository_ClearDefault 测试清除默认配置
-func TestObsConfigRepository_ClearDefault(t *testing.T) {
-	ctx := context.Background()
-	repo := setupObsConfigRepository(t)
-
-	config := &model.ObsConfig{
-		Name:      "To Clear",
-		Provider:  model.ObsProviderAliyun,
-		IsDefault: true,
-		Status:    model.ObsStatusActive,
-	}
-	repo.Create(ctx, config)
-
-	err := repo.ClearDefault(context.Background())
-	if err != nil {
-		t.Errorf("ClearDefault() error = %v", err)
-	}
-
-	result, _ := repo.GetByID(ctx, config.ID)
-	if result.IsDefault {
-		t.Error("Expected IsDefault to be false after clearing")
-	}
-}
+// TestObsConfigRepository_ClearDefault 随 ClearDefault 一起删除（批M / N-26）。
+//
+// 删的是入口而不是判据：旧 API 把"清掉所有默认"做成一个可单独调用的方法，
+// service 于是能在事务外先清后设，留下"零条默认"的库状态；本批把切换收进
+// SetDefault 一个事务之后，这个单独入口没有任何合法用法。
+// 它原来断言的性质（切换之后旧行不再是默认）由
+// obs_config_default_batchm_test.go 的 TestBatchM_SetDefaultLeavesExactlyOneDefault 接管。
 
 // TestObsConfigRepository_UpdateStatus 测试更新状态
 func TestObsConfigRepository_UpdateStatus(t *testing.T) {
@@ -411,6 +410,9 @@ func TestObsConfigRepository_UpdateStatus(t *testing.T) {
 	}
 
 	updated, _ := repo.GetByID(ctx, config.ID)
+	if updated == nil {
+		t.Fatalf("GetByID 既没报错也没给行（`updated.Status` 会 nil 解引用带走整包测试二进制）")
+	}
 	if updated.Status != model.ObsStatusInactive {
 		t.Errorf("Expected status 'inactive', got '%s'", updated.Status)
 	}

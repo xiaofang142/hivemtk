@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -26,31 +27,9 @@ import (
 
 var _ = json.Marshal
 
-func dtEncryptForTest(aesKey, plain string) (string, error) {
-	k, err := base64.StdEncoding.DecodeString(aesKey)
-	if err != nil {
-		return "", err
-	}
-	if len(k) > 32 {
-		k = k[:32]
-	} else if len(k) < 32 {
-		padded := make([]byte, 32)
-		copy(padded, k)
-		k = padded
-	}
-	block, err := aes.NewCipher(k)
-	if err != nil {
-		return "", err
-	}
-	pt := []byte(plain)
-	pad := aes.BlockSize - len(pt)%aes.BlockSize
-	pt = append(pt, bytes.Repeat([]byte{byte(pad)}, pad)...)
-
-	ct := make([]byte, len(pt))
-	mode := cipher.NewCBCEncrypter(block, k[:aes.BlockSize])
-	mode.CryptBlocks(ct, pt)
-	return base64.StdEncoding.EncodeToString(ct), nil
-}
+// dtEncryptForTest 已删除：它按「直接加密 JSON」构造夹具，与仓库实现互相印证造成假绿，
+// 真实钉钉事件订阅回调（random16+len4+msg+receiveId）从未被这条路径覆盖。
+// 官方布局的加密夹具见 dingtalk_official_contract_test.go 的 dtOfficialEncrypt。
 
 func feishuEncryptForTest(encKey, plain string) (string, error) {
 	key := []byte(encKey)
@@ -221,8 +200,7 @@ func TestSendOutbound_DingTalk_MissingOrExpiredWebhook_NoCall(t *testing.T) {
 func TestDingTalkReceiveMessage_CapturesSessionWebhookAndTriggersAI(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.DingTalkAppAccount{}, &model.MessageHub{})
 
-	rawKey := []byte("0123456789abcdef0123456789abcdef")
-	aesKey := base64.StdEncoding.EncodeToString(rawKey)
+	aesKey := newDingTalkTestAESKey(t)
 
 	acc := &model.DingTalkAppAccount{
 		AppKey: "ak", AppSecret: "as", Token: "tok", AESKey: aesKey,
@@ -240,14 +218,26 @@ func TestDingTalkReceiveMessage_CapturesSessionWebhookAndTriggersAI(t *testing.T
 	webhookSvc := &WebhookService{ingressSvc: ingress}
 	dtSvc := NewDingTalkAppService(db, webhookSvc)
 
-	plain := `{"msgtype":"text","senderStaffId":"staff-9","conversationId":"cid-77","msgId":"m-77","createAt":1700000000000,"text":{"content":"你好"},"sessionWebhook":"https://oapi.dingtalk.com/robot/send?access_token=xyz","sessionWebhookExpiredTime":1893456000000}`
-	enc, err := dtEncryptForTest(aesKey, plain)
-	if err != nil {
-		t.Fatalf("encrypt helper: %v", err)
+	// 与 dtLiveRobotMsg 同一口径：createAt 现在是真实时序锚点，钉死在 2023 的夹具会被
+	// 中台钩子3 判成历史堆积（只落库、不触发 AI）；会话 id 也必须一次一换，
+	// 因为 message_hub 的会话查询按 conversation_id 收敛、不分账号。
+	liveAt := time.Now().UnixMilli()
+	convNonce := strconv.FormatInt(liveAt, 10)
+	plain := `{"msgtype":"text","senderStaffId":"staff-9","conversationId":"cid-del-` + convNonce +
+		`","msgId":"m-` + convNonce + `","createAt":` + strconv.FormatInt(liveAt, 10) +
+		`,"text":{"content":"你好"},"sessionWebhook":"https://oapi.dingtalk.com/robot/send?access_token=xyz","sessionWebhookExpiredTime":1893456000000}`
+
+	// 官方事件订阅布局（random16+len4+msg+receiveId）+ query 验签，
+	// 与 dingtalk_official_contract_test.go 用的是同一套独立实现。
+	enc := dtOfficialEncrypt(t, aesKey, plain, "dingCorpIdXYZ")
+	ts := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	query := map[string]string{
+		"signature": dtOfficialEventSign("tok", ts, "n1", enc),
+		"timestamp": ts, "nonce": "n1",
 	}
 	envelope, _ := json.Marshal(map[string]string{"encrypt": enc})
 
-	if err := dtSvc.ReceiveMessage(context.Background(), acc.ID, envelope); err != nil {
+	if err := dtSvc.ReceiveMessage(context.Background(), acc.ID, envelope, query, nil); err != nil {
 		t.Fatalf("ReceiveMessage error: %v", err)
 	}
 	if tr.called != 1 {

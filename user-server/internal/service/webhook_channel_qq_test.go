@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -254,16 +253,4 @@ func TestQQ_GroupConversationHeuristic(t *testing.T) {
 	if isQQGroupConversation("") {
 		t.Error("empty should not be group")
 	}
-}
-
-func TestQQ_TriggerSalesEngineGuard(t *testing.T) {
-	db := setupQQDB(t)
-	ws := newTestWebhookService(db)
-	// salesEngine 未注入时应安全无操作
-	ws.triggerQQSalesEngine(context.Background(), ChannelQQ, "1",
-		&ParsedPayload{Content: "hi"}, &model.MessageHub{Platform: "qq", ConversationID: "G1"})
-	// 空内容守卫
-	ws.triggerQQSalesEngine(context.Background(), ChannelQQ, "1",
-		&ParsedPayload{Content: "  "}, &model.MessageHub{Platform: "qq"})
-	_ = bytes.MinRead
 }

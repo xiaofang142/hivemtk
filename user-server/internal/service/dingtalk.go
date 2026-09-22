@@ -55,7 +55,7 @@ func (s *DingTalkService) SendRobot(ctx context.Context, webhookOrToken, secret,
 		if strings.Contains(u, "?") {
 			sep = "&"
 		}
-		u = fmt.Sprintf("%s%sts=%d&sign=%s", u, sep, ts, url.QueryEscape(sign))
+		u = fmt.Sprintf("%s%stimestamp=%d&sign=%s", u, sep, ts, url.QueryEscape(sign))
 	}
 
 	mt := msgType

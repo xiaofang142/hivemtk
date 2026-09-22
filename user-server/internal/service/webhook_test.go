@@ -216,11 +216,15 @@ func TestWebhookService_VerifyWechat_WrongSig(t *testing.T) {
 	}
 }
 
+// 入站管线用例统一挂在 douyin 上：它是通用 webhook 路由真正有适配器的渠道之一。
+// 用 custom/kuaishou 之类无适配器渠道做夹具，从 Receive 第一道能力闸就会被拒绝
+// （审计 D-03），管线逻辑根本走不到。
+
 func TestWebhookService_Receive_EmptyBody(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	s := NewWebhookService(setupWebhookTestDB(t))
 	defer s.Stop(context.Background())
-	r, err := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: nil})
+	r, err := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: nil})
 	if err != nil {
 		t.Fatalf("recv: %v", err)
 	}
@@ -233,19 +237,19 @@ func TestWebhookService_Receive_NoAccount(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	s := NewWebhookService(setupWebhookTestDB(t))
 	defer s.Stop(context.Background())
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, Body: []byte("{}")})
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, Body: []byte("{}")})
 	if r.Accepted {
 		t.Error("expected rejected for missing account")
 	}
 }
 
-func TestWebhookService_Receive_Custom_NoSecret(t *testing.T) {
+func TestWebhookService_Receive_Douyin_NoSecretInsecureBypass(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	db := setupWebhookTestDB(t)
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
 	body := []byte(`{"event_id":"e1","event_type":"message","content":"hi"}`)
-	r, err := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: body})
+	r, err := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body})
 	if err != nil {
 		t.Fatalf("recv: %v", err)
 	}
@@ -263,11 +267,11 @@ func TestWebhookService_Receive_Duplicate(t *testing.T) {
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
 	body := []byte(`{"event_id":"dup1","event_type":"message","content":"hi"}`)
-	r1, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: body})
+	r1, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body})
 	if !r1.Accepted || r1.Duplicate {
 		t.Errorf("first: %+v", r1)
 	}
-	r2, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: body})
+	r2, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body})
 	if !r2.Accepted || !r2.Duplicate {
 		t.Errorf("second expected duplicate, got %+v", r2)
 	}
@@ -279,7 +283,7 @@ func TestWebhookService_Receive_GeneratedEventID(t *testing.T) {
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
 	body := []byte(`{"content":"hi"}`)
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: body})
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body})
 	if !r.Accepted {
 		t.Errorf("expected accepted, got %+v", r)
 	}
@@ -298,7 +302,7 @@ func TestWebhookService_Receive_DefaultEventType(t *testing.T) {
 	defer s.Stop(context.Background())
 	eventID := fmt.Sprintf("e1-%d", time.Now().UnixNano())
 	body := []byte(fmt.Sprintf(`{"event_id":"%s","content":"hi"}`, eventID))
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: body})
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body})
 	if !r.Accepted {
 		t.Errorf("expected accepted, got %+v", r)
 	}
@@ -312,13 +316,18 @@ func TestWebhookService_Receive_InvalidJSON(t *testing.T) {
 	db := setupWebhookTestDB(t)
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "a1", Body: []byte("not json")})
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: []byte("not json")})
 	if r.Accepted {
 		t.Error("expected rejected")
 	}
 }
 
-func TestWebhookService_Receive_HMAC_Douyin(t *testing.T) {
+// TestWebhookService_Receive_DouyinOfficialSha1 端到端（Receive 而非只测 Verify）：
+// 官方 hex(sha1(client_secret ‖ body)) 签名要能穿过 Receive 的取头/验签/入漏斗这一跳。
+// 批A 的白名单教训：签名算法在 service 里改对了，若 Receive 传下来的头不对，
+// 真实回调仍然进不来 —— 所以这条只能在 Receive 上测。
+// （原名 TestWebhookService_Receive_HMAC_Douyin：HMAC-SHA256(body) 是修复前的错误口径。）
+func TestWebhookService_Receive_DouyinOfficialSha1(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	db := setupWebhookTestDB(t)
 	db.Create(&model.IntegrationAccount{Platform: "douyin", APISecret: "secret123", Status: 1})
@@ -326,10 +335,7 @@ func TestWebhookService_Receive_HMAC_Douyin(t *testing.T) {
 	defer s.Stop(context.Background())
 
 	body := []byte(`{"event_id":"d1","content":"hi"}`)
-	mac := hmac.New(sha256.New, []byte("secret123"))
-	mac.Write(body)
-	sig := hex.EncodeToString(mac.Sum(nil))
-	hdr := map[string]string{"X-Douyin-Signature": sig}
+	hdr := map[string]string{"X-Douyin-Signature": gDyOfficialSign("secret123", body)}
 	r, err := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "a1", Body: body, Headers: hdr})
 	if err != nil {
 		t.Fatalf("recv: %v", err)
@@ -356,51 +362,114 @@ func TestWebhookService_Receive_HMAC_BadSig(t *testing.T) {
 	}
 }
 
-func TestWebhookService_Receive_HMAC_Kuaishou(t *testing.T) {
+// TestWebhookService_Receive_UnsupportedChannelRejected 锁住 D-03 的契约：
+// 通用 webhook 路由没有入站适配器的渠道，必须在能力闸上就被拒绝，
+// 且一行事件都不许落库——回 200 等于告诉渠道方"已收到"，之后不会再重投，
+// 客户消息就此消失（既不进收件箱也不会触发 AI）。
+func TestWebhookService_Receive_UnsupportedChannelRejected(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	db := setupWebhookTestDB(t)
-	db.Create(&model.IntegrationAccount{Platform: "kuaishou", APISecret: "ks_secret", Status: 1})
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
 
-	body := []byte(`{"event_id":"k1"}`)
-	mac := hmac.New(sha256.New, []byte("ks_secret"))
-	mac.Write(body)
-	sig := hex.EncodeToString(mac.Sum(nil))
-	hdr := map[string]string{"X-Signature": sig}
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelKuaishou, AccountID: "a1", Body: body, Headers: hdr})
-	if !r.Accepted {
-		t.Errorf("expected accepted, got %+v", r)
+	cases := []struct {
+		channel       WebhookChannel
+		wantReasonKey string
+	}{
+		// 三家没有官方服务端回调，真实入站只有浏览器桥
+		{ChannelKuaishou, "/api/bridge/ingest"},
+		{ChannelXiaohongshu, "/api/bridge/ingest"},
+		{ChannelXianyu, "/api/bridge/ingest"},
+		// 两家有专用回调入口，通用路由收到即配置错误
+		{ChannelWechat, "/api/webhook/wechat/"},
+		{ChannelDingTalk, "/api/webhook/dingtalk/"},
+		// custom 只是枚举占位，无适配器
+		{ChannelCustom, "无入站适配器"},
+	}
+	for i, tc := range cases {
+		body := []byte(fmt.Sprintf(`{"event_id":"gw-%d","content":"hi"}`, i))
+		// 带上正确算法的签名：拒绝理由必须是"渠道不支持"，不能靠验签失败蒙对。
+		secret := "sec_" + string(tc.channel)
+		if err := db.Create(&model.IntegrationAccount{
+			Platform: string(tc.channel), APISecret: secret, Status: 1,
+		}).Error; err != nil {
+			t.Fatalf("seed %s account: %v", tc.channel, err)
+		}
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		hdr := map[string]string{
+			"X-Signature":         hex.EncodeToString(mac.Sum(nil)),
+			"X-Douyin-Signature":  hex.EncodeToString(mac.Sum(nil)),
+			"X-Hub-Signature-256": "sha256=" + hex.EncodeToString(mac.Sum(nil)),
+			"X-Wechat-Signature":  hex.EncodeToString(mac.Sum(nil)),
+			"X-Wechat-Timestamp":  "1",
+			"X-Wechat-Nonce":      "2",
+		}
+
+		r, err := s.Receive(context.Background(), &ReceiveRequest{
+			Channel: tc.channel, AccountID: "gw-1", Body: body, Headers: hdr,
+		})
+		if err != nil {
+			t.Fatalf("%s receive: %v", tc.channel, err)
+		}
+		if r.Accepted {
+			t.Errorf("%s 必须被拒（无入站适配器），got %+v", tc.channel, r)
+		}
+		if r.VerifyFail {
+			t.Errorf("%s 应因能力闸被拒而非验签失败（否则运维会去查密钥），got %+v", tc.channel, r)
+		}
+		if !strings.Contains(r.Reason, tc.wantReasonKey) {
+			t.Errorf("%s 拒绝理由要指出正确入口 %q，got %q", tc.channel, tc.wantReasonKey, r.Reason)
+		}
+		var n int64
+		if err := db.Model(&model.WebhookEvent{}).Where("platform = ? AND account_id = ?", string(tc.channel), "gw-1").Count(&n).Error; err != nil {
+			t.Fatalf("count events %s: %v", tc.channel, err)
+		}
+		if n != 0 {
+			t.Errorf("%s 被拒后不应留下 webhook 事件行，实际 %d 条", tc.channel, n)
+		}
 	}
 }
 
-func TestWebhookService_Receive_HMAC_Xiaohongshu(t *testing.T) {
+// TestWebhookService_Receive_EmptyChannelRejected 空渠道不得再被兜底成 custom 收下。
+func TestWebhookService_Receive_EmptyChannelRejected(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
-	db := setupWebhookTestDB(t)
-	db.Create(&model.IntegrationAccount{Platform: "xiaohongshu", APISecret: "xhs", Status: 1})
-	s := NewWebhookService(db)
+	s := NewWebhookService(setupWebhookTestDB(t))
 	defer s.Stop(context.Background())
-
-	body := []byte(`{"event_id":"x1"}`)
-	mac := hmac.New(sha256.New, []byte("xhs"))
-	mac.Write(body)
-	sig := hex.EncodeToString(mac.Sum(nil))
-	hdr := map[string]string{"X-Hub-Signature-256": "sha256=" + sig}
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelXiaohongshu, AccountID: "a1", Body: body, Headers: hdr})
-	if !r.Accepted {
-		t.Errorf("expected accepted, got %+v", r)
-	}
-}
-
-func TestWebhookService_Receive_Wechat(t *testing.T) {
-	s := &WebhookService{}
-	body := []byte(`{"event_id":"w1","msg_signature":"x","timestamp":"1","nonce":"2"}`)
-	hdr := map[string]string{"X-Wechat-Timestamp": "1", "X-Wechat-Nonce": "2", "X-Wechat-Signature": "x"}
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelWechat, AccountID: "a1", Body: body, Headers: hdr})
-
-	// fail-closed：secret 未配置时必须拒绝验签（与其他渠道一致）
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{AccountID: "a1", Body: []byte(`{"event_id":"no-chan"}`)})
 	if r.Accepted {
-		t.Errorf("expected rejected (secret 未配置时 fail-closed), got %+v", r)
+		t.Errorf("空渠道必须拒绝，got %+v", r)
+	}
+	if !strings.Contains(r.Reason, "channel") {
+		t.Errorf("reason 要点名 channel，got %q", r.Reason)
+	}
+}
+
+// TestWebhookService_Verify_GenericHMAC 三家共用 verifyHMAC 的既有行为。
+// 能力闸只是不再受理它们的入站，验签实现留到 D-04 按官方口径替换。
+func TestWebhookService_Verify_GenericHMAC(t *testing.T) {
+	db := setupWebhookTestDB(t)
+	s := NewWebhookService(db)
+	defer s.Stop(context.Background())
+
+	for _, ch := range []WebhookChannel{ChannelKuaishou, ChannelXiaohongshu, ChannelXianyu} {
+		secret := "sec_" + string(ch)
+		if err := db.Create(&model.IntegrationAccount{Platform: string(ch), APISecret: secret, Status: 1}).Error; err != nil {
+			t.Fatalf("seed %s: %v", ch, err)
+		}
+		body := []byte(`{"event_id":"v-"` + string(ch) + `}`)
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(body)
+		sig := hex.EncodeToString(mac.Sum(nil))
+
+		ok, err := s.Verify(context.Background(), ch, "a1", body, map[string]string{"X-Signature": sig}, nil)
+		if err != nil || !ok {
+			t.Errorf("%s 正确签名应验签通过，got ok=%v err=%v", ch, ok, err)
+		}
+		// 反向：换一个字节就得失败，否则这条用例是假绿。
+		if ok2, _ := s.Verify(context.Background(), ch, "a1", body, map[string]string{"X-Signature": sig[:len(sig)-1] + "0"}, nil); ok2 {
+			t.Errorf("%s 错误签名不得验签通过", ch)
+		}
 	}
 }
 
@@ -418,12 +487,12 @@ func TestWebhookService_Receive_RateLimit(t *testing.T) {
 	db := setupWebhookTestDB(t)
 	s := NewWebhookService(db)
 	defer s.Stop(context.Background())
-	key := "custom:rl-test"
+	key := "douyin:rl-test"
 	b := &tokenBucket{capacity: 5, refillRate: 0, tokens: 0, lastRefill: time.Now()}
 	s.mu.Lock()
 	s.rlBuckets[key] = b
 	s.mu.Unlock()
-	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelCustom, AccountID: "rl-test", Body: []byte(`{"event_id":"rl1","content":"hi"}`)})
+	r, _ := s.Receive(context.Background(), &ReceiveRequest{Channel: ChannelDouyin, AccountID: "rl-test", Body: []byte(`{"event_id":"rl1","content":"hi"}`)})
 	if r.Accepted {
 		t.Error("expected rate limited")
 	}
@@ -629,27 +698,31 @@ func fmtKey(i int) string {
 }
 
 // TestWebhookInsecureWebhookGuard W-1 验签绕过防护：
-// production 环境下 ALLOW_INSECURE_WEBHOOK=true 必须拒绝启动；dev/test/未设置保持现状。
+// 非开发环境下 ALLOW_INSECURE_WEBHOOK=true 必须拒绝启动；环境未声明按生产姿态处理。
 func TestWebhookInsecureWebhookGuard(t *testing.T) {
 	cases := []struct {
 		name          string
 		appEnv        string
 		mode          string
+		ginMode       string
 		allowInsecure string
 		wantFatal     bool
 	}{
-		{"production+开关开启_拒绝", "production", "", "true", true},
-		{"MODE=production别名_拒绝", "", "production", "true", true},
-		{"production大小写不敏感_拒绝", "Production", "", "true", true},
-		{"production但开关未开_放行", "production", "", "false", false},
-		{"production且未设置变量_放行", "production", "", "", false},
-		{"development开启_放行", "development", "", "true", false},
-		{"test开启_放行", "test", "", "true", false},
-		{"未设置环境开启_放行(dev现状)", "", "", "true", false},
+		{"production+开关开启_拒绝", "production", "", "", "true", true},
+		{"MODE=production别名_拒绝", "", "production", "", "true", true},
+		{"production大小写不敏感_拒绝", "Production", "", "", "true", true},
+		{"production但开关未开_放行", "production", "", "", "false", false},
+		{"production且未设置变量_放行", "production", "", "", "", false},
+		{"development开启_放行", "development", "", "", "true", false},
+		{"test开启_放行", "test", "", "", "true", false},
+		{"local开启_放行", "local", "", "", "true", false},
+		{"环境未声明+GIN_MODE=debug_放行", "", "", "debug", "true", false},
+		{"环境未声明+GIN_MODE=release_拒绝", "", "", "release", "true", true},
+		{"环境全未声明_按生产姿态拒绝", "", "", "", "true", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := insecureWebhookStartupError(tc.appEnv, tc.mode, tc.allowInsecure)
+			err := insecureWebhookStartupError(tc.appEnv, tc.mode, tc.ginMode, tc.allowInsecure)
 			if gotFatal := err != nil; gotFatal != tc.wantFatal {
 				t.Fatalf("wantFatal=%v, got err=%v", tc.wantFatal, err)
 			}

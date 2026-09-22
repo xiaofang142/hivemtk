@@ -54,13 +54,17 @@ func (s *DouyinIntegrationService) SendCard(ctx context.Context, accountID, conv
 	return s.SendMessage(ctx, accountID, conversationID, content)
 }
 
-func (s *DouyinIntegrationService) DMOutreachAllowed(ctx context.Context, accountID, userID string) bool {
-	key := "mtk:dy:dm_outreach:" + accountID + ":" + userID
+// dmOutreachAllowed 私信触达冷却闸：同一 key 在 dyDMOutreachCooldown 内只放行一次。
+func dmOutreachAllowed(ctx context.Context, key string) bool {
 	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", dyDMOutreachCooldown)
 	if err != nil {
 		return true
 	}
 	return set
+}
+
+func (s *DouyinIntegrationService) DMOutreachAllowed(ctx context.Context, accountID, userID string) bool {
+	return dmOutreachAllowed(ctx, "mtk:dy:dm_outreach:"+accountID+":"+userID)
 }
 
 var (

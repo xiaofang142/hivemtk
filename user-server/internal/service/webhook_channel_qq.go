@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"hivemtk-user/internal/channelbot/qq"
@@ -96,25 +95,33 @@ func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *Pa
 	}
 
 	// 同步构造 hub 记录供 sendOutbound / AI 触发使用（Ingress 内部已落库，此处为内存视图）。
-	// MsgID/Extra 与 Ingress 落库口径对齐（MsgID=qq_evt_{事件id}，Extra.channel_msg_id
-	// 供 QQOutboundMsgID 取被动回复关联 ID——P2-2 修复）。
+	// MsgID/Extra 与 Ingress 落库口径对齐：MsgID=HubMsgID()（媒体回填按它找行），
+	// Extra.channel_msg_id 供 QQOutboundMsgID 取被动回复关联 ID，必须是官方 d.id 原值
+	//——官方发送接口写的是「msg_id 从 GROUP_AT_MESSAGE_CREATE 等事件的 d.id 获取，5 分钟内有效」，
+	// 带内部命名空间前缀的值平台不认，每条 AI 回复都会 400。
 	hub := &model.MessageHub{
 		Platform:       model.ChannelQQ,
 		AccountID:      accountID,
-		MsgID:          inbound.MessageID,
+		MsgID:          e.HubMsgID(),
 		Direction:      "inbound",
 		SenderID:       inbound.SenderID,
 		ConversationID: inbound.ConversationID,
-		MsgType:        model.MsgTypeText,
+		MsgType:        inbound.MsgType,
 		Content:        inbound.Content,
 		SentAt:         time.Now(),
 		IsGroup:        inbound.IsGroup,
 		GroupID:        inbound.GroupID,
-		Extra:          map[string]any{"channel_msg_id": inbound.MessageID},
+		Extra:          map[string]any{"channel_msg_id": e.OfficialMsgID()},
+	}
+	if hub.MsgType == "" {
+		hub.MsgType = model.MsgTypeText
 	}
 	if hub.Content == "" {
 		hub.Content = "[qq]"
 	}
+
+	// 富媒体（图片/视频/语音/文件）当场转存：附件 url 是 CDN 临时链接且官方未公布有效期。
+	s.persistQQMediaAsync(ctx, accountID, hub.MsgID, e.Attachments())
 	return hub, nil
 }
 
@@ -132,14 +139,6 @@ func (s *WebhookService) getQQWebhookSecret(ctx context.Context, accountID strin
 		return ""
 	}
 	return acc.WebhookSecret
-}
-
-// triggerQQSalesEngine QQ AI 触发（群消息必须有内容；单聊直接触发）
-func (s *WebhookService) triggerQQSalesEngine(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
-	if hubMsg == nil || strings.TrimSpace(p.Content) == "" {
-		return
-	}
-	s.triggerSalesEngine(ctx, channel, accountID, p, hubMsg)
 }
 
 // QQOutboundMsgID 出站回复关联的原消息 ID（从 hub Extra 取 channel_msg_id）

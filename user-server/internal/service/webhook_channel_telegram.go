@@ -73,19 +73,18 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		return nil, nil, fmt.Errorf("telegram parse: %w", err)
 	}
 
-	if tgPayload.Message != nil {
-		text := tgPayload.Message.Text
-		if text == "" {
-			text = tgPayload.Message.Caption
+	// M-01：媒体消息的正文在 caption 里，且落库类型必须是 image/video/audio/file，
+	// 不能一律 text + 空正文（p.Content 与 hub.Content 必须同源，否则 AI 看到的与工作台上显示的不是同一条）。
+	if m := tgPayload.AnyMessage(); m != nil {
+		inb := m.Inbound()
+		if inb.Content != "" {
+			p.Content = inb.Content
 		}
-		if text != "" {
-			p.Content = text
+		if m.From != nil {
+			p.Sender = strconv.FormatInt(m.From.ID, 10)
 		}
-		if tgPayload.Message.From != nil {
-			p.Sender = strconv.FormatInt(tgPayload.Message.From.ID, 10)
-		}
-		if tgPayload.Message.Chat != nil {
-			p.ChatID = strconv.FormatInt(tgPayload.Message.Chat.ID, 10)
+		if m.Chat != nil {
+			p.ChatID = strconv.FormatInt(m.Chat.ID, 10)
 		}
 	}
 
@@ -222,6 +221,8 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		username  string
 		fromIsBot bool
 		text      string
+		msgType   string
+		media     []telegram.TGMediaRef
 	}
 	var picked *tgMsg
 	if tgPayload.Message != nil && tgPayload.Message.From != nil && tgPayload.Message.Chat != nil {
@@ -237,8 +238,9 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			fromName:  tgPayload.Message.From.FirstName,
 			username:  tgPayload.Message.From.Username,
 			fromIsBot: tgPayload.Message.From.IsBot,
-			text:      tgPayload.Message.Text,
 		}
+		inb := tgPayload.Message.Inbound()
+		tm.text, tm.msgType, tm.media = inb.Content, inb.MsgType, inb.Media
 		if tm.chatType == "" {
 			tm.chatType = "private"
 		}
@@ -272,8 +274,10 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 				}
 				return false
 			}(),
-			text: tgPayload.EditedMessage.Text,
 		}
+		// edited_message 与 message 同构：媒体改动也走同一归一，否则编辑过的图片消息又回到空正文
+		inb := tgPayload.EditedMessage.Inbound()
+		tm.text, tm.msgType, tm.media = inb.Content, inb.MsgType, inb.Media
 		if tm.chatType == "" {
 			tm.chatType = "private"
 		}
@@ -293,6 +297,7 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			fromName:  tgPayload.CallbackQuery.From.FirstName,
 			fromIsBot: tgPayload.CallbackQuery.From.IsBot,
 			text:      "/callback " + tgPayload.CallbackQuery.Data,
+			msgType:   model.MsgTypeText,
 		}
 	}
 	if picked == nil {
@@ -300,21 +305,29 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 	}
 	chatIDStr := fmt.Sprintf("%d", picked.chatID)
 	senderIDStr := fmt.Sprintf("%d", picked.fromID)
+	// 与 Ingress 落库的 EventID 同一个键：媒体回填按它找行，两处各算一套就是一个键写、另一个键读。
+	hubMsgID := tgPayload.HubMsgID(accountID)
+	if hubMsgID == "" {
+		hubMsgID = fmt.Sprintf("tg_%s_%d", accountID, picked.msgID)
+	}
 	hub := &model.MessageHub{
 		Platform:       "telegram",
 		AccountID:      accountID,
-		MsgID:          fmt.Sprintf("tg_%d", picked.msgID),
+		MsgID:          hubMsgID,
 		Direction:      "inbound",
 		SenderID:       senderIDStr,
 		ConversationID: chatIDStr,
-		MsgType:        "text",
+		MsgType:        picked.msgType,
 		Content:        picked.text,
 		SentAt:         time.Now(),
 		IsGroup:        picked.chatType == "group" || picked.chatType == "supergroup",
 		GroupID:        chatIDStr,
 	}
+	if hub.MsgType == "" {
+		hub.MsgType = model.MsgTypeText
+	}
 	if hub.Content == "" {
-		hub.Content = "[" + picked.chatType + "]"
+		hub.Content = "[消息]"
 	}
 
 	// 入站经中台落库（message_hub / 去重钩子），但 AI 触发留在本 dispatch：
@@ -322,6 +335,10 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 	if err := tgPayload.Ingress(WithChannelOwnedAITrigger(ctx), s.ingressHandler(ctx), accountID); err != nil {
 		return nil, nil, err
 	}
+	// 富媒体当场转存：官方 getFile 返回的 file_path 是「至少 1 小时有效」的临时链接，
+	// 且下载要带 bot token（不能像 QQ 那样把链接丢给工作台），故必须在入站侧完成。
+	// 放在 Ingress 之后：回填按 hubMsgID 找行，先落库再异步补，省掉一次「行还没建好」的竞态。
+	s.persistTelegramMediaAsync(ctx, accountID, hubMsgID, picked.media)
 	s.upsertInboxFromHub(ctx, hub, picked.fromName)
 
 	newOpportunity := false

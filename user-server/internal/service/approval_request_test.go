@@ -255,8 +255,16 @@ func TestApprovalService_SubmitTTLBoundary(t *testing.T) {
 	explicit.SubjectID = "q-ttl-2"
 	explicit.TTL = 2 * time.Hour
 	row2, _, err := svc.Submit(ctx, explicit)
-	if err != nil || row2.ExpiresAt == nil || !row2.ExpiresAt.Equal(clock.Add(2*time.Hour)) {
-		t.Errorf("显式 TTL=2h 未生效，实际 %v（err=%v）", row2.ExpiresAt, err)
+	if err != nil {
+		t.Fatalf("Submit(显式 TTL=2h) 失败：%v", err)
+	}
+	// Submit 返回的是指针：判空必须走在 `row2.ExpiresAt` 之前，否则崩溃替本腿印一行假 FAIL、
+	// 同包其余用例一条都不交卷（§23.15 第 4 段那枚 M94 的同一形状）。
+	if row2 == nil {
+		t.Fatalf("Submit 既没给行也没报错，TTL 无从判")
+	}
+	if row2.ExpiresAt == nil || !row2.ExpiresAt.Equal(clock.Add(2*time.Hour)) {
+		t.Errorf("显式 TTL=2h 未生效，实际 %v", row2.ExpiresAt)
 	}
 
 	atMax := base
@@ -786,6 +794,9 @@ func TestApprovalService_ByResumeTokenStates(t *testing.T) {
 	row, _, err := svc.Submit(ctx, ApprovalSubmitInput{SubjectType: "reach_plan", SubjectID: "rp-bt", PolicyKey: "reach.batch"})
 	if err != nil {
 		t.Fatalf("入队失败：%v", err)
+	}
+	if row == nil {
+		t.Fatalf("Submit 既没给行也没报错（下面三处 `row.` 解引用会带走整包测试二进制）")
 	}
 	// 等待中：可续跑=false，但**不是错误**。报成错误会让调用方写出一堆 retry，
 	// 把一次挂起变成轮询风暴（C2 要的是"不阻塞、不轮询"）。

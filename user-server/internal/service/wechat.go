@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +36,8 @@ type WechatService struct {
 	repo         *repository.WechatAccountRepository
 	mu           sync.RWMutex
 	tokenClients map[uint]*wechatTokenClient
+	// db 只用于入站媒体转存后回填 message_hub.media_url（M-01）。
+	db *gorm.DB
 }
 
 type wechatTokenClient struct {
@@ -47,6 +53,7 @@ func NewWechatService(db *gorm.DB) *WechatService {
 	return &WechatService{
 		repo:         repository.NewWechatAccountRepository(db),
 		tokenClients: make(map[uint]*wechatTokenClient),
+		db:           db,
 	}
 }
 
@@ -104,8 +111,8 @@ func (s *WechatService) VerifySignature(token, signature, timestamp, nonce strin
 	parts := []string{token, timestamp, nonce}
 	sort.Strings(parts)
 	hash := sha1.Sum([]byte(strings.Join(parts, "")))
-	expected := fmt.Sprintf("%x", hash)
-	return expected == signature
+	expected := hex.EncodeToString(hash[:])
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
 }
 
 // WechatIncomingMessage 微信推送的 XML 消息结构
@@ -117,7 +124,8 @@ type WechatIncomingMessage struct {
 	MsgType      string   `xml:"MsgType"`
 	Content      string   `xml:"Content,omitempty"`
 	MsgID        string   `xml:"MsgId,omitempty"`
-	// 图片/语音/视频
+	// 图片/语音/视频（官方：image 带 MediaId+PicUrl；voice 带 MediaId+Format；
+	// video/shortvideo 带 MediaId。MediaId 可调用「获取临时素材」拉取）
 	MediaID string `xml:"MediaId,omitempty"`
 	PicURL  string `xml:"PicUrl,omitempty"`
 	Format  string `xml:"Format,omitempty"`
@@ -142,6 +150,20 @@ func (s *WechatService) ParseIncomingMessage(body []byte) (*WechatIncomingMessag
 		return nil, fmt.Errorf("parse wechat xml: %w", err)
 	}
 	return &msg, nil
+}
+
+// DedupKey 入站幂等键。官方 MsgId 只在普通消息里出现，事件推送（订阅、取消订阅、
+// 扫码等）不带 —— 空 EventID 会被 ingress 兜底成随机 uuid，等于放弃幂等：
+// 微信 5 秒未收到回复会重推最多 3 次，每次重推都多一条消息、多一次 AI 回复。
+// 缺官方键时退回本条报文字段哈希（同一条重推字段一致 → 同键）。
+func (m *WechatIncomingMessage) DedupKey(accountID uint) string {
+	if m.MsgID != "" {
+		return fmt.Sprintf("wx-%d-%s", accountID, m.MsgID)
+	}
+	raw := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%s", m.ToUserName, m.FromUserName, m.CreateTime,
+		m.MsgType, m.Event, m.EventKey, m.Content)
+	sum := sha256.Sum256([]byte(raw))
+	return fmt.Sprintf("wx-%d-h-%s", accountID, hex.EncodeToString(sum[:])[:16])
 }
 
 func (s *WechatService) getTokenClient(ctx context.Context, accountID uint) (*wechatTokenClient, error) {
@@ -216,7 +238,7 @@ func (c *wechatTokenClient) fetchAccessToken(ctx context.Context) (string, int, 
 		return "", 0, fmt.Errorf("parse wechat token response: %w", err)
 	}
 	if result.Errcode != 0 {
-		return "", 0, fmt.Errorf("wechat api error: %d %s", result.Errcode, result.Errmsg)
+		return "", 0, wechatAPIError("api", result.Errcode, result.Errmsg)
 	}
 
 	return result.AccessToken, result.ExpiresIn, nil
@@ -226,6 +248,17 @@ func (c *wechatTokenClient) fetchAccessToken(ctx context.Context) (string, int, 
 // 支持 msgType: text / image / news / template
 //
 // accountID=0 表示"自动选择第一个 active 公众号账号"，其他渠道（Telegram/Feishu）也支持类似语义
+// wechatAPIError 公众号接口失败的构造点。Channel 必须带上：45009 与企业微信同号不同义 ——
+// 官方《返回码说明》里它是 "reach max api daily quota limit 接口调用超过限制"（当天不会再成功），
+// 而在企微那边同码是"1 分钟后自动解除"（可重试）。
+func wechatAPIError(op string, errcode int, errmsg string) error {
+	return &ChannelError{
+		Channel: string(ChannelWechat),
+		Code:    strconv.Itoa(errcode),
+		Raw:     fmt.Sprintf("wechat %s error: %d %s", op, errcode, errmsg),
+	}
+}
+
 func (s *WechatService) SendCustomMessage(ctx context.Context, accountID uint, openID, msgType, content string) (string, error) {
 	if accountID == 0 {
 		acc, err := s.GetFirstActiveAccount(ctx)
@@ -282,7 +315,7 @@ func (s *WechatService) SendCustomMessage(ctx context.Context, accountID uint, o
 		return "", fmt.Errorf("parse wechat send response: %w", err)
 	}
 	if result.Errcode != 0 {
-		return "", fmt.Errorf("wechat send error: %d %s", result.Errcode, result.Errmsg)
+		return "", wechatAPIError("send", result.Errcode, result.Errmsg)
 	}
 
 	msg := &model.WechatMessage{

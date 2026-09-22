@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/channelbot/whatsapp"
@@ -13,22 +13,13 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
+// waMessageContent 非文本消息的正文。占位符表由适配器导出（whatsapp.InboundPlaceholder）：
+// 落库那一行由 Ingress 写，这里只是 dispatch 的内存视图，两处各一份表迟早分叉。
 func waMessageContent(msgType string, body string) string {
 	if msgType == "text" {
 		return body
 	}
-	switch msgType {
-	case "image":
-		return "[图片]"
-	case "audio":
-		return "[语音]"
-	case "video":
-		return "[视频]"
-	case "document":
-		return "[文件]"
-	default:
-		return "[" + msgType + "]"
-	}
+	return whatsapp.InboundPlaceholder(msgType)
 }
 
 func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string, p *ParsedPayload, raw []byte) (*model.MessageHub, error) {
@@ -41,36 +32,12 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 		return nil, err
 	}
 
-	var bufSessionID, bufMsgID string
-	var bufTimestampMs int64
-	if waPre, err := whatsapp.ParseWebhook(raw); err == nil {
-		for _, ent := range waPre.Entry {
-			for _, ch := range ent.Changes {
-				for _, m := range ch.Value.Messages {
-					tsSec, _ := strconv.ParseInt(m.Timestamp, 10, 64)
-					if tsSec > 0 && bufSessionID == "" {
-						bufSessionID = m.From
-						bufMsgID = m.ID
-						bufTimestampMs = tsSec * 1000
-						break
-					}
-				}
-				if bufSessionID != "" {
-					break
-				}
-			}
-			if bufSessionID != "" {
-				break
-			}
-		}
-	}
-	if bufSessionID != "" {
-		_, delayed := globalReorderBuffer.Offer(accountID, bufSessionID, bufMsgID, bufTimestampMs, raw)
-		if delayed {
-			logger.Infof("[Webhook] WhatsApp session=%s delayed by reorder buffer", bufSessionID)
-			return nil, nil
-		}
-	}
+	// 审计 N-04：这里原先过一次 globalReorderBuffer「乱序缓冲」，已删除——它的
+	// delayed 分支不可达（Offer 只在缓冲区内 >=2 条时建定时器，而每次 flush 都会
+	// 删掉会话条目，长度恒为 1），实为纯直通。删除依据与等价性由
+	// TestDispatchWhatsApp_OutOfOrderArrivalsAreNotHeld 在删除前后各跑一次坐实。
+	// WhatsApp 官方只承诺「并发投递 + 可能重复」，从未承诺顺序（见审计 §6），
+	// 真正的防护是 wamid 幂等去重，而不是客户端重排。
 
 	waPayload, err := whatsapp.ParseWebhook(raw)
 	if err != nil {
@@ -85,30 +52,28 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 		return nil, err
 	}
 
-	// 媒体消息转存（best-effort）：media id 仅 7 天有效，异步下载并把长期 URL 回填 message_hub.media_url
-	if s.messageHubRepo != nil {
-		if mediaID, _, filename, ok := waPayload.MediaRef(); ok {
-			s.ensureReposFromDB(ctx)
-			s.persistWhatsAppMediaAsync(ctx, accountID, mediaID, filename)
-		}
-	}
+	// 媒体消息按 wamid 建索引：一条推送可以带多条媒体，只取首条会漏存（N-10）。
+	mediaByWAMID := waPayload.MediaByMsgID()
 
 	var firstHub *model.MessageHub
+	var contents []string
 	for _, e := range waPayload.Entry {
 		for _, c := range e.Changes {
 			for _, msg := range c.Value.Messages {
 				content := waMessageContent(msg.Type, msg.Text.Body)
 				// 非文本消息：保留渠道原生引用（media_id/mime/filename），供展示与 AI 理解
 				var mediaExtra map[string]any
-				if msg.Type != "text" {
-					if r, fname, mok := mediaRefOfMsg(&msg); mok {
+				var mediaID, mediaFilename string
+				if ref, ok := mediaByWAMID[msg.ID]; ok {
+					if id, mime, fname, ok := ref.Media(); ok {
 						mediaExtra = map[string]any{
-							"media_id":  r.MediaID,
-							"mime_type": r.MimeType,
+							"media_id":  id,
+							"mime_type": mime,
 						}
 						if fname != "" {
 							mediaExtra["filename"] = fname
 						}
+						mediaID, mediaFilename = id, fname
 					}
 				}
 
@@ -127,7 +92,7 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 					Direction:      "inbound",
 					SenderID:       msg.From,
 					ConversationID: msg.From,
-					MsgType:        msg.Type,
+					MsgType:        InboundHubMsgType(msg.Type),
 					Content:        content,
 					SentAt:         time.Now(),
 				}
@@ -137,16 +102,29 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 
 				s.upsertInboxFromHub(ctx, hub, name)
 
+				// 媒体消息转存（best-effort）：media id 仅 7 天有效，异步下载并把长期 URL
+				// 回填到**本行** message_hub.media_url（键 = wamid，不是 media_id）。
+				if s.messageHubRepo != nil && mediaID != "" {
+					s.persistWhatsAppMediaAsync(ctx, accountID, msg.ID, mediaID, mediaFilename)
+				}
+
 				MineUnifiedLead(ctx, s, hub, WhatsAppLeadAdapter{}, accountID, "", "", msg.From, name, "", content)
 
 				if firstHub == nil {
 					firstHub = hub
-					p.Content = content
 					p.Sender = msg.From
 					p.ChatID = msg.From
 				}
+				contents = append(contents, content)
 			}
 		}
+	}
+	// M-02：一次推送可以带多条消息，handleJob 拿 p.Content 当 AI 的 UserMessage
+	// （webhook_ai.go 的 PublishCustomerMessage / SalesRequest.UserMessage 同源），
+	// 只带首条会让连发的"多少钱 / 有现货吗 / 能开发票吗"只得到第一个问题的回答。
+	// 口径与中台批量入口一致：N 条合成一份输入、一次回复。
+	if len(contents) > 0 {
+		p.Content = strings.Join(contents, "\n")
 	}
 	return firstHub, nil
 }
@@ -191,54 +169,18 @@ func (s *WebhookService) dispatchWhatsAppStatuses(ctx context.Context, accountID
 	return true, nil
 }
 
-// mediaRefOfMsg 从单条 WA webhook 消息提取媒体引用（供 hub.Extra 落库）。
-// 直接接收匿名结构体指针，避免暴露 channelbot 内部类型映射。
-func mediaRefOfMsg(msg *struct {
-	From      string `json:"from"`
-	ID        string `json:"id"`
-	Timestamp string `json:"timestamp"`
-	Type      string `json:"type"`
-	Text      struct {
-		Body string `json:"body"`
-	} `json:"text"`
-	Image    *whatsapp.WAMedia `json:"image,omitempty"`
-	Audio    *whatsapp.WAMedia `json:"audio,omitempty"`
-	Video    *whatsapp.WAMedia `json:"video,omitempty"`
-	Document *struct {
-		whatsapp.WAMedia
-		Filename string `json:"filename"`
-	} `json:"document,omitempty"`
-	Sticker *whatsapp.WAMedia `json:"sticker,omitempty"`
-}) (whatsapp.WAMedia, string, bool) {
-	var empty whatsapp.WAMedia
-	switch msg.Type {
-	case "image":
-		if msg.Image != nil {
-			return *msg.Image, "", true
-		}
-	case "audio":
-		if msg.Audio != nil {
-			return *msg.Audio, "", true
-		}
-	case "video":
-		if msg.Video != nil {
-			return *msg.Video, "", true
-		}
-	case "sticker":
-		if msg.Sticker != nil {
-			return *msg.Sticker, "", true
-		}
-	case "document":
-		if msg.Document != nil {
-			return msg.Document.WAMedia, msg.Document.Filename, true
-		}
-	}
-	return empty, "", false
-}
+// 媒体转存的两个外部 IO 边界以函数变量注入：真实下载要访问 graph.facebook.com，
+// 转存要经 obs_config/存储驱动，测试环境两者都不可达，用替身跑通
+// 「取凭证 → 下载 → 转存 → 回填」全链（生产指向实现本身）。
+var (
+	waMediaFetchFn = FetchWhatsAppMedia
+	waMediaStoreFn = channelMediaPersist
+)
 
-// persistWhatsAppMediaAsync 异步下载 WA 媒体并转存，成功后按 media_id 定位 hub 行回填 media_url。
+// persistWhatsAppMediaAsync 异步下载 WA 媒体并转存，成功后按 msgID（wamid，即本条消息
+// 落 message_hub 时的 msg_id）回填该行的 media_url。
 // 失败仅告警（占位符文本已入库，不影响主链路）。
-func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountID, mediaID, filename string) {
+func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountID, msgID, mediaID, filename string) {
 	accID, _ := strconv.ParseUint(accountID, 10, 64)
 	utils.SafeGo(ctx, "whatsapp.media_persist", func(gctx context.Context) {
 		token, _, err := s.waCloudSecrets(gctx, accountID)
@@ -251,24 +193,24 @@ func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountI
 			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[WhatsApp] 媒体转存跳过：账号不存在")
 			return
 		}
-		rc, contentType, ferr := FetchWhatsAppMedia(gctx, token, acc.PhoneNumberID, mediaID)
+		rc, contentType, ferr := waMediaFetchFn(gctx, token, acc.PhoneNumberID, mediaID)
 		if ferr != nil {
 			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体下载失败（占位符保留）")
 			return
 		}
 		defer func() { _ = rc.Close() }()
-		data, rerr := io.ReadAll(io.LimitReader(rc, maxInboundMediaBytes))
+		data, rerr := readInboundMedia(rc, maxInboundMediaBytes)
 		if rerr != nil {
-			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体读取失败")
+			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体读取失败（占位符保留）")
 			return
 		}
-		publicURL, serr := channelMediaPersist(gctx, "whatsapp", mediaID, data, contentType, filename)
+		publicURL, serr := waMediaStoreFn(gctx, "whatsapp", mediaID, data, contentType, filename)
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体转存失败")
 			return
 		}
-		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "whatsapp", accountID, mediaID, publicURL)
-		logger.Ctx(gctx).Info().Str("media_id", mediaID).Str("url", publicURL).Msg("[WhatsApp] 媒体已转存")
+		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "whatsapp", accountID, msgID, publicURL)
+		logger.Ctx(gctx).Info().Str("msg_id", msgID).Str("media_id", mediaID).Str("url", publicURL).Msg("[WhatsApp] 媒体已转存")
 	})
 }
 

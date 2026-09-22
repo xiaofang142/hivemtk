@@ -220,7 +220,15 @@ func enforceWhatsAppTierPacing(peerKey, templateCategory string, now time.Time) 
 	allow, retryAfter := GetGlobalTierPacer().Enforce(peerKey, tier, now)
 	if !allow {
 		logger.Warnf("[R-7] WhatsApp pacing 拒绝 peer=%s tier=%s retryAfter=%v", peerKey, tier, retryAfter)
-		return fmt.Errorf("whatsapp pacing rejected: peer=%s tier=%s retry_after=%s", peerKey, tier, retryAfter)
+		// 节奏器自己算出的等待值必须以 Duration 传出去：拼成 retry_after=1m0s 再让上层
+		// 从串里反解，等于把一个已知的结构事实降级成文案（N-11①）。
+		return &ChannelError{
+			Channel:    string(ChannelWhatsapp),
+			Category:   CategoryRateLimited,
+			Retryable:  true,
+			RetryAfter: retryAfter,
+			Raw:        fmt.Sprintf("whatsapp pacing rejected: peer=%s tier=%s retry_after=%s", peerKey, tier, retryAfter),
+		}
 	}
 	return nil
 }

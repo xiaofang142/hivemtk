@@ -234,28 +234,4 @@ func TestInboxIngress_BatchMerge_Scenarios(t *testing.T) {
 		}
 		t.Logf("✅ 空 batch 不触发 AI")
 	})
-
-	t.Run("场景8_内容hash计算验证", func(t *testing.T) {
-		h1 := contentHashOf("你好")
-		h2 := contentHashOf("你好")
-		if h1 != h2 {
-			t.Fatalf("相同内容应产生相同 hash: %q vs %q", h1, h2)
-		}
-		if h1 == "" {
-			t.Fatal("hash 不应为空")
-		}
-		t.Logf("✅ 相同内容 hash 一致: %s", h1)
-
-		h3 := contentHashOf("你好啊")
-		if h1 == h3 {
-			t.Fatalf("不同内容应产生不同 hash: 都=%q", h1)
-		}
-		t.Logf("✅ 不同内容 hash 不同: %q vs %q", h1, h3)
-
-		h4 := contentHashOf("")
-		if h4 != "" {
-			t.Fatalf("空内容应返回空 hash，实际: %q", h4)
-		}
-		t.Logf("✅ 空内容返回空 hash")
-	})
 }

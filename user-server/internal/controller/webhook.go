@@ -17,7 +17,8 @@ import (
 
 // WebhookController 多渠道 Webhook 控制器
 // 对应 多渠道 Webhook
-// 提供 9 个渠道的回调入口
+// 通用路由 /api/webhook/:channel[/:account_id] 只受理 service.webhookInboundCapable
+// 里那些确有入站适配器的渠道；钉钉/微信公众号各有专用回调入口，不走通用路由。
 type WebhookController struct {
 	svc          *service.WebhookService
 	waCloudSvc   *service.WhatsAppCloudService
@@ -83,7 +84,7 @@ func (c *WebhookController) RegisterRoutes(r *gin.Engine) {
 // @Tags         Webhook
 // @Accept       json
 // @Produce      json
-// @Param        channel     path   string  true   "渠道：wechat/wecom/douyin/xiaohongshu/email"
+// @Param        channel     path   string  true   "渠道：wecom/whatsapp/telegram/qq/feishu/douyin/tiktok（其余渠道有专用入口或无服务端回调，通用路由返回 400）"
 // @Param        account_id  path   string  true   "账号 ID"
 // @Param        body        body   object  true   "渠道原始 payload"
 // @Success      200  {object}  response.Response  "处理成功"
@@ -120,6 +121,22 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 				return
 			}
 			ctx.JSON(http.StatusOK, gin.H{"challenge": challenge})
+			return
+		}
+	}
+
+	// 抖音开放平台「保存回调地址」握手：必须把 challenge 原样放进响应体，
+	// 否则控制台那一步就过不去，后续 im_receive_msg 一条都收不到（批G-2）。
+	// 只挂在 douyin 上：TikTok 是否需要同样的回显尚未取到可引用原文（审计 §16.3），
+	// 不拿别家的契约往它身上套。
+	if channel == service.ChannelDouyin {
+		challenge, handled, verr := c.svc.HandleDouyinURLVerification(reqCtx, accountID, body, extractHeaders(ctx))
+		if handled {
+			if verr != nil {
+				ctx.String(http.StatusUnauthorized, "douyin url_verification failed: "+verr.Error())
+				return
+			}
+			ctx.Data(http.StatusOK, "application/json; charset=utf-8", challenge)
 			return
 		}
 	}
@@ -372,7 +389,7 @@ func (c *WebhookController) DingTalkReceive(ctx *gin.Context) {
 		return
 	}
 	reqCtx := middleware.InjectLangToCtx(ctx.Request.Context(), c.langResolver, "", 0)
-	if err := c.dtAppSvc.ReceiveMessage(reqCtx, uint(accountID), body); err != nil {
+	if err := c.dtAppSvc.ReceiveMessage(reqCtx, uint(accountID), body, extractQuery(ctx), extractHeaders(ctx)); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"accepted": false, "reason": err.Error()})
 		return
 	}
@@ -399,10 +416,16 @@ func extractHeaders(ctx *gin.Context) map[string]string {
 	for _, k := range []string{
 		"X-Signature", "Signature", "X-Hub-Signature-256",
 		"X-Douyin-Signature", "X-Lark-Signature",
+		// TikTok Business 事件回调（官方把 t=/s= 两段放在同一个头里）。
+		// 不列进白名单的话 service 层永远看不到签名，真实回调会以「缺头」被拒，
+		// 而 service 单测自己构造 headers 照样全绿 —— 批A 钉钉踩过的同一个洞。
+		"TikTok-Signature",
 		"X-Wechat-Timestamp", "X-Wechat-Nonce", "X-Wechat-Signature",
 		"X-Telegram-Bot-Api-Secret-Token",
 		// QQ 开放平台 Ed25519 验签头（webhook 事件推送必带）
 		"X-Signature-Ed25519", "X-Signature-Timestamp",
+		// 钉钉企业内部机器人明文回调验签头（官方就叫 timestamp / sign）
+		"Timestamp", "Sign",
 	} {
 		if v := ctx.GetHeader(k); v != "" {
 			headers[k] = v
@@ -413,7 +436,7 @@ func extractHeaders(ctx *gin.Context) map[string]string {
 
 func extractQuery(ctx *gin.Context) map[string]string {
 	q := make(map[string]string)
-	for _, k := range []string{"msg_signature", "timestamp", "nonce", "echostr", "challenge", "token", "type"} {
+	for _, k := range []string{"signature", "msg_signature", "timestamp", "nonce", "echostr", "challenge", "token", "type"} {
 		if v := ctx.Query(k); v != "" {
 			q[k] = v
 		}

@@ -137,8 +137,12 @@ var sendRetryBackoffs = []time.Duration{
 	4 * time.Minute,
 }
 
-// nextSendRetryAt 计算第 attempts 次失败后的重投时刻：退避 + 避开免打扰时段。
-func nextSendRetryAt(now time.Time, attempts int) time.Time {
+// nextSendRetryAt 计算第 attempts 次失败后的重投时刻：渠道等待值与退避表取大（只顺延不提前），
+// 再避开免打扰时段。
+//
+// 渠道开了口让等 5 分钟时按表 60s 重投，等于在冷却期里再撞一次封禁（N-11④）；
+// 反过来渠道只说等 30s 时也不能比表更早，否则等于把这条回复的投递时序交给一句空话。
+func nextSendRetryAt(now time.Time, attempts int, ce *ChannelError) time.Time {
 	idx := attempts
 	if idx < 0 {
 		idx = 0
@@ -146,7 +150,11 @@ func nextSendRetryAt(now time.Time, attempts int) time.Time {
 	if idx >= len(sendRetryBackoffs) {
 		idx = len(sendRetryBackoffs) - 1
 	}
-	at := now.Add(sendRetryBackoffs[idx])
+	delay := sendRetryBackoffs[idx]
+	if ce != nil && ce.RetryAfter > delay {
+		delay = ce.RetryAfter
+	}
+	at := now.Add(delay)
 	// 免打扰时段内重投等于在深夜打扰客户，和首发同规则顺延到窗口开放。
 	if aiReplyQuietHoursFn(at) {
 		at = nextQuietHoursRelease(at, aiReplyQuietEndHour)
@@ -175,7 +183,7 @@ func (s *WebhookService) enqueueSendRetry(ctx context.Context, channel WebhookCh
 		Content:        content,
 		Cards:          delayedCardsPayload(cards),
 		ConversationID: convIDOrEmpty(hubMsg),
-		SendAt:         nextSendRetryAt(now, 0),
+		SendAt:         nextSendRetryAt(now, 0, ce),
 		Status:         model.DelayedStatusPending,
 		Kind:           model.DelayedKindSendRetry,
 		LastError:      ce.Raw,
@@ -311,7 +319,7 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 		ce := AsChannelError(sendErr)
 		if ce != nil && ce.Retryable {
 			attempts := rec.Attempts + 1
-			if err := s.delayedRepo.ScheduleRetry(ctx, rec.ID, nextSendRetryAt(now, attempts), ce.Raw); err != nil {
+			if err := s.delayedRepo.ScheduleRetry(ctx, rec.ID, nextSendRetryAt(now, attempts, ce), ce.Raw); err != nil {
 				logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 重投失败改排下一次异常")
 			}
 			logger.Ctx(ctx).Warn().Uint("id", rec.ID).Int("attempts", attempts).
@@ -342,9 +350,11 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 
 // sendOutbound 投递一条 AI 回复。
 //
-// 返回值是投递事实：sent 表示至少有一跳成功；sendErr 只在各渠道真实投递接口报错时非空
-// （解析失败、缺 webhook、域名非法等前置不满足的分支返回 (false, nil)，重试也无意义）。
-// 调用方据此决定是否进入持久化重试通道。
+// 返回值是投递事实：sent 表示至少有一跳成功；sendErr 是"这一条回复没能交出去"的原因，
+// 前置不满足（缺 sessionWebhook、窗口过期、账号 id 非法、域名非法、渠道不支持）也要构造
+// 一个不可重试的 *ChannelError 带回去 —— 返回 (false, nil) 等于向调用方谎报"没有发生失败"：
+// 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
+// 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
 
 	if !isDelayedReplay(ctx) && aiReplyQuietHoursFn(time.Now()) {
@@ -371,7 +381,14 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	// 再走原有 outboundSendFailed（写终态失败轨迹 / 发布授权告警）。
 	markSendFailed := func(err error) {
 		sendErr = err
-		s.outboundSendFailed(ctx, channel, accountID, hubMsg, err)
+		s.outboundSendFailed(ctx, channel, accountID, hubMsg, content, err)
+	}
+
+	// markSendFailedLogged 用于"这一支没有可归属的轨迹行"（渠道不在出站分支表里 ⇒
+	// 平台词表必然校验不过）：只把事实说清楚并留结构化日志，不尝试写库。
+	markSendFailedLogged := func(err error) {
+		sendErr = err
+		s.outboundSendFailed(ctx, channel, accountID, nil, content, err)
 	}
 
 	// 收尾（defer 保证各渠道的提前 return 分支同样覆盖）：
@@ -396,10 +413,13 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	case ChannelWeCom:
 
 		if s.integration == nil {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest, "企微出站客户端未接线（integration 为 nil），本进程无法投递"))
 			return
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("企微出站账号 id 非法(account_id=%q)，无法定位发送账号", accountID)))
 			return
 		}
 		if _, err := s.integration.SendMessage(ctx, &WeComSendRequest{
@@ -420,6 +440,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("飞书出站账号 id 非法(account_id=%q)，无法定位发送账号", accountID)))
 			return
 		}
 
@@ -457,6 +479,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("TG 出站账号 id 非法(account_id=%q)，无法定位 bot", accountID)))
 			return
 		}
 
@@ -465,6 +489,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			chatID, _ = strconv.ParseInt(hubMsg.ConversationID, 10, 64)
 		}
 		if chatID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("TG 会话键无法解析为 chat_id(conversation_id=%q)", convIDOrEmpty(hubMsg))))
 			return
 		}
 
@@ -494,6 +520,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	case ChannelQQ:
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("QQ 出站账号 id 非法(account_id=%q)，无法定位机器人", accountID)))
 			return
 		}
 		convID := ""
@@ -501,6 +529,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			convID = hubMsg.ConversationID
 		}
 		if convID == "" {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest, "QQ 出站缺少会话 id，无被动回复目标"))
 			return
 		}
 		// 被动回复关联原消息 ID（QQ 平台 5 分钟窗口 5 条被动回复额度）。
@@ -520,6 +549,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 		accID, err := strconv.ParseUint(accountID, 10, 64)
 		if err != nil || accID == 0 {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("WhatsApp 出站账号 id 非法(account_id=%q)，无法定位 WABA", accountID)))
 			return
 		}
 
@@ -536,6 +567,9 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 							Str("to", p.Sender).
 							Time("last_inbound_at", last.SentAt).
 							Msg("[WhatsApp] 超出 24h 客服窗口且未配置 WHATSAPP_FALLBACK_TEMPLATE，AI 文本回复不可送达，标记失败")
+						markSendFailed(preSendFailure(channel, CategoryWindowExpired,
+							fmt.Sprintf("WhatsApp 24h 客服窗口已关闭(最后入站 %s)且未配置 WHATSAPP_FALLBACK_TEMPLATE，自由文本不可送达",
+								last.SentAt.Format("2006-01-02 15:04:05"))))
 						return
 					}
 					logger.Ctx(ctx).Info().
@@ -580,6 +614,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			logger.Ctx(ctx).Error().Str("channel", "dingtalk").Str("account_id", accountID).
 				Str("conv_id", convIDOrEmpty(hubMsg)).
 				Msg("[DingTalk] 缺少 sessionWebhook（回调未携带或非机器人消息），AI 回复无法送达")
+			markSendFailed(preSendFailure(channel, CategoryWindowExpired,
+				"钉钉回调未携带 sessionWebhook（非机器人消息或平台未下发），无可用的回复地址"))
 			return
 		}
 
@@ -590,6 +626,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			logger.Ctx(ctx).Warn().Str("channel", "dingtalk").Str("account_id", accountID).
 				Int64("expired_at", expiredAt).
 				Msg("[DingTalk] sessionWebhook 已过期，AI 回复无法送达（用户重新发言可恢复）")
+			markSendFailed(preSendFailure(channel, CategoryWindowExpired,
+				fmt.Sprintf("钉钉 sessionWebhook 已过期(expired_at=%d)，被动回复窗口已关闭", expiredAt)))
 			return
 		}
 
@@ -597,6 +635,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		if perr != nil || !dingtalkWebhookHostAllowed(u) {
 			logger.Ctx(ctx).Error().Str("channel", "dingtalk").Str("account_id", accountID).
 				Msg("[DingTalk] sessionWebhook 域名非法（仅允许 *.dingtalk.com），拒绝发送")
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				"钉钉 sessionWebhook 域名不在允许清单(*.dingtalk.com)内，拒绝向外部地址投递"))
 			return
 		}
 		payload := map[string]any{
@@ -607,12 +647,15 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body))
 		if err != nil {
 			logger.Ctx(ctx).Error().Err(err).Str("channel", "dingtalk").Msg("build dingtalk reply request failed")
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("钉钉回复请求构造失败: %v", err)))
 			return
 		}
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			logger.Ctx(ctx).Error().Err(err).Str("channel", "dingtalk").Msg("dingtalk reply send failed")
+			markSendFailed(err)
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -625,6 +668,11 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			logger.Ctx(ctx).Error().Int("http_status", resp.StatusCode).Int("errcode", dtResult.Errcode).
 				Str("errmsg", dtResult.Errmsg).
 				Msg("[DingTalk] AI 回复出站被平台拒绝")
+			if err != nil {
+				markSendFailed(fmt.Errorf("dingtalk sessionWebhook 响应不可解析(status=%d): %w", resp.StatusCode, err))
+			} else {
+				markSendFailed(fmt.Errorf("dingtalk sessionWebhook errcode=%d errmsg=%s", dtResult.Errcode, dtResult.Errmsg))
+			}
 			return
 		}
 		sent = true
@@ -640,6 +688,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		if _, err := s.wechatIntegration.SendCustomMessage(ctx, uint(accID), p.Sender, "text", content); err != nil {
 			logger.Ctx(ctx).Error().Err(err).Str("channel", "wechat").Str("account_id", accountID).
 				Str("open_id", p.Sender).Msg("[Wechat] AI 回复出站失败")
+			markSendFailed(err)
 		} else {
 			sent = true
 		}
@@ -808,12 +857,39 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				outSpanErr = fmt.Errorf("%s", enqueueAbnormal)
 			}
 			outSpan.End(nil, outSpanErr)
-		}
 
-		sent = true
+			// sent 的口径（D-02）：= 这条回复确实交接给了桥接出库队列
+			// （message_hub 落库成功且状态可被扩展领取），**不等于**客户已收到
+			// ——真达由扩展 ack 走 UpdateDeliveryStatus 收口。
+			// 未落库 / 被标 failed / 无入站上下文都不能算成功，否则重放 worker
+			// 会把这条 MarkSent 掉，回复静默丢失。
+			switch {
+			case persisted.ID == 0:
+				markSendFailed(&ChannelError{
+					Category:  CategoryUnknown,
+					Retryable: true,
+					Raw:       "桥接出站未写入 message_hub(channel=" + string(channel) + " conv=" + persisted.ConversationID + ")",
+				})
+			case persisted.Status == "failed":
+				reason, _ := persisted.Extra["undeliverable_reason"].(string)
+				// 桥接族的失败轨迹就是它自己那一行（status=failed + scenario=undeliverable +
+				// 原因），这里只补结构化错误与日志；再走一次轨迹落库会变成同一会话两行出站。
+				markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
+					"桥接目标不可达: "+reason))
+			default:
+				sent = true
+			}
+		} else {
+			logger.Ctx(ctx).Error().Str("channel", string(channel)).Str("account_id", accountID).
+				Msg("[Bridge] 缺少入站消息上下文（无 conversation 目标），AI 回复未出库")
+			markSendFailed(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("%s 桥接出站缺少入站上下文，无 conversation 目标，未出库", channel)))
+		}
 	default:
 
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
+		markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
+			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
 	}
 	return
 }
@@ -829,6 +905,16 @@ func convIDOrEmpty(h *model.MessageHub) string {
 		return ""
 	}
 	return h.ConversationID
+}
+
+// preSendFailure 构造"请求根本没发出去"这一类的渠道错误：这类失败由中台侧的前置条件决定，
+// 重投同一份内容必然同样失败，所以一律不可重试。
+//
+// Category 必须显式给且不能是 CategoryUnknown：AsChannelError 对已判定类别的错误原样放行，
+// 对未判定类别的会拿 Raw 文案重新判档并连带改写 Retryable —— 手工设定的"不可重试"
+// 就会在这一点上被文案左右（文案换个说法，重试行为就变了）。
+func preSendFailure(channel WebhookChannel, category ChannelErrorCategory, reason string) *ChannelError {
+	return &ChannelError{Channel: string(channel), Category: category, Retryable: false, Raw: reason}
 }
 
 var dingtalkWebhookHostAllowed = func(u *url.URL) bool {

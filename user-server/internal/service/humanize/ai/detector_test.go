@@ -83,8 +83,10 @@ func TestDetector_Detect_AIFormatted(t *testing.T) {
 	text := "1. Introduction\n2. Methods\n3. Results\n4. Conclusion\nThank you for your attention."
 	r := d.Detect(text)
 
-	if r.Perplexity > 100 {
-		t.Logf("AI format ppl: %v", r.Perplexity)
+	// 原来只在 ppl>100 时 t.Logf 一句，任何输出都判不了失败 —— 检测器整体坏掉也照样绿。
+	// 这条输入实测 ppl=11.51、Quality=too_ai，按 Quality 断言。
+	if r.Quality != "too_ai" {
+		t.Errorf("AI 模板格式应判为 too_ai，实际 %s (ppl=%v score=%v)", r.Quality, r.Perplexity, r.Score)
 	}
 }
 

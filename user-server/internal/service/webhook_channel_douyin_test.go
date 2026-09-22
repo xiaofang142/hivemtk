@@ -24,7 +24,7 @@ func TestDispatchDouyinGeneric_MsgIDStable(t *testing.T) {
 	defer svc.Stop(ctx)
 
 	p1 := &ParsedPayload{EventID: "evt-dy-g1", Sender: "user_001", Content: "你们产品多少钱"}
-	hub1, _, err := svc.dispatchDouyin(ctx, "7", p1, []byte("{not-json"))
+	hub1, _, err := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p1, []byte("{not-json"))
 	if err != nil {
 		t.Fatalf("dispatch1: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestDispatchDouyinGeneric_MsgIDStable(t *testing.T) {
 	}
 
 	p2 := &ParsedPayload{EventID: "evt-dy-g2", Sender: "user_001", Content: "你们产品多少钱"}
-	hub2, _, err := svc.dispatchDouyin(ctx, "7", p2, []byte("{not-json"))
+	hub2, _, err := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p2, []byte("{not-json"))
 	if err != nil {
 		t.Fatalf("dispatch2: %v", err)
 	}
@@ -44,13 +44,13 @@ func TestDispatchDouyinGeneric_MsgIDStable(t *testing.T) {
 	if hub1.MsgID != hub2.MsgID {
 		t.Errorf("W-5 未达成：相同内容两次投递 MsgID 不一致 %q vs %q（时间戳残留）", hub1.MsgID, hub2.MsgID)
 	}
-	if !strings.HasPrefix(hub1.MsgID, "dy_generic_") || !strings.Contains(hub1.MsgID, "mh:") {
-		t.Errorf("MsgID 应为内容哈希形态 dy_generic_mh:*，实际 %q", hub1.MsgID)
+	if !strings.HasPrefix(hub1.MsgID, "dy_7_generic_") || !strings.Contains(hub1.MsgID, "mh:") {
+		t.Errorf("MsgID 应为「平台_账号_generic_内容哈希」形态 dy_7_generic_mh:*，实际 %q", hub1.MsgID)
 	}
 
-	wantSuffix := ContentHashMsgID("douyin", "", "你们产品多少钱")
-	if hub1.MsgID != "dy_generic_"+wantSuffix {
-		t.Errorf("MsgID expected dy_generic_%s, got %s", wantSuffix, hub1.MsgID)
+	wantSuffix := ContentHashMsgID("douyin", "user_001", "你们产品多少钱")
+	if hub1.MsgID != "dy_7_generic_"+wantSuffix {
+		t.Errorf("MsgID expected dy_7_generic_%s, got %s", wantSuffix, hub1.MsgID)
 	}
 }
 
@@ -60,9 +60,9 @@ func TestDispatchDouyinGeneric_DifferentContentDifferentID(t *testing.T) {
 	defer svc.Stop(ctx)
 
 	p1 := &ParsedPayload{EventID: "evt-dy-c1", Sender: "user_002", Content: "内容甲"}
-	h1, _, _ := svc.dispatchDouyin(ctx, "7", p1, []byte("{not-json"))
+	h1, _, _ := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p1, []byte("{not-json"))
 	p2 := &ParsedPayload{EventID: "evt-dy-c2", Sender: "user_002", Content: "内容乙"}
-	h2, _, _ := svc.dispatchDouyin(ctx, "7", p2, []byte("{not-json"))
+	h2, _, _ := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p2, []byte("{not-json"))
 
 	if h1 == nil || h2 == nil {
 		t.Fatal("expected both hubs")
@@ -78,9 +78,9 @@ func TestDispatchDouyinGeneric_EmptyContentStable(t *testing.T) {
 	defer svc.Stop(ctx)
 
 	p1 := &ParsedPayload{EventID: "evt-dy-e1", Sender: "user_003"}
-	h1, _, _ := svc.dispatchDouyin(ctx, "7", p1, []byte("{not-json"))
+	h1, _, _ := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p1, []byte("{not-json"))
 	p2 := &ParsedPayload{EventID: "evt-dy-e2", Sender: "user_003"}
-	h2, _, _ := svc.dispatchDouyin(ctx, "7", p2, []byte("{not-json"))
+	h2, _, _ := svc.dispatchDouyin(ctx, ChannelDouyin, "7", p2, []byte("{not-json"))
 
 	if h1 == nil || h2 == nil {
 		t.Fatal("expected both hubs")
@@ -93,51 +93,12 @@ func TestDispatchDouyinGeneric_EmptyContentStable(t *testing.T) {
 	}
 }
 
-// TestDispatchDouyinStructured_MissingMessageIDStable 结构化分支缺 message_id → 相同内容重推 MsgID 稳定
-func TestDispatchDouyinStructured_MissingMessageIDStable(t *testing.T) {
-	svc, ctx := newDouyinGenericTestService(t)
-	defer svc.Stop(ctx)
-
-	raw := []byte(`{"event_type":"im.message.receive_v1","data":{"message":{"message_id":"","content":"在吗"},"from":{"user_id":"user_100"},"conversation":{"type":"chat"}}}`)
-	p1 := &ParsedPayload{EventID: "evt-dy-s1", Sender: "user_100", Content: "在吗"}
-	hub1, _, err := svc.dispatchDouyin(ctx, "7", p1, raw)
-	if err != nil {
-		t.Fatalf("dispatch1: %v", err)
-	}
-	if hub1 == nil {
-		t.Fatal("expected hub from structured branch")
-	}
-
-	p2 := &ParsedPayload{EventID: "evt-dy-s2", Sender: "user_100", Content: "在吗"}
-	hub2, _, _ := svc.dispatchDouyin(ctx, "7", p2, raw)
-	if hub2 == nil {
-		t.Fatal("expected second hub")
-	}
-
-	if hub1.MsgID != hub2.MsgID {
-		t.Errorf("M3 未达成：结构化分支相同内容两次投递 MsgID 不一致 %q vs %q（时间戳残留）", hub1.MsgID, hub2.MsgID)
-	}
-	if !strings.HasPrefix(hub1.MsgID, "dy_mh:") {
-		t.Errorf("MsgID 应为内容哈希形态 dy_mh:*，实际 %q", hub1.MsgID)
-	}
-	want := "dy_" + ContentHashMsgID("douyin", "", "在吗")
-	if hub1.MsgID != want {
-		t.Errorf("MsgID expected %s, got %s", want, hub1.MsgID)
-	}
-}
-
-// TestDispatchDouyinStructured_ExplicitMessageIDUnchanged 有 message_id 时保持平台 ID 原样
-func TestDispatchDouyinStructured_ExplicitMessageIDUnchanged(t *testing.T) {
-	svc, ctx := newDouyinGenericTestService(t)
-	defer svc.Stop(ctx)
-
-	raw := []byte(`{"event_type":"im.message.receive_v1","data":{"message":{"message_id":"plat-777","content":"hi"},"from":{"user_id":"u1"}}}`)
-	p := &ParsedPayload{EventID: "evt-dy-s3", Sender: "u1", Content: "hi"}
-	hub, _, err := svc.dispatchDouyin(ctx, "7", p, raw)
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
-	if hub == nil || hub.MsgID != "dy_plat-777" {
-		t.Errorf("平台 MessageID 应原样保留为 dy_plat-777，实际 %+v", hub)
-	}
-}
+// TestDispatchDouyinStructured_MissingMessageIDStable /
+// TestDispatchDouyinStructured_ExplicitMessageIDUnchanged 已随批G 删除：两条的夹具是
+// 飞书式外壳 {"event_type":"im.message.receive_v1","data":{...}} —— 抖音官方报文里
+// 根本没有这些键（审计 §16.1），它们 certifies 的是「解不出的结构化分支退化成内容哈希」
+// 与「平台 message_id 原样进 MsgID」两条旧契约。后者已被批G 有意替换：官方
+// server_message_id 是 88 字符 base64，原样拼会顶破 msg_id varchar(100)（插入失败还会被吞掉），
+// 现在键取 sha1 前缀、原文进 Extra.server_message_id。两条新契约的正向断言在
+// webhook_batchg_douyin_test.go 的 _MsgIDDeterministicAndWithinColumnLimit 与
+// _MissingServerMessageIDFallsBackToContentKey。

@@ -121,7 +121,7 @@ func (s *SimQQPlatform) C2CAtMessageBody(eventID, userOpenID, content string) []
 	raw, _ := json.Marshal(map[string]any{
 		"id": "evt-" + eventID,
 		"op": 0,
-		"t":  qq.EventC2CAtMessage,
+		"t":  qq.EventC2CMessage,
 		"d": map[string]any{
 			"id":          eventID,
 			"user_openid": userOpenID,
@@ -410,8 +410,15 @@ func TestQQFullchain_GroupAtMessage_SignToReply(t *testing.T) {
 	if !strings.HasPrefix(sent.AuthHeader, "QQBot SIM-TOKEN-") {
 		t.Errorf("auth header should be QQBot SIM-TOKEN-*, got %q", sent.AuthHeader)
 	}
-	if sent.MsgID != "qq_m-full-1" {
-		t.Errorf("passive reply should carry msg_id=qq_m-full-1, got %q", sent.MsgID)
+	// 出站报文的 msg_id 必须是官方事件里的 d.id 原值，**不能带内部命名空间前缀**：
+	// 《发送消息》请求体参数表原文「msg_id | string | 否 | 被动回复的消息 ID。
+	// 从 GROUP_AT_MESSAGE_CREATE 等事件的 d.id 获取，5 分钟内有效」
+	// （https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_messages.post.html，
+	// curl 直连 37,900 B / http=200，批M 复验 2026-09-20）。
+	// 带 qq_ 前缀的那个是 message_hub 的幂等键（Event.HubMsgID），平台从不认识它，
+	// 回传过去等于自造一个「msg_id 无效或越权」。
+	if sent.MsgID != "m-full-1" {
+		t.Errorf("passive reply should carry official d.id as msg_id=%q, got %q", "m-full-1", sent.MsgID)
 	}
 
 	// 4) 出站回复落 message_hub

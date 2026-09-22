@@ -51,7 +51,12 @@ func newReq() PushMessageRequest {
 }
 
 func TestValidPlatform_Supported(t *testing.T) {
-	for _, p := range []string{"wecom", "personal_wx", "douyin", "kuaishou", "xiaohongshu", "xianyu", "tiktok", "whatsapp", "sms", "email"} {
+	// wechat/dingtalk/custom 是批F-6 补进来的：这三家的行**一直写得进 message_hub**
+	// （inbox_ingress_persist.go 的落库点直接写 event.Channel，绕过 Normalize），
+	// 出站失败轨迹改走校验路径后，缺词就等于"钉钉/公众号的投递失败永远落不了库"。
+	// 本表由此从"hub.Push 允许哪些"变成"hub 里会出现哪些平台" —— 二者必须一致，
+	// 否则统计与筛选会各自认一套词表。
+	for _, p := range []string{"wecom", "personal_wx", "douyin", "kuaishou", "xiaohongshu", "xianyu", "tiktok", "whatsapp", "sms", "email", "wechat", "dingtalk", "custom"} {
 		if !ValidPlatform(p) {
 			t.Errorf("expected %s valid", p)
 		}
@@ -59,7 +64,7 @@ func TestValidPlatform_Supported(t *testing.T) {
 }
 
 func TestValidPlatform_Unsupported(t *testing.T) {
-	for _, p := range []string{"", "unknown", "facebook", "twitter", "wechat", "QQ", "weibo", "钉钉", "邮箱", "123"} {
+	for _, p := range []string{"", "unknown", "facebook", "twitter", "QQ", "weibo", "钉钉", "邮箱", "123"} {
 		if ValidPlatform(p) {
 			t.Errorf("expected %s invalid", p)
 		}

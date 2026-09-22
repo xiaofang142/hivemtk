@@ -52,6 +52,18 @@ var messageHubPlatforms = map[string]bool{
 	"telegram":    true,
 	"feishu":      true,
 	"qq":          true,
+	// 缺这三词是本表与真实数据面脱节留下的两处不同的坑，一并补：
+	//   - dingtalk / wechat 有**真实入站路径**直接写 event.Channel
+	//     （controller/wechat.go:292、service/dingtalk_app.go:214 → inbox_ingress_persist.go:53
+	//     的 hubRepo.Create），全程不经 Normalize ⇒ 这两家的行今日就在库里。
+	//     出站失败轨迹改走校验路径后，缺词等于"钉钉/公众号的投递失败永远落不了库"。
+	//   - custom 无入站适配器（webhookInboundCapable 判 false），但 POST /api/chat/ingress
+	//     的 channel 是自由文本（NormalizeEvent 只拒空串）⇒ 该值同样写得到库里。
+	// 本表由 TestBF6_ChannelVocabularyCoversEveryOutboundChannel 锁成"渠道常量全集的镜像"：
+	// 少一个词，将来接进来的渠道就会在"轨迹落库"这一步静默失败。
+	"dingtalk": true,
+	"wechat":   true,
+	"custom":   true,
 }
 
 var messageHubMsgTypes = map[string]bool{
@@ -63,6 +75,75 @@ var messageHubMsgTypes = map[string]bool{
 	"link":     true,
 	"card":     true,
 	"location": true,
+	// event：非消息的会话事件（TG 入群/退群事件行写的就是这个）。原先没有任何声明，
+	// 只有 repo.Create 的旁路写得了它 —— 补进词表，让"hub 里会出现哪些类型"这一件事
+	// 以本表为准，而不是以某段绕过校验的代码为准。
+	"event": true,
+}
+
+// inboundHubMsgTypeAliases 渠道官方入站消息类型名 → 中台类型词表。
+//
+// 必须有这张收口表：各渠道对同一件事各叫一名（企微/公众号 voice、飞书/WA/钉钉 audio、
+// 钉钉 picture、WA document、飞书 media、公众号 shortvideo、飞书 post…），而中台词表
+// 只有 text/image/file/audio/video/link/card/location/event。修复前的两种后果：
+//   - 走 hub.Push 的渠道（企微）：Normalize 硬校验 ⇒ ErrMessageHubInvalidMsgType ⇒
+//     dispatch 上抛，客户发的语音**连一行 hub 都没有**（不是类型标错，是消息蒸发）；
+//   - 直接 repo.Create 的渠道（WA/公众号/飞书）：行落得下，但工作台按类型筛选
+//     （repository 的 msg_type = ?）与 by_msg_type 统计永远筛不到这些行。
+//
+// 只收录各渠道官方词表里真实存在的名字；不在表里、也不在词表里的（官方类型还会新增）
+// 由 InboundHubMsgType 兜到 text —— 宁可类型粗，也不能让一条真实消息被拒或被筛漏。
+var inboundHubMsgTypeAliases = map[string]string{
+	"voice":                model.MsgTypeAudio, // 企微 / 公众号
+	"picture":              model.MsgTypeImage, // 钉钉
+	"sticker":              model.MsgTypeImage, // 飞书表情 / WA 贴纸
+	"document":             model.MsgTypeFile,  // WA
+	"folder":               model.MsgTypeFile,  // 飞书文件夹
+	"media":                model.MsgTypeVideo, // 飞书视频
+	"shortvideo":           model.MsgTypeVideo, // 公众号 / 企微小视频
+	"post":                 model.MsgTypeText,  // 飞书富文本（正文已被解出来，类型按文本走）
+	"richtext":             model.MsgTypeText,  // 钉钉富文本
+	"mixed":                model.MsgTypeText,  // 微信客服图文混排
+	"merge_forward":        model.MsgTypeText,  // 飞书合并转发
+	"system":               model.MsgTypeText,  // 飞书系统消息
+	"interactive":          model.MsgTypeCard,  // 飞书卡片 / WA 互动消息
+	"button":               model.MsgTypeCard,  // WA 按钮回复
+	"order":                model.MsgTypeCard,  // WA 订单
+	"product":              model.MsgTypeCard,  // WA 商品
+	"hongbao":              model.MsgTypeCard,  // 以下为飞书卡片类
+	"calendar":             model.MsgTypeCard,
+	"general_calendar":     model.MsgTypeCard,
+	"share_calendar_event": model.MsgTypeCard,
+	"video_chat":           model.MsgTypeCard,
+	"share_chat":           model.MsgTypeCard,
+	"share_user":           model.MsgTypeCard,
+	"miniprogram":          model.MsgTypeCard, // 公众号小程序卡片
+	"todo":                 model.MsgTypeCard,
+	"vote":                 model.MsgTypeCard,
+
+	// 抖音 dop 私信（官方 message_type 全集里不在词表、也不是别名的 4 个）：
+	// user_local_* 是"发送方本地文件"形态，emoji 是动图直链，retain_consult_card 是留资卡片。
+	// 表外新类型由 InboundHubMsgType 兜到 text，不会拒消息，但类型会退化，故官方新增时要补这里。
+	"user_local_image":    model.MsgTypeImage,
+	"user_local_video":    model.MsgTypeVideo,
+	"emoji":               model.MsgTypeImage,
+	"retain_consult_card": model.MsgTypeCard,
+}
+
+// InboundHubMsgType 把渠道官方消息类型名映射进中台词表。
+// 官方名恰好已在词表里的（image/audio/video/file/text/location…）原样返回。
+func InboundHubMsgType(officialType string) string {
+	t := strings.ToLower(strings.TrimSpace(officialType))
+	if t == "" {
+		return model.MsgTypeText
+	}
+	if mapped, ok := inboundHubMsgTypeAliases[t]; ok {
+		return mapped
+	}
+	if messageHubMsgTypes[t] {
+		return t
+	}
+	return model.MsgTypeText
 }
 
 var messageHubDirections = map[string]bool{

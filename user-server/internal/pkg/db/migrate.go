@@ -426,8 +426,38 @@ func AutoMigrate() *gorm.DB {
 
 	postMigrateMessageHubUniqueIndex()
 	postMigrateOpportunityClueUniqueIndex(DB)
+	postMigrateObsDefaultUniqueIndex(DB)
 
 	return DB
+}
+
+// verifyUniqueIndex 在报"已就绪"之前读一次库里的**形状**：返回空串表示那枚索引确实唯一，
+// 否则返回一句可以直接落日志的归因（含索引名，三条钩子同族、文案相近，不点名运维不知道该动谁）。
+//
+// 为什么 `CREATE UNIQUE INDEX IF NOT EXISTS` 的 err 不足以支撑"已就绪"这句话（N-36，实测）：
+// PG 的 `IF NOT EXISTS` 只看**名字** —— 名字被一枚非唯一的历史索引占住时整句是静默 no-op
+// （err=<nil>、indisunique=false、同键两行照落）。标签那一层也补不回来，GORM 同样按名字对账
+// （`driver/postgres@v1.6.0/migrator.go:109` 的 HasIndex 只查 pg_indexes.indexname）。
+// 三条钩子存在的全部理由就是"第二层没铺上要在启动日志里看得见"，
+// 只看 err 恰好把这一格报成"铺上了" —— 日志说反话比没有日志更坏。
+//
+// 为什么形状不对也只报不修（不 DROP 那枚同名索引再重建）：非唯一索引可能是有人为读路径特意建的，
+// 启动期替运维决定删它是拿一个可用性隐患换一致性隐患；且这三道守卫的既有口径就是"只报不改"。
+//
+// 索引名只按名字查、不带表条件：PG 里索引名在 schema 内唯一，同名对象不可能同时属于两张表。
+func verifyUniqueIndex(db *gorm.DB, indexName string) string {
+	var isUnique bool
+	if err := db.Raw(`SELECT i.indisunique
+		FROM pg_index i
+		JOIN pg_class ic ON ic.oid = i.indexrelid
+		JOIN pg_namespace n ON n.oid = ic.relnamespace
+		WHERE ic.relname = ? AND n.nspname = current_schema()`, indexName).Row().Scan(&isUnique); err != nil {
+		return fmt.Sprintf("%s 在库里不是唯一索引（DDL 报成功之后读不到它的形状: %v）", indexName, err)
+	}
+	if !isUnique {
+		return fmt.Sprintf("%s 在库里不是唯一索引（名字被一枚非唯一的历史索引占住，CREATE UNIQUE INDEX IF NOT EXISTS 对它是静默 no-op）", indexName)
+	}
+	return ""
 }
 
 // postMigrateOpportunityClueUniqueIndex 给"一条线索最多只有一个商机"这条承诺配上库级守卫。
@@ -456,7 +486,60 @@ func postMigrateOpportunityClueUniqueIndex(db *gorm.DB) {
 		logger.Warn(fmt.Sprintf("post-migrate: CREATE idx_opportunities_clue_id 失败(存量里可能有重复 clue_id，需人工清重后重启): %v", err))
 		return
 	}
+	if why := verifyUniqueIndex(db, "idx_opportunities_clue_id"); why != "" {
+		logger.Warn("post-migrate: " + why + " ⇒ 同线索转化的库级兜底并未生效，需人工 DROP 那枚同名非唯一索引后重启")
+		return
+	}
 	logger.Info("post-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）")
+}
+
+// postMigrateObsDefaultUniqueIndex 给"全站最多一条默认存储"配库级守卫（批M / N-26）。
+//
+// 为什么必须有这一道：obs_config 的 is_default 是**选取判据**而不是普通布尔列 ——
+// 一旦同时有两条为真，GetDefault 的 First 就退化成按 uuid 主键序随便挑一条，
+// 而主键是随机串，等于每次进程重启都可能换一台存储：媒体转存、素材上传会分别
+// 落到两台桶上，两边都能"成功"，只有取回时才露馅。应用层的两条 UPDATE 挡不住
+// 旁路写入（管理页并发、SQL 运维、别家 service 整行 Save 的陈旧快照）。
+//
+// 为什么是裸 DDL 而不是 struct tag：GORM 的索引标签表达不了 **partial**（带 WHERE 谓词）。
+// 这里必须有谓词 —— is_default=false 的行是绝大多数，不带 WHERE 的唯一索引会把
+// 第二台"非默认"存储直接拦在创建门外，那是比双默认更坏的后果。
+//
+// 为什么先清重再建索引（与 clue_id 那条不同）：那条的重复只可能来自历史旁路写入，
+// 清它需要人判断留哪一条；这里的重复**语义上必然有一行是错的**，而"哪一行是对的"
+// 有唯一不自相矛盾的答案 —— 保留 GetDefault 本来就会选中的那一行（最早 created_at，
+// 同值按 id 升序），因为那是存量文件已经实际落在的那台。
+// 降级动作只在真的出现重复时才发生，并原样报出条数。
+func postMigrateObsDefaultUniqueIndex(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	var dups int64
+	if err := db.Table("obs_config").Where("is_default = ?", true).Count(&dups).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: 统计 obs_config 默认行失败(跳过唯一索引): %v", err))
+		return
+	}
+	if dups > 1 {
+		res := db.Exec(`UPDATE obs_config SET is_default = false
+			WHERE is_default AND id <> (
+				SELECT id FROM obs_config WHERE is_default ORDER BY created_at ASC, id ASC LIMIT 1)`)
+		if res.Error != nil {
+			logger.Warn(fmt.Sprintf("post-migrate: obs_config 双默认清重失败(跳过唯一索引): %v", res.Error))
+			return
+		}
+		logger.Warn(fmt.Sprintf("post-migrate: obs_config 有 %d 条默认存储，已保留 GetDefault 会选中的最早一条、降级 %d 条", dups, res.RowsAffected))
+	}
+	const ddl = `CREATE UNIQUE INDEX IF NOT EXISTS idx_obs_config_single_default
+		ON obs_config (is_default) WHERE is_default`
+	if err := db.Exec(ddl).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: CREATE idx_obs_config_single_default 失败: %v", err))
+		return
+	}
+	if why := verifyUniqueIndex(db, "idx_obs_config_single_default"); why != "" {
+		logger.Warn("post-migrate: " + why + " ⇒ 双默认的库级兜底并未生效，需人工 DROP 那枚同名非唯一索引后重启")
+		return
+	}
+	logger.Info("post-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）")
 }
 
 func postMigrateMessageHubUniqueIndex() {
@@ -472,6 +555,8 @@ func postMigrateMessageHubUniqueIndex() {
 	}
 	if err := DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uni_message_hub_platform_msg_conv ON message_hub (platform, msg_id, conversation_id)`).Error; err != nil {
 		logger.Warn(fmt.Sprintf("post-migrate: CREATE uni_message_hub_platform_msg_conv 失败: %v", err))
+	} else if why := verifyUniqueIndex(DB, "uni_message_hub_platform_msg_conv"); why != "" {
+		logger.Warn("post-migrate: " + why + " ⇒ 三元组去重的库级兜底并未生效，需人工 DROP 那枚同名非唯一索引后重启")
 	} else {
 		logger.Info("post-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪")
 	}

@@ -86,7 +86,7 @@ func TestNextSendRetryAt_BackoffAndQuietHours(t *testing.T) {
 		{7, 4 * time.Minute}, // 超出表长按最后一档封顶，不能越退越快
 	}
 	for _, c := range cases {
-		if got := nextSendRetryAt(now, c.attempts).Sub(now); got != c.want {
+		if got := nextSendRetryAt(now, c.attempts, nil).Sub(now); got != c.want {
 			t.Errorf("attempts=%d 退避 = %s, want %s", c.attempts, got, c.want)
 		}
 	}
@@ -95,7 +95,7 @@ func TestNextSendRetryAt_BackoffAndQuietHours(t *testing.T) {
 	aiReplyQuietHoursFn = func(time.Time) bool { return true }
 	defer func() { aiReplyQuietHoursFn = orig }()
 
-	at := nextSendRetryAt(now, 0)
+	at := nextSendRetryAt(now, 0, nil)
 	if at.In(cstZone).Hour() != aiReplyQuietEndHour || at.In(cstZone).Minute() != 0 {
 		t.Errorf("退避点落在免打扰时段时应顺延到 %02d:00，got %s", aiReplyQuietEndHour, at)
 	}

@@ -40,8 +40,11 @@ func TestDispatchWhatsApp_MultiMessageBatch(t *testing.T) {
 	if hub.MsgID != "wamid.A" {
 		t.Errorf("expected first message hub returned, got MsgID=%s", hub.MsgID)
 	}
-	if p.Content != "第一条" || p.Sender != "+8613800000001" {
-		t.Errorf("payload fields should reflect first message, got content=%q sender=%q", p.Content, p.Sender)
+	// 审计 M-02：同一条推送里的多条消息合成一份 AI 输入（原先只带首条，后两条客户
+	// 消息在推理输入里根本不存在）。返回的 hub 仍是首条，路由字段取自本条推送。
+	if p.Content != "第一条\n第二条\n[图片]" || p.Sender != "+8613800000001" {
+		t.Errorf("payload.Content 应为本推送内三条消息的合成本文、Sender 为首条发言人，got content=%q sender=%q",
+			p.Content, p.Sender)
 	}
 
 	var hubs []model.MessageHub
@@ -86,16 +89,23 @@ func TestDispatchWhatsApp_EmptyBatch(t *testing.T) {
 	}
 }
 
-// TestWaMessageContent 媒体类型占位符映射
+// TestWaMessageContent 媒体类型占位符映射。
+//
+// sticker 的期望值从 "[sticker]" 改成了 "[表情]"（批F-4，审计 N-17）：原用例钉的正是
+// 缺陷本身 —— 客户发的贴纸，客服与 AI 看到的是一串英文类型名。改期望而不是改实现，
+// 是因为实现方向与其余 8 个类型一致（全中文占位符），且库里那一行本就由同一张表写。
 func TestWaMessageContent(t *testing.T) {
 	cases := map[string]string{
-		"text":     "",
-		"image":    "[图片]",
-		"audio":    "[语音]",
-		"video":    "[视频]",
-		"document": "[文件]",
-		"sticker":  "[sticker]",
-		"unknown":  "[unknown]",
+		"text":        "",
+		"image":       "[图片]",
+		"audio":       "[语音]",
+		"video":       "[视频]",
+		"document":    "[文件]",
+		"sticker":     "[表情]",
+		"location":    "[位置]",
+		"contacts":    "[联系人]",
+		"unsupported": "[暂不支持的消息]",
+		"unknown":     "[unknown]",
 	}
 	for typ, want := range cases {
 		got := waMessageContent(typ, "正文")

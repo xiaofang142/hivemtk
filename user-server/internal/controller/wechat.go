@@ -257,29 +257,47 @@ func (c *WechatController) handleIncomingMessage(accountID uint, msg *service.We
 		}
 	}()
 
+	msgType, content, mediaExtra, ok := msg.NormalizeInbound()
+	if !ok {
+		// 事件推送（subscribe/unsubscribe/CLICK/SCAN…）与解不出正文的畸形消息不进收件箱：
+		// 落一行空 content 的 hub 既污染会话，又会驱动一次注定没有输入的 AI 回复（抖音 N-07 同源）。
+		logger.Infof("[Wechat] 非消息推送已跳过: account=%d from=%s type=%s event=%s",
+			accountID, msg.FromUserName, msg.MsgType, msg.Event)
+		return
+	}
+
 	if c.ingressSvc != nil {
 		event := &model.MessageEvent{
 			Channel:        "wechat",
 			ConversationID: fmt.Sprintf("wechat:%d:%s", accountID, msg.FromUserName),
 			SessionID:      fmt.Sprintf("wechat:%d:%s", accountID, msg.FromUserName),
-			EventID:        msg.MsgID,
+			EventID:        msg.DedupKey(accountID),
 			SenderType:     model.SenderTypeCustomer,
 			SenderID:       msg.FromUserName,
 			SenderName:     "",
-			MsgType:        msg.MsgType,
-			Content:        msg.Content,
+			MsgType:        msgType,
+			Content:        content,
 			Timestamp:      time.Unix(msg.CreateTime, 0),
 			Extra: map[string]any{
 				"account_id": fmt.Sprintf("%d", accountID),
 				"to_user":    msg.ToUserName,
+				// 官方 MsgId 是这条消息的稳定主键：中台据此跳过内容窗口去重，并参与出站回环识别。
+				"channel_msg_id": msg.MsgID,
 			},
+		}
+		for k, v := range mediaExtra {
+			event.Extra[k] = v
 		}
 
 		if _, err := c.ingressSvc.HandleIngressMessage(ctx, event); err != nil {
 			logger.Errorf("[Wechat] Ingress 处理失败: %v", err)
+		} else if msg.MediaID != "" {
+			// M-01：用户来信的 MediaId 是临时素材（官方只承诺上传侧 3 天，来信侧未公布时限），
+			// 当场换成长期 URL 才留得住；pic_url/media_id 已在 Extra 里留痕，转存失败不丢引用。
+			c.svc.PersistInboundMediaAsync(ctx, accountID, event.EventID, msg.MediaID)
 		}
 	}
 
 	logger.Infof("[Wechat] 收到消息: account=%d from=%s type=%s content=%s",
-		accountID, msg.FromUserName, msg.MsgType, msg.Content)
+		accountID, msg.FromUserName, msgType, content)
 }

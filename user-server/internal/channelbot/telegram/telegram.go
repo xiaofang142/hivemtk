@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -54,6 +55,39 @@ func NewTelegramClient(token string, opts ...core.ClientOption) *Client {
 
 func (c *Client) jsonHeaders() map[string]string {
 	return map[string]string{"Content-Type": "application/json; charset=utf-8"}
+}
+
+// redactedError 抹掉凭证文本、但保留错误链（Unwrap），这样上游的 errors.Is/errors.As
+// 分类不会因为脱敏而失效。
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
+// scrubToken 从错误串里去掉 bot token。
+//
+// 官方把长期凭证放在 URL 路径里（/bot<token>/<method>），而标准库的 *url.Error 会把完整
+// URL 写进 Error() ⇒ 一次网络抖动就把 token 连同 "Post …" 一起落到日志与观测链路，
+// 出站错误串还会进 ChannelError.Raw 一路带到工单文案。
+// 本包的 HTTP 出口只有 DoJSON 与 DownloadFile 两处，脱敏就收在这两处。
+func (c *Client) scrubToken(err error) error {
+	if err == nil || c.token == "" || !strings.Contains(err.Error(), c.token) {
+		return err
+	}
+	return &redactedError{
+		msg: strings.ReplaceAll(err.Error(), c.token, "<redacted-token>"),
+		err: err,
+	}
+}
+
+// DoJSON 覆写内嵌 BaseClient.DoJSON：唯一目的就是给错误串脱敏。
+// 方法名与内嵌一致 ⇒ 本包所有 c.DoJSON 调用（含 SendMessage / setWebhook / getFile）都走这里。
+func (c *Client) DoJSON(ctx context.Context, method, url string, body io.Reader, headers map[string]string) ([]byte, int, error) {
+	b, status, err := c.BaseClient.DoJSON(ctx, method, url, body, headers)
+	return b, status, c.scrubToken(err)
 }
 
 // SendMessageOptions 主动发消息的可选参数（opts 可变参；零值表示不设置）
@@ -163,7 +197,16 @@ func (c *Client) sendSingle(ctx context.Context, chatID int64, text string, opt 
 			if status2 == 200 {
 				return parseSendMessageID(respB2), nil
 			}
-			lastErr = fmt.Errorf("tg send fallback status %d: %s", status2, string(respB2))
+			// 去掉 Markdown 重试的这第二条也是普通请求：频控按账号计，连着两请求同样会撞 429，
+			// 这条分支若不带上状态码与 retry_after，上层就退回到"从文案里猜"（审计 N-11③）。
+			ra2 := 0
+			if status2 == http.StatusTooManyRequests {
+				ra2 = parseRetryAfter(respB2)
+				if ra2 > 0 {
+					wait = time.Duration(ra2)*time.Second + 200*time.Millisecond
+				}
+			}
+			lastErr = apiErr(status2, ra2, fmt.Sprintf("tg send fallback status %d: %s", status2, string(respB2)))
 			continue
 		}
 		if status == 429 {
@@ -171,16 +214,30 @@ func (c *Client) sendSingle(ctx context.Context, chatID int64, text string, opt 
 			if ra > 0 {
 				wait = time.Duration(ra)*time.Second + 200*time.Millisecond
 			}
-			lastErr = fmt.Errorf("tg send 429 (rate limited, retry_after=%ds): %s", ra, string(respB))
+			// 官方在 parameters.retry_after 里给的就是"还要等多久"，这里带上原值，
+			// 上层据此排持久化重试（+200ms 只是本客户端内部循环的安全余量，不是渠道口径）。
+			lastErr = apiErr(status, ra, fmt.Sprintf("tg send 429 (rate limited, retry_after=%ds): %s", ra, string(respB)))
 			continue
 		}
 		if status >= 500 && status < 600 {
-			lastErr = fmt.Errorf("tg send status %d: %s", status, string(respB))
+			lastErr = apiErr(status, 0, fmt.Sprintf("tg send status %d: %s", status, string(respB)))
 			continue
 		}
-		return 0, fmt.Errorf("tg send status %d: %s", status, string(respB))
+		return 0, apiErr(status, 0, fmt.Sprintf("tg send status %d: %s", status, string(respB)))
 	}
 	return 0, fmt.Errorf("tg send exhausted %d retries: %w", tgSendMaxRetries, lastErr)
+}
+
+// apiErr 把一次失败响应拆成跨层可判读的事实。Raw 与本包改动前的错误串完全同形，
+// 变化只在于状态码与 retry_after 不再要求上层从字符串里反解（审计 N-11①②）。
+// 业务码不进表：官方明写 error_code "contents are subject to change in the future"。
+func apiErr(status, retryAfterSec int, raw string) *core.APIError {
+	return &core.APIError{
+		Channel:    "telegram",
+		StatusCode: status,
+		RetryAfter: time.Duration(retryAfterSec) * time.Second,
+		Raw:        raw,
+	}
 }
 
 func splitMessage(text string, limit int) []string {
@@ -450,14 +507,14 @@ func (c *Client) callMethod(ctx context.Context, method string, payload map[stri
 			if ra > 0 {
 				wait = time.Duration(ra)*time.Second + 200*time.Millisecond
 			}
-			lastErr = fmt.Errorf("tg %s 429 (retry_after=%ds): %s", method, ra, string(respB))
+			lastErr = apiErr(status, ra, fmt.Sprintf("tg %s 429 (retry_after=%ds): %s", method, ra, string(respB)))
 			continue
 		}
 		if status >= 500 && status < 600 {
-			lastErr = fmt.Errorf("tg %s status %d: %s", method, status, string(respB))
+			lastErr = apiErr(status, 0, fmt.Sprintf("tg %s status %d: %s", method, status, string(respB)))
 			continue
 		}
-		return fmt.Errorf("tg %s status %d: %s", method, status, string(respB))
+		return apiErr(status, 0, fmt.Sprintf("tg %s status %d: %s", method, status, string(respB)))
 	}
 	return fmt.Errorf("tg %s exhausted %d retries: %w", method, tgSendMaxRetries, lastErr)
 }
@@ -593,6 +650,109 @@ func (c *Client) CreateChatInviteLink(ctx context.Context, chatID int64, creates
 	return r.Result.InviteLink, nil
 }
 
+// MaxDownloadFileBytes 官方对 bot 可下载文件的上限：「The maximum file size to download is 20 MB」。
+const MaxDownloadFileBytes int64 = 20 << 20
+
+// TGFile 官方 File 对象（只声明本仓要用的字段）。
+// file_unique_id 官方明示「Can't be used to download or reuse the file」⇒ 不取。
+type TGFile struct {
+	FileID   string `json:"file_id"`
+	FilePath string `json:"file_path"`
+	FileSize int64  `json:"file_size"`
+}
+
+// GetFile 用 file_id 换取下载路径。官方：file_path 是 Optional —— 没拿到路径就没有可下载的东西，
+// 此时必须报错而不是返回空串（空串拼出的 URL 会打到 /file/bot<token>/ 这个不存在的接口上）。
+func (c *Client) GetFile(ctx context.Context, fileID string) (*TGFile, error) {
+	if strings.TrimSpace(fileID) == "" {
+		return nil, fmt.Errorf("tg getFile: empty file_id")
+	}
+	b, err := json.Marshal(map[string]any{"file_id": fileID})
+	if err != nil {
+		return nil, fmt.Errorf("tg getFile marshal: %w", err)
+	}
+	api := fmt.Sprintf("%s/bot%s/getFile", c.apiBase, c.token)
+	respB, status, err := c.DoJSON(ctx, http.MethodPost, api, bytes.NewReader(b), c.jsonHeaders())
+	if err != nil {
+		return nil, fmt.Errorf("tg getFile: %w", err)
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("tg getFile status %d: %s", status, string(respB))
+	}
+	var r struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+		Result      TGFile `json:"result"`
+	}
+	if err := json.Unmarshal(respB, &r); err != nil {
+		return nil, fmt.Errorf("tg getFile parse: %s", string(respB))
+	}
+	if !r.OK {
+		// 只带 description：错误串会进日志，而 URL 里的 token 绝不能跟着进
+		return nil, fmt.Errorf("tg getFile not ok: %s", r.Description)
+	}
+	if r.Result.FilePath == "" {
+		return nil, fmt.Errorf("tg getFile 未返回 file_path（官方 Optional）")
+	}
+	return &r.Result, nil
+}
+
+// DownloadFile 下载 getFile 给出的路径。
+//
+// 不走 core.BaseClient.DoJSON：它 io.ReadAll 不设上限，而这里读的是渠道侧任意大的文件，
+// 必须自己 LimitReader(max+1) 并据「正好读到 max+1」判定超限 —— 否则半截文件会被当成完整原件
+// 存进长期存储（图片只渲染一半、压缩包直接损坏，且事后看不出少了一段）。
+func (c *Client) DownloadFile(ctx context.Context, filePath string, maxBytes int64) (data []byte, contentType string, err error) {
+	if err := checkTGFilePath(filePath); err != nil {
+		return nil, "", err
+	}
+	if maxBytes <= 0 {
+		maxBytes = MaxDownloadFileBytes
+	}
+	// file_path 官方形态是 "photos/file_1.jpg" 这样的相对路径，前缀按官方是
+	// https://api.telegram.org/file/bot<token>/<file_path>（注意是 /file/bot…，
+	// 与接口调用的 /bot<token>/<method> 不是同一路径段）。
+	api := fmt.Sprintf("%s/file/bot%s/%s", c.apiBase, c.token, filePath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
+	if err != nil {
+		return nil, "", c.scrubToken(fmt.Errorf("tg download new request: %w", err))
+	}
+	cli := c.HTTPClient
+	if cli == nil {
+		return nil, "", fmt.Errorf("tg download: HTTPClient not initialized")
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return nil, "", c.scrubToken(fmt.Errorf("tg download: %w", err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("tg download status %d", resp.StatusCode)
+	}
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("tg download read: %w", err)
+	}
+	if int64(len(buf)) > maxBytes {
+		return nil, "", fmt.Errorf("tg download file larger than %d bytes", maxBytes)
+	}
+	return buf, resp.Header.Get("Content-Type"), nil
+}
+
+// checkTGFilePath file_path 只有 Optional 与「相对 apiBase/file/bot<token>/ 的路径」两件事是确定的，
+// 绝对路径或 ".." 会让拼出来的 URL 跑到别的资源上（下载腿的 base 可被代理配置改写时尤其要紧）。
+func checkTGFilePath(p string) error {
+	switch {
+	case strings.TrimSpace(p) == "":
+		return fmt.Errorf("tg download: empty file_path")
+	case strings.HasPrefix(p, "/"), strings.HasPrefix(p, "http://"), strings.HasPrefix(p, "https://"):
+		return fmt.Errorf("tg download: file_path 必须是相对路径，got %q", p)
+	case strings.Contains(p, ".."):
+		return fmt.Errorf("tg download: file_path 含上层跳转，got %q", p)
+	}
+	return nil
+}
+
 // Update Telegram webhook 推送的 Update 结构（精简版）
 type Update struct {
 	UpdateID        int64                `json:"update_id"`
@@ -662,6 +822,126 @@ type TGMessage struct {
 	NewChatMembers []TGUser   `json:"new_chat_members,omitempty"`
 	LeftChatMember *TGUser    `json:"left_chat_member,omitempty"`
 	NewChatTitle   string     `json:"new_chat_title,omitempty"`
+
+	// 富媒体容器（M-01）。官方互斥关系决定了下面的判定顺序，不是随手排的：
+	// 「Message is an animation… when this field is set, the document field will also be
+	// set」「live_photo… when this field is set, the photo field will also be set」
+	// ⇒ animation 必须排在 document 前、live_photo 必须排在 photo 前，否则 GIF 会被判成文件、
+	// 实况照片会被判成静态图（丢掉动态那一半，且工作台渲染成错的类型）。
+	Animation *TGMediaRef      `json:"animation,omitempty"`
+	Audio     *TGMediaRef      `json:"audio,omitempty"`
+	Document  *TGMediaRef      `json:"document,omitempty"`
+	LivePhoto *TGMediaRef      `json:"live_photo,omitempty"`
+	Photo     []TGMediaRef     `json:"photo,omitempty"`
+	Sticker   *TGMediaRef      `json:"sticker,omitempty"`
+	Video     *TGMediaRef      `json:"video,omitempty"`
+	VideoNote *TGMediaRef      `json:"video_note,omitempty"`
+	Voice     *TGMediaRef      `json:"voice,omitempty"`
+	Story     *json.RawMessage `json:"story,omitempty"`
+}
+
+// TGMediaRef 官方媒体对象（PhotoSize / Animation / Audio / Document / Video / VideoNote /
+// Voice / Sticker）在本仓用到的公共子集：file_id 是唯一必需项（getFile 的入参），
+// 其余按对象不同而可选。
+//
+// 官方 File 对象另带 file_unique_id，原文写明「Can't be used to download or reuse the file」
+// ⇒ 不取。file_size 官方警告「It can be bigger than 2^31」⇒ 用 int64。
+type TGMediaRef struct {
+	FileID   string `json:"file_id"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+	FileName string `json:"file_name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+}
+
+// 落 message_hub.msg_type 的四类媒体取值（与 model.MsgType* 一致；本包不依赖 model，
+// 因为归一层是各渠道适配器共同的下游，反向依赖会把协议层拖进业务模型）。
+const (
+	KindImage = "image"
+	KindVideo = "video"
+	KindAudio = "audio"
+	KindFile  = "file"
+	KindText  = "text"
+)
+
+// TGInbound 一条消息归一化后的落库形状：类型、正文（含媒体占位符）、待转存的媒体引用。
+type TGInbound struct {
+	MsgType string
+	Content string
+	Media   []TGMediaRef
+}
+
+// mediaKind 官方容器 → 本仓类型 + 占位符。返回 ok=false 表示这条没有可展示的媒体。
+//
+// 顺序即官方互斥口径（见 TGMessage 内注释）：animation 先于 document、live_photo 先于 photo。
+func (m *TGMessage) mediaKind() (kind, placeholder string, refs []TGMediaRef, ok bool) {
+	switch {
+	case m.Animation != nil && m.Animation.FileID != "":
+		return KindVideo, "[动图]", []TGMediaRef{*m.Animation}, true
+	case m.LivePhoto != nil && m.LivePhoto.FileID != "":
+		return KindVideo, "[实况照片]", []TGMediaRef{*m.LivePhoto}, true
+	case m.Video != nil && m.Video.FileID != "":
+		return KindVideo, "[视频]", []TGMediaRef{*m.Video}, true
+	case m.VideoNote != nil && m.VideoNote.FileID != "":
+		return KindVideo, "[圆视频]", []TGMediaRef{*m.VideoNote}, true
+	case m.Voice != nil && m.Voice.FileID != "":
+		return KindAudio, "[语音]", []TGMediaRef{*m.Voice}, true
+	case m.Audio != nil && m.Audio.FileID != "":
+		return KindAudio, "[音频]", []TGMediaRef{*m.Audio}, true
+	case m.Sticker != nil && m.Sticker.FileID != "":
+		return KindImage, "[表情]", []TGMediaRef{*m.Sticker}, true
+	case len(m.Photo) > 0:
+		// photo 是「同一张图的多个可用尺寸」（Array of PhotoSize），不是多张图 ⇒ 只取最大那张，
+		// 存四份同源字节纯属浪费，且工作台只需要一张能看的。
+		return KindImage, "[图片]", []TGMediaRef{largestPhotoSize(m.Photo)}, true
+	case m.Document != nil && m.Document.FileID != "":
+		name := m.Document.FileName
+		if name == "" {
+			return KindFile, "[文件]", []TGMediaRef{*m.Document}, true
+		}
+		return KindFile, "[文件] " + name, []TGMediaRef{*m.Document}, true
+	case m.Story != nil:
+		// 转发故事：官方 Story 对象只保证 chat/date，其媒体能否按 file_id 取回未在本仓验证过
+		// ⇒ 只留可见占位符、不谎称有可下载的原件（media_url 留空即工作台不会渲染破图）。
+		return KindText, "[转发故事]", nil, true
+	default:
+		return "", "", nil, false
+	}
+}
+
+// largestPhotoSize 取 photo 数组里最大的一档：优先官方 file_size，缺失时退回像素面积
+// （PhotoSize 的 file_size 是 Optional，而 width/height 是必填）。
+func largestPhotoSize(sizes []TGMediaRef) TGMediaRef {
+	best := sizes[0]
+	var bestScore int64 = -1
+	for _, s := range sizes {
+		score := s.FileSize
+		if score == 0 {
+			score = int64(s.Width) * int64(s.Height)
+		}
+		if score > bestScore {
+			best, bestScore = s, score
+		}
+	}
+	return best
+}
+
+// Inbound 归一化这条消息：文本消息取 text，媒体消息取 caption + 占位符。
+//
+// 官方 caption 的适用范围是「animation, audio, document, paid media, photo, video or voice」，
+// 所以媒体那条的正文本来就在 caption 里；占位符一并留着，客户写了说明也看得出「这里有个文件」。
+func (m *TGMessage) Inbound() TGInbound {
+	if kind, placeholder, refs, ok := m.mediaKind(); ok {
+		return TGInbound{MsgType: kind, Content: strings.TrimSpace(m.Caption) + placeholder, Media: refs}
+	}
+	// 无媒体容器时退回文本；caption 兜底是给「本仓没承载的媒体形态」（如 paid_media）留的：
+	// 那种消息官方仍会带 caption，丢了就等于客户说了一句话而没人看见。
+	content := m.Text
+	if content == "" {
+		content = m.Caption
+	}
+	return TGInbound{MsgType: KindText, Content: content}
 }
 
 // TGEntity 消息内格式化实体（mention / text_mention / bot_command 等），用于精确识别 @提及
@@ -698,15 +978,47 @@ func ParseUpdate(body []byte) (*Update, error) {
 	return &u, nil
 }
 
-// ToInbound 归一化为 core.InboundMessage（accountID 由调用方填充）
+// AnyMessage 按官方互斥优先序取出本 Update 携带的那条消息（message → edited_message → channel_post）。
+// 与 ToInbound 头部原本三级 if 同序；抽出来是为了让「落库哪条消息」与「按哪个键回填媒体」是同一个判断。
+func (u *Update) AnyMessage() *TGMessage {
+	if u.Message != nil {
+		return u.Message
+	}
+	if u.EditedMessage != nil {
+		return u.EditedMessage
+	}
+	return u.ChannelPost
+}
+
+// HubMsgID 这条 Update 落 message_hub 时的 msg_id（= 中台 EventID），与 Ingress 的赋值同序：
+// update_id 优先（官方对同一 Update 的重投保持 update_id 不变，天然幂等键），
+// 退化到消息自身的 tg_<message_id>。
+//
+// 媒体回填按这个键找行 ⇒ 它必须与 Ingress 写进去的一致；两处各算一套就会一个键写、另一个键读，
+// 长期 URL 永远落不回那行（N-10 在 WhatsApp 侧的同款缺陷）。
+//
+// accountID 必须进键：官方 update_id 与 message_id 都是**单个 bot 自己**的计数，而 message_hub
+// 唯一键是 (platform, msg_id, conversation_id) 不含账号 ⇒ 两个 bot 各自数到同一个号、
+// 又落在同一个会话（同一用户在两个 bot 的私聊里 chat id 就是他的 user id）时，
+// 第二条消息会被中台当重复事件跳过（实测：日志 "钩子2：msg_id 已存在，幂等跳过" +
+// 媒体回填 record not found，客户的话整条蒸发）。与出站 telegramOutboundHubMsgID 同口径。
+func (u *Update) HubMsgID(accountID string) string {
+	if u.UpdateID != 0 {
+		return "tg_upd_" + accountID + "_" + strconv.FormatInt(u.UpdateID, 10)
+	}
+	if m := u.AnyMessage(); m != nil && m.MessageID != 0 {
+		return "tg_" + accountID + "_" + strconv.FormatInt(m.MessageID, 10)
+	}
+	// 按钮回调没有 message_id（回调消息只带 chat），与 ToInbound 的 MessageID 同键，
+	// 否则退化成 dispatch 里的 "tg_0"，与中台落库的行永远对不上。
+	if u.CallbackQuery != nil && u.CallbackQuery.ID != "" {
+		return "tg_cb_" + accountID + "_" + u.CallbackQuery.ID
+	}
+	return ""
+}
+
 func (u *Update) ToInbound(accountID string) *core.InboundMessage {
-	msg := u.Message
-	if msg == nil {
-		msg = u.EditedMessage
-	}
-	if msg == nil {
-		msg = u.ChannelPost
-	}
+	msg := u.AnyMessage()
 	if msg == nil {
 		if u.CallbackQuery != nil && u.CallbackQuery.From != nil {
 			cb := u.CallbackQuery
@@ -720,7 +1032,7 @@ func (u *Update) ToInbound(accountID string) *core.InboundMessage {
 			return &core.InboundMessage{
 				Platform:       "telegram",
 				AccountID:      accountID,
-				MessageID:      "tg_cb_" + cb.ID,
+				MessageID:      "tg_cb_" + accountID + "_" + cb.ID,
 				ConversationID: chatID,
 				SenderID:       strconv.FormatInt(cb.From.ID, 10),
 				SenderName:     cb.From.FirstName,
@@ -732,10 +1044,7 @@ func (u *Update) ToInbound(accountID string) *core.InboundMessage {
 		}
 		return nil
 	}
-	content := msg.Text
-	if content == "" {
-		content = msg.Caption
-	}
+	inb := msg.Inbound()
 	name := ""
 	var senderID string
 	if msg.From != nil {
@@ -756,12 +1065,12 @@ func (u *Update) ToInbound(accountID string) *core.InboundMessage {
 	return &core.InboundMessage{
 		Platform:       "telegram",
 		AccountID:      accountID,
-		MessageID:      "tg_" + strconv.FormatInt(msg.MessageID, 10),
+		MessageID:      "tg_" + accountID + "_" + strconv.FormatInt(msg.MessageID, 10),
 		ConversationID: chatID,
 		SenderID:       senderID,
 		SenderName:     name,
-		Content:        content,
-		MsgType:        "text",
+		Content:        inb.Content,
+		MsgType:        inb.MsgType,
 		IsGroup:        isGroup,
 		GroupID:        groupID,
 		GroupName:      groupName,
@@ -782,8 +1091,8 @@ func (u *Update) Ingress(ctx context.Context, h core.IngressHandler, accountID s
 		return nil
 	}
 	event := inbound.ToMessageEvent(accountID)
-	if u.UpdateID != 0 {
-		event.EventID = "tg_upd_" + strconv.FormatInt(u.UpdateID, 10)
+	if id := u.HubMsgID(accountID); id != "" {
+		event.EventID = id
 	}
 	return h.HandleIngressMessage(ctx, event)
 }

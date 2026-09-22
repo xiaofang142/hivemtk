@@ -2,18 +2,14 @@ package service
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha1"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -49,49 +45,10 @@ func computeWeComSignatureURL(token, timestamp, nonce, echostr string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func encryptWeComPlain(t *testing.T, aesKey, receiveID, msg string) string {
-	if len(aesKey) != 43 {
-		t.Fatalf("invalid aes key length: %d", len(aesKey))
-	}
-	keyB, err := base64.StdEncoding.DecodeString(aesKey + "=")
-	if err != nil {
-		t.Fatalf("decode key: %v", err)
-	}
-
-	msgBytes := []byte(msg)
-	header := make([]byte, 16+4)
-	if _, err := rand.Read(header[:16]); err != nil {
-		t.Fatalf("rand: %v", err)
-	}
-	binary.BigEndian.PutUint32(header[16:20], uint32(len(msgBytes)))
-	body := append(header, msgBytes...)
-	body = append(body, []byte(receiveID)...)
-
-	const blockSize = 32
-	padLen := blockSize - (len(body) % blockSize)
-	if padLen == 0 {
-		padLen = blockSize
-	}
-	pad := make([]byte, padLen)
-	for i := range pad {
-		pad[i] = byte(padLen)
-	}
-	padded := append(body, pad...)
-
-	block, err := aes.NewCipher(keyB)
-	if err != nil {
-		t.Fatalf("new cipher: %v", err)
-	}
-	iv := make([]byte, 16)
-	if _, err := rand.Read(iv); err != nil {
-		t.Fatalf("rand iv: %v", err)
-	}
-	enc := make([]byte, len(padded))
-	cipher.NewCBCEncrypter(block, iv).CryptBlocks(enc, padded)
-
-	out := append(iv, enc...)
-	return base64.StdEncoding.EncodeToString(out)
-}
+// encryptWeComPlain 已删除：它按「随机 IV 前置到密文」自造夹具，那是飞书的方案；
+// 企微官方是 IV=AESKey 前 16 字节、密文不前置。统一改用
+// wecomOfficialEncrypt（见 wecom_crypto_official_contract_test.go），
+// 避免生产实现和测试夹具同时错成一套而互相印证。
 
 // TestWeCom_VerifyURL_OK 验证 URL 验证挑战
 func TestWeCom_VerifyURL_OK(t *testing.T) {
@@ -100,7 +57,7 @@ func TestWeCom_VerifyURL_OK(t *testing.T) {
 	receiveID := "wxcorpid123"
 
 	echostr := "test_echo_string_001"
-	encEcho := encryptWeComPlain(t, aesKey, receiveID, echostr)
+	encEcho := wecomOfficialEncrypt(t, aesKey, echostr, receiveID)
 
 	timestamp := "1700000000"
 	nonce := "abc123"
@@ -122,7 +79,7 @@ func TestWeCom_Decrypt_OK(t *testing.T) {
 	receiveID := "wxcorpid"
 	msg := `{"ToUserName":"wxcorpid","FromUserName":"user001","CreateTime":1700000000,"MsgType":"text","Content":"hello","MsgId":"m_001"}`
 
-	enc := encryptWeComPlain(t, aesKey, receiveID, msg)
+	enc := wecomOfficialEncrypt(t, aesKey, msg, receiveID)
 	plain, err := DecryptWeComMessage(aesKey, enc)
 	if err != nil {
 		t.Fatalf("decrypt: %v", err)
@@ -139,7 +96,7 @@ func TestWeCom_Decrypt_OK(t *testing.T) {
 func TestWeCom_Decrypt_BadKey(t *testing.T) {
 	goodKey := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFG"
 	badKey := "ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210ZYXWVUT"
-	enc := encryptWeComPlain(t, goodKey, "wxcorpid", "hello")
+	enc := wecomOfficialEncrypt(t, goodKey, "hello", "wxcorpid")
 
 	_, err := DecryptWeComMessage(badKey, enc)
 	if err == nil {
@@ -158,8 +115,9 @@ func TestWeCom_Decrypt_InvalidKeyLength(t *testing.T) {
 // TestWeCom_Verify_OK 验签合法
 func TestWeCom_Verify_OK(t *testing.T) {
 
-	body := []byte(`{"encrypt":"ENC123","timestamp":"1700000123","nonce":"nonce123"}`)
-	ts := "1700000123"
+	// timestamp 必须落在 verifyWeCom 的 freshness 时窗内（审计 S-05）
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	body := []byte(`{"encrypt":"ENC123","timestamp":"` + ts + `","nonce":"nonce123"}`)
 	nonce := "nonce123"
 	sig := computeWeComSignature4("MyT", ts, nonce, "ENC123")
 
@@ -506,7 +464,7 @@ func TestWebhook_DuplicateEvent(t *testing.T) {
 	svc := NewWebhookService(db)
 	body := []byte(`{"FromUserName":"u1","MsgType":"text","Content":"hi","MsgId":"m1"}`)
 	req := &ReceiveRequest{
-		Channel:   ChannelCustom,
+		Channel:   ChannelDouyin,
 		AccountID: "1",
 		Body:      body,
 	}
@@ -572,14 +530,20 @@ func TestParsePayload_Invalid(t *testing.T) {
 }
 
 // TestDispatchToUnified_Integration 验证入库 unified_messages
+//
+// 渠道归属判定已改版：有入站适配器的渠道正常消息直接落 message_hub，不再写 unified_messages
+// （审计 D-03 把"哪条路由真正服务这个渠道"变成显式能力表）。unified_messages 现在
+// 承接的是「适配器报错、消息仍要留痕」这一条路径，故用一条 telegram 官方形状都对不上的
+// 报文来驱动：ParseUpdate 必失败，handleJob 才继续往下写。
 func TestDispatchToUnified_Integration(t *testing.T) {
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "true")
 	t.Setenv("ALLOW_INSECURE_TELEGRAM_WEBHOOK", "true")
 	db := setupTestDB(t)
 	svc := NewWebhookService(db)
-	body := []byte(`{"FromUserName":"u1","MsgType":"text","Content":"hi","MsgId":"m_unified_1"}`)
+	defer svc.Stop(context.Background())
+	body := []byte(`{"update_id":"not-a-number","from":"u_d03_unified","content":"hi"}`)
 	r, _ := svc.Receive(context.Background(), &ReceiveRequest{
-		Channel:   ChannelCustom,
+		Channel:   ChannelTelegram,
 		AccountID: "1",
 		Body:      body,
 	})
@@ -588,7 +552,8 @@ func TestDispatchToUnified_Integration(t *testing.T) {
 	}
 	time.Sleep(500 * time.Millisecond)
 	var um model.UnifiedMessage
-	if err := db.Where("sender_id = ?", "u1").First(&um).Error; err != nil {
+	// 用本用例独有的 sender：共用库里若命中别人的行，这条断言就成了假绿。
+	if err := db.Where("sender_id = ?", "u_d03_unified").First(&um).Error; err != nil {
 		t.Errorf("unified message not found: %v", err)
 	}
 	if um.Content != "hi" {
@@ -627,7 +592,7 @@ func TestWeCom_VerifyURL_HTTP(t *testing.T) {
 	})
 
 	echostr := "echo_http_001"
-	encEcho := encryptWeComPlain(t, aesKey, "wx", echostr)
+	encEcho := wecomOfficialEncrypt(t, aesKey, echostr, "wx")
 	ts := "1700000001"
 	nonce := "n001"
 	sig := computeWeComSignatureURL(token, ts, nonce, echostr)

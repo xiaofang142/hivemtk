@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,9 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
-	"time"
 
 	"hivemtk-user/internal/model"
 	dbutil "hivemtk-user/internal/pkg/db"
@@ -24,28 +22,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// 媒体下载与转存：三渠道入站媒体（图片/语音/视频/文件）原先只落占位符文本，
+// 媒体下载与转存：入站媒体原先只落占位符文本，
 // 渠道侧媒体 ID 有效期极短（WhatsApp 7 天 / 企微 3 天 / 飞书图片不过期但文件 2 天），
 // 转存到统一存储后把可长期访问的 URL 回填 message_hub.media_url。
-
-// channelMediaFollower 用 Bearer token 下载受保护媒体（WhatsApp Cloud API）。
-type channelMediaFollower func(ctx context.Context, mediaID string) (io.ReadCloser, string, error)
-
-// channelMediaFollowers 由装配层注入各渠道实现，避免 service 直依赖渠道凭证细节。
-// 注册多发生在启动装配阶段，但渠道入站是并发读，必须持锁防 map 并发读写 panic。
-var (
-	channelMediaFollowersMu sync.RWMutex
-	channelMediaFollowers   = map[string]channelMediaFollower{}
-)
-
-// RegisterChannelMediaFollower 注册渠道媒体下载器（渠道名小写：whatsapp/wecom/feishu）。
-func RegisterChannelMediaFollower(channel string, f channelMediaFollower) {
-	if f != nil {
-		channelMediaFollowersMu.Lock()
-		defer channelMediaFollowersMu.Unlock()
-		channelMediaFollowers[channel] = f
-	}
-}
+//
+// 转存只有"入站当场"一条路径：各渠道在收到消息的那一刻就用自家的 *MediaFetchFn 换到字节，
+// 再交给 channelMediaPersist。曾经存在的第二套"按 mediaID 延迟取"注册表
+// （channelMediaFollowers / RegisterChannelMediaFollower / PersistChannelMedia）已删——
+// 它从未被装配或调用过，且"延迟取"这个前提本身与官方 ID 有效期约束相冲突（见批G-2b 的抖音取证）。
 
 // mediaPersistRecord 转存结果。
 type mediaPersistRecord struct {
@@ -54,45 +38,21 @@ type mediaPersistRecord struct {
 	Size      int64
 }
 
-// fetchChannelMediaFollower 取渠道下载器的内部入口（测试可注入）。
-func fetchChannelMediaFollower(channel string) (channelMediaFollower, bool) {
-	channelMediaFollowersMu.RLock()
-	defer channelMediaFollowersMu.RUnlock()
-	f, ok := channelMediaFollowers[channel]
-	return f, ok
-}
-
-// PersistChannelMedia 下载渠道媒体并转存到默认存储，返回可长期访问的公开 URL。
-// 存储未配置/下载失败时返回 error，调用方按需降级为占位符。
-func PersistChannelMedia(ctx context.Context, channel, mediaID, filenameHint string) (*mediaPersistRecord, error) {
-	if mediaID == "" {
-		return nil, errors.New("media id empty")
-	}
-	follower, ok := fetchChannelMediaFollower(channel)
-	if !ok {
-		return nil, fmt.Errorf("no media follower for channel %s", channel)
-	}
-	rc, mediaURL, err := follower(ctx, mediaID)
-	if err != nil {
-		return nil, fmt.Errorf("fetch media: %w", err)
-	}
-	defer func() { _ = rc.Close() }()
-
-	// 读取全部字节（媒体单文件上限 16MB（WA）/5MB(企微语音视频)，一次性读入可控）
-	data, err := io.ReadAll(io.LimitReader(rc, 64<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read media: %w", err)
-	}
-	contentType := detectContentType(data, mediaURL)
-	if int64(len(data)) > maxInboundMediaBytes {
-		return nil, fmt.Errorf("media too large: %d bytes", len(data))
-	}
-
-	rec, err := storeInboundMedia(ctx, data, contentType, channel, mediaID, filenameHint)
+// readInboundMedia 读取入站媒体字节，超限即整体拒收。
+//
+// 不能写成 io.ReadAll(io.LimitReader(r, limit))：LimitReader 读满就 EOF，半截文件与
+// 完整文件在调用方眼里一模一样 —— 存下去就是只渲染一半的图片、解不开的 zip，而且这条
+// 永久留在存储里（占位符已被长期 URL 替换）。多读 1 字节才能把「正好被截断」和
+// 「恰好等于上限」分开。与 QQ（qq_media.go）、TG（telegram.DownloadFile）同一口径。
+func readInboundMedia(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
 		return nil, err
 	}
-	return rec, nil
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("media exceeds limit %d bytes", limit)
+	}
+	return data, nil
 }
 
 // channelMediaPersist 简化转存入口：数据已在内存时直接上传（文件名 = mediaID + 推断扩展名）。
@@ -137,8 +97,10 @@ func storeInboundMedia(ctx context.Context, data []byte, contentType, channel, m
 	if ext := filepath.Ext(filename); ext == "" {
 		filename += extFromContentType(contentType)
 	}
-	folder := filepath.ToSlash(filepath.Join("channels", channel, time.Now().Format("2006/01")))
-	publicURL, _, err := driver.UploadReader(ctx, strings.NewReader(string(data)), int64(len(data)), folder, filename)
+	// 日期目录由本地驱动按 {folder}/{yyyy}/{mm}/ 自己补（见 internal/storage/local.go 文件头），
+	// 这里再拼一次会得到 channels/<渠道>/2026/09/2026/09/<uuid> —— 按月归档/清理时按前者找不到文件。
+	folder := "channels/" + channel
+	publicURL, _, err := driver.UploadReader(ctx, bytes.NewReader(data), int64(len(data)), folder, filename)
 	if err != nil {
 		return nil, fmt.Errorf("upload media: %w", err)
 	}
@@ -148,33 +110,16 @@ func storeInboundMedia(ctx context.Context, data []byte, contentType, channel, m
 // dbForStorage 媒体转存路径没有统一 ctx-carried db，退回全局 DB（与 repository.NewObsConfigRepository 同源）。
 func dbForStorage(_ context.Context) *gorm.DB { return dbutil.GetDB() }
 
-func detectContentType(data []byte, url string) string {
-	if len(data) > 0 {
-		if ct := http.DetectContentType(data); ct != "" && ct != "application/octet-stream" {
-			return ct
-		}
-	}
-	if url != "" {
-		if ct := mime.TypeByExtension(filepath.Ext(url)); ct != "" {
-			return ct
-		}
-	}
-	return "application/octet-stream"
-}
-
+// extFromContentType 由 MIME 反推扩展名；推不出即 .bin（驱动只取扩展名，文件名主体是 uuid）。
 func extFromContentType(ct string) string {
-	if exts, err := mime.ExtensionsByType(ct); err == nil && len(exts) > 0 {
-		return exts[0]
-	}
-	switch {
-	case strings.HasPrefix(ct, "image/"):
-		return ".bin"
-	default:
+	exts, err := mime.ExtensionsByType(ct)
+	if err != nil || len(exts) == 0 {
 		return ".bin"
 	}
+	return exts[0]
 }
 
-// ─── 渠道媒体下载实现（注册到 channelMediaFollowers） ─────────────────
+// ─── 渠道媒体下载实现（由各渠道装配为 *MediaFetchFn，入站当场调用） ─────
 
 // FetchWhatsAppMedia WhatsApp Cloud API：GET /{media-id} 拿临时 URL → Bearer 下载二进制。
 // media id 仅 7 天有效（官方文档），转存必须及时。

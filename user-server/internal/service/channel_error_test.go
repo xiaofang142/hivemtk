@@ -80,7 +80,7 @@ func TestOutboundSendFailed_MarksTerminalState(t *testing.T) {
 	}
 	fresh, _ := repo.GetByID(ctx, row.ID)
 
-	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", fresh, errors.New("wa send status 401: invalid token"))
+	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", fresh, "x", errors.New("wa send status 401: invalid token"))
 	got, _ := repo.GetByID(ctx, row.ID)
 	if got.Status != "send_failed" {
 		t.Fatalf("auth failure should mark send_failed, got %s", got.Status)
@@ -94,11 +94,11 @@ func TestOutboundSendFailed_MarksTerminalState(t *testing.T) {
 		t.Fatalf("create2: %v", err)
 	}
 	fresh2, _ := repo.GetByID(ctx, row2.ID)
-	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", fresh2, errors.New("dial tcp: connection refused"))
+	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", fresh2, "x", errors.New("dial tcp: connection refused"))
 	got2, _ := repo.GetByID(ctx, row2.ID)
 	if got2.Status == "send_failed" {
 		t.Fatalf("retryable network error must not mark terminal state")
 	}
 
-	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", nil, errors.New("status 401"))
+	svc.outboundSendFailed(ctx, ChannelWhatsapp, "a", nil, "x", errors.New("status 401"))
 }

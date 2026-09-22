@@ -204,6 +204,10 @@ func TestE2E_WebChat_VisitorAsk_AIReplyWithRAG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendMessage(AI) 失败: %v", err)
 	}
+	// 后面整串 `send.AIResponse.Content` 都是解引用，判空必须走在最前（崩这里＝同包其余用例不交卷）
+	if send == nil {
+		t.Fatalf("SendMessage(AI) 既没给结果也没报错")
+	}
 
 	if rag.calls < 1 {
 		t.Error("❌ RAG 召回未被调用（recallRAG 接线断裂）")
@@ -320,8 +324,15 @@ func TestE2E_WebChat_FullBusinessLine(t *testing.T) {
 		ChannelID: "default", VisitorID: "v_e2e_004", SessionID: sid,
 		Content: "请问你们的套餐价格？",
 	})
-	if err != nil || !s1.AIReplied {
-		t.Fatalf("步骤1 AI 回复失败: err=%v replied=%v", err, s1 != nil && s1.AIReplied)
+	// 判空一律先于解引用：崩在这里会带走整个测试二进制，同包其余用例一条都不交卷。
+	if err != nil {
+		t.Fatalf("步骤1 发送失败: err=%v", err)
+	}
+	if s1 == nil || !s1.AIReplied {
+		t.Fatalf("步骤1 AI 回复失败: s1=%+v err=%v", s1, err)
+	}
+	if s1.AIResponse == nil {
+		t.Fatalf("步骤1 AIReplied=true 却没给 AIResponse，无从判 RAG 引用")
 	}
 	if !strings.Contains(s1.AIResponse.Content, ragMarker) {
 		t.Error("步骤1 回复未引用 RAG 知识库")
@@ -331,8 +342,11 @@ func TestE2E_WebChat_FullBusinessLine(t *testing.T) {
 		ChannelID: "default", VisitorID: "v_e2e_004", SessionID: sid,
 		Content: "我要转人工",
 	})
-	if err != nil || !s2.Transferred {
-		t.Fatalf("步骤2 转人工失败: err=%v transferred=%v", err, s2 != nil && s2.Transferred)
+	if err != nil {
+		t.Fatalf("步骤2 发送失败: err=%v", err)
+	}
+	if s2 == nil || !s2.Transferred {
+		t.Fatalf("步骤2 转人工失败: s2=%+v err=%v", s2, err)
 	}
 
 	if err := orch.AgentReply(context.Background(), sid, 1, "您好，人工客服已接入，正在为您处理价格问题。"); err != nil {

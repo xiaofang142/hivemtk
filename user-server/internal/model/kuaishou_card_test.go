@@ -1,13 +1,25 @@
 package model
 
 import (
+	"reflect"
 	"testing"
 	"time"
+
+	"gorm.io/gorm/schema"
 )
 
+// TestKuaishouCard_TableName 钉住落库表名。KuaishouCard 自己没有 TableName()，
+// 表名由 gorm 的 NamingStrategy 从结构体名推导；而 repository/kuaishou_card_stats.go:124
+// 的统计查询是写死的 `LEFT JOIN kuaishou_cards`。结构体一改名，AutoMigrate 就建一张
+// 新空表、老数据留在原名表里，那条 JOIN 直到运行时才炸 —— 所以这条不能只 `_ = card`。
 func TestKuaishouCard_TableName(t *testing.T) {
-	card := &KuaishouCard{}
-	_ = card
+	typ := reflect.TypeOf(KuaishouCard{})
+	if _, ok := typ.MethodByName("TableName"); ok {
+		t.Fatal("KuaishouCard 新增了显式 TableName()：本用例的推导前提失效，请把期望值换成它的返回值，并同步迁移登记与写死的 JOIN")
+	}
+	if got := (schema.NamingStrategy{}).TableName(typ.Name()); got != "kuaishou_cards" {
+		t.Errorf("推导表名=%q，期望 kuaishou_cards（repository 里有写死的 JOIN 依赖它）", got)
+	}
 }
 
 func TestKuaishouCard_BasicFields(t *testing.T) {

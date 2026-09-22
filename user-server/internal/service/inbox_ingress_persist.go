@@ -49,11 +49,15 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		event.ReceiverID = event.ConversationID
 	}
 	hub := &model.MessageHub{
-		MsgID:          event.EventID,
-		Platform:       event.Channel,
-		AccountID:      accountID,
-		Direction:      direction,
-		MsgType:        event.MsgType,
+		MsgID:     event.EventID,
+		Platform:  event.Channel,
+		AccountID: accountID,
+		Direction: direction,
+		// WA / TG / QQ 三渠道共同的落库点，且不经 hub.Push → Normalize 的词表校验：
+		// event.MsgType 是渠道官方名（WA 的 document/sticker…），原样写进去就是写一行
+		// 工作台「按类型筛选」（msg_type = ?）与 by_msg_type 统计永远筛不到的记录。
+		// 这里只归一不校验：校验会把整条消息丢掉。
+		MsgType:        InboundHubMsgType(event.MsgType),
 		SenderID:       event.SenderID,
 		SenderName:     event.SenderName,
 		ReceiverID:     event.ReceiverID,
@@ -321,11 +325,15 @@ func (s *InboxIngressService) persistHistoryMessage(ctx context.Context, event *
 		}
 	}
 	hub := &model.MessageHub{
-		MsgID:          event.EventID,
-		Platform:       event.Channel,
-		AccountID:      accountID,
-		Direction:      direction,
-		MsgType:        event.MsgType,
+		MsgID:     event.EventID,
+		Platform:  event.Channel,
+		AccountID: accountID,
+		Direction: direction,
+		// WA / TG / QQ 三渠道共同的落库点，且不经 hub.Push → Normalize 的词表校验：
+		// event.MsgType 是渠道官方名（WA 的 document/sticker…），原样写进去就是写一行
+		// 工作台「按类型筛选」（msg_type = ?）与 by_msg_type 统计永远筛不到的记录。
+		// 这里只归一不校验：校验会把整条消息丢掉。
+		MsgType:        InboundHubMsgType(event.MsgType),
 		SenderID:       event.SenderID,
 		SenderName:     event.SenderName,
 		ReceiverID:     event.ReceiverID,

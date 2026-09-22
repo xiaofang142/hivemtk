@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,7 +240,15 @@ func (c *Client) sendSingle(ctx context.Context, target SendTarget, text string,
 		return "", fmt.Errorf("qq send status %d body=%s", status, truncateForLog(body))
 	}
 	if status < 200 || status >= 300 || sr.Code != 0 {
-		return "", fmt.Errorf("qq send status %d code=%d msg=%s body=%s", status, sr.Code, sr.Message, truncateForLog(body))
+		// 码值原样带上：40034100（主动消息超频控，退避后可恢复）与 40034128/304103
+		// （被动回复窗口/次数超限，重试必然再失败）在 HTTP 层都是 400，
+		// 只看状态码会把两类混成同一档。
+		return "", &core.APIError{
+			Channel:    "qq",
+			StatusCode: status,
+			Code:       strconv.Itoa(sr.Code),
+			Raw:        fmt.Sprintf("qq send status %d code=%d msg=%s body=%s", status, sr.Code, sr.Message, truncateForLog(body)),
+		}
 	}
 	return sr.Data.MsgID, nil
 }
@@ -380,11 +389,15 @@ func IsValidChallenge(plainToken, eventTS string) bool {
 // 事件解析
 // ---------------------------------------------------------------------------
 
-// 事件类型常量（官方事件名）
+// 事件类型常量（逐字对齐官方事件名，见 qq_test.go TestEventNames_AreOfficialDocNames）
 const (
 	EventGroupAtMessage = "GROUP_AT_MESSAGE_CREATE"
-	EventC2CAtMessage   = "C2C_AT_MESSAGE_CREATE"
-	EventDirectMessage  = "DIRECT_MESSAGE_CREATE"
+	// EventGroupMessage 群消息全量推送模式，载荷与 @机器人 事件同构。
+	EventGroupMessage = "GROUP_MESSAGE_CREATE"
+	// EventC2CMessage 单聊事件。曾误写为 C2C_AT_MESSAGE_CREATE（官方无此事件名），
+	// 后果是所有单聊客户消息在 ToInbound 的 default 分支被静默丢弃。
+	EventC2CMessage    = "C2C_MESSAGE_CREATE"
+	EventDirectMessage = "DIRECT_MESSAGE_CREATE"
 )
 
 // CallbackOp 回调操作码（webhook 通道关注 op=13 地址验证）
@@ -401,23 +414,119 @@ type Event struct {
 	D          json.RawMessage `json:"d"`
 }
 
+// Attachment 官方 attachments[] 结构（消息事件与富媒体发送接口同构）。
+//
+// 文档：https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_message_create.html
+// 官方表中 content_type 的取值集合是 image/jpeg / image/png / image/gif / video/mp4 /
+// voice / file（语音不是 MIME，就是字面量 "voice"），url 直接 GET 即可取到字节，
+// 官方没有「先换下载链接」这一步。
+type Attachment struct {
+	URL          string `json:"url"`
+	Filename     string `json:"filename"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	Size         int    `json:"size"`
+	ContentType  string `json:"content_type"`
+	VoiceWavURL  string `json:"voice_wav_url"`
+	AsrReferText string `json:"asr_refer_text"`
+}
+
+// mediaKind 将附件归类到 message_hub 的 msg_type 口径（与钉钉/公众号共用模型常量）。
+func (a Attachment) mediaKind() string {
+	ct := strings.ToLower(strings.TrimSpace(a.ContentType))
+	switch {
+	case ct == "voice":
+		return kindAudio
+	case strings.HasPrefix(ct, "image/"):
+		return kindImage
+	case strings.HasPrefix(ct, "video/"):
+		return kindVideo
+	case ct == "file":
+		return kindFile
+	}
+	// content_type 缺失/新增取值时按 URL 后缀兜底，未知一律按文件处理
+	//（按图片存会在工作台渲染成破图，按文件存至少能下载原名）。
+	switch strings.ToLower(path.Ext(strings.SplitN(a.URL, "?", 2)[0])) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
+		return kindImage
+	case ".mp4", ".mov", ".avi":
+		return kindVideo
+	case ".amr", ".silk", ".mp3", ".wav", ".ogg":
+		return kindAudio
+	}
+	return kindFile
+}
+
+// placeholder 附件在正文里的占位文本。语音带官方 ASR 结果时不占位——
+// 那段文字就是客户真正说的话，丢掉等于 AI 漏答。
+func (a Attachment) placeholder() string {
+	switch a.mediaKind() {
+	case kindImage:
+		return "[图片]"
+	case kindVideo:
+		return "[视频]"
+	case kindAudio:
+		return "[语音]"
+	default:
+		name := strings.TrimSpace(a.Filename)
+		if name == "" {
+			return "[文件]"
+		}
+		return "[文件] " + name
+	}
+}
+
+// kind* 与 model.MsgType* 字面量一致（channelbot 层不反向依赖 model 包）。
+const (
+	kindImage = "image"
+	kindVideo = "video"
+	kindAudio = "audio"
+	kindFile  = "file"
+)
+
+// normalizeQQInbound 由 content + attachments 归一化出 msg_type 与正文。
+//
+// 官方纯媒体消息的 content 为空串，类型只能由 attachments 决定；hub 一行只有一个
+// msg_type/media_url 位置，故类型取首个附件、正文按顺序拼占位符、全量附件交给调用方转存
+// （与钉钉富文本同口径）。
+func normalizeQQInbound(text string, atts []Attachment) (msgType, content string) {
+	if len(atts) == 0 {
+		return "text", text
+	}
+	var b strings.Builder
+	b.WriteString(text)
+	for _, a := range atts {
+		if a.mediaKind() == kindAudio && strings.TrimSpace(a.AsrReferText) != "" {
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(strings.TrimSpace(a.AsrReferText))
+			continue
+		}
+		b.WriteString(a.placeholder())
+	}
+	return atts[0].mediaKind(), b.String()
+}
+
 // GroupMessageData 群 @机器人 消息事件体（GROUP_AT_MESSAGE_CREATE）
 type GroupMessageData struct {
-	ID          string `json:"id"`           // 事件 ID（幂等键）
+	ID          string `json:"id"`           // 消息 ID（被动回复 msg_id 的取值）
 	GroupOpenID string `json:"group_openid"` // 群 openid
 	Content     string `json:"content"`      // 消息内容（官方已去除 @机器人 前缀）
 	Author      struct {
 		MemberOpenID string `json:"member_openid"` // 发送者 openid
 	} `json:"author"`
-	Timestamp string `json:"timestamp"`
+	Timestamp   string       `json:"timestamp"`
+	Attachments []Attachment `json:"attachments"`
 }
 
-// C2CMessageData 单聊消息事件体（C2C_AT_MESSAGE_CREATE）
+// C2CMessageData 单聊消息事件体（C2C_MESSAGE_CREATE）
 type C2CMessageData struct {
-	ID         string `json:"id"`
-	UserOpenID string `json:"user_openid"`
-	Content    string `json:"content"`
-	Timestamp  string `json:"timestamp"`
+	ID          string       `json:"id"`
+	UserOpenID  string       `json:"user_openid"`
+	Content     string       `json:"content"`
+	Timestamp   string       `json:"timestamp"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ParseEvent 解析 webhook 原始 body
@@ -432,49 +541,110 @@ func ParseEvent(body []byte) (*Event, error) {
 // IsCallbackVerify 是否为 Op13 回调地址验证请求
 func (e *Event) IsCallbackVerify() bool { return e.Op == CallbackOpVerify }
 
-// ToInbound 归一化为 core.InboundMessage（accountID 由调用方填充）。
-// 仅处理群 @ 与单聊消息事件；其他事件（如 DIRECT_MESSAGE_CREATE 频道私信）返回 nil 忽略。
-func (e *Event) ToInbound(accountID string) *core.InboundMessage {
+// parsedInbound 群 @ / 群全量 / 单聊三种消息事件体的归一视图
+// （官方载荷同构，只是 openid 字段名与发送者位置不同）。
+type parsedInbound struct {
+	msgID        string // 官方 d.id：被动回复 msg_id 的唯一合法取值
+	conversation string
+	sender       string
+	content      string
+	msgType      string
+	isGroup      bool
+	timestamp    string
+	attachments  []Attachment
+}
+
+// inbound 解析消息事件体；非消息事件（如 DIRECT_MESSAGE_CREATE 频道私信）返回 nil。
+func (e *Event) inbound() *parsedInbound {
 	switch e.T {
-	case EventGroupAtMessage:
+	case EventGroupAtMessage, EventGroupMessage:
 		var d GroupMessageData
 		if err := json.Unmarshal(e.D, &d); err != nil {
 			return nil
 		}
-		return &core.InboundMessage{
-			Platform:       "qq",
-			AccountID:      accountID,
-			MessageID:      "qq_" + d.ID,
-			ConversationID: d.GroupOpenID,
-			SenderID:       d.Author.MemberOpenID,
-			Content:        d.Content,
-			MsgType:        "text",
-			IsGroup:        true,
-			GroupID:        d.GroupOpenID,
-			Timestamp:      parseQQTimestamp(d.Timestamp),
+		msgType, content := normalizeQQInbound(d.Content, d.Attachments)
+		return &parsedInbound{
+			msgID: d.ID, conversation: d.GroupOpenID, sender: d.Author.MemberOpenID,
+			content: content, msgType: msgType, isGroup: true,
+			timestamp: d.Timestamp, attachments: d.Attachments,
 		}
-	case EventC2CAtMessage:
+	case EventC2CMessage:
 		var d C2CMessageData
 		if err := json.Unmarshal(e.D, &d); err != nil {
 			return nil
 		}
-		return &core.InboundMessage{
-			Platform:       "qq",
-			AccountID:      accountID,
-			MessageID:      "qq_" + d.ID,
-			ConversationID: d.UserOpenID,
-			SenderID:       d.UserOpenID,
-			Content:        d.Content,
-			MsgType:        "text",
-			Timestamp:      parseQQTimestamp(d.Timestamp),
+		msgType, content := normalizeQQInbound(d.Content, d.Attachments)
+		return &parsedInbound{
+			msgID: d.ID, conversation: d.UserOpenID, sender: d.UserOpenID,
+			content: content, msgType: msgType, timestamp: d.Timestamp, attachments: d.Attachments,
 		}
 	default:
 		return nil
 	}
 }
 
+// Attachments 返回消息事件携带的富媒体附件（非消息事件/无附件返回 nil）。
+func (e *Event) Attachments() []Attachment {
+	if in := e.inbound(); in != nil {
+		return in.attachments
+	}
+	return nil
+}
+
+// OfficialMsgID 返回官方事件体里的 d.id。被动回复必须原样回传该值
+// （官方发送接口：msg_id「从 GROUP_AT_MESSAGE_CREATE 等事件的 d.id 获取，5 分钟内有效」），
+// 内部为命名空间加的 qq_ 前缀不能出现在出站报文里。
+func (e *Event) OfficialMsgID() string {
+	if in := e.inbound(); in != nil {
+		return in.msgID
+	}
+	return ""
+}
+
+// HubMsgID 返回中台落该事件时 message_hub.msg_id 的取值（与 Ingress 写入的 EventID 同源，
+// 媒体回填按这个键找行）。事件级 id 优先：官方重投同一事件时它不变，是幂等键。
+func (e *Event) HubMsgID() string {
+	if e.ID != "" {
+		return "qq_evt_" + e.ID
+	}
+	if id := e.OfficialMsgID(); id != "" {
+		return "qq_" + id
+	}
+	return ""
+}
+
+// ToInbound 归一化为 core.InboundMessage（accountID 由调用方填充）。
+// 仅处理群 @ 与单聊消息事件；其他事件返回 nil 忽略。
+func (e *Event) ToInbound(accountID string) *core.InboundMessage {
+	in := e.inbound()
+	if in == nil {
+		return nil
+	}
+	// 官方 d.id 缺失时留空串而不是 "qq_"：后者是个恒定值，会把所有无 id 的消息
+	// 塌成同一条 hub 记录，第二条起全被幂等丢弃。
+	namespaced := ""
+	if in.msgID != "" {
+		namespaced = "qq_" + in.msgID
+	}
+	inbound := core.InboundMessage{
+		Platform:       "qq",
+		AccountID:      accountID,
+		MessageID:      namespaced,
+		ConversationID: in.conversation,
+		SenderID:       in.sender,
+		Content:        in.content,
+		MsgType:        in.msgType,
+		IsGroup:        in.isGroup,
+		Timestamp:      parseQQTimestamp(in.timestamp),
+	}
+	if in.isGroup {
+		inbound.GroupID = in.conversation
+	}
+	return &inbound
+}
+
 // Ingress 把解析后的 QQ 入站消息经消息中台统一处理。
-// EventID 取 "qq_{事件ID}" 作幂等键（官方事件 id 重投不变）。
+// EventID 取 HubMsgID()（官方事件 id 重投不变）。
 // 调用方负责在调用前完成 webhook 验签。
 func (e *Event) Ingress(ctx context.Context, h core.IngressHandler, accountID string) error {
 	if h == nil {
@@ -485,8 +655,13 @@ func (e *Event) Ingress(ctx context.Context, h core.IngressHandler, accountID st
 		return nil
 	}
 	event := inbound.ToMessageEvent(accountID)
-	if e.ID != "" {
-		event.EventID = "qq_evt_" + e.ID
+	if id := e.HubMsgID(); id != "" {
+		event.EventID = id
+	}
+	// core.ToMessageEvent 只能拿到带命名空间前缀的 MessageID；出站被动回复要的是
+	// 官方 d.id 原值，在这里覆盖回未加前缀的口径。
+	if msgID := e.OfficialMsgID(); msgID != "" {
+		event.Extra["channel_msg_id"] = msgID
 	}
 	return h.HandleIngressMessage(ctx, event)
 }

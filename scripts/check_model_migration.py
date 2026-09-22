@@ -91,6 +91,13 @@ def collect_models():
     """返回 {StructName: relpath}"""
     out = {}
     for path in iter_go_files(USER_SERVER):
+        # 两侧必须用同一个文件域：collect_registered() 跳过 _test.go，这里若不跳，
+        # 测试夹具里一个带 `gorm:"primaryKey"` 的临时 struct 就会**永久报红**
+        # （它永远不该进 allModels()）。永红的门等于没有门——真漏登记时读数同样是红，
+        # 「摘掉一行注册 → 门必须变红」这类反向验证当场失去判据。
+        # 实测触发形态：internal/pkg/db/migrate_tolerance_batchm7_test.go 的四个夹具。
+        if path.endswith('_test.go'):
+            continue
         try:
             text = open(path, encoding='utf-8').read()
         except (OSError, UnicodeDecodeError):

@@ -161,6 +161,12 @@ func (s *obsConfigService) UpdateConfig(ctx context.Context, id string, req *dto
 	return s.convertToDTO(ctx, config), nil
 }
 
+// DeleteConfig 删除一条存储配置。
+//
+// 这里的 GetByID **只为把错误话说清楚**（"不能删除默认配置"），它不是安全判据 ——
+// 预读到落库之间另一次"设为默认"提交的话，先读后删就删掉了全站唯一默认。
+// 真正的判据在 repo.DeleteNonDefault 那条语句的 WHERE 里，见其注释。
+// （并发越过预检时返回的是仓储那句通用错误，不是"不能删除默认配置"。）
 func (s *obsConfigService) DeleteConfig(ctx context.Context, id string) error {
 	config, err := s.repo.GetByID(ctx, id)
 	if err != nil {
@@ -171,16 +177,26 @@ func (s *obsConfigService) DeleteConfig(ctx context.Context, id string) error {
 		return errors.New("不能删除默认配置")
 	}
 
-	return s.repo.Delete(ctx, id)
+	return s.repo.DeleteNonDefault(ctx, id)
 }
 
+// SetDefaultConfig 把 id 这一行设为全站默认。
+//
+// 只读校验"这一行存在且是 active"，写全部交给 repo.SetDefault 的那一个事务：
+// 服务层绝不能再先清后设 —— 本方法的前一版就是这么写的（ClearDefault 提交完
+// 再去 UPDATE 目标行），目标行在此期间被删掉就留下"零条默认"，全站上传从此
+// 报"未找到默认存储配置"且无法自愈。
+//
+// 为什么必须挡非 active 行：GetDefault 的判据是 `is_default AND status = active`，
+// 允许把停用行设成默认 = 允许把系统切成"没有任何可用默认"的状态，
+// 而且是在管理页上点一下"设为默认"就切过去、界面还显示成功。
 func (s *obsConfigService) SetDefaultConfig(ctx context.Context, id string) error {
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
+	config, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
-
-	if err := s.repo.ClearDefault(ctx); err != nil {
-		return err
+	if config.Status != model.ObsStatusActive {
+		return fmt.Errorf("存储配置 %s 当前状态为 %s，不能设为默认存储", config.Name, config.Status)
 	}
 
 	return s.repo.SetDefault(ctx, id)
@@ -282,9 +298,10 @@ func (s *obsConfigService) UploadFile(ctx context.Context, file multipart.File, 
 	logger.Infof("[OBS] file uploaded: provider=%s folder=%s path=%s url=%s",
 		config.Provider, folder, storagePath, publicURL)
 
-	config.FileCount++
-	config.TotalSize += header.Size
-	if err := s.repo.Update(ctx, config); err != nil {
+	// 只写两列。这里以前是 config.FileCount++ 之后整行 repo.Update(Save)：
+	// 写回的是上传开始时那份快照，期间管理员若切换了默认，陈旧的 is_default=true
+	// 会被复活成两条默认行，之后媒体落到哪台存储由 uuid 主键序决定。见批M / N-26。
+	if err := s.repo.IncrementUsage(ctx, config.ID, header.Size); err != nil {
 		logger.Warnf("[OBS] update file count failed (non-blocking): %v", err)
 	}
 

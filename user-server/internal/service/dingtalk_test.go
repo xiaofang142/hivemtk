@@ -15,7 +15,7 @@ func dingtalkTestServer(t *testing.T, wantErrcode int, capture *url.Values) *htt
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if capture != nil {
 			q := r.URL.Query()
-			capture.Add("ts", q.Get("ts"))
+			capture.Add("timestamp", q.Get("timestamp"))
 			capture.Add("sign", q.Get("sign"))
 			capture.Add("access_token", q.Get("access_token"))
 		}
@@ -75,8 +75,8 @@ func TestDingTalkSendRobot_WithSign(t *testing.T) {
 	if _, err := svc.SendRobot(context.Background(), srv.URL+"|my-secret", "", "text", "signed"); err != nil {
 		t.Fatalf("带签名发送失败: %v", err)
 	}
-	if captured.Get("sign") == "" || captured.Get("ts") == "" {
-		t.Fatalf("加签模式下应携带 ts 与 sign 查询参数: %v", captured)
+	if captured.Get("sign") == "" || captured.Get("timestamp") == "" {
+		t.Fatalf("加签模式下应携带官方 timestamp 与 sign 查询参数: %v", captured)
 	}
 }
 

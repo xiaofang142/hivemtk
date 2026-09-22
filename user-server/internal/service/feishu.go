@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -192,6 +193,35 @@ func (s *FeishuIntegrationService) SendMessage(ctx context.Context, accountID ui
 	return s.sendMessageTyped(ctx, accountID, openID, "text", content, receiveIDType, conversationID)
 }
 
+// feishuRateLimitResetHeader 官方限流口径："失败的响应头中包含 x-ogw-ratelimit-reset，
+// 使用该响应头延迟请求是解除限频的最好方法" ⇒ 等待值在 HTTP 头里，
+// 只看状态码与响应体文案的判据结构上取不到它。
+const feishuRateLimitResetHeader = "x-ogw-ratelimit-reset"
+
+// feishuCallError 飞书出站失败的构造点：HTTP 状态码、业务码（99991400 一类）、
+// 限流响应头一次取全。错误串与引入本函数之前的两种形态保持一致。
+func feishuCallError(status int, body []byte, rateLimitReset string) error {
+	ce := &ChannelError{
+		Channel:    string(ChannelFeishu),
+		StatusCode: status,
+		Raw:        fmt.Sprintf("feishu api status %d: %s", status, string(body)),
+	}
+	var r struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if json.Unmarshal(body, &r) == nil && r.Code != 0 {
+		ce.Code = strconv.Itoa(r.Code)
+		if status == http.StatusOK {
+			ce.Raw = fmt.Sprintf("feishu api code %d: %s", r.Code, r.Msg)
+		}
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(rateLimitReset)); err == nil && n > 0 {
+		ce.RetryAfter = time.Duration(n) * time.Second
+	}
+	return ce
+}
+
 // sendMessageTyped 按 msg_type 发送飞书消息（text/interactive 等）并统一落库。
 func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, accountID uint, openID, msgType, content, receiveIDType, conversationID string) error {
 	if s.feishuMsgRepo == nil {
@@ -203,9 +233,15 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 	}
 	tk, err := s.getAccessToken(ctx, acc)
 	if err != nil {
-
 		logger.Errorf("[feishu] 拉 token 失败（accountID=%d）: %v", accountID, err)
-		return errors.New("get feishu access token failed")
+		// 真实原因必须跟着返回：只给一句常量会让授权类失败在归一层落进 unknown+retryable，
+		// 于是该 fail-fast 的失败被无限重试（N-11③）。
+		return &ChannelError{
+			Channel:   string(ChannelFeishu),
+			Category:  CategoryAuth,
+			Retryable: false,
+			Raw:       "get feishu access token failed: " + err.Error(),
+		}
 	}
 	idType := receiveIDType
 	if idType == "" {
@@ -215,15 +251,33 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 	if idType == "open_chat_id" {
 		chatType = "group"
 	}
+	// 上线前的两处契约归一（open_chat_id 是服务内部的群聊标记，官方取值只有
+	// open_id|union_id|user_id|email|chat_id；content 必须是序列化后的 JSON 字符串）：
+	wireIDType := idType
+	if wireIDType == "open_chat_id" {
+		wireIDType = "chat_id"
+	}
+	wireContent := content
+	if msgType == "text" {
+		wireContent = feishuTextContentJSON(content)
+	}
+	recordAccountError := func(msg string) {
+		now := time.Now()
+		acc.LastErrorAt = &now
+		acc.LastErrorMsg = msg
+		if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
+			logger.Warnf("[feishu] 账号错误状态持久化失败 account=%d: %v", acc.ID, uErr)
+		}
+	}
 
 	body := map[string]any{
 		"receive_id": openID,
 		"msg_type":   msgType,
-		"content":    content,
+		"content":    wireContent,
 	}
 	b, _ := json.Marshal(body)
 	req, _ := http.NewRequestWithContext(ctx, "POST",
-		"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type="+idType,
+		"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type="+wireIDType,
 		bytes.NewReader(b))
 	req.Header.Set("Authorization", "Bearer "+tk)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -234,14 +288,22 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 	defer func() { _ = resp.Body.Close() }()
 	respB, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		now := time.Now()
-		acc.LastErrorAt = &now
-		acc.LastErrorMsg = string(respB)
-		if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
-			// 持久化失败只影响下次重启前的自愈，记日志留痕
-			logger.Warnf("[feishu] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
-		}
-		return fmt.Errorf("feishu api status %d: %s", resp.StatusCode, string(respB))
+		recordAccountError(string(respB))
+		return feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
+	}
+	// 飞书业务错误走 HTTP 200 + 非零 code（如 230013 出联系人范围），
+	// 只看状态码会把「没送达」记成「已送达」，持久化重试通道也就永不触发。
+	var apiResult struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(respB, &apiResult); err != nil {
+		recordAccountError(string(respB))
+		return fmt.Errorf("parse feishu response: %w (body=%s)", err, string(respB))
+	}
+	if apiResult.Code != 0 {
+		recordAccountError(string(respB))
+		return feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
 	}
 	outMsg := &model.FeishuMessage{
 		AccountID: accountID,
@@ -316,7 +378,15 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 		logger.Errorf("[feishu] 拉 token 失败 code=%d msg=%s（已清空旧 token）", out.Code, out.Msg)
 		return "", fmt.Errorf("feishu token code=%d: %s", out.Code, out.Msg)
 	}
+	// 仓内五处同类腿（TG/企微/公众号/WhatsApp/钉钉）都是「err != nil 或 token 为空」双保险，飞书是漏判的第六处：
+	// 少了这一句会把 ""连同未来过期时间写回账号行，调用方再拿空 token 真发一次请求，
+	// 现场只剩平台侧的鉴权错误码，根因（上一跳就没给凭证）丢掉。守卫必须在写缓存之前。
+	if out.TenantAccessToken == "" {
+		return "", fmt.Errorf("feishu token empty code=%d msg=%s expire=%d", out.Code, out.Msg, out.Expire)
+	}
 	expires := time.Now().Add(time.Duration(out.Expire-300) * time.Second)
+	acc.AccessToken = out.TenantAccessToken
+	acc.TokenExpires = &expires
 	acc.AccessToken = out.TenantAccessToken
 	acc.TokenExpires = &expires
 	if uErr := s.feishu.UpdateAccount(ctx, acc); uErr != nil {
@@ -1007,7 +1077,7 @@ func DecryptFeishuEvent(encryptKey, encrypted string) ([]byte, error) {
 
 func timePtr(t time.Time) *time.Time { return &t }
 
-func feishuTextContentJSON(text string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
+func feishuTextContentJSON(text string) string {
 	b, _ := json.Marshal(map[string]string{"text": text})
 	return string(b)
 }

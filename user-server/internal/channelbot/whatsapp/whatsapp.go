@@ -68,7 +68,7 @@ func (c *CloudClient) SendText(ctx context.Context, to, text string) (string, er
 		return "", fmt.Errorf("wa send: %w", err)
 	}
 	if status != 200 && status != 201 {
-		return "", fmt.Errorf("wa send status %d: %s", status, string(respB))
+		return "", waAPIError("wa send", status, respB)
 	}
 	return extractWAID(respB)
 }
@@ -92,9 +92,29 @@ func (c *CloudClient) SendTemplate(ctx context.Context, to, name, language strin
 		return "", fmt.Errorf("wa template: %w", err)
 	}
 	if status != 200 && status != 201 {
-		return "", fmt.Errorf("wa template status %d: %s", status, string(respB))
+		return "", waAPIError("wa template", status, respB)
 	}
 	return extractWAID(respB)
+}
+
+// waAPIError Graph API 的失败响应。HTTP 状态码在 WhatsApp 这边几乎总是 400，
+// 真正定性的是 error.code（官方稳定字段：130429 吞吐到顶、131056 同一收方过快、
+// 131047 re-engagement 窗口外……），所以在这里就把码取出来交给上层。
+func waAPIError(op string, status int, respB []byte) *core.APIError {
+	out := &core.APIError{
+		Channel:    "whatsapp",
+		StatusCode: status,
+		Raw:        fmt.Sprintf("%s status %d: %s", op, status, string(respB)),
+	}
+	var e struct {
+		Error struct {
+			Code int `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(respB, &e) == nil && e.Error.Code != 0 {
+		out.Code = strconv.Itoa(e.Error.Code)
+	}
+	return out
 }
 
 func extractWAID(respB []byte) (string, error) {
@@ -195,6 +215,35 @@ func ParseWebhook(body []byte) (*WebhookEvent, error) {
 	return &ev, nil
 }
 
+// InboundPlaceholder 非文本消息的可读正文占位符。
+//
+// 导出给 service 层复用：这张表原本在两处各写一份（本文件的 Ingress 与
+// service.waMessageContent），而 Ingress 才是真正落库的那一份 —— 结果就是
+// sticker 在服务侧改成了「[表情]」、库里仍是英文 "[sticker]"，两边各自都不算错。
+// 一处维护，漏项只可能出现在这一处。
+func InboundPlaceholder(msgType string) string {
+	switch msgType {
+	case "image":
+		return "[图片]"
+	case "sticker":
+		return "[表情]"
+	case "audio":
+		return "[语音]"
+	case "video":
+		return "[视频]"
+	case "document":
+		return "[文件]"
+	case "location":
+		return "[位置]"
+	case "contacts":
+		return "[联系人]"
+	case "unsupported":
+		return "[暂不支持的消息]"
+	}
+	// 未知类型留官方原值：新增类型要「看得见是哪种」，不是变成一个中文词。
+	return "[" + msgType + "]"
+}
+
 // FirstMessage 取第一条消息（若无则返回 ok=false）
 func (e *WebhookEvent) FirstMessage() (from, msgID, msgType, content, name string, ts int64, ok bool) {
 	for _, ent := range e.Entry {
@@ -226,7 +275,11 @@ type WAMedia struct {
 
 // WAMessageRef 单条消息的媒体引用视图（供 service 层按消息提取 media_id/mime）。
 // Type 取值与 Meta webhook 的 message.type 一致。
+//
+// MsgID 即本条消息的 wamid，也就是 message_hub.msg_id 的取值键；media_id 只在
+// Extra 里，拿它去查 hub 行必然 0 行命中（N-10 的根因）。
 type WAMessageRef struct {
+	MsgID    string
 	Type     string
 	Image    *WAMedia
 	Audio    *WAMedia
@@ -236,6 +289,34 @@ type WAMessageRef struct {
 		WAMedia
 		Filename string `json:"filename"`
 	}
+}
+
+// Media 展平本条消息的媒体引用（media_id + mime_type + 文件名）。
+// 按 type 取对应的媒体字段：type 是媒体但指针为空（畸形推送）时 ok=false。
+func (r *WAMessageRef) Media() (mediaID, mimeType, filename string, ok bool) {
+	switch r.Type {
+	case "image":
+		if r.Image != nil {
+			return r.Image.MediaID, r.Image.MimeType, "", true
+		}
+	case "audio":
+		if r.Audio != nil {
+			return r.Audio.MediaID, r.Audio.MimeType, "", true
+		}
+	case "video":
+		if r.Video != nil {
+			return r.Video.MediaID, r.Video.MimeType, "", true
+		}
+	case "sticker":
+		if r.Sticker != nil {
+			return r.Sticker.MediaID, r.Sticker.MimeType, "", true
+		}
+	case "document":
+		if r.Document != nil {
+			return r.Document.MediaID, r.Document.MimeType, r.Document.Filename, true
+		}
+	}
+	return "", "", "", false
 }
 
 // MediaRefs 遍历 webhook 中所有媒体消息，返回引用列表（按出现顺序）。
@@ -249,6 +330,7 @@ func (e *WebhookEvent) MediaRefs() []WAMessageRef {
 					continue
 				}
 				ref := WAMessageRef{
+					MsgID:    m.ID,
 					Type:     m.Type,
 					Image:    m.Image,
 					Audio:    m.Audio,
@@ -263,35 +345,15 @@ func (e *WebhookEvent) MediaRefs() []WAMessageRef {
 	return out
 }
 
-// MediaRef 提取第一条媒体消息的引用（media_id + mime_type + 文件名）。
-// 非媒体消息返回 ok=false。
-func (e *WebhookEvent) MediaRef() (mediaID, mimeType, filename string, ok bool) {
-	for _, ent := range e.Entry {
-		for _, ch := range ent.Changes {
-			for i := range ch.Value.Messages {
-				msg := &ch.Value.Messages[i]
-				var ref *WAMedia
-				switch msg.Type {
-				case "image":
-					ref = msg.Image
-				case "audio":
-					ref = msg.Audio
-				case "video":
-					ref = msg.Video
-				case "sticker":
-					ref = msg.Sticker
-				case "document":
-					if msg.Document != nil {
-						return msg.Document.MediaID, msg.Document.MimeType, msg.Document.Filename, true
-					}
-				}
-				if ref != nil && ref.MediaID != "" {
-					return ref.MediaID, ref.MimeType, "", true
-				}
-			}
+// MediaByMsgID 按 wamid 索引本推送里的媒体消息（落库 Extra 与逐条转存共用同一份映射）。
+func (e *WebhookEvent) MediaByMsgID() map[string]WAMessageRef {
+	out := make(map[string]WAMessageRef)
+	for _, r := range e.MediaRefs() {
+		if r.MsgID != "" {
+			out[r.MsgID] = r
 		}
 	}
-	return "", "", "", false
+	return out
 }
 
 // ToInbound 归一化为 core.InboundMessage（accountID 由调用方填充）
@@ -322,6 +384,7 @@ func (e *WebhookEvent) Ingress(ctx context.Context, h core.IngressHandler, accou
 		return nil
 	}
 	var firstErr error
+	mediaByID := e.MediaByMsgID()
 	for _, ent := range e.Entry {
 		for _, ch := range ent.Changes {
 			for _, m := range ch.Value.Messages {
@@ -336,18 +399,7 @@ func (e *WebhookEvent) Ingress(ctx context.Context, h core.IngressHandler, accou
 					}
 				}
 				if content == "" {
-					switch msgType {
-					case "image":
-						content = "[图片]"
-					case "audio":
-						content = "[语音]"
-					case "video":
-						content = "[视频]"
-					case "document":
-						content = "[文件]"
-					default:
-						content = "[" + msgType + "]"
-					}
+					content = InboundPlaceholder(msgType)
 				}
 				ts, _ := strconv.ParseInt(m.Timestamp, 10, 64)
 				inbound := &core.InboundMessage{
@@ -361,7 +413,19 @@ func (e *WebhookEvent) Ingress(ctx context.Context, h core.IngressHandler, accou
 					MsgType:        msgType,
 					Timestamp:      ts,
 				}
-				if err := h.HandleIngressMessage(ctx, inbound.ToMessageEvent(accountID)); err != nil {
+				event := inbound.ToMessageEvent(accountID)
+				// 渠道原生媒体引用随事件落进 message_hub.Extra：media_id 只有 7 天有效，
+				// 转存成功与否都要留痕，AI 侧理解「[图片]」背后的原件也靠这几个字段。
+				if ref, ok := mediaByID[m.ID]; ok {
+					if id, mime, fname, mok := ref.Media(); mok {
+						event.Extra["media_id"] = id
+						event.Extra["mime_type"] = mime
+						if fname != "" {
+							event.Extra["filename"] = fname
+						}
+					}
+				}
+				if err := h.HandleIngressMessage(ctx, event); err != nil {
 					if firstErr == nil {
 						firstErr = err
 					}

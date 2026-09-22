@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -62,6 +63,17 @@ type WeComTokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
+// wecomAPIError 企微各接口的失败构造点：errcode 必须同时留在错误串与结构里（N-11③）。
+// 官方把 45009（接口调用超过限制，"频率拦截时长一般与调用的限制时长相同…1分钟后自动解除"）
+// 这类可恢复码和参数错误类混在同一个 errmsg 文案族里，只留 errmsg 就无从分档。
+func wecomAPIError(op string, errcode int, errmsg string) error {
+	return &ChannelError{
+		Channel: string(ChannelWeCom),
+		Code:    strconv.Itoa(errcode),
+		Raw:     fmt.Sprintf("wecom %s errcode=%d errmsg=%s", op, errcode, errmsg),
+	}
+}
+
 func (s *WeComService) GetAccessToken(ctx context.Context, account *model.WeComAccount) (string, error) {
 	if account == nil {
 		return "", errors.New("账户不能为空")
@@ -99,7 +111,7 @@ func (s *WeComService) GetAccessToken(ctx context.Context, account *model.WeComA
 	}
 
 	if tokenResp.ErrCode != 0 {
-		return "", errors.New(tokenResp.ErrMsg)
+		return "", wecomAPIError("token", tokenResp.ErrCode, tokenResp.ErrMsg)
 	}
 
 	expiresTime := time.Now().Add(time.Duration(tokenResp.ExpiresIn-600) * time.Second)
@@ -228,7 +240,7 @@ func (s *WeComService) SyncCustomers(ctx context.Context, account *model.WeComAc
 	}
 
 	if result.ErrCode != 0 {
-		return 0, errors.New(result.ErrMsg)
+		return 0, wecomAPIError("external_userid_list", result.ErrCode, result.ErrMsg)
 	}
 
 	count := 0
@@ -356,7 +368,7 @@ func (s *WeComService) SyncGroups(ctx context.Context, account *model.WeComAccou
 	}
 
 	if result.ErrCode != 0 {
-		return 0, errors.New(result.ErrMsg)
+		return 0, wecomAPIError("group_list", result.ErrCode, result.ErrMsg)
 	}
 
 	count := 0
@@ -523,7 +535,7 @@ func (s *WeComService) SendMessage(ctx context.Context, account *model.WeComAcco
 	}
 
 	if result.ErrCode != 0 {
-		return "", errors.New(result.ErrMsg)
+		return "", wecomAPIError("send", result.ErrCode, result.ErrMsg)
 	}
 
 	now := time.Now()
@@ -586,7 +598,7 @@ func (s *WeComService) SyncTags(ctx context.Context, account *model.WeComAccount
 	}
 
 	if result.ErrCode != 0 {
-		return 0, errors.New(result.ErrMsg)
+		return 0, wecomAPIError("tag_list", result.ErrCode, result.ErrMsg)
 	}
 
 	count := 0

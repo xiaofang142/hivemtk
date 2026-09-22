@@ -9,8 +9,6 @@ import (
 
 	"hivemtk-user/internal/model"
 
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 
 	"gorm.io/gorm"
@@ -93,7 +91,8 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 		return &IngressDecision{}, nil
 	}
 
-	if chanMsgID := channelMsgIDOf(event); chanMsgID != "" && s.hubRepo != nil {
+	chanMsgID := channelMsgIDOf(event)
+	if chanMsgID != "" && s.hubRepo != nil {
 		accID := resolveAccountID(event)
 		if event.ConversationID != "" && accID != "" {
 
@@ -123,7 +122,11 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 		}
 	}
 
-	if s.cache != nil {
+	// 内容窗口去重只对「平台不给稳定消息 ID」的渠道有独立价值。带 channel_msg_id 的事件
+	// 必须跳过：客户连发两条同样内容（或一次推两张图片、占位正文同为 "[图片]"）是两条真实
+	// 消息，按内容相同就拦会让第二条既不入库也不回复（N-14 实测）。平台 at-least-once 重投
+	// 本来由 message_hub 的 (platform, msg_id, conversation_id) 唯一索引 + isDuplicateKey 幂等兜底。
+	if s.cache != nil && chanMsgID == "" {
 		dedupHash := ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), content)
 		dupKey := InboxSenderContentDedupKey + dedupHash
 		if ok, derr := s.cache.SetNX(ctx, dupKey, "1", InboxContentDedupTTL); derr == nil && !ok {
@@ -143,14 +146,6 @@ func isDuplicateKey(err error) bool {
 		strings.Contains(msg, "unique constraint") ||
 		strings.Contains(msg, "commit unexpectedly resulted in rollback") ||
 		errors.Is(err, gorm.ErrDuplicatedKey)
-}
-
-func contentHashOf(content string) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
-	if content == "" {
-		return ""
-	}
-	h := sha256.Sum256([]byte(content))
-	return hex.EncodeToString(h[:8])
 }
 
 func groupNameOf(event *model.MessageEvent) string {
