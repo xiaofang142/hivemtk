@@ -126,7 +126,7 @@ gh api -X POST repos/xiaofang142/hivemtk/pages -f build_type=workflow
 - 任何对本项目的修改与网络服务提供（例如 SaaS / 云端 / API / 托管实例）均须按 AGPL-3.0 第 13 条向使用该服务的所有用户免费提供其修改后的完整对应源代码（Corresponding Source），且同样以 AGPL-3.0 开源
 - 商业闭源集成 / 二次分发请先联系商务获取授权
 
-商务合作 / 技术支持：jideilvluoqun@gmail.com
+商务合作 / 技术支持：`jideilvluoqun@gmail.com`
 
 ## 所在仓库
 

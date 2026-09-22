@@ -957,7 +957,7 @@ merchant key、`.env:43,266` 的 `PLATFORM_LICENSE_SECRET` 值。
 
 **Go 套件：`internal/service` 一个包跑了三遍，三遍红因各不相同，每次都读出来**
 - 第一遍（整套，`/tmp/go_full.log`）：rc=1，**124 个包 `ok`**，唯一红 `hivemtk-user/internal/service 600.558s`
-  + `panic: test timed out after 10m0s`（中途 `--- FAIL: TestQuoteService_ReviseConcurrentSecondLoser`）。
+  - `panic: test timed out after 10m0s`（中途 `--- FAIL: TestQuoteService_ReviseConcurrentSecondLoser`）。
 - 取证腿自己先红过一次，红因不在被测代码：`nohup` 不继承 shell 里 export 的 DB env ⇒ 整包
   `failed SASL auth … user "admin" (SQLSTATE 28P01)`。判"凭证本身没问题"用的是
   `psql -h 127.0.0.1 -p 8232 -U admin`，它报的是 `database "…" does not exist`（不是密码错），
@@ -1135,12 +1135,11 @@ Task 11/12 收口时留了一批"登记但没动"的条目。这一轮逐条处�
 **原判据错在哪**：Task 11 写的是"协议口径是产品/法务决策 ⇒ 交回用户拍板"。复核发现这是把
 **已生效决策**当成了**待定选项**：`hivemtk/docs/architecture/adr/ADR-002-agpl-license.md` 状态
 `✅ Accepted`、"适用范围"一栏写 `hivemtk + hivemtk-platform 全仓库`、决策条目含
-"`hivemtk-platform/LICENSE` 改为 AGPL-3.0"，且该仓 `LICENSE`（实测首行 `GNU AFFERO GENERAL PUBLIC LICENSE`
-+ `Version 3, 19 November 2007`）与 `NOTICE`（"本项目以 GNU Affero General Public License v3.0（AGPL-3.0）发布"）
+"`hivemtk-platform/LICENSE` 改为 AGPL-3.0"，且该仓 `LICENSE`（实测首行 `GNU AFFERO GENERAL PUBLIC LICENSE` + `Version 3, 19 November 2007`）与 `NOTICE`（"本项目以 GNU Affero General Public License v3.0（AGPL-3.0）发布"）
 早已是 AGPL ⇒ 矛盾的两侧里，只有文档那一侧是旧的。改文档不是选协议，是跟上传决策。
 
 **改的 5 处**：`hivemtk-platform/docs/INDEX.md:17`（`MIT 开源协议` → `AGPL-3.0-or-later 开源协议`）
-+ `docs/architecture/ASSET_MARKET_DESIGN.md:4/:28/:44/:1506`（`MIT 开源` → `AGPL-3.0 开源`）。
+以及 `docs/architecture/ASSET_MARKET_DESIGN.md:4/:28/:44/:1506`（`MIT 开源` → `AGPL-3.0 开源`）。
 
 **验证（全部重跑，不是引用上次结论）**
 - `grep -rn "MIT 开源" hivemtk-platform/docs/` → 0；整仓 `\bMIT\b` 命中全在 `platform-contributor/node_modules/**`
