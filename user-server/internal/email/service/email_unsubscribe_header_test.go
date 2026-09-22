@@ -112,10 +112,10 @@ func TestBuildEmailMessageFailOpenWhenSigningFails(t *testing.T) {
 func TestEmailBodyAppendsFooterOnlyWithLink(t *testing.T) {
 	svc := NewEmailSendService()
 	body := "<p>正文</p>"
-	if got := svc.emailBody(newHeaderTestSend("a@b.example"), unsubLink); got == body {
+	if got := svc.emailBody(newHeaderTestSend("a@b.example"), unsubLink, ""); got == body {
 		t.Errorf("有链接却没追加退订页脚：%q", got)
 	}
-	if got := svc.emailBody(newHeaderTestSend("a@b.example"), ""); got != body {
+	if got := svc.emailBody(newHeaderTestSend("a@b.example"), "", ""); got != body {
 		t.Errorf("无链接仍塞了页脚：%q", got)
 	}
 }

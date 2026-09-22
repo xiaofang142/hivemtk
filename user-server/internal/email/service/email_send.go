@@ -56,6 +56,12 @@ type UnsubscribeLinker interface {
 	GenerateUnsubscribeLink(ctx context.Context, email, jobID string) (string, error)
 }
 
+// OpenPixelLinker 打开追踪像素的签发器。消费侧（像素路由、事件落库）早已装配，
+// 本接口接的是缺的那一半：把 URL 塞进正文。
+type OpenPixelLinker interface {
+	GenerateOpenPixelURL(ctx context.Context, email, jobID string) (string, error)
+}
+
 type EmailSendService struct {
 	repo      repository.EmailSendRepository
 	smtpRepo  repository.EmailSmtpRepository
@@ -66,6 +72,11 @@ type EmailSendService struct {
 	// unsubWarnOnce 让"签发失败"只出声一次：缺密钥是配置错误，看第一行就够，
 	// 每封一行只会把别的日志埋掉。
 	unsubWarnOnce sync.Once
+
+	// openPixel 打开追踪像素签发器，默认构造即带；nil 或未配 EMAIL_TRACKING_SECRET ⇒ 正文不带像素。
+	openPixel OpenPixelLinker
+	// pixelWarnOnce 与 unsubWarnOnce 同一取舍。
+	pixelWarnOnce sync.Once
 
 	// deliver 是"把这一封真的投出去"的接缝，默认为 sendActualEmail（连真 SMTP）。
 	// 抽出来的理由与 SMS 侧同源：合规判据与节拍逻辑要在测试里跑，而测试不该连 SMTP。
@@ -78,6 +89,11 @@ type EmailSendService struct {
 // SetUnsubscribeLinker 替换退订链接签发器（传 nil = 明确不要退订出口）。
 func (s *EmailSendService) SetUnsubscribeLinker(linker UnsubscribeLinker) {
 	s.unsubLinker = linker
+}
+
+// SetOpenPixelLinker 替换打开追踪像素签发器（传 nil = 明确不要打开统计）。
+func (s *EmailSendService) SetOpenPixelLinker(linker OpenPixelLinker) {
+	s.openPixel = linker
 }
 
 // SetEmailUnsubscribeRepository 注入退订名单读取句柄。
@@ -114,6 +130,9 @@ func NewEmailSendService() *EmailSendService {
 		// 只在装配层注入会让"客户点一下立即发送"这条路没有退订出口 —— 而那条路恰恰是
 		// Gmail/Yahoo 会抽样看到的那条路。退订链接只依赖 HMAC 密钥与 base URL，不碰 DB。
 		unsubLinker: service.NewEmailUnsubscribeService(nil),
+		// 像素签发器同样默认带上：它和退订链接一样只依赖 HMAC 密钥与 base URL，不碰 DB，
+		// 未配 EMAIL_TRACKING_SECRET 时签发本身 fail-closed ⇒ 正文不带像素，装配多这一行零成本。
+		openPixel: service.NewEmailOpenTrackerService(nil, nil),
 	}
 }
 
@@ -311,7 +330,7 @@ func (s *EmailSendService) buildEmailMessage(ctx context.Context, smtpConfig *mo
 	m.SetHeader("To", email.To)
 	m.SetHeader("Subject", email.Subject)
 	mail.Unsubscribe(unsub)(m)
-	m.SetBody("text/html", s.emailBody(email, unsub))
+	m.SetBody("text/html", s.emailBody(email, unsub, s.openPixelURL(ctx, email)))
 
 	mail.AttachmentsFromPaths(s.attachmentPaths(email.Attachments))(m)
 	return m
@@ -343,12 +362,32 @@ func (s *EmailSendService) attachmentResolver() mail.AttachmentResolver {
 	return mail.LocalAttachments(dir, urlPrefix)
 }
 
-// emailBody 正文 = 用户录入的内容 + 系统追加的退订页脚。
+// emailBody 正文 = 用户录入的内容 + 系统追加的退订页脚 + （可选）打开追踪像素。
 //
 // 页脚与头部链接同源（都来自这一次 unsubscribeLink 的结果）：两边各签一条的话，
 // 收件人点的和客户端读到的是两个 token，退订落库时归属就对不上。
-func (s *EmailSendService) emailBody(email *model.EmailSend, unsub string) string {
-	return mail.AppendUnsubscribeFooter(email.Content, unsub)
+// 像素排在页脚之后：它是给客户端读的，不该插在人和"退订"两个字中间。
+func (s *EmailSendService) emailBody(email *model.EmailSend, unsub, pixel string) string {
+	return mail.AppendOpenPixel(mail.AppendUnsubscribeFooter(email.Content, unsub), pixel)
+}
+
+// openPixelURL 现签一枚打开追踪像素 URL，空串 = 这封信不带像素。
+//
+// fail-open 的理由与退订链接同一条：缺 EMAIL_TRACKING_SECRET 是配置缺陷，
+// 该让统计没有、不该让信发不出去。但两条路径都得出声一次，否则"打开数恒为 0"
+// 会被读成"没人打开"，而真实原因是没人收到过像素。
+func (s *EmailSendService) openPixelURL(ctx context.Context, email *model.EmailSend) string {
+	if s.openPixel == nil {
+		return ""
+	}
+	url, err := s.openPixel.GenerateOpenPixelURL(ctx, email.To, email.ID)
+	if err != nil {
+		s.pixelWarnOnce.Do(func() {
+			logger.Warnf("打开追踪像素签发失败（本进程只报这一次），后续邮件将不带像素发出: %v", err)
+		})
+		return ""
+	}
+	return url
 }
 
 // unsubscribeLink 现签一条退订链接，空串 = 这封信没有退订出口。

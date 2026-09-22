@@ -48,6 +48,7 @@ type emailRowDeps struct {
 	smtp   smtpSource
 	subs   unsubscribeReader
 	links  email.UnsubscribeLinker
+	pixel  email.OpenPixelLinker
 	mailer sendFunc
 	lists  emailListStore
 	jobs   jobTotaller
@@ -59,6 +60,9 @@ type emailRowDeps struct {
 // bulkAttachWarnOnce 附件一项都没挂上这件事只在进程内出声一次：一波最多 10 行，
 // 逐行报只会把别的日志埋掉，而原因（录入值不是本站形状）不会自己变。
 var bulkAttachWarnOnce sync.Once
+
+// bulkPixelWarnOnce 像素签不出来同样只出声一次（一波最多 10 行，逐行报等于没报）。
+var bulkPixelWarnOnce sync.Once
 
 // bulkLinkWarnOnce 缺密钥这条只在进程内出一次声（配置缺陷不会自己变，也不该刷满日志）。
 var bulkLinkWarnOnce sync.Once
@@ -81,6 +85,7 @@ func EmailListCron() {
 		smtp:        email.NewEmailSmtpService(),
 		subs:        repository.NewEmailUnsubscribeRepository(nil),
 		links:       service.NewEmailUnsubscribeService(nil),
+		pixel:       service.NewEmailOpenTrackerService(nil, nil),
 		mailer:      mail.SendMail,
 		lists:       emailListService,
 		jobs:        email.NewEmailJobsService(),
@@ -168,7 +173,20 @@ func deliverEmailListRow(ctx context.Context, row *model.EmailList, deps emailRo
 		})
 	}
 	opts = append(opts, mail.AttachmentsFromPaths(paths))
-	body := mail.AppendUnsubscribeFooter(row.Content, unsub)
+	// 像素与退订链接同一档取舍：签不出来（多半是 EMAIL_TRACKING_SECRET 没配）就少一枚 img，
+	// 不拦投递。但它必须出声一次 —— 否则"打开数恒为 0"会被读成"没人打开"，
+	// 而真实原因是这批信根本没带过像素。
+	pixel := ""
+	if deps.pixel != nil {
+		if url, pixelErr := deps.pixel.GenerateOpenPixelURL(ctx, to, jobsID); pixelErr != nil {
+			bulkPixelWarnOnce.Do(func() {
+				logger.Warnf("[email_list_cron] 打开追踪像素签发失败（本进程只报这一次），后续群发将不带像素发出: %v", pixelErr)
+			})
+		} else {
+			pixel = url
+		}
+	}
+	body := mail.AppendOpenPixel(mail.AppendUnsubscribeFooter(row.Content, unsub), pixel)
 
 	// RCPT TO 用表里的原值：归一化只服务于合规查询与签发，不该悄悄改写投递地址。
 	if err := deps.mailer(cfg, []string{row.To}, row.Subject, body, true, opts...); err != nil {
