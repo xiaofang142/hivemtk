@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,13 +176,13 @@ func TestM01_DingTalkMediaSurvivesRequestCancel(t *testing.T) {
 // 缺了必然 400），但正文与类型仍要正常入库。
 func TestM01_DingTalkMediaSkippedWithoutRobotCode(t *testing.T) {
 	svc, id, db := f4DtSetup(t)
-	called := 0
+	var called atomic.Int32
 	dtMediaFetchFn = func(ctx context.Context, appKey, appSecret, robotCode, downloadCode string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return nil, "", fmt.Errorf("stub: 不该被调用")
 	}
 	dtMediaStoreFn = func(ctx context.Context, channel, mediaID string, data []byte, contentType, filenameHint string) (string, error) {
-		called++
+		called.Add(1)
 		return "", nil
 	}
 
@@ -201,8 +202,8 @@ func TestM01_DingTalkMediaSkippedWithoutRobotCode(t *testing.T) {
 		t.Errorf("downloadCode 仍要留痕（后续人工/重试可复用），got Extra=%v", row.Extra)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("缺 robotCode 却起了 %d 次下载，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("缺 robotCode 却起了 %d 次下载，want 0", got)
 	}
 }
 

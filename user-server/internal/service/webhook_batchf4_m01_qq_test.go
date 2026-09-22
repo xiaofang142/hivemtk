@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -219,15 +221,15 @@ func TestM01_QQMultiAttachmentStoresEveryOne(t *testing.T) {
 func TestM01_QQTextOnlyDoesNotFetchMedia(t *testing.T) {
 	ws, db := f4QQSetup(t)
 	evtID := fmt.Sprintf("f4qqtxt%d", time.Now().UnixNano())
-	called := 0
+	var called atomic.Int32
 	prevFetch, prevStore := qqMediaFetchFn, qqMediaStoreFn
 	t.Cleanup(func() { qqMediaFetchFn, qqMediaStoreFn = prevFetch, prevStore })
 	qqMediaFetchFn = func(ctx context.Context, rawURL string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return nil, "", fmt.Errorf("stub: 不该被调用")
 	}
 	qqMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		called++
+		called.Add(1)
 		return "", nil
 	}
 
@@ -243,8 +245,8 @@ func TestM01_QQTextOnlyDoesNotFetchMedia(t *testing.T) {
 		t.Errorf("纯文本被改写了: type=%q content=%q", hub.MsgType, hub.Content)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("纯文本起了 %d 次媒体腿，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("纯文本起了 %d 次媒体腿，want 0", got)
 	}
 	row := f4QQLoadHub(t, db, "qq_evt_"+evtID, false)
 	if row.MediaURL != "" {
@@ -333,11 +335,15 @@ func TestM01_QQFetchUsesRealAttachmentURLAndBytes(t *testing.T) {
 	defer srv.Close()
 
 	prevStore := qqMediaStoreFn
+	// 转存回写在 persistQQMediaAsync 的 SafeGo 协程里，测试协程轮询同一组变量 ⇒ 必须过锁。
+	var mu sync.Mutex
 	var gotData []byte
 	var gotCT, gotHint string
 	t.Cleanup(func() { qqMediaStoreFn = prevStore })
 	qqMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
+		mu.Lock()
 		gotData, gotCT, gotHint = b, contentType, hint
+		mu.Unlock()
 		return "/files/qq/" + mediaID, nil
 	}
 
@@ -348,17 +354,26 @@ func TestM01_QQFetchUsesRealAttachmentURLAndBytes(t *testing.T) {
 		t.Fatalf("dispatchQQ: %v", err)
 	}
 	deadline := time.Now().Add(15 * time.Second)
-	for gotHint == "" && time.Now().Before(deadline) {
+	for {
+		mu.Lock()
+		hint := gotHint
+		mu.Unlock()
+		if hint != "" || time.Now().After(deadline) {
+			break
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if string(gotData) != payload {
-		t.Errorf("转存字节数 = %d, want %d（下载腿把文件读残了）", len(gotData), len(payload))
+	mu.Lock()
+	data, ct, hint := gotData, gotCT, gotHint
+	mu.Unlock()
+	if string(data) != payload {
+		t.Errorf("转存字节数 = %d, want %d（下载腿把文件读残了）", len(data), len(payload))
 	}
-	if gotCT != "image/png" {
-		t.Errorf("contentType = %q, want 响应头里的 image/png", gotCT)
+	if ct != "image/png" {
+		t.Errorf("contentType = %q, want 响应头里的 image/png", ct)
 	}
-	if gotHint != "0_real.png" {
-		t.Errorf("文件名 hint = %q, want 0_real.png（带序号防同名覆盖 + 保留官方原名）", gotHint)
+	if hint != "0_real.png" {
+		t.Errorf("文件名 hint = %q, want 0_real.png（带序号防同名覆盖 + 保留官方原名）", hint)
 	}
 	if row := f4QQLoadHub(t, db, "qq_evt_"+evtID, true); row.MediaURL == "" {
 		t.Error("media_url 未回填")
@@ -396,15 +411,15 @@ func TestM01_QQFetchRejectsNonHTTPAndLoopback(t *testing.T) {
 func TestM01_QQOversizedAttachmentSkippedBeforeDownload(t *testing.T) {
 	ws, db := f4QQSetup(t)
 	evtID := fmt.Sprintf("f4qqbig%d", time.Now().UnixNano())
-	called := 0
+	var called atomic.Int32
 	prevFetch, prevStore := qqMediaFetchFn, qqMediaStoreFn
 	t.Cleanup(func() { qqMediaFetchFn, qqMediaStoreFn = prevFetch, prevStore })
 	qqMediaFetchFn = func(ctx context.Context, rawURL string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return []byte("x"), "image/png", nil
 	}
 	qqMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		called++
+		called.Add(1)
 		return "/files/qq/" + mediaID, nil
 	}
 	raw := f4QQEvent(evtID, "ROBOT1.0_"+evtID, "",
@@ -417,8 +432,8 @@ func TestM01_QQOversizedAttachmentSkippedBeforeDownload(t *testing.T) {
 		t.Errorf("类型仍要是 image，got %q", row.MsgType)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("超限附件起了 %d 次媒体腿，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("超限附件起了 %d 次媒体腿，want 0", got)
 	}
 	if row.MediaURL != "" {
 		t.Errorf("超限附件却写了 media_url = %q", row.MediaURL)
@@ -446,11 +461,11 @@ func TestM01_QQTruncatedDownloadIsRejected(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	storedCalled := 0
+	var storedCalled atomic.Int32
 	prevStore := qqMediaStoreFn
 	t.Cleanup(func() { qqMediaStoreFn = prevStore })
 	qqMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		storedCalled++
+		storedCalled.Add(1)
 		return "/files/qq/" + mediaID, nil
 	}
 
@@ -461,8 +476,8 @@ func TestM01_QQTruncatedDownloadIsRejected(t *testing.T) {
 		t.Fatalf("dispatchQQ: %v", err)
 	}
 	time.Sleep(800 * time.Millisecond)
-	if storedCalled != 0 {
-		t.Errorf("200 字节 > 上限 100 却转存了 %d 次（存进去的就是半张图）", storedCalled)
+	if got := storedCalled.Load(); got != 0 {
+		t.Errorf("200 字节 > 上限 100 却转存了 %d 次（存进去的就是半张图）", got)
 	}
 	if row := f4QQLoadHub(t, db, "qq_evt_"+evtID, false); row.MediaURL != "" {
 		t.Errorf("拒收后仍写了 media_url = %q", row.MediaURL)
@@ -478,11 +493,11 @@ func TestM01_QQNon200DownloadIsNotStored(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	storedCalled := 0
+	var storedCalled atomic.Int32
 	prevStore := qqMediaStoreFn
 	t.Cleanup(func() { qqMediaStoreFn = prevStore })
 	qqMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		storedCalled++
+		storedCalled.Add(1)
 		return "/files/qq/" + mediaID, nil
 	}
 
@@ -493,8 +508,8 @@ func TestM01_QQNon200DownloadIsNotStored(t *testing.T) {
 		t.Fatalf("dispatchQQ: %v", err)
 	}
 	time.Sleep(800 * time.Millisecond)
-	if storedCalled != 0 {
-		t.Errorf("404 响应体被当媒体转存了 %d 次", storedCalled)
+	if got := storedCalled.Load(); got != 0 {
+		t.Errorf("404 响应体被当媒体转存了 %d 次", got)
 	}
 	row := f4QQLoadHub(t, db, "qq_evt_"+evtID, false)
 	if row.Content != "[图片]" || row.MsgType != model.MsgTypeImage {

@@ -207,7 +207,7 @@ func TestBatchM_SetDefaultLeavesExactlyOneDefault(t *testing.T) {
 		t.Fatalf("GetDefault 既没报错也没给行")
 	}
 	if got.ID != target.ID {
-		t.Fatalf("默认行 = %s(%+v)，期望 %s", got.Name, got, target.Name)
+		t.Fatalf("默认行 = %s(ID=%s)，期望 %s", got.Name, got.ID, target.Name)
 	}
 }
 

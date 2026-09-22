@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -155,9 +156,9 @@ func TestM01_WechatVideoMediaUsesVideoURL(t *testing.T) {
 	t.Cleanup(func() { wxMediaStoreFn = prevStore })
 	f4WxMediaAPI(t)
 
-	storeCalled := 0
+	var storeCalled atomic.Int32
 	wxMediaStoreFn = func(ctx context.Context, channel, mediaID string, data []byte, contentType, filenameHint string) (string, error) {
-		storeCalled++
+		storeCalled.Add(1)
 		return "/files/" + channel + "/" + mediaID, nil
 	}
 
@@ -171,8 +172,8 @@ func TestM01_WechatVideoMediaUsesVideoURL(t *testing.T) {
 		t.Errorf("M-01：hub.media_url = %q, want 官方 video_url %q", got, want)
 	}
 	time.Sleep(300 * time.Millisecond)
-	if storeCalled != 0 {
-		t.Errorf("视频 media_id 的 JSON 响应被当字节流上传了 %d 次，want 0", storeCalled)
+	if got := storeCalled.Load(); got != 0 {
+		t.Errorf("视频 media_id 的 JSON 响应被当字节流上传了 %d 次，want 0", got)
 	}
 }
 
@@ -183,9 +184,9 @@ func TestM01_WechatMediaErrorKeepsPlaceholder(t *testing.T) {
 	t.Cleanup(func() { wxMediaStoreFn = prevStore })
 	f4WxMediaAPI(t)
 
-	storeCalled := 0
+	var storeCalled atomic.Int32
 	wxMediaStoreFn = func(ctx context.Context, channel, mediaID string, data []byte, contentType, filenameHint string) (string, error) {
-		storeCalled++
+		storeCalled.Add(1)
 		return "/files/" + channel + "/" + mediaID, nil
 	}
 
@@ -194,8 +195,8 @@ func TestM01_WechatMediaErrorKeepsPlaceholder(t *testing.T) {
 	srv.PersistInboundMediaAsync(context.Background(), accID, hubMsgID, "err-"+hubMsgID)
 
 	time.Sleep(1500 * time.Millisecond)
-	if storeCalled != 0 {
-		t.Errorf("接口返回错误 JSON 却上传了 %d 次，want 0（会把 errcode 体存成图片）", storeCalled)
+	if got := storeCalled.Load(); got != 0 {
+		t.Errorf("接口返回错误 JSON 却上传了 %d 次，want 0（会把 errcode 体存成图片）", got)
 	}
 	var hub model.MessageHub
 	if err := database.Where("platform = ? AND msg_id = ?", "wechat", hubMsgID).First(&hub).Error; err != nil {

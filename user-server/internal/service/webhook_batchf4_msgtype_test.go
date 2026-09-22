@@ -521,7 +521,7 @@ func TestN17_FeishuMediaFullChainBackfillsHubRow(t *testing.T) {
 	t.Cleanup(func() { feishuTenantTokenFn, feishuMediaFetchFn, feishuMediaStoreFn = pT, pF, pS })
 	feishuTenantTokenFn = func(_ context.Context, _ *FeishuIntegrationService, a *model.FeishuAccount) (string, error) {
 		if a.AppID != "a" {
-			t.Errorf("替身收到的账号不对：%+v", a)
+			t.Errorf("替身收到的账号不对：AppID=%q", a.AppID)
 		}
 		return "t-f4-token", nil
 	}

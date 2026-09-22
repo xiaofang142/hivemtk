@@ -482,7 +482,8 @@ func TestTelegramAccountRepository_CRUD(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	if got.AccountName != "crud-test-bot" || got.BotToken != "123456:ABC-DEF" {
-		t.Errorf("unexpected account: %+v", got)
+		t.Errorf("unexpected account: AccountName=%q BotToken 长度=%d（want %q / %d，凭证值不落测试日志）",
+			got.AccountName, len(got.BotToken), "crud-test-bot", len("123456:ABC-DEF"))
 	}
 	if !got.AIAgentEnabled || !got.WebhookEnabled {
 		t.Error("expected flags preserved")

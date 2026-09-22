@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -253,15 +254,15 @@ func TestM01_TelegramGIFNotMistakenForDocument(t *testing.T) {
 func TestM01_TelegramTextOnlyDoesNotFetchMedia(t *testing.T) {
 	ws, db := f4TGSetup(t, "777:tok")
 	upd := time.Now().UnixNano() % 1e9
-	called := 0
+	var called atomic.Int32
 	prevFetch, prevStore := tgMediaFetchFn, tgMediaStoreFn
 	t.Cleanup(func() { tgMediaFetchFn, tgMediaStoreFn = prevFetch, prevStore })
 	tgMediaFetchFn = func(ctx context.Context, token, fileID string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return nil, "", fmt.Errorf("stub: 不该被调用")
 	}
 	tgMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		called++
+		called.Add(1)
 		return "", nil
 	}
 
@@ -275,8 +276,8 @@ func TestM01_TelegramTextOnlyDoesNotFetchMedia(t *testing.T) {
 		t.Errorf("纯文本被改写了: type=%q content=%q", hub.MsgType, hub.Content)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("纯文本起了 %d 次媒体腿，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("纯文本起了 %d 次媒体腿，want 0", got)
 	}
 	row := f4TGWaitMediaURL(t, db, fmt.Sprintf("tg_upd_1_%d", upd), false)
 	if row.MediaURL != "" {
@@ -325,15 +326,15 @@ func TestM01_TelegramDownloadFailureKeepsPlaceholderRow(t *testing.T) {
 func TestM01_TelegramMissingTokenSkipsPersist(t *testing.T) {
 	ws, db := f4TGSetup(t, "")
 	upd := time.Now().UnixNano() % 1e9
-	called := 0
+	var called atomic.Int32
 	prevFetch, prevStore := tgMediaFetchFn, tgMediaStoreFn
 	t.Cleanup(func() { tgMediaFetchFn, tgMediaStoreFn = prevFetch, prevStore })
 	tgMediaFetchFn = func(ctx context.Context, token, fileID string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return []byte("x"), "image/png", nil
 	}
 	tgMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		called++
+		called.Add(1)
 		return "/files/telegram/" + mediaID, nil
 	}
 	raw := f4TGUpdate(upd, 507, "", `"photo":[{"file_id":"p_0","file_size":10}]`)
@@ -341,8 +342,8 @@ func TestM01_TelegramMissingTokenSkipsPersist(t *testing.T) {
 		t.Fatalf("dispatchTelegram: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("凭证缺失仍起了 %d 次媒体腿，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("凭证缺失仍起了 %d 次媒体腿，want 0", got)
 	}
 	if row := f4TGWaitMediaURL(t, db, fmt.Sprintf("tg_upd_1_%d", upd), false); row.MediaURL != "" {
 		t.Errorf("凭证缺失却写了 media_url = %q", row.MediaURL)
@@ -357,15 +358,15 @@ func TestM01_TelegramOversizedMediaSkippedBeforeDownload(t *testing.T) {
 	prevLimit := tgMaxMediaBytes
 	t.Cleanup(func() { tgMaxMediaBytes = prevLimit })
 	tgMaxMediaBytes = 100
-	called := 0
+	var called atomic.Int32
 	prevFetch, prevStore := tgMediaFetchFn, tgMediaStoreFn
 	t.Cleanup(func() { tgMediaFetchFn, tgMediaStoreFn = prevFetch, prevStore })
 	tgMediaFetchFn = func(ctx context.Context, token, fileID string) ([]byte, string, error) {
-		called++
+		called.Add(1)
 		return []byte("x"), "image/png", nil
 	}
 	tgMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		called++
+		called.Add(1)
 		return "/files/telegram/" + mediaID, nil
 	}
 	raw := f4TGUpdate(upd, 508, "", fmt.Sprintf(`"video":{"file_id":"v_0","file_size":%d}`, 101))
@@ -377,8 +378,8 @@ func TestM01_TelegramOversizedMediaSkippedBeforeDownload(t *testing.T) {
 		t.Errorf("类型仍要是 video，got %q", hub.MsgType)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if called != 0 {
-		t.Errorf("超限媒体起了 %d 次媒体腿，want 0", called)
+	if got := called.Load(); got != 0 {
+		t.Errorf("超限媒体起了 %d 次媒体腿，want 0", got)
 	}
 	if row := f4TGWaitMediaURL(t, db, fmt.Sprintf("tg_upd_1_%d", upd), false); row.MediaURL != "" {
 		t.Errorf("超限媒体却写了 media_url = %q", row.MediaURL)
@@ -498,11 +499,11 @@ func TestM01_TelegramRealTruncationRejected(t *testing.T) {
 	f4TGOpenLimit(t, 100)
 	// getFile 报的 file_size 在上限内（真实场景：元数据与原件不一致），但响应体更大。
 	_, _ = f4TGAPIStub(t, strings.Repeat("Z", 200), 50, 0)
-	storedCalled := 0
+	var storedCalled atomic.Int32
 	prevStore := tgMediaStoreFn
 	t.Cleanup(func() { tgMediaStoreFn = prevStore })
 	tgMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		storedCalled++
+		storedCalled.Add(1)
 		return "/files/telegram/" + mediaID, nil
 	}
 	raw := f4TGUpdate(upd, 510, "", `"photo":[{"file_id":"t_0","file_size":50}]`)
@@ -510,8 +511,8 @@ func TestM01_TelegramRealTruncationRejected(t *testing.T) {
 		t.Fatalf("dispatchTelegram: %v", err)
 	}
 	time.Sleep(1500 * time.Millisecond)
-	if storedCalled != 0 {
-		t.Errorf("200 字节 > 上限 100 却转存了 %d 次（存进去的就是半张图）", storedCalled)
+	if got := storedCalled.Load(); got != 0 {
+		t.Errorf("200 字节 > 上限 100 却转存了 %d 次（存进去的就是半张图）", got)
 	}
 	if row := f4TGWaitMediaURL(t, db, fmt.Sprintf("tg_upd_1_%d", upd), false); row.MediaURL != "" {
 		t.Errorf("拒收后仍写了 media_url = %q", row.MediaURL)
@@ -523,11 +524,11 @@ func TestM01_TelegramRealDownloadNon200NotStored(t *testing.T) {
 	ws, db := f4TGSetup(t, "777:tok")
 	upd := time.Now().UnixNano() % 1e9
 	_, _ = f4TGAPIStub(t, "", 10, http.StatusForbidden)
-	storedCalled := 0
+	var storedCalled atomic.Int32
 	prevStore := tgMediaStoreFn
 	t.Cleanup(func() { tgMediaStoreFn = prevStore })
 	tgMediaStoreFn = func(ctx context.Context, channel, mediaID string, b []byte, contentType, hint string) (string, error) {
-		storedCalled++
+		storedCalled.Add(1)
 		return "/files/telegram/" + mediaID, nil
 	}
 	raw := f4TGUpdate(upd, 511, "", `"photo":[{"file_id":"n_0","file_size":10}]`)
@@ -535,8 +536,8 @@ func TestM01_TelegramRealDownloadNon200NotStored(t *testing.T) {
 		t.Fatalf("dispatchTelegram: %v", err)
 	}
 	time.Sleep(1500 * time.Millisecond)
-	if storedCalled != 0 {
-		t.Errorf("403 响应体被当媒体转存了 %d 次", storedCalled)
+	if got := storedCalled.Load(); got != 0 {
+		t.Errorf("403 响应体被当媒体转存了 %d 次", got)
 	}
 	row := f4TGWaitMediaURL(t, db, fmt.Sprintf("tg_upd_1_%d", upd), false)
 	if row.Content != "[图片]" || row.MsgType != model.MsgTypeImage {

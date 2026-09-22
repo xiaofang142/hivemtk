@@ -53,8 +53,11 @@ func TestE2E_QQ_AccountCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.AppSecret != "secret-abc" || got.WebhookSecret != "bot-secret-xyz" {
-		t.Errorf("secrets mismatch: %+v", got)
+	if got.AppSecret != "secret-abc" {
+		t.Errorf("AppSecret 未原样读回（got 长度 %d, want %d；凭证值不落测试日志）", len(got.AppSecret), len("secret-abc"))
+	}
+	if got.WebhookSecret != "bot-secret-xyz" {
+		t.Errorf("WebhookSecret 未原样读回（got 长度 %d, want %d；凭证值不落测试日志）", len(got.WebhookSecret), len("bot-secret-xyz"))
 	}
 
 	if s := svc.getWebhookSecret(context.Background(), "1"); s != "bot-secret-xyz" {
