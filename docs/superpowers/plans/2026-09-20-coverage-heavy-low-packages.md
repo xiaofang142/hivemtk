@@ -4160,3 +4160,64 @@ v2.10.0，本机原为 v2.1.6 ⇒ 用仓里既有的 `make lint-install-force` �
 本仓的既有写法是 `_test.go` 自持装桩）；注册表 setter 列的 `文件:` 前缀每加一条分支就要配一格；
 `-race` 电池的文件名锚点必须显式关内联，且**放刀顺序是先改后编**；改产码文件的门（lint）不在
 `make audit` 里，声称"跑过全套"要写清是哪几个目标。
+
+## R29-A 收口补记（2026-09-23 第四十五轮：CI 回读的作业级 A/B，与两朵残留红的归因）
+
+**回读方法（一次多笔推送只有 tip 有作业）**：`a9c2aea6` 是那趟 `git push` 的 tip，父笔 `98470a82`
+在同一窗口里**没有独立作业**（口径见 [[gate-scope-blind-spots]] ⑳）⇒ 对照只能按 headSha 反查：
+`gh run list --limit 200 --json headSha,name,conclusion`。拿到两版各自的
+`Unit tests -race (user-server service)` 作业日志后落盘成两份可复算产物
+（`/tmp/r31_service_race_prev.log` 10298 行 @ `98470a82`、`/tmp/r31_service_race.log` 10317 行 @ `a9c2aea6`；
+两者都是 `gh api repos/.../actions/jobs/<id>/logs`，`gh run view --log` 对仍在跑的 run 会 rc=1）。
+
+**作业级 A/B（本笔到底改变了什么）**：两趟逐作业对照，**唯一翻转的是 `Static gates` 红→绿**
+（上一节那条 `* unused: 14` 归零），其余作业同状态；两趟 `WARNING: DATA RACE` 计数都是 **0**；
+两趟 `internal/service` 都是 `FAIL ... 402.7s / 402.3s` 且 `--- FAIL` 名单**完全相同**
+（`TestAudience_SelectBySegment`、`TestD12_NoNewLegacyKVDirectQuery`）。
+⇒ "本笔做了它声称做的事、且没碰坏别的"这句拿到的是对照读数而不是单趟绿。
+
+**残留红① `TestD12_NoNewLegacyKVDirectQuery`＝文本锁读注释，修法活在对方未提交字节里**：
+CI 报的是 `config_param_guard_test.go:77: 发现新增遗留 KV 直查: [../service/quote.go]`，而判据本体是
+HEAD 版 `user-server/internal/service/config_param_guard_test.go:65` 那句
+`strings.Contains(content, "system_config_kv")` —— 打在**整个文件原文**上，`quote.go` 里
+:45 与 :214 两处**注释**提到这个表名（全文件非注释命中 0 处，已逐行核）就被判红；
+工作树版把这句的输入换成了 `goCodeOnly()`（:24 定义剥注释、:95 调用后才交给 :96 匹配）。
+该文件 `git status` = ` M` 且在泳道的"不碰"清单上 ⇒ 红由 owner 提交那一处 `goCodeOnly` 改造即消，
+本泳道不代改（第三十一轮起同一条口径）。
+
+**残留红② `TestAudience_SelectBySegment`＝CI 容器连接容量，与用例逻辑无关**：
+测试侧只有 **1** 条失败信息，形状是
+`连接 PostgreSQL 测试库失败（dsn=... dbname=user_db_test_slot0 ...）: FATAL: sorry, too many clients already (SQLSTATE 53300)`；
+而同趟服务端日志里 `FATAL: sorry, too many clients already` 有 **97** 条，**96 条挤在 `15:59:58` 同一秒**
+（其余在 `16:0x`）。上一版（`98470a82`）同形状 **80** 条 ⇒ 计数会漂、受害用例也会漂，
+这是容量事件的指纹而不是某条用例的事件。
+
+**本地量测（为什么"提容量"而不是"收套件"要先有数）**：整包 `go test ./internal/service/ -count=1`
+（非 race、非 short）rc=0 / `ok 722.676s`，同时按秒采样
+`select count(*) from pg_stat_activity where datname like 'user_db_test%'`，**600 个样本 / 峰 31**：
+分布 96% ≤3、尖峰 17→30→31→13 分散在 3/6/9/11 号桶 ⇒ **锯齿而非单调 ⇒ 套件没有连接泄漏**，
+只是扇出簇会瞬时抬到 30 上下。本机 `max_connections = 500` ⇒ 这一档在本地**结构上撞不到**，
+"本地绿"对这条红没有证伪力（同一口径见 [[go-test-suite-timing]]）。
+代码侧的天花板是 `internal/config/server.go:80` `DefaultPoolConfig.MaxOpenConns = 200`
+（经 `internal/pkg/db/db.go:86` 落到 `SetMaxOpenConns`），而 CI 那 4 个 postgres service
+（`user-server-ci.yml:248/305/359/479` 的 `options:`）**从未设过 `--max-connections`**
+⇒ 跑的是 pg15 initdb 默认 100。**"同一簇扇出在 `-race` 下要在途更久 ⇒ 峰值抬高"这一步是推断，不是量测**，
+它只用于解释"为什么 CI 撞而本地不撞"，判据不建在它上面。
+
+**决断**：判据是"代码自己声明的连接上限（200）大于测试环境的容器上限（100）"，
+这两数都来自磁盘而非推测 ⇒ 该**提环境容量**去容纳代码口径，而不是为了 CI 容器的默认值去收产码/夹具的
+池语义（收 `testutil` 的池＝给测试执行加一条隐式串行化，会造出新的时序红）。
+落法＝给 `user-server-ci.yml` 那 4 处 postgres `options:` 各加一行 `--max-connections=400`
+（400＝代码上限 200 的两倍余量，仍远低于本机 500，容器内存按每连接 ~10MB 量级也吃得下）。
+**这一刀此刻不落**：`user-server-ci.yml` 现在是 ` M`（并行会话那笔 8+/4- 的"未接线资产台账核对"注释），
+共享索引下 `git add` 会把对方的行一起带走 ⇒ 不在别人脏文件上动刀；文件回 clean 即按上面四处落地，
+落地后判据＝下一次 `Unit tests -race` 作业日志里 `too many clients` 命中 **0**（不是"用例绿了"）。
+**同一份文件里还压着一条 stale 注释**（`:68-71`，属已提交内容）：它说 testutil "以它为前缀创建
+`<前缀>_<pid>` 的进程级隔离库"，而 `internal/pkg/testutil/testdb.go:270` 创建的是
+`<前缀>_slot<N>`（:219 共 32 槽、咨询锁选槽，PID 只在槽全被占时于 :276 回退）⇒ 回 clean 时与容量那四处同笔改掉，
+别让它继续把"CI 里为什么看不到 `*_12345` 形状的库"解释错。
+
+**别把 585 行 `sql: database is closed` 记成这次事件的一部分**：两趟日志里这个计数**都是 585**，
+来源是 `asset_bundle` hotplug / `backup` 状态回写这些**后台协程**在用例把全局句柄 `Close()` 之后继续跑的
+日志噪声（`[asset_bundle] hotplug persist FAILED ... err=sql: database is closed`），没有 `--- FAIL` 挂在它们身上。
+两个数（97 与 585）一个属容量事件、一个属既有句柄生命周期噪声，混着报会把后者说成前者的后果。
