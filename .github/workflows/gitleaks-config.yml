@@ -1,0 +1,59 @@
+# 密钥门配置闸：.gitleaks.toml 的形状守卫
+#
+# 补的是什么洞（第四十一轮实测）：能让更多密钥**不被报出**的文件只有 .gitleaks.toml，
+# 而它不在 user-server-ci.yml 的 on.push / on.pull_request paths 名单里 ——
+# 「只改豁免表」的那一笔提交在 CI 上根本不会触发 gitleaks 那道门。
+# 归属说明：那条 paths 名单归 user-server-ci.yml 的在途泳道改（本仓当时该文件是 M），
+# 故本闸以**新建 workflow** 的方式补触发面，不碰别人在改的文件。
+#
+# 本闸不重跑密钥扫描（那是 gitleaks-action 的活，且它按 push 窗口扫；只改配置的提交
+# 不引入新密钥，重跑等于空跑）。它只把豁免表的四条口径钉成可跑判据：
+#   ① [extend] useDefault = true 必须在（缺了 = 规则集变空 = 密钥门恒绿）
+#   ② regexes 每条必须是精确字面串（含正则元字符或短于 12 字符即红）
+#   ③ 头注释声明的「当前 N 条」必须等于实际条数（实测曾 3 ≠ 5 漂了一天）
+#   ④ [allowlist] 段内只允许 description / regexes（paths / commits 类半径更宽，禁止）
+#
+# 配套脚本：scripts/check-gitleaks-config.sh
+# 本地复现：bash scripts/check-gitleaks-config.sh
+name: Gitleaks Config
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - '.gitleaks.toml'
+      - 'scripts/check-gitleaks-config.sh'
+      - '.github/workflows/gitleaks-config.yml'
+  pull_request:
+    paths:
+      - '.gitleaks.toml'
+      - 'scripts/check-gitleaks-config.sh'
+      - '.github/workflows/gitleaks-config.yml'
+  # 每周一次全量复跑：防"判据本身随 gitleaks 升版失效"这类没人改文件就会烂掉的情况。
+  schedule:
+    - cron: '27 3 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: .gitleaks.toml 形状
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check gitleaks config shape
+        run: bash scripts/check-gitleaks-config.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ 豁免表形状合规（本闸不证明 gitleaks 扫过内容，那是 user-server-ci 里密钥门的活）" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ .gitleaks.toml 形状不合规，红因见上方 FAIL 行" >> "$GITHUB_STEP_SUMMARY"
+            echo '本地复现：bash scripts/check-gitleaks-config.sh' >> "$GITHUB_STEP_SUMMARY"
+          fi

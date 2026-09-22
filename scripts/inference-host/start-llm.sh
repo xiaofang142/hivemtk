@@ -25,7 +25,7 @@ case "$ENGINE" in
     start_role llm "$LLM_FILE" "$LLM_PORT" "$LLM_MODEL_DIR" llm
     ;;
   *)
-    log_err "未知 LLM_ENGINE: $ENGINE（可选：llamacpp | mlx）"
+    log_err "未知 LLM_ENGINE: ${ENGINE}（可选：llamacpp | mlx）"
     exit 1
     ;;
 esac

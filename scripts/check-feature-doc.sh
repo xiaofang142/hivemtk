@@ -104,7 +104,7 @@ echo "  总结"
 echo "============================================================"
 echo "  通过: $PASSED"
 echo "  失败: $FAILED"
-echo "  跳过: $SKIPPED（README / DEPRECATED）"
+echo "  跳过: ${SKIPPED}（README / DEPRECATED）"
 
 if [ $WARNINGS -gt 0 ]; then
   echo -e "  警告: ${YELLOW}$WARNINGS${NC}"

@@ -170,7 +170,7 @@ if [ -d "$ADR_DIR" ]; then
           fi
         done
         if [ -n "$UNDOC" ]; then
-          log_warn "ADR 编号断档: ADR-$(printf '%03d' "$PREV") → ADR-$(printf '%03d' "$n")（未登记作废：$UNDOC）"
+          log_warn "ADR 编号断档: ADR-$(printf '%03d' "$PREV") → ADR-$(printf '%03d' "$n")（未登记作废：${UNDOC}）"
           GAPS=$((GAPS+1))
         fi
       fi

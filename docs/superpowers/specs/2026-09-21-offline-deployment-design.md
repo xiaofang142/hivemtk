@@ -1295,7 +1295,7 @@ key 集合层面前 953 / 后 859 ⇒ **净消失 94、净新增 0**。94 = **93
 `ADMIN_PASSWORD` → 常量兜底，环境变量分支按 `TrimSpace` 处理，与 `cmd/seed` 的 `resolveSeedPassword`
 同口径（注释里写明理由：否则同一 `SEED_PASSWORD` 两边算出的哈希不一致）；
 命中兜底时向 stderr 打一行"使用仓库公开的演示口令生成哈希；要覆盖请传口令参数或设置 SEED_PASSWORD"。
-**默认值未改**（改了会连带打断 `user-web/tests/audit/api_smoke.py` 的登录用例），只把"能覆盖"和"覆盖了会怎样"补齐。
+**默认值未改**（~~改了会连带打断 `user-web/tests/audit/api_smoke.py` 的登录用例~~ **这句第三轮核正为不成立**：`api_smoke.py:14` 写死的是 `Admin@123456`、它从不读 `seedPasswordDefault`，换默认值碰不到它；见 §7.3 Task 22），只把"能覆盖"和"覆盖了会怎样"补齐。
 验证：`go test -count=1 ./cmd/pwtool/... ./cmd/seed/...` → rc=0（两包全 `ok`，非子集过滤）。
 
 ### Task 20 · `docs/operations/AI_AGENT_PERF_API.md` 逐条复核 —— ✅ 全文 file:line 回磁盘重算
@@ -1419,8 +1419,9 @@ key 集合层面前 953 / 后 859 ⇒ **净消失 94、净新增 0**。94 = **93
    且它是仓外未版本控制文件（公开面 0）⇒ 保留并登记（Task 18）。
 3. **Pages 启用 / push / DNSPod 5 条废记录 / 凭证轮换**：全是账号与远端动作，本批全程未 commit、未 push。
 4. **默认口令面**：`Seed@123456` 本轮重测 `git grep -l` = 工作树 12 / HEAD 14 文件，`Admin@123456` = HEAD 38 文件。
-   Task 19 给的是"可覆盖 + 用了公开口令会打告警"，**没动默认值**（动了会打断 `user-web/tests/audit/api_smoke.py` 的登录用例）；
-   是否把默认值换掉是产品决策。
+   Task 19 给的是"可覆盖 + 用了公开口令会打告警"，**没动默认值**（~~动了会打断 `user-web/tests/audit/api_smoke.py`
+   的登录用例~~ 第三轮核正：该用例写死 `Admin@123456`、与 `seedPasswordDefault` 无关，理由不成立）；
+   是否把默认值换掉是产品决策。**本轮已把这条从"拍板"降级为"一条命令"**，见 §7.3 Task 22。
 
 **本轮新抓到的一处"自己写的东西不成立"（顺手记下，因为它证明影子索引复跑有牙）**
 把 spec 与 `website/` 一起塞进临时索引跑链接门 → **rc=1，断链 2 处**，两处都在本 spec 里：
@@ -1438,3 +1439,130 @@ key 集合层面前 953 / 后 859 ⇒ **净消失 94、净新增 0**。94 = **93
   **没有重跑 user-server 全量**（Task 11 已跑过两遍，本轮未碰 user-server 除 GEO/口令外的 Go 码）。
 - `markdownlint-cli2` / `lychee` 本机无 CLI ⇒ 只跑了 python 侧 md 链接门；Pages 真发布 + 浏览器逐页看未做。
 - `check-ci-step-coverage.py` 读远端历史 ⇒ 本批不 commit 它看不到本批改动，其 4 条 `ALWAYS_RED` 与本批无因果、未顺手修。
+
+## 7.3 第三轮：四个开放项收口成"机制 + 一条命令"（2026-09-22，指令 = 不留下任何问题）
+
+本轮范围 = §7.2「仍未处置」里能靠代码收口的部分，加两项本批新发现的形状隐患。
+**这一轮的落点是"把要拍板的事变成一条命令 + 一份读数"，不是把风险读成零。** 四条逐一给证据。
+
+### Task 22 · 公开口令面：探针 + 轮换器 + 活栈实测 —— ✅ 机制齐备，活栈读数 RED（待用户执行那一行）
+
+**为什么要两个脚本而不是一个**：上一版把这条留在"产品决策"，是因为它同时缺两样东西 ——
+①"换没换成"没有可复跑读数（只有 §6.2 里那句手工 curl），②"怎么换"只有文档里的四步手工（漏任一步都是静默失效）。
+本轮分别补齐：`scripts/rotate-admin-password.sh`（执行器，四步进**一个事务**）与
+`scripts/check-admin-default-credential.sh`（读数，判据就是 §6.2 那句"从 200 变 401"）。
+
+**探针的三条设计约束，每条都是量出来的，不是想出来的**：
+1. **默认只发一次登录请求**。`/api/auth/login` 挂 `middleware.BruteForceGuard("auth.login")`，
+   口径 `Window 15m / MaxFailures 5 / LockDuration 30m`、计数键 `ClientIP|endpoint`（`internal/middleware/brute_force.go`），
+   进程内计数 ⇒ **探针自己就是爆破载荷**。扫满 4 个公开字面量会把同机 127.0.0.1 的登录锁 30 分钟，
+   别的泳道的 e2e 会莫名红，所以 `--full-ladder` 要显式写；
+2. **连通性预检不占爆破额度**：预检发 `'{}'`，`LoginRequest` 两字段都是 `binding:"required"`
+   （`internal/service/auth.go:20`）⇒ 在进 service 之前就 400 返回，`RecordBruteForceFailure` 不会被调到。
+   预检拿不到 400（路径改了 / 服务没起 / 已被锁）一律 rc=2，**不带着坏前置往下判**；
+3. **公开字面量不在脚本里另抄**：seed 值从 `user-server/cmd/seed/seed_users.go:32` 的常量行抽，
+   其余从 `user-web/tests/auth.setup.spec.js` 的 `CANDIDATES` 数组抽 —— 这两处本身就是"本仓公开了哪些口令"的事实源。
+   写死进脚本就成了第三个会过期的副本：改了源码忘了改探针 ⇒ **探针恒绿而真值早已换轨**。
+
+**反向测试 9/9 按判据收口**（假服务三档分流：路径不符→404 / 空体→400 / 其余按白名单 200|401，另设"非空体一律 429"档）：
+R1 空白名单→rc=0 印 GREEN；R2 放行 seed 值→rc=1 且点名轮换器；R3 只放行某个 e2e 候选、单次档→rc=0
+（这条是**默认档覆盖面的诚实读数**，不是"口令已换"）；R3b 同状态加 `--full-ladder`→rc=1（证明候选真从源码抽出）；
+R4 `SEED_SRC=/dev/null`→rc=2；R4b 把那行 `const` 改名存副本喂进去→rc=2（变异先断言真的改动了源文本，否则等于没变异）；
+R5 无人监听的端口→rc=2 且全输出不得出现 GREEN；R6 429 档→rc=2；R7 预检打到 404→rc=2。
+
+**活栈实测（本机 8204，就是交付时要带走的那个读数）**：
+`preflight 400` → `probe-1: 口令长度=11 http=200` → **rc=1 RED**，
+即"这台在跑的实例，超管账号仍是仓库公开的口令"。这一格红不是脚本坏，是脚本第一次真取到了数。
+
+**轮换的代价本轮重量，比 §7.2 记的小一个数量级**（这是本轮推翻自己上一轮判断的地方）：
+`Seed@123456` 的文件集 ∩ `8204` 的文件集 = **10 个文件**（ripgrep 两次取交集，`comm -12`），
+其中 4 个是文档（本文件 / plan / `DEPLOYMENT_GUIDE.md` / `scripts/audit-loop/STATE.md`），
+剩 6 个里 `bootstrap.sh`、`user-server/tests/e2e/{deep_lib.sh,deep_trace_v2.sh}`、`scripts/geo_full_test.py`
+**全部走 `SEED_PASSWORD > ADMIN_PASSWORD > 公开默认值` 这条链**，而它们的既定跑法本来就要求先
+`set -a && . ./.env && set +a`（`POSTGRES_PASSWORD` 是硬前置）⇒ `rotate-admin-password.sh --with-env`
+把新值写进 `.env` 之后这几个消费者读到的就是新值，**轮换对它们是透明的**；
+`user-server/config.yaml` 顶部那段"固定凭据标记"自证"本文件的哈希值不参与鉴权、勿改"，也不构成阻力。
+⇒ 上一版"轮换会连带打断一片消费者"的印象不成立，实际阻力只剩"要有人决定新口令"。
+
+**决定不动的那一处，写清楚为什么**：`user-web/tests/**` 里 8 个 dev-only 审计/调试夹具
+（`auth.setup.spec.js`、`asset_bundle_audit.spec.js`、`audit/api_smoke.py`、`e2e/{backup_e2e,securityAudit_e2e,dbg_login}.spec.js`、
+`tools/ui-audit/{audit,dbg}.mjs`）把候选口令数组写死在文件里。给它们加 env 入口**去不掉字面量**
+（字面量只能留作 fallback，否则别人正在跑的脚本从"能跑"变"必须先配 env 才能跑"）；
+而它们中的大多数**今天就已经登录不上**这台实例（候选里没有正在生效的那个值：`api_smoke.py:14` 写死 `Admin@123456`，
+实测生效的是 `Seed@123456`）⇒ 这不是"轮换会造成"的坏，是既有的 dev 夹具债，
+归属浏览器自动化那条泳道（同一批文件它正在改），本批不越界代清。§6.2 已把这条口径写在轮换段落末尾，
+避免下一个人以为"换完口令 e2e 会全红是我造成的"。
+
+**留给用户的那一行**（脚本契约明写"本脚本不代替你决定口令"，且拒绝 <12 字符或就是那四个公开字面量的值）：
+```bash
+SEED_PASSWORD="$(openssl rand -base64 18)" bash scripts/rotate-admin-password.sh --with-env
+bash scripts/check-admin-default-credential.sh          # 期望从 rc=1 变 rc=0
+```
+
+### Task 23 · 监听地址收回机制（`SERVER_HOST`）—— ✅ 代码面完成，缺一个 `Dockerfile` 行归属移交
+
+`user-server/cmd/api/main.go` 的 `resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))`，
+缺省 `config.DefaultListenHost = "0.0.0.0"`（**保持历史行为**，收回是显式动作不是默认）；
+`USER_SERVER_PORT` 只是脚本拼 curl 目标用的，服务端读的是 `PORT` —— 这一点此前四份文档口径不一致，本轮对齐。
+验证：`go test -count=1 ./cmd/api/...` → rc=0（5 个顶层用例全绿，其中 `TestListenAddrResolution` 带 6 条子用例、
+`ActuallyBinds` 那两条是真起监听再读回地址），4 刀变异全杀（把默认改成 `127.0.0.1`、把 env 读取点摘掉等形状各一刀）。
+文档落点：`docs/PORT_REGISTRY.md`、`docs/DEPLOYMENT_GUIDE.md` §三 + §6.2 新增 `SERVER_HOST` 行、
+`.env-example`（补 `PORT=8204` 一行并写明"服务读 `PORT`、`USER_SERVER_PORT` 只给脚本拼 curl 目标"）、
+`user-server/docs/dev/DEVELOPMENT.md`、`website/src/views/DocsPage.vue` 两处 env 样例。
+**顺带清掉一处幻影引用**：`DEVELOPMENT.md` 那格旧写法把 8204 的出处写成「`Dockerfile:57 ENV SERVER_PORT=8204`」，
+本轮实测两仓 `git ls-files | grep -i dockerfile` = **0**（platform 仓 `git ls-tree -r HEAD` 亦 0），
+`SERVER_PORT` 在 Go 侧读取点 = **0** ⇒ 该引用从未成立过（也可能曾随 `deploy/` 一起存在、随本批删除而消失，
+但无论哪种都不能再当"改端口的依据"），已改成"运行期覆盖：`PORT` / `SERVER_HOST`"并写明读点。
+
+### Task 24 · `.gitleaks.toml` 形状闸 —— ✅ 建好接入，触发面一行仍归该泳道
+
+`scripts/check-gitleaks-config.sh` 四条断言：①表头自报条数 == 实际 `regexes` 条数（今日实测 `entries=5 declared=5`）、
+②每条是精确字面串（无正则元字符、长度 ≥12）、③`[extend] useDefault = true` 不许删（删了＝规则集变空 ⇒ 静默零覆盖）、
+④`[allowlist]` 段内不许出现 `paths`/`commits` 类键（按路径豁免会把整文件变成盲区）。
+四格反向全杀（含"只删 `[extend]` 段"这一格，它的红因就是那句"门恒绿等于零覆盖"）。
+**表头数字与条数的矛盾（写 6 实际 5）本轮按"条数为准"改表头**，不是反过来把豁免加回去凑数。
+接入：新建 `.github/workflows/gitleaks-config.yml`（独立 workflow，**不碰热文件 `user-server-ci.yml`**），
+该文件里 gitleaks 的 `paths:` 触发面收窄那行仍由该泳道自己收（登记在 §7.2 之外的移交清单）。
+
+### Task 25 · bash 3.2 + UTF-8 的「`$VAR` 紧跟中文吃掉一个字节」—— ✅ 54 处花括号化 + 防回流闸
+
+**成因（本机 `/bin/bash` 3.2.57 + `LC_CTYPE=C.UTF-8` 实测，非推测）**：未加花括号的 `$VAR` 后面紧跟非 ASCII 字符时，
+bash 3.2 会把**值尾字节和后面那个字符的首字节一起吃掉**。`hexdump` 对照：
+`"=2" "，"` 一段本应是 `3d 32 ef bc 8c`，实际产出 `3d bc 8c`。加花括号 `${VAR}` 免疫，`printf '%s' "$VAR"` 免疫。
+GitHub ubuntu runner 是 bash 5 ⇒ **CI 复现不出来**，这条只保护 macOS 开发机与任何 bash 3.2 宿主。
+两档危害都真踩过：消息档（把红因印错，害我按错文案去找代码，判错一次归因）、
+数据档（`scripts/perf/rag-bench.sh:67` 把中文写进发给服务的 JSON 体 ⇒ 静默改数据，已修）。
+**本轮收口 54 处**：18 个已跟踪脚本合计新增 42 对花括号（逐文件 `git show HEAD:f | tr -cd '{' | wc -c`
+与磁盘同式相减得出，不是估的），另 12 处在本批新写的 `rotate-admin-password.sh` 里；
+每个已跟踪文件还过了一条更强的不变式——`剥掉花括号后的 HEAD 版 == 剥掉花括号后的磁盘版`，
+即"这些文件与 HEAD 的唯一差别就是花括号字符"，别的泳道的行不可能搭本批的车进 commit。
+新建 `scripts/check-shell-cjk-expansion.sh`（判据用 python 写，与 bash 版本无关；
+`scanned=129 个 shell 文件`自证覆盖面；棘轮基线 `scripts/shell-cjk-expansion.baseline`，
+0 命中而基线非 0 时 rc=2 而非"当作清零"）+ 接入 `.github/workflows/lint.yml` 新 job。
+7 格反向全杀。基线里剩的 2 处属热文件（`check-architecture.sh`、`check-unwired-assets.sh`），
+**那是别的泳道的账，不是本批的**，基线注释写明归属。
+
+### §7.2 那四条「仍未处置」的本轮状态
+
+| §7.2 条目 | 本轮实测 | 状态 |
+| --- | --- | --- |
+| 1 frp 三条明文的公开面 | `git grep -n '<token>' HEAD` = 0 命中、工作树全仓 ripgrep = 0、`git log --all -S` = 0 | 上一版之后已随其他提交收口，本批不再挂账 |
+| 2 `.tmp_files` 快照里的 merchant key | 仍是仓外未版本控制文件（公开面 0） | 维持"保留并登记"（Task 18），非本批能改的形态 |
+| 3 Pages 启用 / push / DNSPod | push 已发生（两仓双远端），Pages 与 DNSPod 5 条废记录仍是账号侧动作 | 只剩账号侧两条，代码侧无待办 |
+| 4 默认口令面 | 机制齐（Task 22），活栈读数 RED | 从"要拍板"降级为"一行命令 + 读数从 1 变 0" |
+
+### 本轮新核正（上一轮记录里不成立的句子）
+
+| 上一轮说法 | 本轮实测 | 结果 |
+| --- | --- | --- |
+| "换默认值会打断 `api_smoke.py` 的登录用例"（§7.1 Task 19、§7.2 条目 4 两处） | 该行写死 `Admin@123456`，从不读 `seedPasswordDefault` | 理由不成立，两处原位划改 |
+| "轮换活栈口令会连带打断约 46 个消费者" | 46 是"文件里出现过公开字面量"的宽口径；`Seed@123456 ∩ 8204` 只有 10 个文件、4 个是文档，6 个走 env 链 | 阻力实测只剩"要有人决定新口令"（Task 22） |
+| `docs/DEPLOYMENT_GUIDE.md` 里"四道自检脚本"表（`check-live-environment-credentials.sh` 等） | `git ls-tree -r HEAD` 两仓均 0、`git log --all -S` 两仓均 0 | **幻影引用**：那段在被本批删掉的 `hivemtk-platform/deploy/DEPLOYMENT_GUIDE.md` 里，随该文件一起消失，hivemtk 侧无残留（本轮核过才算收口） |
+
+### 本轮没做到的验证（同口径复述，别当成已过）
+
+- 探针 R1/R3 两格都是 rc=0：**绿只说明"试过的这几项不认"**，不等于"口令已换"。真绿要等活栈跑一次 rc=1→rc=0 的翻转。
+- `rotate-admin-password.sh` 的 6 格变异与 `check-admin-default-credential.sh` 的 9 格反向都是**假服务/假迁移源**上跑的，
+  没有在真库上执行过一次写事务（那要用户先定口令）。
+- Task 23 的真实 bind 测试在本机随机端口跑，未验证"收回后同机另一端口不受影响"以外的网络形态（无反代环境）。
+- Task 25 的字节级证据来自本机 bash 3.2.57；bash 5 侧只有"形状闸同样判红"这一条静态证据，无运行时复现。

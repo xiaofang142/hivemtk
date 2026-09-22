@@ -56,7 +56,7 @@ if [ "$CHAT_ROUTE_FOUND" -gt 0 ]; then
         -H "X-Chat-App-Key: ../../../etc/passwd" \
         -d '{"text":"hi"}' "$BASE/api/v1/chat/public/message" -w "\n%{http_code}")
     HTTP_CODE=$(echo "$RESP_FAKE" | tail -1)
-    [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "404" ] && ok "P0-02 伪造 AppKey 拒绝" "status=$HTTP_CODE" || warn "P0-02" "status=$HTTP_CODE（路由可能变了）"
+    [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "404" ] && ok "P0-02 伪造 AppKey 拒绝" "status=$HTTP_CODE" || warn "P0-02" "status=${HTTP_CODE}（路由可能变了）"
 else
     warn "P0-02" "chat 路由不在 v3 修复范围内（私域部署已移除）"
 fi
@@ -93,7 +93,7 @@ TRAV_RESP=$(curl -s -X POST -H "Content-Type: application/json" "${AUTH[@]}" \
     -d '{"backup_name":"../../etc/cron.d/evil","type":"full"}' \
     "$BASE/api/backups" -w "\n%{http_code}")
 HTTP_CODE=$(echo "$TRAV_RESP" | tail -1)
-[ "$HTTP_CODE" = "400" ] && ok "P0-06 路径穿越→400" "" || warn "P0-06" "status=$HTTP_CODE（可能无 backup 路由）"
+[ "$HTTP_CODE" = "400" ] && ok "P0-06 路径穿越→400" "" || warn "P0-06" "status=${HTTP_CODE}（可能无 backup 路由）"
 
 echo
 echo "=== P0-09: SOP 环检测 ==="

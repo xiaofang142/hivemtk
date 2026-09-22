@@ -103,6 +103,21 @@ jobs:
       - name: Check workflow references
         run: python3 scripts/check_workflow_refs.py --repo .
 
+  # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
+  # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
+  # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。
+  # 所以这道门放在 CI 里做的是「形状不再新增」，代价是它在 runner 上永远不会
+  # 因真实字节损坏而红 —— 判据本体是 python，不受 bash 版本影响。
+  shell-cjk-expansion:
+    name: Shell $VAR+CJK expansion guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check shell scripts for the bash 3.2 CJK expansion hazard
+        run: bash scripts/check-shell-cjk-expansion.sh
+
   license-compliance:
     name: LICENSE Compliance Scan
     runs-on: ubuntu-latest

@@ -160,7 +160,7 @@ SEED_PASSWORD="$SEED_PASSWORD" \
 go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
 
 # 5) 跑 Python 知识库种子
-log "执行 Python 知识库种子（hivemtk 产品 $HIVEMTK_RAG_PRODUCT_ID）..."
+log "执行 Python 知识库种子（hivemtk 产品 ${HIVEMTK_RAG_PRODUCT_ID}）..."
 for py in expand_knowledge_base.py expand_knowledge_base_batch2.py expand_knowledge_base_batch3.py; do
     if [ -f "$PROJECT_DIR/scripts/seed/$py" ]; then
         log "  -> $py"

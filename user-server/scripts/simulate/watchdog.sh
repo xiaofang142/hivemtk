@@ -48,7 +48,7 @@ for i in "${down[@]}"; do
   if [[ "$code" == "200" ]]; then
     echo "[watchdog] $name 重启成功 (health=200)"
   else
-    echo "[watchdog] 警告: $name 重启后仍异常 health=$code，需人工排查"
+    echo "[watchdog] 警告: $name 重启后仍异常 health=${code}，需人工排查"
   fi
 done
 exit 0

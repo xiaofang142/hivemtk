@@ -15,7 +15,7 @@
 | **8202** | PostgreSQL       | Docker 数据层    | ✅ 固定 8202 | 8202（docker-compose 默认）         | `USER_POSTGRES_HOST_PORT`      | `DB_PORT`（config.yaml 默认 8232） | **容器内固定 8202**，宿主机映射可改                |
 | **8232** | PostgreSQL       | 宿主机直连（Dev）    | —         | 8232（ports.go DefaultDBPortDev） | `DB_PORT`（config.yaml 默认 8232） | `DB_PORT`                      | 避开 8202（历史遗留其他服务占用），**只在宿主机直连模式使用**   |
 | **8203** | Redis            | Docker 数据层    | ✅ 8203    | 8203                            | `REDIS_HOST_PORT`              | `REDIS_PORT`                   | 与容器内同号                                |
-| **8204** | user-server API  | 宿主机           | —         | 8204                            | `USER_SERVER_PORT`             | `USER_SERVER_PORT`             | 主 API + WebSocket + Swagger           |
+| **8204** | user-server API  | 宿主机           | —         | 8204                            | `PORT`（服务端）+ `USER_SERVER_PORT`（脚本侧） | `PORT` / `SERVER_HOST`         | 主 API + WebSocket + Swagger。**默认绑 0.0.0.0**，`SERVER_HOST=127.0.0.1` 收回本机（读点 `cmd/api/main.go` `resolveListenAddr`）。注意 Go 进程只读 `PORT`：`USER_SERVER_PORT` 只被 `bootstrap.sh` / `deploy-user.sh` / `rotate-secrets.sh` 拿来拼 curl 目标，**挪不动服务监听端口**，改端口两个必须一起改 |
 | **8205** | platform API     | 独立服务          | —         | 8205                            | `PLATFORM_API_HOST`（host:port） | `PLATFORM_API_URL`             | 平台端，与用户端物理隔离                          |
 | **8206** | Chromium CDP（可选） | 宿主机           | —         | 8206                            | `CDP_PORT`                     | —                              | 截图/PDF 功能用，未启用可不占用                    |
 | **8207** | LLM 推理           | 宿主机 MLX/llama | —         | 8207                            | `LLM_BASE_URL`                 | `inference.llm.base_url`       | OpenAI 兼容，dev 档 Qwen2.5-1.5B-Instruct |
@@ -90,7 +90,7 @@
 1. 确认要改的是「容器内端口」还是「宿主机映射端口」
    - 容器内（如 postgres - port=8202）：改 docker-compose.yml command 行 + ports.go DefaultDBPortDocker
    - 宿主机映射（如 USER_POSTGRES_HOST_PORT）：改 .env + .env-example + docker-compose.yml ports 映射 + ports.go DefaultDBPortDev
-   - user-server 监听（如 USER_SERVER_PORT）：改 ports.go DefaultListenPort + .env + .env-example
+   - user-server 监听（`PORT`，可选 `SERVER_HOST`）：改 ports.go DefaultListenPort（宿主默认值）+ .env + .env-example
 
 2. 代码层（必须先改）：
    vi hivemtk/user-server/internal/config/ports.go   ← 改常量值

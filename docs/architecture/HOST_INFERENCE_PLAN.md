@@ -118,7 +118,7 @@ $HIVEMTK_RUNTIME_DIR/
 | Rerank (llama-server) | **8209** | OpenAI `/v1/rerank` | `inference.rerank.base_url=http://127.0.0.1:8209` |
 | mtk-postgres | **8202** (host) → 5432 (container) | TCP | `database.postgres.host=127.0.0.1,port=8202` |
 | mtk-redis | **8203** (host) → 6379 (container) | TCP | `REDIS_HOST=127.0.0.1,REDIS_PORT=8203` |
-| user-server | 8204 | HTTP | `SERVER_PORT=8204` |
+| user-server | 8204 | HTTP | `PORT=8204`（监听主机默认 `0.0.0.0`，`SERVER_HOST=127.0.0.1` 可收回本机） |
 | user-web (Vite dev) | 5173 | HTTP | Vite 默认 |
 
 ### 3.3 Dev / Prod 模型选型

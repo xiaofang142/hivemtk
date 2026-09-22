@@ -59,7 +59,7 @@ sleep 1
 # 3. DB 验证：最近的 trace_events 有非空 kind（PG DISTINCT + ORDER BY 需用子查询规避）
 RECENT_KIND=$(PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT kind FROM (SELECT kind, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE kind IS NOT NULL AND kind <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
 if [ -n "$RECENT_KIND" ] && [ "$RECENT_KIND" != "" ]; then
-  pass "trace_events 表有数据落库（kind=$RECENT_KIND）"
+  pass "trace_events 表有数据落库（kind=${RECENT_KIND}）"
 else
   fail "trace_events 表无数据"
 fi
@@ -67,7 +67,7 @@ fi
 # 4. DB 验证：service 字段非空
 RECENT_SERVICE=$(PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT service FROM (SELECT service, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE service IS NOT NULL AND service <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
 if [ -n "$RECENT_SERVICE" ]; then
-  pass "trace_events 表 service 字段有值（$RECENT_SERVICE）"
+  pass "trace_events 表 service 字段有值（${RECENT_SERVICE}）"
 else
   fail "trace_events service 字段空"
 fi

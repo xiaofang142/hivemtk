@@ -30,7 +30,7 @@ ER_KEY="${ER_KEY:-${ERNIE_API_KEY:-}}"
 
 for v in "DS_KEY|$DS_KEY" "QW_KEY|$QW_KEY" "DB_KEY|$DB_KEY" "ER_KEY|$ER_KEY"; do
   name="${v%%|*}"; val="${v#*|}"
-  [ -z "$val" ] && { echo "❌ 缺少 $name（环境变量未设置）"; exit 1; }
+  [ -z "$val" ] && { echo "❌ 缺少 ${name}（环境变量未设置）"; exit 1; }
 done
 
 # ---- 1) 登录换 token ----

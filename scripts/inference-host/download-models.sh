@@ -37,7 +37,7 @@ build_urls() {
       modelscope) echo "https://modelscope.cn/models/${repo}/resolve/${branch}/${msf_encoded}" ;;
       hf-mirror)  echo "https://hf-mirror.com/${repo}/resolve/main/${f}" ;;
       hf)         echo "https://huggingface.co/${repo}/resolve/main/${f}" ;;
-      *)          echo "[download] 未知源：$s（跳过）" >&2 ;;
+      *)          echo "[download] 未知源：${s}（跳过）" >&2 ;;
     esac
   done
 }

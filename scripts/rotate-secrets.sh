@@ -136,7 +136,7 @@ fi
 TARGETS=""
 case "$MODE" in
   --all-burned) TARGETS=$BURNED_LIST ;;
-  *) secret_row "$MODE" >/dev/null || { err "未知 secret：$MODE（见 --list）"; exit 2; }; TARGETS=$MODE ;;
+  *) secret_row "$MODE" >/dev/null || { err "未知 secret：${MODE}（见 --list）"; exit 2; }; TARGETS=$MODE ;;
 esac
 
 # 演练：把 4 个 .env 复制到临时目录后在其上操作，真实文件全程只读
@@ -160,7 +160,7 @@ for t in $TARGETS; do
   row=$(secret_row "$t") || { err "登记表里没有 $t"; rc=1; continue; }
   IFS='|' read -r name burn loc act ports <<<"$row"
   if [ "$burn" = not-leaked ] && [ "$MODE" = --all-burned ]; then
-    warn "$name：本机在用的值从未进过版本库，换它只有打扰没有收益，跳过"
+    warn "${name}：本机在用的值从未进过版本库，换它只有打扰没有收益，跳过"
     continue
   fi
   if [ "$DRY" = 0 ]; then interlock || exit 2; fi
@@ -169,7 +169,7 @@ for t in $TARGETS; do
   { [ "$act" = alter_user ] || [ "$act" = alter_platform ]; } && new=$(gen 24)
   BK=${TMPDIR:-/tmp}/hivemtk-rotate-$(date +%Y%m%d-%H%M%S)
   mkdir -p "$BK" && chmod 700 "$BK"
-  log "轮换 $name（新值长度 ${#new}，不打印明文）"
+  log "轮换 ${name}（新值长度 ${#new}，不打印明文）"
 
   # 只处理"落点里确实有这个键"的文件：PLATFORM_LICENSE_SECRET 已随授权功能下线从两侧 .env 删除，
   # 若把"键不存在"计入写后校验，--all-burned 会永久红、下面的备份计数还会报文件不存在。
@@ -179,12 +179,12 @@ for t in $TARGETS; do
     [ -n "$ef" ] || continue
     f=$(envfile_path "$ef") || continue
     old=$(read_key "$f" "$key")
-    [ -n "$old" ] || { warn "  $f 里没有 $key，跳过"; continue; }
+    [ -n "$old" ] || { warn "  $f 里没有 ${key}，跳过"; continue; }
     printf '%s\t%s\t%s\n' "$f" "$key" "$old" >> "$BK/old.tsv"
     write_key "$f" "$key" "$new" && log "  写入 $(basename "$(dirname "$f")")/$(basename "$f"):$key"
   done
   if [ ! -s "$BK/old.tsv" ]; then
-    warn "$name：所有落点都已无此键 —— 该凭证已随功能下线，无需轮换"
+    warn "${name}：所有落点都已无此键 —— 该凭证已随功能下线，无需轮换"
     rm -rf "$BK"; continue
   fi
 
@@ -201,13 +201,13 @@ for t in $TARGETS; do
 
   case "$act" in
     alter_user)
-      alter_role user "$new" || { err "ALTER USER 失败（$CONTAINER_USER）"; rc=1; continue; }
+      alter_role user "$new" || { err "ALTER USER 失败（${CONTAINER_USER}）"; rc=1; continue; }
       dbpw_verify 8232 "$new" user_db || { err "新口令连不上 8232"; rc=1; continue; }
       dbpw_verify 8232 "$(cut -f3 "$BK/old.tsv" | head -1)" user_db && { err "旧口令仍可用＝没换掉"; rc=1; continue; }
       log "  8232：新口令可用、旧口令已失效"
       ;;
     alter_platform)
-      alter_role platform "$new" || { err "ALTER USER 失败（$CONTAINER_PLAT）"; rc=1; continue; }
+      alter_role platform "$new" || { err "ALTER USER 失败（${CONTAINER_PLAT}）"; rc=1; continue; }
       dbpw_verify 8201 "$new" platform_db || { err "新口令连不上 8201"; rc=1; continue; }
       log "  8201：新口令可用"
       ;;
@@ -228,7 +228,7 @@ for t in $TARGETS; do
     envsrc=". ./.env"
     [ "$p" = "$USER_PORT" ] && envsrc=". $ENV_USER; [ -f .env ] && . ./.env"
     ( cd "$cwd" && set -a && eval "$envsrc" && set +a; nohup $cmdstr >> "$BK/server-$p.log" 2>&1 & ) \
-      && log "  :$p 已用新 env 重启（cwd=$cwd cmd=$cmdstr）"
+      && log "  :$p 已用新 env 重启（cwd=$cwd cmd=${cmdstr}）"
   done
   sleep 3
   for p in ${ports//;/ }; do

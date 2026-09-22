@@ -64,7 +64,7 @@ for CHUNKS in $CHUNK_SIZES; do
     echo "  [setup] 注入 $((CHUNKS - CURRENT)) 条测试 chunks..."
     for ((i = CURRENT + 1; i <= CHUNKS; i++)); do
       curl -sf -X POST "${AUTH_HEADER[@]}" -H "Content-Type: application/json" \
-        -d "{\"id\":\"bench-$i\",\"content\":\"测试语料 #$i，用于压测检索延迟。\"}" \
+        -d "{\"id\":\"bench-$i\",\"content\":\"测试语料 #${i}，用于压测检索延迟。\"}" \
         "$TARGET/api/rag/chunks" >/dev/null 2>&1 || true
     done
   fi

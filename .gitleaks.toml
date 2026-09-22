@@ -1,4 +1,9 @@
-# gitleaks 配置 —— 只豁免写明用途的假凭据占位串（当前 3 条，逐条带取证）
+# gitleaks 配置 —— 只豁免写明用途的假凭据占位串（当前 5 条，逐条带取证）
+#
+# 本表形状由 scripts/check-gitleaks-config.sh 机器核对：①本行数字必须等于下面
+# regexes 的实际条数；②每条必须是精确字面串（不许正则元字符、长度 ≥12）；
+# ③[extend] useDefault = true 不许删；④[allowlist] 段内不许出现 paths/commits 类键。
+# 加豁免项时改这里 + 加一条逐值取证注释，两件事一起做，闸会拦只做一半的提交。
 #
 # 立项原因（第二十六轮 A3）：拆 job 之后 gitleaks 第一次真正执行（此前它排在
 # 恒定红的 golangci-lint 之后，被连带 skip 了五周），首跑即报

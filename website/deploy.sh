@@ -84,7 +84,7 @@ preflight() {
     node_v="$(${NODE_BIN:-node} -v 2>/dev/null | sed 's/^v//' || echo unknown)"
     node_major="${node_v%%.*}"
     if [[ "$node_major" =~ ^[0-9]+$ ]]; then
-      [[ "$node_major" -ge 20 ]] || die "Node 版本过低: v$node_v（package.json engines 要求 >=20）"
+      [[ "$node_major" -ge 20 ]] || die "Node 版本过低: v${node_v}（package.json engines 要求 >=20）"
     else
       log_warn "无法解析 node 版本: '$node_v'，跳过版本校验"
     fi
@@ -93,9 +93,9 @@ preflight() {
     log "  跳过 node 检查（--skip-build）"
   fi
 
-  [[ -f "$ROOT/package.json"   ]] || die "缺少 package.json（$ROOT）"
-  [[ -f "$ROOT/check_i18n.mjs" ]] || die "缺少 check_i18n.mjs（$ROOT）"
-  [[ -f "$ROOT/scripts/postbuild.mjs" ]] || die "缺少 scripts/postbuild.mjs（$ROOT）"
+  [[ -f "$ROOT/package.json"   ]] || die "缺少 package.json（${ROOT}）"
+  [[ -f "$ROOT/check_i18n.mjs" ]] || die "缺少 check_i18n.mjs（${ROOT}）"
+  [[ -f "$ROOT/scripts/postbuild.mjs" ]] || die "缺少 scripts/postbuild.mjs（${ROOT}）"
   log "  本地源码: ok"
 
   # i18n 词典完整性：MISSING_UNIQ 必须为 0，否则 $t('中文') 在英/日/阿界面会裸奔

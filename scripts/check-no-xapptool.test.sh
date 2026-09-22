@@ -68,10 +68,10 @@ fi
 RED_COUNT="$(read_count /tmp/nxt-red.log)"
 EXPECTED_RED=$((BASE_COUNT + 1))
 if [[ "$RED_COUNT" != "$EXPECTED_RED" ]]; then
-  echo "BROKEN: 注入 1 行后命中数应为 $EXPECTED_RED，实为 $RED_COUNT（判据没量到增量）" >&2
+  echo "BROKEN: 注入 1 行后命中数应为 ${EXPECTED_RED}，实为 ${RED_COUNT}（判据没量到增量）" >&2
   exit 1
 fi
-echo "  ✓ 红：夹具被拦下（基线 $BASE_COUNT → $RED_COUNT，新增 1 行命中即夹具）"
+echo "  ✓ 红：夹具被拦下（基线 $BASE_COUNT → ${RED_COUNT}，新增 1 行命中即夹具）"
 
 # ---- ①b 非 ASCII 文件名的夹具也必须被扫到 ----
 # 这一条是补上闸自己的假绿：git ls-files 不带 -z 时按 core.quotePath=true 把中文
@@ -96,7 +96,7 @@ if [[ "$CN_COUNT" != "$((BASE_COUNT + 1))" ]]; then
   echo "BROKEN: 中文名夹具注入后命中数应为 $((BASE_COUNT + 1))，实为 $CN_COUNT" >&2
   exit 1
 fi
-echo "  ✓ 红：非 ASCII 文件名夹具同样被拦下（基线 $BASE_COUNT → $CN_COUNT）"
+echo "  ✓ 红：非 ASCII 文件名夹具同样被拦下（基线 $BASE_COUNT → ${CN_COUNT}）"
 
 # ---- ② 撤掉全部夹具必须回到基线 ----
 rm -f "$TMP" "$TMP_CN"
@@ -108,12 +108,12 @@ else
 fi
 AFTER_COUNT="$(read_count /tmp/nxt-green.log)"
 if [[ "$AFTER_RC" != "$BASE_RC" ]]; then
-  echo "BROKEN: 撤夹具后 rc 由 $BASE_RC 变成 $AFTER_RC（夹具留了残迹，或闸不稳定）" >&2
+  echo "BROKEN: 撤夹具后 rc 由 $BASE_RC 变成 ${AFTER_RC}（夹具留了残迹，或闸不稳定）" >&2
   tail -5 /tmp/nxt-green.log >&2
   exit 1
 fi
 if [[ "$AFTER_COUNT" != "$BASE_COUNT" ]]; then
-  echo "BROKEN: 撤夹具后命中数 $AFTER_COUNT ≠ 基线 $BASE_COUNT（残迹未清）" >&2
+  echo "BROKEN: 撤夹具后命中数 $AFTER_COUNT ≠ 基线 ${BASE_COUNT}（残迹未清）" >&2
   tail -5 /tmp/nxt-green.log >&2
   exit 1
 fi

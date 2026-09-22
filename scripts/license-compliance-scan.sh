@@ -88,7 +88,7 @@ else
     echo -e "${C_GRN}[2/3] PUBLIC_BASE_URL 解析为私网 IP $RESOLVED_IP ✓${C_RST}"
   else
     VERDICT="WARN"
-    WARNINGS+=("PUBLIC_BASE_URL=$PB_URL 解析为公网 IP $RESOLVED_IP，若对外提供服务须遵守 AGPL-3.0 第 13 条")
+    WARNINGS+=("PUBLIC_BASE_URL=$PB_URL 解析为公网 IP ${RESOLVED_IP}，若对外提供服务须遵守 AGPL-3.0 第 13 条")
   fi
 fi
 

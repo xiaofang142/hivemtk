@@ -49,8 +49,22 @@ import (
 const (
 	DefaultListenPort = config.DefaultListenPort
 
+	DefaultListenHost = config.DefaultListenHost
+
 	DefaultRedisPort = config.DefaultRedisPort
 )
+
+// resolveListenAddr 组装 HTTP 监听地址：host/port 传空串即取各自默认值。
+// 单列成函数是为了让"两半各管一半、缺省与历史逐字节一致"可测（见 defaults_test.go）。
+func resolveListenAddr(host, port string) string {
+	if host == "" {
+		host = DefaultListenHost
+	}
+	if port == "" {
+		port = DefaultListenPort
+	}
+	return host + ":" + port
+}
 
 func buildRedisClient() *redis.Client {
 	host := os.Getenv("REDIS_HOST")
@@ -445,11 +459,7 @@ func main() {
 		defer recoveryWorker.Stop(context.Background())
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = DefaultListenPort
-	}
-	addr := "0.0.0.0:" + port
+	addr := resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))
 	logger.Infof("营销后端服务启动于 %s", addr)
 	// serveHTTP 按平台拆分:Unix 走 endless(零停机热重启),Windows 走标准 http
 	// (见 serve_unix.go / serve_windows.go)

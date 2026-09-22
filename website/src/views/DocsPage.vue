@@ -364,6 +364,7 @@ USER_POSTGRES_HOST_PORT=8202
 REDIS_HOST_PORT=8203
 
 # {{ $t('应用端口（用户端 Web / API）') }}
+PORT=8204
 USER_SERVER_PORT=8204
 
 # {{ $t('JWT / 安全密钥（务必修改为随机串）') }}
@@ -517,6 +518,7 @@ REDIS_HOST_PORT=8203
 REDIS_PASSWORD=
 
 # {{ $t('服务端口') }}
+PORT=8204
 USER_SERVER_PORT=8204
 
 # {{ $t('安全') }}

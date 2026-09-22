@@ -28,7 +28,7 @@ ENV_FILE=${ENV_FILE:-$ROOT/.env}
 ALLOWLIST=$ROOT/scripts/.secret-allowlist
 FAIL=0
 
-[[ -f "$ENV_FILE" ]] || { echo "❌ 找不到 $ENV_FILE（可用 ENV_FILE=/path/to/.env 指定）"; exit 2; }
+[[ -f "$ENV_FILE" ]] || { echo "❌ 找不到 ${ENV_FILE}（可用 ENV_FILE=/path/to/.env 指定）"; exit 2; }
 
 # 从 allowlist 读取豁免正则（每行一条，# 开头为注释）
 ALLOW_RE=""
@@ -44,7 +44,7 @@ is_allowed() { # $1 = "path:lineno:content"
   printf '%s' "$1" | grep -qE "$ALLOW_RE"
 }
 
-echo "══════ A. 本机 .env 真值比对（$ENV_FILE）══════"
+echo "══════ A. 本机 .env 真值比对（${ENV_FILE}）══════"
 PAIRS=$(mktemp)
 PATTERNS=$(mktemp)
 trap 'rm -f "$PAIRS" "$PATTERNS"' EXIT

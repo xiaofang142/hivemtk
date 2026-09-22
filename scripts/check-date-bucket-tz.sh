@@ -38,7 +38,7 @@ for _cand in "$SCRIPT_DIR/../user-server" "$SCRIPT_DIR/../../hivemtk/user-server
 done
 [ -n "$TARGET" ] || TARGET="$PROJECT_ROOT/user-server"
 if [ ! -d "$TARGET/internal" ]; then
-  echo "::error::待检目录无效：$TARGET（找不到 internal/）"
+  echo "::error::待检目录无效：${TARGET}（找不到 internal/）"
   exit 2
 fi
 
@@ -87,7 +87,7 @@ set -e
 # grep 的两级退出码必须分开看：1 = 没有命中（正常），>1 = grep 自己出错
 # （路径不存在、正则非法）。把两者都当成"零命中"会让门在判据坏掉时恒绿。
 if [ "$scan_rc" -gt 1 ]; then
-  echo "::error::扫描失败 rc=$scan_rc（目标：$TARGET）—— 判据坏掉时宁红不放"
+  echo "::error::扫描失败 rc=${scan_rc}（目标：${TARGET}）—— 判据坏掉时宁红不放"
   exit 2
 fi
 
@@ -102,12 +102,12 @@ echo "日期口径命中：$COUNT 处（基线 $BASELINE 处）"
 # 而不是 21 处一夜之间全收敛。gitleaks 那次的教训就是「配置一坏，门恒绿等于零覆盖」，
 # 这里宁可报错让人来看一眼。真要清零就手动把基线改成 0，那是一次显式决策。
 if [ "$COUNT" -eq 0 ] && [ "$BASELINE" -gt 0 ]; then
-  echo "::error::命中数为 0 但基线是 $BASELINE —— 判定前先确认扫描目标与正则仍然有效（$TARGET）"
+  echo "::error::命中数为 0 但基线是 $BASELINE —— 判定前先确认扫描目标与正则仍然有效（${TARGET}）"
   exit 2
 fi
 
 if [ "$COUNT" -gt "$BASELINE" ]; then
-  echo "::error::宿主机时区日期口径违规增加了 $((COUNT - BASELINE)) 处（基线 $BASELINE → 现值 $COUNT）"
+  echo "::error::宿主机时区日期口径违规增加了 $((COUNT - BASELINE)) 处（基线 $BASELINE → 现值 ${COUNT}）"
   echo "新增/现存落点："
   printf '%s\n' "$HITS" | sed 's/^/  /'
   echo "改法：日期键与日期窗口一律走 internal/pkg/timeutil"
@@ -116,7 +116,7 @@ if [ "$COUNT" -gt "$BASELINE" ]; then
 fi
 
 if [ "$COUNT" -lt "$BASELINE" ]; then
-  echo "提示：现值已低于基线，请把 $BASELINE_FILE 改小到 $COUNT，把收敛固化下来。"
+  echo "提示：现值已低于基线，请把 $BASELINE_FILE 改小到 ${COUNT}，把收敛固化下来。"
 fi
 
 echo "✅ 日期口径守卫通过（未新增宿主机时区依赖）"

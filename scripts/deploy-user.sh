@@ -99,7 +99,7 @@ mode_needs_remote() {
 
 need_deploy_host() {
   if mode_needs_remote && [[ -z "$DRY_RUN" && -z "$DEPLOY_HOST" ]]; then
-    die "缺少 DEPLOY_HOST：本次模式（$MODE）要把前端推到远端，而本脚本不再内置默认目标机。纯本地发布请用 --api-only；确实要推远端请显式指定，例如 DEPLOY_HOST=10.0.0.5 ./scripts/deploy-user.sh"
+    die "缺少 DEPLOY_HOST：本次模式（${MODE}）要把前端推到远端，而本脚本不再内置默认目标机。纯本地发布请用 --api-only；确实要推远端请显式指定，例如 DEPLOY_HOST=10.0.0.5 ./scripts/deploy-user.sh"
   fi
 }
 

@@ -107,7 +107,7 @@ curl http://localhost:8204/api/v1/public/init
 | --- | --- | --- | --- | --- |
 | 8202 | PostgreSQL（Docker 部署映射端口） | `docker compose -f docker-compose.yml up -d` | `config.DefaultDBPortDocker` | `docker-compose.yml` 中 mtk-postgres 容器映射宿主 8202 |
 | 8203 | Redis | `docker compose -f docker-compose.yml up -d` | `config.DefaultRedisPort` | `docker-compose.yml` 中 mtk-redis 容器 |
-| **8204** | **user-server**（Gin HTTP） | `go run ./cmd/api` 或 `air -c .air.toml` | `config.DefaultListenPort` / `main.DefaultListenPort` | `Dockerfile:57 ENV SERVER_PORT=8204` |
+| **8204** | **user-server**（Gin HTTP） | `go run ./cmd/api` 或 `air -c .air.toml` | `config.DefaultListenPort` / `main.DefaultListenPort` | 运行期覆盖：`PORT`（端口）/ `SERVER_HOST`（监听主机，默认 `0.0.0.0`）——读点 `cmd/api/main.go` `resolveListenAddr`。仓内**无 Dockerfile**，旧写法「`Dockerfile:57 ENV SERVER_PORT=8204`」查无此文件、`SERVER_PORT` 亦无读取点 |
 | 8205 | platform-server | `cd hivemtk-platform/platform-server && go run ./cmd/api` | `config.DefaultPlatformPort` | platform-server/config.yaml `server.port` |
 | 8206 | Chromium CDP（远程调试） | `chromedp.Flag("remote-debugging-port", "8206")` | `config.DefaultChromiumCDPPort` | `internal/aiagent/agent/browser/assistant.go:43` |
 | 8207 | LLM（llama.cpp） | `bash scripts/inference-host/start-llm.sh` | `config.DefaultLLMPort` | `inference.llm.base_url: http://127.0.0.1:8207/v1` |
@@ -216,7 +216,7 @@ user-server/
 │   ├── cache/                            横向 缓存抽象（memory + redis）
 │   ├── event/                            横向 Event Bus + 订阅者
 │   ├── websocket/                        横向 WS Hub（hub/handler/seq/ack_tracker/notify）
-│   ├── platform/                         横向 平台对接 SDK（client/sync/adapter/heartbeat）
+│   ├── platform/                         横向 平台对接 SDK（client/sync/adapter/heartbeat，默认不装配）
 │   ├── migration/                        横向 迁移服务（registry/service/migrations）
 │   ├── aiagent/                          能力层（agent/llm/rag/embedding/vector/eval/knowledge）
 │   ├── integration/ · identity/ · etl/ · cron/ · domain/ · channelbot/ · config/   横向业务子包

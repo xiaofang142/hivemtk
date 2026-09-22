@@ -30,8 +30,9 @@
 ┌─────────────────────── 宿主机 ───────────────────────────┐
 │                                                          │
 │  应用层                                                   │
-│  ├─ user-server 二进制        监听 127.0.0.1:8204         │
-│  │   （make user-build 产物，air 热重载用于开发）           │
+│  ├─ user-server 二进制        默认监听 0.0.0.0:8204        │
+│  │   （make user-build 产物，air 热重载用于开发；           │
+│  │     SERVER_HOST=127.0.0.1 可把网口收回本机，见 §6.2）    │
 │  └─ user-web 静态产物         由 反向代理层 或任意静态服务托管   │
 │                                                          │
 │  推理层（scripts/inference-host/）                        │
@@ -70,10 +71,10 @@
 
 | 服务 | 端口 | 绑定 | 说明 |
 |------|------|------|------|
-| user-server API | **8204** | 宿主机监听 | 主 API（HTTP + WebSocket 同端口） |
+| user-server API | **8204** | `0.0.0.0`（默认，全网卡） | 主 API（HTTP + WebSocket 同端口）。只给本机/内网代理用时设 `SERVER_HOST=127.0.0.1` 收回本机，见 §6.2 |
 | PostgreSQL（Docker） | **8202** | 127.0.0.1 | 容器映射自 5432，宿主机侧永远是 8202 |
 | Redis（Docker） | **8203** | 127.0.0.1 | 容器映射自 6379，宿主机侧永远是 8203 |
-| platform-server | 8205 | 可选组件 | 平台端 API 网关（`PLATFORM_API_HOST` 指向它） |
+| platform-server | 8205 | `0.0.0.0`（默认，全网卡） | 可选组件，离线部署默认不启动。绑定地址走它自己的 `config.yaml` `server.host`（`internal/config/config_viper.go:188` 的 viper 默认值），**不读 `SERVER_HOST`** |
 | Chromium CDP | 8206 | 内部 | 浏览器自动化调试口 |
 | LLM (llama-server) | **8207** | 127.0.0.1 | 主对话模型 |
 | Embedding (llama-server) | **8208** | 127.0.0.1 | bge-m3，1024 维 |
@@ -211,6 +212,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `PUBLIC_BASE_URL` | 空 | **部署 Telegram/飞书/钉钉等被动回调渠道时必填**。格式 `https://域名`（不带路径、不带尾斜杠），系统会用它注册 Webhook；留空则这些渠道自动降级 polling 模式（仅单实例可用） |
 | `PLATFORM_API_HOST` | `http://127.0.0.1:8205` | 平台端不在本机时改为其实际地址。注意实际读取的是 `PLATFORM_API_HOST` 不是 `PLATFORM_API_URL` |
 | `PLATFORM_URL` | 空 | 平台地址的**末位回落**：`platform.yaml` 的 `api_url` 为空、`PLATFORM_API_URL` 也为空时才轮到它，再为空则用编译期默认值。平时不需要设；它同时决定启动日志里"平台配置来源"标注成哪一档 |
+| `SERVER_HOST` | `0.0.0.0` | **要把 user-server 网口收回本机时设 `127.0.0.1`**（存量实例不换超管口令时的加固路线，见 §6.2 末「换掉已经装好的那台」段）。改了要重启进程才生效；同机不同端口的数据层不受影响。设了它，`user-web/bridge`、真机浏览器扩展等**从另一台机器**打 8204 的用法会全部连不上（这正是"收回"的含义），单人本机部署才设 |
 | `CORS_ALLOW_ORIGINS_USER` | 见 .env-example | 前端域名与 API 不同源时，把前端 Origin 加入白名单 |
 | `DEEPL_API_KEY` | 空 | 启用低资源语言（ar/th/vi/hi/tr）DeepL 翻译降级时 |
 | `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
@@ -260,12 +262,30 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 > 两条锁的活库实测（只回滚事务，前后 `count(*)` 均为 12）：`UPDATE ... SET password` 抛
 > `初始超管账号(id=1)的密码不允许被修改`，`DELETE ... WHERE id=1` 抛 `初始超管账号(id=1)不允许被删除`。
 > 存量实例二选一：
-> ① 不碰口令，先把网口收回 `127.0.0.1`（见 §三 端口分配、§七 模式 A）；
-> ② 直改那一行：`cd user-server && go run ./cmd/pwtool '<新口令>'` 出 bcrypt → 同一事务里 `DROP TRIGGER` 两把 →
-> `UPDATE system_users SET password='<哈希>' WHERE username='admin'` → 按
-> `internal/migration/migrations/v3_36_0_admin_password_guard_migration.go` 的 `Up()` 把两把触发器建回。
-> 换完自查判据（拿仓库公开的默认值试登录，**从 200 变 401 才算换成功**）：
-> `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"Seed@123456"}'`
+> ① 不碰口令，先把网口收回 `127.0.0.1`：`SERVER_HOST=127.0.0.1` 起进程（读取点 `user-server/cmd/api/main.go`
+> 的 `resolveListenAddr`，缺省仍是 `0.0.0.0`，见 §三 端口分配与 §6.2 该行说明）。收回后本机
+> `curl http://127.0.0.1:8204/healthz` 仍通、局域网侧不再可达；代价是同机之外的浏览器扩展 / 真机
+> 联调全部要改走本机代理，所以这条只在"单人本机部署"时用；
+> ② 换掉那一行的口令：`SEED_PASSWORD='<新口令>' bash scripts/rotate-admin-password.sh --with-env`。
+> 它把"摘两把触发器 → `cmd/pwtool` 出 bcrypt → `UPDATE system_users SET password WHERE username='admin'` →
+> 按 `internal/migration/migrations/v3_36_0_admin_password_guard_migration.go` 的守卫 DDL 把两把触发器建回"
+> 放在**同一个事务**里（四步漏做任何一步的后果都是静默的：要么语句被触发器顶回、要么库留在无守卫状态），
+> 并且顺带把新口令写进 `.env` 的 `SEED_PASSWORD` —— 不写这一笔，下一次 `bootstrap.sh` / `cmd/seed`
+> 会把公开的默认值重新写回库里。口令自己决定（脚本不替你定，且拒绝长度 <12 或就是那四个公开字面量的值），
+> 生一个：`openssl rand -base64 18`。
+>
+> 换没换成不要手工 curl，跑探针：`bash scripts/check-admin-default-credential.sh`
+> （判据就是本段上面那句"拿仓库公开的默认值试登录，**从 200 变 401 才算换成功**"；
+> 它默认只发**一次**登录请求——`/api/auth/login` 挂着 `BruteForceGuard("auth.login")`，
+> 口径 5 次/15m 触发即锁 30m，探针扫满候选会把同机别的 e2e 一起锁在门外；`--full-ladder` 才扫满，
+> `--list` 只印它从 `cmd/seed/seed_users.go` 与 `user-web/tests/auth.setup.spec.js` 抽到了哪些公开字面量。
+> 手工等价式：`curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"<仓库公开的默认值>"}'`）。
+> 轮换后 `bootstrap.sh`、`user-server/tests/e2e/deep_lib.sh`、`deep_trace_v2.sh`、`scripts/geo_full_test.py`
+> 不需要跟着改：它们的口令链都是"显式入参 > `SEED_PASSWORD`/`ADMIN_PASSWORD` 环境 > 公开默认值"，
+> 而这几个脚本的既定跑法本来就要求先 `set -a && . ./.env && set +a`（`POSTGRES_PASSWORD` 是硬前置），
+> `.env` 一更新它们读到的就是新口令。**只有** `user-web/tests/**` 里那些写死候选口令的 Playwright 审计脚本
+> 不吃这条链（它们自带 `['Admin@12345678', …]` 候选数组、且不打 8204 的 seed 值），
+> 那批属另一泳道的 dev-only 审计夹具，本批不动，见 `docs/superpowers/specs/2026-09-21-offline-deployment-design.md` §7。
 
 ### 6.3 config.yaml 要点（user-server/config.yaml）
 

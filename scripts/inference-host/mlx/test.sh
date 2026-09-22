@@ -19,7 +19,7 @@ ok()   { echo "  ✅ $1"; pass=$((pass+1)); }
 bad()  { echo "  ❌ $1"; fail=$((fail+1)); }
 
 if ! curl -fsS --max-time 5 "$BASE/health" >/dev/null 2>&1; then
-  log_err "服务未运行（$BASE），请先：bash scripts/inference-host/start-llm.sh"
+  log_err "服务未运行（${BASE}），请先：bash scripts/inference-host/start-llm.sh"
   exit 1
 fi
 
@@ -118,7 +118,7 @@ print(f\"  请求={d['requests_total']} 流式={d['stream_requests']} \"
   if [ -f "$STATS_FILE" ]; then
     ok "统计落盘存在: $STATS_FILE"
   else
-    bad "统计未落盘: $STATS_FILE（30s 周期，可等待后复查）"
+    bad "统计未落盘: ${STATS_FILE}（30s 周期，可等待后复查）"
   fi
 else
   bad "统计校验失败: $(cat /tmp/mlx_t_stats_err.txt)"
