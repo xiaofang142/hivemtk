@@ -1004,7 +1004,7 @@ merchant key、`.env:43,266` 的 `PLATFORM_LICENSE_SECRET` 值。
 | 门 | rc | 输出要点 |
 | --- | --- | --- |
 | `scripts/check-no-xapptool.sh`（hivemtk 仓根） | 0 | `scanned=4224 files (whitelist=6 paths)` / `0 hits` |
-| `scripts/check-no-xapptool.test.sh`（反向测试） | 0 | 三条腿：ASCII 夹具 0→1、中文文件名夹具 0→1、撤夹具回 0；跑完 `find docs -name "*fixture*"` 空 ⇒ 无残留 |
+| `scripts/check-no-xapptool.test.sh`（反向测试） | 0 | 三条腿：ASCII 夹具 0→1、中文文件名夹具 0→1、撤夹具回 0；跑完 `find docs -name "*fixture*"` 空 ⇒ 无残留。**（"三腿"是当时的事实；2026-09-23 补了第四条腿，而那一版三腿全绿时缺陷就在场 ⇒ 见 §7.5.1，勿把本行当现状）** |
 | 同一份闸脚本用在 platform 仓根 | ~~0~~ | ~~`scanned=4218 / 0 hits`，反向测试同样三腿 PASS~~
   **该行作废**：闸按 `dirname BASH_SOURCE/..` 定根 ⇒ 在 platform 里跑仍扫 hivemtk（4218 就是 hivemtk 的数）。
   真实复跑见 Task 21（platform 侧 `scanned=268 / 0 hits` + 三腿反向 PASS）。 |
