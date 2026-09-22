@@ -301,6 +301,16 @@ $ TZ=UTC go test ./internal/service/ -run 'TestReportUsageBestEffortDisabledSend
   ok hivemtk-user/internal/service 0.957s   （PASS ×2）
 ```
 
+> **提交后复盘更正（2026-09-22，随 `6414d663` 修）**：上面这段是在**工作树**里量的，
+> 而工作树里有两处守卫没跟着测试一起进仓 —— 判归属时把 `controller/asset_bundle.go` 与
+> `service/asset_resolver.go` 当成"并行会话正在改的文件"整文件跳过 staging，连带我自己的
+> `rejectPlatformDisabled(ctx)` 首行与 `config.PlatformEnabled()` 早退一起留下了。
+> 结果远端 HEAD 上这两条自带用例**即红**（巡检第 45 轮先量到，我在只含已提交内容的克隆里
+> `-count=2` 独立复现）：`submit-platform 关态应返回 403，实际 500`、`关态必须零出站请求，实际打到 1 次`。
+> 两个口径缺陷一并记下：① `-run` 过滤的子集不算门禁，"提了测试"必须连同**它钉的实现文件**一起核进仓；
+> ② 影子克隆只跑 `go build` 拦不住行为漏项（守卫不是符号），必须在克隆里把新进测试所在包整包跑一遍。
+> 改后同一克隆复验：`internal/controller` / `internal/service` / `internal/platform` 全量（不加 `-run`）均 `ok`。
+
 **变异测试（一律 `config.PlatformEnabled() && false` / `|| true` 形式，避免"编译不过"冒充行为红；`cp` 备份、`md5` 比一致）**
 
 | 变异点 | 红的用例 | 实测红因 |
