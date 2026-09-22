@@ -1,4 +1,4 @@
-# gitleaks 配置 —— 只豁免一个写明用途的 CI 占位串
+# gitleaks 配置 —— 只豁免写明用途的假凭据占位串（当前 3 条，逐条带取证）
 #
 # 立项原因（第二十六轮 A3）：拆 job 之后 gitleaks 第一次真正执行（此前它排在
 # 恒定红的 golangci-lint 之后，被连带 skip 了五周），首跑即报
@@ -25,4 +25,15 @@ useDefault = true
 
 [allowlist]
 description = "CI 占位 JWT 密钥（非凭据，仅为满足 user-server 启动期的 ≥32 字符校验）"
-regexes = ['''ci-jwt-secret-placeholder-32-chars-min-len-OK''']
+regexes = [
+  '''ci-jwt-secret-placeholder-32-chars-min-len-OK''',
+  # 渠道审计批F-4d / 批G-2b 的两条测试夹具（本轮 push 窗口实测命中，非凭据）：
+  #   · `sticker_v3_n17`：fake 飞书 file_key，与同组夹具 `file_v3_n17_media/_audio/_folder`
+  #     同一命名，只用于断言 sticker→[表情] 的 msg_type 映射，不参与任何鉴权。
+  #   · `tt_g2b_margin_short`：假抖音服务的 app_key，只当缓存 map 的键用（与
+  #     `tt_g2b_margin_long` 成对，用来区分「有效期够长→缓存」与「短于提前量→不缓存」）。
+  # 两条都按**精确串值**豁免，不按路径、不按规则：同文件里出现任何其它 key-shaped 串照旧命中。
+  # 取证见 docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md §23.16。
+  '''sticker_v3_n17''',
+  '''tt_g2b_margin_short''',
+]

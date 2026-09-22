@@ -806,8 +806,8 @@ TestDingTalkReceiveMessage_CapturesSessionWebhookAndTriggersAI（同款"实际 0
   官方错误码走 HTTP 200 + `err_no`，而网关抖动走的是 **502/503/504、429、以及连接层直接断链（EOF）** —— 这些在旧实现里落 `fmt.Errorf("… status %d")` 与裸 `err`，一律终态。
   更要紧的是**下载腿的非 200 分支此前一次都没被覆盖过**：假平台的 `dlStatus` 全文件无人改写（`grep -n dlStatus` 只有声明、默认值和读取三处），
   即 `douyin media download status %d` 这条错误路径是**纯未验证代码**，与 §17.2 那三条"0 断言"同一类，只是这次未验证的是实现分支而不是断言。
-  修法：新增 `douyinTransientError`（带外瞬时态的载体）+ `douyinStatusRetryable`（5xx 与 429 收，其余 4xx 判终态：403 官方口径是「否则无法访问相关资源」）
-  + `douyinErrRetryable`，并把重投从"资源接口这一条腿"上移到 **`FetchDouyinMessageResource` 整动作**（`douyinFetchMessageResourceOnce` 为一次走完三条腿的内层）。
+  修法：新增 `douyinTransientError`（带外瞬时态的载体）+ `douyinStatusRetryable`（5xx 与 429 收，其余 4xx 判终态：403 官方口径是「否则无法访问相关资源」）+
+  `douyinErrRetryable`，并把重投从"资源接口这一条腿"上移到 **`FetchDouyinMessageResource` 整动作**（`douyinFetchMessageResourceOnce` 为一次走完三条腿的内层）。
   上移的理由是代价按整动作算：三条腿任何一条被打断，结果都是"这条消息永久没有媒体"。副作用要说清 —— **重投会把前面已成功的腿再走一遍**：
   `client_token` 命中缓存不发 HTTP（用例钉住 token=1），`resources` 会**再签一次直链**（下载腿失败后 res 从 1 变 2），多花一次 JSON 调用换来的是重投带新签 URL。
   新增 2 条顶层用例（`TestG2B_Gateway5xxRetriesEveryLeg` 4 子例：token 腿 502 / resources 腿 503 / resources 腿连掐两次 / 下载腿 504；
@@ -2659,3 +2659,38 @@ db 那一趟掐掉的理由是它跑的是**旧用例字节**：S26 的 recover 
 
 **6 · 本段仍未覆盖面（不得当作已清）。** ① 第 11 段第 ⑤ 条的**另一半**没动：其它指针返回的 repository（`alert_rule.go:55`、`telegram_gate.go:45`、`knowledge_base.go:43` …）在其用例里的解引用点，本轮只按"本泳道两份文件"收口，包外那一层仍未扫，宽口径 877 池子依旧是噪声不是清单。② 三处"只读 `err`"的调用点是**读码判定**（`_` 丢弃），不是跑出来的判空；它们由 K1/B 的红腿集合反向证了"没被误伤"，但"永远不需要判空"这句只在产码保持 `return &config, err` 的前提下成立。③ 取证驱动自己交过一次学费：为省屏幕把每相的 `用例字节 md5` 行 `grep -v` 掉了，于是第一趟 K1/A 其实是**新字节**在跑、被记成了 A 相（读数与 B 相逐字相同才暴露）。正解不是"更小心"，而是**身份行（哪一相／哪份字节）属结果行，一律不许过滤**——与第 38 条"结果行不许过 tail"同一族，只是这次吞掉的不是结论、是结论的**归属**。
 
+
+---
+
+### 23.16 批M-9：十九批用例随产码入库（`1af6d28c`），顺带量出「密钥门的绿是推送窗口的绿、不是历史的绿」
+
+**来路。** 批A→批M-8 的用例面（含 §23.10～§23.15 那六批 obs_config / message_hub / opportunities 的补腿）自写出起**只活在共享工作树里**：产码那半边早在前几轮已随各自批次提交，用例这半边一直未 `git add`。本段记的是"入库"这一刀本身的取证，不新增被测行为。
+
+**1 · 必须按 hunk 切的一处，以及为什么整文件暂存必定编译不过。** 246 个待提交项里 108 项属本泳道，唯一一份**同时压着两条泳道改动**的产码文件是 `user-server/internal/pkg/db/migrate.go`：本泳道要提交 `verifyUniqueIndex`（N-36：`CREATE UNIQUE INDEX IF NOT EXISTS` 在**同名非唯一索引已存在**时是静默 no-op，故形状必须读 `pg_index.indisunique` 而非"名字在不在"）、`postMigrateObsDefaultUniqueIndex`、以及 `postMigrateMessageHubUniqueIndex` 里那条形状核验分支；并行泳道在同一文件的**相邻 hunk** 往 `allModels()` 里加了 `BrowserAuditDigest`／`BrowserAuditPruneRun`／`BrowserWriteClaim` 三个模型，而这三个类型定义在**未跟踪文件**里 ⇒ 整文件暂存＝把"引用未定义类型"提交进仓，`go build ./...` 必红。做法：`git diff -U3` 取补丁 → `awk '/^@@/{h++} h>=2'` 丢掉对方那一 hunk → `git apply --cached --check` 通过后 `--cached`（工作树不动，对方那几行留在未暂存区）。索引面在提交前用 `git diff --cached --stat` 复核为"恰好本泳道 109 项"（108 + 切过的 `migrate.go`）。
+
+**2 · 提交前/后的核验链（每一步都真跑，非"应该没问题"）。** `check-secrets-workspace.sh` rc=0 → `go build ./...`＋`go vet ./...` rc=0 → 提交前用 `git write-tree`/`git commit-tree` 造出**未落分支的候选树**、克隆该树跑 `pkg/db`＋`repository`＋`channelbot`＋`model` 四门（rc=0，118.280s / 293.915s / 另两门）→ `TREE=$(git write-tree)` 与提交后 `--shared` 克隆各自复验自洽。提交：`1af6d28c`，109 文件、+23754 / −1228。
+
+**3 · 一条不算"结论"但会吞掉结论的形状：证据文件 0 字节。** 首轮把 controller＋service 两门串在同一个后台任务里、各自重定向到独立 log。回执报"完成、exit 0"，而 `…_svc.log` 与任务自身的 output 文件**都是 0 字节**，同一时刻另一条命令的截图里却出现了 `FAIL hivemtk-user/internal/service 392.877s` + `svc rc=1` —— 那行属于**并行泳道就地改写的同名热文件**（[[feedback-mutation-battery-hygiene]] 的"热文件就地摘装"）。⇒ 两条口径进账：① 后台任务的 exit 0 不是产物存在的证明，判"跑完了"要认**文件非空 + 自己写的末行标记**；② 一次门禁读数的身份由**文件名独占性**保证，复用他人前缀（`b4g3_*`）等于没有读数。重跑改用唯一名 `…_svc_run2.log` 并在末尾追加 `RUN2-MARKER-END`。
+
+**4 · 密钥门：本轮 push 窗口实测 2 处命中，都在本批新文件里。** CI 的 `security-scans` job 用 `gitleaks/gitleaks-action@v2` + `fetch-depth: 0`，**阻断**；工作流注释里预先写死了处置口径——「若未来误报测试夹具，用仓库根 `.gitleaks.toml` allowlist 精确豁免，而不是回退本门禁」。本轮就是那个"未来"：在 `1af6d28c` 的克隆里按推送窗口跑 `gitleaks detect --log-opts="HEAD~3..HEAD"`（3 commits scanned）⇒ `rc=1 leaks found: 2`，两条都是 `generic-api-key`，都是本批新写的夹具：`webhook_batchf4_msgtype_test.go:459` 的假飞书 `file_key`、`webhook_batchg2b_douyin_media_test.go:1190` 的假抖音 app_key 常量。二者均不参与任何鉴权（前者只断言 `sticker`→`[表情]` 的映射，后者只当缓存 map 的键，与 `tt_g2b_margin_long` 成对区分"够长→缓存／短于提前量→不缓存"）。处置=按**精确串值**加两条 allowlist（不按路径、不按规则；同文件出现任何其它 key-shaped 串照旧命中）。
+
+**5 · 豁免的四格反向测试（缺任一格都不能写"门有牙"）。**
+
+| 格 | 命令 | 读数 |
+| --- | --- | --- |
+| 新配置 × 真实窗口 | `detect --log-opts="HEAD~3..HEAD"` | `rc=0 no leaks found` |
+| 旧配置（=新配置减去那两条）× 同窗口 | 同上 | `rc=1 leaks found: 2`，逐条同名 ⇒ 豁免**承重** |
+| 隔离仓 canary × 新配置 | `detect --log-opts=-1`（一份 4 常量的 Go 文件） | `rc=1 leaks found: 1`：只报 `github-pat` 的 `ghp_…`，两条豁免串被吃掉 ⇒ **半径未扩大**；`AKIAIOSFODNN7EXAMPLE` 不报，是 gitleaks 内置豁免，故它不能当探针（本文件头注释原话） |
+| 同一 canary × 摘掉配置 | 同上 | `leaks found: 3`：两条夹具各计一次 ⇒ 证明扫描**真读到了**这些字节，不是"没扫所以绿" |
+
+版本口径照实记：本机 `gitleaks` 为源码构建，`--version` 只印 `version is set by build process`，与 `.gitleaks.toml` 注释里那次实测的 v8.24.3 **不保证同版** ⇒ 上表读数只对本机这一版成立，CI 那一版仍需以推送后的 run 日志为准。
+
+**6 · 历史面：登记，不在本批处置。** 同一克隆不带 `--log-opts`（整史）跑 ⇒ `1885` 处命中 / `38` 个文件，其中 `1825` 处集中在一份合成数据 `user-server/scripts/simulate/interactions.jsonl`；余下与本泳道无关的已知点含 `internal/bridge/bridge_helpers_test.go` 的 2 处 `jwt`（jwt.io 文档示例 token）＋1 处 `generic-api-key`、`internal/pkg/mail/unsubscribe_test.go` 的 1 处。⇒ 两条**互不抵消**的结论要一起说：推送窗口的绿**不**等于历史扫描的绿（本批 2 处就是被窗口口径放过、被克隆复跑抓出来的）；反过来历史扫描的红也**不**等于存在泄露——1825/1885 是合成会话 JSON 撞 `generic-api-key` 的形状匹配。真凭据面（F1：8232 口令曾进历史）由用户拍板**暂不处置**，本批不动 `.env`、不轮换、不改写历史。
+
+**7 · 真机库的形状核验：三条守卫的索引，库里实测只有一条在。** 读 `127.0.0.1:8232/user_db` 的 `pg_indexes`：`uni_message_hub_platform_msg_conv` **在**（unique、非 partial），`idx_obs_config_single_default`、`idx_opportunities_clue_id` **不在**。根因不是钩子写错，是**启动路径没在新字节上跑过**——本泳道不重启在跑的 user-server，`AutoMigrate` 之后的那几个 post-migrate 钩子自然没执行。⇒ §23.11/§23.13 那两条"真实启动路径"的腿证的是**代码形状**，不是**这台库的形状**。本轮**不擅自建**这两个索引：① 8232 是并行泳道共用的开发库，partial unique 一旦落下会把"无索引"这一形状从此测不到（`pkg/db` 的 R6 腿正要求**无索引**的前置）；② 建索引属部署动作，该由重启服务的部署腿自然带出。口径进账：**凡以"库里有这个索引"为前提的判断，必须先数 `pg_indexes`**（[[feedback-verify-by-running]]）。
+
+**8 · §23.15 未覆盖面 ① 的分母终于量出来了（同包解析，不是名字相接）。** 三组数一起记：产码里存在裸 `return nil, nil` 的函数 **229** 个（站点 **320**）；测试里"未判空即解引用"的候选站点 **710**；按**同包**解析后（调用与被调在同一 package 才可能命中）落到 **250** 处活站点、分布在 **61** 个测试文件（最密：`internal/service/inbox_test.go` 62、`repository/integration_test.go` 14、`customer_session_test.go` 11、`opportunity_test.go` 10、`unified_message_test.go` 9、`wecom_test.go` 8、`webhook_channel_whatsapp_status_test.go` 7）。跨包那一层未并进来是**故意**的：按裸方法名相接得到 310，属假阳膨胀（同名跨包不相干），宁缺不混。⇒ 这 250 处是**候选清单**、不是**缺陷清单**——多数用例的夹具本就走非 nil 路径；真要清，形状应是"门 + 基线"（照 `check-env-coverage.py`/`env-coverage.baseline` 的先例，只锁"新增不许抬高"），而不是批量改测试。本批未做，见下条。
+
+**9 · 顺带复测的两件小事。** ① markdownlint（`markdownlint-cli2 v0.23.3 / markdownlint v0.41.1`，读仓库根 `.markdownlint.json` 与 `.markdownlint-cli2.jsonc`）在 `1af6d28c` 上跑：**Linting 170 files，0 issues in 0 files**——§23.14 登记的那条 `CHANNEL_INTEGRATION_AUDIT_2026-09.md:797:3 MD004` 已不在当前字节里，故本条以"复跑为绿"结，不改判据。② N-27／N-28／N-29 三处登记项回读：符号仍存在、消费方仍为零（`grep` 逐条命中数＝仅定义处），维持 §5 的"待产品口径"，本批不修。
+
+**10 · 本段未覆盖面（不得当作已清）。** ① 第 8 条那 250 处只到"分母"，门与基线未落地；跨包解引用面仍未解析。② `gitleaks` 那四格反向测的是**本机版本 + 克隆里的候选树**，CI 上 v8.24.3 的读数要等推送后的 run 日志回填。③ service 整包门在 `1af6d28c` 上本轮**只有一次"0 字节读数"**，重跑结论见下条复跑记录，未跑完之前不得引用第 2 步的四门绿来代替它。④ `-race` 下 `TestCreateSession_AnonymousUser` 的全局 DB 句柄项（[[project-platform-test-global-db-handle-leak]]）只定位到文件行号，未复跑判据。⑤ 第 7 条那两个索引在**任何真实部署库**里在不在，本批无证据。
