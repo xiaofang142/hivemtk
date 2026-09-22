@@ -1,6 +1,6 @@
 # HiveMtk 数据库 Schema 深度解析
 
-> **版本**：v1.18（2026-09-21，T-P6-01 **报价域两张表交付**：新增 §4.21 —— 一行 = 一个版本的 `quotes`（10 列 4 索引，`uq_quotes_quote_version` 是 AC① 的唯一硬保证，且**刻意没有**单列 `quote_id` 唯一索引）与 `(quote_row_id, line_no)` 复合主键、无代理键的 `quote_line_items`（"旧版不可变"因此是形状的结果而不是规矩），表头上合计/审批列/行内币种/租户列四样一律不建的理由，版本链的三条写路径与八个并发写者恰好一个赢的实测；上一版 v1.17 是 T-P5-04 的交付）
+> **版本**：v1.19（2026-09-23，T-P7-01 + T-P7-02 **回款域两张表交付**：新增 §4.22 —— `bills`（10 列 4 索引，幂等键是版本行 `uq_bills_quote_row` 而**不是**跨版本重复出现的 `quote_id`）与 `payments`（11 列 5 索引，`uq_payments_channel_ref` 是 AC② 的全部物理形态、`bill_id` 上刻意**只有普通**索引因为分期是常态）的实测形状；两表都不嵌 `BaseModel`（凭证表做软删 = 让不带谓词的唯一索引去拦一行读不到的钱）、`bills` 上刻意没有"已收"那一格（结清是 Σ 算出来的，算式与"哪些状态算数"各只有一处事实源）、`bills.status` 刻意没有 `overdue`（那是查询时的比较，做成状态就要有人每天 UPDATE，cron 漏跑那天催收读到的是"没有逾期"这个假事实）；再记 T-P7-02 放宽跃迁表的那次方向选择、两腿分开装配所以半装配可见（`GET 503` 而不是 `GET 404`），以及 §4.21 那五条"仍不成立"里四条被后续卡推翻的逐条标注。上一版 v1.18 是 T-P6-01 的交付）
 > **范围**：user-server + platform-server 所有数据表
 > **数据库**：PostgreSQL 15 + pgvector
 > **单租户**：私域部署无 `merchant_id` 字段
@@ -2179,15 +2179,145 @@ quote_line_items :: quote_line_items_pkey  UNIQUE (quote_row_id, line_no)
 - 三层 **27 条顶层判据全绿**：`internal/model` 9 条、`internal/pkg/db` 6 条、`internal/repository` 12 条（`-count=1 -v` 的锚定 `^--- PASS` 计数）。
 - 三包全量在 **`TZ=UTC` 与 `TZ=Asia/Shanghai` 两条腿都绿**（db 81.3s / repository 83.1s；第二腿 70.0s / 79.2s），`go build ./...` rc=0。
 - 变异电池 8 格（冲突判定、版本递增、存在性探针、CAS 条件、行序、选版依据、跨链守卫、白名单外溢）**全部 KILLED**，红因逐条点名到用例；还原后 `quote.go` md5 与基线一致。其中两格第一版是**变异脚本自己写坏**（`msg` 变量失去唯一引用 ⇒ 编译错；一处多敲的空格 ⇒ 语法错），修变异不修期望后重跑才拿到 KILLED。
-- 台账 **58/70**（本卡 +2 行，均为 `UNWIRED`）；反向验证：把其中一格改成 `wired` 后门立即 rc=1 报"登记为已接线却无调用点"，改回 rc=0。
+- 台账 **58/70**（本卡 +2 行，均为 `UNWIRED`）；反向验证：把其中一格改成 `wired` 后门立即 rc=1 报"登记为已接线却无调用点"，改回 rc=0。**（该数已被后续各卡推进：项 21 到 T-P6-03 扩为四行并全部 `wired`，现值实测见 §4.22。）**
 
 #### 本卡之后仍不成立（写清不藏着）
 
-- **零生产写入方**：`quotes` 表今天只有测试在写。台账项 21 两格就是登记这件事的，翻 `wired` 的条件是 T-P6-02 的装配点出现。
-- **没有 HTTP 出口、没有前端**：报价的读方要等 T-P6-03/04。所以"报价域已落地"这句话今天的准确形状是"schema 与仓储已落地"。
-- **版本链的"作废"没有表达**：五个状态里没有 `withdrawn`/`obsolete`。当前口径是"被取代"由链本身表达（`Latest()` 之外皆历史），若 T-P6-03 判定需要一个显式状态，那是加一次值域、不是加一列。
-- `quote_id` 与 `id` 的**生成器还没有**（本卡只交付容器）：宽度上限 64 由 `quotes.quote_id varchar(64)` 与 `quote_line_items.product_id varchar(64)` 定死，构造器落在 T-P6-02。
-- 一版里行的**数量与金额区间**没有任何校验（仓储无业务判断，`TestQuoteRepo_DoesNotValidate` 钉住）：`discount_percent` 现在写得进 12.34 也写得进 500，阈值归 T-P6-04。
+> **状态迁移（2026-09-23，T-P6-02/03/04 与 T-P7-01/02 之后回灌）**：下面五条里**四条已经不成立**，逐条在原句后面标注，原文一律不划掉 —— 那句话在 v1.18 那天是真的，删掉它就把"是谁在哪一步把它变成假的"这条线索一起删了。还成立的那一条（作废没有表达）留在原位，它是本节唯一仍然欠着的形状。
+
+- **零生产写入方**：`quotes` 表今天只有测试在写。台账项 21 两格就是登记这件事的，翻 `wired` 的条件是 T-P6-02 的装配点出现。**〔已推翻 · T-P6-02〕** `internal/service/quote.go:315` 的 `store.Create`（首版）与 `:401` 的 `store.Append`（还价那一版）是这两条写路径的第一个生产调用方；台账项 21 现值 `wired`。
+- **没有 HTTP 出口、没有前端**：报价的读方要等 T-P6-03/04。所以"报价域已落地"这句话今天的准确形状是"schema 与仓储已落地"。**〔已推翻 · T-P6-03/04〕** `internal/controller/quote.go:88-93` 挂了四条端点（`POST /api/quote`、`GET /api/quote/latest/:quoteID`、`GET /api/quote/:id`、`POST /api/quote/:id/send`），`setupQuoteRoutes` 在 `internal/router/quote_routes.go`，台账项 21 的 21c/21d 两格登记的就是"装配了却没挂载"这种坏法。前端视图不在本仓。
+- **版本链的"作废"没有表达**：五个状态里没有 `withdrawn`/`obsolete`。当前口径是"被取代"由链本身表达（`Latest()` 之外皆历史），若 T-P6-03 判定需要一个显式状态，那是加一次值域、不是加一列。**〔仍然成立〕** 五值到今天是 `draft/sent/accepted/rejected/expired`（`internal/model/quote.go:166-177`，实测逐字）。T-P6-03 判定不需要那一格 —— 但**账单侧最终需要**：应收的"作废"是 `bills.status` 的第四格 `voided`（§4.22），而报价的链上到今天仍然没有它。
+- `quote_id` 与 `id` 的**生成器还没有**（本卡只交付容器）：宽度上限 64 由 `quotes.quote_id varchar(64)` 与 `quote_line_items.product_id varchar(64)` 定死，构造器落在 T-P6-02。**〔已推翻 · T-P6-02〕** `newQuoteKeys` / `newQuoteKeysFromClock`（`internal/service/quote.go:905,910`）。账单的两把键（`bills.id` 与被抄进 `payments.bill_id` 的那一格）就是照这个形状抄的，见 §4.22。
+- 一版里行的**数量与金额区间**没有任何校验（仓储无业务判断，`TestQuoteRepo_DoesNotValidate` 钉住）：`discount_percent` 现在写得进 12.34 也写得进 500，阈值归 T-P6-04。**〔已推翻 · T-P6-02/04，但推翻点在 service 不在 repository〕** 仓储那一层今天仍然无业务判断（那条判据原样有效），越界值现在在**入参面上**就被拒：`internal/service/quote.go:800` 把折扣打回 `0–100` 之外（含 NaN —— `:782` 那句"两个比较都为 false，取反后仍为 false"是同一支）判 `ErrQuoteInputInvalid`。所以"写得进 500"今天只对**直接调仓储**的路径成立，而那条路径在生产里没有调用方。
+
+---
+
+### 4.22 回款的两张表：欠额是算出来的，所以"已收"那一格永远不存（T-P7-01 + T-P7-02）
+
+两张卡共用这一节，因为它们各自交付一半、任何一半单独看都是缺陷：T-P7-01 给 `bills`（我方主张收多少）与派生入口，T-P7-02 给 `payments`（渠道说收到多少）、结清算式、账单读侧与 webhook 上那一个 `payment` 格子。卡面 AC：①"账单由已成交报价派生、金额与报价合计一致"（T-P7-01）；②"回款登记幂等、结清状态自动跃迁、对账两边各有读口"（T-P7-02）。两卡合计 **2 张新表、21 列、9 条索引、`migrations/` 零变更**。
+
+#### 落点（本节覆盖两张卡，两侧的数字各由一条 git 命令数出来，不合并报：**T-P7-01 = 新增生产文件 6 ＋ 新增测试文件 8 ＋ 探针 1，改 4 处**（`git show --name-status 66964f9e`）；**T-P7-02 = 新增生产文件 6 ＋ 新增测试文件 9 ＋ 反向探针 3，改生产码 11 ＋ 改测试码 9 ＋ 改文档 2 ＋ 改门 1**（`git diff --cached --name-status`）。下表按"T-P7-01 的 `bill` 侧 ＋ 本卡的 `payment` 侧"合列；建表登记走 `allModels()`）
+
+| 路径 | 增/改 | 与库的关系 |
+|---|---|---|
+| `internal/model/bill.go` (190) / `payment.go` (190) | **新增** | 两表的列、值域、索引标签；`payment.go` 带 `PaymentStatusesCounted` 这一格 |
+| `internal/model/integration.go` | 改 | G15 收口：`external_orders` 的来路键从"全局唯一 order_id"改窄到 `(platform, order_id)` |
+| `internal/service/payment.go` (529) | **新增** | 结清算式的**唯一**落点（`applySettlement` / `settlementOf` / `billStatusForSettlement`） |
+| `internal/service/payment_webhook.go` (250) | **新增** | 回调载荷里 `payment` 那六格的解析与校验 |
+| `internal/service/payment_global.go` (27) | **新增** | 回款腿的全局登记处（台账项 24d 认的就是 `GlobalPaymentService`） |
+| `internal/repository/payment.go` (289) | **新增** | 回款行的唯一写路径 ＝ 幂等键冲突的那一处识别（按约束名认 `23505`） |
+| `internal/repository/bill.go` (271) / `integration.go` | 改 | 派生腿补读口、镜像腿补来路键查询 |
+| `internal/app/payment_wiring.go` (64) | **新增** | 对账读腿的装配点（与派生腿 `bill_wiring.go` 分家） |
+| `internal/controller/bill.go` (468) | 改 | 三条端点（一条写两条读）与两腿各自的 503 |
+| `internal/controller/integration.go`、`internal/service/integration.go` | 改 | webhook 那一腿接上回款服务 ＋ 错误分档 `orderWebhookFailure` ＋ 留痕与镜像的 G15 语义 |
+| `internal/router/bill_routes.go`、`router.go` | 改 | 前者在挂载前把**两条腿各读一次全局**并分开判缺件（只缺一条时，另一条照常可用，缺的那条回 503）；后者补上 `app.InitPaymentRuntime(gormDB)` 那一行 —— 它必须同时早于 bill 路由与 `setupIntegrationRoutes`，两处位置各有一条判据 |
+| `internal/pkg/db/migrate.go` | 改 ＋49 | 本卡只登记 `&model.Payment{}` 这一行（`&model.Bill{}` 是 T-P7-01 带进来的），其余 48 行是启动钩子 `postMigrateDropLegacyExternalOrderKey` 及其文件头 |
+| `internal/pkg/db/`：`payment_migration_test.go`、`external_order_key_startup_test.go` (225 行 3 条) | **新增** | 前者点名两表在真库里的列集合/索引名/量程（5 条），后者钉住旧全局唯一键那一刀的三件事：钩子可重跑且不动数据、`AutoMigrate` 里那句调用已接线且排在其余 post-migrate 之后、**失败只 Warn 不 panic**（`TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally`，两臂 `recover`；边界本身写在 `ORDER_WEBHOOK_SIGNATURE.md` §9） |
+| `internal/model/payment_test.go` (268)、`repository/payment_test.go` (411)、`service/payment_test.go` (688)、`service/order_webhook_payment_test.go` (471)、`service/order_webhook_payment_wiring_test.go` (133)、`controller/integration_order_webhook_payment_test.go` (252)、`app/payment_wiring_test.go` (161) | **新增** | 本行 7 个文件按列出顺序带 **51** 条顶层判据（10 / 9 / 13 / 12 / 2 / 2 / 3），加上一行 pkg/db 那 2 个文件的 8 条（5 + 3），本卡新建的 9 个测试文件合计 **59** 条；全量分布见"本卡实跑" |
+| `scripts/check-unwired-assets.sh` | ＋4 新格、1 格翻向 | 项 24 四行；项 23e 由 `unwired` 改判 `wired`（防回退方向随之掉头） |
+| `scripts/mut_bill_read_p702.sh`、`mut_ledger_p702.sh`、`mut_startup_hook_p702.py` | **新增** | 三组反向探针：读侧 12 刀、台账 5 格、启动钩子 2 刀，全部"改坏生产代码 ⇒ 被点名的用例必须红" |
+
+生产建表仍然只跑 GORM `AutoMigrate`（启动期版本化迁移固定 `v1.0.0→v1.0.0` 是空跑，`model/bill.go` 头部数到 T-P2-01/04/05/06、T-P3-01/03、T-P4-01、T-P6-01 **八次实测同源**，加 bills/payments 这一卡是第十次），所以卡面写的 `v3_50_0_bill_migration.go` 与 `v3_50_x_payment_migration.go` 都**不产出**。
+
+#### `bills` 实测形状（10 列 4 索引）
+
+下面这一张与下一张表的每一个字节都来自工作树最终态（HEAD `1bce38c3` ＋ 本卡未提交改动）上的一次真 `AutoMigrate`，读的是 `information_schema.columns` 按 `ordinal_position` 排序与 `pg_index`；取证脚本用完即删，判据留在 `bill_migration_test.go` / `payment_migration_test.go` 那 10 条里（列集合按**逐字全等**比 —— 多一列与少一列同样红）。
+
+| 列 | PG 实测 | null | 默认 | 为什么是这个形状 |
+|---|---|---|---|---|
+| `id` | `text`（`bills_pkey`） | NO | — | 账单号 `b_<unixnano>_<seq>`，service 自生成。不用 serial 的理由与 `quotes.id` 同一条：**这把键会被抄进 `payments.bill_id`**，跨实例不能撞 |
+| `quote_id` | `varchar(64)` + `idx_bills_quote_id` | YES | — | 逻辑报价号，查询维度（"这张报价单开过几张账单"）。**故意不唯一**：它在 `quotes` 里跨版本重复出现，拿它当幂等键等于"一单只能开一张应收" |
+| `quote_row_id` | `text` + `uq_bills_quote_row`（唯一） | YES | — | **派生的幂等键**：钉在版本行上，AC① 在库里的全部硬保证 |
+| `opportunity_id` | `varchar(64)` + `idx_bills_opportunity_id` | YES | — | 从报价行原样抄（不回查）：账单是事后对账的凭据，读它不该依赖"那一版的商机列没被人改过" |
+| `amount` | `numeric(14,2)` | YES | — | 与 `quote_line_items.amount` 同型同宽；值 = `quoteSumAmount(lines)`，**与发送腿共用同一个函数**（AC② 是"同一个算法的同一个结果"，不是两处各算一遍再比） |
+| `currency` | `varchar(3)` | YES | `'CNY'::character varying` | 一张账单一个币种；默认值必须有，因为给存量表补 `NOT NULL` 列不带默认会当场失败 |
+| `due_at` | `timestamptz` | YES | — | **可空 = 账期未定**。今天全库它恒 `NULL`，见本节末"仍不成立" |
+| `status` | `varchar(16)`，**无索引** | YES | — | 四格 `open/partial/paid/voided`。不建索引的判据与 `quotes.status` 同一条：按状态扫全表的那条查询属 T-P7-03，索引由它的第一个读方带来 |
+| `created_at` / `updated_at` | `timestamptz` | NO / NO | — | `updated_at` 只在状态跃迁时动 —— 金额列建后不可改，所以"这行多久没动过"没有第二种解释 |
+
+```
+bills :: bills_pkey            UNIQUE (id)         [pkey]
+bills :: uq_bills_quote_row    UNIQUE (quote_row_id)
+bills :: idx_bills_quote_id    (quote_id)
+bills :: idx_bills_opportunity_id (opportunity_id)
+```
+
+#### `payments` 实测形状（11 列 5 索引）
+
+| 列 | PG 实测 | null | 默认 | 为什么 |
+|---|---|---|---|---|
+| `id` | `text`（`payments_pkey`） | NO | — | `p_<unixnano>_<seq>`。卡面写的是 `payment_id`，命名随仓内五张同类表统一成 `id`：一张表里同时有 `id` 与 `payment_id` 两种主键命名的那天，跨表 JOIN 就没人写得对 |
+| `bill_id` | `varchar(64)` + `idx_payments_bill_id`（**非唯一**） | YES | — | 这张钱冲的是哪张应收。**唯一索引会当场杀掉分期付款与尾款**，所以 `TestPaymentChannelRefIsTheIdempotencyKey` 的第三臂专门写"同一张应收的第二笔必须进得来" |
+| `amount` | `numeric(14,2)` | YES | — | **恒正**（`PaymentAmountInRange`：反写成 `!(amount > 0)` 以把 NaN 一并拒掉）。方向由 `status` 表达 —— 允许负数就是让同一笔退款有两种合法写法，求和侧读到哪一种是调用方当场的决定 |
+| `currency` | `varchar(3)` | YES | `'CNY'::character varying` | 账单是 CNY 而这一笔是 USD 时"收了多少"这个和没有定义；缺省随账单，非空则必须与账单一致 |
+| `paid_at` | `timestamptz` | NO | — | 载荷没给时由 service 填**接收时刻**，并在响应面上标 `filled_paid_at=true`，不假装那是渠道给的时间（零值时间会被账龄读成"四千年前就到了"） |
+| `channel_ref` | `varchar(128)` + `uq_payments_channel_ref`（唯一） | YES | — | **入账的幂等键，AC② 的全部物理形态**。宽度是有界外部文本的上界声明：不设界就是让渠道用一条超长字符串占住一个唯一索引项 |
+| `status` | `varchar(16)`，**无索引** | YES | — | 两格 `confirmed/reversed`。**没有 `pending`**（收款动作在外部电商，没有任何数据源能填那一格），**没有 `partial`**（那是账单的词，粒度不同） |
+| `platform` | `varchar(50)` + `idx_payments_platform` | YES | — | 取自**回调路径上的 `:platform`**，载荷自述不作数（它与签名串同源） |
+| `order_id` | `varchar(100)` + `idx_payments_order_id` | YES | — | 把"哪条回调"留在凭据上，**不**据此反查账单：账单来路只有 `bill_id` 一条 |
+| `created_at` / `updated_at` | `timestamptz` | NO / NO | — | 只有"被冲销"这一条路径会推 `updated_at` |
+
+```
+payments :: payments_pkey             UNIQUE (id)      [pkey]
+payments :: uq_payments_channel_ref   UNIQUE (channel_ref)
+payments :: idx_payments_bill_id      (bill_id)
+payments :: idx_payments_platform     (platform)
+payments :: idx_payments_order_id     (order_id)
+```
+
+#### 三处两表共通的形状选择
+
+1. **都不嵌 `BaseModel`**（实测列集合里没有 `deleted_at`）。凭证类表做软删是给自己造第二套"这张单还在不在"的答案：GORM 的默认查询滤掉 `deleted_at` 非空的行，而那两枚唯一索引（`uq_bills_quote_row` / `uq_payments_channel_ref`）**不带谓词**、照样拦着软删过的行 —— 症状是"重投的那笔钱撞了一个读不到的唯一键"，报成 `RefReuse` 409，而库里那一笔钱其实早就不算数了。
+2. **两把唯一索引都必须命名**。标签写成 `unique` 也能建出唯一约束，但约束名由 PG 自己拼，仓储那句"按名字认 23505"就落空 —— 于是"同一版报价重复派生"与"别的唯一冲突"分不开，幂等复用那条路会去认一个不是它的错。两列在库里都是 `null=YES`（GORM 不给非主键字符串列加 `NOT NULL`），这条要一起记住：**PG 的唯一索引宽待 `NULL`、不宽待空串**，而本域不会走到前者 —— 派生时那一格写的是 `row.ID`（从库里读回的那一版报价的主键），调用方给的空串在 `service/bill.go:183-185` 就被 `ErrBillInputInvalid` 拦下了。
+3. **金额两列同一个量程**（实测 `numeric_precision=14, scale=2` 逐位相同，判据 `TestPaymentAmountSharesRangeWithBills` 把两列读回来直接比结构体）。差在宽度上不会报错，只会在大额那一单从"存进去"变成"存进去又四舍五入"，而结清要的正是逐分对得上。
+
+#### 中心事实：`bills` 上没有"已收"
+
+实测那 10 列里没有 `settled_amount`、没有 `paid_amount`、也没有 `overdue` 这一格状态，这不是漏写：
+
+- **已收 = Σ 计入结清的回款行**，所以它只能有一份。两处各存一份的后果与"报价头存合计"同一条 —— 一处加了新状态，另一处静默不算。计入哪些状态只有一个事实源 `model.PaymentStatusesCounted`（今天恰好是 `[confirmed]`），仓储的求和 SQL 与本层的内存复算都从它取条件。
+- 结清算式在**一处**：`internal/service/payment.go` 的 `applySettlement` / `settlementOf`。比较用 `paymentCentEpsilon = 0.005`，那一格只是 float64 的表示余量，不是"差不多就行"的口子（两侧都是先过 `money2` 两位数的数）。
+- `settled ≥ amount ⇒ paid`、`> 0 ⇒ partial`、`0 ⇒ open`，收多了不拒、在视图上标 `oversettled`。**没有边界就不跃迁，而跃迁失败与写行失败一样是 500**（`ErrPaymentStatusStuck`）：钱已经记上了而状态没落，那是必须有人来看的一笔。
+- 这张表上刻意不建的状态（`overdue`）与刻意不建的列同一条判据：做成状态就要有人每天 `UPDATE` 一遍，cron 漏跑的那天所有过期单还写着 `open`，催收读到的是"没有逾期"这个**假事实** —— 假事实比缺数据贵，它不需要任何人去查第二遍。
+- 值域注释里那句分工要留在文档上，因为它是这三张表唯一的边界说明：报价答"这一版客户接没接"，商机答"这单还在不在跑"，`bills.status` 答"这笔钱收清没有"。`model/quote.go:165` 那句"不含 won/lost/paid：那三格分别属于商机与账单域"就是这个边界在**对侧**的写法。
+- 跃迁表（`billStatusTransitions`）在 T-P7-02 被放宽过一次：T-P7-01 的 `paid`/`partial` 只进不出，那句的完整前提是"当时没有任何一处能算出已收多少"。有了求和之后 `status` 成了那个和的**函数**，所以 `paid→partial`、`paid→open` 两条回退边是必需的（一笔钱被渠道冲销、欠额回来了而账单还写着已结清，那才是要挡的"两头对不上"）。仍然禁的一侧是 `voided`：**作废不可逆**，`paid→voided` 同样禁（结清过的应收要作废，等于用一格状态盖掉一次真实发生过的收付历史）。
+
+#### 半装配是可见的：两条腿分开装、分开判
+
+`BillDeriver`（`app.InitBillRuntime`）与 `BillReader`（`app.InitPaymentRuntime`）由两个装配点装，可以一有一无。`setupBillRoutes` 因此**先把两把实例各读一次、再一起挂载**，而不是"派生腿缺件就不挂读口"：后者的症状是 `GET 404 而 POST 503` —— 同一份缺件在网关日志里留下两种答案，而 404 那句是假的（"这套 API 不存在"与"底座没装配"是两件事，前者才该 404）。判据 `TestBillController_LegsFailIndependently` ＋ `TestBillController_ReadLegUnassembledAnswersFiveOhThree`，两刀在下面的电池里各占一格。
+
+#### HTTP 面（三条端点 ＋ webhook 那一腿）
+
+`POST /api/bill`（成交确认即派生：入口接受 `sent` 与 `accepted` 两版，`sent` 那一腿先跃迁再开单）、`GET /api/bill/:id`（这张单收了多少）、`GET /api/bill/of-quote/:quote_id`（这张报价单开过哪几张单 —— 一条链上可能有多个版本各自成交过一次，对账要读的是那一串），全部挂在**已鉴权**的 `/api` 组下。钱进来的口不是 API：只有回调载荷里 `payment` 那六格（白名单、幂等/冲销语义表、错误分档 400/404/409/500/503 全在 `docs/architecture/ORDER_WEBHOOK_SIGNATURE.md` §8，此处不重抄）。读侧对 URL 上那两把键只做**有界与判空**、不清洗（`TestBillController_PathKeyPassesThroughUnchanged`：清洗过的键查不回任何东西，而"查不到"会被读成"没有这张单"）。
+
+#### 交付口径：AC 各被什么钉住
+
+| AC | 钉住它的判据 |
+|---|---|
+| ① 账单由已成交报价派生 | 库级：`uq_bills_quote_row` 点名（列集合＋索引名）；service 级：非 `sent/accepted` 拒、`sent` 先跃迁、已派生则**一次写都不产生**（`GetByQuoteRowID` 在跃迁之前） |
+| ② 金额与报价合计一致 | 同一个 `quoteSumAmount` 调用，不是两处各算一遍；`TestBillAmountSharesRangeWithQuoteLines` 读回量程逐位比 |
+| ③ 回款幂等（重投三次只入账一次） | 库级 `uq_payments_channel_ref` ＋仓储按约束名认 `23505`；四臂里最贵的是"同一张应收的第二笔必须进得来" |
+| ④ 结清自动跃迁 | `applySettlement` 单点 + `PaymentStatusesCounted` 单点 + epsilon；`TestBillController_ReadSentinelsHaveDistinctOutcomes` 守住读侧哨兵分档 |
+| ⑤ 对账两边各有读口 | 上面那三条端点 + 路由文件的静态锁（`TestBillRoutes_RouterFileHasNoInlineHandler`） |
+
+#### 本卡实跑（数字全部点名测的是哪个对象）
+
+- **全量 17 包 `-p 1 -timeout 60m` 全绿，`rc_gotest=0`**（工作树最终态；`01:09:19 → 01:26:53`，load `5.56 → 4.91`）。逐包：`service` 593.379s、`controller` 188.395s、`repository` 103.889s、`pkg/db` 59.513s、`app` 20.066s、`router` 10.673s、`feedback_loop` 19.183s、`orderft` 4.674s，其余九包各 <1.1s。**口径要写清**：这一趟跑在"启动钩子不 panic 那条判据加进来之前"，那一格落在 `internal/pkg/db` 一个包里 ⇒ 该包随后单独复跑过一次（见下一条），其余 16 包的结论未被其后的改动触及。
+- `internal/pkg/db` 整包在新增那条判据**之后**复跑：`ok hivemtk-user/internal/pkg/db 72.786s`（`01:42:24 → 01:43:38`，含新的 `TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally`；同一棵树上、同一份 `.env` 口令、8232 端口）。
+- 回款域（`bill` ＋ `payment` 两条腿一起看）**16 个测试文件、140 条顶层用例**（`grep -c '^func Test'`，分层：model 19 / repository 20 / service 45 / controller 26 / router 11 / app 6 / pkg/db 13）。拆到本卡：**新建的 9 个文件带 59 条**，**改动的 9 个既有测试文件净增 19 条**（`git diff --cached` 的 `+func Test` 21 笔减 `−func Test` 2 笔）⇒ 本卡新增判据 **78 条**。余下 62 条属 T-P7-01 与更早已在册的账单侧用例。
+- 读侧变异电池 `scripts/mut_bill_read_p702.sh`：**12 刀 12 杀**（`total=12 killed=12 alive=0 broken=0`，`01:27:42 → 01:28:38`），每刀红因逐条点名到用例；`internal/controller/bill.go` 前后 md5 同为 `4db2da22acada3c172a2d3d4e5a08763` ⇒ 源码逐字节还原。
+- 台账门 `scripts/check-unwired-assets.sh`：**本笔提交单独抽出来跑 = 71/81 行已接线，rc=0**（项 24 四行各 1 个接线点，23e 由本卡翻 `wired`；测法 = `git checkout-index -a` 把暂存区抽成一棵独立树再跑该门，那棵树里没有本卡之外的任何未提交改动）。同一时刻**工作树的读数是 72/82**，多出的那一格是并行会话登记的项 22（审计摘要读侧装配），它的实现文件（`browser_automation/model/audit_digest.go` 等）此刻还没被跟踪过 ⇒ 那一格不随本笔提交走：一行 `expect=wired` 的登记写在代码之前，干净克隆里那道门会因为找不到 defpat 直接退 2（"检查形同虚设"），那是替别人报一个假红。它的反向电池 `scripts/mut_ledger_p702.sh`：**5 格 5 杀**、末了复跑 rc=0，且整轮只在 `cp -al` 影子树里落刀，真实树逐格 md5 未变。
+- 启动钩子的失败处置探针 `scripts/mut_startup_hook_p702.py`：**2 刀 2 杀**（`total=2 killed=2 alive=0 broken=0`，`01:40:49 → 01:40:55`），`migrate.go` 前后 md5 同为 `1607be56a9c91dee9716cda64290129a`。两刀的红因分别落在**自己那一臂**上（① 摘掉 nil 守卫 ⇒ 报"① nil 句柄"；② 把 DROP 失败分支的 `return` 换成 `panic(err)` ⇒ 报"② 连接池已关"），不是同一条断言被顺手带红。锚点全部限定在钩子函数体区间内：`if db == nil {` 在 `migrate.go` 里有 5 处、`\n\t\treturn\n\t}\n\tconst ddl` 有 2 处，整文件替换会打到别人的分支上，那种"红"证的不是这一格。
+
+#### 本卡之后仍不成立（写清不藏着）
+
+- **`due_at` 今天恒为 `NULL`**：`service/bill.go:253` 那句 `DueAt: nil` 是全仓唯一对这一格的写入（`grep -rn "DueAt" --include='*.go'` 排除测试后，`bills` 侧只有读、没有赋值）。列的形状已经够了（`timestamptz` 可空、无默认），但 T-P7-03 的逾期判据 `status IN (open,partial) ∧ due_at IS NOT NULL ∧ due_at < now` 里第二个条件今天全库零命中 ⇒ **扫出来必为空**。所以"系统里没有逾期单"这句话今天是假的，真的那句是"没有任何一张单定过账期"—— 两者合成一件的那天，催收就再也看不见这批单。
+- **部分退款两种写法都进不来**：新流水号 + `reversed` ⇒ 409 `NothingToReverse`；同流水号 + 更小金额 ⇒ 409 `RefReuse`。今天一张已收清的账单被退掉 30 元，只能人工另开一张负向应收（或整张作废），**没有"这一笔只退一部分"的表达**。
+- **钱只能被"推"进来**：没有任何按渠道对账取数的任务，渠道不推就永远记不上；而 `uq_payments_channel_ref` 是**全表**唯一，两个平台各自发出同号流水时第二笔进不来（这一条与 `external_orders` 的 `X3/G15` 那段同源，但那是订单镜像、这是资金行，两张表各撞各的）。
+- **没有按 `channel_ref` 的读口**：读侧只有那两条 GET。渠道方来问"这个流水号你们记成哪张单了"，今天只能查库。
+- **账单推送仍然是零**：没有任何一条路把账单交给客户或对账系统（`X8/D-4`：收款动作在外部电商）。"回款域已落地"今天的准确形状是"两张表 + 派生 + 入账 + 对账读口已落地"。
+- **结清只看本表名下的回款行，不校验外部镜像那一格**：`external_orders.pay_amount`（bigint、按元取整）与 `Σ payments.amount` 对不上时今天没有任何一处会报 —— 语义对齐归 T-P7-04。
 
 ---
 
@@ -2365,3 +2495,4 @@ CREATE TYPE doc_type_enum AS ENUM (
 | v1.16 | 2026-09-21 | @backend | 新增 §4.19 **`reach_send` 节点：图上多一步"先批准才出域"**（T-P5-03）：Active 外联从"代码里的一段 if"变成"图上的一步"。**schema 侧零新表、零新列、零新索引、`migrations/` 零变更**，所以登记面全在"值落在哪一列、谁按值查得动"：① 四个新键全挤在 `sop_executions.execution_data`（`type:text`）里 —— `_reach_skipped`（值域 `dnc`/`cooldown`/`already_sent`/`approval:<状态>`，四种"没发出去"的处置动作完全不同，合并成一个 `skipped` 等于把三件事混成一件）、`_reach_channel`、`_reach_message_id`，以及沿 `message_sent:` 同族命名空间的幂等键 `reach_sent:<execution_id>:<node_id>`；② **挂起期在库里是四行四个状态的组合** —— `handleNodeWaiting` 从不写 `sop_executions.status`，所以"卡在哪儿"只能读 `wait_event=approval` 那一列，配 `approval_requests=pending` ＋ `sop_timers=pending` ＋ `sop_executions=running`；③ **一条既有 DB 约束顺手当了兜底**：`uq_approval_request_open (subject_type, subject_id) WHERE status='pending'` ＋ `subject_id=<exec>--<node>` ⇒ 同一步挂起期不可能有两条 pending 审批行（约束来自库、不是应用层），与节点自己那枚跨重启的幂等键各管一件事；④ **对 §4.18 一句口径的收窄**："归因/产物值按值查不动"说重了 —— 这些值在 `sop_exec_events` 的 `input`/`output`/`side_effects` 三列各有一份 **jsonb 镜像**（`writeExecEvent` 每次把整份 `execution_data` 塞进 `input`）⇒ 查得动，真正的代价是那三列**没有任何 GIN 索引**，按值查＝扫一张比执行表大一到两个量级的事件表；结论（P8 建在这些键上会撞全表扫）不变，措辞要换；⑤ 两个审批主体的键**刻意不合成一枚**（图上腿源自执行行 `<exec>--<node>`、服务侧 W-1 门源自客户行 `unified_id`＋渠道＋收件人），合成即"改图＝改归因"，由 P1 变异格背书；⑥ `sop_executions.customer_id` 是 `varchar(64) NOT NULL` **无 default** ⇒ 空串是合法存量形状，这一条列定义直接立了一条用例（无 customer_id 时靠 `one_id` 找回身份）。**卡面落点偏差如实登记**：卡上写"M `proactive_reach.go`（接入检查点）"，实际该文件**零 diff**（三判据早在 `ReachByCustomer` 里，缺的是图上那一腿）。另有两道静态锁各写明自己看不见什么（出域符号扫描看不见"不被 `NodeType()` 认出来的执行器"；装配点源码锁看不见"这一行是否真被执行"），台账项 20 四行、现值 **55/64 → 58/68**（两个端点在同一棵克隆里分别用 HEAD 版与工作树版脚本各实测一次），行为变异电池 **24 格全 KILLED、无未登记存活** |
 | v1.17 | 2026-09-21 | @backend | 新增 §4.20 **放量三档落在哪一列**（T-P5-04）：**仍是零新表、零新列、零索引、`migrations/` 零变更**，但这一节的中心结论是"**没有一列可加**"式的缺：① 档位是 `system_config_kv` 里 `key='ltc.config'` 那一行 `value text` 内的一个 JSON 节（`model/system_config_kv.go:6-11`）⇒ 预算是整份文档 8KB、名单 ≤200 条且单条 ≤128 字节（对齐 `one_id` 最大宽度）、判定键精确等值所以空串/带空格/重复条目在写侧就被拒，**且没有任何 SQL 能按档位查历史**；② "改档不需要重启"要说准成"每请求读＋60s 进程内缓存 ⇒ 多副本对其余副本最迟 60s 生效"，这条本来就是 `ReadingHints` 第一条，写档位的注释不许对它例外；③ **送达率不是接错线、是根本没有 join 键**：`sms_delivery_statuses.message_id` 是唯一归因键且这张表**只由 webhook 建行**，而 `sms_records` 没有单号列、`SmsService.SendSms` 只回 `error`、`sendAliyun` 把 `BizId` 解析进 `result.BizID` 后在成功分支**原样丢弃**、tencent/huawei 成功分支返回硬编码 `"OK","OK"` ⇒ 外发上行的是常量 `sms_out`，它**一个字符都没进过送达表**（"照它建行会挤成一行"是给未来接线的警告，不是现网事实）；④ 退订判据在 SMS 域原有两个入口漏了 ——`SendSms` 命中退订 `return nil`（每个调用方读成"发成功了"：记成功、烧幂等键、进送达率分母）改回 `ErrDoNotContact` 哨兵（复用既有错误 ⇒ 队列/SOP 已有的 DNC 处置自动接上，零新分支），`ResendSms` **从来不查退订**（直连 `dispatchToProvider`）补同一道检查且放在改状态之前；⑤ **一处自家叙述的实测纠偏**：初版 reason 串写"外发链路写进去的 message_id 是常量 sms_out"，逐条重验后不成立（表只由 webhook 按运营商单号建行）⇒ reason/unblocker 与包注释改成实测形状，并给用例加一条"不许把推断写成实测事实"的反向断言（`6897d5c3`）；⑥ 实跑：`--shared` 克隆 `/tmp/p504gate/hivemtk`（HEAD `d94810d8`、0 脏文件）里 build/vet/gofmt rc=0、十道门 **rc 全 0**（台账 **58/68 与本卡开工前同值 ⇒ 本卡零台账行变更**、`api-inventory` 生成物零 diff ⇒ 无新端点），`app`＋`router` 两时区各 rc=0，`service` 本卡子集两时区各 **232 条顶层全 PASS**（该 232 与活树静态同名集合逐条比对 diff 为空；早前那个 280 是**非锚定** grep 含子用例的另一个数，不可混引），`service` 全量 CST **rc=0 pass=3617 fail=0 skip=3（451.778s）**、UTC rc=1 且唯一一条红是**负载相关假红**（`ab_experiment_test.go:50` 断"5 写 2 缓冲⇒恰丢 3"，而构造函数里就起了消费协程 ⇒ 单跑 20/20 绿、带负载 2 FAIL/400 复现，用例由 `8fecb6ad` 引入、与本卡无交集）；10 格变异电池 **KILLED=10／SURVIVED=0**、还原逐文件 md5 一致 |
 | v1.18 | 2026-09-21 | @backend | 新增 §4.21 **报价的两张表：一行 = 一个版本**（N-5 / T-P6-01）：直读 `information_schema` + `pg_indexes` 给出 `quotes`（10 列 4 索引，`uq_quotes_quote_version (quote_id, version)` 是 AC① 的唯一硬保证，且**刻意不建**单列 `quote_id` 唯一索引 —— 那条索引表达的是"一版一号"，装上后同一张单的第二版永远插不进去）与 `quote_line_items`（`(quote_row_id, line_no)` 复合主键、**无代理键**，所以"原地改一行"在物理上不成立，"旧版不可变"是形状的结果而不是规矩）的实测形状；写明表头上合计列／审批列／行内币种／租户列四样一律不建的理由（各有既成事实源：行项目之和、`approval_requests`、混币种时合计没有定义、X3）、版本链只有三条写路径（`Create`/`Append`/`UpdateStatus`，后者的写集合是 `status`+`updated_at` 且 `version` 不动）、八个并发追加恰好一个赢且其余七个收 `ErrQuoteVersionConflict`（裁决权在库级索引而不是进程内锁：多实例下锁只管得住半个链），并登记本卡**零生产写入方**为台账项 21 的两行 `UNWIRED`。GORM 那条实测坑一并记下：两列各写一次同名 `uniqueIndex:` 时它自己拼复合索引，**名字差一个字符就退化成两个单列索引，表能建、插入照样重复、测试全绿** ⇒ 复合索引的唯一性只能在 pg_index 里点名列集合来断 |
+| v1.19 | 2026-09-23 | @backend | 新增 §4.22 **回款的两张表：欠额是算出来的，所以"已收"那一格永远不存**（N-6 / T-P7-01 + T-P7-02）：直读 `information_schema` + `pg_indexes` 给出 `bills`（10 列 4 索引，幂等键是**版本行**`uq_bills_quote_row` 而不是跨版本重复出现的 `quote_id`）与 `payments`（11 列 5 索引，`uq_payments_channel_ref` 是 AC② 的全部物理形态，`bill_id` 上刻意只有普通索引 —— 分期与尾款是常态）的实测形状；写明两表都不嵌 `BaseModel`（凭证表做软删= 让不带谓词的唯一索引去拦一行读不到的钱）、`bills` 上没有 settled/paid 任何一格（求和与"哪些状态算数"各只有一处事实源，`paymentCentEpsilon` 只是 float64 余量）、`bills.status` 上没有 `overdue`（假事实比缺数据贵）、派生腿与对账读腿分开装配所以半装配在网关日志里只有一种答案（`503` 而不是 `404`）；台账项 23e 由本卡从 `unwired` 翻 `wired`、新增项 24 四行，本笔提交单独抽出来跑为 **71/81**（工作树 72/82 里多出的那一格属并行会话尚未提交的项 22，理由与测法见 §4.22「本卡实跑」）；顺带把 §4.21 那五条"仍不成立"里被 T-P6-02/03/04 推翻的四条逐条标注（原文不划）。**同时补上本仓第十处 `AutoMigrate` 同源实测**：启动钩子"失败只 Warn 不 panic"那句决定此前只有注释、没有判据，本行起有（`TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally` 两臂 recover ＋ `scripts/mut_startup_hook_p702.py` 两刀证明它有牙）。 |

@@ -20,6 +20,14 @@ func setupIntegrationServiceTestDB(t *testing.T) *gorm.DB {
 		&model.ExternalOrder{},
 		&model.ExternalProduct{},
 		&model.WebhookEvent{},
+		// payments 在名单里不是为了测回款腿本身（它有 service/payment_test.go 那一套），
+		// 而是为了让"这条回调没有记下任何一笔钱"成为一个**数得出来**的断言：
+		// 表不存在时"没记上"与"没地方记"在计数上长成同一个样子（relation does not exist）。
+		&model.Payment{},
+		// bills 同理，且它是**前置条件**那一格：回款要冲一张应收，而 webhook 的入参里
+		// 只有 bill_id。没有这张表，"腿没装配"与"库里没这张单"都红在同一个地方（见
+		// order_webhook_payment_wiring_test.go）。
+		&model.Bill{},
 	)
 	db.SetTestDB(database)
 	return database

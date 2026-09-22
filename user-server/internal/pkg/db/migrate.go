@@ -342,6 +342,11 @@ func allModels() []any {
 		// 话，而商机的下游（漏斗、闭环率）全部读成 0 且无人报错（ApprovalRequest/HumanTask 同此）。
 		&model.Opportunity{},
 		&model.PasswordHistory{},
+		// Payment（表 payments）：T-P7-02 / N-6 回款域第二层，bills 那张"应收"的**唯一操作数**。
+		// 登记理由与 Bill 同一条而更静：入账是渠道回调驱动的，表没建时对面没有人在看着报错，
+		// 只有重试三轮之后的一句 Warn —— 而后果不是"少一行记录"，是**这张应收永远收不齐**
+		// （settled 恒 0、状态永远停在 open），逾期扫描与赢单跃迁（T-P7-03/04）读的正是那个差。
+		&model.Payment{},
 		&model.RagMetricsDaily{},
 		// Quote / QuoteLineItem（表 quotes / quote_line_items）：T-P6-01 / N-5 报价域第一层。
 		// 与 Opportunity 同一句理由登记：本卡只交付列与索引形状，生成方在 T-P6-02。
@@ -435,6 +440,9 @@ func AutoMigrate() *gorm.DB {
 	postMigrateOpportunityClueUniqueIndex(DB)
 	postMigrateObsDefaultUniqueIndex(DB)
 	postMigrateDropLegacyPlaintextResetTokens(DB)
+	// 排在终校验之后：它动的是**存量形状**（AutoMigrate 只加不删的那一半），
+	// 表都没建出来时这一句只会得到一句被吞掉的告警，而那句话会被读成"旧索引删掉了"。
+	postMigrateDropLegacyExternalOrderKey(DB)
 
 	return DB
 }
@@ -580,6 +588,47 @@ func postMigrateDropLegacyPlaintextResetTokens(db *gorm.DB) {
 		return
 	}
 	logger.Warn(fmt.Sprintf("post-migrate: 已硬删 %d 条旧版明文密码重置令牌（哈希化后这些链接本就永不匹配，用户需重新走一次忘记密码）", res.RowsAffected))
+}
+
+// postMigrateDropLegacyExternalOrderKey 删掉"改键之前"那把 external_orders.order_id 单列唯一索引。
+//
+// 为什么必须有这一步（G15 第①条的收尾，也是本钩子存在的全部理由）：幂等键改成
+// (platform, order_id) 只写在模型标签上，而 **AutoMigrate 只加不删** —— 已部署的库里
+// 那把 `uni_external_orders_order_id` 还在、还在生效。于是"改键"在存量库上是一次
+// **看起来完成了**的动作：新索引建出来了，标签也改了，而两家平台用同一个订单号时
+// 第二条回调仍然撞 23505 —— 一条签名完全合法的推送继续被静默丢掉，只是这次连"为什么"都没人知道。
+//
+// 顺序是判据的一部分：先 DROP 旧索引，再确保复合唯一在位，最后按**形状**（indisunique）验一次。
+// 反过来的话，CREATE 那一步在旧约束还在的库里照样成功（它只按名字对账），
+// 于是日志会报"已就绪"而旧键仍在拦人 —— 与 N-36 那条"名字被非唯一历史索引占住"是同一族谎报。
+//
+// 索引名一律取自 model 的两枚常量，不在这里再写字面量：常量改名而这里没改，
+// DROP 会打在一个不存在的名字上并**静默成功**（IF EXISTS 对拼错的名字也是"执行成功"）。
+//
+// 建不成只 Warn 不 panic：这一格失败的后果是"跨平台同号仍被拦"（即改键之前的既有行为），
+// 而 panic 的后果是整个服务起不来 —— 前者是存量缺陷未修，后者是把一个域的问题升级成全站。
+func postMigrateDropLegacyExternalOrderKey(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	if err := db.Exec("DROP INDEX IF EXISTS " + model.ExternalOrderLegacyOrderIDIndex).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: DROP 旧 %s 失败(跨平台订单号仍会被这把旧键拦住): %v",
+			model.ExternalOrderLegacyOrderIDIndex, err))
+		return
+	}
+	const ddl = "CREATE UNIQUE INDEX IF NOT EXISTS " + model.ExternalOrderScopedUniqueIndex +
+		" ON external_orders (platform, order_id)"
+	if err := db.Exec(ddl).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: CREATE %s 失败(存量里可能有同平台重复订单号，需人工清重后重启): %v",
+			model.ExternalOrderScopedUniqueIndex, err))
+		return
+	}
+	if why := verifyUniqueIndex(db, model.ExternalOrderScopedUniqueIndex); why != "" {
+		logger.Warn("post-migrate: " + why + " ⇒ 订单幂等键的库级兜底并未生效，需人工 DROP 那枚同名非唯一索引后重启")
+		return
+	}
+	logger.Info(fmt.Sprintf("post-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 %s 已删除",
+		model.ExternalOrderLegacyOrderIDIndex))
 }
 
 func postMigrateMessageHubUniqueIndex() {

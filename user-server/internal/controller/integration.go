@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -355,11 +357,48 @@ func (c *IntegrationController) ReceiveOrderWebhook(ctx *gin.Context) {
 	if status == "" {
 		status = "unknown"
 	}
-	if err := c.integrationService.UpsertOrderFromWebhook(ctx.Request.Context(), platform, orderID, status, body); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	res, err := c.integrationService.UpsertOrderFromWebhook(ctx.Request.Context(), platform, orderID, status, body)
+	if err != nil {
+		orderWebhookFailure(ctx, err)
 		return
 	}
-	response.Success(ctx, gin.H{"platform": platform, "order_id": orderID, "status": status}, "已接收并处理")
+	response.Success(ctx, gin.H{
+		"platform": platform, "order_id": orderID, "status": status,
+		"payment_present": res.PaymentPresent,
+		"payment":         res.Payment,
+	}, "已接收并处理")
+}
+
+// orderWebhookFailure 把订单回调这一腿的错误分档成 HTTP 状态码。
+//
+// 分档只有一把尺子：**渠道这一侧该怎么办**。
+//   - 4xx ⇒ 重投同一份载荷永远修不好（改载荷、或先去处理那张应收），渠道应当停止重试并报警；
+//   - 409 ⇒ 我们这边的数据与它报的对不上（单子作废了、这个流水号已经是另一笔钱了）。
+//     与 400 分开是因为载荷本身没坏：修的是数据，改不动载荷；
+//   - 503 ⇒ 回款腿没装配起来，这是部署的事，**渠道重投正是我们要的**（钱不能因为少配一个
+//     构造函数就永远进不来）；
+//   - 其余走 ErrorFromDB：ErrPaymentStatusStuck（钱已入账而状态没落）与真的存储故障都落 500，
+//     前两类的处置动作都是"人工看这一笔"，绝不能被压成 4xx 让渠道以为不用重投了。
+//
+// 全部保留 err.Error() 原文：这一腿的文案里写着"镜像有没有动过"，
+// 那是渠道决定重投是否安全的唯一依据。
+func orderWebhookFailure(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrPaymentInputInvalid):
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrPaymentBillNotFound):
+		response.Error(ctx, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrPaymentBillVoided),
+		errors.Is(err, service.ErrPaymentRefReuse),
+		errors.Is(err, service.ErrPaymentCurrencyMismatch),
+		errors.Is(err, service.ErrPaymentAlreadyReversed),
+		errors.Is(err, service.ErrPaymentNothingToReverse):
+		response.Error(ctx, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrPaymentServiceUnavailable):
+		response.Error(ctx, http.StatusServiceUnavailable, err.Error())
+	default:
+		response.ErrorFromDB(ctx, err, err.Error())
+	}
 }
 
 // GetTemplates 第三方对接模板列表（integration_templates 表）

@@ -47,7 +47,8 @@ var ErrBillNotFound = errors.New("bill: 账单不存在")
 const billQuoteRowConstraint = "uq_bills_quote_row"
 
 // BillRepository bills 读写接口。方法集由 bill_test.go 的
-// TestBillRepository_MethodSetIsExactlyTheDocumentedFive 逐字钉住。
+// TestBillRepository_MethodSetIsExactlyTheDocumentedSix 逐字钉住（六格里最后一格
+// ListByQuoteID 是 T-P7-02 补的，放宽理由写在同一条用例的注释里）。
 type BillRepository interface {
 	// Available 报告是否持有可用 DB 句柄（装配回显用，不用于吞错）。
 	Available() bool
@@ -69,6 +70,12 @@ type BillRepository interface {
 	// GetByQuoteRowID 按"哪一版报价"读取——重复派生时的幂等复用走这条路。
 	// 不存在返回 (nil, nil)。
 	GetByQuoteRowID(ctx context.Context, quoteRowID string) (*model.Bill, error)
+
+	// ListByQuoteID 按**逻辑报价号**捞出这张报价单开过的全部应收，按派生早晚升序。
+	// T-P7-02 补的那一格（对账读口："这张报价开了几张应收、各欠多少"）；
+	// 放宽接口形状的判据、以及"为什么这一格不构成列全表"，逐字见 bill_test.go 的
+	// TestBillRepository_MethodSetIsExactlyTheDocumentedSix。零命中是空切片 + nil error。
+	ListByQuoteID(ctx context.Context, quoteID string) ([]*model.Bill, error)
 }
 
 type billRepo struct {
@@ -223,6 +230,30 @@ func (r *billRepo) GetByQuoteRowID(ctx context.Context, quoteRowID string) (*mod
 	var row model.Bill
 	err := r.db.WithContext(ctx).First(&row, "quote_row_id = ?", quoteRowID).Error
 	return billOrNil(&row, err)
+}
+
+// ListByQuoteID 这张报价单开过的全部应收，按派生早晚（created_at，打平时按行号）升序。
+//
+// 空号先拒：它若进到这里就变成 `WHERE quote_id = ”` 的一次真实查询，而 quote_id 这一列
+// 的唯一守卫住在 Create —— 放行等于给"没有条件的读"留了一条后门（同一判据见
+// payment 仓储的 SumSettledByBill）。
+//
+// 零命中回空切片而不是 error：对账读的是"这张报价开过几张"，一张没开是合法答案。
+func (r *billRepo) ListByQuoteID(ctx context.Context, quoteID string) ([]*model.Bill, error) {
+	if err := r.require(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(quoteID) == "" {
+		return nil, errors.New("bill repository: 空 quote_id 不是读取条件（它会退化成「读全表」）")
+	}
+	var rows []*model.Bill
+	if err := r.db.WithContext(ctx).
+		Where("quote_id = ?", quoteID).
+		Order("created_at ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // billOrNil 把"没有这一行"读成 (nil, nil)，其余错误原样上抛。

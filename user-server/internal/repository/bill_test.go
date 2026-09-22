@@ -11,13 +11,16 @@
 //  4. 跃迁是 CAS：`WHERE id = ? AND status = ?` 起点过期不生效，且写集合只有
 //     status + updated_at —— 金额列如果能被这条路径顺手改到，对账就没主体了；
 //  5. 接口形状即"账单不可改写"：没有 Delete、没有改内容列的方法；
-//  6. 缺句柄时 Available 为假、写入明确报错而不是 panic。
+//  6. 缺句柄时 Available 为假、写入明确报错而不是 panic；
+//  7. 按逻辑报价号捞"这张报价开过几张应收"（T-P7-02 的对账读口）：命中零行是合法
+//     答案而不是错误，空号必须拒（放行等于把这条降级成全表扫）。
 //
 // 与 quotes / opportunities 同一取向：本卡刻意**没有内存版底座** ——
 // 一旦有影子实现，"同一版被派生过两次"就永远测不出来，而那正是 AC① 的全部内容。
 //
 // 方法集与 model 标签的对应关系：
 //   - Create / GetByID / GetByQuoteRowID / UpdateStatus 四条对应 bills 的四处列；
+//   - ListByQuoteID 是 T-P7-02 补的那一格批量读（判据见方法集用例的注释）；
 //   - Available 与 require 是装配回显与半装配守卫（同 quote 仓储的形状）。
 package repository
 
@@ -322,16 +325,24 @@ func TestBillRepository_UpdateStatusIsCompareAndSet(t *testing.T) {
 	}
 }
 
-// TestBillRepository_MethodSetIsExactlyTheDocumentedFive 接口形状即"账单不可改写"。
+// TestBillRepository_MethodSetIsExactlyTheDocumentedSix 接口形状即"账单不可改写"。
 //
 // 反射比方法名清单，多一个少一个都红：
 //   - 多出 Save/Update/Delete 的那一天，"这一张应收金额从没变过"这句话就作废了；
 //   - 少了 GetByQuoteRowID 的那一天，重复派生的幂等通路就没脚可走；
-//   - 刻意**没有**任何 List/分页方法：账单的第一个批量读方是 T-P7-03 的逾期扫描，
-//     那一条查询的形状（status IN (…) ∧ due_at）会决定要哪个索引、要不要游标。
-//     在这里先建一个 ListByOpportunity，就是把一个还没有读方的形状钉成契约。
-func TestBillRepository_MethodSetIsExactlyTheDocumentedFive(t *testing.T) {
-	want := []string{"Available", "Create", "GetByID", "GetByQuoteRowID", "UpdateStatus"}
+//   - 多出任何**不带键**的读口（All / List / ListAll）的那一天，等于开出
+//     "任何人可看全公司的应收"—— bills 没有归属列（判据见 model/bill.go 与
+//     router/bill_routes_test.go 那条 GET /api/bill 的 404 探针）。
+//
+// 【T-P7-02 在这里放宽过一格，理由要留在表上】T-P7-01 交付时 banned 里含 "List"，
+// 那句的完整前提是"账单的第一个批量读方是 T-P7-03 的逾期扫描，先建 List 就是钉一个
+// 没有读方的形状"。读方今天真的来了，而且是按**逻辑报价号**来的（对账要答"这张报价
+// 开了几张应收、各欠多少"，见本卡执行结果结转的遗留①）。所以放的是
+// ListByQuoteID 这一格带键的读，"List" 这个前缀本身不再判红 —— 但带键这件事就是那道门：
+// 签名里必须收 quoteID，空串在仓储层直接拒（用例 TestBillRepository_ListByQuoteID
+// 守的是这一条），于是"顺手写成没有条件的 List"依然落不进接口。
+func TestBillRepository_MethodSetIsExactlyTheDocumentedSix(t *testing.T) {
+	want := []string{"Available", "Create", "GetByID", "GetByQuoteRowID", "ListByQuoteID", "UpdateStatus"}
 	st := reflect.TypeOf((*BillRepository)(nil)).Elem()
 	if st.NumMethod() != len(want) {
 		t.Fatalf("BillRepository 方法数 %d ≠ %d（清单见用例注释）", st.NumMethod(), len(want))
@@ -343,11 +354,132 @@ func TestBillRepository_MethodSetIsExactlyTheDocumentedFive(t *testing.T) {
 	}
 	for i := 0; i < st.NumMethod(); i++ {
 		name := st.Method(i).Name
-		for _, banned := range []string{"Save", "Delete", "Upsert", "List", "Find", "First", "All"} {
+		for _, banned := range []string{"Save", "Delete", "Upsert", "Find", "First", "All"} {
 			if strings.HasPrefix(name, banned) {
 				t.Errorf("接口里出现了 %s：账单是凭证表，改写与抹除都不在本卡的接口形状里", name)
 			}
 		}
+		// 放开了 List 前缀，但没放开"无键的 List"：任何 List* 方法必须收一个字符串键。
+		if strings.HasPrefix(name, "List") {
+			m, _ := st.MethodByName(name)
+			sig := m.Type
+			if sig.NumIn() != 2 || sig.In(0).String() != "context.Context" || sig.In(1).Kind() != reflect.String {
+				t.Errorf("%s 的签名不是 (context.Context, string)：不带键的批量读等于列全表", name)
+			}
+		}
+	}
+}
+
+// TestBillRepository_ListByQuoteID T-P7-02 的对账读口：按逻辑报价号捞整串应收。
+//
+// 三条判据各挡一种坏法：
+//   - 只回属于那一张报价的行 —— 多回一行就是"把别人的应收算进这份对账"；
+//   - 零命中回空切片且 nil error —— "这张报价还没开过应收"是合法答案，
+//     报成 error 的话调用方会把它读成"库查不动"，然后要么重试要么报警；
+//   - 空号必须拒 —— 它若被放行，`WHERE quote_id = ”` 今天恒零行看起来人畜无害，
+//     而只要库里有一行 quote_id 是空串（列上没有 NOT NULL 之外的约束，守卫住在
+//     Create 而老数据可能更早），这条查询就变成"把所有空号账单捞给某一个调用方"。
+//     同一条理由见 payment 仓储的 SumSettledByBill。
+func TestBillRepository_ListByQuoteID(t *testing.T) {
+	db := setupBillTestDB(t)
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	repo := NewBillRepositoryWithDB(db)
+	ctx := context.Background()
+
+	// 同一张报价的三版（三个不同版本行）开出三张应收，另两张属于别的报价单。
+	fixture := []struct {
+		id, quoteID, rowID string
+		created            time.Time
+	}{
+		{"b_l_3", "QT-L", "q_l_v3", time.Date(2026, 10, 15, 1, 0, 0, 0, time.UTC)},
+		{"b_l_1", "QT-L", "q_l_v1", time.Date(2026, 10, 13, 1, 0, 0, 0, time.UTC)},
+		{"b_l_2", "QT-L", "q_l_v2", time.Date(2026, 10, 14, 1, 0, 0, 0, time.UTC)},
+		{"b_x_1", "QT-X", "q_x_v1", time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC)},
+	}
+	for _, f := range fixture {
+		row := newBillRow(f.id, f.quoteID, f.rowID, "opp-"+f.quoteID)
+		row.CreatedAt = f.created
+		row.UpdatedAt = f.created
+		if err := repo.Create(ctx, row); err != nil {
+			t.Fatalf("写入夹具 %s 失败: %v", f.id, err)
+		}
+	}
+
+	got, err := repo.ListByQuoteID(ctx, "QT-L")
+	if err != nil {
+		t.Fatalf("按报价号捞账单失败: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("捞回 %d 行，期望 3（每多一行就是别人的应收进了这份对账）：%+v", len(got), billIDsOf(got))
+	}
+	// 流水顺序：派生早晚即账龄早晚，对账读的是这个顺序。
+	if want := []string{"b_l_1", "b_l_2", "b_l_3"}; !equalStringSlices(billIDsOf(got), want) {
+		t.Errorf("顺序不是按 created_at 升序：%v，期望 %v", billIDsOf(got), want)
+	}
+	for _, b := range got {
+		if b.QuoteID != "QT-L" {
+			t.Errorf("捞回了别家的账单 %+v", b)
+		}
+	}
+
+	empty, err := repo.ListByQuoteID(ctx, "QT-没有这个号")
+	if err != nil {
+		t.Errorf("零命中报成了错误（\"还没开过应收\"是合法答案）: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("零命中的报价号捞回 %d 行: %v", len(empty), billIDsOf(empty))
+	}
+
+	for _, blank := range []string{"", "   ", "\t"} {
+		if _, err := repo.ListByQuoteID(ctx, blank); err == nil {
+			t.Errorf("空报价号 %q 被放行：它会把这条查询降级成一次没有条件的读", blank)
+		}
+	}
+}
+
+// TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt 同一时刻派生的两张按行键排。
+//
+// 这条不是装饰：service 层的账单号是 `<b_unixnano_seq>`，同一纳秒内的两次派生只有
+// seq 那一截分得出先后，而 seq 是十进制 —— 所以"按 id 排"只在**同一前缀、同一位数**时
+// 才等于按 seq 排。用例因此不去断言"字典序=时间序"这件事（那是生成器的事，
+// 住在 service/bill_test.go），只断言一次：created_at 打平时顺序仍然稳定且可复算。
+func TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt(t *testing.T) {
+	db := setupBillTestDB(t)
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	repo := NewBillRepositoryWithDB(db)
+	ctx := context.Background()
+
+	same := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
+	for _, id := range []string{"b_t_2", "b_t_1"} {
+		row := newBillRow(id, "QT-T", "q_"+id, "opp-t")
+		row.CreatedAt = same
+		row.UpdatedAt = same
+		if err := repo.Create(ctx, row); err != nil {
+			t.Fatalf("写入夹具 %s 失败: %v", id, err)
+		}
+	}
+	var first, second []string
+	for i := 0; i < 2; i++ {
+		got, err := repo.ListByQuoteID(ctx, "QT-T")
+		if err != nil {
+			t.Fatalf("第 %d 次捞取失败: %v", i+1, err)
+		}
+		ids := billIDsOf(got)
+		if i == 0 {
+			first = ids
+			continue
+		}
+		second = ids
+	}
+	if !equalStringSlices(first, second) {
+		t.Errorf("两次捞取顺序不稳定：%v vs %v（对账两边各读一次就对不上）", first, second)
+	}
+	if !equalStringSlices(first, []string{"b_t_1", "b_t_2"}) {
+		t.Errorf("created_at 打平时没按行键排：%v", first)
 	}
 }
 
@@ -397,4 +529,33 @@ func TestBillRepository_ConstraintNameIsTheOneOnTheModel(t *testing.T) {
 		t.Errorf("quote_row_id 上的唯一索引名 %v，与仓储判据 %q 不同源：23505 那一步会认不出幂等键",
 			names, billQuoteRowConstraint)
 	}
+}
+
+// —— 本文件的小工具 ——————————————————————————————————————————
+
+// billIDsOf 把一批账单行折成行号序列：断言顺序与集合时只比这一列，
+// 失败输出里就不会混进金额与时间戳这些和判据无关的噪声。
+func billIDsOf(rows []*model.Bill) []string {
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r == nil {
+			ids = append(ids, "<nil>")
+			continue
+		}
+		ids = append(ids, r.ID)
+	}
+	return ids
+}
+
+// equalStringSlices 逐项比且比长度：顺序是判据的一部分，所以不复用 sort + 集合比。
+func equalStringSlices(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

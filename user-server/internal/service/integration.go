@@ -39,14 +39,31 @@ type IntegrationService struct {
 	orderRepo        *repository.ExternalOrderRepository
 	productRepo      *repository.ExternalProductRepository
 	webhookEventRepo *repository.WebhookEventRepository
+
+	// payments 回款腿（T-P7-02）。**不在构造函数里 new**：PaymentService 要的是
+	// 两个仓储的注入（payments + bills），而本服务是"全局 DB 句柄"那一代的老形状。
+	// 生产上这一格由构造函数从全局登记处取（见下面的 GlobalPaymentService 那一支），
+	// 测试里可以再用 SetOrderPaymentSink 换成假腿（判据：中间那一格要看得清）。
+	// 没塞 ⇒ 带 payment 格子的回调明确报错（见 UpsertOrderFromWebhook），不静默丢一笔钱。
+	payments OrderPaymentSink
 }
 
 var (
 	_ *repository.IntegrationAccountRepository
 )
 
+// NewIntegrationService 构造。回款腿在**这一次**取全局：与路由侧同一条口径
+// （装配点必须先于构造，判据见 app.InitPaymentRuntime 的文件头与 router.go 的顺序）。
+//
+// 为什么不在每次回调里现取全局：那会让请求路径（含 webhook 的处理协程）读包级全局，
+// 而本仓对这一类站点有一道静态门（scripts/check-async-global-read.py 的零条目基线）。
+// 构造函数在这里跑一次，正好躲开那一格——代价是"装配晚于构造"会永久记不到钱，
+// 所以 router.go 里那两行的顺序由 order_webhook_payment_wiring_test.go 与它自己的用例守着。
+//
+// 判空写成"取出来再判"而不是直接赋值：全局里放着的可能是 typed-nil，
+// 赋给接口格子之后 `!= nil` 为真，"有没有腿"这一格从此没有可信答案（判据见那一份用例的 ②）。
 func NewIntegrationService() *IntegrationService {
-	return &IntegrationService{
+	svc := &IntegrationService{
 		accountRepo:      repository.NewIntegrationAccountRepository(),
 		syncLogRepo:      repository.NewSyncLogRepository(),
 		customerRepo:     repository.NewExternalCustomerRepository(),
@@ -54,6 +71,21 @@ func NewIntegrationService() *IntegrationService {
 		productRepo:      repository.NewExternalProductRepository(),
 		webhookEventRepo: repository.NewWebhookEventRepository(),
 	}
+	if pay := GlobalPaymentService(); pay != nil {
+		svc.payments = pay
+	}
+	return svc
+}
+
+// SetOrderPaymentSink 注入回款腿；传 nil 即摘掉（测试与"账单域没启用"的环境）。
+//
+// 老规矩：晚于构造注入的依赖一律显式走 setter（与 SetWebhookEventRepoDB 那族同一个理由 ——
+// 构造函数不改签名，就不会连带改掉十几个调用点）。
+func (s *IntegrationService) SetOrderPaymentSink(sink OrderPaymentSink) {
+	if s == nil {
+		return
+	}
+	s.payments = sink
 }
 
 type Platform string
@@ -639,9 +671,18 @@ func (s *IntegrationService) syncTaobaoOrders(ctx context.Context, account *mode
 			Items:     string(itemsJSON),
 		}
 
-		existing, _ := s.orderRepo.GetByOrderID(ctx, account.Platform, t.TID)
+		existing, lookErr := s.orderRepo.GetByOrderID(ctx, account.Platform, t.TID)
+		if lookErr != nil {
+			// 读不动库时**不猜**它是新单：老代码 `existing, _ :=` 把读故障读成"没见过"，
+			// 于是走 Create —— 轻则撞唯一键丢单，重则插出同一单的第二行（G15 第④条）。
+			logger.Errorf("[Integration] 订单读取失败, 本轮跳过(下轮重同步) tid=%s: %v", t.TID, lookErr)
+			continue
+		}
 		if existing != nil {
 			order.ID = existing.ID
+			// 账单线索由 webhook 的回款腿写，同步这一路不认识它：不抄回来就等于每次拉取
+			// 把"这单挂在哪张应收上"抹一次。
+			order.BillID = existing.BillID
 			if e := s.orderRepo.Update(ctx, order); e != nil {
 				logger.Errorf("[Integration] 订单更新失败: %v", e)
 				continue
@@ -793,9 +834,14 @@ func (s *IntegrationService) syncJDOrders(ctx context.Context, account *model.In
 			Items:     string(itemsJSON),
 		}
 
-		existing, _ := s.orderRepo.GetByOrderID(ctx, account.Platform, o.OrderID)
+		existing, lookErr := s.orderRepo.GetByOrderID(ctx, account.Platform, o.OrderID)
+		if lookErr != nil {
+			logger.Errorf("[Integration] 订单读取失败, 本轮跳过(下轮重同步) orderId=%s: %v", o.OrderID, lookErr)
+			continue
+		}
 		if existing != nil {
 			order.ID = existing.ID
+			order.BillID = existing.BillID // 理由同上：同步腿不认识账单线索，不许抹
 			if e := s.orderRepo.Update(ctx, order); e != nil {
 				logger.Errorf("[Integration] 订单更新失败: %v", e)
 				continue
@@ -1062,31 +1108,49 @@ func (s *IntegrationService) GetExternalOrdersByCustomer(ctx context.Context, ph
 	return s.orderRepo.GetByCustomer(ctx, phone, name)
 }
 
-// UpsertOrderFromWebhook 处理电商订单状态推送（近实时刷新本地订单镜像）。
+// UpsertOrderFromWebhook 处理电商订单状态推送（近实时刷新本地订单镜像），并接住载荷里那一笔钱。
 //
 // 这是"拉取同步(B)"之外的"事件推送(C)"补强：电商订单状态变更时主动推送，
 // 本系统记录 WebhookEvent 并 upsert ExternalOrder，使客服看到的订单状态与电商一致（防漂移）。
 // 订单镜像为只读，客服不创建/履约订单。
-func (s *IntegrationService) UpsertOrderFromWebhook(ctx context.Context, platform, orderID, status string, raw map[string]any) error {
-	webhookEvent := &model.WebhookEvent{
-		Platform:  platform,
-		EventID:   fmt.Sprintf("%s:%s:%d", platform, orderID, time.Now().UnixNano()),
-		EventType: "order.updated",
-		RawData:   fmt.Sprintf("%v", raw),
-		Processed: true,
+//
+// T-P7-02 在这一条腿上做了两类事：**接回款**（G15 第③条：钱与账单之间原来没有任何一行数据连着）
+// 和**修四个既有的静默坏法**。顺序是本函数最容易被人日后"顺手优化"掉的地方，所以逐段写明：
+//
+//	① 事件留痕（内容派生键，见 orderWebhookEventKey）；
+//	② 读镜像 —— 读故障**必须**中止：老代码 `existing, _ :=` 把"库查不动"读成"第一次见这单"，
+//	   于是走 Create（G15 第④条）；
+//	③ 写镜像；
+//	④ 回款腿 —— 排在镜像**之后**：一单先要存在，钱才谈得上挂在它身上，
+//	   而这一腿可能拒（账单不存在/币种不符/流水号复用）。
+//
+// ④ 失败时本函数**回错误但保留镜像**：镜像比回款便宜（它是外部事实的副本，重推即可修），
+// 而回款那一腿的错误全部是"载荷或数据坏了"，让渠道看见才有救。
+// 两个判据因此都写进错误文案里：钱记没记上、镜像动没动 —— 后者决定重推是否安全。
+func (s *IntegrationService) UpsertOrderFromWebhook(ctx context.Context, platform, orderID, status string, raw map[string]any) (*OrderWebhookResult, error) {
+	if err := s.recordOrderWebhookEvent(ctx, platform, orderID, status, raw); err != nil {
+		return nil, err
 	}
-	_ = s.webhookEventRepo.Create(ctx, webhookEvent)
-	existing, _ := s.orderRepo.GetByOrderID(ctx, platform, orderID)
-	o := &model.ExternalOrder{
-		Platform: platform,
-		OrderID:  orderID,
+
+	existing, err := s.orderRepo.GetByOrderID(ctx, platform, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("读订单镜像失败（platform=%s order_id=%s，一行都没改，重推可修）：%w", platform, orderID, err)
 	}
-	if existing != nil {
-		o = existing
-		o.Platform = platform
-		o.OrderID = orderID
+
+	// 解析先于写：它不碰库，且"这笔钱长什么样"要参与镜像上的 bill_id 那一格。
+	in, present, perr := ParseOrderWebhookPayment(raw, platform, orderID)
+	res := &OrderWebhookResult{PaymentPresent: present}
+
+	created := existing == nil
+	o := existing
+	if created {
+		o = &model.ExternalOrder{Platform: platform, OrderID: orderID}
 	}
-	o.Status = status
+	// 只挡"往回"这一格，别的列照旧更新：镜像的价值在于它尽量新，
+	// 而一次迟到的 created 把已付的单擦回待付是假事实（G15 第②条）。
+	if !model.ExternalOrderStatusRegresses(o.Status, status) {
+		o.Status = status
+	}
 	if raw != nil {
 		if v, ok := raw["order_no"].(string); ok && v != "" {
 			o.OrderNo = v
@@ -1097,11 +1161,11 @@ func (s *IntegrationService) UpsertOrderFromWebhook(ctx context.Context, platfor
 		if v, ok := raw["user_name"].(string); ok && v != "" {
 			o.UserName = v
 		}
-		if v, ok := raw["total_amount"].(float64); ok {
-			o.TotalAmount = int64(v)
+		if v, ok := webhookMoneyCent(raw["total_amount"]); ok {
+			o.TotalAmount = v
 		}
-		if v, ok := raw["pay_amount"].(float64); ok {
-			o.PayAmount = int64(v)
+		if v, ok := webhookMoneyCent(raw["pay_amount"]); ok {
+			o.PayAmount = v
 		}
 		if v, ok := raw["items"].(string); ok && v != "" {
 			o.Items = v
@@ -1112,10 +1176,89 @@ func (s *IntegrationService) UpsertOrderFromWebhook(ctx context.Context, platfor
 			o.OrderTime = t
 		}
 	}
-	if existing != nil {
+	// 只在真的解析出账单号时写这一格：**不**把已有的值抹成空串。
+	// 抹掉等于把"这单付过账"的来路线索洗掉，而后续那条不带 payment 的普通状态推送
+	// 完全没有资格声明"这单与账单无关"。
+	if present && perr == nil && in.BillID != "" {
+		o.BillID = in.BillID
+	}
+	if err := s.saveOrderMirror(ctx, o, created); err != nil {
+		return nil, fmt.Errorf("写订单镜像失败（platform=%s order_id=%s）：%w", platform, orderID, err)
+	}
+
+	if present {
+		if err := s.bookOrderPayment(ctx, res, in, perr); err != nil {
+			return res, err
+		}
+	}
+	return res, nil
+}
+
+// recordOrderWebhookEvent 落一条事件留痕。
+//
+// 撞到 event_id 唯一键 ⇒ 同一条通知的第二次投递，**继续处理**而不是报错：
+// 这一格只是账本，不是闸门（拿它当闸门会让"第一次写坏了、重推被挡在门外"变成死局）。
+// 这里只按 SQLSTATE 23505 判重、不核索引名，与 bills/payments 那一族不同：
+// 那两族认错 23505 会把一次该失败的写入吞成成功复用（吞的是钱），
+// 而本表认错的最坏结果是"少留一行痕"，镜像与回款两腿都照常走。
+// Processed 恒为 true 是**必须**的：webhook_events 上 processed=false 是恢复扫描器的待办队列，
+// 订单事件由渠道自己重投，塞进那个队列只会让它按另一套契约被反复回放。
+func (s *IntegrationService) recordOrderWebhookEvent(ctx context.Context, platform, orderID, status string, raw map[string]any) error {
+	event := &model.WebhookEvent{
+		Platform:  platform,
+		EventID:   orderWebhookEventKey(platform, orderID, status, raw),
+		EventType: "order.updated",
+		RawData:   orderWebhookCanonicalText(raw),
+		Processed: true,
+	}
+	if err := s.webhookEventRepo.Create(ctx, event); err != nil {
+		if repository.IsDuplicateKeyErr(err) {
+			return nil
+		}
+		return fmt.Errorf("webhook 事件留痕失败（订单镜像一行都没改，重推可修）：%w", err)
+	}
+	return nil
+}
+
+// saveOrderMirror 写镜像那一行。
+//
+// created 为假时直接 Save（整行覆盖：这一行本来就是我们从它出发改的）。
+// 为真时撞唯一键不是失败而是**并发**：两条同号首次投递同时读到"没有这一行"，
+// 后写的那条被 uq_external_orders_platform_order_id 挡下。判据是回读一次：
+// 读得回来 ⇒ 那一行确实存在了，改走更新；读不回来（或读又出错）⇒ 不是并发，把 Create 的错误回出去。
+func (s *IntegrationService) saveOrderMirror(ctx context.Context, o *model.ExternalOrder, created bool) error {
+	if !created {
 		return s.orderRepo.Update(ctx, o)
 	}
-	return s.orderRepo.Create(ctx, o)
+	err := s.orderRepo.Create(ctx, o)
+	if err == nil {
+		return nil
+	}
+	back, gerr := s.orderRepo.GetByOrderID(ctx, o.Platform, o.OrderID)
+	if gerr != nil || back == nil {
+		return err
+	}
+	o.ID = back.ID
+	return s.orderRepo.Update(ctx, o)
+}
+
+// bookOrderPayment 回款腿：把载荷里那一笔钱交给回款服务，并把三种"进不去"分开说清。
+//
+// 三条分支的共同点：**都回错误**，都不静默。少记一笔钱的代价是"应收挂着、客户说付过了"，
+// 而对账时两边都有数据、只差我们这一行 —— 那种账只能在报错的当天查。
+func (s *IntegrationService) bookOrderPayment(ctx context.Context, res *OrderWebhookResult, in RecordPaymentInput, perr error) error {
+	if perr != nil {
+		return fmt.Errorf("载荷报了钱而这一笔没被记下（订单镜像已写入，重推同一份载荷只补这一腿）：%w", perr)
+	}
+	if s.payments == nil || !s.payments.Available() {
+		return fmt.Errorf("回款腿未装配，载荷里的这笔钱没有入账（订单镜像已写入；装配修好后重推同一份载荷即可补上）：%w", ErrPaymentServiceUnavailable)
+	}
+	receipt, err := s.payments.RecordPayment(ctx, in)
+	if err != nil {
+		return fmt.Errorf("回款腿拒了这笔钱（bill_id=%s channel_ref=%s，订单镜像已写入）：%w", in.BillID, in.ChannelRef, err)
+	}
+	res.Payment = receipt
+	return nil
 }
 
 func parseWebhookTime(v any) (*time.Time, bool) {

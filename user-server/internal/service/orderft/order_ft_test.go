@@ -26,7 +26,7 @@ func TestOrderWebhookAndCustomerLookup_FT(t *testing.T) {
 		name  = "功能测试客户"
 	)
 
-	if err := svc.UpsertOrderFromWebhook(ctx, "taobao", "FT20260723001", "已付款", map[string]any{
+	if _, err := svc.UpsertOrderFromWebhook(ctx, "taobao", "FT20260723001", "已付款", map[string]any{
 		"order_no":     "NO-FT-001",
 		"user_phone":   phone,
 		"user_name":    name,
@@ -38,7 +38,7 @@ func TestOrderWebhookAndCustomerLookup_FT(t *testing.T) {
 		t.Fatalf("UpsertOrderFromWebhook(1st) failed: %v", err)
 	}
 
-	if err := svc.UpsertOrderFromWebhook(ctx, "taobao", "FT20260723001", "已完成", map[string]any{
+	if _, err := svc.UpsertOrderFromWebhook(ctx, "taobao", "FT20260723001", "已完成", map[string]any{
 		"user_phone": phone,
 		"user_name":  name,
 	}); err != nil {

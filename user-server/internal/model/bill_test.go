@@ -258,9 +258,18 @@ func billColumnName(f reflect.StructField, table string) string {
 
 // TestBillStatusTransitionsAreDeclared 跃迁表在模型层声明、在服务层执行（P7-02/04 消费）。
 //
-// 判据不是"表存在"，而是这几条具体的边在不在：**paid 之后不许再动**（结清的账单一改，
-// 回款与账龄两头同时对不上），以及 open→paid 必须**经过** partial 或不经过都行、
-// 但不许从 voided 回来（作废是收口，要重开就派生新的一张，留下两张说过程）。
+// 判据不是"表存在"，而是这几条具体的边在不在。本表在 T-P7-02 被**放宽过一次**，
+// 放宽的方向与理由要一起留在这里，否则下一个人会以为这是随手加的：
+//
+//	T-P7-01 交付时写死了"paid 是终态（出边为空）"，那句的完整前提是
+//	"没有任何一处能算出已收多少" —— 那时 payments 还不存在，"改一下 paid"
+//	只能凭人手，而人手改凭证正是那句注释要挡的东西。
+//	T-P7-02 把结清判据实现成 Σ 计入结清的回款行，于是 status 成了那个和的**函数**：
+//	一笔钱被渠道冲销之后，欠额回来了而账单还写着已结清，那才是"两头对不上"。
+//	所以回退边是这张表现在必需的，而"改一格要走 CAS"这件事仍然成立。
+//
+// 仍然禁的两侧：voided 无路可回（作废是收口，要重开就派生新的一张，留下两张说过程），
+// paid→voided 不许（结清过的应收要作废，等于用状态盖掉一次真实的收付历史）。
 func TestBillStatusTransitionsAreDeclared(t *testing.T) {
 	want := []struct {
 		from, to string
@@ -271,20 +280,27 @@ func TestBillStatusTransitionsAreDeclared(t *testing.T) {
 		{BillStatusPartial, BillStatusPaid, true},
 		{BillStatusOpen, BillStatusVoided, true},
 		{BillStatusPartial, BillStatusVoided, true},
-		{BillStatusPaid, BillStatusVoided, false},  // 结清的账单不许事后作废
-		{BillStatusVoided, BillStatusOpen, false},  // 作废不可逆
-		{BillStatusPaid, BillStatusPartial, false}, // 已收清不许回退
-		{BillStatusVoided, BillStatusPaid, false},
+		{BillStatusPaid, BillStatusVoided, false},    // 结清的账单不许事后作废
+		{BillStatusVoided, BillStatusOpen, false},    // 作废不可逆
+		{BillStatusVoided, BillStatusPaid, false},    // 作废不可逆
+		{BillStatusVoided, BillStatusPartial, false}, // 作废不可逆
+		// —— 回款冲销要能把钱退回到"还欠着"：下面三条边由 T-P7-02 开 ——
+		{BillStatusPaid, BillStatusPartial, true}, // 冲掉一部分
+		{BillStatusPartial, BillStatusOpen, true}, // 冲到一笔不剩
+		{BillStatusPaid, BillStatusOpen, true},    // 全额冲销（同一笔钱来过又全走了）
 	}
 	for _, tc := range want {
 		if got := BillStatusCanTransit(tc.from, tc.to); got != tc.ok {
 			t.Errorf("跃迁 %s→%s 应为 %v，实际 %v", tc.from, tc.to, tc.ok, got)
 		}
 	}
-	// 终态出边为空：与 approval_requests 的"改判无路"同一形状，要重来只能新建一行。
-	for _, terminal := range []string{BillStatusPaid, BillStatusVoided} {
-		if n := len(BillStatusNext(terminal)); n != 0 {
-			t.Errorf("%s 是终态却有 %d 条出边：终态有出边等于没有终态", terminal, n)
-		}
+	// voided 是唯一终态：出边为空。
+	if n := len(BillStatusNext(BillStatusVoided)); n != 0 {
+		t.Errorf("voided 是终态却有 %d 条出边：终态有出边等于没有终态", n)
+	}
+	// paid 不再要求出边为空（见上面的放宽理由），但它**不许自环**：
+	// 零位移跃迁在仓储层就被拒，这里若放行为是两张脸。
+	if BillStatusCanTransit(BillStatusPaid, BillStatusPaid) {
+		t.Error("paid→paid 被认成合法跃迁")
 	}
 }

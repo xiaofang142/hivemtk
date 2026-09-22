@@ -143,22 +143,29 @@ func BillStatusKnown(s string) bool {
 	return false
 }
 
-// billStatusTransitions 跃迁表：谁能到谁。**本卡只声明、不执行**（执行在 service，
-// 而真正会用到 partial/paid 的是 T-P7-02/04）。
+// billStatusTransitions 跃迁表：谁能到谁。**本表只声明、不执行**（执行在仓储的 CAS，
+// 决定权在 `WHERE id = ? AND status = ?` 那一条，见 repository/bill.go）。
 //
-// 三条边为什么在：
+// 这张表在 T-P7-02 被放宽过一次，放宽的方向与理由要一起留在表上，否则下一个人会
+// 以为那三条回退边是随手加的：T-P7-01 交付时 paid / partial 只进不出，那句的完整
+// 前提是"没有任何一处能算出已收多少"—— 那时 payments 还不存在，"改一下 paid"
+// 只能凭人手，而人手改凭证正是当初那句注释要挡的东西。
+// T-P7-02 把结清判据实现成 Σ 计入结清的回款行之后，status 成了那个和的**函数**：
+// 一笔钱被渠道冲销、欠额回来了而账单还写着已结清，那才是要挡的"两头对不上"。
+//
+// 出边逐条：
 //   - open→partial / open→paid：一次性付清是常态，不该被迫先过 partial；
-//   - partial→paid：回款累计到位（判据=求和等于 amount，在 T-P7-02）；
+//   - partial→paid：回款累计到位（判据=Σ 计入结清 ≥ amount）；
+//   - paid→partial / paid→open、partial→open：回款被冲销，欠额回来（见上面那段）；
 //   - open/partial→voided：人工收口，催收与对账都要能表达"这张不再主张"。
 //
-// 为什么 paid 与 voided 是终态（出边为空）：
-//   - 结清的账单一改，回款侧与账龄侧两头同时对不上，而 AC② 的对账恰好要读这两个数；
-//   - 作废不可逆 —— 要重来只能派生新的一张，留下两张说过程（与 approval_requests
-//     的"改判无路"同一形状：历史行不被覆盖，是这几张凭证类表共同的取向）。
+// 仍然禁的一侧是 voided：**作废不可逆** —— 要重来只能派生新的一张，留下两张说过程
+// （与 approval_requests 的"改判无路"同一形状：历史行不被覆盖，是这几张凭证类表共同的取向）。
+// paid→voided 同样禁：结清过的应收要作废，等于用一格状态盖掉一次真实发生过收付的历史。
 var billStatusTransitions = map[string][]string{
 	BillStatusOpen:    {BillStatusPartial, BillStatusPaid, BillStatusVoided},
-	BillStatusPartial: {BillStatusPaid, BillStatusVoided},
-	BillStatusPaid:    {},
+	BillStatusPartial: {BillStatusPaid, BillStatusOpen, BillStatusVoided},
+	BillStatusPaid:    {BillStatusPartial, BillStatusOpen},
 	BillStatusVoided:  {},
 }
 

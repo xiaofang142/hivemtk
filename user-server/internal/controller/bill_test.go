@@ -1,4 +1,4 @@
-// bill_test.go T-P7-01：账单出口的入参口径与哨兵分诊。
+// bill_test.go T-P7-01 + T-P7-02：账单出口的入参口径与哨兵分诊（写：派生；读：对账）。
 //
 // 服务层那 18 条钉的是"谁够得着写、什么顺序写"，本层钉的是另一件事：
 // **那八个哨兵在 HTTP 上分不分得开**。派生失败的处置动作各不相同（改载荷 / 换行号 /
@@ -8,12 +8,17 @@
 // 两条看着多余的用例是这张网的承重墙，理由各自写在函数注释上：
 // ① 越界入参（体里带 amount / status）必须在**进服务层之前**被拒；
 // ② 未装配与底座故障必须分得开（只测 503 的话，摘掉错误分支也看不出来）。
+//
+// T-P7-02 加的是读侧那六条，判据同源而对象不同：入参从请求体换成 URL 上那把键，
+// 哨兵从八个换成四个（读不会撞并发、不该撞状态机），而**两腿必须各自关闸**——
+// "派生能跑、对账读不到"是一种会真实发生的半装配，它不能表现为"两边一起 503"。
 package controller
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -69,6 +74,67 @@ func billTestView() *service.BillView {
 		Currency:      "CNY",
 		Status:        "open",
 		CreatedAt:     at,
+	}
+}
+
+// billReadFake 实现 BillReader。
+//
+// 两格共用一个 calls 与 last：本层对读腿的判据是"哪把键透到了服务层"与"未装配时一次都不许读"，
+// 而每一格用例只打一条端点，分开计数只是把断言写长。
+type billReadFake struct {
+	available bool
+	calls     int
+	last      string
+	stmt      *service.BillStatementView
+	list      []*service.BillStatementView
+	err       error
+	nilResult bool
+	nilList   bool
+}
+
+func (f *billReadFake) Available() bool { return f.available }
+
+func (f *billReadFake) Statement(_ context.Context, billID string) (*service.BillStatementView, error) {
+	f.calls++
+	f.last = billID
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.nilResult {
+		return nil, nil
+	}
+	if f.stmt != nil {
+		return f.stmt, nil
+	}
+	return billTestStatement(billID), nil
+}
+
+func (f *billReadFake) StatementsOfQuote(_ context.Context, quoteID string) ([]*service.BillStatementView, error) {
+	f.calls++
+	f.last = quoteID
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.nilList {
+		return nil, nil
+	}
+	return f.list, nil
+}
+
+// billTestStatement 一份"收过一笔、还欠尾款"的对账视图。
+//
+// 状态与币种写成字面量而不是引 model 里的常量：这一层往外送的是 JSON 上的词，
+// 常量改名是本包之外的事，而线上那一格漂了要在这条用例上红。
+func billTestStatement(billID string) *service.BillStatementView {
+	return &service.BillStatementView{
+		BillID: billID, QuoteID: "QT-1-2", QuoteRowID: "q_100_1", OpportunityID: "opp_1",
+		Status: "partial", Amount: 369.99, Currency: "CNY",
+		Settled: 200, Outstanding: 169.99,
+		Payments: []service.PaymentView{{
+			ID: "p_1", BillID: billID, Amount: 200, Currency: "CNY",
+			ChannelRef: "ref-1", Status: "settled", Platform: "taobao", OrderID: "ord-1",
+			PaidAt: time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC),
+		}},
 	}
 }
 
@@ -136,7 +202,11 @@ func billReasonFrom(t *testing.T, env billEnvelopeShape) string {
 	return reason
 }
 
-func newBillCtrl(derive BillDeriver) *BillController { return NewBillController(derive) }
+func newBillCtrl(derive BillDeriver) *BillController { return NewBillController(derive, nil) }
+
+// newBillReadCtrl 只装读腿的那一半（派生侧的用例不需要它，读侧的用例不需要那一半）。
+// 两腿分开构造是本层的真实形状：两个装配点各装一条，可以一有一无。
+func newBillReadCtrl(read BillReader) *BillController { return NewBillController(nil, read) }
 
 // —— ① 正路 ——————————————————————————————————————————————
 
@@ -474,5 +544,371 @@ func TestBillController_SeamIsExactlyTheDocumentedPair(t *testing.T) {
 	want := []string{"Available", "DeriveFromQuote"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("BillDeriver 方法集=%v，期望恰好 %v", got, want)
+	}
+}
+
+// TestBillController_ReadSeamIsExactlyTheDocumentedTriple 读接缝只有 Available 与两格 Statement*。
+//
+// 这一格真正判的是**没有**什么：没有 GetByID / List / 任何仓储级行读，也没有分页与按客户捞。
+// 一旦这层能拿到 bills 与 payments 的行，它就会顺手自己加一遍总，而"已收"这个数
+// 只允许有一个算法（service/payment.go 的 statementOfBill）—— 多一处算就是多一份事实，
+// 而 AC② 要对的正是这个数。方法集合用反射钉，因为"加一个方法"在编译面上毫无痕迹：
+// 接缝变宽不需要改任何调用点。
+func TestBillController_ReadSeamIsExactlyTheDocumentedTriple(t *testing.T) {
+	st := reflect.TypeOf((*BillReader)(nil)).Elem()
+	got := make([]string, st.NumMethod())
+	for i := 0; i < st.NumMethod(); i++ {
+		got[i] = st.Method(i).Name
+	}
+	want := []string{"Available", "Statement", "StatementsOfQuote"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("BillReader 方法集=%v，期望恰好 %v", got, want)
+	}
+}
+
+// —— ⑥ 读侧：结论的形状 ——————————————————————————————
+
+// TestBillController_ViewHappyPath 读到的必须**就是服务层给的那份结论**，逐格原样出。
+//
+// 断言里最要紧的一格是"本层没有把 settled/outstanding 改写过"：期望值 200/169.99 来自
+// 夹具（即服务层），而不是来自控制器的计算。第二要紧的是 due_at 在没账期时**整格缺席**
+// （BillStatementView 上是 *time.Time + omitempty）—— 这与派生侧的 BillView 不同：
+// 那边是"账期未定"要写 null 给前端看，这边的对账视图今天没有任何一处填它，
+// 硬造一个 null 反而是把"这一格存在"当成契约承诺出去。
+func TestBillController_ViewHappyPath(t *testing.T) {
+	fake := &billReadFake{available: true}
+	code, env, raw := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession),
+		http.MethodGet, "/api/bill/b_1762335000000000000_1", "")
+	if code != http.StatusOK {
+		t.Fatalf("读单回 %d：%s —— %s", code, env.Message, raw)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("服务层被调用 %d 次，期望 1", fake.calls)
+	}
+	if fake.last != "b_1762335000000000000_1" {
+		t.Errorf("传给服务层的账单号是 %q，期望原样透传", fake.last)
+	}
+	data := billDataFrom(t, env)
+	for key, want := range map[string]any{
+		"bill_id": "b_1762335000000000000_1", "quote_id": "QT-1-2", "quote_row_id": "q_100_1",
+		"opportunity_id": "opp_1", "status": "partial", "currency": "CNY",
+	} {
+		if data[key] != want {
+			t.Errorf("data.%s=%v，期望 %v", key, data[key], want)
+		}
+	}
+	// 三个数一起看才叫对账：只给"还欠多少"的话，两边各自少一个可比的数。
+	for key, want := range map[string]float64{"amount": 369.99, "settled": 200, "outstanding": 169.99} {
+		if got, ok := data[key].(float64); !ok || got != want {
+			t.Errorf("data.%s=%v，期望 %v（这一层不加第二遍总）", key, data[key], want)
+		}
+	}
+	rows, ok := data["payments"].([]any)
+	if !ok {
+		t.Fatalf("data.payments=%T，期望数组：%v", data["payments"], data["payments"])
+	}
+	if len(rows) != 1 {
+		t.Fatalf("payments %d 行，期望 1", len(rows))
+	}
+	if first, _ := rows[0].(map[string]any); first["channel_ref"] != "ref-1" || first["amount"] != 200.0 {
+		t.Errorf("回款行透得不完整：%v", rows[0])
+	}
+	if v, present := data["due_at"]; present {
+		t.Errorf("due_at=%v，期望整格缺席（夹具没给账期，这一层不替它编一个）", v)
+	}
+}
+
+// TestBillController_DueAtPassesThroughWhenTheServiceSetsIt 账期那一格由 T-P7-03 填；
+// 今天先把"服务给了就出得来"钉住，免得那一卡交付时才发现读侧把它吞了。
+func TestBillController_DueAtPassesThroughWhenTheServiceSetsIt(t *testing.T) {
+	st := billTestStatement("b_1")
+	due := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	st.DueAt = &due
+	fake := &billReadFake{available: true, stmt: st}
+	code, env, raw := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, "/api/bill/b_1", "")
+	if code != http.StatusOK {
+		t.Fatalf("回 %d：%s —— %s", code, env.Message, raw)
+	}
+	got, present := billDataFrom(t, env)["due_at"].(string)
+	if !present || !strings.HasPrefix(got, "2026-12-01") {
+		t.Errorf("data.due_at=%v（存在=%v），期望以 2026-12-01 开头", billDataFrom(t, env)["due_at"], present)
+	}
+}
+
+// TestBillController_OfQuoteShape 第二个入口：两个数（list 与 count）加上"没有也是数组"。
+//
+// 三格具体各有归宿：
+//   - 两张：一条链上多个版本各自成交过一次，对账要读的是那一串，count 必须同长；
+//   - 零张而服务给空切片：list 出 []；
+//   - 零张而服务**直接 return nil**：今天 statementOf 那条路给的是 make 出来的空切片，
+//     哪天改成 return nil 就是线上从 [] 变 null 而全绿 —— null 在前端是"没读到"，
+//     而这里的事实是"这张单子确实一张应收都没开"。
+func TestBillController_OfQuoteShape(t *testing.T) {
+	one := billTestStatement("b_1")
+	two := billTestStatement("b_2")
+	two.Status = "paid"
+	for _, probe := range []struct {
+		name      string
+		list      []*service.BillStatementView
+		nilList   bool
+		wantItems int
+	}{
+		{"两张", []*service.BillStatementView{one, two}, false, 2},
+		{"空切片", []*service.BillStatementView{}, false, 0},
+		{"服务给 nil", nil, true, 0},
+	} {
+		fake := &billReadFake{available: true, list: probe.list, nilList: probe.nilList}
+		code, env, raw := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession),
+			http.MethodGet, "/api/bill/of-quote/QT-1-2", "")
+		if code != http.StatusOK {
+			t.Fatalf("%s 回 %d：%s —— %s", probe.name, code, env.Message, raw)
+		}
+		if fake.last != "QT-1-2" {
+			t.Errorf("%s：传给服务层的报价号是 %q，期望原样透传", probe.name, fake.last)
+		}
+		data := billDataFrom(t, env)
+		items, ok := data["list"].([]any)
+		if !ok {
+			t.Fatalf("%s：data.list=%T，期望数组（null 与 [] 是两件事）", probe.name, data["list"])
+		}
+		if len(items) != probe.wantItems {
+			t.Errorf("%s：list %d 项，期望 %d", probe.name, len(items), probe.wantItems)
+		}
+		if n, ok := data["count"].(float64); !ok || int(n) != probe.wantItems {
+			t.Errorf("%s：count=%v，期望 %d（与 list 同长，否则前端按 count 渲染会截断）", probe.name, data["count"], probe.wantItems)
+		}
+	}
+}
+
+// —— ⑦ 读侧的入参：URL 上那把键 ——————————————————————
+
+// TestBillController_BlankPathKeyIsRejectedLocally 空键在这一层挡下，且服务层一次都不许被调用。
+//
+// 空串在这一族路由上是**能匹配**的（`/api/bill/ ` 那一种"看着有其实没有"，%20 解出来是一个空格），
+// 所以判据不能只靠"路由挂在那儿"。透到服务层会撞上它自己的入参哨兵，那句错误文本的主语
+// 是 bill_id，调用方在 URL 上找不到这个词；更坏的是服务层哪天放松那一格，
+// 空键就退化成"读全表第一行"——那在账单域是别人的应收。
+func TestBillController_BlankPathKeyIsRejectedLocally(t *testing.T) {
+	for _, path := range []string{"/api/bill/%20", "/api/bill/of-quote/%20"} {
+		fake := &billReadFake{available: true}
+		code, env, _ := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, path, "")
+		if code != http.StatusBadRequest {
+			t.Errorf("%s 回 %d，期望 400：%s", path, code, env.Message)
+		}
+		if got := billReasonFrom(t, env); got != "input_invalid" {
+			t.Errorf("%s 的 reason=%q，期望 input_invalid", path, got)
+		}
+		if fake.calls != 0 {
+			t.Errorf("%s：空键仍然走到了服务层（calls=%d）", path, fake.calls)
+		}
+	}
+}
+
+// TestBillController_OverlongPathKeyIsRejectedAndNotEchoed 键宽与回显有界（同派生侧的行号那一格）。
+//
+// 上限取 64 是因为 bills.id / bills.quote_id / quotes.id 三把键列同为 varchar(64)：
+// 超长必是拿错了东西（把整段 URL 抄进来了），而提示语里会带上它。
+func TestBillController_OverlongPathKeyIsRejectedAndNotEchoed(t *testing.T) {
+	long := "b_" + strings.Repeat("x", 200)
+	for _, path := range []string{"/api/bill/" + long, "/api/bill/of-quote/" + long} {
+		fake := &billReadFake{available: true}
+		code, env, _ := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, path, "")
+		if code != http.StatusBadRequest {
+			t.Errorf("超长键回 %d，期望 400：%s", code, env.Message)
+		}
+		if strings.Contains(env.Message, strings.Repeat("x", 64)) {
+			t.Errorf("超长键被原样回显进提示里：%q", env.Message)
+		}
+		if fake.calls != 0 {
+			t.Errorf("%s：超长键仍然走到了服务层", path)
+		}
+	}
+}
+
+// TestBillController_PathKeyPassesThroughUnchanged 除首尾空白之外**不做任何清洗**。
+//
+// 这一条判的是"没写的那一半"：控制器把账单号转小写、补前缀、去掉下划线中的任何一种，
+// 都会把一次本来能命中的读变成 404，而 404 说的是"没有这张单"——在财务域这是一句谎。
+// 大小写混排与下划线同时出现在探针里，因为那正是账单号（b_<unixnano>_<seq>）与报价号
+// （QT-XXX）真实的形状。
+func TestBillController_PathKeyPassesThroughUnchanged(t *testing.T) {
+	for _, probe := range []struct{ path, key string }{
+		{"/api/bill/QT_MixedCase_9", "QT_MixedCase_9"},
+		{"/api/bill/of-quote/QT-MIXED-9", "QT-MIXED-9"},
+	} {
+		fake := &billReadFake{available: true}
+		code, _, raw := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, probe.path, "")
+		if code != http.StatusOK {
+			t.Fatalf("%s 回 %d：%s", probe.path, code, raw)
+		}
+		if fake.last != probe.key {
+			t.Errorf("透到服务层的键是 %q，期望原样 %q（这一层不清洗账单号）", fake.last, probe.key)
+		}
+	}
+}
+
+// —— ⑧ 读侧的分诊与关闸 ——————————————————————————————
+
+// TestBillController_ReadSentinelsHaveDistinctOutcomes 读侧四档各有各的 reason，两条端点同判据。
+//
+// 只有四档且**没有 409**：读不会撞并发、不会撞状态机，任何"你先去处置一下再来"在这里
+// 都是把一次查询写成了一个流程。两条端点各跑一遍是因为分诊出口虽共用，
+// handler 却是两个（给其中一个单独加一档 switch 是零成本的事）。
+// 503 那一格在 available=true 的具体下打：那是"腿装着而仓储说没库"，
+// 与下面那条关闸用例判的不是同一件事。
+func TestBillController_ReadSentinelsHaveDistinctOutcomes(t *testing.T) {
+	cases := []struct {
+		err    error
+		status int
+		reason string
+	}{
+		{service.ErrPaymentInputInvalid, http.StatusBadRequest, "input_invalid"},
+		{fmt.Errorf("%w: b_nope 没有对应应收", service.ErrPaymentBillNotFound), http.StatusNotFound, "not_found"},
+		{fmt.Errorf("%w: 仓储未接库", service.ErrPaymentServiceUnavailable), http.StatusServiceUnavailable, "unavailable"},
+		{errors.New("connection reset by peer"), http.StatusInternalServerError, "internal"},
+	}
+	seen := map[string]int{}
+	for _, c := range cases {
+		seen[c.reason]++
+		for _, path := range []string{"/api/bill/b_1", "/api/bill/of-quote/QT-1-2"} {
+			fake := &billReadFake{available: true, err: c.err}
+			code, env, _ := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, path, "")
+			if code != c.status {
+				t.Errorf("%v @ %s 回 %d，期望 %d：%s", c.err, path, code, c.status, env.Message)
+			}
+			if got := billReasonFrom(t, env); got != c.reason {
+				t.Errorf("%v @ %s 的 reason=%q，期望 %q", c.err, path, got, c.reason)
+			}
+		}
+	}
+	for reason, n := range seen {
+		if n != 1 {
+			t.Errorf("reason %q 出现了 %d 次：两种修法共用了同一个判据词", reason, n)
+		}
+	}
+	// 404 的文案要带着调用方递进来的那把键：不透出的话，"我查的哪个号"这一格只能去翻日志。
+	fake := &billReadFake{available: true, err: fmt.Errorf("%w: b_check_me", service.ErrPaymentBillNotFound)}
+	_, env, _ := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, "/api/bill/b_check_me", "")
+	if !strings.Contains(env.Message, "b_check_me") {
+		t.Errorf("「没这张单」那一档没有回显键名：%q", env.Message)
+	}
+}
+
+// TestBillController_ReadErrorDoesNotLeak 读侧 500 同样不透出底层错误串。
+//
+// 这一条腿的底层报错来自 statementOfBill 里两处求和失败，带的是表名（payments）与 SQL 片段。
+func TestBillController_ReadErrorDoesNotLeak(t *testing.T) {
+	boom := errors.New(`ERROR: relation "payments" does not exist (SQLSTATE 42P01)`)
+	for _, path := range []string{"/api/bill/b_1", "/api/bill/of-quote/QT-1-2"} {
+		fake := &billReadFake{available: true, err: boom}
+		code, env, raw := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, path, "")
+		if code != http.StatusInternalServerError {
+			t.Fatalf("%s 回 %d，期望 500：%s", path, code, env.Message)
+		}
+		for _, needle := range []string{"42P01", "SQLSTATE", "relation", "payments"} {
+			if strings.Contains(raw, needle) {
+				t.Errorf("%s 的响应里出现了 %q：底层错误串被透出", path, needle)
+			}
+		}
+	}
+}
+
+// TestBillController_ReadNilResultWithoutErrorIsFailure 读侧的 (nil, nil) 按失败报。
+//
+// 这一格比派生侧更贵：空对象配 200 会被前端渲染成"这张应收金额 0、已收 0、没有回款行"，
+// 而对账的人据此得出的结论是"这笔钱结了"或"这单没开账"——两种都是错。
+func TestBillController_ReadNilResultWithoutErrorIsFailure(t *testing.T) {
+	fake := &billReadFake{available: true, nilResult: true}
+	code, env, _ := doBill(t, billTestEngine(newBillReadCtrl(fake), billSession), http.MethodGet, "/api/bill/b_1", "")
+	if code != http.StatusInternalServerError {
+		t.Errorf("回 %d，期望 500：%s", code, env.Message)
+	}
+	if got := billReasonFrom(t, env); got != "internal" {
+		t.Errorf("reason=%q，期望 internal（实现漂了不是'没这张单'）", got)
+	}
+	if strings.TrimSpace(env.Message) == "" {
+		t.Error("空对象配空提示：调用方读到的是一句没有内容的成功")
+	}
+}
+
+// TestBillController_ReadLegUnassembledAnswersFiveOhThree 读腿三种缺件形状，两条端点各回 503。
+//
+// 与派生侧同一条判据（503 而不是 404），但这里多一重理由：账单在库里**一直是有的**，
+// 只是这次没读到。404 会被读成"这张单子没开账"，那是业务结论，而此刻的事实是"一次都没查"。
+// 文案里必须出现"对账"而不能出现"派生"：读到 503 的人要立刻知道该催哪个装配点
+// （app.InitPaymentRuntime），而不是去查为什么开不出应收。
+func TestBillController_ReadLegUnassembledAnswersFiveOhThree(t *testing.T) {
+	for _, probe := range []struct {
+		name string
+		read BillReader
+	}{
+		{"腿为 nil", nil},
+		{"腿在但缺件", &billReadFake{available: false}},
+	} {
+		fake, _ := probe.read.(*billReadFake)
+		for _, path := range []string{"/api/bill/b_1", "/api/bill/of-quote/QT-1-2"} {
+			code, env, _ := doBill(t, billTestEngine(newBillReadCtrl(probe.read), billSession), http.MethodGet, path, "")
+			if code != http.StatusServiceUnavailable {
+				t.Errorf("%s @ %s 回 %d，期望 503：%s", probe.name, path, code, env.Message)
+			}
+			if got := billReasonFrom(t, env); got != "unavailable" {
+				t.Errorf("%s 的 reason=%q，期望 unavailable", probe.name, got)
+			}
+			if !strings.Contains(env.Message, "对账") || strings.Contains(env.Message, "派生") {
+				t.Errorf("%s 的文案没点名读腿：%q", probe.name, env.Message)
+			}
+			if fake != nil && fake.calls != 0 {
+				t.Errorf("%s：Available 为假仍然读了（%d 次）", probe.name, fake.calls)
+			}
+		}
+	}
+	// nil 控制器：两条 GET 都不许 panic，且回 503 而不是 500。
+	var nilCtrl *BillController
+	if nilCtrl.Available() {
+		t.Error("nil 控制器报告可用")
+	}
+	if nilCtrl.canRead() {
+		t.Error("nil 控制器报告可读")
+	}
+	code, env, _ := doBill(t, billTestEngine(nilCtrl, billSession), http.MethodGet, "/api/bill/b_1", "")
+	if code != http.StatusServiceUnavailable {
+		t.Errorf("nil 控制器读单回 %d，期望 503：%s", code, env.Message)
+	}
+}
+
+// TestBillController_LegsFailIndependently 两腿各自关闸：一半装配时另一半照常工作。
+//
+// 这一条是"两把接缝而不是合成一把"的全部回报。两个装配点是两次真事（InitBillRuntime
+// 与 InitPaymentRuntime），于是半装配是一种会真实发生的故障形状；
+// 而半装配在 HTTP 面上必须表现成"一半 503、一半 200"，不是"两边一起 503"——
+// 后者会把运维送去查一个本来就好的底座。
+func TestBillController_LegsFailIndependently(t *testing.T) {
+	deriveOnly := NewBillController(&billFake{available: true}, nil)
+	if !deriveOnly.Available() {
+		t.Fatal("只装派生腿时 Available() 报告不可用")
+	}
+	if deriveOnly.canRead() {
+		t.Error("只装派生腿时 canRead() 报告可读：两半混成了一半")
+	}
+	code, env, _ := doBill(t, billTestEngine(deriveOnly, billSession), http.MethodPost, "/api/bill", `{"quote_row_id":"q_1"}`)
+	if code != http.StatusOK {
+		t.Errorf("只装派生腿时 POST 回 %d，期望 200：%s", code, env.Message)
+	}
+	if code, env, _ = doBill(t, billTestEngine(deriveOnly, billSession), http.MethodGet, "/api/bill/b_1", ""); code != http.StatusServiceUnavailable {
+		t.Errorf("只装派生腿时 GET 回 %d，期望 503：%s", code, env.Message)
+	}
+
+	readOnly := NewBillController(nil, &billReadFake{available: true})
+	if readOnly.Available() {
+		t.Error("只装读腿时 Available() 报告可派生")
+	}
+	if !readOnly.canRead() {
+		t.Error("只装读腿时 canRead() 报告不可读")
+	}
+	if code, env, _ = doBill(t, billTestEngine(readOnly, billSession), http.MethodGet, "/api/bill/b_1", ""); code != http.StatusOK {
+		t.Errorf("只装读腿时 GET 回 %d，期望 200：%s", code, env.Message)
+	}
+	if code, env, _ = doBill(t, billTestEngine(readOnly, billSession), http.MethodPost, "/api/bill", `{"quote_row_id":"q_1"}`); code != http.StatusServiceUnavailable {
+		t.Errorf("只装读腿时 POST 回 %d，期望 503：%s", code, env.Message)
 	}
 }

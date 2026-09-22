@@ -248,6 +248,12 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 是 `accepted` 在全系统没有写入口 ⇒ 回款域没有起点，所以这里必须出声。
 	app.InitBillRuntime(gormDB)
 
+	// 回款腿（T-P7-02）：位置约束有**两处**而不是一处。除"排在路由之前"之外，
+	// 它还必须早于下面 setupIntegrationRoutes 里那一次 NewIntegrationController ——
+	// 那条回调路（外部电商推"这笔钱到了"）用的就是这一份实例，晚于构造则永远记不到钱。
+	// 判据与顺序各由 order_webhook_payment_wiring_test.go 与 router 侧的用例守着。
+	app.InitPaymentRuntime(gormDB)
+
 	// 邮件排水运行时（R21）：必须在路由之前 —— /api/email/* 读的是同一个 status 字段的
 	// 那一列，装配点晚于流量的话，列表里会出现"排水器刚把它改成发送中、读侧还在按待发送
 	// 统计"的错位。本竖没有旗子：拿不到 DB 句柄就是不装配，不装配就是回到 R21 之前的

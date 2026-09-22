@@ -421,18 +421,44 @@ BASELINE=(
   # 而 router 包那条"未装配回 503"的用例照样绿（它判的就是 nil 句柄，分不清"本该 nil"
   # 与"没人装配"）；摘掉 mount 是库里有账单而前端 404 —— 两种坏法在响应面上不重叠，
   # 合成一格只守得住一半。
-  # 23e 是本卡**故意交付而暂时没人调**的那一格：账单状态跃迁口（open→partial→paid、→voided）。
-  # 判据在 T-P7-02（回款累计到位才算结清）与 T-P7-03（催收收口），今天写任何调用方
-  # 都要凭空造一个"已收金额"，而那一列本卡刻意不建（求和发生在 payments 侧）。
+  # 23e 是 T-P7-01 **故意交付而没人调**的那一格：账单状态跃迁口（open→partial→paid、→voided）。
+  # 当时判据在下一张卡（回款累计到位才算结清），先写调用方就要凭空造一个"已收金额"，
+  # 而那一列 T-P7-01 刻意不建（求和发生在 payments 侧）⇒ 那一行按空 expect 登记为 UNWIRED。
   # defpat 锚在**方法定义**上而不是接口上：接口那一行现在也在，把它算成"定义存在"的话，
   # 方法被删掉之后这一格会退成 exit 2（报"检查形同虚设"）而不是报"接线状态漂移"。
-  # callpat 用 `bills\.UpdateStatus\(`：派生服务的字段就叫 bills，等 T-P7-02 的回款累计
-  # 真接上时，这一行会从 unwired 翻成 wired 并被当场数出来。
+  # callpat 用 `bills\.UpdateStatus\(`：派生服务的字段就叫 bills，回款服务的字段也叫 bills。
+  # **T-P7-02 已兑现当初那句预告**：service/payment.go 的 applySettlement 成了它的生产调用方
+  # （求和后 status != 库里那一格才跃迁），这一行随之从 unwired 翻成 wired —— 台账当场数出来的，
+  # 不是人推测的。翻成 wired 之后这一格换了方向：谁把那一行调用拆掉（比如改成"由渠道直接
+  # 指定账单状态"），本行立刻报"回退（登记为已接线却无调用点）"。
   "23|账单仓储的装配入口（摘掉 app/bill_wiring.go 那一行，派生腿恒缺件、Go 用例全绿）|type BillRepository interface|NewBillRepositoryWithDB\\(|internal/app|wired"
   "23|账单行的生产写入点（接线数回到 0 = 全系统再没有任何一处能开出一张应收）|type Bill struct|model\\.Bill\\{|internal/service internal/controller|wired"
   "23|账单派生腿在启动路径上的装配点（摘掉 router 那一行，/api/bill 永久 503 且报价 accepted 在全系统没有写入口）|func InitBillRuntime|InitBillRuntime\\(|internal/router|wired"
   "23|账单 HTTP 出口的挂载点（装配了却没挂载 = 库里有账单、前端 404，与 23c 是两种坏法）|func setupBillRoutes|setupBillRoutes\\(|internal/router|wired"
-  "23|账单状态跃迁口的生产调用方（本卡只交付形状：结清判据在 T-P7-02、催收收口在 T-P7-03）|func \\(r \\*billRepo\\) UpdateStatus|bills\\.UpdateStatus\\(|internal/service|"
+  "23|账单状态跃迁口的生产调用方（T-P7-02 起 payment.go 的 applySettlement 在求和之后调它；拆掉那一句 = 账单永远停在 open）|func \\(r \\*billRepo\\) UpdateStatus|bills\\.UpdateStatus\\(|internal/service|wired"
+  # ---- T-P7-02 回款腿（24a–24d）—————————————————————————————————————————
+  # 这一族是账单那一族（23）的读侧与资金侧，四格形状逐条对齐：装配入口 / 真的产生一行钱 /
+  # 启动路径上的 Init / 全局实例交给消费方的那一次交接。24d 是本族特有的一格（报价与账单
+  # 都没有）：回款腿**不由装配点注入**，而是 NewIntegrationService 在构造那一刻从全局登记处
+  # 读一次（请求路径读包级全局会撞上 check-async-global-read.py 的零条目基线，那边不让）。
+  # 于是"读了"这一格长在服务包里，而本仓所有集成用例都自己 SetOrderPaymentSink 塞假腿 ⇒
+  # 摘掉那一行的症状是"webhook 收了单、正文说回款腿未装配"，一个看着像"这套系统还没开账单域"
+  # 的 503 —— 与 22 那一格是同一种坏法（setter 人人会调，生产上没人调）。
+  # 本族的诚实口径（与 23 族不同，写下来免得后人误信）：这四格今天**各有**一条 Go 锁兜着
+  # —— 24a/24c 是 app/payment_wiring_test.go 与 router/bill_routes_test.go 的
+  # TestBillRoutes_PaymentLegAssembledBeforeBothConsumers（后者按 router.go 里的字面量判先后），
+  # 24b 是 service/payment_test.go 那族（断言打在落库那一行），24d 是
+  # service/order_webhook_payment_wiring_test.go。台账在这里的用处不是"唯一守手"，而是
+  # 前两族同样的两件：① 与 23e 一样把接线状态钉成契约（拆掉即 exit 1，且方向是"回退"不是"缺失"），
+  # ② 它是判定 A 的回灌入口 —— 一个竖在本表里没有族，读表的人就有权怀疑它没接完。
+  # 另记一笔**刻意不登记**的：external_orders 那把旧唯一键的启动期删除钩子（同卡交付，
+  # AutoMigrate 只加不删的那一半）。它不配一格，因为 db 包的
+  # TestAutoMigrateWiresExternalOrderLegacyKeyDrop 已经按整行数了 migrate.go 里那一行调用、
+  # 判了它在钩子链里的位置、并禁止钩子体内出现字面量索引名 —— 三道都在 Go 侧，比台账更严。
+  "24|回款仓储的装配入口（摘掉 app/payment_wiring.go 里那一行，回款服务恒 Available 为假）|type PaymentRepository interface|NewPaymentRepositoryWithDB\\(|internal/app|wired"
+  "24|回款行的生产写入点（接线数回到 0 = 全系统再没有任何一处能把一笔钱记进账）|type Payment struct|model\\.Payment\\{|internal/service|wired"
+  "24|回款腿与对账读腿在启动路径上的装配点（摘掉 router 那一行：入账回 503、/api/bill 两条 GET 恒 503）|func InitPaymentRuntime|InitPaymentRuntime\\(|internal/router|wired"
+  "24|回款腿交给集成服务的那一次交接（构造函数里那一行 GlobalPaymentService 读取，setter 只有测试在用）|func GlobalPaymentService|GlobalPaymentService\\(|internal/service|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

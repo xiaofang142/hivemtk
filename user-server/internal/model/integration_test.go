@@ -1,6 +1,9 @@
 package model
 
 import (
+	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -268,4 +271,110 @@ func TestWebhookEvent_BasicFields(t *testing.T) {
 	if !event.Processed {
 		t.Error("Expected Processed to be true")
 	}
+}
+
+// —— T-P7-02 / G15：外部订单镜像的三处形状修正 ————————————————
+//
+// 这一族判据拦的是 T-P2-02 取证出来、登记为 G15 结转本卡的三条实测缺陷
+// （三条都是"一次签名完全合法的回调会静默丢单/写坏数据"的形状）：
+//   ① order_id 全局唯一 ⇒ B 平台沿用 A 平台的订单号时，第二条插不进去、接口回 500；
+//   ② 状态无条件覆盖 ⇒ 后到的 created 能把已落库的 paid 抹回去；
+//   ③ 镜像不带账单引用 ⇒ 钱到了也追不回"冲的是哪张应收"。
+
+func TestExternalOrderIsScopedToPlatform(t *testing.T) {
+	st := reflect.TypeOf(ExternalOrder{})
+
+	// 复合唯一键：(platform, order_id)。命名 + 两列都挂同一个索引名 + priority 定序，
+	// 缺任何一样都组不成复合键（匿名 uniqueIndex 会被 GORM 建成两个单列索引）。
+	platformTag := gormTagOf(t, st, "Platform")
+	orderTag := gormTagOf(t, st, "OrderID")
+	if got := compositeUniqueName(platformTag, 1); got != ExternalOrderScopedUniqueIndex {
+		t.Errorf("platform 应挂在 %s 的 priority:1 上，实际标签 %q", ExternalOrderScopedUniqueIndex, platformTag)
+	}
+	if got := compositeUniqueName(orderTag, 2); got != ExternalOrderScopedUniqueIndex {
+		t.Errorf("order_id 应挂在 %s 的 priority:2 上，实际标签 %q", ExternalOrderScopedUniqueIndex, orderTag)
+	}
+	// 单列 unique 必须**摘掉**：留着它，复合索引只是多出来的一条装饰，
+	// 跨平台复用订单号照样撞（而且撞在哪个索引上取决于 PG 先检查哪一个）。
+	// 判据按**标签分段**取词，不用 Contains("uniqueIndex:")：复合键那一格本身就含这个前缀。
+	for _, part := range strings.Split(orderTag, ";") {
+		if part == "unique" || part == "uniqueIndex" {
+			t.Errorf("order_id 上仍带单列唯一标签 %q ⇒ 跨平台复用订单号会静默丢单：%s", part, orderTag)
+		}
+	}
+	// 两列都得留普通可读性：按平台捞订单列表的既有路径不能因为改索引而退化
+	if !strings.Contains(platformTag, "index") {
+		t.Errorf("platform 缺索引（GetByPlatform 是既有读路径）：%s", platformTag)
+	}
+}
+
+func TestExternalOrderCarriesBillLink(t *testing.T) {
+	st := reflect.TypeOf(ExternalOrder{})
+	f, ok := st.FieldByName("BillID")
+	if !ok {
+		t.Fatal("ExternalOrder 没有 BillID：回调带来的钱与账单之间没有任何一行数据连着（G15 的第③条）")
+	}
+	tag := string(f.Tag.Get("gorm"))
+	if !strings.Contains(tag, "varchar(64)") {
+		t.Errorf("bill_id 应为 varchar(64)（与 bills.id 生成上界同宽）：%s", tag)
+	}
+	if !strings.Contains(tag, "index") {
+		t.Errorf("bill_id 缺索引：对账要按「这张应收被哪几笔订单付的」捞镜像：%s", tag)
+	}
+	if strings.Contains(tag, "uniqueIndex") || strings.Contains(tag, "unique") {
+		t.Errorf("bill_id 不许唯一：一笔付一张单可以，多笔付同一张单与拆单也是真实场景：%s", tag)
+	}
+	if f.Type.Kind() != reflect.String {
+		t.Errorf("BillID 应为非指针字符串（空串=这张订单与账单无关），实际 %v", f.Type.Kind())
+	}
+	if got := strings.Split(f.Tag.Get("json"), ",")[0]; got != "bill_id" {
+		t.Errorf("json 键 %q ≠ 列名 bill_id", got)
+	}
+}
+
+func TestExternalOrderStatusRegressionIsDirectional(t *testing.T) {
+	// from, to, 是不是"退步"（退步 ⇒ 镜像保留原状态）
+	cases := []struct {
+		from, to string
+		blocked  bool
+	}{
+		{"paid", "created", true}, // G15 实测的那一条：乱序的 created 抹掉已付
+		{"paid", "unknown", true}, // 缺字段的推送不该把真实状态擦成 unknown
+		{"shipped", "paid", true},
+		{"completed", "shipped", true},
+		{"created", "paid", false},                // 正常前进
+		{"paid", "refunded", false},               // 退款在钱之后
+		{"paid", "cancelled", false},              // 取消在钱之后
+		{"unknown", "created", false},             // 首条占位被真实状态替掉
+		{"created", "unknown", true},              // unknown 永远不该覆盖已知词
+		{"PAID", "created", true},                 // 平台词大小写不一，判据要按同一口径归一
+		{" paid", "created", true},                // 同上：前后空白
+		{"weird_platform_word", "created", false}, // 两侧都不认识 ⇒ 放行（见函数注释）
+		{"paid", "weird_platform_word", false},    // 未知新词不许被冻住
+		{"", "created", false},                    // 库里那格是空的 ⇒ 任何词都算前进
+		{"paid", "", false},                       // 载荷给空串由控制器先兜成 unknown，这里按放行
+	}
+	for _, tc := range cases {
+		if got := ExternalOrderStatusRegresses(tc.from, tc.to); got != tc.blocked {
+			t.Errorf("ExternalOrderStatusRegresses(%q, %q) = %v，期望 %v", tc.from, tc.to, got, tc.blocked)
+		}
+	}
+}
+
+// compositeUniqueName 从 gorm 标签里取出「挂在指定 priority 上的复合唯一索引名」。
+// priority 必须显式写：不写时 GORM 按结构体字段序定序，而字段序日后一动，
+// 复合键的前缀就换了列（列集合相同而 (platform) 与 (order_id) 谁打头差别在索引能不能用）。
+func compositeUniqueName(tag string, priority int) string {
+	want := "uniqueIndex:" + ExternalOrderScopedUniqueIndex
+	for _, part := range strings.Split(tag, ";") {
+		if !strings.HasPrefix(part, want) {
+			continue
+		}
+		for _, opt := range strings.Split(strings.TrimPrefix(part, want+","), ",") {
+			if opt == "priority:"+strconv.Itoa(priority) {
+				return ExternalOrderScopedUniqueIndex
+			}
+		}
+	}
+	return ""
 }

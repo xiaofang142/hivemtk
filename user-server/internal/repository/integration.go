@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"time"
@@ -254,11 +256,23 @@ func (r *ExternalOrderRepository) GetByID(ctx context.Context, id uint) (*model.
 	return &order, err
 }
 
-// GetByOrderID 根据外部订单 ID 获取外部订单
+// GetByOrderID 按 (platform, order_id) 复合键读一行镜像。
+//
+// 三种返回值互不重叠：命中 (行, nil)、未命中 (nil, nil)、读故障 (nil, err)。
+// 老形状是"未命中也回非 nil 空结构体 + ErrRecordNotFound"，而三个调用点全都写成
+// `existing, _ :=`（把错误丢掉、只判 nil），于是**查不动库**与**第一次见这单**
+// 在判据上长成同一个样子 —— 后果是走 Create：轻则撞唯一键丢单，重则在改成
+// 复合键之后插出同一单的第二行。T-P7-02 / G15 第④条。
 func (r *ExternalOrderRepository) GetByOrderID(ctx context.Context, platform, orderID string) (*model.ExternalOrder, error) {
 	var order model.ExternalOrder
-	err := r.db.Where("platform = ? AND order_id = ?", platform, orderID).First(&order).Error
-	return &order, err
+	err := r.db.WithContext(ctx).Where("platform = ? AND order_id = ?", platform, orderID).First(&order).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
 }
 
 // GetAll 获取所有外部订单列表(单租户)

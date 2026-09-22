@@ -66,6 +66,12 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		// 建表登记这一行如果漂掉，T-P4-05 的建商机只会在日志里留一句话。
 		&model.Opportunity{},
 		&model.PasswordHistory{},
+		// Payment：T-P7-02 新增，有 repository.paymentRepo.Create 这条生产写入路径
+		// （订单 webhook 带回款格子时入账）。列进 mustCover 的理由比 bills 那条更硬：
+		// 这张表没建出来时，"已收多少"恒等于 0，而账单会永远停在 open/partial ——
+		// 那不是"少一张表"，是**欠额被记成已收的反面**（应收一直收不齐），
+		// 且回款是回调驱动的，没有人在对面看着报错，只有重试三轮之后的一句 Warn。
+		&model.Payment{},
 		&model.RagMetricsDaily{},
 		&model.RecoveryQueue{},
 		&model.SecurityAlert{},
