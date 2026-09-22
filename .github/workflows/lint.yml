@@ -36,7 +36,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: user-web/bridge/package-lock.json
 
@@ -46,9 +46,13 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-  # 主应用 lint：阻断项为「error」。当前全量 628 文件 / 0 error / 18788 warning，
-  # 故此处刻意不加 --max-warnings——历史告警债务不阻断，但任何新增 error
-  # （含 default 导入、未定义变量等）都会让 job 失败。
+  # 主应用 lint：阻断项为「error」。此处刻意不加 --max-warnings——历史告警债务不阻断，
+  # 但任何新增 error（含 default 导入、未定义变量等）都会让 job 失败。
+  # 读数只认 CI：本 job 的 eslint 汇总行在 run 35769669195 印的是
+  # `18738 problems (2 errors, 18736 warnings)`。那 2 条 error 在 HEAD 上
+  # （browser_automation/src/core/cdp/input.js 的 preserve-caught-error、
+  # primitives.js 的 no-useless-assignment），修法在另一条泳道的未提交字节里。
+  # 别拿本地数对账：`npm run lint` 带 --fix 会当场改写文件，只读的是 lint:check。
   eslint-user-web:
     name: ESLint (user-web 主应用)
     runs-on: ubuntu-latest
@@ -62,7 +66,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: user-web/package-lock.json
 
@@ -82,7 +86,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Check i18n coverage
         run: node user-web/scripts/check-i18n-coverage.cjs
