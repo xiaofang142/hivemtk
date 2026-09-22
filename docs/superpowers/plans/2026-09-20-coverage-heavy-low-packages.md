@@ -3787,7 +3787,19 @@ V9/V10 **各自只打死 `.../feishu` 与 `.../telegram` 一个子用例**（逐
 ＝ `TestD12_NoNewLegacyKVDirectQuery (0.23s)`，红因 `[../service/quote.go]`（`config_param_guard_test.go:77`
 用 `strings.Contains` 读原文不剥注释 ⇒ 注释位假阳；§23.17 第 12 段已定性为**并行泳道既有红，本泳道不代改**，
 其 `goCodeOnly` 修法至今未进任何提交）。**这是第一次在"只含已提交内容＋本批两文件"的树上跑整包**，
-读数因此可以把口径钉死：除 D12 之外 HEAD 字节整包零红。
+读数因此可以把口径钉死：那一版基座上除 D12 之外整包零红。
+
+**推送后再在"只有已提交内容"的新克隆上复跑一遍**（`/tmp/r26_push`@`7418e489`，`git status` 空、
+本批 `webhook_outbound.go` md5 与活树逐字节一致）：`go build ./...` rc=0、`go vet ./internal/...` rc=0
+（均 0 字节输出）、`gofmt -l internal/` 0 行、整包 `-timeout 40m` ⇒ **rc=1 / 712.751s / load 14.41→6.35**，
+`--- FAIL` 仍是**只有 D12 一条**（`0.27s`，红因逐字一致 `[../service/quote.go]`，全库顶层 `panic:` 计数 0）。
+**为什么必须在推送后重跑而不认上面那一跑**：那一跑的基座是 `e3af05d0`，而它之后并行泳道又落了 `eada12ba`
+（动 `pkg/db/db.go`、`customer_session.go` 和两条 service 用例）⇒ "HEAD 上除 D12 外零红"这句话的
+分母必须是被推上去那一版，不是我为它取证那一版。
+本批用例的复跑口径另有一处要记：首版 `-run 'TestSendOutbound_Bridge_Cards|Cardless|CardCapable'` 数出
+`PASS=4` 看着像"5 格少跑 1 格是因为有一格挂了"，实际是**名单静默少收** —— `Bridge_NoCardsNoDroppedKey`
+不含子串 `Bridge_Cards`。换成宽松前缀 `TestSendOutbound_(Bridge_|Cardless|CardCapable)` 后 `PASS=9 FAIL=0 SKIP=0`
+（本批 5 格 + 同族既有 4 格），并**逐格点名**核 `run=`/`pass=` 才对得上（见 [[cli-toolchain-gotchas]]）。
 另有一跑活树混树基线（17:09 编译，含并行会话全部未提交内容、**不含**本轮统一门）：
 `rc=0 / ok hivemtk-user/internal/service 1388.553s`，load 28.23→25.57 —— 只作并行态参考，
 该跑未带 `-test.v`，其 `--- PASS/FAIL` 计数恒 0 属空证据，只认 rc。
