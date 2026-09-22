@@ -95,11 +95,24 @@ command -v python3 >/dev/null || { err "python3 未安装"; exit 1; }
 
 # 演示口令告警：默认值 Seed@123456 随开源仓库公开（config.yaml / docs / e2e 里都写着），
 # 保留它是为了幂等重跑与 e2e，不代表它可以出现在对外可达的安装上。
-if [ "$SEED_PASSWORD" = "Seed@123456" ]; then
-  warn "演示/admin 口令用的是仓库公开的默认值 Seed@123456；"
-  warn "  对外可达的安装请显式设置：SEED_PASSWORD=\"<自定口令>\" bash scripts/bootstrap.sh"
-  warn "  （或只设 ADMIN_PASSWORD，两者在本脚本里同值）"
-fi
+# 按小写形匹配（bash 3.2 没有 ${VAR,,}，用 tr）：否则 Admin123 这类大小写变体绕过告警。
+_seed_pw_lc=$(printf '%s' "$SEED_PASSWORD" | tr '[:upper:]' '[:lower:]')
+case "$_seed_pw_lc" in
+  seed@123456)
+    warn "演示/admin 口令用的是仓库公开的默认值 Seed@123456；"
+    warn "  对外可达的安装请显式设置：SEED_PASSWORD=\"<自定口令>\" bash scripts/bootstrap.sh"
+    warn "  （或只设 ADMIN_PASSWORD，两者在本脚本里同值）"
+    ;;
+  admin123|admin888|123456|654321|admin|root|password|abc123|iloveyou)
+    # 这一档不是仓库公开值，而是字典攻击第一轮就命中的常见口令。单独提醒的理由是绑定的地址：
+    # 2026-09-22 本机 `lsof -nP -iTCP -sTCP:LISTEN` 实测 user-server 听 *:8204、platform-server 听 *:8205
+    # （`*` 而非 127.0.0.1 ⇒ 同一局域网内任何设备都能直接打到登录页，弱口令在这里不是"不够好"而是"已开门"）。
+    warn "admin 口令落在常见弱口令名单里（首轮字典即命中）；"
+    warn "  本机 dev 栈的服务端口监听的是 *（局域网可达），不只是 127.0.0.1；"
+    warn "  要么换成强口令（SEED_PASSWORD=\"<自定强口令>\" bash scripts/bootstrap.sh），"
+    warn "  要么把服务收回到 127.0.0.1 再跑。"
+    ;;
+esac
 
 export PGHOST="$PG_HOST"
 export PGPORT="$PG_PORT"
