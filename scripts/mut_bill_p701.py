@@ -48,8 +48,33 @@ check-unwired-assets.sh 同时压着别的泳道未提交的改动；那套补�
 - 台账 23b（`model.Bill{` 在 service/controller 两处消费）的**真**失效形态是"造行搬去别的包"，
   那要同时新增一个包外构造函数；G5 注的是它的一个等价可编译代理（局部类型别名），
   证的是"callpat 会因改名而瞎"这件事本身，不等于覆盖了 23b 的全部坏法。
-- gate 格 G4（23e 反向探针）的注码**故意不要求可编译**：它只回答"这一行的 callpat 收得拢吗"。
+- gate 格 G4 的注码**故意不要求可编译**：它只回答"这一行的 callpat 收得拢吗"。
   真要写"派生时顺手标已收"，第一道拦的其实是 service 的 port 面（S17 那格已证）。
+
+第二趟（T-P7-02 已提交之后，HEAD `5b92525c`）：整族在提交字节上重跑，**六格出问题，
+六处全在判据侧、没有一处是产码的洞**。这一类失效的形状值得留在文件头上：一张卡的改动
+会让上一张卡的探针同时出现"锚点找不到"和"注了码而门不报"两种症状，前者响、后者不响。
+
+- K10 锚点 0 次：paid 在 T-P7-01 是终态，T-P7-02 把结清做成 Σ 回款行的函数之后它必须能回退
+  （钱被冲销），voided 成为唯一终态 ⇒ 锚点挪到 `BillStatusVoided:  {},`，判据方向不变；
+- K39 锚点 0 次 + 用例名失效：接口在 T-P7-02 长出 ListByQuoteID，"收尾那一行"换了人，
+  钉方法集的那条用例也从 …Five 改名成 …Six ⇒ 两处一起跟；
+- K92/K93 锚点 0 次：挂载那一行由 `(derive)` 变成 `(derive, read)`，早退判据与末行日志同改；
+- **G3 存活（这一格是本次唯一"看着像洞"的）**：23a 的 callpat 扫整个 internal/app，
+  而 T-P7-02 起那个目录里有**两处** `NewBillRepositoryWithDB(`（派生腿 + 回款腿）。
+  摘掉一处而门仍报 WIRED，是这一行**措辞**下的正确答案，不是失守 —— 它的失效形状从
+  "少一个调用点"变成了"这一个目录里一个都不剩"。格子的注码跟着改成两文件一刀（驱动为此
+  支持 pairs 的三元组形状），而"只掉一条腿"那半边由 K83（派生腿）与 app 包的
+  TestInitPaymentRuntime*（回款腿）在行为面上守。留这一句是因为**下一张卡会让这个数字继续
+  涨**：任何"目录级存在性锁"被写成单消费方假设的探针时，都会在第二个消费方落地那天变成
+  一台永不开火的枪，而它打印的仍是 KILLED/SURVIVED 里那个看着没毛病的状态。
+- **G4 存活**：23e 的反向探针（"写出调用 ⇒ 门必须从 unwired 翻成 wired"）的前提被本卡
+  **兑现**了 —— 调用点已经写进 payment.go、那一行已经登记成 wired。留着一格永不开火的
+  反向探针就是台账门里的假绿来源，挪成正向：拆掉 payment.go 那一行 ⇒ 门必须报"接线被拆掉"。
+
+顺带记两处**没改**的：K72 打印 `ran=0 FAIL=1` 而判 KILLED 是 kind=build 的既有形状（那条
+FAIL 是脚本按点名的编译错串代记的，不是 go test 印的用例名）；`--check` 新增一条"注完码
+字节没变 ⇒ 这一格永不开火"的自检，正是本次 G3/G4 那种失效的机器形态。
 """
 from __future__ import annotations
 
@@ -110,8 +135,10 @@ MODEL = f"{US}/internal/model/bill.go"
 DBMIG = f"{US}/internal/pkg/db/migrate.go"
 REPO = f"{US}/internal/repository/bill.go"
 SVC = f"{US}/internal/service/bill.go"
+PSVC = f"{US}/internal/service/payment.go"
 CTRL = f"{US}/internal/controller/bill.go"
 WIRE = f"{US}/internal/app/bill_wiring.go"
+PAYWIRE = f"{US}/internal/app/payment_wiring.go"
 RTR = f"{US}/internal/router/router.go"
 ROUTES = f"{US}/internal/router/bill_routes.go"
 LEDGER = "scripts/check-unwired-assets.sh"
@@ -154,8 +181,12 @@ CELLS = [
      [("\tBillStatusOpen:    {BillStatusPartial, BillStatusPaid, BillStatusVoided},",
        "\tBillStatusOpen:    {BillStatusPartial, BillStatusPaid},")],
      "TestBillStatusTransitionsAreDeclared"),
-    ("K10", "终态开出出边（已结清的账单一改，回款与账龄两头对不上）", "go", "model", MODEL,
-     [("\tBillStatusPaid:    {},", "\tBillStatusPaid:    {BillStatusOpen},")],
+    # 注码落在**唯一剩下的那一格终态**上。T-P7-01 交付时这里打的是 `BillStatusPaid: {},`
+    # （当时 paid 也是终态）；T-P7-02 把结清判据实现成 Σ 回款行之后 paid 长出了两条回退边
+    # （钱被渠道冲销 ⇒ 欠额回来，账单不能还写着已结清），voided 成为唯一终态。
+    # 判据的方向没变（"终态有出边等于没有终态"），变的只是哪一格是终态 ⇒ 改锚点不改期望。
+    ("K10", "终态开出出边（作废能回退 = 被收口的历史行被人盖掉）", "go", "model", MODEL,
+     [("\tBillStatusVoided:  {},", "\tBillStatusVoided:  {BillStatusOpen},")],
      "TestBillStatusTransitionsAreDeclared"),
 
     # ————— 建表层：真库里的形状（runner=db）—————
@@ -212,14 +243,17 @@ CELLS = [
      [("\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn row, nil",
        "\tif err != nil {\n\t\treturn nil, nil\n\t}\n\treturn row, nil")],
      "TestBillRepository_ReadsDistinguishMissingFromFailure"),
+    # 锚点跟接口一起长出来的那一格走：T-P7-02 在对账读侧补了 ListByQuoteID，
+    # 接口的**收尾那一行**因此从 GetByQuoteRowID 挪到了它（用例名同步 Five→Six）。
+    # 注的形状不变：给凭证表开一条 Delete = 历史能被抹掉。
     ("K39", "接口上多出一条 Delete（凭证表有了抹掉历史的路）", "go", "repo", REPO,
-     [("\tGetByQuoteRowID(ctx context.Context, quoteRowID string) (*model.Bill, error)\n}",
-       "\tGetByQuoteRowID(ctx context.Context, quoteRowID string) (*model.Bill, error)\n\n"
+     [("\tListByQuoteID(ctx context.Context, quoteID string) ([]*model.Bill, error)\n}",
+       "\tListByQuoteID(ctx context.Context, quoteID string) ([]*model.Bill, error)\n\n"
        "\tDeleteByID(ctx context.Context, id string) error\n}"),
       ("func (r *billRepo) exists(",
        "func (r *billRepo) DeleteByID(ctx context.Context, id string) error {\n\treturn r.require()\n}\n\n"
        "func (r *billRepo) exists(")],
-     "TestBillRepository_MethodSetIsExactlyTheDocumentedFive"),
+     "TestBillRepository_MethodSetIsExactlyTheDocumentedSix"),
 
     # ————— 服务层：四条判据 + 幂等 + 顺序（runner=svc）—————
     ("K40a", "Available 不看报价存储（半装配报告「能派生」）", "go", "svc", SVC,
@@ -376,16 +410,19 @@ CELLS = [
     ("K95", "router 里那一行 Init 删掉（端点恒 503 而 Go 用例分不清）", "go", "route", RTR,
      [("\tapp.InitBillRuntime(gormDB)\n", "")],
      "TestBillRoutes_LiveThroughRealSetup"),
+    # 两半装配（derive / read）由 T-P7-02 带进来：挂载那一行变成两个实参，
+    # 早退判据变成 `derive == nil || read == nil`，末尾那行日志也换了措辞。
+    # 注的形状不变：**未装配时干脆不挂路由**（把"底座没装"混成"API 不存在"）。
     ("K92", "未装配时干脆不挂路由（「底座没装」与「API 不存在」混成一件事）", "go", "route", ROUTES,
-     [("\tcontroller.NewBillController(derive).RegisterRoutes(auth)\n\tif derive == nil {",
-       "\tif derive == nil {"),
-      ("\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v）\", derive.Available())",
-       "\tcontroller.NewBillController(derive).RegisterRoutes(auth)\n"
-       "\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v）\", derive.Available())")],
+     [("\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n\tif derive == nil || read == nil {",
+       "\tif derive == nil || read == nil {"),
+      ("\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v，可对账=%v）\", derive.Available(), read.Available())",
+       "\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n"
+       "\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v，可对账=%v）\", derive.Available(), read.Available())")],
      "TestBillRoutes_UnassembledAnswersFiveOhThree"),
     ("K93", "路由文件里内联一个读口（映射之外的第二处响应）", "go", "route", ROUTES,
-     [("\tcontroller.NewBillController(derive).RegisterRoutes(auth)\n",
-       "\tcontroller.NewBillController(derive).RegisterRoutes(auth)\n"
+     [("\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n",
+       "\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n"
        "\tauth.GET(\"/bill/list\", func(ctx *gin.Context) {\n"
        "\t\tctx.JSON(200, gin.H{\"code\": 0})\n\t})\n")],
      "TestBillRoutes_TableIsExactlyTheDeclaredSet"),
@@ -398,16 +435,23 @@ CELLS = [
      [("\tapp.InitBillRuntime(gormDB)\n", "")], "账单派生腿在启动路径上的装配点"),
     ("G2", "台账 23d：摘掉 mount，门必须报漂移", "gate", "gate", RTR,
      [("\t\tsetupBillRoutes(auth)\n", "")], "账单 HTTP 出口的挂载点"),
-    ("G3", "台账 23a：装配点不再调 WithDB 构造函数，门必须报漂移", "gate", "gate", WIRE,
-     [("\tsvc := service.NewBillService(\n\t\trepository.NewBillRepositoryWithDB(db),\n"
-       "\t\trepository.NewQuoteRepositoryWithDB(db),\n\t)",
-       "\tsvc := service.NewBillService(nil, nil)\n\t_ = repository.ErrBillNotFound")],
+    # 23a 的 callpat 扫的是**整个 internal/app**，而 T-P7-02 起这个目录里有两处
+    # `NewBillRepositoryWithDB(`：派生腿（bill_wiring.go）与回款腿（payment_wiring.go，
+    # 它要按 bill_id 跃迁状态）。于是"只摘一处"**不再是这一行的失效形状** —— 门仍报
+    # WIRED 是对的（"internal/app 显式构造过账单仓储"这句话为真），掉的那半边牙由
+    # K83（派生腿，runner=app）与 app 包的 TestInitPaymentRuntime*（回款腿）守着。
+    # 本格因此一刀摘**两处**（pairs 的第二条自带文件名）：那才是这条存在性锁唯一的坏法。
+    ("G3", "台账 23a：internal/app 两处 WithDB 构造点全摘，门必须报漂移", "gate", "gate", WIRE,
+     [("\t\trepository.NewBillRepositoryWithDB(db),\n", ""),
+      (PAYWIRE, "\t\trepository.NewBillRepositoryWithDB(db),\n", "")],
      "账单仓储的装配入口"),
-    ("G4", "台账 23e 反向：出现 bills.UpdateStatus( 调用，门必须报「从 unwired 翻成 wired」（注码不要求可编译）",
-     "gate", "gate", SVC,
-     [("\t\tif existing != nil {\n\t\t\treturn billViewOf(existing, true), nil",
-       "\t\tif existing != nil {\n\t\t\ts.bills.UpdateStatus(ctx, existing.ID, existing.Status, model.BillStatusPaid)\n"
-       "\t\t\treturn billViewOf(existing, true), nil")],
+    # 旧格打的是 23e 的**反向**（"写出 bills.UpdateStatus( 调用 ⇒ 门必须从 unwired 翻成
+    # wired"。那一格的前提由 T-P7-02 兑现掉了：调用点已经写进 payment.go，行已经登记成
+    # wired ⇒ 再加一次调用不改变门的任何一条输出，留着它就是一台永不开火的枪。
+    # 挪成正向：拆掉那一行调用 ⇒ 门必须报「已登记的接线被拆掉」。注码仍不要求可编译
+    # （删掉 `if` 头会留下一个孤 brace），它与旧格守的是同一句话：这一行的 callpat 收得拢吗。
+    ("G4", "台账 23e 正向：拆掉 payment.go 的跃迁调用，门必须报「接线被拆掉」", "gate", "gate", PSVC,
+     [("\tif err := s.bills.UpdateStatus(ctx, bill.ID, bill.Status, view.Status); err != nil {\n", "")],
      "账单状态跃迁口的生产调用方"),
     ("G5", "台账 23b：造行改用局部类型别名（callpat 会因改名而瞎），门必须报漂移", "gate", "gate", SVC,
      [("func billViewOf(", "type billRow = model.Bill\n\nfunc billViewOf("),
@@ -431,6 +475,31 @@ def sub_once(text: str, old: str, new: str, tag: str) -> str:
     if n != 1:
         raise SystemExit(f"{tag} 锚点命中 {n} 次（要求恰好 1 次）：{old[:90]!r}")
     return text.replace(old, new, 1)
+
+
+def cell_rels(cell) -> set[str]:
+    """本格会写到盘上的文件集合。
+
+    pairs 里的注码默认打在 cell[4] 那一份文件上；写成三元组 `(文件, 旧, 新)` 时打在
+    点名的那一份上。要这个形状的理由：台账的一条存在性锁扫的是**整个目录**，
+    同一个构造函数在目录里长出第二个消费方之后，"摘掉一处"就不再是这条锁的失效形状
+    —— 只有一刀摘完才算证到它有牙（G3 是第一例，判据原文写在它下面）。
+    """
+    return {cell[4]} | {p[0] for p in cell[5] if len(p) == 3}
+
+
+def apply_cell(originals: dict[str, str], cell) -> dict[str, str]:
+    """把一格的全部注码**在内存里叠完**再返回，中途任何一锚不命中都不留下半个字节。
+
+    返回值是 {文件: 注完之后的全文}；未点名的文件不进这张表，也就不会被写盘。
+    """
+    code, _desc, _kind, _runner, rel, pairs, _expect = cell
+    out: dict[str, str] = {}
+    for pair in pairs:
+        old_rel, old, new = (rel, pair[0], pair[1]) if len(pair) == 2 else pair
+        base = out.get(old_rel, originals[old_rel])
+        out[old_rel] = sub_once(base, old, new, f"{code}@{old_rel.split('/')[-1]}")
+    return out
 
 
 def prepare(dst: Path) -> Path:
@@ -576,21 +645,25 @@ def main() -> int:
         if not args.keep:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    rels = sorted({c[4] for c in cells} | set(MY_ANCHOR_KEYS) | set(NEW_FILES))
+    rels = sorted(set().union(*(cell_rels(c) for c in cells))
+                  | set(MY_ANCHOR_KEYS) | set(NEW_FILES))
     files = {rel: clone / rel for rel in rels}
     originals = {rel: read(p) for rel, p in files.items()}
     basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
 
     if args.check:
         bad = 0
-        for code, _desc, kind, _runner, rel, pairs, _expect in cells:
+        for cell in cells:
             try:
-                t = originals[rel]
-                for old, new in pairs:
-                    t = sub_once(t, old, new, code)
+                mutated = apply_cell(originals, cell)
             except SystemExit as e:
                 bad += 1
                 print(f"  ✗ {e}")
+                continue
+            for rel, t in mutated.items():
+                if t == originals[rel]:
+                    bad += 1
+                    print(f"  ✗ {cell[0]}@{rel} 注码打完了而字节没变（这一格永不开火）")
         print(f"锚点校验：{len(cells)} 格，{bad} 格锚点有问题")
         sweep()
         return 1 if bad else 0
@@ -621,15 +694,15 @@ def main() -> int:
     problems: list[str] = []
     tally = {k: 0 for k in TALLY}
     killmap: dict[str, set] = {}
-    for code, desc, kind, runner, rel, pairs, expect in cells:
+    for cell in cells:
+        code, desc, kind, runner, _rel, _pairs, expect = cell
         try:
-            t = originals[rel]
-            for old, new in pairs:
-                t = sub_once(t, old, new, code)
+            mutated = apply_cell(originals, cell)
         except SystemExit as e:
             problems.append(str(e))
             continue
-        files[rel].write_text(t, encoding="utf-8")
+        for prel, t in mutated.items():
+            files[prel].write_text(t, encoding="utf-8")
 
         if kind == "gate":
             rc, out = gate_run(clone)
@@ -665,9 +738,10 @@ def main() -> int:
             problems.append(f"{code} 判为 {v}（不是干净的「杀掉」）：{desc}")
             print(out[-2500:])
 
-        files[rel].write_text(originals[rel], encoding="utf-8")
-        if md5_bytes(files[rel]) != basemd5[rel]:
-            raise SystemExit(f"{code} 还原后 md5 不一致，停机")
+        for prel in mutated:
+            files[prel].write_text(originals[prel], encoding="utf-8")
+            if md5_bytes(files[prel]) != basemd5[prel]:
+                raise SystemExit(f"{code} 还原后 {prel} 的 md5 不一致，停机")
 
     items = sorted(killmap.items())
     for i in range(len(items)):
