@@ -1020,10 +1020,21 @@ diff -rq hivemtk-platform/website hivemtk/website 2>&1 | grep -v node_modules | 
 ```
 Expected: 只出现"新副本里被有意改掉/删除的文件"，**不得有"Only in hivemtk-platform/website"**（漏搬文件）。
 
-- [ ] **Step 6: 真发布一次并实测**
+- [x] **Step 6: 真发布一次并实测**
 
 `gh workflow run website-pages.yml -R xiaofang142/hivemtk --ref master`（需先有提交；若按"不 commit"约束不推，则改为：`gh api` 查 Pages 配置 + 本地 `dist` 起服实测已覆盖 Step 5，把"未做线上发布实测"写进 spec §7 并标注为交回用户的手工作）。
 **Pages 未开启时**：`gh api -X POST repos/xiaofang142/hivemtk/pages -f build_type=workflow`，并在交清单里明确告知这是一次对 GitHub 侧的写操作。
+
+**2026-09-22 执行记录（本步已真做完，数字为实测量）**：先 `POST repos/xiaofang142/hivemtk/pages -f build_type=workflow`
+开启 Pages（仓库 `visibility=public`、`has_pages=false` ⇒ 之前 website-pages 的红因是
+`Get Pages site failed … Not Found`，不是构建问题），再 `gh workflow run website-pages.yml --ref master`
+⇒ run 全步 `success`（预检+构建+产物校验 / npm audit / Upload Pages artifact）。线上实测走真连：
+首页 200 / 6505 B，首页引用的 4 个资源逐个 200，深链 `/hivemtk/features|download|docs` 均 200
+（预渲染目录页），未知路径 404 但仍回 SPA 壳（`404.html` 兜底生效），
+线上 index.html 与主 bundle（361804 B）内旧域命中 0，sitemap 7 条 / 旧域 0。
+**开启前先过产物门**（三道源码门都看不见 `dist`）：`check-secrets-artifacts.sh .env website/dist` rc=0
+且打印 scanned=152 / 10 个凭证键，并对它做四腿反向测试（注入真凭证 ⇒ 点名 `[POSTGRES_PASSWORD] 文件:行号`；
+放一个 `.map` ⇒ 红；撤码 ⇒ 归位），据此把 `website/dist` 补进 `make audit-artifacts`。
 
 - [x] **Step 7: 收口**
 
