@@ -32,6 +32,16 @@ API_PATH_RE="['\"\`]/api/[^'\"\`]+['\"\`]"
     grep -rhoE '\.(GET|POST|PUT|DELETE|PATCH)\("[^"]+"' "${REPO_ROOT}/user-server/internal/router" \
       | sed -E 's/\.(GET|POST|PUT|DELETE|PATCH)\("([^"]+)"/\1 \2/' | sort -u
   fi
+  # ⚠️ 盲区（T-P6-03 实测，勿再走"加个目录"的修法）：上面这一节只看得见 internal/router 里
+  # 字面量写成全路径的注册。本仓另一半注册在控制器的 RegisterRoutes(g *gin.RouterGroup) 里，
+  # 路径是**组前缀 + 相对路径**（`g.POST(""，...)` / `g.GET("/:id"，...)`），grep 拼不出全路径。
+  # 实测两个数：本脚本产出的 1038 条里 `grep -c '/api/quote'` = 0、`/api/opportunity` 也 = 0；
+  # 把 internal/controller 加进 grep 目录并不解决 —— 实测新增 131 条 `GET /:id` 这类
+  # **相对路径**，仍然对不上任何前端调用，只是把清单弄脏（那次改动已回退）。
+  # 能算出全路径的是 scripts/audit_api_contract.py 那台 mini 解析器（group_re/func_re/rgtype，
+  # RDIRS 已含 internal/controller，实测 987 个前端调用 UNMATCHED=0）。本快照要变准，
+  # 正路是让它复用那台解析器的后端集合（给它加一个只读输出模式），属独立一格工具卡：
+  # 它不在阻断门禁的面上（真正的门是 --strict 那条），故本卡不动它，只把读数写在这里。
 
   echo ""
   echo "## 前端 API 调用 (user-web/src 下的 .js 与 .vue)"

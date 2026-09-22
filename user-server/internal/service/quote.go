@@ -129,12 +129,15 @@ type QuoteScriptPort interface {
 // **没有话术字段**（AC①）：能递正文就迟早会有人递正文，那时版本、灰度、过期三判据
 // 全被绕过而库里读不出差别。字段集合由反射用例钉成白名单。
 type QuoteGenerateInput struct {
-	OpportunityID string           // 必填（还价侧留空 = 继承基准那一版的归属）
-	OneID         string           // 可空：没定位到人时分桶为空，正文照样要生效版本
-	TemplateCode  string           // 生成第一版必填；还价不重跑模板（见 Revise）
-	Currency      string           // 空 = 取模板那份，再空 = 建表默认
-	ValidUntil    *time.Time       // nil = 由模板 valid_days 推，再没有 = 不设
-	Lines         []QuoteLineInput // 对模板/基准行的覆盖与追加，可空
+	OpportunityID string `json:"opportunity_id"` // 必填（还价侧留空 = 继承基准那一版的归属）
+	// OneID 不带 json 标签是判据不是遗漏：**收件人在 HTTP 面上不是入参**。
+	// 发送腿（T-P6-03）的 one_id 是从报价行的来源商机读出来的，生成侧若允许调用方递一个，
+	// 就等于允许"给甲客户生成、按乙客户分桶"，而灰度分桶的意义正是"同一个人看到同一版话术"。
+	OneID        string           `json:"-"`             // 可空：没定位到人时分桶为空，正文照样要生效版本
+	TemplateCode string           `json:"template_code"` // 生成第一版必填；还价不重跑模板（见 Revise）
+	Currency     string           `json:"currency"`      // 空 = 取模板那份，再空 = 建表默认
+	ValidUntil   *time.Time       `json:"valid_until"`   // nil = 由模板 valid_days 推，再没有 = 不设
+	Lines        []QuoteLineInput `json:"lines"`         // 对模板/基准行的覆盖与追加，可空
 }
 
 // QuoteLineInput 行项目覆盖项。
@@ -142,11 +145,11 @@ type QuoteGenerateInput struct {
 // 全指针是为了「显式 0」与「没给」分得开：按非零才覆盖实现，"客户还价、折扣回到原价"
 // 这个最常见的动作做不出来，而且不报错 —— 折扣悄悄还在。
 type QuoteLineInput struct {
-	ProductID       string
-	Title           *string
-	Quantity        *float64
-	UnitPrice       *float64
-	DiscountPercent *float64
+	ProductID       string   `json:"product_id"`
+	Title           *string  `json:"title"`
+	Quantity        *float64 `json:"quantity"`
+	UnitPrice       *float64 `json:"unit_price"`
+	DiscountPercent *float64 `json:"discount_percent"`
 }
 
 // QuoteLineView 行项目的读视图。Gross 是折前小计，由库里那行的数量×单价现算
@@ -222,6 +225,17 @@ func (s *QuoteService) SetScriptSource(port QuoteScriptPort) {
 		return
 	}
 	s.scripts = port
+}
+
+// SetGate 换掉闸门读口。与发送腿各读一次是刻意的（同 quote_send.go 那句理由）：
+// 同一份配置的两次读，中间翻开的开关在两侧看到的可以不同，
+// 而那正是"生成时开着、发送时关着"的日常场景 —— 两侧若共用**同一次读的结果**才会说谎，
+// 装配点传的是同一个全局实例（一份缓存），每侧在自己的时刻各读一次。
+func (s *QuoteService) SetGate(reader LTCConfigReader) {
+	if s == nil {
+		return
+	}
+	s.gate = reader
 }
 
 // Available 报告能不能生成。闸门配置**不在**这一条里（nil 那份按降级处理，
@@ -472,14 +486,25 @@ func (s *QuoteService) buildView(ctx context.Context, row *model.Quote) (*QuoteV
 			DiscountPercent: it.DiscountPercent, Gross: gross, Amount: it.Amount,
 		})
 		view.GrossTotal += gross
-		view.Total += it.Amount
 	}
 	// 累加本身会带进 float 误差（三行相加能差出 1.8e-9），而"总价"是一位小数都不该
 	// 带尾巴的数：交出去之前把这份误差收掉。收的是**累加误差**，不是任何数值判断 ——
 	// 每行早已在落库前各自舍到分，这里加的就是那些分。
 	view.GrossTotal = quoteRound2(view.GrossTotal)
-	view.Total = quoteRound2(view.Total)
+	view.Total = quoteSumAmount(items)
 	return view, nil
+}
+
+// quoteSumAmount 合计 = **库里那些行相加**。
+//
+// 生成腿的视图与发送腿的正文共用这一份算法：两处各写一个循环，发出去的价与读出来的价
+// 迟早差一分 —— 而报价单的总价必须只有一个答案（AC③ 的口径在两侧同时成立才算成立）。
+func quoteSumAmount(lines []*model.QuoteLineItem) float64 {
+	var sum float64
+	for _, it := range lines {
+		sum += it.Amount
+	}
+	return quoteRound2(sum)
 }
 
 // persistLines 把合并好的行落到刚落库的那一版上，然后**读回来**出视图。
@@ -511,22 +536,43 @@ func (s *QuoteService) persistLines(ctx context.Context, row *model.Quote, lines
 
 // checkGate 域开关（ltc.config 的 quote 阶段）。关着的三种形状各报各的原因。
 func (s *QuoteService) checkGate(ctx context.Context) error {
-	cfg := s.gate.Config(ctx)
+	detail := quoteStageGateDetail(ctx, s.gate)
+	if detail == "" {
+		return nil
+	}
+	return fmt.Errorf("%w: 拦下原因 %s ⇒ 一行不写", ErrQuoteGateClosed, detail)
+}
+
+// quoteStageGateDetail 报价阶段闸门的**可处置原因**；空串 = 闸门开着。
+//
+// 判据抽成包级函数是为了两侧的文案不同而判据同源：生成腿拦下时写"一行不写"，
+// 发送腿拦下时写"不开审批、不外发"。合成一句话两侧就有的一侧在说谎。
+func quoteStageGateDetail(ctx context.Context, reader LTCConfigReader) string {
+	cfg := reader.Config(ctx)
 	// StageActive 的接收者可为 nil（nil 那份按降级），所以这里不用再判空。
 	active, reason := cfg.StageActive(LTCStageQuote)
 	if active {
-		return nil
+		return ""
 	}
 	detail := reason
 	if cfg != nil && cfg.DegradeReason != "" {
 		detail += "：" + cfg.DegradeReason
 	}
-	return fmt.Errorf("%w: 拦下原因 %s ⇒ 一行不写", ErrQuoteGateClosed, detail)
+	return detail
 }
 
 // resolveScript 取配置里那个分片的生效正文（AC① 的必经之路）。
 func (s *QuoteService) resolveScript(ctx context.Context, oneID string) (QuoteScript, error) {
-	raw, err := s.cfg.Get(ctx, QuoteScriptIDKVKey)
+	return resolveQuoteScript(ctx, s.cfg, s.scripts, oneID)
+}
+
+// resolveQuoteScript 解析的两个端口抽成包级函数：发送腿（T-P6-03）发的就是这一格。
+//
+// 两侧各写一份的话，"配置指针 → 生效快照 → 空正文判失败"这条链会先在其中一侧漂掉，
+// 而漂掉的那一侧发出去的东西在库里看起来完全正常。
+func resolveQuoteScript(ctx context.Context, cfg quoteConfigGetter, port QuoteScriptPort,
+	oneID string) (QuoteScript, error) {
+	raw, err := cfg.Get(ctx, QuoteScriptIDKVKey)
 	if err != nil {
 		return QuoteScript{}, fmt.Errorf("quote: 读报价话术指针 %s 失败：%w", QuoteScriptIDKVKey, err)
 	}
@@ -540,7 +586,7 @@ func (s *QuoteService) resolveScript(ctx context.Context, oneID string) (QuoteSc
 		return QuoteScript{}, fmt.Errorf("%w: 配置项 %s 的值 %q 不是话术分片 ID（它得是 script_library.id 那个正整数，不能按 0 号往下走）",
 			ErrQuoteScriptUnavailable, QuoteScriptIDKVKey, raw)
 	}
-	script, err := s.scripts.ActiveQuoteScript(ctx, uint(id64), oneID)
+	script, err := port.ActiveQuoteScript(ctx, uint(id64), oneID)
 	if err != nil {
 		return QuoteScript{}, err
 	}

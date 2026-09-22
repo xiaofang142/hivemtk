@@ -151,7 +151,7 @@ func qsSeedOpportunity(t *testing.T, db *gorm.DB, id string) {
 	t.Helper()
 	repo := repository.NewOpportunityRepositoryWithDB(db)
 	row := &model.Opportunity{
-		ID: id, Code: "OPP-QS-" + id, CustomerID: "cus_qs",
+		ID: id, Code: "OPP-QS-" + id, CustomerID: "cus_qs", OneID: "one_1",
 		Stage: model.OpportunityStageProposal, Status: model.OpportunityStatusOpen,
 		Amount: 1000, Currency: model.OpportunityCurrencyDefault, OwnerUserID: "sales_a",
 		CreatedAt: qsClockBase, UpdatedAt: qsClockBase,

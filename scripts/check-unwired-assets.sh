@@ -84,12 +84,18 @@ BASELINE=(
   "8|订单草稿运行时装配（FF_LTC_ORDER_DRAFT_DB 三态）|func InitOrderDraftRuntime|InitOrderDraftRuntime\(|internal/app internal/router|wired"
   "8|订单草稿到期/终态清扫的定时调用方|func NewOrderDraftSweepWorker|NewOrderDraftSweepWorker\(|internal/app|wired"
   "8|AI 响应→建草稿的生产者注入点|func \\(o \\*SmartCSOrchestrator\\) SetOrderDraftProducer|SetOrderDraftProducer\(|internal/app|wired"
-  # 项9 = T-P2-04 新增：sales_events 这张表**今天在生产路径上一行都不会写**。实测三项零命中：
+  # 项9 = T-P2-04 新增：sales_events 这张表**当时**在生产路径上一行都不写。实测三项零命中：
   # NewSalesEventStatsService 无生产构造点、注入点 SetStats( 零命中、唯一被接线的
   # FollowUpService 走 `if s.stats != nil` 保护（stats 恒 nil）。本卡给这张表加了
   # opportunity_id / quote_id 两个 LTC 预留列，若不登记，"商机事件已入库"这种话在
   # 接线前可以悄悄讲出口——正是 R-4 那条僵尸表（conversion_funnels）的原样翻版。
-  "9|销售事件流的装配入口（sales_events 今日生产零写入）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|"
+  # 【T-P6-03 后更正】"这张表零写入"今天只剩一半：**写**侧有了真实生产写入方
+  #   （internal/service/quote_send.go 的报价外发事件，句柄由 app/quote_wiring.go 递进去），
+  #   而本项盯的**读/统计**侧仍然零接线（callpat 的 scope 里没有 internal/service，
+  #   sales_event_stats.go 里那个 NewSalesEventRepository() 是统计服务自己的构造，不算证据）。
+  #   所以这一格继续留白 = 待办，但口径要说准：现在缺的不是"没人写"，是"写了没人读"——
+  #   而后者才是僵尸表的形状（漏斗读的是 opportunities 表，不是这条事件流）。
+  "9|销售事件统计服务的装配入口（写侧 T-P6-03 起有真实生产写入方，读侧仍零接线）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|"
   # 项10 = T-P2-05 新增：四行全部登记为 **wired**（防回退），不是待办。
   # 10a 是答案缓存版本路由的唯一决策口：它的调用点在 smart_cs_orchestrator.go 里，
   #   一旦被重构掉，编排器会静默退回挂载前的写死 "v1"，管理端配的版本/灰度当场变成
@@ -129,8 +135,11 @@ BASELINE=(
   #   12c 到期清扫有节拍器调用（T-P3-01 移交项：方法写得再完整，零调用方就等于
   #       pending 只增不减）。callpat 用"两个实参"这一形状与草稿侧的 ExpireOverdue(ctx)
   #       分开 —— 两条竖的 ExpireOverdue 同名不同签名，不区分的话删掉清扫器也不会红。
-  # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P6-03 报价发送、
-  # T-P9-02 知识库变更 —— 它们的 subject_type（quote / …）今天没有任何生产 Submit。
+  # 仍未接线的端（各由其卡登记，不在本基线留白即视为已闭环）：T-P9-02 知识库变更 ——
+  # 它的 subject_type 今天没有任何生产 Submit。
+  # 【T-P6-03 后更正】这一行原先还列着"T-P6-03 报价发送"：本卡交付后 subject_type=quote
+  #   有了唯一的生产 Submit（service/quote_send.go 的 verdict：没带结论号时入队一条待办），
+  #   所以它从这张"待接的 subject_type"清单上划掉，改由下面 21c/21d 两格守装配点。
   # 【T-P5-03 后更正】这一行原先把"T-P5-03 外联闸门"也列在零 Submit 名单里，判据本身没错、
   #   名字点错了：外发节点走的是**已有 Submit 的 `sop_node` 这一 subject_type**（图上挂起
   #   复用 T-P3-02 那座桥），所以本卡交付后它不该再出现在这张"待接的 subject_type"清单上。
@@ -363,22 +372,32 @@ BASELINE=(
   "20|SOP 外发出口的装配点（摘掉即图上每一步都能走完、只有最后发送永久失败）|func SetSOPReachSender|service\\.SetSOPReachSender\\(|internal/router|wired"
   "20|退订检查在生产构造点上的装配（setter 侧零生产调用方，摘掉这行退订用例仍全绿）|func NewDoNotContactService|dnc:[[:space:]]*NewDoNotContactService\\(|internal/service|wired"
   "20|节点 Tools 字段的执行器读取方（写入靠深拷贝原样抄、读取 0 处，外发因此走独立节点类型）|Tools +\\[\\]string|\\.Node\\.Tools|"
-  # ---- T-P6-01 起登记、T-P6-02 改口的一格 --------------------------------------
+  # ---- T-P6-01 起登记、T-P6-02 改口、T-P6-03 补齐装配的一族（21a–21d）———————————
   # 21a 盯"有没有人构造报价仓储"。scope 刻意排除 internal/repository —— 实现文件里
   #      两个构造函数的**定义**永远在，把它算成接线就从第一天起假绿（项16 的 16a 同一课）。
-  #      internal/service **留在 scope 里**：报价的写入方就住在那儿，而 hits() 跳过
-  #      _test.go，所以"只在测试里 NewQuoteRepositoryWithDB 了一把"不会把它翻成 wired
-  #      —— T-P6-02 交付后实测仍为 0，装配入口要等 T-P6-03 在 app/controller 侧建。
+  #      internal/service 留在 scope 里：报价的写入方就住在那儿，而 hits() 跳过 _test.go，
+  #      所以"只在测试里 NewQuoteRepositoryWithDB 了一把"不会把它翻成 wired。
   # 21b 盯"有没有人往 quotes 里写行业务数据"。T-P6-01 登记时为 UNWIRED（那一卡只交付
   #      schema 与仓储，全仓没有一个人构造过报价）；T-P6-02 交付 QuoteService 后翻
   #      wired，此后它是**防回退登记**：接线数掉回 0 = 报价生成整条腿没了。scope 排除
   #      internal/pkg/db —— 那里的 `&model.Quote{}` 是**建表登记**不是写入。
   # 两格分开是因为接线有两个断点（装配入口 / 真的产生一行报价），只盯一个会让另一个
-  # 断了也没人知道。今天的读数正好一处 wired、一处 UNWIRED，就是这两个断点各自的答案。
+  # 断了也没人知道。
+  # T-P6-03 又补了两个断点，所以这一族今天有四格：
+  # 21c `app.InitQuoteRuntime(gormDB)` —— 摘掉这一行，两条腿的全局实例恒为 nil，
+  #      四条端点全部退成 503，而 **Go 用例照样全绿**：router 包里那几条"未装配回 503"的
+  #      用例判的就是 nil 句柄，它分不清"本来就该 nil"和"没人装配"。这正是台账存在的理由
+  #      （商机竖的 M33 那一课：service 侧单测全绿、生产装配点没人调用）。
+  # 21d `setupQuoteRoutes(auth)` —— 与 21c 是两个独立断点：装配了但没挂载 = 库里有报价、
+  #      HTTP 面上读不到（前端 404）；挂载了但没装配 = 端点在、每问一句回 503。
+  #      两种坏法在响应面上毫无重叠，合成一格就只守得住一半。
+  #      callpat 只扫 internal/router：定义与调用同包，靠 wiring 过滤掉 `func ` 那一行。
   # 读方的口径（回灌进文档的那句）：quotes 表里有行 = 有人显式建过，
-  # 而"表是空的"仍同时可能是"取数失败"—— 那是 T-P6-04 的出口要分的事，不是这两格。
-  "21|报价仓储的装配入口（service 侧已能造报价，但全仓还没有 HTTP/装配入口把 QuoteService 接上：摘掉 app 侧那行赋值，生成用例仍全绿）|type QuoteRepository interface|NewQuoteRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|"
+  # 而"表是空的"仍同时可能是"取数失败"—— 那是 T-P6-04 的出口要分的事，不是这几格。
+  "21|报价仓储的装配入口（T-P6-03 起 app/quote_wiring.go 有真实构造点；接线数回到 0 = 报价两条腿都没人装）|type QuoteRepository interface|NewQuoteRepository(WithDB)?\\(|internal/app cmd/api internal/service internal/controller|wired"
   "21|报价行的生产写入点（T-P6-02 起 service 侧有真实写入方：Generate 与 Revise 各构造一版；接线数回到 0 = 报价生成整条腿没了）|type Quote struct|model\\.Quote\\{|internal/service internal/controller internal/app|wired"
+  "21|报价两条腿在启动路径上的装配点（摘掉 router 那一行，端点全退 503 而 Go 用例全绿）|func InitQuoteRuntime|InitQuoteRuntime\\(|internal/router|wired"
+  "21|报价 HTTP 出口的挂载点（装配了却没挂载 = 库里有报价、前端 404，与 21c 是两种坏法）|func setupQuoteRoutes|setupQuoteRoutes\\(|internal/router|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

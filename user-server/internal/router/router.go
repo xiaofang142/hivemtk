@@ -236,6 +236,13 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 不装配就是 /api/opportunity/* 全部回 503，不会回一个空列表骗人。
 	app.InitOpportunityRuntime(gormDB)
 
+	// 报价两条腿（T-P6-02 生成 / T-P6-03 发送）：必须排在 InitApprovalRuntime 与
+	// InitHumanTaskRuntime **之后** —— 装配点优先复用全局审批服务（裁决入口在 /api/approvals/*），
+	// 并在那一刻取待办出口。同样排在 InitGlobalToolExecutor 之后：发送腿那份外发服务要挂
+	// T-P3-07 的发送前闸门，而闸门的裁决来源是工具执行器装配时建的。本竖没有旗子也不产生协程，
+	// 但会在 FF_LTC_APPROVAL_RESUME=off 时点名"批不了"这件事（见 quote_wiring.go 文件头）。
+	app.InitQuoteRuntime(gormDB)
+
 	// 邮件排水运行时（R21）：必须在路由之前 —— /api/email/* 读的是同一个 status 字段的
 	// 那一列，装配点晚于流量的话，列表里会出现"排水器刚把它改成发送中、读侧还在按待发送
 	// 统计"的错位。本竖没有旗子：拿不到 DB 句柄就是不装配，不装配就是回到 R21 之前的
@@ -381,6 +388,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 商机 /api/opportunity/*（T-P4-04）：与上一行同一位置约束（写入口的操作者身份
 		// 取自令牌，虽然本卡还不记 actor —— 那件事归哪张表还没拍板）。
 		setupOpportunityRoutes(auth)
+
+		// 报价 /api/quote/*（T-P6-03）：同一位置约束，而且比商机那条更硬 ——
+		// 发送那一条的操作者要落进 sales_events.owner_id（"谁把这一版发出去的"），
+		// 那个身份只来自令牌；匿名可访问等于审计里所有人都可以是任何人。
+		setupQuoteRoutes(auth)
 
 		systemAdmin := auth.Group("")
 		systemAdmin.Use(middleware.AdminAuthMiddleware())

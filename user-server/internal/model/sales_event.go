@@ -9,13 +9,20 @@ import "time"
 // 做 DB 权威统计；与实时驾驶舱（dashboard_sse_stats）互补。
 //
 // OpportunityID / QuoteID 两列（T-P2-04 / R-5，原文件头自记的 H2 技术债）是给 LTC
-// 新域预留的外键位：商机事件由 P4（T-P4-xx）写入，报价事件由 P6 写入。本卡只开列，
-// **不写任何生产者**，理由与三条口径如下：
+// 新域预留的外键位。预留时本卡只开列、**不写任何生产者**，并把"由谁写"记成了
+// "商机事件由 P4 写入、报价事件由 P6 写入"——前者至今没发生（见 a），后者发生在
+// T-P6-03。理由与三条口径如下：
 //
-//	a) 两列今天恒为空，且**整张表在生产路径上零写入**——唯一的生产构造点
-//	   `NewSalesEventStatsService(` 实测在非测试代码里 0 命中，注入点 `SetStats(` 亦 0 命中，
-//	   而已接线的 FollowUpService 走 `if s.stats != nil` 保护（stats 恒 nil）。
+//	a) 【T-P6-03 后更正，实测于本卡】"整张表零写入"这句已经不成立：从报价发送腿起，
+//	   `event_type = "quote"` 这一类是生产路径上的**第一个**写入方，它把
+//	   opportunity_id / quote_id / owner_id 三列一起填上（internal/service/quote_send.go
+//	   的 SalesEvent 构造点）。除此之外的四类事件仍然没有生产者：它们的构造点都在
+//	   `NewSalesEventStatsService(` 里，而该服务在非测试代码里 0 构造点、注入点 `SetStats(`
+//	   亦 0 命中，已接线的 FollowUpService 走 `if s.stats != nil` 保护（stats 恒 nil）。
 //	   该状态由 `check-unwired-assets.sh` **项 9** 盯梢，接线前不得宣称"商机事件已入库"。
+//
+//	   这一更正不改 c) 的结论：目前**没有任何**按 opportunity_id / quote_id 检索
+//	   sales_events 的读路径（写方 ≠ 读方），索引照旧随第一个读方一起加。
 //	b) NULL 与 '' 各有含义，别当成一回事：列可空且**不回填**，所以迁移前已有的行是 NULL
 //	   （= 这条事件发生在有商机概念之前）；迁移后经 GORM 写入的行是 ''
 //	   （= 有该概念、但这次事件没有商机）。Go 侧用 string 而非 *string，是让写入侧
@@ -70,4 +77,9 @@ const (
 	SalesEventTypeAIDeal       = "ai_deal"
 	SalesEventTypeOrderDraft   = "order_draft"
 	SalesEventTypeSalesProfile = "sales_profile"
+	// SalesEventTypeQuote 报价外发成功那一条（T-P6-03）。
+	// 它是这张表在生产路径上的**第一个**带 opportunity_id / quote_id 的写入方：
+	// 上面文档里的口径 a（"整张表零写入"）随那张卡一起更正，见文件头与
+	// scripts/check-unwired-assets.sh 项 9。
+	SalesEventTypeQuote = "quote"
 )
