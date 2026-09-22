@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：71 格逐格验牙。
 
-跑在**私有 --shared 克隆**里，且克隆的内容不是"工作树那一坨"，而是
-「HEAD + 本卡自己的那几处插入」：工作树里 migrate.go / router.go / check-unwired-assets.sh
-三个文件同时压着别的泳道未提交的改动（批22 的 browsermodel 与其台账行），
-直接 cp 会把未跟踪的文件也拽进来（`BrowserAuditDigest` 的宿主文件在 HEAD 里根本不存在，
-克隆当场编不过）。所以这里对这三个文件只打**本卡的 hunk**，其余 14 个新建文件原样覆盖。
-副产品：这一趟跑的就是"将要 commit 的那份字节"，克隆能编过 = 提交自洽的提前证据。
+跑在**私有 --shared 克隆**里，克隆内容就是「HEAD 那一棵树」：本卡的 15 个新建文件与四处
+装配插入都随 `66964f9e` 进了 HEAD，所以 prepare 不再往克隆里写任何字节，只逐条断言那四处
+装配在 HEAD 里**恰好命中一次**（命中 0 ⇒ 拿错了树；命中 2 ⇒ 同一处在 HEAD 里被写了两遍）。
+提交前那一版是「HEAD + 只打本卡 hunk」，因为当时工作树的 migrate.go / router.go /
+check-unwired-assets.sh 同时压着别的泳道未提交的改动；那套补丁逻辑连同它的幂等守卫
+一起被换掉了，换掉的原因记在 `MY_ANCHORS` 上方。
+副产品不变：这一趟跑的就是已提交的那份字节，克隆能编过 = HEAD 自洽的证据。
 
 口径（沿用批16/17/18/19x/20b/20d/22/23 与 b61 电池）：
 - 控制组**放刀前现测**且**每 runner 各测一次**：共享树下别的泳道随时往同一批包里加用例，
@@ -24,6 +25,19 @@
 - 锚点命中必须恰好一次；一格多处注码走 pairs（**内存里叠完一次写盘**，不逐格落盘）；
 - 还原后逐文件比 md5，不一致立即停机；
 - gate 那几格只跑台账脚本（它本身是个 grep 门，不参与编译），其注码形状在每格 desc 里写明。
+
+首轮（同一批产码，克隆基线 HEAD `cf71ba60`）71 格里活了四格、坏了一格，**五处全是判据侧的**，
+逐条记在这里免得下一版重新"发现"一遍：
+- K08（json 名 ↔ 列名）活 = 用例自己算列名：把 `gorm:"column"` 与字段名一起改它跟着改 ⇒
+  改成从 `schema.NamingStrategy` 取（与 GORM 同一个函数）；
+- K92（未装配不挂路由）活 = 夹具自己 new 引擎、绕过 `setupBillRoutes` ⇒ 补一条走真实
+  `setup*` 的挂载数断言（route 控制组从 8 变 9，又一次证明控制组不能写死）；
+- K38（库故障读成"没有这张单"）活 = 没有一条用例走过 `billOrNil` 的 `err != nil` 那一支 ⇒
+  注 cancelled context，断"报错且不回 nil 行"；
+- K61（请求体不封顶）活 = **探针本身无牙**：那条 20KB 的 `q` 同时被行号长度上限挡下，
+  摘掉封顶照样 400 ⇒ 换成"语义合法而字节超限"的体（前导空白在 TrimSpace 后消失），
+  并断言红自体积那一支、派生腿一次都没被叫；
+- K72（接缝多开读口）判 BROKEN = 见上面 kind=build 那一条。
 
 已知**未覆盖**（写在这里而不是悄悄不留痕）：
 - 「已 accepted 先读账单」那条快速路径**没有格子**：把 `if row.Status == accepted` 那一支整个短路，
@@ -53,7 +67,7 @@ ROOT = Path(__file__).resolve().parents[1]
 US = "user-server"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
-# —— 本卡的全部新建文件（工作树里是 ?? 状态，逐字覆盖进克隆）————
+# —— 本卡的新建文件（已随 `66964f9e` 进 HEAD；这里只用于"工作树 vs HEAD"的漂移守卫）——
 NEW_FILES = [
     f"{US}/internal/model/bill.go",
     f"{US}/internal/model/bill_test.go",
@@ -72,25 +86,24 @@ NEW_FILES = [
     f"{US}/internal/pkg/db/migrate_test.go",
 ]
 
-# —— 本卡在既有文件里的插入：克隆里只打这些 hunk，不带别的泳道的改动 ——
-MY_HUNKS = [
-    (f"{US}/internal/pkg/db/migrate.go",
-     "\t\t&model.QuoteLineItem{},\n",
-     "\t\t&model.QuoteLineItem{},\n\t\t&model.Bill{},\n"),
-    (f"{US}/internal/router/router.go",
-     "\tapp.InitQuoteRuntime(gormDB)\n",
-     "\tapp.InitQuoteRuntime(gormDB)\n\tapp.InitBillRuntime(gormDB)\n"),
-    (f"{US}/internal/router/router.go",
-     "\t\tsetupQuoteRoutes(auth)\n",
-     "\t\tsetupQuoteRoutes(auth)\n\n\t\tsetupBillRoutes(auth)\n"),
-    ("scripts/check-unwired-assets.sh",
-     '  "21|报价 HTTP 出口的挂载点（装配了却没挂载 = 库里有报价、前端 404，与 21c 是两种坏法）|func setupQuoteRoutes|setupQuoteRoutes\\\\(|internal/router|wired"\n',
-     '  "21|报价 HTTP 出口的挂载点（装配了却没挂载 = 库里有报价、前端 404，与 21c 是两种坏法）|func setupQuoteRoutes|setupQuoteRoutes\\\\(|internal/router|wired"\n'
-     '  "23|账单仓储的装配入口|type BillRepository interface|NewBillRepositoryWithDB\\\\(|internal/app|wired"\n'
-     '  "23|账单行的生产写入点|type Bill struct|model\\\\.Bill\\\\{|internal/service internal/controller|wired"\n'
-     '  "23|账单派生腿在启动路径上的装配点|func InitBillRuntime|InitBillRuntime\\\\(|internal/router|wired"\n'
-     '  "23|账单 HTTP 出口的挂载点|func setupBillRoutes|setupBillRoutes\\\\(|internal/router|wired"\n'
-     '  "23|账单状态跃迁口的生产调用方|func \\\\(r \\\\*billRepo\\\\) UpdateStatus|bills\\\\.UpdateStatus\\\\(|internal/service|"\n'),
+# —— 本卡在既有文件里的四处插入。提交（`66964f9e`）之后它们**已经在 HEAD 里**，
+# 所以 prepare 不再打补丁，改成逐条断言"在 HEAD 的这份文件里恰好出现一次"：
+# 克隆走偏（拿到别的树）和锚点重复都会在这里当场停住，而不是让 K20/K90/K91/K95/G1/G2
+# 去拿一个"命中 2 次"的红当结论。
+#
+# 这里原来是 (文件, 旧文本, 新文本) 三元组 + 一条幂等守卫 `count(new)==1 and count(old)==0`。
+# 那条守卫**永不成立**：每一处的 old 都是 new 的前缀子串（`&model.QuoteLineItem{},` 就写在
+# 那两行里），提交后 HEAD 里 old 也计 1 次 ⇒ 守卫判"没打上"⇒ hunk 被打第二遍 ⇒
+# `--check` 报 6 格"锚点命中 2 次"。这是本卡第二处"判据自己没牙"，记在这里免得下一版重犯。
+MY_ANCHORS = [
+    (f"{US}/internal/pkg/db/migrate.go", "\t\t&model.Bill{},\n"),
+    (f"{US}/internal/router/router.go", "\tapp.InitBillRuntime(gormDB)\n"),
+    (f"{US}/internal/router/router.go", "\t\tsetupBillRoutes(auth)\n"),
+    ("scripts/check-unwired-assets.sh", '  "23|账单仓储的装配入口'),
+    ("scripts/check-unwired-assets.sh", '  "23|账单行的生产写入点'),
+    ("scripts/check-unwired-assets.sh", '  "23|账单派生腿在启动路径上的装配点'),
+    ("scripts/check-unwired-assets.sh", '  "23|账单 HTTP 出口的挂载点'),
+    ("scripts/check-unwired-assets.sh", '  "23|账单状态跃迁口的生产调用方'),
 ]
 
 MODEL = f"{US}/internal/model/bill.go"
@@ -432,30 +445,47 @@ def prepare(dst: Path) -> Path:
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
         raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
-    for rel in MY_HUNKS_KEYS:
+    for rel in MY_ANCHOR_KEYS:
         src = clone / rel
         if not src.exists():
-            raise SystemExit(f"待打 hunk 的文件在 HEAD 里不存在：{rel}")
-    for rel, old, new in MY_HUNKS:
-        p = clone / rel
-        t = read(p)
-        if t.count(new) == 1 and t.count(old) == 0:
-            continue  # 幂等：已经打上
-        p.write_text(sub_once(t, old, new, f"hunk:{rel}"), encoding="utf-8")
+            raise SystemExit(f"锚点所在文件在 HEAD 里不存在：{rel}")
+    for rel, needle in MY_ANCHORS:
+        n = read(clone / rel).count(needle)
+        if n != 1:
+            raise SystemExit(f"装配锚点在 HEAD 的 {rel} 里命中 {n} 次（要恰好 1 次）：{needle!r}\n"
+                             "⇒ 克隆拿到的不是本卡提交的那棵树，或那一处在 HEAD 里被写了两遍。")
+    in_head = 0
+    drifted: list[str] = []
     for rel in NEW_FILES:
         src = ROOT / rel
         if not src.exists():
             raise SystemExit(f"覆盖源缺失：{src}")
         tgt = clone / rel
+        if tgt.exists():
+            # 提交之后文件已在 HEAD 里：这时**测 HEAD 的字节**，别再拿工作树覆盖 ——
+            # 共享工作树里随时压着并行泳道的未提交改动，覆盖进去就等于把他们的改动算进我的判据。
+            # 但工作树若与 HEAD 不一致，"电池全杀"证的就不是我改过的那份字节 ⇒ 停机点名，不静默。
+            in_head += 1
+            if md5_bytes(src) != md5_bytes(tgt):
+                drifted.append(rel)
+            continue
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
+    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=clone,
+                          capture_output=True, text=True).stdout.strip() or "?"
+    print(f"基线字节：克隆 HEAD `{head}`；本卡文件已在 HEAD {in_head}/{len(NEW_FILES)}"
+          + ("" if in_head == len(NEW_FILES) else "（余下从工作树取，属未提交态）")
+          + f"；装配锚点 {len(MY_ANCHORS)} 处各命中 1 次")
+    if drifted:
+        raise SystemExit("这些文件 HEAD 里有、工作树里被改过且**未提交**，电池测的是 HEAD："
+                         + ", ".join(drifted) + "\n先提交这一格再看电池结论。")
     hostenv = ROOT / US / ".env"
     if hostenv.exists():
         shutil.copy2(hostenv, clone / US / ".env")
     return clone
 
 
-MY_HUNKS_KEYS = tuple(sorted({rel for rel, _, _ in MY_HUNKS}))
+MY_ANCHOR_KEYS = tuple(sorted({rel for rel, _ in MY_ANCHORS}))
 
 
 def env_for(root: Path) -> dict:
@@ -535,7 +565,18 @@ def main() -> int:
     print(f"私有作业目录：{tmp}")
     clone = prepare(tmp)
 
-    rels = sorted({c[4] for c in cells} | set(MY_HUNKS_KEYS) | set(NEW_FILES))
+    def sweep() -> None:
+        """除了 --keep，正常出口与"可复现"的停机出口都把私有克隆带走。
+
+        以前 `--check` 与控制组不干净那两处是直接 return/raise 走的，把整份克隆留在 /tmp 里：
+        一轮整电池几百 MB，而磁盘常态是 99% 满。
+        **md5 不一致那一支刻意不扫**：那份"还原之后还是不对"的字节是唯一证据，
+        克隆可复现而它不可复现，删了就只剩一句"当时红过"。
+        """
+        if not args.keep:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    rels = sorted({c[4] for c in cells} | set(MY_ANCHOR_KEYS) | set(NEW_FILES))
     files = {rel: clone / rel for rel in rels}
     originals = {rel: read(p) for rel, p in files.items()}
     basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
@@ -551,6 +592,7 @@ def main() -> int:
                 bad += 1
                 print(f"  ✗ {e}")
         print(f"锚点校验：{len(cells)} 格，{bad} 格锚点有问题")
+        sweep()
         return 1 if bad else 0
 
     controls: dict[str, int] = {}
@@ -562,6 +604,7 @@ def main() -> int:
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
             if not ok:
                 print(out[-4000:])
+                sweep()
                 raise SystemExit("控制组[gate] 不干净：台账门在克隆里就报漂移，"
                                  "后面所有 G* 格的红/绿都不可信")
             continue
@@ -572,6 +615,7 @@ def main() -> int:
               f"PASS={passed} skip={skipped} FAIL={killed}")
         if bad:
             print(out[-4000:])
+            sweep()
             raise SystemExit(f"控制组[{name}] 不干净——它下游所有格子的红/绿都不可信")
 
     problems: list[str] = []
@@ -634,8 +678,7 @@ def main() -> int:
     print("\n计数：", " ".join(f"{k}={tally[k]}" for k in TALLY), f"格子数={len(cells)}")
     print("全部格子已还原（逐文件 md5 与基线一致）")
 
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
+    sweep()
     if problems:
         print("\n===== 电池判定：有洞 =====")
         for x in problems:
