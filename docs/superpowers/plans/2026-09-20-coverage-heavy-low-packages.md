@@ -4271,7 +4271,11 @@ Node.js 24: actions/checkout@v4, actions/setup-node@v4`，另一趟里是 `actio
 命中 node20 的有 **11 个 pin** —— `checkout@v4`、`setup-node@v4`、`setup-go@v5`、`upload-artifact@v4`、
 `download-artifact@v4`、`setup-python@v5`、`configure-pages@v5`、`deploy-pages@v4`、`codecov-action@v4`、
 `markdownlint-cli2-action@v19`、`release-drafter@v6`。全部抬到"最低 node24 主版本＝当前 latest"那一档
-（`v7 / v7 / v7 / v7 / v8 / v7 / v6 / v5 / v7 / v24 / v7`），**14 个干净文件 36 个站点**。
+（`v7 / v7 / v7 / v7 / v8 / v7 / v6 / v5 / v7 / v24 / v7`），**14 个干净文件 43 个站点**。
+站点数这里订正一次：本节初稿写的是 36，复算时两条路给出的数不一样 —— 自研的"逐文件 `zip()` 比对前后
+`uses:` 列表"漏掉了 `slsa.yml`(6) 与 `website-pages.yml`(4) 两文件（脚本打印的合计 33 与文件数 14 本身就
+对不上，是它漏证的信号），而 `git show bfa0a6e2 | grep -c '^+.*uses: '` = **43** 与"按 11 家清单逐文件点名相加"
+= 43 两条独立口径一致 ⇒ 认 43。**判据：数对象数至少两条独立路子，且要拿"应得的总数"（14 个文件）核对分母**。
 `user-server-ci.yml` 里剩 **27** 个 node20 站点没动 —— 该文件是并行泳道的 ` M`（它那笔 8+/4- 的
 未接线台账注释），共享索引下 `git add` 会把对方的行一起带走，同一条口径第三十一轮起没变过。
 输入面先核过再抬（不是"抬完祈祷"）：`download-artifact@v8` 仍声明 `name/pattern/path/merge-multiple`，
@@ -4354,3 +4358,43 @@ master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest cove
 另记一条外部事实：`bfa0a6e2` 推上去约 3 分钟后，Dependabot 自己关掉了 #20（markdownlint 19→24）
 与 #21（release-drafter 6→7）——即 ③ 覆盖的三张票里两张**由对方主动收敛**，#22（checkout 4→7）在
 本轮读账时仍开放。关票属共享分支动作，仍交人拍板，见 ⑦。
+
+**⑨ 推上去之后的两处回读，加一次把待办写歪过的订正（2026-09-23 02:20–02:50）**：
+
+- `ed07b978` 双推后按全 SHA 反查作业：只有 **5 趟**（`SBOM` / `Docs Consistency` / `Markdown Lint` /
+  `Docs Link Check` / `Lint`），不是"CI 掉了"——仓里一共 **15 份** workflow，另外 10 份要么 `on.push.paths`
+  不含 `docs/**` 与 `scripts/check-ci-step-coverage.*`，要么根本不按 push 触发（`Release`/`SLSA` 那两份的 push
+  面是空的）。**这个数是拿 head_sha 反查作业得出来的，不是照着 paths 推的**（口径 ⑤ 与记忆的 ③⑳ 同轴）。关键是那一步：**`Workflow refs integrity` 作业四步全 success，含
+  `check-ci-step-coverage 用例（假 gh，不联网）`** ⇒ 判据今后退化会在 CI 当场红，不用等人翻本地。
+  整趟 `Lint` 仍 failure，失败作业只有 `ESLint (user-web 主应用)`、失败步 `Run ESLint (errors block,
+  warnings informational)`（③ 那朵已知红），`LICENSE Compliance Scan` 照 ② 恒 `skipped`。
+- **本轮最该记住的一条：结转下来的待办，写法本身是错的**。第四十五轮那条写的是"给四处 postgres
+  `options:` 各加 `--max-connections=400`"，两处都不成立：① `--max-connections` 不是 postgres 的服务端
+  参数名（`-c max_connections=400` 才是）；② GitHub 文档原文——`services.<id>.options` 是
+  "Additional Docker container resource options… see **docker create options**"（`--health-*` 确实属这一类），
+  而镜像名**之后**的参数另有其键，叫 `command`（"passed as arguments after the image name in the
+  docker create command"，文档里 services **没有** `args` 这个键）。照旧写法落地＝参数被 docker 自己吃掉，
+  容器仍按默认 100 起，**红会原样留着且没人怀疑是写法问题**。⇒ 正确落法是每个 service 块加
+  `command: >-\n  -c max_connections=400`（`image:` 是 `pgvector/pgvector:pg15`，用的是 postgres 官方那份 docker-entrypoint.sh：
+  首参以 `-` 开头时它会自己补上 `postgres`），并且**验收不读 yml、读一趟 CI 的 `SHOW max_connections`**。
+- 待办面的证据这轮补齐了（跑的是并行泳道的 `user-server-ci` run `35765306304`，head `5b92525c`，
+  `gh run view --log-failed` 9,367,469 字节，逐朵归因）：4 朵红 =
+  ① `ESLint (user-web)` ＝ 同那两条；② `Unit tests -race (user-server core)` ＝
+  `TestExternalOrderRepository_GetByOrderID/get_non-existing_order`，
+  `integration_test.go:824: GetByOrderID() error = <nil>, wantErr true`（对方在编的外部单号那条腿，非环境）；
+  ③ `Unit tests -race (user-server service)` ＝ **2 条 `FATAL: sorry, too many clients already
+  (SQLSTATE 53300)`**（`async_db_handle_probe_test.go:49`、`audience_selector_test.go:93`，同一库
+  `user_db_test_slot0`）；④ `Coverage (user-server)` 是被"包未产生结果 / 分片判据失效"两条完整性断言
+  连带打红，红因不是覆盖率数字。**`WARNING: DATA RACE` 在这趟里 = 0** ⇒ R27/R28 两批收口没退化。
+- 这一刀**仍不代做**，且这轮把"为什么不代做"从推测升级成实测过的两条否证：
+  `user-server-ci.yml` 此刻 ` M`（对方 8+/4- 的未接线台账注释，mtime 停在 2026-09-20 09:21、三天没动但没提交）。
+  绕法一（`git apply --cached` 只上自己那一 hunk）＝对方的 `git commit` 会把我的行连同他自己的一起提交，
+  账算到别人头上；绕法二（影子 worktree 里 `update-ref master` 再推）＝对方下一次提交该文件时按**它的
+  工作树**记账，会把我刚推的 `command:` 整段**反向删掉**，且不会有任何冲突提示。⇒ 两条都比"等一等"贵。
+  行号也别照抄：`options:` 在 HEAD 是 `243/300/354/474`，在带对方未提交行的工作树是 `247/304/358/478`，
+  **锚在 `services.postgres` 这个块上，不要锚行号**。
+- 收尾杂项：临时分支 `r46-node24` 三处引用（活树 / `upstream` / 影子克隆）已删，删前证据＝
+  `git diff --name-only r46-node24 master -- .github/workflows/` 为空，tip SHA `c56367be` 记此备恢复；
+  Dependabot 开放票实测 #22–#28 共 7 张（checkout 4→7、vitest 1→5、vite 5→8、eslint 9→10、jsdom、globals、
+  go-minor 18 包）；⑥ 那条 `node-version: '20'` 独立线复核＝workflow 里 **12 处**，与 action 运行时到期
+  是两件事，仍按 ⑥ 的口径等一次原子落地＋前端回归。
