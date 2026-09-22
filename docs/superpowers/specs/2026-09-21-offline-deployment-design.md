@@ -1745,3 +1745,15 @@ rc 1→红，并点名"基线里没有这个文件（新落点）"⇒ 那道门�
 顺带被这次 `cmp` 抓出来的一条 stale 断言：§7.5 结尾写"两仓副本逐字一致"，实测在补腿**之前**
 两份已提交的反向测试就差了 10 行（hivemtk 那份在 §7.3 Task 25 收口时被花括号化过 5 处，platform 那份没跟上）。
 两仓没有互相可见的门 ⇒ "逐字一致"这句在每个同步点都得重跑 `cmp -s` 才算数，写完不等于成立。
+
+**最终 tip 上的复核（2026-09-23，测于 hivemtk `aab2e733` / platform `a2cae1c`）**：两树各跑一遍四腿反向电池，
+均 `rc=0` 四腿全 PASS（hivemtk 的 ④ 取到 `user-server/.env.example`、platform 取到 `platform-contributor/.env.example`，
+即两树的交集都非空 ⇒ 这一轮没有走 SKIP 分支）；跑完按显式路径核 `git status --porcelain` = 0 行（无夹具残迹）；
+`cmp -s` 两份副本逐字一致、md5 均为 `990cabf62f4063327c761bd33c5f7a00`。
+邻门在这两版上复跑 hivemtk 侧 `scanned=136 / 命中 2（基线 2）rc=0`。
+顺手把那条"platform 没有这道邻门"的口子量了一遍：把同一套判据（os.walk 的目录排除、`.sh/.bash`、
+跳注释行、引号态 `expandable()`）抽成只读探针在 platform 树上跑，得 `scanned=7 / total=0`
+—— 探针在本仓读数与真门逐位相同（136 / 2），故口径可信 ⇒ platform 现存 shell 脚本里**零处**该形状，
+没有需要基线锁住的存量（真门迁过去会因"基线里没有任何条目"退 rc=2，那是它的正确行为）。
+这不等于 platform 从此有牙：那 7 个文件不受任何自动门约束（该仓无 GitHub Actions），
+下一批若在那儿新增 `$VAR`+中文，只能靠同步点手工复跑本门发现。
