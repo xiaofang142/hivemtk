@@ -7,7 +7,8 @@
 # 本闸把"任何地方别再把它当默认值或示例"固化成可跑判据。
 #
 # 覆盖面口径（务必知道本闸摸不到什么，勿当全量保证）：
-#   枚举源 = 两条并起来 sort -z -u 去重（全程 NUL 分隔，见 candidates() 注释）：
+#   枚举源 = 两条并起来、**剥掉 find 的 ./ 前缀之后** sort -z -u 去重
+#   （全程 NUL 分隔，见 candidates() 与其后的去重注释）：
 #     ① `git ls-files --cached --others --exclude-standard -z`
 #        —— 已追踪 + 未追踪但未被 .gitignore 排除的文件。
 #        取"未追踪也扫"是为了本地新增文件在 git add 之前就能被拦下；
@@ -65,8 +66,10 @@ PATTERN='xapptool\.cn'
 
 # NUL 分隔的待扫清单落盘一次：既要喂给 xargs，又要先数出扫描文件数做枚举自证，
 # 用进程替换两遍读会漏（管道只能消费一次）。
+# 两份清单：LIST_RAW 是循环剥完 ./ 的结果，LIST 是它 sort -z -u 之后的最终口径。
+TMP_LIST_RAW="$(mktemp "${TMPDIR:-/tmp}/no-xapptool-list.XXXXXX")"
 TMP_LIST="$(mktemp "${TMPDIR:-/tmp}/no-xapptool-list.XXXXXX")"
-trap 'rm -f "$TMP_LIST"' EXIT
+trap 'rm -f "$TMP_LIST_RAW" "$TMP_LIST"' EXIT
 
 WHITELIST=(
   "docs/superpowers/specs/2026-09-21-offline-deployment-design.md"
@@ -90,22 +93,32 @@ is_whitelisted() {
 # 于是 [[ -f "$f" ]] 判假、静默 continue —— docs/architecture/FRP私域部署指南.md
 # 的 14 处旧域就这么从闸眼下溜过去，闸还印了 "OK 0 hits"。
 # -z 让 git 输出原始字节且以 \0 分隔，名字里带空格/中文/引号都不再需要转义。
+#
+# 这里**不**先去重：① 给的是 `user-web/.env.example`，② 给的是
+# `./user-web/.env.example`，同一文件两副面孔，在剥前缀之前 sort -u 去不掉。
+# 去重放到下面循环之后（见 TMP_LIST 那一步）。
 candidates() {
-  {
-    git ls-files --cached --others --exclude-standard -z
-    find . \( -name node_modules -o -name .git -o -name dist -o -name build -o -name vendor \) -prune \
-      -o -type f \( -name '.env' -o -name '.env.*' -o -name '*.env' \) -print0
-  } | sort -z -u
+  git ls-files --cached --others --exclude-standard -z
+  find . \( -name node_modules -o -name .git -o -name dist -o -name build -o -name vendor \) -prune \
+    -o -type f \( -name '.env' -o -name '.env.*' -o -name '*.env' \) -print0
 }
 
-SCAN_FILES=0
 while IFS= read -r -d '' f; do
   f="${f#./}"
   is_whitelisted "$f" && continue
   [[ -f "$f" ]] || continue
-  SCAN_FILES=$((SCAN_FILES + 1))
   printf '%s\0' "$f"
-done < <(candidates) > "$TMP_LIST"
+done < <(candidates) > "$TMP_LIST_RAW"
+
+# 归一化之后再 sort -z -u，才是"实际要扫的文件数"。
+# 老写法在 candidates() 里去重，实测有 5 个同时被两条源枚举的 .env 形状文件
+# （scripts/inference-host/models.env、user-server/.env.example、
+# user-web/.env.example、user-web/.env.development、user-web/.env.production）
+# 各进清单两次：scanned 比真值多 5（同一刻实测印 4331 / 真值 4326），
+# 更要紧的是这些文件里的一处命中会被 grep 两遍 ⇒ 印两行 file:line、hit 计数翻倍，
+# 而 .env.example 正是"示例基址"最可能回落到旧域的那类文件。
+sort -z -u < "$TMP_LIST_RAW" > "$TMP_LIST"
+SCAN_FILES="$(tr -dc '\0' < "$TMP_LIST" | wc -c | tr -d ' ')"
 
 # 枚举自证：扫到 0 个文件只可能是管道断了或不在仓根，此时"0 命中"是假绿，必须红。
 if [[ "$SCAN_FILES" -eq 0 ]]; then
