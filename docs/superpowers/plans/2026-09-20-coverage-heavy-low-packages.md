@@ -4398,3 +4398,97 @@ master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest cove
   Dependabot 开放票实测 #22–#28 共 7 张（checkout 4→7、vitest 1→5、vite 5→8、eslint 9→10、jsdom、globals、
   go-minor 18 包）；⑥ 那条 `node-version: '20'` 独立线复核＝workflow 里 **12 处**，与 action 运行时到期
   是两件事，仍按 ⑥ 的口径等一次原子落地＋前端回归。
+
+---
+
+## R33（2026-09-23 第四十七轮：`node-version` 与 `runs.using` 是两条独立的轴，上一轮只查了一条还数错了）
+
+- 先把两条轴分开，因为它们**到期时间不同、失效方式不同、验证方式也不同**：
+  ① **action 运行时**＝每个 action 自己 `action.yml` 里的 `runs.using`。GitHub 在
+  2026-09-23 从 runner 移除 node20。今天实测 runner 的行为是**降级放行＋告警**
+  （`Node 20 is being deprecated. This workflow is running with Node 24 by default.
+  … ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true`），不是硬失败。
+  ② **项目/测试运行时**＝喂给 `actions/setup-node` 的 `node-version:`。它走 tool-cache
+  下载，跟 runner 镜像那次改动无关；要到期的是 Node 20 上游 EOL（2026-04-30）。
+- **订正上一轮两处记数**（都是"二手结论没回磁盘核"造成的）：
+  - `user-server-ci.yml` 里声明 node20 的 `uses:` 是 **29 处，不是 27 处**，且该文件
+    29 个 `uses:` **全部**是 node20 档：12 `checkout@v4` ＋ 6 `setup-go@v5` ＋
+    5 `setup-node@v4` ＋ 2 `codecov@v4` ＋ 2 `upload-artifact@v4` ＋ `golangci-lint@v8`
+    ＋ `gitleaks@v2`。YAML 解析口径下整个 HEAD 是 **77 站点 / 23 个不同 pin**
+    （含 1 个可复用工作流，故可判定 76）。
+  - 上一轮 ⑥ 说"`node-version: '20'` workflow 里 12 处"：本轮抬掉干净侧 7 处后
+    实际剩 **5 处**，全部在 `user-server-ci.yml`。行号分两档，别混着抄：
+    committed（`96e9fa81`）是 `:511 / :538 / :609 / :632 / :678`，带泳道未提交行的活树
+    是 `:515 / :542 / :613 / :636 / :682`——上一轮记的就是后者却当成前者写的。
+- 干净侧落地的 7 处（`0d9a6b1d`）：`lint.yml` ×3、`ci-bridge.yml` ×1、`slsa.yml` ×1、
+  `release.yml` ×1、`website-pages.yml` ×1。引信按"逐 job 真跑 A/B"排，不按"整批原子改"排：
+  `user-web` ESLint 在 node 24.20.0 下与 node20 给出**完全相同**的 18738 problems、
+  且那 2 条 error 落在同样的位置（`browser_automation/src/core/cdp/input.js`
+  的 `preserve-caught-error`、`browser_automation/src/core/primitives.js`
+  的 `no-useless-assignment`）⇒ 抬运行时不改判据。上一轮自我设限的"必须 12 处原子落地"
+  是推断，本轮被自己的 A/B 否证。
+- `website-pages.yml` 的 `deploy` 作业条件是 `github.ref == 'refs/heads/master' &&
+  github.event_name != 'pull_request'` ⇒ 改它**会当场重发线上站点**。发之前先证内容中性：
+  `website/` 树哈希在 `1899775c`（上次成功部署）与 HEAD 上都是
+  `6cfb07219539da4e5dcec2d6a24f07396b59b05c` ⇒ 重发的是同一批字节，这一步才允许做。
+- R33b（`96e9fa81`）补掉"上一轮说干净侧清零"漏掉的两处，外加一条从没执行过的死步骤：
+  - `softprops/action-gh-release@v2`（node20）→ `@v3`（node24）。上一轮的枚举是按
+    **版本号新旧**挑的，v2 当时看着是"较新"，于是整条漏网 —— 这正是要建机器闸的理由。
+  - `slsa-framework/slsa-verifier/actions/installer@v2.7.1` 仍是 node20，且
+    `git ls-remote --tags --sort=-v:refname` 显示 v2.7.1 就是上游最新 tag（后面只有 rc）
+    ⇒ **无可抬目标**，只能留在原地等上游。
+  - `sbom.yml` 尾部那条 `Attach SBOM to release (only on tag)`：工作流只有
+    `permissions:` / `contents: read`（`:11-12`），而创建/更新 Release 需要 `contents: write`
+    ⇒ 它一旦跑到**必然 403**；又因 `git ls-remote --tags upstream` 为空，该文件**零执行史**，
+    所以这个 403 从未发生过。修法不是提权，而是把"发布"收给已经具备 job 级
+    `contents: write` 的 `release.yml`，并把丢掉的前端 SBOM 能力在 `release.yml` 里补回
+    （新增 `Generate SBOM (Frontend)` ＋ 进 upload/create 两个清单）。
+    **可直读的那半是 `sbom.yml`：它在 push 上跑，删掉尾部死步骤后本趟必须仍绿** ——
+    run `35772631739` 实测 success，即"那条步骤承载过任何东西"被否证。
+
+## R34（2026-09-23 第四十八轮：把"action 声明了什么运行时"变成读得出来的门，`442de55c`）
+
+- 门的判据不是"版本号"，是一张**逐个真读过**的表：`gh api
+  repos/<o>/<r>/contents/<action.yml 或子路径>/action.yml?ref=<tag>` ＋ `runs.using`。
+  22 个可判定 pin 全部回读，结论表：checkout v4=node20 / v7=node24；setup-go v5=node20 /
+  v7=node24；setup-node v4=node20 / v7=node24；setup-python v7=node24；upload-artifact
+  v4=node20 / v7=node24；download-artifact v8=node24；codecov v4=node20 / v7=composite；
+  configure-pages v6、deploy-pages v5、upload-pages-artifact v3、markdownlint-cli2 v24、
+  release-drafter v7、action-gh-release v3＝node24/composite；golangci-lint v8、gitleaks v2、
+  slsa-installer v2.7.1＝node20（后两者与 installer 都**没有可抬的更新版**）。
+- 取证脚本自己差点把结论带歪：第一版用 `curl` ＋ 固定 `/tmp/t.yml`，`curl` 返回
+  `http=000` 时**旧文件还留在那儿**，`grep` 于是把上一轮的值当成本轮的答案 ——
+  11 个不同 action 全印同一个 `using:node24`。改成"认证读 ＋ 显式 `NOFETCH` 哨兵"后，
+  `setup-python@v7` 这条才从假的 node24 落回真的 node24（值对，来源此前不可信）。
+  教训：**helper 不许把"没取到"和"取到但没问题"并成一类**。
+- `scripts/check-action-runtime.py`（279 行）的形状：job 级与 step 级 `uses:` 都扫
+  （只数 steps 会整级漏掉）；`.yml` / `./` / `docker://` 形态跳过；表里没有的 pin ⇒ **rc=2**
+  逼人回读；豁免按 `(文件名, pin)` 记 **带上界**——迁走会绿、新会长红（棘轮只降不升），
+  条目匹配不到站点 ⇒ STALE 红（防"已迁完"被留成"仍豁免"）；零输入 ⇒ rc=2（SKIP 不是 PASS）；
+  打印解析出的项目根。出厂基线＝`user-server-ci.yml` 的 29 处（整份文件在并行泳道手里）
+  ＋ installer 1 处（上游没发新版）。
+- 用例 `scripts/check-action-runtime.test.sh`：10 格 43 断言，**正反各钉一次**（既钉
+  "该红的红"也钉"改回去就不红"），最后一格拿真仓库跑门，表或账跟磁盘对不上就红。
+  电池自身用 10 刀变异验牙口：`KILLED=10 SURVIVED=0 BROKEN=0`，被检脚本按 md5 还原
+  （`e5f8b4ee56979ccb3547a76ad15df258`）。建门过程中抓到并修掉自己两处：
+  ① STALE 对"本次没扫到的文件"连坐 ⇒ 按显式清单局部跑会变红墙（加 `scanned_bases` 限定）；
+  ② 退出码被后到的 1 压掉先到的 2 ⇒ "表写歪"会伪装成"只是站点没豁免"，两者处置动作
+  完全不同（改 `raise_rc = max(rc, n)`）。这两处都由变异刀逼出来，不是想出来的。
+- 接线面：`make audit` 一格 ＋ `lint.yml` 的 `Workflow refs integrity` 一步。
+  **没有**接 `scripts/merge-gate.py` —— 该脚本目前是 **未跟踪文件**（并行泳道 task #59
+  的在制品，`git ls-files` 不命中、影子克隆里根本不存在）。往它加注册项等于把四行写进
+  别人的在制品里；我已经写了又原样撤掉（撤后 `grep -c action-runtime` = 0、`ast.parse` 通过）。
+  这暴露一个新的口径盲区：**"门禁注册表"这件事本身可以整体不在版本控制里**。
+- CI 回读（run `35774818678` ＋ `35774818792`）：`SBOM` success（证明 R33b 删的那条不承重）、
+  `Workflow refs integrity` success 且**步级** `check-action-runtime 用例（含真仓库基线自洽）`
+  = success，日志里 `PASS=43 FAIL=0`、`格10 真仓库基线非空（命中 30 处，全部落在豁免内）`
+  ⇒ committed-only 的检出与本地活树给出同一批数。`ESLint (user-web)` 仍红＝那两条既有
+  error，修法确实在泳道未提交字节里（`input.js` 已带 `{ cause: e }`，
+  `primitives.js` 已把 `let navigated = false` 收成 `let navigated`），不是本轮引入。
+- "0 条 node20 告警"这类读数的坑：告警**只在真正执行到的 action 上印**。所以
+  "这份日志里没有告警"既可能是"已迁移"，也可能是"这段今天根本没跑" —— 前者要静态读
+  `action.yml` 才能定，后者解释了为什么 tag-only 的 release 流水线在 push 日志里永远干净。
+- 仍开着的两条，都不属于"发现但推走"：
+  - **task #78**（postgres `max_connections=400`）：前置条件"该文件回 clean"本轮复验
+    仍不成立（`user-server-ci.yml` 还是 ` M`）。
+  - 前端 `node-version` 剩的 5 处同上，等该文件回 clean 后与 #78 一并原子落地。
