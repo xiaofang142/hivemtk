@@ -386,7 +386,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 				{Role: "user", Content: "你好，HiveMTK 是做什么的？"},
 				{Role: "assistant", Content: "您好，HiveMTK 是一套 100% 开源、可私有化部署的 AI 营销自动化套件（AGPL-3.0）。\n\n核心能力：\n- 七端社媒打通（抖音/快手/小红书/闲鱼/TikTok/微信/短信邮件）\n- ReAct 自主 AI 智能体（41 个内置工具，感知→规划→调工具→反思）\n- 三级 RAG 检索（向量+BM25+重排）\n- 数据 100% 私域零出域，本地推理栈跑在客户内网\n\n适合做私域运营、智能客服与自动化营销。代码在 Gitee：https://gitee.com/xhpmayun/hivemtk ，需要我介绍部署方式吗？"},
 				{Role: "user", Content: "怎么部署到我自己的服务器？"},
-				{Role: "assistant", Content: "私有化部署三步即可：\n1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk\n2) make install 自动生成 .env 与 docker-compose.yml 并构建前端\n3) vim .env 改 4 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET/PLATFORM_ADMIN_PASSWORD，用 openssl rand -hex 24 生成），再 make up 启动\n\n访问 http://localhost:8204 ，默认账号 admin + 你设置的密码。卡在哪一步都可以告诉我。"},
+				{Role: "assistant", Content: "私有化部署三步即可：\n1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk\n2) make install 自动生成 .env 与 docker-compose.yml 并构建前端\n3) vim .env 改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET，用 openssl rand -hex 32 生成），再 make up 启动\n\n访问 http://localhost:8204 ，默认账号 admin + 你设置的密码。卡在哪一步都可以告诉我。"},
 			},
 			Examples: model.JSONArray{
 				map[string]any{

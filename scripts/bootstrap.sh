@@ -22,14 +22,20 @@
 # 环境变量:
 #   （常规做法：set -a && . ./.env && set +a 后执行本脚本）
 #   POSTGRES_PASSWORD  必须（与 docker-compose.yml USER_POSTGRES_PASSWORD 一致）
-#   JWT_SECRET / USER_JWT_SECRET / MERCHANT_API_SECRET
-#                      必须，生成方式 openssl rand -hex 32。
+#   JWT_SECRET 或 USER_JWT_SECRET
+#                      必须且只需一把，生成方式 openssl rand -hex 32。
+#                      代码先读 USER_JWT_SECRET、为空才回落到 JWT_SECRET
+#                      （internal/pkg/utils/jwt.go），历史上这里却要求两把同时非空。
 #                      本脚本不再为这几把密钥内置任何默认值：历史版本曾把与部署机
 #                      .env 相同的真实密钥写成 ${VAR:-<40+位hex>} 兜底，随公开仓库
 #                      一并外泄；现由 scripts/check-secrets.sh 的 A 项比对守死。
 #                      注：历史版本还强制要求 PLATFORM_LICENSE_SECRET（商户授权签名密钥）。
 #                      2026-09 授权链路下线后两侧 Go 代码均已无任何读取点，故不再要求设置；
 #                      旧 .env 里残留该键不影响运行，可自行删除。
+#   MERCHANT_API_SECRET
+#                      仅 PLATFORM_ENABLED=true 时必须：它只被 config/platform.yaml 的
+#                      出站 HMAC 签名消费，平台端关态（离线部署默认）下整条链路不装配，
+#                      没有它 seed 与 user-server 都照常跑，故不再拦安装。
 #   USER_SERVER_PORT   可选，默认 8204
 #   PG_PORT            可选，默认 8232
 #   ADMIN_USERNAME     可选，默认 admin
@@ -73,9 +79,16 @@ err()  { printf "${RED}[bootstrap]${NC} %s\n" "$*" >&2; }
 # 预检
 [ -z "$POSTGRES_PASSWORD" ] && { err "POSTGRES_PASSWORD 未设置"; exit 1; }
 # 签名/授权类密钥同样只允许来自环境：脚本内不得内置任何默认值（历史教训见 scripts/check-secrets.sh A 项）
-for _v in JWT_SECRET USER_JWT_SECRET MERCHANT_API_SECRET; do
-  [ -z "${!_v}" ] && { err "$_v 未设置（生成一个：openssl rand -hex 32）"; exit 1; }
-done
+# JWT 两把取其一即可（代码先读 USER_JWT_SECRET，为空才回落到 JWT_SECRET）
+if [ -z "${JWT_SECRET:-}" ] && [ -z "${USER_JWT_SECRET:-}" ]; then
+  err "JWT_SECRET 与 USER_JWT_SECRET 至少设置一把（生成一个：openssl rand -hex 32）"
+  exit 1
+fi
+# 平台端关态（离线部署默认）下不拦安装：MERCHANT_API_SECRET 只服务平台出站签名链路
+if [ "${PLATFORM_ENABLED:-false}" = "true" ] && [ -z "${MERCHANT_API_SECRET:-}" ]; then
+  err "PLATFORM_ENABLED=true 需要 MERCHANT_API_SECRET（生成一个：openssl rand -hex 32）"
+  exit 1
+fi
 command -v psql >/dev/null || { err "psql 未安装"; exit 1; }
 command -v go   >/dev/null || { err "go  未安装"; exit 1; }
 command -v python3 >/dev/null || { err "python3 未安装"; exit 1; }

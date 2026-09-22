@@ -122,11 +122,14 @@ make install
 行为：复制 `.env-example` 为 `.env` 并提示你修改敏感字段。**必须**手工编辑 `.env`：
 
 ```bash
-# 至少修改以下字段（全部要求强随机值，可用 openssl rand -hex 32 生成）
+# 三把必改（全部要求强随机值，可用 openssl rand -hex 32 生成）
 POSTGRES_PASSWORD=
 REDIS_PASSWORD=
 JWT_SECRET=               # ≥32 字符，不足启动时直接 panic
-FIELD_ENCRYPTION_KEY=     # ≥32 字符
+FIELD_ENCRYPTION_KEY=     # 第四把：只服务"加密落库"这条路径。启动不校验它，
+                          # 但没配的话写 SMTP 凭据时会 fail-closed 直接报错
+                          # （internal/email/service/email_smtp.go:24），
+                          # GEO 平台凭据则降级明文存储并打告警
 PLATFORM_ADMIN_PASSWORD=  # 仅开启平台集成（PLATFORM_ENABLED=true）时需要
 MERCHANT_API_SECRET=      # 仅开启平台集成时需要：出站请求的 HMAC 签名密钥（internal/platform/client.go:79）
 ```
