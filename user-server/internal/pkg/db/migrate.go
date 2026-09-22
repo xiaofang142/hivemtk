@@ -364,12 +364,25 @@ func allModels() []any {
 		&model.WorkflowNodeExecution{},
 		&model.WorkflowVersion{},
 
+		// BrowserAuditDigest / BrowserAuditPruneRun（批22 / A6）：command_log 裁剪前的内容摘要
+		// 与每次扫描的留痕。这两张表是「删掉的那段历史」唯一的凭据，本身永不裁剪；
+		// 没建出来的失效方向是 fail-close（PruneBefore 写不进摘要就整批回滚，一行都不删），
+		// 表现为治理任务天天告警，而不是历史无声消失。
+		&browsermodel.BrowserAuditDigest{},
+		&browsermodel.BrowserAuditPruneRun{},
 		&browsermodel.BrowserCommandLog{},
 		&browsermodel.BrowserCronTrigger{},
 		&browsermodel.BrowserLLMPlan{},
 		&browsermodel.BrowserSession{},
 		&browsermodel.BrowserStep{},
 		&browsermodel.BrowserTask{},
+		// BrowserWriteClaim（批20f / A12）：双发闸的存储层独占声明。这张表没建出来
+		// 不是「少一张审计表」，是写步在 ClaimWriteSlot 处第一条 INSERT 就报错——
+		// 而报错方向恰好是 fail-close 的那一侧（所有写步判红），所以漏登记会在
+		// 「功能全废」而不是「闸门静默失效」上暴露。建表走 allModels 而不是迁移文件
+		// （本泳道口径：**新表**由标签直建、**存量表加列**走版本化迁移，后者见 v3.43.0 的
+		// browser_steps 三列——两者不是同一条路，别拿这句去省存量表的 DDL 文件）。
+		&browsermodel.BrowserWriteClaim{},
 
 		// 表 rag_answer_cache：store_pg.go 的文件头注释原本就写着
 		// 「需在 internal/migration/migrations 注册」并附了 DDL，但一直没接。
@@ -427,6 +440,7 @@ func AutoMigrate() *gorm.DB {
 	postMigrateMessageHubUniqueIndex()
 	postMigrateOpportunityClueUniqueIndex(DB)
 	postMigrateObsDefaultUniqueIndex(DB)
+	postMigrateDropLegacyPlaintextResetTokens(DB)
 
 	return DB
 }
@@ -540,6 +554,38 @@ func postMigrateObsDefaultUniqueIndex(db *gorm.DB) {
 		return
 	}
 	logger.Info("post-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）")
+}
+
+// postMigrateDropLegacyPlaintextResetTokens 作废"改哈希之前"落库的那批明文密码重置令牌。
+//
+// 为什么必须清而不是留着：令牌校验现在先哈希再查，旧那批 72 字符明文行**永远匹配不上**，
+// 功能上是死行；但它们是**可直接重放的改密凭证**（24h 窗口内），而且这张表在备份里
+// （service/backup.go 会把 password_reset_tokens 整表导出）⇒ 留着等于把泄露面一起打包。
+//
+// 为什么是硬删不是软删：模型带 DeletedAt，走 GORM 的 Delete 只打标记，原文仍在表里，
+// 备份与只读副本照抄得到 ⇒ 软删等于没修。
+//
+// 判据取列宽而非内容形状：哈希恒 64 字符十六进制，旧实现是 uuid+uuid＝72 字符。
+// 版本化迁移链在当前启动口径下永不执行（建表真值是 AutoMigrate），所以作废挂在 post-migrate。
+func postMigrateDropLegacyPlaintextResetTokens(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	const legacyWhere = "char_length(token) <> 64"
+	var legacy int64
+	if err := db.Raw("SELECT count(*) FROM password_reset_tokens WHERE " + legacyWhere).Scan(&legacy).Error; err != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: 统计明文密码重置令牌失败(跳过作废): %v", err))
+		return
+	}
+	if legacy == 0 {
+		return
+	}
+	res := db.Exec("DELETE FROM password_reset_tokens WHERE " + legacyWhere)
+	if res.Error != nil {
+		logger.Warn(fmt.Sprintf("post-migrate: 作废旧版明文密码重置令牌失败: %v", res.Error))
+		return
+	}
+	logger.Warn(fmt.Sprintf("post-migrate: 已硬删 %d 条旧版明文密码重置令牌（哈希化后这些链接本就永不匹配，用户需重新走一次忘记密码）", res.RowsAffected))
 }
 
 func postMigrateMessageHubUniqueIndex() {

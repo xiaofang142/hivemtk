@@ -95,10 +95,14 @@ func TestResetPassword_GuardCountsOnlyTokenFailures(t *testing.T) {
 	if err := database.Create(tok).Error; err != nil {
 		t.Fatalf("create reset token: %v", err)
 	}
-	if tok.Token == "" {
-		t.Fatal("BeforeCreate 未填充 Token")
+	if tok.RawToken == "" {
+		t.Fatal("BeforeCreate 未填充 RawToken ⇒ 邮件里没有可校验的明文")
 	}
-	w := doBruteForcePost(t, router, "/public/reset-password", gin.H{"token": tok.Token, "new_password": "12345678"})
+	if tok.Token == tok.RawToken {
+		t.Fatal("库里那列仍是明文 ⇒ 令牌哈希化被回退")
+	}
+	// 提交的是明文（用户从邮件里拿到的那串），不是库里那列
+	w := doBruteForcePost(t, router, "/public/reset-password", gin.H{"token": tok.RawToken, "new_password": "12345678"})
 	if w.Code == http.StatusOK {
 		t.Skip("密码策略与用户存在性校验全部通过（环境差异），跳过负例")
 	}

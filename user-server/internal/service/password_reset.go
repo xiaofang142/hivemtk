@@ -80,15 +80,15 @@ func (s *PasswordResetService) RequestPasswordReset(ctx context.Context, req *Re
 		Str("token_id", resetToken.ID).
 		Msg("password reset token created")
 
-	resetURL := fmt.Sprintf("%s/reset-password?token=%s", getFrontendBaseURL(), resetToken.Token)
+	resetURL := fmt.Sprintf("%s/reset-password?token=%s", getFrontendBaseURL(), resetToken.RawToken)
 	subject := "重置您的 HiveMTK 密码"
 	body := fmt.Sprintf("您请求了密码重置。请点击以下链接完成重置：\n%s\n\n链接将在 24 小时后失效。", resetURL)
 
 	if s.emailService != nil {
 		if _, err := s.emailService.Send(ctx, 0, req.Email, subject, body, nil); err != nil {
-			// 只记录 token 前缀（前 8 位），完整 reset URL 带 token 明文不能落日志
+			// 只记录明文前缀（前 8 位），完整 reset URL 带 token 明文不能落日志
 			logger.Ctx(ctx).Warn().Err(err).Str("email", req.Email).
-				Str("token_prefix", resetToken.Token[:min(8, len(resetToken.Token))]).
+				Str("token_prefix", resetToken.RawToken[:min(8, len(resetToken.RawToken))]).
 				Msg("password reset 邮件发送失败，但 token 已生成")
 		} else {
 			logger.Ctx(ctx).Info().Str("email", req.Email).Msg("password reset 邮件发送成功")
@@ -101,7 +101,9 @@ func (s *PasswordResetService) ValidateResetToken(ctx context.Context, tokenStr 
 	if s.tokenRepo == nil {
 		return nil, errors.New("password reset service not initialized")
 	}
-	token, err := s.tokenRepo.GetByToken(ctx, tokenStr)
+	// 库里那列存的是明文的 SHA-256 ⇒ 查之前先哈希。
+	// 反过来说：拿得到库（备份、只读副本、SQL 日志）的人也重放不了链接。
+	token, err := s.tokenRepo.GetByToken(ctx, model.HashPasswordResetToken(tokenStr))
 	if err != nil {
 		return nil, ErrInvalidResetToken
 	}

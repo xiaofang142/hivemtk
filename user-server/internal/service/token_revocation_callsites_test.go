@@ -293,7 +293,7 @@ func TestPasswordResetService_ResetPassword_RevokesTokens(t *testing.T) {
 	}
 	tok := model.PasswordResetToken{
 		UserID:    strconv.FormatUint(uint64(user.ID), 10),
-		Token:     "reverse-test-token-" + suffix,
+		RawToken:  "reverse-test-token-" + suffix,
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
 	if err := database.Create(&tok).Error; err != nil {
@@ -305,7 +305,7 @@ func TestPasswordResetService_ResetPassword_RevokesTokens(t *testing.T) {
 	seedStaleWatermark(t, user.ID)
 
 	if err := svc.ResetPassword(context.Background(), &ResetPasswordRequest{
-		Token:       tok.Token,
+		Token:       tok.RawToken,
 		NewPassword: "N3wSecur3Pwd!",
 	}); err != nil {
 		t.Fatalf("ResetPassword 失败: %v", err)
