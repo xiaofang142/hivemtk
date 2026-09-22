@@ -292,33 +292,41 @@
 
 ## 二十一、平台对接能力
 
-开源版仅保留心跳上报与安装信息回传，**已移除** License / OTA / 版本下载 / 定价 / 注册开户。
+平台端降级为可选本地组件：`PLATFORM_ENABLED` 未开启时不加载平台配置、不注册商户、不心跳、不拉市场，本地功能与资产运行不受影响。OTA / 版本下载 / 定价 / 注册开户一律不在本版。
 
 | 能力 | 状态 | 所在包 | 说明 |
 | --- | --- | --- | --- |
-| 心跳上报（3 分钟间隔 + 9 分钟容错） | ✅ | `platform/heartbeat_sender.go` · `middleware/license_checker.go` | 采集设备指纹 / 主机信息 / 运行指标，IP 由平台侧采集 |
-| 安装信息回传 | ✅ | `platform/sync.go` · `platform/client.go` | install.lock 持久化，install_id 上报 |
-| 资产市场拉取 | ✅ | `platform/asset_market_client.go` · `platform/asset_market_adapter.go` | 拉取平台端上架的资产，落本地 `local_asset` 表并同步版本日志 |
-| 平台配置加载 | ✅ | `platformconfig.LoadPlatform("config/platform.yaml")` | api_url / secret / admin |
-| 平台端地址解析 | ✅ | `main.go` | 优先 `PlatformCfg.APIURL` → `PLATFORM_API_URL` env → `PLATFORM_URL` env → 兜底 `https://hivepaltformapi.xapptool.cn` |
+| 心跳上报（3 分钟间隔 + 9 分钟容错） | 仅 `PLATFORM_ENABLED=true` | `platform/heartbeat_sender.go` · `middleware/install_status.go` | 采集设备指纹 / 主机信息 / 运行指标，IP 由平台侧采集；关态不启动 |
+| 安装信息回传 | 仅 `PLATFORM_ENABLED=true` | `platform/sync.go` · `platform/client.go` | 由 `main.go` 的开关分支内的 `platform.InitSync()` 装配；install.lock 持久化，install_id 上报 |
+| 资产市场拉取 | 仅 `PLATFORM_ENABLED=true` | `platform/asset_market_client.go` · `platform/asset_market_adapter.go` | 拉取平台端上架的资产，落本地 `local_asset` 表并同步版本日志；关态由 `disabledClient{}` 顶替（读面恒空集合/空对象 + nil error，写面返回 `ErrPlatformNotConfigured`），HTTP 侧写操作由 `rejectPlatformDisabled` 挡为 403 |
+| 平台配置加载 | 仅 `PLATFORM_ENABLED=true` | `platformconfig.LoadPlatform("config/platform.yaml")` | api_url / secret / admin；关态早退并把 `PlatformCfg` 置 nil |
+| 平台端地址解析 | 仅 `PLATFORM_ENABLED=true` | `config/platform.go: PlatformURL()` | 关态恒返回空串；开启态取 `PlatformCfg.APIURL` → `PLATFORM_API_HOST` env → `PLATFORM_API_URL` env → 空串。**刻意没有任何默认域名**，空串即"没有平台可连"，下游按 `PlatformCfg == nil` 快速失败 |
 
 ---
 
 ## 二十二、Webhook 入站能力
 
-| 渠道 | 状态 | 入站路由 | 处理 Service |
+路由全部注册在 `internal/controller/webhook.go: RegisterRoutes`（`/api/webhook` 组），入站处理在
+`internal/service/webhook.go: WebhookService.Receive` 这条漏斗上。**本表 2026-09-20 按代码逐项核实重写**：
+旧版把 `service/kuaishou.go`、`service/xiaohongshu.go`、`service/xianyu.go`、`service/tiktok.go`、
+`service/douyin.go` 写成 ✅，这五个文件从未存在（`internal/service/` 下无同名文件），
+且路由形态也不是 `/api/webhook/<渠道>/:id` 而是通用通配 `/:channel/:account_id`。
+
+| 渠道 | 入站路由 | 实际处理位置 | 状态 |
 | --- | --- | --- | --- |
-| 企业微信 | ✅ | `POST /api/webhook/wecom/:id` | `service/wecom.go` |
-| 抖音 | ✅ | `POST /api/webhook/douyin/:id` | `service/douyin.go` |
-| 快手 | ✅ | `POST /api/webhook/kuaishou/:id` | `service/kuaishou.go` |
-| 小红书 | ✅ | `POST /api/webhook/xiaohongshu/:id` | `service/xiaohongshu.go` |
-| 闲鱼 | ✅ | `POST /api/webhook/xianyu/:id` | `service/xianyu.go` |
-| TikTok | ✅ | `POST /api/webhook/tiktok/:id` | `service/tiktok.go` |
-| WhatsApp Cloud | ✅ | `POST /api/webhook/whatsapp/:id` · `GET /api/webhook/whatsapp/:id`（URL 验证） | `service/whatsapp.go` |
-| 飞书 | ✅ | `POST /api/webhook/feishu/:id` | `service/webhook.go`（`dispatchFeishu` 方法） |
-| 钉钉 | ✅ | `POST /api/webhook/dingtalk/:id` | `service/dingtalk.go` |
-| Telegram | ✅ | `POST /api/webhook/telegram/:id` | `channelbot/telegram/` |
-| 邮件追踪 | ✅ | `GET /api/email/track/open/:id` · `GET /api/email/track/click/:id` | `email/service/` |
+| 企业微信 | `POST /api/webhook/wecom/:account_id` · `GET /api/webhook/wecom/:account_id`（URL 验证） | `service/webhook_channel_wecom.go`（`dispatchWeCom`），加解密在 `service/wecom.go` | ✅ |
+| 飞书 | `POST /api/webhook/feishu/:account_id` · `GET /api/webhook/feishu/:account_id` | `service/webhook_channel_feishu.go` | ✅ |
+| 钉钉 | `POST /api/webhook/dingtalk/:account_id` · `GET /api/webhook/dingtalk/:account_id` | **专用路由**，走 `service/dingtalk_app.go`（不进 `Receive` 漏斗）；出站客户端在 `service/dingtalk.go` | ✅ |
+| 微信公众号 | `POST /api/webhook/wechat/:account_id` · `GET /api/webhook/wechat/:account_id` | `controller/wechat.go`（`router/platform_routes.go: setupWechatWebhookRoutes` 注册），自行验签后直接进 Ingress | ✅ |
+| WhatsApp Cloud | `POST /api/webhook/whatsapp/:account_id` · `GET /api/webhook/whatsapp/:account_id`（Meta 挑战） | `service/webhook_channel_whatsapp.go`，出站客户端在 `service/whatsapp.go` | ✅ |
+| Telegram | `POST /api/webhook/telegram/:account_id` | `service/webhook_channel_telegram.go` + `channelbot/telegram/` | ✅ |
+| QQ 官方机器人 | `POST /api/webhook/qq/:account_id` | `service/webhook_channel_qq.go` + `channelbot/qq/` | ✅ |
+| 抖音 | `POST /api/webhook/douyin/:account_id` | `service/webhook_channel_douyin.go`；入站验签为**本地策略**（官方 dop 被签串未取到原文） | ✅ 代码在位，无凭据未真机验证 |
+| TikTok | `POST /api/webhook/tiktok/:account_id` | 与抖音共用解析、按渠道分平台落库；验签按官方 `TikTok-Signature: t=,s=` | ✅ 代码在位，无凭据未真机验证 |
+| 快手 / 小红书 / 闲鱼 / custom | 通配路由**存在但固定 400** | `Receive` 的 `webhookInboundCapable` 能力闸：这三家+custom 无入站适配器，拒收并在响应里指路，绝不"收下回 200"（审计 D-03） | ✘ 无渠道 API，真实链路是 `POST /api/bridge/ingest` 浏览器桥 |
+| 邮件追踪 | `GET /api/email/track/open/:id` · `GET /api/email/track/click/:id` | `internal/email/service/` | ✅ |
+
+`GET /api/webhook/stats` 与 `GET /api/webhook/health` 是运维端点，不属于渠道入站。
 
 ---
 
@@ -341,7 +349,7 @@
 以下功能已从开源版移除，不在本清单内：
 
 - ❌ OTA 自动更新
-- ❌ License 授权校验
+- ❌ 商户授权 / 授权码校验（本版无授权概念，无授权也可构建与运行资产）
 - ❌ 版本下载
 - ❌ 定价方案
 - ❌ 注册开户

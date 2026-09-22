@@ -107,22 +107,6 @@
             </template>
           </el-menu>
         </el-scrollbar>
-
-        
-        <div class="license-info" v-if="licenseInfo && !sidebarCollapsed">
-          <div class="license-expiry" :class="{ 'expired': isLicenseExpired }">
-            <el-icon><Timer /></el-icon>
-            <span>{{ t('layout.licenseExpiry') }}: {{ formattedExpiryTime }}</span>
-          </div>
-          <div class="license-note" v-if="isLicenseExpired">
-            <el-icon><Warning /></el-icon>
-            <span>{{ t('layout.contactForLicense') }}</span>
-          </div>
-          <div class="license-note" v-else>
-            <el-icon><InfoFilled /></el-icon>
-            <span>{{ t('layout.freeTrialHint') }}</span>
-          </div>
-        </div>
       </el-aside>
 
       
@@ -151,10 +135,9 @@ import MessageNotification from '@/components/MessageNotification.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import i18n from '@/i18n'
 import { useUserStore } from '@/stores/user'
-import { getLicenseStatus } from '@/api/license'
-import { Timer, Warning, InfoFilled, Bell, Menu, SwitchButton, Fold, Expand, QuestionFilled } from '@element-plus/icons-vue'
+import { Warning, Bell, Menu, SwitchButton, Fold, Expand, QuestionFilled } from '@element-plus/icons-vue'
 import { routeIconMap } from '@/utils/iconMap'
-void Bell; void Timer; void Warning; void InfoFilled; void Menu; void SwitchButton; void Fold; void Expand
+void Bell; void Warning; void Menu; void SwitchButton; void Fold; void Expand
 
 const iconComponents = routeIconMap;
 
@@ -191,36 +174,6 @@ const persistSidebarCollapsed = () => {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
-
-const licenseInfo = ref(null);
-const isLicenseExpired = computed(() => {
-  if (!licenseInfo.value || !licenseInfo.value.expire_at) return false
-  const expiryTime = new Date(licenseInfo.value.expire_at).getTime()
-  const currentTime = new Date().getTime()
-  return currentTime > expiryTime
-})
-
-const formattedExpiryTime = computed(() => {
-  const info = licenseInfo.value
-  if (!info) return ''
-  if (info.expire_at) {
-    const date = new Date(info.expire_at)
-    const loc = i18n.global.locale.value
-    const localeMap = { zh: 'zh-CN', en: 'en-US', ja: 'ja-JP', ar: 'ar-SA' }
-    return date.toLocaleString(localeMap[loc] || 'zh-CN')
-  }
-  if (info.message)
-    return info.message;
-  if (info.status === 'active' || info.licensed) return t('layout.licenseActive')
-  return t('layout.unknown')
-});
-
-const loadLicenseInfo = async () => {
-  try {
-    const response = await getLicenseStatus({ _silent: true })
-    if (response) licenseInfo.value = response
-  } catch (error) { console.warn("[request] 后台调用失败(已忽略):", error) }
-};
 
 const topMenus = ref([
   {
@@ -809,7 +762,6 @@ onMounted(async () => {
   try {
     const { updateRequestConfig } = await import('@/utils/request')
     await updateRequestConfig()
-    loadLicenseInfo()
   } catch (error) {
     console.error('初始化请求配置失败:', error)
   }
@@ -1062,31 +1014,6 @@ onUnmounted(() => {
   color: $bg-color;
 }
 
-/* ===== 授权信息 ===== */
-.license-info {
-  padding: $spacing-md;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.15);
-  color: $primary-light-3;
-  font-size: $font-size-extra-small;
-  text-align: center;
-}
-.license-expiry.expired { color: $danger-color; }
-.license-expiry {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-xs;
-}
-.license-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-xs;
-  margin-top: $spacing-sm;
-  font-size: $font-size-extra-small;
-  color: $text-placeholder;
-}
 
 /* ===== 主内容区 ===== */
 .app-main {

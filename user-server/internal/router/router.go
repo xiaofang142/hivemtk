@@ -280,7 +280,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	public := r.Group("/api")
 	{
-		setupPublicRoutes(public, liveCodeController, platformCtrl, gormDB)
+		setupPublicRoutes(public, liveCodeController, gormDB)
 		setupChatPublicRoutes(public, gormDB, orchestrator, langResolver)
 		setupSSORoutes(public, gormDB)
 		setupSelfServiceRoutes(public, gormDB)

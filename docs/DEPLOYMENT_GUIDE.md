@@ -127,10 +127,12 @@ POSTGRES_PASSWORD=
 REDIS_PASSWORD=
 JWT_SECRET=               # ≥32 字符，不足启动时直接 panic
 FIELD_ENCRYPTION_KEY=     # ≥32 字符
-MERCHANT_API_SECRET=      # ≥32 字符
-PLATFORM_LICENSE_SECRET=
-PLATFORM_ADMIN_PASSWORD=
+PLATFORM_ADMIN_PASSWORD=  # 仅开启平台集成（PLATFORM_ENABLED=true）时需要
+MERCHANT_API_SECRET=      # 仅开启平台集成时需要：出站请求的 HMAC 签名密钥（internal/platform/client.go:79）
 ```
+
+> 历史版本这里还要求 `PLATFORM_LICENSE_SECRET`（商户授权签名）。该键在 user-server 与
+> platform-server 两侧代码里都已无任何读取点（2026-09-21 逐仓 grep 复核），授权流程整体下线后不再需要设置。
 
 ### 第 2 步：启动数据层
 

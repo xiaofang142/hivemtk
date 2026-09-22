@@ -102,9 +102,9 @@ var DefaultBruteForceConfig = BruteForceConfig{
 // BruteForceGuard 防爆破中间件
 // 用法：
 //
-//	auth.POST("/license/bind", middleware.BruteForceGuard("license.bind"), controller.BindLicense)
-//	控制器中失败时调用：middleware.RecordBruteForceFailure(c, "license.bind")
-//	控制器中成功时调用：middleware.ClearBruteForceFailure(c, "license.bind")
+//	auth.POST("/auth/login", middleware.BruteForceGuard("auth.login"), controller.Login)
+//	控制器中失败时调用：middleware.RecordBruteForceFailure(c, "auth.login")
+//	控制器中成功时调用：middleware.ClearBruteForceFailure(c, "auth.login")
 //
 // # BruteForceGuard 防爆破守卫前置检查
 //

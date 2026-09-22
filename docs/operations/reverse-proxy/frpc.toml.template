@@ -3,15 +3,15 @@
 # ----------------------------------------------------------------------------
 # FRP 私域穿透：把本地 user-server(:8204) 暴露到公网 frps
 #
-# ==== HiveMtk 生产实际架构 ====
+# ==== 自建公网反向代理的参考架构（域名请换成你自己的）====
 #
 #   用户浏览器 ──HTTPS──> nginx, 同机 frps)
 #                            │
 #   ┌────────────────────────┼─────────────────────────────────┐
 #   │ 路径                    │ Host 改写                       │
 #   ├─────────────────────────┼─────────────────────────────────┤
-#   │ /api/*                  │ → hiveuserapi.xapptool.cn       │
-#   │ /chat/embed/*           │ → hiveuser.xapptool.cn          │
+#   │ /api/*                  │ → user-api.hivemtk.example.com  │
+#   │ /chat/embed/*           │ → user.hivemtk.example.com      │
 #   │ /* (静态资源)            │ 不走 frp, nginx 直接读 dist/    │
 #   └─────────────────────────┴─────────────────────────────────┘
 #                            │
@@ -47,15 +47,15 @@ transport.tls.enable = true
 # ========== user-server 穿透 ==========
 # 前端域名的 /api/* 路径  +  独立 API 域名  都打到本地 Go :8204
 #
-# 生产对应:
-#   hiveuserapi.xapptool.cn          ← 整站 frp (独立 server block)
-#   hiveuser.xapptool.cn/api/*       ← nginx location Host 改写到此域名
+# 示例对应（把 example 域换成你自己的域名）:
+#   user-api.hivemtk.example.com          ← 整站 frp (独立 server block)
+#   user.hivemtk.example.com/api/*        ← nginx location Host 改写到此域名
 [[proxies]]
 name = "mtk-user-chat"
 type = "http"
 localIP = "127.0.0.1"
 localPort = 8204
-customDomains = ["hiveuserapi.xapptool.cn"]
+customDomains = ["user-api.hivemtk.example.com"]
 transport.useCompression = true
 transport.heartbeatInterval = 30
 transport.heartbeatTimeout = 90
@@ -68,7 +68,7 @@ name = "mtk-user-web-embed"
 type = "http"
 localIP = "127.0.0.1"
 localPort = 8204
-customDomains = ["hiveuser.xapptool.cn"]
+customDomains = ["user.hivemtk.example.com"]
 transport.useCompression = true
 transport.heartbeatInterval = 30
 transport.heartbeatTimeout = 90

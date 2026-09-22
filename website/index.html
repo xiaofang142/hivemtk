@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="HiveMTK · 私域 AI 营销操作系统。七端打透(抖音/快手/小红书/闲鱼/TikTok/企微/邮件)、ReAct 自主智能体(42 工具)、94 业务模块、GEO 智能优化、零出域数据安全。基于 AGPL-3.0 开源,4 步私有化部署,让 AI 真正替销售卖货。" />
+    <meta name="keywords" content="HiveMTK,私域AI营销操作系统,七端打透,ReAct智能体,GEO,生成式引擎优化,AI搜索优化,私有化部署,AGPL-3.0开源,数据不出域,AI自动谈单,销冠SOP,客户CDP,LLM路由,RAG知识库,开源营销系统,SCRM替代,多账号聚合" />
+    <meta name="author" content="HiveMTK" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="theme-color" content="#FAF7F2" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Open Graph / 社交分享 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="HiveMTK" />
+    <meta property="og:title" content="HiveMTK · 私域 AI 营销操作系统" />
+    <meta property="og:description" content="七端打透 · AI 真自主 · 数据封死在域内。94 业务模块 + 42 智能体工具 + GEO 优化引擎,AGPL-3.0 开源,4 步私有化部署。" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:locale:alternate" content="ja_JP" />
+    <meta property="og:locale:alternate" content="ar_AR" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HiveMTK · 私域 AI 营销操作系统" />
+    <meta name="twitter:description" content="七端打透 · AI 真自主 · 数据封死在域内。基于 AGPL-3.0 开源,让 AI 替销售从接待到逼单。" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- canonical + hreflang alternate（canonical 由 router/index.js 的 afterEach 按路由覆盖）
+         这里的站点前缀必须与 vite.config.js 的 SITE_BASE（'/hivemtk/'）一致：
+         站点托管在 GitHub Pages 的项目子路径下，写成域名根会让规范链接指向 404。
+         ?lang= 由 src/i18n/locale.js 在首屏读取，与 hreflang 声明的语言版本对应。 -->
+    <link rel="canonical" href="https://xiaofang142.github.io/hivemtk/" />
+    <link rel="alternate" hreflang="zh" href="https://xiaofang142.github.io/hivemtk/?lang=zh" />
+    <link rel="alternate" hreflang="en" href="https://xiaofang142.github.io/hivemtk/?lang=en" />
+    <link rel="alternate" hreflang="ja" href="https://xiaofang142.github.io/hivemtk/?lang=ja" />
+    <link rel="alternate" hreflang="ar" href="https://xiaofang142.github.io/hivemtk/?lang=ar" />
+    <link rel="alternate" hreflang="x-default" href="https://xiaofang142.github.io/hivemtk/" />
+
+    <!-- 字体本地化:通过 @fontsource 包打入 dist,零三方 CDN 依赖 -->
+    <!-- 中文字体走系统 fallback:PingFang SC / Songti SC / Source Han 系列 -->
+
+    <!-- 结构化数据 1:开源软件项目 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "HiveMTK",
+      "alternateName": "HiveMTK · 私域 AI 营销操作系统",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Linux, Docker",
+      "description": "HiveMTK · 私域 AI 营销操作系统。七端打透、ReAct 自主智能体(42 工具)、94 业务模块、GEO 智能优化、零出域数据安全。基于 AGPL-3.0 开源。",
+      "url": "https://xiaofang142.github.io/hivemtk/",
+      "downloadUrl": "https://gitee.com/xhpmayun/hivemtk",
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+      "codeRepository": "https://gitee.com/xhpmayun/hivemtk",
+      "programmingLanguage": ["Go", "JavaScript", "Vue"],
+      "author": {
+        "@type": "Organization",
+        "name": "HiveMTK",
+        "url": "https://xiaofang142.github.io/hivemtk/"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "5",
+        "reviewCount": "1"
+      }
+    }
+    </script>
+
+    <!-- 结构化数据 2:组织信息(官网引流入口) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "HiveMTK",
+      "url": "https://xiaofang142.github.io/hivemtk/",
+      "logo": "https://xiaofang142.github.io/hivemtk/favicon.svg",
+      "description": "私域 AI 营销操作系统。七端打透 · AI 真自主 · 数据封死在域内。",
+      "sameAs": [
+        "https://github.com/xiaofang142/hivemtk",
+        "https://gitee.com/xhpmayun/hivemtk"
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "availableLanguage": ["Chinese", "English", "Japanese", "Arabic"]
+      }
+    }
+    </script>
+
+    <!-- 结构化数据 3:网站导航(面包屑基础) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "HiveMTK",
+      "url": "https://xiaofang142.github.io/hivemtk/",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://xiaofang142.github.io/hivemtk/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <title>HiveMTK · 私域 AI 营销操作系统 | AGPL-3.0 开源</title>
+
+    <!-- 百度统计 -->
+    <script>
+      var _hmt = _hmt || [];
+      (function() {
+        var hm = document.createElement("script");
+        hm.src = "https://hm.baidu.com/hm.js?99bc4d326eb54cbc6b7bffcfc3319ed4";
+        var s = document.getElementsByTagName("script")[0];
+        s.parentNode.insertBefore(hm, s);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

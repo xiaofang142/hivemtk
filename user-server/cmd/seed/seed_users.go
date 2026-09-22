@@ -1,6 +1,7 @@
 // seed_users.go 模块 A：系统用户与坐席状态种子数据
 //
-// 演示账号清单（统一密码见 seedPassword 明文）：
+// 演示账号清单（统一密码见 seedPassword，默认值是开源仓库里公开的 Seed@123456，
+// 部署方可用 SEED_PASSWORD / ADMIN_PASSWORD 不改代码覆盖）：
 // admin （超管，DataScope=all）
 // cs01..cs03 （客服坐席，DataScope=self）
 // staff01..staff05 （普通员工，DataScope=self）
@@ -16,6 +17,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -23,8 +26,33 @@ import (
 	"gorm.io/gorm"
 )
 
-// seedPassword 演示账号统一密码（仅 demo 用途）
-const seedPassword = "Seed@123456"
+// seedPasswordDefault 是随开源仓库公开的演示口令，也是本常量的历史唯一取值。
+// 它仍然作为未配置时的默认值保留（e2e/bootstrap 的既有流程依赖它），
+// 但部署方现在可以不改代码就换掉写入的口令，见 seedPassword。
+const seedPasswordDefault = "Seed@123456"
+
+// seedPassword 本次 seed 实际写入 system_users 的统一密码。
+// 取值优先级 SEED_PASSWORD > ADMIN_PASSWORD > seedPasswordDefault；
+// 空白值等同未设置，避免误把空口令账号写进库里。
+var seedPassword = resolveSeedPassword(os.Getenv)
+
+func resolveSeedPassword(getenv func(string) string) string {
+	for _, key := range []string{"SEED_PASSWORD", "ADMIN_PASSWORD"} {
+		if v := strings.TrimSpace(getenv(key)); v != "" {
+			return v
+		}
+	}
+	return seedPasswordDefault
+}
+
+// seedPasswordForLog 日志展示用：默认口令本就是公开信息，照常打印；
+// 部署方自设的口令只打掩码，不把它写进终端/CI 日志。
+func seedPasswordForLog() string {
+	if seedPassword == seedPasswordDefault {
+		return seedPassword + "（公开默认值，生产请用 SEED_PASSWORD 覆盖）"
+	}
+	return "********（已由环境变量覆盖，不回显）"
+}
 
 // seedPhonePrefix 演示号段前缀（11 位手机号段）
 // 用于兼容「real_name 标签缺失」的旧 seed 数据清理
@@ -148,7 +176,7 @@ func (s *usersSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 	}
 
 	log.Printf("  ✓ 已写入 %d 个系统用户 + %d 条坐席状态", len(users), len(agentStatuses))
-	log.Printf("  演示账号：admin/%s, cs01/%s, staff01/%s", seedPassword, seedPassword, seedPassword)
+	log.Printf("  [SEED-PASSWORD] 演示账号：admin/%s，cs01/staff01 等同密码", seedPasswordForLog())
 	return nil
 }
 

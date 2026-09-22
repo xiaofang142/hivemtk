@@ -89,8 +89,8 @@ func (s *AuthService) JwtUtils(ctx context.Context) *utils.JWTUtils {
 // Login 用户登录
 //
 // 严格规则（修复）：
-//  1. 不再"系统无用户 → 自动注册为超管"——该机制绕过 InitGuard/LicenseGuard，
-//     导致未绑 License 即可创建超管，摧毁安全模型。
+//  1. 不再"系统无用户 → 自动注册为超管"——该机制绕过 InitGuard，
+//     导致系统未完成初始化即可创建超管，摧毁安全模型。
 //  2. 必须先有用户（由 InitSetup 创建）才能登录。
 //  3. 用户名/密码错误一律返回"用户名或密码错误"（防枚举）。
 //  4. 用户被禁用直接拒绝（明确反馈）。

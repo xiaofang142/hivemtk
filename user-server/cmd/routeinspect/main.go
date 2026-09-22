@@ -22,7 +22,7 @@ func main() {
 
 	db.InitDB()
 
-	middleware.InitLicenseChecker(config.DefaultPlatformBaseURL, "")
+	middleware.InitInstallStatus()
 
 	gin.SetMode(gin.DebugMode)
 	r := gin.New()

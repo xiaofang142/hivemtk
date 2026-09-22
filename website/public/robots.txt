@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# HiveMTK 官网 sitemap
+Sitemap: https://xiaofang142.github.io/hivemtk/sitemap.xml

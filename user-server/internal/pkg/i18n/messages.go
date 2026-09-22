@@ -40,9 +40,6 @@ var ErrorMessages = map[string]map[Locale]string{
 	"API_KEY_INVALID_2005": {
 		ZH: "API Key 无效", EN: "Invalid API key", JA: "APIキーが無効です", AR: "مفتاح API غير صالح",
 	},
-	"LICENSE_INVALID_2006": {
-		ZH: "授权许可无效", EN: "Invalid license", JA: "ライセンスが無効です", AR: "الترخيص غير صالح",
-	},
 	"PERMISSION_DENIED_2007": {
 		ZH: "权限不足", EN: "Insufficient permissions", JA: "権限が不足しています", AR: "صلاحيات غير كافية",
 	},

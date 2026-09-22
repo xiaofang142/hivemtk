@@ -18,10 +18,13 @@ PG_ENV["PGPASSWORD"] = (os.environ.get("POSTGRES_PASSWORD")
                           or os.environ.get("PGPASSWORD")
                           or sys.exit("❌ 缺少数据库口令：请导出 POSTGRES_PASSWORD"))
 RESULTS = []
+# 演示 admin 口令：与 bootstrap/cmd-seed 同一条覆盖链（SEED_PASSWORD > ADMIN_PASSWORD > 公开默认值）
+ADMIN_PASSWORD = (os.environ.get("SEED_PASSWORD") or os.environ.get("ADMIN_PASSWORD")
+                     or "Seed@123456")
 
 # ===== HiveMTK 品牌常量（全程使用，不是 TestBrand）=====
 BRAND = "HiveMTK"
-DOMAIN = "https://hivemtk.com"
+DOMAIN = "https://xiaofang142.github.io/hivemtk"
 DESCRIPTION = "AI 原生的营销技术套件，整合 AI 营销、AI 客服、智能体编排、GEO 生成式引擎优化"
 ADVANTAGES = "AI原生,多渠道AI客服,智能体Agent编排,私域部署,AI营销自动化,GEO生成式引擎优化"
 COMPETITORS = "微伴助手、探马SCRM、尘锋SCRM、HubSpot、Intercom"
@@ -101,7 +104,7 @@ def assert_ok(ep, r, raw, extra=""):
 
 # ===== 登录 =====
 print("=" * 60); print("STEP 0: Admin 登录")
-r, _, _ = api("POST", "/api/auth/login", {"username":"admin","password":"Seed@123456"}, auth=False)
+r, _, _ = api("POST", "/api/auth/login", {"username":"admin","password":ADMIN_PASSWORD}, auth=False)
 if r and r.status_code == 200 and j(r).get("code") == 0:
     AUTH = j(r)["data"]["token"]; print("  OK token acquired (" + AUTH[:16] + "...)")
 else: print("  FAIL login"); sys.exit(1)
@@ -275,7 +278,7 @@ assert_ok("POST /geo/techconfig/llms-txt", r, raw)
 # 质量指标 EEAT（真实 LLM）
 r, dt, raw = api("POST", "/api/geo/metrics/analyze", {
     "content": """HiveMTK 由 AI 营销专家团队于 2024 年创立。
-办公地址 hq@hivemtk.com。官网 https://hivemtk.com 已部署 HTTPS 和 Schema.org 结构化数据。
+客服邮箱 support@example.com。官网 https://xiaofang142.github.io/hivemtk/ 已部署 HTTPS 和 Schema.org 结构化数据。
 产品已获得 500+ 企业客户信任。""",
     "keyword": "HiveMTK", "brand": BRAND
 }, timeout=60)

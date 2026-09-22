@@ -9,8 +9,8 @@
 #   # 本地（默认 http://127.0.0.1:8204）：
 #   ./scripts/seed-llm-providers.sh
 #
-#   # 远程生产（hiveuser.xapptool.cn）：
-#   BASE=https://hiveuser.xapptool.cn \
+#   # 远程主机（换成你自己的部署地址，需可达且已开放对应端口）：
+#   BASE=https://<你的 user-server 地址> \
 #   USER=admin PASS='你的密码' \
 #   DS_KEY=sk-xxx QW_KEY=sk-xxx DB_KEY=xxx ER_KEY=bce-v3/xxx \
 #   ./scripts/seed-llm-providers.sh

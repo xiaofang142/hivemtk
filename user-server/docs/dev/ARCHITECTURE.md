@@ -97,7 +97,7 @@ graph TB
     subgraph Horizon[横向能力层]
         Model[model/ · GORM 实体]
         Dto[dto/ · 请求/响应]
-        MW[middleware/ · recovery/locale/context/jwt/mfa/permission/audit/trace/ratelimit/init_guard/app_key_auth/brute_force/lang_resolver/license_checker/metrics/metrics_auth/require_admin/visitor_rate_limit]
+        MW[middleware/ · recovery/locale/context/jwt/mfa/permission/audit/trace/ratelimit/init_guard/app_key_auth/brute_force/lang_resolver/install_status/metrics/metrics_auth/require_admin/visitor_rate_limit]
         Cache[cache/ · manager/redis/memory]
         Event[event/ · bus/subscribers]
         WS[websocket/ · hub/handler/seq/ack_tracker/notify]
@@ -426,7 +426,7 @@ graph LR
     AssetMarket --> PlatformSrv
 ```
 
-特性：开源版仅做心跳上报与安装信息回传，无 License 校验、无 OTA；资产市场通过 `asset_market_client.go` 拉取平台端上架的资产，落本地 `local_asset` 表并同步版本日志。
+特性：平台集成是可选本地组件（`PLATFORM_ENABLED` 默认关闭，关态不发一个请求、不注册商户、不心跳），全程无授权校验、无 OTA；资产市场通过 `asset_market_client.go` 拉取平台端上架的资产，落本地 `local_asset` 表并同步版本日志。
 
 ---
 
@@ -446,8 +446,8 @@ graph LR
     LLM[(llama.cpp<br/>Qwen2.5-1.5B :8207)]
     Emb[(Embedding Server<br/>bge-m3 :8208)]
     Rerank[(Reranker<br/>bge-reranker-v2-m3 :8209)]
-    Platform[(platform-server<br/>:8205 · 心跳/资产市场)]
-    Qiniu[(七牛云 OSS<br/>qiniu.xapptool.cn)]
+    Platform[(platform-server :8205<br/>可选·仅 PLATFORM_ENABLED=true)]
+    Obs[(对象存储<br/>local ./uploads 或云 OBS)]
     Channels[渠道 API<br/>微信/企微/抖音/快手/<br/>小红书/闲鱼/TikTok/<br/>飞书/钉钉/WhatsApp/<br/>Telegram/SMS/Email]
     DeepL[(DeepL API<br/>可选·低资源语言翻译降级)]
     Browser[chromedp<br/>浏览器自动化自动回复]
@@ -458,13 +458,13 @@ graph LR
     API --> LLM
     API --> Emb
     API --> Rerank
-    API --> Qiniu
+    API --> Obs
     API --> Channels
     API --> DeepL
     API --> Browser
     WS --> Redis
     SSE --> Redis
-    API -- 心跳/资产同步 --> Platform
+    API -. 心跳/资产同步（仅开态） .-> Platform
     API -- Webhook 回调 <-- Channels
 ```
 
@@ -474,7 +474,8 @@ graph LR
 - **本地推理栈默认**：`config.yaml` 中 `inference.embedding.mode=local`、`inference.llm.mode=local`，私域部署强制本地，数据不出域。
 - **Redis 可选**：未配置时回退进程内缓存；多实例部署必须配置以获得跨实例幂等（如 reply guard、限流计数）。
 - **渠道 API 出站**：仅当用户配置对应渠道账号时才出站；Webhook 入站统一走 `/api/webhook/{platform}/{id}`。
-- **七牛 OSS**：文件上传与卡片图片托管；密钥通过 `${QINIU_ACCESS_KEY}` / `${QINIU_SECRET_KEY}` 注入。
+- **对象存储**：两条独立通路。① `config.yaml` 的 `storage` 块（`type=qiniu` + `${QINIU_ACCESS_KEY}` / `${QINIU_SECRET_KEY}` / `${QINIU_BUCKET}` / `${QINIU_DOMAIN}` 插值）只服务访客上传凭证 `GET /api/chat/public/upload-token`；守卫只看两项——`type != "qiniu"` 或 `access_key` 为空即 503「对象存储未配置」，`secret_key`/`bucket`/`domain` 缺失不报错但会签出不可用的 token（`upload_domain` 缺省回落 `up-z2.qiniup.com`）。② `obs_config` 表（provider ∈ `local`/`aliyun`/`qiniu`/`tencent`/`aws`）服务渠道媒体转存，启动时 `InitDefaultStorageIfEmpty` 仅在表为空时 seed 一条 `local` 配置（base dir 取 `STORAGE_LOCAL_BASE_DIR`，默认 `./uploads`；公开前缀取 `STORAGE_LOCAL_PUBLIC_URL`，默认 `/files`），因此不接任何云也能跑。
+- **platform-server 可选**：`:8205` 只在 `PLATFORM_ENABLED=true` 时接入（见 §启动装配的开关分支）；默认关态下不加载配置、不心跳、不发一个出站请求，本地资产与运行链路不依赖它。
 - **chromedp**：仅在自动回复场景（抖音/小红书/快手/闲鱼）启用，Dockerfile 默认注释，需手动取消注释安装 chromium。
 
 ---
@@ -492,7 +493,7 @@ graph TD
     IntentInit[5. service.InitIntentRecognizer<br/>+ llm.InitDefaultAlertHook]
     Janitor[6. llm.GetGlobalDispatcher<br/>.StartCacheJanitor 60s]
     PlatformInit[7. platformconfig.LoadPlatform<br/>+ platform.InitSync（注册协程读 PlatformCfg，须在后）]
-    License[8. middleware.InitLicenseChecker<br/>+ platform.StartHeartbeat]
+    InstallStatus[8. middleware.InitInstallStatus<br/>+ 开态才跑 platform.StartHeartbeat]
     Migrate[9. migration.NewMigrationService<br/>同步等待迁移完成]
     Failover[10. llm.InitGlobalFailover<br/>+ Start]
     TraceBus[11. llm.InitGlobalTraceBus]
@@ -506,7 +507,7 @@ graph TD
     Serve[19. endless.ListenAndServe :8204]
 
     LoadCfg --> RedisInit --> DBInit --> DispInit --> IntentInit --> Janitor
-    Janitor --> PlatformInit --> License --> Migrate --> Failover
+    Janitor --> PlatformInit --> InstallStatus --> Migrate --> Failover
     Failover --> TraceBus --> SSEHub --> SOP --> ConfAgg --> FBL
     FBL --> Memory --> EventSub --> Router --> Serve
 ```

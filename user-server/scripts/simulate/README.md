@@ -13,8 +13,8 @@
 | Telegram / 企微 / WS | 各渠道 webhook | ⏸ 未覆盖 | 需对应账户与回调穿透 |
 
 > 「从不同端口测试」= 覆盖**不同入口端点/渠道方案**。本工具以 web_embed 为主，
-> 支持 `--app-key` 多次指定以轮询**多个渠道入口**，也支持 `--base-url` 切本地
-> (`http://localhost:8204`) 或公网 (`https://hiveuser.xapptool.cn`)。
+> 支持 `--app-key` 多次指定以轮询**多个渠道入口**，`--base-url` 指向你要打的
+> user-server（默认且推荐 `http://localhost:8204`，即 `make dev` 起的本地实例）。
 
 ## 快速开始
 

@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 # =============================================================
-# HiveMtk 用户端 线上发布脚本
+# HiveMtk 用户端 发布脚本
 #
-# 部署目标：hiveuserapi.xapptool.cn (118.25.236.101)
-# 部署架构（2026-08-17 重构：宿主机部署）：
-#   - 云端（118.25.236.101）：仅 反向代理层 + user-web 静态资源 + frps 隧道服务端
+# 部署形态（2026-09 起）：默认纯本地。
 #   - 本地（宿主机）：user-server 二进制 + PG + Redis + LLM 推理栈
-#   - API 路径：客户端 → 云端 反向代理层 /api → frps(8280) → 本地 frpc → 本地 user-server:8204
+#   - 远端：只有显式给出 DEPLOY_HOST 才会执行前端推送那一段。
+#     历史上那台云端主机（含反向代理层与 frps）已随域名一起停用，
+#     所以这里刻意不留任何默认目标机 —— 留一个就是让发布脚本往黑洞里 rsync。
+#   - API 路径（本地）：浏览器 → http://127.0.0.1:8204/api/…
 #
 # 部署内容：
-#   - user-web 前端 → 云端 /www/wwwroot/hivemtk/user-web/dist/        (商户演示前端 hiveuser.xapptool.cn 站点根)
-#   - embed-sdk   → 云端 /www/wwwroot/hivemtk/user-web/embed-sdk-dist/
 #   - user-server → 本地二进制（go build → nohup 重启，127.0.0.1:8204）
+#   - user-web 前端 → $DEPLOY_HOST:$WEBROOT_USERWEB/dist/（需显式 DEPLOY_HOST）
+#   - embed-sdk     → $DEPLOY_HOST:$WEBROOT_USERWEB/embed-sdk-dist/（同上）
 #
 # 用法:
-#   ./deploy-user.sh                    # 全量发布（前端推送云端 + 本地 user-server 重启）
-#   ./deploy-user.sh --web-only         # 只发布前端到云端
-#   ./deploy-user.sh --api-only         # 只重启本地 user-server（跳过前端构建）
-#   ./deploy-user.sh --skip-build       # 跳过本地前端构建
-#   ./deploy-user.sh --反向代理层-only       # 只更新云端 同源托管配置
-#   ./deploy-user.sh --dry-run          # 仅打印命令
+#   ./deploy-user.sh --api-only                          # 纯本地：只重启本地 user-server
+#   DEPLOY_HOST=<你自己的主机> ./scripts/deploy-user.sh   # 全量：本地 + 推前端到该主机
+#   ./deploy-user.sh --web-only                          # 只推前端（同样必须给 DEPLOY_HOST）
+#   ./deploy-user.sh --skip-build                        # 跳过本地前端构建
+#   ./deploy-user.sh --反向代理层-only                    # 只更新云端 同源托管配置
+#   ./deploy-user.sh --dry-run                           # 仅打印命令
 # =============================================================
 set -euo pipefail
 
@@ -35,7 +36,8 @@ die()     { log_err "$*"; exit 1; }
 
 # ---------- 可覆盖变量 ----------
 DEPLOY_USER="${DEPLOY_USER:-root}"
-DEPLOY_HOST="${DEPLOY_HOST:-118.25.236.101}"
+# 刻意无默认值：远端步骤必须显式指定目标机（见 preflight 里的 need_deploy_host）
+DEPLOY_HOST="${DEPLOY_HOST:-}"
 REMOTE="ssh $DEPLOY_USER@$DEPLOY_HOST"
 
 WEBROOT_USERWEB="${WEBROOT_USERWEB:-/www/wwwroot/hivemtk/user-web}"
@@ -45,7 +47,8 @@ REMOTE_DEPLOY_DIR="${REMOTE_DEPLOY_DIR:-/www/wwwroot/hivemtk}"
 REMOTE_GIT_REPO="${REMOTE_GIT_REPO:-git@gitee.com:xhpmayun/hivemtk.git}"
 REMOTE_GIT_BRANCH="${REMOTE_GIT_BRANCH:-master}"
 
-DOMAIN_USER_API="${DOMAIN_USER_API:-hiveuserapi.xapptool.cn}"
+# 发布后的健康检查打本地端口：域名停用后，"发布是否成功"这件事只有本地这一处能自证
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${USER_SERVER_PORT}/api/health}"
 
 SKIP_HEALTHCHECK="${SKIP_HEALTHCHECK:-}"
 SKIP_BUILD="${SKIP_BUILD:-}"
@@ -61,7 +64,8 @@ while [[ $# -gt 0 ]]; do
     --反向代理层-only)   MODE="反向代理层"; shift ;;
     --dry-run)      DRY_RUN=1; shift ;;
     -h|--help)
-      sed -n '2,20p' "$0"
+      # 按标记取"用法"段，不写死行号（改注释就不会让 --help 悄悄截半）
+      sed -n '/^# 用法:/,/^# =\{10,\}/p' "$0"
       exit 0
       ;;
     *) die "未知参数: $1" ;;
@@ -84,6 +88,21 @@ run_remote() {
   $REMOTE "$@"
 }
 
+# ---------- 远端步骤判定 ----------
+# web / all 两种模式含"推前端到远端"，必须显式给 DEPLOY_HOST；api 模式纯本地，不需要。
+mode_needs_remote() {
+  case "$MODE" in
+    web|all) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+need_deploy_host() {
+  if mode_needs_remote && [[ -z "$DRY_RUN" && -z "$DEPLOY_HOST" ]]; then
+    die "缺少 DEPLOY_HOST：本次模式（$MODE）要把前端推到远端，而本脚本不再内置默认目标机。纯本地发布请用 --api-only；确实要推远端请显式指定，例如 DEPLOY_HOST=10.0.0.5 ./scripts/deploy-user.sh"
+  fi
+}
+
 # ---------- 预检 ----------
 preflight() {
   log "########## 预检 ##########"
@@ -93,26 +112,33 @@ preflight() {
   done
   log "  本地命令: ok"
 
-  if [[ -z "$DRY_RUN" ]]; then
+  need_deploy_host
+
+  if [[ -n "$DRY_RUN" ]]; then
+    log "  跳过 SSH/本地预检（dry-run）"
+    return 0
+  fi
+
+  if mode_needs_remote; then
     $REMOTE "echo ok" >/dev/null 2>&1 || die "无法 SSH 到 $DEPLOY_USER@$DEPLOY_HOST"
     log "  SSH 连通: ok"
-
-    # 本地 docker（PG + Redis 在本地宿主机运行）
-    command -v docker >/dev/null 2>&1 || die "本地命令缺失: docker（数据层 PG+Redis 需要）"
-    log "  本地 docker: ok"
-
-    # 本地 go（user-server 二进制编译需要）
-    command -v go >/dev/null 2>&1 || die "本地命令缺失: go（user-server 编译需要）"
-    log "  本地 go: ok"
-
-    # 本地 .env（user-server 与 docker compose 均依赖）
-    if [[ -f "$ROOT/.env" ]]; then
-      log "  本地 .env: ok"
-    else
-      log_warn "本地 $ROOT/.env 不存在，user-server 启动可能失败（DB 密码等缺失）"
-    fi
   else
-    log "  跳过 SSH/本地预检（dry-run）"
+    log "  本次无远端步骤，跳过 SSH 检查"
+  fi
+
+  # 本地 docker（PG + Redis 在本地宿主机运行）
+  command -v docker >/dev/null 2>&1 || die "本地命令缺失: docker（数据层 PG+Redis 需要）"
+  log "  本地 docker: ok"
+
+  # 本地 go（user-server 二进制编译需要）
+  command -v go >/dev/null 2>&1 || die "本地命令缺失: go（user-server 编译需要）"
+  log "  本地 go: ok"
+
+  # 本地 .env（user-server 与 docker compose 均依赖）
+  if [[ -f "$ROOT/.env" ]]; then
+    log "  本地 .env: ok"
+  else
+    log_warn "本地 $ROOT/.env 不存在，user-server 启动可能失败（DB 密码等缺失）"
   fi
 }
 
@@ -230,11 +256,11 @@ healthcheck() {
     # 避免 反向代理层 SPA 兜底返回 200+HTML（前端 index.html）导致假通过
     # 注意：在 set -euo pipefail 下，避免将 ct=$(...) 与 && 短路链合并，
     # 否则 curl 失败会让整个命令链非零退出导致脚本中断；改用独立 if 包裹。
-    ct=$(curl -fsS -o /dev/null -w "%{content_type}" "https://$DOMAIN_USER_API/api/health" 2>/dev/null || true)
+    ct=$(curl -fsS -o /dev/null -w "%{content_type}" "$HEALTH_URL" 2>/dev/null || true)
     if [[ "$ct" == application/json* ]]; then
       # 注意：变量后紧跟全角括号‘）’ 时，Bash 会把 ct） 当成变量名，
       # 在 set -u 下报 unbound variable；务必用 ${ct} 显式定界。
-      log "  ✅ https://$DOMAIN_USER_API/api/health 通过（${i}s，Content-Type: ${ct}）"
+      log "  ✅ ${HEALTH_URL} 通过（${i}s，Content-Type: ${ct}）"
       return 0
     fi
     sleep 3
@@ -273,7 +299,11 @@ if [[ -n "$DRY_RUN" ]]; then
 else
   log "=========================================="
   log "✅ 发布完成！"
-  log "  域名: https://$DOMAIN_USER_API"
-  log "  API:  https://$DOMAIN_USER_API/api/"
+  log "  本地 API: ${HEALTH_URL%/api/health}"
+  if mode_needs_remote; then
+    log "  前端已推送到: $DEPLOY_USER@$DEPLOY_HOST:$WEBROOT_USERWEB/dist/"
+  else
+    log "  本次无远端推送（纯本地模式）"
+  fi
   log "=========================================="
 fi

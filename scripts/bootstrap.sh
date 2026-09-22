@@ -14,7 +14,7 @@
 # 步骤:
 #   1. 等待 user-server 容器 healthy（/health 200）
 #   2. 跑 schema 修复迁移（027 user_blacklist + 028 customer_tags）
-#   3. 创建默认 admin 账号（admin/Seed@123456，若不存在）
+#   3. 创建默认 admin 账号与演示坐席（实际由步骤 4 的 Go seed 写入，口令取 SEED_PASSWORD）
 #   4. 跑 Go seed 全模块（10 模块，含 11 智能体 + 10 绑定）
 #   5. 跑 Python 知识库种子（hivemtk 产品 hivemtk-platform-cs）
 #   6. 写 install.lock 标记已初始化
@@ -22,13 +22,23 @@
 # 环境变量:
 #   （常规做法：set -a && . ./.env && set +a 后执行本脚本）
 #   POSTGRES_PASSWORD  必须（与 docker-compose.yml USER_POSTGRES_PASSWORD 一致）
-#   JWT_SECRET / USER_JWT_SECRET / MERCHANT_API_SECRET / PLATFORM_LICENSE_SECRET
+#   JWT_SECRET / USER_JWT_SECRET / MERCHANT_API_SECRET
 #                      必须，生成方式 openssl rand -hex 32。
 #                      本脚本不再为这几把密钥内置任何默认值：历史版本曾把与部署机
 #                      .env 相同的真实密钥写成 ${VAR:-<40+位hex>} 兜底，随公开仓库
 #                      一并外泄；现由 scripts/check-secrets.sh 的 A 项比对守死。
+#                      注：历史版本还强制要求 PLATFORM_LICENSE_SECRET（商户授权签名密钥）。
+#                      2026-09 授权链路下线后两侧 Go 代码均已无任何读取点，故不再要求设置；
+#                      旧 .env 里残留该键不影响运行，可自行删除。
 #   USER_SERVER_PORT   可选，默认 8204
 #   PG_PORT            可选，默认 8232
+#   ADMIN_USERNAME     可选，默认 admin
+#   ADMIN_PASSWORD / SEED_PASSWORD
+#                      可选，默认 Seed@123456 —— 这个默认值随开源仓库公开，
+#                      保留它只是为了 e2e/幂等重跑不破；对外暴露的安装应显式设置。
+#                      两者取其一即可：SEED_PASSWORD 优先，未设时继承 ADMIN_PASSWORD，
+#                      Go seed 与步骤 7 的登录校验用同一个值（历史上 ADMIN_PASSWORD
+#                      只影响登录校验、不影响 seed 实际写入口令，设了也白设）。
 # =============================================================================
 
 set -e
@@ -41,7 +51,12 @@ USER_SERVER_PORT="${USER_SERVER_PORT:-8204}"
 PG_PORT="${PG_PORT:-8232}"
 PG_HOST="${PG_HOST:-127.0.0.1}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-Seed@123456}"
+# 口令只有一个事实源：SEED_PASSWORD（未设时取 ADMIN_PASSWORD，再未设时是公开默认值）。
+# 两者历史上各走各的——ADMIN_PASSWORD 只用于步骤 7 登录校验，Go seed 另用自己写死的常量，
+# 于是"设了 ADMIN_PASSWORD 却仍被种成默认口令"。这里合一后，seed 写入与登录校验必然同值。
+SEED_PASSWORD="${SEED_PASSWORD:-${ADMIN_PASSWORD:-Seed@123456}}"
+ADMIN_PASSWORD="$SEED_PASSWORD"
+export SEED_PASSWORD
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@hivemtk.local}"
 HIVEMTK_RAG_PRODUCT_ID="${HIVEMTK_RAG_PRODUCT_ID:-hivemtk-platform-cs}"
 
@@ -58,12 +73,20 @@ err()  { printf "${RED}[bootstrap]${NC} %s\n" "$*" >&2; }
 # 预检
 [ -z "$POSTGRES_PASSWORD" ] && { err "POSTGRES_PASSWORD 未设置"; exit 1; }
 # 签名/授权类密钥同样只允许来自环境：脚本内不得内置任何默认值（历史教训见 scripts/check-secrets.sh A 项）
-for _v in JWT_SECRET USER_JWT_SECRET MERCHANT_API_SECRET PLATFORM_LICENSE_SECRET; do
+for _v in JWT_SECRET USER_JWT_SECRET MERCHANT_API_SECRET; do
   [ -z "${!_v}" ] && { err "$_v 未设置（生成一个：openssl rand -hex 32）"; exit 1; }
 done
 command -v psql >/dev/null || { err "psql 未安装"; exit 1; }
 command -v go   >/dev/null || { err "go  未安装"; exit 1; }
 command -v python3 >/dev/null || { err "python3 未安装"; exit 1; }
+
+# 演示口令告警：默认值 Seed@123456 随开源仓库公开（config.yaml / docs / e2e 里都写着），
+# 保留它是为了幂等重跑与 e2e，不代表它可以出现在对外可达的安装上。
+if [ "$SEED_PASSWORD" = "Seed@123456" ]; then
+  warn "演示/admin 口令用的是仓库公开的默认值 Seed@123456；"
+  warn "  对外可达的安装请显式设置：SEED_PASSWORD=\"<自定口令>\" bash scripts/bootstrap.sh"
+  warn "  （或只设 ADMIN_PASSWORD，两者在本脚本里同值）"
+fi
 
 export PGHOST="$PG_HOST"
 export PGPORT="$PG_PORT"
@@ -103,7 +126,7 @@ cd "$USER_SERVER_DIR"
 POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
 JWT_SECRET="$JWT_SECRET" \
 MERCHANT_API_SECRET="$MERCHANT_API_SECRET" \
-PLATFORM_LICENSE_SECRET="$PLATFORM_LICENSE_SECRET" \
+SEED_PASSWORD="$SEED_PASSWORD" \
 go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
 
 # 5) 跑 Python 知识库种子

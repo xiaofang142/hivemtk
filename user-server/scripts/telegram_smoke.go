@@ -8,7 +8,10 @@
 //
 // 用法：
 //
-//	go run scripts/telegram_smoke.go --token=<BOT_TOKEN> [--public-base=https://hivepaltformapi.xapptool.cn]
+//	go run scripts/telegram_smoke.go --token=<BOT_TOKEN> --public-base=https://<你的公网回调域名>
+//
+// --public-base 必填且刻意不给默认值：Telegram 只接受公网可达的 HTTPS 回调地址，
+// 谁在什么隧道/域名上暴露本服务，只有操作者知道，代码里写死一个只会指向已经不存在的机器。
 package main
 
 import (
@@ -28,7 +31,7 @@ const tgAPIBase = "https://api.telegram.org/bot"
 
 func main() {
 	token := flag.String("token", "", "Telegram bot token (必填)")
-	publicBase := flag.String("public-base", "https://hivepaltformapi.xapptool.cn", "公网基座 URL（用于推导 webhook URL）")
+	publicBase := flag.String("public-base", "", "公网基座 URL（必填，用于推导 webhook URL）")
 	accountID := flag.Uint("account-id", 1, "TG 账号 ID（拼接进 webhook path）")
 	cleanup := flag.Bool("cleanup", true, "测试完成后清理 webhook")
 	flag.Parse()

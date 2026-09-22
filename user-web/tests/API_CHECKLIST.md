@@ -511,12 +511,6 @@
 | 338 | `getKuaishouCardOverallStats` | GET | `/api/kuaishou/stats/overall` | - |
 | 339 | `generateShortLink` | POST | `/api/kuaishou/${id}/generate-short-link` | - |
 
-## license.js（1）
-
-| # | 函数 | method | url | 行 |
-|---|------|--------|-----|----|
-| 340 | `getLicenseStatus` | GET | `/api/license/status` | - |
-
 ## livecode.js（12）
 
 | # | 函数 | method | url | 行 |
@@ -662,9 +656,7 @@
 |---|------|--------|-----|----|
 | 444 | `platformAPI.getLatestMessage` | GET | `/api/platform/message/latest` | - |
 | 445 | `platformAPI.markMessageRead` | POST | `/api/platform/message/${messageId}/read` | - |
-| 446 | `platformAPI.getLicenseStatus` | GET | `/api/platform/license/status` | - |
 | 447 | `platformAPI.reportAPILog` | POST | `/api/platform/report-api-log` | - |
-| 448 | `platformAPI.registerMerchant` | POST | `/api/platform/register` | - |
 
 ## platformAccount.js（8）
 

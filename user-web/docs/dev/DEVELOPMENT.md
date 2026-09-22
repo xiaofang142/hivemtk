@@ -26,27 +26,27 @@ npm install
 
 ### 1.3 .env.development 配置
 
-`user-web/.env.development` 内容：
+`user-web/.env.development` 的有效键只有一条（头部注释另载了端口单一源约束，以文件为准）：
 
 ```bash
-# 开发环境：使用相对路径，请求经 vite 代理(/api → http://localhost:8204)转发，
-# 与首页 CSP(connect-src 'self') 兼容；勿改为绝对 http 地址，否则会被 CSP 拦截。
 VITE_API_BASE_URL=/
 ```
 
+`/` 走同源：dev 由 Vite 把 `/api` 代理到 `http://localhost:8204`，同时兼容首页 CSP（`connect-src 'self' https: wss:`，不含 `http:`，所以跨源明文绝对地址会被浏览器拦掉）。
+
 | 变量 | 作用 | 默认 | 备注 |
 | --- | --- | --- | --- |
-| `VITE_API_BASE_URL` | axios 实例 baseURL | `/`（dev） | 生产构建可改绝对域名；运行期还会被 `localStorage.apiConfig.baseUrl` 覆盖 |
+| `VITE_API_BASE_URL` | axios 实例 baseURL | `/`（三份 env 文件实测一致：`.env.development` / `.env.example` / `.env.production`） | 生产构建可改绝对域名（只能 `https://`，CSP `connect-src 'self' https: wss:` 不含 `http:`）；`localStorage.apiConfig.baseUrl` 的覆盖**仅在 dev 生效**，`request.js:24` 用 `import.meta.env.DEV` 卡住，防被篡改的 localStorage 把全站 API 流量指向任意地址 |
 | WebSocket URL | 由 `configManager.getApiConfig()` 动态推导 | 同源 + `/api/ws/agent` 与 `/api/ws/visitor` | 不可单独配置 |
 
-如需联调本地后端，保持默认即可（Vite 代理 `/api → localhost:8204`）。如需联调远程 demo：
+联调本地后端保持默认即可（Vite 代理 `/api → localhost:8204`）。要连自己另起的远程后端，改 `.env.development` 为绝对 https 地址：
 
 ```bash
-# 修改 .env.development
-VITE_API_BASE_URL=https://hiveuserapi.xapptool.cn
-# 或者复制 .env.example
-cp .env.example .env.development
+# 修改 .env.development（或 cp .env.example .env.development 后改）
+VITE_API_BASE_URL=https://user-api.your-domain.com
 ```
+
+仓库不再提供公共 demo 环境：所有对外地址都由部署方自备（详见根 `README.md` 的部署段）。
 
 ## 2. 启动命令
 
@@ -551,10 +551,15 @@ import { updateRequestConfig } from '@/utils/request'
 const { baseURL } = await updateRequestConfig()
 console.log(baseURL)
 
-// 临时切换（需触发 updateRequestConfig）
-localStorage.setItem('apiConfig', JSON.stringify({ baseUrl: 'https://hiveuserapi.xapptool.cn' }))
+// 临时切换（需触发 updateRequestConfig 重建实例）
+localStorage.setItem('apiConfig', JSON.stringify({ baseUrl: 'https://user-api.your-domain.com' }))
 await updateRequestConfig()
 ```
+
+两条约束：
+
+- **只在 dev 生效**：`request.js:24` 用 `import.meta.env.DEV` 把这条覆盖卡住，生产构建一律走 env 配置——防被篡改的 localStorage 把全站 API 流量指向任意地址。
+- **必须过首页 CSP**：`index.html:12` 的 `connect-src 'self' https: wss:` 不含 `http:`。所以可用的是同源 `/` 与任意 `https://` 地址；从 dev 页（`http://localhost:8211`）填 `http://localhost:8204` 属跨源明文，请求会被浏览器拦掉——要打本地后端就用默认的 `/` 走 Vite 代理，不要手填绝对地址。
 
 ## 11. 常见问题排查
 

@@ -39,14 +39,14 @@ func NewSystemInitController() *SystemInitController {
 // @Success 200 {object} map[string]interface{} "系统初始化状态"
 // @Router /api/system/init-status [get]
 func (c *SystemInitController) GetInitStatus(ctx *gin.Context) {
-	checker := middleware.GetLicenseChecker()
+	checker := middleware.GetInstallStatus()
 	if checker == nil {
 		response.Success(ctx, gin.H{
 			"state":       "NOT_INSTALLED",
 			"initialized": false,
 			"has_admin":   false,
 			"version":     "unknown",
-		}, "授权检查器未初始化")
+		}, "安装态检查器未初始化")
 		return
 	}
 	status := checker.GetInitStatus()
@@ -72,9 +72,9 @@ type InitAdminRequest struct {
 // @Failure 400 {object} object{message=string}
 // @Router /api/system/init-complete [post]
 func (c *SystemInitController) InitComplete(ctx *gin.Context) {
-	checker := middleware.GetLicenseChecker()
+	checker := middleware.GetInstallStatus()
 	if checker == nil {
-		response.Error(ctx, http.StatusServiceUnavailable, "授权检查器未初始化")
+		response.Error(ctx, http.StatusServiceUnavailable, "安装态检查器未初始化")
 		return
 	}
 	if !checker.HasInstallLockAdmin() {

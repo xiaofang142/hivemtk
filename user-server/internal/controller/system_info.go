@@ -40,20 +40,6 @@ func (c *SystemInfoController) Health(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"status": "ok"}, "ok")
 }
 
-func (c *SystemInfoController) LicenseStatus(ctx *gin.Context) {
-	response.Success(ctx, gin.H{
-		"edition":  "open_source",
-		"licensed": true,
-		"status":   "active",
-		"message":  "开源版无需授权",
-	}, "ok")
-}
-
-// LicenseFeatures 返回当前授权激活的特性列表（开源版固定空数组）。
-func (c *SystemInfoController) LicenseFeatures(ctx *gin.Context) {
-	response.Success(ctx, []any{}, "ok")
-}
-
 // SystemMenus 返回前端侧边栏菜单树。
 // 当前开源版无动态菜单配置，返回空数组供前端做初始渲染占位。
 func (c *SystemInfoController) SystemMenus(ctx *gin.Context) {

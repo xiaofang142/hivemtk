@@ -1242,7 +1242,7 @@ product_faq_defs = [
     ],[
         '已对接：Telegram（Webhook/Polling双模式）、Web嵌入（iframe/sdk两种）、企业微信、WhatsApp。小红书/抖音API受限待开放～',
         'Telegram接入：BotFather创建Bot→配置Webhook URL→填到管理后台→启用，{minutes}分钟搞定～',
-        'Web嵌入：<iframe src="https://hiveuserapi.xapptool.cn/embed?app_id=xxx"> 或SDK模式，一行代码搞定～',
+        'Web嵌入：<iframe src="http://<你的user-server地址>:8204/embed?app_id=xxx"> 或SDK模式，一行代码搞定～',
     ]),
     ('feature','ai_agent',[
         '什么是智能体','怎么创建','智能体怎么工作','有多少种','能自我学习吗','RAG是什么','FAQ和SOP区别','FeatureFlag干嘛的',
@@ -1365,8 +1365,8 @@ if has == 0:
             'Swagger：/swagger/index.html 自动生成，开发环境启用',
         ]),
         ('渠道接入指南','channels.md','feature',95,[
-            'Telegram接入：BotFather创建Bot → setWebhook(https://hiveapi.xxx.com/tg/webhook) → 管理后台启用 → 完成',
-            'Web嵌入：方式1-iframe <iframe src="https://hiveuserapi.xxx.com/embed?app_id=xxx"/>；方式2-JS SDK动态加载',
+            'Telegram接入：BotFather创建Bot → 在管理后台填 Token 并注册 Webhook（形如 https://<你的公网域名>/api/webhook/telegram/<account_id>）→ 启用 → 完成',
+            'Web嵌入：方式1-iframe <iframe src="http://<你的user-server地址>:8204/embed?app_id=xxx"/>；方式2-JS SDK动态加载',
             'Webhook安全：Telegram发送X-Telegram-Bot-Api-Secret-Token验证请求来源',
             '长轮询模式：Telegram/Polling方式，每{seconds}秒拉取Update，适合无公网IP场景',
             '企业微信：需要公众号/小程序/企业号资质，OAuth授权后绑定',

@@ -38,7 +38,7 @@ const API_FILES = [
   'clue', 'community', 'conversionFunnel', 'customReport', 'customer360', 'customerEvent',
   'customerJourney', 'customerService', 'customerServiceAgent', 'customerSession', 'dashboardScreen',
   'dialogueMemory', 'domainPool', 'douyinCard', 'email', 'feishu', 'humanTask', 'integration', 'intentRecognition',
-  'knowledge', 'knowledgeBase', 'knowledgeMerchant', 'kuaishouCard', 'license', 'livecode', 'llmRouting',
+  'knowledge', 'knowledgeBase', 'knowledgeMerchant', 'kuaishouCard', 'livecode', 'llmRouting',
   'marketingFlow', 'material', 'messageHub', 'objection', 'obs', 'oneid', 'operationLog',
   'persona', 'platform', 'platformAccount', 'reachPipeline',
   'scriptTemplate', 'securityAudit', 'shortLink', 'sms', 'sopAgent', 'stats', 'system', 'tagSegmentation',

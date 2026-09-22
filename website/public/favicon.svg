@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="hive" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <!-- 蜂巢六边形底 -->
+  <path d="M32 2 L58 17 L58 47 L32 62 L6 47 L6 17 Z" fill="url(#hive)"/>
+  <!-- 蜂巢格纹横线 -->
+  <line x1="13" y1="22" x2="51" y2="22" stroke="#FFF" stroke-width="1.5" opacity="0.3"/>
+  <line x1="6" y1="32" x2="58" y2="32" stroke="#FFF" stroke-width="1.5" opacity="0.3"/>
+  <line x1="13" y1="42" x2="51" y2="42" stroke="#FFF" stroke-width="1.5" opacity="0.3"/>
+  <!-- 蜂巢格纹斜线 -->
+  <line x1="19" y1="9" x2="45" y2="55" stroke="#FFF" stroke-width="1.5" opacity="0.3"/>
+  <line x1="45" y1="9" x2="19" y2="55" stroke="#FFF" stroke-width="1.5" opacity="0.3"/>
+  <!-- 定位标记 -->
+  <circle cx="32" cy="27" r="7" fill="#B45309" stroke="#FFF" stroke-width="2.5"/>
+  <path d="M32 33 L32 53" stroke="#FFF" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="27" r="3" fill="#FFF"/>
+</svg>

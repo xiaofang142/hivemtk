@@ -19,7 +19,6 @@ const (
 	ErrorCodeTokenExpired     ErrorCode = "TOKEN_EXPIRED_2003"
 	ErrorCodeTokenInvalid     ErrorCode = "TOKEN_INVALID_2004"
 	ErrorCodeAPIKeyInvalid    ErrorCode = "API_KEY_INVALID_2005"
-	ErrorCodeLicenseInvalid   ErrorCode = "LICENSE_INVALID_2006"
 	ErrorCodePermissionDenied ErrorCode = "PERMISSION_DENIED_2007"
 
 	ErrorCodeDatabaseError       ErrorCode = "DB_ERROR_3001"
@@ -89,7 +88,6 @@ var errorCodeRegistry = map[ErrorCode]ErrorCodeConfig{
 	ErrorCodeTokenExpired:     {Code: ErrorCodeTokenExpired, HTTPCode: 401, Message: "令牌已过期"},
 	ErrorCodeTokenInvalid:     {Code: ErrorCodeTokenInvalid, HTTPCode: 401, Message: "令牌无效"},
 	ErrorCodeAPIKeyInvalid:    {Code: ErrorCodeAPIKeyInvalid, HTTPCode: 401, Message: "API Key 无效"},
-	ErrorCodeLicenseInvalid:   {Code: ErrorCodeLicenseInvalid, HTTPCode: 403, Message: "授权许可无效"},
 	ErrorCodePermissionDenied: {Code: ErrorCodePermissionDenied, HTTPCode: 403, Message: "权限不足"},
 
 	ErrorCodeDatabaseError:       {Code: ErrorCodeDatabaseError, HTTPCode: 500, Message: "数据库错误"},

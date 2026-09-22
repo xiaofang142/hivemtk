@@ -293,7 +293,7 @@ func (s *faqSopSeeder) faqArchitecture() []model.FAQEntry {
 	}{
 		{
 			Q:        "整体架构是怎样的 " + seedTag,
-			A:        "访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204，含 PostgreSQL :8202、Redis :8203、mtk-llm :8207、mtk-embedding :8208、mtk-rerank :8209）→ 平台端（独立仓库 hivemtk-platform，仅做版本检查/商户标识校验/官方支持，不碰业务数据）。",
+			A:        "访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204，含 PostgreSQL :8202、Redis :8203、mtk-llm :8207、mtk-embedding :8208、mtk-rerank :8209）。平台端（独立仓库 hivemtk-platform）是**可选本地组件**：默认不部署、不接入（PLATFORM_ENABLED 未开启），开启后也只承担资产市场上架与安装信息上报，不碰业务数据、不做任何商户授权校验。",
 			Keywords: []string{"架构", "整体", "用户端", "平台端"},
 			Conf:     0.93,
 		},
@@ -524,7 +524,7 @@ func (s *faqSopSeeder) faqCommunity() []model.FAQEntry {
 		},
 		{
 			Q:        "版本怎么更新 " + seedTag,
-			A:        "用户端 git pull 最新后按升级流程重建；平台端会通过低频 HTTPS 心跳做版本检查与商户标识校验，不接触用户业务数据。",
+			A:        "用户端 git pull 最新后按升级流程重建（开源版没有 OTA/离线安装包，源码就是唯一分发物）。平台端是可选本地组件：默认不部署，因此升级不依赖任何远端；只有你显式设了 PLATFORM_ENABLED=true 时，用户端才会按心跳间隔（默认 3 分钟，可由 DB 配置驱动）把本地版本号与安装信息上报给你自己跑的那个平台端。不存在商户授权校验，也不接触用户业务数据。",
 			Keywords: []string{"版本", "更新", "心跳", "检查"},
 			Conf:     0.83,
 		},

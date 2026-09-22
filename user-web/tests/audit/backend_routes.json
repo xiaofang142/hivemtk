@@ -1,1 +1,4150 @@
-[{"method":"GET","path":"/"},{"method":"GET","path":"/api/customer-sessions"},{"method":"GET","path":"/api/customer-sessions/blacklist"},{"method":"GET","path":"/api/customer-sessions/blacklist/check"},{"method":"GET","path":"/api/customer-sessions/pending"},{"method":"GET","path":"/api/customer-sessions/list"},{"method":"GET","path":"/api/customer-sessions/:id"},{"method":"GET","path":"/api/customer-sessions/:id/messages"},{"method":"GET","path":"/api/customer-service-agents"},{"method":"GET","path":"/api/customer-service-agents/by-ai-agent/:ai_agent_id"},{"method":"GET","path":"/api/customer-service-agents/by-user/:user_id"},{"method":"GET","path":"/api/customer-360"},{"method":"GET","path":"/api/customer-360/tag-rules"},{"method":"GET","path":"/api/customer-360/tag-stats"},{"method":"GET","path":"/api/customer-360/tags"},{"method":"GET","path":"/api/customer-360/stats"},{"method":"GET","path":"/api/customer-360/sessions"},{"method":"GET","path":"/api/customer-360/list"},{"method":"GET","path":"/api/customer-360/basic"},{"method":"GET","path":"/api/customer-360/messages"},{"method":"GET","path":"/api/customer-journey/overview"},{"method":"GET","path":"/api/customer-journey/stages"},{"method":"GET","path":"/api/customer-journey/by-stage"},{"method":"GET","path":"/api/customer-journey/dashboard"},{"method":"GET","path":"/api/customer-events"},{"method":"GET","path":"/api/customer-events/list"},{"method":"GET","path":"/api/customer-events/stats"},{"method":"GET","path":"/api/customer-events/customer/:customer_id"},{"method":"GET","path":"/api/customer-rfm/list"},{"method":"GET","path":"/api/customer-rfm/distribution"},{"method":"GET","path":"/api/customer-rfm/:customer_id"},{"method":"GET","path":"/api/customer-oneid/:customer_id/identities"},{"method":"GET","path":"/api/customer-tags"},{"method":"GET","path":"/api/customer/oneid/list"},{"method":"GET","path":"/api/customer/oneid/stats"},{"method":"GET","path":"/api/customer/oneid/conflicts"},{"method":"GET","path":"/api/customer/session/list"},{"method":"GET","path":"/api/customer/session/:id/messages"},{"method":"GET","path":"/api/customer/list"},{"method":"GET","path":"/api/customer/360/:id"},{"method":"GET","path":"/api/customer/:id"},{"method":"GET","path":"/api/customer/:id/behaviors"},{"method":"GET","path":"/api/customer/:id/communications"},{"method":"GET","path":"/api/custom-reports"},{"method":"GET","path":"/api/custom-reports/templates"},{"method":"GET","path":"/api/custom-reports/:id"},{"method":"GET","path":"/api/custom-reports/:id/data"},{"method":"GET","path":"/api/churn/prediction"},{"method":"GET","path":"/api/churn/predictions"},{"method":"GET","path":"/api/churn/high-risk-users"},{"method":"GET","path":"/api/churn/warnings"},{"method":"GET","path":"/api/churn/unhandled-warnings"},{"method":"GET","path":"/api/churn/model-config"},{"method":"GET","path":"/api/churn/statistics"},{"method":"GET","path":"/api/churn/risk-distribution"},{"method":"GET","path":"/api/churn-prediction"},{"method":"GET","path":"/api/churn-prediction/users"},{"method":"GET","path":"/api/churn-prediction/unhandled-warnings"},{"method":"GET","path":"/api/churn-prediction/list"},{"method":"GET","path":"/api/churn-prediction/warnings"},{"method":"GET","path":"/api/churn-prediction/statistics"},{"method":"GET","path":"/api/churn-prediction/risk-distribution"},{"method":"GET","path":"/api/churn-prediction/model-config"},{"method":"GET","path":"/api/chat/public/sessions/active"},{"method":"GET","path":"/api/chat/public/sessions/recent-closed"},{"method":"GET","path":"/api/chat/public/sessions/:session_id/messages"},{"method":"GET","path":"/api/chat/public/sessions/:session_id/offline-messages"},{"method":"GET","path":"/api/chat/public/channel/:app_key/info"},{"method":"GET","path":"/api/chat/public/agents/available"},{"method":"GET","path":"/api/chat/public/upload-token"},{"method":"GET","path":"/api/chat-channels"},{"method":"GET","path":"/api/chat-channels/:channel_id"},{"method":"GET","path":"/api/channel-agent-bindings"},{"method":"GET","path":"/api/channel-agent-bindings/by-agent/:agent_id"},{"method":"GET","path":"/api/clues"},{"method":"GET","path":"/api/clues/list"},{"method":"GET","path":"/api/clues/statistics"},{"method":"GET","path":"/api/clues/type"},{"method":"GET","path":"/api/clues/import"},{"method":"GET","path":"/api/clue/score/list"},{"method":"GET","path":"/api/clue/score/:clue_id"},{"method":"GET","path":"/api/clue/statistics"},{"method":"GET","path":"/api/clue/list"},{"method":"GET","path":"/api/clue-statistics/overview"},{"method":"GET","path":"/api/community/members"},{"method":"GET","path":"/api/community/members/:id"},{"method":"GET","path":"/api/community/messages"},{"method":"GET","path":"/api/community/groups"},{"method":"GET","path":"/api/community/groups/:id"},{"method":"GET","path":"/api/community/stats"},{"method":"GET","path":"/api/conversion-funnel"},{"method":"GET","path":"/api/conversion-funnels"},{"method":"GET","path":"/api/conversion-funnels/list"},{"method":"GET","path":"/api/conversion-funnels/stage"},{"method":"GET","path":"/api/conversion-funnel/list"},{"method":"GET","path":"/api/conversion-funnel/stage"},{"method":"GET","path":"/api/card-stats/:platform/stats/:id"},{"method":"GET","path":"/api/card-stats/:platform/overall"},{"method":"GET","path":"/api/agent-statuses"},{"method":"GET","path":"/api/agent-statuses/online"},{"method":"GET","path":"/api/agent-statuses/list"},{"method":"GET","path":"/api/agent-statuses/available"},{"method":"GET","path":"/api/agent-statuses/:id"},{"method":"GET","path":"/api/agent-statuses/:id/sessions"},{"method":"GET","path":"/api/agent-kb-bindings/by-agent/:agentId"},{"method":"GET","path":"/api/agent-kb-bindings/by-kb/:kbId"},{"method":"GET","path":"/api/agent-kb-bindings/agent/:aid"},{"method":"GET","path":"/api/agent-kb-bindings/kb/:kid"},{"method":"GET","path":"/api/agent/tools/list"},{"method":"GET","path":"/api/agent/tools/get"},{"method":"GET","path":"/api/agent/tools/stats"},{"method":"GET","path":"/api/agent/tools/audit"},{"method":"GET","path":"/api/agent/tools/cost"},{"method":"GET","path":"/api/agent/tools/providers"},{"method":"GET","path":"/api/agent/tool-integrations"},{"method":"GET","path":"/api/agent/settings"},{"method":"GET","path":"/api/agent/inference/stats"},{"method":"GET","path":"/api/agents/me"},{"method":"GET","path":"/api/agents/all"},{"method":"GET","path":"/api/agents/online"},{"method":"GET","path":"/api/agents/:id"},{"method":"GET","path":"/api/agents/:id/sessions"},{"method":"GET","path":"/api/ai-content/templates"},{"method":"GET","path":"/api/ai-content/templates/:id"},{"method":"GET","path":"/api/ai-content/list"},{"method":"GET","path":"/api/ai-content/history"},{"method":"GET","path":"/api/ai-content/:id"},{"method":"GET","path":"/api/ai-agents"},{"method":"GET","path":"/api/ai-agents/:id"},{"method":"GET","path":"/api/ai-agents/:id/context"},{"method":"GET","path":"/api/ai-agents-enabled"},{"method":"GET","path":"/api/ai-suggestions"},{"method":"GET","path":"/api/ai-suggestions/list"},{"method":"GET","path":"/api/ai-suggestions/:session_id"},{"method":"GET","path":"/api/ai-tools"},{"method":"GET","path":"/api/ai-tools/:name"},{"method":"GET","path":"/api/ai-tools/:name/accounts"},{"method":"GET","path":"/api/ai-productivity/overview"},{"method":"GET","path":"/api/ai-productivity/trend"},{"method":"GET","path":"/api/ai/templates"},{"method":"GET","path":"/api/ai/templates/:id"},{"method":"GET","path":"/api/ai/template-types"},{"method":"GET","path":"/api/ai/history"},{"method":"GET","path":"/api/ai/history/:id"},{"method":"GET","path":"/api/auto-reply/rule"},{"method":"GET","path":"/api/auto-reply/rules"},{"method":"GET","path":"/api/auto-reply/rate-limit-stats"},{"method":"GET","path":"/api/auto-reply/login-status"},{"method":"GET","path":"/api/auto-reply/logs"},{"method":"GET","path":"/api/auto-reply/accounts"},{"method":"GET","path":"/api/auto-reply/concurrent-stats"},{"method":"GET","path":"/api/auto-reply/statistics"},{"method":"GET","path":"/api/auto-reply/headless"},{"method":"GET","path":"/api/auto-reply/debug/status"},{"method":"GET","path":"/api/auth/anomaly/login-events"},{"method":"GET","path":"/api/auth/anomaly/alerts"},{"method":"GET","path":"/api/auth/notifications"},{"method":"GET","path":"/api/auth/notifications/unread-count"},{"method":"GET","path":"/api/auth/current-user"},{"method":"GET","path":"/api/auth/mfa/status"},{"method":"GET","path":"/api/auth/login-events"},{"method":"GET","path":"/api/auth/security-alerts"},{"method":"GET","path":"/api/auth/password-policy"},{"method":"GET","path":"/api/admin/tuning/confidence/signals"},{"method":"GET","path":"/api/admin/tuning/confidence/signals/stats"},{"method":"GET","path":"/api/admin/tuning/confidence/signals/:id"},{"method":"GET","path":"/api/admin/tuning/confidence/calibrations"},{"method":"GET","path":"/api/admin/tuning/confidence/policies"},{"method":"GET","path":"/api/admin/tuning/humanize/scores"},{"method":"GET","path":"/api/admin/tuning/humanize/scores/stats"},{"method":"GET","path":"/api/admin/tuning/humanize/baselines"},{"method":"GET","path":"/api/admin/tuning/humanize/low-quality"},{"method":"GET","path":"/api/admin/tuning/feedback/events"},{"method":"GET","path":"/api/admin/tuning/feedback/events/stats"},{"method":"GET","path":"/api/admin/tuning/feedback/dialogues"},{"method":"GET","path":"/api/admin/tuning/prompt/candidates"},{"method":"GET","path":"/api/admin/tuning/bandit/arms"},{"method":"GET","path":"/api/admin/config"},{"method":"GET","path":"/api/analytics/funnel"},{"method":"GET","path":"/api/analytics/funnel/stage"},{"method":"GET","path":"/api/analytics/ai-productivity"},{"method":"GET","path":"/api/analytics/ai-productivity/trend"},{"method":"GET","path":"/api/analytics/persona/staffs"},{"method":"GET","path":"/api/analytics/persona/staffs/:id"},{"method":"GET","path":"/api/asset-market/list"},{"method":"GET","path":"/api/asset-market/detail/:asset_id"},{"method":"GET","path":"/api/asset-market/my-purchases"},{"method":"GET","path":"/api/asset-bundle/by-aid/:aid"},{"method":"GET","path":"/api/asset-bundle/:id"},{"method":"GET","path":"/api/ab-experiments"},{"method":"GET","path":"/api/ab-experiments/:id"},{"method":"GET","path":"/api/ab-experiments/:id/results"},{"method":"GET","path":"/api/ab-experiments/:id/conversion-events"},{"method":"GET","path":"/api/account/list"},{"method":"GET","path":"/api/account/:id"},{"method":"GET","path":"/api/accounts/list"},{"method":"GET","path":"/api/app-config"},{"method":"GET","path":"/api/app-config/health"},{"method":"GET","path":"/api/sms/delivery/portability"},{"method":"GET","path":"/api/sms/delivery/portability/:phone"},{"method":"GET","path":"/api/sms/delivery/metrics"},{"method":"GET","path":"/api/sms/delivery/carrier/:phone"},{"method":"GET","path":"/api/sms/detail/:id"},{"method":"GET","path":"/api/sms/draft/list"},{"method":"GET","path":"/api/sms/draft/:id"},{"method":"GET","path":"/api/sms/drafts"},{"method":"GET","path":"/api/sms/drafts/list"},{"method":"GET","path":"/api/sms/job/list"},{"method":"GET","path":"/api/sms/job/:id"},{"method":"GET","path":"/api/sms/job/:id/records"},{"method":"GET","path":"/api/sms/jobs"},{"method":"GET","path":"/api/sms/jobs/list"},{"method":"GET","path":"/api/sms/config"},{"method":"GET","path":"/api/sms/configs"},{"method":"GET","path":"/api/sms/configs/list"},{"method":"GET","path":"/api/sms/unsubscribe/list"},{"method":"GET","path":"/api/sms/unsubscribe/export"},{"method":"GET","path":"/api/sms/records"},{"method":"GET","path":"/api/sms/records/list"},{"method":"GET","path":"/api/sms/list"},{"method":"GET","path":"/api/system/config"},{"method":"GET","path":"/api/system/configs"},{"method":"GET","path":"/api/system/configs/list"},{"method":"GET","path":"/api/system/configs/:key"},{"method":"GET","path":"/api/system/roles"},{"method":"GET","path":"/api/system/roles/:code"},{"method":"GET","path":"/api/system/roles/:code/members"},{"method":"GET","path":"/api/system/info"},{"method":"GET","path":"/api/system/init-status"},{"method":"GET","path":"/api/system/users"},{"method":"GET","path":"/api/system/users/:id"},{"method":"GET","path":"/api/system/logs"},{"method":"GET","path":"/api/system/stats"},{"method":"GET","path":"/api/system/backup"},{"method":"GET","path":"/api/system/permissions/audit-logs"},{"method":"GET","path":"/api/system-monitor/metrics"},{"method":"GET","path":"/api/system-monitor/health"},{"method":"GET","path":"/api/sop"},{"method":"GET","path":"/api/sop/executions"},{"method":"GET","path":"/api/sop/executions/:id"},{"method":"GET","path":"/api/sop/stats"},{"method":"GET","path":"/api/sop/match"},{"method":"GET","path":"/api/sop/:id"},{"method":"GET","path":"/api/sop/:id/abtest/stats"},{"method":"GET","path":"/api/sop-agents"},{"method":"GET","path":"/api/sop-agents/list"},{"method":"GET","path":"/api/sop-agents/stats"},{"method":"GET","path":"/api/sop-agents/:id"},{"method":"GET","path":"/api/sop-templates"},{"method":"GET","path":"/api/sop-templates/:id"},{"method":"GET","path":"/api/script-templates"},{"method":"GET","path":"/api/script-templates/list"},{"method":"GET","path":"/api/script-templates/categories"},{"method":"GET","path":"/api/script-templates/search"},{"method":"GET","path":"/api/script-templates/public"},{"method":"GET","path":"/api/script-templates/:id"},{"method":"GET","path":"/api/scripts"},{"method":"GET","path":"/api/scripts/categories"},{"method":"GET","path":"/api/scripts/search"},{"method":"GET","path":"/api/scripts/public"},{"method":"GET","path":"/api/scripts/:id"},{"method":"GET","path":"/api/short-link/list"},{"method":"GET","path":"/api/short-link/all-stats"},{"method":"GET","path":"/api/short-link/:id"},{"method":"GET","path":"/api/short-link/:id/stats"},{"method":"GET","path":"/api/short-links"},{"method":"GET","path":"/api/short-links/list"},{"method":"GET","path":"/api/short-links/:id"},{"method":"GET","path":"/api/shortlink/list"},{"method":"GET","path":"/api/shortlink/stats/all"},{"method":"GET","path":"/api/shortlink/:id"},{"method":"GET","path":"/api/shortlink/:id/stats"},{"method":"GET","path":"/api/session-tags"},{"method":"GET","path":"/api/session-tags/list"},{"method":"GET","path":"/api/security/audit/list"},{"method":"GET","path":"/api/security/audit/:id"},{"method":"GET","path":"/api/sales-champions"},{"method":"GET","path":"/api/sales-champions/list"},{"method":"GET","path":"/api/sales-champions/:id"},{"method":"GET","path":"/api/s/:code"},{"method":"GET","path":"/api/stats/system"},{"method":"GET","path":"/api/marketing-flows"},{"method":"GET","path":"/api/marketing-flows/executions"},{"method":"GET","path":"/api/marketing-flows/executions/stats"},{"method":"GET","path":"/api/marketing-flows/list"},{"method":"GET","path":"/api/marketing-flows/:id"},{"method":"GET","path":"/api/marketing-flows/:id/executions"},{"method":"GET","path":"/api/marketing-flows/:id/stats"},{"method":"GET","path":"/api/market-templates"},{"method":"GET","path":"/api/market-templates/list"},{"method":"GET","path":"/api/market-templates/official"},{"method":"GET","path":"/api/market-templates/search"},{"method":"GET","path":"/api/market-templates/my-downloads"},{"method":"GET","path":"/api/market-templates/:id"},{"method":"GET","path":"/api/material/categories"},{"method":"GET","path":"/api/material/categories/:id"},{"method":"GET","path":"/api/material/stats"},{"method":"GET","path":"/api/material/selector"},{"method":"GET","path":"/api/material/list"},{"method":"GET","path":"/api/material/:id"},{"method":"GET","path":"/api/material-library"},{"method":"GET","path":"/api/material-library/list"},{"method":"GET","path":"/api/material-library/categories"},{"method":"GET","path":"/api/material-library/stats"},{"method":"GET","path":"/api/message-hub/list"},{"method":"GET","path":"/api/message-hub/stats"},{"method":"GET","path":"/api/message-hub/platforms"},{"method":"GET","path":"/api/message-hub/:id"},{"method":"GET","path":"/api/messages"},{"method":"GET","path":"/api/messages/:id"},{"method":"GET","path":"/api/messages/:id/replies"},{"method":"GET","path":"/api/memory/long"},{"method":"GET","path":"/api/memory/list"},{"method":"GET","path":"/api/memory/short"},{"method":"GET","path":"/api/memory/context"},{"method":"GET","path":"/api/monitor/trace-tree"},{"method":"GET","path":"/api/monitor/trace-eval/logs"},{"method":"GET","path":"/api/monitor/traces"},{"method":"GET","path":"/api/monitor/latency"},{"method":"GET","path":"/api/monitor/lifecycle"},{"method":"GET","path":"/api/monitor/health"},{"method":"GET","path":"/api/monitor/anomalies"},{"method":"GET","path":"/api/monitor/node-health"},{"method":"GET","path":"/api/monitor/knowledge-weights"},{"method":"GET","path":"/api/migration/task/:id"},{"method":"GET","path":"/api/migration/history"},{"method":"GET","path":"/api/migration/records"},{"method":"GET","path":"/api/migration/current-version"},{"method":"GET","path":"/api/migration/available"},{"method":"GET","path":"/api/llm/scenarios"},{"method":"GET","path":"/api/llm/scenario-stats"},{"method":"GET","path":"/api/llm/scene-routing"},{"method":"GET","path":"/api/llm/strategies"},{"method":"GET","path":"/api/llm/stats"},{"method":"GET","path":"/api/llm/models"},{"method":"GET","path":"/api/llm/models/:name"},{"method":"GET","path":"/api/llm/model-type-stats"},{"method":"GET","path":"/api/llm/providers/health"},{"method":"GET","path":"/api/llm/providers/health/:provider"},{"method":"GET","path":"/api/llm/providers/policy"},{"method":"GET","path":"/api/llm/egress-alerts"},{"method":"GET","path":"/api/llm/egress-audit"},{"method":"GET","path":"/api/llm/fallback"},{"method":"GET","path":"/api/llm/cost-stats"},{"method":"GET","path":"/api/llm/audit"},{"method":"GET","path":"/api/llm/usage"},{"method":"GET","path":"/api/llm/health"},{"method":"GET","path":"/api/llm-routings/providers/health"},{"method":"GET","path":"/api/llm-routings/providers/:provider/health"},{"method":"GET","path":"/api/llm-routings/policy"},{"method":"GET","path":"/api/llm-routing/rules"},{"method":"GET","path":"/api/llm-routing/models"},{"method":"GET","path":"/api/live-codes"},{"method":"GET","path":"/api/live-codes/list"},{"method":"GET","path":"/api/live-codes/qrcodes/:qr_id/stats"},{"method":"GET","path":"/api/live-codes/:id"},{"method":"GET","path":"/api/live-codes/:id/stats"},{"method":"GET","path":"/api/live-codes/:id/qrcodes"},{"method":"GET","path":"/api/live-code/list"},{"method":"GET","path":"/api/live-code/:id"},{"method":"GET","path":"/api/live-code/:id/qr-codes"},{"method":"GET","path":"/api/live-code/:id/qr-stats"},{"method":"GET","path":"/api/live-code/:id/stats"},{"method":"GET","path":"/api/livecode/:id"},{"method":"GET","path":"/api/license/status"},{"method":"GET","path":"/api/license/features"},{"method":"GET","path":"/api/local-assets"},{"method":"GET","path":"/api/local-assets/sync-log"},{"method":"GET","path":"/api/local-assets/:id"},{"method":"GET","path":"/api/l/:code"},{"method":"GET","path":"/api/lead-mining/config"},{"method":"GET","path":"/api/dashboards"},{"method":"GET","path":"/api/dashboards/data"},{"method":"GET","path":"/api/dashboards/activities"},{"method":"GET","path":"/api/dashboards/public/:code"},{"method":"GET","path":"/api/dashboards/list"},{"method":"GET","path":"/api/dashboards/:id"},{"method":"GET","path":"/api/dashboards/:id/data"},{"method":"GET","path":"/api/dashboard-screen"},{"method":"GET","path":"/api/dashboard-screens"},{"method":"GET","path":"/api/dashboard-screens/list"},{"method":"GET","path":"/api/dashboard-screens/:id"},{"method":"GET","path":"/api/dashboard-screens/:id/data"},{"method":"GET","path":"/api/dashboard-screens/:id/activities"},{"method":"GET","path":"/api/dashboard-screen/list"},{"method":"GET","path":"/api/dashboard/sse"},{"method":"GET","path":"/api/dashboard/stats"},{"method":"GET","path":"/api/dashboard/clients"},{"method":"GET","path":"/api/dashboard/topics"},{"method":"GET","path":"/api/douyin-card/list"},{"method":"GET","path":"/api/douyin-card/stats/:id"},{"method":"GET","path":"/api/douyin-card/overall-stats"},{"method":"GET","path":"/api/douyin-card/:id"},{"method":"GET","path":"/api/douyin-cards"},{"method":"GET","path":"/api/douyin-cards/list"},{"method":"GET","path":"/api/douyin-cards/:id"},{"method":"GET","path":"/api/douyin/stats/card/:id"},{"method":"GET","path":"/api/douyin/stats/overall"},{"method":"GET","path":"/api/douyin/list"},{"method":"GET","path":"/api/douyin/view/:id"},{"method":"GET","path":"/api/douyin/:id"},{"method":"GET","path":"/api/domain-pool"},{"method":"GET","path":"/api/domain-pool/list"},{"method":"GET","path":"/api/domain-pool/:id"},{"method":"GET","path":"/api/domainpool/list"},{"method":"GET","path":"/api/domainpool/:id"},{"method":"GET","path":"/api/dialogue-memories"},{"method":"GET","path":"/api/dialogue-memories/stats"},{"method":"GET","path":"/api/dialogue-memories/short"},{"method":"GET","path":"/api/dialogue-memories/list"},{"method":"GET","path":"/api/dialogue-memories/long"},{"method":"GET","path":"/api/dialogue-memories/context"},{"method":"GET","path":"/api/dialogue-memories/:customer_id"},{"method":"GET","path":"/api/dingtalk-app/accounts"},{"method":"GET","path":"/api/dingtalk-app/accounts/:id"},{"method":"GET","path":"/api/intent/stats"},{"method":"GET","path":"/api/intent/stats/fine"},{"method":"GET","path":"/api/intent/recent"},{"method":"GET","path":"/api/intent/dict"},{"method":"GET","path":"/api/intent/logs"},{"method":"GET","path":"/api/intent/config"},{"method":"GET","path":"/api/intent-records"},{"method":"GET","path":"/api/intent-records/list"},{"method":"GET","path":"/api/intent-records/stats"},{"method":"GET","path":"/api/intent-records/dict"},{"method":"GET","path":"/api/intent-records/config"},{"method":"GET","path":"/api/integration/external-orders"},{"method":"GET","path":"/api/integration/external-orders-by-customer"},{"method":"GET","path":"/api/integration/external-customers"},{"method":"GET","path":"/api/integration/external-products"},{"method":"GET","path":"/api/integration/sync-logs"},{"method":"GET","path":"/api/integrations"},{"method":"GET","path":"/api/integrations/list"},{"method":"GET","path":"/api/integrations/:id"},{"method":"GET","path":"/api/integrations/:id/sync-logs"},{"method":"GET","path":"/api/inbox"},{"method":"GET","path":"/api/inbox/stats"},{"method":"GET","path":"/api/inbox/staff/:staff/load"},{"method":"GET","path":"/api/inbox/conversations"},{"method":"GET","path":"/api/inbox/conversations/list"},{"method":"GET","path":"/api/inbox/assignments"},{"method":"GET","path":"/api/inbox/messages"},{"method":"GET","path":"/api/inbox/:id"},{"method":"GET","path":"/api/inbox/:id/messages"},{"method":"GET","path":"/api/i18n/stats"},{"method":"GET","path":"/api/i18n/stats/lang-dist"},{"method":"GET","path":"/api/i18n/stats/latency"},{"method":"GET","path":"/api/i18n/stats/cache"},{"method":"GET","path":"/api/i18n/stats/glossary"},{"method":"GET","path":"/api/i18n/stats/quality"},{"method":"GET","path":"/api/i18n/stats/fallback"},{"method":"GET","path":"/api/xianyu-card/list"},{"method":"GET","path":"/api/xianyu-card/stats/:id"},{"method":"GET","path":"/api/xianyu-card/overall-stats"},{"method":"GET","path":"/api/xianyu-card/:id"},{"method":"GET","path":"/api/xianyu-cards"},{"method":"GET","path":"/api/xianyu-cards/list"},{"method":"GET","path":"/api/xianyu-cards/:id"},{"method":"GET","path":"/api/xianyu-auto-reply/logs"},{"method":"GET","path":"/api/xianyu-auto-reply/login-status"},{"method":"GET","path":"/api/xianyu-auto-reply/accounts"},{"method":"GET","path":"/api/xianyu-auto-reply/rule"},{"method":"GET","path":"/api/xianyu/auto-reply/login/status"},{"method":"GET","path":"/api/xianyu/auto-reply/logs"},{"method":"GET","path":"/api/xianyu/auto-reply/accounts"},{"method":"GET","path":"/api/xianyu/auto-reply/rules"},{"method":"GET","path":"/api/xianyu/auto-reply/health"},{"method":"GET","path":"/api/xianyu/stats/card/:id"},{"method":"GET","path":"/api/xianyu/stats/overall"},{"method":"GET","path":"/api/xianyu/list"},{"method":"GET","path":"/api/xianyu/view/:id"},{"method":"GET","path":"/api/xianyu/:id"},{"method":"GET","path":"/api/xiaohongshu/auto-reply/login-status"},{"method":"GET","path":"/api/xiaohongshu/auto-reply/logs"},{"method":"GET","path":"/api/xiaohongshu/auto-reply/accounts"},{"method":"GET","path":"/api/xiaohongshu/auto-reply/rules"},{"method":"GET","path":"/api/xiaohongshu/auto-reply/health"},{"method":"GET","path":"/api/xiaohongshu/stats/card/:id"},{"method":"GET","path":"/api/xiaohongshu/stats/overall"},{"method":"GET","path":"/api/xiaohongshu/list"},{"method":"GET","path":"/api/xiaohongshu/view/:id"},{"method":"GET","path":"/api/xiaohongshu/:id"},{"method":"GET","path":"/api/xiaohongshu-card/list"},{"method":"GET","path":"/api/xiaohongshu-card/stats/:id"},{"method":"GET","path":"/api/xiaohongshu-card/overall-stats"},{"method":"GET","path":"/api/xiaohongshu-card/:id"},{"method":"GET","path":"/api/xiaohongshu-cards"},{"method":"GET","path":"/api/xiaohongshu-cards/list"},{"method":"GET","path":"/api/xiaohongshu-cards/:id"},{"method":"GET","path":"/api/wecom/health/accounts"},{"method":"GET","path":"/api/wecom/health/accounts/select"},{"method":"GET","path":"/api/wecom/health/accounts/summary"},{"method":"GET","path":"/api/wecom/health/accounts/risks"},{"method":"GET","path":"/api/wecom/health/accounts/:id"},{"method":"GET","path":"/api/wecom/health/accounts/:id/history"},{"method":"GET","path":"/api/wecom/accounts"},{"method":"GET","path":"/api/wecom/accounts/:id"},{"method":"GET","path":"/api/wecom/customers"},{"method":"GET","path":"/api/wecom/groups"},{"method":"GET","path":"/api/wecom/messages"},{"method":"GET","path":"/api/wecom/tags"},{"method":"GET","path":"/api/webhook/wecom/:account_id"},{"method":"GET","path":"/api/webhook/whatsapp/:account_id"},{"method":"GET","path":"/api/webhook/stats"},{"method":"GET","path":"/api/webhook/health"},{"method":"GET","path":"/api/webhook/feishu/:account_id"},{"method":"GET","path":"/api/webhook/dingtalk/:account_id"},{"method":"GET","path":"/api/whatsapp/jobs"},{"method":"GET","path":"/api/whatsapp/jobs/:id"},{"method":"GET","path":"/api/whatsapp/accounts"},{"method":"GET","path":"/api/whatsapp/accounts/:id/login/status"},{"method":"GET","path":"/api/whatsapp/login-status"},{"method":"GET","path":"/api/whatsapp/lead-groups"},{"method":"GET","path":"/api/whatsapp/group-messaging/status/:queue_id"},{"method":"GET","path":"/api/whatsapp/group-messaging/records"},{"method":"GET","path":"/api/whatsapp/templates"},{"method":"GET","path":"/api/whatsapp/templates/:id"},{"method":"GET","path":"/api/whatsapp/drafts"},{"method":"GET","path":"/api/whatsapp-cloud/accounts"},{"method":"GET","path":"/api/whatsapp-cloud/accounts/:id"},{"method":"GET","path":"/api/ws/visitor"},{"method":"GET","path":"/api/ws/agent"},{"method":"GET","path":"/api/ws/channel"},{"method":"GET","path":"/api/knowledge/stats/overview"},{"method":"GET","path":"/api/knowledge/stats/openapi"},{"method":"GET","path":"/api/knowledge/stats/documents"},{"method":"GET","path":"/api/knowledge/stats/searches"},{"method":"GET","path":"/api/knowledge/stats/imports"},{"method":"GET","path":"/api/knowledge/documents"},{"method":"GET","path":"/api/knowledge/documents/:id"},{"method":"GET","path":"/api/knowledge/documents/:id/progress"},{"method":"GET","path":"/api/knowledge/documents/:id/chunks"},{"method":"GET","path":"/api/knowledge/openapi/sources"},{"method":"GET","path":"/api/knowledge/openapi/sources/:id"},{"method":"GET","path":"/api/knowledge/products/:product_id/overview"},{"method":"GET","path":"/api/knowledge/import-logs"},{"method":"GET","path":"/api/knowledge-merchant/documents/:id/chunks"},{"method":"GET","path":"/api/knowledge-merchant/feedbacks"},{"method":"GET","path":"/api/knowledge-merchant/tokens"},{"method":"GET","path":"/api/knowledge-merchant/external/jobs"},{"method":"GET","path":"/api/knowledge-bases"},{"method":"GET","path":"/api/knowledge-bases/by-agent/:aid"},{"method":"GET","path":"/api/knowledge-bases/by-type/:type"},{"method":"GET","path":"/api/knowledge-bases/:id"},{"method":"GET","path":"/api/kuaishou-card/list"},{"method":"GET","path":"/api/kuaishou-card/stats/:id"},{"method":"GET","path":"/api/kuaishou-card/overall-stats"},{"method":"GET","path":"/api/kuaishou-card/:id"},{"method":"GET","path":"/api/kuaishou-cards"},{"method":"GET","path":"/api/kuaishou-cards/list"},{"method":"GET","path":"/api/kuaishou-cards/:id"},{"method":"GET","path":"/api/kuaishou/stats/card/:id"},{"method":"GET","path":"/api/kuaishou/stats/overall"},{"method":"GET","path":"/api/kuaishou/list"},{"method":"GET","path":"/api/kuaishou/view/:id"},{"method":"GET","path":"/api/kuaishou/:id"},{"method":"GET","path":"/api/telegram/accounts"},{"method":"GET","path":"/api/telegram/accounts/list"},{"method":"GET","path":"/api/telegram/accounts/:id"},{"method":"GET","path":"/api/telegram/accounts/:id/status"},{"method":"GET","path":"/api/templates"},{"method":"GET","path":"/api/templates/official"},{"method":"GET","path":"/api/templates/search"},{"method":"GET","path":"/api/templates/my-downloads"},{"method":"GET","path":"/api/templates/:id"},{"method":"GET","path":"/api/tiktok-card/list"},{"method":"GET","path":"/api/tiktok-card/stats/overall"},{"method":"GET","path":"/api/tiktok-card/:id"},{"method":"GET","path":"/api/tiktok-card/:id/stats"},{"method":"GET","path":"/api/tiktok-cards"},{"method":"GET","path":"/api/tiktok-cards/list"},{"method":"GET","path":"/api/tiktok-cards/:id"},{"method":"GET","path":"/api/tiktok/auto-reply/accounts"},{"method":"GET","path":"/api/tiktok/auto-reply/rule"},{"method":"GET","path":"/api/tiktok/auto-reply/logs"},{"method":"GET","path":"/api/tools/permission/agents"},{"method":"GET","path":"/api/tools/permission/agents/:agent_id"},{"method":"GET","path":"/api/tools/permission/default"},{"method":"GET","path":"/api/tools/permission/global"},{"method":"GET","path":"/api/tag-segments"},{"method":"GET","path":"/api/tag-segmentation/list"},{"method":"GET","path":"/api/trace/:traceId"},{"method":"GET","path":"/api/reach/pipelines"},{"method":"GET","path":"/api/reach/pipelines/:id"},{"method":"GET","path":"/api/reach/jobs"},{"method":"GET","path":"/api/reach/jobs/:id"},{"method":"GET","path":"/api/reach/stats"},{"method":"GET","path":"/api/reach-pipelines"},{"method":"GET","path":"/api/reach-pipelines/list"},{"method":"GET","path":"/api/reach-pipelines/:id"},{"method":"GET","path":"/api/recovery-queue/list"},{"method":"GET","path":"/api/recovery-queue/distribution"},{"method":"GET","path":"/api/recovery-queue/ready"},{"method":"GET","path":"/api/restore/list"},{"method":"GET","path":"/api/restore/last"},{"method":"GET","path":"/api/rag/health"},{"method":"GET","path":"/api/rag/health/refresh"},{"method":"GET","path":"/api/rag/recall/snapshot"},{"method":"GET","path":"/api/rag/recall/snapshots"},{"method":"GET","path":"/api/rag/documents"},{"method":"GET","path":"/api/rag/documents/:id"},{"method":"GET","path":"/api/rag-config/products"},{"method":"GET","path":"/api/rag-config/products/:id"},{"method":"GET","path":"/api/rag-config/accounts/config"},{"method":"GET","path":"/api/rag-product-configs"},{"method":"GET","path":"/api/rag-product-configs/list"},{"method":"GET","path":"/api/email/list"},{"method":"GET","path":"/api/email/lists"},{"method":"GET","path":"/api/email/lists/list"},{"method":"GET","path":"/api/email/lists/:id"},{"method":"GET","path":"/api/email/lists/:id/trace"},{"method":"GET","path":"/api/email/lists/:id/tracking"},{"method":"GET","path":"/api/email/list/:id"},{"method":"GET","path":"/api/email/smtp"},{"method":"GET","path":"/api/email/smtps"},{"method":"GET","path":"/api/email/smtps/list"},{"method":"GET","path":"/api/email/smtps/:id"},{"method":"GET","path":"/api/email/smtp/:id"},{"method":"GET","path":"/api/email/unsubscribe"},{"method":"GET","path":"/api/email/unsubscribe/list"},{"method":"GET","path":"/api/email/unsubscribe/export"},{"method":"GET","path":"/api/email/drafts"},{"method":"GET","path":"/api/email/drafts/:id"},{"method":"GET","path":"/api/email/jobs"},{"method":"GET","path":"/api/email/jobs/:id"},{"method":"GET","path":"/api/email/track/pixel/:token"},{"method":"GET","path":"/api/email/track/open-metrics"},{"method":"GET","path":"/api/events/customer/:id"},{"method":"GET","path":"/api/events/stats"},{"method":"GET","path":"/api/user-segment/rfm/rule"},{"method":"GET","path":"/api/user-segment/rfm/rules"},{"method":"GET","path":"/api/user-segment/rfm/list"},{"method":"GET","path":"/api/user-segment/rfm/user"},{"method":"GET","path":"/api/user-segment/rfm/stats"},{"method":"GET","path":"/api/user-segment/layers"},{"method":"GET","path":"/api/user-segments"},{"method":"GET","path":"/api/user-segments/rfm/list"},{"method":"GET","path":"/api/user-segments/rfm/stats"},{"method":"GET","path":"/api/user-segments/list"},{"method":"GET","path":"/api/user-segments/layers"},{"method":"GET","path":"/api/user/list"},{"method":"GET","path":"/api/user/:id"},{"method":"GET","path":"/api/users"},{"method":"GET","path":"/api/users/:id"},{"method":"GET","path":"/api/unified-messages"},{"method":"GET","path":"/api/unified-messages/list"},{"method":"GET","path":"/api/unified-messages/:id"},{"method":"GET","path":"/api/unified-messages/:id/replies"},{"method":"GET","path":"/api/obs-configs"},{"method":"GET","path":"/api/obs-configs/list"},{"method":"GET","path":"/api/obs-configs/default"},{"method":"GET","path":"/api/obs-configs/:id"},{"method":"GET","path":"/api/obs/config"},{"method":"GET","path":"/api/obs/config/default"},{"method":"GET","path":"/api/obs/config/:id"},{"method":"GET","path":"/api/objection-templates"},{"method":"GET","path":"/api/objection-templates/list"},{"method":"GET","path":"/api/objection/categories"},{"method":"GET","path":"/api/operation-logs"},{"method":"GET","path":"/api/operation-logs/list"},{"method":"GET","path":"/api/operation-logs/statistics"},{"method":"GET","path":"/api/operation-logs/:id"},{"method":"GET","path":"/api/oneid/identities"},{"method":"GET","path":"/api/oneid/conflicts"},{"method":"GET","path":"/api/platform/merchant/list"},{"method":"GET","path":"/api/platform/merchant/:id/stats"},{"method":"GET","path":"/api/platform/message/list"},{"method":"GET","path":"/api/platform/message/latest"},{"method":"GET","path":"/api/platform/stats/system"},{"method":"GET","path":"/api/platform/stats/overview"},{"method":"GET","path":"/api/platform/stats/merchant"},{"method":"GET","path":"/api/platform/dashboard"},{"method":"GET","path":"/api/platform/user/list"},{"method":"GET","path":"/api/platform-accounts"},{"method":"GET","path":"/api/platform-accounts/platforms"},{"method":"GET","path":"/api/platform-accounts/:id"},{"method":"GET","path":"/api/platform-accounts/:id/status"},{"method":"GET","path":"/api/perf/list"},{"method":"GET","path":"/api/perf/:id"},{"method":"GET","path":"/api/batch/template"},{"method":"GET","path":"/api/batch/tools"},{"method":"GET","path":"/api/batch/histories"},{"method":"GET","path":"/api/batch/histories/:id"},{"method":"GET","path":"/api/batch-operations"},{"method":"GET","path":"/api/batch-operations/list"},{"method":"GET","path":"/api/backups"},{"method":"GET","path":"/api/backups/list"},{"method":"GET","path":"/api/backups/:id"},{"method":"GET","path":"/api/bridge/outbox"},{"method":"GET","path":"/api/bridge/accounts"},{"method":"GET","path":"/api/feishu/accounts"},{"method":"GET","path":"/api/feishu/accounts/list"},{"method":"GET","path":"/api/feishu/accounts/:id"},{"method":"GET","path":"/api/feishu/accounts/:id/test-send"},{"method":"GET","path":"/api/feishu/accounts/:id/refresh-token"},{"method":"GET","path":"/api/faqs"},{"method":"GET","path":"/api/faqs/stats"},{"method":"GET","path":"/api/faqs/:id"},{"method":"GET","path":"/api/v1/asset-market/list"},{"method":"GET","path":"/api/v1/asset-market/detail/:asset_id"},{"method":"GET","path":"/api/v1/asset-market/my-purchases"},{"method":"GET","path":"/api/v1/asset-bundle/by-aid/:aid"},{"method":"GET","path":"/api/v1/asset-bundle/:id"},{"method":"GET","path":"/api/v1/local-assets"},{"method":"GET","path":"/api/v1/local-assets/sync-log"},{"method":"GET","path":"/api/v1/local-assets/:id"},{"method":"GET","path":"/api/quick-replies"},{"method":"GET","path":"/api/quick-replies/categories"},{"method":"GET","path":"/api/quick-replies/list"},{"method":"GET","path":"/api/notifications"},{"method":"GET","path":"/api/notifications/unread-count"},{"method":"GET","path":"/api/notifications/list"},{"method":"GET","path":"/api/glossaries"},{"method":"GET","path":"/api/glossaries/:term_id"},{"method":"GET","path":"/api/health"},{"method":"GET","path":"/api/_debug_routes"},{"method":"GET","path":"/assets/*filepath"},{"method":"GET","path":"/share/xiaohongshu/:id"},{"method":"GET","path":"/share/xianyu/:id"},{"method":"GET","path":"/share/douyin/:id"},{"method":"GET","path":"/share/kuaishou/:id"},{"method":"GET","path":"/health"},{"method":"GET","path":"/healthz"},{"method":"GET","path":"/chat/embed"},{"method":"GET","path":"/chat/embed/*path"},{"method":"GET","path":"/readyz"},{"method":"GET","path":"/favicon.ico"},{"method":"GET","path":"/logo.png"},{"method":"GET","path":"/index.html"},{"method":"GET","path":"/embed/*filepath"},{"method":"POST","path":"/api/auto-reply/start"},{"method":"POST","path":"/api/auto-reply/start-login"},{"method":"POST","path":"/api/auto-reply/stop"},{"method":"POST","path":"/api/auto-reply/simulate-message"},{"method":"POST","path":"/api/auto-reply/test-matching"},{"method":"POST","path":"/api/auto-reply/test-batch-matching"},{"method":"POST","path":"/api/auto-reply/test-rate-limit"},{"method":"POST","path":"/api/auto-reply/rule"},{"method":"POST","path":"/api/auto-reply/rules"},{"method":"POST","path":"/api/auto-reply/reset-daily-limit"},{"method":"POST","path":"/api/auto-reply/accounts"},{"method":"POST","path":"/api/auto-reply/accounts/:id/cookies"},{"method":"POST","path":"/api/auto-reply/headless"},{"method":"POST","path":"/api/auto-reply/headless/toggle"},{"method":"POST","path":"/api/auto-reply/debug/test-browser"},{"method":"POST","path":"/api/auth/mfa/verify"},{"method":"POST","path":"/api/auth/mfa/setup"},{"method":"POST","path":"/api/auth/mfa/confirm"},{"method":"POST","path":"/api/auth/mfa/disable"},{"method":"POST","path":"/api/auth/anomaly/alerts/:id/resolve"},{"method":"POST","path":"/api/auth/anomaly/alerts/:id/ignore"},{"method":"POST","path":"/api/auth/notifications/read-all"},{"method":"POST","path":"/api/auth/notifications/:id/read"},{"method":"POST","path":"/api/auth/login"},{"method":"POST","path":"/api/auth/refresh-token"},{"method":"POST","path":"/api/auth/change-password"},{"method":"POST","path":"/api/auth/security-alerts/:id/resolve"},{"method":"POST","path":"/api/ai-content"},{"method":"POST","path":"/api/ai-content/generate"},{"method":"POST","path":"/api/ai-content/:id/favorite"},{"method":"POST","path":"/api/ai-content/:id/rate"},{"method":"POST","path":"/api/ai-agents"},{"method":"POST","path":"/api/ai-agents/:id/toggle"},{"method":"POST","path":"/api/ai-agents/:id/test"},{"method":"POST","path":"/api/ai-tools/batch-status"},{"method":"POST","path":"/api/ai-tools/:name/accounts"},{"method":"POST","path":"/api/ai-suggestions/:id/use"},{"method":"POST","path":"/api/ai/history"},{"method":"POST","path":"/api/ai/history/:id/save"},{"method":"POST","path":"/api/ai/history/:id/favorite"},{"method":"POST","path":"/api/ai/history/:id/rate"},{"method":"POST","path":"/api/ai/generate"},{"method":"POST","path":"/api/ai/templates"},{"method":"POST","path":"/api/asset-bundle"},{"method":"POST","path":"/api/asset-bundle/merchant-save"},{"method":"POST","path":"/api/asset-bundle/merchant-parse/:aid"},{"method":"POST","path":"/api/asset-bundle/list"},{"method":"POST","path":"/api/asset-bundle/weave"},{"method":"POST","path":"/api/asset-bundle/enabled/list"},{"method":"POST","path":"/api/asset-bundle/:id/publish"},{"method":"POST","path":"/api/asset-bundle/:id/archive"},{"method":"POST","path":"/api/asset-bundle/:id/enable"},{"method":"POST","path":"/api/asset-bundle/:id/disable"},{"method":"POST","path":"/api/asset-bundle/:id/submit-platform"},{"method":"POST","path":"/api/asset-market/purchase"},{"method":"POST","path":"/api/asset-market/sync"},{"method":"POST","path":"/api/asset-market/report-usage"},{"method":"POST","path":"/api/asset-market/bind"},{"method":"POST","path":"/api/agent-kb-bindings"},{"method":"POST","path":"/api/agent-kb-bindings/batch"},{"method":"POST","path":"/api/agent-statuses/:id/online"},{"method":"POST","path":"/api/agent-statuses/:id/offline"},{"method":"POST","path":"/api/agents"},{"method":"POST","path":"/api/agents/:id/online"},{"method":"POST","path":"/api/agents/:id/offline"},{"method":"POST","path":"/api/agent/tools/execute"},{"method":"POST","path":"/api/agent/tools/circuit/reset"},{"method":"POST","path":"/api/agent/inference/run"},{"method":"POST","path":"/api/ab-experiments"},{"method":"POST","path":"/api/ab-experiments/:id/start"},{"method":"POST","path":"/api/ab-experiments/:id/stop"},{"method":"POST","path":"/api/ab-experiments/:id/pause"},{"method":"POST","path":"/api/account"},{"method":"POST","path":"/api/accounts/create"},{"method":"POST","path":"/api/app-config/sync"},{"method":"POST","path":"/api/customer"},{"method":"POST","path":"/api/customer-sessions"},{"method":"POST","path":"/api/customer-sessions/assign"},{"method":"POST","path":"/api/customer-sessions/blacklist/remove"},{"method":"POST","path":"/api/customer-sessions/:id/tags"},{"method":"POST","path":"/api/customer-sessions/:id/takeover"},{"method":"POST","path":"/api/customer-sessions/:id/transfer"},{"method":"POST","path":"/api/customer-sessions/:id/rate"},{"method":"POST","path":"/api/customer-sessions/:id/release"},{"method":"POST","path":"/api/customer-sessions/:id/messages"},{"method":"POST","path":"/api/customer-sessions/:id/auto-assign"},{"method":"POST","path":"/api/customer-sessions/:id/close"},{"method":"POST","path":"/api/customer-sessions/:id/switch-handler"},{"method":"POST","path":"/api/customer-sessions/:id/blacklist"},{"method":"POST","path":"/api/customer-service-agents"},{"method":"POST","path":"/api/customer-service-agents/by-user/:user_id"},{"method":"POST","path":"/api/customer-events/pageview"},{"method":"POST","path":"/api/customer-events/purchase"},{"method":"POST","path":"/api/customer-events/track"},{"method":"POST","path":"/api/customer-events/click"},{"method":"POST","path":"/api/customer-events/signup"},{"method":"POST","path":"/api/customer-events/login"},{"method":"POST","path":"/api/customer-events/add-to-cart"},{"method":"POST","path":"/api/customer-journey/touch"},{"method":"POST","path":"/api/customer-journey/transition"},{"method":"POST","path":"/api/customer-rfm/compute"},{"method":"POST","path":"/api/customer-rfm/compute-all"},{"method":"POST","path":"/api/customer-360/tag-rules"},{"method":"POST","path":"/api/customer-oneid/:customer_id/identities"},{"method":"POST","path":"/api/customer/session"},{"method":"POST","path":"/api/customer/session/messages"},{"method":"POST","path":"/api/customer/session/:id/close"},{"method":"POST","path":"/api/customer/session/:id/transfer"},{"method":"POST","path":"/api/customer/oneid/merge"},{"method":"POST","path":"/api/customer/oneid/resolve"},{"method":"POST","path":"/api/customer/oneid/conflicts/:id/resolve"},{"method":"POST","path":"/api/customer/:id/tags"},{"method":"POST","path":"/api/custom-reports"},{"method":"POST","path":"/api/custom-reports/templates/:id/use"},{"method":"POST","path":"/api/chat/public/sessions"},{"method":"POST","path":"/api/chat/public/sessions/:session_id/messages"},{"method":"POST","path":"/api/chat/public/sessions/:session_id/transfer"},{"method":"POST","path":"/api/chat/public/sessions/:session_id/close"},{"method":"POST","path":"/api/chat/public/sessions/:session_id/rate"},{"method":"POST","path":"/api/chat/ingress"},{"method":"POST","path":"/api/chat-channels"},{"method":"POST","path":"/api/chat-channels/:channel_id/rotate-key"},{"method":"POST","path":"/api/chat-channels/:channel_id/reset-secret"},{"method":"POST","path":"/api/channel-agent-bindings"},{"method":"POST","path":"/api/churn/warnings/intervene"},{"method":"POST","path":"/api/churn/warnings/:id/handle"},{"method":"POST","path":"/api/churn/model-config"},{"method":"POST","path":"/api/churn-prediction/model-config"},{"method":"POST","path":"/api/clue/score"},{"method":"POST","path":"/api/clue/score-all"},{"method":"POST","path":"/api/clue/import"},{"method":"POST","path":"/api/clue/engagement"},{"method":"POST","path":"/api/clues/import"},{"method":"POST","path":"/api/community/groups"},{"method":"POST","path":"/api/community/members"},{"method":"POST","path":"/api/community/import"},{"method":"POST","path":"/api/community/export"},{"method":"POST","path":"/api/sms/job"},{"method":"POST","path":"/api/sms/job/pause/:id"},{"method":"POST","path":"/api/sms/job/resume/:id"},{"method":"POST","path":"/api/sms/job/stop/:id"},{"method":"POST","path":"/api/sms/job/:id/pause"},{"method":"POST","path":"/api/sms/job/:id/resume"},{"method":"POST","path":"/api/sms/job/:id/stop"},{"method":"POST","path":"/api/sms/jobs"},{"method":"POST","path":"/api/sms/jobs/:id/pause"},{"method":"POST","path":"/api/sms/jobs/:id/resume"},{"method":"POST","path":"/api/sms/draft"},{"method":"POST","path":"/api/sms/draft/send/:id"},{"method":"POST","path":"/api/sms/draft/:id/send"},{"method":"POST","path":"/api/sms/drafts"},{"method":"POST","path":"/api/sms/delivery/webhook"},{"method":"POST","path":"/api/sms/resend/:id"},{"method":"POST","path":"/api/sms/records"},{"method":"POST","path":"/api/sms/config"},{"method":"POST","path":"/api/sms/configs"},{"method":"POST","path":"/api/sms/webhook/inbound"},{"method":"POST","path":"/api/sms/send"},{"method":"POST","path":"/api/sms/unsubscribe/manual-add"},{"method":"POST","path":"/api/sop"},{"method":"POST","path":"/api/sop-agents"},{"method":"POST","path":"/api/sop-agents/:id/activate"},{"method":"POST","path":"/api/sop-agents/:id/deactivate"},{"method":"POST","path":"/api/sop-agents/:id/execute"},{"method":"POST","path":"/api/sop-agents/:id/step"},{"method":"POST","path":"/api/sop-agents/:id/pause"},{"method":"POST","path":"/api/sop-templates"},{"method":"POST","path":"/api/sop-templates/match"},{"method":"POST","path":"/api/sop/executions/:id/pause"},{"method":"POST","path":"/api/sop/executions/:id/resume"},{"method":"POST","path":"/api/sop/executions/:id/cancel"},{"method":"POST","path":"/api/sop/execute"},{"method":"POST","path":"/api/sop/step"},{"method":"POST","path":"/api/sop/:id/activate"},{"method":"POST","path":"/api/sop/:id/deactivate"},{"method":"POST","path":"/api/system/init-admin"},{"method":"POST","path":"/api/system/init-complete"},{"method":"POST","path":"/api/system/restart"},{"method":"POST","path":"/api/system/restore"},{"method":"POST","path":"/api/system/config"},{"method":"POST","path":"/api/system/backup"},{"method":"POST","path":"/api/system/users"},{"method":"POST","path":"/api/shortlink/create"},{"method":"POST","path":"/api/shortlink/access"},{"method":"POST","path":"/api/shortlink/generate"},{"method":"POST","path":"/api/shortlink/:id/share"},{"method":"POST","path":"/api/short-link"},{"method":"POST","path":"/api/short-link/access"},{"method":"POST","path":"/api/short-links"},{"method":"POST","path":"/api/scripts"},{"method":"POST","path":"/api/scripts/recommend"},{"method":"POST","path":"/api/script-templates"},{"method":"POST","path":"/api/script-templates/recommend"},{"method":"POST","path":"/api/session-tags"},{"method":"POST","path":"/api/security/audit"},{"method":"POST","path":"/api/knowledge/import/upload"},{"method":"POST","path":"/api/knowledge/import/url"},{"method":"POST","path":"/api/knowledge/import/text"},{"method":"POST","path":"/api/knowledge/import/document"},{"method":"POST","path":"/api/knowledge/openapi/sources"},{"method":"POST","path":"/api/knowledge/openapi/sources/:id/test"},{"method":"POST","path":"/api/knowledge/openapi/sources/:id/toggle"},{"method":"POST","path":"/api/knowledge/openapi/sources/:id/sync"},{"method":"POST","path":"/api/knowledge/documents/:id/reindex"},{"method":"POST","path":"/api/knowledge/products/:product_id/rebuild-index"},{"method":"POST","path":"/api/knowledge/search"},{"method":"POST","path":"/api/knowledge-merchant/batch/import"},{"method":"POST","path":"/api/knowledge-merchant/batch/upload"},{"method":"POST","path":"/api/knowledge-merchant/tokens"},{"method":"POST","path":"/api/knowledge-merchant/tokens/:id/revoke"},{"method":"POST","path":"/api/knowledge-merchant/external/import"},{"method":"POST","path":"/api/knowledge-merchant/playground"},{"method":"POST","path":"/api/knowledge-merchant/chunks/:id/split"},{"method":"POST","path":"/api/knowledge-merchant/feedback"},{"method":"POST","path":"/api/knowledge-bases"},{"method":"POST","path":"/api/knowledge-bases/:id/bind"},{"method":"POST","path":"/api/knowledge-bases/:id/unbind"},{"method":"POST","path":"/api/kuaishou/create"},{"method":"POST","path":"/api/kuaishou/like/:id"},{"method":"POST","path":"/api/kuaishou/share/:id"},{"method":"POST","path":"/api/kuaishou/:id/generate-short-link"},{"method":"POST","path":"/api/kuaishou-card"},{"method":"POST","path":"/api/kuaishou-cards"},{"method":"POST","path":"/api/marketing-flows"},{"method":"POST","path":"/api/marketing-flows/:id/activate"},{"method":"POST","path":"/api/marketing-flows/:id/pause"},{"method":"POST","path":"/api/marketing-flows/:id/stop"},{"method":"POST","path":"/api/market-templates"},{"method":"POST","path":"/api/market-templates/:id/download"},{"method":"POST","path":"/api/market-templates/:id/rate"},{"method":"POST","path":"/api/material"},{"method":"POST","path":"/api/material/categories"},{"method":"POST","path":"/api/material/upload"},{"method":"POST","path":"/api/material/:id/usage"},{"method":"POST","path":"/api/memory/messages"},{"method":"POST","path":"/api/memory/facts"},{"method":"POST","path":"/api/memory/objections"},{"method":"POST","path":"/api/memory/purchase-intent"},{"method":"POST","path":"/api/memory/intent-trail"},{"method":"POST","path":"/api/memory/sop-history"},{"method":"POST","path":"/api/message-hub/push"},{"method":"POST","path":"/api/message-hub/push-batch"},{"method":"POST","path":"/api/message-hub/push-from-channel"},{"method":"POST","path":"/api/message-hub/:id/read"},{"method":"POST","path":"/api/migration/task"},{"method":"POST","path":"/api/migration/rollback"},{"method":"POST","path":"/api/monitor/trace-eval/trigger"},{"method":"POST","path":"/api/integrations"},{"method":"POST","path":"/api/integrations/:id/sync-customers"},{"method":"POST","path":"/api/integrations/:id/sync-products"},{"method":"POST","path":"/api/integrations/:id/sync/customers"},{"method":"POST","path":"/api/integrations/:id/sync/products"},{"method":"POST","path":"/api/integrations/:id/test"},{"method":"POST","path":"/api/integration/order-webhook/:platform"},{"method":"POST","path":"/api/intent/recognize"},{"method":"POST","path":"/api/intent/recognize/batch"},{"method":"POST","path":"/api/intent/recognize/fine"},{"method":"POST","path":"/api/intent-records/recognize"},{"method":"POST","path":"/api/intent-records/recognize/batch"},{"method":"POST","path":"/api/inbox/assign"},{"method":"POST","path":"/api/inbox/auto-assign"},{"method":"POST","path":"/api/inbox/reconcile"},{"method":"POST","path":"/api/inbox/lock-human"},{"method":"POST","path":"/api/inbox/unlock-human/:session_id"},{"method":"POST","path":"/api/inbox/:id/read"},{"method":"POST","path":"/api/inbox/:id/pin"},{"method":"POST","path":"/api/inbox/:id/star"},{"method":"POST","path":"/api/inbox/:id/mute"},{"method":"POST","path":"/api/inbox/:id/tags"},{"method":"POST","path":"/api/wecom/accounts"},{"method":"POST","path":"/api/wecom/accounts/:id/sync-customers"},{"method":"POST","path":"/api/wecom/accounts/:id/sync-groups"},{"method":"POST","path":"/api/wecom/accounts/:id/sync-tags"},{"method":"POST","path":"/api/wecom/accounts/:id/send-message"},{"method":"POST","path":"/api/wecom/accounts/:id/refresh"},{"method":"POST","path":"/api/wecom/health/accounts/quota/reset"},{"method":"POST","path":"/api/wecom/health/accounts/:id"},{"method":"POST","path":"/api/wecom/health/accounts/:id/status"},{"method":"POST","path":"/api/wecom/health/accounts/:id/quota/consume"},{"method":"POST","path":"/api/wecom/messages/ingest"},{"method":"POST","path":"/api/wecom/messages/send"},{"method":"POST","path":"/api/webhook/dingtalk/:account_id"},{"method":"POST","path":"/api/webhook/:channel"},{"method":"POST","path":"/api/webhook/:channel/:account_id"},{"method":"POST","path":"/api/whatsapp/accounts"},{"method":"POST","path":"/api/whatsapp/accounts/:id/login/start"},{"method":"POST","path":"/api/whatsapp/start-login"},{"method":"POST","path":"/api/whatsapp/drafts"},{"method":"POST","path":"/api/whatsapp/jobs"},{"method":"POST","path":"/api/whatsapp/group-messaging/send"},{"method":"POST","path":"/api/whatsapp/templates"},{"method":"POST","path":"/api/whatsapp-cloud/accounts"},{"method":"POST","path":"/api/whatsapp-cloud/accounts/:id/test-send"},{"method":"POST","path":"/api/domainpool"},{"method":"POST","path":"/api/domainpool/check-domain"},{"method":"POST","path":"/api/domainpool/check-all"},{"method":"POST","path":"/api/domainpool/check/:id"},{"method":"POST","path":"/api/domainpool/checkall"},{"method":"POST","path":"/api/domainpool/create"},{"method":"POST","path":"/api/domain-pool"},{"method":"POST","path":"/api/douyin/create"},{"method":"POST","path":"/api/douyin/:id/generate-short-link"},{"method":"POST","path":"/api/douyin-card"},{"method":"POST","path":"/api/douyin-cards"},{"method":"POST","path":"/api/dialogue-memories/messages"},{"method":"POST","path":"/api/dialogue-memories/facts"},{"method":"POST","path":"/api/dialogue-memories/objections"},{"method":"POST","path":"/api/dialogue-memories/purchase-intent"},{"method":"POST","path":"/api/dialogue-memories/intent-trail"},{"method":"POST","path":"/api/dialogue-memories/sop-history"},{"method":"POST","path":"/api/dingtalk-app/accounts"},{"method":"POST","path":"/api/dingtalk-app/accounts/:id/test"},{"method":"POST","path":"/api/dashboards"},{"method":"POST","path":"/api/dashboard/broadcast"},{"method":"POST","path":"/api/dashboard-screens"},{"method":"POST","path":"/api/reach/pipelines"},{"method":"POST","path":"/api/reach/pipelines/:id/pause"},{"method":"POST","path":"/api/reach/pipelines/:id/resume"},{"method":"POST","path":"/api/reach/pipelines/:id/archive"},{"method":"POST","path":"/api/reach/jobs"},{"method":"POST","path":"/api/reach/jobs/:id/cancel"},{"method":"POST","path":"/api/reach/jobs/:id/retry"},{"method":"POST","path":"/api/reach/jobs/:id/execute"},{"method":"POST","path":"/api/reach/rate-limit/reset"},{"method":"POST","path":"/api/reach-pipelines"},{"method":"POST","path":"/api/recovery-queue/enqueue"},{"method":"POST","path":"/api/recovery-queue/:id/attempt"},{"method":"POST","path":"/api/recovery-queue/:id/recovered"},{"method":"POST","path":"/api/recovery-queue/:id/cancel"},{"method":"POST","path":"/api/restore"},{"method":"POST","path":"/api/rag/recall/start"},{"method":"POST","path":"/api/rag/recall/stop"},{"method":"POST","path":"/api/rag/recall/collect"},{"method":"POST","path":"/api/rag/import"},{"method":"POST","path":"/api/rag-config/products"},{"method":"POST","path":"/api/rag-config/process-message"},{"method":"POST","path":"/api/rag-config/query"},{"method":"POST","path":"/api/llm/models"},{"method":"POST","path":"/api/llm/models/:name/test"},{"method":"POST","path":"/api/llm/strategies"},{"method":"POST","path":"/api/llm/scene-routing"},{"method":"POST","path":"/api/llm/providers/circuit/reset"},{"method":"POST","path":"/api/llm/providers/circuit/reset/:provider"},{"method":"POST","path":"/api/llm/fallback"},{"method":"POST","path":"/api/llm-routings/providers/circuit/reset"},{"method":"POST","path":"/api/llm-routings/resolve"},{"method":"POST","path":"/api/live-code"},{"method":"POST","path":"/api/live-codes"},{"method":"POST","path":"/api/live-codes/create"},{"method":"POST","path":"/api/live-codes/:id/qrcodes/create"},{"method":"POST","path":"/api/live-codes/:id/share"},{"method":"POST","path":"/api/live-code/:id/qr-code"},{"method":"POST","path":"/api/live-code/:id/share"},{"method":"POST","path":"/api/livecode/:id/click"},{"method":"POST","path":"/api/lead-mining/config"},{"method":"POST","path":"/api/local-assets"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/start"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/start-login"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/stop"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/accounts"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/accounts/:id/cookies"},{"method":"POST","path":"/api/xiaohongshu/auto-reply/rules"},{"method":"POST","path":"/api/xiaohongshu/create"},{"method":"POST","path":"/api/xiaohongshu/:id/generate-short-link"},{"method":"POST","path":"/api/xiaohongshu-card"},{"method":"POST","path":"/api/xiaohongshu-cards"},{"method":"POST","path":"/api/xianyu/auto-reply/accounts"},{"method":"POST","path":"/api/xianyu/auto-reply/accounts/:id/cookies"},{"method":"POST","path":"/api/xianyu/auto-reply/start"},{"method":"POST","path":"/api/xianyu/auto-reply/stop"},{"method":"POST","path":"/api/xianyu/auto-reply/login/start"},{"method":"POST","path":"/api/xianyu/auto-reply/rules"},{"method":"POST","path":"/api/xianyu/create"},{"method":"POST","path":"/api/xianyu/:id/generate-short-link"},{"method":"POST","path":"/api/xianyu-card"},{"method":"POST","path":"/api/xianyu-cards"},{"method":"POST","path":"/api/email/list"},{"method":"POST","path":"/api/email/list/:id/trace"},{"method":"POST","path":"/api/email/lists"},{"method":"POST","path":"/api/email/smtp"},{"method":"POST","path":"/api/email/smtps"},{"method":"POST","path":"/api/email/send"},{"method":"POST","path":"/api/email/track/webhook/postmark"},{"method":"POST","path":"/api/email/track/webhook/sendcloud"},{"method":"POST","path":"/api/email/unsubscribe/confirm"},{"method":"POST","path":"/api/email/unsubscribe/resubscribe"},{"method":"POST","path":"/api/email/drafts"},{"method":"POST","path":"/api/email/jobs"},{"method":"POST","path":"/api/events/pageview"},{"method":"POST","path":"/api/events/purchase"},{"method":"POST","path":"/api/events/track"},{"method":"POST","path":"/api/events/click"},{"method":"POST","path":"/api/events/signup"},{"method":"POST","path":"/api/events/login"},{"method":"POST","path":"/api/events/add-to-cart"},{"method":"POST","path":"/api/tiktok/auto-reply/accounts"},{"method":"POST","path":"/api/tiktok/auto-reply/accounts/:id/cookies"},{"method":"POST","path":"/api/tiktok/auto-reply/start"},{"method":"POST","path":"/api/tiktok/auto-reply/stop"},{"method":"POST","path":"/api/tiktok/auto-reply/rule"},{"method":"POST","path":"/api/tiktok-card"},{"method":"POST","path":"/api/tiktok-card/generate-short-link"},{"method":"POST","path":"/api/tiktok-cards"},{"method":"POST","path":"/api/telegram/accounts"},{"method":"POST","path":"/api/telegram/accounts/:id/register-webhook"},{"method":"POST","path":"/api/telegram/accounts/:id/test-send"},{"method":"POST","path":"/api/templates"},{"method":"POST","path":"/api/templates/:id/download"},{"method":"POST","path":"/api/templates/:id/rate"},{"method":"POST","path":"/api/tools/permission/global"},{"method":"POST","path":"/api/tools/permission/agents/:agent_id"},{"method":"POST","path":"/api/v1/asset-bundle"},{"method":"POST","path":"/api/v1/asset-bundle/merchant-save"},{"method":"POST","path":"/api/v1/asset-bundle/merchant-parse/:aid"},{"method":"POST","path":"/api/v1/asset-bundle/list"},{"method":"POST","path":"/api/v1/asset-bundle/weave"},{"method":"POST","path":"/api/v1/asset-bundle/enabled/list"},{"method":"POST","path":"/api/v1/asset-bundle/:id/publish"},{"method":"POST","path":"/api/v1/asset-bundle/:id/archive"},{"method":"POST","path":"/api/v1/asset-bundle/:id/enable"},{"method":"POST","path":"/api/v1/asset-bundle/:id/disable"},{"method":"POST","path":"/api/v1/asset-bundle/:id/submit-platform"},{"method":"POST","path":"/api/v1/asset-market/purchase"},{"method":"POST","path":"/api/v1/asset-market/sync"},{"method":"POST","path":"/api/v1/asset-market/report-usage"},{"method":"POST","path":"/api/v1/asset-market/bind"},{"method":"POST","path":"/api/v1/local-assets"},{"method":"POST","path":"/api/objection/handle"},{"method":"POST","path":"/api/objection/classify"},{"method":"POST","path":"/api/objection/usage"},{"method":"POST","path":"/api/objection-templates/handle"},{"method":"POST","path":"/api/objection-templates/classify"},{"method":"POST","path":"/api/objection-templates/usage"},{"method":"POST","path":"/api/obs/config"},{"method":"POST","path":"/api/obs/config/:id/test"},{"method":"POST","path":"/api/obs/config/:id/default"},{"method":"POST","path":"/api/obs-configs"},{"method":"POST","path":"/api/obs-configs/:id/test"},{"method":"POST","path":"/api/obs-configs/:id/default"},{"method":"POST","path":"/api/oneid/merge"},{"method":"POST","path":"/api/oneid/resolve"},{"method":"POST","path":"/api/oneid/conflicts/:id/resolve"},{"method":"POST","path":"/api/batch/import"},{"method":"POST","path":"/api/batch/export"},{"method":"POST","path":"/api/batch/delete"},{"method":"POST","path":"/api/batch/update"},{"method":"POST","path":"/api/batch/histories/:id/cancel"},{"method":"POST","path":"/api/batch/preview"},{"method":"POST","path":"/api/backups"},{"method":"POST","path":"/api/bridge/ingest"},{"method":"POST","path":"/api/bridge/outbox/ack"},{"method":"POST","path":"/api/bridge/ai-selectors"},{"method":"POST","path":"/api/bridge/send"},{"method":"POST","path":"/api/platform/message/send"},{"method":"POST","path":"/api/platform/message/:id/read"},{"method":"POST","path":"/api/platform/register"},{"method":"POST","path":"/api/platform/user"},{"method":"POST","path":"/api/platform-accounts"},{"method":"POST","path":"/api/platform-accounts/:id/login"},{"method":"POST","path":"/api/perf/run"},{"method":"POST","path":"/api/feishu/accounts"},{"method":"POST","path":"/api/feishu/accounts/:id/test-send"},{"method":"POST","path":"/api/feishu/accounts/:id/refresh-token"},{"method":"POST","path":"/api/faqs"},{"method":"POST","path":"/api/faqs/match"},{"method":"POST","path":"/api/user"},{"method":"POST","path":"/api/user-segment/rfm/rule"},{"method":"POST","path":"/api/user-segment/rfm/calculate"},{"method":"POST","path":"/api/users"},{"method":"POST","path":"/api/upload"},{"method":"POST","path":"/api/notifications/read-all"},{"method":"POST","path":"/api/notifications/:id/read"},{"method":"POST","path":"/api/glossaries"},{"method":"POST","path":"/api/glossaries/validate"},{"method":"POST","path":"/api/quick-replies"},{"method":"HEAD","path":"/assets/*filepath"},{"method":"HEAD","path":"/favicon.ico"},{"method":"HEAD","path":"/logo.png"},{"method":"HEAD","path":"/embed/*filepath"},{"method":"PUT","path":"/api/llm/models/:name"},{"method":"PUT","path":"/api/llm/scene-routing"},{"method":"PUT","path":"/api/llm/strategies"},{"method":"PUT","path":"/api/llm/fallback"},{"method":"PUT","path":"/api/llm/providers/policy"},{"method":"PUT","path":"/api/llm-routings/policy"},{"method":"PUT","path":"/api/llm-routing/strategies"},{"method":"PUT","path":"/api/live-codes/qrcodes/:qr_id/update"},{"method":"PUT","path":"/api/live-codes/:id"},{"method":"PUT","path":"/api/live-codes/:id/update"},{"method":"PUT","path":"/api/live-code/:id"},{"method":"PUT","path":"/api/live-code/:id/qr-codes/:qr_id"},{"method":"PUT","path":"/api/local-assets/:id"},{"method":"PUT","path":"/api/local-assets/:id/toggle-active"},{"method":"PUT","path":"/api/agent/tool-integrations"},{"method":"PUT","path":"/api/agent/settings"},{"method":"PUT","path":"/api/agent-kb-bindings/by-agent/:agentId"},{"method":"PUT","path":"/api/agent-statuses/:id/status"},{"method":"PUT","path":"/api/agents/:id/status"},{"method":"PUT","path":"/api/ai-tools/:name/status"},{"method":"PUT","path":"/api/ai-agents/:id"},{"method":"PUT","path":"/api/ai-content/:id/save"},{"method":"PUT","path":"/api/ai/templates/:id"},{"method":"PUT","path":"/api/account/:id"},{"method":"PUT","path":"/api/accounts/update/:id"},{"method":"PUT","path":"/api/auth/password-policy"},{"method":"PUT","path":"/api/auto-reply/rules/:id"},{"method":"PUT","path":"/api/admin/tuning/confidence/policies"},{"method":"PUT","path":"/api/admin/tuning/prompt/candidates/:id/status"},{"method":"PUT","path":"/api/app-config"},{"method":"PUT","path":"/api/ab-experiments/:id"},{"method":"PUT","path":"/api/asset-bundle/:id"},{"method":"PUT","path":"/api/sop/:id"},{"method":"PUT","path":"/api/sop/:id/abtest/config"},{"method":"PUT","path":"/api/sop-templates/:id"},{"method":"PUT","path":"/api/sop-agents/:id"},{"method":"PUT","path":"/api/system/permissions/:id/enabled"},{"method":"PUT","path":"/api/system/permissions/:id/password"},{"method":"PUT","path":"/api/system/users/:id"},{"method":"PUT","path":"/api/system/configs/:key"},{"method":"PUT","path":"/api/short-link/:id"},{"method":"PUT","path":"/api/short-links/:id"},{"method":"PUT","path":"/api/shortlink/update"},{"method":"PUT","path":"/api/scripts/:id"},{"method":"PUT","path":"/api/script-templates/:id"},{"method":"PUT","path":"/api/session-tags/:id"},{"method":"PUT","path":"/api/sms/draft/:id"},{"method":"PUT","path":"/api/sms/drafts/:id"},{"method":"PUT","path":"/api/customer-360/tags"},{"method":"PUT","path":"/api/customer-360/tag-rules/:id"},{"method":"PUT","path":"/api/customer-sessions/:id/status"},{"method":"PUT","path":"/api/customer-service-agents/:id"},{"method":"PUT","path":"/api/customer-tags"},{"method":"PUT","path":"/api/customer/:id"},{"method":"PUT","path":"/api/custom-reports/:id"},{"method":"PUT","path":"/api/community/groups/:id"},{"method":"PUT","path":"/api/community/members/:id"},{"method":"PUT","path":"/api/chat-channels/:channel_id"},{"method":"PUT","path":"/api/channel-agent-bindings/:id"},{"method":"PUT","path":"/api/douyin-card/:id"},{"method":"PUT","path":"/api/douyin-cards/:id"},{"method":"PUT","path":"/api/douyin/update"},{"method":"PUT","path":"/api/domainpool/update"},{"method":"PUT","path":"/api/domainpool/:id"},{"method":"PUT","path":"/api/domain-pool/:id"},{"method":"PUT","path":"/api/dashboards/:id"},{"method":"PUT","path":"/api/dashboard-screens/:id"},{"method":"PUT","path":"/api/dingtalk-app/accounts/:id"},{"method":"PUT","path":"/api/knowledge/documents/:id"},{"method":"PUT","path":"/api/knowledge/openapi/sources/:id"},{"method":"PUT","path":"/api/knowledge-merchant/chunks/:id"},{"method":"PUT","path":"/api/knowledge-bases/:id"},{"method":"PUT","path":"/api/kuaishou-card/:id"},{"method":"PUT","path":"/api/kuaishou-cards/:id"},{"method":"PUT","path":"/api/kuaishou/update"},{"method":"PUT","path":"/api/xiaohongshu-card/:id"},{"method":"PUT","path":"/api/xiaohongshu-cards/:id"},{"method":"PUT","path":"/api/xiaohongshu/update"},{"method":"PUT","path":"/api/xianyu-card/:id"},{"method":"PUT","path":"/api/xianyu-cards/:id"},{"method":"PUT","path":"/api/xianyu/update"},{"method":"PUT","path":"/api/whatsapp/accounts/:id"},{"method":"PUT","path":"/api/whatsapp/drafts/:id"},{"method":"PUT","path":"/api/whatsapp/templates/:id"},{"method":"PUT","path":"/api/whatsapp-cloud/accounts/:id"},{"method":"PUT","path":"/api/wecom/accounts/:id"},{"method":"PUT","path":"/api/user/:id"},{"method":"PUT","path":"/api/user/:id/password"},{"method":"PUT","path":"/api/users/:id"},{"method":"PUT","path":"/api/users/:id/password"},{"method":"PUT","path":"/api/user-segment/rfm/rule/:id"},{"method":"PUT","path":"/api/email/list/:id"},{"method":"PUT","path":"/api/email/lists/:id"},{"method":"PUT","path":"/api/email/smtp/:id"},{"method":"PUT","path":"/api/email/smtps/:id"},{"method":"PUT","path":"/api/email/drafts/:id"},{"method":"PUT","path":"/api/tiktok-card/:id"},{"method":"PUT","path":"/api/tiktok-cards/:id"},{"method":"PUT","path":"/api/telegram/accounts/:id"},{"method":"PUT","path":"/api/tools/permission/default"},{"method":"PUT","path":"/api/rag-config/products/:id"},{"method":"PUT","path":"/api/rag-config/accounts/config"},{"method":"PUT","path":"/api/reach/pipelines/:id"},{"method":"PUT","path":"/api/reach-pipelines/:id"},{"method":"PUT","path":"/api/material/categories/:id"},{"method":"PUT","path":"/api/material/:id/usage"},{"method":"PUT","path":"/api/marketing-flows/:id"},{"method":"PUT","path":"/api/intent/config"},{"method":"PUT","path":"/api/intent-records/config"},{"method":"PUT","path":"/api/integrations/:id"},{"method":"PUT","path":"/api/v1/local-assets/:id"},{"method":"PUT","path":"/api/v1/local-assets/:id/toggle-active"},{"method":"PUT","path":"/api/v1/asset-bundle/:id"},{"method":"PUT","path":"/api/feishu/accounts/:id"},{"method":"PUT","path":"/api/faqs/:id"},{"method":"PUT","path":"/api/quick-replies/:id"},{"method":"PUT","path":"/api/obs/config/:id"},{"method":"PUT","path":"/api/obs-configs/:id"},{"method":"PUT","path":"/api/glossaries/:term_id"},{"method":"PUT","path":"/api/platform-accounts/:id"},{"method":"DELETE","path":"/api/sms/draft/:id"},{"method":"DELETE","path":"/api/sms/drafts/:id"},{"method":"DELETE","path":"/api/sms/job/:id"},{"method":"DELETE","path":"/api/sms/jobs/:id"},{"method":"DELETE","path":"/api/sms/unsubscribe/:phone"},{"method":"DELETE","path":"/api/sop-templates/:id"},{"method":"DELETE","path":"/api/sop-agents/:id"},{"method":"DELETE","path":"/api/sop/:id"},{"method":"DELETE","path":"/api/short-link/:id"},{"method":"DELETE","path":"/api/short-links/:id"},{"method":"DELETE","path":"/api/shortlink/delete/:id"},{"method":"DELETE","path":"/api/scripts/:id"},{"method":"DELETE","path":"/api/script-templates/:id"},{"method":"DELETE","path":"/api/session-tags/:id"},{"method":"DELETE","path":"/api/system/users/:id"},{"method":"DELETE","path":"/api/ai-tools/:name/accounts/:account_type/:account_id"},{"method":"DELETE","path":"/api/ai-agents/:id"},{"method":"DELETE","path":"/api/ai-content/:id"},{"method":"DELETE","path":"/api/ai/history/:id"},{"method":"DELETE","path":"/api/ai/templates/:id"},{"method":"DELETE","path":"/api/account/:id"},{"method":"DELETE","path":"/api/accounts/delete/:id"},{"method":"DELETE","path":"/api/auto-reply/accounts/:id"},{"method":"DELETE","path":"/api/auto-reply/rules/:id"},{"method":"DELETE","path":"/api/agent-kb-bindings"},{"method":"DELETE","path":"/api/agent-kb-bindings/:agentId/:kbId"},{"method":"DELETE","path":"/api/ab-experiments/:id"},{"method":"DELETE","path":"/api/asset-bundle/:id"},{"method":"DELETE","path":"/api/customer-360/tag-rules/:id"},{"method":"DELETE","path":"/api/customer-service-agents/:id"},{"method":"DELETE","path":"/api/customer-events/customer/:customer_id"},{"method":"DELETE","path":"/api/customer/:id/tags/:tag"},{"method":"DELETE","path":"/api/custom-reports/:id"},{"method":"DELETE","path":"/api/clues/delete/:id"},{"method":"DELETE","path":"/api/clues/:id"},{"method":"DELETE","path":"/api/clue/:id"},{"method":"DELETE","path":"/api/community/groups/:id"},{"method":"DELETE","path":"/api/community/members/:id"},{"method":"DELETE","path":"/api/chat-channels/:channel_id"},{"method":"DELETE","path":"/api/channel-agent-bindings/:id"},{"method":"DELETE","path":"/api/douyin-card/:id"},{"method":"DELETE","path":"/api/douyin-cards/:id"},{"method":"DELETE","path":"/api/douyin/delete/:id"},{"method":"DELETE","path":"/api/domainpool/delete/:id"},{"method":"DELETE","path":"/api/domainpool/:id"},{"method":"DELETE","path":"/api/domain-pool/:id"},{"method":"DELETE","path":"/api/dashboards/:id"},{"method":"DELETE","path":"/api/dashboard-screens/:id"},{"method":"DELETE","path":"/api/dingtalk-app/accounts/:id"},{"method":"DELETE","path":"/api/xiaohongshu/delete/:id"},{"method":"DELETE","path":"/api/xiaohongshu/auto-reply/accounts/:id"},{"method":"DELETE","path":"/api/xiaohongshu-card/:id"},{"method":"DELETE","path":"/api/xiaohongshu-cards/:id"},{"method":"DELETE","path":"/api/xianyu/delete/:id"},{"method":"DELETE","path":"/api/xianyu/auto-reply/accounts/:id"},{"method":"DELETE","path":"/api/xianyu-card/:id"},{"method":"DELETE","path":"/api/xianyu-cards/:id"},{"method":"DELETE","path":"/api/live-codes/qrcodes/:qr_id/delete"},{"method":"DELETE","path":"/api/live-codes/:id"},{"method":"DELETE","path":"/api/live-codes/:id/delete"},{"method":"DELETE","path":"/api/live-code/:id"},{"method":"DELETE","path":"/api/live-code/:id/qr-codes/:qr_id"},{"method":"DELETE","path":"/api/llm/models/:name"},{"method":"DELETE","path":"/api/local-assets/:id"},{"method":"DELETE","path":"/api/email/list/:id"},{"method":"DELETE","path":"/api/email/lists/:id"},{"method":"DELETE","path":"/api/email/smtp/:id"},{"method":"DELETE","path":"/api/email/smtps/:id"},{"method":"DELETE","path":"/api/email/drafts/:id"},{"method":"DELETE","path":"/api/email/jobs/:id"},{"method":"DELETE","path":"/api/events/customer/:id"},{"method":"DELETE","path":"/api/knowledge/documents/:id"},{"method":"DELETE","path":"/api/knowledge/openapi/sources/:id"},{"method":"DELETE","path":"/api/knowledge-merchant/chunks/:id"},{"method":"DELETE","path":"/api/knowledge-bases/:id"},{"method":"DELETE","path":"/api/kuaishou-card/:id"},{"method":"DELETE","path":"/api/kuaishou-cards/:id"},{"method":"DELETE","path":"/api/kuaishou/delete/:id"},{"method":"DELETE","path":"/api/whatsapp/accounts/:id"},{"method":"DELETE","path":"/api/whatsapp/drafts/:id"},{"method":"DELETE","path":"/api/whatsapp/jobs/:id"},{"method":"DELETE","path":"/api/whatsapp/templates/:id"},{"method":"DELETE","path":"/api/whatsapp-cloud/accounts/:id"},{"method":"DELETE","path":"/api/wecom/accounts/:id"},{"method":"DELETE","path":"/api/tiktok-card/:id"},{"method":"DELETE","path":"/api/tiktok-cards/:id"},{"method":"DELETE","path":"/api/tiktok/auto-reply/accounts/:id"},{"method":"DELETE","path":"/api/telegram/accounts/:id"},{"method":"DELETE","path":"/api/tools/permission/agents/:agent_id"},{"method":"DELETE","path":"/api/rag-config/products/:id"},{"method":"DELETE","path":"/api/rag/documents/:id"},{"method":"DELETE","path":"/api/reach/pipelines/:id"},{"method":"DELETE","path":"/api/reach-pipelines/:id"},{"method":"DELETE","path":"/api/material/categories/:id"},{"method":"DELETE","path":"/api/material/:id"},{"method":"DELETE","path":"/api/marketing-flows/:id"},{"method":"DELETE","path":"/api/inbox/:id/tags/:tag"},{"method":"DELETE","path":"/api/inbox/:id/messages/:mid"},{"method":"DELETE","path":"/api/integrations/:id"},{"method":"DELETE","path":"/api/user/:id"},{"method":"DELETE","path":"/api/users/:id"},{"method":"DELETE","path":"/api/user-segment/rfm/rule/:id"},{"method":"DELETE","path":"/api/feishu/accounts/:id"},{"method":"DELETE","path":"/api/faqs/:id"},{"method":"DELETE","path":"/api/v1/local-assets/:id"},{"method":"DELETE","path":"/api/v1/asset-bundle/:id"},{"method":"DELETE","path":"/api/quick-replies/:id"},{"method":"DELETE","path":"/api/obs/config/:id"},{"method":"DELETE","path":"/api/obs-configs/:id"},{"method":"DELETE","path":"/api/backups/:id"},{"method":"DELETE","path":"/api/platform-accounts/:id"},{"method":"DELETE","path":"/api/platform/user/:id"},{"method":"DELETE","path":"/api/glossaries/:term_id"}]
+[
+  {
+    "method": "DELETE",
+    "path": "/:channel_id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/:name/accounts/:account_type/:account_id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/account/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/accounts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/accounts/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/alerts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/alerts/rules/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/backups/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/clue/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/clues/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/competitors/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/cron/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/custom-reports/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/customer-360/tag-rules/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/customer/:id/tags/:tag"
+  },
+  {
+    "method": "DELETE",
+    "path": "/douyin-card/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/douyin/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/drafts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/email/drafts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/email/jobs/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/email/list/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/email/smtp/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/events/customer/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/groups/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/history/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/inbox/conversations/:id/messages/:mid"
+  },
+  {
+    "method": "DELETE",
+    "path": "/inbox/conversations/:id/tags/:tag"
+  },
+  {
+    "method": "DELETE",
+    "path": "/integrations/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/jobs/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/kb/documents/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/keywords/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/kuaishou-card/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/kuaishou/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/live-code/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/live-code/:id/qr-codes/:qr_id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/live-codes/:id/delete"
+  },
+  {
+    "method": "DELETE",
+    "path": "/live-codes/qrcodes/:qr_id/delete"
+  },
+  {
+    "method": "DELETE",
+    "path": "/material/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/material/categories/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/members/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/models/:name"
+  },
+  {
+    "method": "DELETE",
+    "path": "/obs/config/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/platform-accounts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/platform/accounts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/pushers/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/reach/pipelines/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/rule/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/rules/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/schema-templates/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/scripts/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/short-link/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/shortlink/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/sites/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/tasks/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/templates/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/user/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/users/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/workflow/workflows/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/xianyu-card/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/xianyu/delete/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/xiaohongshu-card/:id"
+  },
+  {
+    "method": "DELETE",
+    "path": "/xiaohongshu/delete/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/"
+  },
+  {
+    "method": "GET",
+    "path": "/:code"
+  },
+  {
+    "method": "GET",
+    "path": "/:code/members"
+  },
+  {
+    "method": "GET",
+    "path": "/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/:name"
+  },
+  {
+    "method": "GET",
+    "path": "/:name/accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/__debug__/routes"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/conversion-events"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/cuped"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/diagnostics"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/results"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/results-with-reach"
+  },
+  {
+    "method": "GET",
+    "path": "/ab-experiments/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/account/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/account/list"
+  },
+  {
+    "method": "GET",
+    "path": "/accounts/list"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/config"
+  },
+  {
+    "method": "GET",
+    "path": "/agent-attribution/performance"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/co-pilot/config"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/order-drafts/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/settings"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tool-integrations"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/approval"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/audit"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/circuit"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/cost"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/get"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/list"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/providers"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/reach-gate"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/risk"
+  },
+  {
+    "method": "GET",
+    "path": "/agent/tools/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/:id/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/all"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/available"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/me"
+  },
+  {
+    "method": "GET",
+    "path": "/agents/online"
+  },
+  {
+    "method": "GET",
+    "path": "/ai-suggestions/:session_id"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/history"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/history/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/sales-cockpit"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/template-types"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/ai/templates/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/alerts/histories"
+  },
+  {
+    "method": "GET",
+    "path": "/alerts/rules"
+  },
+  {
+    "method": "GET",
+    "path": "/alerts/rules/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/alerts/unread-count"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/ai-productivity"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/ai-productivity/trend"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/funnel"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/funnel/stage"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/persona/staffs"
+  },
+  {
+    "method": "GET",
+    "path": "/analytics/persona/staffs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/browser/host-ws"
+  },
+  {
+    "method": "GET",
+    "path": "/api/swagger.json"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ws/visitor"
+  },
+  {
+    "method": "GET",
+    "path": "/app-config"
+  },
+  {
+    "method": "GET",
+    "path": "/app-config/health"
+  },
+  {
+    "method": "GET",
+    "path": "/audit-logs"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/anomaly/alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/anomaly/login-events"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/current-user"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/login-events"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/mfa/status"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/notifications"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/notifications/unread-count"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/password-policy"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/security-alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/backups"
+  },
+  {
+    "method": "GET",
+    "path": "/backups/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/bandit/arms"
+  },
+  {
+    "method": "GET",
+    "path": "/batch/histories"
+  },
+  {
+    "method": "GET",
+    "path": "/batch/histories/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/batch/template"
+  },
+  {
+    "method": "GET",
+    "path": "/batch/tools"
+  },
+  {
+    "method": "GET",
+    "path": "/bridge/capabilities"
+  },
+  {
+    "method": "GET",
+    "path": "/bridge/outbox"
+  },
+  {
+    "method": "GET",
+    "path": "/bridge/outbox/sse"
+  },
+  {
+    "method": "GET",
+    "path": "/bridge/token/status"
+  },
+  {
+    "method": "GET",
+    "path": "/card-stats/:platform/overall"
+  },
+  {
+    "method": "GET",
+    "path": "/card-stats/:platform/stats/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/channel/:app_key/info"
+  },
+  {
+    "method": "GET",
+    "path": "/channels/customer/:customer_id"
+  },
+  {
+    "method": "GET",
+    "path": "/channels/overview"
+  },
+  {
+    "method": "GET",
+    "path": "/chat-channels"
+  },
+  {
+    "method": "GET",
+    "path": "/chat-channels/:channel_id"
+  },
+  {
+    "method": "GET",
+    "path": "/chat/embed"
+  },
+  {
+    "method": "GET",
+    "path": "/chat/embed/*path"
+  },
+  {
+    "method": "GET",
+    "path": "/chat/typing-predict/sse"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/high-risk-users"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/model-config"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/prediction"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/predictions"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/risk-distribution"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/statistics"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/unhandled-warnings"
+  },
+  {
+    "method": "GET",
+    "path": "/churn/warnings"
+  },
+  {
+    "method": "GET",
+    "path": "/clue/list"
+  },
+  {
+    "method": "GET",
+    "path": "/clue/score/:clue_id"
+  },
+  {
+    "method": "GET",
+    "path": "/clue/score/list"
+  },
+  {
+    "method": "GET",
+    "path": "/clue/statistics"
+  },
+  {
+    "method": "GET",
+    "path": "/clues/list"
+  },
+  {
+    "method": "GET",
+    "path": "/clues/statistics"
+  },
+  {
+    "method": "GET",
+    "path": "/clues/type"
+  },
+  {
+    "method": "GET",
+    "path": "/community/groups"
+  },
+  {
+    "method": "GET",
+    "path": "/community/groups/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/community/members"
+  },
+  {
+    "method": "GET",
+    "path": "/community/members/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/community/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/community/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/competitors"
+  },
+  {
+    "method": "GET",
+    "path": "/competitors/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/confidence/calibrations"
+  },
+  {
+    "method": "GET",
+    "path": "/confidence/policies"
+  },
+  {
+    "method": "GET",
+    "path": "/confidence/signals"
+  },
+  {
+    "method": "GET",
+    "path": "/confidence/signals/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/confidence/signals/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/config"
+  },
+  {
+    "method": "GET",
+    "path": "/content/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/content/list"
+  },
+  {
+    "method": "GET",
+    "path": "/crawler-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/cron"
+  },
+  {
+    "method": "GET",
+    "path": "/custom-reports"
+  },
+  {
+    "method": "GET",
+    "path": "/custom-reports/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/custom-reports/:id/data"
+  },
+  {
+    "method": "GET",
+    "path": "/custom-reports/:id/export"
+  },
+  {
+    "method": "GET",
+    "path": "/custom-reports/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/basic"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/events"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/list"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/orders"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/tag-rules"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/tag-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-360/tags"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-events/list"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-journey/by-stage"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-journey/overview"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-journey/stages"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-oneid/:customer_id/identities"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-rfm/:customer_id"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-rfm/distribution"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-rfm/list"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-service/agents"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-service/capacity"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-service/queue"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions/:id/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions/blacklist"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions/blacklist/check"
+  },
+  {
+    "method": "GET",
+    "path": "/customer-sessions/pending"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/360/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/:id/behaviors"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/:id/communications"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/list"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/oneid/conflicts"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/oneid/list"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/oneid/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/session/:id/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/customer/session/list"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboard"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboard/clients"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboard/sse"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboard/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboard/topics"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboards"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboards/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboards/activities"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboards/data"
+  },
+  {
+    "method": "GET",
+    "path": "/dashboards/public/:code"
+  },
+  {
+    "method": "GET",
+    "path": "/detail/:asset_id"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin-card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin-card/list"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin-card/overall-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin-card/stats/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin/list"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin/stats/card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin/stats/overall"
+  },
+  {
+    "method": "GET",
+    "path": "/douyin/view/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/email/drafts"
+  },
+  {
+    "method": "GET",
+    "path": "/email/drafts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/email/jobs"
+  },
+  {
+    "method": "GET",
+    "path": "/email/jobs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/email/list"
+  },
+  {
+    "method": "GET",
+    "path": "/email/list/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/email/smtp"
+  },
+  {
+    "method": "GET",
+    "path": "/email/smtp/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/entity/:id/graph"
+  },
+  {
+    "method": "GET",
+    "path": "/entity/list"
+  },
+  {
+    "method": "GET",
+    "path": "/events/customer/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/events/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags/:id/audit"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags/:id/code-references"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags/:id/eval-log"
+  },
+  {
+    "method": "GET",
+    "path": "/feature-flags/stale"
+  },
+  {
+    "method": "GET",
+    "path": "/feedback/dialogues"
+  },
+  {
+    "method": "GET",
+    "path": "/feedback/events"
+  },
+  {
+    "method": "GET",
+    "path": "/feedback/events/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/files/*filepath"
+  },
+  {
+    "method": "GET",
+    "path": "/gdpr/export/:customer_id"
+  },
+  {
+    "method": "GET",
+    "path": "/geo/decision/report"
+  },
+  {
+    "method": "GET",
+    "path": "/geo/decision/tasks"
+  },
+  {
+    "method": "GET",
+    "path": "/health"
+  },
+  {
+    "method": "GET",
+    "path": "/healthz"
+  },
+  {
+    "method": "GET",
+    "path": "/host/status"
+  },
+  {
+    "method": "GET",
+    "path": "/humanize/baselines"
+  },
+  {
+    "method": "GET",
+    "path": "/humanize/low-quality"
+  },
+  {
+    "method": "GET",
+    "path": "/humanize/scores"
+  },
+  {
+    "method": "GET",
+    "path": "/humanize/scores/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/assignments"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/conversations"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/conversations/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/conversations/:id/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/staff/:staff/load"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/index-tracking/funnel"
+  },
+  {
+    "method": "GET",
+    "path": "/index.html"
+  },
+  {
+    "method": "GET",
+    "path": "/integration/external-customers"
+  },
+  {
+    "method": "GET",
+    "path": "/integration/external-orders"
+  },
+  {
+    "method": "GET",
+    "path": "/integration/external-orders-by-customer"
+  },
+  {
+    "method": "GET",
+    "path": "/integration/external-products"
+  },
+  {
+    "method": "GET",
+    "path": "/integration/sync-logs"
+  },
+  {
+    "method": "GET",
+    "path": "/integrations"
+  },
+  {
+    "method": "GET",
+    "path": "/integrations/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/integrations/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/integrations/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/config"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/dict"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/logs"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/recent"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/intent/stats/fine"
+  },
+  {
+    "method": "GET",
+    "path": "/jobs"
+  },
+  {
+    "method": "GET",
+    "path": "/jobs/:id/progress"
+  },
+  {
+    "method": "GET",
+    "path": "/jobs/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/kb/documents"
+  },
+  {
+    "method": "GET",
+    "path": "/kb/documents/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/kb/search"
+  },
+  {
+    "method": "GET",
+    "path": "/keyword-enhance/analyze"
+  },
+  {
+    "method": "GET",
+    "path": "/keyword-mining/funnel"
+  },
+  {
+    "method": "GET",
+    "path": "/keywords/list"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou-card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou-card/list"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou-card/overall-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou-card/stats/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou/list"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou/stats/card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou/stats/overall"
+  },
+  {
+    "method": "GET",
+    "path": "/kuaishou/view/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/l/:code"
+  },
+  {
+    "method": "GET",
+    "path": "/lead-mining/config"
+  },
+  {
+    "method": "GET",
+    "path": "/lead-mining/status"
+  },
+  {
+    "method": "GET",
+    "path": "/list"
+  },
+  {
+    "method": "GET",
+    "path": "/live-code/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/live-code/:id/qr-codes"
+  },
+  {
+    "method": "GET",
+    "path": "/live-code/:id/qr-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/live-code/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/live-code/list"
+  },
+  {
+    "method": "GET",
+    "path": "/live-codes/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/live-codes/:id/qrcodes"
+  },
+  {
+    "method": "GET",
+    "path": "/live-codes/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/live-codes/list"
+  },
+  {
+    "method": "GET",
+    "path": "/live-codes/qrcodes/:qr_id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/livecode/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/llm-routings/policy"
+  },
+  {
+    "method": "GET",
+    "path": "/llm-routings/providers/:provider/health"
+  },
+  {
+    "method": "GET",
+    "path": "/llm-routings/providers/health"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/audit"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/cost-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/egress-alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/egress-audit"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/fallback"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/health"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/model-type-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/models"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/models/:name"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/providers/health"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/providers/health/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/providers/policy"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/scenario-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/scenarios"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/scene-routing"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/strategies"
+  },
+  {
+    "method": "GET",
+    "path": "/llm/usage"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/co-pilot/config"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/config-params"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/config-params/audit-logs"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/data-export/:customer_id"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/rag-eval/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/rag-eval/runs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/rules"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/session-chain/sla-config"
+  },
+  {
+    "method": "GET",
+    "path": "/manage/typing-predict"
+  },
+  {
+    "method": "GET",
+    "path": "/marketing-flows"
+  },
+  {
+    "method": "GET",
+    "path": "/marketing-flows/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/marketing-flows/:id/executions"
+  },
+  {
+    "method": "GET",
+    "path": "/marketing-flows/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/material/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/material/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/material/categories/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/material/list"
+  },
+  {
+    "method": "GET",
+    "path": "/material/selector"
+  },
+  {
+    "method": "GET",
+    "path": "/material/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/memory/context"
+  },
+  {
+    "method": "GET",
+    "path": "/memory/list"
+  },
+  {
+    "method": "GET",
+    "path": "/memory/long"
+  },
+  {
+    "method": "GET",
+    "path": "/memory/short"
+  },
+  {
+    "method": "GET",
+    "path": "/merchant/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/merchant/list"
+  },
+  {
+    "method": "GET",
+    "path": "/message-hub/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/message-hub/list"
+  },
+  {
+    "method": "GET",
+    "path": "/message-hub/platforms"
+  },
+  {
+    "method": "GET",
+    "path": "/message-hub/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/message/latest"
+  },
+  {
+    "method": "GET",
+    "path": "/message/list"
+  },
+  {
+    "method": "GET",
+    "path": "/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/messages/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/migration/available"
+  },
+  {
+    "method": "GET",
+    "path": "/migration/current-version"
+  },
+  {
+    "method": "GET",
+    "path": "/migration/history"
+  },
+  {
+    "method": "GET",
+    "path": "/migration/records"
+  },
+  {
+    "method": "GET",
+    "path": "/migration/task/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/monitor/alerts/unread"
+  },
+  {
+    "method": "GET",
+    "path": "/monitor/knowledge-weights"
+  },
+  {
+    "method": "GET",
+    "path": "/monitor/trace-eval/logs"
+  },
+  {
+    "method": "GET",
+    "path": "/my-purchases"
+  },
+  {
+    "method": "GET",
+    "path": "/notifications"
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/unread-count"
+  },
+  {
+    "method": "GET",
+    "path": "/objection/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/obs/config"
+  },
+  {
+    "method": "GET",
+    "path": "/obs/config/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/obs/config/default"
+  },
+  {
+    "method": "GET",
+    "path": "/perf/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/perf/list"
+  },
+  {
+    "method": "GET",
+    "path": "/platform-accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/platform-accounts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/platform-accounts/:id/status"
+  },
+  {
+    "method": "GET",
+    "path": "/platform-accounts/platforms"
+  },
+  {
+    "method": "GET",
+    "path": "/platform/accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/platform/platforms"
+  },
+  {
+    "method": "GET",
+    "path": "/platform/records"
+  },
+  {
+    "method": "GET",
+    "path": "/platforms"
+  },
+  {
+    "method": "GET",
+    "path": "/platforms/:id/locators"
+  },
+  {
+    "method": "GET",
+    "path": "/probe/engines"
+  },
+  {
+    "method": "GET",
+    "path": "/probe/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/prompt/candidates"
+  },
+  {
+    "method": "GET",
+    "path": "/prompts"
+  },
+  {
+    "method": "GET",
+    "path": "/prompts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/prompts/:id/versions"
+  },
+  {
+    "method": "GET",
+    "path": "/prompts/ab-experiments"
+  },
+  {
+    "method": "GET",
+    "path": "/public/help-center/articles"
+  },
+  {
+    "method": "GET",
+    "path": "/public/help-center/articles/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/public/help-center/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/public/help-center/search"
+  },
+  {
+    "method": "GET",
+    "path": "/push/quota"
+  },
+  {
+    "method": "GET",
+    "path": "/push/sitemap"
+  },
+  {
+    "method": "GET",
+    "path": "/pushers"
+  },
+  {
+    "method": "GET",
+    "path": "/pushers/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/quick-replies"
+  },
+  {
+    "method": "GET",
+    "path": "/quick-replies/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/rag-eval/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/rag-eval/runs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/jobs"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/jobs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/jobs/with-experiment"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/pipelines"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/pipelines/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/proactive/customer/:customer_id/channels"
+  },
+  {
+    "method": "GET",
+    "path": "/reach/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/readyz"
+  },
+  {
+    "method": "GET",
+    "path": "/recovery-queue/distribution"
+  },
+  {
+    "method": "GET",
+    "path": "/recovery-queue/list"
+  },
+  {
+    "method": "GET",
+    "path": "/recovery-queue/ready"
+  },
+  {
+    "method": "GET",
+    "path": "/reports/api-costs"
+  },
+  {
+    "method": "GET",
+    "path": "/reports/roi"
+  },
+  {
+    "method": "GET",
+    "path": "/reports/summary"
+  },
+  {
+    "method": "GET",
+    "path": "/restore/last"
+  },
+  {
+    "method": "GET",
+    "path": "/restore/list"
+  },
+  {
+    "method": "GET",
+    "path": "/s/:code"
+  },
+  {
+    "method": "GET",
+    "path": "/schema-templates"
+  },
+  {
+    "method": "GET",
+    "path": "/schema-templates/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/script-library/:id/ab-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/script-library/:id/versions"
+  },
+  {
+    "method": "GET",
+    "path": "/scripts"
+  },
+  {
+    "method": "GET",
+    "path": "/scripts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/scripts/categories"
+  },
+  {
+    "method": "GET",
+    "path": "/scripts/public"
+  },
+  {
+    "method": "GET",
+    "path": "/scripts/search"
+  },
+  {
+    "method": "GET",
+    "path": "/security/audit/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/security/audit/list"
+  },
+  {
+    "method": "GET",
+    "path": "/session-tags"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:id/confirm-gate"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:id/export"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:id/logs"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:id/steps"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:session_id/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/:session_id/offline-messages"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/active"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/recent-closed"
+  },
+  {
+    "method": "GET",
+    "path": "/share/douyin/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/share/kuaishou/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/share/xianyu/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/share/xiaohongshu/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/short-link/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/short-link/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/short-link/all-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/short-link/list"
+  },
+  {
+    "method": "GET",
+    "path": "/shortlink/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/shortlink/:id/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/shortlink/list"
+  },
+  {
+    "method": "GET",
+    "path": "/shortlink/stats/all"
+  },
+  {
+    "method": "GET",
+    "path": "/site/llms-txt-preview"
+  },
+  {
+    "method": "GET",
+    "path": "/site/robots-preview"
+  },
+  {
+    "method": "GET",
+    "path": "/sites"
+  },
+  {
+    "method": "GET",
+    "path": "/sites/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/sop"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/:id/abtest/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/:id/heatmap"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/executions"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/executions/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/match"
+  },
+  {
+    "method": "GET",
+    "path": "/sop/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/source-catalog/levels"
+  },
+  {
+    "method": "GET",
+    "path": "/sov"
+  },
+  {
+    "method": "GET",
+    "path": "/sov/trend"
+  },
+  {
+    "method": "GET",
+    "path": "/sso/callback/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/sso/login/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/sso/providers"
+  },
+  {
+    "method": "GET",
+    "path": "/stats/merchant"
+  },
+  {
+    "method": "GET",
+    "path": "/stats/overview"
+  },
+  {
+    "method": "GET",
+    "path": "/stats/system"
+  },
+  {
+    "method": "GET",
+    "path": "/swagger/*any"
+  },
+  {
+    "method": "GET",
+    "path": "/sync-log"
+  },
+  {
+    "method": "GET",
+    "path": "/system/backup"
+  },
+  {
+    "method": "GET",
+    "path": "/system/config"
+  },
+  {
+    "method": "GET",
+    "path": "/system/info"
+  },
+  {
+    "method": "GET",
+    "path": "/system/init-status"
+  },
+  {
+    "method": "GET",
+    "path": "/system/logs"
+  },
+  {
+    "method": "GET",
+    "path": "/system/rate-quota"
+  },
+  {
+    "method": "GET",
+    "path": "/system/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/tasks/:id/sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/templates/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/templates/my-downloads"
+  },
+  {
+    "method": "GET",
+    "path": "/templates/official"
+  },
+  {
+    "method": "GET",
+    "path": "/templates/search"
+  },
+  {
+    "method": "GET",
+    "path": "/trace/:traceId"
+  },
+  {
+    "method": "GET",
+    "path": "/traces/recent"
+  },
+  {
+    "method": "GET",
+    "path": "/upload-token"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/layers"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/rfm/list"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/rfm/rule"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/rfm/rules"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/rfm/stats"
+  },
+  {
+    "method": "GET",
+    "path": "/user-segment/rfm/user"
+  },
+  {
+    "method": "GET",
+    "path": "/user/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/user/list"
+  },
+  {
+    "method": "GET",
+    "path": "/users"
+  },
+  {
+    "method": "GET",
+    "path": "/users/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/users/search"
+  },
+  {
+    "method": "GET",
+    "path": "/verification/results/:article_id"
+  },
+  {
+    "method": "GET",
+    "path": "/visibility/engine-compare"
+  },
+  {
+    "method": "GET",
+    "path": "/visibility/trend"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/accounts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/customers"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/groups"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts/:id/history"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts/risks"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts/select"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/health/accounts/summary"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/messages"
+  },
+  {
+    "method": "GET",
+    "path": "/wecom/tags"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/accounts"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/accounts/:id/login/status"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/drafts"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/group-messaging/records"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/group-messaging/status/:queue_id"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/jobs"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/jobs/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/lead-groups"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/login-status"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/whatsapp/templates/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/workflow/templates"
+  },
+  {
+    "method": "GET",
+    "path": "/workflow/workflows"
+  },
+  {
+    "method": "GET",
+    "path": "/workflow/workflows/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/workflow/workflows/:id/executions"
+  },
+  {
+    "method": "GET",
+    "path": "/workflows/executions"
+  },
+  {
+    "method": "GET",
+    "path": "/workflows/executions/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/workflows/executions/:id/nodes"
+  },
+  {
+    "method": "GET",
+    "path": "/workflows/versions"
+  },
+  {
+    "method": "GET",
+    "path": "/workflows/versions/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/ws/agent"
+  },
+  {
+    "method": "GET",
+    "path": "/ws/channel"
+  },
+  {
+    "method": "GET",
+    "path": "/ws/chat"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu-card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu-card/list"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu-card/overall-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu-card/stats/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu/list"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu/stats/card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu/stats/overall"
+  },
+  {
+    "method": "GET",
+    "path": "/xianyu/view/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu-card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu-card/list"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu-card/overall-stats"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu-card/stats/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu/list"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu/stats/card/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu/stats/overall"
+  },
+  {
+    "method": "GET",
+    "path": "/xiaohongshu/view/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/"
+  },
+  {
+    "method": "POST",
+    "path": "/:channel_id/reset-secret"
+  },
+  {
+    "method": "POST",
+    "path": "/:channel_id/rotate-key"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/activate"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/archive"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/attempt"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/code-references"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/deactivate"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/enable"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/pause"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/publish"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/recovered"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/rollout"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/start"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/stop"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/sync-ab-results"
+  },
+  {
+    "method": "POST",
+    "path": "/:id/trigger"
+  },
+  {
+    "method": "POST",
+    "path": "/:name/accounts"
+  },
+  {
+    "method": "POST",
+    "path": "/ab-experiments/:id/bayesian-test"
+  },
+  {
+    "method": "POST",
+    "path": "/ab-experiments/:id/sequential-test"
+  },
+  {
+    "method": "POST",
+    "path": "/ab-experiments/reach-metrics"
+  },
+  {
+    "method": "POST",
+    "path": "/account"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/login/start"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/refresh"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/send-message"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/sync-customers"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/sync-groups"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/:id/sync-tags"
+  },
+  {
+    "method": "POST",
+    "path": "/accounts/create"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/co-pilot/evaluate"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/tools/approval/whitelist"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/tools/circuit/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/agent/tools/execute"
+  },
+  {
+    "method": "POST",
+    "path": "/agents"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/:id/offline"
+  },
+  {
+    "method": "POST",
+    "path": "/agents/:id/online"
+  },
+  {
+    "method": "POST",
+    "path": "/ai-suggestions/:id/use"
+  },
+  {
+    "method": "POST",
+    "path": "/ai/history"
+  },
+  {
+    "method": "POST",
+    "path": "/ai/history/:id/favorite"
+  },
+  {
+    "method": "POST",
+    "path": "/ai/history/:id/rate"
+  },
+  {
+    "method": "POST",
+    "path": "/alerts/:id/ack"
+  },
+  {
+    "method": "POST",
+    "path": "/alerts/histories/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/alerts/rules"
+  },
+  {
+    "method": "POST",
+    "path": "/app-config/sync"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/anomaly/alerts/:id/ignore"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/anomaly/alerts/:id/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/change-password"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/login"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/logout"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/mfa/backup-codes"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/mfa/confirm"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/mfa/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/mfa/setup"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/mfa/verify"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/notifications/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/notifications/read-all"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/refresh-token"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/security-alerts/:id/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/backups"
+  },
+  {
+    "method": "POST",
+    "path": "/batch-status"
+  },
+  {
+    "method": "POST",
+    "path": "/batch/export"
+  },
+  {
+    "method": "POST",
+    "path": "/batch/preview"
+  },
+  {
+    "method": "POST",
+    "path": "/bind"
+  },
+  {
+    "method": "POST",
+    "path": "/bridge/ingest"
+  },
+  {
+    "method": "POST",
+    "path": "/bridge/outbox/ack"
+  },
+  {
+    "method": "POST",
+    "path": "/bridge/token/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/bulk-send"
+  },
+  {
+    "method": "POST",
+    "path": "/calculate"
+  },
+  {
+    "method": "POST",
+    "path": "/cards/cross-publish"
+  },
+  {
+    "method": "POST",
+    "path": "/channels/bind"
+  },
+  {
+    "method": "POST",
+    "path": "/chat/typing-predict/predict"
+  },
+  {
+    "method": "POST",
+    "path": "/churn/model-config"
+  },
+  {
+    "method": "POST",
+    "path": "/churn/warnings/:id/handle"
+  },
+  {
+    "method": "POST",
+    "path": "/churn/warnings/intervene"
+  },
+  {
+    "method": "POST",
+    "path": "/clue/engagement"
+  },
+  {
+    "method": "POST",
+    "path": "/clue/import"
+  },
+  {
+    "method": "POST",
+    "path": "/clue/score"
+  },
+  {
+    "method": "POST",
+    "path": "/clue/score-all"
+  },
+  {
+    "method": "POST",
+    "path": "/clues/import"
+  },
+  {
+    "method": "POST",
+    "path": "/co-pilot/evaluate"
+  },
+  {
+    "method": "POST",
+    "path": "/competitors"
+  },
+  {
+    "method": "POST",
+    "path": "/compute-all"
+  },
+  {
+    "method": "POST",
+    "path": "/config"
+  },
+  {
+    "method": "POST",
+    "path": "/config/optimize"
+  },
+  {
+    "method": "POST",
+    "path": "/content/eeat"
+  },
+  {
+    "method": "POST",
+    "path": "/content/generate"
+  },
+  {
+    "method": "POST",
+    "path": "/content/optimize"
+  },
+  {
+    "method": "POST",
+    "path": "/content/schema"
+  },
+  {
+    "method": "POST",
+    "path": "/content/score"
+  },
+  {
+    "method": "POST",
+    "path": "/content/uniqueness"
+  },
+  {
+    "method": "POST",
+    "path": "/crawler/run"
+  },
+  {
+    "method": "POST",
+    "path": "/cron"
+  },
+  {
+    "method": "POST",
+    "path": "/cron/:id/disable"
+  },
+  {
+    "method": "POST",
+    "path": "/cron/:id/enable"
+  },
+  {
+    "method": "POST",
+    "path": "/custom-reports"
+  },
+  {
+    "method": "POST",
+    "path": "/custom-reports/templates/:id/use"
+  },
+  {
+    "method": "POST",
+    "path": "/customer"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-360/tag-rules"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-events/batch"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-journey/touch"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-journey/transition"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-oneid/:customer_id/identities"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-rfm/compute"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/auto-assign"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/blacklist"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/close"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/messages"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/rate"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/release"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/switch-handler"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/tags"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/takeover"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/:id/transfer"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/assign"
+  },
+  {
+    "method": "POST",
+    "path": "/customer-sessions/blacklist/remove"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/:id/tags"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/oneid/conflicts/:id/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/oneid/merge"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/oneid/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/session"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/session/:id/close"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/session/:id/transfer"
+  },
+  {
+    "method": "POST",
+    "path": "/customer/session/messages"
+  },
+  {
+    "method": "POST",
+    "path": "/dashboard/broadcast"
+  },
+  {
+    "method": "POST",
+    "path": "/delete"
+  },
+  {
+    "method": "POST",
+    "path": "/douyin-card"
+  },
+  {
+    "method": "POST",
+    "path": "/douyin/:id/generate-short-link"
+  },
+  {
+    "method": "POST",
+    "path": "/douyin/create"
+  },
+  {
+    "method": "POST",
+    "path": "/drafts"
+  },
+  {
+    "method": "POST",
+    "path": "/email/drafts"
+  },
+  {
+    "method": "POST",
+    "path": "/email/jobs"
+  },
+  {
+    "method": "POST",
+    "path": "/email/list"
+  },
+  {
+    "method": "POST",
+    "path": "/email/list/:id/trace"
+  },
+  {
+    "method": "POST",
+    "path": "/email/send"
+  },
+  {
+    "method": "POST",
+    "path": "/email/smtp"
+  },
+  {
+    "method": "POST",
+    "path": "/enqueue"
+  },
+  {
+    "method": "POST",
+    "path": "/entities/extract"
+  },
+  {
+    "method": "POST",
+    "path": "/evaluate"
+  },
+  {
+    "method": "POST",
+    "path": "/evaluate-batch"
+  },
+  {
+    "method": "POST",
+    "path": "/events/add-to-cart"
+  },
+  {
+    "method": "POST",
+    "path": "/events/click"
+  },
+  {
+    "method": "POST",
+    "path": "/events/login"
+  },
+  {
+    "method": "POST",
+    "path": "/events/pageview"
+  },
+  {
+    "method": "POST",
+    "path": "/events/purchase"
+  },
+  {
+    "method": "POST",
+    "path": "/events/signup"
+  },
+  {
+    "method": "POST",
+    "path": "/events/track"
+  },
+  {
+    "method": "POST",
+    "path": "/execute"
+  },
+  {
+    "method": "POST",
+    "path": "/executions/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/executions/:id/pause"
+  },
+  {
+    "method": "POST",
+    "path": "/executions/:id/resume"
+  },
+  {
+    "method": "POST",
+    "path": "/export"
+  },
+  {
+    "method": "POST",
+    "path": "/fallback"
+  },
+  {
+    "method": "POST",
+    "path": "/generate"
+  },
+  {
+    "method": "POST",
+    "path": "/geo/decision/tasks/:id/done"
+  },
+  {
+    "method": "POST",
+    "path": "/group-messaging/send"
+  },
+  {
+    "method": "POST",
+    "path": "/groups"
+  },
+  {
+    "method": "POST",
+    "path": "/histories/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/history/:id/save"
+  },
+  {
+    "method": "POST",
+    "path": "/host/token/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/import"
+  },
+  {
+    "method": "POST",
+    "path": "/inaccurate-claims"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/assign"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/assign/auto"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/conversations/:id/mute"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/conversations/:id/pin"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/conversations/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/conversations/:id/star"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/conversations/:id/tags"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/lock-human"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/reconcile"
+  },
+  {
+    "method": "POST",
+    "path": "/inbox/unlock-human/:session_id"
+  },
+  {
+    "method": "POST",
+    "path": "/index-tracking/verify-all"
+  },
+  {
+    "method": "POST",
+    "path": "/index-tracking/verify/:article_id"
+  },
+  {
+    "method": "POST",
+    "path": "/integrations"
+  },
+  {
+    "method": "POST",
+    "path": "/integrations/:id/sync-customers"
+  },
+  {
+    "method": "POST",
+    "path": "/integrations/:id/sync-products"
+  },
+  {
+    "method": "POST",
+    "path": "/integrations/:id/test"
+  },
+  {
+    "method": "POST",
+    "path": "/intent/recognize"
+  },
+  {
+    "method": "POST",
+    "path": "/intent/recognize/batch"
+  },
+  {
+    "method": "POST",
+    "path": "/intent/recognize/fine"
+  },
+  {
+    "method": "POST",
+    "path": "/jobs"
+  },
+  {
+    "method": "POST",
+    "path": "/jobs/:name/trigger"
+  },
+  {
+    "method": "POST",
+    "path": "/kb/ask"
+  },
+  {
+    "method": "POST",
+    "path": "/kb/documents"
+  },
+  {
+    "method": "POST",
+    "path": "/keyword-enhance/enhance"
+  },
+  {
+    "method": "POST",
+    "path": "/keyword-mining/crawl-suggest"
+  },
+  {
+    "method": "POST",
+    "path": "/keyword-mining/longtail"
+  },
+  {
+    "method": "POST",
+    "path": "/keywords/cluster"
+  },
+  {
+    "method": "POST",
+    "path": "/keywords/expand"
+  },
+  {
+    "method": "POST",
+    "path": "/keywords/mine"
+  },
+  {
+    "method": "POST",
+    "path": "/knowledge-merchant/external/import"
+  },
+  {
+    "method": "POST",
+    "path": "/kuaishou-card"
+  },
+  {
+    "method": "POST",
+    "path": "/kuaishou/:id/generate-short-link"
+  },
+  {
+    "method": "POST",
+    "path": "/kuaishou/create"
+  },
+  {
+    "method": "POST",
+    "path": "/kuaishou/like/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/kuaishou/share/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/live-code"
+  },
+  {
+    "method": "POST",
+    "path": "/live-code/:id/qr-code"
+  },
+  {
+    "method": "POST",
+    "path": "/live-code/:id/share"
+  },
+  {
+    "method": "POST",
+    "path": "/live-codes/:id/qrcodes/create"
+  },
+  {
+    "method": "POST",
+    "path": "/live-codes/:id/share"
+  },
+  {
+    "method": "POST",
+    "path": "/live-codes/create"
+  },
+  {
+    "method": "POST",
+    "path": "/livecode/:id/click"
+  },
+  {
+    "method": "POST",
+    "path": "/llm-routings/providers/circuit/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/llm-routings/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/llm/providers/circuit/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/llm/providers/circuit/reset/:provider"
+  },
+  {
+    "method": "POST",
+    "path": "/manage/config-params/:group/:key/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/manage/config-params/:group/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/material"
+  },
+  {
+    "method": "POST",
+    "path": "/material/:id/usage"
+  },
+  {
+    "method": "POST",
+    "path": "/material/categories"
+  },
+  {
+    "method": "POST",
+    "path": "/material/upload"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp"
+  },
+  {
+    "method": "POST",
+    "path": "/members"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/facts"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/intent-trail"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/messages"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/objections"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/purchase-intent"
+  },
+  {
+    "method": "POST",
+    "path": "/memory/sop-history"
+  },
+  {
+    "method": "POST",
+    "path": "/message-hub/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/message-hub/push"
+  },
+  {
+    "method": "POST",
+    "path": "/message-hub/push-batch"
+  },
+  {
+    "method": "POST",
+    "path": "/message-hub/push-from-channel"
+  },
+  {
+    "method": "POST",
+    "path": "/message/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/message/send"
+  },
+  {
+    "method": "POST",
+    "path": "/metrics/analyze"
+  },
+  {
+    "method": "POST",
+    "path": "/migration/rollback"
+  },
+  {
+    "method": "POST",
+    "path": "/migration/task"
+  },
+  {
+    "method": "POST",
+    "path": "/models"
+  },
+  {
+    "method": "POST",
+    "path": "/models/:name/test"
+  },
+  {
+    "method": "POST",
+    "path": "/monitor/trace-eval/trigger"
+  },
+  {
+    "method": "POST",
+    "path": "/monitor/web-vitals"
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/read-all"
+  },
+  {
+    "method": "POST",
+    "path": "/objection/classify"
+  },
+  {
+    "method": "POST",
+    "path": "/objection/handle"
+  },
+  {
+    "method": "POST",
+    "path": "/objection/usage"
+  },
+  {
+    "method": "POST",
+    "path": "/obs/config"
+  },
+  {
+    "method": "POST",
+    "path": "/obs/config/:id/default"
+  },
+  {
+    "method": "POST",
+    "path": "/obs/config/:id/test"
+  },
+  {
+    "method": "POST",
+    "path": "/perf/run"
+  },
+  {
+    "method": "POST",
+    "path": "/platform-accounts"
+  },
+  {
+    "method": "POST",
+    "path": "/platform-accounts/:id/login"
+  },
+  {
+    "method": "POST",
+    "path": "/platform/accounts"
+  },
+  {
+    "method": "POST",
+    "path": "/platform/publish"
+  },
+  {
+    "method": "POST",
+    "path": "/probe/all"
+  },
+  {
+    "method": "POST",
+    "path": "/probe/run-negative"
+  },
+  {
+    "method": "POST",
+    "path": "/probe/run-source-sync"
+  },
+  {
+    "method": "POST",
+    "path": "/probe/run-sov"
+  },
+  {
+    "method": "POST",
+    "path": "/probe/test"
+  },
+  {
+    "method": "POST",
+    "path": "/prompt/fanout"
+  },
+  {
+    "method": "POST",
+    "path": "/public/forgot-password"
+  },
+  {
+    "method": "POST",
+    "path": "/public/register"
+  },
+  {
+    "method": "POST",
+    "path": "/public/reset-password"
+  },
+  {
+    "method": "POST",
+    "path": "/purchase"
+  },
+  {
+    "method": "POST",
+    "path": "/push/urls"
+  },
+  {
+    "method": "POST",
+    "path": "/pushers"
+  },
+  {
+    "method": "POST",
+    "path": "/rag-eval/run"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/jobs"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/jobs/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/jobs/:id/execute"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/jobs/:id/retry"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/pipelines"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/pipelines/:id/archive"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/pipelines/:id/pause"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/pipelines/:id/resume"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/proactive/batch"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/proactive/customer/:customer_id"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/proactive/quick"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/proactive/send"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/proactive/validate"
+  },
+  {
+    "method": "POST",
+    "path": "/reach/rate-limit/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/report-usage"
+  },
+  {
+    "method": "POST",
+    "path": "/restore"
+  },
+  {
+    "method": "POST",
+    "path": "/rule"
+  },
+  {
+    "method": "POST",
+    "path": "/rules"
+  },
+  {
+    "method": "POST",
+    "path": "/scene-routing"
+  },
+  {
+    "method": "POST",
+    "path": "/schema-templates"
+  },
+  {
+    "method": "POST",
+    "path": "/script-ab/conversion"
+  },
+  {
+    "method": "POST",
+    "path": "/script-library/:id/expire"
+  },
+  {
+    "method": "POST",
+    "path": "/script-library/:id/versions"
+  },
+  {
+    "method": "POST",
+    "path": "/scripts"
+  },
+  {
+    "method": "POST",
+    "path": "/scripts/recommend"
+  },
+  {
+    "method": "POST",
+    "path": "/scripts/sync-to-library"
+  },
+  {
+    "method": "POST",
+    "path": "/security/audit"
+  },
+  {
+    "method": "POST",
+    "path": "/session-chain/reopen"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:id/confirm"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:id/stop"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:session_id/close"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:session_id/messages"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:session_id/rate"
+  },
+  {
+    "method": "POST",
+    "path": "/sessions/:session_id/transfer"
+  },
+  {
+    "method": "POST",
+    "path": "/short-link"
+  },
+  {
+    "method": "POST",
+    "path": "/short-link/access"
+  },
+  {
+    "method": "POST",
+    "path": "/shortlink/:id/share"
+  },
+  {
+    "method": "POST",
+    "path": "/shortlink/access"
+  },
+  {
+    "method": "POST",
+    "path": "/shortlink/create"
+  },
+  {
+    "method": "POST",
+    "path": "/shortlink/generate"
+  },
+  {
+    "method": "POST",
+    "path": "/site/deploy"
+  },
+  {
+    "method": "POST",
+    "path": "/site/export"
+  },
+  {
+    "method": "POST",
+    "path": "/site/full-pipeline"
+  },
+  {
+    "method": "POST",
+    "path": "/sites"
+  },
+  {
+    "method": "POST",
+    "path": "/smart-router/match"
+  },
+  {
+    "method": "POST",
+    "path": "/smart-router/select"
+  },
+  {
+    "method": "POST",
+    "path": "/start-login"
+  },
+  {
+    "method": "POST",
+    "path": "/step"
+  },
+  {
+    "method": "POST",
+    "path": "/strategies"
+  },
+  {
+    "method": "POST",
+    "path": "/sync"
+  },
+  {
+    "method": "POST",
+    "path": "/system/backup"
+  },
+  {
+    "method": "POST",
+    "path": "/system/config"
+  },
+  {
+    "method": "POST",
+    "path": "/system/create-default-admin"
+  },
+  {
+    "method": "POST",
+    "path": "/system/init-admin"
+  },
+  {
+    "method": "POST",
+    "path": "/system/init-complete"
+  },
+  {
+    "method": "POST",
+    "path": "/system/restart"
+  },
+  {
+    "method": "POST",
+    "path": "/system/restore"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/:id/archive"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/:id/pause"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/:id/publish"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/:id/resume"
+  },
+  {
+    "method": "POST",
+    "path": "/tasks/:id/run"
+  },
+  {
+    "method": "POST",
+    "path": "/techconfig/llms-txt"
+  },
+  {
+    "method": "POST",
+    "path": "/techconfig/robots"
+  },
+  {
+    "method": "POST",
+    "path": "/techconfig/sitemap"
+  },
+  {
+    "method": "POST",
+    "path": "/templates"
+  },
+  {
+    "method": "POST",
+    "path": "/templates/:id/download"
+  },
+  {
+    "method": "POST",
+    "path": "/templates/:id/rate"
+  },
+  {
+    "method": "POST",
+    "path": "/update"
+  },
+  {
+    "method": "POST",
+    "path": "/upload"
+  },
+  {
+    "method": "POST",
+    "path": "/user"
+  },
+  {
+    "method": "POST",
+    "path": "/users"
+  },
+  {
+    "method": "POST",
+    "path": "/verification/negative"
+  },
+  {
+    "method": "POST",
+    "path": "/verification/verify"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/health/accounts/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/health/accounts/:id/quota/consume"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/health/accounts/:id/status"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/health/accounts/quota/reset"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/messages/ingest"
+  },
+  {
+    "method": "POST",
+    "path": "/wecom/messages/send"
+  },
+  {
+    "method": "POST",
+    "path": "/workflow/templates"
+  },
+  {
+    "method": "POST",
+    "path": "/workflow/workflows"
+  },
+  {
+    "method": "POST",
+    "path": "/workflow/workflows/:id/run"
+  },
+  {
+    "method": "POST",
+    "path": "/workflows/execute"
+  },
+  {
+    "method": "POST",
+    "path": "/workflows/executions/:id/stop"
+  },
+  {
+    "method": "POST",
+    "path": "/xianyu-card"
+  },
+  {
+    "method": "POST",
+    "path": "/xianyu/:id/generate-short-link"
+  },
+  {
+    "method": "POST",
+    "path": "/xianyu/create"
+  },
+  {
+    "method": "POST",
+    "path": "/xiaohongshu-card"
+  },
+  {
+    "method": "POST",
+    "path": "/xiaohongshu/:id/generate-short-link"
+  },
+  {
+    "method": "POST",
+    "path": "/xiaohongshu/create"
+  },
+  {
+    "method": "PUT",
+    "path": "/:channel_id"
+  },
+  {
+    "method": "PUT",
+    "path": "/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/:id/abtest/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/:id/enabled"
+  },
+  {
+    "method": "PUT",
+    "path": "/:id/password"
+  },
+  {
+    "method": "PUT",
+    "path": "/:id/toggle-active"
+  },
+  {
+    "method": "PUT",
+    "path": "/:name/status"
+  },
+  {
+    "method": "PUT",
+    "path": "/account/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/accounts/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/accounts/update/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/agent/co-pilot/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/agent/settings"
+  },
+  {
+    "method": "PUT",
+    "path": "/agent/tool-integrations"
+  },
+  {
+    "method": "PUT",
+    "path": "/agents/:id/status"
+  },
+  {
+    "method": "PUT",
+    "path": "/alerts/rules/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/alerts/rules/status"
+  },
+  {
+    "method": "PUT",
+    "path": "/app-config"
+  },
+  {
+    "method": "PUT",
+    "path": "/auth/password-policy"
+  },
+  {
+    "method": "PUT",
+    "path": "/co-pilot/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/competitors/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/confidence/policies"
+  },
+  {
+    "method": "PUT",
+    "path": "/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/cron/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/custom-reports/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/customer-360/tag-rules/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/customer-360/tags"
+  },
+  {
+    "method": "PUT",
+    "path": "/customer-sessions/:id/status"
+  },
+  {
+    "method": "PUT",
+    "path": "/customer/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/douyin-card/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/douyin/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/drafts/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/email/drafts/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/email/list/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/email/smtp/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/fallback"
+  },
+  {
+    "method": "PUT",
+    "path": "/groups/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/integrations/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/intent/config"
+  },
+  {
+    "method": "PUT",
+    "path": "/jobs/:name/schedule"
+  },
+  {
+    "method": "PUT",
+    "path": "/kuaishou-card/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/kuaishou/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/live-code/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/live-code/:id/qr-codes/:qr_id"
+  },
+  {
+    "method": "PUT",
+    "path": "/live-codes/:id/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/live-codes/qrcodes/:qr_id/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/llm-routings/policy"
+  },
+  {
+    "method": "PUT",
+    "path": "/llm/providers/policy"
+  },
+  {
+    "method": "PUT",
+    "path": "/manage/config-params/:group/:key"
+  },
+  {
+    "method": "PUT",
+    "path": "/material/:id/usage"
+  },
+  {
+    "method": "PUT",
+    "path": "/material/categories/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/members/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/models/:name"
+  },
+  {
+    "method": "PUT",
+    "path": "/obs/config/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/platform-accounts/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/prompt/candidates/:id/status"
+  },
+  {
+    "method": "PUT",
+    "path": "/pushers/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/reach/pipelines/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/rule/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/rules/:id/toggle"
+  },
+  {
+    "method": "PUT",
+    "path": "/scene-routing"
+  },
+  {
+    "method": "PUT",
+    "path": "/schema-templates/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/script-library/:id/ab-config"
+  },
+  {
+    "method": "PUT",
+    "path": "/script-library/:id/versions/:vid/activate"
+  },
+  {
+    "method": "PUT",
+    "path": "/scripts/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/session-chain/sla-config"
+  },
+  {
+    "method": "PUT",
+    "path": "/short-link/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/shortlink/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/sites/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/strategies"
+  },
+  {
+    "method": "PUT",
+    "path": "/tasks/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/tasks/:id/dependency"
+  },
+  {
+    "method": "PUT",
+    "path": "/templates/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/user/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/user/:id/password"
+  },
+  {
+    "method": "PUT",
+    "path": "/users/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/users/:id/password"
+  },
+  {
+    "method": "PUT",
+    "path": "/workflow/workflows/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/xianyu-card/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/xianyu/update"
+  },
+  {
+    "method": "PUT",
+    "path": "/xiaohongshu-card/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/xiaohongshu/update"
+  }
+]

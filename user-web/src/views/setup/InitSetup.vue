@@ -22,7 +22,7 @@
           <ul>
             <li>{{ $t('本软件仅用于合法用途，不得用于从事任何违法活动') }}</li>
             <li>{{ $t('用户需自行承担使用本软件所产生的所有法律责任') }}</li>
-            <li>{{ $t('软件初始化时会将安装信息（域名/IP/设备指纹/联系方式）上报至官方统计平台') }}</li>
+            <li>{{ $t('默认完全本地运行：仅当显式开启平台集成（环境变量 PLATFORM_ENABLED=true）时，安装信息（域名/IP/设备指纹/联系方式）才会上报') }}</li>
           </ul>
           <el-checkbox v-model="agreed" style="margin-top: 20px">
             {{ $t('我已阅读并同意以上使用条款') }}
@@ -77,12 +77,12 @@
             />
           </el-form-item>
 
-          <el-divider content-position="left">{{ $t('联系信息（选填，用于官方统计平台商户档案）') }}</el-divider>
+          <el-divider content-position="left">{{ $t('联系信息（选填，用于系统通知与问题回访）') }}</el-divider>
 
           <el-form-item :label="$t('手机号')" prop="contact_phone">
             <el-input
               v-model="adminForm.contact_phone"
-              :placeholder="$t('选填，便于商务联系')"
+              :placeholder="$t('选填，用于问题回访')"
               size="large"
               clearable
             />

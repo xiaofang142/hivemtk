@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"net/url"
+	"strings"
 	"time"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/pkg/db"
 
@@ -32,12 +34,16 @@ type GeoCrawlerVisitRepository interface {
 	Clean(ctx context.Context) error
 }
 
-// DomainStatRow 爬虫访问按域名聚合行
+// DomainStatRow 爬虫访问按站点聚合行
+//
+// Domain 是"站点标识"而非纯 host：自家官网在 GitHub Pages 项目页形态下取
+// host+/路径，其余站点取 host（见 siteKeyOf）。
 type DomainStatRow struct {
 	Domain      string `json:"domain"`
 	Engine      string `json:"engine"`
 	VisitCount  int64  `json:"visit_count"`
 	SourceLevel string `json:"source_level"`
+	IsSelfSite  bool   `json:"is_self_site"`
 }
 
 // KeywordStatRow 爬虫访问按关键词聚合行 —— AI Bot 对某关键词的搜索频次
@@ -47,8 +53,9 @@ type KeywordStatRow struct {
 	VisitCount int64  `json:"visit_count"`
 }
 
+// domainSourceLevel 第三方站点的源等级。自家站刻意不在表里：
+// 官网基址是运行期配置（GEO_SITE_BASE_URL），写死进静态表就会随域名搬家而失效。
 var domainSourceLevel = map[string]string{
-	"hive.xapptool.cn":  "A",
 	"weibanzhushou.com": "B",
 	"tanmascrm.com":     "C",
 	"fengchenscrm.com":  "C",
@@ -61,11 +68,21 @@ var domainSourceLevel = map[string]string{
 	"bing.com":          "A",
 }
 
-func sourceLevelOf(domain string) string {
-	if lv, ok := domainSourceLevel[domain]; ok {
+func sourceLevelOf(site string, isSelfSite bool) string {
+	if isSelfSite {
+		return "A"
+	}
+	if lv, ok := domainSourceLevel[site]; ok {
 		return lv
 	}
 	return "D"
+}
+
+func stripScheme(raw string) string {
+	if i := strings.Index(raw, "://"); i >= 0 {
+		return raw[i+len("://"):]
+	}
+	return raw
 }
 
 func extractDomain(rawURL string) string {
@@ -77,6 +94,21 @@ func extractDomain(rawURL string) string {
 		return ""
 	}
 	return u.Host
+}
+
+// siteKeyOf 把一条访问 URL 归一成"站点标识"，并给出它是否属于自家官网。
+//
+// 自家站取基址的 host+路径（如 xiaofang142.github.io/hivemtk），其余取 host。
+// 路径不可省：GitHub Pages 项目页形态下 host 是无数项目共用的，
+// 只按 host 聚合会把别人的项目页和自家站折成同一行，可见度统计就此失真。
+func siteKeyOf(rawURL string) (site string, isSelfSite bool) {
+	if rawURL == "" {
+		return "", false
+	}
+	if config.IsSelfSiteURL(rawURL) {
+		return stripScheme(config.WebsiteBaseURL()), true
+	}
+	return extractDomain(rawURL), false
 }
 
 type geoCrawlerVisitRepo struct{ db *gorm.DB }
@@ -139,23 +171,26 @@ func (r *geoCrawlerVisitRepo) StatsByDomain(ctx context.Context, days int) ([]Do
 		return nil, err
 	}
 
-	type key struct{ Domain, Engine string }
+	type key struct{ Site, Engine string }
 	bucket := map[key]int64{}
+	selfSite := map[string]bool{}
 	for _, row := range raw {
-		d := extractDomain(row.Path)
-		if d == "" {
+		site, isSelf := siteKeyOf(row.Path)
+		if site == "" {
 			continue
 		}
-		bucket[key{d, row.Engine}] += row.N
+		bucket[key{site, row.Engine}] += row.N
+		selfSite[site] = isSelf
 	}
 
 	out := make([]DomainStatRow, 0, len(bucket))
 	for k, n := range bucket {
 		out = append(out, DomainStatRow{
-			Domain:      k.Domain,
+			Domain:      k.Site,
 			Engine:      k.Engine,
 			VisitCount:  n,
-			SourceLevel: sourceLevelOf(k.Domain),
+			SourceLevel: sourceLevelOf(k.Site, selfSite[k.Site]),
+			IsSelfSite:  selfSite[k.Site],
 		})
 	}
 	return out, nil
@@ -204,13 +239,13 @@ func (r *geoCrawlerVisitRepo) ActiveDomains(ctx context.Context, days int) (int6
 		Distinct("path").Where("created_at >= ?", since).Pluck("path", &paths).Error; err != nil {
 		return 0, err
 	}
-	domains := map[string]bool{}
+	sites := map[string]bool{}
 	for _, p := range paths {
-		if d := extractDomain(p); d != "" {
-			domains[d] = true
+		if s, _ := siteKeyOf(p); s != "" {
+			sites[s] = true
 		}
 	}
-	return int64(len(domains)), nil
+	return int64(len(sites)), nil
 }
 
 func (r *geoCrawlerVisitRepo) ActiveKeywords(ctx context.Context, days int) (int64, error) {

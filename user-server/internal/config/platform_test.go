@@ -7,6 +7,7 @@ import (
 )
 
 func TestLoadPlatform(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	// 环境隔离:LoadPlatform 的环境变量覆盖优先级高于配置文件,
 	// 部署环境(.env)注入 PLATFORM_API_HOST/PLATFORM_API_URL/PLATFORM_CONFIG_PATH 时
 	// 若不隔离,本测试在任何真实部署机上必然失败(断言文件值而非环境值)
@@ -56,6 +57,7 @@ admin_password: test_password
 }
 
 func TestLoadPlatform_NonExistentFile(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	err := LoadPlatform("/non/existent/path.yaml")
 	if err == nil {
 		t.Error("Expected error for non-existent file")
@@ -63,6 +65,7 @@ func TestLoadPlatform_NonExistentFile(t *testing.T) {
 }
 
 func TestLoadPlatform_InvalidYAML(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "platform.yaml")
 
@@ -83,6 +86,7 @@ invalid: yaml: content
 
 // TestLoadPlatform_MissingPassword 验证：管理员密码缺失时必须返回错误（合规基线 §7.2）
 func TestLoadPlatform_MissingPassword(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "platform.yaml")
 
@@ -104,6 +108,7 @@ admin_username: admin
 
 // TestLoadPlatform_MissingSecret 验证：商户 API 密钥缺失时必须返回错误（合规基线 §7.2）
 func TestLoadPlatform_MissingSecret(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "platform.yaml")
 
@@ -124,6 +129,7 @@ admin_password: test_password
 
 // TestLoadPlatform_EnvExpansion 验证：${VAR} 形式的环境变量能被正确展开
 func TestLoadPlatform_EnvExpansion(t *testing.T) {
+	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
 	t.Setenv("TEST_PLATFORM_ADMIN_PW", "env_injected_password")
 	t.Setenv("TEST_PLATFORM_SECRET", "env_injected_secret")
 

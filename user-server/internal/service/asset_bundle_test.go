@@ -348,7 +348,7 @@ func TestBuildBundleFromMerchantForm(t *testing.T) {
 		},
 		CardConfig: dto.MerchantCardConfig{
 			IntentType:   "button_card",
-			ProductImage: "https://xapptool.cn/product.png",
+			ProductImage: "https://example.com/product.png",
 			Buttons: []dto.MerchantCardButton{
 				{Title: "立即购买", Action: "open_url", URL: "https://shopify.com", Order: 0},
 			},

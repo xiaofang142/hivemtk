@@ -18,13 +18,10 @@ user	POST	/api/auth/mfa/verify
 user	GET	/api/system/init-status
 user	POST	/api/system/init-admin
 user	POST	/api/system/init-complete
-user	GET	/api/license/status
-user	GET	/api/license/features
 user	GET	/api/s/:code
 user	GET	/api/l/:code
 user	GET	/api/livecode/:id
 user	POST	/api/livecode/:id/click
-user	POST	/api/platform/register
 user	POST	/api/knowledge-merchant/external/import
 user	POST	/api/chat/ingress
 user	GET	/api/douyin-card/list

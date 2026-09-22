@@ -158,21 +158,22 @@ npm install          # 或 pnpm install / yarn install
 
 ### 2. 配置环境变量
 
-开发环境默认从 `.env.development` 读取：
+默认值已经可用，无需改动：`.env.development` / `.env.example` / `.env.production` 三份文件实测都是
 
 ```bash
-# .env.development
-VITE_API_BASE_URL=https://hiveuserapi.xapptool.cn
+# .env.development（同时也是 .env.example / .env.production 的默认值）
+VITE_API_BASE_URL=/
 ```
 
-如需联调本地后端，复制 `.env.example` 覆盖：
+`/` = 同源相对路径：dev 态由 Vite 把 `/api` 反代到 `http://localhost:8204`（`vite.config.js` 的 proxy target），生产态由部署侧的同源反代接管。**只有跨域 / 远程独立部署**才需要改成绝对地址：
 
 ```bash
 cp .env.example .env.development
-# 然后修改 VITE_API_BASE_URL=http://localhost:8204
+# 然后按需修改，例如
+# VITE_API_BASE_URL=https://user-api.your-domain.com
 ```
 
-Vite 已配置 `/api` 反代到 `http://localhost:8204`，开发态直接请求 `/api/...` 即可。
+> 绝对地址只能写 `https://`：`index.html` 的 CSP 是 `connect-src 'self' https: wss:`，不含 `http:`，写成 `http://localhost:8204` 这类跨源明文地址会被浏览器直接拦掉（同源 `/` 不受影响）。
 
 ### 3. 启动开发服务器
 

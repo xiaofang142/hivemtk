@@ -183,8 +183,12 @@
 
           
           <div class="publish-section">
-            <div class="section-title">💰 生态上架配置</div>
-            <el-form label-width="120px" size="small">
+            <div class="section-title">{{ platformEnabled ? '💰 生态上架配置' : '📦 本地发布' }}</div>
+            <el-form
+              v-if="platformEnabled"
+              label-width="120px"
+              size="small"
+            >
               <el-form-item label="商业买断价">
                 <el-input v-model="bundle.price" placeholder="$ 299.00" />
               </el-form-item>
@@ -197,7 +201,7 @@
               </el-form-item>
             </el-form>
             <el-button type="primary" plain class="publish-btn" @click="handlePublish">
-              🚀 审核上架到官方蜂巢商城
+              {{ platformEnabled ? '🚀 审核上架到官方蜂巢商城' : '🚀 发布到本地资产库' }}
               <span class="publish-hint">（自动序列化为标准 messages 数组）</span>
             </el-button>
           </div>
@@ -216,6 +220,7 @@ import {
   weaveBundle, publishBundle, submitToPlatform
 } from '@/api/assetBundle'
 import { useUserStore } from '@/stores/user'
+import { SystemApi } from '@/api/system'
 
 const userStore = useUserStore()
 
@@ -223,6 +228,8 @@ const route = useRoute()
 const router = useRouter()
 const chatHistoryRef = ref(null)
 const saving = ref(false)
+// 关态下后端对上架写接口回 403，入口直接不渲染；取不到就按关态处理
+const platformEnabled = ref(false)
 
 const aid = computed(() => route.params.aid || '')
 const isEdit = computed(() => !!aid.value)
@@ -373,10 +380,17 @@ const handlePublish = async () => {
     ElMessage.warning('请先保存资产包')
     return
   }
+  const toPlatform = platformEnabled.value
   try {
-    await ElMessageBox.confirm('确认发布并上架该资产包？将本地发布并提交平台审核', '确认', { type: 'warning' })
+    await ElMessageBox.confirm(
+      toPlatform ? '确认发布并上架该资产包？将本地发布并提交平台审核' : '确认发布该资产包？发布后本地即可引用',
+      '确认', { type: 'warning' })
     await publishBundle(bundle.id)
     bundle.status = 'active'
+    if (!toPlatform) {
+      ElMessage.success('本地已发布')
+      return
+    }
     try {
       await submitToPlatform(bundle.id)
       ElMessage.success('本地已发布，并已提交平台审核上架')
@@ -503,6 +517,9 @@ const runSandbox = async () => {
 };
 
 onMounted(() => {
+  SystemApi.getInfo({ _silent: true })
+    .then((info) => { platformEnabled.value = info?.platform_enabled === true })
+    .catch(() => { platformEnabled.value = false })
   if (aid.value) {
     bundle.asset_id = aid.value
     loadBundle()

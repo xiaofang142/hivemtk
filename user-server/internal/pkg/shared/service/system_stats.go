@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"time"
 
+	"hivemtk-user/internal/config"
+
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -31,6 +33,9 @@ type SystemInfo struct {
 	NumGoroutine int     `json:"num_goroutine"`
 	AllocMemory  uint64  `json:"alloc_memory"`
 	SysMemory    uint64  `json:"sys_memory"`
+	// PlatformEnabled 平台集成是否启用（PLATFORM_ENABLED）。/api/system/info 是 public 端点，
+	// 前端启动即可拿到，用来隐藏那些"点了必然 403"的上架入口。
+	PlatformEnabled bool `json:"platform_enabled"`
 }
 
 // GetSystemInfo 获取系统信息
@@ -77,5 +82,7 @@ func (s *SystemStatsService) GetSystemInfo() (*SystemInfo, error) {
 		NumGoroutine: runtime.NumGoroutine(),
 		AllocMemory:  m.Alloc,
 		SysMemory:    m.Sys,
+
+		PlatformEnabled: config.PlatformEnabled(),
 	}, nil
 }

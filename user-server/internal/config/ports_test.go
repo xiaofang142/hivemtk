@@ -118,29 +118,44 @@ func TestPortsConstants(t *testing.T) {
 			}
 		}
 	})
+	// 所有 URL 常量的单一清单：NonEmpty 与 NoRetiredOnlineDomain 两条判据共用，
+	// 免得新增常量时只补一处、另一处静默漏检。
+	constants := map[string]string{
+		"DefaultListenPort":             DefaultListenPort,
+		"DefaultRedisPort":              DefaultRedisPort,
+		"DefaultPlatformPort":           DefaultPlatformPort,
+		"DefaultChromiumCDPPort":        DefaultChromiumCDPPort,
+		"DefaultUserServerBaseURL":      DefaultUserServerBaseURL,
+		"DefaultPlatformBaseURL":        DefaultPlatformBaseURL,
+		"DefaultWebsiteBaseURL":         DefaultWebsiteBaseURL,
+		"DefaultRemoteDebugURL":         DefaultRemoteDebugURL,
+		"DefaultLLMBaseURLDev":          DefaultLLMBaseURLDev,
+		"DefaultEmbeddingBaseURLDev":    DefaultEmbeddingBaseURLDev,
+		"DefaultRerankBaseURLDev":       DefaultRerankBaseURLDev,
+		"DefaultLLMBaseURLDocker":       DefaultLLMBaseURLDocker,
+		"DefaultEmbeddingBaseURLDocker": DefaultEmbeddingBaseURLDocker,
+		"DefaultRerankBaseURLDocker":    DefaultRerankBaseURLDocker,
+		"DefaultBGEBaseURLDev":          DefaultBGEBaseURLDev,
+		"DefaultBGEBaseURLDocker":       DefaultBGEBaseURLDocker,
+		"DefaultOllamaBaseURL":          DefaultOllamaBaseURL,
+	}
 	t.Run("NonEmpty", func(t *testing.T) {
-		all := map[string]string{
-			"DefaultListenPort":             DefaultListenPort,
-			"DefaultRedisPort":              DefaultRedisPort,
-			"DefaultPlatformPort":           DefaultPlatformPort,
-			"DefaultChromiumCDPPort":        DefaultChromiumCDPPort,
-			"DefaultUserServerBaseURL":      DefaultUserServerBaseURL,
-			"DefaultPlatformBaseURL":        DefaultPlatformBaseURL,
-			"DefaultPlatformAPI":            DefaultPlatformAPI,
-			"DefaultRemoteDebugURL":         DefaultRemoteDebugURL,
-			"DefaultLLMBaseURLDev":          DefaultLLMBaseURLDev,
-			"DefaultEmbeddingBaseURLDev":    DefaultEmbeddingBaseURLDev,
-			"DefaultRerankBaseURLDev":       DefaultRerankBaseURLDev,
-			"DefaultLLMBaseURLDocker":       DefaultLLMBaseURLDocker,
-			"DefaultEmbeddingBaseURLDocker": DefaultEmbeddingBaseURLDocker,
-			"DefaultRerankBaseURLDocker":    DefaultRerankBaseURLDocker,
-			"DefaultBGEBaseURLDev":          DefaultBGEBaseURLDev,
-			"DefaultBGEBaseURLDocker":       DefaultBGEBaseURLDocker,
-			"DefaultOllamaBaseURL":          DefaultOllamaBaseURL,
-		}
+		all := constants
 		for name, v := range all {
 			if v == "" {
 				t.Errorf("%s 不允许为空（禁软启动）", name)
+			}
+		}
+	})
+	// 已到期不续费的线上域（5 个 hive\*.xapptool 域）不得再出现在任何默认常量里——
+	// 那是"配置缺失时偷偷打公网"的唯一入口。仓内文案层面的清扫由
+	// scripts/check-no-xapptool.sh 覆盖，这条只管运行期默认值。
+	// retired 用拼接写：避免本文件被自己拦下（闸的白名单因此不用为测试开口子）。
+	t.Run("NoRetiredOnlineDomain", func(t *testing.T) {
+		const retired = "xapptool" + ".cn"
+		for name, v := range constants {
+			if strings.Contains(v, retired) {
+				t.Errorf("%s 指向已下线线上域 %q（实际 %q）：默认值只能是 localhost / 容器名 / GitHub Pages", name, retired, v)
 			}
 		}
 	})

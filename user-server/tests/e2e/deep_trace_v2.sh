@@ -18,9 +18,10 @@ FAIL=0
 pass() { echo "  [PASS] $1"; PASS=$((PASS+1)); }
 fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 
-# 登录
+# 登录（口令：SEED_PASSWORD 覆盖 > 仓库公开的演示默认值）
+ADMIN_PW="${SEED_PASSWORD:-Seed@123456}"
 TOKEN=$(curl -s -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"Seed@123456"}' | jq -r '.data.token')
+  -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PW\"}" | jq -r '.data.token')
 if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
   echo "LOGIN_FAIL"; exit 1
 fi

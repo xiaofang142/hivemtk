@@ -68,12 +68,12 @@ user-server 重启校验 install.lock   ◀────────┘
 | `internal/controller/system_init.go` | HTTP API：`GET /api/system/init-status` + `POST /api/system/init-complete` |
 | `internal/controller/auth.go` | `POST /api/system/init-admin`（由 AuthController.InitAdmin 提供） |
 | `internal/middleware/init_guard.go` | 初始化保护中间件：未完成初始化时仅放行白名单 API |
-| `internal/middleware/license_checker.go` | install.lock 状态查询封装（开源版不校验 LicenseKey） |
+| `internal/middleware/install_status.go` | install.lock 状态查询封装（无任何授权概念） |
 
 > **开源版变更**：
 > - 移除原 `init-license` 步骤与 LicenseKey 字段
 > - 移除 `must_change_password` 强制改密机制（commit 65079e5）
-> - 移除 `PLATFORM_LICENSE_SECRET` HMAC 签名与 7 天免费试用
+> - 移除 `PLATFORM_LICENSE_SECRET` HMAC 签名与按到期日倒计时的试用提示
 
 ---
 
@@ -121,7 +121,7 @@ docker compose up -d user-server
 └────────────────────────────────────────────┘
 ```
 
-> 开源版无需 LicenseKey。手机号、邮箱、姓名均为选填，作为商户联系信息上报平台端。
+> 无需任何授权码：手机号、邮箱、姓名均为选填，仅在平台集成开启（`PLATFORM_ENABLED=true`）时作为商户联系信息上报本地 platform-server。
 
 ### 3.3 创建超管账号
 
@@ -169,8 +169,8 @@ http://<your-server-ip>:8204/login
 完成上述步骤后：
 
 - 系统正式可用
-- 所有功能（AI / RAG / 客服 / 营销）全开放，无 License 范围限制
-- 平台端心跳上报为 best-effort：失败仅 Warn，不影响本地业务
+- 所有功能（AI / RAG / 客服 / 营销）全开放，不存在按授权解锁的功能开关
+- 平台集成关闭（默认）时不向任何地址上报；开启后心跳也是 best-effort：失败仅 Warn，不影响本地业务
 
 ---
 
@@ -194,13 +194,15 @@ http://<your-server-ip>:8204/login
 | `initialized` | bool | 是否已完成初始化向导 |
 | `version` | string | 客户端版本号（用于统计上报） |
 
-> **不包含**：`license_key` / `expires_at` / `company` / `contact_email` / `signature` 等授权相关字段（已移除）。
+> **不包含**：`license_key` / `expires_at` / `company` / `contact_email` / `signature` 等授权相关字段（本版无授权流程，install.lock 里从未有这些键）。
 
 ---
 
-## 五、平台端心跳上报（best-effort）
+## 五、平台端心跳上报（可选，默认关闭）
 
-user-server 初始化完成后，会通过 `PLATFORM_API_URL` 向平台端低频上报心跳与安装信息：
+平台端是可选本地组件。`PLATFORM_ENABLED` 未开启（默认）时本节整条链路不装配：不读平台配置、不注册商户、不起心跳，不发一个请求。
+
+开启后（`PLATFORM_ENABLED=true` + 配好 `config/platform.yaml` 的 `api_url`），user-server 初始化完成后向平台端低频上报：
 
 - `POST /api/platform/install` — 安装信息上报（一次性）
 - `POST /api/platform/heartbeat` — 周期性心跳
@@ -209,13 +211,13 @@ user-server 初始化完成后，会通过 `PLATFORM_API_URL` 向平台端低频
 
 - 失败仅 `Warn` 日志，**不阻塞**本地业务
 - 平台端不可达时，user-server 仍正常运行
-- 用于平台端统计商户活跃度与版本分布，不用于授权校验
+- 只用于平台端统计商户活跃度与版本分布；本版没有任何"上报了才能用"的判定
 
 ---
 
 ## 六、安全
 
-- `install.lock` 不含敏感凭证（无 HMAC 签名、无 LicenseKey）
+- `install.lock` 不含敏感凭证（无 HMAC 签名、无授权码）
 - 超管密码使用 bcrypt 哈希存储（cost=10）
 - JWT 鉴权：登录后下发 token，后续 API 携带 `Authorization: Bearer <token>`
 - 迁移机器后 `install.lock` 可直接复制（无需重新初始化，但建议重新生成 `install_id`）
@@ -232,7 +234,7 @@ user-server 初始化完成后，会通过 `PLATFORM_API_URL` 向平台端低频
 | `internal/controller/auth.go` | `POST /api/system/init-admin`（`AuthController.InitAdmin`） |
 | `internal/service/auth.go` | `AuthService.InitAdmin`：超管创建主逻辑 |
 | `internal/middleware/init_guard.go` | 初始化保护中间件（未 `INITIALIZED` 时拦截业务 API） |
-| `internal/middleware/license_checker.go` | install.lock 状态查询封装（开源版不校验 LicenseKey） |
+| `internal/middleware/install_status.go` | install.lock 状态查询封装（无任何授权概念） |
 | `internal/model/system_user.go` | `system_users` 模型（已移除 `must_change_password` 字段） |
 
 ---

@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/repository"
 )
 
@@ -11,7 +12,12 @@ type AssetMarketClientAdapter struct {
 	inner *AssetMarketClient
 }
 
+// NewPlatformAPIClient 按平台集成开关装配市场客户端。
+// 开关是进程级常量（启动时读一次环境变量），所以在装配点判即可，无需每次调用再查。
 func NewPlatformAPIClient() repository.PlatformAPIClient {
+	if !config.PlatformEnabled() {
+		return disabledClient{}
+	}
 	return &AssetMarketClientAdapter{inner: NewAssetMarketClient()}
 }
 

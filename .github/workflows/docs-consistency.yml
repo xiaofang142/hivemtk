@@ -25,6 +25,8 @@ on:
       - 'scripts/check-doc-consistency.sh'
       - 'scripts/check-feature-doc.sh'
       - 'scripts/feature-doc-coverage-report.sh'
+      - 'scripts/check-no-xapptool.sh'
+      - 'scripts/check-no-xapptool.test.sh'
       - 'CODEOWNERS'
       - '.github/workflows/docs-consistency.yml'
   pull_request:
@@ -33,6 +35,8 @@ on:
       - 'scripts/check-doc-consistency.sh'
       - 'scripts/check-feature-doc.sh'
       - 'scripts/feature-doc-coverage-report.sh'
+      - 'scripts/check-no-xapptool.sh'
+      - 'scripts/check-no-xapptool.test.sh'
       - 'CODEOWNERS'
       - '.github/workflows/docs-consistency.yml'
   workflow_dispatch:
@@ -57,3 +61,15 @@ jobs:
       - name: 模板覆盖率报告（OPT-DOC-14，仅报告）
         continue-on-error: true
         run: bash scripts/feature-doc-coverage-report.sh
+
+      - name: check-no-xapptool（线上域防回流）
+        # 2026-09-21：hive / hiveuser 服务器到期不续费，仓库内任何文件都不得再把
+        # 已下线线上域当默认值或示例。命中数即本批待清清单（当前为迁移期红）。
+        # 白名单只有 4 条：设计/计划文档（要能核对改了谁）+ 闸自身与它的反向测试
+        # （二者源码必须写出被拦模式，属自引用）。
+        run: bash scripts/check-no-xapptool.sh
+
+      - name: check-no-xapptool 反向测试（证明上一步能红）
+        # 恒绿的门等于没有门：注入 1 行违规必须让命中数 +1 且红因指向夹具，
+        # 撤掉必须回到基线。已实测：把夹具加进白名单后本步会 BROKEN。
+        run: bash scripts/check-no-xapptool.test.sh

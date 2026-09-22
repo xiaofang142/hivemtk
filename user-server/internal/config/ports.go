@@ -31,7 +31,9 @@ const (
 
 	DefaultPlatformBaseURL = "http://localhost:" + DefaultPlatformPort
 
-	DefaultPlatformAPI = "https://hivepaltformapi.xapptool.cn"
+	// DefaultWebsiteBaseURL 官网基址（GitHub Pages 项目页形态，带 /hivemtk 路径前缀）。
+	// 单一源：本常量；运行期覆盖：GEO_SITE_BASE_URL。
+	DefaultWebsiteBaseURL = "https://xiaofang142.github.io/hivemtk"
 
 	DefaultRemoteDebugURL = "http://localhost:" + DefaultChromiumCDPPort
 

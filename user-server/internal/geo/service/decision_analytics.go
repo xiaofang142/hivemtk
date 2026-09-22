@@ -161,6 +161,34 @@ func safeDivF(a, b int64) float64 {
 	return float64(a) / float64(b)
 }
 
+// selfBrandSOV 摘要卡片里的 avg_sov：与 GET /geo/sov 同口径，
+// 即"自家品牌在全部品牌提及次数中的占比"，取最近 500 条探针记录。
+// 品牌名来自 geo_config.brand_name；配置缺失、读取失败、无探针数据或
+// 自家品牌零提及都返回 0——宁可为 0 也不再回填写死的展示常量。
+func (s *GeoDecisionAnalyticsService) selfBrandSOV(ctx context.Context) float64 {
+	if s.configRepo == nil || s.probeRepo == nil {
+		return 0
+	}
+	cfg, err := s.configRepo.Get()
+	if err != nil || cfg == nil {
+		return 0
+	}
+	brand := strings.TrimSpace(cfg.BrandName)
+	if brand == "" {
+		return 0
+	}
+	entries, err := s.GetShareOfVoiceBetween(ctx, "", time.Time{}, time.Time{})
+	if err != nil {
+		return 0
+	}
+	for _, e := range entries {
+		if e.Brand == brand {
+			return e.SOV
+		}
+	}
+	return 0
+}
+
 // RecordCrawlerVisit 记录 AI 引擎爬虫访问（关键词维度）
 func (s *GeoDecisionAnalyticsService) RecordCrawlerVisit(ctx context.Context, keyword, userAgent, path, engine string) error {
 	return s.crawler.Create(ctx, &model.GeoCrawlerVisit{
@@ -200,7 +228,10 @@ type KeywordCompareRow struct {
 	TotalEngines     int              `json:"total_engines"`
 }
 
-// DomainCompareRow 域名维度 HiveMTK vs 竞品 排名
+// DomainCompareRow 域名维度 自家站 vs 竞品 排名
+//
+// IsHiveMTK 取自仓储按"官网基址 + 路径边界"算出的 IsSelfSite，
+// 不再等于"host 撞上某个写死域名"；JSON 键名保留 is_hivemtk 以兼容前端。
 type DomainCompareRow struct {
 	Domain      string  `json:"domain"`
 	IsHiveMTK   bool    `json:"is_hivemtk"`
@@ -209,8 +240,6 @@ type DomainCompareRow struct {
 	SharePct    float64 `json:"share_pct"`
 	SourceLevel string  `json:"source_level"`
 }
-
-const hivemtkDomain = "hive.xapptool.cn"
 
 // GetCrawlerStats 返回关键词 + 域名 + 对比 三维度
 func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*CrawlerStatsResponse, error) {
@@ -231,6 +260,7 @@ func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*Cra
 
 	kwCompare := computeKeywordCompare(keywordRows)
 	domainCompare, hivemtkVisits, compVisits, coverage := computeDomainCompare(domainRows)
+	avgSOV := s.selfBrandSOV(ctx)
 
 	return &CrawlerStatsResponse{
 		Summary: CrawlerStatsSummary{
@@ -239,7 +269,7 @@ func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*Cra
 			ActiveEngines:    activeEngines,
 			ActiveDomains:    activeDomains,
 			ALevelCount:      aLevelCount,
-			AvgSOV:           73.90,
+			AvgSOV:           avgSOV,
 			HiveMTKVisits:    hivemtkVisits,
 			CompetitorVisits: compVisits,
 		},
@@ -289,6 +319,7 @@ func computeDomainCompare(domainRows []repository.DomainStatRow) ([]DomainCompar
 		visits  int64
 		engines map[string]bool
 		level   string
+		self    bool
 	}
 	bucket := map[string]*domAgg{}
 	for _, r := range domainRows {
@@ -299,14 +330,18 @@ func computeDomainCompare(domainRows []repository.DomainStatRow) ([]DomainCompar
 		}
 		d.visits += r.VisitCount
 		d.engines[r.Engine] = true
+		d.self = d.self || r.IsSelfSite
 	}
 
 	var totalAll int64
+	for _, d := range bucket {
+		totalAll += d.visits
+	}
+
 	var hivemtkVisits, compVisits int64
 	out := make([]DomainCompareRow, 0, len(bucket))
 	for domain, d := range bucket {
-		totalAll += d.visits
-		isHive := domain == hivemtkDomain
+		isHive := d.self
 		if isHive {
 			hivemtkVisits = d.visits
 		} else {

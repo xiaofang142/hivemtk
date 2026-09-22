@@ -1,14 +1,19 @@
-# 平台端地址
-# 单一源：user-server/internal/config/ports.go → DefaultPlatformAPI / DefaultPlatformPort
+# 平台端地址（可选本地组件；仅当环境变量 PLATFORM_ENABLED=true 时本文件才会被读取）
+# 单一源：user-server/internal/config/ports.go → DefaultPlatformPort
 # 文档源：DEVELOPMENT.md §2.4 端口对照表 | 8205 | platform-server
-# 需求：hivemtk 初始化后直接将安装信息上报到该平台。
+# 需求：自建并启用 platform-server 时，把安装信息/心跳上报到该平台。
+#
+# 开关（见 internal/config/platform.go PlatformEnabled）：
+#   - 默认关闭 = 纯本地模式：本文件完全不读、不注册商户、不心跳，
+#     资产市场等平台侧读接口返回空数据，本地资产构建与运行不受影响。
+#   - PLATFORM_ENABLED=true 才进入下面的地址解析。
 #
 # 重要：本文件【禁止】硬编码任何具体域名作为默认。
 # 实际地址必须由环境变量注入，解析优先级（见 internal/config/platform.go LoadPlatform）：
 #   1. PLATFORM_API_HOST   （宿主机部署：同机 http://127.0.0.1:8205，跨机 https://api.example.com）
 #   2. 本字段 api_url（支持 ${VAR} 展开，留空则由环境变量决定）
-# 两者皆空 → 启动报错。
-# 本地联调：在 .env 中设 PLATFORM_API_HOST=http://127.0.0.1:8205
+# 开关开启且两者皆空 → 启动报错；开关关闭 → 不报错，PlatformCfg 保持 nil。
+# 本地联调：在 .env 中设 PLATFORM_ENABLED=true 与 PLATFORM_API_HOST=http://127.0.0.1:8205
 api_url: "${PLATFORM_API_HOST}"
 # 商户端密钥（32 位，与平台端配置一致）
 # 私域合规基线 §7.2：通过环境变量 MERCHANT_API_SECRET 注入，禁止明文落库

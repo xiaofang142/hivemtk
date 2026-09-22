@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# deep_system.sh - 系统/许可/应用配置/监控追踪 深度测试 (仅只读与安全写, 不触发重启/迁移)
+# deep_system.sh - 系统/应用配置/监控追踪 深度测试 (仅只读与安全写, 不触发重启/迁移)
 set +u
 cd "$(dirname "$0")"
 source ./deep_lib.sh
 
-echo "================ 系统/许可/配置/监控 深度测试 ================"
+echo "================ 系统/配置/监控 深度测试 ================ "
 mtk_login || { echo "LOGIN_FAIL"; exit 1; }
 U="$(date +%sN | tail -c 7)"
 
@@ -16,13 +16,13 @@ info "GET /api/system/init-status"
 api GET "/api/system/init-status"
 [ "$API_HTTP" = "200" ] && pass "system/init-status 200" || info "system/init-status http=$API_HTTP (info)"
 
-# ---------------- license ----------------
-info "GET /api/license/status"
-api GET "/api/license/status"
-[ "$API_HTTP" = "200" ] && pass "license/status 200" || fail "license/status http=$API_HTTP"
-info "GET /api/license/features"
-api GET "/api/license/features"
-[ "$API_HTTP" = "200" ] && pass "license/features 200" || fail "license/features http=$API_HTTP"
+# ---------------- 授权端点必须不存在 ----------------
+# 开源版无授权流程：/api/license/* 曾恒真返回 "licensed: true"，2026-09 已连 handler 删除。
+for p in /api/license/status /api/license/features; do
+	info "GET $p"
+	api GET "$p"
+	[ "$API_HTTP" = "404" ] && pass "$(basename "$p") 404 (端点已移除)" || fail "$p 期望 404, 实际 $API_HTTP"
+done
 
 # ---------------- app-config ----------------
 info "GET /api/app-config"

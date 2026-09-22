@@ -1,9 +1,11 @@
 # ============================================================
-# 【固定凭据标记 - 禁止修改】
-# admin 账号密码: admin / Seed@123456
+# 【固定凭据标记 - 记录默认演示口令的哈希，勿改本行哈希】
+# admin 账号默认口令: admin / Seed@123456
 # 更新时间: 2026-09-01 (bcrypt $2a$10$yyJ9iTVx5WkJulTHFWO1nufMhkDyrA3pAbx381DJXxei8UDLh3WUG)
-# 来源: cmd/seed/seed_users.go seedPassword 常量
-# 后续不得修改此密码 — 如需新用户请走 /api/auth/register 或创建新 seed 脚本
+# 来源: cmd/seed/seed_users.go seedPassword（默认值 = seedPasswordDefault）
+# 部署方换口令：SEED_PASSWORD（或 ADMIN_PASSWORD）传给 scripts/bootstrap.sh，
+# cmd/seed 会用新口令写演示账号，本行记录的哈希随之仅作历史参考；
+# 需要新哈希时用 go run ./cmd/pwtool '<新口令>'。本文件的哈希值不参与鉴权，勿改。
 # ============================================================
 
 platform_api:
@@ -115,14 +117,15 @@ inference:
 # ============================================================
 # 对象存储配置（密钥通过环境变量注入，不落配置文件）
 # ============================================================
-# 七牛云 AK/SK 由 QINIU_ACCESS_KEY / QINIU_SECRET_KEY 环境变量提供。
+# 七牛云 AK/SK 由 QINIU_ACCESS_KEY / QINIU_SECRET_KEY 环境变量提供
+# （走下方 ${VAR} 占位插值；留空时 /api/chat/public/upload-token 返回 503「对象存储未配置」）。
 storage:
   type: qiniu
   qiniu:
-    access_key: ""
-    secret_key: ""
-    bucket: ""
-    domain: ""
+    access_key: "${QINIU_ACCESS_KEY:}"
+    secret_key: "${QINIU_SECRET_KEY:}"
+    bucket: "${QINIU_BUCKET:}"
+    domain: "${QINIU_DOMAIN:}"
 
 # 多语言方案配置（v1.2 出海多语言 P1-2）
 # 低资源语言（ar/th/vi/hi/tr）LLM 输出质量不稳定，启用后走 DeepL 翻译降级路径：

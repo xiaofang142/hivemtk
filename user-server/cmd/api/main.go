@@ -196,39 +196,27 @@ func main() {
 	defer cacheJanitorCancel()
 	llm.GetGlobalDispatcher().StartCacheJanitor(cacheJanitorCtx, 60*time.Second)
 
-	if err := config.LoadPlatform("config/platform.yaml"); err != nil {
-		logger.Errorf("平台配置加载失败（PlatformCfg 未初始化，商户上报/授权同步将不可用）：%v", err)
+	// 平台集成是可选本地组件：PLATFORM_ENABLED 未开启时整条链路不装配
+	// （不读配置、不注册商户、不心跳、不发一个请求），本地资产与运行链路不受影响。
+	if !config.PlatformEnabled() {
+		logger.Info("[启动] 平台集成关闭（PLATFORM_ENABLED 未设置）：不加载平台配置、不注册商户、不心跳；" +
+			"资产市场与平台上报类端点返回空数据，本地资产构建与运行不受影响")
 	} else {
-		source := "platform.yaml 默认值"
-		if v := os.Getenv("PLATFORM_URL"); v != "" {
-			source = "PLATFORM_URL 环境变量"
+		if err := config.LoadPlatform("config/platform.yaml"); err != nil {
+			logger.Errorf("平台配置加载失败（PlatformCfg 未初始化，商户上报/资产市场将不可用）：%v", err)
+		} else {
+			logger.Infof("[平台配置] api_url=%s", config.PlatformURL())
 		}
-		logger.Infof("[平台配置] api_url=%s（来源：%s）", config.PlatformCfg.APIURL, source)
+		// 必须在 LoadPlatform 之后：InitSync 的注册协程要读 PlatformCfg
+		if err := platform.InitSync(); err != nil {
+			logger.Errorf("平台同步初始化失败：%v", err)
+		}
+		platform.StartHeartbeat(context.Background())
 	}
-
-	// 必须在 LoadPlatform 之后：InitSync 的注册协程要读 PlatformCfg
-	if err := platform.InitSync(); err != nil {
-		logger.Errorf("平台同步初始化失败：%v", err)
-	}
-
-	platformURL := ""
-	if config.PlatformCfg != nil {
-		platformURL = config.PlatformCfg.APIURL
-	}
-	if platformURL == "" {
-		platformURL = os.Getenv("PLATFORM_API_URL")
-	}
-	if platformURL == "" {
-		platformURL = os.Getenv("PLATFORM_URL")
-	}
-	if platformURL == "" {
-		platformURL = config.DefaultPlatformAPI
-	}
-	middleware.InitLicenseChecker(platformURL, "")
-	logger.Infof("[启动] 初始化上报检查器（install.lock + 3 分钟心跳 + 9 分钟容错）")
+	middleware.InitInstallStatus()
+	logger.Info("[启动] 初始化安装态检查器（只读本地 install.lock，无平台依赖）")
 
 	install.SetAdminProbe(service.NewSystemUserService().GetFirstAdminUsername)
-	platform.StartHeartbeat(context.Background())
 
 	if os.Getenv("GIN_MODE") == "debug" {
 		gin.SetMode(gin.DebugMode)

@@ -26,7 +26,8 @@ TOKEN=""
 PLAT_TOKEN=""
 
 mtk_login() {
-  local pw="${1:-Seed@123456}"
+  # 口令来源与 bootstrap 同一条链：显式入参 > SEED_PASSWORD > 仓库公开的演示默认值
+  local pw="${1:-${SEED_PASSWORD:-Seed@123456}}"
   local resp
   resp=$(curl -s --max-time 15 -X POST "$BASE/api/auth/login" \
     -H 'Content-Type: application/json' \

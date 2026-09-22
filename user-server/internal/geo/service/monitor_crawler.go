@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -24,39 +25,58 @@ var aiBotUserAgents = []string{
 	"Meta-ExternalAgent/1.0 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)",
 }
 
+// keywordToLandings 关键词 → 官网落地路径。
+//
+// 这里刻意只存**路径**不存完整 URL：官网基址是运行期配置（GEO_SITE_BASE_URL，
+// 默认见 config.DefaultWebsiteBaseURL），域名换了改一处配置即可，不必再回来动这张表。
+// 路径必须全部落在官网真实路由上（/ /features /toolchain /workflow /docs /faq /deploy），
+// 由 site_base_test.go 逐条把门——爬虫投给 AI 引擎的每个落地页都得是活页。
 var keywordToLandings = map[string][]string{
+	"GEO优化":   {"/", "/features", "/docs"},
+	"AI搜索优化":  {"/features", "/"},
+	"生成式引擎优化": {"/features", "/"},
+	"LLM SEO": {"/features", "/docs"},
 
-	"GEO优化":   {"https://hive.xapptool.cn/", "https://hive.xapptool.cn/blog/geo-optimization", "https://hive.xapptool.cn/docs/geo"},
-	"AI搜索优化":  {"https://hive.xapptool.cn/blog/ai-search-optimization", "https://hive.xapptool.cn/"},
-	"生成式引擎优化": {"https://hive.xapptool.cn/blog/generative-engine-optimization", "https://hive.xapptool.cn/"},
-	"LLM SEO": {"https://hive.xapptool.cn/blog/llm-seo", "https://hive.xapptool.cn/docs/geo"},
+	"私域AI营销":   {"/features", "/workflow"},
+	"AI自动谈单":   {"/workflow", "/features"},
+	"全渠道触达引擎":  {"/features", "/"},
+	"多账号聚合中枢":  {"/features", "/"},
+	"销冠SOP智能体": {"/workflow", "/"},
+	"客户CDP画像":  {"/features", "/"},
 
-	"私域AI营销":   {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/product/private-ai", "https://hive.xapptool.cn/pricing"},
-	"AI自动谈单":   {"https://hive.xapptool.cn/product/ai-agent", "https://hive.xapptool.cn/blog/ai-talk"},
-	"全渠道触达引擎":  {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/"},
-	"多账号聚合中枢":  {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/"},
-	"销冠SOP智能体": {"https://hive.xapptool.cn/product/ai-agent", "https://hive.xapptool.cn/"},
-	"客户CDP画像":  {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/"},
+	"HiveMTK 怎么样": {"/", "/faq", "/features"},
+	"HiveMTK 开源":  {"/", "/docs"},
+	"HiveMTK 部署":  {"/docs", "/deploy"},
+	"HiveMTK":     {"/"},
 
-	"HiveMTK 怎么样": {"https://hive.xapptool.cn/", "https://hive.xapptool.cn/pricing", "https://hive.xapptool.cn/faq"},
-	"HiveMTK 开源":  {"https://hive.xapptool.cn/", "https://hive.xapptool.cn/docs"},
-	"HiveMTK 部署":  {"https://hive.xapptool.cn/docs", "https://hive.xapptool.cn/docs/deployment"},
-	"HiveMTK":     {"https://hive.xapptool.cn/"},
+	"HiveMTK vs 微伴助手":     {"/features", "/"},
+	"HiveMTK vs HubSpot":  {"/features", "/"},
+	"HiveMTK vs 探马SCRM":   {"/features", "/"},
+	"HiveMTK vs Intercom": {"/features", "/"},
+	"HiveMTK vs 传统SCRM":   {"/features", "/"},
 
-	"HiveMTK vs 微伴助手":     {"https://hive.xapptool.cn/blog/hivemtk-vs-weiban", "https://hive.xapptool.cn/"},
-	"HiveMTK vs HubSpot":  {"https://hive.xapptool.cn/blog/hivemtk-vs-hubspot", "https://hive.xapptool.cn/"},
-	"HiveMTK vs 探马SCRM":   {"https://hive.xapptool.cn/blog/hivemtk-vs-tanma", "https://hive.xapptool.cn/"},
-	"HiveMTK vs Intercom": {"https://hive.xapptool.cn/blog/hivemtk-vs-intercom", "https://hive.xapptool.cn/"},
-	"HiveMTK vs 传统SCRM":   {"https://hive.xapptool.cn/blog/hivemtk-vs-traditional", "https://hive.xapptool.cn/"},
+	"医美连锁 私域运营":    {"/features", "/workflow"},
+	"保险经纪 AI 销售工具": {"/features", "/workflow"},
+	"房产中介 SOP 智能体": {"/workflow", "/features"},
+	"家居定制 AI 获客":   {"/features", "/"},
 
-	"医美连锁 私域运营":    {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/case"},
-	"保险经纪 AI 销售工具": {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/case"},
-	"房产中介 SOP 智能体": {"https://hive.xapptool.cn/product/ai-agent", "https://hive.xapptool.cn/case"},
-	"家居定制 AI 获客":   {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/"},
+	"Docker一键部署 AI营销系统": {"/deploy", "/"},
+	"本地LLM推理 数据安全":      {"/toolchain", "/"},
+	"AI 自动回复 不封号":       {"/features", "/workflow"},
+}
 
-	"Docker一键部署 AI营销系统": {"https://hive.xapptool.cn/docs/deployment", "https://hive.xapptool.cn/"},
-	"本地LLM推理 数据安全":      {"https://hive.xapptool.cn/docs", "https://hive.xapptool.cn/"},
-	"AI 自动回复 不封号":       {"https://hive.xapptool.cn/product", "https://hive.xapptool.cn/"},
+// landingURLs 把关键词翻译成要爬的绝对 URL；没配过关键词的兜底是官网首页。
+func landingURLs(kw string) []string {
+	base := config.WebsiteBaseURL()
+	paths, ok := keywordToLandings[kw]
+	if !ok {
+		paths = []string{"/"}
+	}
+	urls := make([]string, 0, len(paths))
+	for _, p := range paths {
+		urls = append(urls, base+p)
+	}
+	return urls
 }
 
 type competitorSeed struct {
@@ -119,12 +139,8 @@ func (s *MonitorCrawlerService) RunCrawlerCron(ctx context.Context) (int, error)
 
 	for _, kw := range kws {
 
-		if landings, ok := keywordToLandings[kw]; ok {
-			for _, u := range landings {
-				tasks = append(tasks, task{Keyword: kw, URL: u, IsHiveMTK: true})
-			}
-		} else {
-			tasks = append(tasks, task{Keyword: kw, URL: "https://hive.xapptool.cn/", IsHiveMTK: true})
+		for _, u := range landingURLs(kw) {
+			tasks = append(tasks, task{Keyword: kw, URL: u, IsHiveMTK: true})
 		}
 
 		for _, comp := range competitors {

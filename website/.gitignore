@@ -1,0 +1,71 @@
+# ============================================================
+# 平台端官网 (website) - .gitignore
+# Vue + Vite 项目，路径相对于 website/ 目录本身
+# ============================================================
+
+# ---------- 日志 ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.workbuddy-ai/*
+
+# ---------- 依赖 ----------
+node_modules/
+
+# ---------- 构建产物 ----------
+dist/*
+!dist/.gitkeep
+dist-ssr
+*.local
+
+# ---------- 环境配置 ----------
+# 纯静态站点没有任何 VITE_ 变量读取点，故不再提供 .env 模板；
+# 保留下面的规则，防止本地临时加的私有 env 误入库。
+.env
+.env.*
+
+# ---------- 编辑器 / IDE ----------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.claude/
+.trae/
+.sisyphus/
+*.swp
+*.swo
+*~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+
+# ---------- Playwright ----------
+playwright-report/
+test-results/
+playwright/.cache
+
+# ---------- 证书和密钥 ----------
+*.pem
+*.key
+*.crt
+*.p12
+
+# ---------- 备份与缓存 ----------
+*.bak
+*.backup
+*.bak.*
+backups/
+# check_i18n.mjs 每次跑都会重写
+.i18n-missing.jsonl
+.i18n-orphans.jsonl
+.i18n-parity.jsonl
+# workflow 的 npm audit 步骤与本地复跑都会落地这份报告
+npm-audit.json

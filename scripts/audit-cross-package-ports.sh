@@ -224,7 +224,8 @@ for f in \
   "$SELF_NAME/user-web/vite.config.js" \
   "hivemtk-platform/platform-web/vite.config.js" \
   "hivemtk-platform/platform-contributor/vite.config.js" \
-  "hivemtk-platform/website/vite.config.js"
+  "$SELF_NAME/website/vite.config.js" \
+  "$SELF_NAME/website/dev-server.cjs"
 do
   if [[ -f "$REPO_ROOT/$f" ]]; then
     if grep -qE "单一源约束|单一文档源|单一代码源" "$REPO_ROOT/$f"; then

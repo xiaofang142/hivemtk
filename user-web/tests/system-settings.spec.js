@@ -38,7 +38,7 @@ async function mockApi(route, request) {
 
   if (url.includes('/api/auth/login')) return json({ token: 'mock-token', user: { id: 1, username: 'admin', role: 'admin' } })
   if (url.includes('/api/user/info') || url.includes('/api/auth/info') || url.includes('/api/auth/me') || url.includes('/api/auth/userInfo'))
-    return json({ id: 1, username: 'admin', role: 'admin', email: 'admin@xapptool.cn' })
+    return json({ id: 1, username: 'admin', role: 'admin', email: 'admin@example.com' })
   if (url.includes('/api/system/menu') || url.includes('/api/menu')) return json([])
   if (url.includes('/api/system/init-status')) return json({ initialized: true, needSetup: false, adminExists: true, configComplete: true })
 
@@ -86,7 +86,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
     await context.addInitScript(() => {
       localStorage.setItem('system_initialized', 'true')
       localStorage.setItem('token', 'mock-token')
-      localStorage.setItem('user_info', JSON.stringify({ id: 1, username: 'admin', role: 'admin', email: 'admin@xapptool.cn' }))
+      localStorage.setItem('user_info', JSON.stringify({ id: 1, username: 'admin', role: 'admin', email: 'admin@example.com' }))
     })
   })
 

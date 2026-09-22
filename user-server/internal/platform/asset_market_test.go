@@ -145,6 +145,8 @@ func TestAssetMarketClient(t *testing.T) {
 }
 
 func TestAssetMarketClientAdapter(t *testing.T) {
+	// 本用例验的是真实适配器：工厂在关态会返回 disabledClient，必须显式开态
+	t.Setenv("PLATFORM_ENABLED", "true")
 	srv := newMarketTestServer(t)
 	defer srv.Close()
 	t.Setenv("MERCHANT_API_SECRET", "s")

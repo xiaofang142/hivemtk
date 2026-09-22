@@ -13,8 +13,8 @@ import (
 //   - 系统 INITIALIZED：放行
 //   - 白名单路由（init-*/login/health 等）直接放行
 //
-// 授权过期/暂停/吊销拦截、首次强制改密拦截未启用
-// （hivemtk 已全面开源，无授权流程，且不再强制新账号改密）。
+// 本守卫只看一件事：install.lock 里 initialized 是否为真。
+// hivemtk 已全面开源，没有授权态可拦，也不再强制新账号改密。
 func InitGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.FullPath()
@@ -22,7 +22,7 @@ func InitGuard() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		checker := GetLicenseChecker()
+		checker := GetInstallStatus()
 		if checker == nil {
 			c.Next()
 			return
@@ -48,17 +48,6 @@ func InitGuard() gin.HandlerFunc {
 	}
 }
 
-// InitState 常量（与 auth.InitState* 保持一致）
-const (
-	InitStateNotInstalled     = "NOT_INSTALLED"
-	InitStateHasLicense       = "HAS_LICENSE"
-	InitStateHasAdmin         = "HAS_ADMIN"
-	InitStateInitialized      = "INITIALIZED"
-	InitStateLicenseExpired   = "LICENSE_EXPIRED"
-	InitStateLicenseSuspended = "LICENSE_SUSPENDED"
-	InitStateLicenseRevoked   = "LICENSE_REVOKED"
-)
-
 func isInitWhitelist(path string) bool {
 	whitelist := map[string]bool{
 		"/api/system/init-status":          true,
@@ -69,7 +58,6 @@ func isInitWhitelist(path string) bool {
 		"/api/auth/refresh-token":          true,
 		"/api/auth/change-password":        true,
 		"/api/auth/current-user":           true,
-		"/api/merchant/init":               true,
 		"/api/system/create-default-admin": true,
 		"/s/:code":                         true,
 		"/l/:code":                         true,

@@ -18,13 +18,10 @@ OK	user	POST	/api/auth/mfa/verify	400
 OK	user	GET	/api/system/init-status	200
 OK	user	POST	/api/system/init-admin	403
 OK	user	POST	/api/system/init-complete	200
-OK	user	GET	/api/license/status	200
-OK	user	GET	/api/license/features	200
 OK	user	GET	/api/s/:code	404
 OK	user	GET	/api/l/:code	404
 OK	user	GET	/api/livecode/:id	404
 OK	user	POST	/api/livecode/:id/click	404
-OK	user	POST	/api/platform/register	400
 OK	user	POST	/api/knowledge-merchant/external/import	400
 OK	user	POST	/api/chat/ingress	400
 OK	user	GET	/api/douyin-card/list	200

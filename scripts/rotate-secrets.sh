@@ -171,6 +171,10 @@ for t in $TARGETS; do
   mkdir -p "$BK" && chmod 700 "$BK"
   log "轮换 $name（新值长度 ${#new}，不打印明文）"
 
+  # 只处理"落点里确实有这个键"的文件：PLATFORM_LICENSE_SECRET 已随授权功能下线从两侧 .env 删除，
+  # 若把"键不存在"计入写后校验，--all-burned 会永久红、下面的备份计数还会报文件不存在。
+  # 判定结果经文件回传（warn 走 stdout，用命令替换捕获会把提示语当成数据）。
+  : > "$BK/old.tsv"
   printf '%s\n' "$loc" | tr ';' '\n' | while IFS=: read -r ef key; do
     [ -n "$ef" ] || continue
     f=$(envfile_path "$ef") || continue
@@ -179,10 +183,13 @@ for t in $TARGETS; do
     printf '%s\t%s\t%s\n' "$f" "$key" "$old" >> "$BK/old.tsv"
     write_key "$f" "$key" "$new" && log "  写入 $(basename "$(dirname "$f")")/$(basename "$f"):$key"
   done
+  if [ ! -s "$BK/old.tsv" ]; then
+    warn "$name：所有落点都已无此键 —— 该凭证已随功能下线，无需轮换"
+    rm -rf "$BK"; continue
+  fi
 
-  # 写后校验：键的每一条重复出现都必须是新值，且不能误伤别的键
-  bad=$(printf '%s\n' "$loc" | tr ';' '\n' | while IFS=: read -r ef key; do
-    f=$(envfile_path "$ef") || continue
+  # 写后校验：只核"原本就有这个键"的落点，键的每一条重复出现都必须是新值，且不能误伤别的键
+  bad=$(cut -f1,2 "$BK/old.tsv" | while IFS=$'\t' read -r f key; do
     grep -E "^[[:space:]]*${key}=" "$f" | grep -qxF "${key}=${new}" || echo "$f:$key 未全部更新"
   done)
   [ -n "$bad" ] && { err "写后校验失败：$bad"; rc=1; }

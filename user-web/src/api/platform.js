@@ -7,13 +7,5 @@ export const platformAPI = {
 
   markMessageRead(messageId) {
     return http.post(`/api/platform/message/${messageId}/read`)
-  },
-
-  getLicenseStatus() {
-    return http.get('/api/license/status', { _silent: true })
-  },
-
-  registerMerchant(data) {
-    return http.post('/api/platform/register', data)
   }
 };

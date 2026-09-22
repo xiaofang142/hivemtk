@@ -20,11 +20,26 @@
 |------|----------|------|----------|
 | JWT 签名（用户端） | `USER_JWT_SECRET` | 90 天 | 根 `.env` **与** `user-server/.env`（后者覆盖前者，见二A.2） |
 | JWT 签名（商户/平台侧） | `JWT_SECRET` | 90 天 | 各自服务目录的 `.env` |
-| 商户 HMAC | `MERCHANT_API_SECRET` | 180 天 | `.env`（user 与 platform 两侧必须同值） |
-| 平台授权签名 | `PLATFORM_LICENSE_SECRET` | 180 天 | `.env`（两侧各一份） |
+| 商户 HMAC | `MERCHANT_API_SECRET` | 180 天 | `.env`（user 与 platform 两侧必须同值）；仅平台集成开启时参与出站签名 |
 | 字段加密 | `FIELD_ENCRYPTION_KEY` | 180 天 | `.env` 或 `/run/secrets`（见第六节） |
 | 数据库密码 | `POSTGRES_PASSWORD` | 180 天 | `.env` + `user-server/.env` + `assetdpo/.env`(`HIVE_DB_PASSWORD`)，同一个 role |
 | Redis 密码 | `REDIS_PASSWORD` | 365 天 | `.env` + `redis.conf` |
+
+> 本表原来还有一行「平台授权签名 `PLATFORM_LICENSE_SECRET`｜180 天」。2026-09-21 复核：
+> user-server 与 platform-server 两侧生产代码都**没有任何读取点**（字面量 grep 零命中，
+> `scripts/check-env-coverage.py` 数到的 180 个「生产代码读取键」里也没有它），授权流程下线后它不再是在用凭证，
+> 因此从轮换表里删掉。它**仍留在下面的泄露面表**里——值进过公开仓历史，这件事不因为代码不再读它而消失；
+> `scripts/rotate-secrets.sh` 的 `license` 行同样保留（那张表是泄露取证登记，不是"在用凭证清单"）。
+>
+> 2026-09-22 实测补记：`.env` 里的 4 行 `PLATFORM_LICENSE_SECRET`（`hivemtk/.env` 同文件重复键两处、
+> `hivemtk-platform/.env`、`hivemtk-platform/platform-server/.env`）已删除。删除前先跑
+> `--dry-run license`，脚本按"写后校验失败…未全部更新"退 1——它把"键根本不存在"当成了"写进去没生效"，
+> 于是 `--all-burned` 会因这条已下线凭证永久红。`scripts/rotate-secrets.sh` 已改为先探测落点是否真的有这个键：
+> 无一处有则 warn+skip（退 0），写后校验只核"原本就有这个键"的落点。
+> 改完复跑三腿：`--dry-run license` 退 0、`--dry-run merchant_hmac` 退 0 且印「备份 2 条」、
+> `--dry-run --all-burned` 退 0（三条在用的照常轮换 + license 跳过）；
+> 反向验证把 `write_key` 改成空操作后 `--dry-run merchant_hmac` 退 1 并逐个点名两个落点，
+> 证明新校验仍有牙（真实 `.env` 全程只读，演练只写 `mktemp -d` 副本）。
 
 ---
 
@@ -50,7 +65,7 @@ done
 |------|---|---|---|
 | `POSTGRES_PASSWORD`（用户库） | 9 个提交（最早 2026-07-23） | 是（`:8204` 进程 env 实测为该值） | 必须轮换 |
 | `MERCHANT_API_SECRET` | 2 个提交（2026-07-31） | 是，且 **user/platform 两侧同值**＝共享密钥 | 必须轮换（两侧一起） |
-| `PLATFORM_LICENSE_SECRET` | 2 个提交（2026-07-31） | 是（user 侧）；platform 侧本就另有一值 | 必须轮换 |
+| `PLATFORM_LICENSE_SECRET` | 3 个提交含该值（`89f34e78` 2026-07-31 与 `e1d0ca9c` 2026-08-01 写入 `.env-example`，`81955cfc` 2026-09-19 清除）；前两枚已在 `upstream/master`（GitHub）与 `gitee-upstream/master` 上＝**已公开** | 本机侧已从 4 处 `.env` 行中删除（2026-09-22），HEAD 树里 `git grep` 该值命中 0 | 无需"换新值"：它不再被任何代码读取。历史里那两枚提交只能靠改写历史或接受其公开；若你自建的平台端曾拿它做过签名校验，那侧按作废处理 |
 | 平台库 `POSTGRES_PASSWORD` | 1 个提交（`user-server/tests/e2e/deep_lib.sh`，跨仓串味） | 是（`:8205`） | 必须轮换 |
 | `USER_JWT_SECRET`（64 hex，根 `.env`） | 4 个提交 | **否**——真正在用的是 `user-server/.env` 里另一枚（57 字符），且该值 pickaxe 0 命中 | 本机无需轮换；部署侧若用的是被提交的那枚则需轮换 |
 | `REDIS_PASSWORD` / `TG_BOT_TOKEN` / `VISITOR_TOKEN_SECRET` / `MASTER_KEY` / `PLATFORM_ADMIN_PASSWORD` / `DS_API_KEY` | 0 | 是 | 未进过版本库，按常规周期轮换即可 |

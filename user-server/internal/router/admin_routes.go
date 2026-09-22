@@ -31,7 +31,7 @@ func setupPlatformRoutes(platform *gin.RouterGroup, platformCtrl *controller.Pla
 	platform.GET("/stats/merchant", platformCtrl.GetPlatformMerchantStats)
 }
 
-func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.LiveCodeController, platformCtrl *controller.PlatformController, db *gorm.DB) {
+func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.LiveCodeController, db *gorm.DB) {
 
 	systemInfoCtrl := controller.NewSystemInfoController()
 	public.GET("/health", systemInfoCtrl.Health)
@@ -47,9 +47,6 @@ func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.L
 	public.POST("/system/init-admin", authCtrl.InitAdmin)
 	public.POST("/system/init-complete", systemInitCtrl.InitComplete)
 	public.POST("/system/create-default-admin", authCtrl.CreateDefaultAdmin)
-
-	public.GET("/license/status", systemInfoCtrl.LicenseStatus)
-	public.GET("/license/features", systemInfoCtrl.LicenseFeatures)
 
 	redirectCtrl := controller.NewRedirectController(
 		service.NewShortLinkService(db),
@@ -68,8 +65,6 @@ func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.L
 
 	public.GET("/livecode/:id", liveCodeController.RenderLiveCodePage)
 	public.POST("/livecode/:id/click", liveCodeController.RecordClick)
-
-	public.POST("/platform/register", platformCtrl.RegisterMerchant)
 
 	deps := wirePublicDependencies(db)
 	public.POST("/knowledge-merchant/external/import", deps.knowledgeMerchantCtrl.ExternalImport)

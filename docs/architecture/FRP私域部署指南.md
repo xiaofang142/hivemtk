@@ -511,14 +511,19 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 
 ---
 
-## 十三、HiveMtk 生产实际部署架构（混合模式 + 同机 frps）
+## 十三、参考架构：自建 frps + 同机反向代理（混合模式）
 
-> **2026-09-03 踩坑记录**：之前按"独立 Chat 整站穿透"理解架构，错误地把 `hiveuser.xapptool.cn` 整站都走 frp，实际上**前端静态包在服务器 反向代理层 上**，只有 API 路径才走 frp。此节记录正确架构和必守铁律，避免再犯。
+> 本节是一套**可照抄的参考架构**，不是任何在跑的部署：早期版本这里写的是作者自有的到期云服务器
+> （域名与口令均已从文档中清除，见 §13.4/§13.5 的 `CHANGE_ME`），那台机器已于 2026-09 下线不续费。
+> 域名一律用 `*.hivemtk.example.com` 占位，落地时换成你自己的。
+>
+> **2026-09-03 踩坑记录**：之前按"独立 Chat 整站穿透"理解架构，错误地把前端整站域名 `user.hivemtk.example.com`
+> 都走 frp，实际上**前端静态包在服务器 反向代理层 上**，只有 API 路径才走 frp。此节记录正确架构和必守铁律，避免再犯。
 
 ### 13.1 架构图
 
 ```
-                              云端服务器 (118.25.236.101)
+                       云端服务器 (<你的-frps-主机-公网IP>)
                               ┌─────────────────────────────┐
                               │                             │
   ┌────────────────────┐      │   ┌─────────────────┐       │
@@ -577,27 +582,30 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 
 | 公网域名 | frpc customDomain | frps vhost 匹配后转到 | 本地服务 |
 |----------|-------------------|-----------------------|----------|
-| `hiveuserapi.xapptool.cn` | `hiveuserapi.xapptool.cn` | 本地 :8204 | Go user-server |
-| `hiveuser.xapptool.cn/api/*` | (无独立域名, **反向代理层 里 Host 改写**到下一行) | 同 `hiveuserapi.xapptool.cn` | Go user-server |
-| `hiveuser.xapptool.cn/chat/embed` | `hiveuser.xapptool.cn` | 本地 :8204 | Go user-server (embed 路由) |
+| `user-api.hivemtk.example.com` | `user-api.hivemtk.example.com` | 本地 :8204 | Go user-server |
+| `user.hivemtk.example.com/api/*` | (无独立域名, **反向代理层 里 Host 改写**到上一行) | 同 `user-api.hivemtk.example.com` | Go user-server |
+| `user.hivemtk.example.com/chat/embed` | `user.hivemtk.example.com` | 本地 :8204 | Go user-server (embed 路由) |
 
 ### 13.3 反向代理层 关键配置（避免踩坑的完整模板）
+
+见仓内 `docs/operations/reverse-proxy/nginx.conf.template`——它已把本节所有铁律落成可抄的 location 块
+（SSE 关缓冲、WS 透传 Upgrade、frps vhost 显式改写 Host）。本节不再重复贴一份，避免两处漂移。
 
 ### 13.4 frpc 配置（本地开发机）
 
 ```toml
-serverAddr = "118.25.236.101"
+serverAddr = "<你的-frps-主机-公网IP>"   # 或域名
 serverPort = 7000
-auth.token = "7sK9pR2tG5bN8dQ0zL4vX1cJ6mY3aU7fH"
+auth.token = "CHANGE_ME_RANDOM_64_CHARS"   # 与 frps 一致；别把真 token 提交进仓库
 transport.tls.enable = true
 
-# 主 API 隧道 (hiveuserapi + hiveuser.xapptool.cn/api/* 都走这里)
+# 主 API 隧道 (user-api 整站 + user.example.com/api/* 的 Host 改写都走这里)
 [[proxies]]
 name = "mtk-user-chat"
 type = "http"
 localIP = "127.0.0.1"
 localPort = 8204
-customDomains = ["hiveuserapi.xapptool.cn"]
+customDomains = ["user-api.hivemtk.example.com"]
 transport.useCompression = true
 
 # /chat/embed 隧道 (可选, 不需要热更新可删)
@@ -606,7 +614,7 @@ name = "mtk-user-web-embed"
 type = "http"
 localIP = "127.0.0.1"
 localPort = 8204
-customDomains = ["hiveuser.xapptool.cn"]
+customDomains = ["user.hivemtk.example.com"]
 transport.useCompression = true
 ```
 
@@ -615,14 +623,14 @@ transport.useCompression = true
 ```toml
 # /www/wwwroot/frp/frps.toml
 bindPort = 7000                        # 控制连接端口 (frpc 连这个)
-auth.token = "7sK9pR2tG5bN8dQ0zL4vX1cJ6mY3aU7fH"
+auth.token = "CHANGE_ME_RANDOM_64_CHARS"   # 与 frpc 同一个随机值
 vhostHTTPPort = 8280                   # ← 关键! 同源托管这个端口
 transport.tcpMux = true
 transport.maxPoolCount = 10
 webServer.addr = "0.0.0.0"
 webServer.port = 7500
 webServer.user = "admin"
-webServer.password = "$XiaoWei123"
+webServer.password = "CHANGE_ME"           # 7500 后台口令；曾在本文件里明文写过一条真口令，已清除，请轮换
 # 注意: 反向代理层 占了 80/443, 所以 frps 不直接监听这些端口
 # frps 只提供 8280 vhost, 由 反向代理层 转发过来
 ```
@@ -630,7 +638,7 @@ webServer.password = "$XiaoWei123"
 ### 13.6 排错 Checklist（按顺序执行）
 
 ```
-场景: https://hiveuser.xapptool.cn/api/health 返回 404 / 502 / 连接超时
+场景: https://user.hivemtk.example.com/api/health 返回 404 / 502 / 连接超时
 
 [Step 1] 本地 Go 服务是否在跑?
          curl -sS http://127.0.0.1:8204/health
@@ -644,12 +652,12 @@ webServer.password = "$XiaoWei123"
          → 看 frps 端: curl -u admin:$PASS http://frps:7500/api/v1/proxy/http
 
 [Step 3] frps vhost 端口是多少?
-         ssh root@118.25.236.101 'ss -tlnp | grep frps'
+         ssh root@<你的-frps-主机> 'ss -tlnp | grep frps'
          → 期望: LISTEN *:8280 (不是 7000!)
          → 如果 frps 没监听 vhostHTTPPort: 检查 frps.toml + systemctl restart frps
 
 [Step 4] frps 能否直接匹配 Host? (绕过 反向代理层 验证)
-         curl -sS -H "Host: hiveuserapi.xapptool.cn" http://127.0.0.1:8280/api/health
+         curl -sS -H "Host: user-api.hivemtk.example.com" http://127.0.0.1:8280/api/health
          → 本地 frps 上执行 (或 ssh 进服务器后测)
          → 返回 200 → frp 链路 OK, 问题在 反向代理层 层
          → 返回 404 → frpc customDomain 没注册上 (Step 2 检查)
@@ -657,8 +665,8 @@ webServer.password = "$XiaoWei123"
 
 [Step 5] 反向代理层 Host header 是否改写了? (最常见的坑!)
          → grep "proxy_set_header Host"
-         → 期望: proxy_set_header Host  hiveuserapi.xapptool.cn;
-         → 如果是 $host 或 hiveuser.xapptool.cn → 改过来!
+         → 期望: proxy_set_header Host  user-api.hivemtk.example.com;
+         → 如果是 $host 或前端那个域名 → 改过来!
 
 [Step 6] 反向代理层 proxy_pass 端口对不对?
          → 同机 frps 用 127.0.0.1:8280 (内网回环)
@@ -666,7 +674,7 @@ webServer.password = "$XiaoWei123"
          → 错写成 7000? 那是 frp 控制端口, 不是 vhost HTTP 端口!
 
 [Step 7] 浏览器能通但 API 404 → 前端 API baseURL 写错域名
-         curl -sS https://hiveuser.xapptool.cn/ | grep -o 'api.*base.*url'
+         curl -sS https://user.hivemtk.example.com/ | grep -o 'api.*base.*url'
          检查 Vite src/core/constants.js DEFAULT_USER_SERVER
 ```
 
@@ -674,10 +682,10 @@ webServer.password = "$XiaoWei123"
 
 | 时间 | 错误行为 | 根因 | 正确做法 |
 |------|---------|------|---------|
-| 2026-09-03 10:00 | 把 `hiveuser.xapptool.cn` 整站反代 frps | 以为前端也走 frp 热更新 | 前端静态包托管在服务器, 只有 `/api/` 走 frp |
+| 2026-09-03 10:00 | 把前端域名整站反代 frps | 以为前端也走 frp 热更新 | 前端静态包托管在服务器, 只有 `/api/` 走 frp |
 | 2026-09-03 10:00 | frpc.toml 加了 `mtk-user-web` proxy | 对应上条错误理解 | 删除, 前端 反向代理层 直接读 dist/ |
 | 2026-09-03 10:00 | Vite 加 `allowedHosts: true` 为了 frp 反代 | 前端不走 frp, 这条不需要 | 回滚 |
-| 2026-09-03 10:05 | 反向代理层 `location /api/` 透传 `$host` | 忘了 frps 按 Host 匹配 customDomain | 显式 `proxy_set_header Host hiveuserapi.xapptool.cn` |
+| 2026-09-03 10:05 | 反向代理层 `location /api/` 透传 `$host` | 忘了 frps 按 Host 匹配 customDomain | 显式 `proxy_set_header Host <API 侧 customDomain>` |
 | 2026-09-03 10:15 | frpc 被杀后残留进程冲突 | 用 kill -9 PID 但不知道 root 用户也在跑 | 先看 `ps aux \| grep frpc` 找出所有用户的进程 |
 | 2026-09-03 10:15 | frpc.toml 文件 `operation not permitted` | macOS 扩展属性 `com.apple.quarantine` | `xattr -cr frpc.toml` |
 | 2026-09-03 10:20 | Go 服务 `MASTER_KEY missing` 退出 | 没 export GIN_MODE=debug + MASTER_KEY | `GIN_MODE=debug MASTER_KEY=<32字节+> ./mtk-serve` |

@@ -130,7 +130,7 @@ func (s *NotificationService) SeedIfEmpty(ctx context.Context) error {
 			Type:      model.NotificationTypeInfo,
 			Title:     "欢迎使用 HiveMtk（开源版）",
 			Content:   "本软件完全开源，可自由使用、部署与二次开发。",
-			Link:      "/licenseManagement/list",
+			Link:      "/asset-bundle/list",
 			CreatedAt: time.Now().Add(-48 * time.Hour),
 		},
 		{

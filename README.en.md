@@ -20,7 +20,7 @@ One workspace for every social channel. One AI agent for every customer conversa
 [![Gitee](https://img.shields.io/badge/Gitee-xhpmayun%2Fhivemtk-C71D23?logo=gitee)](https://gitee.com/xhpmayun/hivemtk)
 [![GitHub](https://img.shields.io/badge/GitHub-xiaofang142%2Fhivemtk-181717?logo=github)](https://github.com/xiaofang142/hivemtk)
 
-[📖 中文文档](README.md) · [🚀 Live Demo](#-live-demo) · [📦 Feature Modules](docs/marketing-features/README.md)
+[📖 中文文档](README.md) · [🌐 Website](https://xiaofang142.github.io/hivemtk/) · [📦 Feature Modules](docs/marketing-features/README.md)
 
 </div>
 
@@ -154,8 +154,6 @@ make dev                    # user-server with hot reload → http://localhost:8
 cd user-web && npm run dev  # Admin workspace → http://localhost:8211 (another terminal)
 ```
 
-**Live Demo**: https://hiveuser.xapptool.cn/ (login `admin` / `Seed@123456`; demo data is public — do not upload real business data; subject to [Releases](https://github.com/xiaofang142/hivemtk/releases) announcements)
-
 For dev/prod model tiers, common commands, and backup/restore operations, see [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ---
@@ -202,10 +200,15 @@ HiveMtk is a marketing system focused on "all-channel reach + sales-copilot SOP 
    │                                                 │
    │  user-web (Vue 3) · embed-sdk (CS Web Widget)   │
    └─────────────────────────────────────────────────┘
-            │ HTTPS (low-frequency: heartbeat / merchant-key check)
+            ┆ HTTPS (low-frequency heartbeat: install_id / version / host info /
+            ┆  runtime metrics / device fingerprint)
+            ┆  -- this edge does not exist by default: the platform is an
+            ┆     optional local component; with PLATFORM_ENABLED unset
+            ┆     not a single request leaves the box
             ▼
-   Platform (separate repo: hivemtk-platform): metadata only.
-   Never touches, stores, or accesses your business data.
+   Platform (optional, self-hosted from the separate hivemtk-platform repo):
+   metadata only. Never touches, stores, or accesses your business data.
+   There is no merchant licensing and no merchant-identity check anywhere.
 ```
 
 The backend strictly follows a five-layer architecture (Controller → Service → Repository → Model → DTO, no cross-layer calls, CI-enforced). Full spec: [docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md); deployment split with the platform: [docs/operations/MERCHANT_DEPLOYMENT.md](docs/operations/MERCHANT_DEPLOYMENT.md).

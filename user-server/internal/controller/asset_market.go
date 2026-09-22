@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/config"
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -44,6 +45,18 @@ func assetOK(c *gin.Context, data interface{}) {
 	response.Success(c, data, "ok")
 }
 
+// rejectPlatformDisabled 平台集成关闭态下把"要打到平台侧的写操作"直接挡在门口：
+// 403 + 一句照着做就能开通的话。不走 service，是因为那条路只会得到
+// "平台未配置"的失败与一条 Error 日志——那是把"没启用"伪装成"坏了"。
+// 返回 true 表示已经写好响应，调用方立即 return。
+func rejectPlatformDisabled(c *gin.Context) bool {
+	if config.PlatformEnabled() {
+		return false
+	}
+	response.Error(c, http.StatusForbidden, "平台集成未启用（设 PLATFORM_ENABLED=true 并启动本地 platform-server 后可用）")
+	return true
+}
+
 // ListMarket GET /api/v1/asset-market/list
 func (h *AssetMarketController) ListMarket(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -69,6 +82,10 @@ func (h *AssetMarketController) MarketDetail(c *gin.Context) {
 
 // Purchase POST /api/v1/asset-market/purchase
 func (h *AssetMarketController) Purchase(c *gin.Context) {
+	if rejectPlatformDisabled(c) {
+		return
+	}
+
 	var body dto.PurchaseRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误")
@@ -83,6 +100,10 @@ func (h *AssetMarketController) Purchase(c *gin.Context) {
 
 // Sync POST /api/v1/asset-market/sync
 func (h *AssetMarketController) Sync(c *gin.Context) {
+	if rejectPlatformDisabled(c) {
+		return
+	}
+
 	var body dto.SyncRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误")
@@ -216,6 +237,10 @@ func (h *AssetMarketController) SyncLog(c *gin.Context) {
 // ReportUsage POST /api/asset-market/report-usage
 // 将本地累计使用次数回传平台（闭环：本地使用 → 平台统计）。
 func (h *AssetMarketController) ReportUsage(c *gin.Context) {
+	if rejectPlatformDisabled(c) {
+		return
+	}
+
 	var body dto.ReportUsageRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误")

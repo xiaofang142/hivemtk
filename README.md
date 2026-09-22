@@ -14,7 +14,7 @@
 
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev) [![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org) [![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker&logoColor=white)](https://www.docker.com) [![PostgreSQL 15+](https://img.shields.io/badge/PostgreSQL-15+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![Gitee](https://img.shields.io/badge/Gitee-xhpmayun%2Fhivemtk-C71D23?logo=gitee)](https://gitee.com/xhpmayun/hivemtk) [![GitHub](https://img.shields.io/badge/GitHub-xiaofang142%2Fhivemtk-181717?logo=github)](https://github.com/xiaofang142/hivemtk)
 
-[📖 英文文档](README.en.md) · [🚀 在线体验](#-在线体验) · [📦 功能模块](docs/marketing-features/README.md)
+[📖 英文文档](README.en.md) · [🌐 官网](https://xiaofang142.github.io/hivemtk/) · [📦 功能模块](docs/marketing-features/README.md)
 
 </div>
 
@@ -148,8 +148,6 @@ make dev                    # user-server 热更新 → http://localhost:8204
 cd user-web && npm run dev  # 前端工作台 → http://localhost:8211(另开终端)
 ```
 
-**在线体验**:https://hiveuser.xapptool.cn/ (账号 `admin` / 密码 `Seed@123456`;演示数据公开,请勿上传真实业务数据;以 [Releases](https://gitee.com/xhpmayun/hivemtk/releases) 公告为准)
-
 dev/prod 模型档切换、常见命令、数据库备份恢复等运维细节,见 [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) 与 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
 
 ---
@@ -196,10 +194,13 @@ HiveMtk 是私域营销系统,聚焦"多端触达 + 销冠 SOP + CDP + 零出域
    │                                                 │
    │  user-web (Vue 3) · embed-sdk(客服 Widget)      │
    └─────────────────────────────────────────────────┘
-            │ HTTPS(低频:心跳 / 商户标识校验)
+            ┆ HTTPS(低频心跳:install_id / 版本号 / 主机信息 / 运行指标 / 设备指纹)
+            ┆ —— 这条边默认不存在:平台端是可选本地组件,
+            ┆    未设 PLATFORM_ENABLED=true 时一个请求都不发
+            ┆
             ▼
-   平台端(独立仓库 hivemtk-platform):仅元数据,
-   不接触、不存储、不访问任何业务数据
+   平台端(独立仓库 hivemtk-platform,可选自建):仅元数据,
+   不接触、不存储、不访问任何业务数据;无任何商户授权/标识校验环节
 ```
 
 后端严格遵循五层架构(Controller → Service → Repository → Model → DTO,禁止跨层调用,CI 强制检查)。完整规范见 [docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md),与平台端的分工见 [docs/architecture/部署方案_用户端.md](docs/architecture/部署方案_用户端.md)。
@@ -215,6 +216,7 @@ hivemtk/                        # 用户端仓库
 ├── user-server/                # Go 后端(核心业务,五层架构)→ user-server/README.md
 ├── user-web/                   # Vue 3 前端(B 端工作台)→ user-web/README.md
 ├── embed-sdk/                  # 嵌入式客服 Web Widget(IIFE/ESM)
+├── website/                    # 官网源码(Vue 3 SPA)→ 由 .github/workflows/website-pages.yml 发到 GitHub Pages
 ├── migrations/                 # 数据库迁移 SQL(幂等)
 ├── scripts/inference-host/     # 宿主机推理栈脚本(llama.cpp + TEI)
 ├── docs/                       # 文档:INDEX.md / DEPLOYMENT_GUIDE.md / marketing-features/ …

@@ -13,6 +13,7 @@
   R1 with.file / with.context / working-directory 指向的路径必须存在
   R2 run 步骤里调用的仓内脚本（bash/sh/python3/node/go run <path>）必须存在
   R3 `steps.<id>.` 引用的 <id> 必须在同一 job 内有 `id: <id>`
+     （步骤体与 job 级的 environment/if/concurrency 都算 —— 后者的空串同样静默）
   R4 `needs:` 引用的作业名必须在同一文件里有同名 job
   R5 download-artifact 的 name 必须在同一工作流里有对应的 upload-artifact name
      （跨工作流共享 artifact 用 `-- 允许名单` 注释显式声明后方可放行）
@@ -182,6 +183,18 @@ def check_workflow(path: str, repo_root: str, allow: set[str]) -> list[str]:
                         hits.append(
                             f"{rel}: job '{jname}' step '{st.get('name') or '?'}' 调用仓内脚本 '{p}' —— 文件不存在"
                         )
+
+        # R3b: job 级字段里的 steps.<id> 同样要已声明。R3 只扫步骤体，漏掉 environment.url
+        # 这类 job 级引用 —— 而它正是"取到空串"最典型的落点：URL 写错 id 不报错，
+        # 部署环境只是没链接，Pages 发布看起来一切正常。
+        for where in ("environment", "if", "concurrency"):
+            jblob = yaml.safe_dump(job.get(where), sort_keys=False)
+            for sid in set(STEPREF_RE.findall(jblob)):
+                if sid not in step_ids:
+                    hits.append(
+                        f"{rel}: job '{jname}' {where} 引用 steps.{sid}. —— "
+                        f"该 job 内没有 id:'{sid}' 的步骤，取到的是空串"
+                    )
 
     # R5: artifact 名配对
     uploaded, downloaded = set(), []

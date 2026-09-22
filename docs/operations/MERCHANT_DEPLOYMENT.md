@@ -11,11 +11,11 @@ HiveMtk 用户端采用**私域独立部署**模式：
 
 - 部署在商户自己的服务器（或私有云、混合云）
 - 数据库、推理栈、用户数据全部本地化
-- 平台端（安装信息收集、心跳上报）通过 `PLATFORM_API_URL` 低频 HTTPS 调用，数据不落地平台端
+- 平台端是**可选本地组件**（安装信息收集、心跳上报）：默认不部署、不接入。只有你显式设 `PLATFORM_ENABLED=true` 时才会装配这条链路，地址取 `PLATFORM_API_HOST`（兼容 `PLATFORM_API_URL`）或 `config/platform.yaml` 的 `api_url`——**没有任何默认公网地址可回落**。开启后上报的也只是安装元数据，业务数据不落地平台端
 - 每个商户独立一套完整系统（user-server + PostgreSQL + Redis + 推理栈）
 
 > **禁止 SaaS / 多租户模式**：无 `merchant_id` 字段，所有数据归属当前部署实例。
-> **开源版无 License 校验**：所有功能全开放，无 7 天试用、无授权码、无强制首登改密。
+> **本版不做任何授权校验**：所有功能全开放，无 7 天试用、无授权码、无强制首登改密；代码许可证为 AGPL-3.0（见 `LICENSE`），那是版权条款而非使用授权开关。
 
 ---
 
@@ -39,7 +39,9 @@ HiveMtk 用户端采用**私域独立部署**模式：
 ### 步骤 1：克隆代码
 
 ```bash
-git clone https://gitee.com/your-org/hivemtk.git
+# 二选一（同一份代码，两个镜像）：
+git clone https://github.com/xiaofang142/hivemtk.git    # GitHub 镜像
+git clone https://gitee.com/xhpmayun/hivemtk.git        # Gitee 镜像（国内网络更快）
 cd hivemtk
 ```
 
@@ -51,14 +53,16 @@ cp .env-example .env
 # 关键变量（必须修改）
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 32)
-PLATFORM_ADMIN_PASSWORD=$(openssl rand -hex 16)
 
-# 平台端地址（同机部署用 127.0.0.1）
-PLATFORM_API_URL=http://127.0.0.1:8205
-# 跨机/生产：改为平台端公网域名，如 https://api.example.com
+# 平台端：默认不用配。不设 PLATFORM_ENABLED=true 时下面三项全部无效，
+# 用户端不会朝任何地址发心跳/注册/市场上架请求。
+# 只有你自建了本地 platform-server 并要用资产市场，才需要打开：
+#   PLATFORM_ENABLED=true
+#   PLATFORM_API_HOST=http://127.0.0.1:8205      # 跨机/自建有公网域时换成你自己的
+#   PLATFORM_ADMIN_PASSWORD=$(openssl rand -hex 16)
 ```
 
-> 开源版**无需**生成 `PLATFORM_LICENSE_SECRET`、`LicenseKey` 等授权相关密钥（已下线）。
+> 本版**没有授权密钥**要生成：`PLATFORM_LICENSE_SECRET`、`LicenseKey` 一类字段已从配置结构中下线。开启平台集成时 `LoadPlatform` 只校验三项本地凭据——`api_url`、`secret`（与自建 platform-server 共享的 HMAC 签名密钥，不是授权凭证）、`admin_password`；缺任一项即报错且不装配半截配置（`user-server/internal/config/platform.go`）。
 
 ### 步骤 3：启动本地推理栈
 
@@ -262,13 +266,15 @@ nvidia-smi    # NVIDIA
 
 ### 9.3 平台端心跳上报失败
 
-> 平台端心跳为 best-effort，失败仅 Warn 日志，**不阻塞**本地业务。
+> 先确认这条链路本就该存在：`PLATFORM_ENABLED` 未开启（默认）时心跳协程根本不装配，
+> 日志里也不会有心跳记录——那不是故障。若你看到「心跳上报失败（已忽略）」，
+> 说明你已经开启了它：心跳为 best-effort，失败仅 Warn 日志，**不阻塞**本地业务。
 
 ```bash
-# 检查 PLATFORM_API_URL 配置
-grep PLATFORM_API_URL .env
+# 检查平台端地址配置（PLATFORM_API_HOST 优先于 PLATFORM_API_URL）
+grep -n 'PLATFORM_ENABLED\|PLATFORM_API' .env
 # 手动测试连通性
-curl -s $PLATFORM_API_URL/health
+curl -s ${PLATFORM_API_HOST:-$PLATFORM_API_URL}/health
 ```
 
 ### 9.4 学习洞察 / 行业相关功能「静默无输出」
@@ -305,7 +311,7 @@ curl -s $PLATFORM_API_URL/health
 
 ## 十一、技术支持
 
-- 官网：https://hivemtk.com
+- 官网：https://xiaofang142.github.io/hivemtk/
 - 文档：本目录 `docs/INDEX.md`
 - 邮箱：`jideilvluoqun@gmail.com`
 - 开源仓库：

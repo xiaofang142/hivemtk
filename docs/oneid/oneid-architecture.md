@@ -168,7 +168,7 @@ sequenceDiagram
 - 含「保留主档案 / 合并到主档案」按钮，但无后端调用。
 
 ### 6.3 API 封装 (`src/api/oneid.js`)
-完整实现：`fetchOneIDCustomers / getOneIDCustomer / fetchOneIDStats / fetchConflicts / mergeCustomers / resolveConflict`，均经 `request` 拦截器走 `https://hiveuserapi.xapptool.cn`。
+完整实现：`fetchOneIDCustomers / getOneIDCustomer / fetchOneIDStats / fetchConflicts / mergeCustomers / resolveConflict`，均经 `request` 实例发请求，baseURL 取 `VITE_API_BASE_URL`（三套 env 文件实测均为 `/`，即同源；dev 由 Vite 代理 `/api → http://localhost:8204`）。
 
 ### 6.4 路由与菜单
 - 路由 `src/router/modules/oneid.js`：`/oneid/list`、`/oneid/conflicts`，挂在 Layout 父路由下。

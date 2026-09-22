@@ -1,0 +1,110 @@
+# 官网（website/）→ GitHub Pages 发布
+#
+# 站点地址：https://xiaofang142.github.io/hivemtk/
+# 前身是 118.25.236.101 上那台到期不续费的自建站点，整站因此迁到 Pages。
+# 迁移动机与口径见 hivemtk/docs/superpowers/specs/2026-09-21-offline-deployment-design.md。
+#
+# 构建入口刻意只有一行 `bash deploy.sh`：预检（node 版本 / 源码结构 / i18n 词典
+# MISSING_UNIQ=0）、npm ci、vite build + postbuild、以及六类 Pages 专属产物门全在
+# 那个脚本里。CI 与本地跑同一条命令，就不会出现"本地绿、CI 因另一套步骤红"。
+# 历史教训：本 workflow 的旧草稿引用过三个不存在的步骤
+# （scripts/check-i18n-completeness.sh、npm run lint、scripts/npm-audit-gate.sh），
+# 照抄会让 job 在第一步就 127 退出。
+#
+# 一次性的 GitHub 侧前置（本 workflow 无法自证，红时先查这里）：
+#   仓库 Settings → Pages → Build source 必须是 "GitHub Actions"，
+#   或 `gh api -X POST repos/xiaofang142/hivemtk/pages -f build_type=workflow`。
+#   未开启时 configure-pages 步骤会明确报错，而不是静默发一个空站。
+
+name: website-pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-pages.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-pages.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 读仓库 Pages 配置：Pages 没开就当场失败，避免后面白跑一次构建
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: 预检 + 安装 + 构建 + 产物校验
+        working-directory: website
+        run: bash deploy.sh
+
+      # 依赖漏洞扫描：与 user-server-ci.yml 的 OPT-CI-10 同源同判据，仅阻断 high/critical。
+      # 三点固定原因照抄在那边注释里，摘要：npm 10 的 quick-audit 端点已退役，runner 上
+      # 返回 400 却被 --json 当报告解析成"0 漏洞"（假绿）；npmmirror 的 security 端点 404；
+      # dependencies.total=0 必须与"无漏洞"分成两类，否则零覆盖看着像通过。
+      - name: npm audit (OPT-CI-10)
+        working-directory: website
+        run: |
+          export npm_config_registry=https://registry.npmjs.org
+          npx --yes npm@11 audit --omit=dev --audit-level=high --json > npm-audit.json 2>/dev/null || true
+          node -e '
+            const fs = require("fs");
+            let r;
+            try { r = JSON.parse(fs.readFileSync("npm-audit.json", "utf8")); }
+            catch (e) {
+              console.error("::error::npm audit 拿不到 JSON 报告（端点或网络故障），本步骤零覆盖：" + e.message);
+              process.exit(2);
+            }
+            const md = r.metadata || {}, v = md.vulnerabilities || {}, deps = (md.dependencies || {}).total;
+            if (!deps) {
+              console.error("::error::npm audit 未返回依赖树（dependencies.total=0），本步骤零覆盖："
+                + JSON.stringify(r).slice(0, 300));
+              process.exit(2);
+            }
+            console.log(`已审计生产依赖 ${deps} 个：critical ${v.critical || 0} / high ${v.high || 0}`
+              + ` / moderate ${v.moderate || 0} / low ${v.low || 0}`);
+          '
+          npx --yes npm@11 audit --omit=dev --audit-level=high
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    name: Publish to GitHub Pages
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

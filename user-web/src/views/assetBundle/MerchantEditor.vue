@@ -223,7 +223,7 @@
           </el-col>
           <el-col :span="16">
             <el-form-item label="绑定商品主图">
-              <el-input v-model="form.card_config.product_image" placeholder="例如：https://xapptool.cn/product.jpg" />
+              <el-input v-model="form.card_config.product_image" placeholder="例如：https://example.com/product.jpg" />
             </el-form-item>
           </el-col>
         </el-row>
