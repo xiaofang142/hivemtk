@@ -108,7 +108,9 @@ ingress:
    （这个键已按私域合规 §7.2 从 `config.yaml` 移除 ⇒ 恒为空），再退到
    `os.Getenv("POSTGRES_PASSWORD")`，两处都空就 `panic("数据库连接密码缺失…")`。
    今日实测 `DB_PASSWORD` 在 `user-server` 的 Go 代码里**零** `os.Getenv` 命中
-   （只有 `scripts/bridge-monitor.sh:52` 拿它当 `BRIDGE_DB_PASSWORD` 的 fallback，那是另一个进程），
+   （全仓唯一还在用这个名字的是 `scripts/bridge-monitor.sh:52`，而它是**赋值的一侧**：
+   `DB_PASSWORD="${BRIDGE_DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"`，喂的是 bridge 那个进程，
+   不构成 user-server 的读取点），
    而 `docs/operations/secret_rotation.md:25` 的登记表写的正是 `POSTGRES_PASSWORD` ⇒ chart 是这处漂移的
    唯一源头。装出来的故障形态是"Secret 建了、Pod 起了、InitDB panic"，报的还是密码缺失，
    跟"名字写错了"看着不像一回事。现在 `user-server/config.yaml:57-59` 的注释也同步成

@@ -397,6 +397,11 @@ helm install hivemtk ./deploy/helm/hivemtk -n hivemtk --create-namespace
 探针路径、env 名单这三件事由 `user-server/internal/config/ports_test.go` 的
 `TestHelmChartAlignsWithCodePorts` 跟产码对账（它直接读 `values.yaml` / `deployment.yaml` /
 `README.md` 三个文件）⇒ 改 chart 不必担心文档漂移，跑 `go test ./internal/config/` 就会拦。
+这道门自己的反向核验（2026-09-22，跑在只含已提交字节的克隆里）：基线格全绿，随后 7 格注码
+（`targetPort`→8080 / 单个探针口→8080 / `containerPort`→写死数字 / env 名 `MASTER_KEY`→改一名 /
+追加旧名 `DB_PASSWORD` / README 删一条 `--from-literal` ）逐格红在**该红的那个子用例**上。
+其中 README 那一格第一遍是**无效变异**：只把行尾换成占位、判据子串还在 ⇒ 门当然不红，
+第二遍整行删掉才拿到红因 —— 改值式变异必须断言"判据串的命中数变 0"，否则测的是注码本身。
 chart 自身的状态与限制（**它是骨架、从没在真集群上跑过，本机也没有 helm 可 lint**）写在
 `deploy/helm/hivemtk/README.md`，装之前先读那一页的"2026-09-22 修掉的四处"。
 
