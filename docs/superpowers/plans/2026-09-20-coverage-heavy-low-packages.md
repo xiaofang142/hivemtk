@@ -3616,3 +3616,96 @@ middleware+router+storage 三包 313 PASS / 0 FAIL / 0 SKIP、`gofmt -l internal
 是"不另设限"，不得改回"回落到某个默认值"（那等于把第二份上限藏进 if 里）；Content-Type 门不得放宽成
 "所有类型都当 JSON 读"（multipart 会被整份读进内存并改写字节流）；`sanitize_test.go` 里"向下跟随"那一格
 不许因为"它在真实链路上够不到"就删 —— 它测的是事实源，用户可见的那一半由 413 那一格测。
+
+---
+
+## R24（2026-09-22 第四十轮：上一轮写"决断不做"的那条，判据是"存量数据不是我的批次"，而它是可直接重放的改密凭证）
+
+**起点是复判上一轮的六个"决断不做"**，不是巡网。其中一条登记的是"密码重置令牌存明文 —— 属存量表列宽问题，
+留给存储专项"。这句话把缺陷的**性质**写错了：它不是列宽，是凭证。`password_reset_tokens.token` 落的就是
+发进邮件里那串明文（`uuid+uuid`，72 字符），所以任何能读这张表的人 —— 只读副本、运维 shell、
+以及 `internal/service/backup.go:544`（它把这张表**整表导出**）—— 手里都是一批 24h 窗口内可直接重放的改密链接。
+"专项重构"这个标签让它在一轮又一轮的清单里以"待办"的形态活着，而它每一轮都在往备份包里写凭证明文。
+
+**修法**（三处必须一起动，少一处就是把它改坏而不是改好）：
+
+- `internal/model/password_reset_token.go:37` 新增 `HashPasswordResetToken(raw) = hex(sha256(raw))`；
+  `:23` 的 `RawToken` 打上 `gorm:"-" json:"-"` —— 明文只活在签发那一刻的进程内；
+  `:46` `BeforeCreate` **无条件**用 `RawToken` 覆盖 `Token`，含调用方自己预置的 `Token`
+  （否则"我先塞一个明文进去"就是绕过哈希的门）。
+- `internal/service/password_reset.go:106` 校验侧先哈希再查，`:83` 邮件链接仍用 `RawToken`。
+  这两半是一对：只改存储不改校验，所有存量链接静默失效且症状是"令牌无效"，看不出是自己人干的。
+- `internal/pkg/db/migrate.go:430` 挂 `postMigrateDropLegacyPlaintextResetTokens(DB)`（定义 `:557`），
+  判据取列宽不取内容形状（`legacyWhere = "char_length(token) <> 64"`：哈希恒 64，旧实现恒 72），
+  并且**硬删**：模型带 `gorm.DeletedAt`，走 GORM 的 `Delete` 只打标记 ⇒ 原文仍在表里、备份照抄，
+  等于没修。挂 `postMigrate` 而不是版本化迁移，因为本仓建表真值是 `AutoMigrate()`（72 个迁移文件
+  在当前启动口径下永不执行）。
+- 列宽**故意不窄收**到 `char(64)`：收窄是一次 DDL 停机面，而对"能不能读出明文"这件事，128 与 64 没有区别。
+
+**牙**（`.tmp_files/mut-evidence-2026-09-22/b66/battery-r24.py`，七格一刀一杀，控制组在放刀前于同一棵活树现测 8/8）：
+
+| 格 | 注码 | 杀它的腿 |
+| --- | --- | --- |
+| Q1 | 明文原样落库（`t.Token = t.RawToken`） | `TestPasswordResetTokenStoresHashOfRawToken` + 往返格 |
+| Q2 | 允许调用方预置明文（`if t.Token != "" { return nil }`） | `TestPasswordResetTokenBeforeCreateNeverStoresCallerSuppliedPlaintext` |
+| Q3 | 校验侧忘了先哈希 | `TestResetTokenRoundTripRejectsStoredHashAsCredential` + 防爆破计数格 |
+| Q4 | 作废钩子空转（`legacy >= 0`） | `TestStartupDropsLegacyPlaintextResetTokens` |
+| Q5 | 改成软删（`Delete(&PasswordResetToken{})`） | `TestStartupDropsLegacyPlaintextResetTokens` |
+| Q6 | 邮件链接改用库里那列 | `TestResetEmailLinkUsesRawTokenNotStoredHash` |
+| Q7 | 摘掉 `AutoMigrate` 装配点 | `TestAutoMigrateWiresLegacyPlaintextResetTokenGuard` |
+
+Q4 与 Q5 分开两格是必要的：只测"钩子有没有跑"会放过"跑了但删不干净"，而后者才是这张表真正的失效方向
+（`RowsAffected` 与 `legacy` 都得动，软删时两者都非零）。**七格全杀**，每格断言 `ran==控制组` 且
+PASS+FAIL==8，还原后逐文件 md5 与基线一致（`md5_ok = True`）。
+
+顺带把两处把旧行为钉死的存量断言改了（不改它们，哈希化本身就编译不过/跑不过）：
+`internal/controller/brute_force_guard_wiring_test.go`、`internal/service/token_revocation_callsites_test.go`
+里手写的 72 字符明文令牌换成哈希后的 64 字符列值。
+
+## R25（同一轮：追踪的消费侧齐全 ≠ 追踪在工作，`GenerateOpenPixelURL` 的非测试调用点是 0）
+
+上一轮另一条"决断不做"写的是"打开像素签发侧没有调用方 ⇒ 属新功能，不在补测排期里"。这句话事实部分成立、
+结论部分错：`/api/email/track/open/:token` 路由、`RenderPixel`、事件落库、管理端读取，四段**早就在**，
+缺的只是正文里那一枚 `<img>`。所以它不是"新功能没做"，是**一条看起来已经完工的链路实际从未通过**：
+打开数恒为 0，而 0 与"真没人打开"在管理端长得分不出来。
+
+**修法**：两条外发路径都接（单封 `EmailSendService` 与群发 `EmailListCron`，群发才是有量的那条）。
+判据与出口口径与退订链接同档 —— 未配 `EMAIL_TRACKING_SECRET` 时签发本身 fail-closed ⇒ 正文一字不改地发出去，
+但每进程出声一次（`pixelWarnOnce` / `bulkPixelWarnOnce`）：把配置缺失放大成"整批营销邮件停摆"是更坏的取舍，
+可"打开数为 0"必须能被归因成"没带像素"而不是"没人打开"。`img` 的 `src` 走 `html.EscapeString` 并拒绝
+含换行的值（`internal/pkg/mail/open_pixel.go:13`，复用 `unsubscribe.go:53` 的 `linkReadable`）——
+URL 的 base 取自 `SERVER_BASE_URL`，那是运维手填、不由代码产生的字符串。
+
+**牙**（`.tmp_files/mut-evidence-2026-09-22/b67/battery-r25.py`，十格，控制组现测 29/29）：
+P1 像素永不出现、P3 不查换行、P4 单封正文忽略像素、P5 单封根本不签发、P6 单封归属传空 `jobID`、
+P7 群发正文不接像素、P8 群发归属传空 `jobID`、P9 摘群发装配点、P10 摘单封默认签发器 —— 主跑九格全杀；
+P2（不转义，引号逃出 `src` 属性）主跑 **BUILD-BROKEN**（变异把 `html` 用成了孤儿 import，
+不算杀也不算活），改成 `html.UnescapeString` 后用驱动新加的 `ONLY=P2` 单格复跑 ⇒
+`KILLED ran=29/29`，红腿正是 `TestAppendOpenPixelCannotBreakOutOfSrcAttribute`。十格最终 10/10，`md5_ok = True`。
+
+**这一轮真正的教训在提交侧，不在代码侧**：`08578d1f` 提交 `internal/pkg/db/migrate.go` 时，把并行批次
+（批22/A6、批20f/A12）**尚未落库**的 13 行 `browsermodel` 登记一起带进了历史 —— 共享工作树里那个文件当时
+是"我的钩子 + 对侧的登记"混在一起的状态，`git add <显式路径>` 只挡住了别人的文件，挡不住**同一个文件里**的别人的行。
+后果不是"多几行注释"：`browser_automation/model/audit_digest.go`、`write_claim.go` 至今是未跟踪文件，
+于是**只含已提交内容的干净克隆编译不过**（`undefined: browsermodel.BrowserAuditDigest` ×3），
+并级联到 controller / pkg/db / cron / email-service / service 五个包 `[build failed]` —— 也就是 CI 看到的那棵树是红的，
+而我手里的活树是绿的（活树有那两个未跟踪文件）。修法是把那 13 行从 HEAD 摘掉（`1d222e77`），
+工作树里对侧的字节用备份原样写回并 md5 比对（`88194edf67b698e0c495c35521910bfb` 前后一致），
+由浏览器批次随自己的 model 文件一起落库 —— 而不是"顺手替他们把那两个文件也提交了"，那会把他们拆到一半的批次
+钉成既成事实。
+
+**门**：`gofmt -l internal/` 空；`go vet ./internal/pkg/mail/ ./internal/pkg/cron/ ./internal/email/service/` rc=0；
+活树三包 `ok internal/pkg/mail` / `ok internal/pkg/cron 3.079s` / `ok internal/email/service 18.316s`；
+**影子克隆**（`--shared --no-checkout` + `checkout 1d222e77`，克隆里确认那两个未跟踪文件不存在）
+`go build ./...` rc=0、`go vet ./internal/...` rc=0（含测试文件编译，这一层才是"已提交的测试引用了未提交的符号"
+的探测器，`go build ./...` 看不见）、R24/R25 用例集在七包上 23 PASS / 0 FAIL / 0 SKIP。
+双远端 `b75c9939..1d222e77` fast-forward 推送，推后 `git fetch` 复核 local / upstream / gitee 三个 SHA 一致。
+
+**勿放松**：`password_reset_tokens.token` 不得再接受任何非哈希输入（`BeforeCreate` 里"已有值就返回"是最自然的
+"好心"改法，Q2 那格就是为它留的）；旧明文作废必须是硬删（改成 `Delete(&model.PasswordResetToken{})` 就是 Q5 那格）；
+`RawToken` 的两个 tag（`gorm:"-"` 与 `json:"-"`）少一个都会把明文重新暴露出去 —— 前者走响应体，后者走 ORM 落库；
+`AppendOpenPixel` 的 `linkReadable` 前置不许摘（摘了 `src` 就成了可注入面），也不许因为"URL 是我们自己拼的"
+就改成不转义（base 来自环境变量）；像素与退订链接一律 **fail-open + 进程内出声一次**，不得改成拒发，
+也不得改成逐行报（一波 10 行会淹掉别的日志）；本泳道提交共享文件（`migrate.go` 这类"人人往里加一行"的装配点）
+前必须 `git diff --cached` 逐 hunk 认账，**影子克隆 `go build` + `go vet` 是推送前的最后一道，且必须跑在
+只含已提交内容的克隆里** —— 活树绿不构成任何证据。
