@@ -154,8 +154,11 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 
 func (s *EmailService) smtpSend(ctx context.Context, acc *EmailAccount, to, subject, content string, attachments []string) (string, error) {
 	// 附件在这条路径上挂不上：下面是手写的单部件 text/html 报文，没有 multipart 能力。
-	// 现状是所有活调用点（欢迎/密码重置/增长订阅/proactive reach）都传 nil，所以不报错；
-	// 真要带附件请走 email/service.EmailSendService —— 那条经 mail 包的本站附件解析器。
+	// 今天它确实没收到过附件，但这条前提不在看得见的位置：EmailService.Send 的调用点里
+	// 六个传字面 nil，proactive reach 那条注册函数也只被 sendEmail 以 nil 调用；剩下三处是
+	// 变量透传，而读 reach service registry 的只有 ProductionReachAdapter —— 它没有任何构造点。
+	// 谁把那个 adapter 装上、或给 Send 加一个带附件的新调用，附件就会在这里静默丢掉：
+	// 正解是走 email/service.EmailSendService，那条经 mail 包的本站附件解析器。
 	_ = attachments
 	addr := net.JoinHostPort(acc.Host, strconv.Itoa(acc.Port))
 	from := acc.FromAddr
