@@ -3720,3 +3720,81 @@ P2（不转义，引号逃出 `src` 属性）主跑 **BUILD-BROKEN**（变异把
 也不得改成逐行报（一波 10 行会淹掉别的日志）；本泳道提交共享文件（`migrate.go` 这类"人人往里加一行"的装配点）
 前必须 `git diff --cached` 逐 hunk 认账，**影子克隆 `go build` + `go vet` 是推送前的最后一道，且必须跑在
 只含已提交内容的克隆里** —— 活树绿不构成任何证据。
+
+## R26（2026-09-22 第四十一轮：一条登记了三轮、每次都以"文件被并行会话占着"为由推走的项，前置其实已经解除）
+
+**背景**：R16-b §3（本文档 `:3068-3082`）登记的形状是 `sendOutbound` 的分支表里只有飞书
+（`webhook_outbound.go:476`）与 TG（`:525`）两处 `for _, card := range cards` 真把富卡下发，
+其余渠道的 outbound 载荷没有卡片载体 —— 桥接五族（`:707` 起）与企微/QQ/WhatsApp/钉钉/公众号五族
+都不读 `cards`，一批卡走到这里整批丢掉，而文本回复照标 `sent`、队列行走 `MarkSent`，
+日志/轨迹/落库行三面零观测。登记里那句"要不要降级渲染属产品口径"把它推给了下一刀，
+而**"把静默变成可观测"那一格本来就不需要等产品拍板** —— 本轮开工前实测该文件的未提交改动
+只剩我自己那两个 hunk（`git diff --stat` = `23 insertions(+)`、`-0`），前置已解除。
+
+**修法（两处，且刻意只留两处）**：
+
+- 入口统一出声门（`:412-427`）：`len(cards) > 0 && channel ∉ {飞书, TG}` ⇒ 一条 warn，带
+  `module=outbound` / `channel` / `account_id` / `cards_dropped`，`hubMsg != nil` 时再带
+  `conversation_id`（重放路径与无轨迹行的调用都要走得到，不能假设轨迹行一定在）。
+- 桥接族落库计数（`:753-760`）：`outMsg.Extra["cards_dropped"] = n` —— 管理端读的就是那一行，
+  界面据此分得清"这单本来没卡"与"这单把卡丢了"。
+
+**两版设计的替换（教训在测试侧，不在产码侧）**：第一版是"入口一道 + 桥接分支自己再一道"，
+电池 v2（`b70/v2/`）十格里 **C4（摘桥接那条的张数字段）与 C10（摘入口那条的渠道字段）跑绿**。
+红因不在产码，在断言写成"整个日志块里出现过某子串"：一次桥接丢弃会同时产出入口 warn 与紧随其后的
+`outbound send failed` 错误行，两行都带 `"channel":"wecom"`（`/tmp/r26-four-shadow.log:21-22` 是同型两行），
+**跨行拼字段就能凑绿**。⇒ 收敛成"入口是唯一出声点"，断言改成按整行匹配 + `行数 == 1`
+（一次丢弃＝一行，行数即次数），并把"飞书/TG 不得误报"补成反向格 —— 否则那两个排除臂压根没牙。
+
+**牙**（`.tmp_files/mut-evidence-2026-09-22/b70/battery3.sh`，十格，控制组同树现测 `PASS=5 FAIL=0`）：
+V1 摘落库计数 / V2 计数门 `n > 0`→`true` / V3 摘整道入口门 / V4 摘张数字段 / V5 摘渠道字段 /
+V6 摘账号字段 / V7 摘会话号臂 / V8 会话号臂去掉 nil 判断 / V9 摘飞书排除臂 / V10 摘 TG 排除臂
+⇒ **10/10 全杀**，红因各不相同：V1→行用例、V2→"无卡不得凭空写键"、V3→两条出声用例同红（`FAIL=2/5`）、
+V4/V5 同打两条出声用例、V6/V7 只打死按字段断言的那一条、**V8 = KILLED-BYPANIC**
+（`panic: invalid memory address or nil pointer dereference`，证明那句 nil 判断真承重）、
+V9/V10 **各自只打死 `.../feishu` 与 `.../telegram` 一个子用例**（逐臂拆刀，不是同一格重复计数）。
+注码前用临时副本 + `gofmt -e` 做锚点预检（十格 `anchor-ok`；预检本身先反向自测：故意写坏的临时文件必须被
+报成 `expected '}', found 'EOF'`，否则"全部 ok"只是判据没牙），还原后逐文件 md5 与注码前一致
+（产码 `33ed6cf9ec84bb71e2a1a970bd1ac876`、用例 `1801b43dd49a811fd025da318df6fdec`），
+影子克隆与活树两棵树 `cmp` 同字节才放刀。
+
+**生产可达性已核**（避免"装了但走不到"的观测面）：`webhook_ai.go:204`（`RichCardsFromDTO(resp.Cards)`）
+与 `:541`（`result.Cards`）两个调用点**都不按渠道过滤** `cards` ⇒ 任意渠道的带卡 AI 回复都会走到这道门，
+含夜间静默/失败重投后的 `replayDelayedOutbound` 重放腿。反面对照：网页访客侧
+`chat_visitor.go:541 → VisitorSendMessageResult.AICards` 经 `controller/chat_public.go:235` 随响应体正常下发，
+不属于丢弃面 —— 丢弃面就 `sendOutbound` 这一处。
+
+**顺带否证一条结转**：本文件头注释旧版与登记里都写"飞书/TG/**钉钉**那几族逐张真下发"，
+实测钉钉分支不读 `cards`（全文件 `for _, card := range cards` 只有 `:476`/`:525` 两处）⇒ 钉钉与另五族
+同在丢弃面里，注释已按实测改写。另记一条事实：`DouyinIntegrationService.SendCard`
+（`douyin_integration.go:43`，把卡降级成 `[卡片] 标题 + 链接` 文本）**全仓零调用方**
+（`.SendCard(` 的四个调用点分属 `tooluse.ReachAdapter` 与 `tgIntegration`，都不是它）。
+本轮既不删也不接线：该文件与渠道媒体发送面正被并行泳道改，删它会把对方批次钉成既成事实。
+
+**那条"产品口径"本轮定下来：不做自动降级渲染。** ①降级必然要往私信里塞外链，抖音/小红书私信对外链有
+平台风控，账号处罚由业务承担而不是代码承担，这不是补测排期能替它拍的；②从今天起 `cards_dropped`
+在日志和落库行两面有数，"要不要降级、在哪个渠道降级"可以按真实丢弃分布决定而不是按猜。
+⇒ 该项从"开放的产品口径"转成"有数据的待决策"，**观测面这一侧已闭**。
+
+**门**：本轮全部跑在影子克隆上（`--shared --no-checkout` + `checkout e3af05d0`，再逐文件 `cp` 本批两文件，
+`cmp` 通过后开跑）。活树此刻编译不过是并行会话的瞬时态：`inbox_ingress.go:528` 调
+`s.releaseInboundDedup` 而该方法在全仓（含 HEAD `git grep`）都无定义 ⇒ `17:17 实测`
+`[build failed]`，**不碰它**（那是对方泳道的在制品）。克隆上：`go build ./...` rc=0、
+`go vet ./internal/...` rc=0（输出 0 字节，单独重测拿真 rc，不用 `| tail` 遮码）、
+`gofmt -l internal/` 0 行、本批 5 用例 `-v` `PASS=5 FAIL=0`（`18.115s`，load 23.73→30.12）。
+影子克隆整包回归（18:04 收尾）：`go test ./internal/service/ -count=1 -timeout 40m` ⇒ **rc=1**、
+`FAIL hivemtk-user/internal/service 771.117s`、load 22.86→20.97；`--- FAIL` 全库**只有 1 条**
+＝ `TestD12_NoNewLegacyKVDirectQuery (0.23s)`，红因 `[../service/quote.go]`（`config_param_guard_test.go:77`
+用 `strings.Contains` 读原文不剥注释 ⇒ 注释位假阳；§23.17 第 12 段已定性为**并行泳道既有红，本泳道不代改**，
+其 `goCodeOnly` 修法至今未进任何提交）。**这是第一次在"只含已提交内容＋本批两文件"的树上跑整包**，
+读数因此可以把口径钉死：除 D12 之外 HEAD 字节整包零红。
+另有一跑活树混树基线（17:09 编译，含并行会话全部未提交内容、**不含**本轮统一门）：
+`rc=0 / ok hivemtk-user/internal/service 1388.553s`，load 28.23→25.57 —— 只作并行态参考，
+该跑未带 `-test.v`，其 `--- PASS/FAIL` 计数恒 0 属空证据，只认 rc。
+
+**勿放松**：入口那道门是全渠道**唯一**出声点 —— 别在某个渠道分支里再补一条 warn，按行数计数的告警会翻倍，
+而"行数 == 1"这条断言会先红（v2 的 C4/C10 就是这么假绿的）；`channel != ChannelFeishu && channel != ChannelTelegram`
+两个排除臂必须与"分支表里真读 `cards` 的位置"同源 —— 哪天给别的渠道接上卡片下发，就得同时把它移出排除臂
+**并**把 `TestSendOutbound_CardCapableChannelStaysQuiet` 的渠道表补上，否则"正常发卡"会被成片报成丢弃、
+这条日志在运维侧当场作废；桥接族的 `Extra["cards_dropped"]` 只在 `len(cards) > 0` 时写（V2 那格守的就是它）；
+`hubMsg != nil` 那句判断不许为了"日志字段整齐"去掉（V8 那格是 panic，不是断言红）。
