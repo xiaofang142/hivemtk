@@ -243,6 +243,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 但会在 FF_LTC_APPROVAL_RESUME=off 时点名"批不了"这件事（见 quote_wiring.go 文件头）。
 	app.InitQuoteRuntime(gormDB)
 
+	// 账单派生腿（T-P7-01）：同一位置约束，排在报价之后只是读法上的顺序（本竖不复用
+	// 报价的服务实例，两把句柄各自 WithDB 注入）。不装配的代价不是一句 503，
+	// 是 `accepted` 在全系统没有写入口 ⇒ 回款域没有起点，所以这里必须出声。
+	app.InitBillRuntime(gormDB)
+
 	// 邮件排水运行时（R21）：必须在路由之前 —— /api/email/* 读的是同一个 status 字段的
 	// 那一列，装配点晚于流量的话，列表里会出现"排水器刚把它改成发送中、读侧还在按待发送
 	// 统计"的错位。本竖没有旗子：拿不到 DB 句柄就是不装配，不装配就是回到 R21 之前的
@@ -393,6 +398,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 发送那一条的操作者要落进 sales_events.owner_id（"谁把这一版发出去的"），
 		// 那个身份只来自令牌；匿名可访问等于审计里所有人都可以是任何人。
 		setupQuoteRoutes(auth)
+
+		// 账单 /api/bill/*（T-P7-01）：同一位置约束。这一条比报价那条更要紧 ——
+		// 它是 `accepted` 在整个系统里的唯一生产写入口，匿名可访问等于任何人都能
+		// 在任意一条报价上开出一张应收。
+		setupBillRoutes(auth)
 
 		systemAdmin := auth.Group("")
 		systemAdmin.Use(middleware.AdminAuthMiddleware())

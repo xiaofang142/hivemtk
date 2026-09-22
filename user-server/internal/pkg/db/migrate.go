@@ -349,6 +349,13 @@ func allModels() []any {
 		// 行项目写不进去，而"合计对不对"的用例连不上明细表时是 Skip 不是 Fail。
 		&model.Quote{},
 		&model.QuoteLineItem{},
+		// Bill（表 bills）：T-P7-01 / N-6 回款域第一层。
+		// 卡面写的 `v3_50_0_bill_migration.go` 因此不产出 —— 本仓生产建表只跑 AutoMigrate，
+		// 启动期 ExecuteUpgrade 固定空跑（与本文件头部那八次同源实测一致）。
+		// 登记理由与 Quote 同一条：这张表的失败面是"表没建、代码全对"，
+		// 而应收是**给钱的那张纸**：漏建表的那天销售照样点"客户已接受"，
+		// 报价状态真的变成 accepted，只有账单这一侧在日志里留一句话。
+		&model.Bill{},
 		&model.RecoveryQueue{},
 		&model.SecurityAlert{},
 		&model.SystemConfigKV{},

@@ -39,6 +39,11 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		// 生产写入路径（本卡虽未装配，登记建表与登记写入路径是两件事）。
 		&model.ApprovalRequest{},
 		&model.BanditRefluxLog{},
+		// Bill：T-P7-01 新增，有 repository.billRepo.Create 这条生产写入路径
+		// （报价被接受时派生应收）。列入 mustCover 而不是只信 allModels() 里那一行，
+		// 是因为这张表的失败面恰好是"表没建、代码全对"：客户接受那一格照样落库，
+		// 只有账单这一侧在日志里留一句话 —— 而它是给钱的那张纸。
+		&model.Bill{},
 		&model.ChurnScore{},
 		&model.ClueEngagementEvent{},
 		&model.ClueScore{},

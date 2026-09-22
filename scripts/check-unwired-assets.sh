@@ -411,6 +411,28 @@ BASELINE=(
   "21|报价行的生产写入点（T-P6-02 起 service 侧有真实写入方：Generate 与 Revise 各构造一版；接线数回到 0 = 报价生成整条腿没了）|type Quote struct|model\\.Quote\\{|internal/service internal/controller internal/app|wired"
   "21|报价两条腿在启动路径上的装配点（摘掉 router 那一行，端点全退 503 而 Go 用例全绿）|func InitQuoteRuntime|InitQuoteRuntime\\(|internal/router|wired"
   "21|报价 HTTP 出口的挂载点（装配了却没挂载 = 库里有报价、前端 404，与 21c 是两种坏法）|func setupQuoteRoutes|setupQuoteRoutes\\(|internal/router|wired"
+  # ---- T-P7-01 账单派生腿（23a–23e）—————————————————————————————————————
+  # 这一族比报价那一族多一格，因为本卡的中心事实是一句**否证**：
+  # `accepted` 这个值从 T-P6-01 起就在报价值域里，而全仓非测试代码没有任何一处写它
+  # （实测 QuoteRepository.UpdateStatus 的调用方只有发送腿的 draft↔sent 两次）。
+  # 所以"回款域没有起点"这件事在编译、测试、响应面上全都看不出来 —— 只有台账数得出来。
+  # 23a/23b 是报价族同一对断点（装配入口 / 真的产生一行账单）；
+  # 23c/23d 也是（router 里那一行 Init / 那一行 mount）：摘掉 Init 是端点恒 503，
+  # 而 router 包那条"未装配回 503"的用例照样绿（它判的就是 nil 句柄，分不清"本该 nil"
+  # 与"没人装配"）；摘掉 mount 是库里有账单而前端 404 —— 两种坏法在响应面上不重叠，
+  # 合成一格只守得住一半。
+  # 23e 是本卡**故意交付而暂时没人调**的那一格：账单状态跃迁口（open→partial→paid、→voided）。
+  # 判据在 T-P7-02（回款累计到位才算结清）与 T-P7-03（催收收口），今天写任何调用方
+  # 都要凭空造一个"已收金额"，而那一列本卡刻意不建（求和发生在 payments 侧）。
+  # defpat 锚在**方法定义**上而不是接口上：接口那一行现在也在，把它算成"定义存在"的话，
+  # 方法被删掉之后这一格会退成 exit 2（报"检查形同虚设"）而不是报"接线状态漂移"。
+  # callpat 用 `bills\.UpdateStatus\(`：派生服务的字段就叫 bills，等 T-P7-02 的回款累计
+  # 真接上时，这一行会从 unwired 翻成 wired 并被当场数出来。
+  "23|账单仓储的装配入口（摘掉 app/bill_wiring.go 那一行，派生腿恒缺件、Go 用例全绿）|type BillRepository interface|NewBillRepositoryWithDB\\(|internal/app|wired"
+  "23|账单行的生产写入点（接线数回到 0 = 全系统再没有任何一处能开出一张应收）|type Bill struct|model\\.Bill\\{|internal/service internal/controller|wired"
+  "23|账单派生腿在启动路径上的装配点（摘掉 router 那一行，/api/bill 永久 503 且报价 accepted 在全系统没有写入口）|func InitBillRuntime|InitBillRuntime\\(|internal/router|wired"
+  "23|账单 HTTP 出口的挂载点（装配了却没挂载 = 库里有账单、前端 404，与 23c 是两种坏法）|func setupBillRoutes|setupBillRoutes\\(|internal/router|wired"
+  "23|账单状态跃迁口的生产调用方（本卡只交付形状：结清判据在 T-P7-02、催收收口在 T-P7-03）|func \\(r \\*billRepo\\) UpdateStatus|bills\\.UpdateStatus\\(|internal/service|"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go
