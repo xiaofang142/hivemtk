@@ -60,11 +60,16 @@ func TestLocalSourceEnvPrecedence(t *testing.T) {
 		t.Errorf("公开 URL 前缀没去掉尾斜杠：%q", publicURL)
 	}
 
-	// UPLOAD_DIR 是兜底而非主键：只配它时也该生效。
+	// UPLOAD_DIR 自第三十八轮起不再参与解析：它从没进过 .env-example / docker-compose / deploy/，
+	// 而除本函数外的四个本地盘读取点（storage/factory.go、service/init_storage.go、
+	// service/channel_media.go、browser_automation/service/storage_util.go）从来只认
+	// STORAGE_LOCAL_BASE_DIR → ./uploads。留着这一档就是"同一台机器两套根"，
+	// 于是"controller 上传的文件公开链接 404"与"渠道媒体公开链接 404"必然二选一地发生。
+	// 只配它 ⇒ 落到默认根，而不是悄悄换一棵树。
 	clearStorageEnv(t)
 	t.Setenv("UPLOAD_DIR", "/mnt/upload")
-	if baseDir, _, _ := LocalSource(); baseDir != "/mnt/upload" {
-		t.Errorf("只配 UPLOAD_DIR 时磁盘根 = %q", baseDir)
+	if baseDir, _, _ := LocalSource(); baseDir != "./uploads" {
+		t.Errorf("只配已退役的 UPLOAD_DIR 时磁盘根 = %q，期望仍为默认 ./uploads", baseDir)
 	}
 }
 
@@ -101,6 +106,23 @@ func TestUploadHandlerReadsEnvThroughLocalSource(t *testing.T) {
 	for _, key := range []string{`os.Getenv("UPLOAD_FOLDER")`, `os.Getenv("STORAGE_LOCAL_BASE_DIR")`, `os.Getenv("UPLOAD_DIR")`, `os.Getenv("STORAGE_LOCAL_PUBLIC_URL")`} {
 		if got := countLinesContaining(src, key); got != 0 {
 			t.Errorf("upload.go 仍自己读 %s（%d 次）⇒ 与外发侧的根不再同源", key, got)
+		}
+	}
+}
+
+// TestFilesRouteReadsEnvThroughLocalSource 静态锁：/files 托管侧与上传侧同源。
+//
+// 与上一条同形状，只是被锁的文件换成路由侧。路由侧的行为测试
+// （router/files_guard_test.go）只能断"挂的这棵树取得到文件"，
+// 在"路由自己抄一份解析、抄的键恰好等价"时不红 —— 那一格由这里负责。
+func TestFilesRouteReadsEnvThroughLocalSource(t *testing.T) {
+	src := readNonCommentLines(t, "../router/files_guard.go")
+	if got := countLinesContaining(src, "LocalSource()"); got != 1 {
+		t.Errorf("files_guard.go 里 LocalSource() 命中 %d 次，期望恰好 1 次 ⇒ 托管根又有了第二份实现", got)
+	}
+	for _, key := range []string{`os.Getenv("STORAGE_LOCAL_BASE_DIR")`, `os.Getenv("UPLOAD_DIR")`, `os.Getenv("UPLOAD_FOLDER")`, `os.Getenv("STORAGE_LOCAL_PUBLIC_URL")`} {
+		if got := countLinesContaining(src, key); got != 0 {
+			t.Errorf("files_guard.go 仍自己读 %s（%d 次）⇒ 与上传侧的根不再同源", key, got)
 		}
 	}
 }

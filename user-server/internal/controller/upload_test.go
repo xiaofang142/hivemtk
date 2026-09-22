@@ -16,8 +16,8 @@ import (
 func setupUploadTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	_ = os.Setenv("UPLOAD_DIR", dir)
-	t.Cleanup(func() { os.Unsetenv("UPLOAD_DIR") })
+	_ = os.Setenv("STORAGE_LOCAL_BASE_DIR", dir)
+	t.Cleanup(func() { os.Unsetenv("STORAGE_LOCAL_BASE_DIR") })
 	return dir
 }
 

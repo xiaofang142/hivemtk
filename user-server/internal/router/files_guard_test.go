@@ -7,6 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"hivemtk-user/internal/storage"
+
+	dbutil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/testutil"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -93,5 +98,71 @@ func TestFilesGuard_BlocksTraversal(t *testing.T) {
 	}
 	if w.Code != http.StatusNotFound {
 		t.Logf("穿越请求返回非 404（也接受）: %d", w.Code)
+	}
+}
+
+// 上传写入方（controller/upload.go）、邮件外发侧与 /files 托管侧三处必须落在同一个磁盘根上。
+// 本例把文件铺在 storage.LocalSource() 解析出的那棵树下，再断 /files 取得到它。
+//
+// 限定：这条腿在"托管侧自己抄一份解析、但抄的键恰好等价"时不会红（那属可读性问题，
+// 由 internal/storage/attachment_source_test.go 的 TestFilesRouteReadsEnvThroughLocalSource
+// 静态锁负责）。它红的是"两处根本不是同一棵树"这一类 —— 那才是历史上真实发生过的形状。
+func TestRegisterFilesRouteServesTheUploadWritersRoot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	t.Setenv("STORAGE_LOCAL_BASE_DIR", dir)
+	// 退役键（第三十八轮）：就算环境里还留着它，也不许把托管根带走。
+	t.Setenv("UPLOAD_DIR", filepath.Join(dir, "legacy-must-not-be-read"))
+
+	writersRoot, _, _ := storage.LocalSource()
+	if writersRoot != dir {
+		t.Fatalf("夹具未成立：上传侧解析出的根 = %q，期望 %q", writersRoot, dir)
+	}
+	full := filepath.Join(writersRoot, "materials", "served-by-same-root.txt")
+	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("ok"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r := gin.New()
+	RegisterFilesRoute(r)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/files/materials/served-by-same-root.txt", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("/files 取不到上传方写进同一棵根的文件: code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestSetupRegistersFilesRoute 装配腿：RegisterFilesRoute 存在 ≠ 它在 Setup 里被调用。
+//
+// 本仓已有先例说明这一格不是杞人忧天 —— reach registry 的 22 处装配里 21 处的 getter
+// 从来没有活消费方（第三十七轮）。摘掉 Setup 里那一行，/files 整条腿静默消失、
+// 上传功能照常、只有公开链接 404。
+func TestSetupRegistersFilesRoute(t *testing.T) {
+	database := testutil.NewTestDB(t)
+	dbutil.SetTestDB(database)
+	t.Cleanup(func() { dbutil.SetTestDB(nil) })
+
+	dir := t.TempDir()
+	t.Setenv("STORAGE_LOCAL_BASE_DIR", dir)
+	full := filepath.Join(dir, "materials", "assembled-by-setup.txt")
+	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("ok"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	Setup(r, database)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/files/materials/assembled-by-setup.txt", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("Setup 未挂载 /files（或挂的不是同一个根）: code=%d body=%s", w.Code, w.Body.String())
 	}
 }

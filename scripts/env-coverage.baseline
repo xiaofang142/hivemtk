@@ -79,7 +79,6 @@ SMTP_USER	待补文档（第三十五轮登记为债）；读取点 user-server/
 SSE_CORS_ALLOW_ORIGINS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/router.go
 STORAGE_LOCAL_BASE_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/internal/browser_automation/service/storage_util.go
 STORAGE_LOCAL_PUBLIC_URL	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go
-UPLOAD_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go
 UPLOAD_FOLDER	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go
 UPLOAD_MAX_SIZE	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go
 UPLOAD_VIRUS_SCAN	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go

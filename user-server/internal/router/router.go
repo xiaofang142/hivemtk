@@ -156,15 +156,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	var webhookSvc *service.WebhookService
 	var dingtalkAppSvc *service.DingTalkAppService
 
-	uploadDir := os.Getenv("STORAGE_LOCAL_BASE_DIR")
-	if uploadDir == "" {
-		uploadDir = "./uploads"
-	}
-	_ = os.MkdirAll(uploadDir, 0o750)
-	// /files 托管改走守卫版（同源可执行扩展名 403 + nosniff/sandbox），
-	// 替代裸 r.Static，堵素材库/渠道媒体任意扩展名落盘后的同源直出。
-	r.GET("/files/*filepath", serveUploadsGuarded(uploadDir))
-	logger.Infof("[Router] static file server registered (guarded): /files -> %s", uploadDir)
+	RegisterFilesRoute(r)
 
 	r.HandleMethodNotAllowed = true
 	r.NoMethod(func(c *gin.Context) {

@@ -3477,10 +3477,12 @@ env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里
    公开地址可配成绝对地址或裸源站，认原样比对就又回到静默不附；host 不参与比对（越界不靠"认得自家域名"兜）。
    **不解码** `%2f`：编码斜杠在这里就只是普通字符，不会变成路径分隔符。
 2. `internal/storage/attachment_source.go` —— 上传侧那三个环境键（`STORAGE_LOCAL_BASE_DIR` →
-   `UPLOAD_DIR` → `./uploads`；`STORAGE_LOCAL_PUBLIC_URL` → `/files`；`UPLOAD_FOLDER` → `attachments`）
-   的**唯一**读取点（`LocalSource` `attachment_source.go:19`、`LocalAttachmentSource` `:44`）。
-   `internal/controller/upload.go:166` 由内联读 env 改为调它，外发侧调 `LocalAttachmentSource()`：
-   两处同源，否则一改 `STORAGE_LOCAL_BASE_DIR` 就是"上传成功、发信时附件静静消失"。
+   `./uploads`；`STORAGE_LOCAL_PUBLIC_URL` → `/files`；`UPLOAD_FOLDER` → `attachments`）
+   的**唯一**读取点（`LocalSource` `attachment_source.go:29`、`LocalAttachmentSource` `:51`）。
+   `internal/controller/upload.go:166` 由内联读 env 改为调它，外发侧调 `LocalAttachmentSource()`，
+   `/files` 托管侧（`router/files_guard.go` `RegisterFilesRoute`）也调它：
+   三处同源，否则一改 `STORAGE_LOCAL_BASE_DIR` 就是"上传成功、发信时附件静静消失"。
+   （磁盘根原本还夹着一档 `UPLOAD_DIR`，第三十八轮退役，理由见下面那条残项的处置结果。）
 3. 两条外发路径接同一份判定：单封 `email_send.go:316/326/338`（`attachments` 字段是注入接缝，
    nil 时按环境现推），群发 `emaillistcron.go:87` 装配 + `:164-170` 行处理。
    两边都：挂不上不阻断投递（附件是增值项，一个粘错的地址不该堵一波群发），
@@ -3529,10 +3531,16 @@ env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里
 
 **登记为残项（本轮不动）**：
 
-- `internal/router/router.go:159` 的 `/files` 静态托管根仍自己读 env（只看 `STORAGE_LOCAL_BASE_DIR`，
-  兜底 `./uploads`），而上传侧 `LocalSource()` 的兜底链里还夹着 `UPLOAD_DIR` ⇒ 只配 `UPLOAD_DIR` 的部署
-  会"写到 `$UPLOAD_DIR`、从 `./uploads` 公开"，公开链接 404（邮件附件不受影响，它读磁盘本身）。
-  收口动作就是把那半段也换成 `storage.LocalSource()`；**该文件被并行会话占着未提交改动 ⇒ 按归属交接**。
+- ~~`internal/router/router.go` 的 `/files` 静态托管根仍自己读 env~~ ⇒ **第三十八轮已修，别重做**：
+  那条"只配 `UPLOAD_DIR` 的部署会写到 `$UPLOAD_DIR`、从 `./uploads` 公开"的登记，实测**只修路由侧
+  是把 404 换了个位置**（路由侧接上三档链后，轮到只认两档的另外四个本地盘读取点对不上：
+  `storage/factory.go`、`service/init_storage.go`、`service/channel_media.go`、
+  `browser_automation/service/storage_util.go`）。正解是**收成一条链**：`UPLOAD_DIR` 这一档整体退役
+  （它从没进过 `.env-example` / `docker-compose.yml` / `deploy/`），`LocalSource()` 只留
+  `STORAGE_LOCAL_BASE_DIR → ./uploads`，托管侧改调同一个函数。牙是四格变异电池（`.tmp_files/mut-evidence-2026-09-22/b63/cells-r22/`，
+  N1 接回那一档 / N2 托管侧手抄等价键 / N3 摘掉 `Setup` 里的装配调用 / N4 托管侧偷读退役键，
+  四格全被杀）。**上一轮 N3 那一格是 SURVIVED 的** —— `RegisterFilesRoute` 存在不等于它在 `Setup` 里
+  被调用（与第三十七轮"22 处 reach 装配里 21 处无活消费方"同形），现在由 `TestSetupRegistersFilesRoute` 守着。
 - 两条路径的"附件列非空却一项都没挂上"出声只经 `AttachmentsDropped` 这个判定函数锁（它在
   `internal/pkg/mail` 有独立用例），**没有**对日志串本身加静态锁：`sync.Once` + 文案两处各一份，
   锁文案等于锁一个随时会润色的字符串，收益不抵成本。
@@ -3541,7 +3549,10 @@ env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里
 诱饵夹具与 `root/outside.pdf` 是这三腿与越界腿的牙，删夹具＝删判据；`Lstat` + `IsRegular` 不得退回
 `Stat`（跟软链接出根外）；`publicPath` 的"先剥 scheme/host、再截 `?`/`#`、**不解码**"三步顺序不得只留一步；
 `storage.LocalSource()` 必须是 `upload.go` 里那三个键的唯一读取点（静态锁在
-`internal/storage/attachment_source_test.go:96`）；`AttachmentPaths` 的返回值不得改回"未解析也占位"
+`internal/storage/attachment_source_test.go:96`），也必须是 `router/files_guard.go` 里托管根的唯一来源
+（同文件 `:118` 的 `TestFilesRouteReadsEnvThroughLocalSource`；行为侧另有 `router/files_guard_test.go` 的
+`TestRegisterFilesRouteServesTheUploadWritersRoot` 与装配腿 `TestSetupRegistersFilesRoute`）；
+`UPLOAD_DIR` 这一档不得被"顺手兼容"接回来（要换本地盘根就配 `STORAGE_LOCAL_BASE_DIR`）；`AttachmentPaths` 的返回值不得改回"未解析也占位"
 （空串会让 `AttachmentsDropped` 永远不响）；两处 `AttachmentsDropped` 出声保持"进程内一次"，
 既不得删也不得改成每行都打；`internal/service/email.go` 的 `_ = attachments` 若哪天有活调用点
 传非 nil，必须走 `mail` 包那套解析，而不是在手写报文上补 multipart。

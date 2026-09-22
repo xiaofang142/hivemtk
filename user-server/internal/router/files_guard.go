@@ -2,12 +2,35 @@ package router
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
+
+// RegisterFilesRoute 把本地上传目录挂到 /files/*。
+//
+// 抽成独立函数是为了让它可测："托管哪一棵树"这件事单独就能错，而 Setup 要拉起整个应用
+// （见 TestRegisterFilesRouteServesTheUploadWritersRoot；装配腿由 TestSetupRegistersFilesRoute 守着）。
+//
+// 托管根取自 storage.LocalSource() ——与上传写入方（controller/upload.go）、邮件外发侧三方
+// 同一份解析，兜底链 STORAGE_LOCAL_BASE_DIR → ./uploads。此前这里自己读一遍 STORAGE_LOCAL_BASE_DIR，
+// 而上传侧的链中间还夹着一档 UPLOAD_DIR ⇒ "只配 UPLOAD_DIR"的部署把文件写进 $UPLOAD_DIR、
+// 却从 ./uploads 对外公开，公开链接逐个 404（第三十八轮把那一档连同这里的手抄一起退役）。
+// 取第一个返回值：第三个（附件子目录）与第二个（公网前缀）都不是本路由的坐标系，
+// 路由路径按 /files/* 硬编码，改 STORAGE_LOCAL_PUBLIC_URL 只会改外链，不会改这里挂的路径。
+//
+// /files 走守卫版（同源可执行扩展名 403 + nosniff/sandbox）而非裸 r.Static，
+// 堵素材库/渠道媒体任意扩展名落盘后的同源直出。
+func RegisterFilesRoute(r *gin.Engine) {
+	uploadDir, _, _ := storage.LocalSource()
+	_ = os.MkdirAll(uploadDir, 0o750)
+	r.GET("/files/*filepath", serveUploadsGuarded(uploadDir))
+	logger.Infof("[Router] static file server registered (guarded): /files -> %s", uploadDir)
+}
 
 // serveUploadsGuarded 以 r.Static 的替代实现发布本地上传目录（/files/*），
 // 叠加两层防护：
