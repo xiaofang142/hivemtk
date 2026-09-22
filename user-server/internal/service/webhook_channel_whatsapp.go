@@ -182,6 +182,8 @@ var (
 // 失败仅告警（占位符文本已入库，不影响主链路）。
 func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountID, msgID, mediaID, filename string) {
 	accID, _ := strconv.ParseUint(accountID, 10, 64)
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	mediaFetchFn, mediaStoreFn := waMediaFetchFn, waMediaStoreFn
 	utils.SafeGo(ctx, "whatsapp.media_persist", func(gctx context.Context) {
 		token, _, err := s.waCloudSecrets(gctx, accountID)
 		if err != nil || token == "" {
@@ -193,7 +195,7 @@ func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountI
 			logger.Ctx(gctx).Warn().Str("account_id", accountID).Msg("[WhatsApp] 媒体转存跳过：账号不存在")
 			return
 		}
-		rc, contentType, ferr := waMediaFetchFn(gctx, token, acc.PhoneNumberID, mediaID)
+		rc, contentType, ferr := mediaFetchFn(gctx, token, acc.PhoneNumberID, mediaID)
 		if ferr != nil {
 			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体下载失败（占位符保留）")
 			return
@@ -204,7 +206,7 @@ func (s *WebhookService) persistWhatsAppMediaAsync(ctx context.Context, accountI
 			logger.Ctx(gctx).Warn().Err(rerr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体读取失败（占位符保留）")
 			return
 		}
-		publicURL, serr := waMediaStoreFn(gctx, "whatsapp", mediaID, data, contentType, filename)
+		publicURL, serr := mediaStoreFn(gctx, "whatsapp", mediaID, data, contentType, filename)
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[WhatsApp] 媒体转存失败")
 			return

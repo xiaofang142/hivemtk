@@ -53,7 +53,6 @@ ORDER_WEBHOOK_MAX_BODY_BYTES	待补文档（第三十五轮登记为债）；读
 ORDER_WEBHOOK_MAX_SKEW_SECONDS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/middleware/webhook_signature.go
 PLATFORM_CONFIG_PATH	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/platform.go
 PLATFORM_MERCHANT_KEY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/platform/asset_market_client.go
-PORT	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
 POSTGRES_TEST_DBNAME	待补文档（第三十五轮登记为债）；读取点 user-server/internal/pkg/testutil/testdb.go
 POSTGRES_TEST_DSN	待补文档（第三十五轮登记为债）；读取点 user-server/internal/pkg/testutil/testdb.go
 POSTGRES_TEST_HOST	待补文档（第三十五轮登记为债）；读取点 user-server/internal/pkg/testutil/testdb.go

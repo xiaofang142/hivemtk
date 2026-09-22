@@ -444,15 +444,17 @@ func (s *WebhookService) persistDouyinMediaAsync(ctx context.Context, channel We
 
 	// SafeGoDetached：转存是几 MB 的网络往返，挂在 4 个 webhook worker 上会把后面所有
 	// 渠道的事件堵住（队头阻塞）；解耦取消链同时保留 ctx.Value，5 分钟硬上限防泄漏。
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	mediaFetchFn, mediaStoreFn := dyMediaFetchFn, dyMediaStoreFn
 	utils.SafeGoDetached(ctx, "douyin.media_persist", 5*time.Minute, func(gctx context.Context) {
-		data, contentType, ferr := dyMediaFetchFn(gctx, clientKey, clientSecret, ref)
+		data, contentType, ferr := mediaFetchFn(gctx, clientKey, clientSecret, ref)
 		if ferr != nil {
 			logger.Ctx(gctx).Warn().Err(ferr).Str("media_id", ref.MessageID).
 				Msg("[Douyin] 入站媒体下载失败（占位符保留）")
 			return
 		}
 		key := ref.storageKey()
-		publicURL, serr := dyMediaStoreFn(gctx, platform, key, data, contentType, "")
+		publicURL, serr := mediaStoreFn(gctx, platform, key, data, contentType, "")
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("media_key", key).Msg("[Douyin] 入站媒体转存失败")
 			return

@@ -92,15 +92,17 @@ func (s *WebhookService) persistQQMediaAsync(ctx context.Context, accountID, hub
 	}
 	// 这里是队列路径（Receive → queue → worker → handleJob → dispatchQQ），ctx 是服务生命周期
 	// ctx 而不是请求 ctx，故 SafeGo 足够；钉钉/公众号那两条同步链路才必须用 SafeGoDetached。
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	maxBytes, mediaFetchFn, mediaStoreFn := qqMaxMediaBytes, qqMediaFetchFn, qqMediaStoreFn
 	utils.SafeGo(ctx, "qq.media_persist", func(gctx context.Context) {
 		urls := make([]string, 0, len(atts))
 		for i, att := range atts {
-			if int64(att.Size) > qqMaxMediaBytes {
+			if int64(att.Size) > maxBytes {
 				logger.Ctx(gctx).Warn().Str("msg_id", hubMsgID).Int("size", att.Size).
 					Msg("[QQ] 附件超过入站媒体上限，跳过转存")
 				continue
 			}
-			data, contentType, ferr := qqMediaFetchFn(gctx, att.URL)
+			data, contentType, ferr := mediaFetchFn(gctx, att.URL)
 			if ferr != nil {
 				logger.Ctx(gctx).Warn().Err(ferr).Str("msg_id", hubMsgID).Int("index", i).
 					Msg("[QQ] 附件下载失败（占位符保留）")
@@ -113,7 +115,7 @@ func (s *WebhookService) persistQQMediaAsync(ctx context.Context, accountID, hub
 			if name := strings.TrimSpace(att.Filename); name != "" {
 				hint += name
 			}
-			publicURL, serr := qqMediaStoreFn(gctx, "qq", mediaID, data, contentType, hint)
+			publicURL, serr := mediaStoreFn(gctx, "qq", mediaID, data, contentType, hint)
 			if serr != nil {
 				logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[QQ] 附件转存失败")
 				continue

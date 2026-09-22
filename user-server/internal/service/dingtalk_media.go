@@ -155,16 +155,18 @@ func (s *DingTalkAppService) persistDingTalkMediaAsync(ctx context.Context, acco
 	// SafeGoDetached 而不是 SafeGo：钉钉回调是同步链路，请求 ctx 在 handler 写完响应时就 Done()，
 	// 沿用它会把手头这次下载立刻取消掉（媒体永久丢失，而用例传 Background() 时看不出来）。
 	// 解耦取消链但保留 ctx.Value（trace_id 等），用 5 分钟硬上限防泄漏。
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	mediaFetchFn, mediaStoreFn := dtMediaFetchFn, dtMediaStoreFn
 	utils.SafeGoDetached(ctx, "dingtalk.media_persist", 5*time.Minute, func(gctx context.Context) {
 		urls := make([]string, 0, len(codes))
 		for _, code := range codes {
-			data, contentType, ferr := dtMediaFetchFn(gctx, appKey, appSecret, robotCode, code)
+			data, contentType, ferr := mediaFetchFn(gctx, appKey, appSecret, robotCode, code)
 			if ferr != nil {
 				logger.Ctx(gctx).Warn().Err(ferr).Str("media_code", code).
 					Msg("[DingTalk] 媒体下载失败（占位符保留）")
 				continue
 			}
-			publicURL, serr := dtMediaStoreFn(gctx, "dingtalk", code, data, contentType, fileName)
+			publicURL, serr := mediaStoreFn(gctx, "dingtalk", code, data, contentType, fileName)
 			if serr != nil {
 				logger.Ctx(gctx).Warn().Err(serr).Str("media_code", code).Msg("[DingTalk] 媒体转存失败")
 				continue

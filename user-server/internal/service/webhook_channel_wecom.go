@@ -432,6 +432,8 @@ func (s *WebhookService) persistWeComMediaAsync(ctx context.Context, accountID, 
 	if s.wecomRepo == nil {
 		return
 	}
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	tokenFn, mediaFetchFn, mediaStoreFn := wecomTokenFn, wecomMediaFetchFn, wecomMediaStoreFn
 	utils.SafeGo(ctx, "wecom.media_persist", func(gctx context.Context) {
 		accID, _ := strconv.ParseUint(accountID, 10, 64)
 		if accID == 0 {
@@ -442,12 +444,12 @@ func (s *WebhookService) persistWeComMediaAsync(ctx context.Context, accountID, 
 		if accID == 0 {
 			return
 		}
-		token, terr := wecomTokenFn(gctx, s, uint(accID))
+		token, terr := tokenFn(gctx, s, uint(accID))
 		if terr != nil || token == "" {
 			logger.Ctx(gctx).Warn().Err(terr).Str("account_id", accountID).Msg("[WeCom] 媒体转存跳过：access_token 获取失败")
 			return
 		}
-		rc, contentType, derr := wecomMediaFetchFn(gctx, token, mediaID)
+		rc, contentType, derr := mediaFetchFn(gctx, token, mediaID)
 		if derr != nil {
 			logger.Ctx(gctx).Warn().Err(derr).Str("media_id", mediaID).Msg("[WeCom] 媒体下载失败（占位符保留）")
 			return
@@ -461,7 +463,7 @@ func (s *WebhookService) persistWeComMediaAsync(ctx context.Context, accountID, 
 		if contentType == "" || contentType == "application/octet-stream" {
 			contentType = wecomDefaultContentType(msgType)
 		}
-		publicURL, serr := wecomMediaStoreFn(gctx, "wecom", mediaID, data, contentType, "")
+		publicURL, serr := mediaStoreFn(gctx, "wecom", mediaID, data, contentType, "")
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[WeCom] 媒体转存失败")
 			return

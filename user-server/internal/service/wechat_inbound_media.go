@@ -133,6 +133,8 @@ func (s *WechatService) PersistInboundMediaAsync(ctx context.Context, accountID 
 	hubRepo := repository.NewMessageHubRepositoryWithDB(s.db)
 	// SafeGoDetached 而不是 SafeGo：调用方 handleIncomingMessage 用的是 30s 超时 ctx 并 defer cancel()，
 	// 方法一返回就取消，沿用会让转存在起跑线上被杀掉（用例传 Background() 时看不出来）。
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	mediaStoreFn := wxMediaStoreFn
 	utils.SafeGoDetached(ctx, "wechat.media_persist", 5*time.Minute, func(gctx context.Context) {
 		client, err := s.getTokenClient(gctx, accountID)
 		if err != nil {
@@ -174,7 +176,7 @@ func (s *WechatService) PersistInboundMediaAsync(ctx context.Context, accountID 
 				Str("media_id", mediaID).Msg("[Wechat] 媒体接口返回 JSON 且无 video_url，跳过转存")
 			return
 		}
-		publicURL, serr := wxMediaStoreFn(gctx, "wechat", mediaID, data, contentType, "")
+		publicURL, serr := mediaStoreFn(gctx, "wechat", mediaID, data, contentType, "")
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[Wechat] 媒体转存失败")
 			return

@@ -445,6 +445,8 @@ audit:
 	@python3 scripts/check-env-coverage.py
 	@echo "── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──"
 	@python3 scripts/check-test-nil-deref.py
+	@echo "── 协程体不得直读「测试会改写」的包级注入点（进协程前快照成本地值）──"
+	@python3 scripts/check-async-global-read.py
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——

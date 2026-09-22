@@ -76,6 +76,8 @@ func (s *WebhookService) persistTelegramMediaAsync(ctx context.Context, accountI
 		return
 	}
 	// 队列路径（Receive → queue → worker → handleJob → dispatchTelegram），ctx 是服务生命周期 ctx。
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	maxBytes, mediaFetchFn, mediaStoreFn := tgMaxMediaBytes, tgMediaFetchFn, tgMediaStoreFn
 	utils.SafeGo(ctx, "telegram.media_persist", func(gctx context.Context) {
 		token, terr := s.tgBotToken(gctx, accountID)
 		if terr != nil || token == "" {
@@ -86,12 +88,12 @@ func (s *WebhookService) persistTelegramMediaAsync(ctx context.Context, accountI
 		urls := make([]string, 0, len(media))
 		fileIDs := make([]string, 0, len(media))
 		for i, ref := range media {
-			if tgMaxMediaBytes > 0 && ref.FileSize > tgMaxMediaBytes {
+			if maxBytes > 0 && ref.FileSize > maxBytes {
 				logger.Ctx(gctx).Warn().Str("msg_id", hubMsgID).Int64("size", ref.FileSize).
 					Msg("[Telegram] 媒体超过官方下载上限，跳过转存")
 				continue
 			}
-			data, contentType, ferr := tgMediaFetchFn(gctx, token, ref.FileID)
+			data, contentType, ferr := mediaFetchFn(gctx, token, ref.FileID)
 			if ferr != nil {
 				logger.Ctx(gctx).Warn().Err(ferr).Str("msg_id", hubMsgID).Int("index", i).
 					Msg("[Telegram] 媒体下载失败（占位符保留）")
@@ -104,7 +106,7 @@ func (s *WebhookService) persistTelegramMediaAsync(ctx context.Context, accountI
 			if name := strings.TrimSpace(ref.FileName); name != "" {
 				hint += name
 			}
-			publicURL, serr := tgMediaStoreFn(gctx, "telegram", mediaID, data, contentType, hint)
+			publicURL, serr := mediaStoreFn(gctx, "telegram", mediaID, data, contentType, hint)
 			if serr != nil {
 				logger.Ctx(gctx).Warn().Err(serr).Str("media_id", mediaID).Msg("[Telegram] 媒体转存失败")
 				continue

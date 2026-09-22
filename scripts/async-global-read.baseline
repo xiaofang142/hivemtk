@@ -1,0 +1,43 @@
+# 异步体裸读全局门基线 —— `scripts/check-async-global-read.py` 的比对表
+#
+# 格式：`<相对仓库根的产码文件路径><TAB><该文件允许的确证站点数>`；空行与 `#` 开头行忽略。
+# 判据：现算 > 登记 ⇒ OVER 红；文件不在本表却出现站点 ⇒ NEW 红；
+#       登记数额大于现算 ⇒ STALE 红（修掉就划掉，不许留旧数额养僵尸条目）。
+#
+# 当前是**零条目**（2026-09-22 第四十二轮 R27 建门时）：门首跑在 `924168ce` 上实测到 19 处确证站点，
+# 分布在 8 个渠道媒体异步转存文件里，本轮全部按"进协程前快照成本地值"就地收口，没留下一处要登记的存量——
+#   · webhook_channel_feishu.go 3（feishuTenantTokenFn / feishuMediaFetchFn / feishuMediaStoreFn）
+#   · webhook_channel_wecom.go 3、webhook_channel_whatsapp.go 2、wechat_inbound_media.go 1（wxMediaStoreFn；
+#     wxMediaFetchFn 至今**没有任何用例改写它**，故按判据不属"测试会改写的全局"，不计站点）
+#   · qq_media.go 3（含 qqMaxMediaBytes）、telegram_media.go 3（含 tgMaxMediaBytes）、
+#     dingtalk_media.go 2、douyin_media.go 2
+# 建门的直接依据是 CI 真跑出来的 `WARNING: DATA RACE`（job 106701603664 @ `7418e489`：写
+# `webhook_batchf4_msgtype_test.go:522` vs 读 `webhook_channel_feishu.go:427`，判红
+# `--- FAIL: TestN17_FeishuMediaFullChainBackfillsHubRow`）。本机 `-race -count=12/-count=30(GOMAXPROCS=1)`
+# 各 81.8s / 411.5s 两趟**都没撞上**——窗口是"前一条用例残留的协程还没跑到读那一行"，本机 PG 在同城、
+# 协程调度快，撞不上；⇒ 这道门的红**不许用"本地 -race 绿"当修好依据**，判据是站点数归零 + CI 全量 -race。
+# 细节与盲区（seam 默认实现里那一层传递不在本门口径内）见脚本 docstring。
+#
+# 建门时的验证账：影子克隆里 HEAD 树现算 19、装上本轮 8 个文件后现算 0；`make -n audit` 确认已挂上；
+# 判据牙齿 6 格全过（单点回退⇒NEW、`go func(` 形状⇒NEW、基线 1 现算 2⇒OVER、基线 3 现算 0⇒STALE、
+# 删基线文件⇒rc=2 ENV-BROKEN、复原⇒绿），注码文件事后逐字节 md5 复原。
+# 在 `cf71ba60`（推送时的实际 HEAD）上另做了一次红绿对照：影子树里只把 webhook_channel_feishu.go
+# 换回 HEAD 版本 ⇒ rc=1 且逐点报出 427/432/443 三处，其中 427 与上面 CI 记的读点行号**逐字相同**；
+# 换回修复版 ⇒ rc=0、md5 与活树一致。这道门的两条输出行都会打印"项目根 …（扫描根 …）"，
+# 影子树复验时**必须把这行一起落盘**——本仓门的定根方式若与目录层级耦合，rc=0 也可能扫的是另一棵树。
+#
+# 装配面：本门目前只挂在**本地** `make audit`。远程没跑到它，原因有两层，别混：
+#   ① CI 从不执行 `make audit`（`grep -rn 'make audit' .github/workflows/` 实测零命中）——
+#      仓内静态门在 CI 的挂法是 `static-gates` job 里逐步显式调用脚本（见 user-server-ci.yml
+#      的 check-architecture.sh / check-date-bucket-tz.sh / check-unwired-assets.sh 三步）。
+#   ② 要照这个挂法补一步，就得改 `user-server-ci.yml`，而该文件此刻压着并行会话的未提交改动，
+#      按"只处理自己的改动"这一路不许动 ⇒ 待该文件回 clean 后补的是：
+#      `static-gates` 里加一步 `run: python3 scripts/check-async-global-read.py`，
+#      并把 `scripts/check-async-global-read.py` 与 `scripts/async-global-read.baseline`
+#      两个路径加进该工作流的 `on.push.paths` / `on.pull_request.paths`。
+# 所以在补上之前，远程唯一会跑到这个缺陷**后果**的是 job "Unit tests -race (user-server service)"；
+# 这道门守的是"别再写进新站点"，与 CI 绿不绿是两件事，不要相互当证据。
+#
+# 注意：本文件**必须存在**（可以是零条目）。缺文件时门退 2 报 ENV-BROKEN，而不是"没基线 ⇒ 全绿"。
+#
+# 注意：本文件**必须存在**（可以是零条目）。缺文件时门退 2 报 ENV-BROKEN，而不是"没基线 ⇒ 全绿"。

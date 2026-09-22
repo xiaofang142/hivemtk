@@ -407,6 +407,8 @@ var (
 // resType 由调用方按资源种类给定（官方 GET /messages/{mid}/resources/{key} 必带 ?type=image|file，
 // 用错 type 官方直接报 2340069），这里不再从消息类型反推。
 func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID, messageID, fileKey, resType, fileName string) {
+	// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+	tenantTokenFn, mediaFetchFn, mediaStoreFn := feishuTenantTokenFn, feishuMediaFetchFn, feishuMediaStoreFn
 	utils.SafeGo(ctx, "feishu.media_persist", func(gctx context.Context) {
 		accID, _ := strconv.ParseUint(accountID, 10, 64)
 		if accID == 0 {
@@ -424,12 +426,12 @@ func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID,
 		if integration == nil {
 			integration = NewFeishuIntegrationService(s.lazyDB())
 		}
-		tenantToken, tkerr := feishuTenantTokenFn(gctx, integration, acc)
+		tenantToken, tkerr := tenantTokenFn(gctx, integration, acc)
 		if tkerr != nil || tenantToken == "" {
 			logger.Ctx(gctx).Warn().Err(tkerr).Str("account_id", accountID).Msg("[Feishu] 媒体转存跳过：tenant_access_token 获取失败")
 			return
 		}
-		rc, contentType, derr := feishuMediaFetchFn(gctx, tenantToken, messageID, fileKey, resType)
+		rc, contentType, derr := mediaFetchFn(gctx, tenantToken, messageID, fileKey, resType)
 		if derr != nil {
 			logger.Ctx(gctx).Warn().Err(derr).Str("file_key", fileKey).Msg("[Feishu] 媒体下载失败（占位符保留）")
 			return
@@ -440,7 +442,7 @@ func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID,
 			logger.Ctx(gctx).Warn().Err(rerr).Str("file_key", fileKey).Msg("[Feishu] 媒体读取失败（占位符保留）")
 			return
 		}
-		publicURL, serr := feishuMediaStoreFn(gctx, "feishu", fileKey, data, contentType, fileName)
+		publicURL, serr := mediaStoreFn(gctx, "feishu", fileKey, data, contentType, fileName)
 		if serr != nil {
 			logger.Ctx(gctx).Warn().Err(serr).Str("file_key", fileKey).Msg("[Feishu] 媒体转存失败")
 			return
