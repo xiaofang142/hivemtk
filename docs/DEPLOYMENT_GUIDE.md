@@ -216,7 +216,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
 | `LLM_*` / `EMBEDDING_*` / `RERANK_*` | 见 .env-example | 控制推理栈下载哪个模型、监听哪个端口 |
 | `MAX_JSON_BODY_MB` | `8` | 全局 JSON/表单请求体上限（MB），超限直接 413。只兜"没另设上界的内部口"，比各端点自己的封顶更宽时不参与；迁移期要灌大 payload 时**显式设 0 关闭**（负数同义），别改成改代码 |
-| `SEED_PASSWORD` | `Seed@123456` | seed 写进 `system_users` 的 admin 与演示坐席统一口令，优先级 `SEED_PASSWORD` > `ADMIN_PASSWORD` > 该默认值（`cmd/seed/seed_users.go:32`）。**只有跑 `scripts/bootstrap.sh` 或 `go run ./cmd/seed` 才会写入它**——`make install` / `make dev` 不 seed（docker-compose 里的 `admin` 是数据库用户，不是后台账号）。这个默认值随开源仓库公开（文档与 FAQ 种子数据里都写着），**装到别人连得上的机器上就必须显式设**；bootstrap 用默认值启动时会打 warn（`scripts/bootstrap.sh:85`），直接 `go run ./cmd/seed` 则不会。取值走 `SEED_PASSWORD="…"` 注入，勿改成代码常量 |
+| `SEED_PASSWORD` | `Seed@123456` | seed 写进 `system_users` 的 admin 与演示坐席统一口令，优先级 `SEED_PASSWORD` > `ADMIN_PASSWORD` > 该默认值（`cmd/seed/seed_users.go:32`）。**只有跑 `scripts/bootstrap.sh` 或 `go run ./cmd/seed` 才会写入它**——`make install` / `make dev` 不 seed（docker-compose 里的 `admin` 是数据库用户，不是后台账号）。这个默认值随开源仓库公开（文档与 FAQ 种子数据里都写着），**装到别人连得上的机器上就必须显式设**；bootstrap 用默认值启动时会打 warn（本文件下方那条"换掉已经装好的那台"注记解释了为什么**存量实例重跑无效**），直接 `go run ./cmd/seed` 则不会。取值走 `SEED_PASSWORD="…"` 注入，勿改成代码常量 |
 
 以下这些键此前**只存在于代码里**（`.env-example` 与本文都没提），列出来是因为每一个都会改变安全姿态或身份口径，运维不知道它们存在比知道更危险。默认值一律取最严/最窄的一侧。
 
@@ -248,6 +248,24 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
 | `TOOL_CIRCUIT_BACKOFF_MULTIPLIER` | `2.0` | 每多熔断一次的冷却倍率，可用区间 `[1,100]`；非数字或超界 ⇒ 沿用默认 |
 | `TELEGRAM_POLLING_ENABLED` | 未设置 | `1`/`true`/`yes` 强制启用 polling，`0`/`false`/`no` 强制禁用；**未设置则自动判定**：配了 `external.public_base_url` 就注册 webhook 并禁用 polling，没配（内网/本地）自动启用 polling（`internal/service/telegram_polling.go`）。polling 只能单实例跑，多实例部署须显式设 `0`，否则同一消息被多台机器各拉一遍 |
+
+> **换掉"已经装好的那台"的超管口令，不能靠重跑 bootstrap。** `SEED_PASSWORD=… bash scripts/bootstrap.sh`
+> 只在**新装 / 库里还没有 admin 行**时决定口令；存量实例上它三重失效：`system_users` 上有 v3_36.0 装的两把守卫触发器
+> （`trg_guard_initial_admin_password` 拒绝对 id=1 的 `password` 做任何 UPDATE，`trg_guard_initial_admin_delete` 拒删 id=1，
+> 连"停用"这条路也没有——`enabled=false` / `status<>1` 同样被拒），而 seed 的 `Clean` 只删演示形状的行
+> （`real_name LIKE '%[seed-demo]%'` / `phone LIKE '138000000%'` / `email LIKE '%@hivemtk.demo'`）。本机 id=1 是
+> `InitAdmin` 建的（它只收 username/password/email，`phone` 为空），三条谓词一条都不命中 ⇒ `Clean` 一句没删，
+> 随后它 `Create` 新 admin 撞 `idx_system_users_username` 唯一索引；若你那台的 id=1 是 `cmd/seed` 写的那行
+> （`cmd/seed/seed_users.go:99` 的 phone 就是 `13800000001`），它会落进谓词 ⇒ 整条 DELETE 被删除触发器顶回来、seed 直接失败。
+> 两条锁的活库实测（只回滚事务，前后 `count(*)` 均为 12）：`UPDATE ... SET password` 抛
+> `初始超管账号(id=1)的密码不允许被修改`，`DELETE ... WHERE id=1` 抛 `初始超管账号(id=1)不允许被删除`。
+> 存量实例二选一：
+> ① 不碰口令，先把网口收回 `127.0.0.1`（见 §三 端口分配、§七 模式 A）；
+> ② 直改那一行：`cd user-server && go run ./cmd/pwtool '<新口令>'` 出 bcrypt → 同一事务里 `DROP TRIGGER` 两把 →
+> `UPDATE system_users SET password='<哈希>' WHERE username='admin'` → 按
+> `internal/migration/migrations/v3_36_0_admin_password_guard_migration.go` 的 `Up()` 把两把触发器建回。
+> 换完自查判据（拿仓库公开的默认值试登录，**从 200 变 401 才算换成功**）：
+> `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"Seed@123456"}'`
 
 ### 6.3 config.yaml 要点（user-server/config.yaml）
 

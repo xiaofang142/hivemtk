@@ -102,6 +102,9 @@ case "$_seed_pw_lc" in
     warn "演示/admin 口令用的是仓库公开的默认值 Seed@123456；"
     warn "  对外可达的安装请显式设置：SEED_PASSWORD=\"<自定口令>\" bash scripts/bootstrap.sh"
     warn "  （或只设 ADMIN_PASSWORD，两者在本脚本里同值）"
+    warn "  注意：这条只对「新装 / 库里还没有 admin 行」的实例生效。存量实例上 admin(id=1) 的口令被"
+    warn "  system_users 上的 v3_36.0 守卫触发器锁死（改/删/停用一律拒），重跑本脚本换不掉它——"
+    warn "  见 docs/DEPLOYMENT_GUIDE.md §6.2 末「换掉已经装好的那台」注记里的两条可行路径。"
     ;;
   admin123|admin888|123456|654321|admin|root|password|abc123|iloveyou)
     # 这一档不是仓库公开值，而是字典攻击第一轮就命中的常见口令。单独提醒的理由是绑定的地址：
@@ -109,7 +112,8 @@ case "$_seed_pw_lc" in
     # （`*` 而非 127.0.0.1 ⇒ 同一局域网内任何设备都能直接打到登录页，弱口令在这里不是"不够好"而是"已开门"）。
     warn "admin 口令落在常见弱口令名单里（首轮字典即命中）；"
     warn "  本机 dev 栈的服务端口监听的是 *（局域网可达），不只是 127.0.0.1；"
-    warn "  要么换成强口令（SEED_PASSWORD=\"<自定强口令>\" bash scripts/bootstrap.sh），"
+    warn "  要么换成强口令（SEED_PASSWORD=\"<自定强口令>\" bash scripts/bootstrap.sh；存量实例重跑换不掉 id=1，"
+    warn "  见本脚本上一档的注意与 docs/DEPLOYMENT_GUIDE.md §6.2 末注记），"
     warn "  要么把服务收回到 127.0.0.1 再跑。"
     ;;
 esac
