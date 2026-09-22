@@ -4683,3 +4683,21 @@ master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest cove
   ⇒ 绿（`install.lock 已就绪`），对 59999 死端口跑同一条 ⇒ 红（`INIT_STATUS={}` 走 err 分支）。
   旧写法在这两种情形下输出的都是同一句 `warn` 且脚本继续往下跑到底。
 
+- 验证树（`git clone --shared` 到 `/tmp/r36-shadow`，`git checkout master` 后
+  `git status --short` 计数 **0** ⇒ 面＝只含已提交内容；且克隆目录名不含 `hivemtk`，
+  顺带复测了"改名克隆"这一形态）：`go build ./...` rc=0 且输出 0 字节、
+  `go vet ./internal/system/install/... ./internal/platform/... ./internal/middleware/...` rc=0、
+  `gofmt -l` 三包为空、`golangci-lint run` 三包 rc=0（`0 issues.`）、
+  `go test -count=2 -race -test.v ./internal/system/install/...` rc=0 且
+  **PASS=36 / FAIL=0 / SKIP=0 / DATA RACE=0**（18 条 × 2 轮，分母与活树一致）、
+  `go test ./internal/platform/...` rc=0。
+  `make audit` rc=0，并且日志里读到门自己打印的 `项目根: /private/tmp/r36-shadow`
+  （rc=0 还要自证不是空跑：根没推导对时它会打印别的目录，或干脆零输出）；
+  其中配置面门读数＝生产读取键 180 · 已文档化 76 · 工具进程豁免 16 · 基线登记 88 · **红 0**
+  （本笔把 `INSTALL_LOCK_PATH` 从基线挪进文档面，故文档化 +1、基线 −1），文档断链门 162 个 md **0 处**。
+- 门的环境前提一格（勿当红认领）：`make audit-secrets` 在克隆里 **rc=2**，红因是
+  `找不到 /private/tmp/r36-shadow/.env`——该门要拿本机真值做逐值比对，克隆里天生没有；
+  接 `ENV_FILE=<活树 .env>` 复跑 ⇒ rc=0（A 项"待纳管文件不含本机 .env 任何真实凭证"、B 项字面量扫描均过）。
+  ⇒ 克隆复验时 rc=2 属环境前提（真值文件不在扫描对象里），不是缺陷、也不是通过：
+  这道门的判据是"待纳管文件里不许出现本机 .env 的真实凭证"，`.env` 缺席时它连比对对象都没有，
+  所以缺 `ENV_FILE` 的那一趟等于没跑过，别把它当绿收进结论。
