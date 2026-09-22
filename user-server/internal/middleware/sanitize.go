@@ -188,31 +188,41 @@ func toString(v any) string {
 type SanitizeConfig struct {
 	SanitizeRequest  bool
 	SanitizeResponse bool
-	MaxBodyBytes     int64
+	// MaxBodyBytes 是本中间件读请求体的上限；<=0 表示不另设上限，
+	// 与 BodyLimit 的 `MAX_JSON_BODY_MB=0 即不限制` 同语义。
+	MaxBodyBytes int64
 }
 
-// DefaultSanitizeConfig 默认配置
+// DefaultSanitizeConfig 默认配置。
+//
+// 读体上限这里留空：体积上限只有一个事实源，就是 BodyLimit 的全局值。本字段曾写死 1MB，
+// 而全局默认 8MB，两份不一致的表现不是报错，是 1~8MB 的 JSON 请求被静默截断成半份再交给处理器。
 var DefaultSanitizeConfig = SanitizeConfig{
 	SanitizeRequest:  true,
 	SanitizeResponse: false,
-	MaxBodyBytes:     1 << 20,
 }
 
 // SanitizeMiddleware 脱敏 Gin 中间件
 // 用法：router.Use(middleware.SanitizeMiddleware())
 // 注意：只对 application/json 类型生效；其他类型（multipart/form-data）需要单独处理
 func SanitizeMiddleware() gin.HandlerFunc {
-	return SanitizeMiddlewareWithConfig(DefaultSanitizeConfig)
+	// 上限取全局封顶的同一个值：BodyLimit 允许进来的体积，这里才允许读完。
+	cfg := DefaultSanitizeConfig
+	cfg.MaxBodyBytes = BodyLimitFromEnv()
+	return SanitizeMiddlewareWithConfig(cfg)
 }
 
 // SanitizeMiddlewareWithConfig 自定义配置的脱敏中间件
 func SanitizeMiddlewareWithConfig(cfg SanitizeConfig) gin.HandlerFunc {
-	if cfg.MaxBodyBytes <= 0 {
-		cfg.MaxBodyBytes = 1 << 20
+	readBody := func(c *gin.Context) ([]byte, error) {
+		if cfg.MaxBodyBytes <= 0 {
+			return io.ReadAll(c.Request.Body)
+		}
+		return io.ReadAll(io.LimitReader(c.Request.Body, cfg.MaxBodyBytes))
 	}
 	return func(c *gin.Context) {
 		if cfg.SanitizeRequest && isJSONContentType(c.GetHeader("Content-Type")) {
-			body, err := io.ReadAll(io.LimitReader(c.Request.Body, cfg.MaxBodyBytes))
+			body, err := readBody(c)
 			if err == nil && len(body) > 0 {
 				sanitized := SanitizeJSON(body)
 				c.Request.Body = io.NopCloser(bytes.NewReader(sanitized))
