@@ -28,27 +28,54 @@ resources:
     memory: 256Mi
 
 # 容器端口
+#
+# targetPort / 探针端口都必须等于 user-server 的实际监听口，而不是"惯用的 8080"：
+# 产码里 DefaultListenPort = "8204"（user-server/internal/config/ports.go:8，
+# cmd/api/main.go:462 只在 PORT 环境变量给了值时才覆盖），本 chart 的 env 里没有 PORT
+# ⇒ 写 8080 的结果是容器在 8204 听着、kubelet 往 8080 探，Pod 永远 NotReady。
+# 这一格曾经是 8080（骨架期照抄模板、没对产码），改 8204 的同时把上面那两行留在这儿，
+# 并在 internal/config/ports_test.go 里加了一道读 values.yaml 的对账断言防回流。
 service:
   type: ClusterIP
   port: 80          # K8s Service 端口
-  targetPort: 8080  # user-server 监听端口
+  targetPort: 8204  # user-server 监听端口（= DefaultListenPort）
 
 # Ingress 配置
+#
+# 默认关掉：本 chart 从来没有一个"属于本项目的对外域名"可填。
+# 这里原来是 enabled=true + host: api.hivemtk.io，而 hivemtk.io 至今没有解析
+# （实测 `dig +short hivemtk.io A` 返回空），装上去只会得到一个 502 的 Ingress；
+# 同文件的 Chart.yaml 里 home/sources 指的 hivemtk.io / github.com/hivemtk 也一样是空的
+# （`gh api repos/hivemtk/hivemtk` 与 `gh api users/hivemtk` 都 404）。
+# 真要对外：把 enabled 改 true 并把 host 换成你自己解析到集群的域名（README §自定义 values 的样例）。
 ingress:
-  enabled: true
+  enabled: false
   # className: 由 Go embed 静态托管, 无需 Ingress
   annotations:
   hosts:
-    - host: api.hivemtk.io
+    - host: api.example.com   # 占位符：换成你自己的域名
       paths:
         - path: /
           pathType: Prefix
   tls: []
   # - secretName: hivemtk-tls
   #   hosts:
-  #     - api.hivemtk.io
+  #     - api.example.com
 
 # 环境变量 (注入到 user-server)
+#
+# 下面 MASTER_KEY / JWT_SECRET / POSTGRES_PASSWORD 三条不是调优项，是"不给就起不来"：chart 骨架版的
+# env 列表只有 GIN_MODE / LOG_LEVEL / DB_HOST / DB_PASSWORD 四条（最后那个连名字都是错的，见下面的
+# 注释），照本 README 装一遍的结果是 Pod 直接 CrashLoopBackOff。逐条出处与故障形态在 README
+# §已知限制「2026-09-22 修掉的四处」，这里不重复结论。
+#   - MASTER_KEY：≥32 字节。cmd/api/main.go:183-189 在非 development 下取不到就 os.Exit(1)，
+#     而本 chart 设了 GIN_MODE=release ⇒ config.IsDevelopmentEnv()（internal/config/init.go:44-58，
+#     只认 APP_ENV/MODE，两者为空才退到 GIN_MODE=="debug"）返回 false，走的就是拒绝启动那一支。
+#   - JWT_SECRET：缺失或短于 32 字符时 internal/pkg/utils/jwt.go:63-72 直接 panic
+#     （那个"固定测试密钥"分支只在 go test 下可达）；internal/middleware/permission.go:137 读同名变量。
+#   - DB_PORT：user-server/config.yaml 里 database.postgres.port 写的是 `${DB_PORT:8232}`（现第 67 行），
+#     那是"宿主机直连 Dev 模式"的口；集群里的 PG Service 一般听 5432 ⇒ 不注入就是连一个没人听的端口，
+#     报的连接失败跟口令无关。
 env:
   - name: GIN_MODE
     value: release
@@ -60,11 +87,35 @@ env:
       secretKeyRef:
         name: hivemtk-secrets
         key: db-host
-  - name: DB_PASSWORD
+  - name: DB_PORT
+    value: "5432"        # 换成自己的数据层时改这一格（或整条删掉，回落到 config.yaml 的 8232）
+  # ⚠️ 变量名不是可选风格：产码只读 POSTGRES_PASSWORD 这一个。
+  # internal/pkg/db/db.go:38-44 先取 database.postgres.password，而该键已按私域合规 §7.2 从
+  # config.yaml 移除 ⇒ 恒为空；于是退到 os.Getenv("POSTGRES_PASSWORD")，还取不到就直接
+  # panic("数据库连接密码缺失…")。`DB_PASSWORD` 这个字符串在 user-server 的 Go 代码里
+  # 零 os.Getenv 命中（今日实测）⇒ 沿用骨架期那个旧名 = 每次启动都在 InitDB panic，
+  # 报的还是"密码缺失"，跟"你 env 名写错了"看着不像一回事。
+  # Secret 里那个 key 仍叫 db-password：env 名由本行的 name 决定，与 key 名不靠任何转换对上。
+  - name: POSTGRES_PASSWORD
     valueFrom:
       secretKeyRef:
         name: hivemtk-secrets
         key: db-password
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: hivemtk-secrets
+        key: jwt-secret
+  - name: MASTER_KEY
+    valueFrom:
+      secretKeyRef:
+        name: hivemtk-secrets
+        key: master-key
+  - name: FIELD_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef:
+        name: hivemtk-secrets
+        key: field-encryption-key
 
 # 密钥 (skeleton, 生产应通过 ExternalSecrets / Vault 注入)
 #
@@ -74,7 +125,14 @@ env:
 # 随后 secrets.InitFromEnv 从 env 取 MASTER_KEY 等密钥。
 # 优先级：容器 env 已显式设置的变量不被文件覆盖（env > 文件）。
 # 因此供 fileloader 消费的 Secret key 需带扩展名，如 MASTER_KEY.txt、hivemtk.env；
-# 下方 keys 中的 db-host/db-password 等仍走 .Values.env 的 secretKeyRef 通道注入。
+# 本文件 env 段的 db-host/db-password/jwt-secret/master-key/field-encryption-key
+# 走的是另一条通道（secretKeyRef 直接成 env），两条通道任一接通即可，不必重复给。
+#
+# ⚠️ 下面这份 keys 清单**没有任何模板消费**（templates/ 里只有 deployment/service/ingress
+# 三个文件，用到的是 secrets.enabled / name / mountPath）⇒ 改这张表不改变渲染结果，
+# 它只是"这个 Secret 该有哪些 key"的备忘。真正要对上的是 README §快速开始 那条
+# `kubectl create secret generic` 的字面量名单与本文件 env 段的 secretKeyRef：
+# 少一个 key，Pod 起不来（jwt-secret / master-key 都属于"缺了就退出"的那类）。
 secrets:
   enabled: true
   name: hivemtk-secrets
@@ -84,23 +142,38 @@ secrets:
     - db-host
     - db-password
     - jwt-secret
+    - master-key
     - field-encryption-key
     # fileloader 风格示例（含扩展名，挂载为 /run/secrets/<key> 文件）：
     # - MASTER_KEY.txt
     # - hivemtk.env
 
 # 健康检查
+#
+# 三条探针在产码里是三个不同端点，别混用（internal/router/router.go:188-190）：
+#   /healthz  只看进程活着（LivenessCheck，不打 DB/Redis）
+#   /readyz   依赖就绪：DB SELECT 1 + Redis Ping + LLM provider 健康，任一不OK 返 503
+#             （health.go:156 起，码 50302/50303/50304/50305 分别指哪一格坏了）
+#   /health   人读的依赖汇总（HealthCheck，health.go:72 起），不是给 K8s 用的那一格
+# ⇒ liveness 用 /healthz、readiness 用 /readyz 是对的；把 readiness 换成 /health 会让
+#   "LLM provider 全 down" 这种"该摘流量但不该重启"的情况误判成需要重启。
+# 注意 50305 这一格：私域部署若一个 LLM provider 都没配，/readyz 会恒 503 ⇒ Pod 起不来，
+# 这是设计如此（就绪=能干活），不是探针写错了。
+#
+# 探针端口为什么是字面量而不用 {{ .Values.service.targetPort }}：values.yaml 不会被模板二次渲染，
+# 写进去就是那串花括号原文。⇒ 改监听口时要同时动 service.targetPort 与下面两个 port，
+# 三处漏一处就是"容器听着、探针探错口"。
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 8080
+    port: 8204
   initialDelaySeconds: 30
   periodSeconds: 10
 
 readinessProbe:
   httpGet:
     path: /readyz
-    port: 8080
+    port: 8204
   initialDelaySeconds: 5
   periodSeconds: 5
 

@@ -32,7 +32,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8080
+              # 从 values 取而不是硬编码：模板里再写死一个端口，就等于把同一个数放两处，
+              # 改 values.service.targetPort 时只有 Service 跟着变、容器口不动 —— 探针又哑掉。
+              # 本 chart 自己的设计原则 2「所有可变项集中在 values.yaml」要的就是这一行不硬编码。
+              containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
             {{- toYaml .Values.env | nindent 12 }}

@@ -19,9 +19,11 @@ version: 0.1.0    # Chart 版本 (SemVer)
 appVersion: "0.1.0"  # 应用版本, 跟随 hivemtk/user-server 版本
 
 # Chart 维护信息
+#
+# 刻意不带 email 字段：原来那行 sre@hivemtk.io 的域名根本不解析
+# （实测 `dig +short hivemtk.io A` 返回空），留一个收不到信的邮箱比不留更坏。
 maintainers:
   - name: HiveMtk SRE
-    email: sre@hivemtk.io
 
 # 关键字 (用于 helm search hub)
 keywords:
@@ -32,9 +34,16 @@ keywords:
   - saas
 
 # Chart 主页/源
-home: https://hivemtk.io
+#
+# 三个地址都按"本批离线部署后的真实对外面"填：官网是 GitHub Pages 静态站，
+# 源码是 Gitee 主仓 + GitHub 镜像。旧值 home: https://hivemtk.io 与
+# sources: https://github.com/hivemtk/hivemtk 都是空的 ——
+# 前者无 A 记录，后者 `gh api repos/hivemtk/hivemtk` 与 `gh api users/hivemtk` 均 404
+# （那个 org 不存在）。
+home: https://xiaofang142.github.io/hivemtk/
 sources:
-  - https://github.com/hivemtk/hivemtk
+  - https://gitee.com/xhpmayun/hivemtk
+  - https://github.com/xiaofang142/hivemtk
 
 # 注解: 用于 artifact hub 分类
 annotations:
