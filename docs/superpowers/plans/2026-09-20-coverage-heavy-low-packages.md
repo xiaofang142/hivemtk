@@ -4322,3 +4322,35 @@ PR #22 的 head，那趟作业日志读的是 **PR 树**，直接按 `head_sha` 
 eslint 9→10）—— 合票是共享分支上的可见动作且每张都要重跑锁文件与全套前端门，本轮把事实与风险写清，
 不代拍；其中 #22（checkout 4→7）、#20（markdownlint 19→24）、#21（release-drafter 6→7）已被 ③ 覆盖，
 可直接关票。
+
+**⑧ 推上去之后回读 master，这道门自己又露出两个洞（都按 TDD 补齐）**：`bfa0a6e2`+`1899775c` 双推后，
+master push 触发的 11 趟 run 里 `ci-bridge` **整趟首绿**（`Vitest coverage`、`Build (打包校验)`、
+`Upload coverage to Codecov` 三步全 `success`，即 ③ 里那颗第一次真跑的 codecov@v7 也落了证据），
+`Lint` 的 `Workflow refs integrity` 作业里 `check-ci-step-coverage 用例（假 gh，不联网）=> success`
+＝① 那根新轴有了 CI 入口。deprecation 告警在**这次真跑过的**每一趟里都是 0 行。
+回读时踩到的三条口径：
+
+- **取样时刻**：对 `in_progress` 的 run 取 job，未跑完的步骤 `conclusion` 是 `null` ⇒ 表里印成
+  `执行 0 成 0 败 0 跳 0 ← 从未执行`，与"出现了 3 次全被跳过"的死门**长得一模一样**。
+  判据没被骗（`present=0 < --min-presence` ⇒ 不计红），但人是读表的 —— 把"没数据"说成"没跑过"，
+  下一轮就会有人去修一道好门。现在这类行单独印「← 无结论（窗口内 N 次取样该步骤都还是 pending，不判死门）」。
+- **阈值不能共用**（这轮最贵的一条）：`ALWAYS_RED` 原先与 `NEVER_RUN` 同用 `--min-presence=3`，
+  而窗口是按 **run** 截的 —— 本仓 14 个工作流，30 个 run 只覆盖约 2 次 push ⇒ 每个作业出现 2 次
+  ⇒ 一条 100% 失败的步骤（就是 `Run ESLint (errors block...)`，败 2 成 0）**从名单里静默消失**，
+  脚本退 0 打印"每个步骤都至少执行并成功过一次"，而同一份输出的那一行明明标着「← 从未通过」。
+  ⇒ 拆成 `--min-red`（默认 2）：`NEVER_RUN` 要的是"这步骤真存在于配置里"的样本量，
+  `ALWAYS_RED` 要的是"跑起来就红"的样本量，两件事不共用一个分母。
+- **步骤级 `if:` 也能自动认了**：`sbom.yml` 的 `Attach SBOM to release (only on tag)` 是脚本 docstring
+  里自认的假阳（"这类只能靠人判"），现在 `cadence_expr()` 按 `github.event_name` / `github.ref`
+  识别"什么时候才跑"，命中印成「节奏步骤」不计红；`always()` / `success()` / `needs.*.outputs`
+  **不算**豁免，因为那几个说的是"上游红了要不要继续"，被它们挡着从不执行恰恰是要抓的掩盖形状。
+  真数据反证：`--min-presence 2` 那一档现在把 SBOM 那步归到节奏步骤、把 ESLint 那条归到 ALWAYS_RED，
+  两件事同时成立（`ALWAYS_RED 1 个`，rc=1）。
+
+用例从 4 格长到 7 格、断言 18→33，`PASS=33 FAIL=0`；两处反向臂各钉一个新参数
+（格6 拿掉步骤级 `if:` 行、格7 把 `--min-red` 抬回 3 那条红就该消失），夹具装架改成可按 run id
+发不同 job 表（不然造不出"窗口里只出现 2 次"的形状）。假 gh 与 write_yml 改动后先复跑格1–5
+确认 22 条断言一条没漂，才放新格。
+另记一条外部事实：`bfa0a6e2` 推上去约 3 分钟后，Dependabot 自己关掉了 #20（markdownlint 19→24）
+与 #21（release-drafter 6→7）——即 ③ 覆盖的三张票里两张**由对方主动收敛**，#22（checkout 4→7）在
+本轮读账时仍开放。关票属共享分支动作，仍交人拍板，见 ⑦。
