@@ -3046,7 +3046,7 @@ paths:
       - application/json
       description: 按类型/所有者/关键词分页查询知识库
       parameters:
-      - description: 知识库类型：product/faq/policy
+      - description: 知识库类型：faq/rag/sop
         in: query
         name: type
         type: string

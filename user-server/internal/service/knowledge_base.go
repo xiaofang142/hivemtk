@@ -84,16 +84,19 @@ func (s *KnowledgeBaseService) CreateKB(ctx context.Context, kb *model.Knowledge
 	switch kb.OwnerType {
 	case model.KnowledgeBaseOwnerPrivate:
 		if kb.OwnerAgentID == nil || *kb.OwnerAgentID == 0 {
-			return errors.New("owner_type=private 时 owner_agent_id 必填")
+			// 必须包 ErrInvalidInput：response.ErrorFromDB 是按 errors.Is / 消息子串分档的，
+			// 裸 errors.New 的消息（"…必填"）不在它的子串名单里 ⇒ 调用方拿到 500 INTERNAL_ERROR_6002，
+			// 而这是纯粹的入参错（2026-09-22 在开发实例上实测：shared+owner 那一格返 500）。
+			return fmt.Errorf("%w: owner_type=private 时 owner_agent_id 必填", utils.ErrInvalidInput)
 		}
 		ownerAgentID = *kb.OwnerAgentID
 	case model.KnowledgeBaseOwnerShared:
 		if kb.OwnerAgentID != nil && *kb.OwnerAgentID != 0 {
-			return errors.New("owner_type=shared 时 owner_agent_id 必为空")
+			return fmt.Errorf("%w: owner_type=shared 时 owner_agent_id 必为空", utils.ErrInvalidInput)
 		}
 		kb.OwnerAgentID = nil
 	default:
-		return fmt.Errorf("owner_type 非法: %s (private/shared)", kb.OwnerType)
+		return fmt.Errorf("%w: owner_type 非法: %s (private/shared)", utils.ErrInvalidInput, kb.OwnerType)
 	}
 	if kb.Enabled == nil {
 		t := true
@@ -262,11 +265,14 @@ func (s *KnowledgeBaseService) UpdateKB(ctx context.Context, id uint, kb *model.
 	switch ot {
 	case model.KnowledgeBaseOwnerPrivate:
 		if merged.OwnerAgentID == nil || *merged.OwnerAgentID == 0 {
-			return errors.New("owner_type=private 时 owner_agent_id 必填")
+			// 同 CreateKB 那一族：这条消息既不命中 errors.Is 也不命中 ErrorFromDB 的子串名单
+			// （名单里是 "不能为空"，不是 "必填"），不包就是 500。实测口径见
+			// controller/knowledge_base_owner_validation_test.go。
+			return fmt.Errorf("%w: owner_type=private 时 owner_agent_id 必填", utils.ErrInvalidInput)
 		}
 	case model.KnowledgeBaseOwnerShared:
 		if merged.OwnerAgentID != nil && *merged.OwnerAgentID != 0 {
-			return errors.New("owner_type=shared 时 owner_agent_id 必为空")
+			return fmt.Errorf("%w: owner_type=shared 时 owner_agent_id 必为空", utils.ErrInvalidInput)
 		}
 		merged.OwnerAgentID = nil
 	}

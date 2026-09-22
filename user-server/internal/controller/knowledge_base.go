@@ -54,7 +54,7 @@ func (c *KnowledgeBaseController) RegisterRoutes(router *gin.RouterGroup) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        type        query  string  false  "知识库类型：product/faq/policy"
+// @Param        type        query  string  false  "知识库类型：faq/rag/sop"
 // @Param        owner_type  query  string  false  "所有者类型"
 // @Param        agent_id    query  int     false  "绑定的智能体 ID"
 // @Param        keyword     query  string  false  "关键词"

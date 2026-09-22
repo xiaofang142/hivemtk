@@ -2648,7 +2648,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "知识库类型：product/faq/policy",
+                        "description": "知识库类型：faq/rag/sop",
                         "name": "type",
                         "in": "query"
                     },
