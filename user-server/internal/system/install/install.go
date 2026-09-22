@@ -19,6 +19,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -49,9 +50,10 @@ func GetInstallLockPath() string {
 }
 
 var (
-	mu      sync.RWMutex
-	memoLR  *Lock
-	memoExp time.Time
+	mu       sync.RWMutex
+	memoLR   *Lock
+	memoPath string
+	memoExp  time.Time
 
 	adminProbeMu sync.RWMutex
 	adminProbe   func(ctx context.Context) (string, error)
@@ -68,16 +70,19 @@ func SetAdminProbe(fn func(ctx context.Context) (string, error)) {
 }
 
 // Load 读取 install.lock（带 2 秒内存缓存，文件 IO 在 InitGuard 高频路径上避免抖动）
+//
+// 缓存按生效路径记账：INSTALL_LOCK_PATH 是每次调用现读的，缓存若不跟着走，
+// 路径一换就会把上一份 lock 端过来。
 func Load() (*Lock, error) {
+	path := GetInstallLockPath()
 	mu.RLock()
-	if memoLR != nil && time.Now().Before(memoExp) {
+	if memoLR != nil && memoPath == path && time.Now().Before(memoExp) {
 		lr := *memoLR
 		mu.RUnlock()
 		return &lr, nil
 	}
 	mu.RUnlock()
 
-	path := GetInstallLockPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -91,6 +96,7 @@ func Load() (*Lock, error) {
 	}
 	mu.Lock()
 	memoLR = &lr
+	memoPath = path
 	memoExp = time.Now().Add(memoTTL)
 	mu.Unlock()
 	out := lr
@@ -116,27 +122,69 @@ func Save(lr *Lock) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	// 先写临时文件再 rename：这个文件是 InitGuard 每个请求都要读的，
+	// 直接覆写一旦撞上进程被杀／盘满，留下的半截 JSON 会让安装态永久判不出来。
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	cp := *lr
 	mu.Lock()
-	memoLR = lr
+	memoLR = &cp
+	memoPath = path
 	memoExp = time.Now().Add(memoTTL)
 	mu.Unlock()
 	return nil
 }
 
+// 损坏文件的正确处置只有一种：还读得出来的键保下来，其余重建。
+// 敢用正则捞是因为 MarshalIndent 按结构体字段序写，install_id / install_time 永远排在最前，
+// 而最常见的损坏是"写到一半被杀"——尾部的键丢了，开头的它还在。
+var (
+	salvageInstallID   = regexp.MustCompile(`"install_id"\s*:\s*"([^"]{8,64})"`)
+	salvageInstallTime = regexp.MustCompile(`"install_time"\s*:\s*"([^"]{10,40})"`)
+	salvageAdminUser   = regexp.MustCompile(`"admin_username"\s*:\s*"([^"]{1,64})"`)
+	salvageVersion     = regexp.MustCompile(`"version"\s*:\s*"([^"]{1,64})"`)
+)
+
+// loadForWrite 是给"准备改写这个文件"的调用方用的读法。
+// 与 Load 的区别：解析失败时不把错误抛回去——抛回去＝调用方一次都不写，
+// 于是损坏的 install.lock 永远修不好，每个请求都得重读一遍、再查一遍库。
+func loadForWrite() *Lock {
+	data, err := os.ReadFile(GetInstallLockPath())
+	if err != nil {
+		return nil
+	}
+	var lr Lock
+	if json.Unmarshal(data, &lr) == nil {
+		return &lr
+	}
+	body := string(data)
+	return &Lock{
+		InstallID:     salvage(salvageInstallID, body),
+		InstallTime:   salvage(salvageInstallTime, body),
+		AdminUsername: salvage(salvageAdminUser, body),
+		Version:       salvage(salvageVersion, body),
+	}
+}
+
+func salvage(re *regexp.Regexp, body string) string {
+	m := re.FindStringSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
 // MarkAdminInitialized 标记"超管已创建"（开源版：创建超管即视为初始化完成）
 func MarkAdminInitialized(username string) error {
-	lr, err := Load()
-	if err != nil {
-		return err
-	}
+	lr := loadForWrite()
 	if lr == nil {
-		lr = &Lock{
-			InstallID:   newInstallID(),
-			InstallTime: time.Now().UTC().Format(time.RFC3339),
-		}
+		lr = &Lock{}
 	}
 	lr.AdminUsername = strings.TrimSpace(username)
 	lr.Initialized = true
@@ -149,44 +197,12 @@ func MarkAdminInitialized(username string) error {
 // 仅在 install.lock 已存在且 AdminUsername 非空时使用；
 // 否则用空字符串调用，由 install.lock 自动写入新 AdminUsername。
 func MarkAdminInitializedStandalone() error {
-	lr, err := Load()
-	if err != nil {
-		return err
-	}
+	lr := loadForWrite()
 	username := ""
 	if lr != nil {
 		username = lr.AdminUsername
 	}
 	return MarkAdminInitialized(username)
-}
-
-// LoadInstallLockPublic 公开加载 install.lock（不依赖中间件全局）
-func LoadInstallLockPublic() (*Lock, error) {
-	return Load()
-}
-
-// EnsureInstallID 若 install.lock 不存在则创建一份只含 install_id 的文件
-func EnsureInstallID(version string) (*Lock, error) {
-	lr, err := Load()
-	if err != nil {
-		return nil, err
-	}
-	if lr == nil {
-		lr = &Lock{
-			InstallID:   newInstallID(),
-			InstallTime: time.Now().UTC().Format(time.RFC3339),
-			Version:     version,
-		}
-		if err := Save(lr); err != nil {
-			return nil, err
-		}
-		return lr, nil
-	}
-	if lr.Version == "" && version != "" {
-		lr.Version = version
-		_ = Save(lr)
-	}
-	return lr, nil
 }
 
 // Status 初始化状态 DTO（与前端约定保持兼容）
@@ -202,21 +218,30 @@ type Status struct {
 //
 // 判定真相源优先级（根治"重启后要求重新初始化"）：
 //  1. install.lock 文件：initialized==true 且 admin_username 非空 → INITIALIZED（最快路径）。
-//  2. 数据库兜底：文件缺失/未初始化时，若 DB 中已存在超管账号，
+//  2. 数据库兜底：文件缺失/**损坏**/未初始化时，若 DB 中已存在超管账号，
 //     仍判定为 INITIALIZED，并回填 install.lock，使后续请求直接走文件缓存。
-//     这样即便 install.lock 因卷异常/误删丢失，只要库中有超管就不会要求重新初始化。
+//     这样即便 install.lock 因卷异常/误删/写到一半被杀而丢失或坏掉，
+//     只要库中有超管就不会要求重新初始化，也不会每请求都回查一次库。
 func GetStatus() *Status {
 	lr, err := Load()
 	if err != nil || lr == nil {
-		if name := probeDBAdmin(); name != "" {
-			_ = MarkAdminInitialized(name)
-			lr = &Lock{AdminUsername: name, Initialized: true}
-		} else {
+		name := probeDBAdmin()
+		if name == "" {
 			return &Status{
 				State:       "NOT_INSTALLED",
 				Initialized: false,
 				HasAdmin:    false,
 			}
+		}
+		// 回填成功就重新读一次：install_id 与 version 得跟着这次响应走，
+		// 否则前端与心跳拿到的是空身份，而磁盘上明明已经有一份好的了。
+		if MarkAdminInitialized(name) == nil {
+			if healed, healErr := Load(); healErr == nil && healed != nil {
+				lr = healed
+			}
+		}
+		if lr == nil {
+			lr = &Lock{AdminUsername: name, Initialized: true}
 		}
 	}
 	st := &Status{
@@ -232,6 +257,7 @@ func GetStatus() *Status {
 			_ = MarkAdminInitialized(name)
 			st.State = "INITIALIZED"
 			st.Initialized = true
+			st.HasAdmin = true
 		} else {
 			st.State = "HAS_ADMIN"
 		}
@@ -240,6 +266,7 @@ func GetStatus() *Status {
 			_ = MarkAdminInitialized(name)
 			st.State = "INITIALIZED"
 			st.Initialized = true
+			st.HasAdmin = true
 		} else {
 			st.State = "NOT_INSTALLED"
 		}

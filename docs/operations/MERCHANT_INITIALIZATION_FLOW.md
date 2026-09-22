@@ -10,16 +10,18 @@
 docker compose up -d
         │
         ▼
-user-server 启动 ──▶ 读取 install.lock
+user-server 启动 ──▶ 装配数据库超管探针（不写文件）
         │                      │
-        │                  不存在
+        │              首次读 install.lock（GetStatus）
         │                      │
-        │                      ▼
-        │              EnsureInstallID 生成 install_id
-        │              写入最小 install.lock（initialized=false）
+        │                  不存在 / 读不懂
         │                      │
         │                      ▼
-        │              State = NOT_INSTALLED
+        │              查库有无超管：无 ⇒ State = NOT_INSTALLED
+        │              （此时磁盘上没有任何 install.lock，
+        │                install_id 也还不存在）
+        │                      │
+        │                      ▼
         │              InitGuard 仅放行白名单 API
         │                      │
         │                      ▼
@@ -30,10 +32,11 @@ user-server 启动 ──▶ 读取 install.lock
         │              service.AuthService.InitAdmin：
         │                - 强密码校验 + 用户名唯一性
         │                - 写入 system_users 表
-        │                - 回写 install.lock（admin_username + initialized=true）
+        │                - 首次铸 install_id 并落 install.lock
+        │                  （admin_username + initialized=true）
         │                      │
         │                      ▼
-        │              State = HAS_ADMIN → INITIALIZED
+        │              State = INITIALIZED
         │                      │
         ▼                      │
 user-server 重启校验 install.lock   ◀────────┘
@@ -85,19 +88,24 @@ user-server 重启校验 install.lock   ◀────────┘
 docker compose up -d user-server
 ```
 
-容器启动后，user-server 会：
+容器启动后，user-server 只做一件事：把"库里首个超管是谁"这个探测函数装配进安装态模块
+（`cmd/api/main.go` 里的 `install.SetAdminProbe(...)`）。**启动不写 install.lock，也不铸 `install_id`。**
 
-1. 读取 `/app/data/install.lock`（路径优先级：`INSTALL_LOCK_PATH` 环境变量 > `./install.lock`）
-2. **若不存在**：
-   - 调用 `EnsureInstallID()` 生成 32 位 `install_id`（`ins-` + 16 字节随机十六进制）
-   - 写入最小 install.lock（`initialized=false`）
-   - 进入 `NOT_INSTALLED` 状态
-3. **若存在**：
-   - 解析 install.lock，按字段推断状态：
-     - `admin_username != ""` 且 `initialized == true` → `INITIALIZED`（直接进入正常工作模式）
-     - `admin_username != ""` 且 `initialized == false` → `HAS_ADMIN`（需调用 `init-complete`）
-     - 否则 → `NOT_INSTALLED`（进入初始化模式）
+1. 之后每次判状态（`GetStatus`，InitGuard 每个请求都会走一次）先读
+   `/app/data/install.lock`（路径优先级：`INSTALL_LOCK_PATH` 环境变量 > `./install.lock`），带 2 秒内存缓存，缓存按生效路径记账
+2. **文件不存在 / 读不懂**：查库
+   - 库里**有**超管 → 判 `INITIALIZED`，并把这份 lock 回填落盘（能捞出来的键原样保住，其余重建）
+   - 库里**没有**超管 → 判 `NOT_INSTALLED`，磁盘上仍然什么都没有
+3. **文件存在且解析成功**，按字段推断：
+   - `admin_username != ""` 且 `initialized == true` → `INITIALIZED`（直接进入正常工作模式）
+   - `admin_username != ""` 且 `initialized == false` → 再查库：库里有超管 → `INITIALIZED` 并回填；
+     库里没有 → `HAS_ADMIN`（需调用 `init-complete`）
+   - `admin_username == ""` → 再查库：库里有超管 → `INITIALIZED` 并回填；库里没有 → `NOT_INSTALLED`
 
+> `install_id` 由**首次落盘**（即 `init-admin` 走到 `MarkAdminInitialized`）铸出：
+> `ins-` + 16 字节随机十六进制，共 36 字符。在此之前 `install.GetStatus().InstallID` 是空串，
+> 心跳协程读到空身份就不发——这也是"未初始化不上报"的实现方式。
+>
 > **InitGuard 中间件**：未 `INITIALIZED` 时拦截所有非白名单业务 API，引导前端跳转 `/setup`。
 > 白名单：`/api/system/init-status` / `/api/system/init-admin` / `/api/system/init-complete` / `/health` 等。
 
@@ -182,17 +190,17 @@ http://<your-server-ip>:8204/login
   "install_time": "2026-07-24T10:00:00Z",
   "admin_username": "admin",
   "initialized": true,
-  "version": "1.0.0"
+  "version": ""
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `install_id` | string | 一次安装的唯一标识（`ins-` + 16 字节随机十六进制） |
+| `install_id` | string | 一次安装的唯一标识（`ins-` + 16 字节随机十六进制，共 36 字符） |
 | `install_time` | string | 安装时间（UTC RFC3339） |
 | `admin_username` | string | 超管账号（创建后写入） |
 | `initialized` | bool | 是否已完成初始化向导 |
-| `version` | string | 客户端版本号（用于统计上报） |
+| `version` | string | 客户端版本号，仅供统计；**当前代码里没有任何写入方**（本仓库无构建版本号常量），所以自安装实例上恒为空串，心跳侧回落成 `unknown`。仅从旧版／外部工具迁移过来的 lock 才可能带值 |
 
 > **不包含**：`license_key` / `expires_at` / `company` / `contact_email` / `signature` 等授权相关字段（本版无授权流程，install.lock 里从未有这些键）。
 
@@ -205,13 +213,16 @@ http://<your-server-ip>:8204/login
 开启后（`PLATFORM_ENABLED=true` + 配好 `config/platform.yaml` 的 `api_url`），user-server 初始化完成后向平台端低频上报：
 
 - `POST /api/platform/install` — 安装信息上报（一次性）
-- `POST /api/platform/heartbeat` — 周期性心跳
+- `POST /api/platform/heartbeat` — 周期性心跳（默认每 3 分钟）
 
 特性：
 
 - 失败仅 `Warn` 日志，**不阻塞**本地业务
 - 平台端不可达时，user-server 仍正常运行
 - 只用于平台端统计商户活跃度与版本分布；本版没有任何"上报了才能用"的判定
+- 心跳取身份走 `install.GetStatus()` 而不是裸读文件：`install.lock` 坏着时会先自愈再上报。
+  早先的写法是 `install.Load()` 一旦解析失败就 `return`，那台实例从此一帧心跳都不发且不留日志
+  （`install_id` 为空的"未初始化"仍然不发，这是设计意图）
 
 ---
 
@@ -229,7 +240,7 @@ http://<your-server-ip>:8204/login
 
 | 文件 | 作用 |
 |------|------|
-| `internal/system/install/install.go` | install.lock 读写 + 状态机（`GetStatus` / `MarkAdminInitialized` / `EnsureInstallID`） |
+| `internal/system/install/install.go` | install.lock 读写 + 状态机（`GetStatus` / `Load` / `Save` / `MarkAdminInitialized`；损坏文件按键自愈，落盘走临时文件 + rename） |
 | `internal/controller/system_init.go` | `GET /api/system/init-status` + `POST /api/system/init-complete` |
 | `internal/controller/auth.go` | `POST /api/system/init-admin`（`AuthController.InitAdmin`） |
 | `internal/service/auth.go` | `AuthService.InitAdmin`：超管创建主逻辑 |
