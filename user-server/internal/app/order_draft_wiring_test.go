@@ -12,6 +12,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
@@ -328,6 +329,85 @@ func TestStopOrderDraftRuntime_IdempotentAndClears(t *testing.T) {
 	}
 	if GetOrderDraftSnapshot(context.Background()).Assembled {
 		t.Error("Stop 后快照应回到未装配态")
+	}
+}
+
+// T-P2-06 遗留的那一环：worker 侧有了跨轮累计计数（ExpiredTotal/PurgedTotal），
+// 但"快照从 sweeper 取这两个值"这一跳此前没有任何用例盯着。装配层少写一行
+// `snap.SweepExpiredTotal = ...`，运维端点就会永久回 0 而全绿 —— 这正是本文件开头
+// 那条教训（"service 侧全绿、生产装配点没人调用"）的同一个病灶换个层。
+func TestGetOrderDraftSnapshot_CarriesSweepTotals(t *testing.T) {
+	database := draftTestDB(t)
+	installDraftRuntimeCleanup(t)
+	t.Setenv(OrderDraftFlagEnv, "on")
+	rt := InitOrderDraftRuntime(database)
+	if rt == nil {
+		t.Fatal("on 档应装配")
+	}
+	ctx := context.Background()
+	repo := repository.NewOrderDraftRepositoryWithDB(database)
+
+	// 两段各自预置，且**条数故意不等**（2 张到期 pending / 3 行过保留期终态）：
+	// 相等时把 expired 填成 purged、或两个都填成 rounds，断言都抓不到。
+	for i, id := range []string{"snap_pending_a", "snap_pending_b"} {
+		if err := repo.Upsert(ctx, &model.OrderDraft{
+			ID: id, CustomerID: "snap_totals_cust_" + string(rune('a'+i)), OwnerID: "snap_totals_sales",
+			ProductName: "热玛吉", Quantity: 1, UnitPrice: 1200, TotalAmount: 1200,
+			Status: model.OrderDraftStatusPending, Source: "ai_chat",
+			CreatedAt: time.Now().Add(-2 * time.Hour), UpdatedAt: time.Now().Add(-2 * time.Hour),
+			ExpiresAt: time.Now().Add(-time.Hour),
+		}); err != nil {
+			t.Fatalf("预置到期草稿 %s 失败: %v", id, err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if err := repo.Upsert(ctx, &model.OrderDraft{
+			ID: "snap_stale_" + string(rune('a'+i)), CustomerID: "snap_totals_stale_" + string(rune('a'+i)),
+			OwnerID: "snap_totals_sales", ProductName: "水光针", Quantity: 1, UnitPrice: 980, TotalAmount: 980,
+			Status: model.OrderDraftStatusExpired, Source: "ai_chat",
+			CreatedAt: time.Now().Add(-100 * 24 * time.Hour), UpdatedAt: time.Now().Add(-100 * 24 * time.Hour),
+			ExpiresAt: time.Now().Add(-99 * 24 * time.Hour),
+		}); err != nil {
+			t.Fatalf("预置终态行失败: %v", err)
+		}
+	}
+
+	// 一轮扫完再读数：节拍是 DefaultOrderDraftSweepInterval（小时级），本轮之后不会再有
+	// 后台轮次插进来，所以"快照值 == worker 自己那份累计值"是可以在同一时刻成立的硬等式。
+	if r := rt.sweeper.RunOnce(ctx); r.ExpireError != "" || r.PurgeError != "" {
+		t.Fatalf("清扫轮报错：expire=%q purge=%q", r.ExpireError, r.PurgeError)
+	}
+	wantExpired, wantPurged := rt.sweeper.ExpiredTotal(), rt.sweeper.PurgedTotal()
+	if wantExpired < 1 || wantPurged < 1 || wantExpired == wantPurged {
+		t.Fatalf("夹具没给出不等的两段累计数（expired=%d purged=%d）⇒ 后面的等式抓不到填错列", wantExpired, wantPurged)
+	}
+
+	snap := GetOrderDraftSnapshot(ctx)
+	if snap.SweepExpiredTotal != wantExpired || snap.SweepPurgedTotal != wantPurged {
+		t.Errorf("快照应带上清扫累计数 expired=%d purged=%d，实际 expired_total=%d purged_total=%d",
+			wantExpired, wantPurged, snap.SweepExpiredTotal, snap.SweepPurgedTotal)
+	}
+
+	// 第二段盯的是字段名承诺的那件事：**跨轮累加**，不是"最近一轮的值"。
+	// 只跑一轮时 `+=` 写成 `=` 读数一模一样（本轮实测：那条变异在单轮夹具下存活），
+	// 所以这里再补一张到期行、再扫一轮，要求累计数恰好 +1。
+	if err := repo.Upsert(ctx, &model.OrderDraft{
+		ID: "snap_pending_c", CustomerID: "snap_totals_cust_c", OwnerID: "snap_totals_sales",
+		ProductName: "热玛吉", Quantity: 1, UnitPrice: 1200, TotalAmount: 1200,
+		Status: model.OrderDraftStatusPending, Source: "ai_chat",
+		CreatedAt: time.Now().Add(-2 * time.Hour), UpdatedAt: time.Now().Add(-2 * time.Hour),
+		ExpiresAt: time.Now().Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("预置第二轮到期草稿失败: %v", err)
+	}
+	rt.sweeper.RunOnce(ctx)
+	snap2 := GetOrderDraftSnapshot(ctx)
+	if snap2.SweepExpiredTotal != wantExpired+1 {
+		t.Errorf("第二轮应把累计 expired 从 %d 累到 %d，实际 %d（=上一轮的值 ⇒ 计数被覆盖而非累加）",
+			wantExpired, wantExpired+1, snap2.SweepExpiredTotal)
+	}
+	if snap2.SweepPurgedTotal != wantPurged {
+		t.Errorf("第二轮没有新到期的终态行，累计 purged 应仍是 %d，实际 %d", wantPurged, snap2.SweepPurgedTotal)
 	}
 }
 

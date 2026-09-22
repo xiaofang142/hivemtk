@@ -258,6 +258,9 @@ type OrderDraftSnapshot struct {
 	SweepRunning  bool
 	SweepRounds   int64
 	SweepLast     *service.OrderDraftSweepReport
+
+	SweepExpiredTotal int64
+	SweepPurgedTotal  int64
 }
 
 // GetOrderDraftSnapshot 读当前草稿运行时状态。端点在 off 档也要能答上话，
@@ -295,6 +298,10 @@ func GetOrderDraftSnapshot(ctx context.Context) OrderDraftSnapshot {
 		snap.SweepRunning = rt.sweeper.Running()
 		snap.SweepRounds = rt.sweeper.Rounds()
 		snap.SweepLast = rt.sweeper.LastReport()
+		// 累计条数和 rounds 一起带：rounds 空转也 ++，只有这两个数能回答
+		// "库里到底少了多少行"（与 approval_runtime_wiring.go 的 ExpiredTotal 同一个读法）。
+		snap.SweepExpiredTotal = rt.sweeper.ExpiredTotal()
+		snap.SweepPurgedTotal = rt.sweeper.PurgedTotal()
 	}
 	return snap
 }

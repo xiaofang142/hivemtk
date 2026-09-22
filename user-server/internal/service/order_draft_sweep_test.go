@@ -350,36 +350,39 @@ func TestOrderDraftSweepWorker_EndToEndFlipsAndPurgesRealRows(t *testing.T) {
 		t.Fatalf("预置终态行失败: %v", err)
 	}
 
-	// 节拍取 100ms：lastReport 是**逐轮覆盖**的，20ms 一轮比 5ms 一轮的轮询窗口还短，
-	// "抓到干活那一轮"就成了运气（本机 -count=12 实测 3 次红在计数断言）。100ms 让每份报告至少活 20 个轮询。
+	// 节拍取 100ms（不是 20ms）：一轮越快，落库那两条断言越容易被"还没到下一轮"卡住。
+	// 但**节拍再快也不构成判据的可靠性** —— 计数判据早先押在"抓到某一轮的报告"上，
+	// 那份报告逐轮覆盖，于是窗口一短就红（本机 -count=12 实测 3 次红）；现在计数读的是
+	// 累计值，采样疏密只决定"多快退出"，不再决定"能不能退出"。
 	w := NewOrderDraftSweepWorker(svc, 100*time.Millisecond, time.Second)
 	w.Start(ctx)
 	t.Cleanup(func() { w.Stop(context.Background()) })
 
-	// 到期段与清理段各自在哪一轮记到数不作要求（预置行的可见性、DB 往返都会把两段拆进相邻轮），
-	// 要求的是"两段都记到过数" ⇒ 跨轮累加观测，而不是押末轮恰好同时装着两段。
-	var sawExpired, sawPurged, errRounds int
+	// 两段各自记到数 ⇒ 读 worker 的**跨轮累计计数器**，不是"抓到某一轮的报告"。
+	//
+	// 上一版（`9903baaf`）把判据从"末轮恰好同时装着两段"改成"轮询里数命中次数"，但那仍然押
+	// 在采样上：`LastReport` 是逐轮覆盖的，节拍 100ms，而 `waitUntil` 每 5ms 醒一次只是**意愿** ——
+	// 高负载下 `time.Sleep` 会睡到几十毫秒，整个"干活那一轮"的窗口可以被完整跳过。
+	// 实测（本机 21:21 的整包腿，负载 4–9）：库里那一轮确实翻了 1 条、删了 1 行（产码日志
+	// `[order-draft] 清扫轮结束：expired=1 purged=1` 在，后面两条落库断言也在同一轮就成立），
+	// 轮询侧却读到 sawExpired=0 ⇒ 红在**观测通道**，不在被观测的东西。
+	// 累计计数单调不回收，任何一次落在干活之后的读数都算数，这条运气从此没有。
+	var totExpired, totPurged int64
+	var errRounds int
 	var lr *OrderDraftSweepReport
 	if !waitUntil(t, 5*time.Second, func() bool {
-		r := w.LastReport()
-		if r == nil {
-			return false
+		totExpired, totPurged = w.ExpiredTotal(), w.PurgedTotal()
+		if r := w.LastReport(); r != nil {
+			lr = r
+			if r.ExpireError != "" || r.PurgeError != "" {
+				errRounds++
+				t.Logf("清扫轮报错：expire=%q purge=%q", r.ExpireError, r.PurgeError)
+			}
 		}
-		lr = r
-		if r.Expired >= 1 {
-			sawExpired++
-		}
-		if r.Purged >= 1 {
-			sawPurged++
-		}
-		if r.ExpireError != "" || r.PurgeError != "" {
-			errRounds++
-			t.Logf("清扫轮报错：expire=%q purge=%q", r.ExpireError, r.PurgeError)
-		}
-		return sawExpired >= 1 && sawPurged >= 1
+		return totExpired >= 1 && totPurged >= 1
 	}) {
-		t.Fatalf("若干轮内没等到到期段与清理段各自记到数（sawExpired=%d sawPurged=%d 轮次=%d）",
-			sawExpired, sawPurged, w.Rounds())
+		t.Fatalf("若干轮内没等到到期段与清理段各自累计记到数（累计 expired=%d purged=%d 轮次=%d）",
+			totExpired, totPurged, w.Rounds())
 	}
 
 	// 到期翻转

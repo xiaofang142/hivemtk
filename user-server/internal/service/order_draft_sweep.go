@@ -64,6 +64,12 @@ type OrderDraftSweepWorker struct {
 	started    bool
 	rounds     int64
 	lastReport *OrderDraftSweepReport
+	// expiredAll / purgedAll 是自本 worker 启动以来的**累计条数**，与 lastReport 分开存：
+	// lastReport 逐轮覆盖，读它等于赌"采样撞上干活那一轮"（负载高时一次 sleep 能睡过整个窗口）。
+	// 累计值单调不回收，读一次算一次。命名与写入形状照 approval_sweep.go 的 expiredAll，
+	// 两个 sweeper 在装配日志/快照上因此是同一个读法。
+	expiredAll int64
+	purgedAll  int64
 }
 
 // NewOrderDraftSweepWorker 构造清扫 worker。
@@ -147,6 +153,24 @@ func (w *OrderDraftSweepWorker) Rounds() int64 {
 	return w.rounds
 }
 
+// ExpiredTotal 累计翻了多少条到期草稿（含失败轮里已成的那部分）。
+//
+// 与 LastReport 的分工：报告是"最近一轮"的快照，逐轮覆盖，读它只能赌采样撞上干活那一轮；
+// 这两个计数单调不回收，"到没到过数"读一次就永久定论。空转轮不把计数抹回零 ——
+// 那样它会退化成一个更慢的 LastReport。
+func (w *OrderDraftSweepWorker) ExpiredTotal() int64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.expiredAll
+}
+
+// PurgedTotal 累计删了多少行过保留期的终态草稿。
+func (w *OrderDraftSweepWorker) PurgedTotal() int64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.purgedAll
+}
+
 // LastReport 最近一轮的结果；从未跑过为 nil。
 func (w *OrderDraftSweepWorker) LastReport() *OrderDraftSweepReport {
 	w.mu.RLock()
@@ -205,6 +229,10 @@ func (w *OrderDraftSweepWorker) RunOnce(ctx context.Context) *OrderDraftSweepRep
 
 	w.mu.Lock()
 	w.rounds++
+	// 失败轮里已成的那部分也计入（过期段失败时 expired 是"已翻条数"，不是 0）：
+	// 计数回答的是"库里少了多少行"，不是"这一轮整不整齐"。
+	w.expiredAll += int64(report.Expired)
+	w.purgedAll += int64(report.Purged)
 	w.lastReport = report
 	w.mu.Unlock()
 

@@ -77,6 +77,7 @@ func TestOrderDraftStatsPayload_Shadow(t *testing.T) {
 		Durable: false, ProducerAttached: true,
 		Counts:        map[string]int64{"pending": 4},
 		SweepInterval: "6h0m0s", SweepRunning: true, SweepRounds: 2,
+		SweepExpiredTotal: 7, SweepPurgedTotal: 3,
 		Mirror: &service.OrderDraftMirrorStatus{
 			Available: true, RowCounts: map[string]int64{"pending": 3}, Failures: 0,
 		},
@@ -99,6 +100,12 @@ func TestOrderDraftStatsPayload_Shadow(t *testing.T) {
 	sweep, ok := p["sweep"].(gin.H)
 	if !ok || sweep["interval"] != "6h0m0s" || sweep["rounds"] != int64(2) {
 		t.Errorf("sweep 应回显生效节拍与轮次，实际 %#v", p["sweep"])
+	}
+	// rounds 只回答"跑了几轮"，不回答"翻没翻到行"：空转轮一样 ++。
+	// 累计条数是运维在库里数行对账的那个数，缺了它这端点就只能看节拍活没活。
+	if sweep["expired_total"] != int64(7) || sweep["purged_total"] != int64(3) {
+		t.Errorf("sweep 应回显跨轮累计条数，实际 expired_total=%#v purged_total=%#v",
+			sweep["expired_total"], sweep["purged_total"])
 	}
 	if _, hasWarn := p["warning"]; hasWarn {
 		t.Errorf("生产者已挂、镜像无故障 ⇒ 不该有 warning，实际 %#v", p["warning"])

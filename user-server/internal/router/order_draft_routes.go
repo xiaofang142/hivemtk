@@ -61,6 +61,9 @@ func orderDraftStatsPayload(snap app.OrderDraftSnapshot) gin.H {
 		"running":  snap.SweepRunning,
 		"rounds":   snap.SweepRounds,
 		"last":     snap.SweepLast,
+		// rounds 只说"跑了几轮"，空转轮也 ++；这两个累计数才是能跟库里行数对上账的那个。
+		"expired_total": snap.SweepExpiredTotal,
+		"purged_total":  snap.SweepPurgedTotal,
 	}
 	if !snap.ProducerAttached {
 		warn("运行时已装配但编排器没挂生产者 ⇒ 不会有新草稿产生（AI 回复不建草稿），查装配顺序")
