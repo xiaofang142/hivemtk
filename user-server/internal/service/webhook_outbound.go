@@ -409,6 +409,22 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 		go s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
 	}()
+	// 分支表里只有飞书与 TG 真把富卡下发（各自一个 `for _, card := range cards`）；
+	// 其余渠道的 outbound 载荷没有卡片载体，这批卡走到这里就是整批丢掉，而文本回复照标 sent。
+	// 没有痕迹的话，管理端与运维看到的都是一次成功出站 ⇒ 丢弃必须出声，且**只在这一处**出声：
+	// 各渠道分支里再打一条就成了同一事件两行日志，告警侧按行数计数会翻倍。
+	// 桥接五族额外把计数写进出站行（那一族的观测面就是那一行，见下面 bridge 分支）。
+	if n := len(cards); n > 0 && channel != ChannelFeishu && channel != ChannelTelegram {
+		drop := logger.Ctx(ctx).Warn().
+			Str("module", "outbound").
+			Str("channel", string(channel)).
+			Str("account_id", accountID).
+			Int("cards_dropped", n)
+		if hubMsg != nil {
+			drop = drop.Str("conversation_id", hubMsg.ConversationID)
+		}
+		drop.Msg("outbound channel has no card transport, rich cards dropped")
+	}
 	switch channel {
 	case ChannelWeCom:
 
@@ -735,6 +751,13 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				if result.HandlerType != "" {
 					outMsg.Extra["handler_type"] = string(result.HandlerType)
 				}
+			}
+			// 桥接族的出库载体只有文本列（content + msg_type=text），富卡到这里没有可挂的下游
+			// 通道，整批丢掉是既有行为；但"丢了"必须留痕。出声由函数入口那道统一门负责
+			// （本族同样会走到），这里只补管理端读的那一行 —— 计数落库，界面上才分得清
+			// "这单本来没卡"和"这单把卡丢了"。
+			if n := len(cards); n > 0 {
+				outMsg.Extra["cards_dropped"] = n
 			}
 			if undeliverable, reason := isBridgeChannelUndeliverableLocal(accountID, outMsg.ConversationID); undeliverable {
 				outMsg.Status = "failed"
