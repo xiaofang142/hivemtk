@@ -287,12 +287,14 @@ npm run test:e2e:ui
 
 开发联调时，可直接在浏览器访问 `http://localhost:8211/#/chat/embed/default`，配合 `.env.development` 指向本地后端进行调试。
 
-## 🐳 Docker 集成
+## 📦 构建产物如何被托管
 
-仓库根 `hivemtk/docker-compose.yml` 中以构建产物方式集成：
-
-- 构建阶段：`Dockerfile` 执行 `npm install && npm run build`
-- 运行阶段：由 同源托管 `dist/` 静态资源 + `/api` 反代到 `user-server:8204`
+- 构建：`npm run build` 产出 `user-web/dist/`。仓内**没有前端 Dockerfile**（`user-web/Dockerfile` 已随 `a3285882`
+  删除，部署形态改为宿主机直跑），根 `docker-compose.yml` 只编排数据层（`mtk-postgres`、`mtk-redis`），不参与前端构建。
+- 托管：user-server 启动时按 `USER_WEB_DIST` 环境变量取产物目录，未设置则依次探测 `../user-web/dist`、
+  `./user-web-dist`、`./dist`，命中后由 `internal/router/embed_static_routes.go` 同源挂 `/assets`、`/favicon.ico`、
+  `/chat/embed/*` 并做 NoRoute 回落；embed-sdk 走 `EMBED_SDK_DIST`（默认探测 `../embed-sdk/dist`）。
+- 开发：Vite 独立端口（见上）直连后端，不需要重编 user-server。
 
 ## 📷 截图
 

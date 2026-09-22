@@ -49,7 +49,7 @@
 | 日志 | zerolog |
 | 监控 | TraceID 中间件 + 应用层日志（私域无外部监控端点） |
 | API 文档 | swaggo/gin-swagger |
-| 浏览器自动化 | chromedp（卡片自动回复） |
+| 浏览器自动化 | 宿主机 Chrome + Go NM Host（`cmd/nm-host`）+ MV3 扩展 `user-web/browser_automation/`（无 chromedp 依赖） |
 
 > dev / prod 档完整模型定义见 [`../scripts/inference-host/models.env`](../scripts/inference-host/models.env)。
 
@@ -122,10 +122,9 @@ user-server/
 │   ├── service/                # 业务编排（五层架构 · 第 2 层）
 │   ├── template/               # HTML 模板
 │   └── websocket/              # WebSocket 服务
-├── config.yaml                 # 服务配置（dev 宿主直连；Docker 内经 ${ENV_VAR} 注入服务名寻址）
+├── config.yaml                 # 服务配置（dev 宿主直连；数据层容器内由 ${ENV_VAR} 注入服务名寻址）
 ├── go.mod
 ├── go.sum
-├── Dockerfile
 └── .golangci.yml
 ```
 

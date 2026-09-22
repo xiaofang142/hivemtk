@@ -248,10 +248,16 @@ TG_TBL=$(eval $PG_CMD -c "\"SELECT EXISTS (SELECT 1 FROM information_schema.tabl
 
 echo
 echo "=== 反代配置模板（P1-A1）==="
-if [ -f /Users/xiaofang/Documents/www/go/hivemtk/docs/operations/reverse-proxy/ 反向代理层.conf.template ]; then
-    if grep -q "http2 off\|proxy_buffering off" /Users/xiaofang/Documents/www/go/hivemtk/docs/operations/reverse-proxy/ 反向代理层.conf.template 2>&1; then
-        ok "P1-A1 反向代理层 模板" "HTTP/2 off + SSE buffer off 已声明"
-    fi
+# 旧写法把模板路径写成开发机绝对路径、文件名又用了文档里的泛称「反向代理层」：仓内真实文件叫
+# nginx.conf.template ⇒ [ -f ] 恒假，这一步从来没跑过（缺产物静默跳过＝假绿）。
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd; })"
+NGINX_TMPL="${REPO_ROOT}/docs/operations/reverse-proxy/nginx.conf.template"
+if [ ! -f "$NGINX_TMPL" ]; then
+    err "P1-A1 nginx 反代模板" "模板不存在：${NGINX_TMPL}"
+elif grep -q "^[[:space:]]*http2 off;" "$NGINX_TMPL" && grep -q "proxy_buffering off" "$NGINX_TMPL"; then
+    ok "P1-A1 nginx 反代模板" "HTTP/2 off + SSE proxy_buffering off 已声明"
+else
+    err "P1-A1 nginx 反代模板" "模板缺 http2 off 或 proxy_buffering off：${NGINX_TMPL}"
 fi
 
 echo

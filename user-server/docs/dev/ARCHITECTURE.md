@@ -157,8 +157,7 @@ user-server/
 │   ├── email/                                  横向 邮件域（service）
 │   ├── ops/                                    横向 运维域（controller/service/repository/model）
 │   └── pkg/                                    通用工具（i18n/metrics/trace/testutil/utils）
-├── config.yaml · config.yaml            宿主/Docker 配置
-└── Dockerfile                                  多阶段构建
+└── config.yaml                                      宿主配置（数据层 PostgreSQL/Redis 由 compose 提供，服务本体不容器化）
 ```
 
 ---
@@ -450,7 +449,7 @@ graph LR
     Obs[(对象存储<br/>local ./uploads 或云 OBS)]
     Channels[渠道 API<br/>微信/企微/抖音/快手/<br/>小红书/闲鱼/TikTok/<br/>飞书/钉钉/WhatsApp/<br/>Telegram/SMS/Email]
     DeepL[(DeepL API<br/>可选·低资源语言翻译降级)]
-    Browser[chromedp<br/>浏览器自动化自动回复]
+    Browser[nm-host + MV3 扩展<br/>浏览器自动化自动回复]
 
     API --> PG
     API --> PgVec
@@ -476,7 +475,7 @@ graph LR
 - **渠道 API 出站**：仅当用户配置对应渠道账号时才出站；Webhook 入站统一走 `/api/webhook/{platform}/{id}`。
 - **对象存储**：两条独立通路。① `config.yaml` 的 `storage` 块（`type=qiniu` + `${QINIU_ACCESS_KEY}` / `${QINIU_SECRET_KEY}` / `${QINIU_BUCKET}` / `${QINIU_DOMAIN}` 插值）只服务访客上传凭证 `GET /api/chat/public/upload-token`；守卫只看两项——`type != "qiniu"` 或 `access_key` 为空即 503「对象存储未配置」，`secret_key`/`bucket`/`domain` 缺失不报错但会签出不可用的 token（`upload_domain` 缺省回落 `up-z2.qiniup.com`）。② `obs_config` 表（provider ∈ `local`/`aliyun`/`qiniu`/`tencent`/`aws`）服务渠道媒体转存，启动时 `InitDefaultStorageIfEmpty` 仅在表为空时 seed 一条 `local` 配置（base dir 取 `STORAGE_LOCAL_BASE_DIR`，默认 `./uploads`；公开前缀取 `STORAGE_LOCAL_PUBLIC_URL`，默认 `/files`），因此不接任何云也能跑。
 - **platform-server 可选**：`:8205` 只在 `PLATFORM_ENABLED=true` 时接入（见 §启动装配的开关分支）；默认关态下不加载配置、不心跳、不发一个出站请求，本地资产与运行链路不依赖它。
-- **chromedp**：仅在自动回复场景（抖音/小红书/快手/闲鱼）启用，Dockerfile 默认注释，需手动取消注释安装 chromium。
+- **浏览器自动化**：不引入 chromedp（`user-server/go.mod` 零命中），也没有"镜像里装 chromium"这一步（`user-server/Dockerfile` 已随 `94415060` 删除，服务本体不容器化）。现形态是 Go NM Host `cmd/nm-host` + MV3 扩展 `user-web/browser_automation/`（`chrome.debugger`）寄生宿主 Chrome，细节以 [浏览器自动化权威文档](../../../docs/architecture/BROWSER_AUTOMATION.md) 为准。
 
 ---
 

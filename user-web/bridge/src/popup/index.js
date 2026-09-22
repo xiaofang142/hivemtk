@@ -32,7 +32,7 @@ import { explainError, formatErrorBanner } from './error-messages.js';
 const $ = (id) => document.getElementById(id);
 
 // ---- 默认值（全部来自 constants.js，禁止就地写死） ----
-// 文档源：user-server/docs/dev/DEVELOPMENT.md 端口对照表 + user-server/Dockerfile ENV SERVER_PORT=8204
+// 文档源：user-server/docs/dev/DEVELOPMENT.md 端口对照表 + user-server/cmd/api/main.go 读 env `PORT`
 //         + user-server/cmd/api/main.go listenAddr 兜底 :8204
 // 调整流程：见 docs/bridge/DEFAULTS.md §3
 const DEFAULT_PORT_HINT = DEFAULT_USER_SERVER.port;

@@ -65,7 +65,7 @@
 3. host 全量替换为 `https://xiaofang142.github.io/hivemtk/`：`index.html` 的 canonical/hreflang/JSON-LD（12 处）、`public/robots.txt`(1)、`public/sitemap.xml`(42)；
 4. **纯静态 ⇒ 无后端**，删除三处交互件：`src/components/CustomerServiceWidget.vue`（iframe → `VITE_CHAT_URL`）、`src/api/platform.js`（`/public/site/contact`）、`src/router` 里的 `/embed-demo` 路由 + `postbuild` 第 3 步 embed-sdk 复制（embed-sdk 本体留在 `hivemtk/embed-sdk/` 供自托管者用，只是官网不再同源挂它）；
 5. `src/config/content.js`：删 `VITE_CHAT_URL` 默认值(20)、删"在线体验 → hiveuser"(27,43) 两处 CTA，替换为指向 GitHub 仓与 `/hivemtk/download`；
-6. 服务器发布链路退役：`deploy.sh`（rsync 到 118.25.236.101，含 `.user.ini` immutable 规避）删除其 SSH/rsync 段，改为本地 `npm run build && 预检`；`Dockerfile`、`反向代理层.conf` 删除；
+6. 服务器发布链路退役：`deploy.sh`（rsync 到 118.25.236.101，含 `.user.ini` immutable 规避）删除其 SSH/rsync 段，改为本地 `npm run build && 预检`。（原计划里"`Dockerfile`、`反向代理层.conf` 删除"这一条本轮取证后**改归属**：`website/Dockerfile` 与 `website/nginx.conf` 早在 platform 仓 `c6e874f`（2026-07-26）就已删掉，本批整目录迁过来时它们本就不在 ⇒ 不是本批动作，Pages 侧也无遗留。两仓现存的 `*dockerfile*` 跟踪文件 = 0（`git ls-files`），`git log --all --diff-filter=A` 查无"反向代理"命名的文件）；
 7. 新 workflow `hivemtk/.github/workflows/website-pages.yml`：`paths: website/**` 触发，jobs = `npm ci` + i18n `MISSING_UNIQ=0` 预检 + `eslint` + `npm run build` + `npm audit`（OPT-CI-10 写法）+ `actions/upload-pages-artifact` + `actions/deploy-pages`，`permissions: {contents:read, pages:write, id-token:write}`。
 
 **门禁迁移（C5/C6）**：platform-ci.yml 里 website 相关 3 个门（build / audit / path-filter）逐条在新 workflow 复现，并跑一次反向测试证明新门能红（故意引入 lint 错 → 断言红）。platform 仓侧对应 job 与 `Makefile:29,88`、`发布流程.md`、`docs-link-check.yml` 的 website 引用一并摘除。
@@ -1499,7 +1499,7 @@ SEED_PASSWORD="$(openssl rand -base64 18)" bash scripts/rotate-admin-password.sh
 bash scripts/check-admin-default-credential.sh          # 期望从 rc=1 变 rc=0
 ```
 
-### Task 23 · 监听地址收回机制（`SERVER_HOST`）—— ✅ 代码面完成，缺一个 `Dockerfile` 行归属移交
+### Task 23 · 监听地址收回机制（`SERVER_HOST`）—— ✅ 代码面完成，另把一处失效文档引用取到 provenance
 
 `user-server/cmd/api/main.go` 的 `resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))`，
 缺省 `config.DefaultListenHost = "0.0.0.0"`（**保持历史行为**，收回是显式动作不是默认）；
@@ -1509,10 +1509,15 @@ bash scripts/check-admin-default-credential.sh          # 期望从 rc=1 变 rc=
 文档落点：`docs/PORT_REGISTRY.md`、`docs/DEPLOYMENT_GUIDE.md` §三 + §6.2 新增 `SERVER_HOST` 行、
 `.env-example`（补 `PORT=8204` 一行并写明"服务读 `PORT`、`USER_SERVER_PORT` 只给脚本拼 curl 目标"）、
 `user-server/docs/dev/DEVELOPMENT.md`、`website/src/views/DocsPage.vue` 两处 env 样例。
-**顺带清掉一处幻影引用**：`DEVELOPMENT.md` 那格旧写法把 8204 的出处写成「`Dockerfile:57 ENV SERVER_PORT=8204`」，
-本轮实测两仓 `git ls-files | grep -i dockerfile` = **0**（platform 仓 `git ls-tree -r HEAD` 亦 0），
-`SERVER_PORT` 在 Go 侧读取点 = **0** ⇒ 该引用从未成立过（也可能曾随 `deploy/` 一起存在、随本批删除而消失，
-但无论哪种都不能再当"改端口的依据"），已改成"运行期覆盖：`PORT` / `SERVER_HOST`"并写明读点。
+**顺带订正一处失效引用（我起草时先写成"幻影/从未成立"，取证后翻案）**：`DEVELOPMENT.md` 那格旧写法把 8204 的出处
+写成「`Dockerfile:57 ENV SERVER_PORT=8204`」。按 `git log --all --diff-filter=A/D --name-only` 找出该文件的一生，
+再逐 SHA `"${c}":user-server/Dockerfile` 取行号：`ENV SERVER_PORT=8204` 在 e2829727(07-21)、e12ffe70(07-23)、
+1ad16437(07-24)、0aa6e39c(07-26) 四个版本里**正好落在第 57 行**（其后漂到 46/49 行），文件在
+**`94415060`（2026-08-17，与 `docker-compose-example.yml` 同批）被删** ⇒ 那是一条"文件删了、引用没跟着删"的
+**曾经成立**的引用，不是幻影（本轮实测两仓 `git ls-files | grep -i dockerfile` = 0、`SERVER_PORT` Go 侧读取点 = 0，
+所以它今天确实不能当改端口的依据）。口径回灌 [[prove-nonuse-before-deleting]]：判"从未存在"必须走
+`git log --all` 的增删记录，`git ls-files` 为 0 只说明"现在没有"。落点仍改成
+"运行期覆盖：`PORT` / `SERVER_HOST`"并写明读点，只是把"为什么旧写法错"这句换成有据可查的出处。
 
 ### Task 24 · `.gitleaks.toml` 形状闸 —— ✅ 建好接入，触发面一行仍归该泳道
 
@@ -1566,3 +1571,54 @@ GitHub ubuntu runner 是 bash 5 ⇒ **CI 复现不出来**，这条只保护 mac
   没有在真库上执行过一次写事务（那要用户先定口令）。
 - Task 23 的真实 bind 测试在本机随机端口跑，未验证"收回后同机另一端口不受影响"以外的网络形态（无反代环境）。
 - Task 25 的字节级证据来自本机 bash 3.2.57；bash 5 侧只有"形状闸同样判红"这一条静态证据，无运行时复现。
+
+## 7.4 第四轮：把"按已删文件写文档"这一类账清完（2026-09-22，指令 = 不留下任何问题）
+
+Task 23 翻案之后追出来的问题：**本批之前交付的文档里，有一整类"把一个已经不存在的文件当事实来源"的句子**。
+这类句子不会让任何门禁变红（`check-doc-consistency` / `check-feature-doc` / `check-md-links` 都只看链接可达与关键字命中，
+不校验 `file:line` 指向的文件是否存在），所以只能人肉逐条取证。本轮口径：**先量"含该串 ∩ 真消费"，再决定改哪一层**
+（[[delivery-accounting-layers]] 第六层），改完的每一句都要重新落回磁盘上真实存在的读点。
+
+### 本轮改掉的面（10 个文件，全部落在本批 D4「文档全量核清」的范围内）
+
+| 文件 | 原断言 | 本轮改成的事实 |
+| --- | --- | --- |
+| `user-server/docs/dev/DEVELOPMENT.md` | §2.4 那格"查无此文件"（说轻了）、目录树里的 `Dockerfile`、§9.1 `docker build -t …`、§9.2 整节按多阶段镜像讲部署 | 出处补全为"随 `94415060`（2026-08-17）删除、仓内现无 Dockerfile、`SERVER_PORT` 零读取点 ⇒ 改端口只认 `PORT`"；§9.2 改成"已退役，别再照着它部署"四条现状（二进制/air、compose 只两个数据层容器、浏览器自动化、推理栈 8207–8209） |
+| `user-server/docs/dev/ARCHITECTURE.md` | 目录树 `└── Dockerfile 多阶段构建`、出站依赖图节点 `Browser[chromedp]`、正文"chromedp 仅在自动回复启用，Dockerfile 默认注释" | 树里只留 `config.yaml`；节点改 `nm-host + MV3 扩展`；正文改成"`go.mod` 无 chromedp、服务本体不容器化，现形态 = `cmd/nm-host` + `user-web/browser_automation/`（`chrome.debugger`），细节以 `docs/architecture/BROWSER_AUTOMATION.md` 为准" |
+| `user-server/README.md` | 目录树 `├── Dockerfile`、技术栈表"浏览器自动化 = chromedp"、"Docker 内经 `${ENV_VAR}` 注入" | 树中该行删除；技术栈行改写为宿主 Chrome + NM Host + MV3 扩展；注入主体限定为"数据层容器内" |
+| `user-server/docs/dev/HOT_RELOAD.md` | 表格行"修改 `Dockerfile` → `make user-build` 或 `docker build`" | 该行改成"修改根 `docker-compose.yml`（数据层）→ `docker compose up -d mtk-postgres mtk-redis`；服务本体无容器，`make user-build` 只出二进制" |
+| `user-web/README.md` | "🐳 Docker 集成"：声称根 compose 会构建前端 Dockerfile 并反代到 `user-server:8204` | 整节换成"📦 构建产物如何被托管"：`npm run build` → `USER_WEB_DIST` / `internal/router/embed_static_routes.go` 候选路径 / `EMBED_SDK_DIST`，并写明 `user-web/Dockerfile` 已随 `a3285882` 删除 |
+| `docs/operations/KNOWLEDGE_GROUP_DEPLOY.md` | §4 示例 Dockerfile 用 `golang:1.21` + `./cmd/user-server` + `CGO_ENABLED=1` + `EXPOSE 8080`；compose 用 `POSTGRES_*` 与 `FEATURE_KNOWLEDGE_GROUP_*` 环境变量 | 示例改 `golang:1.25` + `./cmd/api` + `ENV PORT=8204`、健康检查 `curl -f :8204/healthz`（`router.go:189`）；compose 改 `DB_HOST/DB_PORT` 并写明"账号与库名写死在 `config.yaml`，`POSTGRES_USER` 覆盖不到"；结尾注明特性开关读 `feature_flag` 表，那两个 `FEATURE_*` 环境变量在 Go 侧零读取点 |
+| `user-web/bridge/src/popup/index.js` `index.html` | 注释/提示文案把 8204 的出处指向 `user-server/Dockerfile ENV SERVER_PORT=8204` | 出处改指 `user-server/cmd/api/main.go` 读 env `PORT` + `DEVELOPMENT.md` 端口对照表（纯文案，无逻辑改动） |
+| 本 spec §5.1 条目 6 | "本批删除 website 的 `Dockerfile`、`nginx.conf`、`反向代理层.conf`" | 重新归属：前两者已由 platform 侧 `c6e874f`（2026-07-26，同批还删了 `website/.dockerignore`）删除；`反向代理*` 作为**文件名**两仓历史 0 命中（`git log --all --diff-filter=ADR --name-only \| grep 反向代理`），仓内真实存在的是 `docs/operations/reverse-proxy/nginx.conf.template`，"反向代理层"只是正文里的泛称 |
+| `scripts/e2e_real_curl.sh` P1-A1 | 断言路径写成开发机绝对路径 ``/Users/xiaofang/.../reverse-proxy/ 反向代理层.conf.template``（文件名用了泛称，且路径中间那个空格让它变成两个词）⇒ `[ -f ]` 恒假、整步从来没跑过，跑不到也不报错 | 定根改 `git rev-parse --show-toplevel`（回落 `BASH_SOURCE/..`，改名克隆与仓外调用都有确定行为）；目标改仓内真实模板；缺模板/缺指令从"静默跳过"改成 `err` 计入 FAIL；判据拆成 `^[[:space:]]*http2 off;` 与 `proxy_buffering off` **两条**（旧写法一条 `grep -q 'A\|B'` 只要任一命中就打印"两者已声明"＝断言比判据宽） |
+
+证据（本轮实测，不是推断）：`git ls-files | grep -i dockerfile` = **0**，`find . -iname '*dockerfile*'`（排 node_modules/.git）也是 **0**；
+`grep -c chromedp user-server/go.mod` = **0**；`user-server/internal/aiagent/agent/browser/` 与 `user-server/internal/service/auto_reply.go` 均不存在；
+仓内模板 `docs/operations/reverse-proxy/nginx.conf.template` 第 27 行 `http2 off;`、第 40 行 `proxy_buffering off`（新判据两条各自命中）。
+另记一处**仓外**残迹（不在两仓版本控制内，故本批不改只登记）：`hivemtk/docs/operations/reverse-proxy/README.md`（工作区外层副本）第 16 行仍写
+"`反向代理层.conf.template`"且目录里没有该文件，而仓内被跟踪的同名 README 第 16 行是正确的 "`nginx.conf.template`" ⇒ 外层那份是旧派生副本。
+
+### 移交清单（本批**不**动的两处，附实测证据，避免下批重新发现一遍）
+
+| 落点 | 现状 | 为什么不随本批改 |
+| --- | --- | --- |
+| `user-web/bridge/src/core/constants.js:12` 的 `交叉验证：user-server/Dockerfile:57 ENV SERVER_PORT=8204`（+ `bridge/test/**/constants.test.js` 用例标题里同一串） | 该文件工作树为 `M`（浏览器/bridge 泳道在改，本次新增 22 行端口注释），幻影句就压在那 22 行里 | 不是本批的账，且改它会把别人在途的 hunk 一起带上车；本轮只把自己名下那两处 popup 文案改对。**该泳道下一次提交前请把 `:12` 与测试标题一起改成 `cmd/api/main.go` 读 `PORT`**，否则幻影引用回流 |
+| `DEVELOPMENT.md:112` 的 8206 行（`chromedp.Flag(...)` + `internal/aiagent/agent/browser/assistant.go:43`）与 `FEATURES.md:79`（`service/auto_reply.go` · `aiagent/agent/browser/`） | 两个引用文件都不存在；`config.DefaultChromiumCDPPort` / `DefaultRemoteDebugURL` 定义在 `ports.go:18,42`，**非测试消费点 = 0**（仅 `ports_test.go` 引用） | 端口行的正确写法取决于"8206 还要不要留"这个代码决定（删常量会连带 `ports_test.go` 的对照表与 `audit-cross-package-ports.sh` 的单一源口径），属浏览器自动化泳道；本批只保证自己新增的句子不引用它 |
+| `user-server/internal/config/server.go:572-585` 无 `config.yaml` 时的回落块里 `Postgres.Host = "postgres-user"` | 全仓 `git grep -n postgres-user` = **2 处**（这一行 + `scripts/deploy-user.sh:210` 解释它的注释），0 个测试断言它；作为 compose 服务名只存在于初始版的 `docker-compose-example.yml` / `config-docker.yaml`，今天的根 compose 只有 `mtk-postgres` / `mtk-redis` ⇒ 回落目标是个**解析不出来**的名字（`4b9c53f9` 有意做成"cwd 错了也不 panic"） | 三个改法都不安全，本批不动：① 改 `127.0.0.1:8202` 会把"当前必然连不上"变成"能连上"——根 compose 的发布口是 `127.0.0.1:${USER_POSTGRES_HOST_PORT:-8202}:8202`（默认 8202＝库容器内口），新克隆照默认 `docker compose up` 之后 8202 就是真库，那些靠"无配置⇒无库"跑着的包测试会开始连开发库（[[cli-toolchain-gotchas]]：并发抢库造成假红）。本机活栈实测只监听 `127.0.0.1:8232`（`lsof` 读数，8202 空）⇒ 这条风险在"别人机器按默认起"时才成立，不是本机能复现的；② 改成 fail-loudly 要过 `internal/service` 等一整批以回落值起身的用例；③ 保持原样则名字是死的。两条都要跑 Go 全量套件才能验，而本机数据卷 99%（~7Gi）跑不下 ⇒ 前置条件先写在这里：**腾出磁盘后**按 ① 或 ② 二选一并跑 `./internal/config/... ./internal/service/...` 全量 |
+
+### 第四轮的验证与没做到的验证
+
+跑过（工作树，改完最后一次）：`npx -y markdownlint-cli2` → `170 files / Summary: 0 issues in 0 files`；
+`scripts/check-md-links-offline.py` → 扫描 162 个 md、断链 0；`check-no-xapptool` / `check-doc-consistency` / `check-feature-doc` → 均 rc=0；
+`user-web/bridge` `eslint src/popup/index.js` → **0 error**（仅 2 条 warning：`index.html` 无匹配配置、`getCustomSelectors` 未用——后者 `git show cf71ba60:` 同文件已在，非本批引入）。
+P1-A1 那一格改完做了 6 格取证（`bash -n` 全脚本 → rc=0；把该块 14 行摘到 `/tmp` 加 `ok/err` 桩单独跑）：
+R0 仓内正跑 = `PASS=1 FAIL=0`（这一步在旧写法下**从不产出任何一行**，所以"绿"本身就是新证据）；
+R1 模板路径不存在 → `FAIL=1`，红因"模板不存在：…"；R2 只留 `proxy_buffering off` → `FAIL=1`；R3 只留 `http2 off;` → `FAIL=1`
+（R2/R3 各自证明两条判据都有独立牙口——旧的一条 `grep -q 'A\|B'` 在这两格都会绿）；
+R4 从 `/tmp` 起跑（脚本副本临时放 `scripts/` 下、跑完 `rm -f`）→ 走 `BASH_SOURCE` 回落定根，仍 `PASS=1`；
+R5 显式 `/bin/bash` 3.2.57 跑 R0 → `PASS=1`。R4 第一次跑出的"REPO_ROOT 为空"是**取证桩用 zsh `source` 导致 `BASH_SOURCE` 不存在**，
+不是脚本缺陷（脚本 shebang 是 bash），改由 `/bin/bash` 直接执行测试文件后转正——按 [[verify-secondhand-review-claims]] 记进没做到的那侧。
+没做到的：本轮改动是文档/注释 + 一个 e2e 脚本的断言步，未跑 Go 全量套件（本机 `/System/Volumes/Data` 已 99%、仅剩 ~7Gi，全量 `-race` 跑不下），
+门禁层面只跑到"文档四门 + markdownlint + bridge eslint + shell 形状闸"这一层；`docs/operations/KNOWLEDGE_GROUP_DEPLOY.md` 的示例 Dockerfile
+**未真实 `docker build`**（本机无该构建上下文），它是"照着今天的事实重写的示例"，其 `./cmd/api`、`PORT`、`/healthz` 三处逐条对过源码。

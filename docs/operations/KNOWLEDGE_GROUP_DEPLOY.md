@@ -146,48 +146,55 @@ curl -X PATCH http://config-center/api/v1/features/knowledge_group_isolation \
 
 ---
 
-## 4. 容器化部署 (Docker)
+## 4. 容器化部署（仓内不提供镜像定义）
 
-### 4.1 Dockerfile
+> ⚠️ 本仓自 `94415060`「重构宿主机部署」起**不再随附任何 Dockerfile**（`git ls-files | grep -i dockerfile` = 0），
+> 部署形态是宿主机二进制 + 根 `docker-compose.yml` 只起数据层。下面这段是"你要自己容器化时"的样例，
+> 口径按今天的产码核对过：入口包 `./cmd/api`（仓内没有 `cmd/user-server`）、监听 8204（`PORT` 可覆盖）、
+> 存活探针 `/healthz`（`internal/router/router.go:189`）、Go 版本跟 `user-server/go.mod` 的 `go 1.25.0`。
+> DB 只有 `DB_HOST`/`DB_PORT` 两个占位可覆盖，账号与库名在 `user-server/config.yaml` 里是写死的
+> （`user: admin`、`dbname: user_db`）⇒ 容器化要挂一份改过的 `config.yaml`，别指望 `POSTGRES_USER` 这类变量。
 
 ```dockerfile
-# 多阶段构建
-FROM golang:1.21 AS builder
+# 自建镜像样例（放到你自己的路径，仓内不入库）
+FROM golang:1.25 AS builder
 WORKDIR /build
-COPY . .
-RUN CGO_ENABLED=1 go build -o /build/user-server ./cmd/user-server
+COPY user-server/ .
+RUN CGO_ENABLED=0 go build -o /build/user-server ./cmd/api
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/user-server /usr/local/bin/
-EXPOSE 8080
+ENV PORT=8204
+EXPOSE 8204
 CMD ["/usr/local/bin/user-server"]
 ```
 
 ### 4.2 Docker Compose
 
 ```yaml
-# docker-compose.yml 片段
-version: '3.8'
+# 片段：服务名要与数据层容器同网段（根 compose 里的数据层服务名是 mtk-postgres / mtk-redis）
 services:
   user-server:
-    image: hivemtk/user-server:latest
+    image: hivemtk/user-server:latest        # 由上面那段自建 Dockerfile 出，仓内无此镜像
     ports:
-      - "8080:8080"
+      - "8204:8204"
     environment:
-      - POSTGRES_HOST=postgres-user
-      - POSTGRES_PORT=8202
-      - POSTGRES_DB=user_db
-      - FEATURE_KNOWLEDGE_GROUP_ISOLATION=true
-      - FEATURE_KNOWLEDGE_GROUP_ROLLOUT_PERCENT=100
+      - PORT=8204
+      - DB_HOST=mtk-postgres        # user-server/config.yaml 的占位符是 ${DB_HOST:127.0.0.1} / ${DB_PORT:8232}
+      - DB_PORT=8202
     depends_on:
-      - postgres-user
+      - mtk-postgres
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8204/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
 ```
+
+> 特性开关不走环境变量：`FEATURE_KNOWLEDGE_GROUP_ISOLATION` / `..._ROLLOUT_PERCENT` 在 Go 侧**零读取点**
+> （本轮 `git grep` 实测），开关由 `feature_flag` 表驱动（`internal/model/feature_flag.go` 的
+> `RolloutPercentage`，`internal/service/feature_flag.go` 校验 0–100）。
 
 ### 4.3 滚动升级
 

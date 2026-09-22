@@ -107,7 +107,7 @@ curl http://localhost:8204/api/v1/public/init
 | --- | --- | --- | --- | --- |
 | 8202 | PostgreSQL（Docker 部署映射端口） | `docker compose -f docker-compose.yml up -d` | `config.DefaultDBPortDocker` | `docker-compose.yml` 中 mtk-postgres 容器映射宿主 8202 |
 | 8203 | Redis | `docker compose -f docker-compose.yml up -d` | `config.DefaultRedisPort` | `docker-compose.yml` 中 mtk-redis 容器 |
-| **8204** | **user-server**（Gin HTTP） | `go run ./cmd/api` 或 `air -c .air.toml` | `config.DefaultListenPort` / `main.DefaultListenPort` | 运行期覆盖：`PORT`（端口）/ `SERVER_HOST`（监听主机，默认 `0.0.0.0`）——读点 `cmd/api/main.go` `resolveListenAddr`。仓内**无 Dockerfile**，旧写法「`Dockerfile:57 ENV SERVER_PORT=8204`」查无此文件、`SERVER_PORT` 亦无读取点 |
+| **8204** | **user-server**（Gin HTTP） | `go run ./cmd/api` 或 `air -c .air.toml` | `config.DefaultListenPort` / `main.DefaultListenPort` | 运行期覆盖：`PORT`（端口）/ `SERVER_HOST`（监听主机，默认 `0.0.0.0`）——读点 `cmd/api/main.go` `resolveListenAddr`。旧写法「`Dockerfile:57 ENV SERVER_PORT=8204`」指向的 `user-server/Dockerfile` 已于 `94415060`（2026-08-17）删除、仓内现已无 Dockerfile，且 `SERVER_PORT` 在 Go 侧零读取点 ⇒ 改端口只认 `PORT` |
 | 8205 | platform-server | `cd hivemtk-platform/platform-server && go run ./cmd/api` | `config.DefaultPlatformPort` | platform-server/config.yaml `server.port` |
 | 8206 | Chromium CDP（远程调试） | `chromedp.Flag("remote-debugging-port", "8206")` | `config.DefaultChromiumCDPPort` | `internal/aiagent/agent/browser/assistant.go:43` |
 | 8207 | LLM（llama.cpp） | `bash scripts/inference-host/start-llm.sh` | `config.DefaultLLMPort` | `inference.llm.base_url: http://127.0.0.1:8207/v1` |
@@ -221,10 +221,9 @@ user-server/
 │   ├── aiagent/                          能力层（agent/llm/rag/embedding/vector/eval/knowledge）
 │   ├── integration/ · identity/ · etl/ · cron/ · domain/ · channelbot/ · config/   横向业务子包
 │   └── pkg/                              通用工具（i18n/metrics/trace/testutil/utils）
-├── config.yaml · config.yaml      宿主/Docker 配置
+├── config.yaml                          宿主配置（数据层容器由根 compose 提供，服务本体不容器化）
 ├── .air.toml                             air 热重载配置（不入仓，见 .gitignore）
 ├── .golangci.yml                         Linter 配置（含 depguard controller-layer / model-layer 两条规则）
-├── Dockerfile                            多阶段构建
 ├── go.mod · go.sum
 └── README.md
 ```
@@ -660,20 +659,21 @@ go build -o bin/user-server ./cmd/api
 # Embedding 子服务（可选，仅当无 host 推理栈时使用）
 go build -o bin/embedding-server ./cmd/embedding-server
 
-# 多阶段 Docker 构建
-docker build -t hivemtk/user-server:latest .
+# 多阶段 Docker 构建 —— 已无此路径：user-server/Dockerfile 随 94415060（2026-08-17）删除，部署形态是宿主机二进制
 ```
 
-> ℹ️ **Embedding 子服务定位**：`cmd/embedding-server/` 源码仍保留（纯 Go char n-gram TF-IDF + 随机投影实现，无 Python/ONNX 依赖），供无 host 推理栈的环境单独构建运行。Docker 部署场景下，Embedding 能力由宿主机 llama.cpp / TEI 提供（详见 [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md)），故 user-server Docker 镜像**不打包** embedding-server 二进制。
+> ℹ️ **Embedding 子服务定位**：`cmd/embedding-server/` 源码仍保留（纯 Go char n-gram TF-IDF + 随机投影实现，无 Python/ONNX 依赖），供无 host 推理栈的环境单独构建运行。当前部署形态下 Embedding 能力由宿主机 llama.cpp 提供（详见 [../../docs/architecture/HOST_INFERENCE_PLAN.md](../../../docs/architecture/HOST_INFERENCE_PLAN.md)），`cmd/embedding-server` 只在没有 host 推理栈时才需要单独 `go build` 运行。
 
-### 9.2 Dockerfile 说明
+### 9.2 Dockerfile：已退役，别再照着它部署
 
-- **阶段 1**: `golang:1.25-alpine` 仅编译 `user-server` 一个二进制（`./cmd/api/main.go`）；`cmd/embedding-server/` 源码保留但不打入镜像
-- **阶段 2**: `alpine:3.19` 运行镜像，非 root 用户（`app:app`）运行
-- **国内镜像源**: 阿里云 Alpine 镜像加速
-- **Chromium**: 默认注释（线上演示不需要自动回复），需要时取消注释
-- **配置**: `config.yaml` 复制为容器内 `config.yaml`
-- **install.lock**: 不打进镜像（运行时由初始化流程写入，持久化到 `/app/data` 命名卷）
+`user-server/Dockerfile`（多阶段构建、alpine 运行镜像、Chromium 注释开关、`install.lock` 落命名卷那一套）
+已随 `94415060`「重构宿主机部署」（2026-08-17）删除，仓内 `git ls-files | grep -i dockerfile` = **0**，
+`docker build .` 会直接报"找不到 Dockerfile"。今天的形态是：
+
+- **服务本体**：宿主机二进制 / `air` 热重载（§9.1），监听 `PORT`（默认 8204）、`SERVER_HOST`（默认 `0.0.0.0`）
+- **数据层**：根 `docker-compose.yml` 只起 `mtk-postgres`、`mtk-redis` 两个容器
+- **Chromium / 浏览器自动化**：不再有"镜像里取消注释装 chromium"这一步，`user-server/go.mod` 亦无 chromedp 依赖；自动回复用宿主机日常使用的 Chrome，经 Go NM Host `cmd/nm-host` + MV3 扩展 `user-web/browser_automation/` 接入（权威文档 [`../../../docs/architecture/BROWSER_AUTOMATION.md`](../../../docs/architecture/BROWSER_AUTOMATION.md)）
+- **推理栈**：宿主机 llama.cpp 三件套（8207/8208/8209），见 `scripts/inference-host/`
 
 ### 9.3 CI/CD（GitHub Actions）
 

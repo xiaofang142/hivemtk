@@ -200,7 +200,7 @@ cd user-web && npm run dev        # user-web Vite HMR
 |---|---|---|
 | 修改前端 `user-web/src/**` | 前端 Vite 单独 HMR | `cd user-web && npm run dev`；**无需**重编 user-server |
 | 新增 go 依赖 `go get xxx` | air 不会自动 `go get` | 先 `go get xxx`，再让 air 重启 |
-| 修改 `Dockerfile` | 容器构建层 | `make user-build` 或 `docker build` |
+| 修改根 `docker-compose.yml`（数据层） | 容器不随 air 重建 | `docker compose up -d mtk-postgres mtk-redis`（服务本体无容器，`make user-build` 只出二进制） |
 | 跨平台原生依赖（如 CGO） | 编译工具链 | `make user-build` 验证 |
 
 ### 5.3 ⛔ 千万别做的事

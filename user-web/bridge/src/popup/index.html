@@ -118,7 +118,7 @@
 
     <label for="serverUrl">服务端地址 (http/https)</label>
     <input id="serverUrl" placeholder="" autocomplete="off" />
-    <div class="hint">user-server 默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / Dockerfile <code>ENV SERVER_PORT=8204</code>）；自定义请用 PORT 环境变量覆盖</div>
+    <div class="hint">user-server 默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / user-server 运行期环境变量 <code>PORT</code>）；自定义请用 PORT 环境变量覆盖</div>
 
     <label for="token">鉴权 Token（可选）</label>
     <input id="token" placeholder="留空也可正常使用（桥接 WS 不要求 JWT）" autocomplete="off" />
