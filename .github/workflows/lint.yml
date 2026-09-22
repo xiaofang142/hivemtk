@@ -114,6 +114,13 @@ jobs:
       - name: check-ci-step-coverage 用例（假 gh，不联网）
         run: bash scripts/check-ci-step-coverage.test.sh
 
+      # action 的运行时（runs.using）写在**那个 action 自己仓库里**，工作流文件里看不见；
+      # 上一轮拿版本号新旧猜"已迁完"，漏了 action-gh-release@v2 和 slsa-verifier installer。
+      # 用例的格 10 会把这道门在真仓库上再跑一次，所以出厂的 RUNTIMES 表和豁免账本
+      # 只要跟磁盘对不上（漏登记、豁免留空条目、豁免文件里又长出 node20 站点），这里就红。
+      - name: check-action-runtime 用例（含真仓库基线自洽）
+        run: bash scripts/check-action-runtime.test.sh
+
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
   # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。
