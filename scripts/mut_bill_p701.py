@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：72 格逐格验牙。
+"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：71 格逐格验牙（格数逐卡变动，原因见文末第四趟）。
 
 跑在**私有 --shared 克隆**里，克隆内容就是「HEAD 那一棵树」：本卡的 15 个新建文件与四处
 装配插入都随 `66964f9e` 进了 HEAD，所以 prepare 不再往克隆里写任何字节，只逐条断言那四处
@@ -105,6 +105,17 @@ FAIL 是脚本按点名的编译错串代记的，不是 go test 印的用例名
 
 这两处修完，前两趟的结论里有几格要从"杀掉"降成"待人工看"—— 所以本卡的计划里
 **整族 72 格必须在提交后重跑一遍**，而不是只跑新加的三格。
+
+第四趟（取证落点迁进仓库树之后，在**已提交 tip** 上跑 `--check`）：72 格里三格锚点 0 次，
+且三格全在 `bill.go` 的 `in.DueAt` 上。归因不是产码回退，而是这张卡的改动**只提交了一半**：
+`23dae260`（T-P7-03，collection 泳道）动了 `model/bill.go` 的复合索引标签与 `repository` 的
+方法集改名（…Six→…Seven），而 `service/bill.go` 最近一笔仍是 `66964f9e`（T-P7-01）—— 那一层
+"账期由调用方给"至今只躺在共享工作树里，从没进过任何一棵 HEAD。
+于是 K07/K39 的新锚点在 tip 上成立，K50/K50b/K56 的新锚点不成立 —— tip 落在两版锚点**之间**，
+任何一版整文件都不对。常驻电池跑的就是克隆 HEAD 的字节，所以这里按 tip 逐格取值：
+K50/K56 回退到与 HEAD 字节匹配的锚点，K50b 整格撤下（它的判据用例
+`TestBillDeriveStoresTheDueAtTheCallerGave` 在 HEAD 里**从未存在过**，留着它就是一台
+对着不存在的用例开火的枪），三处原地留注释说明该卡落地那天怎么补。格子数因此是 71 而不是 72。
 """
 from __future__ import annotations
 
@@ -334,15 +345,14 @@ CELLS = [
     ("K49", "币种不看报价行、恒用默认值", "go", "svc", SVC,
      [("\tcurrency := strings.TrimSpace(row.Currency)", "\tcurrency := model.BillCurrencyDefault")],
      "TestBillDeriveCurrencyFollowsQuote"),
+    # 注：这一格的注码形状属于 T-P7-03（`in.DueAt`）。该卡的**产码**（service 侧改由调用方给账期
+    # + `TestBillDeriveStoresTheDueAtTheCallerGave`）尚未提交，只在别的泳道工作树里；常驻电池
+    # 必须与 HEAD 自洽，故此处保留"本层写死 nil"那一版的锚点。该卡落地那天按 `in.DueAt` 重锚，
+    # 并把下面被删掉的 K50b 一并补回（`--check` 会以"锚点命中 0 次"当场提醒，不会静默）。
     ("K50", "凭空造账期（报价域里没有「付款条件」这一格，造出来的是合同条款）", "go", "svc", SVC,
-     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     &now, // 变异注码：把「没给账期」写成「今天到期」")],
+     [("\t\tDueAt:         nil, // 账期未定：本卡没有任何一处定义过付款条件",
+       "\t\tDueAt:         &now, // 变异注码")],
      "TestBillDeriveLeavesDueAtNull"),
-    # K50b 是 K50 的对偶，T-P7-03 才添得出来：那一卡把 due_at 从"本层写死 nil"改成
-    # "由调用方给"，于是坏法从一种变成两种 —— 凭空造（K50）与**把给的丢掉**（K50b）。
-    # 只留前一格的话，"永远回 NULL"这条退路就没有探针，而催收腿读的正是这一格。
-    ("K50b", "入参带了账期却不落（催收永远只看见 Undated，一条信也不发）", "go", "svc", SVC,
-     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     nil, // 变异注码：把给定的账期丢掉")],
-     "TestBillDeriveStoresTheDueAtTheCallerGave"),
     ("K51", "并发撞上「已派生」之后回读的是自己那份", "go", "svc", SVC,
      [("\t\t\treturn nil, fmt.Errorf(\"bill: 仓储报\\\"已派生过\\\"而按 quote_row_id=%s 读不到那一行（约束名与索引不同源？须人工核对）\", row.ID)\n"
        "\t\t}\n\t\treturn billViewOf(existing, true), nil",
@@ -363,10 +373,10 @@ CELLS = [
        "\treturn fmt.Sprintf(\"b_%s_%d\", now.Format(\"20060102\"), seq)")],
      "TestBillKeyGeneratorIsDeterministic"),
     ("K56", "入参结构多带一格 amount（AC② 当场失去对账对象）", "go", "svc", SVC,
-     [("\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n}",
-       "\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n"
+     [("\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n}",
+       "\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n"
        "\tAmount     float64 // 变异注码\n}")],
-     "TestBillDeriveInputCarriesRowKeyAndOptionalTerm"),
+     "TestBillDeriveInputHasOnlyTheRowKey"),
     ("K57", "派生腿的存储接口多一个写状态的方法（「顺手标成已收」有了入口）", "go", "svc", SVC,
      [("type billStore interface {\n\tAvailable() bool\n",
        "type billStore interface {\n\tAvailable() bool\n\tUpdateStatus(ctx context.Context, id, from, to string) error\n")],
