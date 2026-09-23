@@ -1757,3 +1757,121 @@ rc 1→红，并点名"基线里没有这个文件（新落点）"⇒ 那道门�
 没有需要基线锁住的存量（真门迁过去会因"基线里没有任何条目"退 rc=2，那是它的正确行为）。
 这不等于 platform 从此有牙：那 7 个文件不受任何自动门约束（该仓无 GitHub Actions），
 下一批若在那儿新增 `$VAR`+中文，只能靠同步点手工复跑本门发现。
+
+## 7.6 第六轮：CJK 门的扫描面里混进了取证快照，并补上仓级缺失的 shell 静态门（2026-09-23，指令 = 恢复会话任务继续执行）
+
+### 起因：同一道门在同一棵树上读出 136 / 270 / 404 / 538
+
+台账 §7.5 末尾那句"邻门 `scanned=136`"本轮先复核，连跑两次得到 136 与 538，中间另两次是 270、404。
+四个数**都不是枚举 bug**，而是同一棵活树的瞬时快照：`logs/` 被 `.gitignore:23` 整目录忽略，
+而它是并行泳道放**影子克隆**的地方，克隆里带着全仓 shell 文件的副本 ⇒ 谁在丢 clone，谁的副本就被扫进来。
+
+本轮实测的门红原文（`bash scripts/check-shell-cjk-expansion.sh`，`scanned=538 / 命中 5`，基线 2）里，
+三处"基线里没有这个文件（新落点）"逐条都是同一个形状：
+
+```
+logs/p703-gate1/clone/scripts/check-unwired-assets.sh:42
+logs/p703-probe1/clone/scripts/check-unwired-assets.sh:42
+logs/p703-probe2/clone/scripts/check-unwired-assets.sh:42
+```
+
+—— 正是基线里明写着"属别的泳道热文件"那一份的**副本**。判据没算错，对象错了，后果是两头都失去意义：
+本地恒红（红因指向副本，改原件消不掉，下一批 clone 一落地又复现），CI 恒绿（干净检出里没有 `logs/`），
+而且这道门在本地已经不能当提交前预检用。
+
+### 改法：扫描面换成 git 口径（两姊妹门同一条）
+
+`os.walk + 目录黑名单` ⇒ `git ls-files -z --cached --others --exclude-standard`，取 `.sh / *.bash`：
+
+- 它同时避开本仓已知的两种假读数：shell glob 碰不到非 ASCII 文件名（§7.5 那条的同类），
+  以及"把忽略的取证快照当源码"；
+- `--others` 保留**未跟踪但未被忽略**的新落点 ⇒ 提交前仍能拦（本轮新写的三个脚本自己就被拦/放过各测了一次）；
+- 代价写在判据旁边：被 `.gitignore` 忽略的 shell 文件本门看不见 —— 那种文件进不了版本控制，也就进不了交付；
+- 另加一条下界自检：`scanned < 50 ⇒ rc=2`（本仓 tracked 的 shell 文件实测 134）。面骤减必须是"枚举坏了"，
+  不许被读成"债清完了"；`git ls-files` 本身失败（扫描根不在仓里）同样 rc=2，不判绿。
+
+改造后的复跑：`scanned=136 / 命中 2（基线 2）/ rc=0` ⇒ 本地恢复可用，且与 CI 量同一个面。
+
+### 顺手补的仓级缺口：`shellcheck` 从没接进本仓
+
+`grep -rn shellcheck .github/workflows/` 在建门之前是 0 命中，本机也没装过这个工具：
+130 多个 shell 文件（含装机、部署、超管口令轮换这类会动到生产与凭证的）从没被任何通用静态分析扫过。
+这超出"离线部署"本身，但属于 §7.3 那族"发现了就得处理掉"的账，按"继续执行"的指令一次做完：
+
+先量债再定档（工具 shellcheck 0.11.0，本机 pip 包 `shellcheck-py==0.11.0.1`；扫描面＝上面那条 git 口径，136 个文件）：
+
+| 级别 | 条数 | 处置 |
+|---|---|---|
+| info | 828 | 不判（大头是 SC2015 `A && B || C` 674 条、SC2086 未加引号 74 条、SC1091 不跟随 source 57 条） |
+| warning | 110 | 不判：铺在 104 个文件上，基线会是一张百行表，且大头属别泳道热文件＝"基线写满别人文件＝门永远没人动" |
+| style | 16 | 不判（SC2001 一类偏好） |
+| **error** | **1** | **零容忍、不带基线** ⇒ 新门 `scripts/check-shellcheck.sh` |
+
+那唯一一处 error 是 `scripts/inference-host/env.sh:1` 的 SC2148（没有 shebang 也没有 shell 声明）。
+它按 `source` 被推理栈脚本调用、内部用 `${BASH_SOURCE[0]}` ⇒ 修法取 `# shellcheck shell=bash` 声明，
+不补 shebang（那会暗示一个它没有的可执行身份）。修完 error 面为零 ⇒ 门出厂即绿，不给 CI 添既有红。
+
+### 三条判据不是"跑一下看 rc"，全部来自实测
+
+1. **含非法 UTF-8 字节的 .sh，shellcheck 直接退 0、0 条 finding**（实测 `printf` 一个 `\xff\xfe` 的文件：
+   `rc=0 命中=0`）。所以"能按 UTF-8 读出来"必须是闸自己的一条判据，否则绿读数里混着"根本没被分析过"的文件；
+2. **rc 语义**：0＝该级别无 finding、1＝有、2＝它自己没能检查（实测不存在的文件：`rc=2` +
+   stderr `openBinaryFile: does not exist`）。rc=2 既不许并进"绿"也不许当"有 bug"，走闸的 rc=2；
+3. **逐文件调用**而非一次传 136 个参数：只有逐文件才有"每文件一个 rc"，
+   并让 `scanned=` / `checked=` 两个读数能被反向测试拿独立口径对账。
+
+另有两条开发期自咬的记录，都是判据真的有牙的证据：闸第一次跑就把自己身上两行注释判成
+SC1073/SC1072（注释里写了行首 `# shellcheck …`，会被当真指令解析 —— 已写进维护注记），
+CJK 门则把本轮新测试文件的 `（$BASELINE）` 判成"新落点"（`echo "…（$BASELINE）—— …"`，
+`scripts/check-shell-cjk-expansion.test.sh:31`，按门的提示加花括号后两门同时绿）。
+
+### 反向测试：新门 16 格、姊妹门 9 格，都真跑
+
+`scripts/check-shellcheck.test.sh`（PASS=16 FAIL=0）钉住：真树绿 + `scanned`/`checked` 与独立
+`git ls-files` 计数对账、SC2148 与 SC107x 两族码都能红（证明不是只认一种）、非法 UTF-8 ⇒ rc=2、
+PATH 里摘掉工具 ⇒ rc=2、扫描根不在仓里 ⇒ rc=2、只枚举到 3 个文件 ⇒ rc=2、
+假工具喂 rc×finding 数的三种错配 ⇒ rc=2「自相矛盾」/「不是合法 JSON」、argv 回记断言每次调用都带
+`-f json -S error`（旋钮不是摆设）+ 首行印得出版本号、撤夹具后真树仍绿。
+
+`scripts/check-shell-cjk-expansion.test.sh`（PASS=9 FAIL=0）专治本轮改动的那一条口径：
+未跟踪未忽略的坏形状必须被抓且点名（C1/C1b）、同一份坏内容落在被忽略的 `logs/` 副本里必须**不进扫描面**
+（C2b：红因里不许出现 `logs/…`；C2c：合成树 `scanned=54` 与独立计数逐位相等）、
+缺基线 ⇒ rc=2（C3）、命中 0 而基线非 0 ⇒ rc=2（C4）、扫描根不对 ⇒ rc=2（C5）。
+它之所以建得起来，是靠"合成一棵能跑 git、面够 50、基线可控"的树 —— 在真树上无法安全构造 C4 那种前置。
+
+两处取证侧的死法在这轮又各撞一次（都写进了测试的头注释）：
+① 造"缺工具"不能用 `env -i` 或 `PATH=/usr/bin:/bin` —— `/usr/bin/` 下是 Xcode 的 shim，
+环境一窄，闸自己的 `python3` 先退 69 报 `You have not agreed to the Xcode license`，红因根本不在判据分支上；
+② "探针在不在清单里"不能用 `... | grep -q` —— `set -o pipefail` 下 grep 一命中就退，
+上游 SIGPIPE 的 141 成为整条管道 rc，夹具明明在场却报成"被 ignore 吃了"。改成内存整份清单做子串匹配。
+还有一条方法论：**"摘掉真工具的参数"想证明"参数没落进去会露出来"是无效变异** —— 零债树上每个文件都无输出，
+那种变异实测不可观测（改完退 0），必须换假工具把形状直接喂进判据分支。
+
+### CI 接入与"扫描面为何本地/CI 同一个"
+
+注册进 `.github/workflows/lint.yml`（它的 `on.push` 没有 paths 过滤 ⇒ 任何一笔推送都跑，
+新门不必先对一遍"改哪些文件才重跑"的触发面；`gitleaks-config.yml` 那类带 paths 的 workflow 才有那个洞）：
+
+- 新 job `shellcheck-static`：装钉版本的 shellcheck（venv 优先，失败退回 `--user`，老 pip 不认
+  `--break-system-packages` 故两种参数各试一次；装不到可执行文件整步红）→ 跑门 → 跑它的 16 格反向；
+- 既有 job `shell-cjk-expansion` 加一步跑它的 9 格反向。
+- 钉版本的意义：升版若把某文件判成 error，这里红在"读数 + 版本号"（门首行印 `shellcheck=<ver>（<path>）`），
+  而不是静默漂移；CI 与本机同一版（0.11.0），不给自己留"CI 红本地绿"的版本差来源。
+
+`.gitignore` 与 `Makefile` 本轮**没碰**（两文件工作树里正被别的泳道改着）。CI 里干净检出没有未跟踪文件，
+⇒ CI 侧扫描面恒等于 tracked 集合，`.gitignore` 怎么改都不影响它，所以也没把 `.gitignore` 塞进触发 paths。
+
+### 本轮复跑的门禁读数（全部 rc=0）
+
+`check-shell-cjk-expansion.sh`（`scanned=139 / 命中 2＝基线 2`）、`check-shellcheck.sh`
+（`shellcheck=0.11.0 / scanned=139 checked=139 error=0`）、两门各自的反向测试（9/16 格全 PASS）、
+`check_workflow_refs.py`（15 份工作流，路径/step id/needs/artifact 全可解析）、
+`check-action-runtime.py`（77 站点、node20/16 命中 30 全在豁免内、未豁免 0）、
+`check-ci-step-coverage.test.sh`（PASS=33 FAIL=0）、`check-no-xapptool.sh`（`scanned=4856 / 0 hits`）、
+`check-doc-consistency.sh`、`check-env-coverage.py`（183 键，红 0）、`check-md-links-offline.py`（162 个 md，断链 0）。
+
+### §7.5 末尾那条 platform 侧探针读数的有效性
+
+那里写"把同一套判据（os.walk 的目录排除…）抽成只读探针在 platform 树上跑，得 `scanned=7 / total=0`"。
+口径本轮已换，但结论不动：新面是旧面的**子集**（旧面多出来的只有被忽略的副本），
+在超集上零命中 ⇒ 在子集上必然零命中，无需重跑。历史段落下不改，本节记明口径变更与此推论。
