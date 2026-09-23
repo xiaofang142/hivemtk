@@ -134,6 +134,10 @@ check_ddl() {
   [[ "$ddl" == *"RETURNS trigger AS \$\$"* ]] || die1 "守卫函数体抽取不全（${name}）：没看到 RETURNS trigger AS \$\$"
   [[ "$ddl" == *"LANGUAGE plpgsql" ]] || die1 "守卫函数体抽取不全（${name}）：结尾不是 LANGUAGE plpgsql，锚点截在了半句上"
   [[ "$ddl" == *"$raise"* ]] || die1 "守卫函数体抽取不全（${name}）：缺 RAISE 文案「${raise}」"
+  # 上面四条按内容匹配，**抓不到压平**（实测压平版四条全 PASS，红只在 psql 那一侧才冒出来），
+  # 故补这条跨行判据；反向测：把抽取换回压行版 ⇒ 本行先红、库一步没碰。
+  [[ "$ddl" == *$'\n'* ]] \
+    || die1 "守卫函数体被压成一行（${name}）：体里的 SQL -- 注释会吞掉同一行之后的 \$\$ 收尾，psql 只会报 syntax error at end of input"
 }
 check_ddl password "$FN_PW_DDL" '不允许被修改'
 check_ddl delete   "$FN_DEL_DDL" '不允许被删除'
