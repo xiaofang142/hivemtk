@@ -32,6 +32,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"hivemtk-user/internal/approval"
 	"hivemtk-user/internal/pkg/featureflag"
@@ -50,11 +51,15 @@ const (
 	ReachApprovalToolKey = "reach.proactive.send"
 )
 
-// reach 门的包级状态。与 approvalGateState 同一条装配前提：写入发生在 router.Setup() 里、
-// HTTP 服务启动之前（cron 侧则在 main 把 InitRecoveryWorker 挪到 router.Setup 之后），
-// 因此读侧无需加锁。reachAttached 计数是"几个装配点真的拿到了钩子"——
-// 漏接一个装配点是这个功能最可能的失败形态，所以它必须是可观测的一个数字。
+// reach 门的包级状态。与 approvalGateState 不同，这三份**不能**靠"写入都发生在
+// router.Setup 之前"来免锁：AttachReachGate 是各条外发腿装配里的一步，而草稿/报价/催收
+// 那几台的 Init 明写着"可被重复调用（测试与灰度重启都是真实路径）"⇒ 重复装配的写会落在
+// HTTP 已经收流量之后，而 `/agent/tools/reach-gate` 每请求读一次。
+// reachAttached 计数是"几个装配点真的拿到了钩子"——漏接一个装配点是这个功能最可能的
+// 失败形态，所以它必须是可观测的一个数字，也因此必须是一把锁下的自增（两次并发装配
+// 各加一次与加丢一次，在端点上长得一样）。
 var (
+	reachGateMu        sync.RWMutex
 	reachGateModeValue = string(approvalGateOff)
 	reachDecisions     *approval.DecisionCounter
 	reachAttached      int
@@ -356,20 +361,26 @@ func (g *reachPreSendGate) CheckReachPreSend(ctx context.Context, sub service.Re
 // 若 off 态也建一个空计数器，端点就会把"没接线"显示成"接了但零流量"，这两件事必须能区分。
 func AttachReachGate(svc *service.ProactiveReachService) bool {
 	mode := parseReachGateMode(os.Getenv(ReachGateFlagEnv))
+	reachGateMu.Lock()
 	reachGateModeValue = string(mode)
+	reachGateMu.Unlock()
 
 	if mode == approvalGateOff {
 		if svc != nil {
 			svc.SetPreSendApprovalChecker(nil)
 		}
+		reachGateMu.Lock()
 		reachDecisions = nil
+		reachGateMu.Unlock()
 		return false
 	}
 	if approvalCheckerRef == nil {
 		logger.Warnf("[reach-gate] ⚠️ %s=%s 但 %s 未接线 ⇒ **不装门**：没有裁决来源的闸门只能恒放或恒拒，"+
 			"两种都长得像在拦。先开 %s=shadow|block 再开这把",
 			ReachGateFlagEnv, mode, ApprovalGateFlagEnv, ApprovalGateFlagEnv)
+		reachGateMu.Lock()
 		reachDecisions = nil
+		reachGateMu.Unlock()
 		return false
 	}
 	if svc == nil {
@@ -378,11 +389,16 @@ func AttachReachGate(svc *service.ProactiveReachService) bool {
 		return false
 	}
 
+	reachGateMu.Lock()
 	if reachDecisions == nil {
 		reachDecisions = approval.NewDecisionCounter()
 	}
+	reachGateMu.Unlock()
 	svc.SetPreSendApprovalChecker(&reachPreSendGate{mode: mode, checker: approvalCheckerRef})
+	reachGateMu.Lock()
 	reachAttached++
+	attached := reachAttached
+	reachGateMu.Unlock()
 
 	// 装配期把"库里档位 vs 旗子"的错位喊一次：运营改档位不需要重启，改旗子需要，
 	// 两者只有同时到位才真的拦。这里只喊不判：判定每请求都重读，装配期这份只用于留痕。
@@ -396,7 +412,7 @@ func AttachReachGate(svc *service.ProactiveReachService) bool {
 	if mode == approvalGateShadow {
 		logger.Infof("[reach-gate] ✅ 外发闸门已接线（第 %d 个装配点），模式=shadow：非工具外发路径只记 would_deny，不拦任何发送；"+
 			"生效配置：reach_gate=%s 依赖 %s 白名单旗子 %s=%t reach 名下有效授权=%d",
-			reachAttached, ReachGateFlagEnv, ApprovalGateFlagEnv, approval.FlagKey, flagOn, forReach)
+			attached, ReachGateFlagEnv, ApprovalGateFlagEnv, approval.FlagKey, flagOn, forReach)
 		logger.Infof("[reach-gate] ⚠️ shadow 态：**cron 与直接 API 的外发照常出域**。转阻断前先看 /agent/tools/reach-gate 的 " +
 			"would_deny 报告，并确认 reach 名下有效授权>0（授权只写进程内存、重启即空，撑不起阻断）")
 		return true
@@ -404,7 +420,7 @@ func AttachReachGate(svc *service.ProactiveReachService) bool {
 
 	logger.Infof("[reach-gate] 🚫 外发闸门已接线（第 %d 个装配点），模式=block：未获授权的对象在出口前被拒（ErrReachApprovalDenied），"+
 		"零外发；生效配置：reach_gate=%s 白名单旗子 %s=%t reach 名下有效授权=%d（白名单总条目=%d）",
-		reachAttached, ReachGateFlagEnv, approval.FlagKey, flagOn, forReach, approvalCheckerRef.ActiveEntryCount())
+		attached, ReachGateFlagEnv, approval.FlagKey, flagOn, forReach, approvalCheckerRef.ActiveEntryCount())
 	if !flagOn {
 		logger.Warnf("[reach-gate] ⚠️ block 态但白名单旗子 %s 未开 ⇒ 刹车生效：reason=%s 的拒绝**不拦**，"+
 			"当前实际只等价于 shadow。要真阻断请同时开 %s",
@@ -425,26 +441,34 @@ func AttachReachGate(svc *service.ProactiveReachService) bool {
 // 单独有这个入口而不是让每个装配点自己拼日志：装配点会随外发路径增加，
 // "哪条路径没挂门"必须用同一种说法、同一个前缀打得出来，否则 grep 不到漏的那个。
 func LogReachGateSkippedAssemblyPoint(site string) {
-	if reachGateModeValue == string(approvalGateOff) {
+	reachGateMu.RLock()
+	modeValue, wired := reachGateModeValue, reachDecisions != nil
+	reachGateMu.RUnlock()
+	if modeValue == string(approvalGateOff) {
 		return
 	}
 	logger.Warnf("[reach-gate] ⚠️ 装配点 %s 未挂上外发闸门（mode=%s, wired=%t）：这条路径的外发不受审批约束",
-		site, reachGateModeValue, reachDecisions != nil)
+		site, modeValue, wired)
 }
 
 // GetReachGateSnapshot 返回外发闸门的接线状态与观察期累计，供运维端点读取。
 func GetReachGateSnapshot() (ReachGateSnapshot, *approval.DecisionCounter) {
-	mode := approvalGateMode(reachGateModeValue)
+	// 三份全局一次读齐：它们由可重复调用的装配点写，逐个裸读会把"上一份的模式"与
+	// "这一份的计数器"拼成运维端点上的一格。
+	reachGateMu.RLock()
+	modeValue, counter, attached := reachGateModeValue, reachDecisions, reachAttached
+	reachGateMu.RUnlock()
+	mode := approvalGateMode(modeValue)
 	snap := ReachGateSnapshot{
-		Mode:              reachGateModeValue,
-		Wired:             reachDecisions != nil,
+		Mode:              modeValue,
+		Wired:             counter != nil,
 		BlocksWhenDenied:  mode == approvalGateBlock,
 		GateFlagEnv:       ReachGateFlagEnv,
 		DependencyFlagEnv: ApprovalGateFlagEnv,
 		ReachToolKey:      ReachApprovalToolKey,
 		WhitelistFlagEnv:  featureflag.EnvNameOf(approval.FlagKey),
 		WhitelistFlagOn:   featureflag.Get(approval.FlagKey).Bool(),
-		AttachedServices:  reachAttached,
+		AttachedServices:  attached,
 	}
 	// 判定与读数同源：白名单在 W-1 那个 checker 手里，它没接线时两个分项都读 0
 	// （而不是 -1 或"未知"——运维看到 0 与"旗子开了"合起来的含义就是"一条都不会放行"，
@@ -455,5 +479,5 @@ func GetReachGateSnapshot() (ReachGateSnapshot, *approval.DecisionCounter) {
 		snap.DependencyUnmet = true
 	}
 	snap.RolloutMode, snap.RolloutWhitelistEntries, snap.RolloutDegraded = reachRolloutReadout()
-	return snap, reachDecisions
+	return snap, counter
 }

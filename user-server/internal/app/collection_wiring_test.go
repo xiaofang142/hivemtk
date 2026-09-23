@@ -9,6 +9,7 @@ package app
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"hivemtk-user/internal/approval"
@@ -335,5 +336,65 @@ func TestInitCollectionRuntime_AttachesReachGate(t *testing.T) {
 	InitCollectionRuntime(db)
 	if got := GetCollectionSnapshot(context.Background()); !got.ReachGated {
 		t.Errorf("旗子=shadow 且裁决来源已接线，这一条腿却没挂门（note=%q）", got.ReachGateNote)
+	}
+}
+
+// TestInitCollectionRuntime_ConcurrentReinitAndSnapshot 重复装配与端点读并发时不许有数据竞争。
+//
+// 装配层注释里那句"Init 可被重复调用（测试与灰度重启都是真实路径），重复调用时端点的读协程
+// 已经在跑 ⇒ 不能靠约定先写后读"到目前为止只有锁的形状、没有证据。这一格就是那份证据：
+// 八个协程一半写一半读，`-race` 下必须零竞争。
+//
+// 它同时是**闸门那三份全局**（reachGateModeValue / reachDecisions / reachAttached）的唯一证据：
+// 第一次跑这一格就把它们报成了竞争 —— 那三份的注释写着"写入发生在 router.Setup 之前⇒读侧
+// 无需加锁"，而催收这条腿的重复装配恰好把写发生了服务之后。读侧也一并跑到 GetReachGateSnapshot，
+// 因为运维端点 `/agent/tools/reach-gate` 在装配之后仍每请求读一次。
+//
+// 它的牙齿靠反向测证明（不在电池里 —— 电池的 app runner 不带 `-race`，摘锁的单行 getter
+// 还会被内联）：把 `collectionMu` 或 `reachGateMu` 的任一侧摘掉，这一格必须在 `-race` 下
+// 报出竞争，实测见执行记录。收尾再断言"最后一位写者赢且读得动"，否则这一格只证明没崩、不证明状态可读。
+func TestInitCollectionRuntime_ConcurrentReinitAndSnapshot(t *testing.T) {
+	t.Cleanup(func() { InitCollectionRuntime(nil) })
+
+	db := testutil.NewTestDB(t)
+	t.Setenv(service.CollectionJobFlagEnv, "off")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			switch {
+			case i%2 == 0:
+				InitCollectionRuntime(db)
+			default:
+				// 一次读里不许看到劈开的事实：未装配那一臂按文档回读 env 并给出提示，
+				// 装配那一臂必须带着实例自己的模式与空提示。两臂各自成立，混起来才是洞。
+				snap := GetCollectionSnapshot(context.Background())
+				if snap.Assembled && snap.UnassembledHint != "" {
+					t.Errorf("assembled=true 的快照带着未装配提示 %q ⇒ 读到了两份实例拼出来的一格", snap.UnassembledHint)
+				}
+				if !snap.Assembled && snap.UnassembledHint == "" {
+					t.Error("未装配的快照没给 UnassembledHint ⇒ 运维端点上\"没装\"与\"装了但缺件\"同形")
+				}
+				// 读侧还要碰到闸门那三份包级全局：重复装配会写它们，而 /agent/tools/reach-gate
+				// 在装配之后仍然每请求读一次。这里不跨字段断言（attached>0 与 wired=false
+				// 是合法的先后组合），判据是 `-race` 报不报竞争。
+				if gate, _ := GetReachGateSnapshot(); gate.Mode == "" {
+					t.Error("闸门快照 mode 为空 ⇒ 读到了一份还没写完的全局")
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	InitCollectionRuntime(db)
+	snap := GetCollectionSnapshot(context.Background())
+	if !snap.Assembled || snap.Mode != "off" {
+		t.Errorf("并发阶段之后 assembled=%v mode=%q，期望 true/off ⇒ 全局那份已经不可读",
+			snap.Assembled, snap.Mode)
+	}
+	if !snap.Available {
+		t.Error("并发阶段之后 Available=false ⇒ 五把依赖在重复装配中丢了一把")
 	}
 }

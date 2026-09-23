@@ -163,7 +163,11 @@ func approvalDenialBlocks(mode approvalGateMode, reason string) bool {
 func observeApprovalDecision(ctx context.Context, toolName, accountID string, d approval.Decision) {
 	counter, mode, event := approvalDecisions, approvalGateMode(approvalModeValue), "tool_approval_decision"
 	if toolName == ReachApprovalToolKey {
-		counter, mode, event = reachDecisions, approvalGateMode(reachGateModeValue), "reach_approval_decision"
+		// reach 那两份是包级全局且由可重复调用的装配点写 ⇒ 读要走同一把锁。
+		reachGateMu.RLock()
+		reachCounter, reachMode := reachDecisions, approvalGateMode(reachGateModeValue)
+		reachGateMu.RUnlock()
+		counter, mode, event = reachCounter, reachMode, "reach_approval_decision"
 	}
 	counter.Observe(ctx, toolName, accountID, d)
 

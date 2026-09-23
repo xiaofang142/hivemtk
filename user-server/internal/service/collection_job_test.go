@@ -646,7 +646,9 @@ func TestCollectionDoesNotRemindTwiceWithinWindow(t *testing.T) {
 		t.Errorf("reminders_held=%d，期望 1（这一轮确实跑到了那张单，只是不发）", res2.RemindersHeld)
 	}
 	if len(claim.sets) != 2 {
-		t.Errorf("占锁 %d 次，期望 2（第二轮也要先占才知道占没占到）", len(claim.sets))
+		// 这是后面两格索引的前置：只 Errorf 的话，占锁一次都没发生时这里会 panic 带走整个二进制
+		// （同一族的坑见 TestCollectionEscalationIsOncePerWindow 里 sets[1] 那格）。
+		t.Fatalf("占锁 %d 次，期望 2（第二轮也要先占才知道占没占到）", len(claim.sets))
 	}
 	if got := claim.ttls[claim.sets[0]]; got != CollectionReminderWindow {
 		t.Errorf("提醒键 TTL=%v，期望 %v（这就是\"两次提醒至少隔多久\"那句话在代码里的样子）",
@@ -693,6 +695,9 @@ func TestCollectionSendFailureReleasesTheWindow(t *testing.T) {
 	res, err := job.RunOnce(context.Background())
 	if err != nil {
 		t.Fatalf("单条失败不该让整轮失败: %v", err)
+	}
+	if len(claim.sets) != 1 {
+		t.Fatalf("提醒键占了 %d 把，期望 1 ⇒ 前置不成立（要先占到才谈得上还）：sets=%v", len(claim.sets), claim.sets)
 	}
 	if len(claim.releases) != 1 || claim.releases[0] != claim.sets[0] {
 		t.Errorf("发失败后没把提醒键还掉：releases=%v sets=%v", claim.releases, claim.sets)
@@ -876,6 +881,12 @@ func TestCollectionEscalationIsOncePerWindow(t *testing.T) {
 	if res2.EscalationHeld != 1 || res2.Escalated != 0 || res2.TasksReused != 0 {
 		t.Errorf("第二轮 escalation_held=%d escalated=%d tasks_reused=%d，期望 1/0/0",
 			res2.EscalationHeld, res2.Escalated, res2.TasksReused)
+	}
+	// 索引前先把长度关进本腿：S55 那一格（shadow 判定写反）会让这条路径一个键都不占，
+	// 裸 `sets[1]` 于是 panic 带走整个二进制 —— 后面的用例全都不跑，电池的计数也就不能判。
+	if len(claim.sets) < 2 {
+		t.Fatalf("两轮升级只占了 %d 把窗（sets=%v）⇒ 前置不成立：第二轮没去占升级窗，下面的 TTL 断言没有对象",
+			len(claim.sets), claim.sets)
 	}
 	if got := claim.ttls[claim.sets[1]]; got != CollectionEscalateWindow {
 		t.Errorf("升级键 TTL=%v，期望 %v", got, CollectionEscalateWindow)
@@ -1268,6 +1279,45 @@ func TestCollectionLastReportIsNeverAHalfRound(t *testing.T) {
 	if after == nil || after.Overdue != 3 || after.Reminded != 0 || after.RemindersHeld != 3 {
 		t.Errorf("第二轮跑完后读数 = %+v，期望 overdue=3 reminded=0 reminders_held=3"+
 			"（第二轮跑完了却没发布，或发布的不是它）", after)
+	}
+}
+
+// TestCollectionPublishedRoundIsDetachedFromBothHands 一轮读数交出去两份，两份都必须是抄件。
+//
+// 写侧（RunOnce 的返回值）与读侧（LastReport）若是同一个格子，"拿到返回值的那一方"改一格
+// 就污染了运维端点上的读数 —— 而谁持有那个返回值编译器与观测面都管不着。
+// 读侧那一半由本卡的变异电池钉（把拷贝摘掉必须红），写侧这一半由下面第二条断言钉。
+func TestCollectionPublishedRoundIsDetachedFromBothHands(t *testing.T) {
+	job, scanner, opps, _, _, _ := newTestCollectionJob(RecoveryWorkerModeEnforce)
+	opps.rows["opp_dt"] = collOpp("opp_dt", "cust-dt", "one-dt")
+	scanner.res = collScan(collBill("b_dt_1", "opp_dt", 100, 5))
+
+	got, err := job.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("本轮失败: %v", err)
+	}
+	if got == nil {
+		t.Fatal("RunOnce 回了 nil 读数")
+	}
+	base := job.LastReport()
+	if base == nil || base.Overdue != got.Overdue {
+		t.Fatalf("LastReport=%+v RunOnce=%+v ⇒ 前置不成立：这一轮根本没发布", base, got)
+	}
+
+	if probe := job.LastReport(); probe == got {
+		t.Error("LastReport 与 RunOnce 交出同一个指针 ⇒ 任一侧改一格，另一侧跟着变")
+	}
+	// 读侧：拿到的抄件改掉一格，下一次读必须仍是原值。
+	probe := job.LastReport()
+	probe.Overdue = 9999
+	if again := job.LastReport(); again == nil || again.Overdue != base.Overdue {
+		t.Errorf("LastReport 交出的是活的指针：改探针之后读到 %+v，原值 overdue=%d", again, base.Overdue)
+	}
+	// 写侧：拿到返回值的一方改一格，观测端点不许跟着变。
+	got.Reminded = 8888
+	if after := job.LastReport(); after == nil || after.Reminded != base.Reminded {
+		t.Errorf("RunOnce 的返回值与发布出去的读数同格：调用方改一格后读到 %+v，原值 reminded=%d",
+			after, base.Reminded)
 	}
 }
 

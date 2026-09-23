@@ -37,11 +37,11 @@
        唯一能发现"协程没起"的是等一个间隔（默认 6h）之后的读数。用例面上只有把它写成
        真等 30 分钟的定时断言才能抓到 —— 那是一条天天自己红的假红源。
        这一格由 ledger 25b（装配点在不在）+ 观测端点的 running 读数共同承担，不由用例承担。
-    2) `snap.Available = rt.job.Available()` 取反：app 侧没有任何一个夹具能造出
-       "装了但五把依赖不齐"的实例（InitCollectionRuntime 要么全给要么 db==nil），
-       所以这一格在 app runner 里 0==0。Available 的五项合取由 S45 那一格钉住
-       （逐把摘掉都会红）；这里缺的是一个 app 级半装配夹具，
-       而它只能靠给 NewCollectionJob 少传一格造出来 —— 那正是 service 侧已经钉住的同一句话。
+    2) （第二趟复核改判：这一格已收编为 W15，不再是"不覆盖"）原先登记的理由是"app 侧没有
+       半装配夹具，所以取反在 app runner 里 0==0"——它只说对了"造不出 available=false 的实例"，
+       说错了判据在哪：off 档那条用例**直接断言 `snap.Available`**，取反后它就是红的。
+       登记一条"不覆盖"之前要先把那句断言读一遍，不能从"夹具造不出某种实例"推出"判据没牙"。
+       Available 的五项合取仍由 S45 钉（逐把摘都会红），W14 现在也改成注 nil 实参而不是删实参。
     3) `snap.RemindedTotal` / `EscalatedTotal` 的抄录行：off 档下两个数恒为 0，
        把赋值删掉或改成常量 0 在 app runner 里同形。跨轮累计由 service 侧
        S20/S21 两格钉住（remindedAll/escalatedAll 各摘一次都会红）。
@@ -56,6 +56,45 @@
        可复现性锁的是"同输入同输出"，不是"这句话不许改"。
     7) collectionGateNote 的两条分支文案：它同时进快照与日志，
        内容由 W03/W04 两格（挂没挂上）钉住，具体措辞不钉。
+
+六、跑这一族电池的环境前提（第二趟复核踩到的）
+    本机 `xcode-select -p` 若指向完整的 Xcode.app 而它的许可没同意，任何 cgo 编译都会以
+    `# runtime/cgo: You have not agreed to the Xcode license` 失败 ⇒ 这族电池的每个 runner
+    都判成 BUILD-BROKEN（控制组那一步就会停机，不会假绿，但要认得出是环境不是代码）。
+    正解是 `export DEVELOPER_DIR=/Library/Developer/CommandLineTools` 后重跑；
+    `CGO_ENABLED=0` **不等价**（挽回/巡检那一族的 `-race` 腿需要 cgo）。
+
+七、第二趟复核（判据有没有牙）逐格结论
+    112 格首跑（取证 logs/p703-mut1-run1.log，测于 HEAD `c730c432`）：105 杀 / 2 存活 /
+    4 红而未点名 / 1 计数不平 / 1 BUILD-BROKEN，`battery_rc=1`。逐格定案：
+      · S13 存活 = **等价变异**，不是洞：只摘 `continue` 会落进紧跟其后的 `if !claimed`，
+        而假件在报错时回的就是 claimed=false ⇒ 仍然不发。真 fail-open 的形状是"把报错
+        当成占到了"，注码已改成翻 claimed；升级那条路的同一处另有 S57（两处分刀，不是一处）。
+      · S46 存活 = **真洞**，按 TDD 补了 DETACHED 那条用例（先红后绿），并顺手把发布位
+        的抄件补上（setLast 里 `copied := *r`）——锁只订得住指针，订不住它指向的那格；
+        两处抄件两处刀：S46（读侧）与 S58（写侧）。
+      · S25/S36/S39 三格是**expect 点错了人**（不是判据没牙）：红的那条才是喂到那条分支的
+        用例。S25 的 BLOCKED 那条只喂三种哨兵错误，永远走不到 default；S36 的 GRACE 用的是
+        不换夏令时的 FixedZone，Add 与 AddDate 在它身上同形（ ⇒ 另补 S59 给 GRACE 一架真实的刀）；
+        S39 的 MISSINGID 喂的是"两键都空"，&& 与 || 同形。
+      · S55 的"计数不平"是**测试自己 panic**（`claim.sets[1]` 越界）把二进制带走了：这一趟只
+        留下 22 条 RUN 行 / 7 顶层 PASS + 12 顶层 FAIL，而控制组是 57 条 RUN / 42 顶层 PASS
+        ⇒ 后面 35 条腿压根没跑，被点名的 SHADOW 就在没跑的那一截里。变异本身有牙（12 条用例
+        因它而红）。修法不是改期望，而是给三条用例补前置 Fatalf（见测试里那三处
+        `t.Fatalf("…前置不成立…")`）——前置不成立时后面的断言没有对象，而一条 panic 会跨用例
+        带走整个二进制。
+      · W14 第一版注码"删掉整块实参"编不过（少实参），BUILD-BROKEN 证不到任何事；真在现网
+        发生得了的形状是"接了一把 nil 进去"，接口参数允许 nil，编译期无人报警。
+    同轮另修：app 那条并发腿的假判据（`!snap.Assembled && snap.Mode != ""` 永远不成立，
+    未装配臂按设计就是回显 env）换成 Assembled/UnassembledHint 一致性 + 闸门 mode 非空；
+    reach-gate 三份包级全局补 `reachGateMu`（`-race` 实跑 6 块竞争 ⇒ 上锁后 0 块，
+    反向摘锁复测又出 2 块，取证 logs/p703-race1/leg-race*.log）。
+    **这一条判据的牙不在本电池里**：电池的 app runner 不带 `-race`（逐格跑整包 `-race` 会把
+    共享盘写满、并把没还原的树留在原地），所以摘锁这类洞靠 CI 的 `Unit tests -race
+    (user-server core)` 作业（`go list ./... | grep -vx hivemtk-user/internal/service` 覆盖
+    internal/app，且这条腿没有 `testing.Short()` 跳过）＋上面那次就地反向测兜住。
+    静态门 `check-async-global-read.py` 订不到这一类：它只看协程体里的**字面**裸读，
+    而这一处是"协程里调了一个读全局的函数"，站点数为 0 的那一趟它照样绿。
 """
 
 import argparse
@@ -80,6 +119,11 @@ NEW_FILES = [
     f"{US}/internal/service/collection_job_test.go",
     f"{US}/internal/app/collection_wiring.go",
     f"{US}/internal/app/collection_wiring_test.go",
+    # 第二趟复核改的是闸门那两份（补 reachGateMu 与其读侧），它们不属于本卡新建的文件，
+    # 但**这一趟的结论依赖它们的字节**：没提交就跑电池，app runner 测的是"上一版没锁的字节"，
+    # 而结论会写成"并发腿已修"。放进这里 ⇒ prepare 直接拒跑，不给这个错机会。
+    f"{US}/internal/app/reach_gate_wiring.go",
+    f"{US}/internal/app/approval_wiring.go",
 ]
 
 # —— 本卡落在既有文件里的插入：提交后它们**已经在 HEAD 里**，
@@ -128,6 +172,11 @@ BLOCKED = "TestCollectionBlockedReasonsAreCountedApart"
 MISSINGID = "TestCollectionMissingIdentitySendsNothingAndKeepsNoWindow"
 FALLBACK = "TestCollectionFallsBackToCustomerIDWhenOneIDIsAbsent"
 HALFROUND = "TestCollectionLastReportIsNeverAHalfRound"
+DETACHED = "TestCollectionPublishedRoundIsDetachedFromBothHands"
+SENDFAIL = "TestCollectionSendFailureReleasesTheWindow"
+ESCCA = "TestCollectionEscalateClaimUnavailableSubmitsNothing"
+ABSWINDOW = "TestCollectionCutoffIsAnAbsoluteWindowNotCalendarDays"
+GRACE = "TestCollectionCutoffAppliesTheDocumentedGrace"
 OFFAPP = "TestInitCollectionRuntime_OffModeAssemblesWithoutStarting"
 SHADOWAPP = "TestInitCollectionRuntime_ShadowModeStartsAndStops"
 GATEAPP = "TestInitCollectionRuntime_AttachesReachGate"
@@ -283,8 +332,11 @@ CELLS = [
        "\t\t\tj.escalate(ctx, bill, who, now, report)\n\t\t\t_ = bill")],
      ESCALATE),
     ("S13", "取锁失败 fail-open ⇒ 锁服务一抖就重复催款", "go", "svc", SVC,
+     # 只摘 `continue` 的那一版是**等价变异**，实测存活：摘掉之后控制流落进紧跟其后的
+     # `if !claimed`，而假件在报错时回的就是 claimed=false ⇒ 仍然不发。真 fail-open 的
+     # 形状是"把报错当成占到了"，所以注码必须把 claimed 一起翻掉。
      [("\t\t\t\treport.ClaimUnavailable++\n\t\t\t\tcontinue",
-       "\t\t\t\treport.ClaimUnavailable++")],
+       "\t\t\t\treport.ClaimUnavailable++\n\t\t\t\tclaimed = true")],
      "TestCollectionClaimUnavailableIsFailClosed"),
     ("S14", "提醒窗内占不到锁照样催 ⇒ 七天窗形同虚设", "go", "svc", SVC,
      [("\t\t\tif !claimed {\n\t\t\t\treport.RemindersHeld++",
@@ -324,7 +376,9 @@ CELLS = [
      BLOCKED),
     ("S25", "兜底那一格没了 ⇒ 未知失败静默消失", "go", "svc", SVC,
      [("\tdefault:\n\t\treport.Failed++\n\t}", "\t}")],
-     BLOCKED),
+     # 原先点名 BLOCKED，实测那条不会红：它喂的三种错各有自己的 case，永远走不到 default。
+     # 真会走进兜底臂的是"渠道回了个不认识的东西"，只有 SENDFAIL 那条喂这种错。
+     SENDFAIL),
     ("S26", "退订也还窗 ⇒ 已退订的人每天被重打扰", "go", "svc", SVC,
      [("\tif errors.Is(sendErr, ErrDoNotContact) {\n\t\treturn\n\t}",
        "\tif false && errors.Is(sendErr, ErrDoNotContact) {\n\t\treturn\n\t}")],
@@ -362,7 +416,9 @@ CELLS = [
     ("S36", "cutoff 改用 AddDate ⇒ 跨时区算出两个逾期定义", "go", "svc", SVC,
      [("\treturn now.Add(-CollectionGraceDays * 24 * time.Hour)",
        "\treturn now.AddDate(0, 0, -CollectionGraceDays)")],
-     "TestCollectionCutoffAppliesTheDocumentedGrace"),
+     # 不是 GRACE 那条：夹具用的 FixedZone 永不夏令时 ⇒ Add 与 AddDate 在它身上给出同一瞬间
+     # （那条判据本身是死锁，用例里已写明）。有牙的是换真回拨时区并把期望写死成 UTC 时刻的那条。
+     ABSWINDOW),
     ("S37", "没有商机来路的单被读成\"没身份\"而不是\"缺链路\"", "go", "svc", SVC,
      [("\tif strings.TrimSpace(bill.OpportunityID) == \"\" {",
        "\tif false && strings.TrimSpace(bill.OpportunityID) == \"\" {")],
@@ -374,7 +430,8 @@ CELLS = [
     ("S39", "身份判空 && 写成 || ⇒ 只有 one_id 的单被丢掉", "go", "svc", SVC,
      [("func (i collectionIdentity) empty() bool { return i.customerID == \"\" && i.oneID == \"\" }",
        "func (i collectionIdentity) empty() bool { return i.customerID == \"\" || i.oneID == \"\" }")],
-     MISSINGID),
+     # 不是 MISSINGID 那条：它喂的是"两个键都空"的单，&& 与 || 在它身上同形（实测红了的是 FALLBACK）。
+     FALLBACK),
     ("S40", "身份键摘掉 fallback ⇒ 两笔钱并进同一条催款信", "go", "svc", SVC,
      [("\tif i.oneID != \"\" {\n\t\treturn i.oneID\n\t}\n\treturn i.customerID\n}",
        "\treturn i.oneID\n}")],
@@ -389,7 +446,7 @@ CELLS = [
      CALIBRE),
     ("S43", "宽限期漂到 0 ⇒ 账期一过就催（款还在路上）", "go", "svc", SVC,
      [("\tCollectionGraceDays = 3", "\tCollectionGraceDays = 0")],
-     "TestCollectionCutoffIsAnAbsoluteWindowNotCalendarDays"),
+     ABSWINDOW),
     ("S44", "升级线漂到宽限期之内 ⇒ 两档互斥失位", "go", "svc", SVC,
      [("\tCollectionEscalateAfterDays = 14", "\tCollectionEscalateAfterDays = 2")],
      "TestCollectionLadderThresholdsAreOrdered"),
@@ -399,7 +456,7 @@ CELLS = [
      "TestCollectionJobNilSafety"),
     ("S46", "LastReport 交出活的指针 ⇒ 读侧读到写一半的一轮", "go", "svc", SVC,
      [("\tcopied := *j.last\n\treturn &copied", "\treturn j.last")],
-     HALFROUND),
+     DETACHED),
     ("S47", "收尾那一轮不发布 ⇒ 端点永远看不到完成的一轮", "go", "svc", SVC,
      [("\tj.logRound(report)\n\tj.setLast(report)", "\tj.logRound(report)")],
      HALFROUND),
@@ -431,6 +488,22 @@ CELLS = [
     ("S56", "待办跳转前缀漂一个字母", "go", "svc", SVC,
      [('collectionBillPayloadRefPrefix = "/api/bill/"', 'collectionBillPayloadRefPrefix = "/api/bills/"')],
      ESCALATE),
+    # S13 的对偶：提醒那条路的 fail-open 由 S13 钉，升级这条路有自己的一处 err 分支，
+    # 摘掉哪一处都只影响另一条路 ⇒ 两格必须分开（一处符号两处消费，合格就是假覆盖）。
+    ("S57", "升级取锁失败 fail-open ⇒ 锁服务一抖就多投一条待办", "go", "svc", SVC,
+     [("\t\treport.ClaimUnavailable++\n\t\treturn\n\t}",
+       "\t\treport.ClaimUnavailable++\n\t\tclaimed = true\n\t}")],
+     ESCCA),
+    # 发布位与读取位各有一件抄件，两件是两处独立的代码、两把独立的刀（见 setLast 的注释：
+    # 锁只订得住指针，订不住它指向的那格）。
+    ("S58", "发布不抄件 ⇒ RunOnce 的返回值与端点读的是同一格", "go", "svc", SVC,
+     [("\tcopied := *r\n\tj.mu.Lock()\n\tj.last = &copied\n\tj.mu.Unlock()",
+       "\tj.mu.Lock()\n\tj.last = r\n\tj.mu.Unlock()")],
+     DETACHED),
+    ("S59", "宽限期按小时算 ⇒ 三天宽限变成三小时", "go", "svc", SVC,
+     [("\treturn now.Add(-CollectionGraceDays * 24 * time.Hour)",
+       "\treturn now.Add(-CollectionGraceDays * time.Hour)")],
+     GRACE),
 
     # ————— 装配层（runner=app）—————
     ("W01", "快照把宽限期与升级线两格抄反", "go", "app", WIRE,
@@ -476,7 +549,14 @@ CELLS = [
        "\t\tif false && j.mode == RecoveryWorkerModeOff {\n\t\t\tlogger.Infof(\"[CollectionJob] %s=off ⇒ 未启动")],
      OFFAPP),
     ("W14", "五把依赖少接一把（待办投递口）", "go", "app", WIRE,
-     [("\t\tservice.NewHumanTaskService(\n\t\t\trepository.NewHumanTaskRepositoryWithDB(db),\n\t\t\tservice.GlobalConfigParam(),\n\t\t),\n", "")],
+     # 第一版注码是"把整块实参删掉"，实测判为 BUILD-BROKEN（少一个实参编不过）——那证不到
+     # 任何事。真在现网发生得了的形状是"接了一把 nil 进去"：接口参数允许 nil，编译期无人报警。
+     [("\t\tservice.NewHumanTaskService(\n\t\t\trepository.NewHumanTaskRepositoryWithDB(db),\n\t\t\tservice.GlobalConfigParam(),\n\t\t),\n",
+       "\t\tnil,\n")],
+     OFFAPP),
+    # Available 这一格是端点上"没开 / 开了但缺件"两态的唯一分界（视图层 Rt02 就靠它选一臂）。
+    ("W15", "快照里的 Available 取反 ⇒ 装齐了报缺件、缺件了报装齐", "go", "app", WIRE,
+     [("\tsnap.Available = rt.job.Available()", "\tsnap.Available = !rt.job.Available()")],
      OFFAPP),
 
     # ————— 视图层（runner=route）—————
@@ -690,6 +770,43 @@ def gate_run(clone: Path):
     return r.returncode, ANSI.sub("", r.stdout + r.stderr)
 
 
+def red_evidence(out: str, expect: str, limit: int = 9000) -> str:
+    """把"为什么红"按用例抽出来 —— 不给尾巴切片。
+
+    `out[-N:]` 在这一族里恰好吞掉排在最前面的那个失败块（用例按字母序跑，先红的那条
+    往往就是要点名的那条），而它是这一格里唯一变了的东西。这里先印点名用例的整块正文，
+    再印其余红块，最后给出 panic / 收尾行；没红可印时（SURVIVED）只给结论行。
+    """
+    fails = [m.group(1) for m in re.finditer(r"(?m)^\s*--- FAIL: (\S+)", out)]
+    marks = [(m.start(), m.group(1)) for m in re.finditer(r"(?m)^=== RUN\s+(\S+)", out)]
+    blocks: list[tuple[int, str]] = []
+    for i, (pos, name) in enumerate(marks):
+        hit = [f for f in fails if f == name or f.startswith(name + "/")]
+        if not hit:
+            continue
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(out)
+        blocks.append((0 if name == expect else 1, out[pos:end].rstrip()))
+    blocks.sort(key=lambda b: b[0])
+    chunks, used, omitted = [], 0, 0
+    for _, b in blocks:
+        if used > limit - 400:
+            omitted += 1
+            continue
+        chunks.append(b)
+        used += len(b)
+    if not marks:  # 台账门那种非 go-test 输出：整段本身就是证据
+        return out[-limit:]
+    tail = [ln for ln in out.splitlines()
+            if ln.startswith("panic:") or ln.startswith("FAIL") or ln.startswith("ok ")
+            or ln.startswith("# ") or ln.startswith("\t")]
+    text = "\n\n".join(chunks) or "(没有红块可抽：这一格既没 FAIL 也没 build 报错)"
+    if omitted:
+        text += f"\n（另有 {omitted} 块红因超出篇幅没打印）"
+    if tail:
+        text += "\n-- 收尾/报错行 --\n" + "\n".join(tail[-25:])
+    return text
+
+
 def classify(rc, killed, ran, skipped, out, control, expect=""):
     if "connection refused" in out or "dial tcp" in out or "no such host" in out:
         return "ENV-BROKEN"
@@ -793,6 +910,7 @@ def main() -> int:
     killmap: dict[str, set] = {}
     for cell in cells:
         code, desc, kind, runner, _rel, _pairs, expect = cell
+        whys: list[str] = []
         try:
             mutated = apply_cell(originals, cell)
         except SystemExit as e:
@@ -814,25 +932,33 @@ def main() -> int:
         else:
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
             v = classify(rc, killed, ran, skipped, out, controls[runner], expect)
-            # 第二条断言：**顶层 PASS + FAIL == 控制组数**。只看"点名那条红了"会放过
-            # 注码让别的用例 panic 中止、二进制提前退出这一种形状。
-            if kind == "go" and v in ("KILLED", "RED-UNNAMED") and \
-                    top_pass + len(killed) != control_top[runner]:
-                problems.append(f"{code} 计数不平：顶层 PASS={top_pass} + FAIL={len(killed)} ≠ 控制组的 "
-                                f"{control_top[runner]}（有用例被 panic 带走，或压根没参与这一趟）")
 
         tally[v] += 1
         killmap[code] = set(killed)
         print(f"{code:<5} {desc[:58]:<60} {v} ran={ran} FAIL={len(killed)} rc={rc}")
+        # 第二条断言：**顶层 PASS + FAIL == 控制组数**。只看"点名那条红了"会放过
+        # 注码让别的用例 panic 中止、二进制提前退出这一种形状。
+        if kind == "go" and v in ("KILLED", "RED-UNNAMED") and \
+                top_pass + len(killed) != control_top[runner]:
+            problems.append(f"{code} 计数不平：顶层 PASS={top_pass} + FAIL={len(killed)} ≠ 控制组的 "
+                            f"{control_top[runner]}（有用例被 panic 带走，或压根没参与这一趟）")
+            whys.append("计数不平")
         if v == "KILLED" and kind == "go" and ran < controls[runner]:
-            problems.append(f"{code} 杀了但 ran={ran}<{controls[runner]}：疑似 panic 中止，红因要人工看")
+            problems.append(f"{code} 杀了但 ran={ran}<{controls[runner]}：疑似 panic 中止")
+            whys.append("panic 中止")
         if v == "SURVIVED":
             problems.append(f"{code} 存活 = 洞：{desc}")
         if v == "RED-UNNAMED":
             problems.append(f"{code} 红了但没点出 {expect}：{sorted(killed)[:4]}")
         if v in ("BUILD-BROKEN", "ENV-BROKEN", "NO-RUN"):
             problems.append(f"{code} 判为 {v}（不是干净的「杀掉」）：{desc}")
-            print(out[-2500:])
+        # 这几类都得靠"为什么"才定得下来。第一版只在 BROKEN 三类打印输出，于是日志里留下
+        # 一句"红了但没点出 X"，却没有任何一处看得出**为什么红**（S55 就是这么被读成"计数
+        # 不平"的，真因是测试自己 panic 带走了后面的腿）。尾巴切片一律不用：`out[-N:]` 吞掉
+        # 的正是排在最前面那条红块（用例按字母序跑，要点名的那条常常最先红）。
+        if v in ("SURVIVED", "RED-UNNAMED", "BUILD-BROKEN", "ENV-BROKEN", "NO-RUN") or whys:
+            print(f"----- {code} 证据（{v}{'／' + '+'.join(whys) if whys else ''}）-----\n"
+                  f"{red_evidence(out, expect)}")
 
         for prel in mutated:
             files[prel].write_text(originals[prel], encoding="utf-8")

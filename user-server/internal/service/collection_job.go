@@ -436,12 +436,15 @@ func (j *CollectionJob) EscalatedTotal() int64 {
 }
 
 // setLast 发布一轮读数。锁只订得住这个指针，订不住它指向的那格 ——
-// 所以调用方必须等 report 填完（含 logRound）再发布，不能"先挂上去再一路往上写"：
-// 观测端点是另一个协程在读，写的一侧不持锁就是数据竞争（判据与用例
-// TestCollectionLastReportIsNeverAHalfRound 一对一，同挽回 worker 的发布位）。
+// 所以两件事都必须在这里做到：**先填完再发布**（调用方等 report 填完含 logRound 再进来，
+// 观测端点是另一个协程在读，写的一侧不持锁就是数据竞争），以及**发布的是抄件**
+// （RunOnce 把同一个 report 交给调用方，调用方改一格就会把运维端点上的读数一起改掉，
+// 而"谁持有没有那个返回值"这件事编译期管不着）。两条判据各对应一处用例：
+// TestCollectionLastReportIsNeverAHalfRound 与 TestCollectionPublishedRoundIsDetachedFromBothHands。
 func (j *CollectionJob) setLast(r *CollectionRoundReport) {
+	copied := *r
 	j.mu.Lock()
-	j.last = r
+	j.last = &copied
 	j.mu.Unlock()
 }
 
