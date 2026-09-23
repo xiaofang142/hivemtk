@@ -60,7 +60,7 @@ d="$WORK/g1"; seed "$d"
 wf "$d" "    paths:
       - 'user-server/**'"
 out=$(cd "$d" && python3 "$CHECKER" --repo . 2>&1); rc=$?
-if [ "$rc" -eq 1 ]; then ok "rc=1"; else bad "rc=$rc（期望 1）"; fi
+if [ "$rc" -eq 1 ]; then ok "rc=1"; else bad "rc=${rc}（期望 1）"; fi
 echo "$out" | grep -q 'scripts/check-fake.py' \
   && ok '红因点名门脚本' || bad '红因没点名门脚本'
 echo "$out" | grep -q 'scripts/check-fake.baseline' \
@@ -74,20 +74,20 @@ wf "$d" "    paths:
       - 'scripts/check-fake.py'
       - 'scripts/check-fake.baseline'"
 out=$(cd "$d" && python3 "$CHECKER" --repo . 2>&1); rc=$?
-if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=$rc（期望 0）"; echo "$out" | sed 's/^/      /'; fi
+if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=${rc}（期望 0）"; echo "$out" | sed 's/^/      /'; fi
 echo "$out" | grep -qE '无 paths 过滤' && bad 'G2 里明明有 paths，却报了"无过滤"' || ok '未误报"无过滤"'
 
 echo "G2b 完全没有 paths（每次触发）⇒ 放行，但必须明说"
 d="$WORK/g2b"; seed "$d"
 wf "$d" "__NONE__"
 out=$(cd "$d" && python3 "$CHECKER" --repo . 2>&1); rc=$?
-if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=$rc（期望 0）"; echo "$out" | sed 's/^/      /'; fi
+if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=${rc}（期望 0）"; echo "$out" | sed 's/^/      /'; fi
 echo "$out" | grep -qE '无 paths 过滤' && ok '打印了"无 paths 过滤⇒每次触发"' \
   || bad '放行却没说明理由（静默通过＝恒绿的另一种形态）'
 
 echo "G3 真仓库 ⇒ 绿 + 计数器对得上"
 out=$(cd "$ROOT" && python3 "$CHECKER" --repo . 2>&1); rc=$?
-if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=$rc（期望 0）"; echo "$out" | sed 's/^/      /'; fi
+if [ "$rc" -eq 0 ]; then ok 'rc=0'; else bad "rc=${rc}（期望 0）"; echo "$out" | sed 's/^/      /'; fi
 # BSD sed 不认 `\+`（GNU 才支持）：这里用 grep -E 抽自证数，否则恒抽成空串 ⇒ 假红
 scanned=$(printf '%s\n' "$out" | grep -oE '工作流 [0-9]+ 份' | head -1 | grep -oE '[0-9]+')
 real=$(ls "$ROOT/.github/workflows" | grep -cE '\.ya?ml$')
@@ -99,7 +99,7 @@ printf '%s\n' "$out" | grep -qE '派生判据文件 [1-9][0-9]* 份' \
 echo "G4 工作流目录不存在 ⇒ rc=2"
 d="$WORK/g4"; mkdir -p "$d/scripts"
 out=$(cd "$d" && python3 "$CHECKER" --repo . 2>&1); rc=$?
-if [ "$rc" -eq 2 ]; then ok 'rc=2（没跑过 ≠ 绿）'; else bad "rc=$rc（期望 2）"; fi
+if [ "$rc" -eq 2 ]; then ok 'rc=2（没跑过 ≠ 绿）'; else bad "rc=${rc}（期望 2）"; fi
 
 echo
 if [ "$FAIL" -eq 0 ]; then echo "全部通过"; exit 0; else echo "失败 $FAIL 格"; exit 1; fi
