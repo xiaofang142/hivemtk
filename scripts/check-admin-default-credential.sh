@@ -76,7 +76,13 @@ if [[ -f "$WEB_SETUP_SRC" ]]; then
       [[ "$have" == "$line" ]] && seen=1 && break
     done
     [[ "$seen" -eq 1 ]] || LADDER+=("$line")
-  done < <(sed -n '/const CANDIDATES = \[/,/^\]/p' "$WEB_SETUP_SRC" | grep -o "'[^']*'" | tr -d "'")
+  # 只抽数组**项**：先把收尾行的 `].filter(…)` 尾巴截掉（那行带 `'string'` 与 `''` 两对引号，
+  # 上一版照抽不误 ⇒ 候选从 4 项涨成 5 项，多出来的 `string` 会真发一次失败登录（`''` 那条被下面的
+  # `-n` 判空挡掉），而防爆破口径就是 5 次/15m —— 一次余量都不该白烧），再剔掉 `//` 注释行。
+  done < <(sed -n '/const CANDIDATES = \[/,/^\]/p' "$WEB_SETUP_SRC" \
+            | sed -e '/^\]/ s/\].*//' \
+            | grep -v '^[[:space:]]*//' \
+            | grep -o "'[^']*'" | tr -d "'")
   echo "ladder: e2e 候选口令 ${#LADDER[@]} 项（含 seed 值）来源=${WEB_SETUP_SRC#"$PROJECT_DIR"/}"
 else
   echo "ladder: 未找到 ${WEB_SETUP_SRC#"$PROJECT_DIR"/}，本轮只试 seed 公开值 1 项"

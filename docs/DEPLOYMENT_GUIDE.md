@@ -283,9 +283,19 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 > 轮换后 `bootstrap.sh`、`user-server/tests/e2e/deep_lib.sh`、`deep_trace_v2.sh`、`scripts/geo_full_test.py`
 > 不需要跟着改：它们的口令链都是"显式入参 > `SEED_PASSWORD`/`ADMIN_PASSWORD` 环境 > 公开默认值"，
 > 而这几个脚本的既定跑法本来就要求先 `set -a && . ./.env && set +a`（`POSTGRES_PASSWORD` 是硬前置），
-> `.env` 一更新它们读到的就是新口令。**只有** `user-web/tests/**` 里那些写死候选口令的 Playwright 审计脚本
-> 不吃这条链（它们自带 `['Admin@12345678', …]` 候选数组、且不打 8204 的 seed 值），
-> 那批属另一泳道的 dev-only 审计夹具，本批不动，见 `docs/superpowers/specs/2026-09-21-offline-deployment-design.md` §7。
+> `.env` 一更新它们读到的就是新口令。`user-web/tests/auth.setup.spec.js` 也已接上同一条链
+> （显式入参 > `SEED_PASSWORD` 环境 > 仓根 `.env` 现取**首条** > 公开历史值；注入口 `HIVEMTK_ENV_FILE`，
+> 它的候选数组从"3 个写死字面量"变成"环境档 + `.env` 档 + 那 3 个字面量"）。
+> **轮换后会红的是剩下那批仍写死 `['Admin@12345678', …]` 的 dev-only 审计夹具**
+> （`grep -rl Admin@12345678 user-web/tests user-server/tests` 现数 21 份，减去已接链的 `auth.setup.spec.js` 自己 = 20 份；
+> 它们打的也是 `E2E_BASE_URL` → `/api/auth/login`，而轮换把库里那一行改成了随机值 ⇒ 这批必然 401）。
+> 本批不代改那 20 份，理由有三条实测：其中 5 份此刻正被别的泳道改着（`git diff --name-only` 命中）、
+> 整套 `npx playwright test --list` 在这棵树上本就收不起（两份用例在模块顶层读 `/tmp` 取证文件：
+> `user-web/tests/e2e/walk-all-routes.spec.js:9` 读 `/tmp/route-paths.json`、
+> `user-web/tests/e2e/ui-audit.spec.js:15` 读 `/tmp/uiwalk/routes.json`，两个文件此刻都不存在 ⇒ 收集阶段直接崩、
+> 实测 `Total: 0 tests in 0 files` rc=1）、改完没有任何可跑的门。
+> 补法照 `auth.setup.spec.js` 那一格：把写死的那一个值换成"环境档 + 公开档"的候选数组。
+> 另见 `docs/superpowers/specs/2026-09-21-offline-deployment-design.md` §7 的"另一泳道夹具"口径。
 
 ### 6.3 config.yaml 要点（user-server/config.yaml）
 
