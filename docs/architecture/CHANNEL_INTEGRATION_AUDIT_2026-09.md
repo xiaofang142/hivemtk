@@ -2731,7 +2731,7 @@ db 那一趟掐掉的理由是它跑的是**旧用例字节**：S26 的 recover 
 
 **6 · 电池顺带照出门的一处死码，以及 8 处站点里两处"不是 panic、是假绿"。** ① 死码：`存疑` 那一档写作 `if resolved or callee not in names: continue`，而 `names` 的键是 `Type.Method` ⇒ 裸方法名**永远**不在里面，`callee not in names` 恒真 ⇒ 存疑分支根本走不到，门只会"少报"却**看起来**在报。改判据为按"本包生产者**方法名后缀集**"（`method_names`）判，之后真树读到 113 存疑——**判据要能被打到，才算在生效**（同"静态锁得配行为不变的注码"）。② 站点处置（4 文件 8 处，算术 4+2+1+1）：QQ 的 4 处是 `dispatchQQ` 在 `lazyDB()==nil` 那一支交回 `(nil, nil)`；两个 repository 站点是 `GetByAgentKB`／`GetByID` 把 `ErrRecordNotFound` 吞成 `(nil, nil)`，用例形状是 `got, _ := …` 紧跟 `got.Priority`／`got.Name`；cond_tree 那两处读源码后**改口**——`ParseCondTree` 对空串交回 `(nil, nil)`，但 `(*CondNode).Evaluate` **自带 `if n == nil { return false }`** ⇒ 缺判空**不会 panic**，于是这两处的账要分开记：`:9` 那条最坏是"前置没满足被摊成三条看不懂的断言失败"（补判空是**诊断成本**，不是崩溃成本），`:50` 那条期望值本身就是 `false` ⇒ **nil 树也照样"通过"，是假绿**，这一判是承重墙。⇒ 口径：**"未判空"不等于"会 panic"，也不等于"危害更小"**；按被调函数的 nil 守卫形状分别记账，才有"哪一格是真的在防事故"的读数。
 
-**7 · 门进了哪条链。** `make audit` 的静态审计链里排在 `check-env-coverage.py` 之后（同一形状：本地跑、带基线、红因带文件与数额）。**CI 那一头本轮不接**，理由是口径而不是省事：这道门的输入只有 `user-server/**.go`，而它要防的是"新写的用例抬高站点"，接进 `user-server-ci.yml` 就必须同时把 `scripts/check-test-nil-deref.py` 与 `scripts/test-nil-deref.baseline` 写进 `paths:`（否则改判据不触发本门，`docs-link-check.yml` 那次的教训），这一步留给接 CI 的那一批做，届时须按 §23.16 第 5 条的规矩做"摘掉配置照样红"的反向格。**收尾补记**：`make audit` 整链在隔离克隆 `/tmp/bm9_mine`（只含本泳道 8 份文件，逐文件 md5 与活树相同）真跑过一遍 ⇒ **rc=0、8 步全绿、末步即本门**（该树读 `＝112 · 站点＝0 · 存疑＝113`），产物 `/tmp/bm10_make_audit.log`；先前只做过 `make -n audit`（干跑，只证命令能解析）。
+**7 · 门进了哪条链。** `make audit` 的静态审计链里排在 `check-env-coverage.py` 之后（同一形状：本地跑、带基线、红因带文件与数额）。**CI 那一头本轮不接**，理由是口径而不是省事：这道门的输入只有 `user-server/**.go`，而它要防的是"新写的用例抬高站点"，接进 `user-server-ci.yml` 就必须同时把 `scripts/check-test-nil-deref.py` 与 `scripts/test-nil-deref.baseline` 写进 `paths:`（否则改判据不触发本门，`docs-link-check.yml` 那次的教训），这一步留给接 CI 的那一批做，届时须按 §23.16 第 5 条的规矩做"摘掉配置照样红"的反向格。**（后续兑现见 §23.20：作业已接、反向格已照做，且顺带把同文件里另外三处同族缺口一起补了。）****收尾补记**：`make audit` 整链在隔离克隆 `/tmp/bm9_mine`（只含本泳道 8 份文件，逐文件 md5 与活树相同）真跑过一遍 ⇒ **rc=0、8 步全绿、末步即本门**（该树读 `＝112 · 站点＝0 · 存疑＝113`），产物 `/tmp/bm10_make_audit.log`；先前只做过 `make -n audit`（干跑，只证命令能解析）。
 
 **8 · 最终字节上的整包复跑（隔离树，排除并行在飞文件）。** 对象：`/tmp/bm9_mine` ＝ `git clone --shared` 到 HEAD `e293e233` 后**只**覆写本泳道 6 份文件（4 份用例 + 门 + 基线，逐文件 md5 与活树相同；`git status --porcelain` 在该克隆里只有这 6 项）。`internal/repository` 整包无过滤：`ok 110.528s rc=0`，`--- FAIL` 计数 0。`internal/service` 整包跑了**两趟**，第一趟不算读数：默认 `-timeout 10m` 下 `panic: test timed out after 10m0s`（600.875s 截断，产物 `/tmp/bm9_mine_svc.log`），截断前唯一那条 `--- FAIL` 已经是 D12 ⇒ 超时不是"包里的红"，是**门没跑完**（[[feedback-mutation-battery-hygiene]] 的"TIME-BROKEN 另记"）。把超时抬到 40m 重跑同一棵树跑完：`FAIL hivemtk-user/internal/service 746.475s`、`svc rc=1`、`--- FAIL` 计数 **1**（`TestD12_NoNewLegacyKVDirectQuery (0.41s)`），无 panic（产物 `/tmp/bm10_mine_svc2.log`）。⇒ 两点入账：① 本泳道字节上 service 整包**除 D12 之外零红**（与第 4 段四趟同形；未带 `-test.v` ⇒ PASS 计数不可得，判据只认 `--- FAIL` 计数与末行汇总）；② 默认 600s 不够：本趟实测 **746s > 600s**（本机 load 8–12；[[project-go-test-suite-timing]]）⇒ 从本批起，凡跑 `internal/service` 整包一律显式带 `-timeout 40m`，否则读数按"未跑完"处理而不是按"绿/红"处理。
 
@@ -2837,3 +2837,173 @@ db 那一趟掐掉的理由是它跑的是**旧用例字节**：S26 的 recover 
 - **用时又添两个读数**：service 整包 1128.621s（同树第 1 段是 984.693s／1077.791s），pkg/db 同一份代码 231→319→314→339s（load 24～32）⇒ [[project-go-test-suite-timing]] 的"三处读数差 1～3 倍"这一批又复现四次，任何写进脚本的默认 `-timeout` 都按"跑不完就是没测"处理（批M-10 起的 `-timeout 40m` 口径继续有效）。
 
 **11 · 本段未覆盖面（下一位从这里接手）。** ① **锁的保护边界**：`internal/pkg/db/migrate.go` 里 **19 处**裸 `DB` 读写（`grep -nE '(^|[^.[:alnum:]_])DB([^_a-zA-Z]|$)' migrate.go` 剥整行注释后现算）不经这把锁。今天不出事只因为唯一的生产调用点是 `cmd/api/main.go:125`、跑在起协程之前（`cmd/geo-run/main.go:59` 那个 `db.AutoMigrate(` 是本地 gorm 变量、不是包级句柄，其余命中全在 `*_test.go` 的同协程路径）。**没有一条腿钉住"AutoMigrate 不许被挪进协程"**——`TestBatchM_MigrateIsWiredIntoAPILifecycle`（S15）钉的是"`main.go` 顶层那两行的存在、次数与先后"，两回事。② 本机 `-race` 只跑了两格；全仓 **125 个含 `*_test.go` 的包**，CI 的 core 片（`go list ./...` 去掉 `internal/service`）带 `-p 1 -short -race` 全覆盖，本批没在本地整片复跑 ⇒ 别的包里的同类形状仍只有 CI 会报。③ 三条新腿都不看 `testing.Short()`，CI 的 `-short` 不会把它们跳掉（这点是好的），但 CI 的 `-p 1` 前提本机没复刻（本机整包天然串行）。④ **站点 B 无专属腿**、cron tick 体也无站点腿，守卫只有 accessor 锁：若有人拆掉 `GetOfficeHoursService` 的 `sync.Once` 或把仓储收进结构体字段，B 的形状变了而锁还在 ⇒ **没有用例会同红**。⑤ 反过来，那三枚站点探针在锁被删时全绿（第 6 条实测），防删锁的只有 accessor 一条腿；而"产码里绕过 `GetDB` 直读包级 `DB`"这一面只有第 7 条那枚 grep 口径（当前 0 处），**没有门**。⑥ 锁的代价只测了单点无争用与 4 写协程人造最坏（第 9 条），未测"一次请求取句柄 N 次"的累积，也没有 P99。⑦ **CI 侧零证据**：本批六份文件全未推，未推字节对 CI 隐形（只有影子克隆门看得见，[[project-audit-backlog-2026-09]]），#63（解引用门接进 CI、`paths:` 含脚本自身与基线）仍未做。⑧ D12 常红照旧挂在顶点。⑨ 375/200 那批 `GetDB` 读点里"哪些落在协程内"仍**未逐点枚举**——本批处理的是 `-race` 真报出来的四处，其余按"锁兜住"结案，那是推理不是清单。
+
+### 23.19 批M-11 后续 2：把一轮性取证脚本转成常驻电池，第一次全族跑逼出三处驱动自己的错，顺带照出「短信受理成功」那条分支整片没腿（2026-09-23）
+
+**来路。** §23.18 第 11 段欠的是证据形态，不是新缺陷：本泳道那四处改动（三家接口域注入／测试库句柄池上界／TG 建号两条外部腿／飞书媒体三条腿替身）当时只有 `/tmp/r44_measure/` 里一轮性的普查读数，任务 #75 的代号叫"70 族"（旧注释里的 `70D`／`70E` 即那批一次性格名）。本段把它落成随批入库的常驻件 `scripts/mut_egress_pool_r30.py`，按"每处承诺至少一格、且格要能被反向证伪"重排成 **S／P／T／F 四族 29 个行为格 + 1 个 race 格**，旧别名在注释里已改指 `S2 格`／`S3 格`（`grep -rn "变异格 70" user-server/internal/` 现算 0 命中）。跑出来最值钱的不是"全杀"，是它先照出一整片没腿的面（第 3 段）。
+
+**1 · 五趟读数（产物落在 `docs/superpowers/specs/ledger/logs/R30/<tag>/`，tag 不覆盖）。**
+
+| 趟 | 范围 | 控制组（现测 settled／skip／CONNECT） | 判定 |
+| --- | --- | --- | --- |
+| `full-1` | 全族 21 格（当时只推到 21 格，race 族含在内） | SMS 8／POOL 1／TG 1／F17 1，四组全 0 红 0 SKIP 零 CONNECT | **16 杀／5 未杀**：`Q-on` 分母断言错、S4/S5 `CONN-MISMATCH`、`F2 BROKEN=行为变了`、`Q-off` 被前者连带 SKIPPED |
+| `succ-1` | 新格 10 格（`--only`，非全族） | SMS **12**／POOL 1／TG 1／F17 1，同样零 CONNECT | **5 杀／5 未杀**：S13/S14/S15 `BROKEN=红因而非预期`、S17/S19 `BUILD-BROKEN` |
+| `succ-2` | 修后那 5 格 | 同上 | **5 格全杀**，S17 红三条首次成功腿、S19 只红重发腿（两站点分开了） |
+| `full-2` | 全族 **30** 格（含 race A/B 两相） | 同上，四组零 CONNECT | **逐格被杀，无存活，无 CONN/RAN/PATCH/BUILD 异常**，rc=0 |
+| `full-3` | S 族 21 格，绑定到最终字节重跑（`sms_success_test.go` md5 `605334c6…`、`sms.go` `500262a9…`） | 同上 | **21 格全杀**，逐格读数与 `full-2` 逐字一致 |
+
+`full-2` 的 race 两相：A 相（带锁、`-count=10`）`rc=0 settled=10 红名=— DATA RACE 块=0`；B 相（摘掉 `quote_test.go` 里那三行 `mu.Lock()/Unlock()`）`rc=1`、**2 朵**竞争块，两朵都归到 `--- FAIL: TestQuoteService_ReviseConcurrentSecondLoser` 且报告里含本家文件名。**两相的读数都不靠驱动 stdout**：`race_A_locked.log` 里 `grep -c -- "--- PASS: TestQuoteService_ReviseConcurrentSecondLoser"` = **10**、`grep -c "DATA RACE"` = **0**；`race_B_Q-off.log` 里 `DATA RACE` = **2**、该腿的 `--- FAIL` = **1**、`quote_test.go` 命中 16 行——这两份 log 现在随批在库内（第 1-补 段），所以"锁有效／摘锁就炸"是可复算的而不是转述。
+
+判据为什么仍**不许**锚在标识符上，这里要订正一条说得太死的老口径（原先只登在长期记忆 [[feedback-mutation-battery-hygiene]] 里，§23.18 正文并没有它，本文上一版把它误引成"§23.18 教训"）：`-race` 的 `Write at 0x00c000190968 by goroutine 144:` 那一行确实只有地址、不印被竞争的字段名，**但它会印栈帧的函数符号**，本腿的符号恰好是 `hivemtk-user/internal/service.(*qsScripts).ActiveQuoteScript()` ⇒ 在这份产物上 `grep qsScripts` 命中 **4** 行、"认变量名"偶然可满足。不可依赖的理由有两条：符号身份来自**帧**而非被竞争的那个字段，竞争点挪进别的函数就没这个标识符；且摘锁后的单行 getter 会被内联、帧本身可以不出现（§23.18 那批取证的实测）。常驻件的"判据形状"段已按这条改成"口径，不是不可能命中"的写法。
+
+**1-补 · 上一段那句"产物在 …"原本在仓库里不成立，这一档是本段写完自查时才修上的。** 拿引用回核磁盘：`git check-ignore -v docs/.../R30/full-2/S1.log` 退 **rc=0 + `.gitignore:23:logs/`** ⇒ 六趟共 **117** 份逐格产物全被库外的忽略规则挡着，`git ls-files docs/superpowers/specs/ledger/` 命中 **0**：文档里的读数在这台开发机上找得回，在克隆/CI 里找不回——正是本段要消灭的那种"只有作者看得见"的证据形态（`logs/` 与 `*.log` 是运行时日志规则，误伤了审计取证目录）。处置＝给 `.gitignore` 加例外，而这条例外**改过两版，第一版是反向测出来的过宽**：先写的是两行（`!docs/.../ledger/logs/` + `!docs/.../logs/**/*.log`），拿"别人的目录会不会被一起放进来"去问它——临时造 `logs/R99sim/{a.txt,b.log,deep/c.js.orig}`，三份**全部**变成可跟踪；而共享树同一棵 `docs/superpowers/specs/ledger/logs/` 下如今躺着 **17 个轮次目录、283 份产物、12 MB**（其中 26 份非 `.log`，含别的泳道留下的 `bak/*.js.orig` 残本与 .md/.txt 记要）⇒ 那版例外会把**别人批次的字节**一并送进下一个 `git add`，而这批的提交推送归另一条并行线（[[project-audit-backlog-2026-09]] 批M-7 口径）。终版因此按"轮次目录"收窄成六行：放行 `logs/` 以便下降（父目录被排除时对其内任何 `!` 都不生效）→ 用 `logs/*` 把直接子项整体挡回 → 只放开 `R30/`、`R28/` 两棵及其内 `**/*.log`。**四向都现测**：① 本批 R30 下 **117/117** 份进待跟踪集；② 上面那枚 R99sim 探针（.txt/.log/深一层 .orig）**0** 份可跟踪；③ R28 探针 `.log` 1/1 可跟踪（两枚探针连同目录都清掉了，`ls logs/` 现只剩 `R30`）；④ 仓库根 `logs/x.log` 与 `user-server/y.log` 仍分别由 `.gitignore:23` 和 `user-server/.gitignore:20` 挡住 ⇒ 运行时日志面一字未动。泄露面在放行前扫过两棵树：本批 117 份与共享树 283 份里，`password=`、`postgres(ql)://`、`AKIA…|eyJ…|ghp_…` 三类命中均 **0**（`testdb.go` 的失败路径本就过 `maskedDSN`），`user=` 出现 3442 处但取值全是 `user=admin`(3376)／`user=b19d` 这类**用户名或格标签**而不是凭证；克隆树里没有 `.env`（只有 `.env-example`）⇒ 无口令值可泄。白名单口径留一句：放开的是"这两棵轮次目录"，目录内非 .log 也会入库（现数 R30 里非 .log = **0**，两艘电池都不往 logdir 写 `bak/`），别的轮次要跟进应由那一轮自己改这份配置，不由本批代签。另有第六趟 `20260923-022537`（驱动定稿前的单格验形，只跑 `--only P1`，5 份）：`P1.log` 红因逐字为 `测试库句柄的 MaxOpenConns = 0，期望 32（0 表示根本没设上界，database/sql 里 0＝不限）`，四枚控制组同趟留档——它与 `full-1`/`full-2` 的 P1 格同判，留作"这一格第一次被杀掉"的现场。
+
+**1-再补 · 本段自己犯了一次驱动文档里写着的那条错，而且犯了两次。** 上面几处编辑先给常驻件补了"产物可找回性"的前提，随后第 1-补 段那条"订正判据口径"的编辑又动过它一回（race 那段的措辞就是被这次改掉的）⇒ 两次之间我一度把 md5 记成 `c650fcb8a03e9c968f24e0a49434d1ac`，而它已是中间态。**入库字节以最后一次编辑后现算为准：`md5 -q scripts/mut_egress_pool_r30.py` = `2426aac7a81648a03ba6f53d569653ba`**，`--check` 在这一版上重跑仍 `preflight：29 个行为格 + 1 个 race 格，0 处静态问题`、rc=0。这正是 [[feedback-verify-secondhand-review-claims]] 说的"文档里的 file:line 在最后一次源码编辑后复算"，只不过这次编辑者是我自己；本段表格 `full-3` 行引用的另两枚绑定不受影响，磁盘现值逐字为 `sms_success_test.go` `605334c6fa7075412cf6df63288a803d`、`sms.go` `500262a90c58e580e9493f18988ba2b5`（另 `testdb.go` `dfc201cb3594c71882105e4a97398dec`）⇒ 成功腿的读数仍绑定有效。**口径值得单独记**：驱动自己"每刀还原后比 md5"的判据，反过来同样适用于"文档引用了哪个 md5"——引用 md5 的段落必须晚于对那个文件的最后一次编辑；而常驻件不参与任何格的注码面，所以它变动只失配"身份"这一项，不需要整族复跑（这一点成立的前提也写下来：注码面按锚点定位、锚点没动，改的是注释文字）。
+
+**2 · 出站面：控制组零真出站这条，从"人肉普查"换成了机器判。** 电池自带只记不走的 CONNECT 代理（回 502、不建隧道），四枚控制组过滤器必须 **0 条** CONNECT，`full-1`／`full-2`／`succ-*` 每趟都满足 ⇒ "测试不再打穿外部世界"从此有了一条会红的腿。反向格的 CONNECT 主机名是**判据的一等公民**（缺期望主机 ⇒ `CONN-BROKEN`，出现意外主机 ⇒ `CONN-MISMATCH`）：`full-2` 总表 28 条全部落在反向格内——`dysmsapi.aliyuncs.com` 20（S1 18 + S4 2）、`sms.tencentcloudapi.com` 4（S2 2 + S5 2）、`smsapi.cn-north-4.boe-business.huaweicloud.com` 2（S3）、`api.telegram.org` 2（T1/T2 各 1）。逐格计数会随用例名单漂（`full-1`→`full-2`：S1 12→18、S2/S3 各 1→2，差值恰是新加的成功腿把"改回官方域"这条路多走一遍），所以**判据只比主机名集合、不比次数**，次数只作旁证（同"共享树下控制组会漂"那条口径，[[project-audit-backlog-2026-09]] 第三十八轮）。
+
+**3 · 本轮真正的产出是九格新格（S13–S21）与四条新腿：短信「受理成功」分支此前整片没腿。** 来路是 `full-1` 放刀前的一次自检——"若有人把成功判据摘掉会红吗"，答不出来：`sms_test.go` 那六条桩腿**全回业务错**（走 `err != nil` 那一路），于是 `sms.go:296-297`／`:587-588` 的 `record.SendTime = &sentTime` 与 `record.Status = "sent"` 两句话在整套用例里**从未被执行过** ⇒ 台账上"成功"这两列、以及"成功行不许挂失败原因"这一条，删掉都没人红。补 `internal/service/sms_success_test.go`（新文件，未跟踪→已随批入 `git status`）四条腿：三家各一条首次成功（回包形状按各家判据写：`Code=="OK"` / `Response.Error.Code!=""` / `code=="000000"`）+ 一条重发成功（夹具带上一轮的 `ErrorCode/ErrorMsg`，用来额外钉 `:563-564` 那两行清空）。
+
+三条读数是这九格换来的，不是先验写出来的：
+
+- **同一句话两个站点 ⇒ 一刀两站必假全杀。** `record.Status = "sent"` 与 `record.SendTime = &sentTime` 在 `sms.go` 里**各出现两次**、逐字相同（首次发送 `:296-297`、重发 `:587-588`）。单行锚点命中 2 次 ⇒ `PATCH-BROKEN`；只注一处（另一处仍在）⇒ 红名少一半却报"全杀"。四格按站点拆开，锚点各带一侧独有的错误包装行（`send sms failed: %w` / `resend sms failed: %w`）定位 ⇒ `full-2` 的 S17 红三条首次成功腿、S19 只红重发腿，互不遮蔽（口径：一处符号多处消费要逐格拆刀，[[feedback-mutation-battery-hygiene]]）。
+- **`record.SendTime = nil` 不是"删掉这句"的合法写法。** succ-1 里 S17/S19 报 `BUILD-BROKEN`：`sentTime` 别处不再被引用 ⇒ `declared and not used`，拿到的是编译红而不是"这条性质没了"。改成把整句包进 `if false { … }`（词法上仍是使用点、行为上等同于删句），两格立刻可判。
+- **红名对、红因不是这一格的分支。** S13/S14/S15 把成功判据写成 `if false`，三格红名与推演完全一致，但输出里**没有**"失败原因没落账"——腿先 `t.Fatalf` 在"官方回业务错时应上抛"那一条上，根本走不到台账断言。期望字面量因此拆成两条常量（`R_NO_LAND` 给 S1/S2/S3/S4/S5、`R_NOT_RAISED` 给 S13–S15）。这是"红必须读红因"的又一次复发，且这次是被**自己写的期望**骗过去的。
+
+归属口径记一句：S20/S21（各摘一行清空）的红因是 `assertSentLedger` 第 ③ 条"成功行不该带失败原因"，这条断言三枚首次成功腿也共用——分辨靠**测试名**而非红因文本：那三条腿的夹具行本来干净，③开火只能是成功路径自己写了码；只有重发腿带着上一轮的 `code/msg` 进格子。腿里因此刻意**没有**再写一条只属于重发的重复断言（写了两条同义的 `Errorf`，杀力不变、多一条要维护的红因）。
+
+**4 · 三处驱动/期望自己的错，全部由读数逼出来（`full-1`/`succ-1`），不是推演出来的。**
+- **race A 相的分母不是 1。** 那一相跑 `-count=10` ⇒ `settled=10` 才是健康读数；断言原先写死 1，于是把"锁有效、10 趟零竞争"判成"过滤器没匹配到用例"，还连带把 B 相打成 `SKIPPED=控制组不成立`——**判据自己制造一条假红、并顺手拆掉唯一能做对比的那一相**。改成 `settled != args.race_count` 后 A/B 都在 `full-2` 拿到读数。
+- **S4/S5 的 CONNECT 期望写成"无出站"是推演错。** 把 tencent 那条腿改成读 `aliyunAPIURL`，没被测试覆写的那个字段就是官方域 ⇒ 请求**改道到另一家的官方网关**（实测 `dysmsapi` 2 次 / `tencentcloudapi` 2 次）。"改道"正是这一格要钉的失效形状 ⇒ 修的是期望，不是变异。这两个数（连同第 2 段那张 28 条的总表）不靠转述：每格 log 尾部自带 `===== CONNECT =====` 段，`awk '/===== CONNECT =====/{f=1;next} f&&/CONNECT/{print $3}' docs/superpowers/specs/ledger/logs/R30/full-2/S4.log | sort | uniq -c` 现读 = `2 dysmsapi.aliyuncs.com:443`，S5 同形 = `2 sms.tencentcloudapi.com:443`；五格逐字复算（S1 18/S2 2/S3 2/S4 2/S5 2）与总表 20/4/2/2 闭合，本段最后一次复核时做过，不是从上一版的表里抄的。
+- **F2 原先不是行为不变的变异。** 只摘 `tenantTokenFn` 一条腿的引用、留 `mediaFetchFn/mediaStoreFn` 指向已不存在的局部变量 ⇒ `undefined:` 编译红，被 tally 成"静态格却把用例跑红了（红名=[]）"。三处引用一起改道、快照行才删得干净，改完 `full-2` 拿到 `gate rc=1 点名 internal/service/webhook_channel_feishu.go，用例 1 条全绿`。
+
+**5 · 顺手加的一档 `--check`，以及它挡不住的那一类。** 五件磁盘上能核的事：锚点命中数＝1、红因字面量在某个用例文件里查得见、期望红名在该格过滤器的名单内、名单里的腿真有 `func` 定义、gate 格点名的文件存在。当前读数 `preflight：29 个行为格 + 1 个 race 格，0 处静态问题`。**边界要写明**：第二条只挡"字面量根本不存在"（抄错/漏字），挡不住 P1 那种"字面量在仓库里查得到、但不是本格该开火的那句"（`MaxOpenConnections` 确实在 `testdb_pool_test.go` 里，用例红因印的却是"测试库句柄的 MaxOpenConns"）⇒ 这一类只有真跑能照出来，**`--check` 绿不是"电池有牙"的证据**。
+
+**6 · 门禁与本批字节的自洽（跑在最终字节上）。**
+- `python3 scripts/check-async-global-read.py` ⇒ `OK … 项目根 /private/tmp/r45，扫 153 个 package，站点 0（= 基线合计 0）`，rc=0。
+- `python3 scripts/check-seam-guard.py` ⇒ `OK … 登记 17 个全局，扫 2755 个 .go 文件 ⇒ accessor 之外 0 处访问`，rc=0。这里订正一处：**本文上一版把 2740 当现值抄了下来，那个数是在合并前的旧基座 `1bce38c3` 上量的**；本段第 8 段把影子树 `--ff-only` 推到 `2091cb07` 后两扇门都现重跑，`153 个 package／2755 个 .go` 是最终字节上的读数（上一版那句 `扫 153 个 package，站点 0` 恰好没变，因为它数的是 package 而非文件）。口径并入"读数必附测于哪一版"：门计数随顶点漂，写死数字的段落要在每次 `merge` 后重跑一次才允许留在文里。
+- `gofmt -l` 对本批四份文件报一处（新文件里一段注释的续行折行），`gofmt -w` 后只剩该折行差异；因它动的是**没被任何格注码的** `sms_success_test.go`，为免"读数与入库字节差一行注释"这种账，S 族 21 格在最终字节上整族重跑（`full-3`）而非结转 `full-2`。`go vet ./internal/service/ ./internal/pkg/testutil/` rc=0。
+- **漂移核验（本轮订正，原先两个 SHA 都是旧顶）**：本泳道基线 `2091cb07` 是共享树现测顶点 `b7c5258e`（测于 06:02，`git log --oneline -1`）的祖先，中间 4 笔（`3d441385`、`444e0234`、`79378eb9`、`b7c5258e`，全属并行泳道的 install.lock/并发迁移那两档），`git diff --name-only 2091cb07..b7c5258e` 与本批脏文件**交集 0**（06:26 在同一棵共享树上复测：并行面新增提交仍是这 4 笔、其改动 10 份文件，与本批 `git diff --name-only` 的 18 份 `comm -12` 交集仍为 0。这里顺手把数目订正过来：上一版写的是 17，漏的是 `scripts/mut_startup_hook_p702.py`——它在 06:05 才因本段末那条 ENV-BROKEN 修复变脏 ⇒ **"本批有几份脏文件"要在最后一次源码/脚本编辑之后数，不能在编辑之前数完再抄**）。**07:4x 在同一棵共享树上第三次复测**（写本段收口时）：顶点已漂到 `6b3380f7`（测于 07:40 的 `git log --oneline -1`；`aab2e733`/`b2d62f22`/`6b3380f7` 三笔是 #63 收口期间新落的，全在 `docs/superpowers/plans/` 与 install.lock 那一族），`git diff --name-only 2091cb07..6b3380f7` 现数 **11 份**，与本批 `git diff --name-only`(21) ∪ 未跟踪新增(7) 共 29 条路径做 `comm -12` ⇒ **交集仍为 0**，`git merge-base --is-ancestor 2091cb07 HEAD` 退 0 ⇒ 基线仍是祖先、提交窗口仍只需 fast-forward。这一行的价值不在"这次也是 0"，在**它每复测一次就证明一次"漂移核验"不是一次性动作**：同一批字节在四小时内被三次不同的顶撞过，若只在第一次数完就不再核，最后一次 `git add` 面对的是一条已经换了主人的树 ⇒ 提交窗口只需 fast-forward，无需语义对账；**"当前顶点"这种写法本身是引信**：同一天里它从 `442de55c` 漂到 `96e9fa81` 又漂到 `b7c5258e`，所以这一行今后只写"测于 HH:MM 的 `SHA`"，不写"当前"。
+- 一格口径值得单独记：T3/F2 的 `run_gate` 是 `cwd=clone` 跑**已提交那一版**的门（常驻件自己在 `scripts/` 下、不在 `LANE_PATHS` 里，故不进覆盖表）。这是有意的——门的牙齿要用入库版证；但反过来说，若哪天在活树里未提交地改了门，这两格证的仍是旧门。
+
+**6-补 · 把"取证落点在库外"这一族整个迁进仓库树：10 份常驻电池的复跑、一处新泄露面与三处自洞。** 第 7 段⑩ 那句"剩下的活＝把其余 7 份的落点迁进仓库树，并各自复跑一次"本轮做完，且做完后发现该段本身有三处读数已经过期（见下）。
+
+- **落点普查的现值（`for f in scripts/mut_*.py` 逐份核 `LOGDIR`/`DEFAULT_LOGS` 行）**：常驻电池 **10 份**（不是⑩写的 9 份——`mut_startup_hook_p702.py` 是⑩写完之后加的，而⑩的"其余 7 份用 `tempfile.mkdtemp`/`Path("/tmp")`"同样过期：本轮迁完后，**10 份全部**把逐格产物写进 `docs/superpowers/specs/ledger/logs/<轮次>/<趟次戳>/`；`tempfile.mkdtemp` 如今只用于**私有作业/影子克隆目录**，那是工作副本不是证据，留在树外是对的）。`git status --porcelain -uno` 本段初稿于 06:2x 现数 18 改 + 5 增（18 = 上一版的 17 + 06:05 变脏的 `scripts/mut_startup_hook_p702.py`）（含 `scripts/redact.py`、`scripts/battlog.py` 两份新共用件），产物 **564 份（10 个轮次、33 个趟次目录）** 份、`find … | git check-ignore --stdin` 退 rc=1（**0 份仍在库外**，`.gitignore` 第 35–56 行的轮次白名单正好 10 轮成对 20 行，与磁盘上的 10 个轮次目录 1:1）。
+- **同一句在 #63 做完后已过期，07:40 现数脏文件面、07:47 现数产物面（同一棵 lane 树）**：**21 改 + 7 增**（改方多出的三份全属 #63：`.github/workflows/user-server-ci.yml`、`.github/workflows/lint.yml`、`Makefile`；增方多出的两份是新增的常驻门 `scripts/check-ci-gate-paths.py` 与其反向验形件 `scripts/check-ci-gate-paths.test.sh`，两份都不在 `mut_*.py` 名单里，所以上一条那句"常驻电池 10 份"没被 #63 改动），产物 **572 份（11 个轮次、37 个趟次目录）**（`CIwiring/` 下现有四档：`073421` 反向格 + `074135`/`074449`/`074759` 三趟收口复跑，判读逐项相同，为何留三趟见 §23.20 6-补），`find … | git check-ignore --stdin` 仍退 rc=1、命中 **0** 行 ⇒ **0 份仍在库外**（`.gitignore` 第 35–58 行的轮次白名单现为 11 轮成对 22 行，与磁盘上的 11 个轮次目录 1:1），572 份**全部**是 `.log`（非 `.log` 现数 0）。带判定行的目录仍是 **22** 个 ⇒ 无判定行的目录从 11 变 **15**，多出的四档不是"漏挂 tee"，而是这一族根本没有电池驱动（`00-run.log` 由 `battlog.tee_to()` 写，门与 `make audit` 的判读行就地写在 `00-make-audit*.log` 与 `20-gitleaks-final.log` 里）。**这一条是上一条口径的第三次兑现，而且这一次是连着涨四轮**：566/34（07:40）→ 568/35（07:43）→ 570/36（07:45）→ 572/37（07:47），每一次都不是笔误，而是**上一趟"为了确认最终字节而跑门"自己又落了产物** ⇒ 结论要改写成一条排序约束而不是一句提醒：**"复跑取证"和"回灌计数"不能交替做，必须先把所有会产物的动作做完、只留最后一趟作终趟，然后一次性抄数**（本轮第一版没按这个顺序做，所以多烧了三趟、多写两次订正）。另：本段此后若再有人在此加产物，**照本节写法新开一行、写清新读数的时间戳，不要改本行**——本行的时间戳就是它的有效期。
+- **迁移动力不是"方便"，是前几轮的读数在库里查无对证**：§23.18 登的"R28 那趟 27 格全杀 + SKIP 1"写在 `docs/superpowers/plans/2026-09-20-coverage-heavy-low-packages.md:3952`（**出处是这份计划文档，不是 §23.18 正文**——⑩里"它登在 §23.18 里"这句话指错了地方），而它当时的产物目录 `/tmp/r28_seam_battery_<ts>` 已经随重启蒸发。本轮 R28 在三棵不同条件下复跑三趟，其中 `20260923-040136` 读 **`结论：判 30 格（另有 1 格合并 SKIP），全杀 ⇒ True` + `树残留：无（全部还原且 md5 与开刀前一致）`** ⇒ **⑩那句"该电池的 27 格没有复跑"与"只有文档转述、没有产物"两条都已不成立**。30 vs 27 的差额是 `a9c2aea6` 那笔把 14 扇 test-only 写侧搬进 `_test.go` 之后新增的三格注册表面腿（`setter-prefix-unknown-file` / `-no-such-func` / `-bad-shape`，`mut_seam_guard_r28.py:467-476`），不是同名的格子被重复计数 ⇒ **数"某一族有几格"必须连"数于哪一版代码"一起记**（同一棵树同日两趟，一趟 `--only-gate` 读 28、一趟全族读 30，差的是范围不是牙）。
+- **复跑逼出来的真缺陷（唯一一个判据变更）**：hub/R22 电池的 R4 格第一轮复跑 BROKEN——期望红名只有 `TestSetInboundMediaURLsMissingRowIsNotFoundNotError`，实测另外红到 `TestSetInboundMediaURLsScopesByAccount`。查红因不是连带打偏：该格摘的是 `errors.Is(err, gorm.ErrRecordNotFound) → (false, nil)` 这一支，而**同一支有两条腿在消费**（真·没有这一行；账号 2002 查 2001 的行，同一次 `Find` 同样回 `ErrRecordNotFound`，`message_hub_inbox_media_test.go:98`）⇒ 按 [[feedback-mutation-battery-hygiene]] 的"一处符号多处消费要逐格拆刀/改期望不改变异"口径**把期望集 widen 成两条**，R1（只红 L_SCOPE）的红集仍与它互异 ⇒ 上界没降级回下界。改后独立复跑两趟皆读 `判定：1/18 格（--cells R4），逐格被杀，无存活`。
+- **新泄露面：夹具现算的令牌，不是真口令。** 产物落进仓库树后 `gitleaks detect --no-git --source docs/superpowers/specs/ledger/logs` 命中 4 处（全 `generic-api-key`），值是 `key=uid-rs-<n>-<nonce>`、`"_approval_token":"rt_<64hex>"` 这类**测试夹具**（"0 份真口令"是**规则集的读数**、不是人眼结论：终扫见下）。这类东西不能靠豁免表：夹具带 nonce ⇒ 本轮豁免下轮即失效；而项目规则禁 `paths` 型豁免 ⇒ 唯一出路是**落盘前**改命中面，即 `scripts/redact.py::scrub()`（标签含 key/token/secret… + `=`/`:` + ≥18 位 `[A-Za-z0-9._~-]` 值 ⇒ 收敛成 `前6字[len N]`）。同族坑：JSON 的 `"token":"值"` 里标签与 `:` 之间隔着**一枚闭合引号**，第一版只按 `key=裸值` 写 ⇒ 脱敏后仍剩 1 处。接法：每份驱动**唯一的日志写点**包一层 `scrub()`；子进程直写句柄的那族（R28）在函数收尾就地 `scrub_file()`。无附带损伤是断言出来的不是看出来的：改动面只落在含夹具令牌的那一轮（P503 的 22 份、每档 1～2 行），`TestQuoteService_ReviseConcurrentSecondLoser` 这类测试名、包路径、时间戳、md5 前缀一律没被改；终扫 ``no leaks found`（命中 0，`scanned ~3.24 MB`，测于 06:19 的 `logs/` 全树）`。
+- **新缺失面：判定行本身也是取证产物。** 后台复跑 hub 那一趟时，逐格产物 19 份齐、结论行却只存在于 CLI 任务文件里（任务文件一回收就只剩"判读不可引用"）⇒ 补 `scripts/battlog.py::tee_to(LOGDIR/00-run.log)`，10 份驱动各自在日志目录确定之后挂上，判定行随产物同地落盘。两处自洞当场修：① 子进程 stdout 重定向到文件是**块缓冲**，"日志文件还是空的"不等于"判读丢了"（本轮据此误判过一次，把已经跑完的那趟整趟重跑，白烧一趟；判"跑完"要认末步标记行 + 进程不在两件事）；② `atexit` 关文件早于解释器最后一次 flush ⇒ `ValueError: I/O operation on closed file`、驱动**明明判"逐格被杀"却退 rc=120**，那一轮目录已移出树外（`/tmp/r45_prescrub_artifacts/R22-rc120-…`）不再作为证据。旧轮次里磁盘上还能找到 stdout 的（P701/R28/R22 共 5 份）按"归档补录"写明来源文件名后搬进各自 `00-run.log`；找不到来源的（B16 三族、B17、R30 的 succ 两趟、R28 的 `--only-gate` 趟）**不伪造映射**，改由复跑补齐 ⇒ 现值：`B16ledger/`20260923-053305`、B16ledgerB/`053800`、B16ledgerC/`054414` 三族各读 `电池终态: OK`（b16c 的 M32 顺手把 b16 那格 M7 的等价类理由证伪了一半：`sent 与终态两次台账写之间出现了 return`）；B17action/`054956` `JS 11 格 + Go 7 格 逐格被杀，无存活`；P503/`051832` `KILLED=24 SURVIVED=0 ENV-BROKEN=0`；P701/`042206` `KILLED=71 … 格子数=71`（归档补录）；P702hook/`053219` `total=2 killed=2 alive=0 broken=0` + `md5_orig=md5_after=74b8efc1ea66b937887bcb682b64611f`；R22/`060705` 为改期望后的**全族**复跑，读 `判定：18/18 格，逐格被杀，无存活`（此前 `045158`、`050358` 两趟皆读 `1 格未杀/BROKEN：R4`，是同一判据缺口的两次独立复现，不是抖动）；R28/`040136` 判 30 格 + SKIP 1 全杀；R30/`055445` `判定：30 格（全族）逐格被杀，无存活，无 CONN/RAN/PATCH/BUILD 异常` + 四个控制组 `CONNECT=无``。
+- **一条与本段无关但同批踩到的口径：`git check-ignore` 对"不存在"或"符号链接"的路径不匹配带斜杠的规则。** 白名单收窄到"轮次目录"后要确认别的项目规则不会把产物挡回去，顺手核 `user-web/.gitignore:7` 的 `node_modules/`：在共享树里它是真实目录 ⇒ `user-web/.gitignore:7:node_modules/  user-web/node_modules`、rc=0 命中；在同一份内容的**影子克隆**里那个路径根本不存在 ⇒ 同一条命令退 rc=1，看起来像"这条规则失效了"。带斜杠的模式只匹配目录，而 check-ignore 判不存在的路径时没有目录身份可依据 ⇒ **这类"某路径会不会被挡住"的核账必须在它真实存在为目录的那棵树上测**，跨树测出来的 rc=1 是假证据（与本轮"计数要写明数于哪棵树"是同一族）。
+- **反向趟照出来的一处真缺陷（本轮修完并双向验过）**：`mut_startup_hook_p702.py:15` 的 docstring 早就写着 "影子克隆里没有 `ROOT/.env` ⇒ 由调用方导出 `POSTGRES_TEST_PASSWORD`（否则控制组红是 ENV-BROKEN）"，而代码里的控制组分支只有 `CONTROL-RED：基线就是红的，先修树再放刀`——**这一类从来没有实现过**。不导口令跑一趟，它把 `failed SASL auth` 说成"树的红"⇒ 读的人会去改没坏的代码（与"连不上库也能报全杀"同一族，只是方向相反：这里不是假绿，是**假归因**）。补 `ENV_SIGNS` 六枚连接层字面量 ⇒ `CONTROL-ENV-BROKEN` 并退 rc=8（与"树红"的 7 分开），末了明写"本趟未放刀，判据未验证"。两向都跑：不导口令 ⇒ 读 ENV-BROKEN、产物里 `KILLED` 0 次、rc=8（`P702hook/20260923-060530`）；导口令 ⇒ `CONTROL-GREEN` + `total=2 killed=2` + md5 一致、rc=0（`P702hook/20260923-053219`）。**教训**：驱动自己承诺的判据类别要用一趟反向跑兑现，注释不是判据。
+
+
+**7 · 本段未覆盖面（下一位从这里接手）。** ① **四条成功腿只断"这一行落库的形状"，没断"发出去的那一次请求的参数"**——签名、模板、手机号编码、区域端点这些字段级契约仍零腿（与 §23.x 各家"字段没核"同一族）。② `dispatchToProvider` 有 4 个 return，S13–S15 只翻了其中三处判据的 `if` 侧；重试链（`RetryFailedMessages` 读 `sms_retryable_error_prefixes`）不在本电池的过滤器名单里，"成功判据误开 ⇒ 把不可重试的码写进重试队列"这一面没有格。③ **四条成功腿是在"退订检查报错放行"的前提下绿的**：`setupSmsServiceTestDB` 不建 `sms_unsubscribes` 表，整包日志里逐字有 `relation "sms_unsubscribes" does not exist` 与 `sql: database is closed` 两条 ⇒ `s.unsub().IsUnsubscribed()` 恒返回"未退订"。退订拦截本身另有 `sms_unsubscribed_send_test.go` 四条腿（含两格"没退订"停在"凭据缺失"、不进成功分支）⇒ 两套腿互不重叠，但**没有一条腿断"报错即放行"这件事本身**（改成"报错即拒发"时，本批四条腿会同红，那是巧合级保护，不是腿）。④ 池上界三格（P1–P3）判的是**句柄属性**，不等于"CI 不再 53300"：#73（把 53300 变成本地可复现的 100 连接容器 A/B）仍未做；且并行泳道那条"把 CI 的 postgres 抬到 400"的待办（R32⑨ 已订正为写在 `command:` 而非 `options:`）与本批的 32 是**两件事**——抬服务器名额≠给客户端加上界，反之亦然，两边都不许拿对方的绿当自己的依据。⑤ race 族只有 Q-off 一格；站点 B（`MaybeSendAwayReply`）与 cron tick 体仍无专属腿（§23.18 第 11 条④原样挂着），①②③⑤⑥⑦⑧⑨ 那八条也全部结转未动。⑥ 控制组"零 CONNECT"只覆盖四枚过滤器圈到的用例；`internal/service` 整包与其余 125 个含测试的包没走过这台代理，CI 的 core 片也不带它 ⇒ #63（解引用门接进 CI）仍未做，本常驻件同样**没有任何 CI 执行点**。⑦ 电池自身没有"跑全族"的门禁：`--only` 子集与 `--skip-race` 都能给出"逐格被杀"的终态字样（终态行会写明本趟范围，但要有人读）。⑧ D12 常红照旧挂在顶点（对方泳道的假阳，勿代改）。⑨ **未提交**（本轮订正计数：原文写"11 份改/增 + 1 份 `.gitignore` + 117 份产物"，第二类与第三类都已过期）：`git status --porcelain -uno` 本段写于 06:26 时现数 **18 份已跟踪改动**（lane 内 7 份 `.go` + 9 份 `scripts/mut_*.py` + `.gitignore` + 本文档 = 18，06:26 用 `git diff --name-only` 逐条数过；上一版这里的"17 = 6 份 `.go`"两处都少算了一份，少的是本段末那条 p702 修复与一份 `.go` 的归属，见 6-补 段的同一句订正）**→ 07:40 因 #63 再涨到 21 份**（`user-server-ci.yml`／`lint.yml`／`Makefile` 三份，分解见 6-补 段末条）与 **5 份新增文件**（常驻件 `scripts/mut_egress_pool_r30.py`、本轮共用的 `scripts/redact.py` 与 `scripts/battlog.py`、`user-server/internal/pkg/testutil/testdb_pool_test.go`、`user-server/internal/service/sms_success_test.go）**→ 07:40 为 7 份**（+#63 的 `scripts/check-ci-gate-paths.py` 与 `.test.sh`），外加 **564 份逐格取证产物**（10 个轮次、33 个趟次目录；其中 22 份目录自带判定行，余下 11 份"有产物无判读"的归属在 6-补 段逐条写明，其同名电池的新趟均已带判定行）**→ 07:47 终数为 572 份／11 轮次／37 趟次目录，22 份带判定行、15 份不带的归属见 6-补 段末条**，`gitleaks detect --no-git` 对整棵 `logs/` 读 `no leaks found`）。三类全部未推，未推字节对 CI 隐形，只有影子克隆门看得见；且第 1-补 段的可找回性是靠 `.gitignore` 例外给的，**这份例外不入库则产物依旧在库外**（[[project-audit-backlog-2026-09]]）。⑩ **上一版这里写着"其余 7 份电池的落点还没修完"，本轮整个结掉**（读数与教训见上一段"6-补"）：10 份常驻电池的逐格产物现在全部落 `docs/superpowers/specs/ledger/logs/<轮次>/<趟次戳>/`，判定行随产物同地（`00-run.log`），且**每份都在改完写路径之后复跑过**（迁移而不复跑＝交付一份没验过的常驻件）。`tempfile.mkdtemp`/`Path("/tmp")` 现在只承载**私有作业目录与影子克隆**（那是工作副本不是证据，留在树外是对的）。两处仍然找不回的东西照实记：R28 的 `/tmp/r28_seam_battery_*` 那一趟产物已随重启蒸发（同日三趟复跑在树里，取的是"判 30 格全杀"这一版，见 6-补 段），`/tmp/r44_measure/`（第四十四轮普查 84 项）仍在库外——它属"普查快照"而非电池产物，结转给下一位按同一写法迁进 `logs/` 的对应轮次。
+
+### 23.20 批M-11 #63：把解引用门接进 CI，代价是先得让"接 CI 这件事"本身有一道门（2026-09-23）
+
+**1 · 作业本体。** `scripts/check-test-nil-deref.py` 从"只在 `make audit`（CI 从不执行它）"变成
+`user-server-ci.yml` 的独立作业 `test-nil-deref`（该文件作业数 12 → 13，YAML 解析现测），`run: python3 scripts/check-test-nil-deref.py`，
+`timeout-minutes: 5`。**为什么不是 `static-gates` 的第 9 个步骤**：本文件 A3 注释记的就是
+"同 job 前序一步红 ⇒ 后续步骤全成 skipped"，被藏起来的门与坏掉的门长得一样；作业之间无 `needs:`
+（现测：`jobs with needs: []`），所以独立作业既不被遮挡也不遮挡别人。门耗时本机实测 **1.2s**（纯正则，无 DB、无网络、不编译）。
+
+**2 · 抬 pin 的时候被自家门拦下，这一拦正是门有用的证据。** 新作业先照抄本文件其余作业的
+`actions/checkout@v4` ⇒ `check-action-runtime.py` 当场红：
+`user-server-ci.yml: actions/checkout@v4 实有 13 > 上界 12`。上界 12 是 R47 抬干净侧后留下的豁免账本
+（理由"并行泳道持有该文件未提交改动"），账本只许降不许升 ⇒ 正解不是放宽账本，而是新作业用
+`actions/checkout@v7`（仓内已有 21 处 v7）与 `actions/setup-python@v7`（与 `seam-guard.yml` 同 pin）。
+改后两向读数：门 `node20/node16 命中 30 处：未豁免 0，豁免内 30` ⇒ rc=0，本文件 v4 站点回到 12。
+
+**3 · 反向格照做（§23.16 第 5 条欠的那笔），但它证的是形状不是 GitHub 的求值器。**
+`cp` 备份后从 `user-server-ci.yml` 的两个 events 里各摘掉 deref 门的脚本行与基线行（共 4 行），
+现算的门立刻红且点名到位：
+
+```
+user-server-ci.yml 的 push.paths 缺 `scripts/check-test-nil-deref.py`（该路径被作业 test-nil-deref 的步骤实际执行 ⇒ 改它不会重跑这道门）
+user-server-ci.yml 的 pull_request.paths 缺 `scripts/test-nil-deref.baseline`（…）      # 共 4 条
+```
+
+`cp` 还原后 md5 与放刀前相同，复跑 rc=0。产物：
+`docs/superpowers/specs/ledger/logs/CIwiring/20260923-073421/{00-make-audit.log,10-drop-deref-paths.log}`。
+**边界要写死**：GitHub 对 `on.push.paths` 的求值发生在服务端，本地任何门都只能证"这些行还在、
+且与作业实际执行的脚本对得上"。"改基线那一行确实会拉起这个作业"这一句，要等本批推上去之后
+**第一个只碰这两个文件的提交**跑出 run 才算兑现（交接给 #78 之后的复验，别提前记账）。
+
+**4 · 为了让下一次不重犯，新做了一道门：`scripts/check-ci-gate-paths.py`。** 判据：逐份工作流扫出
+"步骤里真跑了 `scripts/**.py|sh`"的站点 ⇒ 该门脚本路径 **加上从门源码里现抓的判据文件**
+（字面量 `*.baseline` / `*.registry`，且磁盘上真存在）必须逐条出现在 `on.push.paths` 与
+`on.pull_request.paths` 里；该事件整体没有 `paths:` 过滤则判为满足，但必须打印"无 paths 过滤⇒每次触发"，
+不许静默通过。派生而不是手抄（[[project-gate-scope-blind-spots]] ㉗：判据依赖手抄表时最先失效的是表本身）。
+现值：`工作流 15 份 · 门站点 27 处 · 派生判据文件 6 份 · 输入面 md 引用 19 处（不要求进 paths）· paths-ignore 站点 0`。
+
+**5 · 这道门上线第一跑就抓到四处同族存量缺口，一并补掉。** 补 deref 之前它先红在
+`static-gates` 另外三个门上：`scripts/check-architecture.sh`、`scripts/check-date-bucket-tz.sh`、
+`scripts/check-unwired-assets.sh` 与 `scripts/date-bucket-tz.baseline` 全都不在
+`user-server-ci.yml` 的触发面里（＝改了架构门的判据或日期门的基线，CI 根本不重跑那道门）。
+两行改四行（push/pull_request 各一份），改后门绿。**为什么 `docs/**` 不加**：`paths` 是作业级的
+总闸门，加一行 `docs/**` 会让每次文档提交拉起这条 13 作业链（含两个 `-race` 作业，单跑 450–880s），
+所以门把这类"输入在业务树/文档里"的引用打印成"不要求"而非静默放过——
+残留洞因此是**明写的**：`check-unwired-assets.sh` 读 `docs/architecture/AI_CORE_FEATURE_INVENTORY.md`，
+改那份台账不重跑这道门。正解是把它挪到一个只被 `docs/**` 触发的廉价作业，属下一位的活，不在本批（只修被报告的入口）。
+
+**6 · 注册与自洽（全部真跑，跑在最终字节上）。**
+- `Makefile` 的 `audit` 静态链里排在 `check-action-runtime.py` 之后（工作流形状门挨在一起），
+  `make audit` 整链 ⇒ **rc=0、`✅ 静态审计通过`、链内 12 个 `──` 门块**（`10-drop` 同一目录的 `00-make-audit.log`）。**上一版这里写着"14 个"，是数错了口径**：那是不锚行首的 `grep -c '──'`，多出来的两行是 `check-md-links-offline.py` 自己打的 `──── 扫描 162 个 md（CI 口径：只认 git 索引）────` 与其断链行——锚行首 `grep -c '^── '` 与直接数 `Makefile` 的 `audit:` 目标里的 `@echo "──` 两个独立口径都读 **12**（[[feedback-forensic-harness-hygiene]] 的"计数要锚行首＋形状扫描"在这一段自己头上又兑现一次）；
+- `lint.yml` 的 `workflow-refs` 作业加两步：门本体 `python3 scripts/check-ci-gate-paths.py --repo .`
+  与用例 `bash scripts/check-ci-gate-paths.test.sh`（该作业无 `paths:` 过滤 ⇒ 每次 push 都跑，
+  所以它守的是别的作业的触发面）；
+- 用例 `scripts/check-ci-gate-paths.test.sh` 五格全过：G1 缺 paths 必红（红因同时点名门脚本与**派生**基线）、
+  G2 补齐必绿、G2b 无过滤必须明说、G3 真仓库绿且自证 `scanned=15` 与独立复算 `ls|grep -c` 相同＋派生集非空、
+  G4 工作流目录不存在 ⇒ rc=2（没跑过 ≠ 绿）。G3 的抽数一开始恒空——BSD sed 不认 `\+`，
+  改用 `grep -oE`；这是"计数 helper 自己先把数读丢"的又一例（[[feedback-forensic-harness-hygiene]]）；
+- 同批受影响的门全部复跑：`check_workflow_refs.py` rc=0（15 份）、`check-action-runtime.py` rc=0、
+  `check-action-runtime.test.sh` `PASS=43 FAIL=0`、`check-ci-step-coverage.test.sh` `PASS=33 FAIL=0`；
+- 产物落树后 `gitleaks detect --no-git --source docs/superpowers/specs/ledger/logs` ⇒ `no leaks found`
+  （scanned ~3.63 MB），`.gitignore` 白名单从 10 轮成对扩到 11 轮（新增 `CIwiring/` 两行），
+  新目录实测 `git check-ignore` 退非 0 ⇒ 产物可追踪。
+
+**6-补 · 收口复跑：把上面每一条在"最后一次编辑之后"的字节上再读一遍，并当场抓到本段自己的一处计数假数。**
+第 6 段那份 `00-make-audit.log` 记的是 **07:34** 的字节，而它写完之后本批还动了文档与取证目录 ⇒
+按 [[feedback-delivery-accounting-layers]] 第 7 条（"数要在最后一次编辑之后数"）与
+[[feedback-mutation-battery-hygiene]] 的"取证基座一动就重跑便宜格"，整链在**终趟 07:47** 的字节上重跑，
+产物 `docs/superpowers/specs/ledger/logs/CIwiring/20260923-074759/{00-make-audit-final.log,20-gitleaks-final.log}`
+（两档 `scrub()` 前后**逐行比对：0 行改动**，即门输出里没有任何"标签+长令牌"形状）。
+**同一判据在本段里连留了三趟（`074135`/`074449`/`074759`），这是本段自己的排序失误，不是设计**：
+每抄一次计数就为确认字节再跑一趟门，而那一趟又落两档产物 ⇒ 计数再漂一次，如此三轮（566/34 → 568/35 →
+570/36 → **572/37**，逐项见 §23.19 6-补 段末条）。三趟都没删、也没被覆写
+（[[feedback-mutation-battery-hygiene]]"复跑不许覆盖上一轮"），**逐项读数完全相同**，下表取终趟；
+教训写成可执行的一条：**收口顺序＝①做完所有会产物的动作（跑门/跑电池/落档）②只留最后一趟作终趟
+③然后一次抄数抄到底**——"跑一趟、抄一次"交替做，等于用无限趟去追一个自己每轮都推远的数。
+
+| 复跑项 | 07:34（第 6 段原记） | 终趟 07:47 的最终字节 | 判定 |
+| --- | --- | --- | --- |
+| `make audit` 整链 | rc=0 | **rc=0、`✅ 静态审计通过`、`grep -c '^── '` = 12 块** | 一致 |
+| `check-ci-gate-paths.py` | 绿 | `工作流 15 份 · 门站点 27 处 · 派生判据文件 6 份 · 输入面 md 引用 19 处 · paths-ignore 0`，rc=0 | 一致 |
+| `check-ci-gate-paths.test.sh`（新门自己的五格） | 全部通过 | **rc=0、`全部通过`、`✓` 计 12 处**（G1/G2/G2b/G3/G4 五格含 12 条断言） | 一致 |
+| `check_workflow_refs.py` | rc=0（15 份） | rc=0 | 一致 |
+| `check-action-runtime.py` | rc=0 | `命中 30 处：未豁免 0，豁免内 30`，rc=0 | 一致 |
+| `check-action-runtime.test.sh` | PASS=43 | **PASS=43 FAIL=0 rc=0** | 一致 |
+| `check-ci-step-coverage.test.sh` | PASS=33 | **PASS=33 FAIL=0 rc=0** | 一致 |
+| `gitleaks`（整棵 `logs/`） | `no leaks found` ~3.63 MB | `no leaks found` **scanned ~3.70 MB**、rc=0 | 一致（增 0.07 MB＝#63 落的六档产物） |
+
+`rc=` 的两处口径事故顺带记一笔（都是本段取证过程自己踩的）：① `${PIPESTATUS[0]}` 写在 `;` 之后的
+`echo` 里，在 **zsh** 下取不到（zsh 的数组叫 `pipestatus`、且下标从 1 起），于是第一版 `20-gitleaks-final.log`
+末行是 `gitleaks_rc=`（空串）——**空串和 0 在扫读者眼里是一回事**，故改为"先 `cmd > file` 再 `rc=$?`"重落一档；
+② 同一条判据在 `bash -c` 与交互 zsh 下行为不同 ⇒ 落档的取证命令一律**不用管道取码**。
+
+**抓到的一处假数在本段第 1–2 行里**：原写"链内 **14** 个 `──` 门块"，真值 **12**。差的两行不是门，
+是 `check-md-links-offline.py` 自己打印的 `──── 扫描 162 个 md（CI 口径：只认 git 索引）────` 与它的断链行——
+`grep -c '──'` 不锚行首就会把这两行一并计入（且它用的是四个 `─`，与门块的两个不同形）。
+两个独立口径现算都读 12：锚行首 `grep -c '^── '`，以及直接数 `Makefile` 的 `audit:` 目标里
+`@echo "──` 的出现次数（`awk` 限定在 `audit:` 与下一个目标之间）。这正是
+[[feedback-forensic-harness-hygiene]] 那条"形状扫描须锚行首"在本轮**第二次**兑现（第一次是 G3 抽数恒空）；
+差别在于第一次是**新写的 helper** 读丢，这一次是**已经写进文档的读数**读丢 ⇒ 结论：
+**抄进文里的计数，与抄进文里的 file:line 同罪**，收口复跑要连它们一起重算，不能只重跑门禁本身。
+
+**7 · 本段未覆盖面（下一位从这里接手）。** ① 第 3 段那句"服务端求值"的兑现要在推送后读 run；
+② 门只认 `*.baseline` / `*.registry` 两种后缀的字面量——别的后缀（`*.allowlist`、`*.txt`）或变量拼名会漏派生，
+现值 6 份是从码上现抓的，扩后缀要先数真仓有几处；③ `paths-ignore` 不参与判定（现值 0 处，若哪天有人用它，
+本门会打印数额但不会判"被 ignore 的目录"）；④ 门站点判定依赖步骤 `run` 里出现 repo 相对路径字面量，
+`working-directory` + 相对文件名（`python3 check-x.py`）这种写法会漏——现扫 27 处站点里没有这种形状，
+下一条加门时要留意。

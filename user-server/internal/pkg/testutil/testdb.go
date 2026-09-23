@@ -114,6 +114,36 @@ func resolveTestDBEndpoint() (string, string, error) {
 	return host, cands[0], firstErr
 }
 
+// testDBMaxOpenConns／testDBMaxIdleConns 给本辅助开出的每个句柄上连接池上界。
+//
+// 为什么必须有上界：database/sql 的 MaxOpenConns 默认是 **不限**，于是一次用例里同时
+// 发出多少条查询就向服务器要多少条连接。实测（本机 8232 容器、`-race -p 1`、只跑
+// internal/service/async_db_handle_probe_test.go 的三枚 300 轮探针，采样
+// `count(*) from pg_stat_activity where datname like 'user_db_test%'`，每格采样前基线 0～1 条）：
+//   - 不上界（HEAD 字节，两格复跑）：峰值 40 与 71 条；
+//   - 上界 32：峰值 2 与 22 条。三枚探针在两格下都照旧 PASS，耗时同量级（上界没有把
+//     扇出排队放大到看得出来的程度）。
+//
+// 为什么本地从来撞不上、CI 撞得上：开发容器把 max_connections 调成 500
+// （docker-compose.yml:69），而 CI 的 services.postgres 只写了 health-cmd，整个 workflow
+// 里 "max_connections" 出现 0 次 ⇒ 用镜像默认 100。于是 CI 里整包跑时探针的扇出先把连接
+// 名额吃光，下一枚探针建句柄即红：`FATAL: sorry, too many clients already (SQLSTATE 53300)`
+// —— CI run 2026-09-22T09:57Z 的红因正落在 async_db_handle_probe_test.go:76（第三枚探针的
+// NewTestDB 调用行）。这条"本地与 CI 的 PG 参数不同源"与 8202／8232 端口漂移是同一族
+// （见 testDBPortCandidates 注释）：本地绿在这类形状上不构成依据。
+//
+// 32 的取法：真正封顶的是 MaxOpenConns（只留 MaxIdleConns=8、上界拿掉时峰值仍是 66），
+// 数值取在 CI 名额 100 的 1/3 —— 同进程里先后存世的几个句柄要各自留位置（探针是
+// fire-and-forget，上一条用例的协程要到下一条用例期间才归还连接）。它同时高于 pkg/db 的
+// 缺省兜底 20（internal/pkg/db/db.go:74），免得"只有测试里才有的并发"被一个比生产还紧的
+// 上界卡出生产上看不到的排队形状；生产 config 的默认值是另一个数 200
+// （internal/config/server.go:80），那是线上单实例的池，不参与这里的取值论证。
+// MaxIdleConns=8 只为少建几次后端，不承担上界职责。
+const (
+	testDBMaxOpenConns = 32
+	testDBMaxIdleConns = 8
+)
+
 // NewTestDB 创建并初始化（或复用）当前进程的独立 PostgreSQL 测试数据库。
 //
 // 行为：
@@ -174,6 +204,8 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	}
 
 	if sqlDB, dbErr := database.DB(); dbErr == nil {
+		sqlDB.SetMaxOpenConns(testDBMaxOpenConns)
+		sqlDB.SetMaxIdleConns(testDBMaxIdleConns)
 		if _, execErr := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS vector"); execErr != nil {
 			t.Logf("启用 pgvector 扩展提示（需 postgres 镜像含 vector 包）: %v", execErr)
 		}

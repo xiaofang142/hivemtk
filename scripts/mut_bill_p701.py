@@ -116,9 +116,19 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
+# 台账里的读数没有产物可对。目录带趟次戳、不复用；`.gitignore` 需为本轮次开例外。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/P701" / time.strftime("%Y%m%d-%H%M%S")
+
+
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag, out):
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    (LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log")).write_text(scrub(out), encoding="utf-8")
 US = "user-server"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -667,6 +677,8 @@ def main() -> int:
     ap.add_argument("--cells", default="", help="只跑这些代号（逗号分隔）")
     ap.add_argument("--check", action="store_true", help="只校验锚点命中数，不跑用例")
     args = ap.parse_args()
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
 
     cells = CELLS
     if args.cells:
@@ -678,7 +690,7 @@ def main() -> int:
 
     tmp = Path(args.clone or tempfile.mkdtemp(prefix="p701mut-"))
     tmp.mkdir(parents=True, exist_ok=True)
-    print(f"私有作业目录：{tmp}")
+    print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
     clone = prepare(tmp)
 
     def sweep() -> None:
@@ -720,6 +732,7 @@ def main() -> int:
     for name in sorted({c[3] for c in cells}):
         if name == "gate":
             rc, out = gate_run(clone)
+            dump("00-control-gate", out)
             ok = rc == 0
             controls["gate"] = 0
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
@@ -730,6 +743,7 @@ def main() -> int:
                                  "后面所有 G* 格的红/绿都不可信")
             continue
         rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
+        dump(f"00-control-{name}", out)
         bad = rc != 0 or skipped or killed
         controls[name] = ran
         control_top[name] = top_pass
@@ -755,6 +769,7 @@ def main() -> int:
 
         if kind == "gate":
             rc, out = gate_run(clone)
+            dump(code, out)
             if rc == 0:
                 v = "SURVIVED"
             elif expect in out:
@@ -767,11 +782,13 @@ def main() -> int:
             # 编译期锁的格子：判据本身就是"编不过"，所以 BUILD-BROKEN 是**期望结论**而不是未杀。
             # 但只认 BUILD-BROKEN 会假绿（任何语法错都算杀掉），因此 expect 写成必须点名的编译错串。
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
+            dump(code, out)
             v = classify(rc, killed, ran, skipped, out, controls[runner])
             if v == "BUILD-BROKEN" and expect in out:
                 v, killed = "KILLED", [expect]
         else:
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
+            dump(code, out)
             v = classify(rc, killed, ran, skipped, out, controls[runner], expect)
             # 头注里承诺过的第二条断言：**PASS + FAIL == 控制组数**。
             # 只看"点名那条红了"会放过一种真实坏法 —— 注码让别的用例 panic 中止，

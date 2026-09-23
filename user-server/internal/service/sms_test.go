@@ -2,6 +2,11 @@ package service
 
 import (
 	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,8 +16,6 @@ import (
 	"hivemtk-user/internal/repository"
 
 	"hivemtk-user/internal/pkg/testutil"
-
-	"strings"
 
 	"gorm.io/gorm"
 )
@@ -131,12 +134,50 @@ func TestSmsService_SaveConfig(t *testing.T) {
 	}
 }
 
-// TestSmsService_SendSms 测试发送短信
-// 注: 真实阿里云 API 会因测试凭据失败. 这里验证: 数据库中已创建记录, 状态为 sending/failed
+// newSmsVendorStub 起一个"官方网关的回包形状"的本地服务，并把 provider 那一条腿的接口域指过去。
+//
+// 为什么必须有它：修复前三家网关的 URL 写死在 sendAliyun/sendTencent/sendHuawei 里，
+// 于是"发送失败如何落账"这条判据的成败取决于**官方站点是否可达、回什么**：
+//   - 有外网时官方回 `InvalidAccessKeyId.NotFound`，ErrorMsg 由官方文案填上 ⇒ 绿；
+//   - 出站被拦（本机把 HTTPS_PROXY 指到一次性 CONNECT 记录代理做的取证格）时
+//     `client.PostForm` 三次重试全失败，`resp == nil` 那条 return 出来的 errCode/errMsg 都是空串
+//     ⇒ 红（`sms_test.go:212 Expected ErrorMsg to be set`），同一条用例单跑 12 次 CONNECT 里
+//     本用例占 3 次（`/tmp/r44_measure/sms_proxy.log`、`/tmp/r44_measure/rec_sms.log`）。
+//
+// 三家都要有腿，不只 aliyun：注入点是一份产码三个字段，只装其中一条腿时另外两个字段
+// 被改回常量（或写错赋值对象）不会有任何用例红 —— 普查里看不到它们，是因为今天没有
+// 任何测试把 DefaultProvider 设成 tencent／huawei，不是因为它们打不出去。
+//
+// 夹具顺手把 ErrorMsg 清空：修复前它带着 "发送失败"，于是任何"没走到落账那一步"的早退
+// （例如夜间禁发窗口开着）也能让"ErrorMsg 非空"这条断言自证为绿。
+func newSmsVendorStub(t *testing.T, provider, respBody string) (svc *smsService, database *gorm.DB) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, respBody)
+	}))
+	t.Cleanup(srv.Close)
+	database = setupSmsServiceTestDB(t)
+	s, ok := NewSmsService(newTestSmsRepository(database)).(*smsService)
+	if !ok {
+		t.Fatalf("NewSmsService 返回的类型不是 *smsService：%T", s)
+	}
+	switch provider {
+	case "aliyun":
+		s.aliyunAPIURL = srv.URL + "/"
+	case "tencent":
+		s.tencentAPIURL = srv.URL + "/"
+	case "huawei":
+		s.huaweiAPIURL = srv.URL + "/"
+	default:
+		t.Fatalf("newSmsVendorStub 不认的 provider=%q（三家之外没有可注入的腿）", provider)
+	}
+	return s, database
+}
+
+// TestSmsService_SendSms 首次发送：官方回业务错 ⇒ 台账落一条 failed 且原因来自官方。
 func TestSmsService_SendSms(t *testing.T) {
-	database := setupSmsServiceTestDB(t)
-	repo := newTestSmsRepository(database)
-	service := NewSmsService(repo)
+	service, database := newSmsVendorStub(t, "aliyun", `{"Code":"isv.SMS_SIGNATURE_ILLEGAL","Message":"签名不符合规范"}`)
 
 	database.Create(&model.SmsConfig{
 		DefaultProvider: "aliyun",
@@ -152,28 +193,121 @@ func TestSmsService_SendSms(t *testing.T) {
 
 	req := &dto.SmsSendRequest{
 		Phone:   "13812345678",
-		Content: "【测试签名】您的验证码是 123456",
+		Content: "【测试签名】您的验证码是 12356",
 	}
 
 	err := service.SendSms(context.Background(), req)
 	if err == nil {
-		t.Log("SendSms succeeded (unexpected for test credentials)")
-	} else {
-		t.Logf("SendSms expectedly failed with test credentials: %v", err)
+		t.Fatal("官方回业务错时 SendSms 应上抛，之前只是 t.Log 一下就放行")
 	}
 
-	var count int64
-	database.Model(&model.SmsRecord{}).Where("phone = ?", req.Phone).Count(&count)
-	if count != 1 {
-		t.Errorf("Expected 1 SMS record, got %d", count)
+	var rec model.SmsRecord
+	if firstErr := database.Where("phone = ?", req.Phone).First(&rec).Error; firstErr != nil {
+		t.Fatalf("发送后台账应有记录: %v", firstErr)
+	}
+	if rec.Status != "failed" {
+		t.Errorf("官方回业务错后状态 = %q, want failed", rec.Status)
+	}
+	if rec.ErrorCode != "isv.SMS_SIGNATURE_ILLEGAL" || !strings.Contains(rec.ErrorMsg, "签名不符合规范") {
+		t.Errorf("失败原因没落账：code=%q msg=%q", rec.ErrorCode, rec.ErrorMsg)
 	}
 }
 
-// TestSmsService_ResendSms 测试重发短信
+// TestSmsService_SendSms_TencentOfficialError 腾讯腿：签名串按官方形状算，请求发往注入的域，
+// 官方回的业务错误码原样落账。
+//
+// 这条腿钉的是 sms.go 里 `apiURL := s.tencentAPIURL` 那一句。把该字段改回写死的官方域，
+// 本用例就向 sms.tencentcloudapi.com 发一次真实请求，桩里那句中文原因取不到 ⇒ 最后一条断言红
+// （常驻电池 `scripts/mut_egress_pool_r30.py` 的 S2 格；读数见 docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md §23.19）。
+func TestSmsService_SendSms_TencentOfficialError(t *testing.T) {
+	service, database := newSmsVendorStub(t, "tencent",
+		`{"Response":{"Error":{"Code":"FailedSend.OperationLimitReached","Message":"到达日发送上限"}}}`)
+
+	database.Create(&model.SmsConfig{
+		DefaultProvider: "tencent",
+		RateLimit:       100,
+		DailyLimit:      10000,
+		RetryTimes:      3,
+	})
+	database.Create(&model.SmsTencentConfig{
+		SecretID:  "test-secret-id",
+		SecretKey: "test-secret-key",
+		AppID:     "1234567",
+		SignName:  "测试签名",
+	})
+
+	req := &dto.SmsSendRequest{
+		Phone:   "13812345681",
+		Content: "您的验证码是 12357",
+	}
+
+	if err := service.SendSms(context.Background(), req); err == nil {
+		t.Fatal("官方回业务错时 SendSms 应上抛")
+	}
+
+	var rec model.SmsRecord
+	if firstErr := database.Where("phone = ?", req.Phone).First(&rec).Error; firstErr != nil {
+		t.Fatalf("发送后台账应有记录: %v", firstErr)
+	}
+	if rec.Provider != "tencent" {
+		t.Errorf("台账记录的 provider = %q, want tencent（说明没走 sendTencent 那条腿）", rec.Provider)
+	}
+	if rec.Status != "failed" {
+		t.Errorf("官方回业务错后状态 = %q, want failed", rec.Status)
+	}
+	if rec.ErrorCode != "FailedSend.OperationLimitReached" || !strings.Contains(rec.ErrorMsg, "到达日发送上限") {
+		t.Errorf("失败原因没落账：code=%q msg=%q", rec.ErrorCode, rec.ErrorMsg)
+	}
+}
+
+// TestSmsService_SendSms_HuaweiOfficialError 华为腿：Basic + WSSE 头照常签，请求发往注入的域。
+//
+// 华为的回包键是小写的 code／message（与另两家的首字母大写不同形），所以这条腿同时钉住
+// "解码形状没串到别家"这一件事：把 sms.go 里 `apiURL := s.huaweiAPIURL` 改回写死的官方域，
+// 本用例的最后一条断言红（同一电池的 S3 格）。
+func TestSmsService_SendSms_HuaweiOfficialError(t *testing.T) {
+	service, database := newSmsVendorStub(t, "huawei", `{"code":"000007","message":"appKey不存在"}`)
+
+	database.Create(&model.SmsConfig{
+		DefaultProvider: "huawei",
+		RateLimit:       100,
+		DailyLimit:      10000,
+		RetryTimes:      3,
+	})
+	database.Create(&model.SmsHuaweiConfig{
+		AppKey:    "test-app-key",
+		AppSecret: "test-app-secret",
+		Sender:    "test-sender",
+		Signature: "test-signature",
+	})
+
+	req := &dto.SmsSendRequest{
+		Phone:   "13812345682",
+		Content: "您的验证码是 12358",
+	}
+
+	if err := service.SendSms(context.Background(), req); err == nil {
+		t.Fatal("官方回业务错时 SendSms 应上抛")
+	}
+
+	var rec model.SmsRecord
+	if firstErr := database.Where("phone = ?", req.Phone).First(&rec).Error; firstErr != nil {
+		t.Fatalf("发送后台账应有记录: %v", firstErr)
+	}
+	if rec.Provider != "huawei" {
+		t.Errorf("台账记录的 provider = %q, want huawei（说明没走 sendHuawei 那条腿）", rec.Provider)
+	}
+	if rec.Status != "failed" {
+		t.Errorf("官方回业务错后状态 = %q, want failed", rec.Status)
+	}
+	if rec.ErrorCode != "000007" || !strings.Contains(rec.ErrorMsg, "appKey不存在") {
+		t.Errorf("失败原因没落账：code=%q msg=%q", rec.ErrorCode, rec.ErrorMsg)
+	}
+}
+
+// TestSmsService_ResendSms 重发：官方回业务错 ⇒ 状态回到 failed、原因由官方给。
 func TestSmsService_ResendSms(t *testing.T) {
-	database := setupSmsServiceTestDB(t)
-	repo := newTestSmsRepository(database)
-	service := NewSmsService(repo)
+	service, database := newSmsVendorStub(t, "aliyun", `{"Code":"isv.ACCOUNT_NOT_EXISTS","Message":"账号不存在"}`)
 
 	smsConfig := &model.SmsConfig{
 		DefaultProvider: "aliyun",
@@ -196,31 +330,132 @@ func TestSmsService_ResendSms(t *testing.T) {
 		Provider:  "aliyun",
 		Status:    "failed",
 		ErrorCode: "FAILED",
-		ErrorMsg:  "发送失败",
+		ErrorMsg:  "",
 	}
 	database.Create(record)
 
 	err := service.ResendSms(context.Background(), record.ID)
-	if err != nil {
-
-		var updatedRecord model.SmsRecord
-		database.First(&updatedRecord, record.ID)
-		if updatedRecord.Status != "failed" {
-			t.Errorf("Expected status 'failed' after API error, got %s", updatedRecord.Status)
-		}
-		if updatedRecord.ErrorMsg == "" {
-			t.Error("Expected ErrorMsg to be set")
-		}
-		return
+	if err == nil {
+		t.Fatal("官方回业务错时 ResendSms 应上抛")
 	}
 
 	var updatedRecord model.SmsRecord
 	database.First(&updatedRecord, record.ID)
-	if updatedRecord.Status != "sent" {
-		t.Errorf("Expected status 'sent', got %s", updatedRecord.Status)
+	if updatedRecord.Status != "failed" {
+		t.Errorf("Expected status 'failed' after API error, got %s", updatedRecord.Status)
 	}
-	if updatedRecord.SendTime == nil {
-		t.Error("Expected SendTime to be set")
+	if updatedRecord.ErrorCode != "isv.ACCOUNT_NOT_EXISTS" || !strings.Contains(updatedRecord.ErrorMsg, "账号不存在") {
+		t.Errorf("失败原因没落账：code=%q msg=%q", updatedRecord.ErrorCode, updatedRecord.ErrorMsg)
+	}
+}
+
+// TestSmsService_ResendSms_TransportFailureRecordsReason 传输层失败（连不上网关）也要把原因落到台账上。
+//
+// 这条腿钉的是 sendAliyun 里 `resp == nil` 那个 return：它把 errCode/errMsg 交回空串，
+// 于是 ResendSms 写回的是"状态 failed、原因一片空白"。修复前该形状只能靠"官方站点恰好不可达"
+// 复现（本机把 HTTPS_PROXY 指向一次性 CONNECT 记录代理那格实测：`sms_test.go:212 Expected ErrorMsg
+// to be set` 而 Status 那条照绿），所以它既是一条用例的假红源，也是生产台账的观测盲区。
+func TestSmsService_ResendSms_TransportFailureRecordsReason(t *testing.T) {
+	// 只 listen 不开 accept 循环的地址：连接立刻被拒，等价于"网关连不上"而不需要外网。
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	service, database := newSmsVendorStub(t, "aliyun", "")
+	service.aliyunAPIURL = "http://" + addr + "/"
+
+	database.Create(&model.SmsConfig{DefaultProvider: "aliyun", RateLimit: 100, DailyLimit: 10000, RetryTimes: 3})
+	database.Create(&model.SmsAliyunConfig{
+		AccessKeyID: "test-access-key-id", AccessKeySecret: "test-access-key-secret", SignName: "测试签名",
+	})
+	record := &model.SmsRecord{
+		Phone: "13812345679", Content: "【测试签名】验证码", Provider: "aliyun", Status: "failed",
+	}
+	database.Create(record)
+
+	if rerr := service.ResendSms(context.Background(), record.ID); rerr == nil {
+		t.Fatal("连不上网关时 ResendSms 应上抛")
+	}
+
+	var updated model.SmsRecord
+	database.First(&updated, record.ID)
+	if updated.Status != "failed" {
+		t.Errorf("状态 = %q, want failed", updated.Status)
+	}
+	if updated.ErrorMsg == "" {
+		t.Error("传输层失败也必须留下原因：台账上\"failed 但原因空白\"等于没记")
+	}
+	if updated.ErrorCode == "" {
+		t.Error("传输层失败也要留下错误码（供重试归类与看板聚合）")
+	}
+}
+
+// TestSmsService_SendSms_UnknownProviderRecordsReason 配错供应商时，台账同样不能是"failed 但原因空白"。
+//
+// dispatchToProvider 的 default 分支是补码逻辑的第 4 个消费者（另三个是三家的传输层/解析层失败）。
+// 三家都有腿可打，default 没有：它唯一的入口是 `SmsConfig.DefaultProvider` 落一个词表外的串。
+// 少这条腿时，"把 default 改成立刻 return（绕过后面的补码）"在任何现有用例下都绿。
+func TestSmsService_SendSms_UnknownProviderRecordsReason(t *testing.T) {
+	database := setupSmsServiceTestDB(t)
+	service, ok := NewSmsService(newTestSmsRepository(database)).(*smsService)
+	if !ok {
+		t.Fatalf("NewSmsService 返回的类型不是 *smsService：%T", service)
+	}
+
+	database.Create(&model.SmsConfig{
+		DefaultProvider: "not_a_vendor",
+		RateLimit:       100,
+		DailyLimit:      10000,
+		RetryTimes:      3,
+	})
+
+	req := &dto.SmsSendRequest{Phone: "13812345684", Content: "【测试签名】验证码"}
+	if err := service.SendSms(context.Background(), req); err == nil {
+		t.Fatal("provider 不在词表里时 SendSms 应上抛")
+	}
+
+	var rec model.SmsRecord
+	if firstErr := database.Where("phone = ?", req.Phone).First(&rec).Error; firstErr != nil {
+		t.Fatalf("拦截前已建的台账行应仍在: %v", firstErr)
+	}
+	if rec.Status != "failed" {
+		t.Errorf("状态 = %q, want failed", rec.Status)
+	}
+	// 字面量而不是 smsErrCodeUnspecified：与常量同源时，"占位码被改成空串"这一格永远绿。
+	if rec.ErrorCode != "unspecified_error" {
+		t.Errorf("占位错误码 = %q, want unspecified_error", rec.ErrorCode)
+	}
+	if !strings.Contains(rec.ErrorMsg, "unknown sms provider") {
+		t.Errorf("失败原因没落账：msg=%q", rec.ErrorMsg)
+	}
+}
+
+// TestNewSmsServiceDefaultsToOfficialGatewayURLs 钉住注入点的生产那一半：
+// NewSmsService 建出来的实例必须指向三家官方域。
+//
+// 为什么单独立一条腿：其余 SMS 腿都经 newSmsVendorStub 把字段改写成 httptest 地址，
+// 于是"构造函数忘了填那三行""把 tencent 的默认值填成 huawei 的域"这类失效，在现有腿下全都看不出来。
+//
+// 期望值写官方域字面量而不是 smsAliyunAPIURL 等常量（同 testdb_pool_test.go 的口径）：
+// 与被测常量同源时，"常量值被改了"这一格永远绿。代价是改官方域时要两处同步——有意为之的一次对话。
+func TestNewSmsServiceDefaultsToOfficialGatewayURLs(t *testing.T) {
+	database := setupSmsServiceTestDB(t)
+	service, ok := NewSmsService(newTestSmsRepository(database)).(*smsService)
+	if !ok {
+		t.Fatalf("NewSmsService 返回的类型不是 *smsService：%T", service)
+	}
+
+	if got := service.aliyunAPIURL; got != "https://dysmsapi.aliyuncs.com/" {
+		t.Errorf("aliyun 默认接口域 = %q, want https://dysmsapi.aliyuncs.com/", got)
+	}
+	if got := service.tencentAPIURL; got != "https://sms.tencentcloudapi.com/" {
+		t.Errorf("tencent 默认接口域 = %q, want https://sms.tencentcloudapi.com/", got)
+	}
+	if got := service.huaweiAPIURL; got != "https://smsapi.cn-north-4.boe-business.huaweicloud.com:443/sms/batchSendSms/v1" {
+		t.Errorf("huawei 默认接口域 = %q, want https://smsapi.cn-north-4.boe-business.huaweicloud.com:443/sms/batchSendSms/v1", got)
 	}
 }
 
@@ -369,12 +604,13 @@ func TestSmsService_DeleteDraft(t *testing.T) {
 	}
 }
 
-// TestSmsService_SendDraft 测试发送草稿
-// 注: 真实 API 会因测试凭据失败,这里只验证: 数据库创建了 sms_records 记录
+// TestSmsService_SendDraft 发草稿：官方回业务错 ⇒ 台账留一行 failed，且原因由官方给。
+//
+// 改前它写的是"注: 真实 API 会因测试凭据失败,这里只验证数据库创建了记录"，判据只有 `count == 1`：
+// 一句 t.Logf 把真实错误吃掉，于是这条用例的绿要依赖 dysmsapi.aliyuncs.com **恰好可达且恰好回错**
+// （整包出站普查实测它一个跑 3 次 CONNECT＝sendAliyun 的三次重试）。桩打上后次数＝0，且官方给的原因成为断言。
 func TestSmsService_SendDraft(t *testing.T) {
-	database := setupSmsServiceTestDB(t)
-	repo := newTestSmsRepository(database)
-	service := NewSmsService(repo)
+	service, database := newSmsVendorStub(t, "aliyun", `{"Code":"isv.SMS_SIGNATURE_ILLEGAL","Message":"签名不符合规范"}`)
 
 	database.Create(&model.SmsConfig{
 		DefaultProvider: "aliyun",
@@ -396,14 +632,25 @@ func TestSmsService_SendDraft(t *testing.T) {
 
 	phone := "13812345678"
 	err := service.SendDraft(context.Background(), draft.ID, phone)
-	if err != nil {
-		t.Logf("SendDraft expectedly failed with test credentials: %v", err)
+	if err == nil {
+		t.Fatal("官方回业务错时 SendDraft 应上抛")
 	}
 
 	var count int64
 	database.Model(&model.SmsRecord{}).Where("phone = ? AND content = ?", phone, draft.Content).Count(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 SMS record, got %d", count)
+	}
+
+	var rec model.SmsRecord
+	if firstErr := database.Where("phone = ?", phone).First(&rec).Error; firstErr != nil {
+		t.Fatalf("发送后台账应有记录: %v", firstErr)
+	}
+	if rec.Status != "failed" {
+		t.Errorf("官方回业务错后状态 = %q, want failed", rec.Status)
+	}
+	if rec.ErrorCode != "isv.SMS_SIGNATURE_ILLEGAL" || !strings.Contains(rec.ErrorMsg, "签名不符合规范") {
+		t.Errorf("失败原因没落账：code=%q msg=%q", rec.ErrorCode, rec.ErrorMsg)
 	}
 }
 

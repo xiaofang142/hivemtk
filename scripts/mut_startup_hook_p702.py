@@ -11,18 +11,42 @@
 那时"红"证的是别的钩子，这一格就是假杀。
 
 判据：killed == 2 且 alive == broken == 0，末了源文件 md5 与开头一致。
+取证落点：控制组与两刀的原始输出逐格写进 `docs/superpowers/specs/ledger/logs/P702hook/<趟次戳>/`。
+影子克隆里没有 `ROOT/.env` ⇒ 由调用方导出 `POSTGRES_TEST_PASSWORD`（否则控制组红是 ENV-BROKEN）。
+本脚本**就地注码** `internal/pkg/db/migrate.go`（用完每刀立刻还原并比 md5）⇒ 只在私有树里跑，
+绝不与他人共用一棵工作树；中途被 kill 会把注码留在树上，恢复方式是按 md5 认回基线字节。
 用法：python3 scripts/mut_startup_hook_p702.py   （须能连测试库）
 """
 import hashlib
 import os
+import re
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SERVER = os.path.join(ROOT, "user-server")
 SRC = os.path.join(SERVER, "internal/pkg/db/migrate.go")
+# 逐格原始输出落进仓库树（带趟次戳、不复用）：原先只随 stdout 走、由调用方重定向到 /tmp，
+# 重启即蒸发 ⇒ 台账里的读数没有产物可对。`.gitignore` 需为本轮次开例外。
+LOGDIR = Path(ROOT) / "docs/superpowers/specs/ledger/logs/P702hook" / time.strftime("%Y%m%d-%H%M%S")
 TEST = "TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally"
 DEFINE = "func postMigrateDropLegacyExternalOrderKey(db *gorm.DB) {"
+# 控制组红要先分"树的红"和"环境的红"：本电池连的是 TCP 测试库，影子克隆里没有 `.env`，
+# 不导出 POSTGRES_TEST_PASSWORD 时红因是 SASL 认证失败——那既不是判据没牙，也不是树红，
+# 把它报成"先修树"会把人支去改没坏的代码（实测：本轮反向趟就是这么被误判的）。
+ENV_SIGNS = ("failed SASL auth", "password authentication failed",
+             "failed to connect to", "connect: connection refused",
+             "too many clients", "dial tcp")
+
+
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag, out):
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    with open(LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log"), "w", encoding="utf-8") as fh:
+        fh.write(scrub(out))
+
 
 CASES = [
     ("nil 守卫短路", "if db == nil {", "if db == nil && false {"),
@@ -44,15 +68,21 @@ def md5(path: str) -> str:
 
 
 def main() -> int:
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
     env = dict(os.environ)
     envfile = os.path.join(ROOT, ".env")
-    with open(envfile, encoding="utf-8") as fh:
-        for line in fh:
-            if line.startswith("POSTGRES_PASSWORD="):
-                env["POSTGRES_TEST_PASSWORD"] = line.split("=", 1)[1].strip()
-                break
+    # .env 不进 git ⇒ 影子克隆里根本没有它；此时调用方必须自己导出 POSTGRES_TEST_PASSWORD，
+    # 否则下面的控制组会以"连不上测试库"的形态红（那是 ENV-BROKEN，不是判据有牙）。
+    if os.path.exists(envfile) and "POSTGRES_TEST_PASSWORD" not in env:
+        with open(envfile, encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("POSTGRES_PASSWORD="):
+                    env["POSTGRES_TEST_PASSWORD"] = line.split("=", 1)[1].strip()
+                    break
     env["POSTGRES_TEST_PORT"] = env.get("POSTGRES_TEST_PORT") or "8232"
     env["GOFLAGS"] = "-mod=mod"
+    print(f"逐格日志目录：{LOGDIR}")
 
     with open(SRC, encoding="utf-8") as fh:
         original = fh.read()
@@ -66,10 +96,16 @@ def main() -> int:
         ["go", "test", "./internal/pkg/db/", "-run", f"^{TEST}$", "-count=1"],
         cwd=SERVER, env=env, capture_output=True, text=True)
     ctrl_out = ctrl.stdout + ctrl.stderr
+    dump("00-control", ctrl_out)
     if "no tests to run" in ctrl_out:
         print(f"CONTROL-BROKEN：{TEST} 不在树里或 -run 名单没匹配上 ⇒ 整轮判据是空的")
         return 7
     if ctrl.returncode != 0:
+        if any(s in ctrl_out for s in ENV_SIGNS):
+            print("CONTROL-ENV-BROKEN：不是树的红，是连不上测试库 ⇒ 导出 "
+                  "POSTGRES_TEST_PORT/POSTGRES_TEST_PASSWORD 后重跑（本趟未放刀，判据未验证）")
+            print("\n".join(ctrl_out.splitlines()[-4:]))
+            return 8
         print("CONTROL-RED：基线就是红的，先修树再放刀")
         print("\n".join(ctrl_out.splitlines()[-10:]))
         return 7
@@ -99,6 +135,7 @@ def main() -> int:
             ["go", "test", "./internal/pkg/db/", "-run", f"^{TEST}$", "-count=1"],
             cwd=SERVER, env=env, capture_output=True, text=True)
         out = proc.stdout + proc.stderr
+        dump(label, out)
         if "no tests to run" in out:
             print(f"[{label}] NO-TESTS-RAN（-run 名单没匹配上，这一格没跑）")
             broken += 1

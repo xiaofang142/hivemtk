@@ -12,6 +12,14 @@ on:
       - 'user-web/bridge/**'
       - 'embed-sdk/**'
       - 'scripts/api-inventory.sh'
+      - 'scripts/check-architecture.sh'
+      - 'scripts/check-date-bucket-tz.sh'
+      - 'scripts/check-unwired-assets.sh'
+      - 'scripts/date-bucket-tz.baseline'
+      # 下面两行是 `test-nil-deref` 作业的命门：门自己的判据与它读的基线若不进触发面，
+      # "只改判据"/"只动基线"这类提交就根本不重跑这道门（platform docs-link-check.yml 的教训）。
+      - 'scripts/check-test-nil-deref.py'
+      - 'scripts/test-nil-deref.baseline'
       - '.github/workflows/user-server-ci.yml'
   pull_request:
     branches: [master, main]
@@ -21,6 +29,12 @@ on:
       - 'user-web/bridge/**'
       - 'embed-sdk/**'
       - 'scripts/api-inventory.sh'
+      - 'scripts/check-architecture.sh'
+      - 'scripts/check-date-bucket-tz.sh'
+      - 'scripts/check-unwired-assets.sh'
+      - 'scripts/date-bucket-tz.baseline'
+      - 'scripts/check-test-nil-deref.py'
+      - 'scripts/test-nil-deref.baseline'
       - '.github/workflows/user-server-ci.yml'
 
 # ============================================================================
@@ -168,6 +182,42 @@ jobs:
       - name: go build
         working-directory: user-server
         run: go build ./...
+
+  # ------------------------------------------------------------------
+  # 测试解引用门（批M-10 建门、本作业接进 CI）：用例不许在"被调函数能交回
+  # (nil, nil)"的返回值上未判空即解引用。判据、口径边界与零条目基线的来路见
+  # `scripts/check-test-nil-deref.py` 文件头与 §23.16 第 8 条／§23.17。
+  #
+  # 为什么是独立 job 而不是 static-gates 的第 9 个步骤：本文件 A3 注释记的就是
+  # "同 job 前序一步红 ⇒ 后续步骤全成 skipped"，那道被藏起来的门与坏掉的门长得一样。
+  #
+  # 触发面：文件头 paths 里的 `scripts/check-test-nil-deref.py` 与
+  # `scripts/test-nil-deref.baseline` 两行是本作业的命门 —— 缺了它们，"只改判据"
+  # 或"只放宽基线"这类提交根本不会重跑这道门（platform `docs-link-check.yml` 的教训）。
+  # 门的输入是整棵 Go 测试树，故 `user-server/**` 必须在（它已在）。
+  #
+  # 耗时与不遮挡性：本机实测 1.2s（纯 grep/正则，无 DB、无网络、不编译）。
+  # 同一版字节在两个树上读数一致（泳道树 & `git archive HEAD` 的只含已提交内容树：
+  # `函数键 116 · 确证站点 0 · 存疑 114` ⇒ rc=0），所以它绿不依赖本泳道未推的改动。
+  # ------------------------------------------------------------------
+  test-nil-deref:
+    name: Test nil-deref gate (零条目基线棘轮)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        # 用 @v7 而不是本文件其余作业沿用的 @v4：`check-action-runtime.py` 把本文件的
+        # checkout@v4 站点数锁在上界 12（R47 抬干净侧后留下的账，理由"并行泳道持有该文件
+        # 未提交改动"）。新作业若跟着抄 v4 ⇒ 上界 13 > 12 当场红，而这道门的账只许降不许升。
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: 确证站点不得超过基线（新增即红；修掉不划掉也红）
+        run: python3 scripts/check-test-nil-deref.py
 
   # ------------------------------------------------------------------
   # 安全扫描：与静态门/测试互不遮挡。gitleaks 阻断，govulncheck 观测。

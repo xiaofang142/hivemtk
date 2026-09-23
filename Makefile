@@ -443,6 +443,8 @@ audit:
 	@python3 scripts/check_workflow_refs.py --repo .
 	@echo "── action 运行时（runs.using）：node16/node20 站点必须已迁或有对上账本的豁免 ──"
 	@python3 scripts/check-action-runtime.py --repo .
+	@echo "── 被作业实际执行的门，其脚本与判据文件必须在该工作流的 paths 触发面里 ──"
+	@python3 scripts/check-ci-gate-paths.py --repo .
 	@echo "── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──"
 	@python3 scripts/check-env-coverage.py
 	@echo "── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──"

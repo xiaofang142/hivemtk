@@ -448,6 +448,34 @@ func TestN17_FeishuVoiceAndMediaLandInHubWithRightType(t *testing.T) {
 	t.Cleanup(func() { svc.Stop(context.Background()) })
 	accountID := fmt.Sprintf("%d", acc.ID)
 
+	// 三条外部 IO 腿一律换成"只会报错"的替身：本用例断言的是 hub 行的类型与正文，
+	// 媒体转存是 best-effort 的旁路，不该在这里发真实请求。
+	// 修复前实测：4 条带 file_key 的派发消息各自起一次协程去 open.feishu.cn 拉
+	// tenant_access_token，官方真的回了包（`code=10003 invalid param`）——
+	// CI run 2026-09-22T09:57Z 的日志里就有 4 行「媒体转存跳过：tenant_access_token 获取失败」，
+	// 本机 `go test -run TestN17_Feishu` 复现同样是 4 行（单跑本用例 0 行：fire-and-forget
+	// 的协程赶在进程退出前没来得及打印，所以"日志里没有"不等于"没发出去"）。
+	// 数真实出站要认**官方回包的错误码**（`code=10003`）：日志行里压根没有 "open.feishu.cn"
+	// 这个主机串，拿它当判据会把 4 次真实往返读成 0 次。
+	// 真实出站把红的权利交给了官方站点的可用性与频控 ⇒ 收回来。
+	// 用报错替身而不是成功替身：这里不需要链路跑通，只需要它**必然在第一条腿上停下**。
+	tokenCalls := make(chan string, 8)
+	pT, pF, pS := feishuTenantTokenFn, feishuMediaFetchFn, feishuMediaStoreFn
+	t.Cleanup(func() { feishuTenantTokenFn, feishuMediaFetchFn, feishuMediaStoreFn = pT, pF, pS })
+	feishuTenantTokenFn = func(_ context.Context, _ *FeishuIntegrationService, _ *model.FeishuAccount) (string, error) {
+		select {
+		case tokenCalls <- "token":
+		default:
+		}
+		return "", errors.New("f4t: 承载用例不发起真实取凭证")
+	}
+	feishuMediaFetchFn = func(_ context.Context, _, messageID, _, _ string) (io.ReadCloser, string, error) {
+		return nil, "", fmt.Errorf("f4t: 承载用例不发起真实下载（msg_id=%s）", messageID)
+	}
+	feishuMediaStoreFn = func(_ context.Context, _, mediaID string, _ []byte, _, _ string) (string, error) {
+		return "", fmt.Errorf("f4t: 承载用例不发起真实转存（file_key=%s）", mediaID)
+	}
+
 	cases := []struct {
 		msgID, msgType string
 		content        any
@@ -480,6 +508,23 @@ func TestN17_FeishuVoiceAndMediaLandInHubWithRightType(t *testing.T) {
 		if hub.Content != tc.wantContent {
 			t.Errorf("%s 的正文 = %q, want %q", tc.msgType, hub.Content, tc.wantContent)
 		}
+	}
+
+	// 替身真的被走到 ⇒ "零真实出站"不是"根本没进媒体分支"的另一种写法。
+	// 6 条里带 file_key 的正好 4 条（media／audio／sticker／folder；post 的节点里只有
+	// text，stream 是未知类型 ⇒ 两条都没有资源键）。上面那段取证就是这里的反面教材：
+	// 单跑本用例时日志里 0 行外部调用，看着像"没派发"，实际是协程没赶得上打印。
+	tokenHits := 0
+	tokenDeadline := time.Now().Add(15 * time.Second)
+	for tokenHits < 4 && time.Now().Before(tokenDeadline) {
+		select {
+		case <-tokenCalls:
+			tokenHits++
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if tokenHits != 4 {
+		t.Errorf("取凭证替身只被走到 %d/4 次：有派发没进媒体转存分支", tokenHits)
 	}
 
 	// 反向闸：按类型筛选必须真能筛到（repository 的 msg_type = ? 是工作台唯一入口）。

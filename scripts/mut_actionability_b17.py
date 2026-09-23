@@ -29,11 +29,22 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # 脚本在 <repo>/scripts/ 下 ⇒ 根 = 上一级。**不硬编码仓名**（改名克隆必须照样能跑：
 # 这是从别的门脚本学到的坑——定根写死仓名 ⇒ 改名克隆里 rc=1 零输出）。
 ROOT = Path(__file__).resolve().parent.parent
+# 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
+# 台账里的读数没有产物可对。目录带趟次戳、不复用；`.gitignore` 需为本轮次开例外。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/B17action" / time.strftime("%Y%m%d-%H%M%S")
+
+
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag, out):
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    (LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log")).write_text(scrub(out), encoding="utf-8")
+
 WEB = ROOT / "user-web" / "browser_automation"
 PRIM_REL = Path("src/core/primitives.js")
 JS_TEST = "test/batch17-actionability.test.js"
@@ -273,6 +284,8 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--clone", default="")
     args = ap.parse_args()
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
 
     tmp = Path(args.clone or tempfile.mkdtemp(prefix="b17mut-"))
     tmp.mkdir(parents=True, exist_ok=True)
@@ -285,6 +298,7 @@ def main() -> int:
         orig = read(prim)
         base_md5 = md5_bytes(prim)
         rc, killed, ran, skipped, out = js_run(work)
+        dump("00-control-js", out)
         print(f"\n[JS] 控制组 rc={rc} passed={ran} skipped={skipped} 红名={killed}")
         if rc != 0 or ran == 0 or skipped > 0 or killed:
             print(out[-3000:])
@@ -297,6 +311,7 @@ def main() -> int:
                 problems.append(str(e))
                 continue
             rc, killed, ran, skipped, out = js_run(work)
+            dump(code, out)
             verdict = "杀掉" if (rc != 0 and killed) else ("存活=洞" if rc == 0 else "红了但没点名")
             print(f"{code:<4} {desc[:56]:<58} {verdict:<7} pass={ran} skip={skipped} ｜ "
                   + " | ".join(k[:64] for k in killed[:2]))
@@ -318,6 +333,7 @@ def main() -> int:
         gkill = {}
         basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
         rc, killed, ran, skipped, out = go_run(clone)
+        dump("00-control-go", out)
         print(f"\n[Go] 控制组 rc={rc} ran={ran} skip={skipped} FAIL={killed}")
         if rc != 0 or ran == 0 or skipped > 0:
             print(out[-4000:])
@@ -330,6 +346,7 @@ def main() -> int:
                 continue
             files[rel].write_text(mutated)
             rc, killed, ran, skipped, out = go_run(clone)
+            dump(code, out)
             verdict = "杀掉" if (rc != 0 and killed) else ("存活=洞" if rc == 0 else "红了但没点名")
             gkill[code] = set(killed)
             print(f"{code:<4} {desc[:56]:<58} {verdict:<7} ran={ran} skip={skipped} ｜ "

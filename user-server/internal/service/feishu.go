@@ -422,6 +422,15 @@ func NewTelegramService(db *gorm.DB) *TelegramService {
 	return &TelegramService{accRepo: r}
 }
 
+// TelegramService.CreateAccount 的两条外部 IO 腿以函数变量注入（与飞书媒体三条腿同一手法，
+// 见 webhook_channel_feishu.go 的 feishuTenantTokenFn）：getMe 与 setWebhook 都要访问
+// api.telegram.org，而建号用例断言的是落库与取回，把红权利交给官方站点的可用性没有意义。
+// 生产指向实现本身；测试装"只会报错"的替身，替身被走到的次数就是这两条分支的覆盖证据。
+var (
+	tgGetBotUsernameFn = tgbot.GetBotUsername
+	tgSetWebhookFn     = tgbot.SetWebhook
+)
+
 func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.TelegramAccount) (*model.TelegramAccount, error) {
 	if acc.AccountName == "" || acc.BotToken == "" {
 		return nil, errors.New("account_name and bot_token are required")
@@ -437,7 +446,7 @@ func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.Telegram
 
 	// 2. 自动获取 bot_username（异步尝试，失败不阻断创建）
 	if acc.BotUsername == "" {
-		if uname, gerr := tgbot.GetBotUsername(acc.BotToken); gerr == nil && uname != "" {
+		if uname, gerr := tgGetBotUsernameFn(acc.BotToken); gerr == nil && uname != "" {
 			acc.BotUsername = uname
 		}
 	}
@@ -462,9 +471,10 @@ func (s *TelegramService) CreateAccount(ctx context.Context, acc *model.Telegram
 
 	// 6. 异步注册 webhook 或降级 polling（goroutine 不阻断 HTTP 响应）
 	if resolvedURL != "" && hasPublic {
-		// 有公网域名 → goroutine 调 setWebhook
+		// 包级注入点进协程前先快照成本地值：上一条用例残留的协程若直读包级变量，会和下一条用例装替身的写撞成 DATA RACE。
+		setWebhookFn := tgSetWebhookFn
 		utils.SafeGo(context.Background(), "telegram.async_set_webhook", func(ctx context.Context) {
-			if err := tgbot.SetWebhook(acc.BotToken, acc.WebhookURL, acc.WebhookSecret); err != nil {
+			if err := setWebhookFn(acc.BotToken, acc.WebhookURL, acc.WebhookSecret); err != nil {
 				logger.Warnf("[TG] 账号 %d(%s) 异步 setWebhook 失败: %v (可在 UI 手动重试)", acc.ID, acc.AccountName, err)
 				now := time.Now()
 				acc.LastErrorAt = &now
