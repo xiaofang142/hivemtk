@@ -1299,25 +1299,32 @@ func TestCollectionPublishedRoundIsDetachedFromBothHands(t *testing.T) {
 	if got == nil {
 		t.Fatal("RunOnce 回了 nil 读数")
 	}
-	base := job.LastReport()
-	if base == nil || base.Overdue != got.Overdue {
-		t.Fatalf("LastReport=%+v RunOnce=%+v ⇒ 前置不成立：这一轮根本没发布", base, got)
+	// 期望值取**值抄件**：`base := job.LastReport()` 在"读侧不抄"的变异下与探针是同一格，
+	// 拿它当基准等于拿被污染的那一份自证干净 —— 第二趟实测这一格就是这么活下来的。
+	snap := *job.LastReport()
+	if snap.Overdue != got.Overdue {
+		t.Fatalf("LastReport=%+v RunOnce=%+v ⇒ 前置不成立：这一轮根本没发布", snap, got)
 	}
 
+	// 读侧最硬的一条：两次读必须拿到两个不同的格子（抄件），指针相同就是活的指针。
+	// 这一条不看任何字段值 ⇒ 换字段、换顺序都绕不过它。
+	if a, b := job.LastReport(), job.LastReport(); a == b {
+		t.Error("两次 LastReport 交出同一个指针 ⇒ 读侧没抄件，读到的是活的格子")
+	}
 	if probe := job.LastReport(); probe == got {
 		t.Error("LastReport 与 RunOnce 交出同一个指针 ⇒ 任一侧改一格，另一侧跟着变")
 	}
-	// 读侧：拿到的抄件改掉一格，下一次读必须仍是原值。
+	// 读侧：拿到的抄件改掉一格，下一次读必须仍是快照里的原值。
 	probe := job.LastReport()
 	probe.Overdue = 9999
-	if again := job.LastReport(); again == nil || again.Overdue != base.Overdue {
-		t.Errorf("LastReport 交出的是活的指针：改探针之后读到 %+v，原值 overdue=%d", again, base.Overdue)
+	if again := job.LastReport(); again == nil || again.Overdue != snap.Overdue {
+		t.Errorf("LastReport 交出的是活的指针：改探针之后读到 %+v，原值 overdue=%d", again, snap.Overdue)
 	}
 	// 写侧：拿到返回值的一方改一格，观测端点不许跟着变。
 	got.Reminded = 8888
-	if after := job.LastReport(); after == nil || after.Reminded != base.Reminded {
+	if after := job.LastReport(); after == nil || after.Reminded != snap.Reminded {
 		t.Errorf("RunOnce 的返回值与发布出去的读数同格：调用方改一格后读到 %+v，原值 reminded=%d",
-			after, base.Reminded)
+			after, snap.Reminded)
 	}
 }
 
