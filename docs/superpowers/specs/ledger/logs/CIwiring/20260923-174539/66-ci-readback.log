@@ -38,3 +38,8 @@ run=12 Seam Guard success、Docs 三门 success、SBOM success、dependabot succ
 双远端回读 `refs/heads/master` 同为 `0b184fea…`＝本地 HEAD（推为 `c0501c4d..0b184fea`，git 只在 fast-forward 时打印该区间，无 `--force`）。
 `gh api …head_sha=0b184fea…` ⇒ **本 tip 只有三趟**：`Lint` completed/failure、`Docs Consistency` completed/success、`SBOM` completed/success；`Markdown Lint`／`Docs Link Check` **没有跑**。
 现读两份 workflow 得规则（不是推断）：`markdownlint.yml:29-33` 与 `docs-link-check.yml:21-26` 的 push `paths:` 首条都是 `'**/*.md'`（外加各自的配置/脚本自身），**`.log` 一枚都不在里面**；`docs-consistency.yml:23-24` 是 `'docs/**'` ⇒ 本笔改的 `docs/superpowers/…/66-ci-readback.log` 落在它里面 ⇒ 它跑且 success（**取证档本身受文档一致性门守护**，这是本批第一次量到）；`lint.yml:15-16` 的 `on: push:` **无 paths 过滤＝每次推送恒跑**，所以它这一跑的红与"改了 md 才跑"的门是两套触发口径。⇒ 下一位若只推 `.log`，可据此预测 CI 形状：恒跑 Lint ＋ docs 一致性 ＋ SBOM；两枚 md 门不跑。
+
+### 第四笔（订正行号引用 cb59bb6f，改了 `.md`）的 CI 回读＝反向确认上一条规则
+`gh api …head_sha=cb59bb6f…` ⇒ **五趟全在**：`Docs Consistency`／`Docs Link Check`／`Markdown Lint`／`SBOM` 皆 completed/**success**，`Lint` completed/failure（同两枚 error）。
+上一条预测"改 `.md` 会多出两枚 md 门"⇒ 实测 `Markdown Lint` run=136、`Docs Link Check` run=142 **确实跑了**（第三笔只推 `.log` 时两者为零趟）⇒ 触发规则双向各有一次实测，不再只是读 `paths:` 文本。
+**本档在此收口**：本笔之后不再为"回读自己那一推"开新推（那是无界回归）——若下一位要核 `0b184fea` 之后任何一笔，按上面的规则现算 `head_sha` 即可。
