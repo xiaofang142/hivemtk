@@ -35,3 +35,11 @@
 - `gitleaks detect --no-git --source docs/superpowers/specs/ledger/logs` ⇒ `rc=0`、`no leaks found`。
 - `python3 scripts/check-md-links-offline.py` ⇒ `rc=0`、`扫描 162 个 md（CI 口径：只认 git 索引）`、`断链 0 处`。
 半径照旧：本节这段追加的字节不在上面那一跑的"树内产物 501 份"里（那一次它还不存在）；文档面同理。磁盘现数仍 **501 份／12 轮次／32 趟次目录**（本档是既有文件的追加，未新增趟次目录，非 `.log` 仍 0）。
+
+### 本机侧尾巴的量化（把"待处置"从一个形容词变成一读数）
+用常驻闸自己的候选集（11 枚，按值并枚）扫 `~/.qoder-cn/projects/-Users-xiaofang-Documents-www-go-hivemtk/**/*.jsonl`（**259 份**转写，脚本只打印键名与次数，值不入屏）：
+- **12 份**转写含候选真值。本会话（`4cd60626…` 含其 subagents）11 枚**全部在场**：`POSTGRES_PASSWORD` 33／`TG_BOT_TOKEN` 28／其余 8 枚各 2 次；公开常量 `HIVEMTK_ADMIN_PASS` 29 次。
+- 全目录合计（私有 10 枚）= **337 次**，公开常量 = 247 次；`POSTGRES_PASSWORD` 单独占 220 次 ⇒ **这不是本轮常驻化才有的面**，历轮任何一次打印 DSN/`docker inspect` 都会写进转写；本轮那笔只是把 11 枚一次性凑齐。
+- `/tmp` 今日新文件（`-newermt 2026-09-23`）命中 **0 个** ⇒ 我这一轮的取证脚手架里没有真值残留。
+- 外发面探测：`tmutil destinationinfo` ⇒ `No destinations configured`（本机无 Time Machine 目标）；仓库／tip／双远端复测 0（见上）。
+- 处置判断：**不删、不改单行**——转写是用户的会话记录（删＝毁数据，改＝伪造取证链），且本会话文件正在被写。可做的只有两件事，均需人拍板：① 轮换这批凭据（唯一真正收敛风险的动作，`POSTGRES_PASSWORD`/`TG_BOT_TOKEN`/三个 `*_SECRET` 优先）；② 若要清库，整份按机器策略处置（可再生性判断同 [[feedback-cleanup-keep-user-data]]）。⇒ 已写进审计文档 §23.21 第 8 段⑨ 后半段。
