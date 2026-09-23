@@ -1932,6 +1932,10 @@ Lint 层的残红只剩 `ESLint (user-web 主应用)` 一步（`✖ 18738 proble
 
 ### 本轮没做到的一条：两道 shell 门只进了 CI，没进本地聚合门 `make audit`
 
+> **本节结论已被下一小节推翻**（同日，提交 `fb80e634` 已双推）。原判据"Makefile 属热文件 ⇒ 本批不能落"
+> 把"不能整文件 add（会把别人的在途行一起带出去）"当成了"不能改这个文件"，前一句成立、后一句不成立。
+> 下面三段关于步数、两个选项与坑的取证全部照原样留着——它们仍是下一小节的事实底座。
+
 `git show HEAD:Makefile` 里的 `audit:` 从第一条 `python3 scripts/audit_api_contract.py --strict` 到最后一条
 `python3 scripts/check-seam-guard.py` 共 **11 条命令**（配 12 条 `@echo` 小标题，其中调用 `scripts/check*` 的有 9 条）。
 计数形状：`awk '/^audit:/{f=1;next} f&&/^[^ \t]/{exit} f'` 只截这一个目标的 recipe，再按 `@echo` 与命令分类数——
@@ -1961,3 +1965,58 @@ Makefile 这处本批**不能**落：`Makefile` 与 `.gitignore` 全程属"别�
 或者单开 `audit-shell` 目标把选择权交给调用方。**不要**写成"没装就 `|| true` 跳过"——
 那是"SKIP 冒充 PASS"，正是本仓门禁止的形状。归口不代选（那是 Makefile 泳道的聚合门口径），
 本条的作用是把"缺这一步"从"没人发现"变成"有补丁待粘 + 有两个待定选项"。
+
+
+### 上一小节那条移交本轮做掉：两道门进 `make audit`（提交 `fb80e634`，已双推）
+
+先记账：上一小节写补丁时 `audit:` 是 11 条命令，本节起是 **13 条**（同一把 `awk` 截 recipe、剥掉 `@echo`
+后数出来的，其中 `scripts/check*` 11 条）。这个 13 与上一小节被订正掉的那个"13 步"无关——那次错在
+拿窗口目测、把 `@echo` 也当一步。这两步排在
+`check-seam-guard.py` 之后、`✅ 静态审计通过` 之前）。放末尾不是随手：缺 shellcheck 的机器
+照常跑完前面 11 步再红，红因是门自己印的那句装法（`scripts/check-shellcheck.sh:78-79`），
+所以**既没另开 `audit-shell` 目标、也没在 Makefile 里加 `command -v` 前置断言**——上一小节留的两个
+选项都被"门自身已经把缺工具做成显式 rc=2"这一条实测顶掉了，再加一层只是重复。
+
+**影响面先量再改**：CI 从不执行 `make audit`。这句要分成"提到"与"执行"两笔数才成立——
+`git grep -n "make audit" -- .github/workflows` 命中 **1 处，而且是注释散文**
+（`seam-guard.yml:3`：「`make audit` 只在本地跑，CI 从不执行它」）；把判据换成"真去调 make 的 `run:`"，
+workflows 里只有 **1 条**（`user-server-ci.yml:151` `run: make fmt-check`，不是 `audit`）。
+所以这一步只改本地行为，不会把任何作业判红。
+
+**热文件怎么改而不替别人发布**：提交内容＝`git show HEAD:Makefile` ＋ 我那 4 行，
+工作树里别人那两笔（`install:` 的端口 5173→8211、`audit:` 末尾他们的 `check-deploy-claims.py` 两步）
+先前 `cp` 到 `/tmp` 备份（md5 `203a6836fd0f11b6d876ccbe90c96db4`）、提交后再把那 4 行合进他们的版本写回。
+复验＝还原前后 `git diff Makefile` 的两处改动逐字相同，只有 blob 哈希与 hunk 行号因 HEAD 动了而变；
+提交前 `git diff --cached --name-only` 只有 `Makefile` 一个路径、`--stat` 是 `1 file changed, 4 insertions(+)`。
+
+**正向读数（两处树各一趟）**：活树 `make audit` **rc=0**，日志里读到我的小标题与原话
+（`scanned=139 checked=139 error=0` ＋ CJK `命中 2 处（基线 2 处）`）；
+`git clone --shared` 到 `fb80e634` 后同一道链 **rc=0**、`scanned=137`（差 2 ＝未跟踪件只在本机进面）。
+
+**反向三格（真跑，红因照抄，不是"预期会红"）**：
+
+| 格 | 夹具 | 停在哪一步 | 读数 |
+| --- | --- | --- | --- |
+| R1 | 未跟踪 `scripts/r43c_probe_noshebang.sh`，内容一行 `echo` 无 shebang | 我第一步 | `scripts/r43c_probe_noshebang.sh:1:1 SC2148 … Add a shebang` ⇒ `make: *** [audit] Error 1` |
+| R2 | 未跟踪 `scripts/r43c_probe_cjk.sh`，`echo "$name中文"`（有 shebang） | 我第二步 | 同趟里 shellcheck 先 `scanned=138 error=0` 绿 ⇒ CJK 门 `scripts/r43c_probe_cjk.sh 1 处 —— 基线里没有这个文件（新落点）` ⇒ `Error 1`。两格分得住：R2 证明第二步不是第一步的重复 |
+| R3 | `env PATH=/usr/bin:/bin` 跑整链（PATH 上没有 shellcheck） | 我第一步 | `::error::找不到 shellcheck —— 本门零覆盖，不判绿。装法：python3 -m pip install --user shellcheck-py==0.11.0.1` ⇒ `Error 2`（**不是跳过**） |
+
+夹具回收：R1/R2 各自 `rm -f`，最后认 `git status --porcelain` 的输出（只剩我为正向那趟打的文档夹具，见下），
+不认那句 `ls scripts/r43c_probe_*`——它在 zsh 里因"无匹配"整行中断，什么都不证明。
+
+**顺带量出两个环境级事实，都要移交，别混进本批的账**：
+
+① 本机 `/usr/bin/make` 已经被 Xcode 许可协议挡住：`make --version` 直接打
+`You have not agreed to the Xcode license agreements…`、rc=69。修它要 `sudo xcodebuild -license`
+（只有操作者能做）。本轮绕法是 `DEVELOPER_DIR=/Library/Developer/CommandLineTools
+/Library/Developer/CommandLineTools/usr/bin/make`，但那是 **GNU Make 3.81**，
+所以"这个 make 跑得动"不能当成"同事/CI 的 make 跑得动"。
+
+② 已提交 tip 的 `make audit` 在**第 8 步**就是红的，且不是我这两步：`check-env-coverage.py`
+报 3 个 `UNDOCUMENTED`（`FF_LTC_COLLECTION_JOB` / `LTC_COLLECTION_JOB_BATCH` /
+`LTC_COLLECTION_JOB_INTERVAL` ← `user-server/internal/service/collection_job.go`），
+那三个读取点是 `23dae260` 带进仓的（`git log -S FF_LTC_COLLECTION_JOB -- …/collection_job.go` 只报这一笔），
+而文档那 3 行此刻只活在采集泳道**未提交**的 `docs/DEPLOYMENT_GUIDE.md` 里（工作树版 `红 0`、
+克隆版 `红 3`，同一个 183 键总数）。CI 不跑这道门，所以它是"本地聚合门红、CI 全绿"的形状。
+处置：**不替他们写那 3 行**——同一张表里由我重复登记，等他们那一笔落地就变成两条要人对账的行；
+克隆里用 `git apply` 把他们那 3 行当本地夹具打上，只为让链走到我那两步，夹具不入库。
