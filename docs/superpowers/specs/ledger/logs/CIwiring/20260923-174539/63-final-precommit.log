@@ -1,0 +1,18 @@
+# 推送前终趟（本档为最后一份产物：写完它不再有会产物的动作，故两个读数都不含本档正文，只含它的空壳）
+# 命令 1：python3 /tmp/truesecret-174539.py（cwd=r45-lane，HEAD 7bb28240＋未提交的 §23.21 7-补 文案）rc=0
+# 命令 2：gitleaks detect --no-git --source docs/superpowers/specs/ledger/logs rc=0
+# 第一次尝试 gitleaks 时把命令写成 `--report-format summary --exit-code-on-detected 1` ⇒ 本机这版直接打 usage 并退非零（rc 与"检出了东西"同形，不可混用做判据）；改回 172115 那趟用过的原命令复跑，末行见下
+
+### 包含闸
+候选真值枚数=11（来自 hub .env 口令/密钥/令牌类键 ∪ 容器 mtk-postgres env，同名同值已并枚）
+面：树内产物 497 份／提交差异 8115589 行块／文档＋探针 2 份
+反向自证：未种=0 种入=1（须 planted=base+1）⇒ 有牙
+  公开常量 >> 键 HIVEMTK_ADMIN_PASS（值长=8，已跟踪源码 20 处命中）：{'树内产物': 4, '提交差异': 4, '文档': 0, '探针脚本': 0, '整棵tip树': 24} —— 不计入口令面，另栏交代
+判定：11 枚候选 × 5 个面 ⇒ 私有真值出现合计=0（须 0）；公开常量出现合计=32（另判）
+⇒ 绿：无一枚非公开口令字节入档
+
+### gitleaks
+[90m6:00PM[0m [32mINF[0m [1mno leaks found[0m
+
+### 形状闸 9 枚命中的归属（逐条见 60 档）：4＋4 在 CapAB/20260923-134129 的 A@8201／B@8201 两份反向控制档，1 在 P702hook/20260923-153535/00-control.log；三处同为 `POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD>` 配方占位，非占位形状计数=0
+### 结论：形状 9 枚全占位＋真值包含 0 枚＋gitleaks 0 ⇒ 本泳道这 497 份产物、审计文档与探针脚本无凭据泄露，允许推送
