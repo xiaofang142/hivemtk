@@ -1,0 +1,14 @@
+# gitleaks 历史面归属：本泳道四笔 vs 全史（推送后补测，CI 的 gitleaks-action 只判本次推送区间，故必须先知道自己有没有新贡献）
+# 命令：gitleaks detect --source . --report-format json --report-path /tmp/glhist.json（cwd=r45-lane，HEAD 2c447c79）
+# 本机版本文案：`version is set by build process`（gitleaks version 不打具体号，读数只对本机这次有效）
+
+# 现测读数（同一条 python 归属脚本重跑于本档写完之前）：
+全史 findings=1883 涉及 commits=26（本机 gitleaks 规则集，扫 1236 commits／65.27 MB／6.07s）
+本批四笔逐笔命中：f8d83b59=0 2ab6a4b9=0 7bb28240=0 2c447c79=0
+全史命中按规则 top6：[('generic-api-key', 1873), ('curl-auth-header', 5), ('jwt', 5)]
+全史命中按文件 top6：[('interactions.jsonl', 1825), ('AI_AGENT_PERF_API.md', 11), ('webhook_service_e2e_test.go', 5), ('bridge_helpers_test.go', 3), ('provider_crypto_test.go', 2), ('tool_integration_config_test.go', 2)]
+
+判读：本批四笔贡献 0 枚 ⇒ 那 1883 枚全在别人的 26 笔旧提交里（1825 枚来自 interactions.jsonl 一份历史档），
+     与本泳道无关；CI 的 gitleaks-action@v2（user-server-ci.yml:238-244，:233-235 注明此前被死 pin 挡着从未真跑、后按文档要求显式拉全历史）
+     在 push 事件上判的是本次推送区间，故本批不会把它的绿改成红；.gitleaks.toml 的 allowlist 由 gitleaks-config.yml 那道形状闸守着。
+本机另一处坑（记进档免得下次再踩）：第一次尝试 `--report-format summary --exit-code-on-detected 1` 时 rc 非零来自坏参数，与"检出了东西"同形。

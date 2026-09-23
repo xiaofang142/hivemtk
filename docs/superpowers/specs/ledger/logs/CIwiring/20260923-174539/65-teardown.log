@@ -1,0 +1,29 @@
+# 拆灶：#73 的 100 名额容器、本泳道的一次性克隆、/tmp 手稿
+# 归属证明（拆前）：容器 r45-pg100 由本泳道为 #73 起在 127.0.0.1:8234（`docker ps -a --filter name=r45-pg100` 原文见下）；
+#   九份克隆全是 `git clone --shared` 出来的一次性影子树，无一有进程持句柄（逐条 `lsof +D` 行数=0）。
+#   脚本引用面先核后删：`grep -rn "/tmp/r45|/tmp/gocache-r45mut|chk-" scripts/*.py scripts/*.sh` 只有一处命中——
+#   scripts/mut_egress_pool_r30.py:525  env.setdefault("GOCACHE", os.environ.get("R45_MUT_GOCACHE", "/tmp/gocache-r45mut"))
+#   ⇒ /tmp/gocache-r45mut（3.2G）是常驻电池的默认私有 GOCACHE，**不删**（删了下次整电池要从零重建）；其余 /tmp/*r45* 无引用，删。
+
+### 第一次拆除：一份"看着成功"的假绿实录（本档最有价值的部分）
+命令写成 `CLONES="a b c …"; rm -rf $CLONES` 与 `for d in $CLONES; do …; done` ⇒
+zsh **不对未加引号的变量做词分割**（[[feedback-cli-toolchain-gotchas]] 那条老坑，本轮第三次踩），于是：
+- `rm -rf $CLONES` 变成"删一个路径里带空格的目录"——它不存在，`-f` 让整条命令静默退 0；
+- 复测循环也只迭代一次，把九个路径当成一个判 `-e`，必然为假 ⇒ 打印出九合一行的 `GONE /tmp/… /tmp/…`。
+也就是说 **档里第一版"拆后复测"全 GONE 是假的，磁盘上九份克隆一份没少**（`du -sh` 现测：六份影子树各 **49M**、一份 48K、两份 4.0K，合计约 295M）。
+同一条命令链里还有一处 zsh 坑同时开火：`rm -f /tmp/r45-*.log …` 里某个 glob 无匹配 ⇒
+zsh 默认对失败 glob **整条命令中止**（`no matches found`），那一串手稿一个都没删。
+另外当场印出一条 `致命错误：您必须指定一个仓库来克隆`——它来自上一条被 glob 中止后残留的参数拼接形状，
+不是新起的 clone；本档把它一起记下，因为"看到 git clone 用法报错"在这种现场极易被误读成"还有克隆在跑"。
+（`ps -ax` 复测：无任何 r45/clone/probe 相关进程。）
+
+### 第二次拆除：一条命令一个路径，逐条复测
+- `docker rm -f r45-pg100` ⇒ 复测 `docker ps -a --filter name=r45-pg100 -q | wc -l` = **0**
+- 九份克隆逐个 `rm -rf <单一绝对路径>` ⇒ 复测 `ls -d` 九个路径，打印 **9 行 `No such file or directory`**（一行一个，不是一行九个）
+- 手稿 `rm -f` 前先 `setopt NULL_GLOB` ⇒ 复测 `ls -d /tmp/*r45*` 只剩 `/tmp/gocache-r45mut` 一份（有意保留）
+- 采样器残留进程：`pgrep -f cap-ab-53300-probe | wc -l` = **0**（拆前也是 0）
+- 盘：`df -h /` 可用 **137Gi**（拆前 137Gi ⇒ 本机盘不是瓶颈，本轮不需要按 [[feedback-orbstack-disk-slimming]] 裁）
+
+### 规矩（本档换来的）
+拆除类命令里**禁止** `rm -rf $VAR`／`for x in $VAR` 这种"多路径塞一个变量"的形状：zsh 下它不报错、退 0、还照样打印出成功样子。
+要么一行一个路径，要么用数组 `paths=(a b c); rm -rf $paths[@]`；并且复测要**逐条判存在性并把不存在的判据原文打出来**。

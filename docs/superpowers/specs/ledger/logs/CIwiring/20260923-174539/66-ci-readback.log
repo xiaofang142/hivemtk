@@ -1,0 +1,30 @@
+# 推送后 CI 回读（本泳道 tip 2c447c79 与上一 tip f4da0192 做差集）
+# 命令：gh api "repos/xiaofang142/hivemtk/actions/runs?head_sha=<FULL SHA>" --jq …
+#   （两件事都踩过：短 sha 会静默零行；zsh 下不带引号的 URL 里的 `?` 会被当 glob，整条命令以 `no matches found` 中止）
+# 命令：gh run view <run.id 而非 run.number> --repo xiaofang142/hivemtk --log-failed
+#   （第一次拿 run_number=692 去查 ⇒ HTTP 404；`--repo` 也是必需的，泳道树的 origin 是本地路径，gh 认不出 GitHub host）
+
+### tip 2c447c79（本批四笔推上去之后的顶点）
+id=35846463224 run=692  Lint                 completed/failure
+id=35846463180 run=134  Markdown Lint        completed/success
+id=35846463183 run=126  Docs Consistency     completed/success
+id=35846463190 run=140  Docs Link Check      completed/success
+id=35846463294 run=648  SBOM                 completed/success
+
+### 上一 tip f4da0192（对照）
+run=689 Lint completed/failure、run=495 user-server-ci completed/failure、
+run=12 Seam Guard success、Docs 三门 success、SBOM success、dependabot success
+
+### 差集判读
+1. **本批的推送让 `user-server-ci` 与 `Seam Guard` 从"跑过"变成"没跑"**——两趟 tip 的 5 条记录里都没有它们。
+   这是 `paths:` 清单的形状决定的，不是回归：`user-server-ci.yml:9-23` 与 `seam-guard.yml:25-33` 都是**显式文件清单**（不是 `scripts/**` 这种目录通配），
+   本批动的是 `docs/**`（含 497 份取证档）与 `scripts/cap-ab-53300-probe.py`，一枚都不在任一份清单里 ⇒ 两道门**结构性看不见本批**。
+   f4da0192 那一跑里两者都跑过（run=495／run=12），是因为 GitHub 对 push 事件按**整个推送区间**评估 paths，那个区间里有它们盯的字节。
+   ⇒ 记一笔：**"tip 没有 CI 作业"和"tip 的 CI 全绿"是两回事**（§23.20 第 2 段那道"作业级轴"在这趟仍然成立）；
+   而常驻探针 `scripts/cap-ab-53300-probe.py` 自身没有任何 CI 执行点——这是未覆盖面⑦（十份电池无 CI 执行点）的第 11 份同类。
+2. `Lint` 的红与上一 tip **逐字相同**：两枚 error 同为 `216:7 preserve-caught-error` 与 `821:15 no-useless-assignment`，
+   文件为 `user-web/browser_automation/src/core/cdp/input.js` 与 `.../core/primitives.js`（后者 821 行那枚），
+   两个文件的最近改动分别是 `32d1bce4`（2026-09-20）与 `c7f8f37e`（2026-09-21）⇒ **浏览器自动化泳道的已提交字节**，
+   本批一行未碰。第五十二轮记的"那 2 errors 属未提交面"就此订正：它们**早已入库并随 master 推上双远端**，从"待认领"变成"公开既有红"。
+3. 其余四门（Markdown Lint／Docs Consistency／Docs Link Check／SBOM）在 497 份取证档、探针脚本与新文档段进树之后仍 **success**
+   ⇒ 本轮把产物迁进仓库树没有把文档面弄红（Docs Consistency 恰恰是逐条核 `file:line` 的那道）。
