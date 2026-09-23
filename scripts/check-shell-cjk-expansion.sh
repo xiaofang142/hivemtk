@@ -30,18 +30,27 @@
 # 只许降不许升；出现新落点文件、或某文件命中数超过它的基线 ⇒ 红。
 #
 # 覆盖面与盲区（照本仓惯例写清楚，别让绿读数大于它的证明力）：
-#   - 门只保证「这种形状不再新增」，不保证脚本行为正确；也不证明 shellcheck 跑过。
+#   - 门只保证「这种形状不再新增」，不保证脚本行为正确；也不证明 shellcheck 跑过
+#     （那是姊妹门 scripts/check-shellcheck.sh 的活，同一个 lint.yml、不同 job）。
 #   - 逐行判引号态：跨行字符串/heredoc 里的行会被当成独立行看待。落在 heredoc 内的
 #     `#` 开头行会被误当注释豁免（实测本仓当前 0 处这种形状）；heredoc 里的
 #     `$VAR`+中文若不在注释行上则能正常命中。
 #   - 只看 *.sh / *.bash：*.bats、Makefile 里的 recipe、以及 user-web 下的 .js 模板串
 #     不在本门范围（那些语言没有这个展开规则）。
-#   - 用 os.walk 而不是 shell glob 枚举，且显式打印 scanned 数 —— 之前踩过
-#     「非 ASCII 文件名 glob 不上，门恒绿」的坑。
+#   - 扫描面 = `git ls-files --cached --others --exclude-standard` 里的 *.sh / *.bash，
+#     且显式打印 scanned 数。两条历史坑都不许再犯：shell glob 碰不到非 ASCII 文件名
+#     （门恒绿）；os.walk + 目录黑名单会把 gitignore 的仓根 logs/ 取证快照整批扫进来
+#     （实测同一棵树两次扫 136 → 538，红点全在别泳道刚丢下的 clone 里 ⇒ 本地恒红、
+#     CI 干净检出恒绿，两边都失去意义）。代价写清楚：被 .gitignore 忽略的 shell 文件
+#     本门看不见 —— 那种文件进不了版本控制，也就进不了交付；未跟踪但未被忽略的新落点
+#     仍在面内（提交前就能拦）。枚举本身另有下界自检（<50 判 rc=2）。
 #
 # 用法：bash scripts/check-shell-cjk-expansion.sh
 #   rc=0 通过；rc=1 有新增落点/超过基线；rc=2 环境或判据本身有问题（含基线缺失、
 #   总数为 0 但基线非 0、扫描根不对、脚本被改名导致基线失去自指）
+#
+# 反向测试：bash scripts/check-shell-cjk-expansion.test.sh —— 改完本闸（尤其是扫描面口径）
+#   必须真跑那 9 格；CI 里它跟本闸是同一个 job 的两个步骤。
 # =============================================================================
 
 set -euo pipefail
@@ -61,7 +70,7 @@ fi
 
 # 判据本体用 python 写：bash 3.2 正是本门要拦的那个缺陷的载体，用它量它自己不可靠。
 python3 - "$PROJECT_ROOT" "$BASELINE_FILE" "$SELF" "$BASELINE_REL" <<'PY'
-import os, re, sys
+import os, re, subprocess, sys
 
 root, baseline_file, self_path, baseline_rel = sys.argv[1:5]
 # 前置是「可展开的 $NAME」，后置是非 ASCII。(?<![$\\]) 只排 `\$`（转义）与 `$$` 的第二个 $；
@@ -89,27 +98,47 @@ def expandable(line, idx):
             return False
     return not s
 
+# 枚举走 git：`--cached --others --exclude-standard` = 已跟踪的 + 未跟踪但没被 ignore 的，
+# 正好是「提交前该拦下的那一面」。曾经的 os.walk + 目录黑名单栽过两次，两次都是假读数：
+#   - 合入前：shell glob 碰不到非 ASCII 文件名（见 check-no-xapptool 的同类事故）；
+#   - 合入后：仓根的 logs/ 是 gitignore 的取证树，里面全是整仓快照副本。实测同一棵树
+#     两次扫 136 → 538（并行泳道在丢 clone），红点全是 `logs/*/clone/<某热文件>` 的副本
+#     —— 门本地恒红、CI（干净检出，没有 logs/）恒绿，两边都失去意义。副本不是落点，
+#     该修的是原件，所以忽略树一律不进扫描面。
+def git_shell_files(root_dir):
+    r = subprocess.run(["git", "-C", root_dir, "ls-files", "-z",
+                        "--cached", "--others", "--exclude-standard"],
+                       capture_output=True)
+    if r.returncode != 0:
+        print("::error::git ls-files 失败（%s）—— 扫描面无法确定，宁可红也不判绿"
+              % r.stderr.decode("utf-8", "replace").strip()[:200])
+        sys.exit(2)
+    names = r.stdout.decode("utf-8", "surrogateescape").split("\0")
+    return sorted(p for p in names if p.endswith((".sh", ".bash")))
+
+shell_files = git_shell_files(root)
 hits, scanned, skipped_decode = {}, 0, []
-for dirpath, dirs, files in os.walk(root):
-    dirs[:] = sorted(x for x in dirs if x not in
-                     {".git", "node_modules", "dist", "vendor", ".qoder", ".worktrees", "build", "testdata"})
-    for fn in sorted(files):
-        if not fn.endswith((".sh", ".bash")):
+for rel in shell_files:
+    p = os.path.join(root, rel)
+    try:
+        lines = open(p, encoding="utf-8").read().split("\n")
+    except (UnicodeDecodeError, OSError) as e:
+        skipped_decode.append(f"{rel}: {e}")
+        continue
+    scanned += 1
+    for n, line in enumerate(lines, 1):
+        if line.lstrip().startswith("#"):
             continue
-        p = os.path.join(dirpath, fn)
-        try:
-            lines = open(p, encoding="utf-8").read().split("\n")
-        except (UnicodeDecodeError, OSError) as e:
-            skipped_decode.append(f"{os.path.relpath(p, root)}: {e}")
-            continue
-        scanned += 1
-        for n, line in enumerate(lines, 1):
-            if line.lstrip().startswith("#"):
+        for m in PAT.finditer(line):
+            if not expandable(line, m.start()):
                 continue
-            for m in PAT.finditer(line):
-                if not expandable(line, m.start()):
-                    continue
-                hits.setdefault(os.path.relpath(p, root), []).append((n, line.strip()[:110]))
+            hits.setdefault(rel, []).append((n, line.strip()[:110]))
+
+# 扫描面骤减＝枚举坏了，不是收敛。本仓 tracked 的 shell 文件实测 134（+ 未跟踪未忽略的
+# 新落点），取 50 作下界：既容得下正常的目录整理，又拦得住「ls-files 换了参数只报了几个」。
+if scanned < 50:
+    print(f"::error::只扫到 {scanned} 个 shell 文件（已知量级 134）—— 枚举或 git 环境有问题，本门无法判绿")
+    sys.exit(2)
 
 # 自指：基线文件里必须写着本闸的文件名，否则哪天改名会把基线孤儿化（门恒绿而没人知道）。
 base_txt = open(baseline_file, encoding="utf-8").read()

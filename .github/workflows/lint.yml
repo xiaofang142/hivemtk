@@ -136,6 +136,55 @@ jobs:
       - name: Check shell scripts for the bash 3.2 CJK expansion hazard
         run: bash scripts/check-shell-cjk-expansion.sh
 
+      # 扫描面口径改过一次（os.walk + 黑名单 → git 口径，为了把 gitignore 的 logs/ 取证
+      # 快照树请出门外），所以"它还有牙"必须每次重跑那 9 格，而不是信一句"我改对了"。
+      - name: check-shell-cjk-expansion 反向测试（证明它会红）
+        run: bash scripts/check-shell-cjk-expansion.test.sh
+
+  # shell 静态分析：全仓 *.sh / *.bash 的 shellcheck「error 级」零容忍（零债 ⇒ 不带基线，
+  # 定档依据与盲区写在脚本头）。建门之前 `grep -n shellcheck .github/workflows/*.yml` 是
+  # 零命中，也就是这 130 多个 shell 文件（含装机/部署/口令轮换这类会动到生产与凭证的）
+  # 从来没有被任何静态分析跑过一遍。
+  #
+  # 为什么挂这个 workflow 而不是新建一个：lint.yml 的 on.push 没有 paths 过滤，任何一笔
+  # 推送都会跑它 —— 新门不必先对一遍"改哪些文件才重跑"的触发面（那道洞的形状见
+  # gitleaks-config.yml 的立项说明）。扫描面本身是 git 口径（tracked + 未跟踪未忽略），
+  # CI 的干净检出里没有仓根 logs/ 那棵取证快照树，本地与 CI 因此量同一个面。
+  #
+  # 工具按版本钉死（pip 包 shellcheck-py==0.11.0.1 ⇒ shellcheck 0.11.0，与建门时本机
+  # 实测同一版），且装完立刻印版本：升版若把某个文件判成 error，这里是"红 + 版本号"，
+  # 不是静默漂移。venv 失败时退回 --user 安装（老 pip 不认 --break-system-packages，
+  # 两种参数各试一次），最终仍拿不到可执行就整步红——缺工具不许退 0。
+  shellcheck-static:
+    name: Shellcheck (error 级零容忍)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: 装 shellcheck（钉版本，与本地实测同一版）
+        run: |
+          set -eu
+          if python3 -m venv /tmp/scvenv && /tmp/scvenv/bin/pip -q install shellcheck-py==0.11.0.1; then
+            SC=/tmp/scvenv/bin/shellcheck
+            echo "/tmp/scvenv/bin" >> "$GITHUB_PATH"
+          else
+            python3 -m pip install --user shellcheck-py==0.11.0.1 \
+              || python3 -m pip install --user --break-system-packages shellcheck-py==0.11.0.1
+            SC="$HOME/.local/bin/shellcheck"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          test -x "$SC"
+          "$SC" --version
+
+      - name: check-shellcheck（全仓 shell 文件的 error 面）
+        run: bash scripts/check-shellcheck.sh
+
+      # 反向测试也进 CI：这道闸的判据有五条分支（缺工具、枚举不确定、面骤减、非法 UTF-8
+      # 文件、shellcheck 的 rc×finding 数错配）。只看在真树上退 0，不自证它红得起来。
+      - name: check-shellcheck 反向测试（证明它会红）
+        run: bash scripts/check-shellcheck.test.sh
+
   license-compliance:
     name: LICENSE Compliance Scan
     runs-on: ubuntu-latest
