@@ -1846,7 +1846,7 @@ shim 自己要 PATH 上的帮手，把 shim 放进去会把闸卡在"起解释�
 bash 3.2 与 runner bash 5 之间语义不同（同一构造本机 rc=2、CI rc=127）——平台语义不该进到判据里。
 返工时这一格又被门自己砍了一刀：新写的注释里有一行是「`#   <工具名> 只装在 …`」的**缩进**续行，
 `#` 后带空格同样按指令解析 ⇒ SC1073/SC1072（这是第三次，门头的维护注记已把"行首"订正成"含缩进"）。
-修后本地复跑 16/16，且拿"shellcheck 与核心工具同居多个目录"的合称 PATH 单独验过 T4：
+修后本地复跑 16/16，且拿"shellcheck 与核心工具同居多个目录"的合成 PATH 单独验过 T4：
 旧写法 rc=2（本机语义，掩盖）、新写法 rc=2 且红因正是「找不到 shellcheck」——CI 侧的最终判定见本节末「CI 回读：第二跑的逐作业读数」。
 
 
@@ -1929,3 +1929,35 @@ Lint 层的残红只剩 `ESLint (user-web 主应用)` 一步（`✖ 18738 proble
 浏览器自动化存量件，本批未碰过它们。`LICENSE Compliance Scan` 整作业 skipped 与推送无关，
 是它自己的 `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`
 （`.github/workflows/lint.yml:191`）——按 ㉓ 的口径，这类"作业级跳过"要读 `if:` 才知道是设计而不是漏跑。
+
+### 本轮没做到的一条：两道 shell 门只进了 CI，没进本地聚合门 `make audit`
+
+`git show HEAD:Makefile` 里的 `audit:` 从第一条 `python3 scripts/audit_api_contract.py --strict` 到最后一条
+`python3 scripts/check-seam-guard.py` 共 **11 条命令**（配 12 条 `@echo` 小标题，其中调用 `scripts/check*` 的有 9 条）。
+计数形状：`awk '/^audit:/{f=1;next} f&&/^[^ \t]/{exit} f'` 只截这一个目标的 recipe，再按 `@echo` 与命令分类数——
+本节第一版写的"13 步"是拿打印出来的窗口目测估的（把两条 `@echo` 当成了一步，又多算一行），
+现按命令数订正为 11；同一条纪律：凡"共 N 步／N 处"必须数出来，别看着列表估。
+`grep -c 'scripts/check-shell' HEAD:Makefile` ⇒ **0**，工作树版也是 **0** ⇒ 本地按聚合门自测的人量不到这两道
+（CI 侧两个作业已覆盖，所以缺的是"改 shell 脚本前本地先撞一次"这条路）。口径同 §7.5 记过的
+"`make audit` 从不含 golangci-lint"——**注册面只有两处**：`Makefile`（本地）与 `lint.yml`（CI），
+而第三处候选 `merge-gate.py` 至今未跟踪（未跟踪的清单不是清单），所以只有前两处算数。CI 那处本轮已落，
+Makefile 这处本批**不能**落：`Makefile` 与 `.gitignore` 全程属"别的泳道正改着"的热文件，
+`git commit --only Makefile` 会把他们未提交的行整份带出去（同 §十九 记的那类"同文件里对方的行被一起 add"）。
+
+补丁留在这里，等那一泳道腾空直接粘（四行按 `audit:` 既有形状，**行首必须是 Tab**）：
+
+```make
+	@echo "── 全仓 shell 文件：shellcheck error 级零容忍 ──"
+	@bash scripts/check-shellcheck.sh
+	@echo "── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──"
+	@bash scripts/check-shell-cjk-expansion.sh
+```
+
+两条写进移交注记的坑，都是实测形状而不是偏好：
+① `@echo` 文案里**不要出现 `$VAR`**——make 会先把 `$V` 当变量展开成空串，打印缺半句且退 0（上面两行的文案已经为此
+改成中文描述，别"顺手补个变量名"）；
+② 第一行会让**没装 shellcheck 的机器 `make audit` 直接 rc=2**（那道门的口径就是"缺工具不判绿"，见上一节三条判据）。
+处置只有两条合法路：在 `audit:` 之前放一条 `command -v shellcheck` 的**前置断言**（红得越早越像"缺工具"而不是"仓库有 bug"），
+或者单开 `audit-shell` 目标把选择权交给调用方。**不要**写成"没装就 `|| true` 跳过"——
+那是"SKIP 冒充 PASS"，正是本仓门禁止的形状。归口不代选（那是 Makefile 泳道的聚合门口径），
+本条的作用是把"缺这一步"从"没人发现"变成"有补丁待粘 + 有两个待定选项"。
