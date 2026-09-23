@@ -459,6 +459,26 @@ BASELINE=(
   "24|回款行的生产写入点（接线数回到 0 = 全系统再没有任何一处能把一笔钱记进账）|type Payment struct|model\\.Payment\\{|internal/service|wired"
   "24|回款腿与对账读腿在启动路径上的装配点（摘掉 router 那一行：入账回 503、/api/bill 两条 GET 恒 503）|func InitPaymentRuntime|InitPaymentRuntime\\(|internal/router|wired"
   "24|回款腿交给集成服务的那一次交接（构造函数里那一行 GlobalPaymentService 读取，setter 只有测试在用）|func GlobalPaymentService|GlobalPaymentService\\(|internal/service|wired"
+  # ---- T-P7-03 催收腿（25a–25d）—————————————————————————————————————————
+  # 这一族与 23/24 同形（装配入口 / 启动路径上的 Init / 端点挂载），外加一格本族特有的：
+  # 25d 闸门装配点。它是 15b 那一格的**对偶**而不是重复 —— 15b 的 callpat 锁
+  # `AttachReachGate(reach)`（挽回队列那台触达服务），本行锁 `AttachReachGate(collectionReach)`
+  # （催收这台）。分开是 15 族注释里自己写下的那条理由：合并成"AttachReachGate 有人调"
+  # 之后，删掉任意一边都仍显示 WIRED，而"只接了 HTTP 和挽回、催收那条照发"恰是
+  # 这一族最容易发生又最难发现的漏法（快照里的 attached_services 只数本进程装了几个，
+  # 数不出"生产里本该接几个"）。催收这台触达服务的变量名带 collection 前缀就是为这一格。
+  #
+  # 25b 的 scope 只有 cmd/api：催收腿挂在 main.go 里（cron 那一族的位置，与挽回 worker 同处），
+  # 不在 router.go。摘掉那一行 = 这条腿整个不在，而 service 包 27 条用例与 app 包 9 条用例
+  # 全绿 —— 判定 A 的原文形状，所以 Go 侧另有一条 cmd/api 的启动顺序门
+  # （TestCollectionJobMountedAfterRouterSetup）盯同一件事，它还要"排在 router.Setup 之后"，
+  # 那是台账按行存在性判不出来的那一半。
+  # 25c 是观测端点：删掉它不影响催收本身运行（shadow/enforce 照跑），删掉的是
+  # "为什么一条都不催"的唯一答案 —— 那条腿的所有失败形态都是静默的。
+  "25|催收任务的装配入口（摘掉 app/collection_wiring.go 那一行，五把依赖永远凑不齐、任务永不构造）|func NewCollectionJob|NewCollectionJob\\(|internal/app|wired"
+  "25|催收腿在启动路径上的装配点（摘掉 main.go 那一行：逾期单既不提醒也不升级，而用例全绿）|func InitCollectionRuntime|InitCollectionRuntime\\(|cmd/api|wired"
+  "25|催收观测端点的挂载入口（摘掉这一行 = 六种\"没动\"再没有一处能读出是哪一种）|func collectionStatusView|handleCollectionStatusGet\\)|internal/router|wired"
+  "25|催收这条外发路径的审批闸门装配点（15b 的对偶：摘掉它只有挽回那条受约束）|func AttachReachGate|AttachReachGate\\(collectionReach\\)|internal/app|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

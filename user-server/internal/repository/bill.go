@@ -1,7 +1,7 @@
 // bill.go 账单仓储（T-P7-01 / N-6）。
 //
 // 表 bills 的读写面只有三条写不出去的路径都不在这里：派生（Create）、
-// 状态跃迁（UpdateStatus），以及两条读（按账单号、按报价行）。
+// 状态跃迁（UpdateStatus），以及三条读（按账单号、按报价行、按"该被催"这一谓词）。
 // 之所以只有这么点：账单是**凭证表**——
 //   - 没有改写内容的方法：amount 是那一版报价合计的快照，能改它的人就等于能改历史；
 //   - 没有 Delete：作废走 open/partial→voided 的跃迁，留痕；抹掉一行会让
@@ -47,8 +47,9 @@ var ErrBillNotFound = errors.New("bill: 账单不存在")
 const billQuoteRowConstraint = "uq_bills_quote_row"
 
 // BillRepository bills 读写接口。方法集由 bill_test.go 的
-// TestBillRepository_MethodSetIsExactlyTheDocumentedSix 逐字钉住（六格里最后一格
-// ListByQuoteID 是 T-P7-02 补的，放宽理由写在同一条用例的注释里）。
+// TestBillRepository_MethodSetIsExactlyTheDocumentedSeven 逐字钉住（七格里
+// ListByQuoteID 是 T-P7-02 补的、ScanOverdue 是 T-P7-03 补的，两次放宽的理由
+// 各自写在同一条用例的注释里）。
 type BillRepository interface {
 	// Available 报告是否持有可用 DB 句柄（装配回显用，不用于吞错）。
 	Available() bool
@@ -71,11 +72,33 @@ type BillRepository interface {
 	// 不存在返回 (nil, nil)。
 	GetByQuoteRowID(ctx context.Context, quoteRowID string) (*model.Bill, error)
 
+	// ScanOverdue 逾期扫描：值域内可催收、已定账期、且账期早于 cutoff 的应收。
+	// T-P7-03 的读口，也是 bills 上**第一条**带谓词的批量读（"谁该被催"在库里的唯一表达）。
+	// 状态集合由 model.BillStatusesChased 生成，本层不抄字面量。
+	ScanOverdue(ctx context.Context, cutoff time.Time, limit int) (*BillOverdueScan, error)
+
 	// ListByQuoteID 按**逻辑报价号**捞出这张报价单开过的全部应收，按派生早晚升序。
 	// T-P7-02 补的那一格（对账读口："这张报价开了几张应收、各欠多少"）；
 	// 放宽接口形状的判据、以及"为什么这一格不构成列全表"，逐字见 bill_test.go 的
-	// TestBillRepository_MethodSetIsExactlyTheDocumentedSix。零命中是空切片 + nil error。
+	// TestBillRepository_MethodSetIsExactlyTheDocumentedSeven。零命中是空切片 + nil error。
 	ListByQuoteID(ctx context.Context, quoteID string) ([]*model.Bill, error)
+}
+
+// BillOverdueScan 一次逾期扫描的读数。三份数据而不是两份，因为缺的那一份正是
+// 最容易被读错的一份：
+//   - Overdue：这一轮该催的行（已按 due_at 升序，最多 limit 行）；
+//   - Truncated：limit 是否把后面的行截掉了。没有它，"这一轮看到 2 张"与"只有 2 张逾期"
+//     在日志里长得一模一样，而前者意味着还有欠得更久的没被处理；
+//   - Undated：**可催收但没定账期**的行数。T-P7-01 在 DueAt 那一格上许下的判据
+//     （"没有逾期"与"没法定逾期"是两件事，合成一件的那天催收就看不见这批单）
+//     要的是一个数，而不是一个"我们知道有这种行"的态度。
+//
+// 刻意不带 error 字段：读失败时本方法返回 (nil, err) 而不是"半成品读数"，
+// 判据与 billOrNil 同族（把库故障读成"没有逾期"是这一族最贵的一种假绿）。
+type BillOverdueScan struct {
+	Overdue   []*model.Bill
+	Undated   int64
+	Truncated bool
 }
 
 type billRepo struct {
@@ -230,6 +253,49 @@ func (r *billRepo) GetByQuoteRowID(ctx context.Context, quoteRowID string) (*mod
 	var row model.Bill
 	err := r.db.WithContext(ctx).First(&row, "quote_row_id = ?", quoteRowID).Error
 	return billOrNil(&row, err)
+}
+
+// ScanOverdue "谁该被催"在库里的唯一表达。
+//
+// 三处刻意的设计，各自对应一种静默故障：
+//   - **状态集合从 model 生成**：SQL 里抄一遍 `[open,partial]` 就有两处事实源，
+//     催收集增删一格时本查询会安静地和新口径脱钩（同一条理由见 Create 的值域守卫）；
+//   - **due_at IS NOT NULL 单独一条谓词**：不写它的话 `due_at < cutoff` 对 NULL
+//     求值为 NULL，那批"账期还没定"的单子既不会进集合也不会被数出来，催收看到的世界
+//     里它们不存在——而它们恰恰是商务最需要被提醒去把账期定下来的那批；
+//   - **多取一行判截断**：为截断另发一次 COUNT 会给同一轮两个可能互相矛盾的读数
+//     （两次查询之间来了新单），而 limit+1 那一行读的是同一份快照。
+//
+// 排序键是 due_at 升序、打平时按 id：封顶存在是为了防止积压那天把出站队列打满，
+// 而被砍掉的必须是"最不急的那批"。
+func (r *billRepo) ScanOverdue(ctx context.Context, cutoff time.Time, limit int) (*BillOverdueScan, error) {
+	if err := r.require(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		return nil, errors.New("bill repository: 封顶值必须为正（0 既不能读成\"不限\"——那是一次全表捞，也不能读成\"零行\"——那会写成\"今天没人逾期\"）")
+	}
+	var rows []*model.Bill
+	if err := r.db.WithContext(ctx).
+		Where("status IN ?", model.BillStatusesChased).
+		Where("due_at IS NOT NULL AND due_at < ?", cutoff).
+		Order("due_at ASC, id ASC").
+		Limit(limit + 1).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	truncated := len(rows) > limit
+	if truncated {
+		rows = rows[:limit]
+	}
+	var undated int64
+	if err := r.db.WithContext(ctx).Model(&model.Bill{}).
+		Where("status IN ?", model.BillStatusesChased).
+		Where("due_at IS NULL").
+		Count(&undated).Error; err != nil {
+		return nil, err
+	}
+	return &BillOverdueScan{Overdue: rows, Undated: undated, Truncated: truncated}, nil
 }
 
 // ListByQuoteID 这张报价单开过的全部应收，按派生早晚（created_at，打平时按行号）升序。

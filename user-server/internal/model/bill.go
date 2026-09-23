@@ -80,10 +80,13 @@ type Bill struct {
 	// `status IN (open, partial) ∧ due_at IS NOT NULL ∧ due_at < now`，
 	// 账期未定的账单**不参与扫描**、但要在视图里被数出来（"没有逾期"与
 	// "没法定逾期"是两件事，合成一件的那天，催收就再也看不见这批单）。
+	// 那一句"要被数出来"由 BillRepository.ScanOverdue 的 Undated 兑现（T-P7-03）。
 	//
 	// 时区：库里是 timestamptz，比较发生在读侧，本层不写任何按天取整的表达式
 	// （那条路径要先经过 check-date-bucket-tz 点名的显式时区处理）。
-	DueAt *time.Time `json:"due_at"`
+	//
+	// 索引：本列跟着 status 进那条复合索引，理由写在 Status 那一格。
+	DueAt *time.Time `gorm:"index:idx_bills_status_due,priority:2" json:"due_at"`
 
 	// Status 这张应收走到哪了（值域见 BillStatuses）。
 	//
@@ -91,9 +94,13 @@ type Bill struct {
 	// 本列答"这笔钱收清没有"。三格各有一处事实源 —— 合成一格的两条后果在 T-P4-01
 	// （漏斗与赢率塌成同一个数）与 quotes（accepted 不等于 paid）各拦过一次。
 	//
-	// **不建索引**：本卡没有按状态捞的读方；逾期扫描那条查询属 T-P7-03，
-	// 索引由它的第一个读方带来（预留索引与预留列同罪）。
-	Status string `gorm:"type:varchar(16)" json:"status"`
+	// T-P7-01 交付时这里写的是"**不建索引**：本卡没有按状态捞的读方"（原话留在
+	// TestBillKeyedToExactlyOneQuoteVersion 的用例注释里）。读方在 T-P7-03 真的来了：
+	// BillRepository.ScanOverdue 每轮按 `status IN (…) ∧ due_at < cutoff` 捞，
+	// bills 从此是唯一一张会被定时任务反复带谓词扫的凭证表 —— 那一格按它自己许下的
+	// 条件兑现成复合索引。索引名只说列（status_due）不说 chased：部分索引能省体积，
+	// 但会把催收集抄进 DDL，而值域的事实源只有下面那个 BillStatusesChased 一处。
+	Status string `gorm:"type:varchar(16);index:idx_bills_status_due,priority:1" json:"status"`
 
 	CreatedAt time.Time `json:"created_at"`
 	// UpdatedAt 只在状态跃迁时走（仓储只有"派生"与"跃迁"两条写路径）：
@@ -129,6 +136,29 @@ const (
 // BillCurrencyDefault 建表默认币种，与列上的 DEFAULT 'CNY' 同一字面值，
 // 且与 QuoteCurrencyDefault 同源（用例 TestBillKeyColumnWidths 逐字比）。
 const BillCurrencyDefault = "CNY"
+
+// BillStatusesChased **参与催收扫描**的那几格：open（一分未收）与 partial（收了一部分仍欠）。
+//
+// 与 PaymentStatusesCounted 同族同形状：逾期扫描的 SQL 的 IN 列表由这一格生成，
+// service 层不另拼一份字面量。两处各写一遍的后果与"报价头存合计"同一条 ——
+// 一处加了新状态，另一处静默不催，而"少催"这条方向没有任何人会察觉。
+//
+// paid/voided 在集外的理由各自不同：已结清的不该再被打扰，已作废的那张主张已经收回。
+// `overdue` 不在值域里，因此也不可能出现在这里（它为什么不能做成状态，见本文件
+// BillStatuses 的头注释与 T-P7-03 的扫描判据）。
+var BillStatusesChased = []string{
+	BillStatusOpen, BillStatusPartial,
+}
+
+// BillChasedStatusKnown 报告 s 是否是参与催收的那两格之一（逐字比、不规范化）。
+func BillChasedStatusKnown(s string) bool {
+	for _, v := range BillStatusesChased {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
 
 // BillStatusKnown 报告 s 是否恰为值域内的某个字面值。
 //

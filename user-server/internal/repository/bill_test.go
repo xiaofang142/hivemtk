@@ -1,6 +1,6 @@
 // bill_test.go T-P7-01：账单仓储（表 bills）。
 //
-// 本文件只测**只有真库才能证明**的事，六条：
+// 本文件只测**只有真库才能证明**的事，七条：
 //  1. AC① 的幂等键：同一版的第二张账单报的是**那条约束**（ErrBillAlreadyDerived），
 //     而主键撞车一类的别的 23505 不许被认成"已经派生过了"—— 认错的方向是
 //     "把一次本该失败的写入静默吞成一次成功复用"，账单是钱，这一条不能让；
@@ -325,7 +325,7 @@ func TestBillRepository_UpdateStatusIsCompareAndSet(t *testing.T) {
 	}
 }
 
-// TestBillRepository_MethodSetIsExactlyTheDocumentedSix 接口形状即"账单不可改写"。
+// TestBillRepository_MethodSetIsExactlyTheDocumentedSeven 接口形状即"账单不可改写"。
 //
 // 反射比方法名清单，多一个少一个都红：
 //   - 多出 Save/Update/Delete 的那一天，"这一张应收金额从没变过"这句话就作废了；
@@ -341,8 +341,15 @@ func TestBillRepository_UpdateStatusIsCompareAndSet(t *testing.T) {
 // ListByQuoteID 这一格带键的读，"List" 这个前缀本身不再判红 —— 但带键这件事就是那道门：
 // 签名里必须收 quoteID，空串在仓储层直接拒（用例 TestBillRepository_ListByQuoteID
 // 守的是这一条），于是"顺手写成没有条件的 List"依然落不进接口。
-func TestBillRepository_MethodSetIsExactlyTheDocumentedSix(t *testing.T) {
-	want := []string{"Available", "Create", "GetByID", "GetByQuoteRowID", "ListByQuoteID", "UpdateStatus"}
+//
+// 【T-P7-03 又放宽一格：ScanOverdue，而它放的是另一种形状】它没有键可带——
+// "谁该被催"本来就不是按某个 ID 问的问题。这条读口的门不是键而是**封顶**：
+// 一个不带 limit 的 Scan* 就是一句"把全公司逾期的应收一次倒进内存"，
+// 而在催收这一侧它还连着外发队列。所以 banned 依然不含 "Scan"（那是合法前缀），
+// 改由下面那条签名检查拦：任何 Scan* 必须以正整数 limit 结尾，且状态集合不许出现在参数里
+// —— 值域只有一个事实源（model.BillStatusesChased），调用方若能传状态进来就有第二个。
+func TestBillRepository_MethodSetIsExactlyTheDocumentedSeven(t *testing.T) {
+	want := []string{"Available", "Create", "GetByID", "GetByQuoteRowID", "ListByQuoteID", "ScanOverdue", "UpdateStatus"}
 	st := reflect.TypeOf((*BillRepository)(nil)).Elem()
 	if st.NumMethod() != len(want) {
 		t.Fatalf("BillRepository 方法数 %d ≠ %d（清单见用例注释）", st.NumMethod(), len(want))
@@ -365,6 +372,16 @@ func TestBillRepository_MethodSetIsExactlyTheDocumentedSix(t *testing.T) {
 			sig := m.Type
 			if sig.NumIn() != 2 || sig.In(0).String() != "context.Context" || sig.In(1).Kind() != reflect.String {
 				t.Errorf("%s 的签名不是 (context.Context, string)：不带键的批量读等于列全表", name)
+			}
+		}
+		if strings.HasPrefix(name, "Scan") {
+			m, _ := st.MethodByName(name)
+			sig := m.Type
+			// (ctx, cutoff, limit) 三入：无界 或 可传状态集合 都判红。
+			if sig.NumIn() != 3 || sig.In(0).String() != "context.Context" ||
+				sig.In(1).Kind() != reflect.Struct || sig.In(2).Kind() != reflect.Int {
+				t.Errorf("%s 的签名不是 (context.Context, time.Time, int)：不带封顶的扫描等于列全表，"+
+					"而能传状态进来就有第二个催收集事实源", name)
 			}
 		}
 	}

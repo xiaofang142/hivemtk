@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/service"
@@ -465,5 +467,244 @@ func TestLTCConfigView_ExposesCacheAndSizeContract(t *testing.T) {
 		if zero != wantZero {
 			t.Errorf("%s zero_legal=%v，期望 %v", key, zero, wantZero)
 		}
+	}
+}
+
+// ---- 催收腿观测面（T-P7-03）-------------------------------------------------
+
+// 全开那一份快照：blocker 用例的基线，各格从这一份往下改。
+func collectionOpen() app.CollectionSnapshot {
+	return app.CollectionSnapshot{
+		Assembled: true, Available: true, Mode: "enforce", Running: true,
+		StageOn: true, ReachGateChecked: true, ReachGated: true,
+		FlagEnv: service.CollectionJobFlagEnv, BatchEnv: service.CollectionJobBatchEnv,
+		IntervalEnv: service.CollectionJobIntervalEnv, Batch: 20, Interval: (6 * time.Hour).String(),
+		GraceDays: service.CollectionGraceDays, EscalateAfterDays: service.CollectionEscalateAfterDays,
+		RemindWindow:   service.CollectionReminderWindow.String(),
+		EscalateWindow: service.CollectionEscalateWindow.String(),
+	}
+}
+
+// TestCollectionBlockerStringsAreTheAPIClientContract blocker 的六个取值是 API 契约。
+//
+// 为什么单开一格、且只写字面量：视图里每一处赋值写的都是常量名，测试里的比较也是
+// （`blocker != CollectionBlockerModeOff`）—— 于是把常量值从 "mode_off" 改成 "off_mode"
+// 在整张测试面上**完全隐形**，而前端与运维手册是按那串字符串检索的：改名之后页面仍然 200、
+// 用例仍然全绿，只有"这一档到底是哪一处断了"这件事在两个系统之间静默失联。
+// 这一格就是那一声：动它必须连契约文档一起动。
+func TestCollectionBlockerStringsAreTheAPIClientContract(t *testing.T) {
+	for _, tc := range []struct{ got, want string }{
+		{CollectionBlockerNotAssembled, "not_assembled"},
+		{CollectionBlockerDependencyMissing, "dependency_missing"},
+		{CollectionBlockerModeOff, "mode_off"},
+		{CollectionBlockerNotRunning, "not_running"},
+		{CollectionBlockerStageOff, "stage_off"},
+		{CollectionBlockerShadowOnly, "shadow_only"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("blocker 取值 = %q，期望 %q（这串字符是前端与运维手册检索用的键值）", tc.got, tc.want)
+		}
+	}
+	// 六个取值必须互不相同：两格塌成同一个字符串的那天，读侧就分不清"没装"与"缺件"。
+	seen := map[string]string{}
+	for _, tc := range []struct{ name, got string }{
+		{"not_assembled", CollectionBlockerNotAssembled},
+		{"dependency_missing", CollectionBlockerDependencyMissing},
+		{"mode_off", CollectionBlockerModeOff},
+		{"not_running", CollectionBlockerNotRunning},
+		{"stage_off", CollectionBlockerStageOff},
+		{"shadow_only", CollectionBlockerShadowOnly},
+	} {
+		if prev, dup := seen[tc.got]; dup {
+			t.Errorf("%s 与 %s 用了同一个取值 %q", tc.name, prev, tc.got)
+		}
+		seen[tc.got] = tc.name
+	}
+}
+
+// blocker 必须只报链条上**第一处**断掉的地方，而且要能指出下一步做什么。
+//
+// 为什么这件事要在视图里判而不是让运维自己对照六格布尔：这条腿的每一种"没动"都长得
+// 一样（reminded_total 停在 0），而六种成因的排查方向两两相反 —— 旗子 off 是运营选的、
+// 阶段关着是另一处配置、not_running 是这一进程的协程没起来、缺件是装配写错。
+// 把六格布尔原样吐出去，等于把"读响应的人得自己重排一遍优先级"这件事留给事故现场。
+func TestCollectionStatusView_NamesTheFirstBlocker(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*app.CollectionSnapshot)
+		wantBlock string
+		wantSend  bool
+	}{
+		{"全开", func(*app.CollectionSnapshot) {}, "", true},
+		{"没装配", func(s *app.CollectionSnapshot) { s.Assembled = false; s.Mode = "off" }, CollectionBlockerNotAssembled, false},
+		{"缺件", func(s *app.CollectionSnapshot) { s.Available = false }, CollectionBlockerDependencyMissing, false},
+		{"旗子 off", func(s *app.CollectionSnapshot) { s.Mode = "off"; s.Running = false }, CollectionBlockerModeOff, false},
+		{"旗子开着协程没起", func(s *app.CollectionSnapshot) { s.Running = false }, CollectionBlockerNotRunning, false},
+		{"阶段没开", func(s *app.CollectionSnapshot) {
+			s.StageOn = false
+			s.StageReason = "ltc.config 里 collection 未开启"
+		}, CollectionBlockerStageOff, false},
+		{"shadow 只试发", func(s *app.CollectionSnapshot) { s.Mode = "shadow" }, CollectionBlockerShadowOnly, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snap := collectionOpen()
+			tc.mutate(&snap)
+			v := collectionStatusView(snap)
+
+			if got, _ := v["will_send_now"].(bool); got != tc.wantSend {
+				t.Errorf("will_send_now=%v，期望 %v（%+v）", got, tc.wantSend, v)
+			}
+			blocker, _ := v["blocker"].(string)
+			if blocker != tc.wantBlock {
+				t.Errorf("blocker=%q，期望 %q", blocker, tc.wantBlock)
+			}
+			if tc.wantBlock == "" {
+				if note, _ := v["blocker_note"].(string); note != "" {
+					t.Errorf("全开却给出了排障提示：%q", note)
+				}
+				return
+			}
+			// 每个 blocker 都必须带一句"下一步做什么"：只给一个键名的读数，
+			// 在事故现场等于让人再翻一次代码。
+			note, _ := v["blocker_note"].(string)
+			if note == "" {
+				t.Error("blocker 非空而 blocker_note 为空 ⇒ 端点报得出状态、报不出动作")
+			}
+			// 阶段那一格自带的 reason 必须原样带出去，不能只留一句通用文案。
+			if tc.wantBlock == CollectionBlockerStageOff {
+				v2 := collectionStatusView(snap)
+				if got, _ := v2["stage_reason"].(string); got == "" {
+					t.Error("阶段没开而 stage_reason 空 ⇒ 运维不知道是哪一条判据把它关着的")
+				}
+			}
+		})
+	}
+}
+
+// 优先级必须是"先解释为什么一条都不发，再解释为什么在观察"。
+//
+// 这一格盯的是把优先级写反的形状：阶段与旗子同时不对时，报"阶段没开"会让人去改
+// ltc.config（那会顺手放开另外五个阶段），而真正该做的是先看清这条腿自己配的是哪一档。
+func TestCollectionStatusView_BlockerPrecedence(t *testing.T) {
+	snap := collectionOpen()
+	snap.Mode = "off"
+	snap.Running = false
+	snap.StageOn = false
+	v := collectionStatusView(snap)
+	if got, _ := v["blocker"].(string); got != CollectionBlockerModeOff {
+		t.Errorf("mode=off 且阶段关着时 blocker=%q，期望先报 %s", got, CollectionBlockerModeOff)
+	}
+
+	snap2 := collectionOpen()
+	snap2.Assembled = false
+	snap2.Available = false
+	snap2.StageOn = false
+	v2 := collectionStatusView(snap2)
+	if got, _ := v2["blocker"].(string); got != CollectionBlockerNotAssembled {
+		t.Errorf("未装配时 blocker=%q，期望先报 %s（缺件与阶段都是它的下游症状）", got, CollectionBlockerNotAssembled)
+	}
+}
+
+// 快照里的每一格都必须出现在响应里。
+//
+// 盯的刀口是手写视图时漏抄一行（草稿竖那一课：worker 有了累计计数，端点没抄，
+// 于是永久回 0 而全绿）。这里用"字段名清单"而不是逐格断言值：值另有用例管，
+// 这一格只管"没有哪一格在读到这里时消失"。
+func TestCollectionStatusView_CarriesEverySnapshotField(t *testing.T) {
+	v := collectionStatusView(collectionOpen())
+	for _, key := range []string{
+		"assembled", "mode", "running", "available",
+		"flag_env", "batch_env", "interval_env", "batch", "interval",
+		"grace_days", "escalate_after_days", "remind_window", "escalate_window",
+		"stage_on", "reminded_total", "escalated_total",
+		"reach_gate_checked", "reach_gated",
+	} {
+		if _, ok := v[key]; !ok {
+			t.Errorf("响应里没有 %s 这一格 ⇒ 它在端点上消失了", key)
+		}
+	}
+}
+
+// 五格"有才给"的键必须在有值时出现、在空时消失，且 `last` 给的就是快照里那一份读数。
+//
+// 为什么"消失"这一半也要断言：这五格的语义是"这一格此刻有话说"。把它们恒填成空串/nil
+// 会让读侧的 `if "last" in body` 永远为真，于是"这一轮跑过了但一条没催"与"这个进程
+// 从没跑过"在响应里长得一模一样 —— 而这两件事的排查方向相反（前者看频控窗，后者看旗子）。
+// `last` 那半格盯的是视图把读数**原样**交出去：在这里重新拼一份字段，就会拼出一份
+// 与 service 那份各自演化的影子契约（同一条判据见 batch-env 那格的"取快照不重算"）。
+func TestCollectionStatusView_ConditionalKeysAppearOnlyWhenSet(t *testing.T) {
+	const conditional = "blocker_note,stage_reason,last,reach_gate_note,unassembled_hint"
+
+	all := collectionOpen()
+	all.Assembled = false
+	all.StageOn = false
+	all.StageReason = "阶段 collection 未放行"
+	all.Last = &service.CollectionRoundReport{Mode: "enforce", Overdue: 7, Reminded: 3, RemindersHeld: 2}
+	all.ReachGateNote = "外发必经三判据闸门"
+	all.UnassembledHint = "先确认 DB 句柄"
+	v := collectionStatusView(all)
+	for _, key := range strings.Split(conditional, ",") {
+		if _, ok := v[key]; !ok {
+			t.Errorf("五格都有值时响应里没有 %s", key)
+		}
+	}
+	last, ok := v["last"].(*service.CollectionRoundReport)
+	if !ok {
+		t.Fatalf("last 不是那份读数：%T", v["last"])
+	}
+	if last.Overdue != 7 || last.Reminded != 3 || last.RemindersHeld != 2 {
+		t.Errorf("last 被改写过：overdue=%d reminded=%d reminders_held=%d，期望 7/3/2（原样交给读侧）",
+			last.Overdue, last.Reminded, last.RemindersHeld)
+	}
+
+	// 全开那份快照是"五格都没话说"的形状：blocker 空 ⇒ 不给提示，没跑过 ⇒ 不给 last。
+	empty := collectionStatusView(collectionOpen())
+	for _, key := range strings.Split(conditional, ",") {
+		if got, ok := empty[key]; ok {
+			t.Errorf("空值时仍然给了 %s=%v ⇒ 读侧分不清「没话说」与「说了个空」", key, got)
+		}
+	}
+}
+
+// 端点必须落在 AdminAuthMiddleware 之后，且"什么都没装配"时也要答话（不是 503）。
+//
+// 为什么未装配不回 503：这一条读的是"这条腿在不在"，而"不在"本身就是答案。
+// 回 503 会让人去找一个并不存在的故障，回 200 + assembled=false 才会让人去开旗子。
+// 本路由所在的组与 /manage/ltc/config 同一把闸门（setupLTCRoutes 里那个 admin 组）。
+func TestCollectionStatusEndpoint(t *testing.T) {
+	useLTCGlobal(t, newMemKV())
+
+	for _, tc := range []struct {
+		role string
+		want int
+	}{
+		{"", http.StatusUnauthorized},
+		{"agent", http.StatusForbidden},
+		{"admin", http.StatusOK},
+	} {
+		w := serve(ltcAdminEngine(tc.role), "GET", "/api/manage/ltc/collection", "")
+		if w.Code != tc.want {
+			t.Fatalf("role=%q status=%d，期望 %d（body=%s）", tc.role, w.Code, tc.want, w.Body.String())
+		}
+	}
+
+	w := serve(ltcAdminEngine("admin"), "GET", "/api/manage/ltc/collection", "")
+	_, data := decodeEnvelope(t, w)
+	if v, _ := data["assembled"].(bool); v {
+		t.Error("router 包里从没装配过催收腿，端点却报 assembled=true")
+	}
+	if got, _ := data["blocker"].(string); got != CollectionBlockerNotAssembled {
+		t.Errorf("blocker=%q，期望 %s", got, CollectionBlockerNotAssembled)
+	}
+	if got, _ := data["will_send_now"].(bool); got {
+		t.Error("什么都没装配却报 will_send_now=true")
+	}
+	// 未装配那一份的 mode 读自 env，所以响应必须说出这件事本身。
+	if hint, _ := data["unassembled_hint"].(string); hint == "" {
+		t.Error("assembled=false 而没给出\"这个读数来自 env\"的提示 ⇒ 与\"装配了、恰好也是这一档\"同形")
+	}
+	// 口径四格在未装配时同样要给：它们是常量，不是实例状态。
+	if got, _ := data["grace_days"].(float64); got != float64(service.CollectionGraceDays) {
+		t.Errorf("grace_days=%v，期望 %d", data["grace_days"], service.CollectionGraceDays)
 	}
 }

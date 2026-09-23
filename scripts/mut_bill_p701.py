@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：71 格逐格验牙。
+"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：72 格逐格验牙。
 
 跑在**私有 --shared 克隆**里，克隆内容就是「HEAD 那一棵树」：本卡的 15 个新建文件与四处
 装配插入都随 `66964f9e` 进了 HEAD，所以 prepare 不再往克隆里写任何字节，只逐条断言那四处
@@ -75,6 +75,36 @@ check-unwired-assets.sh 同时压着别的泳道未提交的改动；那套补�
 顺带记两处**没改**的：K72 打印 `ran=0 FAIL=1` 而判 KILLED 是 kind=build 的既有形状（那条
 FAIL 是脚本按点名的编译错串代记的，不是 go test 印的用例名）；`--check` 新增一条"注完码
 字节没变 ⇒ 这一格永不开火"的自检，正是本次 G3/G4 那种失效的机器形态。
+
+第三趟（T-P7-03 开发中，**提交前**用 `scripts/anchor-preflight.py` 在工作树上先量出来）：
+三格锚点 0 次，全在 `DueAt` 这一格上 —— 这一卡把它的口径从"本层写死 nil"改成了
+"由调用方给、本层原样落"，并给它加了复合索引标签：
+
+- K07 锚点里没有 gorm 标签：`DueAt *time.Time` 现在带 `index:idx_bills_status_due,priority:2`
+  ⇒ 锚点换成整行，注码方向不变（做成非空 ⇒ 零值时间被逾期扫描读成"早过期几千年"）；
+- K50 锚点 `DueAt: nil, // …` 整行没了（换成 `in.DueAt`）⇒ 注码改打"把没给账期写成今天到期"，
+  判据仍是 `TestBillDeriveLeavesDueAtNull`。**同时补一格 K50b**：坏法从一种变成两种
+  （凭空造 / 把给的丢掉），只留前一格的话"永远回 NULL"这条退路没有探针，而催收腿读的正是它；
+- K56 锚点是"入参结构以 QuoteRowID 收尾"，现在收尾的是 DueAt ⇒ 锚点挪到 DueAt 那一行，
+  expect 跟着改名后的 `TestBillDeriveInputCarriesRowKeyAndOptionalTerm` 走。
+
+这三处都是"上一卡的探针被下一卡的口径改动挪走"，和第二趟那六格同一族。区别只在于
+**这次是在提交前发现的** —— 那个时机就是 `anchor-preflight.py` 的全部用途。
+
+同一趟还查出**驱动自己的两处判据没牙**（不是格子的锚点，是数红/绿的那段代码）：
+
+- `classify` 原先只要输出里出现任何 `--- FAIL` 就判 KILLED，**从不核对 expect 那条腿在不在
+  名单里**。文件头上写着"红而没点名单里那条腿 ⇒ RED-UNNAMED，不计入杀掉"，而 RED-UNNAMED
+  这一类只在"一条用例都没红、rc 却非零"时才产出 —— 也就是说前两趟报的 KILLED 里，
+  任何一格都可能是"注码弄红了别人、本格锁的那条腿照旧绿"。现在点名才算杀掉。
+  反向核验 7 例（点名红/别人红/没红/build 格不点名/skip/连不上库/少跑到）当场跑过，7/7 符合预期；
+- 头注里第二条承诺（`PASS + FAIL == 控制组数`）从来没实现过。补上时踩到一个口径陷阱：
+  `ran` 只数顶层 `=== RUN`，而 `passed` 把 `    --- PASS`（子测试）一起算了，
+  两边不同口径的守恒式凡有子测试必假红 ⇒ 守恒式两边都用**顶层**计数（`top_pass`），
+  分母取控制组现测的那一份而非写死常量。
+
+这两处修完，前两趟的结论里有几格要从"杀掉"降成"待人工看"—— 所以本卡的计划里
+**整族 72 格必须在提交后重跑一遍**，而不是只跑新加的三格。
 """
 from __future__ import annotations
 
@@ -172,7 +202,8 @@ CELLS = [
        'Amount float64 `gorm:"type:numeric(12,2)" json:"amount"`')],
      "TestBillKeyColumnWidths"),
     ("K07", "账期列做成非空（零值会被逾期扫描读成「早过期几千年」）", "go", "model", MODEL,
-     [("\tDueAt *time.Time `json:\"due_at\"`", "\tDueAt time.Time `json:\"due_at\"`")],
+     [("\tDueAt *time.Time `gorm:\"index:idx_bills_status_due,priority:2\" json:\"due_at\"`",
+       "\tDueAt time.Time `gorm:\"index:idx_bills_status_due,priority:2\" json:\"due_at\"`")],
      "TestBillSchemaShape"),
     ("K08", "json 名漂成驼峰（对外契约与列名分家）", "go", "model", MODEL,
      [('json:"quote_row_id"`', 'json:"quoteRowId"`')],
@@ -253,7 +284,7 @@ CELLS = [
       ("func (r *billRepo) exists(",
        "func (r *billRepo) DeleteByID(ctx context.Context, id string) error {\n\treturn r.require()\n}\n\n"
        "func (r *billRepo) exists(")],
-     "TestBillRepository_MethodSetIsExactlyTheDocumentedSix"),
+     "TestBillRepository_MethodSetIsExactlyTheDocumentedSeven"),
 
     # ————— 服务层：四条判据 + 幂等 + 顺序（runner=svc）—————
     ("K40a", "Available 不看报价存储（半装配报告「能派生」）", "go", "svc", SVC,
@@ -293,10 +324,15 @@ CELLS = [
     ("K49", "币种不看报价行、恒用默认值", "go", "svc", SVC,
      [("\tcurrency := strings.TrimSpace(row.Currency)", "\tcurrency := model.BillCurrencyDefault")],
      "TestBillDeriveCurrencyFollowsQuote"),
-    ("K50", "凭空造账期（本卡没有任何一处定义过付款条件）", "go", "svc", SVC,
-     [("\t\tDueAt:         nil, // 账期未定：本卡没有任何一处定义过付款条件",
-       "\t\tDueAt:         &now, // 变异注码")],
+    ("K50", "凭空造账期（报价域里没有「付款条件」这一格，造出来的是合同条款）", "go", "svc", SVC,
+     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     &now, // 变异注码：把「没给账期」写成「今天到期」")],
      "TestBillDeriveLeavesDueAtNull"),
+    # K50b 是 K50 的对偶，T-P7-03 才添得出来：那一卡把 due_at 从"本层写死 nil"改成
+    # "由调用方给"，于是坏法从一种变成两种 —— 凭空造（K50）与**把给的丢掉**（K50b）。
+    # 只留前一格的话，"永远回 NULL"这条退路就没有探针，而催收腿读的正是这一格。
+    ("K50b", "入参带了账期却不落（催收永远只看见 Undated，一条信也不发）", "go", "svc", SVC,
+     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     nil, // 变异注码：把给定的账期丢掉")],
+     "TestBillDeriveStoresTheDueAtTheCallerGave"),
     ("K51", "并发撞上「已派生」之后回读的是自己那份", "go", "svc", SVC,
      [("\t\t\treturn nil, fmt.Errorf(\"bill: 仓储报\\\"已派生过\\\"而按 quote_row_id=%s 读不到那一行（约束名与索引不同源？须人工核对）\", row.ID)\n"
        "\t\t}\n\t\treturn billViewOf(existing, true), nil",
@@ -317,10 +353,10 @@ CELLS = [
        "\treturn fmt.Sprintf(\"b_%s_%d\", now.Format(\"20060102\"), seq)")],
      "TestBillKeyGeneratorIsDeterministic"),
     ("K56", "入参结构多带一格 amount（AC② 当场失去对账对象）", "go", "svc", SVC,
-     [("\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n}",
-       "\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n"
+     [("\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n}",
+       "\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n"
        "\tAmount     float64 // 变异注码\n}")],
-     "TestBillDeriveInputHasOnlyTheRowKey"),
+     "TestBillDeriveInputCarriesRowKeyAndOptionalTerm"),
     ("K57", "派生腿的存储接口多一个写状态的方法（「顺手标成已收」有了入口）", "go", "svc", SVC,
      [("type billStore interface {\n\tAvailable() bool\n",
        "type billStore interface {\n\tAvailable() bool\n\tUpdateStatus(ctx context.Context, id, from, to string) error\n")],
@@ -584,9 +620,13 @@ def go_run(clone: Path, runner: str):
                     set(re.findall(r"^--- FAIL: (\S+)", out, re.M)))
     passed = len(re.findall(r"^--- PASS: (\S+)", out, re.M)) + \
         len(re.findall(r"^    --- PASS: (\S+)", out, re.M))
+    # top_pass 只数**顶层** PASS：`ran` 数的是顶层 `=== RUN`（子测试那几行带缩进，进不了
+    # 这个计数），而 `passed` 把 `    --- PASS` 也一起算了 ⇒ 拿 passed 去和 ran 比守恒，
+    # 凡有子测试的包必然"多算"，那条断言会天天假红。守恒式两边都必须是顶层口径。
+    top_pass = len(re.findall(r"^--- PASS: (\S+)", out, re.M))
     ran = len(re.findall(r"^=== RUN\s+(\S+)", out, re.M))
     skipped = len(re.findall(r"^--- SKIP: (\S+)", out, re.M))
-    return rc, killed, ran, skipped, passed, out
+    return rc, killed, ran, skipped, passed, top_pass, out
 
 
 def gate_run(clone: Path):
@@ -595,7 +635,7 @@ def gate_run(clone: Path):
     return r.returncode, ANSI.sub("", r.stdout + r.stderr)
 
 
-def classify(rc, killed, ran, skipped, out, control):
+def classify(rc, killed, ran, skipped, out, control, expect=""):
     if "connection refused" in out or "dial tcp" in out or "no such host" in out:
         return "ENV-BROKEN"
     if "[build failed]" in out or "undefined:" in out or "declared and not used" in out or rc == -9:
@@ -605,6 +645,13 @@ def classify(rc, killed, ran, skipped, out, control):
     if ran == 0:
         return "NO-RUN"
     if killed:
+        # 【这一条判据在头两趟里是**缺失**的】原先只判 `if killed: return KILLED`，于是
+        # "注码把**别的**用例弄红、而 expect 那条腿照样绿"也算杀掉 —— 那恰好是"这一格没牙"
+        # 的机器形态，文件头上写的 RED-UNNAMED 那一类从来没被这条分支产出过。
+        # 症状是 T-P7-03 加 K50b 时暴露的：注码打在 `in.DueAt` 上，红的却可能是别的派生用例。
+        # 修法是点名：expect 不在 FAIL 名单里 ⇒ RED-UNNAMED，不计入杀掉。
+        if expect and expect not in killed:
+            return "RED-UNNAMED"
         return "KILLED"
     if ran < control:
         return "NO-RUN"
@@ -669,6 +716,7 @@ def main() -> int:
         return 1 if bad else 0
 
     controls: dict[str, int] = {}
+    control_top: dict[str, int] = {}
     for name in sorted({c[3] for c in cells}):
         if name == "gate":
             rc, out = gate_run(clone)
@@ -681,9 +729,10 @@ def main() -> int:
                 raise SystemExit("控制组[gate] 不干净：台账门在克隆里就报漂移，"
                                  "后面所有 G* 格的红/绿都不可信")
             continue
-        rc, killed, ran, skipped, passed, out = go_run(clone, name)
+        rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
         bad = rc != 0 or skipped or killed
         controls[name] = ran
+        control_top[name] = top_pass
         print(f"控制组[{name}] {'DIRTY' if bad else 'CLEAN'} rc={rc} ran={ran} "
               f"PASS={passed} skip={skipped} FAIL={killed}")
         if bad:
@@ -717,13 +766,21 @@ def main() -> int:
         elif kind == "build":
             # 编译期锁的格子：判据本身就是"编不过"，所以 BUILD-BROKEN 是**期望结论**而不是未杀。
             # 但只认 BUILD-BROKEN 会假绿（任何语法错都算杀掉），因此 expect 写成必须点名的编译错串。
-            rc, killed, ran, skipped, passed, out = go_run(clone, runner)
+            rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
             v = classify(rc, killed, ran, skipped, out, controls[runner])
             if v == "BUILD-BROKEN" and expect in out:
                 v, killed = "KILLED", [expect]
         else:
-            rc, killed, ran, skipped, passed, out = go_run(clone, runner)
-            v = classify(rc, killed, ran, skipped, out, controls[runner])
+            rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
+            v = classify(rc, killed, ran, skipped, out, controls[runner], expect)
+            # 头注里承诺过的第二条断言：**PASS + FAIL == 控制组数**。
+            # 只看"点名那条红了"会放过一种真实坏法 —— 注码让别的用例 panic 中止，
+            # 二进制提前退出，expect 那条恰好排在 panic 之前跑完并红了，于是看着像杀掉。
+            # ran < control 拦不住它（panic 影响的是后面的），这一条按"总数守恒"拦。
+            if kind == "go" and v in ("KILLED", "RED-UNNAMED") and \
+                    top_pass + len(killed) != control_top[runner]:
+                problems.append(f"{code} 计数不平：顶层 PASS={top_pass} + FAIL={len(killed)} ≠ 控制组的 "
+                                f"{control_top[runner]}（有用例被 panic 带走，或压根没参与这一趟）")
 
         tally[v] += 1
         killmap[code] = set(killed)

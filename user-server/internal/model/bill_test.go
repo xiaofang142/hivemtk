@@ -133,14 +133,27 @@ func TestBillKeyedToExactlyOneQuoteVersion(t *testing.T) {
 	if tag := gormTagOf(t, st, "OpportunityID"); !strings.Contains(tag, "index") {
 		t.Errorf("opportunity_id 应有索引：客户 360 视图与回款看板按商机捞账：%s", tag)
 	}
-	// status 刻意**不建索引**：本卡没有任何按状态捞的读方（逾期扫描是 P7-03 的查询，
-	// 它的形状是 status IN (…) ∧ due_at < now ⇒ 那时按 due_at 建，与 quotes 不预留索引同判据）。
-	if tag := gormTagOf(t, st, "Status"); strings.Contains(tag, "index") {
-		t.Errorf("status 在本卡就建了索引，而今日零个按状态捞的读方（预留索引与预留列同罪）：%s", tag)
+	// 【这一格在 T-P7-03 反过一次向，反向前后的话都留在这儿】
+	// T-P7-01 交付时它判的是**红**："status 刻意不建索引：本卡没有任何按状态捞的读方
+	// （逾期扫描是 P7-03 的查询，它的形状是 status IN (…) ∧ due_at < now ⇒ 那时才建，
+	// 与 quotes 不预留索引同判据）"。读方在 T-P7-03 真的来了（BillRepository.ScanOverdue），
+	// bills 从此是唯一一张会被定时任务反复带谓词扫的凭证表，那句"那时才建"的"那时"到了。
+	// 于是判据翻成反向：复合索引 (status, due_at) 必须存在，且**必须成对**——
+	// 只给 status 建单列索引是这里最容易写错的一种：催收查询选走的行数占比很高，
+	// 单列索引会让库先捞再把 due_at 过滤掉，看着"有索引"而实际仍是半次扫。
+	if tag := gormTagOf(t, st, "Status"); !strings.Contains(tag, "index:idx_bills_status_due,priority:1") {
+		t.Errorf("status 应是复合索引 idx_bills_status_due 的第一列，实得：%s（缺它则催收每轮全表扫，"+
+			"而慢的表现只是\"这轮扫得少\"，不是报错）", tag)
 	}
-	// due_at 同样不预留：消费者在 P7-03，那条查询今天还不存在。
-	if tag := gormTagOf(t, st, "DueAt"); strings.Contains(tag, "index") {
-		t.Errorf("due_at 的索引该由它的第一个读方（逾期扫描）带来，不是现在：%s", tag)
+	// due_at 同一索引的第二列：判据同上，且顺序反了（due_at 在前）也判红 ——
+	// 那样 `status IN (…)` 这一半就落不进索引，比较谓词只能靠回表。
+	if tag := gormTagOf(t, st, "DueAt"); !strings.Contains(tag, "index:idx_bills_status_due,priority:2") {
+		t.Errorf("due_at 应是 idx_bills_status_due 的第二列，实得：%s", tag)
+	}
+	// 索引名不许把自己写成"催收集"的一部分：部分索引 `WHERE status IN ('open','partial')`
+	// 体积省一半，但那两个字面量就有了第二个家（第一个是 BillStatusesChased）。
+	if tag := gormTagOf(t, st, "Status"); strings.Contains(tag, "where:") {
+		t.Errorf("status 的索引带上了部分谓词，催收的状态字面量被抄进 DDL：%s", tag)
 	}
 }
 

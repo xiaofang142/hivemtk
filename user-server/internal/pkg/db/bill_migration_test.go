@@ -252,3 +252,56 @@ func TestBillIDIsTextPrimaryKey(t *testing.T) {
 func testBillTime() time.Time {
 	return time.Date(2026, 11, 5, 9, 30, 0, 0, time.UTC)
 }
+
+// TestBillChasedDueAtIndexExists T-P7-03 那条扫描的库侧前提。
+//
+// bills 是**唯一一张会随着催收轮次被反复全表扫**的凭证表：每轮 `WHERE status IN (…) ∧
+// due_at < cutoff ORDER BY due_at`。没有支撑索引时，今天一万行扫得动，明年一百万行就是
+// 每轮一次全表扫 —— 而它跑在带封顶的定时任务里，慢的那一面表现为"这一轮扫得少"（截断
+// 读数仍然自洽），不是报错。所以这一格索引必须在**第一个读方落地的同一张卡**上铺，
+// 而不是等到某轮扫描超时那天补。
+//
+// 判据只到"形状"不到"实现方式"：复合索引 (status, due_at) 存在即可。刻意**不**要求它是
+// 部分索引（`WHERE status IN ('open','partial')` 能省一半体积，但那会把催收集的字面量
+// 抄进 DDL —— 值域只有一个事实源 model.BillStatusesChased，见仓储侧同一条理由）。
+func TestBillChasedDueAtIndexExists(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	if err := db.AutoMigrate(&model.Bill{}); err != nil {
+		t.Fatalf("AutoMigrate 失败: %v", err)
+	}
+	// 重跑一次：GORM 按名字对账，已有索引不该变成两份，也不该报错。
+	if err := db.AutoMigrate(&model.Bill{}); err != nil {
+		t.Fatalf("第二次 AutoMigrate 失败: %v", err)
+	}
+
+	var indexes []quoteIndexRow
+	if err := db.Raw(`SELECT
+			i.relname AS name,
+			(SELECT string_agg(a.attname, '+' ORDER BY k.ord)
+			   FROM unnest(x.indkey) WITH ORDINALITY AS k(attnum, ord)
+			   JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = k.attnum) AS cols,
+			x.indisunique AS uniq, x.indisprimary AS pkey
+		FROM pg_index x JOIN pg_class i ON i.oid = x.indexrelid
+		WHERE x.indrelid = 'bills'::regclass`).
+		Scan(&indexes).Error; err != nil {
+		t.Fatalf("查 pg_index 失败: %v", err)
+	}
+	var hits []quoteIndexRow
+	for _, idx := range indexes {
+		if idx.Cols == "status+due_at" {
+			hits = append(hits, idx)
+		}
+	}
+	if len(hits) != 1 {
+		t.Fatalf("(status, due_at) 上的索引命中 %d 个，期望恰好 1 个；bills 实得索引 %v —— "+
+			"缺它则催收每一轮都是一次全表扫，且慢的那一面只会表现为\"这轮扫得少\"",
+			len(hits), colsOf(indexes))
+	}
+	if hits[0].Uniq || hits[0].Pkey {
+		t.Errorf("%s 是唯一索引/主键（uniq=%v pkey=%v）：账期与状态组合上当然可以有多张应收",
+			hits[0].Name, hits[0].Uniq, hits[0].Pkey)
+	}
+}

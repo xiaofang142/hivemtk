@@ -459,6 +459,19 @@ func main() {
 		defer recoveryWorker.Stop(context.Background())
 	}
 
+	// T-P7-03 催收腿：逾期扫描 → 提醒外发 → 升级待办。装配落在 internal/app
+	// （见 collection_wiring.go），开关 FF_LTC_COLLECTION_JOB=off（默认）时协程不起，
+	// 但实例照装 —— 观测端点 /api/manage/ltc/collection 要答得出"现在配的是哪一档"。
+	//
+	// 顺序约束与上一行**同一条**、也同样必须守住：必须在 router.Setup 之后。催收的提醒
+	// 走的是 ReachByCustomer 这个唯一外发出口，它身上的审批闸门要读 W-1 的 checker，
+	// 而那个 checker 是 router.Setup 里 InitGlobalToolExecutor 才建的。装在前面不会 panic，
+	// 只会留下一条告警，然后每一条催收提醒都在没人批准的情况下出域。
+	// （cmd/api 的 TestCollectionJobMountedAfterRouterSetup 把这两件事钉成断言。）
+	if collectionJob := app.InitCollectionRuntime(db.GetDB()); collectionJob != nil {
+		defer collectionJob.Stop(context.Background())
+	}
+
 	addr := resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))
 	logger.Infof("营销后端服务启动于 %s", addr)
 	// serveHTTP 按平台拆分:Unix 走 endless(零停机热重启),Windows 走标准 http

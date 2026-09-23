@@ -122,3 +122,46 @@ func TestInstallStatusInitOutsidePlatformGuard(t *testing.T) {
 		t.Errorf("InitInstallStatus(偏移 %d) 落在平台开关语句内部(结束于 %d)：关态下安装态检查器会是 nil，InitGuard 会放行全部 API", init, end)
 	}
 }
+
+// TestCollectionJobMountedAfterRouterSetup 催收腿必须装进启动路径，而且必须排在
+// router.Setup **之后**。
+//
+// 两件事各有各的红法，所以同一格里都判：
+//   - 没装配（第一处 Fatal）：`CollectionJob` 的全部判据只在 service 包的假件上跑过，
+//     生产里一条逾期单都不会被催。这一种破坏编译照过、全套用例照绿 —— 判定 A 的原文形状，
+//     所以启动路径上有没有这一行必须单独成为一条断言，而不是靠台账（台账也是这一族，
+//     但台账跑在 CI 的另一步，用例这一层也得有一份）。
+//   - 装配但排在 router.Setup 之前：不 panic、不报错，只留一条"依赖未成立 ⇒ 不装门"的告警。
+//     于是催收提醒这条**对客户外发**的路径静默地不受审批约束，而账单页与日志都一切正常。
+//     顺序在这里是功能的一部分，不是可挪动的细节（与挽回 worker 那一条同一学费）。
+func TestCollectionJobMountedAfterRouterSetup(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("读取 main.go: %v", err)
+	}
+	s := string(src)
+
+	const mount = "app.InitCollectionRuntime("
+	init := strings.Index(s, mount)
+	if init < 0 {
+		t.Fatal("main.go 里没有 app.InitCollectionRuntime ⇒ 催收腿不在启动路径上：" +
+			"逾期应收不会被提醒、不会升级人工，而这件事在编译与用例面上全都看不出来")
+	}
+	if n := strings.Count(s, mount); n != 1 {
+		t.Fatalf("催收腿装配应只发生一次，实际 %d 次（多装一台就多一台在扫同一批逾期单）", n)
+	}
+	setup := strings.Index(s, "router.Setup(r")
+	if setup < 0 {
+		t.Fatal("main.go 里已找不到 router.Setup(r：本条判据的参照物消失了")
+	}
+	if init < setup {
+		t.Errorf("催收腿装配(偏移 %d)早于 router.Setup(偏移 %d) ⇒ AttachReachGate 拿不到 W-1 的 checker，"+
+			"这条外发路径不受审批约束，而日志里只有一行告警", init, setup)
+	}
+
+	// 返回的那一台必须被 Stop：off 档下 InitCollectionRuntime 也会返回实例，
+	// defer 只在非 nil 时挂，所以"没挂 Stop"是一种独立的漏法（关停时协程还在发）。
+	if n := strings.Count(s, "collectionJob.Stop(context.Background())"); n != 1 {
+		t.Errorf("collectionJob.Stop 出现 %d 次，期望 1 ⇒ 优雅关停时这一台还在跑下一轮", n)
+	}
+}
