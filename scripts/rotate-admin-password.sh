@@ -105,11 +105,22 @@ echo "hash: bcrypt 前缀=${HASH:0:4} 长度=${#HASH}"
 # 守卫函数体从迁移源里抽，不另抄一份（抄一份就等于留一个会过期的第二事实源）。
 # 抽出来的是 Go 原始字符串的一段，首尾带着反引号定界符和结尾逗号 —— 那是源码记号不是 SQL，
 # 必须剥掉再拼（实测漏剥会把 "`CREATE OR REPLACE FUNCTION …`," 整段喂给 psql）。
+# **必须保持多行**：函数体里有 `-- 1) …` 这种 SQL 行注释，压成一行会让注释吞掉其后的全部文字，
+# 连 `$$` 的收尾定界符和拼上去的 `;` 一起当注释 —— psql 于是把"字符串没闭合"的半句发给服务端，
+# 报 `syntax error at end of input`（2026-09-23 实跑抓到：多行版 rc=0、压行版 rc=3、
+# 多行但删掉 `--` 注释版 rc=0，三格 A/B 定死根因在这里，不在编码、不在 DDL 内容）。
 extract_guard_fn() {
-  sed -n "/CREATE OR REPLACE FUNCTION fn_guard_initial_admin_$1/,/LANGUAGE plpgsql/p" "$MIGRATION_SRC" \
-    | tr '\n' ' ' \
-    | sed -e 's/^[[:space:]]*`//' -e 's/[[:space:]]*`,[[:space:]]*$//' \
-          -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  awk -v name="$1" '
+    !got && $0 ~ "CREATE OR REPLACE FUNCTION fn_guard_initial_admin_" name "\\(\\)" {
+      got = 1; sub(/^[[:space:]]*`/, ""); print; next
+    }
+    got {
+      if ($0 ~ /^[[:space:]]*\$\$ LANGUAGE plpgsql/) {
+        sub(/[[:space:]]*`[[:space:]]*,[[:space:]]*$/, ""); print; exit
+      }
+      print
+    }
+  ' "$MIGRATION_SRC"
 }
 FN_PW_DDL="$(extract_guard_fn password)"
 FN_DEL_DDL="$(extract_guard_fn delete)"

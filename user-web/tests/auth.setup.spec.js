@@ -4,13 +4,16 @@ import path from 'path'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8213'
 const STATE = path.resolve(process.cwd(), 'tests/.auth/user.json')
 
-// 候选密码：覆盖历史重置值(Admin@123456)与平台代理凭证(PLATFORM_ADMIN_PASSWORD 环境变量)，
-// 逐一尝试直到登录成功，避免容器重建后凭据失效导致整套测试无法运行。
+// 口令链与 docs/DEPLOYMENT_GUIDE.md §6.2 同口径：环境变量 > 历史重置值，逐一尝试直到登录成功。
+// 上一版注释里承诺的 `PLATFORM_ADMIN_PASSWORD` 根本没进数组、也没有 `SEED_PASSWORD` 入口
+// ⇒ 凡是跑过 scripts/rotate-admin-password.sh 的实例，这一格必然"所有候选密码均无法登录"。
 const CANDIDATES = [
+  process.env.SEED_PASSWORD,
+  process.env.PLATFORM_ADMIN_PASSWORD,
   'Admin@12345678',
   'Admin@123456',
   '62cfdc6bf1b075830734cc6f9a63501b'
-]
+].filter((pw, i, arr) => typeof pw === 'string' && pw.trim() !== '' && arr.indexOf(pw) === i)
 
 test.use({ baseURL: BASE })
 
