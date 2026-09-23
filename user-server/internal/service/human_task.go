@@ -107,10 +107,17 @@ const HumanTaskSubjectCustomerSession = "customer_session"
 // 它的 subject_id 是 approval_requests.id（不是被审对象的二元组）：待办与审批必须
 // 一对一，而"同一次动作重新 Submit"在审批侧本来就会新建一行（改判无路），
 // 于是待办也跟着新建一条 —— 用被审对象做键会让第二次入队复用第一次那条已关闭的待办。
-//
-// collection_escalation 一类仍**没有**生产投递方（催收竖 T-P7-03 才建），
-// 所以这里也只有两个常量：登记一个没人用的字符串，就是留一份"看起来已经接好"的假象。
 const HumanTaskSubjectApprovalRequest = "approval_request"
+
+// HumanTaskSubjectCollectionCase 催收升级待办的 subject_type 字面量（T-P7-03）。
+//
+// 它的 subject_id 是 **bills.id**（那一张应收），不是商机也不是报价：升级要人去看的是
+// "这一笔钱还没收到"，而一张账单一生只会被升级到一次（升级窗口在 collection_job 侧另算，
+// 因为 Submit 的幂等只覆盖"还在 open 的那条"）。
+//
+// 这一格从"没有生产投递方"变成有投递方，是 T-P7-01 立「登记一个没人用的字符串
+// 就是留一份假象」那条判据时等的那个东西：常量跟着第一个真实写路径一起落地，不提前占位。
+const HumanTaskSubjectCollectionCase = "collection_case"
 
 // HumanTaskSubmitInput 投递一条待办。
 //
