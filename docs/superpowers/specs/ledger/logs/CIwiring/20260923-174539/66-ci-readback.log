@@ -28,3 +28,8 @@ run=12 Seam Guard success、Docs 三门 success、SBOM success、dependabot succ
    本批一行未碰。第五十二轮记的"那 2 errors 属未提交面"就此订正：它们**早已入库并随 master 推上双远端**，从"待认领"变成"公开既有红"。
 3. 其余四门（Markdown Lint／Docs Consistency／Docs Link Check／SBOM）在 497 份取证档、探针脚本与新文档段进树之后仍 **success**
    ⇒ 本轮把产物迁进仓库树没有把文档面弄红（Docs Consistency 恰恰是逐条核 `file:line` 的那道）。
+
+### 第二笔（常驻闸入库 c0501c4d）的 CI 回读
+双远端推前判祖先：GitHub 与 Gitee 的 tip 均为 `2c447c79`，`git merge-base --is-ancestor` 两测 rc=0 ⇒ 皆 fast-forward、无 `--force`；推后 `git ls-remote <URL> refs/heads/master` 双回读 **同为 `c0501c4d0d6119d26bb17efe74c6eaf7dbc3453d`＝本地 HEAD**。
+`gh api "repos/xiaofang142/hivemtk/actions/runs?head_sha=c0501c4d…(全 SHA)"` ⇒ `Docs Link Check`／`Docs Consistency`／`Markdown Lint`／`SBOM` **四门 completed/success**（501 份取证档与新文档段落进树仍不弄红文档面）；`Lint` completed/**failure**，两枚 error 与上一 tip **逐字同**（`216:7 preserve-caught-error`、`821:15 no-useless-assignment`，浏览器自动化泳道已提交字节）⇒ 本批零新增红。`user-server-ci`／`Seam Guard` 依旧没跑（`paths:` 显式清单不含 `docs/**` 与 `scripts/check-secret-containment.py`）。
+半径：本段写的是 `c0501c4d` 那一跑；**本笔追加所在那一推的 CI 回读不写在库里**（终档不能自含，规矩同 §23.19"扫描半径"）——判读以 `gh api …head_sha=<末笔全 SHA>` 现算为准。
