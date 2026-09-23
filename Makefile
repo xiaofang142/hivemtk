@@ -451,6 +451,10 @@ audit:
 	@python3 scripts/check-async-global-read.py
 	@echo "── 第二跳：被异步链经默认实现读到的全局，读写必须各走自己的 accessor（注册表 seam-guard.registry）──"
 	@python3 scripts/check-seam-guard.py
+	@echo "── 全仓 shell 文件：shellcheck error 级零容忍 ──"
+	@bash scripts/check-shellcheck.sh
+	@echo "── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──"
+	@bash scripts/check-shell-cjk-expansion.sh
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——
