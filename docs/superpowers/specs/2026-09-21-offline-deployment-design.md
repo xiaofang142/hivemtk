@@ -1892,3 +1892,38 @@ bash 3.2 与 runner bash 5 之间语义不同（同一构造本机 rc=2、CI rc=
 那里写"把同一套判据（os.walk 的目录排除…）抽成只读探针在 platform 树上跑，得 `scanned=7 / total=0`"。
 口径本轮已换，但结论不动：新面是旧面的**子集**（旧面多出来的只有被忽略的副本），
 在超集上零命中 ⇒ 在子集上必然零命中，无需重跑。历史段落下不改，本节记明口径变更与此推论。
+
+### CI 回读：第二跑的逐作业读数
+
+上一节把最终判定推到"本节末"，这里兑现。第一跑（run `35816241272` @ `3bb24cba`）反向测试
+`PASS=15 FAIL=1` 红在 T4；修法三条推成 `79b81002` 后的第二跑是 run `35818049712`
+（`head_sha` 逐字对过＝`79b810028f3cbbf795a241de60be68f5ef24a19b`，非缩写前缀）。下面每一行都取自
+`gh run view --log` 原文（只折叠了列对齐用的连续空格），不是按"作业绿"倒推的：
+
+| 作业 / 步骤 | 结论 | 日志原文 |
+|---|---|---|
+| `Shellcheck (error 级零容忍)` → 装 shellcheck（钉版本） | success | 装进 `/tmp/scvenv`，随后 `test -x` 通过 |
+| 同上 → `check-shellcheck（全仓 shell 文件的 error 面）` | success | `shellcheck=0.11.0（/tmp/scvenv/bin/shellcheck）`、`scanned=137 checked=137 error=0` |
+| 同上 → `check-shellcheck 反向测试（证明它会红）` | success | `PASS T0b 两个计数 == 独立 ls-files 计数  scanned=checked=137（独立口径 137）`、`PASS T4 缺 shellcheck ⇒ rc=2 不判绿  rc=2`、`合计 PASS=16 FAIL=0` |
+| `Shell $VAR+CJK expansion guard`（两步） | success | `PASS C0b scanned 对账  scanned=137 == 独立口径 137`、`合计 PASS=9 FAIL=0` |
+
+T4 在 CI 上从 `rc=127` + `line 179: bash: command not found` 变成 `rc=2` 且红因正是「找不到 shellcheck」
+⇒ 那三条修法（垫腿内目录 / `sys.executable` 真解释器 / 绝对路径调 bash）在 runner 上成立；
+本机 A/B 复现不出的那条分支由 CI 判掉，这也正是"本地 16/16 不算数"的处置方式。
+
+两处**本地与 CI 的读数差一档**都属真值不同源，必须写明，否则下一位会把差值读成门不稳定：
+
+1. `scanned`：本机 139 / CI 137。本批新门与两份测试当时是未跟踪态，本机面含 `--others`；
+   CI 干净检出恒等于 tracked 集合 ⇒ 与"CI 侧扫描面恒等于 tracked 集合"那条推断同形，差的只有未跟踪件。
+2. CJK 门：本机 `命中 2 ＝ 基线 2`（绿、无提示），CI `命中 1 处（基线 2 处）` 外加一条
+   「以下基线条目已归零，请把它们从基线里删掉：`scripts/check-architecture.sh`」。
+   两条都对，量的不是同一份字节：CI 读已提交版本（那里那一处 0 命中），本机读的是别泳道正在改的工作树版本（1 命中）。
+   处置＝**基线行保留**：删行会让本机的门因别人**未提交**的在途改动而红，而消红要改的文件
+   （`check-architecture.sh`）在本批不动的热文件清单里。归零由那一泳道自己做完，届时提示才成立。
+   这也是"豁免/STALE 核对要限定本次真扫到的文件"的另一个方向：同一条基线在两侧都合法，**但它合法的理由不同**。
+
+Lint 层的残红只剩 `ESLint (user-web 主应用)` 一步（`✖ 18738 problems (2 errors)`：
+`216:7 preserve-caught-error`、`821:15 no-useless-assignment`），即 §十九 已逐条归因过的那一对
+浏览器自动化存量件，本批未碰过它们。`LICENSE Compliance Scan` 整作业 skipped 与推送无关，
+是它自己的 `if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`
+（`.github/workflows/lint.yml:191`）——按 ㉓ 的口径，这类"作业级跳过"要读 `if:` 才知道是设计而不是漏跑。
