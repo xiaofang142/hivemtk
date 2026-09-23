@@ -899,6 +899,11 @@ OPT-CI-10 步骤，口径更强（npm@11 运行时审计 + 零覆盖 exit 2）�
 - 线上发布实测（Pages 起来后访问 `https://xiaofang142.github.io/hivemtk/deploy/` 应为真 200、
   未知路径应为 404 + 兜底页）本批未做，因为拿不到执行体。
 
+> **订正（2026-09-23，第七轮取证）**：上面两条"账号侧/拿不到执行体"的句子**已不成立** ——
+> Pages 此刻是**已开启且已发布**状态，且那两项实测都跑到了（见 §7.7 逐条读数）。
+> 开启动作不是本批做的（本批全程未对 GitHub 写入），但**"未做实测"这条账本批已结**：
+> `/deploy/` 真 200、未知路径真 404 且兜底页渲染，根/deploy/404 三页各过一趟无头浏览器、控制台零报错。
+
 ---
 
 ### Task 10 · 文档全量清除 —— ✅ 完成（两仓 0 命中），但**首遍只清了半个仓，收口时返工**
@@ -975,7 +980,7 @@ merchant key、`.env:43,266` 的 `PLATFORM_LICENSE_SECRET` 值。
   断链 0），**样式级 md 门未跑**。
 - 文档一致性门里"三处注释必须带不装配"那条断言在磁盘上不存在（`scripts/check-doc-consistency.sh` mtime Sep 20、
   全文 grep 零命中）⇒ 未凭计划文本假造该门，也未新增断言；关态不装配这件事目前只由 Task 3 的行为测试守着。
-- 官网/文档改写后**未在浏览器里逐页看过**（Pages 未发布，见 Task 11）。
+- 官网/文档改写后**未在浏览器里逐页看过**（Pages 未发布，见 Task 11）。 ⇒ **第七轮已补，读数见 §7.7。**
 
 ---
 
@@ -1132,6 +1137,7 @@ merchant key、`.env:43,266` 的 `PLATFORM_LICENSE_SECRET` 值。
 - 三条前端构建（user-web / website / platform-web）与 website 产物门在 22:5x–23:2x 各跑过一遍、日志在 `/tmp/t11/`，
   收口阶段**没有重复跑**：同时跑 npm 与 Go 全量会抢负载，而负载正是本批第一遍超时的成因。
 - `markdownlint-cli2` / `lychee` 本机无 CLI ⇒ 只跑了 python 侧 md 链接门；Pages 真发布 + 浏览器逐页看未做（需用户先开 Pages）。
+  ⇒ **第七轮：Pages 实测早已是开启态（不是"等用户开"），浏览器三页也都走了一遍，见 §7.7。**
 - 共享工作树的 `check-ci-step-coverage.py` 读远端历史，本批不 commit ⇒ 它看不到本批任何改动，这道门的 4 条 ALWAYS_RED 与本批无因果，也未顺手修。
 
 ---
@@ -1425,6 +1431,8 @@ key 集合层面前 953 / 后 859 ⇒ **净消失 94、净新增 0**。94 = **93
 2. **`.tmp_files/pre-offline-snapshot.tar.gz` 里 1 处 merchant key**：删它等于删本批唯一回滚依据，
    且它是仓外未版本控制文件（公开面 0）⇒ 保留并登记（Task 18）。
 3. **Pages 启用 / push / DNSPod 5 条废记录 / 凭证轮换**：全是账号与远端动作，本批全程未 commit、未 push。
+   （写于未推送那一轮；push 后续已发生，Pages 一条由 §7.7 结掉。仍待操作者的剩两条：DNSPod 5 条废记录、
+   活栈默认口令那一行命令 —— Task 22 的机制齐备但活栈读数当时是 RED。）
 4. **默认口令面**：`Seed@123456` 本轮重测 `git grep -l` = 工作树 12 / HEAD 14 文件，`Admin@123456` = HEAD 38 文件。
    Task 19 给的是"可覆盖 + 用了公开口令会打告警"，**没动默认值**（~~动了会打断 `user-web/tests/audit/api_smoke.py`
    的登录用例~~ 第三轮核正：该用例写死 `Admin@123456`、与 `seedPasswordDefault` 无关，理由不成立）；
@@ -1445,6 +1453,7 @@ key 集合层面前 953 / 后 859 ⇒ **净消失 94、净新增 0**。94 = **93
   `cmd/pwtool/...` + `cmd/seed/...`（rc=0）、platform `internal/config/...`（rc=0）。
   **没有重跑 user-server 全量**（Task 11 已跑过两遍，本轮未碰 user-server 除 GEO/口令外的 Go 码）。
 - `markdownlint-cli2` / `lychee` 本机无 CLI ⇒ 只跑了 python 侧 md 链接门；Pages 真发布 + 浏览器逐页看未做。
+  ⇒ **Pages 那条已由 §7.7 结掉；`markdownlint-cli2` / `lychee` 仍无本机 CLI，那条是真没做。**
 - `check-ci-step-coverage.py` 读远端历史 ⇒ 本批不 commit 它看不到本批改动，其 4 条 `ALWAYS_RED` 与本批无因果、未顺手修。
 
 ## 7.3 第三轮：四个开放项收口成"机制 + 一条命令"（2026-09-22，指令 = 不留下任何问题）
@@ -1560,7 +1569,7 @@ GitHub ubuntu runner 是 bash 5 ⇒ **CI 复现不出来**，这条只保护 mac
 | --- | --- | --- |
 | 1 frp 三条明文的公开面 | `git grep -n '<token>' HEAD` = 0 命中、工作树全仓 ripgrep = 0、`git log --all -S` = 0 | 上一版之后已随其他提交收口，本批不再挂账 |
 | 2 `.tmp_files` 快照里的 merchant key | 仍是仓外未版本控制文件（公开面 0） | 维持"保留并登记"（Task 18），非本批能改的形态 |
-| 3 Pages 启用 / push / DNSPod | push 已发生（两仓双远端），Pages 与 DNSPod 5 条废记录仍是账号侧动作 | 只剩账号侧两条，代码侧无待办 |
+| 3 Pages 启用 / push / DNSPod | push 已发生（两仓双远端），Pages 与 DNSPod 5 条废记录仍是账号侧动作 | 只剩账号侧两条，代码侧无待办 ⇒ **第七轮订：Pages 那条已实测结掉（§7.7），账号侧只剩 DNSPod 一条** |
 | 4 默认口令面 | 机制齐（Task 22），活栈读数 RED | 从"要拍板"降级为"一行命令 + 读数从 1 变 0" |
 
 ### 本轮新核正（上一轮记录里不成立的句子）
@@ -2020,3 +2029,88 @@ workflows 里只有 **1 条**（`user-server-ci.yml:151` `run: make fmt-check`�
 克隆版 `红 3`，同一个 183 键总数）。CI 不跑这道门，所以它是"本地聚合门红、CI 全绿"的形状。
 处置：**不替他们写那 3 行**——同一张表里由我重复登记，等他们那一笔落地就变成两条要人对账的行；
 克隆里用 `git apply` 把他们那 3 行当本地夹具打上，只为让链走到我那两步，夹具不入库。
+
+---
+
+## 7.7 第七轮：把"Pages 未发布 / 未实测"这一类账结掉（2026-09-23，指令 = 不留下任何问题）
+
+### 起因：文档与线上状态不一致，且不一致的方向是"少报了自己能做的"
+
+spec 里 6 处把官网发布面记成待办：Task 9 末「交回用户的手工作」两条、Task 11「未在浏览器里逐页看过」、
+§7.1 与 §7.2 各一条「Pages 真发布 + 浏览器逐页看未做」、§7.2 待办条目 3、§7.3 状态表第 3 行。
+本轮**先核线上真实状态再落笔**（不引用上一轮的记忆），并在原位加了订正指针、原文照留。
+
+### Pages 此刻是什么态（全部只读取证；本轮对 GitHub 零写操作）
+
+| 取证 | 读数 |
+| --- | --- |
+| `gh api repos/xiaofang142/hivemtk/pages` | `build_type=workflow`、`html_url=https://xiaofang142.github.io/hivemtk/`、`source={master,/}`、`cname=null`、`custom_404=false`、`status=null` |
+| `gh api …/pages/builds/latest` | HTTP 404 —— **这是 workflow 部署形态的预期形状**（旧式 build 管道没在用），不能读成"没发布过" |
+| `gh run list --workflow website-pages.yml --limit 3` | 最近三跑全 `success`：`35771169734` @ `0d9a6b1d`（2026-09-22T19:02:28Z，push）、`35764949603` @ `1899775c`、`35753244856`（pull_request） |
+| `git log --oneline 0d9a6b1d..HEAD -- website/ .github/workflows/website-pages.yml \| wc -l` | **0**（当下 HEAD = `d6eebfa6`）⇒ 线上产物与当前源码在 website 面上等价，"发布的是旧版"这条不成立 |
+
+⇒ 结论：**开启动作本批没做（也确实不需要做）**；本批欠的那半条是"实测"，本轮补完。
+
+### 线上三态实测（curl，`-w '%{http_code} %{size_download}'` 逐条现取）
+
+| 路径 | 状态 / 字节 | 判读 |
+| --- | --- | --- |
+| `/` | 200 / 6157 B / md5 `d36195d4793b40fbc38e52bb7073343f` | 静态 `<title>HiveMTK · 私域 AI 营销操作系统 \| AGPL-3.0 开源</title>`；`xapptool` 0、`hm.baidu.com` 0；`/hivemtk/assets/` 前缀 3 处 |
+| `/deploy/` | 200 / 6157 B（与根同字节） | **真 200**：来自 `website/scripts/postbuild.mjs` 第 3 步为每条静态路由铺设的 `<route>/index.html`，不是靠 `404.html` 兜底"看起来像 200" |
+| `/no-such-page-<rand>/` | 404 / 6157 B（与根同字节） | 状态码是**真 404**，body 走 `dist/404.html`（与 `index.html` 同字节）—— 正是 §5.1 第 2 条写下的预期形状 |
+
+两处本轮自己制造的假读，都要照记（判据比结论重要）：
+
+① 第一次探未知路径退 `000`（`SSL_ERROR_SYSCALL`）、0 字节。若沿用固定文件名，盘上留着的就是**上一轮那份 body**，
+`grep` 会把旧值当本轮答案 —— 同旧那条「curl `http=000` 时旧 `/tmp` 文件留在原地」。本轮改用唯一文件名 +
+`--retry 3` 重测才拿到 404。
+
+② 抓 JS 产物时写成 `"$B$js"`，而 `B` 已含 `/hivemtk`、`js` 又以 `/hivemtk/` 开头 ⇒ URL 变成 `…/hivemtk/hivemtk/assets/…`，
+拿到的是 **404 / 6157 B 的兜底页**，而那份"bundle"里 7 个禁串**全部 0 命中**。
+这是标准的"量错对象还能读出绿"。补齐后的两条硬判据：`size_download` 必须对得上（`361707 ≠ 6157`）、
+且要有"必非空"的正证据（同一文件里 `history` 命中 2 次、体积 > 100 KB）。
+
+### 产物里有没有旧域 / 授权残留（根 HTML 引用的 3 个资产全量抓下来数）
+
+| 资产 | 状态 / 字节 | `xapptool` | `baidu` | `MERCHANT_API` | `hiveuser` | `license` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/assets/index-CxvILaKN.js` | 200 / 361,707 B / md5 `5da1a5c7dc740393147ca86ed26a03f5` | 0 | 0 | 0 | 0 | 9 |
+| `/assets/vendor-D1AGlGFQ.js` | 200 / 157,280 B | 0 | 0 | 0 | 0 | 0 |
+| `/assets/index-mrPWwH3P.css` | 200 / 97,948 B | 0 | 0 | 0 | 0 | 0 |
+
+那 9 处 `license` 逐条看了上下文，全部是**去授权那段文案本身**（i18n 多语言串：
+`no license codes, no gated downloads, no paid tiers` / `AGPL-3.0 open-source license` /
+`Open-sourced under AGPL-3.0: no license keys…`），不是残留的授权逻辑。
+另注意 `grep -c` 在这里给的是**行数 1**（整个文件是一行 minified 码），字面出现次数按 `grep -o | wc -l` 取 9，
+两个数不要混用。
+
+### 浏览器三页（结掉"没在浏览器里逐页看过"）
+
+| 页 | SPA 路由改后的 `document.title` | 渲染判据 | console |
+| --- | --- | --- | --- |
+| `/`（首屏整页 a11y 快照逐节点看过） | `首页 \| HiveMTK · 私域 AI 营销操作系统` | 导航 7 项 + 六大理由 + 13 项核心能力 + 六层架构 + 工作流 6 步 + 页脚「AGPL-3.0 开源,无授权码、无版本下载、无任何收费环节」全在 | **0 条** |
+| `/deploy` | `部署指南 \| HiveMTK · 私域 AI 营销操作系统` | `pathname` 规范化为 `/hivemtk/deploy/`；h1「4 步完成部署 开箱即用」；正文含「无授权码、无版本下载、无任何收费环节」；`body.innerText` 1631 字；5 个禁串各 0 命中 | **0 条** |
+| `/no-such-page-xyz` | `页面未找到 \| HiveMTK · 私域 AI 营销操作系统` | 兜底页真渲染：「ERR · 404 / 页面未收录 / 页面未找到」+ 返回首页 / 查看文档 两 CTA + 34 条链接 | 1 条 error = **该文档自身的 404 状态码**，不是资源缺失 |
+
+静态 HTML 的 `<title>` 与 SPA 路由写回的 `document.title` 不同（前者 `… \| AGPL-3.0 开源`、后者 `首页 \| …`），
+两处都符合预期：路由 `afterEach` 的 title 段是本批 Pages 适配保留件（见 Task 8 的"保留"清单）。
+
+### 同轮复测、**不结**的那几条（别被上面的绿带过去）
+
+- `command -v markdownlint / markdownlint-cli2 / lychee` 三档**全 MISSING** ⇒ §7.2 那条「只跑了 python 侧 md 链接门」
+  仍然成立。补它要下载外部工具，本批不做（勿静默装系统依赖）。
+- DNSPod 上已过期域名的 5 条废记录：仍待操作者（任务 #35 保留）。
+- 活栈默认口令那一行 `rotate-admin-password.sh`：机制齐备、仍待操作者执行（任务 #38 的"仅剩一步"）。
+- 本机 `/usr/bin/make` 的 Xcode 许可闸门（§7.6 移交 ①）：本轮未复测，仍按"待操作者"记账。
+
+### 取证物落点与回收
+
+本轮产物曾在 `/tmp/r44e_pages/`（三页 HTML、`bundle.js`＝那次量错的兜底页、`bundle2.js`、3 个资产、`assets.txt` 清单）。
+**收尾时已按 §二十⑧ / §二十一⑨ 的同一套判据删净**（`listed=8 / deleted=8 / remaining=0`，删前断言 `listed>0`；
+清单由 `ls /tmp | grep -E '^r43e|^r44e'` 现取，不用无尾斜杠的 `find /tmp`）：
+这一批全是**公开 URL 可再生物证**（对同一 URL 重跑 `curl` 即得同 md5），且仓内与仓外 `docs/` 对
+`r43e_` 的引用为 0 处 ⇒ 删除不使上面任何一条读数变得不可回读。
+顺带清掉的还有**上一轮漏网**的 4 个 `r43e_*`：§二十一⑨ 那份清单的 `grep` 模式里没有 `r43e_`，
+所以它们躲过了那次清理；删前逐个与本轮同对象产物比 md5，**四份全部逐字相同**（`d36195d4…` ×3、`5da1a5c7…` ×1）
+⇒ 是冗余副本不是唯一物证。教训照记：**一次清理的"删干净"只对它当时列出的模式成立**，
+换轮次换了前缀就要重新取一次全量清单，别沿用上一轮的模式串。
