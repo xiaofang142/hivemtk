@@ -33,6 +33,9 @@
 #     不可观测（实测跑出来 rc=0）；要换假工具把形状直接喂进判据分支。
 #   - 别用 env -i 或 PATH=/usr/bin:/bin 构造"缺工具"：/usr/bin 下是 Xcode 的 shim，
 #     环境一窄闸自己的 python3 先退 69（"not agreed to the Xcode license"），红因不在分支上。
+#     也不许"把装着 shellcheck 的 PATH 目录摘掉"——CI 的 runner 镜像在 /usr/bin 与 /bin 里
+#     都自带 shellcheck，摘掉＝把 bash/python3/git 一起摘掉（本电池第一版就是在 CI 红在
+#     `bash: command not found`、本地 mac 全绿）。T4 改成自建"只缺 shellcheck"的腿内目录。
 # =============================================================================
 
 set -uo pipefail
@@ -154,31 +157,66 @@ fi
 rm -f "$PROBE"
 
 # ===================== T4：PATH 里没有 shellcheck ⇒ rc=2 =====================
-# 形状：把"装着 shellcheck 的那些 PATH 目录"摘掉，其余原样保留。
-# 为什么不是 PATH=/usr/bin:/bin：/usr/bin 下的是 Xcode 的 shim，PATH 一窄，
-# 闸里的 python3 自己就先退 69（"You have not agreed to the Xcode license"），
-# 测到的就不是"缺工具"这条分支（本仓实测两连：env -i 同一条红因）。
-NO_SC_PATH=""; DROPPED=0
-OLD_IFS="$IFS"; IFS=:
-for p in $PATH; do
-  [ -n "$p" ] || continue
-  if [ -x "$p/shellcheck" ]; then
-    DROPPED=$((DROPPED + 1))
-    continue
-  fi
-  NO_SC_PATH="${NO_SC_PATH:+$NO_SC_PATH:}$p"
+# 形状：从"其它格喂给闸的那条 PATH（SC_PATH）"里摘掉所有装着 shellcheck 的目录，
+#       再在最前面垫一个腿内目录（bash/python3/git/dirname 的绝对路径软链）。
+# 为什么要垫：CI 的 ubuntu runner 上 /usr/bin 与 /bin 里**都躺着** shellcheck（镜像自带），
+#   只摘不垫＝把闸自己需要的 bash/python3/git/dirname 一起摘掉。本电池第一版就是这么在
+#   CI 红成 `line 179: bash: command not found`、rc=127（本地 mac 却全绿：那件工具在本机
+#   只装在 ~/.local/bin，不存在"与核心工具同居"这个前提）——量到的是"环境坏了"，不是被测分支。
+# 为什么一律用**绝对路径**调 bash（"$BASH_ABS" 而不是 PATH=... bash）：
+#   `PATH=<新值> bash …` 里"新值是否参与 bash 这个命令本身的查找"，本机 bash 3.2 与 runner
+#   的 bash 5 语义不同（实测同一构造本机 rc=2、CI rc=127）。平台语义不该进到判据里，
+#   所以腿内一律给绝对路径，让两条平台走同一条查找路径。
+# 为什么 python3 单独解析：本机它是 pyenv 的 shim，shim 自己要 PATH 上的帮手，
+#   腿内 PATH 放个 shim 会把闸卡在"起解释器"（实测挂 40s+，既非红因也非绿）⇒ 取 sys.executable。
+# 为什么不用 env -i / PATH=/usr/bin:/bin：mac 上那是 Xcode shim 的 rc=69（见头注纪律）。
+LEGBIN="$WORK/legbin"
+mkdir -p "$LEGBIN"
+BASH_ABS="$(command -v bash || true)"
+REPAIR_OK=1
+for b in bash git dirname; do
+  abs="$(command -v "$b" || true)"
+  [ -n "$abs" ] || { REPAIR_OK=0; continue; }
+  ln -sf "$abs" "$LEGBIN/$b"
 done
-IFS="$OLD_IFS"
-if [ "$DROPPED" = "0" ]; then
-  printf 'FAIL %-46s PATH 里本来就没有它，这格无法构造"缺工具"（先装工具再跑本测试）\n' "T4 缺 shellcheck ⇒ rc=2"
-  FAIL_COUNT=$((FAIL_COUNT + 1))
-elif PATH="$NO_SC_PATH" command -v shellcheck >/dev/null 2>&1; then
-  printf 'FAIL %-46s 摘掉 %s 个目录后仍然找得到它\n' "T4 缺 shellcheck ⇒ rc=2" "$DROPPED"
+# python3 单独解析：本机它是 pyenv 的 shim（~/.pyenv/shims/python3），shim 自己要 PATH 上的
+# 帮手，腿内 PATH 里放个 shim 会让闸卡在"起解释器"这一步（实测挂 120s+，不是红因也不是绿）。
+# 取 sys.executable 指向的**真解释器**（CI 上就是 /usr/bin/python3，两条路同形）。
+PY_ABS="$(python3 -c 'import sys; print(getattr(sys, "_base_executable", "") or sys.executable)' 2>/dev/null || true)"
+if [ -z "$PY_ABS" ] || [ ! -x "$PY_ABS" ]; then
+  REPAIR_OK=0
+else
+  ln -sf "$PY_ABS" "$LEGBIN/python3"
+fi
+if [ "$REPAIR_OK" = "0" ] || [ -z "$BASH_ABS" ]; then
+  printf 'FAIL %-46s 环境本身缺 bash/python3/git/dirname，本格无法构造\n' "T4 缺 shellcheck ⇒ rc=2"
   FAIL_COUNT=$((FAIL_COUNT + 1))
 else
-  (cd "$ROOT" && PATH="$NO_SC_PATH" SHELLCHECK_PATH= bash "$GATE") > "$OUT" 2>&1
-  RC=$?
-  report "T4 缺 shellcheck ⇒ rc=2 不判绿" 2 "找不到 shellcheck" "$RC" "$OUT"
+  NO_SC_PATH=""; DROPPED=0
+  OLD_IFS="$IFS"
+  IFS=:
+  for p in $SC_PATH; do
+    [ -n "$p" ] || continue
+    if [ -x "$p/shellcheck" ]; then
+      DROPPED=$((DROPPED + 1))
+      continue
+    fi
+    NO_SC_PATH="${NO_SC_PATH:+$NO_SC_PATH:}$p"
+  done
+  IFS="$OLD_IFS"
+  LEGPATH="$LEGBIN${NO_SC_PATH:+:$NO_SC_PATH}"
+  if [ "$DROPPED" = "0" ]; then
+    printf 'FAIL %-46s SC_PATH 里本来就没有 shellcheck（T0 那格应先红），无法构造"缺工具"\n' "T4 缺 shellcheck ⇒ rc=2"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  elif ! PATH="$LEGPATH" "$BASH_ABS" -c \
+      'command -v dirname >/dev/null && command -v python3 >/dev/null && command -v git >/dev/null && ! command -v shellcheck >/dev/null'; then
+    printf 'FAIL %-46s 腿内 PATH 没构造对（核心工具不齐，或仍找得到 shellcheck）\n' "T4 缺 shellcheck ⇒ rc=2"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  else
+    (cd "$ROOT" && PATH="$LEGPATH" SHELLCHECK_PATH= "$BASH_ABS" "$GATE") > "$OUT" 2>&1
+    RC=$?
+    report "T4 缺 shellcheck ⇒ rc=2 不判绿" 2 "找不到 shellcheck" "$RC" "$OUT"
+  fi
 fi
 
 # ===================== T5：扫描根不在 git 仓里 ⇒ rc=2 =====================
