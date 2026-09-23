@@ -1,0 +1,28 @@
+2026-09-23T15:13:19+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRepository_CreateRejectsMissingIdentity
+--- PASS: TestBillRepository_CreateRejectsMissingIdentity (0.14s)
+=== RUN   TestBillRepository_DuplicateQuoteRowIsItsOwnError
+--- PASS: TestBillRepository_DuplicateQuoteRowIsItsOwnError (0.04s)
+=== RUN   TestBillRepository_StatusMustBeInTheDomain
+--- PASS: TestBillRepository_StatusMustBeInTheDomain (0.04s)
+=== RUN   TestBillRepository_ReadsDistinguishMissingFromFailure
+--- PASS: TestBillRepository_ReadsDistinguishMissingFromFailure (0.04s)
+=== RUN   TestBillRepository_ReadFailureIsNotMissingRead
+    bill_test.go:265: GetByID 在库故障时回了 nil 错误（got=<nil>）：故障被读成"没有这张单"，派生路径会据此再开一张
+    bill_test.go:265: GetByQuoteRowID 在库故障时回了 nil 错误（got=<nil>）：故障被读成"没有这张单"，派生路径会据此再开一张
+--- FAIL: TestBillRepository_ReadFailureIsNotMissingRead (0.03s)
+=== RUN   TestBillRepository_UpdateStatusIsCompareAndSet
+--- PASS: TestBillRepository_UpdateStatusIsCompareAndSet (0.07s)
+=== RUN   TestBillRepository_MethodSetIsExactlyTheDocumentedSix
+--- PASS: TestBillRepository_MethodSetIsExactlyTheDocumentedSix (0.00s)
+=== RUN   TestBillRepository_ListByQuoteID
+--- PASS: TestBillRepository_ListByQuoteID (0.05s)
+=== RUN   TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt
+--- PASS: TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt (0.04s)
+=== RUN   TestBillRepository_NilHandleFailsLoudly
+--- PASS: TestBillRepository_NilHandleFailsLoudly (0.00s)
+=== RUN   TestBillRepository_ConstraintNameIsTheOneOnTheModel
+--- PASS: TestBillRepository_ConstraintNameIsTheOneOnTheModel (0.07s)
+FAIL
+FAIL	hivemtk-user/internal/repository	0.957s
+FAIL

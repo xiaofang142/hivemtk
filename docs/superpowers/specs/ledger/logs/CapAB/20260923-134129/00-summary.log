@@ -1,0 +1,7 @@
+趟次 tag=20260923-134129 mode=narrow
+两相身份：A(HEAD 无上限)=b7d993b72758 B(本批 32/8)=dfc201cb3594
+端口 8201: 127.0.0.1:8201 - 接受连接 rc=0 max_connections=psql: 错误: 连接到"127.0.0.1"上的服务器，端口8201失败：FATAL:  password authentication failed for user "admin"
+[A@8201-r1] 相=A testdb注码=b7d993b72758 跑后磁盘=b7d993b72758一致 53300/上限报错行数=0 峰值连接(含idle)=-1★SAMPLER-BROKEN FAIL=4 PASS=0 go rc=1
+[B@8201-r1] 相=B testdb注码=dfc201cb3594 跑后磁盘=dfc201cb3594一致 53300/上限报错行数=0 峰值连接(含idle)=-1★SAMPLER-BROKEN FAIL=4 PASS=0 go rc=1
+判定：A 相上限报错 0 行／B 相 0 行 ⇒ 分歧未成立（逐格行见上）｜★2 格采样器无读数（[A@8201-r1], [B@8201-r1]）⇒ 名额占用那一维本趟没测到
+还原复测：testdb.go md5=dfc201cb3594（应等于 B 相 dfc201cb3594）

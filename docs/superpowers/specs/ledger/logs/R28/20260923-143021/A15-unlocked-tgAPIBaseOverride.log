@@ -1,0 +1,4 @@
+SEAM-GUARD：tgAPIBaseOverride 的 getter loadTGAPIBase 没对 tgSeamMu 上锁（要 tgSeamMu.Lock() 或 tgSeamMu.RLock()）@ internal/service/telegram_media.go:57
+SEAM-GUARD：tgAPIBaseOverride 的 setter storeTGAPIBase 没对 tgSeamMu 上锁（要 tgSeamMu.Lock()）@ internal/service/seam_guard_setters_test.go:72
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

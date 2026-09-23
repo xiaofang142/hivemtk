@@ -1,0 +1,4 @@
+=== RUN   TestNewTestDBBoundsPool
+--- PASS: TestNewTestDBBoundsPool (0.37s)
+PASS
+ok  	hivemtk-user/internal/pkg/testutil	0.768s

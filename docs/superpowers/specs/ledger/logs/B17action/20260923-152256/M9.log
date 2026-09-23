@@ -1,0 +1,43 @@
+
+ RUN  v4.1.11 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-ci1_e4v1/web
+
+ ❯ test/batch17-actionability.test.js (18 tests | 1 failed) 5059ms
+     ✓ 对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次）  349ms
+     ✓ 永远在动的元素：一帧坐标都不许下发，红因点名 unstable  510ms
+     ✓ 落位中的元素：点的是**结算后**那一帧的中心，不是第一帧的  344ms
+     ✓ click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick）  517ms
+     ✓ comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严）  515ms
+     ✓ stable 必须在远小于 15s 注入竞速窗的时间内给出结论  505ms
+     ✓ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次**  321ms
+     ✓ 点完之后目标消失（selector 解析不到）→ element_moved  324ms
+     ✓ 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）  327ms
+     ✓ 身份未变 → ok，且回包明说这次复核过（identity_checked=true）  321ms
+     ✓ 复核自己跑不动（注入没回包）不能变成静默 ok：未知态点名 identity  326ms
+     × 读步（不带 verify_identity）不付这次额外注入 332ms
+     ✓ 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动  321ms
+     ✓ click_near 的写步同样复核（第二个消费点：锚点+文本现算的定位也要能再解析回去） 22ms
+     ✓ DOM 兜底路径不做点后复核（兜底点的就是元素本身，复核只会把真动作误判成移动） 21ms
+     ✓ unstable 判据在三处 probe 里各出现一次 0ms
+     ✓ SW 侧 dispatch 一段里不许出现 *_not_interactable（Go 判「从未派发」的前提） 0ms
+     ✓ injClickIdentityCheck 恰有一处定义、两处消费（click 与 click_near 的 CDP 分支） 0ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:23:58
+   Duration  5.52s (transform 76ms, setup 0ms, import 94ms, tests 5.06s, environment 253ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/batch17-actionability.test.js > 批17(b) 点后身份复核：写步不许静默 ok > 读步（不带 verify_identity）不付这次额外注入
+AssertionError: expected true not to be true // Object.is equality
+ ❯ test/batch17-actionability.test.js:223:36
+    221|     const r = await dispatch({ action: 'click', tab_id: 42, target: '#…
+    222|     expect(r.channel).toBe('cdp');
+    223|     expect(r.identity_checked).not.toBe(true);
+       |                                    ^
+    224|     const identityCalls = fakeChrome.scripting.executeScript.mock.calls
+    225|       .filter((c) => Array.isArray(c[0].args) && typeof c[0].args[1] =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

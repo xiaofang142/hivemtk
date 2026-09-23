@@ -1,0 +1,2 @@
+注册表第 31 行格式坏（要 5 列 TAB 分隔：全局/文件/锁/getter/setter）：short_row	internal/service/wechat.go
+rc=1

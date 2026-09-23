@@ -1,0 +1,14 @@
+[A@8234-r3] 相=A testdb注码=b7d993b72758 跑后磁盘=b7d993b72758一致 53300/上限报错行数=1 峰值连接(含idle)=42 FAIL=1 PASS=3 go rc=1
+[90m2026-09-23T15:28:06+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSessionChainCSATResolvesDBHandleSynchronously
+--- PASS: TestSessionChainCSATResolvesDBHandleSynchronously (0.26s)
+=== RUN   TestFallbackVersionResolvesDBHandleSynchronously
+--- PASS: TestFallbackVersionResolvesDBHandleSynchronously (0.53s)
+=== RUN   TestSessionEventDispatchResolvesDBHandleSynchronously
+--- PASS: TestSessionEventDispatchResolvesDBHandleSynchronously (0.29s)
+=== RUN   TestAudience_SelectBySegment
+    audience_selector_test.go:93: 连接 PostgreSQL 测试库失败（dsn=host=127.0.0.1 port=8234 user=admin password=************************************************ dbname=user_db_test_slot0 sslmode=disable TimeZone=Asia/Shanghai）: failed to connect to `user=admin database=user_db_test_slot0`: 127.0.0.1:8234 (127.0.0.1): server error: FATAL: sorry, too many clients already (SQLSTATE 53300)
+--- FAIL: TestAudience_SelectBySegment (0.20s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.167s
+FAIL

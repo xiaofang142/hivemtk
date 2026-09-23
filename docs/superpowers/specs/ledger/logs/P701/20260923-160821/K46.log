@@ -1,0 +1,44 @@
+2026-09-23T16:11:52+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (0.27s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.10s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+--- PASS: TestBillDeriveIsIdempotentAcrossCalls (0.10s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.14s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.10s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.10s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+--- PASS: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.10s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.09s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.08s)
+=== RUN   TestBillDeriveNeedsLines
+    bill_test.go:527: 没有行项目的版本没报 ErrBillLinesMissing：<nil>
+    bill_test.go:530: 只读判据失败前已经尝试了 1 次状态跃迁：所有只读检查必须在第一次写之前
+    bill_test.go:537: 报价被推成了 "accepted"：行项目缺失的版不该留下成交现场
+    bill_test.go:540: 库里多出 1 张账单
+--- FAIL: TestBillDeriveNeedsLines (0.09s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.09s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.10s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+--- PASS: TestBillDeriveReportsReadBackFailure (0.10s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.08s)
+=== RUN   TestBillDeriveInputHasOnlyTheRowKey
+--- PASS: TestBillDeriveInputHasOnlyTheRowKey (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- PASS: TestBillServiceAvailabilityAndNilSafety (0.08s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.270s
+FAIL

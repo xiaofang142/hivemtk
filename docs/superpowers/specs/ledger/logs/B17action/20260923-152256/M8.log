@@ -1,0 +1,45 @@
+
+ RUN  v4.1.11 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-ci1_e4v1/web
+
+ ❯ test/batch17-actionability.test.js (18 tests | 1 failed) 5071ms
+     ✓ 对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次）  364ms
+     ✓ 永远在动的元素：一帧坐标都不许下发，红因点名 unstable  511ms
+     ✓ 落位中的元素：点的是**结算后**那一帧的中心，不是第一帧的  338ms
+     ✓ click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick）  513ms
+     ✓ comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严）  515ms
+     ✓ stable 必须在远小于 15s 注入竞速窗的时间内给出结论  508ms
+     ✓ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次**  322ms
+     ✓ 点完之后目标消失（selector 解析不到）→ element_moved  321ms
+     ✓ 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）  321ms
+     ✓ 身份未变 → ok，且回包明说这次复核过（identity_checked=true）  324ms
+     ✓ 复核自己跑不动（注入没回包）不能变成静默 ok：未知态点名 identity  331ms
+     ✓ 读步（不带 verify_identity）不付这次额外注入  323ms
+     × 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动 335ms
+     ✓ click_near 的写步同样复核（第二个消费点：锚点+文本现算的定位也要能再解析回去） 21ms
+     ✓ DOM 兜底路径不做点后复核（兜底点的就是元素本身，复核只会把真动作误判成移动） 20ms
+     ✓ unstable 判据在三处 probe 里各出现一次 1ms
+     ✓ SW 侧 dispatch 一段里不许出现 *_not_interactable（Go 判「从未派发」的前提） 0ms
+     ✓ injClickIdentityCheck 恰有一处定义、两处消费（click 与 click_near 的 CDP 分支） 0ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  15:23:52
+   Duration  5.57s (transform 93ms, setup 0ms, import 115ms, tests 5.07s, environment 270ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/batch17-actionability.test.js > 批17(b) 点后身份复核：写步不许静默 ok > 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动
+Error: element_moved: 点后目标已不可解析（被移除或被改版换掉定位）
+ ❯ asIdentityVerdict src/core/primitives.js:749:45
+    747| function asIdentityVerdict(e) {
+    748|   const msg = String(e?.message || e);
+    749|   if (msg.includes('element_moved')) return new Error(msg);
+       |                                             ^
+    750|   return new Error('identity_recheck_failed(点后复核未能给出结论): ' + msg);
+    751| }
+ ❯ Module.dispatch src/core/primitives.js:854:21
+ ❯ test/batch17-actionability.test.js:242:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -1,0 +1,25 @@
+异步体裸读包级可变全局（进协程前先快照成本地值）：
+  项目根 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone（扫描根 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server）
+  user-server/internal/service/webhook_channel_feishu.go:428 在协程体里引用了测试会改写的全量 feishuTenantTokenFn
+  user-server/internal/service/webhook_channel_feishu.go:433 在协程体里引用了测试会改写的全量 feishuMediaFetchFn
+  user-server/internal/service/webhook_channel_feishu.go:444 在协程体里引用了测试会改写的全量 feishuMediaStoreFn
+
+===== 用例 =====
+2026-09-23T14:29:46+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestN17_FeishuVoiceAndMediaLandInHubWithRightType
+2026-09-23T14:29:46+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-23T14:29:46+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T14:29:46+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T14:29:46+08:00 WRN [Feishu] 媒体转存跳过：tenant_access_token 获取失败 error="f4t: 承载用例不发起真实取凭证" account_id=90417101 component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:29:46+08:00 WRN [Feishu] 媒体转存跳过：tenant_access_token 获取失败 error="f4t: 承载用例不发起真实取凭证" account_id=90417101 component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:29:46+08:00 WRN [Feishu] 媒体转存跳过：tenant_access_token 获取失败 error="f4t: 承载用例不发起真实取凭证" account_id=90417101 component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:29:46+08:00 WRN [Feishu] 媒体转存跳过：tenant_access_token 获取失败 error="f4t: 承载用例不发起真实取凭证" account_id=90417101 component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:29:46+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou_f4: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+--- PASS: TestN17_FeishuVoiceAndMediaLandInHubWithRightType (0.48s)
+PASS
+ok  	hivemtk-user/internal/service	1.101s

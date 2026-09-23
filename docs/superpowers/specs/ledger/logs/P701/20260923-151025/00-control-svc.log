@@ -1,0 +1,39 @@
+2026-09-23T15:12:20+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (0.29s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.16s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+--- PASS: TestBillDeriveIsIdempotentAcrossCalls (0.15s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.18s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.16s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.18s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+--- PASS: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.14s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.19s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.17s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.25s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.14s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.17s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+--- PASS: TestBillDeriveReportsReadBackFailure (0.13s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.08s)
+=== RUN   TestBillDeriveInputHasOnlyTheRowKey
+--- PASS: TestBillDeriveInputHasOnlyTheRowKey (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- PASS: TestBillServiceAvailabilityAndNilSafety (0.14s)
+PASS
+ok  	hivemtk-user/internal/service	3.187s

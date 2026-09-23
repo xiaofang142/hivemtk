@@ -1,0 +1,4 @@
+SEAM-GUARD：dingtalkOpenAPIBase 的 getter loadDingtalkOpenAPIBase 没对 dingtalkSeamMu 上锁（要 dingtalkSeamMu.Lock() 或 dingtalkSeamMu.RLock()）@ internal/service/dingtalk_media.go:49
+SEAM-GUARD：dingtalkOpenAPIBase 的 setter storeDingtalkOpenAPIBase 没对 dingtalkSeamMu 上锁（要 dingtalkSeamMu.Lock()）@ internal/service/seam_guard_setters_test.go:36
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

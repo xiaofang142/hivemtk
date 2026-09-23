@@ -1,0 +1,10 @@
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/P702hook/20260923-144412
+CONTROL-GREEN ✅ 未放刀时该用例绿
+[nil 守卫短路] KILLED rc=1
+      external_order_key_startup_test.go:185: ① nil 句柄：钩子 panic ⇒ 启动会被一个没删掉的索引带走：runtime error: invalid memory address or nil pointer dereference
+[DROP 失败改 panic] KILLED rc=1
+      external_order_key_startup_test.go:185: ② 连接池已关：钩子 panic ⇒ 启动会被一个没删掉的索引带走：sql: database is closed
+──────
+total=2 killed=2 alive=0 broken=0
+md5_orig=74b8efc1ea66b937887bcb682b64611f md5_after=74b8efc1ea66b937887bcb682b64611f
+ALL-CASES-KILLED-AND-SOURCE-RESTORED

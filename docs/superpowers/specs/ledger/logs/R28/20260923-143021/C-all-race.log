@@ -1,0 +1,2475 @@
+$ go test -race -gcflags=hivemtk-user/internal/service=-l -v -run TestSeamGuard -count=1 ./internal/service/
+(cwd /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server)
+[90m2026-09-23T14:32:29+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSeamGuard_TelegramAPIBaseIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x0001059e2c90 by goroutine 21:
+  hivemtk-user/internal/service.storeTGAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:57 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:96 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e2c90 by goroutine 22:
+  hivemtk-user/internal/service.storeTGAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:57 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:96 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 21 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:95 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 22 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:95 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e2c90 by goroutine 22:
+  hivemtk-user/internal/service.storeTGAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:57 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:96 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x0001059e2c90 by goroutine 23:
+  hivemtk-user/internal/service.loadTGAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_media.go:58 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:98 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 22 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:95 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 23 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_TelegramAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:95 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_TelegramAPIBaseIsLocked (0.14s)
+=== RUN   TestSeamGuard_TelegramMaxBytesIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x00010590c998 by goroutine 32:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:61 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x00010590c998 by goroutine 31:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:61 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 32 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 31 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00010590c998 by goroutine 36:
+  hivemtk-user/internal/service.loadTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_media.go:62 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:111 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x00010590c998 by goroutine 32:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:61 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 36 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 32 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_TelegramMaxBytesIsLocked (0.14s)
+=== RUN   TestSeamGuard_QQAttachmentGuardIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x000105992c60 by goroutine 42:
+  hivemtk-user/internal/service.storeQQAttachmentURLGuard()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:49 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:123 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992c60 by goroutine 39:
+  hivemtk-user/internal/service.storeQQAttachmentURLGuard()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:49 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:123 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 42 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:122 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 39 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:122 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x000105992c60 by goroutine 44:
+  hivemtk-user/internal/service.loadQQAttachmentURLGuard()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/qq_media.go:50 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:125 +0x34
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992c60 by goroutine 42:
+  hivemtk-user/internal/service.storeQQAttachmentURLGuard()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:49 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:123 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 44 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:122 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 42 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQAttachmentGuardIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:122 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_QQAttachmentGuardIsLocked (0.12s)
+=== RUN   TestSeamGuard_QQMaxBytesIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x00010590c958 by goroutine 48:
+  hivemtk-user/internal/service.storeQQMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:53 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:136 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x00010590c958 by goroutine 49:
+  hivemtk-user/internal/service.storeQQMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:53 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:136 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 48 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:135 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 49 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:135 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00010590c958 by goroutine 54:
+  hivemtk-user/internal/service.loadQQMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/qq_media.go:54 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:138 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x00010590c958 by goroutine 49:
+  hivemtk-user/internal/service.storeQQMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:53 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:136 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 54 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:135 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 49 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_QQMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:135 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_QQMaxBytesIsLocked (0.13s)
+=== RUN   TestSeamGuard_DingTalkOpenAPIBaseIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x000105993b50 by goroutine 65:
+  hivemtk-user/internal/service.loadDingtalkOpenAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/dingtalk_media.go:50 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:151 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105993b50 by goroutine 60:
+  hivemtk-user/internal/service.storeDingtalkOpenAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:33 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:149 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 65 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:148 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 60 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:148 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105993b50 by goroutine 61:
+  hivemtk-user/internal/service.storeDingtalkOpenAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:33 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:149 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105993b50 by goroutine 60:
+  hivemtk-user/internal/service.storeDingtalkOpenAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:33 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:149 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 61 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:148 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 60 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkOpenAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:148 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_DingTalkOpenAPIBaseIsLocked (0.14s)
+=== RUN   TestSeamGuard_DouyinAPIBaseIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x0001059e25b0 by goroutine 70:
+  hivemtk-user/internal/service.storeDyAPIBaseOverride()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:41 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:162 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e25b0 by goroutine 68:
+  hivemtk-user/internal/service.storeDyAPIBaseOverride()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:41 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:162 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 70 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:161 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 68 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:161 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x0001059e25b0 by goroutine 71:
+  hivemtk-user/internal/service.loadDyAPIBaseOverride()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/douyin_media.go:83 +0x28
+  hivemtk-user/internal/service.douyinAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/douyin_media.go:153 +0x20
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:165 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x0001059e25b0 by goroutine 70:
+  hivemtk-user/internal/service.storeDyAPIBaseOverride()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:41 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:162 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 71 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:161 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 70 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:161 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_DouyinAPIBaseIsLocked (0.17s)
+=== RUN   TestSeamGuard_DouyinRetryBackoffIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x000105998000 by goroutine 84:
+  hivemtk-user/internal/service.loadDyMediaRetryBackoff()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/douyin_media.go:79 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:178 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105998000 by goroutine 77:
+  hivemtk-user/internal/service.storeDyMediaRetryBackoff()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:37 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:176 +0x40
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 84 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:175 +0x198
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 77 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:175 +0x198
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105998000 by goroutine 79:
+  hivemtk-user/internal/service.storeDyMediaRetryBackoff()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:37 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:176 +0x40
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105998000 by goroutine 77:
+  hivemtk-user/internal/service.storeDyMediaRetryBackoff()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:37 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:176 +0x40
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 79 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:175 +0x198
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 77 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DouyinRetryBackoffIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:175 +0x198
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_DouyinRetryBackoffIsLocked (0.14s)
+=== RUN   TestSeamGuard_WeChatAPIBaseIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x000105993b60 by goroutine 90:
+  hivemtk-user/internal/service.storeWechatAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:85 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:190 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105993b60 by goroutine 88:
+  hivemtk-user/internal/service.storeWechatAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:85 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:190 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 90 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:189 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 88 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:189 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x000105993b60 by goroutine 94:
+  hivemtk-user/internal/service.loadWechatAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/wechat.go:224 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:192 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105993b60 by goroutine 90:
+  hivemtk-user/internal/service.storeWechatAPIBase()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:85 +0x30
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:190 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 94 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:189 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 90 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_WeChatAPIBaseIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:189 +0x110
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_WeChatAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_AIReplyQuietHoursFnIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x000105992cd8 by goroutine 103:
+  hivemtk-user/internal/service.loadAIReplyQuietHoursFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/webhook_outbound.go:79 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:205 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992cd8 by goroutine 97:
+  hivemtk-user/internal/service.storeAIReplyQuietHoursFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:77 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:203 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 103 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:202 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 97 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:202 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992cd8 by goroutine 99:
+  hivemtk-user/internal/service.storeAIReplyQuietHoursFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:77 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:203 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992cd8 by goroutine 96:
+  hivemtk-user/internal/service.storeAIReplyQuietHoursFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:77 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:203 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 99 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:202 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 96 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_AIReplyQuietHoursFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:202 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_AIReplyQuietHoursFnIsLocked (0.14s)
+=== RUN   TestSeamGuard_DingTalkWebhookHostAllowedIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x000105992ce0 by goroutine 109:
+  hivemtk-user/internal/service.storeDingtalkWebhookHostAllowed()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:81 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:216 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000105992ce0 by goroutine 110:
+  hivemtk-user/internal/service.loadDingtalkWebhookHostAllowed()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/webhook_outbound.go:970 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:218 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 109 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:215 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 110 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:215 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992ce0 by goroutine 108:
+  hivemtk-user/internal/service.storeDingtalkWebhookHostAllowed()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:81 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:216 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992ce0 by goroutine 109:
+  hivemtk-user/internal/service.storeDingtalkWebhookHostAllowed()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:81 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:216 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 108 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:215 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 109 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_DingTalkWebhookHostAllowedIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:215 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_DingTalkWebhookHostAllowedIsLocked (0.12s)
+=== RUN   TestSeamGuard_BridgeOnlineProbeIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x0001059e0398 by goroutine 120:
+  hivemtk-user/internal/service.loadBridgeChannelOnlineProbe()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/bridge_offline_replay.go:98 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:231 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x0001059e0398 by goroutine 117:
+  hivemtk-user/internal/service.storeBridgeChannelOnlineProbe()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/bridge_offline_replay.go:102 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:229 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 120 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:228 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 117 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:228 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0398 by goroutine 116:
+  hivemtk-user/internal/service.storeBridgeChannelOnlineProbe()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/bridge_offline_replay.go:102 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:229 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0398 by goroutine 117:
+  hivemtk-user/internal/service.storeBridgeChannelOnlineProbe()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/bridge_offline_replay.go:102 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:229 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 116 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:228 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 117 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_BridgeOnlineProbeIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:228 +0x15c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_BridgeOnlineProbeIsLocked (0.14s)
+=== RUN   TestSeamGuard_ApprovalNowFnIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x000105992be8 by goroutine 131:
+  hivemtk-user/internal/service.loadApprovalNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/approval_request.go:181 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:246 +0x30
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992be8 by goroutine 125:
+  hivemtk-user/internal/service.storeApprovalNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:25 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:244 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 131 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:243 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 125 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:243 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992be8 by goroutine 124:
+  hivemtk-user/internal/service.storeApprovalNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:25 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:244 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992be8 by goroutine 125:
+  hivemtk-user/internal/service.storeApprovalNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:25 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:244 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 124 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:243 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 125 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:243 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_ApprovalNowFnIsLocked (0.14s)
+=== RUN   TestSeamGuard_ApprovalResumeTokFnIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x000105992bf0 by goroutine 138:
+  hivemtk-user/internal/service.loadApprovalResumeTokFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/approval_request.go:185 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:260 +0x34
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992bf0 by goroutine 135:
+  hivemtk-user/internal/service.storeApprovalResumeTokFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:29 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:258 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 138 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:257 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 135 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:257 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992bf0 by goroutine 133:
+  hivemtk-user/internal/service.storeApprovalResumeTokFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:29 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:258 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992bf0 by goroutine 135:
+  hivemtk-user/internal/service.storeApprovalResumeTokFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:29 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:258 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 133 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:257 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 135 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_ApprovalResumeTokFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:257 +0x210
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_ApprovalResumeTokFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_HumanTaskNowFnIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x000105992c38 by goroutine 144:
+  hivemtk-user/internal/service.storeHumanTaskNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:45 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:272 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992c38 by goroutine 143:
+  hivemtk-user/internal/service.storeHumanTaskNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:45 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:272 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 144 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:271 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 143 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:271 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x000105992c38 by goroutine 147:
+  hivemtk-user/internal/service.loadHumanTaskNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/human_task.go:239 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked.func4()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:274 +0x30
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992c38 by goroutine 143:
+  hivemtk-user/internal/service.storeHumanTaskNowFn()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:45 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:272 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 147 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:271 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 143 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_HumanTaskNowFnIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:271 +0x224
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_HumanTaskNowFnIsLocked (0.13s)
+=== RUN   TestSeamGuard_IntentEnabledIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x00010590c4c1 by goroutine 154:
+  hivemtk-user/internal/service.storeIntentEnabled()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/intent_recognition.go:54 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:284 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x00010590c4c1 by goroutine 151:
+  hivemtk-user/internal/service.storeIntentEnabled()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/intent_recognition.go:54 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:284 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 154 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:283 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 151 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:283 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00010590c4c1 by goroutine 155:
+  hivemtk-user/internal/service.loadIntentEnabled()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/intent_recognition.go:50 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:286 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x00010590c4c1 by goroutine 151:
+  hivemtk-user/internal/service.storeIntentEnabled()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/intent_recognition.go:54 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:284 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 155 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:283 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 151 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_IntentEnabledIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:283 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_IntentEnabledIsLocked (0.12s)
+=== RUN   TestSeamGuard_PollingLockRepoIsLocked
+==================
+WARNING: DATA RACE
+Read at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x000105992c90 by goroutine 167:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:66 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x000105992c90 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 167 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000252b44 by goroutine 167:
+  ??()
+      -:0 +0x1026f0df8
+  sync/atomic.LoadUint32()
+      <autogenerated>:1 +0x10
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x00c000252b44 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xa4
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 167 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xbc
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000105992c90 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x44
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x00c000252b48 by goroutine 165:
+  ??()
+      -:0 +0x1026f752c
+  sync/atomic.CompareAndSwapInt32()
+      <autogenerated>:1 +0x14
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x00c000252b48 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xa4
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 165 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 161:
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 165:
+  hivemtk-user/internal/service.getPollingLockRepo.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:67 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 165 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x0001059e0690 by goroutine 166:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:69 +0x48
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 166 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x0001059e0690 by goroutine 166:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:69 +0x48
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 166 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xbc
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000105992c90 by goroutine 166:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:66 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 166 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x0001059e0690 by goroutine 165:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:69 +0x48
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 165 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x000105992c90 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x120
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992c90 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000612174 by goroutine 161:
+  ??()
+      -:0 +0x1026f0df8
+  sync/atomic.LoadUint32()
+      <autogenerated>:1 +0x10
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x00c000612174 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xa4
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992c90 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xbc
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 166:
+  hivemtk-user/internal/service.getPollingLockRepo.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:67 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous read at 0x0001059e0690 by goroutine 165:
+  hivemtk-user/internal/service.getPollingLockRepo()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:69 +0x48
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 166 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 165 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000105992c90 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 167:
+  hivemtk-user/internal/service.getPollingLockRepo.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:67 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Previous write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 167 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x70
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000105992c90 by goroutine 160:
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x44
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Read at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 167:
+  hivemtk-user/internal/service.getPollingLockRepo.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:67 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 167 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Read at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:67 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 162:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:72 +0x34
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x38
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 162 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 161:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 161 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x000105992c90 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xbc
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000105992c90 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x120
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 163:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:68 +0x5c
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x0001059e0690 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:70 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x0001059e0690 by goroutine 164:
+  hivemtk-user/internal/service.getPollingLockRepo.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_polling_lock.go:67 +0x30
+  sync.(*Once).doSlow()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/sync/once.go:78 +0x94
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:299 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 164 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+==================
+WARNING: DATA RACE
+Write at 0x00c0005928c8 by goroutine 163:
+  ??()
+      -:0 +0x1026f752c
+  sync/atomic.CompareAndSwapInt32()
+      <autogenerated>:1 +0x14
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x00c0005928c8 by goroutine 160:
+  hivemtk-user/internal/service.resetPollingLockRepoForTest()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:69 +0xa4
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:297 +0x2c
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 163 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 160 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_PollingLockRepoIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:296 +0x18c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    seam_guard_race_test.go:300: 取到的不是探针 repo
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_PollingLockRepoIsLocked (0.12s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.970s
+FAIL

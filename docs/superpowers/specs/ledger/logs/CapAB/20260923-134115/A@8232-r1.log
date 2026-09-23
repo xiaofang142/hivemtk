@@ -1,0 +1,12 @@
+[A@8232-r1] 相=A testdb注码=b7d993b72758 跑后磁盘=b7d993b72758一致 53300/上限报错行数=0 峰值连接(含idle)=58 FAIL=0 PASS=4 go rc=0
+[90m2026-09-23T13:41:21+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSessionChainCSATResolvesDBHandleSynchronously
+--- PASS: TestSessionChainCSATResolvesDBHandleSynchronously (3.00s)
+=== RUN   TestFallbackVersionResolvesDBHandleSynchronously
+--- PASS: TestFallbackVersionResolvesDBHandleSynchronously (2.19s)
+=== RUN   TestSessionEventDispatchResolvesDBHandleSynchronously
+--- PASS: TestSessionEventDispatchResolvesDBHandleSynchronously (0.08s)
+=== RUN   TestAudience_SelectBySegment
+--- PASS: TestAudience_SelectBySegment (1.61s)
+PASS
+ok  	hivemtk-user/internal/service	8.529s

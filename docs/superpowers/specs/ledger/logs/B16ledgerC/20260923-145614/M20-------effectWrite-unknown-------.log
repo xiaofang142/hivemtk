@@ -1,0 +1,68 @@
+[90m2026-09-23T14:56:47+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestUnknownEffectStepHoldsDoubleSendGate
+[90m2026-09-23T14:56:56+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:56:56+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+    ledger_b16c_test.go:69: 前置条件不成立：unknown 步没留下提交尝试（is_write=false submit_state=""）
+[90m2026-09-23T14:56:57+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- FAIL: TestUnknownEffectStepHoldsDoubleSendGate (9.40s)
+=== RUN   TestUnknownEffectStepRefusedAfterLedgerDegrade
+[90m2026-09-23T14:56:57+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:56:57+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+    ledger_b16c_test.go:108: click 到线 2 want 1（只许第一条下发，其后会话已降级）
+    ledger_b16c_test.go:111: click_near 到线 1 want 0——降级判定只长在 effectWrite 上时 unknown 步照发，而它这次的台账同样写不进去，下一轮无从得知它发生过
+    ledger_b16c_test.go:115: step[1] 红因须点名台账未落，got ""
+    ledger_b16c_test.go:119: step[2] 应被降级拒绝（status="success" err=""）
+--- FAIL: TestUnknownEffectStepRefusedAfterLedgerDegrade (3.48s)
+=== RUN   TestUnknownEffectStepHoldsConfirmGate
+[90m2026-09-23T14:57:00+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:01+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:01+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+    ledger_b16c_test.go:145: ConfirmPending 未变为 true
+--- FAIL: TestUnknownEffectStepHoldsConfirmGate (40.69s)
+=== RUN   TestLedgerDegradeClearedWhenSessionEnds
+[90m2026-09-23T14:57:41+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:41+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:41+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:43+08:00[0m [33mWRN[0m [1m[BrowserExec] 写台账落库失败 step=2 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:43+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:43+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestLedgerDegradeClearedWhenSessionEnds (2.19s)
+=== RUN   TestInjectTimeoutStepStaysReDispatchable
+[90m2026-09-23T14:57:43+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:43+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:44+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_inject_timeout_15000ms[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:46+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=2 idx=1 action=click attempt=0: click_inject_timeout_15000ms[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:46+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestInjectTimeoutStepStaysReDispatchable (2.56s)
+=== RUN   TestRetryBackoffGrowsExponentially
+--- PASS: TestRetryBackoffGrowsExponentially (0.00s)
+=== RUN   TestFindSubmitAttemptReturnsEarliestAttempt
+[90m2026-09-23T14:57:46+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:46+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+--- PASS: TestFindSubmitAttemptReturnsEarliestAttempt (0.21s)
+[90m2026-09-23T14:57:46+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteStepKeyDistinguishesLocatorFacets
+--- PASS: TestWriteStepKeyDistinguishesLocatorFacets (0.00s)
+=== RUN   TestSentToFinalLedgerWritePathHasNoEarlyReturn
+--- PASS: TestSentToFinalLedgerWritePathHasNoEarlyReturn (0.00s)
+=== RUN   TestWSE2E_UnknownLocatorTableTreatedAsWrite
+[90m2026-09-23T14:57:46+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:46+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:47+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_timeout_waiting_ack[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:47+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=1: click_timeout_waiting_ack[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:47+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=2: click_timeout_waiting_ack[0m [36mcomponent=[0muser-server
+    write_ledger_b16_test.go:254: click 到线 3 次 want 1——定位表不可得时不得宣称「这一下没有副作用」，retries 必须钳 0
+    write_ledger_b16_test.go:258: is_write 必须落库为真（分类未知＝按最坏处置，事后要能看出是被降级判的）
+    write_ledger_b16_test.go:261: submit_state= want unattributed（WS 超时=结果未知，须算提交尝试）
+--- FAIL: TestWSE2E_UnknownLocatorTableTreatedAsWrite (1.70s)
+=== RUN   TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly
+[90m2026-09-23T14:57:47+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:48+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:48+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=29669[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:49+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_timeout_waiting_ack[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:57:49+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=1 action=click attempt=1: click_timeout_waiting_ack[0m [36mcomponent=[0muser-server
+--- PASS: TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly (1.40s)
+[90m2026-09-23T14:57:49+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	62.313s
+FAIL

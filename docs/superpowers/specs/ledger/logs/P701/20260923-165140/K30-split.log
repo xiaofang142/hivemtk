@@ -1,0 +1,7 @@
+2026-09-23T16:53:10+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRepository_NilHandleFailsLoudly
+    bill_test.go:507: nil 句柄报告 Available()=true
+--- FAIL: TestBillRepository_NilHandleFailsLoudly (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/repository	0.235s
+FAIL

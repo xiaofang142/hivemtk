@@ -1,0 +1,41 @@
+2026-09-23T15:13:57+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (1.35s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.32s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+--- PASS: TestBillDeriveIsIdempotentAcrossCalls (0.25s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.30s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.22s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.20s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+--- PASS: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.21s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.26s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.24s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.28s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.31s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.30s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+--- PASS: TestBillDeriveReportsReadBackFailure (0.19s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.11s)
+=== RUN   TestBillDeriveInputHasOnlyTheRowKey
+--- PASS: TestBillDeriveInputHasOnlyTheRowKey (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+    bill_test.go:735: 缺账单存储还报 Available
+--- FAIL: TestBillServiceAvailabilityAndNilSafety (0.10s)
+FAIL
+FAIL	hivemtk-user/internal/service	5.642s
+FAIL

@@ -1,0 +1,30 @@
+=== RUN   TestBillChasedStatusesCoverUnsettledOnly
+--- PASS: TestBillChasedStatusesCoverUnsettledOnly (0.00s)
+=== RUN   TestBillChasedStatusesAreInBillDomain
+--- PASS: TestBillChasedStatusesAreInBillDomain (0.00s)
+=== RUN   TestBillChasedStatusesAreNotMutatedInThisPackage
+--- PASS: TestBillChasedStatusesAreNotMutatedInThisPackage (0.00s)
+=== RUN   TestBillChasedStatusKnownRejectsUnknown
+--- PASS: TestBillChasedStatusKnownRejectsUnknown (0.00s)
+=== RUN   TestBillStatusVocabulary
+--- PASS: TestBillStatusVocabulary (0.00s)
+=== RUN   TestBillSchemaShape
+--- PASS: TestBillSchemaShape (0.00s)
+=== RUN   TestBillKeyedToExactlyOneQuoteVersion
+--- PASS: TestBillKeyedToExactlyOneQuoteVersion (0.00s)
+=== RUN   TestBillCarriesNoPaymentTotals
+--- PASS: TestBillCarriesNoPaymentTotals (0.00s)
+=== RUN   TestBillCarriesNoApprovalState
+--- PASS: TestBillCarriesNoApprovalState (0.00s)
+=== RUN   TestBillHasNoTenantColumn
+--- PASS: TestBillHasNoTenantColumn (0.00s)
+=== RUN   TestBillKeyColumnWidths
+--- PASS: TestBillKeyColumnWidths (0.00s)
+=== RUN   TestBillJSONNamesMatchColumns
+    bill_test.go:253: Bill.QuoteRowID 的 json 键 "quoteRowId" ≠ 列名 "quote_row_id"
+--- FAIL: TestBillJSONNamesMatchColumns (0.00s)
+=== RUN   TestBillStatusTransitionsAreDeclared
+--- PASS: TestBillStatusTransitionsAreDeclared (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.320s
+FAIL

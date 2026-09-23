@@ -1,0 +1,119 @@
+2026-09-23T14:43:15+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSetInboundMediaURLsWritesFirstAndAll
+--- PASS: TestSetInboundMediaURLsWritesFirstAndAll (0.80s)
+=== RUN   TestSetInboundMediaURLsScopesByAccount
+--- PASS: TestSetInboundMediaURLsScopesByAccount (0.05s)
+=== RUN   TestSetInboundMediaURLsMissingRowIsNotFoundNotError
+--- PASS: TestSetInboundMediaURLsMissingRowIsNotFoundNotError (0.05s)
+=== RUN   TestSetInboundMediaURLsReadFailureIsNotReportedAsNotFound
+--- PASS: TestSetInboundMediaURLsReadFailureIsNotReportedAsNotFound (0.04s)
+=== RUN   TestSetInboundMediaURLsEmptyURLsWriteNothing
+--- PASS: TestSetInboundMediaURLsEmptyURLsWriteNothing (0.04s)
+=== RUN   TestSetInboundMediaURLsNilHandleIsErrorNotNotFound
+--- PASS: TestSetInboundMediaURLsNilHandleIsErrorNotNotFound (0.00s)
+=== RUN   TestSetInboundMediaURLsScopesByConversation
+--- PASS: TestSetInboundMediaURLsScopesByConversation (0.05s)
+PASS
+ok  	hivemtk-user/internal/repository	1.298s
+
+2026-09-23T14:43:26+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestM01_DingTalkMediaIsStoredAndBackfilled
+2026-09-23T14:43:26+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dts1790145806801460000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:26+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dts1790145806801460000
+2026-09-23T14:43:26+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-p-f4dts1790145806801460000 urls=["/files/dingtalk/dc-f4dts1790145806801460000-pic"]
+--- PASS: TestM01_DingTalkMediaIsStoredAndBackfilled (0.40s)
+=== RUN   TestM01_DingTalkRichTextStoresEveryPicture
+2026-09-23T14:43:27+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtrt1790145807029293000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:27+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtrt1790145807029293000
+2026-09-23T14:43:27+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-rt-f4dtrt1790145807029293000 urls=["/files/dingtalk/dc-f4dtrt1790145807029293000-a","/files/dingtalk/dc-f4dtrt1790145807029293000-b"]
+--- PASS: TestM01_DingTalkRichTextStoresEveryPicture (0.18s)
+=== RUN   TestM01_DingTalkMediaSurvivesRequestCancel
+2026-09-23T14:43:27+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtcx1790145807193573000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:27+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtcx1790145807193573000
+2026-09-23T14:43:27+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-cx-f4dtcx1790145807193573000 urls=["/files/dingtalk/dc-f4dtcx1790145807193573000-cx"]
+--- PASS: TestM01_DingTalkMediaSurvivesRequestCancel (0.47s)
+=== RUN   TestM01_DingTalkMediaSkippedWithoutRobotCode
+2026-09-23T14:43:27+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtnc1790145807752932000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:27+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtnc1790145807752932000
+2026-09-23T14:43:27+08:00 WRN [DingTalk] 媒体转存跳过：回调未携带 robotCode（换取下载链接的必填项） account_id=1 component=user-server msg_id=dt-1-nr-f4dtnc1790145807752932000
+--- PASS: TestM01_DingTalkMediaSkippedWithoutRobotCode (0.75s)
+=== RUN   TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture
+2026-09-23T14:43:28+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtpf1790145808490094000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:28+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtpf1790145808490094000
+2026-09-23T14:43:28+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="stub: 下载码有误或者已经过期" component=user-server media_code=dc-f4dtpf1790145808490094000-a
+2026-09-23T14:43:28+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-pf-f4dtpf1790145808490094000 urls=["/files/dingtalk/dc-f4dtpf1790145808490094000-b"]
+--- PASS: TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture (0.29s)
+=== RUN   TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture
+2026-09-23T14:43:28+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtst1790145808754356000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:28+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtst1790145808754356000
+2026-09-23T14:43:28+08:00 WRN [DingTalk] 媒体转存失败 error="stub: 长期存储写入失败" component=user-server media_code=dc-f4dtst1790145808754356000-a
+2026-09-23T14:43:28+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-st-f4dtst1790145808754356000 urls=["/files/dingtalk/dc-f4dtst1790145808754356000-b"]
+--- PASS: TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture (0.26s)
+=== RUN   TestM01_DingTalkAllTransfersFailedWriteNoMedia
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtaf1790145808999671000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtaf1790145808999671000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="stub: 下载码有误或者已经过期" component=user-server media_code=dc-f4dtaf1790145808999671000-a
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="stub: 下载码有误或者已经过期" component=user-server media_code=dc-f4dtaf1790145808999671000-b
+--- PASS: TestM01_DingTalkAllTransfersFailedWriteNoMedia (0.69s)
+=== RUN   TestM01_DingTalkSameDownloadCodeTransfersOnce
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtdp1790145809739238000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtdp1790145809739238000
+2026-09-23T14:43:29+08:00 INF [DingTalk] 入站媒体已转存 account_id=1 component=user-server msg_id=dt-1-dp-f4dtdp1790145809739238000 urls=["/files/dingtalk/dc-f4dtdp1790145809739238000-same","/files/dingtalk/dc-f4dtdp1790145809739238000-same","/files/dingtalk/dc-f4dtdp1790145809739238000-same"]
+    webhook_batchf4_m01_dingtalk_download_test.go:391: 下载调用 = [dc-f4dtdp1790145809739238000-same dc-f4dtdp1790145809739238000-same dc-f4dtdp1790145809739238000-same], want 同一个码只起 1 次
+    webhook_batchf4_m01_dingtalk_download_test.go:394: 转存调用 = [dc-f4dtdp1790145809739238000-same dc-f4dtdp1790145809739238000-same dc-f4dtdp1790145809739238000-same], want 1 次
+    webhook_batchf4_m01_dingtalk_download_test.go:397: Extra.media_urls = [/files/dingtalk/dc-f4dtdp1790145809739238000-same /files/dingtalk/dc-f4dtdp1790145809739238000-same /files/dingtalk/dc-f4dtdp1790145809739238000-same], want 一条不重复的 URL
+--- FAIL: TestM01_DingTalkSameDownloadCodeTransfersOnce (0.29s)
+=== RUN   TestM01_DingTalkInboundMediaKeepsTypeAndDownloadCode
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dt1790145809972676000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dt1790145809972676000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-pic
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dt1790145809972676000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dt1790145809972676000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-aud
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dt1790145809972676000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dt1790145809972676000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-file
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dt1790145809972676000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dt1790145809972676000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-vid
+2026-09-23T14:43:29+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dt1790145809972676000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:29+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dt1790145809972676000
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-rt1
+2026-09-23T14:43:29+08:00 WRN [DingTalk] 媒体下载失败（占位符保留） error="f4dt: 承载用例不发起真实下载" component=user-server media_code=dc-f4dt1790145809972676000-rt2
+--- PASS: TestM01_DingTalkInboundMediaKeepsTypeAndDownloadCode (0.20s)
+=== RUN   TestM01_DingTalkKeepsOfficialCreateAt
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtc1790145810160390000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 INF [Inbox] 钩子3：最后一条 inbound 超过 5 分钟，历史消息不触发 AI channel=dingtalk component=user-server conv_id=cid-f4dtc1790145810160390000 event_id=dt-1-tsq-f4dtc1790145810160390000
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtc1790145810160390000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 INF [Inbox] 钩子3：最后一条 inbound 超过 5 分钟，历史消息不触发 AI channel=dingtalk component=user-server conv_id=cid-f4dtc1790145810160390000 event_id=dt-1-tsb-f4dtc1790145810160390000
+2026-09-23T14:43:30+08:00 INF [Inbox] 时序锚点：消息 timestamp 早于锚点，标记为 backfill 历史堆积 anchor_timestamp=2026-09-23T11:43:30+08:00 channel=dingtalk component=user-server conv_id=cid-f4dtc1790145810160390000 event_id=dt-1-tss-f4dtc1790145810160390000 msg_timestamp=2026-09-23T11:43:30+08:00
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtc1790145810160390000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 INF [Inbox] 钩子3：最后一条 inbound 超过 5 分钟，历史消息不触发 AI channel=dingtalk component=user-server conv_id=cid-f4dtc1790145810160390000 event_id=dt-1-tss-f4dtc1790145810160390000
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtc1790145810160390000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtc1790145810160390000
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtc1790145810160390000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtc1790145810160390000
+--- PASS: TestM01_DingTalkKeepsOfficialCreateAt (0.20s)
+=== RUN   TestM01_DingTalkTextUnchanged
+2026-09-23T14:43:30+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=dt-1-cid-f4dtt1790145810374164000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T14:43:30+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=1 channel=dingtalk component=user-server session_id=dt-1-cid-f4dtt1790145810374164000
+--- PASS: TestM01_DingTalkTextUnchanged (0.19s)
+=== RUN   TestBatchJ_DingTalkTokenLegShapes
+=== RUN   TestBatchJ_DingTalkTokenLegShapes/200-空accessToken
+=== RUN   TestBatchJ_DingTalkTokenLegShapes/200-非JSON应答
+=== RUN   TestBatchJ_DingTalkTokenLegShapes/403-空accessToken
+=== RUN   TestBatchJ_DingTalkTokenLegShapes/200-拿到凭证
+--- PASS: TestBatchJ_DingTalkTokenLegShapes (0.00s)
+    --- PASS: TestBatchJ_DingTalkTokenLegShapes/200-空accessToken (0.00s)
+    --- PASS: TestBatchJ_DingTalkTokenLegShapes/200-非JSON应答 (0.00s)
+    --- PASS: TestBatchJ_DingTalkTokenLegShapes/403-空accessToken (0.00s)
+    --- PASS: TestBatchJ_DingTalkTokenLegShapes/200-拿到凭证 (0.00s)
+=== RUN   TestBatchJ_DingTalkTokenErrorIsNotRetryable
+--- PASS: TestBatchJ_DingTalkTokenErrorIsNotRetryable (0.00s)
+=== RUN   TestBatchJ_DingTalkPresignedURLQueryNeverReachesError
+--- PASS: TestBatchJ_DingTalkPresignedURLQueryNeverReachesError (0.00s)
+=== RUN   TestBatchJ_DingTalkAccessTokenNeverReachesParseError
+--- PASS: TestBatchJ_DingTalkAccessTokenNeverReachesParseError (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/service	4.610s
+FAIL

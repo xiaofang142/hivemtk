@@ -1,0 +1,26 @@
+# 整棵树扫（--no-git，半径＝工作树全部文件，不是 CI 那条'尖端提交'）
+# 总命中=36 按规则={'generic-api-key': 28, 'curl-auth-header': 6, 'jwt': 2}
+# 只列 文件/规则名 —— 值不落盘、不上屏（--redact 同时开着）
+# 反向自证：本报告的 json 若落在被扫树里，下一趟会把它自己的命中数再吃一遍（实测 36→74），故 json 一律写 /tmp。
+  .env-example 命中=1 规则=generic-api-key
+  docs/marketing-features/GEO_MODULE_DESIGN.md 命中=1 规则=generic-api-key
+  docs/operations/AI_AGENT_PERF_API.md 命中=9 规则=curl-auth-header,generic-api-key
+  docs/operations/secret_rotation.md 命中=1 规则=curl-auth-header
+  user-server/internal/aiagent/llm/provider_crypto_test.go 命中=1 规则=generic-api-key
+  user-server/internal/bridge/bridge_helpers_test.go 命中=3 规则=generic-api-key,jwt
+  user-server/internal/middleware/ratelimit_test.go 命中=1 规则=generic-api-key
+  user-server/internal/pkg/crypto/field_test.go 命中=1 规则=generic-api-key
+  user-server/internal/pkg/mail/unsubscribe_test.go 命中=1 规则=generic-api-key
+  user-server/internal/pkg/security/visitor_token_test.go 命中=1 规则=generic-api-key
+  user-server/internal/pkg/utils/error_code.go 命中=1 规则=generic-api-key
+  user-server/internal/service/channel_fullchain_e2e_test.go 命中=2 规则=generic-api-key
+  user-server/internal/service/channels_delivery_fix_test.go 命中=1 规则=generic-api-key
+  user-server/internal/service/chat_channel.go 命中=1 规则=generic-api-key
+  user-server/internal/service/email_secret_guard_test.go 命中=1 规则=generic-api-key
+  user-server/internal/service/tool_integration_config_test.go 命中=1 规则=generic-api-key
+  user-server/internal/service/webhook_service_e2e_test.go 命中=5 规则=generic-api-key
+  user-server/tests/e2e/deep_security.sh 命中=2 规则=curl-auth-header,generic-api-key
+  user-web/bridge/scripts/mock-upstream-url.mjs 命中=1 规则=generic-api-key
+  user-web/browser_automation/manifest.json 命中=1 规则=generic-api-key
+# 归属：本批只贡献 2 条（channel_fullchain_e2e_test.go 的字段名 EncodingAESKey，非凭证值）；
+#        其余 34 条分布在 12 份既有测试夹具与 4 份文档/脚本里，CI 那条门从未扫过这个半径。

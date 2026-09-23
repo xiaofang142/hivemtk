@@ -1,0 +1,6 @@
+[90m2026-09-23T14:44:19+08:00[0m [33mWRN[0m [1mpost-migrate: DROP 旧 uni_external_orders_order_id 失败(跨平台订单号仍会被这把旧键拦住): sql: database is closed[0m [36mcomponent=[0muser-server
+--- FAIL: TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally (0.33s)
+    external_order_key_startup_test.go:185: ② 连接池已关：钩子 panic ⇒ 启动会被一个没删掉的索引带走：sql: database is closed
+FAIL
+FAIL	hivemtk-user/internal/pkg/db	0.718s
+FAIL

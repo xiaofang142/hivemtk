@@ -1,0 +1,4 @@
+SEAM-GUARD：approvalNowFn 的 getter loadApprovalNowFn 没对 approvalSeamMu 上锁（要 approvalSeamMu.Lock() 或 approvalSeamMu.RLock()）@ internal/service/approval_request.go:180
+SEAM-GUARD：approvalNowFn 的 setter storeApprovalNowFn 没对 approvalSeamMu 上锁（要 approvalSeamMu.Lock()）@ internal/service/seam_guard_setters_test.go:24
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

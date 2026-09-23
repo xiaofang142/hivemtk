@@ -1,0 +1,16 @@
+=== RUN   TestBillRegisteredInAllModels
+--- PASS: TestBillRegisteredInAllModels (0.00s)
+=== RUN   TestBillAutoMigrate_ShapeAndIdempotent
+--- PASS: TestBillAutoMigrate_ShapeAndIdempotent (0.27s)
+=== RUN   TestBillUniqueIndexIsOnVersionRowKey
+--- PASS: TestBillUniqueIndexIsOnVersionRowKey (0.06s)
+=== RUN   TestBillAmountSharesRangeWithQuoteLines
+--- PASS: TestBillAmountSharesRangeWithQuoteLines (0.08s)
+=== RUN   TestBillIDIsTextPrimaryKey
+--- PASS: TestBillIDIsTextPrimaryKey (0.04s)
+=== RUN   TestBillChasedDueAtIndexExists
+--- PASS: TestBillChasedDueAtIndexExists (0.06s)
+=== RUN   TestAllModels_CoversModelsWithWritePaths
+--- PASS: TestAllModels_CoversModelsWithWritePaths (0.00s)
+PASS
+ok  	hivemtk-user/internal/pkg/db	0.901s

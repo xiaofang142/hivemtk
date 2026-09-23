@@ -1,0 +1,16 @@
+# 收口门禁趟：测于 2026-09-23 17:21:15 的 lane 树 HEAD 2ab6a4b9
+# 树：/tmp/r45-final-gates（`git clone --shared` 干净克隆，HEAD 即此 sha，无脏文件）
+# 门：bash scripts/check-shell-cjk-expansion.sh 的两向读数（同一版门，两棵树）
+# 用途：判「基线条目已归零，请从基线里删掉」这条提示是否成立
+
+== 克隆树 /tmp/r45-final-gates（HEAD 2ab6a4b9，只含已提交字节）==
+scanned=138 个 shell 文件，命中 1 处（基线 2 处）
+提示：以下基线条目已归零，请把它们从基线里删掉，把收敛固化：scripts/check-architecture.sh
+rc=0
+
+== hub 活树 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk（HEAD c985cdf3 + 并行泳道脏文件）==
+scanned=139 个 shell 文件，命中 2 处（基线 2 处）
+✅ 未发现新的「$VAR+中文」展开形状
+rc=0
+
+结论：提示不成立——多出的那 1 份 shell 文件属并行泳道未提交面，克隆里没有它 ⇒ 克隆里那条基线看起来『归零』。基线一字不动，连同两向读数交回并行泳道。

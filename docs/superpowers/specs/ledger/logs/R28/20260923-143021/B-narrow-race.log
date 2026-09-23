@@ -1,0 +1,115 @@
+$ go test -race -gcflags=hivemtk-user/internal/service=-l -v -run TestSeamGuard -count=1 ./internal/service/
+(cwd /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server)
+[90m2026-09-23T14:32:05+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSeamGuard_TelegramAPIBaseIsLocked
+--- PASS: TestSeamGuard_TelegramAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_TelegramMaxBytesIsLocked
+==================
+WARNING: DATA RACE
+Write at 0x000107b00998 by goroutine 30:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:79 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous read at 0x000107b00998 by goroutine 36:
+  hivemtk-user/internal/service.loadTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/telegram_media.go:64 +0x28
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func3()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:111 +0x28
+  hivemtk-user/internal/service.hammerSeam.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:79 +0x9c
+
+Goroutine 30 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 36 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:70 +0x1ac
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x000107b00998 by goroutine 31:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:79 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Previous write at 0x000107b00998 by goroutine 30:
+  hivemtk-user/internal/service.storeTGMaxMediaBytes()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_setters_test.go:79 +0x2c
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked.func2()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:109 +0x24
+  hivemtk-user/internal/service.hammerSeam.func1()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:64 +0x8c
+
+Goroutine 31 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 30 (running) created at:
+  hivemtk-user/internal/service.hammerSeam()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:56 +0xb0
+  hivemtk-user/internal/service.TestSeamGuard_TelegramMaxBytesIsLocked()
+      /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server/internal/service/seam_guard_race_test.go:108 +0xe4
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestSeamGuard_TelegramMaxBytesIsLocked (0.14s)
+=== RUN   TestSeamGuard_QQAttachmentGuardIsLocked
+--- PASS: TestSeamGuard_QQAttachmentGuardIsLocked (0.12s)
+=== RUN   TestSeamGuard_QQMaxBytesIsLocked
+--- PASS: TestSeamGuard_QQMaxBytesIsLocked (0.12s)
+=== RUN   TestSeamGuard_DingTalkOpenAPIBaseIsLocked
+--- PASS: TestSeamGuard_DingTalkOpenAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_DouyinAPIBaseIsLocked
+--- PASS: TestSeamGuard_DouyinAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_DouyinRetryBackoffIsLocked
+--- PASS: TestSeamGuard_DouyinRetryBackoffIsLocked (0.12s)
+=== RUN   TestSeamGuard_WeChatAPIBaseIsLocked
+--- PASS: TestSeamGuard_WeChatAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_AIReplyQuietHoursFnIsLocked
+--- PASS: TestSeamGuard_AIReplyQuietHoursFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_DingTalkWebhookHostAllowedIsLocked
+--- PASS: TestSeamGuard_DingTalkWebhookHostAllowedIsLocked (0.12s)
+=== RUN   TestSeamGuard_BridgeOnlineProbeIsLocked
+--- PASS: TestSeamGuard_BridgeOnlineProbeIsLocked (0.12s)
+=== RUN   TestSeamGuard_ApprovalNowFnIsLocked
+--- PASS: TestSeamGuard_ApprovalNowFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_ApprovalResumeTokFnIsLocked
+--- PASS: TestSeamGuard_ApprovalResumeTokFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_HumanTaskNowFnIsLocked
+--- PASS: TestSeamGuard_HumanTaskNowFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_IntentEnabledIsLocked
+--- PASS: TestSeamGuard_IntentEnabledIsLocked (0.12s)
+=== RUN   TestSeamGuard_PollingLockRepoIsLocked
+--- PASS: TestSeamGuard_PollingLockRepoIsLocked (0.12s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.957s
+FAIL

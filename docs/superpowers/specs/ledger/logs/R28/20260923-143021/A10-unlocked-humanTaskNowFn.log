@@ -1,0 +1,4 @@
+SEAM-GUARD：humanTaskNowFn 的 getter loadHumanTaskNowFn 没对 humanTaskSeamMu 上锁（要 humanTaskSeamMu.Lock() 或 humanTaskSeamMu.RLock()）@ internal/service/human_task.go:238
+SEAM-GUARD：humanTaskNowFn 的 setter storeHumanTaskNowFn 没对 humanTaskSeamMu 上锁（要 humanTaskSeamMu.Lock()）@ internal/service/seam_guard_setters_test.go:54
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

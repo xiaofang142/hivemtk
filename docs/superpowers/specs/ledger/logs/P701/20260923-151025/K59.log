@@ -1,0 +1,57 @@
+2026-09-23T15:18:09+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (0.29s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.14s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+--- PASS: TestBillDeriveIsIdempotentAcrossCalls (0.14s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.20s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.14s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.14s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+--- PASS: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.13s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.14s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.13s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.12s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.12s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.12s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+--- PASS: TestBillDeriveReportsReadBackFailure (0.15s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.12s)
+=== RUN   TestBillDeriveInputHasOnlyTheRowKey
+--- PASS: TestBillDeriveInputHasOnlyTheRowKey (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- FAIL: TestBillServiceAvailabilityAndNilSafety (0.12s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x18 pc=0x102cb9994]
+
+goroutine 196 [running]:
+testing.tRunner.func1.2({0x10432a120, 0x1046de5c0})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1977 +0x318
+panic({0x10432a120?, 0x1046de5c0?})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c
+hivemtk-user/internal/service.(*BillService).DeriveFromQuote(0x7fd84a39fec0, {0x1045c6b08, 0x10475dac0}, {{0x1031f3224?, 0xf?}})
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-op9nifsz/clone/user-server/internal/service/bill.go:188 +0xe4
+hivemtk-user/internal/service.TestBillServiceAvailabilityAndNilSafety(0x7fd84a124908)
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-op9nifsz/clone/user-server/internal/service/bill_test.go:740 +0x198
+testing.tRunner(0x7fd84a124908, 0x1045948d0)
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	hivemtk-user/internal/service	2.880s
+FAIL

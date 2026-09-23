@@ -1,0 +1,24 @@
+# 收口门禁趟：测于 2026-09-23 17:21:15 的 lane 树 HEAD 2ab6a4b9
+# 树：/tmp/r45-final-gates（`git clone --shared` 干净克隆，HEAD 即此 sha，无脏文件）
+# 命令：第 9 步（check-env-coverage.py）红之后，把它之后的五道门逐个直接跑（不靠 make 的连锁）
+════ python3 scripts/check-test-nil-deref.py
+产码交回 (nil, nil) 的函数键（类型.方法名，按包目录）＝116 · 测试确证站点＝0（0 个文件）· 存疑站点＝114
+绿：确证站点 0 与基线一致，无新增
+──── rc=0
+════ python3 scripts/check-async-global-read.py
+OK 异步体裸读全局门：项目根 /private/tmp/r45-final-gates，扫 153 个 package，站点 0（= 基线合计 0）
+──── rc=0
+════ python3 scripts/check-seam-guard.py
+OK seam 全局 accessor 门：项目根 /private/tmp/r45-final-gates，登记 17 个全局，扫 2763 个 .go 文件 ⇒ accessor 之外 0 处访问
+    注册表 scripts/seam-guard.registry；摘锁/绕门的牙齿证据见 scripts/mut_seam_guard_r28.py
+──── rc=0
+════ bash scripts/check-shellcheck.sh
+shellcheck=0.11.0（/Users/xiaofang/.local/bin/shellcheck）
+scanned=138 checked=138 error=0
+✅ 138 个 shell 文件全部按 error 级检查过，0 条 finding
+──── rc=0
+════ bash scripts/check-shell-cjk-expansion.sh
+scanned=138 个 shell 文件，命中 1 处（基线 2 处）
+提示：以下基线条目已归零，请把它们从基线里删掉，把收敛固化：scripts/check-architecture.sh
+✅ 未发现新的「$VAR+中文」展开形状（基线内的残留属别的泳道热文件，见基线注释）
+──── rc=0

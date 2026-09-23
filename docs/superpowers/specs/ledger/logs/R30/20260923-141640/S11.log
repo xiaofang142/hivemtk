@@ -1,0 +1,42 @@
+2026-09-23T14:24:13+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent
+2026-09-23T14:24:15+08:00 ERR 查询短信退订状态失败 phone=13812345690: ERROR: relation "sms_unsubscribes" does not exist (SQLSTATE 42P01) component=user-server
+--- PASS: TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent (2.31s)
+=== RUN   TestSmsService_SendSms_AliyunSuccess
+2026-09-23T14:24:15+08:00 ERR 查询短信退订状态失败 phone=13812345687: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_AliyunSuccess (0.22s)
+=== RUN   TestSmsService_SendSms_TencentSuccess
+2026-09-23T14:24:15+08:00 ERR 查询短信退订状态失败 phone=13812345688: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_TencentSuccess (0.21s)
+=== RUN   TestSmsService_SendSms_HuaweiSuccess
+2026-09-23T14:24:15+08:00 ERR 查询短信退订状态失败 phone=13812345689: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_HuaweiSuccess (0.18s)
+=== RUN   TestSmsService_SendSms
+2026-09-23T14:24:16+08:00 ERR 查询短信退订状态失败 phone=13812345678: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms (0.19s)
+=== RUN   TestSmsService_SendSms_TencentOfficialError
+2026-09-23T14:24:16+08:00 ERR 查询短信退订状态失败 phone=13812345681: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_TencentOfficialError (0.20s)
+=== RUN   TestSmsService_SendSms_HuaweiOfficialError
+2026-09-23T14:24:16+08:00 ERR 查询短信退订状态失败 phone=13812345682: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_HuaweiOfficialError (0.18s)
+=== RUN   TestSmsService_ResendSms
+2026-09-23T14:24:16+08:00 ERR 查询短信退订状态失败 phone=13812345678: sql: database is closed component=user-server
+--- PASS: TestSmsService_ResendSms (0.12s)
+=== RUN   TestSmsService_ResendSms_TransportFailureRecordsReason
+2026-09-23T14:24:16+08:00 ERR 查询短信退订状态失败 phone=13812345679: sql: database is closed component=user-server
+--- PASS: TestSmsService_ResendSms_TransportFailureRecordsReason (1.04s)
+=== RUN   TestSmsService_SendSms_UnknownProviderRecordsReason
+2026-09-23T14:24:18+08:00 ERR 查询短信退订状态失败 phone=13812345684: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendSms_UnknownProviderRecordsReason (0.31s)
+=== RUN   TestNewSmsServiceDefaultsToOfficialGatewayURLs
+    sms_test.go:458: huawei 默认接口域 = "", want https://smsapi.cn-north-4.boe-business.huaweicloud.com:443/sms/batchSendSms/v1
+--- FAIL: TestNewSmsServiceDefaultsToOfficialGatewayURLs (0.20s)
+=== RUN   TestSmsService_SendDraft
+2026-09-23T14:24:18+08:00 ERR 查询短信退订状态失败 phone=13812345678: sql: database is closed component=user-server
+--- PASS: TestSmsService_SendDraft (0.18s)
+FAIL
+FAIL	hivemtk-user/internal/service	5.995s
+FAIL
+
+===== CONNECT =====

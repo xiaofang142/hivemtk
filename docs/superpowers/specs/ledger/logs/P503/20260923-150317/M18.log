@@ -1,0 +1,7 @@
+2026-09-23T15:10:02+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestRouterWiresGatedSenderToSOPLane
+    reach_sender_assembly_test.go:38: SOP 侧 sender 装配点出现 0 次，期望恰好 1 次（0 次=图上的外发永不装配；多次=两个实例在抢同一个全局）
+--- FAIL: TestRouterWiresGatedSenderToSOPLane (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/router	0.983s
+FAIL

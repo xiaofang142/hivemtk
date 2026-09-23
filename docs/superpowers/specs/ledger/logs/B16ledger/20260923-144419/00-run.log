@@ -1,0 +1,34 @@
+注码目标目录: /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server
+基线 md5: executor.go=be6e4a67  write_ledger.go=4a991caa
+对照腿 rc=0 ran=8/8 skip=0 → 绿，门在位
+M1 prepared 台账写失败不再拦下 send rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_LedgerWriteFailureAbortsBeforeSend | TestWSE2E_LedgerWriteFailureDegradesRestOfSession
+   红因: comment_send=1 want 0——台账写不进去还照发，就是拿不可逆动作赌 DB 手感
+   红因: comment_verify=1 want 0（没提交就不必回查）
+   还原 md5 一致 be6e4a67（executor.go）
+M2 会话级降级检查摘掉 rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_LedgerWriteFailureDegradesRestOfSession
+   红因: comment_prep=2 want 1——第二个写步必须一帧都不下发（台账已不可信）
+   红因: comment_send=1 want 0
+   还原 md5 一致 be6e4a67（executor.go）
+M3 越点未落账的进程内兜底不再记 rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_SentLedgerGapStillBlocksRetryRound
+   红因: 重试轮后 comment_send=2 want 1——台账缺口挡不住重发就是双发
+   红因: 重试轮后 comment_prep=2 want 1（拒绝=整步零帧，连 prep 都不该下）
+   还原 md5 一致 4a991caa（write_ledger.go）
+M4 双发闸查询失败退回 fail-open rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_GuardQueryFailureFailsClosed
+   红因: comment_prep=1 want 0——查不到尝试就照发，等于把闸门交给 DB 手感
+   红因: status=success want failed
+   还原 md5 一致 4a991caa（write_ledger.go）
+M5 定位表报错不再升未知态 rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestClassifyStepEffectThreeStates | TestWSE2E_UnknownLocatorTableTreatedAsWrite
+   红因: click 到线 3 次 want 1——定位表不可得时不得宣称「这一下没有副作用」，retries 必须钳 0
+   红因: is_write 必须落库为真（分类未知＝按最坏处置，事后要能看出是被降级判的）
+   还原 md5 一致 4a991caa（write_ledger.go）
+M6 越点未落账的步仍可报成功 rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_SentLedgerGapStillBlocksRetryRound
+   红因: 越点未落账必须判红并写「需人工核对」：status=success err=""
+   还原 md5 一致 be6e4a67（executor.go）
+M7 sent 落账调用点不再标 crossed rc=0 ran=8/8 skip=0 → 绿（变异存活，要就是真洞、要就登记等价类理由）
+   判为等价类（不判红，理由要读）：等价类：sent 与终态写同键、终态写恒可达，缺口只会多记不会漏记（理由见脚本内注释）
+   还原 md5 一致 be6e4a67（executor.go）
+M8 闸门早返挪到落 sent 之后 rc=1 ran=8/8 skip=0 → 红 已杀（恰好 must 集合）｜TestSendGateOrderedBeforeSentLedger
+   红因: 顺序必须 send→闸门早返→落 sent，got send=51491 gate=51800 sent=51757
+   还原 md5 一致 be6e4a67（executor.go）
+收尾对照腿 rc=0 ran=8/8 skip=0 → 绿，代码回到注码前状态
+电池终态: OK

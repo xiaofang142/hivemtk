@@ -1,0 +1,5 @@
+# 反向格：JS 腿前置（node_modules）缺失时，常驻件必须当场停机而非静默跳过（ lane 树天生没有该目录，本机 = 天然夹具）
+# 命令：python3 scripts/mut_actionability_b17.py --js-only   （于 r45-lane，HEAD f8d83b59）
+｜ 私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-l5i2dufe
+｜ /Users/xiaofang/Documents/www/go/hivemtk/r45-lane/user-web/browser_automation/node_modules 不存在——先在 user-web/browser_automation 里 npm install
+rc=1（非零即判停机成立；红因点名缺失目录的绝对路径）

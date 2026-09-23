@@ -1,0 +1,38 @@
+2026-09-23T16:10:05+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRepository_ScanOverdueSelectsByCutoffAndStatus
+--- PASS: TestBillRepository_ScanOverdueSelectsByCutoffAndStatus (0.16s)
+=== RUN   TestBillRepository_ScanOverdueOrdersOldestFirst
+--- PASS: TestBillRepository_ScanOverdueOrdersOldestFirst (0.05s)
+=== RUN   TestBillRepository_ScanOverdueRejectsNonPositiveLimit
+--- PASS: TestBillRepository_ScanOverdueRejectsNonPositiveLimit (0.03s)
+=== RUN   TestBillRepository_ScanOverdueFailureIsNotEmptyResult
+--- PASS: TestBillRepository_ScanOverdueFailureIsNotEmptyResult (0.03s)
+=== RUN   TestBillRepository_ScanOverdueFollowsTheChasedDomain
+--- PASS: TestBillRepository_ScanOverdueFollowsTheChasedDomain (0.04s)
+=== RUN   TestBillRepository_CreateRejectsMissingIdentity
+--- PASS: TestBillRepository_CreateRejectsMissingIdentity (0.03s)
+=== RUN   TestBillRepository_DuplicateQuoteRowIsItsOwnError
+    bill_test.go:117: 同一版重复派生报的不是 ErrBillAlreadyDerived：ERROR: duplicate key value violates unique constraint "uq_bills_quote_row" (SQLSTATE 23505)
+--- FAIL: TestBillRepository_DuplicateQuoteRowIsItsOwnError (0.04s)
+=== RUN   TestBillRepository_StatusMustBeInTheDomain
+--- PASS: TestBillRepository_StatusMustBeInTheDomain (0.04s)
+=== RUN   TestBillRepository_ReadsDistinguishMissingFromFailure
+--- PASS: TestBillRepository_ReadsDistinguishMissingFromFailure (0.04s)
+=== RUN   TestBillRepository_ReadFailureIsNotMissingRead
+--- PASS: TestBillRepository_ReadFailureIsNotMissingRead (0.03s)
+=== RUN   TestBillRepository_UpdateStatusIsCompareAndSet
+--- PASS: TestBillRepository_UpdateStatusIsCompareAndSet (0.04s)
+=== RUN   TestBillRepository_MethodSetIsExactlyTheDocumentedSeven
+--- PASS: TestBillRepository_MethodSetIsExactlyTheDocumentedSeven (0.00s)
+=== RUN   TestBillRepository_ListByQuoteID
+--- PASS: TestBillRepository_ListByQuoteID (0.04s)
+=== RUN   TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt
+--- PASS: TestBillRepository_ListByQuoteIDStableOrderTiesCreatedAt (0.04s)
+=== RUN   TestBillRepository_NilHandleFailsLoudly
+--- PASS: TestBillRepository_NilHandleFailsLoudly (0.00s)
+=== RUN   TestBillRepository_ConstraintNameIsTheOneOnTheModel
+    bill_test.go:546: quote_row_id 上的唯一索引名 [uq_bills_quote_row]，与仓储判据 "uq_bills_quote_row_index" 不同源：23505 那一步会认不出幂等键
+--- FAIL: TestBillRepository_ConstraintNameIsTheOneOnTheModel (0.07s)
+FAIL
+FAIL	hivemtk-user/internal/repository	1.119s
+FAIL

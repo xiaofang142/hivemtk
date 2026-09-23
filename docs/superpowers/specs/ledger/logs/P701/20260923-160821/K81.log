@@ -1,0 +1,16 @@
+2026-09-23T16:15:25+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestInitBillRuntimeAssemblesTheDeriveLeg
+2026-09-23T16:15:26+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+    bill_wiring_test.go:95: 装配出来的实例派生失败：bill: 读报价版本行 q_wiring_bill 失败：quote repository: db handle is nil
+--- FAIL: TestInitBillRuntimeAssemblesTheDeriveLeg (0.26s)
+=== RUN   TestInitBillRuntimeDoesNotDependOnTheGlobalHandle
+2026-09-23T16:15:26+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+    bill_wiring_test.go:134: 全局句柄为空的进程状态下派生失败：bill: 读报价版本行 q_wiring_bill_handle 失败：quote repository: db handle is nil
+--- FAIL: TestInitBillRuntimeDoesNotDependOnTheGlobalHandle (0.11s)
+=== RUN   TestInitBillRuntimeClearsGlobalWithoutDB
+2026-09-23T16:15:26+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+2026-09-23T16:15:26+08:00 WRN [bill] ⚠️ 无 DB 句柄 ⇒ 账单派生腿不装配：/api/bill 回 503，且报价的 accepted 这一格在库里没有任何写入口（回款域没有起点） component=user-server
+--- PASS: TestInitBillRuntimeClearsGlobalWithoutDB (0.10s)
+FAIL
+FAIL	hivemtk-user/internal/app	1.044s
+FAIL

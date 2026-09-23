@@ -1,0 +1,65 @@
+[90m2026-09-23T14:48:48+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestWSE2E_D7GateHoldsSendUntilConfirmed
+[90m2026-09-23T14:48:49+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:49+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:52+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestWSE2E_D7GateHoldsSendUntilConfirmed (4.40s)
+=== RUN   TestWSE2E_D7AbortBeforeConfirmNeverSends
+[90m2026-09-23T14:48:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:53+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: 写步等待人工确认期间被用户中止，评论未提交[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestWSE2E_D7AbortBeforeConfirmNeverSends (3.47s)
+=== RUN   TestBlockedWriteStepReasonSurvivesCanceledCtx
+[90m2026-09-23T14:48:56+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [33mWRN[0m [1m[BrowserExec] 双发闸查询失败 task=1（拒绝下发）: double submit guard query failed: connection reset by peer[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestBlockedWriteStepReasonSurvivesCanceledCtx (0.11s)
+=== RUN   TestCrossedLedgerGapSuppressesAutoRetry
+[90m2026-09-23T14:48:56+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:56+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:48:59+08:00[0m [33mWRN[0m [1m[BrowserExec] 写台账落库失败 step=4 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [33mWRN[0m [1m[BrowserExec] 写台账落库失败 step=4 state=verified（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 回查已见评论（内容确已发布），但提交台账未落全（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级\n写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [33mWRN[0m [1m[BrowserFeedback] task=1 存在写台账缺口，自动重试已抑制（原因见任务行）[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [31mERR[0m [1m[BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestCrossedLedgerGapSuppressesAutoRetry (3.86s)
+=== RUN   TestPreparedLedgerFailureStillSchedulesRetry
+[90m2026-09-23T14:49:00+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:00+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [33mWRN[0m [1m[BrowserExec] 写台账落库失败 step=4 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [33mWRN[0m [1m[BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserFeedback] 任务失败自动重试已挂起 task=1 第 1/1 次，300s 后（2026-09-23T14:54:04+08:00）执行（持久化，重启不丢）[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [31mERR[0m [1m[BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestPreparedLedgerFailureStillSchedulesRetry (3.86s)
+=== RUN   TestRunRetryRefusesTaskWithLedgerGap
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+--- PASS: TestRunRetryRefusesTaskWithLedgerGap (0.10s)
+=== RUN   TestLedgerUpdateOnMissingRowFails
+[90m2026-09-23T14:49:04+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestLedgerUpdateOnMissingRowFails (0.14s)
+=== RUN   TestLedgerGapSetGrowsOnlyPerDistinctKey
+--- PASS: TestLedgerGapSetGrowsOnlyPerDistinctKey (0.00s)
+=== RUN   TestWriteStepKeyNeverEmpty
+--- PASS: TestWriteStepKeyNeverEmpty (0.00s)
+=== RUN   TestGenericWriteStepLedgerFailureJudgedRed
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:04+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:05+08:00[0m [33mWRN[0m [1m[BrowserExec] 写台账落库失败 step=2 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:05+08:00[0m [33mWRN[0m [1m[BrowserExec] 写步已下发但台账未落（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果 session=1 idx=1 action=click[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:05+08:00[0m [31mERR[0m [1m[BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:05+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestGenericWriteStepLedgerFailureJudgedRed (1.59s)
+=== RUN   TestTransientLedgerWriteFailureRecoversWithoutGap
+[90m2026-09-23T14:49:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=26201[0m [36mcomponent=[0muser-server
+[90m2026-09-23T14:49:06+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=26201[0m [36mcomponent=[0muser-server
+--- PASS: TestTransientLedgerWriteFailureRecoversWithoutGap (2.34s)
+[90m2026-09-23T14:49:08+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+PASS
+ok  	hivemtk-user/internal/browser_automation/service	20.182s

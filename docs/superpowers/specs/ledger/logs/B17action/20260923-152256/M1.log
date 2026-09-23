@@ -1,0 +1,98 @@
+
+ RUN  v4.1.11 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-ci1_e4v1/web
+
+ ❯ test/batch17-actionability.test.js (18 tests | 3 failed) 5697ms
+     ✓ 对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次）  355ms
+     × 永远在动的元素：一帧坐标都不许下发，红因点名 unstable 835ms
+     ✓ 落位中的元素：点的是**结算后**那一帧的中心，不是第一帧的  340ms
+     ✓ click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick）  519ms
+     ✓ comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严）  520ms
+     × stable 必须在远小于 15s 注入竞速窗的时间内给出结论 816ms
+     ✓ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次**  325ms
+     ✓ 点完之后目标消失（selector 解析不到）→ element_moved  325ms
+     ✓ 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）  328ms
+     ✓ 身份未变 → ok，且回包明说这次复核过（identity_checked=true）  322ms
+     ✓ 复核自己跑不动（注入没回包）不能变成静默 ok：未知态点名 identity  319ms
+     ✓ 读步（不带 verify_identity）不付这次额外注入  323ms
+     ✓ 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动  321ms
+     ✓ click_near 的写步同样复核（第二个消费点：锚点+文本现算的定位也要能再解析回去） 20ms
+     ✓ DOM 兜底路径不做点后复核（兜底点的就是元素本身，复核只会把真动作误判成移动） 22ms
+     × unstable 判据在三处 probe 里各出现一次 1ms
+     ✓ SW 侧 dispatch 一段里不许出现 *_not_interactable（Go 判「从未派发」的前提） 1ms
+     ✓ injClickIdentityCheck 恰有一处定义、两处消费（click 与 click_near 的 CDP 分支） 0ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 15 passed (18)
+   Start at  15:23:04
+   Duration  6.39s (transform 77ms, setup 0ms, import 96ms, tests 5.70s, environment 292ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/batch17-actionability.test.js > 批17(a) stable：探测到真点之间元素必须已经停下 > 永远在动的元素：一帧坐标都不许下发，红因点名 unstable
+AssertionError: promise resolved "{ ok: true, navigated: false, …(1) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "channel": "cdp",
++   "navigated": false,
++   "ok": true,
+  }
+
+ ❯ test/batch17-actionability.test.js:112:6
+    110|     await expect(
+    111|       dispatch({ action: 'click', tab_id: 42, target: '#send' }, makeD…
+    112|     ).rejects.toThrow(/unstable/);
+       |      ^
+    113|     expect(cdp.clickAt).not.toHaveBeenCalled();
+    114|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  test/batch17-actionability.test.js > 批17(a) stable：探测到真点之间元素必须已经停下 > stable 必须在远小于 15s 注入竞速窗的时间内给出结论
+AssertionError: promise resolved "{ ok: true, navigated: false, …(1) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "channel": "cdp",
++   "navigated": false,
++   "ok": true,
+  }
+
+ ❯ test/batch17-actionability.test.js:155:6
+    153|     await expect(
+    154|       dispatch({ action: 'click', tab_id: 42, target: '#send' }, makeD…
+    155|     ).rejects.toThrow(/unstable/);
+       |      ^
+    156|     expect(Date.now() - started).toBeLessThan(3000);
+    157|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  test/batch17-actionability.test.js > 批17 静态锁：三份内联 probe 与两处复核挂点必须一起长牙 > unstable 判据在三处 probe 里各出现一次
+AssertionError: stable 判据出现 2 次 want 3（injClick / injClickNear / injPostCommentSend）: expected 2 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 2
+
+ ❯ test/batch17-actionability.test.js:285:90
+    283|   it('unstable 判据在三处 probe 里各出现一次', () => {
+    284|     const n = (primitivesSrc.match(/'unstable'/g) || []).length;
+    285|     expect(n, `stable 判据出现 ${n} 次 want 3（injClick / injClickNear / inj…
+       |                                                                                          ^
+    286|   });
+    287|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

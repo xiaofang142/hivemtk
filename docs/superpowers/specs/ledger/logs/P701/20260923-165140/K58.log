@@ -1,0 +1,43 @@
+2026-09-23T16:59:05+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (0.46s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.15s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+    bill_test.go:279: 第二次没报 Reused
+--- FAIL: TestBillDeriveIsIdempotentAcrossCalls (0.17s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.15s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.13s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.13s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+    bill_test.go:427: 重入没复用到那张: "b_1789812000000000000_7"/false vs "b_1789812000000000000_7"
+--- FAIL: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.14s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.12s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.12s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.20s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.13s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.09s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+    bill_test.go:639: 恢复那一次没报 Reused：调用方会以为自己又开了一张应收
+--- FAIL: TestBillDeriveReportsReadBackFailure (0.09s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.09s)
+=== RUN   TestBillDeriveInputHasOnlyTheRowKey
+--- PASS: TestBillDeriveInputHasOnlyTheRowKey (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- PASS: TestBillServiceAvailabilityAndNilSafety (0.10s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.989s
+FAIL

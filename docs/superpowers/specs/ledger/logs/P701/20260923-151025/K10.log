@@ -1,0 +1,23 @@
+=== RUN   TestBillStatusVocabulary
+--- PASS: TestBillStatusVocabulary (0.00s)
+=== RUN   TestBillSchemaShape
+--- PASS: TestBillSchemaShape (0.00s)
+=== RUN   TestBillKeyedToExactlyOneQuoteVersion
+--- PASS: TestBillKeyedToExactlyOneQuoteVersion (0.00s)
+=== RUN   TestBillCarriesNoPaymentTotals
+--- PASS: TestBillCarriesNoPaymentTotals (0.00s)
+=== RUN   TestBillCarriesNoApprovalState
+--- PASS: TestBillCarriesNoApprovalState (0.00s)
+=== RUN   TestBillHasNoTenantColumn
+--- PASS: TestBillHasNoTenantColumn (0.00s)
+=== RUN   TestBillKeyColumnWidths
+--- PASS: TestBillKeyColumnWidths (0.00s)
+=== RUN   TestBillJSONNamesMatchColumns
+--- PASS: TestBillJSONNamesMatchColumns (0.00s)
+=== RUN   TestBillStatusTransitionsAreDeclared
+    bill_test.go:294: 跃迁 voided→open 应为 false，实际 true
+    bill_test.go:299: voided 是终态却有 1 条出边：终态有出边等于没有终态
+--- FAIL: TestBillStatusTransitionsAreDeclared (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.345s
+FAIL
