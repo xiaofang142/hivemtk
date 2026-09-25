@@ -1,0 +1,55 @@
+=== cell K4-single-branch-destroys-dup ===
+2026-09-22T13:35:54.138173+08:00
+--- git HEAD: 546895e5
+--- go test ./internal/service/ -run 'TestIngress_ContentDedupKeyCarriesConversation|TestPersistBridgeHistory_ContentDedupExpiresAfterWindow|TestPersistBridgeHistory_ContentDedupStillHooksFreshEcho|TestPersistBridgeHistory_ContentDedupScopedToConversation|TestHandleIngress_DupDecisionPersistsWithAISuppressed|TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed|TestHandleIngress_SelfEchoDecisionPersistsNothing|TestIngress_PlatformIDEventsSkipContentDedup'
+[90m2026-09-22T13:36:34+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestIngress_ContentDedupKeyCarriesConversation
+--- PASS: TestIngress_ContentDedupKeyCarriesConversation (5.87s)
+=== RUN   TestIngress_PlatformIDEventsSkipContentDedup
+--- PASS: TestIngress_PlatformIDEventsSkipContentDedup (0.23s)
+=== RUN   TestPersistBridgeHistory_ContentDedupExpiresAfterWindow
+--- PASS: TestPersistBridgeHistory_ContentDedupExpiresAfterWindow (0.28s)
+=== RUN   TestPersistBridgeHistory_ContentDedupStillHooksFreshEcho
+[90m2026-09-22T13:36:41+08:00[0m [32mINF[0m [1m[Inbox] PersistBridgeHistory 钩子2.5 命中：normalized platform+content 已存在，幂等跳过（防回环）[0m [36mchannel=[0mxiaohongshu [36mcomponent=[0muser-server [36mconv_id=[0mconv-r23-fresh [36mexisting_conv_id=[0mconv-r23-fresh [36mexisting_direction=[0moutbound [36mexisting_msg_id=[0mmh-r23-fresh [36mmodule=[0mbridge [36msender_id=[0mcustomer-fresh-1790055401612174000
+--- PASS: TestPersistBridgeHistory_ContentDedupStillHooksFreshEcho (0.26s)
+=== RUN   TestPersistBridgeHistory_ContentDedupScopedToConversation
+--- PASS: TestPersistBridgeHistory_ContentDedupScopedToConversation (0.25s)
+=== RUN   TestHandleIngress_DupDecisionPersistsWithAISuppressed
+[90m2026-09-22T13:36:42+08:00[0m [33mWRN[0m [1m[feedback] UpdateCustomerAcceptBySession failed session=xiaohongshu:customer-duptrace-1790055402121544000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01)[0m [36mcomponent=[0muser-server
+[90m2026-09-22T13:36:42+08:00[0m [31mERR[0m [1m[Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。[0m [36maccount_id=[0macct-duptrace-1790055402121544000 [36mchannel=[0mxiaohongshu [36mcomponent=[0muser-server [36msession_id=[0mxiaohongshu:customer-duptrace-1790055402121544000
+[90m2026-09-22T13:36:42+08:00[0m [32mINF[0m [1m[Inbox] 中间件拦截：消息被去重/回环拦截，不穿透业务层[0m [36mcomponent=[0muser-server [36mdup=[0mtrue [36mevent_id=[0mevt-r23-dup-2 [36mreason=[0m"duplicate(channel+sender+content) within window" [36mself_echo=[0mfalse
+    inbox_ingress_dedup_scope_test.go:223: 第二条按重复抑制 AI：Reason=intercepted by middleware: duplicate(channel+sender+content) within window (self_echo=false dup=true)
+    inbox_ingress_dedup_scope_test.go:229: §8.3-18 未达成：被判重复的消息在库里查不到任何痕迹（客户说了没回，排障无据）：record not found
+--- FAIL: TestHandleIngress_DupDecisionPersistsWithAISuppressed (0.27s)
+=== RUN   TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed
+[90m2026-09-22T13:36:42+08:00[0m [33mWRN[0m [1m[feedback] UpdateCustomerAcceptBySession failed session=xiaohongshu:customer-batchdup-1790055402538817000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01)[0m [36mcomponent=[0muser-server
+[90m2026-09-22T13:36:42+08:00[0m [31mERR[0m [1m[Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。[0m [36maccount_id=[0macct-batchdup-1790055402538817000 [36mchannel=[0mxiaohongshu [36mcomponent=[0muser-server [36msession_id=[0mxiaohongshu:customer-batchdup-1790055402538817000
+[90m2026-09-22T13:36:42+08:00[0m [32mINF[0m [1m[Inbox] 中间件拦截（批次）：消息被去重/回环拦截，不穿透业务层[0m [36mcomponent=[0muser-server [36mdup=[0mtrue [36mevent_id=[0mevt-r23-batch-2 [36mreason=[0m"duplicate(channel+sender+content) within window" [36mself_echo=[0mfalse
+[90m2026-09-22T13:36:42+08:00[0m [33mWRN[0m [1m[feedback] UpdateCustomerAcceptBySession failed session=xiaohongshu:customer-batchdup-1790055402538817000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01)[0m [36mcomponent=[0muser-server
+--- PASS: TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed (0.45s)
+=== RUN   TestHandleIngress_SelfEchoDecisionPersistsNothing
+[90m2026-09-22T13:36:42+08:00[0m [32mINF[0m [1m[Inbox] 中间件拦截：消息被去重/回环拦截，不穿透业务层[0m [36mcomponent=[0muser-server [36mdup=[0mfalse [36mevent_id=[0mevt-r23-echo-in [36mreason=[0m"self-echo(platform msg_id exact match)" [36mself_echo=[0mtrue
+--- PASS: TestHandleIngress_SelfEchoDecisionPersistsNothing (0.25s)
+FAIL
+FAIL	hivemtk-user/internal/service	9.479s
+FAIL
+
+stderr:
+
+rc=1
+--- go test ./internal/repository/ -run 'TestMessageHubRepository_ContentEchoScoping|TestMessageHubRepository_GetByPlatformContent|TestMessageHubRepository_GetByContentHash_Empty'
+[90m2026-09-22T13:36:46+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestMessageHubRepository_GetByPlatformContent
+--- PASS: TestMessageHubRepository_GetByPlatformContent (3.40s)
+=== RUN   TestMessageHubRepository_ContentEchoScoping
+--- PASS: TestMessageHubRepository_ContentEchoScoping (0.25s)
+=== RUN   TestMessageHubRepository_GetByPlatformContent_EmptyArgs
+--- PASS: TestMessageHubRepository_GetByPlatformContent_EmptyArgs (0.19s)
+=== RUN   TestMessageHubRepository_GetByContentHash_Empty
+--- PASS: TestMessageHubRepository_GetByContentHash_Empty (0.17s)
+PASS
+ok  	hivemtk-user/internal/repository	4.694s
+
+stderr:
+
+rc=0

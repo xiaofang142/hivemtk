@@ -1,0 +1,11 @@
+== 控制组（未注码）
+   rc=0 settled=18 skip=0 红=— ｜ Tests 18 passed (18)
+O3   add() 去掉先删：重命中就地刷时间戳不挪位 ⇒ evict 前缀快路径停在原地（杀面=H 格）    杀掉           settled=18 ｜ Tests 1 failed | 17 passed (18) ｜ 红=H 会话内重命中续期：evict 按最后命中时间裁，落在重命中条目之后的界外尾条必须回收（杀：add 去掉先删）
+     红因: → expected [ 'm-rehit|c1', 'k-tail1|c1', …(1) ] to not include 'k-tail1|c1'
+O4   markSent 包进 if (sendVerified)：回查未见不记去重账 ⇒ 第二句同文案直过（杀面=红线①下半句格） 杀掉           settled=18 ｜ Tests 1 failed | 17 passed (18) ｜ 红=红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+     红因: → expected "markSent" to be called 1 times, but got 0 times
+
+===== 判定：2 格逐刀被杀，无存活
+OK：工作树两枚文件逐字节还原（downlink.js=712a0b00 channel-adapter.js=6af6de63），日志在 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/R22-lanes
+
+sentcache_rc=0

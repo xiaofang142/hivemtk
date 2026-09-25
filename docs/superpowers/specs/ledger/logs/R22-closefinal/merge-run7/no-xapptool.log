@@ -1,0 +1,7 @@
+$ bash scripts/check-no-xapptool.sh
+(cwd=.)
+rc=0  3.4s
+
+scanned=4968 files (whitelist=6 paths)
+OK no-xapptool: 0 hits
+

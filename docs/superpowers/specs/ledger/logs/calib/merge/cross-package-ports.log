@@ -1,0 +1,65 @@
+$ bash scripts/audit-cross-package-ports.sh
+(cwd=.)
+rc=0  0.1s
+
+============================================================
+Step 1: 提取 user-server ports.go 单一源
+============================================================
+  DefaultListenPort      = 8204
+  DefaultDBPortDev       = 8232
+  DefaultDBPortDocker    = 8202
+  DefaultRedisPort       = 8203
+  DefaultPlatformPort    = 8205
+  DefaultChromiumCDPPort = 8206
+  DefaultLLMPort         = 8207
+  DefaultEmbeddingPort   = 8208
+  DefaultRerankPort      = 8209
+
+
+============================================================
+Step 2: 提取 platform-server ports.go 单一源
+============================================================
+  DefaultServerPort    = 8205
+  DefaultDBPortDev     = 8201
+  DefaultRedisAddr     = 127.0.0.1:8203
+  DefaultOllamaBaseURL = http://localhost:11434
+
+============================================================
+Step 3: 提取 bridge constants.js 单一源
+============================================================
+  DEFAULT_USER_SERVER.port = 8204
+
+============================================================
+Step 4: 验证 user-server <-> bridge 端口对齐
+============================================================
+[0;32m✓ user-server.DefaultListenPort == bridge.DEFAULT_USER_SERVER.port (8204)[0m
+
+============================================================
+Step 5: 验证 user-server <-> platform-server 端口对齐
+============================================================
+[0;32m✓ user-server.DefaultPlatformPort == platform-server.DefaultServerPort (8205)[0m
+
+============================================================
+Step 6: 审计 .yaml 配置文件 base_url 端口字面量
+============================================================
+[0;32m✓ user-server config: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/config.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;32m✓ user-server config/platform: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/config/platform.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;32m✓ platform-server config: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk-platform/platform-server/config.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+
+============================================================
+Step 7: 审计 vite.config.js 单一源约束注释
+============================================================
+[0;32m✓ hivemtk/user-web/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ hivemtk-platform/platform-web/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ hivemtk-platform/platform-contributor/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ hivemtk/website/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ hivemtk/website/dev-server.cjs 包含单一源约束注释[0m
+
+============================================================
+审计总结
+============================================================
+  Errors: [0;31m0[0m
+  Warns:  [0;33m0[0m
+
+[0;32m✓ 跨包审计通过：所有端口字面量与单一源一致[0m
+

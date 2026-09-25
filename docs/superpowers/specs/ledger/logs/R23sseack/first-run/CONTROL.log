@@ -1,0 +1,36 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mSSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[22m[39m[bridge:downlink] SSE 直连启动: r23_sse_drain:... { serverUrl: [32m'http://127.0.0.1:9999'[39m, hasToken: [33mtrue[39m, lastEventId: [32m''[39m }
+[bridge:downlink] SSE 下行已启动（直连模式）: r23_sse...
+
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mSSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[22m[39m[bridge:downlink] pendingAck 重发 ack 完成 { channel: [32m'r23_sse_drain'[39m, success: [33m1[39m, fail: [33m0[39m, retried: [33m1[39m }
+
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mSSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[22m[39m[bridge:downlink] SSE 下行已停止: r23_sse_drain...
+
+ [32m✓[39m test/downlink-r23-sse-ack-drain.test.js[2m > [22m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22mSSE 启动后，到期条目在无人再推消息的情况下被重发 ack[32m 204[2mms[22m[39m
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mstop() 之后排水器不再触发（不许留悬空 interval）
+[22m[39m[bridge:downlink] SSE 直连启动: r23_sse_stop:a... { serverUrl: [32m'http://127.0.0.1:9999'[39m, hasToken: [33mtrue[39m, lastEventId: [32m''[39m }
+[bridge:downlink] SSE 下行已启动（直连模式）: r23_sse...
+
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mstop() 之后排水器不再触发（不许留悬空 interval）
+[22m[39m[bridge:downlink] SSE 下行已停止: r23_sse_stop:...
+
+ [32m✓[39m test/downlink-r23-sse-ack-drain.test.js[2m > [22m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22mstop() 之后排水器不再触发（不许留悬空 interval）[33m 407[2mms[22m[39m
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2m排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属
+[22m[39m[bridge:downlink] pendingAck 重发 ack 完成 { channel: [32m'r23_shared_seam'[39m, success: [33m1[39m, fail: [33m0[39m, retried: [33m1[39m }
+
+[90mstdout[2m | test/downlink-r23-sse-ack-drain.test.js[2m > [22m[2m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m[2mpollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）
+[22m[39m[bridge:downlink] pendingAck 重发 ack 完成 { channel: [32m'r23_poll_still_drains'[39m, success: [33m1[39m, fail: [33m0[39m, retried: [33m1[39m }
+
+ [32m✓[39m test/downlink-r23-sse-ack-drain.test.js[2m > [22m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22m排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属[32m 2[2mms[22m[39m
+ [32m✓[39m test/downlink-r23-sse-ack-drain.test.js[2m > [22m§6-4 SSE 模式必须排 _pendingAck 队列[2m > [22mpollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 15:58:22
+[2m   Duration [22m 1.14s[2m (transform 53ms, setup 0ms, import 69ms, tests 616ms, environment 348ms)[22m
+

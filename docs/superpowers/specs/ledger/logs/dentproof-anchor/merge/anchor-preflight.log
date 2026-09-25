@@ -1,0 +1,11 @@
+$ python3 scripts/anchor-preflight.py
+(cwd=.)
+rc=1  0.8s
+
+[mut_bill_p701.py] 已核 72 格，0 处问题
+[mut_ingest_dedup_r23.py] 已核 18 格，0 处问题
+[mut_retention_a6.py] 已核 28 格，1 处问题
+[mut_write_claim_a12.py] 已核 16 格，0 处问题
+  ✗ [mut_retention_a6.py] D23 锚点在 user-server/internal/browser_automation/repository/command_log.go 里命中 0 次（要求恰好 1）：'\t\t\t\tif res.RowsAffectedXX != w.RowCount {\n'
+覆盖 4/32 份电池、本次核了 134 格；本门读不了 28 份（名单写在脚本里，两份之和==目录现算数，是硬门）
+

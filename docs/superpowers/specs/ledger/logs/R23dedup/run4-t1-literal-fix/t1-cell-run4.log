@@ -1,0 +1,16 @@
+# 第四趟（run4）：只跑 T1 格
+# 前因：run3 16 格里 T1「存活=洞」——TestIngress_ContentDedupWindowExpires 的等待时长与判据消息都读回 svc.contentDedupWindow()（被 T1 注码的那个函数），
+# 注码只让腿变慢、不红。本轮把注入值改成字面量 const injectedTTL = 2s 后重跑这一格。
+# 命令：python3 scripts/mut_ingest_dedup_r23.py --cells T1（私有 --shared 克隆；控制组放刀前现测）
+# 时刻：2026-09-23 00:35:40  load：{ 12.33 10.57 9.19 }  空闲盘：5817080 Ki
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r23dedup-68bou3yy
+[Go] 本趟只跑 1 格：T1
+[Go] 外域未跟踪的**测试**文件不进克隆（其实现文件与已跟踪改动一起装，见 lane_overlays 注释）：user-server/internal/model/payment_test.go user-server/internal/repository/help_center_public_list_test.go user-server/internal/repository/payment_test.go user-server/internal/service/order_webhook_payment_test.go user-server/internal/service/order_webhook_payment_wiring_test.go user-server/internal/service/payment_test.go
+
+[Go] 注码前置：1 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=22 passed=22 skip=0 FAIL=[]
+T1   注入的窗口长度不生效（TTL 这一维退回常量，跨界那条腿就成了没人守的断言）                       杀掉      total=22 fail=1 skip=0 ｜ TestIngress_ContentDedupWindowExpires
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 1 格逐格被杀，无存活（本趟是 --cells 子集，不等于全电池） =====
+BATTERY_RC=0

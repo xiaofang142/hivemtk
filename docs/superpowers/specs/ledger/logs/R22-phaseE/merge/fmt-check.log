@@ -1,0 +1,6 @@
+$ make fmt-check
+(cwd=.)
+rc=0  0.9s
+
+✅ gofmt 检查通过
+

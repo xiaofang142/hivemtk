@@ -62,6 +62,52 @@ docs/superpowers/specs/ledger/logs/*
 !docs/superpowers/specs/ledger/logs/CapAB/
 !docs/superpowers/specs/ledger/logs/CapAB/**/*.log
 
+# 本泳道（浏览器写台账批18–24 / 消息中枢 R22–R23 / 二次审核协议）自己的 21 个轮次，
+# 按同一规矩成对放行（一行放目录、一行只放该目录下的 .log）；不写整目录反选，
+# 因为那会把树里别人的轮次与 .orig/.bak 残本一起变成可跟踪。
+!docs/superpowers/specs/ledger/logs/B24sendverify/
+!docs/superpowers/specs/ledger/logs/B24sendverify/**/*.log
+!docs/superpowers/specs/ledger/logs/R22-closefinal/
+!docs/superpowers/specs/ledger/logs/R22-closefinal/**/*.log
+!docs/superpowers/specs/ledger/logs/R22-lanes/
+!docs/superpowers/specs/ledger/logs/R22-lanes/**/*.log
+!docs/superpowers/specs/ledger/logs/R22-phaseE/
+!docs/superpowers/specs/ledger/logs/R22-phaseE/**/*.log
+!docs/superpowers/specs/ledger/logs/R22-protocol/
+!docs/superpowers/specs/ledger/logs/R22-protocol/**/*.log
+!docs/superpowers/specs/ledger/logs/R22-teeth/
+!docs/superpowers/specs/ledger/logs/R22-teeth/**/*.log
+!docs/superpowers/specs/ledger/logs/R22closeout/
+!docs/superpowers/specs/ledger/logs/R22closeout/**/*.log
+!docs/superpowers/specs/ledger/logs/R22dedupkey/
+!docs/superpowers/specs/ledger/logs/R22dedupkey/**/*.log
+!docs/superpowers/specs/ledger/logs/R23dedup/
+!docs/superpowers/specs/ledger/logs/R23dedup/**/*.log
+!docs/superpowers/specs/ledger/logs/R23retention/
+!docs/superpowers/specs/ledger/logs/R23retention/**/*.log
+!docs/superpowers/specs/ledger/logs/R23sseack/
+!docs/superpowers/specs/ledger/logs/R23sseack/**/*.log
+!docs/superpowers/specs/ledger/logs/R25full/
+!docs/superpowers/specs/ledger/logs/R25full/**/*.log
+!docs/superpowers/specs/ledger/logs/R25full2/
+!docs/superpowers/specs/ledger/logs/R25full2/**/*.log
+!docs/superpowers/specs/ledger/logs/R26media/
+!docs/superpowers/specs/ledger/logs/R26media/**/*.log
+!docs/superpowers/specs/ledger/logs/R27media/
+!docs/superpowers/specs/ledger/logs/R27media/**/*.log
+!docs/superpowers/specs/ledger/logs/b-phase/
+!docs/superpowers/specs/ledger/logs/b-phase/**/*.log
+!docs/superpowers/specs/ledger/logs/c-phase/
+!docs/superpowers/specs/ledger/logs/c-phase/**/*.log
+!docs/superpowers/specs/ledger/logs/calib/
+!docs/superpowers/specs/ledger/logs/calib/**/*.log
+!docs/superpowers/specs/ledger/logs/calib2/
+!docs/superpowers/specs/ledger/logs/calib2/**/*.log
+!docs/superpowers/specs/ledger/logs/dentproof-anchor/
+!docs/superpowers/specs/ledger/logs/dentproof-anchor/**/*.log
+!docs/superpowers/specs/ledger/logs/wiring-anchor/
+!docs/superpowers/specs/ledger/logs/wiring-anchor/**/*.log
+
 # ---------- 运行时产物（PID / 进程日志）----------
 .runtime/
 
@@ -278,12 +324,15 @@ mtk-serve
 # ---------- Go 编译产物（禁止入库）----------
 user-server/nm-host
 
-# ---------- 例外：二次审核台账与取证日志必须入库 ----------
-# 为什么要写在**文件末尾**：`logs/`(第 23 行) 连目录一起吞、`*.log`(24) 与 `*.jsonl`(221) 再吞一遍
-# 里面的每个文件——git 不进被忽略的目录，所以中途的一条 `!…/ledger/` 救不了里面的文件，
-# 必须在所有忽略规则之后整体反选。实测代价：闭合门在私有 --shared 克隆里连自己的台账和证据日志
-# 都读不到（FileNotFoundError，见 docs/superpowers/specs/ledger/logs/R22-protocol/gate-in-shared-clone.log），
-# 而协议 §2 的口径是"证据随仓走、/tmp 不算证据"——忽略规则让这句话只对了本地一半。
-# 反选的是整个取证目录（含合并门禁的逐步全量输出 ~3.9MB）：不做"只留小文件"的花活，
-# 因为按大小裁剪会让"某条台账引用了哪份日志"这件事在克隆里随机失效。
-!docs/superpowers/specs/ledger/**
+
+# ---------- 取证日志里"整包全量输出"的显式排除（4 条模式，覆盖 9 份文件 / 22MB） ----------
+# 判据不是"按大小裁剪"（那种做法会让"台账引用了哪份日志"在克隆里随机失效），
+# 而是按引用面现算：`git grep -l -F <basename> -- '*.md'` 对这 9 份全部 0 命中，
+# 即没有任何一条台账行指向它们；同名的 lint-user-web.log 六份是合并门禁逐次重跑的
+# 近重复全量输出（每份 2592K），只保留判读行所在的轮次即可复算。
+# 反例守卫：calib/merge/go-test-host-packages.log（3333K）被引用 1 次 ⇒ 不在排除名单里，照常入库。
+docs/superpowers/specs/ledger/logs/R22-closefinal/merge/lint-user-web.log
+docs/superpowers/specs/ledger/logs/R22-closefinal/merge-run*/lint-user-web.log
+docs/superpowers/specs/ledger/logs/R22-phaseE/merge/lint-user-web.log
+docs/superpowers/specs/ledger/logs/R22-lanes/service-channelgw-gate-full.log
+docs/superpowers/specs/ledger/logs/R22-lanes/service-full-mut-batchecho.log

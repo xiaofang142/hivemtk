@@ -1,0 +1,17 @@
+$ python3 scripts/run-gate-in-clone.py --selftest
+(cwd=.)
+rc=0  0.3s
+
+[反向] 两侧汇总一致不该红                          判对 ✓（实得 True，期望 True）
+[反向] 克隆少抽几条要红                           判对 ✓（实得 False，期望 False）
+[反向] 两侧都零输出要红（空跑不是绿）                    判对 ✓（实得 False，期望 False）
+[反向] 工作树有汇总、克隆侧空要红                      判对 ✓（实得 False，期望 False）
+[反向] 路径痕迹抹平后两侧才可比（不抹平就恒不等）              判对 ✓（实得 True，期望 True）
+[反向] 外域未跟踪测试要被排除                        判对 ✓（实得 True，期望 True）
+[反向] 同目录自己的测试不许被连带排除                    判对 ✓（实得 False，期望 False）
+[反向] 库连接参数要被抹掉、PATH 要留住                 判对 ✓（实得 True，期望 True）
+[反向] 覆盖/删除/外域三类要分对                      判对 ✓（实得 True，期望 True）
+[反向] 判决行要进脚本自己写的取证（绿侧）                  判对 ✓（实得 True，期望 True）
+[反向] 红侧判决行同样入件、且不许混进绿字样                 判对 ✓（实得 True，期望 True）
+===== run-gate-in-clone --selftest：11/11 格判对 =====
+

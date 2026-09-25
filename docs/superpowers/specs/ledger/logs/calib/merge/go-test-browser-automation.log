@@ -1,0 +1,752 @@
+$ go test -p 1 -count=1 -timeout 40m ./internal/browser_automation/...
+(cwd=user-server)
+rc=1  9.9s
+
+[90m2026-09-23T01:00:48+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+--- FAIL: TestCronUnknownTriggerIDIs404Not400 (0.01s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCronCreateOnOthersTaskIs404AboutTheTask (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCronNonCronTaskIsClientError (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCronDuplicateTriggerIsConflict (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20ConfirmRequiresPayloadHash (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20ConfirmGateElsewhereFromAuditFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20ConfirmGateReadEndpoint (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+[90m2026-09-23T01:00:48+08:00[0m [33mWRN[0m [1m[BrowserHostWS] 拒绝非本地连接 remote="203.0.113.9"[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:48+08:00[0m [33mWRN[0m [1m[BrowserHostWS] 拒绝非本地连接 remote=""[0m [36mcomponent=[0muser-server
+--- FAIL: TestB20EUpdatePersistsAllThreeRetryFields (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20EUpdateWithoutRetryFieldsKeepsThem (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20ERetryRangeMatchesCreateOnBothSides (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.436ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.091ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.093ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.063ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.083ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.055ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.068ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.056ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+--- FAIL: TestB19DMissingSessionStill404WithRightSubject (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:61 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.213ms] [34;1m[rows:0][0m SELECT * FROM "browser_sessions" WHERE (id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL ORDER BY "browser_sessions"."id" LIMIT 1
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:77 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.059ms] [34;1m[rows:0][0m SELECT count(*) FROM "browser_sessions" WHERE (task_id = 1 AND user_id = 781405) AND "browser_sessions"."deleted_at" IS NULL
+
+2026/09/23 01:00:48 [31;1m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/repository/session.go:99 [35;1mfailed to connect to `user=b19d database=b19d`: 127.0.0.1:1 (127.0.0.1): dial error: dial tcp 127.0.0.1:1: connect: connection refused
+[0m[33m[0.059ms] [34;1m[rows:0][0m SELECT count(*) FROM "browser_sessions" WHERE user_id = 781405 AND "browser_sessions"."deleted_at" IS NULL
+--- FAIL: TestA6ExportPayloadCarriesAuditDigests (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6ExportDistinguishesUnwiredFromNothingPruned (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19EStepCountOverCapIsRejectedAtTheBoundary (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19EUpdatePathSharesTheCap (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19EStepCountAtCapStillCreates (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/controller	0.749s
+ok  	hivemtk-user/internal/browser_automation/dto	0.426s
+?   	hivemtk-user/internal/browser_automation/model	[no test files]
+ok  	hivemtk-user/internal/browser_automation/platform	0.425s
+?   	hivemtk-user/internal/browser_automation/platform/douyin	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xianyu	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xiaohongshu	[no test files]
+--- FAIL: TestA6DigestCoversDeletedRows (0.01s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestClosesOverRunRow (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6ChainLinksAcrossRuns (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestRecordsSeqGap (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6BatchDigestSensitiveToPayload (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6PruneFailsCloseWhenDigestWriteBlocked (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6PruneFailsCloseWithoutDigestTable (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6EmptyWindowStillWritesRunRow (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestReproducibleFromRowContent (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestSplitsWithDeleteBatches (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestSeparatesUnackedFromFailedFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestA6DigestChainIdempotentAtStorage (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19GPlanSnapshotPruneIsBatched (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19GCommandLogPruneIsBatched (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestR23PruneRunRecordsCutoffSource (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestR23PruneRefusesEmptyCutoffSource (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimTakeAndIdempotent (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimHeldByOtherStep (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimKeysAreIndependent (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimReleaseOnlyOwns (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimConstraintLivesInStorage (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimConcurrentTakeHasOneWinner (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimSchemaContract (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimIncompleteKeyRefuses (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/repository	0.531s
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+--- FAIL: TestB14_ClickStepRecordsChannel (0.01s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB14_UnknownChannelStaysNull (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB14_DomFallbackChannelVisible (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB14_TypeAndClickNearRecordChannel (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_SendGateRejectStaysPrepared (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19HBrainGateNeverPersistsRejectedSteps (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19HBrainGateKeepsLegalStepsInMixedPlan (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19HBrainGateStillRejectsScreenshot (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20BCommandFramesCarryNoVerdict (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20BWriteStepEmitsConfirmJudgeFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20BUnverifiedWriteConfirmFrameSaysSo (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20BReadOnlyStepsEmitNoConfirmFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB20BOkTriStateSurvivesRoundTrip (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCommentSendFrameRequestsIdentityRecheck (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCommentSendResultRecordsIdentityChecked (0.00s)
+    --- FAIL: TestCommentSendResultRecordsIdentityChecked/扩展报复核过 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+    --- FAIL: TestCommentSendResultRecordsIdentityChecked/旧扩展没这个字段 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCommentSendElementMovedRecordsCrossedAttempt (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19CreateRejectsDependencyOnOthersTask (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19ForeignAndMissingDependencyShareOneMessage (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19CreateKeepsOwnDependency (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB19RunTimeCheckDoesNotLeakOthersSessionStatus (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_ReadThenCommentThreeStage (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_D7GateHoldsSendUntilConfirmed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_D7AbortBeforeConfirmNeverSends (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_ExplicitCloseTabStepIsNotDoubledByCleanup (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_HostErrorPropagatesToStep (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RiskPageOnFailedStepAttributesAsBlock (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_BlockDetectProbeIsBudgetCappedAndCannotKillHost (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RegisterProbeWithoutReplySelfHealsEarly (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RegisterProbeErrorReplyStaysOnline (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9501 version=1.5.0-wire pid=20207[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9501: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9501 version=1.5.0-wire pid=20207[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] 注册探针通过（应用面可服务）user=9501 pid=20207[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9501: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:64635->127.0.0.1:64636: use of closed network connection[0m [36mcomponent=[0muser-server
+--- FAIL: TestGenericWriteStepNotDeliveredLeavesNoAttempt (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestPostCommentSendNotDeliveredKeepsPrepared (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+[90m2026-09-23T01:00:53+08:00[0m [33mWRN[0m [1m[BrowserHost] 连续 2 条命令超时（最近 action=wait）判 Host 应用面假死：下发 shutdown 帧+断开连接触发自愈 user=7 pid=0[0m [36mcomponent=[0muser-server
+--- FAIL: TestBlockedWriteStepReasonSurvivesCanceledCtx (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestCrossedLedgerGapSuppressesAutoRetry (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestPreparedLedgerFailureStillSchedulesRetry (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestRunRetryRefusesTaskWithLedgerGap (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestLedgerUpdateOnMissingRowFails (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestGenericWriteStepLedgerFailureJudgedRed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestTransientLedgerWriteFailureRecoversWithoutGap (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestUnknownEffectStepHoldsDoubleSendGate (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestUnknownEffectStepRefusedAfterLedgerDegrade (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestUnknownEffectStepHoldsConfirmGate (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestLedgerDegradeClearedWhenSessionEnds (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestInjectTimeoutStepStaysReDispatchable (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestFindSubmitAttemptReturnsEarliestAttempt (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_LedgerEndsVerified (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_SendInjectTimeoutStaysPrepared (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_VerifyMissRecordsUnattributed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_SecondRunIsBlockedBeforeAnyFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestFindSubmitAttemptScoping (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB9A_OpenTabRecordsLoadTruthfulness (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestB9A_UnknownLoadedStaysNull (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestRunTaskRejectsDraftAsStateConflict (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestStateAndInputPreconditionsCarryTypes (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestClaimDueRetriesOwnerWhitelist (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestClaimDueRetriesNoProviderKeepsLegacyBehaviour (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestClaimDueRetriesOnlyFailedRowsAreClaimable (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+[90m2026-09-23T01:00:53+08:00[0m [32mINF[0m [1m[BrowserFeedback] 本轮重试扫描跳过：本机无 Host 连接（挂起重试留给持有连接的实例认领）[0m [36mcomponent=[0muser-server
+--- FAIL: TestReconcileBackfillsFromTerminalSession (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReconcileReleasesZombieSessionFromBusyGate (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReconcileWithoutAnySession (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReconcileSkipsTasksWithinOwnBudget (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReconcileRunResultDoesNotClobberRealTerminal (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestFailStaleUnfinishedRespectsFloor (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReconcileFindStaleRunningAllRespectsFloor (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_SubmitKeyFailureRecordsAttempt (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestPublishClampsConfirmWaitSec (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClickFrameRequestsIdentityRecheck (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReadClickFrameDoesNotRequestIdentityRecheck (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestClickNearIdentityRecheckFollowsWriteGate (0.00s)
+    --- FAIL: TestClickNearIdentityRecheckFollowsWriteGate/带平台发送文案=写步要复核 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+    --- FAIL: TestClickNearIdentityRecheckFollowsWriteGate/无文案=只读步不复核 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestClickResultRecordsIdentityChecked (0.00s)
+    --- FAIL: TestClickResultRecordsIdentityChecked/扩展报复核过 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+    --- FAIL: TestClickResultRecordsIdentityChecked/旧扩展没这个字段 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestElementMovedWriteClickRecordsAttempt (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestPreDispatchRefusalRecordsNoAttempt (0.00s)
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/stable_拦下（批17_新增） (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/浮层遮挡（批14_起就有） (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/发送按钮抖动 (0.00s)
+        testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+            提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+              POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+            （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimGateRefusesBeforeAnyFrame (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimReleasedWhenNeverCrossed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimKeptWhenCrossed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimKeptWhenLedgerWriteFailed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimKeptWhenStateReadFailed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWriteClaimGateFailCloseWhenUnwired (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_LedgerWriteFailureAbortsBeforeSend (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_LedgerWriteFailureDegradesRestOfSession (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_SentLedgerGapStillBlocksRetryRound (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_GuardQueryFailureFailsClosed (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_UnknownLocatorTableTreatedAsWrite (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_DerivedWriteStepForcesZeroRetries (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_WriteStepNeverExecutedLeavesNoLedger (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_DerivedWriteStepEndsSent (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RetryRoundSkipsAttemptedWriteStep (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_ManualRerunStillFailsLoudly (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_IndexDriftStillBlocked (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_ReadStepPersistsIsWriteFlag (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestWSE2E_RetryRoundSkipOfUnverifiedWriteStillFails (0.00s)
+    testdb.go:288: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	1.087s
+FAIL
+

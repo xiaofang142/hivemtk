@@ -1,0 +1,30 @@
+$ bash scripts/check-enum-consistency.sh
+(cwd=.)
+rc=0  0.5s
+
+============================================================
+  ENUM 一致性检查（OPT-DB-08 配套）
+============================================================
+迁移文件 : migrations/047_pg_enums.sql
+Go 源码  : user-server
+
+[1/5] platform_type_enum ↔ ChannelTypeXxx
+⚠️  [platform_type_enum] ENUM 值域比 Go 常量多出以下值（应为历史/种子数据，需在迁移中注明）：
+      - system
+
+[2/5] intent_major_enum ↔ IntentMajorXxx
+⚠️  [intent_major_enum] Go 侧无 IntentMajorXxx 常量绑定（已知缺口，见迁移文件第 3 节说明）
+
+[3/5] message_status_enum ↔ MessageStatusXxx
+✅ [message_status_enum] 与 MessageStatusXxx 完全一致（5 值）
+
+[4/5] embed_status_enum ↔ EmbedStatusXxx
+✅ [embed_status_enum] 与 EmbedStatusXxx 完全一致（4 值）
+
+[5/5] source_type_enum ↔ SourceTypeXxx
+⚠️  [source_type_enum] ENUM 值域比 Go 常量多出以下值（应为历史/种子数据，需在迁移中注明）：
+      - system_seed
+
+============================================================
+⚠️  ENUM 一致性检查通过（3 个警告）
+

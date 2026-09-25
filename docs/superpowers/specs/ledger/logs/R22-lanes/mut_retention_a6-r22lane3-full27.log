@@ -1,0 +1,70 @@
+<!--
+C 相续刀 · lane 3 · A6 电池**全量回跑**（27 格：21 格 D + 6 格 V；本轮把上一趟的四个
+二手候选做成常驻格 D19/D20/D21/D22，其中 D20/D22 各配一条本轮补的窄腿）。
+
+命令：python3 scripts/mut_retention_a6.py --clone /tmp/r22lane3-a6-full
+克隆：git clone --shared --no-checkout + 按工作树当前分支 checkout + 本泳道脏 .go 全覆盖
+     （含未跟踪的 retention_a6_test.go——两条新腿住在这个没进 git 的文件里，
+      它没进克隆的话电池会把「克隆里没这条腿」读成「刀存活」）
+库：POSTGRES_TEST_PORT=8232，口令只从 user-server/.env 用 awk 精确取 POSTGRES_PASSWORD
+    喂 POSTGRES_TEST_PASSWORD（值不打印）；控制组 skip=0、无红名 ⇒ 没有「跳过即绿」。
+注码只落克隆；每格跑完逐文件还原并比 md5，整趟结束后共享工作树未改动。
+控制组的 29 是这一趟现测的（本轮往 repository 包里加了 2 条腿），不是写死的常量。
+-->
+
+私有作业目录：/tmp/r22lane3-a6-full
+
+[Go] 注码前置：27 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=29 passed=29 skip=0 FAIL=[]
+D1   摘要根本不落库（裁剪退回成纯删除，凭据整份消失）                                     杀掉      total=29 fail=14 skip=0 ｜ TestA6BatchDigestSensitiveToPayload | TestA6ChainHashComposesPrevWithBatch | TestA6ChainLinksAcrossRuns
+D2   摘要挪出事务旁路补记、写不上也不管（fail-close 折成 fail-open）                   杀掉      total=29 fail=2 skip=0 ｜ TestA6PruneFailsCloseWhenDeleteFailsMidRun | TestA6PruneFailsCloseWhenDigestWriteBlocked
+D19  摘要写在另一条连接上、错照旧报（删除回滚了摘要还在＝说谎的凭据）                             杀掉      total=29 fail=1 skip=0 ｜ TestA6PruneFailsCloseWhenDeleteFailsMidRun
+D3   链哈希不看前一条（补一段假历史零代价）                                          杀掉      total=29 fail=4 skip=0 ｜ TestA6ChainHashComposesPrevWithBatch | TestA6ChainLinksAcrossRuns | TestA6ChainLinksToNewestDigestAcrossThreeRounds
+D4   prev_seq 不接上一条的尾巴（seq 区间首尾不接，中间那段无从交代）                       杀掉      total=29 fail=2 skip=0 ｜ TestA6ChainLinksAcrossRuns | TestA6DigestSplitsWithDeleteBatches
+D5   批序永远写 1（重放同一次裁剪不再撞约束，而是并行出第二条历史）                             杀掉      total=29 fail=10 skip=0 ｜ TestA6BatchDigestSensitiveToPayload | TestA6ChainHashComposesPrevWithBatch | TestA6ChainLinksAcrossRuns
+D21  链头改接最老一条摘要（三轮之后新摘要撞回 ordinal=2、整轮回滚）                         杀掉      total=29 fail=2 skip=0 ｜ TestA6ChainLinksToNewestDigestAcrossThreeRounds | TestA6RunRowClosesArithmeticUnderTwoBatches
+D15  摘要表的 (session, ordinal) 唯一索引退回普通索引                           杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestChainIdempotentAtStorage
+D9   payload 不进逐行哈希（摘要证不了删掉的是哪些内容）                                杀掉      total=29 fail=1 skip=0 ｜ TestA6BatchDigestSensitiveToPayload
+D10  created_at 按会话时区渲染（同一批行在 UTC 主库与异地副本上折出不同指纹）                 杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestReproducibleFromRowContent
+D11  ok 的三态折成两态（无回执被说成回执为否）                                       杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestSeparatesUnackedFromFailedFrame
+D22  ok 的 t/f 折成一态（回执为是与回执为否同指纹，A2 那根轴在摘要里复活）                     杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestSeparatesPassedFromFailedFrame
+D8   分批上界形同虚设（一条 DELETE 吃全表：收回 b19g 的分批承诺）                        杀掉      total=29 fail=2 skip=0 ｜ TestA6DigestSplitsWithDeleteBatches | TestB19GCommandLogPruneIsBatched
+D16  入口行数不记（RowsBefore 恒 0：闭合算术失去分母）                              杀掉      total=29 fail=3 skip=0 ｜ TestA6DigestClosesOverRunRow | TestA6RunRowClosesArithmeticUnderTwoBatches | TestA6RunRowCountsEntryWindowNotLateCrossing
+D20  入口行数换成收口累计（rows_before==rows_pruned 从一句断言退化成恒等式）             杀掉      total=29 fail=1 skip=0 ｜ TestA6RunRowCountsEntryWindowNotLateCrossing
+D17  留痕按批计数而不是按摘要行（凭条数查账会少一半）                                     杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestClosesOverRunRow
+D18  行数折成区间算术长度（断号被抹平：§7.28 八-1 的「区间长度 ≠ 行数」）                     杀掉      total=29 fail=1 skip=0 ｜ TestA6DigestRecordsSeqGap
+D7   扫描不留痕（0 行的那次扫描再也自证不了「该界内无到期行」）                               杀掉      total=29 fail=6 skip=0 ｜ TestA6DigestClosesOverRunRow | TestA6DigestSplitsWithDeleteBatches | TestA6EmptyWindowStillWritesRunRow
+D14  读侧按入库序返回（链序丢失，离线包得自己重排才能接链）                                  杀掉      total=29 fail=1 skip=0 ｜ TestA6ExportPayloadCarriesAuditDigests
+D12  服务层不去读摘要（导出包对「被裁掉的那段」彻底沉默）                                   杀掉      total=29 fail=3 skip=0 ｜ TestA6ExportDistinguishesUnwiredFromNothingPruned | TestA6ExportPayloadCarriesAuditDigests | TestSessionExportAggregates
+D13  控制器换了个键名（最后一跳丢契约，前端按 audit_digests 读永远读不到）                   杀掉      total=29 fail=2 skip=0 ｜ TestA6ExportDistinguishesUnwiredFromNothingPruned | TestA6ExportPayloadCarriesAuditDigests
+V1   空来源不再拒绝（缺来源的裁剪照跑，库里多一条说不清从哪来的界）                              杀掉      total=29 fail=1 skip=0 ｜ TestR23PruneRefusesEmptyCutoffSource
+V2   留痕行的来源列写成空串（参数接住了却不落库＝这一列永远查不出东西）                            杀掉      total=29 fail=1 skip=0 ｜ TestR23PruneRunRecordsCutoffSource
+V3   扫描入口传死值而不是现算的来源（改了 env，库里仍写着第一天那个界从哪来）                       杀掉      total=29 fail=1 skip=0 ｜ TestR23PruneOncePassesSourceToRepo
+V4   扫描不看禁用开关（0=禁用折成「界=今天」的全量裁剪）                                  杀掉      total=29 fail=1 skip=0 ｜ TestR23PruneOnceDisabledByZero
+V5   来源截断的列宽放开（超长 env 值让留痕 INSERT 失败，裁剪被一个记账字段堵死）                 杀掉      total=29 fail=1 skip=0 ｜ TestR23RetentionCutoffSourceShape
+V6   启动门不看仓储是否装配齐（nil 仓储起 goroutine，一小时后后台 panic 带走进程）            杀掉      total=29 fail=1 skip=0 ｜ TestR23RetentionBootGate
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 27 格逐格被杀，无存活（全电池） =====
+
+== 读数之外的几句（写在读数之后，不改读数）==
+1. 格数是 27 不是任务书里的 26：D18 早已在 R23retention/run2-d18-cell.log 那趟进过电池，
+   所以「22→26」这条加法用的是过期分母。本轮的加法是 23→27（四格 D19-D22）。
+2. 四格新棋的落点（锚点各在 command_log.go 的哪一行、命中一次由「注码前置」那行统一担保）：
+   D19 = `tx.Create(&d)`（:208）→ `r.db.WithContext(ctx).Create(&d)`，
+   D21 = `Order("ordinal DESC")`（:121）→ ASC，
+   D20 = `RowsBefore: rowsBefore`（:245）→ total，
+   D22 = `CASE WHEN ok IS NULL THEN 'n' WHEN ok THEN 't' ELSE 'f' END`（:83）→ 折掉 `WHEN ok THEN 't'`。
+3. D20/D22 的红名单里**只有**本轮补的那条腿（各 1 条）：上一趟取证（同目录
+   a6a2-oldlegs-under-knife-r22lane3.log）里这两把刀在 19 条旧腿下 19/19 全绿，
+   这一趟它们各被一条腿点名——补腿前是缺口，补腿后不是。
+4. D16 这趟多了一条红（`TestA6RunRowCountsEntryWindowNotLateCrossing` 也吃 `RowsBefore` 恒 0）：
+   新腿顺带把 D16 的失效面读宽了，两格判据不同（D16＝分母丢失，D20＝恒等式退化），不是重复格。
+5. D21 的红比 expect 宽（多撞红 `TestA6RunRowClosesArithmeticUnderTwoBatches`）：上一趟只印了
+   FAIL 行、把机制写成推测，这一轮取到了证（同目录 a6a2-newlegs-fail-text-r22lane3.log 批二）——
+   两条腿的 Error 文本都是 `duplicate key … uk_browser_audit_digests_session_ordinal (23505)`，
+   即 ASC ⇒ 第三轮摘要撞回 ordinal=2 ⇒ 唯一约束挡下 ⇒ 整轮回滚。这条推测已升级为读数。
+6. 整趟结束后共享工作树未被注码：command_log.go 的 :83/:121/:208/:245 与 executor.go 的
+   :1062/:1077/:1308 逐处复核仍是不注码的原样；本轮只写过 3 个 _test.go 与 2 枚电池脚本。
+7. 六格（D19/D20/D21/D22 + M7/M8）的红因文本、以及「还原后同腿集回绿」的读数，都在同目录
+   a6a2-newlegs-fail-text-r22lane3.log；本文件只留电池那种「腿名级」读数。

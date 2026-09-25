@@ -1,0 +1,32 @@
+$ python3 scripts/merge-gate.py --round calib --only go-build --only go-vet --only gofmt --only go-test-browser-automation --only go-test-host-packages --only vitest-bridge --only vitest-browser-automation --only markdownlint --only arch-gate --only fmt-check --only date-bucket-tz --only unwired-assets --only doc-consistency --only feature-doc --only enum-consistency --only no-xapptool --only cross-package-ports --only model-migration --only md-links-offline --only component-types --only workflow-refs --only ci-step-coverage --only test-nil-deref --only env-coverage --only seam-guard --only async-global-read --only closeout-r22 --only closeout-selftest
+步骤名单（28 步，全程不带 -run）：go-build go-vet gofmt go-test-browser-automation go-test-host-packages vitest-bridge vitest-browser-automation markdownlint arch-gate fmt-check date-bucket-tz unwired-assets doc-consistency feature-doc enum-consistency no-xapptool cross-package-ports model-migration md-links-offline component-types workflow-refs ci-step-coverage test-nil-deref env-coverage seam-guard async-global-read closeout-r22 closeout-selftest
+合并门禁：28 步，日志 → docs/superpowers/specs/ledger/logs/calib/merge/
+[绿] go-build                        22.5s 
+[绿] go-vet                           6.5s 
+[红] gofmt                            0.7s ｜ 要求输出为空，实得 1 行：user-server/internal/pkg/db/external_order_key_startup_test.go
+[红] go-test-browser-automation       9.9s ｜ rc=1 ; 输出里出现了禁止行 '(^|\\n)FAIL'
+[红] go-test-host-packages           61.6s ｜ rc=1 ; 输出里找不到判据行 '^ok\\s+hivemtk-user/internal/service'（命令可能根本没跑到那一步） ; 输出里出现了禁止行 '(^|\\n)FAIL'
+[红] vitest-bridge                   13.4s ｜ 输出里找不到判据行 'Tests\\s+\\d+ passed'（命令可能根本没跑到那一步）
+[红] vitest-browser-automation       37.6s ｜ 输出里找不到判据行 'Tests\\s+\\d+ passed'（命令可能根本没跑到那一步）
+[绿] markdownlint                     4.9s 
+[红] arch-gate                       11.4s ｜ 输出里出现了禁止行 '\\[L4\\]'
+[红] fmt-check                        0.9s ｜ rc=2
+[绿] date-bucket-tz                   0.6s 
+[绿] unwired-assets                  37.4s 
+[绿] doc-consistency                  0.1s 
+[绿] feature-doc                      0.0s 
+[绿] enum-consistency                 0.3s 
+[绿] no-xapptool                      2.5s 
+[绿] cross-package-ports              0.1s 
+[绿] model-migration                  0.3s 
+[绿] md-links-offline                 0.1s 
+[绿] component-types                  0.0s 
+[绿] workflow-refs                    0.2s 
+[红] ci-step-coverage                22.8s ｜ rc=1
+[绿] test-nil-deref                   1.4s 
+[绿] env-coverage                     4.1s 
+[绿] seam-guard                       2.5s 
+[绿] async-global-read                1.3s 
+[绿] closeout-r22                     5.3s 
+[绿] closeout-selftest                3.1s 
+===== 合并门禁：20/28 步绿，红在：gofmt go-test-browser-automation go-test-host-packages vitest-bridge vitest-browser-automation arch-gate fmt-check ci-step-coverage =====

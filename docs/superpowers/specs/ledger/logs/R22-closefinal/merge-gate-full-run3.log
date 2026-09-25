@@ -1,0 +1,39 @@
+$ python3 scripts/merge-gate.py --round R22-closefinal
+步骤名单（35 步，全程不带 -run）：go-build go-vet gofmt go-test-browser-automation go-test-host-packages vitest-bridge vitest-browser-automation lint-bridge lint-user-web markdownlint arch-gate arch-l4-reverse fmt-check date-bucket-tz unwired-assets doc-consistency feature-doc enum-consistency no-xapptool cross-package-ports model-migration md-links-offline component-types workflow-refs ci-step-coverage test-nil-deref env-coverage seam-guard async-global-read anchor-preflight anchor-preflight-selftest closeout-r22 closeout-r22-protocol closeout-selftest merge-gate-selftest
+合并门禁：35 步（其中诊断步 1 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge/　取证 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge-gate-full.log
+[绿] go-build                        13.5s 
+[绿] go-vet                           2.6s 
+[绿] gofmt                            0.7s 
+[红] go-test-browser-automation     243.1s ｜ rc=1 ; 输出里出现了禁止行 '(^|\\n)FAIL'
+[绿] go-test-host-packages          545.8s 
+[绿] vitest-bridge                   17.3s 
+[绿] vitest-browser-automation       33.6s 
+[绿] lint-bridge                      1.6s 
+[绿] lint-user-web                    6.8s 
+[绿] markdownlint                     4.4s 
+[绿] arch-gate                       13.7s 
+[绿] arch-l4-reverse                 83.3s 
+[绿] fmt-check                        1.2s 
+[绿] date-bucket-tz                   0.5s 
+[绿] unwired-assets                  29.6s 
+[绿] doc-consistency                  0.1s 
+[绿] feature-doc                      0.0s 
+[绿] enum-consistency                 0.2s 
+[绿] no-xapptool                      2.8s 
+[绿] cross-package-ports              0.1s 
+[绿] model-migration                  0.3s 
+[绿] md-links-offline                 0.1s 
+[绿] component-types                  0.0s 
+[绿] workflow-refs                    0.2s 
+[诊断·红] ci-step-coverage                38.5s ｜ rc=1
+[绿] test-nil-deref                   1.0s 
+[绿] env-coverage                     3.3s 
+[绿] seam-guard                       2.7s 
+[绿] async-global-read                0.9s 
+[绿] anchor-preflight                 0.7s 
+[绿] anchor-preflight-selftest        0.1s 
+[绿] closeout-r22                    17.6s 
+[绿] closeout-r22-protocol            1.1s 
+[绿] closeout-selftest                3.1s 
+[绿] merge-gate-selftest              0.0s 
+===== 合并门禁：33/34 门步绿，红在：go-test-browser-automation；诊断步红 1 道不门控：ci-step-coverage =====

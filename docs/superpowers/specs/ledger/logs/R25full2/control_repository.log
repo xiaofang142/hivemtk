@@ -1,0 +1,4 @@
+FAIL	hivemtk-user/internal/repository [build failed]
+FAIL
+# hivemtk-user/internal/repository [hivemtk-user/internal/repository.test]
+internal/repository/message_hub_outbound_push_cap_b20d_test.go:231:76: unknown field PushAttempts in struct literal of type "hivemtk-user/internal/model".MessageHub

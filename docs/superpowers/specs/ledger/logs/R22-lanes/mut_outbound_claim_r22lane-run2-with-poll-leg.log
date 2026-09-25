@@ -1,0 +1,13 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r22lane-outbound-zh_ou71w
+[Go] overlay：113 个脏 .go 已进克隆（含本泳道未跟踪新腿）
+
+[Go] 注码前置：3 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=7 passed=7 skip=0 FAIL=[]
+O1a  轮询路径收口实参 cutoff→time.Now()（凡 inflight 皆判死，正在发的那条被就地 fail   杀掉      total=7 fail=1 skip=0 ｜ TestPushCapPollSweepSparesUnexpiredInflightRow
+O1b  补拉路径收口实参 cutoff→time.Now()（同上，第三条取行路径单独一刀）                 杀掉      total=7 fail=1 skip=0 ｜ TestPushCapSweepSparesUnexpiredInflightRow
+O2   InboxOutboundClaimTimeout 30s→5s（可见性窗短于桥端单次发送预算 20s ⇒ 双发   杀掉      total=7 fail=1 skip=0 ｜ TestInboxOutboundClaimTimeoutCoversBridgeSendBudget
+[Go] 克隆内注码文件已全量还原（md5 一致）；工作树全程未被写入
+
+===== 电池判定：Go 3 格逐格被杀，无存活 =====
+
+outbound_claim_with_poll_leg_rc=0

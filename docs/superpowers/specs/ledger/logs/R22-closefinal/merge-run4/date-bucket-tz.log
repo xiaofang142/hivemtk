@@ -1,0 +1,7 @@
+$ bash scripts/check-date-bucket-tz.sh
+(cwd=.)
+rc=0  0.8s
+
+日期口径命中：21 处（基线 21 处）
+✅ 日期口径守卫通过（未新增宿主机时区依赖）
+

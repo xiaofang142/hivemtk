@@ -1,0 +1,6 @@
+$ python3 scripts/merge-gate.py --round wiring-anchor --only anchor-preflight --only anchor-preflight-selftest
+步骤名单（2 步，全程不带 -run）：anchor-preflight anchor-preflight-selftest
+合并门禁：2 步（其中诊断步 0 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/wiring-anchor/merge/
+[绿] anchor-preflight                 1.1s 
+[绿] anchor-preflight-selftest        0.1s 
+===== 合并门禁：2/2 门步绿，无红；诊断步全绿 =====

@@ -1,0 +1,76 @@
+### 门禁判据反向测（22 刀）；生产方 scripts/reverse-test-gate-teeth.py；测量 2026-09-23T12:58:14+0800
+### 条件＝合并门禁步骤名单 37 步（新增 clone-selftest / family-selftests-selftest）之后；第 20/21/22 刀是本收口轮补的三支"取证自己"的牙
+
+$ python3 scripts/reverse-test-gate-teeth.py
+[刀  1] merge-gate.py              摘：红落点                          点名到那一格 ✓
+        rc=1 汇总行「===== merge-gate --selftest：15/16 种坏读数各自拦停/判红，绿读数不误伤 =====」 判错格数=1
+        · [反向] 红落点：门控/只印/绿分流                      判错 ✗（go-build 的 红读数落点不对（failed=[] diag=['go-build'] tag=红））
+[刀  2] merge-gate.py              摘：--only 打错步名                  点名到那一格 ✓
+        rc=1 汇总行「===== merge-gate --selftest：15/16 种坏读数各自拦停/判红，绿读数不误伤 =====」 判错格数=1
+        · [反向] --only 打错步名要停机                     判错 ✗（拼错的步名被放行）
+[刀  3] merge-gate.py              摘：点名的仓内文件缺失                    点名到那一格 ✓
+        rc=1 汇总行「===== merge-gate --selftest：15/16 种坏读数各自拦停/判红，绿读数不误伤 =====」 判错格数=1
+        · [反向] 点名的仓内文件缺失要停机                       判错 ✗（不存在的 docs 路径被放行）
+[刀  4] merge-gate.py              摘：坏门禁脚本                        点名到那一格 ✓
+        rc=1 汇总行「===== merge-gate --selftest：15/16 种坏读数各自拦停/判红，绿读数不误伤 =====」 判错格数=1
+        · [反向] 坏门禁脚本要点名                           判错 ✗（broken.py被放过）
+[刀  5] merge-gate.py              摘：子集跑不许写全量取证名                  点名到那一格 ✓
+        rc=1 汇总行「===== merge-gate --selftest：15/16 种坏读数各自拦停/判红，绿读数不误伤 =====」 判错格数=1
+        · [反向] 子集跑不许写全量取证名                        判错 ✗（全量跑没写 merge-gate-full.log）
+[刀  6] anchor-preflight.py        摘：新电池没分类|已经不存在                 点名到那一格 ✓
+        rc=1 汇总行「反向测：8/10 通过 ⇒ 本门自己的判据有洞」 判错格数=2
+        · ✗ 反向格「新电池没分类」判据没开火（要 1 条含 '没在 COVERED/UNCOVERED 里分类'，实得 0）
+        · ✗ 反向格「名单里的电池已不在磁盘」判据没开火（要 1 条含 '已经不存在'，实得 0）
+[刀  7] run-gate-in-clone.py       摘：克隆少抽几条|两侧都零输出|工作树有汇总         点名到那一格 ✓
+        rc=1 汇总行「===== run-gate-in-clone --selftest：8/11 格判对 =====」 判错格数=3
+        · [反向] 克隆少抽几条要红                           判错 ✗（实得 True，期望 False）
+        · [反向] 两侧都零输出要红（空跑不是绿）                    判错 ✗（实得 True，期望 False）
+        · [反向] 工作树有汇总、克隆侧空要红                      判错 ✗（实得 True，期望 False）
+[刀  8] run-gate-in-clone.py       摘：路径痕迹抹平                       点名到那一格 ✓
+        rc=1 汇总行「===== run-gate-in-clone --selftest：10/11 格判对 =====」 判错格数=1
+        · [反向] 路径痕迹抹平后两侧才可比（不抹平就恒不等）              判错 ✗（实得 False，期望 True）
+[刀  9] run-gate-in-clone.py       摘：覆盖/删除/外域三类                   点名到那一格 ✓
+        rc=1 汇总行「===== run-gate-in-clone --selftest：10/11 格判对 =====」 判错格数=1
+        · [反向] 覆盖/删除/外域三类要分对                      判错 ✗（实得 False，期望 True）
+[刀 10] run-gate-in-clone.py       摘：判决行要进|判决行同样入件                点名到那一格 ✓
+        rc=1 汇总行「===== run-gate-in-clone --selftest：9/11 格判对 =====」 判错格数=2
+        · [反向] 判决行要进脚本自己写的取证（绿侧）                  判错 ✗（实得 False，期望 True）
+        · [反向] 红侧判决行同样入件、且不许混进绿字样                 判错 ✗（实得 False，期望 True）
+[刀 11] run-gate-family-selftests.py 摘：成员零输出要红                      点名到那一格 ✓
+        rc=1 汇总行「===== gate-family-selftests --selftest：3/4 格判对 =====」 判错格数=1
+        · [反向] 成员零输出要红（且红因点名'没跑过'）                判错 ✗（实得 rc=0）
+[刀 12] run-gate-family-selftests.py 摘：成员退非 0 要红                    点名到那一格 ✓
+        rc=1 汇总行「===== gate-family-selftests --selftest：3/4 格判对 =====」 判错格数=1
+        · [反向] 成员退非 0 要红                          判错 ✗（实得 rc=0）
+[刀 13] check-review-closeout.py   摘：无 scope                      点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 34] 无 scope              没红 ✗（门漏判这一类）               []
+[刀 14] check-review-closeout.py   摘：prose 豁免无 reason             点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 39] prose 豁免无 reason     没红 ✗（门漏判这一类）               []
+[刀 15] check-review-closeout.py   摘：声明 ledger 却没有计数钉             点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 59] 声明 ledger 却没有计数钉     没红 ✗（门漏判这一类）               []
+[刀 16] check-review-closeout.py   摘：quote 只有 4 字                 点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 53] quote 只有 4 字         没红 ✗（门漏判这一类）               []
+[刀 17] check-review-closeout.py   摘：quote 抄整段正文                  点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 51] quote 抄整段正文          没红 ✗（门漏判这一类）               []
+[刀 18] check-review-closeout.py   摘：日志断言没命中                      点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 19] 日志断言没命中              没红 ✗（门漏判这一类）               []
+[刀 19] check-review-closeout.py   摘：日志出现不许出现的串                   点名到那一格 ✓
+        rc=1 汇总行「===== selftest：56/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=3
+        · [反向 20] 日志出现不许出现的串           没红 ✗（门漏判这一类）               []
+[刀 20] check-review-closeout.py   摘：logs 字典无断言                   点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 0 红 =====」 判错格数=1
+        · [反向 24] logs 字典无断言           没红 ✗（门漏判这一类）               []
+[刀 21] check-review-closeout.py   摘：禁串只在尾部                       点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 非 0 红 =====」 判错格数=2
+        · [反向 21] 禁串只在尾部               没红 ✗（门漏判这一类）               []
+[刀 22] check-review-closeout.py   摘：禁串被 ANSI 遮挡                  点名到那一格 ✓
+        rc=1 汇总行「===== selftest：58/59 种坏形态各自隔离地红，合法快照 非 0 红 =====」 判错格数=2
+        · [反向 22] 禁串被 ANSI 遮挡          没红 ✗（门漏判这一类）               []
+===== 门牙反向测：22/22 刀各自点名到该开火的那一格 =====
+rc=0

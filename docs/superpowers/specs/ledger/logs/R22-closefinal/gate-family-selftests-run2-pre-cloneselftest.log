@@ -1,0 +1,54 @@
+### 三份门禁件各自的 --selftest 读数；测量 2026-09-23T12:41:24+0800；树=共享工作树（这三趟都不编译 Go 包、不连库、不落临时文件）
+### 台账已是第二遍（非临时）那版：merge/clone/自身三格引用指向本目录
+
+$ python3 scripts/merge-gate.py --selftest
+[反向] rc≠0 要红                            判对 ✓（红）
+[反向] rc=0 但判据行没出现要红                     判对 ✓（红）
+[反向] rc=0 但出现 FAIL 要红                   判对 ✓（红）
+[反向] gofmt 有输出要红（rc 恒 0 那种）             判对 ✓（红）
+[反向] 全绿不该红                              判对 ✓（绿）
+[反向] 带 ANSI 颜色的绿读数不该红                   判对 ✓（绿）
+[反向] 诊断步的红不门控（但照常印）                     判对 ✓（绿）
+[反向] 门步的红必须门控                           判对 ✓（红）
+[反向] 名单非空要拦空过滤                          判对 ✓（拦停：--only 过滤后一步都没有：那是 0）
+[反向] 口令拿不到要停机                           判对 ✓（拦停：跑不出go-test-host-pack）
+[反向] 坏门禁脚本要点名                           判对 ✓（拦停：第 1 行语法坏了：invalid sy）
+[反向] 诊断豁免指错步要停机                         判对 ✓（拦停：DIAG 里的步名不在步骤名单：ci-s）
+[反向] --only 打错步名要停机                     判对 ✓（拦停：步名不存在：go-build-typo（）
+[反向] 红落点：门控/只印/绿分流                      判对 ✓（拦停：go-build 红→failed、ci-step-coverage 红→只印）
+[反向] 点名的仓内文件缺失要停机                       判对 ✓（拦停：probe：命令点名的仓内文件不存在 d）
+[反向] 子集跑不许写全量取证名                        判对 ✓（拦停：子集永不写 full 名）
+===== merge-gate --selftest：16/16 种坏读数各自拦停/判红，绿读数不误伤 =====
+
+rc=0
+
+$ python3 scripts/run-gate-in-clone.py --selftest
+[反向] 两侧汇总一致不该红                          判对 ✓（实得 True，期望 True）
+[反向] 克隆少抽几条要红                           判对 ✓（实得 False，期望 False）
+[反向] 两侧都零输出要红（空跑不是绿）                    判对 ✓（实得 False，期望 False）
+[反向] 工作树有汇总、克隆侧空要红                      判对 ✓（实得 False，期望 False）
+[反向] 路径痕迹抹平后两侧才可比（不抹平就恒不等）              判对 ✓（实得 True，期望 True）
+[反向] 外域未跟踪测试要被排除                        判对 ✓（实得 True，期望 True）
+[反向] 同目录自己的测试不许被连带排除                    判对 ✓（实得 False，期望 False）
+[反向] 库连接参数要被抹掉、PATH 要留住                 判对 ✓（实得 True，期望 True）
+[反向] 覆盖/删除/外域三类要分对                      判对 ✓（实得 True，期望 True）
+===== run-gate-in-clone --selftest：9/9 格判对 =====
+
+rc=0
+
+$ python3 scripts/anchor-preflight.py --selftest
+  ✓ B 锚点 0 命中        → [fake] C1 锚点在 pkg/a.go 里命中 0 次（要求恰好 1）：'Z := 1'
+  ✓ B 锚点 2 命中        → [fake] C1 锚点在 pkg/a.go 里命中 2 次（要求恰好 1）：'X := 1'
+  ✓ B 注码与原文相同        → [fake] C1 注码无效（原文与注码后一致＝这一格永不开火）
+  ✓ B expect 改名      → [fake] C1 的 expect 用例在工作树里找不到：TestRenamedAway
+  ✓ B 槽没登记           → [fake] C1 的槽 'zzz' 不在 SLOT_FILES 里（新增槽要同时登记文件，否则本门读不到它）
+  ✓ B 注码后语法坏         → [fake] C1@pkg/a.go 注码后 gofmt 语法坏，跑出来只会是 build failed：<standard input>:15:6: expected '(', found broken
+<standa
+  ✓ A 注码后字节没变        → [fake] C1@pkg/a.go 注码打完了而字节没变（这一格永不开火）
+  ✓ 对照组：完好的一格 0 问题
+  ✓ 新电池没分类           → scripts/mut_actionability_b17.py 是新电池，没在 COVERED/UNCOVERED 里分类
+  ✓ 名单里的电池已不在磁盘      → COVERED/UNCOVERED 里的 mut_zz_not_on_disk.py 在 scripts/ 里已经不存在（名单要跟着删）
+反向测：10/10 格各自点名到该开火的那一条判据
+
+rc=0
+

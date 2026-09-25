@@ -1,0 +1,42 @@
+2026-09-22T12:30:46+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSignalConfirmBindsPayload
+--- PASS: TestSignalConfirmBindsPayload (0.00s)
+=== RUN   TestPendingGateExposesAwaitingPayload
+--- PASS: TestPendingGateExposesAwaitingPayload (0.00s)
+=== RUN   TestConfirmGateFramesBindPayloadAndOmitBody
+    d7_gate_b20_test.go:162: 挂起时未落 d7_wait 帧
+--- FAIL: TestConfirmGateFramesBindPayloadAndOmitBody (2.01s)
+=== RUN   TestConfirmGateDecisionPerOutgoing
+--- PASS: TestConfirmGateDecisionPerOutgoing (0.01s)
+=== RUN   TestConfirmStatusDistinguishesGateElsewhere
+    d7_gate_b20_test.go:302: 闸门在别处却回 no_gate——与「根本没开闸门」同一句文案，人就会去改编排而不是换实例
+--- FAIL: TestConfirmStatusDistinguishesGateElsewhere (0.00s)
+=== RUN   TestConfirmGateReadIsOwnershipScoped
+--- PASS: TestConfirmGateReadIsOwnershipScoped (0.00s)
+=== RUN   TestGatePayloadMustNeverBeEmpty
+--- PASS: TestGatePayloadMustNeverBeEmpty (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	2.647s
+FAIL
+
+2026-09-22T12:30:50+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestB20ConfirmRequiresPayloadHash
+--- PASS: TestB20ConfirmRequiresPayloadHash (2.95s)
+=== RUN   TestB20ConfirmStatusMappingIsDistinct
+--- PASS: TestB20ConfirmStatusMappingIsDistinct (0.00s)
+=== RUN   TestB20ConfirmGateElsewhereFromAuditFrame
+    d7_confirm_http_b20_test.go:194: 未到期 d7_wait + 无内存闸门 → HTTP 200 msg="该会话当前没有待确认的提交点"，want 409「闸门在别的进程」
+--- FAIL: TestB20ConfirmGateElsewhereFromAuditFrame (0.17s)
+=== RUN   TestB20ConfirmGateReadEndpoint
+--- PASS: TestB20ConfirmGateReadEndpoint (0.17s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/controller	4.221s
+FAIL
+
+2026-09-22T12:30:55+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestIsDuplicateReason_只认重复结论短语不认任意子串
+--- PASS: TestIsDuplicateReason_只认重复结论短语不认任意子串 (0.00s)
+=== RUN   TestIsDuplicateReason
+--- PASS: TestIsDuplicateReason (0.00s)
+PASS
+ok  	hivemtk-user/internal/channelgw	0.562s

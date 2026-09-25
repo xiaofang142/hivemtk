@@ -1,0 +1,1398 @@
+$ npx vitest run
+(cwd=user-web/bridge)
+rc=0  15.3s
+
+
+ RUN  v4.1.11 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 已切换到会话 b2
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 巡检上行消息: 会话 b2（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 已切换到会话 c3
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 遍历所有会话 → 每个会话一条会话级 inbound 帧（2026-08-05 修复：不判断未读，直接遍历）
+[bridge:douyin] 巡检上行消息: 会话 c3（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 已 seen 的消息靠去重跳过：第二轮巡检不再重复上行（不重复打扰）
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 已 seen 的消息靠去重跳过：第二轮巡检不再重复上行（不重复打扰）
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 无 unread 标记时也巡检所有会话（2026-08-05 修复：巡检不再判断未读，直接遍历）
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 无 unread 标记时也巡检所有会话（2026-08-05 修复：巡检不再判断未读，直接遍历）
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 无 unread 标记时也巡检所有会话（2026-08-05 修复：巡检不再判断未读，直接遍历）
+[bridge:douyin] 已切换到会话 b2
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 无 unread 标记时也巡检所有会话（2026-08-05 修复：巡检不再判断未读，直接遍历）
+[bridge:douyin] 巡检上行消息: 会话 b2（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > visitAllWhenNoUnread 兼容：无 unread 标记时也巡检全部会话（靠 seen 去重只报新消息）
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > visitAllWhenNoUnread 兼容：无 unread 标记时也巡检全部会话（靠 seen 去重只报新消息）
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:douyin_web] 已切换到会话 MS4wA1
+[bridge:douyin_web] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:douyin_web] 已切换到会话 MS4wB2
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:douyin_web] 已切换到会话 MS4wC3
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:douyin_web] 私信会话遍历同步完成：成功 3，失败 0
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:douyin_web] 已切换到会话 MS4wA1
+[bridge:douyin_web] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:douyin_web] 已切换到会话 MS4wB2
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:douyin_web] 私信会话遍历同步完成：成功 2，失败 0
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+[bridge:douyin_web] 私信会话遍历同步完成：成功 0，失败 0
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:douyin_web] 私信会话遍历同步完成：成功 0，失败 1
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表首项即当前打开会话（活动会话未变但=目标）→ 计为成功并回填，不误报失败
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+[bridge:douyin_web] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表首项即当前打开会话（活动会话未变但=目标）→ 计为成功并回填，不误报失败
+[bridge:douyin_web] 私信会话遍历同步完成：成功 1，失败 0
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表 id 与活动会话 id 表述不一致（/user/链接 vs data-*）→ 两者都记为已同步，二次调用不重复
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表 id 与活动会话 id 表述不一致（/user/链接 vs data-*）→ 两者都记为已同步，二次调用不重复
+[bridge:douyin_web] 已切换到会话 total-A1
+[bridge:douyin_web] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表 id 与活动会话 id 表述不一致（/user/链接 vs data-*）→ 两者都记为已同步，二次调用不重复
+[bridge:douyin_web] 已切换到会话 total-B2
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表 id 与活动会话 id 表述不一致（/user/链接 vs data-*）→ 两者都记为已同步，二次调用不重复
+[bridge:douyin_web] 私信会话遍历同步完成：成功 2，失败 0
+
+stdout | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 列表 id 与活动会话 id 表述不一致（/user/链接 vs data-*）→ 两者都记为已同步，二次调用不重复
+[bridge:douyin_web] 开始遍历同步私信会话（多轮扫描至列表底部）…
+[bridge:douyin_web] 私信会话遍历同步完成：成功 0，失败 0
+
+stdout | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > openConversation：目标会话≠当前时，点击左侧列表项并切到目标
+[bridge:douyin_web] 已切换到会话 b2
+
+stdout | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话≠当前 → 先切到目标会话再发送（左侧找用户→点击进入→发送）
+[bridge:douyin_web] 已切换到会话 b2
+
+stdout | test/downlink-b24-step-timeout.test.js > 批24：下发外层超时预算必须覆盖回查切片 > 发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）
+[bridge:downlink] 下行完成: b24a 共 1 条已 ack { convs: 1 }
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+stdout | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话≠当前 → 先切到目标会话再发送（左侧找用户→点击进入→发送）
+[bridge:douyin_web] 上行消息: 您好，请问有什么可以帮您？
+
+ ✓ test/b7-humanized-typing.test.js (11 tests) 3153ms
+     ✓ contenteditable div：最终内容逐字一致且按段派发 input 事件  1338ms
+     ✓ textarea：value 全量还原（代理对安全）  1805ms
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > SSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[bridge:downlink] SSE 直连启动: r23_sse_drain:... { serverUrl: 'http://127.0.0.1:9999', hasToken: true, lastEventId: '' }
+[bridge:downlink] SSE 下行已启动（直连模式）: r23_sse...
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 成功：构造 body 投递 + 解析响应
+[bridge:http] [HTTP ingest] {
+  url: 'http://localhost:8204/api/bridge/ingest?channel=xiaohongshu&account_id=acc-x&conversation_id=conv-x',
+  origin: 'http://localhost:8204',
+  path: '/api/bridge/ingest',
+  query: {
+    channel: 'xiaohongshu',
+    account_id: 'acc-x',
+    conversation_id: 'conv-x'
+  },
+  body_preview: '{"v":2,"channel":"xiaohongshu","account_id":"acc-x","conversation_id":"conv-x","messages":[{"event_id":"e1","conversation_id":"conv-x","sender_id":"peer-1","msg_type":"text","content":"你好","timestamp":1700000000}],"expect_reply":true,"timeout_ms":30000}',
+  body_size: 253,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: '?', content: '你好', event_id: 'e1' } ]
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 成功：构造 body 投递 + 解析响应
+[bridge:http] ingest 响应 {
+  url: 'http://localhost:8204/api/bridge/ingest?channel=xiaohongshu&account_id=acc-x&conversation_id=conv-x',
+  ok: true,
+  elapsed_ms: 0,
+  ingested_count: 1,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 非 JSON 响应抛错（包含部分文本）
+[bridge:http] [HTTP ingest] {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'c', account_id: 'a' },
+  body_preview: '{"messages":[]}',
+  body_size: 15,
+  body_truncated: false,
+  messages_count: 0,
+  messages_summary: []
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 服务端 5xx 抛错（走 fetchWithRetry 退避后失败）
+[bridge:http] test {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'c', account_id: 'a' },
+  body_preview: '{"messages":[]}',
+  body_size: 15,
+  body_truncated: false,
+  messages_count: 0,
+  messages_summary: []
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 请求体含 expect_reply=true 时 headers 透传 traceId
+[bridge:http] [HTTP ingest] {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'c', account_id: 'a' },
+  body_preview: '{"expect_reply":true,"messages":[{"event_id":"e1"}]}',
+  body_size: 52,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: '?', content: '', event_id: 'e1' } ]
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 请求体含 expect_reply=true 时 headers 透传 traceId
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  ok: true,
+  elapsed_ms: 0,
+  ingested_count: 0,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 响应包含 outbound_replies 时能被读取
+[bridge:http] [HTTP ingest] {
+  url: 'http://x/api/bridge/ingest?channel=xiaohongshu&account_id=a&conversation_id=conv-x',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: {
+    channel: 'xiaohongshu',
+    account_id: 'a',
+    conversation_id: 'conv-x'
+  },
+  body_preview: '{"messages":[{"event_id":"e1"}]}',
+  body_size: 32,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: '?', content: '', event_id: 'e1' } ]
+}
+
+stdout | test/http-ingest.test.js > http-ingest / postIngest > 响应包含 outbound_replies 时能被读取
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=xiaohongshu&account_id=a&conversation_id=conv-x',
+  ok: true,
+  elapsed_ms: 0,
+  ingested_count: 1,
+  outbound_replies_count: 1,
+  outbound_replies_preview: [
+    {
+      channel: 'xiaohongshu',
+      conversation_id: 'conv-x',
+      content_preview: 'AI 回复内容',
+      content_length: 7,
+      reply_to_event_id: 'e1'
+    }
+  ],
+  reason: undefined
+}
+
+ ✓ test/http-ingest.test.js (35 tests) 3678ms
+     ✓ 429（Too Many Requests）允许重试（不标 nonRetryable）  1003ms
+     ✓ 429 超过 maxRetries 最终抛出且带 retryAfterMs  2004ms
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > SSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[bridge:downlink] pendingAck 重发 ack 完成 { channel: 'r23_sse_drain', success: 1, fail: 0, retried: 1 }
+
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > SSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+[bridge:downlink] SSE 下行已停止: r23_sse_drain...
+
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > stop() 之后排水器不再触发（不许留悬空 interval）
+[bridge:downlink] SSE 直连启动: r23_sse_stop:a... { serverUrl: 'http://127.0.0.1:9999', hasToken: true, lastEventId: '' }
+[bridge:downlink] SSE 下行已启动（直连模式）: r23_sse...
+
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > stop() 之后排水器不再触发（不许留悬空 interval）
+[bridge:downlink] SSE 下行已停止: r23_sse_stop:...
+
+ ✓ test/downlink-b24-step-timeout.test.js (3 tests) 3761ms
+     ✓ 发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）  707ms
+     ✓ 预算仍是上界：永远不回包的发送要在「sendText 预算 + 回查切片」内被切掉并留 pending  3052ms
+stdout | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话=当前 → 直接发送，不切换
+[bridge:douyin_web] 上行消息: 在的
+
+ ✓ test/douyin-walker.test.js (15 tests) 3745ms
+     ✓ sendOutbound：目标会话≠当前 → 先切到目标会话再发送（左侧找用户→点击进入→发送）  2594ms
+     ✓ sendOutbound：目标会话=当前 → 直接发送，不切换  895ms
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > 排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属
+[bridge:downlink] pendingAck 重发 ack 完成 { channel: 'r23_shared_seam', success: 1, fail: 0, retried: 1 }
+
+stdout | test/downlink-r23-sse-ack-drain.test.js > §6-4 SSE 模式必须排 _pendingAck 队列 > pollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）
+[bridge:downlink] pendingAck 重发 ack 完成 { channel: 'r23_poll_still_drains', success: 1, fail: 0, retried: 1 }
+
+ ✓ test/downlink-r23-sse-ack-drain.test.js (4 tests) 611ms
+     ✓ stop() 之后排水器不再触发（不许留悬空 interval）  404ms
+stdout | test/popup-m2-p1.test.js > M2-P1 emergency-stop > resumeBridge 清除标记
+[bridge:killswitch] 紧急停止已恢复
+
+stdout | test/popup-m2-p1.test.js > M2-P1 emergency-stop > toggleEmergencyStop 切换状态
+[bridge:killswitch] 紧急停止已恢复
+
+stdout | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > 普通消息：ackOutbox opts.items = [{msg_id, conversation_id}]
+[bridge:downlink] 下行完成: b2a 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > DM 重映射（extra.dm_target=member）：发送用 receiver_id，ack 用行原始 conversation_id
+[bridge:downlink] 下行完成: b2b 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > payload 缺 conversation_id（老服务端）→ 回退 legacy msg_ids 不发 items
+[bridge:downlink] 下行完成: b2c 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > ack 失败入队携带 conversationId，下轮重试透传给 ackOutbox
+[bridge:downlink] pendingAck 重发 ack 完成 { channel: 'b2d', success: 1, fail: 0, retried: 1 }
+
+stdout | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > ack 失败入队携带 conversationId，下轮重试透传给 ackOutbox
+[bridge:downlink] [下行重复补确认] b2d 已补确认 { channel: 'b2d', count: 1 }
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 直连启动: b3a:acc1 {
+  serverUrl: 'http://localhost:8204',
+  hasToken: false,
+  lastEventId: ''
+}
+[bridge:downlink] SSE 下行已启动（直连模式）: b3a:acc...
+[bridge:downlink] SSE 断开，548ms 后第 1 次重连: b...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，1952ms 后第 2 次重连: ...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，2699ms 后第 3 次重连: ...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，5628ms 后第 4 次重连: ...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，9536ms 后第 5 次重连: ...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，28581ms 后第 6 次重连:...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，19273ms 后第 7 次重连:...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，17530ms 后第 8 次重连:...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，29960ms 后第 9 次重连:...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，20565ms 后第 10 次重连...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，359815ms 后第 11 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，311254ms 后第 12 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，337477ms 后第 13 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，353286ms 后第 14 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，304077ms 后第 15 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，301287ms 后第 16 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，349028ms 后第 17 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，307749ms 后第 18 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，323885ms 后第 19 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，344961ms 后第 20 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，343300ms 后第 21 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，306505ms 后第 22 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，305606ms 后第 23 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，350763ms 后第 24 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，319941ms 后第 25 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，357056ms 后第 26 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，341961ms 后第 27 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，316795ms 后第 28 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，345859ms 后第 29 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，330454ms 后第 30 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，335563ms 后第 31 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，306397ms 后第 32 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，303140ms 后第 33 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 断开，323845ms 后第 34 次重...
+
+stdout | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 下行已停止: b3a:acc1
+[bridge:downlink] SSE 重连循环结束: b3a:acc1
+
+ ✓ test/downlink-b1b2b3.test.js (12 tests) 51ms
+stdout | test/config-io.test.js > config-io importConfig（热更新） > 明文 JSON 导入 → configStore 热更新（serverUrl/token/渠道/巡检）
+[bridge:config-io] 配置导入成功，已热更新 { serverUrl: 'http://new:8204', fields: 6 }
+
+stdout | test/config-io.test.js > config-io importConfig（热更新） > 加密文件 + 正确口令 → 解密后热更新
+[bridge:config-io] 配置导入成功，已热更新 { serverUrl: 'http://enc:8204', fields: 2 }
+
+stdout | test/config-io.test.js > config-io importConfig（热更新） > File 对象输入（含 .text()）也能解析
+[bridge:config-io] 配置导入成功，已热更新 { serverUrl: 'http://f:8204', fields: 1 }
+
+ ✓ test/config-io.test.js (25 tests) 374ms
+ ✓ test/popup-m2-p1.test.js (43 tests) 310ms
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 需求⑥：非文字消息（image）在巡检中被跳过，仅上行文字消息
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 需求⑥：非文字消息（image）在巡检中被跳过，仅上行文字消息
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 多轮历史：一个未读会话含多条新消息 → 一条 inbound 帧的 history[] 含全部多轮
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter.patrol 巡检一轮 > 多轮历史：一个未读会话含多条新消息 → 一条 inbound 帧的 history[] 含全部多轮
+[bridge:douyin] 巡检上行消息: 会话 a1（3 轮新消息）
+
+stdout | test/patrol.test.js > BaseAdapter patrol 启停控制 > patrolStatus 反映累计统计（rounds/visited/captured/...）
+[bridge:douyin] 已切换到会话 a1
+
+stdout | test/patrol.test.js > BaseAdapter patrol 启停控制 > patrolStatus 反映累计统计（rounds/visited/captured/...）
+[bridge:douyin] 巡检上行消息: 会话 a1（1 轮新消息）
+
+ ✓ test/patrol.test.js (8 tests) 4460ms
+     ✓ visitAllWhenNoUnread 兼容：无 unread 标记时也巡检全部会话（靠 seen 去重只报新消息）  4412ms
+ ✓ test/popup.test.js (38 tests) 263ms
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:xiaohongshu] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:xiaohongshu] 已切换到会话 5f8a2b01
+[bridge:xiaohongshu] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:xiaohongshu] 已切换到会话 9c88d76e
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:xiaohongshu] 已切换到会话 1a2b3c4d
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 遍历每个会话并各回填一次历史（统一收信中心各一条记录）
+[bridge:xiaohongshu] 私信会话遍历同步完成：成功 3，失败 0
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:xiaohongshu] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:xiaohongshu] 已切换到会话 a1
+[bridge:xiaohongshu] 回填会话 null: 1 条消息（新增 1）
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:xiaohongshu] 已切换到会话 b2
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:xiaohongshu] 私信会话遍历同步完成：成功 2，失败 0
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 已同步集合生效：二次调用不再重复回填
+[bridge:xiaohongshu] 开始遍历同步私信会话（多轮扫描至列表底部）…
+[bridge:xiaohongshu] 私信会话遍历同步完成：成功 0，失败 0
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:xiaohongshu] 开始遍历同步私信会话（多轮扫描至列表底部）…
+
+stdout | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:xiaohongshu] 私信会话遍历同步完成：成功 0，失败 1
+
+ ✓ test/xhs-walker.test.js (7 tests) 270ms
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+stdout | test/background.test.js > background 加载 > 无语法错误，能正常执行（至少注册了 onMessage 监听器）
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background 配置存储 setConfig 路径 > onMessage setConfig 成功 → 返回 {ok: true}，并写入 storage
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background 配置存储 setConfig 路径 > onMessage setConfig 失败（lastError 有值）→ 返回 {ok: false, error}
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > getStatus → 返回 statuses + routes 计数（初始全空）
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > getStatus → storage 中已有 activeByChannel 时透传
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > injectContentScript 缺 tabId → 同步返回 {ok: false, reason: invalid_tabId}
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > injectContentScript 合法 tabId → 异步返回 {ok}
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > 未知 type → listener 同步返回 false（不保持 channel）
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background onMessage 路由 > 空 message → listener 同步返回 false
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background DEFAULT_USER_SERVER 默认值 > storage 完全为空 → setConfig 写入默认值 serverUrl 来自 constants.js
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/background.test.js > background HTTP-only 模式 > 不再监听 chrome.runtime.onConnect
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+ ✓ test/background.test.js (11 tests) 67ms
+stdout | test/chat-page-convid.test.js > douyin /chat 快照 DOM 端到端消息捕获 > 复现深检快照结构：无链接/无 data 活动会话 → 客户消息被捕获并上行
+[bridge:douyin] 回填会话 conv:张三: 2 条消息（新增 2...
+[bridge:douyin] 上行消息: 实时新消息
+
+stdout | test/chat-page-convid.test.js > xhs /chat 快照 DOM 端到端消息捕获 > 复现深检快照：/chat/{id} 路径会话 + xhs-im-* 气泡 → 捕获消息且时间戳被过滤
+[bridge:xiaohongshu] 回填会话 5e4f75e300000000010...
+
+ ✓ test/chat-page-convid.test.js (9 tests) 161ms
+ ✓ test/peer-name.test.js (9 tests) 134ms
+ ✓ test/batch3-hygiene.test.js (9 tests) 209ms
+stdout | test/adapter.test.js > BaseAdapter sendOutbound 风控通过则回写并上报 outbound 消息 > 调用 hooks.sendText 并触发 onMessage（sender_type=AGENT）
+[bridge:douyin_web] 上行消息: hello
+
+stdout | test/adapter.test.js > BaseAdapter _handleIncremental 统一走 onMessage > CUSTOMER 消息 → onMessage（sender_type=CUSTOMER）
+[bridge:douyin_web] 上行消息: hi
+
+stdout | test/adapter.test.js > BaseAdapter _handleIncremental 统一走 onMessage > SELF 消息 → onMessage（sender_type=SELF）
+[bridge:xhs_web] 上行消息: me too
+
+stdout | test/adapter.test.js > BaseAdapter _handleIncremental 统一走 onMessage > 稳定键去重：相同内容跨 DOM 重渲染只上行一次（seenNodes 失效也不重复）
+[bridge:tiktok_web] 上行消息: dup
+
+stdout | test/adapter.test.js > BaseAdapter _handleIncremental 统一走 onMessage > seenNodes 节点级去重仍生效：同一 DOM 节点重复调用不重复处理
+[bridge:tiktok_web] 上行消息: dup
+
+stdout | test/adapter.test.js > BaseAdapter _handleIncremental 统一走 onMessage > 不同内容正常上行（稳定键按文本区分，不误删）
+[bridge:tiktok_web] 上行消息: msg0
+[bridge:tiktok_web] 上行消息: msg1
+
+stdout | test/adapter.test.js > BaseAdapter 会话切换重挂载 > conversationId 变化触发 _attachConversation 重新挂载
+[bridge:douyin_web] 会话切换: c1 -> c2
+
+ ✓ test/adapter.test.js (30 tests) 135ms
+ ✓ test/xhs-accountid.test.js (12 tests) 34ms
+stdout | test/batch3-sse-stop.test.js > SSE startSSEDelivery 停止路径 > 活动连接期间 stop()：走 key 级 stopSSE abort，循环即刻收束且不再重连
+[bridge:downlink] SSE 直连启动: douyin:acc-A {
+  serverUrl: 'http://localhost:8204',
+  hasToken: false,
+  lastEventId: ''
+}
+[bridge:downlink] SSE 下行已启动（直连模式）: douyin:...
+
+stdout | test/batch3-sse-stop.test.js > SSE startSSEDelivery 停止路径 > 活动连接期间 stop()：走 key 级 stopSSE abort，循环即刻收束且不再重连
+[bridge:downlink] SSE 下行已停止: douyin:acc-A
+[bridge:downlink] SSE 重连循环结束: douyin:acc-A
+
+stdout | test/batch3-sse-stop.test.js > SSE startSSEDelivery 停止路径 > 退避等待期间 stop()：wakeWait 即刻唤醒，循环秒收（不等满 delay）
+[bridge:downlink] SSE 直连启动: douyin:acc-B {
+  serverUrl: 'http://localhost:8204',
+  hasToken: false,
+  lastEventId: ''
+}
+[bridge:downlink] SSE 下行已启动（直连模式）: douyin:...
+
+stdout | test/batch3-sse-stop.test.js > SSE startSSEDelivery 停止路径 > 退避等待期间 stop()：wakeWait 即刻唤醒，循环秒收（不等满 delay）
+[bridge:downlink] SSE 断开，885ms 后第 1 次重连: d...
+
+stdout | test/xhs-real-dom.test.js > 小红书真实 .chat-item DOM：右侧消息上报 > 右侧 .chat-item 消息被捕获并上报（会话 id 正确、时间戳被过滤）
+[bridge:xiaohongshu] 回填会话 63bd523800000000270...
+
+stdout | test/batch3-sse-stop.test.js > SSE startSSEDelivery 停止路径 > 退避等待期间 stop()：wakeWait 即刻唤醒，循环秒收（不等满 delay）
+[bridge:downlink] SSE 下行已停止: douyin:acc-B
+[bridge:downlink] SSE 重连循环结束: douyin:acc-B
+
+ ✓ test/xhs-real-dom.test.js (3 tests) 90ms
+ ✓ test/batch3-sse-stop.test.js (2 tests) 148ms
+ ✓ test/batch3-uplink-requeue.test.js (3 tests) 105ms
+ ✓ test/humanize.test.js (12 tests) 6199ms
+     ✓ click 延迟落在 [50, 360] 区间  3871ms
+     ✓ 从 (0,0) 到 (100,100) 移动 20-35 步  644ms
+     ✓ 分段滚动 + 偶尔回滚  1578ms
+stdout | test/adapter-history.test.js > 历史回填 _backfill > 一个会话 = 一条会话级消息，内含全部多轮历史，统一走 onMessage
+[bridge:douyin] 回填会话 conv1: 2 条消息（新增 2）
+
+stdout | test/adapter-history.test.js > 历史回填 _backfill > 回填再次触发（延迟 1.5s）不重复上报：seenNodes 去重 → 不再发帧
+[bridge:douyin] 回填会话 conv1: 2 条消息（新增 2）
+
+stdout | test/adapter-history.test.js > 纯桥接：所有消息统一走 onMessage > 客户消息走 onMessage（sender_type=CUSTOMER）
+[bridge:douyin] 上行消息: 客户新消息
+
+stdout | test/adapter-history.test.js > 纯桥接：所有消息统一走 onMessage > 切换会话后客户消息仍走 onMessage
+[bridge:douyin] 上行消息: 切回会话后的客户消息
+
+stdout | test/adapter-history.test.js > 群聊 + 实时上下文窗口（点3） > 群聊会话级回填：1 条帧，is_group/group_id/group_name 与逐轮 sender_name 上送
+[bridge:xhs] 回填会话 group-1: 3 条消息（新增 3...
+
+stdout | test/adapter-history.test.js > 群聊 + 实时上下文窗口（点3） > 群聊去重按成员区分：不同成员发相同文本不被误删（需求3 多轮完整性）
+[bridge:xhs] 上行消息: 好的
+[bridge:xhs] 上行消息: 好的
+
+stdout | test/adapter-history.test.js > 群聊 + 实时上下文窗口（点3） > 同一成员重复发相同文本不再 Bridge 端去重（内容 hash 去重交给服务端）
+[bridge:xhs] 上行消息: 好的
+[bridge:xhs] 上行消息: 好的
+
+stdout | test/adapter-history.test.js > 群聊 + 实时上下文窗口（点3） > 实时消息携带该会话最近多轮上下文窗口
+[bridge:xhs] 上行消息: 第一轮
+[bridge:xhs] 上行消息: 我方回复
+[bridge:xhs] 上行消息: 第二轮
+[bridge:xhs] 上行消息: 第三轮请回复
+
+stdout | test/adapter-history.test.js > 纯规则架构（无 LLM 抽取器） > _scanIncremental 走 selector 路径（getMessageItems），忽略 extractMessages 残留
+[bridge:xhs] 上行消息: 来自选择器路径的消息
+
+stdout | test/adapter-history.test.js > 纯规则架构（无 LLM 抽取器） > _backfill 不依赖 extractMessages（纯 getMessageItems 回填）
+[bridge:xhs] 回填会话 conv1: 1 条消息（新增 1）
+
+ ✓ test/adapter-history.test.js (14 tests) 23ms
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 持久化到 config.accounts 并返回 ok
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 启用 → pausedAt 为 null
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 缺 channel → 返回 {ok:false}
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 广播 accountsUpdated 到 tabs
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:switchAccount 更新 channel/accountId/conversationId 并返回 ok
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:switchAccount 广播 accountsUpdated
+[bridge:bg] webNavigation.onCommitte...
+[bridge:bg] background 已就绪（HTTP-only...
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > A 界内（23h）命中：不重发，只补一次 delivered
+[bridge:downlink] [下行重复补确认] b20da 已补确认 { channel: 'b20da', count: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > B 界外（25h）不再拦：重发一次，且记录以新时间戳续期
+[bridge:downlink] 下行完成: b20db 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > C 上限淘汰按时间：插入序与时间序错位时，丢的是最旧的而不是最先写入的
+[bridge:downlink] 下行完成: b20dc 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > H 会话内重命中续期：evict 按最后命中时间裁，落在重命中条目之后的界外尾条必须回收（杀：add 去掉先删）
+[bridge:downlink] 下行完成: b20dh 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > F 未超上限也回收过期条目：时间界不是条数上限的副产品
+[bridge:downlink] 下行完成: b20df 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > D 旧格式（纯字符串）可读：不重发，并被改写为带时间戳的新格式
+[bridge:downlink] [下行重复补确认] b20dd 已补确认 { channel: 'b20dd', count: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > I 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > I 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > I 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: 1 }
+
+ ✓ test/accounts.test.js (26 tests) 119ms
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > G 会话内跨过界：不经装载也必须放开重发
+[bridge:downlink] 下行完成: b20dg 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > G 会话内跨过界：不经装载也必须放开重发
+[bridge:downlink] [下行重复补确认] b20dg 已补确认 { channel: 'b20dg', count: 1 }
+
+stdout | test/downlink-b20d-sentcache-ttl.test.js > 批20d-A4：SentCache 的 24h 时间界 > G 会话内跨过界：不经装载也必须放开重发
+[bridge:downlink] 下行完成: b20dg 共 1 条已 ack { convs: 1 }
+
+ ✓ test/downlink-b20d-sentcache-ttl.test.js (10 tests) 24ms
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ ✓ test/xhs-content.test.js (15 tests) 80ms
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景1：ack items status=not_in_scope（存在但归属其他账号/方向）→ 不入 _pendingAck，停止重发（防越权探测）
+[bridge:downlink] 下行完成: sec_1_179014064789... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景1b：已在 _pendingAck 的 msg 重发 ack 返回 not_in_scope → 停止重试并清理（不再探测）
+[bridge:downlink] pendingAck 重发 ack 完成 {
+  channel: 'sec_2_1790140647902_hjjkgr',
+  success: 1,
+  fail: 0,
+  retried: 1
+}
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景2：ack items status=not_found → 停止重发（不入 _pendingAck）
+[bridge:downlink] 下行完成: sec_3_179014064790... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景3a：ack items status=acked → 已处理完成，不入 _pendingAck
+[bridge:downlink] 下行完成: sec_4_179014064790... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景3b：ack items status=duplicate → 幂等跳过（不入 _pendingAck）
+[bridge:downlink] 下行完成: sec_5_179014064790... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景3c：重发 ack 命中 acked → 清理 _pendingAck（成功移除，不死循环）
+[bridge:downlink] pendingAck 重发 ack 完成 {
+  channel: 'sec_6_1790140647906_0841yt',
+  success: 1,
+  fail: 0,
+  retried: 1
+}
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景4：downlink 按 channel 隔离 sentCache（bridge_sent_{channel} 键隔离），不同 channel 互不影响
+[bridge:downlink] 下行完成: sec_7_179014064790... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景4：downlink 按 channel 隔离 sentCache（bridge_sent_{channel} 键隔离），不同 channel 互不影响
+[bridge:downlink] 下行完成: sec_8_179014064790... { convs: 1 }
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景4：downlink 按 channel 隔离 sentCache（bridge_sent_{channel} 键隔离），不同 channel 互不影响
+[bridge:downlink] [下行重复补确认] sec_7_17901406... {
+  channel: 'sec_7_1790140647907_ewc967',
+  total: 1,
+  settled: 1,
+  retried: 0
+}
+
+stdout | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景5：ack 响应缺失 item（ack_response_missing_item）→ 入 _pendingAck 下轮重试
+[bridge:downlink] 下行完成: sec_9_179014064790... { convs: 1 }
+
+ ✓ test/security.test.js (9 tests) 12ms
+ ✓ test/circuit-breaker-p3.test.js (16 tests) 95ms
+ ✓ test/dom.test.js (92 tests) 121ms
+ ✓ test/douyin-accountid.test.js (4 tests) 38ms
+ ✓ test/diagnostic.test.js (4 tests) 75ms
+stdout | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > 已发过的行不再下发，但按行原始 conversation_id 补一次 delivered 确认
+[bridge:downlink] [下行重复补确认] b11a 已补确认 { channel: 'b11a', count: 1 }
+
+stdout | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > 已发过的行不再下发，但按行原始 conversation_id 补一次 delivered 确认
+[bridge:downlink] 下行完成: b11a 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > DM 场景：缓存键用 receiver_id，补确认仍用行原始 conversation_id
+[bridge:downlink] [下行重复补确认] b11b 已补确认 { channel: 'b11b', count: 1 }
+
+stdout | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > 服务端逐条回执 not_found → 视为已了结，不再入重试队列（防无限重发）
+[bridge:downlink] [下行重复补确认] b11d 已补确认 { channel: 'b11d', total: 1, settled: 1, retried: 0 }
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > 主动私信事件：sendOutbound 收 receiver_id，ack 收行原始 conversation_id
+[bridge:downlink] SSE 直连启动: b11s1:acc1 { serverUrl: 'http://localhost:8204', hasToken: true, lastEventId: '' }
+[bridge:downlink] SSE 下行已启动（直连模式）: b11s1:a...
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > 主动私信事件：sendOutbound 收 receiver_id，ack 收行原始 conversation_id
+[bridge:downlink] SSE 下行已停止: b11s1:acc1
+[bridge:downlink] SSE 重连循环结束: b11s1:acc1
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > SentCache 命中的事件：跳过下发但补一次 delivered 确认（打破 30s 重推循环）
+[bridge:downlink] SSE 直连启动: b11s2:acc1 { serverUrl: 'http://localhost:8204', hasToken: true, lastEventId: '' }
+[bridge:downlink] SSE 下行已启动（直连模式）: b11s2:a...
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > SentCache 命中的事件：跳过下发但补一次 delivered 确认（打破 30s 重推循环）
+[bridge:downlink] SSE 消息已在缓存中，补确认后跳过: ms1|...
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > SentCache 命中的事件：跳过下发但补一次 delivered 确认（打破 30s 重推循环）
+[bridge:downlink] [SSE 重复补确认] b11s2:cs1 已补... { channel: 'b11s2', count: 1 }
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > SentCache 命中的事件：跳过下发但补一次 delivered 确认（打破 30s 重推循环）
+[bridge:downlink] SSE 下行已停止: b11s2:acc1
+[bridge:downlink] SSE 重连循环结束: b11s2:acc1
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > msg_id 缺失（本地 contentHash 回退键）→ 不拿合成 id 去 ack，只回调 onDuplicate
+[bridge:downlink] SSE 直连启动: b11s3:acc1 { serverUrl: 'http://localhost:8204', hasToken: true, lastEventId: '' }
+[bridge:downlink] SSE 下行已启动（直连模式）: b11s3:a...
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > msg_id 缺失（本地 contentHash 回退键）→ 不拿合成 id 去 ack，只回调 onDuplicate
+[bridge:downlink] SSE 消息已在缓存中，补确认后跳过: mh:8...
+
+stdout | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > msg_id 缺失（本地 contentHash 回退键）→ 不拿合成 id 去 ack，只回调 onDuplicate
+[bridge:downlink] SSE 下行已停止: b11s3:acc1
+[bridge:downlink] SSE 重连循环结束: b11s3:acc1
+
+ ✓ test/downlink-b11-reack.test.js (12 tests) 59ms
+ ✓ test/rate-limiter.test.js (6 tests) 11ms
+ ✓ test/oom-patrol-fix.test.js (9 tests) 66ms
+ ✓ test/rate-limiter-lru.test.js (6 tests) 35ms
+stdout | test/dedup-list-noise.test.js > 去重 + 列表噪声防护 > 无活动会话（conv:null）时反复扫描也不上行任何消息
+[bridge:douyin_web] 回填跳过：当前无活动会话（私信列表视图）
+
+stdout | test/dedup-list-noise.test.js > 去重 + 列表噪声防护 > 同一批节点（哪怕 timestamp 每次不同）只上行一次，不会无限重复
+[bridge:douyin_web] 上行消息: 你好在吗
+[bridge:douyin_web] 上行消息: 怎么收费
+
+stdout | test/dedup-list-noise.test.js > 去重 + 列表噪声防护 > 会话切换后新节点正常作为新消息上行
+[bridge:douyin_web] 上行消息: 第一批
+[bridge:douyin_web] 上行消息: 第二批
+
+ ✓ test/dedup-list-noise.test.js (3 tests) 22ms
+ ✓ test/injector.test.js (28 tests) 28ms
+ ✓ test/douyin-sync.test.js (5 tests) 70ms
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ ✓ test/p3h-e2e.test.js (9 tests | 7 skipped) 24ms
+stdout | test/downlink.test.js > downlink / SentCache 去重 + 持久化 > add 后 has 为 true；持久化到 storage
+[bridge:downlink] 下行完成: douyin 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink.test.js > downlink / 本地已发缓存拦截重复下发 > 同 msg_id 不重复下发（本地缓存拦截）+ 补确认让服务端了结该欠投递行
+[bridge:downlink] 下行完成: tiktok 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink.test.js > downlink / 本地已发缓存拦截重复下发 > 同 msg_id 不重复下发（本地缓存拦截）+ 补确认让服务端了结该欠投递行
+[bridge:downlink] [下行重复补确认] tiktok 已补确认 { channel: 'tiktok', count: 1 }
+
+stdout | test/downlink.test.js > downlink / 发送失败重试 > sendOutbound 失败：不缓存、不 ack，下轮重试成功
+[bridge:downlink] 下行完成: xianyu 共 1 条已 ack { convs: 1 }
+
+stdout | test/downlink.test.js > downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试） > 转发成功但 ack 失败：写本地缓存（用户已收到），入 pendingAck 下轮重试 ack
+[bridge:downlink] pendingAck 重发 ack 完成 { channel: 'douyin', success: 1, fail: 0, retried: 1 }
+
+stdout | test/downlink.test.js > downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试） > 转发成功但 ack 失败：写本地缓存（用户已收到），入 pendingAck 下轮重试 ack
+[bridge:downlink] [下行重复补确认] douyin 已补确认 { channel: 'douyin', count: 1 }
+
+stdout | test/downlink.test.js > downlink / 跨会话同 msg_id 不误去重（P0 回归） > 同 msg_id 不同 conversation_id：两条都下发、都 ack
+[bridge:downlink] 下行完成: xiaohongshu 共 2 条已... { convs: 2 }
+
+stdout | test/downlink.test.js > downlink / 跨会话同 msg_id 不误去重（P0 回归） > 跨轮次：第一轮 convA 已 ack，第二轮 convB 仍能下发（不被 convA 缓存误拦截）
+[bridge:downlink] 下行完成: kuaishou 共 1 条已 ac... { convs: 1 }
+
+stdout | test/downlink.test.js > downlink / 跨会话同 msg_id 不误去重（P0 回归） > 跨轮次：第一轮 convA 已 ack，第二轮 convB 仍能下发（不被 convA 缓存误拦截）
+[bridge:downlink] 下行完成: kuaishou 共 1 条已 ac... { convs: 1 }
+
+stdout | test/downlink.test.js > downlink / 多会话不串行（2026-08-07 核心修复） > 两个会话的 pending outbound 全部下发 + 全部 ack（不被全局 minInterval 互相阻断）
+[bridge:downlink] 下行完成: xiaohongshu 共 2 条已... { convs: 2 }
+
+stdout | test/downlink.test.js > downlink / 多会话不串行（2026-08-07 核心修复） > 会话 A 被限速拦截，会话 B 仍正常下发（不跨会话阻断、不污染）
+[bridge:downlink] 下行完成: xiaohongshu 共 2 条已... { convs: 2 }
+
+stdout | test/downlink.test.js > downlink / 多会话不串行（2026-08-07 核心修复） > 串行转发：同一会话文案只进入自己的会话输入框（无跨会话污染）
+[bridge:downlink] 下行完成: xiaohongshu 共 2 条已... { convs: 2 }
+
+ ✓ test/downlink.test.js (10 tests) 34ms
+stdout | test/adapter-r23-occurrence-identity.test.js > §8.3-17 同会话同文本的第二条要作为独立一条上行 > 增量路径：先后两条同文本气泡 → 两条都上行，event_id 为裸哈希与 #1
+[bridge:douyin_web] 上行消息: 好的
+[bridge:douyin_web] 上行消息: 好的
+
+ ✓ test/adapter-r23-occurrence-identity.test.js (4 tests) 11ms
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > enqueue 兜底补全 event_id（前端 hash）
+[bridge:http] [上行 ingest 合并 ×1] {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'douyin', account_id: 'acc1', conversation_id: 'c1' },
+  body_preview: '{"v":2,"channel":"douyin","account_id":"acc1","conversation_id":"c1","account_name":"","agent_id":0,"messages":[{"event_id":"mh:00550fed","channel":"douyin","account_id":"acc1","conversation_id":"c1","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"你好","media_url":"","timestamp":1,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:00550fed"}],"timeout_ms":500000}',
+  body_size: 430,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: 'customer', content: '你好', event_id: 'mh:00550fed' } ]
+}
+
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > enqueue 兜底补全 event_id（前端 hash）
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  ok: true,
+  elapsed_ms: 3,
+  ingested_count: 0,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > 合并窗口：同会话 3 条消息合并为一次 POST
+[bridge:http] [上行 ingest 合并 ×3] {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'douyin', account_id: 'acc1', conversation_id: 'c1' },
+  body_preview: '{"v":2,"channel":"douyin","account_id":"acc1","conversation_id":"c1","account_name":"","agent_id":0,"messages":[{"event_id":"mh:08976a2a","channel":"douyin","account_id":"acc1","conversation_id":"c1","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"m0","media_url":"","timestamp":1790140650270,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:08976a2a"},{"event_id":"mh:09976bbd","channel":"douyin","account_id":"acc1","conversation_id":"c1","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"m1","media_url":"","timestamp":1,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:09976bbd"},{"event_id":"mh:06976704","channel":"douyin","account_id":"acc1","conversation_id":"c1","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"m2","media_url":"","timestamp":2,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:06976704"}],"timeout_ms":500000}',
+  body_size: 1036,
+  body_truncated: false,
+  messages_count: 3,
+  messages_summary: [
+    { sender: 'customer', content: 'm0', event_id: 'mh:08976a2a' },
+    { sender: 'customer', content: 'm1', event_id: 'mh:09976bbd' },
+    { sender: 'customer', content: 'm2', event_id: 'mh:06976704' }
+  ]
+}
+
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > 合并窗口：同会话 3 条消息合并为一次 POST
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  ok: true,
+  elapsed_ms: 0,
+  ingested_count: 0,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > 不同会话分别 POST（各自 flush）
+[bridge:http] [上行 ingest 合并 ×1] {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'douyin', account_id: 'acc1', conversation_id: 'c1' },
+  body_preview: '{"v":2,"channel":"douyin","account_id":"acc1","conversation_id":"c1","account_name":"","agent_id":0,"messages":[{"event_id":"mh:cb786912","channel":"douyin","account_id":"acc1","conversation_id":"c1","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"a","media_url":"","timestamp":1,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:cb786912"}],"timeout_ms":500000}',
+  body_size: 429,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: 'customer', content: 'a', event_id: 'mh:cb786912' } ]
+}
+[bridge:http] [上行 ingest 合并 ×1] {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c2',
+  origin: 'http://x',
+  path: '/api/bridge/ingest',
+  query: { channel: 'douyin', account_id: 'acc1', conversation_id: 'c2' },
+  body_preview: '{"v":2,"channel":"douyin","account_id":"acc1","conversation_id":"c2","account_name":"","agent_id":0,"messages":[{"event_id":"mh:ca78677f","channel":"douyin","account_id":"acc1","conversation_id":"c2","sender_id":"","sender_name":"","sender_type":"customer","msg_type":"text","content":"b","media_url":"","timestamp":2,"is_group":false,"group_id":"","group_name":"","history":[],"content_hash":"mh:ca78677f"}],"timeout_ms":500000}',
+  body_size: 429,
+  body_truncated: false,
+  messages_count: 1,
+  messages_summary: [ { sender: 'customer', content: 'b', event_id: 'mh:ca78677f' } ]
+}
+
+stdout | test/uplink.test.js > uplink / enqueue + flushAll > 不同会话分别 POST（各自 flush）
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c1',
+  ok: true,
+  elapsed_ms: 9,
+  ingested_count: 0,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+[bridge:http] ingest 响应 {
+  url: 'http://x/api/bridge/ingest?channel=douyin&account_id=acc1&conversation_id=c2',
+  ok: true,
+  elapsed_ms: 0,
+  ingested_count: 0,
+  outbound_replies_count: 0,
+  outbound_replies_preview: [],
+  reason: undefined
+}
+
+stdout | test/adapter-b24b-conv-ownership.test.js > 批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据 > _backfill 不得把上一会话残留气泡并进当前会话的历史帧
+[bridge:douyin_web] 回填会话 conv-b24b: 2 条消息（新增...
+
+stdout | test/adapter-b24b-conv-ownership.test.js > 批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据 > _scanIncremental（fallbackTimer 每 3s 走这条）不得增量上行残留气泡
+[bridge:douyin_web] 回填会话 conv-b24b: 1 条消息（新增...
+
+stdout | test/adapter-b24b-conv-ownership.test.js > 批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据 > getMessages（PollingLoop 每秒走的公开入口）不得把残留节点当本会话新消息返回
+[bridge:douyin_web] 回填会话 conv-b24b: 2 条消息（新增...
+
+stdout | test/adapter-b24b-conv-ownership.test.js > 批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据 > _collectUnseenText（巡检单个会话的一抓）不得把残留节点收进批量上行
+[bridge:douyin_web] 回填会话 conv-b24b: 1 条消息（新增...
+
+ ✓ test/adapter-b24b-conv-ownership.test.js (5 tests) 27ms
+ ✓ test/uplink.test.js (9 tests) 28ms
+ ✓ test/p1-3-first-patrol-rate-limit.test.js (9 tests) 9ms
+ ✓ test/constants.test.js (23 tests) 12ms
+stdout | test/polling-loop.test.js > polling-loop / 生命周期 > start() 设置 downlink 定时器，stop() 清除
+[bridge:bridge] 下发轮询已启动：每 1500ms
+[bridge:bridge] 下发调度已停止
+
+stdout | test/polling-loop.test.js > polling-loop / 生命周期 > start() 幂等：重复调用不创建多个 timer
+[bridge:bridge] 下发轮询已启动：每 1500ms
+[bridge:bridge] 下发调度已停止
+
+stdout | test/polling-loop.test.js > polling-loop / 生命周期 > stop() 后 _running 为 false
+[bridge:bridge] 下发轮询已启动：每 1500ms
+[bridge:bridge] 下发调度已停止
+
+stdout | test/polling-loop.test.js > polling-loop / _downlinkSafe 防护 > stop() 后 _downlinkSafe 立即返回
+[bridge:bridge] 下发轮询已启动：每 1500ms
+[bridge:bridge] 下发调度已停止
+
+ ✓ test/polling-loop.test.js (6 tests) 6ms
+ ✓ test/config-store.test.js (7 tests) 27ms
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ ✓ test/batch3-b8-kuaishou.test.js (6 tests) 13ms
+ ✓ test/selector-ai.test.js (8 tests) 6ms
+ ✓ test/open-conversation.test.js (4 tests) 38ms
+ ✓ test/popup-xss-escape.test.js (3 tests) 6ms
+stdout | test/circuit-breaker.test.js > CircuitBreaker 三态机（2026-08-14 P0-B） > HALF_OPEN：探测成功 → CLOSED，重置 failureCount
+[bridge:circuit] 熔断器关闭：探测成功，恢复正常请求
+
+ ✓ test/circuit-breaker.test.js (13 tests) 24ms
+ ✓ test/xianyu.test.js (43 tests) 8ms
+ ✓ test/sanitize.test.js (10 tests) 9ms
+ ✓ test/downlink-pending-ack-p0_9.test.js (14 tests) 9ms
+ ✓ test/adapter-dedupkey-shape.test.js (3 tests) 6ms
+ ✓ test/p3d-contract.test.js (13 tests) 5ms
+ ✓ test/fallback.test.js (3 tests) 2ms
+ ✓ test/protocol.test.js (6 tests) 3ms
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[bridge:douyin_web] 上行消息: 在的
+
+stdout | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ ✓ test/adapter-b24-send-verify.test.js (8 tests) 13212ms
+     ✓ 气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true  2295ms
+     ✓ 反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false  2604ms
+     ✓ 红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）  1683ms
+     ✓ 基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数  1700ms
+     ✓ 渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它  1321ms
+     ✓ 跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了  1803ms
+     ✓ 红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡  1800ms
+
+ Test Files  59 passed (59)
+      Tests  769 passed | 7 skipped (776)
+   Start at  13:17:19
+   Duration  14.44s (transform 1.92s, setup 0ms, import 4.45s, tests 42.36s, environment 27.36s)
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 5xx 失败时按指数退避重试
+[bridge:http] fetch 失败，82ms 后重试 #1/3 { error: 'HTTP 503 : fail' }
+
+(node:31341) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 5xx 失败时按指数退避重试
+[bridge:http] fetch 失败，95ms 后重试 #2/3 { error: 'HTTP 503 : fail' }
+
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7) undefined
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7) undefined
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7) undefined
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7) undefined
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7) undefined
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 408（timeout）允许重试
+[bridge:http] fetch 失败，151ms 后重试 #1/3 { error: 'HTTP 408 : timeout' }
+
+stderr | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:douyin_web] 会话 MS4wA1 点击后未打开线程
+
+stderr | test/douyin-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:douyin_web] 会话 MS4wA1 点击后未打开线程，跳过回填 { name: '张三' }
+
+stderr | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > openConversation：左侧列表找不到目标 → 返回 null
+[bridge:douyin_web] 左侧列表未找到目标会话 not-exist
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 429（Too Many Requests）允许重试（不标 nonRetryable）
+[bridge:http] fetch 失败，1000ms 后重试 #1/3 { error: 'HTTP 429 : rate' }
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 429 超过 maxRetries 最终抛出且带 retryAfterMs
+[bridge:http] fetch 失败，1000ms 后重试 #1/2 { error: 'HTTP 429 : rate' }
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 429 超过 maxRetries 最终抛出且带 retryAfterMs
+[bridge:http] fetch 失败，1000ms 后重试 #2/2 { error: 'HTTP 429 : rate' }
+
+stderr | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话≠当前 → 先切到目标会话再发送（左侧找用户→点击进入→发送）
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'b2', verify_ms: 0 }
+
+stderr | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话未找到 → 放弃发送（防串台）
+[bridge:douyin_web] 左侧列表未找到目标会话 ghost-user
+
+stderr | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话未找到 → 放弃发送（防串台）
+[bridge:douyin_web] 下行目标会话 ghost-user 未打开，放弃... { current: 'a1' }
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 超过 maxRetries 抛出最后一次错误
+[bridge:http] fetch 失败，75ms 后重试 #1/2 { error: 'HTTP 500 : boom' }
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > 超过 maxRetries 抛出最后一次错误
+[bridge:http] fetch 失败，41ms 后重试 #2/2 { error: 'HTTP 500 : boom' }
+
+stderr | test/http-ingest.test.js > http-ingest / fetchWithRetry > fetch reject（网络错误）触发重试退避
+[bridge:http] fetch 失败，186ms 后重试 #1/3 { error: 'Failed to fetch' }
+
+stderr | test/http-ingest.test.js > http-ingest / postIngest > 非 JSON 响应抛错（包含部分文本）
+[bridge:http] ingest 响应 JSON 解析失败 {} { status: 200, text: 'not json' }
+[bridge:http] ingest POST 失败 {} {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  elapsed_ms: 1
+}
+
+stderr | test/http-ingest.test.js > http-ingest / postIngest > 服务端 5xx 抛错（走 fetchWithRetry 退避后失败）
+[bridge:http] ingest POST 失败 {} {
+  url: 'http://x/api/bridge/ingest?channel=c&account_id=a',
+  elapsed_ms: 1
+}
+
+stderr | test/douyin-walker.test.js > openConversation / sendOutbound 目标会话切换（左侧找用户→点击进入右侧→发送） > sendOutbound：目标会话=当前 → 直接发送，不切换
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'a1', verify_ms: 0 }
+
+stderr | test/popup-m2-p1.test.js > M2-P1 emergency-stop > triggerEmergencyStop 写入成功
+[bridge:killswitch] 紧急停止已触发 { reason: 'test' }
+
+stderr | test/popup-m2-p1.test.js > M2-P1 emergency-stop > resumeBridge 清除标记
+[bridge:killswitch] 紧急停止已触发 { reason: 'test' }
+
+stderr | test/popup-m2-p1.test.js > M2-P1 emergency-stop > toggleEmergencyStop 切换状态
+[bridge:killswitch] 紧急停止已触发 { reason: 'manual_toggle' }
+
+stderr | test/downlink-b1b2b3.test.js > B1 resolveSSEOutboundKeys：SSE Data → 去重/ack 键 > msg_id 缺失 → contentHash(channel,conv,content) 同源回退，且绝不吃 data.id/hub_id
+[bridge:downlink] SSE 事件缺 msg_id，已用 conten... { channel: 'xianyu', conv_id: 'c1', fallback_msg_id: 'mh:321bb493' }
+
+stderr | test/downlink-b1b2b3.test.js > B2 pollDownlink：ack 携带会话归属（v2 items） > ack 失败入队携带 conversationId，下轮重试透传给 ackOutbox
+[bridge:downlink] 下行单会话 ack 失败（已发已写 cache ... { channel: 'b2d', convId: 'c-r', count: 1 }
+
+stderr | test/downlink-b1b2b3.test.js > B3 startSSEDelivery：重连超限后降级慢重连而非永久放弃 > connectSSE 持续失败：第 11 次后仍继续尝试（旧实现此处永久停止）
+[bridge:downlink] SSE 重连超过 10 次，降级为 300s 慢...
+
+stderr | test/config-io.test.js > config-io downloadConfigJson > 环境不支持 → 返回 { ok:false, error }
+[bridge:config-io] 触发下载失败 unsupported
+
+(node:31452) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:xiaohongshu] 会话 a1 点击后未打开线程
+
+stderr | test/xhs-walker.test.js > BaseAdapter.syncAllConversations 遍历回填 > 点击未打开线程（活动会话未变）→ 该会话跳过且不标记已同步
+[bridge:xiaohongshu] 会话 a1 点击后未打开线程，跳过回填 { name: '张三' }
+
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'conv-b24', verify_ms: 300 }
+
+(node:31455) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31458) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31459) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31461) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/adapter.test.js > BaseAdapter sendOutbound 风控通过则回写并上报 outbound 消息 > 调用 hooks.sendText 并触发 onMessage（sender_type=AGENT）
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'conv1', verify_ms: 0 }
+
+stderr | test/adapter.test.js > BaseAdapter sendOutbound 风控通过则回写并上报 outbound 消息 > 空内容直接跳过，不调用 sendText
+[bridge:xhs_web] 回复内容为空，跳过
+
+stderr | test/adapter.test.js > 渠道 adapter fallback 匹配（平台改版 / 严格选择器失效） > 抖音：strict 选择器失效 + fallback 命中 → match=true, matchMode=fallback
+[bridge:douyin] match() 走 fallback 模式：抖音...
+[bridge:douyin] match() 走 fallback 模式：抖音...
+
+stderr | test/adapter.test.js > 渠道 adapter fallback 匹配（平台改版 / 严格选择器失效） > 小红书：strict 选择器失效 + fallback 命中 → match=true, matchMode=fallback
+[bridge:xhs] match() 走 fallback 模式：小红...
+[bridge:xhs] match() 走 fallback 模式：小红...
+
+stderr | test/adapter.test.js > 渠道 adapter fallback 匹配（平台改版 / 严格选择器失效） > TikTok：strict INPUT_FALLBACKS 都失效 + 通用 DOM 命中 → matchMode=fallback
+[bridge:tiktok] match() 走 fallback 模式：Ti...
+[bridge:tiktok] match() 走 fallback 模式：Ti...
+
+stderr | test/adapter.test.js > 渠道 adapter fallback 匹配（平台改版 / 严格选择器失效） > 抖音 /im/chat/ + 严格选择器失效 + messageList + chatWindow → match=true, matchMode=fallback
+[bridge:douyin] match() 走 fallback 模式：抖音...
+[bridge:douyin] match() 走 fallback 模式：抖音...
+
+(node:31462) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31463) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > postIngest 拒绝 → 全部未确认条目回插 buffer；恢复后重传成功即清空
+[bridge:uplink] uplink flush 失败，20 条回插待重... network down
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，20 条回插待重... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，21 条回插待重... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，41 条回插待重... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，61 条回插待重... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，81 条回插待重... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，101 条回插待... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，101 条回插待... offline
+
+stderr | test/batch3-uplink-requeue.test.js > uplink flush 失败回插 > 回插封顶 maxBatch*5（离线期有界降级，不无界堆积）
+[bridge:uplink] uplink flush 失败，101 条回插待... offline
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 持久化到 config.accounts 并返回 ok
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 启用 → pausedAt 为 null
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 缺 channel → 返回 {ok:false}
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:setAccountEnabled 广播 accountsUpdated 到 tabs
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:switchAccount 更新 channel/accountId/conversationId 并返回 ok
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts background 消息处理（bridge:setAccountEnabled / bridge:switchAccount） > bridge:switchAccount 广播 accountsUpdated
+[bridge:sse] chrome.alarms 不可用，跳过 kee...
+
+stderr | test/accounts.test.js > accounts popup accounts.js > renderAccountRows 渲染启停开关（暂停账号 → 启用按钮）
+[bridge:douyin] 巡检轮异常 Maximum call stack size ...
+
+stderr | test/accounts.test.js > accounts popup accounts.js > renderAccountRows 渲染启停开关（暂停账号 → 启用按钮）
+[bridge:douyin] 巡检轮异常 Maximum call stack size ...
+
+(node:31471) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'conv-b24', verify_ms: 300 }
+
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[bridge:douyin_web] 下行被风控拦截: dedup same text
+
+stderr | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景1：ack items status=not_in_scope（存在但归属其他账号/方向）→ 不入 _pendingAck，停止重发（防越权探测）
+[bridge:downlink] 下行 ack 详情: not_in_scope ... {
+  channel: 'sec_1_1790140647899_38708c',
+  conv_id: 'c1',
+  msg_id: 'm-nis'
+}
+
+stderr | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景2：ack items status=not_found → 停止重发（不入 _pendingAck）
+[bridge:downlink] 下行 ack 详情: not_found 停止重... {
+  channel: 'sec_3_1790140647903_15wx1d',
+  conv_id: 'c1',
+  msg_id: 'm-nf'
+}
+
+stderr | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景5：ack 响应缺失 item（ack_response_missing_item）→ 入 _pendingAck 下轮重试
+[bridge:downlink] 下行 ack 详情缺失 item: 入 _pen... {
+  channel: 'sec_9_1790140647908_1b46tz',
+  conv_id: 'c1',
+  msg_id: 'm-miss'
+}
+
+stderr | test/security.test.js > P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底 > 场景6：MAX_ACK_RETRY_ATTEMPTS 达到后停止重试并保留缓存（不死循环）
+[bridge:downlink] 下行 ack 达到最大重试次数 10，放弃重试（... {
+  channel: 'sec_10_1790140647909_uwv1fw',
+  msg_id: 'm-exhaust',
+  attempts: 10,
+  last_error: 'retriable'
+}
+
+stderr | test/circuit-breaker-p3.test.js > CircuitBreaker 三态机（P3-C 回归） > CLOSED 3 次失败 → OPEN
+[bridge:circuit] 熔断器开启：连续失败 3 次，100ms 后探测 { reasons: [ 'e3', 'e2', 'e1' ] }
+
+(node:31478) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > 补确认失败（非 ok）→ 入 _pendingAck 带会话归属，下轮按退避重试
+[bridge:downlink] [下行重复补确认] b11c 失败，转入重试队列 { channel: 'b11c', count: 1 }
+
+stderr | test/downlink-b11-reack.test.js > H3 轮询：SentCache 命中的欠投递行补确认 > 无会话归属的重复行不补确认（legacy 会跨会话误翻，v2 会整单 400）
+[bridge:downlink] [下行重复补确认] b11e 缺少会话归属，无法... { channel: 'b11e', msg_id: 'm5' }
+
+stderr | test/downlink-b11-reack.test.js > H4 SSE：与轮询同源的会话定位 + 重复补确认 > msg_id 缺失（本地 contentHash 回退键）→ 不拿合成 id 去 ack，只回调 onDuplicate
+[bridge:downlink] SSE 事件缺 msg_id，已用 conten... { channel: 'b11s3', conv_id: 'c9', fallback_msg_id: 'mh:8bfb9740' }
+
+stderr | test/oom-patrol-fix.test.js > OOM 巡检 修复 > _collectUnseenText 单次封顶 80 条（防 OOM）
+[bridge:xiaohongshu] [常规] 巡检抓取消息数达上限 80，剩余靠下轮...
+
+stderr | test/oom-patrol-fix.test.js > OOM 巡检 修复 > _collectUnseenText 首次 patrol 限速 20 条（P1-3 修复）
+[bridge:xiaohongshu] [首次] 巡检抓取消息数达上限 20，剩余靠下轮...
+
+(node:31482) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31485) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'conv-b24', verify_ms: 300 }
+
+stderr | test/p3h-e2e.test.js
+[P3-H e2e] server http://localhost:8080/healthz 不可达，相关测试将跳过
+
+stderr | test/downlink.test.js > downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试） > 转发成功但 ack 失败：写本地缓存（用户已收到），入 pendingAck 下轮重试 ack
+[bridge:downlink] 下行单会话 ack 失败（已发已写 cache ... { channel: 'douyin', convId: 'c1', count: 1 }
+
+stderr | test/downlink.test.js > downlink / 多会话不串行（2026-08-07 核心修复） > 会话 A 被限速拦截，会话 B 仍正常下发（不跨会话阻断、不污染）
+[bridge:downlink] 下行会话持续限速，放弃本会话剩余并留 pendi... { channel: 'xiaohongshu', convId: 'convA', pending: 1 }
+
+stderr | test/p1-3-first-patrol-rate-limit.test.js > P1-3 首次 L1 巡检限速/分批 > 首次 patrol：单会话单次抓取上限 20（防首次涌入）
+[bridge:xiaohongshu] [首次] 巡检抓取消息数达上限 20，剩余靠下轮...
+
+stderr | test/p1-3-first-patrol-rate-limit.test.js > P1-3 首次 L1 巡检限速/分批 > 非首次 patrol：单会话单次抓取上限 80（maxBatchPerPatrol）
+[bridge:xiaohongshu] [常规] 巡检抓取消息数达上限 80，剩余靠下轮...
+
+(node:31514) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/circuit-breaker.test.js > CircuitBreaker 三态机（2026-08-14 P0-B） > CLOSED：连续 3 次失败后跳到 OPEN
+[bridge:circuit] 熔断器开启：连续失败 3 次，100ms 后探测 { reasons: [ 'e3', 'e2', 'e1' ] }
+
+stderr | test/circuit-breaker.test.js > CircuitBreaker 三态机（2026-08-14 P0-B） > HALF_OPEN：探测失败 → 重新 OPEN
+[bridge:circuit] 熔断器探测失败，重新 OPEN { reason: '探测失败' }
+
+stderr | test/circuit-breaker.test.js > CircuitBreaker 三态机（2026-08-14 P0-B） > snapshot.recentReasons：去重后最多保留 5 种
+[bridge:circuit] 熔断器开启：连续失败 3 次，100ms 后探测 { reasons: [ 'reason-2', 'reason-1', 'reason-0' ] }
+
+(node:31517) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stderr | test/downlink-pending-ack-p0_9.test.js > P0-9 claimDuePendingAck 超限丢弃 > attempts=10 → claimDuePendingAck 触发丢弃
+[bridge:downlink] 下行 ack 达到最大重试次数 10，放弃重试（... {
+  channel: 'test_p0_9_8_1790140651790_ry9v1y',
+  msg_id: 'm_exhausted',
+  attempts: 10,
+  last_error: ''
+}
+
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: 'douyin_web', conv_id: 'conv-b24', verify_ms: 300 }
+
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[bridge:douyin_web] 左侧列表未找到目标会话 ghost-conv
+
+stderr | test/adapter-b24-send-verify.test.js > §8.3-8 出站后回 DOM 复核自己的气泡（批24） > 三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[bridge:douyin_web] 下行目标会话 ghost-conv 未打开，放弃... { current: 'conv-b24' }
+
+

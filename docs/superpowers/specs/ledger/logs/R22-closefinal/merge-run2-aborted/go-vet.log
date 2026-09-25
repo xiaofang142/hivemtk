@@ -1,0 +1,8 @@
+$ go vet ./...
+(cwd=user-server)
+rc=1  8.0s
+
+# hivemtk-user/cmd/seed
+# [hivemtk-user/cmd/seed]
+vet: cmd/seed/main.go:190:115: missing ',' before newline in argument list (and 2 more errors)
+

@@ -1,0 +1,9 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/a6mut-pw0q1xyw
+[Go] 本趟只跑 1 格：D18
+
+[Go] 注码前置：1 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=23 passed=23 skip=0 FAIL=[]
+D18  行数折成区间算术长度（断号被抹平：§7.28 八-1 的「区间长度 ≠ 行数」）                     杀掉      total=23 fail=1 skip=0 ｜ TestA6DigestRecordsSeqGap
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 1 格逐格被杀，无存活（本趟是 --cells 子集，不等于全电池） =====

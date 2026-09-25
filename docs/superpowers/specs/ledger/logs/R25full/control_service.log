@@ -1,0 +1,12 @@
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+internal/service/quote_send_test.go:172:86: too many arguments in call to NewQuoteSendService
+	have (*qssStore, "hivemtk-user/internal/repository".OpportunityRepository, *ApprovalRequestService, qssReader, *qssReach, *qssEvents, qsConfig, *qssScripts, qsGate)
+	want (quoteSendStore, quoteSendApproval, quoteOpenApprovalReader, quoteReachSender, quoteEventWriter, quoteConfigGetter, QuoteScriptPort, LTCConfigReader)
+internal/service/quote_send_test.go:606:23: undefined: ErrQuoteSendRecipientMissing
+internal/service/quote_send_test.go:607:39: undefined: ErrQuoteSendRecipientMissing
+internal/service/quote_send_test.go:1087:72: too many arguments in call to NewQuoteSendService
+	have (nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	want (quoteSendStore, quoteSendApproval, quoteOpenApprovalReader, quoteReachSender, quoteEventWriter, quoteConfigGetter, QuoteScriptPort, LTCConfigReader)
+internal/service/quote_send_test.go:1101:33: s.opps undefined (type *QuoteSendService has no field or method opps)

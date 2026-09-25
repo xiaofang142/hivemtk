@@ -1,0 +1,13 @@
+$ python3 scripts/merge-gate.py --round R22-closefinal --only doc-consistency --only feature-doc --only md-links-offline --only enum-consistency --only anchor-preflight --only closeout-selftest --only closeout-r22 --only closeout-r22-protocol --only merge-gate-selftest
+步骤名单（9 步，全程不带 -run）：doc-consistency feature-doc enum-consistency md-links-offline anchor-preflight closeout-r22 closeout-r22-protocol closeout-selftest merge-gate-selftest
+合并门禁：9 步（其中诊断步 0 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge/　取证 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge-gate-only-9steps.log
+[绿] doc-consistency                  0.1s 
+[绿] feature-doc                      0.0s 
+[绿] enum-consistency                 0.5s 
+[绿] md-links-offline                 0.1s 
+[绿] anchor-preflight                 0.8s 
+[红] closeout-r22                     8.0s ｜ rc=1 ; 输出里出现了禁止行 '❌'
+[红] closeout-r22-protocol            1.2s ｜ rc=1 ; 输出里出现了禁止行 '❌'
+[绿] closeout-selftest                2.7s 
+[绿] merge-gate-selftest              0.0s 
+===== 合并门禁：7/9 门步绿，红在：closeout-r22 closeout-r22-protocol；诊断步全绿 =====

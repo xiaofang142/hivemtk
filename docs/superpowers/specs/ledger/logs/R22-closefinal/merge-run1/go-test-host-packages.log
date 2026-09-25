@@ -1,0 +1,14 @@
+$ go test -p 1 -count=1 -timeout 40m ./internal/service/ ./internal/repository/ ./internal/model/ ./internal/migration/... ./internal/channelgw/
+(cwd=user-server)
+rc=1  1047.1s
+
+ok  	hivemtk-user/internal/service	854.471s
+ok  	hivemtk-user/internal/repository	165.827s
+ok  	hivemtk-user/internal/model	1.076s
+ok  	hivemtk-user/internal/migration	0.484s
+FAIL	hivemtk-user/internal/migration/migrations [build failed]
+ok  	hivemtk-user/internal/channelgw	13.544s
+FAIL
+# hivemtk-user/internal/migration/migrations [hivemtk-user/internal/migration/migrations.test]
+internal/migration/migrations/ai_agent_schema_migration.go:7:2: could not import hivemtk-user/internal/config (open : no such file or directory)
+

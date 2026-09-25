@@ -1,0 +1,6 @@
+$ python3 scripts/check-async-global-read.py
+(cwd=.)
+rc=0  1.2s
+
+OK 异步体裸读全局门：项目根 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk，扫 153 个 package，站点 0（= 基线合计 0）
+

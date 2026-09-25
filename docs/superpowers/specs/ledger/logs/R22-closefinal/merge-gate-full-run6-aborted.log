@@ -1,0 +1,7 @@
+$ python3 scripts/merge-gate.py --round R22-closefinal
+步骤名单（37 步，全程不带 -run）：go-build go-vet gofmt go-test-browser-automation go-test-host-packages vitest-bridge vitest-browser-automation lint-bridge lint-user-web markdownlint arch-gate arch-l4-reverse fmt-check date-bucket-tz unwired-assets doc-consistency feature-doc enum-consistency no-xapptool cross-package-ports model-migration md-links-offline component-types workflow-refs ci-step-coverage test-nil-deref env-coverage seam-guard async-global-read anchor-preflight anchor-preflight-selftest closeout-r22 closeout-r22-protocol closeout-selftest merge-gate-selftest clone-selftest family-selftests-selftest
+合并门禁：37 步（其中诊断步 1 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge/　取证 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge-gate-full.log
+[绿] go-build                        11.2s 
+[绿] go-vet                           2.9s 
+[绿] gofmt                            0.4s 
+[绿] go-test-browser-automation     250.6s 

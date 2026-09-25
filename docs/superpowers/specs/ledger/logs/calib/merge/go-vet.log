@@ -1,0 +1,5 @@
+$ go vet ./...
+(cwd=user-server)
+rc=0  6.5s
+
+

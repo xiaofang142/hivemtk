@@ -1,0 +1,129 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mA 界内（23h）命中：不重发，只补一次 delivered
+[22m[39m[bridge:downlink] [下行重复补确认] b20da 已补确认 { channel: [32m'b20da'[39m, count: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mB 界外（25h）不再拦：重发一次，且记录以新时间戳续期
+[22m[39m[bridge:downlink] 下行完成: b20db 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mC 上限淘汰按时间：插入序与时间序错位时，丢的是最旧的而不是最先写入的
+[22m[39m[bridge:downlink] 下行完成: b20dc 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mH 会话内重命中续期：evict 按最后命中时间裁，落在重命中条目之后的界外尾条必须回收（杀：add 去掉先删）
+[22m[39m[bridge:downlink] 下行完成: b20dh 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mF 未超上限也回收过期条目：时间界不是条数上限的副产品
+[22m[39m[bridge:downlink] 下行完成: b20df 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mD 旧格式（纯字符串）可读：不重发，并被改写为带时间戳的新格式
+[22m[39m[bridge:downlink] [下行重复补确认] b20dd 已补确认 { channel: [32m'b20dd'[39m, count: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mI 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[22m[39m[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mI 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[22m[39m[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mI 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序
+[22m[39m[bridge:downlink] 下行完成: b20di 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mG 会话内跨过界：不经装载也必须放开重发
+[22m[39m[bridge:downlink] 下行完成: b20dg 共 1 条已 ack { convs: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mG 会话内跨过界：不经装载也必须放开重发
+[22m[39m[bridge:downlink] [下行重复补确认] b20dg 已补确认 { channel: [32m'b20dg'[39m, count: [33m1[39m }
+
+[90mstdout[2m | test/downlink-b20d-sentcache-ttl.test.js[2m > [22m[2m批20d-A4：SentCache 的 24h 时间界[2m > [22m[2mG 会话内跨过界：不经装载也必须放开重发
+[22m[39m[bridge:downlink] 下行完成: b20dg 共 1 条已 ack { convs: [33m1[39m }
+
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mA 界内（23h）命中：不重发，只补一次 delivered[32m 3[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mB 界外（25h）不再拦：重发一次，且记录以新时间戳续期[32m 1[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mC 上限淘汰按时间：插入序与时间序错位时，丢的是最旧的而不是最先写入的[32m 2[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mH 会话内重命中续期：evict 按最后命中时间裁，落在重命中条目之后的界外尾条必须回收（杀：add 去掉先删）[32m 1[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mF 未超上限也回收过期条目：时间界不是条数上限的副产品[32m 2[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mD 旧格式（纯字符串）可读：不重发，并被改写为带时间戳的新格式[32m 0[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mE TTL 下界锁：≥24h（同行 5min 去重窗不可照抄，界必须盖住服务端重推窗）[32m 0[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mI 落盘=恰好 TTL 存活集（混排存量 + 多轮 add）：界外的走、界内的留，且写回仍是时间升序[32m 1[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mJ 装载即回收：界外条目在「这一轮一条都没再发」时也必须从盘上消失（杀：load 少一次 evict）[32m 1[2mms[22m[39m
+ [32m✓[39m test/downlink-b20d-sentcache-ttl.test.js[2m > [22m批20d-A4：SentCache 的 24h 时间界[2m > [22mG 会话内跨过界：不经装载也必须放开重发[32m 1[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true[33m 1660[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false[33m 2709[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）[33m 1959[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数[33m 1842[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它[33m 2626[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了[33m 2434[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡[33m 1755[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m18 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 04:45:49
+[2m   Duration [22m 15.69s[2m (transform 212ms, setup 0ms, import 271ms, tests 15.00s, environment 848ms)[22m
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线①下半句：回查未见也必须记 markSent 账 —— 第二发同文本仍被内容去重层短路（杀：markSent 被 if (sendVerified) 门控）
+[22m[39m[bridge:douyin_web] 下行被风控拦截: dedup same text
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 左侧列表未找到目标会话 ghost-conv
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 下行目标会话 ghost-conv 未打开，放弃... { current: [32m'conv-b24'[39m }
+

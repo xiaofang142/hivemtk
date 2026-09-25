@@ -1,0 +1,10 @@
+$ python3 scripts/run-gate-family-selftests.py --selftest
+(cwd=.)
+rc=0  0.2s
+
+[反向] 成员零输出要红（且红因点名'没跑过'）                判对 ✓（实得 rc=1）
+[反向] 成员退非 0 要红                          判对 ✓（实得 rc=1）
+[反向] 好读数不误伤、且汇总行报份数                     判对 ✓（实得 rc=0）
+[反向] 三份成员都要在取证里现形（少一份＝证据少一格）            判对 ✓（实得 rc=0）
+===== gate-family-selftests --selftest：4/4 格判对 =====
+

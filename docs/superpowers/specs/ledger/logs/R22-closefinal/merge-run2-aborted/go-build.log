@@ -1,0 +1,7 @@
+$ go build ./...
+(cwd=user-server)
+rc=1  14.2s
+
+# hivemtk-user/cmd/seed
+cmd/seed/main.go:190:115: syntax error: unexpected newline in argument list; possibly missing comma or )
+
