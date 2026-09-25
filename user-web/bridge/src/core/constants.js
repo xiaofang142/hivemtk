@@ -246,7 +246,20 @@ export const BRIDGE_THREE_CHANNEL = Object.freeze({
   outboxBatchSize: 50,
   ackFlushIntervalMs: 500,
   sentCacheMax: 2000,
+  // 批20d-A4：本地已发缓存的时间界。取值必须 **≥ 上游仍能重投的时长**，否则"过期即重发"
+  // 反而把重复消息放出去（不可撤回）。同行常用 5min（SQS 去重窗），此处不可照抄：
+  // 服务端的重推窗取决于浏览器离线多久，24h 是对"人睡一觉/周末没开浏览器"的上界估计。
+  // 有界是为了回收：界之后的记录既不防任何在途重推，还占着 sentCacheMax 的名额。
+  sentCacheTtlMs: 24 * 3600 * 1000,
   sendOutboundTimeoutMs: 20000,
+  // R22 §6-4：SSE 形态下 _pendingAck 的排水节拍。轮询每 outboxPollIntervalMs(1.5s) 顺带排一次，
+  // SSE 没有那个循环，只能自己定。取 5s：退避首档 1s、服务端可见性超时 30s，再密只是多打 ack 接口。
+  pendingAckDrainIntervalMs: 5000,
+  // 批24 §8.3-8：出站发送后回 DOM 复核自己气泡的预算与节拍。取 2.5s 的理由：各渠道
+  // historyGraceMs 是 2–6s（SPA 渲染滞后），而这条回查**只产结论位、不改 ack 与重发**，
+  // 所以宁可取一个"大概率够、不够就报未见"的小值，也不要为了好看把下行队列按会话堵住 10s。
+  sendVerifyMs: 2500,
+  sendVerifyPollMs: 250,
 });
 
 // B4（批3）：发送全链统一超时。B7 拟人键入后单次 sendText 时长随文本长度线性增长
@@ -255,6 +268,15 @@ export const BRIDGE_THREE_CHANNEL = Object.freeze({
 export function humanSendTimeoutMs(text, baseMs = BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs) {
   const chars = Array.from(String(text || '')).length;
   return Math.min(baseMs + chars * 250, 120_000);
+}
+
+// 出站一次下发的**外层**预算 = 上面这条 sendText 预算 + 批24 的回查切片。
+// 外层调用方（downlink 的三处 withTimeout）必须用这条而不是上一条：外层超时判定的是
+// 「这条没发出去」⇒ 不 ack ⇒ 服务端重推，而回查是在**点击之后**才跑的，
+// 只给 sendText 的预算会把"发得慢、已经点出去了"的文案判成没发出去 —— 重推即双发，
+// 这是本链路唯一不可撤销的那一侧。回查自身有界（sendVerifyMs），所以这里的加法不会无界放大。
+export function outboundStepTimeoutMs(text, baseMs = BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs) {
+  return humanSendTimeoutMs(text, baseMs) + BRIDGE_THREE_CHANNEL.sendVerifyMs;
 }
 
 

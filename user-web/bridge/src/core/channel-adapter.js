@@ -3,7 +3,7 @@ import { RateLimiter, globalSendWaitMs, stampGlobalSendAt } from './rate-limiter
 import { makeUnifiedMessage, SENDER, DIRECTION, HISTORY_CONTEXT_WINDOW, PATROL_DEFAULTS, contentHash } from './types.js';
 import { mergeSelectors } from './selector-ai.js';
 import { simulateRealClick } from './dom.js';
-import { humanSendTimeoutMs } from './constants.js';
+import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL } from './constants.js';
 import { withTimeout } from './downlink.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -21,6 +21,14 @@ function throttledWarn(log, key, intervalMs, msg, extra) {
   }
 }
 const WARN_THROTTLE_MS = 15000;
+// 批24：出站回查的文本归一化。平台会在气泡里把 NBSP 换成普通空格、把连续空白折叠、
+// 在两端留换行；不归一化就会把「发出去了、只是渲染差异」判成未见（假红方向，可接受），
+// 但那是纯噪声，所以按空白归一后再比。这里不做包含匹配：长文案被平台分段时空白归一
+// 也救不回来，宁可报未见，也不给一次没落地的发送发绿。
+function normSendText(s) {
+  // \s 在 JS 正则里含 NBSP（U+00A0），平台把不换行空格渲染成普通空白的差异由这一次折叠吃掉。
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+}
 // 整页导航护栏：小红书无法用 URL 深链可靠打开屏外会话，若盲目整页导航且打不开会
 // 每轮 downlink 重载页面形成抖动。故整页导航只尝试一次——重载后仍打不开即标记
 // "navfail"，停止后续破坏性重载，留 pending 由下一轮 downlink 安全重试（用户打开该会话时自然投递）。
@@ -133,17 +141,59 @@ export class BaseAdapter {
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
 
-  _dedupKey(cid, parsed) {
-    const sender = parsed.sender_id || parsed.sender_name || '';
-    const text = parsed.text || '';
-    return this._hash(`${cid}|${sender}|${text}`);
+  // per-pass 计数器：返回该内容键在本轮已出现的次数（0-based），并把计数推进一格。
+  // 批量路径（巡检 / 回填 / getMessages）与增量路径的 _occurrenceInList 必须给出同一个数，
+  // 所以两边都只按「本轮可见消息里排在前面」定义，不掺到达顺序。
+  _bumpOccurrence(counter, cid, parsed) {
+    const base = this._dedupKey(cid, parsed);
+    const n = counter.get(base) || 0;
+    counter.set(base, n + 1);
+    return n;
   }
 
-  _canonicalMsgId(item, cid, parsed) {
+  // 稳定键（内容维度）+ 发生次数。occurrence 是「该内容键在本轮可见消息里排第几」（0-based）。
+  // 为什么必须有 occurrence：同一会话里客户把同一句话说两遍是两条真实消息，只按
+  // (会话|发送者|文本) 拦就是把第二条永远吞掉（§8.3-17，客户侧表现＝「说了没回」）。
+  // 为什么 0 必须保持旧字节：_sentKeys 落 localStorage（_sentKey() 键），键形一变就等于全部重报一遍。
+  _dedupKey(cid, parsed, occurrence = 0) {
+    const sender = parsed.sender_id || parsed.sender_name || '';
+    const text = parsed.text || '';
+    const base = this._hash(`${cid}|${sender}|${text}`);
+    return occurrence > 0 ? `${base}#${occurrence}` : base;
+  }
+
+  // 内容键相同的气泡在本轮 items 顺序里排在该节点之前有几条 —— 增量路径一次只拿到一个
+  // 节点，编号只能从 DOM 顺序数出来（批量路径用同一份语义的 per-pass 计数器）。
+  _occurrenceInList(item, cid, parsed) {
+    let items;
+    try { items = this.getMessageItems() || []; } catch (_) { return 0; }
+    const root = this.getMessageRoot();
+    const base = this._dedupKey(cid, parsed);
+    let n = 0;
+    for (const node of items) {
+      if (node === item) break;
+      // 批24b：编号只由「本会话窗口里的顺序」决定。上一会话的残留气泡内容可以与本条相同，
+      // 把它算进来会把真实那条从 mh:<hash> 挤成 mh:<hash>#1 —— 与 §8.3-17 的编号口径互相打脸。
+      if (root && node && !root.contains(node)) continue;
+      let p;
+      try { p = this.parseMessageItem(node); } catch (_) { continue; }
+      if (!p || !p.text) continue;
+      if (p.msg_type && p.msg_type !== 'text') continue;
+      if (this._dedupKey(cid, p) === base) n++;
+    }
+    return n;
+  }
+
+  // event_id 的生成规则与服务端钩子2.5 是一对契约：裸 `mh:<hash>` 表示「内容就是这条的全部
+  // 身份」，服务端可以继续按内容嗅探；`mh:<hash>#<n>` 表示上报方按可见顺序声明的第 n+1 条，
+  // 服务端只按 msg_id 精确判等、不再按内容吞（见 service/inbox_ingress_ingest.go 的
+  // eventAssertsDistinctMessage）。改这里必须同时看那一边。
+  _canonicalMsgId(item, cid, parsed, occurrence = 0) {
     const type = parsed.msg_type || 'text';
     const hash = contentHash(this.channel, cid || '', parsed.text || '');
-    if (type === 'system' || type === 'recall') return `${type}:${hash}`;
-    return hash;
+    const id = occurrence > 0 ? `${hash}#${occurrence}` : hash;
+    if (type === 'system' || type === 'recall') return `${type}:${id}`;
+    return id;
   }
 
   _hasSent(key) {
@@ -185,6 +235,7 @@ export class BaseAdapter {
 
   getMessages({ limit = 100 } = {}) {
     const out = [];
+    const occ = new Map();
     let items;
     try { items = this.getMessageItems() || []; } catch (_) { items = []; }
     const cid = this.getConversationId() || this.conversationId || '';
@@ -203,10 +254,12 @@ export class BaseAdapter {
       if (root && item && !root.contains(item)) continue;
       // 稳定键去重（跨 DOM 重渲染）：与 _handleIncremental/_backfill/_collectUnseenText 共用
       // _sentKeys。PollingLoop 每秒巡检、每轮重抓全部可见消息，若不做去重，同一逻辑消息会被反复上行；
-      // 规范 event_id（h:<hash>）让后端按稳定键幂等去重（即便 _sentKeys 过期也能兜底）。
-      const key = this._dedupKey(cid, parsed);
+      // 规范 event_id（mh:<hash>，同内容第二条起为 mh:<hash>#<n>）让后端按稳定键幂等去重
+      // （即便 _sentKeys 过期也能兜底）。
+      const occurrence = this._bumpOccurrence(occ, cid, parsed);
+      const key = this._dedupKey(cid, parsed, occurrence);
       if (this._hasSent(key)) continue;
-      parsed.message_id = this._canonicalMsgId(item, cid, parsed);
+      parsed.message_id = this._canonicalMsgId(item, cid, parsed, occurrence);
       this._markSent(key);
       out.push({
         message_id: parsed.message_id || '',
@@ -223,6 +276,41 @@ export class BaseAdapter {
       });
     }
     return out;
+  }
+
+  // 批24（§8.3-8）：可见气泡里与 text 归一化后相等的条数。**只读**——不碰 _sentKeys、
+  // 不推 occurrence、不进 _convWindow：这三件事任何一件被回查做掉，都会把本该上行的气泡
+  // 吃掉（与 §8.3-17 的发生次数身份直接冲突）。跨会话残留节点的排除与 getMessages 同一条
+  // （root.contains），两边口径不许漂。
+  _countVisibleText(text) {
+    const want = normSendText(text);
+    if (!want) return 0;
+    let items;
+    try { items = this.getMessageItems() || []; } catch (_) { items = []; }
+    const root = this.getMessageRoot();
+    let n = 0;
+    for (const item of items) {
+      if (!item) continue;
+      if (root && !root.contains(item)) continue;
+      let parsed;
+      try { parsed = this.parseMessageItem(item); } catch (_) { continue; }
+      if (!parsed) continue;
+      if (parsed.msg_type && parsed.msg_type !== 'text') continue;
+      if (normSendText(parsed.text) === want) n++;
+    }
+    return n;
+  }
+
+  // 复核判据是「计数增加」而不是「文本命中」：客户先说过同一句话时，后者会把一次
+  // 失败的发送判成已送达 —— 那比不判更糟。返回 false 只意味「没见着」，绝不意味「没发出去」。
+  async _verifySendLanded(text, baseline, waitMs) {
+    const deadline = Date.now() + Math.max(0, waitMs);
+    for (;;) {
+      if (this._countVisibleText(text) > baseline) return true;
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await sleep(Math.min(BRIDGE_THREE_CHANNEL.sendVerifyPollMs, left));
+    }
   }
 
   start(callbacks = {}) {
@@ -857,6 +945,7 @@ export class BaseAdapter {
     const firstRun = this._isFirstPatrolRun();
     const MAX_BATCH = firstRun ? PATROL_DEFAULTS.firstRunMaxBatch : PATROL_DEFAULTS.maxBatchPerPatrol;
     const cid = this.getConversationId() || this.conversationId || '';
+    const occ = new Map();
     let items;
     try { items = this.getMessageItems() || []; } catch (_) { items = []; }
     for (const item of items) {
@@ -865,7 +954,7 @@ export class BaseAdapter {
         else this.log.warn(`[常规] 巡检抓取消息数达上限 ${MAX_BATCH}，剩余靠下轮扫描补齐`);
         break;
       }
-      if (!item || this.seenNodes.has(item)) continue;
+      if (!item) continue;
       let parsed;
       try { parsed = this.parseMessageItem(item); } catch (_) { continue; }
       if (!parsed) continue;
@@ -875,14 +964,18 @@ export class BaseAdapter {
       if (root && item && !root.contains(item)) { this.seenNodes.add(item); continue; }
       if (parsed.msg_type && parsed.msg_type !== 'text') { this.seenNodes.add(item); continue; }
       if (!parsed.text) { this.seenNodes.add(item); continue; }
+      // §8.3-17：同内容气泡的发生次数只由「本轮可见消息的顺序」决定，所以 seenNodes 的跳过
+      // 必须排在计数之后 —— 否则前面那条被跳过时，后面这条会被编成 0、进而被稳定键吞掉。
+      const occurrence = this._bumpOccurrence(occ, cid, parsed);
+      if (this.seenNodes.has(item)) continue;
       this.seenNodes.add(item);
-      // 稳定键去重：巡检重访同一会话时，已上报过的消息按 (会话|发送者|文本) 拦截
-      const key = this._dedupKey(cid, parsed);
+      // 稳定键去重：巡检重访同一会话时，已上报过的消息按 (会话|发送者|文本|发生次数) 拦截
+      const key = this._dedupKey(cid, parsed, occurrence);
       if (this._hasSent(key)) {
         this.log.debug('巡检稳定键去重跳过:', key.slice(0, 56));
         continue;
       }
-      parsed.message_id = this._canonicalMsgId(item, cid, parsed);
+      parsed.message_id = this._canonicalMsgId(item, cid, parsed, occurrence);
       this._markSent(key);
       batch.push(parsed);
     }
@@ -950,18 +1043,24 @@ export class BaseAdapter {
   _handleIncremental(item) {
     if (item && this.seenNodes.has(item)) return;
     if (!this.getConversationId()) return;
+    // 批24b：会话归属校验与 getMessages/巡检/回查共用同一条判据 —— 不在活动消息容器里的节点
+    // 是上一会话的残留。增量这条（_scanIncremental 每 3s 全量重扫）此前没判，会把别的会话
+    // 私信按当前会话 id 上行。不 seenNodes.add：这个节点将来若真的回到活动容器仍可上报。
+    const root = this.getMessageRoot();
+    if (root && item && !root.contains(item)) return;
     const parsed = this.parseMessageItem(item);
     if (!parsed) return;
     if (item) this.seenNodes.add(item);
     // 稳定键去重（跨 DOM 重渲染）：平台虚拟列表重渲染会换节点 → seenNodes 失效，
     // 但同一逻辑消息的文本+发送者+会话稳定 → 用稳定键拦截重复上行（避免 429 死循环/无效 POST）。
     const cid = this.getConversationId();
-    const key = this._dedupKey(cid, parsed);
+    const occurrence = this._occurrenceInList(item, cid, parsed);
+    const key = this._dedupKey(cid, parsed, occurrence);
     if (this._hasSent(key)) {
       this.log.debug('稳定键去重跳过增量:', key.slice(0, 56));
       return;
     }
-    parsed.message_id = this._canonicalMsgId(item, cid, parsed);
+    parsed.message_id = this._canonicalMsgId(item, cid, parsed, occurrence);
     this._markSent(key);
     this._ingest(parsed);
   }
@@ -972,23 +1071,30 @@ export class BaseAdapter {
       return;
     }
     const batch = []; 
+    const occ = new Map();
     const items = this.getMessageItems();
+    const activeRoot = root || this.getMessageRoot();
     const cid = this.getConversationId();
     for (const item of items) {
-      if (this.seenNodes.has(item)) continue;
       const parsed = this.parseMessageItem(item);
       if (!parsed) continue;
       if (parsed.msg_type && parsed.msg_type !== 'text') continue;
       if (!parsed.text) continue;
+      // 批24b：回填与巡检/扫描/回查共用这一条会话归属判据。虚拟列表切换后残留节点仍在
+      // 文档里，不判归属就会把上一会话的私信并进**当前**会话的历史帧上行（串台）。
+      if (activeRoot && item && !activeRoot.contains(item)) { this.seenNodes.add(item); continue; }
+      // §8.3-17：先计数再判 seenNodes，理由同 _collectUnseenText。
+      const occurrence = this._bumpOccurrence(occ, cid, parsed);
+      if (this.seenNodes.has(item)) continue;
       this.seenNodes.add(item);
       // 稳定键去重（跨 DOM 重渲染）：端口断开重连 / 虚拟列表重渲染换节点 seenNodes 失效后，
-      // 平台重发的同一条历史消息按 (会话|发送者|文本) 拦截，避免重复上行。
-      const key = this._dedupKey(cid, parsed);
+      // 平台重发的同一条历史消息按 (会话|发送者|文本|发生次数) 拦截，避免重复上行。
+      const key = this._dedupKey(cid, parsed, occurrence);
       if (this._hasSent(key)) {
         this.log.debug('稳定键去重跳过历史:', key.slice(0, 56));
         continue;
       }
-      parsed.message_id = this._canonicalMsgId(item, cid, parsed);
+      parsed.message_id = this._canonicalMsgId(item, cid, parsed, occurrence);
       this._markSent(key);
       batch.push({ parsed, direction: parsed.sender_type === SENDER.CUSTOMER ? DIRECTION.INBOUND : DIRECTION.OUTBOUND });
     }
@@ -1067,7 +1173,7 @@ export class BaseAdapter {
     if (this.callbacks.onMessage) this.callbacks.onMessage(msg);
   }
 
-  _emitMessage(parsed) {
+  _emitMessage(parsed, extra) {
     const cid = this.getConversationId();
     const windowMsgs = this._windowFor(cid);
     const msg = makeUnifiedMessage({
@@ -1086,13 +1192,14 @@ export class BaseAdapter {
       group_name: parsed.group_name || '',
       sender_name: parsed.sender_name || '',
       raw: parsed.raw || null,
+      extra,
       history: windowMsgs.map((m) => this._historyItem(m, m.sender_type === SENDER.CUSTOMER ? DIRECTION.INBOUND : DIRECTION.OUTBOUND)),
     });
     this.log.info('上行消息:', (msg.content || `[${msg.msg_type}]`).slice(0, 40));
     if (this.callbacks.onMessage) this.callbacks.onMessage(msg);
   }
 
-  async sendOutbound(text, targetConvId) {
+  async sendOutbound(text, targetConvId, opts = {}) {
     if (!text) { this.log.warn('回复内容为空，跳过'); return { ok: false, rateLimited: false, notFound: false }; }
     const account = this.getAccountId();
     let conv = this.getConversationId();
@@ -1138,6 +1245,11 @@ export class BaseAdapter {
     // B6（批3）：跨 tab/跨渠道全局最小间隔闸（storage 共享时钟；不可用时 0ms 降级）
     const gateWaitMs = await globalSendWaitMs(this.rateLimiter.cfg.minIntervalMs);
     if (gateWaitMs > 0) await sleep(gateWaitMs);
+    // 批24（§8.3-8）：回查基线必须在**点击前一刻**取。放在这里而不是方法开头，是因为上面
+    // 两段等待（风控提示 + 全局最小间隔）能睡到秒级，其间客户自己也可能说过同一句话——
+    // 用睡前的基线会把别人的那条气泡算成我们发出去的。
+    const verifyMs = opts.sendVerifyMs != null ? opts.sendVerifyMs : BRIDGE_THREE_CHANNEL.sendVerifyMs;
+    const textBaseline = this._countVisibleText(text);
     let ok;
     try {
       // B4（批3）：rawSendText 裸 await——sendText 卡死（DOM 阻塞/框架吞事件）会永久挂起
@@ -1148,14 +1260,24 @@ export class BaseAdapter {
       this.log.error('回写失败', String(e?.message || e));
       return { ok: false, rateLimited: false, notFound: false };
     }
+    let sendVerified = false;
     if (ok) {
+      // 回查只产结论位：未见**不碰** ok、不碰 markSent、不碰 ack。让"没见着"变成重投，
+      // 就是把一次不可撤销的双发交回给一段渲染滞后（与批20b 在 A 链路的取舍同一条）。
+      sendVerified = await this._verifySendLanded(text, textBaseline, verifyMs);
       this.rateLimiter.markSent(this.channel, account, conv, text);
       stampGlobalSendAt(); // B6：不 await——storage 写失败已在内部吞掉，仅 best-effort 更新共享时钟
       this._emitMessage(
-        { sender_type: SENDER.AGENT, text, media_url: '', timestamp: Date.now(), message_id: contentHash(this.channel, conv, text) }
+        { sender_type: SENDER.AGENT, text, media_url: '', timestamp: Date.now(), message_id: contentHash(this.channel, conv, text) },
+        { send_verified: sendVerified }
       );
+      if (!sendVerified) {
+        this.log.warn('出站已提交但窗口内未见自己的气泡（仅记结论位，不重发）', {
+          channel: this.channel, conv_id: conv, verify_ms: verifyMs,
+        });
+      }
     }
-    return { ok, rateLimited: false, notFound: false };
+    return { ok, sendVerified, rateLimited: false, notFound: false };
   }
 }
 

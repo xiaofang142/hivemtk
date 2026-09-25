@@ -42,11 +42,14 @@ export function makeUnifiedMessage({
   group_name = '',
   raw = null,
   history,
+  extra: callerExtra = null,
 }) {
   const resolvedSenderId = sender_id || (sender_type === SENDER.CUSTOMER ? conversation_id : account_id);
   // 群聊 / 非文字消息等扩展字段：顶层输出（服务端 UnifiedMessage 已加 is_group/group_id/group_name）
   // 同时保留 Extra 冗余，确保老版本后端仍能读到。
-  const extra = {};
+  // callerExtra 先摊开：调用方自己声明的结论位（如批24 的 send_verified）必须能进来，
+  // 而下面这几条由帧字段推导出的键优先级更高——它们与本帧的顶层字段同源，不会互相矛盾。
+  const extra = callerExtra && typeof callerExtra === 'object' ? { ...callerExtra } : {};
   if (is_group) extra.is_group = true;
   if (group_id) extra.group_id = group_id;
   if (group_name) extra.group_name = group_name;
@@ -54,7 +57,11 @@ export function makeUnifiedMessage({
   // 「一个会话一个消息」：history 帧/实时 inbound 可携带该会话的多轮历史（每条含 direction）。
   // 仅当非空数组时输出，保持单条消息帧的向后兼容。
   const historyList = Array.isArray(history) && history.length > 0 ? history : undefined;
-  // event_id 由调用方显式提供（DOM data-message-id 或 `c:${text}` 兜底），后端按 event_id 幂等去重。
+  // event_id 由调用方提供，且巡检/增量四条路径都会用 _canonicalMsgId 把它规范成
+  // `mh:<8位hex>`（同会话同文本的第二条起是 `mh:<8位hex>#<n>`，n 为该内容键在本轮可见
+  // 消息里的出现次序，从 1 开始）。后端按 event_id 幂等去重：裸哈希仍可被内容维度嗅探
+  // （钩子2.5）判重，带 #<n> 的则只按 msg_id 精确判等 —— 见 service/inbox_ingress_ingest.go
+  // 的 eventAssertsDistinctMessage，改形状必须两边一起改。
   // 自/他判定已移交后端（服务端内容回显检测 + sender_type 强制覆盖），前端不再计算内容 hash。
   const stableEventId = event_id;
   // 2026-08-14 治本：account_id 缺失（DOM 兜底失败）时不发该字段，避免后端 400「channel and account_id required」

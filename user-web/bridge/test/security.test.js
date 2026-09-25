@@ -42,6 +42,9 @@ import { BRIDGE_PROTOCOL_V2 } from '../src/core/constants.js';
 let _uniq = 0;
 const newChannel = () => `sec_${++_uniq}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// 批20d-A4：已发缓存落盘形状变成 ['key', 写入时刻]（TTL 要知道年龄）。这里只断言"记住了哪条"。
+const sentKeys = (raw) => (raw || []).map((e) => (Array.isArray(e) ? e[0] : e));
+
 function cfg() {
   return async () => ({ serverUrl: 'http://localhost:8204', token: 't' });
 }
@@ -68,7 +71,7 @@ describe('P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底',
     expect(getPendingAckStats(ch).size).toBe(0);
     // 消息已实际下发成功 → 写 cache 防内容重发（停止重发）
     const stored = await chrome.storage.local.get([`bridge_sent_${ch}`]);
-    expect(stored[`bridge_sent_${ch}`] || []).toContain('m-nis|c1');
+    expect(sentKeys(stored[`bridge_sent_${ch}`])).toContain('m-nis|c1');
   });
 
   it('场景1b：已在 _pendingAck 的 msg 重发 ack 返回 not_in_scope → 停止重试并清理（不再探测）', async () => {
@@ -102,7 +105,7 @@ describe('P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底',
 
     expect(getPendingAckStats(ch).size).toBe(0);
     const stored = await chrome.storage.local.get([`bridge_sent_${ch}`]);
-    expect(stored[`bridge_sent_${ch}`] || []).toContain('m-nf|c1');
+    expect(sentKeys(stored[`bridge_sent_${ch}`])).toContain('m-nf|c1');
   });
 
   it('场景3a：ack items status=acked → 已处理完成，不入 _pendingAck', async () => {
@@ -177,8 +180,8 @@ describe('P0-6 前端安全：防越权探测 / 跨账号隔离 / 重试兜底',
     // 键隔离：两个 channel 各自的 storage key 独立存在
     const sa = await chrome.storage.local.get([`bridge_sent_${chA}`]);
     const sb = await chrome.storage.local.get([`bridge_sent_${chB}`]);
-    expect(sa[`bridge_sent_${chA}`] || []).toContain('m-same|c1');
-    expect(sb[`bridge_sent_${chB}`] || []).toContain('m-same|c1');
+    expect(sentKeys(sa[`bridge_sent_${chA}`])).toContain('m-same|c1');
+    expect(sentKeys(sb[`bridge_sent_${chB}`])).toContain('m-same|c1');
 
     await pollDownlink(chA, 'acc1', cfg(), { sendOutbound: adapterA.sendOutbound });
     expect(adapterA.sendOutbound).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 import { getOutbox, ackOutbox } from './http-ingest.js';
 import { sanitizeForDisplay } from './sanitize.js';
 import { contentHash } from './types.js';
-import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER, humanSendTimeoutMs } from './constants.js';
+import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER, outboundStepTimeoutMs } from './constants.js';
 import { createLogger } from './logger.js';
 import { connectSSE, getLastEventID, setLastEventID, stopSSE } from './sse-fetch-client.js';
 
@@ -9,36 +9,72 @@ const log = createLogger('downlink');
 
 // 本地已发缓存：防刷新 / SW 冻结重开后重复下发同一条消息给用户。
 // 按 channel 隔离，持久化到 chrome.storage.local。
+//
+// 批20d-A4：条目带写入时刻，装载/追加时按 sentCacheTtlMs 回收，超上限按「最旧的时间戳」淘汰。
+// 两件事都必要：
+//   - 时间界：界之后的记录既不防任何在途重推（服务端早已不再重投这条），还占着条数名额；
+//   - 按时间而非插入序淘汰：旧实现是 `[...set].slice(len-max)`，而 Set 命中已有键不刷新位置
+//     —— 一条「今天还在被重推」的记录可能因为插入位靠前被挤掉，最该留的最先丢。
+// 落盘形状由 ['id'] 变为 [['id', ts]]；load 兼容老形状，见下方续期注释。
 class SentCache {
   constructor(channel) {
     this.channel = channel;
     this.key = `bridge_sent_${channel}`;
-    this.mem = new Set();
+    this.mem = new Map();
     this.dirty = false;
     this.loaded = false;
   }
 
   async load() {
     if (this.loaded) return;
+    const now = Date.now();
     try {
       const v = await chrome.storage.local.get([this.key]);
       const arr = v && v[this.key];
-      if (Array.isArray(arr)) this.mem = new Set(arr);
+      if (Array.isArray(arr)) {
+        for (const e of arr) {
+          if (Array.isArray(e) && e.length === 2 && Number.isFinite(Number(e[1]))) {
+            this.mem.set(String(e[0]), Number(e[1]));
+          } else {
+            // 老版本写的纯字符串：真实年龄未知。判成「已过期」= 升级那一刻把在途的重复消息
+            // 全放出去（发出去的私信不可撤回），所以按「刚写过」续一个完整 TTL，之后再自然回收。
+            this.mem.set(String(e), now);
+            this.dirty = true;
+          }
+        }
+        // 混合来源（老记录被续成 now、插在原位）后必须重排，否则 add() 里
+        // 「过期项是头部前缀」这个快路径前提不成立，会留下过期的尾部条目。
+        this.mem = new Map([...this.mem.entries()].sort((a, b) => a[1] - b[1]));
+      }
     } catch (_) {
     }
+    this.evict(now);
     this.loaded = true;
   }
 
   has(id) {
-    return this.mem.has(id);
+    const ts = this.mem.get(id);
+    return ts !== undefined && Date.now() - ts <= BRIDGE_THREE_CHANNEL.sentCacheTtlMs;
   }
 
-  add(id) {
-    this.mem.add(id);
+  add(id, at = Date.now()) {
+    // 先删后设：Map 保留插入序，命中已有键时也要把这条挪到「最新」端，
+    // 这样 evict 才能用「头部即最旧」的线性扫描代替排序。
+    this.mem.delete(id);
+    this.mem.set(id, at);
     this.dirty = true;
-    if (this.mem.size > BRIDGE_THREE_CHANNEL.sentCacheMax) {
-      const arr = [...this.mem];
-      this.mem = new Set(arr.slice(arr.length - BRIDGE_THREE_CHANNEL.sentCacheMax));
+    this.evict(at);
+  }
+
+  // evict 回收：过期条目（时间序下是头部前缀）先整段走，仍超上限再掐头部最旧的。
+  evict(now) {
+    const ttl = BRIDGE_THREE_CHANNEL.sentCacheTtlMs;
+    for (const [k, ts] of this.mem) {
+      if (now - ts <= ttl) break;
+      this.mem.delete(k);
+    }
+    while (this.mem.size > BRIDGE_THREE_CHANNEL.sentCacheMax) {
+      this.mem.delete(this.mem.keys().next().value);
     }
   }
 
@@ -174,6 +210,51 @@ export function getPendingAckStats(channel) {
   return { size: m.size, maxAttempts, oldestAgeMs: oldest };
 }
 
+// drainPendingAcks 消化本渠道到期的 _pendingAck（ack 失败 / 补确认失败的条目），返回本轮读数。
+//
+// 只允许有一份实现：轮询与 SSE 是同一条下行通道的两种形态，退避、attempts++、"与正常下发
+// 同接口"这些语义各写一份就会漂移。R22 §6-4 实测到的正是漂移的极端形态——SSE 形态从没被挂上
+// 排水，队列只在页面刷新前存在，而刷新即清空。
+// cred = { serverUrl, accountId, token }，由调用方按自己那一侧的连接参数给。
+export async function drainPendingAcks(channel, cred) {
+  const duePending = claimDuePendingAck(channel);
+  const out = { retried: duePending.length, success: 0, fail: 0 };
+  if (!duePending.length) return out;
+  for (const { msgId, conversationId } of duePending) {
+    try {
+      const reAck = await ackOutbox(
+        { serverUrl: cred.serverUrl, channel, accountId: cred.accountId, token: cred.token },
+        [msgId],
+        {
+          label: `[下行 ack 重试] ${channel}:${msgId}`,
+          // B2：条目带会话归属时走 v2，按会话精确翻转；无归属（老数据）回退 legacy。
+          conversationId,
+        }
+      );
+      // 详细 ack 响应：acked/duplicate 视为成功，not_found/not_in_scope 也视为"已处理（无需再发）"
+      const handled = processAckDetailedResult(reAck, [msgId], channel, 'reAck');
+      const ok = handled.acked + handled.duplicate + handled.not_found + handled.not_in_scope;
+      if (ok > 0) {
+        markPendingAckTried(channel, msgId, true);
+        out.success++;
+      } else {
+        markPendingAckTried(channel, msgId, false,
+          reAck && reAck.status === 'ok' ? 'retriable' : 'response_not_ok');
+        out.fail++;
+      }
+    } catch (e) {
+      markPendingAckTried(channel, msgId, false, String(e && e.message || e));
+      out.fail++;
+    }
+  }
+  if (out.success || out.fail) {
+    log.info(`pendingAck 重发 ack 完成`, {
+      channel, success: out.success, fail: out.fail, retried: out.retried,
+    });
+  }
+  return out;
+}
+
 // 初始化：预加载各渠道已发缓存 + 待重试 ack 集合（在轮询开始前调用一次）
 export async function initDownlink(channels) {
   for (const ch of channels) {
@@ -232,46 +313,8 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   if (!serverUrl) return;
 
   // 2026-08-15 P0-9：先消化上轮残留的 _pendingAck（带退避，attempts<MAX_ACK_RETRY_ATTEMPTS）。
-  // 必要性：ack 是"后端记账"，失败不能让"用户已收到"这件事回滚。
-  // 节奏：claimDuePendingAck 自动按退避时长筛本轮可重试的条目；逐条重试；attempts++ 直到达上限。
-  // 关键：每条 msg_id 单独走 ackOutbox，与正常下发同接口（避免实现分裂）。
-  const duePending = claimDuePendingAck(channel);
-  if (duePending.length) {
-    let successCount = 0;
-    let failCount = 0;
-    for (const { msgId, conversationId } of duePending) {
-      try {
-        const reAck = await ackOutbox(
-          { serverUrl, channel, accountId, token },
-          [msgId],
-          {
-            label: `[下行 ack 重试] ${channel}:${msgId}`,
-            // B2：条目带会话归属时走 v2，按会话精确翻转；无归属（老数据）回退 legacy。
-            conversationId,
-          }
-        );
-        // 详细 ack 响应：acked/duplicate 视为成功，not_found/not_in_scope 也视为"已处理（无需再发）"
-        const handled = processAckDetailedResult(reAck, [msgId], channel, 'reAck');
-        const ok = handled.acked + handled.duplicate + handled.not_found + handled.not_in_scope;
-        if (ok > 0) {
-          markPendingAckTried(channel, msgId, true);
-          successCount++;
-        } else {
-          markPendingAckTried(channel, msgId, false,
-            reAck && reAck.status === 'ok' ? 'retriable' : 'response_not_ok');
-          failCount++;
-        }
-      } catch (e) {
-        markPendingAckTried(channel, msgId, false, String(e && e.message || e));
-        failCount++;
-      }
-    }
-    if (successCount || failCount) {
-      log.info(`pendingAck 重发 ack 完成`, {
-        channel, success: successCount, fail: failCount, retried: duePending.length,
-      });
-    }
-  }
+  // 必要性：ack 是"后端记账"，失败不能让"用户已收到"这件事回滚。排水语义见 drainPendingAcks。
+  await drainPendingAcks(channel, { serverUrl, accountId, token });
 
   const res = await getOutbox(
     { serverUrl, channel, accountId, token },
@@ -344,7 +387,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         if (sendOutbound) {
           result = await withTimeout(
             sendOutbound(sanitized, convId, { viaAdapter: channel }),
-            humanSendTimeoutMs(sanitized, sendTimeoutMs),
+            outboundStepTimeoutMs(sanitized, sendTimeoutMs),
             `sendOutbound(${channel}:${convId})`
           );
         } else {
@@ -361,6 +404,9 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         channel, conv_id: convId, msg_id: msg.msg_id,
         ok: !!(result && result.ok), rateLimited: !!(result && result.rateLimited),
         notFound: !!(result && result.notFound),
+        // 批24：与 ok 同行的只有「点了」这一件事；sendVerified 才是「窗口里见着自己的气泡」。
+        // 原样打印不做 `!!`：没走到回查的出路必须是 undefined，折成 false 就是把三态洗成二态。
+        sendVerified: result && result.sendVerified,
       });
       if (ok) { recordSent(msg); continue; }
       if (notFound) {
@@ -376,7 +422,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
           try {
             const r2 = await withTimeout(
               sendOutbound(sanitized, convId, { viaAdapter: channel }),
-              humanSendTimeoutMs(sanitized, sendTimeoutMs),
+              outboundStepTimeoutMs(sanitized, sendTimeoutMs),
               `sendOutbound-retry(${channel}:${convId})`
             );
             if (r2 && r2.ok) { delivered = true; recordSent(msg); }
@@ -741,6 +787,7 @@ function _globalSSEDispatcher(msg) {
  * @param {function} handlers.onMessage 消息到达回调 (msg) => void
  * @param {function} [handlers.onError] 错误回调 (err) => void
  * @param {function} [handlers.onDuplicate] 重复消息回调 (msgId) => void
+ * @param {number} [handlers.pendingAckDrainIntervalMs] ack 重试队列排水间隔，默认取 BRIDGE_THREE_CHANNEL
  * @returns {Promise<function>} 停止函数
  */
 export async function startSSEDelivery(channel, accountId, handlers) {
@@ -827,7 +874,7 @@ export async function startSSEDelivery(channel, accountId, handlers) {
                 if (handlers.sendOutbound) {
                   const result = await withTimeout(
                     handlers.sendOutbound(safeContent, convId, { viaAdapter: channel }),
-                    humanSendTimeoutMs(safeContent),
+                    outboundStepTimeoutMs(safeContent),
                     `sendOutbound-SSE(${channel}:${convId})`
                   );
                   const ok = !!(result && result.ok);
@@ -949,6 +996,18 @@ export async function startSSEDelivery(channel, accountId, handlers) {
     log.info(`SSE 重连循环结束: ${channel}:${accountId}`);
   }
 
+  // §6-4（R22 第二十三轮）：SSE 是生产默认形态（服务端 FF_ENABLE_SSE_BRIDGE 默认 true，
+  // 客户端探到 sse_enabled 即 return，轮询定时器根本不启动），而 _pendingAck 原先只有
+  // pollDownlink 会排水 ⇒ ack 失败入队的条目在默认形态下永不重试，页面一刷新队列即清空。
+  const ackCred = { serverUrl, accountId, token };
+  const ackDrainEveryMs = handlers && handlers.pendingAckDrainIntervalMs
+    ? handlers.pendingAckDrainIntervalMs
+    : BRIDGE_THREE_CHANNEL.pendingAckDrainIntervalMs;
+  const ackDrainTimer = setInterval(() => {
+    if (stopped) return;
+    drainPendingAcks(channel, ackCred).catch((err) => log.error('SSE pendingAck 排水失败', err));
+  }, ackDrainEveryMs);
+
   // 启动重连 SSE 连接（异步，不阻塞）
   startSSEWithReconnect().catch((err) => {
     log.error(`SSE 重连循环异常退出: ${channel}:${accountId}`, err);
@@ -963,6 +1022,7 @@ export async function startSSEDelivery(channel, accountId, handlers) {
     // 活动长连接期间 cleanupSSE 为 undefined，stop 实际无法断开 SSE（fetch 悬挂 + 循环续命）。
     // 修复：key 级 stopSSE 立即 abort + 清退避 timer 并唤醒等待，重连循环即刻收束。
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    clearInterval(ackDrainTimer);
     if (wakeWait) wakeWait();
     stopSSE(channel, accountId);
     if (cleanupSSE) {

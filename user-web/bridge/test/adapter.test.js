@@ -102,7 +102,9 @@ describe('BaseAdapter sendOutbound 风控通过则回写并上报 outbound 消�
     const onMessage = vi.fn();
     adapter.start({ onMessage });
     // sendOutbound 内有 sleep(waitHintMs) 用于拟人延迟，fake timers 下需异步推进
-    const p = adapter.sendOutbound('hello');
+    // 批24：回查预算必须显式关掉 —— 这里的假时钟只 fake setTimeout、不 fake Date.now()，
+    // 而回查的到期判断读的是 Date.now()：虚拟推进烧不掉真实预算，`await p` 会挂到用例超时。
+    const p = adapter.sendOutbound('hello', undefined, { sendVerifyMs: 0 });
     await vi.advanceTimersByTimeAsync(4000); 
     const ok = await p;
     expect(ok.ok).toBe(true);

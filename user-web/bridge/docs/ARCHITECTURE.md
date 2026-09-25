@@ -20,7 +20,8 @@
   outboxPollIntervalMs: 1500,  // 下行轮询间隔
   outboxBatchSize: 50,         // 下行单批最大消息数
   ackFlushIntervalMs: 500,     // ack 批量 flush 间隔
-  sentCacheMax: 2000,          // 本地已发缓存容量
+  sentCacheMax: 2000,          // 本地已发缓存容量（超界丢最旧）
+  sentCacheTtlMs: 86400000,    // 已发缓存 24h 时间界（界外不再拦重发）
   sendOutboundTimeoutMs: 20000,// 下行 send 超时
 }
 ```

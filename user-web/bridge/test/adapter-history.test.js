@@ -15,6 +15,9 @@ function msgEl(text, st, id, ts) {
 function makeAdapter(items) {
   const root = document.createElement('div');
   document.body.appendChild(root);
+  // 气泡必须真的挂在消息容器里：批24b 起 _backfill/_handleIncremental 会判会话归属
+  // （root.contains(item)），游离节点在真页面上不存在，判成"上一会话残留"是对的。
+  for (const el of items) root.appendChild(el);
   const hooks = {
     match: () => true,
     getMessageListRoot: () => root,
@@ -85,19 +88,21 @@ describe('历史回填 _backfill', () => {
 
 describe('纯桥接：所有消息统一走 onMessage', () => {
   it('客户消息走 onMessage（sender_type=CUSTOMER）', () => {
-    const { a } = makeAdapter([]);
+    const { a, root } = makeAdapter([]);
     current = a;
     const messages = [];
     a.start({
       onMessage: (m) => messages.push(m),
     });
-    a._handleIncremental(msgEl('客户新消息', SENDER.CUSTOMER, 'm3', Date.now()));
+    const el = msgEl('客户新消息', SENDER.CUSTOMER, 'm3', Date.now());
+    root.appendChild(el);
+    a._handleIncremental(el);
     expect(messages.length).toBe(1);
     expect(messages[0].content).toBe('客户新消息');
   });
 
   it('切换会话后客户消息仍走 onMessage', () => {
-    const { a } = makeAdapter([]);
+    const { a, root } = makeAdapter([]);
     current = a;
     const messages = [];
     a.start({
@@ -107,7 +112,9 @@ describe('纯桥接：所有消息统一走 onMessage', () => {
     a.hooks.getConversationId = () => 'conv2';
     a.conversationId = 'conv2';
     a._attachConversation();
-    a._handleIncremental(msgEl('切回会话后的客户消息', SENDER.CUSTOMER, 'm5', Date.now()));
+    const el = msgEl('切回会话后的客户消息', SENDER.CUSTOMER, 'm5', Date.now());
+    root.appendChild(el);
+    a._handleIncremental(el);
     expect(messages.length).toBe(1);
     expect(messages[0].content).toBe('切回会话后的客户消息');
   });
@@ -126,6 +133,7 @@ describe('群聊 + 实时上下文窗口（点3）', () => {
   function makeGroupAdapter(items) {
     const root = document.createElement('div');
     document.body.appendChild(root);
+    for (const el of items) root.appendChild(el);
     const hooks = {
       match: () => true,
       getMessageListRoot: () => root,
@@ -295,6 +303,7 @@ describe('纯规则架构（无 LLM 抽取器）', () => {
     // 新增一条消息（模拟 MutationObserver/新消息到达），_scanIncremental 走 selector 路径
     const msgEl = document.createElement('div');
     msgEl.textContent = '来自选择器路径的消息';
+    root.appendChild(msgEl);
     a.hooks.getMessageItems = () => [msgEl];
     a._scanIncremental();
     expect(messages.length).toBe(1);
@@ -306,6 +315,7 @@ describe('纯规则架构（无 LLM 抽取器）', () => {
     document.body.appendChild(root);
     const msgEl = document.createElement('div');
     msgEl.textContent = '回填历史消息';
+    root.appendChild(msgEl);
     const a = makeCidRootAdapter(() => 'conv1', root, [msgEl]);
     current = a;
     const messages = [];

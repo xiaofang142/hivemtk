@@ -73,7 +73,8 @@
 | `outboxPollIntervalMs` | 1500 | 下行轮询间隔 |
 | `outboxBatchSize` | 50 | 下行单批最大消息数 |
 | `ackFlushIntervalMs` | 500 | ack 批量 flush 间隔 |
-| `sentCacheMax` | 2000 | 本地已发缓存容量 |
+| `sentCacheMax` | 2000 | 本地已发缓存容量（超界按最旧时间戳淘汰） |
+| `sentCacheTtlMs` | 86400000 | 本地已发缓存时间界：界内命中不重发、界外视为服务端不再重投（批20d-A4）。取值必须 ≥ 服务端重推窗 |
 | `sendOutboundTimeoutMs` | 20000 | 下行 send 超时 |
 
 ### 2.6 巡检制度（patrol，content script 主动枚举左侧列表）
