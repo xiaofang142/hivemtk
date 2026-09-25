@@ -1,6 +1,6 @@
 # 浏览器自动化 — 权威合并文档（Master）
 
-> 版本：v1.2（R24 实施轮状态回写）｜ 2026-09-11 ｜ 本文合并 `BROWSER_AUTOMATION_` 系列全部 9 份文档的有效内容，为该模块**唯一现行入口**；9 份原文已归档至 `docs/architecture/archive/browser-automation/`（各篇处置见附录一）。
+> 版本：v1.7（§4 事实层按批14–22 现状重核回写）｜ 2026-09-22 ｜ 本文合并 `BROWSER_AUTOMATION_` 系列全部 9 份文档的有效内容，为该模块**唯一现行入口**；9 份原文已归档至 `docs/architecture/archive/browser-automation/`（各篇处置见附录一）。
 > 冲突裁决：本文与任何浏览器自动化文档（含 platform-base 四篇）冲突时，以**本文的文件:行号证据**为准。
 > 框架：四问 —— ①我们的要求是什么 ②要解决什么问题 ③同类如何解决（明细）+ 我们的选型论证 ④对照代码缺什么、改什么。
 > 纪律：每条结论带出处（文件:行号 或 URL/置信度）；未核验显式标注；定量数字无一手出处者不作论据。
@@ -10,10 +10,10 @@
 ## 0. 执行摘要
 
 1. **架构已定且经外部对标复核**：NM Host + WS 单长连接 + MV3 扩展（chrome.debugger）寄生用户主 Chrome。六方案对比 8/8 硬约束唯一通过（§3.1），Chrome 136 官方 blog 实证 CDP 直连路线封杀（§3.2），业界 9 步对标 8 步"维持现状"（§3.5）。选型不再翻案。
-2. **实现基线**：Go 模块 ~5,000 行/39 文件五层齐备；对外 15 编排原语 + 内部 tab_exists；双模式执行链（steps 解释 + Brain LLM 循环）共享全部容错/检测/审计设施；三平台适配器注册；v3.37.0–v3.39.0 迁移三件；MCP/workflow/cron/手动四入口。
+2. **实现基线**：Go 模块 ~5,000 行/39 文件五层齐备；对外 15 编排原语 + 内部 tab_exists；双模式执行链（steps 解释 + Brain LLM 循环）共享全部容错/检测/审计设施；三平台适配器注册；本泳道迁移七件（v3.37/38/39/40/42/43/44，v3.41 属 operation_log 不碰本泳道表）；九表（六表 + 批20f/批22 新增三表，见 §4.4）；MCP/workflow/cron/手动四入口。
 3. **本轮最大发现（两个 P0）**：G10 铁律 2「trusted 输入」只对 post_comment 成立，普通 click/type 仍走 R17 已证伪的 JS 合成通道；G11 post_comment 可被步级重试二次提交=双发风险，违反 Postiz 写成接口级契约的红线。**二轮最大发现（P1，建议与 P0 同批实施）：G18 并发治理空白——同用户不同任务并发跑时命令在同 Host 交织，平台声明的「写操作串行」风控要求全靠单连接兜底，MaxConcurrentJobs 零消费**。全部差距 G1–G21 与改进 F1–F8/D 系列见 §5。
 4. **v1 稳定化三项已闭环**：I1 原语对齐零缺口、I2 token 轮换完备、I3 健康脚本 `scripts/check_browser_host.sh` 交付；I4–I6 挂账（§4.7）。
-5. **待拍板两项**：D6（六表迁移独轨 vs 单轨制）、D7（写操作是否开可选人工确认开关——铁律 4 零人工 vs Anthropic 产品级保留发布确认环的张力）。
+5. **待拍板一项 + 已闭一项**：D6（六表→九表的迁移轨制：现状已是「新表由 `allModels()`/AutoMigrate 直建、存量表加列走版本化迁移」这条倾向，是否把它写成终态仍需定夺，见 §4.4 注）；**D7 已落地**（`browser_tasks.require_confirm` v3.42.0 默认 false=关、`confirm_wait_sec` v3.43.0 默认 600，读写口 = `GET /sessions/:id/confirm-gate` + `POST /sessions/:id/confirm`，见 §4.4/§4.7）——铁律 4 零人工 vs Anthropic 保留发布确认环的张力按"任务级可选、默认关"解掉。
 6. **二轮复审（v1.1）增量**：新增 G17–G21（截图抢焦点违反 C2 例外未声明 / 并发闸缺失 / command_log·llm_plans 无数据保留策略 / cron 无时区固定 / stop 为步边界最终一致）；§3.5 外部对标逐条一手核验——**arXiv IPI 论文与 Cloudflare `/accessibilityTree` 端点升级为确证**，Stagehand「21ms/runtime lives in browser/口号」与 browser-use「bu-2-0/Cloud 78%」四条降级为未核验删除；F5 据代码二验强化为「done 前独立复核」。
 
 ---
@@ -208,18 +208,23 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 
 - Token：`bh_<userID>_<32hex>`（16B crypto/rand），userID 内嵌使握手即绑定归属（C8 多租户边界）；KV 键 `browser_host_token`/`_prev`；Rotate 老值滚入 _prev 宽限；Validate 双候选+`subtle.ConstantTimeCompare`，**KV 空 fail-closed**；EnsureExists 防首部署卡死；WS 双防护=token+回环 IP。
 - Registry：同用户旧连接顶掉（go old.close()+指针比对防误删）=最后上线者生效，旧端 running session 置 failed 非静默接管（符合"不静默"）；断连钩子 10s ctx FailRunningByUser。
-- 单 Host 串行：同用户命令天然串行无写竞争；跨用户 conn 隔离。**缺口=无应用层心跳（G4）**：register 后 readDeadline 清零，半开 TCP 僵尸连挂到命令超时且清理钩子不触发。
+- 单 Host 串行：同用户命令天然串行无写竞争；跨用户 conn 隔离。**原 G4「无应用层心跳」缺口已闭（D4a/R24）**：服务端 `pingLoop` 定时 ping、读超时 90s、收到 pong 即重置（`host_registry.go:98,130-135`），半开 TCP 最迟 90s 判为确定事件并触发清理钩子；另加命令级超时计数连续 2 判假死→主动 close（R4 自愈，见 §4.6/§5.6）。
 
-## 4.4 六表 schema（migration v3.37/38/39，**版本化独轨**，不在 AutoMigrate 全局列表——D6 待拍板）
+## 4.4 九表 schema（本泳道迁移七件 v3.37/38/39/40/42/43/44；建表轨制见本节末注，D6 待拍板）
 
 | 表 | 关键列 |
 |---|---|
-| browser_tasks | task_type(one_shot/loop/cron/workflow)/status(draft→ready→running→paused→done/failed/archived)/steps jsonb/brain_mode+brain_goal/loop_count=1/delay_ms=1000/timeout_sec=120/depends_on(mode all_done/any_success)/retry(默认关/delay 300s/max 3)/platform(默认 xiaohongshu)/user_id+account_id |
-| browser_sessions | chrome_tab_id/status(created→active→completed/failed/stopped)/snapshot/total+success+failed_steps/hand_latency_ms(恒 0,G9)/console_errors(不采集,G9)/extracted_data/final_screenshot_url/llm_summary(completed 与 failed 都写) |
-| browser_steps | step_index/action/target(@eN 或 selector)/params jsonb/status(pending→running→success/failed/skipped)/result jsonb/duration_ms/error_msg（注释列 11 action 滞后于 15，行为以 dispatchStep 为准=已知文档债） |
-| browser_command_log | session/task/step_id/seq(session 单调)/direction(command/event/judge)/action/payload 全文/duration_ms/ok；**无 Update/Delete=append-only**；查询端点缺失=G1 |
-| browser_llm_plans | task_id/goal/snapshot/steps/reasoning(脱敏截断)/model/token_in/token_out（**无 session_id 列=G3**） |
-| browser_cron_triggers | task_id(uniq)/cron_expr(六段)/enabled/next_run_at/last_run_at |
+| browser_tasks | task_type(one_shot/loop/cron/workflow)/status(draft→ready→running→paused→done/failed/archived)/steps jsonb/brain_mode+brain_goal/loop_count=1/delay_ms=1000/timeout_sec=120/depends_on(mode all_done/any_success)/retry(默认关/delay 300s/max 3)/platform(默认 xiaohongshu)/user_id+account_id/**next_retry_at(v3.40 重试持久化)**/**require_confirm(v3.42，D7 默认 false)**/**confirm_wait_sec(v3.43，默认 600=确认等待预算，与步超时解耦)** |
+| browser_sessions | chrome_tab_id/status(created→active→completed/failed/stopped)/snapshot/total+success+failed_steps/extracted_data/final_screenshot_url/llm_summary(completed 与 failed 都写)。G9 四列（title/llm_plan/hand_latency_ms/console_errors）**模型字段已删、DB 列按 D6 保留**（R25），故本表不再列它们 |
+| browser_steps | step_index/action/target(@eN 或 selector)/params jsonb/status(pending→running→success/failed/skipped)/result jsonb/duration_ms/error_msg/**is_write+submit_state(prepared/sent/verified/unattributed)+text_hash(v3.43 写台账三列，含两条索引)**。动作名单唯一事实源=`dto/task.go` 的 `oneof`（15 个），模型注释不再抄第二份（原"11 条滞后"文档债已就地消除，见 §5.4 B12） |
+| browser_command_log | session/task/step_id/seq(session 单调)/direction(command/event/judge)/action/payload 全文/duration_ms/**ok=三态**（v3.44.0：`DROP DEFAULT`+`DROP NOT NULL`，NULL=该帧不携带结论；下发帧 ok 从不表达"对端做成了"，历史 command 帧的常量 true 已回填为 NULL）；**无 Update/Delete=append-only**；查询端点 `GET /api/browser/sessions/:id/logs`（D1/G1 已落地，router:104），单请求归并导出 `.../export`（I5，router:105） |
+| browser_llm_plans | task_id/**session_id+kind(plan/judge/summary)(v3.40 → G3 已闭，成本按会话聚合，写入点 service/brain.go:119,255)**/goal/snapshot/steps/reasoning(脱敏截断)/model/token_in/token_out |
+| browser_cron_triggers | task_id(uniq)/cron_expr(六段)/**time_zone(v3.40 → G20：IANA 名，注册时前缀 CRON_TZ=，service/cron.go:149)**/enabled/next_run_at/last_run_at |
+| browser_write_claims | **批20f / A12 新增**：(task_id,text_hash) 唯一键=「此刻谁有权跨提交点」，step_row_id 持有者，session_id 归属。**刻意不带软删列**（软删等于把键位腾出来，而这张表存在的全部理由就是键位不腾），且不参与任何裁剪 |
+| browser_audit_digests | **批22 / A6 新增**：session_id+ordinal 唯一，row_count/first_seq/last_seq/prev_seq 给「删之前那段有没有断号」的判据，batch_digest 由库内逐行 sha256 再二次 sha256，prev_chain_hash/chain_hash 让本表自己也是条链；cutoff 与 created_at 分开 |
+| browser_audit_prune_runs | **批22 / A6 新增**：每次裁剪扫描一行（cutoff/batches/digests/rows_pruned/rows_before），三条恒等式做闭合算术；删 0 行的那次扫描同样要留行，用来把「那段时间本就没有日志」与「扫描器那天没跑」分开 |
+
+> 轨制现状（本节末注，D6 的事实半边）：九只模型全部登记进 `internal/pkg/db/migrate.go` 的 `allModels()`（browser 段 :371–:378 与 :385），由 `AutoMigrate()`（:412，:416 取用）消费 ⇒ 原文"**不在** AutoMigrate 全局列表"已不成立（§5.4 B11）。**新表**由模型标签直建、**存量表加列**仍写版本化迁移文件（v3.43/v3.44 即此），两者不是同一条路。是否把这条"倾向"写成终态＝D6 待拍板。
 
 ## 4.5 原语口径（定稿，全仓统一）
 
@@ -230,7 +235,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 熔断：maxBrainIterations=40 / plan 连败 3（空 plan 计入）/ 动作连败 5 / token 预算 200k（BRAIN_TOKEN_BUDGET）/ wall-clock=TimeoutSec+30s（R22：ctx 链在 LLM/DB 栈曾不生效，session132 实测 11min+ → 双看门狗）。循环指纹连续 3 轮同序列注 nudge / judge fail-open 连续 2 次不放行 / retry≤3、backoff 1s–10s 钳位 / LLM MaxTokens plan 4096·judge 512·轻量 256 / history≤24 滑窗 / 步间 humanizedDelay=base±30% 均匀 / 单步指数退避 backoff·2^(attempt-1) 默认 1000ms。
 越界钳位（扩展）：wait_for_selector timeout 1–60s / scroll 0–20000 / extract 单 key ≤100 节点 / markdown ≤64KiB / wait ≤60s。
 错误码要点：ErrHostOffline→409；`chrome_write` 错误帧=NM 通道坏快速失败；平台未注册/能力缺实现=error 直返（fails-loudly）；disconnect→终止+人工介入；401/403 LLM 快败不烧预算；429/5xx 退避；未知保守不重试。
-版本锚点：**三处 1.4.2 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正，R26 升 1.4.1=注入竞速 deadline，R27 升 1.4.2=nm-host shutdown 控制帧消费端）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部+__host_shutdown__ 控制帧（nm-host 拦截不转发扩展），一站式 post_comment 协议 case 已删（单一路径防分叉）。
+版本锚点：**三处 1.5.0 必须同改**（扩展 src manifest + dist manifest + nm-host hostVersion；R24 升 1.3.0=F1/F3/F4，R25 升 1.4.0=F2② 三段式子命令+F6 新元素标记+G9 captureVisibleTab 修正，R26 升 1.4.1=注入竞速 deadline，R27 升 1.4.2=nm-host shutdown 控制帧消费端，批14–22 段升 1.5.0=写台账闸门/三态日志/双发闸/裁剪摘要这一整批扩展侧改动，2026-09-22 实测三处一致：`user-web/browser_automation/{,dist/}manifest.json:4` 与 `user-server/cmd/nm-host/main.go:61`）；SW ScriptCache 陷阱下 host/status 版本号=新代码生效判据；check_browser_host.sh 从源码动态提取版本、无硬编码。协议动作口径：编排/LLM 可见 15 步动作不变（post_comment 仍是唯一对外写入口），扩展协议面=15+3 内部子命令（comment_prep/send/verify）+tab_exists 内部+__host_shutdown__ 控制帧（nm-host 拦截不转发扩展），一站式 post_comment 协议 case 已删（单一路径防分叉）。
 
 ## 4.7 v1 稳定化收口状态与挂账
 
@@ -249,7 +254,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 ## 5.1 已实现清单（15 项，逐项亲手复验，证据链保留）
 
 双模式执行链共享容错（executor.go:149/237/436/520）｜15 原语+双端分发｜步级 retry/退避/continue-on-error｜DetectBlock 步后+轮后接线+disconnect 终止（executor.go:202,419,490）｜步间 ±30% + CDP 对数正态/轨迹/hold（cdp/input.js:35-53,136-162）｜post_comment 三段式 fails-loudly（primitives.js:429-452）｜ClassifyError 四分类（platform.go:28-36+三平台）｜command_log append-only 三类帧｜reflect 四字段跨轮回喂+循环指纹+JudgeDone+连续 fail-open 拦截（brain.go/executor.go:296-338,423）｜双看门狗｜Brain 可靠性 P0 全项（rune 预算/错误分类/clamp/去竞争，单测 5 组）｜token 预算熔断｜WS per-user 路由+双层鉴权+断连清理｜NM 帧协议+退避重连｜依赖检环/URL 白名单/幂等/cron 六段/MCP+workflow 双入口。
-测试现状：Go 3 文件全在 service（ValidateURL/cron/ParseSteps/预算/token）；扩展 vitest 4 文件 23 it；**未覆盖**=Executor 主循环/dispatchStep/HostRegistry/repository/三平台适配器/cdp/input.js（G8）。
+测试现状（2026-09-22 实测计数）：Go **49 文件 / 244 个 Test 函数**（service 34、controller 9、repository 3、dto 2、platform 1）；扩展 vitest **17 文件 / 181 用例**（含 `cdp-input.test.js`）；私信桥 bridge **54 文件 / 700 用例**。原句"未覆盖＝Executor 主循环/dispatchStep/HostRegistry/repository/三平台适配器/cdp/input.js（G8）"六项**逐项已有在测文件**：executor 主循环由 `executor_{confirm,gaps,selfheal,ws_e2e}_test.go` 等驱动、dispatchStep 在 4 只测试文件里被直接调用、HostRegistry/repository/平台适配器各有专测、`cdp/input.js` 由 `cdp-input.test.js` 覆盖 ⇒ G8 的"零覆盖"表述作废，但**深度未评**（无覆盖率凭据，见 §5.2 G8 行与 §5.4 B13）。
 
 ## 5.2 差距总表（G1–G21，全量）
 
@@ -274,7 +279,7 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 | **G21** | P2 | **stop 为"步边界生效"**：stopCh 机制完整（sleepInterruptible/stopFired，二验通过——非缺陷），但在途命令帧不取消（≤45s 后生效）；UI 需按"最终一致停止"表述 | 二验新增 | ✅R24 文案：停止提示"步边界生效" |
 | G6 | P2 | 文档"四件套 Locators/Recipe/Verifier/Signature"无 Recipe/Signature 接口方法；三适配器纯静态 | platform.go:39-60 | **改文档不改代码**（不为 M3 预建空接口） |
 | G7 | P2 | 三平台写链路如实：小红书技术全通但平台静默吞（基座侧无优化项）；抖音 M3（a_bogus 零代码）；闲鱼接口未找到 | §3.3-Q7 | 维持"不吹不实现" |
-| G8 | P2 | 测试盲区 | §5.1 | D5：**input.js 事件序列单测提为 F1/F3 前置** |
+| G8 | P2 | 测试盲区 | §5.1 | D5：**input.js 事件序列单测提为 F1/F3 前置**。**2026-09-22 复核**："零覆盖"那句已作废（实测见 §5.1 与勘误 B13）——原点名的六项各有在测文件。本项按**盲区已建、深度未评**记：仓内没有覆盖率报告，"每分支是否被测到"目前无凭据，不拿文件数冒充覆盖充分 |
 | G9 | P2 | 死代码/恒 0 字段清单（tabExists 无调用/LlmPlanID/Title/LatencyMs/ConsoleErrors/BuildLoopNudge/旧 GeneratePlan 转发壳/captureVisibleTab 参数笔误；**CountRunningByUser 例外——非删除，F8 并发闸即其消费方**） | PROOF §4.3 G9 明细 | **✅R25 全收口**：死壳三件删、Hand.tabExists 删、BrowserSession.Title/LlmPlan/HandLatencyMs/ConsoleErrors+BrowserTask.LlmPlanID 字段删（DB 列按 D6 保留）、UpdateTitleAndSnapshot→UpdateSnapshot/UpdateMetrics 去恒 0 参/UpdateArtifacts 去 consoleErrors、BuildLoopNudge 接线 nudge、captureVisibleTab 参数笔误修、UI 去 Hand 延迟展示项 |
 
 ## 5.3 改进方案（F1–F7 明细）
@@ -303,6 +308,9 @@ Hand 三约束（hand.go:9-11）：不启动子进程 / 单 Host 连接内串行
 | B8 | BRAIN_SPEC P1-1 视为完成 | 半截（G3） |
 | B9 | DESIGN.md 状态行"待确认实施" | Charter 已拍板+M1/M2 已实施→过时，已随本文归档说明合并 |
 | B10 | Host 启动方向（v1 文档"Go 启动子进程"） | Chrome fork Host 子进程、server 绝不启动（LANDING A5 定稿，代码一致） |
+| B11 | §4.4 标题写"**版本化独轨**、不在 AutoMigrate 全局列表" | 2026-09-22 实测不成立：九只 browser 模型全在 `internal/pkg/db/migrate.go` 的 `allModels()`（browser 段 :371–:378 与 :385）里，由 `AutoMigrate()`（:412）消费。真实现状＝**双轨**：新表由标签直建、存量表加列仍写版本化迁移（v3.43/v3.44）。轨制终态仍属 D6 待拍板，但"不在列表"这句是事实错误而非待决 |
+| B12 | §4.4/§4.3 里 "=G1 查询端点缺失""无 session_id 列=G3""无应用层心跳=G4""注释列 11 action 滞后" 四处标注 | 四处均已闭，就地改写：G1=`GET /sessions/:id/logs`（router:104，D1/R24）；G3=v3.40 加 session_id+kind，写入点 `service/brain.go:119,255`；G4=`host_registry.go:98,130-135` pingLoop+90s 读超时+pong 重置（D4a）；action 名单改为指向 `dto/task.go` 的 oneof 唯一事实源（`model/step.go:16` 不再抄第二份）。另 G19=v3.40+`service/retention.go`（`BROWSER_AUDIT_RETENTION_DAYS` 默认 90）+批19g/批22 的分批裁剪与摘要自证；G20=v3.40 `time_zone`，注册前缀 `CRON_TZ=`（`service/cron.go:149`） |
+| B13 | §5.1"未覆盖＝Executor 主循环/dispatchStep/HostRegistry/repository/三平台适配器/cdp/input.js（G8）" | 六项逐项已有在测文件（实测 2026-09-22：Go 49 文件/244 Test、扩展 17 文件/181 用例含 `cdp-input.test.js`、bridge 54 文件/700 用例）⇒ G8 的"零覆盖"表述作废（按"盲区已建、深度未评"记，见 §5.2 G8 行）；`migrate.go:382` 那句"与批6 的 browser_steps 两列同口径：新表/新列由标签直加、零 DDL 文件"同时订正——批6 那三列恰恰**有** DDL 文件（v3.43.0），只有新表走标签 |
 
 ## 5.5 决策与不做清单
 
@@ -378,3 +386,4 @@ R24 挂账四项全部闭合并经真机全链路验收（详细链路与新缺�
 | v1.4 | 2026-09-13 | **R25 实施轮（扩展 v1.4.0）**：F2② 三段式拆回 Go+finalize / F6 历史压缩+新元素标记 / G9 死代码全收口 / A1–A6 真机全绿，见 §5.6；新缺陷 R1 send 超时回查、R2 终态写脱离取消链、R3 证据 own 归属全部落地；§4.6 版本锚点三处 1.4.0、协议口径 15+3 内部子命令 |
 | v1.5 | 2026-09-13 | **R26 运行态产品化轮（扩展 v1.4.1）**：R4 假死自愈探针产品化（host_registry 命令级超时计数连续 2 判死主动断开复用钩子，SIGSTOP 真机全链验证）；R26-2 注入竞速 deadline+Go 归因三分（inject_timeout 早返零副作用/WS 超时回查/业务错误正常失败）；42 项 vitest+Go 全包全绿；版本锚点三处 1.4.1；详见 R25 审计文档 §5 |
 | v1.6 | 2026-09-14 | **R27 双项（扩展/nm-host v1.4.2）**：① I5 审计导出 GET /sessions/:id/export（会话+步+命令流+LLM 成本账单请求归并、snapshot 大文本不带出、真机 195/188 验证）+前端导出按钮；② **探针自愈链真机补全**（更正 v1.5 过于乐观的"全链验证"结论：close-only 后 nm-host 退避重连成僵尸注册、服务不恢复，session199/204-208 四轮实证）——判病先发 `__host_shutdown__` 控制帧令 host 进程退出→Chrome 重拉全新进程，端到端零人工自愈在 v1.4.2 真机闭环（僵尸 59920 退出→新 pid 60643 注册→pong completed）。版本锚点三处 1.4.2 |
+| v1.7 | 2026-09-22 | **事实层重核（批14–22 回灌，`docs/superpowers/specs/2026-09-19-…-write-ledger-design.md` §7.24 八·第 1 条开的那张卡）**：本文件自 v1.6 之后停了 8 个天、7 个批次（批14–批22），期间 §4 事实层与代码脱钩。本次逐条读码重核并按 §5.4 自己的规矩追加勘误 B11–B13：**§0** 迁移件数（三件→本泳道七件 v3.37/38/39/40/42/43/44）与表数（六表→九表）、D6/D7 现状；**§4.3** G4 心跳缺口已闭（D4a）；**§4.4** 九表逐表补 v3.40/42/43/44 的列、`ok` 三态括注、三张新表（`browser_write_claims`/`browser_audit_digests`/`browser_audit_prune_runs`）、G1/G3 的过期标注、轨制现状注（模型确在 `allModels()`/AutoMigrate 内）；**§4.6** 版本锚点三处 1.4.2→**1.5.0**（实测 `manifest.json:4`、`dist/manifest.json:4`、`cmd/nm-host/main.go:61`）；**§5.1** 测试面按实测计数重写、G8 的"零覆盖"表述作废（深度未评，无覆盖率凭据）；**§5.4** 新增 B11/B12/B13。**不含**批14–22 的功能级叙述（写台账三态、双发闸、D7 审批闭环、裁剪自证各自的论证与证据住在上面那份 spec 的 §7.15–§7.28 与本轮台账 `docs/superpowers/specs/ledger/R22.jsonl`，本文件只回写"事实变了"的那几行，避免同一件事两个事实源）|
