@@ -354,6 +354,12 @@ func allModels() []any {
 		// 行项目写不进去，而"合计对不对"的用例连不上明细表时是 Skip 不是 Fail。
 		&model.Quote{},
 		&model.QuoteLineItem{},
+		// BadCase（表 bad_cases）：T-P8-03 / G-2。卡面写的 `v3_51_0_bad_case_migration.go`
+		// 因此不产出 —— 建表只走这一处登记（与 Bill 同一口径）。
+		// 登记理由与待办那一条同形且更硬：坏例是**整条闭环的唯一事实源**，表没建出来时
+		// 对话照样回答、日志照样打点，只有"这一轮低质被记下了"这件事静默消失，
+		// 而它下游是评测集 —— 少记的那天基线分数不会红，只会悄悄变成另一件事的分数。
+		&model.BadCase{},
 		// Bill（表 bills）：T-P7-01 / N-6 回款域第一层。
 		// 卡面写的 `v3_50_0_bill_migration.go` 因此不产出 —— 本仓生产建表只跑 AutoMigrate，
 		// 启动期 ExecuteUpgrade 固定空跑（与本文件头部那八次同源实测一致）。

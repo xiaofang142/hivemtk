@@ -327,7 +327,8 @@
     "baTasks": "Task List",
     "baCreate": "New Task",
     "baCron": "Cron Triggers",
-    "baStatus": "Host Status"
+    "baStatus": "Host Status",
+    "badCase": "Bad Case Queue"
   },
   "保存": "Save",
   "提交": "Submit",

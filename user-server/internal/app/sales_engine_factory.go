@@ -133,6 +133,10 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 	// 会话人工待办生产者（T-P3-03）：全局底座由 router.Setup 里的 InitHumanTaskRuntime
 	// 装配，这里只负责挂。没装配（拿不到 DB 句柄）时挂的是 nil，与"本卡之前"逐字一致。
 	attachHumanTaskProducer(o)
+
+	// Bad Case 自动标记器（T-P8-03）：全局底座同样由 router.Setup 里的 InitBadCaseRuntime
+	// 装配，这里只负责挂。没装配时挂的是 nil ⇒ 低质回答不留痕，回答路径与本卡之前逐字一致。
+	attachBadCaseMarker(o)
 	return o
 }
 

@@ -232,6 +232,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 就是不装配，此时下面那组 /api/human-tasks/* 端点全部回 503（不会回一个空列表骗人）。
 	app.InitHumanTaskRuntime(gormDB)
 
+	// Bad Case 底座（T-P8-03）：同一位置约束（在编排器与路由之前）。本竖也没有旗子 ——
+	// 编排器按全局服务决定挂不挂"这一轮低质 → 留一条痕"的标记器，不装配时
+	// 下面那组 /api/bad-cases/* 全部回 503，且回答路径与本卡之前逐字一致。
+	app.InitBadCaseRuntime(gormDB)
+
 	// 商机底座（T-P4-04）：同一位置约束（在编排器与路由之前）。本竖没有旗子，也不产生协程 ——
 	// 不装配就是 /api/opportunity/* 全部回 503，不会回一个空列表骗人。
 	app.InitOpportunityRuntime(gormDB)
@@ -390,6 +395,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 统一人工待办 /api/human-tasks/*（T-P3-03）：必须挂在这个块里 —— auth 组在本块
 		// 入口已 Use(JWTAuthMiddleware())，动作端点的操作者身份取自令牌里的 user_id。
 		setupHumanTaskRoutes(auth)
+
+		// Bad Case 队列与评测集导出 /api/bad-cases/*（T-P8-03）：与上一行同一位置约束
+		// （打标/撤销/补录三个写入口的操作者身份取自令牌里的 user_id）。
+		setupBadCaseRoutes(auth)
 
 		// 审批详情与裁决 /api/approvals/*（T-P3-04）：待办池里 kind=approval 那几行的
 		// 唯一出口。与上一行同一位置约束（身份取自令牌），且必须在

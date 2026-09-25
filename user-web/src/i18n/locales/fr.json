@@ -328,7 +328,8 @@
     "baTasks": "Liste des tâches",
     "baCreate": "Nouvelle tâche",
     "baCron": "Déclencheurs planifiés",
-    "baStatus": "État de l’hôte"
+    "baStatus": "État de l’hôte",
+    "badCase": "File des cas défaillants"
   },
   "保存": "Save",
   "提交": "Submit",

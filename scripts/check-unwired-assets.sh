@@ -490,6 +490,21 @@ BASELINE=(
   "25|催收腿在启动路径上的装配点（摘掉 main.go 那一行：逾期单既不提醒也不升级，而用例全绿）|func InitCollectionRuntime|InitCollectionRuntime\\(|cmd/api|wired"
   "25|催收观测端点的挂载入口（摘掉这一行 = 六种\"没动\"再没有一处能读出是哪一种）|func collectionStatusView|handleCollectionStatusGet\\)|internal/router|wired"
   "25|催收这条外发路径的审批闸门装配点（15b 的对偶：摘掉它只有挽回那条受约束）|func AttachReachGate|AttachReachGate\\(collectionReach\\)|internal/app|wired"
+  # ---- T-P8-03 Bad Case 闭环（26a–26d）———————————————————————————————————
+  # 26a/26b 与 21a–21d 同形（启动路径上的 Init / 端点挂载），那两格分开的理由照抄：
+  # 装配了却没挂载 = 库里有坏例、界面上一条看不到，与"根本没装配"是两种坏法。
+  #
+  # 26c 是本卡真正的命门：底座、路由、前端三面全绿而队列永远不会自己长出一行，
+  # 症状只在"没人报的坏例一条都没有"这一件事上，而这件事看起来恰好像"回答质量很好"。
+  # 它与 22（挽回队列）同属"setter 有生产调用点、但调用点只有一行"的形状。
+  #
+  # 26d 盯的是比 26c 更细的一格：`o.markBadCase(...)` 全仓唯一，且它**只在过门槛那一轮
+  # 才执行**（判定 A 的第四变体：调用点存在 ≠ 运行时不休眠）。写成"Mark 有人调"会永远
+  # WIRED —— BadCaseMarker 里那句 svc.Mark 在补录路径上也有人调，与自动留痕是两件事。
+  "26|Bad Case 底座在启动路径上的装配点（摘掉 router.go 那一行：八条端点恒 503、低质回答一条也不留痕，而 Go 用例全绿）|func InitBadCaseRuntime|InitBadCaseRuntime\\(|internal/router|wired"
+  "26|Bad Case 队列的 HTTP 挂载入口（装配了却没挂载 = 库里有坏例、界面上一条看不到，与上一格是两种坏法）|func setupBadCaseRoutes|setupBadCaseRoutes\\(|internal/router|wired"
+  "26|自动标记器挂上编排器的那一次交接（摘掉 attachBadCaseMarker：底座/路由/页面三面全绿，而队列永远不会自己长出一行）|func attachBadCaseMarker|attachBadCaseMarker\\(|internal/app|wired"
+  "26|低质回答的自动留痕调用点（唯一且只在过门槛那轮执行，故点名 markBadCase 而不是\"Mark 有人调\"）|func \\(o \\*SmartCSOrchestrator\\) markBadCase|o\\.markBadCase\\(|internal/service|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

@@ -50,14 +50,16 @@ func TestSmartCSOrchestrator_DefaultConfig(t *testing.T) {
 func TestSmartCSOrchestrator_ExtractConfidence(t *testing.T) {
 	o := NewSmartCSOrchestrator(nil, nil, nil)
 
-	if c := o.extractConfidence(context.Background(), nil, "s-test", "hi"); c != 0 {
+	if c, dec := o.extractConfidence(context.Background(), nil, "s-test", "hi"); c != 0 {
 		t.Errorf("nil 响应置信度应为 0，实际 %.2f", c)
+	} else if dec != nil {
+		t.Error("nil 响应不该有决策")
 	}
 
 	resp := &SalesResponse{
 		Intent: &dto.RecognizeResult{Confidence: 0.85},
 	}
-	if c := o.extractConfidence(context.Background(), resp, "s-test", "hi"); c != 0.85 {
+	if c, _ := o.extractConfidence(context.Background(), resp, "s-test", "hi"); c != 0.85 {
 		t.Errorf("意图置信度 0.85 应直接返回，实际 %.2f", c)
 	}
 
@@ -67,7 +69,7 @@ func TestSmartCSOrchestrator_ExtractConfidence(t *testing.T) {
 		Audited:   true,
 		RAGChunks: []RAGChunk{{Content: "x"}},
 	}
-	c := o.extractConfidence(context.Background(), resp2, "s-test", "hi")
+	c, _ := o.extractConfidence(context.Background(), resp2, "s-test", "hi")
 	if c <= 0.5 {
 		t.Errorf("完整链路置信度应 > 0.5，实际 %.2f", c)
 	}

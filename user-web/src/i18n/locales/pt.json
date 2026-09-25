@@ -328,7 +328,8 @@
     "baTasks": "Lista de tarefas",
     "baCreate": "Nova tarefa",
     "baCron": "Gatilhos agendados",
-    "baStatus": "Status do host"
+    "baStatus": "Status do host",
+    "badCase": "Fila de casos falhos"
   },
   "保存": "Save",
   "提交": "Submit",
