@@ -245,12 +245,20 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vue: ['vue', 'vue-router', 'pinia'],
-          elementPlus: ['element-plus', '@element-plus/icons-vue'],
-          echarts: ['echarts'],
-          tinymce: ['tinymce', '@tinymce/tinymce-vue'],
-          utils: ['axios', 'dompurify']
+        // Vite 8 使用 Rolldown 打包，manualChunks 必须为函数形式（对象形式报 "Expected Function"）。
+        // 分桶语义与原对象式保持一致：vue / elementPlus / echarts / tinymce / utils。
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('element-plus') || id.includes('@element-plus')) return 'elementPlus'
+          if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
+          if (id.includes('tinymce')) return 'tinymce'
+          if (id.includes('axios') || id.includes('dompurify')) return 'utils'
+          if (
+            id.includes('vue-router') ||
+            id.includes('pinia') ||
+            /\/node_modules\/(@vue|vue)\//.test(id)
+          )
+            return 'vue'
         }
       }
     }

@@ -89,7 +89,7 @@ user-web/
 ├── .env.production
 ├── vite.config.js                 # Vite 配置（别名 @、按需导入、分包、/api 代理到 8204）
 ├── vitest.config.js
-├── playwright.config.js            # baseURL 默认 http://localhost:5173
+├── playwright.config.js            # baseURL 默认 http://localhost:8211
 ├── eslint.config.recommended.mjs   # 推荐的 ESLint 配置（未启用）
 ├── check_menu.mjs / check_menu2.mjs / check_menu3.mjs   # 菜单 / 路由一致性巡检脚本
 ├── package.json
