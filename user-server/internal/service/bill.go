@@ -113,12 +113,19 @@ type billQuoteStore interface {
 	ListLines(ctx context.Context, quoteRowID string) ([]*model.QuoteLineItem, error)
 }
 
-// BillDeriveInput 一次成交确认的全部输入：**只有**版本行号（字段集合由反射用例钉成白名单）。
+// BillDeriveInput 一次成交确认的全部输入：版本行号 + 可选账期
+// （字段集合由反射用例 TestBillDeriveInputCarriesRowKeyAndOptionalTerm 钉成白名单）。
 //
-// 没有 amount / currency / status / due_at 任何一格：那四格全都是从库里那一版推出来的，
+// 没有 amount / currency / status 任何一格：那三格全都是从库里那一版推出来的，
 // 入参里能递进来一个，AC② 的"账单金额与报价合计一致"就当场失去对账对象。
+//
+// due_at 在 T-P7-01 交付时也在"没有"那一栏里，理由当时成立、今天被 T-P7-03 换掉：
+// 报价域里没有"付款条件"这一格（valid_days 是报价有效期），所以本层**没有地方能推出来**，
+// 而逾期判据读的正是它 —— 那一列全是 NULL 的催收是一条永不发信的腿。
+// 于是这一格改由在场的人给（合同条款），本层仍然不替它算：不补默认天数、不做时区换算。
 type BillDeriveInput struct {
-	QuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）
+	QuoteRowID string     // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）
+	DueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作"账期未定"（催收侧记 Undated，不参与逾期扫描）
 }
 
 // BillView 一张账单的对外视图（派生与复用两条路都回它）。
@@ -250,10 +257,13 @@ func (s *BillService) DeriveFromQuote(ctx context.Context, in BillDeriveInput) (
 		OpportunityID: row.OpportunityID,
 		Amount:        quoteSumAmount(lines),
 		Currency:      currency,
-		DueAt:         nil, // 账期未定：本卡没有任何一处定义过付款条件
-		Status:        model.BillStatusOpen,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		// 账期原样落：本层不判它是否在过去、不补默认值（判据见 BillDeriveInput.DueAt）。
+		// "已 accepted ⇒ 直接复用那一行"的分支在上面已经返回，所以重复确认带进来的
+		// 第二个账期不会覆盖第一个 —— 改账期需要自己的入口与自己的判据，今天没有。
+		DueAt:     in.DueAt,
+		Status:    model.BillStatusOpen,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := s.bills.Create(ctx, bill); err != nil {
 		if !errors.Is(err, repository.ErrBillAlreadyDerived) {
