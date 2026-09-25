@@ -1,0 +1,2 @@
+  ✗ 用例 TestLegacyExternalOrderKeyHookRenamed 在 /Users/xiaofang/Documents/www/go/hivemtk/r45-lane/user-server/internal/pkg/db 的 *_test.go 里查无定义 ⇒ 两刀都会红在 no tests to run
+锚点校验：3 格，1 格有问题

@@ -1,0 +1,7 @@
+控制组 rc=0 PASS=6 名单=TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟、TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20、TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）、TestNormalizePoolFallbacks/整条留空⇒采用生产默认表、TestPoolBoundLandsOnSQLHandle
+K1 摘掉 SetMaxOpenConns      rc=1 红=1 TestPoolBoundLandsOnSQLHandle 还原=一致 ⇒ 杀掉
+K2 上界兜底 20⇒0               rc=1 红=2 TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20 还原=一致 ⇒ 杀掉
+K3 lifetime 兜底⇒60          rc=1 红=2 TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟 还原=一致 ⇒ 杀掉
+K4 摘掉 MaxIdleConns==0 兜底   rc=1 红=2 TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/整条留空⇒采用生产默认表 还原=一致 ⇒ 杀掉
+基线 md5=13dd9e9f5b8c226724d9109b1f8468b5 终态 md5=13dd9e9f5b8c226724d9109b1f8468b5
+===== 四刀判定：4/4 全杀 =====

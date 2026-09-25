@@ -1,0 +1,5 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-bd3qgtf2
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/P503/20260924-132011
+  ✗ M1 锚点命中 0 次（要求恰好 1 次）：'if hasSideEffectX(ec.Execution, sentKey) {'
+锚点校验：24 格，1 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-bd3qgtf2/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-bd3qgtf2
