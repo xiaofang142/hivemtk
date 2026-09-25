@@ -218,7 +218,7 @@ if [ -f "$ARCH_L4_BASELINE" ]; then
     printf '%s\n' "$L4_BASELINE_VERDICT" | sed 's/^/    /'
   fi
 else
-  log_fail "[L4] 宽口径基线文件缺失：$ARCH_L4_BASELINE（缺基线不放行，避免门静默空转）"
+  log_fail "[L4] 宽口径基线文件缺失：${ARCH_L4_BASELINE}（缺基线不放行，避免门静默空转）"
 fi
 
 # 2.3 service 不应写 SQL 字符串拼接
