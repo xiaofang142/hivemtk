@@ -20,6 +20,10 @@ on:
       # "只改判据"/"只动基线"这类提交就根本不重跑这道门（platform docs-link-check.yml 的教训）。
       - 'scripts/check-test-nil-deref.py'
       - 'scripts/test-nil-deref.baseline'
+      # 这两行是上面那道「PG 名额与池上界同源」门的命门：判据脚本与它的用例。
+      # 少了任何一行，改判据/改夹具的提交就不重跑这道门（同一口井：#63 那次教训）。
+      - 'scripts/check-ci-pg-capacity.py'
+      - 'scripts/check-ci-pg-capacity.test.sh'
       - '.github/workflows/user-server-ci.yml'
   pull_request:
     branches: [master, main]
@@ -35,6 +39,8 @@ on:
       - 'scripts/date-bucket-tz.baseline'
       - 'scripts/check-test-nil-deref.py'
       - 'scripts/test-nil-deref.baseline'
+      - 'scripts/check-ci-pg-capacity.py'
+      - 'scripts/check-ci-pg-capacity.test.sh'
       - '.github/workflows/user-server-ci.yml'
 
 # ============================================================================
@@ -143,6 +149,19 @@ jobs:
         run: |
           chmod +x scripts/check-unwired-assets.sh
           bash scripts/check-unwired-assets.sh
+
+      - name: CI 的 PG 名额与代码侧池上界必须同源
+        # §23.21 第 8 段⑤ 的常驻化：此前"CI 容器只有默认名额、代码侧池上界比它大"这件事
+        # 只活在人脑和事后翻日志里，于是它以「最后一个开连接的用例随机红」的形式留给别人。
+        # 门读三处：本文件 4 枚 services.postgres 的声明、每枚带库作业的现测步骤、
+        # 以及 Go 源里那两枚池上界（现读，不手抄）。任何一处漂移即红；读不到源退 2。
+        run: python3 scripts/check-ci-pg-capacity.py --repo .
+
+      - name: check-ci-pg-capacity 用例（假树夹具，不联网、不要 docker）
+        # 十格：正控制齐全绿／摘 command／名额不等／缺现测步骤／只印不判／低于池上界之和／
+        # 源文件缺失退 2／上界形状缺失退 2／注释污染派生 grep／REAL 真仓库。
+        # 进 CI 的是用例而不只是门：判据退化（例如把"没数到"当成通过）在这里当场红。
+        run: bash scripts/check-ci-pg-capacity.test.sh
 
       - name: go vet
         working-directory: user-server
@@ -284,6 +303,12 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg15
+        # 显式名额。不写这一行 ⇒ 容器用镜像默认值，而代码侧的池上界比它大
+        # （生产 DefaultPoolConfig.MaxOpenConns ＋ testutil 夹具），整片跑就会以
+        # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
+        # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
+        # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
+        command: '-c max_connections=400'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -305,6 +330,23 @@ jobs:
           go-version: '1.25'
           cache: true
           cache-dependency-path: user-server/go.sum
+
+      - name: 现测 PG 名额（容器读到的数才是证据，YAML 里写的只是意图）
+        # §23.21 第 2 段那条「本地按不下去的红」＝服务名额与代码侧池上界不同源。
+        # 上面声明的那枚名额如果没被真测过，跟没写一样：postgres 镜像的 entrypoint
+        # 只在没有用户命令时才用默认参数，任何一处形状写错都会静默回落。
+        # want 用 grep 从本文件派生，不再手抄第二份数字（抄的那份不会跟着改）。
+        # 判据常驻：scripts/check-ci-pg-capacity.py（make audit ＋ static-gates 作业）。
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null || { echo "::error::runner 上没有 psql ⇒ 名额没被现测，这一步不许静默放行"; exit 1; }
+          want=$(grep -m1 -oE 'max_connections=[0-9]+' .github/workflows/user-server-ci.yml | cut -d= -f2)
+          got=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 'show max_connections')
+          if [ "$got" != "$want" ]; then
+            echo "::error::PG 容器名额 ${got} ≠ 工作流声明的 ${want} ⇒ 代码侧池上界会撞 too many clients"
+            exit 1
+          fi
+          echo "PG 名额现测 ${got}，与本文件声明一致"
 
       - name: Run unit tests (with -race)
         working-directory: user-server
@@ -341,6 +383,12 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg15
+        # 显式名额。不写这一行 ⇒ 容器用镜像默认值，而代码侧的池上界比它大
+        # （生产 DefaultPoolConfig.MaxOpenConns ＋ testutil 夹具），整片跑就会以
+        # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
+        # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
+        # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
+        command: '-c max_connections=400'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -362,6 +410,23 @@ jobs:
           go-version: '1.25'
           cache: true
           cache-dependency-path: user-server/go.sum
+
+      - name: 现测 PG 名额（容器读到的数才是证据，YAML 里写的只是意图）
+        # §23.21 第 2 段那条「本地按不下去的红」＝服务名额与代码侧池上界不同源。
+        # 上面声明的那枚名额如果没被真测过，跟没写一样：postgres 镜像的 entrypoint
+        # 只在没有用户命令时才用默认参数，任何一处形状写错都会静默回落。
+        # want 用 grep 从本文件派生，不再手抄第二份数字（抄的那份不会跟着改）。
+        # 判据常驻：scripts/check-ci-pg-capacity.py（make audit ＋ static-gates 作业）。
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null || { echo "::error::runner 上没有 psql ⇒ 名额没被现测，这一步不许静默放行"; exit 1; }
+          want=$(grep -m1 -oE 'max_connections=[0-9]+' .github/workflows/user-server-ci.yml | cut -d= -f2)
+          got=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 'show max_connections')
+          if [ "$got" != "$want" ]; then
+            echo "::error::PG 容器名额 ${got} ≠ 工作流声明的 ${want} ⇒ 代码侧池上界会撞 too many clients"
+            exit 1
+          fi
+          echo "PG 名额现测 ${got}，与本文件声明一致"
 
       - name: Run unit tests (with -race)
         working-directory: user-server
@@ -395,6 +460,12 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg15
+        # 显式名额。不写这一行 ⇒ 容器用镜像默认值，而代码侧的池上界比它大
+        # （生产 DefaultPoolConfig.MaxOpenConns ＋ testutil 夹具），整片跑就会以
+        # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
+        # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
+        # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
+        command: '-c max_connections=400'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -416,6 +487,23 @@ jobs:
           go-version: '1.25'
           cache: true
           cache-dependency-path: user-server/go.sum
+
+      - name: 现测 PG 名额（容器读到的数才是证据，YAML 里写的只是意图）
+        # §23.21 第 2 段那条「本地按不下去的红」＝服务名额与代码侧池上界不同源。
+        # 上面声明的那枚名额如果没被真测过，跟没写一样：postgres 镜像的 entrypoint
+        # 只在没有用户命令时才用默认参数，任何一处形状写错都会静默回落。
+        # want 用 grep 从本文件派生，不再手抄第二份数字（抄的那份不会跟着改）。
+        # 判据常驻：scripts/check-ci-pg-capacity.py（make audit ＋ static-gates 作业）。
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null || { echo "::error::runner 上没有 psql ⇒ 名额没被现测，这一步不许静默放行"; exit 1; }
+          want=$(grep -m1 -oE 'max_connections=[0-9]+' .github/workflows/user-server-ci.yml | cut -d= -f2)
+          got=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 'show max_connections')
+          if [ "$got" != "$want" ]; then
+            echo "::error::PG 容器名额 ${got} ≠ 工作流声明的 ${want} ⇒ 代码侧池上界会撞 too many clients"
+            exit 1
+          fi
+          echo "PG 名额现测 ${got}，与本文件声明一致"
 
       - name: Coverage (Go)
         # 2026-08-15 P0-CI：覆盖率采集（包含 -cover.out 上传 Codecov）
@@ -515,6 +603,12 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg15
+        # 显式名额。不写这一行 ⇒ 容器用镜像默认值，而代码侧的池上界比它大
+        # （生产 DefaultPoolConfig.MaxOpenConns ＋ testutil 夹具），整片跑就会以
+        # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
+        # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
+        # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
+        command: '-c max_connections=400'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -536,6 +630,23 @@ jobs:
           go-version: '1.25'
           cache: true
           cache-dependency-path: user-server/go.sum
+
+      - name: 现测 PG 名额（容器读到的数才是证据，YAML 里写的只是意图）
+        # §23.21 第 2 段那条「本地按不下去的红」＝服务名额与代码侧池上界不同源。
+        # 上面声明的那枚名额如果没被真测过，跟没写一样：postgres 镜像的 entrypoint
+        # 只在没有用户命令时才用默认参数，任何一处形状写错都会静默回落。
+        # want 用 grep 从本文件派生，不再手抄第二份数字（抄的那份不会跟着改）。
+        # 判据常驻：scripts/check-ci-pg-capacity.py（make audit ＋ static-gates 作业）。
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null || { echo "::error::runner 上没有 psql ⇒ 名额没被现测，这一步不许静默放行"; exit 1; }
+          want=$(grep -m1 -oE 'max_connections=[0-9]+' .github/workflows/user-server-ci.yml | cut -d= -f2)
+          got=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 'show max_connections')
+          if [ "$got" != "$want" ]; then
+            echo "::error::PG 容器名额 ${got} ≠ 工作流声明的 ${want} ⇒ 代码侧池上界会撞 too many clients"
+            exit 1
+          fi
+          echo "PG 名额现测 ${got}，与本文件声明一致"
 
       - name: Run go benchmarks (P0-5 性能基线)
         # 仅跑 P0-5 性能基线（500 条 IN 翻转 < 200ms 阈值），bench 默认只跑 1 次耗时短

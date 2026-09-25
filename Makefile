@@ -445,6 +445,8 @@ audit:
 	@python3 scripts/check-action-runtime.py --repo .
 	@echo "── 被作业实际执行的门，其脚本与判据文件必须在该工作流的 paths 触发面里 ──"
 	@python3 scripts/check-ci-gate-paths.py --repo .
+	@echo "── CI 的 PG 名额必须显式声明、被现测、且 ≥ 代码侧池上界之和（两边同源，改一边就红）──"
+	@python3 scripts/check-ci-pg-capacity.py --repo .
 	@echo "── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──"
 	@python3 scripts/check-env-coverage.py
 	@echo "── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──"
@@ -457,6 +459,8 @@ audit:
 	@bash scripts/check-shellcheck.sh
 	@echo "── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──"
 	@bash scripts/check-shell-cjk-expansion.sh
+	@echo "── 全仓 shell 文件必须被 mac 出厂那版 bash（3.2）读通；解析器不是 3.x 时本门自报 SKIP，不冒充绿 ──"
+	@bash scripts/check-bash32-parse.sh
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——
