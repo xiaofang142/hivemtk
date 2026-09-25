@@ -36,20 +36,43 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "user-web" / "browser_automation"
 PRIM_REL = Path("src/core/primitives.js")
-JS_TEST = "test/batch17-actionability.test.js"
+# 批20c 起本泳道的复核闸门有两份用例：批17 的两处消费点 + 批20c 的第三处（comment_send）。
+# 电池必须两都跑——只跑新那份的话，M10/M13 这种「单独断一条线」的变异会分不清是谁红的。
+JS_TESTS = ["test/batch17-actionability.test.js", "test/batch20c-send-identity.test.js"]
 SVC = "internal/browser_automation/service"
 # 克隆里没有本泳道的未提交改动，必须整文件覆盖过去，被测的才是"工作区里这份代码"。
-GO_OVERLAY = [
-    f"user-server/{SVC}/executor.go",
-    f"user-server/{SVC}/hand.go",
-    f"user-server/{SVC}/write_ledger.go",
-    f"user-server/{SVC}/hand_frames_b9_test.go",
-    f"user-server/{SVC}/verify_identity_b17_test.go",
-    "user-web/browser_automation/src/core/primitives.js",
-]
-GO_RUN = "Identity|Recheck|WriteClick|ClickNear|ClickResult|NeverExecuted|ElementMoved|PreDispatch"
+# 覆盖清单不再手写：批20b 把 appendCommandLog 的 ok 改成 *bool 之后，手写清单必然漏文件
+# （漏一个用 bool 调用的旧测试 = 克隆里 [build failed]，电池整个失声）。改成按 git 脏态自动枚举
+# 本泳道三个包下的 .go，谁改过谁进覆盖层。
+LANE_PATHS = ["user-server/internal/browser_automation",
+              "user-server/internal/model",
+              "user-server/internal/migration"]
+
+
+def lane_overlays() -> list[str]:
+    r = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "-uall", "--"] + LANE_PATHS,
+                       capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        raise SystemExit("git status 失败，拿不到本泳道脏文件清单：" + r.stderr[-200:])
+    out = []
+    for line in r.stdout.splitlines():
+        p = line[3:].split(" -> ")[-1].strip().strip('"')
+        if p.endswith(".go"):
+            out.append(p)
+    if not out:
+        raise SystemExit("脏文件清单为空——克隆里跑的是 HEAD，测不到本批改动（宁可停机也别假绿）")
+    return out
+
+
+GO_OVERLAY_JS = ["user-web/browser_automation/src/core/primitives.js"]
+
+GO_RUN = ("Identity|Recheck|WriteClick|ClickNear|ClickResult|NeverExecuted|ElementMoved|PreDispatch"
+          "|CommentSend")
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+# 控制组跑出来的用例总数，逐格变异后必须一字不差地被重新结算（见 verdict）。
+CONTROL = {"js": 0, "go": 0}
 
 
 def md5_bytes(p: Path) -> str:
@@ -84,15 +107,21 @@ def js_prepare(dst: Path) -> Path:
     return work
 
 
-def js_run(work: Path):
-    p = subprocess.run(["npx", "vitest", "run", JS_TEST], cwd=work,
+def js_run(work: Path) -> dict:
+    p = subprocess.run(["npx", "vitest", "run"] + JS_TESTS, cwd=work,
                        capture_output=True, text=True, timeout=900, env=os.environ)
     out = ANSI.sub("", p.stdout + p.stderr)
     killed = [re.sub(r"\s+\d+ms$", "", ln.split("×", 1)[1].strip())
               for ln in out.splitlines() if "×" in ln]
-    ran = int(re.search(r"Tests\s+(\d+) passed", out).group(1)) if re.search(r"Tests\s+(\d+) passed", out) else 0
+    # 汇总行两种形状都要认：全绿时是 "Tests  30 passed (30)"，有红时是
+    # "Tests  4 failed | 26 passed (30)"。旧写法只认前者 ⇒ 红轮里 passed 恒读成 0，
+    # 「整文件崩了只点出 1 个名」和「30 条跑了 3 条红」在报告上长得一模一样（假杀）。
+    m = re.search(r"Tests\s+(?:\d+ failed \| )?(?:\d+ skipped \| )?(\d+) passed.*?\((\d+)\)", out)
+    passed = int(m.group(1)) if m else 0
+    total = int(m.group(2)) if m else 0
     skipped = int(re.search(r"(\d+) skipped", out).group(1)) if re.search(r"(\d+) skipped", out) else 0
-    return p.returncode, killed, ran, skipped, out
+    return {"rc": p.returncode, "killed": killed, "total": total,
+            "failed": total - passed - skipped, "skipped": skipped, "out": out}
 
 
 # ------------------------------------------------------------------ Go 侧
@@ -108,7 +137,9 @@ def go_prepare(dst: Path) -> Path:
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
         raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
-    for rel in GO_OVERLAY:
+    # 覆盖层 = 本泳道全部脏 .go（含未跟踪的新测试文件：克隆里没有它就 [build failed] 式失声）
+    # + Go 侧静态锁要读的那份扩展源码（见 verify_identity 的 JS 侧锁）。
+    for rel in lane_overlays() + GO_OVERLAY_JS:
         src = ROOT / rel
         if not src.exists():
             raise SystemExit(f"覆盖源缺失：{src}")
@@ -122,7 +153,7 @@ def go_prepare(dst: Path) -> Path:
     return clone
 
 
-def go_run(clone: Path):
+def go_run(clone: Path) -> dict:
     root = clone / "user-server"
     env = dict(os.environ)
     env.setdefault("GIN_MODE", "test")
@@ -139,9 +170,30 @@ def go_run(clone: Path):
     out = ANSI.sub("", p.stdout + p.stderr)
     killed = sorted(set(re.findall(r"^    --- FAIL: (\S+)", out, re.M)) |
                     set(re.findall(r"^--- FAIL: (\S+)", out, re.M)))
-    ran = len(re.findall(r"^=== RUN\s+(\S+)", out, re.M))
-    skipped = len(re.findall(r"^--- SKIP: (\S+)", out, re.M))
-    return p.returncode, killed, ran, skipped, out
+    # 「被结算的顶层用例数」= PASS+FAIL+SKIP。一条用例 panic 会带走整个测试二进制，
+    # 后面的用例连 === RUN 都留不下：那种红看着像杀（FAIL=1），其实剩下的腿根本没跑。
+    settled = (len(re.findall(r"^--- PASS: ", out, re.M))
+               + len(re.findall(r"^--- FAIL: ", out, re.M))
+               + len(re.findall(r"^--- SKIP: ", out, re.M)))
+    passed = len(re.findall(r"^--- PASS: ", out, re.M))
+    skipped = len(re.findall(r"^--- SKIP: ", out, re.M))
+    return {"rc": p.returncode, "killed": killed, "total": settled, "passed": passed,
+            "failed": settled - passed - skipped, "skipped": skipped, "out": out,
+            "panicked": bool(re.search(r"^panic: |^fatal error: ", out, re.M)),
+            "buildfailed": "[build failed]" in out or "cannot use" in out or "undefined:" in out}
+
+
+def verdict(r: dict, expect_total: int) -> str:
+    """三态判定：杀掉 / 存活=洞 / BROKEN（红了但判不了）。
+    BROKEN 绝不能混进「杀掉」——一条崩掉整个二进制的变异，和一条真正被断言抓住的变异，
+    在「rc!=0 且点了名」这个旧口径下长得完全相同（本电池从别的批次学到的假杀形态）。"""
+    if r["rc"] == 0 and not r["killed"]:
+        return "存活=洞"
+    if r.get("panicked") or r.get("buildfailed") or not r["killed"]:
+        return "BROKEN=判不了"
+    if r["total"] != expect_total or r["failed"] < 1 or r["skipped"] > 0:
+        return "BROKEN=判不了"
+    return "杀掉"
 
 
 # ------------------------------------------------------------------ 变异表
@@ -150,6 +202,10 @@ def go_run(clone: Path):
 DEADLINE = "if (Date.now() >= deadline) return { error: 'unstable' };"
 INDENTS = {"M1": "        ", "M2": "            ", "M3": "      "}
 RECHECK_CLICK = "          if (cmd.verify_identity && !navigated) {"
+# 第三份 probe（injPostCommentSend）回传的抖动半径那一行。**必须带前导换行**：三份同形但缩进
+# 各异（6/10/4 空格），不带换行时 4 空格串是 6/10 空格串的子串，锚点会命中 3 次（首跑实测被
+# sub_once 拦下）；带上换行后「4 空格紧跟 jitter」只可能是提交点那一份。
+JITTER_LINE = "\n    jitter_radius: Math.min(r.width, r.height) / 2,\n"
 
 
 def js_mutants():
@@ -165,6 +221,12 @@ def js_mutants():
         ("M9", "只读步也强制复核（拿读步的时延预算替写步买单）"),
         ("M10", "click_near 分支的复核单独断线（第二个消费点）"),
         ("M11", "SW 侧 dispatch 合成一句 *_not_interactable（拆掉 Go 判「从未派发」的前提）"),
+        ("M12", "第三份 probe 不回传抖动半径（comment_send 落点静默退化成 ±3px）"),
+        ("M13", "comment_send 分支的复核单独断线（§8.2-1 尾项＝本批立的第三个消费点）"),
+        ("M14", "第三份 probe 不回传 selector（本批新增那处 pathOf 断线：复核没有再解析对象）"),
+        ("M15", "pathOf 退化成 tagName（拿到的是页面上第一个同标签节点，不是被点的那个）"),
+        ("M16", "未请求复核也照样回 identity_checked=true（把「没跑」洗成「跑过且过了」）"),
+        ("M17", "comment_send 整块复核摘掉（静态锁「三处消费」唯一的红法；M13 抽条件它看不见）"),
     ]
 
 
@@ -181,7 +243,15 @@ def apply_js(src: str, code: str) -> str:
     if code == "M9":
         return sub_once(src, RECHECK_CLICK, "          if (!navigated) {", "M9")
     if code == "M10":
-        return sub_once(src, "\n          if (cmd.verify_identity) {", "\n          if (false) {", "M10")
+        # 批20c 起 comment_send 也用同一句 `if (cmd.verify_identity) {`（同为 10 空格缩进），
+        # 单行锚点会命中两次被 sub_once 拦下 ⇒ 带上下一行的 [probe.selector 才是 click_near 那一格。
+        anchor = ("\n          if (cmd.verify_identity) {\n"
+                  "            try {\n"
+                  "              await executeInTab(tabId, injClickIdentityCheck, [probe.selector,")
+        mutated = ("\n          if (false) {\n"
+                   "            try {\n"
+                   "              await executeInTab(tabId, injClickIdentityCheck, [probe.selector,")
+        return sub_once(src, anchor, mutated, "M10")
     if code == "M5":
         old = ("              await executeInTab(tabId, injClickIdentityCheck, [sel, probe.x, probe.y, IDENTITY_RECHECK_TOLERANCE_PX]);\n"
                "            } catch (e) {\n"
@@ -207,6 +277,11 @@ def apply_js(src: str, code: str) -> str:
     if code == "M7":
         return sub_once(src, "const IDENTITY_RECHECK_TOLERANCE_PX = 5;",
                         "const IDENTITY_RECHECK_TOLERANCE_PX = 1e9;", "M7")
+    if code == "M12":
+        # 替换成 "\n" 而不是 ""：锚点带前导换行，整串删掉会把上一行注释和 `};` 黏成一行
+        # （注释吃掉闭括号＝语法错，vitest 报 collection error、一条用例名都点不出来——
+        # 那是"红了但没点名"，不算杀）。留一个换行才是干净的"少回传一个字段"。
+        return sub_once(src, JITTER_LINE, "\n", "M12")
     if code == "M11":
         # 派发之后（SW 侧 dispatch 里）合成一句 *_not_interactable：Go 侧据此判「从未派发」，
         # 这个前提必须由 dispatch 段零合成来守——静态锁不许只是句注释。
@@ -217,6 +292,37 @@ def apply_js(src: str, code: str) -> str:
                "            } catch (e) {\n"
                "              throw new Error('send_button_not_interactable: SW 侧改写了复核结论');\n")
         return sub_once(src, old, new, "M11")
+    # ---- 批20c（comment_send = 第三个复核消费点）----
+    if code == "M13":
+        # 条件恒假：行为腿必须红，而"数消费点"的静态锁看不见这一刀（语句还在、条件被抽空）
+        anchor = ("          if (cmd.verify_identity) {\n"
+                  "            try {\n"
+                  "              await executeInTab(tabId, injClickIdentityCheck, [btn.selector,")
+        mutated = ("          if (false) {\n"
+                   "            try {\n"
+                   "              await executeInTab(tabId, injClickIdentityCheck, [btn.selector,")
+        return sub_once(src, anchor, mutated, "M13")
+    if code == "M17":
+        # 整块摘掉：静态锁（消费点 want 3）唯一的红法就是真少一处，M13 那种抽条件它看不见
+        old = ("          if (cmd.verify_identity) {\n"
+               "            try {\n"
+               "              await executeInTab(tabId, injClickIdentityCheck, [btn.selector, btn.x, btn.y, IDENTITY_RECHECK_TOLERANCE_PX]);\n"
+               "            } catch (e) {\n"
+               "              throw asIdentityVerdict(e);\n"
+               "            }\n"
+               "            return { ok: true, sent: true, identity_checked: true };\n"
+               "          }\n")
+        return sub_once(src, old, "", "M17")
+    if code == "M14":
+        # 替换成 "\n" 的理由见 M12；这一刀摘的是"复核有没有对象"的那条路径
+        return sub_once(src, "\n    selector: pathOf(btn),\n", "\n", "M14")
+    if code == "M15":
+        # pathOf 退化成 'button'：两份内联里只砍第二份（用后随的 `const r = settled.box` 定位）
+        old = ("    return parts.join(' > ');\n  };\n  const r = settled.box;")
+        return sub_once(src, old, "    return 'button';\n  };\n  const r = settled.box;", "M15")
+    if code == "M16":
+        return sub_once(src, "          return { ok: true, sent: true };\n",
+                        "          return { ok: true, sent: true, identity_checked: true };\n", "M16")
     raise SystemExit(f"未知变异体 {code}")
 
 
@@ -251,6 +357,23 @@ def go_mutants():
         ("G7", "派发前拒绝（*_not_interactable）重新被记成提交尝试（闸门误伤回来了）",
          f"user-server/{SVC}/write_ledger.go",
          ' ||\n\t\tstrings.Contains(msg, "_not_interactable")', ""),
+        # ---- 批20c：comment_send 的第三个消费点，请求侧/结论侧各拆一刀 ----
+        ("G8", "hand.go comment_send 帧不再请求复核（第三个消费点在 Go 侧断线）",
+         f"user-server/{SVC}/hand.go",
+         '{"action": "comment_send", "tab_id": tabID, "verify_identity": verifyIdentity}',
+         '{"action": "comment_send", "tab_id": tabID}'),
+        ("G9", "executor.go comment_send 的 is_write 传成死 false（判据不再喂给复核）",
+         f"user-server/{SVC}/executor.go",
+         "e.hand.commentSend(ctx, userID, tabID, prepReq, stepRow.IsWrite)",
+         "e.hand.commentSend(ctx, userID, tabID, prepReq, false)"),
+        ("G10", "post_comment 读错键取复核结论（扩展报了 true 也恒落成 null）",
+         f"user-server/{SVC}/executor.go",
+         '"identity_checked": sendRes["identity_checked"],',
+         '"identity_checked": sendRes["identity_check"],'),
+        ("G11", "post_comment 把复核结论洗成 true（旧扩展/没复核的那一格也冒充复核过）",
+         f"user-server/{SVC}/executor.go",
+         '"identity_checked": sendRes["identity_checked"],',
+         '"identity_checked": sendRes["identity_checked"] != false,'),
     ]
 
 
@@ -284,11 +407,13 @@ def main() -> int:
         prim = work / PRIM_REL
         orig = read(prim)
         base_md5 = md5_bytes(prim)
-        rc, killed, ran, skipped, out = js_run(work)
-        print(f"\n[JS] 控制组 rc={rc} passed={ran} skipped={skipped} 红名={killed}")
-        if rc != 0 or ran == 0 or skipped > 0 or killed:
-            print(out[-3000:])
+        c = js_run(work)
+        print(f"\n[JS] 控制组 rc={c['rc']} total={c['total']} failed={c['failed']} "
+              f"skipped={c['skipped']} 红名={c['killed']}")
+        if c["rc"] != 0 or c["total"] == 0 or c["skipped"] > 0 or c["killed"]:
+            print(c["out"][-3000:])
             raise SystemExit("[JS] 控制组不干净——后面所有红/绿都不可信")
+        CONTROL["js"] = c["total"]
         jskill = {}
         for code, desc in js_mutants():
             try:
@@ -296,14 +421,14 @@ def main() -> int:
             except SystemExit as e:
                 problems.append(str(e))
                 continue
-            rc, killed, ran, skipped, out = js_run(work)
-            verdict = "杀掉" if (rc != 0 and killed) else ("存活=洞" if rc == 0 else "红了但没点名")
-            print(f"{code:<4} {desc[:56]:<58} {verdict:<7} pass={ran} skip={skipped} ｜ "
-                  + " | ".join(k[:64] for k in killed[:2]))
-            if verdict != "杀掉":
-                problems.append(f"[JS] {code} {verdict}：{desc}")
-                print(out[-2500:])
-            jskill[code] = set(killed)
+            r = js_run(work)
+            v = verdict(r, CONTROL["js"])
+            print(f"{code:<4} {desc[:56]:<58} {v:<12} total={r['total']} fail={r['failed']} "
+                  f"skip={r['skipped']} ｜ " + " | ".join(k[:64] for k in r['killed'][:2]))
+            if v != "杀掉":
+                problems.append(f"[JS] {code} {v}：{desc}")
+                print(r["out"][-2500:])
+            jskill[code] = set(r["killed"])
             prim.write_text(orig)
             if md5_bytes(prim) != base_md5:
                 raise SystemExit(f"[JS] {code} 还原后 md5 不一致，停机")
@@ -317,11 +442,13 @@ def main() -> int:
         originals = {rel: read(p) for rel, p in files.items()}
         gkill = {}
         basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
-        rc, killed, ran, skipped, out = go_run(clone)
-        print(f"\n[Go] 控制组 rc={rc} ran={ran} skip={skipped} FAIL={killed}")
-        if rc != 0 or ran == 0 or skipped > 0:
-            print(out[-4000:])
+        c = go_run(clone)
+        print(f"\n[Go] 控制组 rc={c['rc']} settled={c['total']} passed={c['passed']} "
+              f"skip={c['skipped']} FAIL={c['killed']}")
+        if c["rc"] != 0 or c["total"] == 0 or c["skipped"] > 0 or c["killed"]:
+            print(c["out"][-4000:])
             raise SystemExit("[Go] 控制组不干净")
+        CONTROL["go"] = c["total"]
         for code, desc, rel, old, new in go_mutants():
             try:
                 mutated = sub_once(originals[rel], old, new, code)
@@ -329,14 +456,14 @@ def main() -> int:
                 problems.append(str(e))
                 continue
             files[rel].write_text(mutated)
-            rc, killed, ran, skipped, out = go_run(clone)
-            verdict = "杀掉" if (rc != 0 and killed) else ("存活=洞" if rc == 0 else "红了但没点名")
-            gkill[code] = set(killed)
-            print(f"{code:<4} {desc[:56]:<58} {verdict:<7} ran={ran} skip={skipped} ｜ "
-                  + " | ".join(k[:60] for k in killed[:2]))
-            if verdict != "杀掉":
-                problems.append(f"[Go] {code} {verdict}：{desc}")
-                print(out[-3000:])
+            r = go_run(clone)
+            v = verdict(r, CONTROL["go"])
+            gkill[code] = set(r["killed"])
+            print(f"{code:<4} {desc[:56]:<58} {v:<12} settled={r['total']} fail={r['failed']} "
+                  f"skip={r['skipped']} ｜ " + " | ".join(k[:60] for k in r['killed'][:2]))
+            if v != "杀掉":
+                problems.append(f"[Go] {code} {v}：{desc}")
+                print(r["out"][-3000:])
             files[rel].write_text(originals[rel])
             if md5_bytes(files[rel]) != basemd5[rel]:
                 raise SystemExit(f"[Go] {code} 还原后 md5 不一致，停机")

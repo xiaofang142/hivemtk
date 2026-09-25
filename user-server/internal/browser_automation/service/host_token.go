@@ -30,7 +30,10 @@ func GenerateHostToken(userID uint) (string, error) {
 	return fmt.Sprintf("bh_%d_%s", userID, hex.EncodeToString(buf)), nil
 }
 
-// RotateHostToken 轮换 token：当前值滚入 _prev（保持旧 token 平滑失效），写入新值。
+// RotateHostToken 轮换 token：当前值滚入 _prev（保持旧 token 平滑过渡），写入新值。
+// _prev 没有时限——与全仓 bridge_ingest_token_prev / webhook *_prev 同一形状，
+// 旧值一直可用到下一次轮换把它挤出。所以「撤销泄露的 token」要重置两次，
+// controller 侧给运维的那句话必须与此一致（由 host_loopback_b19f_test.go 钉住）。
 // 注意：轮换不改变 token 归属用户（新 token 仍按原 userID 生成语义由调用方决定；
 // MVP 简化：轮换时为 admin 指定/默认 user=1 生成，或保留原 token 的 userID）。
 func RotateHostToken(ctx context.Context, kvRepo hrepo.SystemConfigKVRepository) (string, error) {

@@ -121,39 +121,51 @@ async function refreshTokenOnce(auth) {
 // ensureFreshToken：exp 剩余 <1h 时主动续期。服务端 24h 滚动窗口 + 扩展每次使用前检查
 // => 只要在 24h 内用过一次扩展就永久有效；超过 24h 未用才需要重新登录（符合个人电脑
 //    常驻场景，又避免无限期 token 的安全风险）。
+// 返回值是「这次请求该带哪把令牌」，不是布尔量：refreshTokenOnce 只把新令牌写进存储、
+// 不改传入的 auth，而服务端刷新是一次性轮换（旧令牌当场拉黑）——续期成功后继续用本地
+// 那把等于必发一个已作废的凭据（批19h 的强制重登就是这么来的）。
 async function ensureFreshToken(auth) {
-  if (auth.exp && auth.exp * 1000 < Date.now() + 3600 * 1000) {
-    await refreshTokenOnce(auth);
-  }
+  if (!auth.exp || auth.exp * 1000 >= Date.now() + 3600 * 1000) return auth.token;
+  if (!(await refreshTokenOnce(auth))) return auth.token; // 续期失败照旧发，交给 401 兜底判
+  const fresh = await loadAuth();
+  return fresh.token || auth.token;
 }
 
 async function apiCall(path, { method = 'GET', body, retry = true } = {}) {
   const auth = await loadAuth();
   const base = auth.serverUrl || (await getConfiguredBaseUrl());
   if (!auth.token) throw new Error('未登录：请在扩展弹窗中先登录');
-  await ensureFreshToken(auth);
+  const token = await ensureFreshToken(auth);
 
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   // 401 兜底：服务端 nbf 保护下 refresh 偶发竞态，重登一次；仍失败则要求手动登录
   if (res.status === 401 && retry) {
+    // 先看盘：令牌跟我们用的这把不一样 ⇒ 另有在途调用刚完成轮换，把我们这把拉黑了。
+    // 拿它重试一次即可——这一腿必须排在清盘之前，否则并发的一方会把另一方换来的
+    // 有效令牌当作「已失效」的证据抹掉（一次性轮换 + 并发在途是常态，不是边角）。
+    const cur = await loadAuth();
+    if (cur.token && cur.token !== token) {
+      return await apiCall(path, { method, body, retry: false });
+    }
     if (auth.username && auth.password) {
       // 兼容旧 storage 里可能残留的记住密码：静默重登一次后清掉密码
       try {
         await login(auth.serverUrl || base, auth.username, auth.password);
-        const cur = await loadAuth();
-        await saveAuth({ ...cur, password: undefined });
+        const cur2 = await loadAuth();
+        await saveAuth({ ...cur2, password: undefined });
         return await apiCall(path, { method, body, retry: false });
       } catch {
         await saveAuth({ username: auth.username });
         throw new Error('自动重登失败，请在弹窗中重新登录');
       }
     }
-    if (auth.token && (await refreshTokenOnce(auth))) {
+    // 用「实际发出去的那把」去续期，而不是本地 auth 里可能已被轮换掉的旧值
+    if (await refreshTokenOnce({ ...auth, token })) {
       return await apiCall(path, { method, body, retry: false });
     }
     await saveAuth({ username: auth.username });

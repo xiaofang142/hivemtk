@@ -383,6 +383,30 @@ func TestInboxIngress_ClaimPendingOutbound_AckReclaimRace(t *testing.T) {
 	}
 }
 
+// TestInboxOutboundClaimTimeoutCoversBridgeSendBudget 认领超时下界必须 ≥ 桥端一次发送的最大预算。
+//
+// 杀掉的变异：把 InboxOutboundClaimTimeout 从 30s 砍到 5s（inbox_ingress_outbound.go:164）。
+// 今天这一列没有任何一条腿真钉着它：
+//   - sse_outbound_claim_b11_test.go:81/:280 两处写的是 `!= service.InboxOutboundClaimTimeout`，
+//     比的是常量自己 ⇒ 恒真，改任何数值都照样绿（它们锁的是「两条路径同源」，不是「这个值合理」）；
+//   - 唯一的数字腿 TestInboxIngress_ClaimPendingOutbound_AckReclaimRace 把 claimed_at 往回拨 60s
+//     再要求回收成功 ⇒ 只能抓到「变大」（>60s），往下改多少都不红。
+//
+// 为什么下界取 20s：桥端一次出站发送的预算是 sendOutboundTimeoutMs = 20000
+// （user-web/bridge/src/core/constants.js §9），扩展是**发完才 ack**；超时窗比它短 ⇒
+// 一条还在真实发送的行被回收成 pending 并被另一条路径重新认领 ⇒ 同一句话打给真实客户两遍
+// （§3 定性：双发是这条链路上唯一不可撤销的那一侧）。
+// 本腿只钉这一条地板：批3/B4 之后按文案长度上浮的动态预算（humanSendTimeoutMs，封顶 120s）
+// 是 §8.3 行 7「靠心跳续期」那条被拒绝的取舍的范围，不在这里假装已经覆盖。
+func TestInboxOutboundClaimTimeoutCoversBridgeSendBudget(t *testing.T) {
+	const bridgeSendBudgetMs = 20000 // 单一来源：constants.js BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs
+	bridgeSendBudget := time.Duration(bridgeSendBudgetMs) * time.Millisecond
+	if InboxOutboundClaimTimeout < bridgeSendBudget {
+		t.Fatalf("InboxOutboundClaimTimeout=%v < 桥端单次发送预算 %v：发送还没结束、ack 还没回来，"+
+			"这一行就被回收重投 ⇒ 双发", InboxOutboundClaimTimeout, bridgeSendBudget)
+	}
+}
+
 // TestInboxIngress_ClaimPendingOutbound_GuardZeroNegative 入参守卫：limit<=0 返回 (nil,nil) 不panic。
 func TestInboxIngress_ClaimPendingOutbound_GuardZeroNegative(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.MessageHub{})

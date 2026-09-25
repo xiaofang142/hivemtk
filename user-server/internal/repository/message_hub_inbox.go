@@ -67,36 +67,50 @@ func (r *MessageHubRepository) GetByMsgID(ctx context.Context, msgID string) (*m
 	return &hub, err
 }
 
-func (r *MessageHubRepository) GetByContentHash(ctx context.Context, canonicalHash string) (*model.MessageHub, error) {
+// GetByContentHash 按「内容哈希即 msg_id」的幂等键查行。会话与时间界都是必需的：
+// msg_id 只在 (platform,msg_id,conversation_id) 复合索引下唯一，内容哈希又不带会话，
+// 不锁会话就是「任一会话命中即算命中」；不看 sent_at 就是「历史里说过的原话再说一遍被静默吞」。
+// conversationID 为空表示调用方确实没有会话键，此时不加这条 WHERE。
+func (r *MessageHubRepository) GetByContentHash(ctx context.Context, canonicalHash, conversationID string, since time.Time) (*model.MessageHub, error) {
 	if canonicalHash == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
 	var hub model.MessageHub
-	err := r.db.Where("msg_id = ?", canonicalHash).First(&hub).Error
+	q := r.db.WithContext(ctx).Where("msg_id = ? AND sent_at > ?", canonicalHash, since)
+	if conversationID != "" {
+		q = q.Where("conversation_id = ?", conversationID)
+	}
+	err := q.First(&hub).Error
 	return &hub, err
 }
 
-func (r *MessageHubRepository) GetByPlatformContent(ctx context.Context, platform, content string) (*model.MessageHub, error) {
+// GetByPlatformContent 出站回声嗅探：锁本会话、且只回看出站回声窗口内（sent_at > since）的行。
+func (r *MessageHubRepository) GetByPlatformContent(ctx context.Context, platform, content, conversationID string, since time.Time) (*model.MessageHub, error) {
 	if platform == "" || content == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
 	var hub model.MessageHub
-	err := r.db.WithContext(ctx).
-		Where("platform = ? AND direction = 'outbound' AND md5(content) = md5(?)", platform, content).
-		Order("sent_at DESC").
-		First(&hub).Error
+	q := r.db.WithContext(ctx).
+		Where("platform = ? AND direction = 'outbound' AND md5(content) = md5(?) AND sent_at > ?", platform, content, since)
+	if conversationID != "" {
+		q = q.Where("conversation_id = ?", conversationID)
+	}
+	err := q.Order("sent_at DESC").First(&hub).Error
 	return &hub, err
 }
 
-func (r *MessageHubRepository) GetByPlatformContentNormalized(ctx context.Context, platform, content string) (*model.MessageHub, error) {
+// GetByPlatformContentNormalized 同上，只是把空白折叠掉再比（DOM 抖动重报的形态）。
+func (r *MessageHubRepository) GetByPlatformContentNormalized(ctx context.Context, platform, content, conversationID string, since time.Time) (*model.MessageHub, error) {
 	if platform == "" || content == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
 	var hub model.MessageHub
-	err := r.db.WithContext(ctx).
-		Where("platform = ? AND direction = 'outbound' AND md5(regexp_replace(content, '\\s+', '', 'g')) = md5(regexp_replace(?, '\\s+', '', 'g'))", platform, content).
-		Order("sent_at DESC").
-		First(&hub).Error
+	q := r.db.WithContext(ctx).
+		Where("platform = ? AND direction = 'outbound' AND md5(regexp_replace(content, '\\s+', '', 'g')) = md5(regexp_replace(?, '\\s+', '', 'g')) AND sent_at > ?", platform, content, since)
+	if conversationID != "" {
+		q = q.Where("conversation_id = ?", conversationID)
+	}
+	err := q.Order("sent_at DESC").First(&hub).Error
 	return &hub, err
 }
 

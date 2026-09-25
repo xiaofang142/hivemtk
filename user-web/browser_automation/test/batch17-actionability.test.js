@@ -144,6 +144,18 @@ describe('批17(a) stable：探测到真点之间元素必须已经停下', () =
     expect(cdp.clickAt).not.toHaveBeenCalled();
   });
 
+  it('comment_send 的落点抖动半径必须跟着按钮尺寸走（三份 probe 同源，第三份不许偷偷用退化值）', async () => {
+    // 本文件布局台里按钮 box=100x40 ⇒ 半径 = min(100,40)/2 = 20。
+    // 漏传时 input.js 的 clickJitter(undefined) 退化成 ±3px（Math.min(8, radius||3)）：
+    // 不越界、但三次不可逆提交的落点全挤在同一 6px 窗口里——"同规格"这句注释就成了假话。
+    document.body.innerHTML = '<div><textarea></textarea><button>发送</button></div>';
+    await dispatch({
+      action: 'comment_send', tab_id: 42, input_selector: 'textarea', send_button_text: '发送',
+    }, makeDeps());
+    expect(cdp.clickAt).toHaveBeenCalledTimes(1);
+    expect(cdp.clickAt.mock.calls[0][3]).toEqual({ jitterRadius: 20 });
+  });
+
   it('stable 必须在远小于 15s 注入竞速窗的时间内给出结论', async () => {
     // 这条守的是预算：settle 窗写死过大时，comment_send 会被 raceTimeout 切成
     // comment_send_inject_timeout——那是「点击从未发生」的归因，被 stable 借用就是假归因。
@@ -300,10 +312,22 @@ describe('批17 静态锁：三份内联 probe 与两处复核挂点必须一起
     expect((primitivesSrc.match(/not_interactable/g) || []).length).toBeGreaterThan(0);
   });
 
-  it('injClickIdentityCheck 恰有一处定义、两处消费（click 与 click_near 的 CDP 分支）', () => {
+  it('落点抖动半径在三份 probe 里各回传一次、dispatch 里三处消费（第三份漏传就是静默退化）', () => {
+    const produced = (primitivesSrc.match(/jitter_radius:/g) || []).length;
+    const consumed = (primitivesSrc.match(/jitterRadius:/g) || []).length;
+    expect(produced, `jitter_radius 回传 ${produced} 处 want 3（injClick / injClickNear / injPostCommentSend）`).toBe(3);
+    expect(consumed, `jitterRadius 消费 ${consumed} 处 want 3`).toBe(3);
+    // 反向自证：判据本身不是空集合——真传值时第 3 处必须落在 comment_send 那一句上
+    const sendIdx = primitivesSrc.indexOf('await cdpInput.clickAt(tabId, btn.x, btn.y');
+    expect(sendIdx).toBeGreaterThan(-1);
+    expect(primitivesSrc.slice(sendIdx, sendIdx + 160)).toContain('jitterRadius');
+  });
+
+  it('injClickIdentityCheck 恰有一处定义、三处消费（click / click_near / comment_send 的 CDP 分支）', () => {
     const def = (primitivesSrc.match(/function injClickIdentityCheck/g) || []).length;
     const use = (primitivesSrc.match(/executeInTab\(tabId, injClickIdentityCheck/g) || []).length;
     expect(def, `定义 ${def} 处 want 1`).toBe(1);
-    expect(use, `消费 ${use} 处 want 2（两处必须同步，兜底分支不算）`).toBe(2);
+    // want 3：批20c 补上 comment_send 这第三处。写通道一共三条，少一条就是那条通道没有闸门。
+    expect(use, `消费 ${use} 处 want 3（三处必须同步，兜底分支不算）`).toBe(3);
   });
 });

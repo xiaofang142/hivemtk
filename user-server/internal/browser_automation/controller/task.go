@@ -48,8 +48,11 @@ func parseID(ctx *gin.Context) (uint, bool) {
 	return uint(id), true
 }
 
-// taskErrToResponse 统一域内错误映射
-func taskErrToResponse(ctx *gin.Context, err error) {
+// baErrToResponse 统一域内错误映射（任务/触发器共用一份）。
+// 批19c 把它抽出来共享的成因：cron 那侧自己写了一遍出口，且写成了「一律 400 + 回显原文」——
+// 于是 gorm 的 "record not found" 直接弹给用户、DB 连接失败被记成客户端参数错。
+// 一条不变式两份实现，漏的那份就是用户看到的错。notFoundMsg 是 404 的主语（哪样东西找不到）。
+func baErrToResponse(ctx *gin.Context, err error, notFoundMsg string) {
 	switch {
 	case errors.Is(err, basvc.ErrHostOffline):
 		// 批10：离线与忙都归 409，但前端必须是两条路——离线要去装扩展/Host，忙只要等。
@@ -65,22 +68,30 @@ func taskErrToResponse(ctx *gin.Context, err error) {
 	case errors.Is(err, basvc.ErrInvalidURL):
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		response.Error(ctx, http.StatusNotFound, "任务不存在")
+		response.Error(ctx, http.StatusNotFound, notFoundMsg)
 	default:
-		// 类型分流放在 default 里：这两类是「带动态文案的前置条件」，没有可比对的哨兵值，
+		// 类型分流放在 default 里：这三类是「带动态文案的前置条件/结论」，没有可比对的哨兵值，
 		// 只能按类型判。状态不满足=409（和忙/离线同一族：换个时机再来），入参不合法=400
-		// （改请求再来）；两者都把真实文案原样带给前端，不再冒充 500。
+		// （改请求再来），找不到=404（主语由 Msg 带）；三者都把真实文案原样带给前端，不再冒充 500。
 		var sc *basvc.StateConflictError
 		var ii *basvc.InvalidInputError
+		var nf *basvc.NotFoundError
 		switch {
 		case errors.As(err, &sc):
 			response.Error(ctx, utils.ErrorCodeBrowserStateConflict, sc.Error())
 		case errors.As(err, &ii):
 			response.Error(ctx, http.StatusBadRequest, ii.Error())
+		case errors.As(err, &nf):
+			response.Error(ctx, http.StatusNotFound, nf.Error())
 		default:
 			response.Error(ctx, http.StatusInternalServerError, err.Error())
 		}
 	}
+}
+
+// taskErrToResponse 任务域出口（404 的主语是任务）
+func taskErrToResponse(ctx *gin.Context, err error) {
+	baErrToResponse(ctx, err, "任务不存在")
 }
 
 // Create POST /browser-automation/tasks
@@ -209,6 +220,17 @@ func (c *TaskController) Update(ctx *gin.Context) {
 		}
 		if req.ConfirmWaitSec != nil { // 批8：指针语义，nil=不改确认等待预算
 			t.ConfirmWaitSec = *req.ConfirmWaitSec
+		}
+		// 批20e：重试三件套。缺字段时 gin 对未知 JSON 键默认宽容，于是编辑页那条
+		// 「保存成功」toast 之后库里一个字节都没变——承诺了开关却没给落点，比报错更坏。
+		if req.RetryOnFail != nil {
+			t.RetryOnFail = *req.RetryOnFail
+		}
+		if req.RetryDelaySec != nil {
+			t.RetryDelaySec = *req.RetryDelaySec
+		}
+		if req.MaxRetryTimes != nil {
+			t.MaxRetryTimes = *req.MaxRetryTimes
 		}
 		return nil
 	})

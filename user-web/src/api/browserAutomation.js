@@ -56,9 +56,37 @@ export const listBrowserTaskSessions = (taskId, params) =>
 export const stopBrowserSession = (id, reason) =>
   http.post(`/api/browser-automation/sessions/${id}/stop`, { reason: reason || '' })
 
+// D7 读侧详情（批20 A5/A10）：闸门挂起期间要看清「等的是第几步、将要提交什么、到什么时候」，
+// 并把 payload_hash 取回来给 confirmBrowserSession。预览含正文，服务端按归属校验放行。
+export const getBrowserConfirmGate = (id) =>
+  http.get(`/api/browser-automation/sessions/${id}/confirm-gate`)
+
 // D7：放行 require_confirm 闸门上挂起的写操作提交点（会话详情 confirm_pending=true 时可调用）
-export const confirmBrowserSession = (id) =>
-  http.post(`/api/browser-automation/sessions/${id}/confirm`, {})
+// 批20 起放行绑载荷：hash 必须是 getBrowserConfirmGate 取到的那一份。
+// 本地缺哈希直接拒 —— 服务端会回 400，但「把没指明内容的支票寄出去」这个动作本身就不该发生，
+// 少一次网络往少了说也少一次「400 被当成闸门没了」的误读。
+// _silent：四种结论的文案由监控页按 status 给，拦截器再弹一次会变成两条同义 toast。
+export const confirmBrowserSession = (id, payloadHash) => {
+  const hash = typeof payloadHash === 'string' ? payloadHash.trim() : ''
+  if (!hash) return Promise.reject(new Error('放行缺少 payload_hash：请先取 GET /sessions/:id/confirm-gate'))
+  return http.post(`/api/browser-automation/sessions/${id}/confirm`, { payload_hash: hash }, { _silent: true })
+}
+
+// 放行结论判读。status 是唯一依据：服务端 200 也可能是否定结论（no_gate），
+// 409 的载荷在 err.response.data.data（拦截器只把 message 挂在 Error 上，判读位不能只靠它）。
+// 拿不到已知 status ⇒ unknown：一次网络抖动既不是「放行成功」也不是「没有闸门」，
+// 把二者任一报给用户都是替用户编结论。
+export const CONFIRM_STATUSES = ['granted', 'no_gate', 'payload_mismatch', 'gate_on_another_instance']
+
+export const interpretConfirmResult = (resOrErr) => {
+  const body = resOrErr?.response?.data ?? resOrErr
+  const data = body?.data ?? body
+  const status = CONFIRM_STATUSES.includes(data?.status)
+    ? data.status
+    : (data?.confirmed === true ? 'granted'
+      : (data?.confirmed === false ? 'no_gate' : 'unknown'))
+  return { status, released: status === 'granted', gate: data?.gate ?? null }
+}
 
 // D1（G1 补口）：append-only 命令流审计（direction 可选 command/event/judge）
 export const getBrowserSessionLogs = (id, direction) =>

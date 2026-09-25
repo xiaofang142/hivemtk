@@ -52,6 +52,18 @@ type parsedStep struct {
 	RetryBackoffMs  int
 }
 
+// brainPlanner Executor 对 Brain 层的全部依赖（批19h 从具体 *BrainService 改接缝）。
+// 动机不是解耦好看：*BrainService 让整条 executeBrain 循环在单测里无法驱动（plan 必然打真 LLM），
+// 于是「闸门是否在落库前生效」这类事实只能停在谓词层。有了这一层，测试可以塞进脚本化 plan，
+// 其余部件（真 WS、真 DB、真步循环）全部照旧。
+type brainPlanner interface {
+	GeneratePlanReflect(ctx context.Context, taskID, sessionID uint, goal, platformID, snapshot string, st *reflectState) (stepsJSON []byte, done bool, err error)
+	LastPlanTokens() int
+	LastAuxTokens() int
+	JudgeDone(ctx context.Context, taskID, sessionID uint, goal, evidence string) (approve bool, reason string)
+	SummarizeSession(ctx context.Context, taskID, sessionID uint, goal string, success, total int, extracts string) string
+}
+
 // Executor 执行引擎：steps 解释 + Hand 调用 + Session 流转 + 停止/超时控制。
 // 状态收口原则：session/step 状态只由 Executor 写（替代 v1 的 AfterFunc 直改状态）。
 type Executor struct {
@@ -59,8 +71,13 @@ type Executor struct {
 	sessionRepo repository.BrowserSessionRepository
 	stepRepo    repository.BrowserStepRepository
 	cmdLogRepo  repository.BrowserCommandLogRepository
-	brain       *BrainService
-	feedback    *FeedbackService
+	// writeClaimRepo 批20f（A12）：不可逆写的存储层独占声明。它**不**是台账的缓存或兜底——
+	// 台账（stepRepo）回答「历史上发生过尝试没有」，本仓储回答「此刻谁有权去跨提交点」，
+	// 后者只能由一条 INSERT 的原子性给出，所以 Executor 上不放任何内存态。
+	// nil（未接线）在写步上是 fail-close，见 claimWriteSlot。
+	writeClaimRepo repository.BrowserWriteClaimRepository
+	brain          brainPlanner
+	feedback       *FeedbackService
 
 	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
 	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
@@ -68,11 +85,13 @@ type Executor struct {
 	stopMu       sync.Mutex
 	stopRegistry map[uint]chan struct{} // sessionID → stopCh
 
-	// confirmRegistry D7：sessionID → 待放行确认通道（仅在 post_comment 提交点前挂起时存在）。
+	// confirmRegistry D7：sessionID → 待放行闸门（仅在写步提交点前挂起时存在）。
 	// 与 stopRegistry 同构但生命周期不同：stop 通道随 session 全程注册，确认通道只在等待期存在
 	// ——「存在即挂起」使 ConfirmPending 无需额外状态位。
+	// 批20（A5/A10）：存的不再是裸通道而是闸门自身——「等谁批、批的是哪份载荷、什么时候到期」
+	// 必须和通道同生死，否则读侧只有一个布尔，放行就是一张空白支票。
 	confirmMu       sync.Mutex
-	confirmRegistry map[uint]chan struct{}
+	confirmRegistry map[uint]*confirmGate
 
 	// 批16（A7）：台账写失败后的两张降级表，与上面两张同构但语义相反——它们是「不能再派发写」的记录。
 	//   ledgerBroken: sessionID → 最初那次台账写失败的原因，随会话结束清除（会话级降级）；
@@ -95,16 +114,20 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 		hand:         hand,
 		sessionRepo:  sessionRepo,
 		stepRepo:     stepRepo,
-		brain:        brain,
-		feedback:     feedback,
 		relocateLLM:  defaultRelocateLLM,
 		stopRegistry: make(map[uint]chan struct{}),
 
-		confirmRegistry: make(map[uint]chan struct{}),
+		confirmRegistry: make(map[uint]*confirmGate),
 
 		ledgerBroken: make(map[uint]string),
 		ledgerGaps:   make(map[string]bool),
 	}
+	// 不把 *BrainService(nil) 直接赋给接口字段：那会得到一个「非 nil 的 nil 接口」，
+	// e.brain == nil 判假，随后 executeBrain 就在 nil receiver 上发起真调用。
+	if brain != nil {
+		e.brain = brain
+	}
+	e.feedback = feedback
 	if feedback != nil {
 		// 批16b（B2）单点接线：缺口表长在 Executor 上、挂自动重试的动作在 FeedbackService 上，
 		// 两边互相看不见。接在构造处而不是某个调用点——漏接线时「不重试」的抑制会整条静默消失，
@@ -134,11 +157,21 @@ func (e *Executor) SetCommandLogRepository(r repository.BrowserCommandLogReposit
 	e.cmdLogRepo = r
 }
 
+// SetWriteClaimRepository 批20f（A12）存储层写声明闸门注入。
+// 与上面的日志注入**相反**，这里 nil 不是「可选」而是「闸门没接好」：写步会一律拒绝下发
+// （见 claimWriteSlot）。宁可把任务跑成一屏红步，也不开一条没有独占裁决的写路径——
+// 少接一行装配是可见的、可当天补的，一次双发是不可见、撤不回的。
+func (e *Executor) SetWriteClaimRepository(r repository.BrowserWriteClaimRepository) {
+	e.writeClaimRepo = r
+}
+
 // appendCommandLog append-only 命令-事件日志（P8）。失败仅告警不阻断执行：
 // 日志是审计增强，不能反过来拖垮业务执行路径。
 // seq 由调用方传入（session 局部计数）——Executor 是多 session 共享单例，
 // 共享计数器在并发 session 下是 data race 且 seq 跨 session 交错（P0-2 修复）。
-func (e *Executor) appendCommandLog(ctx context.Context, sessionID, taskID, stepID uint, seq int, direction, action string, payload any, durationMs int64, ok bool) {
+// ok 是这一帧自带的结论，三态（见 model.BrowserCommandLog.Ok）：nil=此帧不携带结论，
+// 下发帧恒为 nil——下发那一刻「成/败」都还没发生，填任何一个值都是替读者编一个结论。
+func (e *Executor) appendCommandLog(ctx context.Context, sessionID, taskID, stepID uint, seq int, direction, action string, payload any, durationMs int64, ok *bool) {
 	if e.cmdLogRepo == nil {
 		return
 	}
@@ -154,6 +187,34 @@ func (e *Executor) appendCommandLog(ctx context.Context, sessionID, taskID, step
 	if err := e.cmdLogRepo.Append(ctx, entry); err != nil {
 		logger.Errorf("[BrowserExec] 命令日志落库失败 session=%d seq=%d: %v", sessionID, entry.Seq, err) // P2-3 升级 error
 	}
+}
+
+// verdict 把一个布尔观测升成审计帧的三态结论。名字刻意不叫 ok()：调用点写 verdict(err == nil)
+// 才读得出「这是这一帧的结论」，而不是「这次成功了」。
+func verdict(v bool) *bool { return &v }
+
+// auditEventPayload 写步回包进审计流前的收口：丢掉 evidence 键。
+// comment_verify 的回包含「页面上命中那条评论的文本节选」（primitives.js evidenceOf），
+// 而命中项就是我们自己发出去的正文——写进 browser_steps.result / extracted_data 是追溯面板
+// 要的凭据，写进 append-only 命令流则是把用户内容带进 I5 离线导出件。审计流要的是结论
+// （已受理/已确认/未确认），内容证据另有其位。
+func auditEventPayload(result []byte) []byte {
+	if len(result) == 0 {
+		return result
+	}
+	var m map[string]any
+	if err := json.Unmarshal(result, &m); err != nil {
+		return result // 非对象回包（数组/标量）原样进流：收口只针对带 evidence 的那一类
+	}
+	if _, has := m["evidence"]; !has {
+		return result
+	}
+	delete(m, "evidence")
+	blob, err := json.Marshal(m)
+	if err != nil {
+		return result
+	}
+	return blob
 }
 
 // SignalStop 手动中断（POST /sessions/:id/stop）
@@ -205,20 +266,85 @@ func (e *Executor) stopChFor(sessionID uint) chan struct{} {
 
 // ---- D7 写操作人工确认闸门（与 stop 同构，语义相反：stop 取消、confirm 放行）----
 
-// SignalConfirm POST /sessions/:id/confirm 放行。返回 false=该 session 当前没有挂起的确认点
-// （未开 require_confirm / 已过提交点 / 已结束）。先摘后关：同一通道只可能被 close 一次。
-func (e *Executor) SignalConfirm(sessionID uint) bool {
+// PendingConfirmGate 闸门的对外可见身份（批20 A5/A10）：一次挂起「在等谁批、批的是哪份载荷、
+// 什么时候到期」必须可查证。Preview 只在读侧（归属校验之后）出现，绝不进审计帧。
+type PendingConfirmGate struct {
+	SessionID   uint      `json:"session_id"`
+	StepIndex   int       `json:"step_index"`
+	PayloadHash string    `json:"payload_hash"`
+	Preview     string    `json:"preview"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// confirmGate 一次挂起的全部事实。载荷哈希在写下时定死、闸门存续期间不许改——
+// 「批的是哪份载荷」有唯一答案，比对才有意义（A5 的反面教材：LangGraph interrupt 对
+// resume 值完全不校验，等于任何一次放行都可为任何一份载荷背书）。
+type confirmGate struct {
+	ch          chan struct{}
+	sessionID   uint
+	stepIndex   int
+	payloadHash string
+	preview     string
+	expiresAt   time.Time
+	// budget 挂起时给定的名义预算：超时归因要说「等了多久」，用 time.Until(expiresAt) 在
+	// 到期那一刻恒等于 0，等于把批8 的归因文案写成谎。
+	budget time.Duration
+
+	// mismatchAttempts 拿错载荷来要的放行次数。放行不撤闸门，所以这个数只能由闸门自己记，
+	// 事后无从重建；judge 帧收口时把它一起落下去（A9：拒过谁来，和批没批同样值得审计）。
+	mu               sync.Mutex
+	mismatchAttempts int
+}
+
+func (g *confirmGate) attempts() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.mismatchAttempts
+}
+
+func (g *confirmGate) info() PendingConfirmGate {
+	return PendingConfirmGate{
+		SessionID: g.sessionID, StepIndex: g.stepIndex, PayloadHash: g.payloadHash,
+		Preview: g.preview, ExpiresAt: g.expiresAt,
+	}
+}
+
+// ConfirmVerdict 放行请求的结论（批20 A5）。三态而不是 bool：
+// 「没有闸门」「批错了东西」「批对了」是三件不同的事，压成一句文案就等于让运维去猜。
+// 命名前缀 Verdict 与闸门自己的出路 confirmOutcome 分开——两者都叫「granted」时，
+// 「放行命中了」和「等待方被放行」会在读码时互相顶替。
+type ConfirmVerdict uint8
+
+const (
+	VerdictNoGate   ConfirmVerdict = iota // 该 session 当前没有挂起闸门
+	VerdictGranted                        // 载荷相符，已放行（一次性消费）
+	VerdictMismatch                       // 有闸门，但批的不是这份载荷——已拒且闸门仍在
+)
+
+// SignalConfirm POST /sessions/:id/confirm 放行。payloadHash 是**被批准的那份载荷**的指纹，
+// 由读侧（GET /sessions/:id/confirm-gate）取得后原样带回；不符即 VerdictMismatch——
+// 不撤闸门、不下发、只计数（fail-closed，且「再问一次」拿不到放行）。
+// 先摘后关：同一通道只可能被 close 一次，第二次请求落到 VerdictNoGate。
+// 空请求不需要特判：闸门的哈希在开闸时已保证非空（见 awaitConfirmGate 的前置），
+// 所以「没带载荷」天然落进不等式这一侧。
+func (e *Executor) SignalConfirm(sessionID uint, payloadHash string) ConfirmVerdict {
 	e.confirmMu.Lock()
-	ch, ok := e.confirmRegistry[sessionID]
-	if ok {
-		delete(e.confirmRegistry, sessionID)
-	}
-	e.confirmMu.Unlock()
+	g, ok := e.confirmRegistry[sessionID]
 	if !ok {
-		return false
+		e.confirmMu.Unlock()
+		return VerdictNoGate
 	}
-	close(ch)
-	return true
+	if payloadHash != g.payloadHash {
+		g.mu.Lock()
+		g.mismatchAttempts++
+		g.mu.Unlock()
+		e.confirmMu.Unlock()
+		return VerdictMismatch
+	}
+	delete(e.confirmRegistry, sessionID)
+	e.confirmMu.Unlock()
+	close(g.ch)
+	return VerdictGranted
 }
 
 // ConfirmPending 该 session 是否正停在确认闸门（读侧暴露给前端按钮可见性）
@@ -227,6 +353,27 @@ func (e *Executor) ConfirmPending(sessionID uint) bool {
 	defer e.confirmMu.Unlock()
 	_, ok := e.confirmRegistry[sessionID]
 	return ok
+}
+
+// PendingGate 读取挂起闸门的详情（第二返回值 false=没有在等人工放行）。
+func (e *Executor) PendingGate(sessionID uint) (PendingConfirmGate, bool) {
+	e.confirmMu.Lock()
+	defer e.confirmMu.Unlock()
+	g, ok := e.confirmRegistry[sessionID]
+	if !ok {
+		return PendingConfirmGate{}, false
+	}
+	return g.info(), true
+}
+
+// registerConfirmGate 登记一次挂起并返回它——与 unregister 配对，且「同一 session 只可能有一个
+// 在等的闸门」由这里唯一裁决（后到者覆盖：闸门是每用户 1 个 running session 的串行面，
+// 真出现覆盖说明上游串行闸已失效，覆盖本身留在那条旧通道的最终归宿里，不额外报错）。
+func (e *Executor) registerConfirmGate(g *confirmGate) *confirmGate {
+	e.confirmMu.Lock()
+	e.confirmRegistry[g.sessionID] = g
+	e.confirmMu.Unlock()
+	return g
 }
 
 // confirmOutcome D7 闸门三种出路（F4：终态语义必须可区分——「操作者主动不提交」和
@@ -247,38 +394,124 @@ const (
 const errConfirmAbortedByStop = "写步等待人工确认期间被用户中止，评论未提交"
 
 // waitForConfirm 挂起等人工放行，自带独立计时器（批8 解耦：不再让 execCtx.Done 兼职确认超时）。
+// 前置：闸门已由 registerConfirmGate 挂上注册表——**登记早于落帧、落帧早于等待**，
+// 反过来排会在「帧已写、注册表还空着」的窗口里把一次真放行答成「没有待确认的提交点」。
 // 返回值第二项是**哪条预算到头**的原文（「确认等待 600s」还是「任务执行预算掐断」）——
 // 两者在审计面上必须可区分，否则人就会去调 timeout_sec 而真正该调的是 confirm_wait_sec。
 // 调用点在不可逆提交点之前，非 confirmGranted 分支从未点击过任何按钮——失败可安全重下发，
 // 不违「单次提交禁重试」红线（那是「已提交且结局未知」的专属纪律）。
 // stopChFor 未注册时返回 nil，select 对 nil 通道分支永不就绪，与 ctx.Done 并存安全。
-func (e *Executor) waitForConfirm(ctx context.Context, sessionID uint, wait time.Duration) (confirmOutcome, string) {
-	ch := make(chan struct{})
-	e.confirmMu.Lock()
-	e.confirmRegistry[sessionID] = ch
-	e.confirmMu.Unlock()
+func (e *Executor) waitForConfirm(ctx context.Context, gate *confirmGate) (confirmOutcome, string) {
 	defer func() {
 		e.confirmMu.Lock()
-		if cur, ok := e.confirmRegistry[sessionID]; ok && cur == ch {
-			delete(e.confirmRegistry, sessionID)
+		if cur, ok := e.confirmRegistry[gate.sessionID]; ok && cur == gate {
+			delete(e.confirmRegistry, gate.sessionID)
 		}
 		e.confirmMu.Unlock()
 	}()
 
+	wait := time.Until(gate.expiresAt)
+	if wait < 0 {
+		wait = 0
+	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
-	stopCh := e.stopChFor(sessionID)
+	stopCh := e.stopChFor(gate.sessionID)
 	select {
-	case <-ch:
+	case <-gate.ch:
 		return confirmGranted, ""
 	case <-stopCh:
 		return confirmStoppedByUser, "用户在确认闸门处中止"
 	case <-timer.C:
-		return confirmWaitTimedOut, fmt.Sprintf("人工确认等待 %ds", int(wait.Seconds()))
+		return confirmWaitTimedOut, fmt.Sprintf("人工确认等待 %ds", int(gate.budget.Seconds()))
 	case <-ctx.Done():
 		// 执行预算（TimeoutSec）到头。批8 起它与确认预算是两条独立计时器，谁先到谁说话。
 		return confirmWaitTimedOut, "任务执行预算用尽"
 	}
+}
+
+// gateDecision 把闸门出路翻成审计面上的词（F4 的对偶：终态能分辨「谁否决了这次提交」，
+// 帧也必须分辨——granted/stopped/timeout 三词在 command_log 里各占一类，不许合并）。
+func gateDecision(out confirmOutcome) string {
+	switch out {
+	case confirmGranted:
+		return "granted"
+	case confirmStoppedByUser:
+		return "stopped"
+	default:
+		return "timeout"
+	}
+}
+
+// d7PreviewRunes 待批内容预览的截断长度：闸门读侧要让人「看见自己批的是什么」（A5 的前提），
+// 但一个 8000 字的长评论不该整段塞进弹窗——预览是给人核对用的，不是正文的第二份副本。
+const d7PreviewRunes = 200
+
+// D7 闸门的两类审计帧动作名。写侧在这里、读侧在 session.go 的 gateElsewhere——
+// 两处各写一遍字面量，就会有一个拼错的常量悄悄把跨进程查证变成死代码（帧一直在落，没人查得到）。
+const (
+	gateWaitFrame    = "d7_wait"    // event：闸门开过、批的是这份载荷、到这个时候
+	gateConfirmFrame = "d7_confirm" // judge：闸门收口，decision 分辨 granted/stopped/timeout
+)
+
+// 批20b（A2）：写链路上「试过了 / 接了 / 平台确认了」三件事的另两个名字。
+// 三态不是给一列改名，而是每一态各有一帧可指：
+//   - command 帧（ok=nil）= attempted：这一条命令被写给了 Host，此刻没有任何结论；
+//     comment_send 单独成帧，是因为不可逆点埋在 post_comment 那一步内部——只有步级帧的审计流
+//     分不清「填好文本没点出去」与「点出去了不知道成没成」，而这两者的处置完全相反。
+//   - event 帧 = accepted：Host 回执到手且无错。
+//   - judge 帧 write_confirm = confirmed：服务端收紧回查裁出的结论（state 带 verified /
+//     unattributed）。它是审计流里唯一有资格回答「评论发出去了吗」的一帧，
+//     且只带载荷哈希——正文证据在 extracted_data 与步结果里，不进离线导出件（I5）。
+const (
+	commentSendAction = "comment_send"
+	writeConfirmFrame = "write_confirm"
+)
+
+// awaitConfirmGate D7 闸门的唯一入口（批20：A5 绑载荷 + A9 留痕 + A10 可跨进程查证）。
+// 三件事必须同生同死，所以不做成调用方各自记得加的三步——漏一步的形状与漏一个闸门同构：
+//   - 等待之前落 d7_wait 帧（登记之后）：这是「闸门确实开过、批的是这份载荷、到什么时候」的唯一落盘凭据。
+//     进程内 map 在重启/多副本下什么都不是（A10 立项理由），而帧在库里。
+//   - 载荷只带哈希不带正文：I5 审计导出会把 payload 原样带进离线件，评论正文不该住在那儿。
+//   - 出路收口时落 d7_confirm 帧（judge 类）：连「没人批、超时了」都要留一行，
+//     否则审计面上「用户拒了」与「用户没来」又折成一句。
+func (e *Executor) awaitConfirmGate(ctx context.Context, task *model.BrowserTask,
+	session *model.BrowserSession, stepID uint, stepIndex int, preview, payloadHash string,
+	seq *int, wait time.Duration) (confirmOutcome, string) {
+	// 绑一份「空载荷」的闸门等于没绑：任何人都能以「我也批了这份」放行。调用方的键来自
+	// writeStepKey（永不为空，见 ledger_b16b_test.go ④-b），这里只把那条前提变成硬前置——
+	// 前提哪天被绕过，是编排 bug，该炸在原地而不是悄悄开一扇匿名放行口。
+	if payloadHash == "" {
+		panic("awaitConfirmGate: 空载荷哈希不得开闸门")
+	}
+	gate := &confirmGate{
+		ch: make(chan struct{}), sessionID: session.ID, stepIndex: stepIndex,
+		payloadHash: payloadHash, preview: truncateRunes(preview, d7PreviewRunes, "…"),
+		expiresAt: time.Now().Add(wait), budget: wait,
+	}
+	// 登记必须先于落帧：帧一到，读侧（GET /sessions/:id/confirm-gate 与跨进程查证）就认为
+	// 有人能放行，而此刻注册表还空着的话，一次真放行会被答成「没有待确认的提交点」。
+	e.registerConfirmGate(gate)
+	*seq++
+	e.appendCommandLog(ctx, session.ID, task.ID, stepID, *seq, "event", gateWaitFrame, map[string]any{
+		"payload_hash": payloadHash, "step_index": stepIndex,
+		"expires_at": gate.expiresAt.Format(time.RFC3339Nano),
+		"wait_sec":   int(wait.Seconds()),
+	}, 0, verdict(true))
+
+	start := time.Now()
+	out, why := e.waitForConfirm(ctx, gate)
+	waited := time.Since(start).Milliseconds()
+
+	*seq++
+	e.appendCommandLog(ctx, session.ID, task.ID, stepID, *seq, "judge", gateConfirmFrame, map[string]any{
+		"payload_hash":      payloadHash,
+		"step_index":        stepIndex,
+		"decision":          gateDecision(out),
+		"mismatch_attempts": gate.attempts(),
+		"waited_ms":         waited,
+	}, waited, verdict(out == confirmGranted))
+	return out, why
 }
 
 // sendErrText 提交命令错误的落库文本（nil→空串）
@@ -304,7 +537,7 @@ func (e *Executor) cleanupSessionTab(baseCtx context.Context, task *model.Browse
 	*seq++
 	e.appendCommandLog(cctx, session.ID, task.ID, 0, *seq, "event", "session_tab_cleanup",
 		map[string]any{"tab_id": session.ChromeTabID, "error": sendErrText(err)},
-		time.Since(start).Milliseconds(), err == nil)
+		time.Since(start).Milliseconds(), verdict(err == nil))
 	if err != nil {
 		logger.Warnf("[BrowserExec] session=%d tab=%d 收口回收失败（不影响终态）: %v",
 			session.ID, session.ChromeTabID, err)
@@ -506,7 +739,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			session.ChromeTabID = tabID
 			_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 			cmdSeq++ // P2-1 自愈动作落审计
-			e.appendCommandLog(ctx, session.ID, task.ID, 0, cmdSeq, "event", "open_tab_recovery", map[string]any{"reason": "snapshot_failed", "new_tab": tabID}, 0, true)
+			e.appendCommandLog(ctx, session.ID, task.ID, 0, cmdSeq, "event", "open_tab_recovery", map[string]any{"reason": "snapshot_failed", "new_tab": tabID}, 0, verdict(true))
 			if snap, _, err = e.hand.snapshot(ctx, task.UserID, session.ChromeTabID); err != nil {
 				return success, failed, "snapshot 失败: " + err.Error()
 			}
@@ -564,7 +797,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			// P1-2：judge 结果落 command_log（direction=judge，审计可查）
 			cmdSeq++
 			e.appendCommandLog(ctx, session.ID, task.ID, 0, cmdSeq, "judge", "judge_done",
-				map[string]any{"approve": approve, "reason": reason}, 0, approve)
+				map[string]any{"approve": approve, "reason": reason}, 0, verdict(approve))
 			if approve {
 				exceeded = false
 				break
@@ -606,15 +839,11 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 				abort = fmt.Sprintf("执行超时（%ds）", task.TimeoutSec)
 				continue
 			}
-			if it.Action == "" {
-				continue // LLM 偶发空步，跳过
-			}
-			if it.Action == "screenshot" {
-				// G17：Brain 轮内拒绝 screenshot（captureVisibleTab 必然激活 tab 抢用户焦点，
-				// 且 F2 前无法确认静默截错）——护栏已禁止 LLM 输出，这里是服务端硬闸（不信任模型）。
-				logger.Warnf("[BrowserExec] brain 轮内 screenshot 被服务端拒绝（抢焦点）session=%d", session.ID)
-				hist := "screenshot → 被拒绝（Brain 模式禁止抢焦点截图，请用 snapshot/markdown 观察）"
-				history = appendHistoryBounded(history, hist, foldedHistory)
+			// 批19h：Brain 的 steps 是 LLM 原文 Unmarshal 出来的，REST 那条 oneof 校验在这条路上
+			// 一行都不跑——落库前先过服务端闸门（G17 的 screenshot 闸是它的一条已存在的腿）。
+			if rej := brainPlanStepRejection(it.Action); rej != "" {
+				logger.Warnf("[BrowserExec] brain 轮内步骤被服务端拒绝 session=%d: %s", session.ID, rej)
+				history = appendHistoryBounded(history, rej, foldedHistory)
 				continue
 			}
 			step := parsedStep{
@@ -763,6 +992,19 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, err.Error())
 			return "failed", err.Error(), nil
 		}
+		// 批20f（A12）：读闸放行 ≠ 独占。上面的查询依据的是台账，「两条腿同时过闸、彼此都查空」
+		// 是并发的常态形状而非意外，所以裁决权必须下推到库里唯一约束的那一次 INSERT。
+		// 位置刻意排在 D7 挂起之前：挂起一分钟，另一条腿在这一分钟里过读闸、下发、提交，
+		// 正是本卡要消灭的那次双发——人工确认的等待期是并发窗口最宽的一刻，不是最窄的。
+		if err := e.claimWriteSlot(ctx, task.ID, session.ID, stepRow.ID, writeKey); err != nil {
+			msg := fmt.Sprintf("写步拒绝下发（%s）：%v", writeWhy, err)
+			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, msg)
+			logger.Warnf("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
+			return "failed", msg, nil
+		}
+		// 腾坑挂在本步收尾（executeStepWithRetry 是步级作用域），不是会话级：
+		// 坑留到会话结束会把「这一步从未跨提交点、下一会话应当能重跑」也一并留死。
+		defer func() { e.releaseWriteSlot(ctx, task.ID, session.ID, stepRow.ID, writeKey) }()
 	}
 	// 批8：D7 覆盖派生写。批7 把「type+回车 / click 发送按钮 / click_near 发送」认成写步之后，
 	// 闸门却仍只长在 post_comment 原语内部——开了 require_confirm 的用户，这类隐形写照样被
@@ -770,7 +1012,11 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	// 让人看见将要发什么）。位置排在双发闸之后、任何命令帧之前：
 	// 该跳过的步不该先问一遍再跳过，未放行则该步一帧都没下发。
 	if writeStep && step.Action != "post_comment" && task.RequireConfirm {
-		out, why := e.waitForConfirm(ctx, session.ID, confirmWaitBudget(task))
+		preview := step.Value
+		if preview == "" {
+			preview = strings.TrimSpace(step.Action + " " + step.Target)
+		}
+		out, why := e.awaitConfirmGate(ctx, task, session, stepRow.ID, index, preview, writeKey, seq, confirmWaitBudget(task))
 		if out != confirmGranted {
 			msg := fmt.Sprintf("写步等待人工确认超时（%s），评论未提交", why)
 			if out == confirmStoppedByUser {
@@ -789,12 +1035,19 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			}
 		}
 		start := time.Now()
-		// P8 append-only 命令日志：命令帧先落（含步骤参数全文），回包/错误随 result 事件再落
+		// P8 append-only 命令日志：命令帧先落（含步骤参数全文），回包/错误随 result 事件再落。
+		// 命令帧 ok=nil（批20b / A2）：写下这一行时 Host 连回执都还没有，批21 之后甚至可能
+		// 根本没进 socket——旧实现传字面量 true，于是审计包里每条「下发」都自带一个 ✓，
+		// 而那个 ✓ 在这一行上什么也不指。它 attempted，不 succeeded。
 		*seq++
 		cmdPayload := map[string]any{"action": step.Action, "target": step.Target, "params": buildStepParams(step)}
-		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", step.Action, cmdPayload, 0, true)
-		result, err := e.dispatchStep(ctx, task, session, step, stepRow)
+		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", step.Action, cmdPayload, 0, nil)
+		result, err := e.dispatchStep(ctx, task, session, step, stepRow, seq)
 		dur := time.Since(start).Milliseconds()
+		// 回包帧自己占一个号：dispatchStep 内部还会落 d7_*/comment_send/write_confirm 帧，
+		// 沿用「一问一答同序号」的旧写法会让步级 event 与它们同号（审计面上两条同号帧，
+		// 按 seq 还原执行序的读者会看到一次动作凭空分成两叉）。
+		*seq++
 		if err == nil {
 			// 批16（A7）：写步的「成功」必须以台账落成前提。命令确实下发了，但库里没有这次
 			// 提交的凭据 ⇒ 下一轮无从得知它发生过 ⇒ 让整轮绿就是拿不可逆动作换一次好看的状态。
@@ -806,11 +1059,12 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 				msg := fmt.Sprintf("写步已下发但台账未落（%v）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果", ledgerErr)
 				logger.Warnf("[BrowserExec] %s session=%d idx=%d action=%s", msg, session.ID, index, step.Action)
 				e.finishStep(ctx, stepRow.ID, "failed", result, dur, msg)
-				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": msg}, dur, false)
+				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": msg}, dur, verdict(false))
 				return "failed", msg, json.RawMessage(result)
 			}
 			e.finishStep(ctx, stepRow.ID, "success", result, dur, "")
-			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"result": json.RawMessage(result)}, dur, true)
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
+				map[string]any{"result": json.RawMessage(auditEventPayload(result))}, dur, verdict(true))
 			return "success", "", json.RawMessage(result)
 		}
 		lastErr = err.Error()
@@ -820,7 +1074,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 				lastErr = fmt.Sprintf("%s；且写台账未落（%v）——重跑本任务前请人工核对该步是否已生效", lastErr, ledgerErr)
 			}
 		}
-		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, false)
+		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, verdict(false))
 		logger.Warnf("[BrowserExec] step 失败 session=%d idx=%d action=%s attempt=%d: %s", session.ID, index, step.Action, attempt, lastErr)
 		// F7（G16）：重试按平台错误归因分线（MediaCrawler 处置矩阵语义）——
 		// bad_body（内容被拒）重试无意义直接终止；refresh_token/disconnect 同样终止（交上层 session 级处置）；
@@ -871,7 +1125,7 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 			"url": pageURL, "snapshot_chars": len(snap), "snapshot_error": snapErr,
 			"selectors_probed": probed, "detect_block_hit": blockedNow, "selector_hit": selectorHit,
 			"blocked": blocked, "reason": reason,
-		}, time.Since(start).Milliseconds(), snapErr == "")
+		}, time.Since(start).Milliseconds(), verdict(snapErr == ""))
 	}()
 	// 整段探测共用一个短预算：snapshot（真机 24 次实测 max 876ms）+ 弹层选择器逐个 query，
 	// 若各自吃满 defaultCmdTimeout，失败步（本身已耗 30s）会被拖成 60s+，而且探测命令自身的
@@ -929,7 +1183,9 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 // 回包（snapshot/extract/markdown/screenshot 等）作为返回值交 executeStepWithRetry 落库——
 // 不挂 Executor 字段：Executor 是进程级单例、多 session 并发触达（R-A4 竞态修复）。
 // stepRow：本步的 DB 行（含 ID），写原语分支用它落 submit_state 台账（批6/F11b）。
-func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep) ([]byte, error) {
+// seq：session 局部命令号——post_comment 的 D7 闸门在分支内部，它要落的 d7_wait/d7_confirm 帧
+// 与外层命令帧共用同一个号段（批20；计数器不下放给闸门，否则两处各自编号必然撞号）。
+func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep, seq *int) ([]byte, error) {
 	userID := task.UserID
 	tabID := session.ChromeTabID
 	p := buildStepParams(step)
@@ -1019,7 +1275,8 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 未放行即中止=从未提交，可安全重下发。
 		// 批8：等待用 task.confirm_wait_sec 独立预算，不再吃 task.TimeoutSec（那条管自动化本身）。
 		if task.RequireConfirm {
-			out, why := e.waitForConfirm(ctx, session.ID, confirmWaitBudget(task))
+			out, why := e.awaitConfirmGate(ctx, task, session, stepRow.ID, stepRow.StepIndex,
+				step.Value, textHash, seq, confirmWaitBudget(task))
 			switch out {
 			case confirmGranted:
 			case confirmStoppedByUser:
@@ -1033,7 +1290,34 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		//    （不进 finalize 白轮 16s，也不污染证据——错误文本自证「未点击」可安全重下发）；
 		// ② 其余任何结局（成功/出错/WS 超时）→点击可能已发生=结果未知→必须 finalize 回查：
 		//    Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
-		_, sendErr := e.hand.commentSend(ctx, userID, tabID, prepReq)
+		// 每次真实提交都成对落两帧（批20b）：command 帧=attempted 且不带结论，
+		// event 帧=accepted。自愈重发的那一次同样落帧——「全场只提交一次」是运行期红线，
+		// 不是审计期红线：审计流要如实有几场就几场，藏起来等于让读包的人猜。
+		// 批20c：sendRes=最后一次 comment_send 回包，扩展的点后复核结论从它身上取；
+		// 判据是回包里的 identity_checked 而不是「我们请求过复核」——请求发出去 ≠ 复核跑成了，
+		// 旧扩展或复核给不出结论时如实记 null（click / click_near 同口径）。
+		var sendRes map[string]any
+		sendOnce := func() error {
+			*seq++
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", commentSendAction,
+				map[string]any{"action": commentSendAction, "tab_id": tabID, "payload_hash": textHash}, 0, nil)
+			start := time.Now()
+			res, err := e.hand.commentSend(ctx, userID, tabID, prepReq, stepRow.IsWrite)
+			*seq++
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", commentSendAction,
+				map[string]any{"error": sendErrText(err)}, time.Since(start).Milliseconds(), verdict(err == nil))
+			// 留最后一次回包：自愈重发过的那一次才是这一步的结论，前一次的复核结论已经不作数
+			sendRes = res
+			return err
+		}
+		sendErr := sendOnce()
+		// 批21：① 那一类在传输层还有第三种形态——这一帧根本没写进 socket（D7 等多分钟，
+		// Host 掉在等待里是常态）。此处刻意**不**就地重发一次：判据成立即 Host 已经没了，
+		// 微秒级的第二次调用只会拿到同一条错误；恢复归任务级重试（台账留 prepared ⇒ 不在
+		// 拦阻集合 ⇒ 下一轮重跑会重新 prep、重新过一次闸门，那是更严而不是更松的路径）。
+		if isCommandNeverOnWire(sendErr) {
+			return nil, fmt.Errorf("post_comment 未提交（命令未上线，点击从未发生，可安全重下发）: %w", sendErr)
+		}
 		if isInjectTimeout(sendErr) {
 			return nil, fmt.Errorf("post_comment 未提交（页面注入拥堵，点击未发生）: %w", sendErr)
 		}
@@ -1042,14 +1326,14 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
 		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。
-		// 注入超时/闸门两个分支在上面提前返回、台账留在 prepared：那两支点击从未发生。
+		// 上面三个早返分支（未上线/注入超时/闸门拒点）台账都留在 prepared：那三支点击从未发生。
 		// 批16（A7）：这次写失败=「越点未落账」，recordSubmitState 会同时记下进程内兜底缺口，
 		// 本步最终判红（见下面 sentLedgerErr）——撤不回了，但至少不再有人替我们假设它没发生。
 		sentLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, model.StepSubmitSent, textHash, true)
 		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
 		// 重发不违「单次提交禁重试」红线；其余错误结局未知，交 finalize 回查绝不重发。
 		if sendErr != nil && e.healCommentSendButton(ctx, task, session, tabID, prepReq, sendErr) {
-			_, sendErr = e.hand.commentSend(ctx, userID, tabID, prepReq)
+			sendErr = sendOnce()
 		}
 		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
 		// 回查结论落台账：verified 是唯一可对外宣称「已发布」的态；未见即 unattributed
@@ -1059,6 +1343,15 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			finalState = model.StepSubmitVerified
 		}
 		finalLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, finalState, textHash, true)
+		// 审计流的第三态（批20b）：跨过提交点后，无论回查见没见都要落一帧结论。
+		// 落在台账写之后、ledgerErr 早返之前——「库里台账没写全」是 ledger 的问题，
+		// 不改变「平台侧回查见了/没见」这个已经观测到的事实，两件事各自留痕。
+		*seq++
+		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "judge", writeConfirmFrame, map[string]any{
+			"payload_hash": textHash,
+			"step_index":   stepRow.StepIndex,
+			"state":        finalState,
+		}, 0, verdict(verified))
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
 		e.mergeExtract(ctx, session, "post_comment", map[string]any{
 			"text":       step.Value,
@@ -1078,7 +1371,13 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			return nil, fmt.Errorf("post_comment %s，但提交台账未落全（%v）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布", seen, ledgerErr)
 		}
 		if verified {
-			return recordResultPayload(map[string]any{"posted": true, "verified": true, "evidence": evidence})
+			return recordResultPayload(map[string]any{
+				"posted": true, "verified": true, "evidence": evidence,
+				// 批20c：finalize 只回答「我的文字上去没」，identity_checked 回答的是
+				// 「点下去的是不是发送按钮」——两问各自留痕。复核没过（element_moved）而回查见了评论时，
+				// 这一列是 null、send_error 在 extracted_data 里，绿得有据可查，不是把结论洗掉。
+				"identity_checked": sendRes["identity_checked"],
+			})
 		}
 		// fails-loudly：提交结局未知或验证未见——归因「平台静默吞/审核中/渲染超时」，
 		// 步判失败但不重试（重试=双发）。这是 R17/R19-6 实测形态的正式归宿。

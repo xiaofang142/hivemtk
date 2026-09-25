@@ -17,6 +17,24 @@ import (
 // ErrHostOffline Host 未连接（无 Host 用户的统一降级信号 → controller 转 409 引导）
 var ErrHostOffline = errors.New("browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh")
 
+// ErrCommandNeverOnWire 命令帧从未写进 socket：注册表里此刻没有这个用户的连接。
+// 这是传输层能给出的唯一一种「副作用必然没发生」的证明——帧没出去，扩展连看都没看到，
+// 更谈不上点一下。写台账据此把这一类留在「未尝试」（批21）。
+//
+// 刻意不覆盖另外两类看起来一样的失败：
+//
+//	· 帧写进 socket 之后连接才断（Request 的 conn.Done() 分支）——扩展收没收到不可判；
+//	· writeJSON 自身报错——gorilla 明确写了写失败后连接状态未知，可能已经半帧送达。
+//
+// 判据只能来自时序，不能来自文案：这三类的错误文本同族，按文本分类必然误纳后两类，
+// 而误纳就等于「把不知道有没有发出去当成没发出去」重下发——双发正是这么来的。
+var ErrCommandNeverOnWire = errors.New("命令未上线")
+
+// isCommandNeverOnWire 错误是否证明这一帧从未写进 socket。
+func isCommandNeverOnWire(err error) bool {
+	return errors.Is(err, ErrCommandNeverOnWire)
+}
+
 // CommandResult Host 回包
 type CommandResult struct {
 	OK    bool           `json:"ok"`
@@ -329,7 +347,8 @@ func (c *HostConn) statusFields() map[string]any {
 func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Duration, cmd map[string]any) (map[string]any, error) {
 	conn, ok := r.GetConn(userID)
 	if !ok {
-		return nil, ErrHostOffline
+		// 双 %w：未上线标记给执行侧归因用，ErrHostOffline 原样保留给 controller 的 409 引导。
+		return nil, fmt.Errorf("%w: %w", ErrCommandNeverOnWire, ErrHostOffline)
 	}
 	reqID := uuid.New()
 	cmd["req_id"] = reqID.String()
@@ -345,6 +364,8 @@ func (r *HostRegistry) Request(ctx context.Context, userID uint, timeout time.Du
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.Done():
+		// 走到这里帧已经写进 socket 了（writeJSON 已返回 nil），所以这一类刻意不带
+		// ErrCommandNeverOnWire：扩展收没收到不可判，按「结果未知」交上层回查/人工。
 		return nil, ErrHostOffline
 	case <-time.After(timeout):
 		// R4 探针：超时计数（有去无回=假死信号）；达阈值主动判死本连接触发自愈。

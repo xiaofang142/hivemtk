@@ -213,7 +213,7 @@ async function clickAt(tabId, x, y, opts = {}) {
     try {
       acked = await awaitAcks([press, release], CLICK_ACK_BUDGET_MS);
     } catch (e) {
-      throw new Error(`click_unacked: press/release 失败原因 ${String(e?.message || e)}`);
+      throw new Error(`click_unacked: press/release 失败原因 ${String(e?.message || e)}`, { cause: e });
     }
     if (!acked.done) throw new Error('click_unacked');
     await sleep(TIMING.afterClick());

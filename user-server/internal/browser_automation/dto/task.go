@@ -30,17 +30,25 @@ type StepItem struct {
 }
 
 type CreateBrowserTaskReq struct {
-	Name        string     `json:"name" binding:"required,max=256"`
-	Description string     `json:"description"`
-	TaskType    string     `json:"task_type" binding:"required,oneof=one_shot loop cron workflow"`
-	Url         string     `json:"url" binding:"required,max=2048"`
-	Platform    string     `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），空=xiaohongshu 兼容存量
-	BrainMode   bool       `json:"brain_mode"`
-	BrainGoal   string     `json:"brain_goal"`
-	Steps       []StepItem `json:"steps"`
-	LoopCount   int        `json:"loop_count" binding:"omitempty,min=1,max=1000"`
-	DelayMs     int        `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
-	TimeoutSec  int        `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
+	Name        string `json:"name" binding:"required,max=256"`
+	Description string `json:"description"`
+	TaskType    string `json:"task_type" binding:"required,oneof=one_shot loop cron workflow"`
+	Url         string `json:"url" binding:"required,max=2048"`
+	Platform    string `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），空=xiaohongshu 兼容存量
+	BrainMode   bool   `json:"brain_mode"`
+	BrainGoal   string `json:"brain_goal"`
+	// Steps 批19e：数组长度必须有上界。其余数值参数一早就钳了区间，只有步数没钳，
+	// 于是「一条任务带 100 万步」是合法请求。真正被打穿的不是执行（会话有 TimeoutSec 硬闸），
+	// 而是**读放大**：steps 整列随任务详情返回，GET 一次就是把百 MB JSON 拉进内存再吐给前端，
+	// 而实例是共享的。200 的口径依据：设计前提「单任务步数量级为个位数」（写台账决策 1 按它省掉复合索引），
+	// 200 已是任何真实编排的十几倍余量。上界改动要连 controller/step_cap_b19e_test.go 的 b19eCap 一起改，
+	// 边界两腿（内侧必过 / 外侧必拒）才会指出动了哪一侧。
+	Steps []StepItem `json:"steps" binding:"omitempty,max=200"`
+	// 正文长度不在本批改：单条命令帧在 nm-host 侧已有 1 MiB 硬顶（cmd/nm-host/main.go nmMaxOutboundFrameBytes），
+	// 超帧的步根本执行不了；在这里给 Value/Target 加字数上限反而会把一条本来就合法的长评论判死在服务端。
+	LoopCount  int `json:"loop_count" binding:"omitempty,min=1,max=1000"`
+	DelayMs    int `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
+	TimeoutSec int `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
 	// workflow 依赖
 	DependsOnTaskID *uint  `json:"depends_on_task_id"`
 	DependsOnMode   string `json:"depends_on_mode" binding:"omitempty,oneof=all_done any_success"`
@@ -56,20 +64,27 @@ type CreateBrowserTaskReq struct {
 }
 
 type UpdateBrowserTaskReq struct {
-	Name        string     `json:"name" binding:"omitempty,max=256"`
-	Description *string    `json:"description"`
-	TaskType    string     `json:"task_type" binding:"omitempty,oneof=one_shot loop cron workflow"`
-	Url         string     `json:"url" binding:"omitempty,max=2048"`
-	Platform    *string    `json:"platform" binding:"omitempty,max=32"`
-	BrainMode   *bool      `json:"brain_mode"`
-	BrainGoal   *string    `json:"brain_goal"`
-	Steps       []StepItem `json:"steps"`
-	LoopCount   *int       `json:"loop_count" binding:"omitempty,min=1,max=1000"`
-	DelayMs     *int       `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
-	TimeoutSec  *int       `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
+	Name        string  `json:"name" binding:"omitempty,max=256"`
+	Description *string `json:"description"`
+	TaskType    string  `json:"task_type" binding:"omitempty,oneof=one_shot loop cron workflow"`
+	Url         string  `json:"url" binding:"omitempty,max=2048"`
+	Platform    *string `json:"platform" binding:"omitempty,max=32"`
+	BrainMode   *bool   `json:"brain_mode"`
+	BrainGoal   *string `json:"brain_goal"`
+	// Steps 批19e：编辑路径同口径——创建拦得住、编辑绕得过去，等于没拦
+	Steps      []StepItem `json:"steps" binding:"omitempty,max=200"`
+	LoopCount  *int       `json:"loop_count" binding:"omitempty,min=1,max=1000"`
+	DelayMs    *int       `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
+	TimeoutSec *int       `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
 	// RequireConfirm D7：指针语义——nil=不改（存量任务不因编辑而重置开关）
 	RequireConfirm *bool `json:"require_confirm"`
 	ConfirmWaitSec *int  `json:"confirm_wait_sec" binding:"omitempty,min=1,max=900"`
+	// 批20e：失败自动重试三件套补进编辑面。区间与 CreateBrowserTaskReq 逐字段同口径——
+	// 只在一侧钳等于没有钳（创建拒 600s、编辑存 600s 会让"哪个值合法"取决于走哪个入口）。
+	// 指针语义同上：nil=不改，编辑名字不许把用户配好的重试策略抹回默认值。
+	RetryOnFail   *bool `json:"retry_on_fail"`
+	RetryDelaySec *int  `json:"retry_delay_sec" binding:"omitempty,min=30,max=86400"`
+	MaxRetryTimes *int  `json:"max_retry_times" binding:"omitempty,min=0,max=10"`
 }
 
 type RunBrowserTaskReq struct {

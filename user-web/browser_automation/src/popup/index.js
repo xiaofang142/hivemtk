@@ -4,6 +4,7 @@ import {
   isLoggedIn, login, logout, listTasks, runTask, getSession, getSessionSteps, getHostStatus,
 } from '../core/api-client.js';
 import { DEFAULT_USER_SERVER, normalizeServerUrl } from '../core/constants.js';
+import { escapeHtml, taskRowHtml, monitorBodyHtml } from '../core/render.js';
 
 const $ = (id) => document.getElementById(id);
 const banner = $('banner');
@@ -39,8 +40,6 @@ async function refreshHostStatus() {
 
 // ---- 任务列表 + 执行 ----
 
-const STATUS_TAG = { running: 'running', done: 'done', completed: 'done', failed: 'failed', ready: 'ready' };
-
 async function loadTasks() {
   const box = $('taskList');
   try {
@@ -50,20 +49,8 @@ async function loadTasks() {
       box.innerHTML = '<div class="hint">暂无任务。请在 user-web 前端「浏览器自动化 → 任务列表」创建。</div>';
       return;
     }
-    box.innerHTML = '';
-    tasks.forEach((t) => {
-      const div = document.createElement('div');
-      div.className = 'task';
-      const tagCls = STATUS_TAG[t.status] || '';
-      div.innerHTML = `
-        <div class="t-name">#${t.id} ${escapeHtml(t.name)}</div>
-        <div class="t-meta">
-          <span class="tag ${tagCls}">${t.status}</span>
-          <span>${t.task_type}${t.brain_mode ? ' · Brain' : ''}</span>
-          <button data-run="${t.id}" ${t.status === 'running' ? 'disabled' : ''}>执行</button>
-        </div>`;
-      box.appendChild(div);
-    });
+    // 模板在 core/render.js（纯函数）：库里出来的每一个字段都在那里过转义，不在本文件拼
+    box.innerHTML = tasks.map((t) => `<div class="task">${taskRowHtml(t)}</div>`).join('');
     box.querySelectorAll('button[data-run]').forEach((btn) => {
       btn.addEventListener('click', () => onRunTask(btn.dataset.run));
     });
@@ -97,11 +84,7 @@ function monitorSession(sessionId) {
     try {
       const [sess, stepsRes] = await Promise.all([getSession(sessionId), getSessionSteps(sessionId)]);
       const steps = stepsRes?.list || stepsRes || [];
-      $('monSteps').innerHTML =
-        `<b>${sess.status}</b>` +
-        (sess.error_msg ? ` · ${escapeHtml(sess.error_msg)}` : '') +
-        '<br/>' +
-        steps.map((s) => `${s.step_index + 1}. ${s.action} <span class="tag ${STATUS_TAG[s.status] || ''}">${s.status}</span>`).join('<br/>');
+      $('monSteps').innerHTML = monitorBodyHtml(sess, steps);
       if (['completed', 'failed', 'stopped'].includes(sess.status)) {
         clearInterval(pollTimer);
         pollTimer = null;
@@ -113,10 +96,6 @@ function monitorSession(sessionId) {
   };
   tick();
   pollTimer = setInterval(tick, 2000);
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---- 登录/退出 ----

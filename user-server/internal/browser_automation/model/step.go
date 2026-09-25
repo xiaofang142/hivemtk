@@ -13,7 +13,7 @@ type BrowserStep struct {
 	SessionID  uint           `gorm:"column:session_id;index;not null" json:"session_id"`
 	TaskID     uint           `gorm:"column:task_id;index;not null" json:"task_id"`
 	StepIndex  int            `gorm:"column:step_index;not null" json:"step_index"`
-	Action     string         `gorm:"column:action;size:32;not null;index" json:"action"`                 // open_tab / click / type / snapshot / markdown / screenshot / wait / wait_for_selector / scroll / extract / close_tab
+	Action     string         `gorm:"column:action;size:32;not null;index" json:"action"`                 // 15 个对外动作；名单唯一事实源=dto/task.go Step.Action 的 oneof 标签，此处不再抄第二遍（抄了就会漂成 11）
 	Target     string         `gorm:"column:target;size:1024" json:"target"`                              // selector 或 @e3 refs
 	Value      string         `gorm:"column:value;type:text" json:"value"`                                // type 动作的输入值
 	Params     datatypes.JSON `gorm:"column:params;type:jsonb" json:"params"`                             // wait/scroll/extract/screenshot 等扩展参数
@@ -26,7 +26,8 @@ type BrowserStep struct {
 	// （步判 failed，提交却可能已生效），混成一列就会把结果未知态误当可重发。
 	// 跨 session 自然键 = task_id + text_hash（批7 F-N4：原先还带 step_index，
 	// Brain 模式的 stepIdx 每轮递增，同一条评论换轮重放会落在不同下标上而绕过闸门）。
-	// 可空列由 gorm AutoMigrate 直加，零迁移文件。
+	// 这三列的 DDL 在 v3.43.0 迁移文件里（存量表加列走版本化迁移，NOT NULL DEFAULT ''/false）；
+	// 只有「整张新表」才走 allModels()/AutoMigrate 直建（browser_write_claims 即此口径，见 pkg/db/migrate.go）。
 	SubmitState string `gorm:"column:submit_state;size:16;index" json:"submit_state,omitempty"` // prepared / sent / verified / unattributed
 	TextHash    string `gorm:"column:text_hash;size:16;index" json:"text_hash,omitempty"`       // fnv32a(去空白正文) hex
 

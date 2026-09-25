@@ -349,8 +349,9 @@ func locatorMatches(locatorList, target string) bool {
 // isNeverExecuted 错误是否证明「这一步从未在页面上发生」——*_not_found 是元素从未命中、
 // *_inject_timeout_ 是注入从未执行、*_not_interactable 是可点性判定在**拿坐标之前**就把这次
 // 动作拒了（遮挡 / 零尺寸 / disabled / 抖动未落位），三者都没有副作用，台账因此留空
-// （= 不算尝试，可安全重下发）。反过来，WS 超时/未知错误一律不算：超时不等于没发生，
-// 那正是双发的形状。
+// （= 不算尝试，可安全重下发）。批21 补上第四类：ErrCommandNeverOnWire=那一帧根本没写进
+// socket（注册表里没有该用户的连接），扩展从未看到这条命令，副作用同样为零。
+// 反过来，WS 超时/写后才断/未知错误一律不算：超时不等于没发生，那正是双发的形状。
 //
 // *_not_interactable 这条前提是可查的，不是猜的：这些文案只由页面内的三份 probe
 // （injClick / injClickNear / injPostCommentSend）产出，且产出点全在 `cdpInput.clickAt`
@@ -361,9 +362,79 @@ func isNeverExecuted(err error) bool {
 	if err == nil {
 		return false
 	}
+	if isCommandNeverOnWire(err) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "_inject_timeout_") || strings.Contains(msg, "_not_found") ||
 		strings.Contains(msg, "_not_interactable")
+}
+
+// ------------------------------------------------------------------ 批20f（A12）：存储层独占声明
+
+// claimWriteSlot 读闸放行之后、任何帧下发之前占坑（(task_id, text_hash) 一把，见
+// repository/write_claim.go 与 model/write_claim.go）。
+//
+// 两层闸门各管一种并发，缺一不可：
+//   - guardResubmit（读侧）管「历史上是否发生过尝试」——依据台账三态，跨会话、跨重启；
+//   - 本函数管「同一时刻另一条腿也在过闸」——那正是读侧两边都查空的形状，
+//     只有 INSERT 的原子性能分出先后，所以裁决权必须下推到库里的唯一约束。
+//
+// 三种结论里只有第一种放行：占坑报错（含「插了 0 行却查不到持有者」）同样拒绝下发。
+// 免检的条件只能是「这一步不是写步」，不能是「闸门没接好」——批16（A11）那条口径。
+func (e *Executor) claimWriteSlot(ctx context.Context, taskID, sessionID, stepRowID uint, textHash string) error {
+	if e.writeClaimRepo == nil {
+		return errors.New("存储层写声明闸门未接线：占不了坑，就无从判断另一条腿是否正在同一份文本上")
+	}
+	holder, err := e.writeClaimRepo.ClaimWriteSlot(ctx, taskID, sessionID, stepRowID, textHash)
+	if err != nil {
+		return err
+	}
+	if holder != nil {
+		return fmt.Errorf("同文本的写声明已在 step=%d session=%d（%s 占坑）手里——那一条腿正要去跨或已经跨过提交点，本腿下发即双发；若已核实那一腿从未真的提交，删掉 browser_write_claims 里这一行即可重跑",
+			holder.StepRowID, holder.SessionID, holder.CreatedAt.Format(time.RFC3339))
+	}
+	return nil
+}
+
+// releaseWriteSlot 写步收尾时腾坑，两个条件缺一不可：
+//  1. 库里这一步没留下任何尝试凭据（submit_state 不在拦阻集合）——这是「从未发生 ⇒ 可安全重下发」
+//     那半边链子。不腾就把声明表变成永久黑名单：一次浮层遮挡、一次 D7 等待超时，都会让
+//     唯一正确的处置（等页面停下再跑一次）被拦死在闸门外。
+//  2. 本会话台账没写过失败。缺了这条就危险：sent 那一写失败时库里停在 prepared（判据 1 成立），
+//     可提交其实已经跨越了——那一刻**这条声明是这次公开提交在库里唯一的凭据**，
+//     腾出去就等于把一次没人记得的提交重新变成可重发。此时宁可留一把占死的坑（可见、可人工释放）。
+//
+// 释放失败只告警：失败方向是「坑留着」，与判据 2 同侧，是保守的那一侧。
+func (e *Executor) releaseWriteSlot(ctx context.Context, taskID, sessionID, stepRowID uint, textHash string) {
+	if e.writeClaimRepo == nil || e.stepRepo == nil || textHash == "" {
+		return
+	}
+	// ctx 很可能已被取消（超时腿与中止腿必然如此），而「腾不腾坑」这个决定恰恰要在事后也做得成。
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerWriteBudget)
+	defer cancel()
+	if why, broken := e.ledgerBrokenReason(sessionID); broken {
+		logger.Warnf("[BrowserExec] 写声明保留不释放 task=%d step=%d：本会话台账写失败过（%s），保留是保守侧", taskID, stepRowID, why)
+		return
+	}
+	state, err := e.stepRepo.SubmitStateOf(readCtx, stepRowID)
+	if err != nil {
+		logger.Warnf("[BrowserExec] 写声明保留不释放 task=%d step=%d（回读台账态失败，判不出=不按没发生算）: %v", taskID, stepRowID, err)
+		return
+	}
+	for _, s := range model.StepSubmitAttemptedStates() {
+		if s == state {
+			return // 已跨越：声明与台账同生死，腾坑由「人工核对后删那一行」这条唯一的路负责
+		}
+	}
+	affected, err := e.writeClaimRepo.ReleaseWriteSlot(readCtx, stepRowID, textHash)
+	if err != nil {
+		logger.Warnf("[BrowserExec] 写声明释放失败 task=%d step=%d（坑留着，必要时人工释放）: %v", taskID, stepRowID, err)
+		return
+	}
+	if affected > 0 {
+		logger.Infof("[BrowserExec] 写声明已释放 task=%d step=%d（本步未跨提交点，同文本可重下发）", taskID, stepRowID)
+	}
 }
 
 // recordGenericWriteLedger 非 post_comment 写步的台账落点。post_comment 有自己的

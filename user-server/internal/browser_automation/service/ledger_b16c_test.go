@@ -146,7 +146,16 @@ func TestUnknownEffectStepHoldsConfirmGate(t *testing.T) {
 	if n := ext.countOf("click"); n != 0 {
 		t.Fatalf("挂起期间 click 已到线 %d 次——unknown 副作用步绕过了人工确认闸门", n)
 	}
-	if !exec.SignalConfirm(session.ID) {
+	// 批20 A5：放行要带闸门登记的载荷哈希，且哈希必须是这一步的写键
+	gate, pending := exec.PendingGate(session.ID)
+	if !pending {
+		t.Fatal("挂起闸门查不到详情——放行无从指明批的是哪份载荷")
+	}
+	if gate.PayloadHash != writeStepKey(steps[1]) {
+		t.Fatalf("闸门登记的载荷=%q，与 click 步的写键 %q 不符——放行批准的不是将要下发的这一步",
+			gate.PayloadHash, writeStepKey(steps[1]))
+	}
+	if exec.SignalConfirm(session.ID, gate.PayloadHash) != VerdictGranted {
 		t.Fatal("放行未命中挂起点")
 	}
 	select {
