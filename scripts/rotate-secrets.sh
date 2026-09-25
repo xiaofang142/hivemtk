@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # rotate-secrets.sh — 把已泄露/到期的凭证在本机环境里真正换掉（T-P0-05 的备用收口动作）
 #
-# 状态：2026-09-19 用户已就 F1「真实口令泄露进公开 git 历史」拍板【暂不处置】，
-#       因此本脚本默认**拒绝执行**，只允许 --list / --dry-run。要真换，必须人工显式授权：
+# 状态：2026-09-19 用户就 F1「真实口令泄露进公开 git 历史」拍板【暂不处置】，本脚本因此默认
+#       **拒绝执行**，只允许 --list / --dry-run；要真换必须人工显式授权：
 #           ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned
 #       （授权等价于重启 F1 决策；见 docs/audit-2026-09-19-sessionC.md §F1）
+#       2026-09-24 用户改拍【全转】并授权执行 ⇒ 登记表内可自转的四条腿（db_user／db_platform／
+#       merchant_hmac／jwt_user）已实转，旧值当场作废；超管口令走 rotate-admin-password.sh。
+#       授权位本身**不因此长期打开**——每次执行仍要显式带 ROTATE_AUTHORIZED=1。
 #
 # 为什么需要脚本而不是照着文档手敲：一次轮换要同时落到 4 个 .env、1 次 ALTER USER、
 # 2 个运行中的服务重启。少做其中任何一步，都会得到"配置文件与真实口令漂移"的状态——
@@ -37,17 +40,32 @@ warn() { printf "${YELLOW}[rotate]${NC} %s\n" "$*"; }
 err()  { printf "${RED}[rotate]${NC} %s\n" "$*" >&2; }
 
 # ── 凭证登记表 ────────────────────────────────────────────────────────────
-# 每条：名称|是否已被公开仓历史泄露|落地的 "文件常量:键" 列表(;分隔)|额外动作|需重启的端口
+# 每条：名称|泄露类别|落地的 "文件常量:键" 列表(;分隔)|额外动作|需重启的端口
+#   burned      旧值已进公开仓历史 ⇒ 在 --all-burned 的执行路径里
+#   not-leaked  旧值从未进过任何一版提交（要靠 git log --all -S<真值> 实测，不许凭印象）
 # 泄露判定来自 git log --all -S<真值> 在公开 hivemtk 仓的实测命中，非推断；明细见
-# docs/operations/secret_rotation.md 二A.1（含"本机在用的 JWT 密钥其实没进过仓"这条反直觉结论）
+# docs/operations/secret_rotation.md 二A.1。
+# 2026-09-24 订正①（本轮现测，不是回忆）：jwt_user 原标 not-leaked 是错的——旧值（64 hex）命中
+#   5 枚提交（scripts/bootstrap.sh 三枚、tests/asset_market_regression_test.sh 两枚），且这五枚
+#   经 git merge-base --is-ancestor 逐枚验证全是公开 master ef11d048 的祖先 ⇒ 已公开。
+#   原先那句"本机在用的 JWT 密钥没进过仓"随本行一起作废（二A.1 同步订正）。
+# 2026-09-24 订正②（我自己判错后复测回退的一条）：曾判定 license 这条腿是"幻影腿"、要新增
+#   retired 类别并在执行路径里退 1。复核 HEAD 版脚本（rot-head.sh:176-189）发现"落点里没有这个
+#   键"的判断**早就有**：逐落点 read_key 为空即 warn 跳过，全部落点都没有则 warn"已随功能下线，
+#   无需轮换"并 continue，rc 保持 0——所以它不会"报已轮而零写入"，而是明说没轮。若按 retired+rc=1
+#   落地，反而会把 2026-09-22 那次"三腿 --dry-run 全退 0"的既有契约变成 --all-burned 永久红。
+#   ⇒ 撤销守卫，license 仍标 burned（它确实泄露过），零写入由既有探测路径给出可见的 warn。
+# 还有一类判据要单记：旧值不只在文本文件里，也编进了已提交的二进制（user-server/mtk-serve、
+# user-server/bridge-mock 的历史 blob 内含超管默认口令）——pickaxe 计数包含二进制，
+# 所以"命中 N 个提交"不能直接读成"代码文件里有 N 处"，归属要逐 diff 行扫（见 §23.22）。
 SECRETS='
 db_user|burned|ENV_USER:POSTGRES_PASSWORD;ENV_USERSRV:POSTGRES_PASSWORD;ENV_ASSET:HIVE_DB_PASSWORD|alter_user|8204
 db_platform|burned|ENV_PLAT:POSTGRES_PASSWORD|alter_platform|8205
 merchant_hmac|burned|ENV_USER:MERCHANT_API_SECRET;ENV_PLAT:MERCHANT_API_SECRET||8204;8205
 license|burned|ENV_USER:PLATFORM_LICENSE_SECRET;ENV_PLAT:PLATFORM_LICENSE_SECRET||8204;8205
-jwt_user|not-leaked|ENV_USER:USER_JWT_SECRET;ENV_USER:JWT_SECRET;ENV_USERSRV:USER_JWT_SECRET||8204
+jwt_user|burned|ENV_USER:USER_JWT_SECRET;ENV_USER:JWT_SECRET;ENV_USERSRV:USER_JWT_SECRET||8204
 '
-BURNED_LIST='db_user db_platform merchant_hmac license'
+BURNED_LIST='db_user db_platform merchant_hmac license jwt_user'
 
 secret_row() { printf '%s\n' "$SECRETS" | grep -E "^$1\|" | head -1; }
 envfile_path() { case "$1" in ENV_USER) echo "$ENV_USER";; ENV_USERSRV) echo "$ENV_USERSRV";; ENV_ASSET) echo "$ENV_ASSET";; ENV_PLAT) echo "$ENV_PLAT";; *) return 1;; esac; }
@@ -89,7 +107,7 @@ interlock() {
 
 # ── 参数 ─────────────────────────────────────────────────────────────────
 MODE=${1:-}; shift || true
-DRY=0; LIST=0; ROLLDIR=""
+DRY=0; LIST=0; ROLLDIR=""; DRYTAG=""
 case "$MODE" in
   --dry-run)  DRY=1;  MODE=${1:-}; shift || true ;;
   --list)     LIST=1 ;;
@@ -126,8 +144,8 @@ fi
 
 # 真实执行需要人工显式授权（F1 决策：暂不处置）
 if [ "$DRY" = 0 ] && [ "${ROTATE_AUTHORIZED:-0}" != "1" ]; then
-  err "拒绝执行：F1 泄露口令处置已由用户拍板为「暂不处置」（2026-09-19）。"
-  err "本脚本仅开放 --list / --dry-run。确要轮换请显式加授权位："
+  err "拒绝执行：轮换会同时改 4 个 .env 与库内 role 口令，漏一步就变成配置与真值漂移（上千条假红）。"
+  err "2026-09-24 已按用户授权跑过一轮；再执行仍要求逐次显式授权："
   err "    ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned"
   exit 2
 fi
@@ -152,7 +170,21 @@ if [ "$DRY" = 1 ]; then
   ENV_USERSRV=$STAGE/hivemtk/user-server/.env
   ENV_ASSET=$STAGE/assetdpo/.env
   ENV_PLAT=$STAGE/hivemtk-platform/platform-server/.env
+  DRYTAG="副本 "   # 只影响日志措辞，不影响写路径：见写循环里那行 log
   log "演练模式：只在 $STAGE 的副本上写，真实 .env 不受影响"
+  # 自检：登记表里每一个落点常量，演练时必须已经指向副本。上面那段是两份手抄清单（复制列表＋
+  # 重指向列表），漏一项的后果不对称——漏"复制"只会读到空键并 warn，漏"重指向"则是
+  # `--dry-run` 直接改写现网 .env。所以判据不打在清单形状上，而是把登记表里的常量逐个解析后
+  # 核前缀（反向测：临时给 envfile_path 加一个没重指向的 ENV_FOO ⇒ 退 2 并点名该常量）。
+  leaked=$(printf '%s\n' "$SECRETS" | cut -d'|' -f3 | tr ';' '\n' | cut -d: -f1 | sort -u | while read -r ef; do
+    [ -n "$ef" ] || continue
+    p=$(envfile_path "$ef") || { printf '%s（登记表里的常量不认识）\n' "$ef"; continue; }
+    # 前缀判定用 `${p#…}` 而不是 `case … in "$STAGE"/*)`：本机 /bin/bash 是 3.2，
+    # `$( )` 里嵌 `case` 的 `;;` 会把老解析器打断（`syntax error near ')'`），
+    # 而 shellcheck 与 CI 的 bash 5 都不报——只有 mac 上 `bash -n` 抓得到。
+    [ "${p#"$STAGE"/}" = "$p" ] && printf '%s → %s\n' "$ef" "$p"
+  done)
+  [ -n "$leaked" ] && { err "演练会写真实文件，这些落点常量没被重指向副本："; printf '  %s\n' "$leaked" >&2; exit 2; }
 fi
 
 rc=0
@@ -175,13 +207,20 @@ for t in $TARGETS; do
   # 若把"键不存在"计入写后校验，--all-burned 会永久红、下面的备份计数还会报文件不存在。
   # 判定结果经文件回传（warn 走 stdout，用命令替换捕获会把提示语当成数据）。
   : > "$BK/old.tsv"
+  # 文件本身也收到 600：目前只靠"父目录 700"挡住别人（实测 old.tsv 落成 644）。
+  # 目录权限是这层唯一的屏障，而这一层挡的是**已轮换掉的旧明文口令**——少一道无所谓的成本，
+  # 多一道则不依赖"没人把 $BK 移出来或改 chmod"。
+  chmod 600 "$BK/old.tsv"
   printf '%s\n' "$loc" | tr ';' '\n' | while IFS=: read -r ef key; do
     [ -n "$ef" ] || continue
     f=$(envfile_path "$ef") || continue
     old=$(read_key "$f" "$key")
     [ -n "$old" ] || { warn "  $f 里没有 ${key}，跳过"; continue; }
     printf '%s\t%s\t%s\n' "$f" "$key" "$old" >> "$BK/old.tsv"
-    write_key "$f" "$key" "$new" && log "  写入 $(basename "$(dirname "$f")")/$(basename "$f"):$key"
+    # 演练的"不动真实文件"靠的是上面把四个 ENV_* 重指向 $STAGE 副本，不是靠这里少调一次 write_key
+    # ⇒ 副本照写，awk 改写＋mv＋写后校验都真走一遍才叫演练。DRYTAG 只改措辞：09-24 一次 --dry-run 的
+    #    日志被读成"改了现网四份 .env"，就是因为演练与真跑印的是同一句"写入 hivemtk/.env:KEY"。
+    write_key "$f" "$key" "$new" && log "  ${DRYTAG}写入 $(basename "$(dirname "$f")")/$(basename "$f"):$key"
   done
   if [ ! -s "$BK/old.tsv" ]; then
     warn "${name}：所有落点都已无此键 —— 该凭证已随功能下线，无需轮换"
@@ -189,13 +228,14 @@ for t in $TARGETS; do
   fi
 
   # 写后校验：只核"原本就有这个键"的落点，键的每一条重复出现都必须是新值，且不能误伤别的键
+  # （演练时读的是 $STAGE 副本，这一档同样开火 ⇒ 真跑到写盘的那一步才算演练）
   bad=$(cut -f1,2 "$BK/old.tsv" | while IFS=$'\t' read -r f key; do
     grep -E "^[[:space:]]*${key}=" "$f" | grep -qxF "${key}=${new}" || echo "$f:$key 未全部更新"
   done)
   [ -n "$bad" ] && { err "写后校验失败：$bad"; rc=1; }
 
   if [ "$DRY" = 1 ]; then
-    log "  演练完成：备份 $(wc -l < "$BK/old.tsv" | tr -d ' ') 条，未触碰数据库与服务"
+    log "  演练完成：落点 $(wc -l < "$BK/old.tsv" | tr -d ' ') 条已在副本上改过，真实 .env／数据库与服务未动"
     rm -rf "$BK"; continue
   fi
 

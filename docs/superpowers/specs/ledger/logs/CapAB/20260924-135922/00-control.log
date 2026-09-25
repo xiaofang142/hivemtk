@@ -1,0 +1,14 @@
+=== RUN   TestPoolBoundLandsOnSQLHandle
+--- PASS: TestPoolBoundLandsOnSQLHandle (0.00s)
+=== RUN   TestNormalizePoolFallbacks
+=== RUN   TestNormalizePoolFallbacks/整条留空⇒采用生产默认表
+=== RUN   TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20
+=== RUN   TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟
+=== RUN   TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）
+--- PASS: TestNormalizePoolFallbacks (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/整条留空⇒采用生产默认表 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿） (0.00s)
+PASS
+ok  	hivemtk-user/internal/pkg/db	0.578s

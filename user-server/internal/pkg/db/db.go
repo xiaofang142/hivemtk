@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"hivemtk-user/internal/config"
 	"os"
@@ -65,7 +66,26 @@ func InitDB() {
 		panic(fmt.Sprintf("Failed to connect to database: %v", err))
 	}
 
-	poolConfig := appConfig.Database.Pool
+	poolConfig := normalizePool(appConfig.Database.Pool)
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to get database instance: %v", err))
+	}
+
+	applyPool(sqlDB, poolConfig)
+
+	dbMu.Lock()
+	DB = db
+	dbMu.Unlock()
+}
+
+// normalizePool 把配置里留空的池参数补成兜底值。
+//
+// 单独成函数的唯一理由：这一段原先只能在 `InitDB` 里跑，而 `InitDB` 要 DSN、要真库、
+// 还要两条 panic 路径 ⇒ 没有任何用例经过它，兜底值写错（比如 MaxOpenConns 补成 0＝不限）
+// 也不会红。拆出来后由 db_pool_bound_test.go 逐格点名补出来的数。
+func normalizePool(poolConfig config.PoolConfig) config.PoolConfig {
 	if poolConfig.MaxIdleConns == 0 {
 		poolConfig = config.DefaultPoolConfig
 	}
@@ -76,20 +96,19 @@ func InitDB() {
 	if poolConfig.ConnMaxLifetime == 0 {
 		poolConfig.ConnMaxLifetime = int((30 * time.Minute).Seconds())
 	}
+	return poolConfig
+}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to get database instance: %v", err))
-	}
-
+// applyPool 把池参数写进 database/sql 句柄。
+//
+// "配置文件里写着 200"与"句柄上真正生效的是 200"是两件事：CI 名额门
+// （scripts/check-ci-pg-capacity.py 的 C5）拿前者当连接数下限，所以这四行一旦被挪走或包进
+// 条件里，门仍绿、吞吐却掉到 Go 默认的 2。故上界那一行由用例现读 Stats() 断言。
+func applyPool(sqlDB *sql.DB, poolConfig config.PoolConfig) {
 	sqlDB.SetMaxIdleConns(poolConfig.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(poolConfig.MaxOpenConns)
 	sqlDB.SetConnMaxIdleTime(time.Duration(poolConfig.ConnMaxIdleTime) * time.Second)
 	sqlDB.SetConnMaxLifetime(time.Duration(poolConfig.ConnMaxLifetime) * time.Second)
-
-	dbMu.Lock()
-	DB = db
-	dbMu.Unlock()
 }
 
 func GetDB() *gorm.DB {

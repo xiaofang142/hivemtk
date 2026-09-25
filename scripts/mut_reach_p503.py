@@ -27,6 +27,7 @@ router 装配侧（M18~M20）原本登记为盲区，本卡改用**源码形状�
 只能靠 `T-P5-03` 那三条 service 侧的 fail-closed 用例兜住方向（未装配 ⇒ 不发，不是放行）。
 
 用法：python3 scripts/mut_reach_p503.py [--keep] [--clone DIR] [--only M1,M4]
+      python3 scripts/mut_reach_p503.py --check    # 24 格锚点逐个试打，不放刀不跑用例（末行印「锚点校验：N 格，M 格有问题」）
 """
 from __future__ import annotations
 
@@ -37,9 +38,10 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+
+from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
 
 ROOT = Path(__file__).resolve().parent.parent
 # 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
@@ -339,6 +341,8 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--clone", default="")
     ap.add_argument("--only", default="", help="只跑这些代号（逗号分隔），用于定位问题")
+    ap.add_argument("--check", action="store_true",
+                    help="只验锚点（每格的原样在克隆里必须恰好命中 1 次且真改到字节），不放刀不跑用例")
     args = ap.parse_args()
     from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
     tee_to(LOGDIR / "00-run.log")
@@ -351,7 +355,7 @@ def main() -> int:
         if missing:
             raise SystemExit(f"未知代号：{sorted(missing)}")
 
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="p503mut-"))
+    tmp, owned = workdir(args.clone, prefix="p503mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
     clone = prepare(tmp)
@@ -360,6 +364,25 @@ def main() -> int:
     files = {rel: clone / rel for rel in rels}
     originals = {rel: read(p) for rel, p in files.items()}
     basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
+
+    if args.check:
+        # 锚点预检的必要性（本轮实测）：`old` 是逐字抄来的源码片段，代码一搬家它就命中 0 次，
+        # 而放刀路径上 `sub_once` 命中 0 次是 SystemExit ⇒ 整族红被读成"用例回归了"。
+        # 这一格先把 24 格的锚点逐个试打一遍，几十秒内把"锚点失守"与"用例判负"分开。
+        bad = 0
+        for code, _desc, rel, old, new, _expect in cells:
+            try:
+                mutated = sub_once(originals[rel], old, new, code)
+            except SystemExit as e:
+                bad += 1
+                print(f"  ✗ {e}")
+                continue
+            if mutated == originals[rel]:
+                bad += 1
+                print(f"  ✗ {code} 注码打完了而字节没变（这一格永不开火）")
+        print(f"锚点校验：{len(cells)} 格，{bad} 格有问题")
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
+        return 1 if bad else 0
 
     def control(name: str) -> None:
         rc, killed, ran, skipped, out = go_run(clone, name)
@@ -431,8 +454,7 @@ def main() -> int:
     print("\n计数：", " ".join(f"{k}={tally[k]}" for k in TALLY))
     print("全部格子已还原（逐文件 md5 与基线一致）")
 
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     if problems:
         print("\n===== 电池判定：有洞 =====")
         for x in problems:

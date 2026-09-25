@@ -41,6 +41,7 @@
   不再只留 `/tmp`：本轮已经实测过一次 `/tmp` 里被引用为证据的克隆三分钟后就没了。
 
 用法：python3 scripts/mut_hub_media_backfill.py [--keep] [--clone DIR] [--logs DIR] [--cells R1,S1]
+      python3 scripts/mut_hub_media_backfill.py --check    # 18 格锚点在装架后的克隆里逐个试打，不跑 go test
 """
 from __future__ import annotations
 
@@ -51,9 +52,10 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+
+from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
 
 ROOT = Path(__file__).resolve().parent.parent
 US = "user-server"
@@ -370,6 +372,8 @@ def main() -> int:
     ap.add_argument("--clone", default="")
     ap.add_argument("--logs", default=DEFAULT_LOGS)
     ap.add_argument("--cells", default="", help="逗号分隔格名；修单格后复跑用，终态会写明本趟是子集")
+    ap.add_argument("--check", action="store_true",
+                    help="只验锚点（每格原样在克隆里必须恰好命中 1 次且真改到字节），不放刀不跑用例")
     args = ap.parse_args()
     only = {c.strip() for c in args.cells.split(",") if c.strip()}
     unknown = only - {c[0] for c in cuts()}
@@ -380,7 +384,7 @@ def main() -> int:
     logs.mkdir(parents=True, exist_ok=True)
     from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
     tee_to(logs / "00-run.log")
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="b23mut-"))
+    tmp, owned = workdir(args.clone, prefix="b23mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
     clone = prepare(tmp)
@@ -392,6 +396,25 @@ def main() -> int:
     files = {rel: clone / rel for rel in (REPO_REL, MEDIA_REL, APP_REL)}
     originals = {rel: read(p) for rel, p in files.items()}
     basemd5 = {rel: md5_bytes(p) for rel, p in files.items()}
+
+    if args.check:
+        # 锚点预检的必要性：`old` 是逐字抄来的源码片段，代码一搬家它就命中 0 次，
+        # 而放刀路径上这条只会被印成 BROKEN=注码失效、混在真实回归里。这一格把全部锚点
+        # 试打一遍且不跑 `go test`，几十秒内把"锚点失守"与"用例判负"分开。
+        bad = 0
+        for code, _desc, rel, old, new, _expect in cuts():
+            src = originals[rel]
+            n = src.count(old)
+            if n != 1:
+                bad += 1
+                print(f"  ✗ {code} 锚点命中 {n} 次（要求恰好 1 次）：{old[:60]!r}")
+                continue
+            if src.replace(old, new, 1) == src:
+                bad += 1
+                print(f"  ✗ {code} 注码打完了而字节没变（这一格永不开火）")
+        print(f"锚点校验：{len(cuts())} 格，{bad} 格有问题")
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
+        return 1 if bad else 0
 
     controls = {}
     for label, pkg, filt in (("repository", PKG_REPO, R_REPO), ("service", PKG_SVC, R_SVC)):
@@ -453,10 +476,7 @@ def main() -> int:
     print("\n===== 判定：" + (f"{scope}，逐格被杀，无存活" if not problems
                           else f"{scope}，{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)) + " =====")
     print(f"（BROKEN=红集合不符 的红因已打进 {logs}/<格>.log，逐条读后再谈定性）")
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
-    else:
-        print(f"保留作业目录：{tmp}")
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     return 1 if problems else 0
 
 

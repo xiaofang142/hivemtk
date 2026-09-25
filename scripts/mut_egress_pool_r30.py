@@ -101,10 +101,11 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
+
+from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
 
@@ -706,7 +707,7 @@ def main() -> int:
     logs.mkdir(parents=True, exist_ok=True)
     from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
     tee_to(logs / "00-run.log")
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="r30mut-"))
+    tmp, owned = workdir(args.clone, prefix="r30mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
 
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
@@ -916,10 +917,7 @@ def main() -> int:
         print("逐格被杀，无存活，无 CONN/RAN/PATCH/BUILD 异常")
     print(f"（BROKEN 的原始输出在 {logs}/<格>.log，逐条读后再谈定性；"
           f"CONNECT 总表在 {logs}/connect.log）")
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
-    else:
-        print(f"保留作业目录：{tmp}")
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     return 1 if problems else 0
 
 

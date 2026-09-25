@@ -1,0 +1,24 @@
+──── python3 scripts/check-test-nil-deref.py
+产码交回 (nil, nil) 的函数键（类型.方法名，按包目录）＝116 · 测试确证站点＝0（0 个文件）· 存疑站点＝114
+绿：确证站点 0 与基线一致，无新增
+rc=0
+──── python3 scripts/check-async-global-read.py
+OK 异步体裸读全局门：项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-lane，扫 153 个 package，站点 0（= 基线合计 0）
+rc=0
+──── python3 scripts/check-seam-guard.py
+OK seam 全局 accessor 门：项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-lane，登记 17 个全局，扫 2764 个 .go 文件 ⇒ accessor 之外 0 处访问
+    注册表 scripts/seam-guard.registry；摘锁/绕门的牙齿证据见 scripts/mut_seam_guard_r28.py
+rc=0
+──── bash scripts/check-shellcheck.sh
+shellcheck=0.11.0（/Users/xiaofang/.local/bin/shellcheck）
+scanned=142 checked=142 error=0
+✅ 142 个 shell 文件全部按 error 级检查过，0 条 finding
+rc=0
+──── bash scripts/check-shell-cjk-expansion.sh
+scanned=142 个 shell 文件，命中 1 处（基线 1 处）
+✅ 未发现新的「$VAR+中文」展开形状（基线内的残留属别的泳道热文件，见基线注释）
+rc=0
+──── bash scripts/check-bash32-parse.sh
+解析器：/bin/bash（bash 3.2.57(1)-release）· 有牙档位=bash 3.x · 面=142 个 shell 文件
+✅ 142 个 shell 文件在 bash 3.2.57(1)-release 下全部读通（解析层，不含运行期判据）
+rc=0

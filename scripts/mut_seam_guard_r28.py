@@ -57,6 +57,7 @@ setter 前缀那三格是 `734118d9` 之后补的：CI 的 golangci-lint（`.gol
 用法：
     python3 scripts/mut_seam_guard_r28.py            # 全族（约 3 趟整包 -race 编译）
     python3 scripts/mut_seam_guard_r28.py --only-gate   # 只跑族 A + 注册表格（不编译，改完驱动先用它验）
+    python3 scripts/mut_seam_guard_r28.py --check       # 30 格注码预检：一次子进程都不起、一个字节都不写
 """
 
 from __future__ import annotations
@@ -260,6 +261,8 @@ def gate_run(log: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only-gate", action="store_true", help="只跑族 A 与注册表格（不编译）")
+    ap.add_argument("--check", action="store_true",
+                    help="只验注码会不会落地（锚点/变异函数/注册表），一次子进程都不起、一个字节都不写")
     args = ap.parse_args()
 
     LOGDIR.mkdir(parents=True, exist_ok=True)
@@ -267,6 +270,58 @@ def main() -> int:
     tee_to(LOGDIR / "00-run.log")
     entries = build_entries()
     mut = Mutator(entries)
+
+    if args.check:
+        # 锚点预检的必要性（本电池尤其）：它是**就地注码**——写的是工作树里的真文件，
+        # 一族 27 格逐格要跑门或编译。锚点失守若发生在第 12 格，前面 11 格的机器时间全白烧，
+        # 而第 12 格报的 BROKEN 又会被读成"门的判据没牙"。这一趟只算"注码会不会落地"：
+        # 不起子进程、不写盘（`unlocked()` 只读文件、只在内存里算新内容，写盘在 apply()）。
+        bad = 0
+        total = 0
+        for e in entries:
+            g = e["global"]
+            total += 1
+            if g in MERGED_WITH:
+                continue
+            try:
+                staged = mut.unlocked({g})
+            except RuntimeError as err:
+                bad += 1
+                print(f"  ✗ [A/{g}] {err}")
+                continue
+            same = [str(q) for q, text in staged.items() if text == q.read_text(encoding="utf-8")]
+            if not staged or same:
+                bad += 1
+                print(f"  ✗ [A/{g}] 摘锁没落地（{'无文件可改' if not staged else '、'.join(same)} 字节未变）")
+        for cell in registry_cells():
+            total += 1
+            kind = cell["kind"]
+            if kind == "rename-registry":
+                if not REGISTRY.exists():
+                    bad += 1
+                    print(f"  ✗ [R/{cell['id']}] 注册表 {REGISTRY} 不在树里")
+            elif kind == "registry-text":
+                original = REGISTRY.read_text(encoding="utf-8")
+                if cell["mut"](original) == original:
+                    bad += 1
+                    print(f"  ✗ [R/{cell['id']}] 变异没落地（注册表文本一字未改）")
+            else:
+                path = SERVER / cell["file"]
+                if not path.exists():
+                    bad += 1
+                    print(f"  ✗ [R/{cell['id']}] 目标文件 {path} 不在树里")
+                    continue
+                src = path.read_text(encoding="utf-8").splitlines()
+                if next((i for i, ln in enumerate(src) if ln.startswith(cell["anchor"])), None) is None:
+                    bad += 1
+                    print(f"  ✗ [R/{cell['id']}] 锚点 {cell['anchor']!r} 不在 {cell['file']}")
+        total += 1
+        if NARROW not in {e["global"] for e in entries}:
+            bad += 1
+            print(f"  ✗ [B-narrow] 登记全局 {NARROW} 已不在注册表里，窄格会打成空集")
+        print(f"锚点校验：{total} 格，{bad} 格有问题")
+        return 1 if bad else 0
+
     results: list[tuple[str, str, str]] = []
     print(f"电池日志目录 {LOGDIR}；注册表 {len(entries)} 行 ⇒ 独立锁格 {len(entries) - len(MERGED_WITH)}")
 

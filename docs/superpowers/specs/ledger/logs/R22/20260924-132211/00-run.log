@@ -1,0 +1,6 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-3yi4l942
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/R22/20260924-132211
+覆盖 2 个脏文件、同步 0 个删除进克隆
+  ✗ R3 锚点命中 0 次（要求恰好 1 次）：'map[string]any{"media_url": urls[0]ZZ, "extra": extra}'
+锚点校验：18 格，1 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-3yi4l942/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-3yi4l942

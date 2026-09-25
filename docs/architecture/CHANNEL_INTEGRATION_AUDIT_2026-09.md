@@ -3090,3 +3090,70 @@ user-server-ci.yml 的 pull_request.paths 缺 `scripts/test-nil-deref.baseline`�
 
 **8 · 本段未覆盖面（下一位从这里接手）。** ① **B 相的 32/8 只钉在 `testdb.go` 一份文件上**：`user-server/internal/pkg/db` 与 platform 侧的**生产**句柄池上界是另一件事（§23.19 第 7 段④ 的"两边都不许拿对方的绿当自己的依据"原样有效），CI 侧那 100 个名额仍要靠并行泳道的 `command: -c max_connections=400` 待办（R32⑨）。② §23.20 第 3 段那张 `paths` 摘行反向格的**原始输出已随旧档消失**，本轮没复跑（`check-ci-gate-paths.test.sh rc=0` 是其自证件，不等同那 4 条点名行）⇒ 下一位若要引用"摘一行就红"，请重跑并新开一趟档，不要引用本节。③ 五份无 `--check` 的电池（r22／r28／p503／p702／b17）没有锚点预检口，基座再漂一次要靠整趟跑才知道。④ `TestExternalOrderRepository_GetByOrderID` 与 D12 两枚既有红本段只做到"归因＋指认在途修法"，未验并行泳道那一刀是否真把断言改对（改了断言就要有新的变异格，那边目前没有）。⑤ 53300 的"CI 侧消失"只有一次单跑读数（第 3 段末），且 `--log-failed` 天然只含失败作业 ⇒ 它既不是门禁也不是回归证据；要把它变入门禁，得让 CI 现测 `pg_settings.max_connections` 并在 B 相池上界被改时点名——#63 那类"接 CI"的活儿在这一维仍未做。⑥ `make audit` 的 14 块里本轮直跑了第 9 块之后的 5 块、之前 8 块靠 make 那一趟（含一块红 ⇒ 第 9 块之后没轮到），**"链整体绿"这件事本段没有读数**；它红在别人的文档面，结掉那笔之前也不会有。⑦ 十份电池与这台 CONNECT 代理依旧没有任何 CI 执行点（§23.19 第 7 段⑥ 结转未动）。⑧ 真机/外部账号类腿（#19、#25、#26、#45、#46）仍挂。⑨ **真值包含闸已常驻（`scripts/check-secret-containment.py`），但候选仍只来自本机**：hub `.env` 口令类键 ∪ 本机活容器 env，键名须命中 `PASS|SECRET|TOKEN|KEY|DSN|CRED|SALT`、值长≥6——别的机器上、别的键名下、或已进历史的老真值，它一概看不见；它也不在 `make audit`（候选源不在别人机器上，注册＝恒 `rc=2` 的哑门）、更不在 CI，所以"这一维在 CI 有人守"仍不成立，CI 侧只有 gitleaks 规则集。**外加一笔本机尾巴**：常驻化过程中有一跑把 11 枚候选值打进了本机会话转写（仓库/产物/tip/双远端均 0，好版复测为证），整份转写的处置属机器策略、不在本泳道能改的字节里 ⇒ 登记待办：下一位若要收这一维，先结掉本机转写，再谈"候选来源可移植"（例如从 CI secret store 取一份清单作对照）。**转写面已量化到读数**（`67` 档末节，拿闸自己的候选集扫 `~/.qoder-cn/projects/.../**.jsonl` 共 259 份，脚本只印键名与次数）：12 份含候选真值；本会话 11 枚全部在场（`POSTGRES_PASSWORD` 33／`TG_BOT_TOKEN` 28／其余各 2）；全目录私有合计 **337 次**、其中 `POSTGRES_PASSWORD` 220 次 ⇒ **这一维早在历轮"打印一次 DSN/inspect"时就已开面**，本轮只是凑齐 11 枚；同扫 `/tmp` 今日新文件命中 **0**、`tmutil destinationinfo`＝无目标、仓库/tip/双远端＝0。不删不改单行（转写是用户的会话记录，改＝伪造取证链），能收敛的只有**轮换凭据**这一条，需人拍板。
 
+### 23.22 批M-11 后续 3（2026-09-24 一批"跑完没记账"的活）：删除闸 + 两道新常驻门 + 池上界落到句柄的腿，按产物原文收口
+
+**0 · 本节收的是哪一批。** 2026-09-24 有一次泳道工作跑完既没记账也没入库：`git status --porcelain` 现数 **49 行 = 15 改 + 34 未跟踪**（34 行拆开＝26 个当日取证目录 + 7 枚新脚本/用例 + `.tmp_files/` 一枚）；26 个目录里共 **32 份 `.log`**。本节① 把这三批字节按"新门＋注册／删除闸＋电池卫生／池上界腿"认清楚，② 只从**产物原文**导出取证判读（不拿脚本名、目录名推结论），③ 自己复跑便宜的门留读数，④ 核新门注册落点，⑤ 明写未覆盖面与待操作者项。**提交切四笔**（见第 7 段），`.tmp_files/` 不入库。
+
+**1 · 这批到底动了什么（逐文件，全部经 `git diff` 逐 hunk 认过是本批内容，无别人的混入）。**
+- **三道新常驻件**：`scripts/check-bash32-parse.sh`（全仓 shell 文件必须被 mac 出厂 `/bin/bash 3.2` 读通；解析器不是 3.x 时**自报 SKIP 不冒充绿**，缺工具/面骤减/根不对退 2）＋自测 `check-bash32-parse.test.sh`；`scripts/check-ci-pg-capacity.py`（CI 的 `services.postgres` 名额、每作业现测步骤、Go 源里两枚池上界三者同源，C1–C6，读不到源退 2）＋自测 `check-ci-pg-capacity.test.sh`；`scripts/mut_dispose.py`（把"电池收尾只回收自己那枚私有克隆"做成 `workdir()` 入口闸＋`dispose()` 收尾闸两道）＋自测 `mut-dispose-guard.test.sh`（九格 G1–G9 全断言"哪个目录还在"，不读 rc——理由写在这份用例头：这一类缺陷的表现恰恰是"一切成功退出"）。
+- **删除闸的立项背景是 2026-09-24 的实测事故**（`scripts/mut-dispose-guard.test.sh:5-10` 与 lint.yml 注释同记）：`python3 scripts/mut_collection_p703.py --clone . --check` 跑完锚点预检，出口 `shutil.rmtree(tmp)` 里 `tmp` 就是 `Path(".")` ⇒ **整棵 r45-lane 连 `.git` 与当轮 18 项未提交字节一起被清空**，本轮因此重做。修法＝六枚带 `--clone` 的电池把 `Path(args.clone or mkdtemp(...))` 换成 `workdir(args.clone, …)`、把裸 `rmtree(tmp)` 换成 `dispose(tmp, owned=…, …)`；危险入参在**装架之前**就被入口闸挡掉（只有收尾闸不够：`--clone .` 即便末尾拒删，中途的 `git clone --shared` 已把改动落进调用方工作树）。
+- **锚点预检（`--check`）**新加到五枚电池：`mut_actionability_b17.py`（JS 11＋Go 7＝18 格）、`mut_hub_media_backfill.py`（18 格）、`mut_reach_p503.py`（24 格）、`mut_seam_guard_r28.py`（30 格）、`mut_startup_hook_p702.py`（3 格）。作用：`old` 是逐字抄的源码片段，代码一搬家就命中 0 次，放刀路径上会被读成"用例回归"；预检几十秒内把"锚点失守/注码不落地"与"判据没牙"分开。**注意**：`--check` 只证锚点与用例名，不证有牙（§23.19 第 5 段原口径，本节反复兑现）。
+- **CI 的 PG 名额同源（§23.21 第 8 段⑤ 的常驻化）**：`user-server-ci.yml` 四枚带库作业的 `services.postgres` 各加 `command: '-c max_connections=400'`、各加一步 `show max_connections` 现测（`want` 用 `grep -m1` 从本文件派生、`!=` 判等，不再手抄），并把门与用例挂进 `static-gates` 作业与该文件的 push/pull `paths`。
+- **池上界落到句柄的腿**：`user-server/internal/pkg/db/db.go` 把原先只活在 `InitDB`（要 DSN、要真库、两条 panic）里、**没有任何用例经过**的四行 `sqlDB.Set*` 拆成 `normalizePool()`＋`applyPool()`，新增 `user-server/internal/pkg/db/db_pool_bound_test.go`（`noDialConnector` 造永不拨号的句柄，不连库；`TestPoolBoundLandsOnSQLHandle` 现读 `Stats().MaxOpenConnections` 断言上界真落地，`TestNormalizePoolFallbacks` 逐格点名兜底值＋else 腿）。这行 `Set` 正是 `check-ci-pg-capacity.py` 的 C5 下限来源（"配置里 200"≠"句柄生效 200"，掉回 Go 默认表现为吞吐骤降而非报错，最难发现）。
+- **基线卫生**：`scripts/shell-cjk-expansion.baseline` 摘掉 `check-architecture.sh` 一行（2→1），核对在干净树上做（`git show HEAD:` 与工作树皆 0 命中、该文件无改动），留着＝把"这一类已收敛"挡在基线里、下次真长出落点反被旧条目吞掉。
+
+**2 · 26 枚 2026-09-24 取证目录的归类（本表按本仓规矩不携读数，读数全在第 3 段散文）。** 驱动脚本一律**从产物里的锚点串现证**（不是拿目录名推）：
+
+| 轮次目录 | 驱动（锚点串实证） | 这一趟是哪一类取证 |
+| --- | --- | --- |
+| `R22/132146`·`132211`·`132241`·`132242`·`132828` | `mut_hub_media_backfill.py`（锚点 `map[string]any{"media_url": urls[0]ZZ,…}`） | `--check` 锚点预检 |
+| `R28/132534`·`132549`·`132600`·`132830` | `mut_seam_guard_r28.py`（`loadIntentEnabled`… 摘锁形状） | `--check` 注码预检（不起子进程、不写盘） |
+| `P503/131916`·`132011`·`132020`·`132032`·`132827` | `mut_reach_p503.py`（锚点 `if hasSideEffectX(ec.Execution, sentKey) {`） | `--check` 锚点预检 |
+| `P701/132720` | `mut_bill_p701.py`（用例 `TestBillRepository_ReadFailureIsNotMissingRead`） | `--check` 锚点预检 |
+| `P702hook/132648`·`132707`·`132708`·`132830` | `mut_startup_hook_p702.py`（钩子 `postMigrateDropLegacyExternalOrderKeyNope`） | `--check` 锚点/用例名预检 |
+| `B17action/132343`·`132411`·`132423`·`132433`·`132829` | `mut_actionability_b17.py`（JS 锚点 `const IDENTITY_RECHECK_TOLERANCE_PXZZ = 5;`） | `--check` 锚点预检 |
+| `CapAB/135922`（6 份 `00-*`/`K1`–`K4`） | **无常驻脚本**（见第 6 段③）：一次性驱动临时改 `db.go` 的 `normalizePool`/`applyPool` | 全族杀伤（四刀，带 md5 还原） |
+| `CIwiring/135922`（2 份） | `make audit` 整链 + 第 9 块之后逐块直跑 | 整链审计 |
+
+**3 · 逐目录读数（不可数的散文段——"记录末次取证"这个动作本身会改台账，故读数不进上表）。**
+
+*R22（18 格，`--check`）*：`132146`、`132241`、`132828` 三趟同读末行 `锚点校验：18 格，0 格有问题`；`132211` 读 `✗ R3 锚点命中 0 次（要求恰好 1 次）：'map[string]any{"media_url": urls[0]ZZ, "extra": extra}'` → `18 格，1 格有问题`；`132242` 读 `✗ R3 注码打完了而字节没变（这一格永不开火）` → `18 格，1 格有问题`。两枚"1 格有问题"是把锚点失守与注码不落地**故意注坏喂给预检**的反向格（预检当场点名坏格名），不是电池判负。
+
+*R28（30 格，`--check`）*：`132534`、`132830` 读 `锚点校验：30 格，0 格有问题`；`132549` 读 16 条 `✗ [A/<全局>] … 只摘到 0 行锁操作，变异形状不对` → `30 格，16 格有问题`；`132600` 读 `✗ [R/registry-empty] 变异没落地（注册表文本一字未改）` → `30 格，1 格有问题`。同样是反向格：证明"摘锁没落地/注册表没改"会被点名，**不等于全族 30 格有牙**（族 A 摘锁/族 B 窄格的杀伤要跑门或编译，`--check` 一趟都不起）。
+
+*P503（24 格，`--check`）*：`131916`、`132032`、`132827` 读 `24 格，0 格有问题`；`132011` 读 `✗ M1 锚点命中 0 次（要求恰好 1 次）：'if hasSideEffectX(ec.Execution, sentKey) {'` → `24 格，1 格有问题`；`132020` 读 `✗ M1 注码打完了而字节没变` → `24 格，1 格有问题`。
+
+*P701（71 格，`--check`）*：`132720` 读 `基线字节：克隆 HEAD \`ef11d048\`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次` + `锚点校验：71 格，0 格锚点有问题`。⚠ 只有预检，**没有** §23.21 那种 `KILLED=… SURVIVED=…` 全族杀伤行。
+
+*P702hook（3 格，`--check`）*：`132648`、`132830` 读 `用例定义于 external_order_key_startup_test.go` + `3 格，0 格有问题`；`132707` 读 `✗ 钩子边界没找到：'func postMigrateDropLegacyExternalOrderKeyNope(db *gorm.DB) {' 不在 …/internal/pkg/db/migrate.go` → `3 格，1 格有问题`；`132708` 读 `✗ 用例 TestLegacyExternalOrderKeyHookRenamed 在 …/db 的 *_test.go 里查无定义 ⇒ 两刀都会红在 no tests to run` → `3 格，1 格有问题`。
+
+*B17action（18 格，`--check`）*：`132411`、`132829` 读 `18 格，0 格有问题`；`132423` 读 `✗ [JS] M7 锚点命中 0 次（要求恰好 1 次）：'const IDENTITY_RECHECK_TOLERANCE_PXZZ = 5;'` → `18 格，1 格有问题`；`132433` 读 `✗ [Go] G2 注码打完了而字节没变` → `18 格，1 格有问题`。**`132343` 无判读产物**：整个 `00-run.log` 只有一行 `私有作业目录：/private/var/folders/…/b17mut-mbb0k754`，驱动在写判定行之前停了 ⇒ 这一格如实记"无判读"，不并入上面任何计数。
+
+*CapAB/135922（唯一一枚带全族杀伤行的）*：`00-summary.log` 读 `控制组 rc=0 PASS=6 名单=TestNormalizePoolFallbacks、…/只缺_ConnMaxLifetime⇒补_30_分钟、…/只缺_MaxOpenConns⇒补_20、…/四项齐全⇒原样穿过（else_腿）、…/整条留空⇒采用生产默认表、TestPoolBoundLandsOnSQLHandle`；四刀逐格 `K1 摘掉 SetMaxOpenConns rc=1 红=1 TestPoolBoundLandsOnSQLHandle 还原=一致 ⇒ 杀掉`、`K2 上界兜底 20⇒0 rc=1 红=2 … ⇒ 杀掉`、`K3 lifetime 兜底⇒60 rc=1 红=2 … ⇒ 杀掉`、`K4 摘掉 MaxIdleConns==0 兜底 rc=1 红=2 … ⇒ 杀掉`；末两行 `基线 md5=13dd9e9f5b8c226724d9109b1f8468b5 终态 md5=13dd9e9f5b8c226724d9109b1f8468b5` ＋ `===== 四刀判定：4/4 全杀 =====`。逐刀红因在 `K1..K4-*.log`，皆为 `db_pool_bound_test.go:70/112` 的 `t.Errorf`（如 K1 `配置写的上界 200 没落到句柄上，实读 0`）。`00-control.log`＝六名单全 PASS。
+
+*CIwiring/135922*：`00-make-audit.log` 末行 `make_audit_rc=2`，红在第 9 块 `check-env-coverage.py`（`生产代码读取键 183 · 已文档化 76 · 工具豁免 16 · 基线登记 88 · 红 3`，三枚 UNDOCUMENTED 全来自 `user-server/internal/service/collection_job.go`：`FF_LTC_COLLECTION_JOB`/`LTC_COLLECTION_JOB_BATCH`/`LTC_COLLECTION_JOB_INTERVAL`）⇒ **属并行 collection 泳道未提交的文档面，不是本批的红**（与 §23.21 第 7 段同一判，本泳道不替别人补文档行）。它之前两块新门都跑到了：`── CI 的 PG 名额…──` 读 `postgres 服务 4 处 · 显式名额声明 4 处 · 现测步骤 4 处 · 代码侧下限 232` ＋ `✅ …三者同源`，`── 全仓 shell 文件必须被 mac 出厂那版 bash（3.2）读通…──` 亦在场（rc=2 是这一整链停摆的码，不是这两道门红）。`10-post10-gates.log`＝第 9 块之后逐块直跑，六块全 `rc=0`（含 `check-test-nil-deref` 站点 0、`check-async-global-read` 站点 0、`check-seam-guard` accessor 外 0、`check-shellcheck` `scanned=142 error=0`、`check-shell-cjk-expansion` `命中 1 处（基线 1 处）`、**新门 `check-bash32-parse` `142 个 shell 文件在 bash 3.2.57 下全部读通` rc=0**）。
+
+**4 · 本会话自己复跑的便宜门/自测（秒级，全部真跑在含 `gofmt -w` 之后的最终字节上；rc 与关键行逐条）。**
+- `bash scripts/check-bash32-parse.test.sh` ⇒ **rc=0**，`===== 用例：九格全过（断言失败 0 处）=====`。其中 **C5 是本批最该记的一条**：假 bash 5 打在"确有语法错"的夹具上，门退 **0＋SKIP**——用例明写"这道门在 CI 里没有判出任何东西，只能靠本地跑"（见第 5 段缺口）。C6/C7/C8/C9 验 rc=2（缺 bash/面骤减/根不对＝没跑过，不并入绿也不并入红）与自我覆盖。
+- `python3 scripts/check-ci-pg-capacity.py --help` ⇒ **rc=0**（只打印 usage）；顺带直跑门本体 `--repo .` ⇒ **rc=0**，`postgres 服务 4 处 · 显式名额声明 4 处 · 现测步骤 4 处 · 代码侧下限 232`。
+- `bash scripts/mut-dispose-guard.test.sh` ⇒ **rc=0**，`===== 用例：九格全过 =====`；REAL 静态面 `✓ 全部 6 枚走 workdir+dispose（--clone 面 6／入口闸 6／收尾闸 6）`、`✓ 没有残留的 \`Path(args.clone …)\` 直连赋值`、`✓ 没有裸 rmtree(tmp/dst/work) 站点`、`✓ 6 枚都在装架之前过入口闸`。
+- `gofmt -l user-server/internal/pkg/db/` ⇒ **首跑红（内容红）**：列出 `db_pool_bound_test.go`（新表驱动里 `ConnMaxLifetime==0 的兜底` 那格结构体字段 `name:/in:/want:` 缩进未对齐）。这是本批自带文件的真缺陷，不是判据太严——修法是 `gofmt -w` 该文件（纯对齐、不改任何断言/期望/判据），**复跑 `gofmt -l` 空**。台账不为绿放宽判据，这里是把内容红修回源头。
+- `go vet ./internal/pkg/db/`（在 `user-server/`）⇒ **rc=0**。
+- `go test ./internal/pkg/db/ -run 'TestPoolBoundLandsOnSQLHandle|TestNormalizePoolFallbacks'`（窄范围，**无全包、无 -race**）⇒ **rc=0**，`ok hivemtk-user/internal/pkg/db`，`TestPoolBoundLandsOnSQLHandle` PASS、`TestNormalizePoolFallbacks` 四子格全 PASS。
+
+**5 · 新门注册核对（第 4 步任务；注册只落在**已跟踪**的 Makefile/workflow，本仓有先例）。**
+- `check-ci-pg-capacity.py`：**双落点齐全**。`Makefile:449`（`audit:` 目标，`echo` 在 448）＋ `user-server-ci.yml` 的 `static-gates` 作业步（门 158、用例 164）＋ push/pull `paths`（25–26、42–43）＋四枚 postgres 的 `command`/现测步。既有 `make audit` 又有 CI 执行点。
+- `mut_dispose.py`：本体是库（被六枚电池 import），其**用例** `mut-dispose-guard.test.sh` 注册在 `lint.yml:143`（`workflow-refs` 作业，该作业无 `paths` 过滤⇒每次 push 恒跑）。注册面＝已跟踪的 workflow。✓
+- **`check-bash32-parse.sh`：只注册进 `Makefile:463`（`audit:`），未挂任何 workflow ⇒ 没有 CI 执行点**（`make audit` 本身不是 CI 作业，见 §23.20 第 6 段）。叠加第 4 段 C5 的自证（CI runner 的 bash 是 5.x，此门在 CI 恒 SKIP），这是一处**双重缺口**：既没接 CI，接了也只是假绿。正解（挪到本地/夜间 mac 跑、或让 CI 显式装一枚 3.2 再跑）不在本批，登记给下一位。本批只把它接进 `make audit`（已跟踪 Makefile，符合"注册落点"规矩）。
+
+**6 · 本段未覆盖面（不得当作已清；下一位从这里接手）。**
+① **本批 26 目录里，除 CapAB 一枚外全是 `--check` 预检产物**：R22/R28/P503/P701/P702hook/B17action 六族的当日取证**没有一份 `KILLED/SURVIVED` 全族杀伤行** ⇒ 本节只能证"锚点/注码形状没失守"，**不能**据此说这六族 211 格"变异全杀"。全族杀伤的历史读数仍在 §23.21 第 6 段那批 09-23 趟次里；要更新它得整族重跑（含 `-race`/编译，本批按任务约束未跑）。
+② 五枚 `--check` 电池（r22/hub 即 b17… 见 §23.21 无 `--check` 那批）之外的常驻性未变：`check-bash32-parse` 无 CI 点（第 5 段）。
+③ **CapAB/135922 那枚"四刀 4/4 全杀"的一次性驱动没有常驻件**：`grep -rln '四刀判定\|normalizePool\|TestPoolBoundLandsOnSQLHandle' scripts/` 在跟踪脚本里**只命中 `mut_egress_pool_r30.py` 的 `摘掉 SetMaxOpenConns`（那是打向 `testdb.go` 的 P1 格，非 db.go 的 K1–K4）**，产出本批 `db.go` 四刀的驱动不在树里 ⇒ 这 4/4 是"跑过、有产物、但下次无从复跑"的一次性证据（[[feedback-forensic-harness-hygiene]]"一次性 /tmp 脚本不算门禁"）。把它常驻化（挂进 `mut_egress_pool_r30.py` 或新常驻卡）是下一位的活。
+④ `make audit` 的 `rc=2` 卡在别人的 `collection_job.go` 文档面（第 3 段 CIwiring），**"整链绿"这件事本段没有读数**；那三行文档补齐之前也不会有。
+⑤ 本段复跑只到 `-run` 点名的 `TestPoolBoundLandsOnSQLHandle|TestNormalizePoolFallbacks` 两枚窄腿，**未跑 `internal/pkg/db` 全包、未跑 `-race`**（任务明令：并发 `-race` 会把这台机器的盘写满）⇒ 池上界这条腿的"全包无连带红"未证。
+
+**7 · 提交切分（本批按逻辑分四笔，逐笔点名 add、每笔 `git diff --cached` 逐 hunk 认过；切法保证每笔自带的新自测对其自己的树可绿）。** ①`feat(gates)`＝`check-bash32-parse.{sh,test.sh}`＋`check-ci-pg-capacity.{py,test.sh}`＋`Makefile`（两块注册 449/463）＋`user-server-ci.yml`（门/用例/paths/四枚 `max_connections=400`＋现测步）＋`shell-cjk-expansion.baseline`：`check-ci-pg-capacity.test.sh` 的 REAL 真仓库腿要的正是本笔工作流，同笔落。②`fix(battery)`＝`mut_dispose.py`＋`mut-dispose-guard.test.sh`＋八枚 `mut_*.py`（六枚接删除闸、其中 b17/hub/p503 另加 `--check`，seam_guard_r28/startup_hook_p702 只加 `--check`）＋`lint.yml`：guard 用例的 REAL 静态面"六枚走 workdir+dispose"要 8 枚同笔落才全绿。③`test(db)`＝`db.go` 拆 `normalizePool`/`applyPool` ＋ `db_pool_bound_test.go`（含 `gofmt -w`）。④`chore(evidence)`＝26 目录 32 份取证 `.log` ＋ 本节台账（放最后，①②③正文里 forward-ref 的"§23.22"自此存在）。凭证自查：32 份产物经 `gitleaks detect --no-git --source`（仅 2026-09-24 切片）⇒ `no leaks found`、`findings_count=0`；`grep` 真值形状（`postgres://`、`:pw@host`、`POSTGRES_PASSWORD=<非占位>`、`bearer <长串>`、`-----BEGIN`）退 **1＝零命中**——本批产物里的 DB 测试走 `noDialConnector` 不拨号、不打 DSN，连 maskedDSN 形状都不出现，故无需 `scrub`。`.tmp_files/` 与本机 session 转写尾巴（§23.21 第 8 段⑨）不入库。
+
+**8 · 待操作者项。** ① `collection_job.go` 那三枚 UNDOCUMENTED 键属并行 collection 泳道的文档面，需那边补 `docs`/基线行，`make audit` 才可能整链绿（本泳道不代改）；② 凭证轮换：2026-09-24 用户已就 F1 改拍【全转】（`secret_rotation.md` 二A.1/二A.2 与 `rotate-secrets.sh` 已订正 `jwt_user` not-leaked→burned、旧值命中 5 枚公开 master 祖先提交、`--all` 全史口径与 `81955cfc~1` 界内口径之差），登记表内四条可自转腿（`db_user`/`db_platform`/`merchant_hmac`/`jwt_user`）标注"已实转、旧值当场作废"——**这句是脚本/文档里的自述，本轮未独立复跑轮换、也无权限核对线上真值**，属操作者事实；外部服务签发的那批（TG/DS/各家 LLM/`GEO_DB_DSN`）仍需在对方控制台吊销后另行替换，脚本代不了；③ `check-bash32-parse` 的 CI 假绿缺口（第 5 段）若要真堵，需一台能跑 bash 3.2 的执行点，属机器策略，请拍板。
+

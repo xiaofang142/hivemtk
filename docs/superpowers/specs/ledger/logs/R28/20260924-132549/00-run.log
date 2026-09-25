@@ -1,0 +1,17 @@
+  ✗ [A/IntentEnabled] IntentEnabled：internal/service/intent_recognition.go 的 loadIntentEnabled 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/aiReplyQuietHoursFn] aiReplyQuietHoursFn：internal/service/webhook_outbound.go 的 loadAIReplyQuietHoursFn 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/approvalNowFn] approvalNowFn：internal/service/approval_request.go 的 loadApprovalNowFn 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/approvalResumeTokFn] approvalResumeTokFn：internal/service/approval_request.go 的 loadApprovalResumeTokFn 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/bridgeChannelOnlineProbe] bridgeChannelOnlineProbe：internal/service/bridge_offline_replay.go 的 loadBridgeChannelOnlineProbe 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/dingtalkOpenAPIBase] dingtalkOpenAPIBase：internal/service/dingtalk_media.go 的 loadDingtalkOpenAPIBase 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/dingtalkWebhookHostAllowed] dingtalkWebhookHostAllowed：internal/service/webhook_outbound.go 的 loadDingtalkWebhookHostAllowed 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/dyAPIBaseOverride] dyAPIBaseOverride：internal/service/douyin_media.go 的 loadDyAPIBaseOverride 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/dyMediaRetryBackoff] dyMediaRetryBackoff：internal/service/douyin_media.go 的 loadDyMediaRetryBackoff 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/humanTaskNowFn] humanTaskNowFn：internal/service/human_task.go 的 loadHumanTaskNowFn 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/pollingLockRepo] pollingLockRepo：internal/service/telegram_polling_lock.go 的 getPollingLockRepo 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/qqAttachmentURLGuard] qqAttachmentURLGuard：internal/service/qq_media.go 的 loadQQAttachmentURLGuard 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/qqMaxMediaBytes] qqMaxMediaBytes：internal/service/qq_media.go 的 loadQQMaxMediaBytes 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/tgAPIBaseOverride] tgAPIBaseOverride：internal/service/telegram_media.go 的 loadTGAPIBase 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/tgMaxMediaBytes] tgMaxMediaBytes：internal/service/telegram_media.go 的 loadTGMaxMediaBytes 只摘到 0 行锁操作，变异形状不对
+  ✗ [A/wechatAPIBase] wechatAPIBase：internal/service/wechat.go 的 loadWechatAPIBase 只摘到 0 行锁操作，变异形状不对
+锚点校验：30 格，16 格有问题

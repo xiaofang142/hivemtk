@@ -3,8 +3,11 @@
 # 事实源：scripts/check-shell-cjk-expansion.sh（判据、修法、覆盖面盲区都在那里）。
 # 每行格式：文件<TAB>命中数。归零后请把该行删掉（门会提示）。
 #
-# 这 2 处属别的泳道在改的热文件（scripts/check-architecture.sh、
-# scripts/check-unwired-assets.sh 本批未动，避免撞车），
+# 这 1 处属别的泳道在改的热文件（scripts/check-unwired-assets.sh 本批未动，避免撞车），
 # 修法同其余 54 处：$FOO 后跟中文 ⇒ ${FOO} 后跟中文。
-scripts/check-architecture.sh	1
+#
+# 2026-09-24 摘掉 check-architecture.sh 那一行：门自己提示"该条目已归零"，且核对是在
+# 干净树上做的（`git show HEAD:` 与工作树都 0 命中、该文件 `git status` 无改动），
+# 也就是残留随它上一次提交就没了。留着＝把"这一类已经收敛"的事实挡在基线里，
+# 下次那枚文件真长出落点时反而会被旧条目吞掉。
 scripts/check-unwired-assets.sh	1

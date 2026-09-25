@@ -67,28 +67,51 @@ done
 | `MERCHANT_API_SECRET` | 2 个提交（2026-07-31） | 是，且 **user/platform 两侧同值**＝共享密钥 | 必须轮换（两侧一起） |
 | `PLATFORM_LICENSE_SECRET` | 3 个提交含该值（`89f34e78` 2026-07-31 与 `e1d0ca9c` 2026-08-01 写入 `.env-example`，`81955cfc` 2026-09-19 清除）；前两枚已在 `upstream/master`（GitHub）与 `gitee-upstream/master` 上＝**已公开** | 本机侧已从 4 处 `.env` 行中删除（2026-09-22），HEAD 树里 `git grep` 该值命中 0 | 无需"换新值"：它不再被任何代码读取。历史里那两枚提交只能靠改写历史或接受其公开；若你自建的平台端曾拿它做过签名校验，那侧按作废处理 |
 | 平台库 `POSTGRES_PASSWORD` | 1 个提交（`user-server/tests/e2e/deep_lib.sh`，跨仓串味） | 是（`:8205`） | 必须轮换 |
-| `USER_JWT_SECRET`（64 hex，根 `.env`） | 4 个提交 | **否**——真正在用的是 `user-server/.env` 里另一枚（57 字符），且该值 pickaxe 0 命中 | 本机无需轮换；部署侧若用的是被提交的那枚则需轮换 |
+| `USER_JWT_SECRET`（64 hex，根 `.env`） | 按上面那条例外口径数到 **4 个提交**；2026-09-24 换成 `--all` 全史口径复数是 **5 枚**（`81955cfc`、`e1d0ca9c`、`89f34e78` 在 `scripts/bootstrap.sh`，`1ad16437`、`c8dd2d52` 在 `user-server/tests/asset_market_regression_test.sh`），五枚**逐笔 `git merge-base --is-ancestor <sha> ef11d048` 皆真** ⇒ 全在已推公开的 master 链上 | **是**——本行原先写"否，真正在用的是 `user-server/.env` 里另一枚（57 字符）、该值 pickaxe 0 命中"，那句随 2026-09-24 订正作废（见下） | **必须轮换**（2026-09-24 已随 `jwt_user` 腿实转，旧值当场作废） |
 | `REDIS_PASSWORD` / `TG_BOT_TOKEN` / `VISITOR_TOKEN_SECRET` / `MASTER_KEY` / `PLATFORM_ADMIN_PASSWORD` / `DS_API_KEY` | 0 | 是 | 未进过版本库，按常规周期轮换即可 |
 | `QINIU_*` / `EMBEDDING_API_KEY` / `RERANK_API_KEY` / 邮箱口令 | — | `.env` 里为空值 | 未配置，无泄露面 |
 
 两点反直觉结论，值得留档：
 
-1. **泄露的是"文件态"还是"运行态"要分开判**。已提交的 JWT 值本机根本没在用（被
-   `user-server/.env` 覆盖），所以换它能带来的收益是零、代价是全员掉线；
-   而看起来"只是本地开发库"的 `POSTGRES_PASSWORD` 却是运行态真值，且与部署机同源的概率高。
+1. ~~**泄露的是"文件态"还是"运行态"要分开判**。已提交的 JWT 值本机根本没在用（被
+   `user-server/.env` 覆盖），所以换它能带来的收益是零、代价是全员掉线~~ ⇒ **这条 2026-09-19 的判读是错的，2026-09-24 现测作废**：
+   枚根 `.env` 的 64-hex `USER_JWT_SECRET` 与 `user-server/.env` 那枚 57 字符**同时被读**（`rotate-secrets.sh` 的 `jwt_user`
+   落点登记为三处：根 `.env` 两处键 ＋ `user-server/.env` 一处），"被覆盖"只对同名键成立、不对不同文件成立。
+   分文件态/运行态这个思路本身留着（它救过 `POSTGRES_PASSWORD` 那一行的判断），错在把"我没数落点"写成了"本机没在用"。
+   教训：**"某值不再被使用"这类否证必须逐落点列清单**（文件 × 键 × 读取点），拿"同名键被覆盖"推整枚作废是省步骤。
+   而看起来"只是本地开发库"的 `POSTGRES_PASSWORD` 却是运行态真值，且与部署机同源的概率高——这半句原样有效。
 2. **跨仓串味**：私有 platform 库的口令是从 **公开** user 仓的 e2e 脚本里泄出去的。
    只扫"本仓自己的 .env 键"会漏掉这一类，因此 `check-secrets.sh` 的 A 项要求把
    相邻仓的 `.env` 也喂进来比对（`ENV_FILE=../hivemtk-platform/platform-server/.env bash scripts/check-secrets.sh`）。
 
-### 二A.2 处置状态（2026-09-19 用户拍板）
+### 二A.1-补 · 2026-09-24 复测：三条读数订正与一条半径声明
+
+- **口径差异要写明**：上面那段命令拿 `81955cfc~1` 做上界（"清除跟踪文件明文之前是否曾公开"），
+  而轮换实排拿 `git log --all` 数全史。同一枚值两个数并不矛盾（64-hex JWT：界内 **4**／全史 **5**），
+  但表里若不写"这个数是哪个口径数出来的"，下一次复算就会把差异读成"有一次数错了"。⇒ 表内现已逐行带口径。
+- **`--all` 与祖先判定**：那 5 枚提交（`81955cfc`／`e1d0ca9c`／`89f34e78`／`1ad16437`／`c8dd2d52`）
+  对已推公开顶点 `ef11d048` 逐笔跑 `git merge-base --is-ancestor` 皆退 0 ⇒ "已公开"不是推断而是判据。
+- **克隆也是落点**：本轮按值反查登记时发现同一枚 64-hex 值同时存在于 `hivemtk/.env` 与
+  `r45-batt/.env`（另一枚 57 字符在 `hivemtk/user-server/.env` 与 `r45-lane/user-server/.env`）。
+  影子克隆会带走 `.env`（它未被跟踪，但 `cp -R`/`clone --shared` 之后仍在磁盘上），
+  所以"扫几个 `.env`"的对象集合必须是**整台机器**而不是每个仓一份 ⇒ 轮换后必须连克隆一起复测（本轮由 `mask_pristine.py` 的掩码扫描覆盖）。
+- **`license` 腿不是"幻影腿"**：曾判定 `rotate-secrets.sh` 会为已下线的 `PLATFORM_LICENSE_SECRET`
+  "报已轮而零写入"，复测否证——既有路径本来就是逐落点 `read_key`，全空则 warn+skip 且退 0，
+  实测输出 `license：所有落点都已无此键 —— 该凭证已随功能下线，无需轮换`。守卫未新增（详见脚本头 订正②）。
+  它仍标 `burned`：泄露事实不随代码下线而消失。
+
+### 二A.2 处置状态（2026-09-19 用户拍板 → 2026-09-24 改拍）
 
 - 已做：清除跟踪文件里的明文（`81955cfc`）+ 上防复发闸门 `scripts/check-secrets.sh`。
-- **暂不做：口令轮换与 git 历史改写**（F1 决策：暂不处置）。轮换工具已备好但默认拒绝执行，
-  需人工显式授权：`ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned`。
+- ~~**暂不做：口令轮换与 git 历史改写**（F1 决策：暂不处置）~~ ⇒ **2026-09-24 用户改拍【全转】并授权执行**：
+  登记表内四条可自转腿（`db_user`／`db_platform`／`merchant_hmac`／`jwt_user`）已实转，旧值当场作废；
+  超管口令走 `scripts/rotate-admin-password.sh`；`license` 腿按上面的实测路径 warn+skip（零写入）。
+  外部服务签发的那批（TG／DS／深言系各家 LLM／`GEO_DB_DSN`）**仍需在对方控制台吊销后另行替换**，脚本代不了。
+  轮换工具仍默认拒绝执行，需人工显式授权：`ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --all-burned`。
 - 不改历史的理由（记录在此，避免下次重新论证）：这些值已经公开可查，改写只是把"可查"变成
   "不可查"，而**轮换是把"可用"变成"不可用"**——只有后者能真正终止泄露的价值；
   同时 `filter-repo` 会作废所有既有克隆与 CI 缓存，收益为零、代价为共享现场破坏。
-  标准处置顺序即"rotate, don't erase"。
+  标准处置顺序即"rotate, don't erase"。⇒ 09-24 的实转正是按这条顺序做的，本段结论未变。
 - 未完成：顶层非 git 目录 `scripts/` 里那份 `bulk_seed.py` 仍含同一枚明文（不在任何闸门覆盖内），
   该残留已移交审计会话 C 的定时修复任务（见 `docs/audit-2026-09-19-sessionC.md` F2），此处不重复修。
 

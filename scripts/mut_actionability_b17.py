@@ -18,6 +18,7 @@
 绝不碰共享工作树（并行会话在里面提交）。
 
 用法：python3 scripts/mut_actionability_b17.py [--js-only|--go-only] [--keep] [--clone DIR]
+      python3 scripts/mut_actionability_b17.py --check     # JS 11 + Go 7 格锚点试打，不跑 vitest 也不跑 go test
 """
 from __future__ import annotations
 
@@ -28,9 +29,10 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+
+from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
 
 # 脚本在 <repo>/scripts/ 下 ⇒ 根 = 上一级。**不硬编码仓名**（改名克隆必须照样能跑：
 # 这是从别的门脚本学到的坑——定根写死仓名 ⇒ 改名克隆里 rc=1 零输出）。
@@ -406,13 +408,58 @@ def main() -> int:
     ap.add_argument("--go-only", action="store_true")
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--clone", default="")
+    ap.add_argument("--check", action="store_true",
+                    help="只验锚点（每格原样在装架后的那份文件里必须恰好命中 1 次且真改到字节），不放刀不跑测试")
     args = ap.parse_args()
     from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
     tee_to(LOGDIR / "00-run.log")
 
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="b17mut-"))
+    tmp, owned = workdir(args.clone, prefix="b17mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}")
+
+    if args.check:
+        # 锚点预检的必要性：`old` 是逐字抄来的源码片段，代码一搬家它就命中 0 次，
+        # 而放刀路径上 `sub_once` 命中 0 次是 SystemExit ⇒ 整族红被读成"用例回归了"。
+        # 这一趟**照样装架**——锚点必须在电池真正要改的那份字节上验（拿工作树代替克隆，
+        # 等于验了一份它从不触碰的副本），只是一次测试都不跑。
+        bad = 0
+        total = 0
+        if not args.go_only:
+            # 这里不走 `js_prepare`：它做的是"把 src/ 原样 copytree + 链 node_modules"，
+            # 为的是能起 vitest。锚点预检只读那一份 js 文本，而 node_modules 是 gitignore 的
+            # ⇒ 为一次不跑测试的预检逼出一趟 npm install 不值；copytree 逐字复制，
+            # 读 WEB/PRIM_REL 与读 work/PRIM_REL 是同一份字节。
+            orig = read(WEB / PRIM_REL)
+            for code, _desc in js_mutants():
+                total += 1
+                try:
+                    mutated = apply_js(orig, code)
+                except SystemExit as e:
+                    bad += 1
+                    print(f"  ✗ [JS] {e}")
+                    continue
+                if mutated == orig:
+                    bad += 1
+                    print(f"  ✗ [JS] {code} 注码打完了而字节没变（这一格永不开火）")
+        if not args.js_only:
+            clone = go_prepare(tmp)
+            originals = {rel: read(clone / rel) for rel in sorted({m[2] for m in go_mutants()})}
+            for code, _desc, rel, old, new in go_mutants():
+                total += 1
+                try:
+                    mutated = sub_once(originals[rel], old, new, code)
+                except SystemExit as e:
+                    bad += 1
+                    print(f"  ✗ [Go] {e}")
+                    continue
+                if mutated == originals[rel]:
+                    bad += 1
+                    print(f"  ✗ [Go] {code} 注码打完了而字节没变（这一格永不开火）")
+        print(f"锚点校验：{total} 格，{bad} 格有问题")
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
+        return 1 if bad else 0
+
     problems = []
 
     if not args.go_only:
@@ -487,8 +534,7 @@ def main() -> int:
         dup_report("Go", gkill)
         print("[Go] 已全量还原（md5 一致）")
 
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     if problems:
         print("\n===== 电池判定：有洞 =====")
         for x in problems:
