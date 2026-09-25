@@ -797,22 +797,22 @@ func TestExternalOrderRepository_GetByOrderID(t *testing.T) {
 	orderRepo.Create(ctx, order)
 
 	tests := []struct {
-		name       string
-		merchantID string
-		orderID    string
-		wantErr    bool
+		name    string
+		orderID string
+		wantErr bool
+		wantNil bool
 	}{
 		{
-			name: "get existing order",
-
+			name:    "get existing order",
 			orderID: "unique-order-id",
-			wantErr: false,
 		},
 		{
-			name: "get non-existing order",
-
+			// "库里没有这一行"必须与"读不到"分得开。老形状是 (非 nil 空结构体, ErrRecordNotFound)，
+			// 而调用侧写成 `existing, _ :=`，于是两种情况都长成"有一行空的" ⇒ 走 Save 插行，
+			// 且一次真实读故障会被当成首次见单（G15 第④条）。
+			name:    "get non-existing order",
 			orderID: "non-existing-order",
-			wantErr: true,
+			wantNil: true,
 		},
 	}
 
@@ -823,14 +823,20 @@ func TestExternalOrderRepository_GetByOrderID(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetByOrderID() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
-			if !tt.wantErr {
-				if result.OrderID != tt.orderID {
-					t.Errorf("Expected order ID '%s', got '%s'", tt.orderID, result.OrderID)
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("未命中应回 nil，实际 %+v", *result)
 				}
-				if result.UserName != "Order User" {
-					t.Errorf("Expected user name 'Order User', got '%s'", result.UserName)
-				}
+				return
+			}
+			if result == nil {
+				t.Fatal("命中却回 nil")
+			}
+			if result.OrderID != tt.orderID {
+				t.Errorf("Expected order ID '%s', got '%s'", tt.orderID, result.OrderID)
+			}
+			if result.UserName != "Order User" {
+				t.Errorf("Expected user name 'Order User', got '%s'", result.UserName)
 			}
 		})
 	}

@@ -70,6 +70,26 @@ func TestToolRisk_EveryProductionToolDeclaresALevel(t *testing.T) {
 	}
 	t.Logf("生产工具集 %d 个：readonly=%d low_write=%d high_write=%d",
 		len(tools), byLevel[RiskReadonly], byLevel[RiskLowWrite], byLevel[RiskHighWrite])
+
+	// 审批门盲区普查：high_write 里只有被 IsColdOutreachTool 认出的那批今天才有第二道闸门。
+	// 只 Logf 不 Assert —— 这批名单会随工具集合正当变化，写死数字就变成了第三处事实源
+	// （前两处：卡面注释、启动日志；两处都已经在上一张卡上烂掉过）。
+	// 报告端点 /api/agent/tools/risk 的 high_write_in_approval_gate 读的就是同一判据。
+	var inGate, outsideGate []string
+	for _, tool := range tools {
+		if l, _ := EffectiveRisk(tool); l != RiskHighWrite {
+			continue
+		}
+		if IsColdOutreachTool(tool) {
+			inGate = append(inGate, tool.Name())
+		} else {
+			outsideGate = append(outsideGate, tool.Name())
+		}
+	}
+	sort.Strings(inGate)
+	sort.Strings(outsideGate)
+	t.Logf("审批门覆盖：门内 %d 个=%v", len(inGate), inGate)
+	t.Logf("审批门覆盖：门外 %d 个=%v", len(outsideGate), outsideGate)
 }
 
 func TestToolRisk_NamesAreUnique(t *testing.T) {

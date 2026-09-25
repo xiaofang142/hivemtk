@@ -10,16 +10,18 @@ import (
 // 用于记录 AI 智能体的决策链路，便于问题排查和性能分析。
 //
 // 表: layer_decision_logs
-// 索引:
-//   - idx_layer_trace_id   (trace 维度, 端到端串联)
-//   - idx_layer_created_at (时间维度)
-//   - idx_layer_layer      (layer 维度, 快速聚合)
+// 索引 (开发库 pg_indexes 实测，8 个含主键):
+//   - layer_decision_logs_pkey
+//   - idx_layer_decision_logs_trace_id / _session_id / _customer_id
+//   - idx_layer_decision_logs_intent / _layer / _created_at / _deleted_at
 //
 // 字段说明:
-//   - TraceID:  端到端 trace id (与 llm_routing_logs.trace_id 对齐)
+//   - TraceID:  本表自造的 lr-<unixnano>（traceID() 兜底分支），与 llm_routing_logs 的
+//     UUID v4 trace_id 不同值，两表无法按它 join
 //   - SessionID / CustomerID: 业务维度
-//   - Layer:    命中的层 (layer1 / layer2 / fallback_template / fallback_cache)
-//   - Reason:   决策原因 (faq_match / sop_template / llm_response / 7b_fail_3b / cache_hit / template_default)
+//   - Layer:    命中的层 (只有 layer1 / layer2，见 dto.Layer1 / dto.Layer2)
+//   - Reason:   决策原因，实际写入集为 layer1_disabled / faq_hit / sop_hit /
+//     low_confidence_skip / fallback；其余 dto.Reason* 常量当前无赋值点
 //   - Intent:   关联意图
 //   - ConfIn:   输入置信度 (LayerRouter.Route 决策前)
 //   - ConfOut:  输出置信度 (决策后, 用于下轮 cache)

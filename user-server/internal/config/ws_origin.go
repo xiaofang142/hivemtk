@@ -36,9 +36,10 @@ var allowedWSOriginsLoaded bool
 //	  - 其他值要求严格匹配
 //
 // 加载顺序:
+//
 //  1. env ALLOWED_WS_ORIGINS (优先, 逗号分隔)
 //  2. config.yaml platform.allowed_ws_origins 段
-//  3. 默认 ["http://localhost:3000", "http://localhost:8080"]
+//  3. DefaultAllowedWSOrigins（本文件顶部；含 dev 8211/8212 与 8204 同源档）
 func GetAllowedWSOrigins() []string {
 	if envOrigins := os.Getenv("ALLOWED_WS_ORIGINS"); envOrigins != "" {
 		parts := strings.Split(envOrigins, ",")

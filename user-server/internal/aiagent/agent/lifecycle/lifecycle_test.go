@@ -45,11 +45,11 @@ func TestResolver(t *testing.T) {
 
 	t.Run("Run 返回各自 StopReason", func(t *testing.T) {
 		res, err := passive.Run(context.Background(), nil, nil)
-		if err != nil || res.StopReason != "passive" {
+		if err != nil || res == nil || res.StopReason != "passive" {
 			t.Fatalf("passive.Run() = %+v, %v", res, err)
 		}
 		res, err = active.Run(context.Background(), nil, nil)
-		if err != nil || res.StopReason != "active" {
+		if err != nil || res == nil || res.StopReason != "active" {
 			t.Fatalf("active.Run() = %+v, %v", res, err)
 		}
 	})
