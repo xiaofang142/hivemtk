@@ -1,0 +1,1 @@
+psql: 错误: 连接到"127.0.0.1"上的服务器，端口8201失败：FATAL:  password authentication failed for user "admin"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：72 格逐格验牙。
+"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：71 格逐格验牙（格数逐卡变动，原因见文末第四趟）。
 
 跑在**私有 --shared 克隆**里，克隆内容就是「HEAD 那一棵树」：本卡的 15 个新建文件与四处
 装配插入都随 `66964f9e` 进了 HEAD，所以 prepare 不再往克隆里写任何字节，只逐条断言那四处
@@ -105,6 +105,44 @@ FAIL 是脚本按点名的编译错串代记的，不是 go test 印的用例名
 
 这两处修完，前两趟的结论里有几格要从"杀掉"降成"待人工看"—— 所以本卡的计划里
 **整族 72 格必须在提交后重跑一遍**，而不是只跑新加的三格。
+
+第四趟（取证落点迁进仓库树之后，在**已提交 tip** 上跑 `--check`）：72 格里三格锚点 0 次，
+且三格全在 `bill.go` 的 `in.DueAt` 上。归因不是产码回退，而是这张卡的改动**只提交了一半**：
+`23dae260`（T-P7-03，collection 泳道）动了 `model/bill.go` 的复合索引标签与 `repository` 的
+方法集改名（…Six→…Seven），而 `service/bill.go` 最近一笔仍是 `66964f9e`（T-P7-01）—— 那一层
+"账期由调用方给"至今只躺在共享工作树里，从没进过任何一棵 HEAD。
+于是 K07/K39 的新锚点在 tip 上成立，K50/K50b/K56 的新锚点不成立 —— tip 落在两版锚点**之间**，
+任何一版整文件都不对。常驻电池跑的就是克隆 HEAD 的字节，所以这里按 tip 逐格取值：
+K50/K56 回退到与 HEAD 字节匹配的锚点，K50b 整格撤下（它的判据用例
+`TestBillDeriveStoresTheDueAtTheCallerGave` 在 HEAD 里**从未存在过**，留着它就是一台
+对着不存在的用例开火的枪），三处原地留注释说明该卡落地那天怎么补。格子数因此是 71 而不是 72。
+
+第五趟（把 K50/K56 回锚并提交成 `f8d83b59` 之后，在同一枚 tip 上跑整族）：65 杀 1 活 5 点名不着，
+七处不干净里**没有一处是产码的洞**，但成因比第四趟更值得留字：这一趟的红不是锚点搬走，而是
+**上一趟那次 `--onto` 把 `23dae260` 接进了 tip，控制组随之下面的用例一起改名/增删**（model 9→13、
+repo 11→16、db 6→7）。逐格读红因后的归因：
+
+- K06 / K38 / K92 / K93 四格 = **expect 名字对不上**，注码每次都把**同一性质**的用例弄红，
+  只是那条腿在 `23dae260` 里被拆出去或改了名（K06 红在 `TestBillSchemaShape` 而不是
+  `…KeyColumnWidths`：金额量程那条断言在 T-P7-03 被并入形状用例；K38 红在
+  `…ReadFailureIsNotMissingRead`：读失败那一支从"分辨缺失与故障"里单独立了一条；
+  K92/K93 红在 `…UnassembledStillMountsRoute` / `…RouterFileHasNoInlineHandler`）。
+  修法一律**改 expect 不改注码** —— 注码打的坏法没变，改期望才是跟着代码走。
+  四格各自独立读过 HEAD 的用例源码确认那条断言真的在这一格的性质上（不是"顺手红了别的"）。
+- K30 = **panic 截断**：注码（`Available()` 不再看 `r.db`）让 `ScanOverdueFailureIsNotEmptyResult`
+  走进 nil 句柄、当场 `panic: invalid memory address`，测试二进制带着后面 12 条一起退场，
+  expect 那条根本没跑 ⇒ 同时触发"点名不着"与"计数不平"两条。这种形状不能靠放宽判据解决：
+  崩溃**正是这条锁要防的事**（说谎的装配回显把 nil 句柄放进真调用里），所以加一条
+  **panic-split 复跑**：整包红而含 `panic:` 且 expect 不在名单里 ⇒ 单拎 expect 那一腿
+  `-run '^<名>$'` 再跑一次，它独自红才算杀掉（产物 `K30-split.log` 留红因，两行判读随
+  stdout 打印）。守恒式与"ran<control 疑似 panic"那条对这一支豁免 —— 分母已经被崩溃截断，
+  再拿它判平就是拿驱动自己的截断当产码的洞。**豁免不是放宽**：它要求单腿复跑必须命中，
+  命中不了仍按原样进 problems。
+- G3 = 台账 23a 的**第三个消费方**落地了：`internal/app` 里 `NewBillRepositoryWithDB(` 从两处
+  （派生腿 + 回款腿）变成三处（多 `collection_wiring.go:96` 的催收腿）。一刀摘两处而门仍报
+  `接线数=1 ⇒ WIRED` 是对的，第二趟末尾那句预言就在这一趟兑现 —— 代价是它**静默**兑现：
+  若不读门打印的接线数，这一格看起来就是"注了码而门不报 = 门没牙"。修法是把第三处一起摘掉
+  （三处全摘 ⇒ 接线数 0 ⇒ 门必须报漂移），并把 desc 与注释里的数字从"两处"改成"三处"。
 """
 from __future__ import annotations
 
@@ -116,9 +154,19 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
+# 台账里的读数没有产物可对。目录带趟次戳、不复用；`.gitignore` 需为本轮次开例外。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/P701" / time.strftime("%Y%m%d-%H%M%S")
+
+
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag, out):
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    (LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log")).write_text(scrub(out), encoding="utf-8")
 US = "user-server"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -169,6 +217,7 @@ PSVC = f"{US}/internal/service/payment.go"
 CTRL = f"{US}/internal/controller/bill.go"
 WIRE = f"{US}/internal/app/bill_wiring.go"
 PAYWIRE = f"{US}/internal/app/payment_wiring.go"
+COLLWIRE = f"{US}/internal/app/collection_wiring.go"
 RTR = f"{US}/internal/router/router.go"
 ROUTES = f"{US}/internal/router/bill_routes.go"
 LEDGER = "scripts/check-unwired-assets.sh"
@@ -200,7 +249,10 @@ CELLS = [
     ("K06", "金额列量程从 numeric(14,2) 漂到 (12,2)（与报价行不再同型）", "go", "model", MODEL,
      [('Amount float64 `gorm:"type:numeric(14,2)" json:"amount"`',
        'Amount float64 `gorm:"type:numeric(12,2)" json:"amount"`')],
-     "TestBillKeyColumnWidths"),
+     # expect 在第五趟由 …KeyColumnWidths 改成 …SchemaShape：T-P7-03 把"金额与报价行同型"
+     # 那条断言并进了形状用例（bill_test.go 的 gormTagOf(Amount) 判 numeric(14,2)），
+     # 宽度用例只管 quote_id / opportunity_id / status / currency 四格。注码没动。
+     "TestBillSchemaShape"),
     ("K07", "账期列做成非空（零值会被逾期扫描读成「早过期几千年」）", "go", "model", MODEL,
      [("\tDueAt *time.Time `gorm:\"index:idx_bills_status_due,priority:2\" json:\"due_at\"`",
        "\tDueAt time.Time `gorm:\"index:idx_bills_status_due,priority:2\" json:\"due_at\"`")],
@@ -273,7 +325,10 @@ CELLS = [
     ("K38", "库故障读成「还没有账单」（一次抖动就能长出两张应收）", "go", "repo", REPO,
      [("\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn row, nil",
        "\tif err != nil {\n\t\treturn nil, nil\n\t}\n\treturn row, nil")],
-     "TestBillRepository_ReadsDistinguishMissingFromFailure"),
+     # 第五趟改点名：`err != nil` 那一支在 T-P7-03 从"分辨缺失与故障"里单独立了一条用例
+     # （…ReadFailureIsNotMissingRead，注 cancelled context 的那条），原 expect 只管
+     # ErrRecordNotFound 那一支。注码打的仍是同一处。
+     "TestBillRepository_ReadFailureIsNotMissingRead"),
     # 锚点跟接口一起长出来的那一格走：T-P7-02 在对账读侧补了 ListByQuoteID，
     # 接口的**收尾那一行**因此从 GetByQuoteRowID 挪到了它（用例名同步 Five→Six）。
     # 注的形状不变：给凭证表开一条 Delete = 历史能被抹掉。
@@ -324,15 +379,14 @@ CELLS = [
     ("K49", "币种不看报价行、恒用默认值", "go", "svc", SVC,
      [("\tcurrency := strings.TrimSpace(row.Currency)", "\tcurrency := model.BillCurrencyDefault")],
      "TestBillDeriveCurrencyFollowsQuote"),
+    # 注：这一格的注码形状属于 T-P7-03（`in.DueAt`）。该卡的**产码**（service 侧改由调用方给账期
+    # + `TestBillDeriveStoresTheDueAtTheCallerGave`）尚未提交，只在别的泳道工作树里；常驻电池
+    # 必须与 HEAD 自洽，故此处保留"本层写死 nil"那一版的锚点。该卡落地那天按 `in.DueAt` 重锚，
+    # 并把下面被删掉的 K50b 一并补回（`--check` 会以"锚点命中 0 次"当场提醒，不会静默）。
     ("K50", "凭空造账期（报价域里没有「付款条件」这一格，造出来的是合同条款）", "go", "svc", SVC,
-     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     &now, // 变异注码：把「没给账期」写成「今天到期」")],
+     [("\t\tDueAt:         nil, // 账期未定：本卡没有任何一处定义过付款条件",
+       "\t\tDueAt:         &now, // 变异注码")],
      "TestBillDeriveLeavesDueAtNull"),
-    # K50b 是 K50 的对偶，T-P7-03 才添得出来：那一卡把 due_at 从"本层写死 nil"改成
-    # "由调用方给"，于是坏法从一种变成两种 —— 凭空造（K50）与**把给的丢掉**（K50b）。
-    # 只留前一格的话，"永远回 NULL"这条退路就没有探针，而催收腿读的正是这一格。
-    ("K50b", "入参带了账期却不落（催收永远只看见 Undated，一条信也不发）", "go", "svc", SVC,
-     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     nil, // 变异注码：把给定的账期丢掉")],
-     "TestBillDeriveStoresTheDueAtTheCallerGave"),
     ("K51", "并发撞上「已派生」之后回读的是自己那份", "go", "svc", SVC,
      [("\t\t\treturn nil, fmt.Errorf(\"bill: 仓储报\\\"已派生过\\\"而按 quote_row_id=%s 读不到那一行（约束名与索引不同源？须人工核对）\", row.ID)\n"
        "\t\t}\n\t\treturn billViewOf(existing, true), nil",
@@ -353,10 +407,10 @@ CELLS = [
        "\treturn fmt.Sprintf(\"b_%s_%d\", now.Format(\"20060102\"), seq)")],
      "TestBillKeyGeneratorIsDeterministic"),
     ("K56", "入参结构多带一格 amount（AC② 当场失去对账对象）", "go", "svc", SVC,
-     [("\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n}",
-       "\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n"
+     [("\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n}",
+       "\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n"
        "\tAmount     float64 // 变异注码\n}")],
-     "TestBillDeriveInputCarriesRowKeyAndOptionalTerm"),
+     "TestBillDeriveInputHasOnlyTheRowKey"),
     ("K57", "派生腿的存储接口多一个写状态的方法（「顺手标成已收」有了入口）", "go", "svc", SVC,
      [("type billStore interface {\n\tAvailable() bool\n",
        "type billStore interface {\n\tAvailable() bool\n\tUpdateStatus(ctx context.Context, id, from, to string) error\n")],
@@ -455,13 +509,21 @@ CELLS = [
       ("\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v，可对账=%v）\", derive.Available(), read.Available())",
        "\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n"
        "\tlogger.Infof(\"[Router] bill 账单 API 已连通（可派生=%v，可对账=%v）\", derive.Available(), read.Available())")],
-     "TestBillRoutes_UnassembledAnswersFiveOhThree"),
+     # 第五趟改点名：这一格的坏法由 …UnassembledStillMountsRoute 抓（摘掉挂载行 ⇒ 未装配时
+     # 挂出来的表是空的），而原 expect（…AnswersFiveOhThree）断的是另一件事——挂上了但回 503，
+     # 注码之后它反而更"对"，所以它照旧绿。首轮 K92 那次"活"补的就是这条挂载数断言。
+     "TestBillRoutes_UnassembledStillMountsRoute"),
     ("K93", "路由文件里内联一个读口（映射之外的第二处响应）", "go", "route", ROUTES,
      [("\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n",
        "\tcontroller.NewBillController(derive, read).RegisterRoutes(auth)\n"
        "\tauth.GET(\"/bill/list\", func(ctx *gin.Context) {\n"
        "\t\tctx.JSON(200, gin.H{\"code\": 0})\n\t})\n")],
-     "TestBillRoutes_TableIsExactlyTheDeclaredSet"),
+     # 第五趟改点名：内联 handler 的正主判据是 …RouterFileHasNoInlineHandler（直接读源文件
+     # 找 `.JSON(`），它比"数表"更早、也更贴这条锁的措辞。原 expect（…TableIsExactlyThe
+     # DeclaredSet）在注码后仍绿——它数的是 setup 之外那份声明表，内联那一条不进它的眼。
+     # 同一趟里 …UnassembledStillMountsRoute 也会红（多挂了一条 GET /bill/list），
+     # 那是第二处牙，不是替换。
+     "TestBillRoutes_RouterFileHasNoInlineHandler"),
     ("K94", "Swagger 的 @Router 路径写错（契约与真实端点分家）", "go", "route", CTRL,
      [("// @Router       /api/bill [post]", "// @Router       /api/bills [post]")],
      "TestBillRoutes_SwaggerCoversEveryRoute"),
@@ -471,15 +533,19 @@ CELLS = [
      [("\tapp.InitBillRuntime(gormDB)\n", "")], "账单派生腿在启动路径上的装配点"),
     ("G2", "台账 23d：摘掉 mount，门必须报漂移", "gate", "gate", RTR,
      [("\t\tsetupBillRoutes(auth)\n", "")], "账单 HTTP 出口的挂载点"),
-    # 23a 的 callpat 扫的是**整个 internal/app**，而 T-P7-02 起这个目录里有两处
-    # `NewBillRepositoryWithDB(`：派生腿（bill_wiring.go）与回款腿（payment_wiring.go，
-    # 它要按 bill_id 跃迁状态）。于是"只摘一处"**不再是这一行的失效形状** —— 门仍报
-    # WIRED 是对的（"internal/app 显式构造过账单仓储"这句话为真），掉的那半边牙由
-    # K83（派生腿，runner=app）与 app 包的 TestInitPaymentRuntime*（回款腿）守着。
-    # 本格因此一刀摘**两处**（pairs 的第二条自带文件名）：那才是这条存在性锁唯一的坏法。
-    ("G3", "台账 23a：internal/app 两处 WithDB 构造点全摘，门必须报漂移", "gate", "gate", WIRE,
+    # 23a 的 callpat 扫的是**整个 internal/app**，而这个目录里的构造点一直在长：
+    # T-P7-01 一处（派生腿 bill_wiring.go）→ T-P7-02 两处（回款腿 payment_wiring.go，它要按
+    # bill_id 跃迁状态）→ T-P7-03 三处（催收腿 collection_wiring.go，扫逾期单也要读账单）。
+    # 于是"只摘一处"**早就不是这一行的失效形状** —— 门仍报 WIRED 是对的
+    # （"internal/app 显式构造过账单仓储"这句话为真），掉的那半边牙由 K83（派生腿）、
+    # app 包的 TestInitPaymentRuntime*（回款腿）与 TestInitCollectionRuntime*（催收腿）守着。
+    # 本格因此一刀摘**三处**（pairs 的第二、三条自带文件名）：那才是这条存在性锁唯一的坏法。
+    # 第五趟的读数就是这句预言兑现的样子：只摘两处时门打印 `接线数=1 ⇒ WIRED` ⇒ G3 判活，
+    # 而它**不是**门没牙 —— 若不读门自己打印的接线数，这一格看起来就是"注了码而门不报"。
+    ("G3", "台账 23a：internal/app 三处 WithDB 构造点全摘，门必须报漂移", "gate", "gate", WIRE,
      [("\t\trepository.NewBillRepositoryWithDB(db),\n", ""),
-      (PAYWIRE, "\t\trepository.NewBillRepositoryWithDB(db),\n", "")],
+      (PAYWIRE, "\t\trepository.NewBillRepositoryWithDB(db),\n", ""),
+      (COLLWIRE, "\t\trepository.NewBillRepositoryWithDB(db),\n", "")],
      "账单仓储的装配入口"),
     # 旧格打的是 23e 的**反向**（"写出 bills.UpdateStatus( 调用 ⇒ 门必须从 unwired 翻成
     # wired"。那一格的前提由 T-P7-02 兑现掉了：调用点已经写进 payment.go，行已经登记成
@@ -606,11 +672,12 @@ def env_for(root: Path) -> dict:
     return env
 
 
-def go_run(clone: Path, runner: str):
-    pkg, run = RUNNERS[runner]
+def go_run(clone: Path, runner: str, run: str = ""):
+    pkg, default_run = RUNNERS[runner]
     root = clone / US
     try:
-        p = subprocess.run(["go", "test", pkg, "-run", run, "-count=1", "-v", "-timeout", "25m"],
+        p = subprocess.run(["go", "test", pkg, "-run", run or default_run, "-count=1", "-v",
+                            "-timeout", "25m"],
                            cwd=root, capture_output=True, text=True, timeout=1800, env=env_for(root))
         out, rc = p.stdout + p.stderr, p.returncode
     except subprocess.TimeoutExpired as e:
@@ -667,6 +734,8 @@ def main() -> int:
     ap.add_argument("--cells", default="", help="只跑这些代号（逗号分隔）")
     ap.add_argument("--check", action="store_true", help="只校验锚点命中数，不跑用例")
     args = ap.parse_args()
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
 
     cells = CELLS
     if args.cells:
@@ -678,7 +747,7 @@ def main() -> int:
 
     tmp = Path(args.clone or tempfile.mkdtemp(prefix="p701mut-"))
     tmp.mkdir(parents=True, exist_ok=True)
-    print(f"私有作业目录：{tmp}")
+    print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
     clone = prepare(tmp)
 
     def sweep() -> None:
@@ -720,6 +789,7 @@ def main() -> int:
     for name in sorted({c[3] for c in cells}):
         if name == "gate":
             rc, out = gate_run(clone)
+            dump("00-control-gate", out)
             ok = rc == 0
             controls["gate"] = 0
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
@@ -730,6 +800,7 @@ def main() -> int:
                                  "后面所有 G* 格的红/绿都不可信")
             continue
         rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
+        dump(f"00-control-{name}", out)
         bad = rc != 0 or skipped or killed
         controls[name] = ran
         control_top[name] = top_pass
@@ -755,6 +826,7 @@ def main() -> int:
 
         if kind == "gate":
             rc, out = gate_run(clone)
+            dump(code, out)
             if rc == 0:
                 v = "SURVIVED"
             elif expect in out:
@@ -767,17 +839,35 @@ def main() -> int:
             # 编译期锁的格子：判据本身就是"编不过"，所以 BUILD-BROKEN 是**期望结论**而不是未杀。
             # 但只认 BUILD-BROKEN 会假绿（任何语法错都算杀掉），因此 expect 写成必须点名的编译错串。
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
+            dump(code, out)
             v = classify(rc, killed, ran, skipped, out, controls[runner])
             if v == "BUILD-BROKEN" and expect in out:
                 v, killed = "KILLED", [expect]
         else:
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
+            dump(code, out)
             v = classify(rc, killed, ran, skipped, out, controls[runner], expect)
+            # panic 截断豁免（第五趟为 K30 补的形状）：一条用例 panic 会带走整个测试二进制，
+            # 排在崩溃点**之后**的 expect 根本没跑 ⇒ 同一趟里既"点名不着"又"计数不平"。
+            # 这不等于格子没牙 —— K30 的崩溃恰恰是那条锁要防的事（说谎的 Available() 把 nil
+            # 句柄放进真调用）。所以不放宽判据，改成把 expect 单拎出来再跑一次：
+            # 它**只有自己的时候**必须红（`-run '^<名>$'` 锚死，否则同前缀邻居会把"独自红"稀释）。
+            # 两条守恒/panic 断言只对这一支豁免：分母已被崩溃截断，再拿它判平就是拿驱动
+            # 自己的截断算成产码的洞；拎不出红的仍按原样进 problems，豁免不是放行。
+            split_ok = False
+            if v == "RED-UNNAMED" and expect and "panic:" in out:
+                rcs, killed_s, rans, _sk, _p, _tp, outs = go_run(clone, runner, f"^{expect}$")
+                dump(f"{code}-split", outs)
+                split_ok = rcs != 0 and rans == 1 and killed_s == [expect]
+                print(f"     [panic-split] 整包崩在 {expect} 之前 ⇒ 单拎该腿复跑 rc={rcs} "
+                      f"ran={rans} FAIL={killed_s} ⇒ {'算杀掉（红因见 ' + code + '-split.log）' if split_ok else '不算杀掉'}")
+                if split_ok:
+                    v, killed = "KILLED", killed_s
             # 头注里承诺过的第二条断言：**PASS + FAIL == 控制组数**。
             # 只看"点名那条红了"会放过一种真实坏法 —— 注码让别的用例 panic 中止，
             # 二进制提前退出，expect 那条恰好排在 panic 之前跑完并红了，于是看着像杀掉。
             # ran < control 拦不住它（panic 影响的是后面的），这一条按"总数守恒"拦。
-            if kind == "go" and v in ("KILLED", "RED-UNNAMED") and \
+            if kind == "go" and not split_ok and v in ("KILLED", "RED-UNNAMED") and \
                     top_pass + len(killed) != control_top[runner]:
                 problems.append(f"{code} 计数不平：顶层 PASS={top_pass} + FAIL={len(killed)} ≠ 控制组的 "
                                 f"{control_top[runner]}（有用例被 panic 带走，或压根没参与这一趟）")
@@ -785,7 +875,7 @@ def main() -> int:
         tally[v] += 1
         killmap[code] = set(killed)
         print(f"{code:<5} {desc[:58]:<60} {v} ran={ran} FAIL={len(killed)} rc={rc}")
-        if v == "KILLED" and kind == "go" and ran < controls[runner]:
+        if v == "KILLED" and kind == "go" and not split_ok and ran < controls[runner]:
             problems.append(f"{code} 杀了但 ran={ran}<{controls[runner]}：疑似 panic 中止，红因要人工看")
         if v == "SURVIVED":
             problems.append(f"{code} 存活 = 洞：{desc}")

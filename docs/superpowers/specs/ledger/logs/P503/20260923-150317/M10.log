@@ -1,0 +1,99 @@
+2026-09-23T15:06:50+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestReachSendPipeline_Permission_DoNotContactBlocked
+2026-09-23T15:06:50+08:00 WRN [COMPLIANCE] 主动触达发送已触发：channel=sms, recipient=13800138000。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。 component=user-server
+2026-09-23T15:06:50+08:00 WRN [DNC] pipeline 跳过发送 customer=one-dnc channel=sms（命中全局退订标志位） component=user-server
+--- PASS: TestReachSendPipeline_Permission_DoNotContactBlocked (0.00s)
+=== RUN   TestReachSendPipeline_Permission_DoNotContactAllowed
+2026-09-23T15:06:50+08:00 WRN [COMPLIANCE] 主动触达发送已触发：channel=sms, recipient=13700004000。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。 component=user-server
+--- PASS: TestReachSendPipeline_Permission_DoNotContactAllowed (0.00s)
+=== RUN   TestNodeExecutor_CompensationInventory
+2026-09-23T15:06:50+08:00 INF all sop node executors registered component=user-server registered_types=["close","follow_up","wait","reach_send","invite","start","greeting","activate","condition","send_offer","ai_decide","end","introduce","handle","nurture","llm","message","action","branch","inquire"]
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=start reason="入口节点：仅写时间戳/触发源留痕，无业务状态可撤销"
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=end reason="出口节点：仅写 `_ended_at` 留痕，无业务状态可撤销"
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=condition reason="路由节点：只读求值，仅留 `_condition_branch` 命中记录，无业务状态可撤销"
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=branch reason="路由节点：只读求值，仅留 `_condition_branch` 命中记录，无业务状态可撤销"
+2026-09-23T15:06:50+08:00 WRN node executor not found, using noop: not_a_real_type component=user-server
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=not_a_real_type reason="节点类型未注册（Noop 兜底）：执行期即空操作，补偿期同样无可撤销状态"
+2026-09-23T15:06:50+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=silent reason="执行器未实现 Compensable，且未声明不补偿理由"
+--- PASS: TestNodeExecutor_CompensationInventory (0.00s)
+=== RUN   TestRegisterAllNodeExecutors_AllTypesRegistered
+2026-09-23T15:06:50+08:00 INF all sop node executors registered component=user-server registered_types=["branch","inquire","handle","close","activate","action","reach_send","end","invite","follow_up","condition","ai_decide","greeting","llm","wait","start","introduce","nurture","message","send_offer"]
+--- PASS: TestRegisterAllNodeExecutors_AllTypesRegistered (0.00s)
+=== RUN   TestReachSend_NoVerdictParksAndSendsNothing
+2026-09-23T15:06:50+08:00 INF [approval-resume] 流程已挂起等裁决（不占线程，重启后由库里这两行续跑） approval_id=apr_1790147210559809000_1 component=user-server node_id=r1 timer_id=1 wait_until=2026-09-23T16:06:50+08:00 waited_so_far=3.896125
+--- PASS: TestReachSend_NoVerdictParksAndSendsNothing (0.45s)
+=== RUN   TestReachSend_ApprovalRuntimeUnwiredFailsClosed
+--- PASS: TestReachSend_ApprovalRuntimeUnwiredFailsClosed (0.26s)
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/rejected
+2026-09-23T15:06:51+08:00 INF reach send not approved, skipping approval_status=rejected component=user-server node_id=r1
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/expired
+2026-09-23T15:06:51+08:00 INF reach send not approved, skipping approval_status=expired component=user-server node_id=r1
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/unreadable
+2026-09-23T15:06:51+08:00 INF reach send not approved, skipping approval_status=unreadable component=user-server node_id=r1
+--- PASS: TestReachSend_NonApprovedVerdictSendsNothing (0.82s)
+    --- PASS: TestReachSend_NonApprovedVerdictSendsNothing/rejected (0.25s)
+    --- PASS: TestReachSend_NonApprovedVerdictSendsNothing/expired (0.31s)
+    --- PASS: TestReachSend_NonApprovedVerdictSendsNothing/unreadable (0.27s)
+=== RUN   TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath
+2026-09-23T15:06:51+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=2 node_id=r1
+    sop_reach_send_test.go:307: 成功外发要留幂等键，实际 []
+--- FAIL: TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath (0.26s)
+=== RUN   TestReachSend_GateKeyComesFromCustomerRowNotExecutionData
+2026-09-23T15:06:53+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=5 node_id=r1
+--- PASS: TestReachSend_GateKeyComesFromCustomerRowNotExecutionData (1.79s)
+=== RUN   TestReachSend_PreferredChannelReachesTheService
+2026-09-23T15:06:54+08:00 INF reach send executed channel=telegram component=user-server execution_id=1 latency_ms=2 node_id=r1
+--- PASS: TestReachSend_PreferredChannelReachesTheService (0.36s)
+=== RUN   TestReachSend_ResolvesIdentityFromOneIDWhenExecutionHasNoCustomerID
+2026-09-23T15:06:54+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=2 node_id=r1
+--- PASS: TestReachSend_ResolvesIdentityFromOneIDWhenExecutionHasNoCustomerID (0.32s)
+=== RUN   TestReachSend_DoNotContactCustomerSendsNothing
+2026-09-23T15:06:54+08:00 INF [DNC][审计] 全局退订标志位已写入 one_id=uid-rs-10-73928000 channel="" source=manual component=user-server
+2026-09-23T15:06:54+08:00 WRN [DNC] 跳过渠道 one_id=uid-rs-10-73928000 channel=sms（命中全局退订标志位） component=user-server
+2026-09-23T15:06:54+08:00 WRN [DNC] 跳过渠道 one_id=uid-rs-10-73928000 channel=whatsapp（命中全局退订标志位） component=user-server
+--- PASS: TestReachSend_DoNotContactCustomerSendsNothing (0.32s)
+=== RUN   TestReachSend_InsideCooldownSendsNothing
+2026-09-23T15:06:55+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=2 node_id=r1
+--- PASS: TestReachSend_InsideCooldownSendsNothing (0.33s)
+=== RUN   TestReachSend_AlreadySentIsNotSentAgain
+2026-09-23T15:06:55+08:00 INF reach already sent, skipping (idempotent) component=user-server node_id=r1 side_effect=reach_sent:1:r1
+--- PASS: TestReachSend_AlreadySentIsNotSentAgain (0.34s)
+=== RUN   TestReachSend_PreSendGateDenialDoesNotRePark
+2026-09-23T15:06:55+08:00 WRN [ReachGate] 外发被拒 channel=sms key=uid-rs[len 18] reason=denied_by_whitelist component=user-server
+--- PASS: TestReachSend_PreSendGateDenialDoesNotRePark (0.29s)
+=== RUN   TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce
+2026-09-23T15:06:55+08:00 INF [approval-resume] 流程已挂起等裁决（不占线程，重启后由库里这两行续跑） approval_id=apr_1790147215963840000_2 component=user-server node_id=r1 timer_id=1 wait_until=2026-09-23T16:06:55+08:00 waited_so_far=6.113125
+2026-09-23T15:06:55+08:00 INF [approval-resume] 裁决已落，定时器提前到期（下一轮轮询点火并回读结论） approval_id=apr_1790147215963840000_2 component=user-server execution_id=1 node_id=r1 status=approved timer_id=1
+2026-09-23T15:06:55+08:00 INF all sop node executors registered component=user-server registered_types=["follow_up","send_offer","reach_send","introduce","handle","nurture","condition","message","action","start","close","llm","invite","activate","wait","ai_decide","branch","end","greeting","inquire"]
+2026-09-23T15:06:55+08:00 INF [worker] processing task attempt=0 component=user-server execution_id=1 module=sop_dispatcher node_id=r1 trace_id=timer-1 worker_id=0
+2026-09-23T15:06:55+08:00 INF [approval-resume] 已回读审批结论并写进执行数据 approval_id=apr_1790147215963840000_2 approval_status=approved component=user-server execution_id=1 module=sop_dispatcher node_id=r1 trace_id=timer-1
+2026-09-23T15:06:55+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=8 module=sop_dispatcher node_id=r1 trace_id=timer-1
+2026-09-23T15:06:56+08:00 INF [worker] node completed, dispatched next component=user-server latency_ms=1 module=sop_dispatcher next_node_id=done node_id=r1 trace_id=timer-1
+2026-09-23T15:06:56+08:00 INF [outbox] timer fired, dispatched task component=user-server execution_id=1 module=sop_outbox node_id=r1 timer_id=1 wait_event=approval
+2026-09-23T15:06:56+08:00 INF [outbox] processed due timers component=user-server fired_count=1 module=sop_outbox scanned_count=1
+2026-09-23T15:06:56+08:00 INF [worker] processing task attempt=0 component=user-server execution_id=1 module=sop_dispatcher node_id=done trace_id=timer-1 worker_id=0
+2026-09-23T15:06:56+08:00 INF sop execution ended component=user-server execution_id=1 module=sop_dispatcher sop_id=1 trace_id=timer-1
+2026-09-23T15:06:56+08:00 INF [worker] execution completed successfully component=user-server execution_id=1 module=sop_dispatcher trace_id=timer-1
+    sop_reach_send_test.go:643: 幂等键要随执行数据落库（重启后重投才拦得住），实际 {"_approval_allowed":true,"_approval_by":"ops-lead","_approval_id":"apr_1790147215963840000_2","_approval_note":"case-by-case","_approval_status":"approved","_approval_token":"rt_d0d[len 67]","_ended_at":"2026-09-23T15:06:56+08:00","_reach_channel":"sms","_reach_message_id":"sms_spy"}
+--- FAIL: TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce (0.36s)
+=== RUN   TestReachSend_RegisteredInExecutorRegistry
+2026-09-23T15:06:56+08:00 INF all sop node executors registered component=user-server registered_types=["end","invite","follow_up","llm","message","ai_decide","greeting","introduce","nurture","condition","send_offer","branch","inquire","handle","wait","action","reach_send","start","close","activate"]
+--- PASS: TestReachSend_RegisteredInExecutorRegistry (0.00s)
+=== RUN   TestSOPReachSender_SetAndGetRoundTrip
+--- PASS: TestSOPReachSender_SetAndGetRoundTrip (0.34s)
+=== RUN   TestNodeExecutorFiles_HaveNoCustomerOutboundBeyondReachByCustomer
+--- PASS: TestNodeExecutorFiles_HaveNoCustomerOutboundBeyondReachByCustomer (0.12s)
+=== RUN   TestReachSend_EmptyContentFailsBeforeApproval
+--- PASS: TestReachSend_EmptyContentFailsBeforeApproval (0.38s)
+=== RUN   TestReachSend_ContentRendersFromExecutionData
+2026-09-23T15:06:57+08:00 INF reach send executed channel=sms component=user-server execution_id=1 latency_ms=2 node_id=r1
+--- PASS: TestReachSend_ContentRendersFromExecutionData (0.41s)
+=== RUN   TestReachSend_MissingPolicyKeyFailsClosed
+2026-09-23T15:06:57+08:00 ERR [approval-resume] 审批入队失败 ⇒ 节点判失败（未放行） error="approval_resume: 审批等待节点 r1 缺 approval_policy_key（不能默认放行，也不能默认某个策略名）" component=user-server node_id=r1
+--- PASS: TestReachSend_MissingPolicyKeyFailsClosed (0.46s)
+=== RUN   TestReachSend_SenderUnwiredFailsClosed
+--- PASS: TestReachSend_SenderUnwiredFailsClosed (0.64s)
+FAIL
+FAIL	hivemtk-user/internal/service	8.935s
+FAIL

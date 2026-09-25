@@ -1,0 +1,52 @@
+# v2 形状闸（把 token=/secret= 一并纳入，故意放宽）
+# 命令：python3 /tmp/pwdshape2-174539.py（cwd=r45-lane，HEAD 7bb28240）
+# 首轮反向自证失败实录：探针行写成 DSN 里不含 password= 关键字，RAW=0 ⇒ 断言当场炸（这就是反向格的意义）；改成 ?password=<40 位假值> 后 planted=base+1 通过
+# 半径：本趟扫到 494 份 .log（文档正文里的 493 之外，多出的那份是本目录 60-*.log——扫描排在写档之后就会自含，'扫描半径'规矩在本趟第二次兑现）
+# 判读：v2 的 23 枚 RAW 逐条对过 61 档的'真值包含闸' ⇒ 全为计数值/合成夹具串/文档正文，无一枚私有口令字节
+# 注：本档末行的 rc 是脚本自己的码，取自重定向之后（不经过管道，避开 tail/tee 吃码）
+
+[反向自证] RAW=1（须 1）命中=1
+[git show HEAD（7bb28240 全量差异）] masked=9 placeholder=9 prose=1 RAW=6
+[docs/superpowers/specs/ledger/logs/CIwiring/20260923-174539/62-shape-v2-token-widened.log] masked=0 placeholder=1 prose=1 RAW=2
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-133538/A@8234-r1.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134029/A@8234-r1.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134029/A@8234-r3.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134129/A@8201-r1.log] masked=0 placeholder=4 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134129/B@8201-r1.log] masked=0 placeholder=4 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-A@8234-r1.log] masked=2 placeholder=0 prose=0 RAW=2
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-B@8234-r1.log] masked=0 placeholder=0 prose=0 RAW=2
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-152743/A@8234-r1.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-152743/A@8234-r2.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/CapAB/20260923-152743/A@8234-r3.log] masked=1 placeholder=0 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/P702hook/20260923-153535/00-control.log] masked=0 placeholder=1 prose=0 RAW=0
+[docs/superpowers/specs/ledger/logs/R22/20260923-143232/S9.log] masked=0 placeholder=0 prose=0 RAW=2
+[docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md] masked=1 placeholder=0 prose=7 RAW=11
+扫过 498 个来源，其中全零 483 个（未逐行打印）
+判定：masked=18 placeholder=19 prose=9 RAW=25，RAW 合计=25（须 0）
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:9161: 值长=4 md5前8=861dc9bd
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:10366: 值长=9 md5前8=c3f111a3
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:33423: 值长=4 md5前8=861dc9bd
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:34632: 值长=9 md5前8=c3f111a3
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:85389: 值长=10 md5前8=47732549
+  RAW命中 >> git show HEAD（7bb28240 全量差异）:85390: 值长=10 md5前8=47732549
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CIwiring/20260923-174539/62-shape-v2-token-widened.log:1: 值长=8 md5前8=1f67ba86
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CIwiring/20260923-174539/62-shape-v2-token-widened.log:49: 值长=8 md5前8=1f67ba86
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-A@8234-r1.log:1786: 值长=4 md5前8=861dc9bd
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-A@8234-r1.log:2991: 值长=9 md5前8=c3f111a3
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-B@8234-r1.log:1785: 值长=4 md5前8=861dc9bd
+  RAW命中 >> docs/superpowers/specs/ledger/logs/CapAB/20260923-134337/full-B@8234-r1.log:2994: 值长=9 md5前8=c3f111a3
+  RAW命中 >> docs/superpowers/specs/ledger/logs/R22/20260923-143232/S9.log:111: 值长=10 md5前8=47732549
+  RAW命中 >> docs/superpowers/specs/ledger/logs/R22/20260923-143232/S9.log:112: 值长=10 md5前8=47732549
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:70: 值长=11 md5前8=22cc08fa
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:134: 值长=30 md5前8=d2a72852
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:614: 值长=2 md5前8=17d79b2d
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:812: 值长=14 md5前8=5ff2f32c
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:940: 值长=21 md5前8=4df2e55b
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2013: 值长=1 md5前8=2f8ed7fa
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2158: 值长=21 md5前8=4e658378
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2182: 值长=20 md5前8=9d9f5741
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2256: 值长=22 md5前8=c1156f7b
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2742: 值长=26 md5前8=355bd1b5
+  RAW命中 >> docs/architecture/CHANNEL_INTEGRATION_AUDIT_2026-09.md:2859: 值长=38 md5前8=3d145ae8
+⇒ 红：先摘字节再谈推送
+v2 rc=1

@@ -1,0 +1,29 @@
+[B@8201-r1] 相=B testdb注码=dfc201cb3594 跑后磁盘=dfc201cb3594一致 53300/上限报错行数=0 峰值连接(含idle)=-1★SAMPLER-BROKEN FAIL=4 PASS=0 go rc=1
+[90m2026-09-23T13:41:37+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSessionChainCSATResolvesDBHandleSynchronously
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8201 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestSessionChainCSATResolvesDBHandleSynchronously (0.02s)
+=== RUN   TestFallbackVersionResolvesDBHandleSynchronously
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8201 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestFallbackVersionResolvesDBHandleSynchronously (0.00s)
+=== RUN   TestSessionEventDispatchResolvesDBHandleSynchronously
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8201 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestSessionEventDispatchResolvesDBHandleSynchronously (0.00s)
+=== RUN   TestAudience_SelectBySegment
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8201 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestAudience_SelectBySegment (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/service	0.824s
+FAIL

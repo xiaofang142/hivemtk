@@ -1,0 +1,4 @@
+SEAM-GUARD：aiReplyQuietHoursFn 的 getter loadAIReplyQuietHoursFn 没对 aiReplyQuietHoursMu 上锁（要 aiReplyQuietHoursMu.Lock() 或 aiReplyQuietHoursMu.RLock()）@ internal/service/webhook_outbound.go:78
+SEAM-GUARD：aiReplyQuietHoursFn 的 setter storeAIReplyQuietHoursFn 没对 aiReplyQuietHoursMu 上锁（要 aiReplyQuietHoursMu.Lock()）@ internal/service/seam_guard_setters_test.go:100
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

@@ -1,0 +1,3 @@
+OK seam 全局 accessor 门：项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt，登记 17 个全局，扫 2755 个 .go 文件 ⇒ accessor 之外 0 处访问
+    注册表 scripts/seam-guard.registry；摘锁/绕门的牙齿证据见 scripts/mut_seam_guard_r28.py
+rc=0

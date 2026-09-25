@@ -1,0 +1,6 @@
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/P702hook/20260923-153535
+CONTROL-ENV-BROKEN：不是树的红，是连不上测试库 ⇒ 导出 POSTGRES_TEST_PORT/POSTGRES_TEST_PASSWORD 后重跑（本趟未放刀，判据未验证）
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+FAIL
+FAIL	hivemtk-user/internal/pkg/db	0.756s
+FAIL

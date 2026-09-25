@@ -16,9 +16,12 @@
      窄格证"不会假红"，全摘格证"没有漏网的腿"——两界合起来才是完整证据。
 
 为什么竞争判据认"腿名 + 文件名"而不认全局变量名（第一版在这里判错过一次，记下来免得再犯）：
-`-race` 报告印的是**地址 + 调用栈帧（函数名 + file:line）**，从不印被竞争的**变量名**；摘锁后
-`return tgMaxMediaBytes` 这种一扇门会被**内联**掉，栈里连函数名都没了。所以"栈里必须出现全局名"
-是不可满足的判据 —— 会把好证据误判成 SURVIVED。可靠的是测试名（栈里必现，因为它就是运行中的那条用例）
+`-race` 报告的 `Write at 0x…` 那一行只有地址、没有字段名，而摘锁后 `return tgMaxMediaBytes`
+这种一扇门会被**内联**掉，栈里连函数名都没了。所以"栈里必须出现全局名"这一类判据**不许用**——
+注意这是口径而不是"物理上不可能命中"：R30 电池实测过另一种形状（竞争点在
+`(*qsScripts).ActiveQuoteScript()` 上，栈帧印函数符号 ⇒ 全文 grep `qsScripts` 真能命中 4 行）。
+偶然可行不等于可依赖：竞争点一旦挪进别的函数就没那个标识符，判据会在好证据上印 SURVIVED。
+可靠的是测试名（栈里必现，因为它就是运行中的那条用例）
 与**没被内联的那一侧帧**所在的生产文件名。同理，竞争块条数是 2 而不是 1：写vs写、读vs写各算一条，
 判据只认"块都归本腿"。
 
@@ -71,7 +74,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVER = ROOT / "user-server"
 REGISTRY = ROOT / "scripts" / "seam-guard.registry"
 GATE = ROOT / "scripts" / "check-seam-guard.py"
-LOGDIR = Path("/tmp") / f"r28_seam_battery_{time.strftime('%Y%m%d-%H%M%S')}"
+# 取证产物落进仓库树（早先写 /tmp，跑完重启即蒸发 ⇒ §23.x 里那批读数只剩文档转述）。
+# 目录名带趟次戳、不复用；`.gitignore` 对 docs/.../ledger/logs/ 有例外，否则 *.log 全在库外。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/R28" / time.strftime("%Y%m%d-%H%M%S")
 
 spec = importlib.util.spec_from_file_location("seamgate", GATE)
 gate = importlib.util.module_from_spec(spec)
@@ -181,6 +186,7 @@ class Mutator:
         return [f"{p} md5 {md5(p)} != {d}" for p, d in self.pristine.items() if md5(p) != d]
 
 
+from redact import scrub_file  # 就地脱敏：子进程直写句柄的日志补一刀
 def run(cmd: list[str], log: Path, cwd: Path, timeout: int) -> int:
     with log.open("w", encoding="utf-8") as fh:
         fh.write("$ " + " ".join(cmd) + f"\n(cwd {cwd})\n")
@@ -189,8 +195,11 @@ def run(cmd: list[str], log: Path, cwd: Path, timeout: int) -> int:
             proc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, timeout=timeout)
         except subprocess.TimeoutExpired:
             fh.write("\n[TIME-BROKEN] 超时\n")
+            scrub_file(log)
             return -99
-        return proc.returncode
+        rc = proc.returncode
+    scrub_file(log)
+    return rc
 
 
 def race_legs(log: Path, pattern: str, timeout: int = 1200) -> int:
@@ -244,6 +253,7 @@ def gate_run(log: Path) -> int:
     with log.open("w", encoding="utf-8") as fh:
         proc = subprocess.run([sys.executable, str(GATE)], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT)
         fh.write(f"rc={proc.returncode}\n")
+    scrub_file(log)
     return proc.returncode
 
 
@@ -253,6 +263,8 @@ def main() -> int:
     args = ap.parse_args()
 
     LOGDIR.mkdir(parents=True, exist_ok=True)
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
     entries = build_entries()
     mut = Mutator(entries)
     results: list[tuple[str, str, str]] = []

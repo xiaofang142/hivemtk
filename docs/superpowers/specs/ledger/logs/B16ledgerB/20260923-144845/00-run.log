@@ -1,0 +1,45 @@
+注码目标目录: /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server
+基线 md5: executor.go=be6e4a67  feedback.go=ae2bcaca  step.go=5577e92c  write_ledger.go=4a991caa
+对照腿 rc=0 ran=11/11 skip=0 → 绿，门在位
+M9 D7 post_comment 确认闸门摘掉 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_D7AbortBeforeConfirmNeverSends | TestWSE2E_D7GateHoldsSendUntilConfirmed
+   红因: ConfirmPending 未变为 true
+   红因: ConfirmPending 未变为 true
+   还原 md5 一致 be6e4a67（executor.go）
+M10 台账 0 行受影响放回 nil rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestLedgerUpdateOnMissingRowFails
+   红因: 不存在 id 的台账写返回 nil——「已记为尝试」可以是零行
+   红因: 软删行的台账写返回 nil——软删行同时也不在闸门查询范围内，两处口径必须一致
+   还原 md5 一致 5577e92c（step.go）
+M11 缺口查询恒为「无缺口」（接线失效） rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestCrossedLedgerGapSuppressesAutoRetry | TestRunRetryRefusesTaskWithLedgerGap
+   红因: 挂起重试 next_retry_at=2026-09-23 14:56:34.591764 +0800 CST want NULL——缺口只活在本进程内存里，重启后扫描器照样认领，而库里那条凭据从未写进去：这一跑就是双发
+   红因: 「为什么不自动重试」必须写在任务行上（运维看不到日志），got last="steps 3/4 成功" err=""
+   还原 md5 一致 ae2bcaca（feedback.go）
+M12 OnSessionFinished 不再因缺口抑制 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestCrossedLedgerGapSuppressesAutoRetry
+   红因: 挂起重试 next_retry_at=2026-09-23 14:57:10.344075 +0800 CST want NULL——缺口只活在本进程内存里，重启后扫描器照样认领，而库里那条凭据从未写进去：这一跑就是双发
+   还原 md5 一致 ae2bcaca（feedback.go）
+M13 runRetry 侧第二道摘掉 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestRunRetryRefusesTaskWithLedgerGap
+   红因: 拒绝原因须点名台账缺口，got retry runner 未装配（SetRetryRunner）
+   还原 md5 一致 ae2bcaca（feedback.go）
+M14 未跨越也被停摆（对照腿反向） rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestCrossedLedgerGapSuppressesAutoRetry | TestPreparedLedgerFailureStillSchedulesRetry
+   红因: 挂起重试 next_retry_at=2026-09-23 14:58:03.691117 +0800 CST want NULL——缺口只活在本进程内存里，重启后扫描器照样认领，而库里那条凭据从未写进去：这一跑就是双发
+   红因: 「为什么不自动重试」必须写在任务行上（运维看不到日志），got last="steps 3/4 成功" err=""
+   还原 md5 一致 ae2bcaca（feedback.go）
+M15 步终态写回挂回执行 ctx rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestBlockedWriteStepReasonSurvivesCanceledCtx
+   红因: 步行 status=running want failed——ctx 一死「为什么被拦」就只留在日志里，可见承诺不成立（err=""）
+   红因: 步行 error_msg 须带闸门原因，got ""
+   还原 md5 一致 be6e4a67（executor.go）
+M16 缺口集合不再按键去重 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestLedgerGapSetGrowsOnlyPerDistinctKey
+   红因: 同一 (task,文本) 记 5 次后集合长度=5 want 1（重复插入必须被去重，否则 512 上限测的是重复次数）
+   还原 md5 一致 4a991caa（write_ledger.go）
+M17 无正文写步的闸门键退化成空串 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestGenericWriteStepLedgerFailureJudgedRed | TestWriteStepKeyNeverEmpty
+   红因: 第 0 个形态的闸门键是空串——guardResubmit 会就地放行且兜底记不住
+   红因: 第 1 个形态的闸门键是空串——guardResubmit 会就地放行且兜底记不住
+   还原 md5 一致 4a991caa（write_ledger.go）
+M18 台账写不再退避重试（1 次即判负） rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestTransientLedgerWriteFailureRecoversWithoutGap
+   红因: 夹具只被调了 1 次台账写，本腿没测到重试路径
+   还原 md5 一致 4a991caa（write_ledger.go）
+M19 通用写步「命令成功即绿」不受台账约束 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestGenericWriteStepLedgerFailureJudgedRed
+   红因: 命令成功 + 台账没落 = 步报绿——闸门依据的记录不存在，下一轮必然双发
+   红因: 红因须点名台账，got ""
+   还原 md5 一致 be6e4a67（executor.go）
+收尾对照腿 rc=0 ran=11/11 skip=0 → 绿，代码回到注码前状态
+电池终态: OK

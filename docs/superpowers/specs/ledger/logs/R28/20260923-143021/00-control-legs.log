@@ -1,0 +1,37 @@
+$ go test -race -gcflags=hivemtk-user/internal/service=-l -v -run TestSeamGuard -count=1 ./internal/service/
+(cwd /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server)
+[90m2026-09-23T14:30:47+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestSeamGuard_TelegramAPIBaseIsLocked
+--- PASS: TestSeamGuard_TelegramAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_TelegramMaxBytesIsLocked
+--- PASS: TestSeamGuard_TelegramMaxBytesIsLocked (0.12s)
+=== RUN   TestSeamGuard_QQAttachmentGuardIsLocked
+--- PASS: TestSeamGuard_QQAttachmentGuardIsLocked (0.12s)
+=== RUN   TestSeamGuard_QQMaxBytesIsLocked
+--- PASS: TestSeamGuard_QQMaxBytesIsLocked (0.12s)
+=== RUN   TestSeamGuard_DingTalkOpenAPIBaseIsLocked
+--- PASS: TestSeamGuard_DingTalkOpenAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_DouyinAPIBaseIsLocked
+--- PASS: TestSeamGuard_DouyinAPIBaseIsLocked (0.15s)
+=== RUN   TestSeamGuard_DouyinRetryBackoffIsLocked
+--- PASS: TestSeamGuard_DouyinRetryBackoffIsLocked (0.12s)
+=== RUN   TestSeamGuard_WeChatAPIBaseIsLocked
+--- PASS: TestSeamGuard_WeChatAPIBaseIsLocked (0.12s)
+=== RUN   TestSeamGuard_AIReplyQuietHoursFnIsLocked
+--- PASS: TestSeamGuard_AIReplyQuietHoursFnIsLocked (0.14s)
+=== RUN   TestSeamGuard_DingTalkWebhookHostAllowedIsLocked
+--- PASS: TestSeamGuard_DingTalkWebhookHostAllowedIsLocked (0.12s)
+=== RUN   TestSeamGuard_BridgeOnlineProbeIsLocked
+--- PASS: TestSeamGuard_BridgeOnlineProbeIsLocked (0.12s)
+=== RUN   TestSeamGuard_ApprovalNowFnIsLocked
+--- PASS: TestSeamGuard_ApprovalNowFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_ApprovalResumeTokFnIsLocked
+--- PASS: TestSeamGuard_ApprovalResumeTokFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_HumanTaskNowFnIsLocked
+--- PASS: TestSeamGuard_HumanTaskNowFnIsLocked (0.12s)
+=== RUN   TestSeamGuard_IntentEnabledIsLocked
+--- PASS: TestSeamGuard_IntentEnabledIsLocked (0.12s)
+=== RUN   TestSeamGuard_PollingLockRepoIsLocked
+--- PASS: TestSeamGuard_PollingLockRepoIsLocked (0.12s)
+PASS
+ok  	hivemtk-user/internal/service	3.778s

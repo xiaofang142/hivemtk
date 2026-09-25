@@ -1,0 +1,11 @@
+# 仓库既定命令：gitleaks detect --log-opts=-1（扫描半径＝尖端提交）
+# 本地 gitleaks 构建不自报版本（`version` 印 'version is set by build process'），
+#   .gitleaks.toml 里记的实测版本是 v8.24.3（与 CI 日志同版）⇒ 本轮读数是'同一命令、不同构建'，
+#   跨版差异未测，只作'尖端提交零命中'的方向性复证。
+# gitleaks 按仓库既定命令跑：detect --log-opts=-1（只扫尖端提交），配置＝仓库根 .gitleaks.toml
+# 本地构建版本：version is set by build process（.gitleaks.toml 里记的实测版本是 v8.24.3，与 CI 同版）
+[90m3:32PM[0m [32mINF[0m [1mUnknown SCM platform. Use --platform to include links in findings.[0m [36mhost=[0m
+[90m3:32PM[0m [32mINF[0m [1m1 commits scanned.[0m
+[90m3:32PM[0m [32mINF[0m [1mscanned ~492 bytes (492 bytes) in 48.8ms[0m
+[90m3:32PM[0m [32mINF[0m [1mno leaks found[0m
+### gitleaks(尖端提交) rc=0

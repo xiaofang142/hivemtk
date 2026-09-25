@@ -1,0 +1,117 @@
+2026-09-23T14:30:19+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.35s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.17s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.17s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.16s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.17s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+==================
+WARNING: DATA RACE
+Write at 0x00c0004fe8a8 by goroutine 125:
+  hivemtk-user/internal/service.(*qsScripts).ActiveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:118 +0x50
+  hivemtk-user/internal/service.resolveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:589 +0x4a4
+  hivemtk-user/internal/service.(*QuoteService).resolveScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:566 +0x3e0
+  hivemtk-user/internal/service.(*QuoteService).Revise()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:360 +0x384
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.func1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1113 +0x164
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.gowrap1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1131 +0x38
+
+Previous write at 0x00c0004fe8a8 by goroutine 126:
+  hivemtk-user/internal/service.(*qsScripts).ActiveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:118 +0x50
+  hivemtk-user/internal/service.resolveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:589 +0x4a4
+  hivemtk-user/internal/service.(*QuoteService).resolveScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:566 +0x3e0
+  hivemtk-user/internal/service.(*QuoteService).Revise()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:360 +0x384
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.func1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1113 +0x164
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.gowrap1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1131 +0x38
+
+Goroutine 125 (running) created at:
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1110 +0x29c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 126 (running) created at:
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1110 +0x29c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c0004fe8b0 by goroutine 127:
+  hivemtk-user/internal/service.(*qsScripts).ActiveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:118 +0x64
+  hivemtk-user/internal/service.resolveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:589 +0x4a4
+  hivemtk-user/internal/service.(*QuoteService).resolveScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:566 +0x3e0
+  hivemtk-user/internal/service.(*QuoteService).Revise()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:360 +0x384
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.func1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1113 +0x164
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.gowrap1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1131 +0x38
+
+Previous write at 0x00c0004fe8b0 by goroutine 126:
+  hivemtk-user/internal/service.(*qsScripts).ActiveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:118 +0x64
+  hivemtk-user/internal/service.resolveQuoteScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:589 +0x4a4
+  hivemtk-user/internal/service.(*QuoteService).resolveScript()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:566 +0x3e0
+  hivemtk-user/internal/service.(*QuoteService).Revise()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote.go:360 +0x384
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.func1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1113 +0x164
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser.gowrap1()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1131 +0x38
+
+Goroutine 127 (running) created at:
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1110 +0x29c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+
+Goroutine 126 (running) created at:
+  hivemtk-user/internal/service.TestQuoteService_ReviseConcurrentSecondLoser()
+      /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr/clone/user-server/internal/service/quote_test.go:1110 +0x29c
+  testing.tRunner()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0x164
+  testing.(*T).Run.gowrap1()
+      /Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x34
+==================
+    testing.go:1712: race detected during execution of test
+--- FAIL: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+FAIL
+FAIL	hivemtk-user/internal/service	2.650s
+FAIL

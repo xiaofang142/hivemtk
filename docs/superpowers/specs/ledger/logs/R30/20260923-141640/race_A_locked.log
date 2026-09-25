@@ -1,0 +1,23 @@
+2026-09-23T14:18:49+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (5.88s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.19s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.23s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.25s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.23s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.24s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.15s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.19s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.16s)
+=== RUN   TestQuoteService_ReviseConcurrentSecondLoser
+--- PASS: TestQuoteService_ReviseConcurrentSecondLoser (0.41s)
+PASS
+ok  	hivemtk-user/internal/service	9.886s

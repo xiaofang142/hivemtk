@@ -1,0 +1,53 @@
+注码目标目录: /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server
+基线 md5: executor.go=be6e4a67  step.go=5577e92c  timeouts.go=525839d6  write_ledger.go=4a991caa
+对照腿 rc=0 ran=11/11 skip=0 → 绿，门在位
+M20 写闸门只认 effectWrite（unknown 步绕过四道） rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestUnknownEffectStepHoldsConfirmGate | TestUnknownEffectStepHoldsDoubleSendGate | TestUnknownEffectStepRefusedAfterLedgerDegrade | TestWSE2E_UnknownLocatorTableTreatedAsWrite
+   红因: 前置条件不成立：unknown 步没留下提交尝试（is_write=false submit_state=""）
+   红因: click 到线 2 want 1（只许第一条下发，其后会话已降级）
+   还原 md5 一致 be6e4a67（executor.go）
+M21 会话收口不清降级表 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestLedgerDegradeClearedWhenSessionEnds
+   红因: 会话收口后仍在降级表里（reason=prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused）——删掉 defer clearLedgerBroken 时全套测试照样绿：表随会话数无界增长，同 ID 行再认领还会被上一轮的失败钉死
+   红因: 收口后降级表长度=1 want 0
+   还原 md5 一致 be6e4a67（executor.go）
+M22 isNeverExecuted 摘掉 inject_timeout 分支 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestInjectTimeoutStepStaysReDispatchable
+   红因: 注入超时步的 submit_state="unattributed" want 空——页面从未收到这一击，记成提交尝试就是把可重下发堵死
+   红因: 累计 click=1 want 2（两轮各一次）——第一条判「从未发生」却仍被闸门拦下，就是分支被摘掉的样子
+   还原 md5 一致 4a991caa（write_ledger.go）
+M23 步重试退避改线性 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestRetryBackoffGrowsExponentially
+   红因: attempt=3 退避=600ms want 800ms（退化成线性后，同一批失败的重试节奏翻倍变密，风控面看得见）
+   红因: attempt=4 退避=800ms want 1.6s（退化成线性后，同一批失败的重试节奏翻倍变密，风控面看得见）
+   还原 md5 一致 525839d6（timeouts.go）
+M24 台账回查改成取最新 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestFindSubmitAttemptReturnsEarliestAttempt
+   红因: 回查取到了后落的那条（id=2 want 1）——取最新会把「早已 verified」的凭据盖掉，闸门结论随插入顺序漂移
+   红因: 取到的那条 submit_state="sent" want verified，否则跳过判据会退化成红
+   还原 md5 一致 5577e92c（step.go）
+M25 闸门键丢掉 Anchor/ButtonText rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestWriteStepKeyDistinguishesLocatorFacets
+   红因: 换按钮文案 后闸门键没变——两个不同的提交位点塌成一个键，双发判定就此失真
+   红因: 换锚点 后闸门键没变——两个不同的提交位点塌成一个键，双发判定就此失真
+   还原 md5 一致 4a991caa（write_ledger.go）
+M26 未命中发送位也判成写步 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestInjectTimeoutStepStaysReDispatchable | TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly
+   红因: 累计 click=1 want 2（两轮各一次）——第一条判「从未发生」却仍被闸门拦下，就是分支被摘掉的样子
+   红因: session=2 里没有 step_index=1 的行
+   还原 md5 一致 4a991caa（write_ledger.go）
+M27 双发闸+降级拒绝整块只认 effectWrite rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestUnknownEffectStepHoldsDoubleSendGate | TestUnknownEffectStepRefusedAfterLedgerDegrade
+   红因: 同一任务的第二轮把 unknown 写步又下发了一次（累计 click=2 want 1）——双发闸只对 effectWrite 生效就等于闸门没有：定位表取不到时恰恰不知道这一次有没有副作用
+   红因: 第二轮该步应判「失败+双发原因」，got status="success" err=""
+   还原 md5 一致 be6e4a67（executor.go）
+M28 D7 确认闸门只认 effectWrite rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestUnknownEffectStepHoldsConfirmGate
+   红因: ConfirmPending 未变为 true
+   还原 md5 一致 be6e4a67（executor.go）
+M29 降级表不再拦在写步下发之前 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestUnknownEffectStepRefusedAfterLedgerDegrade
+   红因: click 到线 2 want 1（只许第一条下发，其后会话已降级）
+   红因: click_near 到线 1 want 0——降级判定只长在 effectWrite 上时 unknown 步照发，而它这次的台账同样写不进去，下一轮无从得知它发生过
+   还原 md5 一致 be6e4a67（executor.go）
+M30 只把「钳 retries」收窄回 effectWrite rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_UnknownLocatorTableTreatedAsWrite
+   红因: click 到线 3 次 want 1——定位表不可得时不得宣称「这一下没有副作用」，retries 必须钳 0
+   还原 md5 一致 be6e4a67（executor.go）
+M31 失败路径台账只给 effectWrite 落 rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestWSE2E_UnknownLocatorTableTreatedAsWrite
+   红因: submit_state= want unattributed（WS 超时=结果未知，须算提交尝试）
+   还原 md5 一致 be6e4a67（executor.go）
+M32 两个台账落点之间长出早返（M7 等价类的前提） rc=1 ran=11/11 skip=0 → 红 已杀（恰好 must 集合）｜TestSentToFinalLedgerWritePathHasNoEarlyReturn
+   红因: sent 与终态两次台账写之间出现了 return——M7 的等价类（摘掉 sent 侧 crossed 不改任何可观测行为）就此失效：sent 失败再也不是「必然被终态写补上」，双发闸会漏掉整类越点未落账的提交
+   还原 md5 一致 be6e4a67（executor.go）
+收尾对照腿 rc=0 ran=11/11 skip=0 → 绿，代码回到注码前状态
+电池终态: OK

@@ -1,0 +1,78 @@
+2026-09-23T15:26:55+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestB14_TypeAndClickNearRecordChannel
+2026-09-23T15:26:56+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:26:56+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:26:57+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestB14_TypeAndClickNearRecordChannel (1.26s)
+=== RUN   TestWriteClickFrameRequestsIdentityRecheck
+2026-09-23T15:26:57+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:26:57+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:26:58+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestWriteClickFrameRequestsIdentityRecheck (1.14s)
+=== RUN   TestReadClickFrameDoesNotRequestIdentityRecheck
+2026-09-23T15:26:58+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:26:58+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+--- PASS: TestReadClickFrameDoesNotRequestIdentityRecheck (1.04s)
+=== RUN   TestClickNearIdentityRecheckFollowsWriteGate
+=== RUN   TestClickNearIdentityRecheckFollowsWriteGate/带平台发送文案=写步要复核
+2026-09-23T15:26:59+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T15:26:59+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:26:59+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:00+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+=== RUN   TestClickNearIdentityRecheckFollowsWriteGate/无文案=只读步不复核
+2026-09-23T15:27:00+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:00+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:01+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestClickNearIdentityRecheckFollowsWriteGate (2.60s)
+    --- PASS: TestClickNearIdentityRecheckFollowsWriteGate/带平台发送文案=写步要复核 (1.01s)
+    --- PASS: TestClickNearIdentityRecheckFollowsWriteGate/无文案=只读步不复核 (1.59s)
+=== RUN   TestClickResultRecordsIdentityChecked
+=== RUN   TestClickResultRecordsIdentityChecked/扩展报复核过
+2026-09-23T15:27:01+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:01+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:03+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+=== RUN   TestClickResultRecordsIdentityChecked/旧扩展没这个字段
+2026-09-23T15:27:03+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:03+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:04+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestClickResultRecordsIdentityChecked (2.28s)
+    --- PASS: TestClickResultRecordsIdentityChecked/扩展报复核过 (1.24s)
+    --- PASS: TestClickResultRecordsIdentityChecked/旧扩展没这个字段 (1.03s)
+=== RUN   TestElementMovedWriteClickRecordsAttempt
+2026-09-23T15:27:04+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:04+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:05+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_moved: 中心点从 150,220 挪到 230,220 component=user-server
+2026-09-23T15:27:05+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestElementMovedWriteClickRecordsAttempt (1.43s)
+=== RUN   TestPreDispatchRefusalRecordsNoAttempt
+=== RUN   TestPreDispatchRefusalRecordsNoAttempt/stable_拦下（批17_新增）
+2026-09-23T15:27:05+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:05+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:06+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_not_interactable: unstable component=user-server
+    verify_identity_b17_test.go:299: submit_state="unattributed" 落在「已尝试」集合里：零副作用的派发前拒绝被记成了提交尝试，下一轮同文本会被双发闸拦死（element_not_interactable: unstable）
+2026-09-23T15:27:06+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+=== RUN   TestPreDispatchRefusalRecordsNoAttempt/浮层遮挡（批14_起就有）
+2026-09-23T15:27:06+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:06+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:08+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_not_interactable: covered component=user-server
+    verify_identity_b17_test.go:299: submit_state="unattributed" 落在「已尝试」集合里：零副作用的派发前拒绝被记成了提交尝试，下一轮同文本会被双发闸拦死（element_not_interactable: covered）
+2026-09-23T15:27:08+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+=== RUN   TestPreDispatchRefusalRecordsNoAttempt/发送按钮抖动
+2026-09-23T15:27:08+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:08+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:09+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: send_button_not_interactable: unstable component=user-server
+    verify_identity_b17_test.go:299: submit_state="unattributed" 落在「已尝试」集合里：零副作用的派发前拒绝被记成了提交尝试，下一轮同文本会被双发闸拦死（send_button_not_interactable: unstable）
+2026-09-23T15:27:09+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- FAIL: TestPreDispatchRefusalRecordsNoAttempt (3.89s)
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/stable_拦下（批17_新增） (1.03s)
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/浮层遮挡（批14_起就有） (1.49s)
+    --- FAIL: TestPreDispatchRefusalRecordsNoAttempt/发送按钮抖动 (1.37s)
+=== RUN   TestWSE2E_WriteStepNeverExecutedLeavesNoLedger
+2026-09-23T15:27:09+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=2285 component=user-server
+2026-09-23T15:27:09+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=2285 component=user-server
+2026-09-23T15:27:10+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=type attempt=0: element_not_found: .content-textarea component=user-server
+2026-09-23T15:27:10+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+--- PASS: TestWSE2E_WriteStepNeverExecutedLeavesNoLedger (1.02s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	15.242s
+FAIL

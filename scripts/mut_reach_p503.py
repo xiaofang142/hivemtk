@@ -38,9 +38,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
+# 文档里的读数没有产物可对。目录名带趟次戳、不复用；`.gitignore` 需要对
+# docs/superpowers/specs/ledger/logs/<本轮次>/ 开例外，否则 `logs/`＋`*.log` 把它们全挡在库外。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/P503" / time.strftime("%Y%m%d-%H%M%S")
+
 SVC = "internal/service"
 RTR = "internal/router"
 PREFIX = "user-server/"
@@ -322,12 +328,20 @@ def classify(rc: int, killed: list, ran: int, skipped: int, out: str, expect_ran
     return "SURVIVED"
 
 
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag: str, out: str) -> None:
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    (LOGDIR / f"{tag}.log").write_text(scrub(out), encoding="utf-8")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--clone", default="")
     ap.add_argument("--only", default="", help="只跑这些代号（逗号分隔），用于定位问题")
     args = ap.parse_args()
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(LOGDIR / "00-run.log")
 
     cells = CELLS
     if args.only:
@@ -339,7 +353,7 @@ def main() -> int:
 
     tmp = Path(args.clone or tempfile.mkdtemp(prefix="p503mut-"))
     tmp.mkdir(parents=True, exist_ok=True)
-    print(f"私有作业目录：{tmp}")
+    print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
     clone = prepare(tmp)
 
     rels = sorted({c[2] for c in cells})
@@ -349,6 +363,7 @@ def main() -> int:
 
     def control(name: str) -> None:
         rc, killed, ran, skipped, out = go_run(clone, name)
+        dump(f"00-control-{name}", out)
         bad = rc != 0 or ran != RUNNERS[name][2] or skipped or killed
         # 控制组没有"注码"这回事 ⇒ 借用格子口径打出的 SURVIVED 会被读成"有一格活下来了"，
         # 所以这里单独给一个 CLEAN/DIRTY 标签，判据本身不变。
@@ -374,6 +389,7 @@ def main() -> int:
             problems.append(str(e))
             continue
         rc, killed, ran, skipped, out = go_run(clone, runner)
+        dump(code, out)
         v = classify(rc, killed, ran, skipped, out, expect_ran)
         tally[v] += 1
         killmap[code] = set(killed)

@@ -1,0 +1,69 @@
+电池日志目录 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R28/20260923-143021；注册表 17 行 ⇒ 独立锁格 16
+控制组：门绿；腿 16 条全绿、0 竞争
+  [A/IntentEnabled] KILLED — rc=1 且点名 IntentEnabled 的锁
+  [A/aiReplyQuietHoursFn] KILLED — rc=1 且点名 aiReplyQuietHoursFn 的锁
+  [A/approvalNowFn] KILLED — rc=1 且点名 approvalNowFn 的锁
+  [A/approvalResumeTokFn] KILLED — rc=1 且点名 approvalResumeTokFn 的锁
+  [A/bridgeChannelOnlineProbe] KILLED — rc=1 且点名 bridgeChannelOnlineProbe 的锁
+  [A/dingtalkOpenAPIBase] KILLED — rc=1 且点名 dingtalkOpenAPIBase 的锁
+  [A/dingtalkWebhookHostAllowed] KILLED — rc=1 且点名 dingtalkWebhookHostAllowed 的锁
+  [A/dyAPIBaseOverride] KILLED — rc=1 且点名 dyAPIBaseOverride 的锁
+  [A/dyMediaRetryBackoff] KILLED — rc=1 且点名 dyMediaRetryBackoff 的锁
+  [A/humanTaskNowFn] KILLED — rc=1 且点名 humanTaskNowFn 的锁
+  [A/pollingLockRepo] KILLED — rc=1 且点名 pollingLockRepo 的锁
+  [A/qqAttachmentURLGuard] KILLED — rc=1 且点名 qqAttachmentURLGuard 的锁
+  [A/qqMaxMediaBytes] KILLED — rc=1 且点名 qqMaxMediaBytes 的锁
+  [A/tgAPIBaseOverride] KILLED — rc=1 且点名 tgAPIBaseOverride 的锁
+  [A/tgMaxMediaBytes] KILLED — rc=1 且点名 tgMaxMediaBytes 的锁
+  [A/wechatAPIBase] KILLED — rc=1 且点名 wechatAPIBase 的锁
+  [R/registry-missing] KILLED — rc=2（期望 2）· 缺表 ⇒ rc=2（零命中与没扫分不开）
+  [R/registry-empty] KILLED — rc=2（期望 2）· 只剩注释 ⇒ rc=2（常绿门比没有门更误导）
+  [R/registry-short-row] KILLED — rc=1（期望 1）· 列数不对 ⇒ rc=1
+  [R/registry-blank-field] KILLED — rc=1（期望 1）· 字段全空白 ⇒ rc=1（与上一格同一条 if 的两个分支，各打一刀）
+  [R/registry-duplicate] KILLED — rc=1（期望 1）· 同一全局登记两遍 ⇒ rc=1
+  [R/registry-unknown-file] KILLED — rc=1（期望 1）· 注册表指向不存在的文件 ⇒ rc=1
+  [R/registry-unknown-accessor] KILLED — rc=1（期望 1）· 指向被改名/删除的 accessor ⇒ rc=1
+  [R/setter-prefix-unknown-file] KILLED — rc=1（期望 1）· setter 的 `文件:` 前缀指向不存在的文件 ⇒ rc=1（14 扇 test-only 写侧都靠这个前缀定位）
+  [R/setter-prefix-no-such-func] KILLED — rc=1（期望 1）· 前缀文件在树里、那里却没有这个函数 ⇒ rc=1（证的是第二分支，不是上一格那条）
+  [R/setter-prefix-bad-shape] KILLED — rc=1（期望 1）· 两个冒号的 `文件:函数名` ⇒ rc=1（否则 split 会把 `x:y` 当函数名，门永远找不到它）
+  [R/bare-read-same-file] KILLED — rc=1（期望 1）· 同文件锁外直读 ⇒ rc=1
+  [R/bare-read-cross-package] KILLED — rc=1（期望 1）· 跨包直读导出量 ⇒ rc=1
+  [B-narrow] KILLED — 2 条竞争全归本腿且点到 telegram_media.go、本家 FAIL、共锁邻居 TestSeamGuard_TelegramAPIBaseIsLocked 与其余各条仍 PASS(15)
+  [C-all] KILLED — 59 条竞争、16 家各有自己的块且都点到本家文件、16 条腿全 FAIL、0 条 PASS
+
+=== 汇总 ===
+IntentEnabled	KILLED	rc=1 且点名 IntentEnabled 的锁
+aiReplyQuietHoursFn	KILLED	rc=1 且点名 aiReplyQuietHoursFn 的锁
+approvalNowFn	KILLED	rc=1 且点名 approvalNowFn 的锁
+approvalResumeTokFn	KILLED	rc=1 且点名 approvalResumeTokFn 的锁
+bridgeChannelOnlineProbe	KILLED	rc=1 且点名 bridgeChannelOnlineProbe 的锁
+dingtalkOpenAPIBase	KILLED	rc=1 且点名 dingtalkOpenAPIBase 的锁
+dingtalkWebhookHostAllowed	KILLED	rc=1 且点名 dingtalkWebhookHostAllowed 的锁
+dyAPIBaseOverride	KILLED	rc=1 且点名 dyAPIBaseOverride 的锁
+dyMediaRetryBackoff	KILLED	rc=1 且点名 dyMediaRetryBackoff 的锁
+humanTaskNowFn	KILLED	rc=1 且点名 humanTaskNowFn 的锁
+pollingLockRepo	KILLED	rc=1 且点名 pollingLockRepo 的锁
+pollingLockRepoOnce	SKIP	与 pollingLockRepo 同锁同 accessor，摘一次即覆盖
+qqAttachmentURLGuard	KILLED	rc=1 且点名 qqAttachmentURLGuard 的锁
+qqMaxMediaBytes	KILLED	rc=1 且点名 qqMaxMediaBytes 的锁
+tgAPIBaseOverride	KILLED	rc=1 且点名 tgAPIBaseOverride 的锁
+tgMaxMediaBytes	KILLED	rc=1 且点名 tgMaxMediaBytes 的锁
+wechatAPIBase	KILLED	rc=1 且点名 wechatAPIBase 的锁
+registry-missing	KILLED	rc=2（期望 2）· 缺表 ⇒ rc=2（零命中与没扫分不开）
+registry-empty	KILLED	rc=2（期望 2）· 只剩注释 ⇒ rc=2（常绿门比没有门更误导）
+registry-short-row	KILLED	rc=1（期望 1）· 列数不对 ⇒ rc=1
+registry-blank-field	KILLED	rc=1（期望 1）· 字段全空白 ⇒ rc=1（与上一格同一条 if 的两个分支，各打一刀）
+registry-duplicate	KILLED	rc=1（期望 1）· 同一全局登记两遍 ⇒ rc=1
+registry-unknown-file	KILLED	rc=1（期望 1）· 注册表指向不存在的文件 ⇒ rc=1
+registry-unknown-accessor	KILLED	rc=1（期望 1）· 指向被改名/删除的 accessor ⇒ rc=1
+setter-prefix-unknown-file	KILLED	rc=1（期望 1）· setter 的 `文件:` 前缀指向不存在的文件 ⇒ rc=1（14 扇 test-only 写侧都靠这个前缀定位）
+setter-prefix-no-such-func	KILLED	rc=1（期望 1）· 前缀文件在树里、那里却没有这个函数 ⇒ rc=1（证的是第二分支，不是上一格那条）
+setter-prefix-bad-shape	KILLED	rc=1（期望 1）· 两个冒号的 `文件:函数名` ⇒ rc=1（否则 split 会把 `x:y` 当函数名，门永远找不到它）
+bare-read-same-file	KILLED	rc=1（期望 1）· 同文件锁外直读 ⇒ rc=1
+bare-read-cross-package	KILLED	rc=1（期望 1）· 跨包直读导出量 ⇒ rc=1
+B-narrow	KILLED	2 条竞争全归本腿且点到 telegram_media.go、本家 FAIL、共锁邻居 TestSeamGuard_TelegramAPIBaseIsLocked 与其余各条仍 PASS(15)
+C-all	KILLED	59 条竞争、16 家各有自己的块且都点到本家文件、16 条腿全 FAIL、0 条 PASS
+计数： {'KILLED': 30, 'SKIP': 1}
+电池日志：/Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R28/20260923-143021
+树残留：无（全部还原且 md5 与开刀前一致）
+结论：判 30 格（另有 1 格合并 SKIP），全杀 ⇒ True

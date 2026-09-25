@@ -1,0 +1,8 @@
+--- FAIL: TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally (0.04s)
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+FAIL
+FAIL	hivemtk-user/internal/pkg/db	0.756s
+FAIL

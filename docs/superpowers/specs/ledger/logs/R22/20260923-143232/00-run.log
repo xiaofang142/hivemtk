@@ -1,0 +1,28 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-pv25idcr
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R22/20260923-143232
+覆盖 9 个脏文件、同步 0 个删除进克隆
+
+[repository] 控制组 rc=0 settled=7 skip=0 红名=[]
+
+[service] 控制组 rc=0 settled=15 skip=0 红名=[]
+R1   回填不锁 account_id（跨账号串写）                         杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsScopesByAccount
+R8   回填不锁 conversation_id（串到同 msg_id 的另一会话）         杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsScopesByConversation
+R9   把手工接线失败（无 DB 句柄）说成「没这一行」                       杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsNilHandleIsErrorNotNotFound
+R2   Extra 整列替换（抹掉入站时落的既有键）                         杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkMediaIsStoredAndBackfilled,TestSetInboundMediaURLsWritesFirstAndAll
+R3   media_url 写末位而不是首图                             杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkRichTextStoresEveryPicture,TestSetInboundMediaURLsWritesFirstAndAll
+R4   「没有这一行」也当错误返回（和读失败并成一类）                        杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsMissingRowIsNotFoundNotError,TestSetInboundMediaURLsScopesByAccount
+R5   读库真失败被吞成「没找到」（批19d 那一类归因错）                     杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsReadFailureIsNotReportedAsNotFound
+R6   摘掉空 urls 守卫（写侧 urls[0] 越界）                     杀掉             settled=7+15 skip=0+0 红=TestSetInboundMediaURLsEmptyURLsWriteNothing
+S1   service 传错 platform（回填永远找不到行）                  杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkMediaIsStoredAndBackfilled,TestM01_DingTalkMediaSurvivesRequestCancel,TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture,TestM01_DingTalkRichTextStoresEveryPicture,TestM01_DingTalkSameDownloadCodeTransfersOnce
+S2   service 漏传会话键（四键退化成三键）                         杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkMediaIsStoredAndBackfilled,TestM01_DingTalkMediaSurvivesRequestCancel,TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture,TestM01_DingTalkRichTextStoresEveryPicture,TestM01_DingTalkSameDownloadCodeTransfersOnce
+S4   调用点把 msg_id 与会话键传反（同为 string，编译器不拦）            杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkMediaIsStoredAndBackfilled,TestM01_DingTalkMediaSurvivesRequestCancel,TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture,TestM01_DingTalkRichTextStoresEveryPicture,TestM01_DingTalkSameDownloadCodeTransfersOnce
+S3   构造函数不注入 hubRepo（装配漏一行）                         杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkMediaIsStoredAndBackfilled,TestM01_DingTalkMediaSurvivesRequestCancel,TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture,TestM01_DingTalkRichTextStoresEveryPicture,TestM01_DingTalkSameDownloadCodeTransfersOnce
+S5   第一张下载失败即放弃整批                                   杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkAllTransfersFailedWriteNoMedia,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture
+S6   第一张转存失败即放弃整批                                   杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkPartialStoreFailureKeepsSuccessfulPicture
+S7   下载失败也把 downloadCode 占位写进结果                     杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkAllTransfersFailedWriteNoMedia,TestM01_DingTalkPartialTransferFailureKeepsSuccessfulPicture
+S8   下载码不去重（同一张图转存三次）                               杀掉             settled=7+15 skip=0+0 红=TestM01_DingTalkSameDownloadCodeTransfersOnce
+S9   预签名链接的查询串泄进错误（日志长期留存）                          杀掉             settled=7+15 skip=0+0 红=TestBatchJ_DingTalkPresignedURLQueryNeverReachesError
+S10  accessToken 明文泄进错误（日志长期留存）                     杀掉             settled=7+15 skip=0+0 红=TestBatchJ_DingTalkAccessTokenNeverReachesParseError
+
+===== 判定：18/18 格，逐格被杀，无存活 =====
+（BROKEN=红集合不符 的红因已打进 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R22/20260923-143232/<格>.log，逐条读后再谈定性）

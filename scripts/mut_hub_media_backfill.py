@@ -52,6 +52,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,6 +67,10 @@ SUBJECT_RELS = [REPO_REL, MEDIA_REL, APP_REL]
 # 少覆盖不是"更安全"，是把克隆变成一份谁也没写过的树。别人的在飞 WIP 由 build_probe 事后摘（见下）。
 LANE_PATHS = [f"{US}/internal"]
 DEFAULT_LOGS = "docs/superpowers/specs/ledger/logs/R22"
+# 趟次戳：整族重跑不许原地抹掉上一轮的取证产物（否则文档里被引用的读数会失去产物）。
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+RUN_STAMP = time.strftime("%Y%m%d-%H%M%S")
+
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 PKG_REPO = "./internal/repository/"
@@ -143,6 +148,11 @@ def cuts():
          'map[string]any{"media_url": urls[0], "extra": extra}',
          'map[string]any{"media_url": urls[len(urls)-1], "extra": extra}',
          {L_MULTI, S_RICH}),
+        # R4 摘掉 `ErrRecordNotFound → (false, nil)` 那一支 ⇒ "WHERE 打空"从"没找到"变成"出错"。
+        # 两条腿各自断"不该是错误"，共用这一支：L_MISS（真·没有这一行）与 L_SCOPE（账号 2002 查 2001 的行
+        # ⇒ 同一次 Find 同样回 ErrRecordNotFound，`message_hub_inbox_media_test.go:98`）。这是**同一分类
+        # 判据的第二个消费者**，不是连带打偏（红因原文就是 `账号不匹配不该是错误，却拿到 err=record not found`），
+        # 故期望按实测定成两条；与 R1（只红 L_SCOPE）红集仍互异 ⇒ 上界没有降级回下界。
         ("R4", "「没有这一行」也当错误返回（和读失败并成一类）", REPO_REL,
          "\t\tif errors.Is(err, gorm.ErrRecordNotFound) {\n\t\t\treturn false, nil\n\t\t}",
          "\t\tif errors.Is(err, gorm.ErrRecordNotFound) && false {\n\t\t\treturn false, nil\n\t\t}",
@@ -366,8 +376,10 @@ def main() -> int:
     if only and unknown:
         raise SystemExit(f"--cells 里有不存在的格：{sorted(unknown)}")
 
-    logs = ROOT / args.logs
+    logs = ROOT / args.logs / RUN_STAMP
     logs.mkdir(parents=True, exist_ok=True)
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(logs / "00-run.log")
     tmp = Path(args.clone or tempfile.mkdtemp(prefix="b23mut-"))
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
@@ -385,7 +397,7 @@ def main() -> int:
     for label, pkg, filt in (("repository", PKG_REPO, R_REPO), ("service", PKG_SVC, R_SVC)):
         c = run_test(clone, pkg, filt, env)
         print(f"\n[{label}] 控制组 rc={c['rc']} settled={c['settled']} skip={c['skipped']} 红名={c['red']}")
-        (logs / f"control_{label}.log").write_text(c["out"])
+        (logs / f"control_{label}.log").write_text(scrub(c["out"]))
         if c["rc"] != 0 or c["settled"] == 0 or c["skipped"] > 0 or c["red"]:
             print(c["out"][-4000:])
             raise SystemExit(f"[{label}] 控制组不干净——后面所有红/绿都不可信")
@@ -412,7 +424,7 @@ def main() -> int:
                 raise SystemExit(f"{code} 还原后 md5 不一致，停机")
 
         raw = "\n".join(r["out"] for r in rs.values())
-        (logs / f"{code}.log").write_text(raw)
+        (logs / f"{code}.log").write_text(scrub(raw))
         red = sorted(set().union(*[set(r["red"]) for r in rs.values()]))
         short = [r for r in rs.values() if r["rc"] != 0 and not r["red"]]
         if all(r["rc"] == 0 for r in rs.values()) and not red:
@@ -440,7 +452,7 @@ def main() -> int:
     scope = f"{ran}/{len(cuts())} 格" + (f"（--cells {','.join(sorted(only))}）" if only else "")
     print("\n===== 判定：" + (f"{scope}，逐格被杀，无存活" if not problems
                           else f"{scope}，{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)) + " =====")
-    print(f"（BROKEN=红集合不符 的红因已打进 {args.logs}/<格>.log，逐条读后再谈定性）")
+    print(f"（BROKEN=红集合不符 的红因已打进 {logs}/<格>.log，逐条读后再谈定性）")
     if not args.keep:
         shutil.rmtree(tmp, ignore_errors=True)
     else:

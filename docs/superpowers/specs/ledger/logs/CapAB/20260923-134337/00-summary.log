@@ -1,0 +1,7 @@
+趟次 tag=20260923-134337 mode=full
+两相身份：A(HEAD 无上限)=b7d993b72758 B(本批 32/8)=dfc201cb3594
+端口 8234: 127.0.0.1:8234 - 接受连接 rc=0 max_connections=100
+[full-A@8234-r1] 相=A testdb注码=b7d993b72758 跑后磁盘=b7d993b72758一致 53300/上限报错行数=4 峰值连接(含idle)=68 FAIL=3 PASS=4008 go rc=1
+[full-B@8234-r1] 相=B testdb注码=dfc201cb3594 跑后磁盘=dfc201cb3594一致 53300/上限报错行数=0 峰值连接(含idle)=32 FAIL=1 PASS=4010 go rc=1
+判定：A 相上限报错 4 行／B 相 0 行 ⇒ 分歧成立，53300 归因到连接池上界
+还原复测：testdb.go md5=dfc201cb3594（应等于 B 相 dfc201cb3594）

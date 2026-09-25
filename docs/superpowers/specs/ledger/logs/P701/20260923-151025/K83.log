@@ -1,0 +1,16 @@
+2026-09-23T15:19:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestInitBillRuntimeAssemblesTheDeriveLeg
+2026-09-23T15:19:24+08:00 WRN [bill] ❌ 派生腿已登记但 Available() 为假 ⇒ /api/bill 会回 503，检查账单/报价两把句柄 component=user-server
+    bill_wiring_test.go:82: 有 DB 句柄却报「装配不齐」：两把句柄必有缺件
+--- FAIL: TestInitBillRuntimeAssemblesTheDeriveLeg (0.21s)
+=== RUN   TestInitBillRuntimeDoesNotDependOnTheGlobalHandle
+2026-09-23T15:19:24+08:00 WRN [bill] ❌ 派生腿已登记但 Available() 为假 ⇒ /api/bill 会回 503，检查账单/报价两把句柄 component=user-server
+    bill_wiring_test.go:129: 全局句柄为空时装配失败：装配点显然还在从别处取库
+--- FAIL: TestInitBillRuntimeDoesNotDependOnTheGlobalHandle (0.11s)
+=== RUN   TestInitBillRuntimeClearsGlobalWithoutDB
+2026-09-23T15:19:24+08:00 WRN [bill] ❌ 派生腿已登记但 Available() 为假 ⇒ /api/bill 会回 503，检查账单/报价两把句柄 component=user-server
+    bill_wiring_test.go:149: 前置条件不成立：带库装配没成功
+--- FAIL: TestInitBillRuntimeClearsGlobalWithoutDB (0.10s)
+FAIL
+FAIL	hivemtk-user/internal/app	0.987s
+FAIL

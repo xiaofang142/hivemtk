@@ -1,0 +1,3 @@
+SEAM-GUARD：wechatAPIBase 的 accessor 找不到（getter loadWechatAPIBase @ internal/service/wechat.go / setter nopeStore @ internal/service/wechat.go）
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

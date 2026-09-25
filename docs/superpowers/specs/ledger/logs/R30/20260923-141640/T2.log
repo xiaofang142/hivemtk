@@ -1,0 +1,12 @@
+2026-09-23T14:28:34+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestE2E_Telegram_AccountCreateAndGet
+2026-09-23T14:28:34+08:00 ERR TG SetWebhook 失败 bot=123:****cdef err=tg setWebhook: core: do request: Post "https://api.telegram.org/bot<redacted-token>/setWebhook": Bad Gateway component=user-server
+2026-09-23T14:28:34+08:00 WRN [TG] 账号 1(测试TG) 异步 setWebhook 失败: tg setWebhook: core: do request: Post "https://api.telegram.org/bot<redacted-token>/setWebhook": Bad Gateway (可在 UI 手动重试) component=user-server
+    channel_fullchain_e2e_test.go:287: setWebhook 腿没被走到：WebhookURL 已给定的分支（CreateAccount 第 6 步）没执行，本用例并没有覆盖它
+--- FAIL: TestE2E_Telegram_AccountCreateAndGet (15.43s)
+FAIL
+FAIL	hivemtk-user/internal/service	16.143s
+FAIL
+
+===== CONNECT =====
+14:28:34 CONNECT api.telegram.org:443

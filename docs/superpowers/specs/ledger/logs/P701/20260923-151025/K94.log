@@ -1,0 +1,619 @@
+2026-09-23T15:19:53+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRoutes_TableIsExactlyTheDeclaredSet
+--- PASS: TestBillRoutes_TableIsExactlyTheDeclaredSet (0.00s)
+=== RUN   TestBillRoutes_NoStatusWriteEndpoints
+--- PASS: TestBillRoutes_NoStatusWriteEndpoints (0.00s)
+=== RUN   TestBillRoutes_RouterFileHasNoInlineHandler
+--- PASS: TestBillRoutes_RouterFileHasNoInlineHandler (0.00s)
+=== RUN   TestBillRoutes_SwaggerCoversEveryRoute
+    bill_routes_test.go:237: POST /api/bill 没有对应的 @Router 注解：Swagger 面上缺这条端点
+--- FAIL: TestBillRoutes_SwaggerCoversEveryRoute (0.00s)
+=== RUN   TestBillRoutes_MountedAtTheRightPlace
+--- PASS: TestBillRoutes_MountedAtTheRightPlace (0.00s)
+=== RUN   TestBillRoutes_PaymentLegAssembledBeforeBothConsumers
+--- PASS: TestBillRoutes_PaymentLegAssembledBeforeBothConsumers (0.00s)
+=== RUN   TestBillRoutes_MountedBySetup
+2026-09-23T15:19:54+08:00 INF [Router] static file server registered (guarded): /files -> ./uploads component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=off 审批门=off 分级判定=off 审计落库=off） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 全局 ToolRouter 已初始化（熔断阈值 5 / 冷却 30s / 默认成本 0.001） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 会话内卡片工具（card.show）已接入全局注册中心 component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ browser 自动化工具（browser_open_task/browser_task_status/browser_task_list）已接入全局注册中心 component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ PermissionDecorator 已接线：45 个工具挂载权限钩子（defaultAllow=true 语义不变） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ Provider reach 装配完成: 20 个工具 (耗时 666µs) component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ Provider pm 装配完成: 3 个工具 (耗时 33.375µs) component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ Provider customer 装配完成: 8 个工具 (耗时 93.917µs) component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ Provider knowledge 装配完成: 4 个工具 (耗时 422.416µs) component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ Provider business 装配完成: 6 个工具 (耗时 50.042µs) component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] 🎯 工具链装配总结: providers=5 tools=41 failed=0 component=user-server
+2026-09-23T15:19:54+08:00 WRN [inference] ⚠️ MemorySystem 未初始化，推理闭环将跳过情境记忆读取 component=user-server
+2026-09-23T15:19:54+08:00 INF [inference] ✅ CoreDataFlowOrchestrator 已装配（4 阶段推理闭环：感知→对齐→门禁→规划） component=user-server
+2026-09-23T15:19:54+08:00 INF [order-draft] FF_LTC_ORDER_DRAFT_DB=off ⇒ 不装配草稿运行时：order_drafts 无写入方、到期草稿无人清扫（与 T-P2-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [approval-runtime] FF_LTC_APPROVAL_RESUME=off ⇒ 不装配审批运行时：approval_requests 无写入方、到期 pending 无人清扫、审批等待节点判失败（与 T-P3-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 统一待办底座已装配（表 human_tasks）：三类 kind 共用状态机、SLA 各占一列，会话首响取 human_task.handoff_first_response_minutes（缺省 5 分钟） component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 商机底座已装配（表 opportunities）：状态机边表 + 乐观锁 CAS + 派生赢率；写 won 只有回款完成一条路，且不经 HTTP component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 线索转商机已装配：达标线索自动建单并按在册销售（sales_events.sales_profile）分配归属；总闸是 ltc.config 的 opportunity 阶段，关着时一条都不转 component=user-server
+2026-09-23T15:19:54+08:00 INF [quote] ✅ 生成腿已装配：模板与话术指针走显式 KV 句柄，话术正文只取 script_versions 快照 component=user-server
+2026-09-23T15:19:54+08:00 WRN [quote] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 发送腿自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上裁决这一条**。要出域须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-23T15:19:54+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+2026-09-23T15:19:54+08:00 INF [payment] ✅ 回款腿已装配：账单的已收只由 payments 表求和得出，bills 上没有第二个数字；同一流水号重投只入账一次 component=user-server
+2026-09-23T15:19:54+08:00 INF [email-drain] 排期邮件排水 worker 已启动：间隔=30s 单轮上限=100 龄上限=24h0m0s（首轮在 30s 之后） component=user-server
+2026-09-23T15:19:54+08:00 INF [email] 排期邮件排水已装配：间隔=30s 龄上限=24h0m0s（超龄排期判过期不补发） component=user-server
+2026-09-23T15:19:54+08:00 INF [humanize] 检测到本地 LLM（base_url=http://127.0.0.1:8207/v1），拟人度评估器自动禁用（本地小模型拟人度 <0.85，避免无效重生成） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入 ToolExecutor（Agent Loop 已启用） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入工具权限检查器（按 Agent 白名单执行期放行） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入回复语言链路（术语表 + 后置校准） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent-lifecycle] ✅ 双模式生命周期已装配（passive=会话引擎 / active=SOP 编排），按 agent_mode 分派 component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 编排器已挂会话待办生产者（转人工即投递一条 conversation_handoff） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] human_task 统一待办 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] approval 路由已挂载，但未装配审批运行时 ⇒ 全部端点回 503（检查 FF_LTC_APPROVAL_RESUME 与 app.InitApprovalRuntime 是否在路由之前跑过） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] opportunity 商机 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] quote 报价 API 已连通（可生成=true 可发送=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] bill 账单 API 已连通（可派生=true，可对账=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 INF [BridgeReplay] 可达性探针已注册：延后出站仅补投给收得到的渠道 component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] 出站认领器已注入：先认领再推送 claim_timeout=30s component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] GlobalSSEPublisher registered successfully component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge AITrigger 已注入（抖音/小红书/TikTok 网页私信 AI 链路已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [lead-mining] 服务已启动，worker=4 queue=8192 component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge LeadMining 已注入（线索发掘异步监听已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [ReachAdapter] 全渠道 service 已注册到 tooluse.GlobalServiceRegistry component=user-server
+2026-09-23T15:19:54+08:00 INF [reach_dispatcher] 启动后台任务调度器，间隔=15s component=user-server
+2026-09-23T15:19:54+08:00 INF [WorkflowDispatcher] started component=user-server
+[OK] doRegAdmin registered: DELETE /clues/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /customer-events/customer/:customer_id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/conflicts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: GET /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /oneid/merge-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules/preview (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/config (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/keywords-override (handlers=2)
+[OK] doRegAdmin registered: PUT /llm-routing/strategies (handlers=2)
+[OK] doRegAdmin registered: POST /reach-pipelines (handlers=2)
+[OK] doRegAdmin registered: PUT /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents (handlers=2)
+[OK] doRegAdmin registered: PUT /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/activate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/deactivate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/execute (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/step (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /script-templates (handlers=2)
+[OK] doRegAdmin registered: PUT /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: POST /email/lists (handlers=2)
+[OK] doRegAdmin registered: PUT /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: GET /email/lists/:id/trace (handlers=2)
+[OK] doRegAdmin registered: POST /email/smtps (handlers=2)
+[OK] doRegAdmin registered: PUT /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/records (handlers=2)
+[OK] doRegAdmin registered: POST /sms/drafts (handlers=2)
+[OK] doRegAdmin registered: PUT /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/resume (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/jobs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/configs (handlers=2)
+[OK] doRegAdmin registered: POST /douyin-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /kuaishou-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xiaohongshu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xianyu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /tiktok-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /short-links (handlers=2)
+[OK] doRegAdmin registered: PUT /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: POST /live-codes (handlers=2)
+[OK] doRegAdmin registered: PUT /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: POST /rag-product-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/generate (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/:id/save (handlers=2)
+[OK] doRegAdmin registered: DELETE /ai-content/:id (handlers=2)
+[OK] doRegAdmin registered: POST /dashboard-screens (handlers=2)
+[OK] doRegAdmin registered: PUT /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /system/configs/:key (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/test (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/default (handlers=2)
+[OK] doRegAdmin registered: DELETE /material-library/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /csat/template (handlers=2)
+[OK] doRegAdmin registered: GET /macros (handlers=2)
+[OK] doRegAdmin registered: POST /macros (handlers=2)
+[OK] doRegAdmin registered: DELETE /macros/:id (handlers=2)
+[OK] doRegAdmin registered: POST /macros/:id/apply (handlers=2)
+[OK] doRegAdmin registered: GET /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: POST /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /webhook-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /saved-views (handlers=2)
+[OK] doRegAdmin registered: DELETE /saved-views/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /report-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions/send-now (handlers=2)
+[OK] doRegAdmin registered: GET /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc/block-phone (handlers=2)
+[OK] doRegAdmin registered: DELETE /dnc/:one_id (handlers=2)
+[OK] doRegAdmin registered: GET /dnc/:one_id/blocked (handlers=2)
+[OK] doRegAdmin registered: GET /automation-rules (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /automation-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/:id/toggle (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/fire (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool (handlers=2)
+[OK] doRegAdmin registered: PUT /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/check-all (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/alerts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/check (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/rotate (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: GET /backup/list (handlers=2)
+[OK] doRegAdmin registered: GET /backup/stats (handlers=2)
+[OK] doRegAdmin registered: GET /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: PUT /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: POST /backup/create (handlers=2)
+[OK] doRegAdmin registered: GET /backup/:id/preview (handlers=2)
+[OK] doRegAdmin registered: POST /backup/:id/restore (handlers=2)
+[OK] doRegAdmin registered: DELETE /backup/:id (handlers=2)
+[OK] doRegAdmin registered: GET /backups/stats (handlers=2)
+[OK] doRegAdmin registered: POST /email/domains/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/batch-retry (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/:id/retry (handlers=2)
+[OK] doRegAdmin registered: DELETE /message-hub/dlq/:id (handlers=2)
+[OK] doRegAdmin registered: POST /clues/import/apply-suggestions (handlers=2)
+[OK] doRegAdmin registered: POST /clues/:id/merge (handlers=2)
+[OK] doRegAdmin registered: POST /clues/force-create (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/list (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/:id (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/statistics (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/export (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/clean (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/:id/rollback (handlers=2)
+[OK] doRegAdmin registered: POST /churn-prediction/model-config (handlers=2)
+2026-09-23T15:19:54+08:00 INF [TG-Gate] TTL 清扫器已启动（每分钟一次） component=user-server
+2026-09-23T15:19:54+08:00 WRN [TG-Bootstrap] 列举 Telegram 账号失败: ERROR: relation "telegram_accounts" does not exist (SQLSTATE 42P01) component=user-server
+--- PASS: TestBillRoutes_MountedBySetup (0.42s)
+=== RUN   TestBillRoutes_UnassembledAnswersFiveOhThree
+--- PASS: TestBillRoutes_UnassembledAnswersFiveOhThree (0.00s)
+=== RUN   TestBillRoutes_UnassembledStillMountsRoute
+2026-09-23T15:19:54+08:00 INF [Router] bill 路由已挂载，但缺 [派生腿 app.InitBillRuntime 对账读腿 app.InitPaymentRuntime] ⇒ 对应端点回 503（检查装配点是否在路由之前跑过） component=user-server
+--- PASS: TestBillRoutes_UnassembledStillMountsRoute (0.00s)
+=== RUN   TestBillRoutes_LiveThroughRealSetup
+2026-09-23T15:19:54+08:00 WRN [BrowserCron] 恢复触发器失败: sql: database is closed component=user-server
+2026-09-23T15:19:54+08:00 WRN [BrowserReconcile] 扫描 running 任务失败: sql: database is closed component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] static file server registered (guarded): /files -> ./uploads component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=off 审批门=off 分级判定=off 审计落库=off） component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ⚠️ Provider 批量装配存在失败: all providers failed or skipped component=user-server
+2026/09/23 15:19:54 [WARN] register card tool card.show failed: tool already exists: card.show
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 会话内卡片工具（card.show）已接入全局注册中心 component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ⚠️ browser 自动化工具注册失败: register browser tool browser_open_task: tool already exists: browser_open_task component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ PermissionDecorator 已接线：0 个工具挂载权限钩子（defaultAllow=true 语义不变） component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider reach 失败: register tool reach.account.list failed: tool already exists: reach.account.list; register tool reach.template.apply failed: tool already exists: reach.template.apply; register tool reach.history failed: tool already exists: reach.history; register tool reach.health failed: tool already exists: reach.health; register tool reach.recall failed: tool already exists: reach.recall; register tool reach.schedule failed: tool already exists: reach.schedule; register tool reach.batch failed: tool already exists: reach.batch; register tool reach.card.send failed: tool already exists: reach.card.send; register tool reach.web.send failed: tool already exists: reach.web.send; register tool reach.feishu.send failed: tool already exists: reach.feishu.send; register tool reach.whatsapp.send failed: tool already exists: reach.whatsapp.send; register tool reach.telegram.send failed: tool already exists: reach.telegram.send; register tool reach.dingtalk.send failed: tool already exists: reach.dingtalk.send; register tool reach.xhs.send failed: tool already exists: reach.xhs.send; register tool reach.kuaishou.send failed: tool already exists: reach.kuaishou.send; register tool reach.douyin.send failed: tool already exists: reach.douyin.send; register tool reach.weixin.send failed: tool already exists: reach.weixin.send; register tool reach.wecom.send failed: tool already exists: reach.wecom.send; register tool reach.email.send failed: tool already exists: reach.email.send; register tool reach.sms.send failed: tool already exists: reach.sms.send;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider pm 失败: register tool pm.message.send failed: tool already exists: pm.message.send; register tool pm.session.read failed: tool already exists: pm.session.read; register tool pm.session.open failed: tool already exists: pm.session.open;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider customer 失败: register tool customer.segment failed: tool already exists: customer.segment; register tool customer.remove_tag failed: tool already exists: customer.remove_tag; register tool customer.add_tag failed: tool already exists: customer.add_tag; register tool customer.merge failed: tool already exists: customer.merge; register tool customer.update failed: tool already exists: customer.update; register tool customer.create failed: tool already exists: customer.create; register tool customer.get failed: tool already exists: customer.get; register tool customer.search failed: tool already exists: customer.search;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider knowledge 失败: register tool knowledge.list_kb failed: tool already exists: knowledge.list_kb; register tool knowledge.add_doc failed: tool already exists: knowledge.add_doc; register tool knowledge.feedback failed: tool already exists: knowledge.feedback; register tool rag.search failed: tool already exists: rag.search;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider business 失败: register tool logistics.track failed: tool already exists: logistics.track; register tool aftersale.query failed: tool already exists: aftersale.query; register tool aftersale.create failed: tool already exists: aftersale.create; register tool order.lookup failed: tool already exists: order.lookup; register tool follow_task.update failed: tool already exists: follow_task.update; register tool follow_task.create failed: tool already exists: follow_task.create;  component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] 🎯 工具链装配总结: providers=0 tools=0 failed=5 component=user-server
+2026-09-23T15:19:54+08:00 INF [order-draft] FF_LTC_ORDER_DRAFT_DB=off ⇒ 不装配草稿运行时：order_drafts 无写入方、到期草稿无人清扫（与 T-P2-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [approval-runtime] FF_LTC_APPROVAL_RESUME=off ⇒ 不装配审批运行时：approval_requests 无写入方、到期 pending 无人清扫、审批等待节点判失败（与 T-P3-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 统一待办底座已装配（表 human_tasks）：三类 kind 共用状态机、SLA 各占一列，会话首响取 human_task.handoff_first_response_minutes（缺省 5 分钟） component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 商机底座已装配（表 opportunities）：状态机边表 + 乐观锁 CAS + 派生赢率；写 won 只有回款完成一条路，且不经 HTTP component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 线索转商机已装配：达标线索自动建单并按在册销售（sales_events.sales_profile）分配归属；总闸是 ltc.config 的 opportunity 阶段，关着时一条都不转 component=user-server
+2026-09-23T15:19:54+08:00 INF [quote] ✅ 生成腿已装配：模板与话术指针走显式 KV 句柄，话术正文只取 script_versions 快照 component=user-server
+2026-09-23T15:19:54+08:00 WRN [quote] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 发送腿自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上裁决这一条**。要出域须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-23T15:19:54+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+2026-09-23T15:19:54+08:00 INF [payment] ✅ 回款腿已装配：账单的已收只由 payments 表求和得出，bills 上没有第二个数字；同一流水号重投只入账一次 component=user-server
+2026-09-23T15:19:54+08:00 INF [email-drain] 排期邮件排水 worker 已启动：间隔=30s 单轮上限=100 龄上限=24h0m0s（首轮在 30s 之后） component=user-server
+2026-09-23T15:19:54+08:00 INF [email] 排期邮件排水已装配：间隔=30s 龄上限=24h0m0s（超龄排期判过期不补发） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入 ToolExecutor（Agent Loop 已启用） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入工具权限检查器（按 Agent 白名单执行期放行） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入回复语言链路（术语表 + 后置校准） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent-lifecycle] ✅ 双模式生命周期已装配（passive=会话引擎 / active=SOP 编排），按 agent_mode 分派 component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 编排器已挂会话待办生产者（转人工即投递一条 conversation_handoff） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] human_task 统一待办 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] approval 路由已挂载，但未装配审批运行时 ⇒ 全部端点回 503（检查 FF_LTC_APPROVAL_RESUME 与 app.InitApprovalRuntime 是否在路由之前跑过） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] opportunity 商机 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] quote 报价 API 已连通（可生成=true 可发送=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] bill 账单 API 已连通（可派生=true，可对账=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-23T15:19:54+08:00 WRN [BrowserCron] 恢复触发器失败: ERROR: relation "browser_cron_triggers" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 WRN [BrowserReconcile] 扫描 running 任务失败: ERROR: relation "browser_tasks" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 INF [BridgeReplay] 可达性探针已注册：延后出站仅补投给收得到的渠道 component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] 出站认领器已注入：先认领再推送 claim_timeout=30s component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] GlobalSSEPublisher registered successfully component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge AITrigger 已注入（抖音/小红书/TikTok 网页私信 AI 链路已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [lead-mining] 服务已启动，worker=4 queue=8192 component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge LeadMining 已注入（线索发掘异步监听已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [ReachAdapter] 全渠道 service 已注册到 tooluse.GlobalServiceRegistry component=user-server
+2026-09-23T15:19:54+08:00 INF [WorkflowDispatcher] started component=user-server
+[OK] doRegAdmin registered: DELETE /clues/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /customer-events/customer/:customer_id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/conflicts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: GET /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /oneid/merge-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules/preview (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/config (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/keywords-override (handlers=2)
+[OK] doRegAdmin registered: PUT /llm-routing/strategies (handlers=2)
+[OK] doRegAdmin registered: POST /reach-pipelines (handlers=2)
+[OK] doRegAdmin registered: PUT /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents (handlers=2)
+[OK] doRegAdmin registered: PUT /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/activate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/deactivate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/execute (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/step (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /script-templates (handlers=2)
+[OK] doRegAdmin registered: PUT /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: POST /email/lists (handlers=2)
+[OK] doRegAdmin registered: PUT /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: GET /email/lists/:id/trace (handlers=2)
+[OK] doRegAdmin registered: POST /email/smtps (handlers=2)
+[OK] doRegAdmin registered: PUT /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/records (handlers=2)
+[OK] doRegAdmin registered: POST /sms/drafts (handlers=2)
+[OK] doRegAdmin registered: PUT /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/resume (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/jobs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/configs (handlers=2)
+[OK] doRegAdmin registered: POST /douyin-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /kuaishou-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xiaohongshu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xianyu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /tiktok-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /short-links (handlers=2)
+[OK] doRegAdmin registered: PUT /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: POST /live-codes (handlers=2)
+[OK] doRegAdmin registered: PUT /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: POST /rag-product-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/generate (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/:id/save (handlers=2)
+[OK] doRegAdmin registered: DELETE /ai-content/:id (handlers=2)
+[OK] doRegAdmin registered: POST /dashboard-screens (handlers=2)
+[OK] doRegAdmin registered: PUT /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /system/configs/:key (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/test (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/default (handlers=2)
+[OK] doRegAdmin registered: DELETE /material-library/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /csat/template (handlers=2)
+[OK] doRegAdmin registered: GET /macros (handlers=2)
+[OK] doRegAdmin registered: POST /macros (handlers=2)
+[OK] doRegAdmin registered: DELETE /macros/:id (handlers=2)
+[OK] doRegAdmin registered: POST /macros/:id/apply (handlers=2)
+[OK] doRegAdmin registered: GET /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: POST /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /webhook-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /saved-views (handlers=2)
+[OK] doRegAdmin registered: DELETE /saved-views/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /report-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions/send-now (handlers=2)
+[OK] doRegAdmin registered: GET /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc/block-phone (handlers=2)
+[OK] doRegAdmin registered: DELETE /dnc/:one_id (handlers=2)
+[OK] doRegAdmin registered: GET /dnc/:one_id/blocked (handlers=2)
+[OK] doRegAdmin registered: GET /automation-rules (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /automation-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/:id/toggle (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/fire (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool (handlers=2)
+[OK] doRegAdmin registered: PUT /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/check-all (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/alerts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/check (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/rotate (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: GET /backup/list (handlers=2)
+[OK] doRegAdmin registered: GET /backup/stats (handlers=2)
+[OK] doRegAdmin registered: GET /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: PUT /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: POST /backup/create (handlers=2)
+[OK] doRegAdmin registered: GET /backup/:id/preview (handlers=2)
+[OK] doRegAdmin registered: POST /backup/:id/restore (handlers=2)
+[OK] doRegAdmin registered: DELETE /backup/:id (handlers=2)
+[OK] doRegAdmin registered: GET /backups/stats (handlers=2)
+[OK] doRegAdmin registered: POST /email/domains/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/batch-retry (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/:id/retry (handlers=2)
+[OK] doRegAdmin registered: DELETE /message-hub/dlq/:id (handlers=2)
+[OK] doRegAdmin registered: POST /clues/import/apply-suggestions (handlers=2)
+[OK] doRegAdmin registered: POST /clues/:id/merge (handlers=2)
+[OK] doRegAdmin registered: POST /clues/force-create (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/list (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/:id (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/statistics (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/export (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/clean (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/:id/rollback (handlers=2)
+[OK] doRegAdmin registered: POST /churn-prediction/model-config (handlers=2)
+2026-09-23T15:19:54+08:00 INF [TG-Gate] TTL 清扫器已启动（每分钟一次） component=user-server
+2026-09-23T15:19:54+08:00 WRN [TG-Bootstrap] 列举 Telegram 账号失败: ERROR: relation "telegram_accounts" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=71bafba2539dd9fa traceID=72d90ce71c0f98f025e465c5c7479302 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-72d90ce71c0f98f025e465c5c7479302-71bafba2539dd9fa-01
+2026-09-23T15:19:54+08:00 INF [Bill] 用户 1 确认报价行 "q_bill_live_1" 成交 ⇒ 账单 "b_1790147994492553000_1"（金额 369.99 CNY，新开） component=user-server
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=6 method=POST path=/api/bill request_body="{\"quote_row_id\":\"q_bill_live_1\"}" response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"id\":\"b_1790147994492553000_1\",\"quote_id\":\"QT-BILL-LIVE\",\"quote_row_id\":\"q_bill_live_1\",\"opportunity_id\":\"opp_bill_live\",\"amount\":369.99,\"currency\":\"CNY\",\"status\":\"open\",\"created_at\":\"2026-09-23T15:19:54.492553+08:00\",\"reused\":false}}" status=200 trace_id=72d90ce71c0f98f025e465c5c7479302
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=c3f9c9f62fd4db7c traceID=c2b51b0f7fb109150a6b01cb06d4415f traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-c2b51b0f7fb109150a6b01cb06d4415f-c3f9c9f62fd4db7c-01
+2026-09-23T15:19:54+08:00 INF [Bill] 用户 1 确认报价行 "q_bill_live_1" 成交 ⇒ 账单 "b_1790147994492553000_1"（金额 369.99 CNY，复用已有那一张） component=user-server
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=POST path=/api/bill request_body="{\"quote_row_id\":\"q_bill_live_1\"}" response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"id\":\"b_1790147994492553000_1\",\"quote_id\":\"QT-BILL-LIVE\",\"quote_row_id\":\"q_bill_live_1\",\"opportunity_id\":\"opp_bill_live\",\"amount\":369.99,\"currency\":\"CNY\",\"status\":\"open\",\"created_at\":\"2026-09-23T15:19:54.492553+08:00\",\"reused\":true}}" status=200 trace_id=c2b51b0f7fb109150a6b01cb06d4415f
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=e5e24b5a24aecafc traceID=a7523fe9fa03c7214e1a169c36fbd2f4 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-a7523fe9fa03c7214e1a169c36fbd2f4-e5e24b5a24aecafc-01
+2026-09-23T15:19:54+08:00 WRN api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=POST path=/api/bill request_body="{\"quote_row_id\":\"q_bill_live_1\"}" response_body="{\"code\":\"UNAUTHORIZED_2001\",\"message\":\"未提供认证令牌\"}" status=401 trace_id=a7523fe9fa03c7214e1a169c36fbd2f4
+--- PASS: TestBillRoutes_LiveThroughRealSetup (0.20s)
+=== RUN   TestBillRoutes_LiveReadSideThroughRealSetup
+2026-09-23T15:19:54+08:00 INF [Router] static file server registered (guarded): /files -> ./uploads component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 全局 ToolExecutor 已初始化（装饰器链：权限/限流/重试/超时/审计/计费 全部启用；熔断=off 审批门=off 分级判定=off 审计落库=off） component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ⚠️ Provider 批量装配存在失败: all providers failed or skipped component=user-server
+2026/09/23 15:19:54 [WARN] register card tool card.show failed: tool already exists: card.show
+2026-09-23T15:19:54+08:00 INF [agent] ✅ 会话内卡片工具（card.show）已接入全局注册中心 component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ⚠️ browser 自动化工具注册失败: register browser tool browser_open_task: tool already exists: browser_open_task component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ PermissionDecorator 已接线：0 个工具挂载权限钩子（defaultAllow=true 语义不变） component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider reach 失败: register tool reach.account.list failed: tool already exists: reach.account.list; register tool reach.template.apply failed: tool already exists: reach.template.apply; register tool reach.history failed: tool already exists: reach.history; register tool reach.health failed: tool already exists: reach.health; register tool reach.recall failed: tool already exists: reach.recall; register tool reach.schedule failed: tool already exists: reach.schedule; register tool reach.batch failed: tool already exists: reach.batch; register tool reach.card.send failed: tool already exists: reach.card.send; register tool reach.web.send failed: tool already exists: reach.web.send; register tool reach.feishu.send failed: tool already exists: reach.feishu.send; register tool reach.whatsapp.send failed: tool already exists: reach.whatsapp.send; register tool reach.telegram.send failed: tool already exists: reach.telegram.send; register tool reach.dingtalk.send failed: tool already exists: reach.dingtalk.send; register tool reach.xhs.send failed: tool already exists: reach.xhs.send; register tool reach.kuaishou.send failed: tool already exists: reach.kuaishou.send; register tool reach.douyin.send failed: tool already exists: reach.douyin.send; register tool reach.weixin.send failed: tool already exists: reach.weixin.send; register tool reach.wecom.send failed: tool already exists: reach.wecom.send; register tool reach.email.send failed: tool already exists: reach.email.send; register tool reach.sms.send failed: tool already exists: reach.sms.send;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider pm 失败: register tool pm.message.send failed: tool already exists: pm.message.send; register tool pm.session.read failed: tool already exists: pm.session.read; register tool pm.session.open failed: tool already exists: pm.session.open;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider customer 失败: register tool customer.segment failed: tool already exists: customer.segment; register tool customer.remove_tag failed: tool already exists: customer.remove_tag; register tool customer.add_tag failed: tool already exists: customer.add_tag; register tool customer.merge failed: tool already exists: customer.merge; register tool customer.update failed: tool already exists: customer.update; register tool customer.create failed: tool already exists: customer.create; register tool customer.get failed: tool already exists: customer.get; register tool customer.search failed: tool already exists: customer.search;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider knowledge 失败: register tool knowledge.list_kb failed: tool already exists: knowledge.list_kb; register tool knowledge.add_doc failed: tool already exists: knowledge.add_doc; register tool knowledge.feedback failed: tool already exists: knowledge.feedback; register tool rag.search failed: tool already exists: rag.search;  component=user-server
+2026-09-23T15:19:54+08:00 ERR [agent] ❌ Provider business 失败: register tool logistics.track failed: tool already exists: logistics.track; register tool aftersale.query failed: tool already exists: aftersale.query; register tool aftersale.create failed: tool already exists: aftersale.create; register tool order.lookup failed: tool already exists: order.lookup; register tool follow_task.update failed: tool already exists: follow_task.update; register tool follow_task.create failed: tool already exists: follow_task.create;  component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] 🎯 工具链装配总结: providers=0 tools=0 failed=5 component=user-server
+2026-09-23T15:19:54+08:00 INF [order-draft] FF_LTC_ORDER_DRAFT_DB=off ⇒ 不装配草稿运行时：order_drafts 无写入方、到期草稿无人清扫（与 T-P2-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [approval-runtime] FF_LTC_APPROVAL_RESUME=off ⇒ 不装配审批运行时：approval_requests 无写入方、到期 pending 无人清扫、审批等待节点判失败（与 T-P3-01 交付态一致） component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 统一待办底座已装配（表 human_tasks）：三类 kind 共用状态机、SLA 各占一列，会话首响取 human_task.handoff_first_response_minutes（缺省 5 分钟） component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 商机底座已装配（表 opportunities）：状态机边表 + 乐观锁 CAS + 派生赢率；写 won 只有回款完成一条路，且不经 HTTP component=user-server
+2026-09-23T15:19:54+08:00 INF [opportunity] ✅ 线索转商机已装配：达标线索自动建单并按在册销售（sales_events.sales_profile）分配归属；总闸是 ltc.config 的 opportunity 阶段，关着时一条都不转 component=user-server
+2026-09-23T15:19:54+08:00 INF [quote] ✅ 生成腿已装配：模板与话术指针走显式 KV 句柄，话术正文只取 script_versions 快照 component=user-server
+2026-09-23T15:19:54+08:00 WRN [quote] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 发送腿自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上裁决这一条**。要出域须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-23T15:19:54+08:00 INF [bill] ✅ 派生腿已装配：账单金额只取自该版行项目合计，入参里带不进金额 component=user-server
+2026-09-23T15:19:54+08:00 INF [payment] ✅ 回款腿已装配：账单的已收只由 payments 表求和得出，bills 上没有第二个数字；同一流水号重投只入账一次 component=user-server
+2026-09-23T15:19:54+08:00 INF [email-drain] 排期邮件排水 worker 已启动：间隔=30s 单轮上限=100 龄上限=24h0m0s（首轮在 30s 之后） component=user-server
+2026-09-23T15:19:54+08:00 INF [email] 排期邮件排水已装配：间隔=30s 龄上限=24h0m0s（超龄排期判过期不补发） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入 ToolExecutor（Agent Loop 已启用） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入工具权限检查器（按 Agent 白名单执行期放行） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent] ✅ SalesEngine 已注入回复语言链路（术语表 + 后置校准） component=user-server
+2026-09-23T15:19:54+08:00 INF [agent-lifecycle] ✅ 双模式生命周期已装配（passive=会话引擎 / active=SOP 编排），按 agent_mode 分派 component=user-server
+2026-09-23T15:19:54+08:00 INF [human-task] ✅ 编排器已挂会话待办生产者（转人工即投递一条 conversation_handoff） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] human_task 统一待办 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] approval 路由已挂载，但未装配审批运行时 ⇒ 全部端点回 503（检查 FF_LTC_APPROVAL_RESUME 与 app.InitApprovalRuntime 是否在路由之前跑过） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] opportunity 商机 API 已连通（底座可用=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] quote 报价 API 已连通（可生成=true 可发送=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [Router] bill 账单 API 已连通（可派生=true，可对账=true） component=user-server
+2026-09-23T15:19:54+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-23T15:19:54+08:00 WRN [BrowserCron] 恢复触发器失败: ERROR: relation "browser_cron_triggers" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 WRN [BrowserReconcile] 扫描 running 任务失败: ERROR: relation "browser_tasks" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-23T15:19:54+08:00 INF [BridgeReplay] 可达性探针已注册：延后出站仅补投给收得到的渠道 component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] 出站认领器已注入：先认领再推送 claim_timeout=30s component=user-server
+2026-09-23T15:19:54+08:00 INF [SSE] GlobalSSEPublisher registered successfully component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge AITrigger 已注入（抖音/小红书/TikTok 网页私信 AI 链路已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [lead-mining] 服务已启动，worker=4 queue=8192 component=user-server
+2026-09-23T15:19:54+08:00 INF [Bridge] bridge LeadMining 已注入（线索发掘异步监听已连通） component=user-server
+2026-09-23T15:19:54+08:00 INF [ReachAdapter] 全渠道 service 已注册到 tooluse.GlobalServiceRegistry component=user-server
+2026-09-23T15:19:54+08:00 INF [WorkflowDispatcher] started component=user-server
+[OK] doRegAdmin registered: DELETE /clues/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /customer-events/customer/:customer_id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/conflicts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: GET /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /oneid/merge-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /oneid/merge-rules/preview (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/config (handlers=2)
+[OK] doRegAdmin registered: PUT /intent-records/keywords-override (handlers=2)
+[OK] doRegAdmin registered: PUT /llm-routing/strategies (handlers=2)
+[OK] doRegAdmin registered: POST /reach-pipelines (handlers=2)
+[OK] doRegAdmin registered: PUT /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /reach-pipelines/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents (handlers=2)
+[OK] doRegAdmin registered: PUT /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sop-agents/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/activate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/deactivate (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/execute (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/step (handlers=2)
+[OK] doRegAdmin registered: POST /sop-agents/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /script-templates (handlers=2)
+[OK] doRegAdmin registered: PUT /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /script-templates/:id (handlers=2)
+[OK] doRegAdmin registered: POST /email/lists (handlers=2)
+[OK] doRegAdmin registered: PUT /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/lists/:id (handlers=2)
+[OK] doRegAdmin registered: GET /email/lists/:id/trace (handlers=2)
+[OK] doRegAdmin registered: POST /email/smtps (handlers=2)
+[OK] doRegAdmin registered: PUT /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /email/smtps/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/records (handlers=2)
+[OK] doRegAdmin registered: POST /sms/drafts (handlers=2)
+[OK] doRegAdmin registered: PUT /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/drafts/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/pause (handlers=2)
+[OK] doRegAdmin registered: POST /sms/jobs/:id/resume (handlers=2)
+[OK] doRegAdmin registered: DELETE /sms/jobs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /sms/configs (handlers=2)
+[OK] doRegAdmin registered: POST /douyin-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /douyin-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /kuaishou-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /kuaishou-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xiaohongshu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xiaohongshu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /xianyu-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /xianyu-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /tiktok-cards (handlers=2)
+[OK] doRegAdmin registered: PUT /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /tiktok-cards/:id (handlers=2)
+[OK] doRegAdmin registered: POST /short-links (handlers=2)
+[OK] doRegAdmin registered: PUT /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /short-links/:id (handlers=2)
+[OK] doRegAdmin registered: POST /live-codes (handlers=2)
+[OK] doRegAdmin registered: PUT /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /live-codes/:id (handlers=2)
+[OK] doRegAdmin registered: POST /rag-product-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /rag-product-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/generate (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content (handlers=2)
+[OK] doRegAdmin registered: POST /ai-content/:id/save (handlers=2)
+[OK] doRegAdmin registered: DELETE /ai-content/:id (handlers=2)
+[OK] doRegAdmin registered: POST /dashboard-screens (handlers=2)
+[OK] doRegAdmin registered: PUT /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /dashboard-screens/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /system/configs/:key (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs (handlers=2)
+[OK] doRegAdmin registered: PUT /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /obs-configs/:id (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/test (handlers=2)
+[OK] doRegAdmin registered: POST /obs-configs/:id/default (handlers=2)
+[OK] doRegAdmin registered: DELETE /material-library/:id (handlers=2)
+[OK] doRegAdmin registered: PUT /csat/template (handlers=2)
+[OK] doRegAdmin registered: GET /macros (handlers=2)
+[OK] doRegAdmin registered: POST /macros (handlers=2)
+[OK] doRegAdmin registered: DELETE /macros/:id (handlers=2)
+[OK] doRegAdmin registered: POST /macros/:id/apply (handlers=2)
+[OK] doRegAdmin registered: GET /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: POST /webhook-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /webhook-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /saved-views (handlers=2)
+[OK] doRegAdmin registered: DELETE /saved-views/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions (handlers=2)
+[OK] doRegAdmin registered: DELETE /report-subscriptions/:id (handlers=2)
+[OK] doRegAdmin registered: POST /report-subscriptions/send-now (handlers=2)
+[OK] doRegAdmin registered: GET /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc (handlers=2)
+[OK] doRegAdmin registered: POST /dnc/block-phone (handlers=2)
+[OK] doRegAdmin registered: DELETE /dnc/:one_id (handlers=2)
+[OK] doRegAdmin registered: GET /dnc/:one_id/blocked (handlers=2)
+[OK] doRegAdmin registered: GET /automation-rules (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules (handlers=2)
+[OK] doRegAdmin registered: DELETE /automation-rules/:id (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/:id/toggle (handlers=2)
+[OK] doRegAdmin registered: POST /automation-rules/fire (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool (handlers=2)
+[OK] doRegAdmin registered: PUT /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: DELETE /domain-pool/:id (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/check-all (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/alerts/:id/resolve (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/check (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/rotate (handlers=2)
+[OK] doRegAdmin registered: POST /domain-pool/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: GET /backup/list (handlers=2)
+[OK] doRegAdmin registered: GET /backup/stats (handlers=2)
+[OK] doRegAdmin registered: GET /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: PUT /backup/strategy (handlers=2)
+[OK] doRegAdmin registered: POST /backup/create (handlers=2)
+[OK] doRegAdmin registered: GET /backup/:id/preview (handlers=2)
+[OK] doRegAdmin registered: POST /backup/:id/restore (handlers=2)
+[OK] doRegAdmin registered: DELETE /backup/:id (handlers=2)
+[OK] doRegAdmin registered: GET /backups/stats (handlers=2)
+[OK] doRegAdmin registered: POST /email/domains/:id/suspend (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/batch-retry (handlers=2)
+[OK] doRegAdmin registered: POST /message-hub/dlq/:id/retry (handlers=2)
+[OK] doRegAdmin registered: DELETE /message-hub/dlq/:id (handlers=2)
+[OK] doRegAdmin registered: POST /clues/import/apply-suggestions (handlers=2)
+[OK] doRegAdmin registered: POST /clues/:id/merge (handlers=2)
+[OK] doRegAdmin registered: POST /clues/force-create (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/list (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/:id (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/statistics (handlers=2)
+[OK] doRegAdmin registered: GET /operation-logs/export (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/clean (handlers=2)
+[OK] doRegAdmin registered: POST /operation-logs/:id/rollback (handlers=2)
+[OK] doRegAdmin registered: POST /churn-prediction/model-config (handlers=2)
+2026-09-23T15:19:54+08:00 INF [TG-Gate] TTL 清扫器已启动（每分钟一次） component=user-server
+2026-09-23T15:19:54+08:00 WRN [TG-Bootstrap] 列举 Telegram 账号失败: ERROR: relation "telegram_accounts" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=058636a974d6f902 traceID=8c7ca03a33f73d90068a88aa615d4ed6 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-8c7ca03a33f73d90068a88aa615d4ed6-058636a974d6f902-01
+2026-09-23T15:19:54+08:00 INF [Bill] 用户 1 确认报价行 "q_bill_read_1" 成交 ⇒ 账单 "b_1790147994718499000_2"（金额 369.99 CNY，新开） component=user-server
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=6 method=POST path=/api/bill request_body="{\"quote_row_id\":\"q_bill_read_1\"}" response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"id\":\"b_1790147994718499000_2\",\"quote_id\":\"QT-BILL-READ\",\"quote_row_id\":\"q_bill_read_1\",\"opportunity_id\":\"opp_bill_read\",\"amount\":369.99,\"currency\":\"CNY\",\"status\":\"open\",\"created_at\":\"2026-09-23T15:19:54.718499+08:00\",\"reused\":false}}" status=200 trace_id=8c7ca03a33f73d90068a88aa615d4ed6
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=022e7918f3589bfc traceID=50618f9e0a5c87fd0997af6839eabb8c traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-50618f9e0a5c87fd0997af6839eabb8c-022e7918f3589bfc-01
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=1 method=GET path=/api/bill/b_1790147994718499000_2 request_body= response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"bill_id\":\"b_1790147994718499000_2\",\"quote_id\":\"QT-BILL-READ\",\"quote_row_id\":\"q_bill_read_1\",\"opportunity_id\":\"opp_bill_read\",\"status\":\"open\",\"amount\":369.99,\"currency\":\"CNY\",\"settled\":0,\"outstanding\":369.99,\"oversettled\":false,\"payments\":[]}}" status=200 trace_id=50618f9e0a5c87fd0997af6839eabb8c
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=b925cc4044eed870 traceID=1454213680fef79e231f489f47619230 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-1454213680fef79e231f489f47619230-b925cc4044eed870-01
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=GET path=/api/bill/of-quote/QT-BILL-READ request_body= response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"count\":1,\"list\":[{\"bill_id\":\"b_1790147994718499000_2\",\"quote_id\":\"QT-BILL-READ\",\"quote_row_id\":\"q_bill_read_1\",\"opportunity_id\":\"opp_bill_read\",\"status\":\"open\",\"amount\":369.99,\"currency\":\"CNY\",\"settled\":0,\"outstanding\":369.99,\"oversettled\":false,\"payments\":[]}]}}" status=200 trace_id=1454213680fef79e231f489f47619230
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=261ec078204d57f0 traceID=4b7d274488c4bdb1e438b8bfc9858793 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-4b7d274488c4bdb1e438b8bfc9858793-261ec078204d57f0-01
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=GET path=/api/bill/b_1790147994718499000_2 request_body= response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"bill_id\":\"b_1790147994718499000_2\",\"quote_id\":\"QT-BILL-READ\",\"quote_row_id\":\"q_bill_read_1\",\"opportunity_id\":\"opp_bill_read\",\"status\":\"partial\",\"amount\":369.99,\"currency\":\"CNY\",\"settled\":200,\"outstanding\":169.99,\"oversettled\":false,\"payments\":[{\"id\":\"p_1790147994725687000_1\",\"bill_id\":\"b_1790147994718499000_2\",\"amount\":200,\"currency\":\"CNY\",\"paid_at\":\"2026-09-23T15:19:54.725687+08:00\",\"channel_ref\":\"ref-read-1\",\"status\":\"confirmed\",\"platform\":\"taobao\",\"order_id\":\"ord-ref-read-1\"}]}}" status=200 trace_id=4b7d274488c4bdb1e438b8bfc9858793
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=ad1fcadfc18437ce traceID=060773494837b6cd6b2c8c40e5c6d70e traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-060773494837b6cd6b2c8c40e5c6d70e-ad1fcadfc18437ce-01
+2026-09-23T15:19:54+08:00 INF api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=1 method=GET path=/api/bill/b_1790147994718499000_2 request_body= response_body="{\"code\":0,\"message\":\"ok\",\"data\":{\"bill_id\":\"b_1790147994718499000_2\",\"quote_id\":\"QT-BILL-READ\",\"quote_row_id\":\"q_bill_read_1\",\"opportunity_id\":\"opp_bill_read\",\"status\":\"paid\",\"amount\":369.99,\"currency\":\"CNY\",\"settled\":369.99,\"outstanding\":0,\"oversettled\":false,\"payments\":[{\"id\":\"p_1790147994725687000_1\",\"bill_id\":\"b_1790147994718499000_2\",\"amount\":200,\"currency\":\"CNY\",\"paid_at\":\"2026-09-23T15:19:54.725687+08:00\",\"channel_ref\":\"ref-read-1\",\"status\":\"confirmed\",\"platform\":\"taobao\",\"order_id\":\"ord-ref-read-1\"},{\"id\":\"p_1790147994732915000_2\",\"bill_id\":\"b_1790147994718499000_2\",\"amount\":169.99,\"currency\":\"CNY\",\"paid_at\":\"2026-09-23T15:19:54.732915+08:00\",\"channel_ref\":\"ref-read-2\",\"status\":\"confirmed\",\"platform\":\"taobao\",\"order_id\":\"ord-ref-read-2\"}]}}" status=200 trace_id=060773494837b6cd6b2c8c40e5c6d70e
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=08b010160063ff56 traceID=f6f6c2f56e9591ec7ace118d1b45e8bb traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-f6f6c2f56e9591ec7ace118d1b45e8bb-08b010160063ff56-01
+2026-09-23T15:19:54+08:00 WRN api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=GET path=/api/bill/b_does_not_exist request_body= response_body="{\"code\":\"NOT_FOUND_1002\",\"message\":\"payment: 目标账单不存在: b_does_not_exist\",\"data\":{\"reason\":\"not_found\"}}" status=404 trace_id=f6f6c2f56e9591ec7ace118d1b45e8bb
+2026-09-23T15:19:54+08:00 INF [TraceMW] DEBUG args component=user-server spanID=e4485edeb5b29035 traceID=833702a9b1707fcffe528c2ce7e79de4 traceID_len=32
+2026-09-23T15:19:54+08:00 INF [TraceMW] set traceparent component=user-server traceparent=00-833702a9b1707fcffe528c2ce7e79de4-e4485edeb5b29035-01
+2026-09-23T15:19:54+08:00 WRN api_interaction client_ip=192.0.2.1 component=user-server event=api_interaction latency_ms=0 method=GET path=/api/bill/b_1790147994718499000_2 request_body= response_body="{\"code\":\"UNAUTHORIZED_2001\",\"message\":\"未提供认证令牌\"}" status=401 trace_id=833702a9b1707fcffe528c2ce7e79de4
+--- PASS: TestBillRoutes_LiveReadSideThroughRealSetup (0.24s)
+FAIL
+FAIL	hivemtk-user/internal/router	1.626s
+FAIL

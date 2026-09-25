@@ -26,6 +26,41 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .workbuddy-ai/*
+# 例外：审计变异电池的逐格取证产物要能在仓库里找回（读数见 CHANNEL_INTEGRATION_AUDIT_2026-09 §23.19 第 1-补 段）。
+# 四条一组的写法是 gitignore 语义逼出来的：① 父目录被 `logs/` 排除时，对其内任何 `!` 规则都不生效，
+# 所以先放行 `logs` 本身；② 一放行，该树下**别的泳道/别的轮次**的目录（共享树现数 18 个，含 .txt/.md/bak/*.orig 残本）
+# 会一起变成可跟踪 ⇒ 再用 `logs/*` 把直接子项整体挡回；③ 逐个放行本泳道自己的轮次（**一对两轮次目录行，一放行一轮**；
+# 轮数这里刻意不写死：它随每批新轮次涨，写死必漂——本行原写"当前 10 轮"，而放行清单加到 `CIwiring` 时磁盘已是 11 轮，
+# 那个 10 就是这么过期的。要现数就 `grep -c '^!docs.*logs/[^*]*/$' .gitignore`，与 `ls docs/.../ledger/logs | wc -l` 对齐。
+# 加行仍按老规矩：新轮次由跑它的那一批自己加两行，本批不代签别人）；
+# ④ 最后按 `*.log` 放行格产物（白名单是"轮次目录"而不是后缀：这些目录内的非 .log 也会入库）。
+# 运行时日志（仓库任意其他 logs/ 目录与其他位置的 *.log）不受这四条影响。
+!docs/superpowers/specs/ledger/logs/
+docs/superpowers/specs/ledger/logs/*
+!docs/superpowers/specs/ledger/logs/R30/
+!docs/superpowers/specs/ledger/logs/R30/**/*.log
+!docs/superpowers/specs/ledger/logs/R28/
+!docs/superpowers/specs/ledger/logs/R28/**/*.log
+!docs/superpowers/specs/ledger/logs/B16ledger/
+!docs/superpowers/specs/ledger/logs/B16ledger/**/*.log
+!docs/superpowers/specs/ledger/logs/B16ledgerB/
+!docs/superpowers/specs/ledger/logs/B16ledgerB/**/*.log
+!docs/superpowers/specs/ledger/logs/B16ledgerC/
+!docs/superpowers/specs/ledger/logs/B16ledgerC/**/*.log
+!docs/superpowers/specs/ledger/logs/P503/
+!docs/superpowers/specs/ledger/logs/P503/**/*.log
+!docs/superpowers/specs/ledger/logs/P701/
+!docs/superpowers/specs/ledger/logs/P701/**/*.log
+!docs/superpowers/specs/ledger/logs/B17action/
+!docs/superpowers/specs/ledger/logs/B17action/**/*.log
+!docs/superpowers/specs/ledger/logs/R22/
+!docs/superpowers/specs/ledger/logs/R22/**/*.log
+!docs/superpowers/specs/ledger/logs/P702hook/
+!docs/superpowers/specs/ledger/logs/P702hook/**/*.log
+!docs/superpowers/specs/ledger/logs/CIwiring/
+!docs/superpowers/specs/ledger/logs/CIwiring/**/*.log
+!docs/superpowers/specs/ledger/logs/CapAB/
+!docs/superpowers/specs/ledger/logs/CapAB/**/*.log
 
 # ---------- 运行时产物（PID / 进程日志）----------
 .runtime/

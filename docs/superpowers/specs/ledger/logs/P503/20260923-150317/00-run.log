@@ -1,0 +1,41 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-ndgvwlat
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/P503/20260923-150317
+控制组[service] CLEAN rc=0 ran=26/26 skip=0 FAIL=[]
+控制组[router] CLEAN rc=0 ran=1/1 skip=0 FAIL=[]
+M1   幂等短路失效（重跑/恢复重投会二次外发）                                     杀掉 by TestReachSend_AlreadySentIsNotSentAgain｜共 1 条
+M2   内容空也去占用审批位并继续外发                                          杀掉 by TestReachSend_EmptyContentFailsBeforeApproval｜共 1 条
+M3   审批运行时未装配时判"完成且已批准"（处置从失败变成放行状）                           杀掉 by TestReachSend_ApprovalRuntimeUnwiredFailsClosed｜共 1 条
+M3b  真·fail-open：未装配时跳过整个审批腿并**照常发出去**                        杀掉 by TestReachSend_ApprovalRuntimeUnwiredFailsClosed｜共 1 条
+M4   外发服务未装配伪装成"正常跳过"                                         杀掉 by TestReachSend_SenderUnwiredFailsClosed｜共 1 条
+M5   审批结论这一关整个失效（任何结论都当作已批准往下走）                               杀掉 by TestReachSend_NonApprovedVerdictSendsNothing｜共 1 条
+M5b  只认 allowed 位不认状态位（把"拒了"读成放行）                             杀掉 by TestReachSend_NonApprovedVerdictSendsNothing｜共 1 条
+M6   没有结论时不去问门、也不挂起（直接按空结论处置）                                 杀掉 by TestReachSend_NoVerdictParksAndSendsNothing｜共 4 条
+M7   退订不再判跳过，落到 default 变成可重试失败                               杀掉 by TestReachSend_DoNotContactCustomerSendsNothing｜共 1 条
+M8   频控不再判跳过，落到 default 变成可重试失败                               杀掉 by TestReachSend_InsideCooldownSendsNothing｜共 1 条
+M9   发送前闸门拒绝落到 default ⇒ 回头重试再挂一次审批                           杀掉 by TestReachSend_PreSendGateDenialDoesNotRePark｜共 1 条
+M10  成功外发不写幂等键（重启后重投会二次发送）                                    杀掉 by TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath｜共 2 条
+M11  发出去的渠道不回显（事后查不到这次发到哪个渠道）                                 杀掉 by TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath｜共 1 条
+M12  图上的渠道偏好传不出去（选路自己漂回默认顺序）                                  杀掉 by TestReachSend_PreferredChannelReachesTheService｜共 1 条
+M13  点火后不把审批结论递回执行器（本卡新接的那一跳失效）                               杀掉 by TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce｜共 1 条
+M14  回读了结论但丢掉（同族的另一半：赋值那一侧）                                   杀掉 by TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce｜共 1 条
+M15  点火短路误伤外发节点（把 reach_send 当 wait 一样跳过）                     杀掉 by TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce｜共 1 条
+M16  节点类型没登记进受支持集合（图存不进去）                                     杀掉 by TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce｜共 2 条
+M17  执行器漏注册（图上这一步静默退化成 Noop=完成）                               杀掉 by TestReachSend_RegisteredInExecutorRegistry｜共 4 条
+P1   闸门判定键改从执行数据取（图里的一步可伪造归因键）                                杀掉 by TestReachSend_GateKeyComesFromCustomerRowNotExecutionData｜共 3 条
+X1   OneID 传参删掉（执行行没有 customer_id 时再也查不到人）                    杀掉 by TestReachSend_ResolvesIdentityFromOneIDWhenExecutionHasNoCustomerID｜共 1 条
+M18  装配点整行删掉（图上的外发从此永远"未装配"，service 用例一条不红）                   杀掉 by TestRouterWiresGatedSenderToSOPLane｜共 1 条
+M19  先借后装：sender 装在了闸门之前（借出去一个没装 W-1 门的实例）                    杀掉 by TestRouterWiresGatedSenderToSOPLane｜共 1 条
+M20  交给 SOP 侧的是**另一个**没装门的外发实例（发得出短信，只是门不在之路上）                杀掉 by TestRouterWiresGatedSenderToSOPLane｜共 1 条
+  [同族] M13 与 M14 杀掉的用例集合相同（1 条）
+  [同族] M13 与 M15 杀掉的用例集合相同（1 条）
+  [同族] M14 与 M15 杀掉的用例集合相同（1 条）
+  [同族] M18 与 M19 杀掉的用例集合相同（1 条）
+  [同族] M18 与 M20 杀掉的用例集合相同（1 条）
+  [同族] M19 与 M20 杀掉的用例集合相同（1 条）
+  [同族] M3 与 M3b 杀掉的用例集合相同（1 条）
+  [同族] M5 与 M5b 杀掉的用例集合相同（1 条）
+
+计数： KILLED=24 SURVIVED=0 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0
+全部格子已还原（逐文件 md5 与基线一致）
+
+===== 电池判定：24 格逐格核验，无未登记存活 =====

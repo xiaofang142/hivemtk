@@ -121,6 +121,17 @@ jobs:
       - name: check-action-runtime 用例（含真仓库基线自洽）
         run: bash scripts/check-action-runtime.test.sh
 
+      # 门接进 CI 的那道"接线门"：凡是被某个作业实际执行的 `scripts/check-*`，
+      # 它自己的脚本路径与从源码里派生出的判据文件（*.baseline / *.registry）都必须
+      # 出现在该工作流的 on.push.paths / on.pull_request.paths 里 —— 缺一行就等于
+      # "改判据不重跑这道门"（platform docs-link-check.yml 的旧坑，本仓 §23.16 第 5 条）。
+      # 本作业自身没有 paths 过滤（每次 push 都跑），所以它守的是别的作业的触发面。
+      - name: 门的触发面覆盖（paths 必须含门脚本与其基线）
+        run: python3 scripts/check-ci-gate-paths.py --repo .
+
+      - name: check-ci-gate-paths 用例（假仓库夹具，不联网）
+        run: bash scripts/check-ci-gate-paths.test.sh
+
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
   # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。

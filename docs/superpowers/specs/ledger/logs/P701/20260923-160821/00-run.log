@@ -1,0 +1,108 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-r902ov1c
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/P701/20260923-160821
+基线字节：克隆 HEAD `f8d83b59`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次
+控制组[app] CLEAN rc=0 ran=3 PASS=3 skip=0 FAIL=[]
+控制组[ctrl] CLEAN rc=0 ran=24 PASS=24 skip=0 FAIL=[]
+控制组[db] CLEAN rc=0 ran=7 PASS=7 skip=0 FAIL=[]
+控制组[gate] CLEAN rc=0
+控制组[model] CLEAN rc=0 ran=13 PASS=13 skip=0 FAIL=[]
+控制组[repo] CLEAN rc=0 ran=16 PASS=16 skip=0 FAIL=[]
+控制组[route] CLEAN rc=0 ran=11 PASS=11 skip=0 FAIL=[]
+控制组[svc] CLEAN rc=0 ran=18 PASS=18 skip=0 FAIL=[]
+K01   状态值域少一格（voided 掉出去 ⇒ 人工收口无处表达）                               KILLED ran=13 FAIL=1 rc=1
+K03   BillStatusKnown 放行一切（值域校验失守）                                 KILLED ran=13 FAIL=1 rc=1
+K04   版本行键的唯一索引退化成普通索引（AC① 的库级保证没了）                                KILLED ran=13 FAIL=1 rc=1
+K06   金额列量程从 numeric(14,2) 漂到 (12,2)（与报价行不再同型）                     RED-UNNAMED ran=13 FAIL=1 rc=1
+K07   账期列做成非空（零值会被逾期扫描读成「早过期几千年」）                                  KILLED ran=13 FAIL=1 rc=1
+K08   json 名漂成驼峰（对外契约与列名分家）                                        KILLED ran=13 FAIL=1 rc=1
+K09   跃迁表少一条边（open 不能再作废）                                          KILLED ran=13 FAIL=1 rc=1
+K10   终态开出出边（作废能回退 = 被收口的历史行被人盖掉）                                  KILLED ran=13 FAIL=1 rc=1
+K20   bills 没登记进 allModels()（表没建、代码全对）                             KILLED ran=7 FAIL=2 rc=1
+K21   唯一索引改了名（仓储按名分幂等 ⇒ 认错人）                                       KILLED ran=7 FAIL=1 rc=1
+K22   唯一索引建到商机列上（幂等键成了「一张商机一张账单」）                                  KILLED ran=7 FAIL=1 rc=1
+K23   金额量程漂到 numeric(16,2)（库侧读到的是另一个量程）                            KILLED ran=7 FAIL=1 rc=1
+K24   账单号列型改成 varchar(64)（与 quotes.id 的 text 不同型）                  KILLED ran=7 FAIL=1 rc=1
+K30   nil 句柄报告 Available()=true（装配回显说谎）                            RED-UNNAMED ran=4 FAIL=1 rc=1
+K31   23505 只看 SQLSTATE 不看索引名（主键冲突被读成「已派生过」）                       KILLED ran=16 FAIL=1 rc=1
+K32   幂等键的索引名与模型标签不同源                                              KILLED ran=16 FAIL=2 rc=1
+K33   状态跃迁丢掉 WHERE 里的状态条件（CAS 退化成无条件改写）                            KILLED ran=16 FAIL=1 rc=1
+K34   起点过期被报成「行不存在」（两个假供词之一）                                       KILLED ran=16 FAIL=1 rc=1
+K35   Create 不再校验状态值域（库里没有 CHECK，这唯一的落点也没了）                        KILLED ran=16 FAIL=1 rc=1
+K36   空 quote_row_id 放行（幂等键为空 ⇒「派没派生过」没有答案）                        KILLED ran=16 FAIL=1 rc=1
+K37   读不到行报成 error（「没有这张单」与「查不了」分家失败）                              KILLED ran=16 FAIL=1 rc=1
+K38   库故障读成「还没有账单」（一次抖动就能长出两张应收）                                   RED-UNNAMED ran=16 FAIL=1 rc=1
+K39   接口上多出一条 Delete（凭证表有了抹掉历史的路）                                  KILLED ran=16 FAIL=1 rc=1
+K40a  Available 不看报价存储（半装配报告「能派生」）                                 KILLED ran=18 FAIL=1 rc=1
+K40b  Available 不看账单存储（另一半各拆一刀）                                    KILLED ran=18 FAIL=1 rc=1
+K41   状态白名单失效（draft/rejected 也能开应收）                                KILLED ran=18 FAIL=1 rc=1
+K43   链位判据的结果丢掉（读了整条链但不据此拦）                                        KILLED ran=18 FAIL=2 rc=1
+K44   链位判据本体失效（同一格的两层各拆一刀）                                         KILLED ran=18 FAIL=1 rc=1
+K45   链上只留一次成交这条判据摘掉（一张报价单长出两张应收）                                  KILLED ran=18 FAIL=1 rc=1
+K46   没有行项目也照开（合计 0.00 的「应收」）                                      KILLED ran=18 FAIL=1 rc=1
+K47   跃迁失败继续插账单（顺序那一段的判据）                                          KILLED ran=18 FAIL=1 rc=1
+K48   金额只取第一行（AC② 的算法被换成「部分合计」）                                    KILLED ran=18 FAIL=1 rc=1
+K49   币种不看报价行、恒用默认值                                                KILLED ran=18 FAIL=1 rc=1
+K50   凭空造账期（报价域里没有「付款条件」这一格，造出来的是合同条款）                             KILLED ran=18 FAIL=1 rc=1
+K51   并发撞上「已派生」之后回读的是自己那份                                          KILLED ran=18 FAIL=1 rc=1
+K52   写完不回读、直接拿内存那份出视图（numeric 落库后是什么没人知道）                         KILLED ran=18 FAIL=1 rc=1
+K53   空行号不做入参校验（报成「不存在」，把人支去查数据）                                   KILLED ran=18 FAIL=1 rc=1
+K54   账单号丢掉 seq（同一纳秒内两次生成撞号）                                       KILLED ran=18 FAIL=2 rc=1
+K55   账单号里带日期串（时区裂脑那条老账在这把键上重演）                                    KILLED ran=18 FAIL=1 rc=1
+K56   入参结构多带一格 amount（AC② 当场失去对账对象）                                KILLED ran=18 FAIL=1 rc=1
+K57   派生腿的存储接口多一个写状态的方法（「顺手标成已收」有了入口）                              KILLED ran=18 FAIL=1 rc=1
+K58   重入复用那一支把 Reused 报成 false（新开与早就在了分不开）                         KILLED ran=18 FAIL=3 rc=1
+K59   未装配时不做前置门（一路走到 nil 存储上）                                      KILLED ran=18 FAIL=1 rc=1
+K60   绑定改成宽容模式（递进来的金额被静默丢掉）                                        KILLED ran=24 FAIL=1 rc=1
+K61   请求体不封顶                                                       KILLED ran=24 FAIL=1 rc=1
+K62   不再要求操作者身份                                                    KILLED ran=24 FAIL=1 rc=1
+K63   两种 409 共用一个 reason（修法不同却读起来一样）                               KILLED ran=24 FAIL=1 rc=1
+K64   500 透出底层错误串（索引名与 SQL 片段外泄）                                   KILLED ran=24 FAIL=1 rc=1
+K65   空结果当成功回 200（实现漂了没人知道）                                        KILLED ran=24 FAIL=1 rc=1
+K66   行号长度不封顶（回显与下游宽度失去界）                                          KILLED ran=24 FAIL=1 rc=1
+K67   空行号不做边界校验                                                    KILLED ran=24 FAIL=1 rc=1
+K68   Available 不再问服务本身（闸门说谎）                                      KILLED ran=24 FAIL=1 rc=1
+K69   报价不存在报成 400（换行号这件事没有入口）                                      KILLED ran=24 FAIL=2 rc=1
+K70   status_stuck 那一档落进 default（五种 409 少一种）                       KILLED ran=24 FAIL=1 rc=1
+K71   状态码轴与 reason 轴之外：未装配回 404 而不是 503                            KILLED ran=24 FAIL=5 rc=1
+K72   派生腿的接缝多开一个读口（控制器能查账单了）                                       KILLED ran=0 FAIL=1 rc=1
+K80   无库时不清全局（端点继续对着上一份实例回 200）                                    KILLED ran=3 FAIL=1 rc=1
+K81   报价句柄取全局隐式句柄（装配顺序决定一切）                                        KILLED ran=3 FAIL=2 rc=1
+K82   建好了服务却没登记进全局                                                 KILLED ran=3 FAIL=3 rc=1
+K83   两把仓储句柄都没接（Available 为假而路由照挂）                                 KILLED ran=3 FAIL=3 rc=1
+K90   启动路径上整条不挂（库里有账单而前端 404）                                      KILLED ran=11 FAIL=4 rc=1
+K91   挂到了匿名组（任何人都能在任意报价上开应收）                                       KILLED ran=11 FAIL=3 rc=1
+K95   router 里那一行 Init 删掉（端点恒 503 而 Go 用例分不清）                      KILLED ran=11 FAIL=3 rc=1
+K92   未装配时干脆不挂路由（「底座没装」与「API 不存在」混成一件事）                            RED-UNNAMED ran=11 FAIL=1 rc=1
+K93   路由文件里内联一个读口（映射之外的第二处响应）                                      RED-UNNAMED ran=11 FAIL=2 rc=1
+K94   Swagger 的 @Router 路径写错（契约与真实端点分家）                            KILLED ran=11 FAIL=1 rc=1
+G1    台账 23c：摘掉 router 里的 Init，门必须报漂移                              KILLED ran=1 FAIL=1 rc=1
+G2    台账 23d：摘掉 mount，门必须报漂移                                       KILLED ran=1 FAIL=1 rc=1
+G3    台账 23a：internal/app 两处 WithDB 构造点全摘，门必须报漂移                   SURVIVED ran=1 FAIL=0 rc=0
+G4    台账 23e 正向：拆掉 payment.go 的跃迁调用，门必须报「接线被拆掉」                    KILLED ran=1 FAIL=1 rc=1
+G5    台账 23b：造行改用局部类型别名（callpat 会因改名而瞎），门必须报漂移                     KILLED ran=1 FAIL=1 rc=1
+  [同族] K01 与 K03 杀掉的用例集合相同（1 条）
+  [同族] K06 与 K07 杀掉的用例集合相同（1 条）
+  [同族] K09 与 K10 杀掉的用例集合相同（1 条）
+  [同族] K21 与 K22 杀掉的用例集合相同（1 条）
+  [同族] K33 与 K34 杀掉的用例集合相同（1 条）
+  [同族] K40a 与 K40b 杀掉的用例集合相同（1 条）
+  [同族] K40a 与 K53 杀掉的用例集合相同（1 条）
+  [同族] K40a 与 K59 杀掉的用例集合相同（1 条）
+  [同族] K40b 与 K53 杀掉的用例集合相同（1 条）
+  [同族] K40b 与 K59 杀掉的用例集合相同（1 条）
+  [同族] K53 与 K59 杀掉的用例集合相同（1 条）
+  [同族] K63 与 K70 杀掉的用例集合相同（1 条）
+  [同族] K82 与 K83 杀掉的用例集合相同（3 条）
+  [同族] K91 与 K95 杀掉的用例集合相同（3 条）
+
+计数： KILLED=65 SURVIVED=1 RED-UNNAMED=5 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=71
+全部格子已还原（逐文件 md5 与基线一致）
+
+===== 电池判定：有洞 =====
+  ✗ K06 红了但没点出 TestBillKeyColumnWidths：['TestBillSchemaShape']
+  ✗ K30 计数不平：顶层 PASS=3 + FAIL=1 ≠ 控制组的 16（有用例被 panic 带走，或压根没参与这一趟）
+  ✗ K30 红了但没点出 TestBillRepository_NilHandleFailsLoudly：['TestBillRepository_ScanOverdueFailureIsNotEmptyResult']
+  ✗ K38 红了但没点出 TestBillRepository_ReadsDistinguishMissingFromFailure：['TestBillRepository_ReadFailureIsNotMissingRead']
+  ✗ K92 红了但没点出 TestBillRoutes_UnassembledAnswersFiveOhThree：['TestBillRoutes_UnassembledStillMountsRoute']
+  ✗ K93 红了但没点出 TestBillRoutes_TableIsExactlyTheDeclaredSet：['TestBillRoutes_RouterFileHasNoInlineHandler', 'TestBillRoutes_UnassembledStillMountsRoute']
+  ✗ G3 存活 = 洞：台账 23a：internal/app 两处 WithDB 构造点全摘，门必须报漂移

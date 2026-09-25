@@ -58,11 +58,35 @@ type smsService struct {
 
 	// unsubSvc 退订查询的注入位；nil 时沿用包级单例（见 unsub()）。
 	unsubSvc *SmsUnsubscribeService
+
+	// 三家网关的接口域。生产由 NewSmsService 填官方常量；测试指向本地 httptest／关掉的端口。
+	//
+	// 为什么是字段而不是包级注入点：本仓已有的三处 URL 覆盖量（dingtalkOpenAPIBase、
+	// tgAPIBaseOverride、dyAPIBaseOverride）都是包级全局，于是各要一把 RWMutex、两扇
+	// accessor、一行 seam-guard 注册表和一条 -race 腿（第四十三轮 R28 的账）才敢被异步链读到。
+	// 短信这三条腿只在请求协程里同步用，跟着实例走既省掉那套机制，也不会让一个用例的桩
+	// 活到下一个用例里去。
+	aliyunAPIURL  string
+	tencentAPIURL string
+	huaweiAPIURL  string
 }
+
+// 三家短信网关的官方接口域（生产默认值）。
+const (
+	smsAliyunAPIURL  = "https://dysmsapi.aliyuncs.com/"
+	smsTencentAPIURL = "https://sms.tencentcloudapi.com/"
+	// 华为的域里带区域段，与 sendHuawei 旧写法一致取 cn-north-4。
+	smsHuaweiAPIURL = "https://smsapi.cn-north-4.boe-business.huaweicloud.com:443/sms/batchSendSms/v1"
+)
 
 // NewSmsService 创建短信服务
 func NewSmsService(repo repository.SmsRepository) SmsService {
-	return &smsService{repo: repo}
+	return &smsService{
+		repo:          repo,
+		aliyunAPIURL:  smsAliyunAPIURL,
+		tencentAPIURL: smsTencentAPIURL,
+		huaweiAPIURL:  smsHuaweiAPIURL,
+	}
 }
 
 var smsPhoneRe = regexp.MustCompile(`^\+?[1-9]\d{6,14}$`)
@@ -275,17 +299,38 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 	return s.repo.UpdateSmsRecord(ctx, record)
 }
 
+// smsErrCodeUnspecified 是"渠道失败了但没给出错误码"时落到台账上的占位码。
+// 它不进 sms_retryable_error_prefixes，因此不会被 RetryFailedMessages 认成可重试；
+// 存在的意义只是让那一行"failed"在页面与导出里不再是空白。
+const smsErrCodeUnspecified = "unspecified_error"
+
 func (s *smsService) dispatchToProvider(ctx context.Context, phone, content, provider string) (time.Time, string, string, error) {
+	var sentTime time.Time
+	var errCode, errMsg string
+	var err error
 	switch provider {
 	case "aliyun":
-		return s.sendAliyun(ctx, phone, content)
+		sentTime, errCode, errMsg, err = s.sendAliyun(ctx, phone, content)
 	case "tencent":
-		return s.sendTencent(ctx, phone, content)
+		sentTime, errCode, errMsg, err = s.sendTencent(ctx, phone, content)
 	case "huawei":
-		return s.sendHuawei(ctx, phone, content)
+		sentTime, errCode, errMsg, err = s.sendHuawei(ctx, phone, content)
 	default:
-		return time.Time{}, "", "", fmt.Errorf("unknown sms provider: %s", provider)
+		err = fmt.Errorf("unknown sms provider: %s", provider)
 	}
+	// 三家网关在"连不上""回包解不开"这类分支上把 code/msg 交回空串，而两个调用方都是
+	// record.ErrorCode = errCode / record.ErrorMsg = errMsg 直接落账 ⇒ 台账上出现
+	// "status=failed、原因一片空白"的一行，真实原因此时只活在这条调用的返回值里。
+	// 空串在这里补成错误本身，别让它带着空白进台账。
+	if err != nil {
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		if errCode == "" {
+			errCode = smsErrCodeUnspecified
+		}
+	}
+	return sentTime, errCode, errMsg, err
 }
 
 func (s *smsService) sendAliyun(ctx context.Context, phone, content string) (time.Time, string, string, error) {
@@ -297,7 +342,7 @@ func (s *smsService) sendAliyun(ctx context.Context, phone, content string) (tim
 		return time.Time{}, "", "", errors.New("aliyun sms config missing")
 	}
 
-	apiURL := "https://dysmsapi.aliyuncs.com/"
+	apiURL := s.aliyunAPIURL
 
 	params := url.Values{}
 	params.Set("PhoneNumbers", phone)
@@ -369,7 +414,9 @@ func (s *smsService) sendTencent(ctx context.Context, phone, content string) (ti
 	}
 
 	apiHost := "sms.tencentcloudapi.com"
-	apiURL := "https://" + apiHost + "/"
+	// 签名与 Host 头按官方域算（apiHost），实际请求发往 s.tencentAPIURL —— 测试把它指向本地服务时，
+	// 签名串保持官方形状，被替换的只有"发给谁"。
+	apiURL := s.tencentAPIURL
 	service := "sms"
 	version := "2021-01-11"
 	action := "SendSms"
@@ -451,8 +498,7 @@ func (s *smsService) sendHuawei(ctx context.Context, phone, content string) (tim
 		return time.Time{}, "", "", errors.New("huawei sms config missing")
 	}
 
-	apiURL := fmt.Sprintf("https://smsapi.%s.boe-business.huaweicloud.com:443/sms/batchSendSms/v1",
-		"cn-north-4")
+	apiURL := s.huaweiAPIURL
 
 	body := map[string]any{
 		"from":          cfg.Sender,

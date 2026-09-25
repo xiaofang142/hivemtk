@@ -209,6 +209,35 @@ func TestE2E_Telegram_AccountCreateAndGet(t *testing.T) {
 	db := setupChannelFullDB(t)
 	svc := NewTelegramService(db)
 
+	// CreateAccount 名下有两条真实出站的腿：取 bot_username 的 getMe、注册回调的 setWebhook。
+	// 本用例断言的只有"账号落库、取回、密钥读得出来"，两条腿一律换成报错替身。
+	//
+	// 修复前实测（本机 8232，HTTPS_PROXY 指向一次性 CONNECT 记录代理 /tmp/r44_egress_recorder.py）：
+	// 单独跑本用例会向 api.telegram.org:443 发出 **2 次**连接，而测试日志里只有 setWebhook
+	// 那一条（`TG SetWebhook 失败 … proxyconnect`＋`[TG] 账号 1(测试TG) 异步 setWebhook 失败`
+	// 两行同属一次尝试）——getMe 的错误在 :440 被 `if gerr == nil` 吞掉，一个字都不打印。
+	// ⇒ 拿日志行当出站仪表会把 2 次真实往返读成 1 次，"日志里没有"不等于"没发出去"。
+	//
+	// 计数走 channel 而不是计数器：setWebhook 那条腿在 utils.SafeGo 起的协程里跑，
+	// 与测试协程并发，裸计数器会被 -race 判竞争。
+	egressHits := make(chan string, 4)
+	pGetUsername, pSetWebhook := tgGetBotUsernameFn, tgSetWebhookFn
+	t.Cleanup(func() { tgGetBotUsernameFn, tgSetWebhookFn = pGetUsername, pSetWebhook })
+	tgGetBotUsernameFn = func(string) (string, error) {
+		select {
+		case egressHits <- "getMe":
+		default:
+		}
+		return "", fmt.Errorf("e2e: 建号用例不发起真实 getMe")
+	}
+	tgSetWebhookFn = func(_, _, _ string) error {
+		select {
+		case egressHits <- "setWebhook":
+		default:
+		}
+		return fmt.Errorf("e2e: 建号用例不发起真实 setWebhook")
+	}
+
 	acc := &model.TelegramAccount{
 		AccountName:    "测试TG",
 		BotToken:       "123:abcdef",
@@ -238,6 +267,24 @@ func TestE2E_Telegram_AccountCreateAndGet(t *testing.T) {
 	}
 	if bt != "123:abcdef" || ws != "sec1" {
 		t.Errorf("secrets mismatch: %s/%s", bt, ws)
+	}
+
+	// 两条腿各自真的被走到 ⇒ "零真实出站"不是"根本没进这两条分支"的另一种写法。
+	// setWebhook 在协程里，所以要轮询到有截止；getMe 是同步的，此刻已在袋里。
+	seen := map[string]bool{}
+	deadline := time.Now().Add(15 * time.Second)
+	for len(seen) < 2 && time.Now().Before(deadline) {
+		select {
+		case name := <-egressHits:
+			seen[name] = true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if !seen["getMe"] {
+		t.Error("getMe 腿没被走到：BotUsername 自动获取那一步（feishu.go 的 CreateAccount 第 2 步）没执行，本用例并没有覆盖它")
+	}
+	if !seen["setWebhook"] {
+		t.Error("setWebhook 腿没被走到：WebhookURL 已给定的分支（CreateAccount 第 6 步）没执行，本用例并没有覆盖它")
 	}
 }
 

@@ -1,0 +1,28 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-ci1_e4v1
+
+[JS] 控制组 rc=0 passed=18 skipped=0 红名=[]
+M1   第 1 份 stable（injClick）到点装死：deadline 到期把最后一帧当结算             杀掉      pass=0 skip=0 ｜ 永远在动的元素：一帧坐标都不许下发，红因点名 unstable | stable 必须在远小于 15s 注入竞速窗的时间内给出结论
+M2   第 2 份 stable（injClickNear）同一处装死                            杀掉      pass=0 skip=0 ｜ click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick） | unstable 判据在三处 probe 里各出现一次
+M3   第 3 份 stable（injPostCommentSend 提交点）同一处装死                  杀掉      pass=0 skip=0 ｜ comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严） | unstable 判据在三处 probe 里各出现一次
+M4   click 分支整条点后复核删掉（写步不再认身份）                                  杀掉      pass=0 skip=0 ｜ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次** | 点完之后目标消失（selector 解析不到）→ element_moved
+M5   复核失败改回「当成 CDP 不可用 → DOM 兜底再点一次」（本批立的形状）                    杀掉      pass=0 skip=0 ｜ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次** | 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）
+M6   复核跑不动时静默 ok（未知态冒充成功）                                       杀掉      pass=0 skip=0 ｜ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次** | 点完之后目标消失（selector 解析不到）→ element_moved
+M7   复核容差放大到 1e9 px（等于只查 selector 解不解析）                         杀掉      pass=0 skip=0 ｜ 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）
+M8   去掉 navigated 跳过（把跳转误判成元素挪位）                                杀掉      pass=0 skip=0 ｜ 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动
+M9   只读步也强制复核（拿读步的时延预算替写步买单）                                    杀掉      pass=0 skip=0 ｜ 读步（不带 verify_identity）不付这次额外注入
+M10  click_near 分支的复核单独断线（第二个消费点）                               杀掉      pass=0 skip=0 ｜ click_near 的写步同样复核（第二个消费点：锚点+文本现算的定位也要能再解析回去）
+M11  SW 侧 dispatch 合成一句 *_not_interactable（拆掉 Go 判「从未派发」的前提）    杀掉      pass=0 skip=0 ｜ click_near 的写步同样复核（第二个消费点：锚点+文本现算的定位也要能再解析回去） | SW 侧 dispatch 一段里不许出现 *_not_interactable（Go 判「从未派发」的前提）
+[JS] 已全量还原（md5 一致）
+
+[Go] 控制组 rc=0 ran=15 skip=0 FAIL=[]
+G1   hand.go click 帧不再请求点后复核（复核在 Go 侧断线）                        杀掉      ran=15 skip=0 ｜ TestWriteClickFrameRequestsIdentityRecheck
+G2   executor.go click 的 is_write 传成死 false（判据不再喂给复核）           杀掉      ran=15 skip=0 ｜ TestWriteClickFrameRequestsIdentityRecheck
+G3   executor.go click 结果不再记 identity_checked（跑没跑过查不到）          杀掉      ran=15 skip=0 ｜ TestClickResultRecordsIdentityChecked | TestClickResultRecordsIdentityChecked/扩展报复核过
+G4   write_ledger.go 把 element_moved 判成「从未发生」（挪了家却记成没动过）        杀掉      ran=15 skip=0 ｜ TestElementMovedWriteClickRecordsAttempt
+G5   hand.go click_near 帧不再请求复核（第二个消费点单独断线）                     杀掉      ran=15 skip=0 ｜ TestClickNearIdentityRecheckFollowsWriteGate | TestClickNearIdentityRecheckFollowsWriteGate/带平台发送文案=写步要复核
+G6   executor.go click_near 的 is_write 传成死 false                杀掉      ran=15 skip=0 ｜ TestClickNearIdentityRecheckFollowsWriteGate | TestClickNearIdentityRecheckFollowsWriteGate/带平台发送文案=写步要复核
+G7   派发前拒绝（*_not_interactable）重新被记成提交尝试（闸门误伤回来了）                杀掉      ran=15 skip=0 ｜ TestPreDispatchRefusalRecordsNoAttempt | TestPreDispatchRefusalRecordsNoAttempt/stable_拦下（批17_新增）
+  [Go] 同族：G1 与 G2 杀掉的用例集合相同（1 条）
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：JS 11 格 + Go 7 格 逐格被杀，无存活 =====

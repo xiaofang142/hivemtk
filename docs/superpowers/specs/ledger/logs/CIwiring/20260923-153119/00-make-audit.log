@@ -1,0 +1,883 @@
+# make audit 于已推尖端 f4da0192afc1f18ebd330c833aff37fa1a6f544a
+# 树=/tmp/r45-reland-153119（--shared 干净克隆，脏条须 0）
+# 起=2026-09-23 15:31:21
+── 前后端 API 契约（UNMATCHED 必须为 0，且不得出现通配 key）──
+backend routes: 1963, unresolved: 5
+   UNRESOLVED: ('GET', '<UNRESOLVED:authed>/email/track/jobs/:id/events')
+   UNRESOLVED: ('GET', '<UNRESOLVED:authed>/email/track/jobs/:id/metrics')
+   UNRESOLVED: ('GET', '<UNRESOLVED:authed>/email/track/metrics')
+   UNRESOLVED: ('GET', '<UNRESOLVED:engine>/api/browser/host-ws')
+   UNRESOLVED: ('GET', '<UNRESOLVED:engine>/ws/chat')
+
+=== UNMATCHED (frontend -> no backend): 0 / 985 ===
+
+=== BACKEND NOT CALLED BY FRONTEND (candidates): 774 ===
+DELETE  /api/:id
+DELETE  /api/account/:id
+DELETE  /api/accounts/:id
+DELETE  /api/accounts/delete/:id
+DELETE  /api/agent-kb-bindings
+DELETE  /api/ai-content/:id
+DELETE  /api/ai-tools/backups/:id
+DELETE  /api/ai/history/:id
+DELETE  /api/ai/templates/:id
+DELETE  /api/alerts/rules/:id
+DELETE  /api/automation-rules/:id
+DELETE  /api/clue/:id
+DELETE  /api/clues/:id
+DELETE  /api/community/members/:id
+DELETE  /api/customer-events/customer/:customer_id
+DELETE  /api/customer-sessions/:id/snooze
+DELETE  /api/customer/:id/tags/:tag
+DELETE  /api/dashboard-screens/:id
+DELETE  /api/dnc/:one_id
+DELETE  /api/douyin-card/:id
+DELETE  /api/douyin-cards/:id
+DELETE  /api/drafts/:id
+DELETE  /api/email/lists/:id
+DELETE  /api/email/smtps/:id
+DELETE  /api/feature-flags/:id
+DELETE  /api/jobs/:id
+DELETE  /api/kuaishou-card/:id
+DELETE  /api/kuaishou-cards/:id
+DELETE  /api/live-code/:id
+DELETE  /api/live-code/:id/qr-codes/:qr_id
+DELETE  /api/live-codes/:id
+DELETE  /api/manage/rules/:id
+DELETE  /api/material-library/:id
+DELETE  /api/models/:name
+DELETE  /api/obs-configs/:id
+DELETE  /api/prompts/:id
+DELETE  /api/prompts/events/customer/:id
+DELETE  /api/prompts/groups/:id
+DELETE  /api/prompts/history/:id
+DELETE  /api/prompts/integrations/:id
+DELETE  /api/prompts/members/:id
+DELETE  /api/prompts/rule/:id
+DELETE  /api/prompts/templates/:id
+DELETE  /api/quick-reply/folders/:id
+DELETE  /api/rag-product-configs/:id
+DELETE  /api/rag/documents/:id
+DELETE  /api/reach-pipelines/:id
+DELETE  /api/saved-views/:id
+DELETE  /api/script-templates/:id
+DELETE  /api/short-link/:id
+DELETE  /api/short-links/:id
+DELETE  /api/sms/drafts/:id
+DELETE  /api/sms/jobs/:id
+DELETE  /api/sms/unsubscribe/:phone
+DELETE  /api/sop-agents/:id
+DELETE  /api/system/permissions/:id
+DELETE  /api/templates/:id
+DELETE  /api/tiktok-cards/:id
+DELETE  /api/user/:id
+DELETE  /api/wechat/accounts/:id
+DELETE  /api/wecom/:channel_id
+DELETE  /api/xianyu-card/:id
+DELETE  /api/xianyu-cards/:id
+DELETE  /api/xiaohongshu-card/:id
+DELETE  /api/xiaohongshu-cards/:id
+GET     /api/ab-experiments/:id/results-with-reach
+GET     /api/account/:id
+GET     /api/account/list
+GET     /api/accounts/list
+GET     /api/admin/config
+GET     /api/agent-attribution/performance
+GET     /api/agent-kb-bindings/agent/:aid
+GET     /api/agent-kb-bindings/kb/:kid
+GET     /api/agent-statuses
+GET     /api/agent-statuses/:id
+GET     /api/agent-statuses/:id/sessions
+GET     /api/agent-statuses/available
+GET     /api/agent-statuses/list
+GET     /api/agent-statuses/online
+GET     /api/agent/co-pilot/config
+GET     /api/agent/order-drafts/stats
+GET     /api/agent/settings
+GET     /api/agent/tool-integrations
+GET     /api/agent/tools/approval
+GET     /api/agent/tools/audit
+GET     /api/agent/tools/circuit
+GET     /api/agent/tools/cost
+GET     /api/agent/tools/get
+GET     /api/agent/tools/list
+GET     /api/agent/tools/providers
+GET     /api/agent/tools/reach-gate
+GET     /api/agent/tools/risk
+GET     /api/agent/tools/stats
+GET     /api/ai-content/:id
+GET     /api/ai-content/history
+GET     /api/ai-content/list
+GET     /api/ai-content/templates
+GET     /api/ai-content/templates/:id
+GET     /api/ai-suggestions
+GET     /api/ai-tools/restore/last
+GET     /api/ai-tools/restore/list
+GET     /api/ai/history
+GET     /api/ai/history/:id
+GET     /api/ai/template-types
+GET     /api/ai/templates
+GET     /api/ai/templates/:id
+GET     /api/alerts/histories
+GET     /api/alerts/rules
+GET     /api/alerts/rules/:id
+GET     /api/analytics/ai-productivity
+GET     /api/analytics/ai-productivity/trend
+GET     /api/analytics/funnel
+GET     /api/analytics/funnel/stage
+GET     /api/app-config
+GET     /api/auth/anomaly/alerts
+GET     /api/auth/anomaly/login-events
+GET     /api/auth/login-events
+GET     /api/auth/mfa/status
+GET     /api/auth/notifications/unread-count
+GET     /api/auth/password-policy
+GET     /api/auth/security-alerts
+GET     /api/automation-rules
+GET     /api/backup/strategy
+GET     /api/batch-operations
+GET     /api/batch-operations/list
+GET     /api/bill/:id
+GET     /api/bill/of-quote/:quote_id
+GET     /api/card-stats/:platform/overall
+GET     /api/card-stats/:platform/stats/:id
+GET     /api/channels/customer/:customer_id
+GET     /api/channels/overview
+GET     /api/chat/typing-predict/sse
+GET     /api/churn-prediction/list
+GET     /api/churn-prediction/risk-distribution
+GET     /api/churn-prediction/unhandled-warnings
+GET     /api/churn/high-risk-users
+GET     /api/churn/model-config
+GET     /api/churn/predictions
+GET     /api/churn/statistics
+GET     /api/churn/warnings
+GET     /api/clue-statistics/overview
+GET     /api/clue/list
+GET     /api/clue/score/:clue_id
+GET     /api/clue/score/list
+GET     /api/clue/statistics
+GET     /api/clues
+GET     /api/clues/import
+GET     /api/clues/type
+GET     /api/community/members/:id
+GET     /api/conversion-funnel
+GET     /api/conversion-funnel/list
+GET     /api/conversion-funnel/stage
+GET     /api/conversion-funnels/list
+GET     /api/custom-reports/:id/export
+GET     /api/customer-360/messages
+GET     /api/customer-events
+GET     /api/customer-events/customer/:customer_id
+GET     /api/customer-events/stats
+GET     /api/customer-journey/dashboard
+GET     /api/customer-rfm/:customer_id
+GET     /api/customer-rfm/distribution
+GET     /api/customer-rfm/list
+GET     /api/customer-service-agents/:id
+GET     /api/customer-service-agents/by-agent/:agent_id
+GET     /api/customer-service/agent-status-board
+GET     /api/customer-service/agents
+GET     /api/customer-service/ai-suggestions
+GET     /api/customer-service/capacity
+GET     /api/customer-service/queue
+GET     /api/customer-sessions/:id/ai-summary
+GET     /api/customer-sessions/:id/transcript
+GET     /api/customer-sessions/list
+GET     /api/customer-sessions/pending
+GET     /api/customer-tags
+GET     /api/customer/360/:id
+GET     /api/customer/:id
+GET     /api/customer/:id/behaviors
+GET     /api/customer/:id/communications
+GET     /api/customer/list
+GET     /api/customer/session/:id/messages
+GET     /api/customer/session/list
+GET     /api/dashboard-screen
+GET     /api/dashboard-screen/list
+GET     /api/dashboard-screens
+GET     /api/dashboard-screens/:id
+GET     /api/dashboard-screens/:id/activities
+GET     /api/dashboard-screens/:id/data
+GET     /api/dashboard-screens/list
+GET     /api/dashboard/clients
+GET     /api/dashboard/sse
+GET     /api/dashboard/stats
+GET     /api/dashboard/topics
+GET     /api/dialogue-memories
+GET     /api/dialogue-memories/:customer_id
+GET     /api/dialogue-memories/context
+GET     /api/dialogue-memories/list
+GET     /api/dialogue-memories/long
+GET     /api/dialogue-memories/short
+GET     /api/dialogue-memories/stats
+GET     /api/dnc
+GET     /api/dnc/:one_id/blocked
+GET     /api/domain-pool/list
+GET     /api/douyin-card/:id
+GET     /api/douyin-card/list
+GET     /api/douyin-card/overall-stats
+GET     /api/douyin-card/stats/:id
+GET     /api/douyin-cards
+GET     /api/douyin-cards/:id
+GET     /api/douyin-cards/list
+GET     /api/email/list/:id
+GET     /api/email/lists
+GET     /api/email/lists/:id
+GET     /api/email/lists/:id/trace
+GET     /api/email/lists/list
+GET     /api/email/smtp/:id
+GET     /api/email/smtps
+GET     /api/email/smtps/:id
+GET     /api/email/smtps/list
+GET     /api/email/track/click/:token
+GET     /api/email/track/open-metrics
+GET     /api/email/track/open/:token
+GET     /api/email/unsubscribe
+GET     /api/email/unsubscribe/export
+GET     /api/email/unsubscribe/list
+GET     /api/feature-flags
+GET     /api/feature-flags/:id
+GET     /api/feature-flags/:id/audit
+GET     /api/feature-flags/:id/code-references
+GET     /api/feature-flags/stale
+GET     /api/feishu/accounts/:id/refresh-token
+GET     /api/feishu/accounts/:id/test-send
+GET     /api/gdpr/export/:customer_id
+GET     /api/geo/jobs
+GET     /api/geo/jobs/runs
+GET     /api/geo/keyword-enhance/analyze
+GET     /api/geo/pushers/:id
+GET     /api/geo/schema-templates/:id
+GET     /api/geo/sites/:id
+GET     /api/geo/visibility/trend
+GET     /api/i18n/stats/fallback
+GET     /api/intent-records
+GET     /api/intent-records/config
+GET     /api/intent-records/dict
+GET     /api/intent-records/list
+GET     /api/intent-records/stats
+GET     /api/jobs/:id/progress
+GET     /api/knowledge/connectors/:source
+GET     /api/knowledge/document-types
+GET     /api/knowledge/help-center/top
+GET     /api/knowledge/playground/presets
+GET     /api/kuaishou-card/:id
+GET     /api/kuaishou-card/list
+GET     /api/kuaishou-card/overall-stats
+GET     /api/kuaishou-card/stats/:id
+GET     /api/kuaishou-cards
+GET     /api/kuaishou-cards/:id
+GET     /api/kuaishou-cards/list
+GET     /api/lead-mining/status
+GET     /api/live-code/:id
+GET     /api/live-code/:id/qr-codes
+GET     /api/live-code/:id/qr-stats
+GET     /api/live-code/:id/stats
+GET     /api/live-code/list
+GET     /api/live-codes
+GET     /api/llm-routing/models
+GET     /api/llm-routing/rules
+GET     /api/llm-routings/policy
+GET     /api/llm/providers/policy
+GET     /api/llm/scenario-stats
+GET     /api/llm/strategies
+GET     /api/manage/co-pilot/config
+GET     /api/manage/data-export/:customer_id
+GET     /api/manage/ltc/collection
+GET     /api/manage/rag-eval/runs
+GET     /api/manage/rag-eval/runs/:id
+GET     /api/manage/rules
+GET     /api/manage/session-chain/sla-config
+GET     /api/manage/typing-predict
+GET     /api/market-templates
+GET     /api/market-templates/:id
+GET     /api/market-templates/list
+GET     /api/market-templates/my-downloads
+GET     /api/market-templates/official
+GET     /api/market-templates/search
+GET     /api/material-library
+GET     /api/material-library/categories
+GET     /api/material-library/list
+GET     /api/material-library/stats
+GET     /api/material/categories/:id
+GET     /api/messages
+GET     /api/messages/:id
+GET     /api/migration/available
+GET     /api/migration/current-version
+GET     /api/migration/history
+GET     /api/migration/records
+GET     /api/migration/task/:id
+GET     /api/notifications
+GET     /api/notifications/list
+GET     /api/notifications/unread-count
+GET     /api/objection-templates
+GET     /api/objection-templates/list
+GET     /api/obs-configs
+GET     /api/obs-configs/:id
+GET     /api/obs-configs/default
+GET     /api/obs-configs/list
+GET     /api/oneid/conflicts
+GET     /api/oneid/identities
+GET     /api/opportunity/:id
+GET     /api/opportunity/:id/moves
+GET     /api/opportunity/rules
+GET     /api/perf/:id
+GET     /api/perf/list
+GET     /api/prompts
+GET     /api/prompts/:id
+GET     /api/prompts/:id/versions
+GET     /api/prompts/ab-experiments
+GET     /api/quick-replies/list
+GET     /api/quick-reply/folders
+GET     /api/quote/:id
+GET     /api/quote/latest/:quoteID
+GET     /api/rag-config/products/:id
+GET     /api/rag-eval/runs
+GET     /api/rag-eval/runs/:id
+GET     /api/rag-product-configs
+GET     /api/rag-product-configs/:id
+GET     /api/rag-product-configs/list
+GET     /api/rag-product-configs/stats
+GET     /api/rag/documents
+GET     /api/rag/documents/:id
+GET     /api/reach-pipelines
+GET     /api/reach-pipelines/:id
+GET     /api/reach-pipelines/list
+GET     /api/reach/proactive/customer/:customer_id/channels
+GET     /api/recovery-queue/distribution
+GET     /api/recovery-queue/list
+GET     /api/recovery-queue/ready
+GET     /api/sales-champions
+GET     /api/sales-champions/:id
+GET     /api/sales-champions/list
+GET     /api/saved-views
+GET     /api/script-templates
+GET     /api/script-templates/:id
+GET     /api/script-templates/categories
+GET     /api/script-templates/list
+GET     /api/script-templates/search
+GET     /api/session-tag/rules
+GET     /api/short-link/:id
+GET     /api/short-link/:id/stats
+GET     /api/short-link/all-stats
+GET     /api/short-link/list
+GET     /api/short-links
+GET     /api/short-links/:id
+GET     /api/short-links/list
+GET     /api/sms/configs
+GET     /api/sms/configs/list
+GET     /api/sms/delivery/carrier/:phone
+GET     /api/sms/delivery/metrics
+GET     /api/sms/delivery/portability
+GET     /api/sms/delivery/portability/:phone
+GET     /api/sms/drafts
+GET     /api/sms/drafts/list
+GET     /api/sms/jobs
+GET     /api/sms/jobs/list
+GET     /api/sms/records
+GET     /api/sms/records/list
+GET     /api/sms/unsubscribe/export
+GET     /api/sms/unsubscribe/list
+GET     /api/sop-agents
+GET     /api/sop-agents/:id
+GET     /api/sop-agents/list
+GET     /api/sop-agents/stats
+GET     /api/sop/:id/abtest/stats
+GET     /api/sso/login/:provider
+GET     /api/sso/providers
+GET     /api/swagger.json
+GET     /api/system-monitor/metrics
+GET     /api/system/backup
+GET     /api/system/configs
+GET     /api/system/configs/:key
+GET     /api/system/configs/list
+GET     /api/system/info
+GET     /api/system/logs
+GET     /api/system/menus
+GET     /api/system/permissions
+GET     /api/system/permissions/:code/members
+GET     /api/system/rate-quota
+GET     /api/tag-segmentation/list
+GET     /api/tag-segments
+GET     /api/telegram/accounts/:id/status
+GET     /api/templates
+GET     /api/templates/:id
+GET     /api/templates/my-downloads
+GET     /api/templates/official
+GET     /api/templates/search
+GET     /api/tiktok-cards
+GET     /api/tiktok-cards/:id
+GET     /api/tiktok-cards/list
+GET     /api/trace/:traceId
+GET     /api/traces/recent
+GET     /api/user-segment/rfm/rules
+GET     /api/user-segments/layers
+GET     /api/user-segments/list
+GET     /api/user-segments/rfm/list
+GET     /api/user/:id
+GET     /api/user/list
+GET     /api/v1/asset-market/my-purchases
+GET     /api/wechat/accounts
+GET     /api/wecom/accounts
+GET     /api/wecom/accounts/:id
+GET     /api/whatsapp/lead-groups
+GET     /api/whatsapp/login-status
+GET     /api/whatsapp/templates/:id
+GET     /api/xianyu-card/:id
+GET     /api/xianyu-card/list
+GET     /api/xianyu-card/overall-stats
+GET     /api/xianyu-card/stats/:id
+GET     /api/xianyu-cards
+GET     /api/xianyu-cards/:id
+GET     /api/xianyu-cards/list
+GET     /api/xiaohongshu-card/:id
+GET     /api/xiaohongshu-card/list
+GET     /api/xiaohongshu-card/overall-stats
+GET     /api/xiaohongshu-card/stats/:id
+GET     /api/xiaohongshu-cards
+GET     /api/xiaohongshu-cards/:id
+GET     /api/xiaohongshu-cards/list
+PATCH   /api/knowledge/documents/:id/help-center-status
+POST    /api/:id/activate
+POST    /api/:id/deactivate
+POST    /api/ab-experiments/reach-metrics
+POST    /api/account
+POST    /api/accounts
+POST    /api/accounts/:id/login/start
+POST    /api/accounts/create
+POST    /api/agent-kb-bindings/batch
+POST    /api/agent-statuses/:id/offline
+POST    /api/agent-statuses/:id/online
+POST    /api/agent/co-pilot/evaluate
+POST    /api/agent/tools/approval/whitelist
+POST    /api/agent/tools/circuit/reset
+POST    /api/agent/tools/execute
+POST    /api/ai-content
+POST    /api/ai-content/:id/favorite
+POST    /api/ai-content/:id/rate
+POST    /api/ai-content/:id/save
+POST    /api/ai-content/generate
+POST    /api/ai-tools/backups
+POST    /api/ai-tools/migration/rollback
+POST    /api/ai-tools/migration/task
+POST    /api/ai-tools/restore
+POST    /api/ai/generate
+POST    /api/ai/history
+POST    /api/ai/history/:id/favorite
+POST    /api/ai/history/:id/rate
+POST    /api/ai/history/:id/save
+POST    /api/ai/templates
+POST    /api/alerts/histories/resolve
+POST    /api/alerts/rules
+POST    /api/app-config/sync
+POST    /api/auth/anomaly/alerts/:id/ignore
+POST    /api/auth/anomaly/alerts/:id/resolve
+POST    /api/auth/logout
+POST    /api/auth/mfa/backup-codes
+POST    /api/auth/mfa/confirm
+POST    /api/auth/mfa/disable
+POST    /api/auth/mfa/setup
+POST    /api/auth/mfa/verify
+POST    /api/auth/notifications/:id/read
+POST    /api/auth/notifications/read-all
+POST    /api/auth/security-alerts/:id/resolve
+POST    /api/automation-rules
+POST    /api/automation-rules/:id/toggle
+POST    /api/automation-rules/fire
+POST    /api/bill
+POST    /api/bulk-send
+POST    /api/cards/cross-publish
+POST    /api/channels/bind
+POST    /api/chat/ingress
+POST    /api/chat/typing-predict/predict
+POST    /api/churn/model-config
+POST    /api/clue/engagement
+POST    /api/clue/import
+POST    /api/clue/score
+POST    /api/clue/score-all
+POST    /api/community/members
+POST    /api/customer
+POST    /api/customer-events/add-to-cart
+POST    /api/customer-events/click
+POST    /api/customer-events/login
+POST    /api/customer-events/pageview
+POST    /api/customer-events/purchase
+POST    /api/customer-events/signup
+POST    /api/customer-events/track
+POST    /api/customer-rfm/compute
+POST    /api/customer-rfm/compute-all
+POST    /api/customer-sessions/:id/apply-tag-rule
+POST    /api/customer-sessions/:id/auto-assign
+POST    /api/customer-sessions/:id/rate
+POST    /api/customer-sessions/assign
+POST    /api/customer/:id/tags
+POST    /api/customer/session
+POST    /api/customer/session/:id/close
+POST    /api/customer/session/:id/transfer
+POST    /api/customer/session/messages
+POST    /api/dashboard-screens
+POST    /api/dashboard/broadcast
+POST    /api/dialogue-memories/facts
+POST    /api/dialogue-memories/intent-trail
+POST    /api/dialogue-memories/messages
+POST    /api/dialogue-memories/objections
+POST    /api/dialogue-memories/purchase-intent
+POST    /api/dialogue-memories/sop-history
+POST    /api/dnc
+POST    /api/dnc/block-phone
+POST    /api/douyin-card
+POST    /api/douyin-cards
+POST    /api/drafts
+POST    /api/email/jobs
+POST    /api/email/list
+POST    /api/email/list/:id/trace
+POST    /api/email/lists
+POST    /api/email/smtps
+POST    /api/email/unsubscribe/confirm
+POST    /api/email/unsubscribe/resubscribe
+POST    /api/execute
+POST    /api/executions/:id/cancel
+POST    /api/executions/:id/pause
+POST    /api/executions/:id/resume
+POST    /api/fallback
+POST    /api/faqs/annotate
+POST    /api/feature-flags
+POST    /api/feature-flags/:id/code-references
+POST    /api/feature-flags/:id/disable
+POST    /api/feature-flags/:id/enable
+POST    /api/feature-flags/:id/rollout
+POST    /api/feature-flags/evaluate
+POST    /api/feature-flags/evaluate-batch
+POST    /api/geo/jobs/:name/trigger
+POST    /api/geo/keyword-enhance/enhance
+POST    /api/geo/metrics/analyze
+POST    /api/geo/probe/run-sov
+POST    /api/geo/prompt/fanout
+POST    /api/geo/techconfig/llms-txt
+POST    /api/geo/techconfig/robots
+POST    /api/geo/techconfig/sitemap
+POST    /api/group-messaging/send
+POST    /api/inbox/lock-human
+POST    /api/inbox/unlock-human/:session_id
+POST    /api/intent-records/recognize
+POST    /api/intent-records/recognize/batch
+POST    /api/jobs
+POST    /api/knowledge-bases/:id/bind
+POST    /api/knowledge-bases/:id/unbind
+POST    /api/knowledge-bases/:id/version
+POST    /api/knowledge/:id/import/crm
+POST    /api/knowledge/:id/import/dingtalk
+POST    /api/knowledge/:id/import/feishu
+POST    /api/knowledge/:id/import/notion
+POST    /api/knowledge/:id/import/url
+POST    /api/knowledge/help-center/retrieval-test
+POST    /api/knowledge/import/document
+POST    /api/kuaishou-card
+POST    /api/kuaishou-cards
+POST    /api/live-code
+POST    /api/live-code/:id/qr-code
+POST    /api/live-code/:id/share
+POST    /api/live-codes
+POST    /api/llm-routings/providers/circuit/reset
+POST    /api/llm-routings/resolve
+POST    /api/llm/fallback
+POST    /api/llm/providers/circuit/reset
+POST    /api/llm/providers/circuit/reset/:provider
+POST    /api/llm/scene-routing
+POST    /api/llm/strategies
+POST    /api/macros/:id/apply
+POST    /api/manage/co-pilot/evaluate
+POST    /api/manage/rag-eval/run
+POST    /api/manage/rules
+POST    /api/manage/session-chain/reopen
+POST    /api/manage/smart-router/match
+POST    /api/market-templates
+POST    /api/market-templates/:id/download
+POST    /api/market-templates/:id/rate
+POST    /api/marketing-flows/:id/sync-ab-results
+POST    /api/marketing-flows/:id/trigger
+POST    /api/material
+POST    /api/material-library
+POST    /api/material/upload
+POST    /api/migration/rollback
+POST    /api/migration/task
+POST    /api/models
+POST    /api/models/:name/test
+POST    /api/monitor/web-vitals
+POST    /api/notifications/:id/read
+POST    /api/notifications/read-all
+POST    /api/objection-templates/classify
+POST    /api/objection-templates/handle
+POST    /api/objection-templates/usage
+POST    /api/obs-configs
+POST    /api/obs-configs/:id/default
+POST    /api/obs-configs/:id/test
+POST    /api/oneid/conflicts/:id/resolve
+POST    /api/oneid/merge
+POST    /api/oneid/resolve
+POST    /api/opportunity/:id/cancel
+POST    /api/opportunity/:id/lost
+POST    /api/opportunity/:id/reopen
+POST    /api/opportunity/:id/stage
+POST    /api/perf/run
+POST    /api/prompts
+POST    /api/prompts/:id/activate
+POST    /api/prompts/:id/pause
+POST    /api/prompts/:id/publish
+POST    /api/prompts/:id/start
+POST    /api/prompts/:id/stop
+POST    /api/prompts/:id/sync-ab-results
+POST    /api/prompts/:id/trigger
+POST    /api/prompts/calculate
+POST    /api/prompts/churn/model-config
+POST    /api/prompts/delete
+POST    /api/prompts/export
+POST    /api/prompts/generate
+POST    /api/prompts/groups
+POST    /api/prompts/histories/:id/cancel
+POST    /api/prompts/history/:id/save
+POST    /api/prompts/import
+POST    /api/prompts/integrations
+POST    /api/prompts/integrations/:id/sync-customers
+POST    /api/prompts/integrations/:id/sync-products
+POST    /api/prompts/integrations/:id/test
+POST    /api/prompts/members
+POST    /api/prompts/rule
+POST    /api/prompts/templates
+POST    /api/prompts/update
+POST    /api/quick-reply/folders
+POST    /api/quick-reply/folders/:id/reorder
+POST    /api/quote
+POST    /api/quote/:id/send
+POST    /api/rag-config/query
+POST    /api/rag-eval/run
+POST    /api/rag-product-configs
+POST    /api/rag/import
+POST    /api/reach-pipelines
+POST    /api/reach/proactive/batch
+POST    /api/reach/proactive/customer/:customer_id
+POST    /api/reach/proactive/quick
+POST    /api/reach/proactive/send
+POST    /api/reach/proactive/validate
+POST    /api/recovery-queue/:id/attempt
+POST    /api/recovery-queue/:id/cancel
+POST    /api/recovery-queue/:id/recovered
+POST    /api/recovery-queue/compute-all
+POST    /api/recovery-queue/config
+POST    /api/recovery-queue/enqueue
+POST    /api/saved-views
+POST    /api/scene-routing
+POST    /api/script-templates
+POST    /api/script-templates/recommend
+POST    /api/scripts/sync-to-library
+POST    /api/session-tag/rules
+POST    /api/short-link
+POST    /api/short-link/access
+POST    /api/short-links
+POST    /api/smart-router/select
+POST    /api/sms/configs
+POST    /api/sms/drafts
+POST    /api/sms/jobs
+POST    /api/sms/jobs/:id/pause
+POST    /api/sms/jobs/:id/resume
+POST    /api/sms/records
+POST    /api/sms/unsubscribe/manual-add
+POST    /api/sop-agents
+POST    /api/sop-agents/:id/activate
+POST    /api/sop-agents/:id/deactivate
+POST    /api/sop-agents/:id/execute
+POST    /api/sop-agents/:id/pause
+POST    /api/sop-agents/:id/step
+POST    /api/start-login
+POST    /api/step
+POST    /api/strategies
+POST    /api/system/backup
+POST    /api/system/permissions
+POST    /api/system/restart
+POST    /api/system/restore
+POST    /api/templates
+POST    /api/templates/:id/download
+POST    /api/templates/:id/rate
+POST    /api/tiktok-cards
+POST    /api/user
+POST    /api/v1/asset-market/bind
+POST    /api/wechat/accounts
+POST    /api/wechat/send
+POST    /api/wecom
+POST    /api/wecom/:channel_id/reset-secret
+POST    /api/wecom/:channel_id/rotate-key
+POST    /api/whatsapp/start-login
+POST    /api/xianyu-card
+POST    /api/xianyu-cards
+POST    /api/xiaohongshu-card
+POST    /api/xiaohongshu-cards
+PUT     /api/:id/abtest/config
+PUT     /api/account/:id
+PUT     /api/accounts/:id
+PUT     /api/accounts/update/:id
+PUT     /api/agent-statuses/:id/status
+PUT     /api/agent/co-pilot/config
+PUT     /api/agent/settings
+PUT     /api/agent/tool-integrations
+PUT     /api/ai/templates/:id
+PUT     /api/alerts/rules/:id
+PUT     /api/alerts/rules/status
+PUT     /api/app-config
+PUT     /api/auth/password-policy
+PUT     /api/community/members/:id
+PUT     /api/customer-sessions/:id/status
+PUT     /api/customer-tags
+PUT     /api/customer/:id
+PUT     /api/customers/:id/custom-attributes
+PUT     /api/dashboard-screens/:id
+PUT     /api/douyin-card/:id
+PUT     /api/douyin-cards/:id
+PUT     /api/drafts/:id
+PUT     /api/email/list/:id
+PUT     /api/email/lists/:id
+PUT     /api/email/smtps/:id
+PUT     /api/fallback
+PUT     /api/feature-flags/:id
+PUT     /api/geo/jobs/:name/schedule
+PUT     /api/intent-records/config
+PUT     /api/knowledge-bases/:id/canary
+PUT     /api/kuaishou-card/:id
+PUT     /api/kuaishou-cards/:id
+PUT     /api/live-code/:id
+PUT     /api/live-code/:id/qr-codes/:qr_id
+PUT     /api/live-codes/:id
+PUT     /api/llm-routing/strategies
+PUT     /api/llm-routings/policy
+PUT     /api/llm/fallback
+PUT     /api/llm/providers/policy
+PUT     /api/llm/strategies
+PUT     /api/manage/co-pilot/config
+PUT     /api/manage/rules/:id/toggle
+PUT     /api/manage/session-chain/sla-config
+PUT     /api/models/:name
+PUT     /api/obs-configs/:id
+PUT     /api/opportunity/:id
+PUT     /api/prompts/:id
+PUT     /api/prompts/groups/:id
+PUT     /api/prompts/integrations/:id
+PUT     /api/prompts/members/:id
+PUT     /api/prompts/rule/:id
+PUT     /api/prompts/templates/:id
+PUT     /api/rag-product-configs/:id
+PUT     /api/reach-pipelines/:id
+PUT     /api/scene-routing
+PUT     /api/script-templates/:id
+PUT     /api/short-link/:id
+PUT     /api/short-links/:id
+PUT     /api/sms/drafts/:id
+PUT     /api/sop-agents/:id
+PUT     /api/sop/:id/abtest/config
+PUT     /api/strategies
+PUT     /api/system/configs/:key
+PUT     /api/system/permissions/:id
+PUT     /api/templates/:id
+PUT     /api/tiktok-cards/:id
+PUT     /api/user/:id
+PUT     /api/user/:id/password
+PUT     /api/wechat/accounts/:id
+PUT     /api/wecom/:channel_id
+PUT     /api/xianyu-card/:id
+PUT     /api/xianyu-cards/:id
+PUT     /api/xiaohongshu-card/:id
+PUT     /api/xiaohongshu-cards/:id
+
+✅ strict: UNMATCHED=0 且无通配 key（985 个前端调用全部可解析并与后端匹配）
+── 跨包端口单一源 ──
+============================================================
+Step 1: 提取 user-server ports.go 单一源
+============================================================
+  DefaultListenPort      = 8204
+  DefaultDBPortDev       = 8232
+  DefaultDBPortDocker    = 8202
+  DefaultRedisPort       = 8203
+  DefaultPlatformPort    = 8205
+  DefaultChromiumCDPPort = 8206
+  DefaultLLMPort         = 8207
+  DefaultEmbeddingPort   = 8208
+  DefaultRerankPort      = 8209
+
+
+============================================================
+Step 2: 提取 platform-server ports.go 单一源
+============================================================
+[0;33m⚠ 对端仓未 checkout：/tmp/hivemtk-platform/platform-server/internal/config/ports.go 不存在，Step 2/5 跨仓比对跳过[0m
+  DefaultServerPort    = 
+  DefaultDBPortDev     = 
+  DefaultRedisAddr     = 
+  DefaultOllamaBaseURL = 
+
+============================================================
+Step 3: 提取 bridge constants.js 单一源
+============================================================
+  DEFAULT_USER_SERVER.port = 8204
+
+============================================================
+Step 4: 验证 user-server <-> bridge 端口对齐
+============================================================
+[0;32m✓ user-server.DefaultListenPort == bridge.DEFAULT_USER_SERVER.port (8204)[0m
+
+============================================================
+Step 5: 验证 user-server <-> platform-server 端口对齐
+============================================================
+[0;33m⚠ Step 5 未执行：DefaultPlatformPort(8205) 未与对端核对（本机/工作区跑 make audit-ports 才会核）[0m
+
+============================================================
+Step 6: 审计 .yaml 配置文件 base_url 端口字面量
+============================================================
+[0;32m✓ user-server config: /tmp/r45-reland-153119/user-server/config.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;32m✓ user-server config/platform: /tmp/r45-reland-153119/user-server/config/platform.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;33m⚠ platform-server config: /tmp/hivemtk-platform/platform-server/config.yaml 不存在，跳过[0m
+
+============================================================
+Step 7: 审计 vite.config.js 单一源约束注释
+============================================================
+[0;32m✓ r45-reland-153119/user-web/vite.config.js 包含单一源约束注释[0m
+[0;33m⚠ hivemtk-platform/platform-web/vite.config.js 不存在，跳过（对端仓未 checkout 时属正常）[0m
+[0;33m⚠ hivemtk-platform/platform-contributor/vite.config.js 不存在，跳过（对端仓未 checkout 时属正常）[0m
+[0;32m✓ r45-reland-153119/website/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ r45-reland-153119/website/dev-server.cjs 包含单一源约束注释[0m
+
+============================================================
+审计总结
+============================================================
+  Errors: [0;31m0[0m
+  Warns:  [0;33m5[0m
+
+[0;32m✓ 跨包审计通过：所有端口字面量与单一源一致[0m
+── 组件类型声明不得指向已删除的组件 ──
+✅ components.d.ts 无悬空声明（共 23 条本地组件声明全部命中文件）
+── 有写入路径的模型必须登记 AutoMigrate ──
+GORM 模型候选：304    已注册 AutoMigrate：318
+✅ 所有带 gorm tag / TableName 的模型均已注册 AutoMigrate
+── 文档相对链接在干净 checkout 里必须可解析 ──
+──── 扫描 162 个 md（CI 口径：只认 git 索引）────
+──── 断链 0 处 ────
+── workflow 引用完整性（with.file/steps.id/needs/artifact 配对）──
+══════ 工作流引用完整性（15 个文件）══════
+  ✓ 路径 / step id / needs / artifact 配对全部可解析
+── action 运行时（runs.using）：node16/node20 站点必须已迁或有对上账本的豁免 ──
+项目根: /private/tmp/r45-reland-153119
+扫描工作流 15 份；uses 站点 79 处（可判定），跳过 1 处（可复用工作流/本地/容器）
+node20/node16 命中 30 处：未豁免 0，豁免内 30
+✅ 无未豁免的弃用运行时站点
+── 被作业实际执行的门，其脚本与判据文件必须在该工作流的 paths 触发面里 ──
+工作流 15 份 · 门站点 30 处 · 派生判据文件 7 份 · 输入面 md 引用 19 处（不要求进 paths）· paths-ignore 站点 0
+  · dco.yml: 无触发器，跳过
+  · sbom.yml: 无触发器，跳过
+绿：每个被作业实际执行的门，其判据文件都在触发 paths 里（或该事件本就无过滤）
+── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──
+生产代码读取键 183 · 已文档化 76 · 工具进程自动豁免 16 · 基线登记 88 · 红 3
+（其中经 env helper 字面量枚举到 26 个键名）
+  UNDOCUMENTED FF_LTC_COLLECTION_JOB  <- user-server/internal/service/collection_job.go
+  UNDOCUMENTED LTC_COLLECTION_JOB_BATCH  <- user-server/internal/service/collection_job.go
+  UNDOCUMENTED LTC_COLLECTION_JOB_INTERVAL  <- user-server/internal/service/collection_job.go
+❌ 配置面可发现性门未过
+make: *** [audit] Error 1
+### make audit rc=2
+# 止=2026-09-23 15:31:30

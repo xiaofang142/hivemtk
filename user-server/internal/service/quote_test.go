@@ -101,7 +101,13 @@ func (k qsKeyReadFailure) Get(ctx context.Context, key string) (string, error) {
 }
 
 // qsScripts 话术端口的替身：记录被问到的 (scriptID, oneID)，返回固定正文。
+//
+// mu 不是装饰：TestQuoteService_ReviseConcurrentSecondLoser 起 4 个 writer 协程各自调 Revise，
+// 产码在 quote.go:589 落到这里写 gotID/gotOneID。整包 -race 实测 2 朵 DATA RACE（两帧逐字同为
+// 本方法 :112），把 testdb.go 换回已提交那版（无池上限）单跑该用例 8 次仍能撞中 1 次 ⇒ 竞争在
+// 已提交字节里就有，与本泳道改动无关；用例自带的 mu 只护住它自己的计数器。
 type qsScripts struct {
+	mu       sync.Mutex
 	gotID    uint
 	gotOneID string
 	script   QuoteScript
@@ -109,7 +115,9 @@ type qsScripts struct {
 }
 
 func (s *qsScripts) ActiveQuoteScript(_ context.Context, id uint, oneID string) (QuoteScript, error) {
+	s.mu.Lock()
 	s.gotID, s.gotOneID = id, oneID
+	s.mu.Unlock()
 	if s.err != nil {
 		return QuoteScript{}, s.err
 	}

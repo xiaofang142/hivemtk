@@ -1,0 +1,14 @@
+FAIL	hivemtk-user/internal/controller [build failed]
+FAIL
+# hivemtk-user/internal/controller [hivemtk-user/internal/controller.test]
+internal/controller/bill.go:83:18: cannot use (*service.BillService)(nil) (value of type *"hivemtk-user/internal/service".BillService) as BillDeriver value in variable declaration: *"hivemtk-user/internal/service".BillService does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:215:57: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:255:55: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:265:53: cannot use fresh (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:282:55: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:313:56: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:335:56: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:362:55: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:375:54: cannot use noise (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:394:55: cannot use fake (variable of type *billFake) as BillDeriver value in argument to newBillCtrl: *billFake does not implement BillDeriver (missing method GetBill)
+internal/controller/bill_test.go:394:55: too many errors

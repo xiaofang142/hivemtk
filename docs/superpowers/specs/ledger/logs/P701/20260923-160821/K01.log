@@ -1,0 +1,30 @@
+=== RUN   TestBillChasedStatusesCoverUnsettledOnly
+--- PASS: TestBillChasedStatusesCoverUnsettledOnly (0.00s)
+=== RUN   TestBillChasedStatusesAreInBillDomain
+--- PASS: TestBillChasedStatusesAreInBillDomain (0.00s)
+=== RUN   TestBillChasedStatusesAreNotMutatedInThisPackage
+--- PASS: TestBillChasedStatusesAreNotMutatedInThisPackage (0.00s)
+=== RUN   TestBillChasedStatusKnownRejectsUnknown
+--- PASS: TestBillChasedStatusKnownRejectsUnknown (0.00s)
+=== RUN   TestBillStatusVocabulary
+    bill_test.go:38: 状态值域漂移：期望 [open partial paid voided]，实际 [open partial paid]（加/改一格要先改卡面 AC 与 P7-02/03/04 的跃迁表，不能顺手）
+--- FAIL: TestBillStatusVocabulary (0.00s)
+=== RUN   TestBillSchemaShape
+--- PASS: TestBillSchemaShape (0.00s)
+=== RUN   TestBillKeyedToExactlyOneQuoteVersion
+--- PASS: TestBillKeyedToExactlyOneQuoteVersion (0.00s)
+=== RUN   TestBillCarriesNoPaymentTotals
+--- PASS: TestBillCarriesNoPaymentTotals (0.00s)
+=== RUN   TestBillCarriesNoApprovalState
+--- PASS: TestBillCarriesNoApprovalState (0.00s)
+=== RUN   TestBillHasNoTenantColumn
+--- PASS: TestBillHasNoTenantColumn (0.00s)
+=== RUN   TestBillKeyColumnWidths
+--- PASS: TestBillKeyColumnWidths (0.00s)
+=== RUN   TestBillJSONNamesMatchColumns
+--- PASS: TestBillJSONNamesMatchColumns (0.00s)
+=== RUN   TestBillStatusTransitionsAreDeclared
+--- PASS: TestBillStatusTransitionsAreDeclared (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.393s
+FAIL

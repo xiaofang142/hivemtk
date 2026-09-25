@@ -1,0 +1,4 @@
+SEAM-GUARD：IntentEnabled 的 getter loadIntentEnabled 没对 intentEnabledMu 上锁（要 intentEnabledMu.Lock() 或 intentEnabledMu.RLock()）@ internal/service/intent_recognition.go:49
+SEAM-GUARD：IntentEnabled 的 setter storeIntentEnabled 没对 intentEnabledMu 上锁（要 intentEnabledMu.Lock()）@ internal/service/intent_recognition.go:53
+项目根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt（扫描根 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/user-server）
+rc=1

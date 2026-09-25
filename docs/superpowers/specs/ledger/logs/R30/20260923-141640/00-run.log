@@ -1,0 +1,50 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r30mut-08239yxr
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R30/20260923-141640
+取证基线：HEAD=2091cb07 工作树=/Users/xiaofang/Documents/www/go/hivemtk/r45-batt load=14:16  up  4:04, 1 user, load averages: 11.74 23.82 34.98 日志 tag=20260923-141640
+覆盖 9 个脏文件、同步 0 个删除进克隆
+CONNECT 记录代理：127.0.0.1:56721（只记不走，回 502）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  dfc201cb3594c71882105e4a97398dec  user-server/internal/pkg/testutil/testdb.go
+  52dc13b2c9a03bfe611721ffa98c6e40  user-server/internal/service/feishu.go
+  a280350d7b6a3345d8bae22756332da1  user-server/internal/service/quote_test.go
+  500262a90c58e580e9493f18988ba2b5  user-server/internal/service/sms.go
+  44b95992fb45a63c80d777192ad98854  user-server/internal/service/webhook_channel_feishu.go
+[控制组 SMS] rc=0 settled=12 skip=0 红名=— CONNECT=无
+[控制组 POOL] rc=0 settled=1 skip=0 红名=— CONNECT=无
+[控制组 TG] rc=0 settled=1 skip=0 红名=— CONNECT=无
+[控制组 F17] rc=0 settled=1 skip=0 红名=— CONNECT=无
+[race A 相] 带锁 10 趟：rc=0 settled=10 红名=— DATA RACE 块=0
+S1    aliyun 的 apiURL 改回写死官方域                          杀掉                 红=TestSmsService_ResendSms,TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent,TestSmsService_SendDraft,TestSmsService_SendSms,TestSmsService_SendSms_AliyunSuccess conn={dysmsapi.aliyuncs.com:18}
+S2    tencent 的 apiURL 改回写死官方域                         杀掉                 红=TestSmsService_SendSms_TencentOfficialError,TestSmsService_SendSms_TencentSuccess conn={sms.tencentcloudapi.com:2}
+S3    huawei 的 apiURL 改回写死官方域                          杀掉                 红=TestSmsService_SendSms_HuaweiOfficialError,TestSmsService_SendSms_HuaweiSuccess conn={smsapi.cn-north-4.boe-business.huaweicloud.com:2}
+S4    tencent 那条腿读成 aliyun 的字段（装配写错对象）                 杀掉                 红=TestSmsService_SendSms_TencentOfficialError,TestSmsService_SendSms_TencentSuccess conn={dysmsapi.aliyuncs.com:2}
+S5    huawei 那条腿读成 tencent 的字段（同上，另一家）                 杀掉                 红=TestSmsService_SendSms_HuaweiOfficialError,TestSmsService_SendSms_HuaweiSuccess conn={sms.tencentcloudapi.com:2}
+S6    摘掉 errMsg 的空白补码                                  杀掉                 红=TestSmsService_ResendSms_TransportFailureRecordsReason,TestSmsService_SendSms_UnknownProviderRecordsReason
+S7    摘掉 errCode 的空白补码                                 杀掉                 红=TestSmsService_ResendSms_TransportFailureRecordsReason,TestSmsService_SendSms_UnknownProviderRecordsReason
+S8    default 分支立刻 return（绕过补码）                        杀掉                 红=TestSmsService_SendSms_UnknownProviderRecordsReason
+S9    NewSmsService 不填 aliyun 默认域                      杀掉                 红=TestNewSmsServiceDefaultsToOfficialGatewayURLs
+S10   NewSmsService 不填 tencent 默认域                     杀掉                 红=TestNewSmsServiceDefaultsToOfficialGatewayURLs
+S11   NewSmsService 不填 huawei 默认域                      杀掉                 红=TestNewSmsServiceDefaultsToOfficialGatewayURLs
+S12   NewSmsService 把 huawei 的域填给 aliyun（三家写串）         杀掉                 红=TestNewSmsServiceDefaultsToOfficialGatewayURLs
+S13   阿里云成功判据失效（业务错被当成功）                               杀掉                 红=TestSmsService_ResendSms,TestSmsService_SendDraft,TestSmsService_SendSms
+S14   腾讯云成功判据失效（Error 子对象被无视）                          杀掉                 红=TestSmsService_SendSms_TencentOfficialError
+S15   华为云成功判据失效（小写 code 的 000000 不再被要求）                杀掉                 红=TestSmsService_SendSms_HuaweiOfficialError
+S16   首次发送受理后状态不翻成 sent                                杀掉                 红=TestSmsService_SendSms_AliyunSuccess,TestSmsService_SendSms_HuaweiSuccess,TestSmsService_SendSms_TencentSuccess
+S17   首次发送受理成功但发送时间不落账（句子包进 if false 以留住 sentTime 的使   杀掉                 红=TestSmsService_SendSms_AliyunSuccess,TestSmsService_SendSms_HuaweiSuccess,TestSmsService_SendSms_TencentSuccess
+S18   重发受理后状态不翻成 sent（首次发送那侧照旧）                        杀掉                 红=TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent
+S19   重发受理成功但发送时间不落账（同上，首次发送那侧照旧）                      杀掉                 红=TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent
+S20   重发进入时不清上一轮错误码                                    杀掉                 红=TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent
+S21   重发进入时不清上一轮错误文案                                   杀掉                 红=TestSmsService_ResendSms_SuccessClearsFailureAndMarksSent
+P1    摘掉 SetMaxOpenConns（上界回到 database/sql 的默认＝不限）     杀掉                 红=TestNewTestDBBoundsPool
+P2    上界常量从 32 改成 200（越过 CI 的 100 名额）                  杀掉                 红=TestNewTestDBBoundsPool
+P3    把 idle 上界当成 open 上界传（两行赋值串位）                     杀掉                 红=TestNewTestDBBoundsPool
+T1    getMe 绕过注入点直连官方                                  杀掉                 红=TestE2E_Telegram_AccountCreateAndGet conn={api.telegram.org:1}
+T2    setWebhook 绕过注入点直连官方                             杀掉                 红=TestE2E_Telegram_AccountCreateAndGet conn={api.telegram.org:1}
+T3    快照挪进协程体（行为不变，只剩静态门在守）                            杀掉                 gate rc=1 点名 internal/service/feishu.go，用例 1 条全绿（行为不变）
+F1    四类媒体少派发一类（计数腿要认出 3/4）                            杀掉                 红=TestN17_FeishuVoiceAndMediaLandInHubWithRightType
+F2    三条腿的快照挪进协程体（行为不变）                                杀掉                 gate rc=1 点名 internal/service/webhook_channel_feishu.go，用例 1 条全绿（行为不变）
+Q-off 摘掉 qsScripts 的写锁（4 个 writer 协程并发写同一字段）           杀掉                 2 朵竞争块，全部归本腿/本家文件，rc=1
+
+===== 判定：30 格（全族） =====
+逐格被杀，无存活，无 CONN/RAN/PATCH/BUILD 异常
+（BROKEN 的原始输出在 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R30/20260923-141640/<格>.log，逐条读后再谈定性；CONNECT 总表在 /Users/xiaofang/Documents/www/go/hivemtk/r45-batt/docs/superpowers/specs/ledger/logs/R30/20260923-141640/connect.log）

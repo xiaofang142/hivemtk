@@ -1,0 +1,65 @@
+2026-09-23T16:59:56+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillController_DeriveHappyPath
+2026-09-23T16:59:56+08:00 INF [Bill] 用户 7 确认报价行 "q_100_1" 成交 ⇒ 账单 "b_1762335000000000000_1"（金额 369.99 CNY，新开） component=user-server
+--- PASS: TestBillController_DeriveHappyPath (0.00s)
+=== RUN   TestBillController_ReusedIsEchoed
+2026-09-23T16:59:56+08:00 INF [Bill] 用户 7 确认报价行 "q_100_1" 成交 ⇒ 账单 "b_1762335000000000000_1"（金额 369.99 CNY，复用已有那一张） component=user-server
+2026-09-23T16:59:56+08:00 INF [Bill] 用户 7 确认报价行 "q_100_1" 成交 ⇒ 账单 "b_1762335000000000000_1"（金额 369.99 CNY，新开） component=user-server
+--- PASS: TestBillController_ReusedIsEchoed (0.00s)
+=== RUN   TestBillController_RequiresSession
+--- PASS: TestBillController_RequiresSession (0.00s)
+=== RUN   TestBillController_BodyCarriesOnlyTheRowKey
+--- PASS: TestBillController_BodyCarriesOnlyTheRowKey (0.00s)
+=== RUN   TestBillController_MissingOrMalformedBody
+--- PASS: TestBillController_MissingOrMalformedBody (0.00s)
+=== RUN   TestBillController_BodyIsCapped
+--- PASS: TestBillController_BodyIsCapped (0.00s)
+=== RUN   TestBillController_RowIDLengthIsBounded
+--- PASS: TestBillController_RowIDLengthIsBounded (0.00s)
+=== RUN   TestBillController_SentinelsHaveDistinctOutcomes
+2026-09-23T16:59:56+08:00 WRN [Bill] 派生账单 "q_1" 遇到未预期错误: connection reset by peer component=user-server
+2026-09-23T16:59:56+08:00 WRN [Bill] 派生账单 "q_1" 遇到未预期错误: 派生账单时出错 component=user-server
+--- PASS: TestBillController_SentinelsHaveDistinctOutcomes (0.00s)
+=== RUN   TestBillController_UnknownErrorDoesNotLeak
+2026-09-23T16:59:56+08:00 WRN [Bill] 派生账单 "q_1" 遇到未预期错误: ERROR: duplicate key value violates unique constraint "uq_bills_quote_row" (SQLSTATE 23505) component=user-server
+--- PASS: TestBillController_UnknownErrorDoesNotLeak (0.00s)
+=== RUN   TestBillController_NilResultWithoutErrorIsFailure
+    bill_test.go:486: 回 200，期望 500：ok
+--- FAIL: TestBillController_NilResultWithoutErrorIsFailure (0.00s)
+=== RUN   TestBillController_UnassembledAnswersFiveOhThree
+--- PASS: TestBillController_UnassembledAnswersFiveOhThree (0.00s)
+=== RUN   TestBillController_SeamIsExactlyTheDocumentedPair
+--- PASS: TestBillController_SeamIsExactlyTheDocumentedPair (0.00s)
+=== RUN   TestBillController_ReadSeamIsExactlyTheDocumentedTriple
+--- PASS: TestBillController_ReadSeamIsExactlyTheDocumentedTriple (0.00s)
+=== RUN   TestBillController_ViewHappyPath
+--- PASS: TestBillController_ViewHappyPath (0.00s)
+=== RUN   TestBillController_DueAtPassesThroughWhenTheServiceSetsIt
+--- PASS: TestBillController_DueAtPassesThroughWhenTheServiceSetsIt (0.00s)
+=== RUN   TestBillController_OfQuoteShape
+--- PASS: TestBillController_OfQuoteShape (0.00s)
+=== RUN   TestBillController_BlankPathKeyIsRejectedLocally
+--- PASS: TestBillController_BlankPathKeyIsRejectedLocally (0.00s)
+=== RUN   TestBillController_OverlongPathKeyIsRejectedAndNotEchoed
+--- PASS: TestBillController_OverlongPathKeyIsRejectedAndNotEchoed (0.00s)
+=== RUN   TestBillController_PathKeyPassesThroughUnchanged
+--- PASS: TestBillController_PathKeyPassesThroughUnchanged (0.00s)
+=== RUN   TestBillController_ReadSentinelsHaveDistinctOutcomes
+2026-09-23T16:59:56+08:00 WRN [Bill] 读账单/对账 "b_1" 遇到未预期错误: connection reset by peer component=user-server
+2026-09-23T16:59:56+08:00 WRN [Bill] 读账单/对账 "QT-1-2" 遇到未预期错误: connection reset by peer component=user-server
+--- PASS: TestBillController_ReadSentinelsHaveDistinctOutcomes (0.00s)
+=== RUN   TestBillController_ReadErrorDoesNotLeak
+2026-09-23T16:59:56+08:00 WRN [Bill] 读账单/对账 "b_1" 遇到未预期错误: ERROR: relation "payments" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-23T16:59:56+08:00 WRN [Bill] 读账单/对账 "QT-1-2" 遇到未预期错误: ERROR: relation "payments" does not exist (SQLSTATE 42P01) component=user-server
+--- PASS: TestBillController_ReadErrorDoesNotLeak (0.00s)
+=== RUN   TestBillController_ReadNilResultWithoutErrorIsFailure
+2026-09-23T16:59:56+08:00 WRN [Bill] 读账单/对账 "b_1" 遇到未预期错误: 读账单返回了空结果而没有给错误 component=user-server
+--- PASS: TestBillController_ReadNilResultWithoutErrorIsFailure (0.00s)
+=== RUN   TestBillController_ReadLegUnassembledAnswersFiveOhThree
+--- PASS: TestBillController_ReadLegUnassembledAnswersFiveOhThree (0.00s)
+=== RUN   TestBillController_LegsFailIndependently
+2026-09-23T16:59:56+08:00 INF [Bill] 用户 7 确认报价行 "q_1" 成交 ⇒ 账单 "b_1762335000000000000_1"（金额 369.99 CNY，新开） component=user-server
+--- PASS: TestBillController_LegsFailIndependently (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/controller	0.583s
+FAIL

@@ -1,0 +1,33 @@
+2026-09-23T16:09:57+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRepository_ScanOverdueSelectsByCutoffAndStatus
+--- PASS: TestBillRepository_ScanOverdueSelectsByCutoffAndStatus (0.21s)
+=== RUN   TestBillRepository_ScanOverdueOrdersOldestFirst
+--- PASS: TestBillRepository_ScanOverdueOrdersOldestFirst (0.08s)
+=== RUN   TestBillRepository_ScanOverdueRejectsNonPositiveLimit
+--- PASS: TestBillRepository_ScanOverdueRejectsNonPositiveLimit (0.03s)
+=== RUN   TestBillRepository_ScanOverdueFailureIsNotEmptyResult
+--- FAIL: TestBillRepository_ScanOverdueFailureIsNotEmptyResult (0.03s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x102a282f8]
+
+goroutine 41 [running]:
+testing.tRunner.func1.2({0x103605940, 0x1037f1f40})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1977 +0x318
+panic({0x103605940?, 0x1037f1f40?})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c
+gorm.io/gorm.(*DB).Session(0x0, 0x197bd82ade58)
+	/Users/xiaofang/go/pkg/mod/gorm.io/gorm@v1.30.0/gorm.go:243 +0x38
+gorm.io/gorm.(*DB).WithContext(...)
+	/Users/xiaofang/go/pkg/mod/gorm.io/gorm@v1.30.0/gorm.go:344
+hivemtk-user/internal/repository.(*billRepo).ScanOverdue(0x197bd82adf18, {0x103748248, 0x10383eee0}, {0xc2a5003577450470, 0x15e84b7a, 0x1038163e0}, 0xa)
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-r902ov1c/clone/user-server/internal/repository/bill.go:279 +0xcc
+hivemtk-user/internal/repository.TestBillRepository_ScanOverdueFailureIsNotEmptyResult(0x197bd8095688)
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-r902ov1c/clone/user-server/internal/repository/bill_overdue_scan_test.go:194 +0x150
+testing.tRunner(0x197bd8095688, 0x103733010)
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	hivemtk-user/internal/repository	0.845s
+FAIL

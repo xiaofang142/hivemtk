@@ -33,9 +33,21 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.environ.get("MUT_ROOT") or os.path.join(REPO, "user-server")
+# 逐格 `go test` 原始输出落进仓库树（只随 stdout 走 ⇒ 调用方重定向到 /tmp，重启即蒸发，
+# 台账里的读数就没有产物可对）。目录带趟次戳、不复用；`.gitignore` 需为本轮次开例外。
+LOGDIR = os.path.join(REPO, "docs/superpowers/specs/ledger/logs/B16ledgerB", time.strftime("%Y%m%d-%H%M%S"))
+
+
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
+def dump(tag, out):
+    os.makedirs(LOGDIR, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "-", tag)
+    with open(os.path.join(LOGDIR, safe + ".log"), "w", encoding="utf-8") as f:
+        f.write(scrub(out))
 SVC = os.path.join(ROOT, "internal/browser_automation/service")
 REPOLAYER = os.path.join(ROOT, "internal/browser_automation/repository")
 ENV = dict(os.environ)
@@ -152,11 +164,12 @@ def md5(path):
     return h.hexdigest()
 
 
-def run_tests():
+def run_tests(tag="00-control"):
     cmd = ["go", "test", "-count=1", "-timeout", "900s", "-test.v",
            "-run", "^(" + "|".join(TESTS) + ")$", "./internal/browser_automation/service/"]
     p = subprocess.run(cmd, cwd=ROOT, env=ENV, capture_output=True, text=True)
     out = p.stdout + p.stderr
+    dump(tag, out)
     ran = {m for m in RUN_RE.findall(out) if m in TESTS}
     failed = {m.split("/")[0] for m in FAIL_RE.findall(out)}
     skipped = {m for m in SKIP_RE.findall(out) if m in TESTS}
@@ -237,6 +250,8 @@ def main():
     used = sorted({f for _, f, _, _, _ in MUTS})
     if "--check" in sys.argv:
         return check_anchors()
+    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    tee_to(os.path.join(LOGDIR, "00-run.log"))
     if not os.path.isdir(ROOT):
         print(f"目标树不存在：{ROOT}")
         return 2
@@ -252,7 +267,7 @@ def main():
     print("基线 md5: " + "  ".join(f"{f}={base[f][:8]}" for f in used))
 
     all_ok = True
-    rc0, ran0, failed0, skip0, out0 = run_tests()
+    rc0, ran0, failed0, skip0, out0 = run_tests("00-control-open")
     if rc0 != 0 or failed0 or ran0 != set(TESTS) or skip0:
         print(f"对照腿（未注码）就红/没跑全/有跳过：ran={len(ran0)} skip={len(skip0)} failed={failed0}")
         print("\n".join(out0.splitlines()[-25:]))
@@ -277,7 +292,7 @@ def main():
             all_ok = False
             shutil.copy2(backups[fname], p)
             continue
-        rc, ran, failed, skipped, out = run_tests()
+        rc, ran, failed, skipped, out = run_tests(name)
         ok = verdict(name, rc, ran, failed, skipped, out, must)
         if not ok and name in EQUIV and rc == 0 and not failed and len(ran) == EXPECT_RAN and not skipped:
             print(f"   判为等价类（不判红，理由要读）：{EQUIV[name]}")
@@ -289,7 +304,7 @@ def main():
             return 3
         print(f"   还原 md5 一致 {base[fname][:8]}（{fname}）")
 
-    rc, ran, failed, skipped, out = run_tests()
+    rc, ran, failed, skipped, out = run_tests("99-control-close")
     if rc == 0 and not failed and ran == set(TESTS) and not skipped:
         print(f"收尾对照腿 rc=0 ran={len(ran)}/{EXPECT_RAN} skip=0 → 绿，代码回到注码前状态")
     else:

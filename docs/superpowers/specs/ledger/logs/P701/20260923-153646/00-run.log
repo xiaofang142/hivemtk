@@ -1,0 +1,7 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-k0igjnly
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/P701/20260923-153646
+基线字节：克隆 HEAD `f4da0192`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次
+  ✗ K50@bill.go 锚点命中 0 次（要求恰好 1 次）：'\t\tDueAt:     in.DueAt,'
+  ✗ K50b@bill.go 锚点命中 0 次（要求恰好 1 次）：'\t\tDueAt:     in.DueAt,'
+  ✗ K56@bill.go 锚点命中 0 次（要求恰好 1 次）：'\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作"账期未定"（催收侧记 Undated，不参与逾期扫描）\n}'
+锚点校验：72 格，3 格锚点有问题
