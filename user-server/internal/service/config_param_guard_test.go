@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,35 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
 )
+
+// goCodeOnly 剥掉注释后的源码。
+//
+// 本守卫拦的是**代码里**对遗留 KV 的直查，而文件头的设计说明段里写出表名是常态
+// （白名单里的 webhook_signature.go、以及 ltc_config.go 都在注释里讲这张表）。
+// 按整文件文本匹配的后果是：一个新卡只要解释了自己为什么用 KV 存策略，就必然判红，
+// 于是大家学会的是「别在注释里写表名」——那条规则拦不住任何直查，只会关掉证据。
+// 解析失败时退回原文（判得更严，不会因为文件读不懂就放行）。
+func goCodeOnly(t *testing.T, path string, src []byte) string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+	if err != nil {
+		return string(src)
+	}
+	out := append([]byte(nil), src...)
+	for _, cg := range f.Comments {
+		lo, hi := int(cg.Pos())-1, int(cg.End())-1
+		if lo < 0 || hi > len(out) || lo >= hi {
+			continue
+		}
+		for i := lo; i < hi; i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
+		}
+	}
+	return string(out)
+}
 
 // D12 守卫：禁止新增对两套遗留 KV 的直查（新配置一律走 ConfigParamService）。
 // 白名单 = 既有合法引用（model/repo 定义、遗留 seed/读取、迁移、测试文件）。
@@ -61,7 +92,7 @@ func TestD12_NoNewLegacyKVDirectQuery(t *testing.T) {
 		if rerr != nil {
 			return nil
 		}
-		content := string(data)
+		content := goCodeOnly(t, path, data)
 		if strings.Contains(content, "FROM system_kv_config") || strings.Contains(content, "system_config_kv") {
 			if strings.Contains(content, "禁止新增") || strings.Contains(content, "D12") {
 				return nil

@@ -411,6 +411,17 @@ BASELINE=(
   "21|报价行的生产写入点（T-P6-02 起 service 侧有真实写入方：Generate 与 Revise 各构造一版；接线数回到 0 = 报价生成整条腿没了）|type Quote struct|model\\.Quote\\{|internal/service internal/controller internal/app|wired"
   "21|报价两条腿在启动路径上的装配点（摘掉 router 那一行，端点全退 503 而 Go 用例全绿）|func InitQuoteRuntime|InitQuoteRuntime\\(|internal/router|wired"
   "21|报价 HTTP 出口的挂载点（装配了却没挂载 = 库里有报价、前端 404，与 21c 是两种坏法）|func setupQuoteRoutes|setupQuoteRoutes\\(|internal/router|wired"
+  # ---- 批22（A6）新增的一格 ----------------------------------------------------
+  # 摘要的**写侧**长在 PruneBefore 里（同事务），有 Go 用例逐格钉着；读侧是注入式 setter，
+  # 而本仓所有服务层用例都是就地 new 一个 SessionService 再自己 Set 一遍——
+  # 没有任何一条用例走 router.Setup。于是 router 里那一行 `SetAuditDigestRepository(digestRepo)`
+  # 被摘掉之后：编译过、路由照挂、Go 用例全绿（电池的 D12/D13 都杀不到它，注的是服务层与
+  # 控制器的码，不是装配），而线上每次审计导出里 audit_digests 恒为 null。
+  # 代价不是报错，是**说不出话**：一个裁过的会话导出来 command_log 为空，读者分不清
+  # 「确实没被裁」与「这台服务根本没接摘要读侧」。所以这一格只能由本台账守。
+  # callpat 刻意只扫 internal/router，且锚在方法名上：setter 的定义在 service 包（被判据
+  # 的 `func ` 过滤之外也在 scope 之外），测试里的同名调用被 hits() 的 _test.go 排除。
+  "22|审计摘要读侧在会话服务上的装配（摘掉 router 那一行 setter，Go 用例全绿、导出的审计包里 audit_digests 恒为 null）|func NewBrowserAuditDigestRepositoryWithDB|SetAuditDigestRepository\\(|internal/router|wired"
   # ---- T-P7-01 账单派生腿（23a–23e）—————————————————————————————————————
   # 这一族比报价那一族多一格，因为本卡的中心事实是一句**否证**：
   # `accepted` 这个值从 T-P6-01 起就在报价值域里，而全仓非测试代码没有任何一处写它
