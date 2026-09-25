@@ -150,6 +150,7 @@ build/
 /user-server/merchant_server
 /user-server/marketing
 /user-server/perf
+/user-server/routeinspect
 /user-server/user-server
 /user-server/reset-admin
 /user-server/main-bin
