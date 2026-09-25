@@ -80,8 +80,11 @@ vector_database:
 # LLM / 推理栈配置
 # ============================================================
 # 设计原则（2026-08-17 重构）：
-#   - 本节提供本地推理栈（llama.cpp / MLX）的回落默认值，必须与
-#     internal/config/server.go DefaultInferenceConfig() 严格一致（测试断言）。
+#   - 本节是 config.yaml 缺失时的回落值。embedding / rerank 两档必须与
+#     internal/config/server.go DefaultInferenceConfig() 一致——断言在
+#     internal/config/inference_load_test.go 的 Consistency_WithDefault；
+#     llm 子块是**本机例外**（见下方 2026-09-10 注），该用例因此只断言 llm.model 非空。
+#     换到没有 8787 网关的机器部署时，把 llm 三项改回 8207 与 .env-example 的 LLM_SERVED_NAME。
 #   - LLM 运行时配置（提供商 / base_url / model / api_key / temperature 等）通过
 #     后台「LLM 路由」页面 → POST /api/llm/models 写入数据库表 llm_providers，
 #     user-server 启动时经 LoadProvidersFromDB 加载，覆盖本节默认值。
@@ -102,6 +105,8 @@ inference:
     enabled: true
   llm:
     # 2026-09-10：本地 llama-server(8207) 已下线省资源，LLM 统一走 freeapi 线上网关。
+    # 该网关是本机回环进程（127.0.0.1:8787），不是公网直连，故仍满足上方
+    # 「cloud_providers 必须为空」基线；产码识别点见 internal/geo/service/search_probe.go:209。
     # 注意：provider/路由真相源在 llm_providers/llm_routing_rules 表（DB 覆盖本节），
     # 本节 base_url 仅作 default provider 与 humanize 评估器检测的兜底值。
     mode: remote
