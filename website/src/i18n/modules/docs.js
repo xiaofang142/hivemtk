@@ -105,10 +105,10 @@ export default build({
   'AI 模型': ['AI models', 'AI モデル', 'نماذج الذكاء الاصطناعي'],
   'CPU 限额': ['CPU limit', 'CPU 上限', 'حد المعالج'],
   'Chrome 自动回复失效': ['Chrome auto-reply not working', 'Chrome 自動返信が機能しない', 'الرد الآلي عبر كروم متوقف'],
-  'Docker 部署仅需安装 Docker / Docker Compose 与 llama.cpp；源码部署额外需要 Go 与 Node.js。': [
-    'Docker deployment only needs Docker / Docker Compose and llama.cpp; source deployment additionally needs Go and Node.js.',
-    'Docker 配置なら Docker / Docker Compose と llama.cpp のみ；ソースからは追加で Go と Node.js が必要です。',
-    'نشر Docker يحتاج فقط إلى Docker / Docker Compose و llama.cpp؛ والنشر من الكود يتطلب أيضًا Go و Node.js.',
+  '数据层需要 Docker / Docker Compose；user-server 与推理栈都跑在宿主机，因此 Go、Node.js 与 llama.cpp 三样都要装。': [
+    'The data layer needs Docker / Docker Compose; because user-server and the inference stack both run on the host, Go, Node.js and llama.cpp are all required.',
+    'データ層には Docker／Docker Compose が必要。user-server と推論スタックもホストで動くため Go・Node.js・llama.cpp の三者とも導入します。',
+    'تحتاج طبقة البيانات إلى Docker / Docker Compose؛ وبما أن user-server وحزمة الاستدلال يعملان على المضيف يلزم تثبيت Go و Node.js و llama.cpp جميعًا.',
   ],
   'Docker 部署时，': ['In a Docker deployment,', 'Docker 配置時は', 'في نشر دوكر،'],
   'Docker 部署时，用户端通过仓库根目录的 .env 配置（由 make install 从 .env-example 复制生成）。常用字段：': [
@@ -116,7 +116,7 @@ export default build({
     'Docker 配置ではユーザークライアントはリポジトルートの .env で設定します（make install が .env-example から複製）。主なフィールド：',
     'في نشر دوكر يُضبط العميل عبر ملف .env بجذر المستودع (يُنسخه make install من .env-example). الحقول الشائعة:',
   ],
-  'Docker 部署（推荐）': ['Docker Deployment (Recommended)', 'Docker 配置（推奨）', 'نشر دوكر (موصى به)'],
+  'Docker + 宿主机部署（推荐）': ['Docker + host deployment (recommended)', 'Docker＋ホストデプロイ（推奨）', 'نشر Docker مع المضيف (موصى به)'],
   'GPU 加速（可选）': ['GPU acceleration (optional)', 'GPU アクセラレーション（任意）', 'تسريع بوحدة الرسوميات (اختياري)'],
   'Gin + WebSocket 长连接 + 业务逻辑': ['Gin + WebSocket long connections + business logic', 'Gin＋WebSocket 常時接続＋ビジネスロジック', 'إطار Gin + اتصالات WebSocket طويلة + منطق الأعمال'],
   'HiveMTK 共含 94 个业务模块 + 42 个智能体工具，按业务域划分为以下核心模块，每个模块独立路由，按需启用。': [
@@ -137,7 +137,7 @@ export default build({
   ],
   'LLM 路由网关': ['LLM routing gateway', 'LLM ルーティングゲートウェイ', 'بوابة توجيه LLM'],
   'PG 数据文件 + WAL': ['PG data files + WAL', 'PG データファイル＋WAL', 'ملفات بيانات PG + WAL'],
-  'PostgreSQL（用户端）': ['PostgreSQL (client)', 'PostgreSQL（ユーザークライアント）', 'PostgreSQL (العميل)'],
+  'PostgreSQL（用户端，Docker 容器）': ['PostgreSQL (client, in a Docker container)', 'PostgreSQL（ユーザークライアント、Docker コンテナ）', 'PostgreSQL (العميل، في حاوية Docker)'],
   'PostgreSQL（用户端，库名 user_db）': ['PostgreSQL (client; database name user_db)', 'PostgreSQL（ユーザークライアント、DB 名 user_db）', 'PostgreSQL (العميل، قاعدة user_db)'],
   'Q: 如何升级到新版本？': ['Q: How do I upgrade to a new version?', 'Q: 新バージョンへの更新方法は？', 'س: كيف أرقي إلى نسخة جديدة؟'],
   'Q: 如何备份数据？': ['Q: How do I back up data?', 'Q: データのバックアップ方法は？', 'س: كيف أعمل نسخًا احتياطيًا؟'],
@@ -176,7 +176,7 @@ export default build({
   'cross-encoder 精排': ['cross-encoder reranking', 'cross-encoder リランク', 'إعادة ترتيب cross-encoder'],
   'cross-encoder，无 pooling': ['cross-encoder, no pooling', 'cross-encoder、pooling なし', 'cross-encoder، بدون pooling'],
   'maxmemory=1gb，allkeys-lru': ['maxmemory=1gb, allkeys-lru', 'maxmemory=1gb、allkeys-lru', 'maxmemory=1gb، allkeys-lru'],
-  'mtk-llm（本地推理）': ['mtk-llm (local inference)', 'mtk-llm（ローカル推論）', 'mtk-llm (استدلال محلي)'],
+  'LLM 推理（llama-server，宿主机）': ['LLM inference (llama-server, on the host)', 'LLM 推論（llama-server、ホスト側）', 'استدلال LLM (‏llama-server على المضيف)'],
   'prod 档推理': ['Production-profile inference', 'prod プロファイル推論', 'استدلال بإعداد الإنتاج'],
   'shared_buffers + 200GB HNSW 索引缓存': ['shared_buffers + 200GB HNSW index cache', 'shared_buffers＋200GB の HNSW インデックスキャッシュ', 'shared_buffers + ذاكرة تخزين مؤقت 200GB لفهرس HNSW'],
   'shared_buffers=256MB，max_connections=500': ['shared_buffers=256MB, max_connections=500', 'shared_buffers=256MB、max_connections=500', 'shared_buffers=256MB، max_connections=500'],
@@ -241,10 +241,10 @@ export default build({
     '拡張のあるブラウザをオンラインかつ対象プラットフォームへログインしたままにしてください。新着 DM は自動で統合受信箱に入り、AI 生成返信は拡張経由で実セッションへ送信されます。発火履歴は「ログ」ページで確認可能です。',
     'أبقِ المتصفح الذي يستضيف الإضافة متصلًا ومسجلًا دخوله في المنصة المستهدفة؛ ستتدفق الرسائل الجديدة تلقائيًا إلى صندوق موحد، وتُرسل ردود الذكاء الاصطناعي داخل محادثات حقيقية عبر الإضافة. يمكنك متابعة سجل التشغيل في صفحة «السجلات».',
   ],
-  '修改 PLATFORM_ADMIN_PASSWORD / JWT_SECRET / POSTGRES_PASSWORD 等必填项': [
-    'Set required items such as PLATFORM_ADMIN_PASSWORD / JWT_SECRET / POSTGRES_PASSWORD',
-    'PLATFORM_ADMIN_PASSWORD／JWT_SECRET／POSTGRES_PASSWORD など必須項目を修正',
-    'عدّل الحقول الإلزامية مثل PLATFORM_ADMIN_PASSWORD / JWT_SECRET / POSTGRES_PASSWORD',
+  '修改 POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET 等必填项': [
+    'Set the required items POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET',
+    'POSTGRES_PASSWORD／REDIS_PASSWORD／JWT_SECRET などの必須項目を修正',
+    'اضبط الحقول الإلزامية POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET',
   ],
   '健康检查': ['Health check', 'ヘルスチェック', 'فحص السلامة'],
   '克隆开源用户端仓库（': ['Clone the open-source client repository (', 'OSS ユーザークライアントのリポジトリをクローン（', 'انسخ مستودع العميل مفتوح المصدر ('],
@@ -274,12 +274,12 @@ export default build({
     '単機フルスタックで 96GB を超える拡張は、業務ドメイン別ノード分割を推奨します。Chrome のメモリ変動で推論スタックが圧迫されるのを避けるため：',
     'بعد 96غيغابايت في التصميم الكامل على جهاز واحد، يُستحسن التقسيم إلى عقد مستقلة بحسب نطاق العمل لتجنب تقلبات ذاكرة كروم التي تسحق حزمة الاستدلال:',
   ],
-  '单用户调试，AI 走 1.5B 本地模型': ['Single-user debugging with the 1.5B local model for AI', '単ユーザー検証、AI は 1.5B ローカルモデル', 'تصحيح مستخدم واحد، ونموذج محلي 1.5B للذكاء الاصطناعي'],
+  '单用户调试，AI 走 3B 本地模型': ['Single-user debugging with the 3B local model for AI', '単ユーザー検証、AI は 3B ローカルモデル', 'تصحيح مستخدم واحد، ونموذج محلي 3B للذكاء الاصطناعي'],
   '单组件实测资源占用（基线参考）': ['Measured per-component resource usage (baseline reference)', 'コンポーネント別実測リソース（基線参考）', 'استهلاك الموارد المقاس لكل مكون (مرجع أساسي)'],
-  '即可使用。AI 默认走本地推理栈（数据不出域）；如需使用云端大模型，编辑 .env 的 LLM_BASE_URL 与 LLM_API_KEY 即可。': [
-    'to start using it. AI defaults to the local inference stack (data never leaves your domain); to use a cloud LLM instead, edit LLM_BASE_URL and LLM_API_KEY in .env.',
-    'で利用開始できます。AI は既定でローカル推論スタック（データ非出域）；クラウド大規模モデルを使う場合は .env の LLM_BASE_URL と LLM_API_KEY を編集します。',
-    'فصبحت جاهزًا للعمل. يقصد الذكاء الاصطناعي تلقائيًا حزمة الاستدلال المحلية (البيانات لا تغادر نطاقك)؛ وإن أردت نموذجًا سحابيًا عدّل LLM_BASE_URL وLLM_API_KEY في ملف .env.',
+  '即可使用。AI 默认走宿主机的本地推理栈（数据不出域）；要改用云端大模型，在后台「LLM 路由」里添加服务商，运行配置写入 llm_providers 表。': [
+    'to get going. AI uses the host-side local inference stack by default (data never leaves your domain); to switch to a cloud LLM, add a provider in the admin "LLM Routing" page — the runtime config is written into the llm_providers table.',
+    'ですぐ利用できます。AI は既定でホスト上のローカル推論スタックを使い（データは外に出ません）、クラウド LLM へ切り替えるには管理画面の「LLM ルーティング」でプロバイダーを追加します（設定は llm_providers テーブルへ保存）。',
+    'لتبدأ العمل. يعتمد الذكاء الاصطناعي افتراضيًا على حزمة الاستدلال المحلية على المضيف (لا تغادر البيانات نطاقك); وللتحويل إلى نموذج سحابي أضف مزوّدًا من صفحة «توجيه LLM» في الإدارة فتُحفظ الإعدادات في جدول llm_providers.',
   ],
   '即可全卸载，显著降低 LLM 推理延迟并提升吞吐；macOS Apple Silicon 默认 Metal 加速（': [
     'offloads fully, markedly cutting LLM inference latency and raising throughput; macOS Apple Silicon uses Metal acceleration by default (',

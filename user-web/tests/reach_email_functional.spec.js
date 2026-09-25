@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:8213'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const STATE = path.resolve(process.cwd(), 'tests/.auth/user.json')
 
 test.use({ baseURL: BASE, storageState: STATE })

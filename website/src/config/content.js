@@ -534,9 +534,9 @@ export const deploySection = {
   tag: '部署指南',
   title: ['4 步完成部署', '开箱即用'],
   gradientIndex: 1,
-  subtitle: '基于 AGPL-3.0 开源，无授权码、无版本下载、无任何收费环节。Docker 一键启动或源码部署，源码与文档均在 GitHub / Gitee 公开托管。',
+  subtitle: '基于 AGPL-3.0 开源，无授权码、无版本下载、无任何收费环节。make install 一键启动或源码部署，源码与文档均在 GitHub / Gitee 公开托管。',
   cards: [
-    { icon: 'package', title: 'Docker 部署', desc: '环境隔离、可一键启停、无需手动配置依赖。', cta: '查看 Docker 部署', link: '/deploy' },
+    { icon: 'package', title: 'Docker 部署', desc: '数据层容器一键启停，推理栈与后端跑在宿主机。', cta: '查看 Docker 部署', link: '/deploy' },
     { icon: 'code', title: '源码仓库', desc: '完整源码，可自由修改、二次开发与贡献。', cta: '前往 Gitee', link: 'https://gitee.com/xhpmayun/hivemtk' },
     { icon: 'book', title: '安装文档', desc: 'Docker 部署、源码部署、FRP 穿透与配置说明。', cta: '查看安装文档', link: '/docs' },
   ],

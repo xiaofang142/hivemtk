@@ -56,11 +56,11 @@ const activeStep = ref(0)
 const steps = [
   {
     title: i18n.global.t('1. 初始化系统'),
-    description: '注册账户并完成商户初始化',
+    description: '创建超管账号并完成系统初始化',
     details: [
-      '访问注册页面创建账户',
-      '登录后系统自动初始化商户信息',
-      '检查商户标识状态（开源版无需授权）'
+      '访问 /setup 创建超级管理员账号',
+      '初始化完成后系统在本地写入 install.lock',
+      '使用创建的账号登录系统'
     ],
     path: '/setup'
   },

@@ -247,7 +247,7 @@ graph LR
     end
 
     subgraph Infra[推理/存储]
-        LocalLLM[(本地 llama.cpp<br/>Qwen2.5-1.5B · :8207)]
+        LocalLLM[(本地 llama.cpp<br/>Qwen2.5-3B · :8207)]
         LocalEmb[(本地 TEI/Xorbits<br/>bge-m3 · :8208)]
         LocalRerank[(本地 reranker<br/>bge-reranker-v2-m3 · :8209)]
         PgVec[(pgvector<br/>1024 维)]
@@ -442,7 +442,7 @@ graph LR
     PG[(PostgreSQL 16<br/>业务主库)]
     PgVec[(pgvector<br/>knowledge_embeddings 1024 维)]
     Redis[(Redis 7<br/>缓存/分布式锁/限流)]
-    LLM[(llama.cpp<br/>Qwen2.5-1.5B :8207)]
+    LLM[(llama.cpp<br/>Qwen2.5-3B :8207)]
     Emb[(Embedding Server<br/>bge-m3 :8208)]
     Rerank[(Reranker<br/>bge-reranker-v2-m3 :8209)]
     Platform[(platform-server :8205<br/>可选·仅 PLATFORM_ENABLED=true)]

@@ -22,17 +22,19 @@ describe('D7 确认放行 API', () => {
     http.post.mockResolvedValue({ code: 'SUCCESS', data: { confirmed: true } })
   })
 
-  it('POST /sessions/:id/confirm（无业务请求体）', async () => {
-    await confirmBrowserSession(12)
+  // 批20 起放行绑载荷：body 必须带 payload_hash（见 browser_d7_gate_b20.test.js）。
+  // 本批原来断言「body 是对象就行」，那条宽松判据正好放过了批20 修的空对象支票。
+  it('POST /sessions/:id/confirm，body 只带放行载荷', async () => {
+    await confirmBrowserSession(12, 'cafe1234')
     expect(http.post).toHaveBeenCalledTimes(1)
     const [url, body] = http.post.mock.calls[0]
     expect(url).toBe('/api/browser-automation/sessions/12/confirm')
-    expect(body).toBeTypeOf('object') // 不得把会话 id 之外的语义塞进 body
+    expect(body).toEqual({ payload_hash: 'cafe1234' }) // 会话 id 之外的语义只允许是「批的是哪份内容」
   })
 
   it('确认端点与中断端点不同路径（复用 stop = 语义混淆）', async () => {
     await stopBrowserSession(12, 'x')
-    await confirmBrowserSession(12)
+    await confirmBrowserSession(12, 'cafe1234')
     const urls = http.post.mock.calls.map(([u]) => u)
     expect(urls).toContain('/api/browser-automation/sessions/12/stop')
     expect(urls).toContain('/api/browser-automation/sessions/12/confirm')

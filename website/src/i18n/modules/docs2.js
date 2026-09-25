@@ -17,8 +17,8 @@ export default build({
   '层级': ['Layer', '階層', 'الطبقة'],
   '嵌入式聊天窗': ['Embedded chat window', '埋め込みチャット窓', 'نافذة محادثة مدمجة'],
   '常见原因': ['Common causes', 'よくある原因', 'الأسباب الشائعة'],
-  '常驻 + KV cache 8192 ctx × 4 并发槽位': ['Resident + KV cache (8192 ctx × 4 concurrency slots)', '常駐＋KV cache（8192 ctx×4 並行スロット）', 'مقيم + مخبأ KV ‏(سياق 8192 × 4 خانات تزامن)'],
-  '常驻 1.1GB + KV cache (ctx=8192)': ['Resident 1.1GB + KV cache (ctx=8192)', '常駐 1.1GB＋KV cache（ctx=8192）', 'مقيم 1.1غيغابايت + مخبأ KV (سياق 8192)'],
+  '常驻 + KV cache（ctx 与槽位取 .env 的 LLM_CTX_SIZE × LLM_PARALLEL）': ['Resident + KV cache (ctx and slots come from LLM_CTX_SIZE × LLM_PARALLEL in .env)', '常駐＋KV cache（ctx とスロットは .env の LLM_CTX_SIZE × LLM_PARALLEL を参照）', 'مقيم + مخبأ KV (السياق و الخانات من LLM_CTX_SIZE × LLM_PARALLEL في ملف .env)'],
+  '常驻 = 模型文件（--mlock 锁页，默认档 2.0GB）+ KV cache': ['Resident = model file (mlock-pinned, 2.0GB on the default profile) + KV cache', '常駐＝モデルファイル（--mlock でページロック、既定档 2.0GB）＋KV cache', 'مقيم = ملف النموذج (مُثبَّت بـ --mlock، 2.0غيغابايت في الإعداد الافتراضي) + مخبأ KV'],
   '并发会话': ['Concurrent sessions', '同時セッション', 'جلسات متزامنة'],
   '应用层': ['Application layer', 'アプリケーション層', 'طبقة التطبيقات'],
   '应用端口（用户端 Web / API）': ['Application ports (client Web / API)', 'アプリポート（ユーザー Web／API）', 'منافذ التطبيق (ويب/API العميل)'],
@@ -38,7 +38,7 @@ export default build({
   ],
   '按账号': ['Per account', 'アカウント単位', 'لكل حساب'],
   '平台端（可选本地组件）': ['Platform side (optional local component)', 'プラットフォーム側（オプションのローカルコンポーネント）', 'جهة المنصة (مكوّن محلي اختياري)'],
-  '平台端（可选，默认关闭）': ['Platform side (optional, off by default)', 'プラットフォーム側（オプション、既定で無効）', 'جهة المنصة (اختيارية، معطّلة افتراضيًا)'],
+  '平台端（默认关闭；PLATFORM_ENABLED=false 时下面几项都不生效）': ['Platform side (off by default; while PLATFORM_ENABLED=false the items below are inert)', 'プラットフォーム側（既定で無効。PLATFORM_ENABLED=false なら以下はすべて無効）', 'جهة المنصة (معطّلة افتراضيًا؛ وما دامت PLATFORM_ENABLED=false فالبنود التالية لا أثر لها)'],
   '平台端（可选本地组件，默认关闭；只有开启时才读取下面三项）': [
     'Platform side (optional local component, off by default; the three keys below are read only when enabled)',
     'プラットフォーム側（オプションのローカルコンポーネント、既定で無効。有効時のみ以下の 3 項目を読み込みます）',
@@ -55,15 +55,15 @@ export default build({
   '指向本机地址。': ['to point at the local address.', 'ローカルアドレスを指定します。', 'للإشارة إلى العنوان المحلي.'],
   '推理节点（独立）': ['Inference node (standalone)', '推論ノード（独立）', 'عقدة الاستدلال (مستقلة)'],
   '推荐整机': ['Recommended whole machine', '推奨マシン全体', 'الجهاز الموصى به كاملًا'],
-  '推荐用 Docker Compose 一键部署用户端，无需安装 Go / Node，适合生产环境。': [
-    'Deploying the client with a single Docker Compose command is recommended — no Go / Node install required; production-ready.',
-    'Docker Compose のワンコマンド配置を推奨。Go／Node 不要で本番環境向けです。',
-    'يُوصى بنشر العميل بأمر واحد عبر Docker Compose دون تثبيت Go أو Node؛ ومناسب للإنتاج.',
+  '数据层（PostgreSQL + Redis）用仓库自带的 docker-compose.yml 起容器，user-server 与本地推理栈跑在宿主机进程：一条 make install 装齐、make dev 起服务。': [
+    'The data layer (PostgreSQL + Redis) runs in containers from the repo-shipped docker-compose.yml, while user-server and the local inference stack run as host processes: make install sets everything up, make dev starts the service.',
+    'データ層（PostgreSQL + Redis）は同梱の docker-compose.yml でコンテナ起動、user-server とローカル推論スタックはホストプロセスで動作します：make install で一括導入、make dev で起動。',
+    'طبقة البيانات (PostgreSQL وRedis) تعمل في حاويات عبر docker-compose.yml المرفق، بينما يعمل user-server وحزمة الاستدلال المحلية كعمليتين على المضيف: make install للتجهيز وmake dev للتشغيل.',
   ],
-  '提示：日常部署更推荐直接使用仓库根目录的 Makefile（make install / make up），它会自动完成上述构建与编排。': [
-    'Tip: for day-to-day deploys prefer the root Makefile (make install / make up), which automates all of the above build and orchestration.',
-    'ヒント：日常の配備ではリポジトルートの Makefile（make install／make up）を使うのが便利です。上記ビルドと編成を自動化します。',
-    'نصيحة: للنشر اليومي يفضل استخدام Makefile في جذر المستودع (make install / make up)، إذ يؤتمت البناء والتنسيق أعلاه.',
+  '提示：日常部署更推荐直接使用仓库根目录的 Makefile（make install / make dev），它会自动完成上述构建与编排。': [
+    'Tip: for day-to-day deploys prefer the root Makefile (make install / make dev), which automates all of the above build and orchestration.',
+    'ヒント：日常の配備ではリポジトリルートの Makefile（make install／make dev）を使うのが便利です。上記ビルドと編成を自動化します。',
+    'نصيحة: للنشر اليومي يفضل استخدام Makefile في جذر المستودع (make install / make dev)، إذ يؤتمت البناء والتنسيق أعلاه.',
   ],
   '操作日志 / 审计': ['Operation logs / audit', '操作ログ／監査', 'سجلات العمليات / التدقيق'],
   '操作系统 + Docker 守护进程 + 数据层 + 应用进程 + 本地推理栈 + 业务并发余量': [
@@ -163,20 +163,20 @@ export default build({
     'لمراجعة تغييرات الإصدارات راجع مدخل «سجل التحديثات» في عمود «المشروع المفتوح» أسفل الموقع.',
   ],
   '生产环境必须留余量应对突发流量': ['Production must keep headroom for traffic spikes', '本番では突発トラフィックへの余裕を確保必須', 'يجب إبقاء هامش في الإنتاج لموجات الزيارات المفاجئة'],
-  '生成 docker-compose.yml、构建前端与 SDK、拉起推理栈并启动': [
-    'generates docker-compose.yml, builds frontend and SDK, brings up the inference stack and starts everything',
-    'docker-compose.yml を生成し、フロントと SDK をビルド、推論スタックを立てて起動',
-    'يولّد docker-compose.yml ويبني الواجهة وحزمة SDK ويُشعل حزمة الاستدلال ثم يشغّل الجميع',
+  '构建前端与 SDK、下载模型、拉起数据层容器与宿主机推理栈': [
+    'builds the frontend and SDK, downloads models, brings up the data-layer containers and the host inference stack',
+    'フロントと SDK をビルド、モデルをダウンロード、データ層コンテナとホスト側推論スタックを起動',
+    'يبني الواجهة وحزمة SDK ويحمّل النماذج ويُشعل حاويات طبقة البيانات وحزمة استدلال المضيف',
   ],
-  '生成 docker-compose.yml、构建前端与 SDK、拉起本地推理栈并启动全栈': [
-    'generates docker-compose.yml, builds frontend and SDK, launches the local inference stack and boots the full stack',
-    'docker-compose.yml を生成し、フロントと SDK をビルド、ローカル推論スタックを立ち上げて全層を起動',
-    'يولّد docker-compose.yml ويبني الواجهة وSDK ويطلق حزمة الاستدلال المحلية ويشغّل جميع الطبقات',
+  '构建前端与 SDK、下载模型、拉起数据层容器与本地推理栈': [
+    'builds the frontend and SDK, downloads models, brings up the data-layer containers and the local inference stack',
+    'フロントと SDK をビルド、モデルをダウンロード、データ層コンテナとローカル推論スタックを起動',
+    'يبني الواجهة وحزمة SDK ويحمّل النماذج ويُشعل حاويات طبقة البيانات وحزمة الاستدلال المحلية',
   ],
-  '生成配置并一键启动全部组件（PostgreSQL + Redis + user-server + 本地推理栈）：': [
-    'Generate configuration and start every component in one shot (PostgreSQL + Redis + user-server + local inference stack):',
-    '設定を生成し全コンポーネントをワンコマンド起動（PostgreSQL＋Redis＋user-server＋ローカル推論スタック）：',
-    'ولّد الإعدادات وشغّل كل المكونات بأمر واحد (PostgreSQL + Redis + user-server + حزمة الاستدلال المحلية):',
+  '生成配置后一键安装：数据层（PostgreSQL、Redis）起 Docker 容器，本地推理栈在宿主机拉起：': [
+    'Generate the config, then install in one command: the data layer (PostgreSQL, Redis) runs in Docker containers while the local inference stack starts on the host:',
+    '設定を生成したらワンコマンド導入：データ層（PostgreSQL、Redis）は Docker コンテナ、ローカル推論スタックはホストで起動：',
+    'ولّد الإعدادات ثم ثبّت بأمر واحد: طبقة البيانات (PostgreSQL وRedis) في حاويات Docker، وحزمة الاستدلال المحلية على المضيف:',
   ],
   '生成随机密钥。': ['to generate random secrets.', 'でランダム鍵を生成してください。', 'لتوليد مفاتيح عشوائية.'],
   '用户分群、RFM 自动计算、标签市场、分层触达、群体画像。': [
@@ -184,7 +184,7 @@ export default build({
     'ユーザーセグメント化、RFM 自動算出、タグ市場、階層別リーチ、コホートプロファイル。',
     'تجزئة المستخدمين، حساب RFM آلي، سوق الوسوم، وصول متدرج، صور جماعية.',
   ],
-  '用户端 Web 默认监听': ['The client web UI listens by default on', 'ユーザー Web の既定待受は', 'تنصت واجهة العميل افتراضيًا على'],
+  '用户端 Web 与 API 同端口监听': ['The client web UI and API listen on the same port', 'ユーザー Web と API は同一ポートで待受', 'واجهة العميل و API تستمعان على المنفذ نفسه'],
   '用户端默认': ['The client defaults to', 'クライアント側は既定で', 'العميل افتراضيًا'],
   '用户端配置（.env）': ['Client configuration (.env)', 'ユーザークライアント設定（.env）', 'إعدادات العميل (.env)'],
   '用户端（HiveMTK）': ['Client side (HiveMTK)', 'ユーザークライアント（HiveMTK）', 'جانب العميل (HiveMTK)'],
@@ -256,10 +256,10 @@ export default build({
   ],
   '维度': ['Dimension', '次元', 'البعد'],
   '缓存 / 限流 / 会话': ['Cache / rate limiting / sessions', 'キャッシュ／レート制限／セッション', 'مخبأ / حد معدل / جلسات'],
-  '编辑 PLATFORM_ADMIN_PASSWORD / JWT_SECRET 等必填项': [
-    'Edit required items such as PLATFORM_ADMIN_PASSWORD / JWT_SECRET',
-    'PLATFORM_ADMIN_PASSWORD／JWT_SECRET など必須項目を編集',
-    'حرر الحقول الإلزامية مثل PLATFORM_ADMIN_PASSWORD / JWT_SECRET',
+  '编辑 POSTGRES_PASSWORD、REDIS_PASSWORD、JWT_SECRET 等必填项': [
+    'Edit the required items POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET',
+    'POSTGRES_PASSWORD、REDIS_PASSWORD、JWT_SECRET などの必須項目を編集',
+    'حرر الحقول الإلزامية POSTGRES_PASSWORD وREDIS_PASSWORD وJWT_SECRET',
   ],
   '自动回复依赖桥接扩展在线：浏览器关闭、平台登录态失效、扩展断连都会导致该账号自动回复暂停，建议为关键账号配置监控告警。': [
     'Auto-reply depends on the bridge extension being online: browser closed, platform session expired, or extension disconnected will each pause that account automatically. Set up monitoring alerts for key accounts.',
@@ -267,7 +267,7 @@ export default build({
     'يعتمد الرد الآلي على اتصال إضافة الجسر: إغلاق المتصفح أو انتهاء جلسة المنصة أو انقطاع الإضافة كلها توقف رد الحساب آليًا؛ لذا اضبط تنبيهات مراقبة للحسابات الحرجة.',
   ],
   '节点角色': ['Node role', 'ノード役割', 'دور العقدة'],
-  '若已生成配置，仅启动服务': ['If config already exists, just start services', '既に設定生成済みならサービス起動のみ', 'إن كانت الإعدادات جاهزة فشغّل الخدمات فقط'],
+  '编译并启动 user-server（air 热重载，监听 8204）': ['compile and start user-server (air hot-reload, listening on 8204)', 'user-server をビルドして起動（air ホットリロード、8204 で待受）', 'صرّف user-server وشغّله (إعادة تحميل حيّ عبر air، يستمع على 8204)'],
   '获取源码': ['Get the source code', 'ソースコード入手', 'احصل على الكود'],
   '角色': ['Role', '役割', 'الدور'],
   '触发关键词与匹配模式（精确 / 模糊 / 正则）': ['Trigger keywords and match modes (exact / fuzzy / regex)', '発火キーワードと一致方式（完全／あいまい／正規表現）', 'كلمات مفتاحية وأوزار المطابقة (تامة / غامضة / تعابير نظامية)'],
@@ -328,9 +328,9 @@ export default build({
     'ピークは 80/20 の法則で概算：80% のメッセージが 20% の時間帯（4.8 時間）に集中し、ピーク QPS は日平均の約 2～3 倍になります。',
     'تقدَّر الذروة بقاعدة 80/20: تتركز 80% من الرسائل في 20% من الوقت (4.8 ساعة)، فيبلغ ذروة QPS نحو 2–3 ضعف المعدل اليومي.',
   ],
-  '默认管理员账号为': ['The default administrator account is', '既定の管理者アカウントは', 'حساب المسؤول الافتراضي هو'],
+  '首次访问会跳到 /setup 初始化向导：超管用户名与口令由你自己设置，不来自任何配置文件或环境变量。': ['the first visit redirects to the /setup wizard, where you set the super-admin username and password yourself — they come from no config file or environment variable.', '初回アクセスは /setup ウィザードへ飛び、スーパー管理者のユーザー名とパスワードを自分で設定します（設定ファイルにも環境変数にもありません）。', 'تحوّلك أول زيارة إلى معالج /setup حيث تضبط اسم مستخدم المشرف وكلمة مرورَه بنفسك؛ فلا来源 من ملف إعداد ولا من متغير بيئة.'],
   '（可选）GPU 推理节点': ['(Optional) GPU inference node', '（任意）GPU 推論ノード', '(اختياري) عقدة استدلال برسوميات'],
-  '（如已生成配置文件）': [' (if the config file already exists)', '（既に設定ファイルがある場合）', '(إن كان ملف الإعدادات موجودًا)'],
+  '启动 user-server（监听 8204；生产可 make user-build 后跑二进制）': ['start user-server (listens on 8204; for production run make user-build and then the binary)', 'user-server を起動（8204 で待受。本番は make user-build してバイナリを実行）', 'شغّل user-server (يستمع على 8204؛ وللإنتاج شغّل make user-build ثمّ الثنائي)'],
   '（旧版 Chrome Headless 无头模式已废弃）。仅需保证关键时段扩展在线、平台登录态有效。': [
     '). Legacy Chrome Headless mode is deprecated). Just keep the extension online during peak windows and the platform login valid.',
     '）。旧来の Chrome Headless モードは廃止済みです）。要はピーク時間帯に拡張をオンライン・プラットフォームログインを有効のまま保つことです。',
@@ -342,17 +342,11 @@ export default build({
     '). تستطيع عقدة الرسوميات تقليص احتياج ذاكرة الجهاز بشكل كبير (فلن يحتل النموذج ذاكرة RAM).',
   ],
   '）：': ['):', '）：', '):'],
-  '，后端 user-server 同一端口提供 API；默认管理员账号': [
-    '; the backend user-server serves the API on the same port; default admin account',
-    '；バックエンド user-server が同一ポートで API 提供；既定管理者アカウント',
-    '؛ يقدم الخادم user-server واجهته عبر المنفذ نفسه؛ حساب المسؤول الافتراضي',
+  '，两者都由宿主机的 user-server 进程提供；首次访问会跳到 /setup 初始化向导，超管用户名与口令在向导里自行设置。': [
+    ', both served by the user-server process on the host; the first visit goes to the /setup wizard where you set the super-admin username and password.',
+    'いずれもホスト上の user-server プロセスが提供。初回アクセスは /setup ウィザードへ飛び、スーパー管理者名とパスワードをそこで設定します。',
+    'وكلاهما يقدّمه مسار user-server على المضيف؛ وتحوّل أول زيارة إلى معالج /setup حيث تضبط اسم مستخدم المشرف وكلمة مروره.',
   ],
-  '，密码为 .env 中的 PLATFORM_ADMIN_PASSWORD。': [
-    ', password being PLATFORM_ADMIN_PASSWORD from .env.',
-    '，パスワードは .env の PLATFORM_ADMIN_PASSWORD です。',
-    '، وكلمة السر هي PLATFORM_ADMIN_PASSWORD من ملف .env.',
-  ],
-  '，密码即': [', whose password is exactly', '，パスワードはそのまま', '، وكلمة السر هي نفسها'],
   '：LLM 切换为 Qwen2.5-14B-Instruct Q4_K_M（常驻 ~9GB），Embedding 切换为 bge-m3 F16（~4.5GB），Rerank 不变；三服务在 4 并发槽位下峰值 ~18GB，企业级 8 并发槽位峰值 ~25GB。': [
     ': switch the LLM to Qwen2.5-14B-Instruct Q4_K_M (~9GB resident), Embedding to bge-m3 F16 (~4.5GB), Rerank unchanged; the three services peak around ~18GB at 4 concurrency slots, ~25GB at enterprise-grade 8 slots.',
     '：LLM を Qwen2.5-14B-Instruct Q4_K_M（常駐 約9GB）、Embedding を bge-m3 F16（約4.5GB）へ変更、Rerank は据え置き。3 サービス合計は並行 4 スロット時のピークで約18GB、企業級 8 スロットで約25GB。',
@@ -363,9 +357,17 @@ export default build({
     '：Douyin／Kuaishou／小紅書／閑魚／TikTok は Chrome 拡張ブリッジで送受信し、拡張は従業員自身のログイン済みブラウザ内で動作します。',
     ': تبادل رسائل دويين/كوايشو/شياوهونغشو/شيانيو/تيك توك يتم عبر جسر إضافة كروم، التي تعمل داخل متصفحات الموظفين المسجلة دخولهم;',
   ],
-  '；首次访问按向导完成初始化即可。': [
-    '; just finish initialization through the wizard on first visit.',
-    '；初回アクセス時にウィザードへ従い初期化すれば OK です。',
-    '؛ أكمل التهيئة عبر المعالج في أول زيارة فقط.',
-  ],
+  '数据层容器日志': ['Data-layer container logs', 'データ層コンテナログ', 'سجلات حاويات طبقة البيانات'],
+  'make dev 的编译与运行日志': ['compile and run log of make dev (air)', 'make dev（air）のビルド・実行ログ', 'سجل البناء والتشغيل لأمر make dev'],
+  '改完要同步 .env 的 POSTGRES_PASSWORD，数据卷只在首次初始化时读它': ['Then sync POSTGRES_PASSWORD in .env — the data volume only reads it on first initialisation.', '変更後は .env の POSTGRES_PASSWORD も同期してください。データボリュームは初回初期化時のみ読みます。', 'ثم حدّث POSTGRES_PASSWORD في ملف .env بالتوافق، فمجلد البيانات يقرأه عند التهيئة الأولى فقط.'],
+  '桥接扩展自动回复失效': ['Bridge extension auto-reply not working', 'ブリッジ拡張の自動返信が効かない', 'تعطّل الرد الآلي عبر إضافة الجسر'],
+  '自动回复跑在员工自己的登录态浏览器与 Chrome 扩展上，服务端没有常驻浏览器进程（无头模式已废弃），所以排查从扩展侧开始。': ['Auto-reply runs inside each employee\'s logged-in browser through the Chrome extension; the server keeps no resident browser process (headless mode is deprecated), so start troubleshooting on the extension side.', '自動返信は従業員自身のログイン済みブラウザ上の Chrome 拡張で動作します。サーバー側にブラウザ常駐プロセスはありません（ヘッドレスモードは廃止済み）ため、拡張側から点検してください。', 'يعمل الرد الآلي داخل متصفح الموظف المسجل دخوله عبر إضافة كروم؛ ولا توجد عملية متصفح مقيمة على الخادم (الوضع بدون واجهة ملغى)، لذا ابدأ الفحص من جهة الإضافة.'],
+  '1. 员工浏览器里确认扩展已安装且在线，该平台账号仍处于登录态': ['1. In the employee browser, confirm the extension is installed and online, and the platform account is still logged in', '1. 従業員のブラウザで拡張が導入済み・オンライン、かつ該当アカウントがログイン済みか確認', '1. تأكد في متصفح الموظف أن الإضافة مثبتة ومتصلة وأن الحساب ما زال مسجّل الدخول'],
+  '2. 服务端查桥接凭证状态（需超管 JWT）': ['2. Check the bridge credential status on the server (super-admin JWT required)', '2. サーバー側でブリッジ資格証明の状態を確認（スーパー管理者 JWT が必要）', '2. راجع حالة اعتماد الجسر على الخادم (يلزم JWT المشرف الأعلى)'],
+  '3. 扩展侧拉取该账号的待发指令（需 X-Bridge-Token 头）': ['3. From the extension side, poll the pending outbox for that account (requires the X-Bridge-Token header)', '3. 拡張側で該当アカウントの未送信キューをポーリング（X-Bridge-Token ヘッダーが必要）', '3. اسحب من جهة الإضافة قائمة الحساب المعلّقة (يتطلب ترويسة X-Bridge-Token)'],
+  '前端由 user-server 托管，先确认构建产物在位': ['The frontend is served by user-server — first confirm the build output is in place', 'フロントエンドは user-server が配信します。まずビルド成果物の所在を確認', 'الواجهة يقدّمها user-server — تأكد أولاً من وجود ناتج البناء'],
+  '再确认启动目录：从 user-server/ 启动时按 ../user-web/dist 找产物，换目录启动要显式指过去': ['Then check the working directory: started from user-server/ it looks for ../user-web/dist; from anywhere else point at it explicitly', '次に起動ディレクトリ：user-server/ からなら ../user-web/dist を参照。それ以外から起動する場合は明示的に指定', 'ثم تحقق من دليل التشغيل: من user-server/ يبحث عن ../user-web/dist؛ ومن أي مكان آخر حدّده صراحةً'],
+  '平台代理口令：不是 8204 的登录口令，超管口令在 /setup 向导里设置': ['Platform proxy password: not the 8204 login credential — set the super-admin password in the /setup wizard', 'プラットフォーム・プロキシのパスワード：8204 のログイン認証ではなく、スーパー管理者パスワードは /setup ウィザードで設定', 'كلمة مرور نيابة المنصة: ليست بيانات دخول 8204 — اضبط كلمة مرور المشرف في معالج /setup'],
+  '数据也存在命名卷': ['The data also lives in the named volume', 'データは名前付きボリュームにも保存され', 'تقيم البيانات أيضًا في مجلد مُسمّى'],
+  '里（docker volume），换机时连卷一起迁。': [' (a docker volume); migrate the volume when you move machines.', '（docker volume）。マシン移動時はボリュームも一緒に移行します。', ' (أي docker volume)؛ وانقل المجلد معك عند تبديل الجهاز.'],
 })

@@ -122,16 +122,16 @@
 - 在反向代理（反向代理层 / Caddy）层强制 HTTPS
 - 配置 CSP / X-Frame-Options / X-Content-Type-Options 等安全响应头
 - 限制 Webhook 入站 IP 白名单（Postmark / SendCloud / 各渠道）
-- 数据库端口不暴露公网（容器内端口 8202，宿主机映射 8232，建议改为内网或 127.0.0.1）
-- Redis 端口不暴露公网（容器内端口 8203）
+- 数据库端口不暴露公网（PG 默认 8202，宿主同名映射并只绑 127.0.0.1；容器内监听的也是 8202。开发机可用 USER_POSTGRES_HOST_PORT 覆盖到 8232）
+- Redis 端口不暴露公网（默认 8203 并只绑 127.0.0.1；容器内同为 8203。改宿主端口用 REDIS_HOST_PORT）
 - 本地推理栈端口（llama-server :8207 LLM / :8208 Embedding / :8209 Rerank）不暴露公网
 
 ### 5.2 运维侧
 
-- 定期备份 PostgreSQL（`make backup`）
-- 监控异常登录告警（详见 [docs/marketing-features/anomaly-login-detector.md`anomaly-login-detector.md`）
-- 监控操作日志（详见 [docs/marketing-features/operation-log.md`operation-log.md`）
-- 监控安全审计（详见 [docs/marketing-features/security-audit.md`security-audit.md`）
+- 定期备份 PostgreSQL（`make db-backup`，恢复用 `make db-restore FILE=xxx.sql`）
+- 监控异常登录告警（实现见 `user-server/internal/service/anomaly_login_detector.go`）
+- 监控操作日志（实现见 `user-server/internal/service/operation_log_domain.go`）
+- 监控安全审计（实现见 `user-server/internal/service/security_audit.go`）
 - 升级前阅读升级指南（`docs/marketing-features/upgrade.md`，编写中）
 
 ### 5.3 开发侧

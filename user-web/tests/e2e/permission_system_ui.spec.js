@@ -20,7 +20,7 @@ import fs from 'fs'
  * 简化点击逻辑，直接 click by text 强制启用 locale=zh
  */
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:8213'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API = process.env.API_BASE_URL || 'http://localhost:8204'
 
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'tests/screenshots/permission_ui')

@@ -30,7 +30,7 @@ export default build({
   '源码仓库':['Source repository','ソースリポジトリ','مستودع الشيفرة'],
   '熔断降级':['Circuit breaking & graceful degradation','サーキットブレイクと縮退','فتح الدائرة والتدهور المرحّي'],
   '物流跟踪':['Logistics tracking','物流追跡','تتبع الشحنات'],
-  '环境隔离、可一键启停、无需手动配置依赖。':['Environment isolation, one-click start/stop, no manual dependency configuration required.','環境隔離、ワンコマンドで起動・停止、依存関係を手動設定する必要なし。','عزل البيئة، تشغيل وإيقاف بأمر واحد، دون الحاجة لإعداد التبعيات يدويًا.'],
+  '数据层容器一键启停，推理栈与后端跑在宿主机。':['Data-layer containers start and stop with one command; the inference stack and backend run on the host.','データ層コンテナはワンコマンド起動・停止、推論スタックとバックエンドはホストで稼働。','حاويات طبقة البيانات تعمل وتنتهي بأمر واحد؛ وحزمة الاستدلال والخلفية تعمل على المضيف.'],
   '电商品牌':['E-commerce brand','EC ブランド','علامة تجارية للتجارة الإلكترونية'],
   '痛点':['Pain points','痛みどころ','التحديات'],
   '直接 clone 仓库，本地启动后端 + 前端，适合二次开发。':['Clone the repo and run backend + frontend locally — ideal for secondary development.','リポジトリを直接クローンしてローカルでバックエンド＋フロントエンドを起動。二次開発に適しています。','انسخ المستودع مباشرة وشغّل الواجهة الخلفية والأمامية محليًا — مثالي للتطوير الثانوي.'],

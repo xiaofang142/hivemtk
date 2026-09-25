@@ -7,7 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:8213'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const CRED = { user: 'admin', pass: process.env.ADMIN_PASS || 'Admin@123456' }
 const OUT_DIR = path.resolve(__dirname, 'reports')
 fs.mkdirSync(OUT_DIR, { recursive: true })

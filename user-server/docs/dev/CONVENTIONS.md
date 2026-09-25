@@ -52,16 +52,16 @@ linters-settings:
       controller-layer:
         files: ["$all"]
         deny:
-          - pkg: "marketing/internal/model"
+          - pkg: "hivemtk-user/internal/model"
             desc: "controller 不得直接依赖 model，应通过 service / DTO"
-          - pkg: "marketing/internal/repository"
+          - pkg: "hivemtk-user/internal/repository"
             desc: "controller 不得直接依赖 repository，应通过 service"
       model-layer:
-        files: ["marketing/internal/model"]
+        files: ["hivemtk-user/internal/model"]
         deny:
-          - pkg: "marketing/internal/service"
-          - pkg: "marketing/internal/controller"
-          - pkg: "marketing/internal/repository"
+          - pkg: "hivemtk-user/internal/service"
+          - pkg: "hivemtk-user/internal/controller"
+          - pkg: "hivemtk-user/internal/repository"
 ```
 
 ### 1.4 架构合规检查
@@ -210,7 +210,7 @@ c.JSON(500, gin.H{"error": err.Error()})
 ### 4.2 日志 API
 
 ```go
-import "marketing/internal/pkg/utils/logger"
+import "hivemtk-user/internal/pkg/utils/logger"
 
 // 基础
 logger.Info("User Server Starting")

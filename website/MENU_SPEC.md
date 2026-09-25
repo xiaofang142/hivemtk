@@ -179,8 +179,8 @@
   | `doc` | 完整安装文档 | Docker 部署、源码部署、FRP 私域穿透、数据库迁移与配置说明 | 阅读安装文档 | `/docs` |
 
 - **命令片段区**：Tab 切换 Docker / 源码，展示对应 shell 片段，「复制」按钮写剪贴板。
-  - **Docker 片段**：克隆仓库 → `cp .env-example .env` → `make install` / `make up` → 访问 `http://localhost:8204`，默认账号 `admin` + `.env` 中的 `PLATFORM_ADMIN_PASSWORD`。
-  - **源码片段**：克隆仓库 → 后端 `user-server`（Go 1.25，端口 `8204`）→ 前端 `user-web`（Node 18+，`npm run dev` 端口 `5173`）。
+  - **Docker 片段**：克隆仓库 → `cp .env-example .env` 改密钥 → `make install`（拉起 PG/Redis 容器与推理栈）→ `make dev` 起 user-server → 访问 `http://localhost:8204`；超管账号在首次 `/setup` 向导自设（用 `scripts/bootstrap.sh` 安装时由 `SEED_PASSWORD` 写入，用户名 `admin`）。
+  - **源码片段**：克隆仓库 → 后端 `user-server`（Go 1.25，端口 `8204`）→ 前端 `user-web`（Node 18+，`npm run dev` 端口 `8211`，取自 `user-web/vite.config.js`）。
 - **公开提示卡**：AGPL-3.0 开源，零授权门槛。无授权码、无版本下载、无任何收费环节；源码与文档在 GitHub / Gitee 公开托管。
 - **联系作者卡**：展示微信号（`useSiteContact` 动态加载，回退占位「暂未配置」）+「复制微信号」按钮，提供 1v1 部署指导。
 
@@ -202,7 +202,7 @@
 
   | # | id | 标题 | 主要内容 |
   | --- | --- | --- | --- |
-  | 1 | `quickstart` | 快速开始 | 3 步部署：获取源码 / 配置与启动（`make install` + `make up`）/ 访问 `8204` |
+  | 1 | `quickstart` | 快速开始 | 4 步部署：获取源码 / 配置密钥（`cp .env-example .env`）/ 装依赖与起服务（`make install` + `make dev`）/ 访问 `8204` |
   | 2 | `architecture` | 架构与分工 | 用户端 vs 平台端对照表；平台端为**可选本地组件**（`PLATFORM_ENABLED=false` 即不连接），自建时配 `PLATFORM_API_HOST` / `MERCHANT_API_SECRET` |
   | 3 | `requirements` | 系统要求 | 硬件要求表（开发 / 小型生产 / 中大型生产）+ 软件要求表（Docker / Go / Node / PostgreSQL / Redis） |
   | 4 | `docker-deploy` | Docker 部署（推荐） | 克隆并生成配置 / 一键安装 / 关键环境变量 / 端口对照表（8202 / 8203 / 8204 / 8207 / 8208 / 8209） |

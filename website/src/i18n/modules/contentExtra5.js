@@ -5,7 +5,7 @@ function build(K){
 }
 
 export default build({
-  '基于 AGPL-3.0 开源，无授权码、无版本下载、无任何收费环节。Docker 一键启动或源码部署，源码与文档均在 GitHub / Gitee 公开托管。':['Released under AGPL-3.0 with no license keys, no paywalled downloads and no paid tiers. One-click Docker launch or source deployment; source code and docs are publicly mirrored on GitHub and Gitee.','AGPL-3.0 で公開。ライセンスキーも、有料ダウンロードも、有料プランもありません。Docker ワンクリック起動またはソースデプロイ。ソースコードとドキュメントは GitHub と Gitee で公開ホスティングされます。','مُصدَر بترخيص AGPL-3.0 بدون مفاتيح ترخيص أو تنزيلات مدفوعة أو باقات رسوم. تشغيل فوري عبر Docker أو نشر من المصدر؛ الكود والوثائق مستضافة علنًا على GitHub و Gitee.'],
+  '基于 AGPL-3.0 开源，无授权码、无版本下载、无任何收费环节。make install 一键启动或源码部署，源码与文档均在 GitHub / Gitee 公开托管。':['Released under AGPL-3.0 with no license keys, no paywalled downloads and no paid tiers. One-command make install setup or source deployment; source code and docs are publicly mirrored on GitHub and Gitee.','AGPL-3.0 で公開。ライセンスキーも、有料ダウンロードも、有料プランもありません。make install ワンコマンド導入またはソースデプロイ。ソースコードとドキュメントは GitHub と Gitee で公開ホスティングされます。','مُصدَر بترخيص AGPL-3.0 بدون مفاتيح ترخيص أو تنزيلات مدفوعة أو باقات رسوم. تشغيل بأمر واحد عبر make install أو نشر من المصدر؛ الكود والوثائق مستضافة علنًا على GitHub و Gitee.'],
   '复购与激活':['Repurchase & reactivation','リピート購入と再活性化','إعادة الشراء والتنشيط'],
   '多 LLM 路由：DeepSeek / 通义千问 / GPT-4o / 智谱 GLM · llm.GetGlobalDispatcher() · provider_failover.go':['Multi-LLM routing: DeepSeek / Tongyi Qianwen / GPT-4o / Zhipu GLM · llm.GetGlobalDispatcher() · provider_failover.go','複数 LLM ルーティング：DeepSeek / 通義千問 / GPT-4o / 智譜 GLM · llm.GetGlobalDispatcher() · provider_failover.go','توجيه متعدد LLM: DeepSeek / Tongyi Qianwen / GPT-4o / Zhipu GLM · llm.GetGlobalDispatcher() · provider_failover.go'],
   '多厂商':['Multi-vendor','複数ベンダー','متعدد الموردين'],
@@ -61,7 +61,7 @@ export default build({
   '按调用量付费,无缓存':['Pay-per-call, no cache','呼び出し量ごとに課金、キャッシュなし','الدفع حسب الاستدعاء، بدون ذاكرة تخزين مؤقت'],
   '接入 DeepSeek / 通义千问 / GPT-4o / 智谱 GLM / Kimi 等多家大模型，Dispatcher 网关按场景动态路由：复杂异议用强模型，常规回复用轻模型，故障自动转移，兼顾效果与成本。':['Integrate DeepSeek / Tongyi Qianwen / GPT-4o / Zhipu GLM / Kimi and more. The Dispatcher gateway routes per scenario — strong models for complex objections, lightweight models for routine replies — with automatic failover, balancing effect and cost.','DeepSeek・通義千問・GPT-4o・智譜 GLM・Kimi など複数モデルを統合。Dispatcher ゲートウェイがシナリオに応じて動的ルーティング：複雑な異議には強力モデル、通常返信には軽量モデル。自動フェイルオーバーで効果とコストを両立。','ادمج DeepSeek / Tongyi Qianwen / GPT-4o / Zhipu GLM / Kimi وغيرها. بوابة Dispatcher توجّه ديناميكيًا حسب السيناريو — النماذج القوية للاعتراضات المعقدة، والنماذج الخفيفة للردود الروتينية — مع تجاوز تلقائي للفشل لتحقيق التوازن بين الفعالية والتكلفة.'],
   '接入与渠道层':['Channel-adapter layer','チャネルアダプタ層','طبقة تكيف القنوات'],
-  '推荐方式：环境隔离、可一键启停、无需手动配置依赖。':['Recommended: isolated environment, one-click start/stop, no manual dependency setup.','推奨：環境分離でワンクリック起動/停止。手動での依存関係設定は不要です。','الموصى به: بيئة معزولة، تشغيل/إيقاف بضغطة واحدة، دون ضبط يدوي للتبعيات.'],
+  '推荐方式：数据层容器一键启停，推理栈与后端跑在宿主机。':['Recommended: data-layer containers start and stop with one command, while the inference stack and backend run on the host.','推奨：データ層コンテナはワンコマンド起動・停止、推論スタックとバックエンドはホストで稼働。','الموصى به: حاويات طبقة البيانات تعمل وتنتهي بأمر واحد، بينما تعمل حزمة الاستدلال والخلفية على المضيف.'],
   '政企':['Government & enterprise','政府・企業','الحكومة والمؤسسات'],
   '故障切换':['Failover','フェイルオーバー','تجاوز الفشل'],
   '教培机构':['Education & training institutions','教育・研修機関','مؤسسات التعليم والتدريب'],

@@ -18,7 +18,7 @@
 | **8204** | user-server API  | 宿主机           | —         | 8204                            | `PORT`（服务端）+ `USER_SERVER_PORT`（脚本侧） | `PORT` / `SERVER_HOST`         | 主 API + WebSocket + Swagger。**默认绑 0.0.0.0**，`SERVER_HOST=127.0.0.1` 收回本机（读点 `cmd/api/main.go` `resolveListenAddr`）。注意 Go 进程只读 `PORT`：`USER_SERVER_PORT` 只被 `bootstrap.sh` / `deploy-user.sh` / `rotate-secrets.sh` 拿来拼 curl 目标，**挪不动服务监听端口**，改端口两个必须一起改 |
 | **8205** | platform API     | 独立服务          | —         | 8205                            | `PLATFORM_API_HOST`（host:port） | `PLATFORM_API_URL`             | 平台端，与用户端物理隔离                          |
 | **8206** | Chromium CDP（可选） | 宿主机           | —         | 8206                            | `CDP_PORT`                     | —                              | 截图/PDF 功能用，未启用可不占用                    |
-| **8207** | LLM 推理           | 宿主机 MLX/llama | —         | 8207                            | `LLM_BASE_URL`                 | `inference.llm.base_url`       | OpenAI 兼容，dev 档 Qwen2.5-1.5B-Instruct |
+| **8207** | LLM 推理           | 宿主机 llama-server | —      | 8207                            | `LLM_BASE_URL`                 | `inference.llm.base_url`       | OpenAI 兼容，served name 取 `.env` 的 `LLM_SERVED_NAME`（现值 Qwen2.5-3B-Instruct） |
 | **8208** | Embedding 推理     | 宿主机 llama     | —         | 8208                            | `EMBEDDING_BASE_URL`           | `inference.embedding.base_url` | **私域部署强制本地**（数据不出域）                   |
 | **8209** | Rerank 推理        | 宿主机 llama     | —         | 8209                            | `RERANK_BASE_URL`              | `inference.rerank.base_url`    | 与 Embedding 同属 RAG 链路                 |
 
@@ -26,8 +26,8 @@
 
 | 端口       | 用途                            | 配置位置                                  |
 | -------- | ----------------------------- | ------------------------------------- |
-| **3000** | Vite dev server（user-web）     | `user-web/vite.config.js`（port: 3000） |
-| **5173** | Vite dev server（embed-sdk 预览） | `embed-sdk/vite.config.js`            |
+| **8211** | Vite dev server（user-web）     | `user-web/vite.config.js`（port: 8211） |
+| **5174** | Vite dev server（embed-sdk 预览） | `embed-sdk/vite.config.js`（port: 5174） |
 | **8080** | 浏览器 WebSocket origin fallback | `internal/config/ws_origin.go`（允许列表）  |
 
 ***
@@ -64,7 +64,7 @@
 
 - `mtk-redis` 容器内 8203 → 宿主机 **127.0.0.1:8203**
 
-- `mtk-serve` 监听 **0.0.0.0:8204**
+- `user-server` 二进制（`make user-build` → `user-server/bin/user-server`）监听 **0.0.0.0:8204**
 
 - LLM/Embedding/Rerank **未启动**（环境变量指向 8207/8208/8209 但服务未起）
 
@@ -117,7 +117,7 @@
 | ------- | ----------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
 | 2026-09 | CV 验收时 user-server 报 EOF 大面积假失败           | shell 里临时 export DB\_PORT=8232，但 docker-compose 还映射 8202；两边各说各话 | export 必须与 .env 一致，改完立刻 `docker compose down && up -d` 让容器重新映射 |
 | 2026-08 | 种子 FAQ 回答里 PG 端口前后矛盾                      | 代码常量 8202（Docker）和 8232（Dev）双轨存在，文档没声明当前环境用哪种                   | 新增本文件，FAQ 回答引用本文件                                              |
-| 2026-07 | 前端 vite 硬写 localhost:8080 导致 WebSocket 跨域 | ws\_origin.go 允许列表漏了 8080                                       | 8080 已加入允许列表（但仍建议统一到 8204）                                     |
+| 2026-07 | 前端 vite 硬写 localhost:8080 导致 WebSocket 跨域 | <!-- deploy-claim:historical --> ws\_origin.go 允许列表漏了 8080                                       | 8080 已加入允许列表（但仍建议统一到 8204）                                     |
 
 ***
 

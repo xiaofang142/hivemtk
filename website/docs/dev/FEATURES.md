@@ -200,13 +200,13 @@
 Docker 命令片段关键步骤：
 1. 克隆开源仓库 `git clone https://gitee.com/xhpmayun/hivemtk.git`
 2. 准备环境变量 `cp .env-example .env`
-3. 一键安装与启动 `make install` + `make up`
-4. 访问 `http://localhost:8204`（默认账号 `admin` + `.env` 中的 `PLATFORM_ADMIN_PASSWORD`）
+3. 一键安装与启动 `make install` + `make dev`
+4. 访问 `http://localhost:8204`（超管在首次 `/setup` 向导自设；用 `scripts/bootstrap.sh` 安装时用户名 `admin` + `.env` 中的 `SEED_PASSWORD`）
 
 源码命令片段关键步骤：
 1. 克隆仓库
 2. 启动后端 `cd user-server && go build` → 端口 8204
-3. 启动前端 `cd user-web && npm run dev` → 端口 5173
+3. 启动前端 `cd user-web && npm run dev` → 端口 8211
 
 ---
 
