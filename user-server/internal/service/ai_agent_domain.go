@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
 )
 
@@ -95,7 +96,7 @@ func (s *AIAgentService) CreateAIAgent(ctx context.Context, req *AIAgentCreateDT
 		agent.Status = 1
 	}
 	if agent.LLMModel == "" {
-		agent.LLMModel = "smollm3-3b-4bit-mlx"
+		agent.LLMModel = config.DefaultLLMModel()
 	}
 	if agent.Temperature == 0 {
 		agent.Temperature = 0.7

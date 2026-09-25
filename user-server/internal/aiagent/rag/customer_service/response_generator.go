@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/aiagent/llm"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
+	sysconfig "hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/i18n"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -157,7 +158,7 @@ type ResponseGenerationConfig struct {
 func NewResponseGeneratorImpl(llmService LLMServiceInterface, config *ResponseGenerationConfig) *ResponseGeneratorImpl {
 	if config == nil {
 		config = &ResponseGenerationConfig{
-			LLMModel:           "gpt-3.5-turbo",
+			LLMModel:           sysconfig.DefaultLLMModel(),
 			DefaultTemperature: 0.7,
 			DefaultMaxTokens:   1000,
 			TopP:               0.9,

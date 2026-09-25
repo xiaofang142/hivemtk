@@ -57,7 +57,7 @@ type AIAgent struct {
 
 	AssetBundleID string `gorm:"type:varchar(128);column:asset_bundle_id;default:''" json:"asset_bundle_id"`
 
-	LLMModel          string            `gorm:"type:varchar(100);default:'smollm3-3b-4bit-mlx'" json:"llm_model"`
+	LLMModel          string            `gorm:"type:varchar(100);default:'Qwen2.5-3B-Instruct'" json:"llm_model"`
 	LLMProviderConfig LLMProviderConfig `gorm:"embedded;embeddedPrefix:llm_" json:"llm_provider_config"`
 	Temperature       float64           `gorm:"default:0.7" json:"temperature"`
 	MaxTokens         int               `gorm:"default:800" json:"max_tokens"`
