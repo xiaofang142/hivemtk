@@ -15,7 +15,8 @@
 影子克隆里没有 `ROOT/.env` ⇒ 由调用方导出 `POSTGRES_TEST_PASSWORD`（否则控制组红是 ENV-BROKEN）。
 本脚本**就地注码** `internal/pkg/db/migrate.go`（用完每刀立刻还原并比 md5）⇒ 只在私有树里跑，
 绝不与他人共用一棵工作树；中途被 kill 会把注码留在树上，恢复方式是按 md5 认回基线字节。
-用法：python3 scripts/mut_startup_hook_p702.py   （须能连测试库）
+用法：python3 scripts/mut_startup_hook_p702.py            （须能连测试库）
+      python3 scripts/mut_startup_hook_p702.py --check   （只验两刀的锚点与用例名，只读不写、不连库）
 """
 import hashlib
 import os
@@ -67,9 +68,49 @@ def md5(path: str) -> str:
         return hashlib.md5(fh.read()).hexdigest()
 
 
+def check_anchors() -> int:
+    """锚点预检（`--check`）：只读不写、一次 `go test` 都不跑，因此也不需要测试库。
+
+    必要性：两刀的锚点都限定在钩子函数体内，钩子一搬家、守卫一行文一改成整文件形状，
+    放刀路径上得到的是 ANCHOR-MISS ⇒ broken，而它和"判据没牙"混在同一份报告里；
+    用例一改名则是两刀全红在 `no tests to run`。这一趟在几毫秒内把这两种失效先点出来。
+    """
+    with open(SRC, encoding="utf-8") as fh:
+        original = fh.read()
+    bad = 0
+    try:
+        start, end = hook_span(original)
+    except ValueError:
+        print(f"  ✗ 钩子边界没找到：{DEFINE!r} 不在 {SRC}")
+        print(f"锚点校验：{len(CASES) + 1} 格，1 格有问题")
+        return 1
+    body = original[start:end]
+    for label, old, new in CASES:
+        hits = body.count(old)
+        if hits != 1:
+            bad += 1
+            print(f"  ✗ [{label}] 钩子体内锚点命中 {hits} 次（期望 1 ⇒ 判据会打到别人身上）")
+            continue
+        if original[:start] + body.replace(old, new) + original[end:] == original:
+            bad += 1
+            print(f"  ✗ [{label}] 补丁没落地（字节未变，这一刀永不开火）")
+    pkg = Path(SERVER) / "internal" / "pkg" / "db"
+    hosts = [q.name for q in sorted(pkg.glob("*_test.go"))
+             if f"func {TEST}(" in q.read_text(encoding="utf-8")]
+    if not hosts:
+        bad += 1
+        print(f"  ✗ 用例 {TEST} 在 {pkg} 的 *_test.go 里查无定义 ⇒ 两刀都会红在 no tests to run")
+    else:
+        print(f"  用例定义于 {', '.join(hosts)}")
+    print(f"锚点校验：{len(CASES) + 1} 格，{bad} 格有问题")
+    return 1 if bad else 0
+
+
 def main() -> int:
     from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
     tee_to(LOGDIR / "00-run.log")
+    if "--check" in sys.argv:   # 与 mut_ledger_b16* 同形：本脚本没有别的参数，不必上 argparse
+        return check_anchors()
     env = dict(os.environ)
     envfile = os.path.join(ROOT, ".env")
     # .env 不进 git ⇒ 影子克隆里根本没有它；此时调用方必须自己导出 POSTGRES_TEST_PASSWORD，

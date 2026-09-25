@@ -132,6 +132,16 @@ jobs:
       - name: check-ci-gate-paths 用例（假仓库夹具，不联网）
         run: bash scripts/check-ci-gate-paths.test.sh
 
+      # 变异电池收尾用的删除闸（scripts/mut_dispose.py）的用例。挂这里的理由跟其余
+      # `.test.sh` 一样：常驻电池的判据退化不会自己出声，只有它的用例被每次 push 跑到才行。
+      # 立项背景是 2026-09-24 的实测事故：`mut_collection_p703.py --clone . --check`
+      # 在收尾时把整棵 r45-lane（含 .git 与当轮 18 项未提交字节）rmtree 掉了——
+      # `dispose()`/`workdir()` 两道闸加这九格是把那一类缺陷钉住的唯一常驻件。
+      # 判据里有静态面（六枚电池的 --clone／入口闸／收尾闸三处计数必须相等），
+      # 所以 `scripts/mut_*.py` 任一改动没同时接满两道闸，这里红。
+      - name: mut_dispose 用例（删除闸九格，不联网）
+        run: bash scripts/mut-dispose-guard.test.sh
+
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
   # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。

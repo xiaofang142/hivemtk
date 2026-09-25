@@ -119,8 +119,9 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
 
 ROOT = Path(__file__).resolve().parents[1]
 US = "user-server"
@@ -859,7 +860,7 @@ def main() -> int:
         if missing:
             raise SystemExit(f"未知代号：{sorted(missing)}")
 
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="p703mut-"))
+    tmp, owned = workdir(args.clone, prefix="p703mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}")
     clone = prepare(tmp)
@@ -869,8 +870,7 @@ def main() -> int:
 
         **md5 不一致那一支刻意不扫**：那份"还原之后还是不对"的字节是唯一证据。
         """
-        if not args.keep:
-            shutil.rmtree(tmp, ignore_errors=True)
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
 
     rels = sorted(set().union(*(cell_rels(c) for c in cells))
                   | set(MY_ANCHOR_KEYS) | set(NEW_FILES))
