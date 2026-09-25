@@ -13,6 +13,8 @@ on:
       - 'embed-sdk/**'
       - 'scripts/api-inventory.sh'
       - 'scripts/check-architecture.sh'
+      # 架构门的 L4 宽口径基线：门读它，不进触发面 ⇒ "只动基线"的提交不重跑这道门。
+      - 'scripts/arch-l4-getdb.baseline'
       - 'scripts/check-date-bucket-tz.sh'
       - 'scripts/check-unwired-assets.sh'
       - 'scripts/date-bucket-tz.baseline'
@@ -30,6 +32,8 @@ on:
       - 'embed-sdk/**'
       - 'scripts/api-inventory.sh'
       - 'scripts/check-architecture.sh'
+      # 架构门的 L4 宽口径基线：门读它，不进触发面 ⇒ "只动基线"的提交不重跑这道门。
+      - 'scripts/arch-l4-getdb.baseline'
       - 'scripts/check-date-bucket-tz.sh'
       - 'scripts/check-unwired-assets.sh'
       - 'scripts/date-bucket-tz.baseline'
