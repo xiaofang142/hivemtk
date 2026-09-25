@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """
-035_bulk_seed.py - 产品级数据批量灌入
+bulk_seed_general.py - 产品级通用数据批量灌入（原 035 一批，故数据前缀为 seed-035-*）
 目标：500+ FAQ, 200+ SOP, 10 RAG 文档 150+ 分段
 纯通用场景，不锁具体产品名
 """
 import psycopg2
 import json
+import sys
 from datetime import datetime
 
 import os
+# 口令缺失就在这里退：把空串递给 psycopg2 只会换回服务端一句
+# `SASL: password provided is empty`，看不出该补哪个键（与 bulk_seed_industries.py 同口径）。
+_DB_PW = (os.environ.get("POSTGRES_PASSWORD")
+          or os.environ.get("HIVEMTK_DB_PASSWORD")
+          or os.environ.get("PGPASSWORD"))
+if not _DB_PW:
+    sys.exit("❌ 缺少数据库口令：请导出 POSTGRES_PASSWORD（或 HIVEMTK_DB_PASSWORD / PGPASSWORD）")
+
 DB = dict(
     host=os.environ.get('PG_HOST', '127.0.0.1'),
     port=int(os.environ.get('PG_PORT', '8232')),
     user=os.environ.get('PG_USER', 'admin'),
-    password=os.environ.get('PGPASSWORD', ''),
+    password=_DB_PW,
     dbname=os.environ.get('PGDATABASE', 'user_db'),
 )
 
@@ -37,22 +46,31 @@ def batch_insert(table, cols, rows):
     cur.executemany(sql, rows)
     return cur.rowcount
 
-# ================================================================
-# 0. 幂等清理 - 清所有 hivemtk% agent 数据（保证脚本独立运行也幂等）
-# ================================================================
-print("[0/5] 清理旧种子数据...")
-cur.execute("DELETE FROM faq_entries WHERE agent_id >= 50")
-cur.execute("DELETE FROM sop_templates WHERE agent_id >= 50")
-cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%' OR product_id = 'hivemtk-platform-cs'")
-cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%' OR product_id = 'hivemtk-platform-cs'")
-cur.execute("DELETE FROM rag_products WHERE id LIKE 'ind-seed-%' OR id LIKE 'seed-035-%' OR id = 'hivemtk-platform-cs'")
-conn.commit()
-
 AGENT_CS  = get_agent_id('hivemtk-agent-general-cs')
 AGENT_SAL = get_agent_id('hivemtk-agent-ecom-sales')
 AGENT_CM  = get_agent_id('hivemtk-agent-community')
 AGENT_HM  = get_agent_id('hivemtk_official')
 print(f"  Agent IDs: CS={AGENT_CS}, SAL={AGENT_SAL}, CM={AGENT_CM}, HM={AGENT_HM}")
+
+# ================================================================
+# 0. 幂等清理 - 只清本脚本自己产的行（agent_code 白名单 + seed-035-* 前缀）
+# ================================================================
+print("[0/5] 清理旧种子数据...")
+# 原先这里是 `DELETE ... WHERE agent_id >= 50`：ai_agents.id 是自增的（033/cmd/seed 都不写死 id），
+# "50 以上都是种子" 只在"库里恰好只有这些行"时成立。库里 id≥50 的行可以是开发在界面上
+# 手工建的智能体，跑一次这个脚本就把人家的 FAQ/SOP 删了，而脚本自己的写入面只有上面四个 agent。
+OWNED_AGENTS = [a for a in (AGENT_CS, AGENT_SAL, AGENT_CM, AGENT_HM) if a]
+if OWNED_AGENTS:
+    cur.execute("DELETE FROM faq_entries WHERE agent_id = ANY(%s)", (OWNED_AGENTS,))
+    cur.execute("DELETE FROM sop_templates WHERE agent_id = ANY(%s)", (OWNED_AGENTS,))
+# hivemtk-platform-cs 不在清理名单里：该产品**不由本脚本创建**（产码只有
+# `user-server/cmd/seed/seed_rag_product.go` 与人工的 `migrations/031` 两处，字段同值由
+# `scripts/check-deploy-claims.py` 规则 8 对齐），删掉它 = 抹掉 CS 与 7 个行业智能体共同
+# 绑定的检索面，而本脚本没有任何一行会把它建回来。
+cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'seed-035-%'")
+cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'seed-035-%'")
+cur.execute("DELETE FROM rag_products WHERE id LIKE 'seed-035-%'")
+conn.commit()
 
 # ================================================================
 # 1. 电商客服 FAQ - 200 条

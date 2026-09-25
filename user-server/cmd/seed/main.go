@@ -1,4 +1,4 @@
-// Command seed 向 user-server 数据库写入演示种子数据，覆盖 9 大业务模块、30+ 张表。
+// Command seed 向 user-server 数据库写入演示种子数据，覆盖 11 个模块、30+ 张表。
 //
 // 用法：
 //
@@ -7,10 +7,15 @@
 // cd user-server && go run ./cmd/seed --module=customers # 仅写入指定模块
 // cd user-server && go run ./cmd/seed --list # 列出所有可用模块
 //
-// 种子数据写入路径（仅两条，无运行期自动播种）：
-//  1. 初次安装：migrations/031_platform_cs_rag_seed.sql（平台客服 RAG 知识库）、
-//     032_industry_assets_local_seed.sql（行业资产包）、033_industry_ai_agents_seed.sql（行业智能体）
-//  2. 本 cmd/seed 命令（开发演示种子，覆盖 9 大业务模块）
+// 种子数据写入路径（仅三条，无运行期自动播种）：
+//  1. 本 cmd/seed 命令（开发演示种子，11 个模块；平台客服知识库的 rag_products 注册行也由它补齐）
+//  2. **人工执行**的 SQL 种子：migrations/031_platform_cs_rag_seed.sql（平台客服 RAG 知识库
+//     的 13 篇文档与分段）、032_industry_assets_local_seed.sql（行业资产包）、
+//     033_industry_ai_agents_seed.sql（行业智能体）。这三份 .sql 没有任何自动执行路径
+//     （compose 的 initdb.d 只挂 init-user-db.sql，Go 侧迁移器只跑 GORM AutoMigrate + Go 任务、
+//     从不读 .sql，scripts/bootstrap.sh 只点名 027/028），要 `psql -v ON_ERROR_STOP=1 -f` 手动跑；
+//     口径真值见 migrations/README.md
+//  3. scripts/seed/*.py 批量灌入脚本（知识库分段、FAQ/SOP 与智能体绑定）
 //
 // 设计要点：
 // 使用 GORM 模型直接写入，避免 SQL 列错位（与 platform-server/seed 一致）
@@ -18,18 +23,19 @@
 // 按外键依赖顺序执行：A 用户 → B 客户 → C 会话 → D AI → E 触达 → F 线索 → G 资产 → H 消息 → I LLM → J 统计
 // 演示数据集中在过去 30 天，所有状态枚举均有覆盖
 //
-// 模块清单（10 个）：
+// 模块清单（11 个）：
 //
 // A. users - 系统用户、坐席状态
 // B. customers - 客户、标签、RFM、事件、长期记忆、挽回队列
 // C. sessions - 客服会话、消息、AI建议、黑名单、快捷回复
-// D. ai_agents - 智能体、绑定、对话记忆、意图、SOP、话术
+// D. ai_agents - 智能体、绑定、对话记忆、意图、SOP、话术（+ 平台客服 RAG 产品注册行）
 // E. reach - 触达Pipeline、任务、邮件、短信、卡片、收件箱
 // F. clues - 线索、评分
 // G. assets - 资产包、活码、短链、域名池
 // H. messages - 统一消息、平台账号、消息中台
 // I. llm_logs - LLM 路由日志、审计
 // J. stats - 漏斗、销冠画像、账号健康度
+// K. faq_sop - FAQ 知识库与 SOP 模板（电商客服方向）
 package main
 
 import (
@@ -181,7 +187,10 @@ func initDB() *gorm.DB {
 	cfg := config.GetAppConfig()
 	pg := cfg.Database.Postgres
 	if pg.Host == "" {
-		log.Fatalf("[FATAL] 缺少 config.yaml 或 database.postgres.host 为空；请先 cp config.yaml.example config.yaml 并按 DEVELOPMENT.md §2.4 配置端口（dev 本机 PG=8232，docker=8202）")
+		log.Fatalf("[FATAL] 缺少 config.yaml 或 database.postgres.host 为空；config.yaml 由本仓库直接提供" +
+			"（user-server/config.yaml，仓库里没有 config.yaml.example，无需 cp），" +
+			"按 DEVELOPMENT.md §2.4 核对端口（dev 本机 PG=8232，docker=8202），" +
+			"或用 DB_HOST / DB_PORT 环境变量覆盖")
 	}
 	if v := os.Getenv("POSTGRES_PASSWORD"); v != "" {
 		pg.Password = v

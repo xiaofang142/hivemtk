@@ -178,7 +178,7 @@ func (s *sessionsSeeder) buildMessages(sessions []model.CustomerSession, ctx *Se
 	aiMsgs := []string{
 		"您好，欢迎使用 HiveMTK 智能客服。可以问我项目功能、技术架构、部署方式、资产市场等问题。",
 		"我帮您查到：ReAct 智能体是感知→规划→调工具→反思的循环，内置 41 个业务工具，最多 5 轮自主决策。",
-		"部署硬件：dev 档约 8GB 内存（Qwen2.5-1.5B），prod 档 16GB+（Qwen2.5-14B），可选 GPU 加速。",
+		"部署硬件：默认档（Qwen2.5-3B-Instruct）约 8GB 内存即可，换 14B 档按 16GB+ 准备，可选 GPU 加速。",
 		"是的，七端接入：抖音/快手/小红书/闲鱼/TikTok/微信/短信邮件，统一消息中心与 CDP 客户视图。",
 		"用 embed-sdk 嵌入即可：引入原生 JS，访客自动调用 /api/chat/public/* 完成双向会话。",
 		"不会。100% 私域零出域，对话与向量存于你内网，Embedding/Rerank 强制本地，云端不落向量。",
@@ -191,7 +191,7 @@ func (s *sessionsSeeder) buildMessages(sessions []model.CustomerSession, ctx *Se
 	}
 	agentMsgs := []string{
 		"您好，我是 HiveMTK 支持工程师，很高兴为您服务。",
-		"部署建议走三步：git clone → make install → make up，.env 密钥用 openssl rand -hex 24 生成。",
+		"部署建议走四步：git clone → cp .env-example .env 改密钥 → make install → make dev，.env 密钥用 openssl rand -hex 24 生成。",
 		"已为您查询：推理栈状态正常，Embedding 端点 8208 连通，RAG 可正常召回。",
 		"可以的呢，请提供报错日志或 Gitee Issue 编号，我帮您排查。",
 		"已收到您的反馈，我们会在 12 小时内回复（Gitee Issues 首响承诺）。",
@@ -252,7 +252,7 @@ func (s *sessionsSeeder) buildAISuggestions(ctx *SeedContext) []model.AISuggesti
 	}
 	suggestions := make([]model.AISuggestion, 0, 20)
 	suggestionTexts := []string{
-		"建议回复：HiveMTK 私有化部署三步即可：git clone → make install → make up。",
+		"建议回复：HiveMTK 私有化部署四步即可：git clone → 改 .env 密钥 → make install → make dev。",
 		"建议回复：数据 100% 私域零出域，Embedding/Rerank 强制本地，云端不落向量。",
 		"建议回复：已查配置，dev 档模型本地就绪，prod 档需 16GB+ 内存或 GPU。",
 		"建议回复：推理栈状态正常，Embedding 端点 8208 连通，RAG 可正常召回。",
@@ -314,7 +314,7 @@ func (s *sessionsSeeder) buildQuickReplies() []model.QuickReply {
 		{"通用", "欢迎语 " + seedTag, "您好，欢迎使用 HiveMTK 智能客服，请问有什么可以帮您？", ""},
 		{"通用", "开源动态 " + seedTag, "HiveMTK 近期发布新版本，新增功能与部署指南已更新，欢迎到 Gitee 查看。", ""},
 		{"通用", "功能推荐 " + seedTag, "为您推荐了解 HiveMTK 七端接入与 ReAct 智能体，详见文档与仓库。", ""},
-		{"通用", "部署说明 " + seedTag, "私有化部署支持 Docker Compose：git clone → make install → make up 三步完成。", ""},
+		{"通用", "部署说明 " + seedTag, "私有化部署＝数据层用 Docker Compose、应用跑宿主机：git clone → 改 .env 密钥 → make install → make dev 四步完成。", ""},
 		{"通用", "感谢咨询 " + seedTag, "感谢您的咨询，如有其他问题随时联系，祝您使用愉快！", ""},
 		{"通用", "转人工 " + seedTag, "好的，正在为您转接人工支持，请稍候。", ""},
 		{"whatsapp", "WA欢迎语 " + seedTag, "Hello! Welcome to HiveMTK open-source community. How can I help you today?", "whatsapp"},

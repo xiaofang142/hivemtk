@@ -3,15 +3,26 @@
 bulk_seed_industries.py - 7 行业智能体 + hivemtk 产品 批量灌入
 每个: 300+ FAQ, 80+ SOP, 1 RAG 产品 5 文档 80+ chunks
 """
+import os
+import sys
 import psycopg2, json, re
 from datetime import datetime, timedelta
 
-import os
+# 口令只从环境注入（本文件不落任何明文字面量）：本机 `set -a && . .env && set +a`。
+# 缺失就在这里退：另一版写法 `password=os.environ.get('PGPASSWORD', '')` 把空串递给
+# psycopg2 ⇒ 报错是服务端一句 `SASL: password provided is empty`，看不出该补哪个键。
+_DB_PW = (os.environ.get("POSTGRES_PASSWORD")
+          or os.environ.get("HIVEMTK_DB_PASSWORD")
+          or os.environ.get("PGPASSWORD"))
+if not _DB_PW:
+    sys.exit("❌ 缺少数据库口令：请导出 POSTGRES_PASSWORD（或 HIVEMTK_DB_PASSWORD / PGPASSWORD）")
+
+# 8232 是 dev 宿主机 PG 端口（容器内口径 8202，见 docs/PORT_REGISTRY.md）
 DB = dict(
     host=os.environ.get('PG_HOST', '127.0.0.1'),
     port=int(os.environ.get('PG_PORT', '8232')),
     user=os.environ.get('PG_USER', 'admin'),
-    password=os.environ.get('PGPASSWORD', ''),
+    password=_DB_PW,
     dbname=os.environ.get('PGDATABASE', 'user_db'),
 )
 conn = psycopg2.connect(**DB)
@@ -55,8 +66,12 @@ print(f"Agent IDs: {AG}")
 # ================================================================
 # 幂等清理
 # ================================================================
-cur.execute("DELETE FROM faq_entries WHERE question LIKE '%[ind-seed]%' OR question LIKE '%[seed-035]%'")
-cur.execute("DELETE FROM sop_templates WHERE name LIKE '%[ind-seed]%' OR name LIKE '%[seed-035]%'")
+# SEED_TAG 是"哪些行属于本脚本"的唯一钥匙：写入侧贴它，清理侧按它删。两边必须同源，
+# 写歪一处就成了重跑必重复灌——曾经 FAQ/SOP 的写法被一次无关提交剥成 `q + ''`，
+# 而下面这四条 DELETE 仍按 `%[ind-seed]%` 匹配 ⇒ 永不命中自己产的行，每跑一轮翻一倍。
+SEED_TAG = "[ind-seed]"
+cur.execute(f"DELETE FROM faq_entries WHERE question LIKE '%{SEED_TAG}%' OR question LIKE '%[seed-035]%'")
+cur.execute(f"DELETE FROM sop_templates WHERE name LIKE '%{SEED_TAG}%' OR name LIKE '%[seed-035]%'")
 cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%'")
 cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%'")
 cur.execute("DELETE FROM rag_products WHERE id LIKE 'ind-seed-%'")
@@ -76,7 +91,7 @@ def gen_faqs(agent_id, category, intent, questions, answers, variants_per=8):
                 a = fill(a_tmpl, {'v': v_tag})
                 keywords = list(set(re.findall(r'[\u4e00-\u9fff]+', q)))[:6]
                 rows.append((
-                    q + '', a + '',
+                    q + f' {SEED_TAG}', a + f' {SEED_TAG}',
                     keywords, category, intent,
                     0.85, agent_id, 0.7, True, 0, NOW, NOW
                 ))
@@ -86,7 +101,7 @@ def gen_sops(agent_id, intent, stage, scenarios):
     rows = []
     for i, (name, tmpl) in enumerate(scenarios):
         rows.append((
-            f"{name}", intent, stage, fill(tmpl, {}), '{}',
+            f"{name} {SEED_TAG}", intent, stage, fill(tmpl, {}), '{}',
             90 - i, 0.85, agent_id, True, 0, NOW, NOW
         ))
     return rows
@@ -109,7 +124,7 @@ def gen_rag(product_id, name, desc, category, agent_id, doc_defs):
             VALUES (%s,%s,%s,'md','system_seed',%s,%s,%s,'indexed',1,%s,%s,NOW(),NOW())
             RETURNING id
         """, (product_id, title, filename, cat, priority, ' '.join(chunks), agent_id,
-              json.dumps({"source": "bootstrap"})))
+              json.dumps({"source": "ind-seed"})))
         doc_id = cur.fetchone()[0]
         doc_count += 1
         
@@ -1254,7 +1269,7 @@ product_faq_defs = [
     ('deploy','model',[
         '用什么模型','本地模型能跑吗','llama.cpp怎么用','要GPU吗','最小模型','模型怎么选','能接国产模型吗','有没有embedding',
     ],[
-        '本地推理用llama.cpp：7B Q5_K_M（{memory}GB内存）主模型 + 1.5B Q2_K降级模型。最低要求{memory_min}GB内存可跑～',
+        '本地推理用宿主机 llama-server：默认档 Qwen2.5-3B-Instruct(Q4_K_M) + bge-m3 + bge-reranker-v2-m3，三个 served name 与文件大小都写在 .env-example；要上 14B 档按 16GB+ 内存准备～',
         '支持的云模型：OpenAI/Gemini/Anthropic/Qwen/DeepSeek/豆包/文心/通义，几乎所有主流都支持～',
         'embedding：bge-m3向量模型（{dim}维），pgvector扩展存向量，HNSW索引加速检索～',
     ]),
@@ -1284,9 +1299,9 @@ product_sop_stages = {
     'middle':[('架构讲解','核心：5层Go架构+5阶段并行AI智能体+HTTP长轮询。Router→Handler→Service→Repository→Model，每层职责单一～'),
               ('部署演示','Docker Compose一键部署：git clone→改.env→docker-compose up -d，15分钟搞定～'),
               ('渠道接入','已对接Telegram/Web/企微/WhatsApp，新渠道按5层架构加，1-2天开发周期～'),
-              ('模型支持','本地llama.cpp（7B+1.5B双模型）+云模型（OpenAI/Qwen/DeepSeek等20+种），随意切换～')],
+              ('模型支持','本地 llama-server 三件套（LLM/Embedding/Rerank，档位由 .env 三行决定）+云模型（OpenAI/Qwen/DeepSeek等20+种），随意切换～')],
     'objection':[('为什么不开SaaS','私域部署数据自主可控，避免数据泄露风险。成本只有SaaS的{percent}%，一次部署无限使用～'),
-                 ('能跑本地小模型吗','可以！llama.cpp支持Q2_K 1.5B到Q8 70B，最低{memory_min}GB内存可跑，Mac M系列支持Metal加速～'),
+                 ('能跑本地小模型吗','可以！默认档就是 3B Q4_K_M，{memory_min}GB 内存的普通机器可跑；换更大档位改 .env 的 LLM_REPO/LLM_FILE/LLM_SERVED_NAME 三行后重下模型即可～'),
                  ('和LangChain比','LangChain是Python生态，HiveMTK是Go+自研框架，性能高{speed}倍，适合生产环境，架构更清晰～'),
                  ('免费够用吗','完全够！所有功能开源，没有"免费版/付费版"区分，开源即完整版～')],
     'closing':[('立即试用','git clone https://github.com/xiaofang142/hivemtk.git ，按文档15分钟搭起来试～'),
@@ -1304,117 +1319,23 @@ for stage, scenarios in product_sop_stages.items():
 batch('faq_entries', ['question','answer','keywords','category','intent','confidence','agent_id','quality_score','enabled','hit_count','created_at','updated_at'], faq_rows)
 batch('sop_templates', ['name','intent','stage','template','vars','priority','confidence','agent_id','enabled','hit_count','created_at','updated_at'], sop_rows)
 
-# 绑定已有的 hivemtk-platform-cs RAG（033 里 seed-hivemtk-product-service 已经关联了）
+# 绑定已有的 hivemtk-platform-cs RAG。
+# 该产品**不由本脚本创建**：产码只有两处——`user-server/cmd/seed/seed_rag_product.go`
+# （scripts/bootstrap.sh 第 4 步 `go run ./cmd/seed` 每次幂等补齐）与 `migrations/031`
+# （人工一次性灌，自带 13 篇知识文档）；这两条路径的同名字段由
+# `scripts/check-deploy-claims.py` 规则 8 逐格对齐。
+# 本脚本原先在这里有第三条兜底：`if has == 0:` 手搓一条 INSERT，vector_table 写成
+# `rag_hivemtk_platform_cs`——既不是上面两处的 `rag_platform_cs`，也不是本文件 gen_rag
+# 的 `rag_{product_id}` 约定；embedding_model / embedding_dim 全部留空走列默认，
+# 再灌进自己那 5 篇与 031 的 13 篇内容互不相同的知识文档、把 doc_count 覆写成 5
+# ⇒ 同一个 product 有了第二套检索面，CS 智能体读到哪一套取决于哪条先到。
+# 现在缺失就打印警告并跳过绑定，不再就地编一份竞争事实源。
 cur.execute("SELECT COUNT(*) FROM rag_products WHERE id='hivemtk-platform-cs'")
-has = cur.fetchone()[0]
-if has == 0:
-    # 创建 RAG + 5 文档 75 chunks
-    cur.execute("""INSERT INTO rag_products (id,name,description,category,vector_table)
-                   VALUES ('hivemtk-platform-cs','HiveMTK平台知识库','HiveMTK产品架构/部署/API/FAQ全维度知识库','platform','rag_hivemtk_platform_cs')
-                   ON CONFLICT (id) DO NOTHING""")
-    docs = [
-        ('产品架构说明','architecture.md','product',100,[
-            'HiveMTK核心架构：L1入口层（HTTP/WebSocket）→ L2路由层（URL映射）→ L3服务层（业务逻辑）→ L4仓储层（DB访问）→ L5模型层（数据结构）',
-            '5阶段并行AI智能体：Phase1 FAQ/SOP快速匹配 → Phase2 RAG向量检索 → Phase3 LLM生成回复 → Phase4 Fallback降级 → Phase5 长轮询返回',
-            '双层架构：智能体引擎（user-server）+ 渠道适配器（channel-server），通过Redis Pub/Sub通信',
-            'FeatureFlag 5开关：FF_PARALLEL（5阶段并行）、FF_STREAM（流式）、FF_LAYER1（FAQ/SOP优先）、FF_FALLBACK_CHAIN（降级链）、FF_DEBUG_LOG（调试日志）',
-            'HTTP长轮询：客户端每{seconds}秒轮询一次，有消息立即返回，无消息延长{seconds2}秒，减少WebSocket连接数',
-            'RAG知识库：pgvector向量存储（HNSW索引）+ bge-m3 embedding + 混合检索（向量+关键词）',
-            '多渠道统一：Telegram/Web/企微/WhatsApp → 统一消息格式 → 智能体处理 → 统一回复格式 → 各渠道适配器发送',
-            '资产包市场：预置{count}+行业资产包，ChatML格式，运行时通过AssetResolver加载',
-            '数据流向：用户消息→Router→AgentLoop→Phase并行处理→决策层选最优回复→返回渠道',
-            '降级链：LLM挂了→RAG单独→SOP单独→FAQ单独→固定话术，确保永不掉线',
-            '技术栈：Go 1.22+ / PostgreSQL 14+ / Redis 6+ / llama.cpp / Vue3+ElementPlus',
-            '模块化：每个业务域4个文件（Handler/Service/Repository/Model），独立可测试',
-            '可扩展性：新渠道→Router+Handler+Service+Repository；新intent→FAQ/SOP加数据；新模型→实现LLMProvider接口',
-            '性能指标：单Agent并发{qps}QPS，平均响应{ms}ms，L1命中率{percent}%（命中FAQ/SOP秒回）',
-            '高可用：无单点故障，Redis集群+PG主从，FeatureFlag热切换',
-        ]),
-        ('部署操作手册','deploy.md','deploy',100,[
-            '最低配置（测试）：2核4G，llama.cpp跑Q2_K 1.5B emb模型，Docker Compose一键',
-            '推荐配置（生产）：8核16G+GPU，llama.cpp跑Q5_K_M 7B主模型+Q2_K 1.5B降级模型',
-            '快速开始：git clone → cd user-server → cp .env.example .env → 修改DB/Redis配置 → go run main.go',
-            'Docker部署：docker-compose up -d，自动拉PostgreSQL 14 + Redis 6，1分钟启动',
-            'K8s部署：Helm chart在deploy/helm/目录，一键部署集群',
-            'llama.cpp本地模型：下载7B Q5_K_M到/opt/hivemtk/models/7b/，配置.env LOCAL_LLM_PATH=/opt/hivemtk/models/7b/model.gguf',
-            'embedding服务：下载bge-m3，启动embedding-server，配置EMB_BASE_URL=http://127.0.0.1:8191',
-            '数据库迁移：goose up或直接执行migrations/目录下SQL文件',
-            'FeatureFlag：config.yaml → feature_flags → true/false，运行时生效',
-            '监控巡检：SQL查询关键指标 → /healthz端点 + 日志文件，无外部监控组件',
-            '备份恢复：scripts/backup.sh导出核心表，restore.sh恢复',
-            'SSL证书：Caddy/nginx反代，自动HTTPS',
-            '端口规划：API默认{port}，Embedding{port2}，llama-server{port3}',
-            '防火墙：开放API端口，其他内部端口仅内网访问',
-            '更新升级：git pull → docker-compose up -d --build，注意数据库兼容性',
-        ]),
-        ('API接口规范','api.md','feature',95,[
-            '统一响应格式：{"code":0,"data":{},"message":"ok"}成功；{"code":400,"message":"参数错误"}失败',
-            '错误码：0=成功 400=参数 401=认证 403=权限 404=不存在 409=冲突 500=服务端',
-            '用户端路径：/api/{domain}/{resource}；管理端：/api/manage/{resource}',
-            '认证：Bearer JWT token，包含agent_id/role等claim',
-            '智能体对话API：POST /api/chat，入参{agent_id, message, context}，返回{reply, source, confidence}',
-            'FAQ查询：GET /api/faq?agent_id=xx&keyword=xx，返回匹配FAQ列表',
-            'SOP匹配：POST /api/sop/match，入参{agent_id, intent, stage}，返回匹配SOP模板',
-            'RAG检索：POST /api/rag/search，入参{product_id, query, top_k}，返回知识片段',
-            '渠道绑定：POST /api/channel/bind，Telegram/Web/企微/WhatsApp各有专属接口',
-            '健康检查：GET /healthz，返回{status, version, uptime, features, db_status}',
-            '限流：每IP每分钟{limit}次，超限返回429',
-            'CORS：配置允许的Origin，*在生产关闭',
-            '日志：结构化JSON，包含trace_id全链路追踪',
-            '测试：scripts/api_verify_full.py覆盖所有端点，三端验证',
-            'Swagger：/swagger/index.html 自动生成，开发环境启用',
-        ]),
-        ('渠道接入指南','channels.md','feature',95,[
-            'Telegram接入：BotFather创建Bot → 在管理后台填 Token 并注册 Webhook（形如 https://<你的公网域名>/api/webhook/telegram/<account_id>）→ 启用 → 完成',
-            'Web嵌入：方式1-iframe <iframe src="http://<你的user-server地址>:8204/embed?app_id=xxx"/>；方式2-JS SDK动态加载',
-            'Webhook安全：Telegram发送X-Telegram-Bot-Api-Secret-Token验证请求来源',
-            '长轮询模式：Telegram/Polling方式，每{seconds}秒拉取Update，适合无公网IP场景',
-            '企业微信：需要公众号/小程序/企业号资质，OAuth授权后绑定',
-            'WhatsApp：通过Twilio/MessageBird等第三方API接入，需要商业账号',
-            '渠道消息格式统一：{channel, user_id, text, timestamp, metadata}，转内部通用格式',
-            '渠道适配器模式：每个渠道一个Adapter实现，TranslateIn/TranslateOut方法',
-            '多渠道同时绑定：一个智能体可同时绑定多个渠道，消息分渠道入库',
-            '渠道特定功能：Telegram支持按钮/卡片/文件；Web支持图片/语音；企微支持小程序跳转',
-            '频率限制：各渠道有发送频率限制（Telegram约{limit}msg/s），智能体自动控制',
-            '离线消息：渠道适配器缓存消息，服务重启后补发',
-            '渠道测试：各渠道都有sandbox/test mode，先测试再上线',
-            '渠道版本：Telegram Bot API v7.0+，企微API v3.0+，建议用最新版',
-            '渠道安全：Webhook必须HTTPS，Token必须保密，定期轮换',
-        ]),
-        ('FAQ/SOP/RAG使用','knowledge.md','feature',95,[
-            'FAQ添加：管理后台→知识库→FAQ管理→新增，填question/answer/keywords/category/intent',
-            'FAQ匹配：用户消息分词→关键词匹配→精确/模糊匹配→返回最高置信度的FAQ',
-            'FAQ权重：confidence（置信度）+ weight（重要性），命中多FAQ时取综合分最高',
-            'SOP模板：name/intent/stage/template/variables，按对话阶段匹配',
-            'SOP阶段：initial（开场）→ middle（引导）→ objection（异议）→ closing（逼单）→ late（售后）',
-            'SOP变量：模板里用{xxx}占位，发送前用实际值填充，如"推荐您{product}，{feature}"',
-            'RAG产品：每个RAG产品是一个独立知识库，有自己的embedding模型/向量表',
-            'RAG文档：pdf/md/txt导入→自动切块（默认{chunk}字+{overlap}重叠）→embedding→入库',
-            'RAG检索：query embedding→向量相似度搜索（top_k={k}）→ rerank→返回片段',
-            '混合检索：向量（语义相似）+ 关键词（jieba分词BM25），两路结果合并去重',
-            'RAG+LLM：检索片段→塞进system_prompt→LLM生成自然语言回复',
-            '相似度阈值：similarity_threshold默认{threshold}，低于此阈值不召回，避免错答',
-            '缓存优化：相同query{cache_ttl}分钟内直接返回缓存结果，减少embedding和LLM调用',
-            '质量评估：定期抽样评估RAG命中率/准确率，差的文档重写或删除',
-            '更新同步：FAQ/SOP修改立即生效；RAG文档更新需重新embedding（手动触发或定时任务）',
-        ]),
-    ]
-    for title, filename, cat, priority, chunks in docs:
-        cur.execute("""INSERT INTO knowledge_documents
-            (product_id, title, filename, file_type, source_type, category, priority,
-             content, embed_status, status, agent_id, metadata, created_at, updated_at)
-            VALUES (%s,%s,%s,'md','system_seed',%s,%s,%s,'indexed',1,%s,%s,NOW(),NOW())
-            RETURNING id""", ('hivemtk-platform-cs', title, filename, cat, priority, ' '.join(chunks), agent_id, json.dumps({"source": "ind-seed-product"})))
-        doc_id = cur.fetchone()[0]
-        for idx, content in enumerate(chunks):
-            cur.execute("""INSERT INTO knowledge_chunks
-                (document_id, product_id, chunk_index, content, char_count, metadata, source_language, embedding_source, embed_status, created_at, updated_at)
-                VALUES (%s,'hivemtk-platform-cs',%s,%s,%s,%s,'zh','tei','indexed',NOW(),NOW())""",
-                (doc_id, idx, content, len(content), json.dumps({"source": "bootstrap"})))
-    cur.execute("UPDATE rag_products SET doc_count=5, chunk_count=%s, updated_at=NOW() WHERE id='hivemtk-platform-cs'", (sum(len(c[4]) for c in docs),))
-
-# 绑定 agent
-cur.execute("UPDATE ai_agents SET rag_product_ids = ARRAY['hivemtk-platform-cs']::text[], updated_at=NOW() WHERE id=%s", (agent_id,))
+if cur.fetchone()[0] == 0:
+    print("  ⚠ 库里没有 rag_products('hivemtk-platform-cs')：先跑 scripts/bootstrap.sh"
+          "（其第 4 步 go run ./cmd/seed 建该产品），本脚本不再自行创建第二套知识 ⇒ 跳过 RAG 绑定")
+else:
+    cur.execute("UPDATE ai_agents SET rag_product_ids = ARRAY['hivemtk-platform-cs']::text[], updated_at=NOW() WHERE id=%s", (agent_id,))
 
 conn.commit()
 cur.execute("SELECT COUNT(*) FROM knowledge_documents WHERE product_id='hivemtk-platform-cs'")

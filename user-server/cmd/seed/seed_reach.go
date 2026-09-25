@@ -540,7 +540,7 @@ func (s *reachSeeder) buildDouyinCards() []model.DouyinCard {
 	cards := []model.DouyinCard{
 		{
 			Title:       "开源部署教程·3 步私有化 " + seedTag,
-			Description: "Docker Compose 私域部署，从 git clone 到 make up",
+			Description: "私域部署：数据层容器化 + 应用跑宿主机，从 git clone 到 make dev",
 			ImageURL:    "https://example.com/seed/douyin1.jpg",
 			RedirectURL: "https://gitee.com/xhpmayun/hivemtk",
 			Tags:        "部署,教程",

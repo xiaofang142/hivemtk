@@ -48,7 +48,7 @@ INSERT INTO ai_agents (
     '您好，我是电商客服小助手😊 可以帮您：商品咨询、订单查询、物流追踪、退换货说明、活动参与等。请问有什么需要帮忙的？',
     ARRAY['ecommerce-general-cs']::text[], ARRAY[]::text[], ARRAY[]::text[],
     ARRAY[]::text[], ARRAY[]::text[],
-    'Qwen2.5-1.5B-Instruct', 'openai', '', '', '', 3, 60,
+    'Qwen2.5-3B-Instruct', 'openai', '', '', '', 3, 60,
     0.6, 1000, 0.9, 0.5, 0.5,
     TRUE, TRUE, TRUE, TRUE, FALSE, 3,
     0.7, 8, 1, 1, NOW(), NOW()
@@ -77,7 +77,7 @@ INSERT INTO ai_agents (
     '您好呀～我是小助手，帮您找到最适合的商品 🎯 想买什么品类？送礼还是自用呀？',
     ARRAY['ecommerce-general-cs']::text[], ARRAY[]::text[], ARRAY[]::text[],
     ARRAY[]::text[], ARRAY[]::text[],
-    'Qwen2.5-1.5B-Instruct', 'openai', '', '', '', 3, 60,
+    'Qwen2.5-3B-Instruct', 'openai', '', '', '', 3, 60,
     0.7, 1200, 0.9, 0.5, 0.5,
     TRUE, TRUE, TRUE, TRUE, FALSE, 3,
     0.65, 6, 1, 1, NOW(), NOW()
@@ -106,7 +106,7 @@ INSERT INTO ai_agents (
     '欢迎来到咱们的社群呀～新人记得先看群规哦，有问题随时问我或者 @管理员 😊',
     ARRAY[]::text[], ARRAY[]::text[], ARRAY[]::text[],
     ARRAY[]::text[], ARRAY[]::text[],
-    'Qwen2.5-1.5B-Instruct', 'openai', '', '', '', 3, 60,
+    'Qwen2.5-3B-Instruct', 'openai', '', '', '', 3, 60,
     0.65, 800, 0.9, 0.5, 0.5,
     TRUE, TRUE, TRUE, TRUE, FALSE, 3,
     0.7, 5, 1, 1, NOW(), NOW()
@@ -139,7 +139,7 @@ INSERT INTO rag_products (
     '通用电商客服知识库',
     '覆盖电商售前咨询、售后退换货、物流查询、活动优惠券、订单操作等通用电商客服场景。',
     'ecommerce', 'rag_ecommerce_general',
-    'bge-m3', 1024, 'Qwen2.5-1.5B-Instruct',
+    'bge-m3', 1024, 'Qwen2.5-3B-Instruct',
     0.3, 1024, 0.9, 0.5, 0.5,
     'text',
     '你是电商客服助手，依据检索到的知识片段回答。严格按政策回答，不超权承诺。涉及具体订单/价格/库存引导用户提供订单号后查询。',

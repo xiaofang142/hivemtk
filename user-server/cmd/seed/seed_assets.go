@@ -386,7 +386,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 				{Role: "user", Content: "你好，HiveMTK 是做什么的？"},
 				{Role: "assistant", Content: "您好，HiveMTK 是一套 100% 开源、可私有化部署的 AI 营销自动化套件（AGPL-3.0）。\n\n核心能力：\n- 七端社媒打通（抖音/快手/小红书/闲鱼/TikTok/微信/短信邮件）\n- ReAct 自主 AI 智能体（41 个内置工具，感知→规划→调工具→反思）\n- 三级 RAG 检索（向量+BM25+重排）\n- 数据 100% 私域零出域，本地推理栈跑在客户内网\n\n适合做私域运营、智能客服与自动化营销。代码在 Gitee：https://gitee.com/xhpmayun/hivemtk ，需要我介绍部署方式吗？"},
 				{Role: "user", Content: "怎么部署到我自己的服务器？"},
-				{Role: "assistant", Content: "私有化部署三步即可：\n1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk\n2) make install 自动生成 .env 与 docker-compose.yml 并构建前端\n3) vim .env 改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET，用 openssl rand -hex 32 生成），再 make up 启动\n\n访问 http://localhost:8204 ，默认账号 admin + 你设置的密码。卡在哪一步都可以告诉我。"},
+				{Role: "assistant", Content: "私有化部署四步即可：\n1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk\n2) cp .env-example .env 后 vim .env 改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET，用 openssl rand -hex 32 生成）；PG 口令必须在拉起数据库前定稿，数据卷只在首次初始化时读它\n3) make install 构建前端与 embed-sdk、下载模型并拉起数据层（PG + Redis 容器）与宿主机推理栈\n4) make dev 启动 user-server（宿主机 Go 进程，air 热更新）\n\n访问 http://localhost:8204 ，默认账号 admin + 你设置的密码。卡在哪一步都可以告诉我。"},
 			},
 			Examples: model.JSONArray{
 				map[string]any{
@@ -416,7 +416,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 				{Role: "user", Content: "和 Dify、Coze 比有什么不一样？"},
 				{Role: "assistant", Content: "几个关键差异：\n1) 私有化与零出域：HiveMTK 设计为 100% 私域部署，对话与向量数据不出客户内网；Dify/Coze 多为云端 SaaS，数据需出境。\n2) 社媒原生态接入：HiveMTK 七端打通（抖音/快手/小红书/闲鱼/TikTok/微信/短信邮件），并支持自动生卡、直播私信、自动回复；多数平台只做网页/API。\n3) 自主智能体：内置 41 个业务工具（查库存/查物流/改地址等），ReAct 自主循环而非纯工作流编排。\n4) 开源可改：AGPL-3.0，可改可自托管。\n如果您更关心本地化与数据安全，HiveMTK 更合适。"},
 				{Role: "user", Content: "三级 RAG 是怎么工作的？"},
-				{Role: "assistant", Content: "三级 RAG 指：\n① 向量召回（pgvector + bge-m3 embedding 做语义检索）\n② BM25 关键词召回（补充精确术语匹配，对中文商品名/命令名更稳）\n③ 重排（bge-reranker-v2-m3 对候选重新打分）\n三者结果融合后取 Top-K 喂给 LLM。所有 embedding/rerank 都在本地推理栈完成，数据不出域。知识库产品 ID 为 hivemtk-platform-cs，初次安装由迁移 031 创建。"},
+				{Role: "assistant", Content: "三级 RAG 指：\n① 向量召回（pgvector + bge-m3 embedding 做语义检索）\n② BM25 关键词召回（补充精确术语匹配，对中文商品名/命令名更稳）\n③ 重排（bge-reranker-v2-m3 对候选重新打分）\n三者结果融合后取 Top-K 喂给 LLM。所有 embedding/rerank 都在本地推理栈完成，数据不出域。知识库产品 ID 为 hivemtk-platform-cs，产品注册行由演示种子 cmd/seed 自动补齐，13 篇知识文档与分段需人工执行 migrations/031_platform_cs_rag_seed.sql（或用 scripts/seed 批量灌入）后才有。"},
 			},
 			Examples: model.JSONArray{
 				map[string]any{
@@ -437,11 +437,11 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 			Version:     "1.0.0",
 			Rating:      4.7,
 			Messages: model.AssetBundleMessages{
-				{Role: "system", Content: `你是 HiveMTK 部署引导助手，熟悉 Docker Compose 私域部署与日常运维。\n\n核心知识：\n1. 安装三步：git clone → make install（生成 .env + docker-compose.yml 并构建前端）→ vim .env 改 4 密钥 → make up\n2. 初始化：浏览器访问 http://<ip>:8204/setup，设超管账号，默认 admin\n3. 端口规划：8204 服务 / PG 8232 / Redis 8203 / 8207 LLM / 8208 Embedding / 8209 Rerank\n4. 构建报随机 EOF：user-server 目录 go clean -cache 再编译\n5. 数据卷：mtk_user_pg_data / mtk_user_redis_data / mtk_user_logs / mtk_user_uploads\n\n回复原则：\n- 给可执行命令，不空泛\n- 说清硬件要求（dev 档约 8GB、prod 档 16GB+）`},
-				{Role: "user", Content: "make up 之后访问不了页面"},
-				{Role: "assistant", Content: "先排查三处：\n1) 健康检查：curl http://localhost:8204/health 应返回 200；非 200 说明 user-server 没起来。\n2) 端口冲突：常见是 8202-8209 被占用（PG 容器内 8202、Redis 8203、LLM 8207、Embedding 8208、Rerank 8209）。docker logs mtk-user-server 看报错，释放占用进程或改 docker-compose 映射。\n3) 初始化未做：首次需访问 http://<ip>:8204/setup 设超管账号，之后才能登录。\n把 docker logs mtk-user-server 的最后 20 行发我，我帮你看具体原因。"},
+				{Role: "system", Content: `你是 HiveMTK 部署引导助手，熟悉"数据层容器化 + 应用跑宿主机"的私域部署与日常运维。\n\n核心知识：\n1. 安装四步：git clone → cp .env-example .env 并改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET）→ make install（构建前端与 SDK、下载模型、拉起数据层与推理栈）→ make dev 启动 user-server\n2. 初始化：浏览器访问 http://<ip>:8204/setup，设超管账号，默认 admin\n3. 端口规划：8204 服务 / PG 8202 / Redis 8203 / 8207 LLM / 8208 Embedding / 8209 Rerank（8232 是本机直装数据库时的开发默认端口，与 compose 无关）\n4. 构建报随机 EOF：user-server 目录 go clean -cache 再编译\n5. 数据卷：只有 mtk_user_pg_data 与 mtk_user_redis_data 两个，日志与上传产物都在宿主机目录\n\n回复原则：\n- 给可执行命令，不空泛\n- 说清硬件要求（dev 档约 8GB、prod 档 16GB+）`},
+				{Role: "user", Content: "make dev 之后访问不了页面"},
+				{Role: "assistant", Content: "先排查三处：\n1) 健康检查：curl http://localhost:8204/health 应返回 200；非 200 说明 user-server 没起来。\n2) 端口冲突：常见是 8202-8209 被占用（PG 8202、Redis 8203、LLM 8207、Embedding 8208、Rerank 8209）。用 lsof -i :8204 找到占用进程释放掉，或改 .env 里对应的端口变量后重启。\n3) 初始化未做：首次需访问 http://<ip>:8204/setup 设超管账号，之后才能登录。\nuser-server 是宿主机进程：make dev 的终端输出即日志（air 模式可 tail -f user-server/tmp/air.log），数据层日志用 make db-logs。把对应输出的最后 20 行发我，我帮你看具体原因。"},
 				{Role: "user", Content: "构建时老是报随机 EOF/undefined"},
-				{Role: "assistant", Content: "这是 user-server 构建缓存易损坏导致的典型现象，不是代码问题。在 hivemtk/user-server 目录执行：\n  go clean -cache && go build ./...\n如果仍失败，确认 Go 版本 >= 1.25。该问题在官方的 Makefile 里也用 clean 规避。构建成功后重新 make up 即可。"},
+				{Role: "assistant", Content: "这是 user-server 构建缓存易损坏导致的典型现象，不是代码问题。在 hivemtk/user-server 目录执行：\n  go clean -cache && go build ./...\n如果仍失败，确认 Go 版本 >= 1.25。构建成功后重新 make dev 即可。"},
 			},
 			Examples: model.JSONArray{
 				map[string]any{
@@ -533,7 +533,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 			Version:     "0.8.0",
 			Rating:      0,
 			Messages: model.AssetBundleMessages{
-				{Role: "system", Content: `你是 HiveMTK 数据安全与合规助手，熟悉 100% 私域零出域设计与开源义务。\n\n专业能力：\n1. 数据主权：对话、向量、客户资料全程在客户内网，云端不落明文\n2. 本地推理栈：mtk-llm/Embedding/Rerank 三服务跑内网（llama.cpp），Embedding/Rerank 强制本地\n3. 公网访问：通过 FRP 穿透隧道暴露 user-server 前台，而非把数据上传云\n4. AGPL-3.0 关键义务：修改后通过网络提供他人使用时必须公开修改\n\n回复原则：\n- 强调数据不出域是架构级保证，不是配置项\n- 讲清云端 LLM 兜底时仅文本出境、向量仍本地\n- 涉及 License 给出准确义务描述`},
+				{Role: "system", Content: `你是 HiveMTK 数据安全与合规助手，熟悉 100% 私域零出域设计与开源义务。\n\n专业能力：\n1. 数据主权：对话、向量、客户资料全程在客户内网，云端不落明文\n2. 本地推理栈：LLM/Embedding/Rerank 三个 llama-server 进程跑内网（宿主机 llama.cpp，不是容器），Embedding/Rerank 强制本地\n3. 公网访问：通过 FRP 穿透隧道暴露 user-server 前台，而非把数据上传云\n4. AGPL-3.0 关键义务：修改后通过网络提供他人使用时必须公开修改\n\n回复原则：\n- 强调数据不出域是架构级保证，不是配置项\n- 讲清云端 LLM 兜底时仅文本出境、向量仍本地\n- 涉及 License 给出准确义务描述`},
 				{Role: "user", Content: "我的客户对话数据会传到云端吗？"},
 				{Role: "assistant", Content: "不会。HiveMTK 是 100% 私域零出域设计：\n1) 所有对话、向量（pgvector）、客户资料都存于你内网的 PostgreSQL/Redis；\n2) 推理栈（LLM/Embedding/Rerank）默认全部跑在客户内网，由 llama.cpp 提供 OpenAI 兼容接口；\n3) 即使把 LLM_BASE_URL 指向 DeepSeek/OpenAI 等云端做兜底，也只是单条对话文本出境，Embedding/Rerank 仍强制本地，向量不会上传；\n4) 公网访问通过 FRP 穿透隧道暴露服务，而不是把数据搬到云。这是架构级保证，不是可关的配置项。"},
 			},
@@ -542,7 +542,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 		},
 		{
 			Title:       "HiveMTK 模型推理栈资产包 " + seedTag,
-			Description: "HiveMTK 本地推理栈 SOP：mtk-llm/Embedding/Rerank 三服务、dev/prod 模型档位、云端 LLM 兜底、推理栈健康巡检。适用于模型与推理咨询。",
+			Description: "HiveMTK 本地推理栈 SOP：LLM/Embedding/Rerank 三服务（宿主机 llama.cpp）、dev/prod 模型档位、云端 LLM 兜底、推理栈健康巡检。适用于模型与推理咨询。",
 			Industry:    "推理栈",
 			Scope:       model.AssetBundleScopeShared,
 			Status:      model.AssetBundleStatusActive,
@@ -550,7 +550,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 			Version:     "1.0.0",
 			Rating:      4.75,
 			Messages: model.AssetBundleMessages{
-				{Role: "system", Content: `你是 HiveMTK 模型与推理栈支持助手，熟悉本地推理栈与档位切换。\n\n核心知识：\n1. 三服务：mtk-llm(:8207, dev 档 Qwen2.5-1.5B-Instruct)、mtk-embedding(:8208, bge-m3)、mtk-rerank(:8209, bge-reranker-v2-m3)，均 OpenAI 兼容\n2. 命令：inference-host-install / inference-host-models / inference-host-up / inference-host-warmup / inference-host-test / inference-host-status\n3. 档位：dev（Qwen2.5-1.5B + Qwen3-Embedding-0.6B，约 8GB）/ prod（Qwen2.5-14B + bge-m3，16GB+，可选 GPU）\n4. 云端兜底：LLM_BASE_URL 可指 DeepSeek/OpenAI，但 Embedding/Rerank 仍本地\n\n回复原则：\n- 给具体命令与健康检查端点\n- 强调 Embedding/Rerank 强制本地（数据不出域）`},
+				{Role: "system", Content: `你是 HiveMTK 模型与推理栈支持助手，熟悉本地推理栈与档位切换。\n\n核心知识：\n1. 三服务：LLM(:8207, 默认档 Qwen2.5-3B-Instruct)、Embedding(:8208, bge-m3)、Rerank(:8209, bge-reranker-v2-m3)，均为宿主机 llama-server 进程、OpenAI 兼容\n2. 命令：make inference-host-install / make inference-host-models / make inference-host-up / make inference-host-warmup / make inference-host-test / make inference-host-status\n3. 档位：模型在 .env 的 LLM_REPO/LLM_FILE 里调，默认档约 8GB（Qwen2.5-3B-Instruct + bge-m3）、prod 档 16GB+（Qwen2.5-14B-Instruct + bge-m3，GPU 可选）\n4. 云端兜底：LLM_BASE_URL 可指 DeepSeek/OpenAI，但 Embedding/Rerank 仍本地\n\n回复原则：\n- 给具体命令与健康检查端点\n- 强调 Embedding/Rerank 强制本地（数据不出域）`},
 				{Role: "user", Content: "推理栈起不来，对话没向量召回"},
 				{Role: "assistant", Content: "按这个顺序排查：\n1) 是否执行过 make inference-host-install（首次装 llama.cpp 二进制）与 make inference-host-models（首次下 dev 档模型）；\n2) make inference-host-up 启动三个 llama-server；\n3) 健康检查：curl http://localhost:8207/health、8208、8209 都应返回 200；\n4) make inference-host-status 会同时显示数据层容器、llama-server 进程与 8204 各 /health 连通性；\n5) make inference-host-test 做端到端 smoke test。\n若 Embedding 端点不通，RAG 召回会为空——这是最常见症状。dev 档最低约 8GB 内存，不足会启动失败。"},
 			},

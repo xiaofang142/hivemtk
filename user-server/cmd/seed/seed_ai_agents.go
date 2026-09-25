@@ -89,6 +89,12 @@ func (s *aiAgentsSeeder) Clean(database *gorm.DB) error {
 }
 
 func (s *aiAgentsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
+	// 先补 RAG 产品注册行再写智能体：buildAIAgents 把 rag_product_ids 绑到
+	// platformCSProductID，没有注册行时绑的是一个查无此物的产品。
+	if err := ensurePlatformCSRagProduct(database); err != nil {
+		return err
+	}
+
 	agents := s.buildAIAgents()
 	if err := batchInsert(database, agents, 50); err != nil {
 		return fmt.Errorf("写入 ai_agents 失败: %w", err)
@@ -182,10 +188,9 @@ func (s *aiAgentsSeeder) Seed(database *gorm.DB, ctx *SeedContext) error {
 
 func (s *aiAgentsSeeder) buildAIAgents() []model.AIAgent {
 	// hivemtk 平台知识库产品 ID（与迁移 031_platform_cs_rag_seed.sql、
-	// scripts/seed/expand_knowledge_base*.py 中的 PRODUCT_ID 一致，均为 'hivemtk-platform-cs'）。
-	// 该产品由初次安装的迁移 031 创建，本 cmd/seed 仅做绑定、不重复创建。
-	const hivemtkRagProductID = "hivemtk-platform-cs"
-	ragProducts := pq.StringArray{hivemtkRagProductID}
+	// scripts/seed/expand_knowledge_base*.py 中的 PRODUCT_ID 一致）；
+	// 注册行由本包的 ensurePlatformCSRagProduct 在写智能体之前补齐，见 seed_rag_product.go。
+	ragProducts := pq.StringArray{platformCSProductID}
 	agents := []model.AIAgent{
 		{
 			AgentCode:    "seed-deploy-consult-01",
@@ -193,8 +198,8 @@ func (s *aiAgentsSeeder) buildAIAgents() []model.AIAgent {
 			Description:  "HiveMTK 开源部署咨询：make install 三步、.env 密钥、模型档位、FRP 公网穿透、初始化流程",
 			AgentType:    string(model.AgentTypeCustomerService),
 			AgentMode:    string(model.AgentModePassive),
-			Persona:      "你是 HiveMTK 部署支持工程师，熟悉 Docker Compose 私域部署、make 命令、.env 配置、本地推理栈与 FRP 穿透，能给出可执行的安装与排障步骤。",
-			SystemPrompt: "你是 HiveMTK 开源部署咨询助手。回答要求：1) 准确，不编造；2) 涉及部署/命令时给出具体可执行步骤（git clone / make install / vim .env / make up）；3) 区分 dev/prod 模型档位与硬件要求；4) 引导至 GitHub/Gitee 仓库或微信交流群。",
+			Persona:      "你是 HiveMTK 部署支持工程师，熟悉数据层 Docker Compose 与宿主机服务（user-server、本地推理栈）的部署方式、make 命令、.env 配置与 FRP 穿透，能给出可执行的安装与排障步骤。",
+			SystemPrompt: "你是 HiveMTK 开源部署咨询助手。回答要求：1) 准确，不编造；2) 涉及部署/命令时给出具体可执行步骤（git clone / cp .env-example .env / make install / make dev）；3) 区分 dev/prod 模型档位与硬件要求；4) 引导至 GitHub/Gitee 仓库或微信交流群。",
 			Greeting:     "您好，我是 HiveMTK 部署咨询助手，可解答安装、初始化、模型档位、FRP 公网穿透、运维排障等问题。请问您在哪个环节需要帮助？",
 			LLMModel:     "default",
 			Temperature:  0.5,
@@ -323,7 +328,7 @@ func (s *aiAgentsSeeder) buildAIAgents() []model.AIAgent {
 		{
 			AgentCode:    "seed-model-inference-01",
 			Name:         "模型与推理栈支持智能体 " + seedTag,
-			Description:  "HiveMTK 本地推理栈与模型档位：mtk-llm/Embedding/Rerank、dev/prod 档、云端 LLM 兜底",
+			Description:  "HiveMTK 本地推理栈与模型档位：宿主机 llama.cpp 的 LLM/Embedding/Rerank 三进程、默认档与 prod 档、云端 LLM 兜底",
 			AgentType:    string(model.AgentTypeCustomerService),
 			AgentMode:    string(model.AgentModePassive),
 			Persona:      "你是 HiveMTK 模型与推理栈支持助手，熟悉本地推理栈三服务（8207 LLM / 8208 Embedding / 8209 Rerank）、dev/prod 模型档位与云端 LLM 兜底配置。",
@@ -740,7 +745,7 @@ func (s *aiAgentsSeeder) buildSOPAgents() []model.SOPAgent {
 					map[string]any{"id": "objection_check", "type": "branch", "name": "异议检测"},
 					map[string]any{"id": "handle_objection", "type": "message", "name": "异议处理"},
 					map[string]any{"id": "final_offer", "type": "message", "name": "终极建议+限时"},
-					map[string]any{"id": "close_yes", "type": "action", "name": "升级（推 make up）"},
+					map[string]any{"id": "close_yes", "type": "action", "name": "升级（推 make user-build）"},
 					map[string]any{"id": "close_no", "type": "message", "name": "加群+长期培育"},
 					map[string]any{"id": "end", "type": "end", "name": "结束"},
 				},

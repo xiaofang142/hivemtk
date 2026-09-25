@@ -61,14 +61,18 @@
 `docker-compose.yml` 中 `mtk-postgres` 容器的 `initdb.d` 机制：
 
 - 仅 `init-user-db.sql` 通过 `docker-entrypoint-initdb.d/` 自动执行（容器首次创建时）。
-- `002-033` 迁移由应用层 `internal/pkg/utils/db/migrate.go` 在 `user-server` 启动时按文件名顺序执行（GORM AutoMigrate 兜底建表）。
-- 升级时无需手动重跑已执行迁移；服务重启时 `migrate.go` 会跳过已记录的迁移任务。
+- `002-033` **没有自动执行路径**：`user-server` 启动时跑的是 `user-server/internal/pkg/db/migrate.go`
+  （GORM AutoMigrate 建表 + `internal/migration/migrations/*.go` 注册的 Go 迁移任务），它从不读 `.sql` 文件。
+- 因此本目录的 `.sql` 只有三种落地方式：① 容器首次初始化时的 `initdb.d`（只挂了 `init-user-db.sql`）；
+  ② `scripts/bootstrap.sh` 里点名执行的两份（`027_user_blacklist`、`028_customer_tags_uuid`）；
+  ③ 人工 `psql -v ON_ERROR_STOP=1 -f migrations/<NNN>_xxx.sql`。
+- 升级时不需要"重跑迁移"，因为服务重启只会重跑 Go 侧迁移任务并按表/列存在性跳过；`.sql` 要人工按需执行。
 
 ## 平台端迁移
 
-平台端（`hivemtk-platform/platform-server`）的数据库迁移**不在本目录**。  
-平台端使用 `platform_db` 独立数据库，迁移逻辑嵌入在 `internal/pkg/utils/db/migrate.go` 中，
-由 `internal/migration/*.go` 模块管理；不通过 SQL 文件而是通过 GORM 自动建表 + 显式迁移任务。
+平台端（独立仓库 `hivemtk-platform`）的数据库迁移**不在本目录**。  
+平台端使用 `platform_db` 独立数据库，建表与迁移在 `platform-server/internal/utils/db/db.go`
+（GORM AutoMigrate）及该仓库自己的 `migrations/` 里；本仓库既不放也不代跑平台端迁移。
 
 ## 故障排查
 

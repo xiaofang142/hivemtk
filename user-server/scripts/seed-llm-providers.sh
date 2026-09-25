@@ -90,4 +90,4 @@ done
 
 echo ""
 echo "✅ 完成。刷新前端 https://$BASE/#/llmRouting/list 即可看到 4 个国产渠道"
-echo "   （本地环境请打开 http://127.0.0.1:5173/#/llmRouting/list 或对应端口）"
+echo "   （本地环境请打开 http://127.0.0.1:8211/#/llmRouting/list，即 user-web 的 vite dev 端口）"
