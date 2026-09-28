@@ -16,30 +16,44 @@
      没有 `.git` 就说明同名目录不是本电池建的，不碰。
   4. `owned=True`（本次由 `tempfile.mkdtemp` 创建、且确实落在系统临时目录下）才整体带走。
 
-调用方形态（所有带 `--clone` 面的常驻电池都已改成这一对；枚数由
+调用方形态（所有带 `--clone` 面的常驻电池都是这三件；枚数由
 `mut-dispose-guard.test.sh` 的 REAL 静态面现取，写死的那个数每加一枚电池就过期一次）：
     tmp, owned = workdir(args.clone, prefix="p703mut-", repo_root=ROOT)
+    clone = prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)   # 兜底，紧随装架那一行
     ...
     dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
 
-两道闸缺一不可：`workdir()` 挡在装架之前（危险 `--clone` 当轮退，工作树分毫未动），
-`dispose()` 兜在收尾（只回收本电池自己 `git clone --shared` 出来的 `clone/`）。
-只留后者的话，`--clone .` 依然会在退出前把克隆与补丁写进调用方的树里。
+三道闸各挡一面：`workdir()` 挡在装架之前（危险 `--clone` 当轮退，工作树分毫未动）；
+`dispose()` 是显式收尾出口，只回收本电池自己 `git clone --shared` 出来的 `clone/`；
+`dispose_at_exit()` 挂在进程退出路径上，兜住"装架之后有人忘了接闸"的整类中止路——
+2026-09-28 现扫：带克隆面的 27 枚电池里，装架函数体之外还可达 134 条退出，而门原先
+只走 `prepare`/`go_prepare` 的函数体，那一半从没被量过，`mut_reach_p503.py` 的控制组停机
+实测留下 73M 残骸。只留前两者的话，`--clone .` 会先写进调用方的树、而停机照样漏盘。
+"现场只活在克隆里"那类豁免路（还原后 md5 不一致）改走 `leave_for_evidence(why)` 打标记，
+兜底闸读到它就只出声不回收。
 
 牙齿：`bash scripts/mut-dispose-guard.test.sh`（G1 交来的目录只回收 clone/／G2 owned 整体带走／
 G3 仓库根拒删且出声／G4 上级拒删／G5 无 .git 的同名 clone/ 不碰／G6 --keep 全留／
 G7–G9 入口闸：仓库根·上级·/tmp 拒、合法入参照样放行／
-REAL 静态面：--clone 面 == 入口闸面 == 收尾闸面，且不留 `Path(args.clone` 直连赋值与裸 rmtree 站点）。
+G10–G12 兜底闸：没接闸的退出路照样回收／已回收过则安静／打过让路标记则只出声不删／
+REAL 静态面：--clone 面 == 入口闸面 == 收尾闸面 == 兜底闸面，且每个让路豁免点都带 `leave_for_evidence`，
+并不留 `Path(args.clone` 直连赋值与裸 rmtree 站点）。
 """
 
 from __future__ import annotations
 
+import atexit
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
 FORBIDDEN = {Path("/"), Path(tempfile.gettempdir()), Path("/tmp")}
+
+# 唯一一处"让收尾闸让路"的开关：现场只活在克隆里的那几条例外路（与豁免三形同源）打上它，
+# `dispose_at_exit()` 读到它就只出声不回收。
+_EVIDENCE: dict[str, str] = {"why": ""}
 
 
 def is_forbidden(target: Path) -> bool:
@@ -138,6 +152,43 @@ def dispose(tmp: Path, *, owned: bool, keep: bool = False, repo_root: Path | Non
         removed.append(str(target))
 
     print(f"收尾：带走 {'、'.join(removed) if removed else '（无可回收产物）'}")
+
+
+def leave_for_evidence(why: str) -> None:
+    """给"现场只活在克隆里"那几条例外路打标记：之后的兜底闸读到它就让路。
+
+    与豁免三形同源的一条取舍：`还原后 md5 不一致` 那类停机意味着克隆里那份字节既不是
+    HEAD 也不是注码版，删了就只剩一句"当时红过"，与 `main()` 侧还原校验同一取舍。
+    """
+    _EVIDENCE["why"] = why
+
+
+def dispose_at_exit(tmp: Path, *, owned: bool, keep: bool = False,
+                    repo_root: Path | None = None) -> None:
+    """把收尾闸挂到进程退出路径上：克隆建起来**之后**任何一条没先过闸的退出也照样回收。
+
+    为什么不是"逐处插 sweep()"：一枚电池的 main 里克隆之后的退出有 6–9 条，还有一部分
+    从它调用的辅助函数（`sub_once`／`lane_overlays`／`apply_js`）里冒出来——那些函数不知道
+    克隆在哪，逐站插要么改签名要么漏。2026-09-28 现扫：27 枚带克隆面的电池里，装架函数体
+    之外的可达退出 134 条，而常驻门的"中止路腿"用 AST 只走 `prepare`/`go_prepare` 函数体，
+    那一半从没被量过；`mut_reach_p503.py` 的 `控制组[service] 不干净` 就是这么实测留下 73M
+    残骸（`/tmp/r75leak2.*` 那一趟），它的红因句子与仓库红一模一样。
+
+    与显式出口共存是设计不是冗余：正常收尾与 `bail()` 都已调过 `dispose()`，兜底这一脚先看
+    `clone/` 还在不在——不在就安静退出，绝不再印第二句"收尾"，免得取证日志里出现两条互相
+    矛盾的回收行。这一条也排在"让路"之前：让路那句话的前提是"有一份克隆值得留"，装架之前
+    就停的路（入口闸、`--clone` 目录已存在）根本没这份克隆，跟着出声会把人引去查一个不存在现场。
+    """
+    def _hook() -> None:
+        if not (Path(tmp) / "clone").exists():
+            return  # 已经有人收过了（正常出口或 bail），或者压根还没装架：都不出声
+        if _EVIDENCE["why"]:
+            print(f"收尾闸让路：{_EVIDENCE['why']}——现场只活在克隆里，本次不回收")
+            return
+        print("收尾闸：这条中止路没接显式收尾（dispose），已由兜底闸回收；要把现场留成取证，走 --keep")
+        dispose(tmp, owned=owned, keep=keep, repo_root=repo_root)
+
+    atexit.register(_hook)
 
 
 if __name__ == "__main__":

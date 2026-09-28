@@ -47,7 +47,7 @@ import time
 from pathlib import Path
 
 from battlog import tee_to
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, workdir
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
 ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).resolve()
@@ -297,6 +297,7 @@ def main() -> int:
     tmp, owned = workdir(args.clone or None, prefix="dbpoolmut-", repo_root=ROOT)
     try:
         clone = prepare(tmp, owned)
+        dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         print(f"基线字节：克隆 HEAD `{tip(clone)}`｜作业目录 {tmp}")
         if args.check:
             tee_to(LOGDIR / "00-check.log")

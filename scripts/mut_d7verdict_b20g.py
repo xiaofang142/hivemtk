@@ -34,7 +34,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -150,6 +150,7 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
         if md5_bytes(src) != md5_bytes(tgt):
+            leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
             raise SystemExit(f"覆盖后 md5 不一致（装错树/写盘失败）：{rel}")
     hostenv = ROOT / "user-server" / ".env"
     if hostenv.exists():
@@ -204,6 +205,7 @@ def main() -> int:
     problems: list[str] = []
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     target = clone / EXEC_REL
     if not target.exists():
         raise SystemExit(f"注码目标文件不在克隆里：{target}")
@@ -248,6 +250,7 @@ def main() -> int:
         gkill[code] = set(r["killed"])
         target.write_text(original, encoding="utf-8")
         if md5_bytes(target) != basemd5:
+            leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
             raise SystemExit(f"{code} 还原后 md5 不一致，停机")
 
     dup_report(gkill)

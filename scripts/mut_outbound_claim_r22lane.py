@@ -36,7 +36,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO_REL = Path("user-server/internal/repository/message_hub_inbox_outbound.go")
@@ -153,6 +153,7 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
         if md5_bytes(src) != md5_bytes(tgt):
+            leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
             raise SystemExit(f"覆盖后 md5 不一致（装错树/写盘失败）：{rel}")
     print(f"[Go] overlay：{len(overlays)} 个脏 .go 已进克隆（含本泳道未跟踪新腿）")
     hostenv = ROOT / "user-server" / ".env"
@@ -224,6 +225,7 @@ def main() -> int:
     problems = []
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     files = {"repo": clone / REPO_REL, "svc": clone / SVC_REL}
     for name, p in files.items():
         if not p.exists():
@@ -278,6 +280,7 @@ def main() -> int:
             files[slot].write_text(originals[slot], encoding="utf-8")
         for slot in acc:
             if md5_bytes(files[slot]) != basemd5[slot]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{code} 还原后 md5 不一致，停机")
     dup_report(gkill)
     print("[Go] 克隆内注码文件已全量还原（md5 一致）；工作树全程未被写入")

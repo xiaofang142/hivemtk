@@ -205,7 +205,7 @@ import sys
 import time
 from pathlib import Path
 
-from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir   # 三道闸：装架前挡危险 --clone，显式收尾只回收私有克隆，兜底闸接住没接闸的退出路
 
 ROOT = Path(__file__).resolve().parents[1]
 # 逐格原始输出落进仓库树：早先只随 stdout 走、由调用方重定向到 /tmp，重启即蒸发 ⇒
@@ -836,6 +836,7 @@ def main() -> int:
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
     clone = prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
 
     def sweep() -> None:
         """除了 --keep，正常出口与"可复现"的停机出口都把私有克隆带走。
@@ -982,6 +983,7 @@ def main() -> int:
         for prel in mutated:
             files[prel].write_text(originals[prel], encoding="utf-8")
             if md5_bytes(files[prel]) != basemd5[prel]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{code} 还原后 {prel} 的 md5 不一致，停机")
 
     items = sorted(killmap.items())

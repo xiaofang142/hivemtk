@@ -105,7 +105,7 @@ import threading
 import time
 from pathlib import Path
 
-from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir   # 三道闸：装架前挡危险 --clone，显式收尾只回收私有克隆，兜底闸接住没接闸的退出路
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
 
@@ -731,6 +731,7 @@ def main() -> int:
     print(f"取证基线：HEAD={head} 工作树={ROOT} load={load} 日志 tag={args.tag}")
 
     clone = prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     rec = Recorder(logs / "connect.log")
     rec.start()
     print(f"CONNECT 记录代理：127.0.0.1:{rec.port}（只记不走，回 502）")
@@ -810,6 +811,7 @@ def main() -> int:
             finally:
                 files[rel].write_text(src)
                 if md5_bytes(files[rel]) != base[rel]:
+                    leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                     raise SystemExit(f"{code} 还原后 md5 不一致，停机")
             (logs / f"{code}.log").write_text(scrub(gout + "\n===== 用例 =====\n" + c["out"]))
             gate_named = gate_file in gout
@@ -832,6 +834,7 @@ def main() -> int:
         finally:
             files[rel].write_text(src)
             if md5_bytes(files[rel]) != base[rel]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{code} 还原后 md5 不一致，停机")
         hosts = conn_hosts(rec.settle()[mark:])
         (logs / f"{code}.log").write_text(scrub(c["out"] + "\n===== CONNECT =====\n" +
@@ -892,6 +895,7 @@ def main() -> int:
             finally:
                 files[rel].write_text(src)
                 if md5_bytes(files[rel]) != base[rel]:
+                    leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                     raise SystemExit(f"{code} 还原后 md5 不一致，停机")
             hosts = conn_hosts(rec.lines()[mark:])
             (logs / f"race_B_{code}.log").write_text(scrub(r["out"]))

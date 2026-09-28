@@ -27,7 +27,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 CTRL = "internal/browser_automation/controller"
@@ -134,6 +134,7 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
         if md5(src) != md5(tgt):
+            leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
             raise SystemExit(f"覆盖后 md5 不一致（装错树/写盘失败）：{rel}")
     hostenv = ROOT / "user-server" / ".env"
     if hostenv.exists():
@@ -171,6 +172,7 @@ def main() -> int:
     print(f"私有作业目录：{tmp}", flush=True)
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     DTOF = clone / "user-server" / DTO / "task.go"
     original = md5(DTOF)
     src0 = read(DTOF)
@@ -209,6 +211,7 @@ def main() -> int:
             rc, killed, ran, skipped, out = go_run(clone)
             DTOF.write_text(src, encoding="utf-8")
             if md5(DTOF) != original:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{tag} 还原失败：md5 与原文件不一致，已停机（克隆保留 {clone}）")
             if rc == 0:
                 survivors.append(tag)

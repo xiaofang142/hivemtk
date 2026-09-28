@@ -31,7 +31,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 SVC = "internal/browser_automation/service"
@@ -202,6 +202,7 @@ def main() -> int:
     print(f"私有作业目录：{tmp}", flush=True)
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     tgt = clone / "user-server" / SVC / "task.go"
     origin = md5_bytes(tgt)
 
@@ -224,6 +225,7 @@ def main() -> int:
                 continue
             tgt.write_text(src, encoding="utf-8")
             if md5_bytes(tgt) != origin:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{tag} 还原失败：md5 与原文件不一致，已停机（克隆保留 {clone}）")
             if rc == 0:
                 survivors.append(tag)

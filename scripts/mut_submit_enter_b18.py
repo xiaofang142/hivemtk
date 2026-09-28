@@ -26,7 +26,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "user-web" / "browser_automation"
@@ -269,12 +269,14 @@ def main() -> int:
             jskill[code] = set(killed)
             prim.write_text(orig)
             if md5_bytes(prim) != base_md5:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[JS] {code} 还原后 md5 不一致，停机")
         dup_report("JS", jskill)
         print("[JS] 已全量还原（md5 一致）")
 
     if not args.js_only:
         clone = go_prepare(tmp, owned)
+        dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         rels = sorted({m[2] for m in go_mutants()})
         files = {rel: clone / rel for rel in rels}
         originals = {rel: read(p) for rel, p in files.items()}
@@ -302,6 +304,7 @@ def main() -> int:
                 print(out[-3000:])
             files[rel].write_text(originals[rel])
             if md5_bytes(files[rel]) != basemd5[rel]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[Go] {code} 还原后 md5 不一致，停机")
         dup_report("Go", gkill)
         print("[Go] 已全量还原（md5 一致）")

@@ -32,7 +32,7 @@ import sys
 import time
 from pathlib import Path
 
-from mut_dispose import dispose, workdir   # 两道闸：装架前挡危险 --clone，收尾只回收私有克隆
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir   # 三道闸：装架前挡危险 --clone，显式收尾只回收私有克隆，兜底闸接住没接闸的退出路
 
 # 脚本在 <repo>/scripts/ 下 ⇒ 根 = 上一级。**不硬编码仓名**（改名克隆必须照样能跑：
 # 这是从别的门脚本学到的坑——定根写死仓名 ⇒ 改名克隆里 rc=1 零输出）。
@@ -458,6 +458,7 @@ def main() -> int:
                     print(f"  ✗ [JS] {code} 注码打完了而字节没变（这一格永不开火）")
         if not args.js_only:
             clone = go_prepare(tmp, owned)
+            dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
             originals = {rel: read(clone / rel) for rel in sorted({m[2] for m in go_mutants()})}
             for code, _desc, rel, old, new in go_mutants():
                 total += 1
@@ -507,6 +508,7 @@ def main() -> int:
             jskill[code] = set(r["killed"])
             prim.write_text(orig)
             if md5_bytes(prim) != base_md5:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[JS] {code} 还原后 md5 不一致，停机")
         dup_report("JS", jskill)
         print("[JS] 已全量还原（md5 一致）")
@@ -544,6 +546,7 @@ def main() -> int:
                 print(r["out"][-3000:])
             files[rel].write_text(originals[rel])
             if md5_bytes(files[rel]) != basemd5[rel]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[Go] {code} 还原后 md5 不一致，停机")
         dup_report("Go", gkill)
         print("[Go] 已全量还原（md5 一致）")

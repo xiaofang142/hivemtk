@@ -97,7 +97,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 # 脚本在 <repo>/scripts/ 下 ⇒ 根 = 上一级。**不硬编码仓名**（改名克隆必须照样能跑）。
 ROOT = Path(__file__).resolve().parent.parent
@@ -375,6 +375,7 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
         if md5_bytes(src) != md5_bytes(tgt):
+            leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
             raise SystemExit(f"覆盖后 md5 不一致（装错树/写盘失败）：{rel}")
     # .env 不进 git ⇒ 克隆里没有则依赖 DB 的用例会 skip，控制组就不干净（skip==0 是硬门）。
     hostenv = ROOT / "user-server" / ".env"
@@ -513,6 +514,7 @@ def main() -> int:
     problems: list[str] = []
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     files = {slot: clone / rel for slot, rel in SLOT_FILES.items()}
     for name, p in files.items():
         if not p.exists():
@@ -558,6 +560,7 @@ def main() -> int:
             files[slot].write_text(originals[slot], encoding="utf-8")
         for slot in acc:
             if md5_bytes(files[slot]) != basemd5[slot]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{code} 还原后 md5 不一致，停机")
 
     dup_report(gkill)

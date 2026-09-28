@@ -27,7 +27,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 CTRL = "internal/browser_automation/controller"
@@ -165,6 +165,7 @@ def main() -> int:
     print(f"私有作业目录：{tmp}", flush=True)
 
     clone = go_prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     u = clone / "user-server"
     CT, CC, SC = u / CTRL / "task.go", u / CTRL / "cron.go", u / SVC / "cron.go"
     TARGET = {"C1": CT, "C2": CT, "C3": CT, "C4": CC, "C5": CT, "C6": SC, "C7": SC, "C8": SC}
@@ -189,6 +190,7 @@ def main() -> int:
             rc, killed, ran, skipped, out = go_run(clone)
             tgt.write_text(src, encoding="utf-8")
             if md5(tgt) != originals[tgt]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{tag} 还原失败：md5 与原文件不一致，已停机（克隆保留 {clone}）")
             if rc == 0:
                 survivors.append(tag)

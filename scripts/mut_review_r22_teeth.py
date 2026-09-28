@@ -51,7 +51,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 US = "user-server"
@@ -290,6 +290,7 @@ def main() -> int:
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
     clone = prepare(tmp, owned)
+    dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     env = test_env(clone)
 
     files = {rel: clone / rel for rel in (EXEC_REL, PROTO_REL)}
@@ -324,6 +325,7 @@ def main() -> int:
         finally:
             files[rel].write_text(src)
             if md5_bytes(files[rel]) != basemd5[rel]:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"{code} 还原后 md5 不一致，停机")
 
         raw = "\n".join(r["out"] for r in rs.values())

@@ -73,7 +73,8 @@ T-P8-03 交付的是五层代码（model 值域与迁移表 / repository 真表�
 ## 口径（照本仓既有电池的规矩）
 
 - 只在 `git clone --shared` 出来的私有克隆里注码，脏文件按 `git status --porcelain -uall` 覆盖进去；
-  `--clone` 走 `mut_dispose.workdir/dispose` 两道闸（不许指着自己的工作树）；
+  `--clone` 走 `mut_dispose.workdir/dispose/dispose_at_exit` 三道闸（不许指着自己的工作树，
+  也不许在装架之后的中止路上把私有克隆留在盘上）；
 - 控制组**现测**：红名与 settled 都不写死（共享树下别人加用例会让写死的数字漂）；
 - 一格多处编辑在内存里叠完一次写盘；每刀还原后逐文件比 md5，不等即停机；
 - BUILD-BROKEN / settled 掉 / 红而不点名 ⇒ 一律 BROKEN，不计入杀掉；
@@ -101,7 +102,7 @@ import sys
 import time
 from pathlib import Path
 
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir
 from redact import scrub
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -601,6 +602,7 @@ def selftest(logs: Path, clone: Path, env: dict) -> int:
         finally:
             path.write_text(original, encoding="utf-8")
             if md5_bytes(path) != base:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[selftest] {name} 还原后 md5 不一致，停机")
         (logs / f"selftest_{want}.log").write_text(scrub(r["out"]))
         got = classify(r, None, expect_red, "", "test")
@@ -675,6 +677,7 @@ def main() -> int:
         print(f"取证基线：HEAD={head} 工作树={ROOT} {load} 日志 tag={args.tag}")
 
         clone = prepare(tmp, owned)
+        dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         env = test_env(clone)
         if not pg_ready(env):
             print(f"ENV-BROKEN：测试库 {env['POSTGRES_TEST_HOST']}:{env['POSTGRES_TEST_PORT']} 连不上 ⇒ "
@@ -725,6 +728,7 @@ def main() -> int:
                 finally:
                     files[rel].write_text(originals[rel])
                     if md5_bytes(files[rel]) != base[rel]:
+                        leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                         raise SystemExit(f"{code} 还原后 md5 与开刀前不一致，停机（后面全是脏树读数）")
                 (logs / f"{code}.log").write_text(scrub(r["out"]))
                 status = classify(r, controls[pkg + filt]["settled"], expect_red, expect_reason, judge)

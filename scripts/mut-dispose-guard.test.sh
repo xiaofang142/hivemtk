@@ -19,17 +19,24 @@
 #   G7 入口闸 workdir()：--clone 就是仓库根 ⇒ 装架之前就退，且出声
 #   G8 入口闸：--clone 是仓库根的上级／是 /tmp 本身 ⇒ 同样退
 #   G9 入口闸：不传 --clone 时 mkdtemp(prefix) 照旧且 owned=1；传安全空目录时 owned=0 且不动它
-#   REAL 静态面（五腿）：**所有**带 --clone 面的常驻电池（枚数由 grep 现取，别照抄文档里的
+#   G10 兜底闸：装架之后一条没接闸的 raise ⇒ 克隆照样回收、外层未动、停机码仍非 0
+#   G11 兜底闸：显式收尾已经收过 ⇒ 兜底安静，全趟只许一条"收尾"行
+#   G12 兜底闸：leave_for_evidence 打过标记 ⇒ 只出声不回收；压根没装架时整趟安静
+#   REAL 静态面（六腿）：**所有**带 --clone 面的常驻电池（枚数由 grep 现取，别照抄文档里的
 #       "六枚/七枚"——写死的那个数每次有人加电池就过期一次）必须 ① --clone 面／入口闸面／收尾闸面三处
 #       计数相等，② 不留 `Path(args.clone …)` 直连赋值，③ 不留裸 rmtree(tmp/dst/work)，
 #       ④ 入口闸那一行必须排在 `prepare(tmp)` **之前**（顺序腿的反向测：把 workdir 挪到
-#       clone 之后即红，见本轮 C 组同款做法），⑤ 克隆建起来之后的每条退出都走 `bail()`
-#       （豁免三形："已存在"/"克隆失败"/"md5 不一致"；反向测在 `$WORK/rev` 里撤掉一处 bail）
+#       clone 之后即红，见本轮 C 组同款做法），⑤ 克隆建起来之后的每条**函数体内**退出都走 `bail()`
+#       （豁免三形："已存在"/"克隆失败"/"md5 不一致"；反向测在 `$WORK/rev` 里撤掉一处 bail），
+#       ⑥ 每枚在装架之后恰好注册一次 `dispose_at_exit`，且 md5 豁免路先打 `leave_for_evidence`
+#       （反向测两条各绑一条分支：摘注册⇒点名"注册了 0 次"、摘标记⇒点名"没打让路标记"）
 #
-# 两道闸的分工（别只看一道就以为安全了）：`dispose()` 是"退出时才发现"的下界，
-# `workdir()` 是"装架之前就把危险入参挡掉"的上界。只有上界的理由是：电池在收尾之前
-# 会往 `tmp` 里 `git clone --shared`、写补丁、跑 `go test`——`--clone .` 即使最后拒删，
-# 中途也已经把克隆和改动落进了调用方的工作树（本轮事故跑的就是 `--clone . --check`）。
+# 三道闸的分工（别只看一道就以为安全了）：`workdir()` 是"装架之前就把危险入参挡掉"的上界，
+# `dispose()` 是"退出时才发现"的下界，`dispose_at_exit()` 是"装架之后有人忘了接闸"的兜底。
+# 上界不可少的理由：电池在收尾之前会往 `tmp` 里 `git clone --shared`、写补丁、跑 `go test`——
+# `--clone .` 即使最后拒删，中途也已经把克隆和改动落进了调用方的工作树（事故跑的就是
+# `--clone . --check`）。下界＋上界仍不够的理由：2026-09-28 现扫，带克隆面的 27 枚电池在
+# main／辅助函数里还有 134 条装架之后的可达退出，实测一趟留 73M（p503 的控制组停机）。
 set -u
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -68,6 +75,35 @@ from mut_dispose import workdir
 repo_root, arg, prefix = Path(sys.argv[2]), sys.argv[3], sys.argv[4]
 tmp, owned = workdir(None if arg == "-" else arg, prefix=prefix, repo_root=repo_root)
 print(f"PASS tmp={tmp} owned={int(owned)}")
+PY
+}
+
+# hook_call <仓库根> <作业目录> <owned> <keep> <mode> —— 挂上兜底闸后按 mode 退出：
+#   raise         函数体里直接 raise SystemExit（就是"这条退出路没接闸"的形状）
+#   dispose-first 先走显式收尾出口再正常退（兜底那一脚应当安静）
+#   leave         打让路标记后 raise（豁免路：只出声不回收）
+# 必须真的从函数里 raise 出去：直接在模块末尾调 dispose 测的是老那条显式出口，证不到钩子。
+hook_call() {
+  python3 - "$ROOT" "$@" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence
+root, tmp = Path(sys.argv[2]), Path(sys.argv[3])
+owned, keep, mode = sys.argv[4] == "1", sys.argv[5] == "1", sys.argv[6]
+dispose_at_exit(tmp, owned=owned, keep=keep, repo_root=root)
+
+
+def main() -> None:
+    if mode == "dispose-first":
+        dispose(tmp, owned=owned, keep=keep, repo_root=root)
+        return
+    if mode == "leave":
+        leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
+    raise SystemExit("控制组不干净")
+
+
+main()
 PY
 }
 
@@ -138,6 +174,35 @@ case "$out" in
   *) bad "不传 --clone 应放行且 owned=1，实得：$out" ;;
 esac
 
+# 兜底闸的三格行为面：这一只钩子的价值全在"那条退出路压根没接闸"的时候，
+# 所以夹具必须真的从函数里 raise 出去（不是调 dispose），否则测的是显式出口那条老路。
+echo "G10 兜底闸：装架之后没接闸的退出 ⇒ 照样回收，且出声"
+d="$WORK/g10"; mkdir -p "$d"; echo keep > "$d/sentinel"; mk_clone "$d"
+out=$(hook_call "$WORK/fakerepo" "$d" 0 0 raise); rc=$?
+printf '%s' "$out" | grep -q '兜底闸回收' && ok '兜底闸认出了这条中止路（打印里有"兜底闸回收"）' || bad "兜底闸没出声：$out"
+[ -e "$d/clone" ] && bad '兜底闸没把克隆带走' || ok '克隆已被兜底回收'
+[ -e "$d/sentinel" ] && ok '外层目录仍分毫未动' || bad '兜底闸越权删了调用方的外层'
+[ "$rc" != 0 ] && ok "停机码照旧非 0（rc=${rc}，兜底不许把红改成绿）" || bad "兜底闸把退出码抹成 0：rc=$rc"
+
+echo "G11 兜底闸：显式收尾已经收过 ⇒ 兜底那一脚必须安静（不许印第二条'收尾'）"
+d="$WORK/g11"; mkdir -p "$d"; mk_clone "$d"
+out=$(hook_call "$WORK/fakerepo" "$d" 0 0 dispose-first); rc=$?
+printf '%s' "$out" | grep -q '兜底闸回收' && bad "已回收过还在复述：$out" || ok '已有人收过 ⇒ 兜底安静退出'
+n_tail=$(printf '%s\n' "$out" | grep -c '^收尾：')
+[ "$n_tail" = 1 ] && ok '整趟只有一条收尾行（取证日志里不会出现互相矛盾的两句）' \
+  || bad "收尾行数=${n_tail}（应为 1）：$(printf '%s' "$out" | tr '\n' '|')"
+
+echo "G12 兜底闸：让路标记（'现场只活在克隆里'那类豁免）⇒ 只出声、不回收"
+d="$WORK/g12"; mkdir -p "$d"; mk_clone "$d"
+out=$(hook_call "$WORK/fakerepo" "$d" 0 0 leave); rc=$?
+printf '%s' "$out" | grep -q '收尾闸让路' && ok '让路时出声（说清为什么这次不删）' || bad "让路没出声：$out"
+[ -e "$d/clone/payload.txt" ] && ok '豁免现场的克隆完整保留' || bad '把该留证的克隆删了'
+# 让路那句话的前提是"有一份克隆值得留"：装架之前就停的路（入口闸、目录已存在）不该跟着出声。
+d="$WORK/g12b"; mkdir -p "$d"
+out=$(hook_call "$WORK/fakerepo" "$d" 0 0 leave); rc=$?
+printf '%s' "$out" | grep -q '让路\|兜底闸回收' && bad "压根没装架却报回收决定：$out" \
+  || ok "没有克隆 ⇒ 兜底闸完全安静（不把「没东西可删」读成一次决定）"
+
 echo "REAL 静态面：所有带 --clone 面的电池都走 dispose，且不留裸 rmtree（枚数现取，不写死）"
 # 对象集合**不含 mut_dispose.py 自己**：它的 docstring 里就写着 `Path(args.clone` 与
 # `shutil.rmtree(tmp)` 两句（那是被修对象的形状，不是待修的调用点），把它算进面里
@@ -146,6 +211,15 @@ cells_files=()
 for f in "$ROOT"/scripts/mut_*.py; do
   [ "$(basename "$f")" = "mut_dispose.py" ] && continue
   cells_files+=("$f")
+done
+# 未跟踪件先点出来（旁道正在跑、还没提交的电池）：本门只对"已经进版本控制的面"负责，
+# 但少掉的对象必须打印，否则 27 枚的读数会被下一位当成 26 枚全证。
+SKIP_UNTRACKED=""
+SKIP_N=0
+for f in "${cells_files[@]}"; do
+  git -C "$ROOT" ls-files --error-unmatch "$f" >/dev/null 2>&1 && continue
+  SKIP_UNTRACKED="$SKIP_UNTRACKED $(basename "$f")"
+  SKIP_N=$((SKIP_N + 1))
 done
 n_clone=$(grep -l 'args\.clone' "${cells_files[@]}" | wc -l | tr -d ' ')
 n_workdir=$(grep -l 'workdir(args\.clone' "${cells_files[@]}" | wc -l | tr -d ' ')
@@ -245,7 +319,7 @@ if [ "$abort_obj" != "$clone_any" ]; then
 elif [ "$abort_rc" = 0 ]; then
   ok "$abort_obj 枚电池在克隆之后的退出全走收尾闸（豁免三形除外）"
 else
-  bad "$abort_obj 枚里有裸中止路：" $(printf '%s\n' "$abort_bad" | head -3 | tr '\n' ' ')
+  bad "$abort_obj 枚里有裸中止路：$(printf '%s\n' "$abort_bad" | head -3 | tr '\n' ' ')"
 fi
 # 反向测（没有这一步，上面那句绿只是"这段代码没报错"）：把一枚电池的 `bail("checkout 失败…")`
 # 改回裸 raise，这条腿必须点名红。
@@ -273,7 +347,160 @@ else
   ok "反向：撤掉一处 bail 当场红（$(printf '%s\n' "$rev_out" | tail -n +2 | head -1 | cut -c1-48)…）"
 fi
 
-# 行为面（不在本门里跑）。上面那条腿只证"克隆之后的 raises 都写了 bail(...)"，不证 bail() 真把
+# 兜底闸腿（REAL 第六腿，2026-09-28）：上一腿只走 `prepare`/`go_prepare` 的**函数体**，
+# 而实测的漏盘就长在它看不见的地方——`mut_reach_p503.py` 的 `控制组[service] 不干净` 那条
+# raise 在 main 里、装架之后、收尾闸之前，一趟留 73M（`/tmp/r75leak2.*`）。现扫：带克隆面的
+# 27 枚电池里，装架函数体之外还有 134 条可达退出。逐处插 sweep() 改不动（一半从
+# `sub_once`/`lane_overlays`/`apply_js` 这类辅助函数里冒出来，它们不知道克隆在哪），
+# 所以这腿断言的是"每枚电池都在装架之后挂了进程级兜底闸"＋"豁免'现场只活在克隆里'的那几处
+# 都先打了让路标记"——G10–G12 证钩子真会回收／真会安静／真会让路，这一腿证现取的那几枚真挂上了。
+hook_leg() {   # 参数：装架目录，其后接"未跟踪旁道件"的文件名（这些枚不在本门面上，见下面的点名）
+  python3 - "$@" <<'PY'
+import ast, pathlib, re, sys
+
+PREPARE = re.compile(r"=\s*(?:go_|js)?prepare\(tmp")
+d = pathlib.Path(sys.argv[1])
+skip = set(sys.argv[2:])
+obj, leak = 0, []
+
+
+def stmt_lists(root):
+    """所有"语句序列"：函数体、if/else、try/finally、for/while……兜底闸必须与装架同序。"""
+    out = []
+    for node in ast.walk(root):
+        for _, value in ast.iter_fields(node):
+            if isinstance(value, list) and value and all(isinstance(v, ast.stmt) for v in value):
+                out.append(value)
+    return out
+
+
+for p in sorted(d.glob("mut_*.py")):
+    if p.name == "mut_dispose.py" or p.name in skip:
+        continue
+    text = p.read_text(encoding="utf-8")
+    if '"git", "clone"' not in text or "args.clone" not in text:
+        continue
+    tree = ast.parse(text)
+    obj += 1
+    imported = any(isinstance(n, ast.ImportFrom) and n.module == "mut_dispose"
+                   and any(a.name == "dispose_at_exit" for a in n.names) for n in ast.walk(tree))
+    if not imported:
+        leak.append(f"{p.name}：没从 mut_dispose 导入 dispose_at_exit")
+    hooks = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call)
+             and getattr(n.func, "id", getattr(n.func, "attr", "")) == "dispose_at_exit"]
+    if len(hooks) != 1:
+        leak.append(f"{p.name}：兜底闸注册了 {len(hooks)} 次（应恰好 1 次）")
+    # 取一句语句的源码用"按行切片"，不用 `ast.get_source_segment`：后者每次调用都把整份
+    # 模块重新按换页符切开（3.10 的实现），一文件三百句就是 O(句数×文件大小)。现测：本腿
+    # 早先那样写，27 枚一趟 90 秒，而本门要把这腿跑三趟（正面＋两条反向）⇒ 4 分半全花在
+    # 取证夹具自己上，读起来像"门挂了"。上一腿（abort_leg）只在函数级取一次，不受影响。
+    lines = text.splitlines()
+
+    def seg(st) -> str:
+        return "\n".join(lines[st.lineno - 1:st.end_lineno])
+
+    # 装架点：全文件第一处 `clone|work|dst = (go_|js)?prepare(tmp…` 的赋值
+    prep = None
+    for body in stmt_lists(tree):
+        for st in body:
+            s = seg(st)
+            if PREPARE.search(s) and s.lstrip().startswith(("clone", "work", "dst")):
+                if prep is None or st.lineno < prep.lineno:
+                    prep = st
+    if prep is None:
+        leak.append(f"{p.name}：找不到装架调用点（= prepare(tmp 的形状对不上）")
+    elif len(hooks) == 1:
+        order_ok = False
+        for body in stmt_lists(tree):
+            idx_p = next((i for i, st in enumerate(body) if st is prep), None)
+            idx_h = next((i for i, st in enumerate(body)
+                          if isinstance(st, ast.Expr) and st.value is hooks[0]), None)
+            if idx_p is not None and idx_h is not None and idx_h > idx_p:
+                order_ok = True
+        if not order_ok:
+            leak.append(f"{p.name}:{hooks[0].lineno} 兜底闸没排在装架（第 {prep.lineno} 行）之后同一段里")
+    # 豁免路：`raise SystemExit(...md5...)` 之前一句必须是 leave_for_evidence(...)
+    prev_end = {}
+    for body in stmt_lists(tree):
+        for st in body:
+            prev_end.setdefault(st.end_lineno, []).append(st)
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Raise):
+            continue
+        s = seg(n).strip()
+        if "md5" not in s or "SystemExit" not in s:
+            continue
+        before = [st for st in prev_end.get(n.lineno - 1, [])
+                  if isinstance(st, ast.Expr) and isinstance(st.value, ast.Call)
+                  and getattr(st.value.func, "id", "") == "leave_for_evidence"]
+        if not before:
+            leak.append(f"{p.name}:{n.lineno} md5 豁免路没打让路标记：{s.splitlines()[0][:56]}")
+print(obj)
+print("\n".join(leak))
+sys.exit(1 if leak else 0)
+PY
+}
+hook_out=$(hook_leg "$ROOT/scripts" $SKIP_UNTRACKED)
+hook_rc=$?
+hook_obj=$(printf '%s\n' "$hook_out" | head -1)
+hook_bad=$(printf '%s\n' "$hook_out" | tail -n +2 | sed '/^$/d')
+# 对象集＝"有 --clone 面 ∩ 有 git-clone 面 ∩ 已进版本控制"。三个条件各排一类假红：
+#   · `mut_extension_auth_b19h.py` 有 --clone 面但没有 git-clone 面（JS 装架留的是 `web/`，
+#     那份残留是 dispose 契约里明写不许回收的）⇒ 钩子对它永远安静，钉它没意义；
+#   · 未跟踪的旁道件（本轮：`mut_kb_release_p902.py`）不在本门面上——替它挂钩子＝让别人的
+#     文件忽然引用只存在于我这笔提交里的符号，他们先提交就拿到一枚 import 不到的电池。
+#     点名输出，不许静默少一枚（少掉的对象不写出来就会被读成"全 27 枚都证过了"）。
+both=0
+for f in "${cells_files[@]}"; do
+  grep -q 'args\.clone' "$f" || continue
+  grep -q '"git", "clone"' "$f" || continue
+  case " $SKIP_UNTRACKED " in *" $(basename "$f") "*) continue ;; esac
+  both=$((both + 1))
+done
+if [ "$hook_obj" != "$both" ]; then
+  bad "兜底闸腿只看到 ${hook_obj} 枚带克隆面的电池，独立对账是 ${both}（判据在空转）"
+elif [ "$hook_rc" = 0 ]; then
+  ok "$hook_obj 枚全在装架之后挂了兜底闸，md5 豁免路全带让路标记（另有 ${SKIP_N:-0} 枚未跟踪旁道件不在面上：${SKIP_UNTRACKED:-无}）"
+else
+  # 明细必须整体当**一个**参数传进去：`bad()` 只印 `$1`，把明细不加引号地接在后面＝红因永远不显示
+  # （上面那条 abort_leg 同款写法在本轮之前一直如此——撤 bail 的那次能点名是因为它走的是 ok 那条引号支）。
+  bad "$hook_obj 枚里兜底闸形状不齐：$(printf '%s\n' "$hook_bad" | head -3 | tr '\n' ' ')"
+fi
+# 两条反向格各自绑一条判据分支（只判"红没红"会证到错的那条，见记忆里的同款教训）：
+#   a) 摘掉一枚的兜底闸注册 ⇒ 必须点名"注册了 0 次"；
+#   b) 摘掉一枚的让路标记 ⇒ 必须点名那一行"md5 豁免路没打让路标记"。
+for kind in hook leave; do
+  R="$WORK/rev-$kind/scripts"; mkdir -p "$R"; cp "$ROOT"/scripts/mut_*.py "$R/"
+  python3 - "$R" "$kind" <<'PY'
+import pathlib, re, sys
+d, kind = pathlib.Path(sys.argv[1]), sys.argv[2]
+pat = "dispose_at_exit(tmp" if kind == "hook" else "leave_for_evidence("
+for p in sorted(d.glob("mut_*.py")):
+    lines = p.read_text(encoding="utf-8").splitlines()
+    for i, l in enumerate(lines):
+        if pat in l:
+            kept = [x for j, x in enumerate(lines) if j != i]
+            p.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            print(f"反向格[{kind}]：摘掉 {p.name}:{i+1} 的『{pat}』")
+            sys.exit(0)
+sys.exit(f"反向格[{kind}]：找不到可摘的『{pat}』——这条腿的对象集是空的")
+PY
+  [ $? = 0 ] || { bad "反向格[$kind] 夹具没做成"; continue; }
+  r_out=$(hook_leg "$R" $SKIP_UNTRACKED); r_rc=$?
+  r_bad=$(printf '%s\n' "$r_out" | tail -n +2 | head -1)
+  if [ "$r_rc" = 0 ]; then
+    bad "反向[$kind]：摘掉之后这条腿仍绿＝判据没牙"
+  elif [ "$kind" = "hook" ] && ! printf '%s' "$r_bad" | grep -q "注册了 0 次"; then
+    bad "反向[hook]：红了，但红在别处（读到的不是'注册次数'那条分支）：$r_bad"
+  elif [ "$kind" = "leave" ] && ! printf '%s' "$r_bad" | grep -q "没打让路标记"; then
+    bad "反向[leave]：红了，但红在别处（读到的不是'让路标记'那条分支）：$r_bad"
+  else
+    ok "反向[$kind]：当场点名 ⇒ 这条分支有牙（$(printf '%s' "$r_bad" | cut -c1-52)…）"
+  fi
+done
+
+# 行为面（不在本门里跑）。下面那条探针只证"克隆之后的 raises 都写了 bail(...)"时 bail() 真把
 # 克隆带走了。那一条的夹具已进仓：`scripts/probe-fleet-bail-reverse.sh`——PATH 前面挂一枚只对
 # `checkout` 退 123、其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在
 # `--clone <空目录>` 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录
@@ -300,5 +527,7 @@ fi
 #     不许把上面那句 PASS=25 读成 26 枚全证。
 
 echo
-if [ "$FAIL" = 0 ]; then echo "===== 用例：九格全过（断言失败 0 处）====="; exit 0; fi
+# 格数从本文件自己现取（写死"九格"的那种读数每加一格就过期一次，且过期时没人会想起来改它）。
+G=$(grep -c '^echo "G[0-9]' "$0")
+if [ "$FAIL" = 0 ]; then echo "===== 用例：${G} 格全过（断言失败 0 处）====="; exit 0; fi
 echo "===== 用例：$FAIL 处断言失败 ====="; exit 1
