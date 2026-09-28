@@ -40,6 +40,14 @@
         本轮读了来树几份，读数从此无法复算（修 A6a 时现测：R30／P701／P703 三支全靠手写份数过关）。
         两支的正解同一条：让份数成为**读数**而不是声明（`identity(..., overlay=[...])` 或手写现测行）。
 
+两份台账（判据对象之外的两批"确实没达标、但不该由本泳道代改"的常驻件，各带上界与过期判据）：
+  D0–D4 债务台账（`DEFERRED`）：有代码内树内落点、但驱动里没有身份发射点的**他人泳道电池**——
+      族照样实测，实测值只用来判条目是否过期（D4），不计入本门的合格／不合格。
+  O1–O5 树外落点台账（`OFFTREE`）：**连落点都不在仓库树**的常驻电池（判读只印 stdout，或树内路径
+      只在 docstring 里引用别人族的那份）。它们进不了 `drivers()`，于是两轴都看不见它们——
+      O1 拦"盘上有、名单外"的静默排除，O2 上界，O3／O4 过期（改名／已补代码内落点），O5 空理由。
+      末行把两个数一起印（进门 N 枚＋登记 M 枚＝候选现数），不许只报进门的那批冒充全量。
+
 反向自测（`--selftest`）：形状轴的每一格都绑定"哪条判据分支该开火"，A4 用真临时目录做正反两格，
 A5 用假集合做正反格（含"过期豁免"与"空理由"两支），A6 做两红七正控（含"该声明只在注释里 ⇒
 抹散文后不许判红"与"就地注码的 copy2 ⇒ 不开火"，防止把改对了的驱动判坏），豁免那一族另配
@@ -82,7 +90,167 @@ NOT_A_BATTERY = {
     "CIwiring": "某几轮 `make audit`／逐门复跑的手工重定向读数，身份在正文的 SHA 叙述里，无驱动可挂",
     "Transcript": "check-secret-containment.py `--transcripts` 那一面的一次性普查读数（键名与次数），"
                   "产物由人工命令行重定向落盘，不是电池格子",
+    "b-phase": "R22 复审泳道 b 阶段的**分车道 findings**（`lane-2-d7-gate-findings.md` 等），"
+               "手写结论文件、由人工执行重定向落盘；提到它的三枚刀具（`mut_d7gate_r22lane.py`／"
+               "`mut_outbound_claim_r22lane.py`／`mut_sentcache_r22lane.py`）都只在散文里引用它，"
+               "前两者代码内没有仓库落点、第三枚的落点是 `R22-lanes`",
+    "c-phase": "同泳道 c 阶段 findings，同上",
+    "R22-closefinal": "R22 复审收口轮的逐门复跑输出与账本读数（人工命令行重定向），无电池驱动",
+    "R22-phaseE": "R22 复审 E 阶段一次性读数（人工重定向），无电池驱动",
+    "R22-protocol": "二次检查协议（second-review-protocol）自身的校准／演练读数，人工执行落盘",
+    "R22closeout": "R22 收口轮的一次性补测读数，人工重定向，无驱动可挂",
+    "R23retention": "R23 保留策略一次性核查读数，人工重定向，无驱动可挂",
+    "R23dedup": "R23 入站去重首轮九格的逐格日志（`CONTROL.log`／`K1…K9-*.log`），由人工命令行"
+                "重定向落盘；`mut_ingest_dedup_r23.py` 的代码里没有仓库内落点（只在 docstring 里"
+                "引用这一族），故它不进成员名单——这条登记同时是本门的一处口径盲区：argv 指进树内"
+                "的一次性读数不会有驱动归属",
+
+    "R25full": "R25 全量复跑的一次性读数（不带格名），人工重定向，无驱动可挂",
+    "R25full2": "R25 全量复跑第二趟的一次性读数，人工重定向，无驱动可挂",
+    "R26media": "R26 媒体批次的一次性锚点／核查读数，人工重定向，无驱动可挂",
+    "R27media": "R27 媒体批次（协程快照站点普查）的一次性读数，人工重定向，无驱动可挂",
+    "calib": "53300 连接容量标定趟（`cap-ab-53300-probe.py` 之前的手工容器标定），人工重定向",
+    "calib2": "同上的第二趟标定，人工重定向",
+    "dentproof-anchor": "锚点预检的一次性\"凹痕证明\"读数（证明参数真进了装架），人工重定向",
+    "wiring-anchor": "门禁注册接线核查的一次性锚点读数，人工重定向",
 }
+
+# 合并带进来的**他人泳道**常驻电池：它们确实把逐格产物写进仓库树，但驱动里没有身份发射点
+# （有的连族目录都还没在树里长出来）。补齐要改别人的驱动＋重跑别人的电池（每枚一趟 Go/vitest
+# 全族），不属于本轮范围；这份登记是**债务台账**而不是放行开关：
+#   · 条目必须写实（族名要与该驱动代码内落点对得上、理由不许空）；
+#   · 数量有上界（`DEFERRED_MAX`）⇒ 新增一枚无身份行的常驻电池照样红，只能减不能加；
+#   · 一旦驱动补了发射点、或该族最近一轮产物实测到 `基线字节`，条目即过期 ⇒ 判红，必须删。
+DEFERRED = {
+    "mut_send_verify_b24.py": (
+        "B24sendverify",
+        "无身份发射点；树里 `run2-16cells` 18 份产物按短语命中 0 份 ⇒ 读数测于哪一笔字节无从查起"),
+    "mut_dedupkey_shape_r22.py": (
+        "R22dedupkey",
+        "无身份发射点；族目录只有 4 份无戳的一次性产物 ⇒ 合入门禁前需该泳道自补 `battlog.identity`"),
+    "mut_review_r22_teeth.py": (
+        "R22-teeth",
+        "无身份发射点（旧规则把它 docstring 里引用的 `logs/R25` 当成族，判错了对象）；"
+        "该族 10 份产物按短语命中 0 份"),
+    "mut_sse_ack_r23.py": (
+        "R23sseack",
+        "无身份发射点；`first-run` 7 份产物按短语命中 0 份"),
+    "mut_bad_case_p803.py": (
+        "P803",
+        "驱动已有身份发射点，但取证落点从未迁进仓库树（族目录不存在）且 `.gitignore` 无成对例外 ⇒ "
+        "迁树＋开例外后要实测这一族的最近一轮产物"),
+    "mut_sentcache_r22lane.py": (
+        "R22-lanes",
+        "无身份发射点；该族是**平铺落点**（驱动把逐格日志直接写进族目录、没有轮次子目录），"
+        "31 份产物按短语命中 0 份"),
+}
+DEFERRED_MAX = 6
+# 债务登记的族也算"有归属"（A5），但不进 A4 实测（实测必红，红的是别人的债）。
+TS_ROUND = re.compile(r"^\d{8}-\d{6}$")
+
+# **树外落点台账**：合并带进来的另 18 枚 `scripts/mut_*.py` 常驻电池，代码行里没有仓库内取证落点
+# （14 枚通篇不提 `LOGROOT`，判读只印到 stdout；4 枚只在 docstring 里引用**别人族**里人工重定向存的
+# 一份读数）。它们因此进不了 `drivers()`——两轴都没有判据对象。这**不等于它们合格**：
+# 从前这里是一个静默的 `return False`，末行只印"20 枚驱动"，读报告的人以为树里的常驻电池全被判过，
+# 实际是 37 枚里 18 枚从没进过门。补齐要改该泳道驱动＋重跑全族（每枚一趟 Go/vitest），不属本轮；
+# 这份登记是债务台账而不是放行开关：
+#   · 盘上冒出一枚既没进门、又没登记 ⇒ O1 开火（静默排除这一形本身被拦下）；
+#   · 数量有上界（`OFFTREE_MAX`）⇒ 只能减不能加；
+#   · 条目里的驱动一旦补了**代码内**落点（自动进门），或文件已不在盘上，条目即过期 ⇒ 判红必须删。
+OFFTREE = {
+    "mut_brain_action_b19h.py": "判读只印 stdout、代码内无树内落点（B19h 扩展动作批）",
+    "mut_command_log_ok_b20b.py": "判读只印 stdout、代码内无树内落点（B20b 指令日志批）",
+    "mut_cron_err_b19c.py": "判读只印 stdout、代码内无树内落点（B19c 定时任务错误批）",
+    "mut_d7verdict_b20g.py": "判读只印 stdout、代码内无树内落点（B20g D7 判定批）",
+    "mut_dependency_b19.py": "判读只印 stdout、代码内无树内落点（B19 依赖批）",
+    "mut_dingtalk_msgid_r22lane.py": "判读只印 stdout、代码内无树内落点（R22 泳道钉钉 msgId 臂）",
+    "mut_extension_auth_b19h.py": "判读只印 stdout、代码内无树内落点（B19h 扩展鉴权批）",
+    "mut_host_gate_b19f.py": "判读只印 stdout、代码内无树内落点（B19f Host 闸门批）",
+    "mut_prune_batch_b19g.py": "判读只印 stdout、代码内无树内落点（B19g 清理批）",
+    "mut_push_budget_b20d.py": "判读只印 stdout、代码内无树内落点（B20d 推送预算批）",
+    "mut_session_err_b19d.py": "判读只印 stdout、代码内无树内落点（B19d 会话错误批）",
+    "mut_step_cap_b19e.py": "判读只印 stdout、代码内无树内落点（B19e 步长上限批）",
+    "mut_submit_enter_b18.py": "判读只印 stdout、代码内无树内落点（B18 提交回车批）",
+    "mut_write_claim_a12.py": "判读只印 stdout、代码内无树内落点（A12 写回声明批）",
+    "mut_d7gate_r22lane.py": "代码内无落点；docstring 引用的 `logs/b-phase/lane-2-d7-gate-findings.md`"
+                             " 是**别人族**里人工重定向的分析件，不是本驱动的产物",
+    "mut_outbound_claim_r22lane.py": "代码内无落点；docstring 引用的 `logs/b-phase/lane-5-outbound-ack-findings.md`"
+                                     " 同上（旧规则正是把它判成 `b-phase` 族、张冠李戴的那一枚）",
+    "mut_ingest_dedup_r23.py": "代码内无落点；docstring 引用的 `logs/R23dedup/` 九格是首轮人工重定向的读数",
+    "mut_retention_a6.py": "代码内无落点；树里那份 `logs/R22-lanes/mut_retention_a6-d23-cell-r22close.log`"
+                           " 是 stdout 重定向的单份读数，非驱动自己写盘",
+}
+OFFTREE_MAX = 18
+
+
+def offtree_accounting(candidates: list, admitted: set, registry: dict, cap: int) -> list:
+    """树外落点登记的四条要求（返回判红说明）：不许有残骸、不许变大、条目不许过期、理由不许空。
+
+    与 `debt_accounting` 同一套牙齿，但对象是**没进门的那批**：`admits()` 判 False 是"两轴无对象"，
+    不是一个绿读数。少了 O1，门可以把任意多枚常驻件安静地留在名单外；少了 O3／O4，登记就成了永久豁免。
+    """
+    bad = []
+    unlisted = sorted({p.name for p in candidates} - admitted - set(registry))
+    for name in unlisted:
+        bad.append(f"O1 `{name}` 在盘上、既没进门也没登记 ⇒ 静默排除（本门从头到尾没看过它）；"
+                   "补 `battlog.identity`＋树内落点后自动进门，否则必须写进 `OFFTREE` 并说明为什么")
+    if len(registry) > cap:
+        bad.append(f"O2 树外落点登记 {len(registry)} 枚 > 上界 {cap} ⇒ 登记面只许减不许增")
+    on_disk = {p.name for p in candidates}
+    for name, reason in sorted(registry.items()):
+        if name not in on_disk:
+            bad.append(f"O3 条目 `{name}` 已不在 `scripts/mut_*.py` 里 ⇒ 登记过期，删条目")
+            continue
+        if name in admitted:
+            bad.append(f"O4 条目 `{name}` 过期：该驱动现在已有代码内树内落点、已自动进门 ⇒ 删条目，"
+                       "让 A1／A2／A4 直接判它")
+            continue
+        if not reason.strip():
+            bad.append(f"O5 条目 `{name}` 理由为空 ⇒ 豁免不许留空条目")
+    return bad
+
+
+def debt_accounting(deferred: dict, fam_by_driver: dict, verdicts: dict, cap: int) -> list:
+    """债务登记的三条要求：不许变大、理由不许空、补齐了就必须删（返回判红的说明）。
+
+    没有这一格，登记就成了"用一张表关掉一格判据"：上界管住新增，族名对账管住指错对象，
+    产物实测管住过期条目——该泳道一旦补了身份行并跑出一轮带戳产物，条目不删就判红。
+    """
+    bad = []
+    if len(deferred) > cap:
+        bad.append(f"D0 债务登记 {len(deferred)} 枚 > 上界 {cap} ⇒ 登记面只许减不许增，"
+                   "新增一枚无身份行的常驻电池应当去补 `battlog.identity`，不是加条目")
+    for name, (fam, reason) in sorted(deferred.items()):
+        if name not in fam_by_driver:
+            bad.append(f"D1 条目 `{name}` 已不在成员名单 ⇒ 登记过期（驱动改名或落点迁走），删条目")
+            continue
+        if not reason.strip():
+            bad.append(f"D2 条目 `{name}` 理由为空 ⇒ 豁免不许留空条目")
+        if fam not in fam_by_driver[name]:
+            bad.append(f"D3 条目 `{name}` 登记的族 `{fam}` 与其代码内落点"
+                       f"（{', '.join(sorted(fam_by_driver[name])) or '无'}）不符 ⇒ 指错了对象")
+        if verdicts.get(fam, ("", ""))[0] == "有身份行":
+            bad.append(f"D4 条目 `{name}` 过期：族 `{fam}` 最近一轮产物已实测到身份行 ⇒ 删条目，"
+                       "让 A4 直接判它")
+    return bad
+
+
+def families_of(code) -> set:
+    """一枚驱动**代码行**里声明的仓库内取证落点族名（可以有多枚）。
+
+    只认代码行，与 A2 那条"散文不是发射点"同源：合并带进来的 `mut_sentcache_r22lane.py`
+    在 docstring 里引用了 `logs/b-phase/lane-5-outbound-ack-findings.md`（它复述的上一轮承诺），
+    旧规则取正文第一处命中 ⇒ 把**别人族**当自己的落点判 A3／A4，而它真正的
+    `LOGDIR = …/logs/R22-lanes` 从来没进过这道门。另四枚（`mut_d7gate_r22lane.py` 等）更极端：
+    全篇只有 prose 引用、代码里根本没有仓库内落点 ⇒ 两轴都没有判据对象，交给 `OFFTREE` 台账
+    （它们是常驻件，只是取证在 stdout／别人族里，**不是合格**）。
+    """
+    out = set()
+    for _, ln in code:
+        for m in re.finditer(re.escape(LOGROOT) + r"([A-Za-z0-9_-]+)", ln):
+            out.add(m.group(1))
+    return out
+
 
 
 def tree_families() -> list:
@@ -117,23 +285,36 @@ def accounting(covered: set, registered: dict, on_disk: list) -> list:
     return bad
 
 
-def drivers() -> list[Path]:
-    """成员名单现取（不写死）：新增一枚常驻电池就自动进门，漏登记不可能。
+def candidates() -> list[Path]:
+    """盘上全部常驻电池候选（`mut_*.py` 去 `EXCLUDE` ＋ 探针件），**不做任何筛选**。
 
-    判据来自"它自己声明了仓库内的取证落点"：只有把产物写进 `logs/<族>` 的驱动才要求身份行，
-    一次性脚本没有常驻产物，不进这道门。
+    分成两数报（`drivers()` 那一份进两轴判、这一份用来查静默排除）：从前只有 `drivers()`，
+    "成员名单现取"听起来像全覆盖，实际是"覆盖到代码行里声明了树内落点的那些"。
     """
-    out = []
-    for p in sorted((ROOT / "scripts").glob("mut_*.py")):
-        if p.name in EXCLUDE:
-            continue
-        if LOGROOT in p.read_text(encoding="utf-8"):
-            out.append(p)
-    # 探针件（不走 mut_ 前缀）按同一口径进门：它的 summary 也是常驻产物。
+    out = [p for p in sorted((ROOT / "scripts").glob("mut_*.py")) if p.name not in EXCLUDE]
     probe = ROOT / "scripts/cap-ab-53300-probe.py"
-    if probe.exists() and LOGROOT in probe.read_text(encoding="utf-8"):
+    if probe.exists():
         out.append(probe)
     return out
+
+
+def drivers() -> list[Path]:
+    """进门的那批：自己**在代码行里**声明了仓库内取证落点的常驻电池。
+
+    判据来自"它自己声明了仓库内的取证落点"（`families_of` 在代码行里找）——只有散文引用不算，
+    否则会把**别人族**里的读数当自己的落点判 A3／A4（合并带入的 `mut_sentcache_r22lane.py` 正是这一形）。
+    **解析失败的照旧进门**：读不懂代码行就判不了落点，向红偏置。
+    落点不在树的那些**不是合格**，它们进 `OFFTREE` 台账，由 `offtree_accounting` 的 O1–O5 说话。
+    """
+    return [p for p in candidates() if admits(p)]
+
+
+def admits(p: Path) -> bool:
+    text = p.read_text(encoding="utf-8")
+    if LOGROOT not in text:
+        return False
+    code = code_lines(text)
+    return code is None or bool(families_of(code))
 
 
 def code_lines(text: str):
@@ -186,7 +367,7 @@ def gitignore_pairs() -> set:
     return dirs & logs
 
 
-def check(code, pairs: set, family: str, order_cleared: bool = False) -> list:
+def check(code, pairs: set, family, order_cleared: bool = False) -> list:
     """一枚驱动的轴一判据：返回"为什么这一枚不合格"的行列表（空＝合格）。
 
     `code` 必须是 `code_lines()` 的输出（散文已抹）；`None` 由调用方先挡掉。
@@ -200,6 +381,8 @@ def check(code, pairs: set, family: str, order_cleared: bool = False) -> list:
     这时由轴二作证据豁免——只豁免先后这一支；缺发射点、缺打开点、缺成对例外都不豁免。
     """
     bad = []
+    # `family` 可以是一枚族名（预检自测里的单形输入）也可以是 `families_of()` 的集合。
+    fams = {family} if isinstance(family, str) else set(family)
     tee = [i for i, ln in code if "tee_to(" in ln]
     wr = [i for i, ln in code if ".write_text(" in ln]
     emit = [i for i, ln in code if EMIT.search(ln)]
@@ -216,8 +399,10 @@ def check(code, pairs: set, family: str, order_cleared: bool = False) -> list:
                        "⇒ 身份行没赶上那份产物")
     else:
         bad.append("A1 代码行里既不 `tee_to(` 也不 `.write_text(`：产物打开点找不到，身份行无处可落")
-    if family and family not in pairs:
-        bad.append(f"A3 族 `{family}` 在 `.gitignore` 里没有成对例外行（目录行 + `**/*.log` 行）")
+    # A3 对**每一枚**代码内落点族都判（一枚驱动写两族时，第二族不许因为"第一族有成对例外"就过关）。
+    for fam in (sorted(fams) if fams else [family]):
+        if fam and fam not in pairs:
+            bad.append(f"A3 族 `{fam}` 在 `.gitignore` 里没有成对例外行（目录行 + `**/*.log` 行）")
     # A6：身份行的**口径**不许与装架机制相反。2026-09-28 复查抓到三枚驱动（B17action／P503／R22）
     # 一边把 `ROOT/rel` 用 `shutil.copy2()` 盖进克隆、一边在 `extra` 里写"来树未入库字节不进本轮
     # 读数"——A4 量"有没有这句"，量不到"这句是不是假的"，所以这句话必须靠形状对账才守得住。
@@ -242,8 +427,25 @@ def artifact_verdict(family: str):
         return "无轮次目录", f"{LOGROOT}{family}/ 不存在 ⇒ 本族的常驻产物从未落进仓库树"
     rounds = sorted((p for p in fam.iterdir() if p.is_dir()), key=lambda p: p.name)
     if not rounds:
+        # 平铺落点（`R22-lanes` 那一形：驱动把逐格日志直接写进族目录，没有轮次子目录）：
+        # 产物**在树里**，量不到"最近一轮"不等于没证据 ⇒ 直接量族目录里的文件。
+        flat = [p for p in fam.iterdir() if p.is_file()]
+        if flat:
+            hit = [p.name for p in flat if PHRASE in p.read_text(encoding="utf-8", errors="replace")]
+            if not hit:
+                return "缺身份行", (f"平铺落点（无轮次目录）共 {len(flat)} 份产物，"
+                                    f"按短语 `{PHRASE}` 命中 0 份 ⇒ 这轮读数测于哪一笔字节无从查起")
+            return "有身份行", (f"平铺落点（无轮次目录）共 {len(flat)} 份产物，"
+                                f"{len(hit)} 份带 `{PHRASE}`（{', '.join(sorted(hit)[:3])}"
+                                f"{' 等' if len(hit) > 3 else ''}）")
         return "无轮次目录", f"{LOGROOT}{family}/ 下没有任何轮次目录"
-    last = rounds[-1]
+    # "最近一轮"必须优先认**带时间戳**的目录：`20260928-141245` 这类按名字序＝按时间序，
+    # 而合并带进来的手工命名轮次（`closeout`／`first-run`／`run2-16cells`）字母序排在数字之后，
+    # 旧规则取末尾 ⇒ 把本族真读数遮掉（本轮实测：R22 族带着身份行的 `20260928-141245`
+    # 被判成"最近一轮 `closeout` 命中 0 份"）。全族都没有带戳轮次时才回退名字序。
+    dated = [p for p in rounds if TS_ROUND.match(p.name)]
+    last = dated[-1] if dated else rounds[-1]
+    undated = len(rounds) - len(dated)
     files = [p for p in last.rglob("*") if p.is_file()]
     hit = [p.name for p in files if PHRASE in p.read_text(encoding="utf-8", errors="replace")]
     if not hit:
@@ -251,7 +453,8 @@ def artifact_verdict(family: str):
                             f"按短语 `{PHRASE}` 命中 0 份 ⇒ 这轮读数测于哪一笔字节无从查起")
     return "有身份行", (f"最近一轮 `{last.name}` 共 {len(files)} 份产物，"
                         f"{len(hit)} 份带 `{PHRASE}`（{', '.join(sorted(hit)[:3])}"
-                        f"{' 等' if len(hit) > 3 else ''}）")
+                        f"{' 等' if len(hit) > 3 else ''}）"
+                        + (f"｜另有 {undated} 个无时间戳轮次不参与『最近』判定" if undated else ""))
 
 
 def selftest() -> int:
@@ -340,6 +543,35 @@ def selftest() -> int:
                 failed += 1
             else:
                 print("  ✓ T17 正控制：最近一轮带身份行 ⇒ A4 放行")
+            # 本轮合并实测到的门自身缺陷：无时间戳目录（`closeout`）按名字序排在 `2026…` 之后，
+            # 旧规则取末尾 ⇒ 把带着身份行的真读数遮掉。
+            (fam / "closeout").mkdir()
+            (fam / "closeout" / "00-run.log").write_text("判定：全杀\n", encoding="utf-8")
+            got = artifact_verdict("X")
+            if "有身份行" not in got[0] or "r2" not in got[1]:
+                print(f"  ✗ T35 无戳目录排在带戳之后 ⇒ 必须仍认带戳那份为『最近一轮』，实际 {got}")
+                failed += 1
+            else:
+                print("  ✓ T35 带时间戳轮次优先（无戳的 `closeout` 不遮蔽真读数）")
+            named = Path(td) / LOGROOT / "Y"
+            (named / "first-run").mkdir(parents=True)
+            (named / "first-run" / "00-run.log").write_text("判定：全杀\n", encoding="utf-8")
+            got = artifact_verdict("Y")
+            if "缺身份行" not in got[0] or "first-run" not in got[1]:
+                print(f"  ✗ T36 全族无带戳轮次 ⇒ 回退名字序取 `first-run`，实际 {got}")
+                failed += 1
+            else:
+                print("  ✓ T36 全族无带戳轮次 ⇒ 回退名字序（仍实测那份）")
+            flat = Path(td) / LOGROOT / "Z"
+            flat.mkdir(parents=True)
+            (flat / "K1.log").write_text("判定：杀掉\n", encoding="utf-8")
+            got = artifact_verdict("Z")
+            if "缺身份行" not in got[0] or "平铺落点" not in got[1]:
+                print(f"  ✗ T37 平铺落点（无轮次子目录）⇒ 要量目录里的文件，不许报『无轮次目录』"
+                      f"（那是把已有证据说成没有），实际 {got}")
+                failed += 1
+            else:
+                print("  ✓ T37 平铺落点按族目录内的文件实测（`R22-lanes` 那一形）")
         finally:
             ROOT = real_root
 
@@ -437,8 +669,96 @@ def selftest() -> int:
         else:
             print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
             failed += 1
-    print(f"===== 预检自测：{len(cases)} + 3 + {len(ex)} + {len(ac)} + {len(oc)} 格，"
-          f"失败 {failed} 格 =====")
+    # 族归属（`families_of`）与债务台账（`debt_accounting`）：本轮合并带进来的两类失效。
+    prose_src = ('"""上一轮的承诺见 docs/superpowers/specs/ledger/logs/b-phase/lane-5.md。\n'
+                 '第二行"""\nLOGDIR = REPO / "docs/superpowers/specs/ledger/logs/R22-lanes"\n'
+                 "tee_to(LOGDIR / '00-run.log')\n")
+    dc = [
+        ("T38 族名只从代码行取：docstring 里引用的**别人族**不算落点",
+         families_of(code_lines(prose_src)), {"R22-lanes"}),
+        ("T39 落点只写在 docstring／注释里 ⇒ 无代码内落点（不进 A1／A2，但必须进 `OFFTREE` 台账）",
+         families_of(code_lines('"""一次性刀具：上一轮读数见 '
+                                'docs/superpowers/specs/ledger/logs/b-phase/x.md。\n第二行"""\n'
+                                "# docs/superpowers/specs/ledger/logs/b-phase/y.md\n"
+                                "print(done)\n")), set()),
+        ("T40 一枚驱动写两族 ⇒ 两族都进判据对象",
+         families_of(code_lines(prose_src + 'OUT2 = "docs/superpowers/specs/ledger/logs/P803"\n')),
+         {"R22-lanes", "P803"}),
+    ]
+    for name, got, want in dc:
+        if got == want:
+            print(f"  ✓ {name}")
+        else:
+            print(f"  ✗ {name}：期望 {want}，实际 {got}")
+            failed += 1
+
+    multi_src = prose_src + 'OUT2 = "docs/superpowers/specs/ledger/logs/P803"\nidentity(ROOT)\n'
+    mc = [
+        ("T41 多族驱动里没开例外的第二族 ⇒ A3 逐族开火（不许拿第一族的例外放行）",
+         check(code_lines(multi_src), {"R22-lanes"}, {"R22-lanes", "P803"}), ["A3 族 `P803`"]),
+        ("T41b 正控制：两族都开了成对例外 ⇒ A3 不开火",
+         check(code_lines(multi_src), {"R22-lanes", "P803"}, {"R22-lanes", "P803"}), []),
+    ]
+    for name, got, want in mc:
+        joined = " / ".join(got)
+        if all(w in joined for w in want) and (want or not got):
+            print(f"  ✓ {name}")
+        else:
+            print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
+            failed += 1
+
+    # 债务台账：登记面上界／指错对象／过期条目三格，加一格"正控制＝如实登记且未补齐"。
+    fbd = {"mut_x.py": {"Fam"}}
+    ok_debt = {"mut_x.py": ("Fam", "无身份发射点；该族产物按短语命中 0 份")}
+    db = [
+        ("T42 正控制：条目如实（族对得上、理由写实、产物实测仍缺）⇒ 台账不开火",
+         debt_accounting(ok_debt, fbd, {"Fam": ("缺身份行", "")}, 1), []),
+        ("T43 登记面超上界 ⇒ D0 开火（只许减不许增）",
+         debt_accounting(ok_debt, fbd, {"Fam": ("缺身份行", "")}, 0), ["D0 债务登记"]),
+        ("T44 条目对应的驱动已不在名单 ⇒ D1 开火（登记过期）",
+         debt_accounting(ok_debt, {}, {"Fam": ("缺身份行", "")}, 5), ["D1 条目"]),
+        ("T45 理由为空 ⇒ D2 开火",
+         debt_accounting({"mut_x.py": ("Fam", "  ")}, fbd, {}, 5), ["D2 条目"]),
+        ("T46 登记的族与驱动代码内落点不符 ⇒ D3 开火（指错对象）",
+         debt_accounting({"mut_x.py": ("OtherFam", "理由写实")}, fbd, {}, 5), ["D3 条目"]),
+        ("T47 该族最近一轮产物实测到身份行 ⇒ D4 开火（补齐了就必须删条目）",
+         debt_accounting(ok_debt, fbd, {"Fam": ("有身份行", "读数见产物")}, 5), ["D4 条目"]),
+    ]
+    for name, got, want in db:
+        joined = " / ".join(got)
+        if all(w in joined for w in want) and (want or not got):
+            print(f"  ✓ {name}")
+        else:
+            print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
+            failed += 1
+
+    # 树外落点台账：拦的是"没进门也没登记"这一形——`admits()` 判 False 只是"两轴无对象"，
+    # 从前它等于安静放行，末行报的"20 枚驱动"读起来像全量。五格四红一正控。
+    cand = [Path("scripts/mut_in.py"), Path("scripts/mut_out.py")]
+    ok_off = {"mut_out.py": "判读只印 stdout、代码内无树内落点"}
+    ot = [
+        ("T48 正控制：候选要么进门、要么如实登记 ⇒ 台账不开火",
+         offtree_accounting(cand, {"mut_in.py"}, ok_off, 1), []),
+        ("T49 盘上一枚既没进门也没登记 ⇒ O1 开火（静默排除就是本门的洞）",
+         offtree_accounting(cand, {"mut_in.py"}, {}, 5), ["O1 `mut_out.py`"]),
+        ("T50 登记面超上界 ⇒ O2 开火（只许减不许增）",
+         offtree_accounting(cand, {"mut_in.py"}, ok_off, 0), ["O2 树外落点登记"]),
+        ("T51 条目对应的驱动已不在盘上 ⇒ O3 开火（登记过期）",
+         offtree_accounting([Path("scripts/mut_in.py")], {"mut_in.py"}, ok_off, 5), ["O3 条目"]),
+        ("T52 条目里那枚已补代码内落点、自动进门 ⇒ O4 开火（补齐了就必须删条目）",
+         offtree_accounting(cand, {"mut_in.py", "mut_out.py"}, ok_off, 5), ["O4 条目"]),
+        ("T53 理由为空 ⇒ O5 开火（豁免不许留空条目）",
+         offtree_accounting(cand, {"mut_in.py"}, {"mut_out.py": "  "}, 5), ["O5 条目"]),
+    ]
+    for name, got, want in ot:
+        joined = " / ".join(got)
+        if all(w in joined for w in want) and (want or not got):
+            print(f"  ✓ {name}")
+        else:
+            print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
+            failed += 1
+    print(f"===== 预检自测：{len(cases)} + 3 + {len(ex)} + {len(ac)} + {len(oc)} + {len(dc)} + "
+          f"{len(mc)} + {len(db)} + {len(ot)} 格，失败 {failed} 格 =====")
     return 1 if failed else 0
 
 
@@ -460,35 +780,43 @@ def main() -> int:
     if not ds:
         print(f"RED-UNNAMED：scripts/ 下没有声明 `{LOGROOT}<族>` 落点的常驻驱动 ⇒ 名单枚举本身失守")
         return 1
+    cands = candidates()
 
     bad = 0
     seen_families = []
+    fam_by_driver = {}
     for p in ds:
-        text = p.read_text(encoding="utf-8")
-        m = re.search(re.escape(LOGROOT) + r"([A-Za-z0-9_-]+)", text)
-        family = m.group(1) if m else ""
-        if family:
-            seen_families.append(family)
+        fams = families_of(code_lines(p.read_text(encoding="utf-8")) or [])
+        fam_by_driver[p.name] = fams
+        seen_families.extend(sorted(fams))
+    deferred_families = {f for f, _ in DEFERRED.values()}
     # 轴二先算：它是"产物里到底有没有"的地面事实，轴一的先后疑点由它作证据豁免（见 check 的 order_cleared）。
+    # 债务登记的族**照样实测**，但实测值只用来判"条目是否过期"（`debt_accounting` 的 D4），
+    # 不进 A4 的合格／不合格账（红的债记在别人名下，不该由本门的红代替它说话）。
     verdicts = {f: artifact_verdict(f) for f in sorted(set(seen_families))}
     if args.no_artifact_axis:
         verdicts = {}
 
     for p in ds:
         text = p.read_text(encoding="utf-8")
-        m = re.search(re.escape(LOGROOT) + r"([A-Za-z0-9_-]+)", text)
-        family = m.group(1) if m else ""
+        fams = fam_by_driver[p.name]
+        label = ", ".join(sorted(fams)) or "未声明"
         code = code_lines(text)
         if code is None:
             bad += 1
-            print(f"  ✗ {p.name}（族 {family or '未声明'}）\n        A0 解析失败（ast/tokenize）"
+            print(f"  ✗ {p.name}（族 {label}）\n        A0 解析失败（ast/tokenize）"
                   "⇒ 判据读不到代码行，向红偏置")
             continue
-        cleared = verdicts.get(family, ("", ""))[0] == "有身份行"
-        why = check(code, pairs, family, order_cleared=cleared)
+        if p.name in DEFERRED:
+            fam, reason = DEFERRED[p.name]
+            if not args.quiet_ok:
+                print(f"  ⚠ {p.name}（族 {fam}）｜他人泳道债务登记：{reason}")
+            continue
+        cleared = any(verdicts.get(f, ("", ""))[0] == "有身份行" for f in fams)
+        why = check(code, pairs, fams, order_cleared=cleared)
         if why:
             bad += 1
-            print(f"  ✗ {p.name}（族 {family or '未声明'}）")
+            print(f"  ✗ {p.name}（族 {label}）")
             for w in why:
                 print(f"        {w}")
         else:
@@ -496,15 +824,34 @@ def main() -> int:
             tee_lines = [i for i, ln in code if "tee_to(" in ln]
             waived = (cleared and tee_lines and max(emit_lines) < min(tee_lines))
             if not args.quiet_ok:
-                print(f"  ✓ {p.name}（族 {family}）"
+                print(f"  ✓ {p.name}（族 {label}）"
                       + ("｜顺序疑点已由最近一轮产物实测豁免（发射在函数体内、调用点在 tee 之后）"
                          if waived else ""))
 
+    for w in debt_accounting(DEFERRED, fam_by_driver, verdicts, DEFERRED_MAX):
+        bad += 1
+        print(f"  ✗ 债务台账 {w}")
+
+    # 树外落点台账：盘上的常驻件必须**要么进门、要么在 `OFFTREE` 里写明为什么没进门**，
+    # 两个都不在就是静默排除（本门上一版的形状：末行只印进门的那批，剩下的没人知道有多少）。
+    offtree_bad = offtree_accounting(cands, {p.name for p in ds}, OFFTREE, OFFTREE_MAX)
+    for w in offtree_bad:
+        bad += 1
+        print(f"  ✗ 树外落点台账 {w}")
+    if not offtree_bad and not args.quiet_ok:
+        print(f"  ✓ 树外落点台账：{len(OFFTREE)} 枚（上界 {OFFTREE_MAX}）"
+              f"｜候选 {len(cands)} 枚＝进门 {len(ds)} 枚＋登记 {len(OFFTREE)} 枚")
+
     # 轴二：按族实测最近一轮产物（一枚族只判一次，多枚驱动共用同族时不重复计红）。
+    # 债务登记的族由台账那一格说话（D4 判过期），这里只印实测读数、不计入合格／不合格。
     on_disk = []
     if not args.no_artifact_axis:
         for family in sorted(set(seen_families)):
             verdict, note = verdicts[family]
+            if family in deferred_families:
+                if not args.quiet_ok:
+                    print(f"  ⚠ 产物 A4〔{family}〕（债务登记）{note}")
+                continue
             if verdict == "有身份行":
                 if not args.quiet_ok:
                     print(f"  ✓ 产物 A4〔{family}〕{note}")
@@ -524,6 +871,7 @@ def main() -> int:
                   + (f"＋非电池登记 {len(extra)} 族（{', '.join(extra)}）" if extra else "，无未登记族"))
 
     print(f"===== 字节身份行门：{len(ds)} 枚驱动（成员现取）／"
+          f"树外落点登记 {len(OFFTREE)} 枚（候选现数 {len(cands)} 枚）／"
           f"{len(set(seen_families))} 族产物实测"
           + (f"／磁盘 {len(on_disk)} 族归属对账" if on_disk else "（产物轴未开")
           + f"，{bad} 项不合格 =====")
