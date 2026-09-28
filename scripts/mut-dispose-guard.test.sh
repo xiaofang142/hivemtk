@@ -278,9 +278,9 @@ fi
 # 其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在 `--clone <空目录>`
 # 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录还在（不许越权
 # 删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。
-# 读数：SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10
-#   ——产物 /tmp/fleet_bail_reverse_run5.log、夹具 /tmp/fleet-bail-reverse.sh，两者都不入库：
-#   它要 node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台恒红的机器。
+# 读数（2026-09-28 那一趟）：SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10
+#   ——夹具是一次性探针，不入库（它要 node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台
+#   恒红的机器），所以上面那串读数不依赖任何在盘产物：按 ①–④ 照方重跑一趟就能现取。
 # 四处只有真跑一趟才看得见的坑（下次动这条探针前先读）：
 #   · 带 --check 是错的探针：26 枚里 16 枚没这个 flag（argparse rc=2，夹具压根没进 prepare），
 #     另 4 枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。不带 --check 才真进
