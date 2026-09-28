@@ -51,7 +51,8 @@ func batchKNonQQAccount(t *testing.T, db *gorm.DB, channel WebhookChannel, tag s
 		acc := &model.WeComAccount{
 			CorpID: "corp-" + tag, CorpSecret: "sec-" + tag,
 			AgentID: 1, CallbackToken: "tok-" + tag,
-			EncodingAESKey: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFG",
+			// 复用同包已有的官方契约夹具（随机 43 位），不写死一条长得像凭据的字面量。
+			EncodingAESKey: newWecomEncodingAESKey(t),
 			WebhookEnabled: true, AIAgentEnabled: true, Status: 1,
 		}
 		if err := db.Create(acc).Error; err != nil {
