@@ -8,6 +8,7 @@ import (
 	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // BrowserSessionRepository 会话仓储
@@ -34,6 +35,10 @@ type BrowserSessionRepository interface {
 	CountRunningByTask(ctx context.Context, userID, taskID uint) (int64, error)
 	// FailStaleUnfinished 对账：某任务下在途且老于 before 的会话收口 failed（僵尸会话会永久占住并发闸）
 	FailStaleUnfinished(ctx context.Context, taskID uint, before time.Time, reason string) (int64, error)
+	// ListInFlightByTask 某任务下仍在途（created/active）的会话清单。
+	// 与 CountRunningByTask 分工：计数用于闸门拒绝（只需知道有没有），清单用于生命周期收口
+	// （必须知道是哪几条——收口方要逐条判「本进程有没有它在跑的执行协程」）。
+	ListInFlightByTask(ctx context.Context, taskID uint) ([]*model.BrowserSession, error)
 }
 
 // ExtractedJSON extracted_data 列的 JSON 载荷（避免 repo 直接依赖 datatypes 的写法扩散）
@@ -106,6 +111,19 @@ func (r *browserSessionRepo) ListByUser(ctx context.Context, userID uint, status
 	return list, total, nil
 }
 
+// durationExpr 终态时长：在收口那一条 UPDATE 里由数据库算，起点
+// COALESCE(started_at, created_at)（排队中就被判死的会话没进过 active，但它确实占了
+// 一次完整的任务生命周期，留 0 等于显示成瞬时结束），终点与 completed_at 共用同一个
+// now——两个值不同源就会各自漂。不做「读 started_at 再写差值」：批量收口一次结多行，
+// 每行起点不同，应用侧算出的差值会把慢的那条压成快的那条。
+// GREATEST(...,0) 兜时钟回拨：负耗时在监控页是「-2.0s」这种用户无法解释的值，比 0 更糟。
+func durationExpr(now time.Time) clause.Expr {
+	return gorm.Expr(
+		"GREATEST(CAST(EXTRACT(EPOCH FROM (?::timestamptz) - COALESCE(started_at, created_at)) * 1000 AS BIGINT), 0)",
+		now,
+	)
+}
+
 func (r *browserSessionRepo) UpdateStatus(ctx context.Context, id uint, status, errMsg string) error {
 	updates := map[string]any{"status": status, "error_msg": errMsg}
 	switch status {
@@ -115,6 +133,7 @@ func (r *browserSessionRepo) UpdateStatus(ctx context.Context, id uint, status, 
 	case "completed", "failed", "stopped":
 		now := time.Now()
 		updates["completed_at"] = &now
+		updates["duration_ms"] = durationExpr(now)
 	}
 	return r.db.WithContext(ctx).Model(&model.BrowserSession{}).Where("id = ?", id).Updates(updates).Error
 }
@@ -183,6 +202,7 @@ func (r *browserSessionRepo) FailRunningByUser(ctx context.Context, userID uint,
 		"status":       "failed",
 		"error_msg":    reason,
 		"completed_at": &now,
+		"duration_ms":  durationExpr(now),
 	}).Error; err != nil {
 		return nil, err
 	}
@@ -228,9 +248,23 @@ func (r *browserSessionRepo) FailStaleUnfinished(ctx context.Context, taskID uin
 	now := time.Now()
 	res := r.db.WithContext(ctx).Model(&model.BrowserSession{}).
 		Where("task_id = ? AND status IN ? AND created_at <= ?", taskID, []string{"created", "active"}, before).
-		Updates(map[string]any{"status": "failed", "error_msg": reason, "completed_at": &now})
+		Updates(map[string]any{"status": "failed", "error_msg": reason, "completed_at": &now, "duration_ms": durationExpr(now)})
 	if res.Error != nil {
 		return 0, res.Error
 	}
 	return res.RowsAffected, nil
+}
+
+// ListInFlightByTask 不带 user_id 条件：调用方是「任务已被删除」的级联收口，
+// 归属只由任务侧那道 SoftDelete（id + user_id）判定一次；任务确属该用户后，
+// 这个任务下的在途会话就是它的会话，不再重复设一层过滤。
+func (r *browserSessionRepo) ListInFlightByTask(ctx context.Context, taskID uint) ([]*model.BrowserSession, error) {
+	var list []*model.BrowserSession
+	err := r.db.WithContext(ctx).
+		Where("task_id = ? AND status IN ?", taskID, []string{"created", "active"}).
+		Order("id ASC").Find(&list).Error
+	if err != nil {
+		return nil, err
+	}
+	return list, nil
 }

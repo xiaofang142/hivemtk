@@ -52,6 +52,13 @@ const (
 	// 谁先判，留出头寸才是不依赖时序的那一种。
 	// 依据：截图 base64 实测 <2MiB；Chrome 扩展→host 官方上限 64MiB（旧注释的 4GB 是文档误传）。
 	hostFrameReadLimit = 8 << 20
+	// hostRegThrashWindow / hostRegThrashCount 同一用户注册抖动判定：窗口内注册次数达阈值
+	// 即视为「两个 Host 在互相顶」——此时保留在场连接、拒绝新来的。
+	// 30s/5 次的取值依据：一次正常的「换浏览器 / 重装后重连」是 1~2 次注册，
+	// 而互逐环每轮至少两次注册，真机实测毫秒级一圈 ⇒ 30s 内能攒下上百次，5 次是
+	// 正常路径绝对够不着、故障路径一秒内必然越过的距离。
+	hostRegThrashWindow = 30 * time.Second
+	hostRegThrashCount  = 5
 )
 
 // —— 会话收敛与看门狗（executor.go / task.go / executor_selfheal.go / cron.go）——

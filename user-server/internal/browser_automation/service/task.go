@@ -192,7 +192,49 @@ func (s *TaskService) Delete(ctx context.Context, id, userID uint) error {
 	// last_run_at 与 next_run_at 照常推进，而每一次都在 RunTask 上拿到「任务不存在」——
 	// 界面读起来一切正常，实际一场都没跑。
 	s.removeTriggers(ctx, id)
+	// 同一条纪律的另一个面：定时器之外，任务还挂着「在途会话」，而会话这条不收敛会锁死人。
+	s.convergeInFlightSessions(ctx, id)
 	return nil
+}
+
+// sessionDeleteReason 收口原文要自证「是删除动作终止的，不是平台跑失败」。
+// 与 stopped 档位一起读才成立：failed 会把人引向「去查编排/选择器」，而这里没有任何执行出错。
+const sessionDeleteReason = "任务已删除，执行中止"
+
+// convergeInFlightSessions 删除任务时收敛其名下仍在途的会话。
+//
+// 不收敛的实测后果（活库：删除任务后 3 条会话一行未动，其中 1 条停在 active）：
+// CountRunningByUser 按 created/active 计数，一条永不终态的会话把用户的并发闸永久占住
+// ——此后每次下发都拿到 ErrUserBusy「已有浏览器任务执行中」，而那个任务在列表里已经不存在；
+// 对账器本应兜这一格，但它按 running 的任务选行，任务被软删后永远扫不到，
+// 等于删除动作亲手关掉了唯一的兜底路径。
+//
+// 分两半收敛不是偷懒，两半各自防一种危害：
+//   - 执行协程在本进程（stopRegistry 有这一条）：只发中止信号，终态留给执行方写。
+//     就地写终态会立刻放闸，用户随即能再发一个任务，而旧协程还在往同一条 Host 连接发命令
+//     ——命令在一个浏览器上逻辑级交织，写操作不可撤回（这正是并发闸存在的理由）。
+//   - 执行协程不在本进程（进程重启留下的僵尸会话）：没有人在跑，就地收口为 stopped。
+//
+// 已终态的会话不在清单里，一个都不会被改写：删除任务销毁的是任务，不是它真实跑过的凭据
+// （command_log 的 append-only 立场在同一处）。
+//
+// 收口失败不改成删除失败：任务已经删掉了，此处回 500 只会让人以为没删而反复点（同 removeTriggers）。
+// 日志必须带 task id 与会话 id：那一格的并发闸仍被占住，而它已不在对账器视野内，只能按日志人工补收。
+func (s *TaskService) convergeInFlightSessions(ctx context.Context, taskID uint) {
+	sessions, err := s.sessionRepo.ListInFlightByTask(ctx, taskID)
+	if err != nil {
+		logger.Warnf("[BrowserTask] 任务 %d 删除后查在途会话失败: %v", taskID, err)
+		return
+	}
+	for _, sess := range sessions {
+		if s.executor != nil && s.executor.SignalStop(sess.ID) {
+			logger.Infof("[BrowserTask] 任务 %d 已删除，会话 %d 执行中 → 已发中止信号（终态由执行协程收口）", taskID, sess.ID)
+			continue
+		}
+		if err := s.sessionRepo.UpdateStatus(ctx, sess.ID, "stopped", sessionDeleteReason); err != nil {
+			logger.Warnf("[BrowserTask] 任务 %d 已删除，会话 %d 收口失败（该用户并发闸仍被占住）: %v", taskID, sess.ID, err)
+		}
+	}
 }
 
 // Publish draft → ready

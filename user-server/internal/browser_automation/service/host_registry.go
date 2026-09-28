@@ -15,7 +15,8 @@ import (
 )
 
 // ErrHostOffline Host 未连接（无 Host 用户的统一降级信号 → controller 转 409 引导）
-var ErrHostOffline = errors.New("browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh")
+var ErrHostOffline = errors.New("browser host 未连接：请确认本机 Chrome 已加载扩展并已运行 cmd/nm-host/install.sh；" +
+	"服务刚重启过时无需重装，Host 会自动重连（最多约 1 分钟），稍后重试即可")
 
 // ErrCommandNeverOnWire 命令帧从未写进 socket：注册表里此刻没有这个用户的连接。
 // 这是传输层能给出的唯一一种「副作用必然没发生」的证明——帧没出去，扩展连看都没看到，
@@ -45,6 +46,15 @@ type CommandResult struct {
 // consecutiveCmdTimeoutSick 连续命令超时判病阈值：2 条=几乎必然假死（合法慢命令
 // 最长 60s 且罕见连续两条超时；单条慢命令超时属页面异常，非链路假死）。
 const consecutiveCmdTimeoutSick = 2
+
+// 同用户出现第二条连接时的两种收口，reason 会进 host 的 stderr 与日志，
+// 是「谁把谁顶掉了」唯一的现场记录——两处都写「shutdown」就分不出正常换浏览器与抢占互逐。
+const (
+	// hostEvictReplaced 新连接获胜：通知在场连接退出。
+	hostEvictReplaced = "replaced_by_new_host"
+	// hostRefuseTakeoverThrash 抢占抖动：拒绝新连接，保留在场连接。
+	hostRefuseTakeoverThrash = "takeover_thrash_refused"
+)
 
 // HostConn 一条 NM Host WebSocket 连接（与 user_id 一一绑定）
 // 并发约定：写帧经 writeMu 串行；读循环把回包按 req_id 投递到 pending chan。
@@ -182,8 +192,11 @@ func (c *HostConn) close() {
 			_ = c.conn.Close()
 		}
 		if c.registry != nil {
-			c.registry.unregister(c.UserID, c)
-			c.registry.onDisconnect(c.UserID)
+			// 钩子语义是「该用户场上再无 Host」，不是「我这条连接死了」：让位给新连接的
+			// 那一次关闭，场上仍有在服的那个，触发它等于把还在跑的执行判死。
+			if c.registry.unregister(c.UserID, c) {
+				c.registry.onDisconnect(c.UserID)
+			}
 		}
 	})
 }
@@ -194,12 +207,16 @@ type HostRegistry struct {
 	mu    sync.RWMutex
 	conns map[uint]*HostConn
 
+	// regTimes 每用户最近的主机注册时刻（只留 hostRegThrashWindow 窗口内的），
+	// 用来认出「两个 Host 互相顶」的抖动；见 Register。
+	regTimes map[uint][]time.Time
+
 	// onDisconnect 断连清理钩子（由 routes 装配时注入 sessionRepo 清理逻辑）
 	onDisconnectFn func(ctx context.Context, userID uint)
 }
 
 func NewHostRegistry() *HostRegistry {
-	return &HostRegistry{conns: make(map[uint]*HostConn)}
+	return &HostRegistry{conns: make(map[uint]*HostConn), regTimes: make(map[uint][]time.Time)}
 }
 
 // SetDisconnectHook 注入断连清理钩子（该用户所有 running session 置 failed）
@@ -216,19 +233,39 @@ func (r *HostRegistry) onDisconnect(userID uint) {
 	r.onDisconnectFn(ctx, userID)
 }
 
-// Register 登记连接；同用户旧连接存在则顶掉（Chrome 重启场景）
+// Register 登记连接。同用户旧连接存在时默认顶掉（换浏览器 / Chrome 重启都是这一类），
+// 但「顶」必须是让前者**退出进程**而不是只断它的 WS：host 的 WS 退避在拨号成功时就归零，
+// 只断线会让它毫秒级重连重注册、把新来的再顶掉，两边互逐到谁都不可服务。
+// 抖动窗口内（短时间内反复互逐）改成保留在场的那个、拒绝新来的——把「谁都不可用」
+// 收敛成「一个稳定可用」，代价只是被拒那一侧按 Chrome 的重拉节奏继续试。
 func (r *HostRegistry) Register(userID uint, version string, pid int, conn *websocket.Conn) *HostConn {
 	hc := newHostConn(userID, version, pid, conn, r)
+	now := time.Now()
+
 	r.mu.Lock()
-	if old, ok := r.conns[userID]; ok && old != hc {
-		// F1：驱逐是「谁把谁顶掉」的关键现场——扩展在服务的连接被一次手工启动抢走时，
-		// 只看到超时看不到替换；两个 pid 同排才归因得出来。
-		logger.Warnf("[BrowserHost] Host 重复注册 user=%d：驱逐旧连接 version=%s pid=%d，新 version=%s pid=%d",
-			userID, old.Version, old.PID, version, pid)
-		go old.close() // 旧连接退出（其 close 会在 unregister 中因指针不等而跳过）
+	attempts := recentWithin(r.regTimes[userID], now, hostRegThrashWindow)
+	r.regTimes[userID] = attempts
+	thrashing := len(attempts) >= hostRegThrashCount
+	incumbent, hasIncumbent := r.conns[userID]
+	if hasIncumbent && incumbent != hc && thrashing {
+		r.mu.Unlock()
+		logger.Warnf("[BrowserHost] Host 抢占抖动 user=%d：%s 内已注册 %d 次，保留在场连接 pid=%d，拒绝新连接 pid=%d",
+			userID, hostRegThrashWindow, len(attempts), incumbent.PID, pid)
+		hc.forceSelfHeal(hostRefuseTakeoverThrash) // 只关这一条新连接，不动注册表
+		return incumbent
 	}
 	r.conns[userID] = hc
 	r.mu.Unlock()
+
+	if hasIncumbent && incumbent != hc {
+		// F1：驱逐是「谁把谁顶掉」的关键现场——扩展在服务的连接被一次手工启动抢走时，
+		// 只看到超时看不到替换；两个 pid 同排才归因得出来。
+		logger.Warnf("[BrowserHost] Host 重复注册 user=%d：驱逐旧连接 version=%s pid=%d，新 version=%s pid=%d",
+			userID, incumbent.Version, incumbent.PID, version, pid)
+		// 先发退出控制帧再断：让前者进程退出（Chrome 会重拉一个新 host 走完整注册），
+		// 而不是揣着一条已让位的 WS 立刻重连回来把这一轮再顶掉。
+		go incumbent.forceSelfHeal(hostEvictReplaced)
+	}
 	logger.Infof("[BrowserHost] Host 已注册 user=%d version=%s pid=%d", userID, version, pid)
 	go hc.readLoop()
 	go hc.pingLoop() // D4a：心跳探测，僵尸连接最迟 90s 判死
@@ -236,12 +273,28 @@ func (r *HostRegistry) Register(userID uint, version string, pid int, conn *webs
 	return hc
 }
 
-func (r *HostRegistry) unregister(userID uint, hc *HostConn) {
+// recentWithin 追加 now 并丢掉窗口外的时刻。新建切片而不复用底层数组：调用方在锁内写，
+// 但旧切片可能正被上一轮的读取方持有，原地覆盖会让「窗口内的次数」被并发改写。
+func recentWithin(prev []time.Time, now time.Time, window time.Duration) []time.Time {
+	out := make([]time.Time, 0, len(prev)+1)
+	for _, ts := range prev {
+		if now.Sub(ts) <= window {
+			out = append(out, ts)
+		}
+	}
+	return append(out, now)
+}
+
+// unregister 摘除该用户的连接登记；返回**是否真的摘掉了自己**。
+// 让位给新连接的那一次关闭返回 false——注册表里已经是别人，此时不得按「用户没 Host 了」清理。
+func (r *HostRegistry) unregister(userID uint, hc *HostConn) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if cur, ok := r.conns[userID]; ok && cur == hc {
 		delete(r.conns, userID)
+		return true
 	}
+	return false
 }
 
 func (r *HostRegistry) GetConn(userID uint) (*HostConn, bool) {
