@@ -92,7 +92,7 @@ describe('cdp/input', () => {
     expect(moves1First).toBeDefined();
   });
 
-  // F11（批5g 夹具真机实测）：后台 tab 不出帧，每个 mouseMoved 的 ack 要等满 5s 超时。
+  // F11（夹具真机实测）：后台 tab 不出帧，每个 mouseMoved 的 ack 要等满 5s 超时。
   // 旧实现逐条 await → 10–40 步轨迹 = 50–200s，press/release 永远发不出去，
   // 服务端只能看到 comment_send 45s 命令超时（页面上一个鼠标事件都没落地）。
   it('慢 ack：mouseMoved 永不回包也必须把 press/release 发下去', async () => {
@@ -136,7 +136,7 @@ describe('cdp/input', () => {
     expect(sent.some((c) => c.method === 'Input.dispatchKeyEvent' && c.params.type === 'keyDown')).toBe(true);
   });
 
-  // ---- 批14：按下之后的任何失败都只能是「结局未知」，绝不能重放或原样上抛 ----
+  // ---- 按下之后的任何失败都只能是「结局未知」，绝不能重放或原样上抛 ----
   // 理由：press 一旦入队，页面上这个动作就可能已经发生。此时
   //  ① 原始错误上抛 → 上层判「CDP 不可用」→ DOM 兜底再点一次 = 双发；
   //  ② withDebugger 的 detach 恢复重跑整个函数体 → 第二遍 press = 双发。
@@ -159,7 +159,7 @@ describe('cdp/input', () => {
   }, 20000);
 
   it('click_unacked 收敛不许丢掉原始失败原因（cause 是归因唯一线索）', async () => {
-    // 「ack 超时」与「CDP 直接拒」与「debugger 掉线」在批14 的语义里都是结局未知，
+    // 「ack 超时」与「CDP 直接拒」与「debugger 掉线」在语义里都是结局未知，
     // 但对人是三种不同的下一步（查预算 / 查权限 / 查装机）。收敛成统一文案时把原因只留在
     // 字符串里＝程序读不到；且 user-web 的 ESLint 门（preserve-caught-error）本就是 error 级。
     const root = new Error('Debugger is not attached');
@@ -182,7 +182,7 @@ describe('cdp/input', () => {
     expect(sent.filter((c) => c.params?.type === 'keyDown').length).toBe(1);
   }, 20000);
 
-  // ---- idle detach 定时器（批15 真机全量跑 rc=1 的真因）----
+  // ---- idle detach 定时器（真机全量跑 rc=1 的真因）----
   // withDebugger 收尾挂了个 3s 定时器，回调里读 chrome.debugger 是**属性访问**：
   // SW 被回收/测试拆除后 chrome.debugger 不在，`.catch(()=>{})` 挡不住这个 TypeError，
   // 而它跑在定时器里没人接 ⇒ 未捕获异常。全量跑时用例之间真实时间会流过 3s，

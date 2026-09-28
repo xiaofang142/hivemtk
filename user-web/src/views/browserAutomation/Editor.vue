@@ -87,6 +87,20 @@
         </el-form-item>
       </template>
 
+      <el-form-item v-if="form.task_type === 'cron'" label="定时表达式" required>
+        <el-input v-model="form.cron_expr" placeholder="*/5 * * * *（5 段：分 时 日 月 周）" style="width: 260px" />
+        <el-select v-model="form.cron_tz" clearable placeholder="时区（默认服务器本地）" style="width: 200px; margin-left: 12px">
+          <el-option v-for="tz in TIMEZONES" :key="tz" :label="tz" :value="tz" />
+        </el-select>
+        <div class="form-hint" style="margin-left: 0; width: 100%">
+          <template v-if="existingTrigger">已有触发器 #{{ existingTrigger.id }}（{{ existingTrigger.cron_expr }}{{ existingTrigger.enabled ? '' : '，已停用' }}），保存会连着它一起改</template>
+          <template v-else>保存后会自动为这条任务创建触发器；留空则不创建</template>
+          <div v-if="!cronRunnable" class="form-warn">
+            任务还不是可执行状态（新建默认是草稿）：触发器照常排程，但到点会被执行入口拒掉、不产生会话——发布后才会真跑
+          </div>
+        </div>
+      </el-form-item>
+
       <el-form-item label="循环次数">
         <el-input-number v-model="form.loop_count" :min="1" :max="1000" />
       </el-form-item>
@@ -143,7 +157,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBrowserTask, createBrowserTask, updateBrowserTask, listBrowserTasks, listPlatforms } from '@/api/browserAutomation'
+import {
+  getBrowserTask, createBrowserTask, updateBrowserTask, listBrowserTasks, listPlatforms,
+  listBrowserCron, createBrowserCron, updateBrowserCron,
+} from '@/api/browserAutomation'
 
 const route = useRoute()
 const router = useRouter()
@@ -151,6 +168,10 @@ const isEdit = computed(() => !!route.params.id)
 const saving = ref(false)
 const readyTasks = ref([])
 const platforms = ref([])
+
+const TIMEZONES = ['Asia/Shanghai', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'UTC']
+// 服务端执行入口只认这几个状态可以跑；cron 触发器到点走的是同一个入口。
+const RUNNABLE_STATUS = ['ready', 'paused', 'done', 'failed']
 
 const actions = [
   { value: 'open_tab', label: '打开标签页' }, { value: 'click', label: '点击' },
@@ -183,7 +204,16 @@ const form = ref({
   retry_on_fail: false, retry_delay_sec: 300, max_retry_times: 3,
   require_confirm: false, confirm_wait_sec: 600,
   depends_on_task_id: null, depends_on_mode: 'all_done',
+  // 触发器不是任务的列：单独一份状态，保存时按它和已有触发器的差异决定新建还是更新
+  cron_expr: '', cron_tz: '',
 })
+
+const triggers = ref([])
+const existingTrigger = computed(() => {
+  const id = Number(route.params.id)
+  return triggers.value.find((c) => c.task_id === id) || null
+})
+const cronRunnable = computed(() => RUNNABLE_STATUS.includes(form.value.status))
 
 const addStep = () => form.value.steps.push(emptyStep())
 const removeStep = (i) => form.value.steps.splice(i, 1)
@@ -220,24 +250,71 @@ function onPlatformChange(pid) {
   }
 }
 
+const unpack = (res) => res?.data ?? res
+const asList = (data) => (Array.isArray(data) ? data : data?.list || [])
+
 async function loadTask() {
   if (!isEdit.value) return
   const res = await getBrowserTask(route.params.id)
-  const t = res?.data ?? res
+  const t = unpack(res)
   if (t) {
     form.value = { ...form.value, ...t, steps: Array.isArray(t.steps) ? t.steps.map((s) => ({ ...emptyStep(), ...s })) : [] }
   }
+  // 表达式来自触发器接口而不是任务列：编辑 cron 任务时界面必须显示"它现在到底按什么跑"，
+  // 空着显示再让用户重打一遍，等于把已有的排程藏起来。
+  try {
+    const cRes = await listBrowserCron()
+    triggers.value = asList(unpack(cRes))
+    const cur = triggers.value.find((c) => c.task_id === Number(route.params.id))
+    if (cur) {
+      form.value.cron_expr = cur.cron_expr
+      form.value.cron_tz = cur.time_zone || ''
+    }
+  } catch {
+    // 触发器读不到不拦编辑：任务本体照旧可存，保存时再按「无触发器」走新建
+  }
+}
+
+// 保存任务后把触发器对齐到表单：有则改、无则建、留空/类型改走都不发。
+// 服务端按 task_id 建了唯一索引，所以「已有还发新建」不是多余一次写入，而是每次保存都 409。
+async function reconcileTrigger(taskId) {
+  if (form.value.task_type !== 'cron') return null
+  const expr = (form.value.cron_expr || '').trim()
+  if (!expr) return null
+  const tz = form.value.cron_tz || ''
+  const cur = triggers.value.find((c) => c.task_id === taskId)
+  if (cur) {
+    if (cur.cron_expr === expr && (cur.time_zone || '') === tz) return null
+    await updateBrowserCron(cur.id, { cron_expr: expr, time_zone: tz })
+    return cur.id
+  }
+  await createBrowserCron({ task_id: taskId, cron_expr: expr, time_zone: tz, enabled: true })
+  return null
 }
 
 async function save() {
   saving.value = true
   try {
     const payload = { ...form.value }
+    delete payload.cron_expr
+    delete payload.cron_tz
     if (payload.depends_on_task_id == null) { delete payload.depends_on_task_id }
+    let taskId = Number(route.params.id)
     if (isEdit.value) {
       await updateBrowserTask(route.params.id, payload)
     } else {
-      await createBrowserTask(payload)
+      // 触发器要挂在服务端给出的那个 id 上，不是本地猜的
+      const created = unpack(await createBrowserTask(payload))
+      taskId = created?.id
+    }
+    // 任务已经存下来了；触发器这一步失败必须说清楚是哪一半没成，
+    // 否则用户以为「定时配好了」，而它到点不会跑。
+    try {
+      await reconcileTrigger(taskId)
+    } catch (e) {
+      ElMessage.warning(`任务已保存，但定时配置没存上：${String(e?.message || e)}`)
+      router.push('/browser-automation/tasks')
+      return
     }
     ElMessage.success('已保存')
     router.push('/browser-automation/tasks')
@@ -270,5 +347,6 @@ onMounted(async () => {
 .platform-hint { margin-left: 12px; color: #e6a23c; font-size: 12px; }
 .step-write-hint { color: #e6a23c; font-size: 12px; }
 .form-hint { margin-left: 12px; color: #909399; font-size: 12px; }
+.form-warn { color: #e6a23c; }
 .preset-hint { margin-left: 12px; color: #999; font-size: 12px; }
 </style>

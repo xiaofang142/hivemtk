@@ -123,7 +123,7 @@ async function refreshTokenOnce(auth) {
 //    常驻场景，又避免无限期 token 的安全风险）。
 // 返回值是「这次请求该带哪把令牌」，不是布尔量：refreshTokenOnce 只把新令牌写进存储、
 // 不改传入的 auth，而服务端刷新是一次性轮换（旧令牌当场拉黑）——续期成功后继续用本地
-// 那把等于必发一个已作废的凭据（批19h 的强制重登就是这么来的）。
+// 那把等于必发一个已作废的凭据（的强制重登就是这么来的）。
 async function ensureFreshToken(auth) {
   if (!auth.exp || auth.exp * 1000 >= Date.now() + 3600 * 1000) return auth.token;
   if (!(await refreshTokenOnce(auth))) return auth.token; // 续期失败照旧发，交给 401 兜底判

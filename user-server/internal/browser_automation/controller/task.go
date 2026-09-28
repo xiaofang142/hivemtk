@@ -22,7 +22,7 @@ import (
 // hostProber 交互式执行前的 Host 在线探针，生产实现是 *service.HostRegistry。
 // 只挂在这一条 HTTP 路径上：cron 与自动重试要容忍「Host 暂时不在，会话排队等它」，
 // 而在列表页点「执行」的人必须当场拿到「没 Host」的结论。
-// 批10 的 C 腿（真机 kill nm-host 后点执行）实测：改造前 /run 回的是 200 + session_id，
+// 的 C 腿（真机 kill nm-host 后点执行）实测：改造前 /run 回的是 200 + session_id，
 // RunTask 全异步，ErrHostOffline 只在执行期产生 → 8001 在请求面永远不出现，
 // 前端「离线 → 引导弹窗」形同虚设，用户看到的是「已开始执行」再等一条红色会话失败。
 type hostProber interface{ EnsureOnline(userID uint) error }
@@ -49,13 +49,13 @@ func parseID(ctx *gin.Context) (uint, bool) {
 }
 
 // baErrToResponse 统一域内错误映射（任务/触发器共用一份）。
-// 批19c 把它抽出来共享的成因：cron 那侧自己写了一遍出口，且写成了「一律 400 + 回显原文」——
+// 把它抽出来共享的成因：cron 那侧自己写了一遍出口，且写成了「一律 400 + 回显原文」——
 // 于是 gorm 的 "record not found" 直接弹给用户、DB 连接失败被记成客户端参数错。
 // 一条不变式两份实现，漏的那份就是用户看到的错。notFoundMsg 是 404 的主语（哪样东西找不到）。
 func baErrToResponse(ctx *gin.Context, err error, notFoundMsg string) {
 	switch {
 	case errors.Is(err, basvc.ErrHostOffline):
-		// 批10：离线与忙都归 409，但前端必须是两条路——离线要去装扩展/Host，忙只要等。
+		// 离线与忙都归 409，但前端必须是两条路——离线要去装扩展/Host，忙只要等。
 		// 只给 HTTP 码时 response.Error 会把所有 409 折成 DUPLICATE_ENTRY_3003，
 		// 于是「已有任务执行中」也弹安装引导（真机走 UI 实测踩过）。码域见 utils/error_code.go。
 		response.Error(ctx, utils.ErrorCodeBrowserHostOffline, err.Error())
@@ -98,7 +98,7 @@ func taskErrToResponse(ctx *gin.Context, err error) {
 func (c *TaskController) Create(ctx *gin.Context) {
 	var req dto.CreateBrowserTaskReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	t := &bamodel.BrowserTask{}
@@ -118,7 +118,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 	t.RetryDelaySec = req.RetryDelaySec
 	t.MaxRetryTimes = req.MaxRetryTimes
 	t.RequireConfirm = req.RequireConfirm
-	t.ConfirmWaitSec = req.ConfirmWaitSec // 批8：0=沿用默认 600s（列 default 与 service 兜底同口径）
+	t.ConfirmWaitSec = req.ConfirmWaitSec // 0=沿用默认 600s（列 default 与 service 兜底同口径）
 	if req.Steps != nil {
 		raw, err := json.Marshal(req.Steps)
 		if err != nil {
@@ -138,7 +138,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 func (c *TaskController) List(ctx *gin.Context) {
 	var req dto.ListTaskReq
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	list, total, err := c.svc.List(ctx.Request.Context(), taskUserID(ctx), req.Status, req.TaskType, req.Page, req.Limit)
@@ -171,7 +171,7 @@ func (c *TaskController) Update(ctx *gin.Context) {
 	}
 	var req dto.UpdateBrowserTaskReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	t, err := c.svc.Update(ctx.Request.Context(), id, taskUserID(ctx), func(t *bamodel.BrowserTask) error {
@@ -218,10 +218,10 @@ func (c *TaskController) Update(ctx *gin.Context) {
 		if req.RequireConfirm != nil { // D7
 			t.RequireConfirm = *req.RequireConfirm
 		}
-		if req.ConfirmWaitSec != nil { // 批8：指针语义，nil=不改确认等待预算
+		if req.ConfirmWaitSec != nil { // 指针语义，nil=不改确认等待预算
 			t.ConfirmWaitSec = *req.ConfirmWaitSec
 		}
-		// 批20e：重试三件套。缺字段时 gin 对未知 JSON 键默认宽容，于是编辑页那条
+		// 重试三件套。缺字段时 gin 对未知 JSON 键默认宽容，于是编辑页那条
 		// 「保存成功」toast 之后库里一个字节都没变——承诺了开关却没给落点，比报错更坏。
 		if req.RetryOnFail != nil {
 			t.RetryOnFail = *req.RetryOnFail
@@ -337,7 +337,7 @@ func (c *TaskController) SetDependency(ctx *gin.Context) {
 		DependsOnMode   string `json:"depends_on_mode" binding:"omitempty,oneof=all_done any_success"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	if err := c.svc.SetDependency(ctx.Request.Context(), id, taskUserID(ctx), req.DependsOnTaskID, req.DependsOnMode); err != nil {

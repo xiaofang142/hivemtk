@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 帧尺寸上限（批9）。三个量级各司其职，别混用一个数：
+// 帧尺寸上限。三个量级各司其职，别混用一个数：
 const (
 	// nmMaxOutboundFrameBytes Host→扩展：Chrome 官方硬限 1MiB，超限 Chrome 直接断 port。
 	nmMaxOutboundFrameBytes = 1 << 20
@@ -53,8 +54,10 @@ const (
 	nmWSWriteTimeout = 10 * time.Second
 )
 
+// defaultWsURL 编译期兜底的服务地址：只有环境变量与配置文件都没给时才用它。
+const defaultWsURL = "ws://127.0.0.1:8204/api/browser/host-ws"
+
 var (
-	wsURL    = envOr("HIVE_MTK_WS_URL", "ws://127.0.0.1:8204/api/browser/host-ws")
 	hostPort = envOr("HIVE_MTK_PORT", "8204")
 	// hostVersion 与扩展 manifest.json version 同步维护（R17：Chrome SW ScriptCache 缓存陷阱
 	// 导致旧扩展代码常驻——host/status 版本号是「新代码是否生效」的快速排查锚点）
@@ -68,26 +71,61 @@ func envOr(key, def string) string {
 	return def
 }
 
-// loadToken 从环境或 ~/.hivemtk/nm_host.conf 读 Host token
-func loadToken() string {
+// loadConf 读 ~/.hivemtk/nm_host.conf。文件不存在返回空表——首次安装本来就没有它，
+// 把「没配置」当成错误会让 Host 在最有用的那一刻（还没配好）拒绝启动。
+func loadConf() map[string]string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return map[string]string{}
+	}
+	conf, _ := readConfFile(filepath.Join(home, ".hivemtk", "nm_host.conf"))
+	return conf
+}
+
+// readConfFile 解析 key=value 行：跳过空行与 # 注释，键值各去一次首尾空白。
+// 不校验取值——缺哪一项由调用方决定退回到环境变量还是默认值。
+func readConfFile(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{}, nil
+		}
+		return nil, err
+	}
+	conf := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		conf[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	return conf, nil
+}
+
+// resolveServerURL 优先级：环境变量 > 配置文件的 server_url= > 编译期默认值。
+// 只认环境变量是不够的：Chrome 通过 connectNative 起 Host 时不继承终端环境，
+// 服务端不在 8204 上就等于连不上且无法配置。
+func resolveServerURL(conf map[string]string, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv("HIVE_MTK_WS_URL")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(conf["server_url"]); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// loadToken 取 Host token：环境变量压过配置文件
+func loadToken(conf map[string]string) string {
 	if v := strings.TrimSpace(os.Getenv("HIVE_MTK_HOST_TOKEN")); v != "" {
 		return v
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	data, err := os.ReadFile(home + "/.hivemtk/nm_host.conf")
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "token=") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "token="))
-		}
-	}
-	return ""
+	return strings.TrimSpace(conf["token"])
 }
 
 // writeNativeFrame 写 4 字节 native-order 长度头 + JSON body 到 stdout（Chrome 管控）
@@ -141,7 +179,7 @@ func extractReqID(body []byte) string {
 }
 
 // readNativeFrame 从 stdin（Chrome 管控）读 4 字节 native-order 长度头 + JSON body。
-// 三种出口必须分清（批9）：
+// 三种出口必须分清：
 //   - 正常帧 → (frame, nil)
 //   - 超限帧 → (nil, *frameTooLargeError)：**整帧已读完丢弃**，流边界仍然对齐，读泵可继续
 //   - 长度头超过 Chrome 上限 → (nil, errStreamDesync)：流已错位，读泵终止
@@ -202,7 +240,7 @@ func readFull(r *bufio.Reader, buf []byte) (int, error) {
 const hostUsage = "用法: hivemtk_browser_nm_host [--version|--help]\n" +
 	"本程序由 Chrome 扩展经 connectNative 自动拉起（Chrome 会把 chrome-extension://<id>/ 作为第一个参数传入），不需要手工常驻运行。\n"
 
-// guardInvocation F1（批5e 真机踩坑登记）：Chrome 启动的 NM host 必定带
+// guardInvocation F1（真机踩坑登记）：Chrome 启动的 NM host 必定带
 // argv[1]="chrome-extension://<id>/"；缺这个参数就不是 Chrome 拉起的。
 // 旧版 main() 完全不读 os.Args，任何参数（含 --version）都会被忽略后直接连接注册，
 // 把扩展正在服务的那条连接的注册位抢走——host/status 照旧显示 count=1/在线，
@@ -229,7 +267,7 @@ func guardInvocation() {
 }
 
 // tokenFingerprint 日志关联用的 token 指纹（sha256 前 8 位十六进制）。
-// 批9：token 是 Host 的长期凭据。旧实现把它拼进 addr 再整条打印，而 NM host 的 stderr
+// token 是 Host 的长期凭据。旧实现把它拼进 addr 再整条打印，而 NM host 的 stderr
 // 会进 Chrome 的 native messaging host 日志文件——等于把凭据落盘给任何读得到该日志的人。
 // 指纹够把「同一次配置的两条日志」对起来，反推不出原值。
 func tokenFingerprint(token string) string {
@@ -264,23 +302,24 @@ func dialAddr(raw string) (string, error) {
 
 func main() {
 	guardInvocation()
-	token := loadToken()
+	conf := loadConf()
+	token := loadToken(conf)
 	if token == "" {
 		// NM Host 的 stderr 仅用于调试日志（stdout 是协议通道）
-		fmt.Fprintln(os.Stderr, "[nm-host] 未找到 HIVE_MTK_HOST_TOKEN，请在 ~/.hivemtk/nm_host.conf 配置 token=...")
+		fmt.Fprintln(os.Stderr, "[nm-host] 未找到 token，请在 ~/.hivemtk/nm_host.conf 配置 token=...（或环境变量 HIVE_MTK_HOST_TOKEN）")
 		// Chrome 的 NM 要求 host 不能立即退出，否则扩展报 disconnected；
 		// 保持空转等待配置后由扩展重连触发重启。
 		time.Sleep(30 * time.Second)
 		os.Exit(1)
 	}
 
-	addr := wsURL
+	addr := resolveServerURL(conf, defaultWsURL)
 	if !strings.HasPrefix(addr, "ws") {
 		addr = "ws://127.0.0.1:" + hostPort + "/api/browser/host-ws"
 	}
 	cleanAddr, err := dialAddr(addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[nm-host] HIVE_MTK_WS_URL 解析失败: %v（30s 后退出，等扩展重连）\n", err)
+		fmt.Fprintf(os.Stderr, "[nm-host] 服务地址解析失败 %q: %v（30s 后退出，等扩展重连）\n", addr, err)
 		time.Sleep(30 * time.Second)
 		os.Exit(1)
 	}
@@ -300,7 +339,7 @@ type stdinEvent struct {
 const nmInboundBufferFrames = 8
 
 // startStdinPump 起**唯一**一条 stdin 读泵，goroutine 活到进程结束。
-// 批9 修正：旧实现把读泵开在 pumpLoop 里，WS 每重连一次就多一条 goroutine 复用同一个
+// 修正：旧实现把读泵开在 pumpLoop 里，WS 每重连一次就多一条 goroutine 复用同一个
 // bufio.Reader——bufio 不是并发安全的，两条泵会把同一条字节流撕开（长度头读到半截），
 // 而且老泵醒来的第一件事是先抢走一帧再往已关闭的 conn 上写，那条命令在服务端只能干等超时。
 // 终止（EOF/流错位）时先在 stderr 记因，再关 stdinDone 与 out。

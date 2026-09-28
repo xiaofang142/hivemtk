@@ -32,7 +32,7 @@ type BrowserSessionRepository interface {
 	CountRunningByUser(ctx context.Context, userID uint) (int64, error)
 	// CountRunningByTask 同任务运行中 session 数（RunTask 幂等防重）
 	CountRunningByTask(ctx context.Context, userID, taskID uint) (int64, error)
-	// FailStaleUnfinished 批8 对账：某任务下在途且老于 before 的会话收口 failed（僵尸会话会永久占住并发闸）
+	// FailStaleUnfinished 对账：某任务下在途且老于 before 的会话收口 failed（僵尸会话会永久占住并发闸）
 	FailStaleUnfinished(ctx context.Context, taskID uint, before time.Time, reason string) (int64, error)
 }
 
@@ -220,7 +220,7 @@ func (r *browserSessionRepo) CountRunningByTask(ctx context.Context, userID, tas
 	return n, err
 }
 
-// FailStaleUnfinished 批8 对账器专用：把某任务下 created/active 且创建于 before 之前的会话收口为 failed。
+// FailStaleUnfinished 对账器专用：把某任务下 created/active 且创建于 before 之前的会话收口为 failed。
 // before 由调用方给（不是无条件按 task_id 收口）：对账判据以「任务快照超出自身执行预算」为门槛，
 // 会话侧再设一道时间下限，避免把刚创建、正要被新一轮执行使用的行判死。
 // 条件更新（status IN 在途态）保证与执行协程同刻收口时后到者自动让位，real 终态不被覆盖。

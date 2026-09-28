@@ -1,6 +1,6 @@
 package service
 
-// 批10b 契约锁：域内「前置条件不满足」这一类结论必须带类型。
+// 契约锁：域内「前置条件不满足」这一类结论必须带类型。
 // 断的不是文案而是类型——文案会被透传成 4xx 的 body.message（前端直接弹它），
 // 而 controller 的映射只有拿到类型才分得出该回 409、400 还是真的 500。
 // 这一层丢类型 = 用户点错一次按钮，服务端记一条内部错误。
@@ -45,7 +45,7 @@ func TestRunTaskRejectsDraftAsStateConflict(t *testing.T) {
 
 	_, err := svc.RunTask(ctx, task.ID, userID, 0)
 	if err == nil {
-		t.Fatal("draft 任务被执行了（批13 的状态门只管自动重试，手工执行这条也得拦）")
+		t.Fatal("draft 任务被执行了（状态门若只管自动重试，手工执行这条就漏了出去）")
 	}
 	var sc *StateConflictError
 	if !errors.As(err, &sc) {

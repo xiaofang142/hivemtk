@@ -10,9 +10,9 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-// verify_identity_b17_test.go — 批17(c)：点后身份复核的**请求侧**在 Go，执行侧在扩展。
+// verify_identity_b17_test.go — 点后身份复核的**请求侧**在 Go，执行侧在扩展。
 //
-// 为什么开关也要腿（批14 的 channel 列同一形状）：复核长在 primitives.js 里，Go 只发一个布尔。
+// 为什么开关也要腿（的 channel 列同一形状）：复核长在 primitives.js 里，Go 只发一个布尔。
 // 如果「写步=true / 读步≠true」这两格都没有断言，那么下面三种世界在审计面上完全一样：
 // ① 写步真的复核了；② Go 从没发过开关（扩展再健壮也不会跑）；③ 读步也付了这次额外注入
 // （每个展开页多一次 evaluate，白付的钱没人记账）。所以帧内容必须当场抓下来判。
@@ -95,7 +95,7 @@ func TestWriteClickFrameRequestsIdentityRecheck(t *testing.T) {
 	}
 	if got, present := identityFlag(frame); !present || !got {
 		t.Fatalf("写步的 click 帧 verify_identity=%v（present=%v）want true——复核执行侧在扩展，"+
-			"请求侧就是这一个布尔：不发出去，批17(b) 那道闸门在真机上一次都不会跑", frame["verify_identity"], present)
+			"请求侧就是这一个布尔：不发出去，那道闸门在真机上一次都不会跑", frame["verify_identity"], present)
 	}
 }
 
@@ -257,16 +257,16 @@ func TestElementMovedWriteClickRecordsAttempt(t *testing.T) {
 // ⑦ *_not_interactable* 与 element_moved 恰好相反：它是**坐标还没离开扩展**时给出的结论
 // （probe / settle / hit-target 全在派发之前），所以台账不许记成提交尝试。
 //
-// 立项证据（批17 真机腿，DB 实读）：夹具页上那个一直在挪的按钮被 stable 拦下，步 2287
+// 立项证据（真机腿，DB 实读）：夹具页上那个一直在挪的按钮被 stable 拦下，步 2287
 // 落成 submit_state=unattributed、error=「element_not_interactable: unstable」。
 // 而 unattributed 在 StepSubmitAttemptedStates() 里（write_ledger.go:169「归因不到不等于没发生」）
 // ⇒ 下一轮同文本直接被双发闸拦死。可这次「没发生」是**查明的**，不是归因不到：
 // 把零副作用的拒绝记成待判，等于让闸门误伤掉唯一正确的处置（等页面停下再跑一次）。
-// 同形状的浮层遮挡（covered）在批14 起就是这个落点，只是当时没有腿盯着——本条一起钉住。
+// 同形状的浮层遮挡（covered）在就是这个落点，只是当时没有腿盯着——本条一起钉住。
 func TestPreDispatchRefusalRecordsNoAttempt(t *testing.T) {
 	cases := []struct{ name, err string }{
-		{"stable 拦下（批17 新增）", "element_not_interactable: unstable"},
-		{"浮层遮挡（批14 起就有）", "element_not_interactable: covered"},
+		{"stable 拦下", "element_not_interactable: unstable"},
+		{"浮层遮挡", "element_not_interactable: covered"},
 		{"发送按钮抖动", "send_button_not_interactable: unstable"},
 	}
 	for _, c := range cases {

@@ -11,7 +11,7 @@ import (
 	"hivemtk-user/internal/browser_automation/repository"
 )
 
-// ledger_b16c_test.go — 批16c：二次审核线（对抗审查子报告）点出的「闸门只对 effectWrite 有腿、
+// ledger_b16c_test.go — 二次审核线（对抗审查子报告）点出的「闸门只对 effectWrite 有腿、
 // 对 effectUnknown 没腿」这类覆盖缺口，逐条复验后补的八条腿。
 //
 // 复验口径（本批每一条都跑过，不采信报告原文）：
@@ -44,7 +44,7 @@ func startSessionFor(t *testing.T, bundle *wsE2EDeps, task *model.BrowserTask) *
 
 // ①（审核线 B1）定位表不可得的步必须过**双发闸**，不只是钳 retries。
 //
-// 批16 只证了「unknown 步不重试」，而闸门是四个独立 if：把条件收窄回 effect==effectWrite，
+// 只证了「unknown 步不重试」，而闸门是四个独立 if：把条件收窄回 effect==effectWrite，
 // unknown 步照样钳 0 重试、照样落 is_write，全套测试仍绿——于是重跑同一任务就是把一条
 // 「不知道有没有副作用」的动作再发一次。这里用同一任务的第二个 session 复现重跑。
 func TestUnknownEffectStepHoldsDoubleSendGate(t *testing.T) {
@@ -146,7 +146,7 @@ func TestUnknownEffectStepHoldsConfirmGate(t *testing.T) {
 	if n := ext.countOf("click"); n != 0 {
 		t.Fatalf("挂起期间 click 已到线 %d 次——unknown 副作用步绕过了人工确认闸门", n)
 	}
-	// 批20 A5：放行要带闸门登记的载荷哈希，且哈希必须是这一步的写键
+	// A5：放行要带闸门登记的载荷哈希，且哈希必须是这一步的写键
 	gate, pending := exec.PendingGate(session.ID)
 	if !pending {
 		t.Fatal("挂起闸门查不到详情——放行无从指明批的是哪份载荷")
@@ -336,9 +336,9 @@ func TestWriteStepKeyDistinguishesLocatorFacets(t *testing.T) {
 	}
 }
 
-// ⑨（审核线对批16 M7 等价类的保留意见）等价类的**前提**必须有锁。
+// ⑨（审核线对「M7 与 M3 等价」这一结论的保留意见）等价类的**前提**必须有锁。
 //
-// 批16 把 M7（sent 落账点不再标 crossed）判成等价类，理由是一条控制流事实：sent 写与终态写
+// 把 M7（sent 落账点不再标 crossed）判成等价类，理由是一条控制流事实：sent 写与终态写
 // 之间没有任何早返，且两次写用同一个 textHash，所以「sent 失败」要么被终态写补成一条库里的
 // 提交尝试（DB 闸门照拦），要么两次一起失败（同键去重后仍记一条兜底缺口）。
 // 当时这个判断是对的，但**没有任何东西在那条早返被写进来的当天变红**——spec 只写了「有寿命、

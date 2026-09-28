@@ -1,5 +1,5 @@
 /**
- * 批20b 契约锁（A2 前端侧）：审计流的三态必须原样落到眼睛看到的符号上。
+ * 契约锁（审计流三态的前端侧）：三态必须原样落到眼睛看到的符号上。
  *
  * 为什么这一半不是"顺手改个显示"：服务端把 command 帧的 ok 从常量 true 改成 null 之后，
  * 旧模板 `row.ok ? '✓' : '✗'` 会立刻把**每一条下发**都画成 ✗ 失败。
@@ -44,7 +44,7 @@ async function mountMonitor() {
   return wrapper
 }
 
-describe('批20b：审计流一列三态', () => {
+describe('审计流一列三态', () => {
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset()
     api.getBrowserSession.mockResolvedValue(SESSION)
@@ -76,7 +76,7 @@ describe('批20b：审计流一列三态', () => {
   })
 })
 
-describe('批20b：静态锁', () => {
+describe('静态锁：Monitor 模板的结果列必须走三态函数', () => {
   const monitor = readFileSync(resolve(process.cwd(), 'src/views/browserAutomation/Monitor.vue'), 'utf8')
   // 锁只能锁模板：注释里那句"旧的二态写法"是解释为什么改的，拿整份文件做 not.toMatch
   // 会锁成一桩自我审查——注释里不许出现这个词，那不是判据是忌讳。

@@ -20,7 +20,7 @@ func TestRegistryHasThreePlatforms(t *testing.T) {
 	}
 }
 
-// TestDetectBlock A2 结构化判据（批2 重写）：
+// TestDetectBlock A2 结构化判据（重写）：
 // 旧实现全文 Contains——评论正文含「验证码」必误报；新契约 URL 层只比对 pageURL、
 // 文案层只比对快照非 text 角色结构行。验收用例即 spec 表：正文含验证码不误报、真拦截必报。
 func TestDetectBlock(t *testing.T) {

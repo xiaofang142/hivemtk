@@ -52,7 +52,7 @@ func clampBrainStepParams(retryCount, backoffMs int) (int, int) {
 	return retryCount, backoffMs
 }
 
-// brainPlanStepRejection Brain 轮内步骤的服务端闸门（批19h）：返回非空=本步不执行、不落库，
+// brainPlanStepRejection Brain 轮内步骤的服务端闸门：返回非空=本步不执行、不落库，
 // 文案原样进历史回喂下一轮；返回空串=放行。
 //
 // 判据来自 dto 的 oneof（REST 与 Brain 同源，见 dto/step_action.go）。旧写法只有两条腿：

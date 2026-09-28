@@ -1,6 +1,6 @@
 package dto
 
-// step_action.go — 步骤动作白名单（批19h）。
+// step_action.go — 步骤动作白名单。
 //
 // 为什么需要一份「代码里的动作集合」：StepItem.Action 的 oneof 只在 gin 绑定 HTTP 请求时生效，
 // 而 Brain 模式的 steps 是 LLM 输出 JSON 直接 json.Unmarshal 出来的，同一条 tag 在那条路上

@@ -43,16 +43,9 @@
       @current-change="load"
     />
 
-    <!-- 无 Host 引导弹窗（409） -->
-    <el-dialog v-model="hostDialog.visible" title="本机 Chrome 未连接" width="480px">
-      <el-alert type="warning" :closable="false" show-icon>
-        <p>执行浏览器任务需要本机 Chrome 运行 HiveMTK 扩展和 NM Host：</p>
-        <ol style="margin: 8px 0 0 16px; line-height: 1.9">
-          <li>chrome://extensions 加载 <code>user-web/browser_automation/dist</code></li>
-          <li>运行 <code>user-server/cmd/nm-host/install.sh</code></li>
-          <li>在 <code>~/.hivemtk/nm_host.conf</code> 填入 admin 生成的 token</li>
-        </ol>
-      </el-alert>
+    <!-- 无 Host 引导弹窗（8001）：与详情页、Host 状态页同一份步骤 -->
+    <el-dialog v-model="hostDialog.visible" title="本机 Chrome 未连接" width="520px">
+      <HostInstallGuide />
     </el-dialog>
   </div>
 </template>
@@ -64,6 +57,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listBrowserTasks, publishBrowserTask, runBrowserTask, pauseBrowserTask, deleteBrowserTask,
 } from '@/api/browserAutomation'
+import { classifyRunError, HOST_OFFLINE, TASK_BUSY, RUN_ERROR_TEXT } from './hostRunError'
+import HostInstallGuide from './HostInstallGuide.vue'
 
 const router = useRouter()
 
@@ -109,27 +104,16 @@ const statusTagType = (s) => ({
 const formatTime = (t) => new Date(t).toLocaleString('zh-CN')
 
 function handleRunError(err) {
-  // 分流只看业务码，不看文案也不只看 HTTP 状态：409 在域内有三条结论
-  // （Host 未连接 / 同 Host 串行闸占用 / 依赖未满足），只有第一条该开安装引导。
-  const msg = String(err?.message || err)
-  switch (err?.bizCode) {
-    case 'BROWSER_HOST_OFFLINE_8001':
-      hostDialog.visible = true
-      break
-    case 'BROWSER_TASK_BUSY_8002':
-      ElMessage.warning(msg)
-      break
-    default:
-      // 兜底：老服务端/网关没带码时仍按 409+文案给引导，别把用户晾在静默里
-      if (err?.status === 409 && msg.includes('未连接')) hostDialog.visible = true
-      else ElMessage.error(msg)
-  }
+  const kind = classifyRunError(err)
+  if (kind === HOST_OFFLINE) hostDialog.visible = true
+  else if (kind === TASK_BUSY) ElMessage.warning(RUN_ERROR_TEXT(err))
+  else ElMessage.error(RUN_ERROR_TEXT(err))
 }
 
 async function onRun(row) {
   try {
     const res = await runBrowserTask(row.id)
-    // F-N3：点了执行就要看得见执行——直接进这条会话的监控页（D7 放行、步骤流都在那里）
+    // 点了执行就要看得见执行——直接进这条会话的监控页（放行闸门、步骤流都在那里）
     const sid = unpack(res)?.session_id
     ElMessage.success('已开始执行')
     load()
@@ -154,9 +138,17 @@ async function onPause(row) {
 }
 
 async function onDelete(row) {
-  await ElMessageBox.confirm(`确认删除任务「${row.name}」？`, '提示', { type: 'warning' })
-  await deleteBrowserTask(row.id)
-  ElMessage.success('已删除')
+  let go = true
+  try {
+    await ElMessageBox.confirm(`确认删除任务「${row.name}」？`, '提示', { type: 'warning' })
+  } catch { go = false } // 用户取消不是失败：不接住它，控制台里会多一份假异常
+  if (!go) return
+  try {
+    await deleteBrowserTask(row.id)
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error(`删除失败：${String(e?.message || e)}`)
+  }
   load()
 }
 

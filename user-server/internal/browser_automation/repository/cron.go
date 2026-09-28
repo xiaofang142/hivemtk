@@ -19,8 +19,10 @@ type BrowserCronTriggerRepository interface {
 	ListAllEnabled(ctx context.Context) ([]*model.BrowserCronTrigger, error)
 	Update(ctx context.Context, t *model.BrowserCronTrigger) error
 	UpdateEnabled(ctx context.Context, id uint, enabled bool) error
-	UpdateTimes(ctx context.Context, id uint, nextRunAt, lastRunAt time.Time) error
+	UpdateTimes(ctx context.Context, id uint, nextRunAt, lastRunAt *time.Time) error
 	Delete(ctx context.Context, id, userID uint) error
+	// DeleteByTaskID 宿主任务被删除或类型改成非 cron 时的回收：按 task_id 删行，没有行不算失败。
+	DeleteByTaskID(ctx context.Context, taskID uint) error
 }
 
 type browserCronTriggerRepo struct {
@@ -85,7 +87,9 @@ func (r *browserCronTriggerRepo) UpdateEnabled(ctx context.Context, id uint, ena
 		Update("enabled", enabled).Error
 }
 
-func (r *browserCronTriggerRepo) UpdateTimes(ctx context.Context, id uint, nextRunAt, lastRunAt time.Time) error {
+// UpdateTimes 成对写这两个时刻；nil = 写 NULL（不是「不改」——map 形态的 Updates 不走零值跳过，
+// 调用方要保住的值自己读回来传，见 service.storeNextRun）。
+func (r *browserCronTriggerRepo) UpdateTimes(ctx context.Context, id uint, nextRunAt, lastRunAt *time.Time) error {
 	return r.db.WithContext(ctx).Model(&model.BrowserCronTrigger{}).Where("id = ?", id).
 		Updates(map[string]any{"next_run_at": nextRunAt, "last_run_at": lastRunAt}).Error
 }
@@ -102,4 +106,11 @@ func (r *browserCronTriggerRepo) Delete(ctx context.Context, id, userID uint) er
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// DeleteByTaskID 不判 RowsAffected：调用方问的是「这条任务的定时器别再响」，
+// 「它本来就没有触发器」是同一种期望结果，不是错误。
+func (r *browserCronTriggerRepo) DeleteByTaskID(ctx context.Context, taskID uint) error {
+	return r.db.WithContext(ctx).Where("task_id = ?", taskID).
+		Delete(&model.BrowserCronTrigger{}).Error
 }

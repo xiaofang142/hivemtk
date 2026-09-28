@@ -1,9 +1,9 @@
-// 批17 §8.2-1：写步点击的两半 —— 探测期内 box 必须**结算**（stable），
+// §8.2-1：写步点击的两半 —— 探测期内 box 必须**结算**（stable），
 // 以及 CDP 真点之后必须**再认一次身份**（仅写步）。
 //
 // 动机（读码 + §8.2-1 同行口径）：probe 与 clickAt 之间隔着拟人贝塞尔轨迹的飞行时间（可达数百 ms），
 // 这期间轮播/懒加载/toast 挪动页面，就会点到一个从未被探测过的元素，而回包仍是 {ok:true, channel:'cdp'}。
-// 批14 只挡住了「probe 失败还被兜底绕过」和「兜底双发」，没挡住「probe 当时是真的、飞行途中变了」。
+// 只挡住了「probe 失败还被兜底绕过」和「兜底双发」，没挡住「probe 当时是真的、飞行途中变了」。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { cdp } = vi.hoisted(() => ({
@@ -96,7 +96,7 @@ beforeEach(() => {
   resetSnapshotBaseline();
 });
 
-describe('批17(a) stable：探测到真点之间元素必须已经停下', () => {
+describe('stable：探测到真点之间元素必须已经停下', () => {
   it('对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次）', async () => {
     document.body.innerHTML = '<button id="send">发送</button>';
     const r = await dispatch({ action: 'click', tab_id: 42, target: '#send' }, makeDeps());
@@ -169,7 +169,7 @@ describe('批17(a) stable：探测到真点之间元素必须已经停下', () =
   });
 });
 
-describe('批17(b) 点后身份复核：写步不许静默 ok', () => {
+describe('点后身份复核：写步不许静默 ok', () => {
   const writeClick = () => ({ action: 'click', tab_id: 42, target: '#send', verify_identity: true });
 
   it('点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次**', async () => {
@@ -287,7 +287,7 @@ describe('批17(b) 点后身份复核：写步不许静默 ok', () => {
   });
 });
 
-describe('批17 静态锁：三份内联 probe 与两处复核挂点必须一起长牙', () => {
+describe('静态锁：三份内联 probe 与两处复核挂点必须一起长牙', () => {
   // 注入函数自包含 ⇒ 检查逻辑只能内联多份（见 primitives.js 头部铁律）。
   // 行为腿各测一处，「这些份有没有同步」只能靠读源码钉住：漏改一份 = 那一格的闸门不存在。
   // ?raw 而不是 readFileSync(相对路径)：后者把用例绑死在「必须从包目录跑」上（实测 import.meta.url
@@ -327,7 +327,7 @@ describe('批17 静态锁：三份内联 probe 与两处复核挂点必须一起
     const def = (primitivesSrc.match(/function injClickIdentityCheck/g) || []).length;
     const use = (primitivesSrc.match(/executeInTab\(tabId, injClickIdentityCheck/g) || []).length;
     expect(def, `定义 ${def} 处 want 1`).toBe(1);
-    // want 3：批20c 补上 comment_send 这第三处。写通道一共三条，少一条就是那条通道没有闸门。
+    // want 3：comment_send 是第三处写通道。写通道一共三条，少一条就是那条通道没有闸门。
     expect(use, `消费 ${use} 处 want 3（三处必须同步，兜底分支不算）`).toBe(3);
   });
 });

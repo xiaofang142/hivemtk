@@ -19,7 +19,7 @@ var ErrHostOffline = errors.New("browser host 未连接，请在本机 Chrome �
 
 // ErrCommandNeverOnWire 命令帧从未写进 socket：注册表里此刻没有这个用户的连接。
 // 这是传输层能给出的唯一一种「副作用必然没发生」的证明——帧没出去，扩展连看都没看到，
-// 更谈不上点一下。写台账据此把这一类留在「未尝试」（批21）。
+// 更谈不上点一下。写台账据此把这一类留在「未尝试」。
 //
 // 刻意不覆盖另外两类看起来一样的失败：
 //
@@ -66,7 +66,7 @@ type HostConn struct {
 	// 服务端主动 close（复用断连清理钩子+nm-host WS 退避重连），把人工 pkill 变自愈。
 	cmdTimeouts int
 
-	// F3（批5e）「注册在线」与「可服务」在协议上是两件事：真机 session237/238/253 三次实测
+	// F3「注册在线」与「可服务」在协议上是两件事：真机 session237/238/253 三次实测
 	// ——host 完成 register、host/status 报 count=1/版本正常，而命令帧有去无回（扩展 SW 端口面
 	// 失效 / 实例更换后旧 host 带陈旧端口重注册），每条命令烧满 30s 超时，代价固定 2×30s。
 	// servable=最近一次「应用面确曾回包」的证据：注册探针通过或任一命令回包即置真，注册时置假。
@@ -130,7 +130,7 @@ func (c *HostConn) writeJSON(v any) error {
 // D4a：读超时 90s，收到 pong 即重置——僵尸连接最迟 90s 判定并触发清理钩子。
 func (c *HostConn) readLoop() {
 	defer c.close()
-	c.conn.SetReadLimit(hostFrameReadLimit) // 批9：与 cmd/nm-host 的边缘上限配对，见 timeouts.go 常量注释
+	c.conn.SetReadLimit(hostFrameReadLimit) // 与 cmd/nm-host 的边缘上限配对，见 timeouts.go 常量注释
 	_ = c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(hostReadTimeout))
@@ -259,7 +259,7 @@ func (r *HostRegistry) EnsureOnline(userID uint) error {
 	return nil
 }
 
-// ConnectedUserIDs 本进程当前持有 Host 连接的用户集（批9 重试归属门用）。
+// ConnectedUserIDs 本进程当前持有 Host 连接的用户集（重试归属门用）。
 // 注意口径是「连接在本进程」，不是「servable」：servable 是探针给的短期健康信号，
 // 归属门要回答的是「这条重试只有我能跑」，连接在就归我管，探针未过自有下发路径归因。
 func (r *HostRegistry) ConnectedUserIDs() []uint {

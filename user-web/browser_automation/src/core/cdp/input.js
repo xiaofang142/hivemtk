@@ -3,7 +3,7 @@
 //   autoclaw-cc/xiaohongshu-skills（同场景：mouseMoved 轨迹 + press hold）
 //   A9T9/RPA cdp_input（事件序列工厂 + attach 生命周期 + infobar 坐标陷阱对策）
 //   xiaohongshu-mcp humanize（时序参数：对数正态分布）
-// B7（批2）：分布采样/时序参数表/轨迹与落点算法迁入 @hivemtk/browser-core
+// B7：分布采样/时序参数表/轨迹与落点算法迁入 @hivemtk/browser-core
 // ——与 bridge 内容脚本共读同一参数源（数值逐字保持，双份漂移即缺陷源）。
 
 import {
@@ -82,7 +82,7 @@ async function withDebugger(tabId, fn) {
   } catch (e) {
     const msg = String(e?.message || e);
     // detach 类错误：只修状态（清掉 + 重 attach），**绝不重跑 fn**。
-    // 批14 真机语义：本模块的 fn 全是输入类命令（键入/点击），一条事件入队后
+    // 真机语义：本模块的 fn 全是输入类命令（键入/点击），一条事件入队后
     // 页面可能已经消费掉它；重跑=把整个动作再来一遍（单测实测：一次 typeText('ab')
     // 在中途 detach 后发出两遍 keyDown('a')）。恢复动作交上层按「结局未知」裁决，
     // 不在这里赌「大概没生效」。
@@ -97,7 +97,7 @@ async function withDebugger(tabId, fn) {
     if (detachTimer) clearTimeout(detachTimer);
     detachTimer = setTimeout(() => {
       detachTimer = null;
-      // 两个坑都由批15 单测照出来：
+      // 两个坑都由单测照出来：
       // ① attached 是 Map，`[...attached]` 解出来的是 [tabId, true] **对**——
       //   detach 于是收到 {tabId:[21,true]}（必然失败又被吞），delete 删的是不存在的键，
       //   结果是"3s 后收起调试横幅"这个功能从来没生效过。必须显式取 .keys()。
@@ -146,7 +146,7 @@ async function typeText(tabId, text) {
 
 const lastMouse = new Map(); // tabId -> {x,y}
 
-// F11（批5g 夹具真机实测）：后台 tab 不出帧 → 每个 mouseMoved 的 CDP ack 都要等满
+// F11（夹具真机实测）：后台 tab 不出帧 → 每个 mouseMoved 的 CDP ack 都要等满
 // 5s 超时（实测逐条 5003/5004/5005ms 串联），10–40 步轨迹 = 50–200s，写腿永远走不到
 // 按下那一步（服务端只能看到 45s 命令超时，页面上一个鼠标事件都没落地）。
 // 对策：事件全部按序入队（IPC 顺序即事件顺序），只在「一段共享预算」里等 ack——
@@ -207,7 +207,7 @@ async function clickAt(tabId, x, y, opts = {}) {
     // press/release 已入队 = 这一页面上很可能已经发生了这次点击。此后**任何**失败
     // （ack 超时、CDP 直接拒、debugger 掉线）都必须收敛成 click_unacked：
     // 原样上抛会被上层当成「CDP 不可用 → 事件从未下发」而降级 DOM 兜底，
-    // 在同一个目标上再点一次 = 双发（批14：写按钮的 handler 跑了两遍、评论不可撤回）。
+    // 在同一个目标上再点一次 = 双发（写按钮的 handler 跑了两遍、评论不可撤回）。
     // 轨迹段的失败不走这条：那时 press 还没入队，兜底是第一次下发，安全。
     let acked;
     try {

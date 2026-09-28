@@ -1,5 +1,5 @@
 /**
- * D7 写操作人工确认 前端契约测试（批3）
+ * 写操作人工确认（D7 闸门）的前端契约测试
  * 三件事必须成立：API 打到正确端点、监控页有放行入口（且只随 confirm_pending 出现）、
  * 编排页开关默认关闭（铁律 4 全自动不变）。
  */
@@ -22,8 +22,8 @@ describe('D7 确认放行 API', () => {
     http.post.mockResolvedValue({ code: 'SUCCESS', data: { confirmed: true } })
   })
 
-  // 批20 起放行绑载荷：body 必须带 payload_hash（见 browser_d7_gate_b20.test.js）。
-  // 本批原来断言「body 是对象就行」，那条宽松判据正好放过了批20 修的空对象支票。
+  // 放行绑载荷：body 必须带 payload_hash（见 browser_d7_gate_b20.test.js）。
+  // 这里原来断言「body 是对象就行」，那条宽松判据正好放过了「空对象也算放行」。
   it('POST /sessions/:id/confirm，body 只带放行载荷', async () => {
     await confirmBrowserSession(12, 'cafe1234')
     expect(http.post).toHaveBeenCalledTimes(1)

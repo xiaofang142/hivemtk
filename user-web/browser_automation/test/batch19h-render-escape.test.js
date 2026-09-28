@@ -1,4 +1,4 @@
-// 批19h 契约锁：popup 的两段模板里，**任何来自库里/模型里的文本都不许当作 HTML 进 DOM**。
+// 契约锁：popup 的两段模板里，**任何来自库里/模型里的文本都不许当作 HTML 进 DOM**。
 //
 // 立项形态：monitorSession 用 innerHTML 拼步骤行，`${s.action}` 是裸插值。而 action 这一列
 // 不是服务端自己写的枚举——Brain 模式下它是 LLM 输出的原语名（executor.go 把 steps 直接
@@ -25,7 +25,7 @@ function renderTo(html) {
   return box;
 }
 
-describe('批19h：popup 渲染出口必须转义', () => {
+describe('popup 渲染出口必须转义', () => {
   it('任务卡片的 name/status/task_type 三个字段都不产生元素', () => {
     const box = renderTo(taskRowHtml({
       id: 7, name: XSS, status: XSS, task_type: QUOTE, brain_mode: false,

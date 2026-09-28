@@ -152,7 +152,7 @@ func TestSetRetryRunnerWiring(t *testing.T) {
 	}
 }
 
-// 批7 重试豁免的全部前提就是「runner 收到的计数 > 0」：计数一旦丢成 0，执行器会把
+// 重试豁免的全部前提就是「runner 收到的计数 > 0」：计数一旦丢成 0，执行器会把
 // 自动重试当成人工重跑，写步撞闸判失败而不是跳过——豁免静默失效，且没有任何其它测试会红。
 func TestRunRetryPassesPositiveCount(t *testing.T) {
 	got := make(chan int, 1)

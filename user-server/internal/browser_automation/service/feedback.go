@@ -19,10 +19,10 @@ import (
 type FeedbackService struct {
 	sessionRepo repository.BrowserSessionRepository
 	taskRepo    repository.BrowserTaskRepository
-	// hostUsersFn 批9 归属门：返回本进程当前持有 Host 连接的用户集（装配见 router 的
+	// hostUsersFn 归属门：返回本进程当前持有 Host 连接的用户集（装配见 router 的
 	// SetHostUsersProvider）。nil = 不参与过滤。
 	hostUsersFn func() []uint
-	// ledgerGapFn 批16b（B2）：该任务在本进程是否留有「提交尝试已跨越、写台账却没落成」的缺口。
+	// ledgerGapFn 该任务在本进程是否留有「提交尝试已跨越、写台账却没落成」的缺口。
 	// 接线见 NewExecutor（单点，漏接线即整条抑制静默消失）。nil = 不参与判断。
 	ledgerGapFn func(taskID uint) bool
 }
@@ -47,7 +47,7 @@ const ledgerGapNote = "\n写台账未落库、提交点已跨越：本任务未�
 
 // OnSessionFinished session 终态后的反馈动作（异步调用，勿阻塞 Executor）
 //
-// 批8：三步全部走 WithoutCancel 的独立预算 ctx。调用点在 ExecuteSession 收口末尾，
+// 三步全部走 WithoutCancel 的独立预算 ctx。调用点在 ExecuteSession 收口末尾，
 // 传进来的 execCtx 在超时/中止腿上必然已 Done——用它写 task 行会被 DB 驱动取消，
 // 于是 session 已终态而 task 永久停在 running（任务砖化：既不能再下发，也显示不出结果）。
 // R25 只对 session 行做了这个处理（executor.go 的 writeCtx），task 行是同一缺陷的第二半。
@@ -61,7 +61,7 @@ func (f *FeedbackService) OnSessionFinished(ctx context.Context, task *model.Bro
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionFinalWriteBudget)
 	defer cancel()
 
-	// 0. 先算「这次失败能不能交给自动重试」——批16b（B2）。必须在写任务快照之前定案：
+	// 0. 先算「这次失败能不能交给自动重试」——这条判定必须在写任务快照之前定案：
 	// 抑制的理由要写在同一行上，否则「为什么没重试」只剩日志里一句 Warn，面板看不到。
 	retryDue := finalStatus == "failed" && task.RetryOnFail && task.RetryCount < task.MaxRetryTimes
 	gapBlocked := retryDue && f.ledgerGapHere(task.ID)
@@ -149,7 +149,16 @@ func (f *FeedbackService) SaveFinalScreenshot(ctx context.Context, sessionID uin
 	if err != nil {
 		return "", err
 	}
-	_, publicURL, err := driver.UploadReader(ctx, newBytesReader(raw), int64(len(raw)), "browser_automation", "session_"+itoa(int(sessionID))+".png")
+	// 不变量：落库的必须是「可直接访问的公开 URL」，不是存储相对路径。
+	// UploadReader 的契约是 (publicURL, storagePath, err)——见 storage/storage.go:28 的具名返回值、
+	// local.go:121 的实现，以及仓内其余四个调用点（upload.go:169、channel_media.go:103、
+	// material.go:106、obs_config.go:293）都是这个顺序。
+	// 这一度写成 (_, publicURL, err)，落库的因此是 storagePath（browser_automation/2026/09/….png）。
+	// 用户侧表现是监控页「最终截图」永远一张裂图：该值不以 / 开头，浏览器按当前页
+	// /browser-automation/sessions/17 去解析它，请求最终打到 SPA 的 index.html 上——
+	// 实测 http=200 而 content-type=text/html，比 404 更难归因，所以判据要同时钉住两侧
+	// （返回值带 /files/ 前缀 + 前缀去掉后正好命中本次落盘的字节）。
+	publicURL, _, err := driver.UploadReader(ctx, newBytesReader(raw), int64(len(raw)), "browser_automation", "session_"+itoa(int(sessionID))+".png")
 	if err != nil {
 		return "", err
 	}
@@ -175,7 +184,7 @@ func (f *FeedbackService) scheduleRetry(ctx context.Context, task *model.Browser
 
 // StartRetryScanner D4b：重试到期扫描器（每分钟）。ClaimDueRetries 条件认领（置 NULL）
 // 保证多副本/双 tick 不双触发；认领后进程崩溃则该次重试放弃（与旧语义一致，但正常运行期重启不再丢）。
-// 批9：认领前过归属门（见 scanDueRetries）。
+// 认领前过归属门（见 scanDueRetries）。
 func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 	go func() {
 		t := time.NewTicker(time.Minute)
@@ -192,7 +201,7 @@ func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 }
 
 func (f *FeedbackService) scanDueRetries(ctx context.Context) {
-	// 批9 归属门：Host 连接是进程内状态，挂起重试是库内共享队列。本进程没有该用户的
+	// 归属门：Host 连接是进程内状态，挂起重试是库内共享队列。本进程没有该用户的
 	// 连接却认领了它的重试，只会以「browser host 未连接」烧掉一次 MaxRetryTimes 额度
 	// （真机实测 task=377 session=429）。provider 未装配时不过滤——宁可退化成改造前
 	// 行为，也不让一次装配遗漏静默停掉全部重试。
@@ -227,7 +236,7 @@ var retryRunnerFn retryRunner
 func SetRetryRunner(fn retryRunner) { retryRunnerFn = fn }
 
 func (f *FeedbackService) runRetry(ctx context.Context, task *model.BrowserTask, newCount int) error {
-	// 批16b（B2）第二道：OnSessionFinished 那道判定发生在「上一轮结束时」，而认领发生在
+	// 第二道：OnSessionFinished 那道判定发生在「上一轮结束时」，而认领发生在
 	// 几分钟后的扫描里——中间这段时间同一任务可能又被跑过一次（人工重跑/另一条会话），
 	// 新缺口正是在那一刻留下的。只查一次就是拿旧结论放行新事实。
 	if f.ledgerGapHere(task.ID) {

@@ -159,9 +159,23 @@ repo 11→16、db 6→7）。逐格读红因后的归因：
 （改前是 249 格、三处 ✗）。行为面只在干净 `--shared` 克隆（HEAD `fe3fc059`）里取证改动的三格：
 `--cells K50,K50b,K56` 读 **`控制组[svc] CLEAN rc=0 ran=19 PASS=19 skip=0`＋`KILLED=3 SURVIVED=0
 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=3`**，产物
-`docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。**这一族不是门禁**：整族 72 格没在
-tip 上复跑，最近一次全族杀伤行仍是 `P701/20260923-165140`（`KILLED=71 SURVIVED=0`，测于
-`f8d83b59`，即本趟回锚**之前**的那棵树），下一趟整族必须连这三格一起重跑才算这卡收口。
+`docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。那一趟末尾"下一趟整族必须连这三格
+一起重跑"的话已兑现：整族在 tip 上复跑两趟 —— `P701/20260928-152810`（测于 `bfad99e6`）与
+`P701/20260928-154508`（测于 `034d1784`，即本文件当下字节），两趟都读 **`KILLED=72 SURVIVED=0
+RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=72`**，且末尾都有
+`全部格子已还原（逐文件 md5 与基线一致）`＋`收尾：带走 .../p701work/clone`；第二趟的 82 份日志
+全量入库（`20260928-154508/`＝72 格〔67 刀 `K*`＋5 格 `G*`〕＋`K30-split` 单腿复跑一份＋9 份驱动侧
+〔8 个控制组＋`00-run.log`〕）。旧的那行 `20260923-165140` 是回锚**之前**的树（`KILLED=71`），
+不再当作本族的现读数。
+杀伤复跑本身**没有 CI 执行点**：`grep -rn mut_bill_p701 .github/ Makefile` 零命中；CI 里跑的是
+`go test` 原样，外加本文件的**静态面**（`scripts/mut-dispose-guard.test.sh` 注册在 `lint.yml`，
+覆盖全族电池的收尾闸形状），`anchor-preflight.py` 同样不在 CI。所以"整族 72 格全杀"是**本机现取
+的门**，别读成流水线每次推送都替你跑过。要在这台机器复现：在**同一个 shell** 里导出 `POSTGRES_TEST_*`
+（`env_for()` 只往影子克隆里的 `user-server/.env` 回落，新起一个 shell 的 export 带不进来），
+cgo 撞上 Xcode 许可时加 `DEVELOPER_DIR=/Library/Developer/CommandLineTools`。这两条不是假设——
+整族头两趟就分别撞死在这两处，驱动 stdout 存 `P701/20260928-152346/00-driver.log` 与
+`P701/20260928-152534/00-driver.log`（那两趟的逐格日志随当时的克隆回收，只剩驱动这一份），
+归类逻辑见上面的 `env_only_failure()`。
 
 三处顺带记下的账：
 - 头一趟（`20260928-135334`）没导 `POSTGRES_TEST_*`，控制组当场判 DIRTY 停机 —— 这是对的，
@@ -720,6 +734,31 @@ def env_for(root: Path) -> dict:
     return env
 
 
+def env_only_failure(out: str) -> str:
+    """控制组红了，先分"这是本机前提没满足"还是"这是仓库里的红"。
+
+    2026-09-28 一趟整电池连撞两次：第一次 `# runtime/cgo` + Xcode 许可未同意（本机
+    `xcode-select -p` 指向 Xcode.app，而那份许可没人签过），第二次 SASL 认证失败
+    （给电池起 shell 时没在**同一个 shell** 里 export 测试库口令，`env_for()` 的回落
+    要读 `user-server/.env`，而影子克隆里本来没有它）。两次的落点都是
+    `控制组[ctrl] DIRTY`，而那句判读只说"不干净、下游都不可信"——读起来像仓库坏了。
+    环境没满足和产码有洞的处置完全相反（前者改环境复跑，后者才是这一族要抓的东西），
+    所以把三种已知环境签名读出来归个类；认不出的形状不猜，照旧按"不干净"停。
+    """
+    if "runtime/cgo" in out and "not agreed to the Xcode license" in out:
+        return ("本机工具链：cgo 编译走到 Xcode.app 而它的许可没签过 ⇒ 不是仓库红。"
+                "改法：`DEVELOPER_DIR=/Library/Developer/CommandLineTools python3 scripts/mut_bill_p701.py …`"
+                "（CLT 里那份 clang 不受许可门影响），或 `sudo xcodebuild -license` 之后复跑")
+    if "failed SASL auth" in out or "password authentication failed" in out:
+        return ("本机库前提：测试库口令/端口没进到 `go test` 进程 ⇒ 不是仓库红。"
+                "口令要在**跑电池的那同一个 shell** 里 export（新起一个 shell 的 export 带不进来），"
+                "或者把 `user-server/.env` 摆进影子克隆（`env_for()` 只从那儿回落）；"
+                "先核对 8232 上运行中的容器口令与 `.env` 是否同源")
+    if "connection refused" in out or "too many clients" in out or "remaining connection slots" in out:
+        return "本机库前提：PG 没起来或连接数顶格 ⇒ 不是仓库红，先把 8232 容器恢复到可连再复跑"
+    return ""
+
+
 def go_run(clone: Path, runner: str, run: str = ""):
     pkg, default_run = RUNNERS[runner]
     root = clone / US
@@ -842,9 +881,13 @@ def main() -> int:
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
             if not ok:
                 print(out[-4000:])
+                why = env_only_failure(out)
+                if why:
+                    print(f"红因归类（环境）：{why}")
                 sweep()
                 raise SystemExit("控制组[gate] 不干净：台账门在克隆里就报漂移，"
-                                 "后面所有 G* 格的红/绿都不可信")
+                                 "后面所有 G* 格的红/绿都不可信"
+                                 + ("" if not why else "（这一趟是本机前提没满足，不是仓库红；按上面归类复跑）"))
             continue
         rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
         dump(f"00-control-{name}", out)
@@ -855,8 +898,12 @@ def main() -> int:
               f"PASS={passed} skip={skipped} FAIL={killed}")
         if bad:
             print(out[-4000:])
+            why = env_only_failure(out)
+            if why:
+                print(f"红因归类（环境）：{why}")
             sweep()
-            raise SystemExit(f"控制组[{name}] 不干净——它下游所有格子的红/绿都不可信")
+            raise SystemExit(f"控制组[{name}] 不干净——它下游所有格子的红/绿都不可信"
+                             + ("" if not why else "（这一趟是本机前提没满足，不是仓库红；按上面归类复跑）"))
 
     problems: list[str] = []
     tally = {k: 0 for k in TALLY}

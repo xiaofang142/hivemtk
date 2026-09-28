@@ -16,7 +16,7 @@ import (
 // "不可改"契约约束的是执行路径写后修改；治理性定期裁剪是显式设计，不破坏重放事实——
 // 保留期内的重放/审计完整性不受影响）；llm_plans 仅清空 snapshot 大文本、保留 token 成本账。
 // 保留天数 env BROWSER_AUDIT_RETENTION_DAYS（默认 90，0=禁用）。
-// 界本身要连**来源**一起落库（批23 / §7.28 八-3，见 `PruneBefore` 的 cutoffSource 参数）：
+// 界本身要连**来源**一起落库（/ §7.28 八-3，见 `PruneBefore` 的 cutoffSource 参数）：
 // 只记 cutoff 时，「运维把 90 天改成 7 天」与「按 90 天正常裁剪」在库里同形。
 
 const (
@@ -88,7 +88,7 @@ func retentionEnabled(cmdLogRepo repository.BrowserCommandLogRepository, planRep
 
 // pruneAuditOnce 跑一轮扫描：界与来源**每次现读现算**。
 // 单独成函数是因为「来源到底有没有传给 PruneBefore」这一格必须可断言——goroutine + 1h ticker
-// 里的接线测不到，而它正是批23 这条修复的落点（少传一处，库里就只剩 cutoff 没有来源，
+// 里的接线测不到，而它正是这条修复的落点（少传一处，库里就只剩 cutoff 没有来源，
 // 与修复前的形状逐字节相同，且没有任何一行会红）。
 func pruneAuditOnce(ctx context.Context, cmdLogRepo repository.BrowserCommandLogRepository, planRepo repository.BrowserLLMPlanRepository) {
 	days, source := auditRetention()

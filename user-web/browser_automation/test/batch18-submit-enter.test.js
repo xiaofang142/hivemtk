@@ -1,4 +1,4 @@
-// 批18：type + submit_on_enter 的提交键失败不许被吞。
+// type + submit_on_enter 的提交键失败不许被吞。
 // 现场缺陷（第三轮深查）：case 'type' 里 `await cdpInput.pressEnter(tabId).catch(() => {})`
 // ——Enter 派发失败时整句仍 `return { ok: true }`。而 type+submit_on_enter 命中平台注册的
 // comment_input 时被 classifyStepEffect 判成**写步**（service/write_ledger.go:279），
@@ -35,7 +35,7 @@ global.chrome = {
   windows: { update: vi.fn(async () => {}) },
 };
 
-// 无布局引擎下给 probe 一个「有几何、可见」的假象（同批14 那份测试的准备）。
+// 无布局引擎下给 probe 一个「有几何、可见」的假象（与 click 那份测试同准备）。
 Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
   get() { return this.parentElement ? document.body : null; },
   configurable: true,
@@ -80,7 +80,7 @@ const makeDeps = () => ({
 
 const NEVER_EXECUTED_TOKENS = ['_inject_timeout_', '_not_found', '_not_interactable'];
 
-describe('CDP 通道：提交键失败=整步失败（批18）', () => {
+describe('CDP 通道：提交键失败=整步失败', () => {
   it('pressEnter 抛错时上抛，且不回读成 ok:true', async () => {
     document.body.innerHTML = '<input id="q" value="">';
     cdp.pressEnter.mockRejectedValue(new Error('Debugger is not attached to the target'));
@@ -149,7 +149,7 @@ describe('CDP 通道：提交键失败=整步失败（批18）', () => {
   });
 });
 
-describe('DOM 兜底通道：Enter 只发一次（批18 防过修正成双发）', () => {
+describe('DOM 兜底通道：Enter 只发一次（防过修正成双发）', () => {
   it('兜底输入后不再补按 CDP Enter，页面侧 keydown 恰好一次', async () => {
     const el = document.createElement('input');
     el.id = 'q';
@@ -164,7 +164,7 @@ describe('DOM 兜底通道：Enter 只发一次（批18 防过修正成双发）
   });
 });
 
-describe('dispatch 的 type 分支不得再出现空 catch（批18 静态锁）', () => {
+describe('dispatch 的 type 分支不得再出现空 catch（静态锁）', () => {
   it('吞错的 .catch(() => {}) 是本批要消灭的形状', () => {
     // 锚点必须带 `{`：`case 'type':` 在「需要活 tab 的清单」那个 switch 里也出现一次
     // （:784），不带花括号就锁到清单那一段、空 catch 落在窗外——实测这样会白过。

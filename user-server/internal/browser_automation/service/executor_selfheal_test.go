@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 批2 A1 自愈回路契约测试（手法对齐 post_comment_finalize_test.go：纯函数 + 源码静态约束，
+// A1 自愈回路契约测试（手法对齐 post_comment_finalize_test.go：纯函数 + 源码静态约束，
 // HostRegistry 无网络桩不做真命令帧回路）。
 
 func TestIsSelectorMiss(t *testing.T) {

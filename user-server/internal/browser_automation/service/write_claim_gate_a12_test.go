@@ -1,6 +1,6 @@
 package service
 
-// 批20f（A12）服务层契约锁：存储层声明必须长在**下发任何帧之前**，且生命周期两半都对。
+// 服务层契约锁：存储层声明必须长在**下发任何帧之前**，且生命周期两半都对。
 //
 // 与仓储层那八条的分工（write_claim_a12_test.go）：仓储层证明「约束在库里、并发只有一个赢」；
 // 本文件证明的是**接线**——executor 到底有没有在用它。这两件事很容易只剩一件：
@@ -237,7 +237,7 @@ func TestWriteClaimKeptWhenStateReadFailed(t *testing.T) {
 }
 
 // S4 存储层闸门不可判定（这里用「没接线」模拟任何让占坑拿不到结论的情况）⇒ 拒绝下发。
-// 免检的条件只能是「这一步不是写步」，不能是「闸门没接好」——批16（A11）那条口径的
+// 免检的条件只能是「这一步不是写步」，不能是「闸门没接好」——这条免检口径的
 // 又一次应用：判不出来不等于没有，拿判不出来换一次放行，赌的是不可逆动作。
 func TestWriteClaimGateFailCloseWhenUnwired(t *testing.T) {
 	exec, bundle, frames := newA12Exec(t, happyReply)

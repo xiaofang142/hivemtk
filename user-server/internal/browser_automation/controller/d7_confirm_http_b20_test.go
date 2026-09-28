@@ -1,6 +1,6 @@
 package controller
 
-// 批20（A5/A9/A10）D7 放行的 HTTP 面契约锁：一条放行请求在控制器上必须能分辨四件事——
+// D7 放行的 HTTP 面契约锁：一条放行请求在控制器上必须能分辨四件事——
 // 批了（200 confirmed:true）、批错内容（409 载荷不符）、批不动（409 闸门在别的进程）、
 // 没得批（200 confirmed:false），且**没带载荷就不许批**（400）。
 // 为什么四态要在 HTTP 面各占一格：前三种在服务端看都是「这次没放行」，
@@ -173,7 +173,7 @@ func TestB20ConfirmStatusMappingIsDistinct(t *testing.T) {
 			t.Errorf("%s 的 confirmed=%v want %v", l.status, got, wantConfirmed)
 		}
 		// data.status 是前端唯一可依赖的判别位：409 经 response.Error 会统一折成
-		// DUPLICATE_ENTRY_3003（批10 实测），只靠码分不清「批错内容」与「闸门在别处」。
+		// DUPLICATE_ENTRY_3003（实测），只靠码分不清「批错内容」与「闸门在别处」。
 		if got, _ := b.Data["status"].(string); got != string(l.status) {
 			t.Errorf("data.status=%q want %q（机器可读判别位缺失=前端只能读文案）", got, l.status)
 		}

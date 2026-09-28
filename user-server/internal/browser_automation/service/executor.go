@@ -52,7 +52,7 @@ type parsedStep struct {
 	RetryBackoffMs  int
 }
 
-// brainPlanner Executor 对 Brain 层的全部依赖（批19h 从具体 *BrainService 改接缝）。
+// brainPlanner Executor 对 Brain 层的全部依赖（从具体 *BrainService 改接缝）。
 // 动机不是解耦好看：*BrainService 让整条 executeBrain 循环在单测里无法驱动（plan 必然打真 LLM），
 // 于是「闸门是否在落库前生效」这类事实只能停在谓词层。有了这一层，测试可以塞进脚本化 plan，
 // 其余部件（真 WS、真 DB、真步循环）全部照旧。
@@ -71,7 +71,7 @@ type Executor struct {
 	sessionRepo repository.BrowserSessionRepository
 	stepRepo    repository.BrowserStepRepository
 	cmdLogRepo  repository.BrowserCommandLogRepository
-	// writeClaimRepo 批20f（A12）：不可逆写的存储层独占声明。它**不**是台账的缓存或兜底——
+	// writeClaimRepo 不可逆写的存储层独占声明。它**不**是台账的缓存或兜底——
 	// 台账（stepRepo）回答「历史上发生过尝试没有」，本仓储回答「此刻谁有权去跨提交点」，
 	// 后者只能由一条 INSERT 的原子性给出，所以 Executor 上不放任何内存态。
 	// nil（未接线）在写步上是 fail-close，见 claimWriteSlot。
@@ -88,17 +88,17 @@ type Executor struct {
 	// confirmRegistry D7：sessionID → 待放行闸门（仅在写步提交点前挂起时存在）。
 	// 与 stopRegistry 同构但生命周期不同：stop 通道随 session 全程注册，确认通道只在等待期存在
 	// ——「存在即挂起」使 ConfirmPending 无需额外状态位。
-	// 批20（A5/A10）：存的不再是裸通道而是闸门自身——「等谁批、批的是哪份载荷、什么时候到期」
+	// 存的不再是裸通道而是闸门自身——「等谁批、批的是哪份载荷、什么时候到期」
 	// 必须和通道同生死，否则读侧只有一个布尔，放行就是一张空白支票。
 	confirmMu       sync.Mutex
 	confirmRegistry map[uint]*confirmGate
 
-	// 批16（A7）：台账写失败后的两张降级表，与上面两张同构但语义相反——它们是「不能再派发写」的记录。
+	// 台账写失败后的两张降级表，与上面两张同构但语义相反——它们是「不能再派发写」的记录。
 	//   ledgerBroken: sessionID → 最初那次台账写失败的原因，随会话结束清除（会话级降级）；
 	//   ledgerGaps:   "taskID|text_hash" → 提交尝试点已跨越但库里没落成，跨会话保留到进程结束
 	//                 （自动重试是同进程换新 session 跑同一任务，会话级降级挡不住它）。
 	// 两张表都只在「台账写失败」这条罕见路径上增长，各自有界（gaps 见 ledgerGapCap）。
-	// gaps 不跨重启 ⇒ 反馈层挂重试前必须查它一次（批16b B2，接线见 NewExecutor）。
+	// gaps 不跨重启 ⇒ 反馈层挂重试前必须查它一次（B2，接线见 NewExecutor）。
 	ledgerMu       sync.Mutex
 	ledgerBroken   map[uint]string
 	ledgerGaps     map[string]bool
@@ -129,9 +129,9 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 	}
 	e.feedback = feedback
 	if feedback != nil {
-		// 批16b（B2）单点接线：缺口表长在 Executor 上、挂自动重试的动作在 FeedbackService 上，
+		// 单点接线：缺口表长在 Executor 上、挂自动重试的动作在 FeedbackService 上，
 		// 两边互相看不见。接在构造处而不是某个调用点——漏接线时「不重试」的抑制会整条静默消失，
-		// 与批16 A11 那条「把错误就地吞掉等于闸门不存在」是同一个失效形态。
+		// 与A11 那条「把错误就地吞掉等于闸门不存在」是同一个失效形态。
 		feedback.SetLedgerGapProvider(e.HasCrossedLedgerGap)
 	}
 	return e
@@ -140,7 +140,7 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 // finishStep 步行终态落库（唯一写入口）。
 //
 // 为什么不能沿用执行 ctx：超时/中止腿上 ctx 此刻必然已 Done，用它的 UPDATE 会被 DB 驱动取消，
-// 于是这一行永远停在 running——批16 承诺的「写步失败是可见、可人工重跑的」就地失效，
+// 于是这一行永远停在 running——「写步失败是可见、可人工重跑的」这条承诺就地失效，
 // 运维在面板上看不到「这一步为什么被拦」，只剩一条日志。R25 只对 session/task 行做了这个
 // 处理（sessionFinalWriteBudget），步行是同一缺陷的第三半。
 // 失败必须上报（旧写法是 `_ =`）：session/task 行有 stale_reconcile 兜底收敛，步行没有。
@@ -157,7 +157,7 @@ func (e *Executor) SetCommandLogRepository(r repository.BrowserCommandLogReposit
 	e.cmdLogRepo = r
 }
 
-// SetWriteClaimRepository 批20f（A12）存储层写声明闸门注入。
+// SetWriteClaimRepository 存储层写声明闸门注入。
 // 与上面的日志注入**相反**，这里 nil 不是「可选」而是「闸门没接好」：写步会一律拒绝下发
 // （见 claimWriteSlot）。宁可把任务跑成一屏红步，也不开一条没有独占裁决的写路径——
 // 少接一行装配是可见的、可当天补的，一次双发是不可见、撤不回的。
@@ -266,7 +266,7 @@ func (e *Executor) stopChFor(sessionID uint) chan struct{} {
 
 // ---- D7 写操作人工确认闸门（与 stop 同构，语义相反：stop 取消、confirm 放行）----
 
-// PendingConfirmGate 闸门的对外可见身份（批20 A5/A10）：一次挂起「在等谁批、批的是哪份载荷、
+// PendingConfirmGate 闸门的对外可见身份：一次挂起「在等谁批、批的是哪份载荷、
 // 什么时候到期」必须可查证。Preview 只在读侧（归属校验之后）出现，绝不进审计帧。
 type PendingConfirmGate struct {
 	SessionID   uint      `json:"session_id"`
@@ -287,7 +287,7 @@ type confirmGate struct {
 	preview     string
 	expiresAt   time.Time
 	// budget 挂起时给定的名义预算：超时归因要说「等了多久」，用 time.Until(expiresAt) 在
-	// 到期那一刻恒等于 0，等于把批8 的归因文案写成谎。
+	// 到期那一刻恒等于 0，等于把归因文案写成谎。
 	budget time.Duration
 
 	// mismatchAttempts 拿错载荷来要的放行次数。放行不撤闸门，所以这个数只能由闸门自己记，
@@ -309,7 +309,7 @@ func (g *confirmGate) info() PendingConfirmGate {
 	}
 }
 
-// ConfirmVerdict 放行请求的结论（批20 A5）。三态而不是 bool：
+// ConfirmVerdict 放行请求的结论。三态而不是 bool：
 // 「没有闸门」「批错了东西」「批对了」是三件不同的事，压成一句文案就等于让运维去猜。
 // 命名前缀 Verdict 与闸门自己的出路 confirmOutcome 分开——两者都叫「granted」时，
 // 「放行命中了」和「等待方被放行」会在读码时互相顶替。
@@ -389,11 +389,11 @@ const (
 // errConfirmAbortedByStop 挂起期间被 stop 中止的步错误原文。不复用「用户手动中断」那句
 // 原文：步与审计面要写清「停在确认闸门、评论从未提交」，终态收口再按此常量精确认出
 // 「这次失败的起因就是用户中断」→ 记 stopped。
-// 批8 起 post_comment 与派生写步（type+回车 / click 发送按钮）共用此原文——F4 的精确匹配
+// 起 post_comment 与派生写步（type+回车 / click 发送按钮）共用此原文——F4 的精确匹配
 // 只认这一条，措辞按步分叉就会把「闸门处中止」重新掉回 failed。
 const errConfirmAbortedByStop = "写步等待人工确认期间被用户中止，评论未提交"
 
-// waitForConfirm 挂起等人工放行，自带独立计时器（批8 解耦：不再让 execCtx.Done 兼职确认超时）。
+// waitForConfirm 挂起等人工放行，自带独立计时器（解耦：不再让 execCtx.Done 兼职确认超时）。
 // 前置：闸门已由 registerConfirmGate 挂上注册表——**登记早于落帧、落帧早于等待**，
 // 反过来排会在「帧已写、注册表还空着」的窗口里把一次真放行答成「没有待确认的提交点」。
 // 返回值第二项是**哪条预算到头**的原文（「确认等待 600s」还是「任务执行预算掐断」）——
@@ -425,7 +425,7 @@ func (e *Executor) waitForConfirm(ctx context.Context, gate *confirmGate) (confi
 	case <-timer.C:
 		return confirmWaitTimedOut, fmt.Sprintf("人工确认等待 %ds", int(gate.budget.Seconds()))
 	case <-ctx.Done():
-		// 执行预算（TimeoutSec）到头。批8 起它与确认预算是两条独立计时器，谁先到谁说话。
+		// 执行预算（TimeoutSec）到头。它与确认预算是两条独立计时器，谁先到谁说话。
 		return confirmWaitTimedOut, "任务执行预算用尽"
 	}
 }
@@ -454,7 +454,7 @@ const (
 	gateConfirmFrame = "d7_confirm" // judge：闸门收口，decision 分辨 granted/stopped/timeout
 )
 
-// 批20b（A2）：写链路上「试过了 / 接了 / 平台确认了」三件事的另两个名字。
+// 写链路上「试过了 / 接了 / 平台确认了」三件事的另两个名字。
 // 三态不是给一列改名，而是每一态各有一帧可指：
 //   - command 帧（ok=nil）= attempted：这一条命令被写给了 Host，此刻没有任何结论；
 //     comment_send 单独成帧，是因为不可逆点埋在 post_comment 那一步内部——只有步级帧的审计流
@@ -468,7 +468,7 @@ const (
 	writeConfirmFrame = "write_confirm"
 )
 
-// awaitConfirmGate D7 闸门的唯一入口（批20：A5 绑载荷 + A9 留痕 + A10 可跨进程查证）。
+// awaitConfirmGate D7 闸门的唯一入口（A5 绑载荷 + A9 留痕 + A10 可跨进程查证）。
 // 三件事必须同生同死，所以不做成调用方各自记得加的三步——漏一步的形状与漏一个闸门同构：
 //   - 等待之前落 d7_wait 帧（登记之后）：这是「闸门确实开过、批的是这份载荷、到什么时候」的唯一落盘凭据。
 //     进程内 map 在重启/多副本下什么都不是（A10 立项理由），而帧在库里。
@@ -607,10 +607,10 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 				case "success":
 					success++
 				case "skipped":
-					// 批7：写步在自动重试轮撞见历史提交尝试 → 整步不下发。两种事实分开判：
+					// 写步在自动重试轮撞见历史提交尝试 → 整步不下发。两种事实分开判：
 					//   前一轮 verified → 目标已达成，本轮只是补完剩余步，不计成败也不中断；
 					//   前一轮 sent/unattributed → 提交从未被证明，本轮防双发也无从证明，
-					//     必须让本轮判红（否则「重试轮全绿」就是批6 要消灭的那类假绿），
+					//     必须让本轮判红（否则「重试轮全绿」就是双发闸要消灭的那类假绿），
 					//     但不 break——后面的只读步照常跑完，现场证据越全越好判。
 					if errMsg != "" {
 						failed++
@@ -706,7 +706,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	tokenBudget := brainTokenBudget()
 	// wall-clock 看门狗（R22）：ctx 取消链在某些 LLM/DB 调用栈不生效（session132 实测 11min+ active），
 	// 以真实时钟兜底——超执行预算+30s 强制收敛，会话必有终态。
-	// 批8：预算走 taskExecBudget（Brain 模式下 LLM 也能编排出写步，确认挂起同样要留出时长）
+	// 预算走 taskExecBudget（Brain 模式下 LLM 也能编排出写步，确认挂起同样要留出时长）
 	deadline := time.Now().Add(taskExecBudget(task) + taskWatchdogGrace)
 
 	for iter := 0; iter < maxBrainIterations; iter++ {
@@ -839,7 +839,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 				abort = fmt.Sprintf("执行超时（%ds）", task.TimeoutSec)
 				continue
 			}
-			// 批19h：Brain 的 steps 是 LLM 原文 Unmarshal 出来的，REST 那条 oneof 校验在这条路上
+			// Brain 的 steps 是 LLM 原文 Unmarshal 出来的，REST 那条 oneof 校验在这条路上
 			// 一行都不跑——落库前先过服务端闸门（G17 的 screenshot 闸是它的一条已存在的腿）。
 			if rej := brainPlanStepRejection(it.Action); rej != "" {
 				logger.Warnf("[BrowserExec] brain 轮内步骤被服务端拒绝 session=%d: %s", session.ID, rej)
@@ -867,7 +867,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 				success++
 				consecutiveActionFails = 0
 			case "skipped":
-				// 批7：Brain 重试轮里的写步跳过，按前一轮台账态分判（见 ExecuteSession 同分支说明）。
+				// Brain 重试轮里的写步跳过，按前一轮台账态分判（见 ExecuteSession 同分支说明）。
 				// verified → 目标已达成，计成功让 LLM 继续收尾；未验证 → 计败并终止本轮，
 				// 因为「发这条内容」这个目标在本轮已不可能再达成（重发即双发），继续烧 LLM 调用没有出路。
 				if errMsg == "" {
@@ -928,9 +928,9 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 // resultJSON：成功时的原语回包（F6a 页面变化证据用），失败为 nil。
 // seq：session 局部命令日志计数器（P0-2，调用方持有保证 session 内单调、跨 session 隔离）。
 func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string, json.RawMessage) {
-	// 批7：写步判定先于落库——is_write 要作为事实随步行一起存，
+	// 写步判定先于落库——is_write 要作为事实随步行一起存，
 	// 事后从 action 名字反推会把「type+回车提交」这类隐形写漏掉。
-	// 批16（A11）：三态分类。effectUnknown（平台定位表取不到）与 effectWrite 同样进闸门，
+	// 三态分类。effectUnknown（平台定位表取不到）与 effectWrite 同样进闸门，
 	// 落库 is_write=true——判不出副作用时宣称「没有副作用」就是三道闸门一起消失。
 	effect, writeWhy := classifyStepEffect(task, step)
 	writeStep := effect.needsWriteGate()
@@ -961,11 +961,11 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	if writeStep {
 		retries = 0
 	}
-	// 批6（F11b）双发闸 + 批7 重试豁免：闸门必须在任何帧下发之前——prep/type 本身会改页面状态
+	// 双发闸 + 重试豁免：闸门必须在任何帧下发之前——prep/type 本身会改页面状态
 	// （把草稿塞进输入框），不是「零副作用探测」。
 	writeKey := ""
 	if writeStep {
-		// 批16（A7）：本会话台账已经写失败过一次 ⇒ 之后的写步一帧都不下发。
+		// 本会话台账已经写失败过一次 ⇒ 之后的写步一帧都不下发。
 		// 闸门依据的是库里的台账，台账自己写不进去时「过闸」只是走过场——
 		// 与其赌一次双发，不如把这一步变成可见、可人工重跑的红步。
 		if why, broken := e.ledgerBrokenReason(session.ID); broken {
@@ -985,14 +985,14 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 				return "skipped", "", nil
 			}
 			// 前一轮只到 sent/unattributed：提交从未被证明，而本轮既不重发（双发）也就无从证明。
-			// 此时让整轮判绿就是批6 立项要消灭的那类假绿，所以把事实上抛给调用方计败。
+			// 此时让整轮判绿就是双发闸要消灭的那类假绿，所以把事实上抛给调用方计败。
 			return "skipped", fmt.Sprintf(
 				"重试轮防双发未重发，前一轮提交未验证（%v）——本轮无法证明内容已发布，请人工核对", prior), nil
 		case err != nil:
 			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, err.Error())
 			return "failed", err.Error(), nil
 		}
-		// 批20f（A12）：读闸放行 ≠ 独占。上面的查询依据的是台账，「两条腿同时过闸、彼此都查空」
+		// 读闸放行 ≠ 独占。上面的查询依据的是台账，「两条腿同时过闸、彼此都查空」
 		// 是并发的常态形状而非意外，所以裁决权必须下推到库里唯一约束的那一次 INSERT。
 		// 位置刻意排在 D7 挂起之前：挂起一分钟，另一条腿在这一分钟里过读闸、下发、提交，
 		// 正是本卡要消灭的那次双发——人工确认的等待期是并发窗口最宽的一刻，不是最窄的。
@@ -1006,7 +1006,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		// 坑留到会话结束会把「这一步从未跨提交点、下一会话应当能重跑」也一并留死。
 		defer func() { e.releaseWriteSlot(ctx, task.ID, session.ID, stepRow.ID, writeKey) }()
 	}
-	// 批8：D7 覆盖派生写。批7 把「type+回车 / click 发送按钮 / click_near 发送」认成写步之后，
+	// D7 覆盖派生写。把「type+回车 / click 发送按钮 / click_near 发送」认成写步之后，
 	// 闸门却仍只长在 post_comment 原语内部——开了 require_confirm 的用户，这类隐形写照样被
 	// 无条件发出去。此处按步挂起（post_comment 保留原语内的闸门：先 prep 填好正文再确认，
 	// 让人看见将要发什么）。位置排在双发闸之后、任何命令帧之前：
@@ -1036,7 +1036,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		}
 		start := time.Now()
 		// P8 append-only 命令日志：命令帧先落（含步骤参数全文），回包/错误随 result 事件再落。
-		// 命令帧 ok=nil（批20b / A2）：写下这一行时 Host 连回执都还没有，批21 之后甚至可能
+		// 命令帧 ok=nil（/ A2）：写下这一行时 Host 连回执都还没有，甚至可能
 		// 根本没进 socket——旧实现传字面量 true，于是审计包里每条「下发」都自带一个 ✓，
 		// 而那个 ✓ 在这一行上什么也不指。它 attempted，不 succeeded。
 		*seq++
@@ -1049,7 +1049,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		// 按 seq 还原执行序的读者会看到一次动作凭空分成两叉）。
 		*seq++
 		if err == nil {
-			// 批16（A7）：写步的「成功」必须以台账落成前提。命令确实下发了，但库里没有这次
+			// 写步的「成功」必须以台账落成前提。命令确实下发了，但库里没有这次
 			// 提交的凭据 ⇒ 下一轮无从得知它发生过 ⇒ 让整轮绿就是拿不可逆动作换一次好看的状态。
 			var ledgerErr error
 			if writeStep {
@@ -1182,9 +1182,9 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 // dispatchStep 按动作分发到 Hand 原语。
 // 回包（snapshot/extract/markdown/screenshot 等）作为返回值交 executeStepWithRetry 落库——
 // 不挂 Executor 字段：Executor 是进程级单例、多 session 并发触达（R-A4 竞态修复）。
-// stepRow：本步的 DB 行（含 ID），写原语分支用它落 submit_state 台账（批6/F11b）。
+// stepRow：本步的 DB 行（含 ID），写原语分支用它落 submit_state 台账。
 // seq：session 局部命令号——post_comment 的 D7 闸门在分支内部，它要落的 d7_wait/d7_confirm 帧
-// 与外层命令帧共用同一个号段（批20；计数器不下放给闸门，否则两处各自编号必然撞号）。
+// 与外层命令帧共用同一个号段（计数器不下放给闸门，否则两处各自编号必然撞号）。
 func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep, seq *int) ([]byte, error) {
 	userID := task.UserID
 	tabID := session.ChromeTabID
@@ -1206,7 +1206,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 不能把「不知道」写成 false，也不能反过来把 false 洗成 true）。
 		return recordResultPayload(map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]})
 	case "click":
-		// 写步才请求点后身份复核（批17(b)）。判据取 stepRow.IsWrite 而不是在这里重算
+		// 写步才请求点后身份复核。判据取 stepRow.IsWrite 而不是在这里重算
 		// classifyStepEffect：那一列是本步落库时写死的事实，重试轮、双发闸、D7 都读它——
 		// 在这里重算就等于允许「闸门认它是写、请求复核时认它不是写」这种裂脑存在。
 		res, err := e.hand.click(ctx, userID, tabID, step.Target, stepRow.IsWrite)
@@ -1215,9 +1215,9 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		// channel 如实透传：cdp / dom_fallback / null（老扩展没这个字段）。
 		// 兜底本身不是失败，但「一片绿里全是 dom_fallback」= trusted 通道死了，
-		// 这一列就是用来发现它死了的（批14 实证形态）。
+		// 这一列就是用来发现它死了的（实证形态）。
 		// identity_checked 同口径：true=这次写步点击真的过了点后复核；null=旧扩展没这个概念。
-		// 不加这一列，「复核跑过」与「复核从没被请求」在库里长得一样（批17 立项理由）。
+		// 不加这一列，「复核跑过」与「复核从没被请求」在库里长得一样（立项理由）。
 		return recordResultPayload(map[string]any{
 			"navigated": res["navigated"] == true, "channel": res["channel"],
 			"identity_checked": res["identity_checked"],
@@ -1248,7 +1248,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			return nil, err
 		}
-		// 双发闸在 executeStepWithRetry 下发任何帧之前已过（批7 起对全部写步统一生效）。
+		// 双发闸在 executeStepWithRetry 下发任何帧之前已过（起对全部写步统一生效）。
 		textHash := writeStepKey(step)
 		prepReq := map[string]any{
 			"input_selector":   locs.InputSelector,
@@ -1265,7 +1265,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		// prep 成功=文本已进输入框，点击仍未发生 → prepared（可安全重下发态，也是
 		// 「闸门/中止腿从未提交」的正面证据）
-		// 批16（A7）：这一行写不进去就不再往下走一格。prepared 不在拦阻集合内，send 之后
+		// 这一行写不进去就不再往下走一格。prepared 不在拦阻集合内，send 之后
 		// 库里若还是空的，下一轮（含同进程自动重试）就查不到任何尝试——那正是双发的形状。
 		if err := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, model.StepSubmitPrepared, textHash, false); err != nil {
 			return nil, fmt.Errorf("post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: %w", err)
@@ -1273,7 +1273,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// D7 人工确认闸门：require_confirm=true 的任务在此挂起，等 POST /sessions/:id/confirm
 		// 放行后才进不可逆提交点。挂起期间只有 prep（填文本，页面内可撤销、零平台副作用）；
 		// 未放行即中止=从未提交，可安全重下发。
-		// 批8：等待用 task.confirm_wait_sec 独立预算，不再吃 task.TimeoutSec（那条管自动化本身）。
+		// 等待用 task.confirm_wait_sec 独立预算，不再吃 task.TimeoutSec（那条管自动化本身）。
 		if task.RequireConfirm {
 			out, why := e.awaitConfirmGate(ctx, task, session, stepRow.ID, stepRow.StepIndex,
 				step.Value, textHash, seq, confirmWaitBudget(task))
@@ -1290,10 +1290,10 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		//    （不进 finalize 白轮 16s，也不污染证据——错误文本自证「未点击」可安全重下发）；
 		// ② 其余任何结局（成功/出错/WS 超时）→点击可能已发生=结果未知→必须 finalize 回查：
 		//    Postiz 心跳判因矩阵语义——超时≠未发生，回查是唯一合法归因路径，绝不重新提交。
-		// 每次真实提交都成对落两帧（批20b）：command 帧=attempted 且不带结论，
+		// 每次真实提交都成对落两帧：command 帧=attempted 且不带结论，
 		// event 帧=accepted。自愈重发的那一次同样落帧——「全场只提交一次」是运行期红线，
 		// 不是审计期红线：审计流要如实有几场就几场，藏起来等于让读包的人猜。
-		// 批20c：sendRes=最后一次 comment_send 回包，扩展的点后复核结论从它身上取；
+		// sendRes=最后一次 comment_send 回包，扩展的点后复核结论从它身上取；
 		// 判据是回包里的 identity_checked 而不是「我们请求过复核」——请求发出去 ≠ 复核跑成了，
 		// 旧扩展或复核给不出结论时如实记 null（click / click_near 同口径）。
 		var sendRes map[string]any
@@ -1311,7 +1311,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			return err
 		}
 		sendErr := sendOnce()
-		// 批21：① 那一类在传输层还有第三种形态——这一帧根本没写进 socket（D7 等多分钟，
+		// ① 那一类在传输层还有第三种形态——这一帧根本没写进 socket（D7 等多分钟，
 		// Host 掉在等待里是常态）。此处刻意**不**就地重发一次：判据成立即 Host 已经没了，
 		// 微秒级的第二次调用只会拿到同一条错误；恢复归任务级重试（台账留 prepared ⇒ 不在
 		// 拦阻集合 ⇒ 下一轮重跑会重新 prep、重新过一次闸门，那是更严而不是更松的路径）。
@@ -1327,7 +1327,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
 		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。
 		// 上面三个早返分支（未上线/注入超时/闸门拒点）台账都留在 prepared：那三支点击从未发生。
-		// 批16（A7）：这次写失败=「越点未落账」，recordSubmitState 会同时记下进程内兜底缺口，
+		// 这次写失败=「越点未落账」，recordSubmitState 会同时记下进程内兜底缺口，
 		// 本步最终判红（见下面 sentLedgerErr）——撤不回了，但至少不再有人替我们假设它没发生。
 		sentLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, model.StepSubmitSent, textHash, true)
 		// A1 自愈一次：send_button_not_found=按钮从未命中=点击从未发生（同 R26-2 归因），
@@ -1343,7 +1343,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			finalState = model.StepSubmitVerified
 		}
 		finalLedgerErr := e.recordSubmitState(ctx, task.ID, session.ID, stepRow.ID, finalState, textHash, true)
-		// 审计流的第三态（批20b）：跨过提交点后，无论回查见没见都要落一帧结论。
+		// 审计流的第三态：跨过提交点后，无论回查见没见都要落一帧结论。
 		// 落在台账写之后、ledgerErr 早返之前——「库里台账没写全」是 ledger 的问题，
 		// 不改变「平台侧回查见了/没见」这个已经观测到的事实，两件事各自留痕。
 		*seq++
@@ -1373,7 +1373,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if verified {
 			return recordResultPayload(map[string]any{
 				"posted": true, "verified": true, "evidence": evidence,
-				// 批20c：finalize 只回答「我的文字上去没」，identity_checked 回答的是
+				// finalize 只回答「我的文字上去没」，identity_checked 回答的是
 				// 「点下去的是不是发送按钮」——两问各自留痕。复核没过（element_moved）而回查见了评论时，
 				// 这一列是 null、send_error 在 extracted_data 里，绿得有据可查，不是把结论洗掉。
 				"identity_checked": sendRes["identity_checked"],
@@ -1412,7 +1412,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			return nil, err
 		}
 		md, _ := res["markdown"].(string)
-		// 截断标志如实上抛（批9a）：markdown 是「快照太长时改用 markdown 取全文」的出口
+		// 截断标志如实上抛：markdown 是「快照太长时改用 markdown 取全文」的出口
 		// （brain_budget 的截断提示就是这么写的），只记本地长度会把 64KiB 截断值当成整页，
 		// 而 len() 是字节数、扩展侧 markdown_chars 是字符数，两者对中文差 3 倍。
 		return recordResultPayload(map[string]any{

@@ -17,7 +17,7 @@ func NewHand(registry *HostRegistry) *Hand {
 	return &Hand{registry: registry}
 }
 
-// openTab 原语。回包一并返回：批9a 起扩展侧会等页面加载完成，
+// openTab 原语。回包一并返回：扩展侧会等页面加载完成，
 // loaded 是「这一步到底读到了没有」的审计事实，不能只留个 tab id 就当成功。
 func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool) (int, map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
@@ -32,7 +32,7 @@ func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool
 
 // click 原语。回包含扩展侧 injClick 的 navigated 标志（是否发生页面跳转）——
 // F6a 轮内截断的证据来源（browser-use「页面变即截断剩余动作」语义，零额外往返）。
-// verifyIdentity（批17(b)）：是否请求「trusted 真点之后的身份复核」。这个开关只有写步该付——
+// verifyIdentity：是否请求「trusted 真点之后的身份复核」。这个开关只有写步该付——
 // 复核是一次额外的页内注入，且它的产物 element_moved 对读步毫无意义（读步 retries 还在，
 // 一次布局抖动就会被记成失败）。请求侧在 Go、执行侧在扩展，所以它必须出现在帧上。
 func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string, verifyIdentity bool) (map[string]any, error) {
@@ -49,7 +49,7 @@ func (h *Hand) click(ctx context.Context, userID uint, tabID int, target string,
 	return res, nil
 }
 
-// typeText 原语。回包必须交回上层：批14 起 type 也带 channel（trusted 键入 vs DOM 兜底），
+// typeText 原语。回包必须交回上层：type 也带 channel（trusted 键入 vs DOM 兜底），
 // 早前的 `) error` 签名把整个回包丢在 hand 层，降级在审计面上完全不可见。
 func (h *Hand) typeText(ctx context.Context, userID uint, tabID int, target, value string, clearFirst, submitOnEnter bool) (map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
@@ -66,7 +66,7 @@ func (h *Hand) typeText(ctx context.Context, userID uint, tabID int, target, val
 }
 
 // snapshot 原语（accessibility @e{N} refs）。
-// A2（批2）：回包同时携带 page_url——拦截判据的 URL 层此前无数据可用（快照不含 URL，
+// A2：回包同时携带 page_url——拦截判据的 URL 层此前无数据可用（快照不含 URL，
 // website-login/error 等判据永不命中）。url 为空表示旧版扩展未回传（fail-soft 降级）。
 func (h *Hand) snapshot(ctx context.Context, userID uint, tabID int) (text, pageURL string, err error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
@@ -141,7 +141,7 @@ func (h *Hand) scroll(ctx context.Context, userID uint, tabID int, direction str
 }
 
 // clickNear 原语：以锚元素为基准点击容器内文本含 buttonText 的 button。
-// 回包同 typeText 交回上层（channel 审计面，批14）。verifyIdentity 同 click（批17(b)）：
+// 回包同 typeText 交回上层（channel 审计面）。verifyIdentity 同 click：
 // 这一步的定位是「锚点+文本」现场算出来的，复核要拿 probe 回传的 selector 再解析一次。
 func (h *Hand) clickNear(ctx context.Context, userID uint, tabID int, anchor, buttonText string, verifyIdentity bool) (map[string]any, error) {
 	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
@@ -196,7 +196,7 @@ func (h *Hand) commentPrep(ctx context.Context, userID uint, tabID int, text str
 // 超时预算对齐旧一站式 post_comment=45s：重页（小红书评论区渲染）上 CDP 事件逐条
 // round-trip 可达秒级，30s 实测触发假超时（session179：发送实际成功但回包迟于超时）。
 // 真机实证教训：发送结果未知时归因交 finalize 回查，不重发。
-// verifyIdentity（批20c）：点后身份复核的开关，同 click/clickNear（批17(b)）。这一步比那两条
+// verifyIdentity：点后身份复核的开关，同 click/clickNear。这一步比那两条
 // 更该付——点错一次是一条撤不回的公开评论，而 finalize 只回答「我的文字上去没」，
 // 回答不了「我刚才点的是不是发送按钮」（点到删除按钮时 finalize 永远是「没上去」）。
 func (h *Hand) commentSend(ctx context.Context, userID uint, tabID int, locators map[string]any, verifyIdentity bool) (map[string]any, error) {

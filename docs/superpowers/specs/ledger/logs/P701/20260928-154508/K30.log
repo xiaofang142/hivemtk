@@ -1,0 +1,33 @@
+2026-09-28T15:46:42+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillRepository_ScanOverdueSelectsByCutoffAndStatus
+--- PASS: TestBillRepository_ScanOverdueSelectsByCutoffAndStatus (0.23s)
+=== RUN   TestBillRepository_ScanOverdueOrdersOldestFirst
+--- PASS: TestBillRepository_ScanOverdueOrdersOldestFirst (0.07s)
+=== RUN   TestBillRepository_ScanOverdueRejectsNonPositiveLimit
+--- PASS: TestBillRepository_ScanOverdueRejectsNonPositiveLimit (0.04s)
+=== RUN   TestBillRepository_ScanOverdueFailureIsNotEmptyResult
+--- FAIL: TestBillRepository_ScanOverdueFailureIsNotEmptyResult (0.04s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x1008a02f8]
+
+goroutine 67 [running]:
+testing.tRunner.func1.2({0x10149b340, 0x101689fa0})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1977 +0x318
+panic({0x10149b340?, 0x101689fa0?})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c
+gorm.io/gorm.(*DB).Session(0x0, 0x5d2d0c35e58)
+	/Users/xiaofang/go/pkg/mod/gorm.io/gorm@v1.30.0/gorm.go:243 +0x38
+gorm.io/gorm.(*DB).WithContext(...)
+	/Users/xiaofang/go/pkg/mod/gorm.io/gorm@v1.30.0/gorm.go:344
+hivemtk-user/internal/repository.(*billRepo).ScanOverdue(0x5d2d0c35f18, {0x1015df9c8, 0x1016d7420}, {0xc2a6a4b8c78a0208, 0x1652fc76, 0x1016ae920}, 0xa)
+	/private/tmp/p701work/clone/user-server/internal/repository/bill.go:279 +0xcc
+hivemtk-user/internal/repository.TestBillRepository_ScanOverdueFailureIsNotEmptyResult(0x5d2d0cc4b48)
+	/private/tmp/p701work/clone/user-server/internal/repository/bill_overdue_scan_test.go:194 +0x150
+testing.tRunner(0x5d2d0cc4b48, 0x1015ca3a8)
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	hivemtk-user/internal/repository	0.810s
+FAIL

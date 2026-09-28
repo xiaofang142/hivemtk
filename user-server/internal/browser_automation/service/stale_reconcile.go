@@ -10,7 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-// stale_reconcile.go — 批8 任务快照对账器。
+// stale_reconcile.go — 任务快照对账器。
 //
 // 要收的口：task 行的终态只有 OnSessionFinished 一个写入口，而它活在执行协程里。
 // 进程在执行期被重启（或那一次写库本身失败）后，session 侧由 R22/R25 的两道看门狗收敛了，

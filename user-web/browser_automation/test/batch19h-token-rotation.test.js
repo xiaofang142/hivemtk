@@ -1,4 +1,4 @@
-// 批19h 契约锁：服务端 refresh 是**一次性轮换**（service/auth.go:197 刷新即把旧令牌拉黑），
+// 契约锁：服务端 refresh 是**一次性轮换**（service/auth.go:197 刷新即把旧令牌拉黑），
 // 所以扩展侧「续期成功」与「这次请求用的是哪把令牌」是两件事，必须分别钉住。
 //
 // 立项形态：exp 进入最后 1h 时 ensureFreshToken 主动续期，但 apiCall 随后仍拿本地
@@ -57,7 +57,7 @@ function seedAuth(serverUrl, token, exp) {
   return { token, exp, username: 'u1', serverUrl };
 }
 
-describe('批19h：静默续期后必须用换来的新令牌发请求', () => {
+describe('静默续期后必须用换来的新令牌发请求', () => {
   let store;
   beforeEach(() => {
     store = {};

@@ -1,5 +1,5 @@
 /**
- * 批20 D7 闸门 组件渲染用例（监控页）
+ * D7 闸门的组件渲染用例（监控页）
  * 为什么在静态断言之还要这一份：静态串只证明源码里写过那句话，模板完全可以写了不用
  * —— 把 preview 插进一个 v-if 永不成立的节点、或者放行按钮照旧无条件可点，
  * 上一份文件照样全绿。这里数的是**渲染出来的 DOM 与真实点击发出的参数**。
@@ -45,7 +45,7 @@ async function mountMonitor() {
   return wrapper
 }
 
-describe('批20 闸门卡片：批之前看得见批的是什么', () => {
+describe('闸门卡片：批之前看得见批的是什么', () => {
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset()
     api.getBrowserSession.mockResolvedValue(SESSION)

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// BrowserAuditDigest 裁剪前的**逐批内容摘要**（批22 / §8.3-6 A6）。
+// BrowserAuditDigest 裁剪前的**逐批内容摘要**（/ §8.3-6 A6）。
 //
 // 立项依据：`PruneBefore` 是整行删除，90 天一过，`browser_command_log` 里那段历史就一个字
 // 都不剩。这不是「保留期到了」而是「证据消失」——审计面上「那三天没有命令」与「那三天的
@@ -38,7 +38,7 @@ type BrowserAuditDigest struct {
 	LastSeq  int   `gorm:"column:last_seq;not null" json:"last_seq"`
 	PrevSeq  int   `gorm:"column:prev_seq;not null" json:"prev_seq"` // 同 session 上一条摘要的 LastSeq，首条 0
 	// Ordinal 是本表自己的序号（不是命令行号）：同一 session 内从 1 起单调递增，
-	// 与 session_id 一起唯一。唯一约束在这里的用处和批20f 同一条：重放同一次裁剪会撞约束，
+	// 与 session_id 一起唯一。唯一约束在这里的用处与写声明闸门同一条：重放同一次裁剪会撞约束，
 	// 而不是悄悄多出一条并行的历史（本表自己若可重复，它就失去了作为凭据的资格）。
 	Ordinal int `gorm:"column:ordinal;not null;uniqueIndex:uk_browser_audit_digests_session_ordinal,priority:2" json:"ordinal"`
 
@@ -54,7 +54,7 @@ type BrowserAuditDigest struct {
 
 func (BrowserAuditDigest) TableName() string { return "browser_audit_digests" }
 
-// BrowserAuditPruneRun 每次裁剪扫描的一行留痕（批22 / A6 的「零事件也要能自证」那一半）。
+// BrowserAuditPruneRun 每次裁剪扫描的一行留痕（/ A6 的「零事件也要能自证」那一半）。
 //
 // 只记「删了多少」不够：删了 0 行的那次扫描同样是一个事实——它证明**在那个时间点、按那个界，
 // 表里没有该走的行**。CloudTrail 的 `logFiles: []` 就是这个用法：空摘要不是「没跑」，
@@ -75,7 +75,7 @@ type BrowserAuditPruneRun struct {
 	ID     uint      `gorm:"primaryKey" json:"id"`
 	Cutoff time.Time `gorm:"column:cutoff;not null;index" json:"cutoff"`
 
-	// CutoffSource 写明**这个界是从哪来的**（批23 / §7.28 八-3）。只有 `cutoff` 一列时，
+	// CutoffSource 写明**这个界是从哪来的**（/ §7.28 八-3）。只有 `cutoff` 一列时，
 	// 库里能证明「删掉的那些行存在过、内容是什么」，却证不了「按什么界放的行」：
 	// 运维把 `BROWSER_AUDIT_RETENTION_DAYS` 从 90 改成 7 再等一天，读数与一次正常裁剪
 	// 逐字节同形。摘要链防的是「抹掉证据」，这一列防的是「改界这件事本身不留痕」。

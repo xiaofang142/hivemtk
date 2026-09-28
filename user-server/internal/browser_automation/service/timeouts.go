@@ -6,7 +6,7 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-// A6（批3·2026-09-19）：browser_automation 服务端全部超时/时限预算收口单表。
+// browser_automation 服务端全部超时/时限预算的收口单表。
 // 纪律：不做配置化（YAGNI）——这些值要么是真机实测结论（session179/132/188），
 // 要么是协议推导（客户端自计时 + 服务端宽限），配置化只会得到另一份没人校准的漂移源。
 // 出处以注释钉死；改值必须同步真机验证，别在调用点就地加字面量。
@@ -45,7 +45,7 @@ const (
 	// 让给「SW 冷启/刚被 Chrome 唤醒」这类合法慢路径——探针误判的代价是白重启一次 host，
 	// 而探针时限过短的代价是把可用 Host 拖进重启循环，故宁松不紧（远小于用户可见的 30s 命令超时）。
 	hostServProbeTimeout = 10 * time.Second
-	// hostFrameReadLimit 单条 Host 回帧的字节上限（批9 与 cmd/nm-host 配套）。
+	// hostFrameReadLimit 单条 Host 回帧的字节上限（与 cmd/nm-host 配套）。
 	// 为什么比 nm-host 的边缘上限（4MiB）**大一倍**：超限帧必须在 host 侧先被判掉——
 	// 服务端 read limit 触发的后果是「协议违规 → 整条 Host 连接关闭」，连带该用户所有
 	// 在途命令一起死；host 侧丢弃只损失一条命令并能回明确错误。两者相等时则取决于
@@ -74,7 +74,7 @@ const (
 	// 取消（超时/中止腿必然如此），必须走 WithoutCancel；close_tab 在扩展侧是一次
 	// chrome.tabs.remove，正常 <50ms，给 15s 全留给「SW 冷启 + WS 换发」。
 	sessionTabCleanupBudget = 15 * time.Second
-	// confirmWaitDefault / confirmWaitMaxSec 批8：D7 人工确认等待的独立预算与上限。
+	// confirmWaitDefault / confirmWaitMaxSec D7 人工确认等待的独立预算与上限。
 	// 解耦理由（真机实测形态）：确认等待此前兼职在 task.TimeoutSec 上——「人还没看到待确认，
 	// 任务先被执行预算掐死」和「确认占用的时间把执行预算吃光」是同一枚硬币的两面。
 	confirmWaitDefault = 600 * time.Second
@@ -92,7 +92,7 @@ func confirmWaitBudget(t *model.BrowserTask) time.Duration {
 
 // taskExecBudget 一次执行的 wall-clock 预算 = TimeoutSec（自动化本身）+ D7 确认等待（另计）。
 // 三处消费必须同源：RunTask 的 execCtx、SafeGoDetached 的外层看门狗、Brain 循环的真实时钟兜底。
-// 各写各的口径就是批8 要收的口子——曾经「确认中」的任务会被看门狗按 TimeoutSec 掐死。
+// 各写各的口径就是要收的口子——曾经「确认中」的任务会被看门狗按 TimeoutSec 掐死。
 func taskExecBudget(t *model.BrowserTask) time.Duration {
 	d := time.Duration(t.TimeoutSec) * time.Second
 	if t.RequireConfirm {
@@ -114,7 +114,7 @@ func retryBackoffDelay(baseMs, attempt int) time.Duration {
 // 单行更新正常 <5ms，给的 3s 全留给连接池重取，再长就不如让步自己失败。
 const ledgerWriteBudget = 3 * time.Second
 
-// —— 步行终态落库（executor.go finishStep，批16b B3）——
+// —— 步行终态落库（executor.go finishStep）——
 // 与 ledgerWriteBudget 同形（都是单行 UPDATE、都在 execCtx 可能已死的时刻写、都不值得长等），
 // 所以取同一个量级而不另立一套经验值；分两个常量的理由是二者消费者不同：
 // 台账失败要退避重试并降级，步终态失败只需上报（步行没有对账器会补，见 finishStep 注释）。

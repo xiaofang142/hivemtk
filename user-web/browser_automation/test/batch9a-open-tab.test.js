@@ -1,4 +1,4 @@
-// 批9a 假绿收口：open_tab 必须等到页面这一帧真能读才回包；读不到内容要判红而不是回空 markdown。
+// 假绿收口：open_tab 必须等到页面这一帧真能读才回包；读不到内容要判红而不是回空 markdown。
 // 立项依据是真机 session=432 的实测：open_tab（chrome.tabs.create 立即返回）→ markdown
 // 读到空气泡 DOM 回 "# \n"，三步全绿、整轮 completed —— 编排方拿到的是「成功但零内容」。
 import { describe, it, expect, vi, beforeEach } from 'vitest';

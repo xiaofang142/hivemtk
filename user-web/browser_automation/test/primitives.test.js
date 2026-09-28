@@ -33,7 +33,7 @@ Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
   get() { return this.parentElement ? document.body : null; },
   configurable: true,
 });
-// 同样必须给几何：批14 起 probe 真的能在页面里跑（此前它稳定抛 ReferenceError，
+// 同样必须给几何：probe 真的能在页面里跑（此前它稳定抛 ReferenceError，
 // 所有 click 都被误判成「CDP 不可用」而降级），零尺寸现在会如实被判 zero_box 挡下。
 // 本文件里这些用例要测的是「无 chrome.debugger → 降级兜底」，不是「零尺寸可点」，
 // 所以按浏览器事实给一个非零 box。
@@ -249,7 +249,7 @@ describe('primitives dispatch', () => {
     expect(data.reason).toBe('comment_not_rendered');
   });
 
-  // F11（批5g 夹具真机实测 session281）：comment_send 失败后草稿原样留在 contenteditable 里，
+  // F11（夹具真机实测 session281）：comment_send 失败后草稿原样留在 contenteditable 里，
   // 旧「整页兜底搜索」把这条草稿当成「评论已渲染」→ 零提交也回 verified=true。
   // 不可逆动作的自检假绿是最坏的一类假（用户据此以为评论已发出，不再补发）。
   it('F11 假绿回归：草稿仍留在输入框里时 verified 必须为 false', async () => {
@@ -274,7 +274,7 @@ describe('primitives dispatch', () => {
     expect(again.evidence.own).toBe(true);
   });
 
-  // F11b（批6 真机 Leg X 实测）：小红书真实 DOM 里输入框**就在** .comments-container 内部，
+  // F11b（真机 Leg X 实测）：小红书真实 DOM 里输入框**就在** .comments-container 内部，
   // 容器主分支的 norm(textOf(c)) 会把那条未提交草稿读成「评论已渲染」→ 零提交也 verified=true。
   // F11 那条只测了整页兜底分支，容器主分支当时漏网——两个分支必须各自有反向腿。
   it('F11b 假绿回归：输入框在评论区容器内部时，草稿不得判成已发布', async () => {
@@ -333,7 +333,7 @@ describe('primitives dispatch', () => {
     }, deps)).rejects.toThrow('comment_prep_inject_timeout_200ms');
   });
 
-  it('批5 真机归因：帧无返回结果（导航/销毁）与注入自报失败必须是两种文案', async () => {
+  it('真机归因：帧无返回结果（导航/销毁）与注入自报失败必须是两种文案', async () => {
     const deps = makeDeps();
     // 真机 xhs 未登录重定向实测：Chrome 在帧被导航掉时返回 result=undefined
     fakeChrome.scripting.executeScript.mockImplementationOnce(async () => [{ frameId: 42 }]);

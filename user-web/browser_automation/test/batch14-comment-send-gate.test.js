@@ -1,4 +1,4 @@
-// 批14 comment_send 可点性闸门对齐：写操作的「点击从未发生」必须可判。
+// comment_send 可点性闸门对齐：写操作的「点击从未发生」必须可判。
 // 缺口：injPostCommentSend 选发送按钮只查 display/visibility，不查 zero_box / disabled /
 // 浮层遮挡——而一次普通 click 的 probe 三项都查。comment_send 是全链路唯一不可逆点，
 // 闸门反而更松，等于把「往浮层上落了一次提交」记成提交点已跨越（台账 sent → 回查 →
@@ -30,7 +30,7 @@ const fakeChrome = {
 };
 global.chrome = fakeChrome;
 
-// jsdom 无布局引擎：不造假几何就永远是 zero_box，测不到被测分支（同批14 click 夹具口径）
+// jsdom 无布局引擎：不造假几何就永远是 zero_box，测不到被测分支（与 click 那组夹具同口径）
 Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
   get() { return this.parentElement ? document.body : null; },
   configurable: true,
@@ -68,7 +68,7 @@ beforeEach(() => {
   cdp.clickAt.mockResolvedValue({ ok: true });
 });
 
-describe('comment_send 发送按钮闸门（批14）', () => {
+describe('comment_send 发送按钮闸门', () => {
   it('正向对照：可点按钮仍恰好一次坐标点击（闸门不得过修正成永不提交）', async () => {
     document.body.innerHTML = PAGE;
     const r = await dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps());

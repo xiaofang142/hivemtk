@@ -286,14 +286,18 @@ else
   ok "反向：撤掉一处 bail 当场红（$(printf '%s\n' "$rev_out" | tail -n +2 | head -1 | cut -c1-48)…）"
 fi
 
-# 行为面（2026-09-28 实测；不进本门，跑在临时夹具上）。上面那条腿只证"克隆之后的 raises 都写了
-# bail(...)"，不证 bail() 真把克隆带走了。那一条这样打靶：PATH 前面挂一枚只对 `checkout` 退 123、
-# 其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在 `--clone <空目录>`
-# 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录还在（不许越权
-# 删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。
-# 读数（2026-09-28 那一趟）：SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10
-#   ——夹具是一次性探针，不入库（它要 node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台
-#   恒红的机器），所以上面那串读数不依赖任何在盘产物：按 ①–④ 照方重跑一趟就能现取。
+# 行为面（不在本门里跑）。上面那条腿只证"克隆之后的 raises 都写了 bail(...)"，不证 bail() 真把
+# 克隆带走了。那一条的夹具已进仓：`scripts/probe-fleet-bail-reverse.sh`——PATH 前面挂一枚只对
+# `checkout` 退 123、其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在
+# `--clone <空目录>` 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录
+# 还在（不许越权删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。它不注册进任何门／CI：要本地
+# node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台恒红的机器；改了 bail/dispose/prepare 的
+# 写路径之后应当手动现取一次，别只信本门的静态面。
+# 读数（`bash scripts/probe-fleet-bail-reverse.sh <干净克隆> <带 .env 的主树>`，测于 tip 2c765be1）：
+#   SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10，整趟退 2
+#   探针自己的反向对账（在克隆里把 mut_actionability_b17.py 的一处 `bail("checkout 失败` 改回裸
+#   raise，`ONLY=` 单跑那一枚）：`✗ …中止后外层剩「clone web 」`，FAIL=1、退 1——不撤的时候那一枚
+#   是 ✓，所以 ④ 那条判据确实有牙，不是橡皮章。
 # 四处只有真跑一趟才看得见的坑（下次动这条探针前先读）：
 #   · 带 --check 是错的探针：26 枚里 16 枚没这个 flag（argparse rc=2，夹具压根没进 prepare），
 #     另 4 枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。不带 --check 才真进

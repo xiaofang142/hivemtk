@@ -109,7 +109,7 @@ func TestWaitForConfirmAbortedByStop(t *testing.T) {
 	}
 }
 
-// 3) 中止链路 B（批8 解耦契约）：确认预算与执行预算是两条独立计时器，谁先到谁说话，
+// 3) 中止链路 B（解耦契约）：确认预算与执行预算是两条独立计时器，谁先到谁说话，
 // 但出路同为 confirmWaitTimedOut（都不是用户主动否决），且 why 必须点明是哪条到头——
 // 否则运维会去调错旋钮（该调 confirm_wait_sec 却调了 timeout_sec）。
 // 两支都不得放行；确认等待吃满即失败收口，不会把 session 吊成永久 active。
@@ -160,7 +160,7 @@ func TestWaitForConfirmBudgetDecoupled(t *testing.T) {
 // 不可逆 send 之前；派生写步（type+回车 / click 发送）的闸门必须落在任何命令帧下发之前。
 // 挪到 send/命令帧之后 = 确认形同虚设；默认 false 若被绕过 = 破坏铁律 4。
 //
-// 批20 起闸门收成 awaitConfirmGate 一个入口：静态锁因此多锁两件事——
+// 起闸门收成 awaitConfirmGate 一个入口：静态锁因此多锁两件事——
 // ① 调用点仍恰为两处（漏一处=有一种写步问都没问就下发）；
 // ② waitForConfirm 只能被 awaitConfirmGate 调起（绕过它=挂起不留审计痕迹、不绑载荷）；
 // ③ 登记先于落帧（顺序反了会有一个「帧已写、注册表还空着」的窗口把真放行答成「没有闸门」）。
@@ -204,7 +204,7 @@ func TestConfirmGatePrecedesIrreversibleSend(t *testing.T) {
 	derived := strings.Index(src, `if writeStep && step.Action != "post_comment" && task.RequireConfirm {`)
 	firstCommand := strings.Index(src, `, "command", `)
 	if derived < 0 {
-		t.Error("派生写步未接入 D7 闸门（批7 已把它们认成写步，闸门却仍在 post_comment 里）")
+		t.Error("派生写步未接入 D7 闸门（它们已被认成写步，闸门却仍在 post_comment 里）")
 	}
 	if firstCommand < 0 {
 		t.Fatal("找不到命令帧下发点，无法定序")

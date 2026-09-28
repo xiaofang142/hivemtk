@@ -4,7 +4,7 @@ import {
   isLoggedIn, login, logout, listTasks, runTask, getSession, getSessionSteps, getHostStatus,
 } from '../core/api-client.js';
 import { DEFAULT_USER_SERVER, normalizeServerUrl } from '../core/constants.js';
-import { escapeHtml, taskRowHtml, monitorBodyHtml } from '../core/render.js';
+import { escapeHtml, taskRowHtml, monitorBodyHtml, hostStatusText, servableHostCount } from '../core/render.js';
 
 const $ = (id) => document.getElementById(id);
 const banner = $('banner');
@@ -27,11 +27,9 @@ async function refreshHostStatus() {
       return;
     }
     const st = await getHostStatus();
-    const online = (st?.count || 0) > 0;
-    dot.className = `dot ${online ? 'on' : 'off'}`;
-    line.textContent = online
-      ? `Host 已连接（${st.count} 台在线）`
-      : 'Host 离线：请确认本机 NM Host 已安装（~/.hivemtk/nm_host.conf 有 token）';
+    // 绿灯只给「可服务」：注册在场但没有回包证据的 Host，点执行一样会失败
+    dot.className = `dot ${servableHostCount(st) > 0 ? 'on' : 'off'}`;
+    line.textContent = hostStatusText(st);
   } catch (e) {
     dot.className = 'dot off';
     line.textContent = `Host 状态获取失败：${e.message}`;

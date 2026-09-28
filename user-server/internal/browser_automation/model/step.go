@@ -21,17 +21,17 @@ type BrowserStep struct {
 	Result     datatypes.JSON `gorm:"column:result;type:jsonb" json:"result,omitempty"`                   // action 返回值（snapshot/extract 结果）
 	DurationMs int64          `gorm:"column:duration_ms" json:"duration_ms"`
 	ErrorMsg   string         `gorm:"column:error_msg;type:text" json:"error_msg,omitempty"`
-	// SubmitState/TextHash 批6（F11b）不可逆写台账：status 记「这一步跑成什么样」，
+	// SubmitState/TextHash 不可逆写台账：status 记「这一步跑成什么样」，
 	// submit_state 记「这条内容的提交是否可能发生」——两者在「send 到达但 verify 未见」时必然分叉
 	// （步判 failed，提交却可能已生效），混成一列就会把结果未知态误当可重发。
-	// 跨 session 自然键 = task_id + text_hash（批7 F-N4：原先还带 step_index，
+	// 跨 session 自然键 = task_id + text_hash（原先还带 step_index，
 	// Brain 模式的 stepIdx 每轮递增，同一条评论换轮重放会落在不同下标上而绕过闸门）。
 	// 这三列的 DDL 在 v3.43.0 迁移文件里（存量表加列走版本化迁移，NOT NULL DEFAULT ''/false）；
 	// 只有「整张新表」才走 allModels()/AutoMigrate 直建（browser_write_claims 即此口径，见 pkg/db/migrate.go）。
 	SubmitState string `gorm:"column:submit_state;size:16;index" json:"submit_state,omitempty"` // prepared / sent / verified / unattributed
 	TextHash    string `gorm:"column:text_hash;size:16;index" json:"text_hash,omitempty"`       // fnv32a(去空白正文) hex
 
-	// IsWrite 批7：服务端判定的「本步是不可逆写」落库留痕（步骤声明 ∪ 原语推导）。
+	// IsWrite 服务端判定的「本步是不可逆写」落库留痕（步骤声明 ∪ 原语推导）。
 	// 必须落列而不是只在内存里判：重试豁免、审计面板、以及「为什么这一步没重试」的归因都要读它。
 	IsWrite bool `gorm:"column:is_write;not null;default:false" json:"is_write,omitempty"`
 

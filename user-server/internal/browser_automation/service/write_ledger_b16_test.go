@@ -11,7 +11,7 @@ import (
 	"hivemtk-user/internal/browser_automation/repository"
 )
 
-// 批16（A7/A8/A11）：闸门所依据的记录本身可以静默失败——这是批6/批7 一整条防双发链路
+// 闸门所依据的记录本身可以静默失败——这是一整条防双发链路
 // 唯一的「地基级」缺口。三处现状都朝「继续执行」的方向倒：
 //   - recordSubmitState 写失败只 Warn（台账没落＝下一轮查不到尝试＝闸门整体消失）；
 //   - guardResubmit 查询失败 fail-open 放行；
@@ -28,7 +28,7 @@ type flakyStepRepo struct {
 	// 因为实现内部会重试，按调用序号选靶会把「重试后成功」误当成缺陷现场）
 	failUpdate func(state, textHash string) bool
 	failFind   error
-	// failStateOf 让「回读单行台账态」失败（批20f / A12 的释放判据读的就是这一列）。
+	// failStateOf 让「回读单行台账态」失败（/ A12 的释放判据读的就是这一列）。
 	// 与 failFind 分开：读闸查的是**别的行**，释放查的是**自己这行**，两次的失效面不同。
 	failStateOf error
 }
@@ -206,7 +206,7 @@ func TestWSE2E_SentLedgerGapStillBlocksRetryRound(t *testing.T) {
 	}
 }
 
-// 4) A8：闸门查询失败改 fail-close。批7 的「人工重跑仍然硬拦」是同一条方向的口径。
+// 4) A8：闸门查询失败改 fail-close。「人工重跑仍然硬拦」是同一条方向的口径。
 func TestWSE2E_GuardQueryFailureFailsClosed(t *testing.T) {
 	exec, ext, bundle := newWSE2E(t, happyReply)
 	exec.stepRepo = &flakyStepRepo{BrowserStepRepository: bundle.stepRepo, failFind: errLedgerDBDown}
@@ -242,7 +242,7 @@ func TestWSE2E_GuardQueryFailureFailsClosed(t *testing.T) {
 //
 //	今天的行为是把 err 丢掉（write_ledger.go:123 locs, _ := …）：三条推导全体不命中，
 //	只剩 post_comment 与显式声明 ⇒ retries=0、双发闸、D7 三道同时静默消失。
-//	收窄条件同批立：只报错才算未知，单纯没命中 locator 仍算只读（批7 的交互搜索腿口径不动）。
+//	收窄条件同批立：只报错才算未知，单纯没命中 locator 仍算只读（的交互搜索腿口径不动）。
 func TestWSE2E_UnknownLocatorTableTreatedAsWrite(t *testing.T) {
 	exec, ext, bundle := newWSE2E(t, func(action string, frame map[string]any) (map[string]any, string) {
 		if action == "click" {
@@ -276,7 +276,7 @@ func TestWSE2E_UnknownLocatorTableTreatedAsWrite(t *testing.T) {
 
 // 6) A11 的收窄边界（反向腿）：定位表正常可得时，未命中 locator 的步仍是只读——
 //
-//	批7 刻意收窄的那条口径（交互搜索腿不得被判写）不许被本批改宽。
+//	刻意收窄的那条口径（交互搜索腿不得被判写）不许被本批改宽。
 func TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly(t *testing.T) {
 	exec, ext, bundle := newWSE2E(t, func(action string, frame map[string]any) (map[string]any, string) {
 		if action == "click" {
@@ -321,7 +321,7 @@ func TestClassifyStepEffectThreeStates(t *testing.T) {
 		{"表不可得+声明 is_write 仍是写", orphan, parsedStep{StepItem: dto.StepItem{Action: "query", Target: "s", IsWrite: true}}, effectWrite},
 		{"表在手+命中发送位=写", known, parsedStep{StepItem: dto.StepItem{Action: "click", Target: "button.submit"}}, effectWrite},
 		{"表在手+未命中=只读", known, parsedStep{StepItem: dto.StepItem{Action: "click", Target: "div.like"}}, effectNone},
-		{"表在手+搜索腿回车=只读（批7 收窄口径不动）", known, parsedStep{StepItem: dto.StepItem{Action: "type", Target: "input.search", SubmitOnEnter: true, Value: "x"}}, effectNone},
+		{"表在手+搜索腿回车=只读（收窄后的口径不动）", known, parsedStep{StepItem: dto.StepItem{Action: "type", Target: "input.search", SubmitOnEnter: true, Value: "x"}}, effectNone},
 	}
 	for _, c := range cases {
 		got, why := classifyStepEffect(c.task, c.step)

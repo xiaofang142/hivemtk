@@ -10,8 +10,8 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-// 批7 写步属性化 + 重试豁免。断的还是「DB 里那一行」和「到线几帧」，不是错误文案。
-// 与 ledger_ws_test.go（批6）同一套真 WS 帧 + 真测试库手法。
+// 写步属性化 + 重试豁免。断的还是「DB 里那一行」和「到线几帧」，不是错误文案。
+// 与 ledger_ws_test.go同一套真 WS 帧 + 真测试库手法。
 
 // 1) 纯函数表：写步判定 = 声明 ∪ 推导，且推导不许被声明撤销
 func TestIsWriteStepAttribution(t *testing.T) {
@@ -40,7 +40,7 @@ func TestIsWriteStepAttribution(t *testing.T) {
 			t.Errorf("%s: 写闸门=%v want %v（effect=%d why=%q）", c.name, got.needsWriteGate(), c.want, got, why)
 		}
 		if got == effectUnknown {
-			t.Errorf("%s: 平台已注册却判成未知态（批16 的第三态只该在取表报错时出现）：%s", c.name, why)
+			t.Errorf("%s: 平台已注册却判成未知态（第三态只该在取表报错时出现）：%s", c.name, why)
 		}
 		if c.want && why == "" {
 			t.Errorf("%s: 判成写却不给归因 why", c.name)
@@ -254,8 +254,8 @@ func TestWSE2E_ManualRerunStillFailsLoudly(t *testing.T) {
 	}
 }
 
-//  9. F-N4 本体（Brain 模式换下标重投）：同一条评论落在不同 step_index 上仍必须被拦。
-//     旧键带 step_index，这一条会漏闸——批7 立项理由之一。
+//  9. Brain 模式换下标重投：同一条评论落在不同 step_index 上仍必须被拦。
+//     旧键带 step_index，这一条会漏闸——这正是加这道闸的理由之一。
 func TestWSE2E_IndexDriftStillBlocked(t *testing.T) {
 	exec, ext, bundle := newWSE2E(t, happyReply)
 	const firstSteps = `[{"action":"open_tab","target":"https://www.xiaohongshu.com/explore"},
@@ -326,7 +326,7 @@ func TestWSE2E_ReadStepPersistsIsWriteFlag(t *testing.T) {
 //
 // 与 7) 成对：7) 里前一轮 verified，跳过是「目标已达成、本轮只补剩余步」，判绿诚实；
 // 这里前一轮 unattributed，本轮什么都没证明——若也判绿，任务快照就会写着「第 2 轮成功」，
-// 而评论到底发没发没人知道。那正是批6 Leg X 立项要消灭的那类假绿，所以必须判红。
+// 而评论到底发没发没人知道。那正是双发闸要消灭的那类假绿，所以必须判红。
 func TestWSE2E_RetryRoundSkipOfUnverifiedWriteStillFails(t *testing.T) {
 	verifyMiss := func(action string, frame map[string]any) (map[string]any, string) {
 		if action == "comment_verify" {

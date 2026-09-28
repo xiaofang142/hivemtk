@@ -1,6 +1,6 @@
 // test/inject-lint.js — 注入函数自包含性检查器（测试工具，不进产物）
 //
-// 背景（批14 真机实证）：chrome.scripting.executeScript 的 func 只以 func.toString() 的
+// 背景（真机实证）：chrome.scripting.executeScript 的 func 只以 func.toString() 的
 // 形态送进页面，模块作用域里的自由变量在页面侧一律 ReferenceError，且 Chrome 回包
 // result:null —— 上层把它误读成「注入没返回」，trusted 通道就这样静默死掉了几个批次。
 // test/inject-sandbox.js 用真反序列化挡住了「被测试跑到的」注入函数；这里补上静态的一层：

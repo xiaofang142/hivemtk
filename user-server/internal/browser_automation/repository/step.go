@@ -18,17 +18,17 @@ type BrowserStepRepository interface {
 	UpdateStatus(ctx context.Context, id uint, status, errMsg string) error
 	UpdateResult(ctx context.Context, id uint, status string, result []byte, durationMs int64, errMsg string) error
 	DeleteBySessionID(ctx context.Context, sessionID uint) error
-	// UpdateSubmitState 批6（F11b）写台账状态转移：只写 submit_state/text_hash 两列，
+	// UpdateSubmitState 写台账状态转移：只写 submit_state/text_hash 两列，
 	// 与 UpdateResult 分道——步终态（status）由步收口写，提交归因由台账写，两者在
 	// 「已提交但验证未见」时必然不同值，合成一列就会把结果未知态当成可重发。
 	UpdateSubmitState(ctx context.Context, id uint, state, textHash string) error
 	// FindSubmitAttempt 跨 session 查「同任务、同文本」是否已存在提交尝试
 	// （sent/verified/unattributed 三态都算尝试过；prepared 不算——点击从未发生）。
 	// 无尝试返回 gorm.ErrRecordNotFound。
-	// 批7（F-N4）键里不再有 step_index：Brain 模式的步下标每轮递增，带下标的键会让同一条
+	// 键里不再有 step_index：Brain 模式的步下标每轮递增，带下标的键会让同一条
 	// 评论在换轮重放时落到不同下标上而漏闸。
 	FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error)
-	// SubmitStateOf 读单行当前的台账态（批20f / A12：写步收尾时要判「这一步到底留下尝试凭据没有」，
+	// SubmitStateOf 读单行当前的台账态（/ A12：写步收尾时要判「这一步到底留下尝试凭据没有」，
 	// 以此决定存储层声明是留是腾）。行不存在返回 gorm.ErrRecordNotFound——调用方按「读不到」
 	// 保守处理，不许当成「没记过」。
 	SubmitStateOf(ctx context.Context, id uint) (string, error)

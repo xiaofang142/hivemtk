@@ -13,8 +13,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 批9 生产路径锁（Go 侧）：tab 作用域原语必须把 tab_id 发到线上。
-// 扩展侧的 ref→selector 映射从批9 起按 tab 分桶，tab_id 缺失/错位不再是「无所谓的一个字段」，
+// 生产路径锁（Go 侧）：tab 作用域原语必须把 tab_id 发到线上。
+// 扩展侧的 ref→selector 映射从按 tab 分桶，tab_id 缺失/错位不再是「无所谓的一个字段」，
 // 而是会让解析器查错桶、把 A 页定位用到 B 页上——所以这一层要锁在帧格式上，
 // 而不是只锁在 JS 单测里（JS 侧看到的 tab_id 是 Go 发出来的，两边各锁一段才闭环）。
 

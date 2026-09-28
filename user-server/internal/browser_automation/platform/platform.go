@@ -53,7 +53,7 @@ type Platform interface {
 	// A1：拦截文案不混入定位表，见 BlockMarkers）
 	Locators() map[string]string
 	// DetectBlock 拦截页识别（A2 结构化判据：URL 层 + 快照结构层，不扫正文全文）。
-	// pageURL 来自 snapshot 原语回包（批2 起扩展快照携带 location.href）。
+	// pageURL 来自 snapshot 原语回包（起扩展快照携带 location.href）。
 	DetectBlock(pageURL, pageSnapshot string) bool
 	// BlockMarkers 风控文案判据（只与快照结构行匹配；同时供 Brain 平台知识 prompt）
 	BlockMarkers() []string

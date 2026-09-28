@@ -12,7 +12,7 @@ import (
 	"hivemtk-user/internal/browser_automation/repository"
 )
 
-// retry_claim_b9_test.go — 批9 重试归属门。
+// retry_claim_b9_test.go — 重试归属门。
 //
 // 踩出它的真实现场：挂起重试存在库里（共享），Host 连接存在进程里（私有）。本机 Host
 // 全程在线的 task=377，重试被另一个实例（8204）认领后在自己的空 registry 上找不到连接，
@@ -106,7 +106,7 @@ func TestClaimDueRetriesNoProviderKeepsLegacyBehaviour(t *testing.T) {
 	}
 }
 
-// --- ①b 状态门：只有仍处失败态的行才可能被认领（批13）---
+// --- ①b 状态门：只有仍处失败态的行才可能被认领---
 
 // 这道门在 SQL 里长两处：Pluck 的筛选条件 + 条件更新的 WHERE。单独摘掉任一处这条测试都
 // 不会红（另一处兜住），两处一起摘才红——同 deleted_at 条件那处的性质（文件头注释记过）。
@@ -227,7 +227,7 @@ func TestRetryOwnerGateIsWired(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(src)
-	// 锁字面注入表达式本身（批8 教训：计数式锁挡不住「语句还在、参数被抽空」）
+	// 锁字面注入表达式本身（教训：计数式锁挡不住「语句还在、参数被抽空」）
 	if !strings.Contains(s, "feedbackSvc.SetHostUsersProvider(registry.ConnectedUserIDs)") {
 		t.Error("归属门未装配到路由启动路径")
 	}

@@ -1,6 +1,6 @@
 package controller
 
-// 批19f 契约锁：Host 通道的「仅限本机」这道门，和「重置 token」这句话。
+// 契约锁：Host 通道的「仅限本机」这道门，和「重置 token」这句话。
 //
 // 两处各自独立成病：
 //  1. clientIPOf 原先无条件采信 X-Real-IP / X-Forwarded-For——这两个头是调用方说什么就是什么。

@@ -8,7 +8,7 @@
 | # | 事实 | 证据 |
 |---|---|---|
 | F11b | **零提交也判 verified=true**。`injPostCommentVerify` 的容器主分支 `norm(textOf(c)).includes(want)` 不排除输入节点：输入框在评论区容器内（小红书真实 DOM 形态）时，未提交草稿被当成已发布评论 | 常驻反向腿 `/tmp/hivemtk_leg_x.py`：`status=completed`、带外 ledger `post=0 / swallowed=1`、`extracted_data.verified=true`、`evidence={containers:1}`。导出的审计包里带着这条假 `verified:true` |
-| F-N1 | **D7 确认超时的任务永久砖化**。`execCtx` 预算=`TimeoutSec`（`task.go:344`），确认等待也吃这个预算；ctx 一死，`feedback.OnSessionFinished(ctx,…)` 用已 Done 的 ctx 写 `browser_tasks`，DB 驱动取消（日志实锤「更新任务快照失败 … context deadline exceeded」），任务行停在 `running` → `status=="running"` 的四道门（edit/delete/run/幂等）全锁死，重试与失败邮件静默丢失，且**全仓无任何对账路径**（`FindRunning` 零调用者） | session 335 + 腿2（timeoutSec=15）+  bricks 任务 278/279/280/283 |
+| F-N1 | **D7 确认超时的任务永久砖化**。`execCtx` 预算=`TimeoutSec`（`task.go:444`），确认等待也吃这个预算；ctx 一死，`feedback.OnSessionFinished(ctx,…)` 用已 Done 的 ctx 写 `browser_tasks`，DB 驱动取消（日志实锤「更新任务快照失败 … context deadline exceeded」），任务行停在 `running` → `status=="running"` 的四道门（edit/delete/run/幂等）全锁死，重试与失败邮件静默丢失，且**全仓无任何对账路径**（`FindRunning` 零调用者） | session 335 + 腿2（timeoutSec=15）+  bricks 任务 278/279/280/283 |
 | F-N2 | **控制台错误面整体失效**。全局 i18n composer 在 `dropMessageCompiler:true` 下对 100% 现存 key 抛 `UNEXPECTED_RETURN_TYPE`（zh.json 叶子 1834 个 → 成功 0 / 抛错 1834，dev 8211 与 prod 8212 一致）。`request.js:172` 的 `t('http.requestFailed')` 落在 catch 之前 → 每条 API 错误都渲染成 toast「SyntaxError」（空 message）。叠加 `List.vue:108-121` 判 `err.code===409`（`buildRequestError` 从不设 `code`）与「未连接」文案，Host 未连接 / 用户忙 / 真失败三者不可辨 | `/tmp/hivemtk_err409_leg.mjs`：`xhr 409 DUPLICATE_ENTRY_3003` → `界面反馈 {"msgs":["SyntaxError"]}` → `new SyntaxError :: (empty)` stack in `i18n-*.js` |
 | F-N3 | 执行成功后无监控入口（`onRun` 只弹「已开始执行」），D7 挂起最长 3600s 期间用户看不到倒计时，只能回列表点详情找会话 | 真机 UI 腿观察项 |
 | 其余 | nm-host 无帧上限/单泵/token 进 stderr；`refs` 全局桶跨 tab 串；`click_unacked` 落 DOM fallback（可能二次点击）；B 链路 `contentHash` 作为幂等键跨通道撞车；契约测试靠 `strings.Contains` 断错误文案 | 批 9–批 11 逐条处置 |
@@ -493,7 +493,7 @@ trace/recovery 中间件捕获 `*gin.Context` 这一条链上（`context.go:174`
 对照（`4785abfa…` vs `f7fe5fcc…`，确实不同）→ 安装态先备份 `/tmp/nm-host.installed.2240.bak`
 → 覆盖安装 → `kill -9` 旧 pid 73131 → 扩展重连循环自愈拉起新 pid 78177（注册即
 `online:true`，探针过后 `servable:true`）→ **所有 A 链路结论在配好的产物上重跑**。
-另记一条归属：`nm_frame_too_large_outbound` 不在扩展里而在 `cmd/nm-host/main.go:101`，
+另记一条归属：`nm_frame_too_large_outbound` 不在扩展里而在 `cmd/nm-host/main.go:139`，
 去 dist 找它是找不到的。
 
 **A 链路设备腿复跑（当前二进制 `/tmp/user-server.b12` + 当前源码编的 Host，`/tmp/b12_device_legs_rerun.log`）：
@@ -1000,7 +1000,7 @@ ok service 170.416s`，**128 PASS / 0 SKIP**（`/tmp/b22_verify.log`）——克
 **B4（文档收口，不动码）：双发闸是 check-then-act。** `guardResubmit` 先 `First` 读、
 之后才写 `prepared`，中间隔着 prep 与最长 600s 的 D7 等待；同层三条并发防护
 （`t.Status=="running"`、`CountRunningByTask`、`CountRunningByUser`）也全是同一形状，
-而 `task.go:318` 那句注释自陈"靠 DB 唯一性兜底竞态"——`browser_tasks`/`browser_sessions` 上
+而 `task.go:391` 那句注释自陈"靠 DB 唯一性兜底竞态"——`browser_tasks`/`browser_sessions` 上
 **并不存在**那样一条约束。再补一道 check-then-act 只是复制同一种形状，正解是台账的
 部分唯一索引，那属 DDL 决策（牵动软删语义与 #6 的裁剪口径）⇒ 登记为 §8.3-20（A12），
 并写清它从"可缓"变"必做"的触发条件（放开每用户并发或引入多副本 worker）。
@@ -1404,7 +1404,7 @@ M1–M12 **12 格逐格被杀**（`/tmp/b19h_b17js_rerun.log`）。M12 点名的
 
 ### 一、形状（一个不变式的两条入口，只有一条查了）
 
-`depends_on_task_id` 由请求方任意指定 ⇒ 必须验它属于当前用户。`SetDependency` 查了（`task.go:227`），
+`depends_on_task_id` 由请求方任意指定 ⇒ 必须验它属于当前用户。`SetDependency` 查了（`task.go:264`），
 `Create` 没查，直接写库。两条后果：① **读侧外泄** —— 执行期 `checkDependency` 用只按 task_id 查的
 `GetLatestByTaskID`/`HasSuccess` 读别人的会话，并把它的状态原样写进 409 文案（「前置任务最近一次执行
 状态为 %s」），成为一台可枚举 id 的跨用户状态探针；② **写侧脏数据** —— 这条依赖永远不可能被合法满足，
@@ -1701,10 +1701,10 @@ R26-2 的矩阵说"超时 ≠ 没发生"，这一条是它的对偶：**只有�
 
 ### 一、形状：一个说"已保存"的 200
 
-编辑页 `Editor.vue:101-105` 早就摆着「失败自动重试」开关 + 两个 `el-input-number`（`:min="30" :max="86400"`、`:min="1" :max="10"`），
+编辑页 `Editor.vue:115-105` 早就摆着「失败自动重试」开关 + 两个 `el-input-number`（`:min="30" :max="86400"`、`:min="1" :max="10"`），
 `save()`（`:232-241`）把整个 `form` 原样 PUT 出去。问题在收端：`dto.UpdateBrowserTaskReq` **根本没有这三个字段**。
 而 gin 的 `ShouldBindJSON` 对未知 JSON 键默认宽容（不是 `DisallowUnknownFields`），于是这条链的每一步都"成功"：
-请求合法 → 绑定不报错 → `Update` 逐个 `if req.X != nil` 应用（`controller/task.go:177-224`，压根没有这三条分支可走）
+请求合法 → 绑定不报错 → `Update` 逐个 `if req.X != nil` 应用（`controller/task.go:177-187`，压根没有这三条分支可走）
 → 落库 → 回 200 → 前端 toast「已保存」。**库里一个字节都没变。**
 
 这不是"少个便利"：重试三件套是有活消费者的配置——`service/feedback.go:66` 用 `RetryCount < MaxRetryTimes` 决定
@@ -2612,7 +2612,7 @@ V7（回查不轮询，第一次没见着就判未见：一段 150ms 的渲染�
 | 17 | 重投要保留同一身份（Pub/Sub "A redelivered message retains the same message ID"），而**内容当身份**的前提是"同一条内容不会第二次真实出现"——这个前提在聊天里不成立 | `computeMsgID` 就是 `contentHash(channel\|conversationId\|content)`（`user-web/bridge/src/core/uplink.js` `enqueue` 里缺省填 `event_id`），服务端钩子2 按 `msg_id + conversation_id` 判等 ⇒ **同一会话里第二条"好的"必然被吞**，且这是"说了没回"在 B 链路里比 Redis 更早、更永久的一层 | **采纳（P1）批23 已落（§7.29 五）**：不取消"内容当身份"，而是在它上面加一层**发生次数身份**——扩展按可见 DOM 序给同一内容键编号，第二条起上报 `mh:<8hex>#<n>`（`channel-adapter.js::_canonicalMsgId`），`n==0` 时 id 与旧版**逐字节相同** ⇒ 存量幂等面不动；服务端 `occurrenceMsgIDRe` 只据此放弃**内容维度**的嗅探（入口窗口 + 钩子2.5），`msg_id` 精确判等与 DB 唯一索引照旧。§8.3-17 当年立的验收口径两条都成立：同会话两条同文本 ⇒ 2 行（`TestPersistBridgeHistory_OccurrenceSuffixPersistsSecondRow` + 扩展增量/批量四 it），同一条重投 ⇒ 仍 1 行（`..._OccurrenceSuffixStillExactIdempotent` + "重渲染后重扫不许多发"那条反向 it）。"严格同源单边改会裂成两套"这句担心的处理方式：正则两头锚死、注释与 `types.js` 契约同时写，且格 K10/K11 各打恒真与过宽两头 |
 | 18 | "接受但不再执行"是默认档，"根本不落库"几乎没人这么做（sidekiq-unique-jobs 把**锁时机**与**冲突怎么办**拆成两个维度：`until_executing`/`while_executing`… × `on_conflict: :log/:raise/:reject/:replace/:reschedule`） | `decision.Blocked` 时两条分支（单条与批量）都在 `persistMessage` **之前** `return` ⇒ 消息**不入库**，只回一个 `Accepted=true` 的好看回执 ⇒ 排障时"客户说了没回"在库里查不到任何痕迹（证据消失） | **采纳（P1）批23 已落（§7.29 三）**：按当年给出的移交口径实现——`IsDup` 分支改"入库 + 抑制 AI"，`IsSelfEcho` 维持不落库（回声在库里已有本体，再落一行就是存两遍）。单条与批次**各一份分支各一刀**（格 K4/K5，因为批次路径有自己的一份 `Blocked` 代码，漏一边就是"单条半边绿、批里无痕"），反向半边由 `TestHandleIngress_SelfEchoDecisionPersistsNothing` 守着（防"改成全都落库"这种过度修法）。顺带把 #19 的误判方向消掉一半：留痕之后 `duplicate` 结论"已经存过了"名副其实 |
 | 19 | 幂等层命中应**回放首次结果**而不是重新判定，且"是否重复"要由结论决定而非文案（Stripe 存首次 status+body 原样回放） | `IsDuplicateReason` 用子串嗅探 reason，而 reason 里混得进**落库失败原文**（§8.1-7）⇒ 误判方向是"永久停发" | **采纳（P0）批15 已落**：判定收成结论短语前缀 + 永久断言 + 两条反向腿（§7.7）。**批23 定案：不再往 outcome 枚举改**，理由与证伪方式在 §7.29 六——三条可核事实：误判方向已由前缀闭集加 `channelgw/dup_outcome_b17_test.go`（把当年真实出现的 PG 冲突原文逐字钉在 `wantFalse`）关死；#18 落地后 `duplicate` 对应的库里确有行，"回放首次结果"能省的本就不多；枚举要动 `InboxIngressResult` 及全部产出点，换来的仍是字符串换字符串。**恢复本条的时机写死**：一旦真实现场需要同时改该用例的 `wantTrue` 与 `wantFalse`（即"没前缀却要判重"或反之），本决定即刻作废 |
-| 20 | 自审发现（非同行调研轴，批16b 二次审核 B4）：防不可逆动作的"先查后做"若两端都在应用层，两个并发执行流就都能查到"没做过"再各自做一遍——正解是把判定下推到存储层的**唯一约束**（Postgres 部分唯一索引天然具备，本仓该目录却只有 `model/cron.go:15` 一处 `uniqueIndex`） | 双发闸是**读后再写**：`guardResubmit` 先 `FindSubmitAttempt`（`repository/step.go`，一条普通 `First`，无 `FOR UPDATE`、无 advisory lock），通过后才由 `recordSubmitState` 写 `prepared`/`sent`；而同一时刻并发的另一条腿看到的是同一条"查不到"。同层的三条并发防护也全是同一形状：`t.Status == "running"`、`CountRunningByTask`、`CountRunningByUser`（`task.go:312-334`，v1 每用户同时 1 个 running session ⇒ 现实窗口很窄，但注释自陈"**靠 DB 唯一性兜底竞态**"，而 `browser_tasks`/`browser_sessions` 上并不存在那样一条约束） | **不采纳"再补一道 check-then-act"**：那只是把同一形状的闸门复制一遍。诚实收口是给台账加**部分唯一索引** `(task_id, text_hash) WHERE submit_state IN (sent, unattributed, verified) AND deleted_at IS NULL`，把"这次提交是否已被记过"交给插入语句本身判定（撞约束即拒发）——代价是它同时把软删语义变成契约问题（软删行参不参与唯一性、`PruneBefore` 类裁剪会不会腾出键位 ⇒ 与 #6 的"裁剪不等于证据消失"连体），属 DDL 决策而非本泳道随手改。**登记 A12（待拍板，不阻塞本批）**：本轮以文档记账，理由是"当前并发面被 per-user running 闸压到极窄"+"改法牵动软删与裁剪两处口径"。若将来放开并发（每用户 >1 session）或引入多副本 worker，A12 立即从"可缓"变为"必做"，届时必须重跑本批电池再谈。**批20f 已拍板并落地（§7.27）**：没有等"放开并发"这个触发条件，理由是这类 DDL 的收益只在真撞双发时兑现、而代价（软删口径 + 裁剪键位）必须一次想清楚，缓下去等于把两处口径原样带着走。落法与本文设想同形：`(task_id, text_hash)` 部分唯一索引 + `ON CONFLICT DO NOTHING` + 认领者回读，键不全即拒发；约束写在模型标签上（电池 C15 直接读 `pg_indexes` 验它在不在），`writeClaimRepo == nil` 走 fail-close |
+| 20 | 自审发现（非同行调研轴，批16b 二次审核 B4）：防不可逆动作的"先查后做"若两端都在应用层，两个并发执行流就都能查到"没做过"再各自做一遍——正解是把判定下推到存储层的**唯一约束**（Postgres 部分唯一索引天然具备，本仓该目录却只有 `model/cron.go:15` 一处 `uniqueIndex`） | 双发闸是**读后再写**：`guardResubmit` 先 `FindSubmitAttempt`（`repository/step.go`，一条普通 `First`，无 `FOR UPDATE`、无 advisory lock），通过后才由 `recordSubmitState` 写 `prepared`/`sent`；而同一时刻并发的另一条腿看到的是同一条"查不到"。同层的三条并发防护也全是同一形状：`t.Status == "running"`、`CountRunningByTask`、`CountRunningByUser`（`task.go:349-334`，v1 每用户同时 1 个 running session ⇒ 现实窗口很窄，但注释自陈"**靠 DB 唯一性兜底竞态**"，而 `browser_tasks`/`browser_sessions` 上并不存在那样一条约束） | **不采纳"再补一道 check-then-act"**：那只是把同一形状的闸门复制一遍。诚实收口是给台账加**部分唯一索引** `(task_id, text_hash) WHERE submit_state IN (sent, unattributed, verified) AND deleted_at IS NULL`，把"这次提交是否已被记过"交给插入语句本身判定（撞约束即拒发）——代价是它同时把软删语义变成契约问题（软删行参不参与唯一性、`PruneBefore` 类裁剪会不会腾出键位 ⇒ 与 #6 的"裁剪不等于证据消失"连体），属 DDL 决策而非本泳道随手改。**登记 A12（待拍板，不阻塞本批）**：本轮以文档记账，理由是"当前并发面被 per-user running 闸压到极窄"+"改法牵动软删与裁剪两处口径"。若将来放开并发（每用户 >1 session）或引入多副本 worker，A12 立即从"可缓"变为"必做"，届时必须重跑本批电池再谈。**批20f 已拍板并落地（§7.27）**：没有等"放开并发"这个触发条件，理由是这类 DDL 的收益只在真撞双发时兑现、而代价（软删口径 + 裁剪键位）必须一次想清楚，缓下去等于把两处口径原样带着走。落法与本文设想同形：`(task_id, text_hash)` 部分唯一索引 + `ON CONFLICT DO NOTHING` + 认领者回读，键不全即拒发；约束写在模型标签上（电池 C15 直接读 `pg_indexes` 验它在不在），`writeClaimRepo == nil` 走 fail-close |
 | 21 | 自审发现（非同行调研轴，批16c 二次审核 B1）：**同一个判据符号被多处消费，测试却只覆盖其中一格**——评审里最常见的假绿形状是"摘掉整块会红"，它被当成了"每一格都有腿"的证据；正解是按消费点逐个下刀，让每条腿各自证明它有牙 | `classifyStepEffect` 的三态由一个符号 `writeStep := effect.needsWriteGate()` 同时喂四处（钳 retries、降级+闸门键+双发闸、D7 确认、成功/失败两路落账）。批16 只在"钳 retries"那一格有腿（`TestWSE2E_UnknownLocatorTableTreatedAsWrite` 断 click 只到线 1 次），把符号收窄回 `effect == effectWrite` 时另外三格（双发闸、降级拒绝、D7）在 unknown 步上一条断言都不走过 ⇒ 一次"不知道有没有副作用"的动作被原样重发 | **已落（批16c）**：三条腿逐格钉住 unknown 步的双发闸/降级拒绝/D7 闸门，电池不再打"一包"而是**逐消费点下刀**（M27 双发闸+降级、M28 D7、M29 只摘降级拦截、M30 只钳 retries、M31 只漏失败路径落账，M20 保留为"四道一起摘"的对照），从而证明每条新腿各自有牙。**通用口径回灌记忆**：一次"摘掉整块全红"不能登记为覆盖，必须按消费点拆刀 |
 
 ## 9. 二次审核协议落地实证（A–E 五相读数 + 越界改动清单）

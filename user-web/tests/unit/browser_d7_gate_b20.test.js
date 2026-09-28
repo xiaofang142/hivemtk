@@ -1,6 +1,6 @@
 /**
- * 批20 D7 放行闭环 前端契约（A5 审批绑载荷 + A10 四态分流）
- * 服务端从批20 起：不带 payload_hash 的放行一律 400，闸门挂起态与结论走 data.status。
+ * D7 放行闭环的前端契约：审批绑载荷 + 结论四态分流
+ * 服务端口径：不带 payload_hash 的放行一律 400，闸门挂起态与结论走 data.status。
  * 前端必须跟着变，且变完仍是 fail-closed：
  * ① 哈希只能来自 GET confirm-gate（预览的就是要批的那一份）；
  * ② 没拿到哈希就不发请求（一条空白支票送到服务端也是支票）；
@@ -31,7 +31,7 @@ const httpError = (status, data) => {
   return err
 }
 
-describe('批20 读侧：闸门详情端点', () => {
+describe('读侧：闸门详情端点', () => {
   beforeEach(() => http.get.mockReset())
 
   it('GET /sessions/:id/confirm-gate（payload_hash 的唯一来源）', async () => {
@@ -45,7 +45,7 @@ describe('批20 读侧：闸门详情端点', () => {
   })
 })
 
-describe('批20 写侧：放行必须指明批的是哪份载荷', () => {
+describe('写侧：放行必须指明批的是哪份载荷', () => {
   beforeEach(() => {
     http.post.mockReset()
     http.post.mockResolvedValue({ confirmed: true, status: 'granted' })
@@ -71,7 +71,7 @@ describe('批20 写侧：放行必须指明批的是哪份载荷', () => {
   })
 })
 
-describe('批20 四态分流：结论只认 status，不认文案', () => {
+describe('四态分流：结论只认 status，不认文案', () => {
   it('granted 是唯一能宣布放行的态', () => {
     expect(interpretConfirmResult({ confirmed: true, status: 'granted' }))
       .toMatchObject({ released: true, status: 'granted' })
@@ -109,7 +109,7 @@ describe('批20 四态分流：结论只认 status，不认文案', () => {
   })
 })
 
-describe('批20 监控页接线', () => {
+describe('监控页接线', () => {
   const monitor = readSrc('views/browserAutomation/Monitor.vue')
 
   it('挂起时先取闸门详情，展示第几步 / 将要提交什么 / 到什么时候', () => {
