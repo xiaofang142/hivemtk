@@ -149,6 +149,13 @@ jobs:
       - name: mut_db_poolcfg 用例（四刀预检七格，不联网、不跑 go）
         run: bash scripts/mut-db-poolcfg.test.sh
 
+      # `scripts/mut_webhook_ai_trigger.py`（入站消息 AI 触发归属那条守卫的四刀电池）的用例。
+      # 同上一族，只跑不依赖 go 与测试库的腿：预检内核的内存反向格（含 classify 的
+      # "必须仍绿"反查）+ 对真源码的锚点预检 + 独立 grep 复算 + 删除闸入参。
+      # 全族杀伤（要编 Go、要测试库）留在本地跑，登记见审计文档 §23.25。
+      - name: mut_webhook_ai_trigger 用例（四刀预检八格，不联网、不跑 go）
+        run: bash scripts/mut-webhook-ai-trigger.test.sh
+
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
   # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。
