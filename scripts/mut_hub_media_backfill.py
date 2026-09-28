@@ -222,12 +222,19 @@ def cuts():
 
 
 def lane_overlays() -> tuple[list[str], list[str]]:
-    """返回 (要覆盖进克隆的脏文件, 要在克隆里删掉的文件)。
+    """返回 (要覆盖进克隆的来树文件, 要在克隆里删掉的文件)。
 
     为什么删除也要搬：`--shared` 克隆 = HEAD + 覆盖，工作树里一条 ` D` 若不搬，
-    克隆就在跑一份"文件还在"的树——它绿不能代表工作树绿（本轮实测：
+    克隆就在跑一份"文件还在"的树——它绿不能代表工作树绿（2026-09-23 实测：
     `user-server/internal/middleware/license_checker.go` 在工作树被删、克隆按 HEAD 仍带着它）。
     覆盖面也不限 `.go`：本批的判据有一部分住在 md/sh 里，只搬 .go 会让复验面窄于改动面。
+
+    旧口径在这里是 `if not mods: raise SystemExit("脏文件清单为空…宁可停机也别假绿")`，
+    那句在**本批写进 HEAD 之后**成了常驻件的死刑：清单永远为空 ⇒ 电池永远跑不了
+    （2026-09-28 现测：`logs/R22/20260928-134145/00-check.log` 那趟 rc=1，红因正是这一句）。
+    停机的前提本来就是假的——它假设"要测的字节必在未入库面里"，而本泳道的常态是批次早已
+    入库、要测的字节就是 HEAD（与 §23.25 里 CapAB 探针 `git show HEAD:` 失效同族）。
+    现在空清单＝本轮读纯 HEAD，份数由身份行现测并写进产物，不再是声明。
     """
     r = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "-uall", "--"] + LANE_PATHS,
                        capture_output=True, text=True, timeout=300)
@@ -241,12 +248,10 @@ def lane_overlays() -> tuple[list[str], list[str]]:
             dels.append(p)
         else:
             mods.append(p)
-    if not mods:
-        raise SystemExit("脏文件清单为空——克隆里跑的是 HEAD，测不到本批改动（宁可停机也别假绿）")
     return mods, dels
 
 
-def prepare(dst: Path) -> Path:
+def prepare(dst: Path, mods: list[str], dels: list[str]) -> Path:
     clone = dst / "clone"
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
@@ -258,7 +263,6 @@ def prepare(dst: Path) -> Path:
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
         raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
-    mods, dels = lane_overlays()
     for rel in mods:
         src = ROOT / rel
         if not src.exists():
@@ -268,7 +272,8 @@ def prepare(dst: Path) -> Path:
         shutil.copy2(src, tgt)
     for rel in dels:
         (clone / rel).unlink(missing_ok=True)
-    print(f"覆盖 {len(mods)} 个脏文件、同步 {len(dels)} 个删除进克隆")
+    print(f"覆盖 {len(mods)} 份来树字节、同步 {len(dels)} 个删除进克隆"
+          + ("（0 份＝本批已入库，克隆读的就是 HEAD 那一笔）" if not mods else ""))
     hostenv = ROOT / US / ".env"
     if hostenv.exists():
         shutil.copy2(hostenv, clone / US / ".env")
@@ -324,12 +329,17 @@ def main() -> int:
 
     logs = ROOT / args.logs / RUN_STAMP
     logs.mkdir(parents=True, exist_ok=True)
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(logs / "00-run.log")
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(logs / ("00-check.log" if args.check else "00-run.log"))
+    # 身份行须在 tee 之后（早于 tee 只进终端），且份数现测：`prepare()` 覆盖的是**来树当前字节**，
+    # 旧文案"来树未入库字节不进本轮读数"与机制相反（2026-09-28 复查抓出）⇒ 换成 `overlay=`。
+    mods, dels = lane_overlays()
+    identity(ROOT, label="基线字节", overlay=mods,
+             extra="｜本轮读私有 `--shared` 克隆，来树覆盖份数见下一行『覆盖 N 份来树字节』")
     tmp, owned = workdir(args.clone, prefix="b23mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
-    clone = prepare(tmp)
+    clone = prepare(tmp, mods, dels)
     env = test_env(clone)
 
     files = {rel: clone / rel for rel in (REPO_REL, MEDIA_REL, APP_REL)}
