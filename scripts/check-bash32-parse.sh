@@ -43,8 +43,9 @@
 #   rc=1 至少一个文件读不通；rc=2 环境或判据本身有问题（没有 bash、扫描根不对、面骤减）
 #
 # 反向测试（改完本脚本必须逐格真跑）：bash scripts/check-bash32-parse.test.sh
-#   前提：本机 /bin/bash 是 3.x。不满足时用例退 2 并自报 ENV-BROKEN（不是"九格全过"），
-#   所以它和门一样只挂在 `make audit` 这一侧，CI 里没有它们的位置。
+#   前提：本机 /bin/bash 是 3.x。不满足时用例退 2 并自报 ENV-BROKEN（不是"九格全过"）。
+#   两个执行点：本地 `make audit`，以及 lint.yml 的 `bash32-parse` 作业（macos-latest，
+#   第一格先实测 `$BASH_VERSION` 非 3.x 即红 ⇒ 不会以 ENV-BROKEN/SKIP 的形状混成绿）。
 # =============================================================================
 
 set -uo pipefail

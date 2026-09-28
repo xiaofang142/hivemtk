@@ -245,8 +245,10 @@ jobs:
       - name: check-bash32-parse（全仓 shell 文件按 3.2 读通）
         run: bash scripts/check-bash32-parse.sh
 
-      # 九格反向测试也进 CI：这道门的"绿"和"根本没判"长得几乎一样（CI 上必走 SKIP 分支），
-      # 只有 C1–C3 那三格证明它读得出坏文件，"退 0"才是判据而不是空跑。
+      # 九格反向测试也进 CI：这道门的"绿"和"根本没判"长得几乎一样——在解析器 ≥4 的那一档
+      # （ubuntu runner 的形状）它必走 SKIP 分支。只有 C1–C3 那三格证明它读得出坏文件，
+      # "退 0"才是判据而不是空跑。本作业跑在 macos-latest（出厂 3.2.57），所以这三格在这里是真判据；
+      # 上一格的版本实测保证：一旦镜像换成 ≥4，本作业整体红，不会以 rc=2 的形态混成绿。
       - name: check-bash32-parse 反向测试（九格，证明它会红）
         run: bash scripts/check-bash32-parse.test.sh
 
