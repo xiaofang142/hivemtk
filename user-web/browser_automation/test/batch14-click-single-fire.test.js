@@ -1,4 +1,4 @@
-// 批14 A1 取证落地：一次 click 步骤 = 一次 handler 调用。
+// A1 取证落地：一次 click 步骤 = 一次 handler 调用。
 // 真机证据（session 536/537，/tmp/b14_ev537.txt）：夹具页面只收到 6 个事件、全部
 // isTrusted=false，其中 click 两个（t=3460 与 t=3461）→ 按钮计数 CLICKED-2。
 // 成因在 injClick 的 DOM 兜底：el.click() 之外又补发了一个 MouseEvent('click')。
@@ -120,7 +120,7 @@ const attachCounter = (el) => {
   el.addEventListener('keydown', () => { hitTests.keydowns += 1; });
 };
 
-describe('注入沙箱自身必须咬得住（批14：闸门的反向测试）', () => {
+describe('注入沙箱自身必须咬得住（闸门的反向测试）', () => {
   const LEAKED = '模块作用域的常量';
   function leakyInjected(el) { return LEAKED; }
 
@@ -134,7 +134,7 @@ describe('注入沙箱自身必须咬得住（批14：闸门的反向测试）',
   });
 });
 
-describe('click 主通道（批14：trusted 必须真的跑得起来）', () => {
+describe('click 主通道：trusted 必须真的跑得起来', () => {
   it('probe 在去闭包后仍能算出坐标：CDP 可用时 channel=cdp 且 clickAt 收到正数坐标', async () => {
     document.body.innerHTML = '<button id="send">发送</button>';
     attachCounter(document.querySelector('#send'));
@@ -169,7 +169,7 @@ describe('click 主通道（批14：trusted 必须真的跑得起来）', () => 
   });
 });
 
-describe('click DOM 兜底：一次步骤一次动作（批14）', () => {
+describe('click DOM 兜底：一次步骤一次动作', () => {
   it('click 兜底路径：按钮 click handler 恰好执行一次', async () => {
     document.body.innerHTML = '<button id="send">发送</button>';
     attachCounter(document.querySelector('#send'));
@@ -198,7 +198,7 @@ describe('click DOM 兜底：一次步骤一次动作（批14）', () => {
   });
 });
 
-describe('probe 判不可交互不得被兜底绕过（批14）', () => {
+describe('probe 判不可交互不得被兜底绕过', () => {
   it('元素被浮层遮挡：上抛 element_not_interactable，且 handler 零次调用', async () => {
     document.body.innerHTML = '<button id="send">发送</button><div id="mask"></div>';
     const btn = document.querySelector('#send');
@@ -219,7 +219,7 @@ describe('probe 判不可交互不得被兜底绕过（批14）', () => {
   });
 });
 
-describe('type 富文本兜底不得无谓发 Enter（批14）', () => {
+describe('type 富文本兜底不得无谓发 Enter', () => {
   it('contenteditable 兜底：未要求 submit_on_enter 时不派发 keydown Enter', async () => {
     document.body.innerHTML = '<div id="ce" contenteditable="true"></div>';
     const ce = document.querySelector('#ce');

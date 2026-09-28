@@ -6,7 +6,7 @@
 // refs 映射缓存在扩展 SW 内存（Map<ref, selector>）；页面导航即失效。
 
 // ref 分配器（SW 单例内存，按 tab 分桶）
-// 批9：旧实现是**全局单桶 + 每次快照清空**，多 tab 编排时两条错路都会发生——
+// 旧实现是**全局单桶 + 每次快照清空**，多 tab 编排时两条错路都会发生——
 // ① tab B 拍一帧就把 tab A 的 @eN 全清了，A 的后续定位凭空失效；
 // ② 计数器每帧归零，A 的 @e3 与 B 的 @e3 同号，后写覆盖前写 → A 的 ref 解析到 B 的元素。
 // 分桶后桶键 = String(tabKey)，与调用方传数字还是字符串无关（Go 侧 tab_id 是 JSON number）。
@@ -46,7 +46,7 @@ export function collectInteractiveNodes() {
   // 上限刻意声明在函数体内：本函数以 func.toString() 的形态送进页面，
   // 引用模块顶层 const 今天能跑只是因为 esbuild 把它折成了字面量——
   // 一旦它变成可配置值或关掉折叠，页面侧就是 ReferenceError + result:null，
-  // 上层读成 inject_no_result，快照静默变空（批14 静态闸门把这类都拦下）。
+  // 上层读成 inject_no_result，快照静默变空（静态闸门把这类都拦下）。
   const MAX_NODES = 400;
   const cssEscape = (s) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : String(s).replace(/([^\w-])/g, '\\$1'));
   const selectorOf = (el) => {
@@ -129,7 +129,7 @@ export function collectInteractiveNodes() {
     seen.add(text);
     pushNode(el, 'text');
   });
-  // A2（批2）：快照携带页面 URL——拦截判据的 URL 层依赖（旧实现快照不含 URL，
+  // A2：快照携带页面 URL——拦截判据的 URL 层依赖（旧实现快照不含 URL，
   // website-login/error 等重定向判据永不命中）
   return { nodes, paths, url: location.href };
 }
@@ -169,7 +169,7 @@ export function assembleSnapshot({ nodes, paths, url }, tabKey = 'default') {
 
 // resetSnapshotBaseline 清某 tab（或全部）的对比基线——页面导航/open_tab 后调用，
 // 使下一帧重新建立基线而不把整页标成新元素。
-// 批9：refs 与基线同生命周期（导航后 cssPath 必失效），一并清掉，避免旧 @eN 解析到
+// refs 与基线同生命周期（导航后 cssPath 必失效），一并清掉，避免旧 @eN 解析到
 // 新页面的同序元素——那是「定位看似成功、其实点错」的温床。
 export function resetSnapshotBaseline(tabKey) {
   if (tabKey === undefined) {

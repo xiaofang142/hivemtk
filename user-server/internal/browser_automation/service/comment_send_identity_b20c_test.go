@@ -8,7 +8,7 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-// comment_send_identity_b20c_test.go — 批20c：三条 trusted 写通道的最后一处点后身份复核。
+// comment_send_identity_b20c_test.go — 三条 trusted 写通道的最后一处点后身份复核。
 //
 // 为什么开关/结论都要腿（与 verify_identity_b17_test.go 同理由，此处是第三个消费点）：
 // 复核长在 primitives.js 里，Go 只发一个布尔、只读一个字段。没有断言的话，
@@ -59,7 +59,7 @@ func TestCommentSendFrameRequestsIdentityRecheck(t *testing.T) {
 		t.Fatal("扩展侧没收到 comment_send 帧（无法判定复核开关）")
 	}
 	if got, present := identityFlag(frame); !present || !got {
-		t.Fatalf("comment_send 帧 verify_identity=%v present=%v want true——批20c 那道闸门执行侧在扩展，"+
+		t.Fatalf("comment_send 帧 verify_identity=%v present=%v want true——那道闸门的执行侧在扩展，"+
 			"请求侧就是这一个布尔：不发出去，真机上一次都不会跑", frame["verify_identity"], present)
 	}
 }

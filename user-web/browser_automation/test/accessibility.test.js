@@ -42,7 +42,7 @@ describe('accessibility snapshot', () => {
     expect(snap.text).toBe('');
   });
 
-  // 上限常量的声明位置在批14 从模块顶层挪进了注入函数体（见 collectInteractiveNodes 内注释）。
+  // 上限常量的声明位置在从模块顶层挪进了注入函数体（见 collectInteractiveNodes 内注释）。
   // 这条用例是那个常量的唯一行为证据：挪错地方/漏掉就是这里先红。
   // 显式超时不是偷懒：nameOf 读 innerText，而 jsdom 每次 innerText 都要重算整篇样式，成本随节点数
   // 线性放大。同一台机器上实测：工作树单跑 2.0s（全量跑也 <5s，所以这条一直"看起来"是绿的），

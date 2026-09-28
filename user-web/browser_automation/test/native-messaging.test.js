@@ -23,7 +23,7 @@ function fakeChromeRuntime() {
   return {
     // 真实 Chrome：每次 connectNative 返回**独立** port，监听器不跨 port 累积。
     // 早前的夹具复用同一个 port 对象，一次 disconnect 会把历史 N 个监听器全叫醒，
-    // 于是「重连上限」在测试里靠这个假象才够得到——夹具本身的假绿（批14 修）。
+    // 于是「重连上限」在测试里靠这个假象才够得到——夹具本身的假绿（修）。
     makeFreshPort,
     chromeAPI: {
       runtime: {
@@ -68,7 +68,7 @@ describe('native-messaging port', () => {
     await vi.advanceTimersByTimeAsync(2000);
     // 第二次 connectNative 调用
     expect(ctx.chromeAPI.runtime.connectNative).toHaveBeenCalledTimes(2);
-    // online 现在只在「端口存活满证活窗口」后才报（批14：连上就报 online 是假绿，
+    // online 现在只在「端口存活满证活窗口」后才报（连上就报 online 是假绿，
     // Host 秒退的场景当时会反复闪 online，popup 显示一切正常而服务端一个命令都下发不了）
     await vi.advanceTimersByTimeAsync(2000);
     expect(statuses).toContain('online');
@@ -87,7 +87,7 @@ describe('native-messaging port', () => {
     expect(statuses).not.toContain('online');
   });
 
-  // 批14：connect() 入口无条件 reconnectAttempts=0，把退避序列打回原形——
+  // connect() 入口无条件 reconnectAttempts=0，把退避序列打回原形——
   // 上限永远够不到（giveup 是死代码），Host 缺失时变成 2s 一次的永久进程风暴。
   it('连续失败退避递增（2s→4s），说明计数没在 connect 时被清零', async () => {
     const ctx = fakeChromeRuntime();

@@ -1,6 +1,6 @@
 // inject-sandbox.js — 复刻 Chrome executeScript 的「序列化边界」，供单测使用。
 //
-// 为什么需要它（批14 真机实证）：chrome.scripting.executeScript 只把 func.toString()
+// 为什么需要它（真机实证）：chrome.scripting.executeScript 只把 func.toString()
 // 送到页面里执行，闭包变量全部丢失。真 Chrome 上 probe 分支因此稳定抛
 // ReferenceError（executeScript 回 result:null），primitives.js 的 click 兜底把这条
 // 误判成「CDP 不可用」→ 每次点击都静默降级成 DOM 合成，且被降级路径的双发放大成

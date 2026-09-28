@@ -5,12 +5,12 @@
 const WAIT_SELECTOR_INTERVAL_MS = 200;
 
 // ---- 页面上下文函数（序列化注入，禁止引用外部闭包）----
-// 铁律（批14 真机实证，闸门见 test/inject-sandbox.js）：chrome.scripting.executeScript
+// 铁律（真机实证，闸门见 test/inject-sandbox.js）：chrome.scripting.executeScript
 // 只把 func.toString() 送进页面，模块作用域里的任何自由变量在页面侧都是 ReferenceError，
 // 且 Chrome 回包 result:null —— 调用方会把它误读成「注入没返回/CDP 不可用」。
 // 下面的 actionability 检查因此在 injClick / injClickNear / injPostCommentSend 里各内联一份
 //（三处必须同步改）；语义对齐 Playwright _retryPointerAction 的 visible/stable/enabled/hit-target/box 五项。
-// stable（批17 §8.2-1a）也在注入函数内部实现：rAF 双帧比盒，直到连续两帧同 box 才交坐标。
+// stable（§8.2-1a）也在注入函数内部实现：rAF 双帧比盒，直到连续两帧同 box 才交坐标。
 // 单帧模型不是障碍——Chrome 会等注入函数返回的 Promise 结算（injWaitForSelector 早就靠这条），
 // 所以「等落位」仍是一次 evaluate、零额外往返。结算窗上限（500ms）与帧间隔（16ms）随检查逻辑
 // 一起内联在各份 probe 里：注入函数引用不到模块作用域，改数值同样是三处一起改。
@@ -36,7 +36,7 @@ async function injClick(target, mode) {
       } catch { /* 无 elementFromPoint 的环境：跳过该项 */ }
       return null;
     };
-    // stable（批17 §8.2-1a，三份内联同步改）：连续两帧同 box 才算落位；一直动就一帧坐标都不下发。
+    // stable（§8.2-1a，三份内联同步改）：连续两帧同 box 才算落位；一直动就一帧坐标都不下发。
     // 节拍用 rAF，但真机后台 tab（open_tab active=false）不出帧，所以并挂 setTimeout 兜底——
     // 只等 rAF 的版本会在隐藏页里永挂。先比盒后查 deadline：被节流的静止元素照样一次通过。
     // 500ms 上限远小于 comment_send 的 15s 注入竞速窗：超窗会被切成 *_inject_timeout，
@@ -83,12 +83,12 @@ async function injClick(target, mode) {
   }
   // DOM 兜底路径保持宽松（旧语义）：jsdom/无几何环境也能走通；仅 disabled 硬失败。
   // 可见性/遮挡一项不在这里重判——那是 probe 的职责，且 dispatch 层已保证
-  // probe 不通过就不会走到这条路径（批14：闸门不得被兜底绕过）。
+  // probe 不通过就不会走到这条路径（闸门不得被兜底绕过）。
   if (el.disabled) return { ok: false, error: 'element_not_interactable: disabled' };
   try { el.scrollIntoView?.({ block: 'center', inline: 'center' }); } catch { /* jsdom/不可滚动时忽略 */ }
   // SPA（React/Vue 合成事件）监听的是指针序列，所以一次动作 = 一轮指针事件 + 一个 click。
   // click 由 el.click() 收尾：它既是唯一的那个 click 事件，又带浏览器激活行为
-  //（表单提交 / 链接跳转 / 勾选切换）。批14 真机证据（session 536/537）：原先在
+  //（表单提交 / 链接跳转 / 勾选切换）。真机证据（session 536/537）：原先在
   // el.click() 之外又 dispatchEvent(new MouseEvent('click'))，页面收到两个 click，
   // 「发送」按钮的 handler 跑了两遍 = 公开内容双发且不可撤回。
   const opts = { bubbles: true, cancelable: true, view: window, pointerId: 1, isPrimary: true };
@@ -191,7 +191,7 @@ function injType(target, value, clearFirst, submitOnEnter, mode) {
       }
     }
     // Enter 只在被要求时发：富文本评论框上「键入」和「提交」是两件事，
-    // 无条件派发等于让一个 type 步骤带上不可撤回的提交语义（批14）。
+    // 无条件派发等于让一个 type 步骤带上不可撤回的提交语义。
     if (submitOnEnter) {
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
     }
@@ -225,7 +225,7 @@ function injNavigatedCheck(probePageUrl) {
   } catch { return { ok: true, navigated: false }; }
 }
 
-// injClickIdentityCheck 批17 §8.2-1b：trusted 点击**之后**的身份复核（只有写步下发这条）。
+// injClickIdentityCheck §8.2-1b：trusted 点击**之后**的身份复核（只有写步下发这条）。
 // 探测与真点之间隔着拟人贝塞尔轨迹的飞行时间（可达数百 ms），这期间轮播/懒加载/toast 挪动页面，
 // 就会点到一个从未被探测过的元素，而旧回包仍是 {ok:true, channel:'cdp'}——静默假绿。
 // 只复核「页面侧此刻还观测得到」的三件事：selector 仍可解析、中心点未挪出容差、
@@ -601,7 +601,7 @@ function injPostCommentVerify(targetText, opts) {
     }
     return false;
   };
-  // 子树版（F11b 批6）：容器/条目级取文同样必须剔除输入子树。
+  // 子树版：容器/条目级取文同样必须剔除输入子树。
   // 真机 Leg X 实测形态——小红书评论输入框**就在** .comments-container 里面，
   // 旧实现整容器 textOf(c) 直接命中那条未提交草稿 → 零提交也报 verified=true。
   // 不可逆动作的自检假绿是所有假里最坏的一类（用户据此认为评论已发出）。
@@ -758,7 +758,7 @@ async function executeInTab(tabId, func, args = []) {
 
 // isUnackedClick CDP 可信点击的「结局未知」态：mousePressed/mouseReleased 已下发进渲染进程
 // 队列，只是 ack 没回来（后台 tab 不出帧时实测可达 5s+/条）。
-// 批9：这种态**绝不**走 DOM el.click() 兜底——兜底等于在「可能已经点中」之上再点一次，
+// 这种态**绝不**走 DOM el.click() 兜底——兜底等于在「可能已经点中」之上再点一次，
 // 对提交/发送按钮就是双发（公开评论不可撤回）。宁可把未知态原样抛给上层，
 // 由服务端 finalize 用只读验证裁决（写步骤 retries=0，见 Go 侧台账）。
 // 其余 CDP 失败（attach 被拒、调试器被占）事件从未下发，兜底仍然保留。
@@ -766,7 +766,7 @@ function isUnackedClick(msg) {
   return String(msg || '').includes('click_unacked');
 }
 
-// asIdentityVerdict 批17(b) 点后复核的归因：复核自己给出 element_moved 就原样上抛（那是结论）；
+// asIdentityVerdict 点后复核的归因：复核自己给出 element_moved 就原样上抛（那是结论）；
 // 复核跑不动（注入没回包/该帧被销毁）必须换名成 identity_recheck_failed——未知态既不能顺着
 // 「没抛错就是 ok」变成静默绿，也不能冒充「元素挪位」这个已经查明成因的具体结论。
 function asIdentityVerdict(e) {
@@ -821,7 +821,7 @@ export async function dispatch(cmd, deps) {
       const tabId = cmd.tab_id;
       const exists = await tabExists(tabId);
       if (!exists) throw new Error('tab_not_found: ' + tabId);
-      // refs → CSS selector 映射（@eN 引用在 SW 内存、按 tab 分桶，批9）
+      // refs → CSS selector 映射（@eN 引用在 SW 内存、按 tab 分桶）
       // 解析不出来的 @eN=快照已失效（导航/新帧重置），绝不能原样塞进 querySelector：
       // 那会变成 DOMException「'@e77' is not a valid selector」，把「元素未命中」伪装成语法错误，
       // 而 A1 自愈只认 *_not_found 结构化 token（executor_selfheal.go isSelectorMiss）——
@@ -837,7 +837,7 @@ export async function dispatch(cmd, deps) {
         case 'click': {
           // F1 铁律 2 收口：写操作主通道=CDP trusted（probe 定位坐标→贝塞尔轨迹点击）；
           // CDP 不可用（调试器被占/扩展受限）才降级 DOM 合成兜底——兜底结果标注 channel。
-          // 批14：probe 必须在 try 外面。原实现把 probe 和 CDP 点击放同一个 try，
+          // probe 必须在 try 外面。原实现把 probe 和 CDP 点击放同一个 try，
           // probe 报「元素不可交互（被浮层遮挡/不可见/零尺寸）」时被 catch 当成
           // 「CDP 不可用」而降级 DOM 兜底——兜底不重查可见性，闸门恰好在它最该
           // 生效的那一刻被自己绕过（浮层还压着，按钮已经被点掉了）。
@@ -870,7 +870,7 @@ export async function dispatch(cmd, deps) {
             }
             throw e;
           }
-          // 批17(b)：写步的点后身份复核。**必须落在上面那个 try 之外**——复核失败若在 try 内
+          // 写步的点后身份复核。**必须落在上面那个 try 之外**——复核失败若在 try 内
           // 抛出，会被 catch 当成「CDP 不可用」而走 DOM 兜底再点一次：那是「已经发生的动作」
           // 之上再动一次（双发），正是本批要消灭的形状。DOM 兜底不做复核：兜底点的是元素本身，
           // 复核只会把真动作误判成移动。导航已发生同样跳过：那是跳转，不是元素挪位。
@@ -988,7 +988,7 @@ export async function dispatch(cmd, deps) {
           const btn = await raceTimeout(executeInTab(tabId, injPostCommentSend, [inputSel, sendText]), cmd.inject_timeout_ms || 15000, 'comment_send');
           if (!btn.ok) throw new Error(btn.error || 'send_button_not_found');
           await cdpInput.clickAt(tabId, btn.x, btn.y, { jitterRadius: btn.jitter_radius });
-          // 批20c（§8.2-1 尾项）：三条 trusted 写通道的最后一处点后复核。判据与 click/click_near
+          // 三条 trusted 写通道的最后一处（comment_send）点后复核。判据与 click/click_near
           // 同口径——探测与真点之间隔着贝塞尔轨迹的飞行时间，这期间浮层压上来就会把一次
           // **不可撤回的公开提交**落在一个从未被探测过的元素上，而旧回包照样 sent:true。
           // 这里刻意不套 try/catch 兜底：comment_send 全程没有任何 DOM 兜底分支，

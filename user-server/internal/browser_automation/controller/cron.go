@@ -20,7 +20,7 @@ func NewCronController(svc *service.CronService) *CronController {
 	return &CronController{svc: svc}
 }
 
-// cronErrToResponse 触发器域出口：与任务域共用同一份分类（批19c），404 的主语是触发器。
+// cronErrToResponse 触发器域出口：与任务域共用同一份分类，404 的主语是触发器。
 func cronErrToResponse(ctx *gin.Context, err error) {
 	baErrToResponse(ctx, err, "触发器不存在")
 }
@@ -39,7 +39,7 @@ func (c *CronController) List(ctx *gin.Context) {
 func (c *CronController) Create(ctx *gin.Context) {
 	var req dto.CreateCronReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	enabled := true
@@ -63,7 +63,7 @@ func (c *CronController) Update(ctx *gin.Context) {
 	}
 	var req dto.UpdateCronReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	tr, err := c.svc.Update(ctx.Request.Context(), uint(id), taskUserID(ctx), req.CronExpr, req.TimeZone)

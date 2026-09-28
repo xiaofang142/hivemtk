@@ -33,7 +33,7 @@ type BrowserTask struct {
 	// RequireConfirm D7：写操作（post_comment 提交点）前置人工确认开关。
 	// 默认 false=铁律 4 全自动不变；true 时不可逆提交前挂起等 POST /sessions/:id/confirm。
 	RequireConfirm bool `gorm:"column:require_confirm;default:false" json:"require_confirm"`
-	// ConfirmWaitSec 批8：确认挂起的独立预算（秒），0=按默认 600s。
+	// ConfirmWaitSec 确认挂起的独立预算（秒），0=按默认 600s。
 	// 此前确认等待「兼职」在 TimeoutSec 上——人还没看到待确认，任务就先被执行预算掐死；
 	// 反之确认占用的时间又把执行预算吃光。两条预算各管各的（见 service.taskExecBudget）。
 	ConfirmWaitSec int `gorm:"column:confirm_wait_sec;default:600" json:"confirm_wait_sec"`

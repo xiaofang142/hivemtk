@@ -73,6 +73,9 @@
           <el-button size="small" @click="toggleCron">{{ cron.enabled ? '停用' : '启用' }}</el-button>
           <el-button size="small" type="danger" @click="removeCron">删除</el-button>
         </el-space>
+        <div v-if="cronBlocked" class="cron-warn">
+          任务状态 {{ task.status }} 不可执行，到点只会空跑（不产生会话，服务端只写一条告警日志）——需先发布
+        </div>
       </template>
       <template v-else>
         <el-space>
@@ -84,27 +87,39 @@
         </el-space>
       </template>
     </el-card>
+
+    <el-dialog v-model="hostDialog.visible" title="本机 Chrome 未连接" width="520px">
+      <HostInstallGuide />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getBrowserTask, publishBrowserTask, runBrowserTask,
   listBrowserTaskSessions,
   createBrowserCron, listBrowserCron, enableBrowserCron, disableBrowserCron, deleteBrowserCron,
 } from '@/api/browserAutomation'
+import { classifyRunError, HOST_OFFLINE, TASK_BUSY, RUN_ERROR_TEXT } from './hostRunError'
+import HostInstallGuide from './HostInstallGuide.vue'
 
 const route = useRoute()
+const router = useRouter()
 const task = ref(null)
 const sessions = ref([])
 const cron = ref(null)
 const newCronExpr = ref('*/5 * * * *')
 const newCronTz = ref('Asia/Shanghai')
+const hostDialog = reactive({ visible: false })
 
 const unpack = (res) => res?.data ?? res
+
+// 与执行历史/触发器同一条任务状态预算：draft/archived 挂了启用中的触发器也不会产生会话
+const RUNNABLE_STATUS = ['ready', 'paused', 'done', 'failed']
+const cronBlocked = computed(() => !!cron.value?.enabled && !RUNNABLE_STATUS.includes(task.value?.status))
 
 async function load() {
   const id = route.params.id
@@ -122,16 +137,26 @@ async function load() {
 
 async function onRun() {
   try {
-    await runBrowserTask(task.value.id)
+    const res = await runBrowserTask(task.value.id)
+    // 点了执行就要看得见执行：直接进这条会话的监控页（放行闸门、步骤流都在那里）
+    const sid = unpack(res)?.session_id
     ElMessage.success('已开始执行')
-    setTimeout(load, 500)
-  } catch (e) { ElMessage.error(String(e?.message || e)) }
+    load()
+    if (sid) router.push(`/browser-automation/sessions/${sid}`)
+  } catch (e) {
+    const kind = classifyRunError(e)
+    if (kind === HOST_OFFLINE) hostDialog.visible = true
+    else if (kind === TASK_BUSY) ElMessage.warning(RUN_ERROR_TEXT(e))
+    else ElMessage.error(RUN_ERROR_TEXT(e))
+  }
 }
 
 async function onPublish() {
-  await publishBrowserTask(task.value.id)
-  ElMessage.success('已发布')
-  load()
+  try {
+    await publishBrowserTask(task.value.id)
+    ElMessage.success('已发布')
+    load()
+  } catch (e) { ElMessage.error(RUN_ERROR_TEXT(e)) }
 }
 
 async function addCron() {
@@ -142,16 +167,31 @@ async function addCron() {
   } catch (e) { ElMessage.error(String(e?.message || e)) }
 }
 
+// 启停/删除失败时必须回读后端真相：否则开关停在「看起来已经改了」的位置，
+// 用户以为定时器已停用，实际下一个触发点照样会响。
 async function toggleCron() {
-  if (cron.value.enabled) await disableBrowserCron(cron.value.id)
-  else await enableBrowserCron(cron.value.id)
-  load()
+  const next = !cron.value.enabled
+  try {
+    if (cron.value.enabled) await disableBrowserCron(cron.value.id)
+    else await enableBrowserCron(cron.value.id)
+    ElMessage.success(next ? '已启用' : '已停用')
+  } catch (e) {
+    ElMessage.error(`操作失败：${String(e?.message || e)}`)
+  }
+  await load()
 }
 
 async function removeCron() {
-  await ElMessageBox.confirm('确认删除该触发器？', '提示', { type: 'warning' })
-  await deleteBrowserCron(cron.value.id)
-  load()
+  try {
+    await ElMessageBox.confirm('确认删除该触发器？', '提示', { type: 'warning' })
+  } catch { return } // 用户取消不是失败
+  try {
+    await deleteBrowserCron(cron.value.id)
+    ElMessage.success('触发器已删除')
+  } catch (e) {
+    ElMessage.error(`删除失败：${String(e?.message || e)}`)
+  }
+  await load()
 }
 
 onMounted(load)
@@ -160,4 +200,5 @@ onMounted(load)
 <style scoped>
 .page { padding: 16px; }
 .header { display: flex; justify-content: space-between; align-items: center; }
+.cron-warn { color: #e6a23c; font-size: 12px; line-height: 1.6; margin-top: 8px; }
 </style>

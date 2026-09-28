@@ -1,4 +1,4 @@
-// 批14 静态闸门：任何被送进页面的注入函数都必须自包含（不得引用模块顶层名字）。
+// 静态闸门：任何被送进页面的注入函数都必须自包含（不得引用模块顶层名字）。
 // 与 inject-sandbox.js 的分工：沙箱跑的是「用例真的调用到」的注入函数，
 // 这里覆盖的是「全部」注入函数——包括 wait_for_selector / markdown / comment_verify
 // 这些单测不一定逐个跑到页面的。漏网一条就是一整个批次的静默降级（真机实证过）。
@@ -17,7 +17,7 @@ const INJECTED_FROM_ACCESSIBILITY = ['collectInteractiveNodes'];
 const read = (f) => readFile(resolve(CORE, f), 'utf8');
 const refs = (vs) => vs.map((v) => `${v.fn}->${v.ref}`).sort();
 
-describe('注入函数自包含性（批14 静态闸门）', () => {
+describe('注入函数自包含性（静态闸门）', () => {
   it('primitives.js 枚举到的注入目标不少于 12 个（枚举集合本身不能缩水）', async () => {
     const targets = injectedTargets(await read('primitives.js'));
     expect(targets.length).toBeGreaterThanOrEqual(12);
@@ -72,7 +72,7 @@ describe('注入函数自包含性（批14 静态闸门）', () => {
       "const MAX_NODES = 400;",
       "function injClick(target) { return { ok: !!document.querySelector(target) }; }",
       "function injLoud(sel) {",
-      "  // 与 injClick 同一份检查；MAX_NODES 的口径也照它抄（批14 前这里是注释）",
+      "  // 与 injClick 同一份检查；MAX_NODES 的口径也照它抄（这里曾经只是一句注释）",
       "  /* 另一段注释提到 MAX_NODES */",
       "  const msg = 'MAX_NODES 引用在字符串里: injClick';",
       "  return { ok: !!document.querySelector(sel), msg };",

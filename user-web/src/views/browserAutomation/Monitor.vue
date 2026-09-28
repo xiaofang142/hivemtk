@@ -38,11 +38,50 @@
       {{ session.llm_summary }}
     </el-card>
 
+    <el-card v-if="hasExtracted" header="提取数据（各次 extract 的合并结果，键=编排里的选择器名）" style="margin-top: 12px">
+      <div v-for="item in dataEntries(session.extracted_data)" :key="item.key" class="detail-item">
+        <span class="detail-key">{{ item.key }}</span>
+        <pre v-if="item.kind === 'block'" class="detail-block">{{ item.text }}</pre>
+        <span v-else class="detail-inline">{{ item.text }}</span>
+      </div>
+    </el-card>
+
     <el-card header="步骤执行" style="margin-top: 12px">
       <el-table :data="steps" v-loading="loading">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="step-detail">
+              <div v-if="row.submit_state" class="submit-ledger">
+                <span class="detail-key">写操作台账</span>
+                <el-tag size="small" :type="SUBMIT_COPY[row.submit_state]?.type || 'info'">{{ row.submit_state }}</el-tag>
+                <span class="detail-inline">{{ SUBMIT_COPY[row.submit_state]?.text || '未知提交态（服务端未给结论，按未提交对待）' }}</span>
+                <span v-if="row.text_hash" class="detail-hash">正文指纹 {{ row.text_hash }}</span>
+              </div>
+              <div v-for="g in stepDataGroups(row)" :key="g.title" class="detail-group">
+                <div class="detail-title">{{ g.title }}</div>
+                <div v-for="item in g.entries" :key="item.key" class="detail-item">
+                  <span class="detail-key">{{ item.key }}</span>
+                  <pre v-if="item.kind === 'block'" class="detail-block">{{ item.text }}</pre>
+                  <span v-else class="detail-inline">{{ item.text }}</span>
+                </div>
+              </div>
+              <div v-if="!row.submit_state && !stepDataGroups(row).length" class="detail-empty">
+                这一步没有回包数据（动作只改变页面状态，不返回内容）
+              </div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column type="index" label="#" width="60" />
-        <el-table-column prop="action" label="动作" width="130" />
+        <el-table-column prop="action" label="动作" width="130">
+          <template #default="{ row }">
+            <span>{{ row.action }}</span>
+            <el-tag v-if="row.is_write" size="small" type="warning" class="write-tag">写</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="target" label="目标" min-width="160" show-overflow-tooltip />
+        <el-table-column label="值" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.value || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="{ success: 'success', failed: 'danger', running: 'warning', skipped: 'info', pending: 'info' }[row.status] || 'info'">
@@ -89,8 +128,29 @@
       </el-table>
     </el-card>
 
+    <el-card v-if="session?.snapshot" style="margin-top: 12px">
+      <template #header>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>页面快照（可访问性树文本，{{ session.snapshot.length }} 字符——定位失败时拿它对照真实结构）</span>
+          <el-button size="small" @click="snapshotOpen = !snapshotOpen">{{ snapshotOpen ? '收起' : '展开全部' }}</el-button>
+        </div>
+      </template>
+      <pre class="detail-block" :class="{ collapsed: !snapshotOpen }">{{ session.snapshot }}</pre>
+    </el-card>
+
     <el-card v-if="session?.final_screenshot_url" header="最终截图" style="margin-top: 12px">
-      <el-image :src="session.final_screenshot_url" fit="contain" style="max-width: 100%" :preview-src-list="[session.final_screenshot_url]" />
+      <el-image
+        :src="session.final_screenshot_url"
+        fit="contain"
+        style="max-width: 100%"
+        :preview-src-list="[session.final_screenshot_url]"
+      >
+        <template #error>
+          <div class="img-fallback">
+            截图取不到（文件可能不在本机 uploads 目录里，或服务端存的是相对路径而非可访问 URL）：{{ session.final_screenshot_url }}
+          </div>
+        </template>
+      </el-image>
     </el-card>
   </div>
 </template>
@@ -133,11 +193,63 @@ const payloadPreview = (p) => {
   return str.length > 160 ? str.slice(0, 160) + '…' : str
 }
 
-// 批20b（A2）：ok 是三态，不是布尔。null = 这一帧不携带结论（下发帧写下时 Host 还没回执；
-// 批21 之后更进一步——那一帧甚至可能根本没上线）。把 null 折进 falsy 分支就等于把每一条
+// ok 是三态，不是布尔。null = 这一帧不携带结论（下发帧写下时 Host 还没回执；
+// 之后更进一步——那一帧甚至可能根本没上线）。把 null 折进 falsy 分支就等于把每一条
 // 「下发」都画成失败，而旧模板 `row.ok ? '✓' : '✗'` 在服务端改掉常量 true 的同一批就会犯这个错。
 // 未知形状（缺字段/字符串）一律走 '—'：宁可说"这帧没结论"，也不替用户编一个红或绿。
 const outcomeMark = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '—')
+
+// 写台账四态的文案。步的 status 记「这一步跑成什么样」，submit_state 记「这条内容的提交
+// 是否可能发生」，两者在「send 到达但回查未见」时必然分叉（status=failed 而提交已生效）。
+// 所以这一行不许并进状态标签里：把 failed 直接读成「没发出去」就会去重发，而重发＝双发。
+const SUBMIT_COPY = {
+  prepared: { type: 'info', text: '文本只进了输入框，提交从未发生——这一步可以安全重跑' },
+  sent: { type: 'warning', text: '提交命令已发出，但平台侧结局未确认——不会自动重试，重试即可能双发' },
+  verified: { type: 'success', text: '回查已在页面上见到这条正文——它确实发出去了' },
+  unattributed: { type: 'danger', text: '试过提交但没能归因到这一步——仍拦重发，请人工到平台确认' },
+}
+
+const hasExtracted = computed(() => {
+  const d = session.value?.extracted_data
+  return d && typeof d === 'object' && Object.keys(d).length > 0
+})
+
+// 快照/正文类长字段在 a11y 树里动辄数千字符，默认折起来，展开才给全高。
+const snapshotOpen = ref(false)
+
+// 把 {k: v} 摊成 [{key, kind, text}]：kind=block 走等宽 pre（长文本/数组/对象），
+// kind=inline 走一行短文本。extract 的回包形态（键=选择器名、值=字符串或字符串数组）
+// 与 query/markdown 的标量形态共用这一份渲染，避免出现第二个「JSON 怎么显示」的口径。
+const describeValue = (val) => {
+  if (Array.isArray(val)) {
+    return { kind: 'block', text: `${val.length} 项\n${val.map((v, i) => `${i + 1}. ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')}` }
+  }
+  if (val && typeof val === 'object') return { kind: 'block', text: JSON.stringify(val, null, 2) }
+  if (typeof val === 'string') {
+    return val.length > 60 ? { kind: 'block', text: val } : { kind: 'inline', text: val === '' ? '（空字符串）' : val }
+  }
+  if (val == null) return { kind: 'inline', text: 'null' }
+  return { kind: 'inline', text: String(val) }
+}
+
+const dataEntries = (obj) => {
+  if (obj == null) return []
+  const src = typeof obj === 'string' ? (() => { try { return JSON.parse(obj) } catch { return null } })() : obj
+  if (src == null || typeof src !== 'object') return [{ key: '值', ...describeValue(obj) }]
+  return Object.entries(src).map(([key, val]) => ({ key, ...describeValue(val) }))
+}
+
+// 步骤展开面板里的数据组：params 是编排声明的扩展参数（步「想怎么做」），
+// result 是原语回包（步「实际拿到什么」）。两者都要能被看见——只给状态行不给回包，
+// extract/snapshot/query 这类「产出物就是数据」的步骤等于什么都没执行。
+const stepDataGroups = (row) => {
+  const groups = []
+  const params = dataEntries(row.params)
+  if (params.length) groups.push({ title: '下发参数', entries: params })
+  const result = dataEntries(row.result)
+  if (result.length) groups.push({ title: '执行回包', entries: result })
+  return groups
+}
 
 async function loadLogs() {
   try {
@@ -199,7 +311,7 @@ async function onStop() {
   load()
 }
 
-// D7：人工放行挂起的写操作提交点。批20 起放行绑载荷——只能批准页面正在显示的那一份；
+// D7：人工放行挂起的写操作提交点。放行绑载荷——只能批准页面正在显示的那一份；
 // 结论按 status 分流（confirmed 只说「闸门认没认」，三种「没放行」必须各说各的原因）。
 async function onConfirm() {
   const hash = gate.value?.payload_hash
@@ -256,4 +368,29 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
 <style scoped>
 .page { padding: 16px; }
 .header { display: flex; justify-content: space-between; align-items: center; }
+.step-detail { padding: 8px 16px; }
+.detail-group { margin-bottom: 12px; }
+.detail-title { font-size: 12px; color: #909399; margin-bottom: 6px; }
+.detail-item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }
+.detail-key { min-width: 110px; color: #606266; font-size: 12px; }
+.detail-inline { font-size: 13px; }
+.detail-hash { color: #909399; font-size: 12px; margin-left: 8px; }
+.detail-block {
+  margin: 0;
+  flex: 1;
+  max-height: 220px;
+  overflow: auto;
+  background: #f6f7f9;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.detail-block.collapsed { max-height: 120px; }
+.submit-ledger { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.write-tag { margin-left: 6px; }
+.detail-empty { color: #909399; font-size: 12px; }
+.img-fallback { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 120px; color: #909399; font-size: 12px; padding: 12px; }
 </style>

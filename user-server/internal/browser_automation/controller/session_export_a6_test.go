@@ -1,6 +1,6 @@
 package controller
 
-// 批22（A6）最后一跳：导出的 HTTP 载荷里到底有没有那一份摘要。
+// 最后一跳：导出的 HTTP 载荷里到底有没有那一份摘要。
 //
 // 服务层用例（session_export_test.go）只证明 SessionExport 回了这个值；控制器把六元组
 // 摊成 gin.H 的那一行是另一个断点。这一跳断掉的代价不是报错，而是**说不出话**：

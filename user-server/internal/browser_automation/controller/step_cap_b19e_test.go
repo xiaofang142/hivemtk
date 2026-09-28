@@ -1,6 +1,6 @@
 package controller
 
-// 批19e 契约锁：编排步数必须有上界。
+// 契约锁：编排步数必须有上界。
 // CreateBrowserTaskReq 对每个数字参数都钳了区间（loop_count 1..1000、delay_ms、timeout_sec、
 // retry_*），唯独 Steps 数组本身没有 max——于是一条任务可以带 100 万步。
 // 落点不是「跑不完」那层（会话有 TimeoutSec≤3600 的硬闸兜着），而是**读放大**：
@@ -80,9 +80,16 @@ func TestB19EStepCountOverCapIsRejectedAtTheBoundary(t *testing.T) {
 	if body.Code != string(utils.ErrorCodeInvalidParameter) {
 		t.Errorf("%d 步 → code=%v want %s（超上界是入参问题，不是服务端故障）", b19eCap+1, body.Code, utils.ErrorCodeInvalidParameter)
 	}
-	if !strings.Contains(body.Message, "Steps") {
+	// 绑定错误的文案必须点出**对外**字段名 steps（见 bind_err.go：这一族入口不再回显 Go
+	// 结构体名，原来这里断言的 "Steps" 正是那句回显结构体名的副产品）。
+	// 上限数值也要在——它是用户唯一能照着改的信息。
+	if !strings.Contains(body.Message, "steps") {
 		t.Errorf("%d 步的拒绝文案得点出是哪个字段：%q", b19eCap+1, body.Message)
 	}
+	if !strings.Contains(body.Message, fmt.Sprint(b19eCap)) {
+		t.Errorf("%d 步的拒绝文案得给出上限：%q", b19eCap+1, body.Message)
+	}
+	assertNoInternalLeak(t, body.Message)
 	// 上界生效不该留下半成品：一行都不许落库（按名字数，本包的用例共用同一进程库，
 	// 全用户计数会把别的腿合法创建的那行算进来）
 	var n int64

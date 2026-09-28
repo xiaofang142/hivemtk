@@ -1,10 +1,10 @@
 package controller
 
-// 批19d 契约锁：会话域不许把「读不出来」说成「不存在」。
+// 契约锁：会话域不许把「读不出来」说成「不存在」。
 // session 的六个读/写入口把所有 service 错误一律写成 `404 会话不存在`——两类结论被折成一句：
 // 真的没有这条会话（用户该换个 id），和会话在、但库里读不动（连接/超时/数据故障，服务端该进监控）。
 // 真机侧的观感是列表页明明有这条会话、点详情却弹「会话不存在」；同时一次服务端故障被记成
-// 用户误操作（批10b 的 500 洗白问题，方向相反：那是客户端错误被记成故障，这是故障被记成客户端错误）。
+// 用户误操作（的 500 洗白问题，方向相反：那是客户端错误被记成故障，这是故障被记成客户端错误）。
 // 断的是码与主语，不是措辞。
 //
 // 造内部错误的取径说明（先量后写，别照着想当然）：
@@ -83,7 +83,7 @@ func TestB19DSessionReadFailureIsNotReportedAsMissingSession(t *testing.T) {
 		{"ListLogs", c.ListLogs, http.MethodGet, ""},
 		{"Export", c.Export, http.MethodGet, ""},
 		{"Stop", c.Stop, http.MethodPost, ""},
-		// 批20 起放行必须带载荷哈希：不带的话 400 挡在服务层之前，
+		// 起放行必须带载荷哈希：不带的话 400 挡在服务层之前，
 		// 这条腿要测的是「服务层读不动」，就得先把入参喂对。
 		{"Confirm", c.Confirm, http.MethodPost, `{"payload_hash":"b19d-any-hash"}`},
 		{"ConfirmGate", c.ConfirmGate, http.MethodGet, ""},
@@ -108,7 +108,7 @@ func TestB19DSessionReadFailureIsNotReportedAsMissingSession(t *testing.T) {
 }
 
 // 反向锁：真的没有这条会话时，404 与「会话不存在」必须原样保留——分流不能把 not-found
-// 一并洗成 500，否则前端丢掉「这条 id 不存在」的结论（同批10b 的对偶腿）。
+// 一并洗成 500，否则前端丢掉「这条 id 不存在」的结论（同对偶腿）。
 func TestB19DMissingSessionStill404WithRightSubject(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.BrowserSession{}, &model.BrowserStep{})
 	if db == nil {

@@ -20,7 +20,7 @@ type StepItem struct {
 	AssertKind string `json:"assert_kind" binding:"omitempty,oneof=contains_text selector_exists"` // assert 子类型
 	QueryKind  string `json:"query_kind" binding:"omitempty,oneof=text exists count attr"`         // query 子类型
 	Attribute  string `json:"attribute" binding:"omitempty,max=64"`                                // query attr 用：属性名（href/src/value/...）
-	// IsWrite 批7：编排方显式声明「本步是不可逆写」。服务端只认「声明 ∪ 原语推导」的并集，
+	// IsWrite 编排方显式声明「本步是不可逆写」。服务端只认「声明 ∪ 原语推导」的并集，
 	// 声明不许撤销推导（否则 LLM 一句 is_write=false 就能把发送步的重试闸门关掉）。
 	IsWrite bool `json:"is_write"`
 	// 错误处理策略
@@ -37,13 +37,19 @@ type CreateBrowserTaskReq struct {
 	Platform    string `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），空=xiaohongshu 兼容存量
 	BrainMode   bool   `json:"brain_mode"`
 	BrainGoal   string `json:"brain_goal"`
-	// Steps 批19e：数组长度必须有上界。其余数值参数一早就钳了区间，只有步数没钳，
+	// Steps 数组长度必须有上界。其余数值参数一早就钳了区间，只有步数没钳，
 	// 于是「一条任务带 100 万步」是合法请求。真正被打穿的不是执行（会话有 TimeoutSec 硬闸），
 	// 而是**读放大**：steps 整列随任务详情返回，GET 一次就是把百 MB JSON 拉进内存再吐给前端，
 	// 而实例是共享的。200 的口径依据：设计前提「单任务步数量级为个位数」（写台账决策 1 按它省掉复合索引），
 	// 200 已是任何真实编排的十几倍余量。上界改动要连 controller/step_cap_b19e_test.go 的 b19eCap 一起改，
 	// 边界两腿（内侧必过 / 外侧必拒）才会指出动了哪一侧。
-	Steps []StepItem `json:"steps" binding:"omitempty,max=200"`
+	//
+	// dive：validator 对 slice 只跑 slice 级规则，元素规则一条都不跑，除非显式 dive。
+	// 少了它，StepItem 上那三行 oneof（action/direction/assert_kind/query_kind）加 retry_* 区间
+	// 全是装饰——POST `{"steps":[{"action":"rm_rf"}]}` 会建单成功并一路 published，
+	// 到执行期才在 dispatchStep 的 default 上炸「未知动作」。Brain 侧闸门早就拦住了这种
+	// 「注定失败的步骤行」，REST 入口必须与那道闸门同判据，否则编排模式是绕过闸门的侧门。
+	Steps []StepItem `json:"steps" binding:"omitempty,max=200,dive"`
 	// 正文长度不在本批改：单条命令帧在 nm-host 侧已有 1 MiB 硬顶（cmd/nm-host/main.go nmMaxOutboundFrameBytes），
 	// 超帧的步根本执行不了；在这里给 Value/Target 加字数上限反而会把一条本来就合法的长评论判死在服务端。
 	LoopCount  int `json:"loop_count" binding:"omitempty,min=1,max=1000"`
@@ -58,7 +64,7 @@ type CreateBrowserTaskReq struct {
 	MaxRetryTimes int  `json:"max_retry_times" binding:"omitempty,min=0,max=10"`
 	// RequireConfirm D7：写操作提交前人工确认开关（默认 false=全自动）
 	RequireConfirm bool `json:"require_confirm"`
-	// ConfirmWaitSec 批8：D7 确认等待预算（秒）。与 TimeoutSec 解耦——确认挂起不吃执行预算。
+	// ConfirmWaitSec D7 确认等待预算（秒）。与 TimeoutSec 解耦——确认挂起不吃执行预算。
 	// 0=用服务端默认（600s）；上限 900s 与 Editor.vue 夹紧同口径。
 	ConfirmWaitSec int `json:"confirm_wait_sec" binding:"omitempty,min=1,max=900"`
 }
@@ -71,15 +77,16 @@ type UpdateBrowserTaskReq struct {
 	Platform    *string `json:"platform" binding:"omitempty,max=32"`
 	BrainMode   *bool   `json:"brain_mode"`
 	BrainGoal   *string `json:"brain_goal"`
-	// Steps 批19e：编辑路径同口径——创建拦得住、编辑绕得过去，等于没拦
-	Steps      []StepItem `json:"steps" binding:"omitempty,max=200"`
+	// Steps 编辑路径同口径——创建拦得住、编辑绕得过去，等于没拦
+	// dive 同 CreateBrowserTaskReq：漏一侧＝该侧的步内规则（三行 oneof + retry_* 区间）全不生效
+	Steps      []StepItem `json:"steps" binding:"omitempty,max=200,dive"`
 	LoopCount  *int       `json:"loop_count" binding:"omitempty,min=1,max=1000"`
 	DelayMs    *int       `json:"delay_ms" binding:"omitempty,min=0,max=60000"`
 	TimeoutSec *int       `json:"timeout_sec" binding:"omitempty,min=10,max=3600"`
 	// RequireConfirm D7：指针语义——nil=不改（存量任务不因编辑而重置开关）
 	RequireConfirm *bool `json:"require_confirm"`
 	ConfirmWaitSec *int  `json:"confirm_wait_sec" binding:"omitempty,min=1,max=900"`
-	// 批20e：失败自动重试三件套补进编辑面。区间与 CreateBrowserTaskReq 逐字段同口径——
+	// 失败自动重试三件套补进编辑面。区间与 CreateBrowserTaskReq 逐字段同口径——
 	// 只在一侧钳等于没有钳（创建拒 600s、编辑存 600s 会让"哪个值合法"取决于走哪个入口）。
 	// 指针语义同上：nil=不改，编辑名字不许把用户配好的重试策略抹回默认值。
 	RetryOnFail   *bool `json:"retry_on_fail"`

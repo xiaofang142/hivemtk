@@ -1,6 +1,6 @@
 package dto
 
-// 批19h 契约锁：Brain 链路的动作白名单必须与 REST 的 oneof 同源、且缺判据时 fail-closed。
+// 契约锁：Brain 链路的动作白名单必须与 REST 的 oneof 同源、且缺判据时 fail-closed。
 //
 // 为什么会有一条没人管的动作名通道：REST 建任务走 binding 校验，Action 上的
 // `oneof=open_tab click …` 把不认识的动作挡在库里；Brain 模式却是 LLM 输出 JSON →

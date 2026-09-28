@@ -20,7 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 批5 A 链路端到端：真 WebSocket 帧 + 真 DB 落库 + 真 Executor 步循环，
+// A 链路端到端：真 WebSocket 帧 + 真 DB 落库 + 真 Executor 步循环，
 // 唯一替身是「扩展侧」（Chrome 不在此环境）。
 // 补的正是 post_comment_finalize_test.go:45 当年记下的缺口——
 // 「HostRegistry.Request 依赖真实 websocket 连接，此处不做网络桩」：
@@ -156,7 +156,7 @@ func newWSE2E(t *testing.T, reply func(action string, frame map[string]any) (map
 	}
 	exec := NewExecutor(NewHand(reg), bundle.sessionRepo, bundle.stepRepo, nil, nil)
 	exec.SetCommandLogRepository(bundle.cmdLogRepo)
-	// 批20f（A12）：必须接线，且不许换成整只 fake——独占裁决的真相就是库里那一次 INSERT，
+	// 必须接线，且不许换成整只 fake——独占裁决的真相就是库里那一次 INSERT，
 	// 替掉它之后本包所有写步用例判的都是一个不存在的东西。
 	exec.SetWriteClaimRepository(bundle.claimRepo)
 	return exec, ext, bundle
@@ -400,7 +400,7 @@ func TestWSE2E_D7GateHoldsSendUntilConfirmed(t *testing.T) {
 	if n := ext.countOf("comment_send"); n != 0 {
 		t.Fatalf("挂起期间 comment_send 已到线 %d 次——闸门失效（不可逆动作先于确认）", n)
 	}
-	// 批20 A5：放行带的是闸门登记的载荷哈希，且这份哈希就是「将要提交的那段正文」的指纹
+	// A5：放行带的是闸门登记的载荷哈希，且这份哈希就是「将要提交的那段正文」的指纹
 	gate, pending := exec.PendingGate(session.ID)
 	if !pending {
 		t.Fatal("挂起闸门查不到详情")
@@ -743,7 +743,7 @@ const (
 	// 槽位不是估的，是夹具本身：threeStageSteps 的 open_tab / snapshot / markdown / comment_prep
 	// 四条在放行前，放行后还有 comment_send 与 comment_verify。逐条取合法上界 ≈235s
 	// （markdown 自身是 2×defaultCmdTimeout），这里一律按 e2eCmdWindow 放大到 6×40+45+15=300s。
-	// 批16 那版写的是 `3×e2eCmdWindow`（理由句"最多三条命令在途"）——少算一半，负载够高时
+	// 那版写的是 `3×e2eCmdWindow`（理由句"最多三条命令在途"）——少算一半，负载够高时
 	// 这两条腿照样假红，只是比 3s/5s 时代难得多；「这轮没红」不等于「预算够」，算术要能复算。
 	e2eExecBudget = 6*e2eCmdWindow + handCommentSendTimeout + 15*time.Second
 )

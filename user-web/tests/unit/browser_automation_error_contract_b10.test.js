@@ -1,10 +1,10 @@
 /**
- * 批10 契约锁：浏览器自动化的 409 必须在客户端可分流。
+ * 契约锁：浏览器自动化的 409 必须在客户端可分流。
  *
  * 两条都是真踩过的形态，各配一条用例：
  *  ① 服务端把整族 409 折成同一个 code（DUPLICATE_ENTRY_3003）时，「已有任务执行中」
  *     也会弹出「去装 Host」的引导 → 断的是 bizCode，不是文案；
- *  ② 生产构建里 t() 对每个现存 key 抛 UNEXPECTED_RETURN_TYPE（spec F-N2 实测），
+ *  ② 生产构建里 t() 对每个现存 key 抛 UNEXPECTED_RETURN_TYPE（在生产构建里实测到），
  *     而它的调用点全在给错误对象挂 status/bizCode **之前** → 抛出后调用方拿到的
  *     连 Error 都不是，分流字段全丢 → 断的是「i18n 坏掉时契约仍然在」。
  */
@@ -65,7 +65,7 @@ async function runThroughInterceptor(err) {
   throw new Error('拦截器没有按预期 reject')
 }
 
-describe('浏览器自动化 409 的客户端契约（批10）', () => {
+describe('浏览器自动化 409 的客户端契约', () => {
   it('离线与忙各自带自己的 bizCode，且 HTTP 都是 409', async () => {
     const offline = await runThroughInterceptor(
       httpError(409, { code: 'BROWSER_HOST_OFFLINE_8001', message: '浏览器 Host 未连接' }),

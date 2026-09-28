@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// BrowserWriteClaim 不可逆写的**存储层独占声明**（批20f / §8.3-20 A12）。
+// BrowserWriteClaim 不可逆写的**存储层独占声明**（/ §8.3-20 A12）。
 //
 // 一行 = 「(task_id, text_hash) 这把坑被 step_row_id 这一步占着，它正要去跨提交点」。
 // 它的存在只为一件事：把「这次提交是否已被记过」的裁决权从应用层的

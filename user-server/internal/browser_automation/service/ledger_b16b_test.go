@@ -14,7 +14,7 @@ import (
 	"hivemtk-user/internal/browser_automation/repository"
 )
 
-// ledger_b16b_test.go — 批16b：二次对抗审核（生产代码轴 + 规格轴）确认的四处收口。
+// ledger_b16b_test.go — 二次对抗审核（生产代码轴 + 规格轴）确认的四处收口。
 //
 // 立项依据不是「再加固一点」，而是审核跑出来的具体失效形态：
 // ① 台账写入只看 `.Error`，而 0 行受影响时 Error 就是 nil（探针实测见 §7.9）——

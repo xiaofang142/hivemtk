@@ -1,4 +1,4 @@
-// blockdetect.go — A2 结构化拦截判据（2026-09-19 批2）。
+// blockdetect.go — 平台拦截的结构化判据（正则+状态码表）。
 //
 // 缺陷根因（旧实现）：文案 marker 对 snapshot 全文 Contains——评论/正文里出现
 // 「验证码」三个字就误判拦截。业界调研（MediaCrawler 系风控判定）结论：拦截判定

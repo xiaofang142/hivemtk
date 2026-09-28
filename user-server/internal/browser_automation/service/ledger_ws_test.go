@@ -13,7 +13,7 @@ import (
 	"hivemtk-user/internal/pkg/testutil"
 )
 
-// 批6（F11b）写台账测试。手法与 executor_ws_e2e_test.go 同一档：真 WS 帧 + 真测试库落库，
+// 写台账测试。手法与 executor_ws_e2e_test.go 同一档：真 WS 帧 + 真测试库落库，
 // 断的是「DB 里那一行的 submit_state」和「不可逆帧到线几次」——不是错误文案的字符串匹配。
 // 双发闸（本批立项理由）必须能在无真机情况下跑出来：第二次执行连 comment_prep 都不许到线。
 
@@ -175,7 +175,7 @@ func TestWSE2E_SecondRunIsBlockedBeforeAnyFrame(t *testing.T) {
 }
 
 //  6. FindSubmitAttempt 的范围：换任务/换文本不拦，prepared 不拦，其余三态都拦；
-//     而「同一任务、同一文本、不同 step_index」必须拦（批7 F-N4：Brain 模式每轮递增下标，
+//     而「同一任务、同一文本、不同 step_index」必须拦（Brain 模式每轮递增下标，
 //     带下标的键等于没有键）。
 //     （漏一个条件=该拦的没拦（双发）或多一个条件=不该拦的拦了（正常任务跑不动），两头都要测到）
 func TestFindSubmitAttemptScoping(t *testing.T) {
@@ -213,7 +213,7 @@ func TestFindSubmitAttemptScoping(t *testing.T) {
 	if _, err := repo.FindSubmitAttempt(ctx, taskID+1, h, 0); !isNotFound(err) {
 		t.Error("跨任务不得互拦")
 	}
-	// 尝试记在别的 step_index 上仍算尝试（F-N4：键里不再有下标）。
+	// 尝试记在别的 step_index 上仍算尝试（键里不再有下标）。
 	// 端到端那一面由 TestWSE2E_IndexDriftStillBlocked 守，这里只守 SQL 条件本身。
 	mk(7, model.StepSubmitSent, "只在别的下标投过")
 	if _, err := repo.FindSubmitAttempt(ctx, taskID, HashWriteText("只在别的下标投过"), 0); err != nil {

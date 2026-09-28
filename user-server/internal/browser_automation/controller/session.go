@@ -22,7 +22,7 @@ func NewSessionController(svc *service.SessionService) *SessionController {
 	return &SessionController{svc: svc}
 }
 
-// sessionErrToResponse 会话域出口（批19d）。
+// sessionErrToResponse 会话域出口。
 // 原先六个入口都是 `if err != nil { 404 会话不存在 }`——把「库读不动」和「这条会话不在」
 // 压成同一个结论：用户看到「会话不存在」去找 id，监控把一次服务端故障记成用户误操作。
 // 接上任务/触发器域共用的那份分流（baErrToResponse），404 的主语仍是「会话」。
@@ -34,7 +34,7 @@ func sessionErrToResponse(ctx *gin.Context, err error) {
 func (c *SessionController) List(ctx *gin.Context) {
 	var req dto.ListSessionReq
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		bindErrToResponse(ctx, err, &req)
 		return
 	}
 	list, total, err := c.svc.ListByUser(ctx.Request.Context(), taskUserID(ctx), req.Status, req.Page, req.Limit)
@@ -130,7 +130,7 @@ func (c *SessionController) Export(ctx *gin.Context) {
 	ctx.Header("Content-Disposition", "attachment; filename=browser_session_"+ctx.Param("id")+"_audit.json")
 	response.Success(ctx, gin.H{
 		"session": sess, "steps": steps, "command_log": logs, "llm_plans": plans,
-		// 批22（A6）：命令流被按界裁掉之后，这一份是「裁走了哪些行」的唯一凭据。
+		// 命令流被按界裁掉之后，这一份是「裁走了哪些行」的唯一凭据。
 		// 没有它，command_log 为空这一件事有两种解释，而导出包说不出是哪一种。
 		"audit_digests": digests,
 		"exported_at":   time.Now().Format(time.RFC3339),
@@ -159,7 +159,7 @@ func (c *SessionController) Stop(ctx *gin.Context) {
 }
 
 // ConfirmGate GET /browser-automation/sessions/:id/confirm-gate
-// D7 读侧详情（批20 A5/A10）：放行前必须看得见「等的是第几步、将要提交什么、到什么时候」，
+// D7 读侧详情：放行前必须看得见「等的是第几步、将要提交什么、到什么时候」，
 // 并把 payload_hash 带回去给 Confirm。归属校验在 service（预览含正文，越权读到就是外泄）。
 func (c *SessionController) ConfirmGate(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
@@ -180,7 +180,7 @@ func (c *SessionController) ConfirmGate(ctx *gin.Context) {
 }
 
 // Confirm POST /browser-automation/sessions/:id/confirm
-// D7：放行 require_confirm 闸门上的写操作提交点。批20 起放行**绑载荷**（A5）——请求必须带
+// D7：放行 require_confirm 闸门上的写操作提交点。放行**绑载荷**（A5）——请求必须带
 // GET confirm-gate 取到的 payload_hash，哈希不符即 409 且闸门原样留着：一条不带载荷的放行
 // 与一张空白支票同构（批准的内容可以换，也可以被下一个挂起点消费掉）。
 // 四态分流（A10）：放行 / 没有闸门 / 载荷不符 / 闸门在另一个进程——最后一种与第三种
@@ -211,7 +211,7 @@ func (c *SessionController) Confirm(ctx *gin.Context) {
 // granted/mismatch 两条需要进程内真有闸门，控制器测试造不出来，而「闸门在别处」与「没有闸门」
 // 的文案差异恰恰是最不该被写反的一条）。
 // data.status 带机器可读的态名：response.Error 走 int 码时会把 409 一律折成 DUPLICATE_ENTRY_3003
-// （批10 实测过），前端要靠文案 substring 才能分辨是哪一种「没放行」——那是把结论建在措辞上。
+// （实测过），前端要靠文案 substring 才能分辨是哪一种「没放行」——那是把结论建在措辞上。
 // 错误码表（internal/pkg/utils）在本批车道外，不为两个态去扩公共码域，改在 data 里给稳定判别位。
 func writeConfirmResult(ctx *gin.Context, res service.ConfirmResult) {
 	confirmed := res.Status == service.ConfirmStatusGranted

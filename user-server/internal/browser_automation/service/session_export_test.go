@@ -15,7 +15,7 @@ import (
 
 // R27-1 I5 审计导出：SessionExport 归并会话+步+命令流+LLM 成本账+裁剪摘要的契约锁。
 // 归属校验/仓储缺位置空不报错（与 D1 读侧同纪律）。
-// 摘要分量是批22（A6）加的：命令流被按界裁掉之后，导出包里没有它就只能显示一个空数组，
+// 导出包里为什么要有摘要分量：命令流被按界裁掉之后，导出包里没有它就只能显示一个空数组，
 // 「这段没发生过」与「这段被治理裁掉了」便同形——那正是 A6 立项要消灭的形状。
 
 type exportSessionRepo struct {
@@ -60,7 +60,7 @@ func (e *exportPlanRepo) ListBySessionID(_ context.Context, _ uint, limit int) (
 	return e.plans, nil
 }
 
-// exportDigestRepo 裁剪摘要读侧（批22 / A6）。导出包里带它，才有办法把
+// exportDigestRepo 裁剪摘要读侧（/ A6）。导出包里带它，才有办法把
 // 「command_log 是空的」与「command_log 被按界裁掉了」这两种解释分开说。
 type exportDigestRepo struct {
 	repository.BrowserAuditDigestRepository

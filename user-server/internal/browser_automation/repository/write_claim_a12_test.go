@@ -1,8 +1,8 @@
 package repository
 
-// 批20f（A12）契约锁：双发闸的最后一层必须住在存储层。
+// 契约锁：双发闸的最后一层必须住在存储层。
 //
-// 立项依据（§8.3-20，批16b 自审 B4）：双发闸今天是**读后再写**——guardResubmit 先
+// 立项依据（§8.3-20，自审 B4）：双发闸今天是**读后再写**——guardResubmit 先
 // FindSubmitAttempt（一条普通 First，无 FOR UPDATE、无 advisory lock），通过后才由
 // recordSubmitState 写台账。同一时刻并发的另一条腿看到的是同一条「查不到」，于是两条腿
 // 都过闸、都提交一次，而评论不可撤回。同层的三条并发防护（t.Status=="running"、
@@ -293,7 +293,7 @@ func TestWriteClaimSchemaContract(t *testing.T) {
 //     而 0 不是任何一行的 id，于是这一格键位永久占死。
 //
 // 判据取「报错」而不是「静默不占」：静默不占在调用方看起来和占到一模一样，
-// 一次键位没落地的写就会被当成有闸门保护着发出去（批16 A8 的同一条口径）。
+// 一次键位没落地的写就会被当成有闸门保护着发出去（A8 的同一条口径）。
 func TestWriteClaimIncompleteKeyRefuses(t *testing.T) {
 	repo, db := a12Repo(t)
 	ctx := context.Background()

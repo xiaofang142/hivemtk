@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// BrowserAuditDigestRepository 裁剪摘要的**读侧**（批22 / A6）。
+// BrowserAuditDigestRepository 裁剪摘要的**读侧**（/ A6）。
 //
 // 写侧不长在这里：摘要必须与它描述的那批删除同事务落库，所以由
 // BrowserCommandLogRepository.PruneBefore 内部完成（见 command_log.go）。

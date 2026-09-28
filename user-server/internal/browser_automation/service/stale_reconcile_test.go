@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// stale_reconcile_test.go — 批8 任务快照对账器契约锁。
+// stale_reconcile_test.go — 任务快照对账器契约锁。
 //
 // 对账器是「只在异常路径上生效」的后台职责，正常执行永远不触发它，所以这里的用例
 // 全是刻意造异常态：砖化 running、僵尸 active 会话、预算内的活任务、非 running 的真实终态。
@@ -179,7 +179,7 @@ func TestReconcileWithoutAnySession(t *testing.T) {
 //  4. 预算内不得动（对账器的误杀面）：
 //     ① 老于粗筛下限、但仍在自己的 timeout_sec 内；
 //     ② D7 任务——timeout_sec 很短而确认等待很长，正在等人放行。
-//     第 ② 条就是批8 解耦的反证：预算若不含 confirm_wait_sec，一个只是等人点确认的任务会被对账判死。
+//     第 ② 条就是解耦的反证：预算若不含 confirm_wait_sec，一个只是等人点确认的任务会被对账判死。
 func TestReconcileSkipsTasksWithinOwnBudget(t *testing.T) {
 	b := newReconcileDB(t)
 	userID := uint(771004)

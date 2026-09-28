@@ -1,9 +1,9 @@
-// 批20c §8.2-1 尾项：comment_send 是三条 trusted 写通道里唯一没补「点后身份复核」的一条。
+// §8.2-1 尾项：comment_send 是三条 trusted 写通道里唯一没补「点后身份复核」的一条。
 //
-// 形状与批17 完全同构，只是后果更重：click 点错了一个元素通常还能撤销，comment_send 点下去
+// 形状与完全同构，只是后果更重：click 点错了一个元素通常还能撤销，comment_send 点下去
 // 是一次不可撤回的公开提交。探测与真点之间隔着拟人贝塞尔轨迹的飞行时间（可达数百 ms），
 // 这期间浮层压上来 / 轮播挪位，真点就落在一个从未被探测过的元素上，而回包仍写 {sent:true}。
-// click 与 click_near 各有一条复核（批17(b)），本批补第三处消费点。
+// click 与 click_near 各有一条复核，这里补第三处消费点。
 //
 // 复核要有对象：click 的 target 是调用方给的 selector，click_near 靠 probe 回传 pathOf(hit)。
 // comment_send 的按钮是「输入框往上 4 层找文本」现场算出来的，调用方手里没有任何定位——
@@ -49,7 +49,7 @@ Object.defineProperty(global.HTMLElement.prototype, 'innerText', {
   configurable: true,
 });
 
-// 布局可控台（同 batch17）：中心点默认 (150,220)，recheck 拿到的就是这个坐标被挪走/被接管
+// 布局可控台（与 batch17-actionability.test.js 那份同款）：中心点默认 (150,220)，recheck 拿到的就是这个坐标被挪走/被接管
 let reads = 0;
 let boxFn = () => ({ left: 100, top: 200, width: 100, height: 40 });
 global.HTMLElement.prototype.getBoundingClientRect = function () {
@@ -106,7 +106,7 @@ beforeEach(() => {
   resetSnapshotBaseline();
 });
 
-describe('批20c comment_send 的点后身份复核（第三个消费点）', () => {
+describe('comment_send 的点后身份复核（第三个消费点）', () => {
   it('提交后目标消失（selector 解析不到）→ element_moved，且**绝不再点第二次**', async () => {
     const btn = fixture();
     cdp.clickAt.mockImplementation(async () => {
@@ -185,7 +185,7 @@ describe('批20c comment_send 的点后身份复核（第三个消费点）', ()
   });
 
   it('复核必须落在 try 之外：抛出去就是抛出去，不许被兜底通道再提交一次', async () => {
-    // click 的教训（批17）写在这：comment_send 现在确实没有 DOM 兜底分支，
+    // click 的教训写在这：comment_send 现在确实没有 DOM 兜底分支，
     // 一旦有人"顺手"加一条（CDP 失败 → el.click()），这条腿立刻红——
     // 复核失败会被 catch 成「CDP 不可用」，在已经发生的提交之上再点一次。
     const btn = fixture();
@@ -200,7 +200,7 @@ describe('批20c comment_send 的点后身份复核（第三个消费点）', ()
   });
 });
 
-describe('批20c 静态锁：多份内联的定位路径与复核挂点必须一起长牙', () => {
+describe('静态锁：多份内联的定位路径与复核挂点必须一起长牙', () => {
   it('pathOf 恰有两份内联、两处回传 selector（注入函数自包含 ⇒ 不能抽公共函数）', () => {
     const defs = (primitivesSrc.match(/const pathOf = /g) || []).length;
     const uses = (primitivesSrc.match(/selector: pathOf\(/g) || []).length;

@@ -1,4 +1,4 @@
-// executor_selfheal.go — A1 定位自愈回路（批2，Stagehand selfHeal 同型）。
+// executor_selfheal.go — 定位自愈回路（Stagehand selfHeal 同型）。
 //
 // 触发：扩展 comment_prep/comment_send 定位原语失败，回包携带结构化 token
 // （primitives.js：comment_input_not_found / send_button_not_found）。

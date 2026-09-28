@@ -1,11 +1,11 @@
 package service
 
-// 批20b 契约锁（A2）：审计流里「下发了」「Host 接了」「平台确认了」必须永不共列。
+// 契约锁（A2）：审计流里「下发了」「Host 接了」「平台确认了」必须永不共列。
 //
 // 现状的两处混装（都在 browser_command_log 那一列 `ok` 上）：
 //  1. **命令帧的 ok 是常量 true**（executor.go 写 command 行的那一行传的就是字面量 true）。
 //     于是审计包/监控面板里每个"下发"都自带一个 ✓，而 ✓ 在这行上没有任何含义。
-//     批21 之后这个 ✓ 更是**可证为假**的：GetConn 未命中时命令帧根本没写进 socket
+//     之后这个 ✓ 更是**可证为假**的：GetConn 未命中时命令帧根本没写进 socket
 //     （ErrCommandNeverOnWire），可日志上那条 command 行照样是绿的。
 //  2. **第三种事实压根没进流**：post_comment 的收紧回查结论（verified / unattributed）
 //     只落在 browser_steps.submit_state 与 extracted_data 两处**可变行**上；

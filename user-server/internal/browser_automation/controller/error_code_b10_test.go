@@ -1,6 +1,6 @@
 package controller
 
-// 批10 契约锁：409 域内三件事必须分码。
+// 契约锁：409 域内三件事必须分码。
 // HTTP 状态相同（都是 409）时，前端的分流依据只有响应体 code——
 // 全部折成 errorCodeFromHTTPCode(409)=DUPLICATE_ENTRY_3003 的那版实现里，
 // 「已有任务执行中」也会弹「去装 Host」的引导（真机走 UI 实测）。
@@ -82,7 +82,7 @@ func TestOtherConflictsKeepGenericCode(t *testing.T) {
 	}
 }
 
-// 批10c：/run 请求面上的离线先验门。
+// /run 请求面上的离线先验门。
 // ErrHostOffline 过去只由执行期的 HostRegistry 产生，而 RunTask 是「建会话 + SafeGoDetached
 // 异步跑」——离线点「执行」永远拿 200，8001 与前端引导弹窗都不可能命中（真机 C 腿实测：
 // 服务端 host/status 已 count=0，/run 仍回 200 + session_id）。门要挂在交互路径上，
@@ -153,7 +153,7 @@ func TestOtherDomainErrorsStillReachService(t *testing.T) {
 	}
 }
 
-// 批10b：真机 UI 腿在列表页点 draft 任务的「执行」，服务端回的是
+// 真机 UI 腿在列表页点 draft 任务的「执行」，服务端回的是
 // HTTP 500 INTERNAL_ERROR_6002 + 文案「任务状态 draft 不可执行（需先 publish）」——
 // 用户一次正常误操作被记成服务端故障。前置条件类结论必须落 4xx 且文案原样透传，
 // 而真·未知错误要继续是 500（否则这层分流会把真故障洗成客户端错误）。
@@ -191,11 +191,11 @@ func TestPreconditionErrorsAreNotReportedAsServerFaults(t *testing.T) {
 	}
 }
 
-// 装配锁（口径同批8/批9）：先验门用的探针必须是真注册表。
+// 装配锁（口径同）：先验门用的探针必须是真注册表。
 // 装配时传 nil，handler 里那两行一个字都不用改、每个请求照样执行，只是每次都在
 // c.host.EnsureOnline 上 panic 被 gin 兜成 500 —— 在线离线一起坏，比没修更糟。
 // 所以断的是「装配时给了谁」这条字面量，不是 NewTaskController 出现了几次
-// （批8 吃过计数式静态锁的亏：语句还在、条件被抽空，锁照样绿）。
+// （吃过计数式静态锁的亏：语句还在、条件被抽空，锁照样绿）。
 func TestRunPreGateIsWiredToRealRegistry(t *testing.T) {
 	src, err := os.ReadFile("../../router/browser_automation_routes.go")
 	if err != nil {

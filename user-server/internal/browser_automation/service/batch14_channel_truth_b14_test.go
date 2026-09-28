@@ -1,4 +1,4 @@
-// 批14：写/交互步骤必须把「这次动作走的是哪条通道」落进审计面。
+// 写/交互步骤必须把「这次动作走的是哪条通道」落进审计面。
 // 立项依据：真机 session 536/537 的取证显示，扩展侧早就回了 channel:cdp / dom_fallback，
 // 但服务端 click 只挑走 navigated、type 与 click_near 整个回包直接丢弃（hand 层签名只留 error）。
 // 结果： trusted 通道全程失效、每一次点击都在降级 DOM 兜底，而步骤台账一片绿——
@@ -70,7 +70,7 @@ func TestB14_UnknownChannelStaysNull(t *testing.T) {
 }
 
 // DOM 兜底必须在台账上看得见——它只该出现在调试器被占的降级场景，
-// 一旦成片出现就是 trusted 通道死了（批14 实证正是这个形态）。
+// 一旦成片出现就是 trusted 通道死了（实证正是这个形态）。
 func TestB14_DomFallbackChannelVisible(t *testing.T) {
 	const stepsJSON = `[{"action":"click","target":"#send"}]`
 	res := b14RunSteps(t, stepsJSON, func(action string, _ map[string]any) (map[string]any, string) {

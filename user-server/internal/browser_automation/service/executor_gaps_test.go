@@ -17,7 +17,7 @@ import (
 
 // D5 补测（主文档 §5.2 G8）：executor 本轮新增纯函数——
 // F7 错误分类分线 / F6a 页面变化证据 / D2 attr 参数贯通。
-// （原 TestIsWriteAction 随 isWriteAction 一起退役：批7 起写步判定要看目标定位与声明位，
+// （原 TestIsWriteAction 随 isWriteAction 一起退役：写步判定要看目标定位与声明位，
 //   纯 action 判据已不成立，判据表见 write_ledger_b7_test.go 的 TestIsWriteStepAttribution。）
 
 func TestStepErrRetryable(t *testing.T) {

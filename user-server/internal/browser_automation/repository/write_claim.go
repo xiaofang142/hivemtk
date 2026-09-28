@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// BrowserWriteClaimRepository 不可逆写的存储层独占声明（批20f / A12）。
+// BrowserWriteClaimRepository 不可逆写的存储层独占声明（/ A12）。
 //
 // 三个方法就是这把坑的全生命周期：占（Claim）→ 别人已占则拿回事实（holder）→
 // 证明从未发生则释放（Release）。没有 Update：跨越之后事实住在台账里，本表只管键位。

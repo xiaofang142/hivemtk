@@ -23,7 +23,7 @@ type BrowserTaskRepository interface {
 	UpdateRunResult(ctx context.Context, id uint, status, lastResult, errMsg string, retryCount int) error
 	SoftDelete(ctx context.Context, id, userID uint) error
 	FindRunning(ctx context.Context, userID uint) ([]*model.BrowserTask, error)
-	// 批8 对账器（stale_reconcile.go）专用两条，见各自注释
+	// 对账器（stale_reconcile.go）专用两条，见各自注释
 	FindStaleRunningAll(ctx context.Context, minAge time.Duration, limit int) ([]*model.BrowserTask, error)
 	ReconcileRunResult(ctx context.Context, id uint, status, lastResult, errMsg string) (bool, error)
 	ListDependents(ctx context.Context, taskID uint) ([]*model.BrowserTask, error)
@@ -134,7 +134,7 @@ func (r *browserTaskRepo) FindRunning(ctx context.Context, userID uint) ([]*mode
 	return list, err
 }
 
-// FindStaleRunningAll 批8 对账器专用：跨用户扫「running 且 updated_at 老于 minAge」的任务。
+// FindStaleRunningAll 对账器专用：跨用户扫「running 且 updated_at 老于 minAge」的任务。
 // 与 FindRunning 分列而非复用：那条带 userID 语义（用户侧「我的执行中」），对账是全库后台职责，
 // 混用会让「加个 userID 参数」变成越权读取的入口。minAge 只是粗筛下限，
 // 每任务真实预算（含 D7 确认等待）由调用方按 taskExecBudget 判。
@@ -149,7 +149,7 @@ func (r *browserTaskRepo) FindStaleRunningAll(ctx context.Context, minAge time.D
 	return list, err
 }
 
-// ReconcileRunResult 批8 对账回填：仅当任务仍是 running 时写终态，返回是否由本次回填生效。
+// ReconcileRunResult 对账回填：仅当任务仍是 running 时写终态，返回是否由本次回填生效。
 // 条件 WHERE 不可省——对账器与执行协程可能同刻收口，无条件更新会把刚落下的真实终态盖成对账值。
 func (r *browserTaskRepo) ReconcileRunResult(ctx context.Context, id uint, status, lastResult, errMsg string) (bool, error) {
 	res := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
@@ -176,14 +176,14 @@ func (r *browserTaskRepo) SetNextRetryAt(ctx context.Context, id uint, at *time.
 // ClaimDueRetries D4b（G5）：原子认领到期重试——条件更新置 NULL，多副本同库仅一方 RowsAffected=1；
 // 认领成功后进程崩溃则重试丢失（与改造前语义相同），但重启不再丢挂起重试。
 //
-// 批9 归属门：Host 连接是**进程内**状态（registry.conns），挂起重试却是**库内**共享队列。
+// 归属门：Host 连接是**进程内**状态（registry.conns），挂起重试却是**库内**共享队列。
 // 无门时任一实例都能认领任一用户的重试，然后在自己空空的 registry 上判「browser host
 // 未连接」，把 MaxRetryTimes 的额度烧在一次根本不可能执行的认领上（真机实测：task=377
 // session=429 由另一实例认领，而本机 Host 全程在线）。ownerUserIDs 即本进程持有连接的用户
 // 白名单。**空=不加过滤**：装配遗漏时退化成改造前行为，也不要静默停掉全部重试
 // （调用方若要表达「本机无人」，应自行不调用，见 feedback.scanDueRetries）。
 //
-// 状态门（批13）：挂起重试只在**仍处于失败态**时才有意义。next_retry_at 是失败时写下的，
+// 状态门：挂起重试只在**仍处于失败态**时才有意义。next_retry_at 是失败时写下的，
 // 之后行的状态可以走到任何一处，而这四条路都不会回头清这个字段：
 // done —— 用户手工重跑成功了，RunTask 明确放行 done 态执行，扫描器到点就把一条已经成功
 // 的任务再跑一遍（含写步，防双发只剩台账这一道，等于把「成功即终止」推翻）；

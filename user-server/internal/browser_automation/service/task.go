@@ -20,6 +20,29 @@ type TaskService struct {
 	taskRepo    repository.BrowserTaskRepository
 	sessionRepo repository.BrowserSessionRepository
 	executor    *Executor
+	// triggerRemover 由装配处注入（CronService）：nil = 本进程没有定时触发器面（测试装配常见）。
+	triggerRemover TriggerRemover
+}
+
+// TriggerRemover 宿主任务生命周期变化时回收其定时触发器。
+// 判据来自触发器自己的两条前置：Create 只认 task_type=cron 的任务、RunTask 只认已发布的任务；
+// 任务被删除或类型被改走之后，这两条前置都不再由任务的编辑/删除入口负责，
+// 所以回收必须发生在改动的同一处，否则就进入一个「新建时拒绝、改一改却能抵达」的状态。
+type TriggerRemover interface {
+	RemoveByTask(ctx context.Context, taskID uint) error
+}
+
+func (s *TaskService) SetTriggerRemover(r TriggerRemover) { s.triggerRemover = r }
+
+// removeTriggers 回收失败不改写本次结论：任务已经删掉/改完了，此时回 500 只会让人
+// 以为操作没发生而反复点。失败记进日志（列表侧也有「宿主已不可执行」的可见面兜底）。
+func (s *TaskService) removeTriggers(ctx context.Context, taskID uint) {
+	if s.triggerRemover == nil {
+		return
+	}
+	if err := s.triggerRemover.RemoveByTask(ctx, taskID); err != nil {
+		logger.Warnf("[BrowserTask] 回收任务 %d 的定时触发器失败: %v", taskID, err)
+	}
 }
 
 func NewTaskService(taskRepo repository.BrowserTaskRepository, sessionRepo repository.BrowserSessionRepository, executor *Executor) *TaskService {
@@ -53,7 +76,7 @@ type InvalidInputError struct{ Msg string }
 func (e *InvalidInputError) Error() string { return e.Msg }
 
 // NotFoundError 「哪样东西找不到」是结论的一部分：状态码一样（404）时，文案的主语
-// 决定用户往哪儿排查（批19c：触发器挂在别人的任务上，回「触发器不存在」就是错方向）。
+// 决定用户往哪儿排查（触发器挂在别人的任务上，回「触发器不存在」就是错方向）。
 // 域内其余 to-be-typed 错误同构：类型给 controller 分流，Msg 给用户看原因。
 type NotFoundError struct{ Msg string }
 
@@ -151,11 +174,25 @@ func (s *TaskService) Update(ctx context.Context, id, userID uint, mutator func(
 	if err := s.taskRepo.Update(ctx, t); err != nil {
 		return nil, err
 	}
+	// 类型改走 = 触发器的前置没了（Create 明确拒绝非 cron 任务挂触发器）。
+	// 不在这里收就是「建的时候拦、改的时候放」：cron 任务编辑成 one_shot 之后，
+	// 触发器仍按分钟唤起它，而 /cron 的读数（已启用/下次触发/上次触发）全部正常。
+	if t.TaskType != "cron" {
+		s.removeTriggers(ctx, t.ID)
+	}
 	return t, nil
 }
 
 func (s *TaskService) Delete(ctx context.Context, id, userID uint) error {
-	return s.taskRepo.SoftDelete(ctx, id, userID)
+	if err := s.taskRepo.SoftDelete(ctx, id, userID); err != nil {
+		return err
+	}
+	// 任务没了，挂在它上面的定时器必须跟着停。此前不级联时的实测形态：删除任务后
+	// 触发器仍出现在列表里（列表的 JOIN 不过滤任务的 deleted_at），进程内条目照旧每次醒来、
+	// last_run_at 与 next_run_at 照常推进，而每一次都在 RunTask 上拿到「任务不存在」——
+	// 界面读起来一切正常，实际一场都没跑。
+	s.removeTriggers(ctx, id)
+	return nil
 }
 
 // Publish draft → ready
@@ -173,7 +210,7 @@ func (s *TaskService) Publish(ctx context.Context, id, userID uint) error {
 	if !t.BrainMode && len(t.Steps) == 0 {
 		return invalidInput("显式模式至少编排一个步骤")
 	}
-	// 批8：确认等待预算夹紧 1..900s。dto binding 只管 HTTP 入口，这一列还有 cron/重试/
+	// 确认等待预算夹紧 1..900s。dto binding 只管 HTTP 入口，这一列还有 cron/重试/
 	// 直接落库三条来路；Publish 是进入可执行态的唯一门，值在这里失守就等于把
 	// 「不可逆提交前挂起多久」交给一个没人校验的整数（0 会退化成默认 600s，负数直接不等待）。
 	if t.ConfirmWaitSec < 0 || t.ConfirmWaitSec > confirmWaitMaxSec {
@@ -402,7 +439,7 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 
 	// 异步执行：SafeGoDetached 剥除请求 ctx 的取消链（HTTP 响应返回即 cancel，
 	// 普通 SafeGo 会让 Executor 在第一步就 ctx.Err() != nil 退出）；超时预算见 taskExecBudget
-	// （批8：TimeoutSec 只管自动化，D7 确认等待另计，外层看门狗同步放宽，否则「确认中」必被掐死）
+	// （TimeoutSec 只管自动化，D7 确认等待另计，外层看门狗同步放宽，否则「确认中」必被掐死）
 	utils.SafeGoDetached(ctx, "browser_automation.run", taskExecBudget(t)+taskWatchdogGrace, func(runCtx context.Context) {
 		execCtx, cancel := context.WithTimeout(runCtx, taskExecBudget(t))
 		defer cancel()

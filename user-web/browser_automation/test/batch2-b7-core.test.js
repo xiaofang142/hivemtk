@@ -1,4 +1,4 @@
-// B7（批2）共享基座 @hivemtk/browser-core 契约测试：
+// B7共享基座 @hivemtk/browser-core 契约测试：
 //  1) 分布/轨迹/键入计划纯函数的统计与形态特性；
 //  2) A 侧 input.js 的 bezierPoints/TIMING 导出必须就是共享包本体（对象同一性），
 //     防止"改了一份忘了另一份"的双源漂移。

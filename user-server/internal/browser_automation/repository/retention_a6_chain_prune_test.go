@@ -1,6 +1,6 @@
 package repository
 
-// 批22（A6）攻击补腿：独立攻击复审在 command_log.go 里指出五处「改坏了却没有一条腿读那个字段」
+// 攻击补腿：独立攻击复审在 command_log.go 里指出五处「改坏了却没有一条腿读那个字段」
 // 的空白。本文件不改动 retention_a6_test.go（并行车道共享工作树，就地编辑易撞车），
 // 只**新增**腿，并复用同包已有的 a6DB / a6Row / a6Seed / a6SeedFrozen / a6Digests / a6RunRows /
 // a6CountLog / a6Prune / a6Cutoff / a6FrozenStamp 夹具。每条腿头顶一句中文注释写明它要杀的那个变异。

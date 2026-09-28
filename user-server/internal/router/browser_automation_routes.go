@@ -50,6 +50,9 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	// 代价是裁过的会话导出来的包里 command_log 为空却说不出为什么为空。
 	sessionSvc.SetAuditDigestRepository(digestRepo)
 	cronSvc := basvc.NewCronService(cronRepo, taskRepo, taskSvc)
+	// 任务删除/类型改走时回收其触发器：漏这一行不会编译报错，代价是进程里留下
+	// 一个每分钟醒来、每次都拿到「任务不存在」却照样推进 last_run_at 的排程条目。
+	taskSvc.SetTriggerRemover(cronSvc)
 
 	// 失败自动重试装配：FeedbackService → TaskService.RunTaskWithRetry（进程级一次性注入）
 	basvc.SetRetryRunner(taskSvc.RunTaskWithRetry)

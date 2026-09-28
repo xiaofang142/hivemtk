@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 批6（F11b）：不可逆写台账。step 行的 status 只回答「这一步跑成什么样」，回答不了
+// 不可逆写台账。step 行的 status 只回答「这一步跑成什么样」，回答不了
 // 「这条内容的提交是否可能发生」——而后者才是禁止双发的依据。真机 Leg X 实测的假绿
 // （零提交却 verified）说明：连 verified 本身都可能是错的，所以台账不是日志增强，
 // 是重发闸门的唯一事实来源。状态语义见 model.StepSubmit*，列定义见 model.BrowserStep.SubmitState。
@@ -38,7 +38,7 @@ func HashWriteText(s string) string {
 // recordSubmitState 台账状态写点。尽力而为但必达终态：ctx 已被取消（超时/中止腿必然如此）
 // 时走 WithoutCancel——「send 已跨越、execCtx 恰好死掉」正是最需要留下台账的一刻。
 //
-// 批16（A7）改口径：写失败必须上抛。旧实现只 Warn，四个调用点拿不到失败事实，于是
+// 改口径：写失败必须上抛。旧实现只 Warn，四个调用点拿不到失败事实，于是
 // 「send 已跨越但台账没落」的下一轮 FindSubmitAttempt 查空——双发闸门整体消失，而这张表
 // 在 §3.1 的定性是「重发闸门的唯一事实来源」。取舍方向不对称：写步失败是**可见、可人工重跑**，
 // 双发是**不可见、撤不回**。失败时先在 ledgerWriteBudget 内退避重试（单行 UPDATE 失败最常见
@@ -114,10 +114,10 @@ func (e *Executor) clearLedgerBroken(sessionID uint) {
 // rememberLedgerGap 记一条「提交尝试已跨越、台账却没落成」。它是数据库闸门的进程内兜底，
 // 覆盖面**只有本进程、本进程存活期**（键是 taskID|textHash，与是否换 session 无关）。
 //
-// 两条必须一起记住的边界（批16b 二次审核写清，之前那句「唯一会自动重跑的那条路」说过头了）：
+// 两条必须一起记住的边界（二次审核写清，之前那句「唯一会自动重跑的那条路」说过头了）：
 //   - 自动重试的挂起态是**持久化**的（feedback.go scheduleRetry 只写 task.next_retry_at，
 //     重启不丢、由任何持连接的实例认领），本集合不落库 ⇒ 进程一重启它就空了。
-//     所以缺口不能只靠这里挡：批16b（B2）已把消费方接到反馈层——OnSessionFinished 见到
+//     所以缺口不能只靠这里挡：消费方已经接到反馈层——OnSessionFinished 见到
 //     缺口就不再挂重试（并把原因写进任务行），runRetry 认领后再查一次；调用方仍须把
 //     「需人工核对是否已发布」写进那一步的文案，因为**跨进程**重启后的存量挂起行挡不住。
 //   - 跨进程人工重跑同样挡不住，同一理由。
@@ -168,7 +168,7 @@ func writeGapKey(taskID uint, textHash string) string {
 // guardResubmit 双发闸：同任务、同文本在历史上（含其它 session、含被重启后重下发、含
 // Brain 模式换到下标重投）已有提交尝试即不再下发。unattributed 也拦——归因不到不等于没发生。
 //
-// 三种结论（批7 把「任务级自动重试豁免」并进同一趟查询，判定只此一处）：
+// 三种结论（把「任务级自动重试豁免」并进同一趟查询，判定只此一处）：
 //   - nil             → 放行
 //   - errRetrySkipped → 本次是自动重试轮（task.RetryCount>0）且已有尝试：这一步跳过，
 //     让任务里剩下的只读步跑完。重试的目的不是把同一条内容再发一遍，而是补完可恢复的环节；
@@ -176,7 +176,7 @@ func writeGapKey(taskID uint, textHash string) string {
 //     哨兵里挂着前一轮那行的事实（见 writeAttemptPrior），上层据此分「可安心跳过」与「必须判红」。
 //   - 其余 err        → 拒绝执行（步判 failed，台账不动）
 //
-// 批16（A8）：查询失败改 fail-close（旧口径是 Warn 后放行）。同行默认值就是这条——K8s admission
+// 查询失败改 fail-close（旧口径是 Warn 后放行）。同行默认值就是这条——K8s admission
 // 的 failurePolicy 默认 Fail、sideEffects 把 Unknown 与 Some 同等对待。「DB 抖动期照常执行」的实际
 // 含义是「抖动期没有闸门」，而抖动期恰恰是最容易重复下发的时候。
 func (e *Executor) guardResubmit(ctx context.Context, task *model.BrowserTask, textHash string, excludeStepRowID uint) error {
@@ -207,7 +207,7 @@ var errRetrySkipped = errors.New("自动重试轮跳过已尝试过的写步")
 // writeAttemptPrior 闸门命中那行「历史提交尝试」的事实。必须随哨兵一起上抛：
 // 「前一轮已 verified」与「前一轮只到 sent/unattributed」在本轮该判什么上完全相反——
 // 前者目标已达成，跳过它继续跑剩余步即可；后者提交从未被证明，而本轮重发即双发、
-// 无从证明，只能判红。只传一句文案就会把后者也糊成全绿（批6 立项要消灭的那类假绿）。
+// 无从证明，只能判红。只传一句文案就会把后者也糊成全绿（立项要消灭的那类假绿）。
 type writeAttemptPrior struct {
 	stepRowID uint
 	sessionID uint
@@ -254,10 +254,10 @@ func (s stepEffect) needsWriteGate() bool { return s != effectNone }
 // comment_input 定位表时才算写——真机交互搜索腿同样是「输入框 + 回车」，把一切回车都判成写，
 // 会白白剥掉搜索步的重试能力并在重试轮里错误跳过。
 //
-// 批16（A11）：定位表**取不到**（平台未注册/适配器缺失）不再等同于「推导不命中」。
+// 定位表**取不到**（平台未注册/适配器缺失）不再等同于「推导不命中」。
 // 旧写法 `locs, _ :=` 把错误丢掉，三条推导全体不命中，只剩 post_comment 与显式声明 ⇒
 // retries=0、双发闸、D7 三道同时静默消失。收窄条件同批立住：只有**报错**才升未知，
-// 单纯没命中 locator 仍判只读（上面那条批7 口径不动）；且只升级「本来可能被推导出写」的
+// 单纯没命中 locator 仍判只读（上面那条口径不动）；且只升级「本来可能被推导出写」的
 // 动作形态（type+回车 / click / click_near 带按钮文案），scroll、open_tab 这类
 // 无论定位表里有什么都不可能是提交动作的步不受牵连。
 func classifyStepEffect(task *model.BrowserTask, step parsedStep) (stepEffect, string) {
@@ -319,7 +319,7 @@ func writeStepKey(step parsedStep) string {
 }
 
 // platformStepLocators 取平台的定位表（推导写步的唯一依据）。错误原样上抛：
-// 批16 起「取不到」是有结论的第三态（见 classifyStepEffect），不再就地吞成空表。
+// 起「取不到」是有结论的第三态（见 classifyStepEffect），不再就地吞成空表。
 func platformStepLocators(task *model.BrowserTask) (map[string]string, error) {
 	p, err := platform.Get(taskPlatformID(task))
 	if err != nil {
@@ -349,15 +349,15 @@ func locatorMatches(locatorList, target string) bool {
 // isNeverExecuted 错误是否证明「这一步从未在页面上发生」——*_not_found 是元素从未命中、
 // *_inject_timeout_ 是注入从未执行、*_not_interactable 是可点性判定在**拿坐标之前**就把这次
 // 动作拒了（遮挡 / 零尺寸 / disabled / 抖动未落位），三者都没有副作用，台账因此留空
-// （= 不算尝试，可安全重下发）。批21 补上第四类：ErrCommandNeverOnWire=那一帧根本没写进
+// （= 不算尝试，可安全重下发）。补上第四类：ErrCommandNeverOnWire=那一帧根本没写进
 // socket（注册表里没有该用户的连接），扩展从未看到这条命令，副作用同样为零。
 // 反过来，WS 超时/写后才断/未知错误一律不算：超时不等于没发生，那正是双发的形状。
 //
 // *_not_interactable 这条前提是可查的，不是猜的：这些文案只由页面内的三份 probe
 // （injClick / injClickNear / injPostCommentSend）产出，且产出点全在 `cdpInput.clickAt`
-// 之前——SW 侧的 dispatch 一句都不合成它（锁在 user-web 的批17 静态腿上）。
+// 之前——SW 侧的 dispatch 一句都不合成它（锁在 user-web 的静态腿上）。
 // 把它算成「已尝试」的后果是具体的：一次被浮层遮住的写步会把唯一正确的处置
-// （等页面停下再跑一次）永久拦死在双发闸外（批17 真机腿实读 step 2287）。
+// （等页面停下再跑一次）永久拦死在双发闸外（真机腿实读 step 2287）。
 func isNeverExecuted(err error) bool {
 	if err == nil {
 		return false
@@ -370,7 +370,7 @@ func isNeverExecuted(err error) bool {
 		strings.Contains(msg, "_not_interactable")
 }
 
-// ------------------------------------------------------------------ 批20f（A12）：存储层独占声明
+// ------------------------------------------------------------------ 存储层独占声明
 
 // claimWriteSlot 读闸放行之后、任何帧下发之前占坑（(task_id, text_hash) 一把，见
 // repository/write_claim.go 与 model/write_claim.go）。
@@ -381,7 +381,7 @@ func isNeverExecuted(err error) bool {
 //     只有 INSERT 的原子性能分出先后，所以裁决权必须下推到库里的唯一约束。
 //
 // 三种结论里只有第一种放行：占坑报错（含「插了 0 行却查不到持有者」）同样拒绝下发。
-// 免检的条件只能是「这一步不是写步」，不能是「闸门没接好」——批16（A11）那条口径。
+// 免检的条件只能是「这一步不是写步」，不能是「闸门没接好」——这条免检口径。
 func (e *Executor) claimWriteSlot(ctx context.Context, taskID, sessionID, stepRowID uint, textHash string) error {
 	if e.writeClaimRepo == nil {
 		return errors.New("存储层写声明闸门未接线：占不了坑，就无从判断另一条腿是否正在同一份文本上")

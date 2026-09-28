@@ -1,4 +1,4 @@
-// 批9 扩展侧卫生：refs 按 tab 分桶 + click_unacked 不落 DOM 兜底
+// 扩展侧卫生：refs 按 tab 分桶 + click_unacked 不落 DOM 兜底
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // cdp/input.js 是命名空间导入（primitives.js 里 import * as cdpInput），
@@ -76,7 +76,7 @@ const makeDeps = () => ({
 const fallbackCalls = () => fakeChrome.scripting.executeScript.mock.calls
   .filter((c) => (c[0].args || []).includes('fallback'));
 
-describe('refs 按 tab 分桶（批9）', () => {
+describe('refs 按 tab 分桶', () => {
   it('两个 tab 各自的 @eN 互不覆盖、互不清空', () => {
     const a = assembleSnapshot({
       nodes: [{ role: 'button', name: 'A页发送' }, { role: 'textbox', name: 'A页输入' }],
@@ -146,7 +146,7 @@ const injectedTargets = (mode) => fakeChrome.scripting.executeScript.mock.calls
   .filter((c) => (c[0].args || []).includes(mode))
   .map((c) => c[0].args[0]);
 
-describe('生产路径 @eN 定位按 tab 解析（批9：覆盖 click / type）', () => {
+describe('生产路径 @eN 定位按 tab 解析（覆盖 click / type）', () => {
   // resolve_ref 走的是显式命令；click/type 走的是 dispatch 内部的 resolveTarget。
   // 两条路共用同一个分桶解析器，但只有后者是 LLM 每一步真正会走到的路径，
   // 所以必须单独锁——把 resolveTarget 的 tabId 参数摘掉（J8）只会红在这一条上。
@@ -184,7 +184,7 @@ describe('生产路径 @eN 定位按 tab 解析（批9：覆盖 click / type）'
   });
 });
 
-describe('失效 @eN 报结构化错误名（批9：A1 自愈的触发词不能被打成语法错误）', () => {
+describe('失效 @eN 报结构化错误名（自愈的触发词不能被打成语法错误）', () => {
   it('click 用失效 ref：报 element_not_found，且不做第二次注入', async () => {
     document.body.innerHTML = '<button id="tab43">发送</button>';
     assembleSnapshot({ nodes: [{ role: 'button', name: 'a' }], paths: ['#tab43'] }, 43);
@@ -212,7 +212,7 @@ describe('失效 @eN 报结构化错误名（批9：A1 自愈的触发词不能�
   });
 });
 
-describe('click_unacked 不落 DOM 兜底（批9）', () => {
+describe('click_unacked 不落 DOM 兜底', () => {
   it('CDP 已下发但 ack 丢失：原样上抛，绝不二次点击', async () => {
     document.body.innerHTML = '<button id="send">发送</button>';
     let domClicks = 0;

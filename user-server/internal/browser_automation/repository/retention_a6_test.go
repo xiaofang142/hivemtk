@@ -1,6 +1,6 @@
 package repository
 
-// 批22（A6）契约锁：裁剪不等于证据消失。
+// 契约锁：裁剪不等于证据消失。
 //
 // command_log 的 90 天界一到，PruneBefore 就把那段历史整行删掉。删完之后，
 // 「那三天确实没有命令」与「那三天的命令被人在保留期外删了/删错了」在库里完全同形，
@@ -39,7 +39,7 @@ const (
 	a6SessionB = uint(782202)
 	a6Task     = uint(782203)
 	a6Days     = 200
-	// a6Source 是裁剪界的来源标注（批23 / §7.28 八-3）。PruneBefore 现在要求非空来源，
+	// a6Source 是裁剪界的来源标注（/ §7.28 八-3）。PruneBefore 现在要求非空来源，
 	// 本包所有裁剪腿都填它；「空来源必须被拒绝」单独由 TestR23PruneRefusesEmptyCutoffSource 钉。
 	a6Source = "test:retention_a6"
 	// a6SessionLate 只给「裁剪进行中才越界的那一行」那条腿用：不与既有 782201-782206 的任何
@@ -586,7 +586,7 @@ func a6SeedFrozen(t *testing.T, db *gorm.DB, rows ...*model.BrowserCommandLog) {
 
 // TestA6DigestSeparatesUnackedFromFailedFrame 「没有回执」与「回执为否」不得折进同一个指纹。
 //
-// 批20b（A2）把 ok 从 bool 改成 *bool，为的就是这一字之差：command 帧写下时 Host 还没回执，
+// 把 ok 从 bool 改成 *bool，为的就是这一字之差：command 帧写下时 Host 还没回执，
 // 把 nil 画成 false 等于宣称「这帧失败了」。裁剪之后那一段只剩摘要，如果摘要把两者折成
 // 同一个哈希，那次「发出去没回音」的观察就永久变成了「做过了且失败」——
 // 而这正是双发/重发判断最怕的那种改写（它会把一条待查的帧说成一条已定的帧）。
@@ -629,7 +629,7 @@ func TestA6DigestSeparatesUnackedFromFailedFrame(t *testing.T) {
 
 // TestA6DigestChainIdempotentAtStorage 摘要表的自证资格住在存储层，不在 Go 代码里。
 //
-// 与批20f 同一课：本表自己若可重复、可软删，它就只是一份可被改写的记账，
+// 与同一课：本表自己若可重复、可软删，它就只是一份可被改写的记账，
 // 而「删日志、再补一段假的」正好需要这两样。所以这里钉三格：
 //   - 同 (session_id, ordinal) 再插一条必须被库拒掉（重放裁剪=撞约束，不是多出一条并行历史）；
 //   - 换一个 ordinal 必须插得进（约束是复合的；写成 session_id 单列唯一的话本表只能记一批）；
@@ -664,7 +664,7 @@ func TestA6DigestChainIdempotentAtStorage(t *testing.T) {
 // `CASE WHEN ok IS NULL THEN 'n' WHEN ok THEN 't' ELSE 'f' END` 裁成
 // `CASE WHEN ok IS NULL THEN 'n' ELSE 't' END` 之后，nil 仍走 'n'、false 仍走 't'，
 // 那一腿照样绿（C 相电池 D22 实跑即如此）。真正被折成一态的是 **true 与 false**——
-// 也就是批20b（A2）花一整批拆开的「下发了 / 平台确认了」那根轴：裁掉的那一段里，
+// 也就是前面拆开的「下发了 / 平台确认了」那根轴：裁掉的那一段里，
 // 一条成功的帧与一条失败的帧在摘要上再也分不开。
 //
 // 判据形状与上一腿同源：同 session、同 seq、同正文、同 created_at 的两轮窗口，

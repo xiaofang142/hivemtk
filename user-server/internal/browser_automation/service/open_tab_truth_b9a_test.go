@@ -1,4 +1,4 @@
-// 批9a 假绿收口（服务端侧）：open_tab/markdown 的回包事实必须原样落进步骤结果。
+// 假绿收口（服务端侧）：open_tab/markdown 的回包事实必须原样落进步骤结果。
 // 立项依据是真机 session=432：扩展 open_tab 未等加载就读到空 DOM，回包只有 chrome_tab_id，
 // 服务端据此判这一步成功——「读到了什么」这件事在审计面上完全不存在。
 package service

@@ -16,7 +16,7 @@ type SessionService struct {
 	stepRepo    repository.BrowserStepRepository
 	cmdLogRepo  repository.BrowserCommandLogRepository
 	planRepo    repository.BrowserLLMPlanRepository
-	// digestRepo 裁剪摘要读侧（批22 / A6）。它与 cmdLogRepo 是**同一份事实的两面**：
+	// digestRepo 裁剪摘要读侧（/ A6）。它与 cmdLogRepo 是**同一份事实的两面**：
 	// 命令流给出留下的行，摘要给出被裁掉的行。只装一个就等于让导出包有能力沉默。
 	digestRepo repository.BrowserAuditDigestRepository
 	executor   *Executor
@@ -31,7 +31,7 @@ func (s *SessionService) SetCommandLogRepository(r repository.BrowserCommandLogR
 	s.cmdLogRepo = r
 }
 
-// SetAuditDigestRepository 批22（A6）：审计导出取裁剪摘要（未装配时该分量置空，同 D1 纪律）
+// SetAuditDigestRepository 审计导出取裁剪摘要（未装配时该分量置空，同 D1 纪律）
 func (s *SessionService) SetAuditDigestRepository(r repository.BrowserAuditDigestRepository) {
 	s.digestRepo = r
 }
@@ -91,7 +91,7 @@ func (s *SessionService) ConfirmPending(sessionID uint) bool {
 	return s.executor.ConfirmPending(sessionID)
 }
 
-// ConfirmGate D7 读侧详情（批20 A5）：前端放行按钮要显示「正在等批的是哪一步、哪份内容、
+// ConfirmGate D7 读侧详情：前端放行按钮要显示「正在等批的是哪一步、哪份内容、
 // 什么时候到期」，并把 payload_hash 原样带回 confirm——布尔值撑不起一次有对象的批准。
 // 归属校验与 ListSteps 同构：预览里含正文，越权读到就是外泄。
 func (s *SessionService) ConfirmGate(ctx context.Context, sessionID, userID uint) (PendingConfirmGate, bool, error) {
@@ -156,7 +156,7 @@ func (s *SessionService) gateElsewhere(ctx context.Context, sessionID uint) bool
 	return err == nil && time.Now().Before(exp)
 }
 
-// Confirm D7：人工放行停在 require_confirm 闸门上的写操作提交点（批20 起绑载荷）。
+// Confirm D7：人工放行停在 require_confirm 闸门上的写操作提交点（起绑载荷）。
 // payloadHash 必须是读侧（ConfirmGate）取到的那一份：不符即拒（fail-closed），闸门仍在、
 // 一帧命令都不下发。归属校验与 Stop 同构。
 func (s *SessionService) Confirm(ctx context.Context, sessionID, userID uint, payloadHash string) (ConfirmResult, error) {
@@ -217,7 +217,7 @@ type SessionExportRow struct {
 // 归属校验与 ListCommandLogs 同构（GetByID 带 userID）；仓储未装配的分量置空不报错
 // （审计导出是增强，不因装配缺位而失败——与 D1 读侧同纪律）。
 //
-// 摘要分量（批22 / A6）刻意做成**同一个返回元组**而不是另开一个方法：元组少一个值，
+// 摘要分量（/ A6）刻意做成**同一个返回元组**而不是另开一个方法：元组少一个值，
 // 调用方编译不过；两个方法则允许「只导了命令流、忘了导摘要」这种静默残缺长期存在，
 // 而那种残缺正是本批要消灭的形状（空数组没人分得清是「没发生」还是「被裁了」）。
 func (s *SessionService) SessionExport(ctx context.Context, sessionID, userID uint) (*model.BrowserSession, []*model.BrowserStep, []*model.BrowserCommandLog, []*SessionExportRow, []*model.BrowserAuditDigest, error) {

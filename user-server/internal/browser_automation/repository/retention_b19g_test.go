@@ -1,6 +1,6 @@
 package repository
 
-// 批19g 契约锁：治理裁剪必须真的分批。
+// 契约锁：治理裁剪必须真的分批。
 //
 // retention.go 对运维的承诺是「分批避免长事务锁」（G19），PruneSnapshotText 的注释也写着
 // 「分批 5000」——但它的实现是一条不带批的 UPDATE：首次上线时表里攒着多少超期行，
@@ -32,7 +32,7 @@ const (
 	b19gFreshTask = uint(781502)
 	b19gText      = "snapshot-payload"
 	b19gDays      = 200
-	// b19gSource：批23 起 PruneBefore 要求写明界的来源（见 retention_a6_test.go 的 a6Source）。
+	// b19gSource：PruneBefore 要求写明界的来源（见 retention_a6_test.go 的 a6Source）。
 	b19gSource = "test:retention_b19g"
 )
 
@@ -160,7 +160,7 @@ func TestB19GPlanSnapshotPruneIsBatched(t *testing.T) {
 }
 
 func TestB19GCommandLogPruneIsBatched(t *testing.T) {
-	// 批22 之后 PruneBefore 先把摘要落库再删行，摘要写不进去就整批回滚：
+	// 之后 PruneBefore 先把摘要落库再删行，摘要写不进去就整批回滚：
 	// 这两张表本用例建不了、也必须建（缺表时本腿会以「PruneBefore 报错」的形式红，
 	// 那正是 a6 那条 fail-close 腿在判的事）。
 	db := b19gDB(t, &model.BrowserCommandLog{}, &model.BrowserAuditDigest{}, &model.BrowserAuditPruneRun{})

@@ -1,6 +1,6 @@
 package service
 
-// 批19：依赖归属门（IDOR）。Create 与 SetDependency 是同一条不变式的两条入口——
+// 依赖归属门（IDOR）。Create 与 SetDependency 是同一条不变式的两条入口——
 // 「depends_on_task_id 由请求方任意指定，所以必须验它属于当前用户」——而只有
 // SetDependency 查了（task.go:227）。Create 把请求里的 DependsOnTaskID 直接写库，
 // 于是任何人都能让自己的任务挂在别人的任务 id 上，两条后果：

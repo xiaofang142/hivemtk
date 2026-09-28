@@ -80,7 +80,7 @@ func NewHostWSHandler(registry *service.HostRegistry, kvRepo hrepo.SystemConfigK
 // 握手协议：连接后第一条帧必须为 {"type":"register","version":"1.0.0","pid":N}，
 // 且 token 必须能解析出归属 user_id（token 形如 "bh_<userID>_<rand>"，admin 生成时绑定）。
 func (h *HostWSHandler) Handle(ctx *gin.Context) {
-	// 1. IP 门：只认连接的真实对端（批19f）。这道门守的是「谁能碰到 Host 通道」，
+	// 1. IP 门：只认连接的真实对端。这道门守的是「谁能碰到 Host 通道」，
 	// 而 X-Real-IP / X-Forwarded-For 是调用方自报的——一行 `X-Real-IP: 127.0.0.1` 就能把
 	// 任意远程地址伪成本机（gin 的 ClientIP 恰会顺着头改写，RemoteIP 只看 RemoteAddr）。
 	// 本条路径注册在 engine 上、不过 JWT，回环门塌了就只剩 token 单层。

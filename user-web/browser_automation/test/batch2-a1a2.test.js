@@ -1,4 +1,4 @@
-// 批2 A1/A2 扩展侧契约测试：
+// A1/A2 扩展侧契约测试：
 //  A2 快照携带 location.href（拦截判据 URL 层的数据源）；
 //  A1 resolve_ref 原语 + comment_prep 的 @eN input_selector 解析（自愈回路重下发通道）。
 import { describe, it, expect, vi, beforeEach } from 'vitest';

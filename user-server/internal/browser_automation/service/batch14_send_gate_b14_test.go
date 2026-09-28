@@ -1,6 +1,6 @@
 package service
 
-// 批14：comment_send 页面侧闸门（send_button_not_interactable）必须归到「点击从未发生」这一类。
+// comment_send 页面侧闸门（send_button_not_interactable）必须归到「点击从未发生」这一类。
 // 与注入超时同一待遇的理由：扩展在把坐标交给 CDP 之前就被自己的可点性检查拦下，
 // 页面没有收到任何输入 → 台账留在 prepared 才是事实；记成 sent 会把一次「根本没点」
 // 说成「可能已发」，从此这条评论既不能安全重下发，也说不清到底发生过什么。
@@ -87,7 +87,7 @@ func TestSendGateOrderedBeforeSentLedger(t *testing.T) {
 	src := readSrc(t, "executor.go")
 	iSend := strings.Index(src, "e.hand.commentSend(")
 	iGate := strings.Index(src, "isSendGateReject(sendErr)")
-	// 只锁状态 token、不锁参数尾巴：recordSubmitState 的签名会变（批16 加了 crossed），
+	// 只锁状态 token、不锁参数尾巴：recordSubmitState 的签名会变（加了 crossed），
 	// 锁尾巴等于把断言绑在参数列表上，改签名就假红，而本测试要断的从来只有顺序。
 	iSent := strings.Index(src, "model.StepSubmitSent")
 	iHeal := strings.Index(src, "e.healCommentSendButton(")

@@ -1,11 +1,11 @@
 package controller
 
-// 批20e 契约锁：PUT /tasks/:id 必须真的能改「失败自动重试」三件套。
-// 立项理由（批3 登记残项，本轮清账）：Editor.vue 的表单里就有这一组开关与两个数字，
+// 契约锁：PUT /tasks/:id 必须真的能改「失败自动重试」三件套。
+// 立项理由（登记残项，本轮清账）：Editor.vue 的表单里就有这一组开关与两个数字，
 // save() 把整个 form 发出去，而 UpdateBrowserTaskReq 根本没这三个字段 ——
 // gin 的 ShouldBindJSON 对未知字段默认宽容，于是「200 成功 + 已保存」toast 之后
 // 库里一个字节都没变，详情页照旧显示旧值。静默丢失比报错更难发现：用户以为自己开了自动重试。
-// 同一条纪律在批19e 已经立过一次（创建拦得住、编辑绕得过去=没拦）：两条路径的区间必须同口径。
+// 同一条纪律已经立过一次（创建拦得住、编辑绕得过去=没拦）：两条路径的区间必须同口径。
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func newB20eCtrl(t *testing.T) (*TaskController, *gorm.DB) {
 	taskRepo := barepo.NewBrowserTaskRepositoryWithDB(db)
 	sessionRepo := barepo.NewBrowserSessionRepositoryWithDB(db)
 	stepRepo := barepo.NewBrowserStepRepositoryWithDB(db)
-	// hostProber 传 nil：Update 路径不碰「Host 在不在」（与批19e 的创建腿同口径）。
+	// hostProber 传 nil：Update 路径不碰「Host 在不在」（与创建腿同口径）。
 	return NewTaskController(basvc.NewTaskService(taskRepo, sessionRepo,
 		basvc.NewExecutor(nil, sessionRepo, stepRepo, nil, nil)), nil), db
 }

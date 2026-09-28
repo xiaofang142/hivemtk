@@ -12,7 +12,7 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-// 批18：扩展侧「提交键派发失败」上抛后，Go 台账必须记成**提交尝试**。
+// 扩展侧「提交键派发失败」上抛后，Go 台账必须记成**提交尝试**。
 //
 // 立项缺陷（第三轮深查）：primitives.js 的 type 分支原先给 pressEnter 挂了空回调吞错，
 // Enter 没发出去整步仍回 ok=true。type+submit_on_enter 命中注册评论框时是写步

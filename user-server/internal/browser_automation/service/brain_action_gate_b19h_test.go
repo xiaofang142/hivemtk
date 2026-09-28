@@ -1,6 +1,6 @@
 package service
 
-// 批19h 契约锁：Brain 轮内每个步骤在落库前先过服务端闸门。
+// 契约锁：Brain 轮内每个步骤在落库前先过服务端闸门。
 //
 // 落点在 executeBrain 的步循环：LLM 输出的 steps 是 `json.Unmarshal` 出来的 dto.StepItem，
 // 这条路上 gin 的 binding 一行都不跑（oneof 只在 HTTP 入口生效）。所以模型幻觉出
