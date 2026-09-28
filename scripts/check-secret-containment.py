@@ -4,6 +4,7 @@
 候选集 = hub `.env` 里键名命中 PASS|SECRET|TOKEN|KEY|DSN|CRED|SALT 且值长≥6 的取值
         ∪ 容器 `mtk-postgres` 的 env 里同类键的取值（同名同值并枚）
 面 = 树内取证产物 *.log ／ 本笔提交全量差异 ／ 审计文档 ／ 探针脚本 ／ 整棵 tip 树（git grep）
+   （加 `--transcripts` 再看第 6 个面：本机会话转写。它只报告、不进判定，理由见 transcripts_report 上方）
 一枚值若已在排除取证档后的已跟踪源码里出现（弱口令表、测试常量），单列为"公开常量"，不计入口令面。
 反向自证：把候选里第一枚临时拼进一行假日志，出现数必须 +1，否则本闸没牙。
 值本身任何形态都不打印：RAW 命中只印 键名／值长／各面计数。
@@ -12,6 +13,7 @@
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 SECRET_KEY_RE = re.compile(r"(PASS|SECRET|TOKEN|KEY|DSN|CRED|SALT)", re.I)
@@ -62,6 +64,52 @@ def grep_count(args, value):
                if ln.rsplit(":", 1)[-1].isdigit())
 
 
+TRANSCRIPT_GLOB = "projects/*/*.jsonl"
+# 转写面为什么只报告、不进判定：① 活动会话那份**必然**含明文（此刻正在追加），
+# 把它算进 rc 会让闸恒红；② 这一维的收敛手段是**轮换**（旧值当场作废），不是逐份改写
+# ——改用户会话记录不可逆，且 §23.21 第 8 段⑨ 已把"取证链不许伪造"立为口径；
+# ③ 面在本机，别人机器与 CI 上取不到同一批文件（与整闸不入 `make audit` 同判）。
+# 要的是"这一维现在有多大、有没有随轮换收窄"的可复跑读数，不是又一扇门。
+def transcripts_report(vals) -> None:
+    root = Path.home() / ".qoder-cn"
+    files = sorted(root.glob(TRANSCRIPT_GLOB))
+    if not files:
+        print(f"本机转写面：{root}/{TRANSCRIPT_GLOB} 零文件 ⇒ 这一维无从测（不是 0 命中）")
+        return
+    per_key, dirty, total = {}, [], 0
+    for f in files:
+        try:
+            txt = f.read_text(errors="replace")
+        except OSError as e:
+            print(f"  读不过：{f.name[:8]}（{type(e).__name__}）⇒ 该份缺席，计数是下界")
+            continue
+        row = {}
+        for k, v in vals:
+            c = txt.count(v)
+            if c:
+                row[k] = c
+                per_key[k] = per_key.get(k, 0) + c
+                total += c
+        if row:
+            dirty.append((f, row))
+    # 牙齿：转写面走的是同一套 `count`，所以自证＝临时文件里种一枚候选值，必须被数到。
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="sectcontain-") as td:
+        seed = Path(td) / "seed.jsonl"
+        seed.write_text(f'noise {vals[0][1]} noise', encoding="utf-8")
+        teeth = count([seed.read_text(encoding="utf-8")], vals[0][1])
+    mb = sum(f.stat().st_size for f in files) / 1e6
+    print(f"本机转写面（只报告，不计入判定）：{len(files)} 份／{mb:.1f} MB／含现值 {len(dirty)} 份／命中 {total} 次")
+    print(f"  反向自证：种入临时份被数到 {teeth} 次（须 1）⇒ {'转写面有牙' if teeth == 1 else '转写面失效，本行读数不可引'}")
+    for k, c in sorted(per_key.items(), key=lambda x: -x[1]):
+        print(f"  键 {k}：{c} 次")
+    for f, row in sorted(dirty, key=lambda x: -sum(x[1].values())):
+        import datetime
+        mt = datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime("%m-%d %H:%M")
+        live = "（此刻仍在追加＝活动会话）" if time.time() - f.stat().st_mtime < 600 else ""
+        print(f"  {f.name[:8]} mtime={mt} 命中={sum(row.values())} 键={sorted(row)}{live}")
+
+
 def main() -> int:
     by_value = {}
     for k, v in env_values(HUB_ENV) + container_values():
@@ -105,8 +153,12 @@ def main() -> int:
         if s:
             print(f"  命中 >> 键 {k}（值长={len(v)}，已跟踪源码 0 处）：{hits}")
     print(f"判定：{len(vals)} 枚候选 × 5 个面 ⇒ 私有真值出现合计={total}（须 0）；公开常量出现合计={public_total}（另判）")
+    rc = 0 if total == 0 else 1
     print(f"⇒ {'绿：无一枚非公开口令字节入档' if total == 0 else '红：立即摘字节，禁止推送'}")
-    return 0 if total == 0 else 1
+    # 转写面排在判定之后：它不改 rc，但它印的是键名，必须等上面那枚形状守卫跑过才允许出声。
+    if "--transcripts" in sys.argv:
+        transcripts_report(vals)
+    return rc
 
 
 if __name__ == "__main__":
