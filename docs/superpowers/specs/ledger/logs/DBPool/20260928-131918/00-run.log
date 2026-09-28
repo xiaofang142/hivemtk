@@ -1,0 +1,12 @@
+基线字节：`449e4991`｜未入库字节 31 处｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）｜作业目录 /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dbpoolmut-xmk73ns6
+CONTROL-GREEN ✅ ran=6 名单=TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟、TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20、TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）、TestNormalizePoolFallbacks/整条留空⇒采用生产默认表、TestPoolBoundLandsOnSQLHandle
+K1   摘掉 SetMaxOpenConns ⇒ 上界不落句柄              杀掉 by TestPoolBoundLandsOnSQLHandle｜红名单 1 条 ran=6
+K2   上界兜底 20⇒0（0＝不限连接）                        杀掉 by TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20｜红名单 2 条 ran=6
+K3   lifetime 兜底 30 分钟⇒60 秒                   杀掉 by TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟｜红名单 2 条 ran=6
+K4   摘掉 MaxIdleConns==0 的默认表兜底                杀掉 by TestNormalizePoolFallbacks/整条留空⇒采用生产默认表｜红名单 2 条 ran=6
+
+计数： KILLED=4 SURVIVED=0 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0
+全部格子已还原（user-server/internal/pkg/db/db.go md5=13dd9e9f5b8c226724d9109b1f8468b5）
+
+===== 电池判定：4 格逐格核验，无未登记存活 =====
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dbpoolmut-xmk73ns6/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dbpoolmut-xmk73ns6

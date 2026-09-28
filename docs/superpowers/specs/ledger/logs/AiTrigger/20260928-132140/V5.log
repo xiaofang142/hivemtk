@@ -1,0 +1,64 @@
+2026-09-28T13:24:47+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce
+=== RUN   TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WeCom
+2026-09-28T13:24:51+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:51+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:51+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:51+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=wecom account=wecom:wm-user-k-nonqq-1790573091857677000: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+=== RUN   TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/Feishu
+2026-09-28T13:24:52+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:52+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:52+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:52+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=feishu account=fs:ou-k-k-nonqq-1790573092674589000: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:52+08:00 WRN [Inbox][Recheck] 查询待投回复失败，按无排队继续 error="sql: database is closed" component=user-server conv_id=wecom-1-wm-user-k-nonqq-1790573091857677000 module=webhook
+2026-09-28T13:24:52+08:00 WRN [Inbox][Recheck] 查询未回复消息失败，跳过补触发 error="sql: database is closed" component=user-server conv_id=wecom-1-wm-user-k-nonqq-1790573091857677000 module=webhook
+=== RUN   TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WhatsApp
+2026-09-28T13:24:53+08:00 WRN [Inbox][Recheck] 查询待投回复失败，按无排队继续 error="sql: database is closed" component=user-server conv_id=oc-k-k-nonqq-1790573092674589000 module=webhook
+2026-09-28T13:24:53+08:00 WRN [Inbox][Recheck] 查询未回复消息失败，跳过补触发 error="sql: database is closed" component=user-server conv_id=oc-k-k-nonqq-1790573092674589000 module=webhook
+2026-09-28T13:24:53+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:53+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:53+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:53+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=whatsapp:k-nonqq-1790573093540623000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:53+08:00 INF [Inbox] 渠道自管 AI 触发：仅落库不重复触发 channel=whatsapp component=user-server conv_id=k-nonqq-1790573093540623000 event_id=wamid.k-k-nonqq-1790573093540623000
+2026-09-28T13:24:53+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=whatsapp account=wa:k-nonqq-1790573093540623000: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:53+08:00 WRN [WhatsApp] 超出 24h 客服窗口且未配置 WHATSAPP_FALLBACK_TEMPLATE，AI 文本回复不可送达，标记失败 account_id=1 channel=whatsapp component=user-server last_inbound_at=2023-11-15T06:13:20+08:00 module=webhook to=k-nonqq-1790573093540623000
+2026-09-28T13:24:53+08:00 ERR outbound send failed: WhatsApp 24h 客服窗口已关闭(最后入站 2023-11-15 06:13:20)且未配置 WHATSAPP_FALLBACK_TEMPLATE，自由文本不可送达 account_id=1 category=window_expired channel=whatsapp component=user-server module=webhook retryable=false status_code=0
+--- PASS: TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce (6.65s)
+    --- PASS: TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WeCom (4.96s)
+    --- PASS: TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/Feishu (0.82s)
+    --- PASS: TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WhatsApp (0.88s)
+=== RUN   TestBatchK_QQHandleJobDoesNotDoubleTriggerAI
+2026-09-28T13:24:54+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:54+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:54+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:54+08:00 ERR [Webhook] sales engine error: user_message is empty component=user-server
+2026-09-28T13:24:54+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=qq:G-k-k-qq-dup-1790573094194621000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:54+08:00 INF [Inbox] aiTrigger.TriggerInboundAI start account_id=1 channel=qq component=user-server content_len=0 conv_id=G-k-k-qq-dup-1790573094194621000 event_id=qq_evt_k-qq-dup-1790573094194621000 sender=M-k-k-qq-dup-1790573094194621000
+2026-09-28T13:24:54+08:00 WRN [Inbox][Recheck] 查询待投回复失败，按无排队继续 error="sql: database is closed" component=user-server conv_id=k-nonqq-1790573093540623000 module=webhook
+2026-09-28T13:24:54+08:00 WRN [Inbox][Recheck] 查询未回复消息失败，跳过补触发 error="sql: database is closed" component=user-server conv_id=k-nonqq-1790573093540623000 module=webhook
+2026-09-28T13:24:54+08:00 ERR [Webhook] sales engine error: user_message is empty component=user-server
+--- PASS: TestBatchK_QQHandleJobDoesNotDoubleTriggerAI (0.65s)
+=== RUN   TestTGGateHandledSuppressesSalesTrigger
+=== RUN   TestTGGateHandledSuppressesSalesTrigger/PlainPrivateTriggers
+2026-09-28T13:24:54+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:54+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:54+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:54+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=telegram:12345: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:54+08:00 INF [Inbox] 渠道自管 AI 触发：仅落库不重复触发 channel=telegram component=user-server conv_id=12345 event_id=tg_upd_1_1
+2026-09-28T13:24:54+08:00 WRN [UnifiedLeadMiner] 查询线索失败 channel=telegram account=tg:67890: ERROR: relation "clues" does not exist (SQLSTATE 42P01) component=user-server
+=== RUN   TestTGGateHandledSuppressesSalesTrigger/StartGateSuppresses
+2026-09-28T13:24:55+08:00 INF [WebhookRecovery] scanner started interval=30s cooldown=1m0s batch=100 component=user-server
+2026-09-28T13:24:55+08:00 WRN [H-3] 延迟出站 TTL 判过期失败，本轮跳过判期但不阻断重放 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:55+08:00 WRN [H-3] sending 悬挂行观测查询失败，忽略（不影响派发） error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server
+2026-09-28T13:24:55+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=telegram:12345: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+2026-09-28T13:24:55+08:00 INF [Inbox] 渠道自管 AI 触发：仅落库不重复触发 channel=telegram component=user-server conv_id=12345 event_id=tg_upd_1_1
+2026-09-28T13:24:55+08:00 WRN [Inbox][Recheck] 查询待投回复失败，按无排队继续 error="sql: database is closed" component=user-server conv_id=12345 module=webhook
+2026-09-28T13:24:55+08:00 WRN [Inbox][Recheck] 查询未回复消息失败，跳过补触发 error="sql: database is closed" component=user-server conv_id=12345 module=webhook
+2026-09-28T13:24:56+08:00 WRN [Inbox][Recheck] 查询待投回复失败，按无排队继续 error="ERROR: relation \"reach_delayed_outbound\" does not exist (SQLSTATE 42P01)" component=user-server conv_id=12345 module=webhook
+    webhook_tggate_trigger_test.go:136: StartGateSuppresses：期望恰好 0 次销售触发，实际 1 次（正文 "/start"）——0 变 1＝GateHandled 守卫失效，客户收到网关回复后又收到一份 AI 回复；1 变 0＝触发臂本身没接上
+--- FAIL: TestTGGateHandledSuppressesSalesTrigger (1.85s)
+    --- PASS: TestTGGateHandledSuppressesSalesTrigger/PlainPrivateTriggers (0.70s)
+    --- FAIL: TestTGGateHandledSuppressesSalesTrigger/StartGateSuppresses (1.15s)
+FAIL
+FAIL	hivemtk-user/internal/service	9.662s
+FAIL

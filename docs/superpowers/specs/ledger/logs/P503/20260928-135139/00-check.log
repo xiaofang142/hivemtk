@@ -1,0 +1,5 @@
+基线字节：`449e4991`｜未入库字节 40 处｜装架覆盖来树 13 份（其中 0 份未入库，计入本轮读数）｜本轮读私有 `--shared` 克隆的 HEAD＋来树覆盖字节（覆盖清单＝脚本里的 `OVERLAY`）
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-atel2urx
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/P503/20260928-135139
+锚点校验：24 格，0 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-atel2urx/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p503mut-atel2urx
