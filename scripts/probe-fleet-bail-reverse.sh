@@ -16,8 +16,9 @@
 # 退出码：0 全绿｜1 有 FAIL（含计数对不上账）｜2 没有 FAIL 但有 ENV-BROKEN 未取证的枚子。
 #
 # 三处踩过的坑（都在这版里修掉，别改回去）：
-#  - 加 --check 是错的：26 枚里 16 枚没有这个 flag（argparse rc=2，夹具从没进 prepare），
-#    另外 4 枚的 --check 明确"只静态预检、不装架"⇒ 同样不走 prepare。必须不带 --check，
+#  - 加 --check 是错的：面上多数枚压根没有这个 flag（argparse rc=2，夹具从没进 prepare），
+#    另外几枚的 --check 明确"只静态预检、不装架"⇒ 同样不走 prepare。两类各几枚随重构摆动，
+#    现取：`git ls-files scripts/mut_*.py | xargs grep -L -- '--check'`。必须不带 --check，
 #    让流程真进装架；夹具杀了 checkout，所以走不到跑用例那一步，仍然便宜。
 #  - 每个判据分支的产物要留在磁盘上：第一版 rm 掉了单枚输出，20 枚红只能猜是"电池漏"
 #    还是"探针假红"。这版全部存 LOGDIR，FAIL 当场打印红因。
