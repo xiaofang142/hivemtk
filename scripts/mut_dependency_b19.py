@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 SVC = "internal/browser_automation/service"
@@ -183,20 +184,17 @@ def main() -> int:
     ap.add_argument("--clone", default="")
     args = ap.parse_args()
 
-    dst = Path(args.clone) if args.clone else Path("/tmp/b19dep-mut")
-    if dst.exists():
-        raise SystemExit(f"{dst} 已存在（换 --clone 目录或先删）")
-    dst.mkdir(parents=True)
-    print(f"私有作业目录：{dst}", flush=True)
+    tmp, owned = workdir(args.clone or None, prefix="b19dep-mut-", repo_root=ROOT)
+    print(f"私有作业目录：{tmp}", flush=True)
 
-    clone = go_prepare(dst)
+    clone = go_prepare(tmp)
     tgt = clone / "user-server" / SVC / "task.go"
     origin = md5_bytes(tgt)
 
     rc, killed, ran, skipped, out = go_run(clone)
     if rc != 0 or ran == 0 or skipped != 0:
         print(out[-3000:])
-        shutil.rmtree(dst, ignore_errors=True)
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         raise SystemExit(f"控制组不成立 rc={rc} ran={ran} skip={skipped}——整轮判「无法判定」")
     print(f"[控制组] rc=0 ran={ran} skip=0 全绿\n", flush=True)
 
@@ -222,8 +220,7 @@ def main() -> int:
             else:
                 print(f"{tag}  {desc:<46} 杀掉  {' '.join(killed)}", flush=True)
     finally:
-        if not args.keep:
-            shutil.rmtree(dst, ignore_errors=True)
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
 
     print()
     if broken:

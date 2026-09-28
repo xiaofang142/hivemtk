@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO_DTO = "internal/browser_automation/dto"
@@ -195,15 +196,13 @@ def main() -> int:
     ap.add_argument("--clone", default="")
     args = ap.parse_args()
 
-    # 默认目录带 pid：两轮共用一个克隆时，后起的那轮会把前一轮的树建没，
-    # 前一轮转头就去注码**后一轮**的文件（实测两边结论全废）。
-    dst = Path(args.clone) if args.clone else Path(f"/tmp/b19h-mut-{os.getpid()}")
-    if dst.exists():
-        raise SystemExit(f"{dst} 已存在（换 --clone 目录或先删）")
-    dst.mkdir(parents=True)
-    print(f"私有作业目录：{dst}", flush=True)
+    # 作业目录必须由 workdir() 现开（不传 --clone 时是 mkdtemp 的独占目录）：两轮共用一个克隆时，
+    # 后起的那轮会把前一轮的树建没，前一轮转头就去注码**后一轮**的文件（实测两边结论全废）。
+    # 早先这里靠自己拼 `/tmp/b19h-mut-<pid>` 求独占，那只挡住了"两轮"，没挡住 `--clone .`。
+    tmp, owned = workdir(args.clone or None, prefix="b19h-mut-", repo_root=ROOT)
+    print(f"私有作业目录：{tmp}", flush=True)
 
-    clone = go_prepare(dst)
+    clone = go_prepare(tmp)
     u = clone / "user-server"
     TARGET = {
         "task": u / REPO_DTO / "task.go",
@@ -229,7 +228,7 @@ def main() -> int:
     rc, killed, ran, skipped, out = go_run(clone)
     if rc != 0 or ran != RUN_N or skipped != 0:
         print(out[-4000:])
-        shutil.rmtree(dst, ignore_errors=True)
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         raise SystemExit(f"控制组不成立 rc={rc} ran={ran}（要求 {RUN_N}）skip={skipped}——整轮判「无法判定」")
     print(f"[控制组] rc=0 ran={ran} skip=0 全绿\n", flush=True)
 
@@ -255,8 +254,7 @@ def main() -> int:
             else:
                 print(f"{tag:<4} {desc:<38} 杀掉  {' '.join(killed)}", flush=True)
     finally:
-        if not args.keep:
-            shutil.rmtree(dst, ignore_errors=True)
+        dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
 
     print()
     if broken:

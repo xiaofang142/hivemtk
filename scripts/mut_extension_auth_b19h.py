@@ -22,7 +22,7 @@
 「红了」不算杀——必须点到本格预期那条用例名（中文用子串匹配）；
 等价格外若真被杀掉，同样只报告不判失败（说明上面的论证错了，得回头看）。
 
-用法：python3 scripts/mut_extension_auth_b19h.py [--keep] [--dst DIR]
+用法：python3 scripts/mut_extension_auth_b19h.py [--keep] [--clone DIR]
 """
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent          # <repo>/scripts/ → 上一级
 WEB = ROOT / "user-web" / "browser_automation"
@@ -161,10 +161,10 @@ def cells():
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")
-    ap.add_argument("--dst", default="")
+    ap.add_argument("--clone", default="")
     args = ap.parse_args()
 
-    tmp = Path(args.dst or tempfile.mkdtemp(prefix="b19hjs-"))
+    tmp, owned = workdir(args.clone or None, prefix="b19hjs-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}")
 
@@ -218,8 +218,7 @@ def main() -> int:
                       f"（{len(items[i][1])} 条）——两格盯的是同一句断言")
 
     print("\n[还原] 两个源文件全量还原，md5 一致")
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     if problems:
         print("===== 电池判定：有格未杀 =====")
         for p in problems:

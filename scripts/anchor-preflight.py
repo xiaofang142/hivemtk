@@ -57,9 +57,12 @@ COVERED: dict[str, str] = {
 #  (ii) 单文件/就地注码：格表里没有"文件"这一维（文件写在模块级常量里），要接得先给电池加槽表；
 #  (iii) 格表是代码拼出来的（无静态字面表），只能靠电池自己那份 --check 或整跑。
 UNCOVERED: tuple[str, ...] = (
-    "mut_actionability_b17.py", "mut_brain_action_b19h.py", "mut_command_log_ok_b20b.py",
+    "mut_actionability_b17.py", "mut_bad_case_p803.py", "mut_brain_action_b19h.py",
+    "mut_command_log_ok_b20b.py",
     "mut_cron_err_b19c.py", "mut_d7gate_r22lane.py", "mut_d7verdict_b20g.py",
-    "mut_dependency_b19.py", "mut_dedupkey_shape_r22.py", "mut_dingtalk_msgid_r22lane.py",
+    "mut_db_poolcfg.py", "mut_dependency_b19.py", "mut_dedupkey_shape_r22.py",
+    "mut_dingtalk_msgid_r22lane.py",
+    "mut_egress_pool_r30.py",
     "mut_extension_auth_b19h.py", "mut_host_gate_b19f.py", "mut_hub_media_backfill.py",
     "mut_ledger_b16.py", "mut_ledger_b16b.py", "mut_ledger_b16c.py",
     "mut_outbound_claim_r22lane.py", "mut_prune_batch_b19g.py", "mut_push_budget_b20d.py",
@@ -76,7 +79,12 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def roster() -> list[str]:
-    return sorted(p.name for p in (ROOT / "scripts").glob("mut_*.py"))
+    # `mut_dispose.py` 不是电池，是整族电池共用的删除闸模块（没有格表可核），
+    # 名字却撞在 `mut_*.py` 这把 glob 上 —— 与 mut-dispose-guard.test.sh 的 REAL 静态面
+    # 同一处口径：那边把它从对象集合里摘掉，这边也摘掉，否则同一份模块在两枚门里
+    # 一会儿算"电池"一会儿算"闸"，名单永远对不齐。
+    return sorted(p.name for p in (ROOT / "scripts").glob("mut_*.py")
+                  if p.name != "mut_dispose.py")
 
 
 def roster_problems() -> list[str]:

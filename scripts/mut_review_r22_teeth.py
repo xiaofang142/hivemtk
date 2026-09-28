@@ -50,8 +50,8 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 US = "user-server"
@@ -272,7 +272,7 @@ def main() -> int:
         raise SystemExit(f"逐格日志目录 {args.logs} 里已有上一轮的 .log——换目录："
                          "复用旧目录会让下一格读到上一轮的产码，红的归因就不成立了")
     logs.mkdir(parents=True, exist_ok=True)
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="r22teeth-"))
+    tmp, owned = workdir(args.clone or None, prefix="r22teeth-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
     clone = prepare(tmp)
@@ -343,10 +343,7 @@ def main() -> int:
     print("\n===== 判定：" + (f"{scope}，逐格被杀，无存活" if not problems
                           else f"{scope}，{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)) + " =====")
     print(f"（红因逐格落在 {args.logs}/<格>.log，定性前先逐条读）")
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
-    else:
-        print(f"保留作业目录：{tmp}")
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     return 1 if problems else 0
 
 

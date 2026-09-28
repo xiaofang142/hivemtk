@@ -53,8 +53,8 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 US = "user-server"
@@ -232,7 +232,7 @@ def main() -> int:
     if only and unknown:
         raise SystemExit(f"--cells 里有不存在的格：{sorted(unknown)}")
 
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="b20bmut-"))
+    tmp, owned = workdir(args.clone or None, prefix="b20bmut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}")
     clone = prepare(tmp)
@@ -300,10 +300,7 @@ def main() -> int:
     scope = f"{ran}/{len(cuts())} 格" + (f"（--cells {','.join(sorted(only))}）" if only else "")
     print("\n===== 判定：" + (f"{scope}，逐格被杀，无存活" if not problems
                             else f"{scope}，{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)) + " =====")
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
-    else:
-        print(f"保留作业目录：{tmp}")
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     return 1 if problems else 0
 
 

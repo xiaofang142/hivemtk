@@ -33,8 +33,8 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from mut_dispose import dispose, workdir
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -184,7 +184,7 @@ def main() -> int:
     ap.add_argument("--clone", default="")
     args = ap.parse_args()
 
-    tmp = Path(args.clone or tempfile.mkdtemp(prefix="b20gmut-"))
+    tmp, owned = workdir(args.clone or None, prefix="b20gmut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}", flush=True)
     problems: list[str] = []
@@ -239,8 +239,7 @@ def main() -> int:
     dup_report(gkill)
     print("[Go] 已全量还原（md5 一致）")
 
-    if not args.keep:
-        shutil.rmtree(tmp, ignore_errors=True)
+    dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
     if problems:
         print("\n===== 电池判定：有洞 =====")
         for x in problems:
