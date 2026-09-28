@@ -691,7 +691,21 @@ def apply_cell(originals: dict[str, str], cell) -> dict[str, str]:
     return out
 
 
-def prepare(dst: Path) -> Path:
+def prepare(dst: Path, owned: bool = False) -> Path:
+
+    def bail(msg: str) -> None:
+        """克隆已经建起来之后的中止路：先回收私有克隆，再出声。
+
+        收尾闸原先只接在 `main()` 的出口上，装架函数里克隆之后的每一条 raise 都把整份
+        私有克隆留在临时目录（一轮 50–70MB，而磁盘常态 98% 满）。2026-09-28 在
+        `mut_bill_p701.py` 上实测一次 DIRTY 停机留 72M，这一族按同一形状补齐。
+        三条**不**走这里："已存在"（那份 clone/ 不是本电池建的）、"克隆失败"（目录归属
+        还没定）、"md5 不一致"（"覆盖后还是不对"的字节只活在克隆里，删了就只剩一句
+        "当时红过"——与 `main()` 侧还原校验同一取舍）。
+        """
+        if (dst / "clone").exists():
+            dispose(dst, owned=owned, keep=False, repo_root=ROOT)
+        raise SystemExit(msg)
     clone = dst / "clone"
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
@@ -702,22 +716,22 @@ def prepare(dst: Path) -> Path:
     b = subprocess.run(["git", "checkout", "-f", "master"], cwd=clone,
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
-        raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
+        bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
     for rel in MY_ANCHOR_KEYS:
         src = clone / rel
         if not src.exists():
-            raise SystemExit(f"锚点所在文件在 HEAD 里不存在：{rel}")
+            bail(f"锚点所在文件在 HEAD 里不存在：{rel}")
     for rel, needle in MY_ANCHORS:
         n = read(clone / rel).count(needle)
         if n != 1:
-            raise SystemExit(f"装配锚点在 HEAD 的 {rel} 里命中 {n} 次（要恰好 1 次）：{needle!r}\n"
+            bail(f"装配锚点在 HEAD 的 {rel} 里命中 {n} 次（要恰好 1 次）：{needle!r}\n"
                              "⇒ 克隆拿到的不是本卡提交的那棵树，或那一处在 HEAD 里被写了两遍。")
     in_head = 0
     drifted: list[str] = []
     for rel in NEW_FILES:
         src = ROOT / rel
         if not src.exists():
-            raise SystemExit(f"覆盖源缺失：{src}")
+            bail(f"覆盖源缺失：{src}")
         tgt = clone / rel
         if tgt.exists():
             # 提交之后文件已在 HEAD 里：这时**测 HEAD 的字节**，别再拿工作树覆盖 ——
@@ -734,7 +748,7 @@ def prepare(dst: Path) -> Path:
           + ("" if in_head == len(NEW_FILES) else "（余下从工作树取，属未提交态）")
           + f"；装配锚点 {len(MY_ANCHORS)} 处各命中 1 次")
     if drifted:
-        raise SystemExit("这些文件 HEAD 里有、工作树里被改过且**未提交**，电池测的是 HEAD："
+        bail("这些文件 HEAD 里有、工作树里被改过且**未提交**，电池测的是 HEAD："
                          + ", ".join(drifted) + "\n先提交这一格再看电池结论。")
     hostenv = ROOT / US / ".env"
     if hostenv.exists():
@@ -863,7 +877,7 @@ def main() -> int:
     tmp, owned = workdir(args.clone, prefix="p703mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}")
-    clone = prepare(tmp)
+    clone = prepare(tmp, owned)
 
     def sweep() -> None:
         """除了 --keep，正常出口与"可复现"的停机出口都把私有克隆带走。

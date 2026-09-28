@@ -19,11 +19,12 @@
 #   G7 入口闸 workdir()：--clone 就是仓库根 ⇒ 装架之前就退，且出声
 #   G8 入口闸：--clone 是仓库根的上级／是 /tmp 本身 ⇒ 同样退
 #   G9 入口闸：不传 --clone 时 mkdtemp(prefix) 照旧且 owned=1；传安全空目录时 owned=0 且不动它
-#   REAL 静态面（四腿）：**所有**带 --clone 面的常驻电池（枚数由 grep 现取，别照抄文档里的
+#   REAL 静态面（五腿）：**所有**带 --clone 面的常驻电池（枚数由 grep 现取，别照抄文档里的
 #       "六枚/七枚"——写死的那个数每次有人加电池就过期一次）必须 ① --clone 面／入口闸面／收尾闸面三处
 #       计数相等，② 不留 `Path(args.clone …)` 直连赋值，③ 不留裸 rmtree(tmp/dst/work)，
 #       ④ 入口闸那一行必须排在 `prepare(tmp)` **之前**（顺序腿的反向测：把 workdir 挪到
-#       clone 之后即红，见本轮 C 组同款做法）
+#       clone 之后即红，见本轮 C 组同款做法），⑤ 克隆建起来之后的每条退出都走 `bail()`
+#       （豁免三形："已存在"/"克隆失败"/"md5 不一致"；反向测在 `$WORK/rev` 里撤掉一处 bail）
 #
 # 两道闸的分工（别只看一道就以为安全了）：`dispose()` 是"退出时才发现"的下界，
 # `workdir()` 是"装架之前就把危险入参挡掉"的上界。只有上界的理由是：电池在收尾之前
@@ -169,7 +170,12 @@ for f in "${cells_files[@]}"; do
   grep -q 'args\.clone' "$f" || continue
   ord_seen=$((ord_seen + 1))
   wl=$(grep -n 'workdir(args\.clone' "$f" | head -1 | cut -d: -f1)
-  pl=$(grep -n 'prepare(tmp' "$f" | head -1 | cut -d: -f1)
+  # 装架这一行要锚**调用点形状**（`= prepare(tmp`／`= go_prepare(tmp`）。原先只写
+  # `prepare(tmp` 会捞到两类不是调用点的行，2026-09-28 一天里各撞一次：
+  #   ① 把装架函数的形参也命名为 `tmp` ⇒ 函数定义行先命中，格子读成"入口闸排在 clone 之后"；
+  #   ② 注释/文档里照抄这个字面 ⇒ 注释行先命中，同一句红话从别的行印出来。
+  # 两次的红都不是产码问题，而是判据抓错了对象——抓错对象的判据既会假红也会假绿，所以这里钉死形状。
+  pl=$(grep -n '= go_prepare(tmp\|= js_prepare(tmp\|= prepare(tmp' "$f" | head -1 | cut -d: -f1)
   [ -n "$wl" ] && [ -n "$pl" ] && [ "$wl" -lt "$pl" ] && continue
   late=$((late + 1))
   echo "  · $(basename "$f") 顺序不对：workdir 在第 ${wl:-无} 行、装架在第 ${pl:-无} 行"
@@ -181,6 +187,113 @@ elif [ "$late" = 0 ]; then
 else
   bad "$late 枚的入口闸排在 clone 之后"
 fi
+
+# 中止路腿（REAL 第五腿）：`git clone` 建起来**之后**的每一条退出都必须先过收尾闸。
+# 起因是 2026-09-28 的实测：`mut_bill_p701.py --check` 走到"工作树压着并行泳道未提交字节"
+# 那条 raise 时直接退出，把 72M 私有克隆留在临时目录里，而磁盘常态 98% 满——
+# 收尾闸当时只接在 `main()` 的出口上，装架函数内的中止路一条都没接。
+# 三条豁免与 `bail()` 的 docstring 同源："已存在"（那份 clone/ 不是本电池建的，不许删）、
+# "克隆失败"（目录归属还没定）、"md5 不一致"（"覆盖后还是不对"的字节只活在克隆里，
+# 删了就只剩一句"当时红过"，与 `main()` 侧还原校验同一取舍）。
+abort_leg() {
+  python3 - "$1" <<'PY'
+import ast, pathlib, sys
+
+EXEMPT = ("已存在", "克隆失败", "md5 不一致")
+d = pathlib.Path(sys.argv[1])
+obj, leak = 0, []
+for p in sorted(d.glob("mut_*.py")):
+    if p.name == "mut_dispose.py":
+        continue
+    text = p.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    fn = next((f for f in tree.body
+               if isinstance(f, ast.FunctionDef) and f.name in ("prepare", "go_prepare")
+               and '"git", "clone"' in (ast.get_source_segment(text, f) or "")), None)
+    if fn is None:
+        continue
+    obj += 1
+    seg = ast.get_source_segment(text, fn)
+    if "def bail(" not in seg:
+        leak.append(f"{p.name}：装架函数里没有 bail()——克隆之后的退出会留整份私有克隆")
+        continue
+    if "owned: bool" not in seg.split("def bail(")[0]:
+        leak.append(f"{p.name}：装架函数没有 owned 形参，bail() 无从判断目录归属")
+    inner = {id(n) for b in fn.body if isinstance(b, ast.FunctionDef) and b.name == "bail"
+             for n in ast.walk(b)}
+    def_ln = min(n.lineno for n in ast.walk(fn)
+                 if isinstance(n, ast.FunctionDef) and n.name == "bail")
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Raise) and id(n) not in inner:
+            s = (ast.get_source_segment(text, n) or "").strip()
+            if not any(k in s for k in EXEMPT):
+                leak.append(f"{p.name}:{n.lineno} 克隆之后的裸 raise：{s.splitlines()[0][:64]}")
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "bail" and n.lineno < def_ln:
+            leak.append(f"{p.name}:{n.lineno} 在 def bail 之前调用它")
+print(obj)
+print("\n".join(leak))
+sys.exit(1 if leak else 0)
+PY
+}
+abort_out=$(abort_leg "$ROOT/scripts")
+abort_rc=$?
+abort_obj=$(printf '%s\n' "$abort_out" | head -1)
+abort_bad=$(printf '%s\n' "$abort_out" | tail -n +2 | sed '/^$/d')
+clone_any=$(grep -l '"git", "clone"' "${cells_files[@]}" | wc -l | tr -d ' ')
+if [ "$abort_obj" != "$clone_any" ]; then
+  bad "中止路腿只看到 ${abort_obj} 枚带 git-clone 装架的电池，独立计数是 ${clone_any}（判据在空转）"
+elif [ "$abort_rc" = 0 ]; then
+  ok "$abort_obj 枚电池在克隆之后的退出全走收尾闸（豁免三形除外）"
+else
+  bad "$abort_obj 枚里有裸中止路：" $(printf '%s\n' "$abort_bad" | head -3 | tr '\n' ' ')
+fi
+# 反向测（没有这一步，上面那句绿只是"这段代码没报错"）：把一枚电池的 `bail("checkout 失败…")`
+# 改回裸 raise，这条腿必须点名红。
+REVDIR="$WORK/rev/scripts"
+mkdir -p "$REVDIR"
+cp "$ROOT"/scripts/mut_*.py "$REVDIR/"
+python3 - "$REVDIR" <<'PY'
+import pathlib, sys
+d = pathlib.Path(sys.argv[1])
+for p in sorted(d.glob("mut_*.py")):
+    t = p.read_text(encoding="utf-8")
+    if 'bail("checkout 失败' in t:
+        p.write_text(t.replace('bail("checkout 失败', 'raise SystemExit("checkout 失败', 1),
+                     encoding="utf-8")
+        print(f"反向格：把 {p.name} 的一处 bail 改回裸 raise")
+        break
+else:
+    raise SystemExit("反向格找不到可撤的 bail——这条腿的对象集是空的")
+PY
+rev_out=$(abort_leg "$REVDIR")
+rev_rc=$?
+if [ "$rev_rc" = 0 ]; then
+  bad "反向：撤掉一处 bail 之后这条腿仍绿＝判据没牙"
+else
+  ok "反向：撤掉一处 bail 当场红（$(printf '%s\n' "$rev_out" | tail -n +2 | head -1 | cut -c1-48)…）"
+fi
+
+# 行为面（2026-09-28 实测；不进本门，跑在临时夹具上）。上面那条腿只证"克隆之后的 raises 都写了
+# bail(...)"，不证 bail() 真把克隆带走了。那一条这样打靶：PATH 前面挂一枚只对 `checkout` 退 123、
+# 其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在 `--clone <空目录>`
+# 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录还在（不许越权
+# 删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。
+# 读数：SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10
+#   ——产物 /tmp/fleet_bail_reverse_run5.log、夹具 /tmp/fleet-bail-reverse.sh，两者都不入库：
+#   它要 node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台恒红的机器。
+# 四处只有真跑一趟才看得见的坑（下次动这条探针前先读）：
+#   · 带 --check 是错的探针：26 枚里 16 枚没这个 flag（argparse rc=2，夹具压根没进 prepare），
+#     另 4 枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。不带 --check 才真进
+#     装架，而 checkout 被杀 ⇒ 走不到跑用例那一步，一趟还是只花几秒。
+#   · 有 `dst / "web"` 面的那几枚（JS 装架）中止后留一个 web/ 是 **dispose 契约里写明不许回收**的
+#     ——它把调用方的 node_modules 拷/链了进来，rmtree 会顺着走到别人的依赖树上。所以探针判的是
+#     "外层恰好剩 web/"，不是一律"外层必须空"；给它加体积上界时要用 `du -m -s`，不带 -s 就一个子
+#     目录印一行，那串喂给 `[ -gt ]` 得 integer expression expected ⇒ 判据静默失效（第一版就这样）。
+#   · mut_review_r22_teeth.py 的默认 --logs 目录在 HEAD 里就带 10 份已跟踪 .log ⇒ 任何干净克隆里
+#     不带参数跑都会先在 prepare 之前撞"复用旧目录"那条判据，探针要显式给它一个新目录才进得了夹具。
+#   · 行为面唯一没证到的那枚是 mut_egress_pool_r30.py：它自己的前提是 /tmp 剩 ≥ 20 GiB（本机 14），
+#     这道 ENV-BROKEN 闸也在 prepare 之前，所以它的 bail 那一路只有静态面。没腾出那 7 GiB 之前，
+#     不许把上面那句 PASS=25 读成 26 枚全证。
 
 echo
 if [ "$FAIL" = 0 ]; then echo "===== 用例：九格全过（断言失败 0 处）====="; exit 0; fi

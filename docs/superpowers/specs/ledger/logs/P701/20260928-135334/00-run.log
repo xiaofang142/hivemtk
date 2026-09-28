@@ -1,0 +1,58 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-koxmayoz
+逐格日志目录：/private/tmp/p701anchor/hivemtk/docs/superpowers/specs/ledger/logs/P701/20260928-135334
+基线字节：克隆 HEAD `fe3fc059`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次
+控制组[svc] DIRTY rc=1 ran=19 PASS=3 skip=0 FAIL=['TestBillAmountEqualsHandComputedTotal', 'TestBillDeriveAcceptsAlreadyAcceptedRowAgain', 'TestBillDeriveCASFailureLeavesNoBill', 'TestBillDeriveCurrencyFollowsQuote', 'TestBillDeriveFromSentQuoteWritesOneRow', 'TestBillDeriveIsIdempotentAcrossCalls', 'TestBillDeriveLeavesDueAtNull', 'TestBillDeriveNeedsLines', 'TestBillDeriveQuoteNotFound', 'TestBillDeriveRacesIntoExisting', 'TestBillDeriveRejectsSecondAcceptedVersionInChain', 'TestBillDeriveRejectsSupersededVersion', 'TestBillDeriveReportsReadBackFailure', 'TestBillDeriveRequiresSentVersion', 'TestBillDeriveStoresTheDueAtTheCallerGave', 'TestBillServiceAvailabilityAndNilSafety']
+ (0.00s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.00s)
+=== RUN   TestBillDeriveNeedsLines
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveNeedsLines (0.00s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveCASFailureLeavesNoBill (0.00s)
+=== RUN   TestBillDeriveRacesIntoExisting
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveRacesIntoExisting (0.00s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveReportsReadBackFailure (0.00s)
+=== RUN   TestBillDeriveQuoteNotFound
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillDeriveQuoteNotFound (0.00s)
+=== RUN   TestBillDeriveInputCarriesRowKeyAndOptionalTerm
+--- PASS: TestBillDeriveInputCarriesRowKeyAndOptionalTerm (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestBillServiceAvailabilityAndNilSafety (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/service	0.759s
+FAIL
+
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-koxmayoz/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-koxmayoz

@@ -1,0 +1,47 @@
+2026-09-28T14:02:03+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (2.05s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.11s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+--- PASS: TestBillDeriveIsIdempotentAcrossCalls (0.11s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.11s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+    bill_test.go:360: 派生出的账单带了账期 2026-09-19 18:00:00 +0800 CST：本卡没有任何一处定义过账期
+    bill_test.go:368: 库里那一行的 due_at 不是 NULL
+--- FAIL: TestBillDeriveLeavesDueAtNull (0.10s)
+=== RUN   TestBillDeriveStoresTheDueAtTheCallerGave
+    bill_test.go:403: 视图账期 2026-09-19 10:00:00 +0000 UTC，期望 2026-12-31 01:30:00 +0000 UTC
+    bill_test.go:413: 库里账期 2026-09-19 10:00:00 +0000 UTC 与给定的 2026-12-31 01:30:00 +0000 UTC 差 -2463h30m0s：落库改了瞬间或改了时区
+    bill_test.go:427: 重复确认把账期从 2026-12-31 01:30:00 +0000 UTC 改成了 2026-09-19 18:00:00 +0800 CST：改账期不是确认成交的副作用
+--- FAIL: TestBillDeriveStoresTheDueAtTheCallerGave (0.11s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.10s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+--- PASS: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.09s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.09s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.14s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.14s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.11s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.12s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+--- PASS: TestBillDeriveReportsReadBackFailure (0.15s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.12s)
+=== RUN   TestBillDeriveInputCarriesRowKeyAndOptionalTerm
+--- PASS: TestBillDeriveInputCarriesRowKeyAndOptionalTerm (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- PASS: TestBillServiceAvailabilityAndNilSafety (0.21s)
+FAIL
+FAIL	hivemtk-user/internal/service	4.527s
+FAIL
