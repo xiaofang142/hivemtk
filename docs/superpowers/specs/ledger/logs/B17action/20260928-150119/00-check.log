@@ -1,0 +1,4 @@
+基线字节：`a4138364`｜未入库字节 7 处｜装架覆盖来树 1 份（全部与 HEAD 同字节 ⇒ 本轮读数＝HEAD）｜本轮读私有 `--shared` 克隆的 HEAD＋来树覆盖字节（覆盖清单＝`lane_overlays() + GO_OVERLAY_JS`，即本泳道脏 .go ＋ Go 侧静态锁读的那份扩展源码）
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-e5wqb4h9
+锚点校验：28 格，0 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-e5wqb4h9/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b17mut-e5wqb4h9

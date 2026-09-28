@@ -1,0 +1,17 @@
+  ✓ V1 整段短路 ⇒ 五家的触发归属一起没了｜红 7 条／绿 1 条
+  ✓ V2 只把企微从触发块除名 ⇒ 只有企微那条客户收不到回复｜红 2 条／绿 6 条
+  ✓ V3 只把飞书除名｜红 2 条／绿 6 条
+  ✓ V4 只把 WhatsApp 除名｜红 2 条／绿 6 条
+  ✓ V5 删掉 GateHandled 守卫 ⇒ /start 之后又追一份 AI 回复｜红 2 条／绿 6 条
+CONTROL-GREEN ✅ ran=8 名单=TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce、TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/Feishu、TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WeCom、TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce/WhatsApp、TestBatchK_QQHandleJobDoesNotDoubleTriggerAI、TestTGGateHandledSuppressesSalesTrigger、TestTGGateHandledSuppressesSalesTrigger/PlainPrivateTriggers、TestTGGateHandledSuppressesSalesTrigger/StartGateSuppresses
+V1   整段短路 ⇒ 五家的触发归属一起没了                     杀掉｜红 7 条（7 条点名）绿名单零命中 ran=8
+V2   只把企微从触发块除名 ⇒ 只有企微那条客户收不到回复             杀掉｜红 2 条（2 条点名）绿名单零命中 ran=8
+V3   只把飞书除名                                 杀掉｜红 2 条（2 条点名）绿名单零命中 ran=8
+V4   只把 WhatsApp 除名                         杀掉｜红 2 条（2 条点名）绿名单零命中 ran=8
+V5   删掉 GateHandled 守卫 ⇒ /start 之后又追一份 AI   杀掉｜红 2 条（2 条点名）绿名单零命中 ran=8
+
+计数： KILLED=5 SURVIVED=0 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0
+全部格子已还原（user-server/internal/service/webhook.go md5=3cb01f02642e71505fcef7275c09ad0f）
+
+===== 电池判定：5 格逐格核验（红名单点名＋绿名单零命中），无未登记存活 =====
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/whtrigmut-sb9v7p3g/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/whtrigmut-sb9v7p3g

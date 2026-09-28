@@ -266,8 +266,10 @@ def main() -> int:
     args = ap.parse_args()
 
     LOGDIR.mkdir(parents=True, exist_ok=True)
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(LOGDIR / "00-run.log")
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(LOGDIR / ("00-check.log" if args.check else "00-run.log"))
+    # 身份行须在 tee 之后；本电池是就地注码，所以"未入库字节数"就是本轮读数的成分，必须入档。
+    identity(ROOT, label="基线字节", extra="｜就地注码 ⇒ 未入库字节也在本轮读数里")
     entries = build_entries()
     mut = Mutator(entries)
 

@@ -166,7 +166,8 @@ jobs:
         run: python3 scripts/check-ci-pg-capacity.py --repo .
 
       - name: check-ci-pg-capacity 用例（假树夹具，不联网、不要 docker）
-        # 十格：正控制齐全绿／摘 command／名额不等／缺现测步骤／只印不判／低于池上界之和／
+        # 十组（断言**处数**由用例现报，写死的枚数会随格子漂移，见审计文档 §23.25 第 18、19 段）：
+        # 正控制齐全绿／摘 command／名额不等／缺现测步骤／只印不判／低于池上界之和／
         # 源文件缺失退 2／上界形状缺失退 2／注释污染派生 grep／REAL 真仓库。
         # 进 CI 的是用例而不只是门：判据退化（例如把"没数到"当成通过）在这里当场红。
         run: bash scripts/check-ci-pg-capacity.test.sh

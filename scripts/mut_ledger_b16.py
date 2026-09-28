@@ -247,10 +247,14 @@ def check_anchors():
 
 
 def main():
-    if "--check" in sys.argv:
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    check = "--check" in sys.argv
+    # tee 必须在 `--check` 分流之前：只读预检的末行（锚点校验：N 格，M 格有问题）也是常驻判据，
+    # 早先它只进终端 ⇒ 预检的绿没有产物可对。身份行同理，必须在 tee 之后才进得了产物。
+    tee_to(os.path.join(LOGDIR, "00-check.log" if check else "00-run.log"))
+    identity(ROOT, label="基线字节", extra="｜就地注码：未入库字节也在本轮读数里")
+    if check:
         return check_anchors()
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(os.path.join(LOGDIR, "00-run.log"))
     if not os.path.isdir(ROOT):
         print(f"目标树不存在：{ROOT}")
         return 2

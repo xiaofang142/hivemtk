@@ -7,11 +7,12 @@
 # 那等于把一次性证据换成了**会骗人的**常驻证据。
 #
 # 这一族只跑**不需要 go、不需要测试库**的腿（全族杀伤要编 Go，见脚本头部的用法）：
-#   T1 预检内核的五格内存反向格 ⇒ rc=0，末行"失败 0 格"
-#   T2 对真源码的锚点预检（`--check-tree`）⇒ rc=0 且"4 格，0 格有问题"
+#   T1 预检内核的内存反向格 ⇒ rc=0，末行"失败 0 格"（分母由被检方现报，本用例不抄数）
+#   T2 对真源码的锚点预检（`--check-tree`）⇒ rc=0 且"非零格数，0 格有问题"
 #   T3 反向：把真源码里 K1 那枚锚点删掉再喂判据 ⇒ 必须点名 1 格（证明 T2 的绿不是空判）
 #   T4 反向：expect 的父用例名换成本包里不存在的名字 ⇒ 必须点名 1 格（化石 expect 那条腿）
-#   T5 独立复算：四枚锚点的关键行各在 `db.go` 里命中恰好 1 行（用 grep 数行，不读脚本自己的计数）
+#   T5 独立复算：锚点的关键行各在 `db.go` 里命中恰好 1 行（用 grep 数行，不读脚本自己的计数）
+#       ＋对账腿：本腿列出的名单长度必须等于 T2 现取的格数（两份真相只有一致才算绿）
 #   T6 删除闸：`--clone .` 必须**装架之前**退非 0，且工作树分毫未动（§23.22 第 1 段的事故本体）
 #   T7 删除闸：`--clone <仓库根的上级>` 同样退非 0
 #
@@ -23,9 +24,13 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BATT="$ROOT/scripts/mut_db_poolcfg.py"
 SRC="$ROOT/user-server/internal/pkg/db/db.go"
 FAIL=0
-
-ok() { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+# 断言处数由格子自己报，不写死（`七格` 是 T1–T7 的**分组数**，一组里常有多条断言 ⇒ 拿分组数当
+# 覆盖面就是说谎；与 mut-dispose-guard.test.sh 的"九格"、check-battery-identity 自测的 "+3"
+# 同族）。本注释刻意**不记实印处数**——记了就又是一处会随加腿漂移的死数，现读去看汇总行。
+# `bad` 收 `$*` 是排版保险：红因名单可能落在第二个参数上。
+N=0
+ok() { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$BATT" ] || { echo "FATAL: 找不到 ${BATT}"; exit 1; }
 [ -f "$SRC" ] || { echo "FATAL: 找不到 ${SRC}（T2/T5 的前提没了，不是树的红）"; exit 2; }
@@ -35,20 +40,23 @@ echo "T1 预检内核的内存反向格"
 t1=$(cd "$ROOT" && python3 scripts/mut_db_poolcfg.py --selftest 2>&1)
 rc=$?
 echo "$t1" | tail -2
-if [ "$rc" -eq 0 ] && echo "$t1" | grep -q '预检自测：5 格，失败 0 格'; then
-  ok "rc=0 且末行是『失败 0 格』（5 格逐条点名）"
+# 分母从被检方那一行现取，不写进本用例（写死＝"别人加一格我就假红、少一格我又抓不到"两头的坑）。
+n_t1=$(printf '%s' "$t1" | sed -n 's/.*预检自测：\([0-9]\{1,\}\) 格.*/\1/p')
+if [ "$rc" -eq 0 ] && [ "${n_t1:-0}" -ge 1 ] && echo "$t1" | grep -qE '预检自测：[1-9][0-9]* 格，失败 0 格'; then
+  ok "rc=0 且末行是『失败 0 格』（分母现取 ${n_t1} 格，逐条点名）"
 else
-  bad "rc=${rc} 或末行读数不对（须 rc=0 ＋『失败 0 格』）"
+  bad "rc=${rc} 或末行读数不对（须 rc=0 ＋非零分母＋『失败 0 格』，实得 ${n_t1:-空}）"
 fi
 
 echo "T2 对真源码的锚点预检（--check-tree）"
 t2=$(cd "$ROOT" && python3 scripts/mut_db_poolcfg.py --check-tree 2>&1)
 rc=$?
 echo "$t2" | tail -1
-if [ "$rc" -eq 0 ] && echo "$t2" | grep -q '锚点校验：4 格，0 格有问题'; then
-  ok "四枚锚点各命中 1 次、注码会落地、杀手用例有定义"
+n_t2=$(printf '%s' "$t2" | sed -n 's/.*锚点校验：\([0-9]\{1,\}\) 格.*/\1/p')
+if [ "$rc" -eq 0 ] && [ "${n_t2:-0}" -ge 1 ] && echo "$t2" | grep -qE '锚点校验：[1-9][0-9]* 格，0 格有问题'; then
+  ok "锚点各命中 1 次、注码会落地、杀手用例有定义（判据内核自报 ${n_t2} 格）"
 else
-  bad "rc=${rc}：锚点或杀手名单不对（先修锚点，别改期望）"
+  bad "rc=${rc}：锚点或杀手名单不对（先修锚点，别改期望；实得分母 ${n_t2:-空}）"
 fi
 
 echo "T3 反向：真源码里删掉 K1 的锚点 ⇒ 判据必须点名那一格"
@@ -92,9 +100,11 @@ rc=$?
 echo "  $t4"
 [ "$rc" -eq 0 ] && ok "化石 expect 被点名" || bad "rc=${rc}：expect 指向不存在的用例却没被抓到"
 
-echo "T5 独立复算：四枚锚点关键行在 db.go 里的命中行数（grep 数行，不读脚本的计数）"
+echo "T5 独立复算：锚点关键行在 db.go 里的命中行数（grep 数行，不读脚本的计数）"
 # 用 here-doc 而不是管道：管道右侧的 while 在子 shell 里跑，FAIL 计数会丢（bash 检查四死法之一）
+q=0
 while IFS='|' read -r code pat; do
+  q=$((q + 1))
   n=$(grep -c -F "$pat" "$SRC")
   echo "  ${code} 命中 ${n} 行｜$(grep -n -F "$pat" "$SRC" | head -1)"
   if [ "$n" -eq 1 ]; then
@@ -108,6 +118,13 @@ K2|poolConfig.MaxOpenConns = 20
 K3|poolConfig.ConnMaxLifetime = int((30 * time.Minute).Seconds())
 K4|poolConfig = config.DefaultPoolConfig
 EOF
+# 两份真相必须对账：判据内核自报的格数（T2 现取）＝本腿独立列出的名单长度。写死"四枚"只拦得住
+# 改了一边的情况，且改对两边时反而假红；这里两头都拦。
+if [ "${n_t2:-0}" -ge 1 ] && [ "$q" = "$n_t2" ]; then
+  ok "名单长度与判据内核自报一致（本腿 ${q} 枚＝T2 现取 ${n_t2} 格）"
+else
+  bad "两份真相不一致：本腿列了 ${q} 枚、判据内核自报 ${n_t2:-空} 格 ⇒ 有人只改了一边"
+fi
 
 echo "T6 删除闸：--clone .（仓库根本身）必须装架之前退，且工作树分毫未动"
 before=$(cd "$ROOT" && git status --porcelain | wc -l | tr -d ' ')
@@ -134,8 +151,13 @@ echo "  $(echo "$t7" | head -1)"
 [ "$rc" -ne 0 ] && ok "上级目录当轮退非 0（rc=${rc}）" || bad "rc=0：--clone 指到上级没被挡"
 
 echo "──────"
-if [ "$FAIL" -gt 0 ]; then
-  echo "===== 用例：失败 ${FAIL} 处 ====="
+# 下界取 T 分组数（7）：只判"半路死掉、有腿没执行"，不钉死处数（钉死＝别人加/减一条断言本门假红）。
+if [ "$N" -lt 7 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 7）＝有腿没执行，判红 ====="
   exit 1
 fi
-echo "===== 用例：七格全过（断言失败 0 处）====="
+if [ "$FAIL" -gt 0 ]; then
+  echo "===== 用例：${N} 处断言里 ${FAIL} 处失败 ====="
+  exit 1
+fi
+echo "===== 用例：${N} 处断言全过（断言失败 0 处）====="

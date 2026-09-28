@@ -821,8 +821,8 @@ def main() -> int:
     ap.add_argument("--cells", default="", help="只跑这些代号（逗号分隔）")
     ap.add_argument("--check", action="store_true", help="只校验锚点命中数，不跑用例")
     args = ap.parse_args()
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(LOGDIR / "00-run.log")
+    from battlog import tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(LOGDIR / ("00-check.log" if args.check else "00-run.log"))
 
     cells = CELLS
     if args.cells:

@@ -1,0 +1,5 @@
+基线字节：`73e21e4d`｜未入库字节 84 处｜装架覆盖来树 13 份（全部与 HEAD 同字节 ⇒ 本轮读数＝HEAD）｜本轮读私有 `--shared` 克隆的 HEAD＋来树覆盖字节（覆盖清单＝脚本里的 `OVERLAY`）
+私有作业目录：/private/tmp/r76p503chk.QRISMk
+逐格日志目录：/private/tmp/r76merge.gX1ISe/clone/docs/superpowers/specs/ledger/logs/P503/20260928-180652
+锚点校验：24 格，0 格有问题
+收尾：带走 /private/tmp/r76p503chk.QRISMk/clone
