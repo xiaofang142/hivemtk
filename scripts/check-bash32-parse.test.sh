@@ -25,18 +25,23 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 GATE="$ROOT/scripts/check-bash32-parse.sh"
 FAIL=0
+# 断言处数由格子自己报（`九格` 是 C1–C9 的**分组数**，一组里常有多条断言 ⇒ 拿分组数当覆盖面
+# 就是说谎；与 mut-dispose-guard.test.sh 的"九格"、check-battery-identity 自测的 "+3" 同族）。
+# 本注释刻意**不记实印处数**——记了就又是一处会随加腿漂移的死数，现读去看汇总行。
+N=0
 WORK=$(mktemp -d /tmp/bash32parse-test.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-ok()  { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+ok()  { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$GATE" ] || { echo "FATAL: 找不到门脚本 $GATE"; exit 1; }
 
 # 环境前提（不是可选装饰）：C1–C3 的判据**依赖本机真有一版 bash 3.x**。/bin/bash 是 5.x
 # 的机器（ubuntu runner、装过 bash 的 mac）上跑这套格子，C2 会从"抓到缺陷"变成"抓不到"——
 # 那是环境不满足，不是判据退化。所以这里先量一次，不满足就退 2 并写明，绝不让它退 0 冒充
-# "九格全过"。本用例在 CI 的执行点是 lint.yml 的 `bash32-parse` 作业（macos-latest）：那个
+# 那条 `${N} 处断言全过` 的绿行（N 由格子自己报，写死枚数会说谎——见本文件末的汇总行注释）。
+# 本用例在 CI 的执行点是 lint.yml 的 `bash32-parse` 作业（macos-latest）：那个
 # 作业的第一格先实测 /bin/bash 必须是 3.x、否则整作业红，所以这里退 2 的分支在 CI 里同样
 # 会被判成红——不存在"ENV-BROKEN 混成绿"的通路。
 SYS_BASH_VER=$(/bin/bash -c 'printf %s "$BASH_VERSION"' 2>/dev/null)
@@ -167,8 +172,13 @@ fi
 # "门与它的用例这两份字节本身读得通"，别长成"它管别人、自己没人管"。
 
 echo
+# 下界取分组数（9＝C1–C9）：只判"半路死掉、有腿没执行"，不钉死处数（钉死＝别人加/减一条断言本门假红）。
+if [ "$N" -lt 9 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 9）＝有腿没执行，判红 ====="
+  exit 1
+fi
 if [ "$FAIL" = 0 ]; then
-  echo "===== 用例：九格全过（断言失败 0 处）====="
+  echo "===== 用例：${N} 处断言全过（断言失败 0 处）====="
   exit 0
 fi
 echo "===== 用例：$FAIL 处断言失败 ====="

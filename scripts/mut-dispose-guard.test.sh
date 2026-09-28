@@ -258,7 +258,7 @@ fi
 bad_probe=$( ( bad '甲：' '乙文件名.py' ) 2>/dev/null )
 case "$bad_probe" in
   *乙文件名.py*) ok '红因点名：bad 的后续参数一起打印（实得『'"$bad_probe"'』）' ;;
-  *) bad "红因不点名：bad '甲：' '乙文件名.py' 只输出『$bad_probe』——裸中止路那条红会查无对象" ;;
+  *) bad "红因不点名：bad '甲：' '乙文件名.py' 只输出『${bad_probe}』——裸中止路那条红会查无对象" ;;
 esac
 # 反向测（没有这一步，上面那句绿只是"这段代码没报错"）：把一枚电池的 `bail("checkout 失败…")`
 # 改回裸 raise，这条腿必须点名红。

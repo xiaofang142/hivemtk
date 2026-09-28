@@ -5,8 +5,8 @@
 # 因此在 CI 里挂不住；但它的判据内核（`check_cells` 与 `classify`）坏成"恒报没问题／恒报 KILLED"
 # 时，五格的绿就是装饰。这一族只跑**不需要 go、不需要测试库**的腿，把内核的牙钉成常驻判据。
 #
-#   T1 预检内核的内存反向格 ⇒ rc=0，末行"失败 0 格"
-#   T2 对真源码的锚点预检（`--check-tree`）⇒ rc=0 且"5 格，0 格有问题"
+#   T1 预检内核的内存反向格 ⇒ rc=0，末行"失败 0 格"（两段分母由被检方现报，本用例不抄数）
+#   T2 对真源码的锚点预检（`--check-tree`）⇒ rc=0 且"非零格数，0 格有问题"
 #   T3 反向：把真源码里那枚锚点删掉再喂判据 ⇒ 必须五格全部点名（证明 T2 的绿不是空判）
 #   T4 反向：expect 的父用例名换成本包里不存在的名字 ⇒ 必须点名 1 格（化石 expect 那条腿）
 #   T5 反向：把"必须仍绿"名单同时放进"必须红"名单 ⇒ 必须点名（自相矛盾的一格不许算干净杀掉）
@@ -24,9 +24,13 @@ BATT="$ROOT/scripts/mut_webhook_ai_trigger.py"
 SRC="$ROOT/user-server/internal/service/webhook.go"
 PKG="$ROOT/user-server/internal/service"
 FAIL=0
-
-ok() { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+# 断言处数由格子自己报，不写死（`八格` 是 T1–T8 的**分组数**，一组里常有多条断言 ⇒ 拿分组数当
+# 覆盖面就是说谎；与 mut-dispose-guard.test.sh 的"九格"、check-battery-identity 自测的 "+3"
+# 同族）。本注释刻意**不记实印处数**——记了就又是一处会随加腿漂移的死数，现读去看汇总行。
+# `bad` 收 `$*` 是排版保险：红因名单可能落在第二个参数上。
+N=0
+ok() { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$BATT" ] || { echo "FATAL: 找不到 ${BATT}"; exit 1; }
 [ -f "$SRC" ] || { echo "FATAL: 找不到 ${SRC}（T2/T6 的前提没了，不是树的红）"; exit 2; }
@@ -36,20 +40,24 @@ echo "T1 预检内核的内存反向格"
 t1=$(cd "$ROOT" && python3 scripts/mut_webhook_ai_trigger.py --selftest 2>&1)
 rc=$?
 echo "$t1" | tail -3
-if [ "$rc" -eq 0 ] && echo "$t1" | grep -q '预检自测：6＋4 格，失败 0 格'; then
-  ok "rc=0 且末行是『失败 0 格』（6 格预检反向＋4 格 classify 反向）"
+# 分母从被检方那一行现取：本用例不抄"6＋4"这个数（抄了＝对方加一条探针我就假红，
+# 而我这一版把 4 改成写死时它连"谎报覆盖面"都拦不住）。
+n_t1=$(printf '%s' "$t1" | sed -n 's/.*预检自测：\([0-9]\{1,\}\)＋\([0-9]\{1,\}\) 格.*/\1＋\2/p')
+if [ "$rc" -eq 0 ] && [ -n "$n_t1" ] && echo "$t1" | grep -qE '预检自测：[1-9][0-9]*＋[1-9][0-9]* 格，失败 0 格'; then
+  ok "rc=0 且末行是『失败 0 格』（分母现取 ${n_t1}：预检反向＋classify 反向）"
 else
-  bad "rc=${rc} 或末行读数不对（须 rc=0 ＋『失败 0 格』）"
+  bad "rc=${rc} 或末行读数不对（须 rc=0 ＋两段非零分母＋『失败 0 格』，实得 ${n_t1:-空}）"
 fi
 
 echo "T2 对真源码的锚点预检（--check-tree）"
 t2=$(cd "$ROOT" && python3 scripts/mut_webhook_ai_trigger.py --check-tree 2>&1)
 rc=$?
 echo "$t2" | tail -1
-if [ "$rc" -eq 0 ] && echo "$t2" | grep -q '锚点校验：5 格，0 格有问题'; then
-  ok "两处锚点各命中 1 次、注码会落地、杀手用例有定义、红绿名单不相交"
+n_t2=$(printf '%s' "$t2" | sed -n 's/.*锚点校验：\([0-9]\{1,\}\) 格.*/\1/p')
+if [ "$rc" -eq 0 ] && [ "${n_t2:-0}" -ge 1 ] && echo "$t2" | grep -qE '锚点校验：[1-9][0-9]* 格，0 格有问题'; then
+  ok "锚点各命中 1 次、注码会落地、杀手用例有定义、红绿名单不相交（判据内核自报 ${n_t2} 格）"
 else
-  bad "rc=${rc}：锚点或杀手名单不对（先修锚点，别改期望）"
+  bad "rc=${rc}：锚点或杀手名单不对（先修锚点，别改期望；实得分母 ${n_t2:-空}）"
 fi
 
 echo "T3 反向：真源码里删掉那枚锚点 ⇒ 判据必须五格全部点名"
@@ -168,8 +176,13 @@ echo "  $(echo "$t8" | head -1)"
 [ "$rc" -ne 0 ] && ok "上级目录当轮退非 0（rc=${rc}）" || bad "rc=0：--clone 指到上级没被挡"
 
 echo "──────"
-if [ "$FAIL" -gt 0 ]; then
-  echo "===== 用例：失败 ${FAIL} 处 ====="
+# 下界取 T 分组数（8）：只判"半路死掉、有腿没执行"，不钉死处数（钉死＝别人加/减一条断言本门假红）。
+if [ "$N" -lt 8 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 8）＝有腿没执行，判红 ====="
   exit 1
 fi
-echo "===== 用例：八格全过（断言失败 0 处）====="
+if [ "$FAIL" -gt 0 ]; then
+  echo "===== 用例：${N} 处断言里 ${FAIL} 处失败 ====="
+  exit 1
+fi
+echo "===== 用例：${N} 处断言全过（断言失败 0 处）====="

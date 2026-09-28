@@ -23,11 +23,15 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CHECKER="$ROOT/scripts/check-ci-pg-capacity.py"
 FAIL=0
+# 断言处数由格子自己报（`十格` 是 F1–F8＋F7b＋REAL 的**分组数**，一组里常有多条断言 ⇒ 拿分组数
+# 当覆盖面就是说谎；与 mut-dispose-guard.test.sh 的"九格"、check-battery-identity 自测的 "+3"
+# 同族）。本注释刻意**不记实印处数**——记了就又是一处会随加腿漂移的死数，现读去看汇总行。
+N=0
 WORK=$(mktemp -d /tmp/ci-pg-capacity-test.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-ok()  { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+ok()  { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$CHECKER" ] || { echo "FATAL: 找不到 $CHECKER"; exit 1; }
 
@@ -189,5 +193,9 @@ printf '%s' "$out" | grep -qE 'postgres 服务 [0-9]+ 处' && ok '自证计数�
 printf '%s' "$out" | grep -qE '现测步骤 [0-9]+ 处' && ok '现测计数在场' || bad '没有现测计数'
 
 echo
-if [ "$FAIL" = 0 ]; then echo "===== 用例：十格全过（断言失败 0 处）====="; exit 0; fi
+# 下界取分组数（10＝F1–F8＋F7b＋REAL）：只判"半路死掉、有腿没执行"，不钉死处数。
+if [ "$N" -lt 10 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 10）＝有腿没执行，判红 ====="; exit 1
+fi
+if [ "$FAIL" = 0 ]; then echo "===== 用例：${N} 处断言全过（断言失败 0 处）====="; exit 0; fi
 echo "===== 用例：$FAIL 处断言失败 ====="; exit 1

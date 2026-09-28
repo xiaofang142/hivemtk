@@ -136,24 +136,26 @@ jobs:
       # `.test.sh` 一样：常驻电池的判据退化不会自己出声，只有它的用例被每次 push 跑到才行。
       # 立项背景是 2026-09-24 的实测事故：`mut_collection_p703.py --clone . --check`
       # 在收尾时把整棵 r45-lane（含 .git 与当轮 18 项未提交字节）rmtree 掉了——
-      # `dispose()`/`workdir()` 两道闸加这九格是把那一类缺陷钉住的唯一常驻件。
+      # `dispose()`/`workdir()` 两道闸加这九组断言是把那一类缺陷钉住的唯一常驻件。
       # 判据里有静态面（每枚带 --clone 面的电池的 --clone／入口闸／收尾闸三处计数必须相等），
       # 所以 `scripts/mut_*.py` 任一改动没同时接满两道闸，这里红。
-      - name: mut_dispose 用例（删除闸九格，不联网）
+      # 步名只写**分组数**、不写处数：处数由用例自己现报（`===== 用例：N 处断言全过 =====`），
+      # 写死的枚数会随格子漂移——本轮就抓到四份这种谎（§23.25 第 18、19 段）。
+      - name: mut_dispose 用例（删除闸九组，处数现报，不联网）
         run: bash scripts/mut-dispose-guard.test.sh
 
       # `scripts/mut_db_poolcfg.py`（db.go 池参数那条接线的四刀电池）的用例。
       # 这一族只跑不依赖 go 与测试库的腿：预检内核的五格内存反向格 + 对真源码的锚点预检
       # + 删除闸入参（`--clone .` 必须装架前退）。挂这里的理由是 §23.22 第 6 段③ 那条：
       # 一次性 `/tmp` 驱动的读数只能引用不能复跑，常驻化之后判据本身还得有人守。
-      - name: mut_db_poolcfg 用例（四刀预检七格，不联网、不跑 go）
+      - name: mut_db_poolcfg 用例（四刀预检七组，处数现报，不联网、不跑 go）
         run: bash scripts/mut-db-poolcfg.test.sh
 
       # `scripts/mut_webhook_ai_trigger.py`（入站消息 AI 触发归属那条守卫的五刀电池）的用例。
       # 同上一族，只跑不依赖 go 与测试库的腿：预检内核的内存反向格（含 classify 的
       # "必须仍绿"反查）+ 对真源码的锚点预检 + 独立 grep 复算（两枚锚点）+ 删除闸入参。
       # 全族杀伤（要编 Go、要测试库）留在本地跑，登记见审计文档 §23.25。
-      - name: mut_webhook_ai_trigger 用例（五刀预检八格，不联网、不跑 go）
+      - name: mut_webhook_ai_trigger 用例（五刀预检八组，处数现报，不联网、不跑 go）
         run: bash scripts/mut-webhook-ai-trigger.test.sh
 
       # 常驻电池的"字节身份行"门（scripts/check-battery-identity.py）。立项读数是 2026-09-28
@@ -278,11 +280,11 @@ jobs:
       - name: check-bash32-parse（全仓 shell 文件按 3.2 读通）
         run: bash scripts/check-bash32-parse.sh
 
-      # 九格反向测试也进 CI：这道门的"绿"和"根本没判"长得几乎一样——在解析器 ≥4 的那一档
+      # 九组反向断言也进 CI：这道门的"绿"和"根本没判"长得几乎一样——在解析器 ≥4 的那一档
       # （ubuntu runner 的形状）它必走 SKIP 分支。只有 C1–C3 那三格证明它读得出坏文件，
       # "退 0"才是判据而不是空跑。本作业跑在 macos-latest（出厂 3.2.57），所以这三格在这里是真判据；
       # 上一格的版本实测保证：一旦镜像换成 ≥4，本作业整体红，不会以 rc=2 的形态混成绿。
-      - name: check-bash32-parse 反向测试（九格，证明它会红）
+      - name: check-bash32-parse 反向测试（九组，处数由用例现报，证明它会红）
         run: bash scripts/check-bash32-parse.test.sh
 
   license-compliance:

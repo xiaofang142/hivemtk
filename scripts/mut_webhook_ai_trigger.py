@@ -331,27 +331,30 @@ def do_selftest() -> int:
 
     # classify 的"必须仍绿"那条腿单独反向：只断言"某个 expect 红了"的话，
     # 一刀把三家全打死（V1 的红名单是 V2 的红名单的超集）会被 V2 误判成 KILLED。
-    wide = sorted([NQP, WECOM, FEISHU, WAPP, QQ])
-    v2 = classify(1, wide, 5, "", CELLS[1][4], CELLS[1][5])
-    print(f"  classify V2 反查：三家同红时判为 {v2}（要求 RED-UNNAMED，不能算干净杀掉）")
-    if v2 != "RED-UNNAMED":
-        failed += 1
-    tight = classify(1, [NQP, WECOM], 5, "", CELLS[1][4], CELLS[1][5])
-    print(f"  classify V2 正查：只企微红时判为 {tight}（要求 KILLED）")
-    if tight != "KILLED":
-        failed += 1
     # 第五刀的两条腿：V5 的红名单是"父用例＋期望 0 那一格"。若两格一起红（正控制格也被
     # 带走＝这一刀把整条腿打崩，不是精准杀掉），必须判 RED-UNNAMED 而不是 KILLED。
+    # 四条探针摆成名单 ⇒ 末行分母由 `len(probes)` 现取，不再写死那个 `＋4`：写死＝下一位
+    # 加一条反向探针，汇总行就少报一格（与收尾闸的"九格"、自测的"+3"同族）。
     v5 = CELLS[4]
-    both = classify(1, sorted([TG, TG_OFF, TG_ON]), 8, "", v5[4], v5[5])
-    print(f"  classify V5 反查：抑制格与正控制格同红时判为 {both}（要求 RED-UNNAMED）")
-    if both != "RED-UNNAMED":
-        failed += 1
-    v5tight = classify(1, [TG, TG_OFF], 8, "", v5[4], v5[5])
-    print(f"  classify V5 正查：只 /start 那一格红时判为 {v5tight}（要求 KILLED）")
-    if v5tight != "KILLED":
-        failed += 1
-    print(f"===== 预检自测：{len(cases)}＋4 格，失败 {failed} 格 =====")
+    probes = [
+        ("classify V2 反查：三家同红时",
+         classify(1, sorted([NQP, WECOM, FEISHU, WAPP, QQ]), 5, "", CELLS[1][4], CELLS[1][5]),
+         "RED-UNNAMED", "，不能算干净杀掉"),
+        ("classify V2 正查：只企微红时",
+         classify(1, [NQP, WECOM], 5, "", CELLS[1][4], CELLS[1][5]),
+         "KILLED", ""),
+        ("classify V5 反查：抑制格与正控制格同红时",
+         classify(1, sorted([TG, TG_OFF, TG_ON]), 8, "", v5[4], v5[5]),
+         "RED-UNNAMED", ""),
+        ("classify V5 正查：只 /start 那一格红时",
+         classify(1, [TG, TG_OFF], 8, "", v5[4], v5[5]),
+         "KILLED", ""),
+    ]
+    for label, got, want, note in probes:
+        print(f"  {label}判为 {got}（要求 {want}{note}）")
+        if got != want:
+            failed += 1
+    print(f"===== 预检自测：{len(cases)}＋{len(probes)} 格，失败 {failed} 格 =====")
     return 1 if failed else 0
 
 
