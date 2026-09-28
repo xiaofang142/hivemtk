@@ -515,6 +515,7 @@ def main() -> int:
 
     if not args.js_only:
         clone = go_prepare(tmp, owned)
+        dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         rels = sorted({m[2] for m in go_mutants()})
         files = {rel: clone / rel for rel in rels}
         originals = {rel: read(p) for rel, p in files.items()}

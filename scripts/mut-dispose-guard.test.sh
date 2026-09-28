@@ -28,8 +28,9 @@
 #       ④ 入口闸那一行必须排在 `prepare(tmp)` **之前**（顺序腿的反向测：把 workdir 挪到
 #       clone 之后即红，见本轮 C 组同款做法），⑤ 克隆建起来之后的每条**函数体内**退出都走 `bail()`
 #       （豁免三形："已存在"/"克隆失败"/"md5 不一致"；反向测在 `$WORK/rev` 里撤掉一处 bail），
-#       ⑥ 每枚在装架之后恰好注册一次 `dispose_at_exit`，且 md5 豁免路先打 `leave_for_evidence`
-#       （反向测两条各绑一条分支：摘注册⇒点名"注册了 0 次"、摘标记⇒点名"没打让路标记"）
+#       ⑥ 每枚电池的**每一处**装架之后都跟着一次 `dispose_at_exit` 注册（两处装架＝两处注册；
+#       只挂第一处＝真跑用例那条路全程没闸），且 md5 豁免路先打 `leave_for_evidence`
+#       （反向测两条各绑一条分支：摘注册⇒点名"这处装架之后没挂兜底闸"、摘标记⇒点名"没打让路标记"）
 #
 # 三道闸的分工（别只看一道就以为安全了）：`workdir()` 是"装架之前就把危险入参挡掉"的上界，
 # `dispose()` 是"退出时才发现"的下界，`dispose_at_exit()` 是"装架之后有人忘了接闸"的兜底。
@@ -389,8 +390,9 @@ for p in sorted(d.glob("mut_*.py")):
     hooks = [n for n in ast.walk(tree)
              if isinstance(n, ast.Call)
              and getattr(n.func, "id", getattr(n.func, "attr", "")) == "dispose_at_exit"]
-    if len(hooks) != 1:
-        leak.append(f"{p.name}：兜底闸注册了 {len(hooks)} 次（应恰好 1 次）")
+    # 这里不写死"恰好 1 次"：注册次数该跟**装架点数**走（见下面逐处判据）。b17 有两处装架
+    # （--check 一条路、真跑一条路）就是两次注册；写死 1 会把这种正确形状判成红，
+    # 而"0 次/漏一处"由下面那条逐处腿点名。
     # 取一句语句的源码用"按行切片"，不用 `ast.get_source_segment`：后者每次调用都把整份
     # 模块重新按换页符切开（3.10 的实现），一文件三百句就是 O(句数×文件大小)。现测：本腿
     # 早先那样写，27 枚一趟 90 秒，而本门要把这腿跑三趟（正面＋两条反向）⇒ 4 分半全花在
@@ -400,26 +402,28 @@ for p in sorted(d.glob("mut_*.py")):
     def seg(st) -> str:
         return "\n".join(lines[st.lineno - 1:st.end_lineno])
 
-    # 装架点：全文件第一处 `clone|work|dst = (go_|js)?prepare(tmp…` 的赋值
-    prep = None
+    # 装架点：**每一处** `clone|work|dst = (go_|js)?prepare(tmp…` 的赋值，不是只取第一处。
+    # 为什么逐处：`mut_actionability_b17.py` 有两处装架——一处在 `if args.check:` 分支里、
+    # 一处在真跑用例的那条路上，而注册只有第一处后面那一句 ⇒ 跑用例那条路全程没闸（那行
+    # 注册压根没执行到；2026-09-28 现扫 AST 抓到）。判据因此是"每处装架之后同一段里都跟着
+    # 一句注册"，摘掉任一句注册都会当场点名是哪一处装架在裸奔。
+    preps = []
     for body in stmt_lists(tree):
-        for st in body:
+        for i, st in enumerate(body):
             s = seg(st)
             if PREPARE.search(s) and s.lstrip().startswith(("clone", "work", "dst")):
-                if prep is None or st.lineno < prep.lineno:
-                    prep = st
-    if prep is None:
+                preps.append((body, i, st))
+    if not preps:
         leak.append(f"{p.name}：找不到装架调用点（= prepare(tmp 的形状对不上）")
-    elif len(hooks) == 1:
-        order_ok = False
-        for body in stmt_lists(tree):
-            idx_p = next((i for i, st in enumerate(body) if st is prep), None)
-            idx_h = next((i for i, st in enumerate(body)
-                          if isinstance(st, ast.Expr) and st.value is hooks[0]), None)
-            if idx_p is not None and idx_h is not None and idx_h > idx_p:
-                order_ok = True
-        if not order_ok:
-            leak.append(f"{p.name}:{hooks[0].lineno} 兜底闸没排在装架（第 {prep.lineno} 行）之后同一段里")
+    else:
+        for body, i, st in preps:
+            if not any(isinstance(x, ast.Expr)
+                       and getattr(getattr(x.value, "func", None), "id", "") == "dispose_at_exit"
+                       for x in body[i + 1:]):
+                leak.append(f"{p.name}:{st.lineno} 这处装架之后没挂兜底闸"
+                            f"（本枚注册 {len(hooks)} 次／装架点 {len(preps)} 处）")
+        if len(hooks) > len(preps):
+            leak.append(f"{p.name}：兜底闸注册了 {len(hooks)} 次，多于装架点 {len(preps)} 处")
     # 豁免路：`raise SystemExit(...md5...)` 之前一句必须是 leave_for_evidence(...)
     prev_end = {}
     for body in stmt_lists(tree):
@@ -461,14 +465,14 @@ done
 if [ "$hook_obj" != "$both" ]; then
   bad "兜底闸腿只看到 ${hook_obj} 枚带克隆面的电池，独立对账是 ${both}（判据在空转）"
 elif [ "$hook_rc" = 0 ]; then
-  ok "$hook_obj 枚全在装架之后挂了兜底闸，md5 豁免路全带让路标记（另有 ${SKIP_N:-0} 枚未跟踪旁道件不在面上：${SKIP_UNTRACKED:-无}）"
+  ok "$hook_obj 枚的每处装架之后都挂了兜底闸，md5 豁免路全带让路标记（另有 ${SKIP_N:-0} 枚未跟踪旁道件不在面上：${SKIP_UNTRACKED:-无}）"
 else
   # 明细必须整体当**一个**参数传进去：`bad()` 只印 `$1`，把明细不加引号地接在后面＝红因永远不显示
   # （上面那条 abort_leg 同款写法在本轮之前一直如此——撤 bail 的那次能点名是因为它走的是 ok 那条引号支）。
   bad "$hook_obj 枚里兜底闸形状不齐：$(printf '%s\n' "$hook_bad" | head -3 | tr '\n' ' ')"
 fi
 # 两条反向格各自绑一条判据分支（只判"红没红"会证到错的那条，见记忆里的同款教训）：
-#   a) 摘掉一枚的兜底闸注册 ⇒ 必须点名"注册了 0 次"；
+#   a) 摘掉一枚的兜底闸注册 ⇒ 必须点名"这处装架之后没挂兜底闸"（逐处判据那条分支）；
 #   b) 摘掉一枚的让路标记 ⇒ 必须点名那一行"md5 豁免路没打让路标记"。
 for kind in hook leave; do
   R="$WORK/rev-$kind/scripts"; mkdir -p "$R"; cp "$ROOT"/scripts/mut_*.py "$R/"
@@ -491,8 +495,8 @@ PY
   r_bad=$(printf '%s\n' "$r_out" | tail -n +2 | head -1)
   if [ "$r_rc" = 0 ]; then
     bad "反向[$kind]：摘掉之后这条腿仍绿＝判据没牙"
-  elif [ "$kind" = "hook" ] && ! printf '%s' "$r_bad" | grep -q "注册了 0 次"; then
-    bad "反向[hook]：红了，但红在别处（读到的不是'注册次数'那条分支）：$r_bad"
+  elif [ "$kind" = "hook" ] && ! printf '%s' "$r_bad" | grep -q "这处装架之后没挂兜底闸"; then
+    bad "反向[hook]：红了，但红在别处（读到的不是'逐处装架都有闸'那条分支）：$r_bad"
   elif [ "$kind" = "leave" ] && ! printf '%s' "$r_bad" | grep -q "没打让路标记"; then
     bad "反向[leave]：红了，但红在别处（读到的不是'让路标记'那条分支）：$r_bad"
   else
@@ -504,25 +508,32 @@ done
 # 克隆带走了。那一条的夹具已进仓：`scripts/probe-fleet-bail-reverse.sh`——PATH 前面挂一枚只对
 # `checkout` 退 123、其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在
 # `--clone <空目录>` 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录
-# 还在（不许越权删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。它不注册进任何门／CI：要本地
-# node_modules＋改 PATH＋26 次真克隆，挂进 CI 只会得到一台恒红的机器；改了 bail/dispose/prepare 的
-# 写路径之后应当手动现取一次，别只信本门的静态面。
-# 读数（`bash scripts/probe-fleet-bail-reverse.sh <干净克隆> <带 .env 的主树>`，测于 tip 2c765be1）：
+# 还在（不许越权删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。它不注册进任何门／CI：要改
+# PATH、要 26 次真克隆、带 JS 相的三枚还要 --go-only 才进得了装架，挂进 CI 只会得到一台恒红的机器；
+# 改了 bail/dispose/prepare 的写路径之后应当手动现取一次，别只信本门的静态面。
+# 读数（`bash scripts/probe-fleet-bail-reverse.sh <影子克隆> <带 .env 的主树>`，
+# 测于 tip e72a7638 ＋本文件的逐处注册腿与 b17 的第二处注册）：
 #   SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10，整趟退 2
-#   探针自己的反向对账（在克隆里把 mut_actionability_b17.py 的一处 `bail("checkout 失败` 改回裸
-#   raise，`ONLY=` 单跑那一枚）：`✗ …中止后外层剩「clone web 」`，FAIL=1、退 1——不撤的时候那一枚
-#   是 ✓，所以 ④ 那条判据确实有牙，不是橡皮章。
+#   探针自己的反向对账（在同一克隆里把 mut_actionability_b17.py 的一处 `bail("checkout 失败` 改回
+#   裸 raise，`ONLY=` 单跑那一枚）：`✗ …中止后外层剩「clone 」`，FAIL=1——不撤的时候那一枚是 ✓，
+#   所以 ④ 那条判据确实有牙，不是橡皮章。**这一趟还顺带定了兜底闸的覆盖面**：注册行排在装架赋值
+#   **之后**，而 checkout 死在 `go_prepare` **里面**，那时注册根本没执行 ⇒ 撤掉 bail 就漏
+#   （残骸 108K，是被杀在 checkout 的骨架克隆）。所以 prepare 内部靠本门腿 ⑤（bail），main 侧靠
+#   腿 ⑥（逐处注册）＋ G10，三面不能互相代替。
 # 四处只有真跑一趟才看得见的坑（下次动这条探针前先读）：
 #   · 带 --check 是错的探针：26 枚里 16 枚没这个 flag（argparse rc=2，夹具压根没进 prepare），
 #     另 4 枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。不带 --check 才真进
-#     装架，而 checkout 被杀 ⇒ 走不到跑用例那一步，一趟还是只花几秒。
-#   · 有 `dst / "web"` 面的那几枚（JS 装架）中止后留一个 web/ 是 **dispose 契约里写明不许回收**的
-#     ——它把调用方的 node_modules 拷/链了进来，rmtree 会顺着走到别人的依赖树上。所以探针判的是
-#     "外层恰好剩 web/"，不是一律"外层必须空"；给它加体积上界时要用 `du -m -s`，不带 -s 就一个子
-#     目录印一行，那串喂给 `[ -gt ]` 得 integer expression expected ⇒ 判据静默失效（第一版就这样）。
+#     装架，而 checkout 被杀 ⇒ 走不到跑用例那一步，一趟还是只花几十秒。
+#   · JS 相排在克隆之前的三枚（b17/b18/b20d）在**任何影子克隆里都缺 node_modules**（那是
+#     gitignore 的）⇒ 原先它们在 `git clone` 之前就退在"缺 node_modules"，量到的是环境不是 bail，
+#     整趟读数成 PASS=22／FAIL=3（2026-09-28 在干净克隆复跑当场露出来）。这版给带 `dst / "web"`
+#     面的枚子加 `--go-only`，于是外层判据能收成"必须全空"（旧的"允许恰好一个 web/ ＋ 5 MB 上界"
+#     随之删掉——留着它就是把"根本没进装架"读成"回收正确"）。顺带一条同款教训：给体积上界要用
+#     `du -m -s`，不带 -s 就一个子目录印一行，那串喂给 `[ -gt ]` 得 integer expression expected
+#     ⇒ 判据静默失效（第一版的 web/ 上界就这样）。
 #   · mut_review_r22_teeth.py 的默认 --logs 目录在 HEAD 里就带 10 份已跟踪 .log ⇒ 任何干净克隆里
 #     不带参数跑都会先在 prepare 之前撞"复用旧目录"那条判据，探针要显式给它一个新目录才进得了夹具。
-#   · 行为面唯一没证到的那枚是 mut_egress_pool_r30.py：它自己的前提是 /tmp 剩 ≥ 20 GiB（本机 14），
+#   · 行为面唯一没证到的那枚是 mut_egress_pool_r30.py：它自己的前提是 /tmp 剩 ≥ 20 GiB（本机 13），
 #     这道 ENV-BROKEN 闸也在 prepare 之前，所以它的 bail 那一路只有静态面。没腾出那 7 GiB 之前，
 #     不许把上面那句 PASS=25 读成 26 枚全证。
 
