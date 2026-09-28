@@ -141,7 +141,7 @@ def sub_once(text: str, old: str, new: str, tag: str) -> str:
     return text.replace(old, new, 1)
 
 
-def prepare(dst: Path) -> Path:
+def prepare(dst: Path, owned: bool = False) -> Path:
     """私有 `--shared` 克隆，基线字节＝HEAD。
 
     为什么不打脏文件：本电池五刀全打在已入库的 `webhook.go`，杀手用例也必须是被提交的那份
@@ -149,6 +149,19 @@ def prepare(dst: Path) -> Path:
     （跟着 tip 走），不是拿脏树冒充基线。
     """
     clone = dst / "clone"
+
+    def bail(msg: str) -> None:
+        """克隆已经建起来之后的中止路：先回收私有克隆，再出声。
+
+        收尾闸原先只接在 `main()` 的出口上，装架函数里克隆之后的每一条 raise 都把整份
+        私有克隆留在临时目录（一轮 50–70MB，而磁盘常态 98% 满）。三条**不**走这里：
+        "已存在"（那份 clone/ 不是本电池建的）、"克隆失败"（目录归属还没定）、
+        "md5 不一致"（本电池没有该站点）。
+        """
+        if (dst / "clone").exists():
+            dispose(dst, owned=owned, keep=False, repo_root=ROOT)
+        raise SystemExit(msg)
+
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
     r = subprocess.run(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(clone)],
@@ -158,7 +171,7 @@ def prepare(dst: Path) -> Path:
     b = subprocess.run(["git", "checkout", "-f", "master"], cwd=clone,
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
-        raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
+        bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
     return clone
 
 
@@ -364,7 +377,7 @@ def main() -> int:
 
     tmp, owned = workdir(args.clone or None, prefix="whtrigmut-", repo_root=ROOT)
     try:
-        clone = prepare(tmp)
+        clone = prepare(tmp, owned)
         if args.check:
             tee_to(LOGDIR / "00-check.log")
         else:
