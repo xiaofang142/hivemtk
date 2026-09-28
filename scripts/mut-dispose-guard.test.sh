@@ -35,11 +35,15 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MODULE="$ROOT/scripts/mut_dispose.py"
 FAIL=0
+N=0
 WORK=$(mktemp -d /tmp/mut-dispose-test.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-ok()  { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+# `$*` 不是排版：`bad "…枚里有裸中止路：" $(…)` 把命中名单放在第二个参数上，原先写 `"$1"`
+# 时红只印出冒号、后面空的（本轮合并后就是这样，只能人手重跑 PY 段才捞出文件名）。
+# 计数同理——汇总行原先写死"九格"，加一条腿就说谎，故现数。
+ok()  { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$MODULE" ] || { echo "FATAL: 找不到 $MODULE"; exit 1; }
 
@@ -247,6 +251,15 @@ elif [ "$abort_rc" = 0 ]; then
 else
   bad "$abort_obj 枚里有裸中止路：" $(printf '%s\n' "$abort_bad" | head -3 | tr '\n' ' ')
 fi
+# 红因点名腿（2026-09-28 立的）：上面那条 bad 把命中名单当**第二个参数**传（未加引号 ⇒ 逐格拆开），
+# 而 `bad()` 原先写的是 `echo "  ✗ $1"` ⇒ 真红的时候只印出"…枚里有裸中止路："后面空的：本轮合并
+# 后它就是 rc=1 却零个文件名，定位靠人手把 PY 段抄出来重跑才捞出唯一那枚漏的电池。红不点名＝
+# 下一位重复同一趟人工捞取。这条腿把"bad 的后续参数必须出现在输出里"钉成判据。
+bad_probe=$( ( bad '甲：' '乙文件名.py' ) 2>/dev/null )
+case "$bad_probe" in
+  *乙文件名.py*) ok '红因点名：bad 的后续参数一起打印（实得『'"$bad_probe"'』）' ;;
+  *) bad "红因不点名：bad '甲：' '乙文件名.py' 只输出『$bad_probe』——裸中止路那条红会查无对象" ;;
+esac
 # 反向测（没有这一步，上面那句绿只是"这段代码没报错"）：把一枚电池的 `bail("checkout 失败…")`
 # 改回裸 raise，这条腿必须点名红。
 REVDIR="$WORK/rev/scripts"
@@ -296,5 +309,14 @@ fi
 #     不许把上面那句 PASS=25 读成 26 枚全证。
 
 echo
-if [ "$FAIL" = 0 ]; then echo "===== 用例：九格全过（断言失败 0 处）====="; exit 0; fi
-echo "===== 用例：$FAIL 处断言失败 ====="; exit 1
+# 汇总行原先写死"九格"，而本轮现数是 **24 处断言**（ok/bad 各调一次算一处）——写死的那句数的是什么
+# 口径无从对照，唯一能确定的是它不随断言数变：加一条腿它照样印"九格"＝谎报。现改成现数，并带一条
+# 下界（9）——只判"半路死掉、有腿没执行"，不钉死处数（钉死会让别人加/减一条腿时本门假红，
+# [[feedback-mutation-battery-hygiene]]"共享树下控制组不许写死常量"同族）。
+if [ "$N" -lt 9 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 9）＝有腿没执行，判红 ====="; exit 1
+fi
+if [ "$FAIL" = 0 ]; then
+  echo "===== 用例：${N} 处断言全过（失败 0 处）====="; exit 0
+fi
+echo "===== 用例：${N} 处断言里 $FAIL 处失败 ====="; exit 1
