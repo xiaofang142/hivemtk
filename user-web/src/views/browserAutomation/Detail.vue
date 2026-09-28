@@ -56,7 +56,7 @@
           <template #default="{ row }">{{ row.success_steps }}/{{ row.total_steps }} 成功</template>
         </el-table-column>
         <el-table-column prop="duration_ms" label="耗时" width="110">
-          <template #default="{ row }">{{ (row.duration_ms / 1000).toFixed(1) }}s</template>
+          <template #default="{ row }">{{ sessionDurationText(row) }}</template>
         </el-table-column>
         <el-table-column prop="error_msg" label="错误" min-width="200" show-overflow-tooltip />
         <el-table-column prop="created_at" label="时间" width="170">
@@ -104,6 +104,7 @@ import {
   createBrowserCron, listBrowserCron, enableBrowserCron, disableBrowserCron, deleteBrowserCron,
 } from '@/api/browserAutomation'
 import { classifyRunError, HOST_OFFLINE, TASK_BUSY, RUN_ERROR_TEXT } from './hostRunError'
+import { sessionDurationText } from './durationText'
 import HostInstallGuide from './HostInstallGuide.vue'
 
 const route = useRoute()

@@ -25,7 +25,7 @@
 
     <el-card v-if="session" style="margin-top: 12px">
       <el-descriptions :column="4" border>
-        <el-descriptions-item label="耗时">{{ (session.duration_ms / 1000).toFixed(1) }}s</el-descriptions-item>
+        <el-descriptions-item label="耗时">{{ sessionDurationText(session) }}</el-descriptions-item>
         <el-descriptions-item label="成功率">{{ session.total_steps ? `${session.success_steps}/${session.total_steps}` : '—' }}</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ session.started_at ? new Date(session.started_at).toLocaleString('zh-CN') : '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="session.error_msg" label="错误" :span="4">
@@ -90,7 +90,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="duration_ms" label="耗时" width="100">
-          <template #default="{ row }">{{ row.duration_ms ? `${row.duration_ms}ms` : '—' }}</template>
+          <template #default="{ row }">{{ durationText(row.duration_ms) }}</template>
         </el-table-column>
         <el-table-column prop="error_msg" label="错误" min-width="200" show-overflow-tooltip />
       </el-table>
@@ -120,7 +120,7 @@
           <template #default="{ row }">{{ outcomeMark(row.ok) }}</template>
         </el-table-column>
         <el-table-column prop="duration_ms" label="耗时" width="80">
-          <template #default="{ row }">{{ row.duration_ms ? `${row.duration_ms}ms` : '—' }}</template>
+          <template #default="{ row }">{{ durationText(row.duration_ms) }}</template>
         </el-table-column>
         <el-table-column label="payload" min-width="260" show-overflow-tooltip>
           <template #default="{ row }"><span style="font-family: monospace; font-size: 12px">{{ payloadPreview(row.payload) }}</span></template>
@@ -160,6 +160,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, confirmBrowserSession, getBrowserConfirmGate, getBrowserSessionLogs, exportBrowserSessionAudit, interpretConfirmResult } from '@/api/browserAutomation'
+import { durationText, sessionDurationText } from './durationText'
 
 const route = useRoute()
 const sessionId = computed(() => route.params.id)
