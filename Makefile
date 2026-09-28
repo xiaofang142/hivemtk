@@ -463,7 +463,7 @@ audit:
 	@python3 scripts/check-deploy-claims.py
 	@echo "── 全仓 shell 文件必须被 mac 出厂那版 bash（3.2）读通；解析器不是 3.x 时本门自报 SKIP，不冒充绿 ──"
 	@bash scripts/check-bash32-parse.sh
-	@echo "── 常驻变异电池的每份产物都必须写着「这轮读的是哪一笔字节」（轴一形状含 A5 归属／A6 口径对账，轴二实测最近一轮；两份台账 D0–D4／O1–O5 各带上界与过期判据）──"
+	@echo "── 常驻变异电池的每份产物都必须写着「这轮读的是哪一笔字节」（轴一形状含 A5 归属／A6 口径对账，A7 名字轴拦「编译绿、跑到那行才 NameError」的悬空调用，轴二实测最近一轮；两份台账 D0–D4／O1–O5 各带上界与过期判据）──"
 	@python3 scripts/check-battery-identity.py --quiet-ok
 	@echo "✅ 静态审计通过"
 

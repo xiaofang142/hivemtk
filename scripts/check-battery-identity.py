@@ -47,6 +47,14 @@
       只在 docstring 里引用别人族的那份）。它们进不了 `drivers()`，于是两轴都看不见它们——
       O1 拦"盘上有、名单外"的静默排除，O2 上界，O3／O4 过期（改名／已补代码内落点），O5 空理由。
       末行把两个数一起印（进门 N 枚＋登记 M 枚＝候选现数），不许只报进门的那批冒充全量。
+  A7 名字轴（对象集＝候选全量，不是只进门的那批）：**调用了本文件里根本没定义的名字**。
+      它与前六类都不同轴——前面量"产物与口径"，这一轴量"这份脚本能不能跑到它那行判据"。
+      `python3 -m py_compile` 只判语法，故这一族**编译绿**、跑到那行才 `NameError`；本机
+      `pyflakes` 能抓，但它没注册进任何门（Makefile／workflows 现数 0 命中）＝全靠手动。
+      立项读数（2026-09-28 二次合并）：对方在 `mut_db_poolcfg.py` 的 tee 之前加了一行
+      ``print(f"基线字节：克隆 HEAD `{tip(clone)}`…")``，而 `def tip` 只在那棵树里（本树该文件
+      现数 0 处）⇒ 照抄即把 4 刀电池变成一开跑就炸的死件。合并把它丢了，并按同一形状反向注码
+      验证本轴有牙（注入 `tip_absent()` 到 `mut_hub_media_backfill.py` 第 333 行 ⇒ rc=1 点名）。
 
 反向自测（`--selftest`）：形状轴的每一格都绑定"哪条判据分支该开火"，A4 用真临时目录做正反两格，
 A5 用假集合做正反格（含"过期豁免"与"空理由"两支），A6 做两红七正控（含"该声明只在注释里 ⇒
@@ -57,6 +65,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import builtins
 import io
 import re
 import sys
@@ -420,6 +429,53 @@ def check(code, pairs: set, family, order_cleared: bool = False) -> list:
     return bad
 
 
+BUILTIN_NAMES = set(dir(builtins))
+
+
+def undefined_calls(text: str) -> list:
+    """A7：调用了本文件里**根本没定义**的名字（AST 名表并集，返回不合格行；空＝合格）。
+
+    为什么补这一轴：`python3 -m py_compile` 只判语法——2026-09-28 二次合并带进 `mut_db_poolcfg.py`
+    的一行 `print(f"基线字节：克隆 HEAD `{tip(clone)}`…")` 编译**绿**（实测注入副本 py_compile rc=0），
+    跑到那一行才 NameError；而 `def tip` 只存在于对方那棵树（本树该文件现数 0 处、`git show
+    2c765be1:scripts/mut_db_poolcfg.py` 那份 1 处）。本机 `pyflakes` CLI 能抓这一族（实测报
+    `undefined name 'tip'`），但它没注册进任何门（`grep -rn 'pyflakes|flake8|ruff' Makefile
+    .github/workflows/*.yml` 现数 0 命中）⇒ 全靠人手动跑＝等于没有。AST 只用标准库，CI 与本地同一条判据。
+
+    名表取**全树并集**（任何 `def`/`class`、`import`、`Store` 位置的 `Name`、函数与 lambda 形参、
+    `except … as`、`global`/`nonlocal`）：这样"局部变量当函数调"那类真缺陷会**漏判**，而"名字在文件
+    别处定义"绝不**误伤**——向漏判偏置、不向假红偏置（共享树上判据宁窄勿宽）。属性调用
+    （`p.read_text(`、`re.compile(`）不在判据内：名字归谁要看接收者，不是本文件的事。
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as exc:
+        return [f"A7 解析失败（ast.parse：{exc.msg} 第 {exc.lineno} 行）⇒ 名字轴读不到，向红偏置"]
+    defined = set()
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(n.name)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                defined.add((a.asname or a.name).split(".")[0])
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+            defined.add(n.id)
+        elif isinstance(n, ast.arg):
+            defined.add(n.arg)
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            defined.add(n.name)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            defined.update(n.names)
+    bad = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            f = n.func.id
+            if f not in defined and f not in BUILTIN_NAMES:
+                bad.append(f"A7 第 {n.lineno} 行调用本文件里未定义的名字 `{f}`"
+                           "⇒ 编译绿、跑到那行才炸（合并带进来的悬空引用正是这一形）")
+    return bad
+
+
 def artifact_verdict(family: str):
     """轴二：该族最近一轮产物里到底有没有那句身份行。返回 `(判定, 说明)`。"""
     fam = ROOT / LOGROOT / family
@@ -500,7 +556,23 @@ def selftest() -> int:
          {"X"}, "X", ""),
     ]
     failed = 0
+    # `ran` 是**跑过一格记一格**的现数。汇总行从前是 `len(cases) + 3 + len(ex) + …`：那个写死的
+    # `3` 对应轴二内联块，而那块本轮实测已经有 **6** 格（T15–T17＋T35–T37）⇒ 2026-09-28 现跑
+    # 实际印 55 行 ✓、末行却说 52 格。自报格数比真跑的少＝"自测覆盖面"这个读数在说谎，
+    # 与本节第 17 段抓到的收尾闸"九格"同一族，改成由格子自己计数。
+    ran = 0
+
+    def say(cond_ok: bool, msg: str) -> None:
+        nonlocal ran, failed
+        ran += 1
+        if cond_ok:
+            print(f"  ✓ {msg}")
+        else:
+            print(f"  ✗ {msg}")
+            failed += 1
+
     for name, src, pairs, family, want in cases:
+        ran += 1
         code = code_lines(src)
         bad = check(code, pairs, family) if code is not None else ["解析失败"]
         joined = " / ".join(bad)
@@ -513,65 +585,50 @@ def selftest() -> int:
         else:
             print(f"  ✓ {name}")
 
-    # 轴二的三格：A4 用真临时目录证明"没目录/有目录无身份行/有身份行"三种输入各有不同判定。
+    # 轴二的六格（原先在汇总行里写死成 `+ 3`，那是立项时的格数）：A4 用真临时目录证明
+    # "没目录／有目录无身份行／有身份行／无戳目录遮蔽／全族无戳回退／平铺落点"各有不同判定。
     global ROOT
     real_root = ROOT
     with tempfile.TemporaryDirectory() as td:
         try:
             ROOT = Path(td)
             empt = artifact_verdict("NoSuchFamily")
-            if "无轮次目录" not in empt[0]:
-                print(f"  ✗ T15 族目录不存在 ⇒ A4 必须报『无轮次目录』，实际 {empt}")
-                failed += 1
-            else:
-                print("  ✓ T15 族目录不存在 ⇒ A4 报『无轮次目录』（不是放行）")
+            say("无轮次目录" in empt[0],
+                f"T15 族目录不存在 ⇒ A4 报『无轮次目录』（不是放行），实测 {empt[0]}")
             fam = Path(td) / LOGROOT / "X"
             (fam / "r1").mkdir(parents=True)
             (fam / "r1" / "00-run.log").write_text("判定：全杀\n", encoding="utf-8")
             got = artifact_verdict("X")
-            if "缺身份行" not in got[0]:
-                print(f"  ✗ T16 最近一轮无身份行 ⇒ A4 必须报『缺身份行』，实际 {got}")
-                failed += 1
-            else:
-                print("  ✓ T16 最近一轮无身份行 ⇒ A4 报『缺身份行』")
+            say("缺身份行" in got[0],
+                f"T16 最近一轮无身份行 ⇒ A4 报『缺身份行』，实测 {got[0]}")
             (fam / "r2").mkdir()
             (fam / "r2" / "00-run.log").write_text("基线字节：`abc1234`｜未入库字节 0 处\n",
                                                    encoding="utf-8")
             got = artifact_verdict("X")
-            if "有身份行" not in got[0]:
-                print(f"  ✗ T17 正控制：新轮次带身份行 ⇒ A4 应放行，实际 {got}")
-                failed += 1
-            else:
-                print("  ✓ T17 正控制：最近一轮带身份行 ⇒ A4 放行")
+            say("有身份行" in got[0],
+                f"T17 正控制：最近一轮带身份行 ⇒ A4 放行，实测 {got[0]}")
             # 本轮合并实测到的门自身缺陷：无时间戳目录（`closeout`）按名字序排在 `2026…` 之后，
             # 旧规则取末尾 ⇒ 把带着身份行的真读数遮掉。
             (fam / "closeout").mkdir()
             (fam / "closeout" / "00-run.log").write_text("判定：全杀\n", encoding="utf-8")
             got = artifact_verdict("X")
-            if "有身份行" not in got[0] or "r2" not in got[1]:
-                print(f"  ✗ T35 无戳目录排在带戳之后 ⇒ 必须仍认带戳那份为『最近一轮』，实际 {got}")
-                failed += 1
-            else:
-                print("  ✓ T35 带时间戳轮次优先（无戳的 `closeout` 不遮蔽真读数）")
+            say("有身份行" in got[0] and "r2" in got[1],
+                "T35 带时间戳轮次优先（无戳的 `closeout` 不遮蔽真读数）"
+                f"（应认 r2，实测 {got[0]}／{got[1]}）")
             named = Path(td) / LOGROOT / "Y"
             (named / "first-run").mkdir(parents=True)
             (named / "first-run" / "00-run.log").write_text("判定：全杀\n", encoding="utf-8")
             got = artifact_verdict("Y")
-            if "缺身份行" not in got[0] or "first-run" not in got[1]:
-                print(f"  ✗ T36 全族无带戳轮次 ⇒ 回退名字序取 `first-run`，实际 {got}")
-                failed += 1
-            else:
-                print("  ✓ T36 全族无带戳轮次 ⇒ 回退名字序（仍实测那份）")
+            say("缺身份行" in got[0] and "first-run" in got[1],
+                "T36 全族无带戳轮次 ⇒ 回退名字序取 `first-run`"
+                f"（实测 {got[0]}／{got[1]}）")
             flat = Path(td) / LOGROOT / "Z"
             flat.mkdir(parents=True)
             (flat / "K1.log").write_text("判定：杀掉\n", encoding="utf-8")
             got = artifact_verdict("Z")
-            if "缺身份行" not in got[0] or "平铺落点" not in got[1]:
-                print(f"  ✗ T37 平铺落点（无轮次子目录）⇒ 要量目录里的文件，不许报『无轮次目录』"
-                      f"（那是把已有证据说成没有），实际 {got}")
-                failed += 1
-            else:
-                print("  ✓ T37 平铺落点按族目录内的文件实测（`R22-lanes` 那一形）")
+            say("缺身份行" in got[0] and "平铺落点" in got[1],
+                "T37 平铺落点按族目录内的文件实测（`R22-lanes` 那一形，不许报『无轮次目录』）"
+                f"（实测 {got[0]}／{got[1]}）")
         finally:
             ROOT = real_root
 
@@ -591,6 +648,7 @@ def selftest() -> int:
                order_cleared=True), ["A2 代码行里没有身份发射点"]),
     ]
     for name, got, want in ex:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
@@ -613,6 +671,7 @@ def selftest() -> int:
          accounting({"Z"}, {"Z": "既是电池又登记"}, ["Z"]), ["两种身份"]),
     ]
     for name, got, want in ac:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
@@ -663,6 +722,7 @@ def selftest() -> int:
                {"X"}, "X"), []),
     ]
     for name, got, want in oc:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
@@ -686,6 +746,7 @@ def selftest() -> int:
          {"R22-lanes", "P803"}),
     ]
     for name, got, want in dc:
+        ran += 1
         if got == want:
             print(f"  ✓ {name}")
         else:
@@ -700,6 +761,7 @@ def selftest() -> int:
          check(code_lines(multi_src), {"R22-lanes", "P803"}, {"R22-lanes", "P803"}), []),
     ]
     for name, got, want in mc:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
@@ -725,6 +787,7 @@ def selftest() -> int:
          debt_accounting(ok_debt, fbd, {"Fam": ("有身份行", "读数见产物")}, 5), ["D4 条目"]),
     ]
     for name, got, want in db:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
@@ -751,14 +814,45 @@ def selftest() -> int:
          offtree_accounting(cand, {"mut_in.py"}, {"mut_out.py": "  "}, 5), ["O5 条目"]),
     ]
     for name, got, want in ot:
+        ran += 1
         joined = " / ".join(got)
         if all(w in joined for w in want) and (want or not got):
             print(f"  ✓ {name}")
         else:
             print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
             failed += 1
-    print(f"===== 预检自测：{len(cases)} + 3 + {len(ex)} + {len(ac)} + {len(oc)} + {len(dc)} + "
-          f"{len(mc)} + {len(db)} + {len(ot)} 格，失败 {failed} 格 =====")
+    # 名字轴 A7：一格红（本轮合并实测到的那一形）＋三格"不许误伤"的正控。
+    nm = [
+        ("T58 调用只存在于对方树里的函数（`tip(clone)`，def 缺席）⇒ A7 开火",
+         undefined_calls("def prepare(dst):\n"
+                         '    print(f"基线字节：`{tip(dst)}`")\n'
+                         "    return dst\n"),
+         ["A7 第 2 行调用本文件里未定义的名字 `tip`"]),
+        ("T59 正控制：本文件里定义的函数／内建／属性调用都不算悬空 ⇒ 不开火",
+         undefined_calls("import re\n\n"
+                         "def helper(v):\n    return v\n\n"
+                         "def main(p):\n"
+                         "    print(helper('x'), len('y'), re.compile('a'), p.read_text())\n"),
+         []),
+        ("T60 正控制：形参／局部 def／except as／global 登记的名字不误伤（名表取全树并集）",
+         undefined_calls("import json\n\n"
+                         "def run(fn, arg):\n"
+                         "    def wrap(v):\n        return fn(v)\n"
+                         "    try:\n        return wrap(json.loads(arg))\n"
+                         "    except ValueError as exc:\n        return str(exc)\n"),
+         []),
+        ("T61 解析失败 ⇒ A7 点名『解析失败』而不是静默合格（向红偏置）",
+         undefined_calls("def f(:\n"), ["A7 解析失败"]),
+    ]
+    for name, got, want in nm:
+        ran += 1
+        joined = " / ".join(got)
+        if all(w in joined for w in want) and (want or not got):
+            print(f"  ✓ {name}")
+        else:
+            print(f"  ✗ {name}：期望 {want}，实际 {joined or '（判为合格）'}")
+            failed += 1
+    print(f"===== 预检自测：现数 {ran} 格（跑过一格记一格，不写分组数），失败 {failed} 格 =====")
     return 1 if failed else 0
 
 
@@ -828,6 +922,17 @@ def main() -> int:
                       + ("｜顺序疑点已由最近一轮产物实测豁免（发射在函数体内、调用点在 tee 之后）"
                          if waived else ""))
 
+    # 名字轴 A7：对象集是**候选全量**（38 枚），不是只进门的 20 枚——悬空引用与"落点在树外"
+    # 是两件不相干的事，树外落点那批同样会在真跑时 NameError。
+    name_hits = 0
+    for p in cands:
+        for w in undefined_calls(p.read_text(encoding="utf-8")):
+            bad += 1
+            name_hits += 1
+            print(f"  ✗ 名字轴 {p.name}：{w}")
+    if not name_hits and not args.quiet_ok:
+        print(f"  ✓ 名字轴 A7：{len(cands)} 枚候选逐枚 AST 名表对账，无悬空调用")
+
     for w in debt_accounting(DEFERRED, fam_by_driver, verdicts, DEFERRED_MAX):
         bad += 1
         print(f"  ✗ 债务台账 {w}")
@@ -872,6 +977,7 @@ def main() -> int:
 
     print(f"===== 字节身份行门：{len(ds)} 枚驱动（成员现取）／"
           f"树外落点登记 {len(OFFTREE)} 枚（候选现数 {len(cands)} 枚）／"
+          f"名字轴现数 {len(cands)} 枚／"
           f"{len(set(seen_families))} 族产物实测"
           + (f"／磁盘 {len(on_disk)} 族归属对账" if on_disk else "（产物轴未开")
           + f"，{bad} 项不合格 =====")
