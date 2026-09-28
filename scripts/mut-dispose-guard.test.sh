@@ -350,7 +350,8 @@ fi
 
 # 兜底闸腿（REAL 第六腿，2026-09-28）：上一腿只走 `prepare`/`go_prepare` 的**函数体**，
 # 而实测的漏盘就长在它看不见的地方——`mut_reach_p503.py` 的 `控制组[service] 不干净` 那条
-# raise 在 main 里、装架之后、收尾闸之前，一趟留 73M（`/tmp/r75leak2.*`）。现扫：带克隆面的
+# raise 在 main 里、装架之后、收尾闸之前，一趟留 73M（读数在库内：
+# `docs/superpowers/specs/ledger/logs/P503/20260928-161751/00-residue.log`，du -sk = 75196 KiB）。现扫：带克隆面的
 # 27 枚电池里，装架函数体之外还有 134 条可达退出。逐处插 sweep() 改不动（一半从
 # `sub_once`/`lane_overlays`/`apply_js` 这类辅助函数里冒出来，它们不知道克隆在哪），
 # 所以这腿断言的是"每枚电池都在装架之后挂了进程级兜底闸"＋"豁免'现场只活在克隆里'的那几处

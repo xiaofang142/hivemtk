@@ -179,7 +179,8 @@ def dispose_at_exit(tmp: Path, *, owned: bool, keep: bool = False,
     克隆在哪，逐站插要么改签名要么漏。2026-09-28 现扫：27 枚带克隆面的电池里，装架函数体
     之外的可达退出 134 条，而常驻门的"中止路腿"用 AST 只走 `prepare`/`go_prepare` 函数体，
     那一半从没被量过；`mut_reach_p503.py` 的 `控制组[service] 不干净` 就是这么实测留下 73M
-    残骸（`/tmp/r75leak2.*` 那一趟），它的红因句子与仓库红一模一样。
+    残骸（读数见 `docs/superpowers/specs/ledger/logs/P503/20260928-161751/00-residue.log`：
+    那一趟的 `du -sk` = 75196 KiB = 73.43 MiB，中止 1h32m 后仍原样在盘上），它的红因句子与仓库红一模一样。
 
     与显式出口共存是设计不是冗余：正常收尾与 `bail()` 都已调过 `dispose()`，兜底这一脚先看
     `clone/` 还在不在——不在就安静退出，绝不再印第二句"收尾"，免得取证日志里出现两条互相

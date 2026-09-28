@@ -1,0 +1,145 @@
+2026-09-28T16:18:35+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestReachSendPipeline_Permission_DoNotContactBlocked
+2026-09-28T16:18:35+08:00 WRN [COMPLIANCE] 主动触达发送已触发：channel=sms, recipient=13800138000。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。 component=user-server
+2026-09-28T16:18:35+08:00 WRN [DNC] pipeline 跳过发送 customer=one-dnc channel=sms（命中全局退订标志位） component=user-server
+--- PASS: TestReachSendPipeline_Permission_DoNotContactBlocked (0.00s)
+=== RUN   TestReachSendPipeline_Permission_DoNotContactAllowed
+2026-09-28T16:18:35+08:00 WRN [COMPLIANCE] 主动触达发送已触发：channel=sms, recipient=13700004000。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。 component=user-server
+--- PASS: TestReachSendPipeline_Permission_DoNotContactAllowed (0.00s)
+=== RUN   TestNodeExecutor_CompensationInventory
+2026-09-28T16:18:36+08:00 INF all sop node executors registered component=user-server registered_types=["invite","send_offer","ai_decide","reach_send","end","greeting","close","activate","llm","action","handle","follow_up","nurture","wait","message","start","inquire","introduce","condition","branch"]
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=start reason="入口节点：仅写时间戳/触发源留痕，无业务状态可撤销"
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=end reason="出口节点：仅写 `_ended_at` 留痕，无业务状态可撤销"
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=condition reason="路由节点：只读求值，仅留 `_condition_branch` 命中记录，无业务状态可撤销"
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=branch reason="路由节点：只读求值，仅留 `_condition_branch` 命中记录，无业务状态可撤销"
+2026-09-28T16:18:36+08:00 WRN node executor not found, using noop: not_a_real_type component=user-server
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=not_a_real_type reason="节点类型未注册（Noop 兜底）：执行期即空操作，补偿期同样无可撤销状态"
+2026-09-28T16:18:36+08:00 INF [Compensation] node not compensable, skipped component=user-server node_id=n node_type=silent reason="执行器未实现 Compensable，且未声明不补偿理由"
+--- PASS: TestNodeExecutor_CompensationInventory (0.00s)
+=== RUN   TestRegisterAllNodeExecutors_AllTypesRegistered
+2026-09-28T16:18:36+08:00 INF all sop node executors registered component=user-server registered_types=["llm","introduce","handle","follow_up","action","greeting","inquire","activate","wait","start","end","close","nurture","condition","message","ai_decide","invite","send_offer","branch","reach_send"]
+--- PASS: TestRegisterAllNodeExecutors_AllTypesRegistered (0.00s)
+=== RUN   TestReachSend_NoVerdictParksAndSendsNothing
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_NoVerdictParksAndSendsNothing (0.01s)
+=== RUN   TestReachSend_ApprovalRuntimeUnwiredFailsClosed
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_ApprovalRuntimeUnwiredFailsClosed (0.00s)
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/rejected
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/expired
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+=== RUN   TestReachSend_NonApprovedVerdictSendsNothing/unreadable
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_NonApprovedVerdictSendsNothing (0.00s)
+    --- FAIL: TestReachSend_NonApprovedVerdictSendsNothing/rejected (0.00s)
+    --- FAIL: TestReachSend_NonApprovedVerdictSendsNothing/expired (0.00s)
+    --- FAIL: TestReachSend_NonApprovedVerdictSendsNothing/unreadable (0.00s)
+=== RUN   TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_ApprovedVerdictSendsOnceThroughCustomerPath (0.00s)
+=== RUN   TestReachSend_GateKeyComesFromCustomerRowNotExecutionData
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_GateKeyComesFromCustomerRowNotExecutionData (0.00s)
+=== RUN   TestReachSend_PreferredChannelReachesTheService
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_PreferredChannelReachesTheService (0.00s)
+=== RUN   TestReachSend_ResolvesIdentityFromOneIDWhenExecutionHasNoCustomerID
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_ResolvesIdentityFromOneIDWhenExecutionHasNoCustomerID (0.00s)
+=== RUN   TestReachSend_DoNotContactCustomerSendsNothing
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_DoNotContactCustomerSendsNothing (0.00s)
+=== RUN   TestReachSend_InsideCooldownSendsNothing
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_InsideCooldownSendsNothing (0.00s)
+=== RUN   TestReachSend_AlreadySentIsNotSentAgain
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_AlreadySentIsNotSentAgain (0.00s)
+=== RUN   TestReachSend_PreSendGateDenialDoesNotRePark
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_PreSendGateDenialDoesNotRePark (0.00s)
+=== RUN   TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSendEndToEnd_ApproveThenFireSendsExactlyOnce (0.00s)
+=== RUN   TestReachSend_RegisteredInExecutorRegistry
+2026-09-28T16:18:36+08:00 INF all sop node executors registered component=user-server registered_types=["introduce","handle","llm","message","ai_decide","reach_send","start","close","invite","follow_up","nurture","activate","condition","action","send_offer","branch","end","wait","greeting","inquire"]
+--- PASS: TestReachSend_RegisteredInExecutorRegistry (0.00s)
+=== RUN   TestSOPReachSender_SetAndGetRoundTrip
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestSOPReachSender_SetAndGetRoundTrip (0.00s)
+=== RUN   TestNodeExecutorFiles_HaveNoCustomerOutboundBeyondReachByCustomer
+--- PASS: TestNodeExecutorFiles_HaveNoCustomerOutboundBeyondReachByCustomer (0.14s)
+=== RUN   TestReachSend_EmptyContentFailsBeforeApproval
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_EmptyContentFailsBeforeApproval (0.00s)
+=== RUN   TestReachSend_ContentRendersFromExecutionData
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_ContentRendersFromExecutionData (0.00s)
+=== RUN   TestReachSend_MissingPolicyKeyFailsClosed
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_MissingPolicyKeyFailsClosed (0.00s)
+=== RUN   TestReachSend_SenderUnwiredFailsClosed
+    testdb.go:320: 初始化进程级测试库失败: failed to connect to `user=admin database=postgres`: 127.0.0.1:8232 (127.0.0.1): failed SASL auth: FATAL: password authentication failed for user "admin" (SQLSTATE 28P01)
+        提示：本机 PG 端口/密码与 CI 默认值不同时，请显式导出测试连接变量，例如
+          POSTGRES_TEST_PORT=8232 POSTGRES_TEST_PASSWORD=<hivemtk/.env 的 POSTGRES_PASSWORD> go test ./...
+        （端口候选见 testDBPortCandidates；密码不回落到 .env，避免把密钥写进代码）
+--- FAIL: TestReachSend_SenderUnwiredFailsClosed (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/service	1.087s
+FAIL
