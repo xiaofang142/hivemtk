@@ -288,8 +288,13 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="只验锚点（每格原样在装架后的那份文件里必须恰好命中 1 次且真改到字节），不放刀不跑测试")
     args = ap.parse_args()
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(LOGDIR / "00-run.log")
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(LOGDIR / ("00-check.log" if args.check else "00-run.log"))
+    # 身份行须在 tee 之后（早于 tee 只进终端），且必须写明覆盖份数：`go_prepare()` 把
+    # GO_OVERLAY 那几份**工作树字节**拷进克隆，旧文案"来树未入库字节不进本轮读数"与机制相反
+    # （2026-09-28 复查抓出），份数改由 `overlay=` 现测。
+    identity(ROOT, label="基线字节", overlay=GO_OVERLAY,
+             extra="｜本轮读私有 `--shared` 克隆的 HEAD＋来树覆盖字节（覆盖清单＝脚本里的 `GO_OVERLAY`）")
 
     tmp, owned = workdir(args.clone, prefix="b17mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)

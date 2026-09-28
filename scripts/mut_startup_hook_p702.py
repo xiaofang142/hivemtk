@@ -107,9 +107,12 @@ def check_anchors() -> int:
 
 
 def main() -> int:
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(LOGDIR / "00-run.log")
-    if "--check" in sys.argv:   # 与 mut_ledger_b16* 同形：本脚本没有别的参数，不必上 argparse
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
+    check = "--check" in sys.argv   # 与 mut_ledger_b16* 同形：本脚本没有别的参数，不必上 argparse
+    # tee 必须在 `--check` 分流之前：只读预检的末行也是常驻判据，早先它只进终端 ⇒ 预检的绿没有产物可对。
+    tee_to(LOGDIR / ("00-check.log" if check else "00-run.log"))
+    identity(ROOT, label="基线字节", extra="｜就地注码 ⇒ 未入库字节也在本轮读数里")
+    if check:
         return check_anchors()
     env = dict(os.environ)
     envfile = os.path.join(ROOT, ".env")

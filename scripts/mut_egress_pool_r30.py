@@ -705,8 +705,8 @@ def main() -> int:
 
     logs = ROOT / args.logs / args.tag
     logs.mkdir(parents=True, exist_ok=True)
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(logs / "00-run.log")
+    from battlog import tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(logs / ("00-check.log" if args.check else "00-run.log"))
     tmp, owned = workdir(args.clone, prefix="r30mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
 

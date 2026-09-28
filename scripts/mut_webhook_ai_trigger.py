@@ -29,9 +29,11 @@ V2–V4 的"另几家必须仍绿"是本电池比常规"点名杀手"多出来�
 基线字节＝克隆 HEAD，身份行现读 tip 短 SHA ⇒ 本电池断言的是**已入库**的字节；
 危险 `--clone` 由 `mut_dispose.workdir()` 挡在装架之前。
 与不连库的那批电池不同，这一族跑的是 `internal/service` 的 handleJob 端到端腿，**必须要测试库**：
-`POSTGRES_TEST_PORT`（默认 8232）与 `POSTGRES_TEST_PASSWORD`（测试库不回落到进程环境，
-缺它时用例红在 `failed SASL auth`，那是环境不是判据）都从克隆旁边的 `user-server/.env` 取，
-取值只进子进程环境，不打印、不入档。工具链与盘满同样单列 ENV-BROKEN。
+`POSTGRES_TEST_PORT`（默认 8232）与 `POSTGRES_TEST_PASSWORD` 都由本脚本备好再注入子进程环境 ——
+`testutil` 只读进程环境（`POSTGRES_TEST_PASSWORD`，回落进程里的 `POSTGRES_PASSWORD`，
+见 `internal/pkg/testutil/testdb.go:351`），**不会自己去读 `user-server/.env`**，
+缺它时用例红在 `failed SASL auth`，那是环境不是判据。取值只进环境，不打印、不入档
+（工具链与盘满同样单列 ENV-BROKEN）。
 
 判据：控制组必须绿且 ran 名单含全部八枚名字（父用例与子用例都点名）；五格全 KILLED；每格 `ran` 与控制组相等；
 每格的"必须仍绿"名单在红名单里零命中；末了 `webhook.go` 的 md5 与基线一致。
@@ -57,7 +59,7 @@ import sys
 import time
 from pathlib import Path
 
-from battlog import tee_to
+from battlog import identity, tee_to
 from mut_dispose import dispose, workdir
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
@@ -158,11 +160,6 @@ def prepare(dst: Path) -> Path:
     if b.returncode != 0:
         raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
     return clone
-
-
-def tip(clone: Path) -> str:
-    return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=clone,
-                          capture_output=True, text=True).stdout.strip()
 
 
 def test_env(clone: Path) -> dict:
@@ -362,17 +359,22 @@ def main() -> int:
     if args.selftest:
         return do_selftest()
     if args.check_tree:
-        print(f"基线字节：当前工作树 {ROOT}（`--check-tree`，不装架、不落产物）")
+        identity(ROOT, extra="｜`--check-tree`：当前工作树，不装架、不落产物")
         return do_check(ROOT)
 
     tmp, owned = workdir(args.clone or None, prefix="whtrigmut-", repo_root=ROOT)
     try:
         clone = prepare(tmp)
-        print(f"基线字节：克隆 HEAD `{tip(clone)}`｜作业目录 {tmp}")
         if args.check:
             tee_to(LOGDIR / "00-check.log")
+        else:
+            tee_to(LOGDIR / "00-run.log")
+        # 身份行必须在 tee 之后：它是"这轮读数测的是哪一笔"的唯一记录，早于 tee 只留在终端。
+        # 报的是**来树**的 HEAD 与未入库字节数——注码发生在 `--shared` 克隆里，未入库的那些不进本轮读数。
+        identity(ROOT, label="基线字节", extra="｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）"
+                               f"｜作业目录 {tmp}")
+        if args.check:
             return do_check(clone)
-        tee_to(LOGDIR / "00-run.log")
 
         src = clone / SRC_REL
         original = read(src)

@@ -67,6 +67,9 @@ docs/superpowers/specs/ledger/logs/*
 # mut_webhook_ai_trigger.py（AI 触发归属四刀电池）的取证轮次
 !docs/superpowers/specs/ledger/logs/AiTrigger/
 !docs/superpowers/specs/ledger/logs/AiTrigger/**/*.log
+# mut_collection_p703.py 的取证轮次：这一族的产物此前从未落进仓库树（只在 /tmp 里随轮次蒸发）
+!docs/superpowers/specs/ledger/logs/P703/
+!docs/superpowers/specs/ledger/logs/P703/**/*.log
 # check-secret-containment.py `--transcripts` 那一面的读数（只印键名与次数，真值不入屏不入档）
 !docs/superpowers/specs/ledger/logs/Transcript/
 !docs/superpowers/specs/ledger/logs/Transcript/**/*.log

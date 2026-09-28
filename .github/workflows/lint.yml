@@ -156,6 +156,24 @@ jobs:
       - name: mut_webhook_ai_trigger 用例（五刀预检八格，不联网、不跑 go）
         run: bash scripts/mut-webhook-ai-trigger.test.sh
 
+      # 常驻电池的"字节身份行"门（scripts/check-battery-identity.py）。立项读数是 2026-09-28
+      # 修前现测的：`logs/` 下 15 个族 562 份产物、66 个轮次目录里，按短语 `基线字节` 只有
+      # P701 的 12 份与 R30 的 1 份带着"这轮读的是哪一笔字节"——其余族的读数在树里无从复算（§23.25）。
+      # 两轴都要：轴一（源码形状）能在今晚放刀前就拦住"身份行打印在 tee 之前"这一形，
+      # 轴二（直接读树里最近一轮产物）才拦得住"改了写路径却没跑"、"行号先后量不到的调用图"
+      # 与"树里长出一族没有驱动"（A5 归属对账：门的判据对象只从驱动正文反推，磁盘上的族可能更多）。
+      # A6 管的是更贵的一类：身份行**有**、那句口径却是假的。两半——A6a 驱动把来树字节 copy2 进克隆
+      # 却声明"未入库字节不进本轮读数"（A4 只认这句在不在，认不出真不真）；A6b 同一机制却一处现测
+      # 份数都没有（不传 `overlay=`，也没有手写"已在 HEAD n/N"／"覆盖 N 个"）：它不撒谎，只是让读数
+      # 无从复算，比 A6a 更安静。
+      # 先自测后现数：门的判据退化不会自己出声，只跑现数等于把门的失效留到人身上。
+      # 步名里不写格数——枚数由脚本自己印（§23.23 摘掉的那处"枚数写死在注释里"不复发）。
+      - name: check-battery-identity 反向自测（形状／产物／豁免／归属／口径五类格，纯内存＋临时目录）
+        run: python3 scripts/check-battery-identity.py --selftest
+
+      - name: check-battery-identity 对真仓库现数（成员与族目录都现取）
+        run: python3 scripts/check-battery-identity.py --quiet-ok
+
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8
   # LC_CTYPE（本批实测就栽在那儿：红因里的计数被吃掉，白查一轮）。
