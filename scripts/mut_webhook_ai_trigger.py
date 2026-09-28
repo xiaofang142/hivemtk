@@ -9,18 +9,21 @@ QQ 的归属在中台 Ingress，其余渠道的归属在 handleJob。它一旦�
 企微 / 飞书 / WhatsApp 三家「账号级 AI 开关 → handleJob 触发」的端到端臂是后补的
 （`webhook_batchk_nonqq_trigger_test.go`，登记见审计文档 §19.5-1）。
 补腿只做一次性 `/tmp` 驱动的话，读数就成了只能引用、无法复跑的二手证据，
-所以四刀与判据常驻在本脚本里。
+所以五刀与判据常驻在本脚本里。
 
-四刀的落点与期望（expect 是实测出来的名单，不是"应该红在哪格"推的）：
-  V1 整段短路（`if false && triggerAI && …`）      ⇒ 企微／飞书／WhatsApp 三子例全红，且 QQ 用例里那条抖音臂也红
-  V2 只把企微除名（`&& channel != ChannelWeCom`）   ⇒ 只有 WeCom 子例红，另两家与 QQ 必须仍绿
-  V3 只把飞书除名（`&& channel != ChannelFeishu`）  ⇒ 只有 Feishu 子例红，另两家与 QQ 必须仍绿
-  V4 只把 WhatsApp 除名（`&& channel != ChannelWhatsapp`）⇒ 只有 WhatsApp 子例红，另两家与 QQ 必须仍绿
+五刀的落点与期望（expect 是实测出来的名单，不是"应该红在哪格"推的）：
+  V1 整段短路（`if false && triggerAI && …`）      ⇒ 企微／飞书／WhatsApp 三子例全红，且 QQ 用例里那条抖音臂也红，TG 的私聊正控制格也红
+  V2 只把企微除名（`&& channel != ChannelWeCom`）   ⇒ 只有 WeCom 子例红，另两家与 QQ、TG 两格必须仍绿
+  V3 只把飞书除名（`&& channel != ChannelFeishu`）  ⇒ 只有 Feishu 子例红，另两家与 QQ、TG 两格必须仍绿
+  V4 只把 WhatsApp 除名（`&& channel != ChannelWhatsapp`）⇒ 只有 WhatsApp 子例红，另两家与 QQ、TG 两格必须仍绿
+  V5 删掉 `tgExtra.GateHandled` 那三行守卫          ⇒ 只有 TG 的 `/start` 那一格红（它期望 0 变 1），
+     私聊正控制格与另四臂必须仍绿 —— 这一刀打在守卫块上而不是触发行上，是另一处承重墙。
 
-V2–V4 的"另两家必须仍绿"是本电池比常规"点名杀手"多出来的一条硬判据：
-表驱动用例最常见的失效是三条腿其实走的是同一条路径（渠道分支没真分开），
-只断言"某一格红"证不出三臂各有主 —— 必须同时证明另外两臂在这一刀下不受影响。
-V1 与 V2–V4 打在**同一行源码**却红在**不同断言集合**，这也是"一处符号多处消费要逐格拆刀"的口径。
+V1 与 V2–V4 打在**同一行源码**却红在**不同断言集合**，V5 打在**上一行**却只红在**「不该触发」那一格**：
+"一处符号多处消费要逐格拆刀"与"抑制臂只能用反向格杀"两条口径在这里分别是判据。
+V2–V4 的"另几家必须仍绿"是本电池比常规"点名杀手"多出来的一条硬判据：
+表驱动用例最常见的失效是几条腿其实走的是同一条路径（渠道分支没真分开），
+只断言"某一格红"证不出各臂有主 —— 必须同时证明其余臂在这一刀下不受影响。
 
 跑在哪棵树：只在 `git clone --shared` 出来的私有克隆里注码（共享工作树里有并行会话的字节），
 基线字节＝克隆 HEAD，身份行现读 tip 短 SHA ⇒ 本电池断言的是**已入库**的字节；
@@ -30,19 +33,19 @@ V1 与 V2–V4 打在**同一行源码**却红在**不同断言集合**，这也
 缺它时用例红在 `failed SASL auth`，那是环境不是判据）都从克隆旁边的 `user-server/.env` 取，
 取值只进子进程环境，不打印、不入档。工具链与盘满同样单列 ENV-BROKEN。
 
-判据：控制组必须绿且 ran 名单含全部五个名字；四格全 KILLED；每格 `ran` 与控制组相等；
+判据：控制组必须绿且 ran 名单含全部八枚名字（父用例与子用例都点名）；五格全 KILLED；每格 `ran` 与控制组相等；
 每格的"必须仍绿"名单在红名单里零命中；末了 `webhook.go` 的 md5 与基线一致。
 任一条不成立退 1。判据类别缺一格也算不成立（SURVIVED／RED-UNNAMED／BUILD-BROKEN／
-ENV-BROKEN／NO-RUN 都记账，不在"杀了 3/4"时退 0）。
+ENV-BROKEN／NO-RUN 都记账，不在"杀了 4/5"时退 0）。
 
 取证落点：控制组与逐刀原始输出写进 `docs/superpowers/specs/ledger/logs/AiTrigger/<趟次戳>/`，
 判定行同时 tee 到该目录的 `00-run.log`（落盘前过 `redact.scrub`）。
 
 用法：
-  python3 scripts/mut_webhook_ai_trigger.py                    # 四刀全族（要编 Go，要测试库）
+  python3 scripts/mut_webhook_ai_trigger.py                    # 五刀全族（要编 Go，要测试库）
   python3 scripts/mut_webhook_ai_trigger.py --check            # 锚点/用例名预检（要装架，不跑 go test）
   python3 scripts/mut_webhook_ai_trigger.py --check-tree       # 同上但对着当前树：CI 的落点用这一枚
-  python3 scripts/mut_webhook_ai_trigger.py --selftest         # 五格内存反向格（不读源码、不跑 go）
+  python3 scripts/mut_webhook_ai_trigger.py --selftest         # 六格预检反向＋四腿归类反向（不读源码、不跑 go）
   python3 scripts/mut_webhook_ai_trigger.py --clone <仓库外空目录> [--keep]
 """
 import argparse
@@ -63,31 +66,44 @@ SERVER = "user-server"
 SRC_REL = "user-server/internal/service/webhook.go"
 PKG_REL = "user-server/internal/service"
 RUNNER = ("TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce"
-          "|TestBatchK_QQHandleJobDoesNotDoubleTriggerAI")
+          "|TestBatchK_QQHandleJobDoesNotDoubleTriggerAI"
+          "|TestTGGateHandledSuppressesSalesTrigger")
 LOGROOT = ROOT / "docs/superpowers/specs/ledger/logs/AiTrigger"
 LOGDIR = None  # main() 里按趟次戳定；常驻件不许复用上一轮的目录（同路径＝抹掉旧读数）
 
 NQP = "TestBatchK_NonQQHomeChannelsTriggerAIExactlyOnce"
 QQ = "TestBatchK_QQHandleJobDoesNotDoubleTriggerAI"
+TG = "TestTGGateHandledSuppressesSalesTrigger"
 WECOM, FEISHU, WAPP = f"{NQP}/WeCom", f"{NQP}/Feishu", f"{NQP}/WhatsApp"
+# TG 那一枚是互为对照的两格：正控制格（私聊普通消息⇒恰好 1）与抑制格（/start⇒恰好 0）。
+# 两格分属不同刀的判据集合：整段短路只红在正控制格，删守卫只红在抑制格。
+TG_ON, TG_OFF = f"{TG}/PlainPrivateTriggers", f"{TG}/StartGateSuppresses"
+OTHERS = sorted([NQP, WECOM, FEISHU, WAPP, QQ])
 
 # 触发块那一行的原文（V1–V4 全打在这里，锚点必须命中恰好 1 次）
 ANCHOR = "\tif triggerAI && channel != ChannelQQ {\n"
+# 上一行的 TG /start 网关抑制块（V5 的锚点，同样要求恰好 1 次）
+GUARD = ("\tif channel == ChannelTelegram && tgExtra != nil && tgExtra.GateHandled {\n"
+         "\t\ttriggerAI = false // /start 网关验证已消费\n"
+         "\t}\n")
 
 # (格名, 这一刀改坏的是什么, old, new, 必须红的名单, 必须仍绿的名单)
 CELLS = [
-    ("V1", "整段短路 ⇒ 三家与抖音的触发归属一起没了",
+    ("V1", "整段短路 ⇒ 五家的触发归属一起没了",
      ANCHOR, "\tif false && triggerAI && channel != ChannelQQ {\n",
-     sorted([NQP, WECOM, FEISHU, WAPP, QQ]), []),
+     sorted(OTHERS + [TG, TG_ON]), [TG_OFF]),
     ("V2", "只把企微从触发块除名 ⇒ 只有企微那条客户收不到回复",
      ANCHOR, "\tif triggerAI && channel != ChannelQQ && channel != ChannelWeCom {\n",
-     [NQP, WECOM], sorted([FEISHU, WAPP, QQ])),
+     [NQP, WECOM], sorted([FEISHU, WAPP, QQ, TG, TG_ON, TG_OFF])),
     ("V3", "只把飞书除名",
      ANCHOR, "\tif triggerAI && channel != ChannelQQ && channel != ChannelFeishu {\n",
-     [NQP, FEISHU], sorted([WECOM, WAPP, QQ])),
+     [NQP, FEISHU], sorted([WECOM, WAPP, QQ, TG, TG_ON, TG_OFF])),
     ("V4", "只把 WhatsApp 除名",
      ANCHOR, "\tif triggerAI && channel != ChannelQQ && channel != ChannelWhatsapp {\n",
-     [NQP, WAPP], sorted([WECOM, FEISHU, QQ])),
+     [NQP, WAPP], sorted([WECOM, FEISHU, QQ, TG, TG_ON, TG_OFF])),
+    ("V5", "删掉 GateHandled 守卫 ⇒ /start 之后又追一份 AI 回复",
+     GUARD, "",
+     [TG, TG_OFF], sorted([TG_ON] + OTHERS)),
 ]
 
 TALLY = ["KILLED", "SURVIVED", "RED-UNNAMED", "BUILD-BROKEN", "ENV-BROKEN", "NO-RUN"]
@@ -126,7 +142,7 @@ def sub_once(text: str, old: str, new: str, tag: str) -> str:
 def prepare(dst: Path) -> Path:
     """私有 `--shared` 克隆，基线字节＝HEAD。
 
-    为什么不打脏文件：本电池四刀全打在已入库的 `webhook.go`，杀手用例也必须是被提交的那份
+    为什么不打脏文件：本电池五刀全打在已入库的 `webhook.go`，杀手用例也必须是被提交的那份
     （覆盖工作树的未提交测试字节会量出一个 HEAD 上不存在的世界）。锚点失守时该改的是脚本
     （跟着 tip 走），不是拿脏树冒充基线。
     """
@@ -261,29 +277,36 @@ def do_check(base: Path) -> int:
 
 
 def do_selftest() -> int:
-    """五格内存反向格：不读盘、不起 `go test`、不需要克隆 ⇒ 任何有 python3 的地方都能跑。
+    """六格预检反向＋四腿归类反向：不读盘、不起 `go test`、不需要克隆 ⇒ 任何有 python3 的地方都能跑。
 
     为什么常驻件自己也要被反向测：`check_cells` 与 `classify` 是本电池"锚点失守／注码不落地／
     expect 是化石／把别人的红当自己的杀"四种失效的唯一出口。它们若恒报"没问题／KILLED"，
-    那 `--check` 与四格的绿就是装饰 —— 所以每一格既断言坏格数，也断言**点名的行数**。
+    那 `--check` 与五格的绿就是装饰 —— 所以每一格既断言坏格数，也断言**点名的行数**。
+
+    `base` 把两处锚点都带上（V1–V4 打 ANCHOR、V5 打 GUARD）：只喂一份锚点的话，另一处
+    会在每一格里被顺带点名成"锚点失守"，坏格数就对不上期望了（这是加第五刀时实测到的）。
+    S3–S5 按 CELLS 动态拼，加第六刀时不必再改这一段的下标。
     """
-    good = ANCHOR
-    tests = {NQP, QQ}
+    base_text = ANCHOR + GUARD
+    tests = {NQP, QQ, TG}
     base = CELLS[1]
     cases = [
-        ("S1 好锚点＋名单里的用例都有定义 ⇒ 0 格有问题", good, CELLS, tests, 0),
-        ("S2 锚点被搬走 ⇒ 四格全部点名（四刀打的是同一行，锚点没了就谁都没牙）", "", CELLS, tests,
-         len(CELLS)),
-        ("S3 注码不落地（old==new）⇒ 点名那一格", good,
-         [CELLS[0], (base[0], base[1], base[2], base[2], base[4], base[5]),
-          CELLS[2], CELLS[3]], tests, 1),
-        ("S4 expect 是用例改名后的化石 ⇒ 点名那一格", good,
-         [CELLS[0], CELLS[1], CELLS[2],
-          ("V4x", "化石 expect", base[2], "\t// x\n", [f"{NQP}RenamedAway"], [])],
+        ("S1 好锚点＋名单里的用例都有定义 ⇒ 0 格有问题", base_text, CELLS, tests, 0),
+        ("S2 锚点被搬走 ⇒ 全部格点名（两处锚点都没了就没牙）", "", CELLS, tests, len(CELLS)),
+        ("S3 注码不落地（old==new）⇒ 点名那一格", base_text,
+         [CELLS[0]] + [(base[0], base[1], base[2], base[2], base[4], base[5])] + CELLS[2:],
          tests, 1),
-        ("S5 红名单与绿名单相交 ⇒ 点名（这一格说不清该红该绿）", good,
-         [CELLS[0], CELLS[1], CELLS[2],
-          ("V4y", "自相矛盾", base[2], "\t// y\n", [NQP, WAPP], [WAPP])],
+        ("S4 expect 是用例改名后的化石 ⇒ 点名那一格", base_text,
+         CELLS[:-1] + [("Vx", "化石 expect", base[2], "\t// x\n", [f"{NQP}RenamedAway"], [])],
+         tests, 1),
+        ("S5 红名单与绿名单相交 ⇒ 点名（这一格说不清该红该绿）", base_text,
+         CELLS[:-1] + [("Vy", "自相矛盾", base[2], "\t// y\n", [NQP, WAPP], [WAPP])],
+         tests, 1),
+        # 相交判据在第五刀的名单形状上也要有一次反向：V5 的红名单只有"期望 0"的那格，
+        # 若同一格被同时写进红与绿（把抑制格当成正控制格的那类笔误），必须由 ④ 点名。
+        ("S6 V5 形状的名单自相矛盾 ⇒ 点名相交判据", base_text,
+         CELLS[:-1] + [("V5z", "同一格又红又绿", GUARD, "",
+                        [TG, TG_OFF], sorted([TG_OFF, TG_ON] + OTHERS))],
          tests, 1),
     ]
     failed = 0
@@ -307,7 +330,18 @@ def do_selftest() -> int:
     print(f"  classify V2 正查：只企微红时判为 {tight}（要求 KILLED）")
     if tight != "KILLED":
         failed += 1
-    print(f"===== 预检自测：{len(cases)}＋2 格，失败 {failed} 格 =====")
+    # 第五刀的两条腿：V5 的红名单是"父用例＋期望 0 那一格"。若两格一起红（正控制格也被
+    # 带走＝这一刀把整条腿打崩，不是精准杀掉），必须判 RED-UNNAMED 而不是 KILLED。
+    v5 = CELLS[4]
+    both = classify(1, sorted([TG, TG_OFF, TG_ON]), 8, "", v5[4], v5[5])
+    print(f"  classify V5 反查：抑制格与正控制格同红时判为 {both}（要求 RED-UNNAMED）")
+    if both != "RED-UNNAMED":
+        failed += 1
+    v5tight = classify(1, [TG, TG_OFF], 8, "", v5[4], v5[5])
+    print(f"  classify V5 正查：只 /start 那一格红时判为 {v5tight}（要求 KILLED）")
+    if v5tight != "KILLED":
+        failed += 1
+    print(f"===== 预检自测：{len(cases)}＋4 格，失败 {failed} 格 =====")
     return 1 if failed else 0
 
 
