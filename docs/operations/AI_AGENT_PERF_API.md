@@ -82,7 +82,8 @@ AI 智能体性能优化交付两类对外接口：REST 同步返回 + HTTP 长�
 | `FF_DEBUG_LOG` | 输出 phase 详细日志 (Steps 含 debug) | `0` (关闭) | `0` | 内部观察用 | `FF_DEBUG_LOG=0` |
 | `FF_SSE_BRIDGE` | Bridge 出站用 SSE（true）还是长轮询（false） | 设计稿未列 | `1` | - | `FF_SSE_BRIDGE=0` |
 
-> 6 个开关的名字到 env 的映射是 `FF_` + flag 名大写（`flag.go:157` 的 `EnvNameOf`），
+> 6 个开关的名字到 env 的映射是 `FF_` + flag 名大写、点号一类的非标识符字符翻成下划线
+> （`flag.go:166` 的 `EnvNameOf`；下面这 6 个名字里没有点号，所以两种写法同形），
 > 即 `parallel`→`FF_PARALLEL`、`sse_bridge`→`FF_SSE_BRIDGE`。
 > 另有一套**给运维后台用的 DB 版 FeatureFlag**（表 `feature_flags`，接口 `/api/feature-flags`，
 > `internal/router/business_routes.go:161`），与上面这套 env flag 不是同一个东西，别混用。

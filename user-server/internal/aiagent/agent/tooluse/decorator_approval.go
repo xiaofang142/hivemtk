@@ -119,13 +119,34 @@ func (a *approvalTool) Execute(ctx context.Context, args map[string]any) (ToolRe
 		if checker == nil {
 			checker = globalApprovalChecker.Load()
 		}
-		if checker != nil && !(*checker).IsApproved(ctx, a.inner.Name(), approvalOwnerKey(ctx)) {
-			err := fmt.Errorf("%w: tool %s (%s) requires cold outreach approval",
-				ErrApprovalDenied, a.inner.Name(), a.inner.Category())
+		ownerKey := approvalOwnerKey(ctx)
+		if checker != nil && !(*checker).IsApproved(ctx, a.inner.Name(), ownerKey) {
+			err := approvalDeniedError(a.inner, ownerKey)
 			return ErrorResult(a.inner.Name(), err), err
 		}
 	}
 	return a.inner.Execute(ctx, args)
+}
+
+// approvalDeniedError 拼一句**能照着处置**的拒绝原因。
+//
+// 只说 "requires cold outreach approval" 时，两种完全不同的故障长得一样：
+//   - 这个账号确实没被放行（去授权即可）；
+//   - 这次调用根本没带上可归属的账号（CallerID/AgentID 都空）—— 于是白名单**永远**
+//     匹配不上，授权多少次都照旧被拒。
+//
+// 第二种的修法在调用链上游，而操作者按第一种读完会反复去点授权按钮。把实际用于匹配的
+// 那个键写进错误里，两端读的是同一个数（这里传的就是 IsApproved 收到的那一份，
+// 不是另算一次 —— 另算会让提示与被执行的判据在 approvalOwnerKey 改动的那天分开）。
+func approvalDeniedError(t Tool, ownerKey string) error {
+	if strings.TrimSpace(ownerKey) == "" {
+		return fmt.Errorf("%w: tool %s (%s) requires cold outreach approval —— "+
+			"本次调用没有带上可归属的账号身份（CallerID/AgentID 均为空），白名单按空键查过、无从匹配；"+
+			"请先修调用方传入的上下文，再谈授权",
+			ErrApprovalDenied, t.Name(), t.Category())
+	}
+	return fmt.Errorf("%w: tool %s (%s) requires cold outreach approval —— 白名单按 owner=%q 查过，没有有效条目",
+		ErrApprovalDenied, t.Name(), t.Category(), ownerKey)
 }
 
 func approvalOwnerKey(ctx context.Context) string {
@@ -157,14 +178,16 @@ func ApprovalGateDecorator(t Tool, checker ApprovalChecker, shadow bool) ToolDec
 			if checker == nil || t == nil || !IsColdOutreachTool(t) {
 				return next(ctx, args)
 			}
-			if checker.IsApproved(ctx, t.Name(), approvalOwnerKey(ctx)) {
+			ownerKey := approvalOwnerKey(ctx)
+			if checker.IsApproved(ctx, t.Name(), ownerKey) {
 				return next(ctx, args)
 			}
 			if shadow {
 				return next(ctx, args)
 			}
-			err := fmt.Errorf("%w: tool %s (%s) requires cold outreach approval",
-				ErrApprovalDenied, t.Name(), t.Category())
+			// 与 approvalTool.Execute 共用同一个构造点：两条包装形态给的拒绝必须说同一句话，
+			// 否则换一条接线方式（装饰器链 ↔ Tool 包装）操作者读到的处置方向就换了。
+			err := approvalDeniedError(t, ownerKey)
 			return ErrorResult(t.Name(), err), err
 		}
 	}

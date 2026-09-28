@@ -13,6 +13,8 @@ import (
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/app"
+	"hivemtk-user/internal/approval"
+	"hivemtk-user/internal/pkg/featureflag"
 
 	"github.com/gin-gonic/gin"
 )
@@ -742,7 +744,7 @@ func TestApprovalStatePayload_BlockEcho(t *testing.T) {
 		GlobalCheckerSet:       true,
 		BlocksWhenDenied:       true,
 		WhitelistFlagKey:       "ai.safety.tool_approval_gate",
-		WhitelistFlagEnv:       "FF_AI.SAFETY_TOOL_APPROVAL_GATE",
+		WhitelistFlagEnv:       featureflag.EnvNameOf(approval.FlagKey),
 		WhitelistFlagOn:        true,
 		WhitelistActiveEntries: 3,
 		GateFlagEnv:            app.ApprovalGateFlagEnv,
@@ -852,8 +854,11 @@ func TestHandleReachGateState_HTTP_Unwired(t *testing.T) {
 	if flags["gate"] != app.ReachGateFlagEnv {
 		t.Errorf("flags.gate = %v, want %s（与 app 侧常量漂移）", flags["gate"], app.ReachGateFlagEnv)
 	}
-	if flags["whitelist_env"] != "FF_AI.SAFETY.TOOL_APPROVAL_GATE" {
-		t.Errorf("flags.whitelist_env = %v", flags["whitelist_env"])
+	// 白名单旗子的 env 名同样不许手抄：这里比的是**真端点真打印**的那一份，抄一份字面量
+	// 就等于把"提示语教运维去设一个没人读的名字"这种漂移锁成期望值。
+	if flags["whitelist_env"] != featureflag.EnvNameOf(approval.FlagKey) {
+		t.Errorf("flags.whitelist_env = %v, want %s（与 featureflag.EnvNameOf 漂移）",
+			flags["whitelist_env"], featureflag.EnvNameOf(approval.FlagKey))
 	}
 	if resp.Data["reach_tool_key"] != app.ReachApprovalToolKey {
 		t.Errorf("reach_tool_key = %v, want %s（授权要按这个入口名灌）", resp.Data["reach_tool_key"], app.ReachApprovalToolKey)
@@ -968,7 +973,7 @@ func TestReachGateStatePayload_Echo(t *testing.T) {
 		GateFlagEnv:              app.ReachGateFlagEnv,
 		DependencyFlagEnv:        app.ApprovalGateFlagEnv,
 		ReachToolKey:             app.ReachApprovalToolKey,
-		WhitelistFlagEnv:         "FF_AI.SAFETY.TOOL_APPROVAL_GATE",
+		WhitelistFlagEnv:         featureflag.EnvNameOf(approval.FlagKey),
 		WhitelistFlagOn:          true,
 		WhitelistActiveEntries:   5,
 		WhitelistEntriesForReach: 2,
@@ -1101,14 +1106,41 @@ func TestHandleToolApprovalWhitelist_HTTP_InputGuards(t *testing.T) {
 		name string
 		body string
 		want int
+		// wantMsg 判 400 的那几格要说的是**不同的修法**：光看状态码分不出"格式写错了"
+		// 和"格式没错但这条授权当场就失效"，而前者的下一步是改格式、后者的下一步是
+		// 干脆不带这一格。文案串味＝把操作者支到另一条错路上。
+		//
+		// 缺键那两格把期望值锚在 `"message":"` 上（整条提示的开头），只比键名是不成立的比法：
+		// 提示的尾巴本来就有"授权按 (tool_name, account_id) 这一对键写"，
+		// 于是"两个都列出来"那种实现照样能对上 Contains("account_id")。
+		wantMsg []string
 	}{
-		{"非法 JSON", `{"tool_name":`, http.StatusBadRequest},
-		{"缺 tool_name", `{"account_id":"a1"}`, http.StatusBadRequest},
-		{"缺 account_id", `{"tool_name":"reach.batch"}`, http.StatusBadRequest},
-		{"全空白", `{"tool_name":"  ","account_id":"  "}`, http.StatusBadRequest},
-		{"expires_at 不是 RFC3339", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"2026/10/01"}`, http.StatusBadRequest},
+		{"非法 JSON", `{"tool_name":`, http.StatusBadRequest, nil},
+		{"缺 tool_name", `{"account_id":"a1"}`, http.StatusBadRequest, []string{`"message":"tool_name 必填且不能是空白`}},
+		{"缺 account_id", `{"tool_name":"reach.batch"}`, http.StatusBadRequest, []string{`"message":"account_id 必填且不能是空白`}},
+		{"全空白", `{"tool_name":"  ","account_id":"  "}`, http.StatusBadRequest, []string{`"message":"tool_name 与 account_id 必填且不能是空白`}},
+		{"expires_at 不是 RFC3339", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"2026/10/01"}`, http.StatusBadRequest,
+			[]string{"RFC3339"}},
+		// 授权带一个**已经过去**的截止时刻：白名单按 `expiresAt.After(now)` 判有效，
+		// 于是这一条当场就是死条目。若这里照旧走到底（未接线时回 503、接线后回 200），
+		// 操作者读到的是"给了一个窗口"，而下一次冷触达仍被拒 —— 两端各说各话。
+		// 判 400 而不是"写进去再说"：这一格在闸门接没接线之前就该拦（顺序本身就是判据）。
+		{"expires_at 已过", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"2020-01-01T00:00:00Z"}`, http.StatusBadRequest,
+			// 三个判据各管一端：回显收到的时刻（不必回头翻请求体）、说清这条当场就失效、
+			// 给出真正可选的修法（给未来时刻 / 干脆不带这一格 = 永不过期）。
+			[]string{"2020-01-01T00:00:00Z", "必须晚于当下", "不带这一格"}},
+		{"expires_at 正好是当下", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"` + time.Now().UTC().Format(time.RFC3339) + `"}`, http.StatusBadRequest,
+			[]string{"必须晚于当下"}},
+		// 撤权不看这一格：撤一条本来就已过期的授权仍然是撤。
+		// 这一条同时是上面那条的**范围控制** —— 判据写成"expires_at 过期就 400"（不分动作）
+		// 会连关门这条路一起堵死，而那扇门后面可能压着一条还在生效的旧授权。
+		{"撤权带过期时刻仍走到闸门", `{"tool_name":"reach.batch","account_id":"a1","revoke":true,"expires_at":"2020-01-01T00:00:00Z"}`, http.StatusServiceUnavailable,
+			// 走到闸门 ⇒ 说的是"门没接线"，不是"你时间写错了"。
+			[]string{"审批门未接线"}},
+		{"未来的截止时刻不归这一格管", `{"tool_name":"reach.batch","account_id":"a1","expires_at":"` + time.Now().UTC().Add(time.Hour).Format(time.RFC3339) + `"}`, http.StatusServiceUnavailable,
+			[]string{"审批门未接线"}},
 		// 入参合法但闸门没接线 ⇒ 必须 503，不能返回 200 让人以为授权成功了
-		{"未接线", `{"tool_name":"reach.batch","account_id":"a1"}`, http.StatusServiceUnavailable},
+		{"未接线", `{"tool_name":"reach.batch","account_id":"a1"}`, http.StatusServiceUnavailable, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -1121,6 +1153,11 @@ func TestHandleToolApprovalWhitelist_HTTP_InputGuards(t *testing.T) {
 
 			if w.Code != c.want {
 				t.Fatalf("status = %d, want %d；body=%s", w.Code, c.want, w.Body.String())
+			}
+			for _, want := range c.wantMsg {
+				if !strings.Contains(w.Body.String(), want) {
+					t.Errorf("提示语缺 %q：%s", want, w.Body.String())
+				}
 			}
 		})
 	}

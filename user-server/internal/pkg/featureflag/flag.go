@@ -152,14 +152,56 @@ func (f *Flag) Bool() bool {
 // EnvNameOf 返回 flag 对应的环境变量名。
 //
 // 与 readEnv 同源：告警/运维端点提示"该开哪个 env"时必须用这里算，
-// 否则会出现提示写 FF_A_B、代码读 FF_A.B 这种查不出来的漂移（点号在 flag 名里是合法的）。
+// 否则会出现提示写 FF_A_B、代码读 FF_A.B 这种查不出来的漂移。
+//
+// 点号（以及任何不是 [A-Z0-9_] 的字符）在这里翻成下划线：flag 名里点号是合法的
+// （`ai.safety.tool_approval_gate` 这种分层写法），但**环境变量名里不是** ——
+// shell 里 `export FF_AI.SAFETY.TOOL_APPROVAL_GATE=1` 直接报 invalid variable name，
+// 于是"提示让你开的那个变量"永远开不上：旗子在端点上照旧读作 off，运维反复确认
+// 自己写对了名字，白名单却一次也没生效过。提示与读取必须落在同一个可用的名字上。
+//
+// 不做的事：不把名字压成去重后的同一片（`a.b` 与 `a_b` 会撞名）—— 现有注册表里
+// 没有这种成对的名字，而防撞名的做法要么加后缀要么判冲突，都超出"把点号写对"这件事。
+// 撞名这件事由测试盯着（见 flag_envname_test.go）。
 func EnvNameOf(name string) string {
+	var b strings.Builder
+	b.WriteString("FF_")
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - 32)
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
+// legacyEnvName 点号原名直接拼出来的那份（`FF_AI.SAFETY.TOOL_APPROVAL_GATE`）。
+// 它不可从 shell 设置，却**可能**已经在 compose/k8s 的 env 映射里被人照着旧提示写过
+// （那些地方允许点号键名）。归一化之后如果只认新名字，那种写法会静默变成 off ——
+// 一把安全闸门开关从"开着"掉回"关着"，且没有任何一处报错。读的时候两份都看，新名优先。
+func legacyEnvName(name string) string {
 	return "FF_" + strings.ToUpper(name)
 }
 
 func (f *Flag) readEnv() bool {
-	envName := EnvNameOf(f.name)
-	v := os.Getenv(envName)
+	return f.readEnvNamed(EnvNameOf(f.name), legacyEnvName(f.name))
+}
+
+// readEnvNamed 按优先级读两个候选变量名。
+// 拆开是因为"未设置"与"设置了空串"在旧行为里是两种判读（空串回落到默认值），
+// 这个区别必须留在同一处，别在两个候选名之间丢失它。
+func (f *Flag) readEnvNamed(names ...string) bool {
+	v := ""
+	for _, n := range names {
+		if got, ok := os.LookupEnv(n); ok {
+			v = got
+			break
+		}
+	}
 	if v == "" {
 		return f.defaultValue
 	}
