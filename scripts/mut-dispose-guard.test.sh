@@ -19,7 +19,8 @@
 #   G7 入口闸 workdir()：--clone 就是仓库根 ⇒ 装架之前就退，且出声
 #   G8 入口闸：--clone 是仓库根的上级／是 /tmp 本身 ⇒ 同样退
 #   G9 入口闸：不传 --clone 时 mkdtemp(prefix) 照旧且 owned=1；传安全空目录时 owned=0 且不动它
-#   REAL 静态面（四腿）：六枚带 --clone 的常驻电池必须 ① --clone 面／入口闸面／收尾闸面三处
+#   REAL 静态面（四腿）：**所有**带 --clone 面的常驻电池（枚数由 grep 现取，别照抄文档里的
+#       "六枚/七枚"——写死的那个数每次有人加电池就过期一次）必须 ① --clone 面／入口闸面／收尾闸面三处
 #       计数相等，② 不留 `Path(args.clone …)` 直连赋值，③ 不留裸 rmtree(tmp/dst/work)，
 #       ④ 入口闸那一行必须排在 `prepare(tmp)` **之前**（顺序腿的反向测：把 workdir 挪到
 #       clone 之后即红，见本轮 C 组同款做法）
@@ -136,7 +137,7 @@ case "$out" in
   *) bad "不传 --clone 应放行且 owned=1，实得：$out" ;;
 esac
 
-echo "REAL 静态面：六枚带 --clone 的电池都走 dispose，且不留裸 rmtree"
+echo "REAL 静态面：所有带 --clone 面的电池都走 dispose，且不留裸 rmtree（枚数现取，不写死）"
 # 对象集合**不含 mut_dispose.py 自己**：它的 docstring 里就写着 `Path(args.clone` 与
 # `shutil.rmtree(tmp)` 两句（那是被修对象的形状，不是待修的调用点），把它算进面里
 # 会同时把两处计数各抬高 1，看起来仍"相等"，于是这一格从"有一枚没接线"变成永远读不准。

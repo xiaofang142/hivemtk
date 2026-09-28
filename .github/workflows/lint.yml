@@ -137,10 +137,17 @@ jobs:
       # 立项背景是 2026-09-24 的实测事故：`mut_collection_p703.py --clone . --check`
       # 在收尾时把整棵 r45-lane（含 .git 与当轮 18 项未提交字节）rmtree 掉了——
       # `dispose()`/`workdir()` 两道闸加这九格是把那一类缺陷钉住的唯一常驻件。
-      # 判据里有静态面（六枚电池的 --clone／入口闸／收尾闸三处计数必须相等），
+      # 判据里有静态面（每枚带 --clone 面的电池的 --clone／入口闸／收尾闸三处计数必须相等），
       # 所以 `scripts/mut_*.py` 任一改动没同时接满两道闸，这里红。
       - name: mut_dispose 用例（删除闸九格，不联网）
         run: bash scripts/mut-dispose-guard.test.sh
+
+      # `scripts/mut_db_poolcfg.py`（db.go 池参数那条接线的四刀电池）的用例。
+      # 这一族只跑不依赖 go 与测试库的腿：预检内核的五格内存反向格 + 对真源码的锚点预检
+      # + 删除闸入参（`--clone .` 必须装架前退）。挂这里的理由是 §23.22 第 6 段③ 那条：
+      # 一次性 `/tmp` 驱动的读数只能引用不能复跑，常驻化之后判据本身还得有人守。
+      - name: mut_db_poolcfg 用例（四刀预检七格，不联网、不跑 go）
+        run: bash scripts/mut-db-poolcfg.test.sh
 
   # 静态形状检查，不是运行时复现：ubuntu runner 的 bash 是 5.x，本身不会触发
   # 「$VAR 紧跟中文吃字节」；会触发的是 macOS 开发机上的 /bin/bash 3.2 + UTF-8

@@ -16,7 +16,8 @@
      没有 `.git` 就说明同名目录不是本电池建的，不碰。
   4. `owned=True`（本次由 `tempfile.mkdtemp` 创建、且确实落在系统临时目录下）才整体带走。
 
-调用方形态（六枚带 `--clone` 的常驻电池都已改成这一对）：
+调用方形态（所有带 `--clone` 面的常驻电池都已改成这一对；枚数由
+`mut-dispose-guard.test.sh` 的 REAL 静态面现取，写死的那个数每加一枚电池就过期一次）：
     tmp, owned = workdir(args.clone, prefix="p703mut-", repo_root=ROOT)
     ...
     dispose(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
