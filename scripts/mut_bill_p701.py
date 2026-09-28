@@ -159,9 +159,23 @@ repo 11→16、db 6→7）。逐格读红因后的归因：
 （改前是 249 格、三处 ✗）。行为面只在干净 `--shared` 克隆（HEAD `fe3fc059`）里取证改动的三格：
 `--cells K50,K50b,K56` 读 **`控制组[svc] CLEAN rc=0 ran=19 PASS=19 skip=0`＋`KILLED=3 SURVIVED=0
 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=3`**，产物
-`docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。**这一族不是门禁**：整族 72 格没在
-tip 上复跑，最近一次全族杀伤行仍是 `P701/20260923-165140`（`KILLED=71 SURVIVED=0`，测于
-`f8d83b59`，即本趟回锚**之前**的那棵树），下一趟整族必须连这三格一起重跑才算这卡收口。
+`docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。那一趟末尾"下一趟整族必须连这三格
+一起重跑"的话已兑现：整族在 tip 上复跑两趟 —— `P701/20260928-152810`（测于 `bfad99e6`）与
+`P701/20260928-154508`（测于 `034d1784`，即本文件当下字节），两趟都读 **`KILLED=72 SURVIVED=0
+RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=72`**，且末尾都有
+`全部格子已还原（逐文件 md5 与基线一致）`＋`收尾：带走 .../p701work/clone`；第二趟的 82 份日志
+全量入库（`20260928-154508/`＝72 格〔67 刀 `K*`＋5 格 `G*`〕＋`K30-split` 单腿复跑一份＋9 份驱动侧
+〔8 个控制组＋`00-run.log`〕）。旧的那行 `20260923-165140` 是回锚**之前**的树（`KILLED=71`），
+不再当作本族的现读数。
+杀伤复跑本身**没有 CI 执行点**：`grep -rn mut_bill_p701 .github/ Makefile` 零命中；CI 里跑的是
+`go test` 原样，外加本文件的**静态面**（`scripts/mut-dispose-guard.test.sh` 注册在 `lint.yml`，
+覆盖全族电池的收尾闸形状），`anchor-preflight.py` 同样不在 CI。所以"整族 72 格全杀"是**本机现取
+的门**，别读成流水线每次推送都替你跑过。要在这台机器复现：在**同一个 shell** 里导出 `POSTGRES_TEST_*`
+（`env_for()` 只往影子克隆里的 `user-server/.env` 回落，新起一个 shell 的 export 带不进来），
+cgo 撞上 Xcode 许可时加 `DEVELOPER_DIR=/Library/Developer/CommandLineTools`。这两条不是假设——
+整族头两趟就分别撞死在这两处，驱动 stdout 存 `P701/20260928-152346/00-driver.log` 与
+`P701/20260928-152534/00-driver.log`（那两趟的逐格日志随当时的克隆回收，只剩驱动这一份），
+归类逻辑见上面的 `env_only_failure()`。
 
 三处顺带记下的账：
 - 头一趟（`20260928-135334`）没导 `POSTGRES_TEST_*`，控制组当场判 DIRTY 停机 —— 这是对的，

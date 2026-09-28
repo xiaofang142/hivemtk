@@ -1,0 +1,13 @@
+私有作业目录：/private/tmp/p701work
+逐格日志目录：/private/tmp/p701full/hivemtk/docs/superpowers/specs/ledger/logs/P701/20260928-152346
+基线字节：克隆 HEAD `bfad99e6`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次
+控制组[app] CLEAN rc=0 ran=3 PASS=3 skip=0 FAIL=[]
+控制组[ctrl] DIRTY rc=1 ran=0 PASS=0 skip=0 FAIL=[]
+FAIL	hivemtk-user/internal/controller [build failed]
+FAIL
+# runtime/cgo
+You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from within a Terminal window to review and agree to the Xcode and Apple SDKs license.
+
+收尾：带走 /private/tmp/p701work/clone
+控制组[ctrl] 不干净——它下游所有格子的红/绿都不可信
+FULL_RC=1

@@ -1,0 +1,46 @@
+2026-09-28T15:49:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBillDeriveFromSentQuoteWritesOneRow
+--- PASS: TestBillDeriveFromSentQuoteWritesOneRow (0.31s)
+=== RUN   TestBillAmountEqualsHandComputedTotal
+--- PASS: TestBillAmountEqualsHandComputedTotal (0.21s)
+=== RUN   TestBillDeriveIsIdempotentAcrossCalls
+    bill_test.go:279: 第二次没报 Reused
+--- FAIL: TestBillDeriveIsIdempotentAcrossCalls (0.26s)
+=== RUN   TestBillDeriveCurrencyFollowsQuote
+--- PASS: TestBillDeriveCurrencyFollowsQuote (0.20s)
+=== RUN   TestBillDeriveLeavesDueAtNull
+--- PASS: TestBillDeriveLeavesDueAtNull (0.21s)
+=== RUN   TestBillDeriveStoresTheDueAtTheCallerGave
+    bill_test.go:423: 重复确认没标 reused：那一格是「我刚开了一张」与「这张早就在」的唯一分野
+--- FAIL: TestBillDeriveStoresTheDueAtTheCallerGave (0.16s)
+=== RUN   TestBillDeriveRequiresSentVersion
+--- PASS: TestBillDeriveRequiresSentVersion (0.83s)
+=== RUN   TestBillDeriveAcceptsAlreadyAcceptedRowAgain
+    bill_test.go:497: 重入没复用到那张: "b_1789812000000000000_8"/false vs "b_1789812000000000000_8"
+--- FAIL: TestBillDeriveAcceptsAlreadyAcceptedRowAgain (0.22s)
+=== RUN   TestBillDeriveRejectsSupersededVersion
+--- PASS: TestBillDeriveRejectsSupersededVersion (0.18s)
+=== RUN   TestBillDeriveRejectsSecondAcceptedVersionInChain
+--- PASS: TestBillDeriveRejectsSecondAcceptedVersionInChain (0.14s)
+=== RUN   TestBillDeriveNeedsLines
+--- PASS: TestBillDeriveNeedsLines (0.30s)
+=== RUN   TestBillDeriveCASFailureLeavesNoBill
+--- PASS: TestBillDeriveCASFailureLeavesNoBill (0.32s)
+=== RUN   TestBillDeriveRacesIntoExisting
+--- PASS: TestBillDeriveRacesIntoExisting (0.55s)
+=== RUN   TestBillDeriveReportsReadBackFailure
+    bill_test.go:709: 恢复那一次没报 Reused：调用方会以为自己又开了一张应收
+--- FAIL: TestBillDeriveReportsReadBackFailure (0.51s)
+=== RUN   TestBillDeriveQuoteNotFound
+--- PASS: TestBillDeriveQuoteNotFound (0.33s)
+=== RUN   TestBillDeriveInputCarriesRowKeyAndOptionalTerm
+--- PASS: TestBillDeriveInputCarriesRowKeyAndOptionalTerm (0.00s)
+=== RUN   TestBillServicePortSurfacesAreNarrow
+--- PASS: TestBillServicePortSurfacesAreNarrow (0.00s)
+=== RUN   TestBillKeyGeneratorIsDeterministic
+--- PASS: TestBillKeyGeneratorIsDeterministic (0.00s)
+=== RUN   TestBillServiceAvailabilityAndNilSafety
+--- PASS: TestBillServiceAvailabilityAndNilSafety (0.74s)
+FAIL
+FAIL	hivemtk-user/internal/service	6.167s
+FAIL
