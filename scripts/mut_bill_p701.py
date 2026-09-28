@@ -720,6 +720,31 @@ def env_for(root: Path) -> dict:
     return env
 
 
+def env_only_failure(out: str) -> str:
+    """控制组红了，先分"这是本机前提没满足"还是"这是仓库里的红"。
+
+    2026-09-28 一趟整电池连撞两次：第一次 `# runtime/cgo` + Xcode 许可未同意（本机
+    `xcode-select -p` 指向 Xcode.app，而那份许可没人签过），第二次 SASL 认证失败
+    （给电池起 shell 时没在**同一个 shell** 里 export 测试库口令，`env_for()` 的回落
+    要读 `user-server/.env`，而影子克隆里本来没有它）。两次的落点都是
+    `控制组[ctrl] DIRTY`，而那句判读只说"不干净、下游都不可信"——读起来像仓库坏了。
+    环境没满足和产码有洞的处置完全相反（前者改环境复跑，后者才是这一族要抓的东西），
+    所以把三种已知环境签名读出来归个类；认不出的形状不猜，照旧按"不干净"停。
+    """
+    if "runtime/cgo" in out and "not agreed to the Xcode license" in out:
+        return ("本机工具链：cgo 编译走到 Xcode.app 而它的许可没签过 ⇒ 不是仓库红。"
+                "改法：`DEVELOPER_DIR=/Library/Developer/CommandLineTools python3 scripts/mut_bill_p701.py …`"
+                "（CLT 里那份 clang 不受许可门影响），或 `sudo xcodebuild -license` 之后复跑")
+    if "failed SASL auth" in out or "password authentication failed" in out:
+        return ("本机库前提：测试库口令/端口没进到 `go test` 进程 ⇒ 不是仓库红。"
+                "口令要在**跑电池的那同一个 shell** 里 export（新起一个 shell 的 export 带不进来），"
+                "或者把 `user-server/.env` 摆进影子克隆（`env_for()` 只从那儿回落）；"
+                "先核对 8232 上运行中的容器口令与 `.env` 是否同源")
+    if "connection refused" in out or "too many clients" in out or "remaining connection slots" in out:
+        return "本机库前提：PG 没起来或连接数顶格 ⇒ 不是仓库红，先把 8232 容器恢复到可连再复跑"
+    return ""
+
+
 def go_run(clone: Path, runner: str, run: str = ""):
     pkg, default_run = RUNNERS[runner]
     root = clone / US
@@ -842,9 +867,13 @@ def main() -> int:
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
             if not ok:
                 print(out[-4000:])
+                why = env_only_failure(out)
+                if why:
+                    print(f"红因归类（环境）：{why}")
                 sweep()
                 raise SystemExit("控制组[gate] 不干净：台账门在克隆里就报漂移，"
-                                 "后面所有 G* 格的红/绿都不可信")
+                                 "后面所有 G* 格的红/绿都不可信"
+                                 + ("" if not why else "（这一趟是本机前提没满足，不是仓库红；按上面归类复跑）"))
             continue
         rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
         dump(f"00-control-{name}", out)
@@ -855,8 +884,12 @@ def main() -> int:
               f"PASS={passed} skip={skipped} FAIL={killed}")
         if bad:
             print(out[-4000:])
+            why = env_only_failure(out)
+            if why:
+                print(f"红因归类（环境）：{why}")
             sweep()
-            raise SystemExit(f"控制组[{name}] 不干净——它下游所有格子的红/绿都不可信")
+            raise SystemExit(f"控制组[{name}] 不干净——它下游所有格子的红/绿都不可信"
+                             + ("" if not why else "（这一趟是本机前提没满足，不是仓库红；按上面归类复跑）"))
 
     problems: list[str] = []
     tally = {k: 0 for k in TALLY}
