@@ -1,0 +1,229 @@
+整包上界复跑（§23.22 第 6 段⑤ 的结转项）：`internal/pkg/db` 整包、不带 -run 过滤、不带 -race。
+命令：cd user-server && GIN_MODE=test GOFLAGS=-mod=mod GOCACHE=/tmp/gocache-r45mut
+      POSTGRES_TEST_PORT=8232 POSTGRES_TEST_USER=admin POSTGRES_TEST_PASSWORD=<.env 里的值，不入屏>
+      go test ./internal/pkg/db/ -count=1 -v -timeout 20m
+测于 lane HEAD `03b370b4`（工作树对 db.go 零脏文件，md5 见末行）；落盘前过 scripts/redact.py::scrub()
+
+=== RUN   TestBillRegisteredInAllModels
+--- PASS: TestBillRegisteredInAllModels (0.00s)
+=== RUN   TestBillAutoMigrate_ShapeAndIdempotent
+--- PASS: TestBillAutoMigrate_ShapeAndIdempotent (2.08s)
+=== RUN   TestBillUniqueIndexIsOnVersionRowKey
+--- PASS: TestBillUniqueIndexIsOnVersionRowKey (0.05s)
+=== RUN   TestBillAmountSharesRangeWithQuoteLines
+--- PASS: TestBillAmountSharesRangeWithQuoteLines (0.07s)
+=== RUN   TestBillIDIsTextPrimaryKey
+--- PASS: TestBillIDIsTextPrimaryKey (0.04s)
+=== RUN   TestBillChasedDueAtIndexExists
+--- PASS: TestBillChasedDueAtIndexExists (0.05s)
+=== RUN   TestPoolBoundLandsOnSQLHandle
+--- PASS: TestPoolBoundLandsOnSQLHandle (0.00s)
+=== RUN   TestNormalizePoolFallbacks
+=== RUN   TestNormalizePoolFallbacks/整条留空⇒采用生产默认表
+=== RUN   TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20
+=== RUN   TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟
+=== RUN   TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）
+--- PASS: TestNormalizePoolFallbacks (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/整条留空⇒采用生产默认表 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿） (0.00s)
+=== RUN   TestConcurrentGetDBAndSetTestDBAreRaceFree
+--- PASS: TestConcurrentGetDBAndSetTestDBAreRaceFree (0.01s)
+=== RUN   TestGetDB
+--- PASS: TestGetDB (0.00s)
+=== RUN   TestInitDB_PostgreSQL
+    db_test.go:28: InitDB panicked (expected if config not set): 数据库连接密码缺失：配置文件未保留 password 字段，必须由运行时环境变量 POSTGRES_PASSWORD 注入
+--- PASS: TestInitDB_PostgreSQL (0.00s)
+=== RUN   TestGetDB_AfterInit
+--- PASS: TestGetDB_AfterInit (0.01s)
+=== RUN   TestDB_Connection
+--- PASS: TestDB_Connection (0.01s)
+=== RUN   TestDB_PostgresConnection
+--- PASS: TestDB_PostgresConnection (0.01s)
+=== RUN   TestAutoMigrate
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestAutoMigrate (7.42s)
+=== RUN   TestStartupDropsLegacyExternalOrderOrderIDKey
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestStartupDropsLegacyExternalOrderOrderIDKey (0.12s)
+=== RUN   TestAutoMigrateWiresExternalOrderLegacyKeyDrop
+--- PASS: TestAutoMigrateWiresExternalOrderLegacyKeyDrop (0.00s)
+=== RUN   TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally
+[90m2026-09-28T09:44:12+08:00[0m [33mWRN[0m [1mpost-migrate: DROP 旧 uni_external_orders_order_id 失败(跨平台订单号仍会被这把旧键拦住): sql: database is closed[0m [36mcomponent=[0muser-server
+--- PASS: TestLegacyExternalOrderKeyHookFailsLoudlyNotFatally (0.01s)
+=== RUN   TestBatchM_OpportunityGuardDoesNotClaimReadyWhenNameIsNotUnique
+[90m2026-09-28T09:44:12+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_OpportunityGuardDoesNotClaimReadyWhenNameIsNotUnique (0.12s)
+=== RUN   TestBatchM_ObsGuardDoesNotClaimReadyWhenNameIsNotUnique
+[90m2026-09-28T09:44:13+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_ObsGuardDoesNotClaimReadyWhenNameIsNotUnique (0.08s)
+=== RUN   TestBatchM_MessageHubGuardDoesNotClaimReadyWhenNameIsNotUnique
+[90m2026-09-28T09:44:13+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_MessageHubGuardDoesNotClaimReadyWhenNameIsNotUnique (0.09s)
+=== RUN   TestBatchM_StartupClearsLegacyMessageHubNarrowUniqueness
+[90m2026-09-28T09:44:17+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:17+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:17+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:17+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:17+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:21+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:21+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:21+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:21+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:21+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_StartupClearsLegacyMessageHubNarrowUniqueness (7.98s)
+=== RUN   TestBatchM_StartupMessageHubIndexShapeAndSecondRunSilent
+--- PASS: TestBatchM_StartupMessageHubIndexShapeAndSecondRunSilent (6.67s)
+=== RUN   TestAllModels_CoversModelsWithWritePaths
+--- PASS: TestAllModels_CoversModelsWithWritePaths (0.00s)
+=== RUN   TestAutoMigrate_Complete
+[90m2026-09-28T09:44:31+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:31+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:31+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:31+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:31+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestAutoMigrate_Complete (3.29s)
+=== RUN   TestAutoMigrate_Partial
+--- PASS: TestAutoMigrate_Partial (0.05s)
+=== RUN   TestAutoMigrate_MultipleTables
+--- PASS: TestAutoMigrate_MultipleTables (0.11s)
+=== RUN   TestAutoMigrate_Idempotent
+--- PASS: TestAutoMigrate_Idempotent (0.08s)
+=== RUN   TestAutoMigrate_WithIndexes
+--- PASS: TestAutoMigrate_WithIndexes (0.09s)
+=== RUN   TestAutoMigrate_NilDB
+--- PASS: TestAutoMigrate_NilDB (0.00s)
+=== RUN   TestAutoMigrate_EmptyModel
+--- PASS: TestAutoMigrate_EmptyModel (0.01s)
+=== RUN   TestAutoMigrate_LargeModel
+--- PASS: TestAutoMigrate_LargeModel (0.15s)
+=== RUN   TestAutoMigrate_ConcurrentDistinctModels
+--- PASS: TestAutoMigrate_ConcurrentDistinctModels (0.04s)
+=== RUN   TestAutoMigrate_VeryLargeNumberOfModels
+--- PASS: TestAutoMigrate_VeryLargeNumberOfModels (0.23s)
+=== RUN   TestBatchM_StartupHealsOrphanCompositeType
+--- PASS: TestBatchM_StartupHealsOrphanCompositeType (6.90s)
+=== RUN   TestBatchM_StartupToleratesLegacyConstraintNameDriftWithoutRewriting
+--- PASS: TestBatchM_StartupToleratesLegacyConstraintNameDriftWithoutRewriting (3.60s)
+=== RUN   TestBatchM_StartupPanicsOnNonTolerableNotNullDrift
+--- PASS: TestBatchM_StartupPanicsOnNonTolerableNotNullDrift (3.28s)
+=== RUN   TestBatchM_MigrateErrorClassifierTruthTable
+[90m2026-09-28T09:44:45+08:00[0m [33mWRN[0m [1mAutoMigrate 命中历史约束命名漂移(可容忍，建议清理历史表): ERROR: constraint "uni_zz_batchm7_drift_code" of relation "zz_batchm7_drift" does not exist (SQLSTATE 42704)[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:45+08:00[0m [33mWRN[0m [1mAutoMigrate 命中幂等重跑提示(可容忍): ERROR: relation "zz_batchm7_orphan" already exists (SQLSTATE 42P07)[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_MigrateErrorClassifierTruthTable (0.00s)
+=== RUN   TestBatchM_StartupReinstallsMissingPGExtension
+--- PASS: TestBatchM_StartupReinstallsMissingPGExtension (3.56s)
+=== RUN   TestBatchM_EnsureExtensionsWarnsButDoesNotPanicOnDeadHandle
+--- PASS: TestBatchM_EnsureExtensionsWarnsButDoesNotPanicOnDeadHandle (0.01s)
+=== RUN   TestBatchM_MissingTablesAndTableNameHelpers
+[90m2026-09-28T09:44:49+08:00[0m [33mWRN[0m [1m解析模型表名失败 int: unsupported data type: 42[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_MissingTablesAndTableNameHelpers (0.06s)
+=== RUN   TestBatchM_FallbackPanicsInsteadOfClaimingRebuildWhenNameIsTakenByView
+--- PASS: TestBatchM_FallbackPanicsInsteadOfClaimingRebuildWhenNameIsTakenByView (3.33s)
+=== RUN   TestBatchM_ObsDefaultIndex_CreatedAndIdempotent
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_ObsDefaultIndex_CreatedAndIdempotent (0.03s)
+=== RUN   TestBatchM_ObsDefaultIndex_RejectsSecondDefault
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_ObsDefaultIndex_RejectsSecondDefault (0.03s)
+=== RUN   TestBatchM_ObsDefaultIndex_AllowsManyNonDefaults
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_ObsDefaultIndex_AllowsManyNonDefaults (0.03s)
+=== RUN   TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault
+=== RUN   TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault/存量2条默认
+[90m2026-09-28T09:44:52+08:00[0m [33mWRN[0m [1mpost-migrate: obs_config 有 2 条默认存储，已保留 GetDefault 会选中的最早一条、降级 1 条[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+=== RUN   TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault/存量3条默认
+[90m2026-09-28T09:44:52+08:00[0m [33mWRN[0m [1mpost-migrate: obs_config 有 3 条默认存储，已保留 GetDefault 会选中的最早一条、降级 2 条[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:52+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault (0.07s)
+    --- PASS: TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault/存量2条默认 (0.03s)
+    --- PASS: TestBatchM_ObsDefaultIndex_RepairKeepsOldestDefault/存量3条默认 (0.03s)
+=== RUN   TestBatchM_ObsDefaultIndex_HookIsWiredIntoMigrate
+--- PASS: TestBatchM_ObsDefaultIndex_HookIsWiredIntoMigrate (0.00s)
+=== RUN   TestBatchM_StartupFreshDatabaseBuildsObsGuard
+[90m2026-09-28T09:44:55+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:55+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:55+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:55+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:55+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_StartupFreshDatabaseBuildsObsGuard (3.20s)
+=== RUN   TestBatchM_StartupSecondRunIsSilentAndGuardSurvives
+[90m2026-09-28T09:44:59+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:59+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:59+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:59+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:44:59+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_StartupSecondRunIsSilentAndGuardSurvives (6.14s)
+=== RUN   TestBatchM_StartupDedupesExistingDefaultsOnRealPath
+--- PASS: TestBatchM_StartupDedupesExistingDefaultsOnRealPath (3.10s)
+=== RUN   TestBatchM_ModelColumnDefaultsApplyAtDatabaseLevel
+--- PASS: TestBatchM_ModelColumnDefaultsApplyAtDatabaseLevel (0.04s)
+=== RUN   TestBatchM_MigrateIsWiredIntoAPILifecycle
+--- PASS: TestBatchM_MigrateIsWiredIntoAPILifecycle (0.00s)
+=== RUN   TestBatchM_StartupBuildsOpportunityClueGuard
+--- PASS: TestBatchM_StartupBuildsOpportunityClueGuard (6.62s)
+=== RUN   TestBatchM_StartupDoesNotAutoRewriteLegacyDuplicateOpportunities
+[90m2026-09-28T09:45:15+08:00[0m [32mINF[0m [1mAutoMigrate 完成，无迁移漂移[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:15+08:00[0m [32mINF[0m [1mpost-migrate: message_hub (platform, msg_id, conversation_id) 三元组唯一索引已就绪[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:15+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:15+08:00[0m [32mINF[0m [1mpost-migrate: obs_config 单默认偏唯一索引已就绪（is_default=false 的行不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:15+08:00[0m [32mINF[0m [1mpost-migrate: external_orders 订单幂等键已是 (platform, order_id)，旧单列唯一索引 uni_external_orders_order_id 已删除[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:18+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestBatchM_StartupDoesNotAutoRewriteLegacyDuplicateOpportunities (6.99s)
+=== RUN   TestOpportunityRegisteredInAllModels
+--- PASS: TestOpportunityRegisteredInAllModels (0.00s)
+=== RUN   TestOpportunityAutoMigrate_Idempotent
+--- PASS: TestOpportunityAutoMigrate_Idempotent (0.08s)
+=== RUN   TestOpportunityNumericColumnsAreReallyNumeric
+--- PASS: TestOpportunityNumericColumnsAreReallyNumeric (0.04s)
+=== RUN   TestOpportunityHasNoTenantColumnAtDBLevel
+--- PASS: TestOpportunityHasNoTenantColumnAtDBLevel (0.04s)
+=== RUN   TestOpportunityIndexesOnlyForNamedQueries
+[90m2026-09-28T09:45:19+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+--- PASS: TestOpportunityIndexesOnlyForNamedQueries (0.04s)
+=== RUN   TestOpportunityClueIDPartialUniqueIndex
+[90m2026-09-28T09:45:19+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:19+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:19+08:00[0m [32mINF[0m [1mpost-migrate: opportunities 非空 clue_id 唯一索引已就绪（手工商机的空 clue_id 不受约束）[0m [36mcomponent=[0muser-server
+[90m2026-09-28T09:45:19+08:00[0m [33mWRN[0m [1mpost-migrate: CREATE idx_opportunities_clue_id 失败(存量里可能有重复 clue_id，需人工清重后重启): ERROR: could not create unique index "idx_opportunities_clue_id" (SQLSTATE 23505)[0m [36mcomponent=[0muser-server
+--- PASS: TestOpportunityClueIDPartialUniqueIndex (0.08s)
+=== RUN   TestOpportunityAutoMigrate_BackfillsVersionOnExistingTable
+--- PASS: TestOpportunityAutoMigrate_BackfillsVersionOnExistingTable (0.14s)
+=== RUN   TestStartupDropsLegacyPlaintextResetTokens
+[90m2026-09-28T09:45:19+08:00[0m [33mWRN[0m [1mpost-migrate: 已硬删 1 条旧版明文密码重置令牌（哈希化后这些链接本就永不匹配，用户需重新走一次忘记密码）[0m [36mcomponent=[0muser-server
+--- PASS: TestStartupDropsLegacyPlaintextResetTokens (0.04s)
+=== RUN   TestAutoMigrateWiresLegacyPlaintextResetTokenGuard
+--- PASS: TestAutoMigrateWiresLegacyPlaintextResetTokenGuard (0.00s)
+=== RUN   TestPaymentRegisteredInAllModels
+--- PASS: TestPaymentRegisteredInAllModels (0.00s)
+=== RUN   TestPaymentAutoMigrate_ShapeAndIdempotent
+--- PASS: TestPaymentAutoMigrate_ShapeAndIdempotent (0.08s)
+=== RUN   TestPaymentChannelRefIsTheIdempotencyKey
+--- PASS: TestPaymentChannelRefIsTheIdempotencyKey (0.05s)
+=== RUN   TestPaymentAmountSharesRangeWithBills
+--- PASS: TestPaymentAmountSharesRangeWithBills (0.06s)
+=== RUN   TestPaymentBillIDIsVarchar64AndIndexed
+--- PASS: TestPaymentBillIDIsVarchar64AndIndexed (0.04s)
+=== RUN   TestQuoteRegisteredInAllModels
+--- PASS: TestQuoteRegisteredInAllModels (0.00s)
+=== RUN   TestQuoteAutoMigrate_Idempotent
+--- PASS: TestQuoteAutoMigrate_Idempotent (0.14s)
+=== RUN   TestQuoteCompositeUniqueIndexIsReallyComposite
+--- PASS: TestQuoteCompositeUniqueIndexIsReallyComposite (0.07s)
+=== RUN   TestQuoteLineItemPrimaryKeyIsPerVersionRow
+--- PASS: TestQuoteLineItemPrimaryKeyIsPerVersionRow (0.07s)
+=== RUN   TestQuoteNumericColumnsAreReallyNumeric
+--- PASS: TestQuoteNumericColumnsAreReallyNumeric (0.08s)
+=== RUN   TestQuoteHasNoTenantColumnAtDBLevel
+--- PASS: TestQuoteHasNoTenantColumnAtDBLevel (0.07s)
+PASS
+ok  	hivemtk-user/internal/pkg/db	77.591s

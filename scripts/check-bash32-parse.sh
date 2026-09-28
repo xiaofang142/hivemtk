@@ -32,16 +32,20 @@
 #     管道子 shell 的 set -u 语义）一律不在判据内 —— 那些属 shellcheck 与用例。
 #   - 只对 3.2 这一档有效：4.x/5.x 独有的其它形状（如 `${VAR@Q}`）本门测不到，
 #     除非开发机装了对应版本的 bash 并用 BASH32_BIN 指过去（那时判据仍按 major 分类）。
-#   - CI 里恒 SKIP ⇒ 本门**只注册进 `make audit`**（本地聚合门），不接 CI 步骤：
-#     一道在 CI 永远不可能开火的门挂进步骤面，读数上就多一个"绿"，是负债不是资产。
+#   - 解析器 ≥4 的那一档（ubuntu runner）本门恒 SKIP ⇒ 它在那儿**不算执行点**。2026-09-28 起
+#     它有两个真执行点：本地 `make audit`，以及 lint.yml 的 `bash32-parse` 作业（`macos-latest`
+#     的 /bin/bash 就是 3.2.57，与本机同版；该作业第一格先实测版本，非 3.x 直接红，
+#     不让"恒 SKIP"伪装成绿步骤）。在那之前只有 `make audit` 一侧，CI 侧属 §23.22 第 5 段②
+#     记下的"注册了但从未开火"缺口。
 #
 # 用法：bash scripts/check-bash32-parse.sh
 #   rc=0 解析器是 3.x 且全面读通（或解析器不是 3.x ⇒ SKIP，退 0 但不印绿）；
 #   rc=1 至少一个文件读不通；rc=2 环境或判据本身有问题（没有 bash、扫描根不对、面骤减）
 #
 # 反向测试（改完本脚本必须逐格真跑）：bash scripts/check-bash32-parse.test.sh
-#   前提：本机 /bin/bash 是 3.x。不满足时用例退 2 并自报 ENV-BROKEN（不是"九格全过"），
-#   所以它和门一样只挂在 `make audit` 这一侧，CI 里没有它们的位置。
+#   前提：本机 /bin/bash 是 3.x。不满足时用例退 2 并自报 ENV-BROKEN（不是"九格全过"）。
+#   两个执行点：本地 `make audit`，以及 lint.yml 的 `bash32-parse` 作业（macos-latest，
+#   第一格先实测 `$BASH_VERSION` 非 3.x 即红 ⇒ 不会以 ENV-BROKEN/SKIP 的形状混成绿）。
 # =============================================================================
 
 set -uo pipefail

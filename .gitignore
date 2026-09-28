@@ -61,6 +61,12 @@ docs/superpowers/specs/ledger/logs/*
 !docs/superpowers/specs/ledger/logs/CIwiring/**/*.log
 !docs/superpowers/specs/ledger/logs/CapAB/
 !docs/superpowers/specs/ledger/logs/CapAB/**/*.log
+# mut_db_poolcfg.py（§23.22 第 6 段③ 的常驻化）的取证轮次：一对两行，与 `ls logs/` 现数对齐
+!docs/superpowers/specs/ledger/logs/DBPool/
+!docs/superpowers/specs/ledger/logs/DBPool/**/*.log
+# check-secret-containment.py `--transcripts` 那一面的读数（只印键名与次数，真值不入屏不入档）
+!docs/superpowers/specs/ledger/logs/Transcript/
+!docs/superpowers/specs/ledger/logs/Transcript/**/*.log
 
 # 本泳道（浏览器写台账批18–24 / 消息中枢 R22–R23 / 二次审核协议）自己的 21 个轮次，
 # 按同一规矩成对放行（一行放目录、一行只放该目录下的 .log）；不写整目录反选，

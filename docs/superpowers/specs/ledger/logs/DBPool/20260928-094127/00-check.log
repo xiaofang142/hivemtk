@@ -1,0 +1,6 @@
+  ✓ K1 摘掉 SetMaxOpenConns ⇒ 上界不落句柄｜杀手 TestPoolBoundLandsOnSQLHandle
+  ✓ K2 上界兜底 20⇒0（0＝不限连接）｜杀手 TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20
+  ✓ K3 lifetime 兜底 30 分钟⇒60 秒｜杀手 TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟
+  ✓ K4 摘掉 MaxIdleConns==0 的默认表兜底｜杀手 TestNormalizePoolFallbacks/整条留空⇒采用生产默认表
+锚点校验：4 格，0 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dbpoolmut-rfk8jz3x/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dbpoolmut-rfk8jz3x
