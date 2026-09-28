@@ -1,0 +1,16 @@
+=== RUN   TestPoolBoundLandsOnSQLHandle
+--- PASS: TestPoolBoundLandsOnSQLHandle (0.00s)
+=== RUN   TestNormalizePoolFallbacks
+=== RUN   TestNormalizePoolFallbacks/整条留空⇒采用生产默认表
+    db_pool_bound_test.go:112: MaxIdleConns==0 的兜底：期望 {MaxIdleConns:50 MaxOpenConns:200 ConnMaxIdleTime:300 ConnMaxLifetime:3600}，实得 {MaxIdleConns:0 MaxOpenConns:20 ConnMaxIdleTime:0 ConnMaxLifetime:1800}
+=== RUN   TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20
+=== RUN   TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟
+=== RUN   TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）
+--- FAIL: TestNormalizePoolFallbacks (0.00s)
+    --- FAIL: TestNormalizePoolFallbacks/整条留空⇒采用生产默认表 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟 (0.00s)
+    --- PASS: TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿） (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/pkg/db	0.421s
+FAIL
