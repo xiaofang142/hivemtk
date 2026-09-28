@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：71 格逐格验牙（格数逐卡变动，原因见文末第四趟）。
+"""T-P7-01 账单派生竖（N-6 回款域第一层）的变异电池：72 格逐格验牙（格数逐卡变动，原因见文末第四、六趟）。
 
 跑在**私有 --shared 克隆**里，克隆内容就是「HEAD 那一棵树」：本卡的 15 个新建文件与四处
 装配插入都随 `66964f9e` 进了 HEAD，所以 prepare 不再往克隆里写任何字节，只逐条断言那四处
@@ -143,6 +143,41 @@ repo 11→16、db 6→7）。逐格读红因后的归因：
   `接线数=1 ⇒ WIRED` 是对的，第二趟末尾那句预言就在这一趟兑现 —— 代价是它**静默**兑现：
   若不读门打印的接线数，这一格看起来就是"注了码而门不报 = 门没牙"。修法是把第三处一起摘掉
   （三处全摘 ⇒ 接线数 0 ⇒ 门必须报漂移），并把 desc 与注释里的数字从"两处"改成"三处"。
+
+第六趟（T-P7-04 走查期间由 `scripts/anchor-preflight.py` 在 tip 上量出来，2026-09-28）：三处
+锚点 0 次，全在 K50/K56 —— 第四趟那次"按 tip 逐格回退"到 `DueAt: nil` 版的锚点，被
+`d7b060b9`（09-25 10:17，比最后一笔电池改动 `b444dca4` 晚 7 分钟）推进 HEAD 的 `in.DueAt`
+挪走了。归因先核过再落笔：`service/bill.go` 在 `d7b060b9` 之后没有第二笔，电池文件也没有被人
+同时改过 ⇒ 这一朵红从 09-25 就在册，不是本轮合流带进来的。按第三趟写好的方案落地：K50 的注码
+从"写死 nil"改成"把没给的账期写成今天到期"，K56 的锚点挪到 `DueAt` 那一行、expect 跟着
+改名后的 `TestBillDeriveInputCarriesRowKeyAndOptionalTerm` 走，并按那句"一并补回"补上 K50b
+（另一侧退路：把给的账期丢掉，判据 `TestBillDeriveStoresTheDueAtTheCallerGave` —— 这一格
+在 HEAD 里**从没存在过的用例**如今存在了，第四趟撤它的理由随之失效）。格数 71→72。
+静态面两道：`--check` 读 **`锚点校验：72 格，0 格锚点有问题`**（并反向证过一次 —— 把 K50 的锚点
+改回 HEAD 里已不存在的 `DueAt: nil` 写法，当场读 `✗ K50@bill.go 锚点命中 0 次`、`rc=1`）；
+`anchor-preflight` 读 **`覆盖 5/36 份电池、本次核了 250 格`＋`锚点…expect 用例名全部在场`、`rc=0`**
+（改前是 249 格、三处 ✗）。行为面只在干净 `--shared` 克隆（HEAD `fe3fc059`）里取证改动的三格：
+`--cells K50,K50b,K56` 读 **`控制组[svc] CLEAN rc=0 ran=19 PASS=19 skip=0`＋`KILLED=3 SURVIVED=0
+RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=3`**，产物
+`docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。**这一族不是门禁**：整族 72 格没在
+tip 上复跑，最近一次全族杀伤行仍是 `P701/20260923-165140`（`KILLED=71 SURVIVED=0`，测于
+`f8d83b59`，即本趟回锚**之前**的那棵树），下一趟整族必须连这三格一起重跑才算这卡收口。
+
+三处顺带记下的账：
+- 头一趟（`20260928-135334`）没导 `POSTGRES_TEST_*`，控制组当场判 DIRTY 停机 —— 这是对的，
+  它没有把"连不上库"报成"全杀"；
+- K50 除了自己的判据还把邻居 `TestBillDeriveStoresTheDueAtTheCallerGave` 一起弄红（FAIL=2，
+  `PASS+FAIL=17+2=19` 仍等于控制组）⇒ 同一行的两条退路必须拆成两格，各点各的腿；
+- 驱动自己漏了一份私有克隆：`prepare()` 里克隆命令之后一共六条 `raise SystemExit`，
+  除"克隆失败"（那时目录归属还没定）之外的五条原先都排在收尾闸**之前**，停机就把整份克隆
+  留在临时目录 —— 实测那一次留下 72M（产物 `20260928-135113/00-run.log`，它没有收尾行），
+  而磁盘常态 98% 满。现在这五条走 `bail()`：先 `dispose()` 再出声，修完的同一趟停机
+  读到 `收尾：带走 .../p701mut-rlnhobia/clone、.../p701mut-rlnhobia`
+  （产物 `20260928-135916/00-run.log`）。
+  另记一笔口径教训：这道顺序判据（`scripts/mut-dispose-guard.test.sh` 的"入口闸排在装架之前"腿）
+  原先按装架调用的字面取第一处匹配，把 `prepare` 的形参也叫 `tmp` 会让**函数定义行**先命中，
+  于是格子里读出来的是"入口闸排在 clone 之后"；把同一个字面写进注释也会在注释行上先命中。
+  判据已改成只认调用点形状（赋值号打头），形参名则跟其余电池保持一致用 `dst`。
 """
 from __future__ import annotations
 
@@ -380,14 +415,15 @@ CELLS = [
     ("K49", "币种不看报价行、恒用默认值", "go", "svc", SVC,
      [("\tcurrency := strings.TrimSpace(row.Currency)", "\tcurrency := model.BillCurrencyDefault")],
      "TestBillDeriveCurrencyFollowsQuote"),
-    # 注：这一格的注码形状属于 T-P7-03（`in.DueAt`）。该卡的**产码**（service 侧改由调用方给账期
-    # + `TestBillDeriveStoresTheDueAtTheCallerGave`）尚未提交，只在别的泳道工作树里；常驻电池
-    # 必须与 HEAD 自洽，故此处保留"本层写死 nil"那一版的锚点。该卡落地那天按 `in.DueAt` 重锚，
-    # 并把下面被删掉的 K50b 一并补回（`--check` 会以"锚点命中 0 次"当场提醒，不会静默）。
-    ("K50", "凭空造账期（报价域里没有「付款条件」这一格，造出来的是合同条款）", "go", "svc", SVC,
-     [("\t\tDueAt:         nil, // 账期未定：本卡没有任何一处定义过付款条件",
-       "\t\tDueAt:         &now, // 变异注码")],
+    # 锚点形状属于 T-P7-03（`in.DueAt`）：该卡的产码已在 `d7b060b9` 进 HEAD，第四趟那次
+    # "按 tip 回退到写死 nil 版"随之作废 ⇒ 此处按落地后的字节重锚，并补回当时撤下的 K50b
+    # （原因见文末第六趟）。两格打在**同一行**的两个退路上：凭空造 / 把给的丢掉。
+    ("K50", "凭空造账期（调用方没给，本层把它写成今天到期）", "go", "svc", SVC,
+     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     &now, // 变异注码")],
      "TestBillDeriveLeavesDueAtNull"),
+    ("K50b", "把给的账期丢掉（催收腿读的正是这一格，恒 NULL 就等于永不发信）", "go", "svc", SVC,
+     [("\t\tDueAt:     in.DueAt,", "\t\tDueAt:     nil, // 变异注码")],
+     "TestBillDeriveStoresTheDueAtTheCallerGave"),
     ("K51", "并发撞上「已派生」之后回读的是自己那份", "go", "svc", SVC,
      [("\t\t\treturn nil, fmt.Errorf(\"bill: 仓储报\\\"已派生过\\\"而按 quote_row_id=%s 读不到那一行（约束名与索引不同源？须人工核对）\", row.ID)\n"
        "\t\t}\n\t\treturn billViewOf(existing, true), nil",
@@ -408,10 +444,10 @@ CELLS = [
        "\treturn fmt.Sprintf(\"b_%s_%d\", now.Format(\"20060102\"), seq)")],
      "TestBillKeyGeneratorIsDeterministic"),
     ("K56", "入参结构多带一格 amount（AC② 当场失去对账对象）", "go", "svc", SVC,
-     [("\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n}",
-       "\tQuoteRowID string // 必填：quotes.id（**版本行主键**，不是 quotes.quote_id 逻辑号）\n"
+     [("\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n}",
+       "\tDueAt      *time.Time // 可空：账期；nil ⇒ 库里落 NULL，读作\"账期未定\"（催收侧记 Undated，不参与逾期扫描）\n"
        "\tAmount     float64 // 变异注码\n}")],
-     "TestBillDeriveInputHasOnlyTheRowKey"),
+     "TestBillDeriveInputCarriesRowKeyAndOptionalTerm"),
     ("K57", "派生腿的存储接口多一个写状态的方法（「顺手标成已收」有了入口）", "go", "svc", SVC,
      [("type billStore interface {\n\tAvailable() bool\n",
        "type billStore interface {\n\tAvailable() bool\n\tUpdateStatus(ctx context.Context, id, from, to string) error\n")],
@@ -605,10 +641,21 @@ def apply_cell(originals: dict[str, str], cell) -> dict[str, str]:
     return out
 
 
-def prepare(dst: Path) -> Path:
+def prepare(dst: Path, owned: bool = False) -> Path:
     clone = dst / "clone"
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
+
+    def bail(msg: str) -> None:
+        """克隆已经建起来之后的每一条中止路都先回收再出声。
+
+        收尾闸原来只接在 `main()` 的两个出口上，准备段这六条 raise 直接把整份私有克隆
+        留在临时目录里：2026-09-28 实测一次"工作树有并行泳道未提交字节"的停机留下 72M，
+        而磁盘常态是 98% 满。留在这里的注释就是那次的账。
+        """
+        dispose(dst, owned=owned, keep=False, repo_root=ROOT)
+        raise SystemExit(msg)
+
     r = subprocess.run(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(clone)],
                        capture_output=True, text=True, timeout=900)
     if r.returncode != 0:
@@ -616,22 +663,22 @@ def prepare(dst: Path) -> Path:
     b = subprocess.run(["git", "checkout", "-f", "master"], cwd=clone,
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
-        raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
+        bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
     for rel in MY_ANCHOR_KEYS:
         src = clone / rel
         if not src.exists():
-            raise SystemExit(f"锚点所在文件在 HEAD 里不存在：{rel}")
+            bail(f"锚点所在文件在 HEAD 里不存在：{rel}")
     for rel, needle in MY_ANCHORS:
         n = read(clone / rel).count(needle)
         if n != 1:
-            raise SystemExit(f"装配锚点在 HEAD 的 {rel} 里命中 {n} 次（要恰好 1 次）：{needle!r}\n"
-                             "⇒ 克隆拿到的不是本卡提交的那棵树，或那一处在 HEAD 里被写了两遍。")
+            bail(f"装配锚点在 HEAD 的 {rel} 里命中 {n} 次（要恰好 1 次）：{needle!r}\n"
+                 "⇒ 克隆拿到的不是本卡提交的那棵树，或那一处在 HEAD 里被写了两遍。")
     in_head = 0
     drifted: list[str] = []
     for rel in NEW_FILES:
         src = ROOT / rel
         if not src.exists():
-            raise SystemExit(f"覆盖源缺失：{src}")
+            bail(f"覆盖源缺失：{src}")
         tgt = clone / rel
         if tgt.exists():
             # 提交之后文件已在 HEAD 里：这时**测 HEAD 的字节**，别再拿工作树覆盖 ——
@@ -649,8 +696,8 @@ def prepare(dst: Path) -> Path:
           + ("" if in_head == len(NEW_FILES) else "（余下从工作树取，属未提交态）")
           + f"；装配锚点 {len(MY_ANCHORS)} 处各命中 1 次")
     if drifted:
-        raise SystemExit("这些文件 HEAD 里有、工作树里被改过且**未提交**，电池测的是 HEAD："
-                         + ", ".join(drifted) + "\n先提交这一格再看电池结论。")
+        bail("这些文件 HEAD 里有、工作树里被改过且**未提交**，电池测的是 HEAD："
+             + ", ".join(drifted) + "\n先提交这一格再看电池结论。")
     hostenv = ROOT / US / ".env"
     if hostenv.exists():
         shutil.copy2(hostenv, clone / US / ".env")
@@ -749,7 +796,7 @@ def main() -> int:
     tmp, owned = workdir(args.clone, prefix="p701mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{LOGDIR}")
-    clone = prepare(tmp)
+    clone = prepare(tmp, owned)
 
     def sweep() -> None:
         """除了 --keep，正常出口与"可复现"的停机出口都把私有克隆带走。

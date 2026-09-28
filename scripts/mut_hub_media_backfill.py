@@ -314,7 +314,22 @@ def build_probe(clone: Path, env: dict, pkgs: list[str]) -> list[str]:
     raise SystemExit("[build probe] 摘了 6 轮仍编不过（红是一串互相引用的 WIP）——停机人工判")
 
 
-def prepare(dst: Path, mods: list[str], dels: list[str]) -> Path:
+def prepare(dst: Path, mods: list[str], dels: list[str], owned: bool = False) -> Path:
+
+    def bail(msg: str) -> None:
+        """克隆已经建起来之后的中止路：先回收私有克隆，再出声。
+
+        收尾闸原先只接在 `main()` 的出口上，装架函数里克隆之后的每一条 raise 都把整份
+        私有克隆留在临时目录（一轮 50–70MB，而磁盘常态 98% 满）。2026-09-28 在
+        `mut_bill_p701.py` 上实测一次 DIRTY 停机留 72M，这一族按同一形状补齐。
+        三条**不**走这里："已存在"（那份 clone/ 不是本电池建的）、"克隆失败"（目录归属
+        还没定）、"md5 不一致"（"覆盖后还是不对"的字节只活在克隆里，删了就只剩一句
+        "当时红过"——与 `main()` 侧还原校验同一取舍）。
+        """
+        if (dst / "clone").exists():
+            dispose(dst, owned=owned, keep=False, repo_root=ROOT)
+        raise SystemExit(msg)
+
     clone = dst / "clone"
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
@@ -325,11 +340,13 @@ def prepare(dst: Path, mods: list[str], dels: list[str]) -> Path:
     b = subprocess.run(["git", "checkout", "-f", "master"], cwd=clone,
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
-        raise SystemExit("checkout 失败：" + (b.stdout + b.stderr)[-400:])
+        bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
+    # 覆盖清单由调用方算好传进来（`main()` 里那份和身份行的 `overlay=mods` 是同一个对象）：
+    # `prepare()` 自己再算一遍＝"身份行报一份、装架盖另一份"，两者可以安静地不一致。
     for rel in mods:
         src = ROOT / rel
         if not src.exists():
-            raise SystemExit(f"覆盖源缺失：{src}")
+            bail(f"覆盖源缺失：{src}")
         tgt = clone / rel
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, tgt)
@@ -402,7 +419,7 @@ def main() -> int:
     tmp, owned = workdir(args.clone, prefix="b23mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
-    clone = prepare(tmp, mods, dels)
+    clone = prepare(tmp, mods, dels, owned)
     env = test_env(clone)
     # 控制组之前先证"这两个包能编译"：编不过是别人的未跟踪 WIP 就摘掉它、印一行是谁，
     # 是本批自己的红就停机上报——半棵树上跑出来的 18 格一律不算读数。

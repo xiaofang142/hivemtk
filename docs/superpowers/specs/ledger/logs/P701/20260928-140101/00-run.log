@@ -1,0 +1,13 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-npegdv2f
+逐格日志目录：/private/tmp/p701anchor/hivemtk/docs/superpowers/specs/ledger/logs/P701/20260928-140101
+基线字节：克隆 HEAD `fe3fc059`；本卡文件已在 HEAD 15/15；装配锚点 8 处各命中 1 次
+控制组[svc] CLEAN rc=0 ran=19 PASS=19 skip=0 FAIL=[]
+K50   凭空造账期（调用方没给，本层把它写成今天到期）                                      KILLED ran=19 FAIL=2 rc=1
+K50b  把给的账期丢掉（催收腿读的正是这一格，恒 NULL 就等于永不发信）                           KILLED ran=19 FAIL=1 rc=1
+K56   入参结构多带一格 amount（AC② 当场失去对账对象）                                KILLED ran=19 FAIL=1 rc=1
+
+计数： KILLED=3 SURVIVED=0 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=3
+全部格子已还原（逐文件 md5 与基线一致）
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-npegdv2f/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p701mut-npegdv2f
+
+===== 电池判定：3 格逐格核验，无未登记存活 =====
