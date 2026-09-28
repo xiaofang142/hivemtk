@@ -6,10 +6,20 @@
 "本地跑不出来的红"等于没有回归门，所以本件在本地起一个同样 100 名额的容器
 （见文档里的 docker run 命令），只换 `internal/pkg/testutil/testdb.go` 一份字节做 A/B：
 
-  - A 相 = HEAD（泳道基线）那份**没有** SetMaxOpenConns 的 testdb.go；
-  - B 相 = 本批改成的 SetMaxOpenConns(32)／SetMaxIdleConns(8)。
+  - B 相 = 磁盘上当前那份 testdb.go（带 SetMaxOpenConns(32)／SetMaxIdleConns(8)）；
+  - A 相 = 从 B 相**合成**——按行摘掉那两枚 `sqlDB.SetMax*` 调用，其余字节逐字不动。
 
 其余字节两相逐字相同（同一棵树、同一批脏文件覆盖），所以两相之差只能归因到那两行。
+
+A 相为什么不再取 `git show HEAD:`：那两行随 `1ccfe5be` 已经入库，HEAD 与工作树对这份
+文件是同一笔字节 ⇒ "两相字节相同"会让本件在**任何已落地的树**上直接停机，常驻件退化成
+一次性取证。
+
+要说清合成相与当初那个历史 A 相的**差别**（实测比对 `1ccfe5be^` 那份字节得出，不是推演）：
+历史 A 相连 `testDBMaxOpenConns`／`testDBMaxIdleConns` 两枚常量与那段论证注释都没有，
+合成相只摘两条 `sqlDB.SetMax*` 调用、常量与注释留着 ⇒ 两者不逐字相等。这个差别对本件的
+判据没有影响：未使用的包级常量在 Go 里合法（只有局部变量与 import 未使用才编不过），
+两相之差仍是"有没有那两枚上界调用"这一件事；但引用本件时不许说"A 相＝当初那笔 HEAD"。
 
 判据形状（都是"跑出来的读数"，不是推演）：
   1. A 相在 100 名额容器上必须出现 53300，且 B 相同容器零出现；
@@ -35,12 +45,12 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from battlog import identity  # noqa: E402  同一枚助手：产物里必须写明这轮读的是哪一笔
 from redact import scrub  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 US = ROOT / "user-server"
 TESTDB = US / "internal/pkg/testutil/testdb.go"
-REL = "user-server/internal/pkg/testutil/testdb.go"
 PKG = "./internal/service/"
 NARROW = ("TestSessionChainCSATResolvesDBHandleSynchronously|"
           "TestFallbackVersionResolvesDBHandleSynchronously|"
@@ -55,16 +65,23 @@ DBNAME = os.environ.get("POSTGRES_TEST_DBNAME", "user_db_test")
 SAMPLE_DB = "postgres"      # 两相容器都在的库；采样器与容量读数都走它
 
 
-def head_text() -> str:
-    r = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{REL}"],
-                       capture_output=True, text=True, timeout=300)
-    if r.returncode != 0:
-        raise SystemExit(f"拿不到 HEAD:{REL} rc={r.returncode} {r.stderr[-200:]}")
-    return r.stdout
-
-
 def md5(p: pathlib.Path) -> str:
     return hashlib.md5(p.read_bytes()).hexdigest()
+
+
+def synth_a(text: str) -> str:
+    """按行摘掉两枚 `sqlDB.SetMax*` 调用，得到"无池上界"那一相。
+
+    上界必须恰好吃到 2 行：少一行＝合成规则没落地（两相其实是同一笔字节）；
+    多一行＝摘到了不该摘的语句（两相之差就不再只归因到那两行）。
+    `sqlDB` 在剩下的两条 Exec 里仍被消费 ⇒ 摘完仍可编译，不会造出一相编不过的假 A/B。
+    """
+    out = [ln for ln in text.splitlines(keepends=True)
+           if "sqlDB.SetMaxOpenConns(" not in ln and "sqlDB.SetMaxIdleConns(" not in ln]
+    removed = len(text.splitlines()) - len(out)
+    if removed != 2:
+        raise SystemExit(f"合成 A 相摘到 {removed} 行（应为 2）⇒ 合成规则与磁盘字节不对形")
+    return "".join(out)
 
 
 class Cells:
@@ -72,18 +89,18 @@ class Cells:
 
     def __init__(self):
         self.batch = TESTDB.read_text(encoding="utf-8")
-        self.head = head_text()
-        if self.batch == self.head:
-            raise SystemExit("A/B 两相字节相同：本树里没有池上界改动，测了也是白测")
         if "SetMaxOpenConns" not in self.batch:
             raise SystemExit("B 相（工作树字节）里没有 SetMaxOpenConns，身份判不出来")
-        if "SetMaxOpenConns" in self.head:
-            raise SystemExit("A 相（HEAD 字节）里已有 SetMaxOpenConns，身份判不出来")
-        self.md5 = {"A": hashlib.md5(self.head.encode()).hexdigest(),
+        self.a = synth_a(self.batch)
+        if "SetMaxOpenConns(" not in self.batch or "SetMaxOpenConns" in self.a:
+            raise SystemExit("合成出的 A 相里仍有 SetMaxOpenConns，身份判不出来")
+        if self.a == self.batch:
+            raise SystemExit("A/B 两相字节相同：本树里没有池上界改动，测了也是白测")
+        self.md5 = {"A": hashlib.md5(self.a.encode()).hexdigest(),
                     "B": hashlib.md5(self.batch.encode()).hexdigest()}
 
     def arm(self, cell: str) -> str:
-        TESTDB.write_text(self.head if cell == "A" else self.batch, encoding="utf-8")
+        TESTDB.write_text(self.a if cell == "A" else self.batch, encoding="utf-8")
         got = md5(TESTDB)
         if got != self.md5[cell]:
             raise SystemExit(f"注码未落地：{cell} 期望 {self.md5[cell][:12]} 实得 {got[:12]}")
@@ -183,9 +200,14 @@ def main() -> int:
     logdir.mkdir(parents=True, exist_ok=True)
     summary = logdir / "00-summary.log"
     lines = [f"趟次 tag={args.tag} mode={args.mode}"]
+    # 身份行进 summary（不是 print）：本件不用 tee，产物由 lines 逐行 write_text 而成。
+    # 没有这一行，下面 A/B 两相的 md5 之差就不知道是"哪一笔 HEAD 的 A"对"哪一笔的 B"。
+    lines.append(identity(ROOT, label="基线字节",
+                          extra="｜本趟两相都由这一笔工作树字节派生：B＝磁盘当前字节，"
+                                "A＝B 摘两枚 `sqlDB.SetMax*`（未入库改动计入 B，不计入 A）"))
 
     cells = Cells()
-    lines.append(f"两相身份：A(HEAD 无上限)={cells.md5['A'][:12]} B(本批 32/8)={cells.md5['B'][:12]}")
+    lines.append(f"两相身份：A(合成·摘两枚 SetMax)={cells.md5['A'][:12]} B(磁盘当前 32/8)={cells.md5['B'][:12]}")
     for port in ports:
         r = subprocess.run(["pg_isready", "-h", "127.0.0.1", "-p", port],
                            capture_output=True, text=True, timeout=30)
