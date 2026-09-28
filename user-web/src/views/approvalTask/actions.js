@@ -1,7 +1,8 @@
 // actions.js 待办中心（N-9）的按钮判据：一行的 (kind, status, 认领人) → 能出现哪些动作。
 //
 // 为什么单列一个文件而不是写在模板的 v-if 里：这三条判据里有一条是**产品红线**
-// —— 审批类待办不许有"完成"按钮。它一旦以 v-if 的形式散在模板里，就只能靠人眼 review，
+// —— 审批类待办不许有"完成"也不许有"撤销"（服务端同一判据，见 internal/model/human_task.go
+// 的 humanTaskActionKinds）。它一旦以 v-if 的形式散在模板里，就只能靠人眼 review，
 // 而下一次改模板的人不知道这条为什么在（看起来就是"少写了一个按钮"）。
 // 写在这里它就有用例（tests/unit/approvalTask_actions.test.js）。
 //
@@ -47,11 +48,14 @@ export function rowActions(task, me = '') {
   if (!me) return []
   if (!task || !OPEN_STATUSES.includes(task.status)) return []
   if (task.kind === KIND_APPROVAL) {
-    // 没有 complete：把审批待办"完成"掉，池子里那条消失了而 approval_requests
-    // 仍是 pending —— 流程还挂着，而没人看得见它在等。这就是拆闸门。
-    // 注意后端**允许**对 approval 类调 Complete（humanTaskActionKinds 里 complete 三类通用），
-    // 所以这是一条只在前端的红线；要收到服务端得给那张表加 kind 判据（已进本卡交接清单）。
-    return ['decide', 'cancel']
+    // 只有 decide：审批类待办不许有"完成"也不许有"撤销"。
+    // 把还在等的审批待办从池子里关掉（无论哪一颗），approval_requests 那一行仍是 pending ——
+    // 流程还挂着，而没人看得见它在等。这就是拆闸门。
+    // 这条红线现在**服务端也认**：humanTaskActionKinds 里 complete/cancel 都不再开放给
+    // approval 类，待办侧点下去是 409 且提示会指回 /api/approvals/:id/decide。
+    // 前端因此少给按钮是收敛：不再有人先吃到那一句 409。
+    // 裁决（批准/驳回）不属于这里：它走 approval_requests，落定后由系统收口这条待办。
+    return ['decide']
   }
   if (task.kind === KIND_COLLECTION) return ['complete', 'cancel']
   if (task.kind !== KIND_HANDOFF) return []
@@ -85,12 +89,38 @@ const HUMAN_VERDICTS = ['approved', 'rejected']
 /**
  * 一条审批详情上现在能点哪两个结论。
  *
- * 判据取自后端回显的 allowed_transitions，而不是前端自己再写一张跃迁表：
- * 跃迁归 approval_requests 所有，前端抄一份就是第二个事实源（它会在后端加第四个
- * 状态的那天准时失真）。这里只在这份清单上**做一次交集**，把 expired 筛掉。
+ * 两份后端读数一起用，各管一件事：
+ *  - allowed_transitions：这一行在状态机上去得了哪些态（"pending 能变成 approved"）；
+ *  - decidable_by_human：人现在还有没有机会去落其中一个（那扇已经关上的门）。
+ * 只读第一份会画出"按钮亮着、点下去永远 409"的形状：TTL 到期到清扫器跑上来之间
+ * 最多有一整个轮次（实测 5 分钟），那段时间里状态照旧是 pending、三个目标照单全列，
+ * 而服务端已经不收这次裁决了 —— 流程早就按超时被推走了。
+ *
+ * 取 true 才给按钮（不是"取 false 才收起"）：字段缺失/后端没升级时，宁可少给两颗按钮
+ * （坐席看见的是"这条批不动"，会去查），也不能给一颗点了会写出假审计账的按钮。
+ * 判据本身仍取自后端回显，前端不写死跃迁表：跃迁归 approval_requests 所有，
+ * 抄一份就是第二个事实源（它会在后端加第四个状态的那天准时失真）。
  */
 export function verdictButtons(approval) {
   if (!approval || approval.status !== 'pending') return []
+  if (approval.decidable_by_human !== true) return []
   const allowed = Array.isArray(approval.allowed_transitions) ? approval.allowed_transitions : []
   return HUMAN_VERDICTS.filter((v) => allowed.includes(v))
+}
+
+/**
+ * 按钮为什么不在了 —— 给操作者的一句实话。
+ *
+ * 少了这一句，"没有按钮"读起来像"我没有权限"，而真原因是"这扇门的时间已经用完了"。
+ * 两者的处置方向完全相反（前者去找管理员开权限，后者去修流程的 TTL 或看清扫轮次）。
+ *
+ * 三种情况分三句，其中第三种不许并进第二种：读数**缺失**时断言"时限已过"，
+ * 就是把"没读到"说成"读到了一个坏消息"（同后端"读故障不许伪装成空态"那条口径）。
+ */
+export function verdictBlockReason(approval) {
+  if (!approval || approval.status !== 'pending') return ''
+  const flag = approval.decidable_by_human
+  if (flag === true) return ''
+  if (flag === false) return '挂起时限已过：这条已经按超时收口，本次不会有人工裁决入口。'
+  return '审批详情里没有「现在还能不能人工裁决」这一格读数，本次不提供裁决入口（前后端版本不一致）。'
 }

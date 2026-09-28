@@ -3,8 +3,9 @@
 // 本文件只测**只有真库才能证明**的四件事：
 //  1. 两个部分唯一索引真的被 GORM 标签建成了部分索引（直查 pg_indexes）；
 //  2. 幂等复用/重复待办的边界：pending 占坑、裁决后让坑（AC③ 的库侧前提）；
-//  3. MutatePending 是"加锁读—判态—按列白名单写回"一步，并发下只有一个赢家，
-//     而且**身份列改不动**（改得动就等于用一次合法裁决给别的对象开了门）；
+//  3. MutatePending 是"加锁读—判态与判截止—按列白名单写回"一步，并发下只有一个赢家，
+//     而且**身份列改不动**（改得动就等于用一次合法裁决给别的对象开了门）、
+//     **过期那格也写不动**：写得了就等于让人替时间签一条不存在的决定；
 //  4. 读失败与"查不到"是两种返回：把前者读成后者，闸门就会放行。
 package repository
 
@@ -48,6 +49,17 @@ func newApprovalRow(id, subjectType, subjectID, policyKey, status string) *model
 	return row
 }
 
+// approvalMutateAsOf MutatePending 的判定时钟。
+//
+// 取固定时刻而不是 time.Now()：这批用例整体冻在 2026-09-19 那条时间线上（newApprovalRow
+// 的 pending 行截止 = 基准 +24h），这个钟落在所有截止之前，于是老用例判的仍然是它们
+// 原来判的那件事。更要紧的是：判"过没过期"的时钟若取 Now()，任何人改动夹具里一个
+// expires_at 都会悄悄把这道闸的覆盖面挪走（用例照绿，而它已经不在测截止了）。
+// 截止那一格本身由 TestApprovalRequestRepo_MutatePendingRefusesPastDeadline 专测。
+func approvalMutateAsOf() time.Time {
+	return time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+}
+
 func TestApprovalRequestRepo_NilHandle(t *testing.T) {
 	repo := NewApprovalRequestRepositoryWithDB(nil)
 	if repo.Available() {
@@ -68,7 +80,7 @@ func TestApprovalRequestRepo_NilHandle(t *testing.T) {
 	if _, err := repo.GetPendingBySubject(ctx, "quote", "q1", "quote.send"); err == nil {
 		t.Error("GetPendingBySubject 应报错")
 	}
-	if _, err := repo.MutatePending(ctx, "a1", nil); err == nil {
+	if _, err := repo.MutatePending(ctx, "a1", approvalMutateAsOf(), nil); err == nil {
 		t.Error("MutatePending 应报错")
 	}
 	if _, err := repo.ExpirePendingBatch(ctx, time.Now(), 10); err == nil {
@@ -231,7 +243,7 @@ func TestApprovalRequestRepo_OpenConflictAndRelease(t *testing.T) {
 	}
 
 	// 裁决掉首行后再提交同 (subject, policy) 必须成功 —— 部分索引的另一半。
-	applied, err := repo.MutatePending(ctx, first.ID, func(m *model.ApprovalRequest) {
+	applied, err := repo.MutatePending(ctx, first.ID, approvalMutateAsOf(), func(m *model.ApprovalRequest) {
 		m.Status = model.ApprovalStatusRejected
 	})
 	if err != nil || !applied {
@@ -417,7 +429,7 @@ func TestApprovalRequestRepo_ConcurrentMutateSingleWinner(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			applied, err := repo.MutatePending(ctx, row.ID, func(m *model.ApprovalRequest) {
+			applied, err := repo.MutatePending(ctx, row.ID, approvalMutateAsOf(), func(m *model.ApprovalRequest) {
 				m.Status = model.ApprovalStatusApproved
 				m.DecidedBy = fmt.Sprintf("approver-%d", i)
 				now := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
@@ -486,7 +498,7 @@ func TestApprovalRequestRepo_MutateHoldsRowLockWhileFnRuns(t *testing.T) {
 	releaseNow := func() { once.Do(func() { close(release) }) }
 	defer releaseNow()
 	go func() {
-		_, _ = repo.MutatePending(ctx, row.ID, func(m *model.ApprovalRequest) {
+		_, _ = repo.MutatePending(ctx, row.ID, approvalMutateAsOf(), func(m *model.ApprovalRequest) {
 			m.Status = model.ApprovalStatusApproved
 			close(entered)
 			<-release // 停在事务内部：此刻行锁必须还握着
@@ -552,7 +564,7 @@ func TestApprovalRequestRepo_MutatePendingCASBasics(t *testing.T) {
 	if err := repo.Insert(ctx, row); err != nil {
 		t.Fatalf("写入失败：%v", err)
 	}
-	applied, err := repo.MutatePending(ctx, row.ID, func(m *model.ApprovalRequest) {
+	applied, err := repo.MutatePending(ctx, row.ID, approvalMutateAsOf(), func(m *model.ApprovalRequest) {
 		m.Status = model.ApprovalStatusApproved
 		m.DecidedBy = "alice"
 	})
@@ -573,7 +585,7 @@ func TestApprovalRequestRepo_MutatePendingCASBasics(t *testing.T) {
 	}
 	// 落败方：非 pending 行不再被改写，且不是错误。
 	before, _ := repo.GetByID(ctx, row.ID)
-	applied2, err := repo.MutatePending(ctx, row.ID, func(m *model.ApprovalRequest) {
+	applied2, err := repo.MutatePending(ctx, row.ID, approvalMutateAsOf(), func(m *model.ApprovalRequest) {
 		m.Status = model.ApprovalStatusRejected
 		m.DecisionNote = "被改坏了"
 	})
@@ -587,9 +599,91 @@ func TestApprovalRequestRepo_MutatePendingCASBasics(t *testing.T) {
 	if after.Status != before.Status || after.DecisionNote != before.DecisionNote {
 		t.Errorf("落败的 mutate 不应改动任何列，实际 %+v", after)
 	}
-	missing, err := repo.MutatePending(ctx, "查无此单", nil)
+	missing, err := repo.MutatePending(ctx, "查无此单", approvalMutateAsOf(), nil)
 	if err != nil || missing {
 		t.Errorf("不存在期望 (false,nil)，实际 (%v,%v)", missing, err)
+	}
+}
+
+// TestApprovalRequestRepo_MutatePendingRefusesPastDeadline 截止闸在仓储层的形状：
+// pending 但已过 expires_at 的行**不许**被 CAS 翻成任何结论。
+//
+// 为什么判据要在仓储而不是 service 里先读一次再判：清扫器一轮要几分钟，这段时间里
+// "库里还是 pending"与"还没过期"是两件事，先读后写的中间地带正好是那条假账落下的位置 ——
+// 人签了字，而流程早已按超时被推走（见 service 的 ResolveOnFire 给 pending 且已过
+// expires_at 的行回 derived=ttl）。判据进同一条 CAS，"这一次判定"才是同一件事。
+//
+// 边界与 ExpirePendingBatch 严格对齐（`expires_at <= now` 算过期）：两处若一边写 `<`、
+// 一边写 `<=`，压在截止那一秒的行就会"人批得动、清扫也翻得了"，两个结论各写一次。
+func TestApprovalRequestRepo_MutatePendingRefusesPastDeadline(t *testing.T) {
+	repo := NewApprovalRequestRepositoryWithDB(setupApprovalTestDB(t))
+	ctx := context.Background()
+
+	deadline := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	mk := func(id string, expires *time.Time) {
+		t.Helper()
+		row := newApprovalRow(id, "quote", id, "quote.send", model.ApprovalStatusPending)
+		row.ResumeToken = "rt_" + id
+		row.ExpiresAt = expires
+		if err := repo.Insert(ctx, row); err != nil {
+			t.Fatalf("写入 %s 失败：%v", id, err)
+		}
+	}
+	// fnCalled 记下闭包有没有被跑到。这道截止闸在两处判据上重合（锁内快照 + 写回那条
+	// WHERE 的 expires_at 条件），而两处的分工只有这一个读数能分开：变异实测单撤锁内那处
+	// 会在下面第 1 格转红，单撤 SQL 那处整包仍绿，两处同撤才红。也就是说"库里的最终形状"
+	// 量不到锁内那道闸——能量到它的只有"有没有拿一条已过期的行去构造过写回数据"这句话。
+	var fnCalled bool
+	decide := func(id string, asOf time.Time) (bool, error) {
+		fnCalled = false
+		return repo.MutatePending(ctx, id, asOf, func(m *model.ApprovalRequest) {
+			fnCalled = true
+			m.Status = model.ApprovalStatusApproved
+			m.DecidedBy = "late-approver"
+		})
+	}
+
+	// 1. 恰好压在边界那一秒：与清扫器同一个判据 ⇒ 不许裁决。
+	mk("apr_deadline_on", &deadline)
+	applied, err := decide("apr_deadline_on", deadline)
+	if err != nil || applied {
+		t.Errorf("截止时刻当场裁决 = (%v,%v)，期望 (false,nil)（与 ExpirePendingBatch 的 <= 同边界）", applied, err)
+	}
+	if fnCalled {
+		t.Error("已过截止的行仍被交去构造写回数据：快照那道闸没在锁内拦住，写回 WHERE 成了唯一防线")
+	}
+	got, err := repo.GetByID(ctx, "apr_deadline_on")
+	if err != nil || got == nil {
+		t.Fatalf("回读失败：(%v,%v)", got, err)
+	}
+	if got.Status != model.ApprovalStatusPending || got.DecidedBy != "" || got.DecidedAt != nil {
+		t.Errorf("被拒的裁决不该在行上留下任何痕迹，实际 %s/%q/%v", got.Status, got.DecidedBy, got.DecidedAt)
+	}
+
+	// 2. 早一秒仍然批得动：这道闸拦的是"过期"，不是"pending 不许被写"。
+	//    少了这一格，判据写成过期两小时才算过期那类过严版式也能全绿。
+	mk("apr_deadline_before", &deadline)
+	if applied, err := decide("apr_deadline_before", deadline.Add(-time.Second)); err != nil || !applied {
+		t.Errorf("截止前一秒应可裁决 = (%v,%v)", applied, err)
+	}
+
+	// 3. 没有截止时间的行不受这道闸影响（expires_at IS NULL：这条路本来就不存在）。
+	mk("apr_no_deadline", nil)
+	if applied, err := decide("apr_no_deadline", time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil || !applied {
+		t.Errorf("无截止行应可裁决 = (%v,%v)", applied, err)
+	}
+
+	// 4. 不给钟就等于取消这道闸：必须当场报错，而不是拿 time.Now() 兜底、更不是静默放行。
+	//    这一格是那个 sentinel 存在性的唯一证据 —— 兜底版与放行版在前面三格里长得一样。
+	mk("apr_no_clock", &deadline)
+	if applied, err := decide("apr_no_clock", time.Time{}); !errors.Is(err, ErrApprovalAsOfMissing) || applied {
+		t.Errorf("缺判定时钟 = (%v,%v)，期望 (false, ErrApprovalAsOfMissing)", applied, err)
+	}
+	// 报错那格不许已经改过行：判据在开事务之前，压根没进 SQL。
+	if got, err := repo.GetByID(ctx, "apr_no_clock"); err != nil || got == nil {
+		t.Fatalf("回读失败：(%v,%v)", got, err)
+	} else if got.Status != model.ApprovalStatusPending || got.DecidedBy != "" {
+		t.Errorf("缺时钟的报错不该动过行：%s/%q", got.Status, got.DecidedBy)
 	}
 }
 
@@ -611,7 +705,7 @@ func TestApprovalRequestRepo_MutateCannotRepointIdentity(t *testing.T) {
 		t.Fatalf("写入失败：%v", err)
 	}
 
-	applied, err := repo.MutatePending(ctx, row.ID, func(m *model.ApprovalRequest) {
+	applied, err := repo.MutatePending(ctx, row.ID, originCreated, func(m *model.ApprovalRequest) {
 		m.Status = model.ApprovalStatusApproved
 		m.DecidedBy = "bob"
 		m.DecisionNote = "批了"
@@ -791,7 +885,7 @@ func TestApprovalRequestRepo_ReadFailureIsNotNotFound(t *testing.T) {
 	if got, err := repo.GetByResumeToken(ctx, "rt_any"); err == nil {
 		t.Errorf("GetByResumeToken 期望报错，实际 (%v,nil)", got)
 	}
-	if _, err := repo.MutatePending(ctx, row.ID, nil); err == nil {
+	if _, err := repo.MutatePending(ctx, row.ID, approvalMutateAsOf(), nil); err == nil {
 		t.Error("MutatePending 期望报错（故障时绝不能报 applied=true）")
 	}
 	if _, err := repo.ExpirePendingBatch(ctx, time.Now(), 10); err == nil {

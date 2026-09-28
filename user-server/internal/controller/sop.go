@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -185,7 +187,7 @@ func (c *SOPController) Execute(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
-	response.Success(ctx, exec, "执行成功")
+	response.Success(ctx, redactExecution(exec), "执行成功")
 }
 
 // Step 单步推进
@@ -200,7 +202,7 @@ func (c *SOPController) Step(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
-	response.Success(ctx, exec, "推进成功")
+	response.Success(ctx, redactExecution(exec), "推进成功")
 }
 
 // Pause 暂停
@@ -254,10 +256,17 @@ func (c *SOPController) GetExecution(ctx *gin.Context) {
 	}
 	exec, err := c.svc.GetExecution(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.NotFound(ctx, "执行不存在")
+		// "查不到"与"这次读失败"分两格回（服务侧本来就分了 ErrSOPExecNotFound 与故障）：
+		// 都写成 404 时，一次 DB 抖动在界面上读起来就是"这条执行被人删了"，
+		// 而运维会去查谁删的。与待办层、审批层同一口径。
+		if errors.Is(err, service.ErrSOPExecNotFound) {
+			response.NotFound(ctx, "执行不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
-	response.Success(ctx, exec, "查询成功")
+	response.Success(ctx, redactExecution(exec), "查询成功")
 }
 
 // ListExecutions 列表
@@ -274,7 +283,52 @@ func (c *SOPController) ListExecutions(ctx *gin.Context) {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
+	// 这里就地换 map 而不复制切片：这一份 list 是本次请求刚从仓储扫出来的私有数据，
+	// 而详情那条要复制副本是因为 service 手上还留着同一个对象（见 redactApprovalToken）。
+	for i := range list {
+		list[i].ExecutionData = redactApprovalToken(list[i].ExecutionData)
+	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
+}
+
+// approvalTokenMask 执行数据里恢复凭证的对外替换值。
+//
+// 为什么这批出口必须遮：resume_token 在 approval_requests 上是 `json:"-"`，model 层
+// 还有一整条用例钉住"它不出现在任何响应体里"（internal/router/approval_routes_test.go
+// 列的第 1 条边界）。但审批桥会把裁决结论**连同凭证**并进 sop_executions.execution_data
+// —— 那是卡面要求（流程要能在 checkpoint 里凭它续跑，见 service.ApprovalOutcomeTokenKey
+// 与 TestApprovalResumeE2E 里那条 checkpoint 断言）。于是同一个值换了一张表就又从
+// /sop/executions* 出去了，而这两个读端点任何登录用户都能读：换表不等于换了信任边界。
+//
+// 为什么遮成固定串而不是删掉这一格：删掉后"这条流程从没等过审批"与"等过、凭证被遮"
+// 在响应里长得一模一样，而运维要问的正好是后者。
+const approvalTokenMask = "[redacted]"
+
+// redactApprovalToken 返回遮掉恢复凭证的执行数据。
+//
+// 没有这一格时原样返回：绝大多数执行记录根本没有审批产物，为它们各建一份 map 是白付的分配。
+// 有则**必须复制**：入参可能是 service 手上那份活对象（Execute/Step 返回的就是它），
+// 就地改键会把续跑要读的那一格一起改掉，而那是一次跨请求的进程内副作用。
+func redactApprovalToken(data model.JSONMap) model.JSONMap {
+	if _, ok := data[service.ApprovalOutcomeTokenKey]; !ok {
+		return data
+	}
+	out := make(model.JSONMap, len(data))
+	for k, v := range data {
+		out[k] = v
+	}
+	out[service.ApprovalOutcomeTokenKey] = approvalTokenMask
+	return out
+}
+
+// redactExecution 返回一份遮了凭证的执行记录副本。
+func redactExecution(exec *model.SOPExecution) *model.SOPExecution {
+	if exec == nil {
+		return nil
+	}
+	out := *exec
+	out.ExecutionData = redactApprovalToken(exec.ExecutionData)
+	return &out
 }
 
 // MatchByIntent 意图匹配

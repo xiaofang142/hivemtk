@@ -230,12 +230,21 @@ var humanTaskActionTargets = map[string]map[string]string{
 
 // humanTaskActionKinds 哪个动作允许用在哪类待办上（C3 那句"状态机不同"的落点）。
 //
+// 判据的问句是**"人在界面上能不能对这个动作动手"**，不是"这一行能不能变成那个状态"。
+// 后者归 HumanTaskCloseTarget（系统按业务身份收口用的就是它），两者共用一张表的话，
+// 关掉一类待办的对外动作会连带把系统收口的路也切断 —— 那正是审批类要避免的方向。
+//
 // claim / release 只对 conversation_handoff 开：会话所有权可以抢、可以退，
 // 而**审批不可抢占只能裁决**（C3 原文），把"认领"开放给审批类待办会造出第二种批法 ——
 // "我认领了所以只有我能批"，而 approval_requests 那边根本不认这件事。
 // 催收升级同理：它是一张单据，处理它的人由裁决动作留下，不靠抢。
 //
-// complete / cancel 三类都开：都表示"这件事不用再等人了"。
+// complete / cancel 开给会话类与催收类，**不开给审批类**（这是 C3 那条红线的另一半）：
+// 审批类待办是 approval_requests 那一行在待办池里的投影，它只能随那一行落定而收口
+// （批准/驳回 → CloseForApproval 完成它，超时 → 同一出口撤销它）。人在这里点"完成"
+// 或"撤销"，池子里那条消失了而审批行仍是 pending —— 挂着的流程没人叫醒、也没人看得见它在等，
+// 等于把闸门拆了还留一句"处理完了"。实测过一次：坐席账号 POST /complete 拿到 200，
+// 审批行原样 pending（这一条原本只在前端 actions.js 里是红线，服务端表里三类通用）。
 var humanTaskActionKinds = map[string]map[string]bool{
 	HumanTaskActionClaim: {
 		HumanTaskKindConversationHandoff: true,
@@ -245,14 +254,30 @@ var humanTaskActionKinds = map[string]map[string]bool{
 	},
 	HumanTaskActionComplete: {
 		HumanTaskKindConversationHandoff:  true,
-		HumanTaskKindApproval:             true,
 		HumanTaskKindCollectionEscalation: true,
 	},
 	HumanTaskActionCancel: {
 		HumanTaskKindConversationHandoff:  true,
-		HumanTaskKindApproval:             true,
 		HumanTaskKindCollectionEscalation: true,
 	},
+}
+
+// HumanTaskCloseTarget 系统侧按业务身份收口一条待办时的跃迁判据：只问状态机在此刻
+// 有没有这条路，**不问**这个动作对不对那一类待办开放。
+//
+// 为什么不复用 HumanTaskTransitionAllowed：调用方（审批裁决落定后的 CloseForApproval）
+// 不是"一个人在选按钮"，而是"那件业务已经有结论了，投影该收口"。它的合法性来自业务行
+// 落定这件事，若它也过对外动作表，把审批类的 complete 关掉就等于把"批完之后待办消失"
+// 这条正常路径一起关掉 —— 那会是比原缺陷更糟的修法（实测：改完表后 CloseForApproval
+// 静默 no-op，待办永远留在池子里）。
+// 终态仍拦得住：两个终态在 humanTaskActionTargets 里没有出边。
+func HumanTaskCloseTarget(from, action string) (to string, ok bool) {
+	targets, exists := humanTaskActionTargets[from]
+	if !exists {
+		return "", false
+	}
+	to, ok = targets[action]
+	return to, ok
 }
 
 // HumanTaskSLAColumns 三档 SLA 列的库列名，顺序固定（同一次输入的两次判读必须给出同一份清单）。
@@ -287,6 +312,14 @@ func HumanTaskTransitionAllowed(kind, from, action string) (to string, ok bool) 
 		return "", false
 	}
 	return to, true
+}
+
+// HumanTaskActionAllowed 报告这个动作对不对那一类待办开放（不看当前状态）。
+//
+// 存在的理由只有一个：给错误提示说**准的那半句**。未知 kind / 未知 action 一律 false，
+// 与 HumanTaskTransitionAllowed 同一偏置（表里没有这条路就是不许）。
+func HumanTaskActionAllowed(kind, action string) bool {
+	return humanTaskActionKinds[action][kind]
 }
 
 // HumanTaskSLAField 返回该 kind 唯一可填的 SLA 列的库列名；未知 kind 返回空串。

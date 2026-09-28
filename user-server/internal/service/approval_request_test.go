@@ -38,6 +38,10 @@ type fakeApprovalRepo struct {
 	expireSawLimit int
 	mutateErr      error
 	mutateApplied  bool
+	// mutateSawRow 留下 fn 改过的那份内存行（真库里由事务写回，假仓储没有可回读的行）。
+	// 记下它是为了断"一次裁决只读一次钟"：判截止的 asOf 与写进 decided_at 的值必须同值。
+	mutateSawAsOf time.Time
+	mutateSawRow  *model.ApprovalRequest
 
 	calls struct {
 		insert, getPending, getByID, getByToken, mutate, expire int
@@ -79,8 +83,9 @@ func (f *fakeApprovalRepo) GetPendingBySubject(context.Context, string, string, 
 	return f.getPendingRow, f.getPendingErr
 }
 
-func (f *fakeApprovalRepo) MutatePending(_ context.Context, _ string, fn func(*model.ApprovalRequest)) (bool, error) {
+func (f *fakeApprovalRepo) MutatePending(_ context.Context, _ string, asOf time.Time, fn func(*model.ApprovalRequest)) (bool, error) {
 	f.calls.mutate++
+	f.mutateSawAsOf = asOf
 	if f.mutateErr != nil {
 		return false, f.mutateErr
 	}
@@ -89,7 +94,9 @@ func (f *fakeApprovalRepo) MutatePending(_ context.Context, _ string, fn func(*m
 		return false, nil
 	}
 	if fn != nil {
-		fn(&model.ApprovalRequest{ID: "apr_fake", Status: model.ApprovalStatusPending})
+		row := &model.ApprovalRequest{ID: "apr_fake", Status: model.ApprovalStatusPending}
+		fn(row)
+		f.mutateSawRow = row
 	}
 	return true, nil
 }
@@ -731,6 +738,195 @@ func TestApprovalService_DecideOnDecidedRowReturnsCurrentWithItsAnswer(t *testin
 	}
 	if got == nil || got.Status != model.ApprovalStatusRejected || got.DecidedBy != "alice" || got.DecisionNote != "第一次拒" {
 		t.Fatalf("应带回已被拒的那一条（含其说明），实际 %+v", got)
+	}
+}
+
+// TestApprovalService_DecideAfterDeadlineIsRefused 钉的是过了截止、清扫器还没跑上来的那段窗口。
+//
+// 不拦就会落下的形状：TTL 与清扫轮次同量级，人在刚过截止那一分钟点"批准"照样拿到 200，
+// 库里落下 `decided_by=<人的账号>` + `decided_at=<刚才>`；而流程那边早就被审批桥按
+// "超时"派生推走了（ResolveOnFire 对 pending 且已过 expires_at 回 derived=ttl）。
+// 结果是一条**不存在的决定**进了审计账本，而下一个读它的人据此认为"这个人批了它"。
+//
+// 这一格断四件事，缺一不可：
+//  1. 报的是 ErrApprovalDecideTooLate（不是 AlreadyDecided：根本没有第二个人做过决定）；
+//  2. 那一行原样不动（pending、没有 decided_by/decided_at）——不是"写完再报错"；
+//  3. 被拒之后清扫器仍能把这一行翻成 expired，超时率照旧算得出来（拒绝裁决 ≠ 弃行）；
+//  4. 边界前一秒仍批得动（否则这道闸就成了"人永远不能裁决"，那比假账更糟）。
+func TestApprovalService_DecideAfterDeadlineIsRefused(t *testing.T) {
+	base := time.Date(2026, 9, 19, 10, 0, 0, 0, time.UTC)
+	advance := freezeApprovalClock(t, base)
+	svc, repo, _ := newApprovalServiceWithDB(t, nil)
+	ctx := context.Background()
+
+	// 边界前一秒：批得动。放在同一用例的最前面，是为了让它成为后面那格的对照 ——
+	// 只有"晚一秒拒、早一秒过"这一对同时成立，才说得上"拦的是截止，不是裁决"。
+	row, _, err := svc.Submit(ctx, ApprovalSubmitInput{
+		SubjectType: "quote", SubjectID: "q-late", PolicyKey: "quote.send", TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("入队失败：%v", err)
+	}
+	if row.ExpiresAt == nil || !row.ExpiresAt.Equal(base.Add(time.Hour)) {
+		t.Fatalf("前置断了：expires_at = %v，期望 %v", row.ExpiresAt, base.Add(time.Hour))
+	}
+	advance(time.Hour - time.Second)
+	if decided, err := svc.Decide(ctx, row.ID, ApprovalApprove, "early-bird", ""); err != nil {
+		t.Fatalf("截止前一秒的裁决应成功：%v", err)
+	} else if decided.DecidedAt == nil || !decided.DecidedAt.Equal(base.Add(time.Hour-time.Second)) {
+		t.Errorf("decided_at 应等于当时的时钟值，实际 %v", decided.DecidedAt)
+	}
+
+	second, _, err := svc.Submit(ctx, ApprovalSubmitInput{
+		SubjectType: "quote", SubjectID: "q-late-2", PolicyKey: "quote.send", TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("第二条入队失败：%v", err)
+	}
+	// 把钟拨到**这一行自己的**截止时刻：advance 是累加的，硬写时长会让两次 Submit 之间的
+	// 累计把边界挪走（本用例第一轮就是这么错过边界的 —— 那时 now 还早着，裁决自然成功，
+	// 看起来像"那道闸没生效"）。按行上带回的截止算差值，边界就与夹具绑定在同一处。
+	if second.ExpiresAt == nil {
+		t.Fatal("前置断了：入队没带回截止时间")
+	}
+	advance(second.ExpiresAt.Sub(loadApprovalNowFn()())) // now 恰好落在 expires_at 上
+	got, err := svc.Decide(ctx, second.ID, ApprovalApprove, "late-approver", "我以为还来得及")
+	if !errors.Is(err, ErrApprovalDecideTooLate) {
+		t.Fatalf("截止当场补批期望 ErrApprovalDecideTooLate，实际 %v", err)
+	}
+	if got == nil || got.Status != model.ApprovalStatusPending {
+		t.Fatalf("要带回当前行且它仍是 pending（运维据此知道这一行在等清扫），实际 %+v", got)
+	}
+	back, err := repo.GetByID(ctx, second.ID)
+	if err != nil || back == nil {
+		t.Fatalf("回读失败：(%v,%v)", back, err)
+	}
+	if back.Status != model.ApprovalStatusPending || back.DecidedBy != "" || back.DecidedAt != nil || back.DecisionNote != "" {
+		t.Errorf("被拒的裁决在行上留了痕（= 审计里多出一条不存在的决定）：%s/%q/%v/%q",
+			back.Status, back.DecidedBy, back.DecidedAt, back.DecisionNote)
+	}
+
+	// 拒了不等于弃行：清扫器随后仍能把这一行按超时翻走，超时率统计不缺这一格。
+	flipped, err := svc.ExpireOverdue(ctx, 10)
+	if err != nil {
+		t.Fatalf("清扫失败：%v", err)
+	}
+	swept := false
+	for _, r := range flipped {
+		if r != nil && r.ID == second.ID {
+			swept = true
+		}
+	}
+	if !swept {
+		t.Fatalf("过期那条应被本轮清扫翻走，实际翻了 %d 条", len(flipped))
+	}
+	if after, e := repo.GetByID(ctx, second.ID); e != nil || after == nil ||
+		after.Status != model.ApprovalStatusExpired || after.DecidedBy != model.ApprovalDecidedByTTL {
+		t.Errorf("清扫后的行不对： %+v (%v)", after, e)
+	}
+}
+
+// TestApprovalService_DecideReadsTheClockOnce 一次裁决只许读一次时钟。
+//
+// 判截止（传进 CAS 的 asOf）与写 decided_at 若各读一次 now，卡在边界的那一次就会
+// 留下"用 A 判定没过期、盖上 B 时刻的章"这种两个数互相矛盾的账 —— 而事后复盘正是
+// 拿 decided_at 与 expires_at 比对来回答"这个人到底是在截止前还是后批的"。
+// 真库里两个值都等于"当时"，差别看不出来，所以这一格走假仓储把两份读数都摘下来比。
+//
+// 这里刻意不用 freezeApprovalClock：它每次读返回的都是同一个值（见那个 helper 的
+// storeApprovalNowFn 那一行），于是"读两次"在任何一份值上都看不出来，本用例就只剩
+// "两个数相等"这一条永真式。改成**按次计数**的钟，读数次数本身才成为断言对象。
+func TestApprovalService_DecideReadsTheClockOnce(t *testing.T) {
+	at := time.Date(2026, 9, 19, 11, 0, 0, 0, time.UTC)
+	reads := 0
+	previous := loadApprovalNowFn()
+	storeApprovalNowFn(func() time.Time {
+		reads++
+		return at
+	})
+	t.Cleanup(func() { storeApprovalNowFn(previous) })
+
+	// getByIDRow 是裁决落库后那次回读的出口：少了它，Decide 会在"写成功却查不到行"
+	// 这条分支上返回 ErrApprovalNotFound，本用例连比较两份读数的机会都拿不到。
+	repo := &fakeApprovalRepo{
+		available:     true,
+		mutateApplied: true,
+		getByIDRow:    &model.ApprovalRequest{ID: "apr_fake", Status: model.ApprovalStatusPending},
+	}
+	svc := NewApprovalRequestService(repo, nil)
+
+	if _, err := svc.Decide(context.Background(), "apr_fake", ApprovalApprove, "alice", ""); err != nil {
+		t.Fatalf("裁决失败：%v", err)
+	}
+	if reads != 1 {
+		t.Errorf("一次裁决读了 %d 次时钟，期望 1（判截止与盖章分两次读，边界上就会对不上）", reads)
+	}
+	if repo.mutateSawAsOf.IsZero() {
+		t.Fatal("CAS 没拿到判定时钟（那道截止闸等于不存在）")
+	}
+	if !repo.mutateSawAsOf.Equal(at) {
+		t.Errorf("判定时钟 = %v，期望冻结值 %v", repo.mutateSawAsOf, at)
+	}
+	if repo.mutateSawRow == nil || repo.mutateSawRow.DecidedAt == nil {
+		t.Fatalf("裁决没写 decided_at：%+v", repo.mutateSawRow)
+	}
+	if !repo.mutateSawRow.DecidedAt.Equal(repo.mutateSawAsOf) {
+		t.Errorf("decided_at(%v) 与判截止用的钟(%v)不是同一次读数", repo.mutateSawRow.DecidedAt, repo.mutateSawAsOf)
+	}
+}
+
+// TestApprovalService_DecidableByHumanFieldReads 给读端点的那份"现在还能不能批"。
+//
+// 它与 AllowedTransitions 必须在同一行上给出**不同**的答案，否则这个字段是白加的：
+// pending 且已过截止的那一格就是它们分开的地方（状态机照旧给三个目标，裁决口已关）。
+func TestApprovalService_DecidableByHumanFieldReads(t *testing.T) {
+	at := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	advance := freezeApprovalClock(t, at)
+	svc := NewApprovalRequestService(&fakeApprovalRepo{available: true}, nil)
+	row := func(status string, expires *time.Time) *model.ApprovalRequest {
+		return &model.ApprovalRequest{ID: "apr_x", Status: status, ExpiresAt: expires}
+	}
+	atPtr, pastPtr, futurePtr := at, at.Add(-time.Minute), at.Add(time.Minute)
+
+	cases := []struct {
+		name string
+		row  *model.ApprovalRequest
+		want bool
+	}{
+		{"pending 未到期", row(model.ApprovalStatusPending, &futurePtr), true},
+		{"pending 已过截止", row(model.ApprovalStatusPending, &pastPtr), false},
+		{"pending 恰好压在截止那一秒", row(model.ApprovalStatusPending, &atPtr), false},
+		{"pending 无截止时间", row(model.ApprovalStatusPending, nil), true},
+		{"已批准", row(model.ApprovalStatusApproved, &futurePtr), false},
+		{"已拒", row(model.ApprovalStatusRejected, &futurePtr), false},
+		{"清扫落定后的已过期", row(model.ApprovalStatusExpired, &pastPtr), false},
+		{"nil 行", nil, false},
+	}
+	for _, c := range cases {
+		if got := svc.DecidableByHuman(c.row); got != c.want {
+			t.Errorf("%s：DecidableByHuman = %v，期望 %v", c.name, got, c.want)
+		}
+	}
+	// 时钟往前推，同一行要从"能批"翻成"不能批"：证明判的是当下，不是入参里的某个静态值。
+	moving := row(model.ApprovalStatusPending, &futurePtr)
+	if !svc.DecidableByHuman(moving) {
+		t.Fatal("前置断了：这一秒还该批得动")
+	}
+	advance(2 * time.Hour)
+	if svc.DecidableByHuman(moving) {
+		t.Error("时钟已过截止，仍报可批（字段没读服务端时钟）")
+	}
+	// 同一行上两个答案分开：AllowedTransitions 只管状态机，它不知道截止这回事。
+	if len(svc.AllowedTransitions(model.ApprovalStatusPending)) == 0 {
+		t.Error("前置断了：pending 的状态机该有目标态")
+	}
+	if svc.DecidableByHuman(moving) {
+		t.Error("两个读数此刻该分开")
+	}
+	// nil 服务不许 panic（装配层会对着未装配的运行时调它）。
+	var nilSvc *ApprovalRequestService
+	if nilSvc.DecidableByHuman(moving) {
+		t.Error("未装配的运行时里没有可批的审批")
 	}
 }
 

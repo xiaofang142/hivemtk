@@ -285,7 +285,9 @@
           v-else-if="decide.approval"
           class="hint"
         >
-          这条审批已经不需要人来裁决了（已落定或已由清扫器按 TTL 收口）。
+          <!-- 两句话不能合成一句：「时限已过」时这条既没落定也没被清扫收口，
+               而处置方向是去修流程的 TTL；括号里那句说的是另一件事。 -->
+          {{ decideHint }}
         </p>
 
         <div class="decide-actions">
@@ -319,6 +321,7 @@ import {
   hasRejectReason,
   rowActions,
   slaField,
+  verdictBlockReason,
   verdictButtons
 } from './actions'
 
@@ -396,6 +399,11 @@ const verdictLabel = (v) => VERDICT_LABELS[v] || v
 const subjectText = (a) => (a ? `${a.subject_type}/${a.subject_id}` : '—')
 
 const verdicts = computed(() => verdictButtons(decide.approval))
+// 没有按钮时要说得出为什么没有：只把按钮收起来，读的人看到的是"这条点不动"，
+// 而他会去查的方向（权限？数据坏了？）和真原因（时限已过）往往不是同一个。
+const decideHint = computed(() =>
+  verdictBlockReason(decide.approval) || '这条审批已经不需要人来裁决了（已落定或已由清扫器按 TTL 收口）。'
+)
 
 function formatTime(value) {
   if (!value) return '—'

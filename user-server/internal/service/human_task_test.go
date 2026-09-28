@@ -739,12 +739,15 @@ func TestHumanTaskSvc_CompleteRecordsCompleter(t *testing.T) {
 }
 
 // 未认领也能直接完成（坐席在待办中心一次性处理完，不走认领那一步）。
+//
+// 用会话类：审批类不许从待办侧完成是条红线，单独由
+// TestHumanTaskSvc_ApprovalTaskCannotBeClosedFromTheTaskSide 管。
 func TestHumanTaskSvc_CompleteFromPending(t *testing.T) {
 	database := setupHumanTaskSvcDB(t)
 	svc := newHumanTaskSvc(t, database, &stubHumanTaskCfg{value: 5})
 	ctx := context.Background()
-	apr := mustSubmit(t, svc, approvalSubmitInput("apr_direct", humanTaskFixedNow.Add(time.Hour)))
-	done, err := svc.Complete(ctx, apr.ID, "boss-1")
+	h := mustSubmit(t, svc, handoffSubmitInput("sess_direct"))
+	done, err := svc.Complete(ctx, h.ID, "boss-1")
 	if err != nil {
 		t.Fatalf("pending 直接完成失败：%v", err)
 	}
@@ -760,12 +763,12 @@ func TestHumanTaskSvc_CancelRecordsReason(t *testing.T) {
 	useHumanTaskClock(t, humanTaskFixedNow)
 	ctx := context.Background()
 
-	apr := mustSubmit(t, svc, approvalSubmitInput("apr_cancel", humanTaskFixedNow.Add(time.Hour)))
-	got, err := svc.Cancel(ctx, apr.ID, "boss-1", "策略改为自动放行")
+	h := mustSubmit(t, svc, handoffSubmitInput("sess_cancel"))
+	got, err := svc.Cancel(ctx, h.ID, "boss-1", "客户已自行解决")
 	if err != nil {
 		t.Fatalf("撤销失败：%v", err)
 	}
-	if got.Status != model.HumanTaskStatusCancelled || got.CancelReason != "策略改为自动放行" {
+	if got.Status != model.HumanTaskStatusCancelled || got.CancelReason != "客户已自行解决" {
 		t.Errorf("撤销结果 = %s/%q", got.Status, got.CancelReason)
 	}
 	if got.CancelledAt == nil || !got.CancelledAt.Equal(humanTaskFixedNow) {
@@ -773,8 +776,53 @@ func TestHumanTaskSvc_CancelRecordsReason(t *testing.T) {
 	}
 	// 撤销长标题/长理由的边界：理由比标题长（撤销说明往往就是那段话）。
 	longReason := strings.Repeat("由", 2000)
-	if _, err := svc.Cancel(ctx, apr.ID, "boss-1", longReason); err == nil {
+	if _, err := svc.Cancel(ctx, h.ID, "boss-1", longReason); err == nil {
 		t.Error("已落定的待办竞然再次撤销成功")
+	}
+}
+
+// 审批类待办不许从待办侧完成或撤销。
+//
+// 不修就会落到的形状：坐席账号对一条 approval 待办 POST /complete 拿到 200，待办从池子里消失，
+// 而 approval_requests 那一行原样停在 pending —— 挂着的流程既没人叫醒也再不显形，
+// 等于把审批闸门拆了还留一句"处理完了"。这一格把两件事钉住：
+//  1. 两个动词都拒，且错误仍是 ErrHumanTaskTransition（对外映射 409，不是 404/500）；
+//  2. 提示必须说清"去哪儿点"（裁决口）而不是"这个状态做不了"——
+//     后者会把人引向刷新重试，而刷新永远也不会让那颗按钮出现。
+//
+// 待办行必须原地不动（不是"报错但已经改了一半"）。
+func TestHumanTaskSvc_ApprovalTaskCannotBeClosedFromTheTaskSide(t *testing.T) {
+	database := setupHumanTaskSvcDB(t)
+	svc := newHumanTaskSvc(t, database, &stubHumanTaskCfg{value: 5})
+	ctx := context.Background()
+
+	apr := mustSubmit(t, svc, approvalSubmitInput("apr_side_close", humanTaskFixedNow.Add(time.Hour)))
+
+	if got, err := svc.Complete(ctx, apr.ID, "boss-1"); !errors.Is(err, ErrHumanTaskTransition) {
+		t.Errorf("审批待办从待办侧完成 = (%v,%v)，期望 ErrHumanTaskTransition", got, err)
+	} else if !strings.Contains(err.Error(), "/api/approvals/") ||
+		!strings.Contains(err.Error(), apr.SubjectID) {
+		t.Errorf("完成的提示该指回裁决口，实际：%q", err.Error())
+	}
+	if got, err := svc.Cancel(ctx, apr.ID, "boss-1", "手滑"); !errors.Is(err, ErrHumanTaskTransition) {
+		t.Errorf("审批待办从待办侧撤销 = (%v,%v)，期望 ErrHumanTaskTransition", got, err)
+	} else if !strings.Contains(err.Error(), "/api/approvals/") {
+		t.Errorf("撤销的提示该指回裁决口，实际：%q", err.Error())
+	}
+
+	back, err := svc.Get(ctx, apr.ID)
+	if err != nil || back == nil {
+		t.Fatalf("回读失败：%v", err)
+	}
+	if back.Status != model.HumanTaskStatusPending || back.AssigneeUserID != "" || back.CompletedAt != nil {
+		t.Errorf("被拒的动作改写了待办：%s/%q/%v", back.Status, back.AssigneeUserID, back.CompletedAt)
+	}
+
+	// 提示分得开两种原因：类别不开放 ≠ 状态没有这条边。
+	// 同一条待办换成会话类（同一状态、同一动词）就必须是成功，否则说明判据串到了状态那一维。
+	h := mustSubmit(t, svc, handoffSubmitInput("sess_side_contrast"))
+	if _, err := svc.Complete(ctx, h.ID, "boss-1"); err != nil {
+		t.Errorf("对照组（会话类 pending 完成）失败：%v", err)
 	}
 }
 
