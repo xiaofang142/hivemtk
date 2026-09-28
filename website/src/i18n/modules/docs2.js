@@ -119,6 +119,11 @@ export default build({
     'بحث متجهي محلي عبر pgvector، تحليل وتنظيف الوثائق، إدارة الإصدارات، تغذية راجعة لجودة الاسترجاع.',
   ],
   '本地推理栈': ['Local inference stack', 'ローカル推論スタック', 'حزمة الاستدلال المحلية'],
+  '本地推理栈为可选项：不启动时需在后台「LLM 路由」配置云端服务商（写入 llm_providers 表）；.env 的 LLM_BASE_URL / LLM_API_KEY 只是默认指向与首启占位。': [
+    'The local inference stack is optional: when it is not started, configure a cloud provider in the admin console under "LLM Routing" (stored in the llm_providers table); LLM_BASE_URL / LLM_API_KEY in .env only supply the default target and the first-boot placeholders.',
+    'ローカル推論スタックは任意です。起動しない場合は管理コンソールの「LLM ルーティング」でクラウドプロバイダーを設定してください（llm_providers テーブルに保存されます）。.env の LLM_BASE_URL / LLM_API_KEY はデフォルトの指向先と初回起動時のプレースホルダーにすぎません。',
+    'حزمة الاستدلال المحلية اختيارية: عند عدم تشغيلها اضبط مزوّد النماذج السحابي في لوحة الإدارة تحت «توجيه LLM» (تُحفظ في جدول llm_providers)؛ قيم LLM_BASE_URL / LLM_API_KEY في .env ليست سوى التوجيه الافتراضي وقيم مؤقتة للإقلاع الأول.',
+  ],
   '本地推理栈为可选项：关闭后用户端会回退到 .env 中配置的云端大模型（LLM_BASE_URL / LLM_API_KEY）。': [
     'The local inference stack is optional: with it disabled the client falls back to the cloud LLM configured in .env (LLM_BASE_URL / LLM_API_KEY).',
     'ローカル推論スタックは任意です。無効化すると .env に設定したクラウド大規模モデル（LLM_BASE_URL／LLM_API_KEY）へフォールバックします。',
