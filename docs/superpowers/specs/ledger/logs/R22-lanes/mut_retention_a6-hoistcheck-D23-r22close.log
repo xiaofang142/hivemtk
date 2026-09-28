@@ -1,0 +1,10 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/a6mut-5sdx17cq
+[Go] 本趟只跑 1 格：D23
+
+[Go] 注码前置：1 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=30 passed=30 skip=0 FAIL=[]
+D23  行数守卫短路（声明 2 行、实删 3 行的那一批照样提交＝说谎的凭据落进永不可裁的表）                  杀掉      total=30 fail=1 skip=0 ｜ TestA6PruneRollsBackWhenDigestUnderstatesDeletedRows
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 1 格逐格被杀，无存活（本趟是 --cells 子集，不等于全电池） =====
+A6_RC=0

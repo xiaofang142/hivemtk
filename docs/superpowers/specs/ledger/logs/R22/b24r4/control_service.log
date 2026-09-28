@@ -1,0 +1,14 @@
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+internal/service/quote_send_test.go:84:2: undefined: quoteSendStore
+internal/service/quote_send_test.go:128:11: undefined: QuoteSendService
+internal/service/quote_send_test.go:157:9: undefined: NewQuoteSendService
+internal/service/quote_send_test.go:188:33: undefined: QuoteSendInput
+internal/service/quote_send_test.go:189:9: undefined: QuoteSendInput
+internal/service/quote_send_test.go:192:44: undefined: QuoteSendInput
+internal/service/quote_send_test.go:193:9: undefined: QuoteSendInput
+internal/service/quote_send_test.go:272:24: undefined: QuoteSendAwaiting
+internal/service/quote_send_test.go:273:54: undefined: QuoteSendAwaiting
+internal/service/quote_send_test.go:329:27: undefined: QuoteSendAwaiting
+internal/service/quote_send_test.go:329:27: too many errors

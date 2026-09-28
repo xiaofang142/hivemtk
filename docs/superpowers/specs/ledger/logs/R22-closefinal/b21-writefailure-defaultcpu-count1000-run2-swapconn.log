@@ -1,0 +1,377 @@
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+    asm_arm64.s:1447: fake extension 读帧结束: websocket: close 1006 (abnormal closure): unexpected EOF
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57400->127.0.0.1:57401: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57402->127.0.0.1:57403: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57404->127.0.0.1:57405: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57406->127.0.0.1:57407: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57408->127.0.0.1:57409: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57410->127.0.0.1:57411: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57412->127.0.0.1:57413: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57414->127.0.0.1:57415: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57416->127.0.0.1:57417: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57418->127.0.0.1:57419: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57420->127.0.0.1:57421: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57422->127.0.0.1:57423: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57424->127.0.0.1:57425: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57426->127.0.0.1:57427: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57428->127.0.0.1:57429: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57430->127.0.0.1:57431: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57432->127.0.0.1:57433: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57434->127.0.0.1:57435: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57436->127.0.0.1:57437: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57438->127.0.0.1:57439: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57440->127.0.0.1:57441: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57442->127.0.0.1:57443: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57444->127.0.0.1:57445: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57446->127.0.0.1:57447: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57448->127.0.0.1:57449: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57450->127.0.0.1:57451: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57452->127.0.0.1:57453: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57454->127.0.0.1:57455: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57456->127.0.0.1:57457: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57458->127.0.0.1:57459: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57460->127.0.0.1:57461: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57462->127.0.0.1:57463: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57464->127.0.0.1:57465: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57466->127.0.0.1:57467: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57468->127.0.0.1:57469: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57470->127.0.0.1:57471: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57472->127.0.0.1:57473: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57474->127.0.0.1:57475: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57476->127.0.0.1:57477: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57478->127.0.0.1:57479: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57480->127.0.0.1:57481: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57482->127.0.0.1:57483: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57484->127.0.0.1:57485: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57486->127.0.0.1:57487: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57488->127.0.0.1:57489: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57490->127.0.0.1:57491: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57492->127.0.0.1:57493: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57494->127.0.0.1:57495: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57496->127.0.0.1:57497: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57498->127.0.0.1:57499: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57500->127.0.0.1:57501: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57502->127.0.0.1:57503: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57504->127.0.0.1:57505: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57506->127.0.0.1:57507: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57508->127.0.0.1:57509: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57510->127.0.0.1:57511: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57512->127.0.0.1:57513: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57514->127.0.0.1:57515: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57516->127.0.0.1:57517: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57518->127.0.0.1:57519: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57520->127.0.0.1:57521: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57522->127.0.0.1:57523: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57524->127.0.0.1:57525: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57526->127.0.0.1:57527: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57528->127.0.0.1:57529: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57530->127.0.0.1:57531: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57532->127.0.0.1:57533: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57534->127.0.0.1:57535: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57536->127.0.0.1:57537: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57538->127.0.0.1:57539: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57540->127.0.0.1:57541: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57542->127.0.0.1:57543: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57544->127.0.0.1:57545: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57546->127.0.0.1:57547: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57548->127.0.0.1:57549: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57550->127.0.0.1:57551: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57552->127.0.0.1:57553: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57554->127.0.0.1:57555: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57556->127.0.0.1:57557: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57558->127.0.0.1:57559: use of closed network connection[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57560->127.0.0.1:57561: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57562->127.0.0.1:57563: use of closed network connection[0m [36mcomponent=[0muser-server
+    asm_arm64.s:1447: fake extension 读帧结束: websocket: close 1006 (abnormal closure): unexpected EOF
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57564->127.0.0.1:57565: use of closed network connection[0m [36mcomponent=[0muser-server
+    asm_arm64.s:1447: fake extension 读帧结束: websocket: close 1006 (abnormal closure): unexpected EOF
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57566->127.0.0.1:57568: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57569->127.0.0.1:57570: use of closed network connection[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57571->127.0.0.1:57572: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+[90m2026-09-23T11:59:06+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57573->127.0.0.1:57574: use of closed network connection[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+[90m2026-09-23T11:59:06+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestWriteFailureIsNotNeverOnWire (0.00s)
+=== RUN   TestWriteFailureIsNotNeverOnWire
+panic: concurrent write to websocket connection
+
+goroutine 756 [running]:
+github.com/gorilla/websocket.(*messageWriter).flushFrame(0x6d6672b08d80, 0x1, {0x0?, 0x6d6672bba360?, 0x6d6672b33d08?})
+	/Users/xiaofang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:617 +0x40c
+github.com/gorilla/websocket.(*messageWriter).Close(0x6d6672b33d28?)
+	/Users/xiaofang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:731 +0x44
+github.com/gorilla/websocket.(*Conn).beginMessage(0x6d66728cb760, 0x6d6672bba360, 0x1)
+	/Users/xiaofang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:480 +0x38
+github.com/gorilla/websocket.(*Conn).NextWriter(0x6d66728cb760, 0x1)
+	/Users/xiaofang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:520 +0x40
+github.com/gorilla/websocket.(*Conn).WriteJSON(0xc2a4f18516bc6388?, {0x1021b1e00, 0x6d6672bba330})
+	/Users/xiaofang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/json.go:24 +0x2c
+hivemtk-user/internal/browser_automation/service.(*HostConn).writeJSON(0x6d6672bbfb90, {0x1021b1e00, 0x6d6672bba330})
+	/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/service/host_registry.go:126 +0xfc
+hivemtk-user/internal/browser_automation/service.(*HostRegistry).probeServable(0x6d6672d2acc0?, 0x6d6672bbfb90)
+	/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/service/host_registry.go:437 +0x18c
+created by hivemtk-user/internal/browser_automation/service.(*HostRegistry).Register in goroutine 717
+	/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/browser_automation/service/host_registry.go:235 +0x378
+FAIL	hivemtk-user/internal/browser_automation/service	0.611s
+FAIL

@@ -6,12 +6,22 @@
         <el-tag v-if="session" :type="{ completed: 'success', failed: 'danger', stopped: 'info', active: 'warning' }[session.status] || 'info'">
           {{ session.status }}
         </el-tag>
-        <el-tag v-if="session.confirm_pending" type="warning">待人工确认（写操作已挂起）</el-tag>
+        <el-tag v-if="session?.confirm_pending" type="warning">待人工确认（写操作已挂起）</el-tag>
         <el-button v-if="session && ['created','active'].includes(session.status)" type="danger" @click="onStop">停止</el-button>
-        <el-button v-if="session?.confirm_pending" type="primary" :loading="confirming" @click="onConfirm">确认放行</el-button>
+        <el-button v-if="session?.confirm_pending" type="primary" :loading="confirming" :disabled="!gate?.payload_hash" @click="onConfirm">确认放行</el-button>
         <el-button v-if="session" @click="onExport">导出审计包</el-button>
       </el-space>
     </div>
+
+    <el-card v-if="gate" header="待确认的写操作（放行的仅此一份内容）" style="margin-top: 12px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="步骤序号">第 {{ gate?.step_index }} 步</el-descriptions-item>
+        <el-descriptions-item label="挂起到期">{{ formatTime(gate?.expires_at) }}</el-descriptions-item>
+        <el-descriptions-item label="将要提交的内容" :span="2">
+          <span style="white-space: pre-wrap">{{ gate?.preview || '（无预览）' }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
 
     <el-card v-if="session" style="margin-top: 12px">
       <el-descriptions :column="4" border>
@@ -50,7 +60,7 @@
     <el-card style="margin-top: 12px">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>命令流（append-only 审计：command 下发 / event 回包 / judge 验收）</span>
+          <span>命令流（append-only 审计：command 下发 / event 回包 / judge 验收；✓=该帧结论成立、✗=不成立、—=此帧不携带结论）</span>
           <el-select v-model="logDirection" size="small" style="width: 110px" @change="loadLogs">
             <el-option label="全部" value="" />
             <el-option label="command" value="command" />
@@ -67,8 +77,8 @@
           </template>
         </el-table-column>
         <el-table-column prop="action" label="动作" width="130" />
-        <el-table-column prop="ok" label="结果" width="70">
-          <template #default="{ row }">{{ row.ok ? '✓' : '✗' }}</template>
+        <el-table-column prop="ok" label="帧结论" width="80">
+          <template #default="{ row }">{{ outcomeMark(row.ok) }}</template>
         </el-table-column>
         <el-table-column prop="duration_ms" label="耗时" width="80">
           <template #default="{ row }">{{ row.duration_ms ? `${row.duration_ms}ms` : '—' }}</template>
@@ -89,22 +99,45 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, confirmBrowserSession, getBrowserSessionLogs, exportBrowserSessionAudit } from '@/api/browserAutomation'
+import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, confirmBrowserSession, getBrowserConfirmGate, getBrowserSessionLogs, exportBrowserSessionAudit, interpretConfirmResult } from '@/api/browserAutomation'
 
 const route = useRoute()
 const sessionId = computed(() => route.params.id)
 const session = ref(null)
+const gate = ref(null)
 const steps = ref([])
 const logs = ref([])
 const logDirection = ref('')
 const loading = ref(false)
 const confirming = ref(false)
 
+// 四个态的文案必须各说各的话：把「闸门挂在别的进程」说成「没有待确认提交点」，
+// 用户会去改编排，而该改的是实例数（服务端 A10 分流的就是这一条）。
+const CONFIRM_COPY = {
+  'granted': { type: 'success', text: '已放行，写操作正在提交' },
+  'no_gate': { type: 'warning', text: '该会话当前没有待确认的提交点（可能已到期或被放行），已为你刷新状态' },
+  'payload_mismatch': { type: 'error', text: '放行的载荷与挂起中的提交内容不一致，未放行——请照着下方最新预览重新确认' },
+  'gate_on_another_instance': { type: 'error', text: '确认闸门挂在另一个服务进程上，本次放行未生效——请刷新会话，或确认服务实例数（多副本需共享挂起态）' },
+  'unknown': { type: 'error', text: '放行结果未知（请求未拿到结论），请刷新会话查看是否已提交' },
+}
+
+const formatTime = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('zh-CN')
+}
+
 const payloadPreview = (p) => {
   if (p == null) return '—'
   const str = typeof p === 'string' ? p : JSON.stringify(p)
   return str.length > 160 ? str.slice(0, 160) + '…' : str
 }
+
+// 批20b（A2）：ok 是三态，不是布尔。null = 这一帧不携带结论（下发帧写下时 Host 还没回执；
+// 批21 之后更进一步——那一帧甚至可能根本没上线）。把 null 折进 falsy 分支就等于把每一条
+// 「下发」都画成失败，而旧模板 `row.ok ? '✓' : '✗'` 在服务端改掉常量 true 的同一批就会犯这个错。
+// 未知形状（缺字段/字符串）一律走 '—'：宁可说"这帧没结论"，也不替用户编一个红或绿。
+const outcomeMark = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '—')
 
 async function loadLogs() {
   try {
@@ -130,6 +163,7 @@ async function load() {
     session.value = unpack(sRes)
     const list = unpack(stRes)
     steps.value = Array.isArray(list) ? list : list?.list || []
+    loadGate()
     // 终态停止轮询
     if (session.value && ['completed', 'failed', 'stopped'].includes(session.value.status)) {
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
@@ -139,23 +173,56 @@ async function load() {
   }
 }
 
+// 闸门详情：只在挂起期间取，且取失败一律置空——没有载荷就没有放行入口可点（fail-closed）。
+// 与 load() 并发而不串行：会话详情是主数据，闸门读侧慢/失败都不该把步流水一起拖住。
+async function loadGate() {
+  if (!session.value?.confirm_pending) {
+    if (gate.value) gate.value = null
+    return
+  }
+  if (gateLoading) return
+  gateLoading = true
+  try {
+    const res = unpack(await getBrowserConfirmGate(sessionId.value))
+    gate.value = res?.pending ? res.gate : null
+  } catch {
+    gate.value = null
+  } finally {
+    gateLoading = false
+  }
+}
+let gateLoading = false
+
 async function onStop() {
   await stopBrowserSession(sessionId.value, '用户手动中断')
   ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
   load()
 }
 
-// D7：人工放行挂起的写操作提交点（confirmed=false = 挂起点已消失，提示后刷新即可）
+// D7：人工放行挂起的写操作提交点。批20 起放行绑载荷——只能批准页面正在显示的那一份；
+// 结论按 status 分流（confirmed 只说「闸门认没认」，三种「没放行」必须各说各的原因）。
 async function onConfirm() {
+  const hash = gate.value?.payload_hash
+  if (!hash) {
+    ElMessage.warning('未取到待确认的载荷，暂不放行——正在刷新状态，请稍候再试')
+    load()
+    return
+  }
   confirming.value = true
   try {
-    const res = await confirmBrowserSession(sessionId.value)
-    const data = unpack(res)
-    if (data?.confirmed === false) {
-      ElMessage.warning(res?.message || '该会话当前没有待确认的提交点')
-    } else {
-      ElMessage.success('已放行，评论正在提交')
+    let raw
+    try {
+      raw = await confirmBrowserSession(sessionId.value, hash)
+    } catch (err) {
+      raw = err // 409 的结论同样写在响应体里，与 200 走同一个判读函数
     }
+    const verdict = interpretConfirmResult(raw)
+    const copy = CONFIRM_COPY[verdict.status] || CONFIRM_COPY.unknown
+    if (copy.type === 'success') ElMessage.success(copy.text)
+    else if (copy.type === 'warning') ElMessage.warning(copy.text)
+    else ElMessage.error(copy.text)
+    // 载荷不符时服务端把当前挂起的闸门带回，立刻换掉预览：用户下一步是照新内容重批，不是刷新碰运气
+    if (verdict.gate) gate.value = verdict.gate
     load()
   } finally {
     confirming.value = false

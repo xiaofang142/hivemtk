@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS rag_products (
     vector_table VARCHAR(128) UNIQUE,
     embedding_model VARCHAR(64) DEFAULT 'bge-m3',
     embedding_dim INTEGER DEFAULT 1024,
-    llm_model VARCHAR(100) DEFAULT 'gpt-3.5-turbo',
+    llm_model VARCHAR(100) DEFAULT 'Qwen2.5-3B-Instruct',
     -- LLMProviderConfig (embeddedPrefix:llm_)
     llm_api_key VARCHAR(255),
     llm_base_url VARCHAR(255),

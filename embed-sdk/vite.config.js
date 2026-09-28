@@ -17,7 +17,7 @@ export default defineConfig({
         exports: 'named'
       }
     },
-    minify: 'esbuild',
+    minify: true, // Vite 8/Rolldown 用 oxc 原生压缩器；'esbuild' 需 esbuild 作为可选依赖，已移除
     sourcemap: false,
     target: 'es2018'
   },

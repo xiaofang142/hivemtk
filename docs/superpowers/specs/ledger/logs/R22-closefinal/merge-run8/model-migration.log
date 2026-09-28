@@ -1,0 +1,7 @@
+$ python3 scripts/check_model_migration.py
+(cwd=.)
+rc=0  0.3s
+
+GORM 模型候选：307    已注册 AutoMigrate：321
+✅ 所有带 gorm tag / TableName 的模型均已注册 AutoMigrate
+

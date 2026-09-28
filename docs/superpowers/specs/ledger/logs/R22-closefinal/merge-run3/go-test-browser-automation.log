@@ -1,0 +1,375 @@
+$ go test -p 1 -count=1 -timeout 40m ./internal/browser_automation/...
+(cwd=user-server)
+rc=1  243.1s
+
+ok  	hivemtk-user/internal/browser_automation/controller	4.090s
+ok  	hivemtk-user/internal/browser_automation/dto	0.314s
+?   	hivemtk-user/internal/browser_automation/model	[no test files]
+ok  	hivemtk-user/internal/browser_automation/platform	0.307s
+?   	hivemtk-user/internal/browser_automation/platform/douyin	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xianyu	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xiaohongshu	[no test files]
+ok  	hivemtk-user/internal/browser_automation/repository	23.880s
+2026-09-23T11:26:40+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:41+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:43+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:43+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:43+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:46+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（发送按钮不可点，点击未发生）: send_button_not_interactable: covered component=user-server
+2026-09-23T11:26:46+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:26:46+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:47+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:47+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:47+08:00 WRN [BrowserExec] brain 轮内步骤被服务端拒绝 session=1: hover → 被拒绝（动作名不在可用 action 表内，服务端不认识；只允许 action 表里列出的动作） component=user-server
+2026-09-23T11:26:47+08:00 WRN [BrowserExec] brain 轮内步骤被服务端拒绝 session=1: 发送评论 → 被拒绝（动作名不在可用 action 表内，服务端不认识；只允许 action 表里列出的动作） component=user-server
+2026-09-23T11:26:48+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:48+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:48+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:48+08:00 WRN [BrowserExec] brain 轮内步骤被服务端拒绝 session=1: download_page → 被拒绝（动作名不在可用 action 表内，服务端不认识；只允许 action 表里列出的动作） component=user-server
+2026-09-23T11:26:49+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:49+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:49+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:49+08:00 WRN [BrowserExec] brain 轮内步骤被服务端拒绝 session=1: screenshot → 被拒绝（Brain 模式禁止抢焦点截图，请用 snapshot/markdown 观察） component=user-server
+2026-09-23T11:26:50+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:50+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:50+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:54+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:55+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:55+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:26:57+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:26:57+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:26:57+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:01+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发 component=user-server
+2026-09-23T11:27:01+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:01+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:01+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:03+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:03+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:03+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:06+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（发送按钮不可点，点击未发生）: send_button_not_interactable: covered component=user-server
+2026-09-23T11:27:06+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:27:06+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:07+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:07+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:08+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:08+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:08+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:10+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:10+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:10+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:11+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:11+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:11+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:13+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:13+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:13+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:15+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 等待人工确认超时（人工确认等待 1s），评论未提交 component=user-server
+2026-09-23T11:27:15+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:27:15+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:15+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:15+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:18+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:18+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:18+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:21+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:21+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:21+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:24+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: 写步等待人工确认期间被用户中止，评论未提交 component=user-server
+2026-09-23T11:27:24+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:27:24+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:24+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:24+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:29+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:29+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:29+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:33+08:00 WRN [BrowserExec] A1 输入框自愈失败 session=1: 自愈 LLM 接缝未装配 component=user-server
+2026-09-23T11:27:33+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: comment_input_not_found component=user-server
+2026-09-23T11:27:33+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:27:33+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:33+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:33+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:34+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=wait_for_selector attempt=0: selector_timeout: #root component=user-server
+2026-09-23T11:27:34+08:00 WRN [BrowserExec] 平台拦截页命中 platform=xiaohongshu errType=disconnect session=1 component=user-server
+2026-09-23T11:27:34+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:34+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:34+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:43+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:27:43+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:53+08:00 WRN [BrowserHost] 注册探针 10s 无回包：应用面不可服务，下发 shutdown 帧+断开连接提前自愈（不等用户任务去撞 2×30s）user=9301 pid=25531 component=user-server
+2026-09-23T11:27:53+08:00 WRN [BrowserHost] 连接读失败 user=9301: read tcp 127.0.0.1:56901->127.0.0.1:56902: use of closed network connection component=user-server
+2026-09-23T11:27:53+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:27:53+08:00 WRN [BrowserHost] 注册探针回包异常但链路可用 user=9301 pid=25531: unknown_action_v4: tab_exists component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] Host 已注册 user=9501 version=1.5.0-wire pid=25531 component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9501 pid=25531 component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9501: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] Host 已注册 user=9501 version=1.5.0-wire pid=25531 component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9501 pid=25531 component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9501: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0 component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0 component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:04+08:00 INF [BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0 component=user-server
+2026-09-23T11:28:04+08:00 WRN [BrowserHost] 连接读失败 user=9377: read tcp 127.0.0.1:57365->127.0.0.1:57366: use of closed network connection component=user-server
+--- FAIL: TestWriteFailureIsNotNeverOnWire (0.00s)
+    host_offline_b21_test.go:161: 夹具必须命中 writeJSON 失败分支，got 命令未上线: browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh
+    asm_arm64.s:1447: fake extension 读帧结束: websocket: close 1006 (abnormal closure): unexpected EOF
+2026-09-23T11:28:05+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:05+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:06+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: 命令未上线: browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh component=user-server
+2026-09-23T11:28:06+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:28:06+08:00 WRN [BrowserExec] session=1 tab=777 收口回收失败（不影响终态）: 命令未上线: browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh component=user-server
+2026-09-23T11:28:06+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:06+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:06+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:09+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（命令未上线，点击从未发生，可安全重下发）: 命令未上线: browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh component=user-server
+2026-09-23T11:28:09+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:28:09+08:00 WRN [BrowserExec] session=1 tab=777 收口回收失败（不影响终态）: 命令未上线: browser host 未连接，请在本机 Chrome 加载扩展并运行 cmd/nm-host/install.sh component=user-server
+2026-09-23T11:28:09+08:00 WRN [BrowserHost] 连续 2 条命令超时（最近 action=wait）判 Host 应用面假死：下发 shutdown 帧+断开连接触发自愈 user=7 pid=0 component=user-server
+2026-09-23T11:28:09+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:10+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:10+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:10+08:00 WRN [BrowserExec] 双发闸查询失败 task=1（拒绝下发）: double submit guard query failed: connection reset by peer component=user-server
+2026-09-23T11:28:10+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:10+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:10+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=verified（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 回查已见评论（内容确已发布），但提交台账未落全（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级\n写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布 component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=4：本会话台账写失败过（sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserFeedback] task=1 存在写台账缺口，自动重试已抑制（原因见任务行） component=user-server
+2026-09-23T11:28:14+08:00 ERR [BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference component=user-server
+2026-09-23T11:28:14+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:14+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:14+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:18+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:18+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级 component=user-server
+2026-09-23T11:28:18+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=4：本会话台账写失败过（prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:28:18+08:00 INF [BrowserFeedback] 任务失败自动重试已挂起 task=1 第 1/1 次，300s 后（2026-09-23T11:33:18+08:00）执行（持久化，重启不丢） component=user-server
+2026-09-23T11:28:18+08:00 ERR [BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference component=user-server
+2026-09-23T11:28:18+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:18+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:18+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:19+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:19+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:19+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:19+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:19+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:20+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:20+08:00 WRN [BrowserExec] 写步已下发但台账未落（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果 session=1 idx=1 action=click component=user-server
+2026-09-23T11:28:20+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2：本会话台账写失败过（sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:28:20+08:00 ERR [BrowserFeedback] notify panic recovered: runtime error: invalid memory address or nil pointer dereference component=user-server
+2026-09-23T11:28:20+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:21+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:21+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:23+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:23+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:23+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:25+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:25+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:25+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:27+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:27+08:00 WRN [BrowserExec] 写步已下发但台账未落（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果 session=1 idx=1 action=click component=user-server
+2026-09-23T11:28:27+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2：本会话台账写失败过（sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:28:27+08:00 WRN [BrowserExec] 写步拒绝下发（unknown=平台定位表不可得(平台 not_registered_platform_zz 未注册（可用: [douyin xianyu xiaohongshu]）)）：sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused——台账未落，本会话写能力已降级，请人工核对已下发的步后重跑 session=1 idx=2 component=user-server
+2026-09-23T11:28:28+08:00 WRN [BrowserExec] 写步拒绝下发（unknown=平台定位表不可得(平台 not_registered_platform_zz 未注册（可用: [douyin xianyu xiaohongshu]）)）：sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused——台账未落，本会话写能力已降级，请人工核对已下发的步后重跑 session=1 idx=3 component=user-server
+2026-09-23T11:28:28+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:29+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:29+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:30+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:30+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:30+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:32+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:28:32+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级 component=user-server
+2026-09-23T11:28:32+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2：本会话台账写失败过（prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:28:32+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:32+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:32+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:33+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_inject_timeout_15000ms component=user-server
+2026-09-23T11:28:33+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:28:34+08:00 WRN [BrowserExec] step 失败 session=2 idx=1 action=click attempt=0: click_inject_timeout_15000ms component=user-server
+2026-09-23T11:28:34+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:28:34+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:35+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:35+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:35+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:35+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:35+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:38+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:38+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:39+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:41+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（页面注入拥堵，点击未发生）: comment_send_inject_timeout_15000ms component=user-server
+2026-09-23T11:28:41+08:00 INF [BrowserExec] 写声明已释放 task=1 step=4（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:28:41+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:42+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:42+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:45+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发 component=user-server
+2026-09-23T11:28:45+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:45+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:45+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:52+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:52+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:52+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:53+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:53+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:53+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:53+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserFeedback] 本轮重试扫描跳过：本机无 Host 连接（挂起重试留给持有连接的实例认领） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=1 快照收敛 → done（对账回填自 session=1） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=2 快照收敛 → failed（对账回填自 session=2） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=1 收敛 2 条僵尸会话（并发闸已释放） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=1 快照收敛 → failed（对账回填自 session=2） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=1 快照收敛 → failed（对账回填：无可依据的终态会话） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=2 收敛 1 条僵尸会话（并发闸已释放） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserReconcile] task=2 快照收敛 → failed（对账回填自 session=2） component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:54+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:56+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=type attempt=0: submit_key_not_dispatched: Debugger is not attached to the target component=user-server
+2026-09-23T11:28:56+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:56+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:56+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:57+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:57+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:57+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:58+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:58+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:58+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:28:59+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:28:59+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:28:59+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:01+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:01+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:01+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:02+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:02+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:02+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:03+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:03+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:03+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:04+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_moved: 中心点从 150,220 挪到 230,220 component=user-server
+2026-09-23T11:29:04+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:04+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:04+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:05+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_not_interactable: unstable component=user-server
+2026-09-23T11:29:05+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:29:05+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:05+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:05+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:06+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: element_not_interactable: covered component=user-server
+2026-09-23T11:29:06+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:29:06+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:07+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:07+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:07+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: send_button_not_interactable: unstable component=user-server
+2026-09-23T11:29:07+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:29:07+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:08+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:08+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:08+08:00 WRN [BrowserExec] 写步拒绝下发（action=post_comment）：claim write slot failed: connection reset by peer session=1 idx=1 component=user-server
+2026-09-23T11:29:08+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:08+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:08+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:09+08:00 WRN [BrowserExec] 写步拒绝下发（action=post_comment）：同文本的写声明已在 step=783002 session=783001（2026-09-23T11:29:08+08:00 占坑）手里——那一条腿正要去跨或已经跨过提交点，本腿下发即双发；若已核实那一腿从未真的提交，删掉 browser_write_claims 里这一行即可重跑 session=1 idx=1 component=user-server
+2026-09-23T11:29:09+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:09+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:09+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:11+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 未提交（页面注入拥堵，点击未发生）: comment_send_inject_timeout_: 页面注入拥堵，点击从未发生 component=user-server
+2026-09-23T11:29:11+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:29:12+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:12+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:12+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:14+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发 component=user-server
+2026-09-23T11:29:14+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:14+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:14+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:15+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:16+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=verified（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:16+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 回查已见评论（内容确已发布），但提交台账未落全（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级\n写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布 component=user-server
+2026-09-23T11:29:16+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2：本会话台账写失败过（sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:29:16+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:16+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:16+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:17+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2（回读台账态失败，判不出=不按没发生算）: submit_state read-back failed: connection reset by peer component=user-server
+2026-09-23T11:29:17+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:17+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:17+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:18+08:00 WRN [BrowserExec] 写步拒绝下发（action=post_comment）：存储层写声明闸门未接线：占不了坑，就无从判断另一条腿是否正在同一份文本上 session=1 idx=1 component=user-server
+2026-09-23T11:29:18+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:18+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:18+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:22+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:22+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级 component=user-server
+2026-09-23T11:29:22+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=4：本会话台账写失败过（prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:29:22+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:23+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:23+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:24+08:00 WRN [BrowserExec] 写台账落库失败 step=2 state=prepared（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:24+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=post_comment attempt=0: post_comment 未提交（prepared 台账未落，点击从未发生，本会话写能力已降级）: 写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级 component=user-server
+2026-09-23T11:29:24+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=2：本会话台账写失败过（prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:29:26+08:00 WRN [BrowserExec] 写步拒绝下发（action=post_comment）：prepared 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused——台账未落，本会话写能力已降级，请人工核对已下发的步后重跑 session=1 idx=3 component=user-server
+2026-09-23T11:29:26+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:26+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:26+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:30+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=sent（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:30+08:00 WRN [BrowserExec] 写台账落库失败 step=4 state=verified（含重试共 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused component=user-server
+2026-09-23T11:29:30+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 回查已见评论（内容确已发布），但提交台账未落全（写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级\n写台账落库失败（dial tcp 127.0.0.1:8232: connect: connection refused）: 台账未落，本会话写能力已降级）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布 component=user-server
+2026-09-23T11:29:30+08:00 WRN [BrowserExec] 写声明保留不释放 task=1 step=4：本会话台账写失败过（sent 未落账（重试 3 次）: dial tcp 127.0.0.1:8232: connect: connection refused），保留是保守侧 component=user-server
+2026-09-23T11:29:33+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:33+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:33+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:35+08:00 WRN [BrowserExec] 双发闸查询失败 task=1（拒绝下发）: double submit guard query failed: connection reset by peer component=user-server
+2026-09-23T11:29:35+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:36+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:36+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:36+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_timeout_waiting_ack component=user-server
+2026-09-23T11:29:37+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:37+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:37+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:38+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=0: click_timeout_waiting_ack component=user-server
+2026-09-23T11:29:38+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=click attempt=1: click_timeout_waiting_ack component=user-server
+2026-09-23T11:29:38+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:38+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:38+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:39+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=type attempt=0: type_timeout_waiting_ack component=user-server
+2026-09-23T11:29:39+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:39+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:39+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:40+08:00 WRN [BrowserExec] step 失败 session=1 idx=1 action=type attempt=0: element_not_found: .content-textarea component=user-server
+2026-09-23T11:29:40+08:00 INF [BrowserExec] 写声明已释放 task=1 step=2（本步未跨提交点，同文本可重下发） component=user-server
+2026-09-23T11:29:40+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:40+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:40+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:41+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:41+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:41+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:47+08:00 INF [BrowserExec] 写步跳过（action=post_comment）：step=4 session=1 state=verified——同文本已有提交尝试，重发即双发 session=2 idx=3 component=user-server
+2026-09-23T11:29:47+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:47+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:47+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:53+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:54+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:54+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:29:58+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:29:58+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:29:58+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:30:01+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+2026-09-23T11:30:01+08:00 INF [BrowserHost] Host 已注册 user=9301 version=1.5.0-e2e pid=25531 component=user-server
+2026-09-23T11:30:01+08:00 INF [BrowserHost] 注册探针通过（应用面可服务）user=9301 pid=25531 component=user-server
+2026-09-23T11:30:04+08:00 WRN [BrowserExec] step 失败 session=1 idx=3 action=post_comment attempt=0: post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发 component=user-server
+2026-09-23T11:30:08+08:00 INF [BrowserExec] 写步跳过（action=post_comment）：step=4 session=1 state=unattributed——同文本已有提交尝试，重发即双发 session=2 idx=3 component=user-server
+2026-09-23T11:30:08+08:00 WRN [BrowserHost] 连接读失败 user=9301: websocket: close 1006 (abnormal closure): unexpected EOF component=user-server
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	208.913s
+FAIL
+

@@ -1,0 +1,6 @@
+$ gofmt -l user-server/internal
+(cwd=.)
+rc=0  0.7s
+
+user-server/internal/pkg/db/external_order_key_startup_test.go
+

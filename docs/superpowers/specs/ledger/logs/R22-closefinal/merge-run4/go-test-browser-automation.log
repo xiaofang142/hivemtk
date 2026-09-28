@@ -1,0 +1,14 @@
+$ go test -p 1 -count=1 -timeout 40m ./internal/browser_automation/...
+(cwd=user-server)
+rc=0  242.6s
+
+ok  	hivemtk-user/internal/browser_automation/controller	9.843s
+ok  	hivemtk-user/internal/browser_automation/dto	0.307s
+?   	hivemtk-user/internal/browser_automation/model	[no test files]
+ok  	hivemtk-user/internal/browser_automation/platform	0.307s
+?   	hivemtk-user/internal/browser_automation/platform/douyin	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xianyu	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xiaohongshu	[no test files]
+ok  	hivemtk-user/internal/browser_automation/repository	25.305s
+ok  	hivemtk-user/internal/browser_automation/service	202.719s
+

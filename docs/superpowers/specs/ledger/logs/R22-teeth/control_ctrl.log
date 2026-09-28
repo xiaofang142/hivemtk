@@ -1,0 +1,11 @@
+2026-09-22T12:29:57+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestB20ConfirmRequiresPayloadHash
+--- PASS: TestB20ConfirmRequiresPayloadHash (5.05s)
+=== RUN   TestB20ConfirmStatusMappingIsDistinct
+--- PASS: TestB20ConfirmStatusMappingIsDistinct (0.00s)
+=== RUN   TestB20ConfirmGateElsewhereFromAuditFrame
+--- PASS: TestB20ConfirmGateElsewhereFromAuditFrame (0.16s)
+=== RUN   TestB20ConfirmGateReadEndpoint
+--- PASS: TestB20ConfirmGateReadEndpoint (0.10s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/controller	5.955s

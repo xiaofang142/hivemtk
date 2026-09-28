@@ -106,7 +106,10 @@ permission → ratelimit → circuit → retry → timeout → audit → cost �
     **不放刹车**的情形是"旗子已开但表为空"⇒ 全 `denied_default` ⇒ 全拦，这是 explicit-allow 的预期语义，
     只在启动日志与快照里把 `whitelist_active_entries=0` 报出来
   - **两把旗子不是一把**：`FF_LTC_APPROVAL_GATE` 决定闸门挂没挂链、以哪种模式挂，`ai.safety.tool_approval_gate`
-    （env 名由 `featureflag.EnvNameOf` 推导，点号合法：`FF_AI.SAFETY_TOOL_APPROVAL_GATE`）决定白名单生不生效。
+    （env 名由 `featureflag.EnvNameOf` 推导：flag 名里的点号翻成下划线 ⇒ `FF_AI_SAFETY_TOOL_APPROVAL_GATE`，
+    因为带点号的名字在 shell 里 `export` 不了 —— 旧文档写的 `FF_AI.SAFETY.TOOL_APPROVAL_GATE` 就是这样一把
+    开不上的旗子；但它不是死名字，读取侧仍按 `legacyEnvName` 兼容它（compose/k8s 的 env 映射允许点号键名），
+    两份同时设置时归一化那份优先）决定白名单生不生效。
     ⇒ **阻断需要两把同时到位**，只开一把不会拦人。观察端点两把一起回显 + `blocks_when_denied` +
     `whitelist_active_entries`，否则 `would_deny=100%` 且 `by_reason` 全是 `disabled_by_flag` 会被读成"账号都没被批准"
   - 全局注入点按模式交出不同对象：shadow 交 `shadowApprovalChecker` 包装版（`WithApproval` 那条路拿到 false

@@ -534,8 +534,33 @@ async function injPostCommentSend(inputSelector, sendButtonText) {
   // 落位后重判一次：等待期间才挂上来的浮层/按钮 disabled 都必须拦下这次提交
   blocked = check(btn);
   if (blocked) return { ok: false, error: 'send_button_not_interactable: ' + blocked };
+  // 一条能再解析回同一个节点的路径（内联第二份，理由见 injClickNear 同处）。
+  // 发送按钮没有调用方持有的 selector——它是「输入框往上 4 层找文本」现场算出来的，
+  // 不回传这一项，点后的身份复核就没有对象，只能「无从复核却照样 sent:true」。
+  const pathOf = (node) => {
+    if (node.id) return '#' + node.id;
+    const parts = [];
+    let cur = node;
+    while (cur && cur.nodeType === 1 && cur.tagName !== 'HTML') {
+      const parent = cur.parentElement;
+      if (!parent) break;
+      const sameTag = Array.from(parent.children).filter((c) => c.tagName === cur.tagName);
+      const suffix = sameTag.length > 1 ? ':nth-of-type(' + (sameTag.indexOf(cur) + 1) + ')' : '';
+      parts.unshift(cur.tagName.toLowerCase() + suffix);
+      cur = parent;
+    }
+    return parts.join(' > ');
+  };
   const r = settled.box;
-  return { ok: true, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  return {
+    ok: true,
+    x: Math.round(r.left + r.width / 2),
+    y: Math.round(r.top + r.height / 2),
+    // 与另两份 probe 同规格回传半径：漏这一项，clickJitter(undefined) 会静默退化成 ±3px，
+    // 同一按钮上的每次不可逆提交都挤在同一 6px 窗口里（落点分布过窄=可检测特征）。
+    jitter_radius: Math.min(r.width, r.height) / 2,
+    selector: pathOf(btn),
+  };
 }
 
 /**
@@ -818,7 +843,9 @@ export async function dispatch(cmd, deps) {
           // 生效的那一刻被自己绕过（浮层还压着，按钮已经被点掉了）。
           const sel = resolveTarget(cmd.target);
           const probe = await executeInTab(tabId, injClick, [sel, 'probe']);
-          let navigated = false;
+          // 不写 `= false`：下面两个分支（读判据 / 判据注入失败）必然先赋值再被读，
+          // 初值从未被用到——ESLint 的 no-useless-assignment 会把它记成 error 级门红。
+          let navigated;
           try {
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             // R25-Q1：点击生效帧后短暂等路由，再纯读 location 对比判定同页导航；
@@ -882,20 +909,33 @@ export async function dispatch(cmd, deps) {
         }
         case 'type': {
           const sel = resolveTarget(cmd.target);
+          const submit = !!cmd.submit_on_enter;
+          let res;
           try {
-            await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, !!cmd.submit_on_enter, 'probe']);
+            await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, submit, 'probe']);
             await cdpInput.typeText(tabId, cmd.value || '');
-            if (cmd.submit_on_enter) {
-              await cdpInput.pressEnter(tabId).catch(() => {});
-            }
-            return { ok: true, editable: true, channel: 'cdp' };
+            res = { ok: true, editable: true, channel: 'cdp' };
           } catch (e) {
             if (!String(e?.message || e).includes('element_not_found')) {
-              const r = await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, !!cmd.submit_on_enter, 'fallback']).catch(() => null);
-              if (r?.ok) return { ...r, channel: 'dom_fallback' };
+              const r = await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, submit, 'fallback']).catch(() => null);
+              if (r?.ok) res = { ...r, channel: 'dom_fallback' };
             }
-            throw e;
+            if (!res) throw e;
           }
+          // 提交键落在输入 try 之外，且不许吞：type+submit_on_enter 命中平台注册的评论框时
+          // 是**写步**（service/write_ledger.go:279），旧写法给 pressEnter 挂了个空回调把失败
+          // 吞掉，让「Enter 没发出去」这一步照样上报 ok ⇒ Go 记 status=success / submit_state=sent：
+          // 一次没发出去的评论既报绿又被双发闸永久拦死（唯一正确处置=看清页面再跑一次，
+          // 被自己的台账锁掉）。上抛后 Go 走 unattributed（提交键可能已部分送达，不判「从未发生」），
+          // 交人工核。兜底通道不补按：injType 的 fallback 已在页面侧发过 Enter，再按一次就是双发。
+          if (submit && res.channel === 'cdp') {
+            try {
+              await cdpInput.pressEnter(tabId);
+            } catch (e) {
+              throw new Error('submit_key_not_dispatched: ' + String(e?.message || e), { cause: e });
+            }
+          }
+          return res;
         }
         case 'wait_for_selector': {
           const timeout = Math.min(Math.max(cmd.timeout_ms || 10000, 1000), 60000);
@@ -947,7 +987,21 @@ export async function dispatch(cmd, deps) {
           // 错误名 comment_send_inject_timeout 供服务端归类（pre-click 灰态≠post-click 未知态）。
           const btn = await raceTimeout(executeInTab(tabId, injPostCommentSend, [inputSel, sendText]), cmd.inject_timeout_ms || 15000, 'comment_send');
           if (!btn.ok) throw new Error(btn.error || 'send_button_not_found');
-          await cdpInput.clickAt(tabId, btn.x, btn.y);
+          await cdpInput.clickAt(tabId, btn.x, btn.y, { jitterRadius: btn.jitter_radius });
+          // 批20c（§8.2-1 尾项）：三条 trusted 写通道的最后一处点后复核。判据与 click/click_near
+          // 同口径——探测与真点之间隔着贝塞尔轨迹的飞行时间，这期间浮层压上来就会把一次
+          // **不可撤回的公开提交**落在一个从未被探测过的元素上，而旧回包照样 sent:true。
+          // 这里刻意不套 try/catch 兜底：comment_send 全程没有任何 DOM 兜底分支，
+          // 复核失败原样上抛 = 服务端把这次记成「已跨越但结果未知」交 finalize 回查裁决，
+          // 绝不在已经发生的提交之上再动一次。
+          if (cmd.verify_identity) {
+            try {
+              await executeInTab(tabId, injClickIdentityCheck, [btn.selector, btn.x, btn.y, IDENTITY_RECHECK_TOLERANCE_PX]);
+            } catch (e) {
+              throw asIdentityVerdict(e);
+            }
+            return { ok: true, sent: true, identity_checked: true };
+          }
           return { ok: true, sent: true };
         }
         case 'comment_verify': {

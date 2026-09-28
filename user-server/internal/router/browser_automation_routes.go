@@ -30,6 +30,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	cronRepo := barepo.NewBrowserCronTriggerRepositoryWithDB(gormDB)
 	planRepo := barepo.NewBrowserLLMPlanRepositoryWithDB(gormDB)
 	cmdLogRepo := barepo.NewBrowserCommandLogRepositoryWithDB(gormDB)
+	digestRepo := barepo.NewBrowserAuditDigestRepositoryWithDB(gormDB)
+	writeClaimRepo := barepo.NewBrowserWriteClaimRepositoryWithDB(gormDB)
 	kvRepo := hrepo.NewSystemConfigKVRepository()
 
 	// --- Service（进程级单例：registry / hand）---
@@ -39,10 +41,14 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	feedbackSvc := basvc.NewFeedbackService(sessionRepo, taskRepo)
 	executor := basvc.NewExecutor(hand, sessionRepo, stepRepo, brainSvc, feedbackSvc)
 	executor.SetCommandLogRepository(cmdLogRepo)
+	executor.SetWriteClaimRepository(writeClaimRepo) // 批20f（A12）：漏这一行 = 所有写步拒绝下发
 	taskSvc := basvc.NewTaskService(taskRepo, sessionRepo, executor)
 	sessionSvc := basvc.NewSessionService(sessionRepo, stepRepo, executor)
 	sessionSvc.SetCommandLogRepository(cmdLogRepo) // D1（G1）：命令流审计查询
 	sessionSvc.SetLLMPlanRepository(planRepo)      // I5：审计导出含 LLM 成本账
+	// 批22（A6）：审计导出含裁剪摘要。漏这一行不会报错（读侧与 D1 同纪律），
+	// 代价是裁过的会话导出来的包里 command_log 为空却说不出为什么为空。
+	sessionSvc.SetAuditDigestRepository(digestRepo)
 	cronSvc := basvc.NewCronService(cronRepo, taskRepo, taskSvc)
 
 	// 失败自动重试装配：FeedbackService → TaskService.RunTaskWithRetry（进程级一次性注入）
@@ -99,7 +105,10 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.GET("/sessions/:id/export", sessionCtrl.Export) // I5：审计包单请求归并导出
 	ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
 	ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
-	ba.POST("/sessions/:id/confirm", sessionCtrl.Confirm) // D7：写操作人工确认放行
+	// D7 放行读侧：先取「正在等批的是哪一步/哪份载荷」，再把哈希带回 confirm（批20 A5）。
+	// 这道口不是便利贴：没有它，前端唯一的输入就是一个布尔，绑载荷就无从谈起。
+	ba.GET("/sessions/:id/confirm-gate", sessionCtrl.ConfirmGate)
+	ba.POST("/sessions/:id/confirm", sessionCtrl.Confirm) // D7：写操作人工确认放行（绑载荷）
 
 	// Cron
 	ba.GET("/cron", cronCtrl.List)

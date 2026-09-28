@@ -68,14 +68,30 @@ const approvalIDParamMaxLen = 64
 // 上限本身防的是"一次 POST 写进一兆文本"这种存储放大器。
 const approvalNoteMaxLen = 2000
 
-// approvalDetail 详情响应 = 审批行本体 + 服务端状态机的可去目标。
+// approvalDetail 详情响应 = 审批行本体 + 服务端的两份判断。
 //
 // 嵌指针而不是逐字段抄：抄一遍就等于把 resume_token 上那条 json:"-" 的防线换成
 // "我记得没抄这一列"。AllowedTransitions 给的是服务端事实，前端不再自己抄一份
 // "pending 才能点按钮"——状态机改了而前端没改，表现是按钮能点但必失败。
+//
+// DecidableByHuman 是第二份读数，它落的是时间这半句：allowed_transitions 只说"这个状态
+// 语义上去得了哪几个态"，它**不**说"人现在还有没有机会去落其中一个"。已过截止而未落定
+// （清扫轮次未到）的那条恰好是这两个答案分开的时刻：状态还是 pending，三个目标照单全列，
+// 而裁决口已经关上了。少了这一格，前端能给的唯一形状就是"按钮亮着、点下去永远 409"。
 type approvalDetail struct {
 	*model.ApprovalRequest
 	AllowedTransitions []string `json:"allowed_transitions"`
+	DecidableByHuman   bool     `json:"decidable_by_human"`
+}
+
+// detail 组装对外那一格。三处出口共用一个构造点：少一处带上 DecidableByHuman，
+// 前端就要替它猜一个默认值，而那正是这一层想消掉的东西。
+func (c *ApprovalController) detail(row *model.ApprovalRequest) approvalDetail {
+	return approvalDetail{
+		ApprovalRequest:    row,
+		AllowedTransitions: c.svc.AllowedTransitions(row.Status),
+		DecidableByHuman:   c.svc.DecidableByHuman(row),
+	}
 }
 
 // Get GET /api/approvals/:id
@@ -98,7 +114,7 @@ func (c *ApprovalController) Get(ctx *gin.Context) {
 		response.Error(ctx, http.StatusNotFound, "审批不存在（id="+id+"）")
 		return
 	}
-	response.Success(ctx, approvalDetail{row, c.svc.AllowedTransitions(row.Status)}, "ok")
+	response.Success(ctx, c.detail(row), "ok")
 }
 
 // Decide POST /api/approvals/:id/decide  body: {"verdict":"approved|rejected","note":"…"}
@@ -137,14 +153,20 @@ func (c *ApprovalController) Decide(ctx *gin.Context) {
 	if err != nil {
 		// 409 单独立一条：落败方真正要回答的是"那到底批了没有"，
 		// 所以把当前行一起带回（服务侧本来就返回了它），而不是让人再去刷一次列表。
-		if errors.Is(err, service.ErrApprovalAlreadyDecided) {
-			response.Error(ctx, http.StatusConflict, err.Error(), approvalDetail{row, c.svc.AllowedTransitions(row.Status)})
+		//
+		// 两种落败共用这一条出口、但保留两个 sentinel：别人先落定了 / 截止时刻已过。
+		// 状态码一样是因为前端的处置一样（这次不会成功、把当前行渲染出来）；
+		// 错误串必须不一样，因为人要查的方向相反 —— 而带回那份 detail 里
+		// decidable_by_human=false 才是按钮该变灰的读数，不是靠猜哪一句错误串。
+		if errors.Is(err, service.ErrApprovalAlreadyDecided) ||
+			errors.Is(err, service.ErrApprovalDecideTooLate) {
+			response.Error(ctx, http.StatusConflict, err.Error(), c.detail(row))
 			return
 		}
 		c.replyError(ctx, err)
 		return
 	}
-	response.Success(ctx, approvalDetail{row, c.svc.AllowedTransitions(row.Status)}, "ok")
+	response.Success(ctx, c.detail(row), "ok")
 }
 
 // unavailable 503 出口：不附带任何审批形状的数据。

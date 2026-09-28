@@ -1,0 +1,12 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+ [32m✓[39m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m① 首条稳定键必须是裸 base，第二条起才带 #<n>[32m 3[2mms[22m[39m
+ [32m✓[39m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m② flush 到 localStorage 的首条记录仍是裸 base（注释里「落 localStorage」那半句）[32m 1[2mms[22m[39m
+ [32m✓[39m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m③ 反向半边：老落盘的裸 base 记录必须被首扫命中，一条都不许多发[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 03:53:37
+[2m   Duration [22m 700ms[2m (transform 121ms, setup 0ms, import 151ms, tests 4ms, environment 425ms)[22m
+

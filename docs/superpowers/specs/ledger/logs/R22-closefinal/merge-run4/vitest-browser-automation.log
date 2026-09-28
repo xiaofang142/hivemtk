@@ -1,0 +1,67 @@
+$ npx vitest run
+(cwd=user-web/browser_automation)
+rc=0  35.1s
+
+
+ RUN  v4.1.11 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/browser_automation
+
+ ✓ test/batch20c-send-identity.test.js (10 tests) 222ms
+ ✓ test/batch9-host-hygiene.test.js (16 tests) 454ms
+     ✓ click：@e1 解析成当前 tab 的 selector 后才进注入  354ms
+ ✓ test/batch14-click-single-fire.test.js (11 tests) 800ms
+     ✓ probe 在去闭包后仍能算出坐标：CDP 可用时 channel=cdp 且 clickAt 收到正数坐标  357ms
+     ✓ trusted 路径不往页面下发任何合成事件（页面侧 handler 零次调用）  329ms
+ ✓ test/batch9a-open-tab.test.js (12 tests) 984ms
+     ✓ 真实 waitForLoad：loading→complete 轮询到完成并带回最终标题  306ms
+     ✓ 真实 waitForLoad：预算内等不到 complete → 返回 loaded:false 且不抛（永不加载完的重页是真实现实）  616ms
+ ✓ test/accessibility.test.js (6 tests) 446ms
+     ✓ 节点上限 400：超限页面只带回前 400 个，nodes 与 paths 同步截断  301ms
+ ✓ test/batch14-comment-send-gate.test.js (6 tests) 337ms
+ ✓ test/batch14-inject-selfcontained.test.js (9 tests) 273ms
+ ✓ test/batch2-a1a2.test.js (6 tests) 52ms
+ ✓ test/batch18-submit-enter.test.js (7 tests) 82ms
+ ✓ test/batch19h-render-escape.test.js (9 tests) 123ms
+ ✓ test/batch19h-token-rotation.test.js (3 tests) 33ms
+ ✓ test/native-messaging.test.js (7 tests) 14ms
+ ✓ test/batch2-b7-core.test.js (16 tests) 33ms
+ ✓ test/api-config.test.js (7 tests) 19ms
+ ✓ test/batch17-actionability.test.js (20 tests) 5092ms
+     ✓ 对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次）  354ms
+     ✓ 永远在动的元素：一帧坐标都不许下发，红因点名 unstable  517ms
+     ✓ 落位中的元素：点的是**结算后**那一帧的中心，不是第一帧的  346ms
+     ✓ click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick）  521ms
+     ✓ comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严）  509ms
+     ✓ stable 必须在远小于 15s 注入竞速窗的时间内给出结论  508ms
+     ✓ 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次**  320ms
+     ✓ 点完之后目标消失（selector 解析不到）→ element_moved  323ms
+     ✓ 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行）  328ms
+     ✓ 身份未变 → ok，且回包明说这次复核过（identity_checked=true）  321ms
+     ✓ 复核自己跑不动（注入没回包）不能变成静默 ok：未知态点名 identity  319ms
+     ✓ 读步（不带 verify_identity）不付这次额外注入  321ms
+     ✓ 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动  327ms
+ ✓ test/primitives.test.js (23 tests) 5972ms
+     ✓ R25-Q1 回归：trusted 点击 A[_blank] 不得再接管 location.href（禁双跳）  1661ms
+     ✓ chrome.debugger 可用时 click 走 trusted 通道（mock CDP 事件序列断言）  1350ms
+     ✓ comment_send 定位发送按钮 + trusted 坐标点击，回包仅 {sent}（不掺验证）  929ms
+     ✓ comment_verify 评论未渲染：超时 verified=false reason=comment_not_rendered（只读可安全轮询）  504ms
+     ✓ F11 假绿回归：草稿仍留在输入框里时 verified 必须为 false  506ms
+     ✓ F11b 假绿回归：输入框在评论区容器内部时，草稿不得判成已发布  508ms
+ ✓ test/cdp-input.test.js (13 tests) 32959ms
+     ✓ ASCII 键走 keyDown/keyUp（带 code/windowsVirtualKeyCode），Enter 走 insertText  1070ms
+     ✓ clickAt 完整序列：mouseMoved≥10 步 → press(buttons=1,clickCount=1) → release(buttons=0,clickCount=1)  1643ms
+     ✓ 轨迹起点记忆：第二次点击起点=上一次终点（F3：起点不恒定）  3173ms
+     ✓ 慢 ack：mouseMoved 永不回包也必须把 press/release 发下去  8285ms
+     ✓ pressEnter 事件 text 为 \r（Puppeteer 规范）  601ms
+     ✓ mousePressed 被 CDP 拒绝：上抛 click_unacked 而非原始错误  1250ms
+     ✓ mouseReleased 报 detach 类错误：上抛 click_unacked 且不重放第二次 press  1491ms
+     ✓ click_unacked 收敛不许丢掉原始失败原因（cause 是归因唯一线索）  1312ms
+     ✓ 键入中途 detach 报错：已发的按键不重放（一次字符 = 一次 keyDown）  579ms
+     ✓ idle detach 定时器在 chrome.debugger 已消失时触发：不得抛，且每个 tab 的状态都要清掉  7983ms
+     ✓ idle detach 逐个吞错：一个 tab detach 抛不得憋住其余 tab  5365ms
+
+ Test Files  17 passed (17)
+      Tests  181 passed (181)
+   Start at  12:27:22
+   Duration  34.15s (transform 1.16s, setup 0ms, import 1.75s, tests 47.90s, environment 9.78s)
+
+

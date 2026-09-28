@@ -1,0 +1,12 @@
+start 00:03:55
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b20bmut-zf1in46n
+覆盖 71 个脏文件、同步 0 个删除进克隆
+
+[service] 控制组 rc=0 settled=5 passed=5 skip=0 红名=[]
+
+[migrations] 控制组 rc=0 settled=4 passed=4 skip=0 红名=[]
+M4   回填范围不命中（旧下发帧的假 ✓ 一条都没被改）                                 杀掉             settled=4 skip=0 红=TestCommandLogOkTriStateMigration_UpAndBackfill
+
+===== 判定：1/6 格（--cells M4），逐格被杀，无存活 =====
+BATTERY_RC=0
+end 00:04:49

@@ -1,0 +1,60 @@
+$ bash scripts/check-architecture.sh
+(cwd=.)
+rc=0  14.4s
+
+============================================================
+  五层架构合规检查
+  目标: user-server
+  规范: GO_FIVE_LAYER_ARCHITECTURE.md
+============================================================
+
+[1/10] Controller 反向依赖检查...
+✅ [L3] controller 未直接引用 repository
+✅ [L3] controller 未直接调 db
+✅ [L3] controller 未直接引用 gorm
+✅ [L3] controller 使用 response.Success/Error 统一响应
+
+[2/10] Service 反向依赖检查...
+✅ [L4] service 未引用 controller/router
+✅ [L4] service 未直接调 db
+⚠️  [L4] 以下 service struct 持有 *gorm.DB 字段(应重构为 Repository 注入):
+    /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/service/wechat.go:40:	db *gorm.DB
+⚠️  [L4] 参考: 架构文档 GO_FIVE_LAYER_ARCHITECTURE.md §三 L3 职责
+✅ [L4] service 取 DB 句柄宽口径与基线一致（存量 39 处 / 22 个文件）
+✅ [L4] service 未含 SQL 字符串拼接
+
+[3/10] Repository 反向依赖检查...
+✅ [L5] repository 未引用 service
+✅ [L5] repository 未引用 dto
+
+[4/10] Model 业务方法检查...
+✅ [Model] 无业务方法(仅 GORM Hook/TableName)
+
+[5/10] DTO 反向依赖检查...
+✅ [DTO] dto 未引用 service/repository
+✅ [DTO] dto 未直接调 db
+✅ [DTO] 无业务方法(仅 Value/Scan)
+
+[6/10] 文件命名规范检查...
+✅ [命名] 无版本/扩展/日期后缀
+✅ [命名] 无通用名文件
+✅ [命名] controller/service/repository/dto 无冗余后缀
+✅ [命名] 无源文件误命名为 _test.go
+
+[7/10] Service interface 规范检查...
+✅ [Service] 所有 service.go 都遵循 interface+struct 模式
+
+[8/10] Repository interface 规范检查...
+✅ [Repository] 所有 repository.go 都遵循 interface+struct 模式
+
+[9/10] 上下文透传检查(抽查)...
+✅ [Repository] 所有导出方法都含 ctx context.Context
+
+[10/10] Config 包位置检查...
+✅ [Config] config 包位置合规（不在 internal/pkg/utils/ 下）
+✅ [Config] config 包未分裂
+
+============================================================
+✅ 架构检查通过(可能有 warning,需人工复核)
+============================================================
+

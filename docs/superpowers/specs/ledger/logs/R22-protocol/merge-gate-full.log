@@ -1,0 +1,6 @@
+$ python3 scripts/merge-gate.py --round R22-protocol --only action-runtime --only action-runtime-battery
+步骤名单（2 步，全程不带 -run）：action-runtime action-runtime-battery
+合并门禁：2 步（其中诊断步 0 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/R22-protocol/merge/
+[绿] action-runtime                   0.1s 
+[绿] action-runtime-battery           0.8s 
+===== 合并门禁：2/2 门步绿，无红；诊断步全绿 =====

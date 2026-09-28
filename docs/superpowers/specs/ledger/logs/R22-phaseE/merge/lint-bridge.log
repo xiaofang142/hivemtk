@@ -1,0 +1,123 @@
+$ sh -c npx eslint src test scripts --max-warnings=80; rc=$?; echo ESLINT_RC=$rc; exit $rc
+(cwd=user-web/bridge)
+rc=0  1.7s
+
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/scripts/build.mjs
+  3:64  warning  'rmSync' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/background/sse-client.js
+   18:5   warning  'sseConnections' is never reassigned. Use 'const' instead                             prefer-const
+   19:5   warning  'lastEventIDs' is never reassigned. Use 'const' instead                               prefer-const
+   20:5   warning  'tabRegistry' is never reassigned. Use 'const' instead                                prefer-const
+  142:9   warning  'connected' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  264:21  warning  'channel' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
+  266:23  warning  'accountId' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/channels/douyin.js
+   83:7   warning  'btn' is never reassigned. Use 'const' instead                                        prefer-const
+  149:95  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u          no-unused-vars
+  156:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u          no-unused-vars
+  468:9   warning  'container' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/channels/kuaishou.js
+  164:7  warning  'groupId' is never reassigned. Use 'const' instead  prefer-const
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/channels/tiktok.js
+    7:3   warning  'simulateRealClick' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  131:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u         no-unused-vars
+  151:86  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u         no-unused-vars
+  163:95  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u         no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/channels/xhs.js
+  116:92  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  123:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  529:26  warning  'ctx' is defined but never used. Allowed unused args must match /^_/u         no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/channels/xianyu.js
+    7:3   warning  'simulateRealClick' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  151:95  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u         no-unused-vars
+  158:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u         no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/content/common.js
+  185:7   warning  'threadTree' is never reassigned. Use 'const' instead                              prefer-const
+  357:11  warning  'm' is never reassigned. Use 'const' instead                                       prefer-const
+  363:11  warning  'm' is never reassigned. Use 'const' instead                                       prefer-const
+  450:9   warning  'closed' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/base-adapter.js
+  17:17  warning  'selectors' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  28:26  warning  'conversationId' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  38:44  warning  'opts' is assigned a value but never used. Allowed unused args must match /^_/u   no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/channel-adapter.js
+    4:10  warning  'mergeSelectors' is defined but never used. Allowed unused vars must match /^_/u                 no-unused-vars
+  443:11  warning  'items' is never reassigned. Use 'const' instead                                                 prefer-const
+  827:5   warning  'scrollLoadMs' is assigned a value but never used. Allowed unused args must match /^_/u          no-unused-vars
+  828:5   warning  'maxPasses' is assigned a value but never used. Allowed unused args must match /^_/u             no-unused-vars
+  829:5   warning  'visitAllWhenNoUnread' is assigned a value but never used. Allowed unused args must match /^_/u  no-unused-vars
+  841:77  warning  'unreadCount' is never reassigned. Use 'const' instead                                           prefer-const
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/dom.js
+   35:17  warning  'type' is defined but never used. Allowed unused args must match /^_/u        no-unused-vars
+  101:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  154:14  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  186:16  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  219:18  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  272:31  warning  Unnecessary escape character: \-                                              no-useless-escape
+  272:44  warning  Unnecessary escape character: \-                                              no-useless-escape
+  290:17  warning  Unnecessary escape character: \-                                              no-useless-escape
+  290:30  warning  Unnecessary escape character: \-                                              no-useless-escape
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/downlink.js
+  396:16  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u        no-unused-vars
+  431:20  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u        no-unused-vars
+  539:58  warning  'channel' is assigned a value but never used. Allowed unused args must match /^_/u  no-unused-vars
+  539:72  warning  'label' is assigned a value but never used. Allowed unused args must match /^_/u    no-unused-vars
+  729:5   warning  '_sseListeners' is never reassigned. Use 'const' instead                            prefer-const
+  955:16  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u      no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/fallback.js
+  26:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+  39:12  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/http-ingest.js
+  1:10  warning  'DEFAULT_USER_SERVER' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/humanize.js
+  8:7  warning  'log' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js
+  39:16  warning  'e' is defined but never used. Allowed unused caught errors must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-ai.js
+  150:37  warning  'channel' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  150:46  warning  'domain' is defined but never used. Allowed unused args must match /^_/u   no-unused-vars
+  155:52  warning  'domain' is defined but never used. Allowed unused args must match /^_/u   no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js
+  2:7  warning  'log' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/sse-fetch-client.js
+   24:5   warning  'listeners' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+   24:5   warning  'listeners' is never reassigned. Use 'const' instead                                  prefer-const
+  203:20  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u        no-unused-vars
+  292:15  warning  'key' is assigned a value but never used. Allowed unused vars must match /^_/u        no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/uplink.js
+  11:41  warning  'accountId' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/popup/accounts.js
+  5:7  warning  'log' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/popup/index.js
+  10:3  warning  'getCustomSelectors' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/test/downlink.test.js
+  114:9  warning  'stored' is never reassigned. Use 'const' instead  prefer-const
+
+✖ 67 problems (0 errors, 67 warnings)
+  0 errors and 12 warnings potentially fixable with the `--fix` option.
+
+ESLINT_RC=0
+

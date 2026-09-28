@@ -1,0 +1,66 @@
+$ npx vitest run
+(cwd=user-web/browser_automation)
+rc=0  37.6s
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/browser_automation[39m
+
+ [32m✓[39m test/batch20c-send-identity.test.js [2m([22m[2m10 tests[22m[2m)[22m[32m 230[2mms[22m[39m
+ [32m✓[39m test/batch9-host-hygiene.test.js [2m([22m[2m16 tests[22m[2m)[22m[33m 475[2mms[22m[39m
+     [33m[2m✓[22m[39m click：@e1 解析成当前 tab 的 selector 后才进注入 [33m 383[2mms[22m[39m
+ [32m✓[39m test/batch14-click-single-fire.test.js [2m([22m[2m11 tests[22m[2m)[22m[33m 817[2mms[22m[39m
+     [33m[2m✓[22m[39m probe 在去闭包后仍能算出坐标：CDP 可用时 channel=cdp 且 clickAt 收到正数坐标 [33m 370[2mms[22m[39m
+     [33m[2m✓[22m[39m trusted 路径不往页面下发任何合成事件（页面侧 handler 零次调用） [33m 322[2mms[22m[39m
+ [32m✓[39m test/accessibility.test.js [2m([22m[2m6 tests[22m[2m)[22m[33m 320[2mms[22m[39m
+ [32m✓[39m test/batch9a-open-tab.test.js [2m([22m[2m12 tests[22m[2m)[22m[33m 958[2mms[22m[39m
+     [33m[2m✓[22m[39m 真实 waitForLoad：loading→complete 轮询到完成并带回最终标题 [33m 304[2mms[22m[39m
+     [33m[2m✓[22m[39m 真实 waitForLoad：预算内等不到 complete → 返回 loaded:false 且不抛（永不加载完的重页是真实现实） [33m 609[2mms[22m[39m
+ [32m✓[39m test/batch14-comment-send-gate.test.js [2m([22m[2m6 tests[22m[2m)[22m[32m 174[2mms[22m[39m
+ [32m✓[39m test/batch14-inject-selfcontained.test.js [2m([22m[2m9 tests[22m[2m)[22m[32m 101[2mms[22m[39m
+ [32m✓[39m test/batch2-a1a2.test.js [2m([22m[2m6 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+ [32m✓[39m test/batch18-submit-enter.test.js [2m([22m[2m7 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+ [32m✓[39m test/batch19h-render-escape.test.js [2m([22m[2m9 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m test/batch2-b7-core.test.js [2m([22m[2m16 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+ [32m✓[39m test/api-config.test.js [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/native-messaging.test.js [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/batch19h-token-rotation.test.js [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m test/batch17-actionability.test.js [2m([22m[2m20 tests[22m[2m)[22m[33m 5108[2mms[22m[39m
+     [33m[2m✓[22m[39m 对照腿：box 静止时 stable 不许把可点步判死（channel=cdp、只点一次） [33m 375[2mms[22m[39m
+     [33m[2m✓[22m[39m 永远在动的元素：一帧坐标都不许下发，红因点名 unstable [33m 512[2mms[22m[39m
+     [33m[2m✓[22m[39m 落位中的元素：点的是**结算后**那一帧的中心，不是第一帧的 [33m 345[2mms[22m[39m
+     [33m[2m✓[22m[39m click_near 的 probe 同样有牙（第二份内联检查，不许只补 injClick） [33m 522[2mms[22m[39m
+     [33m[2m✓[22m[39m comment_send 的发送按钮 probe 同样有牙（第三份内联检查：提交点比一次点击更该严） [33m 518[2mms[22m[39m
+     [33m[2m✓[22m[39m stable 必须在远小于 15s 注入竞速窗的时间内给出结论 [33m 518[2mms[22m[39m
+     [33m[2m✓[22m[39m 点完之后中心点被别人接管 → 报 element_moved，且**不再点第二次** [33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m 点完之后目标消失（selector 解析不到）→ element_moved [33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m 点完之后中心点挪出容差 → element_moved（不许"大概没动"就放行） [33m 321[2mms[22m[39m
+     [33m[2m✓[22m[39m 身份未变 → ok，且回包明说这次复核过（identity_checked=true） [33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m 复核自己跑不动（注入没回包）不能变成静默 ok：未知态点名 identity [33m 321[2mms[22m[39m
+     [33m[2m✓[22m[39m 读步（不带 verify_identity）不付这次额外注入 [33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m 页面已经跳走（navigated）时不做中心点判据：那是跳转，不是移动 [33m 322[2mms[22m[39m
+ [32m✓[39m test/primitives.test.js [2m([22m[2m23 tests[22m[2m)[22m[33m 6088[2mms[22m[39m
+     [33m[2m✓[22m[39m R25-Q1 回归：trusted 点击 A[_blank] 不得再接管 location.href（禁双跳） [33m 1980[2mms[22m[39m
+     [33m[2m✓[22m[39m chrome.debugger 可用时 click 走 trusted 通道（mock CDP 事件序列断言） [33m 1158[2mms[22m[39m
+     [33m[2m✓[22m[39m comment_send 定位发送按钮 + trusted 坐标点击，回包仅 {sent}（不掺验证） [33m 928[2mms[22m[39m
+     [33m[2m✓[22m[39m comment_verify 评论未渲染：超时 verified=false reason=comment_not_rendered（只读可安全轮询） [33m 503[2mms[22m[39m
+     [33m[2m✓[22m[39m F11 假绿回归：草稿仍留在输入框里时 verified 必须为 false [33m 505[2mms[22m[39m
+     [33m[2m✓[22m[39m F11b 假绿回归：输入框在评论区容器内部时，草稿不得判成已发布 [33m 505[2mms[22m[39m
+ [32m✓[39m test/cdp-input.test.js [2m([22m[2m13 tests[22m[2m)[22m[33m 32840[2mms[22m[39m
+     [33m[2m✓[22m[39m ASCII 键走 keyDown/keyUp（带 code/windowsVirtualKeyCode），Enter 走 insertText [33m 975[2mms[22m[39m
+     [33m[2m✓[22m[39m clickAt 完整序列：mouseMoved≥10 步 → press(buttons=1,clickCount=1) → release(buttons=0,clickCount=1) [33m 1578[2mms[22m[39m
+     [33m[2m✓[22m[39m 轨迹起点记忆：第二次点击起点=上一次终点（F3：起点不恒定） [33m 3398[2mms[22m[39m
+     [33m[2m✓[22m[39m 慢 ack：mouseMoved 永不回包也必须把 press/release 发下去 [33m 8467[2mms[22m[39m
+     [33m[2m✓[22m[39m pressEnter 事件 text 为 \r（Puppeteer 规范） [33m 590[2mms[22m[39m
+     [33m[2m✓[22m[39m mousePressed 被 CDP 拒绝：上抛 click_unacked 而非原始错误 [33m 1092[2mms[22m[39m
+     [33m[2m✓[22m[39m mouseReleased 报 detach 类错误：上抛 click_unacked 且不重放第二次 press [33m 1272[2mms[22m[39m
+     [33m[2m✓[22m[39m click_unacked 收敛不许丢掉原始失败原因（cause 是归因唯一线索） [33m 1449[2mms[22m[39m
+     [33m[2m✓[22m[39m 键入中途 detach 报错：已发的按键不重放（一次字符 = 一次 keyDown） [33m 593[2mms[22m[39m
+     [33m[2m✓[22m[39m idle detach 定时器在 chrome.debugger 已消失时触发：不得抛，且每个 tab 的状态都要清掉 [33m 8004[2mms[22m[39m
+     [33m[2m✓[22m[39m idle detach 逐个吞错：一个 tab detach 抛不得憋住其余 tab [33m 5201[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m17 passed[39m[22m[90m (17)[39m
+[2m      Tests [22m [1m[32m181 passed[39m[22m[90m (181)[39m
+[2m   Start at [22m 01:02:12
+[2m   Duration [22m 34.40s[2m (transform 1.16s, setup 0ms, import 1.62s, tests 47.35s, environment 12.06s)[22m
+
+

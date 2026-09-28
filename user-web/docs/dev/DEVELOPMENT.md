@@ -58,7 +58,7 @@ VITE_API_BASE_URL=https://user-api.your-domain.com
 | `npm run test` | 单元测试（Vitest，单次运行） | `vitest.config.js` 配置 |
 | `npm run test:watch` | 监听模式 | 开发期间持续运行 |
 | `npm run test:coverage` | 覆盖率报告 | `@vitest/coverage-v8` |
-| `npm run test:e2e` | Playwright E2E | `playwright.config.js` baseURL 默认 `http://localhost:5173` |
+| `npm run test:e2e` | Playwright E2E | `playwright.config.js` baseURL 默认 `http://localhost:8211`（需先 `npm run dev`）|
 | `npm run test:e2e:ui` | Playwright UI 模式 | 推荐：可视化调试用例 |
 | `npm run test:e2e:report` | 查看 E2E HTML 报告 | 浏览器打开 `playwright-report/` |
 
@@ -75,7 +75,7 @@ npm run dev
 
 | 端口 | 服务 / 应用 | 启动入口 | 单一源 | 文档源 |
 | --- | --- | --- | --- | --- |
-| **8211** | **user-web**（Vite dev） | `npm run dev` | `vite.config.js server.port=8211` | `vite.config.js:102` |
+| **8211** | **user-web**（Vite dev） | `npm run dev` | `vite.config.js server.port=8211` | `vite.config.js:268` |
 | **8204** | **user-server**（被前端联调） | `cd ../user-server && go run ./cmd/api` | user-server `config.DefaultListenPort` | user-server/docs/dev/DEVELOPMENT.md §2.4 |
 | 8202 | user-server PG（docker 宿主机映射） | `docker compose -f docker-compose.yml up -d` | user-server `config.DefaultDBPortDocker` | user-server docs §2.4 |
 | 8203 | user-server Redis | `docker compose -f docker-compose.yml up -d` | user-server `config.DefaultRedisPort` | user-server docs §2.4 |
@@ -84,14 +84,13 @@ npm run dev
 | 8208 | Embedding（本地推理） | user-server `make inference-host-up` | user-server `config.DefaultEmbeddingPort` | user-server docs §2.4 |
 | 8209 | Rerank（本地推理） | user-server `make inference-host-up` | user-server `config.DefaultRerankPort` | user-server docs §2.4 |
 | 8232 | user-server PG（dev 本机直连） | `pg_ctl -D /usr/local/var/postgres start` | user-server `config.DefaultDBPortDev` | user-server `config.yaml` |
-| 5173 | Playwright E2E 目标 URL | `npm run test:e2e` | `playwright.config.js baseURL` | `playwright.config.js` |
 | 8204 | bridge 扩展 popup server URL 默认 | `http://localhost:8204` | `user-web/bridge/src/core/constants.js DEFAULT_USER_SERVER.port` | user-web/bridge/docs/dev/DEVELOPMENT.md §3 |
 
 **前端启动约束**（禁软启动 / 禁多处硬编码）：
 
 1. Vite 端口与代理目标均集中在 `vite.config.js`，**禁止在 `.env.*` 中覆盖**（`.env.development` 仅可覆盖 `VITE_API_BASE_URL` 用于生产跨域）
 2. WS URL 由 `src/utils/configManager.js` 的 `getApiConfig()` 动态推导（`baseUrl + /api/ws/agent` 与 `/api/ws/visitor`），禁止前端代码直接写绝对 URL
-3. E2E `baseURL` 5173 是 Playwright 配置独立项，**与 dev server 8211 解耦**；可通过 `E2E_BASE_URL` 环境变量覆盖
+3. E2E `baseURL` 默认与 dev server 同为 `http://localhost:8211`（Playwright 不代起前端，跑前先 `npm run dev`）；跨机/换端口时用 `E2E_BASE_URL` 覆盖
 
 ## 3. 目录导航
 
@@ -402,7 +401,7 @@ npm run test:e2e:report
 **配置要点**（`playwright.config.js`）：
 
 - `testDir: './tests'`，`testMatch: '**/*.spec.js'`
-- `baseURL`：`process.env.E2E_BASE_URL || 'http://localhost:5173'`（注意是 5173 不是 dev server 的 8211）
+- `baseURL`：`process.env.E2E_BASE_URL || 'http://localhost:8211'`（与 `vite.config.js server.port` 同源，改 dev 端口要同步改这一处）
 - `workers: 1`，`fullyParallel: false`：串行执行避免数据竞争
 - `timeout: 30s`，`actionTimeout: 15s`，`navigationTimeout: 20s`
 - 失败时自动截图 + 录制视频 + trace
@@ -489,7 +488,6 @@ npm run preview
 | `.env.development` | 开发环境 | `VITE_API_BASE_URL=/` |
 | `.env.production` | 生产构建 | 可配置独立域名 |
 | `.env.example` | 模板 | 复制后改名 `.env.development` 使用 |
-| `.development.example` / `.production.example` | 示例 | 同上 |
 
 ## 10. 调试技巧
 
@@ -571,7 +569,7 @@ await updateRequestConfig()
 | toast 重复弹出 | 检查是否在 2.5s 内对相同 message 触发多次（`lastToastMsg` 去重逻辑） |
 | 文件上传 415 | 确认是否使用 `http.upload(url, formData)` 自动注入 `multipart/form-data` |
 | 文件下载乱码 | 确认 `responseType: 'blob'`，响应拦截器会跳过 JSON 解析直接透传 |
-| E2E 用例 5173 端口无响应 | `playwright.config.js` 的 `baseURL` 默认 5173，dev server 是 8211；可通过 `E2E_BASE_URL` 环境变量覆盖 |
+| E2E 用例整批 `net::ERR_CONNECTION_REFUSED` | 前端没起：先 `npm run dev`（默认 8211）；`strictPort:false` 下 8211 被占用会自动递增，此时用 `E2E_BASE_URL` 指到实际端口 |
 | `import axios` 报错 | 应使用 `import { http } from '@/utils/request'`，禁止直接 import axios |
 
 ## 关联文档

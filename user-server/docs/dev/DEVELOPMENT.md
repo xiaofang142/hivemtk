@@ -55,7 +55,7 @@
 
 ```bash
 cd ..                            # 回到 hivemtk 仓库根
-make install                     # 生成 .env + docker-compose.yml + 拉模型 + 启 PG/Redis/推理栈
+make install                     # cp .env-example .env（已存在则跳过）+ 构建前端/SDK + 装 llama.cpp + 拉模型 + 起 PG/Redis 容器与推理栈；docker-compose.yml 由仓库自带，install 不产出它
 make dev                         # 启动 user-server 热更新（air）
 cd user-web && npm run dev       # 启动前端（另一终端，已在 hivemtk/ 根目录下）
 ```
@@ -109,7 +109,7 @@ curl http://localhost:8204/api/v1/public/init
 | 8203 | Redis | `docker compose -f docker-compose.yml up -d` | `config.DefaultRedisPort` | `docker-compose.yml` 中 mtk-redis 容器 |
 | **8204** | **user-server**（Gin HTTP） | `go run ./cmd/api` 或 `air -c .air.toml` | `config.DefaultListenPort` / `main.DefaultListenPort` | 运行期覆盖：`PORT`（端口）/ `SERVER_HOST`（监听主机，默认 `0.0.0.0`）——读点 `cmd/api/main.go` `resolveListenAddr`。旧写法「`Dockerfile:57 ENV SERVER_PORT=8204`」指向的 `user-server/Dockerfile` 已于 `94415060`（2026-08-17）删除、仓内现已无 Dockerfile，且 `SERVER_PORT` 在 Go 侧零读取点 ⇒ 改端口只认 `PORT` |
 | 8205 | platform-server | `cd hivemtk-platform/platform-server && go run ./cmd/api` | `config.DefaultPlatformPort` | platform-server/config.yaml `server.port` |
-| 8206 | Chromium CDP（远程调试） | `chromedp.Flag("remote-debugging-port", "8206")` | `config.DefaultChromiumCDPPort` | `internal/aiagent/agent/browser/assistant.go:43` |
+| 8206 | Chromium CDP（远程调试，**可选**） | 由浏览器自动化侧自行拉起 Chromium，本仓 Go 代码不启动它 | `config.DefaultChromiumCDPPort`（`internal/config/ports.go:18`；派生的 `DefaultRemoteDebugURL` 同文件 :42） | 旧写法引用的 `aiagent/agent/browser/` 目录与 `chromedp` 依赖在仓内都不存在：常量目前**非测试消费点为 0**，8206 去留属浏览器自动化泳道 |
 | 8207 | LLM（llama.cpp） | `bash scripts/inference-host/start-llm.sh` | `config.DefaultLLMPort` | `inference.llm.base_url: http://127.0.0.1:8207/v1` |
 | 8208 | Embedding（bge-m3） | `bash scripts/inference-host/start-embedding.sh` 或 `go run ./cmd/embedding-server` | `config.DefaultEmbeddingPort` | `inference.embedding.base_url: http://127.0.0.1:8208/v1` |
 | 8209 | Rerank（bge-reranker-v2-m3） | `bash scripts/inference-host/start-rerank.sh` | `config.DefaultRerankPort` | `inference.rerank.base_url: http://127.0.0.1:8209/v1` |
@@ -134,7 +134,7 @@ cd hivemtk && make inference-host-up
 # === 3. 启动 user-server 主进程 ===
 # 端口 8204
 cd hivemtk/user-server
-cp config.yaml.example config.yaml  # 首次；按 .env 调整 POSTGRES_PASSWORD
+# config.yaml 随仓库提供（user-server/ 下），无需 cp；首次只需核对 database 段口令/端口来自 .env
 go run ./cmd/api
 # 或热更新（⭐推荐，详见 [./HOT_RELOAD.md](./HOT_RELOAD.md)）：
 cd hivemtk && make dev    # air 监听 ./user-server，保存 .go 即自动重启
@@ -147,10 +147,10 @@ go run ./cmd/api
 # 验证：curl http://localhost:8205/healthz
 
 # === 5. 启动 user-web 前端 ===
-# 默认 vite 5173
+# 端口由 user-web/vite.config.js 的 server.port 定为 8211（strictPort:false，占用则递增）
 cd hivemtk/user-web
 npm run dev
-# 验证：浏览器打开 http://localhost:5173
+# 验证：浏览器打开 http://localhost:8211
 
 # === 6. 启动 bridge 浏览器扩展（可选）===
 # 端口 8204（连接 user-server）
@@ -175,10 +175,10 @@ node scripts/build.mjs
 1. **所有端口字面量集中在 `user-server/internal/config/ports.go`**（`DefaultListenPort`/`DefaultDBPortDev`/`DefaultDBPortDocker`/`DefaultRedisPort`/`DefaultPlatformPort`/`DefaultChromiumCDPPort`/`DefaultLLMPort`/`DefaultEmbeddingPort`/`DefaultRerankPort` 等 + 对应 `_PortStr` 字符串版本 + `DefaultXxxBaseURLDev`/`DefaultXxxBaseURLDocker` 派生 URL + `DefaultPlatformAPI` 平台 API 网关 + `DefaultBGEBaseURLDev/Docker` BGE-m3 兜底）
 2. **bridge 端单源**：`user-web/bridge/src/core/constants.js` 的 `DEFAULT_USER_SERVER.port = 8204`
 3. **禁止"软启动"**——`config.yaml` 缺字段时必须明确报错（`log.Fatalf`），不允许 `if cfg == nil { cfg = defaultConfig }` 静默兜底；即使是最后兜底的本地默认值，也必须从 `config.DefaultXxxBaseURLDev` / `config.DefaultXxxBaseURLDocker` 引用，禁止字面量
-4. **禁止"重复硬编码"**——任何模块（含 `cmd/perf/main.go`、`internal/service/short_link.go` 等）禁止在写 `http://localhost:8204` / `:8207` 等字面量，必须 `import "marketing/internal/pkg/utils/config"` 后用 `config.DefaultXxx` 派生
-5. **fallback 必须可溯源**——embedding/rerank/llm 服务的 last-resort fallback（如 `embedding.go:163`、`rerank.go:137`、`llm.go:574`）必须引用 `config.DefaultXxxBaseURLDocker` 或 `config.DefaultXxxBaseURLDev`，禁止直接写 `http://mtk-xxx:8208/v1` 等字面量
+4. **禁止"重复硬编码"**——任何模块（含 `cmd/perf/main.go`、`internal/service/short_link.go` 等）禁止在写 `http://localhost:8204` / `:8207` 等字面量，必须 `import "hivemtk-user/internal/pkg/utils/config"` 后用 `config.DefaultXxx` 派生
+5. **fallback 必须可溯源**——embedding/rerank/llm 服务的 last-resort fallback（如 `embedding.go:163`、`rerank.go:137`、`llm.go:574`）必须引用 `config.DefaultXxxBaseURLDocker` 或 `config.DefaultXxxBaseURLDev`，禁止直接写 `http://<推理服务主机>:8208/v1` 等字面量
 6. **禁止账号/密码硬编码**——`cmd/perf/main.go` 等压测工具禁止 `admin123` 等弱口令默认值；必须通过命令行 `-username`/`-password` 或 `PERF_USERNAME`/`PERF_PASSWORD` 环境变量显式传入
-7. **禁止模型名硬编码**——LLM/Embedding/Rerank 默认模型名集中通过 `config.DefaultLLMModel()` / `config.DefaultEmbeddingModel()` / `config.DefaultRerankModel()` getter 引用，禁止 `embedding.go:169` 类的 `model = "bge-m3"` 字面量（dev 档契约：`Qwen2.5-1.5B-Instruct` / `bge-m3` / `bge-reranker-v2-m3`）
+7. **禁止模型名硬编码**——LLM/Embedding/Rerank 默认模型名集中通过 `config.DefaultLLMModel()` / `config.DefaultEmbeddingModel()` / `config.DefaultRerankModel()` getter 引用，禁止 `embedding.go:169` 类的 `model = "bge-m3"` 字面量。三个 getter 的回落值与 `.env-example` 的 `LLM_SERVED_NAME` / `EMBEDDING_SERVED_NAME` / `RERANK_SERVED_NAME` 由 `internal/config/inference_profile_parity_test.go` 同值守卫：换档只改 `.env-example` 会让回落到一个没下载的模型名
 8. **禁止外部 URL 硬编码**——平台 API 域名集中通过 `config.DefaultPlatformAPI` 引用，禁止 `cmd/api/main.go:175` 类字面量；Ollama 端口由环境变量 `PLAYGROUND_LLM_BASE_URL` 显式覆盖
 
 **PostgreSQL 端口差异说明**：本地源码启动时 `config.yaml` 中端口为 **8232**；Docker 部署时 `docker-compose.yml` 把 mtk-postgres 容器的 5432 映射到宿主机 **8202**。两者不冲突——切换部署模式时需同步修改 `config.yaml` 或 `config.yaml` 的 `database.postgres.port`，或通过 `POSTGRES_PORT` 环境变量覆盖。
@@ -261,7 +261,7 @@ func (CustomerTag) TableName() string { return "customer_tags" }
 ```go
 package dto
 
-import "marketing/internal/model"
+import "hivemtk-user/internal/model"
 
 // CreateCustomerTagRequest 创建请求
 type CreateCustomerTagRequest struct {
@@ -292,8 +292,8 @@ package repository
 
 import (
     "context"
-    "marketing/internal/model"
-    "marketing/internal/pkg/utils/db"
+    "hivemtk-user/internal/model"
+    "hivemtk-user/internal/pkg/utils/db"
 )
 
 type CustomerTagRepository struct {
@@ -322,10 +322,10 @@ package service
 
 import (
     "context"
-    "marketing/internal/dto"
-    "marketing/internal/model"
-    "marketing/internal/pkg/utils/logger"
-    "marketing/internal/repository"
+    "hivemtk-user/internal/dto"
+    "hivemtk-user/internal/model"
+    "hivemtk-user/internal/pkg/utils/logger"
+    "hivemtk-user/internal/repository"
 )
 
 type CustomerTagService struct {
@@ -357,9 +357,9 @@ package controller
 
 import (
     "net/http"
-    "marketing/internal/dto"
-    "marketing/internal/pkg/utils/response"
-    "marketing/internal/service"
+    "hivemtk-user/internal/dto"
+    "hivemtk-user/internal/pkg/utils/response"
+    "hivemtk-user/internal/service"
     "github.com/gin-gonic/gin"
 )
 
@@ -485,7 +485,7 @@ package migrations
 import (
     "context"
     "fmt"
-    "marketing/internal/migration"
+    "hivemtk-user/internal/migration"
     "gorm.io/gorm"
 )
 

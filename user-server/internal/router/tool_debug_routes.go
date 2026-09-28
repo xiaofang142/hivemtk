@@ -465,8 +465,12 @@ func handleToolCircuitReset(c *gin.Context) {
 
 // toolApprovalWhitelistRequest 冷触达审批白名单授权请求。
 type toolApprovalWhitelistRequest struct {
-	ToolName  string `json:"tool_name" binding:"required"`
-	AccountID string `json:"account_id" binding:"required"`
+	// 这两个键**刻意不挂 binding:"required"**：挂了之后缺键会被校验器先截走，
+	// 回的是 `Key: 'toolApprovalWhitelistRequest.ToolName' ...` —— Go 字段名，
+	// 不是请求体里那个 `tool_name`；而"给了空白"又漏到下面那句手写提示。
+	// 同一个毛病两条路、两种文案，其中一种还教人改错地方。判空交给下面一处。
+	ToolName  string `json:"tool_name"`
+	AccountID string `json:"account_id"`
 
 	// ExpiresAt RFC3339；留空 = 永不过期。
 	ExpiresAt string `json:"expires_at"`
@@ -649,7 +653,17 @@ func handleToolApprovalWhitelist(c *gin.Context) {
 	toolName := strings.TrimSpace(req.ToolName)
 	accountID := strings.TrimSpace(req.AccountID)
 	if toolName == "" || accountID == "" {
-		response.Error(c, 400, "tool_name and account_id required")
+		// 缺键与给空白在这一句合流（见 toolApprovalWhitelistRequest 上不挂 required 的理由）。
+		// 点名**缺的那一个**：授权按 (tool_name, account_id) 这一对键写，只说"两个都要"
+		// 会让已经给了其中一个的人去反复检查自己给对的那格。
+		missing := make([]string, 0, 2)
+		if toolName == "" {
+			missing = append(missing, "tool_name")
+		}
+		if accountID == "" {
+			missing = append(missing, "account_id")
+		}
+		response.Error(c, 400, strings.Join(missing, " 与 ")+" 必填且不能是空白：授权按 (tool_name, account_id) 这一对键写，缺一不可")
 		return
 	}
 	var expiresAt time.Time
@@ -657,6 +671,16 @@ func handleToolApprovalWhitelist(c *gin.Context) {
 		parsed, err := time.Parse(time.RFC3339, s)
 		if err != nil {
 			response.Error(c, 400, "expires_at 需为 RFC3339，如 2026-10-01T00:00:00Z")
+			return
+		}
+		// 授权带一个**已经过去**的时刻 = 写下一条当场失效的条目：白名单的判读
+		// （ActiveEntryCount / decide）都按 `expiresAt.After(now)` 算有效，于是这次授权
+		// 什么都没开到。若这里照样回 200，操作者读到的是"给了窗口"，而下一次冷触达
+		// 仍被拒 —— 两端各说各话，排查方向会从"这个账号没被放行"跑到"旗子没开"。
+		// 撤权不看这一格：撤一条本来就已过期的授权仍然是撤，拦它等于拦人关门。
+		if !req.Revoke && !parsed.After(time.Now()) {
+			response.Error(c, 400, "expires_at 必须晚于当下（收到 "+parsed.Format(time.RFC3339)+
+				"）：这条授权当场就会失效，本次不写入。要么给一个未来时刻，要么不带这一格（= 永不过期）")
 			return
 		}
 		expiresAt = parsed

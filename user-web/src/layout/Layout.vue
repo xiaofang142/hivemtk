@@ -188,6 +188,9 @@ const topMenus = ref([
       // 待办中心与收件箱是两件事：那一边是"这个会话现在归谁"，这一边是"有件事在等人办，
       // 几点之前不办就算逾期"。合并成一个入口会让 SLA 读数混进会话列表里。
       { key: 'approvalTask', title: '待办中心', icon: 'Tickets', path: '/approvalTask/list' },
+      // Bad Case 队列与待办中心是两件事：那一边是"有件事在等人办，几点前不办算逾期"，
+      // 这一边是"这次答得不好的那一次，该判给哪个责任层"。合并成一个入口会把归因账混进值班队列里。
+      { key: 'badCase', title: 'Bad Case 队列', icon: 'Warning', path: '/badCase/list' },
       { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]

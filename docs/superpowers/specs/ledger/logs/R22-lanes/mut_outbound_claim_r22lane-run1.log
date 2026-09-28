@@ -1,0 +1,33 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r22lane-outbound-l4q23dy5
+[Go] overlay：113 个脏 .go 已进克隆（含本泳道未跟踪新腿）
+
+[Go] 注码前置：3 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=6 passed=6 skip=0 FAIL=[]
+O1a  轮询路径收口实参 cutoff→time.Now()（凡 inflight 皆判死，正在发的那条被就地 fail   存活=洞    total=6 fail=0 skip=0 ｜ 
+2026-09-23T04:40:02+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestClaimPendingOutboundCapsPushAttemptsAndTerminalizes
+--- PASS: TestClaimPendingOutboundCapsPushAttemptsAndTerminalizes (5.07s)
+=== RUN   TestInflightRecycleKeepsPushAttemptBudget
+--- PASS: TestInflightRecycleKeepsPushAttemptBudget (0.10s)
+=== RUN   TestFetchOutboundUndeliveredExcludesAndEscalatesExhausted
+--- PASS: TestFetchOutboundUndeliveredExcludesAndEscalatesExhausted (0.10s)
+=== RUN   TestPushCapSweepTouchesOnlyOwedOutbound
+--- PASS: TestPushCapSweepTouchesOnlyOwedOutbound (0.12s)
+=== RUN   TestPushCapSweepSparesUnexpiredInflightRow
+--- PASS: TestPushCapSweepSparesUnexpiredInflightRow (0.09s)
+PASS
+ok  	hivemtk-user/internal/repository	6.054s
+2026-09-23T04:40:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestInboxOutboundClaimTimeoutCoversBridgeSendBudget
+--- PASS: TestInboxOutboundClaimTimeoutCoversBridgeSendBudget (0.00s)
+PASS
+ok  	hivemtk-user/internal/service	0.778s
+
+O1b  补拉路径收口实参 cutoff→time.Now()（同上，第三条取行路径单独一刀）                 杀掉      total=6 fail=1 skip=0 ｜ TestPushCapSweepSparesUnexpiredInflightRow
+O2   InboxOutboundClaimTimeout 30s→5s（可见性窗短于桥端单次发送预算 20s ⇒ 双发   杀掉      total=6 fail=1 skip=0 ｜ TestInboxOutboundClaimTimeoutCoversBridgeSendBudget
+[Go] 克隆内注码文件已全量还原（md5 一致）；工作树全程未被写入
+
+===== 电池判定：有洞 =====
+  ✗ [Go] O1a 存活=洞：轮询路径收口实参 cutoff→time.Now()（凡 inflight 皆判死，正在发的那条被就地 failed）
+
+outbound_claim_rc=1

@@ -300,12 +300,16 @@ func TestBillController_RequiresSession(t *testing.T) {
 // 服务层的入参结构里没有那一格（由反射用例钉着），但绑定若是宽容的，
 // 调用方递进来的 amount 会被静默丢掉，于是"我传了 5000 而系统按 369.99 记账"
 // 在两边看起来都是对的。
+//
+// due_at 今天不在这份名单里（T-P7-03 把它开成了入参，见
+// TestBillController_DueAtPassesThroughToTheService）；本用例守的是剩下那四格 +
+// "用逻辑号 quote_id 派生"这一格 —— 那一格恰恰是账期之外最容易被顺手加回来的东西，
+// 因为拿逻辑号也能"看起来"开出账单，只是同一张报价单从此只能开一张。
 func TestBillController_BodyCarriesOnlyTheRowKey(t *testing.T) {
 	for _, body := range []string{
 		`{"quote_row_id":"q_1","amount":5000}`,
 		`{"quote_row_id":"q_1","status":"paid"}`,
 		`{"quote_row_id":"q_1","currency":"USD"}`,
-		`{"quote_row_id":"q_1","due_at":"2026-12-31"}`,
 		`{"quote_row_id":"q_1","opportunity_id":"opp_x"}`,
 		`{"quote_id":"QT-1-2"}`,
 	} {
@@ -330,6 +334,11 @@ func TestBillController_MissingOrMalformedBody(t *testing.T) {
 		{"行号为空白", `{"quote_row_id":"   "}`},
 		{"形状不对", `["q_1"]`},
 		{"类型不对", `{"quote_row_id":12}`},
+		// 账期"给了但读不出"：只吃带显式偏移的 RFC3339（换算由录入侧做，见
+		// TestBillController_DueAtPassesThroughToTheService）。裸日期在这一格回 400，
+		// 而不是被按某个时区猜成一天 —— 那一猜就是 check-date-bucket-tz 点名的裂脑。
+		{"账期是裸日期", `{"quote_row_id":"q_1","due_at":"2026-12-31"}`},
+		{"账期是数字", `{"quote_row_id":"q_1","due_at":1766275800}`},
 	} {
 		fake := &billFake{available: true}
 		code, env, _ := doBill(t, billTestEngine(newBillCtrl(fake), billSession), http.MethodPost, "/api/bill", probe.body)
@@ -343,6 +352,61 @@ func TestBillController_MissingOrMalformedBody(t *testing.T) {
 			t.Errorf("%s 服务层被调用 %d 次：空行号本该在门口挡下", probe.name, fake.calls)
 		}
 	}
+}
+
+// TestBillController_DueAtPassesThroughToTheService 账期这一格的三条腿：给了就原样递、
+// 不给就递 nil、递错形状就 400（后一条在 TestBillController_MissingOrMalformedBody）。
+//
+// "本层不碰它"是这一格的全部判据：控制器不做时区换算、不补默认天数、不裁剪到整天。
+// 理由与 T-P7-01 拒绝写死 30 天是同一句 —— 任何一个"顺手算一下"都会让
+// 运营在合同上看到的日期与库里那一行差一格，而差的那一格正是逾期判据的边界。
+//
+// 断言打在**递给服务层的那一份入参**上（fake 记的 in），不看响应：
+// 响应里的 due_at 来自夹具视图，它绿不绿与这一格传没传过去是两件事。
+func TestBillController_DueAtPassesThroughToTheService(t *testing.T) {
+	t.Run("给了 ⇒ 原样递，指针非空且是同一瞬间", func(t *testing.T) {
+		fake := &billFake{available: true}
+		code, _, _ := doBill(t, billTestEngine(newBillCtrl(fake), billSession), http.MethodPost, "/api/bill",
+			`{"quote_row_id":"q_1","due_at":"2026-12-31T09:30:00+08:00"}`)
+		if code != http.StatusOK {
+			t.Fatalf("回 %d，期望 200", code)
+		}
+		if fake.in.DueAt == nil {
+			t.Fatal("服务层收到的 DueAt 是 nil：这一格在绑定层就被丢掉了")
+		}
+		want := time.Date(2026, 12, 31, 9, 30, 0, 0, time.FixedZone("CST", 8*3600))
+		if !fake.in.DueAt.Equal(want) {
+			t.Errorf("收到 %v，期望 %v（同一瞬间，换算是调用方做的）", fake.in.DueAt.UTC(), want.UTC())
+		}
+		if fake.in.QuoteRowID != "q_1" {
+			t.Errorf("行号被改成 %q", fake.in.QuoteRowID)
+		}
+	})
+
+	t.Run("不给 ⇒ 递 nil，而不是零值日期", func(t *testing.T) {
+		fake := &billFake{available: true}
+		code, _, _ := doBill(t, billTestEngine(newBillCtrl(fake), billSession), http.MethodPost, "/api/bill",
+			`{"quote_row_id":"q_1"}`)
+		if code != http.StatusOK {
+			t.Fatalf("回 %d，期望 200（账期是**可选**格：合同没谈拢付款条件也要能先确认成交）", code)
+		}
+		if fake.in.DueAt != nil {
+			t.Errorf("收到 %v，期望 nil：零值日期会被运营读成「公元 1 年就到期了」，"+
+				"而催收那条腿会立刻把它算成逾期一万天", *fake.in.DueAt)
+		}
+	})
+
+	t.Run("显式 null 与不给同义", func(t *testing.T) {
+		fake := &billFake{available: true}
+		code, _, _ := doBill(t, billTestEngine(newBillCtrl(fake), billSession), http.MethodPost, "/api/bill",
+			`{"quote_row_id":"q_1","due_at":null}`)
+		if code != http.StatusOK {
+			t.Fatalf("回 %d，期望 200", code)
+		}
+		if fake.in.DueAt != nil {
+			t.Errorf("due_at:null 收到了 %v，期望 nil（「清掉账期」与「填个零值」必须是同一件事）", *fake.in.DueAt)
+		}
+	})
 }
 
 // TestBillController_BodyIsCapped 请求体封顶：判据必须**只有封顶才兑现得了**。

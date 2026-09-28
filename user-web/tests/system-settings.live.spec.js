@@ -28,7 +28,7 @@ const isApiUrl = (s) => s.includes('/api/') && !s.includes('/src/')
 // 一次性真实登录（独立 API 上下文，避免 page.route 污染 / 上下文状态串扰）
 let AUTH = { token: '', user: null }
 test.beforeAll(async () => {
-  const ctx = await request.newContext({ baseURL: process.env.E2E_BASE_URL || 'http://localhost:8214' })
+  const ctx = await request.newContext({ baseURL: process.env.E2E_BASE_URL || 'http://localhost:8211' })
   const resp = await ctx.post('/api/auth/login', { data: { username: 'admin', password: 'Admin@12345678' } })
   const body = await resp.json().catch(() => ({}))
   AUTH = { token: body?.data?.token || '', user: body?.data?.user || null }

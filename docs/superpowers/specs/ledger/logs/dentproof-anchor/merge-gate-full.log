@@ -1,0 +1,5 @@
+$ python3 scripts/merge-gate.py --round dentproof-anchor --only anchor-preflight
+步骤名单（1 步，全程不带 -run）：anchor-preflight
+合并门禁：1 步（其中诊断步 0 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/dentproof-anchor/merge/
+[红] anchor-preflight                 0.8s ｜ rc=1 ; 输出里找不到判据行 '已登记的 \\d+ 份电池'（命令可能根本没跑到那一步） ; 输出里出现了禁止行 '✗'
+===== 合并门禁：0/1 门步绿，红在：anchor-preflight；诊断步全绿 =====

@@ -1,0 +1,40 @@
+<!--
+C 相续刀 · lane 3 · 批20b（A2）电池**全量回跑**（6 格 → 8 格：新增 M7/M8 两格，
+补的窄腿＝TestB20BFailedDispatchEventFramesSayFailed）。
+控制组的 settled 数是这一趟现测的（service 侧从 5 条腿变成 6 条），不是写死的常量。
+
+命令：python3 scripts/mut_command_log_ok_b20b.py --clone /tmp/r22lane3-b20b-full
+克隆：git clone --shared --no-checkout + checkout master + 71 个本泳道脏 .go 覆盖
+     （含未跟踪的 command_log_outcome_b20b_test.go——本轮那条新腿就住在这个文件里，
+      它没进克隆的话电池会把「克隆里没这条腿」读成「刀存活」，这条坑本仓踩过）
+库：POSTGRES_TEST_PORT=8232，口令只从 user-server/.env 用 awk 精确取 POSTGRES_PASSWORD
+    喂 POSTGRES_TEST_PASSWORD（值不打印）；两个控制组 skip=0、无红名。
+注码只落克隆，共享工作树的 executor.go / 迁移文件未改动；每格跑完还原并比 md5。
+-->
+
+私有作业目录：/tmp/r22lane3-b20b-full
+覆盖 71 个脏文件、同步 0 个删除进克隆
+
+[service] 控制组 rc=0 settled=6 passed=6 skip=0 红名=[]
+
+[migrations] 控制组 rc=0 settled=4 passed=4 skip=0 红名=[]
+M1   command 帧退回带结论（A2 那根轴又折回一列）                              杀掉             settled=6 skip=0 红=TestB20BCommandFramesCarryNoVerdict
+M2   确认帧改名（帧照落、审计流里查不到这个名字）                                   杀掉             settled=6 skip=0 红=TestB20BUnverifiedWriteConfirmFrameSaysSo,TestB20BWriteStepEmitsConfirmJudgeFrame
+M3   摘掉落流侧 evidence 脱敏（正文进离线件）                                杀掉             settled=6 skip=0 红=TestB20BWriteStepEmitsConfirmJudgeFrame
+M4   回填范围不命中（旧下发帧的假 ✓ 一条都没被改）                                 杀掉             settled=4 skip=0 红=TestCommandLogOkTriStateMigration_UpAndBackfill
+M5   不摘 NOT NULL（新代码第一次写 nil 就炸）                              杀掉             settled=4 skip=0 红=TestCommandLogOkTriStateMigration_UpAndBackfill
+M6   不摘 DEFAULT（gorm 会把 nil 折回 false）                         杀掉             settled=4 skip=0 红=TestCommandLogOkTriStateMigration_UpAndBackfill
+M7   comment_send 的失败回包帧带常量结论（`verdict(err == nil)`→`verdic   杀掉             settled=6 skip=0 红=TestB20BFailedDispatchEventFramesSayFailed
+M8   步失败的 event 回包帧带常量结论（`verdict(false)`→`verdict(true)`）    杀掉             settled=6 skip=0 红=TestB20BFailedDispatchEventFramesSayFailed
+
+===== 判定：8/8 格，逐格被杀，无存活 =====
+
+== 读数之外的两句 ==
+1. M7/M8 的期望红集合相同（同一条窄腿里的两处断言各吃一处站点），但这不是重复格：
+   注掉任一处只红对应的那一处——上一趟取证（a6a2-oldlegs-under-knife-r22lane3.log）里
+   这两把刀在 5 条旧腿下 5/5 全绿，红名单为空、skip=0，所以补腿前它们是**真缺口**而不是没跑。
+2. 这条电池不但只跑新格：M1-M6 与 M7/M8 共用 executor.go 的锚点与同一批腿，
+   旧格必须同趟复跑（本趟就是 8/8 全量），否则"锚点被上一次改动漂掉"没人看见。
+3. M7/M8 的红因文本（`command_log_outcome_b20b_test.go:280` 与 `:281`，两条腿各自点出
+   `comment_send` / `post_comment` 那一帧）与「还原后同腿集回绿」的读数在同目录
+   a6a2-newlegs-fail-text-r22lane3.log（批一）；本文件只留电池那种「腿名级」读数。

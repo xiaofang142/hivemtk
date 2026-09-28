@@ -126,8 +126,11 @@ func ContentHashMsgID(channel, conversationID, content string) string {
 // 出站(outbound)行判定「自己消息」，再以账号(platform 身份)回填发送者，保证自/他区分不依赖前端标签。
 //
 // 注意：content 仍做 TrimSpace（与 ContentHashMsgID 保持一致，兼容首尾空白差异），
-// 但严禁加入 conversationID——跨会话同内容(不同发送者)必须可区分，且复合唯一索引
-// (msg_id, conversation_id) 已为跨会话同内容留出空间。
+// 但严禁加入 conversationID——这句约束的范围是「这个哈希作为 msg_id / dedup_hash 两列的值」：
+// 跨会话同内容必须落同一哈希，复合唯一索引 (msg_id, conversation_id) 才留得出位置。
+// 它不覆盖 Redis 入口去重键：那把键在 inbox_ingress_ingest.go 里把 conversation_id 追加在哈希
+// 之外（键 = 前缀 + 本哈希 + ":" + 会话），命中即丢、没有索引兜底，键不带会话就会跨会话互吞。
+// 哈希本身与前端 types.js::sharedContentHash 逐字节一致，改不得。
 func ContentHashWithSender(channel, senderName, content string) string {
 	s := channel + "|" + senderName + "|" + strings.TrimSpace(content)
 	h := fnv.New32a()

@@ -1,0 +1,33 @@
+# 协议自身台账（R22-protocol.jsonl）的闭合门两趟 —— P-36 的证据
+# 生成 2026-09-23 04:50  口径：闭合门读的就是这份 jsonl + 协议 spec
+
+## 第 1 趟（台账有一条证据文件还没落盘 ⇒ 门必须红，这正是 P-36 攻击面的前一半）
+$ python3 scripts/check-review-closeout.py docs/superpowers/specs/ledger/R22-protocol.jsonl
+轮次 R22-protocol：条目 41（fixed=38 refuted=2 locked-equivalence=0 blocked=1 非法status 0）
+  钉 1. 承诺轴：审什么由"代码对外说过什么"决定 / 1. 承诺轴：审什么由"代码对外说过什么"决定 / bullet → 实抽 5
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / bullet → 实抽 4
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / tablerow → 实抽 7
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / bullet → 实抽 1
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / numbered → 实抽 9
+  钉 6. 本轮收口面（条目级，不是口号） / 6. 本轮收口面（条目级，不是口号） / bullet → 实抽 7
+  钉 8. 验收判据（本轮什么算完） / 8. 验收判据（本轮什么算完） / numbered → 实抽 5
+❌ 第 38 行 id=P-36：证据文件不存在或不是文件：docs/superpowers/specs/ledger/logs/R22-protocol/gate-r22-protocol.log
+===== 闭合判定：1 条不成立 =====
+
+（第 1 趟之后：把本文件写进来当证据、并把台账从 --bootstrap 复建成正式一趟）
+
+## 第 1.5 趟（自引用两趟法的中间核账：正式一趟与 --bootstrap 一趟的产物 cmp 一致 ⇒ 下面第 2 趟读的就是台账里承诺的那份字节）
+$ cmp /tmp/bootstrap-built.jsonl /tmp/formal-built.jsonl  →  IDENTICAL（41 行条目 + meta 一字未动，只少了构建期那三行提示）
+
+## 第 2 趟（证据已落盘、台账为正式一趟产物 ⇒ 门必须绿，P-36 攻击面的后一半「本轮两份台账都要 rc=0」）
+$ python3 scripts/check-review-closeout.py docs/superpowers/specs/ledger/R22-protocol.jsonl
+轮次 R22-protocol：条目 41（fixed=38 refuted=2 locked-equivalence=0 blocked=1 非法status 0）
+  钉 1. 承诺轴：审什么由"代码对外说过什么"决定 / 1. 承诺轴：审什么由"代码对外说过什么"决定 / bullet → 实抽 5
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / bullet → 实抽 4
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / tablerow → 实抽 7
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / bullet → 实抽 1
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / numbered → 实抽 9
+  钉 6. 本轮收口面（条目级，不是口号） / 6. 本轮收口面（条目级，不是口号） / bullet → 实抽 7
+  钉 8. 验收判据（本轮什么算完） / 8. 验收判据（本轮什么算完） / numbered → 实抽 5
+===== 闭合判定：台账全部落在四终态且证据可核，计数钉全对且每条都有条目兜住 =====
+rc=0

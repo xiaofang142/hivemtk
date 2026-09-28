@@ -71,7 +71,10 @@ const APPROVAL_DETAIL = {
   subject_type: 'sop_node',
   subject_id: '4242/w1',
   expires_at: '2026-09-20T10:00:00Z',
-  allowed_transitions: ['approved', 'rejected', 'expired']
+  allowed_transitions: ['approved', 'rejected', 'expired'],
+  // 与后端 approvalDetail 一致：详情出口三处（GET / 裁决 200 / 裁决 409）都带这一格。
+  // 夹具不给就等于伪造一个"后端还没升级"的世界，而本用例要测的是升级完的形状。
+  decidable_by_human: true
 }
 
 const countButtons = (wrapper, text) =>
@@ -105,11 +108,16 @@ describe('待办中心渲染：三类一起列，按钮按类分', () => {
     expect(countButtons(wrapper, '裁决')).toBe(1)
   })
 
-  it('认领只给会话类的待处理行；释放只给挂在我名下的行', async () => {
+  it('认领只给会话类的待处理行；审批行一颗关闭按钮都不给', async () => {
     const wrapper = await mountPage()
     expect(countButtons(wrapper, '认领')).toBe(1)
     expect(countButtons(wrapper, '释放')).toBe(0)
-    expect(countButtons(wrapper, '撤销')).toBe(3)
+    // 撤销 = 会话行 + 催收行。审批行从两条红线（完成/撤销）收成"只有裁决"：
+    // 从待办侧关掉一条还在等的审批，池子里那条消失了而 approval_requests 仍是 pending，
+    // 流程挂着、没人看得见它在等 —— 服务端现在也认这条（409 并指回裁决口），
+    // 前端少给一颗按钮是收敛，不再有人先吃到那句 409。
+    expect(countButtons(wrapper, '撤销')).toBe(2)
+    expect(countButtons(wrapper, '完成')).toBe(2)
   })
 
   it('审批行按自己那一档 SLA（sla_decide_at）判逾期，不看别人的截止', async () => {
@@ -178,5 +186,51 @@ describe('裁决抽屉：批准/驳回，且驳回没有理由就点不动', () 
       .click()
     await flushPromises()
     expect(api.decide).toHaveBeenCalledWith('apr_1', 'rejected', '金额与报价单不符')
+  })
+
+  // 按钮在不在由后端那份读数决定，而不是前端自己比时间戳。
+  // 取"最后一份 .el-drawer"而不是全局 querySelector：本文件每条用例各挂一份抽屉且没有卸载，
+  // 全局取第一份会读到更早用例留下的抽屉 —— 那时"没有批准按钮"会以假绿通过。
+  const lastDrawer = () => {
+    const all = document.querySelectorAll('.el-drawer')
+    expect(all.length, '至少要挂过一份抽屉才有最后一份').toBeGreaterThan(0)
+    return all[all.length - 1]
+  }
+  const openDecideDrawer = async (wrapper) => {
+    const btn = wrapper.findAll('button').find((b) => b.text().trim() === '裁决')
+    expect(btn, '审批行必须有裁决按钮').toBeTruthy()
+    btn.trigger('click')
+    await flushPromises()
+  }
+
+  it('挂起时限已过（状态仍是 pending、三个目标照单全列）：抽屉里没有批准/驳回', async () => {
+    api.getApproval.mockResolvedValue({ ...APPROVAL_DETAIL, decidable_by_human: false })
+    const wrapper = await mountPage()
+    await openDecideDrawer(wrapper)
+
+    const drawer = lastDrawer()
+    const labels = Array.from(drawer.querySelectorAll('button')).map((b) => b.textContent.trim())
+    expect(labels).not.toContain('批准')
+    expect(labels).not.toContain('驳回')
+    // 不只看"按钮没了"：光收按钮会被读成"我没权限"，而真原因是时间用完了、处置方向是修 TTL。
+    expect(drawer.textContent).toContain('挂起时限已过')
+    expect(api.decide).not.toHaveBeenCalled()
+  })
+
+  it('后端没给这一格读数：说「没读到」，不许顺口断言时限已过', async () => {
+    const detail = { ...APPROVAL_DETAIL }
+    delete detail.decidable_by_human
+    api.getApproval.mockResolvedValue(detail)
+    const wrapper = await mountPage()
+    await openDecideDrawer(wrapper)
+
+    const drawer = lastDrawer()
+    const labels = Array.from(drawer.querySelectorAll('button')).map((b) => b.textContent.trim())
+    expect(labels).not.toContain('批准')
+    expect(labels).not.toContain('驳回')
+    // 「没读到」与「读到了坏消息」是两句话：并成一句时，前后端版本不一致会被当成超时，
+    // 于是没人去查真正的原因（这一格也是 fail-closed 的唯一反向证据）。
+    expect(drawer.textContent).toContain('没有「现在还能不能人工裁决」这一格读数')
+    expect(drawer.textContent).not.toContain('挂起时限已过')
   })
 })

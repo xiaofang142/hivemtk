@@ -354,6 +354,12 @@ func allModels() []any {
 		// 行项目写不进去，而"合计对不对"的用例连不上明细表时是 Skip 不是 Fail。
 		&model.Quote{},
 		&model.QuoteLineItem{},
+		// BadCase（表 bad_cases）：T-P8-03 / G-2。卡面写的 `v3_51_0_bad_case_migration.go`
+		// 因此不产出 —— 建表只走这一处登记（与 Bill 同一口径）。
+		// 登记理由与待办那一条同形且更硬：坏例是**整条闭环的唯一事实源**，表没建出来时
+		// 对话照样回答、日志照样打点，只有"这一轮低质被记下了"这件事静默消失，
+		// 而它下游是评测集 —— 少记的那天基线分数不会红，只会悄悄变成另一件事的分数。
+		&model.BadCase{},
 		// Bill（表 bills）：T-P7-01 / N-6 回款域第一层。
 		// 卡面写的 `v3_50_0_bill_migration.go` 因此不产出 —— 本仓生产建表只跑 AutoMigrate，
 		// 启动期 ExecuteUpgrade 固定空跑（与本文件头部那八次同源实测一致）。
@@ -376,12 +382,25 @@ func allModels() []any {
 		&model.WorkflowNodeExecution{},
 		&model.WorkflowVersion{},
 
+		// BrowserAuditDigest / BrowserAuditPruneRun（批22 / A6）：command_log 裁剪前的内容摘要
+		// 与每次扫描的留痕。这两张表是「删掉的那段历史」唯一的凭据，本身永不裁剪；
+		// 没建出来的失效方向是 fail-close（PruneBefore 写不进摘要就整批回滚，一行都不删），
+		// 表现为治理任务天天告警，而不是历史无声消失。
+		&browsermodel.BrowserAuditDigest{},
+		&browsermodel.BrowserAuditPruneRun{},
 		&browsermodel.BrowserCommandLog{},
 		&browsermodel.BrowserCronTrigger{},
 		&browsermodel.BrowserLLMPlan{},
 		&browsermodel.BrowserSession{},
 		&browsermodel.BrowserStep{},
 		&browsermodel.BrowserTask{},
+		// BrowserWriteClaim（批20f / A12）：双发闸的存储层独占声明。这张表没建出来
+		// 不是「少一张审计表」，是写步在 ClaimWriteSlot 处第一条 INSERT 就报错——
+		// 而报错方向恰好是 fail-close 的那一侧（所有写步判红），所以漏登记会在
+		// 「功能全废」而不是「闸门静默失效」上暴露。建表走 allModels 而不是迁移文件
+		// （本泳道口径：**新表**由标签直建、**存量表加列**走版本化迁移，后者见 v3.43.0 的
+		// browser_steps 三列——两者不是同一条路，别拿这句去省存量表的 DDL 文件）。
+		&browsermodel.BrowserWriteClaim{},
 
 		// 表 rag_answer_cache：store_pg.go 的文件头注释原本就写着
 		// 「需在 internal/migration/migrations 注册」并附了 DDL，但一直没接。

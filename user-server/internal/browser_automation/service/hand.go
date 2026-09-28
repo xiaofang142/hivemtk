@@ -196,8 +196,11 @@ func (h *Hand) commentPrep(ctx context.Context, userID uint, tabID int, text str
 // 超时预算对齐旧一站式 post_comment=45s：重页（小红书评论区渲染）上 CDP 事件逐条
 // round-trip 可达秒级，30s 实测触发假超时（session179：发送实际成功但回包迟于超时）。
 // 真机实证教训：发送结果未知时归因交 finalize 回查，不重发。
-func (h *Hand) commentSend(ctx context.Context, userID uint, tabID int, locators map[string]any) (map[string]any, error) {
-	req := map[string]any{"action": "comment_send", "tab_id": tabID}
+// verifyIdentity（批20c）：点后身份复核的开关，同 click/clickNear（批17(b)）。这一步比那两条
+// 更该付——点错一次是一条撤不回的公开评论，而 finalize 只回答「我的文字上去没」，
+// 回答不了「我刚才点的是不是发送按钮」（点到删除按钮时 finalize 永远是「没上去」）。
+func (h *Hand) commentSend(ctx context.Context, userID uint, tabID int, locators map[string]any, verifyIdentity bool) (map[string]any, error) {
+	req := map[string]any{"action": "comment_send", "tab_id": tabID, "verify_identity": verifyIdentity}
 	for k, v := range locators {
 		req[k] = v
 	}

@@ -109,13 +109,14 @@ const xhsNoteSnapshot = `- heading "春日穿搭分享" [ref=@e1]
 - button "发送" [ref=@e4]`
 
 // newWSE2E 起一条真实的 Host WS 连接（httptest 升级 → registry.Register → 客户端 fake 扩展），
-// 并把 Executor 接到真测试库（task/session/step/command_log 四表）。
+// 并把 Executor 接到测试库（task/session/step/command_log/write_claims 五表）。
 func newWSE2E(t *testing.T, reply func(action string, frame map[string]any) (map[string]any, string)) (*Executor, *fakeExtension, *wsE2EDeps) {
 	t.Helper()
 
 	db := testutil.NewTestDB(t,
 		&model.BrowserTask{}, &model.BrowserSession{},
 		&model.BrowserStep{}, &model.BrowserCommandLog{},
+		&model.BrowserWriteClaim{},
 	)
 	if db == nil {
 		t.Skip("测试库不可达")
@@ -150,10 +151,14 @@ func newWSE2E(t *testing.T, reply func(action string, frame map[string]any) (map
 		sessionRepo: repository.NewBrowserSessionRepositoryWithDB(db),
 		stepRepo:    repository.NewBrowserStepRepositoryWithDB(db),
 		cmdLogRepo:  repository.NewBrowserCommandLogRepositoryWithDB(db),
+		claimRepo:   repository.NewBrowserWriteClaimRepositoryWithDB(db),
 		db:          db,
 	}
 	exec := NewExecutor(NewHand(reg), bundle.sessionRepo, bundle.stepRepo, nil, nil)
 	exec.SetCommandLogRepository(bundle.cmdLogRepo)
+	// 批20f（A12）：必须接线，且不许换成整只 fake——独占裁决的真相就是库里那一次 INSERT，
+	// 替掉它之后本包所有写步用例判的都是一个不存在的东西。
+	exec.SetWriteClaimRepository(bundle.claimRepo)
 	return exec, ext, bundle
 }
 
@@ -161,6 +166,7 @@ type wsE2EDeps struct {
 	sessionRepo repository.BrowserSessionRepository
 	stepRepo    repository.BrowserStepRepository
 	cmdLogRepo  repository.BrowserCommandLogRepository
+	claimRepo   repository.BrowserWriteClaimRepository
 	db          *gorm.DB
 }
 
@@ -347,7 +353,7 @@ func TestWSE2E_ReadThenCommentThreeStage(t *testing.T) {
 			}
 			// F11c：探测成功但未拦截时 ok 必须为真——旧实现把 ok 当「有没有拦到」传，
 			// 正常页面的审计包里每一帧都是红的，读包的人据此误判检测链路坏了。
-			if payload["blocked"] == false && !l.Ok {
+			if payload["blocked"] == false && (l.Ok == nil || !*l.Ok) {
 				t.Errorf("干净页面的探测被记成失败：%s", l.Payload)
 			}
 		}
@@ -394,7 +400,15 @@ func TestWSE2E_D7GateHoldsSendUntilConfirmed(t *testing.T) {
 	if n := ext.countOf("comment_send"); n != 0 {
 		t.Fatalf("挂起期间 comment_send 已到线 %d 次——闸门失效（不可逆动作先于确认）", n)
 	}
-	if !exec.SignalConfirm(session.ID) {
+	// 批20 A5：放行带的是闸门登记的载荷哈希，且这份哈希就是「将要提交的那段正文」的指纹
+	gate, pending := exec.PendingGate(session.ID)
+	if !pending {
+		t.Fatal("挂起闸门查不到详情")
+	}
+	if gate.PayloadHash != HashWriteText("测试评论正文") {
+		t.Fatalf("闸门载荷=%q 与正文指纹不符——批准的内容与提交的内容不是同一份", gate.PayloadHash)
+	}
+	if exec.SignalConfirm(session.ID, gate.PayloadHash) != VerdictGranted {
 		t.Fatal("放行未命中挂起点")
 	}
 	waitConfirmPending(t, exec, session.ID, false)

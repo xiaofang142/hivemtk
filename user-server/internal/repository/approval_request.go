@@ -40,6 +40,13 @@ var ErrApprovalPendingConflict = errors.New("approval_request: 该对象同策�
 // 也照改，写完就被静默改掉 —— 本卡实测踩过两次。
 var ErrApprovalTokenEmpty = errors.New("approval_request: 恢复凭证为空")
 
+// ErrApprovalAsOfMissing MutatePending 没拿到判截止用的时钟。
+//
+// 单独一个 sentinel 而不是退回 ErrApprovalInputInvalid：这一条判据失效的后果不是
+// "这次请求被拒"，而是"截止时间的闸门整道消失"（它不在时落下的正是一条假账），
+// 所以它必须是调用方**改代码才能消掉**的响，而不是运行时能顺手重试掉的输入错。
+var ErrApprovalAsOfMissing = errors.New("approval_request: 缺少裁决判定时钟（asOf 为零值）")
+
 // approvalWriteColumns 裁决时可写的列。
 //
 // 这是一份**白名单**，写在这里的意义是"名单之外的一切改不动"：
@@ -73,8 +80,9 @@ type ApprovalRequestRepository interface {
 	// 没有返回 (nil, nil)，读失败返回 error —— 两者的差别就是本卡 AC③ 能不能兑现的地方。
 	GetPendingBySubject(ctx context.Context, subjectType, subjectID, policyKey string) (*model.ApprovalRequest, error)
 
-	// MutatePending 在一条事务里锁住某行、确认仍是 pending 后交 fn 就地改，再按
-	// approvalWriteColumns 写回。返回 false = 行不存在或已不是 pending（fn 未被调用）。
+	// MutatePending 在一条事务里锁住某行、确认仍是 pending **且 asOf 还没过它的截止时间**，
+	// 后交 fn 就地改，再按 approvalWriteColumns 写回。
+	// 返回 false = 行不存在、已不是 pending，或已过截止时间（fn 未被调用）。
 	//
 	// 不写成"GetByID → 判 pending → Save"三步：两名审批人同时点同一行时，两边都读到
 	// pending、各写一次自己的结论，**后写的把先写的覆盖掉**，而两边都以为自己批成功了 ——
@@ -83,7 +91,17 @@ type ApprovalRequestRepository interface {
 	// **fn 执行期间这一行不许被别人改**。两者各自被一条测试钉住
 	// （`_ConcurrentMutateSingleWinner` / `_MutateHoldsRowLockWhileFnRuns`）——
 	// 变异实测：摘掉 FOR UPDATE 只有后者红，前者仍绿，别把单赢家的功劳记到行锁头上。
-	MutatePending(ctx context.Context, id string, fn func(*model.ApprovalRequest)) (bool, error)
+	//
+	// 第三道条件（截止时间）拦的是**清扫器还没跑到的那段时间**：
+	// TTL 过了但 5 分钟一轮的清扫还没轮上来，这一行在库里仍写着 pending，于是人工裁决
+	// 照样能落 —— 而审批桥对同一条已经按"超时"派生放行/推进了（见 service 的
+	// ResolveOnFire：pending 且已过 expires_at 时它给出 derived=ttl）。这时落进去的
+	// `decided_by=<人的账号>` 是一条**假账**：人没有决定那件事的余地，流程早已按超时走完。
+	// 判据必须进同一条 CAS，不能写成"先读一次判过期、再走旧的两道判据"——那样
+	// 恰好把"读到 pending 后被清扫翻成 expired / 截止时刻跨过"这一类竞态留在窗外。
+	// asOf 由调用方给（service 用它的可注入时钟），仓储不自取 time.Now：
+	// 一张表的两个写路径各读各的钟，测试就钉不住边界那一格。
+	MutatePending(ctx context.Context, id string, asOf time.Time, fn func(*model.ApprovalRequest)) (bool, error)
 
 	// ExpirePendingBatch 在一条事务里锁定一批"已到期且仍 pending"的记录并翻成 expired，
 	// 返回**实际被翻转**的行。limit<=0 = 本轮不限。
@@ -200,19 +218,26 @@ func (r *approvalRequestRepo) GetPendingBySubject(ctx context.Context, subjectTy
 	return &a, nil
 }
 
-// MutatePending 一次加锁读 + 判态 + 按列清单写回，返回 fn 是否真的落库。
+// MutatePending 一次加锁读 + 判态与判截止 + 按列清单写回，返回 fn 是否真的落库。
 //
-// 排序上有讲究：先 FOR UPDATE 读到快照，再判 status，最后带 status 条件写回。
-// 两道判据各管一件事，实测可分离（见 approval_request_test.go 的两条用例）：
+// 排序上有讲究：先 FOR UPDATE 读到快照，再判 status 与截止时间，最后带同样的条件写回。
+// 三道判据各管一件事，实测可分离（见 approval_request_test.go 的对应用例）：
 //   - 带 `status='pending'` 的写回 = 单赢家的来源。摘掉它才会退化成乐观覆盖。
 //   - FOR UPDATE = 让 fn 看到并锁定这一行的**当前**版本（fn 执行期间别人改不动它，
 //     含非白名单列）。摘掉它，8 协程用例仍绿 —— 因为 UPDATE 自己会排队、重判时行已不是
 //     pending；但 fn 里"读到的就是将要写回的那一行"这个前提没了。
+//   - 带 `expires_at IS NULL OR expires_at > asOf` 的判据 = 拦住"已过期但清扫器还没跑到"
+//     那段窗口里的人工裁决。摘掉它，清扫晚到一步时人照样能签一条"我批了"的假账。
 //
-// 注释只描述这两件事，不再声称"少了行锁就会双写成功"（那是本卡实测推翻的一句）。
-func (r *approvalRequestRepo) MutatePending(ctx context.Context, id string, fn func(*model.ApprovalRequest)) (bool, error) {
+// 注释只描述这几件事，不再声称"少了行锁就会双写成功"（那是本卡实测推翻的一句）。
+func (r *approvalRequestRepo) MutatePending(ctx context.Context, id string, asOf time.Time, fn func(*model.ApprovalRequest)) (bool, error) {
 	if err := r.require(); err != nil {
 		return false, err
+	}
+	if asOf.IsZero() {
+		// 判"过没过期"必须有一个当下的钟。取 time.Now() 兜底是把这条判据的时钟交给隐式
+		// （用例再也换不动它），静默放行更是直接取消这道闸 —— 两种都不如当场报错。
+		return false, ErrApprovalAsOfMissing
 	}
 	applied := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -227,6 +252,12 @@ func (r *approvalRequestRepo) MutatePending(ctx context.Context, id string, fn f
 		if a.Status != model.ApprovalStatusPending {
 			return nil
 		}
+		// 边界与清扫器（ExpirePendingBatch 的 `expires_at <= now`）取**同一个**判据：
+		// 一处写 `<`、一处写 `<=`，恰好压在截止时刻那一秒的审批就会"人批得动、清扫也翻得了"，
+		// 两个结论各写一次而两边都以为自己赢了。
+		if a.ExpiresAt != nil && !a.ExpiresAt.After(asOf) {
+			return nil
+		}
 		if fn != nil {
 			fn(&a)
 		}
@@ -234,8 +265,15 @@ func (r *approvalRequestRepo) MutatePending(ctx context.Context, id string, fn f
 		// WHERE，而 a 是刚被 fn 改过的那个实例 —— 一旦 fn 动了 m.ID，两条 id 条件互斥，
 		// 更新静默命中 0 行，applied=false，service 便会对一条**仍然 pending** 的记录
 		// 报出"已由他人裁决"。写回的目标只认传进来的 id，fn 改什么都不算数。
+		// 同一条过期判据在下面那条 UPDATE 里**再出现一次**，这是备份而不是第二道防线，
+		// 依据是变异实测（不是推测）：单撤锁内那一处，仓储用例在「已过截止的行仍被交去
+		// 构造写回数据」那格转红；单撤下面 SQL 里的这个条件，整包照旧绿（锁内判据已拦下，
+		// 两处读的是同一把行锁下的同一行）；两处同撤才红。留着它是因为这条 SQL 才是真正
+		// 落库的那个判定，而它与上面的判读之间隔着一次 fn 调用——以后有人把判读挪出锁的
+		// 覆盖范围时，这里还在。
 		res := tx.Model(&model.ApprovalRequest{}).
-			Where("id = ? AND status = ?", id, model.ApprovalStatusPending).
+			Where("id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)",
+				id, model.ApprovalStatusPending, asOf).
 			Select(approvalWriteColumns).
 			Updates(&a)
 		if res.Error != nil {

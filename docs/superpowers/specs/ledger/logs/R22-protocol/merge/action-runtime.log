@@ -1,0 +1,9 @@
+$ python3 scripts/check-action-runtime.py
+(cwd=.)
+rc=0  0.1s
+
+项目根: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+扫描工作流 15 份；uses 站点 76 处（可判定），跳过 1 处（可复用工作流/本地/容器）
+node20/node16 命中 30 处：未豁免 0，豁免内 30
+✅ 无未豁免的弃用运行时站点
+

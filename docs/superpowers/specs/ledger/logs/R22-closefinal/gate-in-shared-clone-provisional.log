@@ -1,0 +1,22 @@
+### 克隆面复跑（台账 P-26 那格的证据）；测量 2026-09-23T08:26:19+0800；本轮驱动 R22_PROVISIONAL=1（台账仍指上一轮的两份旧取证件），故这一份是**bootstrap 读数**——收口全量门禁跑完后重跑一遍并把最终读数落到本路径，这一份另存 `gate-in-shared-clone-provisional.log` 留痕
+
+$ python3 scripts/run-gate-in-clone.py docs/superpowers/specs/ledger/R22.jsonl docs/superpowers/specs/ledger/R22-protocol.jsonl
+工作树 HEAD=69aa2c60  装进克隆的覆盖文件 689 个；排除外域未跟踪测试 0 个；克隆里删除 0 个
+排除的外域未跟踪测试：（无）
+子进程环境抹掉的连接参数（按键名，值不落日志）：（本就没有）
+
+### docs/superpowers/specs/ledger/R22.jsonl
+  工作树 rc=0  克隆 rc=0  两侧汇总行逐字一致=True（各 1/1 行）
+  克隆目录名 gate-clone（≠ 仓名，顺带验项目根推导不靠硬编码仓名）
+  | ===== 闭合判定：台账全部落在四终态且证据可核，计数钉全对且每条都有条目兜住 =====
+### docs/superpowers/specs/ledger/R22-protocol.jsonl
+  工作树 rc=0  克隆 rc=0  两侧汇总行逐字一致=True（各 1/1 行）
+  克隆目录名 gate-clone（≠ 仓名，顺带验项目根推导不靠硬编码仓名）
+  | ===== 闭合判定：台账全部落在四终态且证据可核，计数钉全对且每条都有条目兜住 =====
+
+### scripts/check-review-closeout.py --selftest（克隆里）
+  rc=0
+  ===== selftest：57/57 种坏形态各自隔离地红，合法快照 0 红 =====
+
+克隆已删除（/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r22p-clone-o8bsx284/gate-clone 不留残迹；本轮零 commit，取证只在仓内日志里）
+===== 克隆面：rc=0，门在私有克隆里跑得出与工作树逐字一致的读数 =====

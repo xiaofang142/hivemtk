@@ -1,0 +1,68 @@
+<!--
+C 相续刀 · lane 3 · 取证趟（**不是常驻电池**）：把 A6 四刀 + A2 两刀注进私有
+`git clone --shared --no-checkout`，只跑「本轮补腿之前仓里已经有的腿」，逐条记红/绿。
+目的＝「存活处置」第 1 步：先证明预判存活不是取证假象（腿跑了、PASS、skip=0），
+再决定补不补窄腿。跑法＝一次性脚本 /tmp/r22lane3_survival_probe.py（借两枚电池的
+克隆/覆盖/注码/md5 还原口径）；本轮的常驻形态是那四格 + 两格（见
+scripts/mut_retention_a6.py、scripts/mut_command_log_ok_b20b.py）。
+
+命令：python3 /tmp/r22lane3_survival_probe.py
+克隆：/tmp/r22lane3-survival/clone（base=master + 77 个本泳道脏 .go 覆盖，含未跟踪新腿文件）
+库：POSTGRES_TEST_PORT=8232，口令只从 user-server/.env 用 awk 精确取 POSTGRES_PASSWORD
+    喂 POSTGRES_TEST_PASSWORD（值不打印）；整趟 skip=0，无「跳过即绿」。
+旧腿集：repository 19 条（TestA6* + TestB19GCommandLog + TestR23*，**不含**本轮补的
+    TestA6DigestSeparatesPassedFromFailedFrame / TestA6RunRowCountsEntryWindowNotLateCrossing）、
+    service 5 条（TestB20B*，**不含**本轮补的 TestB20BFailedDispatchEventFramesSayFailed）。
+-->
+
+克隆就绪：分支 master、覆盖 77 个脏 .go
+口令已从 .env 取到（值不打印）
+[旧腿集] repository: 19 条 = TestA6BatchDigestSensitiveToPayload TestA6ChainHashComposesPrevWithBatch TestA6ChainLinksAcrossRuns TestA6ChainLinksToNewestDigestAcrossThreeRounds TestA6DigestChainIdempotentAtStorage TestA6DigestClosesOverRunRow TestA6DigestCoversDeletedRows TestA6DigestRecordsSeqGap TestA6DigestReproducibleFromRowContent TestA6DigestSeparatesUnackedFromFailedFrame TestA6DigestSplitsWithDeleteBatches TestA6EmptyWindowStillWritesRunRow TestA6PruneFailsCloseWhenDeleteFailsMidRun TestA6PruneFailsCloseWhenDigestWriteBlocked TestA6PruneFailsCloseWithoutDigestTable TestA6RunRowClosesArithmeticUnderTwoBatches TestB19GCommandLogPruneIsBatched TestR23PruneRefusesEmptyCutoffSource TestR23PruneRunRecordsCutoffSource
+[旧腿集] service: 5 条 = TestB20BCommandFramesCarryNoVerdict TestB20BOkTriStateSurvivesRoundTrip TestB20BReadOnlyStepsEmitNoConfirmFrame TestB20BUnverifiedWriteConfirmFrameSaysSo TestB20BWriteStepEmitsConfirmJudgeFrame
+
+D19 [repository] 杀掉 ｜ 跑完 19/19 PASS=18 FAIL=1 SKIP=0
+   注码：'if err := tx.Create(&d).Error; err != nil {\n\t\t\t\t\treturn' → 'if err := r.db.WithContext(ctx).Create(&d).Error; err !='
+   备注：02:47 那条触发器腿（chain_prune），预判杀掉
+   红: --- FAIL: TestA6PruneFailsCloseWhenDeleteFailsMidRun (0.17s)
+
+D20 [repository] 存活（旧腿全绿） ｜ 跑完 19/19 PASS=19 FAIL=0 SKIP=0
+   注码：'RowsBefore:   rowsBefore,' → 'RowsBefore:   total,'
+   备注：TestA6RunRowClosesArithmeticUnderTwoBatches / TestA6DigestClosesOverRunRow，预判存活
+
+D21 [repository] 杀掉 ｜ 跑完 19/19 PASS=17 FAIL=2 SKIP=0
+   注码：'tx.Where("session_id = ?", sessionID).Order("ordinal DESC").' → 'tx.Where("session_id = ?", sessionID).Order("ordinal ASC").F'
+   备注：TestA6ChainLinksToNewestDigestAcrossThreeRounds，预判杀掉
+   红: --- FAIL: TestA6ChainLinksToNewestDigestAcrossThreeRounds (0.16s)
+   红: --- FAIL: TestA6RunRowClosesArithmeticUnderTwoBatches (35.92s)
+
+D22 [repository] 存活（旧腿全绿） ｜ 跑完 19/19 PASS=19 FAIL=0 SKIP=0
+   注码："CASE WHEN ok IS NULL THEN 'n' WHEN ok THEN 't' ELSE 'f' END" → "CASE WHEN ok IS NULL THEN 'n' ELSE 't' END,"
+   备注：TestA6DigestSeparatesUnackedFromFailedFrame，预判存活
+
+M7 [service] 存活（旧腿全绿） ｜ 跑完 5/5 PASS=5 FAIL=0 SKIP=0
+   注码：event 回包帧 `..., verdict(err == nil))` → `..., verdict(true))`（executor.go comment_send 那一处；
+        脚本里 old/new 各截 60 字符打印，两串前 60 字符相同，故上面看着像没变——差异在 `verdict(` 之后）
+   备注：TestB20BCommandFramesCarryNoVerdict 等 5 条旧腿，预判存活
+
+M8 [service] 存活（旧腿全绿） ｜ 跑完 5/5 PASS=5 FAIL=0 SKIP=0
+   注码：步失败 event 回包帧 `..., dur, verdict(false))` → `..., dur, verdict(true))`（executor.go 那一处）
+   备注：同上，预判存活
+
+[取证趟结束] 两枚注码目标文件均已还原（md5 一致）
+
+== 这一趟读出来的东西（写在读数之后，不改读数）==
+1. D19/D21 兑现「旧腿杀得住」：B 相那两条判断成立，02:47 那批新腿不是白写的。
+   D21 还额外把 `TestA6RunRowClosesArithmeticUnderTwoBatches` 撞红了（本趟只印了 FAIL 行，
+   没印它的红因文本，所以下面这句是**按代码读出来的推测、本趟未取证**：ASC 让第三轮摘要撞回
+   ordinal=2 ⇒ 唯一约束挡下 ⇒ 整轮回滚 ⇒ PruneBefore 报错，那条腿的 `a6Prune` 就在 Fatalf 上红）。
+   多出来的红不算错（电池只要求 expect ⊆ 红名单），但记一句：D21 的失效面比 expect 宽。
+2. D20/D22/M7/M8 四把刀在旧腿集下**全部存活**，且存活不是取证假象：包没编译红（rc=0）、
+   19/19 与 5/5 逐条跑完（PASS+FAIL==旧腿集数）、skip=0、红名单为空。⇒ 缺口成立，
+   按「存活即补窄腿」处置：本轮补了 TestA6RunRowCountsEntryWindowNotLateCrossing（D20）、
+   TestA6DigestSeparatesPassedFromFailedFrame（D22）、TestB20BFailedDispatchEventFramesSayFailed
+   （M7+M8 共用），四格随后在整电池里逐格回跑取「注码下红、还原后绿」的读数。
+3. D20 这一格值得单记：B 相那张表把它挂在那条两批次大腿上，而**那条腿自己的注释就写了它杀不掉
+   这一刀**（入口计数谓词 == 窗口/删除谓词 ⇒ `RowsBefore: total` 与实现恒同值）。实跑坐实之后，
+   补的腿不是把期望改宽，而是去造那一幕：入口数 5 行、裁剪进行中由行级触发器补写第 6 行越界、
+   实删 6 行分两批 ⇒ rows_before 与 rows_pruned 当场分家（不是把 SQL 常量抄进测试，
+   也没有手工往仓储里塞一行再造期望）。

@@ -1,0 +1,27 @@
+# L4「service 直接取 DB 句柄」宽口径存量基线（scripts/check-architecture.sh 第 2.2.2 步读取）。
+# 每行：文件<TAB>允许处数<TAB>理由。文件键相对仓库根。三列任一不符即判红：
+#   新增文件 / 同文件处数与登记不符（超出或收窄）/ 条目失效（文件已不再命中却还留着）/ 理由为空 ⇒ 红。
+# 登记理由统一是「存量待收口为构造注入」，不是「这样写是对的」——本表只挡新增，不发合格证。
+# 2026-09-22 由 R22 第二十三轮从当时的树里生成并逐条核对（39 处 / 22 个文件，门实测同数）。
+user-server/internal/service/agent_kb_binding.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/ai_agent.go	4	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/channel_media.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/customer_session.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/customer_session_cron.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/data_export.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/faq.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/inbox.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/inbox_ingress.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/knowledge_base.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/message_hub.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/objection_handler.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/openapi.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/r44_gap_services.go	4	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/rag_product.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/sales_persona.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/security_audit.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/sop_template.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/trace_learning/insights.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/trace_learning/service.go	4	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/webhook.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/wecom.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）

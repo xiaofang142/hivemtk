@@ -173,6 +173,54 @@ else
   log_pass "[L4] service struct 未持有 *gorm.DB 字段"
 fi
 
+# 2.2.2 L4 宽口径：任意接收者的 `.GetDB`（含 dbUtil./dbutil./repository./别名）
+# 上面 2.2 的口径只认 `db.GetDB()` 与 `_db.GetDB()` 两种拼写。2026-09-22（R22 第二十三轮）
+# 在同一棵树里数出：等价「service 伸手拿全局 DB 句柄」另有 39 处、分布在 22 个文件，走的都是
+# 别的拼写（`dbUtil.GetDB()` / `repository.GetDB()` / `s.eventRepo.GetDB()` …）——那是**门看不见**，
+# 不是**没有**。这里把口径加宽到 `任意标识符.GetDB`，并挂一份逐文件限量的存量基线：
+#   新增文件、同文件处数与登记不符（超出或收窄）、基线条目失效（文件已不再命中却还留着）、
+#   理由列为空 ⇒ 一律判红。
+# 基线不发合格证，它只保证「这个口子既不再变宽、也不许留旧的大数额」：现算与登记必须逐文件
+# 相等，多了判「超出」、少了判「收窄」（与 scripts/test-nil-deref.baseline 同一双向口径）。
+# 基线的键相对**仓库根**（`user-server/internal/service/x.go`），不是相对 service/ —— 跟同目录
+# 其它 .baseline 的约定保持一致，免得同一棵树里两套路径口径互相看不懂。
+ARCH_L4_BASELINE="$SCRIPT_DIR/arch-l4-getdb.baseline"
+if [ -f "$ARCH_L4_BASELINE" ]; then
+  SERVICE_DB_WIDE=$(grep -rnE --include="*.go" --exclude="*_test.go" \
+    '[a-zA-Z0-9_]+\.GetDB\b' "$TARGET/internal/service/" 2>/dev/null \
+    | grep -vE ':[[:space:]]*//' \
+    | grep -vE ':[[:space:]]*\*' \
+    | grep -vE ':[[:space:]]*/\*' \
+    | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
+    | awk -F: -v pre="$TARGET/" -v rel="$TARGET_REL/" \
+        '{ p=$1; if (index(p, pre)==1) p=rel substr(p, length(pre)+1); print p }' \
+    || true)
+  L4_BASELINE_VERDICT=$(awk -F'\t' -v base="$ARCH_L4_BASELINE" '
+    FNR==NR {
+      if ($0 !~ /^#/ && NF>=3 && $3 != "") { bc[$1]=$2+0; bl[$1]=1 }
+      next
+    }
+    NF>=1 && $0 != "" { cur[$1]+=$2; next }
+    END {
+      bad=0
+      for (p in cur) {
+        if (!(p in bl)) { print "新增: " p " 有 " cur[p] " 处 .GetDB，基线里没有这一行"; bad=1; continue }
+        if (cur[p] > bc[p]) { print "超出: " p " 当前 " cur[p] " > 基线 " bc[p]; bad=1 }
+        else if (cur[p] < bc[p]) { print "收窄: " p " 当前 " cur[p] " < 基线 " bc[p] "（已收口，请把这一行下调到实际数额）"; bad=1 }
+      }
+      for (p in bl) if (!(p in cur)) { print "失效条目（该文件已不再命中，请从基线里删除这一行）: " p; bad=1 }
+      if (!bad) { t=0; n=0; for (p in cur) { t+=cur[p]; n++ }; printf "OK\t%d\t%d\n", t, n }
+    }' "$ARCH_L4_BASELINE" <(printf '%s\n' "$SERVICE_DB_WIDE" | sort | uniq -c | awk '{print $2"\t"$1}'))
+  if [ "${L4_BASELINE_VERDICT%%$'\t'*}" = "OK" ]; then
+    log_pass "[L4] service 取 DB 句柄宽口径与基线一致（存量 $(echo "$L4_BASELINE_VERDICT" | cut -f2) 处 / $(echo "$L4_BASELINE_VERDICT" | cut -f3) 个文件）"
+  else
+    log_fail "[L4] service 取 DB 句柄宽口径与基线不符（新增/超出/条目失效）"
+    printf '%s\n' "$L4_BASELINE_VERDICT" | sed 's/^/    /'
+  fi
+else
+  log_fail "[L4] 宽口径基线文件缺失：${ARCH_L4_BASELINE}（缺基线不放行，避免门静默空转）"
+fi
+
 # 2.3 service 不应写 SQL 字符串拼接
 if grep -rn '\.Raw(.*+.*)' "$TARGET/internal/service/" 2>/dev/null; then
   log_fail "[L4] service 含 SQL 字符串拼接,应封装到 repository"

@@ -1,0 +1,11 @@
+$ go test -p 1 -count=1 -timeout 40m ./internal/service/ ./internal/repository/ ./internal/model/ ./internal/migration/... ./internal/channelgw/
+(cwd=user-server)
+rc=0  506.4s
+
+ok  	hivemtk-user/internal/service	398.511s
+ok  	hivemtk-user/internal/repository	72.972s
+ok  	hivemtk-user/internal/model	0.854s
+ok  	hivemtk-user/internal/migration	0.338s
+ok  	hivemtk-user/internal/migration/migrations	20.184s
+ok  	hivemtk-user/internal/channelgw	4.753s
+

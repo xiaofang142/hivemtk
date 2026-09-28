@@ -10,33 +10,38 @@ import (
 
 // MessageHub 消息中台 - 多账号聚合消息
 type MessageHub struct {
-	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform       string         `gorm:"type:varchar(30);not null;index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:1" json:"platform"`
-	MsgID          string         `gorm:"type:varchar(100);uniqueIndex:uni_message_hub_platform_msg_conv,priority:2" json:"msg_id"`
-	AccountID      string         `gorm:"type:varchar(100);not null;index" json:"account_id"`
-	Direction      string         `gorm:"type:varchar(10);not null" json:"direction"`
-	Status         string         `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	MsgType        string         `gorm:"type:varchar(20);not null" json:"msg_type"`
-	SenderID       string         `gorm:"type:varchar(100);index" json:"sender_id"`
-	SenderName     string         `gorm:"type:varchar(200)" json:"sender_name"`
-	ReceiverID     string         `gorm:"type:varchar(100)" json:"receiver_id"`
-	ReceiverName   string         `gorm:"type:varchar(200)" json:"receiver_name"`
-	Content        string         `gorm:"type:text" json:"content"`
-	MediaURL       string         `gorm:"type:varchar(500)" json:"media_url"`
-	ConversationID string         `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
-	IsGroup        bool           `gorm:"default:false" json:"is_group"`
-	GroupID        string         `gorm:"type:varchar(100)" json:"group_id"`
-	IsAIReply      bool           `gorm:"default:false" json:"is_ai_reply"`
-	AIAgent        string         `gorm:"type:varchar(50)" json:"ai_agent"`
-	TraceID        string         `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
-	DedupHash      string         `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
-	ClaimedAt      *time.Time     `gorm:"index" json:"claimed_at"`
-	IsRead         bool           `gorm:"default:false" json:"is_read"`
-	ReadAt         *time.Time     `json:"read_at"`
-	SentAt         time.Time      `gorm:"index" json:"sent_at"`
-	Extra          JSONMap        `gorm:"type:text" json:"extra"`
-	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform       string     `gorm:"type:varchar(30);not null;index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:1" json:"platform"`
+	MsgID          string     `gorm:"type:varchar(100);uniqueIndex:uni_message_hub_platform_msg_conv,priority:2" json:"msg_id"`
+	AccountID      string     `gorm:"type:varchar(100);not null;index" json:"account_id"`
+	Direction      string     `gorm:"type:varchar(10);not null" json:"direction"`
+	Status         string     `gorm:"type:varchar(20);default:'pending';index" json:"status"`
+	MsgType        string     `gorm:"type:varchar(20);not null" json:"msg_type"`
+	SenderID       string     `gorm:"type:varchar(100);index" json:"sender_id"`
+	SenderName     string     `gorm:"type:varchar(200)" json:"sender_name"`
+	ReceiverID     string     `gorm:"type:varchar(100)" json:"receiver_id"`
+	ReceiverName   string     `gorm:"type:varchar(200)" json:"receiver_name"`
+	Content        string     `gorm:"type:text" json:"content"`
+	MediaURL       string     `gorm:"type:varchar(500)" json:"media_url"`
+	ConversationID string     `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
+	IsGroup        bool       `gorm:"default:false" json:"is_group"`
+	GroupID        string     `gorm:"type:varchar(100)" json:"group_id"`
+	IsAIReply      bool       `gorm:"default:false" json:"is_ai_reply"`
+	AIAgent        string     `gorm:"type:varchar(50)" json:"ai_agent"`
+	TraceID        string     `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
+	DedupHash      string     `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
+	ClaimedAt      *time.Time `gorm:"index" json:"claimed_at"`
+	// PushAttempts/PushError（批20d-A3）只给出站行记账：服务端每把一行交给桥端一次计一次，
+	// 到 MaxOutboundPushAttempts 即落终态 failed，PushError 写明「为什么不再是 pending」。
+	// 计数留在行上而不是内存里：SW 回收/进程重启都要能接着算，否则预算每次重启都白送一轮。
+	PushAttempts int            `gorm:"not null;default:0" json:"push_attempts"`
+	PushError    string         `gorm:"type:varchar(200);not null;default:''" json:"push_error"`
+	IsRead       bool           `gorm:"default:false" json:"is_read"`
+	ReadAt       *time.Time     `json:"read_at"`
+	SentAt       time.Time      `gorm:"index" json:"sent_at"`
+	Extra        JSONMap        `gorm:"type:text" json:"extra"`
+	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MessageHub) TableName() string { return "message_hub" }

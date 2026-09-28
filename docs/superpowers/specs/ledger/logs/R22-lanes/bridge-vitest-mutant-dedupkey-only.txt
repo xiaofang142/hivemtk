@@ -1,0 +1,73 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+ [31m❯[39m test/adapter-dedupkey-shape.test.js [2m([22m[2m3 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[32m 9[2mms[22m[39m
+[31m     [31m×[31m ① 首条稳定键必须是裸 base，第二条起才带 #<n>[39m[32m 5[2mms[22m[39m
+[31m     [31m×[31m ② flush 到 localStorage 的首条记录仍是裸 base（注释里「落 localStorage」那半句）[39m[32m 2[2mms[22m[39m
+[31m     [31m×[31m ③ 反向半边：老落盘的裸 base 记录必须被首扫命中，一条都不许多发[39m[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m① 首条稳定键必须是裸 base，第二条起才带 #<n>
+[31m[1mAssertionError[22m: expected '2bvjuk0tju8#0' to be '2bvjuk0tju8' // Object.is equality[39m
+
+Expected: [32m"2bvjuk0tju8"[39m
+Received: [31m"2bvjuk0tju8[7m#0[27m"[39m
+
+[36m [2m❯[22m test/adapter-dedupkey-shape.test.js:[2m73:44[22m[39m
+    [90m 71|[39m     [90m// 直接问一次函数：首条（occurrence 缺省即 0）不得出现任何 `#` 后缀。[39m
+    [90m 72|[39m     [35mconst[39m parsed [33m=[39m adapter[33m.[39m[34mparseMessageItem[39m(state[33m.[39mnodes[[34m0[39m])[33m;[39m
+    [90m 73|[39m     [34mexpect[39m(adapter[33m.[39m[34m_dedupKey[39m([33mCID[39m[33m,[39m parsed))[33m.[39m[34mtoBe[39m(base)[33m;[39m
+    [90m   |[39m                                            [31m^[39m
+    [90m 74|[39m     [34mexpect[39m(adapter[33m.[39m[34m_dedupKey[39m([33mCID[39m[33m,[39m parsed[33m,[39m [34m0[39m))[33m.[39m[34mtoBe[39m(base)[33m;[39m
+    [90m 75|[39m     [34mexpect[39m(adapter[33m.[39m[34m_dedupKey[39m([33mCID[39m[33m,[39m parsed[33m,[39m [34m1[39m))[33m.[39m[34mtoBe[39m(second)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m② flush 到 localStorage 的首条记录仍是裸 base（注释里「落 localStorage」那半句）
+[31m[1mAssertionError[22m: expected [ '2bvjuk0tju8#0', '2bvjuk0tju8#1' ] to deeply equal [ '2bvjuk0tju8', '2bvjuk0tju8#1' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[32m-   "2bvjuk0tju8",[39m
+[31m+   "2bvjuk0tju8#0",[39m
+[2m    "2bvjuk0tju8#1",[22m
+[2m  ][22m
+
+[36m [2m❯[22m test/adapter-dedupkey-shape.test.js:[2m94:45[22m[39m
+    [90m 92|[39m     [35mconst[39m raw [33m=[39m localStorage[33m.[39m[34mgetItem[39m(storageKey)[33m;[39m
+    [90m 93|[39m     [34mexpect[39m(raw)[33m.[39m[34mtoBeTruthy[39m()[33m;[39m
+    [90m 94|[39m     [34mexpect[39m([33mJSON[39m[33m.[39m[34mparse[39m(raw)[33m.[39m[34mmap[39m(([k]) [33m=>[39m k))[33m.[39m[34mtoEqual[39m([base[33m,[39m second])[33m;[39m
+    [90m   |[39m                                             [31m^[39m
+    [90m 95|[39m   })[33m;[39m
+    [90m 96|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/adapter-dedupkey-shape.test.js[2m > [22m4-D `_dedupKey` 键形硬承诺（channel-adapter.js:157 注释）[2m > [22m③ 反向半边：老落盘的裸 base 记录必须被首扫命中，一条都不许多发
+[31m[1mAssertionError[22m: expected 1 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m test/adapter-dedupkey-shape.test.js:[2m110:42[22m[39m
+    [90m108|[39m     [90m// 键形没变 ⇒ 查的名字与账上的名字同名 ⇒ 这条早报过，必须被吞掉。[39m
+    [90m109|[39m     [90m// 键形一变（首条变 `base#0`）⇒ 账上的裸 base 再也不命中 ⇒ 全部重报一遍（本腿该红）。[39m
+    [90m110|[39m     [34mexpect[39m(adapter[33m.[39m[34mgetMessages[39m()[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m   |[39m                                          [31m^[39m
+    [90m111|[39m     adapter[33m.[39m[34mstop[39m()[33m;[39m
+    [90m112|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[90m (3)[39m
+[2m   Start at [22m 02:59:12
+[2m   Duration [22m 931ms[2m (transform 103ms, setup 0ms, import 128ms, tests 9ms, environment 658ms)[22m
+

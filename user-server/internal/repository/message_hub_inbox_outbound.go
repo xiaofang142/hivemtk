@@ -12,6 +12,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// MaxOutboundPushAttempts 出站行的重推上界（批20d-A3 / §8.3 行 3）。
+//
+// 一次「认领成功」= 服务端把这一行交给桥端一次。到界后这一行离开 owed 集合并落 failed，
+// 不再由任何一条取行路径给出。取值 20 的口径：认领超时 30s ⇒ 约 10 分钟的持续失败；
+// 再长就是「桥端在线但这条永远发不出去」的死循环（同行给这类循环都设了界：
+// Sidekiq 25→dead、SQS maxReceiveCount→DLQ、River discarded）。
+// 上界放在仓储而不是由调用方传：三条取行路径必须同口径，谁忘了传就等于没设界。
+const MaxOutboundPushAttempts = 20
+
 func (r *MessageHubRepository) AckOutboundDeliveredBatch(ctx context.Context, channel, accountID string, msgIDs []string) (int64, error) {
 	if r.db == nil || len(msgIDs) == 0 {
 		return 0, nil
@@ -40,11 +49,41 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturning(ctx context.Co
 	return updatedIDs, affectedRows, nil
 }
 
+// exhaustOutbound 把「重推次数已用尽、此刻仍欠交付」的出站行升级成终态 failed（批20d-A3）。
+//
+// 为什么由三条取行路径各自顺手做，而不是让调用方记得调一次：这一界的全部意义是
+// 「不会再有人重推它」，只要有一条路径忘了（或将来新增一条），那批行就又回到永推状态；
+// 忘一次的代价正是本批立项时的事实。放在取行的地方 = 想取就必须先结算。
+//
+// 落终态时**不写 sent_at**：这条从没交付出去，而 sent_at 是「已发出的时刻」——
+// 回显检测（ListRecentOutboundInConv / GetOutboundByPlatformSenderContent*）按它筛候选，
+// 给一条页面上从未出现过的内容盖上时间戳，等于让后续回复被误判成「自己发过的回显」而吞掉。
+// 桥端主动 ack failed 的路径照旧写 sent_at（那是既有语义，本批不动），两者靠 push_error 分辨。
+func (r *MessageHubRepository) exhaustOutbound(ctx context.Context, channel, accountID string, cutoff time.Time) error {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Exec(`UPDATE message_hub
+		SET status = 'failed', push_error = ?, claimed_at = NULL
+		WHERE platform = ? AND account_id = ? AND direction = 'outbound'
+		  AND push_attempts >= ?
+		  AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))`,
+		pushExhaustedError, channel, accountID, MaxOutboundPushAttempts, cutoff).Error
+}
+
+// pushExhaustedError 写在行上的原因。不重复带上界数字：同一行的 push_attempts 就是那个数，
+// 在这里再抄一份只是给「两处不一致」留口子。
+const pushExhaustedError = "outbound_push_exhausted"
+
 func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int, claimTimeout time.Duration) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || limit <= 0 {
 		return nil, nil
 	}
 	cutoff := time.Now().Add(-claimTimeout)
+
+	if err := r.exhaustOutbound(ctx, channel, accountID, cutoff); err != nil {
+		fmt.Printf("[ClaimPendingOutbound] 到界行升级终态失败（继续认领）: %v\n", err)
+	}
 
 	if err := r.db.WithContext(ctx).
 		Model(&model.MessageHub{}).
@@ -54,15 +93,19 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 	}
 
 	list := make([]model.MessageHub, 0, limit)
-	const q = `UPDATE message_hub SET status = 'inflight', claimed_at = now()
+	// push_attempts 在这里 +1：一次认领就是一次「交给桥端去发」，无论它后来 ack 没 ack。
+	// 回收那一步（上面）刻意不碰这一列——「这次没送成」不等于「没送过」，
+	// 清零等于每 30s 白送一轮预算，上界就成了摆设。
+	const q = `UPDATE message_hub SET status = 'inflight', claimed_at = now(), push_attempts = push_attempts + 1
 		WHERE id IN (
 			SELECT id FROM message_hub
 			WHERE platform = ? AND account_id = ? AND direction = 'outbound' AND status = 'pending'
+			  AND push_attempts < ?
 			ORDER BY id ASC LIMIT ?
 			FOR UPDATE SKIP LOCKED
 		)
 		RETURNING *`
-	if err := r.db.WithContext(ctx).Raw(q, channel, accountID, limit).Scan(&list).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(q, channel, accountID, MaxOutboundPushAttempts, limit).Scan(&list).Error; err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -75,19 +118,20 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 //   - status='inflight' 且 claimed_at 已超超时 —— 上一次下推后扩展没 ack（发送失败/进程被杀/SW 回收），
 //     这条就是要重投的那条；不重投它它就永久停在 inflight，客户收不到且无人知晓
 //
-// 返回 false = 这一行此刻归别人（轮询已认领 / 已 delivered / 已 failed / 入站方向）→ 调用方必须放弃推送。
+// 返回 false = 这一行此刻归别人（轮询已认领 / 已 delivered / 已 failed / 入站方向）、
+// 或它的重推预算已用完（批20d-A3：与轮询同口径，否则只关一条路径＝换条路径照样永推）→ 调用方必须放弃推送。
 // 单表单行、条件更新，天然互斥（并发两个推送只有一个能拿到 1 行），不需要额外锁。
 func (r *MessageHubRepository) ClaimOutboundForPush(ctx context.Context, id uint64, claimTimeout time.Duration) (bool, error) {
 	if r == nil || r.db == nil || id == 0 {
 		return false, nil
 	}
 	cutoff := time.Now().Add(-claimTimeout)
-	const q = `UPDATE message_hub SET status = 'inflight', claimed_at = now()
-		WHERE id = ? AND direction = 'outbound'
+	const q = `UPDATE message_hub SET status = 'inflight', claimed_at = now(), push_attempts = push_attempts + 1
+		WHERE id = ? AND direction = 'outbound' AND push_attempts < ?
 		  AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))
 		RETURNING id`
 	var ids []uint64
-	if err := r.db.WithContext(ctx).Raw(q, id, cutoff).Scan(&ids).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(q, id, MaxOutboundPushAttempts, cutoff).Scan(&ids).Error; err != nil {
 		return false, err
 	}
 	return len(ids) > 0, nil
@@ -102,6 +146,11 @@ func (r *MessageHubRepository) ClaimOutboundForPush(ctx context.Context, id uint
 //
 // inflight 但 claimed_at IS NULL 不算欠：那是别处（非本批两条认领路径）置的状态，
 // 无超时可判，宁可漏投一轮也不重复推。
+//
+// 「收敛」在批20d-A3 之前只是语义上的承诺：一条桥端永远发不出去的消息会同时满足
+// pending 与 inflight 超时两个条件，于是每轮都被列出、被重推、再无下文——列表侧没有上界，
+// 只有关掉认领那两条路径的界等于没关（本函数是三条取行路径里的第三条，也是唯一一条
+// 「只读不认领」的，最容易被漏）。现在它与两条认领路径同口径：先结算到界行，再按预算取。
 func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, channel, accountID string, claimTimeout time.Duration, limit int) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || channel == "" || accountID == "" {
 		return nil, nil
@@ -110,9 +159,13 @@ func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, cha
 		limit = 200
 	}
 	cutoff := time.Now().Add(-claimTimeout)
+	if err := r.exhaustOutbound(ctx, channel, accountID, cutoff); err != nil {
+		fmt.Printf("[FetchOutboundUndelivered] 到界行升级终态失败（继续取待推）: %v\n", err)
+	}
 	var rows []model.MessageHub
 	err := r.db.WithContext(ctx).
 		Where("platform = ? AND account_id = ? AND direction = 'outbound'", channel, accountID).
+		Where("push_attempts < ?", MaxOutboundPushAttempts).
 		Where("(status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))", cutoff).
 		Order("id ASC").Limit(limit).Find(&rows).Error
 	if err != nil {

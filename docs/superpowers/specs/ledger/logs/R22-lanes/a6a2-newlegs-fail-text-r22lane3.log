@@ -1,0 +1,127 @@
+<!--
+C 相续刀 · lane 3 · 「红因」取证趟（**不是常驻电池**，两批跑在同一张脚本上）。
+
+电池那一趟只印「哪条腿红」；这一趟印的是**红因文本**（t.Errorf 那一行原文），
+为的是坐实四格新棋（D19/D20/D21/D22）与 A2 两格（M7/M8）的红点落在**核心断言**上，
+不是落在腿自己的前提自检上。每格都在注码下取一次红、还原后同腿集再取一次绿。
+
+命令（两批，同一个 /tmp 脚本，改 R22LANE3_ONLY 换格）：
+  批一 D20,D22,M7,M8：R22LANE3_WORK=/tmp/r22lane3-redtext           python3 /tmp/r22lane3_newleg_red_text.py
+  批二 D19,D21      ：R22LANE3_WORK=/tmp/r22lane3-redtext2 R22LANE3_ONLY=D19,D21 python3 /tmp/…_red_text.py
+克隆：git clone --shared --no-checkout + 按工作树当前分支 checkout + 76 个本泳道脏 .go 覆盖
+     （含未跟踪的 retention_a6_test.go / command_log_outcome_b20b_test.go，两条新腿都住在这儿）
+库：POSTGRES_TEST_PORT=8232，口令只从 user-server/.env 用 awk 精确取 POSTGRES_PASSWORD
+    喂 POSTGRES_TEST_PASSWORD（值不打印）；两批都 skip=0，出现 SKIP 即停机。
+注码只落克隆；每格跑完还原并比 md5，两批结束时两枚目标文件（command_log.go / executor.go）
+均与克隆基线一致。脚本留在 /tmp 没进仓：任务书的「可写范围」只列了电池、日志与测试文件。
+-->
+
+== 批一（D20 / D22 / M7 / M8）==
+
+克隆就绪：分支 master、覆盖 76 个脏 .go
+口令已从 .env 取到（值不打印）
+[腿存在] repository: TestA6DigestClosesOverRunRow TestA6DigestSeparatesPassedFromFailedFrame TestA6DigestSeparatesUnackedFromFailedFrame TestA6RunRowCountsEntryWindowNotLateCrossing
+[腿存在] service: TestB20BCommandFramesCarryNoVerdict TestB20BFailedDispatchEventFramesSayFailed
+
+== 控制组（未注码，新腿集全绿是这一趟的前提）==
+   [控制组] repository 跑完 4/4 PASS=4 FAIL=0 SKIP=0
+     PASS TestA6RunRowCountsEntryWindowNotLateCrossing
+     PASS TestA6DigestSeparatesPassedFromFailedFrame
+     PASS TestA6DigestSeparatesUnackedFromFailedFrame
+     PASS TestA6DigestClosesOverRunRow
+   [控制组] service 跑完 2/2 PASS=2 FAIL=0 SKIP=0
+     PASS TestB20BFailedDispatchEventFramesSayFailed
+     PASS TestB20BCommandFramesCarryNoVerdict
+
+D20 注码：'RowsBefore:   rowsBefore,' → 'RowsBefore:   total,'
+   [注码下] repository 跑完 3/3 PASS=2 FAIL=1 SKIP=0
+     FAIL TestA6RunRowCountsEntryWindowNotLateCrossing
+        retention_a6_test.go:811: rows_before=6 want 5：入口计数被写成了累计删除数，「裁剪进行中才冒出来的行」被算进『一开始就该走』的那一批，rows_before==rows_pruned 从此恒真
+        retention_a6_test.go:816: 实删 6 与入口 6 相差 0 want 1：那 1 行越界补写没在留痕上分出「入口」与「后到」两截
+   [还原后] repository 跑完 3/3 PASS=3 FAIL=0 SKIP=0
+     PASS TestA6RunRowCountsEntryWindowNotLateCrossing
+     PASS TestA6DigestClosesOverRunRow
+     PASS TestA6RunRowClosesArithmeticUnderTwoBatches
+   D20：红名单=1 条 -> TestA6RunRowCountsEntryWindowNotLateCrossing
+
+D22 注码："CASE WHEN ok IS NULL THEN 'n' WHEN ok THEN 't' ELSE 'f' END," → "CASE WHEN ok IS NULL THEN 'n' ELSE 't' END,"
+   [注码下] repository 跑完 2/2 PASS=1 FAIL=1 SKIP=0
+     FAIL TestA6DigestSeparatesPassedFromFailedFrame
+        retention_a6_test.go:696: 「回执为是」与「回执为否」折出同一个批摘要 f5cdb494e71d32f572bac783f0135b217da9a87243171215588f3f750e505c5b：ok 的 t/f 两态被折成一态，裁掉的那一段里一条成功的帧与一条失败的帧再也分不开（A2 拆开的两轴又并回一列）
+   [还原后] repository 跑完 2/2 PASS=2 FAIL=0 SKIP=0
+     PASS TestA6DigestSeparatesPassedFromFailedFrame
+     PASS TestA6DigestSeparatesUnackedFromFailedFrame
+   D22：红名单=1 条 -> TestA6DigestSeparatesPassedFromFailedFrame
+
+M7 注码：'map[string]any{"error": sendErrText(err)}, time.Since(start).Milliseco' → 'map[string]any{"error": sendErrText(err)}, time.Since(start).Milliseco'
+   [注码下] service 跑完 1/1 PASS=0 FAIL=1 SKIP=0
+     FAIL TestB20BFailedDispatchEventFramesSayFailed
+        command_log_outcome_b20b_test.go:280: comment_send 的 event 帧 ok=true：这一帧的 payload 写着 error="send_button_not_interactable: covered"，结论轴被写成了常量 ✓（A2 拆开的「下发了」与「成了」又并回一列）
+   [还原后] service 跑完 1/1 PASS=1 FAIL=0 SKIP=0
+     PASS TestB20BFailedDispatchEventFramesSayFailed
+   M7：红名单=1 条 -> TestB20BFailedDispatchEventFramesSayFailed
+
+M8 注码：'e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event"' → 'e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event"'
+   [注码下] service 跑完 1/1 PASS=0 FAIL=1 SKIP=0
+     FAIL TestB20BFailedDispatchEventFramesSayFailed
+        command_log_outcome_b20b_test.go:281: post_comment 的 event 帧 ok=true：这一帧的 payload 写着 error="post_comment 未提交（发送按钮不可点，点击未发生）: send_button_not_interactable: covered"，结论轴被写成了常量 ✓（A2 拆开的「下发了」与「成了」又并回一列）
+   [还原后] service 跑完 1/1 PASS=1 FAIL=0 SKIP=0
+     PASS TestB20BFailedDispatchEventFramesSayFailed
+   M8：红名单=1 条 -> TestB20BFailedDispatchEventFramesSayFailed
+
+[取证趟结束] 两枚注码目标文件均已还原（md5 一致）
+
+== 批二（D19 / D21）==
+
+克隆就绪：分支 master、覆盖 76 个脏 .go
+口令已从 .env 取到（值不打印）
+
+== 控制组（未注码，新腿集全绿是这一趟的前提）==
+   [控制组] repository 跑完 4/4 PASS=4 FAIL=0 SKIP=0
+     PASS TestA6RunRowCountsEntryWindowNotLateCrossing
+     PASS TestA6DigestSeparatesPassedFromFailedFrame
+     PASS TestA6DigestSeparatesUnackedFromFailedFrame
+     PASS TestA6DigestClosesOverRunRow
+   [控制组] service 跑完 2/2 PASS=2 FAIL=0 SKIP=0
+     PASS TestB20BFailedDispatchEventFramesSayFailed
+     PASS TestB20BCommandFramesCarryNoVerdict
+
+D19 注码：'if err := tx.Create(&d).Error; err != nil {\n\t\t\t\t\treturn err\n\t\t\t\t}' → 'if err := r.db.WithContext(ctx).Create(&d).Error; err != nil {\n\t\t\t\t\tre'
+   [注码下] repository 跑完 2/2 PASS=1 FAIL=1 SKIP=0
+     FAIL TestA6PruneFailsCloseWhenDeleteFailsMidRun
+        retention_a6_chain_prune_test.go:270: 删除失败后库里留下 2 条摘要 want 0：摘要写在删除事务之外，会对仍在其外的行谎称已删（摘要一旦说谎就不是凭据）
+        retention_a6_chain_prune_test.go:281: 反向锁后摘要 4 条 want 2：一次干净裁剪该为两个 session 各补一条
+   [还原后] repository 跑完 2/2 PASS=2 FAIL=0 SKIP=0
+     PASS TestA6PruneFailsCloseWhenDeleteFailsMidRun
+     PASS TestA6PruneFailsCloseWhenDigestWriteBlocked
+   D19：红名单=1 条 -> TestA6PruneFailsCloseWhenDeleteFailsMidRun
+
+D21 注码：'tx.Where("session_id = ?", sessionID).Order("ordinal DESC").First(&d)' → 'tx.Where("session_id = ?", sessionID).Order("ordinal ASC").First(&d)'
+   [注码下] repository 跑完 2/2 PASS=0 FAIL=2 SKIP=0
+     FAIL TestA6ChainLinksToNewestDigestAcrossThreeRounds
+        retention_a6_chain_prune_test.go:99: 第 3 轮裁剪报错：ERROR: duplicate key value violates unique constraint "uk_browser_audit_digests_session_ordinal" (SQLSTATE 23505) —— ASC 世界会把链头接回最旧那条、ordinal 撞回旧值 → 摘要写不进 → 整批回滚
+     FAIL TestA6RunRowClosesArithmeticUnderTwoBatches
+        retention_a6_chain_prune_test.go:320: PruneBefore 报错：ERROR: duplicate key value violates unique constraint "uk_browser_audit_digests_session_ordinal" (SQLSTATE 23505)
+   [还原后] repository 跑完 2/2 PASS=2 FAIL=0 SKIP=0
+     PASS TestA6ChainLinksToNewestDigestAcrossThreeRounds
+     PASS TestA6RunRowClosesArithmeticUnderTwoBatches
+        retention_a6_chain_prune_test.go:362: 钉死：rows_before=10001 == rows_pruned=10001 == 入口到期数，故 `RowsBefore: total` 与实现逐字节同值、杀不掉
+   D21：红名单=2 条 -> TestA6ChainLinksToNewestDigestAcrossThreeRounds TestA6RunRowClosesArithmeticUnderTwoBatches
+
+[取证趟结束] 两枚注码目标文件均已还原（md5 一致）
+
+== 这两批读出来的东西（写在读数之后，不改读数）==
+1. 六格的红点全在**核心断言**上，不在前提自检上：D20＝:811/:816（rows_before 与差值），
+   D22＝:696（两态折一态后批摘要相同），M7＝:280、M8＝:281（同一事件帧的两个站点各自红），
+   D19＝:270（删除回滚后摘要仍在＝说谎的凭据），D21＝:99（第 3 轮接不上链头）。
+   前提自检（`Fatalf`）一条都没先撞——先撞的话读数就只证「夹具坏了」，不证刀。
+2. M7/M8 打印的注码串看着一样，是脚本各截 70 字符造成的（两串前 60 余字符相同），
+   差异在 `verdict(` 之后；两格在电池里各自锚点命中一次（「注码前置」那行 8 格全过），
+   且各自只红对应的那一处（:280 与 :281 分属两格），不是同一格跑两遍。
+3. 上一趟（a6a2-oldlegs-under-knife-r22lane3.log）里 D21 多撞红那条算术大腿只印了 FAIL 行、
+   没印红因，当时那句「ASC ⇒ ordinal 撞回旧值 ⇒ 唯一约束挡下 ⇒ 整轮回滚」写明是推测。
+   本趟批二把它取到了证：两条腿的 Error 文本都是 `duplicate key … session_ordinal (SQLSTATE 23505)`。
+   同处还顺带印出那条大腿自己的注释（:362「`RowsBefore: total` 与实现逐字节同值、杀不掉」），
+   这就是 D20 必须补新腿的理由。
+4. 每一格都有「还原后同腿集回绿」这一行，六格齐全；两批结束时 command_log.go / executor.go
+   在克隆里都还原到基线（md5 一致），共享工作树全程没被注码碰过。

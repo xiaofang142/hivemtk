@@ -23,6 +23,6 @@
     "test:e2e": "bash test/e2e.sh"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "vite": "^8.1.1"
   }
 }

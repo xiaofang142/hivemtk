@@ -1,0 +1,24 @@
+私有作业目录：/tmp/r23-bat-15
+[Go] 未跟踪的外域文件不进克隆（并行泳道的半成品会让克隆 build failed）：user-server/internal/model/bill.go user-server/internal/model/bill_test.go user-server/internal/repository/bill_test.go user-server/internal/repository/help_center_public_list_test.go user-server/internal/service/webhook_outbound_r26_bridge_cards_test.go
+
+[Go] 注码前置：15 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=21 passed=21 skip=0 FAIL=[]
+K1   Redis 去重键丢掉会话（换会话的同一句话被共用一把键，客户「说了没回」）                       杀掉      total=21 fail=1 skip=0 ｜ TestIngress_ContentDedupKeyCarriesConversation
+K2   调用方把回声窗口折成零时刻（历史里多老的行都算回声）                                   杀掉      total=21 fail=1 skip=0 ｜ TestPersistBridgeHistory_ContentDedupExpiresAfterWindow
+K6   仓储侧不看 since 参数（调用方传了窗口，SQL 里那条 `sent_at > ?` 其实没人守）          杀掉      total=21 fail=2 skip=0 ｜ TestMessageHubRepository_ContentEchoScoping | TestPersistBridgeHistory_ContentDedupExpiresAfterWindow
+K3   调用方给 hub 层传空会话（会话界在这一跳被丢掉）                                   杀掉      total=21 fail=1 skip=0 ｜ TestPersistBridgeHistory_ContentDedupScopedToConversation
+K7   仓储侧不接会话参数（跨会话同文本互吞）                                          杀掉      total=21 fail=2 skip=0 ｜ TestMessageHubRepository_ContentEchoScoping | TestPersistBridgeHistory_ContentDedupScopedToConversation
+K4   单条路径退回「拦截即销毁」（判重的那句话在库里查不到任何痕迹）                              杀掉      total=21 fail=1 skip=0 ｜ TestHandleIngress_DupDecisionPersistsWithAISuppressed
+K5   批次路径退回「拦截即销毁」（单条半边照样绿，批里的重复无痕）                               杀掉      total=21 fail=1 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed
+L1   摘掉「平台给了 id 就跳过内容去重」那半句守卫                                     杀掉      total=21 fail=2 skip=0 ｜ TestIngress_OccurrenceSuffixSkipsContentWindowDedup | TestIngress_PlatformIDEventsSkipContentDedup
+K8   入口只摘「发生次数身份」那半句（平台 id 守卫留着）⇒ 第二条又在入库前被吞                      杀掉      total=21 fail=1 skip=0 ｜ TestIngress_OccurrenceSuffixSkipsContentWindowDedup
+K9   落库只摘钩子2.5 的豁免那半句 ⇒ 内容哈希又把第二条同文本吞掉                            杀掉      total=21 fail=1 skip=0 ｜ TestPersistBridgeHistory_OccurrenceSuffixPersistsSecondRow
+K10  豁免判据恒真（内容维度嗅探对整个入站流失效：回环防护与重投兜底一起没）                          杀掉      total=21 fail=8 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed | TestHandleIngress_DupDecisionPersistsWithAISuppressed | TestHandleIngress_PersistSuccessKeepsContentWindow
+K11  豁免只看「以 #数字 结尾」这一截（丢掉 mh:<8hex> 前缀界，外来 id 蹭豁免）                杀掉      total=21 fail=1 skip=0 ｜ TestIngress_NonOccurrenceHashLikeIDSuffixStillContentDeduped
+R1   单条路径不退坑（那条重投回来会被自己留下的键判成 duplicate：只留痕不回 AI）                 杀掉      total=21 fail=1 skip=0 ｜ TestHandleIngress_PersistFailureReleasesContentWindow
+R2   批次路径不退坑（单条半边照样绿，批里失败的那条毒掉后面每一次重投）                            杀掉      total=21 fail=1 skip=0 ｜ TestHandleIngressBatch_PersistFailureReleasesContentWindow
+R3   补偿写成无条件退坑（落库成功也把键删掉，同内容连发两帧会回两遍 AI）                          杀掉      total=21 fail=3 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed | TestHandleIngress_DupDecisionPersistsWithAISuppressed | TestHandleIngress_PersistSuccessKeepsContentWindow
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 15 格逐格被杀，无存活（全电池） =====
+DEDUP_RC=0

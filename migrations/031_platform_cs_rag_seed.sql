@@ -8,7 +8,10 @@
 --   * 知识分段 product_id = 'hivemtk-platform-cs'（与 rag_products.id 同为字符串产品 ID，
 --     自 2026-08 产品ID统一为字符串后，不再使用 HashStringToInt64 数值哈希桥接）
 --   * 检索侧：BM25 关键词召回立即可用；向量召回需 embedding 服务就绪后触发重建索引
--- 设计文档: docs/marketing-features/agent-rag-qa.md
+-- 执行方式: 本文件**不会被任何自动路径执行**（compose 的 initdb.d 只挂 init-user-db.sql，
+--   scripts/bootstrap.sh 只点名 027/028，Go 侧无人读 .sql），需要人工
+--   psql -v ON_ERROR_STOP=1 -f migrations/031_platform_cs_rag_seed.sql；口径真值见 migrations/README.md
+-- 相关产码: user-server/cmd/seed/seed_ai_agents.go（把客服智能体绑到本文件的 hivemtk-platform-cs）
 -- 合规约束: 不含定价/版本下载/注册开户等已下线内容；含 GitHub/Gitee 地址
 -- ============================================================
 
@@ -32,7 +35,7 @@ INSERT INTO rag_products (
     '用于官网网页客服自动回答商户关于 HiveMTK 项目的开源信息、部署、运维、架构、资产市场、AI 智能体等咨询。涵盖 13 大主题文档与可检索知识分段。',
     'platform_cs',
     'rag_platform_cs',
-    'bge-m3', 1024, 'Qwen2.5-1.5B-Instruct',
+    'bge-m3', 1024, 'Qwen2.5-3B-Instruct',
     0.3, 1024, 0.9, 0.5, 0.5,
     'text',
     '你是 HiveMTK 官方客服助手，负责解答商户关于本项目的咨询。回答依据下方检索到的知识片段，要求：1) 准确，不编造；2) 简洁，单次回复不超过 200 字；3) 涉及部署/命令时给出具体步骤；4) 不涉及定价、版本下载、注册开户等已下线内容；5) 引导至 GitHub/Gitee 仓库或微信群获取更多帮助。',
@@ -42,7 +45,7 @@ INSERT INTO rag_products (
 );
 
 -- ============================================================
--- 2) 知识文档（8 篇）+ 知识分段
+-- 2) 知识文档（13 篇，与上方"本迁移创建 … 13 篇知识文档"同口径）+ 知识分段
 -- 文档 ID 由 SERIAL 自增；分段 document_id 引用文档 ID
 -- 为稳定可重入，使用 RETURNING 捕获 ID 写入分段
 -- ============================================================
@@ -69,7 +72,7 @@ BEGIN
     (doc_id_bigint, pid, 0, 'HiveMTK 是一个私域部署的 AI 营销操作系统，核心定位是「把七端社媒、AI 智能体、零出域数据安全三件事同时做透」。它不是给大模型套壳，也不是写死的自动化脚本，而是内置一套能感知→规划→调工具→反思的自主 AI 智能体（ReAct 循环 + 41 个内置工具）。开源协议 AGPL-3.0，任何公司或个人可自由使用与私有部署。', 184, '{"doc":"overview","section":"定位"}', NOW()),
     (doc_id_bigint, pid, 1, 'HiveMTK 三大核心卖点：1) 渠道覆盖——七端打通（抖音/快手/小红书/闲鱼/TikTok/微信企业微信/短信/邮件），一个工作台全管；2) AI 范式——ReAct 自主智能体（非写死工作流），三级 RAG 检索（向量召回 + bge-reranker 精排 + LLM 改写）；3) 数据安全——100% 私域零出域，本地 AI 推理栈，对话不出客户内网。', 193, '{"doc":"overview","section":"卖点"}', NOW()),
     (doc_id_bigint, pid, 2, 'HiveMTK 仓库地址：Gitee 主仓库 https://gitee.com/xhpmayun/hivemtk ；GitHub 镜像 https://github.com/xiaofang142/hivemtk 。平台端仓库 hivemtk-platform 同样已开源。开源协议为 GNU AGPL-3.0：修改后若通过网络对外提供服务，必须按 AGPL-3.0 向所有用户免费提供修改后的完整源代码；仅内部私有部署不对外提供服务时无需公开修改。', 208, '{"doc":"overview","section":"仓库地址"}', NOW()),
-    (doc_id_bigint, pid, 3, 'HiveMTK 技术栈：后端 Go 1.25 + Gin + GORM + pgvector；前端 Vue 3 + Vite + Element Plus + Pinia；数据库 PostgreSQL 15 + pgvector（1024 维）；缓存 Redis 7；LLM 走 llama.cpp + Qwen2.5-1.5B-Instruct（OpenAI 兼容 API）；Embedding 走本地 TEI/Qwen3-Embedding-0.6B（1024 维）；Rerank 走 bge-reranker-base；嵌入式客服为原生 JS IIFE + iframe + postMessage；部署为 Docker Compose。', 218, '{"doc":"overview","section":"技术栈"}', NOW()),
+    (doc_id_bigint, pid, 3, 'HiveMTK 技术栈：后端 Go 1.25 + Gin + GORM + pgvector；前端 Vue 3 + Vite + Element Plus + Pinia；数据库 PostgreSQL 15 + pgvector（1024 维）；缓存 Redis 7；LLM 走宿主机 llama.cpp（llama-server，OpenAI 兼容 API，默认 Qwen2.5-3B-Instruct）；Embedding 与 Rerank 同样是宿主机 llama-server（默认 bge-m3 1024 维 / bge-reranker-v2-m3）；嵌入式客服为原生 JS IIFE + iframe + postMessage；部署为「数据层 Docker Compose + 应用与推理跑宿主机」。', 218, '{"doc":"overview","section":"技术栈"}', NOW()),
     (doc_id_bigint, pid, 4, 'HiveMTK 与平台端的关系：用户端（hivemtk，本仓库）归属企业客户，运行在客户本地内网，存储全部业务数据（对话/知识库/客户）；平台端（hivemtk-platform）归属平台运营方，运行在平台云端，仅存储元数据（商户/版本/统计），不接触、不存储、不访问任何用户业务数据。用户端通过低频 HTTPS 心跳访问平台端。', 178, '{"doc":"overview","section":"用户端与平台端"}', NOW());
 
     -- =========================================================
@@ -107,10 +110,10 @@ BEGIN
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
     (doc_id_bigint, pid, 0, 'HiveMTK 部署模式为私域独立部署：部署在商户自己的服务器（或私有云、混合云），数据库、推理栈、用户数据全部本地化。平台端以公网 API 形式调用，数据不落地平台端。每个商户独立一套完整系统（user-server + PostgreSQL + Redis + 推理栈）。禁止 SaaS/多租户模式，无 merchant_id 字段，所有数据归属当前部署实例。', 169, '{"doc":"deployment","section":"部署模式"}', NOW()),
     (doc_id_bigint, pid, 1, 'HiveMTK 硬件最低要求：CPU 2 核（推荐 8 核+，LLM 推理需 4 核+）；内存 4GB（推荐 16GB+，14B 模型需 12GB+）；磁盘 50GB（推荐 200GB+，模型文件约 10GB）；网络内网（公网对话需 HTTPS 或 FRP 穿透）。GPU 加速可选：NVIDIA 8GB+（dev 档 3B 模型），NVIDIA 16GB+（prod 档 14B 模型）。前置要求：Docker 24+ & Docker Compose v2。', 191, '{"doc":"deployment","section":"硬件要求"}', NOW()),
-    (doc_id_bigint, pid, 2, 'HiveMTK 5 分钟上手三步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) make install（自动生成 .env + docker-compose.yml + 构建前端）；3) vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，可用 openssl rand -hex 32 生成），然后 make up 启动所有服务，访问 http://localhost:8204，默认账号 admin + 你设置的密码。只有把平台端也跑起来（PLATFORM_ENABLED=true）才需要再加 PLATFORM_ADMIN_PASSWORD 与 MERCHANT_API_SECRET。', 209, '{"doc":"deployment","section":"快速上手"}', NOW()),
-    (doc_id_bigint, pid, 3, 'HiveMTK 关键端口：8204 user-server API（RESTful + WebSocket）；8202 PostgreSQL user_db（容器内端口，宿主机映射 8232）；8203 Redis；8207 mtk-llm（llama.cpp 推理，Qwen2.5-1.5B-Instruct）；8208 mtk-embedding（bge-m3，1024 维）；8209 mtk-rerank（bge-reranker-v2-m3）。健康检查：curl http://localhost:8204/health。', 196, '{"doc":"deployment","section":"端口"}', NOW()),
-    (doc_id_bigint, pid, 4, 'HiveMTK 数据持久化通过命名卷：mtk_user_pg_data（PostgreSQL 数据）、mtk_user_redis_data（Redis 数据）、mtk_user_logs（应用日志）、mtk_user_uploads（用户上传文件）、mtk_user_data（install.lock 等运行时凭证）。不要用 bind mount 替换这些卷，否则数据可能丢失。', 161, '{"doc":"deployment","section":"持久化"}', NOW()),
-    (doc_id_bigint, pid, 5, 'HiveMTK 模型档位切换：编辑 .env 替换 LLM_*/EMBEDDING_* 三行。dev 轻量档（当前默认）：LLM 为 Qwen2.5-1.5B-Instruct (Q4)，Embedding 为 Qwen3-Embedding-0.6B，内存需求 8GB，适合个人电脑/小内存部署。prod 重量档：LLM 为 Qwen2.5-14B-Instruct (Q4+)，Embedding 为 BAAI/bge-m3 (1024 维)，内存需求 16GB+，适合生产环境。', 195, '{"doc":"deployment","section":"模型档位"}', NOW()),
+    (doc_id_bigint, pid, 2, 'HiveMTK 5 分钟上手四步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) cp .env-example .env 后 vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，可用 openssl rand -hex 32 生成；PG 口令必须在拉起数据层前定稿，数据卷只在首次初始化时读它）；3) make install（构建前端与 embed-sdk、下载模型、启动 PostgreSQL + Redis 数据层容器与宿主机推理栈；docker-compose.yml 由仓库自带、不会被生成）；4) make dev 启动 user-server（宿主机 Go 进程），访问 http://localhost:8204/setup 设超管账号，之后才能登录。只有把平台端也跑起来（PLATFORM_ENABLED=true）才需要再加 PLATFORM_ADMIN_PASSWORD 与 MERCHANT_API_SECRET；前者是平台端代理的管理员口令，与 8204 的用户端登录无关。', 209, '{"doc":"deployment","section":"快速上手"}', NOW()),
+    (doc_id_bigint, pid, 3, 'HiveMTK 关键端口：8204 user-server API（RESTful + WebSocket，跑在宿主机）；PostgreSQL user_db 8202（容器内也是 8202，compose 默认宿主同名映射且只绑 127.0.0.1，换宿主端口改 USER_POSTGRES_HOST_PORT；本机直装数据库的开发档才用 8232）；Redis 8203（同样只绑 127.0.0.1，换宿主端口改 REDIS_HOST_PORT）；8207 LLM / 8208 Embedding / 8209 Rerank 是宿主机的三个 llama-server 进程，不是容器。健康检查：curl http://localhost:8204/health。', 196, '{"doc":"deployment","section":"端口"}', NOW()),
+    (doc_id_bigint, pid, 4, 'HiveMTK 数据持久化：compose 只声明两条命名卷 mtk_user_pg_data（PostgreSQL 数据）与 mtk_user_redis_data（Redis 数据）。推理栈日志与 pid 在宿主机 $HIVEMTK_RUNTIME_DIR（默认 $HOME/.hivemtk/runtime）、模型在 $HIVEMTK_MODELS_DIR（默认项目内 ./models）、安装身份 install.lock 默认写在进程工作目录 ./install.lock（生产要用 INSTALL_LOCK_PATH 指成绝对路径并随机器保留）——这些都不由 compose 卷管理。不要用 bind mount 替换那两条卷，否则数据可能丢失。', 161, '{"doc":"deployment","section":"持久化"}', NOW()),
+    (doc_id_bigint, pid, 5, 'HiveMTK 模型档位切换：档位不是一个开关，而是 .env 里 LLM_REPO/LLM_FILE/LLM_SERVED_NAME 三行（Embedding、Rerank 同理），make inference-host-models 与 make inference-host-models-prod 都只按 .env 下载，后者只是把 HIVEMTK_PROFILE 标成 prod。仓库默认档：LLM 为 Qwen2.5-3B-Instruct (Q4_K_M，约 2.0GB)，Embedding 为 bge-m3 (1024 维)，Rerank 为 bge-reranker-v2-m3，内存需求约 8GB，适合个人电脑先跑通最小闭环。要换更大的 LLM（例如 Qwen2.5-14B-Instruct）就改那三行、重下模型并 make inference-host-up 重启，内存按 16GB+ 准备。', 195, '{"doc":"deployment","section":"模型档位"}', NOW()),
     (doc_id_bigint, pid, 6, 'HiveMTK 本地推理栈启动：make inference-host-install 安装 llama.cpp 二进制（首次）；make inference-host-models 下载 dev 档模型（首次）；make inference-host-up 启动 LLM + Embedding + Rerank 三个 llama-server；make inference-host-warmup 预热三端点（避免首请求慢）；make inference-host-test 端到端 smoke test；make inference-host-status 统一查看数据层+推理栈+user-server 状态。', 213, '{"doc":"deployment","section":"推理栈"}', NOW()),
     (doc_id_bigint, pid, 7, 'HiveMTK FRP 私域穿透：访客从公网进，数据经隧道回本地，云端不落一条对话。适合本地部署但需公网访问的场景。配置 frpc.toml 指向平台端 frps，将本地 user-server 的 8204 端口暴露为公网子域名。详细配置见 docs/architecture/FRP私域部署指南.md。', 159, '{"doc":"deployment","section":"FRP穿透"}', NOW());
 
@@ -128,11 +131,11 @@ BEGIN
     ) RETURNING id INTO doc_id_bigint;
 
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-    (doc_id_bigint, pid, 0, 'HiveMTK 常用运维命令：make install 一键安装；make up 启动所有服务；make down 停止；make restart 重启；make logs 查看 user-server 日志；make ps 查看服务状态；make inference-up 单独拉起本地推理栈；make inference-down 停止推理栈（保留模型）；make web-build 重新构建前端；make sdk-build 重新构建 embed-sdk；make backup 备份 PostgreSQL；make restore FILE=... 恢复备份。', 198, '{"doc":"operations","section":"常用命令"}', NOW()),
-    (doc_id_bigint, pid, 1, 'HiveMTK 数据层运维：make db-up 启动 PG + Redis 容器；make db-down 停止；make db-ps 查看容器状态；make db-logs 查看容器日志；make db-backup 备份 PG（输出 backup_YYYYMMDD_HHMMSS.sql）；make db-restore FILE=backup_xxx.sql 恢复 PG。备份文件为纯 SQL，可直接用 psql 导入。建议生产环境每日自动备份。', 182, '{"doc":"operations","section":"数据层"}', NOW()),
-    (doc_id_bigint, pid, 2, 'HiveMTK 本地开发热更新：make dev-install 安装 air 热更新工具（如未安装）；make dev 启动 user-server 热更新（air 监听 .go/.yaml/.html 自动重编+重启）；make dev-stop 停止 air 进程；make dev-all 一键全栈（数据层 + 推理栈 + air 提示）；make dev-down 停止数据层 + 推理栈 + air。前端开发：cd user-web && npm run dev 启动 Vite 开发服务器。', 196, '{"doc":"operations","section":"开发模式"}', NOW()),
+    (doc_id_bigint, pid, 0, 'HiveMTK 常用运维命令（都以根 Makefile 为准，make help 可列全）：make install 一键安装；make dev 启动 user-server 热更新、make dev-stop 停；make user-build 产出宿主机二进制 user-server/bin/user-server；make dev-all 拉起数据层+推理栈、make dev-down 全停；make inference-host-up / make inference-host-down 单独起停本地推理栈（保留模型）；make web-build 重新构建前端；make sdk-build 重新构建 embed-sdk；make db-backup 备份 PostgreSQL；make db-restore FILE=... 恢复备份。', 198, '{"doc":"operations","section":"常用命令"}', NOW()),
+    (doc_id_bigint, pid, 1, 'HiveMTK 数据层运维（compose 里只有 PG 与 Redis 两个容器）：make db-up 启动；make db-down 停止；make db-ps 查看容器状态；make db-logs 查看容器日志；make db-backup 备份 PG（输出 backup_YYYYMMDD_HHMMSS.sql）；make db-restore FILE=backup_xxx.sql 恢复 PG。备份文件为纯 SQL，可直接用 psql 导入。建议生产环境每日自动备份。', 182, '{"doc":"operations","section":"数据层"}', NOW()),
+    (doc_id_bigint, pid, 2, 'HiveMTK 本地开发热更新：make dev-install 安装 air 热更新工具（如未安装）；make dev 启动 user-server 热更新（air 监听 .go/.yaml/.html 自动重编+重启，日志即 air 输出，也可看 user-server/tmp/air.log）；make dev-stop 停止 air 进程；make dev-all 一键全栈（数据层 + 推理栈 + air 提示）；make dev-down 停止数据层 + 推理栈 + air。前端开发：cd user-web && npm run dev 启动 Vite 开发服务器。', 196, '{"doc":"operations","section":"开发模式"}', NOW()),
     (doc_id_bigint, pid, 3, 'HiveMTK 统一日志系统配置（zerolog 驱动）：level 可选 debug/info/warn/error；format 可选 json（生产，便于采集）或 console（本地，带颜色）；output 可选 stdout/file/both；file 为日志文件路径（output 为 file/both 时生效），超过 max_size(MB) 自动滚动保留 1 份备份；component 写入每条日志的 service 标识。配置位于 user-server/config.yaml 的 logging 段。', 198, '{"doc":"operations","section":"日志配置"}', NOW()),
-    (doc_id_bigint, pid, 4, 'HiveMTK 推理栈状态检查：make inference-host-status 会显示数据层容器状态、llama-server 进程、端点连通性（8207 LLM / 8208 Embedding / 8209 Rerank / 8204 user-server，每个端点 curl /health 返回 200 即正常）。make inference-host-logs tail 三个 llama-server 日志。make inference-host-ps 显示 ps aux | grep llama-server。', 189, '{"doc":"operations","section":"推理栈检查"}', NOW()),
+    (doc_id_bigint, pid, 4, 'HiveMTK 推理栈状态检查：make inference-host-status 会显示数据层容器状态、llama-server 进程、端点连通性（8207 LLM / 8208 Embedding / 8209 Rerank / 8204 user-server，每个端点 curl /health 返回 200 即正常）。make inference-host-logs tail $HIVEMTK_RUNTIME_DIR 下的三个 llama-server 日志。make inference-host-ps 显示 llama-server 进程列表。', 189, '{"doc":"operations","section":"推理栈检查"}', NOW()),
     (doc_id_bigint, pid, 5, 'HiveMTK 系统初始化流程：浏览器访问 http://your-server-ip:8204/setup，1) 设置超管账号（首次登录会强制改密，system_users.must_change_password 字段标记）；2) 完成系统初始化。私域部署无 LicenseKey 强制要求。初始化后默认管理员账号为 admin。健康检查 curl http://localhost:8204/health 返回 200 即服务正常。', 188, '{"doc":"operations","section":"初始化"}', NOW());
 
     -- =========================================================
@@ -149,9 +152,9 @@ BEGIN
     ) RETURNING id INTO doc_id_bigint;
 
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-    (doc_id_bigint, pid, 0, 'HiveMTK 整体架构：访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204，含 PostgreSQL user_db :8202、Redis 7 :8203、mtk-llm :8207 Qwen2.5-1.5B-Instruct、mtk-embedding :8208 Qwen3-Embedding-0.6B、mtk-rerank :8209 bge-reranker-base）→ 平台端（独立仓库 hivemtk-platform，提供版本检查/商户标识校验/官方支持，不碰业务数据）。', 208, '{"doc":"architecture","section":"整体架构"}', NOW()),
+    (doc_id_bigint, pid, 0, 'HiveMTK 整体架构：访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204 跑宿主机，数据层容器 PostgreSQL user_db :8202、Redis 7 :8203，宿主机 llama-server 三进程 LLM :8207 Qwen2.5-3B-Instruct、Embedding :8208 bge-m3（1024 维）、Rerank :8209 bge-reranker-v2-m3）→ 平台端（独立仓库 hivemtk-platform，提供版本检查/商户标识校验/官方支持，不碰业务数据）。', 208, '{"doc":"architecture","section":"整体架构"}', NOW()),
     (doc_id_bigint, pid, 1, 'HiveMTK Go 代码严格遵守分层架构规范：Controller（接口层）→ Service（业务层）→ Repository（数据访问层）→ Model（数据模型层）→ Infra（基础设施层）。禁止：controller 直访 db/repository、service 直访 db、model 含业务方法、dto 反向引用 service。检查脚本 hivemtk/scripts/check-architecture.sh 已集成 CI。主文档 hivemtk/docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md。', 207, '{"doc":"architecture","section":"分层架构"}', NOW()),
-    (doc_id_bigint, pid, 2, 'HiveMTK RAG 智能问答架构（2026-07-16 私域基线）：LLM 走外部 API（按业务需求出域），Embedding 走本地 docker 容器（私域数据不出域）。数据流：客户消息 → Embedding（本地 TEI+BAAI/bge-m3，dim=1024）→ pgvector 向量检索 → Top-K 知识片段 → 拼装 Prompt → LLM 调用（外部 API：Qwen/Claude/GPT）→ 后处理（敏感词过滤）→ 返回 reply+sources。', 196, '{"doc":"architecture","section":"RAG架构"}', NOW()),
+    (doc_id_bigint, pid, 2, 'HiveMTK RAG 智能问答架构（2026-07-16 私域基线）：LLM 与 Embedding 默认都走本机 llama-server（私域数据不出域；要把 LLM 换成外部 API，改 .env 的 LLM_BASE_URL/LLM_MODEL 即可）。数据流：客户消息 → Embedding（本地 llama-server + bge-m3，dim=1024）→ pgvector 向量检索 → Top-K 知识片段 → 拼装 Prompt → LLM 调用（外部 API：Qwen/Claude/GPT）→ 后处理（敏感词过滤）→ 返回 reply+sources。', 196, '{"doc":"architecture","section":"RAG架构"}', NOW()),
     (doc_id_bigint, pid, 3, 'HiveMTK 三级 RAG 检索：1) 粗排——向量召回（pgvector + bge-m3 embedding，1024 维）；2) 精排——bge-reranker-v2-m3 重排（多语言跨编码器）；3) LLM 改写——HyDE/Query Rewriter 优化查询。置信度阈值默认 0.7，低于阈值降级到通用 LLM。多轮对话保留 3-5 轮上下文。转人工策略：MaxAIConsecutive=5（连续 5 次 AI 回复后建议转人工），ConfidenceThreshold=0.7。', 199, '{"doc":"architecture","section":"三级检索"}', NOW()),
     (doc_id_bigint, pid, 4, 'HiveMTK 数据安全：100% 私域零出域。本地 AI 推理栈（llama.cpp + TEI）三个 OpenAI 兼容服务跑在客户内网；所有对话、知识库、向量化、检索增强全程在客户内网完成，零外网可跑；FRP 私域穿透时访客从公网进、数据经隧道回本地，云端不落一条对话；满足等保、数据出境管控、私有化部署基线。可选云端 LLM：把 LLM_BASE_URL 改成 DeepSeek/OpenAI 即可，但 Embedding/Rerank 仍强制本地。', 208, '{"doc":"architecture","section":"数据安全"}', NOW());
 
@@ -212,10 +215,10 @@ BEGIN
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
     (doc_id_bigint, pid, 0, 'Q: HiveMTK 是开源的吗？A: 是，采用 AGPL-3.0 协议完全开源。Gitee 主仓库 https://gitee.com/xhpmayun/hivemtk ，GitHub 镜像 https://github.com/xiaofang142/hivemtk 。修改后若通过网络对外提供服务须按 AGPL-3.0 开源修改后的完整源代码；仅内部私有部署不对外提供服务时无需公开。', 184, '{"doc":"faq","q":"开源协议"}', NOW()),
     (doc_id_bigint, pid, 1, 'Q: HiveMTK 收费吗？A: 本项目本身完全开源免费，可自由使用与私有部署。商务合作/企业级技术支持/定制集成可通过 jideilvluoqun@gmail.com 联系。微信交流群管理员 wxid: xiao142000 提供 7x24 答疑。', 158, '{"doc":"faq","q":"收费"}', NOW()),
-    (doc_id_bigint, pid, 2, 'Q: 部署需要什么硬件？A: 最低 2 核 CPU/4GB 内存/50GB 磁盘；推荐生产 8 核+/16GB+/200GB+（含 LLM）。dev 轻量档（Qwen2.5-1.5B-Instruct + Qwen3-Embedding-0.6B）8GB 内存即可；prod 重量档（Qwen2.5-14B-Instruct + bge-m3）需 16GB+。GPU 加速可选（NVIDIA 8GB+ dev / 16GB+ prod）。前置要求 Docker 24+ & Docker Compose v2。', 206, '{"doc":"faq","q":"硬件要求"}', NOW()),
+    (doc_id_bigint, pid, 2, 'Q: 部署需要什么硬件？A: 最低 2 核 CPU/4GB 内存/50GB 磁盘；推荐生产 8 核+/16GB+/200GB+（含 LLM）。仓库默认档（Qwen2.5-3B-Instruct + bge-m3 + bge-reranker-v2-m3）8GB 内存即可；换成更大的 LLM（如 Qwen2.5-14B-Instruct）要自己改 .env 的 LLM_REPO/LLM_FILE/LLM_SERVED_NAME，并按 16GB+ 准备内存。GPU 加速可选（NVIDIA 8GB+ dev / 16GB+ prod）。前置要求 Docker 24+ & Docker Compose v2。', 206, '{"doc":"faq","q":"硬件要求"}', NOW()),
     (doc_id_bigint, pid, 3, 'Q: 数据安全吗？A: 100% 私域零出域。所有对话、知识库、向量化、检索增强全程在客户内网完成。本地 AI 推理栈（llama.cpp + TEI）跑在客户内网。FRP 私域穿透时访客从公网进、数据经隧道回本地，云端不落一条对话。满足等保、数据出境管控、私有化部署基线。可选云端 LLM（改 LLM_BASE_URL），但 Embedding/Rerank 仍强制本地。', 193, '{"doc":"faq","q":"数据安全"}', NOW()),
     (doc_id_bigint, pid, 4, 'Q: 支持哪些渠道？A: 七端打通——抖音/快手/小红书/闲鱼/TikTok/微信企业微信/短信/邮件。每个渠道支持触达、智能卡片（前 5 端）、自动回复、RAG 客服。统一 CDP 客户视图一份资料全渠道触达，统一消息中心会话/工单/留言一处看完。', 158, '{"doc":"faq","q":"渠道支持"}', NOW()),
-    (doc_id_bigint, pid, 5, 'Q: 怎么启动？A: 三步——1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) make install；3) vim .env 改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET，openssl rand -hex 32 生成），make up 启动。访问 http://localhost:8204，账号 admin + 你设置的密码。健康检查 curl http://localhost:8204/health。', 211, '{"doc":"faq","q":"启动"}', NOW()),
+    (doc_id_bigint, pid, 5, 'Q: 怎么启动？A: 四步——1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) cp .env-example .env 后 vim .env 改 3 个密钥（POSTGRES_PASSWORD/REDIS_PASSWORD/JWT_SECRET，openssl rand -hex 32 生成）；3) make install（构建前端与 SDK、下载模型、起数据层容器与宿主机推理栈）；4) make dev 启动 user-server。访问 http://localhost:8204/setup 设超管账号后登录。健康检查 curl http://localhost:8204/health。', 211, '{"doc":"faq","q":"启动"}', NOW()),
     (doc_id_bigint, pid, 6, 'Q: user-server 构建报错怎么办？A: user-server 构建缓存易损坏，若遇随机 undefined/EOF 报错，先 go clean -cache 再编译。命令：cd hivemtk/user-server && go clean -cache && go build ./...。若仍失败检查 Go 版本需 1.25+。', 167, '{"doc":"faq","q":"构建报错"}', NOW()),
     (doc_id_bigint, pid, 7, 'Q: 怎么联系作者？A: Bug/Feature Request 走 Gitee Issues（12 小时内首响）https://gitee.com/xhpmayun/hivemtk/issues ；微信交流群管理员 wxid: xiao142000（7x24 答疑）；商务合作 jideilvluoqun@gmail.com。贡献者公约见 CONTRIBUTING.md。', 187, '{"doc":"faq","q":"联系作者"}', NOW());
 
@@ -233,12 +236,12 @@ BEGIN
     ) RETURNING id INTO doc_id_bigint;
 
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-    (doc_id_bigint, pid, 0, 'HiveMTK 安装三步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) make install 自动生成 .env + docker-compose.yml 并构建前端；3) vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，用 openssl rand -hex 32 生成），然后 make up 启动所有服务，访问 http://localhost:8204，默认账号 admin + 你设置的密码。', 218, '{"doc":"install","section":"安装步骤"}', NOW()),
-    (doc_id_bigint, pid, 1, 'HiveMTK 的 .env 三把必改密钥：POSTGRES_PASSWORD（PostgreSQL 密码）、REDIS_PASSWORD（Redis 密码）、JWT_SECRET（JWT token 签名密钥，务必随机）。均可用 openssl rand -hex 32 生成高强度值。改完无需手动建库，make install 已生成 docker-compose 与配置。超管初始口令属平台端（PLATFORM_ENABLED=true）范畴，离线部署默认不装配。', 205, '{"doc":"install","section":"env密钥"}', NOW()),
+    (doc_id_bigint, pid, 0, 'HiveMTK 安装四步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) cp .env-example .env 后 vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，用 openssl rand -hex 32 生成）；3) make install 构建前端与 embed-sdk、下载模型、启动 PostgreSQL + Redis 数据层容器与宿主机推理栈（docker-compose.yml 由仓库自带、不会被生成；.env 只在缺失时由它复制）；4) make dev 启动 user-server，访问 http://localhost:8204/setup 设超管账号，之后才能登录。', 218, '{"doc":"install","section":"安装步骤"}', NOW()),
+    (doc_id_bigint, pid, 1, 'HiveMTK 的 .env 三把必改密钥：POSTGRES_PASSWORD（PostgreSQL 密码）、REDIS_PASSWORD（Redis 密码）、JWT_SECRET（JWT token 签名密钥，务必随机）。均可用 openssl rand -hex 32 生成高强度值。改完无需手动建库：数据层容器首次初始化会自建 user_db。用户端超管口令由浏览器 http://localhost:8204/setup 向导设定；跑 cmd/seed 灌演示数据时，写入口令取 SEED_PASSWORD（未设置则用随开源仓库公开的演示口令）。PLATFORM_ADMIN_PASSWORD 是平台端代理口令，只有 PLATFORM_ENABLED=true 时才需要，与 8204 的登录无关。', 205, '{"doc":"install","section":"env密钥"}', NOW()),
     (doc_id_bigint, pid, 2, 'HiveMTK 初始化：浏览器访问 http://your-server-ip:8204/setup，1) 设置超管账号（首次登录强制改密，system_users.must_change_password 标记）；2) 完成系统初始化。私域部署无 LicenseKey 强制要求，初始化后默认管理员账号为 admin。健康检查 curl http://localhost:8204/health 返回 200 即服务正常。', 198, '{"doc":"install","section":"初始化"}', NOW()),
-    (doc_id_bigint, pid, 3, 'HiveMTK 数据持久化命名卷：mtk_user_pg_data（PostgreSQL 数据）、mtk_user_redis_data（Redis 数据）、mtk_user_logs（应用日志）、mtk_user_uploads（用户上传文件）、mtk_user_data（install.lock 等运行时凭证）。不要用 bind mount 替换这些卷，否则数据可能丢失。', 184, '{"doc":"install","section":"持久化"}', NOW()),
+    (doc_id_bigint, pid, 3, 'HiveMTK 数据持久化命名卷只有两条：mtk_user_pg_data（PostgreSQL 数据）与 mtk_user_redis_data（Redis 数据）。日志、模型与 install.lock 都在宿主机路径（$HIVEMTK_RUNTIME_DIR / $HIVEMTK_MODELS_DIR / INSTALL_LOCK_PATH），不在 compose 卷里。不要用 bind mount 替换那两条卷，否则数据可能丢失。', 184, '{"doc":"install","section":"持久化"}', NOW()),
     (doc_id_bigint, pid, 4, 'HiveMTK 仓库目录：user-server（Go+Gin 后端，含 cmd/seed、migrations）、user-web（Vue3+Vite 前端）、hivemtk-platform（平台端，独立仓库）、scripts（构建/检查脚本）、docs（架构与营销特性文档）、migrations（SQL 迁移与种子）。构建产物由 make web-build / sdk-build 生成。', 198, '{"doc":"install","section":"目录结构"}', NOW()),
-    (doc_id_bigint, pid, 5, 'HiveMTK 常用 make 目标：install（一键安装）、up/down/restart（启停）、logs/ps（日志/状态）、web-build/sdk-build（重建前端与 embed-sdk）、backup/restore（数据库备份恢复）、db-up/down/backup/restore（数据层）、inference-host-install/models/up/warmup/test/status（本地推理栈）、dev（开发热更新）。', 210, '{"doc":"install","section":"make目标"}', NOW());
+    (doc_id_bigint, pid, 5, 'HiveMTK 常用 make 目标：install（一键安装）、dev / dev-stop / dev-all / dev-down（user-server 热更新与全栈启停）、user-build（出宿主机二进制）、web-build / sdk-build（重建前端与 embed-sdk）、db-up / db-down / db-ps / db-logs（数据层）、db-backup / db-restore FILE=...（数据库备份恢复）、inference-host-install / models / models-prod / up / down / warmup / test / logs / ps / status（本地推理栈）、lint / vet / test-go / audit（质量门）。', 210, '{"doc":"install","section":"make目标"}', NOW());
 
     -- =========================================================
     -- 文档 10：推理栈与模型档位
@@ -254,11 +257,11 @@ BEGIN
     ) RETURNING id INTO doc_id_bigint;
 
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-    (doc_id_bigint, pid, 0, 'HiveMTK 本地推理栈由三个 OpenAI 兼容服务组成：mtk-llm（:8207，llama.cpp 运行 Qwen2.5-1.5B-Instruct）、mtk-embedding（:8208，运行 bge-m3，1024 维向量）、mtk-rerank（:8209，运行 bge-reranker-v2-m3）。三者均跑在客户内网，由 llama.cpp 提供 HTTP 接口。', 196, '{"doc":"inference","section":"组成"}', NOW()),
+    (doc_id_bigint, pid, 0, 'HiveMTK 本地推理栈由三个 OpenAI 兼容端点组成，都是宿主机的 llama-server 进程（不是容器）：LLM（:8207，默认 Qwen2.5-3B-Instruct）、Embedding（:8208，bge-m3，1024 维向量）、Rerank（:8209，bge-reranker-v2-m3）。三者都跑在客户内网，由 llama.cpp 提供 HTTP 接口，pid 与日志在 $HIVEMTK_RUNTIME_DIR。', 196, '{"doc":"inference","section":"组成"}', NOW()),
     (doc_id_bigint, pid, 1, 'HiveMTK 推理栈命令：make inference-host-install 安装 llama.cpp 二进制（首次）；make inference-host-models 下载 dev 档模型（首次）；make inference-host-up 启动 LLM+Embedding+Rerank 三个 llama-server；make inference-host-warmup 预热避免首请求慢；make inference-host-test 端到端 smoke test；make inference-host-status 查看状态。', 216, '{"doc":"inference","section":"命令"}', NOW()),
-    (doc_id_bigint, pid, 2, 'HiveMTK dev 轻量档（默认）：LLM 为 Qwen2.5-1.5B-Instruct (Q4)，Embedding 为 Qwen3-Embedding-0.6B，内存需求约 8GB，适合个人电脑/小内存部署，适合先跑通最小闭环。', 156, '{"doc":"inference","section":"dev档"}', NOW()),
-    (doc_id_bigint, pid, 3, 'HiveMTK prod 重量档：LLM 为 Qwen2.5-14B-Instruct (Q4+)，Embedding 为 BAAI/bge-m3 (1024 维)，内存需求 16GB+，适合生产环境；可选 NVIDIA 16GB+ GPU 加速。', 158, '{"doc":"inference","section":"prod档"}', NOW()),
-    (doc_id_bigint, pid, 4, 'HiveMTK 模型档位切换：编辑 .env 替换 LLM_MODEL/LLM_BASE_URL/EMBEDDING_MODEL/EMBEDDING_BASE_URL 等几行，保存后 make inference-host-up 重建推理栈生效。dev/prod 两套参数已内置，改 BASE_URL 也可指向已有 llama-server。', 178, '{"doc":"inference","section":"切换"}', NOW()),
+    (doc_id_bigint, pid, 2, 'HiveMTK 仓库默认档：LLM 为 Qwen2.5-3B-Instruct (Q4_K_M，约 2.0GB)，Embedding 为 bge-m3（1024 维），Rerank 为 bge-reranker-v2-m3，内存需求约 8GB，适合个人电脑/小内存部署，适合先跑通最小闭环。', 156, '{"doc":"inference","section":"dev档"}', NOW()),
+    (doc_id_bigint, pid, 3, 'HiveMTK 生产换档要改 .env：把 LLM_REPO/LLM_FILE/LLM_SERVED_NAME 换成更大的模型（例如 Qwen2.5-14B-Instruct 的 Q4_K_M），make inference-host-models 重下后 make inference-host-up 重启；内存按 16GB+ 准备，可选 NVIDIA 16GB+ GPU 加速（NGL=999 全卸载）。仓库不内置第二套模型参数，档位就是那三行 .env。', 158, '{"doc":"inference","section":"prod档"}', NOW()),
+    (doc_id_bigint, pid, 4, 'HiveMTK 模型档位切换：编辑 .env 替换 LLM_REPO/LLM_FILE/LLM_SERVED_NAME 与 LLM_MODEL/LLM_BASE_URL 等行，保存后 make inference-host-models 重下模型、make inference-host-up 重启推理栈生效。BASE_URL 也可以直接指向已有的 OpenAI 兼容端点（外部 API 或另一台机器上的 llama-server）。', 178, '{"doc":"inference","section":"切换"}', NOW()),
     (doc_id_bigint, pid, 5, 'HiveMTK 可选云端 LLM：把 LLM_BASE_URL 改成 DeepSeek/OpenAI 等云端 API 即可走更强模型，但 Embedding/Rerank 仍强制本地（数据不出域）。注意 reasoning 类模型会消耗 max_tokens，必要时调大或摘掉 tools 重试。', 188, '{"doc":"inference","section":"云端兜底"}', NOW());
 
     -- =========================================================
@@ -275,10 +278,10 @@ BEGIN
     ) RETURNING id INTO doc_id_bigint;
 
     INSERT INTO knowledge_chunks (document_id, product_id, chunk_index, content, char_count, metadata, created_at) VALUES
-    (doc_id_bigint, pid, 0, 'HiveMTK 运维命令：make up/down/restart/logs/ps 管理服务；make db-up/down/ps/logs 管理数据层；make db-backup/db-restore 备份恢复 PG；make inference-up/down 单独管理推理栈；make web-build/sdk-build 重建前端与客服 SDK。', 186, '{"doc":"troubleshooting","section":"命令"}', NOW()),
-    (doc_id_bigint, pid, 1, 'HiveMTK 备份恢复：make db-backup 输出 backup_YYYYMMDD_HHMMSS.sql（纯 SQL，可直接 psql 导入）；make db-restore FILE=backup_xxx.sql 恢复。建议生产环境每日自动备份，并与应用日志卷(mtk_user_logs)一起归档。', 192, '{"doc":"troubleshooting","section":"备份"}', NOW()),
+    (doc_id_bigint, pid, 0, 'HiveMTK 运维命令：make dev / make dev-stop 启停 user-server（宿主机 air 热更新），make user-build 出二进制；make db-up / make db-down / make db-ps / make db-logs 管理数据层；make db-backup / make db-restore FILE=... 备份恢复 PG；make inference-host-up / make inference-host-down 单独管理推理栈；make web-build / make sdk-build 重建前端与客服 SDK。', 186, '{"doc":"troubleshooting","section":"命令"}', NOW()),
+    (doc_id_bigint, pid, 1, 'HiveMTK 备份恢复：make db-backup 输出 backup_YYYYMMDD_HHMMSS.sql（纯 SQL，可直接 psql 导入）；make db-restore FILE=backup_xxx.sql 恢复。建议生产环境每日自动备份，并与宿主机 $HIVEMTK_RUNTIME_DIR 下的推理栈日志一起归档。', 192, '{"doc":"troubleshooting","section":"备份"}', NOW()),
     (doc_id_bigint, pid, 2, 'HiveMTK 构建报随机 undefined/EOF 错误：user-server 构建缓存易损坏，先 go clean -cache 再编译：cd hivemtk/user-server && go clean -cache && go build ./...。仍需失败请确认 Go 版本 >= 1.25。', 178, '{"doc":"troubleshooting","section":"构建缓存"}', NOW()),
-    (doc_id_bigint, pid, 3, 'HiveMTK 端口规划：8204 user-server；PostgreSQL 容器内 8202（宿主机映射 8232）；Redis 8203；8207 LLM；8208 Embedding；8209 Rerank。服务起不来常因 8202-8209 被占用，停占用进程或改 docker-compose 映射即可。', 190, '{"doc":"troubleshooting","section":"端口"}', NOW()),
+    (doc_id_bigint, pid, 3, 'HiveMTK 端口规划：8204 user-server（宿主机进程）；PostgreSQL 容器内 8202、compose 默认宿主也映射 8202 且只绑 127.0.0.1（本机直装数据库的开发档才用 8232）；Redis 8203（只绑 127.0.0.1）；8207 LLM；8208 Embedding；8209 Rerank。服务起不来常因 8202-8209 被占用：停掉占用进程，或改 .env 的 USER_POSTGRES_HOST_PORT / REDIS_HOST_PORT 与 LLM_PORT / EMBEDDING_PORT / RERANK_PORT。', 190, '{"doc":"troubleshooting","section":"端口"}', NOW()),
     (doc_id_bigint, pid, 4, 'HiveMTK 推理栈健康检查：make inference-host-status 显示数据层容器、llama-server 进程、端点连通性（8207/8208/8209/8204 各 /health 返回 200 即正常）；make inference-host-logs tail 查看三个 llama-server 日志；make inference-host-ps 看进程。', 192, '{"doc":"troubleshooting","section":"推理栈状态"}', NOW()),
     (doc_id_bigint, pid, 5, 'HiveMTK 常见症状速查：①对话无回复→本地推理栈未起或 LLM_BASE_URL 错误，查 8207 /health；②RAG 召回为空→embedding 服务未跑或知识库为空，查 8208 与 rag_products；③构建随机报错→go clean -cache；④端口冲突→释放 8202-8209。', 206, '{"doc":"troubleshooting","section":"症状速查"}', NOW());
 

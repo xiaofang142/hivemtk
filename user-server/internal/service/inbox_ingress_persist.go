@@ -272,9 +272,13 @@ func (s *InboxIngressService) PersistBridgeHistory(ctx context.Context, event *m
 		}
 	}
 
-	if s.hubRepo != nil && event.Content != "" && event.Channel != "" {
+	// 钩子2.5 全部按内容判等，是「内容即身份」时代的产物。上报方一旦用 `mh:<hash>#<n>` 这种
+	// 发生次数身份显式声明「这是同一句话的第二条」（§8.3-17），内容维度就没有权判它重复；
+	// 上面的钩子2（msg_id 精确判等）不受影响，所以同一帧重发依旧只有一行。
+	if s.hubRepo != nil && event.Content != "" && event.Channel != "" && !eventAssertsDistinctMessage(event.EventID) {
+		echoSince := time.Now().Add(-InboxOutboundEchoWindow)
 		canonicalHash := ContentHashMsgID(event.Channel, event.ConversationID, event.Content)
-		if existing, err := s.hubRepo.GetByContentHash(ctx, canonicalHash); err == nil && existing != nil && existing.ConversationID == event.ConversationID {
+		if existing, err := s.hubRepo.GetByContentHash(ctx, canonicalHash, event.ConversationID, echoSince); err == nil && existing != nil && existing.ConversationID == event.ConversationID {
 			logger.Ctx(ctx).Info().
 				Str("module", "bridge").
 				Str("canonical_hash", canonicalHash).
@@ -286,7 +290,7 @@ func (s *InboxIngressService) PersistBridgeHistory(ctx context.Context, event *m
 				Msg("[Inbox] PersistBridgeHistory 钩子2.5 命中：canonical contentHash 已存在，幂等跳过（防回环）")
 			return nil
 		}
-		if existing, err := s.hubRepo.GetByPlatformContent(ctx, event.Channel, event.Content); err == nil && existing != nil {
+		if existing, err := s.hubRepo.GetByPlatformContent(ctx, event.Channel, event.Content, event.ConversationID, echoSince); err == nil && existing != nil {
 			logger.Ctx(ctx).Info().
 				Str("module", "bridge").
 				Str("existing_msg_id", existing.MsgID).
@@ -298,7 +302,7 @@ func (s *InboxIngressService) PersistBridgeHistory(ctx context.Context, event *m
 			return nil
 		}
 
-		if existing, err := s.hubRepo.GetByPlatformContentNormalized(ctx, event.Channel, event.Content); err == nil && existing != nil {
+		if existing, err := s.hubRepo.GetByPlatformContentNormalized(ctx, event.Channel, event.Content, event.ConversationID, echoSince); err == nil && existing != nil {
 			logger.Ctx(ctx).Info().
 				Str("module", "bridge").
 				Str("existing_msg_id", existing.MsgID).

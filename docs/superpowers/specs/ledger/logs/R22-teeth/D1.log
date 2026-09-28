@@ -1,0 +1,45 @@
+2026-09-22T12:30:09+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSignalConfirmBindsPayload
+    d7_gate_b20_test.go:85: 错哈希放行=1，want VerdictMismatch（载荷不符必须拒且可辨）
+    d7_gate_b20_test.go:88: 拒一次放行不得撤掉闸门——用户改正哈希后仍应能放行
+--- FAIL: TestSignalConfirmBindsPayload (0.00s)
+=== RUN   TestPendingGateExposesAwaitingPayload
+--- PASS: TestPendingGateExposesAwaitingPayload (0.00s)
+=== RUN   TestConfirmGateFramesBindPayloadAndOmitBody
+    d7_gate_b20_test.go:181: 错哈希应判 mismatch
+--- FAIL: TestConfirmGateFramesBindPayloadAndOmitBody (0.01s)
+=== RUN   TestConfirmGateDecisionPerOutgoing
+--- PASS: TestConfirmGateDecisionPerOutgoing (0.01s)
+=== RUN   TestConfirmStatusDistinguishesGateElsewhere
+    d7_gate_b20_test.go:322: 错载荷=granted want mismatch
+    d7_gate_b20_test.go:326: 对载荷未放行: {Status:no_gate Gate:<nil>} <nil>
+--- FAIL: TestConfirmStatusDistinguishesGateElsewhere (0.00s)
+=== RUN   TestConfirmGateReadIsOwnershipScoped
+--- PASS: TestConfirmGateReadIsOwnershipScoped (0.00s)
+=== RUN   TestGatePayloadMustNeverBeEmpty
+    d7_gate_b20_test.go:384: 空载荷放行=1 want VerdictMismatch（不带载荷的放行不认）
+    d7_gate_b20_test.go:387: 拒一次空载荷不得撤闸门
+--- FAIL: TestGatePayloadMustNeverBeEmpty (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	0.661s
+FAIL
+
+2026-09-22T12:30:11+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestB20ConfirmRequiresPayloadHash
+--- PASS: TestB20ConfirmRequiresPayloadHash (2.07s)
+=== RUN   TestB20ConfirmStatusMappingIsDistinct
+--- PASS: TestB20ConfirmStatusMappingIsDistinct (0.00s)
+=== RUN   TestB20ConfirmGateElsewhereFromAuditFrame
+--- PASS: TestB20ConfirmGateElsewhereFromAuditFrame (0.18s)
+=== RUN   TestB20ConfirmGateReadEndpoint
+--- PASS: TestB20ConfirmGateReadEndpoint (0.13s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/controller	2.994s
+
+2026-09-22T12:30:15+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestIsDuplicateReason_只认重复结论短语不认任意子串
+--- PASS: TestIsDuplicateReason_只认重复结论短语不认任意子串 (0.00s)
+=== RUN   TestIsDuplicateReason
+--- PASS: TestIsDuplicateReason (0.00s)
+PASS
+ok  	hivemtk-user/internal/channelgw	0.427s

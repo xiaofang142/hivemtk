@@ -66,6 +66,12 @@ type SmartCSOrchestrator struct {
 	// 同样由 internal/app 注入；nil = 本进程不产待办（没有 DB 句柄时就是这份形态），
 	// 此时 transferToHuman 的行为与本卡之前逐字一致。
 	humanTaskProduce func(ctx context.Context, session *model.CustomerSession, reason string) error
+
+	// badCaseMark 「这一轮回答的事实 → 一条 Bad Case 留痕」的标记器（T-P8-03）。
+	// 同样由 internal/app 注入；nil = 本进程不留痕，回答路径与本卡之前逐字一致。
+	// 它做成**吞错误的函数注入**（返回 void）而不是 error：留痕是回答的旁路，
+	// Mark 里任何失败都不该改变本轮回复发不发、发什么 —— 那件事由日志说一句承担。
+	badCaseMark func(ctx context.Context, in BadCaseMarkInput)
 }
 
 // OrchestratorConfig 编排器配置
@@ -151,6 +157,14 @@ func (o *SmartCSOrchestrator) SetOrderDraftProducer(produce func(ctx context.Con
 // 要不要建底座是装配层的事；这里也顺带成为本卡天然的关闸（没有旗子，不注入即零改动）。
 func (o *SmartCSOrchestrator) SetHumanTaskProducer(produce func(ctx context.Context, session *model.CustomerSession, reason string) error) {
 	o.humanTaskProduce = produce
+}
+
+// SetBadCaseMarker 注入「本轮回答事实 → Bad Case 留痕」的标记器（T-P8-03 / AC①）。
+//
+// 传 nil 与不调这个效果相同：一条坏例都不会记。做成函数注入的理由与上面两条一致
+// （有没有底座是装配层的事），它同时就是本卡天然的关闸。
+func (o *SmartCSOrchestrator) SetBadCaseMarker(mark func(ctx context.Context, in BadCaseMarkInput)) {
+	o.badCaseMark = mark
 }
 
 func (o *SmartCSOrchestrator) ensureCustomerForSession(ctx context.Context, platform model.Platform, senderID, userName string) {
@@ -386,10 +400,11 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		}
 	}
 	result.SalesResponse = salesResp
-	result.Confidence = o.extractConfidence(ctx, salesResp, session.SessionID, in.Content)
+	conf, confDec := o.extractConfidence(ctx, salesResp, session.SessionID, in.Content)
+	result.Confidence = conf
 	result.Cards = RichCardsFromDTO(salesResp.Cards)
 
-	suggestionID := o.saveAISuggestion(ctx, session.SessionID, salesResp, in.Content)
+	suggestionID := o.saveAISuggestion(ctx, session.SessionID, salesResp, in.Content, conf)
 	result.SuggestionID = suggestionID
 
 	threshold := o.confidenceThreshold
@@ -401,6 +416,12 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		effectiveConf = threshold
 	}
 	result.Confidence = effectiveConf
+	// Bad Case 留痕（T-P8-03 / AC①）：放在卡片抬权**之后**，判据才是这一轮真正生效的
+	// 那个数 —— 抬到阈值之上就不该记成低质，那正是抬权这件事的语义。
+	// 位置在 shouldTransfer 之前也是有意的：低置信被判定要转人工的那批正是最该留痕的
+	// 样本（模型答了、答得不好、人接了），放到分支后面就整批漏掉。引擎自己转掉的那批
+	// 由 badCaseTurnNotAnAnswer 挡，不必靠这里的行序。
+	o.markBadCase(ctx, session.SessionID, salesResp, in, confDec, effectiveConf, threshold)
 	knownIntent := salesResp.Intent != nil && salesResp.Intent.IntentType != IntentUnknown
 	safeIntent := salesResp.Intent != nil &&
 		(salesResp.Intent.IntentType == IntentGreeting || salesResp.Intent.IntentType == IntentSocial)
@@ -787,11 +808,119 @@ func (o *SmartCSOrchestrator) saveOutboundMessage(ctx context.Context, session *
 	return o.messageRepo.Create(ctx, msg)
 }
 
-func (o *SmartCSOrchestrator) saveAISuggestion(ctx context.Context, sessionID string, resp *SalesResponse, userText string) uint {
+// badCaseMarkTimeout 给后台留痕留的时间窗，口径与 orderDraftProduceTimeout 同一条。
+const badCaseMarkTimeout = 10 * time.Second
+
+// badCaseTurnNotAnAnswer 判"这一轮压根没产出可评的答案"。
+//
+// 三类轮次必须挡在留痕之外，否则零命中判据会把它们记成"知识库缺料"（AC③ 的
+// D→A 就是照这份清单去补文档的，混进去一条就是让知识库去补一个不存在的缺口）：
+//   - 转人工：回复是 `[系统自动转人工] …` 这句系统公告，不是模型答的；而"这轮要人接"
+//     这件事在人工任务队列里已经有一行（T-P3-03），记进坏例等于同一事实两个去处；
+//   - 追问澄清：问句本身含糊到被判成需要澄清，此时"没检回内容"分不清是缺料还是问法不清；
+//   - 生成失败：回复是兜底文案（脚本 / "抱歉, 服务暂时不可用"），把容量故障记成知识缺口。
+//
+// 三个信号都取自 resp 的结构化字段，**不看 Steps 里有没有 5_recall_rag**：并行引擎
+// （HandleParallel）把检索放进 phase0、根本不写那个步骤名，按步骤名设闸会把并行流量
+// 整条静默掉。生成那一步反过来用"显式 fail"而不是"没有 ok"：layer1 fastpath 命中时
+// 也是没有该步骤，那是真答案，该留痕。
+func badCaseTurnNotAnAnswer(resp *SalesResponse) bool {
+	if resp.TransferredToHuman {
+		return true
+	}
+	if resp.Intent != nil && resp.Intent.IntentType == IntentClarify {
+		return true
+	}
+	for _, step := range resp.Steps {
+		if step.Step == "6_generate_candidate" && step.Status == "fail" {
+			return true
+		}
+	}
+	return false
+}
+
+// markBadCase 把"这一轮回答的事实"交给 Bad Case 底座（T-P8-03 / AC① 的唯一生产入口）。
+//
+// 四点口径，前三点与上面 runOrderDraftProduce 同一套取舍：
+//   - **先过门槛再起协程**：ShouldMark 是纯函数（不碰库），绝大多数回答过不了这道门，
+//     在这里判掉就省掉每轮一条永远不用的 goroutine；判据本身仍只在 service 层一份；
+//   - 异步 + recover + 独立 ctx：留痕要写库，库慢或炸都不能把会话响应拖住、带崩；
+//     传进来的 ctx 此刻已随请求返回而取消，所以必须挂新 ctx 而不能沿用；
+//   - marker 为 nil（底座未装配）时零动作，本行不改变挂载前的行为；
+//   - **在门槛之前先过 badCaseTurnNotAnAnswer**：门槛只看数（置信度、检回数），
+//     看不见"这句根本不是回答"，而它排在第一道的后果正是转人工那轮被记成知识缺口。
+func (o *SmartCSOrchestrator) markBadCase(
+	ctx context.Context,
+	sessionID string,
+	resp *SalesResponse,
+	in *IncomingContext,
+	dec *dto.ConfidenceDecision,
+	confidence, threshold float64,
+) {
+	mark := o.badCaseMark
+	if mark == nil || resp == nil || in == nil {
+		return
+	}
+	if badCaseTurnNotAnAnswer(resp) {
+		return
+	}
+	input := BadCaseMarkInput{
+		SessionID:      sessionID,
+		MessageID:      in.MessageID,
+		IntentType:     badCaseIntentOf(resp),
+		QueryText:      in.Content,
+		AnswerText:     resp.Reply,
+		Confidence:     confidence,
+		Threshold:      threshold,
+		RetrievedCount: len(resp.RAGChunks),
+	}
+	if _, _, ok := ShouldMark(input); !ok {
+		return
+	}
+	if dec != nil {
+		input.SignalID = dec.SignalID
+		// 决策档与否决规则一起写进理由：坏例队列里"低于阈值"和"被否决规则打成 0"
+		// 是两件完全不同的事，只看 confidence 这一列的人分不开它们。
+		input.MarkReason = fmt.Sprintf("；决策档 %s", dec.DecisionBand)
+		if dec.VetoTriggered != "" {
+			input.MarkReason += fmt.Sprintf("、否决规则 %s", dec.VetoTriggered)
+		}
+	}
+	reply := input.AnswerText
+	if strings.TrimSpace(reply) == "" {
+		// 空回复不该留痕：本卡的样本是给评测集用的"这句答错了"，
+		// 空串进去只会变成下游一条无法判定的样本（降级链的出口在上面已经 return 了）。
+		return
+	}
+	go func(in BadCaseMarkInput) {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Warnf("[bad-case] 留痕 panic 已 recover，不影响会话主链路: %v\n%s", r, debug.Stack())
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), badCaseMarkTimeout)
+		defer cancel()
+		mark(ctx, in)
+	}(input)
+}
+
+func badCaseIntentOf(resp *SalesResponse) string {
+	if resp == nil || resp.Intent == nil {
+		return ""
+	}
+	return resp.Intent.IntentType
+}
+
+// saveAISuggestion 落一条 AI 建议。
+//
+// confidence 由调用方给，不再在这里重算一次：此前它调 extractConfidence，于是**一轮
+// 回答会跑两次聚合**，而每次 Aggregate 都异步写一行 confidence_signals（见
+// confidence/aggregator.go 的 saveSignalAsync）—— 两个 signal_id、两条快照，
+// 下游按信号数算的任何指标都翻倍，而 T-P8-03 的坏例到底该挂哪个 signal_id 也无从判。
+func (o *SmartCSOrchestrator) saveAISuggestion(ctx context.Context, sessionID string, resp *SalesResponse, userText string, confidence float64) uint {
 	if o.suggestionRepo == nil || resp == nil || resp.Reply == "" {
 		return 0
 	}
-	confidence := o.extractConfidence(ctx, resp, sessionID, userText)
 	suggestion := &model.AISuggestion{
 		SessionID:  sessionID,
 		Suggestion: resp.Reply,
@@ -928,9 +1057,15 @@ func (o *SmartCSOrchestrator) isUrgentOrComplaint(ctx context.Context, content s
 	return MatchUrgentKeywords(content)
 }
 
-func (o *SmartCSOrchestrator) extractConfidence(ctx context.Context, resp *SalesResponse, sessionID, userText string) float64 {
+// extractConfidence 算出本轮回答的置信度，并把**整份决策**一起交回去。
+//
+// 第二个返回值是 T-P8-03 加的：决策里带着 signal_id、否决规则名与当时的动态阈值，
+// 而 Bad Case 要落的正是"凭什么判它低质"。此前这里把 dec 折成一个 float 就丢掉，
+// 于是坏例只能自己再算一遍 —— 两处各算一次正是官方 G4 说的那种割裂。
+// 拿不到决策（聚合器报错走启发式）时回 nil，调用方必须判空。
+func (o *SmartCSOrchestrator) extractConfidence(ctx context.Context, resp *SalesResponse, sessionID, userText string) (float64, *dto.ConfidenceDecision) {
 	if resp == nil {
-		return 0
+		return 0, nil
 	}
 	if o.confidenceAgg != nil {
 		in := &dto.SignalCollectionInput{
@@ -944,12 +1079,12 @@ func (o *SmartCSOrchestrator) extractConfidence(ctx context.Context, resp *Sales
 			in.RawIntentConf = resp.Intent.Confidence
 		}
 		if dec, err := o.confidenceAgg.Aggregate(ctx, in); err == nil && dec != nil {
-			return dec.AggregatedConf
+			return dec.AggregatedConf, dec
 		} else if err != nil {
 			logger.Ctx(ctx).Warn().Err(err).Msg("[Orchestrator] confidence aggregate failed, fallback to heuristic")
 		}
 	}
-	return o.fallbackConfidence(resp)
+	return o.fallbackConfidence(resp), nil
 }
 
 func (o *SmartCSOrchestrator) fallbackConfidence(resp *SalesResponse) float64 {

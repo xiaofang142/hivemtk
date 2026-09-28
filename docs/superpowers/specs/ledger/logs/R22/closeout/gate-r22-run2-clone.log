@@ -1,0 +1,23 @@
+# 闭合门 × R22.jsonl —— 第 2 跑：私有快照副本（只含已提交内容 + 本泳道文件）
+测量时间：2026-09-22T23:59+08:00
+树：/tmp/r22tree —— 由工作树 rsync 出的副本，排除 `user-server/{bin,logs,tmp}`，
+`docs/superpowers/specs/ledger/logs/` 以 `cp -R` 补入（首跑因 rsync 的 `--exclude logs/` 不带锚点
+把证据目录一起排掉，门因此报了 25 格「证据文件不存在」——那是副本做错了，不是台账错）
+与共享工作树的差异面（只减不增）：删 4 个未跟踪的 payment 系列文件（payment.go / payment_test.go /
+payment_webhook.go / order_webhook_payment_test.go），`integration.go` 回退 HEAD 版
+（HEAD 的 `UpsertOrderFromWebhook` 返回 1 值，与 `order_ft_test.go` 一致）
+前置：`go vet ./internal/service/` rc=0，`go test ./internal/service/ -list '.*'` rc=0（3998 行，
+含本次点验的两条腿）
+GATE_RC=0
+
+用途：证明上面那 2 格红的归因——把该包恢复到不含并行泳道未跟踪文件的一棵树，两条腿照旧点得到、
+门整份绿。两份读数的判据行一致（38 条 / 6 钉全对）。
+
+轮次 R22：条目 38（fixed=27 refuted=9 locked-equivalence=0 blocked=2 非法status 0）
+  钉 8. 批14 同行调研台账（六维度取证 + 对本仓的实证纠正） / 8.3 差距矩阵与取舍（21 行，每条左列都经本泳道读码复核，未复核的一律不进；#11 为「被子 agent 证伪故不进矩阵」的反例记录；#20、#21 为批16b/批16c 自审新增、左列不是同行口径而是本仓缺陷形状） / tablerow → 实抽 21
+  钉 6. 记录为独立工作项（本批不修） / 6. 记录为独立工作项（本批不修） / numbered → 实抽 4
+  钉 7.24 批20b：审计流里「下发了」与「平台确认了」拆成两件事（A2 落地：`ok` 从二态常量改成三态观测） / 八、登记（看过、本批不做） / bullet → 实抽 3
+  钉 7.28 批22：裁剪不等于证据消失（A6 落地：digest-before-delete + 永不裁剪的自证小表） / 八、登记（看过、本批不做） / bullet → 实抽 3
+  钉 7.29 批23：二次审核线结论复验收口（§6 移交四项 + §8.3-9/10/17/18/19 + §7.28 八-3） / 十三、本轮没跑的 / 仍然开着的 / bullet → 实抽 4
+  钉 7.30 批24（+批24b）：B 链路出站回 DOM 复核（§8.3-8 落码）与"会话归属"六处同口径 / 十、本批不做的 / bullet → 实抽 3
+===== 闭合判定：台账全部落在四终态且证据可核，计数钉全对且每条都有条目兜住 =====

@@ -1,0 +1,8 @@
+$ make fmt-check
+(cwd=.)
+rc=2  0.9s
+
+❌ 以下文件未通过 gofmt（执行 make fmt 修复）：
+internal/pkg/db/external_order_key_startup_test.go
+make: *** [fmt-check] Error 1
+

@@ -384,7 +384,8 @@ func TestHumanTaskAPI_CancelNeedsReason(t *testing.T) {
 	}
 }
 
-// 审批类待办不可认领（C3），API 出口必须是 409 且带一句能照做的答复。
+// 审批类待办对外一颗按钮都不给（C3 定的"不可抢占只能裁决"），API 出口必须是 409
+// 且带一句能照做的答复。
 func TestHumanTaskAPI_ApprovalTaskCannotBeClaimed(t *testing.T) {
 	svc, _ := setupHumanTaskRoutesDB(t)
 	apr := submitViaSvc(t, svc, approvalTaskInput("apr_no_claim"))
@@ -397,9 +398,22 @@ func TestHumanTaskAPI_ApprovalTaskCannotBeClaimed(t *testing.T) {
 	if !strings.Contains(body.Message, model.HumanTaskKindApproval) {
 		t.Errorf("提示里应说明是哪一类不可认领：%q", body.Message)
 	}
-	// 裁决走 complete：这条路是通的
-	if code, _ = doHumanTask(t, h, http.MethodPost, "/api/human-tasks/"+apr.ID+"/complete", ""); code != http.StatusOK {
-		t.Errorf("审批类完成应 200，实际 %d", code)
+
+	// complete 同样关着：待办侧点"完成"只会把还在等的审批从池子里摘掉，
+	// 而 approval_requests 那一行照旧停在 pending —— 于是下一次同一对象入队又拿到
+	// 那条旧记录，闸门看起来批过、实际什么都没批。
+	// 它留在本用例而不是另开一条，是因为这两条合起来才是同一句判据：**对外零颗按钮**。
+	code, body = doHumanTask(t, h, http.MethodPost, "/api/human-tasks/"+apr.ID+"/complete", "")
+	if code != http.StatusConflict {
+		t.Fatalf("审批类完成应 409（裁决只走 /api/approvals/:id/decide），实际 %d：%s", code, body.Message)
+	}
+	if !strings.Contains(body.Message, "/api/approvals/"+apr.SubjectID+"/decide") {
+		t.Errorf("提示要指回真正能裁决的那个口，而不是只说「不行」：%q", body.Message)
+	}
+	// 被拒之后这一行还悬在池子里：把它收掉就等于把还在等的审批藏起来。
+	if got, err := svc.Get(context.Background(), apr.ID); err != nil || got == nil ||
+		got.Status != model.HumanTaskStatusPending {
+		t.Errorf("409 之后审批待办不该落定：(%+v,%v)", got, err)
 	}
 }
 

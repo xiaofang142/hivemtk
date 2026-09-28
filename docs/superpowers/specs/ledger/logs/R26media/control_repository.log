@@ -1,0 +1,6 @@
+FAIL	hivemtk-user/internal/repository [build failed]
+FAIL
+# hivemtk-user/internal/pkg/db
+internal/pkg/db/migrate.go:371:17: undefined: browsermodel.BrowserAuditDigest
+internal/pkg/db/migrate.go:372:17: undefined: browsermodel.BrowserAuditPruneRun
+internal/pkg/db/migrate.go:384:17: undefined: browsermodel.BrowserWriteClaim

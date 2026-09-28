@@ -340,6 +340,10 @@ func TestBillDeriveCurrencyFollowsQuote(t *testing.T) {
 //
 // 报价模板里的 valid_days 是**报价有效期**，不是"多少天内付款"。
 // 在这里给它写个默认 30 天，运营就会把它读成合同条款（判据见 model/bill.go 的 DueAt 注释）。
+//
+// T-P7-03 把账期开成了入参（那一格见 TestBillDeriveStoresTheDueAtTheCallerGave），
+// 这一条**没有因此作废**，它现在是判据的另一半：不填 ⇒ 仍然必须是 NULL。
+// "没有默认值"这件事正是催收侧 `Undated` 那一格能存在的前提。
 func TestBillDeriveLeavesDueAtNull(t *testing.T) {
 	db := billSetupDB(t)
 	if db == nil {
@@ -362,6 +366,72 @@ func TestBillDeriveLeavesDueAtNull(t *testing.T) {
 	}
 	if n != 1 {
 		t.Error("库里那一行的 due_at 不是 NULL")
+	}
+}
+
+// TestBillDeriveStoresTheDueAtTheCallerGave 账期由调用方给，本层原样落库。
+//
+// 这一格是 T-P7-03 的入口：逾期判据要读 due_at，而库里全是 NULL 的话那条扫描
+// 永久为空 ⇒ 整条催收腿是一台没有输入的机器。所以"账期从哪来"必须在这张卡一起结掉，
+// 不能推到下一张（推下去的后果是 P7-03 交付一个可证明永远不会发出提醒的功能）。
+//
+// 三件事分别断言：
+//   - 视图上有（返回值）；
+//   - **库里那一行**上有（返回值是服务拼的，它说有不算数）；
+//   - 重复确认（已 accepted ⇒ 复用）时第二次带的另一个账期**不覆盖**第一次那个：
+//     否则"改账期"就藏在"再点一次确认成交"里，而这是一个财务主张的修改，
+//     它需要自己的入口、自己的审计与自己那条"能不能改"的判据（本卡没有，见账单更新用例）。
+func TestBillDeriveStoresTheDueAtTheCallerGave(t *testing.T) {
+	db := billSetupDB(t)
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	billSeedOpp(t, db, "opp-due-in")
+	rowID := billSeedQuote(t, db, "q_due_in", "QT-DUE-IN", "opp-due-in", model.QuoteStatusSent)
+	billSeedLines(t, db, rowID)
+
+	due := time.Date(2026, 12, 31, 9, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	svc := billSvc(t, db)
+	view, err := svc.DeriveFromQuote(context.Background(), BillDeriveInput{QuoteRowID: rowID, DueAt: &due})
+	if err != nil {
+		t.Fatalf("带账期派生失败: %v", err)
+	}
+	if view.DueAt == nil {
+		t.Fatal("视图里没有账期：入参给了却被丢掉，催收那条腿照样看不见这张单")
+	}
+	if !view.DueAt.Equal(due) {
+		t.Errorf("视图账期 %v，期望 %v", view.DueAt.UTC(), due.UTC())
+	}
+	stored := billRow(t, db, view.ID)
+	if stored.DueAt == nil {
+		t.Fatal("库里 due_at 是 NULL：视图说有而库里没有，对账时以哪边为准？")
+	}
+	// PG 的 timestamptz 到微秒，Go 的 time.Time 带纳秒 ⇒ 比到微秒，
+	// 而**必须**比这一刻本身（不同时区表示的同一瞬间要相等，故用 Equal 不用 ==）。
+	const micro = time.Microsecond
+	if diff := stored.DueAt.Round(micro).Sub(due.Round(micro)); diff != 0 {
+		t.Errorf("库里账期 %v 与给定的 %v 差 %v：落库改了瞬间或改了时区", stored.DueAt.UTC(), due.UTC(), diff)
+	}
+
+	// 第二次确认：换一个账期递进来，库里那一行不许动。
+	other := due.Add(72 * time.Hour)
+	second, err := svc.DeriveFromQuote(context.Background(), BillDeriveInput{QuoteRowID: rowID, DueAt: &other})
+	if err != nil {
+		t.Fatalf("重复确认失败: %v", err)
+	}
+	if !second.Reused {
+		t.Error("重复确认没标 reused：那一格是「我刚开了一张」与「这张早就在」的唯一分野")
+	}
+	again := billRow(t, db, view.ID)
+	if again.DueAt == nil || !again.DueAt.Round(micro).Equal(due.Round(micro)) {
+		t.Errorf("重复确认把账期从 %v 改成了 %v：改账期不是确认成交的副作用", due.UTC(), again.DueAt)
+	}
+	var rows int64
+	if err := db.Model(&model.Bill{}).Where("quote_row_id = ?", rowID).Count(&rows).Error; err != nil {
+		t.Fatalf("数账单失败: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("同一版派生出 %d 张账单，期望 1", rows)
 	}
 }
 
@@ -659,17 +729,44 @@ func TestBillDeriveQuoteNotFound(t *testing.T) {
 
 // —— 契约形状 ——————————————————————————————————————————————————————————
 
-// TestBillDeriveInputHasOnlyTheRowKey 入参白名单：一格里只有版本行号。
+// TestBillDeriveInputCarriesRowKeyAndOptionalTerm 入参白名单：版本行号 + 可选账期。
 //
 // 多开一格 amount / status / currency，就是把"账单是报价的派生物"改成
 // "账单是人填的表"——AC② 从此没有对账对象，而这是本卡存在的全部理由。
-func TestBillDeriveInputHasOnlyTheRowKey(t *testing.T) {
+//
+// T-P7-03 开的第二格是**唯一**被允许的一格，判据是"这一格在库里没有事实源"：
+// 金额来自那一版的行项目合计、币种与来路三把键来自报价行、状态由本层落，
+// 四者都是派生物 ⇒ 都不许进；账期在报价域里根本不存在（valid_days 是报价有效期），
+// 它是**合同条款**，只能由在场的人给。
+// 指针类型也是判据：值类型会被迫在"没给"时落成一个日期（零值 0001-01-01
+// 会被运营读成"公元 1 年就到期了"，见 controller 侧同一条用例）。
+func TestBillDeriveInputCarriesRowKeyAndOptionalTerm(t *testing.T) {
 	st := reflect.TypeOf(BillDeriveInput{})
-	if st.NumField() != 1 {
-		t.Fatalf("BillDeriveInput 有 %d 个字段，期望恰好 1 个（版本行号）", st.NumField())
+	if st.NumField() != 2 {
+		var got []string
+		for i := 0; i < st.NumField(); i++ {
+			got = append(got, st.Field(i).Name)
+		}
+		t.Fatalf("BillDeriveInput 有 %d 个字段 %v，期望恰好 2 个（版本行号 + 可选账期）", st.NumField(), got)
 	}
 	if f := st.Field(0); f.Name != "QuoteRowID" || f.Type.Kind() != reflect.String {
-		t.Errorf("唯一那一格是 %s %s，期望 QuoteRowID string", f.Name, f.Type.Kind())
+		t.Errorf("第一格是 %s %s，期望 QuoteRowID string", f.Name, f.Type.Kind())
+	}
+	f1 := st.Field(1)
+	if f1.Name != "DueAt" || f1.Type.Kind() != reflect.Ptr ||
+		f1.Type.Elem() != reflect.TypeOf(time.Time{}) {
+		t.Errorf("第二格是 %s %s，期望 DueAt *time.Time（不能是值类型：没给账期时必须能读成 NULL）",
+			f1.Name, f1.Type.String())
+	}
+	// 名字里带 amount / status / currency 的一律不许出现（多一格就是白名单失效）：
+	// 用补集判，而不是只数个数 —— 数个数会放过"把 DueAt 换成 Amount"这种换法。
+	for i := 0; i < st.NumField(); i++ {
+		name := strings.ToLower(st.Field(i).Name)
+		for _, banned := range []string{"amount", "status", "currency", "total", "paid"} {
+			if strings.Contains(name, banned) {
+				t.Errorf("入参带了 %s：%s 是派生物，进得了入参就等于把 AC② 的对账对象删了", st.Field(i).Name, banned)
+			}
+		}
 	}
 }
 

@@ -19,7 +19,7 @@ import (
 // 本批把它掰成 fail-close：宁可留下一条「可见、可人工重跑」的红步，也不留一次
 // 「不可见、撤不回」的双发。断言口径与前几批一致——打到库里那一行和到线帧数，不打错误文案子串以外的事实。
 
-// flakyStepRepo 只替两个台账方法，其余走真库：写失败/查失败都是本批的被测前提，
+// flakyStepRepo 只替三个台账方法，其余走真库：写失败/查失败/回读失败都是本泳道的被测前提，
 // 不能用「假装有个 repo」的整只 fake（那会把 BatchCreate/UpdateResult 的真相一起替掉）。
 type flakyStepRepo struct {
 	repository.BrowserStepRepository
@@ -28,13 +28,25 @@ type flakyStepRepo struct {
 	// 因为实现内部会重试，按调用序号选靶会把「重试后成功」误当成缺陷现场）
 	failUpdate func(state, textHash string) bool
 	failFind   error
+	// failStateOf 让「回读单行台账态」失败（批20f / A12 的释放判据读的就是这一列）。
+	// 与 failFind 分开：读闸查的是**别的行**，释放查的是**自己这行**，两次的失效面不同。
+	failStateOf error
 }
+
+var errStateReadBack = errors.New("submit_state read-back failed: connection reset by peer")
 
 func (f *flakyStepRepo) UpdateSubmitState(ctx context.Context, id uint, state, textHash string) error {
 	if f.failUpdate != nil && f.failUpdate(state, textHash) {
 		return errors.New("dial tcp 127.0.0.1:8232: connect: connection refused")
 	}
 	return f.BrowserStepRepository.UpdateSubmitState(ctx, id, state, textHash)
+}
+
+func (f *flakyStepRepo) SubmitStateOf(ctx context.Context, id uint) (string, error) {
+	if f.failStateOf != nil {
+		return "", f.failStateOf
+	}
+	return f.BrowserStepRepository.SubmitStateOf(ctx, id)
 }
 
 func (f *flakyStepRepo) FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error) {

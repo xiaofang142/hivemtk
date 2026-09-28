@@ -20,6 +20,11 @@ func NewCronController(svc *service.CronService) *CronController {
 	return &CronController{svc: svc}
 }
 
+// cronErrToResponse 触发器域出口：与任务域共用同一份分类（批19c），404 的主语是触发器。
+func cronErrToResponse(ctx *gin.Context, err error) {
+	baErrToResponse(ctx, err, "触发器不存在")
+}
+
 // List GET /browser-automation/cron
 func (c *CronController) List(ctx *gin.Context) {
 	list, err := c.svc.List(ctx.Request.Context(), taskUserID(ctx))
@@ -43,7 +48,7 @@ func (c *CronController) Create(ctx *gin.Context) {
 	}
 	tr, err := c.svc.Create(ctx.Request.Context(), taskUserID(ctx), req.TaskID, req.CronExpr, req.TimeZone, enabled)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		cronErrToResponse(ctx, err)
 		return
 	}
 	response.Success(ctx, tr, "ok")
@@ -63,7 +68,7 @@ func (c *CronController) Update(ctx *gin.Context) {
 	}
 	tr, err := c.svc.Update(ctx.Request.Context(), uint(id), taskUserID(ctx), req.CronExpr, req.TimeZone)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		cronErrToResponse(ctx, err)
 		return
 	}
 	response.Success(ctx, tr, "ok")
@@ -77,7 +82,7 @@ func (c *CronController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), uint(id), taskUserID(ctx)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		cronErrToResponse(ctx, err)
 		return
 	}
 	response.Success(ctx, nil, "已删除")
@@ -100,7 +105,7 @@ func (c *CronController) setEnabled(ctx *gin.Context, enabled bool) {
 		return
 	}
 	if err := c.svc.SetEnabled(ctx.Request.Context(), uint(id), taskUserID(ctx), enabled); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		cronErrToResponse(ctx, err)
 		return
 	}
 	if enabled {

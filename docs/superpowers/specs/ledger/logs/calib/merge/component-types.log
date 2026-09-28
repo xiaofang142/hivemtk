@@ -1,0 +1,6 @@
+$ python3 scripts/check_component_types.py
+(cwd=.)
+rc=0  0.0s
+
+✅ components.d.ts 无悬空声明（共 23 条本地组件声明全部命中文件）
+

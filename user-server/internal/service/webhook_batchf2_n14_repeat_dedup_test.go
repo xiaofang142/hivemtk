@@ -111,8 +111,10 @@ func TestN14_IDLessEventStillDedupsByContent(t *testing.T) {
 	}
 }
 
-// TestN14_DingTalkRepeatedTextIsNotDropped 钉钉入站事件不带 channel_msg_id，
-// 是同一条缺陷的第二处现场：同一客户五分钟内连发两条相同文本，第二条会被丢掉。
+// TestN14_DingTalkRepeatedTextIsNotDropped 钉钉入站**带**官方 msgId（dingtalk_app.go 把
+// msgId 映射进 Extra["channel_msg_id"]，腿见 dingtalk_channel_msg_id_test.go），于是走
+// 「带稳定 id ⇒ 跳内容窗口」那一支：同一客户连发两条相同文本、msgId 不同 ⇒ 各入库一行。
+// 旧文案写的是「不带 channel_msg_id」，那是映射补上之前的现场，留着会把本腿读成反的。
 func TestN14_DingTalkRepeatedTextIsNotDropped(t *testing.T) {
 	nonce := fmt.Sprintf("n14-dt-%d", time.Now().UnixNano())
 	conv := "cid-" + nonce

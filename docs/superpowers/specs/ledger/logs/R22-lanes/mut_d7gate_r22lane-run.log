@@ -1,0 +1,66 @@
+# mut_d7gate_r22lane.py 首次全跑读数（C 相续刀 · lane 2：D7 闸门四把二手候选刀建格）
+# 命令：python3 scripts/mut_d7gate_r22lane.py            （2026-09-23 04:2x，一次跑完，无 --keep）
+# 前置：四条腿先在共享工作树不注码逐条 `--- PASS`（本电池在 --shared 私有克隆内注码，共享树 executor.go/session.go 一字未动）
+#       G4 腿名与 brief 有漂移：brief 写 `TestAwaitConfirmGateDeadlineMatchesFrame`，仓内真名 `TestAwaitConfirmGateFrameWritesRealDeadline`
+#       （d7_gate_b20_test.go:453，注释标「复核补刀（findings#4）」）——按真名建格，`go test -list` 四条逐条点到。
+# 环境：GIN_MODE=test POSTGRES_TEST_PORT=8232，POSTGRES_TEST_PASSWORD 由 user-server/.env 的 POSTGRES_PASSWORD 用 awk 精确喂入（未打印）；
+#       控制组 total=4 skip=0（放刀前现测，非写死常量），每格断言 PASS+FAIL==控制组数，还原比 md5 一致。
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r22lane2mut-7mxnrb7w
+[Go] overlay 64 个脏 .go，含腿文件 user-server/internal/browser_automation/service/d7_gate_b20_test.go
+[Go] 腿前置：4 条腿 `go test -list` 逐条点到
+[Go] 注码前置：4 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=4 passed=4 skip=0 FAIL=[]
+[Go] 控制组逐腿：G1=TestAwaitConfirmGatePreviewTruncatesSubmittedText | G2=TestConfirmGateFramesBindPayloadAndOmitBody | G3=TestGateElsewhereFollowsNewestWaitFrame | G4=TestAwaitConfirmGateFrameWritesRealDeadline（total=4，放刀前现测）
+
+G1   findings#1 预览截断常量 d7PreviewRunes→0（审批人只剩省略号＝回到盲签）
+     注码: user-server/internal/browser_automation/service/executor.go: const d7PreviewRunes = 200 → const d7PreviewRunes = 0
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestAwaitConfirmGatePreviewTruncatesSubmittedText']
+     逐字红因（TestAwaitConfirmGatePreviewTruncatesSubmittedText）：
+           d7_gate_b20_test.go:438: 预览去掉标注后为空（=常量被翻成 0 的形状：只剩一个省略号）：审批人看不见任何正文，got "…"
+       --- FAIL: TestAwaitConfirmGatePreviewTruncatesSubmittedText (0.01s)
+
+G2   findings#2 judge 帧 step_index 置 0（批准行不再指回具体步）
+     注码: user-server/internal/browser_automation/service/executor.go: e.appendCommandLog(ctx, session.ID, task.ID, stepID, *seq, "judge", gateConfirmFrame, map[string]any{
+		"payload_hash":      payloadHash,
+		"step_index":        stepIndex, → e.appendCommandLog(ctx, session.ID, task.ID, stepID, *seq, "judge", gateConfirmFrame, map[string]any{
+		"payload_hash":      payloadHash,
+		"step_index":        0,
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestConfirmGateFramesBindPayloadAndOmitBody']
+     逐字红因（TestConfirmGateFramesBindPayloadAndOmitBody）：
+           d7_gate_b20_test.go:225: judge 帧 step_index=0 必须与 wait 帧(2)同值且非零
+       --- FAIL: TestConfirmGateFramesBindPayloadAndOmitBody (0.05s)
+
+G3   findings#3 跨进程择新帧方向 >→<（跟着最旧帧归因）
+     注码: user-server/internal/browser_automation/service/session.go: if l.Direction == "event" && l.Action == gateWaitFrame && (latest == nil || l.Seq > latest.Seq) { → if l.Direction == "event" && l.Action == gateWaitFrame && (latest == nil || l.Seq < latest.Seq) {
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestGateElsewhereFollowsNewestWaitFrame']
+     逐字红因（TestGateElsewhereFollowsNewestWaitFrame）：
+           d7_gate_b20_test.go:523: 新帧未到期/旧帧过期时归因=no_gate，want gate_on_another_instance（应跟最新帧；被 > → < 翻错则此处红）
+           d7_gate_b20_test.go:532: 新帧过期/旧帧未到期时归因=gate_on_another_instance，want no_gate（不得被旧帧永久钉成在别处；被 > → < 翻错则此处红）
+       --- FAIL: TestGateElsewhereFollowsNewestWaitFrame (0.00s)
+
+G4   findings#4 d7_wait 帧 expires_at 写成固定 24h（写下的期望≠内存真值）
+     注码: user-server/internal/browser_automation/service/executor.go: "expires_at": gate.expiresAt.Format(time.RFC3339Nano), → "expires_at": time.Now().Add(24 * time.Hour).Format(time.RFC3339Nano),
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestAwaitConfirmGateFrameWritesRealDeadline']
+     逐字红因（TestAwaitConfirmGateFrameWritesRealDeadline）：
+           d7_gate_b20_test.go:482: 帧 expires_at=2026-09-24T04:28:26.266529+08:00 不在预算到期窗口 [2026-09-23T04:29:09+08:00,2026-09-23T04:29:16+08:00)——写下的期望没跟着 wait 走（如被改成固定 24h）
+           d7_gate_b20_test.go:491: 帧 expires_at 与闸门内存 ExpiresAt 相差 23h59m15.000001s（写下的与内存里的是两回事）
+       --- FAIL: TestAwaitConfirmGateFrameWritesRealDeadline (0.01s)
+
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 4 格（G1–G4）逐刀被杀、无存活 =====
+mut_d7gate_r22lane_rc=0
+
+# ---- 第二趟独立复跑（同一克隆流程重建，证读数非一次性；格读数与首趟逐字一致，仅时间戳不同）----
+[Go] 控制组 rc=0 total=4 passed=4 skip=0 FAIL=[]
+[Go] 控制组逐腿：G1=TestAwaitConfirmGatePreviewTruncatesSubmittedText | G2=TestConfirmGateFramesBindPayloadAndOmitBody | G3=TestGateElsewhereFollowsNewestWaitFrame | G4=TestAwaitConfirmGateFrameWritesRealDeadline（total=4，放刀前现测）
+G1   findings#1 预览截断常量 d7PreviewRunes→0（审批人只剩省略号＝回到盲签）
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestAwaitConfirmGatePreviewTruncatesSubmittedText']
+G2   findings#2 judge 帧 step_index 置 0（批准行不再指回具体步）
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestConfirmGateFramesBindPayloadAndOmitBody']
+G3   findings#3 跨进程择新帧方向 >→<（跟着最旧帧归因）
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestGateElsewhereFollowsNewestWaitFrame']
+G4   findings#4 d7_wait 帧 expires_at 写成固定 24h（写下的期望≠内存真值）
+     结果: 杀掉      total=4 pass+fail=4 fail=1 skip=0 ｜ 红名=['TestAwaitConfirmGateFrameWritesRealDeadline']
+===== 电池判定：Go 4 格（G1–G4）逐刀被杀、无存活 =====
+mut_d7gate_r22lane_pass2_rc=0

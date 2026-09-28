@@ -1,0 +1,26 @@
+### 测量时间 2026-09-23T00:04:08+0800  树：共享工作树 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+$ python3 scripts/check-md-links-offline.py
+──── 扫描 162 个 md（CI 口径：只认 git 索引）────
+──── 断链 0 处 ────
+RC_MDLINKS=0
+
+$ bash scripts/check-architecture.sh
+[0;32m✅ [Repository] 所有 repository.go 都遵循 interface+struct 模式[0m
+
+[9/10] 上下文透传检查(抽查)...
+[0;32m✅ [Repository] 所有导出方法都含 ctx context.Context[0m
+
+[10/10] Config 包位置检查...
+[0;32m✅ [Config] config 包位置合规（不在 internal/pkg/utils/ 下）[0m
+[0;32m✅ [Config] config 包未分裂[0m
+
+============================================================
+[0;32m✅ 架构检查通过(可能有 warning,需人工复核)[0m
+============================================================
+RC_ARCH=?
+
+$ bash scripts/check-architecture.sh > /dev/null  (只记 rc，上面那格用了 tail 会吞掉真 rc)
+RC_ARCH=0
+$ python3 scripts/check-review-closeout.py --selftest
+===== selftest：47/47 种坏形态各自隔离地红，合法快照 0 红 =====
+RC_SELFTEST=0

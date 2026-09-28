@@ -1,0 +1,61 @@
+### 16 格全量复跑（第 3 趟：lane_overlays() 改成「外域未跟踪只排 _test.go」之后）；开始 2026-09-23T00:19:02+0800；GOCACHE=共享默认（省盘）；load={ 5.96 5.69 7.06 }；df=9.6Gi 可用
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r23dedup-5g1jxxjn
+[Go] 外域未跟踪的**测试**文件不进克隆（其实现文件与已跟踪改动一起装，见 lane_overlays 注释）：user-server/internal/model/payment_test.go user-server/internal/repository/help_center_public_list_test.go user-server/internal/repository/payment_test.go user-server/internal/service/order_webhook_payment_test.go user-server/internal/service/payment_test.go
+
+[Go] 注码前置：16 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=22 passed=22 skip=0 FAIL=[]
+K1   Redis 去重键丢掉会话（换会话的同一句话被共用一把键，客户「说了没回」）                       杀掉      total=22 fail=1 skip=0 ｜ TestIngress_ContentDedupKeyCarriesConversation
+K2   调用方把回声窗口折成零时刻（历史里多老的行都算回声）                                   杀掉      total=22 fail=1 skip=0 ｜ TestPersistBridgeHistory_ContentDedupExpiresAfterWindow
+K6   仓储侧不看 since 参数（调用方传了窗口，SQL 里那条 `sent_at > ?` 其实没人守）          杀掉      total=22 fail=2 skip=0 ｜ TestMessageHubRepository_ContentEchoScoping | TestPersistBridgeHistory_ContentDedupExpiresAfterWindow
+K3   调用方给 hub 层传空会话（会话界在这一跳被丢掉）                                   杀掉      total=22 fail=1 skip=0 ｜ TestPersistBridgeHistory_ContentDedupScopedToConversation
+K7   仓储侧不接会话参数（跨会话同文本互吞）                                          杀掉      total=22 fail=2 skip=0 ｜ TestMessageHubRepository_ContentEchoScoping | TestPersistBridgeHistory_ContentDedupScopedToConversation
+K4   单条路径退回「拦截即销毁」（判重的那句话在库里查不到任何痕迹）                              杀掉      total=22 fail=1 skip=0 ｜ TestHandleIngress_DupDecisionPersistsWithAISuppressed
+K5   批次路径退回「拦截即销毁」（单条半边照样绿，批里的重复无痕）                               杀掉      total=22 fail=1 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed
+L1   摘掉「平台给了 id 就跳过内容去重」那半句守卫                                     杀掉      total=22 fail=2 skip=0 ｜ TestIngress_OccurrenceSuffixSkipsContentWindowDedup | TestIngress_PlatformIDEventsSkipContentDedup
+K8   入口只摘「发生次数身份」那半句（平台 id 守卫留着）⇒ 第二条又在入库前被吞                      杀掉      total=22 fail=1 skip=0 ｜ TestIngress_OccurrenceSuffixSkipsContentWindowDedup
+K9   落库只摘钩子2.5 的豁免那半句 ⇒ 内容哈希又把第二条同文本吞掉                            杀掉      total=22 fail=1 skip=0 ｜ TestPersistBridgeHistory_OccurrenceSuffixPersistsSecondRow
+K10  豁免判据恒真（内容维度嗅探对整个入站流失效：回环防护与重投兜底一起没）                          杀掉      total=22 fail=9 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed | TestHandleIngress_DupDecisionPersistsWithAISuppressed | TestHandleIngress_PersistSuccessKeepsContentWindow
+K11  豁免只看「以 #数字 结尾」这一截（丢掉 mh:<8hex> 前缀界，外来 id 蹭豁免）                杀掉      total=22 fail=1 skip=0 ｜ TestIngress_NonOccurrenceHashLikeIDSuffixStillContentDeduped
+R1   单条路径不退坑（那条重投回来会被自己留下的键判成 duplicate：只留痕不回 AI）                 杀掉      total=22 fail=1 skip=0 ｜ TestHandleIngress_PersistFailureReleasesContentWindow
+R2   批次路径不退坑（单条半边照样绿，批里失败的那条毒掉后面每一次重投）                            杀掉      total=22 fail=1 skip=0 ｜ TestHandleIngressBatch_PersistFailureReleasesContentWindow
+R3   补偿写成无条件退坑（落库成功也把键删掉，同内容连发两帧会回两遍 AI）                          杀掉      total=22 fail=3 skip=0 ｜ TestHandleIngressBatch_DupDecisionPersistsWithAISuppressed | TestHandleIngress_DupDecisionPersistsWithAISuppressed | TestHandleIngress_PersistSuccessKeepsContentWindow
+T1   注入的窗口长度不生效（TTL 这一维退回常量，跨界那条腿就成了没人守的断言）                       存活=洞    total=22 fail=0 skip=0 ｜ 
+ exist (SQLSTATE 42P01) component=user-server
+2026-09-23T00:29:35+08:00 ERR [Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。 account_id=acct-keep-1790094575940715000 channel=xiaohongshu component=user-server session_id=xiaohongshu:customer-keep-1790094575940715000
+2026-09-23T00:29:35+08:00 INF [Inbox] 中间件拦截：消息被去重/回环拦截，不穿透业务层 component=user-server dup=true event_id=evt-r23-keep-2 reason="duplicate(channel+sender+content) within window" self_echo=false
+2026-09-23T00:29:35+08:00 WRN [feedback] UpdateCustomerAcceptBySession failed session=xiaohongshu:customer-keep-1790094575940715000: ERROR: relation "feedback_records" does not exist (SQLSTATE 42P01) component=user-server
+--- PASS: TestHandleIngress_PersistSuccessKeepsContentWindow (0.10s)
+=== RUN   TestIngress_OccurrenceSuffixSkipsContentWindowDedup
+--- PASS: TestIngress_OccurrenceSuffixSkipsContentWindowDedup (0.08s)
+=== RUN   TestIngress_PlainContentHashStillContentDeduped
+--- PASS: TestIngress_PlainContentHashStillContentDeduped (0.10s)
+=== RUN   TestIngress_NonOccurrenceHashLikeIDSuffixStillContentDeduped
+--- PASS: TestIngress_NonOccurrenceHashLikeIDSuffixStillContentDeduped (0.13s)
+=== RUN   TestPersistBridgeHistory_OccurrenceSuffixPersistsSecondRow
+--- PASS: TestPersistBridgeHistory_OccurrenceSuffixPersistsSecondRow (0.09s)
+=== RUN   TestPersistBridgeHistory_OccurrenceSuffixStillExactIdempotent
+2026-09-23T00:29:36+08:00 INF [Inbox] PersistBridgeHistory 钩子2 命中：msg_id 已存在，幂等跳过（防回环） channel=xiaohongshu component=user-server conv_id=conv-r23-exact event_id=mh:378c0db1#1 existing_direction=inbound module=bridge sender_id=customer-exact-1790094576429460000
+--- PASS: TestPersistBridgeHistory_OccurrenceSuffixStillExactIdempotent (0.08s)
+=== RUN   TestPersistBridgeHistory_ForeignIDStillCaughtByContentHash
+2026-09-23T00:29:36+08:00 INF [Inbox] PersistBridgeHistory 钩子2.5 命中：canonical contentHash 已存在，幂等跳过（防回环） canonical_hash=mh:4969063b channel=xiaohongshu component=user-server conv_id=conv-r23-foreign existing_direction=inbound existing_msg_id=mh:4969063b module=bridge sender_id=customer-foreign-1790094576525656000
+--- PASS: TestPersistBridgeHistory_ForeignIDStillCaughtByContentHash (0.10s)
+PASS
+ok  	hivemtk-user/internal/service	304.091s
+2026-09-23T00:29:39+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestMessageHubRepository_GetByPlatformContent
+--- PASS: TestMessageHubRepository_GetByPlatformContent (9.97s)
+=== RUN   TestMessageHubRepository_ContentEchoScoping
+--- PASS: TestMessageHubRepository_ContentEchoScoping (0.07s)
+=== RUN   TestMessageHubRepository_GetByPlatformContent_EmptyArgs
+--- PASS: TestMessageHubRepository_GetByPlatformContent_EmptyArgs (0.06s)
+=== RUN   TestMessageHubRepository_GetByContentHash_Empty
+--- PASS: TestMessageHubRepository_GetByContentHash_Empty (0.07s)
+PASS
+ok  	hivemtk-user/internal/repository	10.892s
+
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：有洞 =====
+  ✗ [Go] T1 存活=洞：注入的窗口长度不生效（TTL 这一维退回常量，跨界那条腿就成了没人守的断言）
+BATTERY_RC=1
+### 结束 2026-09-23T00:29:51+0800 load={ 5.56 8.09 8.31 }

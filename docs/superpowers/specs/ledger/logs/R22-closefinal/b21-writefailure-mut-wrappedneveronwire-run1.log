@@ -1,0 +1,19 @@
+[90m2026-09-23T12:03:22+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestRequestWithoutConnIsNeverOnWire
+--- PASS: TestRequestWithoutConnIsNeverOnWire (0.00s)
+=== RUN   TestConnDropAfterWriteIsNotNeverOnWire
+[90m2026-09-23T12:03:22+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+[90m2026-09-23T12:03:22+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+--- PASS: TestConnDropAfterWriteIsNotNeverOnWire (0.01s)
+=== RUN   TestHostCommandTimeoutIsNotNeverOnWire
+[90m2026-09-23T12:03:22+08:00[0m [32mINF[0m [1m[BrowserHost] Host 已注册 user=9377 version=1.5.0-b21 pid=0[0m [36mcomponent=[0muser-server
+--- PASS: TestHostCommandTimeoutIsNotNeverOnWire (0.30s)
+[90m2026-09-23T12:03:22+08:00[0m [33mWRN[0m [1m[BrowserHost] 连接读失败 user=9377: websocket: close 1006 (abnormal closure): unexpected EOF[0m [36mcomponent=[0muser-server
+=== RUN   TestWriteFailureIsNotNeverOnWire
+    host_offline_b21_test.go:183: 写失败时送达不可判，不得带未上线标记：命令未上线: 发送命令到 Host 失败: write tcp 127.0.0.1:65295->127.0.0.1:65296: use of closed network connection
+    asm_arm64.s:1447: fake extension 读帧结束: websocket: close 1006 (abnormal closure): unexpected EOF
+    host_offline_b21_test.go:186: 写失败不得落进「从未发生」集合：命令未上线: 发送命令到 Host 失败: write tcp 127.0.0.1:65295->127.0.0.1:65296: use of closed network connection
+--- FAIL: TestWriteFailureIsNotNeverOnWire (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/service	0.905s
+FAIL

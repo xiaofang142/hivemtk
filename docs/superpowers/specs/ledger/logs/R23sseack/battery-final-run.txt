@@ -1,0 +1,9 @@
+== 控制组（未注码）
+   rc=0 settled=4 skip=0 红=—
+S1   SSE 的排水定时器空转（不排队列）                           杀掉           settled=4 红=SSE 启动后，到期条目在无人再推消息的情况下被重发 ack
+S2   stop 不回收排水定时器                                杀掉           settled=4 红=stop() 之后排水器不再触发（不许留悬空 interval）
+S3   轮询侧不再走共享排水函数                                 杀掉           settled=4 红=pollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）
+S4   重试 ack 丢掉会话归属                                杀掉           settled=4 红=排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属
+
+===== 判定：四格逐刀被杀，无存活
+OK：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/downlink.js 逐字节还原（md5 e8b3cb216cd12c0068949368e7662f35），日志在 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/R23sseack

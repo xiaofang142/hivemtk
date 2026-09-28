@@ -67,13 +67,25 @@ func (r *browserLLMPlanRepo) ListBySessionID(ctx context.Context, sessionID uint
 	return list, err
 }
 
-// PruneSnapshotText G19：仅置空快照大字段（审计与成本账不丢），分批 5000。
+// PruneSnapshotText G19：仅置空快照大字段（审计与成本账不丢），分批 pruneBatchRows。
+// 必须分批的理由与 command_log 侧同源：快照每行可到 64 KiB，首次裁剪时超期行数=历史全量，
+// 一条 UPDATE 吃完就是拿写放大大事务去换治理窗口（注释原先写着「分批 5000」、实现没有）。
+// 清完的行不再满足「snapshot 非空」，故谓词本身保证每批都在推进、循环必然收敛。
 func (r *browserLLMPlanRepo) PruneSnapshotText(ctx context.Context, cutoff time.Time) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&model.BrowserLLMPlan{}).
-		Where("created_at < ? AND snapshot <> ''", cutoff).
-		Update("snapshot", "")
-	if res.Error != nil {
-		return 0, res.Error
+	match := func() *gorm.DB {
+		return r.db.WithContext(ctx).Model(&model.BrowserLLMPlan{}).
+			Where("created_at < ? AND snapshot <> ''", cutoff)
 	}
-	return res.RowsAffected, nil
+	var total int64
+	for {
+		res := match().Where("id IN (?)", match().Order("id ASC").Limit(pruneBatchRows).Select("id")).
+			Update("snapshot", "")
+		if res.Error != nil {
+			return total, res.Error
+		}
+		total += res.RowsAffected
+		if res.RowsAffected == 0 {
+			return total, nil
+		}
+	}
 }

@@ -1,0 +1,7 @@
+[删条目→新增] 红 ✓  红因命中「新增: user-server/internal/service/ai_agent.go」
+[登记调小→超出] 红 ✓  红因命中「超出: user-server/internal/service/ai_agent.go」
+[登记调大→收窄] 红 ✓  红因命中「收窄: user-server/internal/service/ai_agent.go」
+[理由清空→新增] 红 ✓  红因命中「新增: user-server/internal/service/ai_agent.go」
+[基线缺失→判红] 红 ✓  红因命中「宽口径基线文件缺失」
+[还原后控制组] 绿 ✓  [0;32m✅ [L4] service 取 DB 句柄宽口径与基线一致（存量 39 处 / 22 个文件）[0m
+===== L4 基线反向测试：6 格（5 种坏基线各自红且红因点名 + 还原后控制组绿），基线 md5 与注码前一致 =====

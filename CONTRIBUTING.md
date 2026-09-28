@@ -37,8 +37,8 @@ make inference-host-up        # 拉起宿主机 llama-server :8207 (LLM) / :8208
 make web-build              # user-web
 make sdk-build              # embed-sdk
 
-# 4. 启动用户端
-make up
+# 4. 启动用户端（宿主机 Go 进程，air 热更新）
+make dev
 
 # 5. 健康检查
 curl http://localhost:8204/health

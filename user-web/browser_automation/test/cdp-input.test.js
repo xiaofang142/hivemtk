@@ -158,6 +158,21 @@ describe('cdp/input', () => {
     expect(sent.filter((c) => c.params?.type === 'mousePressed').length).toBe(1);
   }, 20000);
 
+  it('click_unacked 收敛不许丢掉原始失败原因（cause 是归因唯一线索）', async () => {
+    // 「ack 超时」与「CDP 直接拒」与「debugger 掉线」在批14 的语义里都是结局未知，
+    // 但对人是三种不同的下一步（查预算 / 查权限 / 查装机）。收敛成统一文案时把原因只留在
+    // 字符串里＝程序读不到；且 user-web 的 ESLint 门（preserve-caught-error）本就是 error 级。
+    const root = new Error('Debugger is not attached');
+    const m = await loadWithDebugger(makeDebuggerWith(async (_method, params) => {
+      if (params?.type === 'mouseReleased') throw root;
+      return {};
+    }));
+    const err = await m.clickAt(12, 200, 300).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.cause).toBe(root);
+    expect(String(err.message).startsWith('click_unacked: ')).toBe(true);
+  }, 20000);
+
   it('键入中途 detach 报错：已发的按键不重放（一次字符 = 一次 keyDown）', async () => {
     const m = await loadWithDebugger(makeDebuggerWith(async (_method, params) => {
       if (params?.type === 'keyUp') throw new Error('Cannot access a chrome:// URL');

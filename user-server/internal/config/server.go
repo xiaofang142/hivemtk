@@ -88,7 +88,9 @@ const (
 	defaultRerankBaseURL    = DefaultRerankBaseURLDev
 	defaultEmbeddingDim     = 1024
 
-	defaultLLMModelLocal       = "Qwen2.5-1.5B-Instruct"
+	// 三个模型名必须与 .env-example 的 *_SERVED_NAME 同源（推理栈用它作 llama-server --alias），
+	// 由 TestDefaultModelsMatchEnvExample 把关；换档只改 .env-example 会让本回落指向未下载的模型。
+	defaultLLMModelLocal       = "Qwen2.5-3B-Instruct"
 	defaultEmbeddingModelLocal = "bge-m3"
 	defaultRerankModelLocal    = "bge-reranker-v2-m3"
 )

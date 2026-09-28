@@ -334,7 +334,8 @@
     "baTasks": "タスク一覧",
     "baCreate": "新規タスク",
     "baCron": "定期トリガー",
-    "baStatus": "ホスト状態"
+    "baStatus": "ホスト状態",
+    "badCase": "Bad Case キュー"
   },
   "保存": "保存",
   "提交": "送信",

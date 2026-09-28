@@ -328,6 +328,7 @@ func newLedgerGapFeedbackE2E(t *testing.T) (*Executor, *fakeExtension, *wsE2EDep
 	feedback := NewFeedbackService(bundle.sessionRepo, taskRepo)
 	rebuilt := NewExecutor(exec.hand, bundle.sessionRepo, bundle.stepRepo, nil, feedback)
 	rebuilt.SetCommandLogRepository(bundle.cmdLogRepo)
+	rebuilt.SetWriteClaimRepository(bundle.claimRepo)
 	return rebuilt, ext, bundle, taskRepo
 }
 

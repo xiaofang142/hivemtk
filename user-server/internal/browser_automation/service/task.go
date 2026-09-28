@@ -52,6 +52,17 @@ type InvalidInputError struct{ Msg string }
 
 func (e *InvalidInputError) Error() string { return e.Msg }
 
+// NotFoundError 「哪样东西找不到」是结论的一部分：状态码一样（404）时，文案的主语
+// 决定用户往哪儿排查（批19c：触发器挂在别人的任务上，回「触发器不存在」就是错方向）。
+// 域内其余 to-be-typed 错误同构：类型给 controller 分流，Msg 给用户看原因。
+type NotFoundError struct{ Msg string }
+
+func (e *NotFoundError) Error() string { return e.Msg }
+
+func notFound(format string, a ...any) error {
+	return &NotFoundError{Msg: fmt.Sprintf(format, a...)}
+}
+
 func stateConflict(format string, a ...any) error {
 	return &StateConflictError{Msg: fmt.Sprintf(format, a...)}
 }
@@ -102,6 +113,9 @@ func (s *TaskService) Create(ctx context.Context, userID uint, t *model.BrowserT
 		t.TimeoutSec = 120
 	}
 	if t.DependsOnTaskID != nil {
+		if err := s.checkDependencyTarget(ctx, userID, t.ID, t.DependsOnTaskID); err != nil {
+			return err
+		}
 		if err := s.checkDependencyCycle(ctx, userID, t.ID, *t.DependsOnTaskID); err != nil {
 			return err
 		}
@@ -217,15 +231,8 @@ func (s *TaskService) SetDependency(ctx context.Context, id, userID uint, depend
 		return err
 	}
 	if dependsOnTaskID != nil {
-		if *dependsOnTaskID == t.ID {
-			return invalidInput("任务不能依赖自身")
-		}
-		dep, err := s.taskRepo.GetByIDAnyUser(ctx, *dependsOnTaskID)
-		if err != nil {
-			return invalidInput("前置任务不存在")
-		}
-		if dep.UserID != userID {
-			return invalidInput("前置任务不存在")
+		if err := s.checkDependencyTarget(ctx, userID, t.ID, dependsOnTaskID); err != nil {
+			return err
 		}
 		if err := s.checkDependencyCycle(ctx, userID, t.ID, *dependsOnTaskID); err != nil {
 			return err
@@ -240,6 +247,27 @@ func (s *TaskService) SetDependency(ctx context.Context, id, userID uint, depend
 		t.DependsOnMode = ""
 	}
 	return s.taskRepo.Update(ctx, t)
+}
+
+// checkDependencyTarget 前置任务必须存在且属于当前用户。
+// depends_on_task_id 由请求方任意指定，而 Create 与 SetDependency 是这条不变式的两条入口——
+// 此前只有 SetDependency 查归属，Create 把请求里的 id 直接写库，于是任何人都能让自己的任务
+// 挂在别人的任务上：执行期 checkDependency 按 task_id（不带 user 过滤）读那条会话，
+// 并把它的状态原样写进本用户的 409 文案，等于一台可枚举 id 的跨用户状态探针。
+// 判定只有一份，两条入口共用——「两处各写一遍」正是这次的漂移来源。
+func (s *TaskService) checkDependencyTarget(ctx context.Context, userID, taskID uint, dependsOn *uint) error {
+	if dependsOn == nil {
+		return nil
+	}
+	if *dependsOn == taskID {
+		return invalidInput("任务不能依赖自身")
+	}
+	dep, err := s.taskRepo.GetByIDAnyUser(ctx, *dependsOn)
+	if err != nil || dep.UserID != userID {
+		// 两类结论共用一句文案：分开写就等于回「这条 id 存在，但不是你的」
+		return invalidInput("前置任务不存在")
+	}
+	return nil
 }
 
 // checkDependencyCycle DFS 检测 A→B→…→A 环
@@ -280,6 +308,14 @@ func (s *TaskService) validateDependencyMode(t *model.BrowserTask) error {
 func (s *TaskService) checkDependency(ctx context.Context, t *model.BrowserTask) error {
 	if t.DependsOnTaskID == nil {
 		return nil
+	}
+	// 执行期兜底（fail-closed）：会话查询只按 task_id 过滤，归属必须在这一刀上自己确认——
+	// Create 修好之前写进库的越权行不会因代码更新而消失，不挡就是把别人会话的终态
+	// 透进本用户的错误文案（且别人的执行结果真的参与了我的调度判定）。
+	// 文案中性：跨用户与前置已删都只回「不可用」，不给出任何可比对的读数。
+	dep, err := s.taskRepo.GetByIDAnyUser(ctx, *t.DependsOnTaskID)
+	if err != nil || dep.UserID != t.UserID {
+		return fmt.Errorf("%w: 前置任务不可用", ErrDependencyNotMet)
 	}
 	switch t.DependsOnMode {
 	case "any_success":

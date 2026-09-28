@@ -1,0 +1,19 @@
+$ bash scripts/check-feature-doc.sh
+(cwd=.)
+rc=0  0.0s
+
+============================================================
+  Feature Doc 8 节模板校验（OPT-DOC-13）
+  目录: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/marketing-features
+  模式: normal
+============================================================
+
+✅ GEO_MODULE_DESIGN.md 通过必填节校验
+
+============================================================
+  总结
+============================================================
+  通过: 1
+  失败: 0
+  跳过: 1（README / DEPRECATED）
+

@@ -76,6 +76,21 @@ var ErrApprovalAlreadyDecided = errors.New("approval_request: 该审批已由他
 // ErrApprovalResumeNotPending 恢复凭证指向的记录还不可恢复（已被拒/过期）。
 var ErrApprovalResumeNotPending = errors.New("approval_request: 审批尚未放行，不能恢复")
 
+// ErrApprovalDecideTooLate 截止时刻已过，本次人工裁决**没有**被收录（返回时同样带当前记录）。
+//
+// 它存在的理由是一段真实的时间窗：TTL 过完到清扫器跑上来之间最多有一整个轮次（本模块
+// 实测为 5 分钟），这段时间里库里那一行仍写着 pending。若不拦：
+//   - 审批桥早就按"超时"把流程推走了（ResolveOnFire 对 pending 且已过 expires_at 的行
+//     给出 derived=ttl，见 sop_approval_resume.go）—— 人这时批的是一扇已经关上的门；
+//   - 而落进去的那一行会写下 `decided_by=<人的账号>`、`decided_at=<刚才>`，事后查"这件
+//     事为什么放行/被拒"的人读到的是"这个人在截止之后批了它"。审计账本上凭空多一条
+//     不存在的决定，比这条决定被拒严重得多。
+//
+// 为什么不与 ErrApprovalAlreadyDecided 合成一个：两者给操作者的话正相反 —— 后者是
+// "别人已经落定了"（换一条/刷新即可），前者是"时间已经替你做完了这个决定"（重试永远
+// 不会成功，该修的是流程的 TTL 或清扫轮次）。混成一个，运维方向就错。
+var ErrApprovalDecideTooLate = errors.New("approval_request: 挂起时限已过，本次人工裁决未收录")
+
 // ApprovalVerdict 人工裁决结论。
 //
 // 字面值刻意与目标状态**同一个串**（approved/rejected）：中间再放一张映射表，
@@ -492,8 +507,12 @@ func (s *ApprovalRequestService) Submit(ctx context.Context, in ApprovalSubmitIn
 // 只有 pending 可被裁决（见 model.ApprovalTransitionAllowed）：已批准的不能再改判、
 // 已拒的也不允许在这里翻回来 —— 要重审就对新的一次动作重新 Submit，留下两条记录。
 //
-// 落败方（并发下别人先批了）拿到的是 ErrApprovalAlreadyDecided **加上当前记录**，
-// 调用方因此能直接回答"那件事到底批没批"。
+// **且截止时刻还没过**：pending 但已过 expires_at 的那段窗口（清扫器一轮的间隔）里
+// 人来批，拿到的是 ErrApprovalDecideTooLate，那一行原样不动（理由见该 sentinel 的注释；
+// 判据本身在仓储的同一条 CAS 里，不在这里先读一次再写，见 repository.MutatePending 的 asOf）。
+//
+// 落败方（并发下别人先批了、或时间先到期了）拿到的是 ErrApprovalAlreadyDecided /
+// ErrApprovalDecideTooLate **加上当前记录**，调用方因此能直接回答"那件事到底批没批"。
 func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict ApprovalVerdict, decidedBy, note string) (*model.ApprovalRequest, error) {
 	if s == nil || s.repo == nil || !s.repo.Available() {
 		return nil, errors.New("approval_request service: 未接仓储或句柄不可用")
@@ -529,12 +548,15 @@ func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict 
 			model.ApprovalStatusPending, target)
 	}
 
-	applied, err := s.repo.MutatePending(ctx, id, func(a *model.ApprovalRequest) {
+	// 一次裁决只读一次钟：判截止用的 asOf 与写 decided_at 的值必须是同一个。
+	// 分两次读，一次卡在边界附近的裁决就会写成"decided_at 比判定用的现在还早/晚"，
+	// 而事后复盘正是拿这两个数比对的。
+	now := loadApprovalNowFn()()
+	applied, err := s.repo.MutatePending(ctx, id, now, func(a *model.ApprovalRequest) {
 		a.Status = target
 		a.DecidedBy = decidedBy
 		a.DecisionNote = strings.TrimSpace(note)
-		at := loadApprovalNowFn()()
-		a.DecidedAt = &at
+		a.DecidedAt = &now
 	})
 	if err != nil {
 		return nil, err
@@ -565,6 +587,13 @@ func (s *ApprovalRequestService) Decide(ctx context.Context, id string, verdict 
 	}
 	if cur == nil {
 		return nil, ErrApprovalNotFound
+	}
+	// 判输的两种原因分开说，方向完全不同：
+	//   - 回读仍是 pending ⇒ 拦住它的是**截止时刻**（库里那一行还等着被清扫器翻走）；
+	//   - 回读已落定 ⇒ 别人先批了，这一行已经不属于这里。
+	// 合成一句"已由他人裁决"会让人去查是谁批的，而这里根本没有第二个人。
+	if cur.Status == model.ApprovalStatusPending {
+		return cur, ErrApprovalDecideTooLate
 	}
 	return cur, ErrApprovalAlreadyDecided
 }
@@ -638,6 +667,31 @@ func (s *ApprovalRequestService) ExpireOverdue(ctx context.Context, limit int) (
 }
 
 // AllowedTransitions 暴露状态机给待办中心/审计视图（"这条还能被改成什么"）。
+//
+// 它是**纯状态机**的读法：不看截止时刻，也不看是谁在问。界面上"现在能不能点批准"问的
+// 不是这一件事（那是 DecidableByHuman）；把两者合成一个函数，迟早会让读端点在"状态还
+// 写着 pending"的时候把按钮画亮。
 func (s *ApprovalRequestService) AllowedTransitions(status string) []string {
 	return model.ApprovalTransitionTargets(strings.ToLower(strings.TrimSpace(status)))
+}
+
+// DecidableByHuman 报告这条审批**此刻**还容不容得下一次人工裁决。
+//
+// 存在的理由是那段窗口：库里写着 pending 不等于人还能批 —— 过了 expires_at 而清扫器
+// 还没跑上来的那几分钟里，Decide 会回 ErrApprovalDecideTooLate。判据只有一处事实源：
+// 这里与那条 CAS、与 ExpirePendingBatch 用的是同一个边界（expires_at <= 当下 算已过期）。
+//
+// 为什么把结论算在服务端并回显给读端点，而不是让前端自己比时间戳：前端手上既没有服务端的
+// 钟（它可注入、用例还会冻住它），也没有"哪一列算截止"的口径。它自己判一次，就会在服务端
+// 加第四个条件的那天准时失真，而失真出来的形状是"按钮亮着、点下去永远 409"。
+//
+// nil 行 / nil 服务回 false：没有行就没有可批的东西，与本模块"表里没有这条路就是不许"同向。
+func (s *ApprovalRequestService) DecidableByHuman(row *model.ApprovalRequest) bool {
+	if s == nil || row == nil {
+		return false
+	}
+	if row.Status != model.ApprovalStatusPending {
+		return false
+	}
+	return row.ExpiresAt == nil || loadApprovalNowFn()().Before(*row.ExpiresAt)
 }

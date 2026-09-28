@@ -1,0 +1,9 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dtidmut-tby2a3qd
+[Go] 注码前置：2 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=1 passed=1 skip=0 FAIL=[]
+P1   官方 msgId 换成空串（键在、值丢：守卫判「没带 id」⇒ 走内容窗口）                     杀掉      total=1 fail=1 skip=0 ｜ TestDingTalkInboundChannelMsgIDIsOfficialMsgID
+P2   整列不写（Extra 里根本没有 channel_msg_id）                           杀掉      total=1 fail=1 skip=0 ｜ TestDingTalkInboundChannelMsgIDIsOfficialMsgID
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 2 格逐格被杀，无存活 =====
+dt_rc=0

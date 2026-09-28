@@ -1,0 +1,102 @@
+$ python3 scripts/check-ci-step-coverage.py
+(cwd=.)
+rc=1  22.8s
+
+══════ CI 步骤执行覆盖率（xiaofang142/hivemtk，最近 15 次 master run）══════
+
+[Docs Consistency / 文档一致性 + 模板结构]
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+  check-no-xapptool 反向测试（证明上一步能红）                      执行   3  成   3  败   0  跳   0
+  check-no-xapptool（线上域防回流）                            执行   3  成   3  败   0  跳   0
+  功能文档 8 节模板结构（OPT-DOC-13）                             执行   3  成   3  败   0  跳   0
+  文档引用一致性（OPT-DOC-15）                                  执行   3  成   3  败   0  跳   0
+  模板覆盖率报告（OPT-DOC-14，仅报告）                              执行   3  成   3  败   0  跳   0
+
+[Docs Link Check / lychee --offline]
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Offline link check (git-index scoped)                执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Run lychee (offline link check)                      执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+  Summary                                              执行   3  成   3  败   0  跳   0
+
+[Lint / ESLint (Bridge)]
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Install dependencies                                 执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Post Set up Node                                     执行   3  成   3  败   0  跳   0
+  Run ESLint                                           执行   3  成   3  败   0  跳   0
+  Set up Node                                          执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+
+[Lint / ESLint (user-web 主应用)]
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Install dependencies                                 执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Post Set up Node                                     执行   0  成   0  败   0  跳   3   ← 未执行（housekeeping，不计门禁）
+  Run ESLint (errors block, warnings informational)    执行   3  成   0  败   3  跳   0   ← 从未通过
+  Set up Node                                          执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+
+[Lint / Shell $VAR+CJK expansion guard]
+  Check shell scripts for the bash 3.2 CJK expansion h 执行   3  成   3  败   0  跳   0
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+
+[Lint / Workflow refs integrity]
+  Check workflow references                            执行   3  成   3  败   0  跳   0
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+
+[Lint / i18n Coverage Check]
+  Check i18n coverage                                  执行   3  成   3  败   0  跳   0
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Post Set up Node                                     执行   3  成   3  败   0  跳   0
+  Set up Node                                          执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+
+[Markdown Lint / markdownlint-cli2]
+  Checkout                                             执行   2  成   2  败   0  跳   0
+  Complete job                                         执行   2  成   2  败   0  跳   0
+  Post Checkout                                        执行   2  成   2  败   0  跳   0
+  Run markdownlint-cli2                                执行   2  成   2  败   0  跳   0
+  Set up job                                           执行   2  成   2  败   0  跳   0
+  Summary                                              执行   2  成   2  败   0  跳   0
+
+[SBOM / Generate SBOM]
+  Attach SBOM to release (only on tag)                 执行   0  成   0  败   0  跳   3   ← 从未执行
+  Checkout                                             执行   3  成   3  败   0  跳   0
+  Complete job                                         执行   3  成   3  败   0  跳   0
+  Generate SBOM (SPDX, Bridge)                         执行   3  成   3  败   0  跳   0
+  Generate SBOM (SPDX, Frontend)                       执行   3  成   3  败   0  跳   0
+  Generate SBOM (SPDX, Go)                             执行   3  成   3  败   0  跳   0
+  Install syft                                         执行   3  成   3  败   0  跳   0
+  Post Checkout                                        执行   3  成   3  败   0  跳   0
+  Set up job                                           执行   3  成   3  败   0  跳   0
+  Upload SBOM artifacts                                执行   3  成   3  败   0  跳   0
+
+[github_actions in / for actions/checkout - Update #1587593937 / Dependabot]
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Create job directory                                 执行   1  成   1  败   0  跳   0
+  Post Run Dependabot                                  执行   1  成   1  败   0  跳   0
+  Run Dependabot                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+
+══════ 结论 ══════
+  统计步骤 70 个；NEVER_RUN 1 个；ALWAYS_RED 1 个
+  · NEVER_RUN  SBOM / Generate SBOM / Attach SBOM to release (only on tag)（出现 3 次，全被跳过）
+  · ALWAYS_RED Lint / ESLint (user-web 主应用) / Run ESLint (errors block, warnings informational)（执行 3 次，次次失败）
+  ⇒ 这些门禁没有产生过任何证据；先判「门跑不起来」还是「门查出了问题」，再决定修门还是修存量。
+

@@ -134,29 +134,36 @@ func TestHumanTaskKindVocabulary(t *testing.T) {
 
 // TestHumanTaskStateMachineSharedAcrossKinds 本卡 AC① 的前半句：共用状态机。
 //
-// 判据不是"三类各自跑一遍都对"，而是**同一条 (from,action) 在三类上得到逐字相同的结论**
-// （claim/release 是已登记的类别差异，单独由 TestHumanTaskClaimReleaseMatrix 管）。
-// 将来有人给某一类偷偷加一条边，这里会红。
+// 审批类从待办侧摘掉 complete/cancel 之后，这句话要拆成两半说，否则它会和"审批类不许从待办侧 complete/cancel"打架：
+//
+//   - **状态怎么跃迁**（(from,action) → to）三类必须逐字相同，一条私有的边都不许有；
+//   - **哪一类准不准用这个动作**是另一根轴（humanTaskActionKinds），它的差异只许表现为
+//     "少几条路"，绝不许表现为"同样的路落到不同的态"。
+//
+// 所以判据写成双向包含：kind 侧放行 ⟹ 共享表里有同一条边且目标态相同；
+// 而对这一类开放该动作时 ⟹ 结论恰好就是共享表的那一个。
+// 将来有人给某一类偷偷加一条边或改一个目标态，这里会红。
 func TestHumanTaskStateMachineSharedAcrossKinds(t *testing.T) {
 	for _, from := range HumanTaskStatuses {
-		for _, action := range []string{HumanTaskActionComplete, HumanTaskActionCancel} {
-			var refKind, refTo string
-			var refOK bool
-			for i, kind := range HumanTaskKinds {
+		for _, action := range HumanTaskActions {
+			sharedTo, sharedOK := HumanTaskCloseTarget(from, action)
+			if sharedOK != (sharedTo != "") {
+				t.Errorf("共享状态机自相矛盾：(%s,%s) ok=%v 却给出目标态 %q", from, action, sharedOK, sharedTo)
+			}
+			if sharedOK && !HumanTaskStatusKnown(sharedTo) {
+				t.Errorf("(%s,%s) 落到未知状态 %q", from, action, sharedTo)
+			}
+			for _, kind := range HumanTaskKinds {
 				to, ok := HumanTaskTransitionAllowed(kind, from, action)
-				if ok != (to != "") {
-					t.Errorf("%s/%s/%s：ok=%v 与目标态 %q 自相矛盾（放行就必须给目标态）", kind, from, action, ok, to)
+				if ok && !sharedOK {
+					t.Errorf("状态机不再共用：%s 在 (%s,%s) 上偷偷有一条共享表里没有的边 → %q", kind, from, action, to)
 				}
-				if ok && !HumanTaskStatusKnown(to) {
-					t.Errorf("%s/%s/%s 落到未知状态 %q", kind, from, action, to)
+				if ok && to != sharedTo {
+					t.Errorf("状态机不再共用：(%s,%s) 共享表给 %q，%s 却给 %q", from, action, sharedTo, kind, to)
 				}
-				if i == 0 {
-					refKind, refTo, refOK = kind, to, ok
-					continue
-				}
-				if to != refTo || ok != refOK {
-					t.Errorf("状态机不再共用：(%s,%s) 在 %s 上是 (%q,%v)，在 %s 上却是 (%q,%v)",
-						from, action, refKind, refTo, refOK, kind, to, ok)
+				if HumanTaskActionAllowed(kind, action) && ok != sharedOK {
+					t.Errorf("%s 对该动作是开放的，(%s,%s) 的结论却应是 (%q,%v)，实际 (%q,%v)——状态那一维被加了类别特判",
+						kind, from, action, sharedTo, sharedOK, to, ok)
 				}
 			}
 		}
@@ -178,27 +185,81 @@ func TestHumanTaskClaimIsAKindDifference(t *testing.T) {
 		return out
 	}
 	handoff := reach(HumanTaskKindConversationHandoff)
-	// 会话类 6 条边 = 另两类的 4 条 + pending→claimed（认领）+ claimed→pending（释放）。
+	// 会话类 6 条边 = 催收类的 4 条 + pending→claimed（认领）+ claimed→pending（释放）。
 	if len(handoff) != 6 {
 		t.Errorf("会话类可达边数 = %d，期望 6：%v", len(handoff), handoff)
 	}
-	for _, kind := range HumanTaskKinds[1:] {
-		got := reach(kind)
-		if len(got) != 4 {
-			t.Errorf("%s 可达边 = %v，期望只剩 complete/cancel 那 4 条", kind, got)
-		}
+	if got := reach(HumanTaskKindCollectionEscalation); len(got) != 4 {
+		t.Errorf("催收类可达边 = %v，期望只剩 complete/cancel 那 4 条", got)
+	}
+	// 审批类**一条对外边都没有**：它的四个动词全不开放 —— 认领/释放被 C3 挡住，
+	// 完成/撤销被"只能随审批行落定而收口"挡住（见 humanTaskActionKinds 的注释）。
+	// 这一格守的是：以前它有 4 条边，坐席 POST /complete 拿到 200，
+	// 而 approval_requests 那一行原样停在 pending。
+	if got := reach(HumanTaskKindApproval); len(got) != 0 {
+		t.Errorf("审批类可达边 = %v，期望零条（对外没有任何一颗按钮，裁决归 /api/approvals/:id/decide）", got)
 	}
 }
 
-// TestHumanTaskCompleteCancelLandOnTerminals 三类共用的两条终态边逐格实测（正向）。
+// TestHumanTaskApprovalStillCloseableBySystem 摘掉审批类的对外边之后，系统按业务身份
+// 收口的那两条路必须照旧走得通。
+//
+// 这条是上一切的反向守卫：CloseForApproval（裁决/到期收口）走的是 CompleteOpenBySubject /
+// CancelOpenBySubject，它们与对外动作表**共用**过同一张 kind 判据 —— 当时把 complete/cancel
+// 从审批类摘掉，实测结果是裁决后待办静静留在池子里（service 层回 (row,false,nil)，不报错）。
+// 一张表管两件不同的事，就会在关掉其中一个用途时把另一个用途一起关掉，而且没有声音。
+// 本用例把"这必须是两张判据"钉成用例而不是注释。
+func TestHumanTaskApprovalStillCloseableBySystem(t *testing.T) {
+	for _, from := range HumanTaskOpenStatuses {
+		if to, ok := HumanTaskCloseTarget(from, HumanTaskActionComplete); !ok || to != HumanTaskStatusDone {
+			t.Errorf("系统收口 %s complete → (%q,%v)，期望 (%s,true)", from, to, ok, HumanTaskStatusDone)
+		}
+		if to, ok := HumanTaskCloseTarget(from, HumanTaskActionCancel); !ok || to != HumanTaskStatusCancelled {
+			t.Errorf("系统收口 %s cancel → (%q,%v)，期望 (%s,true)", from, to, ok, HumanTaskStatusCancelled)
+		}
+		// 同状态下人侧仍然被拒（两类审批动作都不许从这里过）。
+		if _, ok := HumanTaskTransitionAllowed(HumanTaskKindApproval, from, HumanTaskActionComplete); ok {
+			t.Errorf("审批类 %s 的 complete 仍被对外动作表放行", from)
+		}
+	}
+	// 终态仍然拦得住系统收口：不是"审批特殊"，是状态机没有出边。
+	for _, from := range []string{HumanTaskStatusDone, HumanTaskStatusCancelled, "", "expired"} {
+		for _, action := range []string{HumanTaskActionComplete, HumanTaskActionCancel} {
+			if to, ok := HumanTaskCloseTarget(from, action); ok {
+				t.Errorf("系统收口从 %q 执行 %s 竟放行到 %q（终态无出边）", from, action, to)
+			}
+		}
+	}
+	// 口型由调用方限定：本函数只被 complete/cancel 两条系统收口路径调用（见 service 层
+	// 的 Complete/CancelOpenBySubject）。它答的是"这个状态下有没有这条边"，
+	// 不答"这个动作对不对这一类开放" —— 后者正是上面那些断言分给 TransitionAllowed 的部分。
+	if _, ok := HumanTaskCloseTarget(HumanTaskStatusClaimed, HumanTaskActionClaim); ok {
+		t.Error("claimed --claim--> 不该存在（那是重复认领，判据在 CAS 那一侧）")
+	}
+}
+
+// TestHumanTaskCompleteCancelLandOnTerminals 两条终态边逐格实测（正向）：
+// 会话类与催收类由人在界面上点，审批类**只能**由系统按业务身份收口。
+//
+// 审批类从"三类共用"里被摘出来；它的反向守卫（摘掉边系统收口仍然走得通）
+// 在 TestHumanTaskApprovalStillCloseableBySystem，两条合起来才是完整判据：
+// 只留前者会把正常路径关掉，只留后者拦不住人从待办侧拆闸门。
 func TestHumanTaskCompleteCancelLandOnTerminals(t *testing.T) {
-	for _, kind := range HumanTaskKinds {
+	for _, kind := range []string{HumanTaskKindConversationHandoff, HumanTaskKindCollectionEscalation} {
 		for _, from := range HumanTaskOpenStatuses {
 			if to, ok := HumanTaskTransitionAllowed(kind, from, HumanTaskActionComplete); !ok || to != HumanTaskStatusDone {
 				t.Errorf("%s/%s complete → (%q,%v)，期望 (%s,true)", kind, from, to, ok, HumanTaskStatusDone)
 			}
 			if to, ok := HumanTaskTransitionAllowed(kind, from, HumanTaskActionCancel); !ok || to != HumanTaskStatusCancelled {
 				t.Errorf("%s/%s cancel → (%q,%v)，期望 (%s,true)", kind, from, to, ok, HumanTaskStatusCancelled)
+			}
+		}
+	}
+	for _, from := range HumanTaskOpenStatuses {
+		for _, action := range []string{HumanTaskActionComplete, HumanTaskActionCancel} {
+			if to, ok := HumanTaskTransitionAllowed(HumanTaskKindApproval, from, action); ok {
+				t.Errorf("审批类 %s 的 %s 被放行到 %s：待办侧关掉一条还在等的审批 = 拆闸门（裁决请走 /api/approvals/:id/decide）",
+					from, action, to)
 			}
 		}
 	}

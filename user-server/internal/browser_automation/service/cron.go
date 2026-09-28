@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -71,16 +70,18 @@ func ValidateCronExpr(expr, timeZone string) error {
 func (s *CronService) Create(ctx context.Context, userID uint, taskID uint, cronExpr, timeZone string, enabled bool) (*model.BrowserCronTrigger, error) {
 	t, err := s.taskRepo.GetByID(ctx, taskID, userID)
 	if err != nil {
-		return nil, errors.New("任务不存在")
+		// 主语必须是「任务」：这一条 404 说的是"你要挂触发器的那条任务不归你/不存在"，
+		// 回「触发器不存在」会把用户支到错误的排查方向（批19c）。
+		return nil, notFound("任务不存在")
 	}
 	if t.TaskType != "cron" {
-		return nil, errors.New("仅 cron 类型任务可配置定时触发器")
+		return nil, invalidInput("仅 cron 类型任务可配置定时触发器")
 	}
 	if err := ValidateCronExpr(cronExpr, timeZone); err != nil {
-		return nil, err
+		return nil, invalidInput("%s", err)
 	}
 	if _, err := s.cronRepo.GetByTaskID(ctx, taskID); err == nil {
-		return nil, errors.New("该任务已存在触发器")
+		return nil, stateConflict("该任务已存在触发器")
 	}
 	tr := &model.BrowserCronTrigger{TaskID: taskID, CronExpr: strings.TrimSpace(cronExpr), TimeZone: strings.TrimSpace(timeZone), Enabled: enabled}
 	if err := s.cronRepo.Create(ctx, tr); err != nil {

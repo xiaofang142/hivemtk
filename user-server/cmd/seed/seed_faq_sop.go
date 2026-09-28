@@ -147,25 +147,25 @@ func (s *faqSopSeeder) faqDeploy() []model.FAQEntry {
 	}{
 		{
 			Q:        "怎么安装 " + seedTag,
-			A:        "三步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) make install（自动生成 .env + docker-compose.yml + 构建前端）；3) vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，可用 openssl rand -hex 32 生成；只有要把平台端跑起来时才再加 PLATFORM_ADMIN_PASSWORD），然后 make up 启动，访问 http://localhost:8204，默认账号 admin + 你设置的密码。",
+			A:        "四步：1) git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk；2) cp .env-example .env 后 vim .env 修改 3 个密钥（POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET，可用 openssl rand -hex 32 生成；只有要把平台端跑起来时才再加 PLATFORM_ADMIN_PASSWORD）——PG 口令必须在拉起数据库前定稿，数据卷只在首次初始化时读它；3) make install（构建前端与 embed-sdk、下载模型、拉起 PG/Redis 数据层容器与宿主机推理栈）；4) make dev 启动 user-server，访问 http://localhost:8204，默认账号 admin + 你设置的密码。",
 			Keywords: []string{"安装", "部署", "make install", "上手"},
 			Conf:     0.96,
 		},
 		{
 			Q:        "硬件要求 " + seedTag,
-			A:        "最低 2 核 CPU / 4GB 内存 / 50GB 磁盘；推荐生产 8 核+ / 16GB+ / 200GB+（含模型文件约 10GB）。dev 轻量档（Qwen2.5-1.5B-Instruct + Qwen3-Embedding-0.6B）8GB 即可；prod 重量档（Qwen2.5-14B-Instruct + bge-m3）需 16GB+。GPU 可选。前置要求 Docker 24+ & Docker Compose v2。",
+			A:        "最低 2 核 CPU / 4GB 内存 / 50GB 磁盘；推荐生产 8 核+ / 16GB+ / 200GB+。默认档（.env-example 的三个 served name：LLM Qwen2.5-3B-Instruct Q4_K_M + Embedding bge-m3 1024 维 + Rerank bge-reranker-v2-m3）模型文件合计约 2.8GB，8GB 内存的机器即可跑；要换更大的 LLM（例如 Qwen2.5-14B-Instruct Q4+）按 16GB+ 准备。GPU 可选。前置要求 Docker 24+ & Docker Compose v2（只用于 PG + Redis 数据层）。",
 			Keywords: []string{"硬件", "配置", "内存", "要求"},
 			Conf:     0.94,
 		},
 		{
 			Q:        "有哪些端口 " + seedTag,
-			A:        "8204 user-server API（RESTful + WebSocket）；8202 PostgreSQL（宿主机映射 8232）；8203 Redis；8207 mtk-llm（llama.cpp，Qwen2.5-1.5B-Instruct）；8208 mtk-embedding（bge-m3，1024 维）；8209 mtk-rerank（bge-reranker-v2-m3）。健康检查：curl http://localhost:8204/health。",
+			A:        "8204 user-server API（RESTful + WebSocket）；8202 PostgreSQL（宿主映射，本机直装开发档常用 8232）；8203 Redis；8207 LLM（宿主机 llama.cpp，默认档 Qwen2.5-3B-Instruct）；8208 Embedding（bge-m3，1024 维）；8209 Rerank（bge-reranker-v2-m3）。健康检查：curl http://localhost:8204/health。",
 			Keywords: []string{"端口", "port", "8204", "健康检查"},
 			Conf:     0.93,
 		},
 		{
 			Q:        "模型档位怎么切换 " + seedTag,
-			A:        "编辑 .env 替换 LLM_*/EMBEDDING_* 三行。dev 轻量档（当前默认）：Qwen2.5-1.5B-Instruct(Q4) + Qwen3-Embedding-0.6B，内存 8GB；prod 重量档：Qwen2.5-14B-Instruct(Q4+) + BAAI/bge-m3(1024 维)，内存 16GB+。",
+			A:        "档位不是一个开关，而是 .env 里三行一组：LLM_REPO / LLM_FILE / LLM_SERVED_NAME（Embedding、Rerank 同理），改完 make inference-host-models 重下、make inference-host-up 重启即生效。仓库当前默认档：LLM Qwen2.5-3B-Instruct(Q4_K_M，约 2.0GB) + Embedding bge-m3(1024 维) + Rerank bge-reranker-v2-m3，内存 8GB；换成 Qwen2.5-14B-Instruct(Q4+) 则按 16GB+ 准备。",
 			Keywords: []string{"模型", "档位", "dev", "prod", "切换"},
 			Conf:     0.9,
 		},
@@ -220,7 +220,7 @@ func (s *faqSopSeeder) faqOps() []model.FAQEntry {
 	}{
 		{
 			Q:        "常用运维命令 " + seedTag,
-			A:        "make install 一键安装；make up 启动所有服务；make down 停止；make restart 重启；make logs 查看 user-server 日志；make ps 查看服务状态；make inference-up/down 单独管理本地推理栈；make web-build / sdk-build 重新构建前端与 embed-sdk；make backup / restore FILE=... 备份恢复。",
+			A:        "make install 一键安装（缺 .env 时从模板生成、构建前端与 SDK、下载模型、拉起数据层与推理栈）；make dev 启动 user-server 热更新（Ctrl+C 或 make dev-stop 停止）；make user-build 只编译二进制；make db-up / db-down / db-ps / db-logs 管理 PG + Redis 容器；make inference-host-up / inference-host-down 单独管理本地推理栈，make inference-host-status 统一看三态；make web-build / sdk-build 重新构建前端与 embed-sdk；make db-backup / db-restore FILE=... 备份恢复；make dev-all / dev-down 一键起停数据层与推理栈。",
 			Keywords: []string{"运维", "命令", "make", "常用"},
 			Conf:     0.95,
 		},
@@ -262,7 +262,7 @@ func (s *faqSopSeeder) faqOps() []model.FAQEntry {
 		},
 		{
 			Q:        "怎么升级到新版 " + seedTag,
-			A:        "git pull 最新代码后：make web-build 与 make sdk-build 重新构建前端与客服 SDK，再 make up --force-recreate 重建服务。数据库结构由迁移脚本演进，按序执行迁移即可。",
+			A:        "git pull 最新代码后：make web-build 与 make sdk-build 重新构建前端与客服 SDK，再 make user-build 重编 user-server 二进制并重启进程（air 模式下 make dev 会自动重编重启，数据层容器不必重建）。数据库结构由迁移脚本演进，启动时自动按序执行。",
 			Keywords: []string{"升级", "更新", "版本", "pull"},
 			Conf:     0.86,
 		},
@@ -293,7 +293,7 @@ func (s *faqSopSeeder) faqArchitecture() []model.FAQEntry {
 	}{
 		{
 			Q:        "整体架构是怎样的 " + seedTag,
-			A:        "访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204，含 PostgreSQL :8202、Redis :8203、mtk-llm :8207、mtk-embedding :8208、mtk-rerank :8209）。平台端（独立仓库 hivemtk-platform）是**可选本地组件**：默认不部署、不接入（PLATFORM_ENABLED 未开启），开启后也只承担资产市场上架与安装信息上报，不碰业务数据、不做任何商户授权校验。",
+			A:        "访客浏览器（公网）经 HTTPS/WSS（FRP/公网 IP/反代）→ 客户本地用户端（user-server Go+Gin :8204，含 PostgreSQL :8202、Redis :8203、LLM :8207、Embedding :8208、Rerank :8209）。平台端（独立仓库 hivemtk-platform）是**可选本地组件**：默认不部署、不接入（PLATFORM_ENABLED 未开启），开启后也只承担资产市场上架与安装信息上报，不碰业务数据、不做任何商户授权校验。",
 			Keywords: []string{"架构", "整体", "用户端", "平台端"},
 			Conf:     0.93,
 		},
@@ -567,7 +567,7 @@ func (s *faqSopSeeder) faqGeneral() []model.FAQEntry {
 		},
 		{
 			Q:        "能帮我把项目跑起来吗 " + seedTag,
-			A:        "可以。最简三步：git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk → make install → vim .env 改 3 个密钥后 make up，访问 http://localhost:8204（账号 admin + 你设的密码）。需要哪一步的详细说明我都可以展开。",
+			A:        "可以。最简四步：git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk → cp .env-example .env 并改 3 个密钥 → make install → make dev，访问 http://localhost:8204（账号 admin + 你设的密码）。需要哪一步的详细说明我都可以展开。",
 			Keywords: []string{"跑起来", "启动", "上手", "帮助"},
 			Conf:     0.85,
 		},
@@ -873,7 +873,7 @@ func (s *faqSopSeeder) sopObjectionStage() []model.SOPTemplate {
 			Name:     "部署复杂度疑虑 " + seedTag,
 			Intent:   "deploy",
 			Stage:    "objection",
-			Template: "部署确实有一定门槛，但已经尽量简化：make install 一键生成 .env 与 docker-compose，改 3 个密钥后 make up 即可。官方文档含安装、运维、FRP 穿透指南；微信交流群 7x24 答疑。建议先用 dev 轻量档在本地熟悉流程。",
+			Template: "部署确实有一定门槛，但已经尽量简化：cp .env-example .env 改 3 个密钥后 make install 一键装好数据层与推理栈，再 make dev 起服务即可。官方文档含安装、运维、FRP 穿透指南；微信交流群 7x24 答疑。建议先用 dev 轻量档在本地熟悉流程。",
 			Vars:     `{}`,
 			Priority: 90,
 			Conf:     0.9,
@@ -882,7 +882,7 @@ func (s *faqSopSeeder) sopObjectionStage() []model.SOPTemplate {
 			Name:     "硬件成本疑虑 " + seedTag,
 			Intent:   "deploy",
 			Stage:    "objection",
-			Template: "可以按需起步：dev 轻量档（Qwen2.5-1.5B + Qwen3-Embedding-0.6B）8GB 内存的普通机器即可跑；确认效果后再升级 prod 档（16GB+，可选 GPU）。不必一开始投入高配。",
+			Template: "可以按需起步：默认档（Qwen2.5-3B-Instruct + bge-m3 + bge-reranker-v2-m3）8GB 内存的普通机器即可跑；确认效果后再把 .env 的 LLM 三行换成更大的档位（16GB+，可选 GPU）。不必一开始投入高配。",
 			Vars:     `{}`,
 			Priority: 88,
 			Conf:     0.88,
@@ -918,7 +918,7 @@ func (s *faqSopSeeder) sopObjectionStage() []model.SOPTemplate {
 			Name:     "模型效果疑虑 " + seedTag,
 			Intent:   "deploy",
 			Stage:    "objection",
-			Template: "本地 dev 档 1.5B 模型适合轻量客服；若追求更强效果，prod 档可上 14B 模型，或把 LLM_BASE_URL 指向 DeepSeek/OpenAI 等云端大模型（Embedding/Rerank 仍本地）。三级 RAG 也会显著提升召回准确率。",
+			Template: "本地默认档的 3B 模型适合轻量客服；若追求更强效果，把 .env 的 LLM 三行换成 14B 档（内存按 16GB+ 准备），或把 LLM_BASE_URL 指向 DeepSeek/OpenAI 等云端大模型（Embedding/Rerank 仍本地）。三级 RAG 也会显著提升召回准确率。",
 			Vars:     `{}`,
 			Priority: 84,
 			Conf:     0.87,
@@ -974,7 +974,7 @@ func (s *faqSopSeeder) sopClosingStage() []model.SOPTemplate {
 			Name:     "引导初始化步骤 " + seedTag,
 			Intent:   "deploy",
 			Stage:    "closing",
-			Template: "下一步建议：1) make install 生成配置 2) vim .env 设置 3 个密钥（openssl rand -hex 32 生成）3) make up 启动 4) 浏览器访问 :8204/setup 完成初始化。完成后健康检查 curl http://localhost:8204/health 应返回 200。",
+			Template: "下一步建议：1) cp .env-example .env 并设置 3 个密钥（openssl rand -hex 32 生成）2) make install 装好前端、模型、数据层与推理栈 3) make dev 启动 4) 浏览器访问 :8204/setup 完成初始化。完成后健康检查 curl http://localhost:8204/health 应返回 200。",
 			Vars:     `{}`,
 			Priority: 92,
 			Conf:     0.9,

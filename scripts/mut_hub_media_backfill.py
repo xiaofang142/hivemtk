@@ -9,7 +9,9 @@
 - 更要紧的是：这次搬家顺手把一处**归因错误**改对了。原实现把"读库真失败"和"没有这一行"
   合并成同一条日志（`找不到 hub 行`），正是本泳道批19d 点过的病（把内部读失败说成实体不存在）。
   新签名 `(found bool, err error)` 把两者分开 ⇒ 这个"分开"本身是新承诺，必须有腿，
-  且必须证明腿有牙（R4/R5 两刀：合起来是一种读数 ⇒ 各自应有一条腿红）。
+  且必须证明腿有牙（R4/R5 两刀：合起来是一种读数 ⇒ 各自应有腿红）。R4 的名单是两条而不是
+  一条：`ScopesByAccount` 把"无匹配＝found=false 且 err=nil"当成越权断言的**前置**（Fatalf），
+  与 `MissingRow…` 共用同一条 not-found 分支 ⇒ 一刀必连带两红，已实测并收进期望。
 - R1 这一刀还留了一条**判据之外的收获**：铺序改了才测得到。最初的用例把"不该被碰的行"
   铺在第二位，于是"丢掉 account 过滤"的变异会命中第一位（正是请求的那一行）、用例照绿——
   一条看起来在测跨账号串写的腿其实什么都不测。现在把该行铺在**第一**位（id 更小），
@@ -60,6 +62,11 @@ US = "user-server"
 REPO_REL = f"{US}/internal/repository/message_hub_inbox_media.go"
 MEDIA_REL = f"{US}/internal/service/dingtalk_media.go"
 APP_REL = f"{US}/internal/service/dingtalk_app.go"
+SUBJECT_RELS = [REPO_REL, MEDIA_REL, APP_REL]
+# 覆盖面＝本泳道整条泳道住的那棵树（`user-server/internal`）。2026-09-22 实测过按本批文件收窄的
+# 下场：批22/批20f 的未跟踪产码（`browser_automation/model/audit_digest.go`、`write_claim.go`）被
+# 挡在覆盖面外，`internal/pkg/db/migrate.go` 立刻 `undefined: BrowserAuditDigest` ⇒ 连控制组都编不过。
+# 少覆盖不是"更安全"，是把克隆变成一份谁也没写过的树。别人的在飞 WIP 由 build_probe 事后摘（见下）。
 LANE_PATHS = [f"{US}/internal"]
 DEFAULT_LOGS = "docs/superpowers/specs/ledger/logs/R22"
 # 趟次戳：整族重跑不许原地抹掉上一轮的取证产物（否则文档里被引用的读数会失去产物）。
@@ -228,6 +235,9 @@ def lane_overlays() -> tuple[list[str], list[str]]:
     克隆就在跑一份"文件还在"的树——它绿不能代表工作树绿（2026-09-23 实测：
     `user-server/internal/middleware/license_checker.go` 在工作树被删、克隆按 HEAD 仍带着它）。
     覆盖面也不限 `.go`：本批的判据有一部分住在 md/sh 里，只搬 .go 会让复验面窄于改动面。
+    未跟踪的新文件同样要搬（本泳道十二批产码有一半至今未提交，且它们的依赖是跨目录的），
+    并行 lane 的在飞 WIP 因此也进了克隆——编不过的那几个由 `build_probe` 逐个摘掉并印出来，
+    而不是在这里按路径猜"谁的文件算我的"（猜窄了会连自己的依赖一起丢掉，见 LANE_PATHS 上方注释）。
 
     旧口径在这里是 `if not mods: raise SystemExit("脏文件清单为空…宁可停机也别假绿")`，
     那句在**本批写进 HEAD 之后**成了常驻件的死刑：清单永远为空 ⇒ 电池永远跑不了
@@ -236,7 +246,8 @@ def lane_overlays() -> tuple[list[str], list[str]]:
     复跑终端读到的，修后那轮 `20260928-135138` 的同名产物是 6 行。）
     停机的前提本来就是假的——它假设"要测的字节必在未入库面里"，而本泳道的常态是批次早已
     入库、要测的字节就是 HEAD（与 §23.25 里 CapAB 探针 `git show HEAD:` 失效同族）。
-    现在空清单＝本轮读纯 HEAD，份数由身份行现测并写进产物，不再是声明。
+    现在空清单＝本轮读纯 HEAD，份数由身份行现测并写进产物，不再是声明；"本批到底在不在被测树里"
+    交给下面那段按 `SUBJECT_RELS` 的现查——那才是那条停机话本来想表达的东西。
     """
     r = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "-uall", "--"] + LANE_PATHS,
                        capture_output=True, text=True, timeout=300)
@@ -250,7 +261,57 @@ def lane_overlays() -> tuple[list[str], list[str]]:
             dels.append(p)
         else:
             mods.append(p)
+    # 本批产码必须在被测树里：要么被搬进来，要么已在 HEAD。两者都不成立就是"测了个没有本批的树"。
+    for rel in SUBJECT_RELS:
+        if rel in mods or rel in dels:
+            continue
+        c = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"HEAD:{rel}"],
+                           capture_output=True, timeout=120)
+        if c.returncode != 0:
+            raise SystemExit(f"本批产码 {rel} 既不在覆盖清单里也不在 HEAD 里——克隆测不到它，"
+                             "宁可停机也别假绿")
     return mods, dels
+
+
+def is_untracked(clone: Path, rel: str) -> bool:
+    """克隆里这个文件是不是"未跟踪"（＝从工作树搬进来的、HEAD 里根本没有的）。只有这类才可摘。"""
+    r = subprocess.run(["git", "-C", str(clone), "status", "--porcelain", "--", rel],
+                       capture_output=True, text=True, timeout=120)
+    return r.stdout.startswith("??")
+
+
+def build_probe(clone: Path, env: dict, pkgs: list[str]) -> list[str]:
+    """注码之前先把要测的包编一遍：编不过时逐个摘掉"从工作树搬进来的未跟踪文件"，并印出摘了谁。
+
+    治的病（2026-09-22 实测两次）：并行 lane 的 WIP 处在"测试先写、产码没落"的不编译态
+    （`service/quote_send*.go` 先缺符号、后构造器参数不匹配），它一进来就把控制组打成 BUILD FAILED，
+    那一趟 18 格的红/绿全部作废。控制组不干净＝整只电池没有判据，所以宁可把别人的手请出去、
+    把"请出去了谁"写在脸上，也不按"可能是环境"糊过去。
+    只摘未跟踪文件；一旦红点在本批产码或已跟踪文件上就停机上报——那是我自己的红，不该由电池代偿。
+    """
+    dropped: list[str] = []
+    for _ in range(6):
+        p = subprocess.run(["go", "vet", *pkgs], cwd=clone / US, capture_output=True,
+                           text=True, timeout=1800, env=env)
+        out = ANSI.sub("", p.stdout + p.stderr)
+        if p.returncode == 0:
+            if dropped:
+                print(f"[build probe] 摘掉 {len(dropped)} 个并行 lane 的未跟踪 WIP 后，"
+                      f"待测包编译干净：{', '.join(dropped)}")
+            return dropped
+        offenders = [m for m in re.findall(r"^(\S+\.go):\d+:\d+: ", out, re.M)]
+        removed = False
+        for off in offenders:
+            rel = f"{US}/{off}" if not off.startswith(US + "/") else off
+            if rel in SUBJECT_RELS or not (clone / rel).is_file() or not is_untracked(clone, rel):
+                continue
+            (clone / rel).unlink()
+            dropped.append(rel)
+            removed = True
+        if not removed:
+            print("[build probe] 编不过且无一条可摘（红在本批产码或已跟踪文件上）：\n" + out[-1200:])
+            raise SystemExit("克隆编译不干净且不是别人的未跟踪 WIP 造成的——停机，别拿半棵树测")
+    raise SystemExit("[build probe] 摘了 6 轮仍编不过（红是一串互相引用的 WIP）——停机人工判")
 
 
 def prepare(dst: Path, mods: list[str], dels: list[str]) -> Path:
@@ -343,6 +404,9 @@ def main() -> int:
     print(f"私有作业目录：{tmp}\n逐格日志目录：{logs}")
     clone = prepare(tmp, mods, dels)
     env = test_env(clone)
+    # 控制组之前先证"这两个包能编译"：编不过是别人的未跟踪 WIP 就摘掉它、印一行是谁，
+    # 是本批自己的红就停机上报——半棵树上跑出来的 18 格一律不算读数。
+    build_probe(clone, env, [PKG_REPO, PKG_SVC])
 
     files = {rel: clone / rel for rel in (REPO_REL, MEDIA_REL, APP_REL)}
     originals = {rel: read(p) for rel, p in files.items()}

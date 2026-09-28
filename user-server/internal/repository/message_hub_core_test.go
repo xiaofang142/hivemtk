@@ -692,7 +692,7 @@ func TestMessageHubRepository_GetByPlatformContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := repo.GetByPlatformContent(ctx, "wechat", "精确内容")
+	got, err := repo.GetByPlatformContent(ctx, "wechat", "精确内容", seed.ConversationID, time.Now().Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("GetByPlatformContent 失败: %v", err)
 	}
@@ -700,10 +700,49 @@ func TestMessageHubRepository_GetByPlatformContent(t *testing.T) {
 		t.Errorf("MsgID 期望 m_md5_1, 实际 %s", got.MsgID)
 	}
 
-	if got2, err2 := repo.GetByPlatformContent(ctx, "wechat", "精确内容"); err2 != nil {
+	if got2, err2 := repo.GetByPlatformContent(ctx, "wechat", "精确内容", seed.ConversationID, time.Now().Add(-time.Hour)); err2 != nil {
 		t.Errorf("同内容再查应稳定返回: %v", err2)
 	} else if got2 == nil || got2.MsgID != "m_md5_1" {
 		t.Errorf("同内容再查应命中同一条: %+v", got2)
+	}
+}
+
+// 内容回声嗅探的两条界：会话界（跨会话同文本不得互吞）与时间界（窗口外的老行不得再算回声）。
+// 没有这两条界，§6-1/§6-2 的「客户把同一句话又说一遍」就会在 hub 层被静默吞掉。
+func TestMessageHubRepository_ContentEchoScoping(t *testing.T) {
+	db := setupMessageHubTestDB(t)
+	repo := &MessageHubRepository{db: db}
+	ctx := context.Background()
+
+	fresh := newHub("wechat", "acc_scope", "m_scope_fresh", "outbound", "text", "同一句原话", "delivered")
+	if err := db.Create(fresh).Error; err != nil {
+		t.Fatal(err)
+	}
+	aged := newHub("wechat", "acc_scope", "m_scope_aged", "outbound", "text", " aged-sentence", "delivered")
+	aged.ConversationID = fresh.ConversationID
+	aged.SentAt = time.Now().Add(-3 * time.Hour)
+	if err := db.Create(aged).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	const since = 2 * time.Hour
+	if _, err := repo.GetByPlatformContent(ctx, "wechat", "同一句原话", "conv_someone_else", time.Now().Add(-since)); err != gorm.ErrRecordNotFound {
+		t.Errorf("跨会话同文本不应命中出站回声，实际 err=%v", err)
+	}
+	if _, err := repo.GetByPlatformContent(ctx, "wechat", " aged-sentence", fresh.ConversationID, time.Now().Add(-since)); err != gorm.ErrRecordNotFound {
+		t.Errorf("超出回看窗口的老行不应再算回声，实际 err=%v", err)
+	}
+	if _, err := repo.GetByPlatformContentNormalized(ctx, "wechat", "同一句原话", "conv_someone_else", time.Now().Add(-since)); err != gorm.ErrRecordNotFound {
+		t.Errorf("跨会话同文本不应命中归一化出站回声，实际 err=%v", err)
+	}
+	if _, err := repo.GetByContentHash(ctx, fresh.MsgID, "conv_someone_else", time.Now().Add(-since)); err != gorm.ErrRecordNotFound {
+		t.Errorf("跨会话同 content-hash 行不应命中，实际 err=%v", err)
+	}
+	if _, err := repo.GetByContentHash(ctx, aged.MsgID, aged.ConversationID, time.Now().Add(-since)); err != gorm.ErrRecordNotFound {
+		t.Errorf("超出窗口的 content-hash 行不应命中，实际 err=%v", err)
+	}
+	if got, err := repo.GetByContentHash(ctx, fresh.MsgID, fresh.ConversationID, time.Now().Add(-since)); err != nil || got.MsgID != fresh.MsgID {
+		t.Errorf("同会话窗口内的 content-hash 行应命中，got=%+v err=%v", got, err)
 	}
 }
 
@@ -712,11 +751,11 @@ func TestMessageHubRepository_GetByPlatformContent_EmptyArgs(t *testing.T) {
 	repo := &MessageHubRepository{db: db}
 	ctx := context.Background()
 
-	_, err := repo.GetByPlatformContent(ctx, "", "content")
+	_, err := repo.GetByPlatformContent(ctx, "", "content", "conv_x", time.Time{})
 	if err != gorm.ErrRecordNotFound {
 		t.Errorf("空 platform 应返回 ErrRecordNotFound, 实际 %v", err)
 	}
-	_, err = repo.GetByPlatformContent(ctx, "wechat", "")
+	_, err = repo.GetByPlatformContent(ctx, "wechat", "", "conv_x", time.Time{})
 	if err != gorm.ErrRecordNotFound {
 		t.Errorf("空 content 应返回 ErrRecordNotFound, 实际 %v", err)
 	}
@@ -881,7 +920,7 @@ func TestMessageHubRepository_GetByContentHash_Empty(t *testing.T) {
 	repo := &MessageHubRepository{db: db}
 	ctx := context.Background()
 
-	_, err := repo.GetByContentHash(ctx, "")
+	_, err := repo.GetByContentHash(ctx, "", "conv_x", time.Time{})
 	if err != gorm.ErrRecordNotFound {
 		t.Errorf("空 hash 应返回 ErrRecordNotFound, 实际 %v", err)
 	}

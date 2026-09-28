@@ -1,0 +1,13 @@
+2026-09-22T09:56:18+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSetInboundMediaURLsWritesFirstAndAll
+--- PASS: TestSetInboundMediaURLsWritesFirstAndAll (0.43s)
+=== RUN   TestSetInboundMediaURLsScopesByAccount
+--- PASS: TestSetInboundMediaURLsScopesByAccount (0.15s)
+=== RUN   TestSetInboundMediaURLsMissingRowIsNotFoundNotError
+--- PASS: TestSetInboundMediaURLsMissingRowIsNotFoundNotError (0.18s)
+=== RUN   TestSetInboundMediaURLsReadFailureIsNotReportedAsNotFound
+--- PASS: TestSetInboundMediaURLsReadFailureIsNotReportedAsNotFound (0.22s)
+=== RUN   TestSetInboundMediaURLsEmptyURLsWriteNothing
+--- PASS: TestSetInboundMediaURLsEmptyURLsWriteNothing (0.27s)
+PASS
+ok  	hivemtk-user/internal/repository	2.045s

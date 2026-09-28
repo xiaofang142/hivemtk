@@ -1,0 +1,5 @@
+== 控制组（未注码）
+   rc=0 settled=4 skip=0 红=—
+!! 控制组跑出来的用例名与期望名单不一致 —— 停机
+   期望=['SSE 启动后，到期条目在无人再推消息的情况下被重发 ack', 'stop() 之后排水器不再触发（不许留悬空 interval）', 'pollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）', '排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属']
+   实际=['SSE 启动后，到期条目在无人再推消息的情况下被重发 ack', 'stop() 之后排水器不再触发（不许留悬空 interval）（改名）', '排水实现只有一份：轮询与 SSE 共用 drainPendingAcks，且 ack 请求带会话归属', 'pollDownlink 仍走同一个排水函数（重构不许把轮询那条腿弄丢）']

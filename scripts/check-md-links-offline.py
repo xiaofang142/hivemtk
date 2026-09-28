@@ -24,10 +24,16 @@ def main(root):
     # 扫它们只会造成本地与 CI 判定不一致（本轮 3 处误报即由此而来）。
     md_files = sorted(fp for fp in tracked if fp.endswith(".md"))
     n = 0
+    deleted = []
     for rel in md_files:
         if any(rel.startswith(e + "/") or "/" + e + "/" in "/" + rel for e in EXCLUDE):
             continue
         fp = os.path.abspath(os.path.join(root, rel))
+        # 索引里有、工作区已删 = 有人删了文件还没 git rm / commit，是发布前的正常中间态。
+        # 它不是断链（打开它会以 traceback 崩掉整个门，把真正的断链判定一起吞掉）。
+        if not os.path.isfile(fp):
+            deleted.append(rel)
+            continue
         n += 1
         fence = False
         for lineno, line in enumerate(open(fp, encoding="utf-8", errors="replace"), 1):
@@ -60,6 +66,12 @@ def main(root):
                     why = "仓库内不存在"
                 broken.append((rel, lineno, tgt, relc, why))
     print(f"──── 扫描 {n} 个 md（CI 口径：只认 git 索引）────")
+    if deleted:
+        print(f"──── 跳过 {len(deleted)} 个「索引里有、工作区已删」的 md（提交删除后本行消失）────")
+        for rel in sorted(deleted)[:10]:
+            print(f"    · {rel}")
+        if len(deleted) > 10:
+            print(f"    · …其余 {len(deleted) - 10} 个")
     for f, l, t, c, why in sorted(broken):
         print(f"  ❌ {f}:{l} → {t}\n        {why}｜解析为 {c}")
     print(f"──── 断链 {len(broken)} 处 ────")

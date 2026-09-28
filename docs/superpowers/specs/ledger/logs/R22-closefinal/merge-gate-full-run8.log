@@ -1,0 +1,41 @@
+$ python3 scripts/merge-gate.py --round R22-closefinal
+步骤名单（37 步，全程不带 -run）：go-build go-vet gofmt go-test-browser-automation go-test-host-packages vitest-bridge vitest-browser-automation lint-bridge lint-user-web markdownlint arch-gate arch-l4-reverse fmt-check date-bucket-tz unwired-assets doc-consistency feature-doc enum-consistency no-xapptool cross-package-ports model-migration md-links-offline component-types workflow-refs ci-step-coverage test-nil-deref env-coverage seam-guard async-global-read anchor-preflight anchor-preflight-selftest closeout-r22 closeout-r22-protocol closeout-selftest merge-gate-selftest clone-selftest family-selftests-selftest
+合并门禁：37 步（其中诊断步 1 步只印不门，见 DIAG），日志 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge/　取证 → docs/superpowers/specs/ledger/logs/R22-closefinal/merge-gate-full.log
+[绿] go-build                        14.5s 
+[绿] go-vet                           2.3s 
+[绿] gofmt                            1.0s 
+[绿] go-test-browser-automation     241.4s 
+[绿] go-test-host-packages          698.8s 
+[绿] vitest-bridge                   15.6s 
+[绿] vitest-browser-automation       32.5s 
+[绿] lint-bridge                      1.6s 
+[绿] lint-user-web                    7.7s 
+[绿] markdownlint                     5.4s 
+[绿] arch-gate                       14.7s 
+[绿] arch-l4-reverse                116.8s 
+[绿] fmt-check                        1.8s 
+[绿] date-bucket-tz                   0.7s 
+[绿] unwired-assets                  34.0s 
+[绿] doc-consistency                  0.1s 
+[绿] feature-doc                      0.0s 
+[绿] enum-consistency                 0.3s 
+[绿] no-xapptool                      3.9s 
+[绿] cross-package-ports              0.1s 
+[绿] model-migration                  0.3s 
+[绿] md-links-offline                 0.1s 
+[绿] component-types                  0.0s 
+[绿] workflow-refs                    0.2s 
+[诊断·红] ci-step-coverage                59.5s ｜ rc=1
+[绿] test-nil-deref                   1.5s 
+[绿] env-coverage                     4.1s 
+[绿] seam-guard                       3.9s 
+[绿] async-global-read                1.2s 
+[绿] anchor-preflight                 0.8s 
+[绿] anchor-preflight-selftest        0.1s 
+[绿] closeout-r22                     9.2s 
+[绿] closeout-r22-protocol            2.2s 
+[绿] closeout-selftest                3.7s 
+[绿] merge-gate-selftest              0.1s 
+[绿] clone-selftest                   0.3s 
+[绿] family-selftests-selftest        0.0s 
+===== 合并门禁：36/36 门步绿，无红；诊断步红 1 道不门控：ci-step-coverage =====

@@ -42,6 +42,11 @@ const (
 
 	InboxSenderContentDedupKey = "hivemtk:dedup:sender-content:"
 
+	// InboxOutboundEchoWindow 出站回声的回看窗口：一条出站消息 only 在这个窗口内才有
+	// 「平台把它回显回来 / DOM 抖动重报」的可能，超出之后同内容命中就不再是回声，而是客户
+	// 把同一句话又说了一遍——此时按内容吞掉＝「说了没回」。入口与 hub 两层共用这一个界。
+	InboxOutboundEchoWindow = 2 * time.Hour
+
 	InboxReplyWindow = 5 * time.Minute
 
 	InboxBackfillFutureTolerance = 5 * time.Second
@@ -128,6 +133,18 @@ type InboxIngressService struct {
 	// pendingOutbound 延迟出站队列探针：查「该会话是否还有一条排队待投的回复」。
 	// 为 nil 时（未接库/单测）视为无排队，行为与接入前一致。
 	pendingOutbound *repository.DelayedOutboundRepository
+
+	// contentDedupTTL 是入口那把「渠道+发送者+内容」窗口键的存活时间，零值取 InboxContentDedupTTL。
+	// 做成字段而非常量，只为了让"窗口真的有界"这一句能被断言：常量下那条腿要睡满 5 分钟。
+	contentDedupTTL time.Duration
+}
+
+// contentDedupWindow 返回内容窗口的实际存活时间（未显式注入时用包级默认值）。
+func (s *InboxIngressService) contentDedupWindow() time.Duration {
+	if s.contentDedupTTL > 0 {
+		return s.contentDedupTTL
+	}
+	return InboxContentDedupTTL
 }
 
 // SetPendingOutboundProbe 注入延迟出站队列仓储，让 recheck 在「回复已排队待投」时让位。
@@ -491,9 +508,12 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		}
 	}
 
-	if decision, derr := s.interceptInbound(ctx, event); derr != nil {
+	decision, derr := s.interceptInbound(ctx, event)
+	if derr != nil {
 		logger.Ctx(ctx).Warn().Err(derr).Str("event_id", event.EventID).Msg("[Inbox] interceptInbound 出错，放行（不阻断业务）")
-	} else if decision != nil && decision.Blocked {
+		decision = nil
+	}
+	if decision != nil && decision.Blocked {
 		result.Accepted = true
 		result.QueuedForAI = false
 		result.Reason = fmt.Sprintf("intercepted by middleware: %s (self_echo=%v dup=%v)", decision.Reason, decision.IsSelfEcho, decision.IsDup)
@@ -503,10 +523,21 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 			Bool("dup", decision.IsDup).
 			Str("reason", decision.Reason).
 			Msg("[Inbox] 中间件拦截：消息被去重/回环拦截，不穿透业务层")
+		// 拦截只抑制「穿透业务层」，不销毁记录：按内容判的重复是客户真说过的一句话，
+		// 不落库就是工作台上一条也查不到的「说了没回」（§8.3-18）。唯一什么都不落的是
+		// 自己的出站回声——那条在库里已经有本体，再落一行就是把自己的话存两遍。
+		if !decision.IsSelfEcho {
+			if err := s.persistMessage(ctx, event); err != nil {
+				return result, fmt.Errorf("持久化消息失败: %w", err)
+			}
+		}
 		return result, nil
 	}
 
 	if err := s.persistMessage(ctx, event); err != nil {
+		// §8.3-9(c)：入口那把内容窗口键是「先占后写」的，写失败就得把坑退回去 ——
+		// 否则扩展按重投队列原样再发一次时，会被自己留下的键判成 duplicate，只剩留痕不回 AI。
+		s.releaseInboundDedup(ctx, decision)
 		return result, fmt.Errorf("持久化消息失败: %w", err)
 	}
 	result.Accepted = true
@@ -941,9 +972,12 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		}
 	}
 
-	if decision, derr := s.interceptInbound(ctx, event); derr != nil {
+	decision, derr := s.interceptInbound(ctx, event)
+	if derr != nil {
 		logger.Ctx(ctx).Warn().Err(derr).Str("event_id", event.EventID).Msg("[Inbox] interceptInbound 出错，放行（不阻断业务）")
-	} else if decision != nil && decision.Blocked {
+		decision = nil
+	}
+	if decision != nil && decision.Blocked {
 		result.Accepted = true
 		result.QueuedForAI = false
 		result.Reason = fmt.Sprintf("intercepted by middleware: %s (self_echo=%v dup=%v)", decision.Reason, decision.IsSelfEcho, decision.IsDup)
@@ -953,10 +987,19 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 			Bool("dup", decision.IsDup).
 			Str("reason", decision.Reason).
 			Msg("[Inbox] 中间件拦截（批次）：消息被去重/回环拦截，不穿透业务层")
+		// 与单条路径同一条规则：dup 判定要落库留痕、只压 AI；什么都不落的只有自己的出站回声。
+		if !decision.IsSelfEcho {
+			if err := s.persistMessage(ctx, event); err != nil {
+				return result, fmt.Errorf("持久化消息失败: %w", err)
+			}
+		}
 		return result, nil
 	}
 
 	if err := s.persistMessage(ctx, event); err != nil {
+		// 与单条路径同一条补偿（§8.3-9(c)）：批次里失败的那一条如果不退坑，
+		// 同一会话后面每一条同内容重投都会被它毒掉。
+		s.releaseInboundDedup(ctx, decision)
 		return result, fmt.Errorf("持久化消息失败: %w", err)
 	}
 	result.Accepted = true

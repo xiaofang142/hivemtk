@@ -66,6 +66,7 @@ const moduleNames = [
   "reachPipeline", 'wecomAccount',
   'inbox',
   'approvalTask',
+  'badCase',
   'whatsappCloud',
   'dingtalkApp',
   "llmRouting", 'tagSegmentation', 'conversionFunnel',

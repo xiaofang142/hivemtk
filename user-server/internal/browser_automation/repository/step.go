@@ -28,6 +28,10 @@ type BrowserStepRepository interface {
 	// 批7（F-N4）键里不再有 step_index：Brain 模式的步下标每轮递增，带下标的键会让同一条
 	// 评论在换轮重放时落到不同下标上而漏闸。
 	FindSubmitAttempt(ctx context.Context, taskID uint, textHash string, excludeID uint) (*model.BrowserStep, error)
+	// SubmitStateOf 读单行当前的台账态（批20f / A12：写步收尾时要判「这一步到底留下尝试凭据没有」，
+	// 以此决定存储层声明是留是腾）。行不存在返回 gorm.ErrRecordNotFound——调用方按「读不到」
+	// 保守处理，不许当成「没记过」。
+	SubmitStateOf(ctx context.Context, id uint) (string, error)
 }
 
 // StepResultJSON result 列的 JSON 载荷
@@ -116,4 +120,15 @@ func (r *browserStepRepo) FindSubmitAttempt(ctx context.Context, taskID uint, te
 		return nil, err
 	}
 	return &row, nil
+}
+
+// SubmitStateOf 只读 submit_state 一列。独立零值 struct（不复用调用方手里那行）：
+// 复用一个已填充的 struct 再 First() 会把旧字段并进 WHERE，读出来是一条 record not found 假红。
+func (r *browserStepRepo) SubmitStateOf(ctx context.Context, id uint) (string, error) {
+	var row model.BrowserStep
+	if err := r.db.WithContext(ctx).Model(&model.BrowserStep{}).Where("id = ?", id).
+		Select("submit_state").First(&row).Error; err != nil {
+		return "", err
+	}
+	return row.SubmitState, nil
 }

@@ -1,0 +1,19 @@
+diff internal/service/collection_job_test.go.orig internal/service/collection_job_test.go
+--- internal/service/collection_job_test.go.orig
++++ internal/service/collection_job_test.go
+@@ -33,8 +33,8 @@
+ // ---------------------------------------------------------------- 测试替身
+ 
+ type fakeCollectionScanner struct {
+-	res     *repository.BillOverdueScan
+-	err     error
++	res *repository.BillOverdueScan
++	err error
+ 	// nilRes 造出 (nil, nil) 这一格：既不是"今天没人逾期"也不是"读失败了"。
+ 	// 假件默认永远回一个非 nil 的读数（哪怕空），所以这一格必须单独开一格开关，
+ 	// 否则"扫描回了 nil 读数"那条守卫在测试里根本没有对应的输入。
+
+# 本文件＝越界改动前的快照（协议 §5：在飞文件先留 diff 再动）
+# 测量 2026-09-23 05:2x，collection_job_test.go 开工 md5 0d540611abbab49b25e38a1b433550ed（mtime 05:09，属并行 lane 在飞文件）
+# 改后 md5 ef5a14c777977a0036ac78279aa599ea 的核对与 gofmt -l 全树清零读数由主会话记在 spec §九 越界清单
+# 第二处（internal/repository/bill.go）：mtime 03:21（>2h，不在飞），gofmt 唯一红是 104 行多出的空行，Edit 精确串删一行

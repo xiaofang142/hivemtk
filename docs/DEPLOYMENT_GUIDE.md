@@ -246,6 +246,9 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `LTC_RECOVERY_WORKER_BATCH` | `20` | 挽回队列单轮处理上限，可用区间 `[1,500]`；非整数或超界 ⇒ 告警并沿用默认（`internal/service/recovery_queue_worker.go`）。前提是 `FF_LTC_RECOVERY_WORKER=enforce` |
 | `LTC_RECOVERY_WORKER_INTERVAL` | `5m` | 挽回队列轮询间隔（Go duration 写法，如 `30s`/`5m`）。低于 `30s` 抬到 `30s`，否则一轮没跑完下一轮就起、同一条会被两轮领走 |
 | `LTC_RECOVERY_WORKER_BACKOFF` | `24h` | 重试退避基数（同时是无文案项的推后幅度）。小于触达冷却窗口时抬到"冷却窗口 + 余量"，否则每次到期都只换来一次 cooldown 拒绝，白耗一轮 |
+| `FF_LTC_COLLECTION_JOB` | `off` | 催收任务（逾期应收自动提醒 + 越过升级线转人工待办）的三态开关 `off|shadow|enforce`（`internal/service/collection_job.go`，解析复用挽回 worker 的 `parseRecoveryWorkerMode`，别名口径与它同一份）。`off` 连轮询协程都不起、一轮都不扫；`shadow` 只选路不发不写；`enforce` 才真给真人发提醒。**env 这一档在装配期读一次 ⇒ 改档要重启**；每轮现读的是第二把锁 `ltc.config` 的 `collection` 阶段档（它关着的每一轮一次查询都不发，一键回滚要下一轮就咬得住，指的是这一把）。写布尔真值（`true`/`1`/`on`）一律按 `shadow` 处理并告警——短信不可撤回，要真发必须显式写 `enforce` |
+| `LTC_COLLECTION_JOB_BATCH` | `20` | 催收单轮扫描封顶（对应 `ScanOverdue` 的 limit），可用区间 `[1,200]`；非整数或超界 ⇒ 告警并沿用默认。上限比挽回队列的 `[1,500]` 窄是代价决定的：单轮内每行一次商机读（应收表上没有客户列，身份按 `bills.opportunity_id` 现推），批越大跨表读越多 |
+| `LTC_COLLECTION_JOB_INTERVAL` | `6h` | 催收轮询间隔（Go duration 写法，如 `30m`/`6h`）。非法时长 ⇒ 告警并沿用默认；低于 `30m` 抬到 `30m` 并告警——一轮没跑完下一轮就起时，同一张单会被两轮各领一次（提醒窗的锁拦得住外发，但报告会开始大量出现 `reminders_held`） |
 | `TOOL_CIRCUIT_BASE_COOLDOWN` | `30s` | 按工具熔断的起始冷却，可用区间 `[1ms,1h]`。非法时长或超界 ⇒ 告警并沿用默认；五项参数各自校验，配错一项不拖累其余（`internal/app/tool_circuit_breaker_wiring.go`） |
 | `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
 | `TOOL_CIRCUIT_BACKOFF_MULTIPLIER` | `2.0` | 每多熔断一次的冷却倍率，可用区间 `[1,100]`；非数字或超界 ⇒ 沿用默认 |

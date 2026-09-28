@@ -1,0 +1,1162 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24b-conv-ownership.test.js[2m > [22m[2m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m[2m_backfill 不得把上一会话残留气泡并进当前会话的历史帧
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24b: 2 条消息（新增...
+
+[90mstdout[2m | test/adapter-b24b-conv-ownership.test.js[2m > [22m[2m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m[2m_scanIncremental（fallbackTimer 每 3s 走这条）不得增量上行残留气泡
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24b: 1 条消息（新增...
+
+[90mstdout[2m | test/adapter-b24b-conv-ownership.test.js[2m > [22m[2m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m[2mgetMessages（PollingLoop 每秒走的公开入口）不得把残留节点当本会话新消息返回
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24b: 2 条消息（新增...
+
+[90mstdout[2m | test/adapter-b24b-conv-ownership.test.js[2m > [22m[2m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m[2m_collectUnseenText（巡检单个会话的一抓）不得把残留节点收进批量上行
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24b: 1 条消息（新增...
+
+ [32m✓[39m test/adapter-b24b-conv-ownership.test.js[2m > [22m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m_backfill 不得把上一会话残留气泡并进当前会话的历史帧[32m 16[2mms[22m[39m
+ [32m✓[39m test/adapter-b24b-conv-ownership.test.js[2m > [22m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m_scanIncremental（fallbackTimer 每 3s 走这条）不得增量上行残留气泡[32m 3[2mms[22m[39m
+ [32m✓[39m test/adapter-b24b-conv-ownership.test.js[2m > [22m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m_occurrenceInList 只数本会话的节点：残留不得把真实那条挤成 #1[32m 2[2mms[22m[39m
+ [32m✓[39m test/adapter-b24b-conv-ownership.test.js[2m > [22m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22mgetMessages（PollingLoop 每秒走的公开入口）不得把残留节点当本会话新消息返回[32m 2[2mms[22m[39m
+ [32m✓[39m test/adapter-b24b-conv-ownership.test.js[2m > [22m批24b：六条 getMessageItems 迭代路径共用同一条会话归属判据[2m > [22m_collectUnseenText（巡检单个会话的一抓）不得把残留节点收进批量上行[32m 4[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m空文本=基础值；线性 +250ms/码点；封顶 120s；emoji 按码点计[32m 1[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m静态契约：发送全链三处均走长度感知超时，无裸 await[32m 1[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m静态契约：uplink 吞错已接日志并回插 buffer[32m 1[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB5 stop() 全清 timer（行为）[2m > [22mstop 后 _mutationTimer 不再触发 _flushMutations，且所有 timer 置 null[32m 162[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB5 stop() 全清 timer（行为）[2m > [22m静态契约：activate 监听器自我摘除；SSE stop 走 key 级 abort + 唤醒退避[32m 2[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m无 chrome.storage → 0ms 降级（不阻塞发送）[32m 0[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22mstamp 后按剩余间隔返回等待；旧时间戳返回 0[32m 0[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m未来时间戳（时钟漂移）判无效防自锁；minInterval<=0 直接 0[32m 0[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m静态契约：fillAndSend 在 rawSendText 前过闸、成功后盖章[32m 1[2mms[22m[39m
+[90mstdout[2m | test/downlink-b24-step-timeout.test.js[2m > [22m[2m批24：下发外层超时预算必须覆盖回查切片[2m > [22m[2m发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）
+[22m[39m[bridge:downlink] 下行完成: b24a 共 1 条已 ack { convs: [33m1[39m }
+
+ [32m✓[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）[33m 706[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true[33m 1215[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m预算仍是上界：永远不回包的发送要在「sendText 预算 + 回查切片」内被切掉并留 pending[33m 3051[2mms[22m[39m
+ [31m×[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m静态锁：结果日志原样透传 sendVerified（三态不许被 `!!` 洗成二态）[32m 6[2mms[22m[39m
+[31m   → expected 'import { getOutbox, ackOutbox } from …' to contain 'sendVerified: result && result.sendVe…'[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false[33m 2745[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数[33m 1563[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它[33m 1433[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了[33m 1332[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡[33m 1449[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m23 passed[39m[22m[90m (24)[39m
+[2m   Start at [22m 23:18:31
+[2m   Duration [22m 10.75s[2m (transform 558ms, setup 0ms, import 786ms, tests 13.71s, environment 2.34s)[22m
+
+(node:54352) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 出站已提交但窗口内未见自己的气泡（仅记结论位，不... { channel: [32m'douyin_web'[39m, conv_id: [32m'conv-b24'[39m, verify_ms: [33m300[39m }
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 左侧列表未找到目标会话 ghost-conv
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 下行目标会话 ghost-conv 未打开，放弃... { current: [32m'conv-b24'[39m }
+
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m静态锁：结果日志原样透传 sendVerified（三态不许被 `!!` 洗成二态）
+[31m[1mAssertionError[22m: expected 'import { getOutbox, ackOutbox } from …' to contain 'sendVerified: result && result.sendVe…'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- sendVerified: result && result.sendVerified,[39m
+[31m+ import { getOutbox, ackOutbox } from './http-ingest.js';[39m
+[31m+ import { sanitizeForDisplay } from './sanitize.js';[39m
+[31m+ import { contentHash } from './types.js';[39m
+[31m+ import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER, outboundStepTimeoutMs } from './constants.js';[39m
+[31m+ import { createLogger } from './logger.js';[39m
+[31m+ import { connectSSE, getLastEventID, setLastEventID, stopSSE } from './sse-fetch-client.js';[39m
+[31m+[39m
+[31m+ const log = createLogger('downlink');[39m
+[31m+[39m
+[31m+ // 本地已发缓存：防刷新 / SW 冻结重开后重复下发同一条消息给用户。[39m
+[31m+ // 按 channel 隔离，持久化到 chrome.storage.local。[39m
+[31m+ //[39m
+[31m+ // 批20d-A4：条目带写入时刻，装载/追加时按 sentCacheTtlMs 回收，超上限按「最旧的时间戳」淘汰。[39m
+[31m+ // 两件事都必要：[39m
+[31m+ //   - 时间界：界之后的记录既不防任何在途重推（服务端早已不再重投这条），还占着条数名额；[39m
+[31m+ //   - 按时间而非插入序淘汰：旧实现是 `[...set].slice(len-max)`，而 Set 命中已有键不刷新位置[39m
+[31m+ //     —— 一条「今天还在被重推」的记录可能因为插入位靠前被挤掉，最该留的最先丢。[39m
+[31m+ // 落盘形状由 ['id'] 变为 [['id', ts]]；load 兼容老形状，见下方续期注释。[39m
+[31m+ class SentCache {[39m
+[31m+   constructor(channel) {[39m
+[31m+     this.channel = channel;[39m
+[31m+     this.key = `bridge_sent_${channel}`;[39m
+[31m+     this.mem = new Map();[39m
+[31m+     this.dirty = false;[39m
+[31m+     this.loaded = false;[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   async load() {[39m
+[31m+     if (this.loaded) return;[39m
+[31m+     const now = Date.now();[39m
+[31m+     try {[39m
+[31m+       const v = await chrome.storage.local.get([this.key]);[39m
+[31m+       const arr = v && v[this.key];[39m
+[31m+       if (Array.isArray(arr)) {[39m
+[31m+         for (const e of arr) {[39m
+[31m+           if (Array.isArray(e) && e.length === 2 && Number.isFinite(Number(e[1]))) {[39m
+[31m+             this.mem.set(String(e[0]), Number(e[1]));[39m
+[31m+           } else {[39m
+[31m+             // 老版本写的纯字符串：真实年龄未知。判成「已过期」= 升级那一刻把在途的重复消息[39m
+[31m+             // 全放出去（发出去的私信不可撤回），所以按「刚写过」续一个完整 TTL，之后再自然回收。[39m
+[31m+             this.mem.set(String(e), now);[39m
+[31m+             this.dirty = true;[39m
+[31m+           }[39m
+[31m+         }[39m
+[31m+         // 混合来源（老记录被续成 now、插在原位）后必须重排，否则 add() 里[39m
+[31m+         // 「过期项是头部前缀」这个快路径前提不成立，会留下过期的尾部条目。[39m
+[31m+         this.mem = new Map([...this.mem.entries()].sort((a, b) => a[1] - b[1]));[39m
+[31m+       }[39m
+[31m+     } catch (_) {[39m
+[31m+     }[39m
+[31m+     this.evict(now);[39m
+[31m+     this.loaded = true;[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   has(id) {[39m
+[31m+     const ts = this.mem.get(id);[39m
+[31m+     return ts !== undefined && Date.now() - ts <= BRIDGE_THREE_CHANNEL.sentCacheTtlMs;[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   add(id, at = Date.now()) {[39m
+[31m+     // 先删后设：Map 保留插入序，命中已有键时也要把这条挪到「最新」端，[39m
+[31m+     // 这样 evict 才能用「头部即最旧」的线性扫描代替排序。[39m
+[31m+     this.mem.delete(id);[39m
+[31m+     this.mem.set(id, at);[39m
+[31m+     this.dirty = true;[39m
+[31m+     this.evict(at);[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // evict 回收：过期条目（时间序下是头部前缀）先整段走，仍超上限再掐头部最旧的。[39m
+[31m+   evict(now) {[39m
+[31m+     const ttl = BRIDGE_THREE_CHANNEL.sentCacheTtlMs;[39m
+[31m+     for (const [k, ts] of this.mem) {[39m
+[31m+       if (now - ts <= ttl) break;[39m
+[31m+       this.mem.delete(k);[39m
+[31m+     }[39m
+[31m+     while (this.mem.size > BRIDGE_THREE_CHANNEL.sentCacheMax) {[39m
+[31m+       this.mem.delete(this.mem.keys().next().value);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   async flush() {[39m
+[31m+     if (!this.dirty) return;[39m
+[31m+     try {[39m
+[31m+       await chrome.storage.local.set({ [this.key]: [...this.mem] });[39m
+[31m+       this.dirty = false;[39m
+[31m+     } catch (_) {[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const caches = {};[39m
+[31m+ function getCache(channel) {[39m
+[31m+   if (!caches[channel]) caches[channel] = new SentCache(channel);[39m
+[31m+   return caches[channel];[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // _pendingAckByChannel：按渠道维护"待重试 ack"的 msg_id 队列（2026-08-15 P0-9 升级为带退避的 Map）。[39m
+[31m+ //[39m
+[31m+ // 2026-08-14 修复（用户诉求 "不要兜底逻辑会导致垃圾数据" 的反例——这里必须"兜底"）：[39m
+[31m+ //   sendOutbound 已成功 = 用户已收到。这条事实是"用户是否收到"的唯一权威。[39m
+[31m+ //   ack 服务端只是后端记账的副作用——若 ack 失败（网络/服务暂时不可用），[39m
+[31m+ //   必须 (a) 立刻写本地已发缓存防重发 (b) 记入此队列等下轮重发 ack。[39m
+[31m+ //[39m
+[31m+ // 2026-08-15 P0-9 升级（10/10 任务清单）：[39m
+[31m+ //   - 由 Set 升级为 Map<msg_id, { attempts, firstSeenAt, lastTryAt, lastError }>[39m
+[31m+ //   - 加入最大重试次数（MAX_ACK_RETRY_ATTEMPTS=10），超过则放弃重试但仍保留 cache[39m
+[31m+ //     （用户已收到，后端状态机不一致无影响；避免永久重试导致队列膨胀）[39m
+[31m+ //   - 加入指数退避（baseMs=1000 → 1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s, 60s, 60s）[39m
+[31m+ //   - 加入条目级 TTL（MAX_ACK_ENTRY_AGE_MS=24h），超过则清理（防永久残留）[39m
+[31m+ const MAX_ACK_RETRY_ATTEMPTS = 10;[39m
+[31m+ const MAX_PENDING_ACK_PER_CHANNEL = 1000;[39m
+[31m+ const ACK_RETRY_BACKOFF_BASE_MS = 1000;     [39m
+[31m+ const ACK_RETRY_BACKOFF_CAP_MS = 60_000;    [39m
+[31m+ const MAX_ACK_ENTRY_AGE_MS = 24 * 60 * 60 * 1000; [39m
+[31m+ const _pendingAckByChannel = {};[39m
+[31m+ function this_pendingAckFor(channel) {[39m
+[31m+   if (!_pendingAckByChannel[channel]) _pendingAckByChannel[channel] = new Map();[39m
+[31m+   const m = _pendingAckByChannel[channel];[39m
+[31m+   if (m.size > MAX_PENDING_ACK_PER_CHANNEL) {[39m
+[31m+     // 容量保护：Map 保持插入序（FIFO），直接遍历迭代器删除前 N 个最早条目。[39m
+[31m+     // 优化前：构造 [...entries()] 全量数组 + sort（O(n log n)）+ 截取；现 O(n) 一遍过。[39m
+[31m+     const iter = m.keys();[39m
+[31m+     const evictCount = m.size - MAX_PENDING_ACK_PER_CHANNEL;[39m
+[31m+     for (let i = 0; i < evictCount; i++) m.delete(iter.next().value);[39m
+[31m+   }[39m
+[31m+   return m;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ackRetryBackoffMs 计算指定 attempt 次数（从 1 开始）的退避时长（毫秒）。[39m
+[31m+ // 第 1 次：baseMs=1000；第 2 次：2000；第 3 次：4000；...；第 7 次及之后：capMs=60000。[39m
+[31m+ export function ackRetryBackoffMs(attempt) {[39m
+[31m+   if (attempt < 1) return ACK_RETRY_BACKOFF_BASE_MS;[39m
+[31m+   const ms = ACK_RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt - 1);[39m
+[31m+   return Math.min(ms, ACK_RETRY_BACKOFF_CAP_MS);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // addPendingAck 添加 msg_id 到重试队列（首次入队时设置 firstSeenAt=now, attempts=0）。[39m
+[31m+ // B2（2026-09-19）：条目携带 conversationId（DB 行的原始 conversation_id，非 DM 重映射后的[39m
+[31m+ // 会话键），重试 ack 时走 v2 items[] 按会话精确翻转。同 msg_id 跨会话入队极少见，[39m
+[31m+ // 以最后一次入队的 conv 为准（重试幂等，最坏退化为 legacy 翻转范围）。[39m
+[31m+ export function addPendingAck(channel, msgId, lastError, conversationId) {[39m
+[31m+   const m = this_pendingAckFor(channel);[39m
+[31m+   if (m.has(msgId)) {[39m
+[31m+     const entry = m.get(msgId);[39m
+[31m+     entry.lastTryAt = Date.now();[39m
+[31m+     if (lastError) entry.lastError = lastError;[39m
+[31m+     if (conversationId) entry.conversationId = conversationId;[39m
+[31m+     return entry;[39m
+[31m+   }[39m
+[31m+   const now = Date.now();[39m
+[31m+   const entry = { attempts: 0, firstSeenAt: now, lastTryAt: 0, lastError: lastError || '', conversationId: conversationId || '' };[39m
+[31m+   m.set(msgId, entry);[39m
+[31m+   if (m.size > MAX_PENDING_ACK_PER_CHANNEL) {[39m
+[31m+     const sorted = [...m.entries()].sort((a, b) => a[1].firstSeenAt - b[1].firstSeenAt);[39m
+[31m+     const evictCount = m.size - MAX_PENDING_ACK_PER_CHANNEL;[39m
+[31m+     for (let i = 0; i < evictCount; i++) m.delete(sorted[i][0]);[39m
+[31m+   }[39m
+[31m+   return entry;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // claimDuePendingAck 提取本轮可重试的 msg_id（已达退避时长 且 未超最大次数 且 未超 TTL）。[39m
+[31m+ export function claimDuePendingAck(channel) {[39m
+[31m+   const m = this_pendingAckFor(channel);[39m
+[31m+   const now = Date.now();[39m
+[31m+   const due = [];[39m
+[31m+   for (const [msgId, entry] of m) {[39m
+[31m+     if (now - entry.firstSeenAt > MAX_ACK_ENTRY_AGE_MS) {[39m
+[31m+       m.delete(msgId);[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     if (entry.attempts >= MAX_ACK_RETRY_ATTEMPTS) {[39m
+[31m+       m.delete(msgId);[39m
+[31m+       log.warn(`下行 ack 达到最大重试次数 ${MAX_ACK_RETRY_ATTEMPTS}，放弃重试（cache 保留防内容重发）`,[39m
+[31m+         { channel, msg_id: msgId, attempts: entry.attempts, last_error: entry.lastError });[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     const backoff = ackRetryBackoffMs(entry.attempts + 1);[39m
+[31m+     if (entry.lastTryAt && now - entry.lastTryAt < backoff) continue;[39m
+[31m+     due.push({ msgId, conversationId: entry.conversationId || '', entry });[39m
+[31m+   }[39m
+[31m+   return due;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // markPendingAckTried 在重试后更新 attempts/lastTryAt。[39m
+[31m+ export function markPendingAckTried(channel, msgId, success, error) {[39m
+[31m+   const m = this_pendingAckFor(channel);[39m
+[31m+   if (success) {[39m
+[31m+     m.delete(msgId);[39m
+[31m+     return;[39m
+[31m+   }[39m
+[31m+   const entry = m.get(msgId);[39m
+[31m+   if (!entry) return;[39m
+[31m+   entry.attempts += 1;[39m
+[31m+   entry.lastTryAt = Date.now();[39m
+[31m+   if (error) entry.lastError = error;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // getPendingAckStats 用于监控/调试（外部可读取重试队列状态）。[39m
+[31m+ export function getPendingAckStats(channel) {[39m
+[31m+   const m = _pendingAckByChannel[channel];[39m
+[31m+   if (!m) return { size: 0 };[39m
+[31m+   let maxAttempts = 0;[39m
+[31m+   let oldest = 0;[39m
+[31m+   const now = Date.now();[39m
+[31m+   for (const [, entry] of m) {[39m
+[31m+     if (entry.attempts > maxAttempts) maxAttempts = entry.attempts;[39m
+[31m+     const age = now - entry.firstSeenAt;[39m
+[31m+     if (age > oldest) oldest = age;[39m
+[31m+   }[39m
+[31m+   return { size: m.size, maxAttempts, oldestAgeMs: oldest };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // drainPendingAcks 消化本渠道到期的 _pendingAck（ack 失败 / 补确认失败的条目），返回本轮读数。[39m
+[31m+ //[39m
+[31m+ // 只允许有一份实现：轮询与 SSE 是同一条下行通道的两种形态，退避、attempts++、"与正常下发[39m
+[31m+ // 同接口"这些语义各写一份就会漂移。R22 §6-4 实测到的正是漂移的极端形态——SSE 形态从没被挂上[39m
+[31m+ // 排水，队列只在页面刷新前存在，而刷新即清空。[39m
+[31m+ // cred = { serverUrl, accountId, token }，由调用方按自己那一侧的连接参数给。[39m
+[31m+ export async function drainPendingAcks(channel, cred) {[39m
+[31m+   const duePending = claimDuePendingAck(channel);[39m
+[31m+   const out = { retried: duePending.length, success: 0, fail: 0 };[39m
+[31m+   if (!duePending.length) return out;[39m
+[31m+   for (const { msgId, conversationId } of duePending) {[39m
+[31m+     try {[39m
+[31m+       const reAck = await ackOutbox([39m
+[31m+         { serverUrl: cred.serverUrl, channel, accountId: cred.accountId, token: cred.token },[39m
+[31m+         [msgId],[39m
+[31m+         {[39m
+[31m+           label: `[下行 ack 重试] ${channel}:${msgId}`,[39m
+[31m+           // B2：条目带会话归属时走 v2，按会话精确翻转；无归属（老数据）回退 legacy。[39m
+[31m+           conversationId,[39m
+[31m+         }[39m
+[31m+       );[39m
+[31m+       // 详细 ack 响应：acked/duplicate 视为成功，not_found/not_in_scope 也视为"已处理（无需再发）"[39m
+[31m+       const handled = processAckDetailedResult(reAck, [msgId], channel, 'reAck');[39m
+[31m+       const ok = handled.acked + handled.duplicate + handled.not_found + handled.not_in_scope;[39m
+[31m+       if (ok > 0) {[39m
+[31m+         markPendingAckTried(channel, msgId, true);[39m
+[31m+         out.success++;[39m
+[31m+       } else {[39m
+[31m+         markPendingAckTried(channel, msgId, false,[39m
+[31m+           reAck && reAck.status === 'ok' ? 'retriable' : 'response_not_ok');[39m
+[31m+         out.fail++;[39m
+[31m+       }[39m
+[31m+     } catch (e) {[39m
+[31m+       markPendingAckTried(channel, msgId, false, String(e && e.message || e));[39m
+[31m+       out.fail++;[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   if (out.success || out.fail) {[39m
+[31m+     log.info(`pendingAck 重发 ack 完成`, {[39m
+[31m+       channel, success: out.success, fail: out.fail, retried: out.retried,[39m
+[31m+     });[39m
+[31m+   }[39m
+[31m+   return out;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // 初始化：预加载各渠道已发缓存 + 待重试 ack 集合（在轮询开始前调用一次）[39m
+[31m+ export async function initDownlink(channels) {[39m
+[31m+   for (const ch of channels) {[39m
+[31m+     await getCache(ch).load();[39m
+[31m+     this_pendingAckFor(ch); [39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // dmAwareConvId 计算"投递定位用"的会话键：主动私信（extra.dm_target==='member'）用 receiver_id，[39m
+[31m+ // 其余用行原始 conversation_id。[39m
+[31m+ //[39m
+[31m+ // 必须两条下行路径同源（轮询 + SSE）：SSE 是生产默认通道，若只在轮询侧重映射，[39m
+[31m+ // 同一条主动私信经 SSE 下发时会被填进群会话的输入框——发错对象且不可撤回。[39m
+[31m+ // extra 可能是对象（SSE Data / 新服务端）或 JSON 字符串（老 payload 直传 DB 列），两种都吃。[39m
+[31m+ export function dmAwareConvId(row, fallbackConvId) {[39m
+[31m+   let convId = fallbackConvId;[39m
+[31m+   if (row && row.receiver_id && row.receiver_id !== row.conversation_id) {[39m
+[31m+     let ex = row.extra;[39m
+[31m+     if (typeof ex === 'string') { try { ex = JSON.parse(ex); } catch (_) { ex = null; } }[39m
+[31m+     if (ex && ex.dm_target === 'member') convId = row.receiver_id;[39m
+[31m+   }[39m
+[31m+   return convId;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // pollDownlink 通道C·下发轮询 + 通道B·状态确认。[39m
+[31m+ // 拉取本渠道待发消息 → 按 conversation_id 分组并行转发到对应网页会话 → 成功后批量 ack delivered。[39m
+[31m+ //[39m
+[31m+ // 2026-08-07 修复（用户诉求 ①②③）：[39m
+[31m+ //   ① 下发转发不应该串行——回复谁的消息就应该在谁的消息输入框。[39m
+[31m+ //      旧版 for...of 串行处理：第 1 条发送成功 markSent → lastGlobalSendAt 立刻更新 → 第 2 条[39m
+[31m+ //      tryAcquire 命中 minIntervalMs(1500ms) → 整批 break → 第二个会话永远不发。[39m
+[31m+ //      改为按 conversation_id 分组并行：每个会话独立 tryAcquire/markSent/rate-limit，[39m
+[31m+ //      会话 A 限速拦截不影响会话 B；同时同一会话内按原顺序串行（保留单会话限速语义）。[39m
+[31m+ //   ② 下发转发应该即时——并行处理 + 会话内串行减少总等待时间。[39m
+[31m+ //   ③ 每次下发转发消息应该清空输入框内容——见 xhs.js sendText fillContentEditable 调用前先清空。[39m
+[31m+ export async function pollDownlink(channel, accountId, getConfig, options = {}) {[39m
+[31m+   const sendOutbound = options && typeof options.sendOutbound === 'function' ? options.sendOutbound : null;[39m
+[31m+   // 下发转发超时（实现 BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs）：sendOutbound 卡死时[39m
+[31m+   // 不应永久阻塞整个轮询，超时则视为失败，下个周期重试。[39m
+[31m+   const sendTimeoutMs = options && options.sendOutboundTimeoutMs[39m
+[31m+     ? options.sendOutboundTimeoutMs[39m
+[31m+     : BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs;[39m
+[31m+   const outboxBatchSize = options && options.outboxBatchSize[39m
+[31m+     ? options.outboxBatchSize[39m
+[31m+     : BRIDGE_THREE_CHANNEL.outboxBatchSize;[39m
+[31m+   const cache = getCache(channel);[39m
+[31m+   await cache.load();[39m
+[31m+   let cfg;[39m
+[31m+   try {[39m
+[31m+     cfg = (await getConfig()) || {};[39m
+[31m+   } catch (_) {[39m
+[31m+     cfg = {};[39m
+[31m+   }[39m
+[31m+   const serverUrl = cfg.serverUrl || '';[39m
+[31m+   const token = cfg.token || '';[39m
+[31m+   if (!serverUrl) return;[39m
+[31m+[39m
+[31m+   // 2026-08-15 P0-9：先消化上轮残留的 _pendingAck（带退避，attempts<MAX_ACK_RETRY_ATTEMPTS）。[39m
+[31m+   // 必要性：ack 是"后端记账"，失败不能让"用户已收到"这件事回滚。排水语义见 drainPendingAcks。[39m
+[31m+   await drainPendingAcks(channel, { serverUrl, accountId, token });[39m
+[31m+[39m
+[31m+   const res = await getOutbox([39m
+[31m+     { serverUrl, channel, accountId, token },[39m
+[31m+     { label: `[下行 outbox] ${channel}`, batchSize: outboxBatchSize }[39m
+[31m+   );[39m
+[31m+   const messages = (res && res.messages) || [];[39m
+[31m+   // B4（批3）：裸 console.log 全文泄露私信内容（控制台可被同浏览器其他扩展读取）[39m
+[31m+   // → 降为 verbose-gated debug 且不再携带 content 字段（脱敏=不进参数，而非事后打码）。[39m
+[31m+   log.debug('pollDownlink 分组前', {[39m
+[31m+     channel, count: messages.length, ids: messages.map((m) => m.msg_id),[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   // —— 按 conversation_id 分组（同会话内保留原顺序以维持单会话限速语义）——[39m
+[31m+   const groups = new Map();[39m
+[31m+   // 批11：cache 命中但服务端仍下发的行 → 补确认（见 reAckSentDuplicates 注释）[39m
+[31m+   const dupEntries = [];[39m
+[31m+   for (const m of messages) {[39m
+[31m+     if (!m || !m.msg_id) continue;[39m
+[31m+     // SentCache key 必须用 msg_id|conversation_id 复合键：[39m
+[31m+     //   AI 回复 msg_id = contentHash(channel, content)，不含 conversation_id（patrol 回环去重需要）。[39m
+[31m+     //   跨会话同 content 的 AI 回复 msg_id 相同，若只用 msg_id 做 key，[39m
+[31m+     //   第一会话 ack 后 cache.add(msg_id) → 第二会话 cache.has(msg_id) 命中 → 跳过，永远不下发！[39m
+[31m+     //   复合键保证不同会话的同 msg_id 消息各自独立去重。[39m
+[31m+     // 主动私信场景（后端 Extra.dm_target==='member'）：以 receiver_id（成员标识）为会话定位键，[39m
+[31m+     // 而非原群会话 conversation_id——抖音私信会话 id 即成员标识，列表匹配可打开已有私信会话。[39m
+[31m+     const convId = dmAwareConvId(m, m.conversation_id || '_unknown_');[39m
+[31m+     const cacheKey = `${m.msg_id}|${convId}`;[39m
+[31m+     if (cache.has(cacheKey)) {[39m
+[31m+       dupEntries.push({ msg_id: m.msg_id, conversation_id: m.conversation_id || '' });[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     const raw = m.content || '';[39m
+[31m+     if (!raw) continue; [39m
+[31m+     // XSS 防护：净化内容（控制长度、去控制字符）[39m
+[31m+     const safeContent = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;[39m
+[31m+     if (!groups.has(convId)) groups.set(convId, []);[39m
+[31m+     groups.get(convId).push({ msg: m, sanitized: safeContent });[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   if (dupEntries.length) {[39m
+[31m+     await reAckSentDuplicates([39m
+[31m+       { serverUrl, channel, accountId, token },[39m
+[31m+       dupEntries,[39m
+[31m+       `[下行重复补确认] ${channel}`[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // —— 按 conversation_id 串行转发（核心修复：杜绝跨会话污染）——[39m
+[31m+   // 背景：桥接内容脚本运行在单个 SPA 页（小红书/抖音聊天页），多个会话共用同一页面 DOM。[39m
+[31m+   //   sendOutbound 内部会 openConversation(convId) 切换右侧会话再 fillAndSend。若多个会话[39m
+[31m+   //   并行 openConversation，页面导航会相互竞争，导致 A 会话的文案被填进 B 会话的输入框——[39m
+[31m+   //   即"下发给 A 的消息却发给了 B/所有人"。故必须按会话串行，保证"切会话→填发→完成"原子，[39m
+[31m+   //   单会话内也串行（同会话限速语义）。[39m
+[31m+   // 限速处理：全局 minInterval 会让"紧接其后的另一会话"首条被 rateLimited。此时就地等待后[39m
+[31m+   //   重试（有限次），而非 break 丢弃——既保留拟人限速，又确保每会话都最终下发（不丢消息）。[39m
+[31m+   const allAckIds = [];[39m
+[31m+   const MAX_RATE_RETRIES = 3; [39m
+[31m+   for (const [convId, group] of groups) {[39m
+[31m+     const sentIds = [];[39m
+[31m+     // B2：ack 必须带 DB 行的原始 conversation_id（不是 DM 重映射后的 convId），[39m
+[31m+     // 服务端 v2 items[] 按 (msg_id, conversation_id) 精确翻转，防跨会话同 msg_id 误翻。[39m
+[31m+     const sentEntries = [];[39m
+[31m+     const recordSent = (msg) => {[39m
+[31m+       sentIds.push(msg.msg_id);[39m
+[31m+       sentEntries.push({ msg_id: msg.msg_id, conversation_id: msg.conversation_id || '' });[39m
+[31m+     };[39m
+[31m+     for (const { msg, sanitized } of group) {[39m
+[31m+       let result = null;[39m
+[31m+       try {[39m
+[31m+         if (sendOutbound) {[39m
+[31m+           result = await withTimeout([39m
+[31m+             sendOutbound(sanitized, convId, { viaAdapter: channel }),[39m
+[31m+             outboundStepTimeoutMs(sanitized, sendTimeoutMs),[39m
+[31m+             `sendOutbound(${channel}:${convId})`[39m
+[31m+           );[39m
+[31m+         } else {[39m
+[31m+           log.warn('pollDownlink: 未提供 sendOutbound，跳过下发', channel);[39m
+[31m+         }[39m
+[31m+       } catch (e) {[39m
+[31m+         result = null;[39m
+[31m+       }[39m
+[31m+       const ok = !!(result && result.ok);[39m
+[31m+       const rateLimited = !!(result && result.rateLimited);[39m
+[31m+       const notFound = !!(result && result.notFound);[39m
+[31m+       // B4：同上——结果日志只带键与状态位，不带私信内容（verbose-gated）[39m
+[31m+       log.debug('sendOutbound 结果', {[39m
+[31m+         channel, conv_id: convId, msg_id: msg.msg_id,[39m
+[31m+         ok: !!(result && result.ok), rateLimited: !!(result && result.rateLimited),[39m
+[31m+         notFound: !!(result && result.notFound),[39m
+[31m+         // 批24：与 ok 同行的只有「点了」这一件事；sendVerified 才是「窗口里见着自己的气泡」。[39m
+[31m+         // 原样打印不做 `!!`：没走到回查的出路必须是 undefined，折成 false 就是把三态洗成二态。[39m
+[31m+         sendVerified: !!(result && result.sendVerified),[39m
+[31m+       });[39m
+[31m+       if (ok) { recordSent(msg); continue; }[39m
+[31m+       if (notFound) {[39m
+[31m+         log.debug(`下行目标会话不存在，跳过并留 pending: ${convId}`, { msg_id: msg.msg_id });[39m
+[31m+         continue;[39m
+[31m+       }[39m
+[31m+       if (rateLimited) {[39m
+[31m+         let delivered = false;[39m
+[31m+         for (let attempt = 0; attempt < MAX_RATE_RETRIES && !delivered; attempt++) {[39m
+[31m+           const waitMs =[39m
+[31m+             options.rateRetryWaitMs != null ? options.rateRetryWaitMs : rateRetryBaseMs();[39m
+[31m+           await sleep(waitMs);[39m
+[31m+           try {[39m
+[31m+             const r2 = await withTimeout([39m
+[31m+               sendOutbound(sanitized, convId, { viaAdapter: channel }),[39m
+[31m+               outboundStepTimeoutMs(sanitized, sendTimeoutMs),[39m
+[31m+               `sendOutbound-retry(${channel}:${convId})`[39m
+[31m+             );[39m
+[31m+             if (r2 && r2.ok) { delivered = true; recordSent(msg); }[39m
+[31m+             else if (r2 && r2.notFound) break;      [39m
+[31m+             else if (r2 && !r2.rateLimited) break;   [39m
+[31m+           } catch (e) {  }[39m
+[31m+         }[39m
+[31m+         if (delivered) continue;[39m
+[31m+         log.warn(`下行会话持续限速，放弃本会话剩余并留 pending`, {[39m
+[31m+           channel, convId, pending: group.length - sentIds.length,[39m
+[31m+         });[39m
+[31m+         break;[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+     if (sentIds.length) {[39m
+[31m+       for (const id of sentIds) cache.add(`${id}|${convId}`);[39m
+[31m+       // 第 2 步：尝试 ack 服务端（副作用：让 server 知道这条已下发）[39m
+[31m+       // B2：全量条目都带原始 conversation_id 时走 v2 items[]（按会话精确翻转）；[39m
+[31m+       // 有缺失（老服务端 payload 无该字段）→ 保守回退 legacy msg_ids（维持旧行为）。[39m
+[31m+       const origConvOf = new Map(sentEntries.map((e) => [e.msg_id, e.conversation_id]));[39m
+[31m+       const allHaveConv = sentEntries.every((e) => !!e.conversation_id);[39m
+[31m+       const ackOpts = allHaveConv[39m
+[31m+         ? { label: `[下行 ack] ${channel}:${convId}`, items: sentEntries }[39m
+[31m+         : { label: `[下行 ack] ${channel}:${convId}` };[39m
+[31m+       const ackRes = await ackOutbox([39m
+[31m+         { serverUrl, channel, accountId, token },[39m
+[31m+         sentIds,[39m
+[31m+         ackOpts[39m
+[31m+       );[39m
+[31m+       if (ackRes && ackRes.status === 'ok') {[39m
+[31m+         // 2026-08-15 P3-D + P4-3.4 修复：详细 ack 响应——精确处理每条 msg_id[39m
+[31m+         //   - status='acked' / 'duplicate' → 已处理完成，不入 _pendingAck[39m
+[31m+         //   - status='not_found' → 服务端明确"不可能再 ack 成功"，立即停止重发（不写 cache 后续删除由后端）[39m
+[31m+         //   - items 中无对应 msg_id（响应不完整）→ 入 _pendingAck 下轮重试[39m
+[31m+         //   - items[].status 缺失或未知 → 入 _pendingAck 下轮重试（保守 retriable）[39m
+[31m+         //   - 整体响应 ok 但 items 字段缺失（老版本）→ 全量视为成功，不入 pending[39m
+[31m+         const items = Array.isArray(ackRes.items) ? ackRes.items : null;[39m
+[31m+         if (items) {[39m
+[31m+           const itemByMsgID = new Map(items.map((it) => [it.msg_id, it]));[39m
+[31m+           for (const id of sentIds) {[39m
+[31m+             const it = itemByMsgID.get(id);[39m
+[31m+             if (!it) {[39m
+[31m+               addPendingAck(channel, id, 'ack_response_missing_item', origConvOf.get(id));[39m
+[31m+               log.warn(`下行 ack 详情缺失 item: 入 _pendingAck 下轮重试`, { channel, conv_id: convId, msg_id: id });[39m
+[31m+               continue;[39m
+[31m+             }[39m
+[31m+             if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.ACKED || it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.DUPLICATE) {[39m
+[31m+               // acked / duplicate：已确认送达，无需任何动作，移出重试队列[39m
+[31m+             } else if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.NOT_FOUND) {[39m
+[31m+               log.warn(`下行 ack 详情: not_found 停止重发`, { channel, conv_id: convId, msg_id: id });[39m
+[31m+             } else if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.NOT_IN_SCOPE) {[39m
+[31m+               // P0-6：存在但归属其他账号/方向 → 服务端明确"不归我管"，立即停止重发（防越权探测）[39m
+[31m+               log.warn(`下行 ack 详情: not_in_scope 停止重发（归属他账号/方向）`, { channel, conv_id: convId, msg_id: id });[39m
+[31m+             } else {[39m
+[31m+               addPendingAck(channel, id, `unknown_status_${it.status}`, origConvOf.get(id));[39m
+[31m+               log.warn(`下行 ack 详情未知 status: 入 _pendingAck`, { channel, conv_id: convId, msg_id: id, status: it.status });[39m
+[31m+             }[39m
+[31m+           }[39m
+[31m+         }[39m
+[31m+         allAckIds.push(...sentIds);[39m
+[31m+       } else {[39m
+[31m+         for (const id of sentIds) {[39m
+[31m+           addPendingAck(channel, id, 'ack_request_failed', origConvOf.get(id));[39m
+[31m+         }[39m
+[31m+         log.warn(`下行单会话 ack 失败（已发已写 cache 防重发，纳入下轮 ack 重试队列）`, {[39m
+[31m+           channel, convId, count: sentIds.length,[39m
+[31m+         });[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   await cache.flush();[39m
+[31m+   if (allAckIds.length) log.info(`下行完成: ${channel} 共 ${allAckIds.length} 条已 ack`, { convs: groups.size });[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export async function withTimeout(promise, ms, label) {[39m
+[31m+   if (!ms || ms <= 0) return promise;[39m
+[31m+   let timer = null;[39m
+[31m+   const timeout = new Promise((_, rej) => {[39m
+[31m+     timer = setTimeout(() => rej(new Error(`${label} timeout after ${ms}ms`)), ms);[39m
+[31m+   });[39m
+[31m+   try {[39m
+[31m+     return await Promise.race([promise, timeout]);[39m
+[31m+   } finally {[39m
+[31m+     if (timer) clearTimeout(timer);[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // sleep：限速重试等待（拟人节奏，避免被识别为机器人）。[39m
+[31m+ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));[39m
+[31m+[39m
+[31m+ // rateRetryBaseMs：单行限速重试的等待时长（对齐三层风控的拟人节奏）。[39m
+[31m+ // 取全局最小间隔 + 随机抖动，使"紧接其后的另一会话"在等待后能通过 minInterval 校验。[39m
+[31m+ function rateRetryBaseMs() {[39m
+[31m+   const { minIntervalMs, jitterMinMs, jitterMaxMs } = RATE_LIMIT_DEFAULTS;[39m
+[31m+   const jitter = jitterMinMs + Math.random() * Math.max(0, jitterMaxMs - jitterMinMs);[39m
+[31m+   return minIntervalMs + jitter;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // processAckDetailedResult 处理服务端详细 ack 响应（P3-D 2026-08-15 + P0-6 2026-08-15）。[39m
+[31m+ //[39m
+[31m+ // 输入：ackRes（{status, acked, duplicate_count, not_found_count, items: [...]}}）+ ackIds（请求的 msg_ids）[39m
+[31m+ // 输出：{ acked, duplicate, not_found, not_in_scope, retriable }[39m
+[31m+ //   - acked        本次成功翻转行数（status='acked'）[39m
+[31m+ //   - duplicate    幂等跳过行数（status='duplicate'，本地无需重发）[39m
+[31m+ //   - not_found    不存在行数（status='not_found'，本地无需再尝试）[39m
+[31m+ //   - not_in_scope 归属其他账号/方向行数（status='not_in_scope'，本地无需再尝试，防越权探测）[39m
+[31m+ //   - retriable    需进入下轮 _pendingAck 重试的行数（status 缺失或响应未含详情）[39m
+[31m+ //[39m
+[31m+ // 设计原则：[39m
+[31m+ //   - status='acked' / 'duplicate' 都视为"已处理"，不应再入 pendingAck[39m
+[31m+ //   - status='not_found' / 'not_in_scope' 视为"不可能再 ack 成功"，也不应入 pendingAck[39m
+[31m+ //   - 响应无 items 字段（老版本）按"全量成功"处理（保持兼容）[39m
+[31m+ //   - 响应 ok 但部分 msg_id 没有对应 item（极少见）→ 入 pendingAck 下轮重试[39m
+[31m+ export function processAckDetailedResult(ackRes, ackIds, channel = '', label = 'ack') {[39m
+[31m+   const result = { acked: 0, duplicate: 0, not_found: 0, not_in_scope: 0, retriable: 0 };[39m
+[31m+   if (!ackRes || ackRes.status !== 'ok') {[39m
+[31m+     result.retriable = Array.isArray(ackIds) ? ackIds.length : 0;[39m
+[31m+     return result;[39m
+[31m+   }[39m
+[31m+   const items = Array.isArray(ackRes.items) ? ackRes.items : null;[39m
+[31m+   if (!items) {[39m
+[31m+     result.acked = Array.isArray(ackIds) ? ackIds.length : 0;[39m
+[31m+     return result;[39m
+[31m+   }[39m
+[31m+   // 新版本响应：per-msg-id 分类[39m
+[31m+   const itemByMsgID = new Map(items.map((it) => [it.msg_id, it]));[39m
+[31m+   for (const id of ackIds || []) {[39m
+[31m+     if (!id) continue;[39m
+[31m+     const it = itemByMsgID.get(id);[39m
+[31m+     if (!it || !it.status) {[39m
+[31m+       result.retriable++;[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.ACKED) result.acked++;[39m
+[31m+     else if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.DUPLICATE) result.duplicate++;[39m
+[31m+     else if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.NOT_FOUND) result.not_found++;[39m
+[31m+     else if (it.status === BRIDGE_PROTOCOL_V2.RESPONSE_STATUS.NOT_IN_SCOPE) result.not_in_scope++;[39m
+[31m+     else result.retriable++; [39m
+[31m+   }[39m
+[31m+   return result;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // reAckSentDuplicates 补确认：本地 SentCache 已命中、服务端却仍然把这条交给我们。[39m
+[31m+ //[39m
+[31m+ // 批11（B 链路领取语义）出现该情形的三种真实原因：[39m
+[31m+ //   (a) 上次 ack 请求失败/非 ok（行仍 pending）；[39m
+[31m+ //   (b) 服务端 SSE 推送先给行打了 inflight 领取标记，ack 丢失 → 可见性超时后重推；[39m
+[31m+ //   (c) 页面/SW 重启把 _pendingAck（纯内存队列）清空，而已发缓存（chrome.storage）还在[39m
+[31m+ //       → 重试机制彻底失效，这是唯一还能了结该行的路径。[39m
+[31m+ // 旧行为是直接 continue：行永远留在"欠投递"集合里，服务端每 claimTimeout 重推一次，[39m
+[31m+ // 客户端每次都命中缓存再跳过——同一条文案在用户聊天窗里被反复打开→放弃，且无一处日志能看出[39m
+[31m+ // 这是"其实已经发出去了"。补一次 delivered 确认让行翻终态，重推循环当场收敛。[39m
+[31m+ //[39m
+[31m+ // 失败不抛错：退到 _pendingAck 队列（轮询模式下轮由 claimDuePendingAck 消化）；[39m
+[31m+ // SSE 模式不消化该队列，但服务端超时重推会再次进入本函数，仍能闭环。[39m
+[31m+ // 无 DB 会话归属的条目不走 v2 items（服务端会整单 400），也不能走 legacy[39m
+[31m+ // （legacy 按 msg_id 翻所有会话，会误翻其他会话尚未投递的同 msg_id 行）→ 只记 warn。[39m
+[31m+ async function reAckSentDuplicates(cred, entries, label) {[39m
+[31m+   const withConv = [];[39m
+[31m+   for (const e of entries) {[39m
+[31m+     if (e.conversation_id && e.conversation_id !== '_unknown_') withConv.push(e);[39m
+[31m+     else log.warn(`${label} 缺少会话归属，无法安全补确认`, { channel: cred.channel, msg_id: e.msg_id });[39m
+[31m+   }[39m
+[31m+   if (!withConv.length) return;[39m
+[31m+   const ids = withConv.map((e) => e.msg_id);[39m
+[31m+   const res = await ackOutbox(cred, ids, { label, items: withConv });[39m
+[31m+   const S = BRIDGE_PROTOCOL_V2.RESPONSE_STATUS;[39m
+[31m+   const items = res && res.status === 'ok' && Array.isArray(res.items) ? res.items : null;[39m
+[31m+   if (!items) {[39m
+[31m+     if (res && res.status === 'ok') {[39m
+[31m+       // items 缺失 = 老服务端按全量成功处理（与正常下发 ack 同口径），不入重试队列[39m
+[31m+       log.info(`${label} 已补确认`, { channel: cred.channel, count: ids.length });[39m
+[31m+       return;[39m
+[31m+     }[39m
+[31m+     for (const e of withConv) addPendingAck(cred.channel, e.msg_id, 'duplicate_reack_failed', e.conversation_id);[39m
+[31m+     log.warn(`${label} 失败，转入重试队列`, { channel: cred.channel, count: ids.length });[39m
+[31m+     return;[39m
+[31m+   }[39m
+[31m+   const byID = new Map(items.map((it) => [it.msg_id, it]));[39m
+[31m+   let settled = 0;[39m
+[31m+   for (const e of withConv) {[39m
+[31m+     const it = byID.get(e.msg_id);[39m
+[31m+     const st = it && it.status;[39m
+[31m+     // acked/duplicate：记账完成；not_found/not_in_scope：不可能再成功（已终态或归属他人）[39m
+[31m+     if (st === S.ACKED || st === S.DUPLICATE || st === S.NOT_FOUND || st === S.NOT_IN_SCOPE) { settled++; continue; }[39m
+[31m+     addPendingAck(cred.channel, e.msg_id, `duplicate_reack_${st || 'missing_item'}`, e.conversation_id);[39m
+[31m+   }[39m
+[31m+   log.info(`${label} 已补确认`, {[39m
+[31m+     channel: cred.channel, total: ids.length, settled, retried: ids.length - settled,[39m
+[31m+   });[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // =============================================================[39m
+[31m+ // SSE 模式下行支持（Service Worker 推送 → Content Script 接收）[39m
+[31m+ // =============================================================[39m
+[31m+ // 设计：[39m
+[31m+ //   - Content Script 通过 registerWithServiceWorker() 告知 SW 自己的存在[39m
+[31m+ //   - SW 建立 EventSource 连接，将下行消息通过 chrome.tabs.sendMessage 推送到 Content Script[39m
+[31m+ //   - Content Script 通过 listenSSEOutbound() 监听 SSE_OUTBOUND 消息[39m
+[31m+ //   - 每条消息走 SentCache 防重 → 会话内串行 → sendOutbound → ack 的完整流程[39m
+[31m+ //   - 保留独立的会话队列（ConversationQueue），确保同会话消息顺序执行[39m
+[31m+[39m
+[31m+ // ---- 会话队列：按 conversation_id 串行执行 ----[39m
+[31m+ // 同一会话的消息必须串行（避免 A 会话的消息被填进 B 会话的输入框）。[39m
+[31m+ // 不同会话的消息可以并行。[39m
+[31m+ class ConversationQueue {[39m
+[31m+   constructor() {[39m
+[31m+     this._queues = new Map(); // convId -> Array<{fn, resolve, reject}>[39m
+[31m+     this._running = new Set(); // convIds currently being processed[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // 入队：返回 Promise，在 fn 执行完成后 resolve[39m
+[31m+   enqueue(convId, fn) {[39m
+[31m+     return new Promise((resolve, reject) => {[39m
+[31m+       if (!this._queues.has(convId)) {[39m
+[31m+         this._queues.set(convId, []);[39m
+[31m+       }[39m
+[31m+       this._queues.get(convId).push({ fn, resolve, reject });[39m
+[31m+       // 若该会话未在执行中，启动处理[39m
+[31m+       if (!this._running.has(convId)) {[39m
+[31m+         this._process(convId);[39m
+[31m+       }[39m
+[31m+     });[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   async _process(convId) {[39m
+[31m+     if (this._running.has(convId)) return;[39m
+[31m+     this._running.add(convId);[39m
+[31m+     try {[39m
+[31m+       while (this._queues.has(convId) && this._queues.get(convId).length > 0) {[39m
+[31m+         const item = this._queues.get(convId).shift();[39m
+[31m+         try {[39m
+[31m+           const result = await item.fn();[39m
+[31m+           item.resolve(result);[39m
+[31m+         } catch (err) {[39m
+[31m+           item.reject(err);[39m
+[31m+         }[39m
+[31m+       }[39m
+[31m+       // 队列清空，移除会话[39m
+[31m+       this._queues.delete(convId);[39m
+[31m+     } finally {[39m
+[31m+       this._running.delete(convId);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const sseQueues = new Map(); // channel -> ConversationQueue[39m
+[31m+ function getSSEQueue(channel) {[39m
+[31m+   if (!sseQueues.has(channel)) {[39m
+[31m+     sseQueues.set(channel, new ConversationQueue());[39m
+[31m+   }[39m
+[31m+   return sseQueues.get(channel);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // resolveSSEOutboundKeys 从 SSE 事件 Data 解析去重/ack 键（B1，2026-09-19）。[39m
+[31m+ //[39m
+[31m+ // 背景：SSE 总线路径的 Data 曾缺 msg_id → `data.msg_id || data.id` 得 undefined →[39m
+[31m+ // 复合缓存键 "undefined|conv" 第二条同会话消息起全被误判重复 → 静默丢消息。[39m
+[31m+ // 服务端已统一 Data（bridge.BuildOutboundSSEEvent 双路径含 msg_id），此处为二道防线：[39m
+[31m+ //   - msg_id 缺失 → 用与服务端 ContentHashMsgID 同源算法回退（fail-loud error 日志）；[39m
+[31m+ //   - 绝不回退 data.id（那是 hub_id 数字串，拿去 ack 必然 not_found 且污染缓存键）。[39m
+[31m+ // 导出供单测直接断言键生成契约。[39m
+[31m+ export function resolveSSEOutboundKeys(data, channel) {[39m
+[31m+   const convId = (data && data.conversation_id) || '_unknown_';[39m
+[31m+   let msgId = (data && data.msg_id) || '';[39m
+[31m+   if (!msgId) {[39m
+[31m+     msgId = contentHash(channel, convId, (data && data.content) || '');[39m
+[31m+     log.error('SSE 事件缺 msg_id，已用 contentHash 同源回退（服务端 Data 契约异常，须排查）', {[39m
+[31m+       channel, conv_id: convId, fallback_msg_id: msgId,[39m
+[31m+     });[39m
+[31m+   }[39m
+[31m+   return { msgId, convId };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- 注册/注销到 Service Worker ----[39m
+[31m+[39m
+[31m+ export async function registerWithServiceWorker(channel, accountId) {[39m
+[31m+   try {[39m
+[31m+     await chrome.runtime.sendMessage({[39m
+[31m+       type: 'BRIDGE_REGISTER_TAB',[39m
+[31m+       channel,[39m
+[31m+       accountId,[39m
+[31m+     });[39m
+[31m+     log.info(`已注册到 Service Worker: ${channel}:${accountId}`);[39m
+[31m+   } catch (err) {[39m
+[31m+     log.warn('注册到 Service Worker 失败（可能 SW 未就绪）', err && err.message);[39m
+[31m+     throw err;[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export async function unregisterFromServiceWorker(channel, accountId) {[39m
+[31m+   try {[39m
+[31m+     await chrome.runtime.sendMessage({[39m
+[31m+       type: 'BRIDGE_UNREGISTER_TAB',[39m
+[31m+       channel,[39m
+[31m+       accountId,[39m
+[31m+     });[39m
+[31m+     log.info(`已从 Service Worker 注销: ${channel}:${accountId}`);[39m
+[31m+   } catch (_) {}[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- 监听 Service Worker 发来的 SSE 消息 ----[39m
+[31m+[39m
+[31m+ let _sseListeners = new Map(); // channel -> Set of listeners[39m
+[31m+[39m
+[31m+ export function listenSSEOutbound(channel, onMessage, onError) {[39m
+[31m+   if (!_sseListeners.has(channel)) {[39m
+[31m+     _sseListeners.set(channel, new Set());[39m
+[31m+   }[39m
+[31m+   const handler = (msg) => {[39m
+[31m+     if (!msg || msg.type !== 'SSE_OUTBOUND') return;[39m
+[31m+     if (msg.channel !== channel) return;[39m
+[31m+     try {[39m
+[31m+       onMessage(msg.data);[39m
+[31m+     } catch (err) {[39m
+[31m+       log.error('SSE 消息处理失败', err);[39m
+[31m+       if (onError) onError(err);[39m
+[31m+     }[39m
+[31m+   };[39m
+[31m+   _sseListeners.get(channel).add(handler);[39m
+[31m+[39m
+[31m+   // 全局监听器（只注册一次）[39m
+[31m+   if (!_globalSSEListenerRegistered) {[39m
+[31m+     chrome.runtime.onMessage.addListener(_globalSSEDispatcher);[39m
+[31m+     _globalSSEListenerRegistered = true;[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // 返回取消订阅函数[39m
+[31m+   return () => {[39m
+[31m+     const set = _sseListeners.get(channel);[39m
+[31m+     if (set) set.delete(handler);[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ let _globalSSEListenerRegistered = false;[39m
+[31m+ function _globalSSEDispatcher(msg) {[39m
+[31m+   if (!msg || msg.type !== 'SSE_OUTBOUND') return false;[39m
+[31m+   const channel = msg.channel;[39m
+[31m+   const set = _sseListeners.get(channel);[39m
+[31m+   if (set) {[39m
+[31m+     for (const handler of set) {[39m
+[31m+       try { handler(msg); } catch (_) {}[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   return false;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- SSE 模式下发主入口 ----[39m
+[31m+[39m
+[31m+ /**[39m
+[31m+  * startSSEDelivery 启动 SSE 模式下行。[39m
+[31m+  *[39m
+[31m+  * 修复（2026-08-18）：[39m
+[31m+  *   - 原实现通过 Service Worker 的 EventSource，在 Chrome MV3 中受限[39m
+[31m+  *   - 新实现使用 fetch + ReadableStream 在 Content Script 中直接建立连接[39m
+[31m+  *   - 优势：更稳定、支持自定义 Header、更好的错误处理[39m
+[31m+  *[39m
+[31m+  * @param {string} channel 渠道编码 (douyin/xiaohongshu/tiktok/xianyu/kuaishou)[39m
+[31m+  * @param {string} accountId 账号 ID[39m
+[31m+  * @param {object} handlers 回调函数[39m
+[31m+  * @param {function} handlers.sendOutbound 发送函数 (text, convId, opts) => Promise<{ok, rateLimited, notFound}>[39m
+[31m+  * @param {function} handlers.onMessage 消息到达回调 (msg) => void[39m
+[31m+  * @param {function} [handlers.onError] 错误回调 (err) => void[39m
+[31m+  * @param {function} [handlers.onDuplicate] 重复消息回调 (msgId) => void[39m
+[31m+  * @param {number} [handlers.pendingAckDrainIntervalMs] ack 重试队列排水间隔，默认取 BRIDGE_THREE_CHANNEL[39m
+[31m+  * @returns {Promise<function>} 停止函数[39m
+[31m+  */[39m
+[31m+ export async function startSSEDelivery(channel, accountId, handlers) {[39m
+[31m+   const cache = getCache(channel);[39m
+[31m+   await cache.load();[39m
+[31m+[39m
+[31m+   // 1. 获取配置（server URL + token）[39m
+[31m+   let cfg = {};[39m
+[31m+   try {[39m
+[31m+     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {[39m
+[31m+       const r = await chrome.storage.local.get('bridgeConfig');[39m
+[31m+       cfg = (r && r.bridgeConfig) || {};[39m
+[31m+     }[39m
+[31m+   } catch (_) {}[39m
+[31m+[39m
+[31m+   const serverUrl = cfg.serverUrl || DEFAULT_USER_SERVER.baseUrl;[39m
+[31m+   const token = cfg.token || '';[39m
+[31m+   const lastEventId = getLastEventID(channel, accountId);[39m
+[31m+[39m
+[31m+   // 2. 直接在 Content Script 中建立 SSE 连接（fetch + ReadableStream）[39m
+[31m+   log.info(`SSE 直连启动: ${channel}:${accountId}`, { serverUrl, hasToken: !!token, lastEventId });[39m
+[31m+[39m
+[31m+   let cleanupSSE;[39m
+[31m+   let stopped = false;[39m
+[31m+   let reconnectTimer = null;[39m
+[31m+   let wakeWait = null; // B5：stop 时立即唤醒退避等待，不等满 delay[39m
+[31m+   let reconnectAttempts = 0;[39m
+[31m+   const MAX_RECONNECT_ATTEMPTS = 10;[39m
+[31m+   const RECONNECT_BASE_DELAY_MS = 1000;[39m
+[31m+   const RECONNECT_MAX_DELAY_MS = 30000;[39m
+[31m+   // B3（2026-09-19，WHATWG SSE 重连语义 + AWS full-jitter 实践）：[39m
+[31m+   //   原实现 10 次后永久 break——SSE 是下行主通道，永久放弃 = 渠道静默失联直到页面刷新。[39m
+[31m+   //   改为超限后降级为慢重连（固定间隔 + 抖动），连接恢复时 Last-Event-ID 补拉机制兜住断流缺口。[39m
+[31m+   const DEGRADED_RETRY_MS = 5 * 60_000;[39m
+[31m+   // 服务端 retry: 字段建议值（sse-fetch-client onRetry 回调写入；0=未提供，用本地退避）[39m
+[31m+   let serverRetryDelayMs = 0;[39m
+[31m+[39m
+[31m+   // 带重连的 SSE 连接启动[39m
+[31m+   async function startSSEWithReconnect() {[39m
+[31m+     while (!stopped) {[39m
+[31m+       try {[39m
+[31m+         cleanupSSE = await connectSSE(channel, accountId, {[39m
+[31m+           serverUrl,[39m
+[31m+           token,[39m
+[31m+           lastEventId: getLastEventID(channel, accountId), // 每次重连获取最新的 lastEventId[39m
+[31m+           onMessage: async (data) => {[39m
+[31m+             if (stopped) return;[39m
+[31m+[39m
+[31m+             // B1：键解析收敛到 resolveSSEOutboundKeys（msg_id 缺失回退 contentHash，绝不回退 data.id）[39m
+[31m+             const { msgId, convId: dbConvId } = resolveSSEOutboundKeys(data, channel);[39m
+[31m+             // 批11：主动私信与轮询同源重映射——dbConvId 是 DB 行归属（ack 用），[39m
+[31m+             // convId 是页面会话定位键（打开会话/入队/发送用）。二者只在 DM 场景分叉。[39m
+[31m+             const convId = dmAwareConvId(data, dbConvId);[39m
+[31m+[39m
+[31m+             // SentCache 防重（复合键：msg_id|conversation_id）[39m
+[31m+             const cacheKey = `${msgId}|${convId}`;[39m
+[31m+             if (cache.has(cacheKey)) {[39m
+[31m+               // 批11：本地已发过而服务端仍推来 = ack 丢包/领取超时重推。补确认让行翻终态，[39m
+[31m+               // 否则每 claimTimeout 重推一次、每次命中缓存跳过，循环永不收敛。[39m
+[31m+               log.info(`SSE 消息已在缓存中，补确认后跳过: ${cacheKey}`);[39m
+[31m+               await reAckSentDuplicates([39m
+[31m+                 { serverUrl, channel, accountId, token },[39m
+[31m+                 // 只确认服务端真实点名过的行：msg_id 缺失时 msgId 是本地 contentHash 回退值，[39m
+[31m+                 // 拿它去 ack 只会命中 not_found 噪声。[39m
+[31m+                 data.msg_id ? [{ msg_id: data.msg_id, conversation_id: data.conversation_id || '' }] : [],[39m
+[31m+                 `[SSE 重复补确认] ${channel}:${convId}`[39m
+[31m+               );[39m
+[31m+               handlers.onDuplicate?.(msgId);[39m
+[31m+               return;[39m
+[31m+             }[39m
+[31m+[39m
+[31m+             // 按 conversation_id 入队串行执行[39m
+[31m+             const queue = getSSEQueue(channel);[39m
+[31m+             try {[39m
+[31m+               await queue.enqueue(convId, async () => {[39m
+[31m+                 const raw = data.content || '';[39m
+[31m+                 if (!raw) return;[39m
+[31m+[39m
+[31m+                 // XSS 防护：净化内容[39m
+[31m+                 const safeContent = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;[39m
+[31m+[39m
+[31m+                 // 调用 sendOutbound 发送到网页（B4：与轮询路径对称的超时保护，[39m
+[31m+                 // 预算随文案长度伸缩，防拟人键入长文被固定超时误杀）[39m
+[31m+                 if (handlers.sendOutbound) {[39m
+[31m+                   const result = await withTimeout([39m
+[31m+                     handlers.sendOutbound(safeContent, convId, { viaAdapter: channel }),[39m
+[31m+                     outboundStepTimeoutMs(safeContent),[39m
+[31m+                     `sendOutbound-SSE(${channel}:${convId})`[39m
+[31m+                   );[39m
+[31m+                   const ok = !!(result && result.ok);[39m
+[31m+                   const rateLimited = !!(result && result.rateLimited);[39m
+[31m+                   const notFound = !!(result && result.notFound);[39m
+[31m+[39m
+[31m+                   if (ok) {[39m
+[31m+                     // 写入缓存防重[39m
+[31m+                     cache.add(cacheKey);[39m
+[31m+                     await cache.flush();[39m
+[31m+[39m
+[31m+                     // 回调通知[39m
+[31m+                     handlers.onMessage?.({[39m
+[31m+                       msgId,[39m
+[31m+                       content: safeContent,[39m
+[31m+                       conversationId: convId,[39m
+[31m+                       msgType: data.msg_type || 'text',[39m
+[31m+                       isAIReply: data.is_ai_reply || data.event === 'ai_reply',[39m
+[31m+                     });[39m
+[31m+[39m
+[31m+                     // ack 服务端（B2：会话有效时 ackOutbox 内部自动走 v2 items[]）[39m
+[31m+                     // 批11：必须用 dbConvId（DB 行归属）而非 convId（页面定位键）——DM 场景两者不同，[39m
+[31m+                     // 用页面键翻转会 ack 到不存在的行 → 真行永远留在欠投递集合里被重推。[39m
+[31m+                     // ackOutbox 不抛错只回 {status:'error'}——两条失败路径都要入重试队列。[39m
+[31m+                     try {[39m
+[31m+                       const ackRes = await ackOutbox([39m
+[31m+                         { serverUrl, channel, accountId, token },[39m
+[31m+                         [msgId],[39m
+[31m+                         { label: `[SSE ack] ${channel}:${convId}`, conversationId: dbConvId }[39m
+[31m+                       );[39m
+[31m+                       if (!ackRes || ackRes.status !== 'ok') {[39m
+[31m+                         addPendingAck(channel, msgId, 'sse_ack_not_ok', data.conversation_id || '');[39m
+[31m+                       }[39m
+[31m+                     } catch (err) {[39m
+[31m+                       log.warn('SSE ack 失败，加入重试队列', err && err.message);[39m
+[31m+                       addPendingAck(channel, msgId, 'sse_ack_failed', data.conversation_id || '');[39m
+[31m+                     }[39m
+[31m+                   } else if (rateLimited) {[39m
+[31m+                     log.warn(`SSE 下行被限速: ${channel}:${convId}`, { msgId });[39m
+[31m+                   } else if (notFound) {[39m
+[31m+                     log.warn(`SSE 下行目标会话不存在: ${channel}:${convId}`, { msgId });[39m
+[31m+                   } else {[39m
+[31m+                     log.warn(`SSE 下行发送失败: ${channel}:${convId}`, { result });[39m
+[31m+                   }[39m
+[31m+                 } else {[39m
+[31m+                   log.warn(`SSE startSSEDelivery: 未提供 sendOutbound`, channel);[39m
+[31m+                 }[39m
+[31m+               });[39m
+[31m+             } catch (err) {[39m
+[31m+               log.error('SSE 消息处理异常', err);[39m
+[31m+               handlers.onError?.(err);[39m
+[31m+             }[39m
+[31m+           },[39m
+[31m+           onError: (err) => {[39m
+[31m+             if (!stopped) {[39m
+[31m+               log.error(`SSE 连接错误: ${channel}:${accountId}`, err);[39m
+[31m+               handlers.onError?.(err);[39m
+[31m+             }[39m
+[31m+           },[39m
+[31m+           onLastEventID: (id) => {[39m
+[31m+             setLastEventID(channel, accountId, id);[39m
+[31m+           },[39m
+[31m+           onRetry: (ms) => {[39m
+[31m+             serverRetryDelayMs = ms;[39m
+[31m+           },[39m
+[31m+         });[39m
+[31m+[39m
+[31m+         // B5：stop() 经 stopSSE 中止活动流后 await 才 resolve——先判停，不误报"已建立"、不清零计数[39m
+[31m+         if (stopped) break;[39m
+[31m+[39m
+[31m+         // 重置重连计数[39m
+[31m+         reconnectAttempts = 0;[39m
+[31m+         log.info(`SSE 直连已建立: ${channel}:${accountId}`);[39m
+[31m+[39m
+[31m+         // 等待连接结束（正常或异常）[39m
+[31m+         // connectSSE 在流结束时 resolve，在错误时 reject[39m
+[31m+         // 这里不需要额外等待，因为如果断开了，会进入 catch 块[39m
+[31m+       } catch (err) {[39m
+[31m+         if (stopped) break;[39m
+[31m+[39m
+[31m+         reconnectAttempts++;[39m
+[31m+         let delay;[39m
+[31m+         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {[39m
+[31m+           if (reconnectAttempts === MAX_RECONNECT_ATTEMPTS + 1) {[39m
+[31m+             log.warn(`SSE 重连超过 ${MAX_RECONNECT_ATTEMPTS} 次，降级为 ${DEGRADED_RETRY_MS / 1000}s 慢重连（不再永久放弃）: ${channel}:${accountId}`);[39m
+[31m+           }[39m
+[31m+           // 服务端 retry: 心跳值（15s）适用于普通断流重连；连续失败已达上限说明[39m
+[31m+           // 连接可能持续劣化，降级间隔只接受更长的 hint，不接受更短。[39m
+[31m+           const base = Math.max(DEGRADED_RETRY_MS, serverRetryDelayMs);[39m
+[31m+           delay = base + Math.floor(Math.random() * base * 0.2); // ±0~20% 抖动防惊群[39m
+[31m+         } else {[39m
+[31m+           // 快速恢复期（前 10 次）：坚持本地指数退避，不吃服务端 retry hint——[39m
+[31m+           // hint=心跳间隔（15s）会把首次瞬时断流的恢复延迟从 1s 拉到 15s。[39m
+[31m+           const exp = Math.min([39m
+[31m+             RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1),[39m
+[31m+             RECONNECT_MAX_DELAY_MS[39m
+[31m+           );[39m
+[31m+           delay = Math.round(exp * (0.5 + Math.random() * 0.5)); // full-jitter 变体[39m
+[31m+         }[39m
+[31m+         log.info(`SSE 断开，${delay}ms 后第 ${reconnectAttempts} 次重连: ${channel}:${accountId}`);[39m
+[31m+[39m
+[31m+         // 通知上层连接已断开（前 10 次带进度提示；降级后不再刷屏，仅首次慢重连提示一次）[39m
+[31m+         if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS + 1) {[39m
+[31m+           handlers.onError?.(new Error(`SSE 断开，准备重连 (${reconnectAttempts})`));[39m
+[31m+         }[39m
+[31m+[39m
+[31m+         // 等待重连延迟（B5：可被 stop 立即唤醒——清 timer + wakeWait，不等满退避）[39m
+[31m+         await new Promise((resolve) => {[39m
+[31m+           wakeWait = resolve;[39m
+[31m+           reconnectTimer = setTimeout(resolve, delay);[39m
+[31m+         });[39m
+[31m+         wakeWait = null;[39m
+[31m+         reconnectTimer = null;[39m
+[31m+[39m
+[31m+         if (stopped) break;[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+[39m
+[31m+     log.info(`SSE 重连循环结束: ${channel}:${accountId}`);[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // §6-4（R22 第二十三轮）：SSE 是生产默认形态（服务端 FF_ENABLE_SSE_BRIDGE 默认 true，[39m
+[31m+   // 客户端探到 sse_enabled 即 return，轮询定时器根本不启动），而 _pendingAck 原先只有[39m
+[31m+   // pollDownlink 会排水 ⇒ ack 失败入队的条目在默认形态下永不重试，页面一刷新队列即清空。[39m
+[31m+   const ackCred = { serverUrl, accountId, token };[39m
+[31m+   const ackDrainEveryMs = handlers && handlers.pendingAckDrainIntervalMs[39m
+[31m+     ? handlers.pendingAckDrainIntervalMs[39m
+[31m+     : BRIDGE_THREE_CHANNEL.pendingAckDrainIntervalMs;[39m
+[31m+   const ackDrainTimer = setInterval(() => {[39m
+[31m+     if (stopped) return;[39m
+[31m+     drainPendingAcks(channel, ackCred).catch((err) => log.error('SSE pendingAck 排水失败', err));[39m
+[31m+   }, ackDrainEveryMs);[39m
+[31m+[39m
+[31m+   // 启动重连 SSE 连接（异步，不阻塞）[39m
+[31m+   startSSEWithReconnect().catch((err) => {[39m
+[31m+     log.error(`SSE 重连循环异常退出: ${channel}:${accountId}`, err);[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   log.info(`SSE 下行已启动（直连模式）: ${channel}:${accountId}`);[39m
+[31m+[39m
+[31m+   // 返回停止函数[39m
+[31m+   return async () => {[39m
+[31m+     stopped = true;[39m
+[31m+     // B5（批3）：原实现只 await cleanupSSE——但该停止函数在流结束后才 resolve，[39m
+[31m+     // 活动长连接期间 cleanupSSE 为 undefined，stop 实际无法断开 SSE（fetch 悬挂 + 循环续命）。[39m
+[31m+     // 修复：key 级 stopSSE 立即 abort + 清退避 timer 并唤醒等待，重连循环即刻收束。[39m
+[31m+     if (reconnectTimer) clearTimeout(reconnectTimer);[39m
+[31m+     clearInterval(ackDrainTimer);[39m
+[31m+     if (wakeWait) wakeWait();[39m
+[31m+     stopSSE(channel, accountId);[39m
+[31m+     if (cleanupSSE) {[39m
+[31m+       try { await cleanupSSE(); } catch (_) {}[39m
+[31m+     }[39m
+[31m+     log.info(`SSE 下行已停止: ${channel}:${accountId}`);[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+[39m
+
+[36m [2m❯[22m test/downlink-b24-step-timeout.test.js:[2m89:16[22m[39m
+    [90m 87|[39m   [34mit[39m([32m'静态锁：结果日志原样透传 sendVerified（三态不许被 `!!` 洗成二态）'[39m[33m,[39m () [33m=>[39m {
+    [90m 88|[39m     const dl = readFileSync(join(process.cwd(), 'src/core/downlink.js'…
+    [90m 89|[39m     expect(dl).toContain('sendVerified: result && result.sendVerified,…
+    [90m   |[39m                [31m^[39m
+    [90m 90|[39m     expect(dl).not.toContain('sendVerified: !!(result && result.sendVe…
+    [90m 91|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

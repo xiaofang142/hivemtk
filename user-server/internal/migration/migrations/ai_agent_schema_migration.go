@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/migration"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -59,7 +60,7 @@ func (m *AIAgentSchemaMigration) Up(ctx context.Context) error {
 			Description: "系统初始化时创建的默认销售智能体，可编辑或删除",
 			AgentType:   string(model.AgentTypeSales),
 			Persona:     "你是一位资深销售专家，擅长用温和、专业的语气帮助客户解决问题。回复简洁、亲切、不超过 80 字。",
-			LLMModel:    "gpt-4o-mini",
+			LLMModel:    config.DefaultLLMModel(),
 			Status:      1,
 		}
 		if err := m.db.Create(defaultAgent).Error; err != nil {

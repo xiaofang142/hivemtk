@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -46,7 +47,12 @@ func (c *HostController) ResetToken(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, "重置 token 失败: "+err.Error())
 		return
 	}
-	response.Success(ctx, gin.H{"token": token}, "已重置（旧 token 24h 内仍可用）")
+	// 文案只说实现真做的事：ValidateHostToken 对 _prev 没有时限（全仓 bridge/webhook 的
+	// 灰度位同此形状），旧 token 活到下一次重置为止。原先写「24h 内仍可用」——那是一个
+	// 没人实现的承诺，运维按它以为泄露的 token 一天后自动失效，实际不会。
+	// 要真撤销：重置之后再重置一次（把旧值挤出 _prev）。改这句话前先改 host_token.go 的语义，
+	// 二者由 controller/host_loopback_b19f_test.go 钉成一条锁的两半。
+	response.Success(ctx, gin.H{"token": token}, "已重置；旧 token 仍可用，直到下一次重置")
 }
 
 const hostTokenUpgraderBufferSize = 4096
@@ -74,10 +80,15 @@ func NewHostWSHandler(registry *service.HostRegistry, kvRepo hrepo.SystemConfigK
 // 握手协议：连接后第一条帧必须为 {"type":"register","version":"1.0.0","pid":N}，
 // 且 token 必须能解析出归属 user_id（token 形如 "bh_<userID>_<rand>"，admin 生成时绑定）。
 func (h *HostWSHandler) Handle(ctx *gin.Context) {
-	// 1. IP 白名单：仅本地回环（frp 回源取 X-Real-IP，非回环即拒绝）
-	ip := clientIPOf(ctx)
-	if ip != "127.0.0.1" && ip != "::1" {
-		logger.Warnf("[BrowserHostWS] 拒绝非本地连接 ip=%s", ip)
+	// 1. IP 门：只认连接的真实对端（批19f）。这道门守的是「谁能碰到 Host 通道」，
+	// 而 X-Real-IP / X-Forwarded-For 是调用方自报的——一行 `X-Real-IP: 127.0.0.1` 就能把
+	// 任意远程地址伪成本机（gin 的 ClientIP 恰会顺着头改写，RemoteIP 只看 RemoteAddr）。
+	// 本条路径注册在 engine 上、不过 JWT，回环门塌了就只剩 token 单层。
+	// 反过来也不许按头判：本机 Host 经 nginx/frp 进来时对端本来就是 127.0.0.1，
+	// 头里带的是它的公网地址，采信头就是把真人拦在门外。
+	// 取不到对端地址（RemoteAddr 畸形 → RemoteIP 返回空串）一律拒绝：fail-closed。
+	if ip := net.ParseIP(ctx.RemoteIP()); ip == nil || !ip.IsLoopback() {
+		logger.Warnf("[BrowserHostWS] 拒绝非本地连接 remote=%q", ctx.RemoteIP())
 		response.Error(ctx, http.StatusForbidden, "Host 通道仅限本机连接")
 		return
 	}
@@ -121,15 +132,4 @@ func extractHostToken(ctx *gin.Context) string {
 		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 	}
 	return strings.TrimSpace(ctx.Query("token"))
-}
-
-func clientIPOf(ctx *gin.Context) string {
-	if v := strings.TrimSpace(ctx.GetHeader("X-Real-IP")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(ctx.GetHeader("X-Forwarded-For")); v != "" {
-		parts := strings.Split(v, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	return ctx.ClientIP()
 }

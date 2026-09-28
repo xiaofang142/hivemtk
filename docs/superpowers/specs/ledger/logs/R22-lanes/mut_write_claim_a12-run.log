@@ -1,0 +1,24 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/a12mut-dzau0gf1
+
+[Go] 注码前置：16 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=15 passed=15 skip=0 FAIL=[]
+C1   键不完整不再拒占（空正文/零号行都往库里插）                                       杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimIncompleteKeyRefuses
+C2   占坑退回成裸 INSERT（没有 ON CONFLICT：撞约束=报错而不是判出持有者）                 杀掉      total=15 fail=3 skip=0 ｜ TestWriteClaimConcurrentTakeHasOneWinner | TestWriteClaimHeldByOtherStep | TestWriteClaimTakeAndIdempotent
+C3   ON CONFLICT 的目标写错列（键的一半错了 = 库里根本没有这条约束）                      杀掉      total=15 fail=10 skip=0 ｜ TestWriteClaimConcurrentTakeHasOneWinner | TestWriteClaimGateRefusesBeforeAnyFrame | TestWriteClaimHeldByOtherStep
+C4   插了 0 行也当占到（持有者永远查不出来，独占当场失效）                                 杀掉      total=15 fail=3 skip=0 ｜ TestWriteClaimConcurrentTakeHasOneWinner | TestWriteClaimGateRefusesBeforeAnyFrame | TestWriteClaimHeldByOtherStep
+C5   同一步重复占坑判成「别人占着」（跨过点的步被自己的声明拦死）                               杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimTakeAndIdempotent
+C6   释放条件从 AND 写成 OR（任何人按文本都能腾别人的坑）                               杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimReleaseOnlyOwns
+C15  复合唯一索引两列一起摘掉（闸门退回应用层的一段 Go 代码）                               杀掉      total=15 fail=12 skip=0 ｜ TestWriteClaimConcurrentTakeHasOneWinner | TestWriteClaimConstraintLivesInStorage | TestWriteClaimGateRefusesBeforeAnyFrame
+C7   查出持有者却当没事（闸门只剩记账，不再生效）                                       杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimGateRefusesBeforeAnyFrame
+C8   闸门没接线时当成放行（fail-close 折成 fail-open：照抄日志仓储的可选注入）              杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimGateFailCloseWhenUnwired
+C12  executor 根本不看占坑结论（写了闸门却没长在派发路径上）                             杀掉      total=15 fail=3 skip=0 ｜ TestWriteClaimGateFailCloseWhenUnwired | TestWriteClaimGateRefusesBeforeAnyFrame | TestWriteClaimRepoErrorRefusesDispatch
+C16  占坑报错被吞成放行（拿不到独占结论也照发＝并发下双发）                                  杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimRepoErrorRefusesDispatch
+C9   释放不看台账态（已跨过提交点的步也把坑腾出去）                                      杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimKeptWhenCrossed
+C10  本会话台账写失败过照样释放（把唯一凭据删掉，双发只剩读闸一列在守）                            杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimKeptWhenLedgerWriteFailed
+C11  台账态读不出来当成「没发生」（判不出折向放行）                                      杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimKeptWhenStateReadFailed
+C13  收尾不释放（声明表变成永久黑名单，比没有闸门更糟）                                    杀掉      total=15 fail=1 skip=0 ｜ TestWriteClaimReleasedWhenNeverCrossed
+C14  占坑完立刻释放（defer 变同步调用，独占窗口长度归零）                                杀掉      total=15 fail=2 skip=0 ｜ TestWriteClaimKeptWhenCrossed | TestWriteClaimKeptWhenLedgerWriteFailed
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 16 格逐格被杀，无存活 =====
+a12_rc=0

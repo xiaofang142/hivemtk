@@ -1,0 +1,9 @@
+== 控制组（未注码）
+   rc=0 settled=3 skip=0 红=—
+D1   首条键形也带 #0（存量裸 base 记录整体不命中＝全部重报一遍）                   杀掉           settled=3 红=① 首条稳定键必须是裸 base，第二条起才带 #<n>,② flush 到 localStorage 的首条记录仍是裸 base（注释里「落 localStorage」那半句）,③ 反向半边：老落盘的裸 base 记录必须被首扫命中，一条都不许多发
+     红因: → expected '2bvjuk0tju8#0' to be '2bvjuk0tju8' // Object.is equality
+D2   编号不进键（同内容第二条被稳定键吞掉，发生次数身份在扩展侧消失）                     杀掉           settled=3 红=① 首条稳定键必须是裸 base，第二条起才带 #<n>,② flush 到 localStorage 的首条记录仍是裸 base（注释里「落 localStorage」那半句）
+     红因: → expected '2bvjuk0tju8' to be '2bvjuk0tju8#1' // Object.is equality
+
+===== 判定：2 格逐刀被杀，无存活
+OK：源文件逐字节还原（channel-adapter.js=6af6de63），日志在 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/R22dedupkey

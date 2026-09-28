@@ -41,6 +41,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -166,13 +167,18 @@ const (
 	msgReadUnavailable   = "对账底座未装配（缺少 DB 句柄或路由挂在了装配之前），本次未读到任何账单"
 )
 
-// billDeriveBody 派生入参：**只有**版本行号这一格。
+// billDeriveBody 派生入参：版本行号 + 可选账期。
 //
 // 不内嵌 service.BillDeriveInput 而另写一个结构，是为了让"体里能递进来什么"这一格
 // 在 HTTP 边界上独立可读（Swagger 生成的 schema 就是这一格）；字段名与 json tag
 // 必须与服务层同形，TestBillController_BodyCarriesOnlyTheRowKey 逐格试的是这个集合的补集。
+//
+// due_at 只吃带显式偏移的 RFC3339（Go 的 time.Time 默认形状）。这一格刻意不做任何加工：
+// 裸日期 "2026-12-31" 要在 400 那一支挡下，而不是由服务端按某个时区展开成一天 ——
+// 那一展开正是 check-date-bucket-tz 点名的裂脑，而它落点是"该不该催收"这种要给人看的答案。
 type billDeriveBody struct {
-	QuoteRowID string `json:"quote_row_id"`
+	QuoteRowID string     `json:"quote_row_id"`
+	DueAt      *time.Time `json:"due_at,omitempty"`
 }
 
 // Derive POST /api/bill —— 确认这一版报价成交，并开出那张应收。
@@ -180,14 +186,14 @@ type billDeriveBody struct {
 // 200 有两种来源（新开 / 复用已有），差在那一格的 reused 上；四种失败各一档状态码。
 //
 // @Summary      由已成交报价派生账单
-// @Description  只有链上最新且已发出的一版能被确认；金额取自该版行项目合计，不是入参；同版重复确认复用已有账单（data.reused=true）
+// @Description  只有链上最新且已发出的一版能被确认；金额取自该版行项目合计，不是入参；账期是可选入参（不给则记为未定）；同版重复确认复用已有账单（data.reused=true）
 // @Tags         Bill
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        body   body    billDeriveBody              true  "版本行主键 quotes.id（不是跨版本重复出现的逻辑号）"
+// @Param        body   body    billDeriveBody              true  "版本行主键 quotes.id（不是跨版本重复出现的逻辑号）＋ 可选 due_at（带偏移的 RFC3339）"
 // @Success      200    {object}  response.Response  "成功（data 为账单视图，reused 区分新开与复用）"
-// @Failure      400    {object}  response.Response  "入参不合法（含未知字段：金额、状态、币种、账期都不是入参）"
+// @Failure      400    {object}  response.Response  "入参不合法（含未知字段：金额、状态、币种都不是入参；账期形状不对也落这一档）"
 // @Failure      401    {object}  response.Response  "会话里没有操作者身份"
 // @Failure      404    {object}  response.Response  "该版报价不存在"
 // @Failure      409    {object}  response.Response  "该版未发出 / 不是链上最新 / 该链已有一次成交 / 无行项目 / 状态写不动"
@@ -226,7 +232,11 @@ func (c *BillController) Derive(ctx *gin.Context) {
 		return
 	}
 
-	view, err := c.derive.DeriveFromQuote(ctx.Request.Context(), service.BillDeriveInput{QuoteRowID: rowID})
+	view, err := c.derive.DeriveFromQuote(ctx.Request.Context(), service.BillDeriveInput{
+		QuoteRowID: rowID,
+		// 账期原样透传：这一层不做换算、不补默认（判据见 billDeriveBody.DueAt）。
+		DueAt: body.DueAt,
+	})
 	if err != nil {
 		c.replyError(ctx, err, rowID)
 		return

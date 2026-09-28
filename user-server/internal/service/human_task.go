@@ -648,9 +648,14 @@ func (s *HumanTaskService) CancelOpenBySubject(ctx context.Context, subjectType,
 	if err != nil || cur == nil {
 		return nil, false, err
 	}
-	to, ok := model.HumanTaskTransitionAllowed(cur.Kind, cur.Status, model.HumanTaskActionCancel)
+	to, ok := model.HumanTaskCloseTarget(cur.Status, model.HumanTaskActionCancel)
 	if !ok {
 		// 已落定的行不该被这条路径再动一次（与 ApplyAction 的期望态判据同方向）。
+		//
+		// 这里用 CloseTarget 而不是 TransitionAllowed：审批类的 complete/cancel 已经从
+		// 对外动作表里摘掉（人不能从待办侧关掉一条还在等的审批），而**系统按业务身份收口**
+		// 恰恰是那条唯一合法的路。两张判据合成一张时，关掉对外按钮会连这条路一起断掉，
+		// 且断得没有声音（本函数回 (cur,false,nil)）—— 实测过：裁决后待办原样留在池子里。
 		return cur, false, nil
 	}
 	now := loadHumanTaskNowFn()()
@@ -697,8 +702,11 @@ func (s *HumanTaskService) CompleteOpenBySubject(ctx context.Context, subjectTyp
 	if err != nil || cur == nil {
 		return nil, false, err
 	}
-	to, ok := model.HumanTaskTransitionAllowed(cur.Kind, cur.Status, model.HumanTaskActionComplete)
+	to, ok := model.HumanTaskCloseTarget(cur.Status, model.HumanTaskActionComplete)
 	if !ok {
+		// 同 CancelOpenBySubject：判据用 CloseTarget 而不是对外动作表 ——
+		// 审批类的 complete 已从对外表摘掉（人不许从待办侧关掉一条还在等的审批），
+		// 而"审批落定了 ⇒ 它的投影该收口"必须照旧走得通。共用一张表时这条会静默 no-op。
 		return cur, false, nil
 	}
 	now := loadHumanTaskNowFn()()
@@ -920,10 +928,36 @@ func humanTaskTransitionError(cur *model.HumanTask, action, operator string) err
 	case action == model.HumanTaskActionRelease:
 		return fmt.Errorf("%w: 只有 pending 的会话待办可以退回到池子（id=%s，当前态 %s）",
 			ErrHumanTaskTransition, cur.ID, cur.Status)
+	// 下面这一格必须排在"开放态"那条**前面**，否则同一个 409 会说错原因。
+	//
+	// 同一句"complete 在 pending 态不可执行"在两种原因下成立：这一类根本不开放这个动作，
+	// 与这个状态没有这条边。前者要人换个地方点（裁决口），后者要人刷新，处置完全相反。
+	// 先按 kind 判：动作这一维确实对整类都不开放时才说那句准话。
+	case !model.HumanTaskActionAllowed(cur.Kind, action):
+		return fmt.Errorf("%w: %s 类待办不许从待办侧%s（id=%s）——它是审批在等办时的投影，"+
+			"只能由 /api/approvals/%s/decide 的批准或驳回、或它自己的截止时间收口",
+			ErrHumanTaskTransition, cur.Kind, humanTaskActionVerb(action), cur.ID, cur.SubjectID)
 	case model.HumanTaskIsOpen(cur.Status):
 		return fmt.Errorf("%w: %s 在 %s 态不可执行（id=%s）", ErrHumanTaskTransition, action, cur.Status, cur.ID)
 	default:
 		return fmt.Errorf("%w: 这条待办已处理完毕（当前态 %s），同一件事若还需人工请重新投递一条（id=%s）",
 			ErrHumanTaskTransition, cur.Status, cur.ID)
 	}
+}
+
+// humanTaskActionVerb 动作常量 → 提示里那句中文动词。
+// 表里没有时回落到常量原值：宁可提示里出现一个英文 "complete"，也不要因为漏登记
+// 而把整句话术打回"不可执行"那种答非所问的形状。
+func humanTaskActionVerb(action string) string {
+	switch action {
+	case model.HumanTaskActionComplete:
+		return "完成"
+	case model.HumanTaskActionCancel:
+		return "撤销"
+	case model.HumanTaskActionClaim:
+		return "认领"
+	case model.HumanTaskActionRelease:
+		return "释放"
+	}
+	return action
 }

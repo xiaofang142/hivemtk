@@ -74,7 +74,7 @@ func TestRagProduct_DefaultValues(t *testing.T) {
 	product := &RagProduct{}
 
 	if product.LLMModel != "" {
-		t.Logf("LLMModel is %s (expected empty before save, default is 'gpt-3.5-turbo')", product.LLMModel)
+		t.Logf("LLMModel is %q (建列默认由 config.DefaultLLMModel 同值守卫，见 inference_profile_parity_test.go)", product.LLMModel)
 	}
 	if product.Temperature != 0 {
 		t.Logf("Temperature is %f (expected 0 before save, default is 0.7)", product.Temperature)

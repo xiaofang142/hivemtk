@@ -327,7 +327,8 @@
     "baTasks": "任务列表",
     "baCreate": "新建任务",
     "baCron": "定时触发器",
-    "baStatus": "Host 状态"
+    "baStatus": "Host 状态",
+    "badCase": "Bad Case 队列"
   },
   "保存": "保存",
   "提交": "提交",

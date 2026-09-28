@@ -1,0 +1,16 @@
+$ python3 scripts/check-review-closeout.py docs/superpowers/specs/ledger/R22-protocol.jsonl
+(cwd=.)
+rc=1  1.3s
+
+轮次 R22-protocol：条目 41（fixed=38 refuted=2 locked-equivalence=0 blocked=1 非法status 0）
+  钉 1. 承诺轴：审什么由"代码对外说过什么"决定 / 1. 承诺轴：审什么由"代码对外说过什么"决定 / bullet → 实抽 5
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / bullet → 实抽 4
+  钉 2. 台账：一条发现只有四种终态 / 2. 台账：一条发现只有四种终态 / tablerow → 实抽 7
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / bullet → 实抽 1
+  钉 3. 闭合门：`scripts/check-review-closeout.py` / 3. 闭合门：`scripts/check-review-closeout.py` / numbered → 实抽 9
+  钉 6. 本轮收口面（条目级，不是口号） / 6. 本轮收口面（条目级，不是口号） / bullet → 实抽 7
+  钉 8. 验收判据（本轮什么算完） / 8. 验收判据（本轮什么算完） / numbered → 实抽 5
+❌ 第 39 行 id=P-37：claim.quote 在 '8. 验收判据（本轮什么算完）' 一节的任一条目里都找不到连续原文（承诺被改写、已删，或是跨两条拼出来的）
+❌ 节「8. 验收判据（本轮什么算完）」的计数钉已验 5 条承诺，台账里只有 4 条指向它——有承诺没抽轴（每条都要一行 {claim, attack, status}）
+===== 闭合判定：2 条不成立 =====
+

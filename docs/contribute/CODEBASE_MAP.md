@@ -111,7 +111,7 @@ user-web/src/
 cp .env-example .env(改密钥)
 → make install(前端构建+模型下载+数据层+推理栈)
 → make dev(air 热更新启动 user-server)
-→ cd user-web && npm run dev(前端 5173)
+→ cd user-web && npm run dev(前端 8211)
 → 健康检查 curl http://localhost:8204/health
 → 首次访问调 POST /api/system/init-admin 创建超管
 ```

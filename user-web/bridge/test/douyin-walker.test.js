@@ -279,10 +279,13 @@ describe('openConversation / sendOutbound 目标会话切换（左侧找用户�
     expect(opened).toBeNull();
   });
 
+  // 这三条腿只测「切会话再发」的路由，夹具里的假 DOM 不会长出气泡 ⇒ 不显式给 sendVerifyMs:0
+  // 就要白等一整个回查预算（2.5s），会把 5s 的用例超时吃掉。回查本身的判据在
+  // adapter-b24-send-verify.test.js 里逐条钉。
   it('sendOutbound：目标会话≠当前 → 先切到目标会话再发送（左侧找用户→点击进入→发送）', async () => {
     const convList = [makeConvItem('a1', '张三'), makeConvItem('b2', '李四')];
     const { adapter } = buildCtx(convList, 'a1');
-    const ok = await adapter.sendOutbound('您好，请问有什么可以帮您？', 'b2');
+    const ok = await adapter.sendOutbound('您好，请问有什么可以帮您？', 'b2', { sendVerifyMs: 0 });
     expect(ok.ok).toBe(true);
     expect(adapter.getConversationId()).toBe('b2'); 
     expect(adapter.hooks.sendText).toHaveBeenCalledWith('您好，请问有什么可以帮您？');
@@ -299,7 +302,7 @@ describe('openConversation / sendOutbound 目标会话切换（左侧找用户�
   it('sendOutbound：目标会话=当前 → 直接发送，不切换', async () => {
     const convList = [makeConvItem('a1', '张三')];
     const { adapter } = buildCtx(convList, 'a1');
-    const ok = await adapter.sendOutbound('在的', 'a1');
+    const ok = await adapter.sendOutbound('在的', 'a1', { sendVerifyMs: 0 });
     expect(ok.ok).toBe(true);
     expect(adapter.hooks.sendText).toHaveBeenCalledWith('在的');
   });

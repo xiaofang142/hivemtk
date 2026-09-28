@@ -1,0 +1,12 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/dtidmut-ovri425w
+[Go] 注码前置：2 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=1 total=0 passed=0 skip=0 FAIL=[]
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+# hivemtk-user/internal/pkg/db
+internal/pkg/db/migrate.go:383:17: undefined: browsermodel.BrowserAuditDigest
+internal/pkg/db/migrate.go:384:17: undefined: browsermodel.BrowserAuditPruneRun
+internal/pkg/db/migrate.go:397:17: undefined: browsermodel.BrowserWriteClaim
+
+[Go] 控制组不干净——后面所有红/绿都不可信
+dt_rc=1

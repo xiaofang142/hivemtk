@@ -1,0 +1,79 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/a6mut-22e8f9pz
+[Go] 本趟只跑 1 格：D23
+
+[Go] 注码前置：1 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=1 total=30 passed=29 skip=0 FAIL=['TestA6PruneRollsBackWhenDigestOverstatesDeletedRows']
+=== RUN   TestA6ChainLinksToNewestDigestAcrossThreeRounds
+--- PASS: TestA6ChainLinksToNewestDigestAcrossThreeRounds (0.86s)
+=== RUN   TestA6ChainHashComposesPrevWithBatch
+--- PASS: TestA6ChainHashComposesPrevWithBatch (0.08s)
+=== RUN   TestA6PruneFailsCloseWhenDeleteFailsMidRun
+--- PASS: TestA6PruneFailsCloseWhenDeleteFailsMidRun (0.10s)
+=== RUN   TestA6RunRowClosesArithmeticUnderTwoBatches
+    retention_a6_chain_prune_test.go:362: 钉死：rows_before=10001 == rows_pruned=10001 == 入口到期数，故 `RowsBefore: total` 与实现逐字节同值、杀不掉
+--- PASS: TestA6RunRowClosesArithmeticUnderTwoBatches (12.96s)
+=== RUN   TestA6DigestCoversDeletedRows
+--- PASS: TestA6DigestCoversDeletedRows (0.04s)
+=== RUN   TestA6DigestClosesOverRunRow
+--- PASS: TestA6DigestClosesOverRunRow (0.04s)
+=== RUN   TestA6ChainLinksAcrossRuns
+--- PASS: TestA6ChainLinksAcrossRuns (0.05s)
+=== RUN   TestA6DigestRecordsSeqGap
+    retention_a6_test.go:276: 区间长度 5 != 行数 4：断号 1 处，摘要已如实记下（这正是本腿要的形状）
+--- PASS: TestA6DigestRecordsSeqGap (0.04s)
+=== RUN   TestA6BatchDigestSensitiveToPayload
+--- PASS: TestA6BatchDigestSensitiveToPayload (0.04s)
+=== RUN   TestA6PruneFailsCloseWhenDigestWriteBlocked
+--- PASS: TestA6PruneFailsCloseWhenDigestWriteBlocked (0.05s)
+=== RUN   TestA6PruneFailsCloseWithoutDigestTable
+--- PASS: TestA6PruneFailsCloseWithoutDigestTable (0.04s)
+=== RUN   TestA6EmptyWindowStillWritesRunRow
+--- PASS: TestA6EmptyWindowStillWritesRunRow (0.04s)
+=== RUN   TestA6DigestReproducibleFromRowContent
+--- PASS: TestA6DigestReproducibleFromRowContent (0.04s)
+=== RUN   TestA6DigestSplitsWithDeleteBatches
+--- PASS: TestA6DigestSplitsWithDeleteBatches (0.15s)
+=== RUN   TestA6DigestSeparatesUnackedFromFailedFrame
+--- PASS: TestA6DigestSeparatesUnackedFromFailedFrame (0.07s)
+=== RUN   TestA6DigestChainIdempotentAtStorage
+--- PASS: TestA6DigestChainIdempotentAtStorage (0.03s)
+=== RUN   TestA6DigestSeparatesPassedFromFailedFrame
+--- PASS: TestA6DigestSeparatesPassedFromFailedFrame (0.06s)
+=== RUN   TestA6RunRowCountsEntryWindowNotLateCrossing
+--- PASS: TestA6RunRowCountsEntryWindowNotLateCrossing (0.07s)
+=== RUN   TestA6PruneRollsBackWhenDigestOverstatesDeletedRows
+    retention_a6_test.go:903: 撤销原因不含 "摘要声明 3 行、实删 2 行"：ERROR: tuple to be updated was already modified by an operation triggered by the current command (SQLSTATE 27000) —— 报的是别的原因（触发器/约束），本腿的对照对象没成立
+--- FAIL: TestA6PruneRollsBackWhenDigestOverstatesDeletedRows (0.07s)
+=== RUN   TestB19GCommandLogPruneIsBatched
+--- PASS: TestB19GCommandLogPruneIsBatched (0.16s)
+=== RUN   TestR23PruneRunRecordsCutoffSource
+--- PASS: TestR23PruneRunRecordsCutoffSource (0.06s)
+=== RUN   TestR23PruneRefusesEmptyCutoffSource
+--- PASS: TestR23PruneRefusesEmptyCutoffSource (0.05s)
+FAIL
+FAIL	hivemtk-user/internal/browser_automation/repository	15.703s
+2026-09-23T06:33:02+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestR23RetentionCutoffSourceShape
+--- PASS: TestR23RetentionCutoffSourceShape (0.00s)
+=== RUN   TestR23RetentionReadsEnvPerSweep
+--- PASS: TestR23RetentionReadsEnvPerSweep (0.00s)
+=== RUN   TestR23PruneOncePassesSourceToRepo
+--- PASS: TestR23PruneOncePassesSourceToRepo (0.00s)
+=== RUN   TestR23PruneOnceDisabledByZero
+--- PASS: TestR23PruneOnceDisabledByZero (0.00s)
+=== RUN   TestR23RetentionBootGate
+--- PASS: TestR23RetentionBootGate (0.00s)
+=== RUN   TestSessionExportAggregates
+--- PASS: TestSessionExportAggregates (0.00s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/service	0.633s
+2026-09-23T06:33:03+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestA6ExportPayloadCarriesAuditDigests
+--- PASS: TestA6ExportPayloadCarriesAuditDigests (0.87s)
+=== RUN   TestA6ExportDistinguishesUnwiredFromNothingPruned
+--- PASS: TestA6ExportDistinguishesUnwiredFromNothingPruned (0.14s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/controller	1.641s
+FAIL
+
+[Go] 控制组不干净——后面所有红/绿都不可信

@@ -1,0 +1,37 @@
+== 控制组（未注码）
+   rc=0 settled=24 skip=0 红=—
+V1   判据从「计数增加」退化成「文本命中」                                   杀掉           settled=24 红=基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+     红因: → expected true to be false // Object.is equality
+V2   回查不再排除跨会话残留节点                                        杀掉           settled=24 红=跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+     红因: → expected true to be false // Object.is equality
+V3   回声帧不再声明结论位                                           杀掉           settled=24 红=反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false,气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+     红因: → expected undefined to be truthy
+V4   红线：回查未见参与 ack（会把不可撤销的双发交回渲染滞后）                       杀掉           settled=24 红=反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false,基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数,跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+     红因: → expected false to be true // Object.is equality
+V5   三态：没走到回查的出路折成 false                                  杀掉           settled=24 红=三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+     红因: → expected true to be false // Object.is equality
+V7   回查不轮询（第一次没见着就判未见）                                    杀掉           settled=24 红=渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+     红因: → expected false to be true // Object.is equality
+V11  基线改在点击之后取                                            杀掉           settled=24 红=气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true,红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡,静态契约：fillAndSend 在 rawSendText 前过闸、成功后盖章
+     红因: → expected 2804 to be less than 2700
+V6   外层预算丢掉回查切片                                           杀掉           settled=24 红=发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）,预算仍是上界：永远不回包的发送要在「sendText 预算 + 回查切片」内被切掉并留 pending
+     红因: → expected "vi.fn()" to be called 1 times, but got 0 times
+V8   帧构造不再透传 callerExtra                                  杀掉           settled=24 红=反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false,气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+     红因: → expected undefined to be truthy
+V9   重试站点漂回不含回查切片的裸预算                                     杀掉           settled=24 红=静态契约：发送全链三处均走长度感知超时，无裸 await
+     红因: → expected 'import { getOutbox, ackOutbox } from …' not to contain 'humanSendTimeoutMs'
+V10  结果日志把三态洗成二态                                          杀掉           settled=24 红=静态锁：结果日志原样透传 sendVerified（三态不许被 `!!` 洗成二态）
+     红因: → expected 'import { getOutbox, ackOutbox } from …' to contain 'sendVerified: result && result.sendVe…'
+V12  _occurrenceInList 不再判归属（残留挤掉真实那条的 #0 编号）             杀掉           settled=24 红=_occurrenceInList 只数本会话的节点：残留不得把真实那条挤成 #1
+     红因: → expected 1 to be +0 // Object.is equality
+V13  _handleIncremental 不再判归属（增量把残留上行）                    杀掉           settled=24 红=_scanIncremental（fallbackTimer 每 3s 走这条）不得增量上行残留气泡
+     红因: → expected "vi.fn()" to not be called at all, but actually been called 1 times
+V14  _backfill 不再判归属（残留并进当前会话历史帧）                         杀掉           settled=24 红=_backfill 不得把上一会话残留气泡并进当前会话的历史帧
+     红因: → expected [ '上一会话的残留', '屏内的这条' ] to not include '上一会话的残留'
+V15  getMessages 不再判归属                                    杀掉           settled=24 红=getMessages（PollingLoop 每秒走的公开入口）不得把残留节点当本会话新消息返回
+     红因: → expected [ '上一会话的残留', '屏内的这条' ] to not include '上一会话的残留'
+V16  _collectUnseenText 不再判归属                             杀掉           settled=24 红=_collectUnseenText（巡检单个会话的一抓）不得把残留节点收进批量上行
+     红因: → expected [ '切换后残留' ] to deeply equal []
+
+===== 判定：16 格逐刀被杀，无存活
+OK：四个源文件逐字节还原（channel-adapter.js=6af6de63 constants.js=f17a0e34 downlink.js=712a0b00 types.js=d0b00bfd），日志在 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/B24sendverify

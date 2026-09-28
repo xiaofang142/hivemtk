@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '../..')
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:8213'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API_BASE = process.env.API_BASE_URL || 'http://localhost:8204'
 const CRED = { user: 'admin', pass: process.env.ADMIN_PASS || 'Admin@123456' }
 const OUT_DIR = path.resolve(__dirname, 'reports')

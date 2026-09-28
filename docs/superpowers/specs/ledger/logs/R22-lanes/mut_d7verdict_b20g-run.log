@@ -1,0 +1,11 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b20gmut-9xzr13w6
+[Go] 注码前置：3 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=0 total=3 passed=3 skip=0 FAIL=[]
+G1   消费点：闸门判超时后吞掉结论，继续走到不可逆提交点                                  杀掉      total=3 fail=1 skip=0 ｜ TestWSE2E_D7ConfirmTimeoutVerdictConsumedByCaller
+G2   归因：确认预算到头说成执行预算（运维去调错旋钮）                                   杀掉      total=3 fail=1 skip=0 ｜ TestWSE2E_D7ConfirmTimeoutVerdictConsumedByCaller
+G3   判据本身：计时器到点头折成 granted                                      杀掉      total=3 fail=1 skip=0 ｜ TestWSE2E_D7ConfirmTimeoutVerdictConsumedByCaller
+[Go] 同族（同一批用例被多格杀掉，判据可能重叠）：G1≈G2≈G3 → TestWSE2E_D7ConfirmTimeoutVerdictConsumedByCaller
+[Go] 已全量还原（md5 一致）
+
+===== 电池判定：Go 3 格逐格被杀，无存活 =====
+b20g_rc=0

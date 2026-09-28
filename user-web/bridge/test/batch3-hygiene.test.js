@@ -21,7 +21,10 @@ describe('B4 humanSendTimeoutMs（长度感知超时预算）', () => {
     expect(ca).toContain('withTimeout(this.rawSendText(text), humanSendTimeoutMs(text)');
     const dl = readSrc('core/downlink.js');
     expect(dl).toContain('sendOutbound-SSE'); // SSE 路径对称超时
-    expect(dl.match(/humanSendTimeoutMs\(/g).length).toBeGreaterThanOrEqual(3); // poll + retry + SSE
+    expect(dl.match(/(?:humanSendTimeoutMs|outboundStepTimeoutMs)\(/g).length).toBeGreaterThanOrEqual(3); // poll + retry + SSE
+    // 批24：外层三处一律走「含回查切片」的那条。downlink 里再出现裸 humanSendTimeoutMs
+    // 就意味着某一处外层会在回查还睡着的时候判失败 ⇒ 不 ack ⇒ 服务端重推 ⇒ 双发。
+    expect(dl).not.toContain('humanSendTimeoutMs');
     expect(dl).not.toContain("console.log('[bridge FULL]");
   });
   it('静态契约：uplink 吞错已接日志并回插 buffer', () => {
@@ -101,10 +104,16 @@ describe('B6 跨上下文全局发送闸', () => {
   it('静态契约：fillAndSend 在 rawSendText 前过闸、成功后盖章', () => {
     const ca = readSrc('core/channel-adapter.js');
     const start = ca.indexOf('async sendOutbound(text');
-    const body = ca.slice(start, start + 3000);
+    // 方法体边界取"下一个 2 空格缩进的收尾 brace"（sendOutbound 是类里最后一个方法），
+    // 而不是固定字符数：注释一多就会把 stampGlobalSendAt() 挤出窗口，那种红跟契约无关。
+    const end = ca.indexOf('\n  }', start);
+    const body = ca.slice(start, end);
     expect(body.length).toBeGreaterThan(100); // 方法体确实存在
     expect(body.indexOf('globalSendWaitMs')).toBeGreaterThan(-1);
     expect(body.indexOf('globalSendWaitMs')).toBeLessThan(body.indexOf('rawSendText(text)'));
     expect(body).toContain('stampGlobalSendAt()');
+    // 批24：回查基线必须取自**点击之前**（点击之后取基线 ⇒ 计数永远不增 ⇒ 恒判未见）
+    expect(body.indexOf('_countVisibleText')).toBeGreaterThan(-1);
+    expect(body.indexOf('_countVisibleText')).toBeLessThan(body.indexOf('rawSendText(text)'));
   });
 });

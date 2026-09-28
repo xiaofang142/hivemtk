@@ -40,7 +40,8 @@ import (
 // 还有一个必须写下来的坑：两把旗子不是一把 ——
 //   - `FF_LTC_APPROVAL_GATE`（本文件）：审批门挂不挂链、以哪种模式挂；
 //   - `approval.FlagKey` = `ai.safety.tool_approval_gate`（env 名
-//     `FF_AI.SAFETY_TOOL_APPROVAL_GATE`，由 featureflag 读取，点号合法）：白名单生不生效。
+//     `FF_AI_SAFETY_TOOL_APPROVAL_GATE`，由 featureflag 读取：flag 名里的点号在
+//     `EnvNameOf` 里翻成下划线，因为带点号的名字在 shell 里 export 不了）：白名单生不生效。
 //
 // 因此**阻断需要两把旗子同时到位**（`block` + 白名单旗子为真），只开一把都不会拦人。
 // 观察端点把两把旗子的当前值、有效白名单条数和"本模式是否真拦"一起回显，

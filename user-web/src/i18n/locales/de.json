@@ -328,7 +328,8 @@
     "baTasks": "Aufgabenliste",
     "baCreate": "Neue Aufgabe",
     "baCron": "Zeitpläne",
-    "baStatus": "Host-Status"
+    "baStatus": "Host-Status",
+    "badCase": "Bad-Case-Warteschlange"
   },
   "保存": "Save",
   "提交": "Submit",

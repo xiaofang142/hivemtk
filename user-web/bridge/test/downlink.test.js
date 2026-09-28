@@ -30,6 +30,10 @@ vi.mock('../src/core/sanitize.js', () => ({
 import { pollDownlink, initDownlink } from '../src/core/downlink.js';
 import { getOutbox, ackOutbox } from '../src/core/http-ingest.js';
 
+// 批20d-A4：已发缓存的落盘形状从 'key' 变成 ['key', 写入时刻]（TTL 需要年龄）。
+// 本文件的断言只关心"哪条被记住了"，所以统一抽一层键视图，别把形状变化当成行为变化。
+const sentKeys = (raw) => (raw || []).map((e) => (Array.isArray(e) ? e[0] : e));
+
 // 每个用例用独立 channel，避免模块级 SentCache 单例跨用例污染
 function cfg() { return async () => ({ serverUrl: 'http://localhost:8204', token: 't' }); }
 
@@ -45,7 +49,7 @@ describe('downlink / SentCache 去重 + 持久化', () => {
     ackOutbox.mockResolvedValue({ status: 'ok' });
     await pollDownlink('douyin', 'acc1', cfg(), { sendOutbound: adapter.sendOutbound });
     const stored = await chrome.storage.local.get(['bridge_sent_douyin']);
-    expect(stored['bridge_sent_douyin']).toContain('m-d1|c1');
+    expect(sentKeys(stored['bridge_sent_douyin'])).toContain('m-d1|c1');
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
     expect(ackOutbox).toHaveBeenCalledWith(expect.any(Object), ['m-d1'], expect.any(Object));
   });
@@ -108,7 +112,7 @@ describe('downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试）', 
     await pollDownlink('douyin', 'acc1', c, { sendOutbound: adapter.sendOutbound });
     // P0-9：sendOutbound 成功 = 用户已收到 → 写 cache 防止下轮重发
     let stored = await chrome.storage.local.get(['bridge_sent_douyin']);
-    expect(stored['bridge_sent_douyin'] || []).toContain('m-ackfail|c1');
+    expect(sentKeys(stored['bridge_sent_douyin'])).toContain('m-ackfail|c1');
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
 
     // 下轮：cache 命中 → 不重发用户，但两条独立机制各补一次确认
@@ -166,9 +170,9 @@ describe('downlink / 跨会话同 msg_id 不误去重（P0 回归）', () => {
     // 缓存写入两个复合键，不含裸 msg_id
     const stored = await chrome.storage.local.get(['bridge_sent_xiaohongshu']);
     const arr = stored['bridge_sent_xiaohongshu'] || [];
-    expect(arr).toContain('mh:samehash|convA');
-    expect(arr).toContain('mh:samehash|convB');
-    expect(arr).not.toContain('mh:samehash');
+    expect(sentKeys(arr)).toContain('mh:samehash|convA');
+    expect(sentKeys(arr)).toContain('mh:samehash|convB');
+    expect(sentKeys(arr)).not.toContain('mh:samehash');
   });
 
   it('跨轮次：第一轮 convA 已 ack，第二轮 convB 仍能下发（不被 convA 缓存误拦截）', async () => {

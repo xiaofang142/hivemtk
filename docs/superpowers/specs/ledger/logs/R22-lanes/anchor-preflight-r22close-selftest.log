@@ -1,0 +1,12 @@
+  ✓ B 锚点 0 命中        → [fake] C1 锚点在 pkg/a.go 里命中 0 次（要求恰好 1）：'Z := 1'
+  ✓ B 锚点 2 命中        → [fake] C1 锚点在 pkg/a.go 里命中 2 次（要求恰好 1）：'X := 1'
+  ✓ B 注码与原文相同        → [fake] C1 注码无效（原文与注码后一致＝这一格永不开火）
+  ✓ B expect 改名      → [fake] C1 的 expect 用例在工作树里找不到：TestRenamedAway
+  ✓ B 槽没登记           → [fake] C1 的槽 'zzz' 不在 SLOT_FILES 里（新增槽要同时登记文件，否则本门读不到它）
+  ✓ B 注码后语法坏         → [fake] C1@pkg/a.go 注码后 gofmt 语法坏，跑出来只会是 build failed：<standard input>:15:6: expected '(', found broken
+<standa
+  ✓ A 注码后字节没变        → [fake] C1@pkg/a.go 注码打完了而字节没变（这一格永不开火）
+  ✓ 对照组：完好的一格 0 问题
+  ✓ 新电池没分类           → scripts/mut_actionability_b17.py 是新电池，没在 COVERED/UNCOVERED 里分类
+  ✓ 名单里的电池已不在磁盘      → COVERED/UNCOVERED 里的 mut_zz_not_on_disk.py 在 scripts/ 里已经不存在（名单要跟着删）
+反向测：10/10 格各自点名到该开火的那一条判据

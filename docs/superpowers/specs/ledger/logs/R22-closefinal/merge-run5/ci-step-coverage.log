@@ -1,0 +1,253 @@
+$ python3 scripts/check-ci-step-coverage.py
+(cwd=.)
+rc=1  30.1s
+
+══════ CI 步骤执行覆盖率（xiaofang142/hivemtk，最近 24 次 master run）══════
+
+[Docs Consistency / 文档一致性 + 模板结构]
+  Checkout                                             执行   4  成   4  败   0  跳   0
+  Complete job                                         执行   4  成   4  败   0  跳   0
+  Post Checkout                                        执行   4  成   4  败   0  跳   0
+  Set up job                                           执行   4  成   4  败   0  跳   0
+  check-no-xapptool 反向测试（证明上一步能红）                      执行   4  成   4  败   0  跳   0
+  check-no-xapptool（线上域防回流）                            执行   4  成   4  败   0  跳   0
+  功能文档 8 节模板结构（OPT-DOC-13）                             执行   4  成   4  败   0  跳   0
+  文档引用一致性（OPT-DOC-15）                                  执行   4  成   4  败   0  跳   0
+  模板覆盖率报告（OPT-DOC-14，仅报告）                              执行   4  成   4  败   0  跳   0
+
+[Docs Link Check / lychee --offline]
+  Checkout                                             执行   4  成   4  败   0  跳   0
+  Complete job                                         执行   4  成   4  败   0  跳   0
+  Offline link check (git-index scoped)                执行   4  成   4  败   0  跳   0
+  Post Checkout                                        执行   4  成   4  败   0  跳   0
+  Run lychee (offline link check)                      执行   4  成   4  败   0  跳   0
+  Set up job                                           执行   4  成   4  败   0  跳   0
+  Summary                                              执行   4  成   4  败   0  跳   0
+
+[Lint / ESLint (Bridge)]
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Install dependencies                                 执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Post Set up Node                                     执行   5  成   5  败   0  跳   0
+  Run ESLint                                           执行   5  成   5  败   0  跳   0
+  Set up Node                                          执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+
+[Lint / ESLint (user-web 主应用)]
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Install dependencies                                 执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Post Set up Node                                     执行   0  成   0  败   0  跳   5   ← 未执行（housekeeping，不计门禁）
+  Run ESLint (errors block, warnings informational)    执行   5  成   0  败   5  跳   0   ← 从未通过
+  Set up Node                                          执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+
+[Lint / Shell $VAR+CJK expansion guard]
+  Check shell scripts for the bash 3.2 CJK expansion h 执行   5  成   5  败   0  跳   0
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+  check-shell-cjk-expansion 反向测试（证明它会红）                执行   5  成   5  败   0  跳   0
+
+[Lint / Shellcheck (error 级零容忍)]
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+  check-shellcheck 反向测试（证明它会红）                         执行   5  成   5  败   0  跳   0
+  check-shellcheck（全仓 shell 文件的 error 面）               执行   5  成   5  败   0  跳   0
+  装 shellcheck（钉版本，与本地实测同一版）                           执行   5  成   5  败   0  跳   0
+
+[Lint / Workflow refs integrity]
+  Check workflow references                            执行   5  成   5  败   0  跳   0
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+  check-action-runtime 用例（含真仓库基线自洽）                    执行   5  成   5  败   0  跳   0
+  check-ci-step-coverage 用例（假 gh，不联网）                  执行   5  成   5  败   0  跳   0
+
+[Lint / i18n Coverage Check]
+  Check i18n coverage                                  执行   5  成   5  败   0  跳   0
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Post Set up Node                                     执行   5  成   5  败   0  跳   0
+  Set up Node                                          执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+
+[Markdown Lint / markdownlint-cli2]
+  Checkout                                             执行   4  成   4  败   0  跳   0
+  Complete job                                         执行   4  成   4  败   0  跳   0
+  Post Checkout                                        执行   4  成   4  败   0  跳   0
+  Run markdownlint-cli2                                执行   4  成   4  败   0  跳   0
+  Set up job                                           执行   4  成   4  败   0  跳   0
+  Summary                                              执行   4  成   4  败   0  跳   0
+
+[SBOM / Generate SBOM]
+  Checkout                                             执行   5  成   5  败   0  跳   0
+  Complete job                                         执行   5  成   5  败   0  跳   0
+  Generate SBOM (SPDX, Bridge)                         执行   5  成   5  败   0  跳   0
+  Generate SBOM (SPDX, Frontend)                       执行   5  成   5  败   0  跳   0
+  Generate SBOM (SPDX, Go)                             执行   5  成   5  败   0  跳   0
+  Install syft                                         执行   5  成   5  败   0  跳   0
+  Post Checkout                                        执行   5  成   5  败   0  跳   0
+  Set up job                                           执行   5  成   5  败   0  跳   0
+  Upload SBOM artifacts                                执行   5  成   5  败   0  跳   0
+
+[Seam Guard / 异步体裸读全局 + seam accessor 注册表]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Python                                   执行   1  成   1  败   0  跳   0
+  Set up Python                                        执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  seam 全局读写各走自己的 accessor（R28 门，注册表 17 行）              执行   1  成   1  败   0  跳   0
+  协程体裸读包级注入点（R27 门，基线 0 站点）                            执行   1  成   1  败   0  跳   0
+
+[user-server-ci / API Inventory Report (non-blocking)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Generate API inventory                               执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Upload inventory                                     执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Benchmarks (P0-5 性能基线)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Initialize containers                                执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   1  成   1  败   0  跳   0
+  Run go benchmarks (P0-5 性能基线)                        执行   1  成   1  败   0  跳   0
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Stop containers                                      执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Bridge Extension Tests (vitest)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  ESLint (P0-CI)                                       执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Node.js                                  执行   1  成   1  败   0  跳   0
+  Set up Node.js                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Upload coverage to Codecov                           执行   1  成   1  败   0  跳   0
+  npm ci                                               执行   1  成   1  败   0  跳   0
+  vitest                                               执行   1  成   1  败   0  跳   0
+  vitest coverage                                      执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Build (user-web)]
+  Build                                                执行   1  成   1  败   0  跳   0
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Node.js                                  执行   1  成   1  败   0  跳   0
+  Set up Node.js                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  npm ci                                               执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Coverage (user-server)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Coverage (Go)                                        执行   1  成   0  败   1  跳   0   ← 从未通过
+  Coverage threshold (OPT-CI-06)                       执行   1  成   1  败   0  跳   0
+  Initialize containers                                执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   0  成   0  败   0  跳   1   ← 未执行（housekeeping，不计门禁）
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Stop containers                                      执行   1  成   1  败   0  跳   0
+  Upload coverage to Codecov                           执行   0  成   0  败   0  跳   1   ← 从未执行
+
+[user-server-ci / ESLint (user-web)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  ESLint (OPT-FE-01)                                   执行   1  成   0  败   1  跳   0   ← 从未通过
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Node.js                                  执行   0  成   0  败   0  跳   1   ← 未执行（housekeeping，不计门禁）
+  Set up Node.js                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  npm ci                                               执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Lint (embed-sdk)]
+  Build                                                执行   1  成   1  败   0  跳   0
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Node.js                                  执行   1  成   1  败   0  跳   0
+  Set up Node.js                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Test (unit + boundary)                               执行   1  成   1  败   0  跳   0
+  npm ci                                               执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Security scans (gitleaks / govulncheck)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Go dependency audit (govulncheck)                    执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   1  成   1  败   0  跳   0
+  Secret scan (gitleaks)                               执行   1  成   1  败   0  跳   0
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Static gates (arch/vet/gofmt/lint/build)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   1  成   1  败   0  跳   0
+  Post golangci-lint（架构护栏 depguard）                    执行   1  成   1  败   0  跳   0
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  go build                                             执行   1  成   1  败   0  跳   0
+  go mod download                                      执行   1  成   1  败   0  跳   0
+  go vet                                               执行   1  成   1  败   0  跳   0
+  gofmt（格式门禁）                                          执行   1  成   1  败   0  跳   0
+  golangci-lint（架构护栏 depguard）                         执行   1  成   1  败   0  跳   0
+  日期口径守卫（宿主机时区棘轮）                                      执行   1  成   1  败   0  跳   0
+  未接线资产台账核对（能力可用性的事实源）                                 执行   1  成   1  败   0  跳   0
+  架构合规检查(分层)                                           执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Unit tests -race (user-server core)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Initialize containers                                执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   0  成   0  败   0  跳   1   ← 未执行（housekeeping，不计门禁）
+  Run unit tests (with -race)                          执行   1  成   0  败   1  跳   0   ← 从未通过
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Stop containers                                      执行   1  成   1  败   0  跳   0
+
+[user-server-ci / Unit tests -race (user-server service)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Initialize containers                                执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Go                                       执行   0  成   0  败   0  跳   1   ← 未执行（housekeeping，不计门禁）
+  Run unit tests (with -race)                          执行   1  成   0  败   1  跳   0   ← 从未通过
+  Set up Go                                            执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Stop containers                                      执行   1  成   1  败   0  跳   0
+
+[user-server-ci / npm audit (user-web)]
+  Checkout                                             执行   1  成   1  败   0  跳   0
+  Complete job                                         执行   1  成   1  败   0  跳   0
+  Post Checkout                                        执行   1  成   1  败   0  跳   0
+  Post Set up Node.js                                  执行   1  成   1  败   0  跳   0
+  Set up Node.js                                       执行   1  成   1  败   0  跳   0
+  Set up job                                           执行   1  成   1  败   0  跳   0
+  Upload npm audit report                              执行   1  成   1  败   0  跳   0
+  npm audit (OPT-CI-10)                                执行   1  成   1  败   0  跳   0
+  npm ci                                               执行   1  成   1  败   0  跳   0
+
+══════ 结论 ══════
+  统计步骤 194 个 / 作业 24 个；NEVER_RUN 0 个；NEVER_RUN_JOB 0 个；ALWAYS_RED 1 个
+  · ALWAYS_RED Lint / ESLint (user-web 主应用) / Run ESLint (errors block, warnings informational)（执行 5 次，次次失败）
+  节奏门（yml 里有 if: 守卫或 needs 继承自它，本就不在 push 上跑，不计红）：
+  · 节奏门     Lint / LICENSE Compliance Scan（窗口内出现 5 次，全被跳过）
+  ⇒ 这些门禁没有产生过任何证据；先判「门跑不起来」还是「门查出了问题」，再决定修门还是修存量。
+

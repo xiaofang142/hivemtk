@@ -1,0 +1,7 @@
+$ python3 scripts/check_workflow_refs.py
+(cwd=.)
+rc=0  0.4s
+
+══════ 工作流引用完整性（15 个文件）══════
+  ✓ 路径 / step id / needs / artifact 配对全部可解析
+

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -14,7 +15,8 @@ func TestRegistryOfflinePaths(t *testing.T) {
 	if err := r.EnsureOnline(7); err != ErrHostOffline {
 		t.Errorf("无连接应 ErrHostOffline, got %v", err)
 	}
-	if _, err := r.Request(context.Background(), 7, time.Second, map[string]any{"action": "wait"}); err != ErrHostOffline {
+	// 批21 起 Request 的离线错误多挂了一层「未上线」标记（归因用），对外的离线判据不变。
+	if _, err := r.Request(context.Background(), 7, time.Second, map[string]any{"action": "wait"}); !errors.Is(err, ErrHostOffline) {
 		t.Errorf("Request 无连接应 ErrHostOffline, got %v", err)
 	}
 	st := r.MyStatus(7)

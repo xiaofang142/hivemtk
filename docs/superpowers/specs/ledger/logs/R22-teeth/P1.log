@@ -1,0 +1,40 @@
+2026-09-22T12:32:13+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestSignalConfirmBindsPayload
+--- PASS: TestSignalConfirmBindsPayload (0.00s)
+=== RUN   TestPendingGateExposesAwaitingPayload
+--- PASS: TestPendingGateExposesAwaitingPayload (0.00s)
+=== RUN   TestConfirmGateFramesBindPayloadAndOmitBody
+--- PASS: TestConfirmGateFramesBindPayloadAndOmitBody (0.05s)
+=== RUN   TestConfirmGateDecisionPerOutgoing
+--- PASS: TestConfirmGateDecisionPerOutgoing (0.01s)
+=== RUN   TestConfirmStatusDistinguishesGateElsewhere
+--- PASS: TestConfirmStatusDistinguishesGateElsewhere (0.00s)
+=== RUN   TestConfirmGateReadIsOwnershipScoped
+--- PASS: TestConfirmGateReadIsOwnershipScoped (0.00s)
+=== RUN   TestGatePayloadMustNeverBeEmpty
+--- PASS: TestGatePayloadMustNeverBeEmpty (0.00s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/service	0.548s
+
+2026-09-22T12:32:16+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestB20ConfirmRequiresPayloadHash
+--- PASS: TestB20ConfirmRequiresPayloadHash (3.57s)
+=== RUN   TestB20ConfirmStatusMappingIsDistinct
+--- PASS: TestB20ConfirmStatusMappingIsDistinct (0.00s)
+=== RUN   TestB20ConfirmGateElsewhereFromAuditFrame
+--- PASS: TestB20ConfirmGateElsewhereFromAuditFrame (0.35s)
+=== RUN   TestB20ConfirmGateReadEndpoint
+--- PASS: TestB20ConfirmGateReadEndpoint (0.22s)
+PASS
+ok  	hivemtk-user/internal/browser_automation/controller	4.635s
+
+2026-09-22T12:32:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestIsDuplicateReason_只认重复结论短语不认任意子串
+    dup_outcome_b17_test.go:46: 不应判重复（判了就是让客户端永久停止重发一条没落库的消息）: "batch handle error: 持久化消息失败: duplicate key value violates unique constraint \"idx_message_hub_msg_id\" (SQLSTATE 23505)"
+    dup_outcome_b17_test.go:46: 不应判重复（判了就是让客户端永久停止重发一条没落库的消息）: "handle failed for text: 这条评论 duplicate 会被 skip 掉的"
+--- FAIL: TestIsDuplicateReason_只认重复结论短语不认任意子串 (0.00s)
+=== RUN   TestIsDuplicateReason
+--- PASS: TestIsDuplicateReason (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/channelgw	0.674s
+FAIL

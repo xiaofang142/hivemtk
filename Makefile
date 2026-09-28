@@ -88,7 +88,7 @@ install:
 	@echo "  Embedding  : 127.0.0.1:8208/v1"
 	@echo "  Rerank     : 127.0.0.1:8209"
 	@echo "  user-server: 127.0.0.1:8204（make dev 或 make user-build 后启动）"
-	@echo "  user-web   : 127.0.0.1:5173（cd user-web && npm run dev）"
+	@echo "  user-web   : 127.0.0.1:8211（cd user-web && npm run dev）"
 	@echo "=========================================="
 	@echo "下一步："
 	@echo "  make dev           # 启动 user-server 热更新"
@@ -459,6 +459,8 @@ audit:
 	@bash scripts/check-shellcheck.sh
 	@echo "── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──"
 	@bash scripts/check-shell-cjk-expansion.sh
+	@echo "── 对外部署口径（种子文案/迁移 SQL/官网）里的 make 目标、容器卷名、端口、口令来源必须与仓库真值同源 ──"
+	@python3 scripts/check-deploy-claims.py
 	@echo "── 全仓 shell 文件必须被 mac 出厂那版 bash（3.2）读通；解析器不是 3.x 时本门自报 SKIP，不冒充绿 ──"
 	@bash scripts/check-bash32-parse.sh
 	@echo "── 常驻变异电池的每份产物都必须写着「这轮读的是哪一笔字节」（轴一形状含 A5 归属／A6 口径对账，轴二实测最近一轮）──"

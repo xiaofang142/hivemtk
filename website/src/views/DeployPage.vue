@@ -14,7 +14,7 @@ const deployMethods = [
   {
     key: 'docker',
     title: 'Docker 一键部署',
-    desc: '推荐方式：环境隔离、可一键启停、无需手动配置依赖。',
+    desc: '推荐方式：数据层容器一键启停，推理栈与后端跑在宿主机。',
     cta: '前往部署文档',
     link: '/docs',
   },
@@ -42,15 +42,18 @@ cd hivemtk
 
 # 2. 准备环境变量
 cp .env-example .env
-# 编辑 .env，填写 POSTGRES_PASSWORD / JWT_SECRET / PLATFORM_ADMIN_PASSWORD 等必填项
+# 编辑 .env，填写 POSTGRES_PASSWORD / JWT_SECRET 等必填项
 
-# 3. 一键安装与启动（PostgreSQL + Redis + user-server + 本地推理栈）
-make install   # 生成 docker-compose.yml + 构建前端 + 拉起推理栈
-make up        # 若已生成配置，仅启动服务
+# 3. 一键安装（数据层 PG + Redis 起容器，模型下载到宿主机并拉起 LLM/Embedding/Rerank 推理栈）
+make install
 
-# 4. 访问
+# 4. 启动 user-server（Go 服务跑在宿主机，不在容器里）
+make dev         # air 热更新
+# 生产：make user-build 后运行 user-server/bin/user-server
+
+# 5. 访问
 # 用户端 Web/API：http://localhost:8204
-# 默认账号 admin + .env 中的 PLATFORM_ADMIN_PASSWORD`
+# 首次进入会跳 /setup 向导：超管用户名与口令由你自己设置`
 
 const sourceSnippet = `# 1. 克隆开源仓库
 git clone https://gitee.com/xhpmayun/hivemtk.git

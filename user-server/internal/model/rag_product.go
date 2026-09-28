@@ -51,7 +51,7 @@ type RagProduct struct {
 	VectorTable             string                  `json:"vector_table" gorm:"size:128;uniqueIndex"`
 	EmbeddingModel          string                  `json:"embedding_model" gorm:"size:64;default:bge-m3"`
 	EmbeddingDim            int                     `json:"embedding_dim" gorm:"default:1024"`
-	LLMModel                string                  `json:"llm_model" gorm:"size:100;default:gpt-3.5-turbo"`
+	LLMModel                string                  `json:"llm_model" gorm:"size:100;default:'Qwen2.5-3B-Instruct'"`
 	LLMProviderConfig       LLMProviderConfig       `json:"llm_provider_config" gorm:"embedded;embeddedPrefix:llm_"`
 	EmbeddingProviderConfig EmbeddingProviderConfig `json:"embedding_provider_config" gorm:"embedded;embeddedPrefix:emb_"`
 	RerankProviderConfig    RerankProviderConfig    `json:"rerank_provider_config" gorm:"embedded;embeddedPrefix:rerank_"`

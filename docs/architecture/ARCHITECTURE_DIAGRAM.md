@@ -193,13 +193,16 @@ graph TD
 ### 4.3 启动顺序
 
 ```bash
-# 1. 启动推理栈（创建 mtk-inference-net 网络）
-make inference-up
+# 1. 启动数据层（PG + Redis 容器，网络 mtk-user-network）
+make db-up
 
-# 2. 启动用户端（接入 mtk-inference-net 外部网络）
-make user-up
+# 2. 启动宿主机推理栈（llama-server :8207/:8208/:8209）
+make inference-host-up
 
-# 3. 验证
+# 3. 启动用户端（宿主机 Go 进程）
+make dev
+
+# 4. 验证
 curl http://localhost:8204/health
 ```
 

@@ -1,0 +1,7 @@
+$ python3 scripts/check-md-links-offline.py
+(cwd=.)
+rc=0  0.1s
+
+──── 扫描 162 个 md（CI 口径：只认 git 索引）────
+──── 断链 0 处 ────
+

@@ -1,0 +1,136 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge[39m
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m空文本=基础值；线性 +250ms/码点；封顶 120s；emoji 按码点计[32m 9[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m静态契约：发送全链三处均走长度感知超时，无裸 await[32m 9[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB4 humanSendTimeoutMs（长度感知超时预算）[2m > [22m静态契约：uplink 吞错已接日志并回插 buffer[32m 5[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB5 stop() 全清 timer（行为）[2m > [22mstop 后 _mutationTimer 不再触发 _flushMutations，且所有 timer 置 null[32m 177[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB5 stop() 全清 timer（行为）[2m > [22m静态契约：activate 监听器自我摘除；SSE stop 走 key 级 abort + 唤醒退避[32m 7[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m无 chrome.storage → 0ms 降级（不阻塞发送）[32m 1[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22mstamp 后按剩余间隔返回等待；旧时间戳返回 0[32m 0[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m未来时间戳（时钟漂移）判无效防自锁；minInterval<=0 直接 0[32m 0[2mms[22m[39m
+ [32m✓[39m test/batch3-hygiene.test.js[2m > [22mB6 跨上下文全局发送闸[2m > [22m静态契约：fillAndSend 在 rawSendText 前过闸、成功后盖章[32m 11[2mms[22m[39m
+[90mstdout[2m | test/downlink-b24-step-timeout.test.js[2m > [22m[2m批24：下发外层超时预算必须覆盖回查切片[2m > [22m[2m发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）
+[22m[39m[bridge:downlink] 下行完成: b24a 共 1 条已 ack { convs: [33m1[39m }
+
+ [32m✓[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m发送耗时越过 sendText 预算、但落在回查切片内 → 仍算已发并 ack（不得重推）[33m 755[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m气泡真的出现 → sendVerified=true，且 AGENT 回声帧带 extra.send_verified=true[33m 1854[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m预算仍是上界：永远不回包的发送要在「sendText 预算 + 回查切片」内被切掉并留 pending[33m 3150[2mms[22m[39m
+ [32m✓[39m test/downlink-b24-step-timeout.test.js[2m > [22m批24：下发外层超时预算必须覆盖回查切片[2m > [22m静态锁：结果日志原样透传 sendVerified（三态不许被 `!!` 洗成二态）[32m 13[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [31m×[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false[33m 2754[2mms[22m[39m
+[31m   → expected false to be true // Object.is equality[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [31m×[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数[33m 2793[2mms[22m[39m
+[31m   → expected false to be true // Object.is equality[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m渲染滞后容得下：气泡在 150ms 后才挂上 → 回查轮询要等到它[33m 1400[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [31m×[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了[33m 2856[2mms[22m[39m
+[31m   → expected false to be true // Object.is equality[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡
+[22m[39m[bridge:douyin_web] 上行消息: 在的
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m红线②：回查是只读 —— 不写去重容器，之后正常扫描仍能报出这些气泡[33m 927[2mms[22m[39m
+[90mstdout[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 回填会话 conv-b24: 1 条消息（新增 ...
+
+ [32m✓[39m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false[32m 10[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m16 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 19:43:33
+[2m   Duration [22m 16.18s[2m (transform 2.98s, setup 0ms, import 3.88s, tests 16.76s, environment 5.79s)[22m
+
+(node:84572) ExperimentalWarning: CommonJS module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/selector-engine.js is loading ES Module /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/bridge/src/core/logger.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 左侧列表未找到目标会话 ghost-conv
+
+[90mstderr[2m | test/adapter-b24-send-verify.test.js[2m > [22m[2m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m[2m三态：没走到回查的出路（目标会话打不开）不带结论位，既不是 true 也不是 false
+[22m[39m[bridge:douyin_web] 下行目标会话 ghost-conv 未打开，放弃... { current: [32m'conv-b24'[39m }
+
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m反向半边：平台静默吞（气泡始终不出现）→ 照常 ack 语义不变，但结论位必须是 false
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m test/adapter-b24-send-verify.test.js:[2m103:20[22m[39m
+    [90m101|[39m
+    [90m102|[39m     [90m// ① 判据本身：没见着就是没见着，不许跟着 ok 一起绿[39m
+    [90m103|[39m     [34mexpect[39m(res[33m.[39mok)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                    [31m^[39m
+    [90m104|[39m     [34mexpect[39m(res[33m.[39msendVerified)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m105|[39m     [90m// ② 红线：回查未见**不得**改 ack/重发语义（防双发优先于防假绿）[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m基线判据：发送前窗口里就有一条同文本（客户先说过）→ 只"存在"不算数
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m test/adapter-b24-send-verify.test.js:[2m123:20[22m[39m
+    [90m121|[39m     const res = await adapter.sendOutbound('在的', undefined, { sendVeri…
+    [90m122|[39m
+    [90m123|[39m     [34mexpect[39m(res[33m.[39mok)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                    [31m^[39m
+    [90m124|[39m     [34mexpect[39m(res[33m.[39msendVerified)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m125|[39m     adapter[33m.[39m[34mstop[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/adapter-b24-send-verify.test.js[2m > [22m§8.3-8 出站后回 DOM 复核自己的气泡（批24）[2m > [22m跨会话残留节点不计入：点击之后才挂进 items 的上一会话同文本气泡，不算这次发出去了
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m test/adapter-b24-send-verify.test.js:[2m154:20[22m[39m
+    [90m152|[39m     const res = await adapter.sendOutbound('在的', undefined, { sendVeri…
+    [90m153|[39m
+    [90m154|[39m     [34mexpect[39m(res[33m.[39mok)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                    [31m^[39m
+    [90m155|[39m     [34mexpect[39m(res[33m.[39msendVerified)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m156|[39m     adapter[33m.[39m[34mstop[39m()[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+

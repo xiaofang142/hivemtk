@@ -119,19 +119,19 @@ cd hivemtk</code></pre>
               <div class="step-num">2</div>
               <div class="step-body">
                 <h4>{{ $t('配置与启动') }}</h4>
-                <p>{{ $t('生成配置并一键启动全部组件（PostgreSQL + Redis + user-server + 本地推理栈）：') }}</p>
-                <pre><code>cp .env-example .env   # {{ $t('编辑 PLATFORM_ADMIN_PASSWORD / JWT_SECRET 等必填项') }}
+                <p>{{ $t('生成配置后一键安装：数据层（PostgreSQL、Redis）起 Docker 容器，本地推理栈在宿主机拉起：') }}</p>
+                <pre><code>cp .env-example .env   # {{ $t('编辑 POSTGRES_PASSWORD、REDIS_PASSWORD、JWT_SECRET 等必填项') }}
 vim .env
-make install           # {{ $t('生成 docker-compose.yml、构建前端与 SDK、拉起推理栈并启动') }}
-make up                # docker compose up -d{{ $t('（如已生成配置文件）') }}</code></pre>
-                <p>{{ $t('默认管理员账号为') }} <code>admin</code>{{ $t('，密码即') }} <code>.env</code> {{ $t('中的') }} <code>PLATFORM_ADMIN_PASSWORD</code>{{ $t('；首次访问按向导完成初始化即可。') }}</p>
+make install           # {{ $t('构建前端与 SDK、下载模型、拉起数据层容器与宿主机推理栈') }}
+make dev               # {{ $t('启动 user-server（监听 8204；生产可 make user-build 后跑二进制）') }}</code></pre>
+                <p>{{ $t('首次访问会跳到 /setup 初始化向导：超管用户名与口令由你自己设置，不来自任何配置文件或环境变量。') }}</p>
               </div>
             </div>
             <div class="step-item">
               <div class="step-num">3</div>
               <div class="step-body">
                 <h4>{{ $t('访问与使用') }}</h4>
-                <p>{{ $t('浏览器打开') }} <code>http://{{ $t('服务器IP') }}:8204</code> {{ $t('即可使用。AI 默认走本地推理栈（数据不出域）；如需使用云端大模型，编辑 .env 的 LLM_BASE_URL 与 LLM_API_KEY 即可。') }}</p>
+                <p>{{ $t('浏览器打开') }} <code>http://{{ $t('服务器IP') }}:8204</code> {{ $t('即可使用。AI 默认走宿主机的本地推理栈（数据不出域）；要改用云端大模型，在后台「LLM 路由」里添加服务商，运行配置写入 llm_providers 表。') }}</p>
               </div>
             </div>
           </div>
@@ -201,7 +201,7 @@ make up                # docker compose up -d{{ $t('（如已生成配置文件�
                   <td>{{ $t('4 核') }}</td>
                   <td>12 GB</td>
                   <td>80 GB SSD</td>
-                  <td>{{ $t('单用户调试，AI 走 1.5B 本地模型') }}</td>
+                  <td>{{ $t('单用户调试，AI 走 3B 本地模型') }}</td>
                 </tr>
                 <tr>
                   <td>{{ $t('小型生产（dev 档，单机全栈）') }}</td>
@@ -248,7 +248,7 @@ make up                # docker compose up -d{{ $t('（如已生成配置文件�
                 <tr><td>Redis 7</td><td>~1.0 GB</td><td>~2.0 GB</td><td>{{ $t('1 万并发会话 + 消息队列 + 频控') }}</td></tr>
                 <tr><td rowspan="2">{{ $t('应用层') }}</td><td>user-server (Go)</td><td>~1.5 GB</td><td>~4.0 GB</td><td>{{ $t('Gin + WebSocket 长连接 + 业务逻辑') }}</td></tr>
                 <tr><td>{{ $t('桥接扩展（客户端侧）') }}</td><td>Chrome {{ $t('扩展') }} × {{ $t('按账号') }}</td><td>—</td><td>—</td><td>{{ $t('运行在员工浏览器，服务端零占用；五端社媒收发依赖扩展在线') }}</td></tr>
-                <tr><td rowspan="3">{{ $t('本地推理栈') }}</td><td>LLM (Qwen2.5-1.5B / 14B Q4_K_M)</td><td>~3.0 GB</td><td>~12 GB</td><td>{{ $t('常驻 + KV cache 8192 ctx × 4 并发槽位') }}</td></tr>
+                <tr><td rowspan="3">{{ $t('本地推理栈') }}</td><td>LLM (Qwen2.5-3B-Instruct / 14B Q4_K_M)</td><td>~3.0 GB</td><td>~12 GB</td><td>{{ $t('常驻 + KV cache（ctx 与槽位取 .env 的 LLM_CTX_SIZE × LLM_PARALLEL）') }}</td></tr>
                 <tr><td>Embedding (bge-m3 Q4 / F16)</td><td>~3.0 GB</td><td>~5.0 GB</td><td>{{ $t('1024 维，RAG 检索高峰批处理') }}</td></tr>
                 <tr><td>Rerank (bge-reranker-v2-m3)</td><td>~1.5 GB</td><td>~1.5 GB</td><td>{{ $t('cross-encoder 精排') }}</td></tr>
                 <tr><td><strong>{{ $t('合计') }}</strong></td><td><strong>{{ $t('小规模全栈') }}</strong></td><td><strong>~16 GB</strong></td><td><strong>~38 GB</strong></td><td>{{ $t('未含 30% 安全余量') }}</td></tr>
@@ -265,7 +265,7 @@ make up                # docker compose up -d{{ $t('（如已生成配置文件�
                 <tr><td>{{ $t('消息表（含索引）') }}</td><td>~400 MB</td><td>~72 GB</td><td>~144 GB</td></tr>
                 <tr><td>RAG {{ $t('向量索引') }}</td><td>~1.1 GB</td><td>~200 GB</td><td>~400 GB</td></tr>
                 <tr><td>{{ $t('操作日志 / 审计') }}</td><td>~200 MB</td><td>~36 GB</td><td>~72 GB</td></tr>
-                <tr><td>{{ $t('模型文件（dev / prod）') }}</td><td>—</td><td>3 GB / 12 GB</td><td>3 GB / 12 GB</td></tr>
+                <tr><td>{{ $t('模型文件（dev / prod）') }}</td><td>—</td><td>2.8 GB / 12 GB</td><td>2.8 GB / 12 GB</td></tr>
                 <tr><td>PostgreSQL WAL + {{ $t('临时表') }}</td><td>~100 MB</td><td>~18 GB</td><td>~36 GB</td></tr>
                 <tr><td><strong>{{ $t('合计') }}</strong></td><td><strong>~1.8 GB</strong></td><td><strong>~330 GB</strong></td><td><strong>~660 GB</strong></td></tr>
               </tbody>
@@ -293,11 +293,11 @@ make up                # docker compose up -d{{ $t('（如已生成配置文件�
               <tbody>
                 <tr><td>mtk-postgres (pgvector:pg15)</td><td>{{ $t('1 核') }}</td><td>~463 MB</td><td>{{ $t('shared_buffers=256MB，max_connections=500') }}</td></tr>
                 <tr><td>mtk-redis (7-alpine)</td><td>{{ $t('1 核') }}</td><td>~256 MB</td><td>{{ $t('maxmemory=1gb，allkeys-lru') }}</td></tr>
-                <tr><td>mtk-user-server (Go)</td><td>{{ $t('1–2 核') }}</td><td>~512 MB</td><td>{{ $t('空载基线') }}</td></tr>
-                <tr><td>llama-server LLM (Qwen2.5-1.5B Q4_K_M)</td><td>{{ $t('2–4 核') }}</td><td>~1.6 GB</td><td>{{ $t('常驻 1.1GB + KV cache (ctx=8192)') }}</td></tr>
+                <tr><td>user-server (Go，宿主机进程)</td><td>{{ $t('1–2 核') }}</td><td>~512 MB</td><td>{{ $t('空载基线') }}</td></tr>
+                <tr><td>llama-server LLM (Qwen2.5-3B-Instruct Q4_K_M)</td><td>{{ $t('2–4 核') }}</td><td>≥2.0 GB</td><td>{{ $t('常驻 = 模型文件（--mlock 锁页，默认档 2.0GB）+ KV cache') }}</td></tr>
                 <tr><td>llama-server Embedding (bge-m3 Q4_K_M)</td><td>{{ $t('1–2 核') }}</td><td>~2.5 GB</td><td>{{ $t('1024 维，warmup 后稳定') }}</td></tr>
                 <tr><td>llama-server Rerank (bge-reranker-v2-m3 Q4_K_M)</td><td>{{ $t('1 核') }}</td><td>~1.0 GB</td><td>{{ $t('cross-encoder，无 pooling') }}</td></tr>
-                <tr><td>{{ $t('模型文件（dev 档）') }}</td><td>—</td><td>~3.0 GB {{ $t('磁盘') }}</td><td>LLM 1.1G + Embed 1.2G + Rerank 0.6G</td></tr>
+                <tr><td>{{ $t('模型文件（dev 档）') }}</td><td>—</td><td>~2.8 GB {{ $t('磁盘') }}</td><td>LLM 2.0G + Embed 0.4G + Rerank 0.4G（取 .env 的 LLM_FILE / EMBEDDING_FILE / RERANK_FILE）</td></tr>
                 <tr><td>{{ $t('模型文件（prod 档）') }}</td><td>—</td><td>~12.0 GB {{ $t('磁盘') }}</td><td>14B Q4 9G + bge-m3 F16 2.4G + Rerank 0.6G</td></tr>
               </tbody>
             </table>
@@ -331,26 +331,26 @@ make up                # docker compose up -d{{ $t('（如已生成配置文件�
               </tbody>
             </table>
           </div>
-          <p class="note">{{ $t('Docker 部署仅需安装 Docker / Docker Compose 与 llama.cpp；源码部署额外需要 Go 与 Node.js。') }}</p>
+          <p class="note">{{ $t('数据层需要 Docker / Docker Compose；user-server 与推理栈都跑在宿主机，因此 Go、Node.js 与 llama.cpp 三样都要装。') }}</p>
         </section>
 
         <!-- Docker 部署 -->
         <section id="docker-deploy" class="doc-section">
-          <h2>{{ $t('Docker 部署（推荐）') }}</h2>
-          <p class="lead">{{ $t('推荐用 Docker Compose 一键部署用户端，无需安装 Go / Node，适合生产环境。') }}</p>
+          <h2>{{ $t('Docker + 宿主机部署（推荐）') }}</h2>
+          <p class="lead">{{ $t('数据层（PostgreSQL + Redis）用仓库自带的 docker-compose.yml 起容器，user-server 与本地推理栈跑在宿主机进程：一条 make install 装齐、make dev 起服务。') }}</p>
 
           <h4>{{ $t('1. 克隆并生成配置') }}</h4>
           <pre><code>git clone https://gitee.com/xhpmayun/hivemtk.git
 cd hivemtk
 cp .env-example .env
-vim .env   # {{ $t('修改 PLATFORM_ADMIN_PASSWORD / JWT_SECRET / POSTGRES_PASSWORD 等必填项') }}</code></pre>
+vim .env   # {{ $t('修改 POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET 等必填项') }}</code></pre>
           <p class="note">{{ $t('必填项缺失时') }} <code>make install</code> {{ $t('会提示用') }} <code>openssl rand -hex 32</code> {{ $t('生成随机密钥。') }}</p>
 
           <h4>{{ $t('2. 一键安装与启动') }}</h4>
-          <pre><code>make install   # {{ $t('生成 docker-compose.yml、构建前端与 SDK、拉起本地推理栈并启动全栈') }}
-make up        # {{ $t('若已生成配置，仅启动服务') }}
+          <pre><code>make install   # {{ $t('构建前端与 SDK、下载模型、拉起数据层容器与本地推理栈') }}
+make dev       # {{ $t('编译并启动 user-server（air 热重载，监听 8204）') }}
 docker compose ps   # {{ $t('查看运行状态') }}</code></pre>
-          <p>{{ $t('用户端 Web 默认监听') }} <code>8204</code>{{ $t('，后端 user-server 同一端口提供 API；默认管理员账号') }} <code>admin</code>{{ $t('，密码为 .env 中的 PLATFORM_ADMIN_PASSWORD。') }}</p>
+          <p>{{ $t('用户端 Web 与 API 同端口监听') }} <code>8204</code>{{ $t('，两者都由宿主机的 user-server 进程提供；首次访问会跳到 /setup 初始化向导，超管用户名与口令在向导里自行设置。') }}</p>
 
           <h4>{{ $t('3. 关键环境变量') }}</h4>
           <p>{{ $t('在') }} <code>.env</code> {{ $t('中设置（字段优先于镜像默认值）：') }}</p>
@@ -370,28 +370,28 @@ USER_SERVER_PORT=8204
 # {{ $t('JWT / 安全密钥（务必修改为随机串）') }}
 JWT_SECRET=ChangeMe_To_32Char_Random_JWT_Secret_Key_For_Production
 JWT_EXPIRE=24h
-PLATFORM_ADMIN_PASSWORD=ChangeMe_To_Strong_Password_For_User_Admin
 
 # {{ $t('平台端（可选本地组件，默认关闭；只有开启时才读取下面三项）') }}
 PLATFORM_ENABLED=false
 PLATFORM_API_HOST=http://127.0.0.1:8205   # {{ $t('指向本机自建的平台端') }}
-MERCHANT_API_SECRET=ChangeMe_To_Random_Secret   # {{ $t('用户端与平台端共用的签名密钥') }}</code></pre>
+MERCHANT_API_SECRET=ChangeMe_To_Random_Secret   # {{ $t('用户端与平台端共用的签名密钥') }}
+PLATFORM_ADMIN_PASSWORD=ChangeMe_To_Strong_Password   # {{ $t('平台代理口令：不是 8204 的登录口令，超管口令在 /setup 向导里设置') }}</code></pre>
 
           <h4>{{ $t('端口对照表') }}</h4>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>{{ $t('服务') }}</th><th>{{ $t('容器端口') }}</th><th>{{ $t('宿主机端口（默认）') }}</th></tr></thead>
+              <thead><tr><th>{{ $t('服务') }}</th><th>{{ $t('监听端口') }}</th><th>{{ $t('对外访问端口（默认）') }}</th></tr></thead>
               <tbody>
-                <tr><td>user-server（Web + API）</td><td>8204</td><td>8204</td></tr>
-                <tr><td>{{ $t('PostgreSQL（用户端）') }}</td><td>8202</td><td>8202</td></tr>
-                <tr><td>Redis</td><td>8203</td><td>8203</td></tr>
-                <tr><td>{{ $t('mtk-llm（本地推理）') }}</td><td>8207</td><td>8207</td></tr>
-                <tr><td>mtk-embedding</td><td>8208</td><td>8208</td></tr>
-                <tr><td>mtk-rerank</td><td>8209</td><td>8209</td></tr>
+                <tr><td>user-server（Web + API，宿主机进程）</td><td>8204</td><td>8204</td></tr>
+                <tr><td>{{ $t('PostgreSQL（用户端，Docker 容器）') }}</td><td>8202</td><td>8202</td></tr>
+                <tr><td>Redis（Docker 容器）</td><td>8203</td><td>8203</td></tr>
+                <tr><td>{{ $t('LLM 推理（llama-server，宿主机）') }}</td><td>8207</td><td>8207</td></tr>
+                <tr><td>Embedding 推理（llama-server，宿主机）</td><td>8208</td><td>8208</td></tr>
+                <tr><td>Rerank 推理（llama-server，宿主机）</td><td>8209</td><td>8209</td></tr>
               </tbody>
             </table>
           </div>
-          <p class="note">{{ $t('本地推理栈为可选项：关闭后用户端会回退到 .env 中配置的云端大模型（LLM_BASE_URL / LLM_API_KEY）。') }}</p>
+          <p class="note">{{ $t('本地推理栈为可选项：不启动时需在后台「LLM 路由」配置云端服务商（写入 llm_providers 表）；.env 的 LLM_BASE_URL / LLM_API_KEY 只是默认指向与首启占位。') }}</p>
         </section>
 
         <!-- 源码部署 -->
@@ -418,7 +418,7 @@ go build -o user-server ./cmd/api/main.go
           <h4>{{ $t('3. 构建前端（user-web）') }}</h4>
           <pre><code>cd hivemtk/user-web
 npm install &amp;&amp; npm run build      # {{ $t('产物在 dist/，由 user-server 托管') }}</code></pre>
-          <p class="note">{{ $t('提示：日常部署更推荐直接使用仓库根目录的 Makefile（make install / make up），它会自动完成上述构建与编排。') }}</p>
+          <p class="note">{{ $t('提示：日常部署更推荐直接使用仓库根目录的 Makefile（make install / make dev），它会自动完成上述构建与编排。') }}</p>
         </section>
 
         <!-- FRP 私域穿透 -->
@@ -523,15 +523,15 @@ USER_SERVER_PORT=8204
 
 # {{ $t('安全') }}
 JWT_SECRET / JWT_EXPIRE=24h
-PLATFORM_ADMIN_PASSWORD
 
-# {{ $t('平台端（可选，默认关闭）') }}
+# {{ $t('平台端（默认关闭；PLATFORM_ENABLED=false 时下面几项都不生效）') }}
 PLATFORM_ENABLED=false
 PLATFORM_API_HOST=http://127.0.0.1:8205
+PLATFORM_ADMIN_PASSWORD
 
 # {{ $t('AI 模型') }}
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
-EMBEDDING_BASE_URL / EMBEDDING_MODEL / EMBEDDING_DIM
+EMBEDDING_BASE_URL / EMBEDDING_SERVED_NAME / EMBEDDING_DIM
 RERANK_BASE_URL / RERANK_ENABLED</code></pre>
 
           <h4>{{ $t('环境变量优先级') }}</h4>
@@ -705,46 +705,43 @@ RERANK_BASE_URL / RERANK_ENABLED</code></pre>
 
           <h4>{{ $t('服务无法启动') }}</h4>
           <pre><code># {{ $t('查看具体错误') }}
-docker compose logs mtk-user-server | tail -50
+make db-logs          # {{ $t('数据层容器日志') }}
+tail -50 user-server/tmp/air.log   # {{ $t('make dev 的编译与运行日志') }}
 
 # {{ $t('常见原因') }}
 # 1. {{ $t('数据库未就绪：等待 mtk-postgres healthy 后再启动') }}
 docker compose up -d mtk-postgres
-docker compose up -d mtk-user-server
 
 # 2. {{ $t('端口冲突：修改 .env 中端口映射') }}
 # 3. {{ $t('配置文件错误：检查 .env 字段名与必填项') }}</code></pre>
 
           <h4>{{ $t('数据库连接失败') }}</h4>
           <pre><code># {{ $t('检查 PostgreSQL 状态') }}
-docker compose exec mtk-postgres pg_isready -U admin -p 8202
+docker compose exec mtk-postgres pg_isready -U admin -d user_db -p 8202
 
 # {{ $t('检查网络') }}
-docker compose exec mtk-user-server sh -c 'nc -zv mtk-postgres 8202'
+nc -zv 127.0.0.1 8202
 
 # {{ $t('重置数据库密码') }}
-docker compose exec mtk-postgres psql -U admin -c "ALTER USER admin PASSWORD 'new_password';"</code></pre>
+docker compose exec mtk-postgres psql -U admin -c "ALTER USER admin PASSWORD 'new_password';"
+# {{ $t('改完要同步 .env 的 POSTGRES_PASSWORD，数据卷只在首次初始化时读它') }}</code></pre>
 
-          <h4>{{ $t('Chrome 自动回复失效') }}</h4>
-          <pre><code># {{ $t('检查 Chrome 进程') }}
-docker compose exec user-server ps aux | grep chromium
+          <h4>{{ $t('桥接扩展自动回复失效') }}</h4>
+          <p>{{ $t('自动回复跑在员工自己的登录态浏览器与 Chrome 扩展上，服务端没有常驻浏览器进程（无头模式已废弃），所以排查从扩展侧开始。') }}</p>
+          <pre><code># {{ $t('1. 员工浏览器里确认扩展已安装且在线，该平台账号仍处于登录态') }}
 
-# {{ $t('重启 Chrome') }}
-docker compose restart user-server
+# {{ $t('2. 服务端查桥接凭证状态（需超管 JWT）') }}
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8204/api/bridge/token/status
 
-# {{ $t('清理浏览器数据（Cookie / Cache）') }}
-docker compose exec user-server sh -c 'rm -rf /data/chromium/*'
-docker compose restart user-server
-
-# {{ $t('检查账号登录状态') }}
-curl http://localhost:9222/json/version</code></pre>
+# {{ $t('3. 扩展侧拉取该账号的待发指令（需 X-Bridge-Token 头）') }}
+curl -H "X-Bridge-Token: $BRIDGE_TOKEN" http://127.0.0.1:8204/api/bridge/outbox</code></pre>
 
           <h4>{{ $t('前端访问白屏') }}</h4>
-          <pre><code># {{ $t('前端由 user-server 托管，检查其日志') }}
-docker compose logs mtk-user-server | tail -30
+          <pre><code># {{ $t('前端由 user-server 托管，先确认构建产物在位') }}
+ls user-web/dist/index.html
 
-# {{ $t('确认前端构建产物已挂载') }}
-docker compose exec mtk-user-server ls /app/user-web-dist
+# {{ $t('再确认启动目录：从 user-server/ 启动时按 ../user-web/dist 找产物，换目录启动要显式指过去') }}
+USER_WEB_DIST=/absolute/path/user-web/dist ./bin/user-server
 
 # {{ $t('清理浏览器缓存后重试') }}</code></pre>
         </section>
@@ -777,19 +774,21 @@ docker compose exec mtk-user-server ls /app/user-web-dist
             <h4>{{ $t('Q: 如何备份数据？') }}</h4>
             <p>{{ $t('A: 使用用户端自带的运维命令（Makefile）备份 PostgreSQL（库名 user_db）：') }}</p>
             <pre><code># 备份（转储到 backup_*.sql）
-make backup
+make db-backup
 
 # 恢复
-make restore FILE=backup_20260101_120000.sql</code></pre>
-            <p>{{ $t('也可直接备份') }} <code>./pg_data</code> {{ $t('数据目录（Docker 绑定挂载）。') }}</p>
+make db-restore FILE=backup_20260101_120000.sql</code></pre>
+            <p>{{ $t('数据也存在命名卷') }} <code>mtk_user_pg_data</code> {{ $t('里（docker volume），换机时连卷一起迁。') }}</p>
           </div>
 
           <div class="faq-item">
             <h4>{{ $t('Q: 如何升级到新版本？') }}</h4>
             <p>{{ $t('A: HiveMTK 为开源项目，直接拉取最新源码并重启即可：') }}</p>
             <pre><code>git pull
-make restart        # 必要时先 make build 重新构建
-# 数据库迁移（如有）会随启动自动执行</code></pre>
+make user-build     # 重新编译 user-server
+make web-build      # 前端有改动时重新构建
+cd user-server &amp;&amp; ./bin/user-server
+# 建表加列由 GORM AutoMigrate 在启动时自动执行</code></pre>
             <p>{{ $t('版本变更说明请查看官网底部「开源项目」列的「更新日志」入口。') }}</p>
           </div>
 

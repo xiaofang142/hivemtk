@@ -188,7 +188,7 @@ OneID 客户体系：身份合并→360 画像→旅程→会话→流失预测�
 1. 创建 8 个子目录（sales/ reach/ card/ customer/ rag/ marketing/ channel/ system/）
 2. `git mv` 移动文件至对应子目录
 3. 修改每个文件的 `package service` → `package <domain>`
-4. 全局重写 import 路径：`marketing/internal/service` → `marketing/internal/service/<domain>`
+4. 全局重写 import 路径：`hivemtk-user/internal/service` → `hivemtk-user/internal/service/<domain>`
 5. 处理跨域共享类型（如 `SalesRequest` 被多处引用，需决定归属或提取到 `shared/`）
 6. 运行 `goimports -w` 自动整理 import
 7. `go build ./... && go test ./...` 验证

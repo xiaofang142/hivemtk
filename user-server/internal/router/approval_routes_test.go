@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -343,6 +344,111 @@ func TestApprovalAPI_DecideOnDecidedRowIs409(t *testing.T) {
 		`{"verdict":"rejected"}`)
 	if code != http.StatusConflict {
 		t.Errorf("已批准的再驳应 409，实际 %d：%s", code, body.Message)
+	}
+}
+
+// --- 截止已过、清扫未到（那扇时间窗）------------------------------------------
+
+// pushApprovalDeadline 把一行 pending 审批的 expires_at 改到指定时刻。
+//
+// 为什么不靠"等一会儿"或"注入时钟"造这一刻：HTTP 这一层跑的是真服务真库，
+// 服务侧已有冻结时钟的用例覆盖判定本身；本层要钉的是**这一格数据形状真的能从
+// 读端点和写端点分别拿到什么答复**。而"已过截止而仍是 pending"在生产里每个轮次
+// 都存在（TTL 到期到清扫器跑上来之间最多一整轮，本模块实测 5 分钟），
+// 把它直接写进行里就是在复现那个窗口，不是在伪造状态。
+func pushApprovalDeadline(t *testing.T, database *gorm.DB, id string, at time.Time) {
+	t.Helper()
+	if err := database.Model(&model.ApprovalRequest{}).
+		Where("id = ? AND status = ?", id, model.ApprovalStatusPending).
+		UpdateColumn("expires_at", at).Error; err != nil {
+		t.Fatalf("挪动 expires_at 失败：%v", err)
+	}
+}
+
+// 详情里的两份判断必须能分开：allowed_transitions 答"这个状态去得了哪些态"，
+// decidable_by_human 答"人现在还有没有机会去落其中一个"。
+// 窗口里那一格就是它们唯一分开的地方（状态照旧 pending、三个目标照单全列、口已关）。
+func TestApprovalAPI_GetDecidableByHumanSeparatesFromTransitions(t *testing.T) {
+	svc, _, database := setupApprovalRoutesDB(t)
+	row := submitApprovalViaSvc(t, svc, "q_http_window")
+	h := newApprovalTestEngine(svc, uint(42), "user")
+
+	_, before, _ := doApproval(t, h, http.MethodGet, "/api/approvals/"+row.ID, "")
+	if before.Data["decidable_by_human"] != true {
+		t.Fatalf("未到期应可人工裁决，实际 %v", before.Data["decidable_by_human"])
+	}
+
+	pushApprovalDeadline(t, database, row.ID, time.Now().Add(-time.Minute))
+	_, inside, _ := doApproval(t, h, http.MethodGet, "/api/approvals/"+row.ID, "")
+	if inside.Data["status"] != model.ApprovalStatusPending {
+		t.Fatalf("前置断了：窗口里那一行该还是 pending，实际 %v", inside.Data["status"])
+	}
+	if inside.Data["decidable_by_human"] != false {
+		t.Errorf("已过截止的 pending 行仍报「可人工裁决」（前端据此会把按钮亮着）：%v", inside.Data)
+	}
+	// 同一行上两个答案相反，才是这一格存在的意义：若两者总是同进同退，
+	// 前端直接读 allowed_transitions 就够了，这个字段是白加的。
+	if targets, _ := inside.Data["allowed_transitions"].([]any); len(targets) != 3 {
+		t.Errorf("窗口里的 allowed_transitions = %v，期望状态机照旧给三个目标态", inside.Data["allowed_transitions"])
+	}
+
+	// 清扫落定后仍是 false：证明这个字段读的是"截止"而不是"状态 != pending"的别名 ——
+	// 后者在窗口里会答 true，于是这一格就只是状态的第二份抄本。
+	if flipped, err := svc.ExpireOverdue(context.Background(), 10); err != nil || len(flipped) != 1 {
+		t.Fatalf("前置断了：清扫没翻走这一行 (%d,%v)", len(flipped), err)
+	}
+	_, after, _ := doApproval(t, h, http.MethodGet, "/api/approvals/"+row.ID, "")
+	if after.Data["status"] != model.ApprovalStatusExpired || after.Data["decidable_by_human"] != false {
+		t.Errorf("清扫后应 expired + 不可人工裁决，实际 %v", after.Data)
+	}
+}
+
+// 窗口里点"批准"：409、文案说清是时间到点而不是别人抢先，且**库里不留那条不存在的决定**。
+func TestApprovalAPI_DecidePastDeadlineIs409AndWritesNothing(t *testing.T) {
+	svc, tasks, database := setupApprovalRoutesDB(t)
+	row := submitApprovalViaSvc(t, svc, "q_http_late")
+	pushApprovalDeadline(t, database, row.ID, time.Now().Add(-time.Minute))
+
+	h := newApprovalTestEngine(svc, uint(42), "manager")
+	code, body, raw := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
+		`{"verdict":"approved","note":"想起来还有一单没批"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("过截止的裁决应 409，实际 %d：%s", code, body.Message)
+	}
+	// 两个 sentinel 的文案不许塌成一句：读到"已由他人裁决"的人会去查是谁批的，
+	// 而真答案是"没人批过，时间到点了"。
+	if !strings.Contains(body.Message, "挂起时限") || strings.Contains(body.Message, "已由他人裁决") {
+		t.Errorf("409 文案没分清超时与抢先：%q", body.Message)
+	}
+	if body.Data["status"] != model.ApprovalStatusPending || body.Data["decidable_by_human"] != false {
+		t.Errorf("409 应带回当前行并给出「这扇门已关」的读数：%v", body.Data)
+	}
+	if strings.Contains(raw, row.ResumeToken) {
+		t.Errorf("409 回带行里出现了凭证：%s", raw)
+	}
+
+	// 落库侧：一个字的裁决痕迹都不许留下。这条才是本卡真正的账：
+	// decided_by/decided_at 一旦写上，事后复盘读到的是"这个人在截止后批了它"。
+	cur, err := svc.Get(context.Background(), row.ID)
+	if err != nil || cur == nil {
+		t.Fatalf("回读失败：(%v,%v)", cur, err)
+	}
+	if cur.Status != model.ApprovalStatusPending || cur.DecidedBy != "" || cur.DecidedAt != nil {
+		t.Errorf("被拒的裁决在库里留下了痕迹：status=%s decided_by=%q decided_at=%v",
+			cur.Status, cur.DecidedBy, cur.DecidedAt)
+	}
+	// 待办也不该被收掉：这件事仍然悬着，等清扫器把它落成"没人处理"。
+	if task := humanTaskForApproval(t, tasks, row.ID); task == nil ||
+		task.Status != model.HumanTaskStatusPending {
+		t.Errorf("裁决被拒后待办不该落定：%+v", task)
+	}
+
+	// 反向控制：把截止推回未来，同一个 handler 同一个人立刻就能批。
+	// 少了这一格，上面的 409 也可能来自"直接 UPDATE 把行改坏了"而不是截止判定。
+	pushApprovalDeadline(t, database, row.ID, time.Now().Add(time.Hour))
+	if code, body, _ := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
+		`{"verdict":"approved"}`); code != http.StatusOK {
+		t.Fatalf("未到期时同一条路应 200（否则上面的红因不是截止判定）：%d %s", code, body.Message)
 	}
 }
 

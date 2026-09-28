@@ -39,6 +39,11 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		// 生产写入路径（本卡虽未装配，登记建表与登记写入路径是两件事）。
 		&model.ApprovalRequest{},
 		&model.BanditRefluxLog{},
+		// BadCase：T-P8-03 新增，有 service.BadCaseService.Mark 这条生产写入路径
+		// （编排器每轮回答后按两条判据留痕）。列入 mustCover 的理由与 bills/human_tasks
+		// 同一条且更硬：这张表没建出来时对话一切正常、日志一切正常，只有"低质被记下了"
+		// 这件事静默消失 —— 而它是整条 Bad Case 闭环唯一的事实源，下游是评测集。
+		&model.BadCase{},
 		// Bill：T-P7-01 新增，有 repository.billRepo.Create 这条生产写入路径
 		// （报价被接受时派生应收）。列入 mustCover 而不是只信 allModels() 里那一行，
 		// 是因为这张表的失败面恰好是"表没建、代码全对"：客户接受那一格照样落库，

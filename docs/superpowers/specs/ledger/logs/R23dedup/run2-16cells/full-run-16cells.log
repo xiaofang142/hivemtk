@@ -1,0 +1,35 @@
+### 16 格全量复跑（第 2 趟）；测量开始 2026-09-23T00:14:26+0800；GOCACHE=共享默认（省盘）；load={ 5.02 5.95 7.72 }；df=9.3Gi 可用
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/r23dedup-89oe1j9c
+[Go] 未跟踪的外域文件不进克隆（并行泳道的半成品会让克隆 build failed）：user-server/internal/model/payment.go user-server/internal/model/payment_test.go user-server/internal/repository/help_center_public_list_test.go user-server/internal/repository/payment.go user-server/internal/repository/payment_test.go user-server/internal/service/order_webhook_payment_test.go user-server/internal/service/payment.go user-server/internal/service/payment_global.go user-server/internal/service/payment_test.go user-server/internal/service/payment_webhook.go
+
+[Go] 注码前置：16 格锚点各命中一次 + 注码后语法可解析
+[Go] 控制组 rc=1 total=4 passed=4 skip=0 FAIL=[]
+FAIL	hivemtk-user/internal/service [build failed]
+2026-09-23T00:14:42+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestMessageHubRepository_GetByPlatformContent
+--- PASS: TestMessageHubRepository_GetByPlatformContent (1.19s)
+=== RUN   TestMessageHubRepository_ContentEchoScoping
+--- PASS: TestMessageHubRepository_ContentEchoScoping (0.07s)
+=== RUN   TestMessageHubRepository_GetByPlatformContent_EmptyArgs
+--- PASS: TestMessageHubRepository_GetByPlatformContent_EmptyArgs (0.06s)
+=== RUN   TestMessageHubRepository_GetByContentHash_Empty
+--- PASS: TestMessageHubRepository_GetByContentHash_Empty (0.05s)
+PASS
+ok  	hivemtk-user/internal/repository	2.100s
+FAIL
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+internal/service/integration.go:47:11: undefined: OrderPaymentSink
+internal/service/integration.go:69:55: undefined: OrderPaymentSink
+internal/service/integration.go:1115:130: undefined: OrderWebhookResult
+internal/service/integration.go:1126:23: undefined: ParseOrderWebhookPayment
+internal/service/integration.go:1127:10: undefined: OrderWebhookResult
+internal/service/integration.go:1149:15: undefined: webhookMoneyCent
+internal/service/integration.go:1152:15: undefined: webhookMoneyCent
+internal/service/integration.go:1194:14: undefined: orderWebhookEventKey
+internal/service/integration.go:1234:73: undefined: OrderWebhookResult
+internal/service/integration.go:1234:96: undefined: RecordPaymentInput
+internal/service/integration.go:1194:14: too many errors
+
+[Go] 控制组不干净——后面所有红/绿都不可信
+BATTERY_RC=1
+### 结束 00:14:44 load={ 5.52 6.00 7.70 }
