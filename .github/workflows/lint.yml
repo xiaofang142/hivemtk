@@ -213,6 +213,43 @@ jobs:
       - name: check-shellcheck 反向测试（证明它会红）
         run: bash scripts/check-shellcheck.test.sh
 
+  # `check-bash32-parse.sh` 的执行点。立项背景见脚本头：2026-09-24 那句「命令替换里嵌 case」
+  # 在 shellcheck（0 条 finding）与 CI 的 bash 5.x 里都看不见，只有 mac 出厂的 /bin/bash 3.2
+  # 会在 `-n` 那一步报语法错——而部署／装机／口令轮换这类脚本恰恰是人在 mac 上直接跑的。
+  #
+  # 为什么这一枚必须挂在 macos 上：判据按 major 版本选档，解析器 ≥4 时门**只打 SKIP 并退 0**
+  # （故意不给绿读数，见脚本判据①）。所以 ubuntu 上跑它等于跑一根没有牙的棍子，§23.22 第 5 段
+  # 记的就是这个"注册了但从未开火"的形状。GitHub 的 macos-latest 镜像的 /bin/bash 就是
+  # 3.2.57(1)-release，与本机同一版 ⇒ 挂这里它才真的有判据。
+  #
+  # 假绿防线：第一格先实测 `$BASH_VERSION`。哪天镜像不再出厂 3.2，这一格红——宁可作业红，
+  # 也不让"门在 CI 里恒 SKIP"重新伪装成一个绿步骤。代价：macOS runner 按 10 倍计分钟数，
+  # 但这三格只读 143 个文件的解析层，不装工具、不联网、不编 Go。
+  bash32-parse:
+    name: Bash 3.2 parser gate (macOS 出厂解析器)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: 解析器必须是 3.x（非 3.x 时本作业没有判据，宁可红不许静默 SKIP）
+        run: |
+          set -eu
+          v=$(/bin/bash -c 'echo $BASH_VERSION')
+          case "$v" in
+            3.*) echo "实测 /bin/bash = $v ⇒ 有牙档，门的判据在本作业成立" ;;
+            *) echo "::error::runner 的 /bin/bash 是 $v（不是 3.x）⇒ check-bash32-parse.sh 在这里只会打 SKIP，本作业没有判据"
+               exit 1 ;;
+          esac
+
+      - name: check-bash32-parse（全仓 shell 文件按 3.2 读通）
+        run: bash scripts/check-bash32-parse.sh
+
+      # 九格反向测试也进 CI：这道门的"绿"和"根本没判"长得几乎一样（CI 上必走 SKIP 分支），
+      # 只有 C1–C3 那三格证明它读得出坏文件，"退 0"才是判据而不是空跑。
+      - name: check-bash32-parse 反向测试（九格，证明它会红）
+        run: bash scripts/check-bash32-parse.test.sh
+
   license-compliance:
     name: LICENSE Compliance Scan
     runs-on: ubuntu-latest
