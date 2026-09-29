@@ -167,12 +167,15 @@ func (c *hubSummaryAggCron) trigger(ctx context.Context) {
 
 // StopMessageHubSummaryAggCron 进程退出时由 main 调用（与 Start 成对，配合 defer）。
 func StopMessageHubSummaryAggCron(ctx context.Context) {
-	if hubSummaryAggCronInst == nil {
+	inst := hubSummaryAggCronInst
+	if inst == nil {
 		return
 	}
-	hubSummaryAggCronInst.stopOnce.Do(func() { close(hubSummaryAggCronInst.stopCh) })
+	inst.stopOnce.Do(func() { close(inst.stopCh) })
 	done := make(chan struct{})
-	go func() { hubSummaryAggCronInst.wg.Wait(); close(done) }()
+	// 协程体只读这个本地快照：包级全局是测试会改写的注入点，
+	// 若在这里仍写 hubSummaryAggCronInst，等的那把 wg 可能已不是刚关闭的那把。
+	go func() { inst.wg.Wait(); close(done) }()
 	select {
 	case <-done:
 	case <-ctx.Done():
