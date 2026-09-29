@@ -111,6 +111,7 @@ func InitCron() {
 	}
 
 	geoservice.SetupGeoJobs(mgr)
+	geoservice.GetGeoJobManager().SetJobManagerDB(db.GetDB())
 
 	_, err = mgr.AddTask("0 5 3 * * *", mgr.goTask("daily_backup", func(ctx context.Context) {
 		service.RunDailyBackup()

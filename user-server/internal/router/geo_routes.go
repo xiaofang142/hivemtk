@@ -222,6 +222,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/keyword-mining/crawl-suggest", kwMiningCtrl.CrawlSuggest)
 	geo.POST("/keyword-mining/longtail", kwMiningCtrl.CombineLongtail)
 	geo.GET("/keyword-mining/funnel", kwMiningCtrl.BuildFunnel)
+	geo.POST("/keyword-mining/pipeline", kwMiningCtrl.TriggerPipeline)
 
 	// 蜘蛛推送 v2
 	geo.POST("/push/urls", pushCtrl.PushURLs)

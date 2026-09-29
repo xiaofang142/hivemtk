@@ -30,6 +30,7 @@ const (
 	JobNegativeMonitor = "negative_monitor"
 	JobSourceSync      = "source_sync"
 	JobCrawlerMonitor  = "crawler_monitor"
+	JobKeywordPipeline = "keyword_pipeline"
 
 	geoJobRunRetention = 30 * 24 * time.Hour
 )
@@ -70,6 +71,13 @@ var geoJobDefs = []geoJobDef{
 		DefaultSpec: "0 0 */6 * * *",
 		Timeout:     20 * time.Minute,
 		Fn:          crawlerMonitorJob,
+	},
+	{
+		Name:        JobKeywordPipeline,
+		Description: "关键词批量管线：4业务线×技术栈种子→长尾/下拉展开→落库→有界LLM SEO（生成/评分/验证/探针）",
+		DefaultSpec: "0 0 4 * * *",
+		Timeout:     60 * time.Minute,
+		Fn:          keywordPipelineJob,
 	},
 }
 
