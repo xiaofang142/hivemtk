@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -84,36 +85,36 @@ func TestParseInt64(t *testing.T) {
 // TestIntegrationReachAdapter_SentinelErrors 验证 IntegrationReachAdapter 返回 sentinel error
 func TestIntegrationReachAdapter_SentinelErrors(t *testing.T) {
 	a := &IntegrationReachAdapter{}
-	_, err := a.SendTelegram(nil, "1", "123", "x")
+	_, err := a.SendTelegram(context.Background(), "1", "123", "x")
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendTelegram 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
-	_, err = a.SendWhatsApp(nil, "1", "+861", "x")
+	_, err = a.SendWhatsApp(context.Background(), "1", "+861", "x")
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendWhatsApp 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
-	_, err = a.SendFeishu(nil, "1", "ou_x", "x")
+	_, err = a.SendFeishu(context.Background(), "1", "ou_x", "x")
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendFeishu 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
 
-	_, err = a.SendSMS(nil, "1", "x", "", nil)
+	_, err = a.SendSMS(context.Background(), "1", "x", "", nil)
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendSMS 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
-	_, err = a.SendEmail(nil, "1", "s", "x", nil)
+	_, err = a.SendEmail(context.Background(), "1", "s", "x", nil)
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendEmail 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
-	err = a.Recall(nil, "sms", "x")
+	err = a.Recall(context.Background(), "sms", "x")
 	if !errors.Is(err, ErrChannelNotImplemented) {
 		t.Errorf("Recall 应返回 ErrChannelNotImplemented, got %v", err)
 	}
-	_, err = a.AccountHealth(nil, "sms", "1")
+	_, err = a.AccountHealth(context.Background(), "sms", "1")
 	if !errors.Is(err, ErrChannelNotImplemented) {
 		t.Errorf("AccountHealth 应返回 ErrChannelNotImplemented, got %v", err)
 	}
-	_, err = a.ListAccounts(nil, "sms")
+	_, err = a.ListAccounts(context.Background(), "sms")
 	if !errors.Is(err, ErrChannelNotImplemented) {
 		t.Errorf("ListAccounts 应返回 ErrChannelNotImplemented, got %v", err)
 	}

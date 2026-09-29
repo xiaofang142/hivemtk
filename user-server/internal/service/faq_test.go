@@ -29,7 +29,7 @@ func makeFAQMatchResult(q, a, intent string, score float64) dto.FAQMatchResult {
 // TestFAQService_Match_NilRepo 测试 repo==nil 时的安全行为
 func TestFAQService_Match_NilRepo(t *testing.T) {
 	svc := &FAQService{repo: nil}
-	matches, err := svc.Match(nil, "你好", 3)
+	matches, err := svc.Match(context.Background(), "你好", 3)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -107,14 +107,14 @@ func TestFAQService_ShouldSkipLLM_Boundary(t *testing.T) {
 // TestFAQService_IncrementHitCount_NilRepo 测试 id=0 / nil repo 安全
 func TestFAQService_IncrementHitCount_NilRepo(t *testing.T) {
 	svc := &FAQService{repo: nil}
-	svc.IncrementHitCount(nil, 0)
-	svc.IncrementHitCount(nil, 1)
+	svc.IncrementHitCount(context.Background(), 0)
+	svc.IncrementHitCount(context.Background(), 1)
 }
 
 // TestFAQService_Stats_NilRepo 测试空仓库 Stats
 func TestFAQService_Stats_NilRepo(t *testing.T) {
 	svc := &FAQService{repo: nil}
-	total, enabled, err := svc.Stats(nil)
+	total, enabled, err := svc.Stats(context.Background())
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}

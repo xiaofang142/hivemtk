@@ -40,7 +40,6 @@ type quoteFakeReader struct {
 	viewErr error
 
 	gotRowID    string
-	gotQuoteID  string
 	gotLatestID string
 
 	genIn     service.QuoteGenerateInput

@@ -233,7 +233,7 @@ func TestShortLinkAccessRepository_GetStatsByShortLinkID(t *testing.T) {
 	}
 
 	if stats == nil {
-		t.Error("Expected stats to be returned")
+		t.Fatal("Expected stats to be returned")
 	}
 	if stats.ShortLinkID != 1 {
 		t.Errorf("Expected ShortLinkID 1, got %d", stats.ShortLinkID)

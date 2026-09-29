@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -85,7 +86,7 @@ func TestEmitGroupRevive_NoBusNoPanic(t *testing.T) {
 			t.Fatalf("未初始化总线时不应 panic: %v", r)
 		}
 	}()
-	EmitGroupRevive(nil, "grp_test", BuildReviveVerdict("grp_test", GroupReviveCandidate, 73, time.Now()))
+	EmitGroupRevive(context.Background(), "grp_test", BuildReviveVerdict("grp_test", GroupReviveCandidate, 73, time.Now()))
 }
 
 // TestEmitGroupRevive_PublishesToBus 挂接既有事件总线：注册订阅后可收到 group_revive 信号
@@ -101,7 +102,7 @@ func TestEmitGroupRevive_PublishesToBus(t *testing.T) {
 	event.SetGlobalBus(bus)
 	t.Cleanup(event.StopGlobal)
 
-	EmitGroupRevive(nil, "grp_x", BuildReviveVerdict("grp_x", GroupReviveCandidate, 80, time.Now()))
+	EmitGroupRevive(context.Background(), "grp_x", BuildReviveVerdict("grp_x", GroupReviveCandidate, 80, time.Now()))
 	select {
 	case p := <-received:
 		if p.SignalKey != GroupReviveSignal || p.GroupID != "grp_x" {

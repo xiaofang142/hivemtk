@@ -892,13 +892,11 @@ func TestMessageHubRepository_FetchOutboundSince(t *testing.T) {
 	repo := &MessageHubRepository{db: db}
 	ctx := context.Background()
 
-	var ids []uint64
 	for i := 1; i <= 5; i++ {
 		h := newHub("wechat", "acc_since", fmt.Sprintf("m_since_%d", i), "outbound", "text", "since", "delivered")
 		if err := db.Create(h).Error; err != nil {
 			t.Fatal(err)
 		}
-		ids = append(ids, uint64(h.ID))
 	}
 
 	list, err := repo.FetchOutboundSince(ctx, "wechat", "acc_since", 3, 10)

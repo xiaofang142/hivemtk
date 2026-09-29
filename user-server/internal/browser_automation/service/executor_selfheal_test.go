@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -105,7 +106,7 @@ func TestRelocatePromptContract(t *testing.T) {
 // 手工构造 Executor 的测试面不得静默走 nil 函数）。
 func TestRelocateLLMNilGuard(t *testing.T) {
 	e := &Executor{} // relocateLLM nil
-	_, err := e.relocateWithSnapshot(nil, nil, nil, 0, "comment_input")
+	_, err := e.relocateWithSnapshot(context.Background(), nil, nil, 0, "comment_input")
 	if err == nil || !strings.Contains(err.Error(), "未装配") {
 		t.Errorf("nil 接缝应快败报未装配，got %v", err)
 	}

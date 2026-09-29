@@ -137,6 +137,7 @@ func TestFromGinContext_DualKeyCompat(t *testing.T) {
 	if v, ok := fromGinContext(typed, ginUserKey); !ok || v != uint(1) {
 		t.Fatal("类型化键应可读出")
 	}
+	//lint:ignore SA1029 本用例刻意用裸字符串键，验证历史兼容读取路径
 	plain := context.WithValue(context.Background(), ginUserKey, uint(2))
 	if v, ok := fromGinContext(plain, ginUserKey); !ok || v != uint(2) {
 		t.Fatal("历史裸字符串键应兼容读出")
@@ -144,7 +145,8 @@ func TestFromGinContext_DualKeyCompat(t *testing.T) {
 	if _, ok := fromGinContext(context.Background(), ginUserKey); ok {
 		t.Fatal("空 ctx 不应命中")
 	}
-	if _, ok := fromGinContext(nil, ginUserKey); ok { //nolint:staticcheck // 显式测试 nil ctx 防御
+	//lint:ignore SA1012 本用例刻意传 nil ctx 防御路径
+	if _, ok := fromGinContext(nil, ginUserKey); ok {
 		t.Fatal("nil ctx 应安全返回未命中")
 	}
 }
@@ -183,6 +185,7 @@ func TestSetGinValuesToCtx_NoOverwriteExisting(t *testing.T) {
 }
 
 func TestSetGinValuesToCtx_NilSafety(t *testing.T) {
+	//lint:ignore SA1012 本用例刻意传 nil ctx 防御路径
 	if ctx := SetGinValuesToCtx(nil, &fakeGin{}); ctx != nil {
 		t.Fatal("nil ctx 应原样返回")
 	}
@@ -206,10 +209,12 @@ func TestIsAdmin_StringRoleOnly(t *testing.T) {
 }
 
 func TestWithUIDRole_NilCtxGuard(t *testing.T) {
-	if WithUID(nil, 1) != nil { //nolint:staticcheck // 防御路径
+	//lint:ignore SA1012 本用例刻意传 nil ctx 防御路径
+	if WithUID(nil, 1) != nil {
 		t.Fatal("WithUID(nil) 应返回 nil")
 	}
-	if WithRole(nil, "admin") != nil { //nolint:staticcheck // 防御路径
+	//lint:ignore SA1012 本用例刻意传 nil ctx 防御路径
+	if WithRole(nil, "admin") != nil {
 		t.Fatal("WithRole(nil) 应返回 nil")
 	}
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestSuggestQQWebhookURLFromBase(t *testing.T) {
 func TestVerifyCallbackSelfCheck_Errors(t *testing.T) {
 	svc := NewQQService(nil)
 	// 全局 DB 未初始化（单测环境无 PG）时 GetByID 返回错误而非 panic
-	if _, err := svc.VerifyCallbackSelfCheck(nil, 999999); err == nil {
+	if _, err := svc.VerifyCallbackSelfCheck(context.Background(), 999999); err == nil {
 		t.Error("expect error when db unavailable, got nil")
 	}
 }

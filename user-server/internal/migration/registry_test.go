@@ -218,6 +218,7 @@ func TestMigrationRegistry_NilContext(t *testing.T) {
 	m := &testMigration{version: "v1.0.0", name: "Test"}
 	registry.Register(m)
 
+	//lint:ignore SA1012 刻意传 nil 上下文验证兼容
 	err := m.Up(nil)
 	if err != nil {
 		t.Errorf("Expected no error with nil context, got %v", err)

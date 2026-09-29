@@ -1,6 +1,7 @@
 package platform_test
 
 import (
+	"context"
 	"testing"
 
 	"hivemtk-user/internal/browser_automation/platform"
@@ -132,7 +133,7 @@ func TestBlockKnowledgePresent(t *testing.T) {
 func TestCommentLocatorsSingleSource(t *testing.T) {
 	xhs, _ := platform.Get("xiaohongshu")
 	l := xhs.Locators()
-	cl, err := platform.CommentLocatorsFor(nil, "xiaohongshu")
+	cl, err := platform.CommentLocatorsFor(context.Background(), "xiaohongshu")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,10 +162,10 @@ func TestCapabilitiesHonest(t *testing.T) {
 		t.Error("xiaohongshu 应声明 post_comment")
 	}
 	// CommentPoster 契约：声明了就必须实现（fails-loudly 由 CommentLocatorsFor 执行）
-	if _, err := platform.CommentLocatorsFor(nil, "xiaohongshu"); err != nil {
+	if _, err := platform.CommentLocatorsFor(context.Background(), "xiaohongshu"); err != nil {
 		t.Errorf("xiaohongshu CommentLocatorsFor 应成功: %v", err)
 	}
-	if _, err := platform.CommentLocatorsFor(nil, "xianyu"); err == nil {
+	if _, err := platform.CommentLocatorsFor(context.Background(), "xianyu"); err == nil {
 		t.Error("xianyu CommentLocatorsFor 应 fails-loudly 报错")
 	}
 }

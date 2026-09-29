@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
@@ -46,7 +47,7 @@ func TestInitLogger_File(t *testing.T) {
 }
 
 func TestCtxTraceAndModule(t *testing.T) {
-	ctx := WithTraceID(nil, "trace-1")
+	ctx := WithTraceID(context.Background(), "trace-1")
 	ctx = WithModule(ctx, "orchestrator")
 	l := Ctx(ctx)
 	if l == nil {
@@ -56,7 +57,7 @@ func TestCtxTraceAndModule(t *testing.T) {
 }
 
 func TestTraceIDRoundTrip(t *testing.T) {
-	ctx := WithTraceID(nil, "")
+	ctx := WithTraceID(context.Background(), "")
 	if TraceIDFromContext(ctx) == "" {
 		t.Error("WithTraceID should auto-generate a trace id")
 	}

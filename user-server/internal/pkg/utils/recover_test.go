@@ -38,6 +38,7 @@ func TestSafeGo_NilFunc(t *testing.T) {
 func TestSafeGo_NilCtx(t *testing.T) {
 
 	var executed atomic.Bool
+	//lint:ignore SA1012 刻意传 nil 验证 SafeGo 的替换语义
 	SafeGo(nil, "test.nilctx", func(ctx context.Context) {
 		if ctx == nil {
 			t.Fatal("nil ctx 应被替换为 Background")
@@ -91,6 +92,7 @@ func TestSafeGoDetached_PreservesTraceValue(t *testing.T) {
 
 func TestSafeGoDetached_NilCtxSafe(t *testing.T) {
 	var executed atomic.Bool
+	//lint:ignore SA1012 刻意传 nil 验证 SafeGoDetached 的替换语义
 	SafeGoDetached(nil, "test.detachnil", 0, func(ctx context.Context) {
 		if ctx == nil {
 			t.Fatal("nil ctx 应被替换为 Background")
@@ -174,6 +176,7 @@ func TestSafeGoWithRetry_PanicRecoveredAndRetried(t *testing.T) {
 
 func TestSafeGoWithRetry_NilCtxSafe(t *testing.T) {
 	var executed atomic.Bool
+	//lint:ignore SA1012 刻意传 nil 验证 SafeGoWithRetry 的替换语义
 	SafeGoWithRetry(nil, "test.retrynil", nil, func(ctx context.Context) error {
 		executed.Store(true)
 		return nil

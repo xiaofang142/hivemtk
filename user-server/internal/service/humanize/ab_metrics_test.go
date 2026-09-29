@@ -302,12 +302,14 @@ func TestABRecorder_PersistHook(t *testing.T) {
 
 	gotCalls := make([]call, 0, 5)
 	timeout := time.After(2 * time.Second)
+collect:
 	for len(gotCalls) < 3 {
 		select {
 		case c := <-calls:
 			gotCalls = append(gotCalls, c)
 		case <-timeout:
-			break
+			// 必须跳出外层 for：只 break select 的话 timeout 已关，会空转死循环
+			break collect
 		}
 	}
 	if len(gotCalls) < 3 {

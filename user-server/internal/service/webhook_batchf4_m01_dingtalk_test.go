@@ -242,7 +242,7 @@ func TestM01_DingTalkKeepsOfficialCreateAt(t *testing.T) {
 		row := f4DtLoadHubByMsgID(t, db, "dt-"+fmt.Sprint(id)+"-"+tc.msgID, false)
 		switch tc.name {
 		case "missing", "null":
-			if d := row.SentAt.Sub(time.Now()); d > 2*time.Second || d < -2*time.Second {
+			if d := time.Until(row.SentAt); d > 2*time.Second || d < -2*time.Second {
 				t.Errorf("M-01(%s)：createAt 缺失时 sent_at = %v，want ≈now", tc.name, row.SentAt)
 			}
 		default:

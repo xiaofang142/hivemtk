@@ -9,7 +9,7 @@ import (
 func TestNewInMemoryDialogManager_NilConfig(t *testing.T) {
 	manager := NewInMemoryDialogManager(nil)
 	if manager == nil {
-		t.Error("Expected non-nil InMemoryDialogManager")
+		t.Fatal("Expected non-nil InMemoryDialogManager")
 	}
 	if manager.config.DefaultMaxHistoryLength != 10 {
 		t.Errorf("Expected default max history length 10, got %d", manager.config.DefaultMaxHistoryLength)
@@ -34,7 +34,7 @@ func TestInMemoryDialogManager_CreateSession(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if session == nil {
-		t.Error("Expected non-nil session")
+		t.Fatal("Expected non-nil session")
 	}
 	if session.UserID != "user-1" {
 		t.Errorf("Expected UserID 'user-1', got '%s'", session.UserID)

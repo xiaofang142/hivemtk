@@ -89,7 +89,7 @@ func TestSOPExecutionDispatcher_DispatchAfterStop(t *testing.T) {
 
 func TestSOPExecutionDispatcher_DispatchOrLogNoPanic(t *testing.T) {
 	d := &SOPExecutionDispatcher{
-		dispatchQueue: make(chan *dispatchTask, 0),
+		dispatchQueue: make(chan *dispatchTask),
 		stopCh:        make(chan struct{}),
 		retryPolicy:   DefaultSOPRetryPolicy(),
 	}

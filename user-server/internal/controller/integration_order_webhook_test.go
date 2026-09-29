@@ -2,9 +2,6 @@ package controller
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,13 +20,6 @@ import (
 // T-P2-02 控制器侧的入口核对：公开验签入口必须带着 guard 写下的"已验平台"才允许落库。
 // 这里刻意在测试里**只注册控制器、不挂 guard**（生产路由是挂了的），
 // 用来证"忘了挂 guard 的新路由不会静默收下推送"。
-
-func orderWebhookSign(secret, platform, ts, nonce string, body []byte) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(platform + "\n" + ts + "\n" + nonce + "\n"))
-	mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
-}
 
 func setupOrderWebhookControllerDB(t *testing.T) *gorm.DB {
 	t.Helper()

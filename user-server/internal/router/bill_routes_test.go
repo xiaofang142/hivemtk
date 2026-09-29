@@ -290,7 +290,7 @@ func TestBillRoutes_MountedAtTheRightPlace(t *testing.T) {
 	}
 	// 派生腿读的是报价那一族的仓储，装配必须排在报价之后（InitQuoteRuntime 在前只是顺序读法，
 	// 真正要守的是"别排在它之前又依赖它建过的东西"——本卡不依赖，所以只登记不判红）。
-	if strings.Index(src, "app.InitQuoteRuntime(gormDB)") < 0 {
+	if !strings.Contains(src, "app.InitQuoteRuntime(gormDB)") {
 		t.Error("router.go 里找不到 app.InitQuoteRuntime 这一句：本条用例对装配顺序的参照物没了")
 	}
 }

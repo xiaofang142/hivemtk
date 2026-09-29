@@ -74,7 +74,7 @@ var domainSourceLevel = map[string]string{
 // 读写锁：注入发生在请求路径（GetCrawlerStats），读取发生在爬虫记录路径，并发读写需互斥。
 var (
 	domainSourceLevelOverride map[string]string
-	domainSourceLevelMu        sync.RWMutex
+	domainSourceLevelMu       sync.RWMutex
 )
 
 // SetDomainSourceLevel 注入 DB 驱动的站点等级映射（nil/空表示用内置表）

@@ -37,7 +37,7 @@ func TestNewDashboardScreenService(t *testing.T) {
 
 	service := NewDashboardScreenService()
 	if service == nil {
-		t.Error("Expected non-nil service")
+		t.Fatal("Expected non-nil service")
 	}
 	if service.screenRepo == nil {
 		t.Error("Expected non-nil screen repository")

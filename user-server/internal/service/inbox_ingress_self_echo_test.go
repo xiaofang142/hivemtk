@@ -35,7 +35,7 @@ func TestHandleIngress_SelfEcho_BridgeRelay_Blocked(t *testing.T) {
 		t.Fatalf("预置 outbound 失败: %v", err)
 	}
 
-	relayedContent := "您好！　😊 我是 HiveMTK 销售助手，专注为您提供一站式私域方案。​"
+	relayedContent := "您好！　😊 我是 HiveMTK 销售助手，专注为您提供一站式私域方案。\u200b"
 	evt := &model.MessageEvent{
 		Channel:        model.ChannelXHS,
 		SenderID:       conv,

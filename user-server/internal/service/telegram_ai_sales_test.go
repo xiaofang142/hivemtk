@@ -438,7 +438,7 @@ func TestWebhookService_Receive_TelegramJoinEvent(t *testing.T) {
 		}
 	}`)
 
-	result, err := svc.Receive(nil, &ReceiveRequest{
+	result, err := svc.Receive(context.Background(), &ReceiveRequest{
 		Channel:   ChannelTelegram,
 		AccountID: "1",
 		Body:      payload,

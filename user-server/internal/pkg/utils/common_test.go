@@ -16,7 +16,7 @@ func TestBoolPtr(t *testing.T) {
 	for _, tt := range tests {
 		result := BoolPtr(tt.input)
 		if result == nil {
-			t.Errorf("BoolPtr(%v) returned nil", tt.input)
+			t.Fatalf("BoolPtr(%v) returned nil", tt.input)
 		}
 		if *result != tt.expected {
 			t.Errorf("BoolPtr(%v) = %v, expected %v", tt.input, *result, tt.expected)

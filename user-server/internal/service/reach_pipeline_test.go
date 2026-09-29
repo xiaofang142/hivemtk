@@ -187,11 +187,11 @@ func TestComputeNextRunTime_ExponentialCapped(t *testing.T) {
 	rp := RetryPolicy{MaxRetries: 10, IntervalMs: 1000, Backoff: "exponential", MaxIntervalMs: 5000}
 	t1 := computeNextRunTime(rp, 10)
 	t2 := computeNextRunTime(rp, 20)
-	if t1.Sub(time.Now()) > 6*time.Second {
-		t.Errorf("expected capped, got %v", t1.Sub(time.Now()))
+	if time.Until(t1) > 6*time.Second {
+		t.Errorf("expected capped, got %v", time.Until(t1))
 	}
-	if t2.Sub(time.Now()) > 6*time.Second {
-		t.Errorf("expected capped, got %v", t2.Sub(time.Now()))
+	if time.Until(t2) > 6*time.Second {
+		t.Errorf("expected capped, got %v", time.Until(t2))
 	}
 }
 

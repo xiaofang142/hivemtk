@@ -291,6 +291,7 @@ func TestModesAreStable(t *testing.T) {
 // 会被发现"。这条用例是跑在磁盘上的真实 import 集合上的，红因指到文件名与那一行。
 func TestActiveNeverImportsConversationEngine(t *testing.T) {
 	fset := token.NewFileSet()
+	//lint:ignore SA1019 ParseDir 足够做 import 扫描；换 x/tools/go/packages 仅为测试引入重依赖不值
 	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
 	}, parser.ImportsOnly)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 // TestBind_NilBindingRepo 测试 nil binding repo
 func TestBind_NilBindingRepo(t *testing.T) {
 	svc := &AgentKBBindingService{}
-	err := svc.Bind(nil, 1, 1, 0)
+	err := svc.Bind(context.Background(), 1, 1, 0)
 	if err == nil {
 		t.Error("expected error for nil binding repo")
 	}
@@ -28,7 +29,7 @@ func TestBind_ZeroAgentID(t *testing.T) {
 			t.Errorf("Bind should not panic with agentID=0 (should return error before nil deref): %v", r)
 		}
 	}()
-	err := svc.Bind(nil, 0, 1, 0)
+	err := svc.Bind(context.Background(), 0, 1, 0)
 	if err == nil {
 		t.Error("expected error for agentID=0")
 	}
@@ -42,7 +43,7 @@ func TestBind_ZeroKBID(t *testing.T) {
 			t.Errorf("Bind should not panic with kbID=0: %v", r)
 		}
 	}()
-	err := svc.Bind(nil, 1, 0, 0)
+	err := svc.Bind(context.Background(), 1, 0, 0)
 	if err == nil {
 		t.Error("expected error for kbID=0")
 	}
@@ -51,7 +52,7 @@ func TestBind_ZeroKBID(t *testing.T) {
 // TestBind_ErrorMessage 验证错误信息
 func TestBind_ErrorMessage(t *testing.T) {
 	svc := &AgentKBBindingService{bindingRepo: nil}
-	err := svc.Bind(nil, 0, 0, 0)
+	err := svc.Bind(context.Background(), 0, 0, 0)
 	if err == nil {
 		t.Skip("nil repo returns generic error first")
 	}
@@ -63,7 +64,7 @@ func TestBind_ErrorMessage(t *testing.T) {
 // TestUnbind_NilBindingRepo 测试 nil repo
 func TestUnbind_NilBindingRepo(t *testing.T) {
 	svc := &AgentKBBindingService{}
-	err := svc.Unbind(nil, 1, 1)
+	err := svc.Unbind(context.Background(), 1, 1)
 	if err == nil {
 		t.Error("expected error for nil binding repo")
 	}
@@ -72,7 +73,7 @@ func TestUnbind_NilBindingRepo(t *testing.T) {
 // TestListByAgent_NilBindingRepo 测试 nil repo
 func TestListByAgent_NilBindingRepo(t *testing.T) {
 	svc := &AgentKBBindingService{}
-	got, err := svc.ListByAgent(nil, 1)
+	got, err := svc.ListByAgent(context.Background(), 1)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -84,7 +85,7 @@ func TestListByAgent_NilBindingRepo(t *testing.T) {
 // TestListByKB_NilBindingRepo 测试 nil repo
 func TestListByKB_NilBindingRepo(t *testing.T) {
 	svc := &AgentKBBindingService{}
-	got, err := svc.ListByKB(nil, 1)
+	got, err := svc.ListByKB(context.Background(), 1)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -96,7 +97,7 @@ func TestListByKB_NilBindingRepo(t *testing.T) {
 // TestBatchBind_NilBindingRepo 测试 nil repo
 func TestBatchBind_NilBindingRepo(t *testing.T) {
 	svc := &AgentKBBindingService{}
-	err := svc.BatchBind(nil, []BatchBindItem{{AgentID: 1, KBID: 1}})
+	err := svc.BatchBind(context.Background(), []BatchBindItem{{AgentID: 1, KBID: 1}})
 	if err == nil {
 		t.Error("expected error for nil binding repo")
 	}
@@ -105,10 +106,10 @@ func TestBatchBind_NilBindingRepo(t *testing.T) {
 // TestBatchBind_EmptyItems 测试空 items 不报错
 func TestBatchBind_EmptyItems(t *testing.T) {
 	svc := &AgentKBBindingService{bindingRepo: nil}
-	if err := svc.BatchBind(nil, nil); err != nil {
+	if err := svc.BatchBind(context.Background(), nil); err != nil {
 		t.Errorf("expected nil error for nil items, got %v", err)
 	}
-	if err := svc.BatchBind(nil, []BatchBindItem{}); err != nil {
+	if err := svc.BatchBind(context.Background(), []BatchBindItem{}); err != nil {
 		t.Errorf("expected nil error for empty items, got %v", err)
 	}
 }
@@ -119,7 +120,7 @@ func TestBatchBind_EmptyItems(t *testing.T) {
 // 这个测试在 test/integration/knowledge_base_crud_test.go 中通过真实 DB 覆盖 items 校验逻辑
 func TestBatchBind_ZeroAgentIDInItem(t *testing.T) {
 	svc := &AgentKBBindingService{bindingRepo: nil}
-	err := svc.BatchBind(nil, []BatchBindItem{
+	err := svc.BatchBind(context.Background(), []BatchBindItem{
 		{AgentID: 1, KBID: 10},
 		{AgentID: 0, KBID: 20},
 	})
@@ -136,7 +137,7 @@ func TestBatchBind_ZeroAgentIDInItem(t *testing.T) {
 // 实际行为: bindingRepo nil 校验在 items 校验之前, 因此这里会先返回 "binding repo not initialized"
 func TestBatchBind_ZeroKBIDInItem(t *testing.T) {
 	svc := &AgentKBBindingService{bindingRepo: nil}
-	err := svc.BatchBind(nil, []BatchBindItem{
+	err := svc.BatchBind(context.Background(), []BatchBindItem{
 		{AgentID: 1, KBID: 0},
 	})
 	if err == nil {
@@ -150,7 +151,7 @@ func TestBatchBind_ZeroKBIDInItem(t *testing.T) {
 // 这里 bindingRepo 也是 nil, 应该先返回 nil binding repo 错误
 func TestBatchBind_NilDB_NoDBFallback(t *testing.T) {
 	svc := &AgentKBBindingService{bindingRepo: nil}
-	err := svc.BatchBind(nil, []BatchBindItem{{AgentID: 1, KBID: 1}})
+	err := svc.BatchBind(context.Background(), []BatchBindItem{{AgentID: 1, KBID: 1}})
 	if err == nil {
 		t.Error("expected error")
 	}
@@ -215,7 +216,7 @@ func TestBind_Priority_DefaultValue(t *testing.T) {
 	defer func() {
 		_ = recover()
 	}()
-	_ = svc.Bind(nil, 1, 1, 0)
+	_ = svc.Bind(context.Background(), 1, 1, 0)
 }
 
 // TestBatchBind_ItemValidation_AllValid 测试所有 item 都合法 (无 nil repo 时返回 bindingRepo 错误)
@@ -226,7 +227,7 @@ func TestBatchBind_ItemValidation_AllValid(t *testing.T) {
 		{AgentID: 1, KBID: 11, Priority: 2},
 		{AgentID: 2, KBID: 10, Priority: 3},
 	}
-	err := svc.BatchBind(nil, items)
+	err := svc.BatchBind(context.Background(), items)
 	if err == nil {
 		t.Error("expected error from nil binding repo")
 	}
@@ -244,7 +245,7 @@ func TestBind_AllValid_NilRepo_NoPanic(t *testing.T) {
 	defer func() {
 		_ = recover()
 	}()
-	_ = svc.Bind(nil, 1, 1, 0)
+	_ = svc.Bind(context.Background(), 1, 1, 0)
 }
 
 // TestBatchBind_AllValid_NilRepo 测试 batch 在 nil repo 下的行为
@@ -253,7 +254,7 @@ func TestBatchBind_AllValid_NilRepo(t *testing.T) {
 	defer func() {
 		_ = recover()
 	}()
-	_ = svc.BatchBind(nil, []BatchBindItem{{AgentID: 1, KBID: 1}})
+	_ = svc.BatchBind(context.Background(), []BatchBindItem{{AgentID: 1, KBID: 1}})
 }
 
 // TestAgentKBBinding_Model 验证模型字段定义

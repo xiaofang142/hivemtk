@@ -176,7 +176,7 @@ func TestReportHealth_CustomMetrics(t *testing.T) {
 		QuotaUsed: 0, QuotaTotal: 500, SuccessRate: 100, ErrorCount: 0,
 		Metrics: metrics,
 	})
-	if rec.Metrics == nil || len(rec.Metrics) == 0 {
+	if len(rec.Metrics) == 0 {
 		t.Error("expected metrics saved")
 	}
 }

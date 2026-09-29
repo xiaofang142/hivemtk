@@ -73,7 +73,7 @@ func TestRAGService_Query_WithContext(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if resp == nil {
-		t.Error("Expected non-nil response")
+		t.Fatal("Expected non-nil response")
 	}
 	if resp.Answer == "" {
 		t.Error("Expected non-empty answer")

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -98,13 +99,13 @@ func TestD15_PendingSinceMergesRemote(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		var probe map[uint64]time.Time
-		if _ = seqCache.GetJSON(nil, pendingKey("s1"), &probe); len(probe) == 1 {
+		if _ = seqCache.GetJSON(context.Background(), pendingKey("s1"), &probe); len(probe) == 1 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	_ = seqCache.SetJSON(nil, pendingKey("s1"), map[uint64]time.Time{5: time.Now(), 9: time.Now()}, 0)
+	_ = seqCache.SetJSON(context.Background(), pendingKey("s1"), map[uint64]time.Time{5: time.Now(), 9: time.Now()}, 0)
 
 	got := p.PendingSince("s1", 6)
 

@@ -534,7 +534,7 @@ func TestQQFullchain_ReplayIdempotent(t *testing.T) {
 	}
 	{
 		var resp map[string]any
-		_ = json.Unmarshal([]byte(rec2.Body.String()), &resp)
+		_ = json.Unmarshal(rec2.Body.Bytes(), &resp)
 		if resp["duplicate"] != true {
 			t.Errorf("second push should be marked duplicate, got %v (body=%s)", resp["duplicate"], rec2.Body.String())
 		}

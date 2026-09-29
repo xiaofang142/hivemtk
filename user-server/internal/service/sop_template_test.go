@@ -126,8 +126,8 @@ func TestSOPTemplate_BuildLayer1Reply_NilTpl(t *testing.T) {
 // TestSOPTemplate_IncrementHitCount_NilRepo 测试 nil repo + id=0 安全
 func TestSOPTemplate_IncrementHitCount_NilRepo(t *testing.T) {
 	svc := &SOPTemplateService{}
-	svc.IncrementHitCount(nil, 0)
-	svc.IncrementHitCount(nil, 1)
+	svc.IncrementHitCount(context.Background(), 0)
+	svc.IncrementHitCount(context.Background(), 1)
 }
 
 // TestSOPTemplate_InvalidateCache_NilSafe 测试 nil cache 安全
@@ -142,7 +142,7 @@ func TestSOPTemplate_InvalidateCache_NilSafe(t *testing.T) {
 // TestSOPTemplate_MatchByIntent_NilRepo 测试空仓库
 func TestSOPTemplate_MatchByIntent_NilRepo(t *testing.T) {
 	svc := &SOPTemplateService{repo: nil}
-	got, err := svc.MatchByIntent(nil, "logistics")
+	got, err := svc.MatchByIntent(context.Background(), "logistics")
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -150,7 +150,7 @@ func TestSOPTemplate_MatchByIntent_NilRepo(t *testing.T) {
 		t.Errorf("expected nil matches for nil repo, got %v", got)
 	}
 
-	got2, _ := svc.MatchByIntent(nil, "")
+	got2, _ := svc.MatchByIntent(context.Background(), "")
 	if got2 != nil {
 		t.Errorf("expected nil for empty intent, got %v", got2)
 	}
@@ -159,7 +159,7 @@ func TestSOPTemplate_MatchByIntent_NilRepo(t *testing.T) {
 // TestSOPTemplate_MatchByIntentStage_NilRepo 测试 (intent, stage) 空仓库
 func TestSOPTemplate_MatchByIntentStage_NilRepo(t *testing.T) {
 	svc := &SOPTemplateService{repo: nil}
-	got, err := svc.MatchByIntentStage(nil, "logistics", "initial")
+	got, err := svc.MatchByIntentStage(context.Background(), "logistics", "initial")
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}

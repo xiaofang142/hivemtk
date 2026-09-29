@@ -72,9 +72,11 @@ func TestCarrierRoundTripAndNilSafety(t *testing.T) {
 	if tid := TraceIDFromContext(logCtx); tid != "tid-9" {
 		t.Errorf("TraceIDFromContext 应回落到 logger trace_id, got %q", tid)
 	}
+	//lint:ignore SA1012 刻意传 nil ctx 验证防御
 	if CarrierFromContext(nil) != nil {
 		t.Error("nil ctx 不应 panic 且应返回 nil")
 	}
+	//lint:ignore SA1012 刻意传 nil ctx 验证防御
 	if TraceIDFromContext(nil) != "" {
 		t.Error("nil ctx 的 trace_id 应为空串")
 	}

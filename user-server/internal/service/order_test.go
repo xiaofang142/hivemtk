@@ -236,10 +236,6 @@ func TestOrderService_GetRecentOrderList(t *testing.T) {
 		t.Fatalf("GetRecentOrderList failed: %v", err)
 	}
 
-	if len(recentOrders) < 0 {
-		t.Errorf("Expected orders, got %d", len(recentOrders))
-	}
-
 	t.Logf("GetRecentOrderList returned %d orders", len(recentOrders))
 }
 

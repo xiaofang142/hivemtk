@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestIsValidKBType_AllValid(t *testing.T) {
 // TestCreateKB_NilInput 验证 nil 输入 (在 nil repo 之前)
 func TestCreateKB_NilInput(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
-	err := svc.CreateKB(nil, nil)
+	err := svc.CreateKB(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error for nil kb")
 	}
@@ -41,7 +42,7 @@ func TestCreateKB_NilInput(t *testing.T) {
 // TestCreateKB_NilRepo 验证 nil repo
 func TestCreateKB_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	err := svc.CreateKB(nil, &model.KnowledgeBase{
+	err := svc.CreateKB(context.Background(), &model.KnowledgeBase{
 		KBCode: "X",
 		Type:   "faq",
 		Name:   "test",
@@ -57,7 +58,7 @@ func TestCreateKB_NilRepo(t *testing.T) {
 // TestGetKB_NilRepo 测试 nil repo 下的安全行为
 func TestGetKB_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	got, err := svc.GetKB(nil, 1)
+	got, err := svc.GetKB(context.Background(), 1)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -69,7 +70,7 @@ func TestGetKB_NilRepo(t *testing.T) {
 // TestListKBs_NilRepo 测试 nil repo
 func TestListKBs_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	got, total, err := svc.ListKBs(nil, "faq", "", 0, "")
+	got, total, err := svc.ListKBs(context.Background(), "faq", "", 0, "")
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -81,7 +82,7 @@ func TestListKBs_NilRepo(t *testing.T) {
 // TestListByType_NilRepo
 func TestListByType_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	got, err := svc.ListByType(nil, "faq")
+	got, err := svc.ListByType(context.Background(), "faq")
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -93,7 +94,7 @@ func TestListByType_NilRepo(t *testing.T) {
 // TestListByAgent_NilRepo
 func TestListByAgent_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	got, err := svc.ListByAgent(nil, 1)
+	got, err := svc.ListByAgent(context.Background(), 1)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}
@@ -105,7 +106,7 @@ func TestListByAgent_NilRepo(t *testing.T) {
 // TestUpdateKB_NilRepo 验证 nil repo 报错
 func TestUpdateKB_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{Name: "x"})
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{Name: "x"})
 	if err == nil {
 		t.Error("expected error for nil repo")
 	}
@@ -115,7 +116,7 @@ func TestUpdateKB_NilRepo(t *testing.T) {
 func TestUpdateKB_ZeroID(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
 	svc.repo = nil
-	err := svc.UpdateKB(nil, 0, &model.KnowledgeBase{Name: "x"})
+	err := svc.UpdateKB(context.Background(), 0, &model.KnowledgeBase{Name: "x"})
 	if err == nil {
 		t.Error("expected error for id=0")
 	}
@@ -124,7 +125,7 @@ func TestUpdateKB_ZeroID(t *testing.T) {
 // TestUpdateKB_EmptyName 验证 name 必填
 func TestUpdateKB_EmptyName(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{Name: ""})
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{Name: ""})
 	if err == nil {
 		t.Error("expected error for empty name")
 	}
@@ -133,7 +134,7 @@ func TestUpdateKB_EmptyName(t *testing.T) {
 // TestUpdateKB_InvalidType 验证 type 合法性
 func TestUpdateKB_InvalidType(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{Name: "x", Type: "BAD"})
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{Name: "x", Type: "BAD"})
 	if err == nil {
 		t.Error("expected error for invalid type")
 	}
@@ -142,7 +143,7 @@ func TestUpdateKB_InvalidType(t *testing.T) {
 // TestUpdateKB_PrivateWithoutOwner 验证 private 缺 owner
 func TestUpdateKB_PrivateWithoutOwner(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{
 		Name:      "x",
 		OwnerType: model.KnowledgeBaseOwnerPrivate,
 	})
@@ -155,7 +156,7 @@ func TestUpdateKB_PrivateWithoutOwner(t *testing.T) {
 func TestUpdateKB_SharedWithOwner(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
 	agent := uint(1)
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{
 		Name:         "x",
 		OwnerType:    model.KnowledgeBaseOwnerShared,
 		OwnerAgentID: &agent,
@@ -168,7 +169,7 @@ func TestUpdateKB_SharedWithOwner(t *testing.T) {
 // TestUpdateKB_SharedClearsOwner 验证 shared 改 owner_type 时清空 owner_agent_id
 func TestUpdateKB_SharedClearsOwner(t *testing.T) {
 	svc := &KnowledgeBaseService{repo: nil}
-	err := svc.UpdateKB(nil, 1, &model.KnowledgeBase{
+	err := svc.UpdateKB(context.Background(), 1, &model.KnowledgeBase{
 		Name:         "x",
 		OwnerType:    model.KnowledgeBaseOwnerShared,
 		OwnerAgentID: nil,
@@ -181,7 +182,7 @@ func TestUpdateKB_SharedClearsOwner(t *testing.T) {
 // TestDeleteKB_NilRepo
 func TestDeleteKB_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	err := svc.DeleteKB(nil, 1)
+	err := svc.DeleteKB(context.Background(), 1)
 	if err == nil {
 		t.Error("expected error for nil repo")
 	}
@@ -190,7 +191,7 @@ func TestDeleteKB_NilRepo(t *testing.T) {
 // TestUnbindFromAgent_NilBindingRepo 测试 nil repo 下的安全行为
 func TestUnbindFromAgent_NilBindingRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	err := svc.UnbindFromAgent(nil, 1, 1)
+	err := svc.UnbindFromAgent(context.Background(), 1, 1)
 	if err != nil {
 		t.Errorf("expected nil error for nil binding repo, got %v", err)
 	}
@@ -208,7 +209,7 @@ func TestBindToAgent_NilBindingRepo(t *testing.T) {
 			t.Logf("BindToAgent panicked (expected with nil repo): %v", r)
 		}
 	}()
-	_ = svc.BindToAgent(nil, 999, 1)
+	_ = svc.BindToAgent(context.Background(), 999, 1)
 }
 
 // TestNewKnowledgeBaseService 测试构造函数

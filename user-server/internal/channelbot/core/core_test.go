@@ -15,7 +15,7 @@ func TestSecureEqual(t *testing.T) {
 		{"both empty", "", "", true},
 		{"a empty", "", "x", false},
 		{"b empty", "x", "", false},
-		{"equal", "secret-token", "secret-token", false && true || ("secret-token" == "secret-token")},
+		{"equal", "secret-token", "secret-token", true},
 		{"differ", "abc", "abd", false},
 		{"prefix", "abc", "abcd", false},
 	}

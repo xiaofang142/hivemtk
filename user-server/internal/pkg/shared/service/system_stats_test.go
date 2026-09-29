@@ -20,7 +20,7 @@ func TestSystemStatsService_GetSystemInfo(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if info == nil {
-		t.Error("Expected non-nil SystemInfo")
+		t.Fatal("Expected non-nil SystemInfo")
 	}
 	if info.GoVersion == "" {
 		t.Error("Expected non-empty GoVersion")

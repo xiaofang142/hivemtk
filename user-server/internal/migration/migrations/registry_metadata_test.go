@@ -160,6 +160,7 @@ func implementedVersions(dir string) (map[string]string, error) {
 		return byType[recv]
 	}
 
+	//lint:ignore SA1019 ParseDir 足够做元数据扫描；换 x/tools/go/packages 仅为测试引入重依赖不值
 	pkgs, err := parser.ParseDir(token.NewFileSet(), dir,
 		func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") },
 		0)

@@ -767,10 +767,8 @@ func TestM01_TelegramBackfillScopedToAccount(t *testing.T) {
 
 // TestM01_TelegramServiceFetchSeamTypes 编译期钉住 seam 的签名（换实现时先在这里露出来）。
 func TestM01_TelegramServiceFetchSeamTypes(t *testing.T) {
-	var f func(context.Context, string, string) ([]byte, string, error) = FetchTelegramMedia
-	if f == nil {
-		t.Fatal("FetchTelegramMedia 签名变了")
-	}
+	// 赋值即校验：签名不符编译不过；函数值恒非 nil，判 nil 是死断言
+	var _ func(context.Context, string, string) ([]byte, string, error) = FetchTelegramMedia
 	var refs []telegram.TGMediaRef
 	refs = append(refs, telegram.TGMediaRef{FileID: "a"})
 	if len(refs) != 1 {
