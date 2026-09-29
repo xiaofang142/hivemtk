@@ -452,6 +452,31 @@ func (s *OpportunityService) MarkWonByCollection(ctx context.Context, id string)
 		OpportunityCauseCollection, model.OpportunityStatusWon, nil)
 }
 
+// CompleteCollection 回款完成这条事实在商机侧的收口（T-P7-04）：幂等门 + 唯一入口。
+//
+// 调用方（回款→复购钩子）只认 alreadyWon 这一格来决定"复购跟进排不排"：
+//   - false ⇒ 本次是赢单的那一次，调用方继续切旅程、排跟进；
+//   - true ⇒ 赢单早已发生（重放 / 冲销后重付），本次只做幂等收口，不重排。
+//
+// 赢单写本身永远走 MarkWonByCollection（AC③ 唯一入口），本函数不碰 statusMove。
+func (s *OpportunityService) CompleteCollection(ctx context.Context, id string) (alreadyWon bool, row *model.Opportunity, err error) {
+	before, gerr := s.Get(ctx, id)
+	if gerr != nil {
+		return false, nil, gerr
+	}
+	if before == nil {
+		return false, nil, fmt.Errorf("%w: %s", ErrOpportunityNotFound, strings.TrimSpace(id))
+	}
+	if before.Status == model.OpportunityStatusWon {
+		return true, before, nil // 已赢单：连唯一入口都不必进，更谈不上改写
+	}
+	after, merr := s.MarkWonByCollection(ctx, id)
+	if merr != nil {
+		return false, nil, merr
+	}
+	return false, after, nil
+}
+
 // statusMove 的 expectedVersion：人工入口传调用方看到的那一格，机器入口（回款完成）传 nil
 // 让核心采用刚读到的那一格 —— 两条路都是 CAS 改写，区别只在"谁的那份视图在赌"。
 func (s *OpportunityService) statusMove(ctx context.Context, id string, expectedVersion *int64,

@@ -610,6 +610,7 @@ func (s *faqSopSeeder) buildSOPTemplates() []model.SOPTemplate {
 	tpls = append(tpls, s.sopClosingStage()...)
 	tpls = append(tpls, s.sopUrgencyStage()...)
 	tpls = append(tpls, s.sopSupportStage()...)
+	tpls = append(tpls, s.sopRepurchaseStage()...)
 	_ = trueVal
 	for i := range tpls {
 		tpls[i].HitCount = int64(randInt(20, 800))
@@ -1232,6 +1233,39 @@ func (s *faqSopSeeder) sopSupportStage() []model.SOPTemplate {
 		{Name: `技术卡住开场 __URGENCY_SUPPORT_SEED_20260908__`, Intent: "support", Stage: "initial", Template: `技术问题卡住了？加微信 xiao142000 进交流群，贴出报错日志，大家一起定位比自己摸索快 10 倍。`, Vars: `{}`, Priority: 97, Conf: 0.94},
 		{Name: `技术卡住-部署失败 __URGENCY_SUPPORT_SEED_20260908__`, Intent: "support", Stage: "middle", Template: `部署失败常见 5 个原因：端口冲突、.env 密钥没生成、Docker daemon 没启动、模型文件缺失、PostgreSQL 连接不上。加微信 xiao142000，拉群后逐步排查。`, Vars: `{}`, Priority: 92, Conf: 0.91},
 		{Name: `技术卡住-二次开发 __URGENCY_SUPPORT_SEED_20260908__`, Intent: "support", Stage: "late", Template: `二次开发问题更适合拉进开发群讨论，里面有 Go 分层架构专家和 GORM 坑位经验。加微信 xiao142000，说拉开发群即可。`, Vars: `{}`, Priority: 90, Conf: 0.90},
+	}
+	out := make([]model.SOPTemplate, 0, len(specs))
+	for _, sp := range specs {
+		out = append(out, model.SOPTemplate{
+			Name:       sp.Name,
+			Intent:     sp.Intent,
+			Stage:      sp.Stage,
+			Template:   sp.Template,
+			Vars:       sp.Vars,
+			Priority:   sp.Priority,
+			Confidence: sp.Conf,
+			Enabled:    &trueVal,
+		})
+	}
+	return out
+}
+
+// sopRepurchaseStage 复购阶段 (T-P7-04)：回款完成 → 赢单后旅程切 StageRepurchase，
+// 跟进提醒挂的 SOPName 就是 repurchase_reminder（SOPName 只是标签，跟进调度器不解析
+// 模板；这里补上同名模板，让 SOP 检索侧也能命中同一套话术，标签与模板两边对得上）。
+func (s *faqSopSeeder) sopRepurchaseStage() []model.SOPTemplate {
+	trueVal := true
+	specs := []struct {
+		Name     string
+		Intent   string
+		Stage    string
+		Template string
+		Vars     string
+		Priority int
+		Conf     float64
+	}{
+		{Name: `复购提醒 repurchase_reminder ` + seedTag, Intent: "repurchase", Stage: "repurchase", Template: `您好，感谢您此前的信任与合作！距离上次成交已有一段时间，想跟您同步一下近期的新能力与优惠，看看有没有新的需求可以帮上忙。方便的话，约个 10 分钟聊聊？`, Vars: `{}`, Priority: 90, Conf: 0.9},
+		{Name: `复购跟进-需求回访 repurchase_reminder ` + seedTag, Intent: "repurchase", Stage: "repurchase", Template: `您好，上次合作的服务用下来感觉如何？有没有遇到什么问题，或是有新的场景想扩展？我们近期上了几个新功能，老客户续购有专属优惠，可以给您详细介绍一下。`, Vars: `{}`, Priority: 88, Conf: 0.88},
 	}
 	out := make([]model.SOPTemplate, 0, len(specs))
 	for _, sp := range specs {

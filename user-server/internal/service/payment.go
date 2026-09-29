@@ -147,11 +147,25 @@ type SettlementView struct {
 }
 
 // PaymentReceipt 一次入账的完整结论：那一行 + 那张单的三格数。
+// Collection 是回款完成钩子（赢单→复购 SOP，T-P7-04）的结论：
+//   - "" ⇒ 钩子没被触发（这次没把账单结掉，partial / open 都走这里）；
+//   - "ok" ⇒ 触发且成功；"no-hook" ⇒ 触发条件到了但没装钩子；
+//   - "skipped" ⇒ 钩子主动跳过（账单没关联商机 / 商机早已赢单，不重排跟进）；
+//   - "error: …" ⇒ 钩子失败 —— 钱已记、单已结，失败只记在这里，不败支付。
 type PaymentReceipt struct {
 	Payment    PaymentView    `json:"payment"`
 	Reused     bool           `json:"reused"`
 	Settlement SettlementView `json:"settlement"`
+	Collection string         `json:"collection,omitempty"`
 }
+
+// CollectionCompletedHook 回款完成（账单 Transited 到 paid）之后的钩子：
+// 赢单收口 + 复购跟进（T-P7-04）。只在"这次把账单结掉了"时触发一次，
+// partial 不触发、已结掉账单的重放不触发（Transited 为假）。
+//
+// 约定：返回 ErrCollectionHookSkipped（用 errors.Is 判）表示"主动跳过"，
+// 其余非 nil 错误表示失败 —— 两种都不影响支付本身的成功。
+type CollectionCompletedHook func(ctx context.Context, bill *model.Bill) error
 
 // BillStatementView 账单的对账读视图（读侧唯一出口，无 Reused：那不是账单的属性）。
 type BillStatementView struct {
@@ -174,6 +188,8 @@ type PaymentService struct {
 	payments paymentStore
 	bills    settlementBillStore
 	now      func() time.Time
+	// onCollection 回款完成钩子（T-P7-04）：nil = 没装，触发条件到了也只是记 "no-hook"。
+	onCollection CollectionCompletedHook
 }
 
 // NewPaymentService 构造。缺件时构造照旧成功，由 Available / 各方法报出来。
@@ -190,6 +206,36 @@ func (s *PaymentService) SetClock(now func() time.Time) {
 		now = time.Now
 	}
 	s.now = now
+}
+
+// SetCollectionCompletedHook 装回款完成钩子（T-P7-04）：生产由 app/payment_wiring.go
+// 装默认实现（赢单→复购），测试可换计数替身。nil = 明确不装。
+func (s *PaymentService) SetCollectionCompletedHook(hook CollectionCompletedHook) {
+	if s == nil {
+		return
+	}
+	s.onCollection = hook
+}
+
+// fireCollectionCompleted 触发条件 + 结论记账。
+//
+// 只认"这次 Transited 到 paid"：partial 不触发（AC②）、已结掉账单的重放
+// Transited 为假不触发（AC③ 的 SOP 侧）。钩子的任何失败都只变成结论字符串，
+// 不败支付 —— 钱已记、单已结是事实，钩子只是事实的跟进。
+func (s *PaymentService) fireCollectionCompleted(ctx context.Context, bill *model.Bill, view SettlementView) string {
+	if !(view.Transited && view.Status == model.BillStatusPaid) {
+		return ""
+	}
+	if s.onCollection == nil {
+		return "no-hook"
+	}
+	if err := s.onCollection(ctx, bill); err != nil {
+		if errors.Is(err, ErrCollectionHookSkipped) {
+			return "skipped"
+		}
+		return "error: " + err.Error()
+	}
+	return "ok"
 }
 
 // Available 报告能不能入账。
@@ -307,7 +353,8 @@ func (s *PaymentService) RecordPayment(ctx context.Context, in RecordPaymentInpu
 		return nil, fmt.Errorf("%w（回款 %s 已入账，账单 %s 的折算没做成；重放同一笔回调可补上）：%v",
 			ErrPaymentStatusStuck, view.ID, billID, err)
 	}
-	return &PaymentReceipt{Payment: view, Reused: false, Settlement: settled}, nil
+	return &PaymentReceipt{Payment: view, Reused: false,
+		Settlement: settled, Collection: s.fireCollectionCompleted(ctx, bill, settled)}, nil
 }
 
 // settleKnown 幂等通路上的三种结论：复用（无写入）、冲销（只改 status）、拒（内容不符）。
@@ -362,7 +409,8 @@ func (s *PaymentService) receiptOf(ctx context.Context, row *model.Payment, bill
 		return nil, fmt.Errorf("%w（回款 %s 早已入账，账单 %s 的折算没做成；重放这一笔通知可补上）：%v",
 			ErrPaymentStatusStuck, row.ID, bill.ID, err)
 	}
-	return &PaymentReceipt{Payment: paymentViewOf(row, false), Reused: true, Settlement: settled}, nil
+	return &PaymentReceipt{Payment: paymentViewOf(row, false), Reused: true,
+		Settlement: settled, Collection: s.fireCollectionCompleted(ctx, bill, settled)}, nil
 }
 
 // applySettlement 把账单状态折算成"Σ 计入结清 vs 应收金额"的结果。

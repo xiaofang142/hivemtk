@@ -239,7 +239,7 @@ func TestOpportunityStatusMoveIsGatedByCause(t *testing.T) {
 // 同时改这张清单，而改清单意味着有人得在评审里回答"这个入口谁调、它凭什么改这列"。
 func TestOpportunityServiceSurfaceIsFrozen(t *testing.T) {
 	want := []string{
-		"Available", "Cancel", "Edit", "Get", "MarkLost", "MarkWonByCollection",
+		"Available", "Cancel", "CompleteCollection", "Edit", "Get", "MarkLost", "MarkWonByCollection",
 		"MoveStage", "Reopen", "SetClock",
 	}
 	got := make([]string, 0, len(want))

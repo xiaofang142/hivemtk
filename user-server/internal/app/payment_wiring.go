@@ -51,6 +51,17 @@ func InitPaymentRuntime(db *gorm.DB) bool {
 	)
 	service.SetGlobalPaymentService(svc)
 
+	// T-P7-04 回款完成 → 赢单 → 复购跟进：默认钩子在这里装。
+	// 商机服务取全局（InitOpportunityRuntime 排在 InitPaymentRuntime 之前，见 router.go，
+	// 生产这里非 nil；测试里单独调 InitPaymentRuntime 时可能是 nil —— 钩子把 nil 判据
+	// 留到触发那一刻，支付成功不受影响）；旅程权威态走全局缓存后端，实例就地建。
+	journey := service.NewCustomerJourneyService()
+	svc.SetCollectionCompletedHook(service.WireCollectionToRepurchase(
+		service.GlobalOpportunityService(),
+		journey,
+		service.NewFollowUpService(journey),
+	))
+
 	ok := svc.Available()
 	if !ok {
 		// 半装配比不装配更坏：不装配是清一色 503 一眼看得出来，半装配是"路由挂了、
