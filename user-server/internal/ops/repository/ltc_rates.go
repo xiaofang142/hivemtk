@@ -27,7 +27,7 @@ func NewLtcRatesRepository(db *gorm.DB) *LtcRatesRepository {
 	return &LtcRatesRepository{db: db}
 }
 
-// CountOpportunitiesByStatus 按 status 分组数商机行（软删行 gorm 默认 scope 已剔除）。
+// CountOpportunitiesByStatus 按 status 分组数商机行（opportunities 表无软删列，全表即全量）。
 func (r *LtcRatesRepository) CountOpportunitiesByStatus(ctx context.Context) (map[string]int64, error) {
 	type row struct {
 		Status string

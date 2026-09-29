@@ -91,3 +91,64 @@ docker compose exec redis redis-cli ping
 ---
 
 *最后更新: 2026-08-16*
+
+---
+
+## 7. SLO 分域口径（C6/C10，T-P8-06）
+
+> 本节是 C6/C10 的唯一口径源。每个指标 = 分子/分母 + 数据源 + 代码锚点。
+> 三率（闭环/回款/逾期）的生产聚合是 `user-server/internal/ops/service/ltc_rates.go`
+> （取数 `internal/ops/repository/ltc_rates.go`，T-P8-05），文档 SQL 与该聚合逐行对齐，
+> 由 `internal/ops/service/ltc_rates_slo_test.go` 锁死（同一 fixture 下文档 SQL 结果
+> 必须等于 service 输出，否则测试红灯）。
+
+### 7.1 北极星：闭环率（C6）
+
+- 定义：已闭环商机 / 全部商机。闭环 = `won` + `lost`（`cancelled` 作废不算闭环）。
+- 分子：`SELECT COUNT(*) FROM opportunities WHERE status IN ('won','lost')`
+- 分母：`SELECT COUNT(*) FROM opportunities`（三表均无软删列，全表即全量）
+- 锚点：`CountOpportunitiesByStatus` + service `closed = won + lost`；看板北极星首位（T-P8-05）。
+
+### 7.2 回款率
+
+- 定义：已确认回款总额 / 应收总额（作废账单不该收，分母剔除）。
+- 分子：`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status IN ('confirmed')`
+  （`model.PaymentStatusesCounted`，今天只有 confirmed；reversed 冲销不算数）
+- 分母：`SELECT COALESCE(SUM(amount),0) FROM bills WHERE status <> 'voided'`
+- 锚点：`SumPaymentsAmount` / `SumBillsAmount`。
+
+### 7.3 逾期率
+
+- 定义：已逾期 open 商机 / 全部 open 商机。没定关单日（NULL）的不算逾期。
+- 分子：`SELECT COUNT(*) FROM opportunities WHERE status='open' AND expected_close_at IS NOT NULL AND expected_close_at < :now`
+- 分母：`SELECT COUNT(*) FROM opportunities WHERE status='open'`
+- 锚点：`CountOverdueOpportunities` / `CountOpenOpportunities`。
+
+### 7.4 被动应答 P95（适用 CS-61 3s，C6/C10）
+
+- 定义：自动回复链路 P95 ≤ 3s。**审批卡点明确不含在内**（审批走 §7.5 独立指标）。
+- 分子（延迟样本）：`unified_replies.sent_at - unified_messages.received_at`，
+  `JOIN ON unified_replies.message_id = unified_messages.message_id`，
+  仅 `unified_replies.status='sent'` 行；P95 取该样本集的 95 分位。
+- 分母：同上过滤的行数（P95 的样本集即分母）。
+- 代码现状：`UnifiedMessage.ReceivedAt` + `UnifiedReply.SentAt/MessageID/Status`
+  字段齐备；`reply_type` 无代码常量，自动/人工拆分待建（未闭环，当前口径按 sent 全集）。
+
+### 7.5 审批卡点：待审批 24h 达标率（不适用 P95）
+
+- 定义：终态审批行中 24h 内办结的占比。
+- 分子：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL AND decided_at - created_at <= INTERVAL '24 hours'`
+- 分母：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL`
+- 字段锚点：`ApprovalRequest.CreatedAt/DecidedAt/ExpiresAt` + 四态 + decided_by 三值常量。
+- 诚实标注：24h 是政策目标，**代码中无 TTL 常量**（ExpiresAt 当前无生产赋值），
+  达标率由本 SQL 离线/脚本统计，不进 P95。
+
+### 7.6 外联触达与硬预算（C10）
+
+- 送达率：分子 `status='sent'` 行数，分母 `sent + failed` 行数（`unified_replies`；
+  pending 未尝试、discarded 发送前丢弃，均不计入）。
+- 骚扰投诉率：分子 `feedback_events.signal_key='complaint'` 事件数，
+  分母同期 `unified_replies` sent 行数；红线 0。
+- 硬预算：7 日外发 ≤ N（N 为运营配置，非代码常量，手工核）；
+  DNC 名单命中发送数 = 0（数据源 `customer_do_not_contacts` + `unified_replies`）；
+  投诉红线见上。
