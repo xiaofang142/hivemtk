@@ -588,13 +588,26 @@ function injPostCommentVerify(targetText, opts) {
       return false; // 无 closest 的旧引擎：按可见文本继续判
     }
   };
+  // 瞬态回显节点（toast/tooltip/status/aria 提示）：文案常原样复读评论正文，
+  // 但那是「已提交」提示，不是「评论已渲染」。e2e 靶站实测（toastrisk 场景）：
+  // 服务端拒收、评论根本没落库，浮层一句「真好吃」就让全文兜底判 verified=true——
+  // 零提交假绿，与评论草稿留框同级（不可逆动作自检出绿是最坏的一类假）。
+  // 不排 role=dialog：评论区在部分平台就是抽屉/弹层渲染，排掉会把真命中变漏。
+  const inTransientNode = (p) => {
+    if (!p || typeof p.closest !== 'function') return false;
+    try {
+      return !!p.closest('[class*=toast],[class*=tooltip],[role=status],[role=alert],[aria-busy="true"]');
+    } catch {
+      return false;
+    }
+  };
   // 跨节点累积（评论正文可能被拆进多个文本节点），限窗避免长页 O(n²)
   const textOutsideInputsIncludes = (needle) => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node;
     let acc = '';
     while ((node = walker.nextNode())) {
-      if (inInputNode(node.parentElement)) continue;
+      if (inInputNode(node.parentElement) || inTransientNode(node.parentElement)) continue;
       acc += norm(node.nodeValue);
       if (acc.length > 6000) acc = acc.slice(-3000);
       if (needle && acc.includes(needle)) return true;
@@ -610,7 +623,7 @@ function injPostCommentVerify(targetText, opts) {
     let node;
     let out = '';
     while ((node = walker.nextNode())) {
-      if (inInputNode(node.parentElement)) continue;
+      if (inInputNode(node.parentElement) || inTransientNode(node.parentElement)) continue;
       out += norm(node.nodeValue);
     }
     return out;

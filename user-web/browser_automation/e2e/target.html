@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>成都美食 · 评论区靶站</title>
+<style>
+  body { margin:0; font-family:-apple-system,"PingFang SC",sans-serif; background:#f5f5f7; }
+  .wrap { max-width:560px; margin:0 auto; background:#fff; min-height:100vh; position:relative; }
+  .topbar { padding:14px 16px; border-bottom:1px solid #eee; font-weight:600; }
+  .work { padding:16px; border-bottom:8px solid #f5f5f7; }
+  .work .cover { height:150px; border-radius:8px; background:linear-gradient(135deg,#ffd6a5,#ffadad);
+                 display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .work h3 { margin:12px 0 4px; font-size:16px; }
+  .work p { margin:0; color:#888; font-size:13px; }
+  .comments-container { padding:8px 16px 24px; }
+  .note-comment-item { padding:8px 0; font-size:14px; border-bottom:1px dashed #f0f0f0; }
+  .note-comment-item .author { color:#666; margin-right:8px; }
+  .comment-post-box { display:flex; gap:8px; align-items:flex-end; margin-top:12px;
+                      border-top:1px solid #eee; padding-top:12px; }
+  .content-textarea, .dy-textarea {
+    flex:1; min-height:38px; border:1px solid #e5e5e5; border-radius:18px;
+    padding:9px 14px; font-size:14px; outline:none; background:#f7f7f7; resize:none;
+    font-family:inherit; line-height:20px;
+  }
+  .content-textarea:empty:before { content:attr(data-placeholder); color:#bbb; }
+  button.submit { border:none; background:#ff2442; color:#fff; border-radius:18px;
+                  padding:9px 16px; font-size:14px; cursor:pointer; }
+  button.submit:disabled { background:#ccc; cursor:not-allowed; }
+  .overlay { position:absolute; inset:0; background:rgba(0,0,0,.35); z-index:99; }
+  .toast { position:fixed; left:50%; top:24px; transform:translateX(-50%);
+           background:#222; color:#fff; padding:8px 16px; border-radius:6px; font-size:13px; z-index:999; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="topbar">首页 · 成都美食</div>
+
+  <div class="work">
+    <div class="cover">🍲 成都苍蝇馆子实探</div>
+    <h3>成都苍蝇馆子实探：巷子里的蒜泥白肉</h3>
+    <p>@川味地图 · 3.2万赞 · 评论 486</p>
+  </div>
+
+  <div class="comments-container" id="commentContainer">
+    <div class="comments-el" id="commentList">
+      <div class="note-comment-item"><span class="author">@吃货小王</span><span>看着就香</span></div>
+      <div class="note-comment-item"><span class="author">@成都土著</span><span>这家我常去</span></div>
+    </div>
+    <div class="comment-post-box">
+      <div class="content-textarea" id="editor" contenteditable="true" data-placeholder="说点什么..."></div>
+      <button class="submit" id="sendBtn">发送</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var app = q.get('app') || 'xhs';      // xhs = contenteditable / dy = textarea
+  var c = q.get('case') || 'ok';        // ok | nobutton | disabled | covered
+  var editor = document.getElementById('editor');
+  var btn = document.getElementById('sendBtn');
+
+  if (app === 'dy') {
+    var ta = document.createElement('textarea');
+    ta.className = 'dy-textarea';
+    ta.id = 'editor';
+    ta.placeholder = '说点什么...';
+    ta.rows = 1;
+    editor.replaceWith(ta);
+    editor = ta;
+    btn.textContent = '发布';
+  }
+  if (c === 'nobutton') btn.remove();
+  if (c === 'disabled') btn.disabled = true;
+  if (c === 'covered') {
+    var ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.id = 'coverOverlay';
+    document.getElementById('wrap').appendChild(ov);
+  }
+  // toastrisk：模拟「服务端拒收/回滚」——浮层文案含评论正文，但评论永不落库。
+  // 用于暴露 verify 全文兜底（primitives.js textOutsideInputsIncludes）的误命中面。
+  var toastHasText = c === 'toastrisk';
+
+  function currentText() {
+    return editor.isContentEditable
+      ? (editor.innerText || '').trim()
+      : (editor.value || '').trim();
+  }
+  function clearEditor() {
+    if (editor.isContentEditable) editor.innerHTML = '';
+    else editor.value = '';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'BUTTON') return;
+    if (!/发送|发布|评论/.test(t.innerText || '')) return;
+    var text = currentText();
+    var toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = !text ? '请输入内容'
+      : (toastHasText ? text : '发布成功');
+    document.body.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 1200);
+    if (!text || toastHasText) return;   // toastrisk: 拒收，草稿留框、评论不落库
+    // 模拟服务端落库后回渲染（真站同样有 ~几百 ms 窗口）
+    setTimeout(function () {
+      var item = document.createElement('div');
+      item.className = 'note-comment-item';
+      item.innerHTML = '<span class="author">@我</span><span class="body"></span>';
+      item.querySelector('.body').textContent = text;
+      document.getElementById('commentList').appendChild(item);
+      clearEditor();
+    }, 300);
+  });
+
+  window.__targetReady = true;
+  window.__targetInfo = { app: app, case: c, editorTag: editor.tagName,
+                           contentEditable: !!editor.isContentEditable };
+})();
+</script>
+</body>
+</html>

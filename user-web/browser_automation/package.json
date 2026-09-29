@@ -8,7 +8,8 @@
     "dev": "node scripts/build.mjs --watch",
     "build": "node scripts/build.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "node e2e/run.mjs"
   },
   "devDependencies": {
     "acorn": "^8.18.0",

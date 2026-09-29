@@ -1,0 +1,2 @@
+# e2e 运行工件（截图 + report.json），由 `npm run e2e` 随时再生
+e2e/report/
