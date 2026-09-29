@@ -18,6 +18,13 @@ const (
 	defaultCmdTimeout = 30 * time.Second
 	// handMarkdownTimeout 整页 Markdown 序列化：大 DOM 页遍历+拼接，取默认 2 倍。
 	handMarkdownTimeout = 60 * time.Second
+	// handScreenshotTimeout 截图回包预算。**真机实测（session611，小红书真站笔记页）**：
+	// 扩展 SW 侧 chrome.tabs.captureVisibleTab 在复杂真实站点耗时 29.95s，同一函数在
+	// 本地靶站仅 0.20s——差 150 倍，稳定打满 defaultCmdTimeout=30s ⇒ screenshot 步
+	// 必然假超时（回包其实会到，只是晚于闸门）。与 handMarkdownTimeout 同形：都是
+	// 「随页面复杂度增长」的命令，故同取 2 倍。靶站测不出这条：它没有真站的持续渲染，
+	// 这条是真机验证才能暴露的基座缺陷，改值需再跑真站 session 回归。
+	handScreenshotTimeout = 60 * time.Second
 	// handConditionGrace 「客户端自计时」命令（wait_for_selector/assert/comment_verify）
 	// 的服务端附加宽限：服务端预算必须大于扩展侧 timeout_ms，否则先于扩展回包假超时
 	// （与 B4 假超时→重发→重复消息同源风险）。

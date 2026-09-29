@@ -105,8 +105,10 @@ func (h *Hand) markdown(ctx context.Context, userID uint, tabID int) (map[string
 }
 
 // screenshot 原语（M3：仅对激活 tab；扩展侧先激活再截，见设计文档 §6）
+// 预算用 handScreenshotTimeout 而非 defaultCmdTimeout：真站 captureVisibleTab 实测
+// 29.95s（靶站 0.20s），30s 闸必然假超时——依据见 timeouts.go 该常量注释。
 func (h *Hand) screenshot(ctx context.Context, userID uint, tabID int, activateFirst bool) (string, error) {
-	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
+	res, err := h.registry.Request(ctx, userID, handScreenshotTimeout, map[string]any{
 		"action": "screenshot", "tab_id": tabID, "activate_first": activateFirst,
 	})
 	if err != nil {

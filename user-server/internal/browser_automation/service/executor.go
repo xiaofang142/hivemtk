@@ -1204,7 +1204,18 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 		// page_loaded 原样透传（可能是 nil：老 Host 不回这个字段时如实记 null，
 		// 不能把「不知道」写成 false，也不能反过来把 false 洗成 true）。
-		return recordResultPayload(map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]})
+		// load_wait_ms/title 一并留档：真机 session611 真站 open_tab 往返 26159ms 而
+		// step.duration 已把整段吞掉，缺扩展侧「等加载花了多久」就无法把慢归因到
+		// tabs.create+waitForLoad 还是链路；title 用来确认打开的确实是目标页。
+		// 两字段缺席（老 Host 不回）时原样不写，不编造 0。
+		payload := map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]}
+		if v, ok := res["load_wait_ms"]; ok && v != nil {
+			payload["load_wait_ms"] = v
+		}
+		if v, ok := res["title"]; ok && v != nil {
+			payload["title"] = v
+		}
+		return recordResultPayload(payload)
 	case "click":
 		// 写步才请求点后身份复核。判据取 stepRow.IsWrite 而不是在这里重算
 		// classifyStepEffect：那一列是本步落库时写死的事实，重试轮、双发闸、D7 都读它——
