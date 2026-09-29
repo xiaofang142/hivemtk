@@ -1,5 +1,7 @@
 package service
 
+import "strings"
+
 // BusinessLine GEO 关键词一级类目：hivemtk 4 大核心业务线
 //
 // 所有批量挖掘的种子词都归属其中一条业务线（写入 GeoKeyword.Cluster），
@@ -13,47 +15,59 @@ type BusinessLine struct {
 	CoreTerms []string
 }
 
-// TechStackAttrs 技术栈/概念属性维度（覆盖 hivemtk 涉及的每个技术、每个概念）
+// TechStackAttrs 技术栈/概念属性维度：只收录本项目真实的功能性、技术性名词。
+//
+// 来源（均可在本仓库验证）：
+//   - GEO 功能：internal/geo/service/*.go 文件名即功能（keyword/content/verification/
+//     visibility/probe/push/workflow/kb/entity/decision/index_tracker/scheduler…）
+//   - 前端模块：user-web/src/views/geo/*.vue（25 个功能页）
+//   - 后端依赖：go.mod（Gin/GORM/PostgreSQL/Redis/JWT/cron/WebSocket/OpenTelemetry…）
+//   - AI 网关：internal/aiagent/llm（DeepSeek/通义/豆包/文心/Kimi/GLM/投票/熔断…）
+//   - 渠道集成：WhatsApp、Telegram Bot、SMTP 邮件、二维码、PDF 解析
+//
 // 与业务线正交组合，生成"技术×业务"种子（如 "RAG智能客服"）。
-// 分组：AI大模型技术 / 营销概念 / 销售概念 / 客服概念 / GEO与AI搜索概念 / 工程与数据技术。
+// 分组：AI大模型与网关 / GEO与AI搜索功能 / 客服营销销售功能 / 平台工程技术。
 var TechStackAttrs = []string{
-	// AI大模型技术
-	"人工智能", "大模型", "LLM", "RAG", "知识图谱", "向量数据库", "NLP",
-	"深度学习", "机器学习", "智能体", "Agent", "MCP", "Function Calling",
-	"提示词工程", "模型微调", "推理模型", "Tokenizer", "Embedding模型",
-	"重排序", "混合检索", "向量检索", "语义搜索", "多模态", "TTS",
-	"ASR", "Agent工作流", "多智能体", "记忆机制", "ReAct", "思维链",
-	"LoRA", "模型量化", "模型蒸馏", "RLHF", "安全护栏", "幻觉检测", "引用溯源",
-	// 营销概念
-	"营销自动化", "内容营销", "社交媒体营销", "SEO", "SEM", "信息流广告",
-	"AARRR", "PLG", "ABM", "SCRM", "CDP", "DMP", "用户画像",
-	"裂变营销", "分销", "KOC", "KOL", "直播带货", "私域流量",
-	"归因模型", "UTM", "留存", "复购", "客户成功", "营销漏斗",
-	// 销售概念
-	"SDR", "BDR", "CRM", "SFA", "MEDDIC", "SPIN销售", "商机管理",
-	"线索评分", "销售漏斗", "成单率", "客单价", "续费率",
-	"交叉销售", "向上销售", "外呼", "电销", "客户跟进", "智能报价",
-	// 客服概念
-	"IVR", "语音识别", "语音合成", "SLA", "工单系统", "知识库",
-	"FAQ", "人工坐席", "客服质检", "满意度", "首响时间", "解决率",
-	"转人工率", "自助服务", "在线客服", "呼叫中心", "云客服", "全渠道",
-	"多轮对话", "意图识别",
-	// GEO与AI搜索概念
-	"SOV声量份额", "E-E-A-T", "llms.txt", "robots.txt", "Schema标记",
-	"JSON-LD", "知识面板", "AI Overviews", "引用率", "品牌提及",
-	"零点击搜索", "答案引擎", "实体识别", "权威度", "AI搜索排名",
-	// 工程与数据技术
-	"Python", "Java", "Go", "Golang", "TypeScript", "React", "Vue", "Node.js",
-	"Gin", "GORM", "MySQL", "PostgreSQL", "Redis", "Kafka", "Elasticsearch",
-	"ClickHouse", "MongoDB", "Docker", "Kubernetes", "CI/CD",
-	"微服务", "API网关", "服务网格", "Serverless", "云原生", "可观测性",
-	"Prometheus", "Grafana", "链路追踪", "对象存储", "CDN", "负载均衡",
-	"OAuth", "JWT", "WebSocket", "gRPC", "REST", "消息队列", "定时任务",
-	"分布式锁", "缓存", "分库分表", "读写分离", "低代码", "RPA", "OCR",
-	"BI", "数据仓库", "ETL", "数据湖", "Flink", "Spark", "数据中台",
-	"数据治理", "H5", "小程序", "SaaS", "私有化部署", "混合云",
-	"边缘计算", "物联网", "区块链", "数字孪生", "开源", "信创",
-	"推荐系统", "搜索引擎", "PyTorch", "TensorFlow",
+	// AI大模型与网关（项目真实接入的模型与网关能力）
+	"人工智能", "大模型", "LLM", "NLP", "RAG", "RAG问答",
+	"知识图谱", "向量数据库", "Embedding模型", "重排序", "混合检索",
+	"向量检索", "语义搜索", "知识库", "提示词工程", "Function Calling",
+	"MCP", "Agent", "智能体", "多智能体", "Agent工作流", "ReAct",
+	"思维链", "记忆机制", "多模态", "多模型投票", "自一致性",
+	"熔断降级", "金丝雀发布", "Token计费", "上下文窗口", "JSON模式",
+	"流式输出", "内容审核", "幻觉检测", "引用溯源", "私域部署",
+	"本地部署", "DeepSeek", "通义千问", "豆包", "文心一言",
+	"月之暗面", "Kimi", "智谱GLM", "GPT", "Claude", "Gemini",
+	// GEO与AI搜索功能（geo 模块真实功能，见 internal/geo/service）
+	"GEO优化", "生成式引擎优化", "AI搜索优化", "品牌可见性监测",
+	"SOV声量份额", "AI引用监测", "AI搜索排名", "E-E-A-T", "EEAT增强",
+	"llms.txt", "robots.txt", "Schema标记", "JSON-LD", "知识面板",
+	"AI Overviews", "引用率", "品牌提及", "零点击搜索", "答案引擎",
+	"实体识别", "实体图谱", "GEO审计", "GEO评分", "内容评分",
+	"内容生成", "内容优化", "原创度检测", "事实密度增强", "关键词挖掘",
+	"长尾词", "下拉词", "语义扩展", "话题聚类", "意图识别",
+	"Prompt扇出", "负面监控", "收录追踪", "来源归因", "信源目录",
+	"爬虫监控", "决策报告", "缺口补位", "工作流引擎", "定时任务",
+	"推送配额", "站点部署", "健康检查",
+	// 客服营销销售功能（4 大业务线真实功能概念）
+	"智能客服", "客服机器人", "工单系统", "知识库问答", "FAQ",
+	"多轮对话", "人工转接", "在线客服", "呼叫中心", "云客服",
+	"全渠道", "客服质检", "满意度", "SLA", "首响时间", "解决率",
+	"转人工率", "自助服务", "营销自动化", "内容营销", "邮件营销",
+	"社交媒体营销", "短视频营销", "直播营销", "私域流量", "KOC",
+	"SEO", "SEM", "UTM", "营销漏斗", "客户旅程", "营销归因",
+	"AARRR", "ABM", "客户成功", "WhatsApp营销", "Telegram机器人",
+	"二维码营销", "销售智能体", "AI销售", "线索挖掘", "商机识别",
+	"商机管理", "线索评分", "客户画像", "客户跟进", "销售漏斗",
+	"销售预测", "销售话术", "智能报价", "外呼机器人", "SDR",
+	"BDR", "CRM", "SCRM", "MEDDIC", "成单率", "客单价",
+	"续费率", "交叉销售", "电销",
+	// 平台工程技术（go.mod / user-web 真实依赖与部署链）
+	"Golang", "Gin", "GORM", "PostgreSQL", "Redis",
+	"Vue", "Element Plus", "ECharts", "Pinia", "TypeScript",
+	"JWT", "SSO单点登录", "WebSocket", "链路追踪", "分布式锁",
+	"缓存", "Docker", "Docker Compose", "GitHub Actions", "Hugo",
+	"Cloudflare", "二维码", "PDF解析", "邮件服务", "cron",
 }
 
 // DefaultBrandName 推广品牌（本项目 hivemtk 的对外品牌名，需与 GeoConfig.BrandName 一致）
@@ -105,10 +119,18 @@ var BusinessLines = []BusinessLine{
 //   - seeds：去重保序的种子词列表（业务核心词 + 技术×业务组合词）
 //   - seedLines：种子词 → 一级类目（业务线名）映射，用于回填 GeoKeyword.Cluster
 //
-// 规模口径：48 核心词 + 4×184 技术/概念组合词 + 16 品牌推广词（品牌×4业务线 + 品牌×12 GEO核心词）≈ 800 种子；
-// 经 DefaultLongtailTemplates（23 模板）离线展开约 18,400 长尾词；
+// 规模口径：48 核心词 + 约 4×181 技术/概念组合词（含已含简称词的跳过）+ 16 品牌推广词
+// （品牌×4业务线 + 品牌×12 GEO核心词）≈ 700+ 种子；
+// 经 DefaultLongtailTemplates（23 模板）离线展开约 16,000+ 长尾词；
 // 再经 CrawlSuggest（5 引擎下拉）补充数千下拉词，全量经 SaveMiningResults 落库。
 func BuildBusinessSeedMatrix() ([]string, map[string]string) {
+	return buildSeedMatrix(TechStackAttrs, BusinessLines, nil)
+}
+
+// buildSeedMatrix 种子矩阵通用构建（供 DB 驱动的 SeedTermService 复用）。
+// brandCombos 非 nil 时直接采用 DB 中的品牌组合词（term→业务线），
+// 为 nil 时按业务线派生（品牌×业务线 + 品牌×GEO核心词）。
+func buildSeedMatrix(techAttrs []string, lines []BusinessLine, brandCombos map[string]string) ([]string, map[string]string) {
 	seeds := make([]string, 0, 256)
 	seedLines := make(map[string]string, 256)
 	seen := make(map[string]bool, 256)
@@ -121,25 +143,39 @@ func BuildBusinessSeedMatrix() ([]string, map[string]string) {
 		seedLines[term] = line
 	}
 
-	for _, bl := range BusinessLines {
+	for _, bl := range lines {
 		for _, core := range bl.CoreTerms {
 			add(core, bl.Name)
 		}
-		for _, tech := range TechStackAttrs {
+		for _, tech := range techAttrs {
+			// 技术词已含业务线简称时跳过组合，避免 "GEO审计GEO" 类非真实搜索词
+			if strings.Contains(tech, bl.ShortName) {
+				continue
+			}
 			add(tech+bl.ShortName, bl.Name)
 		}
 	}
 
+	if brandCombos != nil {
+		// DB 驱动：品牌组合词以表为准
+		for term, line := range brandCombos {
+			add(term, line)
+		}
+		return seeds, seedLines
+	}
+
 	// 品牌推广词：推广本项目 hivemtk，所有品牌组合词必须真实有效（品牌+业务线名/GEO核心词均为真实搜索模式）
-	for _, bl := range BusinessLines {
+	for _, bl := range lines {
 		brandTerm := DefaultBrandName + bl.ShortName
 		if bl.ShortName == "GEO" {
 			brandTerm = DefaultBrandName + " GEO"
 		}
 		add(brandTerm, bl.Name)
 	}
-	for _, core := range BusinessLines[1].CoreTerms {
-		add(DefaultBrandName+" "+core, BusinessLines[1].Name)
+	if len(lines) > 1 {
+		for _, core := range lines[1].CoreTerms {
+			add(DefaultBrandName+" "+core, lines[1].Name)
+		}
 	}
 	return seeds, seedLines
 }

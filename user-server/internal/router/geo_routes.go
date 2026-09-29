@@ -111,6 +111,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	siteSvc := geoservice.NewSiteDeployService(gormDB, pushSvc)
 	indexTrackerSvc := geoservice.NewIndexTrackerService(gormDB, probes...)
 	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
+	seedTermSvc := geoservice.NewSeedTermService(georepo.NewGeoSeedTermRepositoryWithDB(gormDB))
+	seedTermCtrl := geoctrl.NewSeedTermController(seedTermSvc)
 	pushCtrl := geoctrl.NewPushController(pushSvc)
 	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc)
 	indexCtrl := geoctrl.NewIndexTrackerController(indexTrackerSvc)
@@ -223,6 +225,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/keyword-mining/longtail", kwMiningCtrl.CombineLongtail)
 	geo.GET("/keyword-mining/funnel", kwMiningCtrl.BuildFunnel)
 	geo.POST("/keyword-mining/pipeline", kwMiningCtrl.TriggerPipeline)
+	geo.GET("/seed-terms", seedTermCtrl.List)
+	geo.POST("/seed-terms/reseed", seedTermCtrl.Reseed)
 
 	// 蜘蛛推送 v2
 	geo.POST("/push/urls", pushCtrl.PushURLs)
