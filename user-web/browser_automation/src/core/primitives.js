@@ -757,8 +757,12 @@ function raceTimeout(promise, ms, label) {
   return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
 }
 
-async function executeInTab(tabId, func, args = []) {
-  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
+async function executeInTab(tabId, func, args = [], deadlineMs = INJECT_DEADLINE_MS, label = 'inject') {
+  const [res] = await injectWithDeadline(
+    chrome.scripting.executeScript({ target: { tabId }, func, args }),
+    deadlineMs,
+    label,
+  );
   const r = res?.result;
   if (!r || r.ok === false) {
     // r 为空与 r.ok=false 是两种成因：后者是注入跑了并给出理由（走 r.error），
@@ -767,6 +771,35 @@ async function executeInTab(tabId, func, args = []) {
     throw new Error(r?.error || 'inject_no_result(该帧注入未返回，通常是页面正在导航/帧已销毁)');
   }
   return r;
+}
+
+// executeInTab 的本地 deadline（R26-2 续）：executeScript 走的是**页面主线程**，
+// 重页（真站评论区渲染/水合）能把注入队列堵到数十秒。旧实现只给 comment_prep /
+// comment_send 两处包了 raceTimeout，其余读注入（query/extract/markdown/snapshot/
+// wait_for_selector/assert/scroll/comment_verify）全是裸 await —— 同一形态的挂死
+// 在读动作上一模一样会发生，扩展不回帧 → 服务端只见 30s/60s「host 命令超时」。
+//
+// 取值纪律：每个 deadline 必须**严格小于**服务端同动作预算（timeouts.go），
+// 保证扩展先回一个带错误名的帧（可归因），而不是让服务端判超时（不可归因）。
+// 预算对照：defaultCmdTimeout=30s / handMarkdownTimeout=60s /
+//            wait_for_selector·assert·comment_verify = step timeout_ms + handConditionGrace(10s)
+// 错误名沿用 `_inject_timeout_` 后缀 ⇒ 服务端 isNeverExecuted 直接归类为「从未发生」
+// （本次超时的注入全是提交前的定位/读取，副作用仅止于「输入框多了几个字」，
+//  绝不涉及提交，故这个归类对写台账是安全的——见 write_ledger.go isNeverExecuted）。
+const INJECT_DEADLINE_MS = 20000;      // 立即返回的读注入（query/extract/scroll/probe）
+const MARKDOWN_DEADLINE_MS = 45000;    // < handMarkdownTimeout(60s)：大 DOM 页遍历
+const SNAPSHOT_DEADLINE_MS = 25000;    // < defaultCmdTimeout(30s)
+const INJECT_GRACE_MS = 5000;          // 自计时注入的页内预算之外的回程余量（服务端宽限 10s 的一半）
+// COMMENT_PREP_TOTAL_BUDGET_MS 是 comment_prep **整段**的总闸：各层 deadline 相加仍可能
+// 越过服务端 defaultCmdTimeout(30s)（定位 15s + 键入 15s + 单条 send 尾巴 5s ≈ 35s），
+// 故必须再收一层。25s < 30s，保证扩展先回可归因的帧。
+const COMMENT_PREP_TOTAL_BUDGET_MS = 25000;
+
+// INJECT_DEADLINE_MS 等预算的解释见下方 executeInTab 上方注释。
+// injectWithDeadline 给一次 executeScript 套本地 deadline。label 决定错误名
+// （`${label}_inject_timeout_${ms}ms`），服务端 isNeverExecuted 认这个后缀。
+function injectWithDeadline(promise, ms, label = 'inject') {
+  return raceTimeout(promise, ms, label);
 }
 
 // isUnackedClick CDP 可信点击的「结局未知」态：mousePressed/mouseReleased 已下发进渲染进程
@@ -795,6 +828,10 @@ function asIdentityVerdict(e) {
  */
 export async function dispatch(cmd, deps) {
   const { openTab, waitForLoad, closeTab, activateTab, tabExists } = deps.tabManager;
+  // CDP 写通道前置：后台 tab 不出帧 ⇒ Input 事件 ack 压栈（真机 3.1s/条）。
+  // 必须放在**定位注入之后、真正的 CDP 写之前**：定位是纯读，后台跑得动；
+  // 而 Input 事件必须打在出帧的激活 tab 上。旧测试 deps 未提供时退化为空操作。
+  const ensureActiveForInput = deps.tabManager.ensureActiveForInput || (async () => {});
   const { getRefSelector } = deps.accessibility;
   // F6 基线联动：导航即清该 tab 的新元素基线（下一帧重新建立，不把整页标成新元素）。
   // resetBaseline 为可选依赖（旧测试 deps 未提供时静默跳过）。
@@ -894,6 +931,7 @@ export async function dispatch(cmd, deps) {
           // 初值从未被用到——ESLint 的 no-useless-assignment 会把它记成 error 级门红。
           let navigated;
           try {
+            await ensureActiveForInput(tabId);
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
             // R25-Q1：点击生效帧后短暂等路由，再纯读 location 对比判定同页导航；
             // 检测注入失败通常=页面正在导航中，按已导航处理。不再主动接管 href。
@@ -935,6 +973,7 @@ export async function dispatch(cmd, deps) {
           const anchorSel = resolveTarget(cmd.anchor);
           const probe = await executeInTab(tabId, injClickNear, [anchorSel, cmd.button_text || '', 'probe']);
           try {
+            await ensureActiveForInput(tabId);
             await cdpInput.clickAt(tabId, probe.x, probe.y, { jitterRadius: probe.jitter_radius });
           } catch (e) {
             const msg = String(e?.message || e);
@@ -960,6 +999,7 @@ export async function dispatch(cmd, deps) {
           let res;
           try {
             await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, submit, 'probe']);
+            await ensureActiveForInput(tabId);
             const typed = await cdpInput.typeText(tabId, cmd.value || '');
             res = { ok: true, editable: true, channel: 'cdp', partial: !!typed?.partial, typed: typed?.typed ?? 0 };
           } catch (e) {
@@ -977,6 +1017,7 @@ export async function dispatch(cmd, deps) {
           // 交人工核。兜底通道不补按：injType 的 fallback 已在页面侧发过 Enter，再按一次就是双发。
           if (submit && res.channel === 'cdp') {
             try {
+              await ensureActiveForInput(tabId);
               await cdpInput.pressEnter(tabId);
             } catch (e) {
               throw new Error('submit_key_not_dispatched: ' + String(e?.message || e), { cause: e });
@@ -986,7 +1027,9 @@ export async function dispatch(cmd, deps) {
         }
         case 'wait_for_selector': {
           const timeout = Math.min(Math.max(cmd.timeout_ms || 10000, 1000), 60000);
-          return await executeInTab(tabId, injWaitForSelector, [cmd.selector, timeout]);
+          // 页内自计时 injWaitForSelector 自己会等满 timeout，故本地 deadline 必须
+          // 覆盖它再加回程余量，否则会先于页内结果掐断一次合法的等待。
+          return await executeInTab(tabId, injWaitForSelector, [cmd.selector, timeout], timeout + INJECT_GRACE_MS);
         }
         case 'scroll': {
           const amount = Math.min(Math.max(cmd.amount || 400, 0), 20000);
@@ -998,12 +1041,12 @@ export async function dispatch(cmd, deps) {
           return { data: r.data };
         }
         case 'snapshot': {
-          const collected = await executeInTab(tabId, deps.accessibility.collectInPage, []);
+          const collected = await executeInTab(tabId, deps.accessibility.collectInPage, [], SNAPSHOT_DEADLINE_MS);
           // F6 新元素标记：基线按 tab 归属（两 tab 快照互不污染 diff 集）
           return deps.accessibility.assemble(collected, tabId);
         }
         case 'markdown':
-          return await executeInTab(tabId, injMarkdown, []);
+          return await executeInTab(tabId, injMarkdown, [], MARKDOWN_DEADLINE_MS);
         case 'comment_prep':
         case 'comment_send': {
           // F2②（G11 正确版）：三段式编排收口 Go——扩展只暴露无状态子命令，
@@ -1019,29 +1062,43 @@ export async function dispatch(cmd, deps) {
             // 阶段一：定位输入框 + 聚焦（contenteditable 交给 CDP trusted 键入）。
             // R26-2：定位注入加 15s 竞速 deadline——重页注入队列拥堵时早返明确错误
             // （注入未执行，无副作用），不再陪跑到服务端超时产生灰态。
-            const pre = await raceTimeout(executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel]), cmd.inject_timeout_ms || 15000, 'comment_prep');
-            if (!pre.input_found) throw new Error('comment_input_not_found');
-            if (pre.needs_trusted) {
-              // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
-              // 含 humanize 时序与 infobar 稳定等待 —— 见 cdp/input.js
-              const typed = await cdpInput.typeText(tabId, cmd.value || '');
-              // 真机实测：后台 tab 上 CDP ack 会尖刺到 ~3.1s/条，逐字串行能把 30s 闸吃光
-              // → 扩展不回帧 → 服务端只见「host 命令超时」。cdp/input.js 已加总闸，
-              // 超预算时它**提前收手并如实回报 partial**（已敲的字真留在框里，不能当成功）。
-              // 这里不 throw：prep 阶段副作用只有「输入框里多了几个字」，绝不涉及提交；
-              // partial 原样上抛会让服务端判灰态，而真相是照常走 comment_verify 的 DOM 裁决。
+            //
+            // 本段还需要一条**总闸**：定位注入(15s) + 键入(TYPE_TOTAL_BUDGET_MS=15s，
+            // 最坏再加单条 send 的 5s 尾巴) 最坏可到 ~35s，越过服务端 comment_prep 的
+            // defaultCmdTimeout(30s) ⇒ 扩展不回帧 ⇒ 又一次「host 命令超时」黑盒。
+            // 各层 deadline 只管自己那一段，加起来仍可能超过整条命令的闸，必须再收一层。
+            // 取 25s < 30s，且 > 15+15 的常规最坏值，留出余量又不抢服务端的闸。
+            //
+            // 错误名沿用 `_inject_timeout_` 后缀是**有意的**：服务端 isNeverExecuted 认这个
+            // 后缀归类为「从未发生」。对 prep 阶段这个归类是安全的——它的副作用上限就是
+            // 「输入框里多了几个字」，提交是独立的 comment_send 命令，本段不可能提交过。
+            return raceTimeout((async () => {
+              const pre = await executeInTab(tabId, injPostCommentPrep, [cmd.value || '', inputSel], cmd.inject_timeout_ms || 15000, 'comment_prep');
+              if (!pre.input_found) throw new Error('comment_input_not_found');
+              if (pre.needs_trusted) {
+                // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
+                // 含 humanize 时序与 infobar 稳定等待 —— 见 cdp/input.js
+                await ensureActiveForInput(tabId);
+                const typed = await cdpInput.typeText(tabId, cmd.value || '');
+                // 真机实测：后台 tab 上 CDP ack 会尖刺到 ~3.1s/条，逐字串行能把 30s 闸吃光
+                // → 扩展不回帧 → 服务端只见「host 命令超时」。cdp/input.js 已加总闸，
+                // 超预算时它**提前收手并如实回报 partial**（已敲的字真留在框里，不能当成功）。
+                // 这里不 throw：prep 阶段副作用只有「输入框里多了几个字」，绝不涉及提交；
+                // partial 原样上抛会让服务端判灰态，而真相是照常走 comment_verify 的 DOM 裁决。
               if (typed?.partial) {
                 return { ok: true, input_found: true, needs_trusted: true, input_text: pre.input_text || '', partial: true, typed: typed.typed ?? 0, typed_total: typed.chars ?? 0 };
               }
-            }
-            return { ok: true, input_found: true, needs_trusted: !!pre.needs_trusted, input_text: pre.input_text || '' };
+              }
+              return { ok: true, input_found: true, needs_trusted: !!pre.needs_trusted, input_text: pre.input_text || '' };
+            })(), COMMENT_PREP_TOTAL_BUDGET_MS, 'comment_prep_total');
           }
           // comment_send 阶段二：拿发送按钮坐标，CDP trusted 坐标点击（mouseMoved 轨迹前置）。
           // 提交不可逆：本命令绝不含 verify——verify 超时态由 Go 侧 finalize 轮询处置（禁双发）。
           // R26-2：按钮定位注入同样加 15s 竞速——**注入未执行=点击从未发生=无副作用**，
           // 错误名 comment_send_inject_timeout 供服务端归类（pre-click 灰态≠post-click 未知态）。
-          const btn = await raceTimeout(executeInTab(tabId, injPostCommentSend, [inputSel, sendText]), cmd.inject_timeout_ms || 15000, 'comment_send');
+          const btn = await executeInTab(tabId, injPostCommentSend, [inputSel, sendText], cmd.inject_timeout_ms || 15000, 'comment_send');
           if (!btn.ok) throw new Error(btn.error || 'send_button_not_found');
+          await ensureActiveForInput(tabId);
           await cdpInput.clickAt(tabId, btn.x, btn.y, { jitterRadius: btn.jitter_radius });
           // 三条 trusted 写通道的最后一处（comment_send）点后复核。判据与 click/click_near
           // 同口径——探测与真点之间隔着贝塞尔轨迹的飞行时间，这期间浮层压上来就会把一次
@@ -1061,15 +1118,16 @@ export async function dispatch(cmd, deps) {
         }
         case 'comment_verify': {
           // 只读验证（可重试/可中断）：评论是否渲染进评论区。Go finalize 轮询调用。
+          const verifyMs = Math.min(Math.max(cmd.timeout_ms || 3000, 500), 60000);
           return await executeInTab(tabId, injPostCommentVerify, [
             cmd.value || '',
-            { timeoutMs: cmd.timeout_ms || 3000, containerSelector: cmd.comment_container || '', itemSelector: cmd.comment_item_text || '' },
-          ]);
+            { timeoutMs: verifyMs, containerSelector: cmd.comment_container || '', itemSelector: cmd.comment_item_text || '' },
+          ], verifyMs + INJECT_GRACE_MS);
         }
         case 'assert': {
           const kind = cmd.assert || 'contains_text';
           const timeout = Math.min(Math.max(cmd.timeout_ms || 5000, 500), 60000);
-          return await executeInTab(tabId, injAssert, [kind, cmd.value || cmd.target || '', cmd.selector || '', timeout]);
+          return await executeInTab(tabId, injAssert, [kind, cmd.value || cmd.target || '', cmd.selector || '', timeout], timeout + INJECT_GRACE_MS);
         }
         case 'query': {
           const kind = cmd.query || 'text';

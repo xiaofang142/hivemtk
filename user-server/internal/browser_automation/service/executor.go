@@ -558,6 +558,27 @@ func isSendGateReject(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "send_button_not_interactable")
 }
 
+// isNeverDispatched 扩展侧 CDP **attach 阶段**就没成功 ⇒ 一条输入事件都没下发过 ⇒ 零副作用。
+//
+// 为什么必须单独一类：cdp/input.js 的 withDebugger 是「先 attach、再跑 fn(target)」。
+// attach 撞自己的 deadline（cdp/input.js 的 CDP_ATTACH_DEADLINE_MS）时 fn 压根没被调用，
+// 页面上不可能发生过点击/键入——它与 cdp_send_deadline / click_unacked / cdp_command_deadline
+// 那一族有本质区别：后三者都意味着**事件已入队进渲染进程**（结局未知，不可重发）。
+//
+// 漏判的代价是实打实的双发闸误伤：若把它当「结果未知」，台账落 unattributed，
+// 该文本从此进拦阻集合（write_ledger.go guardResubmit 连 unattributed 一起拦），
+// 用户看清页面重跑时会被告知「已有提交尝试」——而实际一次都没发出去。
+// 真机依据：session627-629 的 comment_prep/comment_send 曾整段卡死，修复后 deadline 首次
+// 成为可达路径，这个归类必须同时落到位，否则修好挂死反而锁死文本。
+func isNeverDispatched(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// 只认 attach 两处；send/command 那一族是「已入队」，绝不能并进来。
+	return strings.Contains(msg, "cdp_attach_deadline")
+}
+
 // ExecuteSession 执行一个 session（在独立 goroutine 中运行）。
 // ctx 由调用方包上 task.TimeoutSec 超时。
 func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, steps []parsedStep) {
@@ -1338,6 +1359,9 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		if isSendGateReject(sendErr) {
 			return nil, fmt.Errorf("post_comment 未提交（发送按钮不可点，点击未发生）: %w", sendErr)
+		}
+		if isNeverDispatched(sendErr) {
+			return nil, fmt.Errorf("post_comment 未提交（CDP 未 attach，事件从未下发，可安全重下发）: %w", sendErr)
 		}
 		// 提交点已跨越：立即落 sent，不等 finalize 的结论。理由——「send 之后 execCtx 恰好到期」
 		// 是最坏窗口（步被判超时、终态归因模糊），此时台账若还没写，重下发就没有任何拦阻。

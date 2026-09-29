@@ -365,6 +365,11 @@ func isNeverExecuted(err error) bool {
 	if isCommandNeverOnWire(err) {
 		return true
 	}
+	// CDP attach 阶段就没成功 ⇒ 事件从未下发（与 cdp_send/click_unacked 那一族相反，
+	// 后者事件已入队=结局未知）。见 executor.go isNeverDispatched 的归因与代价说明。
+	if isNeverDispatched(err) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "_inject_timeout_") || strings.Contains(msg, "_not_found") ||
 		strings.Contains(msg, "_not_interactable")
