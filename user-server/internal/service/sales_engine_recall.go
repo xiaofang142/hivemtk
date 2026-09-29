@@ -14,6 +14,12 @@ type RAGSearcher interface {
 	Search(ctx context.Context, query string, topK int) ([]RAGChunk, error)
 }
 
+// RAGProductSearcher 分产品检索（可选能力）。
+// RagSearcher 已实现；fake/第三方实现未实现时自动回退全局 Search。
+type RAGProductSearcher interface {
+	SearchProducts(ctx context.Context, productIDs []string, query string, topK int) ([]RAGChunk, error)
+}
+
 type RAGChunk = dto.RAGChunk
 
 type ScriptLookup interface {
@@ -90,6 +96,14 @@ func (e *SalesEngine) matchSOP(ctx context.Context, intent *dto.RecognizeResult,
 func (e *SalesEngine) recallRAG(ctx context.Context, req *SalesRequest, intent *dto.RecognizeResult) ([]RAGChunk, error) {
 	if !req.Config.EnableRAG || e.ragSearcher == nil {
 		return nil, nil
+	}
+	// 优先按智能体绑定的 rag_product_ids 分产品召回（隔离），无命中再回退全局。
+	if pids := dto.SalesRequestRagProductIDs(req); len(pids) > 0 {
+		if ps, ok := e.ragSearcher.(RAGProductSearcher); ok {
+			if chunks, err := ps.SearchProducts(ctx, pids, req.UserMessage, req.Config.RAGTopK); err == nil && len(chunks) > 0 {
+				return chunks, nil
+			}
+		}
 	}
 	return e.ragSearcher.Search(ctx, req.UserMessage, req.Config.RAGTopK)
 }
