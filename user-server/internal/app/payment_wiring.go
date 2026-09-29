@@ -64,6 +64,13 @@ func InitPaymentRuntime(db *gorm.DB) bool {
 		service.NewFollowUpService(journey),
 	))
 
+	// T-P8-02 回款金额进 feedback_loop：Transited 的每次结算触发（含 partial）。
+	// 商机取全局、采集器取全局；任一缺席钩子记 skipped 哨兵，支付不受影响。
+	svc.SetCollectionRewardHook(service.WireCollectionReward(
+		service.GlobalOpportunityService(),
+		service.GetFeedbackCollector(),
+	))
+
 	ok := svc.Available()
 	if !ok {
 		// 半装配比不装配更坏：不装配是清一色 503 一眼看得出来，半装配是"路由挂了、

@@ -39,6 +39,10 @@ type BanditAllocatorInterface interface {
 //	客户点赞 +1.0  客户点踩 -1.5  评分 ≥4 +0.8  评分 ≤2 -1.0  投诉 -2.0
 //	转化成功 +2.0   回复率>0.7 +0.5  会话>5min +0.3  转人工 -0.5
 //	销冠标记 +1.5   话术采用 +0.6
+//	回款金额 log10 缩放（weight=0.5 作系数，1 万 ≈ +2.0 与转化同量级，封顶 +3.0）
+//	丢单 flat -1.0
+//
+// 回款两键不进 reflux（无 arm 上下文）：入库供训练/离线消费，见 bandit_reward_reflux 四键过滤。
 type SignalWeightMap map[dto.FeedbackSignalKey]float64
 
 // DefaultSignalWeights 默认信号权重
@@ -56,6 +60,11 @@ var DefaultSignalWeights = SignalWeightMap{
 
 	dto.FBSignalToolCall:    0.3,
 	dto.FBSignalIntentMatch: 0.5,
+
+	// collection 的 weight 是 log10 缩放系数（见 computeReward collection 分支）；
+	// collection_lost 走 computeReward default 分支，weight 即 flat reward。
+	dto.FBSignalCollection:     0.5,
+	dto.FBSignalCollectionLost: -1.0,
 }
 
 // BanditConfig Bandit 分配器配置

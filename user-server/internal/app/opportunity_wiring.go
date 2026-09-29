@@ -44,6 +44,8 @@ func InitOpportunityRuntime(db *gorm.DB) *service.OpportunityService {
 	svc := service.NewOpportunityService(oppRepo)
 	// T-P8-01 全链路埋点：商机 won 事件走 CompleteCollection 发射。
 	svc.SetSalesTrace(repository.NewSalesEventRepositoryWithDB(db))
+	// T-P8-02 丢单负样本：MarkLost 真跃迁后触发，采集器取全局（缺席记 skipped）。
+	svc.SetLostRewardHook(service.WireLostReward(service.GetFeedbackCollector()))
 	service.SetGlobalOpportunityService(svc)
 
 	// 线索→商机的转换竖（T-P4-05）。四个句柄都从同一个 db 出发：

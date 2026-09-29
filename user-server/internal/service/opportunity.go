@@ -94,6 +94,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -309,6 +310,16 @@ type OpportunityService struct {
 	now func() time.Time
 	// trace 全链路埋点写口（T-P8-01）：nil = 没装，赢单照常，不阻塞。
 	trace salesTraceWriter
+	// onLostReward 丢单负样本钩子（T-P8-02）：nil = 没装；错只 Warn，不断丢单。
+	onLostReward LostRewardHook
+}
+
+// SetLostRewardHook 注入丢单负样本钩子。传 nil 表示不采集（测试/轻装配可用）。
+func (s *OpportunityService) SetLostRewardHook(hook LostRewardHook) {
+	if s == nil {
+		return
+	}
+	s.onLostReward = hook
 }
 
 // SetSalesTrace 注入链路事件写口。传 nil 表示不埋点（测试/轻装配可用）。
@@ -425,9 +436,20 @@ func (s *OpportunityService) MarkLost(ctx context.Context, id string, expectedVe
 			ErrOpportunityInputInvalid, len(trimmed), opportunityLostReasonMaxLen)
 	}
 	client := expectedVersion
-	return s.statusMove(ctx, id, &client, OpportunityCauseSales, model.OpportunityStatusLost, func(row *model.Opportunity) {
+	row, err := s.statusMove(ctx, id, &client, OpportunityCauseSales, model.OpportunityStatusLost, func(row *model.Opportunity) {
 		row.LostReason = trimmed
 	})
+	if err != nil {
+		return nil, err
+	}
+	// T-P8-02 丢单负样本：只有真跃迁能到这里（已 lost 的重放在 statusMove 里被
+	// ErrOpportunityClosed 拦下）。钩子错只 Warn，不断丢单。
+	if s.onLostReward != nil {
+		if herr := s.onLostReward(ctx, row); herr != nil {
+			logger.Warnf("[opportunity] 丢单负样本钩子缺席/失败（商机 %s）：%v —— 丢单不受影响", id, herr)
+		}
+	}
+	return row, nil
 }
 
 // Cancel 作废：误建或重复。它**不写** lost_reason —— 那个字段是丢单归因的口径，

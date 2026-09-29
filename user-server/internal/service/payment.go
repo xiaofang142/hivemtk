@@ -190,6 +190,8 @@ type PaymentService struct {
 	now      func() time.Time
 	// onCollection 回款完成钩子（T-P7-04）：nil = 没装，触发条件到了也只是记 "no-hook"。
 	onCollection CollectionCompletedHook
+	// onReward 回款奖励钩子（T-P8-02）：nil = 没装；错只 Warn，不断支付。
+	onReward CollectionRewardHook
 	// trace 全链路埋点写口（T-P8-01）：nil = 没装，记账照常，不阻塞。
 	trace salesTraceWriter
 }
@@ -200,6 +202,15 @@ func (s *PaymentService) SetSalesTrace(w salesTraceWriter) {
 		return
 	}
 	s.trace = w
+}
+
+// SetCollectionRewardHook 注入回款奖励钩子（T-P8-02）。传 nil 表示不采集。
+// 钩子在 traceSettlement 内触发（Transited 的每次结算），错只 Warn，不断支付。
+func (s *PaymentService) SetCollectionRewardHook(hook CollectionRewardHook) {
+	if s == nil {
+		return
+	}
+	s.onReward = hook
 }
 
 // NewPaymentService 构造。缺件时构造照旧成功，由 Available / 各方法报出来。
@@ -247,6 +258,8 @@ func (s *PaymentService) traceSettlement(ctx context.Context, bill *model.Bill, 
 			OccurredAt:    s.now(),
 		}, "payment_settlement")
 	}
+	// T-P8-02 回款金额进奖励：Transited 的每次结算都走（含 partial），重放不走。
+	s.fireRewardHook(ctx, bill, settled)
 	return s.fireCollectionCompleted(ctx, bill, settled)
 }
 

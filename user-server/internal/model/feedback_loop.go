@@ -37,17 +37,21 @@ type FeedbackEvent struct {
 func (FeedbackEvent) TableName() string { return "feedback_events" }
 
 // FeedbackSignalKey 反馈信号类型常量（与 service/feedback_loop SignalKey 字符串值一致）
+// 回款两键（T-P8-02）：collection 的 reward 由 computeReward 按金额缩放，
+// collection_lost 走 flat -1.0；两者都不进 bandit reflux（无 arm 上下文，见 reflux 四键过滤）。
 const (
-	FeedbackSignalLike         = "like"
-	FeedbackSignalDislike      = "dislike"
-	FeedbackSignalRating       = "rating"
-	FeedbackSignalComplaint    = "complaint"
-	FeedbackSignalConversion   = "conversion"
-	FeedbackSignalReplyRate    = "reply_rate"
-	FeedbackSignalDuration     = "duration"
-	FeedbackSignalTransfer     = "transfer"
-	FeedbackSignalChampionMark = "champion_mark"
-	FeedbackSignalScriptAdopt  = "script_adopt"
+	FeedbackSignalLike           = "like"
+	FeedbackSignalDislike        = "dislike"
+	FeedbackSignalRating         = "rating"
+	FeedbackSignalComplaint      = "complaint"
+	FeedbackSignalConversion     = "conversion"
+	FeedbackSignalReplyRate      = "reply_rate"
+	FeedbackSignalDuration       = "duration"
+	FeedbackSignalTransfer       = "transfer"
+	FeedbackSignalChampionMark   = "champion_mark"
+	FeedbackSignalScriptAdopt    = "script_adopt"
+	FeedbackSignalCollection     = "collection"
+	FeedbackSignalCollectionLost = "collection_lost"
 )
 
 // FeedbackEventType 反馈事件类型常量

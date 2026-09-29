@@ -240,7 +240,7 @@ func TestOpportunityStatusMoveIsGatedByCause(t *testing.T) {
 func TestOpportunityServiceSurfaceIsFrozen(t *testing.T) {
 	want := []string{
 		"Available", "Cancel", "CompleteCollection", "Edit", "Get", "MarkLost", "MarkWonByCollection",
-		"MoveStage", "Reopen", "SetClock", "SetSalesTrace",
+		"MoveStage", "Reopen", "SetClock", "SetLostRewardHook", "SetSalesTrace",
 	}
 	got := make([]string, 0, len(want))
 	svcType := reflect.TypeOf(&OpportunityService{})
