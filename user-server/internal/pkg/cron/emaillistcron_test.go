@@ -30,11 +30,11 @@ func (f *fakeSubscriber) ExistsByEmail(_ context.Context, email string) (bool, e
 }
 
 type fakeLinkSigner struct {
-	link        string
-	err         error
-	gotEmail    string
-	gotJobID    string
-	calls       int
+	link     string
+	err      error
+	gotEmail string
+	gotJobID string
+	calls    int
 }
 
 func (f *fakeLinkSigner) GenerateUnsubscribeLink(_ context.Context, email, jobID string) (string, error) {
