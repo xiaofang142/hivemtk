@@ -721,7 +721,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 		// 兜底开 tab：LLM 首轮 plan 若未显式 open_tab，保证有页面可操作
 		if session.ChromeTabID == 0 {
-			tabID, _, err := e.hand.openTab(ctx, task.UserID, task.Url, false)
+			tabID, _, err := e.hand.openTab(ctx, task.UserID, task.Url, false, 0)
 			if err != nil {
 				return success, failed, "open_tab 失败: " + err.Error()
 			}
@@ -732,7 +732,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			// tab 可能在 LLM 思考间隙被 SW 空闲回收/用户关闭：重开一次再 snapshot
 			logger.Warnf("[BrowserExec] brain snapshot 失败 session=%d tab=%d: %v，尝试重开 tab", session.ID, session.ChromeTabID, err)
-			tabID, _, openErr := e.hand.openTab(ctx, task.UserID, task.Url, false)
+			tabID, _, openErr := e.hand.openTab(ctx, task.UserID, task.Url, false, 0)
 			if openErr != nil {
 				return success, failed, "snapshot 失败且重开 tab 失败: " + openErr.Error()
 			}
@@ -1196,7 +1196,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if openURL == "" {
 			openURL = task.Url // 编排未填 target 时兜底任务起始 URL
 		}
-		tabID, res, err := e.hand.openTab(ctx, userID, openURL, false) // active 恒 false
+		tabID, res, err := e.hand.openTab(ctx, userID, openURL, false, step.TimeoutMs) // active 恒 false
 		if err != nil {
 			return nil, err
 		}
@@ -1204,16 +1204,20 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 		// page_loaded 原样透传（可能是 nil：老 Host 不回这个字段时如实记 null，
 		// 不能把「不知道」写成 false，也不能反过来把 false 洗成 true）。
-		// load_wait_ms/title 一并留档：真机 session611 真站 open_tab 往返 26159ms 而
-		// step.duration 已把整段吞掉，缺扩展侧「等加载花了多久」就无法把慢归因到
-		// tabs.create+waitForLoad 还是链路；title 用来确认打开的确实是目标页。
-		// 两字段缺席（老 Host 不回）时原样不写，不编造 0。
+		// load_wait_ms/title/create_ms 一并留档：真机 session611 真站 open_tab 往返 26159ms
+		// 而 step.duration 已把整段吞掉，缺扩展侧「等加载花了多久」就无法把慢归因到
+		// tabs.create+waitForLoad 还是链路；session619-621 的 30s 黑盒更是在
+		// tabs.create 挂死时连 create 耗时都拿不到——create_ms 就是那案的归因字段。
+		// title 用来确认打开的确实是目标页。字段缺席（老 Host 不回）时原样不写，不编造 0。
 		payload := map[string]any{"chrome_tab_id": tabID, "page_loaded": res["loaded"]}
 		if v, ok := res["load_wait_ms"]; ok && v != nil {
 			payload["load_wait_ms"] = v
 		}
 		if v, ok := res["title"]; ok && v != nil {
 			payload["title"] = v
+		}
+		if v, ok := res["create_ms"]; ok && v != nil {
+			payload["create_ms"] = v
 		}
 		return recordResultPayload(payload)
 	case "click":

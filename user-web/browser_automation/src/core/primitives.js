@@ -811,12 +811,38 @@ export async function dispatch(cmd, deps) {
       if (!cmd.url || !/^https?:\/\//i.test(cmd.url)) {
         throw new Error('open_tab 需要合法 http(s) URL，收到: ' + (cmd.url || '(空)'));
       }
-      const tab = await openTab(cmd.url, cmd.active === true);
+      // 竞速闸：open_tab 是唯一可能被「浏览器进程忙」整段卡死的原语——tabs.create 走
+      // 浏览器进程 IPC，重页（真机抖音）加载期间该 IPC 可几十秒不回包，扩展侧就一直
+      // 挂着不回帧，服务端 30s 黑盒超时连吃两次才靠 forceSelfHeal 自愈（session619-621）。
+      // 缺省 25s < 服务端 defaultCmdTimeout 30s：宁可先一步回一个可归因的失败，
+      // 也不让链路黑盒；卡住的 create 仍在后台继续，后续 open_tab 重试即可成功。
+      const capMs = Math.min(Math.max(Number(cmd.open_tab_timeout_ms) || 25000, 5000), 28000);
+      const t0 = Date.now();
+      let tab;
+      try {
+        tab = await raceTimeout(openTab(cmd.url, cmd.active === true), capMs, 'open_tab');
+      } catch (e) {
+        // raceTimeout 的 *_inject_timeout_* 是注入语系文案；open_tab 卡的是 SW 自己的
+        // tabs.create，换成能直接归因的话再上抛。
+        if (/_inject_timeout_/.test(String(e?.message || e))) {
+          throw new Error(`open_tab_timeout: tabs.create 超过 ${capMs}ms 未回包（重页加载阻塞浏览器进程时实测会整段卡住）`, { cause: e });
+        }
+        throw e;
+      }
+      const createMs = Date.now() - t0;
       resetBaseline(tab.id);
       // 等页面这一帧真的加载出来再回包（假绿收口，见 tab-manager.waitForLoad）。
-      // 命令预算 30s，缺省等待 10s，上限 30s 由 waitForLoad 自身夹紧，永不吃掉命令超时。
-      const load = await waitForLoad(tab.id, cmd.load_timeout_ms);
-      return { chrome_tab_id: tab.id, title: load.title || tab.title || '', loaded: load.loaded, load_wait_ms: load.wait_ms };
+      // 缺省仍 10s，但绝不越过竞速闸剩下的预算：create 已吃掉的秒数不能让总时长
+      // 超过 capMs——否则回包仍会晚于服务端命令超时，黑盒照旧。
+      const loadBudgetMs = Math.max(capMs - createMs, 500);
+      const load = await raceTimeout(waitForLoad(tab.id, Math.min(Number(cmd.load_timeout_ms) || 10000, loadBudgetMs)), loadBudgetMs, 'open_tab');
+      return {
+        chrome_tab_id: tab.id,
+        title: load.title || tab.title || '',
+        loaded: load.loaded,
+        load_wait_ms: load.wait_ms,
+        create_ms: createMs,
+      };
     }
     case 'click':
     case 'type':

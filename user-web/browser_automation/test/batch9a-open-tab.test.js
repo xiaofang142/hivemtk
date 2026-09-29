@@ -51,12 +51,44 @@ Object.defineProperty(global.HTMLElement.prototype, 'offsetParent', {
 });
 
 describe('open_tab 等加载（假绿收口）', () => {
-  it('回包带 loaded/load_wait_ms，且等待发生在回包之前', async () => {
+  it('回包带 loaded/load_wait_ms/create_ms，且等待发生在回包之前', async () => {
     const deps = makeDeps();
     const data = await dispatch({ action: 'open_tab', url: 'https://example.com' }, deps);
-    expect(deps.tabManager.waitForLoad).toHaveBeenCalledWith(42, undefined);
+    // 缺省 load_timeout_ms 不下发 → 由 waitForLoad 取它自己的 10s 缺省
+    expect(deps.tabManager.waitForLoad).toHaveBeenCalledWith(42, 10000);
     expect(data).toMatchObject({ chrome_tab_id: 42, loaded: true, title: '大页夹具' });
     expect(typeof data.load_wait_ms).toBe('number');
+    // create_ms 是 tabs.create 归因字段：session619-621 黑盒时正是缺它无法归因
+    expect(typeof data.create_ms).toBe('number');
+  });
+
+  it('tabs.create 挂死 → 竞速闸在 open_tab_timeout_ms 内回 open_tab_timeout（不再 30s 黑盒）', async () => {
+    vi.useFakeTimers();
+    try {
+      const deps = makeDeps({ openTab: () => new Promise(() => {}) });
+      const p = dispatch({ action: 'open_tab', url: 'https://example.com', open_tab_timeout_ms: 5000 }, deps);
+      const assertion = expect(p).rejects.toThrow(/open_tab_timeout: tabs\.create 超过 5000ms/);
+      await vi.advanceTimersByTimeAsync(5000);
+      await assertion;
+      // 等加载一步不得再执行：create 都没回来，没有 tab 可等
+      expect(deps.tabManager.waitForLoad).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('load 等待不越竞速闸：create 已吃掉预算时按剩余预算夹紧', async () => {
+    const deps = makeDeps({
+      openTab: async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        return { id: 42, title: '' };
+      },
+    });
+    await dispatch({ action: 'open_tab', url: 'https://example.com', open_tab_timeout_ms: 5000 }, deps);
+    const [, waitMs] = deps.tabManager.waitForLoad.mock.calls[0];
+    // 剩余预算 = 5000 - create 耗时(<5000) → 必须小于闸门本身
+    expect(waitMs).toBeGreaterThan(0);
+    expect(waitMs).toBeLessThan(5000);
   });
 
   it('等不到 complete 时如实回 loaded:false（不把没加载伪装成可读）', async () => {

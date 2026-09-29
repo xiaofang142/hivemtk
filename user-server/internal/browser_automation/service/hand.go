@@ -19,9 +19,42 @@ func NewHand(registry *HostRegistry) *Hand {
 
 // openTab 原语。回包一并返回：扩展侧会等页面加载完成，
 // loaded 是「这一步到底读到了没有」的审计事实，不能只留个 tab id 就当成功。
-func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool) (int, map[string]any, error) {
-	res, err := h.registry.Request(ctx, userID, defaultCmdTimeout, map[string]any{
-		"action": "open_tab", "url": url, "active": active,
+func (h *Hand) openTab(ctx context.Context, userID uint, url string, active bool, timeoutMs int) (int, map[string]any, error) {
+	// 预算取 max(30s 缺省, 步 timeout_ms)：步的 timeout_ms 是「愿意等加载多久」，
+	// 是放宽方向——拿它当更小的命令预算（早先实现）会把扩展竞速闸压到 10s 以内，
+	// 比固定 30s 还早失败。真正的约束是**扩展必须先于服务端回包**：
+	// 扩展闸 open_tab_timeout_ms = 预算-2s（往返留头），加载等待 load_timeout_ms
+	// 不越过闸门剩余量。缺这一对，tabs.create 被重页卡死时就是 session619-621
+	// 的 30s 黑盒（服务端零回包、连吃两次超时才靠 forceSelfHeal 自愈）。
+	budget := defaultCmdTimeout
+	if timeoutMs > 0 {
+		if stepBudget := time.Duration(timeoutMs) * time.Millisecond; stepBudget > budget {
+			budget = stepBudget
+		}
+	}
+	capMs := int(budget/time.Millisecond) - 2000
+	if capMs > 28000 {
+		capMs = 28000
+	}
+	if capMs < 5000 {
+		capMs = 5000
+	}
+	loadMs := 10000
+	if timeoutMs > 0 {
+		loadMs = timeoutMs
+	}
+	if headroom := capMs - 3000; loadMs > headroom {
+		loadMs = headroom
+	}
+	if loadMs < 500 {
+		loadMs = 500
+	}
+	res, err := h.registry.Request(ctx, userID, budget, map[string]any{
+		"action":              "open_tab",
+		"url":                 url,
+		"active":              active,
+		"open_tab_timeout_ms": capMs,
+		"load_timeout_ms":     loadMs,
 	})
 	if err != nil {
 		return 0, nil, err
