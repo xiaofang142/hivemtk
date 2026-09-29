@@ -38,25 +38,52 @@ func NewGeoDictRepositoryWithDB(db *gorm.DB) GeoDictRepository {
 	return &geoDictRepo{db: db}
 }
 
+// dbh 解析本次调用实际使用的 DB：构造时注入的优先；未注入（或注入时全局 DB
+// 尚未就绪）则按调用时点重取全局，容忍 globalDict 首次触达早于 DB 初始化；
+// 两者皆空返回 ErrInvalidDB，让上层 DictService 走既定的 fail-open 回缺省
+// 而不是 panic（DictService.DictJSON 文档承诺"DB 故障 fail-open"）。
+func (r *geoDictRepo) dbh() (*gorm.DB, error) {
+	db := r.db
+	if db == nil {
+		db = _db.GetDB()
+	}
+	if db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	return db, nil
+}
+
 func (r *geoDictRepo) Get(category, key string) (*model.GeoDict, error) {
+	db, err := r.dbh()
+	if err != nil {
+		return nil, err
+	}
 	var d model.GeoDict
-	if err := r.db.Where("category = ? AND \"key\" = ? AND active = ?", category, key, true).First(&d).Error; err != nil {
+	if err := db.Where("category = ? AND \"key\" = ? AND active = ?", category, key, true).First(&d).Error; err != nil {
 		return nil, err
 	}
 	return &d, nil
 }
 
 func (r *geoDictRepo) GetAny(category, key string) (*model.GeoDict, error) {
+	db, err := r.dbh()
+	if err != nil {
+		return nil, err
+	}
 	var d model.GeoDict
-	if err := r.db.Where("category = ? AND \"key\" = ?", category, key).First(&d).Error; err != nil {
+	if err := db.Where("category = ? AND \"key\" = ?", category, key).First(&d).Error; err != nil {
 		return nil, err
 	}
 	return &d, nil
 }
 
 func (r *geoDictRepo) ListByCategory(category string) ([]*model.GeoDict, error) {
+	db, err := r.dbh()
+	if err != nil {
+		return nil, err
+	}
 	var list []*model.GeoDict
-	if err := r.db.Where("category = ? AND active = ?", category, true).Order("\"sort\" ASC, \"key\" ASC").Find(&list).Error; err != nil {
+	if err := db.Where("category = ? AND active = ?", category, true).Order("\"sort\" ASC, \"key\" ASC").Find(&list).Error; err != nil {
 		return nil, err
 	}
 	return list, nil
@@ -66,6 +93,10 @@ func (r *geoDictRepo) Upsert(d *model.GeoDict) error {
 	if d == nil {
 		return nil
 	}
+	db, err := r.dbh()
+	if err != nil {
+		return err
+	}
 	// 必须用原生 SQL：GORM 的 `default:true` 标签会在零值时直接替换绑定变量
 	// （DryRun 实测：结构体 Active=false 进 VARS 变成 true），Select 也拦不住；
 	// 导致 active=false 永远写不进去（EXCLUDED.active 取到列 DEFAULT true）。
@@ -74,7 +105,7 @@ func (r *geoDictRepo) Upsert(d *model.GeoDict) error {
 	if d.ID == "" {
 		d.ID = uuid.NewString()
 	}
-	return r.db.Exec(`INSERT INTO geo_dicts (id, category, "key", value, remark, active, sort, created_at, updated_at)
+	return db.Exec(`INSERT INTO geo_dicts (id, category, "key", value, remark, active, sort, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
 		ON CONFLICT (category, "key") DO UPDATE SET
 			value = EXCLUDED.value, remark = EXCLUDED.remark, active = EXCLUDED.active,
@@ -83,12 +114,20 @@ func (r *geoDictRepo) Upsert(d *model.GeoDict) error {
 }
 
 func (r *geoDictRepo) Delete(category, key string) error {
-	return r.db.Where("category = ? AND \"key\" = ?", category, key).Delete(&model.GeoDict{}).Error
+	db, err := r.dbh()
+	if err != nil {
+		return err
+	}
+	return db.Where("category = ? AND \"key\" = ?", category, key).Delete(&model.GeoDict{}).Error
 }
 
 func (r *geoDictRepo) CountByCategory(category string) (int64, error) {
+	db, err := r.dbh()
+	if err != nil {
+		return 0, err
+	}
 	var n int64
-	if err := r.db.Model(&model.GeoDict{}).Where("category = ?", category).Count(&n).Error; err != nil {
+	if err := db.Model(&model.GeoDict{}).Where("category = ?", category).Count(&n).Error; err != nil {
 		return 0, err
 	}
 	return n, nil
