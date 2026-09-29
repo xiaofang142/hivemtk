@@ -137,7 +137,13 @@ var negativeSeeds = []string{"差评", "投诉", "骗局", "失败", "坑"}
 func loadNegativeKeywords(config *model.GeoConfig) []string {
 	raw := strings.TrimSpace(config.NegativeKeywords)
 	if raw == "" {
-		return negativeSeeds
+		// 配置为空时走字典：DB 优先（geo_dicts/negative_seeds.words，缺行自动播种），
+		// 故障或空表时 fail-open 回内置 negativeSeeds
+		var words []string
+		if err := DictJSON(model.DictCategoryNegativeSeeds, "words", `["差评","投诉","骗局","失败","坑"]`, &words); err != nil || len(words) == 0 {
+			return negativeSeeds
+		}
+		return words
 	}
 	out := make([]string, 0, 8)
 	for _, part := range strings.Split(raw, ",") {

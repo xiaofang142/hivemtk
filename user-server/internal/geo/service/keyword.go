@@ -6,11 +6,49 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
+
+// defaultKeywordWordbanks 内置组合词库（DB 为空/故障时兜底）
+func defaultKeywordWordbanks() map[string][]string {
+	return map[string][]string{
+		"A前缀1": {"行业上", "市场上", "市面上", "目前", "国内", "市场"},
+		"B前缀2": {"口碑好的", "比较好的", "靠谱的", "有实力的", "可靠的", "诚信的", "正规的", "专业的", "热门的", "知名的"},
+		"C主词":  {"软件", "管理系统", "工具"},
+		"D通义词": {"品牌", "公司", "工厂", "厂商", "生产厂家", "供应商"},
+		"E推荐词": {"推荐", "排行", "推荐榜", "排行榜", "推荐榜单", "推荐排行", "推荐排行榜", "口碑排行"},
+		"F疑问词": {"哪家好", "哪家强", "哪家靠谱", "哪家权威", "哪个好", "有哪些", "找哪家", "选哪家", "为什么"},
+	}
+}
+
+// keywordWordbanksDefaultJSON 缺省词库 JSON（DB 为空/故障时兜底）
+var keywordWordbanksDefaultOnce sync.Once
+var keywordWordbanksDefaultJSON string
+
+func defaultKeywordWordbanksJSON() string {
+	keywordWordbanksDefaultOnce.Do(func() {
+		b, err := json.Marshal(defaultKeywordWordbanks())
+		if err != nil {
+			b = []byte("{}")
+		}
+		keywordWordbanksDefaultJSON = string(b)
+	})
+	return keywordWordbanksDefaultJSON
+}
+
+// activeKeywordWordbanks DB 优先读取组合词库（geo_dicts/keyword_wordbanks.banks），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置词库。
+func activeKeywordWordbanks() map[string][]string {
+	var m map[string][]string
+	if err := DictJSON(model.DictCategoryKeywordWordbanks, "banks", defaultKeywordWordbanksJSON(), &m); err != nil || len(m) == 0 {
+		return defaultKeywordWordbanks()
+	}
+	return m
+}
 
 // KeywordService 关键词服务
 type KeywordService struct {
@@ -169,14 +207,7 @@ func truncateForLog(s string, n int) string {
 }
 
 func generateKeywordCombinations(seedWords []string) []string {
-	wordbanks := map[string][]string{
-		"A前缀1": {"行业上", "市场上", "市面上", "目前", "国内", "市场"},
-		"B前缀2": {"口碑好的", "比较好的", "靠谱的", "有实力的", "可靠的", "诚信的", "正规的", "专业的", "热门的", "知名的"},
-		"C主词":  {"软件", "管理系统", "工具"},
-		"D通义词": {"品牌", "公司", "工厂", "厂商", "生产厂家", "供应商"},
-		"E推荐词": {"推荐", "排行", "推荐榜", "排行榜", "推荐榜单", "推荐排行", "推荐排行榜", "口碑排行"},
-		"F疑问词": {"哪家好", "哪家强", "哪家靠谱", "哪家权威", "哪个好", "有哪些", "找哪家", "选哪家", "为什么"},
-	}
+	wordbanks := activeKeywordWordbanks()
 	if len(seedWords) > 0 {
 		wordbanks["C主词"] = append(wordbanks["C主词"], seedWords...)
 	}

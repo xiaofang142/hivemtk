@@ -9,8 +9,8 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	pkgdb "hivemtk-user/internal/pkg/db"
-	baseservice "hivemtk-user/internal/service"
 	"hivemtk-user/internal/pkg/utils/logger"
+	baseservice "hivemtk-user/internal/service"
 
 	"gorm.io/gorm"
 )

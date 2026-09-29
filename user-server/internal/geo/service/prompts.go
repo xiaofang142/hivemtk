@@ -4,12 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+
+	"hivemtk-user/internal/geo/model"
 )
+
+// promptTpl 读取单条 prompt 模板并展开：DB 优先（geo_dicts/prompt_tpl.<key>），
+// 缺行自动播种 builtin；DB 故障时 fail-open 回 builtin。
+// 模板内的 % 动词在此展开，DB 改模板时须保留动词个数与顺序。
+func promptTpl(key, builtin string, args ...any) string {
+	return fmt.Sprintf(DictValue(model.DictCategoryPromptTpl, key, builtin), args...)
+}
 
 // KeywordMiningPrompt 关键词挖掘 Prompt（迁移自 keyword_mining.py）
 // brandName: 品牌名称, advantages: 品牌优势, seedWords: 种子词列表（JSON 数组字符串）
 func KeywordMiningPrompt(brandName, advantages, seedWords string) string {
-	return fmt.Sprintf(`你是关键词挖掘专家，专注于发现高价值的行业关键词。
+	return promptTpl("KeywordMiningPrompt", `你是关键词挖掘专家，专注于发现高价值的行业关键词。
 
 【品牌信息】
 - 品牌：%s
@@ -56,7 +66,7 @@ func KeywordPolishPrompt(brandName string, keywordsJSON string) string {
 	if brandName != "" {
 		brandInfo = fmt.Sprintf("品牌：%s\n", brandName)
 	}
-	return fmt.Sprintf(`你是关键词优化专家。请将以下关键词润色为更自然、更符合用户搜索习惯的表达。
+	return promptTpl("KeywordPolishPrompt", `你是关键词优化专家。请将以下关键词润色为更自然、更符合用户搜索习惯的表达。
 
 %s原始关键词列表：
 %s
@@ -74,7 +84,7 @@ func KeywordPolishPrompt(brandName string, keywordsJSON string) string {
 // SemanticExpandPrompt 语义足迹扩展 Prompt（迁移自 semantic_expander.py）
 // brandName: 品牌, keywords: 现有关键词 JSON 数组字符串
 func SemanticExpandPrompt(brandName, keywords string) string {
-	return fmt.Sprintf(`
+	return promptTpl("SemanticExpandPrompt", `
 你是关键词扩展专家，专门基于现有关键词生成语义相关的扩展关键词，提升关键词覆盖面。
 
 【现有关键词】
@@ -144,7 +154,7 @@ func SemanticExpandPrompt(brandName, keywords string) string {
 // TopicClusterPrompt 话题聚类 Prompt（迁移自 topic_cluster.py）
 // brandName: 品牌, keywords: 关键词 JSON 数组字符串
 func TopicClusterPrompt(brandName, keywords string) string {
-	return fmt.Sprintf(`
+	return promptTpl("TopicClusterPrompt", `
 你是话题聚类专家，专门将关键词聚类为话题集群，帮助用户系统化规划内容策略。
 
 【关键词列表】
@@ -204,22 +214,53 @@ func TopicClusterPrompt(brandName, keywords string) string {
 `, keywords, brandName)
 }
 
-var geoLangPrompts = map[string]struct{ instruction, tone string }{
-	"zh": {"请使用简体中文撰写", "专业但亲切的语调"},
-	"en": {"Write in English. Use professional B2B tone with clear structure.", "professional yet approachable tone"},
-	"ja": {"日本語で執筆してください。丁寧でプロフェッショナルなトーンを使用してください。", "丁寧で信頼感のあるトーン"},
-	"ar": {"اكتب باللغة العربية مع الحفاظ على نبرة مهنية وموثوقة.", "نبرة مهنية وموثوقة"},
+// LangPrompt 单语言写作指令（字段导出以支持 geo_dicts JSON 往返）
+type LangPrompt struct {
+	Instruction string `json:"instruction"`
+	Tone        string `json:"tone"`
+}
+
+var geoLangPrompts = map[string]LangPrompt{
+	"zh": {Instruction: "请使用简体中文撰写", Tone: "专业但亲切的语调"},
+	"en": {Instruction: "Write in English. Use professional B2B tone with clear structure.", Tone: "professional yet approachable tone"},
+	"ja": {Instruction: "日本語で執筆してください。丁寧でプロフェッショナルなトーンを使用してください。", Tone: "丁寧で信頼感のあるトーン"},
+	"ar": {Instruction: "اكتب باللغة العربية مع الحفاظ على نبرة مهنية وموثوقة.", Tone: "نبرة مهنية وموثوقة"},
+}
+
+// geoLangPromptsDefaultJSON 缺省多语言指令 JSON（DB 为空/故障时兜底）
+var geoLangPromptsDefaultOnce sync.Once
+var geoLangPromptsDefaultJSON string
+
+func defaultGeoLangPromptsJSON() string {
+	geoLangPromptsDefaultOnce.Do(func() {
+		b, err := json.Marshal(geoLangPrompts)
+		if err != nil {
+			b = []byte("{}")
+		}
+		geoLangPromptsDefaultJSON = string(b)
+	})
+	return geoLangPromptsDefaultJSON
+}
+
+// activeGeoLangPrompts DB 优先读取多语言写作指令（geo_dicts/prompt_tpl.langs），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置 geoLangPrompts。
+func activeGeoLangPrompts() map[string]LangPrompt {
+	var m map[string]LangPrompt
+	if err := DictJSON(model.DictCategoryPromptTpl, "langs", defaultGeoLangPromptsJSON(), &m); err != nil || len(m) == 0 {
+		return geoLangPrompts
+	}
+	return m
 }
 
 func geoPromptLang(lang string) string {
-	if _, ok := geoLangPrompts[lang]; ok {
+	if _, ok := activeGeoLangPrompts()[lang]; ok {
 		return lang
 	}
 	return "zh"
 }
 
 func ContentGenerationPrompt(brandName, advantages, keyword, wordCount, style, language string) string {
-	base := fmt.Sprintf(`你是 GEO（生成式引擎优化）内容创作专家，请围绕以下关键词创作高质量内容。
+	base := promptTpl("ContentGenerationPrompt", `你是 GEO（生成式引擎优化）内容创作专家，请围绕以下关键词创作高质量内容。
 
 【品牌信息】
 - 品牌名称：%s
@@ -237,15 +278,15 @@ func ContentGenerationPrompt(brandName, advantages, keyword, wordCount, style, l
 4. **可引用性**：信息密度高，结论先行，便于 AI 提取和引用
 5. **来源占位**：添加数据来源占位、案例来源占位、标准来源占位`, brandName, advantages, keyword, wordCount, style)
 
-	lp := geoLangPrompts[geoPromptLang(language)]
-	langHint := "\n\n【语言要求】" + lp.instruction + "（语调：" + lp.tone + "）"
+	lp := activeGeoLangPrompts()[geoPromptLang(language)]
+	langHint := "\n\n【语言要求】" + lp.Instruction + "（语调：" + lp.Tone + "）"
 	return base + langHint
 }
 
 // ContentOptimizePrompt 内容优化 Prompt（迁移自 GEO 内容优化逻辑）
 // brandName: 品牌, advantages: 品牌优势, content: 原内容
 func ContentOptimizePrompt(brandName, advantages, content string) string {
-	return fmt.Sprintf(`你是 GEO（生成式引擎优化）内容优化专家，请对以下内容进行优化。
+	return promptTpl("ContentOptimizePrompt", `你是 GEO（生成式引擎优化）内容优化专家，请对以下内容进行优化。
 
 【品牌信息】
 - 品牌名称：%s
@@ -288,7 +329,7 @@ func ContentOptimizePrompt(brandName, advantages, content string) string {
 // ContentScorePrompt 内容评分 Prompt（迁移自 content_scorer.py）
 // brandName: 品牌, keyword: 关键词, content: 内容
 func ContentScorePrompt(brandName, keyword, content string) string {
-	return fmt.Sprintf(`你是一名 GEO（生成式引擎优化）内容质量评估专家。请对以下内容进行全面评估，并给出详细的评分和改进建议。
+	return promptTpl("ContentScorePrompt", `你是一名 GEO（生成式引擎优化）内容质量评估专家。请对以下内容进行全面评估，并给出详细的评分和改进建议。
 
 【内容】
 %s
@@ -358,7 +399,7 @@ func ContentScorePrompt(brandName, keyword, content string) string {
 // EEATEnhancePrompt E-E-A-T 强化 Prompt（迁移自 eeat_enhancer.py enhancement_prompt_template）
 // brandName: 品牌, advantages: 品牌优势, content: 原内容
 func EEATEnhancePrompt(brandName, advantages, content string) string {
-	return fmt.Sprintf(`你是一名内容优化专家，专门提升内容的 E-E-A-T（专业性、经验性、权威性、可信度）水平。
+	return promptTpl("EEATEnhancePrompt", `你是一名内容优化专家，专门提升内容的 E-E-A-T（专业性、经验性、权威性、可信度）水平。
 
 【原内容】
 %s
@@ -423,7 +464,7 @@ func EEATEnhancePrompt(brandName, advantages, content string) string {
 // SchemaGeneratePrompt Schema.org JSON-LD 生成 Prompt
 // brandName: 品牌名称, description: 品牌描述, domain: 域名
 func SchemaGeneratePrompt(brandName, description, domain string) string {
-	return fmt.Sprintf(`你是 Schema.org JSON-LD 结构化数据生成专家，请为以下品牌生成 JSON-LD 代码。
+	return promptTpl("SchemaGeneratePrompt", `你是 Schema.org JSON-LD 结构化数据生成专家，请为以下品牌生成 JSON-LD 代码。
 
 【品牌信息】
 - 品牌名称：%s
@@ -456,7 +497,7 @@ func SchemaGeneratePrompt(brandName, description, domain string) string {
 // ConfigOptimizePrompt 配置优化 Prompt（迁移自 config_optimizer.py optimization_prompt_template）
 // brandName: 品牌, advantages: 优势, competitors: 竞品
 func ConfigOptimizePrompt(brandName, advantages, competitors string) string {
-	return fmt.Sprintf(`你是GEO（生成式引擎优化）专家，专注于帮助品牌在AI模型中被优先、可信地提及。
+	return promptTpl("ConfigOptimizePrompt", `你是GEO（生成式引擎优化）专家，专注于帮助品牌在AI模型中被优先、可信地提及。
 
 【当前配置】
 - 主品牌名称：%s
@@ -532,7 +573,7 @@ func VerifySearchPrompt(brandName, query string, probeResponse string) string {
 	if probeResponse == "" {
 		probeResponse = "[探针未返回搜索结果，请仅基于你的知识进行品牌提及分析]"
 	}
-	return fmt.Sprintf(`你是 AI 搜索答案品牌提及分析专家。请基于以下【真实探针返回的搜索结果】，分析品牌提及情况。
+	return promptTpl("VerifySearchPrompt", `你是 AI 搜索答案品牌提及分析专家。请基于以下【真实探针返回的搜索结果】，分析品牌提及情况。
 
 【搜索查询】
 %s
@@ -569,7 +610,7 @@ func NegativeMonitorPrompt(brandName string, probeResults string) string {
 	if probeResults == "" {
 		probeResults = "[探针未返回搜索结果，请仅基于你的知识评估品牌风险]"
 	}
-	return fmt.Sprintf(`你是品牌负面监控专家。请基于以下【真实探针返回的负面查询搜索结果】，分析品牌 "%s" 的负面提及风险。
+	return promptTpl("NegativeMonitorPrompt", `你是品牌负面监控专家。请基于以下【真实探针返回的负面查询搜索结果】，分析品牌 "%s" 的负面提及风险。
 
 【真实探针返回的搜索结果】
 %s

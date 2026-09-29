@@ -9,8 +9,8 @@ import (
 
 // 种子词条类目：技术/概念属性词 / 业务线核心词 / 品牌组合词
 const (
-	SeedTermCategoryTechAttr  = "tech_attr"
-	SeedTermCategoryCoreTerm  = "core_term"
+	SeedTermCategoryTechAttr   = "tech_attr"
+	SeedTermCategoryCoreTerm   = "core_term"
 	SeedTermCategoryBrandCombo = "brand_combo"
 )
 

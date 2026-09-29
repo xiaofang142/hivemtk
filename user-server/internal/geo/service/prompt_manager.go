@@ -1,7 +1,5 @@
 package service
 
-import "fmt"
-
 // PromptManager GEO 模块国际化 Prompt 管理器（G13.1）
 //
 // 按 language (zh/en/ja) 返回不同 prompt template。
@@ -44,7 +42,7 @@ func (pm *PromptManager) EntityExtractPromptWithLang(lang, title, content string
 
 	switch norm {
 	case "en", "ja":
-		return fmt.Sprintf(`You are a named entity extraction expert. Extract structured entities and relations from the given document.
+		return promptTpl("EntityExtractPrompt.en", `You are a named entity extraction expert. Extract structured entities and relations from the given document.
 
 【Document Title】
 %s
@@ -71,7 +69,7 @@ Respond ONLY with valid JSON, no markdown fences:
 【Start】`, title, content)
 
 	default:
-		return fmt.Sprintf(`你是实体抽取专家。请从以下文档中抽取结构化实体和实体关系。
+		return promptTpl("EntityExtractPrompt.zh", `你是实体抽取专家。请从以下文档中抽取结构化实体和实体关系。
 
 【文档标题】
 %s
@@ -110,7 +108,7 @@ func (pm *PromptManager) SourceClassifyPromptWithLang(lang, url, content string)
 
 	switch norm {
 	case "en", "ja":
-		return fmt.Sprintf(`Classify the credibility and category of the following web source.
+		return promptTpl("SourceClassifyPrompt.en", `Classify the credibility and category of the following web source.
 
 【Source URL】
 %s
@@ -129,7 +127,7 @@ Respond ONLY with valid JSON:
 【Start】`, url, truncate(content, 2000))
 
 	default:
-		return fmt.Sprintf(`请对以下信源做可信度和分类判定。
+		return promptTpl("SourceClassifyPrompt.zh", `请对以下信源做可信度和分类判定。
 
 【信源 URL】
 %s

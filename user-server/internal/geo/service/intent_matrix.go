@@ -1,7 +1,11 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
+	"sync"
+
+	"hivemtk-user/internal/geo/model"
 )
 
 // IntentStrategy 单一意图的内容与信源策略
@@ -53,9 +57,38 @@ var DefaultIntentMatrix = map[string]IntentStrategy{
 	},
 }
 
+// intentMatrixDefaultJSON 缺省 6 意图矩阵 JSON（DB 为空/故障时兜底）
+var intentMatrixDefaultOnce sync.Once
+var intentMatrixDefaultJSON string
+
+func defaultIntentMatrixJSON() string {
+	intentMatrixDefaultOnce.Do(func() {
+		b, err := json.Marshal(DefaultIntentMatrix)
+		if err != nil {
+			b = []byte("{}")
+		}
+		intentMatrixDefaultJSON = string(b)
+	})
+	return intentMatrixDefaultJSON
+}
+
+// activeIntentMatrix DB 优先读取意图矩阵（geo_dicts/intent_matrix.matrix），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置 DefaultIntentMatrix。
+func activeIntentMatrix() map[string]IntentStrategy {
+	var m map[string]IntentStrategy
+	if err := DictJSON(model.DictCategoryIntentMatrix, "matrix", defaultIntentMatrixJSON(), &m); err != nil || len(m) == 0 {
+		return DefaultIntentMatrix
+	}
+	return m
+}
+
 // GetIntentStrategy 获取意图策略；未知意图回退到"信息"基础策略
 func GetIntentStrategy(intent string) IntentStrategy {
-	if st, ok := DefaultIntentMatrix[intent]; ok {
+	m := activeIntentMatrix()
+	if st, ok := m[intent]; ok {
+		return st
+	}
+	if st, ok := m["信息"]; ok {
 		return st
 	}
 	return DefaultIntentMatrix["信息"]

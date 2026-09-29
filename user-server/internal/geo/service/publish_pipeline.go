@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -35,8 +36,8 @@ type PlatformMeta struct {
 	NeedLogin   bool   `json:"need_login"`
 }
 
-// PlatformMetas 返回所有平台的元信息表
-func PlatformMetas() map[string]PlatformMeta {
+// defaultPlatformMetas 内置平台元信息表（DB 为空/故障时兜底）
+func defaultPlatformMetas() map[string]PlatformMeta {
 	return map[string]PlatformMeta{
 		PlatformJuejin: {Name: PlatformJuejin, DisplayName: "掘金", Category: PlatformBrowser, MaxTitleLen: 30, MaxBodyLen: 15000, NeedLogin: true},
 		PlatformXhs:    {Name: PlatformXhs, DisplayName: "小红书", Category: PlatformBrowser, MaxTitleLen: 20, MaxBodyLen: 1000, NeedLogin: true},
@@ -45,6 +46,32 @@ func PlatformMetas() map[string]PlatformMeta {
 		PlatformMedium: {Name: PlatformMedium, DisplayName: "Medium", Category: PlatformAPI, MaxTitleLen: 100, MaxBodyLen: 100000},
 		PlatformDevTo:  {Name: PlatformDevTo, DisplayName: "DEV Community", Category: PlatformAPI, MaxTitleLen: 100, MaxBodyLen: 100000},
 	}
+}
+
+// platformMetasDefaultJSON 缺省平台元信息 JSON（DB 为空/故障时兜底）
+var platformMetasDefaultOnce sync.Once
+var platformMetasDefaultJSON string
+
+func defaultPlatformMetasJSON() string {
+	platformMetasDefaultOnce.Do(func() {
+		b, err := json.Marshal(defaultPlatformMetas())
+		if err != nil {
+			b = []byte("{}")
+		}
+		platformMetasDefaultJSON = string(b)
+	})
+	return platformMetasDefaultJSON
+}
+
+// PlatformMetas 返回所有平台的元信息表：
+// DB 优先（geo_dicts/platform_metas.table），缺行自动播种；
+// DB 故障或空表时 fail-open 回内置表。
+func PlatformMetas() map[string]PlatformMeta {
+	var m map[string]PlatformMeta
+	if err := DictJSON(model.DictCategoryPlatformMetas, "table", defaultPlatformMetasJSON(), &m); err != nil || len(m) == 0 {
+		return defaultPlatformMetas()
+	}
+	return m
 }
 
 // AdaptedContent 适配某平台后的内容

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/config"
@@ -13,6 +14,56 @@ import (
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
+
+// crawlerUAsDefaultJSON 缺省 8 种 AI Bot UA JSON（DB 为空/故障时兜底）
+var crawlerUAsDefaultOnce sync.Once
+var crawlerUAsDefaultJSON string
+
+func defaultCrawlerUAsJSON() string {
+	crawlerUAsDefaultOnce.Do(func() {
+		b, err := json.Marshal(aiBotUserAgents)
+		if err != nil {
+			b = []byte("[]")
+		}
+		crawlerUAsDefaultJSON = string(b)
+	})
+	return crawlerUAsDefaultJSON
+}
+
+// activeCrawlerUAs DB 优先读取 AI 爬虫 UA（geo_dicts/crawler_uas.list），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置 aiBotUserAgents。
+func activeCrawlerUAs() []string {
+	var list []string
+	if err := DictJSON(model.DictCategoryCrawlerUAs, "list", defaultCrawlerUAsJSON(), &list); err != nil || len(list) == 0 {
+		return aiBotUserAgents
+	}
+	return list
+}
+
+// keywordLandingsDefaultJSON 缺省关键词→落地路径 JSON（DB 为空/故障时兜底）
+var keywordLandingsDefaultOnce sync.Once
+var keywordLandingsDefaultJSON string
+
+func defaultKeywordLandingsJSON() string {
+	keywordLandingsDefaultOnce.Do(func() {
+		b, err := json.Marshal(keywordToLandings)
+		if err != nil {
+			b = []byte("{}")
+		}
+		keywordLandingsDefaultJSON = string(b)
+	})
+	return keywordLandingsDefaultJSON
+}
+
+// activeKeywordLandings DB 优先读取关键词落地映射（geo_dicts/keyword_landings.map），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置 keywordToLandings。
+func activeKeywordLandings() map[string][]string {
+	var m map[string][]string
+	if err := DictJSON(model.DictCategoryKeywordLandings, "map", defaultKeywordLandingsJSON(), &m); err != nil || len(m) == 0 {
+		return keywordToLandings
+	}
+	return m
+}
 
 var aiBotUserAgents = []string{
 	"GPTBot/1.1 (+https://openai.com/gptbot)",
@@ -66,9 +117,10 @@ var keywordToLandings = map[string][]string{
 }
 
 // landingURLs 把关键词翻译成要爬的绝对 URL；没配过关键词的兜底是官网首页。
+// 落地映射 DB 优先（geo_dicts/keyword_landings.map），兜底内置 keywordToLandings。
 func landingURLs(kw string) []string {
 	base := config.WebsiteBaseURL()
-	paths, ok := keywordToLandings[kw]
+	paths, ok := activeKeywordLandings()[kw]
 	if !ok {
 		paths = []string{"/"}
 	}
@@ -246,13 +298,14 @@ func defaultSeedKeywords() []string {
 }
 
 func pickRandomUAs(n int) []string {
-	if n >= len(aiBotUserAgents) {
-		n = len(aiBotUserAgents)
+	uas := activeCrawlerUAs()
+	if n >= len(uas) {
+		n = len(uas)
 	}
-	perm := rand.Perm(len(aiBotUserAgents))
+	perm := rand.Perm(len(uas))
 	out := make([]string, n)
 	for i := 0; i < n; i++ {
-		out[i] = aiBotUserAgents[perm[i]]
+		out[i] = uas[perm[i]]
 	}
 	return out
 }

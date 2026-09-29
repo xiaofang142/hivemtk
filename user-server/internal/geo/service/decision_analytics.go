@@ -243,6 +243,12 @@ type DomainCompareRow struct {
 
 // GetCrawlerStats 返回关键词 + 域名 + 对比 三维度
 func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*CrawlerStatsResponse, error) {
+	// 信源站点等级 DB 优先（geo_dicts/source_levels.map），缺行自动播种；
+	// 失败时不注入，repository 回退内置表（fail-open）。
+	var levelMap map[string]string
+	if err := DictJSON(model.DictCategorySourceLevels, "map", `{"weibanzhushou.com":"B","tanmascrm.com":"C","fengchenscrm.com":"C","hubspot.com":"A","producthunt.com":"A","techcrunch.com":"A","intercom.com":"A","baidu.com":"A","google.com":"A","bing.com":"A"}`, &levelMap); err == nil && len(levelMap) > 0 {
+		repository.SetDomainSourceLevel(levelMap)
+	}
 	keywordRows, _ := s.crawler.StatsByKeyword(ctx, 30)
 	domainRows, _ := s.crawler.StatsByDomain(ctx, 30)
 

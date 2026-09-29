@@ -389,12 +389,37 @@ var DefaultLongtailTemplates = []LongtailTemplate{
 	{"某企业{seed}落地实践", "case_study", "retention"},
 }
 
+// longtailTemplatesDefaultJSON 缺省 23 模板 JSON（DB 为空/故障时兜底）
+var longtailTemplatesDefaultOnce sync.Once
+var longtailTemplatesDefaultJSON string
+
+func defaultLongtailTemplatesJSON() string {
+	longtailTemplatesDefaultOnce.Do(func() {
+		b, err := json.Marshal(DefaultLongtailTemplates)
+		if err != nil {
+			b = []byte("[]")
+		}
+		longtailTemplatesDefaultJSON = string(b)
+	})
+	return longtailTemplatesDefaultJSON
+}
+
+// activeLongtailTemplates DB 优先读取长尾模板（geo_dicts/longtail_templates.templates），
+// 缺行自动播种；DB 故障或空表时 fail-open 回内置 DefaultLongtailTemplates。
+func activeLongtailTemplates() []LongtailTemplate {
+	var rows []LongtailTemplate
+	if err := DictJSON(model.DictCategoryLongtailTemplates, "templates", defaultLongtailTemplatesJSON(), &rows); err != nil || len(rows) == 0 {
+		return DefaultLongtailTemplates
+	}
+	return rows
+}
+
 // CombineLongtail 模板化长尾词组合
 // seedWords: 种子词列表
-// templates: 不传则用 DefaultLongtailTemplates
+// templates: 不传则用 DB 优先的 activeLongtailTemplates（兜底 DefaultLongtailTemplates）
 func (s *KeywordMiningService) CombineLongtail(ctx context.Context, seedWords []string, templates []LongtailTemplate) ([]*model.GeoKeyword, error) {
 	if len(templates) == 0 {
-		templates = DefaultLongtailTemplates
+		templates = activeLongtailTemplates()
 	}
 
 	seen := map[string]*model.GeoKeyword{}

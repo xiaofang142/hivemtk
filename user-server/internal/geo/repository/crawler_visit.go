@@ -68,9 +68,24 @@ var domainSourceLevel = map[string]string{
 	"bing.com":          "A",
 }
 
+// domainSourceLevelOverride DB 驱动覆盖（service 层经 geo_dicts/source_levels 加载后注入）。
+// 为空时回退内置 domainSourceLevel；Repository 不直接读字典表（五层架构：禁止反向依赖 service）。
+var domainSourceLevelOverride map[string]string
+
+// SetDomainSourceLevel 注入 DB 驱动的站点等级映射（nil/空表示用内置表）
+func SetDomainSourceLevel(m map[string]string) {
+	domainSourceLevelOverride = m
+}
+
 func sourceLevelOf(site string, isSelfSite bool) string {
 	if isSelfSite {
 		return "A"
+	}
+	if len(domainSourceLevelOverride) > 0 {
+		if lv, ok := domainSourceLevelOverride[site]; ok {
+			return lv
+		}
+		return "D"
 	}
 	if lv, ok := domainSourceLevel[site]; ok {
 		return lv
