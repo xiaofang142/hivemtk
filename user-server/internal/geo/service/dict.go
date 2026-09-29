@@ -48,8 +48,13 @@ func (s *DictService) GetString(ctx context.Context, category, key, fallback str
 			return str
 		}
 	}
-	d, err := s.repo.Get(category, key)
+	d, err := s.repo.GetAny(category, key)
 	if err == nil && d != nil {
+		if !d.Active {
+			// 已停用：回缺省但不播种（否则停用会被复活）；Set 重启会清缓存
+			s.cache.Store(dictCacheKey(category, key), fallback)
+			return fallback
+		}
 		s.cache.Store(dictCacheKey(category, key), d.Value)
 		return d.Value
 	}

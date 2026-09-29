@@ -12,6 +12,8 @@ import (
 type GeoDictRepository interface {
 	// Get 按类目+键取单条（仅启用）
 	Get(category, key string) (*model.GeoDict, error)
+	// GetAny 按类目+键取单条（含停用，用于区分“缺行”与“已停用”，避免停用被自动播种复活）
+	GetAny(category, key string) (*model.GeoDict, error)
 	// ListByCategory 按类目列出全部启用条目（sort 升序）
 	ListByCategory(category string) ([]*model.GeoDict, error)
 	// Upsert 按 (category,key) 幂等写入
@@ -39,6 +41,14 @@ func NewGeoDictRepositoryWithDB(db *gorm.DB) GeoDictRepository {
 func (r *geoDictRepo) Get(category, key string) (*model.GeoDict, error) {
 	var d model.GeoDict
 	if err := r.db.Where("category = ? AND \"key\" = ? AND active = ?", category, key, true).First(&d).Error; err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (r *geoDictRepo) GetAny(category, key string) (*model.GeoDict, error) {
+	var d model.GeoDict
+	if err := r.db.Where("category = ? AND \"key\" = ?", category, key).First(&d).Error; err != nil {
 		return nil, err
 	}
 	return &d, nil

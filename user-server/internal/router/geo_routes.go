@@ -228,10 +228,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.GET("/keyword-mining/funnel", kwMiningCtrl.BuildFunnel)
 	geo.POST("/keyword-mining/pipeline", kwMiningCtrl.TriggerPipeline)
 	geo.GET("/seed-terms", seedTermCtrl.List)
-	geo.POST("/seed-terms/reseed", seedTermCtrl.Reseed)
 	geo.GET("/dicts", dictCtrl.List)
-	geo.PUT("/dicts", dictCtrl.Set)
-	geo.DELETE("/dicts/:category/:key", dictCtrl.Delete)
 
 	// 蜘蛛推送 v2
 	geo.POST("/push/urls", pushCtrl.PushURLs)
@@ -308,6 +305,11 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geoAdmin.GET("/jobs/runs", jobCtrl.Runs)
 	geoAdmin.POST("/jobs/:name/trigger", jobCtrl.Trigger)
 	geoAdmin.PUT("/jobs/:name/schedule", jobCtrl.UpdateSchedule)
+
+	// 字典写操作归管理员：改定价/prompt/UA 等影响全站行为（读接口保持普通鉴权）
+	geoAdmin.POST("/seed-terms/reseed", seedTermCtrl.Reseed)
+	geoAdmin.PUT("/dicts", dictCtrl.Set)
+	geoAdmin.DELETE("/dicts/:category/:key", dictCtrl.Delete)
 }
 
 type geoLeadReporter struct{ db *gorm.DB }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/config"
@@ -70,10 +71,16 @@ var domainSourceLevel = map[string]string{
 
 // domainSourceLevelOverride DB 驱动覆盖（service 层经 geo_dicts/source_levels 加载后注入）。
 // 为空时回退内置 domainSourceLevel；Repository 不直接读字典表（五层架构：禁止反向依赖 service）。
-var domainSourceLevelOverride map[string]string
+// 读写锁：注入发生在请求路径（GetCrawlerStats），读取发生在爬虫记录路径，并发读写需互斥。
+var (
+	domainSourceLevelOverride map[string]string
+	domainSourceLevelMu        sync.RWMutex
+)
 
 // SetDomainSourceLevel 注入 DB 驱动的站点等级映射（nil/空表示用内置表）
 func SetDomainSourceLevel(m map[string]string) {
+	domainSourceLevelMu.Lock()
+	defer domainSourceLevelMu.Unlock()
 	domainSourceLevelOverride = m
 }
 
@@ -81,8 +88,11 @@ func sourceLevelOf(site string, isSelfSite bool) string {
 	if isSelfSite {
 		return "A"
 	}
-	if len(domainSourceLevelOverride) > 0 {
-		if lv, ok := domainSourceLevelOverride[site]; ok {
+	domainSourceLevelMu.RLock()
+	override := domainSourceLevelOverride
+	domainSourceLevelMu.RUnlock()
+	if len(override) > 0 {
+		if lv, ok := override[site]; ok {
 			return lv
 		}
 		return "D"
