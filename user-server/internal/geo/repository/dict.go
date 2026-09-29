@@ -4,8 +4,8 @@ import (
 	"hivemtk-user/internal/geo/model"
 	_db "hivemtk-user/internal/pkg/db"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // GeoDictRepository GEO 通用配置字典
@@ -66,12 +66,20 @@ func (r *geoDictRepo) Upsert(d *model.GeoDict) error {
 	if d == nil {
 		return nil
 	}
-	// 必须显式 Select 全列：GORM Create 默认省略零值字段，否则 active=false
-	// 进不了 INSERT 列，EXCLUDED.active 取列 DEFAULT(true)，停用永远写不进去。
-	return r.db.Select("id", "category", "key", "value", "remark", "active", "sort", "created_at", "updated_at").Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "category"}, {Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value", "remark", "active", "sort", "updated_at"}),
-	}).Create(d).Error
+	// 必须用原生 SQL：GORM 的 `default:true` 标签会在零值时直接替换绑定变量
+	// （DryRun 实测：结构体 Active=false 进 VARS 变成 true），Select 也拦不住；
+	// 导致 active=false 永远写不进去（EXCLUDED.active 取到列 DEFAULT true）。
+	// 原生 Exec 显式绑定，false 就是 false。BeforeCreate hook 在 Exec 下不触发，
+	// 故此处显式补 UUID（与 model.BeforeCreate 保持一致）。
+	if d.ID == "" {
+		d.ID = uuid.NewString()
+	}
+	return r.db.Exec(`INSERT INTO geo_dicts (id, category, "key", value, remark, active, sort, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		ON CONFLICT (category, "key") DO UPDATE SET
+			value = EXCLUDED.value, remark = EXCLUDED.remark, active = EXCLUDED.active,
+			sort = EXCLUDED.sort, updated_at = NOW()`,
+		d.ID, d.Category, d.Key, d.Value, d.Remark, d.Active, d.Sort).Error
 }
 
 func (r *geoDictRepo) Delete(category, key string) error {
