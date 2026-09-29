@@ -169,7 +169,11 @@ CREATE_CUE = re.compile(r"步骤\s*\d|新建|创建")
 # 规则 7：前端 dev server 端口。`user-web/vite.config.js` 的 `server.port` 是唯一真值（现读，不写死）。
 # 触发词后 26 字符内的第一个四位数＝这句话在说的前端端口；窗口必须收紧且不跨句号，
 # 否则"前端 user-web（Node 18+，8211）→ 后端 8204"这种一行两口的正常文案会去吃后端的数。
-FE_CLAIM = re.compile(r"(?:user-web|前端工作台|Vite dev|vite)[^。\n]{0,26}?(\d{4})")
+# `vite` 必须是独立词：裸子串会把 `website/vite.config.js（port: 8213）` 这种
+# **别的前端工程自己的端口行**（PORT_REGISTRY.md 前端开发端口表）读成"把 user-web 端口写成 8213"
+# ⇒ 真值面只有 user-web 一个口，非 user-web 工程的口必被判假。实测本轮就是这处假红。
+# lookbehind 排掉 `/`、`.`、字连字符与 `-`（路径与 `foo-vite` 之类复合词），其余触发词不受影响。
+FE_CLAIM = re.compile(r"(?:user-web|前端工作台|Vite dev|(?<![\w/.-])vite)[^。\n]{0,26}?(\d{4})")
 # 豁免位只留**今天真的在用**的两档：embed-sdk 自己的 vite 预览端口（5174，与 user-web 无关）、
 # 以及 5432/6379（PG/Redis 出厂端口常出现在同一行配置说明里，会被触发词窗口捞走）。
 # 原先还豁免 `playwright|E2E|baseURL`——那是 baseURL 停在 5173 那一代留的口子。本轮把
@@ -229,10 +233,18 @@ def compose_names() -> set[str]:
     以及 `name:` 显式赋值）。按"缩进两格的键 + name 值"收，不按顶层块位置切分——
     本仓 compose 的顶层顺序是 networks/volumes/services，按位置切容易在文件重排后漏收，
     而漏收会让门把真名判成假名（红得无理由）。
+
+    真值面 = 仓里全部 `docker-compose*.yml`（含 dev overlay）。只读主文件会在
+    2026-09-29 模式 C 之后系统性误报：`mtk-user-server-dev` 声明在
+    `docker-compose.dev.yml` 的 `services.user-server-dev.container_name`，
+    而文档按事实引用它 ⇒ 门把真名判成假名。
     """
-    body = read(COMPOSE)
-    names = set(re.findall(r"^\s{2}(mtk[-_][A-Za-z0-9_-]+):", body, re.M))
-    names.update(re.findall(r"^\s+name:\s*(mtk[-_][A-Za-z0-9_-]+)\s*$", body, re.M))
+    names: set[str] = set()
+    for f in sorted(REPO_ROOT.glob("docker-compose*.yml")):
+        body = read(f)
+        names.update(re.findall(r"^\s{2}(mtk[-_][A-Za-z0-9_-]+):", body, re.M))
+        names.update(re.findall(r"^\s+name:\s*(mtk[-_][A-Za-z0-9_-]+)\s*$", body, re.M))
+        names.update(re.findall(r"^\s+container_name:\s*(mtk[-_][A-Za-z0-9_-]+)\s*$", body, re.M))
     return names
 
 
