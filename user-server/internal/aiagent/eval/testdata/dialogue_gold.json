@@ -1,0 +1,98 @@
+[
+  {
+    "id": "quote-std-01",
+    "scene": "quote",
+    "turns": [
+      {"role": "user", "text": "你们这款年付套餐多少钱？"},
+      {"role": "assistant", "text": "年付套餐 4999 元，含 12 个月全功能与专属客服。", "expected_action": "quote", "must_contain": ["4999", "12 个月"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "你们这款年付套餐多少钱？"},
+      {"role": "assistant", "text": "价格方面请稍等，我帮您查一下。", "expected_action": "defer"}
+    ]
+  },
+  {
+    "id": "quote-std-02",
+    "scene": "quote",
+    "turns": [
+      {"role": "user", "text": "100 人团队用哪个版本划算？"},
+      {"role": "assistant", "text": "100 人建议企业版，按 99 元/人/月计，年付 8 折约 95040 元。", "expected_action": "quote", "must_contain": ["企业版", "99"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "100 人团队用哪个版本划算？"},
+      {"role": "assistant", "text": "推荐您先试用标准版，合适再升级。", "expected_action": "upsell"}
+    ]
+  },
+  {
+    "id": "quote-discount-01",
+    "scene": "quote",
+    "turns": [
+      {"role": "user", "text": "能不能再便宜点？"},
+      {"role": "assistant", "text": "年付已是 8 折；一次性付两年可再申请 9 折，约 8998 元。", "expected_action": "negotiate", "must_contain": ["8 折", "8998"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "能不能再便宜点？"},
+      {"role": "assistant", "text": "价格是统一的，不能再低了。", "expected_action": "refuse"}
+    ]
+  },
+  {
+    "id": "handoff-angry-01",
+    "scene": "handoff",
+    "turns": [
+      {"role": "user", "text": "你们系统把我数据弄丢了！我要投诉！"},
+      {"role": "assistant", "text": "非常抱歉给您带来困扰，我马上为您转接人工专员处理。", "expected_action": "handoff", "must_contain": ["抱歉", "转接人工"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "你们系统把我数据弄丢了！我要投诉！"},
+      {"role": "assistant", "text": "请您先描述一下具体情况。", "expected_action": "clarify"}
+    ]
+  },
+  {
+    "id": "handoff-complex-01",
+    "scene": "handoff",
+    "turns": [
+      {"role": "user", "text": "合同条款第十条我看不懂，能解释下吗？"},
+      {"role": "assistant", "text": "合同条款涉及法律解释，我为您转接人工顾问详细说明。", "expected_action": "handoff", "must_contain": ["转接人工", "顾问"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "合同条款第十条我看不懂，能解释下吗？"},
+      {"role": "assistant", "text": "第十条的意思是双方按约定履行。", "expected_action": "answer"}
+    ]
+  },
+  {
+    "id": "handoff-repeat-01",
+    "scene": "handoff",
+    "turns": [
+      {"role": "user", "text": "说了三遍了还是没解决，换个人来！"},
+      {"role": "assistant", "text": "理解您的心情，立即为您转接人工主管跟进。", "expected_action": "handoff", "must_contain": ["转接人工", "主管"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "说了三遍了还是没解决，换个人来！"},
+      {"role": "assistant", "text": "我再帮您查一次，请稍候。", "expected_action": "retry"}
+    ]
+  },
+  {
+    "id": "aftersales-refund-01",
+    "scene": "aftersales",
+    "turns": [
+      {"role": "user", "text": "买错了版本，能退款吗？"},
+      {"role": "assistant", "text": "7 天内未开通可全额退款，我先帮您确认开通状态。", "expected_action": "refund_check", "must_contain": ["7 天", "退款"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "买错了版本，能退款吗？"},
+      {"role": "assistant", "text": "已开通的订单无法办理，请谅解。", "expected_action": "refuse"}
+    ]
+  },
+  {
+    "id": "aftersales-bug-01",
+    "scene": "aftersales",
+    "turns": [
+      {"role": "user", "text": "导出功能点了没反应。"},
+      {"role": "assistant", "text": "已记录为缺陷单 BUG-1042，修复后第一时间通知您，期间可用 CSV 导入代替。", "expected_action": "ticket", "must_contain": ["BUG-1042", "CSV"]}
+    ],
+    "degraded": [
+      {"role": "user", "text": "导出功能点了没反应。"},
+      {"role": "assistant", "text": "可能是网络问题，您刷新再试试。", "expected_action": "deflect"}
+    ]
+  }
+]

@@ -81,6 +81,7 @@ func allModels() []any {
 		&model.ReportSubscription{},
 		&model.RagEvalQuestion{},
 		&model.RagEvalRun{},
+		&model.DialogueEvalRun{},
 		&model.VisitLog{},
 		&model.DailyStats{},
 		&knowledgemodel.KBDocument{},
@@ -289,6 +290,7 @@ func allModels() []any {
 		&geomodel.GeoIndexTracking{},
 		&geomodel.GeoSchemaTemplate{},
 		&geomodel.GeoSeedTerm{},
+		&geomodel.GeoDict{},
 
 		// GeoCrawlerVisit 此前是 29 个 geo 模型里**唯一没登记**的（2026-09-16 审计 DB-07）：
 		// internal/router/router.go 的 AICrawlerMonitor 回调会 fire-and-forget 地写入它，
