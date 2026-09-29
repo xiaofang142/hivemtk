@@ -93,7 +93,7 @@ graph TB
 
 | 组件 | 选型 | 理由 |
 |------|------|------|
-| user-server | Go 1.25 + Gin + GORM | 高性能、静态编译、运维简单 |
+| user-server | Go 1.26 + Gin + GORM | 高性能、静态编译、运维简单 |
 | user-web | Vue 3 + Vite + Element Plus | 现代前端栈、构建快 |
 | PostgreSQL | pgvector 官方镜像 | 1024 维向量原生支持 |
 | Redis | redis:7-alpine | 轻量、Token 存储 |

@@ -89,7 +89,7 @@
 
 | 软件 | 版本要求 | 用途 | 验证命令 |
 |------|---------|------|---------|
-| Go | **1.25+**（go.mod 声明 1.25.0） | 编译 user-server | `go version` |
+| Go | **1.26+**（go.mod 声明 1.26.0） | 编译 user-server | `go version` |
 | Node.js | 18 LTS+ | 构建 user-web / embed-sdk | `node -v` |
 | Docker + Compose | 稳定版 | 数据层容器 | `docker compose version` |
 | psql 客户端 | 14+ | 执行初始化 SQL | `psql --version` |
@@ -100,7 +100,7 @@
 # Ubuntu 22.04 / Debian 12 参考安装
 apt-get update && apt-get install -y \
   curl wget git make postgresql-client \
-# Go 1.25 与 Node 18 请按官方渠道安装，发行版仓库版本可能过旧
+# Go 1.26 与 Node 18 请按官方渠道安装，发行版仓库版本可能过旧
 ```
 
 ### 4.2 获取代码

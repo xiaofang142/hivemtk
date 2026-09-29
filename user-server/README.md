@@ -1,6 +1,6 @@
 # user-server · 用户端后端服务
 
-> HiveMtk 的 Go 后端核心服务：多渠道 CDP、ReAct 智能体引擎、RAG 知识库、智能卡片、触达编排都从这里出。覆盖用户端 94 个核心业务模块，Go 1.25 / Gin / GORM,所有客户业务数据本地化存储。项目总览见 [仓库根 README](../README.md)。
+> HiveMtk 的 Go 后端核心服务：多渠道 CDP、ReAct 智能体引擎、RAG 知识库、智能卡片、触达编排都从这里出。覆盖用户端 94 个核心业务模块，Go 1.26 / Gin / GORM,所有客户业务数据本地化存储。项目总览见 [仓库根 README](../README.md)。
 >
 > 推理栈架构：**宿主机 llama.cpp + TEI 兼容服务**（非容器化），数据层（PostgreSQL + Redis）走 Docker。详见 [`../docs/architecture/HOST_INFERENCE_PLAN.md`](../docs/architecture/HOST_INFERENCE_PLAN.md)。
 >
@@ -36,7 +36,7 @@
 
 | 维度 | 选型 |
 |---|---|
-| 语言 | Go 1.25 |
+| 语言 | Go 1.26 |
 | Web 框架 | [Gin](https://github.com/gin-gonic/gin) v1.9 |
 | ORM | [GORM](https://gorm.io) v1.30 + pgx/v5 |
 | 数据库 | PostgreSQL 16 + pgvector（向量库同库） |
@@ -171,7 +171,7 @@ HIVEMTK_PROFILE=prod make inference-host-up
 
 #### 前置要求
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL 16（启用 pgvector 扩展）
 - Redis 7+（可选，未配置时走进程内缓存）
 - Node.js 20+（仅在需要构建前端时）

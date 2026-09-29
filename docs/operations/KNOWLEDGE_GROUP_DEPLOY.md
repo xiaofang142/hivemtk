@@ -291,7 +291,7 @@ SELECT flag_key, action, actor_id, created_at FROM feature_flag_audit_logs
 > ⚠️ 本仓自 `94415060`「重构宿主机部署」起**不再随附任何 Dockerfile**（`git ls-files | grep -i dockerfile` = 0），
 > 部署形态是宿主机二进制 + 根 `docker-compose.yml` 只起数据层。下面这段是"你要自己容器化时"的样例，
 > 口径按今天的产码核对过：入口包 `./cmd/api`（仓内没有 `cmd/user-server`）、监听 8204（`PORT` 可覆盖）、
-> 存活探针 `/healthz`（`internal/router/router.go:189`）、Go 版本跟 `user-server/go.mod` 的 `go 1.25.0`。
+> 存活探针 `/healthz`（`internal/router/router.go:189`）、Go 版本跟 `user-server/go.mod` 的 `go 1.26.0`。
 > DB 只有 `DB_HOST`/`DB_PORT` 两个占位可覆盖，账号与库名在 `user-server/config.yaml` 里是写死的
 > （`user: admin`、`dbname: user_db`）⇒ 容器化要挂一份改过的 `config.yaml`，别指望 `POSTGRES_USER` 这类变量。
 
@@ -299,7 +299,7 @@ SELECT flag_key, action, actor_id, created_at FROM feature_flag_audit_logs
 
 ```dockerfile
 # 自建镜像样例（放到你自己的路径，仓内不入库）
-FROM golang:1.25 AS builder
+FROM golang:1.26 AS builder
 WORKDIR /build
 COPY user-server/ .
 RUN CGO_ENABLED=0 go build -o /build/user-server ./cmd/api

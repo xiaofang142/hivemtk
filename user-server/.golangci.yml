@@ -10,7 +10,7 @@ version: "2"
 
 run:
   timeout: 5m
-  go: "1.25"
+  go: "1.26"
   # 架构护栏只约束生产代码；测试文件允许跨层构造夹具（如直连 gorm 建内存 DB）
   tests: false
 

@@ -12,7 +12,7 @@
 
 <div align="center">
 
-[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev) [![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org) [![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker&logoColor=white)](https://www.docker.com) [![PostgreSQL 15+](https://img.shields.io/badge/PostgreSQL-15+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![Gitee](https://img.shields.io/badge/Gitee-xhpmayun%2Fhivemtk-C71D23?logo=gitee)](https://gitee.com/xhpmayun/hivemtk) [![GitHub](https://img.shields.io/badge/GitHub-xiaofang142%2Fhivemtk-181717?logo=github)](https://github.com/xiaofang142/hivemtk)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev) [![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org) [![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker&logoColor=white)](https://www.docker.com) [![PostgreSQL 15+](https://img.shields.io/badge/PostgreSQL-15+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![License AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![Gitee](https://img.shields.io/badge/Gitee-xhpmayun%2Fhivemtk-C71D23?logo=gitee)](https://gitee.com/xhpmayun/hivemtk) [![GitHub](https://img.shields.io/badge/GitHub-xiaofang142%2Fhivemtk-181717?logo=github)](https://github.com/xiaofang142/hivemtk)
 
 [📖 英文文档](README.en.md) · [🌐 官网](https://xiaofang142.github.io/hivemtk/) · [📦 功能模块](docs/marketing-features/README.md)
 
@@ -206,7 +206,7 @@ HiveMtk 是私域营销系统,聚焦"多端触达 + 销冠 SOP + CDP + 零出域
 
 后端严格遵循五层架构(Controller → Service → Repository → Model → DTO,禁止跨层调用,CI 强制检查)。完整规范见 [docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md),与平台端的分工见 [docs/architecture/部署方案_用户端.md](docs/architecture/部署方案_用户端.md)。
 
-**技术栈**:Go 1.25 + Gin + GORM · Vue 3 + Vite + Element Plus + Pinia · PostgreSQL 15 + pgvector · Redis 7 · llama.cpp + Qwen2.5 · TEI + bge-m3 / bge-reranker-v2-m3 · Docker Compose。
+**技术栈**:Go 1.26 + Gin + GORM · Vue 3 + Vite + Element Plus + Pinia · PostgreSQL 15 + pgvector · Redis 7 · llama.cpp + Qwen2.5 · TEI + bge-m3 / bge-reranker-v2-m3 · Docker Compose。
 
 ---
 

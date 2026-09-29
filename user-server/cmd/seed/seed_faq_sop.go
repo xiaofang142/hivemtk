@@ -244,7 +244,7 @@ func (s *faqSopSeeder) faqOps() []model.FAQEntry {
 		},
 		{
 			Q:        "user-server 构建报随机错误 " + seedTag,
-			A:        "user-server 构建缓存易损坏，若遇随机 undefined/EOF 报错，先 go clean -cache 再编译：cd hivemtk/user-server && go clean -cache && go build ./...。若仍失败检查 Go 版本需 1.25+。",
+			A:        "user-server 构建缓存易损坏，若遇随机 undefined/EOF 报错，先 go clean -cache 再编译：cd hivemtk/user-server && go clean -cache && go build ./...。若仍失败检查 Go 版本需 1.26+。",
 			Keywords: []string{"构建", "报错", "build", "缓存"},
 			Conf:     0.91,
 		},

@@ -441,7 +441,7 @@ func (s *assetsSeeder) buildAssetBundles() []model.AssetBundle {
 				{Role: "user", Content: "make dev 之后访问不了页面"},
 				{Role: "assistant", Content: "先排查三处：\n1) 健康检查：curl http://localhost:8204/health 应返回 200；非 200 说明 user-server 没起来。\n2) 端口冲突：常见是 8202-8209 被占用（PG 8202、Redis 8203、LLM 8207、Embedding 8208、Rerank 8209）。用 lsof -i :8204 找到占用进程释放掉，或改 .env 里对应的端口变量后重启。\n3) 初始化未做：首次需访问 http://<ip>:8204/setup 设超管账号，之后才能登录。\nuser-server 是宿主机进程：make dev 的终端输出即日志（air 模式可 tail -f user-server/tmp/air.log），数据层日志用 make db-logs。把对应输出的最后 20 行发我，我帮你看具体原因。"},
 				{Role: "user", Content: "构建时老是报随机 EOF/undefined"},
-				{Role: "assistant", Content: "这是 user-server 构建缓存易损坏导致的典型现象，不是代码问题。在 hivemtk/user-server 目录执行：\n  go clean -cache && go build ./...\n如果仍失败，确认 Go 版本 >= 1.25。构建成功后重新 make dev 即可。"},
+				{Role: "assistant", Content: "这是 user-server 构建缓存易损坏导致的典型现象，不是代码问题。在 hivemtk/user-server 目录执行：\n  go clean -cache && go build ./...\n如果仍失败，确认 Go 版本 >= 1.26。构建成功后重新 make dev 即可。"},
 			},
 			Examples: model.JSONArray{
 				map[string]any{

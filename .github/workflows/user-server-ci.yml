@@ -114,7 +114,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
@@ -201,6 +201,8 @@ jobs:
         # 新命中（5 govet + 1 staticcheck），换版本与修存量不应混在一个提交里。
         # 再升 Go 目标版本时，这里的 pin 要一并核对 —— Makefile 的 GOLANGCI_LINT_VERSION
         # 与本行由 `make lint-version-check` 强制对齐（不一致就拒绝跑本地 lint）。
+        # 2026-09-29：go.mod/.golangci.yml 升 go1.26 后复核过 pin：v2.10.0 以 go1.26.0 构建
+        # ≥ 目标 1.26，config 加载不会再 exit 3。
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.10.0
@@ -278,7 +280,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
@@ -289,13 +291,13 @@ jobs:
         #      CI parity 扫描直接 exit 1，门禁尚未运行即失败，与代码无关；
         #   ② 本地 go1.26.0 扫描测得 26 个「可达」stdlib 漏洞（crypto/x509 等），
         #      仅在 go1.26.1 修复，非本仓库可编辑消除，转阻断会立即红。
-        # 前置条件：CI 工具链升级到 go1.26.1+（且 govulncheck 可安装）后再转阻断。
-        # 在此之前本步骤保留 continue-on-error，作为漏洞趋势观测而非门禁。
+        # 2026-09-29：前置条件已满足——setup-go 升 1.26（解析到 1.26.x ≥ 1.26.1，stdlib 26 条已修），
+        # govulncheck@latest(v1.8.0, 要求 go≥1.26) 可安装；依赖侧 edwards25519 已升 v1.2.0（包级归零），
+        # x/crypto ssh/openpgp 为不可达模块级项（本仓仅用 bcrypt）。故按既定计划转阻断（去 continue-on-error）。
         working-directory: user-server
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-        continue-on-error: true
 
   # ------------------------------------------------------------------
   # -race：拆成 core + service 两片。
@@ -336,7 +338,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
@@ -416,7 +418,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
@@ -493,7 +495,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
@@ -636,7 +638,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
           cache-dependency-path: user-server/go.sum
 
