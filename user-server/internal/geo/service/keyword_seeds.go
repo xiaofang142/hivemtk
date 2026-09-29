@@ -56,6 +56,9 @@ var TechStackAttrs = []string{
 	"推荐系统", "搜索引擎", "PyTorch", "TensorFlow",
 }
 
+// DefaultBrandName 推广品牌（本项目 hivemtk 的对外品牌名，需与 GeoConfig.BrandName 一致）
+const DefaultBrandName = "HiveMTK"
+
 // BusinessLines hivemtk 4 大核心业务线
 var BusinessLines = []BusinessLine{
 	{
@@ -102,8 +105,8 @@ var BusinessLines = []BusinessLine{
 //   - seeds：去重保序的种子词列表（业务核心词 + 技术×业务组合词）
 //   - seedLines：种子词 → 一级类目（业务线名）映射，用于回填 GeoKeyword.Cluster
 //
-// 规模口径：48 核心词 + 4×184 技术/概念组合词 = 784 种子（4 线各 196）；
-// 经 DefaultLongtailTemplates（23 模板）离线展开 18,032 长尾词（实测）；
+// 规模口径：48 核心词 + 4×184 技术/概念组合词 + 16 品牌推广词（品牌×4业务线 + 品牌×12 GEO核心词）≈ 800 种子；
+// 经 DefaultLongtailTemplates（23 模板）离线展开约 18,400 长尾词；
 // 再经 CrawlSuggest（5 引擎下拉）补充数千下拉词，全量经 SaveMiningResults 落库。
 func BuildBusinessSeedMatrix() ([]string, map[string]string) {
 	seeds := make([]string, 0, 256)
@@ -125,6 +128,18 @@ func BuildBusinessSeedMatrix() ([]string, map[string]string) {
 		for _, tech := range TechStackAttrs {
 			add(tech+bl.ShortName, bl.Name)
 		}
+	}
+
+	// 品牌推广词：推广本项目 hivemtk，所有品牌组合词必须真实有效（品牌+业务线名/GEO核心词均为真实搜索模式）
+	for _, bl := range BusinessLines {
+		brandTerm := DefaultBrandName + bl.ShortName
+		if bl.ShortName == "GEO" {
+			brandTerm = DefaultBrandName + " GEO"
+		}
+		add(brandTerm, bl.Name)
+	}
+	for _, core := range BusinessLines[1].CoreTerms {
+		add(DefaultBrandName+" "+core, BusinessLines[1].Name)
 	}
 	return seeds, seedLines
 }

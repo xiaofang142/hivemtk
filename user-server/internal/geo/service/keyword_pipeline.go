@@ -18,8 +18,10 @@ import (
 const (
 	// geoPipelineSuggestSeedCap 下拉抓取的种子子集上限（5 引擎 × N 种子 = HTTP 请求数，限流保护）
 	geoPipelineSuggestSeedCap = 30
-	// geoPipelineDefaultSEOBatch 每轮 LLM SEO（生成→评分→验证→探针）的词数上限，防成本爆炸
-	geoPipelineDefaultSEOBatch = 5
+	// geoPipelineDefaultSEOBatch 每轮 LLM SEO（生成→评分→验证→探针）的词数上限。
+	// 待 SEO 队列按 last_mined_at 轮转拉取，每日一轮逐步消化 backlog、无遗留；
+	// 20 词约消耗单轮超时（60min）的一半预算，兼顾成本与清零速度，可经 agent_llm.geo_pipeline_batch_per_run 调整
+	geoPipelineDefaultSEOBatch = 20
 	// geoPipelineSEO WordCount 生成字数
 	geoPipelineSEOWordCount = 800
 )
@@ -28,7 +30,7 @@ func geoPipelineBatchPerRun(ctx context.Context) int {
 	return baseservice.GlobalConfigParam().GetInt(ctx, "agent_llm", "geo_pipeline_batch_per_run", geoPipelineDefaultSEOBatch)
 }
 
-// keywordPipelineJob 关键词批量管线定时任务（4 业务线 × 技术栈 → 数千词 → 有界 LLM SEO）
+// keywordPipelineJob 关键词批量管线定时任务（4 业务线 × 技术/概念 × 品牌 → 万词级 → 队列轮转 LLM SEO，清零 backlog 不遗留）
 //
 // 阶段（零重试、无外部 LLM 直调，全部走 GEO 站内服务）：
 //  1. 种子矩阵：BuildBusinessSeedMatrix（离线确定性，4 业务线一级类目）
