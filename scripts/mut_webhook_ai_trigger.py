@@ -16,10 +16,10 @@ QQ 的归属在中台 Ingress，其余渠道的归属在 handleJob。它一旦�
   V2 只把企微除名（`&& channel != ChannelWeCom`）   ⇒ 只有 WeCom 子例红，另两家与 QQ、TG 两格必须仍绿
   V3 只把飞书除名（`&& channel != ChannelFeishu`）  ⇒ 只有 Feishu 子例红，另两家与 QQ、TG 两格必须仍绿
   V4 只把 WhatsApp 除名（`&& channel != ChannelWhatsapp`）⇒ 只有 WhatsApp 子例红，另两家与 QQ、TG 两格必须仍绿
-  V5 删掉 `tgExtra.GateHandled` 那三行守卫          ⇒ 只有 TG 的 `/start` 那一格红（它期望 0 变 1），
+  V5 删掉 `tgExtra.GateHandled` 整段守卫块              ⇒ 只有 TG 的 `/start` 那一格红（它期望 0 变 1），
      私聊正控制格与另四臂必须仍绿 —— 这一刀打在守卫块上而不是触发行上，是另一处承重墙。
 
-V1 与 V2–V4 打在**同一行源码**却红在**不同断言集合**，V5 打在**上一行**却只红在**「不该触发」那一格**：
+V1 与 V2–V4 打在**同一行源码**却红在**不同断言集合**，V5 打在**紧邻上方的守卫块**却只红在**「不该触发」那一格**：
 "一处符号多处消费要逐格拆刀"与"抑制臂只能用反向格杀"两条口径在这里分别是判据。
 V2–V4 的"另几家必须仍绿"是本电池比常规"点名杀手"多出来的一条硬判据：
 表驱动用例最常见的失效是几条腿其实走的是同一条路径（渠道分支没真分开），
@@ -84,9 +84,13 @@ OTHERS = sorted([NQP, WECOM, FEISHU, WAPP, QQ])
 
 # 触发块那一行的原文（V1–V4 全打在这里，锚点必须命中恰好 1 次）
 ANCHOR = "\tif triggerAI && channel != ChannelQQ {\n"
-# 上一行的 TG /start 网关抑制块（V5 的锚点，同样要求恰好 1 次）
+# 紧邻上方的 TG /start 网关抑制块（V5 的锚点，同样要求恰好 1 次）
 GUARD = ("\tif channel == ChannelTelegram && tgExtra != nil && tgExtra.GateHandled {\n"
-         "\t\ttriggerAI = false // /start 网关验证已消费\n"
+         "\t\tif tgExtra.GateMuted {\n"
+         "\t\t\tlogger.Infof(\"[Webhook] TG 群门控互锁：发言人未通过验证，不触发 AI event=%s chat=%s sender=%s\",\n"
+         "\t\t\t\tjob.event.EventID, payload.ChatID, payload.Sender)\n"
+         "\t\t}\n"
+         "\t\ttriggerAI = false // /start 网关验证已消费 / 门控群未验证成员发言\n"
          "\t}\n")
 
 # (格名, 这一刀改坏的是什么, old, new, 必须红的名单, 必须仍绿的名单)

@@ -116,7 +116,7 @@ import sys
 import time
 from pathlib import Path
 
-from mut_dispose import dispose, workdir
+from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir   # 三道闸：装架前挡危险 --clone，显式收尾只回收私有克隆，兜底闸接住没接闸的退出路
 from redact import scrub
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1111,6 +1111,7 @@ def selftest(logs: Path, clone: Path, env: dict) -> int:
         finally:
             path.write_text(original, encoding="utf-8")
             if md5_bytes(path) != base:
+                leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                 raise SystemExit(f"[selftest] {name} 还原后 md5 不一致，停机")
         (logs / f"selftest_{want}.log").write_text(scrub(r["out"]))
         got = classify(r, None, expect_red, "", "test")
@@ -1187,6 +1188,7 @@ def main() -> int:
         print(f"取证基线：HEAD={head} 工作树={ROOT} {load} 日志 tag={args.tag}")
 
         clone = prepare(tmp, owned)
+        dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         env = test_env(clone)
         if not pg_ready(env):
             print(f"ENV-BROKEN：测试库 {env['POSTGRES_TEST_HOST']}:{env['POSTGRES_TEST_PORT']} 连不上 ⇒ "
@@ -1236,6 +1238,7 @@ def main() -> int:
                 finally:
                     files[rel].write_text(originals[rel])
                     if md5_bytes(files[rel]) != base[rel]:
+                        leave_for_evidence("还原后 md5 不一致：现场只活在克隆里")
                         raise SystemExit(f"{code} 还原后 md5 与开刀前不一致，停机（后面全是脏树读数）")
                 (logs / f"{code}.log").write_text(scrub(r["out"]))
                 status = classify(r, controls[pkg + filt]["settled"], expect_red, expect_reason, judge)
