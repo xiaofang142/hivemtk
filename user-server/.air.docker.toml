@@ -1,0 +1,34 @@
+# 容器内热重载配置：与 .air.toml 同构，差异仅两处——
+# 1. 不 source ../.env（容器内只有 /app 挂载，../.env 不存在；环境由 compose 的 env_file+environment 注入）
+# 2. DB/Redis 主机名由 compose environment 覆盖为容器网络别名（见 docker-compose.dev.yml）
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/main ./cmd/api"
+bin = "tmp/main"
+include_ext = ["go", "tpl", "tmpl", "html", "yaml", "json"]
+exclude_dir = ["tmp", "dist", "node_modules", "logs", "bin", "backups", "uploads", "data", "vendor", ".git"]
+exclude_regex = ["_test\\.go$", "flycheck_", "\\.out$", "\\.prof$", "\\.bak$", "coverage\\.html$"]
+exclude_unchanged = true
+delay = 1000
+stop_on_error = true
+log = "air.log"
+
+[env]
+CGO_ENABLED = "0"
+
+[color]
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true

@@ -1,0 +1,9 @@
+# 本地开发热重载镜像：源码由 bind-mount 注入，air 监听变更即时重编。
+# 仅用于 docker-compose.dev.yml，生产镜像另见 Dockerfile（如有）。
+FROM golang:1.26-bookworm
+
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+CMD ["air", "-c", ".air.docker.toml"]

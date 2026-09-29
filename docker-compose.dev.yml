@@ -1,0 +1,41 @@
+# 本地开发覆盖：后端进容器热重载（air + 源码 bind-mount），DB/Redis 沿用主 compose 容器。
+# 前端仍在宿主机跑（npm run dev），经 127.0.0.1:8204 连本容器。
+# 用法：docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d user-server-dev
+services:
+  user-server-dev:
+    build:
+      context: ./user-server
+      dockerfile: Dockerfile.dev
+    container_name: mtk-user-server-dev
+    ports:
+      - "127.0.0.1:8204:8204"
+    volumes:
+      - ./user-server:/app
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+    # .env 提供 JWT/密钥等；environment 覆盖容器网络可达的主机名（优先级高于 env_file）
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mtk-postgres
+      DB_PORT: "8202"
+      REDIS_HOST: mtk-redis
+      REDIS_PORT: "8203"
+    networks:
+      mtk-user-network:
+        aliases:
+          - user-server-dev
+    depends_on:
+      mtk-postgres:
+        condition: service_healthy
+      mtk-redis:
+        condition: service_started
+    restart: "no"
+
+volumes:
+  go-build-cache:
+  go-mod-cache:
+
+networks:
+  mtk-user-network:
+    external: true
