@@ -35,7 +35,6 @@ type fakeLinkSigner struct {
 	gotEmail    string
 	gotJobID    string
 	calls       int
-	failOpenLog string
 }
 
 func (f *fakeLinkSigner) GenerateUnsubscribeLink(_ context.Context, email, jobID string) (string, error) {

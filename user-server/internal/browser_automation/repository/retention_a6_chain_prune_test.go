@@ -37,9 +37,6 @@ const (
 	a6SourceTwo = "test:retention_a6_two"
 )
 
-// a6FixedCutoff 是取整到秒的裁剪界：两次甚至三次裁剪传同一个值，cutoff_source 不同时唯一键不撞。
-func a6FixedCutoff() time.Time { return time.Now().UTC().AddDate(0, 0, -a6Days).Truncate(time.Second) }
-
 // a6RowAt 与 a6Row 同形，唯一区别是 created_at 写死成传入的瞬时（gorm 的 autoCreateTime 只在零值时填，
 // 给了非零值便如实落库）——需要把多行钉在同一瞬时的窗口切分腿用它。
 func a6RowAt(sessionID uint, seq int, action, payload string, at time.Time) *model.BrowserCommandLog {
@@ -58,16 +55,6 @@ func a6RawDigestCount(t *testing.T, db *gorm.DB) int64 {
 	var n int64
 	if err := db.Model(&model.BrowserAuditDigest{}).Count(&n).Error; err != nil {
 		t.Fatalf("数摘要行失败：%v", err)
-	}
-	return n
-}
-
-// a6RawLogCount 跨 session 数命令日志剩余行。
-func a6RawLogCount(t *testing.T, db *gorm.DB) int64 {
-	t.Helper()
-	var n int64
-	if err := db.Model(&model.BrowserCommandLog{}).Count(&n).Error; err != nil {
-		t.Fatalf("数命令日志失败：%v", err)
 	}
 	return n
 }
