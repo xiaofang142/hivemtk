@@ -100,7 +100,7 @@ window.mcwInstance.destroy()
 cd embed-sdk
 npm install
 npm run dev
-# 启动 Vite dev server，自动打开 http://localhost:5174/demo.html
+# 启动 Vite dev server，自动打开 http://localhost:8214/demo.html
 ```
 
 ### 6. 构建生产产物

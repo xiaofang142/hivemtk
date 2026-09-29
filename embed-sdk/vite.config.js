@@ -22,7 +22,9 @@ export default defineConfig({
     target: 'es2018'
   },
   server: {
-    port: 5174,
+    // 8214 固定（与 platform-contributor 8215 相邻），拒绝漂移
+    port: 8214,
+    strictPort: true,
     open: '/demo.html'
   }
 })

@@ -31,7 +31,7 @@ npm install
 
 | 命令 | 作用 |
 |---|---|
-| `npm run dev` | 启动 Vite dev server，自动打开 `http://localhost:5174/demo.html` |
+| `npm run dev` | 启动 Vite dev server，自动打开 `http://localhost:8214/demo.html` |
 | `npm run build` | Vite 库模式构建，输出 `dist/marketing-chat-widget.{iife,esm}.js` |
 | `npm run preview` | 预览构建产物 |
 | `npm run test` | 运行 `test/unit.test.mjs` 单元测试（需先 `npm run build`） |
@@ -43,11 +43,11 @@ npm install
 ### 2.1 端口对照表
 
 > **核心约束**：`src/config.js` 的 `DEFAULTS.apiBaseURL` = **`script 同源` 或 `window.location.origin`**（不写死端口）
-> 但默认行为上**通过 user-server 提供 demo**（见 `vite.config.js` 的 `server.port=5174`），dev 模式下 demo.html 的 `{apiBaseUrl}` 会被自动替换为 `http://localhost:8204`（user-server 端口）
+> 但默认行为上**通过 user-server 提供 demo**（见 `vite.config.js` 的 `server.port=8214`），dev 模式下 demo.html 的 `{apiBaseUrl}` 会被自动替换为 `http://localhost:8204`（user-server 端口）
 
 | 端口 | 服务 / 应用 | 启动入口 | 单一源 | 文档源 |
 | --- | --- | --- | --- | --- |
-| **5174** | **embed-sdk Vite dev**（demo.html 托管） | `npm run dev` | `vite.config.js server.port=5174` | `vite.config.js:27` |
+| **8214** | **embed-sdk Vite dev**（demo.html 托管） | `npm run dev` | `vite.config.js server.port=8214` | `vite.config.js:25` |
 | **8204** | **user-server**（demo.html 实际请求目标） | `cd ../user-server && go run ./cmd/api` | user-server `config.DefaultListenPort` | user-server/docs/dev/DEVELOPMENT.md §2.4 |
 | 8207 | LLM（user-server 本地推理） | user-server `make inference-host-up` | user-server `config.DefaultLLMPort` | user-server docs §2.4 |
 | 8208 | Embedding | user-server `make inference-host-up` | user-server `config.DefaultEmbeddingPort` | user-server docs §2.4 |
@@ -55,14 +55,14 @@ npm install
 **前端启动约束**（禁软启动 / 禁多处硬编码）：
 
 1. SDK 集成后**不绑定端口**——`apiBaseURL` 走 `data-api-base-url` 属性 / `window.MarketingChatWidgetConfig.apiBaseURL` / script 同源
-2. demo.html 端口 5174 是 Vite dev 端口（仅 demo），不影响 SDK 产物
+2. demo.html 端口 8214 是 Vite dev 端口（仅 demo），不影响 SDK 产物
 3. WS 端点由 user-server 端注册：`/api/ws/visitor`（`service_routes.go`）—— SDK 端**禁止写绝对 WS URL**
 
 ### `node demo.html` 调试方式
 
 `demo.html` 不能直接 `node demo.html` 运行（它是 HTML 文件）。正确的本地调试方式：
 
-1. **方式 A（推荐）**：`npm run dev` 后访问 `http://localhost:5174/demo.html`
+1. **方式 A（推荐）**：`npm run dev` 后访问 `http://localhost:8214/demo.html`
 2. **方式 B**：先 `npm run build`，再用任意静态服务器（`python3 -m http.server 8080`）从 embed-sdk 根目录提供服务，访问 `http://localhost:8080/demo.html`，此时 demo.html 会加载 `./dist/marketing-chat-widget.iife.js`
 3. **方式 C**：让 user-server 在 8204 端口运行后，demo.html 中的 `{apiBaseUrl}` 会被自动替换为 `http://localhost:8204`
 
@@ -366,7 +366,7 @@ aws s3 sync dist/ s3://cdn.example.com/embed/ \
 
 ### 8.1 demo.html 本地调试
 
-- `npm run dev` 启动 Vite，自动打开 `http://localhost:5174/demo.html`
+- `npm run dev` 启动 Vite，自动打开 `http://localhost:8214/demo.html`
 - demo.html 顶部有「占位符」面板，可动态修改 `apiBaseUrl` / `channelId` / `primaryColor`
 - 每个场景卡片下方有「激活此场景」按钮，会销毁旧 widget 并按新配置重新加载 SDK
 - 场景 5「编程式控制」提供 `open() / close() / destroy()` 按钮和实时事件日志
@@ -437,7 +437,7 @@ window.mcwInstance.config
 ```js
 // 查看当前白名单
 window.mcwInstance.config.allowedOrigins
-// 例如：['http://localhost:8204', 'http://localhost:5174']
+// 例如：['http://localhost:8204', 'http://localhost:8214']
 
 // 临时增加白名单（调试用）
 window.mcwInstance.config.allowedOrigins.push('https://test.example.com')
