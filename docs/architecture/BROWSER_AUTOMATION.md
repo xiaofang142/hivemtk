@@ -187,7 +187,7 @@ browser-use 1/2/4s 重连 watchdog；Midscene 扩展 already-attached 容忍+det
 ## 4.1 全链路九步与入口
 
 ```
-S0 前端控制台(7 路由/27 api) → S1 Gin 路由(JWT 25 端点 + WS 独立 token+回环)
+S0 前端控制台(7 路由/30 api) → S1 Gin 路由(JWT 30 端点 + WS 独立 token+回环)
 → S2 Executor(steps 解释 / Brain 循环) → S3 Hand(15+1)→HostRegistry(req_id)
 → S4 WS /api/browser/host-ws → nm-host(Go 子进程,双泵,退避 2s→60s)
 → S5 NM 4 字节 native-order 帧(≤1MiB/4GB) → 扩展 SW connectNative
