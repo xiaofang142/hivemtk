@@ -51,6 +51,73 @@
     </el-row>
 
     
+    <!-- LTC 三率（T-P8-05，LTC-29/AC4）：闭环完成率是北极星指标，摆首位 -->
+    <el-row
+      :gutter="20"
+      class="mt-20"
+    >
+      <el-col :span="8">
+        <el-card class="capability-card ltc-north-star">
+          <div class="capability-icon">
+            🎯
+          </div>
+          <div class="capability-name">
+            闭环完成率
+            <el-tag
+              type="danger"
+              size="small"
+            >
+              北极星
+            </el-tag>
+          </div>
+          <div class="capability-stat">
+            <span class="big-num">
+              {{ ltc.closureText }}
+            </span>
+          </div>
+          <div class="capability-meta">
+            {{ ltc.closureMeta }}
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card class="capability-card">
+          <div class="capability-icon">
+            💰
+          </div>
+          <div class="capability-name">
+            回款率
+          </div>
+          <div class="capability-stat">
+            <span class="big-num">
+              {{ ltc.collectionText }}
+            </span>
+          </div>
+          <div class="capability-meta">
+            {{ ltc.collectionMeta }}
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card class="capability-card">
+          <div class="capability-icon">
+            ⏰
+          </div>
+          <div class="capability-name">
+            逾期率
+          </div>
+          <div class="capability-stat">
+            <span class="big-num">
+              {{ ltc.overdueText }}
+            </span>
+          </div>
+          <div class="capability-meta">
+            {{ ltc.overdueMeta }}
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-row :gutter="20" class="mt-20">
       <el-col :span="12">
         <el-card header="意图分布（12 类）">
@@ -108,6 +175,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { getSalesCockpit } from '@/api/cockpit'
+import LtcRatesApi from '@/api/ltcRates'
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 
@@ -122,6 +190,50 @@ const cockpit = ref({
   topTools: [],
   intentDistribution: []
 })
+
+/**
+ * LTC 三率（T-P8-05）：后端 /api/ltc-rates 返回 {closure, collection, overdue}，
+ * 每率 {rate, numerator, denominator}。分子分母摆出来，AC① 对账直接可比。
+ */
+const ltc = ref({
+  closureText: '—', closureMeta: '加载中…',
+  collectionText: '—', collectionMeta: '加载中…',
+  overdueText: '—', overdueMeta: '加载中…'
+})
+
+function fmtRate(v) {
+  const n = Number(v && v.rate)
+  if (!Number.isFinite(n)) return '—'
+  return (n * 100).toFixed(1) + '%'
+}
+
+function fmtFrac(v) {
+  const num = Number(v && v.numerator || 0)
+  const den = Number(v && v.denominator || 0)
+  return `${num.toLocaleString()} / ${den.toLocaleString()}`
+}
+
+async function loadLtcRates() {
+  try {
+    const res = await LtcRatesApi.getRates()
+    const d = (res && res.data) || res || {}
+    ltc.value = {
+      closureText: fmtRate(d.closure),
+      closureMeta: `已闭环 ${fmtFrac(d.closure)}`,
+      collectionText: fmtRate(d.collection),
+      collectionMeta: `已回款 ${fmtFrac(d.collection)} 元`,
+      overdueText: fmtRate(d.overdue),
+      overdueMeta: `逾期 ${fmtFrac(d.overdue)} 单`
+    }
+  } catch (err) {
+    console.error('load ltc rates failed:', err)
+    ltc.value = {
+      closureText: '—', closureMeta: '加载失败',
+      collectionText: '—', collectionMeta: '加载失败',
+      overdueText: '—', overdueMeta: '加载失败'
+    }
+  }
+}
 
 /**
  * 将后端 /api/ai/sales-cockpit 返回的 data 字段适配为前端模板期望的结构。
@@ -217,7 +329,8 @@ function renderIntentChart() {
 
 onMounted(() => {
   loadCockpit()
-  timer = setInterval(loadCockpit, 60000)
+  loadLtcRates()
+  timer = setInterval(() => { loadCockpit(); loadLtcRates() }, 60000)
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
@@ -237,5 +350,6 @@ onUnmounted(() => {
 .capability-stat .big-num { font-size: 36px; font-weight: 600; color: #409eff; }
 .capability-stat .unit { font-size: 12px; color: #909399; margin-left: 6px; }
 .capability-meta { font-size: 12px; color: #909399; }
+.ltc-north-star { border-color: #f56c6c; }
 .mt-20 { margin-top: 20px; }
 </style>

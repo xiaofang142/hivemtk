@@ -413,6 +413,11 @@ func setupFrontendAliases(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gor
 	doReg("GET", "/conversion-funnel/list", funnelCtrl.GetFunnel)
 	doReg("GET", "/conversion-funnel/stage", funnelCtrl.GetStageDetails)
 
+	// T-P8-05 LTC 三率（LTC-29/AC4）：与 funnel/screen 同一族，只挂别名。
+	// manage 端与 C 端走同一 /api 基址（本文件所有 doReg 皆如此，无 /manage 双挂）。
+	ltcRatesCtrl := opsctrl.NewLtcRatesController()
+	doReg("GET", "/ltc-rates", ltcRatesCtrl.GetLtcRates)
+
 	aiProdCtrl := opsctrl.NewAIProductivityController()
 	doReg("GET", "/ai-productivity/overview", aiProdCtrl.GetReport)
 	doReg("GET", "/ai-productivity/trend", aiProdCtrl.GetDailyTrend)
