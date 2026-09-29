@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,8 +45,15 @@ type ReplayStats struct {
 	FailedMessages   int64            `json:"failed_messages"`
 	SkippedOffline   int              `json:"skipped_offline_channels"`
 	OfflineSnapshots []OfflineChannel `json:"offline_snapshots,omitempty"`
-	StartedAt        time.Time        `json:"started_at"`
-	FinishedAt       time.Time        `json:"finished_at"`
+	// 孤儿结算一格：候选行数与实际落 failed 的行数并列，二者不等就是探针挡下的量。
+	// OrphanDryRun 记下这一轮跑在哪一侧：读报表的人必须先知道 settled=0 是"没得结算"
+	// 还是"闸门关着"，否则 0 会被当成队列已经干净。
+	OrphanDryRun        bool      `json:"orphan_dry_run"`
+	OrphanCandidateRows int64     `json:"orphan_candidate_rows"`
+	OrphanSkippedOnline int64     `json:"orphan_skipped_reachable_rows"`
+	OrphanSettledRows   int64     `json:"orphan_settled_rows"`
+	StartedAt           time.Time `json:"started_at"`
+	FinishedAt          time.Time `json:"finished_at"`
 }
 
 // partitionBridgeChannels 按 status 把渠道划成在线/离线两批。
@@ -241,6 +249,32 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 		stats.FailedMessages += f
 	}
 
+	// 补投只能救「还会回来」的渠道；不会回来的那批必须在这一轮末尾结算掉，否则队列对它们是无限的。
+	//
+	// 缺省只报数不写：这道 UPDATE 不可逆（真回复从此离开待办集合），而回扫是每 5 分钟自动跑的
+	// 后台任务 —— 开发态存盘即热重载进真实例、连的是真库，"先人工确认再放量"如果只靠流程约定，
+	// 实际等于没有闸门（实测：闸门上线前的一轮 cron 就把 38 行历史 pending 直接烧成 failed）。
+	// 要真结算，运维读到达标口径后把 bridge.outbound_orphan_dry_run 置 false。
+	orphanDryRun := bridgeOrphanSettlementDryRun(ctx)
+	orphan, oerr := s.SettleOrphanBridgeOutbound(ctx, bridgeOrphanOutboundTTL(ctx), orphanDryRun)
+	switch {
+	case oerr != nil:
+		// 结算失败只是这一轮没清掉，行仍在；报错而不是静默，是为了让"积压只增不减"可归因。
+		logger.Warnf("[BridgeReplay] 孤儿出站结算失败: %v", oerr)
+	case orphan.ProbeMissing:
+		logger.Warnf("[BridgeReplay] 可达性探针未注册，本轮跳过孤儿出站结算（候选 %d 行保持原状）", orphan.CandidateRows)
+	case orphanDryRun:
+		logger.Infof("[BridgeReplay] 孤儿出站结算 dry-run（未写库）: ttl=%ds groups=%d candidates=%d skipped_reachable=%d —— 确认口径后置 bridge.outbound_orphan_dry_run=false 才会真正落 failed",
+			orphan.TTLSeconds, orphan.Groups, orphan.CandidateRows, orphan.SkippedReachable)
+	case orphan.SettledRows > 0 || orphan.SkippedReachable > 0:
+		logger.Infof("[BridgeReplay] 孤儿出站结算: ttl=%ds groups=%d candidates=%d skipped_reachable=%d settled=%d",
+			orphan.TTLSeconds, orphan.Groups, orphan.CandidateRows, orphan.SkippedReachable, orphan.SettledRows)
+	}
+	stats.OrphanCandidateRows = orphan.CandidateRows
+	stats.OrphanSkippedOnline = orphan.SkippedReachable
+	stats.OrphanSettledRows = orphan.SettledRows
+	stats.OrphanDryRun = orphanDryRun
+
 	stats.FinishedAt = time.Now()
 	// 计数名用「不可达」而不是「无订阅者」：轮询式下发的账号没有订阅，
 	// 它是在线位过期才落到这一格的，取证时按"没连 SSE"读会找错方向。
@@ -249,4 +283,120 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 		stats.ReplayedMessages, stats.FailedMessages,
 		stats.FinishedAt.Sub(startedAt).Round(time.Millisecond))
 	return stats
+}
+
+// --- 孤儿出站结算 ----------------------------------------------------------
+
+const (
+	// BridgeOutboundOrphanDefaultTTL 阈值缺省值：配置项缺失或读不动时用它。
+	BridgeOutboundOrphanDefaultTTL = 7 * 24 * time.Hour
+	// bridgeOutboundOrphanParam 配置项（group=bridge，duration 语义=秒）。
+	bridgeOutboundOrphanParam = "outbound_orphan_ttl"
+	// bridgeOutboundOrphanDryRunParam 配置项：true＝只报数不写库（缺省），false＝真结算。
+	bridgeOutboundOrphanDryRunParam = "outbound_orphan_dry_run"
+	// bridgeOutboundOrphanReason 写进 message_hub.push_error 的原因，
+	// 与重推到界那条（outbound_push_exhausted）同列同规格，事后按这一列就能分清两种判弃。
+	bridgeOutboundOrphanReason = "outbound_orphan_expired"
+	// bridgeOutboundOrphanBatchLimit 一轮最多结算多少行：五分钟的节拍上下限够用，
+	// 也让一次装配事故（阈值被配成分钟级）不至于在一轮里刷掉整张表。
+	bridgeOutboundOrphanBatchLimit = 1000
+)
+
+// OrphanSettlement 一轮孤儿结算的报数。dry-run 与实跑共用同一判定，只差最后那条 UPDATE。
+type OrphanSettlement struct {
+	TTLSeconds       int64 `json:"ttl_seconds"`
+	Groups           int   `json:"groups"`
+	CandidateRows    int64 `json:"candidate_rows"`
+	SkippedReachable int64 `json:"skipped_reachable_rows"`
+	SettledRows      int64 `json:"settled_rows"`
+	DryRun           bool  `json:"dry_run"`
+	// ProbeMissing：可达性探针没装时整轮不结算。这道写入不可逆，判据未知就当"全部可达"，
+	// 代价是一轮空转；反过来当"全不可达"的代价是误烧真回复，且没有任何日志能追回。
+	ProbeMissing bool `json:"probe_missing"`
+	// SkippedDisabled：阈值 <=0（配置里写 0 即停用本结算）。
+	SkippedDisabled bool `json:"skipped_disabled"`
+}
+
+// bridgeOrphanOutboundTTL 读阈值。GlobalConfigParam 本身 nil-safe（未装配时返回走
+// fallback 的空壳实例），所以这里不需要再判一次实例存不存在。
+func bridgeOrphanOutboundTTL(ctx context.Context) time.Duration {
+	return GlobalConfigParam().GetDuration(ctx, "bridge", bridgeOutboundOrphanParam, BridgeOutboundOrphanDefaultTTL)
+}
+
+// bridgeOrphanSettlementDryRun 读"只报数"开关；读不到配置按 true。
+//
+// 缺省偏保守与探针缺失那条同口径：不可逆写入在判据未知时一律不动手。
+func bridgeOrphanSettlementDryRun(ctx context.Context) bool {
+	return GlobalConfigParam().GetBool(ctx, "bridge", bridgeOutboundOrphanDryRunParam, true)
+}
+
+// bridgeChannelNames 已注册的桥接渠道名（排序只为让日志与用例断言稳定）。
+func bridgeChannelNames() []string {
+	names := make([]string, 0, len(bridgeChannels))
+	for n := range bridgeChannels {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// SettleOrphanBridgeOutbound 结算「桥接渠道里再没有人会来拉」的出站行。
+//
+// 为什么必须有人结算：MaxOutboundPushAttempts 那道 20 次上界只在三条取行路径里生效，
+// 而取行的前提是有账号来拉。账号一旦不再注册/不再同步，那批行既不会被认领、也就永远不会
+// 累计 attempts —— 队列对它们是无限的。用户侧看到的事实是「AI 生成过回复、客户永远收不到」，
+// 而巡检里的积压数字随天数只增不减，永远清不掉。
+//
+// dryRun=true 时只报数不写：这是一条不可逆的写入（把真回复标成 failed），上线前必须先报数。
+func (s *BridgeOfflineReplayService) SettleOrphanBridgeOutbound(ctx context.Context, ttl time.Duration, dryRun bool) (OrphanSettlement, error) {
+	out := OrphanSettlement{TTLSeconds: int64(ttl.Seconds()), DryRun: dryRun}
+	if ttl <= 0 {
+		out.SkippedDisabled = true
+		return out, nil
+	}
+	if s.repo == nil {
+		return out, nil
+	}
+	platforms := bridgeChannelNames()
+	if len(platforms) == 0 {
+		return out, nil
+	}
+	groups, err := s.repo.ListOrphanOutboundGroups(ctx, platforms, ttl)
+	if err != nil {
+		return out, err
+	}
+	probe := loadBridgeChannelOnlineProbe()
+	if probe == nil {
+		out.ProbeMissing = true
+		out.CandidateRows = sumOrphanRows(groups)
+		return out, nil
+	}
+	settleTargets := make([]repository.OrphanOutboundGroup, 0, len(groups))
+	for _, g := range groups {
+		out.Groups++
+		out.CandidateRows += g.Rows
+		if probe(ctx, g.Platform, g.AccountID) {
+			// 此刻收得到（挂着 SSE，或宽限窗内同步过）就不烧：让下一轮回扫照常补投。
+			out.SkippedReachable += g.Rows
+			continue
+		}
+		settleTargets = append(settleTargets, g)
+	}
+	if dryRun || len(settleTargets) == 0 {
+		return out, nil
+	}
+	settled, err := s.repo.SettleOrphanOutbound(ctx, settleTargets, ttl, bridgeOutboundOrphanReason, bridgeOutboundOrphanBatchLimit)
+	if err != nil {
+		return out, err
+	}
+	out.SettledRows = settled
+	return out, nil
+}
+
+func sumOrphanRows(groups []repository.OrphanOutboundGroup) int64 {
+	var n int64
+	for _, g := range groups {
+		n += g.Rows
+	}
+	return n
 }

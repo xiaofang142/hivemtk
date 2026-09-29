@@ -31,6 +31,7 @@
     "saveSuccess": "Saved successfully",
     "createSuccess": "Created successfully",
     "updateSuccess": "Updated successfully",
+    "username": "Username",
     "language": "Language",
     "hint": "Hint",
     "warning": "Warning",
@@ -329,7 +330,9 @@
     "baCreate": "Nueva tarea",
     "baCron": "Disparadores programados",
     "baStatus": "Estado del host",
-    "badCase": "Cola de casos fallidos"
+    "approvalTask": "Centro de tareas",
+    "badCase": "Cola de casos fallidos",
+    "qqAccount": "Cuenta de bot"
   },
   "保存": "Save",
   "提交": "Submit",

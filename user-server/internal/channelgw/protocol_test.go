@@ -247,3 +247,62 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// TestBridgeSessionKey_FallsBackToSender 私聊帧缺 conversation_id 时按发送者分桶，
+// 不同买家不得共用同一个会话键（否则 AI 上下文与人工接管锁跨买家串台）。
+func TestBridgeSessionKey_FallsBackToSender(t *testing.T) {
+	zhang := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderID: "uid-zhang", SenderName: "张三"}).ToEvent("http").SessionID
+	li := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderID: "uid-li", SenderName: "李四"}).ToEvent("http").SessionID
+	if zhang == "" || li == "" {
+		t.Fatalf("会话键不应为空: %q / %q", zhang, li)
+	}
+	if zhang == li {
+		t.Fatalf("同账号不同买家串进了同一个会话: %q", zhang)
+	}
+	if zhang != "douyin:acc-1:uid-zhang" {
+		t.Fatalf("会话键应含发送者身份, got %q", zhang)
+	}
+}
+
+// TestBridgeSessionKey_SenderIDOverName sender_id 优先于 sender_name（昵称可重复/可改）。
+func TestBridgeSessionKey_SenderIDOverName(t *testing.T) {
+	ev := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderID: "uid-1", SenderName: "张三"}).ToEvent("http")
+	if ev.SessionID != "douyin:acc-1:uid-1" {
+		t.Fatalf("应优先用 sender_id, got %q", ev.SessionID)
+	}
+	onlyName := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderName: "张三"}).ToEvent("http")
+	if onlyName.SessionID != "douyin:acc-1:张三" {
+		t.Fatalf("无 sender_id 时应退回 sender_name, got %q", onlyName.SessionID)
+	}
+}
+
+// TestBridgeSessionKey_GroupUsesGroupID 群帧缺 conversation_id 时按群分桶：
+// 同一个群的多个发言人必须留在同一个会话里。
+func TestBridgeSessionKey_GroupUsesGroupID(t *testing.T) {
+	a := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", SenderID: "u1"}).ToEvent("http").SessionID
+	b := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", SenderID: "u2"}).ToEvent("http").SessionID
+	if a != b {
+		t.Fatalf("同群不同发言人被拆开: %q vs %q", a, b)
+	}
+	if a != "xiaohongshu:acc-1:group-1" {
+		t.Fatalf("群会话键应取 group_id, got %q", a)
+	}
+}
+
+// TestBridgeSessionKey_ExplicitConversationWins 显式 conversation_id 时行为不变（存量键形状不得漂移）。
+func TestBridgeSessionKey_ExplicitConversationWins(t *testing.T) {
+	ev := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", ConversationID: "conv-9", SenderID: "uid-1"}).ToEvent("http")
+	if ev.SessionID != "douyin:acc-1:conv-9" {
+		t.Fatalf("显式 conversation_id 应原样入键, got %q", ev.SessionID)
+	}
+}
+
+// TestBridgeSessionKey_HistorySharesFrameBucket 历史帧的每一轮与帧顶层同桶：
+// 同一会话的多轮（客户问 + 客服答）不能被拆成两个会话。
+func TestBridgeSessionKey_HistorySharesFrameBucket(t *testing.T) {
+	parent := &IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderID: "uid-zhang", SenderName: "张三"}
+	turn := &HistoryItem{EventID: "h-1", SenderID: "acc-bot", SenderName: "客服", Direction: "outbound"}
+	if got := HistoryToEvent(parent, turn).SessionID; got != parent.ToEvent("http").SessionID {
+		t.Fatalf("history 轮次与帧顶层会话键不一致: %q vs %q", got, parent.ToEvent("http").SessionID)
+	}
+}

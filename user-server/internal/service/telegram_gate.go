@@ -79,13 +79,11 @@ const (
 	TGGateModeMuteUnlock  = "mute_unlock"  // 方案 B
 )
 
-func tgGateDefaultWelcome(mode string) string {
-	// 统一 4 个占位符（和 DB welcome_msg 模板一致）:
-	//   [0]=displayName, [1]=@botUsername, [2]=botDomain(不带@), [3]=token
-	if mode == TGGateModeJoinRequest {
-		return "👋 欢迎 %s！你正在通过 %s 加入群组。\n\n请点击这里完成验证：https://t.me/%s?start=%s\n\n验证后即可正常发言~"
-	}
-	return "👋 欢迎 %s！你正在通过 %s 加入群组。\n\n请点击这里完成验证：https://t.me/%s?start=%s\n\n验证后即可正常发言~"
+// tgGateDefaultWelcome 门控未配置自定义文案时的兜底模板。
+// 命名占位符 {{display}} / {{verify_link}} 由 renderTGGateWelcome 替换；两种门控模式
+// 当前共用这一段（差别只在送达面：join_request 走私聊，mute_unlock 私聊不可达时退化成群内提示）。
+func tgGateDefaultWelcome() string {
+	return "👋 欢迎 {{display}}！\n\n请点击这里完成验证：{{verify_link}}\n\n验证后即可正常发言~"
 }
 
 // client 加载 Bot 客户端
@@ -116,6 +114,25 @@ func genVerifyToken() string {
 // botDeepLink 生成 t.me 深链
 func botDeepLink(botUsername, token string) string {
 	return fmt.Sprintf("https://t.me/%s?start=%s", strings.TrimPrefix(botUsername, "@"), token)
+}
+
+// renderTGGateWelcome 渲染门控的欢迎/验证提示。
+//
+// 去掉「你正在通过 @xx 加入群组」那段＝模板里少一个位置占位符，而按位置序传参时
+// 后面的 https://t.me/%s?start=%s 会整体左移一位（domain 位拿到 bot 名、token 位拿到
+// domain）⇒ 验证链接直接坏掉，且坏得很安静。所以新模板改用命名占位符，替换与出现
+// 顺序/个数无关；库里已存在的 %s 老模板继续按 [display, bot, domain, token] 的位置序
+// 走原路径——改文案不该把别人配过的群提示打坏。
+func renderTGGateWelcome(tpl, display, botUsername, token string) string {
+	if strings.Contains(tpl, "{{") {
+		return strings.NewReplacer(
+			"{{display}}", display,
+			"{{bot}}", botUsername,
+			"{{verify_link}}", botDeepLink(botUsername, token),
+			"{{token}}", token,
+		).Replace(tpl)
+	}
+	return fmt.Sprintf(tpl, display, botUsername, strings.TrimPrefix(botUsername, "@"), token)
 }
 
 // HandleJoinRequest 方案 A 入口：处理 chat_join_request
@@ -156,12 +173,11 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 	// 此时依赖群里提示让用户主动点开 Bot（不重试，等用户 /start）。
 	botUsername := s.botUsername(ctx, accountID)
 	link := botDeepLink(botUsername, token)
-	botDomain := strings.TrimPrefix(botUsername, "@")
 	welcome := gate.WelcomeMsg
 	if welcome == "" {
-		welcome = tgGateDefaultWelcome(TGGateModeJoinRequest)
+		welcome = tgGateDefaultWelcome()
 	}
-	welcome = fmt.Sprintf(welcome, tgUserDisplayName(req.From), botUsername, botDomain, token)
+	welcome = renderTGGateWelcome(welcome, tgUserDisplayName(req.From), botUsername, token)
 
 	if cli, cerr := s.client(ctx, accountID); cerr == nil {
 		if _, serr := cli.SendMessage(ctx, req.From.ID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); serr != nil {
@@ -235,10 +251,9 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 
 		welcome := gate.WelcomeMsg
 		if welcome == "" {
-			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+			welcome = tgGateDefaultWelcome()
 		}
-		botDomain := strings.TrimPrefix(botUsername, "@")
-		welcome = fmt.Sprintf(welcome, tgUserDisplayName(&m), botUsername, botDomain, token)
+		welcome = renderTGGateWelcome(welcome, tgUserDisplayName(&m), botUsername, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			// 提示没送达 = 用户不知道要验证 = 必然超时被踢。禁言已生效、不致命，
 			// 但必须补发：记录后由清扫器带 verify_token 补发（expires_at 重算，等于宽限重置）
@@ -401,6 +416,63 @@ func tgUserDisplayName(u *telegram.TGUser) string {
 	return name
 }
 
+// tgPrivilegedStatus 群主/管理员：Bot 对他们做不了 restrict（TG 侧直接拒），
+// 而门控的「先禁言 ⇒ 再发验证提示」这条链在禁言失败时就 continue，提示也就不发了。
+func tgPrivilegedStatus(status string) bool {
+	switch status {
+	case "creator", "administrator":
+		return true
+	}
+	return false
+}
+
+// exemptPrivilegedSpeaker 无台账的门控群发言人若是群主/管理员 ⇒ 补一条已授权台账并放行。
+//
+// 返回 true 表示已确认特权（调用方据此不再互锁、也不再走补发邀请）。
+// 查不到 / API 出错 / 状态不可解析一律返回 false，维持既有互锁（宁可多拦不误放），
+// 但红因必须进日志：这条链失效的表现就是「群里有人发言、外面什么都没回」，
+// 静默返回 false 等于把本次报障原样留着。
+func (s *TelegramGateService) exemptPrivilegedSpeaker(ctx context.Context, accountID uint, chatID, userID string) bool {
+	chatIDInt, cerr := strconv.ParseInt(chatID, 10, 64)
+	userIDInt, uerr := strconv.ParseInt(userID, 10, 64)
+	if cerr != nil || uerr != nil {
+		return false
+	}
+	cli, err := s.client(ctx, accountID)
+	if err != nil {
+		logger.Errorf("[TG-Gate] 特权发言人判定失败（Bot 客户端加载不了，继续按未验证处理）account=%d chat=%s user=%s: %v",
+			accountID, chatID, userID, err)
+		return false
+	}
+	res, err := cli.GetChatMember(ctx, chatIDInt, userIDInt)
+	if err != nil {
+		logger.Errorf("[TG-Gate] 特权发言人判定失败（getChatMember 打不通，继续按未验证处理）account=%d chat=%s user=%s: %v",
+			accountID, chatID, userID, err)
+		return false
+	}
+	status, _ := res["status"].(string)
+	if !tgPrivilegedStatus(status) {
+		return false
+	}
+	now := time.Now()
+	if err := s.memberRepo.Upsert(ctx, &model.TelegramGroupMember{
+		AccountID:    accountID,
+		ChatID:       chatID,
+		UserID:       userID,
+		JoinStatus:   model.TGMemberApproved,
+		JoinMode:     TGGateModeMuteUnlock,
+		Authorized:   true,
+		AuthorizedAt: &now,
+	}); err != nil {
+		logger.Errorf("[TG-Gate] 特权发言人台账写入失败（本次仍按未验证互锁）account=%d chat=%s user=%s status=%s: %v",
+			accountID, chatID, userID, status, err)
+		return false
+	}
+	logger.Infof("[TG-Gate] 群主/管理员在门控群无台账 ⇒ 直接授权放行 account=%d chat=%s user=%s status=%s",
+		accountID, chatID, userID, status)
+	return true
+}
+
 // MemberUnverified 判断成员在指定群是否处于未过验证状态（pending/restricted/kicked 且未激活）。
 // 用于门控群 AI 互锁：未验证成员的群发言不触发销售 AI / 线索商机挖掘。
 // 语义：群有启用中的 mute_unlock 门控但该成员无台账 → 视为门控生效前已在群的
@@ -423,7 +495,56 @@ func (s *TelegramGateService) MemberUnverified(ctx context.Context, accountID ui
 	}
 	// 无台账：仅当群是启用中的禁言解锁门控时才拦截（历史成员补验证），否则放行
 	gate, gerr := s.gateRepo.GetByChatID(ctx, accountID, chatID)
+	if gerr != nil || gate == nil || !gate.Enabled || gate.Mode != TGGateModeMuteUnlock {
+		return false
+	}
+	// 门控装群之前就在线上的群主/管理员：他们永远不会产生入群事件，而补发邀请那条路
+	// 要先禁言（Bot 无权动群主 ⇒ 必失败 ⇒ 连邀请都不发）⇒ 互锁对他是终身的，
+	// 群里他说话外面一声不响。先问一次 TG 侧的真实身份，特权就直接授权放行。
+	if s.exemptPrivilegedSpeaker(ctx, accountID, chatID, userID) {
+		return false
+	}
+	return true
+}
+
+// MemberLacksLedger 该发言人在门控群里**一行台账都没有**。
+//
+// 与 MemberUnverified 的分工：后者把"有行但未验证"和"根本没有行"合并成同一个 true，
+// 而这两件事的处置完全不同——前者是他自己没点验证链接，后者是门控装群时他早已在群里，
+// 系统从未给他发过验证入口（提示只在 new_chat_members 事件发，
+// sendPendingVerificationSummary 也自认 token "无法凭空重建"）⇒ 互锁对他永久成立。
+// 调用方据此只对后者补发邀请，不重复骚扰前者。
+func (s *TelegramGateService) MemberLacksLedger(ctx context.Context, accountID uint, chatID, userID string) bool {
+	if !s.wired() {
+		return false
+	}
+	if m, err := s.memberRepo.Get(ctx, accountID, chatID, userID); err == nil && m != nil {
+		return false
+	}
+	gate, gerr := s.gateRepo.GetByChatID(ctx, accountID, chatID)
 	return gerr == nil && gate != nil && gate.Enabled && gate.Mode == TGGateModeMuteUnlock
+}
+
+// MemberVerified 正面回答「这名发言人是启用中的禁言解锁门控群里的已验证成员」。
+//
+// 它不能写成 !MemberUnverified：后者返回 false 还包含三种"跟验证无关"的情形——
+// 群没装门控、台账里是已退群的人、服务未装配。宽松触发策略（群内问话不必 @ 机器人
+// 也交给智能体）一旦建在取反上，就会把这三种群/人也一并泼进去，覆盖面远超门控群。
+// 只认 mute_unlock 这一种门控：join_request 群没过审的人根本进不来说话，
+// 那条路上没有"已验证成员闲聊"这个问题，不在本策略内。
+func (s *TelegramGateService) MemberVerified(ctx context.Context, accountID uint, chatID, userID string) bool {
+	if !s.wired() {
+		return false
+	}
+	gate, gerr := s.gateRepo.GetByChatID(ctx, accountID, chatID)
+	if gerr != nil || gate == nil || !gate.Enabled || gate.Mode != TGGateModeMuteUnlock {
+		return false
+	}
+	m, err := s.memberRepo.Get(ctx, accountID, chatID, userID)
+	if err != nil || m == nil {
+		return false
+	}
+	return m.Authorized || m.JoinStatus == model.TGMemberApproved
 }
 
 // ---------- 网关配置管理（管理端） ----------
@@ -540,9 +661,9 @@ func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 		botUsername := s.botUsername(ctx, m.AccountID)
 		welcome := gate.WelcomeMsg
 		if welcome == "" {
-			welcome = tgGateDefaultWelcome(TGGateModeMuteUnlock)
+			welcome = tgGateDefaultWelcome()
 		}
-		welcome = fmt.Sprintf(welcome, m.FullName, botUsername, strings.TrimPrefix(botUsername, "@"), m.VerifyToken)
+		welcome = renderTGGateWelcome(welcome, m.FullName, botUsername, m.VerifyToken)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			logger.Warnf("[TG-Gate] 补偿提示发送失败 chat=%s user=%s: %v", m.ChatID, m.UserID, err)
 			continue // expires_at 已临近，下轮 sweeper 将按超时正常踢出

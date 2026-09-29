@@ -1,0 +1,42 @@
+2026-09-25T12:38:09+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBadCaseRepo_NilHandle
+--- PASS: TestBadCaseRepo_NilHandle (0.00s)
+=== RUN   TestBadCaseRepo_InsertAndReadBack
+--- PASS: TestBadCaseRepo_InsertAndReadBack (0.18s)
+=== RUN   TestBadCaseRepo_DedupIsReal
+--- PASS: TestBadCaseRepo_DedupIsReal (0.07s)
+=== RUN   TestBadCaseRepo_ConflictIdentityIsExact
+--- PASS: TestBadCaseRepo_ConflictIdentityIsExact (0.05s)
+=== RUN   TestBadCaseRepo_ApplyActionWriteWhitelist
+    bad_case_test.go:340: 判定结论没落库："kb_missing"/"op-1"/""
+--- FAIL: TestBadCaseRepo_ApplyActionWriteWhitelist (0.06s)
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/pending_上按_pending_→_生效
+    bad_case_test.go:389: 写入与 applied 不自洽：applied=true label_note=""
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已判完的行按_pending_→_不生效
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已导出的行按_labeled_→_不生效
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已放弃的行按_pending_→_不生效
+--- FAIL: TestBadCaseRepo_ApplyActionExpectsStatus (0.07s)
+    --- FAIL: TestBadCaseRepo_ApplyActionExpectsStatus/pending_上按_pending_→_生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已判完的行按_pending_→_不生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已导出的行按_labeled_→_不生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已放弃的行按_pending_→_不生效 (0.00s)
+=== RUN   TestBadCaseRepo_ApplyActionFnErrorRollsBack
+--- PASS: TestBadCaseRepo_ApplyActionFnErrorRollsBack (0.06s)
+=== RUN   TestBadCaseRepo_ApplyActionHoldsRowLockWhileFnRuns
+--- PASS: TestBadCaseRepo_ApplyActionHoldsRowLockWhileFnRuns (0.36s)
+=== RUN   TestBadCaseRepo_ListFilters
+--- PASS: TestBadCaseRepo_ListFilters (0.12s)
+=== RUN   TestBadCaseRepo_ClampsAreExact
+--- PASS: TestBadCaseRepo_ClampsAreExact (0.22s)
+=== RUN   TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent
+--- PASS: TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent (0.04s)
+=== RUN   TestBadCaseRepo_CountByFixLayer
+--- PASS: TestBadCaseRepo_CountByFixLayer (0.07s)
+=== RUN   TestBadCaseRepo_ClaimForExport
+--- PASS: TestBadCaseRepo_ClaimForExport (0.06s)
+=== RUN   TestBadCaseRepo_ClaimForExportIsDisjointUnderConcurrency
+--- PASS: TestBadCaseRepo_ClaimForExportIsDisjointUnderConcurrency (0.07s)
+FAIL
+FAIL	hivemtk-user/internal/repository	1.930s
+FAIL

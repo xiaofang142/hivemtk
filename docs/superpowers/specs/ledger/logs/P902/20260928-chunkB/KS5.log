@@ -1,0 +1,1229 @@
+2026-09-28T18:37:56+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished
+2026-09-28T18:38:02+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:06 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:06 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:06 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:06 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:06 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:06 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:06 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:06 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:06 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:06 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:06 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:06 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:06 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:06 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:06 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:06 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:06 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:06 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:06 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:06 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:06 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:06 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:06 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:06 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:06 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:06 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:06 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:06 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:06 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:06 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:06 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:06 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:06 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:06 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:06 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:06 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:06 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:06 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:06 [v3.22.0] customer_id 列共 10 个，本次收敛 5 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:176: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:176: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/off/bm25SearchAll/全库
+2026-09-28T18:38:08+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:09 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:09 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:09 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:09 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:09 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:09 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:09 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:09 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:09 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:09 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:09 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:09 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:09 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:09 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:09 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:09 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:09 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:09 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:09 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:09 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:09 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:09 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:09 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:09 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:09 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:09 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:09 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:09 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:09 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:09 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:09 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:09 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:09 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:09 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:09 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:09 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:09 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:09 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:09 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/off/bm25SearchIndex/按库过滤
+2026-09-28T18:38:10+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:10 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:10 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:10 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:10 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:10 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:10 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:10 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:10 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:10 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:10 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:10 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:10 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:10 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:10 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:10 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:10 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:10 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:10 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:10 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:10 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:10 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:10 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:10 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:10 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:10 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:10 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:10 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:10 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:10 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:10 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:10 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:10 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:10 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:10 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:10 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:10 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:10 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:10 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:10 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/off/vectorSearch/按库过滤
+2026-09-28T18:38:11+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:11 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:11 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:11 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:11 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:11 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:11 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:11 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:11 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:11 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:11 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:11 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:11 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:11 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:11 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:11 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:11 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:11 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:11 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:11 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:11 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:11 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:11 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:11 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:11 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:11 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:11 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:11 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:11 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:11 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:11 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:11 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:11 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:11 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:11 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:11 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:11 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:11 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:11 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:11 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/off/vectorSearch/全库
+2026-09-28T18:38:12+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:13 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:13 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:13 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:13 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:13 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:13 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:13 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:13 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:13 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:13 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:13 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:13 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:13 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:13 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:13 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:13 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:13 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:13 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:13 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:13 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:13 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:13 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:13 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:13 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:13 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:13 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:13 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:13 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:13 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:13 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:13 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:13 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:13 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:13 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:13 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:13 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:13 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:13 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 xianyu -> xianyu_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:13 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/shadow/bm25SearchAll/全库
+2026-09-28T18:38:14+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:14 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:14 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:14 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:14 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:14 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:14 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:14 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:14 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:14 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:14 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:14 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:14 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:14 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:14 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:14 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:14 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:14 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:14 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:14 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:14 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:14 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:14 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:14 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:14 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:14 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:14 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:14 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:14 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:14 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:14 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:14 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:14 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:14 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:14 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:14 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:14 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:14 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:14 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 tiktok_web -> tiktok 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:14 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/shadow/bm25SearchIndex/按库过滤
+2026-09-28T18:38:15+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:15 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:15 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:15 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:15 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:15 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:15 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:15 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:15 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:15 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:15 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:15 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:15 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:15 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:15 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:15 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:15 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:15 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:15 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:15 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:15 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:15 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:15 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:15 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:15 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:15 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:15 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:15 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:15 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:15 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:15 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:15 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:15 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:15 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:15 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:15 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:15 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:15 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:15 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:16 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/shadow/vectorSearch/按库过滤
+2026-09-28T18:38:17+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:17 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:17 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:17 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:17 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:17 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:17 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:17 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:17 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:17 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:17 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:17 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:17 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:17 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:17 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:17 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:17 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:17 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:17 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:17 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:17 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:17 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:17 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:17 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:17 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:17 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:17 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:17 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:17 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:17 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:17 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:17 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:17 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:17 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:17 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:17 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:17 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:17 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:17 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:18 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/shadow/vectorSearch/全库
+2026-09-28T18:38:19+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:20 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:20 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:20 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:20 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:20 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:20 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:20 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:20 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:20 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:20 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:20 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:20 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:20 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:20 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:20 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:20 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:20 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:20 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:20 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:20 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:20 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:20 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:20 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:20 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:20 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:20 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:20 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:20 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:20 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:20 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:20 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:20 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:20 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:20 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:20 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:20 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:20 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:20 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:20 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/on/bm25SearchAll/全库
+2026-09-28T18:38:21+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:21 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:21 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:21 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:21 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:21 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:21 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:21 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:21 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:21 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:21 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:21 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:21 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:21 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:21 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:21 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:21 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:21 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:21 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:21 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:21 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:21 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:21 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:21 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:21 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:21 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:21 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:21 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:21 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:21 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:21 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:21 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:21 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:21 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:21 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:21 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:21 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:21 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:21 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 kuaishou -> kuaishou_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:22 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/on/bm25SearchIndex/按库过滤
+2026-09-28T18:38:23+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:24 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:24 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:24 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:24 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:24 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:24 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:24 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:24 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:24 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:24 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:24 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:24 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:24 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:24 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:24 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:24 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:24 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:24 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:24 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:24 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:24 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:24 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:24 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:24 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:24 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:24 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:24 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:24 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:24 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:24 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:24 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:24 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:24 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:24 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:24 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:24 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:24 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:24 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 kuaishou -> kuaishou_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 tiktok_web -> tiktok 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:24 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/on/vectorSearch/按库过滤
+2026-09-28T18:38:25+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:25 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:25 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:25 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:25 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:25 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:25 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:25 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:25 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:25 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:25 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:25 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:25 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:25 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:25 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:25 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:25 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:25 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:25 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:25 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:25 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:25 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:25 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:25 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:25 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:25 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:25 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:25 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:25 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:25 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:25 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:25 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:25 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:25 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:25 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:25 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:25 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:25 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:25 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 xianyu -> xianyu_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:26 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_RagSearcherSitesHideUnpublished/on/vectorSearch/全库
+2026-09-28T18:38:26+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:27 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:27 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:27 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:27 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:27 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:27 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:27 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:27 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:27 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:27 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:27 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:27 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:27 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:27 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:27 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:27 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:27 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:27 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:27 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:27 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:27 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:27 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:27 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:27 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:27 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:27 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:27 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:27 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:27 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:27 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:27 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:27 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:27 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:27 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:27 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:27 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:27 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:27 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 douyin_web -> douyin 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:27 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:231: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+--- PASS: TestKbGate_RagSearcherSitesHideUnpublished (30.99s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/off/bm25SearchAll/全库 (1.48s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/off/bm25SearchIndex/按库过滤 (1.41s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/off/vectorSearch/按库过滤 (1.13s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/off/vectorSearch/全库 (1.55s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/shadow/bm25SearchAll/全库 (1.11s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/shadow/bm25SearchIndex/按库过滤 (1.97s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/shadow/vectorSearch/按库过滤 (2.22s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/shadow/vectorSearch/全库 (1.84s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/on/bm25SearchAll/全库 (1.73s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/on/bm25SearchIndex/按库过滤 (2.30s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/on/vectorSearch/按库过滤 (1.47s)
+    --- PASS: TestKbGate_RagSearcherSitesHideUnpublished/on/vectorSearch/全库 (1.36s)
+=== RUN   TestKbGate_ShadowLogsWouldHide
+=== RUN   TestKbGate_ShadowLogsWouldHide/shadow/rankRAGChunks
+2026-09-28T18:38:28+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:28 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:28 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:28 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:28 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:28 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:28 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:28 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:28 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:28 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:28 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:28 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:28 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:28 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:28 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:28 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:28 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:28 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:28 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:28 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:28 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:28 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:28 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:28 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:28 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:28 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:28 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:28 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:28 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:28 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:28 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:28 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:28 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:28 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:28 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:28 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:28 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:28 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:28 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 douyin_web -> douyin 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:28 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+    kb_gate_rag_searcher_test.go:301: shadow 档该有 1 行 shadow 读数，实际 0 行；捕获内容：
+    kb_gate_rag_searcher_test.go:304: shadow 读数该说"有 1 条"会被隐藏：
+=== RUN   TestKbGate_ShadowLogsWouldHide/shadow/rankMerchantChunks
+2026-09-28T18:38:29+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:30 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:30 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:30 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:30 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:30 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:30 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:30 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:30 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:30 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:30 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:30 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:30 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:30 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:30 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:30 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:30 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:30 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:30 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:30 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:30 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:30 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:30 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:30 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:30 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:30 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:30 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:30 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:30 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:30 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:30 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:30 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:30 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:30 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:30 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:30 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:30 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:30 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:30 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 tiktok_web -> tiktok 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:30 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_ShadowLogsWouldHide/off/rankRAGChunks
+2026-09-28T18:38:31+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:32 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:32 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:32 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:32 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:32 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:32 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:32 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:32 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:32 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:32 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:32 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:32 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:32 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:32 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:32 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:32 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:32 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:32 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:32 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:32 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:32 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:32 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:32 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:32 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:32 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:32 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:32 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:32 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:32 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:32 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:32 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:32 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:32 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:32 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:32 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:32 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:32 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:32 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 xiaohongshu -> xhs_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 douyin_web -> douyin 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:32 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_ShadowLogsWouldHide/off/rankMerchantChunks
+2026-09-28T18:38:32+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:33 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:33 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:33 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:33 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:33 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:33 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:33 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:33 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:33 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:33 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:33 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:33 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:33 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:33 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:33 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:33 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:33 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:33 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:33 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:33 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:33 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:33 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:33 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:33 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:33 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:33 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:33 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:33 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:33 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:33 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:33 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:33 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:33 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:33 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:33 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:33 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:33 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:33 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 xiaohongshu -> xhs_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:33 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_ShadowLogsWouldHide/on/rankRAGChunks
+2026-09-28T18:38:34+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:34 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:34 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:34 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:34 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:34 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:34 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:34 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:34 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:34 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:34 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:34 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:34 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:34 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:34 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:34 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:34 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:34 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:34 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:34 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:34 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:34 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:34 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:34 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:34 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:34 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:34 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:34 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:34 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:34 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:34 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:34 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:34 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:34 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:34 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:34 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:34 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:34 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:34 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:34 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+=== RUN   TestKbGate_ShadowLogsWouldHide/on/rankMerchantChunks
+2026-09-28T18:38:35+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:35 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:35 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:35 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:35 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:35 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:35 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:35 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:35 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:35 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:35 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:35 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:35 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:35 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:35 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:35 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:35 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:35 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:35 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:35 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:35 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:35 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:35 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:35 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:35 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:35 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:35 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:35 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:35 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:35 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:35 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:35 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:35 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:35 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:35 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:35 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:35 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:35 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:35 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 kuaishou_web -> kuaishou 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xianyu_web -> xianyu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:35 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:277: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+--- FAIL: TestKbGate_ShadowLogsWouldHide (8.82s)
+    --- FAIL: TestKbGate_ShadowLogsWouldHide/shadow/rankRAGChunks (1.38s)
+    --- PASS: TestKbGate_ShadowLogsWouldHide/shadow/rankMerchantChunks (2.04s)
+    --- PASS: TestKbGate_ShadowLogsWouldHide/off/rankRAGChunks (1.27s)
+    --- PASS: TestKbGate_ShadowLogsWouldHide/off/rankMerchantChunks (1.28s)
+    --- PASS: TestKbGate_ShadowLogsWouldHide/on/rankRAGChunks (1.16s)
+    --- PASS: TestKbGate_ShadowLogsWouldHide/on/rankMerchantChunks (1.69s)
+=== RUN   TestKbGate_ShadowSilentWhenNothingWouldHide
+2026-09-28T18:38:37+08:00 INF [RagHybridMigration] zhparser 扩展安装提示（可忽略，将用 simple 兜底）: ERROR: extension "zhparser" is not available (SQLSTATE 0A000) component=user-server
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): 反馈学习闭环（6 张新表 + 2 张表扩展）: alter sop_agents 失败: exec failed (DO $$
+        BEGIN
+        	IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sop_agents' AND column_name = 'use_bandit') THEN
+        		ALTER TABLE sop_agents ADD COLUMN IF NOT EXISTS use_bandit BOOLEAN NOT NULL DEFAULT FALSE;
+        	END IF;
+        END $$): ERROR: relation "sop_agents" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): 多语言 i18n 方案 - glossaries 表 + 5 张表扩展字段: multilingual_i18n 执行失败 (ALTER TABLE chat_channels ADD COLUMN IF NOT EXISTS target_la...): ERROR: relation "chat_channels" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:37 [v3.15] 开始知识库统一迁移 P0-B ...
+2026/09/28 18:38:37 [v3.15] 1/7 CREATE TABLE knowledge_bases ...
+2026/09/28 18:38:37 [v3.15] ✓ knowledge_bases 表已创建
+2026/09/28 18:38:37 [v3.15] 2/7 CREATE TABLE agent_kb_bindings ...
+2026/09/28 18:38:37 [v3.15] ✓ agent_kb_bindings 表已创建
+2026/09/28 18:38:37 [v3.15] 3/7 ALTER TABLE faq_entries ADD agent_id ...
+2026/09/28 18:38:37 [v3.15] ✓ faq_entries.agent_id 已添加 + 索引
+2026/09/28 18:38:37 [v3.15] 4/7 ALTER TABLE sop_templates ADD agent_id ...
+2026/09/28 18:38:37 [v3.15] ✓ sop_templates.agent_id 已添加 + 索引
+2026/09/28 18:38:37 [v3.15] 5/7 ALTER TABLE knowledge_documents ADD agent_id ...
+2026/09/28 18:38:37 [v3.15] ✓ knowledge_documents.agent_id 已添加 + 索引
+2026/09/28 18:38:37 [v3.15] 6/7 数据迁移: 现有 FAQ / SOP / RAG 文档已自动归为共享 (agent_id IS NULL)
+2026/09/28 18:38:37 [v3.15] faq_entries.agent_id 分布 (前 50):
+2026/09/28 18:38:37 [v3.15] sop_templates.agent_id 分布 (前 50):
+2026/09/28 18:38:37 [v3.15] knowledge_documents.agent_id 分布 (前 50):
+2026/09/28 18:38:37 [v3.15] 7/7 ChannelAgentBinding 1:1 约束检查 ...
+2026/09/28 18:38:37 [v3.15] ✓ ChannelAgentBinding 1:1 约束已确认
+2026/09/28 18:38:37 [v3.15] 知识库统一迁移 P0-B 全部完成
+2026/09/28 18:38:37 [v3.16] 开始清理孤儿表 rag_safety_audit_logs ...
+2026/09/28 18:38:37 [v3.16] 1/3 DROP INDEX idx_rag_safety_audit_tenant ...
+2026/09/28 18:38:37 [v3.16] ✓ idx_rag_safety_audit_tenant 已删除
+2026/09/28 18:38:37 [v3.16] 2/3 DROP INDEX idx_rag_safety_audit_blocked ...
+2026/09/28 18:38:37 [v3.16] ✓ idx_rag_safety_audit_blocked 已删除
+2026/09/28 18:38:37 [v3.16] 3/3 DROP TABLE rag_safety_audit_logs ...
+2026/09/28 18:38:37 [v3.16] ✓ rag_safety_audit_logs 表已删除
+2026/09/28 18:38:37 [v3.16] 孤儿表清理完成
+2026/09/28 18:38:37 [v3.17] 开始清理孤儿表 rag_alerts ...
+2026/09/28 18:38:37 [v3.17] 1/5 DROP INDEX idx_rag_alerts_type ...
+2026/09/28 18:38:37 [v3.17] ✓ idx_rag_alerts_type 已删除
+2026/09/28 18:38:37 [v3.17] 2/5 DROP INDEX idx_rag_alerts_severity ...
+2026/09/28 18:38:37 [v3.17] ✓ idx_rag_alerts_severity 已删除
+2026/09/28 18:38:37 [v3.17] 3/5 DROP INDEX idx_rag_alerts_resolved ...
+2026/09/28 18:38:37 [v3.17] ✓ idx_rag_alerts_resolved 已删除
+2026/09/28 18:38:37 [v3.17] 4/5 DROP INDEX idx_rag_alerts_created ...
+2026/09/28 18:38:37 [v3.17] ✓ idx_rag_alerts_created 已删除
+2026/09/28 18:38:37 [v3.17] 5/5 DROP TABLE rag_alerts ...
+2026/09/28 18:38:37 [v3.17] ✓ rag_alerts 表已删除
+2026/09/28 18:38:37 [v3.17] 孤儿表清理完成
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): 归一化旧 bridge channel 数据: message_hub 归一化 douyin -> douyin_web 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一 v2（*_web/xhs -> 全名）: message_hub 归一化 xhs_web -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): 渠道编码统一收尾（彻底清除 *_web / xhs 历史值）: message_hub 收尾归一化 xhs -> xiaohongshu 失败: ERROR: relation "message_hub" does not exist (SQLSTATE 42P01)
+2026/09/28 18:38:37 [v3.22.0] customer_id 列共 10 个，本次收敛 0 个为 varchar(64)
+    kb_gate_rag_searcher_test.go:330: 测试迁移告警(未致命): intent_records 与 intent_logs 整合: intent_records 表不存在，无法合并
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): SOP 热力图复合索引 (sop_id, created_at DESC): create composite index failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移告警(未致命): email_smtp 存量明文密码一次性 AES-GCM 加密: FIELD_ENCRYPTION_KEY 不可用, 拒绝执行明文密码加密迁移: FIELD_ENCRYPTION_KEY must be >= 32 bytes
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): sop_executions 补 executed_nodes 列（SAGA 补偿依据）: add executed_nodes column failed: ERROR: relation "sop_executions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): customer_sessions 补 outcome 追踪列（handoff 三时间戳）: ALTER TABLE customer_sessions ADD COLUMN IF NOT EXISTS handoff_at TIMESTAMP: ERROR: relation "customer_sessions" does not exist (SQLSTATE 42P01)
+    kb_gate_rag_searcher_test.go:330: 测试迁移跳过(基础表未创建,与本测试无关): system_users 超管密码保护触发器: 执行语句失败: ERROR: relation "system_users" does not exist (SQLSTATE 42P01)
+        SQL: CREATE TRIGGER trg_guard_initial_admin_password
+        			BEFORE UPDATE ON system_users
+        			FOR EACH ROW EXECUTE FUNCTION fn_guard_initial_admin_password()
+    kb_gate_rag_searcher_test.go:372: 对照格：有 1 条会被隐藏时该出声，实得：
+--- FAIL: TestKbGate_ShadowSilentWhenNothingWouldHide (1.32s)
+FAIL
+FAIL	hivemtk-user/internal/aiagent/knowledge/service	41.549s
+FAIL

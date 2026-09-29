@@ -1,0 +1,34 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-eylvzkja
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P803/20260925-123336
+取证基线：HEAD=0787e406 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 12:33  up 2 days,  2:21, 2 users, load averages: 3.15 5.36 4.84 日志 tag=20260925-123336
+覆盖 19 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  41fee4212dda74817756fb62289dd3cc  user-server/internal/app/bad_case_wiring.go
+  7dee73cc4df03bdb0cbd9f15b33439b9  user-server/internal/controller/bad_case.go
+  a65d72f2c122a297e6e2d8f644331cf5  user-server/internal/model/bad_case.go
+  338e02f679ece0d7e753c264ce8e5c5c  user-server/internal/repository/bad_case.go
+  3714a4413bc596e56a65ee3889c0ebe3  user-server/internal/service/bad_case.go
+  94ee1778a6a367aa9ebe433bebb62a5c  user-server/internal/service/smart_cs_orchestrator.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=27 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=11 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=5 skip=0 红名=—
+R2   写回白名单少一列（判定依据落不了地）                             杀掉                           红=TestBadCaseRepo_ApplyActionExpectsStatus,TestBadCaseRepo_ApplyActionWriteWhitelist settled=14/14
+R8   导出条件丢了「必须已打标」（pending 被灌进评测集）                  杀掉                           红=TestBadCaseRepo_ClaimForExport settled=14/14
+R10  聚合读数少键（前端的 0 变 undefined）                      杀掉                           红=TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent settled=14/14
+S1   零命中判据失效（无本之木不再被记）                              杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_SourceComesFromServiceGate,TestBadCaseService_MarkAuto,TestBadCaseShouldMark settled=27/27
+S2   门槛边界改成 <=（等于阈值也算低质）                            杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_UsesEffectiveConfidence,TestBadCaseShouldMark settled=27/27
+S3   阈值缺位时的兜底撤掉（整条自动标记静默停摆）                         杀掉                           红=TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError,TestBadCaseService_MarkAuto,TestBadCaseService_MarkRequiresMessageID,TestBadCaseShouldMark,TestBadCaseShouldMark_ZeroThresholdNeverDisablesMarking settled=27/27
+S6   责任层不再由类目派生（写死成 knowledge）                      杀掉                           红=TestBadCaseService_Label settled=27/27
+S7   撤销可以不给理由                                       杀掉                           红=TestBadCaseService_Dismiss settled=27/27
+S8   CAS 落败被当成成功（重复打标静默覆盖）                          杀掉                           红=TestBadCaseService_Label settled=27/27
+S9   底座未装配也造出标记器（关闸失效）                              杀掉                           红=TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError,TestBadCaseService_UnavailableRejectsEveryEntry settled=27/27
+O1   先判门槛再起协程这道预筛撤掉（每轮白起一条协程）                       杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_PregateMatchesServiceGate,TestBadCaseMarkBadCase_UsesEffectiveConfidence settled=27/27
+C1   底座不可用回 500 而不是 503                             杀掉                           红=TestBadCaseRoutes_SetupUsesGlobalRegistry,TestBadCaseRoutes_UnavailableIs503WithDataless settled=11/11
+C3   记录不存在回 500（前端会无限打圈）                            杀掉                           红=TestBadCaseRoutes_LabelAndDismissCodes settled=11/11
+
+结果：杀掉 13/13 格 （本趟只跑了 13/41 格，是子集，**不构成全族读数**）
+终态：跑到的格子全杀，但本趟是子集/未覆盖全族，不写'全杀'。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-eylvzkja/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-eylvzkja

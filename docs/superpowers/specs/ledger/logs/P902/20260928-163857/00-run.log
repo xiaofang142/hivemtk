@@ -1,0 +1,122 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-986c6gvt
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P902/20260928-163857
+取证基线：HEAD=d738f738 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 16:38  up 5 days,  6:27, 2 users, load averages: 47.11 63.10 65.42 日志 tag=20260928-163857
+覆盖 85 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  3f90c51f9d6ebad665c4f42f7ca4118d  user-server/internal/aiagent/knowledge/controller/knowledge_merchant.go
+  87b904a8d78c14eee64a17acc20e6281  user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go
+  190c8c0cdd44203b45f84a6f7fa93abc  user-server/internal/aiagent/knowledge/service/rag_searcher.go
+  133269c6653d33f7b379c115f58de3d3  user-server/internal/aiagent/knowledge/service/rag_searcher_bm25.go
+  47eac23620ef61c682c123d18d8d83ef  user-server/internal/aiagent/knowledge/service/rag_searcher_vector.go
+  9ce13662bb7a8e59ea6fa6a3367e7eaa  user-server/internal/aiagent/rag/retrieval/hybrid_searcher.go
+  0a1976deca8866b70ec65f5f5499e17d  user-server/internal/aiagent/rag/retrieval/lexical_retriever.go
+  bb66b668fbf925eb68baf65bf6bf6f37  user-server/internal/aiagent/rag/retrieval/vector_retriever.go
+  74a322de23a08202fcbd4efd046df76c  user-server/internal/app/kb_release_wiring.go
+  a1e64ccd7c3433d6bbd5c97993e1d51b  user-server/internal/controller/kb_release.go
+  f213d1f505bd940c334ef54350e56b2f  user-server/internal/model/kb_release.go
+  1f6615f0bb1d55fddf033c955c99d589  user-server/internal/pkg/kbrelease/kbrelease.go
+  dbdb9586968768fc736d853ba2ed6fde  user-server/internal/repository/kb_release.go
+  4efed602baf92773aa0d1a2ace2d1553  user-server/internal/router/kb_release_routes.go
+  f8dd68941837c4a13828adf9f768fa75  user-server/internal/router/router.go
+  87366b222eea4f6c938e11c9c397f4bf  user-server/internal/service/kb_release.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=19 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=22 skip=0 红名=—
+[控制组 ./internal/controller/] rc=0 settled=32 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/pkg/kbrelease/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/repository/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/service/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/controller/] rc=0 settled=1 skip=0 红名=—
+[控制组 ./internal/aiagent/rag/retrieval/] rc=0 settled=3 skip=0 红名=—
+RP1   裸 SQL 建行顺带开启治理（看一眼就把库推进发布制）                      RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信 红=TestKBReleaseRepo_LockReleaseEnsuresRow,TestKBReleaseRepo_SetGovernedIdempotent settled=2/19
+      红因: kb_release_test.go:235: LockRelease 建的那一行必须 governed=false：查一次状态不等于开启治理
+      红因: kb_release_test.go:277: 三次启用只该留一条痕，实得 0 条
+      红因: kb_release_test.go:289: 留痕的改前改后写反或缺项：[{ID:1 SubjectKey:release:kbrepo_p2 OldValue:true NewValue:false Action:governed Actor:op-2 CreatedAt:2026-09-28 16:45:25.314491 +0800 CST}]
+      红因: panic: runtime error: index out of range [1] with length 1 [recovered, repanicked]
+RP2   建行幂等键换列（同一个库建出两行）                                BROKEN=红集合不符：期望=['TestKBReleaseRepo_LockReleaseEnsuresRow'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_LockReleaseEnsuresRow', 'TestKBReleaseRepo_PointerMovesRefuseCleanRows', 'TestKBReleaseRepo_PublishAddStampsAndAdvances', 'TestKBReleaseRepo_PublishJudgments', 'TestKBReleaseRepo_PublishPublishesDraftBucket', 'TestKBReleaseRepo_PublishRejectsBadChanges', 'TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending', 'TestKBReleaseRepo_ReviseAndRetireShape', 'TestKBReleaseRepo_RollbackTouchesNoCorpus', 'TestKBReleaseRepo_SetGovernedIdempotent'] 红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_LockReleaseEnsuresRow,TestKBReleaseRepo_PointerMovesRefuseCleanRows,TestKBReleaseRepo_PublishAddStampsAndAdvances,TestKBReleaseRepo_PublishJudgments,TestKBReleaseRepo_PublishPublishesDraftBucket,TestKBReleaseRepo_PublishRejectsBadChanges,TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending,TestKBReleaseRepo_ReviseAndRetireShape,TestKBReleaseRepo_RollbackTouchesNoCorpus,TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+      红因: kb_release_test.go:229: kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:270: 第 2 次启用失败: kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:331: 实得 kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:334: 报错要点名是哪个库："kb_releases 建行失败: ERROR: duplicate key value violates unique constraint \"idx_kb_releases_product_id\" (SQLSTATE 23505)"
+      红因: kb_release_test.go:343: 实得 kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:362: 实得 kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:375: 禁令没开火：跨过一次被回滚的版本会静默复活那段语料，实得 kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+      红因: kb_release_test.go:434: 要的错误 "必须有内容" 没出现，实得 kb_releases 建行失败: ERROR: duplicate key value violates unique constraint "idx_kb_releases_product_id" (SQLSTATE 23505)
+RP3   锁脱离事务也能用（FOR UPDATE 立刻释放）                        杀掉                             红=TestKBReleaseRepo_LockReleaseEnsuresRow settled=19/19
+RP4   查无此行不再报 NotFound（零值行冒充记录）                        SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=19/19
+RP5   启停治理重复留痕（审计里出现启用两次）                              SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=19/19
+RP6   留痕的改前改后写反                                        杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP7   受治理名单把所有库都列进去                                    杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP8   查无此条变成错误（404 与 500 分不开）                          杀掉                             红=TestKBReleaseRepo_ChangeViews settled=19/19
+RP9   变更列表的页长夹住失效（一次拉全表）                               BROKEN=红集合不符：期望=['TestKBReleaseRepo_ClampsAreExact'] 实际=['TestKBReleaseRepo_ChangeViews', 'TestKBReleaseRepo_ClampsAreExact'] 红=TestKBReleaseRepo_ChangeViews,TestKBReleaseRepo_ClampsAreExact settled=19/19
+      红因: kb_release_test.go:1073: 按库过滤错：rows=0 total=2 err=<nil>
+      红因: kb_release_test.go:1145: 超上界夹到默认 50：limit=100000 实得 51 行（期望 50）
+      红因: kb_release_test.go:1145: 上界外侧 201 夹到默认 50：limit=201 实得 51 行（期望 50）
+      红因: kb_release_test.go:1145: 零值回默认 50：limit=0 实得 0 行（期望 50）
+RP10  留痕读取的页长夹住失效                                      BROKEN=红因而非预期：红名对了但没有任何一行同时含 'limit=0 要夹默认值而不是报错' 红=TestKBReleaseRepo_ClampsAreExact settled=19/19
+      红因: kb_release_test.go:1175: ListAuditBySubject(limit=100000) 实得 51 行（期望 50）
+      红因: kb_release_test.go:1175: ListAuditBySubject(limit=201) 实得 51 行（期望 50）
+      红因: kb_release_test.go:1175: ListAuditBySubject(limit=0) 实得 0 行（期望 50）
+RP11  待办清单把已落地的也算进去                                    BROKEN=红集合不符：期望=['TestKBReleaseRepo_ChangeViews', 'TestKBReleaseRepo_WithdrawCAS'] 实际=['TestKBReleaseRepo_WithdrawCAS'] 红=TestKBReleaseRepo_WithdrawCAS settled=19/19
+      红因: kb_release_test.go:1206: 撤回后仍出现在待办里：[{ID:kbc_w1 ProductID:kbrepo_p28 DocumentID:0 Op:add TargetChunkID:0 Content:正文 Reason:r Status:withdrawn ApprovalID:apr_w1 RequestedBy:op-1 ReleaseVersion:0 AppliedChunkID:0 CreatedAt:2026-09-28 16:46:45
+RP12  撤回不带 CAS 条件（已发布的能被改回待处理）                         杀掉                             红=TestKBReleaseRepo_WithdrawCAS settled=19/19
+RP13  发布不查治理开关（未进发布制的库也能发）                             杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP14  跨号发布禁令撤掉（回滚掉的语料被静默放回）                            杀掉                             红=TestKBReleaseRepo_PublishJudgments,TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP15  桶号可以等于在服号（绕过审批直接上线）                              杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP16  空批也走一次发布（审计里多出不存在的一次发布）                          杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP17  add 可以没有内容                                       BROKEN=红因而非预期：红名对了但没有任何一行同时含 '判据拒了却仍移了指针' 红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+      红因: kb_release_test.go:434: 要的错误 "必须有内容" 没出现，实得 kb_release: 变更已不在待处理态，本次发布回滚（change=kbc_a1：读待办与落库之间被撤回，或被别次发布带走）
+RP18  修订已退役的分段也放行                                      BROKEN=红集合不符：期望=['TestKBReleaseRepo_PublishRejectsBadChanges', 'TestKBReleaseRepo_ReviseAndRetireShape'] 实际=['TestKBReleaseRepo_PublishRejectsBadChanges'] 红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+      红因: kb_release_test.go:455: 已退役目标要拒，实得 chunk 1 不存在或已被退役，无法再次下线
+      红因: kb_release_test.go:458: 目标冲突的 sentinel 身份丢了：chunk 1 不存在或已被退役，无法再次下线
+RP19  修订可以指向别的库                                        杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP20  下线可以指向别的库                                        杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP21  修订的目标行不存在被静默跳过（AC① 的反面）                          杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP22  重复下线同一条被静默放过                                     杀掉                             红=TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP23  修订后的新行落在别的分段号上（上下文邻接断了）                          杀掉                             红=TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP24  修订的文档归属不继承老行                                     SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=19/19
+RP25  版本戳没真的写进语料行                                      BROKEN=红集合不符：期望=['TestKBReleaseRepo_PublishAddStampsAndAdvances'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_PublishAddStampsAndAdvances', 'TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending', 'TestKBReleaseRepo_ReviseAndRetireShape', 'TestKBReleaseRepo_RollbackTouchesNoCorpus'] 红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_PublishAddStampsAndAdvances,TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending,TestKBReleaseRepo_ReviseAndRetireShape,TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+      红因: kb_release_test.go:483: 要的是发布回滚，实得 knowledge_chunks 插入失败（change=kbc_live）: expected 6 arguments, got 7
+      红因: kb_release_test.go:524: knowledge_chunks 插入失败（change=kbc_1）: expected 6 arguments, got 7
+      红因: kb_release_test.go:663: knowledge_chunks 插入失败（change=kbc_rev）: expected 6 arguments, got 7
+      红因: kb_release_test.go:725: knowledge_chunks 插入失败（change=kbc_r1）: expected 6 arguments, got 7
+      红因: kb_release_test.go:843: knowledge_chunks 插入失败（change=kbc_f1）: expected 6 arguments, got 7
+RP26  发布状态回写不带 CAS（撤回与发布抢同一行）                          BROKEN=红因而非预期：红名对了但没有任何一行同时含 '回滚|被撤回' 红=TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending settled=19/19
+      红因: kb_release_test.go:483: 要的是发布回滚，实得 <nil>
+RP27  同一次发布里两条 add 抢同一个分段号                             SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=19/19
+RP28  回滚顺手改写了语料的版本戳（AC② 破了）                            杀掉                             红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP29  第二次回滚被允许（穿到更老的历史）                                杀掉                             红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP30  没有撤下号也能放回（凭空造一版）                                 杀掉                             红=TestKBReleaseRepo_PointerMovesRefuseCleanRows settled=19/19
+RP31  回滚与放回写同一种留痕（审计读不出方向）                             BROKEN=红集合不符：期望=['TestKBReleaseRepo_PointerMovesRefuseCleanRows', 'TestKBReleaseRepo_RollbackTouchesNoCorpus'] 实际=['TestKBReleaseRepo_RollbackTouchesNoCorpus'] 红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+      红因: kb_release_test.go:785: 放回留痕 0 条
+RP32  在服数不看闸门（页面说有待发布、实际搜不到）                           BROKEN=红集合不符：期望=['TestKBReleaseRepo_CountChunksInForce'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_PublishPublishesDraftBucket'] 红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_PublishPublishesDraftBucket settled=19/19
+      红因: kb_release_test.go:624: 未发布前它不该在服：inForce=1 err=<nil>
+      红因: kb_release_test.go:886: on 档读数错：inForce=3 total=3（应为在服 1 条 / 全量 3 条）
+RP33  字段不全的留痕行被收下（AC③ 少一个出处）                           杀掉                             红=TestKBReleaseRepo_AuditShape settled=19/19
+RP34  发布留痕的 subject_key 丢了前缀（按号查不到全部动作）                BROKEN=红集合不符：期望=['TestKBReleaseRepo_AuditShape', 'TestKBReleaseRepo_PublishAddStampsAndAdvances'] 实际=['TestKBReleaseRepo_PublishAddStampsAndAdvances'] 红=TestKBReleaseRepo_PublishAddStampsAndAdvances settled=19/19
+      红因: kb_release_test.go:565: kbc_1 的发布留痕 0 条
+      红因: kb_release_test.go:565: kbc_2 的发布留痕 0 条
+
+结果：杀掉 18/34 格 （本趟只跑了 34/161 格，是子集，**不构成全族读数**）
+未杀/坏格清单：
+  !! RP1 RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信：裸 SQL 建行顺带开启治理（看一眼就把库推进发布制）
+  !! RP2 BROKEN=红集合不符：期望=['TestKBReleaseRepo_LockReleaseEnsuresRow'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_LockReleaseEnsuresRow', 'TestKBReleaseRepo_PointerMovesRefuseCleanRows', 'TestKBReleaseRepo_PublishAddStampsAndAdvances', 'TestKBReleaseRepo_PublishJudgments', 'TestKBReleaseRepo_PublishPublishesDraftBucket', 'TestKBReleaseRepo_PublishRejectsBadChanges', 'TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending', 'TestKBReleaseRepo_ReviseAndRetireShape', 'TestKBReleaseRepo_RollbackTouchesNoCorpus', 'TestKBReleaseRepo_SetGovernedIdempotent']：建行幂等键换列（同一个库建出两行）
+  !! RP4 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：查无此行不再报 NotFound（零值行冒充记录）
+  !! RP5 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：启停治理重复留痕（审计里出现启用两次）
+  !! RP9 BROKEN=红集合不符：期望=['TestKBReleaseRepo_ClampsAreExact'] 实际=['TestKBReleaseRepo_ChangeViews', 'TestKBReleaseRepo_ClampsAreExact']：变更列表的页长夹住失效（一次拉全表）
+  !! RP10 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'limit=0 要夹默认值而不是报错'：留痕读取的页长夹住失效
+  !! RP11 BROKEN=红集合不符：期望=['TestKBReleaseRepo_ChangeViews', 'TestKBReleaseRepo_WithdrawCAS'] 实际=['TestKBReleaseRepo_WithdrawCAS']：待办清单把已落地的也算进去
+  !! RP17 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '判据拒了却仍移了指针'：add 可以没有内容
+  !! RP18 BROKEN=红集合不符：期望=['TestKBReleaseRepo_PublishRejectsBadChanges', 'TestKBReleaseRepo_ReviseAndRetireShape'] 实际=['TestKBReleaseRepo_PublishRejectsBadChanges']：修订已退役的分段也放行
+  !! RP24 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：修订的文档归属不继承老行
+  !! RP25 BROKEN=红集合不符：期望=['TestKBReleaseRepo_PublishAddStampsAndAdvances'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_PublishAddStampsAndAdvances', 'TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending', 'TestKBReleaseRepo_ReviseAndRetireShape', 'TestKBReleaseRepo_RollbackTouchesNoCorpus']：版本戳没真的写进语料行
+  !! RP26 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '回滚|被撤回'：发布状态回写不带 CAS（撤回与发布抢同一行）
+  !! RP27 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：同一次发布里两条 add 抢同一个分段号
+  !! RP31 BROKEN=红集合不符：期望=['TestKBReleaseRepo_PointerMovesRefuseCleanRows', 'TestKBReleaseRepo_RollbackTouchesNoCorpus'] 实际=['TestKBReleaseRepo_RollbackTouchesNoCorpus']：回滚与放回写同一种留痕（审计读不出方向）
+  !! RP32 BROKEN=红集合不符：期望=['TestKBReleaseRepo_CountChunksInForce'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_PublishPublishesDraftBucket']：在服数不看闸门（页面说有待发布、实际搜不到）
+  !! RP34 BROKEN=红集合不符：期望=['TestKBReleaseRepo_AuditShape', 'TestKBReleaseRepo_PublishAddStampsAndAdvances'] 实际=['TestKBReleaseRepo_PublishAddStampsAndAdvances']：发布留痕的 subject_key 丢了前缀（按号查不到全部动作）
+终态：本卡电池**未**全杀——上面每一条要么补腿、要么按'不配格'那一节写明理由。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-986c6gvt/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-986c6gvt

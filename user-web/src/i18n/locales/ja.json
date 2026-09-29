@@ -30,6 +30,7 @@
     "saveSuccess": "保存しました",
     "createSuccess": "作成しました",
     "updateSuccess": "更新しました",
+    "username": "ユーザー名",
     "language": "言語",
     "hint": "ヒント",
     "warning": "警告",
@@ -335,7 +336,9 @@
     "baCreate": "新規タスク",
     "baCron": "定期トリガー",
     "baStatus": "ホスト状態",
-    "badCase": "Bad Case キュー"
+    "approvalTask": "タスクセンター",
+    "badCase": "Bad Case キュー",
+    "qqAccount": "ボットアカウント"
   },
   "保存": "保存",
   "提交": "送信",

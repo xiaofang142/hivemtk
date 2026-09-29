@@ -94,7 +94,11 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
       return Promise.all([url, token]);
     }).then(([url, token]) => {
       const headers = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const t = (token || '').trim();
+      if (t) {
+        headers['X-Bridge-Token'] = t;
+        headers['Authorization'] = `Bearer ${t}`;
+      }
       return fetch(url, {
         method: 'POST',
         headers,
@@ -132,8 +136,10 @@ async function ensureSSEConnection(channel, accountId) {
   const token = await getAuthToken();
 
   const url = `${baseUrl}/api/bridge/outbox/sse?channel=${encodeURIComponent(channel)}&account_id=${encodeURIComponent(accountId)}&last_event_id=${encodeURIComponent(lastEventID)}`;
-  // EventSource 不支持自定义 Header，Token 通过 URL 传递
-  const fullUrl = token ? `${url}&token=${encodeURIComponent(token)}` : url;
+  // EventSource 不支持自定义 Header，Token 只能通过查询参数；
+  // 服务端闸门读的键名是 bridge_token（middleware/bridge_ingress_guard.go），
+  // 写成 token 会被当成"没带凭证"直接 401。
+  const fullUrl = token ? `${url}&bridge_token=${encodeURIComponent(token)}` : url;
 
   log.info(`SSE 连接中: ${key}, lastEventID=${lastEventID || '(none)'}`);
 

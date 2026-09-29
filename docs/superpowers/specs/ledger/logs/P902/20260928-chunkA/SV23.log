@@ -1,0 +1,70 @@
+2026-09-28T18:16:33+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBRelease_UnavailableEverywhere
+--- PASS: TestKBRelease_UnavailableEverywhere (0.00s)
+=== RUN   TestKBRelease_GlobalRegistryRoundTrip
+--- PASS: TestKBRelease_GlobalRegistryRoundTrip (0.00s)
+=== RUN   TestKBRelease_SubmitInputNormalization
+--- PASS: TestKBRelease_SubmitInputNormalization (0.00s)
+=== RUN   TestKBRelease_WriteArgs
+--- PASS: TestKBRelease_WriteArgs (0.00s)
+=== RUN   TestKBRelease_ChangeIDErrsOnOverflow
+--- PASS: TestKBRelease_ChangeIDErrsOnOverflow (0.00s)
+=== RUN   TestKBRelease_SubmitChangeHappyPath
+2026-09-28T18:16:33+08:00 INF [kb-release] 变更已提交：kbc_1700000000000000000_1 op=add product=p1 approval=apr_77（新建=true） component=user-server
+--- PASS: TestKBRelease_SubmitChangeHappyPath (0.00s)
+=== RUN   TestKBRelease_SubmitChangeApprovalFailureLeavesNoRow
+--- PASS: TestKBRelease_SubmitChangeApprovalFailureLeavesNoRow (0.00s)
+=== RUN   TestKBRelease_SubmitChangeNilApprovalWithoutError
+--- PASS: TestKBRelease_SubmitChangeNilApprovalWithoutError (0.00s)
+=== RUN   TestKBRelease_SubmitChangeInsertFailure
+--- PASS: TestKBRelease_SubmitChangeInsertFailure (0.00s)
+=== RUN   TestKBRelease_SubmitChangeAuditFailureStillSucceeds
+2026-09-28T18:16:33+08:00 WRN [kb-release] 变更 kbc_1700000000000000000_1 的 submitted 留痕写入失败: 审计表写入失败 component=user-server
+2026-09-28T18:16:33+08:00 INF [kb-release] 变更已提交：kbc_1700000000000000000_1 op=add product=p1 approval=apr_stub（新建=true） component=user-server
+--- PASS: TestKBRelease_SubmitChangeAuditFailureStillSucceeds (0.00s)
+=== RUN   TestKBRelease_WithdrawChange
+=== RUN   TestKBRelease_WithdrawChange/入参判据
+=== RUN   TestKBRelease_WithdrawChange/查无此条
+=== RUN   TestKBRelease_WithdrawChange/读故障上抛
+=== RUN   TestKBRelease_WithdrawChange/已发布的撤不掉
+=== RUN   TestKBRelease_WithdrawChange/撤回成功
+=== RUN   TestKBRelease_WithdrawChange/CAS_被抢先
+=== RUN   TestKBRelease_WithdrawChange/留痕失败上抛
+--- PASS: TestKBRelease_WithdrawChange (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/入参判据 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/查无此条 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/读故障上抛 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/已发布的撤不掉 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/撤回成功 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/CAS_被抢先 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/留痕失败上抛 (0.00s)
+=== RUN   TestKBRelease_PublishPendingVerdicts
+2026-09-28T18:16:33+08:00 WRN [kb-release] 变更 kbc_bogus 的审批 apr_bogus status="someday" 无法识别 ⇒ 本次不带 component=user-server
+2026-09-28T18:16:33+08:00 WRN [kb-release] 变更 kbc_other 挂着审批 apr_other，但三列是 (quote,kbc_other,kb.change.apply) ⇒ 不是这条变更的结论，本次不带 component=user-server
+2026-09-28T18:16:33+08:00 WRN [kb-release] 变更 kbc_wrong 挂着审批 apr_wrong，但三列是 (kb_change,kbc_someone-else,kb.change.apply) ⇒ 不是这条变更的结论，本次不带 component=user-server
+2026-09-28T18:16:33+08:00 INF [kb-release] 库 p1 发布完成：v3 → v4，落库 0 条变更 component=user-server
+--- PASS: TestKBRelease_PublishPendingVerdicts (0.00s)
+=== RUN   TestKBRelease_PublishPendingApprovalReadFailureStopsEverything
+--- PASS: TestKBRelease_PublishPendingApprovalReadFailureStopsEverything (0.00s)
+=== RUN   TestKBRelease_PublishPendingNothingApprovedSkipsTransaction
+--- FAIL: TestKBRelease_PublishPendingNothingApprovedSkipsTransaction (0.00s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x18 pc=0x10100525c]
+
+goroutine 57 [running]:
+testing.tRunner.func1.2({0x1026efd60, 0x102ab26f0})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1977 +0x318
+panic({0x1026efd60?, 0x102ab26f0?})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c
+hivemtk-user/internal/service.(*KBReleaseService).PublishPending(0x1904d7987d40, {0x1029959e8, 0x102b33480}, {0x1015014cc, 0x2}, {0x101502f39, 0x4})
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-q3ywz_te/clone/user-server/internal/service/kb_release.go:527 +0xd4c
+hivemtk-user/internal/service.TestKBRelease_PublishPendingNothingApprovedSkipsTransaction(0x1904d7a026c8)
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-q3ywz_te/clone/user-server/internal/service/kb_release_test.go:750 +0x1d0
+testing.tRunner(0x1904d7a026c8, 0x102964dd8)
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	hivemtk-user/internal/service	0.721s
+FAIL

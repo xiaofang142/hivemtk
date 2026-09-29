@@ -1,0 +1,93 @@
+2026-09-28T18:04:15+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/on
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/off
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/shadow
+=== RUN   TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/on
+--- PASS: TestKbGate_RetrievalSitesHideUnpublished (62.90s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/off (0.71s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/shadow (0.47s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/按库过滤/on (0.63s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/off (1.33s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/shadow (1.43s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.vectorSearchPG/跨库全量/on (1.39s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/off (1.69s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/shadow (2.49s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/按库过滤/on (1.15s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/off (0.94s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/shadow (0.82s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.tsvectorSearch/跨库全量/on (0.56s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/off (1.84s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/shadow (1.31s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/按库过滤/on (1.88s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/off (0.93s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/shadow (1.03s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/hybrid.keywordSearchPGFallback/跨库全量/on (2.58s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/off (1.88s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/shadow (0.67s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/按库过滤/on (1.21s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/off (1.05s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/shadow (0.74s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.tryTSQuery/跨库全量/on (0.66s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/off (0.91s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/shadow (1.03s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/按库过滤/on (1.04s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/off (0.78s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/shadow (0.97s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/lexical.ilikeFallback/跨库全量/on (0.73s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/off (0.68s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/shadow (1.24s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/按库过滤/on (1.79s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/off (1.50s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/shadow (0.49s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.SearchVector/跨库全量/on (0.77s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/off (0.85s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/shadow (0.40s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/按库过滤/on (0.29s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/off (0.46s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/shadow (0.26s)
+    --- PASS: TestKbGate_RetrievalSitesHideUnpublished/vector.Retrieve/跨库全量/on (0.47s)
+=== RUN   TestKbGate_EmbeddingSourceFilterStillApplies
+--- PASS: TestKbGate_EmbeddingSourceFilterStillApplies (0.62s)
+=== RUN   TestKbGate_TestSchemaCoversModelColumns
+--- PASS: TestKbGate_TestSchemaCoversModelColumns (0.36s)
+PASS
+ok  	hivemtk-user/internal/aiagent/rag/retrieval	64.198s

@@ -295,7 +295,9 @@ func TestAckBridgeOutbox_FailedStatus_P0_3(t *testing.T) {
 		accountID = "acc_h_failed"
 	)
 	hub := &model.MessageHub{
-		Platform:       channel,
+		// 库里只可能是规范名（ingest 入口归一后才落 message_hub）；下面的 HTTP 请求仍带
+		// 别名 douyin_web ⇒ 这一格同时锁住"ack 入口必须把别名归一后才能匹配上行"。
+		Platform:       "douyin",
 		AccountID:      accountID,
 		ConversationID: "conv_h",
 		MsgID:          "mh:h_failed",
@@ -438,7 +440,9 @@ func TestAckBridgeOutbox_CrossAccountProbe_NotInScope_P0_6(t *testing.T) {
 	h.ingress = svc
 
 	if err := db.Create(&model.MessageHub{
-		Platform:       "douyin_web",
+		// 规范名入库才是现实形态（ingest 入口把别名归一后才落 message_hub）。
+		// 下面请求仍带别名 douyin_web ⇒ 这一格顺带锁住"ack 入口也必须归一"。
+		Platform:       "douyin",
 		AccountID:      "acc_B",
 		ConversationID: "conv_B",
 		MsgID:          "m_probe_http",

@@ -31,6 +31,7 @@
     "saveSuccess": "Saved successfully",
     "createSuccess": "Created successfully",
     "updateSuccess": "Updated successfully",
+    "username": "Username",
     "language": "Language",
     "hint": "Hint",
     "warning": "Warning",
@@ -329,7 +330,9 @@
     "baCreate": "Новая задача",
     "baCron": "Плановые триггеры",
     "baStatus": "Статус хоста",
-    "badCase": "Очередь проблемных ответов"
+    "approvalTask": "Центр задач",
+    "badCase": "Очередь проблемных ответов",
+    "qqAccount": "Аккаунт бота"
   },
   "保存": "Save",
   "提交": "Submit",

@@ -299,6 +299,14 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		logger.Ctx(ctx).Debug().Str("event_id", eventID).Msg("[Webhook] TriggerInboundAI duplicate, skip")
 		return
 	}
+
+	meta := &TriggerInboundMeta{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(meta)
+		}
+	}
+
 	// 渠道账号 AI 开关守卫：仅对有账号级 AI 开关字段的渠道生效
 	// （wechat/dingtalk/桥接五端等无开关渠道直接放行，避免误杀既有 AI 链路）
 	if channel != "" && channelHasAIAgentSwitch(WebhookChannel(channel)) && !s.shouldTriggerAI(ctx, WebhookChannel(channel), accountID) {
@@ -313,12 +321,23 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		return
 	}
 
-	meta := &TriggerInboundMeta{}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(meta)
+	// 门控互锁在本漏斗上再兜一道：入站主路径（handleJob）按 @mention/商机/已验证成员
+	// 决定要不要回，但 recheck 补触发会把"主路径判定不该回"的行照样灌进来 ⇒
+	// 门控群里刚被禁言的未验证成员能拿到 AI 回复，网关等于白装。
+	// 判据用正面口径 MemberUnverified（无门控群/未装配门控一律放行，不影响其他渠道）。
+	if channel == string(ChannelTelegram) && meta.IsGroup {
+		if accID, cerr := strconv.ParseUint(accountID, 10, 64); cerr == nil && accID > 0 &&
+			s.tgGate.MemberUnverified(ctx, uint(accID), conversationID, customerID) {
+			logger.Ctx(ctx).Info().
+				Str("account_id", accountID).
+				Str("conv_id", conversationID).
+				Str("sender", customerID).
+				Str("event_id", eventID).
+				Msg("[Webhook] TriggerInboundAI skipped: 门控群未验证成员，补触发不得绕过互锁")
+			return
 		}
 	}
+
 	p := &ParsedPayload{
 		EventID: eventID,
 		Sender:  customerID,
@@ -529,6 +548,19 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			Str("session_id", result.SessionID).
 			Str("reason", result.TransferReason).
 			Msg("transferred to human")
+		// 转接公告必须和 AI 回复走同一条出站链路（message_hub(status=pending) → outbox/SSE
+		// → 插件投递 → ack），插件才不需要为它单独加一条通道。
+		// 不发的后果是实测到的那一形态：客户照兜底文案回了「转人工」，会话被系统判成
+		// 等人工、待办也进了池子，但客户端一句回执都没有 —— 客户只知道没人理他。
+		// TransferNotice 为空表示"不是本轮接走的"（会话上一轮已在人工手里），
+		// 那时重复播报就是刷屏。
+		if result.TransferNotice != "" {
+			outCtx := HandleResultToContext(ctx, result)
+			if agentCtx != nil && agentCtx.AgentCode != "" {
+				outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)
+			}
+			_, _ = s.sendOutbound(outCtx, channel, accountID, p, result.TransferNotice, hubMsg, nil)
+		}
 		return
 	}
 

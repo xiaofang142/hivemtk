@@ -1,0 +1,4 @@
+FAIL	hivemtk-user/internal/controller [build failed]
+FAIL
+# hivemtk-user/internal/controller [hivemtk-user/internal/controller.test]
+internal/controller/kb_release.go:333:12: declared and not used: result

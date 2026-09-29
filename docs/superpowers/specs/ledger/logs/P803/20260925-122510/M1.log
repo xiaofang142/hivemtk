@@ -1,0 +1,16 @@
+=== RUN   TestBadCase_StatusesAreClosed
+--- PASS: TestBadCase_StatusesAreClosed (0.00s)
+=== RUN   TestBadCase_Transitions
+    bad_case_test.go:66: CanBadCaseTransition(exported, labeled)=true，期望 false
+--- FAIL: TestBadCase_Transitions (0.00s)
+=== RUN   TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable
+--- PASS: TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable (0.00s)
+=== RUN   TestBadCase_SourcesAreClosed
+--- PASS: TestBadCase_SourcesAreClosed (0.00s)
+=== RUN   TestBadCaseDedupKey
+--- PASS: TestBadCaseDedupKey (0.00s)
+=== RUN   TestBadCase_TableName
+--- PASS: TestBadCase_TableName (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.325s
+FAIL

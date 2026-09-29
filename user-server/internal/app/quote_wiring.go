@@ -62,7 +62,7 @@ func InitQuoteRuntime(db *gorm.DB) bool {
 	gen.SetScriptSource(scripts)
 	service.SetGlobalQuoteService(gen)
 
-	approvals, approvalsFromGlobal := quoteApprovalReader(db)
+	approvals, approvalsFromGlobal := approvalSubmitReader(db)
 	send := service.NewQuoteSendService(
 		quoteRepo, oppRepo, approvals,
 		repository.NewApprovalRequestRepositoryWithDB(db),
@@ -114,12 +114,17 @@ func quoteScriptPort(db *gorm.DB, kv repository.SystemConfigKVRepository) *servi
 	return service.NewQuoteScriptSource(repo, ab, nil)
 }
 
-// quoteApprovalReader 发送腿要的 Submit/Get 门面：优先复用审批运行时那一份，
+// approvalSubmitReader 装配点要的 Submit/Get 门面：优先复用审批运行时那一份，
 // 没有就构造一份不带 auto-approve 策略的（policy=nil 的含义是**全部走人工**，
 // 那是最保守的一档，不是"没策略所以没人被自动放行"的疏漏）。
 //
 // 第二个返回值说"用的是不是全局那份"：调用方要用它决定喊不喊那句"没人能在 HTTP 上裁决"。
-func quoteApprovalReader(db *gorm.DB) (*service.ApprovalRequestService, bool) {
+//
+// 从 quote_wiring.go 的私有函数升为本包共用（T-P9-02）：共用的是那三行**判据**而不是对象 ——
+// 待办出口（SetTaskSink）这一步漏掉的话，入队的审批会正常落库却永远投不进待办中心，
+// 表现是"提了变更没人批"，而真实原因是"没人看得见它"。这种"两处各写一遍、其中一处先漏"
+// 的形状正是 operator.go / 本包既有装配文件反复收成一处的那个理由。
+func approvalSubmitReader(db *gorm.DB) (*service.ApprovalRequestService, bool) {
 	if svc := service.GlobalApprovalRequestService(); svc != nil {
 		return svc, true
 	}

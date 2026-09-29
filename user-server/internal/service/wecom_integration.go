@@ -145,6 +145,8 @@ func (s *WeComIntegrationService) SendMessage(ctx context.Context, req *WeComSen
 	convID := fmt.Sprintf("wecom-%d-%s", req.AccountID, req.ExternalUserID)
 
 	now := time.Now()
+	// 这里不声明投递状态：本函数是「先落库、后发送」的形状，且发送段在 WECOM_DISABLE_OUTBOUND
+	// 或缺 CorpID/CorpSecret 时整块跳过。落库即写 delivered 等于把没发出去的消息记成已送达。
 	hubMsg, err := s.hub.Push(ctx, &PushMessageRequest{
 
 		Platform:       "wecom",

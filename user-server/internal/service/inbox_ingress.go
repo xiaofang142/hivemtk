@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -205,7 +206,9 @@ func (s *InboxIngressService) IsSessionHumanLocked(ctx context.Context, sessionI
 	switch {
 	case err == nil:
 		return v == "true", nil
-	case errors.Is(err, cache.ErrCacheMiss):
+	// 未命中（RedisCache 返 redis.Nil、MemoryCache 返 cache.ErrCacheMiss）＝该会话没有人工锁，
+	// 不是故障：缺 redis.Nil 这一支会让每条正常入站都打成「Redis 故障」Error 日志。
+	case errors.Is(err, redis.Nil), errors.Is(err, cache.ErrCacheMiss):
 		return false, nil
 	default:
 		content := ""
@@ -216,10 +219,10 @@ func (s *InboxIngressService) IsSessionHumanLocked(ctx context.Context, sessionI
 			}
 		}
 		if content != "" && (MatchTransferKeywords(content) || MatchExplicitKeywords(content)) {
-			logger.Errorf("[Inbox] Redis 故障且最近用户消息命中转人工关键词，保守判定为人工接管 session=%s", sessionID)
+			logger.Errorf("[Inbox] Redis 读取失败且最近用户消息命中转人工关键词，保守判定为人工接管 session=%s err=%v", sessionID, err)
 			return true, nil
 		}
-		logger.Errorf("[Inbox] Redis 故障且无转人工关键词命中，放行 AI 路由 session=%s", sessionID)
+		logger.Errorf("[Inbox] Redis 读取失败且无转人工关键词命中，放行 AI 路由 session=%s err=%v", sessionID, err)
 		return false, nil
 	}
 }
@@ -460,17 +463,8 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 
 	isSystemMsg := event.SenderType == "system"
 
-	humanLocked, _ := s.IsSessionHumanLocked(ctx, event.SessionID, event.Content)
-	if humanLocked {
-		result.HumanLocked = true
-		result.Accepted = true
-		result.Reason = "session is human-locked; bypass AI routing"
-		if err := s.persistMessage(ctx, event); err != nil {
-			return result, fmt.Errorf("持久化消息失败: %w", err)
-		}
-		return result, nil
-	}
-
+	// 幂等判定必须排在人工锁定之前：运营正在回话的会话恰恰是「出站内容被渠道回灌」最常发生的
+	// 状态，锁定判定抢在前面会让同一条 msg_id 每次都再落一行，回声保护在该状态下彻底失效。
 	if s.hubRepo != nil {
 		existing, err := s.hubRepo.GetByMsgID(ctx, event.EventID)
 		if err == nil && existing != nil && existing.ConversationID == event.ConversationID {
@@ -506,6 +500,17 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 				Str("existing_conv_id", existing.ConversationID).
 				Msg("[Inbox] 钩子2：msg_id 跨会话命中（algo2 同 channel+content），不跳过，各自入库")
 		}
+	}
+
+	humanLocked, _ := s.IsSessionHumanLocked(ctx, event.SessionID, event.Content)
+	if humanLocked {
+		result.HumanLocked = true
+		result.Accepted = true
+		result.Reason = "session is human-locked; bypass AI routing"
+		if err := s.persistMessage(ctx, event); err != nil {
+			return result, fmt.Errorf("持久化消息失败: %w", err)
+		}
+		return result, nil
 	}
 
 	decision, derr := s.interceptInbound(ctx, event)
@@ -807,6 +812,20 @@ func (s *InboxIngressService) RecheckUnrepliedAndTrigger(ctx context.Context, co
 		return
 	}
 
+	// TG 群里的「没回」通常是主路径的判定结果，不是遗漏：这条漏斗把「会话里最后一条
+	// 非系统入站行」直接灌给 AI，于是主路径判为闲聊/图片/表情的行会在下一次出站收尾时
+	// 被回锅，内容闸等于白装（真商机与 @机器人 都在这条漏斗之前就已经判过了）。
+	// 只挡 TG 群：私聊客户的未回复补触发不受影响。@机器人 但出站失败的情形走
+	// enqueueSendRetry 重投同一份内容，不依赖这里。
+	if last.Platform == string(ChannelTelegram) && last.IsGroup &&
+		!tgVerifiedSpeechWorthReply(last.MsgType, last.Content) {
+		logger.Ctx(ctx).Info().
+			Str("conv_id", conversationID).
+			Str("msg_type", last.MsgType).Uint("hub_id", last.ID).
+			Msg("[Inbox][Recheck] TG 群待补触发的正文未过内容闸（非文本/不像问话），跳过")
+		return
+	}
+
 	if s.cache != nil && last.ID != 0 {
 		budgetKey := InboxRecheckBudgetKey + strconv.FormatUint(uint64(last.ID), 10)
 		n, berr := s.cache.Incr(ctx, budgetKey, InboxReplyWindow)
@@ -940,17 +959,6 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 
 	isSystemMsg := event.SenderType == "system"
 
-	humanLocked, _ := s.IsSessionHumanLocked(ctx, event.SessionID, event.Content)
-	if humanLocked {
-		result.HumanLocked = true
-		result.Accepted = true
-		result.Reason = "session is human-locked; bypass AI routing"
-		if err := s.persistMessage(ctx, event); err != nil {
-			return result, fmt.Errorf("持久化消息失败: %w", err)
-		}
-		return result, nil
-	}
-
 	if s.hubRepo != nil {
 
 		if event.EventID != "" {
@@ -970,6 +978,17 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 				return result, nil
 			}
 		}
+	}
+
+	humanLocked, _ := s.IsSessionHumanLocked(ctx, event.SessionID, event.Content)
+	if humanLocked {
+		result.HumanLocked = true
+		result.Accepted = true
+		result.Reason = "session is human-locked; bypass AI routing"
+		if err := s.persistMessage(ctx, event); err != nil {
+			return result, fmt.Errorf("持久化消息失败: %w", err)
+		}
+		return result, nil
 	}
 
 	decision, derr := s.interceptInbound(ctx, event)

@@ -265,6 +265,8 @@ func (t *DecisionTree) ExecuteWithFallback(
 	return "", LevelTemplate, fmt.Errorf("fallback chain exhausted: 7B/3B/cache all failed")
 }
 
+// scenarioFallbackTemplates 按场景轮换的降级文案池，客户可见；
+// 「…」暗号同 defaultFallbackTemplates 的约束（须是 service 层转人工关键词表认识的词）。
 var scenarioFallbackTemplates = map[DispatchScenario][]string{
 
 	ScenarioIntentRecognize: {
@@ -272,7 +274,7 @@ var scenarioFallbackTemplates = map[DispatchScenario][]string{
 	},
 
 	ScenarioSOPReply: {
-		"您好，系统正在为您处理该业务，请稍候；如需加急可回复「人工」。",
+		"您好，系统正在为您处理该业务，请稍候；如需加急可回复「转人工」。",
 		"您的请求已记录，我们会尽快为您办理，感谢耐心等待。",
 	},
 
@@ -287,9 +289,13 @@ var scenarioFallbackTemplates = map[DispatchScenario][]string{
 	},
 }
 
+// defaultFallbackTemplates 未命中场景表时的通用降级文案池。
+// 池里出现的「…」暗号必须是 service 层转人工关键词表真认识的词（现为「转人工」），
+// 否则客户照文案回复也触发不了 veto，兜底回复就成了死路；两侧一致性由
+// service 包的 TestFallbackCopy_HandoffKeywordIsMatchable 跨包守住。
 var defaultFallbackTemplates = []string{
 	"抱歉，当前客服系统繁忙，请稍后再试，或联系人工客服获取帮助。",
-	"系统暂时有点忙，请稍后重试；紧急问题可回复「人工」转人工客服。",
+	"系统暂时有点忙，请稍后重试；紧急问题可直接回复「转人工」。",
 }
 
 var scenarioTemplateCursor uint64

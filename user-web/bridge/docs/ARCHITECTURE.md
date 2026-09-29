@@ -39,7 +39,9 @@ bridgeWS.POST("/bridge/outbox/ack",   bridgeHandler.AckBridgeOutbox)
 - `account_id` 缺失 → 400 `account_id required`（不写 `default` 兜底）；
 - `channel` 不在白名单 → 400 `unsupported`；
 - body 上限 `HTTPIngestMaxBodySize = 4MB`，单批消息上限 `HTTPIngestMaxMessages = 200`；
-- Token 走 `Authorization: Bearer <token>` Header（**禁止 URL query**）。
+- Token 走 `X-Bridge-Token` Header（`Authorization: Bearer` 不被桥接闸门读取，发了也是 401）。
+  唯一例外是 SSE：EventSource 带不了自定义头，允许 `?bridge_token=<token>`，
+  服务端校验通过后会把该参数从 `RawQuery` 剥离并在日志里脱敏。
 
 ## 3. 协议类型单源
 

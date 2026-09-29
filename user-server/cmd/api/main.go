@@ -414,6 +414,13 @@ func main() {
 	defer service.StopSessionTTLCron(context.Background())
 	logger.Info("[SessionTTLCron] 会话 TTL 自动关闭 cron 已显式启动（替代原 init 副作用）")
 
+	// msg_hourly_summary 唯一的写入者。service 包的 init 装配传的是 nil DB ⇒ repo 非空但
+	// 句柄为空，每 5 分钟只留下一行 "invalid db"，水位线永不推进，汇总表从未产出过一行
+	// （仪表盘的消息量因此一直走实时兜底）。与上一行同法改为显式装配。
+	service.StartMessageHubSummaryAggCron(db.GetDB())
+	defer service.StopMessageHubSummaryAggCron(context.Background())
+	logger.Info("[HubSummaryAggCron] message_hub 小时汇总已显式启动（替代 init 里的 nil DB 哑装配）")
+
 	cronpkg.InitCron()
 	logger.Info("[GEO InitCron] 定时任务已注册（SOV刷新/负面监控/信源同步/竞品爬虫，经 JobManager 统一管理）")
 
@@ -471,6 +478,12 @@ func main() {
 	if collectionJob := app.InitCollectionRuntime(db.GetDB()); collectionJob != nil {
 		defer collectionJob.Stop(context.Background())
 	}
+
+	// Telegram polling 的分布式锁在关停时必须交回：polling 协程随进程消失后，
+	// DB 里的 polling_owner 仍写着这个已死进程，60s 心跳陈旧窗口内启动的新实例会判定
+	// 「锁被其他实例持有」而整轮不启动 polling —— 表现是重启后 Telegram 一条消息都不进，
+	// 且要再重启一次才恢复。登记在持久层 Close 之后 ⇒ 本 defer 先执行，释放语句仍进得了库。
+	defer service.StopAllTelegramPolling()
 
 	addr := resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))
 	logger.Infof("营销后端服务启动于 %s", addr)

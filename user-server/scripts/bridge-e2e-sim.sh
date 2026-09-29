@@ -20,10 +20,16 @@ set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8204}"
 # X-Bridge-Token 闸门（middleware/bridge_ingress_guard.go, code UNAUTHORIZED_2001）:
-# 本脚本早于该闸门，未带 token 时 ingest 全 401、GET outbox 的 401 还会被误归因为
-# "推理栈波动" WARN。用法: BRIDGE_TOKEN=$(查 system_config_kv.bridge_ingest_token) bash 本脚本
+# 闸门只读 X-Bridge-Token 头（SSE 另支持 ?bridge_token=），不读 Authorization / ?token=。
+# 未带凭证时 ingest 全 401，且 GET outbox 的 401 会被误归因为"推理栈波动" WARN。
+# 默认自动从 DB 取当前生效凭证；显式指定用 BRIDGE_TOKEN=xxx bash 本脚本
 BRIDGE_TOKEN="${BRIDGE_TOKEN:-}"
-H_TOKEN=(-H "X-Bridge-Token: ${BRIDGE_TOKEN}")
+# 等 AI 回复落库的窗口（秒）。
+# 66–255s 那一档量的是手建的临时二进制（退避跑满），不是本仓的开发态：热重载实例
+# （make dev = air）上现测三次首条回复落库 = 6s / 6s / 7s（Embedding :8208 仍缺位，
+# 答案来自 llm_providers 里的云端提供商）。窗口按 10 倍余量收到 120s：
+# 再长就不是"AI 慢"而是"AI 死了"，多渠道多腿累加会把一趟闸门拖成十几分钟的空等。
+AI_WAIT_S="${AI_WAIT_S:-120}"
 CHANNELS=("douyin" "xiaohongshu" "kuaishou" "xianyu" "tiktok")
 PASS=0; FAIL=0; WARN=0
 declare -a REPORT
@@ -32,12 +38,29 @@ RUN_TOKEN="$(python3 -c 'import uuid;print(uuid.uuid4().hex[:10])')"
 # ---- 数据库连接（宿主映射端口，从 hivemtk/.env 读取密码）----
 DB_HOST="${DB_HOST:-localhost}"; DB_PORT="${DB_PORT:-8232}"; DB_USER="${DB_USER:-admin}"
 DB_NAME="${DB_NAME:-user_db}"
-PW="$(grep '^POSTGRES_PASSWORD=' "$(dirname "$0")/../../.env" 2>/dev/null | head -1 | cut -d= -f2-)"
+ENV_FILE="$(dirname "$0")/../../.env"
+PW="$(grep '^POSTGRES_PASSWORD=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)"
 PW="${PW:-${POSTGRES_PASSWORD:-}}"
+envv() { grep -E "^[[:space:]]*$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'; }
 PG_CONN=(-h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME")
 psql_q() { PGPASSWORD="$PW" psql "${PG_CONN[@]}" -t -A -c "$1" 2>/dev/null; }
 
-# mkjson <json-string-literal-python-expr> ... 不是，这里用简单的 ack body 生成器
+# curl 连不上时 -w 已经打印了 000，再写 `|| echo 000` 会拼成 000000（上一版健康门控就把
+# "/health=000000" 印进了结果面）。取码统一走这里，空值补 000。
+http_code() { local c; c=$(curl -s -m "${2:-5}" -o /dev/null -w "%{http_code}" "$1" 2>/dev/null); printf '%s' "${c:-000}"; }
+
+# 凭证未显式给出时从 DB 现取（闸门是 fail-closed：拿不到凭证就整批 401，
+# 而 401 会被后面的用例误归因成环境波动 ⇒ 这里必须取不到就停，不能空着头往下跑）
+if [ -z "$BRIDGE_TOKEN" ]; then
+  BRIDGE_TOKEN="$(psql_q "SELECT value FROM system_config_kv WHERE key='bridge_ingest_token'")"
+fi
+if [ -z "$BRIDGE_TOKEN" ]; then
+  echo "FATAL: 取不到桥接凭证（环境变量 BRIDGE_TOKEN 未给，且 $DB_NAME.system_config_kv 无 bridge_ingest_token）。" >&2
+  echo "       后台「桥接凭证」页生成，或 BRIDGE_TOKEN=xxx bash $0" >&2
+  exit 2
+fi
+H_TOKEN=(-H "X-Bridge-Token: ${BRIDGE_TOKEN}")
+
 # mkack <msg_ids_csv> <status> → 生成 {"msg_ids":[...],"status":"..."}
 mkack() {
   python3 -c '
@@ -76,7 +99,7 @@ ch, acct, conv, evt, content = sys.argv[1:6]
 ts = int(time.time() * 1000)
 print(json.dumps({"messages":[{
     "event_id": evt, "conversation_id": conv,
-    "sender": {"id": "cust_"+conv[:16], "name": "访客", "type": "customer"},
+    "sender_id": "cust_"+conv[:16], "sender_name": "访客", "sender_type": "customer",
     "content": content, "msg_type": "text", "timestamp": ts
 }]}))
 ' "$1" "$2" "$3" "$4" "$5"
@@ -90,25 +113,101 @@ assert_type() {
   return 0
 }
 
+# 轮询 outbox 直到拉到待下发回复，或走完 AI_WAIT_S 秒。
+# 成功：OB=响应体、WAITED=实测秒数、返回 0；超时：OB 置空、WAITED=已等秒数、返回 1。
+# 首条 AI 回复的耗时属于 AI 生成链路（意图→RAG→生成），桥接侧只负责落库后的下发与 ack，
+# 所以超时一律按"未落库"归因、不当协议失败。
+poll_outbox() {
+  local ch="$1" acct="$2" lim="$3" t0 cur body st n
+  t0=$(date +%s)
+  while :; do
+    body=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$acct&limit=$lim")
+    st=$(printf '%s' "$body" | jq -r '.status' 2>/dev/null)
+    if [ "$st" = "ok" ]; then
+      n=$(printf '%s' "$body" | jq -r '.messages|length' 2>/dev/null)
+      if [ "${n:-0}" -gt 0 ]; then
+        OB="$body"; WAITED=$(( $(date +%s) - t0 )); LAST_STATUS="$st"; return 0
+      fi
+    fi
+    # 预算按墙上时钟判，不按轮数：一次轮询除了 sleep 1 还要跑一趟 curl，
+    # 按轮数计会让"等 N 秒"实际等到远超 N 秒，报出来的 WAITED 秒数和读起来的样子不一致。
+    cur=$(date +%s)
+    [ $(( cur - t0 )) -ge "$AI_WAIT_S" ] && break
+    sleep 1
+  done
+  OB=""; WAITED=$(( $(date +%s) - t0 )); LAST_STATUS="${st:-无响应}"
+  return 1
+}
+
 echo "==================================================================="
 echo "${C_BLU}桥接模块 + 统一收件箱 全渠道端到端模拟 (run=$RUN_TOKEN)${C_RST}"
 echo "目标服务: $BASE_URL   渠道: ${CHANNELS[*]}"
 echo "==================================================================="
 
 # ---- 0. 服务健康 ----
-HC=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$BASE_URL/api/health" || echo 000)
+HC="$(http_code "$BASE_URL/api/health")"
 if [ "$HC" = "200" ]; then ok "服务健康 /api/health → 200"; else bad "服务健康" "/api/health=$HC"; fi
 
-# ---- 0b. 推理栈健康门控 ----
+# ---- 0b. AI 依赖健康门控（三档分开判，别把云端 LLM 算成本地缺口）----
+# LLM 的真相源是 llm_providers 表（config.yaml 的 llm 段只是兜底），启用的提供商可以是云端网关，
+# 此时 :8207 缺席属正常配置；Embedding/Rerank 按设计强制本地（数据不出域）：缺 :8208 时，
+# 没有 fail-fast 的二进制会对每个候选端点跑满 5 轮退避（单轮 30s），首条 AI 回复实测拖到
+# 66–255s，且回复文案自述"知识库暂时查询超时"。
 LLM_OK=1
-for p in 8207 8208 8209; do
-  c=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "http://localhost:$p/health" || echo 000)
-  if [ "$c" = "200" ]; then ok "推理栈 :$p /health → 200"; else warn "推理栈 :$p" "/health=$c (AI 可能降级，AI 回复相关项视为环境归因)"; LLM_OK=0; fi
+# 未被任何路由引用、端点又没起的提供商＝配置残留，不参与本次请求；收集名字给下面的建议行
+INERT=""
+# enabled 的提供商可能多个共用同一个 base_url，按 URL 去重后每个端点只探一次，
+# 否则一个死掉的本地代理会被报成多条同因 WARN。
+# 每条还带 routes=N：该提供商被几个场景路由引用。routes=0 的提供商根本没参与请求
+# （候选只从 route.provider + route.fallbacks 里取），把它报成"AI 回复可能降级"
+# 是把不相干的配置行算成了本次故障的原因。
+PROVIDERS="$(psql_q "SELECT base_url || '|' || string_agg(name || ':#' || routes, ',') FROM (SELECT p.name AS name, p.base_url AS base_url, (SELECT count(*) FROM llm_routing_rules r WHERE r.route_json::jsonb->>'provider' = p.name OR coalesce(r.route_json::jsonb->'fallbacks','[]'::jsonb) @> to_jsonb(p.name)) AS routes FROM llm_providers p WHERE p.enabled = true) x GROUP BY base_url ORDER BY base_url")"
+[ -z "$PROVIDERS" ] && PROVIDERS="$(envv LLM_BASE_URL)|env-LLM_BASE_URL:#0"
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  purl="${line%|*}"; pnames="${line##*|}"
+  # 该端点上被路由引用的提供商数：>0 才说明它真的会参与请求
+  referenced=$(printf '%s' "$pnames" | tr ',' '\n' | grep -c ':#[1-9]')
+  pnames="$(printf '%s' "$pnames" | sed 's/:\#[0-9]*//g')"
+  case "$purl" in
+    *127.0.0.1*|*localhost*)
+      c="$(http_code "${purl%/v1}/health")"
+      if [ "$c" = "200" ]; then ok "本地 LLM 端点 ${purl} /health → 200（提供商 ${pnames}）"
+      elif [ "$referenced" = "0" ]; then ok "本地 LLM 端点 ${purl} 未起，但提供商 [${pnames}] 未被任何场景路由引用（不参与本次请求）"; INERT="${INERT:+$INERT }${pnames}"
+      else warn "本地 LLM 端点 ${purl}" "/health=${c}，被 ${referenced} 个路由引用的提供商 [${pnames}] 不可用 (AI 回复会降级)"; LLM_OK=0; fi
+      ;;
+    *) ok "云端 LLM 提供商 [${pnames}] → ${purl}（不探本地端口）" ;;
+  esac
+done <<< "$PROVIDERS"
+# 单点路由门控：某个场景只挂一个提供商、fallbacks 为空时，云端网关一次瞬时 5xx
+# 就没有任何接手者（实测 sensenova 一次 522 直接把"抱歉，AI 服务暂时不可用"发给客户）。
+# 触发条件是 NOFB>0 而不是"全空"：7 个场景里空 1 个也仍然是单点。
+NOFB="$(psql_q "SELECT count(*) FROM llm_routing_rules WHERE coalesce(route_json::jsonb->'fallbacks','[]'::jsonb) = '[]'::jsonb")"
+ALLR="$(psql_q "SELECT count(*) FROM llm_routing_rules")"
+# 可用兜底的先决条件：得有第二个"带密钥"的启用提供商。实测本机 9 个提供商里只有
+# sensenova 配了 api_key（deepseek 虽然 enabled 但密钥为空），照旧文案让人"补 fallbacks"
+# 只会把一次 5xx 降级换成一次 401 降级 ⇒ 把可用候选数一起报出来。
+KEYED="$(psql_q "SELECT count(*) FROM llm_providers WHERE enabled = true AND coalesce(api_key,'') <> ''")"
+if [ -n "$NOFB" ] && [ "${NOFB:-0}" -gt 0 ]; then
+  # 建议行里的提供商名单取自上面实测（写死个数会随配置漂移变成假话）
+  inert_txt=""
+  [ -n "$INERT" ] && inert_txt="；顺手停用未被任何路由引用且端点未起的残留提供商 [${INERT//,/ }]"
+  keyed_txt="带密钥的启用提供商 ${KEYED:-?} 个"
+  if [ "${KEYED:-0}" -le 1 ]; then
+    keyed_txt="只有 ${KEYED:-0} 个带密钥的启用提供商 ⇒ 先在「LLM 提供商」给第二个提供商配 api_key（空密钥一调就 401，补了 fallbacks 也接不住）"
+  fi
+  warn "路由单点" "${NOFB}/${ALLR} 个场景 fallbacks 为空：主提供商一次瞬时 5xx 即降级，无任何接手者。给 route 补 fallbacks（管理端或 UPDATE llm_routing_rules.route_json）；${keyed_txt}${inert_txt}"
+fi
+for p in 8208 8209; do
+  c="$(http_code "http://localhost:$p/health")"
+  if [ "$c" = "200" ]; then ok "本地推理栈 :$p /health → 200"; else warn "本地推理栈 :$p" "/health=$c (Embedding/Rerank 强制本地, 缺位会拖慢并降级 AI 回复)"; LLM_OK=0; fi
 done
 if [ "$LLM_OK" = "0" ]; then
-  # 处置指针写进结果面（批5 发现登记项）：本脚本判不了也修不了推理栈，但必须说清
+  # 处置指针要写进结果面：本脚本判不了也修不了推理栈，但必须说清
   # 「去哪儿修、影响面止于哪一块」，否则 WARN 只到「环境归因」就断了。
-  warn "推理栈处置指引" "拉起缺口的栈：bash scripts/inference-host/start-all.sh；影响面=bridge outbox 的 AI 回复（浏览器 Brain 走平台 LLM 网关，不同路）"
+  # 命令按 Makefile 目标写（本脚本 cwd 在 user-server，scripts/inference-host/ 在仓库根，
+  # 直接 bash 那条相对路径会 No such file）。
+  warn "推理栈处置指引" "仓库根执行 make inference-host-up（首次先 inference-host-install + inference-host-models），make inference-host-status 看三态；影响面=bridge outbox 的 AI 回复内容与耗时（浏览器 Brain 走平台 LLM 网关，不同路）"
 fi
 
 # ---- 0c. 跨语言哈希契约锚点（最高优先级）----
@@ -118,12 +217,12 @@ if [ "$ANCHOR" = "mh:00550fed" ]; then ok "哈希契约锚点 chash('douyin','�
 # ---- 负向用例 ----
 echo ""; echo "${C_YEL}--- 负向用例 ---${C_RST}"
 NEG=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
-  -d '{"messages":[{"event_id":"x","conversation_id":"c","sender":{"id":"s","type":"customer"},"content":"hi","msg_type":"text","timestamp":1}]}')
+  -d '{"messages":[{"event_id":"x","conversation_id":"c","sender_id":"s","sender_type":"customer","content":"hi","msg_type":"text","timestamp":1}]}')
 [ "$(printf '%s' "$NEG" | jq -r '.ok')" = "false" ] \
   && ok "缺参: 无 channel/account_id → ok=false (reason=$(printf '%s' "$NEG" | jq -r '.reason'))" \
   || bad "缺参" "ok 应为 false: $NEG"
 NEG2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/ingest?channel=unknown_xyz&account_id=a" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
-  -d '{"messages":[{"event_id":"x2","conversation_id":"c2","sender":{"id":"s","type":"customer"},"content":"hi","msg_type":"text","timestamp":1}]}')
+  -d '{"messages":[{"event_id":"x2","conversation_id":"c2","sender_id":"s","sender_type":"customer","content":"hi","msg_type":"text","timestamp":1}]}')
 [ "$(printf '%s' "$NEG2" | jq -r '.ok')" = "false" ] \
   && ok "不支持渠道: unknown_xyz → ok=false (reason=$(printf '%s' "$NEG2" | jq -r '.reason'))" \
   || bad "不支持渠道" "ok 应为 false: $NEG2"
@@ -172,30 +271,20 @@ for ch in "${CHANNELS[@]}"; do
     ok "$ch 回声/回环去重: 同内容新 event_id → 被拦截 (reason=$(printf '%s' "$r3" | jq -r '.reason'))"
   else bad "$ch 回声/回环去重" "未拦截同内容回灌: $r3"; fi
 
-  # 4) outbox 拉取 AI 回复（轮询，容忍瞬时错误与推理栈偶发慢）
-  REPLY=""; LAST=""
-  for i in $(seq 1 75); do
-    OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$ch&account_id=$ACCT&limit=5")
-    LAST=$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)
-    if [ "$LAST" = "ok" ]; then
-      n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
-      [ "${n:-0}" -gt 0 ] && { REPLY="$OB"; break; }
-    fi
-    sleep 1
-  done
-
-  if [ -z "$REPLY" ]; then
-    # 已验证 outbox/claim 路径本身正确（pending 行存在时必被认领返回），
-    # 未拉到回复属推理栈偶发不稳定/负载导致 AI 回复未及时落库，归属环境而非桥接缺陷。
+  # 4) outbox 拉取 AI 回复（轮询，窗口见 AI_WAIT_S）
+  if ! poll_outbox "$ch" "$ACCT" 5; then
+    # 已验证 outbox/claim 路径本身正确（pending 行存在时必被认领返回，见 D4），
+    # 窗口内没消息＝AI 回复没落库，不是桥接缺陷。
     if [ "$LLM_OK" = "1" ]; then
-      warn "$ch outbox" "75s 内未拉到 AI 回复 (last_status=$LAST, ai_handled=$aid) —— 推理栈偶发慢/不稳定, 桥接 outbox/claim 路径已独立验证正确"
+      warn "$ch outbox" "${WAITED}s 内未拉到 AI 回复 (last_status=$LAST_STATUS, ai_handled=$aid) —— AI 生成链路未在窗口内落库, 桥接 outbox/claim 路径已独立验证正确"
     else
-      warn "$ch outbox" "75s 内未拉到 AI 回复 (last_status=$LAST) —— 推理栈不健康, 归属环境, 桥接协议本身未受影响"
+      warn "$ch outbox" "${WAITED}s 内未拉到 AI 回复 (last_status=$LAST_STATUS) —— 本地推理栈缺位, 归属环境；推理栈起来后同一链路实测可落库"
     fi
     sleep 3; continue
   fi
+  ok "$ch outbox: ${WAITED}s 拉到 AI 回复（AI 生成链路端到端耗时）"
 
-  m0=$(printf '%s' "$REPLY" | jq -c '.messages[0]')
+  m0=$(printf '%s' "$OB" | jq -c '.messages[0]')
   assert_type "$m0" '.msg_id' 'string' "$ch outbox[0].msg_id"
   assert_type "$m0" '.conversation_id' 'string' "$ch outbox[0].conversation_id"
   assert_type "$m0" '.content' 'string' "$ch outbox[0].content"
@@ -208,11 +297,25 @@ for ch in "${CHANNELS[@]}"; do
   conv_ok=$(printf '%s' "$m0" | jq -r --arg c "$CONV" '.conversation_id==$c')
   isai=$(printf '%s' "$m0" | jq -r '.is_ai_reply')
   rc=$(printf '%s' "$m0" | jq -r '.content')
+  # 字数在 JSON 侧数（jq 的 length 是码点数）：本机 wc -m 在 C locale 下数的是字节，
+  # 会把 20 字的兜底文案报成"54 字"，取证行里的读数就成了假的。
+  rc_len=$(printf '%s' "$m0" | jq -r '(.content // "") | length')
   [ "$conv_ok" = "true" ] && ok "$ch outbox: conversation_id 与上报一致" || bad "$ch outbox" "conversation_id 不匹配"
   [ "$isai" = "true" ] && ok "$ch outbox: is_ai_reply=true" || bad "$ch outbox" "is_ai_reply 应为 true"
-  if [ -n "$rc" ] && [ "$(printf '%s' "$rc" | wc -m)" -gt 3 ]; then
-    ok "$ch outbox: AI 回复内容非空(长度 $(printf '%s' "$rc" | wc -m) 字): ${C_YEL}$(printf '%.70s' "$rc")${C_RST}"
-  else bad "$ch outbox" "AI 回复内容过短或为空"; fi
+  # 兜底模板也是"非空"，报成 ok 就是假绿：链路通、AI 栈没真实应答，客户收到的是一句固定话术。
+  # 只列各条兜底文案的独有句式（不用"请稍后再试"这类通用词——正常应答里也会合法出现）。
+  # 产出方见 internal/service/sales_engine_agentloop.go、internal/aiagent/llm/{fallback_tree,provider_failover}.go、
+  # internal/aiagent/agent/runtime/runtime.go；改文案要同步这里与 scripts/simulate/ai_quality.py。
+  case "$rc" in
+    *"AI 服务暂时不可用"* | *"暂时无法处理您的请求"* | *"当前服务暂时繁忙"* | *"当前客服系统繁忙"* | *"系统暂时有点忙"* | *"系统暂不可用"*)
+      warn "$ch outbox" "AI 回复是固定兜底模板（桥接链路通、AI 栈未真实应答）: ${C_YEL}$(printf '%.70s' "$rc")${C_RST}"
+      ;;
+    *)
+      if [ -n "$rc" ] && [ "${rc_len:-0}" -gt 3 ]; then
+        ok "$ch outbox: AI 回复内容非空(长度 ${rc_len} 字): ${C_YEL}$(printf '%.70s' "$rc")${C_RST}"
+      else bad "$ch outbox" "AI 回复内容过短或为空"; fi
+      ;;
+  esac
 
   # 5) ack 闭环
   MSGID=$(printf '%s' "$m0" | jq -r '.msg_id')
@@ -260,7 +363,7 @@ for i in range(3):
     msgs.append({
         "event_id": "deep_batch_%d_%d" % (i, now),
         "conversation_id": "'"$DCONV"'",
-        "sender": {"id": "cust_deep_%d" % i, "name": "访客%d" % i, "type": "customer"},
+        "sender_id": "cust_deep_%d" % i, "sender_name": "访客%d" % i, "sender_type": "customer",
         "content": "批量消息第%d条，咨询产品优惠。run=%s" % (i, "'"$RUN_TOKEN"'"),
         "msg_type": "text", "timestamp": now + i
     })
@@ -285,24 +388,27 @@ else bad "D1 批量 ingest" "ok!=true: $BR"; fi
 echo ""; echo "${C_YEL}--- D2. outbox limit 边界（limit=1 仅返回 1 条；超大封顶）---${C_RST}"
 # 等待 D1 的 AI 回复落库（可能 3 条，按 conv 合并为 1 条回复更可能，但兜底测 limit）
 REPLY_D2=""
-for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=100")
-  st=$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)
-  if [ "$st" = "ok" ]; then
-    n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
-    [ "${n:-0}" -gt 0 ] && { REPLY_D2="$OB"; break; }
-  fi
-  sleep 1
-done
+if poll_outbox "$DCH" "$DACCT" 100; then REPLY_D2="$OB"; fi
 if [ -z "$REPLY_D2" ]; then
-  warn "D2 outbox limit" "75s 内未拉到 AI 回复（推理栈波动，环境归因）"
+  warn "D2 outbox limit" "${WAITED}s 内未拉到 AI 回复（AI 生成链路未落库，环境归因）"
 else
   TOTAL_D2=$(printf '%s' "$REPLY_D2" | jq -r '.messages|length')
   # 先 ack 清空，便于后续 limit=1 精确计数
+  # Python 程序一律单引号包裹、值走 argv：上一版把它嵌在 -d "$(python3 -c "…{'k':v,…}")" 里，
+  # macOS /bin/bash 3.2 在"双引号内的命令替换"中会丢掉内层引号，{'msg_ids':…,'status':…}
+  # 于是走大括号展开被逗号劈成两个参数——python 报 SyntaxError、curl 收到空 -d 退出 2，
+  # 而下面照样打印"已清空"的 ok（ack 其实没发出去，limit 断言量的是没清空的队列＝假绿）。
   ALL_IDS=$(printf '%s' "$REPLY_D2" | jq -r '[.messages[].msg_id]|join(",")')
-  curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" \
-    -d "$(python3 -c "import json;print(json.dumps({'msg_ids':'$ALL_IDS'.split(','),'status':'delivered'}))")" >/dev/null
-  ok "D2 outbox: 已拉到 $TOTAL_D2 条 AI 回复并清空（limit=100 返回全部）"
+  ACK_D2=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$(mkack "$ALL_IDS" delivered)")
+  # 只判 status==ok 是不够的：不存在的 msg_id 也返回 ok（not_found_count 才是账），
+  # 那样"清空"就是假的，后面 limit=1 量到的仍是没清空的队列。
+  n_acked=$(printf '%s' "$ACK_D2" | jq -r '.acked_items_count // 0')
+  n_miss=$(printf '%s' "$ACK_D2" | jq -r '.not_found_count // 0')
+  if [ "$(printf '%s' "$ACK_D2" | jq -r '.status')" = "ok" ] && [ "${n_acked:-0}" -ge 1 ] && [ "${n_miss:-0}" = "0" ]; then
+    ok "D2 outbox: 已拉到 $TOTAL_D2 条 AI 回复并清空 (acked=${n_acked} not_found=${n_miss}，limit=100 返回全部，等待 ${WAITED}s)"
+  else
+    bad "D2 outbox ack 清空" "期望 acked>=1 且 not_found=0，实际 acked=${n_acked:-?} not_found=${n_miss:-?}：$ACK_D2"
+  fi
   # limit=1 边界：再发 2 条到同一 conv 看 limit 是否生效（若无新回复则不强制 fail）
   # 直接验证 limit 参数被接受且返回 <= limit
   OB1=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=1")
@@ -323,23 +429,16 @@ ACK_BODY=$(python3 -c '
 import json, time
 print(json.dumps({"messages":[{
     "event_id": "'"$DEVT"'", "conversation_id": "'"$DCONV"'",
-    "sender": {"id": "cust_deep_ack", "name": "访客", "type": "customer"},
+    "sender_id": "cust_deep_ack", "sender_name": "访客", "sender_type": "customer",
     "content": "ack边界测试唯一内容 '"$DEVT"'", "msg_type": "text",
     "timestamp": int(time.time()*1000)
 }]}))
 ')
 curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$ACK_BODY" >/dev/null
 ACK_TARGET=""
-for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
-  if [ "$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)" = "ok" ]; then
-    n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
-    [ "${n:-0}" -gt 0 ] && { ACK_TARGET="$OB"; break; }
-  fi
-  sleep 1
-done
+if poll_outbox "$DCH" "$DACCT" 5; then ACK_TARGET="$OB"; fi
 if [ -z "$ACK_TARGET" ]; then
-  warn "D3 ack 边界" "未拉到可 ack 的回复（推理栈波动，环境归因）"
+  warn "D3 ack 边界" "${WAITED}s 内未拉到可 ack 的回复（AI 生成链路未落库，环境归因）"
 else
   MID=$(printf '%s' "$ACK_TARGET" | jq -r '.messages[0].msg_id')
   # 首次 ack
@@ -363,6 +462,85 @@ else
   [ "$a4" = "ok" ] && ok "D3 ack 空 body: status=ok (acked_items_count=0, 不报错)" || bad "D3 ack 空 body" "status=$a4: $A4"
 fi
 
+# ---- D3c. v2 逐项 status 校验（未知值整批拒在写之前）----
+# v2 的 status 挂在每个 item 上，入口那道只查顶层 status 的校验拦不到它：未知值会一路走到
+# service 报错回 500。而 v2 是按 (conversation_id, status) 分组后遍历 map 逐组落库的，
+# 遍历序随机 ⇒ 实测同一请求 20 次里 15 次已把好项落库、5 次一格没落，客户端只读到一句
+# 不带原因的 "ack failed"，无从判断该重试还是该改参数；没落库的行留在"欠交付"集合里，
+# 30s 认领租约到期后被重新下发（最多 20 次）。这一格要求：拒成 400 且文案点名不认的值。
+echo ""; echo "${C_YEL}--- D3c. v2 逐项 status 校验（未知 status → 400，不是 500）---${C_RST}"
+BAD_BODY='{"v":2,"items":[{"msg_id":"mh:deadbeef","conversation_id":"conv_d3c","status":"delivered"},{"msg_id":"mh:cafe1234","conversation_id":"conv_d3c","status":"shipped"}]}'
+BAD_TMP="$(mktemp "${TMPDIR:-/tmp}/d3c.XXXXXX")"
+BAD_CODE="$(curl -s -m 10 -o "$BAD_TMP" -w "%{http_code}" -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$BAD_BODY")"
+BAD_MSG="$(head -c 300 "$BAD_TMP")"; rm -f "$BAD_TMP"
+if [ "$BAD_CODE" = "400" ] && printf '%s' "$BAD_MSG" | grep -q 'shipped'; then
+  ok "D3c v2 未知 status: http=400 且文案点名不认的值 (body=$(printf '%.90s' "$BAD_MSG"))"
+elif [ "$BAD_CODE" = "500" ]; then
+  bad "D3c v2 未知 status" "http=500：入参错误被报成服务端故障，且整批是否落库随 map 遍历序摆动 (body=$BAD_MSG)"
+else
+  bad "D3c v2 未知 status" "http=$BAD_CODE 期望 400 (body=$BAD_MSG)"
+fi
+# 反向对照：合法值（delivered + failed）不许被这道校验误拒
+OK_BODY='{"v":2,"items":[{"msg_id":"mh:deadbeef","conversation_id":"conv_d3c","status":"delivered"},{"msg_id":"mh:cafe1234","conversation_id":"conv_d3c","status":"failed","error":"send blocked"}]}'
+OK_TMP="$(mktemp "${TMPDIR:-/tmp}/d3cok.XXXXXX")"
+OK_CODE="$(curl -s -m 10 -o "$OK_TMP" -w "%{http_code}" -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$OK_BODY")"
+OK_MSG="$(head -c 300 "$OK_TMP")"; rm -f "$OK_TMP"
+OK_NF=$(printf '%s' "$OK_MSG" | jq -r '.not_found_count // "?"' 2>/dev/null)
+[ "$OK_CODE" = "200" ] && [ "$OK_NF" = "2" ] \
+  && ok "D3c 合法 v2 批（delivered+failed）未被误拒: http=200 not_found_count=2" \
+  || bad "D3c 合法 v2 批" "http=$OK_CODE not_found=${OK_NF:-?} 期望 200/2 (body=$OK_MSG)"
+
+# ---- D3b. 渠道别名一致性（ingest/outbox/ack 三入口必须同进同出）----
+# 别名（xhs / douyin_web / …）由服务端 NormalizeBridgeChannel 收编：ingest 与 outbox 早就归一，
+# ack 曾经没归 ⇒ message_hub 只有规范名，别名 ack 每格 not_found=1 却仍回 200 status:ok，
+# 那一行停在 inflight ⇒ 30s 租约到期后同一条回复被反复下发，最多 20 次才落 failed。
+echo ""; echo "${C_YEL}--- D3b. 渠道别名一致性（别名入参 ack 必须能收口）---${C_RST}"
+ALIAS_CH="douyin_web"
+AL_ACCT="alias_${RUN_TOKEN}"
+AL_CONV="alias_conv_${RUN_TOKEN}"
+AL_EVT="deep_alias_${RUN_TOKEN}"
+AL_BODY=$(python3 -c '
+import json, time
+print(json.dumps({"messages":[{
+    "event_id": "'"$AL_EVT"'", "conversation_id": "'"$AL_CONV"'",
+    "sender_id": "cust_alias", "sender_name": "访客", "sender_type": "customer",
+    "content": "别名一致性测试唯一内容 '"$AL_EVT"'", "msg_type": "text",
+    "timestamp": int(time.time()*1000)
+}]}))
+')
+curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$ALIAS_CH&account_id=$AL_ACCT" \
+  -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$AL_BODY" >/dev/null
+AL_OB=""
+if poll_outbox "$ALIAS_CH" "$AL_ACCT" 5; then AL_OB="$OB"; fi
+if [ -z "$AL_OB" ]; then
+  warn "D3b 别名闭环" "${WAITED}s 内未拉到 AI 回复（AI 链路未落库，环境归因）"
+else
+  AL_MID=$(printf '%s' "$AL_OB" | jq -r '.messages[0].msg_id')
+  # 落库形态本身也是判据的一部分：别名绝不能写进 message_hub.platform
+  # 按账号收窄：msg_id 是内容哈希，不同轮次只要 AI 回复文本相同就会撞同一个 msg_id，
+  # 不限定 account_id 时 psql 会返回多行，值里的换行会把下面的字符串比较判成不相等
+  # （实测两条 FAIL 的读数分别印成 "douyin"/"douyin 期望 douyin"，看着像断言写反了）。
+  AL_PLAT="$(psql_q "SELECT platform FROM message_hub WHERE account_id='$AL_ACCT' AND msg_id='$AL_MID'")"
+  if [ "$AL_PLAT" = "douyin" ]; then
+    ok "D3b 别名 ingest: 落库为规范名 douyin"
+  else
+    bad "D3b 别名 ingest" "message_hub.platform=$AL_PLAT 期望 douyin（别名一旦入库，后面每一层都要再归一一次）"
+  fi
+  AL_ACK=$(curl -s -m 10 -X POST "$BASE_URL/api/bridge/outbox/ack?channel=$ALIAS_CH&account_id=$AL_ACCT" \
+    -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$(mkack "$AL_MID" delivered)")
+  AL_A=$(printf '%s' "$AL_ACK" | jq -r '.acked_items_count' 2>/dev/null)
+  AL_MISS=$(printf '%s' "$AL_ACK" | jq -r '.not_found_count' 2>/dev/null)
+  if [ "${AL_A:-0}" = "1" ] && [ "${AL_MISS:-0}" = "0" ]; then
+    ok "D3b 别名 ack: acked_items_count=1 且 not_found_count=0"
+  else
+    bad "D3b 别名 ack" "acked=${AL_A:-?} not_found=${AL_MISS:-?}：$AL_ACK"
+  fi
+  # ack 之后必须离开欠交付集合（这一条就是"客户不会被同一句刷屏"的现场判据）
+  AL_ST="$(psql_q "SELECT status FROM message_hub WHERE account_id='$AL_ACCT' AND msg_id='$AL_MID'")"
+  [ "$AL_ST" = "delivered" ] && ok "D3b 别名 ack 后落库 delivered" \
+    || bad "D3b 别名 ack 后状态" "status=$AL_ST 期望 delivered（停在 inflight 就是等着被重投）"
+fi
+
 # ---- D4. reclaim 超时重下发（inflight 卡 30s 后回收为 pending 重新可拉）----
 echo ""; echo "${C_YEL}--- D4. reclaim 超时重下发（验证 at-least-once）---${C_RST}"
 DEVT4="deep_reclaim_$(uid12)"
@@ -370,7 +548,7 @@ R4_BODY=$(python3 -c '
 import json, time
 print(json.dumps({"messages":[{
     "event_id": "'"$DEVT4"'", "conversation_id": "'"$DCONV"'",
-    "sender": {"id": "cust_deep_rc", "name": "访客", "type": "customer"},
+    "sender_id": "cust_deep_rc", "sender_name": "访客", "sender_type": "customer",
     "content": "reclaim超时测试唯一内容 '"$DEVT4"'", "msg_type": "text",
     "timestamp": int(time.time()*1000)
 }]}))
@@ -378,20 +556,13 @@ print(json.dumps({"messages":[{
 curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_id=$DACCT" -H 'Content-Type: application/json' "${H_TOKEN[@]}" -d "$R4_BODY" >/dev/null
 # 拉取一次（转为 inflight），不 ack
 R4=""
-for i in $(seq 1 75); do
-  OB=$(curl -s -m 10 "${H_TOKEN[@]}" "$BASE_URL/api/bridge/outbox?channel=$DCH&account_id=$DACCT&limit=5")
-  if [ "$(printf '%s' "$OB" | jq -r '.status' 2>/dev/null)" = "ok" ]; then
-    n=$(printf '%s' "$OB" | jq -r '.messages|length' 2>/dev/null)
-    [ "${n:-0}" -gt 0 ] && { R4="$OB"; break; }
-  fi
-  sleep 1
-done
+if poll_outbox "$DCH" "$DACCT" 5; then R4="$OB"; fi
 if [ -z "$R4" ]; then
-  warn "D4 reclaim" "未拉到待 reclaim 的回复（推理栈波动，环境归因）"
+  warn "D4 reclaim" "${WAITED}s 内未拉到待 reclaim 的回复（AI 生成链路未落库，环境归因）"
 else
   MID4=$(printf '%s' "$R4" | jq -r '.messages[0].msg_id')
   # 验证该 msg_id 当前为 inflight（已被 claim）
-  S1=$(psql_q "SELECT status FROM message_hub WHERE msg_id='$MID4' LIMIT 1;")
+  S1=$(psql_q "SELECT status FROM message_hub WHERE account_id='$DACCT' AND msg_id='$MID4' LIMIT 1;")
   [ "$S1" = "inflight" ] && ok "D4 reclaim: 首次拉取后 status=$S1 (已被 claim)" || warn "D4 reclaim" "status=$S1 (期望 inflight)"
   echo "  等待 32s 让 inflight 超时被回收为 pending ..."
   sleep 32
@@ -422,7 +593,7 @@ MRES=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_i
 import json, time
 print(json.dumps({"messages":[{
     "event_id": "'"$DEVT5"'", "conversation_id": "'"$DCONV"'",
-    "sender": {"id": "cust_deep_media", "name": "访客", "type": "customer"},
+    "sender_id": "cust_deep_media", "sender_name": "访客", "sender_type": "customer",
     "content": "用户发来一张商品图 '"$DEVT5"'", "msg_type": "image",
     "media_url": "'"$MEDIA_URL"'", "timestamp": int(time.time()*1000)
 }]}))
@@ -446,7 +617,7 @@ COVER=$(curl -s -m 20 -X POST "$BASE_URL/api/bridge/ingest?channel=$DCH&account_
 import json, time
 print(json.dumps({"channel": "xiaohongshu", "account_id": "'"$DACCT"'", "messages":[{
     "event_id": "'"$DEVT6"'", "conversation_id": "'"$DCONV"'",
-    "sender": {"id": "cust_cover", "name": "访客", "type": "customer"},
+    "sender_id": "cust_cover", "sender_name": "访客", "sender_type": "customer",
     "content": "channel覆盖测试唯一内容 '"$DEVT6"'", "msg_type": "text",
     "timestamp": int(time.time()*1000)
 }]}))
@@ -456,6 +627,89 @@ if [ "$(printf '%s' "$COVER" | jq -r '.ok')" = "true" ]; then
   PLAT=$(psql_q "SELECT platform FROM message_hub WHERE msg_id='$DEVT6' LIMIT 1;")
   [ "$PLAT" = "$DCH" ] && ok "D6 channel 覆盖: 落库 platform=$PLAT (query 优先于 body)" || bad "D6 channel 覆盖" "platform=$PLAT 期望 $DCH"
 else bad "D6 channel 覆盖" "ok!=true: $COVER"; fi
+
+# ---- D7. SSE 建流前的入参校验 ----
+# SSE 是默认下行形态：capabilities 报 sse_enabled=true 后扩展端连轮询定时器都不启动，
+# 而 once 发出 200 就再也回不去（错误体送不出去）。所以缺 channel／空 account_id／
+# 桥接不承载的渠道必须在 WriteHeader 之前判成 400——否则配置写错的客户只看到
+# "SSE 已连接、一条错误也没有、一条回复也收不到"。
+echo ""; echo "${C_YEL}--- D7. SSE 入参校验（三类坏入参 400 + 合法入参成流）---${C_RST}"
+
+# sse_probe <query 串> → 置 SSE_CODE／SSE_BODY／SSE_CTYPE
+# 取 2s 就中断：合法流会一直开着（curl 退 28），这里要的是首帧与响应头，不是流跑完。
+# 每次现取新临时文件：复用旧路径会把上一轮的 body 当本轮读数（假绿）。
+sse_probe() {
+  local outf hdrf
+  outf="$(mktemp)"; hdrf="$(mktemp)"
+  SSE_CODE="$(curl -s -m 2 -o "$outf" -D "$hdrf" -w '%{http_code}' "${H_TOKEN[@]}" \
+    "$BASE_URL/api/bridge/outbox/sse?$1")"
+  SSE_BODY="$(cat "$outf")"
+  SSE_CTYPE="$(awk -F': ' 'tolower($1)=="content-type"{print $2; exit}' "$hdrf")"
+  rm -f "$outf" "$hdrf"
+}
+
+# 三类坏入参：http=400 且文案点名缺的是哪一个
+for probe in "account_id=${DACCT}|channel required" \
+             "channel=douyin&account_id=|account_id required" \
+             "channel=wechat&account_id=${DACCT}|unsupported bridge channel"; do
+  qs="${probe%%|*}"; want="${probe##*|}"
+  sse_probe "$qs"
+  if [ -z "$SSE_CODE" ] || [ "$SSE_CODE" = "000" ]; then
+    bad "D7 SSE 坏入参 [$qs]" "请求没跑成（http=${SSE_CODE:-空}），本轮读数不可用"
+    continue
+  fi
+  case "$SSE_BODY" in
+    *"$want"*)
+      if [ "$SSE_CODE" = "400" ]; then
+        ok "D7 SSE 坏入参 [$qs]: http=400 且文案点名 ${want}"
+      else
+        bad "D7 SSE 坏入参 [$qs]" "http=${SSE_CODE} 期望 400，body=${SSE_BODY}"
+      fi
+      ;;
+    *) bad "D7 SSE 坏入参 [$qs]" "http=${SSE_CODE} 文案未含 ${want}：${SSE_BODY}" ;;
+  esac
+  # 坏入参绝不能已经进入流模式（进入后 Content-Type 就是 event-stream，错误体送不出去）
+  case "$SSE_CTYPE" in
+    *text/event-stream*) bad "D7 SSE 坏入参 [$qs]" "响应已被当作 SSE 流发出（ctype=${SSE_CTYPE}）" ;;
+  esac
+done
+
+# 正控制：合法入参（规范名 + 别名）必须成流，否则上面三条靠"一律拒绝"就能蒙绿
+for okq in "channel=douyin&account_id=${DACCT}" "channel=douyin_web&account_id=${DACCT}"; do
+  sse_probe "$okq"
+  is_stream=false
+  case "$SSE_CTYPE" in *text/event-stream*) is_stream=true ;; esac
+  has_retry=false
+  case "$SSE_BODY" in *retry:*) has_retry=true ;; esac
+  if [ "$SSE_CODE" = "200" ] && [ "$is_stream" = true ] && [ "$has_retry" = true ]; then
+    ok "D7 SSE 合法入参 [$okq]: http=200 + text/event-stream + retry 首帧"
+  else
+    bad "D7 SSE 合法入参 [$okq]" "http=${SSE_CODE:-空} ctype=${SSE_CTYPE:-空} body=${SSE_BODY}"
+  fi
+done
+
+# ---- D8. capabilities 契约（扩展端据此选 SSE／轮询）----
+echo ""; echo "${C_YEL}--- D8. capabilities 读数与门禁 ---${C_RST}"
+CAPF="$(mktemp)"
+CAP="$(curl -s -m 10 -o "$CAPF" -w '%{http_code}' "${H_TOKEN[@]}" "$BASE_URL/api/bridge/capabilities")"
+CAPBODY="$(cat "$CAPF")"; rm -f "$CAPF"
+if [ "$CAP" = "200" ]; then
+  assert_type "$CAPBODY" '.poll_interval_ms' 'number' "D8 capabilities.poll_interval_ms"
+  assert_type "$CAPBODY" '.sse_enabled' 'boolean' "D8 capabilities.sse_enabled"
+  assert_type "$CAPBODY" '.sse_heartbeat_ms' 'number' "D8 capabilities.sse_heartbeat_ms"
+  ok "D8 capabilities 三键齐备: ${CAPBODY}"
+else
+  bad "D8 capabilities" "http=${CAP} body=${CAPBODY}"
+fi
+# capabilities 与其余桥接端点同组同闸门：无凭证必须 401（改桥接凭证＝同时改这道门禁）
+CAPNOF="$(mktemp)"
+CAPNO="$(curl -s -m 10 -o "$CAPNOF" -w '%{http_code}' "$BASE_URL/api/bridge/capabilities")"
+CAPNOBODY="$(cat "$CAPNOF")"; rm -f "$CAPNOF"
+if [ "$CAPNO" = "401" ]; then
+  ok "D8 capabilities 无凭证被闸门拦下 (http=401)"
+else
+  bad "D8 capabilities 无凭证" "http=${CAPNO} 期望 401，body=${CAPNOBODY}"
+fi
 
 # ---- 汇总 ----
 echo ""; echo "==================================================================="
@@ -469,7 +723,7 @@ echo "==================================================================="
 # ---- 清理 sim 测试数据 ----
 if [ -n "$PW" ]; then
   echo "${C_YEL}清理 sim/deep 测试数据 ...${C_RST}"
-  psql_q "DELETE FROM message_hub WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%'; DELETE FROM inbox_conversations WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%'; DELETE FROM customer_sessions WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%';" >/dev/null || true
+  psql_q "DELETE FROM message_hub WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%'; DELETE FROM inbox_conversations WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%'; DELETE FROM customer_sessions WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%';" >/dev/null || true
 fi
 
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

@@ -64,6 +64,12 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "bridge", Key: "online_grace_window", Name: "在线状态宽限窗口",
 			Description: "渠道账号心跳丢失后仍判定为在线的宽限时间（秒）",
 			ValueType:   "duration", DefaultValue: "30", Min: strPtr("10"), Max: strPtr("300"), Step: strPtr("5")},
+		{Group: "bridge", Key: "outbound_orphan_ttl", Name: "出站孤儿行结算阈值",
+			Description: "桥接渠道出站消息在「账号未注册或已超过此时长未同步」时，行本身超过此时长即落 failed（原因 outbound_orphan_expired）；0 表示停用该结算",
+			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("0"), Max: strPtr("7776000"), Step: strPtr("3600")},
+		{Group: "bridge", Key: "outbound_orphan_dry_run", Name: "出站孤儿行结算只报数",
+			Description: "true（缺省）＝后台回扫只统计并打印候选行数，不写库；确认过报数后改 false 才真正把孤儿行落 failed。落 failed 不可逆（内容不动，但状态离开待办集合），所以开关默认停在报数一侧",
+			ValueType:   "bool", DefaultValue: "true"},
 
 		{Group: "knowledge", Key: "default_top_k", Name: "默认 Top-K 检索数",
 			Description: "向量检索返回的候选文档数",

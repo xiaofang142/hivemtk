@@ -1,0 +1,25 @@
+2026-09-28T16:45:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBReleaseRepo_LockReleaseEnsuresRow
+    kb_release_test.go:235: LockRelease 建的那一行必须 governed=false：查一次状态不等于开启治理
+--- FAIL: TestKBReleaseRepo_LockReleaseEnsuresRow (1.59s)
+=== RUN   TestKBReleaseRepo_SetGovernedIdempotent
+    kb_release_test.go:277: 三次启用只该留一条痕，实得 0 条
+    kb_release_test.go:289: 留痕的改前改后写反或缺项：[{ID:1 SubjectKey:release:kbrepo_p2 OldValue:true NewValue:false Action:governed Actor:op-2 CreatedAt:2026-09-28 16:45:25.314491 +0800 CST}]
+--- FAIL: TestKBReleaseRepo_SetGovernedIdempotent (0.24s)
+panic: runtime error: index out of range [1] with length 1 [recovered, repanicked]
+
+goroutine 39 [running]:
+testing.tRunner.func1.2({0x10112d6e0, 0x5ad5fa592030})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:1977 +0x318
+panic({0x10112d6e0?, 0x5ad5fa592030?})
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c
+hivemtk-user/internal/repository.TestKBReleaseRepo_SetGovernedIdempotent(0x5ad5fa7a06c8)
+	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-986c6gvt/clone/user-server/internal/repository/kb_release_test.go:291 +0x60c
+testing.tRunner(0x5ad5fa7a06c8, 0x10118d518)
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	hivemtk-user/internal/repository	2.069s
+FAIL

@@ -400,7 +400,7 @@ func isPollingLockDBNotReadyError(err error) bool {
 }
 
 func deliverTelegramUpdate(ctx context.Context, client *http.Client, accountID uint, webhookSecret string, raw json.RawMessage) error {
-	url := fmt.Sprintf("%s/api/webhook/telegram/%d", config.DefaultUserServerBaseURL, accountID)
+	url := fmt.Sprintf("%s/api/webhook/telegram/%d", config.UserServerSelfBaseURL(), accountID)
 	var lastErr error
 	for i := 0; i < 3; i++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))

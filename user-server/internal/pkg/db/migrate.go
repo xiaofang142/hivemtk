@@ -330,6 +330,12 @@ func allModels() []any {
 		&model.HumanTask{},
 		&model.IntegrationTemplate{},
 		&model.IntentExample{},
+		// T-P9-02 知识库发布制三张表。kb_releases 是**读路径的依赖**（召回侧的
+		// NOT EXISTS 子查询按它判定），没建出来时闸门形同虚设且不报错，
+		// 所以它与另两张表都必须在这里登记，见 migrate_test.go 里那条理由。
+		&model.KBChangeAuditLog{},
+		&model.KBChangeRequest{},
+		&model.KBRelease{},
 		&model.LLMRoutingLog{},
 		&model.LoginEvent{},
 		// OrderDraft（表 order_drafts）：T-P2-01 前草稿只活在 service 的内存 map 里，

@@ -26,7 +26,7 @@
 
 | 通道 | 方向 | 说明 |
 |------|------|------|
-| uplink | 扩展 → 服务端 | 上报会话/消息（Authorization: Bearer Token） |
+| uplink | 扩展 → 服务端 | 上报会话/消息（`X-Bridge-Token` 头） |
 | outbox | 扩展 → 服务端 | 拉取待下发消息（长轮询） |
 | ack | 扩展 → 服务端 | 确认已下发（`AckOutboundItem` 原子化 `UPDATE...RETURNING`） |
 
@@ -37,6 +37,35 @@ make inference-host-status   # 检查 8204/8207/8208/8209 四个端点连通性
 make db-ps                   # 检查 PG + Redis 容器
 bash scripts/bridge-monitor.sh   # 桥接健康巡检（如存在）
 ```
+
+### 0.4 出站行的状态语义（读积压数字前先看这节）
+
+`message_hub` 里 `direction='outbound'` 的每一行代表"服务端欠客户的一条回复"。状态含义与写入方：
+
+| status | 含义 | 谁写 |
+|--------|------|------|
+| `pending` | 欠交付，等待被认领/补投 | 建行默认值 |
+| `inflight` | 已被某次轮询认领，30s 租约内 | 三条取行路径的 CAS |
+| `delivered` | 桥端 ack 已下发；直接投递渠道在发送 API 成功后由写侧结算 | ack 接口 / 各渠道 Send |
+| `failed` | 终态，不再重推 | 两条自动结算路径（见下）或桥端主动 ack failed |
+| `send_failed` | 渠道侧返回失败（走 trace 链路，不进队列） | `PushSendFailureTrace` |
+
+两条**自动**把行判成 `failed` 的路径，靠 `push_error` 列区分：
+
+| `push_error` | 触发条件 | 上界/阈值配置 |
+|--------------|----------|----------------|
+| `outbound_push_exhausted` | 账号还在拉，但同一条推 20 次仍失败 | 常量 `MaxOutboundPushAttempts`（代码内，无旋钮） |
+| `outbound_orphan_expired` | 账号连续 `outbound_orphan_ttl` 未注册/未同步，且行本身也老于此阈值 | `bridge.outbound_orphan_ttl`（秒，缺省 604800＝7 天；0＝停用） |
+
+两种判弃都**不写 `sent_at`**（这条从未交付出去，盖上时间戳会让后续回复被误判成"自己发过的回显"而吞掉）。
+
+**孤儿结算默认只报数**：`bridge.outbound_orphan_dry_run` 缺省 `true`，后台回扫每轮只在日志里打印
+`[BridgeReplay] 孤儿出站结算 dry-run（未写库）: ttl=… groups=… candidates=… skipped_reachable=…`，
+一行都不改。放量步骤＝读着这行日志确认候选口径无误 → `config_params` 里把该键置 `false` → 下一轮真正落 `failed`。
+为什么默认要停在报数侧：这道写入不可逆，而回扫是 5 分钟一跑的后台任务，开发态存盘即热重载进真实例、连真库
+（2026-09-28 实测：闸门上线前的一轮 cron 把 38 行历史 pending 直接烧成 failed，事后已逐行还原）。
+
+`unreachable_channels` 一格不等于"没人连 SSE"：轮询式下发的账号是靠 `last_sync_at` 落在宽限窗内才算在线的。
 
 ---
 
@@ -204,7 +233,8 @@ AI 平台工程师；LLM 故障 P1 级。
 - popup 健康度面板显示熔断（circuit-breaker open）
 
 ### 4.2 根因
-1. 桥接 Token 失效 / 被吊销（Authorization Header 认证失败）
+1. 桥接 Token 失效 / 被吊销（`X-Bridge-Token` 头认证失败——401 有两种，原因在服务端响应体里：
+   `缺少 X-Bridge-Token`＝头没发出去，`bridge token 无效`＝头发出去了但值不对，处置动作不同）
 2. user-server `/api/bridge/*` 路由不可达（未开 / 被反代拦截）
 3. 扩展侧死开关（Dead Man's Switch）触发，自动停摆
 4. 账号被平台风控（高频巡检触发）
@@ -212,14 +242,22 @@ AI 平台工程师；LLM 故障 P1 级。
 ### 4.3 排查步骤
 ```bash
 # 1. 桥接接口可达性
-curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer <TOKEN>" \
-  http://127.0.0.1:8204/api/bridge/outbox
+# 闸门只读 X-Bridge-Token（发 Authorization: Bearer 会 401，别误判成"服务没起来"）；
+# outbox 还要求 channel + account_id，缺参是 400。200=通、400=通但少参、401=凭证不对、000=没起来。
+curl -s -o /dev/null -w "%{http_code}" -H "X-Bridge-Token: <TOKEN>" \
+  "http://127.0.0.1:8204/api/bridge/outbox?channel=douyin&account_id=<ACCOUNT_ID>"
 
 # 2. 查看桥接相关日志
 journalctl -u user-server --no-pager | grep -iE "bridge|uplink|outbox|ack" | tail -50
 
 # 3. 检查扩展 popup 健康度面板：熔断状态 / 延迟 P50/P95 / 错码分布
 # 4. 检查浏览器控制台：chrome://extensions → 背景页 Console
+#    SSE 建连被拒时，控制台现在带服务端回的原因（`SSE 连接失败: HTTP 401 — bridge token 无效`），
+#    不再只剩一个状态码数字。见 user-web/bridge/src/core/sse-fetch-client.js 的 buildSSEError。
+#    4xx（408/429 除外）判为不可重试：循环会打一条
+#    `SSE 被服务端拒绝（不可重试），降为 60s 慢重连`（downlink.js），
+#    此后每 60s 才再试一次——这是预期降档，不是"卡住不动"，别按重连失败去重启服务。
+#    在选项页把 Token 改对后不需要刷新页面，下一个 60s 试探自己会接上。
 
 # 5. 检查 Token 是否过期：平台端账号管理 → 重置桥接 Token
 ```

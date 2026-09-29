@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -64,10 +65,10 @@ func (r *VectorRetriever) SearchVector(ctx context.Context, kbID string, queryVe
 		`
 		args := []any{vecLiteral}
 		if kbID != "" {
-			sql += " AND product_id = ? ORDER BY embedding <=> ?::vector LIMIT ?"
+			sql += " AND product_id = ?" + kbrelease.AndVisible() + " ORDER BY embedding <=> ?::vector LIMIT ?"
 			args = append(args, kbID, vecLiteral, topK)
 		} else {
-			sql += " ORDER BY embedding <=> ?::vector LIMIT ?"
+			sql += kbrelease.AndVisible() + " ORDER BY embedding <=> ?::vector LIMIT ?"
 			args = append(args, vecLiteral, topK)
 		}
 		return tx.Raw(sql, args...).Scan(&rows).Error
@@ -126,10 +127,10 @@ func (r *VectorRetriever) Retrieve(ctx context.Context, productID string, query 
 		`
 		args := []any{vecLiteral}
 		if productID != "" {
-			sql += " AND product_id = ? ORDER BY embedding <=> ?::vector LIMIT ?"
+			sql += " AND product_id = ?" + kbrelease.AndVisible() + " ORDER BY embedding <=> ?::vector LIMIT ?"
 			args = append(args, productID, vecLiteral, topK)
 		} else {
-			sql += " ORDER BY embedding <=> ?::vector LIMIT ?"
+			sql += kbrelease.AndVisible() + " ORDER BY embedding <=> ?::vector LIMIT ?"
 			args = append(args, vecLiteral, topK)
 		}
 		return tx.Raw(sql, args...).Scan(&rows).Error
@@ -140,8 +141,10 @@ func (r *VectorRetriever) Retrieve(ctx context.Context, productID string, query 
 
 	if len(rows) == 0 {
 		if n := r.countUnembeddedChunks(ctx, productID); n > 0 {
-			logger.Warnf("[VectorRetriever] 向量召回为空，但存在 %d 个未向量化 chunk (embed_status='pending' 或 embedding IS NULL)，疑似回填缺失；query=%q product_id=%q",
-				n, query, productID)
+			// 读数带上闸门档位：召回为 0 有两种成因（没向量化 / 内容还没发布），
+			// 而运维只看到"空召回"时会按第一种去重跑导入。
+			logger.Warnf("[VectorRetriever] 向量召回为空（版本闸门 %s），但存在 %d 个未向量化 chunk (embed_status='pending' 或 embedding IS NULL)，疑似回填缺失；query=%q product_id=%q",
+				kbrelease.ModeForLog(), n, query, productID)
 		}
 	}
 	return rowsToChunks(rows), nil

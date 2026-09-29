@@ -803,9 +803,25 @@ export async function startSSEDelivery(channel, accountId, handlers) {
     }
   } catch (_) {}
 
-  const serverUrl = cfg.serverUrl || DEFAULT_USER_SERVER.baseUrl;
-  const token = cfg.token || '';
+  // serverUrl/token 必须是可重读的：重连循环靠这两个闭包值活过配置变更。
+  // 快照成 const 的话，"不永久放弃"只是把"等刷新页面"换成"等一个永远拿不到新凭证的循环"。
+  let serverUrl = cfg.serverUrl || DEFAULT_USER_SERVER.baseUrl;
+  let token = cfg.token || '';
   const lastEventId = getLastEventID(channel, accountId);
+
+  // 4xx 之后重读一次配置：被拒最常见的成因就是凭证/地址写错，而运维的修复动作发生在选项页。
+  // 不重读的话，这条循环每次试探拿的都是启动时那份快照——改对了也不会生效，
+  // "不永久放弃"就退化成"永远用错凭证重试"，用户看到的仍是"扩展在线却一条也不下"。
+  async function refreshBridgeConfig() {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const r = await chrome.storage.local.get('bridgeConfig');
+        const next = (r && r.bridgeConfig) || {};
+        if (next.serverUrl) serverUrl = next.serverUrl;
+        if (typeof next.token === 'string') token = next.token;
+      }
+    } catch (_) {}
+  }
 
   // 2. 直接在 Content Script 中建立 SSE 连接（fetch + ReadableStream）
   log.info(`SSE 直连启动: ${channel}:${accountId}`, { serverUrl, hasToken: !!token, lastEventId });
@@ -822,12 +838,26 @@ export async function startSSEDelivery(channel, accountId, handlers) {
   //   原实现 10 次后永久 break——SSE 是下行主通道，永久放弃 = 渠道静默失联直到页面刷新。
   //   改为超限后降级为慢重连（固定间隔 + 抖动），连接恢复时 Last-Event-ID 补拉机制兜住断流缺口。
   const DEGRADED_RETRY_MS = 5 * 60_000;
+  // 被服务端判为"请求本身坏了"（4xx，408/429 除外）时的重连节奏：比快速恢复期慢、
+  // 比断流降级档快——运维在选项页改对凭证后不必刷新页面也能自己接上。
+  const NON_RETRYABLE_RETRY_MS = 60_000;
   // 服务端 retry: 字段建议值（sse-fetch-client onRetry 回调写入；0=未提供，用本地退避）
   let serverRetryDelayMs = 0;
+  // 重连循环自己播报的原因只播一次：每次尝试的 err 仍会经 connectSSE 的 onError 通道上交
+  // 一次（既有行为，不动它），再逐次补一条同义的原因就是每 60s 多刷一条无效日志。
+  let nonRetryableAnnounced = false;
+  // 上一轮被 4xx 拒过 ⇒ 下一次尝试前重读一次配置（见 catch 里的说明）
+  let pendingConfigRefresh = false;
 
   // 带重连的 SSE 连接启动
   async function startSSEWithReconnect() {
     while (!stopped) {
+      // 上一轮被 4xx 拒过 ⇒ 发起这次尝试之前才重读配置：运维是在那 60s 等待窗口里
+      // 才把凭证改对的，在被拒的那一刻读只能读到同一份坏配置。
+      if (pendingConfigRefresh) {
+        pendingConfigRefresh = false;
+        await refreshBridgeConfig();
+      }
       try {
         cleanupSSE = await connectSSE(channel, accountId, {
           serverUrl,
@@ -947,6 +977,7 @@ export async function startSSEDelivery(channel, accountId, handlers) {
 
         // 重置重连计数
         reconnectAttempts = 0;
+        nonRetryableAnnounced = false;
         log.info(`SSE 直连已建立: ${channel}:${accountId}`);
 
         // 等待连接结束（正常或异常）
@@ -956,8 +987,27 @@ export async function startSSEDelivery(channel, accountId, handlers) {
         if (stopped) break;
 
         reconnectAttempts++;
+        const nonRetryable = !!(err && err.nonRetryable);
         let delay;
-        if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+        if (nonRetryable) {
+          // 4xx 是"这个请求本身是坏的"（缺参/凭证无效/渠道不在白名单），不是"网络断了"。
+          // 走指数梯重打 10 次、再降 5 分钟档无限重试，等于拿同一个坏请求一直敲鉴权，
+          // 而日志里每一行都只是重复的 HTTP 401——运维既看不到原因，也等不到它自己变好。
+          // 降到固定慢档：不永久停手（token 在选项页改对后要能自己接上），也不再刷屏。
+          delay = NON_RETRYABLE_RETRY_MS;
+          // 标记留到下一次尝试前再重读：运维是在这 60s 等待窗口里才把凭证改对的，
+          // 在被拒的那一刻立刻重读，读到的还是那份坏配置（实测过：第二次试探仍带旧 token）。
+          pendingConfigRefresh = true;
+          if (!nonRetryableAnnounced) {
+            nonRetryableAnnounced = true;
+            log.error(`SSE 被服务端拒绝（不可重试），降为 ${NON_RETRYABLE_RETRY_MS / 1000}s 慢重连: ${channel}:${accountId}`, {
+              status: err.status,
+              code: err.code,
+              server_message: err.serverMessage,
+            });
+            handlers.onError?.(err);
+          }
+        } else if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
           if (reconnectAttempts === MAX_RECONNECT_ATTEMPTS + 1) {
             log.warn(`SSE 重连超过 ${MAX_RECONNECT_ATTEMPTS} 次，降级为 ${DEGRADED_RETRY_MS / 1000}s 慢重连（不再永久放弃）: ${channel}:${accountId}`);
           }
@@ -977,7 +1027,8 @@ export async function startSSEDelivery(channel, accountId, handlers) {
         log.info(`SSE 断开，${delay}ms 后第 ${reconnectAttempts} 次重连: ${channel}:${accountId}`);
 
         // 通知上层连接已断开（前 10 次带进度提示；降级后不再刷屏，仅首次慢重连提示一次）
-        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS + 1) {
+        // 不可重试的 4xx 已在上面带原因上报过一次，逐次再报只会把同一条坏请求刷成洪水。
+        if (!nonRetryable && reconnectAttempts <= MAX_RECONNECT_ATTEMPTS + 1) {
           handlers.onError?.(new Error(`SSE 断开，准备重连 (${reconnectAttempts})`));
         }
 
@@ -999,13 +1050,15 @@ export async function startSSEDelivery(channel, accountId, handlers) {
   // §6-4（R22 第二十三轮）：SSE 是生产默认形态（服务端 FF_ENABLE_SSE_BRIDGE 默认 true，
   // 客户端探到 sse_enabled 即 return，轮询定时器根本不启动），而 _pendingAck 原先只有
   // pollDownlink 会排水 ⇒ ack 失败入队的条目在默认形态下永不重试，页面一刷新队列即清空。
-  const ackCred = { serverUrl, accountId, token };
+  // 凭证按次现读，不快照：SSE 侧被 4xx 拒过、重读配置后 token 会换，
+  // 排水若还拿启动时那份旧凭证，下行接上了、ack 却永远打不通（行一直留在欠投递集合里）。
+  const ackCred = () => ({ serverUrl, accountId, token });
   const ackDrainEveryMs = handlers && handlers.pendingAckDrainIntervalMs
     ? handlers.pendingAckDrainIntervalMs
     : BRIDGE_THREE_CHANNEL.pendingAckDrainIntervalMs;
   const ackDrainTimer = setInterval(() => {
     if (stopped) return;
-    drainPendingAcks(channel, ackCred).catch((err) => log.error('SSE pendingAck 排水失败', err));
+    drainPendingAcks(channel, ackCred()).catch((err) => log.error('SSE pendingAck 排水失败', err));
   }, ackDrainEveryMs);
 
   // 启动重连 SSE 连接（异步，不阻塞）

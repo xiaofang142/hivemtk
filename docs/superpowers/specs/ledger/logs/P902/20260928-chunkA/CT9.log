@@ -1,0 +1,236 @@
+2026-09-28T18:22:31+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBReleaseController_UnavailableEveryExit
+--- PASS: TestKBReleaseController_UnavailableEveryExit (0.00s)
+=== RUN   TestKBReleaseController_GateAnswersWithoutStore
+--- PASS: TestKBReleaseController_GateAnswersWithoutStore (0.00s)
+=== RUN   TestKBReleaseController_GateModes
+2026-09-28T18:22:31+08:00 WRN [kb-release] FF_LTC_KB_CHANGE_GATE="nonsense" 无法识别 ⇒ 按 off 处理（召回不受版本闸门约束）；可用值：off|shadow|on component=user-server
+2026-09-28T18:22:31+08:00 WRN [kb-release] FF_LTC_KB_CHANGE_GATE="nonsense" 无法识别 ⇒ 按 off 处理（召回不受版本闸门约束）；可用值：off|shadow|on component=user-server
+2026-09-28T18:22:31+08:00 WRN [kb-release] FF_LTC_KB_CHANGE_GATE="nonsense" 无法识别 ⇒ 按 off 处理（召回不受版本闸门约束）；可用值：off|shadow|on component=user-server
+--- PASS: TestKBReleaseController_GateModes (0.00s)
+=== RUN   TestKBReleaseController_GateReadFailureStillAnswers
+--- PASS: TestKBReleaseController_GateReadFailureStillAnswers (0.00s)
+=== RUN   TestKBReleaseController_WriteRequiresOperator
+--- PASS: TestKBReleaseController_WriteRequiresOperator (0.00s)
+=== RUN   TestKBReleaseController_OperatorTypesReachActor
+2026-09-28T18:22:31+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-28T18:22:31+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-28T18:22:31+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-28T18:22:31+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+--- PASS: TestKBReleaseController_OperatorTypesReachActor (0.00s)
+=== RUN   TestKBReleaseController_ListQueryTranslation
+=== RUN   TestKBReleaseController_ListQueryTranslation/全默认
+=== RUN   TestKBReleaseController_ListQueryTranslation/按库+状态+动作
+=== RUN   TestKBReleaseController_ListQueryTranslation/op_大小写折叠、product_id_去空白
+=== RUN   TestKBReleaseController_ListQueryTranslation/翻页换算
+=== RUN   TestKBReleaseController_ListQueryTranslation/只有_page_size
+=== RUN   TestKBReleaseController_ListQueryTranslation/page=0
+=== RUN   TestKBReleaseController_ListQueryTranslation/page_非数字
+=== RUN   TestKBReleaseController_ListQueryTranslation/page_size_负数
+=== RUN   TestKBReleaseController_ListQueryTranslation/page_size=0
+=== RUN   TestKBReleaseController_ListQueryTranslation/status_越界
+=== RUN   TestKBReleaseController_ListQueryTranslation/status_大写
+=== RUN   TestKBReleaseController_ListQueryTranslation/op_越界
+=== RUN   TestKBReleaseController_ListQueryTranslation/product_id_超长
+--- PASS: TestKBReleaseController_ListQueryTranslation (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/全默认 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/按库+状态+动作 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/op_大小写折叠、product_id_去空白 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/翻页换算 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/只有_page_size (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/page=0 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/page_非数字 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/page_size_负数 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/page_size=0 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/status_越界 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/status_大写 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/op_越界 (0.00s)
+    --- PASS: TestKBReleaseController_ListQueryTranslation/product_id_超长 (0.00s)
+=== RUN   TestKBReleaseController_ListTotalPassthrough
+--- PASS: TestKBReleaseController_ListTotalPassthrough (0.00s)
+=== RUN   TestKBReleaseController_ParamGates
+=== RUN   TestKBReleaseController_ParamGates/变更号超长_GET
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: kbFakeStore.GetChange 未接线 component=user-server
+    kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+=== RUN   TestKBReleaseController_ParamGates/变更号超长_withdraw
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: kbFakeStore.GetChange 未接线 component=user-server
+    kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+=== RUN   TestKBReleaseController_ParamGates/变更号超长_audit
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: kbFakeStore.ListAuditBySubject 未接线 component=user-server
+    kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+=== RUN   TestKBReleaseController_ParamGates/库号超长_get
+=== RUN   TestKBReleaseController_ParamGates/库号超长_stats
+=== RUN   TestKBReleaseController_ParamGates/库号超长_audit
+=== RUN   TestKBReleaseController_ParamGates/库号超长_publish
+=== RUN   TestKBReleaseController_ParamGates/库号超长_rollback
+=== RUN   TestKBReleaseController_ParamGates/库号超长_restore
+=== RUN   TestKBReleaseController_ParamGates/库号超长_governed
+=== RUN   TestKBReleaseController_ParamGates/留痕_limit=0
+=== RUN   TestKBReleaseController_ParamGates/留痕_limit_非数字
+--- FAIL: TestKBReleaseController_ParamGates (0.00s)
+    --- FAIL: TestKBReleaseController_ParamGates/变更号超长_GET (0.00s)
+    --- FAIL: TestKBReleaseController_ParamGates/变更号超长_withdraw (0.00s)
+    --- FAIL: TestKBReleaseController_ParamGates/变更号超长_audit (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_get (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_stats (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_audit (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_publish (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_rollback (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_restore (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/库号超长_governed (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/留痕_limit=0 (0.00s)
+    --- PASS: TestKBReleaseController_ParamGates/留痕_limit_非数字 (0.00s)
+=== RUN   TestKBReleaseController_ProductParamCountsRunes
+--- PASS: TestKBReleaseController_ProductParamCountsRunes (0.00s)
+=== RUN   TestKBReleaseController_BadBodies
+=== RUN   TestKBReleaseController_BadBodies/提交：坏_JSON
+=== RUN   TestKBReleaseController_BadBodies/提交：类型不对
+=== RUN   TestKBReleaseController_BadBodies/启停：坏_JSON
+=== RUN   TestKBReleaseController_BadBodies/启停：缺_governed
+=== RUN   TestKBReleaseController_BadBodies/启停：governed_是字符串
+--- PASS: TestKBReleaseController_BadBodies (0.00s)
+    --- PASS: TestKBReleaseController_BadBodies/提交：坏_JSON (0.00s)
+    --- PASS: TestKBReleaseController_BadBodies/提交：类型不对 (0.00s)
+    --- PASS: TestKBReleaseController_BadBodies/启停：坏_JSON (0.00s)
+    --- PASS: TestKBReleaseController_BadBodies/启停：缺_governed (0.00s)
+    --- PASS: TestKBReleaseController_BadBodies/启停：governed_是字符串 (0.00s)
+=== RUN   TestKBReleaseController_SubmitInputJudgments
+=== RUN   TestKBReleaseController_SubmitInputJudgments/缺_product_id
+=== RUN   TestKBReleaseController_SubmitInputJudgments/缺_reason
+=== RUN   TestKBReleaseController_SubmitInputJudgments/op_越界
+=== RUN   TestKBReleaseController_SubmitInputJudgments/add_缺_document_id
+=== RUN   TestKBReleaseController_SubmitInputJudgments/add_不该带_target
+=== RUN   TestKBReleaseController_SubmitInputJudgments/retire_不该带_content
+=== RUN   TestKBReleaseController_SubmitInputJudgments/content_超长
+--- PASS: TestKBReleaseController_SubmitInputJudgments (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/缺_product_id (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/缺_reason (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/op_越界 (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/add_缺_document_id (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/add_不该带_target (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/retire_不该带_content (0.00s)
+    --- PASS: TestKBReleaseController_SubmitInputJudgments/content_超长 (0.00s)
+=== RUN   TestKBReleaseController_ReplyErrorTable
+=== RUN   TestKBReleaseController_ReplyErrorTable/底座未装配/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/底座未装配/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/审批没给结论/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/审批没给结论/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/入参不合法/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/入参不合法/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/查无此条/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/查无此条/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/撤不掉/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/撤不掉/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/库未进发布制/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/库未进发布制/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有上一版可回/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有上一版可回/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有可放回的版本/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有可放回的版本/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/发布禁令/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/发布禁令/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有可发布的东西/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/没有可发布的东西/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/目标分段对不上/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/目标分段对不上/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/变更已不在待处理态/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/变更已不在待处理态/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/已进发布制不许直写/裸错误
+=== RUN   TestKBReleaseController_ReplyErrorTable/已进发布制不许直写/包一层
+=== RUN   TestKBReleaseController_ReplyErrorTable/未登记的内部错误/裸错误
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: 连接断了 component=user-server
+=== RUN   TestKBReleaseController_ReplyErrorTable/未登记的内部错误/包一层
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: 变更 kbc_1 的处理失败: 连接断了 component=user-server
+--- PASS: TestKBReleaseController_ReplyErrorTable (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/底座未装配/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/底座未装配/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/审批没给结论/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/审批没给结论/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/入参不合法/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/入参不合法/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/查无此条/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/查无此条/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/撤不掉/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/撤不掉/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/库未进发布制/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/库未进发布制/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有上一版可回/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有上一版可回/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有可放回的版本/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有可放回的版本/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/发布禁令/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/发布禁令/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有可发布的东西/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/没有可发布的东西/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/目标分段对不上/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/目标分段对不上/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/变更已不在待处理态/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/变更已不在待处理态/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/已进发布制不许直写/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/已进发布制不许直写/包一层 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/未登记的内部错误/裸错误 (0.00s)
+    --- PASS: TestKBReleaseController_ReplyErrorTable/未登记的内部错误/包一层 (0.00s)
+=== RUN   TestKBReleaseController_SubmitShape
+2026-09-28T18:22:31+08:00 INF [kb-release] 变更已提交：kbc_1790590951414298000_1 op=revise product=p9 approval=apr_fake_kbc_1790590951414298000_1（新建=true） component=user-server
+--- PASS: TestKBReleaseController_SubmitShape (0.00s)
+=== RUN   TestKBReleaseController_SubmitApprovalEnqueueFailed
+2026-09-28T18:22:31+08:00 WRN [kb-release] 未预期错误: 变更 kbc_1790590951414459000_1 入队审批失败: 审批底座不可用 component=user-server
+--- PASS: TestKBReleaseController_SubmitApprovalEnqueueFailed (0.00s)
+=== RUN   TestKBReleaseController_GetChange404
+--- PASS: TestKBReleaseController_GetChange404 (0.00s)
+=== RUN   TestKBReleaseController_GetChangeFound
+--- PASS: TestKBReleaseController_GetChangeFound (0.00s)
+=== RUN   TestKBReleaseController_WithdrawPaths
+=== RUN   TestKBReleaseController_WithdrawPaths/放行
+=== RUN   TestKBReleaseController_WithdrawPaths/已被发布
+=== RUN   TestKBReleaseController_WithdrawPaths/读不到行
+--- PASS: TestKBReleaseController_WithdrawPaths (0.00s)
+    --- PASS: TestKBReleaseController_WithdrawPaths/放行 (0.00s)
+    --- PASS: TestKBReleaseController_WithdrawPaths/已被发布 (0.00s)
+    --- PASS: TestKBReleaseController_WithdrawPaths/读不到行 (0.00s)
+=== RUN   TestKBReleaseController_AuditSubjectKeys
+--- PASS: TestKBReleaseController_AuditSubjectKeys (0.00s)
+=== RUN   TestKBReleaseController_GetReleaseAbsent
+--- PASS: TestKBReleaseController_GetReleaseAbsent (0.00s)
+=== RUN   TestKBReleaseController_GetReleasePresent
+--- PASS: TestKBReleaseController_GetReleasePresent (0.00s)
+=== RUN   TestKBReleaseController_SetGovernedExplicitBool
+2026-09-28T18:22:31+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-28T18:22:31+08:00 INF [kb-release] 库 p1 governed=false（闸门档位 off） component=user-server
+--- PASS: TestKBReleaseController_SetGovernedExplicitBool (0.00s)
+=== RUN   TestKBReleaseController_ListReleases
+--- PASS: TestKBReleaseController_ListReleases (0.00s)
+=== RUN   TestKBReleaseController_StatsShape
+--- PASS: TestKBReleaseController_StatsShape (0.00s)
+=== RUN   TestKBReleaseController_StatsEmptyProduct
+--- PASS: TestKBReleaseController_StatsEmptyProduct (0.00s)
+=== RUN   TestKBReleaseController_PublicNullVsEmpty
+2026-09-28T18:22:31+08:00 INF [kb-release] 库 p1 本次没有可发布的变更：待审 1 条 / 被拒 0 条 / 过期 0 条 / 结论不明 0 条 component=user-server
+--- PASS: TestKBReleaseController_PublicNullVsEmpty (0.00s)
+=== RUN   TestKBReleaseController_PublishGovernanceAndBucket
+=== RUN   TestKBReleaseController_PublishGovernanceAndBucket/没有发布行
+=== RUN   TestKBReleaseController_PublishGovernanceAndBucket/有行但没开治理
+=== RUN   TestKBReleaseController_PublishGovernanceAndBucket/已治理_+_桶上有货_+_零变更
+2026-09-28T18:22:31+08:00 INF [kb-release] 库 p1 发布完成：v2 → v3，落库 0 条变更 component=user-server
+--- PASS: TestKBReleaseController_PublishGovernanceAndBucket (0.00s)
+    --- PASS: TestKBReleaseController_PublishGovernanceAndBucket/没有发布行 (0.00s)
+    --- PASS: TestKBReleaseController_PublishGovernanceAndBucket/有行但没开治理 (0.00s)
+    --- PASS: TestKBReleaseController_PublishGovernanceAndBucket/已治理_+_桶上有货_+_零变更 (0.00s)
+=== RUN   TestKBReleaseController_PublishIntentCarriesApprovedOnly
+2026-09-28T18:22:31+08:00 INF [kb-release] 库 p1 发布完成：v0 → v1，落库 1 条变更 component=user-server
+--- PASS: TestKBReleaseController_PublishIntentCarriesApprovedOnly (0.00s)
+=== RUN   TestKBReleaseController_PointerMovesNotInterchangeable
+--- PASS: TestKBReleaseController_PointerMovesNotInterchangeable (0.00s)
+=== RUN   TestKBReleaseController_Taxonomy
+--- PASS: TestKBReleaseController_Taxonomy (0.00s)
+=== RUN   TestKBReleaseController_TaxonomyWithoutStore
+--- PASS: TestKBReleaseController_TaxonomyWithoutStore (0.00s)
+=== RUN   TestKBReleaseController_RealStack
+2026-09-28T18:22:41+08:00 WRN [kb-release] 库 pctrl_real 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-28T18:22:41+08:00 INF [kb-release] 变更已提交：kbc_1790590961212976000_1 op=add product=pctrl_real approval=apr_1790590961216196000_1（新建=true） component=user-server
+2026-09-28T18:22:41+08:00 INF [kb-release] 库 pctrl_real 本次没有可发布的变更：待审 1 条 / 被拒 0 条 / 过期 0 条 / 结论不明 0 条 component=user-server
+2026-09-28T18:22:41+08:00 INF [kb-release] 库 pctrl_real 发布完成：v0 → v1，落库 1 条变更 component=user-server
+--- PASS: TestKBReleaseController_RealStack (9.95s)
+FAIL
+FAIL	hivemtk-user/internal/controller	10.590s
+FAIL

@@ -82,7 +82,21 @@ type KnowledgeChunk struct {
 	Metadata        string  `gorm:"type:jsonb;default:'{}'" json:"metadata"`
 	SourceLanguage  string  `gorm:"type:varchar(8);default:'zh'" json:"source_language"`
 	// D16: 向量来源（'tei'=真实模型 / 'hash'=FNV 兜底）；读路径按 'tei' 过滤
-	EmbeddingSource    string    `gorm:"type:varchar(16);not null;default:'tei'" json:"embedding_source"`
+	EmbeddingSource string `gorm:"type:varchar(16);not null;default:'tei'" json:"embedding_source"`
+	// T-P9-02 发布制三列。可见性判据只有一处（kbrelease.hiddenPredicate），这里只声明形状。
+	//
+	// 三列都**不带索引**，两个理由：
+	//   - 读路径不按它们过滤单行，而是在已命中的行上做一次相关子查询判定；
+	//   - AutoMigrate 给一张有存量的热表建索引会取 SHARE 锁（阻塞写入），而这三列
+	//     在升级后的一段时间里全是默认值 0，建了也没人走。
+	//
+	// 默认 0 的语义是"升级前的存量行"，它保证两件事：启用发布制不会让已上线内容
+	// 当场消失（0 > effective 恒假），以及任何忘记打戳的新写入退化成"按存量对待"
+	// 而不是"凭空不可见"—— 少打一个戳的表现是多放一条可见，不是少一条，
+	// 这个失败方向是刻意选的（同审批闸门"没拿到批准"与"再开一条待办"的分开法）。
+	KBVersion          int       `gorm:"column:kb_version;not null;default:0" json:"kb_version"`
+	RetiredVersion     int       `gorm:"column:retired_version;not null;default:0" json:"retired_version"`
+	ChangeID           string    `gorm:"type:varchar(40);column:change_id;not null;default:''" json:"change_id"`
 	TranslatedVersions JSONMap   `gorm:"type:jsonb;column:translated_versions" json:"translated_versions,omitempty"`
 	CreatedAt          time.Time `gorm:"autoCreateTime" json:"created_at"`
 }

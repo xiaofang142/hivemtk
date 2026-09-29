@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/bm25"
 )
 
@@ -16,12 +17,11 @@ func (s *RagSearcher) bm25SearchAll(ctx context.Context, query string, topK int)
 		return nil, nil
 	}
 	var rows []chunkRow
-	if err := s.db.WithContext(ctx).
+	q := kbrelease.WhereVisible(s.db.WithContext(ctx).
 		Table("knowledge_chunks").
 		Select("id, document_id, content").
-		Where("embedding IS NULL OR embedding IS NOT NULL").
-		Limit(BM25ScanLimit()).
-		Scan(&rows).Error; err != nil {
+		Where("embedding IS NULL OR embedding IS NOT NULL"))
+	if err := q.Limit(BM25ScanLimit()).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return s.bm25RankAndReturn(rows, terms, topK), nil
@@ -36,12 +36,11 @@ func (s *RagSearcher) bm25SearchIndex(ctx context.Context, productID string, que
 		return nil, nil
 	}
 	var rows []chunkRow
-	if err := s.db.WithContext(ctx).
+	q := kbrelease.WhereVisible(s.db.WithContext(ctx).
 		Table("knowledge_chunks").
 		Select("id, document_id, content").
-		Where("product_id = ?", productID).
-		Limit(BM25ScanLimit()).
-		Scan(&rows).Error; err != nil {
+		Where("product_id = ?", productID))
+	if err := q.Limit(BM25ScanLimit()).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	pairs := s.bm25Rank(rows, terms)

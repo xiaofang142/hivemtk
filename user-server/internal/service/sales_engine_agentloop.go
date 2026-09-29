@@ -394,8 +394,14 @@ func (e *SalesEngine) runAgentLoop(
 	return "", nil, nil, exhaustedErr
 }
 
+// 兜底文案必须给出一条真能走通出路：
+//   - 「转人工」是 MatchTransferKeywords/MatchExplicitKeywords 认识的词（客户照做即触发 veto 转人工）；
+//     裸「人工」不在关键词表里，写它就是让客户照做一个不会产生任何效果的指令。
+//   - 「无法处理」「请稍后再试」两串是 TestEmptyReplyFallback 与 scripts/simulate
+//     （simulate.py 的降级判定、ai_quality.py 的 DEGRADED_MARKERS）共同的识别锚，删掉任一
+//     会把真实降级回复读成正常应答。
 func (e *SalesEngine) emptyReplyFallback() string {
-	return "抱歉，我暂时无法处理您的请求，请稍后再试。"
+	return "抱歉，我暂时无法处理您的请求，请稍后再试，或回复「转人工」由人工客服为您服务。"
 }
 
 // renderRAGReferenceBlock 渲染【知识库参考】区块。

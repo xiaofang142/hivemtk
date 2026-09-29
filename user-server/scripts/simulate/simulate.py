@@ -34,6 +34,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 HERE = os.path.dirname(os.path.abspath(__file__))
 INTERACTIONS_FILE = os.path.join(HERE, "interactions.jsonl")
 
+# 降级判据只有一份：ai_quality.DEGRADED_MARKERS（与本文件同目录，靠 sys.path[0] 解析）。
+# 这里原先另写了一条内联副本（只认 "AI 服务暂时不可用"/"请稍后再试"），
+# 于是补任何一条兜底文案只会让其中一边报警，降级率永远统计不全。
+from ai_quality import is_degraded
+
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -177,7 +182,7 @@ def run_one(round_idx, idx, args, questions, names, app_keys, stats, print_lock)
         ok = len(stripped) > 0
         empty = not ok
         # 识别 AI 栈过载/不可用兜底（HTTP 成功但非真实应答）
-        degraded = "AI 服务暂时不可用" in stripped or "请稍后再试" in stripped
+        degraded = is_degraded(stripped)
         err = "" if ok else "empty ai_response"
         if ok and degraded:
             err = "AI_DEGRADED"  # 链路通但 AI 栈未真实应答

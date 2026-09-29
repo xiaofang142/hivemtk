@@ -494,6 +494,10 @@ func (s *LLMService) callProvider(ctx context.Context, config *LLMConfig, body [
 		if err != nil {
 			lastErr = fmt.Errorf("HTTP request failed: %w", err)
 			logger.Errorf("[LLM] request error (attempt %d/%d): %v", attempt+1, maxRetries, err)
+			if isUnreachable(err) {
+				// 端口没人监听/域名解析不出来，退避到下一次也不会自愈 ⇒ 立刻返回
+				return nil, lastErr
+			}
 			continue
 		}
 

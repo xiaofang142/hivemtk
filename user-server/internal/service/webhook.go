@@ -968,7 +968,11 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 	// QQ 渠道 AI 触发已由 dispatchQQ → Ingress（aiTrigger=webhookSvc.TriggerInboundAI）
 	// 完成，这里不再走 triggerSalesEngine，避免同一事件双触发 AI（双重回复）。
 	if channel == ChannelTelegram && tgExtra != nil && tgExtra.GateHandled {
-		triggerAI = false // /start 网关验证已消费
+		if tgExtra.GateMuted {
+			logger.Infof("[Webhook] TG 群门控互锁：发言人未通过验证，不触发 AI event=%s chat=%s sender=%s",
+				job.event.EventID, payload.ChatID, payload.Sender)
+		}
+		triggerAI = false // /start 网关验证已消费 / 门控群未验证成员发言
 	}
 	if triggerAI && channel != ChannelQQ {
 		// Telegram 群消息：先把 @mention/商机 元信息塞进 ctx → 让 sendOutbound 能 @mention 原发言人
@@ -988,10 +992,10 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 		} else {
 			mentioned := tgExtra != nil && tgExtra.Mentioned
 			newOpp := tgExtra != nil && tgExtra.NewOpportunity
-			switch {
-			case mentioned:
-				s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
-			case newOpp && s.tgLeadOutreachAllowed(ctx, job.account, payload.ChatID, payload.Sender):
+			verifiedSpeaker := tgExtra != nil && tgExtra.SpeakerVerified
+			if tgGroupShouldTriggerAI(mentioned, newOpp, verifiedSpeaker,
+				func() bool { return s.tgLeadOutreachAllowed(ctx, job.account, payload.ChatID, payload.Sender) },
+				job.event.EventID, payload.ChatID, payload.Sender, hubMsg.MsgType, hubMsg.Content) {
 				s.triggerSalesEngine(aiCtx, channel, job.account, payload, hubMsg)
 			}
 		}

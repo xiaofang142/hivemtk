@@ -1,12 +1,15 @@
 package controller
 
 import (
-	"hivemtk-user/internal/aiagent/knowledge/service"
-	"hivemtk-user/internal/pkg/utils/response"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/pkg/kbrelease"
+	"hivemtk-user/internal/pkg/utils/response"
 )
 
 // KnowledgeMerchantController 商户视角 RAG 增强控制器
@@ -132,6 +135,20 @@ func (ctrl *KnowledgeMerchantController) ListDocumentChunks(c *gin.Context) {
 	response.Success(c, gin.H{"items": chunks, "total": total, "page": page, "page_size": pageSize}, "")
 }
 
+// replyChunkWriteError 三个"就地改语料"写入口（改 / 删 / 拆）共用的错误出口。
+//
+// 只为本卡（T-P9-02）新增的那一条判据开一个 409 分支，其余错误沿用本控制器既有的 400 口径。
+// 这两码在这里不是粗细之别而是**下一步动作之别**：400 是"请求体写错了，改完再点"，
+// 409 是"这个库已进发布制，这条路根本不提供，请改提一条变更走审批"。
+// 把后者一起报成 400，运营会反复改正文再点保存，而改多少次结果都一样。
+func replyChunkWriteError(c *gin.Context, err error) {
+	if errors.Is(err, kbrelease.ErrGovernedDirectWrite) {
+		response.Error(c, http.StatusConflict, err.Error())
+		return
+	}
+	response.Error(c, http.StatusBadRequest, err.Error())
+}
+
 func (ctrl *KnowledgeMerchantController) UpdateChunk(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
@@ -147,7 +164,7 @@ func (ctrl *KnowledgeMerchantController) UpdateChunk(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.UpdateChunk(c.Request.Context(), &service.UpdateChunkRequest{ChunkID: id, Content: body.Content, Token: c.GetHeader("X-Knowledge-Token")}); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChunkWriteError(c, err)
 		return
 	}
 	response.Success(c, nil, "更新成功")
@@ -161,7 +178,7 @@ func (ctrl *KnowledgeMerchantController) DeleteChunk(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.DeleteChunk(c.Request.Context(), id, c.GetHeader("X-Knowledge-Token")); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChunkWriteError(c, err)
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -181,7 +198,7 @@ func (ctrl *KnowledgeMerchantController) SplitChunk(c *gin.Context) {
 	}
 	req.ChunkID = id
 	if err := ctrl.svc.SplitChunk(c.Request.Context(), &req); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChunkWriteError(c, err)
 		return
 	}
 	response.Success(c, nil, "拆分成功")

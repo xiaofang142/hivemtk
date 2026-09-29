@@ -206,7 +206,9 @@ func (s *ChannelOverviewService) bridgeCount(ctx context.Context, channel string
 }
 
 func (s *ChannelOverviewService) bridgeOnlineCount(ctx context.Context, channel string) int {
-	return s.safeCount("bridge_online_"+channel, func() (int64, error) { return s.repo.CountBridgeOnline(ctx, channel) })
+	// grace 窗口在这里读，不下沉到仓库层：仓库不能反向依赖 service（会被 bridge→service→repository 绕成环）。
+	graceSeconds := int(BridgeOnlineGraceWindow(ctx).Seconds())
+	return s.safeCount("bridge_online_"+channel, func() (int64, error) { return s.repo.CountBridgeOnline(ctx, channel, graceSeconds) })
 }
 
 // BindChannel 绑定客户到某渠道（用于主动收集 OneID 信息）

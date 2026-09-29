@@ -36,6 +36,7 @@ var (
 	ErrMessageHubQueueFull         = errors.New("queue is full")
 	ErrMessageHubStreamNotFound    = errors.New("stream not found")
 	ErrMessageHubPartitionMismatch = errors.New("partition mismatch")
+	ErrMessageHubInvalidStatus     = errors.New("invalid status")
 )
 
 var messageHubPlatforms = map[string]bool{
@@ -151,6 +152,23 @@ var messageHubDirections = map[string]bool{
 	"outbound": true,
 }
 
+// messageHubSettableStatuses 是 PushMessageRequest.Status 允许调用方声明的词表。
+//
+// message_hub.status 列是 varchar(20)、没有 DB 约束，服务端此前也不看它 ⇒ 词表只能在这里锁。
+// 全集其实有六个值：pending（model 默认，桥接出站行等扩展认领）、delivered（ack 收口或
+// 直接投递渠道在发送 API 返回成功之后声明）、failed（认领到界 outbound_push_exhausted、
+// 队列侧投递失败）、send_failed（PushSendFailureTrace 的失败轨迹）、sent（抖音兜底路径，
+// 防 outbox 重发）、以及 **inflight——它故意不在本表里**：把一行置成 inflight 等于谎称
+// "已交给某个投递者"，待办集合会少掉这一行、30s 租约与 20 次重推上界也同时对它失效，
+// 所以只有两条认领 SQL（ClaimPendingOutbound / ClaimOutboundForPush）有权写它。
+var messageHubSettableStatuses = map[string]bool{
+	"pending":     true,
+	"delivered":   true,
+	"failed":      true,
+	"send_failed": true,
+	"sent":        true,
+}
+
 // 消息中台常量
 const (
 	MessageHubDefaultIdemTTL    = 24 * time.Hour
@@ -180,6 +198,11 @@ type PushMessageRequest struct {
 	AIAgent        string         `json:"ai_agent"`
 	Extra          map[string]any `json:"extra"`
 	SentAt         *time.Time     `json:"sent_at"`
+
+	// Status 只在进程内由投递方声明（直接投递渠道在发送 API 成功之后写 delivered），
+	// 故意不带 JSON 标签映射：hub 的 HTTP 推送入口若能让调用方自报状态，任何外部
+	// 调用方都能把一行说成已送达，待办集合与巡检口径会同时对它失真。
+	Status string `json:"-"`
 }
 
 // MessageHubService 消息中台服务
@@ -289,6 +312,9 @@ func (s *MessageHubService) Normalize(ctx context.Context, req *PushMessageReque
 	if req.MsgType == "text" && strings.TrimSpace(req.Content) == "" {
 		return nil, ErrMessageHubInvalidContent
 	}
+	if req.Status != "" && !messageHubSettableStatuses[req.Status] {
+		return nil, fmt.Errorf("%w: %s", ErrMessageHubInvalidStatus, req.Status)
+	}
 
 	sentAt := time.Now()
 	if req.SentAt != nil && !req.SentAt.IsZero() {
@@ -321,6 +347,7 @@ func (s *MessageHubService) Normalize(ctx context.Context, req *PushMessageReque
 		IsAIReply:      req.IsAIReply,
 		AIAgent:        req.AIAgent,
 		IsRead:         false,
+		Status:         req.Status,
 		SentAt:         sentAt,
 		Extra:          extra,
 	}, nil

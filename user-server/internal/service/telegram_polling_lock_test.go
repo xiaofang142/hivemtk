@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -263,4 +265,147 @@ func mustHostname() string {
 		return "unknown"
 	}
 	return h
+}
+
+// TestStopAllTelegramPollingReleasesHeldLock 关停必须把 polling 锁交回给下一个实例
+//
+// 为什么行为断言不能被 cmd/api 那条门代替：那条门只钉住「main.go 里有
+// defer service.StopAllTelegramPolling()」这一行源码形状，而 StopAll 内部是
+// cancel → 等 done → 释放锁 三步，**少了最后一步它照样绿**。真漏的那一步后果是外部的：
+// DB 里 polling_owner 仍写着这个已死进程，60s 心跳陈旧窗口内启动的新实例会判定
+// 「锁被其他实例持有」而整轮不启动 polling —— 重启后 Telegram 一条消息都不进，
+// 要再重启一次才恢复（2026-09-28 排查"三人行无回复"时实际撞到两次）。
+func TestStopAllTelegramPollingReleasesHeldLock(t *testing.T) {
+	dbConn := setupPollingLockTestDB(t)
+	seedTelegramAccount(t, dbConn, 500, "test-acc-500", "test-token-500")
+	ctx := context.Background()
+
+	repo := repository.NewTelegramPollingLockRepositoryWithDB(dbConn)
+	withPollingLockRepo(t, repo)
+
+	// 前置钉成 Fatal：StopAll 会 cancel 并等 done 它看到的每一条 worker，别的用例在这里
+	// 留了状态的话，本用例会把它的 worker 一起带走（红因会读成"那个用例挂了"）。
+	telegramPollingMu.Lock()
+	initial := len(telegramPollingStates)
+	telegramPollingMu.Unlock()
+	if initial != 0 {
+		t.Fatalf("polling 注册表初始非空（%d 条）：先归属那几条是谁留的再重跑", initial)
+	}
+
+	workerID := GetPollingWorkerID() // 先固化：直接写 pollingWorkerID 会被 sync.Once 覆盖
+	acquired, owner, _, err := TryAcquirePollingLock(ctx, nil, 500)
+	if err != nil || !acquired || owner != workerID {
+		t.Fatalf("前置抢占失败: acquired=%v owner=%s err=%v", acquired, owner, err)
+	}
+
+	wctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		<-wctx.Done()
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Errorf("清理时 worker 的 done 通道 2s 内没关闭")
+		}
+		telegramPollingMu.Lock()
+		delete(telegramPollingStates, 500)
+		telegramPollingMu.Unlock()
+		_ = repo.ReleasePollingLock(ctx, "other-host:9999", 500)
+	})
+
+	// 装一条与 StartTelegramPolling 等价的 worker 状态：lockHeld=true 才是释放分支的开关
+	telegramPollingMu.Lock()
+	telegramPollingStates[500] = &telegramPollingState{cancel: cancel, done: done, lockHeld: true}
+	telegramPollingMu.Unlock()
+
+	if !IsPollingLockHeldByMe(ctx, nil, 500) {
+		t.Fatal("前置：关停前锁应握在本进程名下")
+	}
+
+	StopAllTelegramPolling()
+
+	if IsPollingLockHeldByMe(ctx, nil, 500) {
+		t.Errorf("StopAllTelegramPolling 后锁仍在本进程名下 ⇒ 释放那一步没执行")
+	}
+
+	// 下一个实例必须**立刻**抢得上：要等心跳陈旧窗口才恢复的话，重启后那 60s 里零消息，
+	// 而进程日志一切正常 —— 正是本次报障的形态。
+	acquired2, info2, err2 := repo.TryAcquirePollingLock(ctx, "other-host:9999", 500)
+	if err2 != nil {
+		t.Fatalf("新实例抢占出错: %v", err2)
+	}
+	if !acquired2 {
+		t.Errorf("关停后新实例抢不上锁（owner=%s lastHeartbeat=%v）⇒ 必须等心跳陈旧窗口才能恢复 polling",
+			info2.Owner, info2.LastHeartbeat)
+	}
+}
+
+// TestStartTelegramPollingMarksStateLockHeld 抢占成功时注册的 worker 状态必须写 lockHeld: true
+//
+// 上一条行为用例自己写了 `lockHeld: true`，所以它证的是「释放分支在 lockHeld=true 时会跑」，
+// 不是「StartTelegramPolling 会把它写成 true」。那一半为什么要单独钉，且只按形状钉：
+//   - 走真路径要放一个 worker 协程出去打 api.telegram.org（用例不许联网），而且它拿到 401 后
+//     会自己退出、顺手把注册表条目删掉并释放锁 —— 那时 StopAll 看到的是空表，
+//     释放这条腿根本没被走到，绿是假绿。
+//   - 少了这道的后果：polling 正常在跑，关停时一条锁都不放（`if s.lockHeld` 整块被跳过），
+//     上一条行为用例照绿（它自带 true）、cmd/api 的形状门也照绿（defer 那行没动），
+//     而重启后的实例要在 60s 心跳陈旧窗口之后才起来 —— 正是本次报障里我实际撞到两次的形态。
+//
+// 判据取 StartTelegramPolling 函数体内 `&telegramPollingState{…}` 那一条字面量，不取全文件：
+// 别处（别的构造点、被注释掉的历史代码）出现一个 `lockHeld: true` 不能替这一条顶数。
+func TestStartTelegramPollingMarksStateLockHeld(t *testing.T) {
+	path := filepath.Join(".", "telegram_polling.go")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", path, err)
+	}
+	code := goCodeOnly(t, path, raw)
+
+	start := strings.Index(code, "func StartTelegramPolling(")
+	if start < 0 {
+		t.Fatal("telegram_polling.go 里已找不到 StartTelegramPolling：判据的参照物消失了")
+	}
+	rest := code[start:]
+	// 函数体止于第一个「行首 }」：内部 if / go 闭包的右括号都在缩进里，不会误伤
+	end := strings.Index(rest, "\n}")
+	if end < 0 {
+		t.Fatal("StartTelegramPolling 的花括号未配对，判据本身失效")
+	}
+	body := rest[:end]
+
+	litAt := strings.Index(body, "&telegramPollingState{")
+	if litAt < 0 {
+		t.Fatal("StartTelegramPolling 里没有 &telegramPollingState{ 构造 ⇒ 抢占成功后没有可被关停的 worker 状态")
+	}
+	lit := body[litAt:]
+	// 配对到该复合字面量自己的右括号：`make(chan struct{})` 里那对花括号会先出现，
+	// 按"第一个 }"截断会在 lockHeld 之前收口（第一次写就红给自己看过）。
+	depth := 0
+	closed := -1
+	for i := 0; i < len(lit); i++ {
+		switch lit[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				closed = i
+			}
+		}
+		if closed >= 0 {
+			break
+		}
+	}
+	if closed < 0 {
+		t.Fatal("&telegramPollingState{ 的右花括号未配对，判据本身失效")
+	}
+	lit = lit[:closed+1]
+	if !strings.Contains(lit, "lockHeld: true") {
+		t.Errorf("StartTelegramPolling 注册的 worker 状态没写 lockHeld: true（实际字面量：%s）"+
+			"⇒ 关停时 ReleasePollingLock 那一步永远走不到，重启后要在心跳陈旧窗口之后才恢复 polling", lit)
+	}
 }

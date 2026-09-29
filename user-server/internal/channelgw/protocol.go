@@ -200,6 +200,22 @@ func (f *Frame) ProtocolVersion() int {
 	return f.V
 }
 
+// bridgeSessionKey 组装桥接会话键 channel:account_id:conversation_id。
+//
+// conversation_id 缺失时按发送者分桶：留空会把同一账号下所有买家的对话并成一个会话，
+// 于是 AI 上下文、人工接管锁、去重记录全部跨买家共享（张三问完价，李四接着被当成回复张三）。
+// 群聊帧取 group_id，避免把同一个群里的不同发言人拆成多个会话。
+func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, senderName string, isGroup bool) string {
+	conv := conversationID
+	if conv == "" {
+		conv = groupID
+	}
+	if conv == "" && !isGroup {
+		conv = firstNonEmpty(senderID, senderName)
+	}
+	return channel + ":" + accountID + ":" + conv
+}
+
 // ToEvent 将上行消息转换为消息中台的 model.MessageEvent（不含 History 拷贝）。
 //
 // transport 标记来源传输（"http" / "websocket"），写入 Extra["transport"] 供可观测。
@@ -215,7 +231,7 @@ func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
 	}
 	ev := &model.MessageEvent{
 		EventID:        m.EventID,
-		SessionID:      m.Channel + ":" + m.AccountID + ":" + m.ConversationID,
+		SessionID:      bridgeSessionKey(m.Channel, m.AccountID, m.ConversationID, m.GroupID, m.SenderID, m.SenderName, m.IsGroup),
 		Channel:        m.Channel,
 		SenderID:       m.SenderID,
 		SenderName:     m.SenderName,
@@ -297,7 +313,7 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 	}
 	ev := &model.MessageEvent{
 		EventID:        it.EventID,
-		SessionID:      parent.Channel + ":" + parent.AccountID + ":" + parent.ConversationID,
+		SessionID:      bridgeSessionKey(parent.Channel, parent.AccountID, parent.ConversationID, parent.GroupID, parent.SenderID, parent.SenderName, parent.IsGroup),
 		Channel:        parent.Channel,
 		SenderID:       it.SenderID,
 		SenderName:     it.SenderName,

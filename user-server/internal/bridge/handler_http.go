@@ -352,8 +352,10 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	channelNorm := NormalizeBridgeChannel(channel)
 
 	bridgeHTTPIngestError := func(errCode string) {
-		bm.IngestErrors.WithLabel(channel, errCode).Inc()
-		bm.IngestDuration.WithLabel(channel).Observe(float64(time.Since(start).Milliseconds()))
+		// 标签必须用规范名：成功计数（IngestTotal/IngestDuration）都按 channelNorm 上报，
+		// 错误计数若按原始入参打标，同一个渠道的"抖音网页"会被拆成 douyin_web 与 douyin 两条曲线。
+		bm.IngestErrors.WithLabel(channelNorm, errCode).Inc()
+		bm.IngestDuration.WithLabel(channelNorm).Observe(float64(time.Since(start).Milliseconds()))
 	}
 
 	logger.Ctx(ctx0).Info().
@@ -864,7 +866,12 @@ type BridgeOutboxAckResponse struct {
 
 func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
-	channel := c.Query("channel")
+	// 三个 HTTP 入口里只有这里曾经不归一渠道（ingest 在 httpMessageToEvent 里归一、
+	// outbox/SSE 在入口归一）。`message_hub.platform` 只存规范名，别名 ack 取不到行 ⇒
+	// 每格都报 not_found 却仍回 200 status:ok，那一行离不开"欠交付"集合：
+	// 30s 认领租约到期后被重新下发，最多 20 次（约 10 分钟）才落 failed —— 客户第一条
+	// 其实早就收到了，剩下的 19 遍是刷屏，最后台账还把它记成"发送失败"。
+	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
 	start := time.Now()
 	bm := metrics.GetBridge()
@@ -898,6 +905,23 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"status":  "error",
 					"message": "conversation_id required (v2 items[] must carry msg_id + conversation_id)",
+				})
+				return
+			}
+			// v2 的 status 是逐项给的，下面 v1 那道校验拦不住它：未知状态会一路走到 service 报错，
+			// 这里回 500。而 v2 是按 (conversation_id, status) 分组后遍历 map 逐组落库的，
+			// 遍历序随机 ⇒ 同一个请求有时好项已落库、有时一格没落（实测 20 次 15 中 5 空），
+			// 客户端只看到 500 无从判断该重试还是该改参数。没落库的那些行留在"欠交付"集合里，
+			// 30s 认领租约到期后被重新下发，最多 20 次。所以这里在任何写之前先把整批的
+			// status 验完：要么全收，要么一格不动并报出到底是哪个值不认。
+			st := it.Status
+			if st == "" {
+				st = model.BridgeAckStatusDelivered
+			}
+			if st != model.BridgeAckStatusDelivered && st != model.BridgeAckStatusFailed {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"status":  "error",
+					"message": fmt.Sprintf("invalid status: %q (must be delivered or failed)", it.Status),
 				})
 				return
 			}

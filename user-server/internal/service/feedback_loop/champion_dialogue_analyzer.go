@@ -11,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	textutil "hivemtk-user/internal/pkg/utils/text"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -230,7 +231,8 @@ func (a *ChampionDialogueAnalyzer) extractScriptsWithLLM(ctx context.Context, di
 	}
 	jsonStr := extractJSON(content)
 	if jsonStr == "" {
-		return nil, fmt.Errorf("no JSON content in LLM response: %s", content)
+		// 原文随 err 进日志，LLM 散文回复可达数 KB ⇒ 截断后再进错误串
+		return nil, fmt.Errorf("no JSON content in LLM response: %s", textutil.Truncate(content, 200))
 	}
 	var scripts []dto.ExtractedScriptDTO
 	if err := json.Unmarshal([]byte(jsonStr), &scripts); err != nil {

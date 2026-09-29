@@ -30,6 +30,7 @@
     "saveSuccess": "保存成功",
     "createSuccess": "创建成功",
     "updateSuccess": "更新成功",
+    "username": "用户名",
     "language": "语言",
     "hint": "提示",
     "warning": "警告",
@@ -328,7 +329,9 @@
     "baCreate": "新建任务",
     "baCron": "定时触发器",
     "baStatus": "Host 状态",
-    "badCase": "Bad Case 队列"
+    "approvalTask": "待办中心",
+    "badCase": "Bad Case 队列",
+    "qqAccount": "机器人账号"
   },
   "保存": "保存",
   "提交": "提交",

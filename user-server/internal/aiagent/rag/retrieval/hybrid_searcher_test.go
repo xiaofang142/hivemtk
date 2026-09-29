@@ -53,6 +53,13 @@ func setupHybridTestDB(t *testing.T) *gorm.DB {
 		//
 		// 现按实时库 user_db.knowledge_chunks 的 24 列补齐（含 product_id 由 BIGINT 改
 		// 回 TEXT：实时库就是 text）。**改动生产 schema 时请同步本 DDL。**
+		//
+		// 这句话第三次要说上了：2026-09-28（T-P9-02 读闸门）本 DDL 又落后了三个版本列
+		// （kb_version / retired_version / change_id），而闸门片段逐字引用 kb_version ⇒
+		// 旗子一置 on，这里的每条召回 SQL 都撞 42703、被上层降级成"空结果 + WARN"，
+		// 于是"闸门挡住了未发布内容"这件事会**以通过的样子**骗过人。
+		// 所以补齐之外还留了一道常驻闸：TestKbGate_TestSchemaCoversModelColumns
+		// 每次跑都按 model.KnowledgeChunk 的列集反查本 DDL，缺列即红（不靠人记得）。
 		`CREATE TABLE knowledge_chunks (
 			id BIGSERIAL PRIMARY KEY,
 			document_id BIGINT NOT NULL DEFAULT 0,
@@ -77,7 +84,10 @@ func setupHybridTestDB(t *testing.T) *gorm.DB {
 			embed_status VARCHAR(20) DEFAULT 'pending',
 			updated_at TIMESTAMPTZ DEFAULT NOW(),
 			content_tsv_jieba tsvector,
-			embedding_source VARCHAR(16) NOT NULL DEFAULT 'tei'
+			embedding_source VARCHAR(16) NOT NULL DEFAULT 'tei',
+			kb_version BIGINT NOT NULL DEFAULT 0,
+			retired_version BIGINT NOT NULL DEFAULT 0,
+			change_id VARCHAR(40) NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX idx_knowledge_chunks_embedding_hnsw ON knowledge_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`,
 		`CREATE INDEX idx_knowledge_chunks_content_tsv ON knowledge_chunks USING GIN (content_tsv)`,

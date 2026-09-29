@@ -343,6 +343,16 @@ func (s *EmbeddingService) callProviderWithRetry(ctx context.Context, cfg *Embed
 				return vectors, nil
 			}
 			lastErr = err
+			// "连不上"和"连上了但失败"是两类故障：前者（端口无人监听/域名不存在）在
+			// 一次请求的生命周期内不会自愈，退避重试只会把一次检索拖成 30s（实测把
+			// bridge 的 AI 回复从秒级推到 60–260s）；后者（5xx/超时/限流）才值得退避。
+			if isUnreachable(err) {
+				if ci < len(candidates)-1 {
+					logger.Warnf("[Embedding] %s 拒绝连接，立即改试候选 BaseURL: %v", baseURL, err)
+					break
+				}
+				return nil, fmt.Errorf("本地 embedding 服务不可达（%s），端口拒绝连接故未重试: %w", cfg.BaseURL, err)
+			}
 			if ci < len(candidates)-1 && isConnError(err) {
 				logger.Warnf("[Embedding] %s 不可达，回退候选 BaseURL: %v", baseURL, err)
 				break
@@ -373,10 +383,19 @@ func isConnError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "no such host") ||
-		strings.Contains(msg, "connection refused") ||
+	return isUnreachable(err) ||
 		strings.Contains(msg, "dial tcp") ||
 		strings.Contains(msg, "i/o timeout")
+}
+
+// isUnreachable 判定"端点根本不存在"（端口无人监听 / 域名解析不出来）。
+// 与 i/o timeout 分开：后者说明对端在但慢，同一请求内退避重试有意义。
+func isUnreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "no such host") || strings.Contains(msg, "connection refused")
 }
 
 func isRateLimited(err error) bool {

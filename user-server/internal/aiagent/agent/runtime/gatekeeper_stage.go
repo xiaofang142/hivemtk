@@ -7,6 +7,29 @@ import (
 	"time"
 )
 
+// HandoffCustomerNotice 转人工时**发给客户看**的那一句，全仓唯一一份。
+//
+// 为什么要有常量、而不是各处各写一句：转人工有两个产出方（本文件的危机门禁、
+// service 编排器的置信度/关键词/上限/引擎缺位四个出口），文案分叉后客户会在不同渠道
+// 看到不同说法，而排查"这句是谁发的"也无从下手。
+// 措辞约束（改字前先看这三条，都有活的消费方）：
+//   - 不许命中 scripts/simulate/ai_quality.py 的 DEGRADED_MARKERS 任一锚串
+//     （如「稍后再试」「服务繁忙」）——那套锚是压测用来识别降级回复的，命中一次
+//     就把一条正常的转接公告统计成 AI 降级；
+//   - 不许写具体坐席名或"已接通"：转人工只保证会话进了人工队列与待办池，
+//     无在线客服时没人立刻应答，所以这句只承诺"转接 + 稍等"；
+//   - 不许带内部原因（「AI 置信度不足 0.42」「客户显式要求转人工」这类），
+//     那些是 handoff_decisions / human_tasks 的字段，给运营看不给客户看。
+const HandoffCustomerNotice = "已为您转接人工客服，请稍等～"
+
+// HandoffQueueNotice 转人工**但当下没有可接的坐席**时发给客户的那一句。
+//
+// 与 HandoffCustomerNotice 分开是有原因的：分配失败时会话只是进了人工队列与待办池，
+// 并没有人被叫上线，而编排器随后仍会让 AI 继续应答（客户不该因为没人接而变成没人理）。
+// 这时说「已为您转接人工客服」就是把一句没发生过的承诺发给客户 —— 与本轮要消灭的
+// 那句「回复「人工」」死路话术同一类。措辞约束与 HandoffCustomerNotice 一致。
+const HandoffQueueNotice = "当前没有在线客服，您的诉求已记录，客服上线后会第一时间回复您；这段时间我先继续为您解答。"
+
 // DefaultCrisisDetector 默认危机感检测器
 type DefaultCrisisDetector struct {
 	HighRiskKeywords   []string
@@ -64,7 +87,7 @@ func (d *DefaultCrisisDetector) Execute(ctx context.Context, ic *InferenceContex
 		ic.Decision.HandoffToHuman = true
 		ic.Decision.HandoffReason = ic.Crisis.Reason
 		ic.Decision.StopReason = "crisis_gate_triggered"
-		ic.Decision.Reply = "已为您转接人工客服，请稍等～"
+		ic.Decision.Reply = HandoffCustomerNotice
 		ic.Decision.ReplyType = "handoff"
 		return StopResult(&ic.Decision)
 	}

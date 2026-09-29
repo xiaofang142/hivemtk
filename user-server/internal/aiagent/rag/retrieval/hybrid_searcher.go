@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
@@ -305,6 +306,9 @@ func (h *HybridSearcher) vectorSearchPG(ctx context.Context, productID string, q
 		sql += " AND product_id = $2"
 		args = append(args, productID)
 	}
+	// 闸门片段不带任何绑定参数，所以 $N 的编号只由 args 决定：这句必须在算 limitPos
+	// **之前**拼进来也没关系（AndVisible 不追加占位符），拼在后面同样正确。
+	sql += kbrelease.AndVisible()
 	limitPos := len(args) + 1
 	sql += fmt.Sprintf(" ORDER BY score ASC LIMIT $%d", limitPos)
 	args = append(args, topK)
@@ -343,7 +347,7 @@ func (h *HybridSearcher) tsvectorSearch(ctx context.Context, tsConfig, tsvCol, p
 		sql += " AND product_id = ?"
 		args = append(args, productID)
 	}
-	sql += " ORDER BY score DESC LIMIT ?"
+	sql += kbrelease.AndVisible() + " ORDER BY score DESC LIMIT ?"
 	args = append(args, topK)
 
 	var rows []chunkScanRow
@@ -399,7 +403,7 @@ func (h *HybridSearcher) keywordSearchPGFallback(ctx context.Context, productID 
 		sql += " AND product_id = ?"
 		args = append(args, productID)
 	}
-	sql += " ORDER BY id DESC LIMIT ?"
+	sql += kbrelease.AndVisible() + " ORDER BY id DESC LIMIT ?"
 	args = append(args, topK)
 
 	var rows []chunkScanRow

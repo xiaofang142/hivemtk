@@ -3,9 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
-	"hivemtk-user/internal/aiagent/knowledge/model"
+	"fmt"
 	"strconv"
 	"time"
+
+	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/pkg/kbrelease"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
@@ -21,17 +25,27 @@ func NewKnowledgeChunkRepository(db *gorm.DB) *KnowledgeChunkRepository {
 }
 
 // Create 创建分段
+//
+// T-P9-02：写入前先过一次版本打戳（见 kbrelease.StampForWrite）。收在仓储这一格而不是
+// 各导入入口，是因为漏掉一次打戳的表现是"这段内容带着 kb_version=0 落库"，
+// 而 0 的语义是"不受闸门管" —— 那是 AC① 的无声绕过口，不是少一个装饰字段。
 func (r *KnowledgeChunkRepository) Create(ctx context.Context, chunk *model.KnowledgeChunk) error {
 	if chunk.Metadata == "" {
 		chunk.Metadata = "{}"
 	}
+	if err := kbrelease.StampOneForWrite(ctx, r.db, chunk); err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).Create(chunk).Error
 }
 
-// BatchCreate 批量创建分段
+// BatchCreate 批量创建分段（按 product_id 分组各分配一次待发布桶）
 func (r *KnowledgeChunkRepository) BatchCreate(ctx context.Context, chunks []model.KnowledgeChunk) error {
 	if len(chunks) == 0 {
 		return nil
+	}
+	if err := kbrelease.StampForWrite(ctx, r.db, chunks); err != nil {
+		return err
 	}
 	batchSize := 100
 	for i := 0; i < len(chunks); i += batchSize {
@@ -42,6 +56,46 @@ func (r *KnowledgeChunkRepository) BatchCreate(ctx context.Context, chunks []mod
 		if err := r.db.WithContext(ctx).Create(chunks[i:end]).Error; err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// guardDirectWrite 拦下"在已进发布制的库上就地改写/物理删除一条在服分段"。
+//
+// 只拦这两种，其余写通路不动，理由是按"会不会让未审批的正文当场可检"划的线：
+//   - Update 覆盖 content：kb_version 保持原值（存量行是 0），改完立刻在服 ⇒ 绕过审批 ⇒ 拒；
+//   - Delete(id) 抹掉一条在服分段：已上线内容被一次没有留痕的动作撤下 ⇒ 拒（改提 retire）；
+//   - Create / BatchCreate：新行进待发布桶，未发布前本来就不可见 ⇒ 放行并打戳；
+//   - DeleteByDocumentID / DeleteByProductID：重切与整库清理的内部通路，
+//     一并拦会把"导入"（本卡要求它走发布制）弄成静默失败 ⇒ 放行，只出声。
+//
+// productID 传空时按 id 回查一次：UpdateChunk 那条链带得上产品号，但 Delete 只有 id。
+// 回查只在闸门 on 时发生（见 DirectWriteBlocked），off 档一个额外查询都不该有。
+func (r *KnowledgeChunkRepository) guardDirectWrite(ctx context.Context, productID string, id uint64) error {
+	if !kbrelease.GateOn() {
+		return nil
+	}
+	if productID == "" {
+		// 这里**不能**用 GetByID：它把"没有这一行"翻成 error（"chunk not found"），
+		// 而闸门要的就是"没有这一行 ⇒ 没什么可保护的"。照 GetByID 的写法，
+		// 删一条已经不存在的分段会在 on 档凭空多出一个 404/500 —— 而删除本来就是幂等的，
+		// off 档它至今回 nil。判据只在"行确实在、且它所属的库受管"时才开火。
+		var found model.KnowledgeChunk
+		err := r.db.WithContext(ctx).Where("id = ?", id).First(&found).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		productID = found.ProductID
+	}
+	blocked, err := kbrelease.DirectWriteBlocked(ctx, r.db, productID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return fmt.Errorf("%w（chunk=%d product=%s）", kbrelease.ErrGovernedDirectWrite, id, productID)
 	}
 	return nil
 }
@@ -85,6 +139,9 @@ func (r *KnowledgeChunkRepository) Update(ctx context.Context, chunk *model.Know
 	if chunk.ID == 0 {
 		return errors.New("chunk id is required")
 	}
+	if err := r.guardDirectWrite(ctx, chunk.ProductID, chunk.ID); err != nil {
+		return err
+	}
 	updates := map[string]any{
 		"content":      chunk.Content,
 		"char_count":   chunk.CharCount,
@@ -97,20 +154,65 @@ func (r *KnowledgeChunkRepository) Update(ctx context.Context, chunk *model.Know
 }
 
 // Delete 根据 ID 删除分段
+//
+// 已进发布制的库上这条被拒（guardDirectWrite）：物理删除一条在服分段既不留痕，
+// 又让该库的回滚失去可回之物 —— 要下线内容请提一条 retire 变更，走审批与发布。
 func (r *KnowledgeChunkRepository) Delete(ctx context.Context, id uint64) error {
+	if err := r.guardDirectWrite(ctx, "", id); err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.KnowledgeChunk{}).Error
 }
 
 // DeleteByDocumentID 删除文档的所有分段
+//
+// 重切/导入的内部通路，闸门下**不**拒（拒它等于把导入链路一起关掉），但受管库上会出声：
+// 老行被物理删掉、新行进待发布桶 ⇒ 这篇文档在发布之前检不到，且回滚救不了已删的行。
 func (r *KnowledgeChunkRepository) DeleteByDocumentID(ctx context.Context, documentID uint64) error {
+	if err := r.warnIfGovernedLosingRows(ctx, "document_id", "document_id = ?", documentID); err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).Where("document_id = ?", documentID).
 		Delete(&model.KnowledgeChunk{}).Error
 }
 
 // DeleteByProductID 删除产品的所有分段
 func (r *KnowledgeChunkRepository) DeleteByProductID(ctx context.Context, productID string) error {
+	if err := r.warnIfGovernedLosingRows(ctx, "product_id", "product_id = ?", productID); err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).Where("product_id = ?", productID).
 		Delete(&model.KnowledgeChunk{}).Error
+}
+
+// warnIfGovernedLosingRows 批量物理删除前，若该批行里有**在服**的分段就出声。
+//
+// 只出声不改判据的原因见上面两条方法注释：这条通路既服务于导入重切、也服务于整库清理，
+// 拦下来的代价是导入不可用，放过的代价只是回滚窗口变短 —— 两者都不该由这里代答。
+// 谓词用的是叶子包那一份可见性判据（同一处定义），不在这里另写版本号比较。
+//
+// label 是**这句告警自己**要的条件名：where 那段是给 SQL 用的（带占位符），
+// 把它原样拼进人读的那句会变成 "document_id = ?=10"，值班照着这句去库里查会查错列。
+//
+// 一次 COUNT 换一句告警，且只在闸门 on 时发生。
+func (r *KnowledgeChunkRepository) warnIfGovernedLosingRows(ctx context.Context, label, where string, arg any) error {
+	if !kbrelease.GateOn() {
+		return nil
+	}
+	pred := kbrelease.VisiblePredicate()
+	if pred == "" {
+		return nil
+	}
+	var inForce int64
+	if err := r.db.WithContext(ctx).Table("knowledge_chunks").
+		Where(where, arg).Where(pred).Count(&inForce).Error; err != nil {
+		return err
+	}
+	if inForce > 0 {
+		logger.Warnf("[kb-release] 即将物理删除 %s=%v 的 %d 条在服分段：该库若已进发布制，"+
+			"这些行不会随回滚回来，重建出的新段要等一次发布才可见", label, arg, inForce)
+	}
+	return nil
 }
 
 // CountByProductID 统计产品分段数

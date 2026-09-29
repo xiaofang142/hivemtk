@@ -1,0 +1,24 @@
+2026-09-28T18:32:41+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestInitKBReleaseRuntime_NilDBClearsGlobal
+2026-09-28T18:32:44+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-28T18:32:44+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-28T18:32:44+08:00 WRN [kb-release] ⚠️ 无 DB 句柄 ⇒ 知识库变更底座不装配：/api/kb-changes/* 与 /api/kb-releases/* 全部回 503；读路径的版本闸门不受本句影响（它只看 FF_LTC_KB_CHANGE_GATE），未装配时召回与今天逐字节相同 component=user-server
+--- PASS: TestInitKBReleaseRuntime_NilDBClearsGlobal (2.62s)
+=== RUN   TestInitKBReleaseRuntime_RegistersUsableGlobal
+2026-09-28T18:32:44+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-28T18:32:44+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-28T18:32:44+08:00 WRN [human_task] 待办底座未装配 ⇒ 审批 apr_1790591564570763000_1 不进池子（仍由其 expires_at 到期收口） component=user-server
+2026-09-28T18:32:44+08:00 INF [kb-release] 变更已提交：kbc_1790591564567874000_1 op=add product=pprod_wire approval=apr_1790591564570763000_1（新建=true） component=user-server
+--- PASS: TestInitKBReleaseRuntime_RegistersUsableGlobal (0.21s)
+=== RUN   TestInitKBReleaseRuntime_UsesGlobalApprovalService
+2026-09-28T18:32:44+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-28T18:32:44+08:00 INF [kb-release] 变更已提交：kbc_1790591564818572000_1 op=add product=pprod_appr approval=apr_1790591564821976000_2（新建=true） component=user-server
+--- PASS: TestInitKBReleaseRuntime_UsesGlobalApprovalService (0.25s)
+=== RUN   TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues
+2026-09-28T18:32:45+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-28T18:32:45+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-28T18:32:45+08:00 WRN [human_task] 待办底座未装配 ⇒ 审批 apr_1790591565073091000_3 不进池子（仍由其 expires_at 到期收口） component=user-server
+2026-09-28T18:32:45+08:00 INF [kb-release] 变更已提交：kbc_1790591565071847000_1 op=add product=pprod_noapr approval=apr_1790591565073091000_3（新建=true） component=user-server
+--- PASS: TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues (0.25s)
+PASS
+ok  	hivemtk-user/internal/app	3.966s

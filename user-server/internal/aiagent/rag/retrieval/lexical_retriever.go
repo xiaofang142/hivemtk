@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+
+	"hivemtk-user/internal/pkg/kbrelease"
 )
 
 type LexicalRetriever struct {
@@ -72,10 +74,10 @@ func (r *LexicalRetriever) tryTSQuery(ctx context.Context, productID string, que
 	`, safeCol, safeConfig, safeCol, safeConfig)
 	args := []any{query}
 	if productID != "" {
-		sql += " AND product_id = ? ORDER BY score DESC LIMIT ?"
+		sql += " AND product_id = ?" + kbrelease.AndVisible() + " ORDER BY score DESC LIMIT ?"
 		args = append(args, query, productID, topK)
 	} else {
-		sql += " ORDER BY score DESC LIMIT ?"
+		sql += kbrelease.AndVisible() + " ORDER BY score DESC LIMIT ?"
 		args = append(args, query, topK)
 	}
 	var rows []chunkScanRow
@@ -95,10 +97,10 @@ func (r *LexicalRetriever) ilikeFallback(ctx context.Context, productID string, 
 	`
 	args := []any{pattern}
 	if productID != "" {
-		sql += " AND product_id = ? ORDER BY id DESC LIMIT ?"
+		sql += " AND product_id = ?" + kbrelease.AndVisible() + " ORDER BY id DESC LIMIT ?"
 		args = append(args, productID, topK)
 	} else {
-		sql += " ORDER BY id DESC LIMIT ?"
+		sql += kbrelease.AndVisible() + " ORDER BY id DESC LIMIT ?"
 		args = append(args, topK)
 	}
 	var rows []chunkScanRow

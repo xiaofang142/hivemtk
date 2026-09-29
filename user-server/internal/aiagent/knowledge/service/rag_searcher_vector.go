@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"hivemtk-user/internal/pkg/kbrelease"
 )
 
 func (s *RagSearcher) vectorSearch(ctx context.Context, productID string, query string, topK int) ([]scored, error) {
@@ -28,7 +30,7 @@ func (s *RagSearcher) vectorSearch(ctx context.Context, productID string, query 
 			FROM knowledge_chunks
 			WHERE embedding IS NOT NULL
 			  AND embedding_source = 'tei'
-			  AND product_id = ?
+			  AND product_id = ?` + kbrelease.AndVisible() + `
 			ORDER BY embedding <=> ?::vector
 			LIMIT ?
 		`
@@ -41,7 +43,7 @@ func (s *RagSearcher) vectorSearch(ctx context.Context, productID string, query 
 			       (1 - (embedding <=> ?::vector))::float8 AS score
 			FROM knowledge_chunks
 			WHERE embedding IS NOT NULL
-			  AND embedding_source = 'tei'
+			  AND embedding_source = 'tei'` + kbrelease.AndVisible() + `
 			ORDER BY embedding <=> ?::vector
 			LIMIT ?
 		`

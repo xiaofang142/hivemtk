@@ -1,7 +1,7 @@
 <template>
   <header
     class="page-header"
-    :aria-label="ariaLabel || $t('common.pageHeader') || '页面头部'"
+    :aria-label="ariaLabel || '页面头部'"
   >
     <div class="ph-left">
       <div class="ph-icon" v-if="icon || $slots.icon" aria-hidden="true">

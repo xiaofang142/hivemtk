@@ -85,7 +85,7 @@
 │  │   └─ Ack：发送成功后 POST /api/bridge/outbox/ack 标记 delivered    │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 └───────────────────────────────┬──────────────────────────────────────────┘
-                                │  HTTP (Authorization: Bearer <token>)
+                                │  HTTP (X-Bridge-Token: <token>)
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  user-server                                                             │
@@ -158,14 +158,16 @@ export interface UnifiedMessage {
 
 ## 4. 协议（HTTP 三通道）
 
-bridge ↔ user-server 走**纯 HTTP 三通道**（非 WebSocket，非 SSE）。每个通道相互独立、参数可配置。
+bridge ↔ user-server 走**纯 HTTP**（非 WebSocket）：上行 ingest、下行 outbox 轮询、状态 ack 三个通道
+相互独立、参数可配置；下行另有一条**可选的 SSE 补推通道**（§4.6），它只缩短"知道有回复"的延迟，
+ack 收口与租约重投的规则和轮询完全共用，轮询始终是兜底。
 
 ### 4.1 通道 A · 上行（Uplink）
 
 ```
 POST /api/bridge/ingest?channel=<ch>&account_id=<acc>[&conversation_id=<c>]
 Headers:
-  Authorization: Bearer <token>          # token 走 Header，不进 URL
+  X-Bridge-Token: <token>                # 闸门只读这个头（或 SSE 用 ?bridge_token=，见 §4.4）
   Content-Type: application/json
   X-Request-Id: <trace-id>               # 端到端 trace 透传（P3-E）
 
@@ -180,9 +182,17 @@ Body:
 Response 200:
   {
     "ok": true,
-    "ingested": [{"event_id": "...", "accepted": true}, ...]
+    "session_id": "<ch>:<account_id>:<conversation_id>",
+    "server_time": 1758000000000,
+    "ingested": [
+      {"event_id": "...", "accepted": true, "duplicate": false, "ai_handled": true, "reason": "..."}
+    ]
   }
 ```
+
+> `duplicate` 是重发的权威信号：命中去重时它为 true（`accepted` 仍为 true，表示服务端已收讫），
+> 扩展端据此停止重复投递；`reason` 会写清是被 `event_id` 幂等拦下，还是被
+> `channel+sender+content` 窗口拦截。`ok:true` 只代表这一批被接收，逐条结论看 `ingested[]`。
 
 > **2026-08-18 二次审核**：早期文档承诺 `outbound_replies` 随 ingest 响应返回（省一轮下行轮询）。
 > 实际代码中该字段恒空，下行已统一走通道 B 独立轮询（GET /api/bridge/outbox）。
@@ -193,7 +203,7 @@ Response 200:
 ```
 GET /api/bridge/outbox?channel=<ch>&account_id=<acc>&limit=<n>
 Headers:
-  Authorization: Bearer <token>
+  X-Bridge-Token: <token>
 
 Response 200:
   {
@@ -219,19 +229,33 @@ Response 200:
 ```
 POST /api/bridge/outbox/ack?channel=<ch>&account_id=<acc>
 Headers:
-  Authorization: Bearer <token>
+  X-Bridge-Token: <token>
   Content-Type: application/json
 
-Body（v1 协议，与前端 v2 单源化常量 BRIDGE_PROTOCOL_V2 兼容）:
+Body（v1：整批一个状态）:
   {
     "msg_ids": ["mh:abc", "mh:def"],
     "status": "delivered" | "failed"
   }
 
+Body（v2：逐项状态，`items[]` 存在时优先于 `msg_ids`）:
+  {
+    "v": 2,
+    "items": [
+      { "msg_id": "mh:abc", "conversation_id": "conv-abc", "status": "delivered" },
+      { "msg_id": "mh:def", "conversation_id": "conv-abc", "status": "failed", "error": "..." }
+    ]
+  }
+
 Response 200:
   {
     "status": "ok",
-    "acked": 1, "duplicate_count": 0, "not_found_count": 1,
+    "affected_count": 1,
+    "acked_items_count": 1,
+    "failed_items_count": 0,
+    "duplicate_count": 0,
+    "not_found_count": 1,
+    "not_in_scope_count": 0,
     "items": [
       { "msg_id": "mh:abc", "status": "acked" },
       { "msg_id": "mh:def", "status": "not_found" }
@@ -239,25 +263,99 @@ Response 200:
   }
 ```
 
+> `status: "ok"` 只代表请求被处理，**不代表收口成功**：不存在的 `msg_id`、跨账号的 `msg_id`
+> 同样返回 200。收口账要看 `acked_items_count`（+`failed_items_count`）与
+> `not_found_count` / `not_in_scope_count`。没被收口的那一行会留在"欠交付"集合里，
+> 30s 认领租约到期后被重新下发（最多 20 次），对端就会反复收到同一条回复。
+>
+> `status`（顶层或 `items[]` 任一项）只接受 `delivered` / `failed`，缺省按 `delivered`。
+> 出现其它值时**整批在任何写入之前**返回 400，文案点名不认的那个值
+> （`invalid status: "shipped" (must be delivered or failed)`）—— 不做部分落库，
+> 免得响应说失败、库里却改了一半。
+>
+> v2 的 `items[]` 必须同时带 `msg_id` 与 `conversation_id`，缺任一 → 400。
+
 详细状态机与 v2 协议见 `src/core/downlink.js` 与 `internal/bridge/handler_http.go`。
 
 ### 4.4 鉴权
 
-- 仅过 `InitGuard` 中间件（系统须已初始化，私有化部署单用户）；
+- 过 `InitGuard` + `BridgeIngressGuard` 两个中间件（前者要求系统已初始化，私有化部署单用户；后者校验桥接凭证）；
 - 不过 JWT，账号以 `channel` + `account_id` 在 URL 自证身份；
-- `Authorization: Bearer <token>` Header 可选（增强部署可加 token 校验）；
+- 凭证只认 `X-Bridge-Token` Header；`Authorization: Bearer <token>` 不被桥接闸门读取
+  （扩展端仍会同时带这两个头，兼容旧版，但服务端只校验前者）；
+- EventSource 无法自定义 Header，SSE 走 `?bridge_token=<token>`：校验通过后该参数会从
+  `RawQuery` 剥离，日志里以 `maskTokenBridge` 脱敏，不落明文；
+- 缺凭证 → 401（`缺少 X-Bridge-Token`）；凭证值错 → 401（`UNAUTHORIZED_2001`）；
+- 服务端未配置任何凭证（`system_config_kv.bridge_ingest_token` 与 `BRIDGE_INGEST_TOKEN` 都空）
+  → 503 拒绝，fail-closed；只有显式 `BRIDGE_INGEST_AUTH=off` 才恢复旧的无鉴权放行（限可信内网）；
 - `account_id` 缺失 → 400 拒绝（不写 `default` 兜底，避免脏数据）；
 - `channel` 不在白名单（`douyin/xiaohongshu/tiktok/xianyu/kuaishou`） → 400 拒绝。
+  别名（`xhs` / `douyin_web` / …）由 `NormalizeBridgeChannel` 收编成规范名，
+  四个 HTTP 入口（`ingest` / `outbox` / `outbox/ack` / `outbox/sse`）同进同出。
+  SSE 也在这条口径里是后补的：它曾对缺参与不支持的渠道直接回 200 挂一条空流，
+  而 SSE 是默认下行形态（§4.7 探到 `sse_enabled` 后轮询根本不启动），
+  配置写错的客户会看到「一条错误都没有、也一条回复都收不到」。
 
-### 4.5 为什么是 HTTP 三通道（不是 WebSocket / SSE）
+### 4.5 为什么以 HTTP 轮询为主干（而不是 WebSocket）
 
 - **MV3 Service Worker 友好**：WS 长连接在 SW 冻结/恢复时易断，HTTP 三通道天然无状态；
 - **可测性强**：`curl` 即可端到端联调，无需专用 WS 客户端；
-- **OOM 安全**：无长连接、无心跳、无 map 索引；
+- **状态可核对**：待下发/已认领/已收口全在 `message_hub` 一行上，运维只查表就能对账；
 - **离线不丢回复**：AI 回复入 outbox 持久层，扩展下次轮询自然拉回（连接恢复即补发）；
 - **运营友好**：故障定位只需看 HTTP access log。
 
-> 30s 实时性损失换来架构简单 / 部署简单 / 故障定位简单，私域客服场景接受。
+主干实时性由轮询间隔决定（默认 1500ms，见 `BRIDGE_THREE_CHANNEL.outboxPollIntervalMs`
+与 §4.6 的 capabilities 读数），SSE 只在这之上补推"有新回复"这件事，不改变收口语义。
+
+### 4.6 通道 B′ · SSE 补推（可选）
+
+```
+GET /api/bridge/outbox/sse?channel=<ch>&account_id=<acc>[&last_event_id=<id>]
+Headers:
+  X-Bridge-Token: <token>          # EventSource 带不了自定义头时改用 ?bridge_token=<token>
+  Accept: text/event-stream
+  Last-Event-ID: <id>              # 或 ?last_event_id=<id>，断线续传用
+
+Response 200 (text/event-stream):
+  retry: 15000
+
+  : ping                                   # 心跳注释帧，间隔 ≤20s（默认 15s）
+  id: <hub_id>
+  event: new_outbound
+  data: {"hub_id":123,"msg_id":"mh:...","platform":"douyin","account_id":"...",
+         "conversation_id":"...","content":"...","msg_type":"text",
+         "receiver_id":"...","is_ai_reply":true,"extra":null}
+```
+
+```
+Response 400（application/json）—— 与其余入口同一套入参校验，且发生在发出 200 之前，
+                                 所以错误体送得出去（一旦进入流模式就再也回不去）:
+  缺 channel          → {"status":"error","message":"channel required"}
+  空 account_id       → {"status":"error","message":"account_id required (extension must capture account from DOM before opening the SSE stream)"}
+  桥接不承载的渠道（如 wechat） → {"status":"error","message":"unsupported bridge channel"}
+```
+
+- 事件名只有 `new_outbound` 一种，`data` 由服务端 `BuildOutboundSSEEvent` 统一构造
+  （禁止任何投递路径手拼 Data：曾因缺 `msg_id` 让同会话第二条起被误判重复而静默丢消息）；
+- 收到后仍要按通道 C ack 收口。SSE 推送前先经 `ClaimOutboundForPush` 认领同一张 `message_hub`
+  待办表（与轮询的 `ClaimPendingOutbound` 共用同一套 30s 租约）：认领不到就不推，
+  免得同一条回复经两条路径各投一次（发给真实客户两遍是不可逆写）；
+- 注释帧（以 `:` 开头）客户端必须忽略，它只是保活，不代表有消息；
+- 心跳间隔与是否启用由 `GET /api/bridge/capabilities` 现报（见 §4.7），别在客户端写死；
+- `channel` 同样先过 `NormalizeBridgeChannel`，别名与规范名等价。
+
+### 4.7 能力协商
+
+```
+GET /api/bridge/capabilities
+Headers:
+  X-Bridge-Token: <token>
+
+Response 200:
+  { "poll_interval_ms": 1500, "sse_enabled": true, "sse_heartbeat_ms": 15000 }
+```
+
+扩展端启动时读一次，据此决定轮询间隔与是否挂 SSE；`sse_enabled=false` 时只走轮询。
 
 ---
 
@@ -267,27 +365,36 @@ Response 200:
 
 ```
 internal/bridge/
-  handler_http.go          POST /api/bridge/ingest  入口（InitGuard + 入站 + 拉下行回复）
-  handler_http_*.go        7 个测试文件
-  http_reply_buffer.go     内存 reply 缓冲（outbox 拉取的源）
-  reach_adapter.go         BridgeReachAdapter：网页渠道 AI 回复入 outbox
+  handler_http.go          四个 HTTP 入口：ingest / outbox / outbox-ack / SSE（委托 sse.go）
+  sse.go                   SSEBus 广播 + SSEHandler（心跳、续传补拉、在线位维护、认领后推送）
+  reach_adapter.go         BridgeReachAdapter：网页渠道 AI 回复写入 message_hub 出站行
   frames.go                UnifiedMessage / UnifiedReply / Frame 数据模型
-  channel.go               渠道常量（douyin/xiaohongshu/tiktok/xianyu/kuaishou）
-  account.go / account_repo.go  桥接账号 CRUD + IsOnline
+  channel.go               渠道常量与 NormalizeBridgeChannel / IsBridgeChannel
+  account.go / account_repo.go  桥接账号 CRUD + TouchLastSync / SetOffline / IsOnline
   bridge_helpers.go        共享工具：token 脱敏 / body 解析 / HistoryToEvent
+  *_test.go                21 个测试文件
 ```
+
+> 下行待发的唯一事实源是 `message_hub`（`ClaimPendingOutbound` / `FetchOutboundSince` /
+> `FetchOutboundUndelivered` 三个查询）：包内不再有内存 reply 缓冲，
+> `reach_adapter.go` 顶部注释即"不再注入 httpReplyBuffer"的收口记录。
 
 > 协议类型单源：`internal/channelgw`（HTTP / WS 共用 IngestMessage / OutboxMessage / HistoryItem）。
 
 ### 5.2 HTTP 端点注册
 
-`internal/router/router.go` 注册（`bridgeWS` 路由组，仅过 `InitGuard`）：
+`internal/router/router.go` 注册（`bridgeWS` 路由组，过 `InitGuard` + `BridgeIngressGuard`）：
 
 ```go
 bridgeWS.POST("/bridge/ingest",       bridgeHandler.HandleHTTPIngest)
 bridgeWS.GET ("/bridge/outbox",       bridgeHandler.GetBridgeOutbox)
 bridgeWS.POST("/bridge/outbox/ack",   bridgeHandler.AckBridgeOutbox)
+bridgeWS.GET ("/bridge/outbox/sse",   bridgeHandler.HandleOutboxSSE)
+bridgeWS.GET ("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 ```
+
+> 同一个组里还挂着 `/api/mcp` 与 `/api/ws/channel`，因此它们**也要求 `X-Bridge-Token`**
+> （实测无凭证：两者均 401 `缺少 X-Bridge-Token`）。改桥接凭证等于同时改这两个端点的门禁。
 
 ### 5.3 入站接线（零改动中台）
 
@@ -297,8 +404,12 @@ bridgeWS.POST("/bridge/outbox/ack",   bridgeHandler.AckBridgeOutbox)
 2. 校验 `account_id` 必填（缺失 → 400 `account_id required`）；
 3. 校验 `channel` 在白名单；
 4. 读取 body（限 `HTTPIngestMaxBodySize = 4MB`、限 `HTTPIngestMaxMessages = 200`）；
-5. 逐条 `UnifiedMessage` → `model.MessageEvent`，调 `InboxIngressService.HandleIngressMessage`；
-6. 拉取该 `(channel, account, conversation)` 的待发 reply 随响应返回。
+5. 逐条 `HTTPIngestMessage` → `model.MessageEvent`（`httpMessageToEvent`），
+   整批交给 `InboxIngressService` 的入站批处理（`callHandleIngressBatch`），每条结果写进 `ingested[]`；
+6. 群聊渠道（全部五个渠道都算）触发线索挖掘回调 `leadMiner`；
+7. 响应只带回执（`ingested[]{event_id,accepted,duplicate,ai_handled,reason}` + `session_id` + `server_time`），
+   **不携带 AI 回复**：回复只在通道 B（`outbox` 轮询 / SSE 补推）里出现，
+   扩展不持续轮询或挂 SSE 就永远收不到第一条回复。
 
 ### 5.4 出站接线：`BridgeReachAdapter`
 
@@ -506,8 +617,9 @@ sendOutbound(text, targetConvId)
 
 ### 7.5 鉴权
 
-- 服务端仅 `InitGuard`（私有化部署单用户，无 token）；
-- 可选 `Authorization: Bearer <token>` Header（增强部署）；
+- 服务端过 `InitGuard`（私有化部署单用户）之后还要过 `BridgeIngressGuard`：凭证**不是可选的**
+  （未配置凭证时 503 fail-closed，缺/错凭证时 401，详见 §4.4）；
+- 凭证只认 `X-Bridge-Token` Header，SSE 可用 `?bridge_token=`（服务端剥离 + 日志脱敏）；
 - `account_id` 缺失 / `channel` 非白名单 → 400 拒绝（不写 `default` 兜底）。
 
 ---

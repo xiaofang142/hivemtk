@@ -47,6 +47,11 @@ type ChannelLeadAdapter interface {
 
 const unifiedMinerOpportunityThreshold = 40
 
+// unifiedIntentBaseScore 打分起点：正文里没有任何意向词时的分数。
+// 调用方用它做"是否命中过词库"的判据（score > 起点 = 至少命中一词），
+// 别把 8 这个字面量抄到调用方——改起点时那边会静默失效。
+const unifiedIntentBaseScore = 8
+
 var unifiedMeaningfulRe = regexp.MustCompile(`[\p{L}\p{N}]`)
 
 var (
@@ -77,7 +82,7 @@ func DetectUnifiedIntent(text string, extraHigh, extraMedium []string) (score in
 		return 0, nil, false
 	}
 	lower := strings.ToLower(t)
-	score = 8
+	score = unifiedIntentBaseScore
 	seen := map[string]bool{}
 	add := func(sig string, w int) {
 		if seen[sig] {

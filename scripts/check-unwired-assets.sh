@@ -505,6 +505,77 @@ BASELINE=(
   "26|Bad Case 队列的 HTTP 挂载入口（装配了却没挂载 = 库里有坏例、界面上一条看不到，与上一格是两种坏法）|func setupBadCaseRoutes|setupBadCaseRoutes\\(|internal/router|wired"
   "26|自动标记器挂上编排器的那一次交接（摘掉 attachBadCaseMarker：底座/路由/页面三面全绿，而队列永远不会自己长出一行）|func attachBadCaseMarker|attachBadCaseMarker\\(|internal/app|wired"
   "26|低质回答的自动留痕调用点（唯一且只在过门槛那轮执行，故点名 markBadCase 而不是\"Mark 有人调\"）|func \\(o \\*SmartCSOrchestrator\\) markBadCase|o\\.markBadCase\\(|internal/service|wired"
+  # ---- T-P9-02 知识库变更流程（27a–27j）———————————————————————————————————
+  # 这一族比前几族长（10 行），因为本卡的失效面不是一条链而**两面**：读闸门（未发布不可见）
+  # 与写通路（什么内容有资格变成已发布）。任何一面单点被拆，其余九面都照常工作，
+  # 而症状都是"看起来一切正常"：读闸门拆了 → 未审批的正文当场进了答案；写闸门拆了 →
+  # 正文进了语料却没人批过。两种都正是 AC① 的反例，且都不报错。
+  #
+  # 27a/27b 与 21/26 族同形（启动路径上的 Init / 端点挂载），分开是"装配了没挂载 = 底座在、
+  # 运营端一条读不到"与"挂载了没装配 = 端点在、每条回 503"是两种坏法。
+  #
+  # 27c 的 callpat 刻意不写 `s.approvals.Submit(`：那一行形状在 quote_send.go:488 逐字相同，
+  # 删掉本卡这一处仍显示 WIRED。改用**本卡独有的审批对象类型**作锚 —— 它同时说出了这一格的
+  # 语义（变更提交即入队审批），是全仓唯一一处 KBChangeApprovalSubjectType 的提交点。
+  #
+  # 27e/27f 是同一条判据的两个构建器（原始 SQL 拼接 vs gorm 链）。拆掉任意一边，另一边仍在，
+  # 计数就还是 WIRED —— 台账按行存在性判不出"每条检索通路都带上了谓词"，那是 Go 侧逐通路
+  # 断言的活。测试那批已随本卡落地，按 24/25/26 族的格式把函数名补在这里（名字逐个从
+  # *_test.go 现取，写这段的脚本会先核每个名字真实存在；复算＝`go test ./internal/<包>/
+  # -run "<^Test…$" -v -count 1`，带 POSTGRES_TEST_* 的那几族要连库）：
+  #   27e/27f（读侧 15 个拼接点）＝ TestKbGate_RetrievalSitesHideUnpublished（rag/retrieval 的
+  #     11 处，off/shadow/on 三档逐个方法真跑）、TestKbGate_RagSearcherSitesHideUnpublished
+  #     （knowledge/service 的 4 处：2 条 gorm 链 + 2 条向量裸 SQL）、
+  #     TestKbGate_EmbeddingSourceFilterStillApplies（挂谓词不许把原有的 embedding_source 过滤挤掉）、
+  #     TestKbRelease_PredicateShape / _PredicateEmptyUnlessOn / _WhereVisible（叶子三格：片段形状、
+  #     关闸回空串、开闸才挂链）；
+  #   27a＝ TestInitKBReleaseRuntime_RegistersUsableGlobal / _UsesGlobalApprovalService /
+  #     _WithoutGlobalApprovalStillEnqueues / _NilDBClearsGlobal（internal/app 四条），次序那一半
+  #     由 TestKBReleaseRoutes_AssemblyOrderInRouter 钉在 router.go 的三个装配锚点上（运行时没有
+  #     可观测差异的次序，台账与用例都只能判源码形状）；
+  #   27b＝ TestKBReleaseRoutes_UnassembledAnswers503WithoutData / _StaticSegmentsWin /
+  #     _AssemblyAndStopAreSymmetric；
+  #   27c＝ TestKBRelease_SubmitChangeApprovalFailureLeavesNoRow（审批没入队 ⇒ 变更行与留痕都是 0）、
+  #     TestKBReleaseController_SubmitApprovalEnqueueFailed；
+  #   27d＝ TestKBRelease_PublishPendingVerdicts / _PublishPendingArgsAndStoreErrors /
+  #     _PublishPendingNothingApprovedSkipsTransaction / _PublishPendingDraftBucketWithoutChanges
+  #     ＋ TestKBReleaseRepo_PublishAddStampsAndAdvances；
+  #   27g＝ TestKbRepo_WriteStampingRoutesToDraftBucket、TestKBReleaseRepo_StampForWriteRealRows、
+  #     TestKbRelease_StampForWriteOffLeavesRowsAlone（27g 只看批量那一个调用点，单条 Create 那一处
+  #     由新增的 27k 单独盯——两处消费同一个叶子能力，漏一处的坏法不同）；
+  #   27h＝ TestKbRepo_GuardDirectWrite、TestKM_ChunkWriteErrorMapsGovernedTo409、
+  #     TestKbRelease_DirectWriteBlockedOffEvenWithRow；
+  #   27i＝ TestKBRelease_SubmitChangeHappyPath（submitted 那一行的动作/主体/操作者）、
+  #     TestKBRelease_WithdrawChange（withdrawn 同上）、TestKBReleaseRepo_AuditShape（字段不全必拒）；
+  #   27j＝ TestKBReleaseRepo_PublishAddStampsAndAdvances（change: 与 release: 两条 published 各 =1）、
+  #     TestKBReleaseRepo_RollbackTouchesNoCorpus（rollback 一条 =1，且语料零改动）；
+  #   27l（批量删除的在服行告警）＝ TestKbRepo_BatchDeleteWarnsOnlyInForceRows。
+  # 台账答"这一行在不在"，"摘掉这一行有没有用例红"由常驻电池 scripts/mut_kb_release_p902.py 答。
+  #
+  # 27g 是"导入也要走发布制"这条产品决定的唯一落点。漏打戳的表现不是报错，是 kb_version=0，
+  # 而 0 的语义写死在叶子包里＝"永不受闸门管"：那是一段**静默绕开整套审批**的正文。
+  # 27h 守对偶面：已进发布制的库上就地改写/物理删除在服分段（Update/Delete 覆盖正文）。
+  #
+  # 27i/27j 都叫留痕，劈成两格是因为它们在**不同层**：27i 是 service 在事务外补的两条
+  # （submitted / withdrawn），27j 是 Publish/Rollback 事务体内的那三条（applied / pointer moved）。
+  # 只登记一格会让"删掉另一格"仍然 WIRED，而 AC③ 要的是"每个动作都有一条"。
+  "27|变更底座在启动路径上的装配点（摘掉 router.go 那一行：十五条端点里除 /gate 与 /taxonomy 之外的十三条恒 503，而 service/repository 两层用例全绿）|func InitKBReleaseRuntime|InitKBReleaseRuntime\\(|internal/router|wired"
+  "27|知识库变更与发布的 HTTP 挂载入口（装配了没挂载 = 底座在、运营端读不到任何变更与版本，与上一格两种坏法）|func setupKBReleaseRoutes|setupKBReleaseRoutes\\(|internal/router|wired"
+  "27|变更提交即入队审批（本卡唯一的审批对象类型 KBChangeApprovalSubjectType；摘掉它=正文能被发布却从未有人批过）|func \\(s \\*KBReleaseService\\) SubmitChange|SubjectType: KBChangeApprovalSubjectType|internal/service|wired"
+  "27|发布事务的调用点（判完资格要落库；摘掉它 verdicts 照常返回 included、指针永不移动）|func \\(s \\*KBReleaseService\\) PublishPending|s\\.store\\.Publish\\(|internal/service|wired"
+  "27|检索 SQL 侧的可见性谓词（词面/向量/混合三条通路共用的拼接口；摘掉一处即有一条通路把未发布正文当在服内容返回）|func AndVisible|kbrelease\\.AndVisible\\(\\)|internal/aiagent|wired"
+  "27|文档级 gorm 链上的可见性谓词（与上一格同判据的另一个构建器，漏一边=那条腿永不受闸门管）|func WhereVisible|kbrelease\\.WhereVisible\\(|internal/aiagent|wired"
+  "27|导入/新建分段的版本打戳（产品决定\"导入也要走发布制\"的唯一落点；漏打=kb_version=0=永不受闸门管）|func StampForWrite|kbrelease\\.StampForWrite\\(|internal/aiagent|wired"
+  "27|已进发布制库上的就地改写拦截（Update/Delete 覆盖在服正文是审批之外的第二条变更通路，必须拒）|func DirectWriteBlocked|kbrelease\\.DirectWriteBlocked\\(|internal/aiagent|wired"
+  "27|提交与撤回的留痕（事务外两条；摘掉它=审批有结论、变更有状态，但查不到是谁在什么时候做的）|func \\(r \\*KBReleaseRepository\\) RecordAudit|s\\.store\\.RecordAudit\\(|internal/service|wired"
+  "27|发布与回滚事务体内的留痕（与上一格分层：这一格删了，指针移动就再也没有对应的那一行审计）|func \\(r \\*KBReleaseRepository\\) AppendAudit|r\\.AppendAudit\\(ctx, tx,|internal/repository|wired"
+  # 27k/27l 是复查 27g/27h 时补的两处口径缺口：27g 的 callpat 只盯 `StampForWrite(`（批量那一个
+  # 调用点），而单条新建走的是同包另一个函数 `StampOneForWrite(` —— 删掉 Create 里那一行，
+  # 27g 照样 WIRED，而那条通路写进去的内容从此 kb_version=0、永不受闸门管。27l 同理：
+  # 批量删除的"在服行告警"是本卡唯一一条"代码不拦、只出声"的判据，摘掉调用点在 API 与用例的
+  # 返回值上都看不见（它不改判据），只有台账这一行认得它。
+  "27|单条新建分段的版本打戳（Create 走 StampOneForWrite，与 27g 是两个调用点：漏一处就有一条写入通路绕开桶号）|func StampOneForWrite|kbrelease\\.StampOneForWrite\\(|internal/aiagent|wired"
+  "27|批量物理删除前的在服行告警（本卡唯一\"代码不拦、运维看得到\"的判据；摘掉调用点=删光在服分段而日志一句没有）|func \\(r \\*KnowledgeChunkRepository\\) warnIfGovernedLosingRows|r\\.warnIfGovernedLosingRows\\(|internal/aiagent|wired"
 )
 
 hits() {  # hits <pattern> <dir...> — 只扫 .go，跳过 _test.go

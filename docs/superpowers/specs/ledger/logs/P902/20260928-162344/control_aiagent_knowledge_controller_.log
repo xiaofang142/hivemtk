@@ -1,0 +1,11 @@
+2026-09-28T16:31:21+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/哨兵本身_⇒_409
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/仓储包装过一层仍认得_⇒_409
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/其余错误维持既有_400_口径
+--- PASS: TestKM_ChunkWriteErrorMapsGovernedTo409 (0.00s)
+    --- PASS: TestKM_ChunkWriteErrorMapsGovernedTo409/哨兵本身_⇒_409 (0.00s)
+    --- PASS: TestKM_ChunkWriteErrorMapsGovernedTo409/仓储包装过一层仍认得_⇒_409 (0.00s)
+    --- PASS: TestKM_ChunkWriteErrorMapsGovernedTo409/其余错误维持既有_400_口径 (0.00s)
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/controller	0.490s

@@ -1,0 +1,25 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-hw5qzluy
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P803/20260925-133617
+取证基线：HEAD=0787e406 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 13:36  up 2 days,  3:24, 2 users, load averages: 2.86 2.96 3.39 日志 tag=20260925-133617
+覆盖 19 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  41fee4212dda74817756fb62289dd3cc  user-server/internal/app/bad_case_wiring.go
+  7dee73cc4df03bdb0cbd9f15b33439b9  user-server/internal/controller/bad_case.go
+  a65d72f2c122a297e6e2d8f644331cf5  user-server/internal/model/bad_case.go
+  338e02f679ece0d7e753c264ce8e5c5c  user-server/internal/repository/bad_case.go
+  6c4bec82c4aa1fed8d89fa236dc1c286  user-server/internal/service/bad_case.go
+  2e2eb22d25959b4567772c63d52af693  user-server/internal/service/smart_cs_orchestrator.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=28 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=11 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=5 skip=0 红名=—
+O5   转人工那一轮不再排除（系统公告被记成知识缺口）                        杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O6   追问澄清那一轮不再排除（含糊的问句算到知识库头上）                      杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O7   生成失败那一轮不再排除（兜底文案当成模型答案收进评测集）                   杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O8   这道闸整句不再被调用（helper 还在、留痕照旧，没人拦那三类轮次）            杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+
+结果：杀掉 4/4 格 （本趟只跑了 4/45 格，是子集，**不构成全族读数**）
+终态：跑到的格子全杀，但本趟是子集/未覆盖全族，不写'全杀'。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-hw5qzluy/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-hw5qzluy

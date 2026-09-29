@@ -100,6 +100,21 @@ func GlobalConfigParam() *ConfigParamService {
 	}
 }
 
+// BridgeOnlineGraceParam / BridgeOnlineGraceDefault 是"这台桥接账号此刻够得着吗"的唯一时长来源。
+//
+// 在线判定散在四个读侧（管理面列表、渠道总览计数、主动触达选号、巡检脚本），各自写死一份秒数
+// 就会造出互相矛盾的报告：列表说在线、总览报另一个数、发出去的出站行没人来取。
+// 默认值与 config_params 里 bridge/online_grace_window 的 DefaultValue("30") 同值，改动要一起改。
+const (
+	BridgeOnlineGraceParam   = "online_grace_window"
+	BridgeOnlineGraceDefault = 30 * time.Second
+)
+
+// BridgeOnlineGraceWindow 读在线宽限窗口；参数未装配时按默认值（GlobalConfigParam 本身 nil-safe）。
+func BridgeOnlineGraceWindow(ctx context.Context) time.Duration {
+	return GlobalConfigParam().GetDuration(ctx, "bridge", BridgeOnlineGraceParam, BridgeOnlineGraceDefault)
+}
+
 // SeedConfigParams 启动时调用：AutoMigrate + Upsert 默认参数。
 // 首次启动会写入全部 60+ 参数；后续启动只补齐缺失项，不覆盖用户已改值。
 func SeedConfigParams(ctx context.Context, db *gorm.DB) error {

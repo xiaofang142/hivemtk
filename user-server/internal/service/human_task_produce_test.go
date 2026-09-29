@@ -75,11 +75,11 @@ func TestTransferToHuman_ProducesExactlyOneHandoffTask(t *testing.T) {
 	session := seedHandoffSession(t, database, "sess_ht_once", "oneid_ht_1")
 	reason := "机器人连续两轮未答，客户要求人工"
 
-	if err := o.transferToHuman(ctx, session, reason); err != nil {
+	if err := o.transferToHuman(ctx, session, reason, nil); err != nil {
 		t.Fatalf("第一次转人工失败: %v", err)
 	}
 	session2 := *session // 换一份快照再走一次（真实场景是下一次入参重新读出来的行）
-	if err := o.transferToHuman(ctx, &session2, reason); err != nil {
+	if err := o.transferToHuman(ctx, &session2, reason, nil); err != nil {
 		t.Fatalf("第二次转人工失败: %v", err)
 	}
 
@@ -133,7 +133,7 @@ func TestTransferToHuman_ProducesExactlyOneHandoffTask(t *testing.T) {
 		t.Fatalf("完成第一条待办失败: %v", err)
 	}
 	session3 := *session
-	if err := o.transferToHuman(ctx, &session3, reason); err != nil {
+	if err := o.transferToHuman(ctx, &session3, reason, nil); err != nil {
 		t.Fatalf("第三次转人工失败: %v", err)
 	}
 	var after []*model.HumanTask
@@ -155,7 +155,7 @@ func TestTransferToHuman_ProducerFailureIsNotFatal(t *testing.T) {
 	})
 
 	session := seedHandoffSession(t, database, "sess_ht_fail", "oneid_ht_2")
-	if err := o.transferToHuman(context.Background(), session, "情绪升级"); err != nil {
+	if err := o.transferToHuman(context.Background(), session, "情绪升级", nil); err != nil {
 		t.Fatalf("生产者失败不该让转人工失败，实际 %v", err)
 	}
 	var stored model.CustomerSession
@@ -191,7 +191,7 @@ func TestTransferToHuman_WithoutProducerIsUnchanged(t *testing.T) {
 	o.SetHumanTaskProducer(nil)
 
 	session := seedHandoffSession(t, database, "sess_ht_nil", "oneid_ht_3")
-	if err := o.transferToHuman(context.Background(), session, "低置信度"); err != nil {
+	if err := o.transferToHuman(context.Background(), session, "低置信度", nil); err != nil {
 		t.Fatalf("未挂生产者时转人工失败: %v", err)
 	}
 	if stored := humanTaskProduceRowCount(t, database, "sess_ht_nil"); stored != 0 {

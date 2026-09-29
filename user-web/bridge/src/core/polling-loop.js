@@ -33,8 +33,12 @@ export async function getServerCapabilities(cfg) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const headers = { 'Content-Type': 'application/json' };
-    if (cfg && cfg.token) {
-      headers['Authorization'] = `Bearer ${cfg.token}`;
+    if (cfg && cfg.token && cfg.token.trim()) {
+      // /api/bridge/capabilities 也在 BridgeIngressGuard 之后：只发 Bearer 会 401，
+      // 然后这里按"服务端不支持 SSE"降级 → 用户永远拿不到长连接下行。
+      const t = cfg.token.trim();
+      headers['X-Bridge-Token'] = t;
+      headers['Authorization'] = `Bearer ${t}`;
     }
     const resp = await fetch(url, {
       method: 'GET',

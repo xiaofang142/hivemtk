@@ -1,0 +1,203 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-q3ywz_te
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P902/20260928-chunkA
+取证基线：HEAD=2fb5a1ea 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 17:52  up 5 days,  7:41, 2 users, load averages: 72.20 100.71 104.72 日志 tag=20260928-chunkA
+覆盖 99 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  3f90c51f9d6ebad665c4f42f7ca4118d  user-server/internal/aiagent/knowledge/controller/knowledge_merchant.go
+  87b904a8d78c14eee64a17acc20e6281  user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go
+  190c8c0cdd44203b45f84a6f7fa93abc  user-server/internal/aiagent/knowledge/service/rag_searcher.go
+  133269c6653d33f7b379c115f58de3d3  user-server/internal/aiagent/knowledge/service/rag_searcher_bm25.go
+  47eac23620ef61c682c123d18d8d83ef  user-server/internal/aiagent/knowledge/service/rag_searcher_vector.go
+  9ce13662bb7a8e59ea6fa6a3367e7eaa  user-server/internal/aiagent/rag/retrieval/hybrid_searcher.go
+  0a1976deca8866b70ec65f5f5499e17d  user-server/internal/aiagent/rag/retrieval/lexical_retriever.go
+  bb66b668fbf925eb68baf65bf6bf6f37  user-server/internal/aiagent/rag/retrieval/vector_retriever.go
+  74a322de23a08202fcbd4efd046df76c  user-server/internal/app/kb_release_wiring.go
+  a1e64ccd7c3433d6bbd5c97993e1d51b  user-server/internal/controller/kb_release.go
+  f213d1f505bd940c334ef54350e56b2f  user-server/internal/model/kb_release.go
+  1f6615f0bb1d55fddf033c955c99d589  user-server/internal/pkg/kbrelease/kbrelease.go
+  dbdb9586968768fc736d853ba2ed6fde  user-server/internal/repository/kb_release.go
+  4efed602baf92773aa0d1a2ace2d1553  user-server/internal/router/kb_release_routes.go
+  f8dd68941837c4a13828adf9f768fa75  user-server/internal/router/router.go
+  87366b222eea4f6c938e11c9c397f4bf  user-server/internal/service/kb_release.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=19 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=22 skip=0 红名=—
+[控制组 ./internal/controller/] rc=0 settled=32 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/pkg/kbrelease/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/repository/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/service/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/controller/] rc=0 settled=1 skip=0 红名=—
+[控制组 ./internal/aiagent/rag/retrieval/] rc=0 settled=3 skip=0 红名=—
+SV1   底座可用性不看审批服务（能提交但永远没人能批）                          杀掉                             红=TestKBRelease_UnavailableEverywhere settled=22/22
+SV2   product_id 不再去空白（带空格的库号各记一套账）                    杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV3   op 不再归一小写（ADD 被判成非法动作）                           BROKEN=红因而非预期：红名对了但没有任何一行同时含 '去空白/归一未做全' 红=TestKBRelease_SubmitInputNormalization settled=22/22
+      红因: kb_release_test.go:338: 合法入参不该报错: 知识库变更入参不合法: op="ADD" 不在 add/revise/retire 之内
+SV4   变更可以不写理由（AC③ 的落点被抹掉）                             杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV5   动作值域闸失效（未知 op 也能提交）                              杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV6   add 也能带 target_chunk_id                          杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV7   retire 也能带 content（下线顺手改了正文）                     SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=22/22
+SV8   revise 不指定被替换的分段也能提交                             杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV9   变更号超列宽被截断使用                                      杀掉                             红=TestKBRelease_ChangeIDErrsOnOverflow settled=22/22
+SV10  审批入队的三列写错（结论挂到别的对象上）                             杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV11  审批回空记录也当成功（留下没有结论的变更行）                           杀掉                             红=TestKBRelease_SubmitChangeNilApprovalWithoutError settled=22/22
+SV12  变更行落库时状态初值写成 applied（还没发布就算已生效）                  杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV13  submitted 留痕不写了（AC③ 少一条）                         杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV14  跃迁表被绕过（applied 也能直接撤回）                           BROKEN=红因而非预期：红名对了但没有任何一行同时含 'applied 不该能直接撤回' 红=TestKBRelease_WithdrawChange settled=22/22
+      红因: kb_release_test.go:588: 报错要给出下一步（改提一条 retire 走审批），实得 "该变更当前状态不允许撤回: kbc_1 在本次撤回之间状态已变（可能刚被发布）"
+      红因: kb_release_test.go:591: 判据不过时不该再碰仓储的写：[GetChange WithdrawChange]
+SV15  CAS 落败被当成成功（与发布抢同一行时静默覆盖）                        杀掉                             红=TestKBRelease_WithdrawChange settled=22/22
+SV16  撤回不记留痕（谁按的查不出来）                                  杀掉                             红=TestKBRelease_WithdrawChange settled=22/22
+SV17  发布不先问治理（你没开门被说成屋里是空的）                            RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信 红=TestKBRelease_PublishPendingRequiresGoverned settled=16/22
+      红因: panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+SV18  读指针的故障被归成没有发布行                                   BROKEN=红因而非预期：红名对了但没有任何一行同时含 '读指针失败不该说成未进发布制' 红=TestKBRelease_PublishPendingArgsAndStoreErrors settled=22/22
+      红因: kb_release_test.go:784: 没有发布行该按未进发布制回答，实得 kb_release: 该库没有发布记录
+SV19  审批三列比对少一列（给别的对象开门）                               SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=22/22
+SV20  没批的也算进本次发布（AC① 正面破口）                             BUILD-BROKEN：编译坏（修变异不修期望）      红=— settled=0/22
+SV21  认不出的审批状态不再保守（不当成不明）                              BROKEN=红因而非预期：红名对了但没有任何一行同时含 'unknown 分账缺项' 红=TestKBRelease_PublishPendingVerdicts settled=22/22
+      红因: kb_release_test.go:684: skipped_expired=[kbc_exp] unknown=[kbc_noid kbc_gone kbc_other kbc_wrong]
+SV22  读不到结论时继续发布（把故障说成没批）                              RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信 红=TestKBRelease_PublishPendingApprovalReadFailureStopsEverything settled=13/22
+      红因: panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+SV23  一条都没批也进事务（留下一次空发布的痕）                             RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信 红=TestKBRelease_PublishPendingNothingApprovedSkipsTransaction settled=14/22
+      红因: panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+SV24  有桶却没有变更时不再真发布（导入的内容永远上不了线）                       SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=22/22
+SV25  retire 那条也去补向量（空内容占一次调用）                         杀掉                             红=TestKBRelease_EmbedAppliedAfterCommit settled=22/22
+SV26  没有新行也调用向量通路                                      杀掉                             红=TestKBRelease_EmbedAppliedAfterCommit settled=22/22
+SV27  回滚与放回走同一条仓储通路（方向串了）                              BROKEN=红因而非预期：红名对了但没有任何一行同时含 '两个方向该各走一次仓储' 红=TestKBRelease_PointerMovesGoToStore settled=22/22
+      红因: kb_release_test.go:943: Rollback=&{FromVersion:4 ToVersion:5 Recalled:0}/<nil>
+SV28  发布/回滚不校验库号列宽（一句数据库报错）                            BROKEN=红集合不符：期望=['TestKBRelease_WriteArgs'] 实际=['TestKBRelease_PointerMovesGoToStore', 'TestKBRelease_WriteArgs'] 红=TestKBRelease_PointerMovesGoToStore,TestKBRelease_WriteArgs settled=22/22
+      红因: kb_release_test.go:395: kbWriteArgs("ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp","op") 应判入参不合法，实得 <nil>
+      红因: kb_release_test.go:954: 超列宽库号该在入参层挡住: <nil>
+SV29  留痕可以不给操作者（追责没有出处）                                BROKEN=红集合不符：期望=['TestKBRelease_WriteArgs'] 实际=['TestKBRelease_PublishPendingArgsAndStoreErrors', 'TestKBRelease_SetGoverned', 'TestKBRelease_WriteArgs'] 红=TestKBRelease_PublishPendingArgsAndStoreErrors,TestKBRelease_SetGoverned,TestKBRelease_WriteArgs settled=22/22
+      红因: kb_release_test.go:395: kbWriteArgs("p1","") 应判入参不合法，实得 <nil>
+      红因: kb_release_test.go:395: kbWriteArgs("p1","   ") 应判入参不合法，实得 <nil>
+      红因: kb_release_test.go:772: 空操作者应判入参（发布要归人）: <nil>
+      红因: kb_release_test.go:976: 空操作者应判入参（谁启的治理要留得下来）: <nil>
+      红因: kb_release_test.go:983: 判据过了就该走到仓储，实得 3 次
+SV30  没有发布行时回 404 而不是未启用（前端读成库不存在）                     杀掉                             红=TestKBRelease_Views settled=22/22
+SV31  统计视图把影子读数当成真拦读数                                  杀掉                             红=TestKBRelease_StatsFlagsShadowReadings settled=22/22
+SV32  留痕读口接受空 subject_key（整张事件流倒给用户）                   杀掉                             红=TestKBRelease_Views settled=22/22
+SV33  全局登记处不清空（撤掉装配后端点仍回 200）                          BROKEN=红因而非预期：红名对了但没有任何一行同时含 '撤掉|清空' 红=TestKBRelease_GlobalRegistryRoundTrip settled=22/22
+      红因: kb_release_test.go:321: 传 nil 应撤掉登记（端点回 503）
+CT1   底座不可用回 500（运维该报装配却被领着改请求）                        杀掉                             红=TestKBReleaseController_UnavailableEveryExit settled=32/32
+CT2   提交不带身份也放行（留痕里是一句空串的谁改的）                          BROKEN=红集合不符：期望=['TestKBReleaseController_OperatorTypesReachActor', 'TestKBReleaseController_WriteRequiresOperator'] 实际=['TestKBReleaseController_WriteRequiresOperator'] 红=TestKBReleaseController_WriteRequiresOperator settled=32/32
+      红因: kb_release_test.go:558: 没有 user_id：POST /api/kb-changes 期望 401，实得 200（body={"code":0,"message":"ok","data":{"id":"kbc_1790590825530403000_1","product_id":"p1","document_id":1,"op":"add","target_chunk_id":0,"content":"c","reason":"r","status
+      红因: kb_release_test.go:562: 没有 user_id：POST /api/kb-changes 在回 401 之前已经动了底座（calls=[InsertChange RecordAudit]）
+      红因: kb_release_test.go:558: uint(0)：POST /api/kb-changes 期望 401，实得 200（body={"code":0,"message":"ok","data":{"id":"kbc_1790590825530631000_1","product_id":"p1","document_id":1,"op":"add","target_chunk_id":0,"content":"c","reason":"r","status":"
+      红因: kb_release_test.go:562: uint(0)：POST /api/kb-changes 在回 401 之前已经动了底座（calls=[InsertChange RecordAudit]）
+      红因: kb_release_test.go:558: int(-3)：POST /api/kb-changes 期望 401，实得 200（body={"code":0,"message":"ok","data":{"id":"kbc_1790590825530758000_1","product_id":"p1","document_id":1,"op":"add","target_chunk_id":0,"content":"c","reason":"r","status":"
+      红因: kb_release_test.go:562: int(-3)：POST /api/kb-changes 在回 401 之前已经动了底座（calls=[InsertChange RecordAudit]）
+      红因: kb_release_test.go:558: float64(0.5)：POST /api/kb-changes 期望 401，实得 200（body={"code":0,"message":"ok","data":{"id":"kbc_1790590825530844000_1","product_id":"p1","document_id":1,"op":"add","target_chunk_id":0,"content":"c","reason":"r","stat
+      红因: kb_release_test.go:562: float64(0.5)：POST /api/kb-changes 在回 401 之前已经动了底座（calls=[InsertChange RecordAudit]）
+CT3   发布口的 401 写成 403                                  杀掉                             红=TestKBReleaseController_WriteRequiresOperator settled=32/32
+CT4   状态筛选器的值域闸失效（打错字母被说成没有这种变更）                       BROKEN=红因而非预期：红名对了但没有任何一行同时含 '值域闸在查询前就该拦下' 红=TestKBReleaseController_ListQueryTranslation settled=32/32
+      红因: kb_release_test.go:667: 期望 400，实得 200：{"code":0,"data":{"list":[],"total":0},"message":"成功"}
+      红因: kb_release_test.go:667: 期望 400，实得 200：{"code":0,"data":{"list":[],"total":0},"message":"成功"}
+CT5   动作筛选器的值域闸失效                                      BROKEN=红因而非预期：红名对了但没有任何一行同时含 '值域闸在查询前就该拦下' 红=TestKBReleaseController_ListQueryTranslation settled=32/32
+      红因: kb_release_test.go:667: 期望 400，实得 200：{"code":0,"data":{"list":[],"total":0},"message":"成功"}
+CT6   查询里的库号长度闸失效                                      BROKEN=红集合不符：期望=['TestKBReleaseController_ListQueryTranslation', 'TestKBReleaseController_ParamGates'] 实际=['TestKBReleaseController_ListQueryTranslation'] 红=TestKBReleaseController_ListQueryTranslation settled=32/32
+      红因: kb_release_test.go:667: 期望 400，实得 200：{"code":0,"data":{"list":[],"total":0},"message":"成功"}
+CT7   page=0 被静默纠正成第一页                                 杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT8   page_size 非法被静默纠正                                杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT9   路径参数长度闸失效（免费的慢查询）                                BROKEN=红因而非预期：红名对了但没有任何一行同时含 '变更 id 过长|坏参数不该打到底座' 红=TestKBReleaseController_ParamGates settled=32/32
+      红因: kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+      红因: kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+      红因: kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+CT10  库号闸按字节数而不是字数（64 个汉字被拒）                           杀掉                             红=TestKBReleaseController_ProductParamCountsRunes settled=32/32
+CT11  留痕的 limit 非法被静默纠正                                BROKEN=红集合不符：期望=['TestKBReleaseController_AuditSubjectKeys'] 实际=['TestKBReleaseController_ParamGates'] 红=TestKBReleaseController_ParamGates settled=32/32
+      红因: kb_release_test.go:746: 期望 400，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+CT12  变更列表空结果回 null（前端得先判类型）                           杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT13  留痕列表空结果回 null                                    杀掉                             红=TestKBReleaseController_AuditSubjectKeys settled=32/32
+CT14  受治理名单空结果回 null                                   杀掉                             红=TestKBReleaseController_ListReleases settled=32/32
+CT15  发布行缺席时回 404（读成库不存在）                              BROKEN=红集合不符：期望=['TestKBReleaseController_GetReleaseAbsent'] 实际=['TestKBReleaseController_GetReleaseAbsent', 'TestKBReleaseController_RealStack'] 红=TestKBReleaseController_GetReleaseAbsent,TestKBReleaseController_RealStack settled=32/32
+      红因: kb_release_test.go:1165: 期望 200，实得 404：{"code":"NOT_FOUND_1002","message":"发布记录不存在"}
+      红因: kb_release_test.go:1660: 期望 200，实得 404：{"code":"NOT_FOUND_1002","message":"发布记录不存在"}
+CT16  启停治理漏字段时当成启用（静默扩大治理范围）                           BROKEN=红集合不符：期望=['TestKBReleaseController_SetGovernedExplicitBool'] 实际=['TestKBReleaseController_BadBodies'] 红=TestKBReleaseController_BadBodies settled=32/32
+      红因: kb_release_test.go:803: 坏请求体不该走到仓储
+      红因: kb_release_test.go:809: 期望 400，实得 200：{"code":0,"message":"ok","data":null}
+CT17  闸门档位回显把读侧与写侧并成一格                                 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 (%s, blocks=%t, stamps=%t)' 红=TestKBReleaseController_GateModes settled=32/32
+      红因: kb_release_test.go:490: env="shadow"：期望 (shadow, blocks=false, stamps=true)，实得 map[blocks_read:false flag_env:FF_LTC_KB_CHANGE_GATE governed_count:1 governed_products:[p_gov] mode:shadow stamps_write:false]
+      红因: kb_release_test.go:490: env="true"：期望 (shadow, blocks=false, stamps=true)，实得 map[blocks_read:false flag_env:FF_LTC_KB_CHANGE_GATE governed_count:1 governed_products:[p_gov] mode:shadow stamps_write:false]
+CT18  底座不在时名单回空数组（把读不到说成一个都没有）                         杀掉                             红=TestKBReleaseController_GateAnswersWithoutStore settled=32/32
+CT19  名单读取失败时不出声（回一个空名单）                               杀掉                             红=TestKBReleaseController_GateReadFailureStillAnswers settled=32/32
+CT20  变更号取错（按号取数取到别的行）                                 杀掉                             红=TestKBReleaseController_GetChange404 settled=32/32
+CT21  审批没给结论回 409（该报装配的成了改请求）                          杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT22  跨号发布禁令映成 500（运营会重试一个注定失败的动作）                     BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 409|sentinel 原文' 红=TestKBReleaseController_ReplyErrorTable settled=32/32
+      红因: kb_release_test.go:897: 发布禁令/裸错误：期望 409，实得 500（body={"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}）
+      红因: kb_release_test.go:897: 发布禁令/包一层：期望 409，实得 500（body={"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}）
+CT23  就地改写被拒映成 500                                     BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 409|sentinel 原文' 红=TestKBReleaseController_ReplyErrorTable settled=32/32
+      红因: kb_release_test.go:897: 已进发布制不许直写/裸错误：期望 409，实得 500（body={"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}）
+      红因: kb_release_test.go:897: 已进发布制不许直写/包一层：期望 409，实得 500（body={"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}）
+CT24  500 把内部错误原文回显出去（响应体放大器）                          杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT25  提交口把 target_chunk_id 丢了                          BROKEN=红集合不符：期望=['TestKBReleaseController_SubmitShape'] 实际=['TestKBReleaseController_SubmitInputJudgments', 'TestKBReleaseController_SubmitShape'] 红=TestKBReleaseController_SubmitInputJudgments,TestKBReleaseController_SubmitShape settled=32/32
+      红因: kb_release_test.go:839: 期望 400，实得 200：{"code":0,"message":"ok","data":{"id":"kbc_1790591165970584000_1","product_id":"p1","document_id":1,"op":"add","target_chunk_id":0,"content":"c","reason":"r","status":"pending","approval_id":"apr_fake_k
+      红因: kb_release_test.go:842: 报错文案该含 "retire 不该带 content"，实得 "知识库变更入参不合法: retire 必须指定 target_chunk_id"
+      红因: kb_release_test.go:943: 期望 200，实得 400：{"code":"INVALID_PARAM_1001","message":"知识库变更入参不合法: revise 必须指定被替换的 target_chunk_id"}
+CT26  值域出口自己抄了一份 ops（库里加了选不到）                          杀掉                             红=TestKBReleaseController_Taxonomy settled=32/32
+CT27  值域出口开始依赖底座（最需要时不给答案）                             BROKEN=红集合不符：期望=['TestKBReleaseController_Taxonomy'] 实际=['TestKBReleaseController_TaxonomyWithoutStore'] 红=TestKBReleaseController_TaxonomyWithoutStore settled=32/32
+      红因: kb_release_test.go:1604: svc=<nil> 时 taxonomy 仍该回 200，实得 503
+      红因: kb_release_test.go:1604: svc=&{false [] {   0 0}  0 {  []}   false <nil>  <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil> <nil>} 时 taxonomy 仍该回 200，实得 503
+CT28  变更留痕的 subject_key 丢了前缀                           BROKEN=红集合不符：期望=['TestKBReleaseController_AuditSubjectKeys'] 实际=['TestKBReleaseController_AuditSubjectKeys', 'TestKBReleaseController_RealStack'] 红=TestKBReleaseController_AuditSubjectKeys,TestKBReleaseController_RealStack settled=32/32
+      红因: kb_release_test.go:1131: /api/kb-changes/kbc_9/audit：subject_key 该是 "change:kbc_9"，实得 "kbc_9"
+      红因: kb_release_test.go:1131: /api/kb-changes/kbc_9/audit?limit=7：subject_key 该是 "change:kbc_9"，实得 "kbc_9"
+      红因: kb_release_test.go:1740: 变更留痕的动作该是 submitted+published，实得 map[]（total=0）
+CT29  发布出口把 result 吞了（空发布与没发生分不开）                      BUILD-BROKEN：编译坏（修变异不修期望）      红=— settled=0/32
+CT30  回滚与放回并成一条通路                                      BROKEN=红因而非预期：红名对了但没有任何一行同时含 '串到了' 红=TestKBReleaseController_PointerMovesNotInterchangeable settled=32/32
+      红因: kb_release_test.go:1532: /api/kb-releases/p1/rollback 期望 200，实得 500：{"code":"INTERNAL_ERROR_6002","message":"知识库变更操作失败"}
+CT31  撤回口不校验跃迁（把服务层的 409 说成 200）                       SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=32/32
+RT1   挂载不读全局登记处（路由对着 nil 底座挂上）                         杀掉                             红=TestKBReleaseRoutes_AssemblyAndStopAreSymmetric,TestKBReleaseRoutes_StaticSegmentsWin settled=4/4
+RT2   gate 静态段被参数段抢走（档位读不回来）                           BROKEN=红集合不符：期望=['TestKBReleaseRoutes_StaticSegmentsWin'] 实际=['TestKBReleaseRoutes_StaticSegmentsWin', 'TestKBReleaseRoutes_UnassembledAnswers503WithoutData'] 红=TestKBReleaseRoutes_StaticSegmentsWin,TestKBReleaseRoutes_UnassembledAnswers503WithoutData settled=4/4
+      红因: kb_release_routes_test.go:95: /gate 不该依赖底座，实得 503：{"code":"SERVICE_UNAVAILABLE_6003","message":"知识库变更底座不可用（未装配或缺少 DB 句柄），本次未读到任何发布状态"}
+      红因: kb_release_routes_test.go:122: /gate 被 :product 抢走了（回显库号 "gate"）：{"code":0,"message":"ok","data":{"exists":false,"governed":false,"product_id":"gate"}}
+RT3   变更底座装在了审批运行时之前（两份审批服务分家）                         杀掉                             红=TestKBReleaseRoutes_AssemblyOrderInRouter settled=4/4
+RT4   挂载挂到了鉴权组之外（六个写入口匿名可用）                            杀掉                             红=TestKBReleaseRoutes_AssemblyOrderInRouter settled=4/4
+AP1   无 DB 句柄时不清空全局（路由对着未装配回 200）                      杀掉                             红=TestInitKBReleaseRuntime_NilDBClearsGlobal settled=4/4
+AP2   撤销装配没清全局（旗子关掉后端点照旧服务）                            BROKEN=红集合不符：期望=['TestInitKBReleaseRuntime_NilDBClearsGlobal', 'TestInitKBReleaseRuntime_RegistersUsableGlobal'] 实际=['TestInitKBReleaseRuntime_RegistersUsableGlobal'] 红=TestInitKBReleaseRuntime_RegistersUsableGlobal settled=4/4
+      红因: kb_release_wiring_test.go:94: StopKBReleaseRuntime 没清全局
+AP3   装配出来的实例没登记到全局（路由取到 nil）                          BROKEN=红集合不符：期望=['TestInitKBReleaseRuntime_RegistersUsableGlobal'] 实际=['TestInitKBReleaseRuntime_RegistersUsableGlobal', 'TestInitKBReleaseRuntime_UsesGlobalApprovalService', 'TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues'] 红=TestInitKBReleaseRuntime_RegistersUsableGlobal,TestInitKBReleaseRuntime_UsesGlobalApprovalService,TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues settled=4/4
+      红因: kb_release_wiring_test.go:70: 路由取的全局与 Init 返回的不是同一个实例（两处各一份就会漂移）
+      红因: kb_release_wiring_test.go:79: 全局实例提交变更失败: 知识库变更底座未装配（无 DB 句柄）
+      红因: kb_release_wiring_test.go:118: 提交失败: 知识库变更底座未装配（无 DB 句柄）
+      红因: kb_release_wiring_test.go:151: 提交失败: 知识库变更底座未装配（无 DB 句柄）
+
+结果：杀掉 36/71 格 （本趟只跑了 71/162 格，是子集，**不构成全族读数**）
+未杀/坏格清单：
+  !! SV3 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '去空白/归一未做全'：op 不再归一小写（ADD 被判成非法动作）
+  !! SV7 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：retire 也能带 content（下线顺手改了正文）
+  !! SV14 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'applied 不该能直接撤回'：跃迁表被绕过（applied 也能直接撤回）
+  !! SV17 RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信：发布不先问治理（你没开门被说成屋里是空的）
+  !! SV18 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '读指针失败不该说成未进发布制'：读指针的故障被归成没有发布行
+  !! SV19 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：审批三列比对少一列（给别的对象开门）
+  !! SV20 BUILD-BROKEN：编译坏（修变异不修期望）：没批的也算进本次发布（AC① 正面破口）
+  !! SV21 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'unknown 分账缺项'：认不出的审批状态不再保守（不当成不明）
+  !! SV22 RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信：读不到结论时继续发布（把故障说成没批）
+  !! SV23 RAN-BROKEN：用例 panic 带走整个二进制，settled 不可信：一条都没批也进事务（留下一次空发布的痕）
+  !! SV24 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：有桶却没有变更时不再真发布（导入的内容永远上不了线）
+  !! SV27 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '两个方向该各走一次仓储'：回滚与放回走同一条仓储通路（方向串了）
+  !! SV28 BROKEN=红集合不符：期望=['TestKBRelease_WriteArgs'] 实际=['TestKBRelease_PointerMovesGoToStore', 'TestKBRelease_WriteArgs']：发布/回滚不校验库号列宽（一句数据库报错）
+  !! SV29 BROKEN=红集合不符：期望=['TestKBRelease_WriteArgs'] 实际=['TestKBRelease_PublishPendingArgsAndStoreErrors', 'TestKBRelease_SetGoverned', 'TestKBRelease_WriteArgs']：留痕可以不给操作者（追责没有出处）
+  !! SV33 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '撤掉|清空'：全局登记处不清空（撤掉装配后端点仍回 200）
+  !! CT2 BROKEN=红集合不符：期望=['TestKBReleaseController_OperatorTypesReachActor', 'TestKBReleaseController_WriteRequiresOperator'] 实际=['TestKBReleaseController_WriteRequiresOperator']：提交不带身份也放行（留痕里是一句空串的谁改的）
+  !! CT4 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '值域闸在查询前就该拦下'：状态筛选器的值域闸失效（打错字母被说成没有这种变更）
+  !! CT5 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '值域闸在查询前就该拦下'：动作筛选器的值域闸失效
+  !! CT6 BROKEN=红集合不符：期望=['TestKBReleaseController_ListQueryTranslation', 'TestKBReleaseController_ParamGates'] 实际=['TestKBReleaseController_ListQueryTranslation']：查询里的库号长度闸失效
+  !! CT9 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '变更 id 过长|坏参数不该打到底座'：路径参数长度闸失效（免费的慢查询）
+  !! CT11 BROKEN=红集合不符：期望=['TestKBReleaseController_AuditSubjectKeys'] 实际=['TestKBReleaseController_ParamGates']：留痕的 limit 非法被静默纠正
+  !! CT15 BROKEN=红集合不符：期望=['TestKBReleaseController_GetReleaseAbsent'] 实际=['TestKBReleaseController_GetReleaseAbsent', 'TestKBReleaseController_RealStack']：发布行缺席时回 404（读成库不存在）
+  !! CT16 BROKEN=红集合不符：期望=['TestKBReleaseController_SetGovernedExplicitBool'] 实际=['TestKBReleaseController_BadBodies']：启停治理漏字段时当成启用（静默扩大治理范围）
+  !! CT17 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 (%s, blocks=%t, stamps=%t)'：闸门档位回显把读侧与写侧并成一格
+  !! CT22 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 409|sentinel 原文'：跨号发布禁令映成 500（运营会重试一个注定失败的动作）
+  !! CT23 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '期望 409|sentinel 原文'：就地改写被拒映成 500
+  !! CT25 BROKEN=红集合不符：期望=['TestKBReleaseController_SubmitShape'] 实际=['TestKBReleaseController_SubmitInputJudgments', 'TestKBReleaseController_SubmitShape']：提交口把 target_chunk_id 丢了
+  !! CT27 BROKEN=红集合不符：期望=['TestKBReleaseController_Taxonomy'] 实际=['TestKBReleaseController_TaxonomyWithoutStore']：值域出口开始依赖底座（最需要时不给答案）
+  !! CT28 BROKEN=红集合不符：期望=['TestKBReleaseController_AuditSubjectKeys'] 实际=['TestKBReleaseController_AuditSubjectKeys', 'TestKBReleaseController_RealStack']：变更留痕的 subject_key 丢了前缀
+  !! CT29 BUILD-BROKEN：编译坏（修变异不修期望）：发布出口把 result 吞了（空发布与没发生分不开）
+  !! CT30 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '串到了'：回滚与放回并成一条通路
+  !! CT31 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：撤回口不校验跃迁（把服务层的 409 说成 200）
+  !! RT2 BROKEN=红集合不符：期望=['TestKBReleaseRoutes_StaticSegmentsWin'] 实际=['TestKBReleaseRoutes_StaticSegmentsWin', 'TestKBReleaseRoutes_UnassembledAnswers503WithoutData']：gate 静态段被参数段抢走（档位读不回来）
+  !! AP2 BROKEN=红集合不符：期望=['TestInitKBReleaseRuntime_NilDBClearsGlobal', 'TestInitKBReleaseRuntime_RegistersUsableGlobal'] 实际=['TestInitKBReleaseRuntime_RegistersUsableGlobal']：撤销装配没清全局（旗子关掉后端点照旧服务）
+  !! AP3 BROKEN=红集合不符：期望=['TestInitKBReleaseRuntime_RegistersUsableGlobal'] 实际=['TestInitKBReleaseRuntime_RegistersUsableGlobal', 'TestInitKBReleaseRuntime_UsesGlobalApprovalService', 'TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues']：装配出来的实例没登记到全局（路由取到 nil）
+终态：本卡电池**未**全杀——上面每一条要么补腿、要么按'不配格'那一节写明理由。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-q3ywz_te/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-q3ywz_te

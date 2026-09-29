@@ -26,7 +26,7 @@ func NewMessageHubSummaryAggregationService(database *gorm.DB) *MessageHubSummar
 }
 
 // RunOnce 消费自上次水位线以来的全部新消息并累加进 summary 表。
-// 返回本轮消费的消息行数。DB 未就绪返回 (0, nil) 静默跳过。
+// 返回本轮消费的消息行数。repo 未注入返回 (0, nil) 静默跳过。
 func (s *MessageHubSummaryAggregationService) RunOnce(ctx context.Context) (int64, error) {
 	if s.repo == nil {
 		return 0, nil
@@ -114,8 +114,15 @@ type hubSummaryAggCron struct {
 
 var hubSummaryAggCronInst *hubSummaryAggCron
 
-func init() {
-	hubSummaryAggCronInst = startHubSummaryAggCron(NewMessageHubSummaryAggregationService(nil))
+// StartMessageHubSummaryAggCron 由 main 显式调用（原 init() 副作用装配的是 nil DB：
+// repo 非空但句柄为空 ⇒ RunOnce 每 5 分钟报一次 invalid db，水位线永不推进，
+// msg_hourly_summary 在任何真实进程里从未产出行）。
+// database 为空时不装配：宁可没有汇总，也不要再起一个只会报错的哑 cron。
+func StartMessageHubSummaryAggCron(database *gorm.DB) {
+	if database == nil || hubSummaryAggCronInst != nil {
+		return
+	}
+	hubSummaryAggCronInst = startHubSummaryAggCron(NewMessageHubSummaryAggregationService(database))
 }
 
 func startHubSummaryAggCron(svc *MessageHubSummaryAggregationService) *hubSummaryAggCron {
@@ -158,7 +165,7 @@ func (c *hubSummaryAggCron) trigger(ctx context.Context) {
 	}
 }
 
-// StopMessageHubSummaryAggCron 进程退出时可调用（可选接线）。
+// StopMessageHubSummaryAggCron 进程退出时由 main 调用（与 Start 成对，配合 defer）。
 func StopMessageHubSummaryAggCron(ctx context.Context) {
 	if hubSummaryAggCronInst == nil {
 		return

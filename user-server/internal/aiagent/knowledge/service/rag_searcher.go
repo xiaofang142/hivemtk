@@ -12,6 +12,7 @@ import (
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -271,6 +272,9 @@ func (s *RagSearcher) rankRAGChunks(ctx context.Context, chunks []RAGChunk) []RA
 		}
 	}
 	tracing.RecordRecalledChunks(ctx, chunkIDs)
+	// 观察档出声：这批召回结果里有多少条切到 on 会被版本闸门挡掉。off/on 档零开销
+	// （LogWouldHide 自己判档），它是"要不要开闸"这个决定的数据来源。
+	kbrelease.LogWouldHide(ctx, s.db, ids, "", "rankRAGChunks")
 	weights := s.loadChunkWeights(ctx, ids)
 	type ranked struct {
 		c   RAGChunk
@@ -309,6 +313,7 @@ func (s *RagSearcher) rankMerchantChunks(ctx context.Context, chunks []MerchantR
 		ids = append(ids, c.ID)
 	}
 	tracing.RecordRecalledChunks(ctx, chunkIDs)
+	kbrelease.LogWouldHide(ctx, s.db, ids, "", "rankMerchantChunks")
 	weights := s.loadChunkWeights(ctx, ids)
 	type ranked struct {
 		c   MerchantRAGChunk

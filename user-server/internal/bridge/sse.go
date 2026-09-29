@@ -516,6 +516,30 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 	}
 
 	ctxReq := c.Request.Context()
+
+	// 入参校验必须发生在 WriteHeader 之前：这条流一旦发出 200，就只能一直发注释帧，
+	// 事后既补不上状态码也送不出错误体。ingest/outbox/ack 三个入口对同样的缺参各回 400，
+	// 只有这里曾把缺 channel、空 account_id、以及 wechat 这类「格式对但桥接不承载」的渠道
+	// 一并接受成一条永久空闲的流：扩展端 fetch 判的是 response.ok，日志印「SSE 已连接」，
+	// 而 SSE 是默认下形态（capabilities 报 sse_enabled 后轮询定时器根本不启动），
+	// 于是配置写错的客户看到的是「一条错误都没有、也一条回复都收不到」。
+	// 归一后的渠道名再判一次，别名（douyin_web）走同一条放行路径。
+	if accountID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "account_id required (extension must capture account from DOM before opening the SSE stream)",
+		})
+		return
+	}
+	if channel == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "channel required"})
+		return
+	}
+	if !IsBridgeChannel(channel) {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unsupported bridge channel"})
+		return
+	}
+
 	heartbeatInterval := h.heartbeatInterval
 	if heartbeatInterval == SSEDefaultHeartbeatInterval {
 		heartbeatInterval = runtimeSSEHeartbeatInterval(ctxReq)

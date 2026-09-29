@@ -1,0 +1,17 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-ows086y9
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P803/20260925-122456
+取证基线：HEAD=0787e406 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 12:24  up 2 days,  2:13, 2 users, load averages: 3.03 3.12 3.31 日志 tag=20260925-122456
+覆盖 19 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  41fee4212dda74817756fb62289dd3cc  user-server/internal/app/bad_case_wiring.go
+  7dee73cc4df03bdb0cbd9f15b33439b9  user-server/internal/controller/bad_case.go
+  a65d72f2c122a297e6e2d8f644331cf5  user-server/internal/model/bad_case.go
+  338e02f679ece0d7e753c264ce8e5c5c  user-server/internal/repository/bad_case.go
+  3714a4413bc596e56a65ee3889c0ebe3  user-server/internal/service/bad_case.go
+  94ee1778a6a367aa9ebe433bebb62a5c  user-server/internal/service/smart_cs_orchestrator.go
+[selftest] OK  ST1 无效果变异: 期望驱动报 SURVIVED，实际报 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守
+[selftest] OK  ST2 期望写歪: 期望驱动报 BROKEN，实际报 BROKEN=红集合不符：期望=['TestBadCase_NoSuchLeg'] 实际=['TestBadCase_Transitions']
+[selftest] OK  ST3 编译坏: 期望驱动报 BUILD-BROKEN，实际报 BUILD-BROKEN：编译坏（修变异不修期望）
+[selftest] 驱动能报出三种不成立态，可以放整族
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-ows086y9/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-ows086y9

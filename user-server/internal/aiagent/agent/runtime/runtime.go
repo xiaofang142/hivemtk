@@ -117,7 +117,9 @@ func (r *defaultAgentRuntime) Stop(ctx context.Context) error {
 
 func (r *defaultAgentRuntime) fallbackResponse(payload CustomerMessagePayload, agentCtx *AgentContext) *SalesResponse {
 	return &SalesResponse{
-		ReplyContent: "系统暂不可用，请稍后再试。",
+		// 「请稍后再试」是压测脚本识别降级回复的锚；「转人工」必须是 service 层
+		// 转人工关键词表认识的词（裸「人工」不是），否则客户照做也转不出去。
+		ReplyContent: "系统暂不可用，请稍后再试，或回复「转人工」由人工客服为您服务。",
 		ReplyType:    "text",
 		Confidence:   0,
 		AgentID:      agentCtx.AgentID,

@@ -9,7 +9,7 @@
 //
 // 使用 fetch + ReadableStream 的优势：
 //   1. 可以在 Content Script 中直接建立连接
-//   2. 支持自定义 Header（Authorization）
+//   2. 支持自定义 Header（X-Bridge-Token / Authorization）
 //   3. 更好的错误处理和重连控制
 //   4. Content Script 生命周期与页面绑定，更稳定
 
@@ -107,6 +107,60 @@ async function parseSSEStream(reader, handlers) {
   }
 }
 
+// ---- 连接被拒时的取证 ----
+
+// 建连失败时服务端错误体的最大取证长度：闸门回的是几十字节的 JSON，
+// 网关/反代的 HTML 页可能上兆——只取前缀就够判读，又不能把日志撑爆。
+const SSE_ERROR_BODY_MAX_CHARS = 512;
+
+/**
+ * 把非 2xx 的响应转成带判据的错误对象。
+ *
+ * 为什么不能只报 HTTP 状态码：/api/bridge/outbox/sse 的 401 有两种截然不同的成因
+ * （没带头 = `缺少 X-Bridge-Token`；带头但值不对 = `bridge token 无效`），
+ * 400 也分「缺 channel/account_id」与「channel 不在白名单」。运维在扩展日志里只看到一个
+ * 数字时无从下手，而服务端已经把答案写在响应体里了——丢掉它就是丢掉了唯一可执行的线索。
+ *
+ * `nonRetryable` 沿用 http-ingest.js 的同名字段：4xx（408/429 除外）是请求本身坏了，
+ * 重打同一个坏请求不会变好，重连侧据此降档。
+ * @param {Response} response
+ * @returns {Promise<Error>}
+ */
+async function buildSSEError(response) {
+  let raw = '';
+  try {
+    raw = await response.text();
+  } catch (err) {
+    // 读体失败不能盖掉状态码本身：这只是一层取证。
+    log.debug('SSE 错误体读取失败', err && err.message);
+  }
+  const snippet = raw.slice(0, SSE_ERROR_BODY_MAX_CHARS);
+
+  let code = '';
+  let message = '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      code = typeof parsed.code === 'string' ? parsed.code : '';
+      message = typeof parsed.message === 'string' ? parsed.message : '';
+    }
+  } catch (_) {
+    // 非 JSON（网关 HTML / 纯文本）走原文兜底，见下面的 detail
+  }
+
+  const detail = message || snippet;
+  const err = new Error(`SSE 连接失败: HTTP ${response.status}${detail ? ` — ${detail}` : ''}`);
+  err.status = response.status;
+  err.code = code;
+  err.serverMessage = message;
+  err.nonRetryable =
+    response.status >= 400 &&
+    response.status < 500 &&
+    response.status !== 408 &&
+    response.status !== 429;
+  return err;
+}
+
 // ---- SSE 连接管理 ----
 
 /**
@@ -156,8 +210,11 @@ export async function connectSSE(channel, accountId, opts = {}) {
   const headers = {
     'Accept': 'text/event-stream',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (token && token.trim()) {
+    // 服务端闸门只读 X-Bridge-Token（或 ?bridge_token=）；Bearer 在这条路由上无读取点。
+    const t = token.trim();
+    headers['X-Bridge-Token'] = t;
+    headers['Authorization'] = `Bearer ${t}`;
   }
   if (lastEventId) {
     headers['Last-Event-ID'] = lastEventId;
@@ -176,7 +233,7 @@ export async function connectSSE(channel, accountId, opts = {}) {
     });
 
     if (!response.ok) {
-      throw new Error(`SSE 连接失败: HTTP ${response.status}`);
+      throw await buildSSEError(response);
     }
 
     if (!response.body) {

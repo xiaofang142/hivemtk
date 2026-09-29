@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -1288,5 +1290,93 @@ func TestConsume_ContextCancel(t *testing.T) {
 	_, err := svc.Consume(ctx, "wecom", "cancel-acc", 1*time.Second)
 	if err == nil {
 		t.Error("expected context cancellation error")
+	}
+}
+
+func TestNormalize_StatusPassthroughForEverySettableValue(t *testing.T) {
+	svc, _ := newMessageHubTestService(t)
+	for _, st := range []string{"pending", "delivered", "failed", "send_failed", "sent"} {
+		req := newReq()
+		req.Status = st
+		msg, err := svc.Normalize(context.Background(), &req)
+		if err != nil {
+			t.Errorf("status %s 应被接受: %v", st, err)
+			continue
+		}
+		if msg.Status != st {
+			t.Errorf("status 应原样透传: 期望 %s，实得 %q", st, msg.Status)
+		}
+	}
+}
+
+func TestNormalize_LeavesStatusEmptyWhenUnstated(t *testing.T) {
+	svc, _ := newMessageHubTestService(t)
+	req := newReq()
+	msg, err := svc.Normalize(context.Background(), &req)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if msg.Status != "" {
+		t.Errorf("未声明状态时应留空交给列默认，实得 %q", msg.Status)
+	}
+}
+
+// inflight 只有两条认领 SQL 有权写：调用方自报 inflight 会让该行脱离待办集合、
+// 同时绕开 30s 租约与 20 次重推上界，所以词表外必须拒。
+func TestNormalize_RejectsUnsettableStatus(t *testing.T) {
+	svc, _ := newMessageHubTestService(t)
+	for _, st := range []string{"inflight", "DELIVERED", "delivered ", "unknown"} {
+		req := newReq()
+		req.Status = st
+		_, err := svc.Normalize(context.Background(), &req)
+		if !errors.Is(err, ErrMessageHubInvalidStatus) {
+			t.Errorf("status %q 应被拒（ErrMessageHubInvalidStatus），实得 %v", st, err)
+		}
+	}
+}
+
+// hub 的 HTTP 推送入口不允许调用方自报状态：否则任何外部调用方都能把一行说成已送达。
+func TestPushMessageRequest_StatusNotJSONBoundable(t *testing.T) {
+	var req PushMessageRequest
+	if err := json.Unmarshal([]byte(`{"platform":"telegram","status":"delivered"}`), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if req.Status != "" {
+		t.Errorf("status 不应从请求体绑定，实得 %q", req.Status)
+	}
+}
+
+// 落库侧的两条不变量：声明过的状态原样入列，未声明的仍由列默认落成 pending。
+// 后半条是本次改动的承重墙——若 GORM 把空串写进去，两条认领 SQL 的 status='pending'
+// 就不再命中任何一行，整个下行链路静默停摆。
+func TestPush_StatusLandsAndUnstatedKeepsColumnDefault(t *testing.T) {
+	svc, db := newMessageHubTestService(t)
+	if db == nil {
+		t.Fatal("需要测试库：本用例判的是列默认，跳过等于没测")
+	}
+	for _, tc := range []struct{ name, stated, want string }{
+		{"声明 delivered", "delivered", "delivered"},
+		{"未声明", "", "pending"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := newReq()
+			req.Platform = "douyin"
+			req.Direction = "outbound"
+			req.AccountID = "settlement-acc"
+			req.MsgID = fmt.Sprintf("settle-%d", time.Now().UnixNano())
+			req.Status = tc.stated
+			pushed, err := svc.Push(context.Background(), &req)
+			if err != nil {
+				t.Fatalf("push: %v", err)
+			}
+			var got model.MessageHub
+			if err := db.Where("platform = ? AND msg_id = ? AND conversation_id = ?",
+				pushed.Platform, pushed.MsgID, pushed.ConversationID).First(&got).Error; err != nil {
+				t.Fatalf("读回: %v", err)
+			}
+			if got.Status != tc.want {
+				t.Errorf("落库状态期望 %q，实得 %q", tc.want, got.Status)
+			}
+		})
 	}
 }

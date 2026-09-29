@@ -31,6 +31,7 @@
     "saveSuccess": "Saved successfully",
     "createSuccess": "Created successfully",
     "updateSuccess": "Updated successfully",
+    "username": "Username",
     "language": "Language",
     "hint": "Hint",
     "warning": "Warning",
@@ -329,7 +330,9 @@
     "baCreate": "Neue Aufgabe",
     "baCron": "Zeitpläne",
     "baStatus": "Host-Status",
-    "badCase": "Bad-Case-Warteschlange"
+    "approvalTask": "Aufgabenliste",
+    "badCase": "Bad-Case-Warteschlange",
+    "qqAccount": "Bot-Konto"
   },
   "保存": "Save",
   "提交": "Submit",

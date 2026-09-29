@@ -140,6 +140,7 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 			AccountID:      strconv.FormatUint(uint64(acc.ID), 10),
 			MsgID:          msgID,
 			Direction:      "outbound",
+			Status:         model.BridgeAckStatusDelivered,
 			MsgType:        "text",
 			ReceiverID:     to,
 			Content:        subject + "\n" + content,

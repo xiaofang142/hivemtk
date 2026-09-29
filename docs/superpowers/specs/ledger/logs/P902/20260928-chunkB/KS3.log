@@ -1,0 +1,14 @@
+FAIL	hivemtk-user/internal/aiagent/knowledge/service [build failed]
+FAIL
+# hivemtk-user/internal/aiagent/knowledge/service [hivemtk-user/internal/aiagent/knowledge/service.test]
+internal/aiagent/knowledge/service/rag_searcher_vector.go:34:10: syntax error: unexpected name BY at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:34:27: invalid character U+003F '?'
+internal/aiagent/knowledge/service/rag_searcher_vector.go:35:10: invalid character U+003F '?'
+internal/aiagent/knowledge/service/rag_searcher_vector.go:42:11: syntax error: unexpected name id at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:43:31: invalid character U+003F '?'
+internal/aiagent/knowledge/service/rag_searcher_vector.go:44:9: syntax error: unexpected name knowledge_chunks at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:45:10: syntax error: unexpected name embedding at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:46:10: syntax error: unexpected name embedding_source at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:46:29: more than one character in rune literal
+internal/aiagent/knowledge/service/rag_searcher_vector.go:47:10: syntax error: unexpected name BY at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:47:10: too many errors

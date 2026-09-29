@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"fmt"
+	"strings"
 
 	"hivemtk-user/internal/dto"
 
@@ -13,6 +14,16 @@ import (
 )
 
 func (e *SalesEngine) shouldTransferToHuman(ctx context.Context, intent *dto.RecognizeResult, mem *model.DialogueMemory, req *SalesRequest) (bool, string) {
+	// 客户显式要求人工，必须排在下面那道"分类器够自信就不再往下看"的前置门之前：
+	// 分类器把「转人工」读成别的意图（conf>=0.7）时整条 veto 会被跳过，
+	// 于是降级兜底文案里"回复「转人工」"那句承诺落空 —— 客户照做也只是再等一轮 AI。
+	if req != nil {
+		if content := strings.TrimSpace(req.UserMessage); content != "" &&
+			(MatchTransferKeywords(content) || MatchExplicitKeywords(content)) {
+			return true, "客户显式要求转人工"
+		}
+	}
+
 	if intent == nil {
 		return false, ""
 	}

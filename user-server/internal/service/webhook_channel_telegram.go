@@ -5,6 +5,8 @@ import (
 
 	"fmt"
 
+	"regexp"
+
 	"strconv"
 
 	"strings"
@@ -25,6 +27,13 @@ type tgDispatchExtra struct {
 	Mentioned      bool
 	NewOpportunity bool
 	GateHandled    bool // /start 网关验证已消费，不再触发销售智能体
+	// GateMuted 区分 GateHandled 的两种来源：群门控把发言人挡下（可观测/可归因），
+	// 而私聊 /start 只是流程已消费。二者都置 GateHandled，日志口径不能混。
+	GateMuted bool
+
+	// SpeakerVerified 发言人是启用中的禁言解锁门控群里已验证的成员 ⇒ 他的问话即使
+	// 没 @ 机器人也应交给智能体（社群咨询话术打不进带货词库的意向分阈值）。
+	SpeakerVerified bool
 
 	// 群回复 @mention 原发言人 + reply-to 消息所需
 	FromUsername string // Telegram @username（可能为空）
@@ -33,7 +42,7 @@ type tgDispatchExtra struct {
 	ReplyToMsgID int64  // 原消息 msgID（回复引用，Telegram int64）
 
 	// 触发原因（传递到 AI 上下文 + 回复行为决策）
-	TriggerReason string // "mention" | "opportunity" | "private" | "start" | ""
+	TriggerReason string // "mention" | "opportunity" | "private" | "start" | "verified_member_speech" | ""
 }
 
 const (
@@ -379,12 +388,35 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 	if picked.chatType == "group" || picked.chatType == "supergroup" {
 		accID, _ := strconv.ParseUint(accountID, 10, 64)
 		if accID > 0 && s.tgGate.MemberUnverified(ctx, uint(accID), chatIDStr, senderIDStr) {
+			// 台账里根本没有这个人 = 门控装群之前就在线上的老成员：他的验证入口永远没发过，
+			// 互锁因此是终身的、且原先一声不响。按新人流程就地补发一次（写台账+禁言+群内提示），
+			// 补过之后他就有 pending 行，后续发言不再重复补发。
+			if s.tgGate.MemberLacksLedger(ctx, uint(accID), chatIDStr, senderIDStr) {
+				invited := s.tgGate.HandleNewMembers(ctx, uint(accID), picked.chatID, []telegram.TGUser{{
+					ID:        picked.fromID,
+					FirstName: picked.fromName,
+					Username:  picked.username,
+					IsBot:     picked.fromIsBot,
+				}})
+				logger.Infof("[TG-Gate] 门控群无台账老成员：就地补发验证邀请 account=%s chat=%s sender=%s invited=%v",
+					accountID, chatIDStr, senderIDStr, invited)
+			}
 			return hub, &tgDispatchExtra{
-				Mentioned: false, NewOpportunity: false, GateHandled: true,
+				Mentioned: false, NewOpportunity: false, GateHandled: true, GateMuted: true,
 				FromUsername: picked.username, FromName: picked.fromName, FromUserID: picked.fromID,
 				ReplyToMsgID:  picked.msgID,
 				TriggerReason: "",
 			}, nil
+		}
+	}
+
+	// 已验证发言人：门控群里过了审的人，一句"群主在吗"也是来咨询的。
+	// 必须放在两处互锁判定之后（走到这里说明他没被挡下），且用正面判据而非取反
+	// MemberUnverified —— 后者对"没装门控的群/已退群的人/服务未装配"同样返回 false。
+	speakerVerified := false
+	if picked.chatType == "group" || picked.chatType == "supergroup" {
+		if accID, cerr := strconv.ParseUint(accountID, 10, 64); cerr == nil && accID > 0 {
+			speakerVerified = s.tgGate.MemberVerified(ctx, uint(accID), chatIDStr, senderIDStr)
 		}
 	}
 
@@ -397,19 +429,22 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 		reason = "mention"
 	case newOpportunity:
 		reason = "opportunity"
+	case speakerVerified:
+		reason = tgTriggerReasonVerifiedSpeaker
 	case picked.chatType == "private":
 		reason = "private"
 	}
 
 	return hub, &tgDispatchExtra{
-		Mentioned:      mentioned,
-		NewOpportunity: newOpportunity,
-		GateHandled:    gateHandled,
-		FromUsername:   picked.username,
-		FromName:       picked.fromName,
-		FromUserID:     picked.fromID,
-		ReplyToMsgID:   picked.msgID,
-		TriggerReason:  reason,
+		Mentioned:       mentioned,
+		NewOpportunity:  newOpportunity,
+		GateHandled:     gateHandled,
+		SpeakerVerified: speakerVerified,
+		FromUsername:    picked.username,
+		FromName:        picked.fromName,
+		FromUserID:      picked.fromID,
+		ReplyToMsgID:    picked.msgID,
+		TriggerReason:   reason,
 	}, nil
 }
 
@@ -442,6 +477,101 @@ func (s *WebhookService) getTelegramBotUsername(ctx context.Context, accountID s
 		return ""
 	}
 	return strings.TrimSpace(acc.BotUsername)
+}
+
+// tgCommunityAskRe 社群问话/咨询的最小信号集。带货商机词由 DetectUnifiedIntent 的词库负责
+// （见 tgVerifiedSpeechWorthReply 里的分数下界），这里只补"在问话但没在采购"那一类。
+// 集合里刻意不列"什么/想/要/谢谢/老师"：前三个在纯问候句里高频出现（"我是做什么的"
+// "认识一下大家，请多指教"），后两个是礼貌用语，放进放行集等于把闲聊全放回来。
+// "嘛"与"吗"同音、社群口语里同样收尾表疑问（"你不是在测试机器人都嘛"），漏了它＝把真问话当闲聊。
+var tgCommunityAskRe = regexp.MustCompile(`(?:吗|嘛|怎样|怎么|如何|多少|几个|哪些|哪里|哪儿|为什么|为啥|能否|能不能|可不可以|是不是|有没有|是否|请问|麻烦|求|支持|？|\?|[Ww]ho|[Ww]hat|[Ww]hen|[Ww]here|[Ww]hich|[Ww]hy|[Hh]ow|[Mm]uch|[Pp]rice|[Cc]ost|[Cc]ontact|[Ss]upport)`)
+
+// tgVerifiedSpeechWorthReply 已验证成员的不 @ 发言值不值得占一次 AI 回复。
+//
+// 上一轮为救"群里问话没人回"，这条路开成了"过了审的成员说话就进 AI"，代价是图片、
+// 表情、成员之间的自我介绍与寒暄也各触发一次 AI 回复（现证：09-28 当天群里两张图片、
+// "各位都是哪里的啊"这类成员互聊各换来一条回复）。这里把内容判据加回来，三道各挡一类，
+// 每道都有能杀掉它的用例（少一道判据就少一面牙）：
+//  1. 只认 text ⇒ 带说明文字的图片/文件（正文是问话也不回，AI 看不到图，回了是答非所问）；
+//  2. 含字母/数字 ⇒ 空正文、纯标点、纯表情（判据本身就把空串挡下，不另设判空）；
+//  3. 像问话（tgCommunityAskRe）或命中商机词库（分数高于起点 = 至少命中一词）⇒ 挡掉
+//     "大家好""收到""Quinn"这类成员之间的应答。
+//
+// @机器人 与"新商机"走各自分支、不经本函数 ⇒ 真问话不会因为词库没命中而丢掉。
+func tgVerifiedSpeechWorthReply(msgType, content string) bool {
+	if msgType != "text" {
+		return false
+	}
+	t := strings.TrimSpace(content)
+	if !unifiedMeaningfulRe.MatchString(t) {
+		return false
+	}
+	if tgCommunityAskRe.MatchString(t) {
+		return true
+	}
+	score, _, _ := DetectUnifiedIntent(t, nil, nil)
+	return score > unifiedIntentBaseScore
+}
+
+// telegramGroupTriggerDecision Telegram 群消息是否触发销售 AI，以及判定的原因文本。
+// 原先 handleJob 里的 switch 只有两条 case、既无 default 也无日志 ⇒ 群里"发了没人回"
+// 在日志里查不到任何痕迹。outreachAllowed 必须由调用方在 newOpp 为真时才计算
+// （它会占一个 30 分钟的 Redis SetNX 槽）。
+//
+// speakerVerified 排在 cooldown 之前：那把冷却锁的是"主动触达"，不该顺手把
+// 已验证成员在群里的问话也一起挡掉。
+//
+// msgType/content 只用于给"已验证成员"这条无门槛通路加内容判据；不参与别的分支。
+func telegramGroupTriggerDecision(mentioned, newOpp, outreachAllowed, speakerVerified bool, msgType, content string) (bool, string) {
+	switch {
+	case mentioned:
+		return true, tgTriggerReasonMention
+	case newOpp && outreachAllowed:
+		return true, tgTriggerReasonOpportunity
+	case speakerVerified:
+		// 单独一条 not-worth 的 reason：否则日志里会把"内容被判为不值得回"和
+		// "根本没过了审"混成同一句 no_mention_no_opportunity，排查时分不开。
+		if tgVerifiedSpeechWorthReply(msgType, content) {
+			return true, tgTriggerReasonVerifiedSpeaker
+		}
+		return false, tgTriggerReasonSpeechNoAsk
+	case newOpp:
+		return false, tgTriggerReasonOpportunityCooldown
+	default:
+		return false, tgTriggerReasonNoTrigger
+	}
+}
+
+const (
+	tgTriggerReasonMention             = "mention"
+	tgTriggerReasonOpportunity         = "opportunity"
+	tgTriggerReasonOpportunityCooldown = "opportunity_outreach_cooldown"
+	tgTriggerReasonVerifiedSpeaker     = "verified_member_speech"
+	// tgTriggerReasonSpeechNoAsk 过了审、但正文不像在问话（图片/表情/命令/纯寒暄）。
+	// 取值刻意不含 "member_speech" 子串：日志按 reason 名计数时两条判据要能分开。
+	tgTriggerReasonSpeechNoAsk = "speech_not_question"
+	tgTriggerReasonNoTrigger   = "no_mention_no_opportunity"
+)
+
+// tgGroupShouldTriggerAI 判定并出声：群消息到底为什么不触发 AI。
+//
+// outreachAllowed 是惰性的，只有判定到"新商机"才被调用 —— 它会占一个 30 分钟的
+// Redis SetNX 槽（tgLeadOutreachCooldown），普通闲聊也调一次就等于替该发言人
+// 随后半小时的真商机触达预先点火。已验证成员的问话同样不去抢它（抢了也不影响放行）。
+//
+// 日志不打消息正文：正文可含换行，一条发言就能把日志劈成两行伪造出别的事件。
+func tgGroupShouldTriggerAI(mentioned, newOpp, speakerVerified bool, outreachAllowed func() bool, eventID, chatID, sender, msgType, content string) bool {
+	allowed := false
+	if newOpp {
+		allowed = outreachAllowed()
+	}
+	fire, reason := telegramGroupTriggerDecision(mentioned, newOpp, allowed, speakerVerified, msgType, content)
+	if fire {
+		logger.Infof("[Webhook] TG 群消息触发 AI reason=%s event=%s chat=%s sender=%s", reason, eventID, chatID, sender)
+		return true
+	}
+	logger.Infof("[Webhook] TG 群消息未触发 AI reason=%s event=%s chat=%s sender=%s", reason, eventID, chatID, sender)
+	return false
 }
 
 func isTelegramBotMentioned(text, botUsername string) bool {

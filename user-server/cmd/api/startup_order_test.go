@@ -123,6 +123,43 @@ func TestInstallStatusInitOutsidePlatformGuard(t *testing.T) {
 	}
 }
 
+// TestTelegramPollingStoppedOnShutdown Telegram polling 必须登记进优雅关停。
+//
+// 不登记的话故障形态是"重启后 Telegram 一条都不进、再重启一次才恢复"：polling 用
+// DB 行锁（telegram_accounts.polling_owner + 60s 心跳陈旧窗口）保证同一个 bot 只有一台在
+// getUpdates。进程被 SIGTERM 带走时协程直接消失，锁仍写着这个已死进程；新实例若在
+// 那 60s 窗口内启动，TryAcquirePollingLock 判不过，日志只留一行"锁被其他实例持有"
+// 就整轮不起 polling —— 编译与其余用例全都看不出来。
+//
+// 三条判据各拦一种漏法：
+//   - 整行消失 / 出现两次（多装一台会在关停时互相等 done）；
+//   - 装了但不在 defer 上（serveHTTP 返回后直接退出，语句根本不执行）；
+//   - 登记点排在持久层 Close 之前 ⇒ LIFO 下它后执行，释放语句已经进不了库。
+func TestTelegramPollingStoppedOnShutdown(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("读取 main.go: %v", err)
+	}
+	s := string(src)
+
+	const call = "service.StopAllTelegramPolling()"
+	if n := strings.Count(s, call); n != 1 {
+		t.Fatalf("main.go 里 service.StopAllTelegramPolling() 出现 %d 次，期望 1 次", n)
+	}
+	if !strings.Contains(s, "defer "+call) {
+		t.Errorf("StopAllTelegramPolling 不在 defer 上：优雅关停时不会被执行，锁留在已死进程名下")
+	}
+	stop := strings.Index(s, call)
+	closePersistence := strings.Index(s, "app.CloseToolAuditPersistence()")
+	if closePersistence < 0 {
+		t.Fatal("main.go 里已找不到 app.CloseToolAuditPersistence()，先后判据失去参照物")
+	}
+	if stop < closePersistence {
+		t.Errorf("polling 停止(偏移 %d)登记在持久层 Close(偏移 %d)之前 ⇒ LIFO 下它后执行，"+
+			"释放锁的 UPDATE 撞上已关闭的持久层", stop, closePersistence)
+	}
+}
+
 // TestCollectionJobMountedAfterRouterSetup 催收腿必须装进启动路径，而且必须排在
 // router.Setup **之后**。
 //

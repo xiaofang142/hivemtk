@@ -1,0 +1,4 @@
+FAIL	hivemtk-user/internal/model [build failed]
+FAIL
+# hivemtk-user/internal/model [hivemtk-user/internal/model.test]
+internal/model/bad_case.go:106:25: syntax error: unexpected = in grouped declaration; possibly missing semicolon or newline or )

@@ -1,0 +1,18 @@
+=== RUN   TestBadCase_StatusesAreClosed
+--- PASS: TestBadCase_StatusesAreClosed (0.00s)
+=== RUN   TestBadCase_Transitions
+--- PASS: TestBadCase_Transitions (0.00s)
+=== RUN   TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable
+--- PASS: TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable (0.00s)
+=== RUN   TestBadCase_SourcesAreClosed
+--- PASS: TestBadCase_SourcesAreClosed (0.00s)
+=== RUN   TestBadCaseDedupKey
+    bad_case_test.go:136: 自动来源的键形态不对："sess_1|msg_1" ok=true
+    bad_case_test.go:142: 两个来源共用了同一条幂等键
+    bad_case_test.go:155: 手动来源允许空 message_id，得到 "sess_1|" ok=true
+--- FAIL: TestBadCaseDedupKey (0.00s)
+=== RUN   TestBadCase_TableName
+--- PASS: TestBadCase_TableName (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.385s
+FAIL

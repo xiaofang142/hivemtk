@@ -133,7 +133,10 @@ func corsMiddleware() gin.HandlerFunc {
 			c.Header("Vary", "Origin")
 		}
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control")
+		// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），
+		// 而浏览器对自定义头要先过预检——这里没列出它，跨源网页调用方就会在预检阶段被拦，
+		// 拿到的报错与"凭证不对"长得完全不同，很容易被当成服务端故障。
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token")
 		c.Header("Access-Control-Expose-Headers", "Last-Event-ID,X-Trace-Id")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -236,6 +239,14 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 编排器按全局服务决定挂不挂"这一轮低质 → 留一条痕"的标记器，不装配时
 	// 下面那组 /api/bad-cases/* 全部回 503，且回答路径与本卡之前逐字一致。
 	app.InitBadCaseRuntime(gormDB)
+
+	// 知识库变更底座（T-P9-02）：同一位置约束（在编排器与路由之前），但**多一条**顺序要求 ——
+	// 它必须排在 InitApprovalRuntime 之后，装配点优先复用全局审批服务（裁决入口在
+	// /api/approvals/*）；那把旗子是 off 时就地构造一份只用于入队/读结论的，并出声
+	// "没人能在 HTTP 上批准这一条"（见 app/kb_release_wiring.go 文件头）。
+	// 本竖不加装配旗子：闸门已经是两道（FF_LTC_KB_CHANGE_GATE × 逐库 governed），
+	// 而变更行在发布之前一行都不进 knowledge_chunks ⇒ 装上不等于线上有变化。
+	app.InitKBReleaseRuntime(gormDB)
 
 	// 商机底座（T-P4-04）：同一位置约束（在编排器与路由之前）。本竖没有旗子，也不产生协程 ——
 	// 不装配就是 /api/opportunity/* 全部回 503，不会回一个空列表骗人。
@@ -404,6 +415,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 唯一出口。与上一行同一位置约束（身份取自令牌），且必须在
 		// app.InitApprovalRuntime 之后 —— 它决定这里是全局实例还是"回 503 的空壳"。
 		setupApprovalRoutes(auth)
+
+		// 知识库变更与发布 /api/kb-changes/* + /api/kb-releases/*（T-P9-02）：与上一行同一
+		// 位置约束（六个写入口的操作者身份取自令牌），且必须在 app.InitKBReleaseRuntime 之后。
+		setupKBReleaseRoutes(auth)
 
 		// 商机 /api/opportunity/*（T-P4-04）：与上一行同一位置约束（写入口的操作者身份
 		// 取自令牌，虽然本卡还不记 actor —— 那件事归哪张表还没拍板）。

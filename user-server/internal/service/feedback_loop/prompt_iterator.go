@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	textutil "hivemtk-user/internal/pkg/utils/text"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -156,7 +157,7 @@ func (p *PromptIterator) generateCandidates(ctx context.Context, current model.P
 	}
 	jsonStr := extractJSON(content)
 	if jsonStr == "" {
-		return nil, fmt.Errorf("no JSON content in LLM response: %s", content)
+		return nil, fmt.Errorf("no JSON content in LLM response: %s", textutil.Truncate(content, 200))
 	}
 	var raw []struct {
 		Title              string `json:"title"`

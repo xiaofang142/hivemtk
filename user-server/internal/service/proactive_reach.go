@@ -734,7 +734,7 @@ func (l *defaultAccountLookup) FindActiveAccount(ctx context.Context, channel st
 	if l.repo == nil {
 		return "", errors.New("db not available")
 	}
-	return l.repo.FindActiveAccountID(ctx, channel)
+	return l.repo.FindActiveAccountID(ctx, channel, int(BridgeOnlineGraceWindow(ctx).Seconds()))
 }
 
 // BindProactiveReachSenders 把 Reach Sender 注册到 ProactiveReachService

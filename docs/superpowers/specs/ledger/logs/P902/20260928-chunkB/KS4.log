@@ -1,0 +1,7 @@
+FAIL	hivemtk-user/internal/aiagent/knowledge/service [build failed]
+FAIL
+# hivemtk-user/internal/aiagent/knowledge/service [hivemtk-user/internal/aiagent/knowledge/service.test]
+internal/aiagent/knowledge/service/rag_searcher_vector.go:47:10: syntax error: unexpected name BY at end of statement
+internal/aiagent/knowledge/service/rag_searcher_vector.go:47:27: invalid character U+003F '?'
+internal/aiagent/knowledge/service/rag_searcher_vector.go:48:10: invalid character U+003F '?'
+internal/aiagent/knowledge/service/rag_searcher_vector.go:49:3: string not terminated

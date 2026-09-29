@@ -151,10 +151,12 @@ func (r *BridgeAccountRepository) TouchLastSync(ctx context.Context, channel, ac
 // OnlineGraceWindow status 为 online 时，last_sync_at 距今多久内仍算在线。
 // 必须大于 SSE 心跳间隔——心跳是在线位的唯一续期来源，小于它会让活着的流按心跳周期闪烁成离线
 // （由 TestHeartbeatCadenceWithinOnlineGraceWindow 钉住默认值）。
-const OnlineGraceWindow = 30 * time.Second
+// 值取自 service 包的同名常量：那一层还有渠道总览与主动触达两个读侧要判在线，
+// 两处各写一份秒数就会量出两个不同的"在线数"。
+const OnlineGraceWindow = service.BridgeOnlineGraceDefault
 
 func runtimeOnlineGraceWindow(ctx context.Context) time.Duration {
-	return service.GlobalConfigParam().GetDuration(ctx, "bridge", "online_grace_window", OnlineGraceWindow)
+	return service.BridgeOnlineGraceWindow(ctx)
 }
 
 func isOnlineByLastSync(ctx context.Context, lastSyncAt *time.Time, status string, now time.Time) bool {

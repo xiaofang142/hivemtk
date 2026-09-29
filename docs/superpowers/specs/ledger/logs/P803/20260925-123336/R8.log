@@ -1,0 +1,41 @@
+2026-09-25T12:34:16+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBadCaseRepo_NilHandle
+--- PASS: TestBadCaseRepo_NilHandle (0.00s)
+=== RUN   TestBadCaseRepo_InsertAndReadBack
+--- PASS: TestBadCaseRepo_InsertAndReadBack (0.22s)
+=== RUN   TestBadCaseRepo_DedupIsReal
+--- PASS: TestBadCaseRepo_DedupIsReal (0.09s)
+=== RUN   TestBadCaseRepo_ConflictIdentityIsExact
+--- PASS: TestBadCaseRepo_ConflictIdentityIsExact (0.07s)
+=== RUN   TestBadCaseRepo_ApplyActionWriteWhitelist
+--- PASS: TestBadCaseRepo_ApplyActionWriteWhitelist (0.06s)
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/pending_上按_pending_→_生效
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已判完的行按_pending_→_不生效
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已导出的行按_labeled_→_不生效
+=== RUN   TestBadCaseRepo_ApplyActionExpectsStatus/已放弃的行按_pending_→_不生效
+--- PASS: TestBadCaseRepo_ApplyActionExpectsStatus (0.09s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/pending_上按_pending_→_生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已判完的行按_pending_→_不生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已导出的行按_labeled_→_不生效 (0.01s)
+    --- PASS: TestBadCaseRepo_ApplyActionExpectsStatus/已放弃的行按_pending_→_不生效 (0.01s)
+=== RUN   TestBadCaseRepo_ApplyActionFnErrorRollsBack
+--- PASS: TestBadCaseRepo_ApplyActionFnErrorRollsBack (0.05s)
+=== RUN   TestBadCaseRepo_ApplyActionHoldsRowLockWhileFnRuns
+--- PASS: TestBadCaseRepo_ApplyActionHoldsRowLockWhileFnRuns (0.39s)
+=== RUN   TestBadCaseRepo_ListFilters
+--- PASS: TestBadCaseRepo_ListFilters (0.17s)
+=== RUN   TestBadCaseRepo_ClampsAreExact
+--- PASS: TestBadCaseRepo_ClampsAreExact (0.25s)
+=== RUN   TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent
+--- PASS: TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent (0.07s)
+=== RUN   TestBadCaseRepo_CountByFixLayer
+--- PASS: TestBadCaseRepo_CountByFixLayer (0.09s)
+=== RUN   TestBadCaseRepo_ClaimForExport
+    bad_case_test.go:920: 第二次导出失败：bad_case repository: 导出取走 3 行却只盖上 1 行，整笔回滚
+--- FAIL: TestBadCaseRepo_ClaimForExport (0.06s)
+=== RUN   TestBadCaseRepo_ClaimForExportIsDisjointUnderConcurrency
+--- PASS: TestBadCaseRepo_ClaimForExportIsDisjointUnderConcurrency (0.10s)
+FAIL
+FAIL	hivemtk-user/internal/repository	2.198s
+FAIL

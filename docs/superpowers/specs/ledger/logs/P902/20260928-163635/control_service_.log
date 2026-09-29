@@ -1,0 +1,12 @@
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+internal/service/telegram_gate.go:179:34: too many arguments in call to tgGateDefaultWelcome
+	have (string)
+	want ()
+internal/service/telegram_gate.go:255:35: too many arguments in call to tgGateDefaultWelcome
+	have (string)
+	want ()
+internal/service/telegram_gate.go:666:35: too many arguments in call to tgGateDefaultWelcome
+	have (string)
+	want ()

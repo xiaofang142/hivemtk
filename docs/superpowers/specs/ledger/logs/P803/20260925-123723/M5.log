@@ -1,0 +1,18 @@
+=== RUN   TestBadCase_StatusesAreClosed
+--- PASS: TestBadCase_StatusesAreClosed (0.00s)
+=== RUN   TestBadCase_Transitions
+--- PASS: TestBadCase_Transitions (0.00s)
+=== RUN   TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable
+--- PASS: TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable (0.00s)
+=== RUN   TestBadCase_SourcesAreClosed
+--- PASS: TestBadCase_SourcesAreClosed (0.00s)
+=== RUN   TestBadCaseDedupKey
+    bad_case_test.go:147: 自动来源缺 message_id 必须判不可用
+    bad_case_test.go:150: 全空格的 message_id 等同缺失，不许生成键
+    bad_case_test.go:155: 手动来源允许空 message_id，得到 "" ok=false
+--- FAIL: TestBadCaseDedupKey (0.00s)
+=== RUN   TestBadCase_TableName
+--- PASS: TestBadCase_TableName (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.360s
+FAIL

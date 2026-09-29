@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/aiagent/llm"
 	ragcache "hivemtk-user/internal/aiagent/rag/cache"
 	"hivemtk-user/internal/dto"
@@ -219,9 +220,15 @@ type HandleResult struct {
 	Confidence     float64           `json:"confidence"`
 	Transferred    bool              `json:"transferred"`
 	TransferReason string            `json:"transfer_reason,omitempty"`
-	Cards          []model.RichCard  `json:"cards,omitempty"`
-	SuggestionID   uint              `json:"suggestion_id,omitempty"`
-	SalesResponse  *SalesResponse    `json:"sales_response,omitempty"`
+	// TransferNotice 是转人工那轮**该发给客户**的一句公告，只在"本轮把会话从 AI 手里
+	// 接走"时非空。它刻意与 Reply 分开：Reply 会被算进 AI 应答量、进坏例评测、
+	// 被当成"模型答的那句"，而转接公告不是答案，转人工那轮也不该记成 AI 答过。
+	// IM/桥接渠道由 WebhookService 把它投递出站；Web 访客有自己的 websocket 转接提示，
+	// 所以这个字段留空即可，两处各发一遍会变成刷屏。
+	TransferNotice string           `json:"transfer_notice,omitempty"`
+	Cards          []model.RichCard `json:"cards,omitempty"`
+	SuggestionID   uint             `json:"suggestion_id,omitempty"`
+	SalesResponse  *SalesResponse   `json:"sales_response,omitempty"`
 }
 
 // HandleIncoming 处理入站消息（智能体主入口，默认配置）
@@ -294,7 +301,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		result.HandlerType = model.HandlerTypeHuman
 		result.Transferred = true
 		result.TransferReason = fmt.Sprintf("AI 连续回复已达上限 (%d 次)，转人工跟进", o.maxAIConsecutive)
-		utils.WarnErrKV("smartcs.transferToHuman.upperLimit", o.transferToHuman(ctx, session, result.TransferReason), "session_id", session.SessionID, "agent_id", strconv.FormatUint(uint64(session.AgentID), 10))
+		utils.WarnErrKV("smartcs.transferToHuman.upperLimit", o.transferToHuman(ctx, session, result.TransferReason, result), "session_id", session.SessionID, "agent_id", strconv.FormatUint(uint64(session.AgentID), 10))
 		return result, nil
 	}
 
@@ -305,7 +312,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 			result.HandlerType = model.HandlerTypeHuman
 			result.Transferred = true
 			result.TransferReason = emoStrat.TransferReason
-			utils.WarnErrKV("smartcs.transferToHuman.emotion", o.transferToHuman(ctx, session, result.TransferReason), "session_id", session.SessionID, "reason", emoStrat.TransferReason)
+			utils.WarnErrKV("smartcs.transferToHuman.emotion", o.transferToHuman(ctx, session, result.TransferReason, result), "session_id", session.SessionID, "reason", emoStrat.TransferReason)
 			return result, nil
 		}
 		emotionHint = emoStrat.ReplyHint
@@ -315,7 +322,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		result.HandlerType = model.HandlerTypeHuman
 		result.Transferred = true
 		result.TransferReason = "AI 引擎未就绪，转人工"
-		_ = o.transferToHuman(ctx, session, result.TransferReason)
+		_ = o.transferToHuman(ctx, session, result.TransferReason, result)
 		return result, nil
 	}
 
@@ -395,7 +402,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 			result.HandlerType = model.HandlerTypeHuman
 			result.Transferred = true
 			result.TransferReason = "AI 引擎处理失败，降级链 Level 3 兜底转人工"
-			_ = o.transferToHuman(ctx, session, result.TransferReason)
+			_ = o.transferToHuman(ctx, session, result.TransferReason, result)
 			return result, nil
 		}
 	}
@@ -435,7 +442,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		} else {
 			result.TransferReason = fmt.Sprintf("AI 置信度不足 (%.2f < %.2f)", result.Confidence, threshold)
 		}
-		utils.WarnErrKV("smartcs.transferToHuman.lowConfidence", o.transferToHuman(ctx, session, result.TransferReason), "session_id", session.SessionID, "confidence", strconv.FormatFloat(result.Confidence, 'f', 4, 64), "threshold", strconv.FormatFloat(threshold, 'f', 4, 64))
+		utils.WarnErrKV("smartcs.transferToHuman.lowConfidence", o.transferToHuman(ctx, session, result.TransferReason, result), "session_id", session.SessionID, "confidence", strconv.FormatFloat(result.Confidence, 'f', 4, 64), "threshold", strconv.FormatFloat(threshold, 'f', 4, 64))
 		return result, nil
 	}
 
@@ -940,7 +947,34 @@ func (o *SmartCSOrchestrator) markSuggestionUsed(ctx context.Context, id uint) e
 	return o.suggestionRepo.MarkAsUsed(ctx, id, 0)
 }
 
-func (o *SmartCSOrchestrator) transferToHuman(ctx context.Context, session *model.CustomerSession, reason string) error {
+// handoffNoticeFor 按"有没有真把某个坐席叫上来"挑一句客户可见的转接公告。
+func handoffNoticeFor(assigned bool) string {
+	if assigned {
+		return agent_runtime.HandoffCustomerNotice
+	}
+	return agent_runtime.HandoffQueueNotice
+}
+
+// transferToHuman 把会话交给人工；本轮真的从 AI 手里接走时，给 result 挂上一句客户
+// 可见的公告（result 传 nil 的调用方——后台补投待办那一类——不需要公告）。
+//
+// 公告在函数内决定、且必须在改写 session.HandlerType 之前取"接走前是谁"，两点都是硬约束：
+//   - 调用方拿到 session 时 handler 已经是人，事后再问就永远得到"本来就在人工手里"，
+//     一句公告也发不出去；
+//   - 已经在人工手里的会话不重复播报，否则客户等待期连发三条消息就是三条公告，
+//     人工等待变成刷屏。
+//
+// 措辞分档靠 autoAssignToAgent 的返回值：它只在真选中在线坐席时返回 nil
+// （查不到在线坐席返回「无在线客服」），所以那个 err 就是"人到底来没来"的凭据。
+// 承诺落在会话状态本身（waiting + human + 队列里这一条），不落在待办行 ——
+// 待办投递失败只记 Error 由人工补投，会话此刻确实已经算转过去了。
+func (o *SmartCSOrchestrator) transferToHuman(
+	ctx context.Context,
+	session *model.CustomerSession,
+	reason string,
+	result *HandleResult,
+) error {
+	newlyHandoff := session.HandlerType != model.HandlerTypeHuman
 	session.Status = model.SessionStatusWaiting
 	session.HandlerType = model.HandlerTypeHuman
 	session.LastMessage = reason
@@ -970,10 +1004,16 @@ func (o *SmartCSOrchestrator) transferToHuman(ctx context.Context, session *mode
 		logger.Ctx(ctx).Error().Err(err).Msg("[transferToHuman] create system message failed")
 	}
 
+	assigned := false
 	if o.assignmentSvc != nil {
 		if err := o.assignmentSvc.autoAssignToAgent(ctx, session, reason); err != nil {
 			logger.Ctx(ctx).Error().Err(err).Msg("[transferToHuman] autoAssignToAgent failed")
+		} else {
+			assigned = true
 		}
+	}
+	if newlyHandoff && result != nil {
+		result.TransferNotice = handoffNoticeFor(assigned)
 	}
 
 	// 统一待办投递（T-P3-03 AC②）。三点口径：

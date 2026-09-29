@@ -1,0 +1,117 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-ghzc0yrw
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P902/20260928-160651
+取证基线：HEAD=d738f738 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 16:06  up 5 days,  5:55, 2 users, load averages: 116.53 45.72 26.69 日志 tag=20260928-160651
+覆盖 77 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  3f90c51f9d6ebad665c4f42f7ca4118d  user-server/internal/aiagent/knowledge/controller/knowledge_merchant.go
+  87b904a8d78c14eee64a17acc20e6281  user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go
+  190c8c0cdd44203b45f84a6f7fa93abc  user-server/internal/aiagent/knowledge/service/rag_searcher.go
+  133269c6653d33f7b379c115f58de3d3  user-server/internal/aiagent/knowledge/service/rag_searcher_bm25.go
+  47eac23620ef61c682c123d18d8d83ef  user-server/internal/aiagent/knowledge/service/rag_searcher_vector.go
+  9ce13662bb7a8e59ea6fa6a3367e7eaa  user-server/internal/aiagent/rag/retrieval/hybrid_searcher.go
+  0a1976deca8866b70ec65f5f5499e17d  user-server/internal/aiagent/rag/retrieval/lexical_retriever.go
+  bb66b668fbf925eb68baf65bf6bf6f37  user-server/internal/aiagent/rag/retrieval/vector_retriever.go
+  74a322de23a08202fcbd4efd046df76c  user-server/internal/app/kb_release_wiring.go
+  a1e64ccd7c3433d6bbd5c97993e1d51b  user-server/internal/controller/kb_release.go
+  f213d1f505bd940c334ef54350e56b2f  user-server/internal/model/kb_release.go
+  1f6615f0bb1d55fddf033c955c99d589  user-server/internal/pkg/kbrelease/kbrelease.go
+  dbdb9586968768fc736d853ba2ed6fde  user-server/internal/repository/kb_release.go
+  fc9bf9bc68e51198d980398480ec7553  user-server/internal/router/kb_release_routes.go
+  fafa2dcde6ebcd5bfcfbf342334fad1a  user-server/internal/router/router.go
+  87366b222eea4f6c938e11c9c397f4bf  user-server/internal/service/kb_release.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=19 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=22 skip=0 红名=—
+[控制组 ./internal/controller/] rc=0 settled=32 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/pkg/kbrelease/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/repository/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/service/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/controller/] rc=0 settled=1 skip=0 红名=—
+[控制组 ./internal/aiagent/rag/retrieval/] rc=0 settled=3 skip=0 红名=—
+M2    状态值域少一项（withdrawn 从契约里消失）                        杀掉                             红=TestKBChangeModel_StatusValueDomain,TestKBChangeModel_TransitionTableCoversStatuses settled=6/6
+LF1   shadow 这个档位名失联（观察期变成真拦）                          BROKEN=红因而非预期：红名对了但没有任何一行同时含 'ShadowsOrOn=%t' 红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn,TestKbRelease_parseMode settled=14/14
+      红因: kbrelease_test.go:57: parseMode("watch")="off"，期望 "shadow"
+      红因: kbrelease_test.go:57: parseMode("report")="off"，期望 "shadow"
+      红因: kbrelease_test.go:57: parseMode("shadow")="off"，期望 "shadow"
+      红因: kbrelease_test.go:57: parseMode("Observe")="off"，期望 "shadow"
+      红因: kbrelease_test.go:57: parseMode("log")="off"，期望 "shadow"
+      红因: kbrelease_test.go:128: FF_LTC_KB_CHANGE_GATE="shadow" 时 ShadowsOrOn=false，期望 true
+      红因: kbrelease_test.go:152: shadow 档 ShadowsOrOn 必须为真
+LF2   on 不再等于开闸（显式写 on 的人拿不到拦截）                        BROKEN=红集合不符：期望=['TestKbRelease_PredicateShape', 'TestKbRelease_parseMode'] 实际=['TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateShape', 'TestKbRelease_ShadowsOrOn', 'TestKbRelease_UnknownValueWarns', 'TestKbRelease_WhereVisible', 'TestKbRelease_parseMode'] 红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateShape,TestKbRelease_ShadowsOrOn,TestKbRelease_UnknownValueWarns,TestKbRelease_WhereVisible,TestKbRelease_parseMode settled=14/14
+      红因: kbrelease_test.go:57: parseMode("on")="off"，期望 "on"
+      红因: kbrelease_test.go:99: 谓词应以 NOT EXISTS ( 起头，实得 ""
+      红因: kbrelease_test.go:110: 谓词缺少片段 "kb_releases kr"：
+      红因: kbrelease_test.go:110: 谓词缺少片段 "kr.product_id = knowledge_chunks.product_id"：
+      红因: kbrelease_test.go:110: 谓词缺少片段 "kr.governed"：
+      红因: kbrelease_test.go:110: 谓词缺少片段 "knowledge_chunks.kb_version > kr.effective_version"：
+      红因: kbrelease_test.go:110: 谓词缺少片段 "knowledge_chunks.retired_version > 0"：
+      红因: kbrelease_test.go:110: 谓词缺少片段 "retired_version <= kr.effective_version"：
+LF3   布尔式真值直接拿到 on（按习惯写 =true 就改了生产召回）                 BROKEN=红集合不符：期望=['TestKbRelease_FalseyBooleansStayOff', 'TestKbRelease_parseMode'] 实际=['TestKbRelease_PredicateEmptyUnlessOn', 'TestKbRelease_parseMode'] 红=TestKbRelease_PredicateEmptyUnlessOn,TestKbRelease_parseMode settled=14/14
+      红因: kbrelease_test.go:57: parseMode("true")="on"，期望 "shadow"
+      红因: kbrelease_test.go:57: parseMode("1")="on"，期望 "shadow"
+      红因: kbrelease_test.go:76: FF_LTC_KB_CHANGE_GATE="true" 时谓词必须为空，实得 "NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_versi
+      红因: kbrelease_test.go:79: FF_LTC_KB_CHANGE_GATE="true" 时拼接片段必须为空串（非空才追加），实得 " AND NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.
+      红因: kbrelease_test.go:82: FF_LTC_KB_CHANGE_GATE="true" 时 GateOn 必须为假
+      红因: kbrelease_test.go:76: FF_LTC_KB_CHANGE_GATE="1" 时谓词必须为空，实得 "NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\
+      红因: kbrelease_test.go:79: FF_LTC_KB_CHANGE_GATE="1" 时拼接片段必须为空串（非空才追加），实得 " AND NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.eff
+      红因: kbrelease_test.go:82: FF_LTC_KB_CHANGE_GATE="1" 时 GateOn 必须为假
+LF4   认不出的值保守回 off 这条失效（拼错就开闸）                         BROKEN=红集合不符：期望=['TestKbRelease_UnknownValueWarns'] 实际=['TestKbRelease_UnknownValueWarns', 'TestKbRelease_parseMode'] 红=TestKbRelease_UnknownValueWarns,TestKbRelease_parseMode settled=14/14
+      红因: kbrelease_test.go:57: parseMode("banana")="shadow"，期望 "off"
+      红因: kbrelease_test.go:57: parseMode("on shadow")="shadow"，期望 "off"
+      红因: kbrelease_test.go:335: 拼错的值 "banana" 应保守回 off，实得 "shadow"
+      红因: kbrelease_test.go:335: 拼错的值 "on shadow" 应保守回 off，实得 "shadow"
+LF5   认不出的值不再出声（运维以为闸门开着）                              杀掉                             红=TestKbRelease_UnknownValueWarns settled=14/14
+LF6   可见性判据少了 NOT（把该显示的当隐藏）                            BROKEN=红集合不符：期望=['TestKbRelease_PredicateShape'] 实际=['TestKbRelease_PredicateShape', 'TestKbRelease_WhereVisible'] 红=TestKbRelease_PredicateShape,TestKbRelease_WhereVisible settled=14/14
+      红因: kbrelease_test.go:99: 谓词应以 NOT EXISTS ( 起头，实得 "EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\n\t       OR (kno
+      红因: kbrelease_test.go:114: AndVisible 应自带前导 AND，实得 " AND EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\n\t       O
+      红因: kbrelease_test.go:185: 闸门开着时 SQL 里必须出现可见性判据：SELECT * FROM `knowledge_chunks` WHERE product_id = "p1" AND (EXISTS (
+LF7   闸门对所有库生效（丢了 governed 半边）                         杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF8   退役半边失效（被下线的仍可见）                                  杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF9   AndVisible 不带前导 AND（拼进 SQL 就是语法错）                杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF10  AndVisible 在关闸时返回非空（空串塞进 SQL 尾巴）                 杀掉                             红=TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+LF11  GateOn 判据变松（shadow 档也拦人）                         BROKEN=红集合不符：期望=['TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateEmptyUnlessOn'] 实际=['TestKbRelease_DirectWriteBlockedOffEvenWithRow', 'TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateEmptyUnlessOn'] 红=TestKbRelease_DirectWriteBlockedOffEvenWithRow,TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+      红因: kbrelease_test.go:76: FF_LTC_KB_CHANGE_GATE="shadow" 时谓词必须为空，实得 "NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_ver
+      红因: kbrelease_test.go:79: FF_LTC_KB_CHANGE_GATE="shadow" 时拼接片段必须为空串（非空才追加），实得 " AND NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > k
+      红因: kbrelease_test.go:82: FF_LTC_KB_CHANGE_GATE="shadow" 时 GateOn 必须为假
+      红因: kbrelease_test.go:76: FF_LTC_KB_CHANGE_GATE="true" 时谓词必须为空，实得 "NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_versi
+      红因: kbrelease_test.go:79: FF_LTC_KB_CHANGE_GATE="true" 时拼接片段必须为空串（非空才追加），实得 " AND NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.
+      红因: kbrelease_test.go:82: FF_LTC_KB_CHANGE_GATE="true" 时 GateOn 必须为假
+      红因: kbrelease_test.go:76: FF_LTC_KB_CHANGE_GATE="1" 时谓词必须为空，实得 "NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\
+      红因: kbrelease_test.go:79: FF_LTC_KB_CHANGE_GATE="1" 时拼接片段必须为空串（非空才追加），实得 " AND NOT EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.eff
+LF12  ShadowsOrOn 漏掉 shadow（影子期不打版本戳）                  BROKEN=红因而非预期：红名对了但没有任何一行同时含 'ShadowsOrOn=%t' 红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn settled=14/14
+      红因: kbrelease_test.go:128: FF_LTC_KB_CHANGE_GATE="true" 时 ShadowsOrOn=false，期望 true
+      红因: kbrelease_test.go:128: FF_LTC_KB_CHANGE_GATE="shadow" 时 ShadowsOrOn=false，期望 true
+      红因: kbrelease_test.go:152: shadow 档 ShadowsOrOn 必须为真
+LF13  WhereVisible 关闸时也挂空条件                            SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守 红=— settled=14/14
+LF14  待发布桶分配的幂等键写反（同批导入拿到不同号）                          BROKEN=红集合不符：期望=['TestKBReleaseRepo_EnsureDraftStampConcurrent', 'TestKBReleaseRepo_StampForWriteRealRows'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_EnsureDraftStampConcurrent', 'TestKBReleaseRepo_PublishPublishesDraftBucket', 'TestKBReleaseRepo_StampForWriteRealRows'] 红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_EnsureDraftStampConcurrent,TestKBReleaseRepo_PublishPublishesDraftBucket,TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+      红因: kb_release_test.go:619: 导入侧打桶：bucket=0 err=kb_releases 分配后 draft_version 仍为 0（product=kbrepo_p13）
+      红因: kb_release_test.go:847: 第二格桶：b=0 err=kb_releases 分配后 draft_version 仍为 0（product=kbrepo_p18）
+      红因: kb_release_test.go:949: kb_releases 分配后 draft_version 仍为 0（product=kbrepo_p22）
+      红因: kb_release_test.go:1026: 第 0 路分配失败: kb_releases 分配后 draft_version 仍为 0（product=kbrepo_p24）
+LF15  off 档也打版本戳（关闸失效，导入被挡在桶里）                         BROKEN=红因而非预期：红名对了但没有任何一行同时含 'off 档不该改任何版本列' 红=TestKbRelease_StampForWriteOffLeavesRowsAlone settled=14/14
+      红因: kbrelease_test.go:252: off 档打戳不该报错: kb_releases 待发布版本读取失败: dry run mode unsupported
+LF16  未治理库的 0 也被写回版本列（放行口变拦截口）                         BROKEN=红因而非预期：红名对了但没有任何一行同时含 '未治理库要拿到 0' 红=TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+      红因: kb_release_test.go:970: 未治理库的已编号行要原样不动，实得 kb_version=0 retired_version=0
+LF17  影子读数在无货时也出声（0 条会被隐藏也报）                           杀掉                             红=TestKbGate_ShadowSilentWhenNothingWouldHide settled=3/3
+LF18  影子统计在 off 档也跑（关闸那次白付一次查询）                        杀掉                             红=TestKbGate_ShadowLogsWouldHide settled=3/3
+LF19  就地改写的 off 守卫失效（没开闸也拦编辑入口）                        杀掉                             红=TestKbRelease_DirectWriteBlockedOffEvenWithRow settled=14/14
+LF20  拒绝文案不再指路（运营拿到一句没有出口的错）                           杀掉                             红=TestKbRelease_ErrGovernedDirectWriteIsStandalone settled=14/14
+
+结果：杀掉 10/21 格 （本趟只跑了 21/161 格，是子集，**不构成全族读数**）
+未杀/坏格清单：
+  !! LF1 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'ShadowsOrOn=%t'：shadow 这个档位名失联（观察期变成真拦）
+  !! LF2 BROKEN=红集合不符：期望=['TestKbRelease_PredicateShape', 'TestKbRelease_parseMode'] 实际=['TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateShape', 'TestKbRelease_ShadowsOrOn', 'TestKbRelease_UnknownValueWarns', 'TestKbRelease_WhereVisible', 'TestKbRelease_parseMode']：on 不再等于开闸（显式写 on 的人拿不到拦截）
+  !! LF3 BROKEN=红集合不符：期望=['TestKbRelease_FalseyBooleansStayOff', 'TestKbRelease_parseMode'] 实际=['TestKbRelease_PredicateEmptyUnlessOn', 'TestKbRelease_parseMode']：布尔式真值直接拿到 on（按习惯写 =true 就改了生产召回）
+  !! LF4 BROKEN=红集合不符：期望=['TestKbRelease_UnknownValueWarns'] 实际=['TestKbRelease_UnknownValueWarns', 'TestKbRelease_parseMode']：认不出的值保守回 off 这条失效（拼错就开闸）
+  !! LF6 BROKEN=红集合不符：期望=['TestKbRelease_PredicateShape'] 实际=['TestKbRelease_PredicateShape', 'TestKbRelease_WhereVisible']：可见性判据少了 NOT（把该显示的当隐藏）
+  !! LF11 BROKEN=红集合不符：期望=['TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateEmptyUnlessOn'] 实际=['TestKbRelease_DirectWriteBlockedOffEvenWithRow', 'TestKbRelease_ModeIsReadPerCall', 'TestKbRelease_PredicateEmptyUnlessOn']：GateOn 判据变松（shadow 档也拦人）
+  !! LF12 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'ShadowsOrOn=%t'：ShadowsOrOn 漏掉 shadow（影子期不打版本戳）
+  !! LF13 SURVIVED=洞：没有用例被打红 ⇒ 这条承诺只有注释在守：WhereVisible 关闸时也挂空条件
+  !! LF14 BROKEN=红集合不符：期望=['TestKBReleaseRepo_EnsureDraftStampConcurrent', 'TestKBReleaseRepo_StampForWriteRealRows'] 实际=['TestKBReleaseRepo_CountChunksInForce', 'TestKBReleaseRepo_EnsureDraftStampConcurrent', 'TestKBReleaseRepo_PublishPublishesDraftBucket', 'TestKBReleaseRepo_StampForWriteRealRows']：待发布桶分配的幂等键写反（同批导入拿到不同号）
+  !! LF15 BROKEN=红因而非预期：红名对了但没有任何一行同时含 'off 档不该改任何版本列'：off 档也打版本戳（关闸失效，导入被挡在桶里）
+  !! LF16 BROKEN=红因而非预期：红名对了但没有任何一行同时含 '未治理库要拿到 0'：未治理库的 0 也被写回版本列（放行口变拦截口）
+终态：本卡电池**未**全杀——上面每一条要么补腿、要么按'不配格'那一节写明理由。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-ghzc0yrw/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-ghzc0yrw

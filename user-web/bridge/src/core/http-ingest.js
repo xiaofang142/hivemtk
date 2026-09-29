@@ -21,11 +21,18 @@ function toHttpUrl(serverUrl) {
 }
 
 // 构造带认证的请求头（2026-08-14 P0-A：token 一律走 Header，绝不放 URL query）。
-// 有 token → Authorization: Bearer <token>；空 token → 不设 Authorization（服务端走匿名/默认分支）。
+//
+// 服务端闸门是 `middleware.BridgeIngressGuard`（router.go 挂在 /api/bridge/* 上），它只认
+// `X-Bridge-Token` 头或 `bridge_token` 查询参数；`Authorization: Bearer` 在这几条路由上
+// **没有任何读取点**。只发 Bearer 时每个请求都被 401 挡回，而下行轮询把 401 吞成
+// `{status:'error'}`，用户侧表现为"接上了却一条不同步"。
+// Bearer 一并保留：不改已有部署/反代可能读取的头部形状。
 export function buildAuthHeaders(token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token && token.trim()) {
-    headers['Authorization'] = `Bearer ${token.trim()}`;
+    const t = token.trim();
+    headers['X-Bridge-Token'] = t;
+    headers['Authorization'] = `Bearer ${t}`;
   }
   return headers;
 }
@@ -38,7 +45,7 @@ export function buildAuthHeaders(token) {
 // 入参：
 //   - serverUrl: 用户配置的 baseUrl（http/https/ws/wss 都接受，自动归一为 http(s)）
 //   - params: { channel, accountId, conversationId }
-//   - token 一律走 Authorization Header（2026-08-14 P0-A），绝不进 URL query。
+//   - token 一律走 Header（X-Bridge-Token + Authorization，2026-08-14 P0-A），绝不进 URL query。
 // 返回：完整 URL 字符串，可直接传给 fetch。
 function buildIngestUrl(serverUrl, params) {
   const u = new URL(`${toHttpUrl(serverUrl)}${INGEST_PATH}`);

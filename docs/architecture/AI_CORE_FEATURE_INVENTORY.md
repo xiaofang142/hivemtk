@@ -186,6 +186,28 @@ EmbeddingDim=1024(BGE-M3 TEI localhost:8080)、TopK=5、相似阈值0.5、异步
   `UpdateVersionCanary`（`UpdateColumns`，不 bump `updated_at`——那列是缓存失效信号）。管理端：
   `GET /api/knowledge-bases/:id/versions`、`POST /:id/version`、`PUT /:id/canary`
 
+- **知识内容上线走发布制**（T-P9-02，2026-09-28 接线）：三张新表 —— `kb_change_requests`（变更行；
+  **apply 之前一行内容都不进 `knowledge_chunks`**，这就是"未审批不进线上检索"的全部实现，不依赖读路径过滤）、
+  `kb_releases`（逐库发布指针，五个号各答一个问题：`allocated` 高水位、`draft` 待发布桶、`effective` 在服号
+  （读路径唯一读的字段）、`previous` 回滚目标（故回滚天然只一步）、`recalled` 被撤下的号＝**发布禁令**）、
+  `kb_change_audit_logs`（只增事件流，形状照 `ConfigParamAuditLog`）。审批是"准不准"的唯一事实源
+  （`subject_type=kb_change`、`policy_key=kb.change.apply`），变更表**不**复制 rejected/expired，只记
+  pending/applied/withdrawn；落库只发生在 Publish 那一个事务里（锁行→分桶→写分段→移指针→记审计），
+  失败即"这次发布没发生"，因此不存在 `apply_failed` 这个态。回滚＝纯指针回拨、一个字节不碰语料；
+  被撤下的号进 `recalled_version`，此后任何一次跨号发布都会被拒（防"静默复活"），放回须显式 Restore。
+  开关 `FF_LTC_KB_CHANGE_GATE` **三态、默认 off**：`off` ⇒ 召回 SQL 与挂载前逐字相同、且导入内容**不**打版本戳；
+  `shadow` ⇒ 写侧照常打戳、召回一条不少，只在日志报"切 on 会被隐藏几条"（转 on 的准入证据）；
+  `on` ⇒ 未发布内容对线上检索不可见。布尔真值（`true`/`1`/`yes`）一律降到 `shadow` 并告警。
+  **第二道锁是逐库的 `kb_releases.governed`（默认 false）**：旗子 `on` 而未启用的库一条都不隐藏，
+  而未启用的库连一次 Publish 都过不去。已进发布制的库上"就地改写 / 单条删除 / 重切分段"三个入口会被拒
+  （409 `ErrGovernedDirectWrite`：老正文的字节已被覆盖 ⇒ 版本救不了它，且这三类动作都不产生变更行、
+  即不留痕）；**插入不拒**（新行落进待发布桶，这正是"导入也走发布制"，拦它等于把导入弄成静默失败）。
+  管理端：`/api/kb-changes/*`（提交/撤回/列表/留痕）、`/api/kb-releases/*`（发布/回滚/放回/启停治理/统计/闸门档位）。
+  装配点 `internal/app/kb_release_wiring.go`，须晚于 `InitApprovalRuntime`；那把旗子是 `off` 时本竖会就地构造
+  一个只能入队/读结论的审批服务并出声"没人能在 HTTP 上批准这一条"（同 T-P6-03 的报价发送腿）。
+  向量补算在发布事务**之后**（best-effort，失败只 Errorf 不回滚）：没有任何后台通路扫 `embed_status='pending'`，
+  而语料已按版本生效、词面检索当场可命中 —— 报成"发布失败"会诱使重放一次已经成功的发布
+
 ## F6 入站编排（SmartCSOrchestrator 九步）
 ①查建会话（OneID 合并，群聊 `group:{id}`）→ ②存消息(5s去重窗) → ③在线座席直通 → ④AI连续回复上限 **10次** 转人工 → ⑤紧急词转人工 → ⑥智能体选择（挂载>绑定>默认）→ ⑦SalesEngine.HandleWithAgent → ⑧置信度门槛 0.7（有卡片视为达标）→ ⑨落库计数
 - ⚠️ extractConfidence 启发式兜底（0.5+加分）与 confidence/ 五信号体系割裂未打通

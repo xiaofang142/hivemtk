@@ -848,7 +848,7 @@ function wirePatrol() {
 
 document.addEventListener('DOMContentLoaded', () => {
   $('serverUrl').placeholder = DEFAULT_PLACEHOLDER;
-  $('token').placeholder = '留空也可正常使用（桥接 WS 不要求 JWT）';
+  $('token').placeholder = '服务端配置了桥接凭证时必填，留空会被全部拒绝（401）';
   loadConfig((cfg) => {
     $('serverUrl').value = cfg.serverUrl || '';
     $('token').value = cfg.token || '';

@@ -81,7 +81,10 @@ describe('M2-P1 error-messages explainError', () => {
     const r = explainError({ status: 401 });
     expect(r.key).toBe('http_401');
     expect(r.level).toBe('error');
-    expect(r.title).toContain('鉴权');
+    expect(r.title).toContain('凭证');
+    // 401 的判据不止"分类对"：闸门是 fail-closed 的，用户唯一出路是去后台重新生成凭证，
+    // 指引丢了就等于把 401 说成"稍后再试"（本轮改文案的动机）。
+    expect(r.action).toContain('桥接凭证');
   });
 
   it('HTTP 5xx 错误码分类', async () => {

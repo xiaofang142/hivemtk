@@ -300,3 +300,50 @@ func TestDashboardDoubleRead_EmptySummaryFallsBack(t *testing.T) {
 		t.Fatalf("空 summary 应回源 raw: %+v", points)
 	}
 }
+
+// 装配方式回归：cron 只能在 main 显式带 DB 启动。
+//
+// 这里的第一条断言（导入本包的二进制里 inst 必须还是 nil）是这一整条的牙齿：
+// 只要有人把它挪回 init() 装配，任何 import 本包的测试/CLI 都会拉起一个后台协程，
+// 而 init 拿不到 DB 只能传 nil ⇒ 每 5 分钟一行 "invalid db"、水位线永不推进
+// （msg_hourly_summary 在实际进程里一次也没落过行，就是这个形状）。
+func TestHubSummaryAggCronWiredExplicitly(t *testing.T) {
+	if hubSummaryAggCronInst != nil {
+		t.Fatal("导入本包就被装配了：init 副作用回来了，CLI/测试二进制会带一个哑 cron")
+	}
+
+	// DB 缺失时不得装配：宁可不汇总，也不要一个只会报错的协程
+	StartMessageHubSummaryAggCron(nil)
+	if hubSummaryAggCronInst != nil {
+		t.Error("传 nil DB 仍装配了 cron ⇒ 回到 invalid db 的死循环")
+	}
+
+	database := setupSummaryTestDB(t)
+	StartMessageHubSummaryAggCron(database)
+	cron := hubSummaryAggCronInst
+	if cron == nil {
+		t.Fatal("带 DB 启动后 cron 仍为 nil ⇒ 汇总表永远没有写入者")
+	}
+	if cron.svc == nil || cron.svc.repo == nil {
+		t.Fatal("cron 的 svc/repo 未注入")
+	}
+
+	// 重复启动不得再起第二个：两个写入者会各自推进同一水位线，同一批行被累加两次
+	StartMessageHubSummaryAggCron(database)
+	if hubSummaryAggCronInst != cron {
+		t.Error("二次启动换掉了 cron 实例 ⇒ 旧协程泄漏，两个写入者并存")
+	}
+
+	t.Cleanup(func() {
+		StopMessageHubSummaryAggCron(context.Background())
+		// 包级全局成对还原，否则同二进制里后跑的用例会看见已关闭的实例
+		hubSummaryAggCronInst = nil
+	})
+
+	StopMessageHubSummaryAggCron(context.Background())
+	select {
+	case <-cron.stopCh:
+	default:
+		t.Error("Stop 后 stopCh 未关闭 ⇒ 退出时协程不会被收回")
+	}
+}

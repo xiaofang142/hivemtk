@@ -44,7 +44,7 @@ func TestUpdateSessionStatus_CancelsOpenHandoffTask(t *testing.T) {
 	useGlobalHumanTaskSvc(t, newHumanTaskSvc(t, database, &stubHumanTaskCfg{value: 5}))
 
 	session := seedHandoffSession(t, database, "sess_hook_close", "oneid_hook_1")
-	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "客户要求人工"); err != nil {
+	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "客户要求人工", nil); err != nil {
 		t.Fatalf("转人工失败: %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestUpdateSessionStatus_KeepsTerminalTaskAlone(t *testing.T) {
 	useGlobalHumanTaskSvc(t, ht)
 
 	session := seedHandoffSession(t, database, "sess_hook_done", "oneid_hook_2")
-	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "第一次"); err != nil {
+	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "第一次", nil); err != nil {
 		t.Fatalf("转人工失败: %v", err)
 	}
 	first := handoffTaskOf(t, database, "sess_hook_done")
@@ -87,7 +87,7 @@ func TestUpdateSessionStatus_KeepsTerminalTaskAlone(t *testing.T) {
 	}
 	// 完成后再转一次 ⇒ 第二条开放待办（终态那条不占唯一索引的空位）。
 	session.Status = model.SessionStatusAIHandling
-	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "第二次"); err != nil {
+	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "第二次", nil); err != nil {
 		t.Fatalf("第二次转人工失败: %v", err)
 	}
 
@@ -118,7 +118,7 @@ func TestUpdateSessionStatus_WithoutHumanTaskServiceStillSucceeds(t *testing.T) 
 	useGlobalHumanTaskSvc(t, nil)
 
 	session := seedHandoffSession(t, database, "sess_hook_nil", "oneid_hook_3")
-	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "低置信度"); err != nil {
+	if err := newHandoffOrchestrator(t, database).transferToHuman(ctx, session, "低置信度", nil); err != nil {
 		t.Fatalf("转人工失败: %v", err)
 	}
 	// 上面那次投递用的是编排器自带的服务实例（不经全局），所以池子里确实有一行开放待办；

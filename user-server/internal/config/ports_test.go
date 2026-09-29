@@ -189,6 +189,32 @@ func TestPortsConstants_AlignWithBridge(t *testing.T) {
 	})
 }
 
+// TestUserServerSelfBaseURL 钉住「轮询自投地址」与监听端口同源。
+//
+// 为什么要函数而不是直接用 DefaultUserServerBaseURL：cmd/api/main.go 听的是
+// PORT（缺省才回落 8204），而 Telegram 轮询把入站消息自投回自己的
+// /api/webhook/telegram/:id。两者不同源时，服务在 8255 上监听、轮询却往
+// 8204 投 ⇒ 请求打到另一个进程（或干脆 connection refused），
+// 现场表现就是「bot 在跑、poll 拿到 update、群里没有任何回复」，且日志里全是 200。
+func TestUserServerSelfBaseURL(t *testing.T) {
+	t.Run("FollowPORT", func(t *testing.T) {
+		t.Setenv("PORT", "8255")
+		if got, want := UserServerSelfBaseURL(), "http://localhost:8255"; got != want {
+			t.Errorf("PORT=8255 时应得 %s，实际 %s", want, got)
+		}
+	})
+	// 空串与纯空格都算没配：PORT=" " 时监听会回落到 8204，自投地址必须跟着回落，
+	// 否则会拼出 http://localhost: （一个打不通的 URL）。
+	t.Run("FallbackToDefault", func(t *testing.T) {
+		for _, v := range []string{"", "   "} {
+			t.Setenv("PORT", v)
+			if got := UserServerSelfBaseURL(); got != DefaultUserServerBaseURL {
+				t.Errorf("PORT=%q 应回落 %s，实际 %s", v, DefaultUserServerBaseURL, got)
+			}
+		}
+	})
+}
+
 // TestHelmChartAlignsWithCodePorts 把 deploy/helm/hivemtk 那份 chart 拉进端口对账，
 // 并检查 chart 自己的两个文件之间映射闭合。
 //

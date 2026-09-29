@@ -1,0 +1,57 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_3jcid4t
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P902/20260928-163216
+取证基线：HEAD=d738f738 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 16:32  up 5 days,  6:20, 2 users, load averages: 68.80 106.95 77.05 日志 tag=20260928-163216
+覆盖 82 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  3f90c51f9d6ebad665c4f42f7ca4118d  user-server/internal/aiagent/knowledge/controller/knowledge_merchant.go
+  87b904a8d78c14eee64a17acc20e6281  user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go
+  190c8c0cdd44203b45f84a6f7fa93abc  user-server/internal/aiagent/knowledge/service/rag_searcher.go
+  133269c6653d33f7b379c115f58de3d3  user-server/internal/aiagent/knowledge/service/rag_searcher_bm25.go
+  47eac23620ef61c682c123d18d8d83ef  user-server/internal/aiagent/knowledge/service/rag_searcher_vector.go
+  9ce13662bb7a8e59ea6fa6a3367e7eaa  user-server/internal/aiagent/rag/retrieval/hybrid_searcher.go
+  0a1976deca8866b70ec65f5f5499e17d  user-server/internal/aiagent/rag/retrieval/lexical_retriever.go
+  bb66b668fbf925eb68baf65bf6bf6f37  user-server/internal/aiagent/rag/retrieval/vector_retriever.go
+  74a322de23a08202fcbd4efd046df76c  user-server/internal/app/kb_release_wiring.go
+  a1e64ccd7c3433d6bbd5c97993e1d51b  user-server/internal/controller/kb_release.go
+  f213d1f505bd940c334ef54350e56b2f  user-server/internal/model/kb_release.go
+  1f6615f0bb1d55fddf033c955c99d589  user-server/internal/pkg/kbrelease/kbrelease.go
+  dbdb9586968768fc736d853ba2ed6fde  user-server/internal/repository/kb_release.go
+  fc9bf9bc68e51198d980398480ec7553  user-server/internal/router/kb_release_routes.go
+  fafa2dcde6ebcd5bfcfbf342334fad1a  user-server/internal/router/router.go
+  87366b222eea4f6c938e11c9c397f4bf  user-server/internal/service/kb_release.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=19 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=22 skip=0 红名=—
+[控制组 ./internal/controller/] rc=0 settled=32 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/pkg/kbrelease/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/repository/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/service/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/controller/] rc=0 settled=1 skip=0 红名=—
+[控制组 ./internal/aiagent/rag/retrieval/] rc=0 settled=3 skip=0 红名=—
+LF1   shadow 这个档位名失联（观察期变成真拦）                          杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn,TestKbRelease_parseMode settled=14/14
+LF2   on 不再等于开闸（显式写 on 的人拿不到拦截）                        杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateShape,TestKbRelease_ShadowsOrOn,TestKbRelease_UnknownValueWarns,TestKbRelease_WhereVisible,TestKbRelease_parseMode settled=14/14
+LF3   布尔式真值直接拿到 on（按习惯写 =true 就改了生产召回）                 杀掉                             红=TestKbRelease_PredicateEmptyUnlessOn,TestKbRelease_parseMode settled=14/14
+LF4   认不出的值保守回 off 这条失效（拼错就开闸）                         杀掉                             红=TestKbRelease_UnknownValueWarns,TestKbRelease_parseMode settled=14/14
+LF5   认不出的值不再出声（运维以为闸门开着）                              杀掉                             红=TestKbRelease_UnknownValueWarns settled=14/14
+LF6   可见性判据少了 NOT（把该显示的当隐藏）                            杀掉                             红=TestKbRelease_PredicateShape,TestKbRelease_WhereVisible settled=14/14
+LF7   闸门对所有库生效（丢了 governed 半边）                         杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF8   退役半边失效（被下线的仍可见）                                  杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF9   AndVisible 不带前导 AND（拼进 SQL 就是语法错）                杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF10  AndVisible 在关闸时返回非空（空串塞进 SQL 尾巴）                 杀掉                             红=TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+LF11  GateOn 判据变松（shadow 档也拦人）                         杀掉                             红=TestKbRelease_DirectWriteBlockedOffEvenWithRow,TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+LF12  ShadowsOrOn 漏掉 shadow（影子期不打版本戳）                  杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn settled=14/14
+LF13  WhereVisible 开闸时不挂谓词（该藏的线上内容全量召回）                杀掉                             红=TestKbRelease_WhereVisible settled=14/14
+LF14  待发布桶分配的幂等键写反（同批导入拿到不同号）                          杀掉                             红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_EnsureDraftStampConcurrent,TestKBReleaseRepo_PublishPublishesDraftBucket,TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+LF15  off 档也打版本戳（关闸失效，导入被挡在桶里）                         杀掉                             红=TestKbRelease_StampForWriteOffLeavesRowsAlone settled=14/14
+LF16  未治理库的 0 也被写回版本列（放行口变拦截口）                         杀掉                             红=TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+LF17  影子读数在无货时也出声（0 条会被隐藏也报）                           杀掉                             红=TestKbGate_ShadowSilentWhenNothingWouldHide settled=3/3
+LF18  影子统计在 off 档也跑（关闸那次白付一次查询）                        杀掉                             红=TestKbGate_ShadowLogsWouldHide settled=3/3
+LF19  就地改写的 off 守卫失效（没开闸也拦编辑入口）                        杀掉                             红=TestKbRelease_DirectWriteBlockedOffEvenWithRow settled=14/14
+LF20  拒绝文案不再指路（运营拿到一句没有出口的错）                           杀掉                             红=TestKbRelease_ErrGovernedDirectWriteIsStandalone settled=14/14
+
+结果：杀掉 20/20 格 （本趟只跑了 20/161 格，是子集，**不构成全族读数**）
+终态：跑到的格子全杀，但本趟是子集/未覆盖全族，不写'全杀'。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_3jcid4t/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_3jcid4t

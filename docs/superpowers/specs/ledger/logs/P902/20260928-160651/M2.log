@@ -1,0 +1,17 @@
+=== RUN   TestKBChangeModel_OpValueDomain
+--- PASS: TestKBChangeModel_OpValueDomain (0.00s)
+=== RUN   TestKBChangeModel_StatusValueDomain
+    kb_release_test.go:47: 状态值域应为 3 项，实得 2：[pending applied]
+--- FAIL: TestKBChangeModel_StatusValueDomain (0.00s)
+=== RUN   TestKBChangeModel_TransitionTable
+--- PASS: TestKBChangeModel_TransitionTable (0.00s)
+=== RUN   TestKBChangeModel_TransitionTableCoversStatuses
+    kb_release_test.go:102: 跃迁表有 3 个键而值域有 2 个状态：两边不同源
+--- FAIL: TestKBChangeModel_TransitionTableCoversStatuses (0.00s)
+=== RUN   TestKBChangeModel_TableNames
+--- PASS: TestKBChangeModel_TableNames (0.00s)
+=== RUN   TestKBChangeModel_AuditActionsAreDistinct
+--- PASS: TestKBChangeModel_AuditActionsAreDistinct (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.320s
+FAIL

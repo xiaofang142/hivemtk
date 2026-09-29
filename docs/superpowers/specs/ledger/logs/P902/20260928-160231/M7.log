@@ -1,0 +1,16 @@
+=== RUN   TestKBChangeModel_OpValueDomain
+--- PASS: TestKBChangeModel_OpValueDomain (0.00s)
+=== RUN   TestKBChangeModel_StatusValueDomain
+--- PASS: TestKBChangeModel_StatusValueDomain (0.00s)
+=== RUN   TestKBChangeModel_TransitionTable
+--- PASS: TestKBChangeModel_TransitionTable (0.00s)
+=== RUN   TestKBChangeModel_TransitionTableCoversStatuses
+--- PASS: TestKBChangeModel_TransitionTableCoversStatuses (0.00s)
+=== RUN   TestKBChangeModel_TableNames
+--- PASS: TestKBChangeModel_TableNames (0.00s)
+=== RUN   TestKBChangeModel_AuditActionsAreDistinct
+    kb_release_test.go:130: 审计动作值域应为 6 项，实得 7：[submitted withdrawn published rollback restored governed restored]
+--- FAIL: TestKBChangeModel_AuditActionsAreDistinct (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.575s
+FAIL

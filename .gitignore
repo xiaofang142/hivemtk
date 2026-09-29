@@ -57,6 +57,13 @@ docs/superpowers/specs/ledger/logs/*
 !docs/superpowers/specs/ledger/logs/R22/**/*.log
 !docs/superpowers/specs/ledger/logs/P702hook/
 !docs/superpowers/specs/ledger/logs/P702hook/**/*.log
+# P803 是上一张卡（T-P8-03）的常驻电池取证目录：登记时漏了这两行，它的 8 个轮次目录 237 份
+# 读数全在库外（`git check-ignore -v` 命中 `logs/*` 那一行）⇒ 本批代签补上。两棵目录都逐文件
+# 现数过：非 .log 文件 0 个 ⇒ 按"轮次目录"放行不会把残本一起带进库。
+!docs/superpowers/specs/ledger/logs/P803/
+!docs/superpowers/specs/ledger/logs/P803/**/*.log
+!docs/superpowers/specs/ledger/logs/P902/
+!docs/superpowers/specs/ledger/logs/P902/**/*.log
 !docs/superpowers/specs/ledger/logs/CIwiring/
 !docs/superpowers/specs/ledger/logs/CIwiring/**/*.log
 !docs/superpowers/specs/ledger/logs/CapAB/

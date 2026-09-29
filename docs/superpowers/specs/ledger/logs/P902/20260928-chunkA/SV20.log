@@ -1,0 +1,5 @@
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+internal/service/kb_release.go:497:8: duplicate case model.ApprovalStatusPending (constant "pending" of type string) in expression switch
+	internal/service/kb_release.go:491:43: previous case

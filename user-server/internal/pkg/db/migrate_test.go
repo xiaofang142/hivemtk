@@ -60,6 +60,14 @@ func TestAllModels_CoversModelsWithWritePaths(t *testing.T) {
 		&model.HumanTask{},
 		&model.IntegrationTemplate{},
 		&model.IntentExample{},
+		// KBChangeRequest / KBRelease / KBChangeAuditLog：T-P9-02 新增，三张表都有
+		// repository.KBReleaseRepository 这条生产写入路径。列进来的理由与 bad_cases
+		// 同一条且更硬：**闸门读的就是 kb_releases 这一行**，表没建出来时召回侧
+		// NOT EXISTS 恒真 ⇒ 全部可见、发布/回滚只在日志里留一句话，
+		// 整套"变更需审批 + 切版本"静默退化成一堆没人读的表。
+		&model.KBChangeAuditLog{},
+		&model.KBChangeRequest{},
+		&model.KBRelease{},
 		&model.LLMRoutingLog{},
 		&model.LoginEvent{},
 		// OrderDraft：T-P2-01 新增，有 repository.Upsert 这条生产写入路径。

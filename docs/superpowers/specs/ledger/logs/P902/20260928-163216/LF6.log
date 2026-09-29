@@ -1,0 +1,76 @@
+=== RUN   TestKbRelease_parseMode
+2026-09-28T16:33:51+08:00 WRN [kb-release] FF_LTC_KB_CHANGE_GATE="banana" 无法识别 ⇒ 按 off 处理（召回不受版本闸门约束）；可用值：off|shadow|on component=user-server
+2026-09-28T16:33:51+08:00 WRN [kb-release] FF_LTC_KB_CHANGE_GATE="on shadow" 无法识别 ⇒ 按 off 处理（召回不受版本闸门约束）；可用值：off|shadow|on component=user-server
+--- PASS: TestKbRelease_parseMode (0.00s)
+=== RUN   TestKbRelease_FalseyBooleansStayOff
+--- PASS: TestKbRelease_FalseyBooleansStayOff (0.00s)
+=== RUN   TestKbRelease_PredicateEmptyUnlessOn
+--- PASS: TestKbRelease_PredicateEmptyUnlessOn (0.00s)
+=== RUN   TestKbRelease_PredicateShape
+    kbrelease_test.go:99: 谓词应以 NOT EXISTS ( 起头，实得 "EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\n\t       OR (knowledge_chunks.retired_version > 0\n\t           AND knowledge_chunks.retired_version <= kr.effective_version))\n)"
+    kbrelease_test.go:114: AndVisible 应自带前导 AND，实得 " AND EXISTS (\n\tSELECT 1 FROM kb_releases kr\n\tWHERE kr.product_id = knowledge_chunks.product_id\n\t  AND kr.governed\n\t  AND (knowledge_chunks.kb_version > kr.effective_version\n\t       OR (knowledge_chunks.retired_version > 0\n\t           AND knowledge_chunks.retired_version <= kr.effective_version))\n)"
+--- FAIL: TestKbRelease_PredicateShape (0.00s)
+=== RUN   TestKbRelease_ShadowsOrOn
+--- PASS: TestKbRelease_ShadowsOrOn (0.00s)
+=== RUN   TestKbRelease_ModeIsReadPerCall
+--- PASS: TestKbRelease_ModeIsReadPerCall (0.00s)
+=== RUN   TestKbRelease_WhereVisible
+    kbrelease_test.go:185: 闸门开着时 SQL 里必须出现可见性判据：SELECT * FROM `knowledge_chunks` WHERE product_id = "p1" AND (EXISTS (
+        	SELECT 1 FROM kb_releases kr
+        	WHERE kr.product_id = knowledge_chunks.product_id
+        	  AND kr.governed
+        	  AND (knowledge_chunks.kb_version > kr.effective_version
+        	       OR (knowledge_chunks.retired_version > 0
+        	           AND knowledge_chunks.retired_version <= kr.effective_version))
+        ))
+--- FAIL: TestKbRelease_WhereVisible (0.00s)
+=== RUN   TestKbRelease_FastPathsDoNoWork
+--- PASS: TestKbRelease_FastPathsDoNoWork (0.00s)
+=== RUN   TestKbRelease_DirectWriteBlockedOffEvenWithRow
+--- PASS: TestKbRelease_DirectWriteBlockedOffEvenWithRow (0.00s)
+=== RUN   TestKbRelease_StampForWriteOffLeavesRowsAlone
+--- PASS: TestKbRelease_StampForWriteOffLeavesRowsAlone (0.00s)
+=== RUN   TestKbRelease_LogWouldHideNeverBreaksSearch
+
+2026/09/28 16:33:51 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_3jcid4t/clone/user-server/internal/pkg/kbrelease/kbrelease.go:219 dry run mode unsupported
+[0.055ms] [rows:0] SELECT COUNT(*) FROM `knowledge_chunks` WHERE id IN (1,2,3) AND (EXISTS (
+	SELECT 1 FROM kb_releases kr
+	WHERE kr.product_id = knowledge_chunks.product_id
+	  AND kr.governed
+	  AND (knowledge_chunks.kb_version > kr.effective_version
+	       OR (knowledge_chunks.retired_version > 0
+	           AND knowledge_chunks.retired_version <= kr.effective_version))
+))
+2026-09-28T16:33:51+08:00 WRN [kb-release] shadow 统计失败（unit-test product=p1）: dry run mode unsupported component=user-server
+--- PASS: TestKbRelease_LogWouldHideNeverBreaksSearch (0.00s)
+=== RUN   TestKbRelease_LogWouldHideNeedsRealRowsForZeroCount
+
+2026/09/28 16:33:51 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_3jcid4t/clone/user-server/internal/pkg/kbrelease/kbrelease.go:219 dry run mode unsupported
+[0.009ms] [rows:0] SELECT COUNT(*) FROM `knowledge_chunks` WHERE id IN (1,2,3) AND (EXISTS (
+	SELECT 1 FROM kb_releases kr
+	WHERE kr.product_id = knowledge_chunks.product_id
+	  AND kr.governed
+	  AND (knowledge_chunks.kb_version > kr.effective_version
+	       OR (knowledge_chunks.retired_version > 0
+	           AND knowledge_chunks.retired_version <= kr.effective_version))
+))
+--- PASS: TestKbRelease_LogWouldHideNeedsRealRowsForZeroCount (0.00s)
+=== RUN   TestKbRelease_ErrGovernedDirectWriteIsStandalone
+--- PASS: TestKbRelease_ErrGovernedDirectWriteIsStandalone (0.00s)
+=== RUN   TestKbRelease_UnknownValueWarns
+=== RUN   TestKbRelease_UnknownValueWarns/拼错的值出声
+=== RUN   TestKbRelease_UnknownValueWarns/两个合法值粘在一起也出声
+=== RUN   TestKbRelease_UnknownValueWarns/off_不出声
+=== RUN   TestKbRelease_UnknownValueWarns/shadow_不出声
+=== RUN   TestKbRelease_UnknownValueWarns/on_不出声
+=== RUN   TestKbRelease_UnknownValueWarns/布尔真值不出声（它有自己的档位，不是错值）
+--- PASS: TestKbRelease_UnknownValueWarns (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/拼错的值出声 (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/两个合法值粘在一起也出声 (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/off_不出声 (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/shadow_不出声 (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/on_不出声 (0.00s)
+    --- PASS: TestKbRelease_UnknownValueWarns/布尔真值不出声（它有自己的档位，不是错值） (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/pkg/kbrelease	0.353s
+FAIL

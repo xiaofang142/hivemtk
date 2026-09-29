@@ -1,5 +1,10 @@
 package config
 
+import (
+	"os"
+	"strings"
+)
+
 const (
 	// DefaultListenHost HTTP 监听主机兜底值。保持 0.0.0.0（历史行为）：
 	// 收回本机只能靠显式设 SERVER_HOST=127.0.0.1，见 docs/DEPLOYMENT_GUIDE.md §6.2 加固路线①。
@@ -59,3 +64,16 @@ const (
 
 	DefaultOllamaBaseURL = "http://localhost:11434"
 )
+
+// UserServerSelfBaseURL 本进程回调自己 HTTP 入口时应使用的基址。
+//
+// 与 DefaultUserServerBaseURL 的区别只在这一点上：监听端口被 PORT 覆盖时（同机多实例
+// 并行、或 8204 被别的进程占走）默认常量会把请求投给**另一个**进程。
+// Telegram polling 的自投递（getUpdates → POST 自家 /api/webhook/telegram/:id）
+// 就属于这一类：投错进程等于消息被没有同一份会话状态的实例处理，或直接 404 丢掉。
+func UserServerSelfBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv("PORT")); v != "" {
+		return "http://localhost:" + v
+	}
+	return DefaultUserServerBaseURL
+}

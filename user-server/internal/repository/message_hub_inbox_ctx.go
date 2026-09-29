@@ -32,6 +32,14 @@ const undeliveredOutboundCond = "NOT (direction = ? AND COALESCE(status, '') = ?
 
 var undeliveredOutboundArgs = []any{"outbound", "send_failed"}
 
+// notSystemEventCond 排除渠道系统事件行（msg_type='event'：TG 入群/退群、审批通知等）。
+// 这类行不是客户发来的问话，入站主路径按设计不回它；把它当"未回复的客户消息"，
+// 补触发就会拿系统通知正文去问 AI ⇒ 刚被门控禁言的新人收到一条欢迎语。
+// msg_type 列 NOT NULL，但历史/直插行可能是空串，与上面 status 同样走 NULL 安全口径。
+const notSystemEventCond = "COALESCE(msg_type, '') <> ?"
+
+var notSystemEventArgs = []any{"event"}
+
 func (r *MessageHubRepository) HasUnrepliedCustomerMessage(ctx context.Context, conversationID string, replyWindow time.Duration) (unreplied bool, withinWindow bool, err error) {
 	if r == nil || r.db == nil {
 		return false, false, nil
@@ -44,6 +52,7 @@ func (r *MessageHubRepository) HasUnrepliedCustomerMessage(ctx context.Context, 
 	if err := r.db.WithContext(ctx).
 		Where("conversation_id = ?", conversationID).
 		Where(undeliveredOutboundCond, undeliveredOutboundArgs...).
+		Where(notSystemEventCond, notSystemEventArgs...).
 		Order("sent_at DESC").
 		Limit(1).
 		First(&last).Error; err != nil {
@@ -96,6 +105,7 @@ func (r *MessageHubRepository) GetLastInboundByConversation(ctx context.Context,
 	var msg model.MessageHub
 	err := r.db.WithContext(ctx).
 		Where("conversation_id = ? AND direction = ?", conversationID, "inbound").
+		Where(notSystemEventCond, notSystemEventArgs...).
 		Order("sent_at DESC").
 		First(&msg).Error
 	if err != nil {

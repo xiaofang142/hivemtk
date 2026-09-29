@@ -32,13 +32,16 @@ func TestAckBridgeOutbox_DetailedItems_P3D(t *testing.T) {
 	h.ingress = svc
 
 	const (
+		// channel 走 HTTP 入参（别名），platform 是 message_hub 里唯一可能出现的形态（规范名）：
+		// 二者故意不同名 ⇒ 这一格同时锁住"ack 入口必须先把别名归一，否则一行都匹配不上"。
 		channel   = "douyin_web"
+		platform  = "douyin"
 		accountID = "acc_p3d_1"
 		conv      = "conv_p3d"
 	)
 	for _, c := range []string{"msg_a content", "msg_b content", "msg_c content"} {
 		hub := &model.MessageHub{
-			Platform:       channel,
+			Platform:       platform,
 			AccountID:      accountID,
 			ConversationID: conv,
 			MsgID:          "mh:" + c,
@@ -52,7 +55,7 @@ func TestAckBridgeOutbox_DetailedItems_P3D(t *testing.T) {
 		}
 	}
 
-	if n, err := svc.AckOutboundDelivered(context.Background(), channel, accountID, []string{"mh:msg_b content"}); err != nil || n != 1 {
+	if n, err := svc.AckOutboundDelivered(context.Background(), platform, accountID, []string{"mh:msg_b content"}); err != nil || n != 1 {
 		t.Fatalf("首次 ack msg_b 应返回 1，实际 (%d, %v)", n, err)
 	}
 
@@ -357,5 +360,100 @@ func TestGetByMsgIDsInScope_OnlyOutbound_P4(t *testing.T) {
 	}
 	if outboundCount != 1 {
 		t.Errorf("期望仅返回 1 条 outbound，实际 %d 条（rows=%+v）", outboundCount, rows)
+	}
+}
+
+// v2 items[] 的 status 是逐项带的，入口那道 v1 status 校验拦不到它。修复前它一路走到 service
+// 报错回 500，而 v2 是按 (conversation_id, status) 分组后遍历 map 逐组落库，遍历序随机 ⇒
+// 实测同一个请求 20 次里 15 次把好项落了库、5 次一格没落，客户端只看到一个不带原因的 500。
+// 这一格锁住两件事：整批在任何写入之前被 400 拒掉，且报错文案点名到底是哪个值不认。
+func TestAckBridgeOutbox_V2UnknownStatus_RejectsWholeBatchBeforeWrite_P3D(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewTestDB(t, &model.MessageHub{})
+	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
+		t.Fatalf("清理失败: %v", err)
+	}
+	svc := service.NewInboxIngressServiceWithDB(db, nil)
+	h := NewBridgeIngestHandlerWithMock(nil, nil)
+	h.ingress = svc
+
+	const (
+		channel   = "douyin"
+		accountID = "acc_v2_bad_status"
+	)
+	seed := []struct{ msg, conv string }{
+		{"mh:v2bs_a", "conv_v2bs_1"},
+		{"mh:v2bs_b", "conv_v2bs_2"},
+		{"mh:v2bs_c", "conv_v2bs_1"},
+	}
+	for _, s := range seed {
+		hub := &model.MessageHub{
+			Platform:       channel,
+			AccountID:      accountID,
+			ConversationID: s.conv,
+			MsgID:          s.msg,
+			MsgType:        "text",
+			Content:        "v2 bad status content " + s.msg,
+			Direction:      "outbound",
+			Status:         "pending",
+		}
+		if err := db.Create(hub).Error; err != nil {
+			t.Fatalf("seed %s 失败: %v", s.msg, err)
+		}
+	}
+
+	// 两个合法项分布在两个 conversation_id（两个分组）+ 一个未知状态项
+	body := `{"v":2,"items":[` +
+		`{"msg_id":"mh:v2bs_a","conversation_id":"conv_v2bs_1","status":"delivered"},` +
+		`{"msg_id":"mh:v2bs_b","conversation_id":"conv_v2bs_2","status":"delivered"},` +
+		`{"msg_id":"mh:v2bs_c","conversation_id":"conv_v2bs_1","status":"shipped"}]}`
+	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rr)
+	c.Request = req
+	h.AckBridgeOutbox(c)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("期望 400（入参错误），实际 %d: %s", rr.Code, rr.Body.String())
+	}
+	respStr := rr.Body.String()
+	// 响应体里值是带 JSON 转义的（\"shipped\"），断言只取裸词，不把转义形状写死
+	for _, want := range []string{`"status":"error"`, `invalid status`, `shipped`} {
+		if !strings.Contains(respStr, want) {
+			t.Errorf("响应缺少 %q\n实际响应: %s", want, respStr)
+		}
+	}
+
+	// 整批没落：三行都还停在 pending（合法项也不许被单独收口，否则响应说失败、库里却变了）
+	var changed int64
+	if err := db.Model(&model.MessageHub{}).
+		Where("account_id = ? AND status <> ?", accountID, "pending").
+		Count(&changed).Error; err != nil {
+		t.Fatalf("统计失败: %v", err)
+	}
+	if changed != 0 {
+		t.Errorf("未知状态请求后仍有 %d 行被改写，期望 0（整批拒在写之前）", changed)
+	}
+
+	// 同一个请求重复 20 次，读数必须恒定（修复前这里是 15/5 摆动）
+	for i := 0; i < 20; i++ {
+		req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rr)
+		c.Request = req
+		h.AckBridgeOutbox(c)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("第 %d 次重放期望恒 400，实际 %d: %s", i, rr.Code, rr.Body.String())
+		}
+	}
+	if err := db.Model(&model.MessageHub{}).
+		Where("account_id = ? AND status <> ?", accountID, "pending").
+		Count(&changed).Error; err != nil {
+		t.Fatalf("重放后统计失败: %v", err)
+	}
+	if changed != 0 {
+		t.Errorf("重放 20 次后有 %d 行被改写，期望 0", changed)
 	}
 }

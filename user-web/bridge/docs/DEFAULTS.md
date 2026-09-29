@@ -46,7 +46,8 @@
 - `channel` 不在白名单（`douyin/xiaohongshu/tiktok/xianyu/kuaishou`）→ 400 `unsupported`
 - body 上限 `HTTPIngestMaxBodySize = 4MB`
 - 单批消息上限 `HTTPIngestMaxMessages = 200`
-- Token 走 `Authorization: Bearer <token>` Header，**禁止 URL query**
+- Token 走 `X-Bridge-Token` Header，除 SSE 外**禁止 URL query**
+  （SSE 用 `?bridge_token=`，服务端校验后剥离并脱敏日志）
 
 ### 2.4 限速 / 风控（防封号，详见 bridge.md §7）
 
@@ -181,7 +182,7 @@ contentHash(channel, content) = 'mh:' + fnv1a(`${channel}|${content.trim()}`).he
 | 加默认值不写文档源 | 后续维护者无法调整 | 每个常量都附"文档源"注释 |
 | HTML 中写死端口/URL（如 `placeholder="http://localhost:8204"`） | 改 constants.js 后 UI 不变 | 由 JS 加载时从 constants 设置 placeholder |
 | `setInterval(fn, 5000)` 直接写 5000 | 改 constants.js 后行为不变 | 从 `UI_DEFAULTS.metaReportIntervalMs` 取 |
-| Token 走 URL query | devtools / 浏览器历史明文泄漏 | 走 `Authorization: Bearer` Header |
+| Token 走 URL query | devtools / 浏览器历史明文泄漏 | 走 `X-Bridge-Token` Header（SSE 例外：`?bridge_token=`，服务端剥离 + 脱敏） |
 
 ## 5. 测试矩阵
 

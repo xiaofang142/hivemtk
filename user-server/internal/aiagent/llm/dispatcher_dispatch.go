@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
+	textutil "hivemtk-user/internal/pkg/utils/text"
 )
 
 type DispatchRequest struct {
@@ -149,13 +150,15 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 	}
 
 	config := &LLMConfig{
-		APIKey:         provider.APIKey,
-		BaseURL:        provider.BaseURL,
-		APIType:        provider.APIType,
-		Model:          provider.Model,
-		Temperature:    temperature,
-		MaxTokens:      maxTokens,
-		MaxRetries:     1,
+		APIKey:      provider.APIKey,
+		BaseURL:     provider.BaseURL,
+		APIType:     provider.APIType,
+		Model:       provider.Model,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+		// 与同包 GetDefaultConfig 对齐取 3：这里曾是 1，网关一次瞬时 5xx 就直接降级成
+		// "抱歉，AI 服务暂时不可用"落到客户脸上（route 无 fallbacks 时无人接手）。
+		MaxRetries:     3,
 		RequestTimeout: route.MaxLatency / 1000,
 		SystemPrompt:   req.SystemPrompt,
 	}
@@ -285,13 +288,43 @@ func (d *Dispatcher) DispatchStructured(ctx context.Context, req DispatchRequest
 
 	jsonStr := extractJSON(result.Content)
 	if jsonStr == "" {
-		return result, fmt.Errorf("no JSON content in response: %s", result.Content)
+		// response_format=json_object 只是入参约定，兼容网关可以整段忽略它回散文（实测 sensenova
+		// 对线索判定回了整篇 markdown，导致 lead-mining 27 次调用全判失败、一条线索都没落库）。
+		// 兜底：把"只输出 JSON"补成最后一条消息再打一次，仍取不到才认失败。
+		retryReq := req
+		retryReq.CacheKey = "" // 重试不得复用首轮缓存，否则原样取回同一段散文
+		retryReq.Messages = appendJSONRetryMessage(req.Messages, req.Prompt)
+		if r2, err2 := d.Dispatch(ctx, retryReq); err2 == nil {
+			if s2 := extractJSON(r2.Content); s2 != "" {
+				result, jsonStr = r2, s2
+			}
+		}
+	}
+	if jsonStr == "" {
+		return result, fmt.Errorf("no JSON content in response: %s", textutil.Truncate(result.Content, 200))
 	}
 	if err := json.Unmarshal([]byte(jsonStr), schema); err != nil {
 		return result, fmt.Errorf("parse JSON: %w", err)
 	}
 	result.Content = jsonStr
 	return result, nil
+}
+
+// jsonRetryInstruction 追加在重试请求末尾的硬约束。
+const jsonRetryInstruction = "上一条回复不是合法 JSON。现在只输出目标 JSON 对象本身：不要解释文字、不要 markdown 代码块、不要前后缀。"
+
+// appendJSONRetryMessage 保留原对话、追加一条硬约束消息。
+// 原请求走 Messages 时接在其后；只走 Prompt 时把约束拼进 Prompt（Messages 为空时才会用 Prompt）。
+func appendJSONRetryMessage(msgs []ChatMessage, prompt string) []ChatMessage {
+	if len(msgs) > 0 {
+		out := make([]ChatMessage, 0, len(msgs)+1)
+		out = append(out, msgs...)
+		return append(out, ChatMessage{Role: "user", Content: jsonRetryInstruction})
+	}
+	if prompt == "" {
+		return []ChatMessage{{Role: "user", Content: jsonRetryInstruction}}
+	}
+	return []ChatMessage{{Role: "user", Content: prompt + "\n\n" + jsonRetryInstruction}}
 }
 
 func estimateTokens(text string) int {
