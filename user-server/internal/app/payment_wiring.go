@@ -49,6 +49,8 @@ func InitPaymentRuntime(db *gorm.DB) bool {
 		repository.NewPaymentRepositoryWithDB(db),
 		repository.NewBillRepositoryWithDB(db),
 	)
+	// T-P8-01 全链路埋点：账单 settled 事件走 traceSettlement 发射（Transited 才发）。
+	svc.SetSalesTrace(repository.NewSalesEventRepositoryWithDB(db))
 	service.SetGlobalPaymentService(svc)
 
 	// T-P7-04 回款完成 → 赢单 → 复购跟进：默认钩子在这里装。

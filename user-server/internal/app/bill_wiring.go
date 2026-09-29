@@ -49,6 +49,8 @@ func InitBillRuntime(db *gorm.DB) bool {
 		repository.NewBillRepositoryWithDB(db),
 		repository.NewQuoteRepositoryWithDB(db),
 	)
+	// T-P8-01 全链路埋点：账单 created 事件走 DeriveFromQuote 真新建分支发射。
+	svc.SetSalesTrace(repository.NewSalesEventRepositoryWithDB(db))
 	service.SetGlobalBillService(svc)
 
 	ok := svc.Available()

@@ -118,6 +118,16 @@ type OpportunityConvertService struct {
 	// now 同时喂三处：主键的时间段、赢率的逾期判据、审计的时间痕。
 	// 分叉成两个时钟会出现"这一行刚建出来就已经逾期"这种自相矛盾的形状。
 	now func() time.Time
+	// trace 全链路埋点写口（T-P8-01）：nil = 没装，转化照常，不阻塞。
+	trace salesTraceWriter
+}
+
+// SetSalesTrace 注入链路事件写口。传 nil 表示不埋点（测试/轻装配可用）。
+func (s *OpportunityConvertService) SetSalesTrace(w salesTraceWriter) {
+	if s == nil {
+		return
+	}
+	s.trace = w
 }
 
 // NewOpportunityConvertService 构造。audit 允许为 nil（装配回显会照实报出这一格空着）。
@@ -226,6 +236,15 @@ func (s *OpportunityConvertService) ConvertFromClue(ctx context.Context, in Oppo
 		// 而分开的判据在仓储侧。换编号重试绝不做 —— 那会把一次重复投递变成两行商机。
 		return OpportunityConvertResult{}, fmt.Errorf("opportunity convert: 线索 %s 落库失败：%w", clueID, err)
 	}
+	// T-P8-01 链路第一跳：商机创建。重放走 existing 分支提前返回，这里只在真新建时到。
+	emitSalesTrace(ctx, s.trace, &model.SalesEvent{
+		EventType:     model.SalesEventTypeOpportunity,
+		Action:        "created",
+		OpportunityID: row.ID,
+		CustomerID:    in.CustomerID,
+		OwnerID:       row.OwnerUserID,
+		OccurredAt:    now,
+	}, "opportunity_convert")
 
 	res := OpportunityConvertResult{
 		Allowed: true, Created: true, GateReason: LTCReasonActive,

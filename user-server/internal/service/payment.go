@@ -190,6 +190,16 @@ type PaymentService struct {
 	now      func() time.Time
 	// onCollection 回款完成钩子（T-P7-04）：nil = 没装，触发条件到了也只是记 "no-hook"。
 	onCollection CollectionCompletedHook
+	// trace 全链路埋点写口（T-P8-01）：nil = 没装，记账照常，不阻塞。
+	trace salesTraceWriter
+}
+
+// SetSalesTrace 注入链路事件写口。传 nil 表示不埋点（测试/轻装配可用）。
+func (s *PaymentService) SetSalesTrace(w salesTraceWriter) {
+	if s == nil {
+		return
+	}
+	s.trace = w
 }
 
 // NewPaymentService 构造。缺件时构造照旧成功，由 Available / 各方法报出来。
@@ -222,6 +232,24 @@ func (s *PaymentService) SetCollectionCompletedHook(hook CollectionCompletedHook
 // 只认"这次 Transited 到 paid"：partial 不触发（AC②）、已结掉账单的重放
 // Transited 为假不触发（AC③ 的 SOP 侧）。钩子的任何失败都只变成结论字符串，
 // 不败支付 —— 钱已记、单已结是事实，钩子只是事实的跟进。
+// traceSettlement 回款记账两处收口的公共尾巴（T-P8-01）：先写 bill/settled 链路事件，
+// 再走回款→赢单钩子。事件只在 Transited 时发（真推动账单状态的那一次）；
+// partial 同样发（Result 携带 paid/partial），链上不断。
+func (s *PaymentService) traceSettlement(ctx context.Context, bill *model.Bill, settled SettlementView) string {
+	if settled.Transited {
+		emitSalesTrace(ctx, s.trace, &model.SalesEvent{
+			EventType:     model.SalesEventTypeBill,
+			Action:        "settled",
+			Result:        settled.Status,
+			OpportunityID: bill.OpportunityID,
+			QuoteID:       bill.QuoteID,
+			Amount:        settled.Settled,
+			OccurredAt:    s.now(),
+		}, "payment_settlement")
+	}
+	return s.fireCollectionCompleted(ctx, bill, settled)
+}
+
 func (s *PaymentService) fireCollectionCompleted(ctx context.Context, bill *model.Bill, view SettlementView) string {
 	if !(view.Transited && view.Status == model.BillStatusPaid) {
 		return ""
@@ -354,7 +382,7 @@ func (s *PaymentService) RecordPayment(ctx context.Context, in RecordPaymentInpu
 			ErrPaymentStatusStuck, view.ID, billID, err)
 	}
 	return &PaymentReceipt{Payment: view, Reused: false,
-		Settlement: settled, Collection: s.fireCollectionCompleted(ctx, bill, settled)}, nil
+		Settlement: settled, Collection: s.traceSettlement(ctx, bill, settled)}, nil
 }
 
 // settleKnown 幂等通路上的三种结论：复用（无写入）、冲销（只改 status）、拒（内容不符）。
@@ -410,7 +438,7 @@ func (s *PaymentService) receiptOf(ctx context.Context, row *model.Payment, bill
 			ErrPaymentStatusStuck, row.ID, bill.ID, err)
 	}
 	return &PaymentReceipt{Payment: paymentViewOf(row, false), Reused: true,
-		Settlement: settled, Collection: s.fireCollectionCompleted(ctx, bill, settled)}, nil
+		Settlement: settled, Collection: s.traceSettlement(ctx, bill, settled)}, nil
 }
 
 // applySettlement 把账单状态折算成"Σ 计入结清 vs 应收金额"的结果。

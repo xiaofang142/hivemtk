@@ -307,6 +307,16 @@ type OpportunityService struct {
 	// now 只被"是否逾期"这一条判据读。做成字段而不是包级变量：
 	// 本文件与 600 多个同包文件共处，改包级时钟会跨用例串扰（-count=2 稳定红那一类）。
 	now func() time.Time
+	// trace 全链路埋点写口（T-P8-01）：nil = 没装，赢单照常，不阻塞。
+	trace salesTraceWriter
+}
+
+// SetSalesTrace 注入链路事件写口。传 nil 表示不埋点（测试/轻装配可用）。
+func (s *OpportunityService) SetSalesTrace(w salesTraceWriter) {
+	if s == nil {
+		return
+	}
+	s.trace = w
 }
 
 // NewOpportunityService 构造。仓储句柄由装配侧注入 —— 本层不自己去拿全局 DB。
@@ -474,6 +484,15 @@ func (s *OpportunityService) CompleteCollection(ctx context.Context, id string) 
 	if merr != nil {
 		return false, nil, merr
 	}
+	// T-P8-01 链路 hops：赢单真跃迁。已赢单的重放上面已提前返回，这里只在真改写时到。
+	emitSalesTrace(ctx, s.trace, &model.SalesEvent{
+		EventType:     model.SalesEventTypeOpportunity,
+		Action:        "won",
+		OpportunityID: after.ID,
+		CustomerID:    after.CustomerID,
+		OwnerID:       after.OwnerUserID,
+		OccurredAt:    s.now(),
+	}, "opportunity_complete_collection")
 	return false, after, nil
 }
 

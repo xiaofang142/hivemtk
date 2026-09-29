@@ -151,6 +151,16 @@ type BillService struct {
 	bills  billStore
 	quotes billQuoteStore
 	now    func() time.Time
+	// trace 全链路埋点写口（T-P8-01）：nil = 没装，派生照常，不阻塞。
+	trace salesTraceWriter
+}
+
+// SetSalesTrace 注入链路事件写口。传 nil 表示不埋点（测试/轻装配可用）。
+func (s *BillService) SetSalesTrace(w salesTraceWriter) {
+	if s == nil {
+		return
+	}
+	s.trace = w
 }
 
 // NewBillService 构造。缺件时构造照旧成功，由 Available / DeriveFromQuote 报出来 ——
@@ -291,6 +301,15 @@ func (s *BillService) DeriveFromQuote(ctx context.Context, in BillDeriveInput) (
 	if stored == nil {
 		return nil, fmt.Errorf("bill: 账单 %s 写入返回成功而按主键读不回（同一事务里刚写的那一行，须人工核对）", key)
 	}
+	// T-P8-01 链路 hops：账单创建。复用/并发分支上面已提前返回，这里只在真新建时到。
+	emitSalesTrace(ctx, s.trace, &model.SalesEvent{
+		EventType:     model.SalesEventTypeBill,
+		Action:        "created",
+		OpportunityID: stored.OpportunityID,
+		QuoteID:       stored.QuoteID,
+		Amount:        stored.Amount,
+		OccurredAt:    s.now(),
+	}, "bill_derive_fresh_create")
 	return billViewOf(stored, false), nil
 }
 

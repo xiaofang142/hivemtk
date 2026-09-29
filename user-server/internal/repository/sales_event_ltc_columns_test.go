@@ -76,23 +76,35 @@ func TestSalesEventLTCColumns_SchemaShape(t *testing.T) {
 	}
 }
 
-// TestSalesEventLTCColumns_NoIndexYet 钉住 model 注释 c) 条：今天**不建**索引。
-// P4 的商机时间线真的按 opportunity_id 查了就会红 —— 那是**预期中的红**：加索引时必须
-// 同时改掉 a)/c) 两条注释与本用例，别留一个"注释说没有、库里已经有了"的现场。
-func TestSalesEventLTCColumns_NoIndexYet(t *testing.T) {
+// TestSalesEventLTCColumns_OpportunityIndexPresent 钉住 model 注释 c) 条的兑现：
+// T-P8-01 落了首个按 opportunity_id 检索的读路径（ListByOpportunityID），索引
+// idx_sales_events_opportunity 随本卡一起建。quote_id 今天仍无读方，继续保持无索引。
+func TestSalesEventLTCColumns_OpportunityIndexPresent(t *testing.T) {
 	database := setupLTCColumnTestDB(t)
 
 	var indexed int64
 	if err := database.Raw(`
 		SELECT COUNT(*) FROM pg_indexes
 		WHERE tablename = 'sales_events'
-		  AND (indexdef ILIKE '%opportunity_id%' OR indexdef ILIKE '%quote_id%')`).
+		  AND indexdef ILIKE '%opportunity_id%'`).
 		Scan(&indexed).Error; err != nil {
 		t.Fatalf("查 pg_indexes 失败：%v", err)
 	}
-	if indexed != 0 {
-		t.Fatalf("sales_events 上出现了引用 LTC 预留列的索引（%d 条）⇒ 与 model 注释 c) 条冲突："+
-			"要么随 P4 一并把注释改成事实，要么这就是无人查询的死索引", indexed)
+	if indexed == 0 {
+		t.Fatalf("ListByOpportunityID 已是生产读口，sales_events 上却没有 opportunity_id 索引 ⇒ " +
+			"与 model 注释 c) 条冲突：读方与索引必须同卡落地")
+	}
+
+	var quoteIndexed int64
+	if err := database.Raw(`
+		SELECT COUNT(*) FROM pg_indexes
+		WHERE tablename = 'sales_events'
+		  AND indexdef ILIKE '%quote_id%'`).
+		Scan(&quoteIndexed).Error; err != nil {
+		t.Fatalf("查 pg_indexes 失败：%v", err)
+	}
+	if quoteIndexed != 0 {
+		t.Fatalf("quote_id 今天仍无读方，sales_events 上却出现了它的索引（%d 条）⇒ 无人查询的死索引", quoteIndexed)
 	}
 }
 

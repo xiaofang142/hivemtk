@@ -17,6 +17,9 @@ type SalesEventRepository interface {
 	Create(ctx context.Context, ev *model.SalesEvent) error
 	// ListByType 按事件类型查询；ownerID 为空表示不限销售，since 为零值表示不限起始时间
 	ListByType(ctx context.Context, eventType, ownerID string, sinceUnix int64) ([]*model.SalesEvent, error)
+	// ListByOpportunityID T-P8-01 首个生产读口：按 opportunity_id 取全链路事件，
+	// occurred_at ASC、id ASC（同秒并列由自增 id 破序，链序 = 写入序）。
+	ListByOpportunityID(ctx context.Context, opportunityID string) ([]*model.SalesEvent, error)
 }
 
 type salesEventRepo struct {
@@ -35,6 +38,16 @@ func NewSalesEventRepositoryWithDB(db *gorm.DB) SalesEventRepository {
 
 func (r *salesEventRepo) Create(ctx context.Context, ev *model.SalesEvent) error {
 	return r.db.Create(ev).Error
+}
+
+func (r *salesEventRepo) ListByOpportunityID(ctx context.Context, opportunityID string) ([]*model.SalesEvent, error) {
+	list := make([]*model.SalesEvent, 0)
+	if err := r.db.WithContext(ctx).Model(&model.SalesEvent{}).
+		Where("opportunity_id = ?", opportunityID).
+		Order("occurred_at ASC, id ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (r *salesEventRepo) ListByType(ctx context.Context, eventType, ownerID string, sinceUnix int64) ([]*model.SalesEvent, error) {

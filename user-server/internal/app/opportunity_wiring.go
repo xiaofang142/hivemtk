@@ -42,6 +42,8 @@ func InitOpportunityRuntime(db *gorm.DB) *service.OpportunityService {
 	}
 	oppRepo := repository.NewOpportunityRepositoryWithDB(db)
 	svc := service.NewOpportunityService(oppRepo)
+	// T-P8-01 全链路埋点：商机 won 事件走 CompleteCollection 发射。
+	svc.SetSalesTrace(repository.NewSalesEventRepositoryWithDB(db))
 	service.SetGlobalOpportunityService(svc)
 
 	// 线索→商机的转换竖（T-P4-05）。四个句柄都从同一个 db 出发：
@@ -54,6 +56,8 @@ func InitOpportunityRuntime(db *gorm.DB) *service.OpportunityService {
 			service.NewSalesEventRoster(repository.NewSalesEventRepositoryWithDB(db)), oppRepo),
 		repository.NewOperationLogRepositoryWithDB(db),
 	)
+	// T-P8-01 全链路埋点：商机 created 事件走 ConvertFromClue 真新建分支发射。
+	conv.SetSalesTrace(repository.NewSalesEventRepositoryWithDB(db))
 	service.SetGlobalOpportunityConverter(conv)
 
 	logger.Infof("[opportunity] ✅ 商机底座已装配（表 opportunities）：状态机边表 + 乐观锁 CAS + 派生赢率；" +
