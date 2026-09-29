@@ -818,14 +818,22 @@ export async function dispatch(cmd, deps) {
       // 也不让链路黑盒；卡住的 create 仍在后台继续，后续 open_tab 重试即可成功。
       const capMs = Math.min(Math.max(Number(cmd.open_tab_timeout_ms) || 25000, 5000), 28000);
       const t0 = Date.now();
+      const openP = openTab(cmd.url, cmd.active === true);
       let tab;
       try {
-        tab = await raceTimeout(openTab(cmd.url, cmd.active === true), capMs, 'open_tab');
+        tab = await raceTimeout(openP, capMs, 'open_tab');
       } catch (e) {
         // raceTimeout 的 *_inject_timeout_* 是注入语系文案；open_tab 卡的是 SW 自己的
         // tabs.create，换成能直接归因的话再上抛。
         if (/_inject_timeout_/.test(String(e?.message || e))) {
-          throw new Error(`open_tab_timeout: tabs.create 超过 ${capMs}ms 未回包（重页加载阻塞浏览器进程时实测会整段卡住）`, { cause: e });
+          // 孤儿 tab 收口：create 迟到回来时这个 tab 对本步已无主——服务端因命令超时
+          // 拿不到 chrome_tab_id，cleanupSessionTab 会因 tab_id<=0 直接跳过回收。
+          // 没人管的抖音重页会一直占着浏览器进程 IPC，把后续 open_tab 一起拖死
+          // （真机 session625：孤儿重页 + 后续 open_tab 30s 黑盒，清页后立刻恢复）。
+          Promise.resolve(openP)
+            .then((late) => (late && late.id ? chrome.tabs.remove(late.id) : null))
+            .catch(() => {});
+          throw new Error(`open_tab_timeout: tabs.create 超过 ${capMs}ms 未回包（重页加载阻塞浏览器进程时实测会整段卡住；迟到的 tab 已由扩展侧回收）`, { cause: e });
         }
         throw e;
       }
@@ -952,8 +960,8 @@ export async function dispatch(cmd, deps) {
           let res;
           try {
             await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, submit, 'probe']);
-            await cdpInput.typeText(tabId, cmd.value || '');
-            res = { ok: true, editable: true, channel: 'cdp' };
+            const typed = await cdpInput.typeText(tabId, cmd.value || '');
+            res = { ok: true, editable: true, channel: 'cdp', partial: !!typed?.partial, typed: typed?.typed ?? 0 };
           } catch (e) {
             if (!String(e?.message || e).includes('element_not_found')) {
               const r = await executeInTab(tabId, injType, [sel, cmd.value || '', !!cmd.clear_first, submit, 'fallback']).catch(() => null);
@@ -1016,7 +1024,15 @@ export async function dispatch(cmd, deps) {
             if (pre.needs_trusted) {
               // CJK 走逐字 insertText、ASCII 走 keyDown/keyUp（码表对齐 Puppeteer），
               // 含 humanize 时序与 infobar 稳定等待 —— 见 cdp/input.js
-              await cdpInput.typeText(tabId, cmd.value || '');
+              const typed = await cdpInput.typeText(tabId, cmd.value || '');
+              // 真机实测：后台 tab 上 CDP ack 会尖刺到 ~3.1s/条，逐字串行能把 30s 闸吃光
+              // → 扩展不回帧 → 服务端只见「host 命令超时」。cdp/input.js 已加总闸，
+              // 超预算时它**提前收手并如实回报 partial**（已敲的字真留在框里，不能当成功）。
+              // 这里不 throw：prep 阶段副作用只有「输入框里多了几个字」，绝不涉及提交；
+              // partial 原样上抛会让服务端判灰态，而真相是照常走 comment_verify 的 DOM 裁决。
+              if (typed?.partial) {
+                return { ok: true, input_found: true, needs_trusted: true, input_text: pre.input_text || '', partial: true, typed: typed.typed ?? 0, typed_total: typed.chars ?? 0 };
+              }
             }
             return { ok: true, input_found: true, needs_trusted: !!pre.needs_trusted, input_text: pre.input_text || '' };
           }

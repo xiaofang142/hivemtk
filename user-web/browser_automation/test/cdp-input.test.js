@@ -231,4 +231,68 @@ describe('cdp/input', () => {
     expect(Math.abs(last.x - 1000)).toBeLessThanOrEqual(1);
     expect(Math.abs(last.y)).toBeLessThanOrEqual(1);
   });
+
+  // ---- 写通道 deadline（真机 30s 黑盒的根因；实测依据见 cdp/input.js 顶部注释）----
+  // 修复前 attach/send/typeText 全是裸 await：CDP ack 尖刺（真机实测 ~3.1s/条，
+  // F11 记载后台 tab 5s/ack）时逐字串行把 30s 服务端闸吃光，扩展一个帧都不回。
+  it('sendCommand 永不回包：typeText 必须在 CDP_SEND_DEADLINE_MS 内失败而不是永挂', async () => {
+    global.chrome = {
+      debugger: {
+        attach: vi.fn(async () => {}),
+        detach: vi.fn(async () => {}),
+        sendCommand: vi.fn(() => new Promise(() => {})), // 永不 ack
+        onDetach: { addListener: vi.fn() },
+      },
+    };
+    vi.resetModules();
+    const m = await import('../src/core/cdp/input.js');
+    await expect(m.typeText(31, '好吃')).rejects.toThrow(/cdp_send_deadline/);
+  }, 20000);
+
+  it('attach 永不回包：必须报 cdp_attach_deadline 而不是把整条命令挂死', async () => {
+    global.chrome = {
+      debugger: {
+        attach: vi.fn(() => new Promise(() => {})),
+        detach: vi.fn(async () => {}),
+        sendCommand: vi.fn(async () => ({})),
+        onDetach: { addListener: vi.fn() },
+      },
+    };
+    vi.resetModules();
+    const m = await import('../src/core/cdp/input.js');
+    await expect(m.typeText(32, 'a')).rejects.toThrow(/cdp_attach_deadline/);
+  }, 20000);
+
+  it('逐条都在 deadline 内但整体超预算：typeText 提前收手并如实回报 partial', async () => {
+    // 每条 ack 都比 5s deadline 快（保证不是 cdp_send_deadline 触发），
+    // 但累计把 15s 总闸跑穿 → 必须回 partial 且 typed < chars，绝不能谎报成功。
+    global.chrome = {
+      debugger: {
+        attach: vi.fn(async () => {}),
+        detach: vi.fn(async () => {}),
+        sendCommand: vi.fn(async () => {
+          await new Promise((r) => setTimeout(r, 400));
+          return {};
+        }),
+        onDetach: { addListener: vi.fn() },
+      },
+    };
+    vi.resetModules();
+    const m = await import('../src/core/cdp/input.js');
+    // 24 个 ASCII 字 × (keyDown 400 + sleep 30 + keyUp 400) ≈ 21s > 15s 总闸，
+    // 但每条 ack 400ms 远快于 5s 单条 deadline → 必须是「总闸收手」而非单条超时。
+    const r = await m.typeText(33, 'abcdefghijklmnopqrstuvwx'); // 24 字
+    expect(r.partial).toBe(true);
+    expect(r.typed).toBeGreaterThan(0);
+    expect(r.typed).toBeLessThan(r.chars);
+    expect(r.chars).toBe(24);
+  }, 40000);
+
+  it('总闸必须早于服务端 30s 闸：CDP_COMMAND_DEADLINE_MS < 30000', async () => {
+    const m = await loadFresh();
+    // 扩展必须先于服务端 defaultCmdTimeout 回一个带错误名的帧，否则只能等黑盒
+    expect(m.CDP_COMMAND_DEADLINE_MS).toBeLessThan(30000);
+    expect(m.CDP_SEND_DEADLINE_MS).toBeLessThan(m.CDP_COMMAND_DEADLINE_MS);
+    expect(m.TYPE_TOTAL_BUDGET_MS).toBeLessThan(m.CDP_COMMAND_DEADLINE_MS);
+  });
 });
