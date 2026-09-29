@@ -151,19 +151,42 @@ elif [ -z "$JWT" ]; then
   log_warn "未提供 JWT(--token 或 HIVE_MTK_JWT):跳过在线检查,仅完成本机静态检查"
   log_info "在线验证: curl -H \"Authorization: Bearer <JWT>\" $BASE_URL/api/browser-automation/host/status"
 else
-  RESP=$(curl -s -m 10 -H "Authorization: Bearer $JWT" "$BASE_URL/api/browser-automation/host/status" 2>/dev/null || true)
+  # 本机 loopback 的 IPv4/IPv6 可能分属两个监听者（2026-09-29 实测：Docker 容器
+  # mtk-user-server-dev 占 127.0.0.1:8204，宿主 air 起的服务端只在 [::1]:8204）。
+  # 只打 IPv4 会读到容器那份 count:0，把宿主链路误判成离线，故逐个候选试到 online:true。
+  CANDS=("$BASE_URL")
+  case "$BASE_URL" in
+    http://127.0.0.1:*|http://localhost:*)
+      PORT="${BASE_URL##*:}"
+      CANDS+=("http://[::1]:$PORT") ;;
+  esac
+  RESP=""
+  USED_URL=""
+  for U in "${CANDS[@]}"; do
+    R=$(curl -s -m 10 -H "Authorization: Bearer $JWT" "$U/api/browser-automation/host/status" 2>/dev/null || true)
+    [ -n "$R" ] && { RESP="$R"; USED_URL="$U"; }
+    if echo "$R" | grep -q '"online":true'; then
+      RESP="$R"; USED_URL="$U"; break
+    fi
+  done
   if [ -z "$RESP" ]; then
     log_fail "服务端不可达: $BASE_URL (确认 user-server 已启动,端口见 internal/config/ports.go DefaultListenPort=8204)"
-  elif echo "$RESP" | grep -q '"code":0\|"code": 0'; then
-    log_pass "host/status 返回 code=0"
+  elif ! echo "$RESP" | grep -q '"code":0\|"code": 0'; then
+    log_fail "host/status 返回异常: $(echo "$RESP" | head -c 300)"
+  elif ! echo "$RESP" | grep -q '"online":true'; then
+    # 这条检查的名字就是「在线检查」：online:false 必须 FAIL。
+    # 早前只在 online:true 且缺 servable 时告警，host 完全离线反而判通过（假绿）。
+    log_fail "host/status 可达但 Host 离线(online=false) @ $USED_URL: $(echo "$RESP" | head -c 300)"
+    log_info "排查: 扩展 SW 是否存活(chrome://extensions) / ~/.hivemtk/nm_host.conf 的 token 与 server_url /"
+    log_info "      Host 进程是否被 Chrome 拉起(pgrep -fl hivemtk_browser_nm_host)"
+  else
+    log_pass "Host 在线 @ $USED_URL"
     log_info "$(echo "$RESP" | head -c 500)"
     # F3：online=注册在场，servable=应用面确曾回包。只有前者时命令帧可能全部有去无回，
     # 「看起来健康」却完全不可服务（真机踩过三次），故单列一条 WARN 指路。
-    if echo "$RESP" | grep -q '"online":true' && ! echo "$RESP" | grep -q '"servable":true'; then
+    if ! echo "$RESP" | grep -q '"servable":true'; then
       log_warn "Host 注册在线但 servable=false：应用面未回过包（注册探针 ≤10s 内应出结论，仍 false 就查扩展 SW/重新加载扩展）"
     fi
-  else
-    log_fail "host/status 返回异常: $(echo "$RESP" | head -c 300)"
   fi
 fi
 
