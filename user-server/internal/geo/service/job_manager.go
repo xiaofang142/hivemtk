@@ -80,11 +80,13 @@ var specParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom
 //  2. panic 恢复 + 超时控制
 //  3. 每次运行落 geo_job_runs 历史（管理端可查）
 //  4. cron 表达式可经管理端 API 调整并持久化到 GeoConfig.CronSpecs
+//  5. 分布式锁：多实例部署时防止同一任务重复执行
 type JobManager struct {
 	mu      sync.RWMutex
 	sched   JobScheduler
 	runRepo repository.GeoJobRunRepository
 	cfgRepo repository.GeoConfigRepository
+	db      *gorm.DB
 
 	running map[string]*atomic.Bool
 	specs   map[string]string
@@ -115,6 +117,13 @@ func GetGeoJobManager() *JobManager {
 		}
 	})
 	return jobManager
+}
+
+// SetJobManagerDB 设置数据库连接用于分布式锁
+func (m *JobManager) SetJobManagerDB(db *gorm.DB) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.db = db
 }
 
 // SetupGeoJobs 由 cron.InitCron 调用：清理僵尸 running 记录、
@@ -202,6 +211,18 @@ func (m *JobManager) StartJob(name, trigger string) (bool, error) {
 		return false, nil
 	}
 
+	// 分布式锁：多实例部署时防止同一任务重复执行
+	if m.db != nil {
+		locked, err := m.acquireDistributedLock(name, def.Timeout)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("[GEO Jobs] 任务 %s 获取分布式锁失败: %v", name, err))
+		} else if !locked {
+			logger.Info(fmt.Sprintf("[GEO Jobs] 任务 %s 已被其他实例锁定，跳过本次触发（trigger=%s）", name, trigger))
+			m.running[name].Store(false)
+			return false, nil
+		}
+	}
+
 	run := &model.GeoJobRun{
 		JobName:   name,
 		Trigger:   trigger,
@@ -219,8 +240,38 @@ func (m *JobManager) StartJob(name, trigger string) (bool, error) {
 	return true, nil
 }
 
+// acquireDistributedLock 尝试获取分布式锁（基于数据库行锁）
+func (m *JobManager) acquireDistributedLock(jobName string, timeout time.Duration) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var result int
+	err := m.db.WithContext(ctx).Raw(
+		"SELECT pg_try_advisory_lock(hashtext(?))", jobName,
+	).Scan(&result).Error
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+// releaseDistributedLock 释放分布式锁
+func (m *JobManager) releaseDistributedLock(jobName string) {
+	if m.db == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// 解锁返回值无需使用，但 Scan 目标不可为 nil（gorm 会 panic，见 acquireDistributedLock 同构写法）。
+	var discarded bool
+	_ = m.db.WithContext(ctx).Raw(
+		"SELECT pg_advisory_unlock(hashtext(?))", jobName,
+	).Scan(&discarded).Error
+}
+
 func (m *JobManager) execute(def geoJobDef, runID uint, trigger string) {
 	defer m.running[def.Name].Store(false)
+	defer m.releaseDistributedLock(def.Name)
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), def.Timeout)
