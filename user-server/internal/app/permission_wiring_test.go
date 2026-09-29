@@ -33,11 +33,11 @@ func TestParseRiskGateMode(t *testing.T) {
 		{"shadow", riskGateShadow},
 		{"observe", riskGateShadow},
 		{" SHADOW ", riskGateShadow},
-		// 阻断语气的值一律落到 shadow：本构建没有拒绝路径，但意图不能被判成"关掉"。
-		{"enforce", riskGateShadow},
-		{"block", riskGateShadow},
-		{"true", riskGateShadow},
-		{"1", riskGateShadow},
+		// 阻断语气的值进 block（T-P9-01）：would_deny 变成真拦截。回滚 = 改旗子。
+		{"enforce", riskGateBlock},
+		{"block", riskGateBlock},
+		{"true", riskGateBlock},
+		{"1", riskGateBlock},
 		// 认不出的值不挂链（挂了也没人消费）。
 		{"banana", riskGateOff},
 	}
@@ -57,6 +57,9 @@ func TestApplyRiskGate_OffLeavesConfigUntouched(t *testing.T) {
 	if cfg.RiskGrants != nil || cfg.RiskObserver != nil {
 		t.Error("off 模式下两个字段必须显式清空（不是「没赋值」，是「赋成 nil」）")
 	}
+	if cfg.RiskEnforce {
+		t.Error("off 模式下 RiskEnforce 必须为 false（否则关旗不断阻断）")
+	}
 }
 
 func TestApplyRiskGate_ShadowMountsObserver(t *testing.T) {
@@ -70,6 +73,32 @@ func TestApplyRiskGate_ShadowMountsObserver(t *testing.T) {
 	}
 	if _, ok := cfg.RiskGrants.(*tooluse.WhitelistPermissionChecker); !ok {
 		t.Errorf("grants 实际类型 %T：判定必须直接读 Agent 白名单那张表", cfg.RiskGrants)
+	}
+	if cfg.RiskEnforce {
+		t.Error("shadow 模式下 RiskEnforce 必须为 false（本态无拒绝路径）")
+	}
+}
+
+// TestApplyRiskGate_BlockMountsEnforce 是 T-P9-01 的核心装配断言：旗子=block 时
+// 观察层照常挂（判定口径不变），外加 RiskEnforce=true 让 executor 挂阻断装饰器。
+func TestApplyRiskGate_BlockMountsEnforce(t *testing.T) {
+	t.Setenv(RiskGateFlagEnv, "block")
+	cfg := tooluse.ToolExecutorConfig{DefaultTimeout: time.Second}
+	if mode := applyRiskGate(&cfg); mode != riskGateBlock {
+		t.Fatalf("mode=%s，期望 block", mode)
+	}
+	if cfg.RiskGrants == nil || cfg.RiskObserver == nil {
+		t.Fatal("block 模式下观察层必须照常挂（判定口径与 shadow 一致）")
+	}
+	if !cfg.RiskEnforce {
+		t.Error("block 模式下 RiskEnforce 必须为 true，否则挂的还是透传门")
+	}
+	rep := GetToolRiskReport()
+	if rep.Mode != string(riskGateBlock) {
+		t.Errorf("报告 mode=%s，期望 block", rep.Mode)
+	}
+	if !rep.BlocksWhenDenied {
+		t.Error("block 态 blocks_when_denied=false：报告在谎报没有阻断能力")
 	}
 }
 

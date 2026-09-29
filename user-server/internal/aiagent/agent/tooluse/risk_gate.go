@@ -1,4 +1,6 @@
-// 工具风险分级闸门（T-P3-05 / G-3）：**只判定、只留痕，不改放行结果**。
+// 工具风险分级闸门（T-P3-05 / G-3，阻断由 T-P9-01 接入）：默认只判定、只留痕；
+// 仅当 executor 配了 RiskEnforce=true（旗 FF_TOOL_PERMISSION_ENFORCE=block）时，
+// RiskGateBlockDecorator 才把 would_deny 变成真拦截。
 //
 // 与已有的两层控制各自回答不同的问题，缺一层都会留下具体的盲区：
 //
@@ -26,6 +28,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // riskModeOffLiteral 与 app 层的 riskGateOff 同值；在这里重述一份字面量，
@@ -63,8 +67,9 @@ type AgentGrantReader interface {
 
 // RiskDecision 一次调用上的分级判定结果。
 //
-// Allowed 与 WouldDeny 必须同时存在且**不合并**：本卡 Allowed 恒真（无拒绝路径），
-// WouldDeny 才是"若转阻断会被拦的量"。合并成一个字段的话，P9 手上就没有观察期数据了。
+// Allowed 与 WouldDeny 必须同时存在且**不合并**：shadow 态 Allowed 恒真（无拒绝路径），
+// WouldDeny 才是"若转阻断会被拦的量"；block 态 Allowed = !WouldDeny，被拒的行 Allowed=false。
+// 合并成一个字段的话，P9 手上就没有观察期数据了。
 type RiskDecision struct {
 	ToolName      string        `json:"tool_name"`
 	Level         ToolRiskLevel `json:"level"`
@@ -140,6 +145,43 @@ func RiskGateDecorator(t Tool, grants AgentGrantReader, observer RiskObserver) T
 			j.Allowed = true
 			j.At = time.Now()
 			observer.Observe(ctx, j)
+			return next(ctx, args)
+		}
+	}
+}
+
+// ErrRiskDenied 阻断模式下"高危且未逐条授权"调用的拒绝原因哨兵。
+// 与 ErrPermissionDenied 分开：一个是"后果分级"的拒（P9），一个是"授权检查"的拒。
+var ErrRiskDenied = fmt.Errorf("tool risk denied")
+
+// RiskGateBlockDecorator 把判定变成阻断（T-P9-01 / G-3）：deny ⟺ WouldDeny。
+//
+// 与 RiskGateDecorator 的唯一差别是 WouldDeny 时不调 next：判定口径、Observe 留痕、
+// nil 透传三处逐字一致，所以观察期攒下的 would_deny 与阻断期的实际拦截量可比。
+// 被拒的调用：结果 Allowed=false、返 ErrorResult(ErrRiskDenied)、记 tool_risk_denied
+// 结构化日志（error 级，供告警）；riskSink 的 tool_risk_decision 行同步记 allowed=false，
+// 与 shadow 态的 allowed=true 可区分（AC① 可观测）。
+func RiskGateBlockDecorator(t Tool, grants AgentGrantReader, observer RiskObserver) ToolDecorator {
+	return func(next ToolHandler) ToolHandler {
+		return func(ctx context.Context, args map[string]any) (ToolResult, error) {
+			if grants == nil || observer == nil {
+				return next(ctx, args)
+			}
+			j := RiskVerdict(t, GetToolContext(ctx), grants)
+			j.Allowed = !j.WouldDeny
+			j.At = time.Now()
+			observer.Observe(ctx, j)
+			if j.WouldDeny {
+				logger.Ctx(ctx).Error().
+					Str("event", "tool_risk_denied").
+					Str("tool_name", j.ToolName).
+					Str("risk_level", string(j.Level)).
+					Str("agent_id", j.AgentID).
+					Str("caller_id", j.CallerID).
+					Str("reason", j.Reason).
+					Msg("工具后果分级阻断：高危且未逐条授权的调用被拦下")
+				return ErrorResult(j.ToolName, fmt.Errorf("%w: %s (%s)", ErrRiskDenied, j.ToolName, j.Reason)), ErrRiskDenied
+			}
 			return next(ctx, args)
 		}
 	}

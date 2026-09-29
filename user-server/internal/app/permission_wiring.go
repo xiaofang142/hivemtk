@@ -26,12 +26,17 @@ import (
 //	off（默认） 不挂判定层，装饰链与接线前逐字节一致
 //	shadow      每次调用算一次判定并留痕；**代码里不存在拒绝路径**
 //
-// 熔断有 enforce、审批门有 block，本卡却**没有**阻断态：卡面写着"只记录判定，
-// 不改放行结果"，转阻断排在 P9。所以把 `FF_TOOL_PERMISSION_ENFORCE=enforce|block|true`
-// 一律按 shadow 挂载并**显式告警"这个构建里它拦不住任何东西"** —— 运维写了 enforce
-// 却以为在阻断，是比不接更糟的状态（defaultAllow=true 那种"名义与实现相反"正是本卡要清掉的）。
-// P9 接阻断时改的是 RiskGateDecorator，不是这里的解析表；报告的 blocks_when_denied 恒 false，
-// 就是为了让"当前有没有真拦"在数据上无法被误读。
+// 三态（T-P9-01 起，与熔断/审批门对齐）：
+//
+//	off（默认） 不挂判定层，装饰链与接线前逐字节一致
+//	shadow      每次调用算一次判定并留痕；**代码里不存在拒绝路径**
+//	block       would_deny 变成真拦截（RiskGateBlockDecorator）：高危且未逐条授权的调用被拒，
+//	            被拒记 tool_risk_denied（error 级）+ tool_risk_decision allowed=false；
+//	            回滚 = 旗子置回 off/shadow，不动代码。
+//
+// 历史注记：T-P3-05 时代本卡没有阻断态，`=enforce|block|true` 一律按 shadow 挂载并告警
+// "这个构建里它拦不住任何东西"。P9 把阻断接上之后，这段告警逻辑已改为真进 block；
+// 报告的 blocks_when_denied 随旗子走（block 态 true），"当前有没有真拦"以它为准。
 
 const (
 	// RiskGateFlagEnv 挂不挂判定层。名字里的 enforce 是卡面指定的（P9 会把它接成真拦截），
@@ -47,6 +52,8 @@ type riskGateMode string
 const (
 	riskGateOff    riskGateMode = "off"
 	riskGateShadow riskGateMode = "shadow"
+	// riskGateBlock 阻断（T-P9-01）：would_deny 变成真拦截。回滚 = 把旗子置回 off/shadow。
+	riskGateBlock riskGateMode = "block"
 )
 
 // 装配期写一次、HTTP 读，无锁前提与 circuitStateRef / approvalModeValue 相同。
@@ -70,12 +77,12 @@ func parseRiskGateMode(raw string) riskGateMode {
 	case "shadow", "observe", "watch", "log", "report":
 		return riskGateShadow
 	case "enforce", "block", "active", "on", "yes", "y", "true", "1":
-		logger.Warnf("[tool-risk] ⚠️ %s=%q 是阻断语气：本构建的分级层**没有任何拒绝路径**（T-P3-05 只判定，转阻断在 P9）"+
-			"⇒ 按 shadow 挂载，只会留下 would_deny 观察数据，不会拦下任何调用。"+
-			"不要据此认为高危工具已被管控；可用值：off|shadow", RiskGateFlagEnv, raw)
-		return riskGateShadow
+		logger.Warnf("[tool-risk] ⚠️ %s=%q 是阻断语气 ⇒ 按 block 挂载：高危且未逐条授权的调用会被真拦（T-P9-01）。"+
+			"开之前先看 /api/agent/tools/risk 的 would_deny；一键回滚 = 把旗子置回 off/shadow。可用值：off|shadow|block",
+			RiskGateFlagEnv, raw)
+		return riskGateBlock
 	}
-	logger.Warnf("[tool-risk] %s=%q 无法识别 ⇒ 按 off 处理（分级判定层不挂链）；可用值：off|shadow", RiskGateFlagEnv, raw)
+	logger.Warnf("[tool-risk] %s=%q 无法识别 ⇒ 按 off 处理（分级判定层不挂链）；可用值：off|shadow|block", RiskGateFlagEnv, raw)
 	return riskGateOff
 }
 
@@ -119,6 +126,7 @@ func applyRiskGate(config *tooluse.ToolExecutorConfig) riskGateMode {
 	if mode == riskGateOff {
 		config.RiskGrants = nil
 		config.RiskObserver = nil
+		config.RiskEnforce = false
 		riskObserverRef = nil
 		return mode
 	}
@@ -132,10 +140,16 @@ func applyRiskGate(config *tooluse.ToolExecutorConfig) riskGateMode {
 
 	config.RiskGrants = grants
 	config.RiskObserver = riskSink{obs: obs}
+	config.RiskEnforce = mode == riskGateBlock
 	riskObserverRef = obs
 
-	logger.Infof("[tool-risk] ✅ 工具后果分级判定已接线，模式=%s（保留窗 %d 条判定，累计计数不受上限影响；"+
-		"本层无拒绝路径 ⇒ 放行结果与接线前一致）", mode, retained)
+	if mode == riskGateBlock {
+		logger.Infof("[tool-risk] 🛑 工具后果分级阻断已接线（保留窗 %d 条判定）：高危且未逐条授权的调用会被真拦，"+
+			"被拒记 tool_risk_denied（error 级）+ tool_risk_decision allowed=false。一键回滚 = 旗子置回 off/shadow。", retained)
+	} else {
+		logger.Infof("[tool-risk] ✅ 工具后果分级判定已接线，模式=%s（保留窗 %d 条判定，累计计数不受上限影响；"+
+			"本层无拒绝路径 ⇒ 放行结果与接线前一致）", mode, retained)
+	}
 	// 这里不写"高危有几个、门内有几个"：那组数字随工具集合漂，抄进日志就会变成第二处事实源。
 	// 启动日志只指路，数字由 /api/agent/tools/risk 每次实算。
 	logger.Infof("[tool-risk] ⚠️ 观察数据只在进程内存里（重启归零）。转阻断前先看 /api/agent/tools/risk 的 " +
@@ -156,8 +170,9 @@ func GetToolRiskReport() tooluse.RiskReport {
 		tooluse.AgentGrantReader(GetGlobalPermissionChecker()),
 		riskObserverRef,
 		riskModeValue,
-		// 阻断能力恒 false：本构建的判定层没有拒绝路径，P9 接阻断时改这一处。
-		false,
+		// 阻断能力 = 旗子是不是 block：block 态 RiskGateBlockDecorator 真拦，
+		// shadow/off 态无拒绝路径。回滚即改旗子，不动代码。
+		riskModeValue == string(riskGateBlock),
 		RiskGateFlagEnv,
 	)
 }
