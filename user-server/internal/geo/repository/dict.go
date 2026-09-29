@@ -66,7 +66,9 @@ func (r *geoDictRepo) Upsert(d *model.GeoDict) error {
 	if d == nil {
 		return nil
 	}
-	return r.db.Clauses(clause.OnConflict{
+	// 必须显式 Select 全列：GORM Create 默认省略零值字段，否则 active=false
+	// 进不了 INSERT 列，EXCLUDED.active 取列 DEFAULT(true)，停用永远写不进去。
+	return r.db.Select("category", "key", "value", "remark", "active", "sort").Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "category"}, {Name: "key"}},
 		DoUpdates: clause.AssignmentColumns([]string{"value", "remark", "active", "sort", "updated_at"}),
 	}).Create(d).Error
