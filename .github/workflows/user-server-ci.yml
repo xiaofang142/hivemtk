@@ -203,7 +203,7 @@ jobs:
         # 与本行由 `make lint-version-check` 强制对齐（不一致就拒绝跑本地 lint）。
         # 2026-09-29：go.mod/.golangci.yml 升 go1.26 后复核过 pin：v2.10.0 以 go1.26.0 构建
         # ≥ 目标 1.26，config 加载不会再 exit 3。
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.10.0
           working-directory: user-server
