@@ -197,29 +197,43 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 		traceID = tracing.TraceIDFromContext(ctx)
 	}
 
+	logger.Infof("[LLM] dispatch scenario=%s candidates=%v provider=%q fallbacks=%v minQuality=%.2f maxLatency=%d",
+		req.Scenario, candidates, activeRoute.Provider, activeRoute.Fallbacks, activeRoute.MinQuality, activeRoute.MaxLatency)
+
 	var lastErr error
 	attempted := 0
 	for _, providerName := range candidates {
 		d.mu.RLock()
 		provider, exists := d.providers[providerName]
 		d.mu.RUnlock()
-		if !exists || !provider.Enabled {
+		if !exists {
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=not_in_registry", req.Scenario, providerName)
+			continue
+		}
+		if !provider.Enabled {
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=disabled", req.Scenario, providerName)
 			continue
 		}
 
 		if activeRoute.MinQuality > 0 && provider.QualityScore < activeRoute.MinQuality {
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=min_quality score=%.2f need=%.2f",
+				req.Scenario, providerName, provider.QualityScore, activeRoute.MinQuality)
 			continue
 		}
 		if activeRoute.MaxLatency > 0 && provider.AvgLatencyMs > activeRoute.MaxLatency {
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=max_latency avg=%dms limit=%dms",
+				req.Scenario, providerName, provider.AvgLatencyMs, activeRoute.MaxLatency)
 			continue
 		}
 
 		if fo := GetGlobalFailover(); fo != nil && fo.IsCircuitOpen(providerName) {
-			logger.Debugf("[LLM] provider=%s 集群熔断中，跳过 scenario=%s", providerName, req.Scenario)
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=circuit_open", req.Scenario, providerName)
 			continue
 		}
 
 		if !d.allowRequest(providerName, provider.MaxRPM) {
+			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=rpm_limit max_rpm=%d",
+				req.Scenario, providerName, provider.MaxRPM)
 			continue
 		}
 
