@@ -19,7 +19,9 @@ K4 原先被推在 else 腿那一格，实测红在第一格，订正见 `db_poo
   K4 摘掉 `if MaxIdleConns == 0 { 用默认表 }` 整条  ⇒ TestNormalizePoolFallbacks/整条留空⇒采用生产默认表
 
 跑在哪棵树：只在 `git clone --shared` 出来的私有克隆里注码（共享工作树里有并行会话的提交），
-基线字节＝克隆 HEAD，身份行现读 tip 短 SHA；危险 `--clone` 由 `mut_dispose.workdir()` 挡在装架之前。
+基线字节＝克隆 HEAD，身份行由 `battlog.identity()` 现读 tip 短 SHA ＋ 未入库字节数，
+且必须打在 `tee_to()` **之后**（早于 tee 只进终端，14 份常驻产物对 `基线字节` 零命中就是这么来的）；
+危险 `--clone` 由 `mut_dispose.workdir()` 挡在装架之前。
 两枚被跑的用例都不连库（`noDialConnector` 不拨号、表测是纯函数），所以本电池**不需要测试库**，
 也不读 `.env`——它的红因此不能归因到"PG 没起"。工具链与盘满仍单独分一类 ENV-BROKEN：
 本机 Xcode 许可未接受时 `xcrun` 退 69 ⇒ `SDKROOT` 空 ⇒ 链接器报 `library 'resolv' not found`，
@@ -46,7 +48,7 @@ import sys
 import time
 from pathlib import Path
 
-from battlog import tee_to
+from battlog import identity, tee_to
 from mut_dispose import dispose, dispose_at_exit, workdir
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
@@ -140,11 +142,6 @@ def prepare(dst: Path, owned: bool = False) -> Path:
     if b.returncode != 0:
         bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
     return clone
-
-
-def tip(clone: Path) -> str:
-    return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=clone,
-                          capture_output=True, text=True).stdout.strip()
 
 
 def defined_tests(pkg: Path) -> set:
@@ -291,18 +288,23 @@ def main() -> int:
     if args.selftest:
         return do_selftest()
     if args.check_tree:
-        print(f"基线字节：当前工作树 {ROOT}（`--check-tree`，不装架、不落产物）")
+        identity(ROOT, extra="｜`--check-tree`：当前工作树，不装架、不落产物")
         return do_check(ROOT)
 
     tmp, owned = workdir(args.clone or None, prefix="dbpoolmut-", repo_root=ROOT)
     try:
         clone = prepare(tmp, owned)
         dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
-        print(f"基线字节：克隆 HEAD `{tip(clone)}`｜作业目录 {tmp}")
         if args.check:
             tee_to(LOGDIR / "00-check.log")
+        else:
+            tee_to(LOGDIR / "00-run.log")
+        # 身份行必须在 tee 之后：它是"这轮读数测的是哪一笔"的唯一记录，早于 tee 只留在终端。
+        # 报的是**来树**的 HEAD 与未入库字节数——注码发生在 `--shared` 克隆里，未入库的那些不进本轮读数。
+        identity(ROOT, label="基线字节", extra="｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）"
+                               f"｜作业目录 {tmp}")
+        if args.check:
             return do_check(clone)
-        tee_to(LOGDIR / "00-run.log")
 
         src = clone / SRC_REL
         original = read(src)

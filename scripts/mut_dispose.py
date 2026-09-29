@@ -33,7 +33,8 @@
 三道闸各挡一面：`workdir()` 挡在装架之前（危险 `--clone` 当轮退，工作树分毫未动）；
 `dispose()` 是显式收尾出口，只回收本电池自己 `git clone --shared` 出来的 `clone/`；
 `dispose_at_exit()` 挂在进程退出路径上，兜住"装架之后有人忘了接闸"的整类中止路——
-2026-09-28 现扫：带克隆面的 27 枚电池里，装架函数体之外还可达 134 条退出，而门原先
+装架函数体之外每条 `raise`／`sys.exit` 都是这么一条没接闸的路（枚数与条数都随重构摆动，
+不在这里写死：带克隆面的枚数由 `bash scripts/mut-dispose-guard.test.sh` 的静态面 AST 现取并打印）。门原先
 只走 `prepare`/`go_prepare` 的函数体，那一半从没被量过，`mut_reach_p503.py` 的控制组停机
 实测留下 73M 残骸。只留前两者的话，`--clone .` 会先写进调用方的树、而停机照样漏盘。
 "现场只活在克隆里"那类豁免路（还原后 md5 不一致）改走 `leave_for_evidence(why)` 打标记，
@@ -174,11 +175,11 @@ def dispose_at_exit(tmp: Path, *, owned: bool, keep: bool = False,
                     repo_root: Path | None = None) -> None:
     """把收尾闸挂到进程退出路径上：克隆建起来**之后**任何一条没先过闸的退出也照样回收。
 
-    为什么不是"逐处插 sweep()"：一枚电池的 main 里克隆之后的退出有 6–9 条，还有一部分
+    为什么不是"逐处插 sweep()"：一枚电池在克隆建起来之后有好几条退出路，还有一部分
     从它调用的辅助函数（`sub_once`／`lane_overlays`／`apply_js`）里冒出来——那些函数不知道
-    克隆在哪，逐站插要么改签名要么漏。2026-09-28 现扫：27 枚带克隆面的电池里，装架函数体
-    之外的可达退出 134 条，而常驻门的"中止路腿"用 AST 只走 `prepare`/`go_prepare` 函数体，
-    那一半从没被量过；`mut_reach_p503.py` 的 `控制组[service] 不干净` 就是这么实测留下 73M
+    克隆在哪，逐站插要么改签名要么漏。装架函数体之外那些可达退出的**条数**随重构摆动，
+    不在这里写死（写死的数下一位无从复算）；常驻门的"中止路腿"用 AST 只走 `prepare`/`go_prepare`
+    函数体，那一半从没被量过；`mut_reach_p503.py` 的 `控制组[service] 不干净` 就是这么实测留下 73M
     残骸（读数见 `docs/superpowers/specs/ledger/logs/P503/20260928-161751/00-residue.log`：
     那一趟的 `du -sk` = 75196 KiB = 73.43 MiB，中止 1h32m 后仍原样在盘上），它的红因句子与仓库红一模一样。
 

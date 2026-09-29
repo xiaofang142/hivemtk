@@ -1,0 +1,6 @@
+基线字节：`449e4991`｜未入库字节 39 处｜装架不覆盖来树字节 ⇒ 本轮读数＝克隆 HEAD 那一笔｜本轮读私有 `--shared` 克隆，来树覆盖份数见下一行『覆盖 N 份来树字节』
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-8c_oshhe
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/r45-lane/docs/superpowers/specs/ledger/logs/R22/20260928-135138
+覆盖 0 份来树字节、同步 0 个删除进克隆（0 份＝本批已入库，克隆读的就是 HEAD 那一笔）
+锚点校验：18 格，0 格有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-8c_oshhe/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/b23mut-8c_oshhe

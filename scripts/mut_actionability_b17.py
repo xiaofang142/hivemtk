@@ -60,6 +60,10 @@ SVC = "internal/browser_automation/service"
 LANE_PATHS = ["user-server/internal/browser_automation",
               "user-server/internal/model",
               "user-server/internal/migration"]
+# 本电池的"必在被测树里"清单：这三份 Go 侧判据文件加一份扩展源码。
+SUBJECT_RELS = [f"user-server/{SVC}/executor.go", f"user-server/{SVC}/hand.go",
+                f"user-server/{SVC}/write_ledger.go",
+                "user-web/browser_automation/src/core/primitives.js"]
 
 
 def lane_overlays() -> list[str]:
@@ -72,8 +76,17 @@ def lane_overlays() -> list[str]:
         p = line[3:].split(" -> ")[-1].strip().strip('"')
         if p.endswith(".go"):
             out.append(p)
-    if not out:
-        raise SystemExit("脏文件清单为空——克隆里跑的是 HEAD，测不到本批改动（宁可停机也别假绿）")
+    # 原先这里是 `if not out: raise SystemExit("脏文件清单为空…")`。那句在本泳道写进 HEAD 之后
+    # 就成了常驻件的死刑（清单永远为空 ⇒ 电池永远跑不了），与 `mut_hub_media_backfill.py` 的
+    # 同族缺陷同形、同一口径处理：空清单＝本轮读纯 HEAD，改成现查"本批到底在不在被测树里"。
+    for rel in SUBJECT_RELS:
+        if rel in out or rel in GO_OVERLAY_JS:
+            continue
+        c = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"HEAD:{rel}"],
+                           capture_output=True, timeout=120)
+        if c.returncode != 0:
+            raise SystemExit(f"本批产码 {rel} 既不在覆盖清单里也不在 HEAD 里——克隆测不到它，"
+                             "宁可停机也别假绿")
     return out
 
 
@@ -138,7 +151,7 @@ def js_run(work: Path) -> dict:
 
 
 # ------------------------------------------------------------------ Go 侧
-def go_prepare(dst: Path, owned: bool = False) -> Path:
+def go_prepare(dst: Path, overlays: list[str], owned: bool = False) -> Path:
 
     def bail(msg: str) -> None:
         """克隆已经建起来之后的中止路：先回收私有克隆，再出声。
@@ -153,6 +166,7 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
         if (dst / "clone").exists():
             dispose(dst, owned=owned, keep=False, repo_root=ROOT)
         raise SystemExit(msg)
+
     clone = dst / "clone"
     if clone.exists():
         raise SystemExit(f"{clone} 已存在（换 --clone 目录或先删）")
@@ -164,9 +178,9 @@ def go_prepare(dst: Path, owned: bool = False) -> Path:
                        capture_output=True, text=True, timeout=900)
     if b.returncode != 0:
         bail("checkout 失败：" + (b.stdout + b.stderr)[-400:])
-    # 覆盖层 = 本泳道全部脏 .go（含未跟踪的新测试文件：克隆里没有它就 [build failed] 式失声）
-    # + Go 侧静态锁要读的那份扩展源码（见 verify_identity 的 JS 侧锁）。
-    for rel in lane_overlays() + GO_OVERLAY_JS:
+    # 覆盖层由调用方算好传进来（`main()` 里那份和身份行报的是同一个对象）：自己在这里再算一遍
+    # 就成了"身份行报一份、装架盖另一份"，两者可以安静地不一致。
+    for rel in overlays:
         src = ROOT / rel
         if not src.exists():
             bail(f"覆盖源缺失：{src}")
@@ -425,8 +439,15 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="只验锚点（每格原样在装架后的那份文件里必须恰好命中 1 次且真改到字节），不放刀不跑测试")
     args = ap.parse_args()
-    from battlog import tee_to  # 判定行与逐格产物同处一地（LOGDIR/00-run.log）
-    tee_to(LOGDIR / "00-run.log")
+    from battlog import identity, tee_to  # 判定行与逐格产物同处一地（预检轮叫 00-check.log，别叫 run）
+    tee_to(LOGDIR / ("00-check.log" if args.check else "00-run.log"))
+    # 覆盖清单在 tee 之后、identity 之前现算一次，同一份对象交给 `go_prepare`：身份行数的份数
+    # 和装架真盖的份数必须是同一个读数。`go_prepare()` 把这些**工作树字节**拷进克隆，旧文案
+    # "来树未入库字节不进本轮读数"与机制相反（2026-09-28 复查抓出），份数改由 `overlay=` 现测。
+    overlays = lane_overlays() + GO_OVERLAY_JS
+    identity(ROOT, label="基线字节", overlay=overlays,
+             extra="｜本轮读私有 `--shared` 克隆的 HEAD＋来树覆盖字节"
+                   "（覆盖清单＝`lane_overlays() + GO_OVERLAY_JS`，即本泳道脏 .go ＋ Go 侧静态锁读的那份扩展源码）")
 
     tmp, owned = workdir(args.clone, prefix="b17mut-", repo_root=ROOT)
     tmp.mkdir(parents=True, exist_ok=True)
@@ -457,7 +478,7 @@ def main() -> int:
                     bad += 1
                     print(f"  ✗ [JS] {code} 注码打完了而字节没变（这一格永不开火）")
         if not args.js_only:
-            clone = go_prepare(tmp, owned)
+            clone = go_prepare(tmp, overlays, owned)
             dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
             originals = {rel: read(clone / rel) for rel in sorted({m[2] for m in go_mutants()})}
             for code, _desc, rel, old, new in go_mutants():
@@ -514,7 +535,7 @@ def main() -> int:
         print("[JS] 已全量还原（md5 一致）")
 
     if not args.js_only:
-        clone = go_prepare(tmp, owned)
+        clone = go_prepare(tmp, overlays, owned)
         dispose_at_exit(tmp, owned=owned, keep=args.keep, repo_root=ROOT)
         rels = sorted({m[2] for m in go_mutants()})
         files = {rel: clone / rel for rel in rels}

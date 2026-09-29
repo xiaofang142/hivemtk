@@ -36,18 +36,23 @@
 # `dispose()` 是"退出时才发现"的下界，`dispose_at_exit()` 是"装架之后有人忘了接闸"的兜底。
 # 上界不可少的理由：电池在收尾之前会往 `tmp` 里 `git clone --shared`、写补丁、跑 `go test`——
 # `--clone .` 即使最后拒删，中途也已经把克隆和改动落进了调用方的工作树（事故跑的就是
-# `--clone . --check`）。下界＋上界仍不够的理由：2026-09-28 现扫，带克隆面的 27 枚电池在
-# main／辅助函数里还有 134 条装架之后的可达退出，实测一趟留 73M（p503 的控制组停机）。
+# `--clone . --check`）。下界＋上界仍不够的理由：装架函数体之外的每一条 `raise`／`sys.exit`／
+# `bail` 都是一条没人接闸的退出路（枚数与条数由下面那条兜底闸腿每次 AST 现取并打印，不在文案里
+# 写死——写死的下一位无从复算）。实测一趟留 73M（p503 的控制组停机，读数在库内）。
 set -u
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MODULE="$ROOT/scripts/mut_dispose.py"
 FAIL=0
+N=0
 WORK=$(mktemp -d /tmp/mut-dispose-test.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-ok()  { echo "  ✓ $1"; }
-bad() { echo "  ✗ $1"; FAIL=$((FAIL + 1)); }
+# `$*` 不是排版：`bad "…枚里有裸中止路：" $(…)` 把命中名单放在第二个参数上，原先写 `"$1"`
+# 时红只印出冒号、后面空的（本轮合并后就是这样，只能人手重跑 PY 段才捞出文件名）。
+# 计数同理——汇总行原先写死"九格"，加一条腿就说谎，故现数。
+ok()  { echo "  ✓ $*"; N=$((N + 1)); }
+bad() { echo "  ✗ $*"; N=$((N + 1)); FAIL=$((FAIL + 1)); }
 
 [ -f "$MODULE" ] || { echo "FATAL: 找不到 $MODULE"; exit 1; }
 
@@ -214,7 +219,7 @@ for f in "$ROOT"/scripts/mut_*.py; do
   cells_files+=("$f")
 done
 # 未跟踪件先点出来（旁道正在跑、还没提交的电池）：本门只对"已经进版本控制的面"负责，
-# 但少掉的对象必须打印，否则 27 枚的读数会被下一位当成 26 枚全证。
+# 但少掉的对象必须打印，否则「面上 N 枚」的读数会被下一位读成「这 N 枚就是全部」。
 SKIP_UNTRACKED=""
 SKIP_N=0
 for f in "${cells_files[@]}"; do
@@ -322,6 +327,15 @@ elif [ "$abort_rc" = 0 ]; then
 else
   bad "$abort_obj 枚里有裸中止路：$(printf '%s\n' "$abort_bad" | head -3 | tr '\n' ' ')"
 fi
+# 红因点名腿（2026-09-28 立的）：上面那条 bad 把命中名单当**第二个参数**传（未加引号 ⇒ 逐格拆开），
+# 而 `bad()` 原先写的是 `echo "  ✗ $1"` ⇒ 真红的时候只印出"…枚里有裸中止路："后面空的：本轮合并
+# 后它就是 rc=1 却零个文件名，定位靠人手把 PY 段抄出来重跑才捞出唯一那枚漏的电池。红不点名＝
+# 下一位重复同一趟人工捞取。这条腿把"bad 的后续参数必须出现在输出里"钉成判据。
+bad_probe=$( ( bad '甲：' '乙文件名.py' ) 2>/dev/null )
+case "$bad_probe" in
+  *乙文件名.py*) ok '红因点名：bad 的后续参数一起打印（实得『'"$bad_probe"'』）' ;;
+  *) bad "红因不点名：bad '甲：' '乙文件名.py' 只输出『${bad_probe}』——裸中止路那条红会查无对象" ;;
+esac
 # 反向测（没有这一步，上面那句绿只是"这段代码没报错"）：把一枚电池的 `bail("checkout 失败…")`
 # 改回裸 raise，这条腿必须点名红。
 REVDIR="$WORK/rev/scripts"
@@ -351,8 +365,8 @@ fi
 # 兜底闸腿（REAL 第六腿，2026-09-28）：上一腿只走 `prepare`/`go_prepare` 的**函数体**，
 # 而实测的漏盘就长在它看不见的地方——`mut_reach_p503.py` 的 `控制组[service] 不干净` 那条
 # raise 在 main 里、装架之后、收尾闸之前，一趟留 73M（读数在库内：
-# `docs/superpowers/specs/ledger/logs/P503/20260928-161751/00-residue.log`，du -sk = 75196 KiB）。现扫：带克隆面的
-# 27 枚电池里，装架函数体之外还有 134 条可达退出。逐处插 sweep() 改不动（一半从
+# `docs/superpowers/specs/ledger/logs/P503/20260928-161751/00-residue.log`，du -sk = 75196 KiB）。装架函数体
+# 之外那些可达退出的枚数与条数由本腿每次现取、随重构摆动（写在文案里就等着过期），逐处插 sweep() 改不动（一半从
 # `sub_once`/`lane_overlays`/`apply_js` 这类辅助函数里冒出来，它们不知道克隆在哪），
 # 所以这腿断言的是"每枚电池都在装架之后挂了进程级兜底闸"＋"豁免'现场只活在克隆里'的那几处
 # 都先打了让路标记"——G10–G12 证钩子真会回收／真会安静／真会让路，这一腿证现取的那几枚真挂上了。
@@ -364,6 +378,7 @@ PREPARE = re.compile(r"=\s*(?:go_|js)?prepare\(tmp")
 d = pathlib.Path(sys.argv[1])
 skip = set(sys.argv[2:])
 obj, leak = 0, []
+exits = 0   # 现取读数：装架之后、且不在任何 `*prepare` 函数体内的退出语句条数
 
 
 def stmt_lists(root):
@@ -374,6 +389,14 @@ def stmt_lists(root):
             if isinstance(value, list) and value and all(isinstance(v, ast.stmt) for v in value):
                 out.append(value)
     return out
+
+
+def is_exit(node) -> bool:
+    """一条"会离开进程（或中止本趟）"的语句：raise／exit()／sys.exit()／bail()。"""
+    if isinstance(node, ast.Raise):
+        return True
+    return (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+            and ast.unparse(node.value.func) in ("exit", "sys.exit", "bail"))
 
 
 for p in sorted(d.glob("mut_*.py")):
@@ -396,7 +419,7 @@ for p in sorted(d.glob("mut_*.py")):
     # 而"0 次/漏一处"由下面那条逐处腿点名。
     # 取一句语句的源码用"按行切片"，不用 `ast.get_source_segment`：后者每次调用都把整份
     # 模块重新按换页符切开（3.10 的实现），一文件三百句就是 O(句数×文件大小)。现测：本腿
-    # 早先那样写，27 枚一趟 90 秒，而本门要把这腿跑三趟（正面＋两条反向）⇒ 4 分半全花在
+    # 早先那样写，一整批跑一趟 90 秒，而本门要把这腿跑三趟（正面＋两条反向）⇒ 4 分半全花在
     # 取证夹具自己上，读起来像"门挂了"。上一腿（abort_leg）只在函数级取一次，不受影响。
     lines = text.splitlines()
 
@@ -417,6 +440,15 @@ for p in sorted(d.glob("mut_*.py")):
     if not preps:
         leak.append(f"{p.name}：找不到装架调用点（= prepare(tmp 的形状对不上）")
     else:
+        # 读数口径：第一处装架之后、且不落在任何 `*prepare` 函数体内的退出。为什么排函数体：
+        # 那一半由 `bail()` 与上一条腿（abort_leg）负责，混进来会把两个面数成一个数。
+        body_lines = set()
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.endswith("prepare"):
+                body_lines |= set(range(n.lineno, n.end_lineno + 1))
+        first_prep = min(st.lineno for _, _, st in preps)
+        exits += sum(1 for n in ast.walk(tree)
+                     if is_exit(n) and n.lineno >= first_prep and n.lineno not in body_lines)
         for body, i, st in preps:
             if not any(isinstance(x, ast.Expr)
                        and getattr(getattr(x.value, "func", None), "id", "") == "dispose_at_exit"
@@ -442,6 +474,7 @@ for p in sorted(d.glob("mut_*.py")):
         if not before:
             leak.append(f"{p.name}:{n.lineno} md5 豁免路没打让路标记：{s.splitlines()[0][:56]}")
 print(obj)
+print(f"EXITS={exits}")
 print("\n".join(leak))
 sys.exit(1 if leak else 0)
 PY
@@ -449,13 +482,15 @@ PY
 hook_out=$(hook_leg "$ROOT/scripts" $SKIP_UNTRACKED)
 hook_rc=$?
 hook_obj=$(printf '%s\n' "$hook_out" | head -1)
-hook_bad=$(printf '%s\n' "$hook_out" | tail -n +2 | sed '/^$/d')
+# 第二行是本腿现取的读数（不是判据），从"红因"里剔出去，免得它被当成一条漏盘点名。
+hook_exits=$(printf '%s\n' "$hook_out" | sed -n 's/^EXITS=//p')
+hook_bad=$(printf '%s\n' "$hook_out" | tail -n +2 | grep -v '^EXITS=' | sed '/^$/d')
 # 对象集＝"有 --clone 面 ∩ 有 git-clone 面 ∩ 已进版本控制"。三个条件各排一类假红：
 #   · `mut_extension_auth_b19h.py` 有 --clone 面但没有 git-clone 面（JS 装架留的是 `web/`，
 #     那份残留是 dispose 契约里明写不许回收的）⇒ 钩子对它永远安静，钉它没意义；
 #   · 未跟踪的旁道件（本轮：`mut_kb_release_p902.py`）不在本门面上——替它挂钩子＝让别人的
 #     文件忽然引用只存在于我这笔提交里的符号，他们先提交就拿到一枚 import 不到的电池。
-#     点名输出，不许静默少一枚（少掉的对象不写出来就会被读成"全 27 枚都证过了"）。
+#     点名输出，不许静默少一枚（少掉的对象不写出来就会被读成"面上那些全证过了"）。
 both=0
 for f in "${cells_files[@]}"; do
   grep -q 'args\.clone' "$f" || continue
@@ -467,6 +502,9 @@ if [ "$hook_obj" != "$both" ]; then
   bad "兜底闸腿只看到 ${hook_obj} 枚带克隆面的电池，独立对账是 ${both}（判据在空转）"
 elif [ "$hook_rc" = 0 ]; then
   ok "$hook_obj 枚的每处装架之后都挂了兜底闸，md5 豁免路全带让路标记（另有 ${SKIP_N:-0} 枚未跟踪旁道件不在面上：${SKIP_UNTRACKED:-无}）"
+  # 读数并进同一条断言的输出：单开一条 `ok` 会让"断言处数"随一行说明文摆动，而格数／处数是
+  # 下一位对账用的，不该被文案改数。
+  echo "     现取读数：装架函数体之外可达退出 ${hook_exits} 条（本腿每次现扫，不作判据、随重构摆动）"
 else
   # 明细必须整体当**一个**参数传进去：`bad()` 只印 `$1`，把明细不加引号地接在后面＝红因永远不显示
   # （上面那条 abort_leg 同款写法在本轮之前一直如此——撤 bail 的那次能点名是因为它走的是 ok 那条引号支）。
@@ -493,7 +531,7 @@ sys.exit(f"反向格[{kind}]：找不到可摘的『{pat}』——这条腿的�
 PY
   [ $? = 0 ] || { bad "反向格[$kind] 夹具没做成"; continue; }
   r_out=$(hook_leg "$R" $SKIP_UNTRACKED); r_rc=$?
-  r_bad=$(printf '%s\n' "$r_out" | tail -n +2 | head -1)
+  r_bad=$(printf '%s\n' "$r_out" | tail -n +2 | grep -v '^EXITS=' | head -1)
   if [ "$r_rc" = 0 ]; then
     bad "反向[$kind]：摘掉之后这条腿仍绿＝判据没牙"
   elif [ "$kind" = "hook" ] && ! printf '%s' "$r_bad" | grep -q "这处装架之后没挂兜底闸"; then
@@ -510,11 +548,19 @@ done
 # `checkout` 退 123、其余 exec 真 git 的 shim，让每一枚带 git-clone 面的电池**不带 --check** 地在
 # `--clone <空目录>` 上跑一趟，断言 ① rc≠0 ② 红因是 checkout 那一条分支（不是别的退出）③ 外层目录
 # 还在（不许越权删调用方交的目录）④ 里面的 clone/ 已被收尾闸带走。它不注册进任何门／CI：要改
-# PATH、要 26 次真克隆、带 JS 相的三枚还要 --go-only 才进得了装架，挂进 CI 只会得到一台恒红的机器；
+# PATH、要按面上一枚一次真克隆（枚数见本门兜底闸腿的现取打印）、带 JS 相的三枚还要 --go-only 才进得了装架，挂进 CI 只会得到一台恒红的机器；
 # 改了 bail/dispose/prepare 的写路径之后应当手动现取一次，别只信本门的静态面。
 # 读数（`bash scripts/probe-fleet-bail-reverse.sh <影子克隆> <带 .env 的主树>`，
 # 测于 tip e72a7638 ＋本文件的逐处注册腿与 b17 的第二处注册）：
 #   SEEN=26｜PASS=25 FAIL=0｜ENV-BROKEN 未取证=1｜无 git-clone 面而跳过=10，整趟退 2
+#   —— 这一趟的 ENV-BROKEN 那一枚是 mut_egress_pool_r30.py，卡在自己的"／tmp 剩 ≥ 20 GiB"前提上
+#   （见下面那条坑），当时本机 13 GiB。
+# 合并旁道 22 笔之后再取一次（tip `be08a8a9`，面比上一趟多一枚 `mut_webhook_ai_trigger.py`，
+# 而本机 /tmp 腾到 45 GiB）：
+#   SEEN=27｜PASS=27 FAIL=0｜ENV-BROKEN 未取证=0｜无 git-clone 面而跳过=10，整趟退 0
+#   两面都是真跑，不是"数变了"就换口径：`SEEN == PASS + FAIL + ENV-BROKEN` 这一趟 27=27+0+0 对得上，
+#   前一趟 26=25+0+1 也对得上；跳过的 10 枚不进 SEEN（它们压根没有 git-clone 面）。
+#   行为面自此 27 枚全证 ⇒ 下面那条 egress 的"只有静态面"作废，但它的前提判据还在，见该条。
 #   探针自己的反向对账（在同一克隆里把 mut_actionability_b17.py 的一处 `bail("checkout 失败` 改回
 #   裸 raise，`ONLY=` 单跑那一枚）：`✗ …中止后外层剩「clone 」`，FAIL=1——不撤的时候那一枚是 ✓，
 #   所以 ④ 那条判据确实有牙，不是橡皮章。**这一趟还顺带定了兜底闸的覆盖面**：注册行排在装架赋值
@@ -522,9 +568,10 @@ done
 #   （残骸 108K，是被杀在 checkout 的骨架克隆）。所以 prepare 内部靠本门腿 ⑤（bail），main 侧靠
 #   腿 ⑥（逐处注册）＋ G10，三面不能互相代替。
 # 四处只有真跑一趟才看得见的坑（下次动这条探针前先读）：
-#   · 带 --check 是错的探针：26 枚里 16 枚没这个 flag（argparse rc=2，夹具压根没进 prepare），
-#     另 4 枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。不带 --check 才真进
-#     装架，而 checkout 被杀 ⇒ 走不到跑用例那一步，一趟还是只花几十秒。
+#   · 带 --check 是错的探针：面上多数枚压根没这个 flag（argparse rc=2，夹具压根没进 prepare），
+#     另有几枚的 --check 明写"只静态预检、不装架"⇒ 同样在 prepare 之前返回。两类各是几枚随重构摆动，
+#     现取：`git ls-files scripts/mut_*.py | xargs grep -L -- '--check'`（再手工排掉没 git-clone 面的）。
+#     不带 --check 才真进装架，而 checkout 被杀 ⇒ 走不到跑用例那一步，一趟还是只花几十秒。
 #   · JS 相排在克隆之前的三枚（b17/b18/b20d）在**任何影子克隆里都缺 node_modules**（那是
 #     gitignore 的）⇒ 原先它们在 `git clone` 之前就退在"缺 node_modules"，量到的是环境不是 bail，
 #     整趟读数成 PASS=22／FAIL=3（2026-09-28 在干净克隆复跑当场露出来）。这版给带 `dst / "web"`
@@ -534,12 +581,25 @@ done
 #     ⇒ 判据静默失效（第一版的 web/ 上界就这样）。
 #   · mut_review_r22_teeth.py 的默认 --logs 目录在 HEAD 里就带 10 份已跟踪 .log ⇒ 任何干净克隆里
 #     不带参数跑都会先在 prepare 之前撞"复用旧目录"那条判据，探针要显式给它一个新目录才进得了夹具。
-#   · 行为面唯一没证到的那枚是 mut_egress_pool_r30.py：它自己的前提是 /tmp 剩 ≥ 20 GiB（本机 13），
-#     这道 ENV-BROKEN 闸也在 prepare 之前，所以它的 bail 那一路只有静态面。没腾出那 7 GiB 之前，
-#     不许把上面那句 PASS=25 读成 26 枚全证。
+#   · `mut_egress_pool_r30.py` 的夹具前提是自己量 /tmp 剩 ≥ 20 GiB 的一道 ENV-BROKEN 闸，且这道闸
+#     也在 prepare 之前。2026-09-28 头一趟跑的时候本机只剩 13 GiB ⇒ 它那一路只有静态面，读数就是
+#     上面那句 PASS=25／ENV-BROKEN=1；腾到 45 GiB 之后同一枚真进了装架（PASS=27／ENV-BROKEN=0）。
+#     所以这条不是"已修"而是**会来回摆的读数**：盘又涨满时它会退回 ENV-BROKEN，那一趟的
+#     `SEEN=27｜PASS=26｜ENV-BROKEN=1` 是盘的状态、不是回收面坏了，别拿它当红去改代码。
 
 echo
-# 格数从本文件自己现取（写死"九格"的那种读数每加一格就过期一次，且过期时没人会想起来改它）。
-G=$(grep -c '^echo "G[0-9]' "$0")
-if [ "$FAIL" = 0 ]; then echo "===== 用例：${G} 格全过（断言失败 0 处）====="; exit 0; fi
-echo "===== 用例：$FAIL 处断言失败 ====="; exit 1
+# 汇总行原先写死"九格"，而本轮现数是 **24 处断言**（ok/bad 各调一次算一处）——写死的那句数的是什么
+# 口径无从对照，唯一能确定的是它不随断言数变：加一条腿它照样印"九格"＝谎报。现改成现数，并带一条
+# 下界（9）——只判"半路死掉、有腿没执行"，不钉死处数（钉死会让别人加/减一条腿时本门假红，
+# [[feedback-mutation-battery-hygiene]]"共享树下控制组不许写死常量"同族）。
+# 两个口径一起印，因为它们数的不是一回事：$N＝**真执行到的断言**（某条腿半路死掉它就偏小），
+# $G＝本文件里**摆着的用例格**（从文件自己现取，写死"九格"那种读数每加一格就过期一次）。
+# 只在 FAIL=0 那条分支取 $G：红的时候没必要再解析一遍自己，红因优先。
+if [ "$N" -lt 9 ]; then
+  echo "===== 用例：断言只跑到 ${N} 处（下界 9）＝有腿没执行，判红 ====="; exit 1
+fi
+if [ "$FAIL" = 0 ]; then
+  G=$(grep -c '^echo "G[0-9]' "$0")
+  echo "===== 用例：${G} 格／${N} 处断言全过（失败 0 处）====="; exit 0
+fi
+echo "===== 用例：${N} 处断言里 $FAIL 处失败 ====="; exit 1

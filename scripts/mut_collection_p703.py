@@ -119,11 +119,25 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+from battlog import identity, tee_to
 from mut_dispose import dispose, dispose_at_exit, leave_for_evidence, workdir   # 三道闸：装架前挡危险 --clone，显式收尾只回收私有克隆，兜底闸接住没接闸的退出路
+from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 
 ROOT = Path(__file__).resolve().parents[1]
+# 逐格原始输出与判定行落进仓库树：早先只随 stdout 走、由调用方重定向到 `/tmp`，重启即蒸发
+# （`logs/p703-mut1-run1.log` 这类文件名在树里已经查无 ⇒ 台账里的读数没有产物可对）。
+# 目录带趟次戳、不复用；`.gitignore` 需为本轮次开例外。与 p701 逐字同源，改一处要改两处。
+LOGDIR = ROOT / "docs/superpowers/specs/ledger/logs/P703" / time.strftime("%Y%m%d-%H%M%S")
+
+
+def dump(tag, out):
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    (LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log")).write_text(scrub(out), encoding="utf-8")
+
+
 US = "user-server"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -865,6 +879,12 @@ def main() -> int:
     ap.add_argument("--cells", default="", help="只跑这些代号（逗号分隔）")
     ap.add_argument("--check", action="store_true", help="只校验锚点命中数，不跑用例")
     args = ap.parse_args()
+    # tee 与身份行都在分流之前：`--check` 的末行（锚点校验：N 格，M 格有问题）也是常驻判据，
+    # 只进终端就没人能复算它；身份行必须晚于 tee，否则产物里查不到"这轮读的是哪一笔"。
+    tee_to(LOGDIR / ("00-check.log" if args.check else "00-run.log"))
+    identity(ROOT, label="基线字节",
+             extra="｜本轮读私有 `--shared` 克隆的 HEAD；本卡文件若尚未入库则按工作树字节计入"
+                   "（下一行现测『本卡文件已在 HEAD n/N』，n<N 时那 N−n 份属未提交态）")
 
     cells = CELLS
     if args.cells:
@@ -915,6 +935,7 @@ def main() -> int:
     for name in sorted({c[3] for c in cells}):
         if name == "gate":
             rc, out = gate_run(clone)
+            dump("00-control-gate", out)
             ok = rc == 0
             controls["gate"] = 0
             print(f"控制组[gate] {'CLEAN' if ok else 'DIRTY'} rc={rc}")
@@ -925,6 +946,7 @@ def main() -> int:
                                  "后面所有 G* 格的红/绿都不可信")
             continue
         rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, name)
+        dump(f"00-control-{name}", out)
         bad = rc != 0 or skipped or killed
         controls[name] = ran
         control_top[name] = top_pass
@@ -962,6 +984,9 @@ def main() -> int:
         else:
             rc, killed, ran, skipped, passed, top_pass, out = go_run(clone, runner)
             v = classify(rc, killed, ran, skipped, out, controls[runner], expect)
+        # 逐格原始输出无条件入档：只把"有问题那几格"的证据留在树里，下一位就无从
+        # 复算"杀掉"那格的读数（红名单、ran 上界都只在这份原文里）。
+        dump(code, out)
 
         tally[v] += 1
         killmap[code] = set(killed)
