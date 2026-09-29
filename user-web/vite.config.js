@@ -5,8 +5,9 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { VitePWA } from 'vite-plugin-pwa'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import { resolve } from 'path'
+import { resolve, basename } from 'path'
 import { writeFileSync, mkdirSync } from 'fs'
+import { generateJSON } from '@intlify/bundle-utils'
 
 // ============================================================================
 // PWA 彻底防旧页/404 方案
@@ -98,12 +99,49 @@ export default defineConfig({
   plugins: [
     // 自定义: 构建时生成 dist/version.json (main.js 用来探测版本)
     versionJsonPlugin,
+    // 自定义: 把 ./src/i18n/locales/*.json 预编译为消息函数再交给应用。
+    // 背景: @intlify/unplugin-vue-i18n v11 对资源统一走 JIT（输出消息 AST），
+    // 而它同时把 vue-i18n 别名到运行时构建（runtimeOnly 默认 true，无消息编译器），
+    // 运行时构建解析 AST 会抛 UNEXPECTED_RETURN_TYPE，导致所有 t() 全挂、白屏。
+    // 此处用同版本的 generateJSON 以 jit:false 产出函数形式消息，与运行时构建配对，
+    // 无 new Function，CSP script-src 'self' 安全；exclude 让 intlify 跳过这些文件。
+    {
+      name: 'hivemtk-i18n-functions',
+      // post: 在 vite:json 之后运行。vite:json 会把 .json 先转成模块，
+      // 这里忽略它的输出、直接读盘重做函数预编译，避免被二次加工。
+      enforce: 'post',
+      async transform(source, id) {
+        const cleanId = id.split('?')[0]
+        if (!cleanId.endsWith('.json') || !cleanId.includes('/src/i18n/locales/')) return null
+        try {
+          const { readFileSync } = await import('fs')
+          const raw = readFileSync(cleanId, 'utf-8')
+          const locale = basename(cleanId, '.json')
+          const { code } = generateJSON(raw, {
+            type: 'bare',
+            locale,
+            jit: false,
+            strictMessage: false,
+            escapeHtml: false,
+            forceStringify: false,
+            env: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+          })
+          return { code: `export default ${code}`, map: null }
+        } catch (e) {
+          console.error(`[hivemtk-i18n-functions] 预编译失败 ${cleanId}:`, e.message)
+          return null
+        }
+      },
+    },
     // 预编译 i18n 资源（./src/i18n/locales/*.json），运行期不再编译消息，
     // 避免 vue-i18n 用 new Function 触发 CSP script-src 'self' 的 unsafe-eval 拦截。
     // runtimeOnly 默认 true：改用 vue-i18n 运行时构建（无消息编译器）。
     // strictMessage:false 因为部分翻译含 <g>/<x>/<string> 等占位标签，按字面量保留。
+    // exclude: locales 下的 json 由上面的 hivemtk-i18n-functions 处理（函数形式），
+    // intlify 只保留别名/define，不管这些文件，避免它输出 AST。
     VueI18n({
       include: resolve(__dirname, './src/i18n/locales/**'),
+      exclude: resolve(__dirname, './src/i18n/locales/**'),
       strictMessage: false,
       dropMessageCompiler: true,
     }),
