@@ -244,10 +244,7 @@ func (s *obsConfigService) TestConnection(ctx context.Context, config *dto.ObsCo
 
 		baseDir := config.Endpoint
 		if baseDir == "" {
-			baseDir = os.Getenv("STORAGE_LOCAL_BASE_DIR")
-		}
-		if baseDir == "" {
-			baseDir = "./uploads"
+			baseDir, _, _ = storage.LocalSource()
 		}
 
 		info, err := os.Stat(baseDir)
@@ -325,18 +322,13 @@ func (s *obsConfigService) validateCreateRequest(ctx context.Context, req *dto.C
 	switch provider {
 	case model.ObsProviderLocal:
 
-		if req.Endpoint == "" {
-			if v := os.Getenv("STORAGE_LOCAL_BASE_DIR"); v != "" {
-				req.Endpoint = v
-			} else {
-				req.Endpoint = "./uploads"
+		if req.Endpoint == "" || req.Domain == "" {
+			endpoint, publicURL, _ := storage.LocalSource()
+			if req.Endpoint == "" {
+				req.Endpoint = endpoint
 			}
-		}
-		if req.Domain == "" {
-			if v := os.Getenv("STORAGE_LOCAL_PUBLIC_URL"); v != "" {
-				req.Domain = v
-			} else {
-				req.Domain = "/files"
+			if req.Domain == "" {
+				req.Domain = publicURL
 			}
 		}
 		return nil

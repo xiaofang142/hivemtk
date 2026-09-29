@@ -207,7 +207,7 @@ def main() -> int:
                 print(f"     期望={[name]} 实际={r['red']}")
 
     done = len(picked) if picked else len(CELLS)
-    print(f"\n===== 判定：" + (f"{done} 格逐刀被杀，无存活" if not problems
+    print("\n===== 判定：" + (f"{done} 格逐刀被杀，无存活" if not problems
                             else f"{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)))
     if md5(SRC) != base_md5:
         print("!! 收尾 md5 校验失败：源文件没回到注码前")

@@ -228,9 +228,9 @@ def main() -> int:
             print(f"!! 收尾 md5 校验失败：{f} 没回到注码前")
             return 2
     shutil.rmtree(backup_dir, ignore_errors=True)
-    print(f"\n===== 判定：" + (f"{done} 格逐刀被杀，无存活" if not problems
+    print("\n===== 判定：" + (f"{done} 格逐刀被杀，无存活" if not problems
                             else f"{len(problems)} 格未杀/BROKEN：" + "; ".join(problems)))
-    print(f"OK：工作树两枚文件逐字节还原（" + " ".join(f"{Path(f).name}={base_md5[f][:8]}" for f in FILES)
+    print("OK：工作树两枚文件逐字节还原（" + " ".join(f"{Path(f).name}={base_md5[f][:8]}" for f in FILES)
           + f"），日志在 {LOGDIR}")
     if picked:
         print("   注：本次按 --cells 只跑了窄口子，**门禁不认这一行**，认的是不带 --cells 的全量。")

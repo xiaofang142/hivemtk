@@ -12,10 +12,7 @@ import (
 
 // newLocalDriverFromEnv 从环境构造 LocalDriver（与 router.go 的 uploadDir 配置保持一致）
 func newLocalDriverFromEnv() (*storage.LocalDriver, error) {
-	baseDir := os.Getenv("STORAGE_LOCAL_BASE_DIR")
-	if baseDir == "" {
-		baseDir = "./uploads"
-	}
+	baseDir, _, _ := storage.LocalSource()
 	if err := os.MkdirAll(baseDir, 0o750); err != nil {
 		return nil, err
 	}

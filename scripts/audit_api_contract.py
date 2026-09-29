@@ -81,7 +81,6 @@ def analyze(dirs):
             raw[fname] = src
             scopes = [(None, '<file>', src)]
             for m in func_re.finditer(src):
-                recv = m.group(1)
                 recvtype = m.group(2)
                 name = m.group(3)
                 params = [p.strip() for p in m.group(4).split(',') if p.strip()]
@@ -104,10 +103,6 @@ def analyze(dirs):
                 extra_routes = []
                 for mm in re.finditer(r'\bdoReg\w*\(\s*"(GET|POST|PUT|DELETE|PATCH)"\s*,\s*"([^"]*)"', body):
                     extra_routes.append(('auth', mm.group(1), mm.group(2)))
-                # for-range 多组注册：for _, g := range []*gin.RouterGroup{A, B} { ... }
-                # 块内 g.GET(...) 路由与 ctrl.Register(g) 调用按每组展开
-                expanded_routes = []
-                expanded_calls = []
 
                 def _expand_range_loops(text, slice_defs):
                     out_routes = []
@@ -366,6 +361,28 @@ for (m, p), fs in sorted(frontend.items()):
 print("\n=== UNMATCHED (frontend -> no backend): %d / %d ===" % (len(unmatched), len(frontend)))
 for m, p, fs in unmatched:
     print("%-7s %-65s <- %s" % (m, p, ','.join(fs)))
+
+# SUSPECT：前端写的是**全字面量**路径，却只能靠后端某段的 `:参数` 才"匹配"上。
+# match() 让 `:x` 吃掉任意同段字面量 ⇒ 这类调用的"已匹配"是拼出来的，不是注册出来的：
+# 实测 `PUT /api/session-tags`（服务端只有 `PUT /api/session-tags/:id`）在 --strict 下
+# 长期报 UNMATCHED=0，而真打过去是 405 METHOD_NOT_ALLOWED —— 编辑标签点了没反应，门却说绿。
+# 这里单独列一份。它**不进退出码**：字面量末段确实有可能是合法的 id 值（如 `/api/x/default`），
+# 拦成红会把别人的正常调用一起挡掉；但每次 CI 都会把这份名单打在日志里，谁新增谁解释。
+def is_static_route(p):
+    return not any(s.startswith(':') for s in norm(p))
+
+
+suspect = []
+for (m, p), fs in sorted(frontend.items()):
+    if ':param' in p:
+        continue
+    hits = [bp for (bm, bp) in backend if bm == m and match(p, bp)]
+    # 只要有任意一条命中路由是全字面量，这个调用就是注册出来的，不是拼出来的。
+    if hits and not any(is_static_route(bp) for bp in hits):
+        suspect.append((m, p, hits, fs))
+print("\n=== SUSPECT (字面量路径只被 :参数 接住，非阻断): %d ===" % len(suspect))
+for m, p, hits, fs in suspect:
+    print("%-7s %-55s 仅匹配 %s <- %s" % (m, p, hits[:2], ','.join(sorted(set(fs)))[:120]))
 
 fe_keys = list(frontend.keys())
 dead = []

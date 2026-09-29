@@ -5,7 +5,6 @@ bulk_seed_general.py - 产品级通用数据批量灌入（原 035 一批，故�
 纯通用场景，不锁具体产品名
 """
 import psycopg2
-import json
 import sys
 from datetime import datetime
 

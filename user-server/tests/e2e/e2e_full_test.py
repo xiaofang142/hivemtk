@@ -6,7 +6,6 @@ HivemTK User Server - 全面端到端 API 测试脚本
 
 import requests
 import json
-import time
 import sys
 import os
 from datetime import datetime
@@ -135,14 +134,14 @@ def test_endpoint(session, method, endpoint, result, expected_success=True, data
             elif status_code == 429:
                 result.add_fail(endpoint, method, status_code, "请求过多 (429) - 限流触发")
             else:
-                result.add_warning(endpoint, method, status_code, f"非预期状态码")
+                result.add_warning(endpoint, method, status_code, "非预期状态码")
         else:
             if status_code in (400, 401, 403, 422):
                 result.add_pass(endpoint, method, status_code, "正确返回错误状态码")
             elif status_code == 200:
                 result.add_warning(endpoint, method, status_code, "预期失败但成功")
             else:
-                result.add_warning(endpoint, method, status_code, f"非预期状态码")
+                result.add_warning(endpoint, method, status_code, "非预期状态码")
                 
     except requests.exceptions.ConnectionError:
         result.add_fail(endpoint, method, 0, "连接失败 - 服务不可达")
@@ -172,7 +171,7 @@ def run_tests():
     if not token:
         print("❌ 登录失败，无法继续测试")
         return result
-    print(f"✅ Token 获取成功")
+    print("✅ Token 获取成功")
     
     # 3. 认证相关路由
     print("\n[3] 认证路由测试...")
@@ -458,7 +457,7 @@ def print_report(result):
     total = result.passed + result.failed + result.skipped
     pass_rate = (result.passed / total * 100) if total > 0 else 0
     
-    print(f"\n📊 统计摘要:")
+    print("\n📊 统计摘要:")
     print(f"   总测试数: {total}")
     print(f"   ✅ 通过: {result.passed} ({pass_rate:.1f}%)")
     print(f"   ❌ 失败: {result.failed}")
@@ -507,7 +506,6 @@ def print_report(result):
     
     print(f"\n📁 模块统计 ({len(modules)} 个模块):")
     for module, stats in sorted(modules.items()):
-        total_m = stats["pass"] + stats["fail"] + stats["warn"] + stats["skip"]
         status_icon = "✅" if stats["fail"] == 0 else "❌"
         print(f"   {status_icon} {module}: {stats['pass']}通过/{stats['fail']}失败/{stats['warn']}警告/{stats['skip']}跳过")
     

@@ -6,12 +6,8 @@
 
 import os
 import sys
-import json
 import hashlib
 import psycopg2
-import random
-import string
-from datetime import datetime
 
 # 口令仅从环境注入（本文件不落任何明文字面量）：本机 `set -a && . .env && set +a`
 _DB_PW = (os.environ.get("POSTGRES_PASSWORD")

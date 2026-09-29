@@ -71,7 +71,6 @@ json.dump(results, open(os.path.join(os.path.dirname(__file__), "pages_api.json"
 # 统计
 total_apis = sum(len(p["apis"]) for p in results)
 print(f"页面数 {len(results)}, 解析到的 API 调用总数 {total_apis}")
-from collections import Counter
 missing = [p for p in results if p.get("missing_component")]
 print(f"组件缺失 {len(missing)}")
 noapi = [p for p in results if not p.get("missing_component") and not p["apis"]]

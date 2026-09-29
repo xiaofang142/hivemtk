@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """测试脚手架 testkit：封装 登录/API调用/DB查询，供各业务域写测试复用。"""
-import json, subprocess, urllib.request, urllib.error, time, os, sys
+import json, urllib.request, urllib.error, time, os
 
 BASE = "http://localhost:8204"
 AUDIT = os.path.dirname(os.path.abspath(__file__))

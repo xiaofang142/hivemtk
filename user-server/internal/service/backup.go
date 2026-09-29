@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/storage"
 	"io"
 	"os"
 	"path/filepath"
@@ -132,7 +133,8 @@ func (s *BackupService) executeBackup(ctx context.Context, backup *model.Backup)
 		logger.Errorf("[backup] update backup status failed: %v", err)
 	}
 
-	backupDir := filepath.Join("backups", backup.BackupName)
+	backupRoot, _ := storage.BackupSource()
+	backupDir := filepath.Join(backupRoot, backup.BackupName)
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		backup.Status = model.BackupStatusFailed
 		backup.ErrorMessage = err.Error()
@@ -455,6 +457,7 @@ func (s *RestoreService) executeRestore(ctx context.Context, record *model.Resto
 }
 
 func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string) error {
+	_, restoreTmp := storage.BackupSource()
 	r, err := zip.OpenReader(backupFile)
 	if err != nil {
 		return err
@@ -474,7 +477,7 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 			_ = rc.Close()
 			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 		}
-		path := filepath.Join("restore_tmp", name)
+		path := filepath.Join(restoreTmp, name)
 
 		if f.FileInfo().IsDir() {
 			_ = rc.Close()
@@ -510,7 +513,8 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 }
 
 func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Backup) error {
-	jsonFile := filepath.Join("restore_tmp", "data.json")
+	_, restoreTmp := storage.BackupSource()
+	jsonFile := filepath.Join(restoreTmp, "data.json")
 	data, err := os.ReadFile(jsonFile)
 	if err != nil {
 		return err
@@ -662,7 +666,7 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 	logger.Info(fmt.Sprintf("备份 %s 恢复完成: 线索 %d 条, 用户 %d 个, 扩表 %d 组",
 		backup.BackupName, restoredClues, restoredUsers, restoredExtraTables))
 
-	if e := os.RemoveAll("restore_tmp"); e != nil {
+	if e := os.RemoveAll(restoreTmp); e != nil {
 		logger.Warnf("[Restore] 清理临时目录失败: %v", e)
 	}
 	return nil

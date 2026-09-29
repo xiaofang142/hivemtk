@@ -292,13 +292,13 @@ ROUTES = f"{US}/internal/router/bill_routes.go"
 LEDGER = "scripts/check-unwired-assets.sh"
 
 RUNNERS = {
-    "model": (f"./internal/model/", "^TestBill"),
-    "db": (f"./internal/pkg/db/", "^(TestBill|TestAllModels_)"),
-    "repo": (f"./internal/repository/", "^TestBillRepository_"),
-    "svc": (f"./internal/service/", "^TestBill"),
-    "ctrl": (f"./internal/controller/", "^TestBillController_"),
-    "app": (f"./internal/app/", "^TestInitBillRuntime"),
-    "route": (f"./internal/router/", "^TestBillRoutes_"),
+    "model": ("./internal/model/", "^TestBill"),
+    "db": ("./internal/pkg/db/", "^(TestBill|TestAllModels_)"),
+    "repo": ("./internal/repository/", "^TestBillRepository_"),
+    "svc": ("./internal/service/", "^TestBill"),
+    "ctrl": ("./internal/controller/", "^TestBillController_"),
+    "app": ("./internal/app/", "^TestInitBillRuntime"),
+    "route": ("./internal/router/", "^TestBillRoutes_"),
     "gate": ("", ""),
 }
 CELLS = [

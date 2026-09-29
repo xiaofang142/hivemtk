@@ -16,8 +16,9 @@ import (
 func setupUploadTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	_ = os.Setenv("STORAGE_LOCAL_BASE_DIR", dir)
-	t.Cleanup(func() { os.Unsetenv("STORAGE_LOCAL_BASE_DIR") })
+	// t.Setenv 而非 os.Setenv+os.Unsetenv：后者收尾时会把 TestMain 注入的值整个摘掉，
+	// 后续用例就回退到相对路径 ./uploads，又开始往包目录里写。
+	t.Setenv("STORAGE_LOCAL_BASE_DIR", dir)
 	return dir
 }
 

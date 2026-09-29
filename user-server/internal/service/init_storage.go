@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/storage"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -31,14 +32,7 @@ func InitDefaultStorageIfEmpty(gdb *gorm.DB) {
 		return
 	}
 
-	baseDir := os.Getenv("STORAGE_LOCAL_BASE_DIR")
-	if baseDir == "" {
-		baseDir = "./uploads"
-	}
-	publicURL := os.Getenv("STORAGE_LOCAL_PUBLIC_URL")
-	if publicURL == "" {
-		publicURL = "/files"
-	}
+	baseDir, publicURL, _ := storage.LocalSource()
 
 	cfg := &model.ObsConfig{
 		ID:        uuid.New().String(),

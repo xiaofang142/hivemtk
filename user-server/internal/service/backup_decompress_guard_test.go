@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"hivemtk-user/internal/storage"
 )
 
 // writeZip 按给定条目名造一个最小 zip 文件（内容固定），返回路径。
@@ -67,8 +69,10 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 		t.Fatalf("合法 zip 解压失败: %v", err)
 	}
 
+	_, restoreTmp := storage.BackupSource()
+
 	for _, rel := range []string{"data.json", "b..c.txt", "d/nested.txt"} {
-		p := filepath.Join("restore_tmp", rel)
+		p := filepath.Join(restoreTmp, rel)
 		st, err := os.Stat(p)
 		if err != nil {
 			t.Fatalf("应解出 %s: %v", p, err)
@@ -77,14 +81,14 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 			t.Errorf("%s 权限 = %o, want 600", p, mode)
 		}
 	}
-	// 目录条目须落在 restore_tmp 内（旧实现漏了前缀，会在 CWD 造出散目录）
-	if _, err := os.Stat(filepath.Join("restore_tmp", "d")); err != nil {
-		t.Errorf("目录条目未解到 restore_tmp 下: %v", err)
+	// 目录条目须落在暂存根内（旧实现漏了前缀，会在 CWD 造出散目录）
+	if _, err := os.Stat(filepath.Join(restoreTmp, "d")); err != nil {
+		t.Errorf("目录条目未解到暂存根下: %v", err)
 	}
 	if _, err := os.Stat("d"); !os.IsNotExist(err) {
-		t.Error("目录条目泄漏到 restore_tmp 之外")
+		t.Error("目录条目泄漏到暂存根之外")
 	}
-	if st, err := os.Stat("restore_tmp"); err != nil || st.Mode().Perm()&0o077 != 0 {
-		t.Errorf("restore_tmp 目录权限过宽: %v %o", err, st.Mode().Perm())
+	if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
+		t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
 	}
 }

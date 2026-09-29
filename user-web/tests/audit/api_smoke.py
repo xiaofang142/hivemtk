@@ -36,12 +36,11 @@ def do_get(path, attempt=0):
         except: j = None
         return resp.status, j
     except urllib.error.HTTPError as e:
-        errbody = e.read()
         if e.code == 429 and attempt < 5:
             time.sleep(0.5 * (attempt+1))
             return do_get(path, attempt+1)
         return e.code, None
-    except Exception as e:
+    except Exception:
         if attempt < 3:
             time.sleep(0.5)
             return do_get(path, attempt+1)

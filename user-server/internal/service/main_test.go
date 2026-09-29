@@ -7,6 +7,8 @@
 //  4. HTTP_BASE_URL_TEST=...   —— 允许单独测试覆盖（不常用）
 //  5. 退出时调用 cache.ShutdownAll() 关闭所有 MemoryCache cleanup goroutine，防止 goroutine leak 导致测试超时
 //  6. 注入访客 token 的 HMAC 密钥（见下），否则所有访客会话用例都会因"secret 不能为空"失败
+//  7. 把 uploads / backups / restore_tmp 三个根指进临时目录，别让 go test 往源码树里写；
+//     收尾再 Sweep 一次，兜住中途被用例自清 env 后回退到相对路径的那些残留
 //
 // 任何 service 子包的新增测试都会自动应用此设置，不需要每个 _test.go 重复声明。
 package service
@@ -17,6 +19,7 @@ import (
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/storage/storagetest"
 )
 
 // visitorTokenTestSecret 测试用访客 token HMAC 密钥（仅测试，非生产密钥）
@@ -41,7 +44,11 @@ func TestMain(m *testing.M) {
 		config.SetAppConfig(&cfg)
 	}
 
+	restoreStorageRoots := storagetest.Install()
+
 	code := m.Run()
+	storagetest.Sweep(".")
 	cache.ShutdownAll()
+	restoreStorageRoots()
 	os.Exit(code)
 }

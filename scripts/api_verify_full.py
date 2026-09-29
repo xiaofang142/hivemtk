@@ -190,8 +190,7 @@ def run_chain(keep=False):
         check("S0 bridge token 可用", False, "system_config_kv 无 bridge_ingest_token 且未设 HIVEMTK_BRIDGE_TOKEN")
         return finish(keep)
     bridge = APIClient(bridge_token=BRIDGE_TOKEN)  # bridge 通道无需 JWT
-    admin_token = login_admin()
-    adm = APIClient(admin_token)
+    login_admin()
 
     # ---- Step1 消息入库 (ingest) ----
     section("Step1 消息入库: POST /api/bridge/ingest")
@@ -331,8 +330,6 @@ def run_chain(keep=False):
         }
         j8, _ = bridge.req("POST", "/api/bridge/ingest", "S8 回文上报", expect_code=200, json=echo_body)
         ing8 = (j8.get("ingested") or [{}])[0] if j8 else {}
-        echo_row = q1("SELECT * FROM message_hub WHERE msg_id=%s AND platform=%s",
-                      (f"evt-e2e-{run_id}-echo", channel))
         check("S8.1 回文未触发AI", ing8.get("ai_handled") is not True,
               f"ai_handled={ing8.get('ai_handled')} reason={ing8.get('reason')}")
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """L2 知识库域写测试：import/text 真实导入 + 核对 DB documents/chunks 落库 + 清理。"""
-import sys, time, json
+import sys, time
 sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
-from testkit import api, db_count, db_rows, db_q, token, log
+from testkit import api, db_count, log
 
 def main():
     # 取真实产品 id

@@ -28,9 +28,6 @@ interactions.jsonl，再本脚本读取评估。也可独立单独跑。
 import argparse
 import json
 import os
-import re
-import signal
-import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +87,6 @@ def is_degraded(text):
 
 def _longest_repeat(text):
     """最长重复子串长度（O(n^2)，文本短，足够快）。"""
-    best = 0
     for L in range(min(len(text), 40), 3, -1):
         seen = set()
         for i in range(len(text) - L + 1):

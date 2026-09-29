@@ -19,11 +19,10 @@
 """
 
 import argparse
+import json
 import os
 import re
-import signal
 import subprocess
-import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))

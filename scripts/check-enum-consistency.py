@@ -3,7 +3,6 @@
 ENUM 值与 Go 常量一致性检查（OPT-DB-08 配套）
 防止 PG ENUM 迁移与 Go 代码常量漂移
 """
-import os
 import re
 import sys
 from pathlib import Path
@@ -119,7 +118,7 @@ def main():
         if warnings > 0:
             print(f"\033[1;33m⚠️  ENUM 一致性检查通过（有 {warnings} 个警告）\033[0m")
         else:
-            print(f"\033[0;32m✅ ENUM 一致性检查完全通过\033[0m")
+            print("\033[0;32m✅ ENUM 一致性检查完全通过\033[0m")
         sys.exit(0)
 
 

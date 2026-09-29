@@ -2,7 +2,7 @@
 """从 user-server Go 源码提取全部路由 (method, fullpath)。
 方法：finditer 找所有 .Group 闭包区间(括号配平)建树，再找 .METHOD 落在最深层 group 内累积前缀。
 """
-import os, re, glob, json
+import os, re, json
 
 SRV = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server"
 files = []

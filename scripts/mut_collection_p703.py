@@ -177,13 +177,13 @@ MAIN = f"{US}/cmd/api/main.go"
 LEDGER = "scripts/check-unwired-assets.sh"
 
 RUNNERS = {
-    "model": (f"./internal/model/", "^TestBillChased"),
-    "db": (f"./internal/pkg/db/", "^TestBill"),
-    "repo": (f"./internal/repository/", "^TestBillRepository_ScanOverdue"),
-    "svc": (f"./internal/service/", "^TestCollection"),
-    "app": (f"./internal/app/", "^(TestInitCollectionRuntime|TestGetCollectionSnapshot)"),
-    "route": (f"./internal/router/", "^TestCollection"),
-    "cmd": (f"./cmd/api/", "^TestCollectionJobMounted"),
+    "model": ("./internal/model/", "^TestBillChased"),
+    "db": ("./internal/pkg/db/", "^TestBill"),
+    "repo": ("./internal/repository/", "^TestBillRepository_ScanOverdue"),
+    "svc": ("./internal/service/", "^TestCollection"),
+    "app": ("./internal/app/", "^(TestInitCollectionRuntime|TestGetCollectionSnapshot)"),
+    "route": ("./internal/router/", "^TestCollection"),
+    "cmd": ("./cmd/api/", "^TestCollectionJobMounted"),
 }
 
 CALIBRE = "TestCollectionDocumentedContractSurfaceIsExact"

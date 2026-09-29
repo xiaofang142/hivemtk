@@ -254,7 +254,7 @@ def main() -> int:
     for code, leg in LEGS.items():
         if not leg_present(clone, leg):
             raise SystemExit(f"{code} 腿 {leg} 在克隆里 -list 点不到＝腿不存在，停机")
-    print(f"[Go] 腿前置：4 条腿 `go test -list` 逐条点到")
+    print("[Go] 腿前置：4 条腿 `go test -list` 逐条点到")
 
     # 动手前②：注码前置（锚点唯一 / 注码非恒等 / gofmt 可解析），按靶文件各自读原文
     originals: dict[str, str] = {}

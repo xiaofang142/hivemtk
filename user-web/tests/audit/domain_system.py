@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """L2 系统用户管理域写测试：users CRUD + DB 核对 + 清理。"""
-import sys, time, json, subprocess, os
+import sys, time
 sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
 from testkit import api, db_count, log
 

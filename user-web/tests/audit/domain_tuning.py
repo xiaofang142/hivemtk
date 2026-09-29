@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """L2 调优域写测试：confidence/policies upsert + prompt/candidates/:id/status。真实写+DB核对。"""
-import sys, time, json
+import sys, time
 sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
 from testkit import api, db_count, log, db_rows
 

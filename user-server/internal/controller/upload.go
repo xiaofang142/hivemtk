@@ -65,7 +65,6 @@ type UploadConfig struct {
 	AllowedTypes     string
 	EnableVirusScan  bool
 	VirusScanURL     string
-	UploadDir        string
 	CheckMagicNumber bool
 }
 
@@ -74,7 +73,6 @@ var DefaultUploadConfig = UploadConfig{
 	AllowedTypes:     "image/jpeg,image/jpg,image/png,image/gif,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 	EnableVirusScan:  false,
 	VirusScanURL:     "",
-	UploadDir:        "./uploads",
 	CheckMagicNumber: true,
 }
 

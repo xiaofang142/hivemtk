@@ -13,6 +13,7 @@ import (
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/pkg/utils/async"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/storage"
 	"io"
 	"mime/multipart"
 	"os"
@@ -48,7 +49,8 @@ func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string,
 		return nil, fmt.Errorf("不支持的文件类型: %s", ext)
 	}
 
-	uploadDir := filepath.Join("uploads", "knowledge-base", time.Now().Format("20060102"))
+	uploadBase, _, _ := storage.LocalSource()
+	uploadDir := filepath.Join(uploadBase, "knowledge-base", time.Now().Format("20060102"))
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建上传目录失败: %w", err)
 	}

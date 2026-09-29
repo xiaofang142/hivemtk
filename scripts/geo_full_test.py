@@ -8,7 +8,7 @@
 所有 GEO service (keyword/content/verification/entities) 均通过 LLMAdapter
 真实调用 llm_routing_rules 路由（primary=qwen, fallback=deepseek+local-mlx）。
 """
-import requests, json, sys, time, subprocess, os
+import requests, sys, time, subprocess, os
 
 BASE = "http://127.0.0.1:8204"
 AUTH = None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """L2 剩余清晰域写测试：email draft / sms draft / customer-sessions。真实写+DB核对+清理。"""
-import sys, time, json
+import sys, time
 sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
 from testkit import api, db_count, log
 

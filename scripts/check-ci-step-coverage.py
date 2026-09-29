@@ -304,7 +304,7 @@ def main() -> int:
                 line += "   ← 从未通过"
             print(line)
 
-    print(f"\n══════ 结论 ══════")
+    print("\n══════ 结论 ══════")
     print(f"  统计步骤 {len(stats)} 个 / 作业 {len(job_stats)} 个；"
           f"NEVER_RUN {len(dead)} 个；NEVER_RUN_JOB {len(dead_jobs)} 个；ALWAYS_RED {len(always_red)} 个")
     for wf, jn, sn, present in dead:

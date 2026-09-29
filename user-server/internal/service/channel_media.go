@@ -9,7 +9,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"os"
 	"path/filepath"
 
 	"hivemtk-user/internal/model"
@@ -72,10 +71,7 @@ func storeInboundMedia(ctx context.Context, data []byte, contentType, channel, m
 	cfg, err := cfgRepo.GetDefault(ctx)
 	if err != nil || cfg == nil {
 		// 兜底：无 obs_config 记录时按本地默认目录构造（与 router /files 静态目录一致）
-		baseDir := os.Getenv("STORAGE_LOCAL_BASE_DIR")
-		if baseDir == "" {
-			baseDir = "./uploads"
-		}
+		baseDir, _, _ := storage.LocalSource()
 		cfg = &model.ObsConfig{
 			Name:      "媒体转存默认本地存储",
 			Provider:  model.ObsProviderLocal,

@@ -3,7 +3,6 @@
 P1-A 知识库绑定 seed: 按智能体业务线分配 FAQ / SOP 模板 ID
 依据 2026-07-31 P1-A: 头脑风暴二次论证 - 各 AI 智能体可绑定自己的 FAQ / SOP 范围
 """
-import json
 import os
 import sys
 import psycopg2

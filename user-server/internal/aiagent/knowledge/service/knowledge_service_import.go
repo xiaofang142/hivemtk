@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/storage"
 	"io"
 	"net/http"
 	"os"
@@ -44,7 +45,8 @@ func (s *KnowledgeService) importUploadedFile(ctx context.Context, req *ImportRe
 		return nil, fmt.Errorf("不支持的文件类型: %s", ext)
 	}
 
-	uploadDir := filepath.Join("uploads", "knowledge", req.ProductID, time.Now().Format("20060102"))
+	uploadBase, _, _ := storage.LocalSource()
+	uploadDir := filepath.Join(uploadBase, "knowledge", req.ProductID, time.Now().Format("20060102"))
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建上传目录失败: %w", err)
 	}
@@ -108,7 +110,8 @@ func (s *KnowledgeService) importText(ctx context.Context, req *ImportRequest, p
 		req.Title = "未命名文档_" + time.Now().Format("20060102150405")
 	}
 	tagsJSON, _ := json.Marshal(req.Tags)
-	tmpDir := filepath.Join("uploads", "knowledge-text", req.ProductID, time.Now().Format("20060102"))
+	textBase, _, _ := storage.LocalSource()
+	tmpDir := filepath.Join(textBase, "knowledge-text", req.ProductID, time.Now().Format("20060102"))
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建目录失败: %w", err)
 	}
@@ -171,7 +174,8 @@ func (s *KnowledgeService) importFromURL(ctx context.Context, req *ImportRequest
 		}
 	}
 	tagsJSON, _ := json.Marshal(req.Tags)
-	tmpDir := filepath.Join("uploads", "knowledge-url", req.ProductID, time.Now().Format("20060102"))
+	urlBase, _, _ := storage.LocalSource()
+	tmpDir := filepath.Join(urlBase, "knowledge-url", req.ProductID, time.Now().Format("20060102"))
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建目录失败: %w", err)
 	}

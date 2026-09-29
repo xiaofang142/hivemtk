@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """L2 智能体 + 营销流程域写测试：真实 CRUD + DB 核对 + 清理。"""
-import sys, time, json
+import sys, time
 sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
-from testkit import api, db_count, db_q, log
+from testkit import api, db_count, log
 
 def test_agents():
     log("===== 智能体 ai-agents =====")
