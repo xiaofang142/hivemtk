@@ -98,15 +98,77 @@ func (r *TelegramGroupMemberRepository) SetDB(ctx context.Context, db *gorm.DB) 
 }
 
 // Upsert 按 (account_id, chat_id, user_id) 幂等写入成员记录
+//
+// welcome_sent_at / welcome_resends 一并覆盖：重新入群＝一段新的成员关系，
+// 上一段的提示送达状态不该继承（否则再进群的人永远收不到验证提示）。
 func (r *TelegramGroupMemberRepository) Upsert(ctx context.Context, m *model.TelegramGroupMember) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "account_id"}, {Name: "chat_id"}, {Name: "user_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"username", "full_name", "join_status", "join_mode", "verify_token", "expires_at", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"username", "full_name", "join_status", "join_mode", "verify_token", "expires_at", "welcome_sent_at", "welcome_resends", "updated_at"}),
 	}).Create(m).Error
 }
 
 func (r *TelegramGroupMemberRepository) Update(ctx context.Context, m *model.TelegramGroupMember) error {
 	return r.db.WithContext(ctx).Save(m).Error
+}
+
+// MarkWelcomeSent 记录群内验证提示已送达，并清零补发计数。
+//
+// 只 SET 相关列且带 authorized=false 守卫：整行 Save 会把 read→write 窗口内
+// 刚刚完成的私聊激活覆盖回 false，而按 key 定位不依赖主键（Upsert 路径拿不到 ID）。
+func (r *TelegramGroupMemberRepository) MarkWelcomeSent(ctx context.Context, accountID uint, chatID, userID string, sentAt time.Time) error {
+	return r.db.WithContext(ctx).Model(&model.TelegramGroupMember{}).
+		Where("account_id = ? AND chat_id = ? AND user_id = ? AND authorized = ?", accountID, chatID, userID, false).
+		Updates(map[string]any{"welcome_sent_at": sentAt, "welcome_resends": 0, "updated_at": time.Now()}).Error
+}
+
+// BumpWelcomeResend 记一次未送达的补发尝试（上限由调用方判定）。
+func (r *TelegramGroupMemberRepository) BumpWelcomeResend(ctx context.Context, accountID uint, chatID, userID string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&model.TelegramGroupMember{}).
+		Where("account_id = ? AND chat_id = ? AND user_id = ? AND authorized = ?", accountID, chatID, userID, false).
+		Updates(map[string]any{"welcome_resends": gorm.Expr("welcome_resends + 1"), "updated_at": now}).Error
+}
+
+// ClaimStalledResend 原子认领一条"从未送达"的补偿任务。
+//
+// 同一个成员可能同时被 webhook 重试和补偿循环（甚至多个清扫器实例）盯上；
+// 先查 List 再发，谁都拦不住对方——认领必须是单条 UPDATE 的原子语义，带上
+// 乐观锁：只有 welcome_sent_at 仍为空、补发数未达上限、且补发数仍等于 List
+// 出来时的值（expectedResends）的行才能被认领。第二个认领者必然看到计数已
+// 变，RowsAffected=0 ⇒ 跳过，于是同一行一轮只会发出一条提示。
+// 认领失败不代表丢任务：没被认领的行下轮清扫还会再来（at-least-once 不变，
+// 重复发送被杀掉）。
+//
+// 认领顺手把本次尝试计入 welcome_resends：调用方在后续的发送失败支路上不
+// 要再 bump，避免一次尝试被记两次。
+func (r *TelegramGroupMemberRepository) ClaimStalledResend(ctx context.Context, memberID uint, expectedResends, maxResends int) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&model.TelegramGroupMember{}).
+		Where("id = ? AND welcome_sent_at IS NULL AND welcome_resends = ? AND welcome_resends < ?", memberID, expectedResends, maxResends).
+		Updates(map[string]any{"welcome_resends": gorm.Expr("welcome_resends + 1"), "updated_at": time.Now()})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
+// RetimeVerification 只刷新验证截止时间（未验证成员重新计时、不清退用）。
+// 同样带 authorized=false 守卫：这期间已过审的人不该被重新计时，也不该被清扫踢出。
+func (r *TelegramGroupMemberRepository) RetimeVerification(ctx context.Context, memberID uint, expiresAt time.Time) error {
+	return r.db.WithContext(ctx).Model(&model.TelegramGroupMember{}).
+		Where("id = ? AND authorized = ?", memberID, false).
+		Updates(map[string]any{"expires_at": expiresAt, "updated_at": time.Now()}).Error
+}
+
+// MarkKicked 把超时未验证的成员落成 kicked。
+//
+// 同样只 SET 状态列并带 authorized=false 守卫：踢人前读的台账和写回之间隔着两次 TG
+// 调用，这期间他刚好 /start 过审的话，整行 Save 会把 authorized 覆盖回 false——
+// 人已解禁却被打回未验证，还会在下一轮被再踢一次。
+func (r *TelegramGroupMemberRepository) MarkKicked(ctx context.Context, memberID uint) error {
+	return r.db.WithContext(ctx).Model(&model.TelegramGroupMember{}).
+		Where("id = ? AND authorized = ?", memberID, false).
+		Updates(map[string]any{"join_status": model.TGMemberKicked, "updated_at": time.Now()}).Error
 }
 
 func (r *TelegramGroupMemberRepository) Get(ctx context.Context, accountID uint, chatID, userID string) (*model.TelegramGroupMember, error) {
@@ -140,11 +202,22 @@ func (r *TelegramGroupMemberRepository) ListExpired(ctx context.Context, now tim
 	return members, nil
 }
 
-// ListStalledRestricted 找出"禁言中、未验证且 expires_at 早于 before"的成员（入群补偿循环用）
-func (r *TelegramGroupMemberRepository) ListStalledRestricted(ctx context.Context, before time.Time, limit int) ([]*model.TelegramGroupMember, error) {
+// ListStalledRestricted 找出需要补偿循环补发入群提示的成员：
+// 禁言中、未验证、welcome_sent_at 为空（提示从未送达）、且验证窗口还没到期。
+//
+// 两列各拦一种线上故障：
+//   - welcome_sent_at IS NULL 是必要条件。已送达提示的人该由 SweepExpired 按到期口径
+//     处置，把他捞进来就会一遍遍给他续期，TTL 形同虚设——"同一名成员一天被重播 60+ 次
+//     入群提示"就是这么来的（旧版用"临近到期"当提示没送达的代理，两个信号根本无关）。
+//   - expires_at 还没到期（没有窗口视为待补，人工/迁移留下的行不该被静默漏掉）。窗口一旦
+//     走完就交给 SweepExpired：他按"从未送达不处置"放过，补偿循环不再空转。
+//
+// 补发次数的上限属于 service 的策略，不下沉到这条查询里。
+func (r *TelegramGroupMemberRepository) ListStalledRestricted(ctx context.Context, now time.Time, limit int) ([]*model.TelegramGroupMember, error) {
 	var members []*model.TelegramGroupMember
-	q := r.db.WithContext(ctx).Where("join_status = ? AND authorized = ? AND expires_at IS NOT NULL AND expires_at < ?",
-		model.TGMemberRestricted, false, before)
+	q := r.db.WithContext(ctx).Where(
+		"join_status = ? AND authorized = ? AND welcome_sent_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+		model.TGMemberRestricted, false, now)
 	if limit > 0 {
 		q = q.Limit(limit)
 	}

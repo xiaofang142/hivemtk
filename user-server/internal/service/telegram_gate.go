@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/channelbot/core"
@@ -37,14 +38,16 @@ import (
 //	restricted → 群里发提示（含 t.me/<bot>?start=<token> 深链）→ 用户点击
 //	跳转 Bot 私聊 /start → authorized=true → UnrestrictChatMember 解禁。
 //
-// 超时未验证：方案 A declineChatJoinRequest；方案 B banChatMember 踢出。
-// TTL 清扫由 StartGateSweeper 后台协程周期执行。
+// 超时未验证：方案 A declineChatJoinRequest；方案 B banChatMember 移出（可再次入群）。
+// 对真人的处置以"提示确实送达过"为前提，详见 SweepExpired。
+// TTL 清扫由 StartGateSweeper 后台协程周期执行，多实例共库时由 cron_job_leases 选主。
 // TelegramGateService L4 门面：只持 repository，不持有 *gorm.DB（五层架构 §三.4，
 // 对齐 telegram_polling_lock.go 先例）。nil 守卫统一判 gateRepo（构造期与 db 同生共死）。
 type TelegramGateService struct {
 	gateRepo   *repository.TelegramGroupGateRepository
 	memberRepo *repository.TelegramGroupMemberRepository
 	tgRepo     *repository.TelegramAccountRepository
+	leaseRepo  *repository.CronJobLeaseRepository
 
 	// apiBase 覆盖 Telegram Bot API 基址（空串=官方 api.telegram.org）。
 	// 供测试指向 httptest 服务端，避免 happy path 因真实 API 401 而无法覆盖；
@@ -66,6 +69,7 @@ func NewTelegramGateService(db *gorm.DB) *TelegramGateService {
 		svc.gateRepo = repository.NewTelegramGroupGateRepositoryWithDB(db)
 		svc.memberRepo = repository.NewTelegramGroupMemberRepositoryWithDB(db)
 		svc.tgRepo = repository.NewTelegramAccountRepositoryWithDB(db)
+		svc.leaseRepo = repository.NewCronJobLeaseRepositoryWithDB(db)
 	}
 	return svc
 }
@@ -125,14 +129,78 @@ func botDeepLink(botUsername, token string) string {
 // 走原路径——改文案不该把别人配过的群提示打坏。
 func renderTGGateWelcome(tpl, display, botUsername, token string) string {
 	if strings.Contains(tpl, "{{") {
-		return strings.NewReplacer(
+		out := strings.NewReplacer(
 			"{{display}}", display,
 			"{{bot}}", botUsername,
 			"{{verify_link}}", botDeepLink(botUsername, token),
 			"{{token}}", token,
 		).Replace(tpl)
+		if strings.Contains(out, "{{") {
+			// 未知命名占位符会原文外发（如 {{foo}}），比缺文案更伤：直接退回默认模板。
+			logger.Errorf("[TG-Gate] 欢迎模板含未知占位符，已退回默认模板 tpl=%q", tpl)
+			return renderTGGateWelcomeDefault(display, botUsername, token)
+		}
+		return out
 	}
-	return fmt.Sprintf(tpl, display, botUsername, strings.TrimPrefix(botUsername, "@"), token)
+	// 老 %s 模板：按 [display, bot, domain, token] 位置序逐个填，verb 与实参
+	// 数量不一致时绝不再调 Sprintf（多余实参会变成 %!(EXTRA …) 发出去，缺少的
+	// 会变成 %!s(MISSING)，两种都是线上事故）。
+	args := []string{display, botUsername, strings.TrimPrefix(botUsername, "@"), token}
+	out := fillPositionalVerbs(tpl, args)
+	if hasUnfilledVerb(out) {
+		logger.Errorf("[TG-Gate] 欢迎模板动词无法完全填充，已退回默认模板 tpl=%q", tpl)
+		return renderTGGateWelcomeDefault(display, botUsername, token)
+	}
+	return out
+}
+
+// renderTGGateWelcomeDefault 用已知干净的默认模板渲染（不递归回主入口）。
+func renderTGGateWelcomeDefault(display, botUsername, token string) string {
+	return strings.NewReplacer(
+		"{{display}}", display,
+		"{{bot}}", botUsername,
+		"{{verify_link}}", botDeepLink(botUsername, token),
+		"{{token}}", token,
+	).Replace(tgGateDefaultWelcome())
+}
+
+// fillPositionalVerbs 把模板里的 %s 按出现顺序依次换成 args；args 用尽后
+// 剩余的 %s 原样保留（由 hasUnfilledVerb 判定退回默认模板）。
+func fillPositionalVerbs(tpl string, args []string) string {
+	if !strings.Contains(tpl, "%s") || len(args) == 0 {
+		return tpl
+	}
+	var b strings.Builder
+	ai := 0
+	for i := 0; i < len(tpl); i++ {
+		if tpl[i] == '%' && i+1 < len(tpl) && tpl[i+1] == 's' && ai < len(args) {
+			b.WriteString(args[ai])
+			ai++
+			i++
+			continue
+		}
+		b.WriteByte(tpl[i])
+	}
+	return b.String()
+}
+
+// hasUnfilledVerb 报告文本里是否还有未被填充的 % 动词（% 后跟字母即动词，
+// %% 是转义不算；"100%" 这类 % 后非字母的不算）。
+func hasUnfilledVerb(s string) bool {
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] != '%' {
+			continue
+		}
+		c := s[i+1]
+		if c == '%' {
+			i++
+			continue
+		}
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleJoinRequest 方案 A 入口：处理 chat_join_request
@@ -146,10 +214,7 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 		return // 未配置网关或未开启：保持 Telegram 默认行为（人工审批）
 	}
 
-	ttl := gate.VerifyTTLMin
-	if ttl <= 0 {
-		ttl = 10
-	}
+	ttl := normalizeTGGateTTL(gate.VerifyTTLMin)
 	expires := time.Now().Add(time.Duration(ttl) * time.Minute)
 	token := genVerifyToken()
 
@@ -171,6 +236,10 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 
 	// 尝试私聊验证引导。Telegram 限制：用户从未与 Bot 交互过时 sendMessage 会 403，
 	// 此时依赖群里提示让用户主动点开 Bot（不重试，等用户 /start）。
+	//
+	// 送达结果必须落台账：申请被批准前人看不到群消息，私聊是唯一能触达他的通道，
+	// 于是 welcome_sent_at 就是"这个人有没有被告知"的唯一事实源（补发计数与
+	// 超时处置都读它），而不是读一条自己都没发出去过的消息。
 	botUsername := s.botUsername(ctx, accountID)
 	link := botDeepLink(botUsername, token)
 	welcome := gate.WelcomeMsg
@@ -179,6 +248,7 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 	}
 	welcome = renderTGGateWelcome(welcome, tgUserDisplayName(req.From), botUsername, token)
 
+	delivered := false
 	if cli, cerr := s.client(ctx, accountID); cerr == nil {
 		if _, serr := cli.SendMessage(ctx, req.From.ID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); serr != nil {
 			logger.Infof("[TG-Gate] 私聊引导未达（用户尚未与 Bot 交互，属预期）account=%d user=%d: %v", accountID, req.From.ID, serr)
@@ -187,7 +257,14 @@ func (s *TelegramGateService) HandleJoinRequest(ctx context.Context, accountID u
 				groupTip := fmt.Sprintf("@%s 你的入群申请已收到，请点击 %s 完成验证后自动批准。", req.From.Username, link)
 				_, _ = cli.SendMessage(ctx, req.Chat.ID, groupTip, telegram.SendMessageOptions{DisableMarkdownConversion: true})
 			}
+		} else {
+			delivered = true
 		}
+	}
+	if delivered {
+		s.markWelcomeSent(ctx, accountID, chatIDStr, member.UserID)
+	} else {
+		s.bumpWelcomeResend(ctx, accountID, chatIDStr, member.UserID)
 	}
 }
 
@@ -210,10 +287,7 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 	}
 
 	botUsername := s.botUsername(ctx, accountID)
-	ttl := gate.VerifyTTLMin
-	if ttl <= 0 {
-		ttl = 10
-	}
+	ttl := normalizeTGGateTTL(gate.VerifyTTLMin)
 
 	handled := false
 	for i := range members {
@@ -241,9 +315,9 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		}
 
 		// 先禁言再发提示（顺序不能反：先发提示万一禁言失败，用户会以为可发言）。
-		// 禁言/提示任何一步失败都不 continue——台账保持 restricted，交给
-		// StartGateSweeper 的补偿循环（HandleNewMembers 本身可能已被 30s webhook
-		// 超时打断，在请求内重试只会加剧超时）。
+		// 禁言/提示任何一步失败都不 continue——台账保持 restricted 且 welcome_sent_at
+		// 为空，交给 StartGateSweeper 的补偿循环（HandleNewMembers 本身可能已被 30s
+		// webhook 超时打断，在请求内重试只会加剧超时）。
 		if err := cli.RestrictChatMember(ctx, chatID, m.ID, 0); err != nil {
 			logger.Errorf("[TG-Gate] 禁言失败（已入补偿队列，清扫器将重试）account=%d user=%d: %v", accountID, m.ID, err)
 			continue
@@ -255,30 +329,32 @@ func (s *TelegramGateService) HandleNewMembers(ctx context.Context, accountID ui
 		}
 		welcome = renderTGGateWelcome(welcome, tgUserDisplayName(&m), botUsername, token)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
-			// 提示没送达 = 用户不知道要验证 = 必然超时被踢。禁言已生效、不致命，
-			// 但必须补发：记录后由清扫器带 verify_token 补发（expires_at 重算，等于宽限重置）
+			// 提示没送达 = 用户不知道要验证。禁言已生效、不致命，补发计数 +1 后由
+			// 清扫器带 verify_token 补发（上限 tgGateWelcomeResendMax 次）。
+			// 这条支路必须 continue：把"发失败"也登记成送达，等于同时关掉补偿循环
+			// 的补发（查询只取未送达的行）和清扫器的免罚判据——人被判了刑却没收到传票。
 			logger.Errorf("[TG-Gate] 群内验证提示发送失败（已入补偿队列，清扫器将补发）account=%d chat=%s: %v", accountID, chatIDStr, err)
-			s.compensateWelcome(ctx, accountID, chatID, m.ID)
+			s.bumpWelcomeResend(ctx, accountID, chatIDStr, strconv.FormatInt(m.ID, 10))
+			continue
 		}
+		s.markWelcomeSent(ctx, accountID, chatIDStr, strconv.FormatInt(m.ID, 10))
 	}
 	return handled
 }
 
-// compensateWelcome 提示补发登记：把该成员 expires_at 顺延一个 TTL 并打标，
-// 让 StartGateSweeper 的补偿循环下个周期重新发提示（sweeper 内识别"禁言成功
-// 但提示未发"的成员）。实现上无需新字段：把 expires_at 推迟到 now+TTL 即可，
-// 补偿循环按 verify_token 重发提示。
-func (s *TelegramGateService) compensateWelcome(ctx context.Context, accountID uint, chatID int64, userID int64) {
-	chatIDStr := strconv.FormatInt(chatID, 10)
-	userIDStr := strconv.FormatInt(userID, 10)
-	m, err := s.memberRepo.Get(ctx, accountID, chatIDStr, userIDStr)
-	if err != nil || m == nil {
-		return
+// markWelcomeSent 登记"这个人的验证提示已经送达"。
+//
+// 送达登记是重复播报的唯一刹车：补偿循环只补 welcome_sent_at 为空的行，
+// 写失败会让下一个人也被重播，所以失败要出声。
+func (s *TelegramGateService) markWelcomeSent(ctx context.Context, accountID uint, chatID, userID string) {
+	if err := s.memberRepo.MarkWelcomeSent(ctx, accountID, chatID, userID, time.Now()); err != nil {
+		logger.Errorf("[TG-Gate] 提示送达登记失败 account=%d chat=%s user=%s: %v", accountID, chatID, userID, err)
 	}
-	newExp := time.Now().Add(2 * time.Minute) // 下个清扫周期（1 分钟）内必被扫到
-	m.ExpiresAt = &newExp
-	if err := s.memberRepo.Update(ctx, m); err != nil {
-		logger.Errorf("[TG-Gate] 提示补发登记失败 account=%d chat=%s user=%s: %v", accountID, chatIDStr, userIDStr, err)
+}
+
+func (s *TelegramGateService) bumpWelcomeResend(ctx context.Context, accountID uint, chatID, userID string) {
+	if err := s.memberRepo.BumpWelcomeResend(ctx, accountID, chatID, userID); err != nil {
+		logger.Errorf("[TG-Gate] 提示补发计数失败 account=%d chat=%s user=%s: %v", accountID, chatID, userID, err)
 	}
 }
 
@@ -619,22 +695,35 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 	return s.AuthorizeMember(ctx, member)
 }
 
+// tgGateWelcomeResendMax 群内验证提示的最大补发次数（含入群时的首次尝试）。
+// 上限存在的理由：提示发不出去一般不是抖动，而是 Bot 在这个群里没了发言权限；
+// 对这种成员每分钟重发一次只会把群刷屏（线上实测 6 名成员被重播 219 条）。
+const tgGateWelcomeResendMax = 3
+
 // RecoverStalled 入群响应补偿循环（可靠性的最后兜底）。
 //
 // HandleNewMembers 在 webhook 请求内同步执行，TG API 网络抖动可能让禁言或
-// 验证提示失败。台账里 restricted 但“未被禁言/提示没送达”的成员，若不补偿
-// 就会静默卡死（用户没人管，10 分钟后被踢，体验=入群没人响应）。
-// 每个清扫周期由 SweepExpired 调用：逐个重读 TG 侧真实状态，未禁言的补禁言，
-// 临近过期的重发验证提示（刷新 expires_at 给用户重新计时）。
+// 验证提示失败。台账里 restricted 但"提示从未送达"的成员，若不补偿就会静默
+// 卡死（用户没人管，体验=入群没人响应）。
+//
+// 取数判据是 welcome_sent_at 而不是 expires_at：ListStalledRestricted 只返回"提示
+// 从未送达"的 restricted 成员，所以已被告知的人根本进不了这个循环——一次播报都不发，
+// 计时也不再被顶回去（历史上"临近到期"被当成"提示没送达"，每个 TTL 给同一个人重播
+// 一次群消息，且重播顺手把 expires_at 顶回去，TTL 清理对这个人永不触发）。
+//
+// 进来的人两条路：
+//   - 补发未到上限：补禁言 + 补发，成功登记送达并把计时改为"送达时刻 + TTL"（验证窗口
+//     从他真被告知那刻起算），失败计一次补发数；
+//   - 已到上限：只停手，让 expires_at 自然到期，由清扫器按"从未送达"不对他处置。
+//
 // 每次最多处理 limit 条，避免清扫周期被拖垮。
 func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 	if !s.wired() {
 		return
 	}
-	// 禁言中的成员且 2 分钟内将到期：大概率是“提示发送失败”被 compensateWelcome
-	// 顺延过期的，或首次提示被网络抖动吞掉的。重发提示并重新计时。
-	soon := time.Now().Add(2 * time.Minute)
-	stalled, err := s.memberRepo.ListStalledRestricted(ctx, soon, limit)
+	// 窗口还开着的人才是补偿对象：窗口已经走完的交给 SweepExpired 的到期口径，
+	// 不要在这里再走一遍"发不出去就计数"的空转。
+	stalled, err := s.memberRepo.ListStalledRestricted(ctx, time.Now(), limit)
 	if err != nil || len(stalled) == 0 {
 		return
 	}
@@ -649,9 +738,31 @@ func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 		if gerr != nil || gate == nil || !gate.Enabled {
 			continue
 		}
+		ttl := normalizeTGGateTTL(gate.VerifyTTLMin)
+
+		// 补发已到上限＝这条链路上发不出去（Bot 被移出群、chat 不可达之类）。继续
+		// 重发只会刷屏，也不该把计时顶回去：让 expires_at 自然到期，清扫器会认出
+		// "提示从未送达"而不对他处置。
+		if m.WelcomeResends >= tgGateWelcomeResendMax {
+			logger.Warnf("[TG-Gate] 提示补发已到上限（%d 次）：停止播报 chat=%s user=%s",
+				tgGateWelcomeResendMax, m.ChatID, m.UserID)
+			continue
+		}
+
 		cli, cerr := s.client(ctx, m.AccountID)
 		if cerr != nil {
 			return // 账号级故障（token/DB），本轮放弃
+		}
+		// 原子认领：webhook 重试 / 多个清扫器实例可能同时盯上同一行，
+		// 先 List 再发拦不住对方——认领失败说明已被认领/已送达/已到上限，直接跳过。
+		// 认领已把本次尝试计入 welcome_resends，后续失败支路不再 bump。
+		claimed, clerr := s.memberRepo.ClaimStalledResend(ctx, m.ID, m.WelcomeResends, tgGateWelcomeResendMax)
+		if clerr != nil {
+			logger.Warnf("[TG-Gate] 补偿认领失败 chat=%s user=%s: %v", m.ChatID, m.UserID, clerr)
+			continue
+		}
+		if !claimed {
+			continue
 		}
 		// 幂等补禁言：若首次禁言就成功，重复 restrict 只是幂等写，无副作用
 		if err := cli.RestrictChatMember(ctx, chatID, userID, 0); err != nil {
@@ -666,101 +777,286 @@ func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 		welcome = renderTGGateWelcome(welcome, m.FullName, botUsername, m.VerifyToken)
 		if _, err := cli.SendMessage(ctx, chatID, welcome, telegram.SendMessageOptions{DisableMarkdownConversion: true}); err != nil {
 			logger.Warnf("[TG-Gate] 补偿提示发送失败 chat=%s user=%s: %v", m.ChatID, m.UserID, err)
-			continue // expires_at 已临近，下轮 sweeper 将按超时正常踢出
+			continue // 认领时已计数，到上限后不再重发
 		}
-		// 补发成功：按配置 TTL 重新计时
-		ttl := gate.VerifyTTLMin
-		if ttl <= 0 {
-			ttl = 10
-		}
-		newExp := time.Now().Add(time.Duration(ttl) * time.Minute)
-		m.ExpiresAt = &newExp
-		if err := s.memberRepo.Update(ctx, m); err != nil {
-			logger.Errorf("[TG-Gate] 补偿后计时刷新失败 id=%d: %v", m.ID, err)
-		} else {
-			logger.Infof("[TG-Gate] 补偿完成：已补禁言+补发提示 chat=%s user=%s 新过期时间=%s", m.ChatID, m.UserID, newExp.Format("15:04:05"))
-		}
+		s.markWelcomeSent(ctx, m.AccountID, m.ChatID, m.UserID)
+		s.retimeGateWindow(ctx, m, ttl)
+		logger.Infof("[TG-Gate] 补偿完成：已补禁言+补发提示 chat=%s user=%s", m.ChatID, m.UserID)
 	}
 }
 
-// SweepExpired TTL 清扫：超时未验证 → 方案 A 拒绝申请 / 方案 B 踢出并落台账 kicked
+// retimeGateWindow 把验证窗口改为"现在 + TTL"，只在补偿循环真把提示发出去之后调用：
+// 倒计时从被告知的时刻起算才成立，入群时那次写入可能对应一条根本没送达的消息。
+// 除此之外不再有"重新计时"这条路——无限续期就是 TTL 清理永不触发的原因。
+func (s *TelegramGateService) retimeGateWindow(ctx context.Context, m *model.TelegramGroupMember, ttlMinutes int) {
+	newExp := time.Now().Add(time.Duration(ttlMinutes) * time.Minute)
+	if err := s.memberRepo.RetimeVerification(ctx, m.ID, newExp); err != nil {
+		logger.Errorf("[TG-Gate] 计时刷新失败 id=%d: %v", m.ID, err)
+	}
+}
+
+// SweepExpired TTL 到期处置：方案 A declineChatJoinRequest；方案 B 移出群（仍可再次入群）并落 kicked。
+//
+// 方案 B 的判据有两层，两层都只在"别惩罚没被告知的人"这一条上收紧：
+//  1. welcome_sent_at 为空 —— 验证提示从没送达（入群时发送失败、补发又到上限），
+//     这个人超时不是他的过错，不处置，继续由补偿循环维持禁言与计时；
+//  2. 提示送达过、verify_ttl_min 的窗口也确实过去了 —— 再宽限一个 TTL 才移人。
+//     在群里点开链接、跳私聊、发 /start 这条链路本来就慢，一次窗口没点不等于不想入群。
+//
+// 方案 A 不受这两层约束：decline 只把申请退回"可以再次申请"，人既没被移出也没被拉黑。
+//
+// 台账重读失败时本轮直接跳过：处置判据（是否送达、何时到期）只能来自重读出来的那一行，
+// 读不出来就不拿二手数据对真人动手。
 func (s *TelegramGateService) SweepExpired(ctx context.Context, limit int) (int, error) {
 	if !s.wired() {
 		return 0, nil
 	}
-	s.RecoverStalled(ctx, 50) // 补偿：入群时禁言/提示失败的成员
-	expired, err := s.memberRepo.ListExpired(ctx, time.Now(), limit)
+	s.RecoverStalled(ctx, 50) // 补偿：提示从未送达的禁言成员
+	now := time.Now()
+	expired, err := s.memberRepo.ListExpired(ctx, now, limit)
 	if err != nil {
 		return 0, err
 	}
 	swept := 0
 	for _, member := range expired {
-		// 竞态防御：成员可能在过期后被 /start 放行（authorized 已翻 true），
-		// 踢出前按主键重读台账，避免把刚通过验证的成员误踢
-		fresh, err := s.memberRepo.GetByToken(ctx, member.VerifyToken)
-		if err == nil && fresh != nil && fresh.ID == member.ID && fresh.Authorized {
+		// 处置前按主键重读：成员可能刚在过期那一瞬被 /start 放行，也可能送达状态刚变。
+		// 重读要认主键——处置对象就是这一行，而 verify_token 是会被重新入群改写的业务列，
+		// 拿一个会被改写的列当"我还是不是我要动的那一行"的依据，判据就挂在会动的东西上了。
+		fresh, err := s.memberRepo.GetMemberByID(ctx, member.ID)
+		if err != nil || fresh == nil {
 			continue
 		}
-		cli, err := s.client(ctx, member.AccountID)
-		if err != nil {
-			continue
+		if fresh.Authorized {
+			continue // 已过审：上一行的放行路径负责解禁，这里不重复动他
 		}
-		chatID, _ := strconv.ParseInt(member.ChatID, 10, 64)
-		userID, _ := strconv.ParseInt(member.UserID, 10, 64)
+		chatID, _ := strconv.ParseInt(fresh.ChatID, 10, 64)
+		userID, _ := strconv.ParseInt(fresh.UserID, 10, 64)
 		if chatID == 0 || userID == 0 {
 			continue
 		}
-		if member.JoinMode == TGGateModeJoinRequest {
+		if fresh.JoinMode != TGGateModeJoinRequest {
+			// 方案 B：没送达过提示的人不罚
+			if fresh.WelcomeSentAt == nil {
+				logger.Debugf("[TG-Gate] 提示从未送达，超时也不处置 chat=%s user=%s", fresh.ChatID, fresh.UserID)
+				continue
+			}
+			gate, gerr := s.gateRepo.GetByChatID(ctx, fresh.AccountID, fresh.ChatID)
+			if gerr != nil || gate == nil {
+				continue // 群配置已删：没有配置可依据，就不该替他做移出决定
+			}
+			grace := time.Duration(normalizeTGGateTTL(gate.VerifyTTLMin)) * time.Minute
+			if fresh.ExpiresAt != nil && now.Sub(*fresh.ExpiresAt) < grace {
+				logger.Debugf("[TG-Gate] 已到期但在宽限期内（再等 %d 分钟）chat=%s user=%s", int64(grace/time.Minute), fresh.ChatID, fresh.UserID)
+				continue
+			}
+		}
+		cli, err := s.client(ctx, fresh.AccountID)
+		if err != nil {
+			continue
+		}
+		if fresh.JoinMode == TGGateModeJoinRequest {
 			if err := cli.DeclineChatJoinRequest(ctx, chatID, userID); err != nil {
-				logger.Warnf("[TG-Gate] decline 超时申请失败 chat=%s user=%d: %v", member.ChatID, userID, err)
+				logger.Warnf("[TG-Gate] decline 超时申请失败 chat=%s user=%d: %v", fresh.ChatID, userID, err)
 			}
 		} else {
 			// 踢出（untilDate=过去时间 → 只踢不拉黑，用户可再次申请加入）
-			if err := cli.BanChatMember(ctx, chatID, userID, time.Now().Add(-time.Minute).Unix()); err != nil {
-				logger.Warnf("[TG-Gate] 踢出超时成员失败 chat=%s user=%d: %v", member.ChatID, userID, err)
+			if err := cli.BanChatMember(ctx, chatID, userID, now.Add(-time.Minute).Unix()); err != nil {
+				logger.Warnf("[TG-Gate] 踢出超时成员失败 chat=%s user=%d: %v", fresh.ChatID, userID, err)
+				continue // TG 侧没动成功就别把台账写成 kicked，下轮还会重试
 			} else {
 				// Telegram 实际行为：banChatMember 过去时间 = 永久拉黑。补一次 unban
 				// 解除拉黑，保留"只踢不拉黑、可再次申请加入"的产品语义
 				if err := cli.UnbanChatMember(ctx, chatID, userID); err != nil {
-					logger.Warnf("[TG-Gate] 解除拉黑失败（仍为拉黑状态，用户无法再次加入）chat=%s user=%d: %v", member.ChatID, userID, err)
+					logger.Warnf("[TG-Gate] 解除拉黑失败（仍为拉黑状态，用户无法再次加入）chat=%s user=%d: %v", fresh.ChatID, userID, err)
 				}
 			}
+			logger.Infof("[TG-Gate] 超时未验证已移出（可重新入群）chat=%s user=%s 提示送达于=%s",
+				fresh.ChatID, fresh.UserID, fresh.WelcomeSentAt.Format("2006-01-02 15:04:05"))
 		}
-		member.JoinStatus = model.TGMemberKicked
-		if err := s.memberRepo.Update(ctx, member); err != nil {
-			logger.Errorf("[TG-Gate] kicked 状态回写失败 id=%d: %v", member.ID, err)
+		if err := s.memberRepo.MarkKicked(ctx, fresh.ID); err != nil {
+			logger.Errorf("[TG-Gate] kicked 状态回写失败 id=%d: %v", fresh.ID, err)
 		}
 		swept++
 	}
 	return swept, nil
 }
 
+// normalizeTGGateTTL 群配置的验证窗口（分钟），非正值按 10 分钟兜底。
+func normalizeTGGateTTL(minutes int) int {
+	if minutes <= 0 {
+		return 10
+	}
+	return minutes
+}
+
+// 清扫周期与租约作业名。
+//
+// tgGateSweeperLeaseJob 是 cron_job_leases 里这一路的键：清扫器会**对真人动手**
+// （移出群 / 拒绝申请），而同一套库上可以同时住着多个进程（本地开发常见的
+// "正式实例 + air 实例 + 手工起的旧二进制"）。没有跨进程互斥时每个实例各自
+// 每分钟广播一遍，入群提示的重复播报量就是实例数的整数倍。
+const (
+	gateSweeperInterval    = time.Minute
+	gateSweeperTickTimeout = 30 * time.Second
+	gateSweeperBatchLimit  = 100
+	tgGateSweeperLeaseJob  = "telegram_gate_sweeper"
+)
+
+// gateSweeperRunner 后台协程的关停把手（cancel 停 ticker，done 表示协程真退出了）。
+type gateSweeperRunner struct {
+	workerID string
+	svc      *TelegramGateService
+	interval time.Duration
+	cancel   context.CancelFunc
+	done     chan struct{}
+}
+
+// 清扫器是进程级单实例：全局状态只有这里这一处，用锁守住"检查+赋值"这个动作，
+// Stop/自愈重启/重复 Start 三条路径都从同一把锁进。
+var (
+	gateSweeperMu sync.Mutex
+	gateSweeper   *gateSweeperRunner
+)
+
+// sweepOnce 执行一轮门控清扫，返回 (处置数, 本轮是否由本进程执行, 错误)。
+//
+// 先抢/续租约，抢不到就直接返回、一次 TG 调用都不发——这条判据只有在"非持有者
+// 零动作"上成立才有意义，所以把租约判定和 SweepExpired 的先后顺序放进一个能被
+// 用例直接调用的函数里（等一分钟的 ticker 不是测试）。
+//
+// leaseRepo 为 nil＝没有跨进程协调的能力（无库/未装配），退回单实例语义直接跑。
+func sweepOnce(ctx context.Context, svc *TelegramGateService, workerID string) (int, bool, error) {
+	if svc == nil {
+		return 0, false, nil
+	}
+	if svc.leaseRepo == nil {
+		n, err := svc.SweepExpired(ctx, gateSweeperBatchLimit)
+		return n, true, err
+	}
+	held, err := svc.leaseRepo.Hold(ctx, tgGateSweeperLeaseJob, workerID)
+	if err != nil {
+		return 0, false, err
+	}
+	if !held {
+		return 0, false, nil
+	}
+	n, err := svc.SweepExpired(ctx, gateSweeperBatchLimit)
+	return n, true, err
+}
+
 // StartGateSweeper 启动后台 TTL 清扫协程；调用方在路由注册后直接调用（内部 go routine），
 // 每分钟执行一次 SweepExpired。db 为 nil 时直接返回（测试/无 DB 场景）。
+//
+// 与 polling 锁共用 worker 标识（hostname:pid），日志里两个"谁在跑"能对上是同一个进程。
+// 成对的 StopGateSweeper 必须在进程关停时调用（main.go 里 defer）。
 func StartGateSweeper(db *gorm.DB) {
 	if db == nil {
 		return
 	}
-	svc := NewTelegramGateService(db)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Errorf("[TG-Gate] TTL 清扫协程 panic 重启: %v", r)
-				go StartGateSweeper(db) // 自愈重启
-			}
-		}()
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			swept, err := svc.SweepExpired(ctx, 100)
-			cancel()
-			if err != nil {
+	workerID := GetPollingWorkerID()
+	startGateSweeper(NewTelegramGateService(db), workerID)
+	logger.Infof("[TG-Gate] TTL 清扫器已启动（每分钟一次，租约 worker=%s）", workerID)
+}
+
+func startGateSweeper(svc *TelegramGateService, workerID string) {
+	startGateSweeperAt(svc, workerID, gateSweeperInterval)
+}
+
+// startGateSweeperAt 登记一台清扫器并指定节拍。
+//
+// 节拍做成参数只有一个原因：一分钟一次的线上节拍进不了用例，而"注册了协程 ⇒ 它自己抢租约、
+// 真跑一轮清扫、Stop 时把租约交回"这一整条只能在毫秒节拍上观测到。
+func startGateSweeperAt(svc *TelegramGateService, workerID string, interval time.Duration) {
+	gateSweeperMu.Lock()
+	defer gateSweeperMu.Unlock()
+	if gateSweeper != nil {
+		return // 幂等：重复启动不换实例，否则旧 ticker 泄漏成两条并行清扫流
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	r := &gateSweeperRunner{workerID: workerID, svc: svc, interval: interval, cancel: cancel, done: make(chan struct{})}
+	gateSweeper = r
+	go r.tickLoop(runCtx)
+}
+
+// tickLoop 清扫主循环（节拍来自 runner.interval，线上是 gateSweeperInterval）。
+func (r *gateSweeperRunner) tickLoop(ctx context.Context) {
+	defer close(r.done)
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			return
+		}
+		logger.Errorf("[TG-Gate] TTL 清扫协程 panic 重启: %v", rec)
+		r.restartAfterPanic(ctx)
+	}()
+	ticker := time.NewTicker(r.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tickCtx, cancelTick := context.WithTimeout(ctx, gateSweeperTickTimeout)
+			swept, ran, err := sweepOnce(tickCtx, r.svc, r.workerID)
+			cancelTick()
+			switch {
+			case err != nil:
 				logger.Errorf("[TG-Gate] TTL 清扫失败: %v", err)
-			} else if swept > 0 {
+			case !ran:
+				logger.Debugf("[TG-Gate] 清扫租约在别的实例名下，本轮零动作 worker=%s", r.workerID)
+			case swept > 0:
 				logger.Infof("[TG-Gate] TTL 清扫完成，处理 %d 个超时成员", swept)
 			}
 		}
-	}()
-	logger.Infof("[TG-Gate] TTL 清扫器已启动（每分钟一次）")
+	}
+}
+
+// restartAfterPanic 决定 panic 之后要不要把清扫器复活、以及怎么复活。
+//
+// 拆成方法只为了一件事：这两条分支各自拦一种事故，而它们只有在"直接调用"上才能各判各的
+// ——走一分钟一次的 ticker 时，"关停窗口里不复活"这一条要等 panic 恰好落在 cancel 之前，
+// 那是运气而不是判据。
+//   - 正常运行中死掉却不复活 ⇒ 台账从此不再清理，而日志只留下一行 panic（静默失效）；
+//   - 关停窗口里复活 ⇒ StopGateSweeper 已等旧协程退出并交回租约，新协程又用同一个 workerID
+//     抢回租约继续对真人动手 —— 进程"已经停了"却还在踢人。
+//
+// 先摘全局再登记：全局指向的仍是这台已死实例时置空，避免复活出来的那台被当成重复启动丢掉。
+func (r *gateSweeperRunner) restartAfterPanic(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	gateSweeperMu.Lock()
+	if gateSweeper == r {
+		gateSweeper = nil
+	}
+	gateSweeperMu.Unlock()
+	startGateSweeperAt(r.svc, r.workerID, r.interval) // 沿用原节拍
+}
+
+// StopGateSweeper 进程关停时调用（与 StartGateSweeper 成对，main.go 里 defer）。
+//
+// 先取消 ticker 并等协程真退出，再释放租约——顺序反了就会出现"本进程还打着 TG、
+// 另一个实例已经抢到租约开始移人"的双跑窗。等不到退出就不释放：租约会自然过期
+// （repository.cronLeaseStaleAfter），只是下一个实例多等一轮，比双跑便宜。
+func StopGateSweeper(ctx context.Context) {
+	gateSweeperMu.Lock()
+	r := gateSweeper
+	gateSweeper = nil
+	gateSweeperMu.Unlock()
+	if r == nil {
+		return
+	}
+	r.cancel()
+	select {
+	case <-r.done:
+	case <-ctx.Done():
+		logger.Warnf("[TG-Gate] 清扫协程未在关停窗口内退出，保留租约待其自然过期 worker=%s", r.workerID)
+		return
+	}
+	if r.svc != nil && r.svc.leaseRepo != nil {
+		if err := r.svc.leaseRepo.Release(ctx, tgGateSweeperLeaseJob, r.workerID); err != nil {
+			logger.Warnf("[TG-Gate] 清扫租约释放失败（将自然过期）worker=%s: %v", r.workerID, err)
+		}
+	}
+	logger.Infof("[TG-Gate] TTL 清扫器已停止 worker=%s", r.workerID)
 }

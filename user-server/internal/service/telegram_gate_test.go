@@ -267,6 +267,10 @@ func TestSweepExpiredFilter(t *testing.T) {
 		{AccountID: 1, ChatID: "-2", UserID: "2", JoinStatus: model.TGMemberPending, VerifyToken: "e2", ExpiresAt: past},
 		{AccountID: 1, ChatID: "-3", UserID: "3", JoinStatus: model.TGMemberRestricted, VerifyToken: "e3", ExpiresAt: future},
 		{AccountID: 1, ChatID: "-4", UserID: "4", JoinStatus: model.TGMemberApproved, Authorized: true, VerifyToken: "e4", ExpiresAt: past},
+		// 授权位与 join_status 是两列，判据也得各管各的：这种行确实会出现（/start 放行写到
+		// 一半、人工核对时的手工置位、迁移遗留）。少了 authorized=false 这条谓词，e5 会被
+		// join_status 的过滤网漏下来当成"超时未验证"，人已经解禁却在下轮被移出。
+		{AccountID: 1, ChatID: "-5", UserID: "5", JoinStatus: model.TGMemberRestricted, Authorized: true, VerifyToken: "e5", ExpiresAt: past},
 	}
 	for _, m := range seeds {
 		if err := db.Create(m).Error; err != nil {
@@ -642,6 +646,42 @@ func TestRenderTGGateWelcomeNamedAndLegacy(t *testing.T) {
 	t.Run("兜底模板自身不含被删那段", func(t *testing.T) {
 		if strings.Contains(tgGateDefaultWelcome(), "你正在通过") {
 			t.Error("兜底模板里还留着要去掉的那段")
+		}
+	})
+
+	// 线上事故：2 动词老模板 + 4 实参 Sprintf ⇒ 尾部挂 %!(EXTRA …) 发到群里。
+	// 现在按位置逐个填，多余实参直接丢弃，绝不外发 EXTRA。
+	t.Run("动词比实参少时不外发EXTRA", func(t *testing.T) {
+		short := "👋 欢迎 %s 加入「三人行」技术交流群！\n\n请在 10 分钟内点击这里完成验证：https://t.me/lovesanrenxing_bot?start=abc123token\n\n验证后即可正常发言~"
+		out := renderTGGateWelcome(short, display, bot, token)
+		if strings.Contains(out, "%!") || strings.Contains(out, "%s") || strings.Contains(out, "{{") {
+			t.Errorf("短模板渲染泄漏了占位符/EXTRA：%q", out)
+		}
+		if !strings.Contains(out, display) {
+			t.Errorf("昵称没填上：%q", out)
+		}
+	})
+
+	// 未知命名占位符（如 {{foo}}）会原文外发：必须退回默认模板而不是原样发。
+	t.Run("未知命名占位符退回默认模板", func(t *testing.T) {
+		out := renderTGGateWelcome("👋 欢迎 {{display}}！暗号：{{foo}}", display, bot, token)
+		if strings.Contains(out, "{{") {
+			t.Errorf("未知占位符外发出去了：%q", out)
+		}
+		if !strings.Contains(out, link) {
+			t.Errorf("退回默认模板后链接应可用：%q", out)
+		}
+	})
+
+	// 非 %s 动词（如 %d）填不上：同样退回默认模板。
+	t.Run("非s动词退回默认模板", func(t *testing.T) {
+		out := renderTGGateWelcome("👋 欢迎 %s！剩余 %d 分钟", display, bot, token)
+		if strings.Contains(out, "%") && out != "100%" {
+			// 默认模板里没有 %，出现即泄漏
+			t.Errorf("未填充动词外发出去了：%q", out)
+		}
+		if !strings.Contains(out, link) {
+			t.Errorf("退回默认模板后链接应可用：%q", out)
 		}
 	})
 }
