@@ -70,6 +70,10 @@ UNCOVERED: tuple[str, ...] = (
     "mut_send_verify_b24.py", "mut_sentcache_r22lane.py", "mut_session_err_b19d.py",
     "mut_sse_ack_r23.py", "mut_startup_hook_p702.py", "mut_step_cap_b19e.py",
     "mut_submit_enter_b18.py",
+    # 2026-09-29 并入旁道那一笔带进来的第 32 枚：它的 `--check`（"只验锚点与用例名，要装架、
+    # 不跑 go test"）就是上面第 (i) 类，本门不重复实现；且它的格表是「文件常量 + 原文/注码 +
+    # 两列用例名」的 7 元组、没有 SHAPE_A 要的 `cell_rels`/`apply_cell`，硬接只会让适配器报错。
+    "mut_webhook_ai_trigger.py",
 )
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")

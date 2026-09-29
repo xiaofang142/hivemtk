@@ -153,10 +153,13 @@ repo 11→16、db 6→7）。逐格读红因后的归因：
 改名后的 `TestBillDeriveInputCarriesRowKeyAndOptionalTerm` 走，并按那句"一并补回"补上 K50b
 （另一侧退路：把给的账期丢掉，判据 `TestBillDeriveStoresTheDueAtTheCallerGave` —— 这一格
 在 HEAD 里**从没存在过的用例**如今存在了，第四趟撤它的理由随之失效）。格数 71→72。
-静态面两道：`--check` 读 **`锚点校验：72 格，0 格锚点有问题`**（并反向证过一次 —— 把 K50 的锚点
-改回 HEAD 里已不存在的 `DueAt: nil` 写法，当场读 `✗ K50@bill.go 锚点命中 0 次`、`rc=1`）；
-`anchor-preflight` 读 **`覆盖 5/36 份电池、本次核了 250 格`＋`锚点…expect 用例名全部在场`、`rc=0`**
-（改前是 249 格、三处 ✗）。行为面只在干净 `--shared` 克隆（HEAD `fe3fc059`）里取证改动的三格：
+静态面两道：`--check` 读 **`锚点校验：72 格，0 格锚点有问题`**（产物
+`docs/superpowers/specs/ledger/logs/P701/20260929-092746/`，测于 `5d0973b0`；并反向证过一次 ——
+把 K50 的锚点改回 HEAD 里已不存在的 `DueAt: nil` 写法，当场读 `✗ K50@bill.go 锚点命中 0 次`、`rc=1`）；
+`anchor-preflight` 读 **`[mut_bill_p701.py] 已核 72 格，0 处问题`**＋`锚点…expect 用例名全部在场`、
+`rc=0`（改前那趟报三处 ✗、本族那行是 71 格）。"覆盖几份电池／全族共几格"这两个分母由这道门每次
+现算并打印在最后一行，本文件不抄 —— 抄一次就随下一枚电池入库过期一次，只记本族自己那一行。行为面
+只在干净 `--shared` 克隆（HEAD `fe3fc059`）里取证改动的三格：
 `--cells K50,K50b,K56` 读 **`控制组[svc] CLEAN rc=0 ran=19 PASS=19 skip=0`＋`KILLED=3 SURVIVED=0
 RED-UNNAMED=0 BUILD-BROKEN=0 ENV-BROKEN=0 NO-RUN=0 格子数=3`**，产物
 `docs/superpowers/specs/ledger/logs/P701/20260928-140101/`。那一趟末尾"下一趟整族必须连这三格
