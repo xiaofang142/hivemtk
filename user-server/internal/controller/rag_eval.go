@@ -63,8 +63,7 @@ func (c *RagEvalController) Get(ctx *gin.Context) {
 		return
 	}
 	run, questions, err := c.svc.GetRun(ctx.Request.Context(), uint(id))
-	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+	if HandleServiceError(ctx, err) {
 		return
 	}
 	response.Success(ctx, gin.H{
