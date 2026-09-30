@@ -177,7 +177,8 @@ func TestPlanRoundBrainFallbackWhenDisabled(t *testing.T) {
 	task, session := testTaskSession()
 	seq := 0
 	st := &reflectState{}
-	steps, done, terminal, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", st, []string{"click @e9"}, &seq)
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", st, []string{"click @e9"}, &seq, nil)
+	steps, done, terminal, tokens := out.stepsJSON, out.done, out.terminal, out.brainTokens+out.jevTokens
 	if err != nil || done || terminal != "" {
 		t.Fatalf("未启用 JEV 应原样走 Brain，got err=%v done=%v terminal=%q", err, done, terminal)
 	}
@@ -199,7 +200,8 @@ func TestPlanRoundJevClick(t *testing.T) {
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
-	steps, done, terminal, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil)
+	steps, done, terminal, tokens := out.stepsJSON, out.done, out.terminal, out.brainTokens+out.jevTokens
 	if err != nil || done || terminal != "" {
 		t.Fatalf("JEV CLICK 应产单步，got err=%v done=%v terminal=%q", err, done, terminal)
 	}
@@ -229,7 +231,8 @@ func TestPlanRoundJevInvalidFallsBack(t *testing.T) {
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
-	steps, _, _, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil)
+	steps, tokens := out.stepsJSON, out.brainTokens+out.jevTokens
 	if err != nil {
 		t.Fatalf("非法 JEV 响应应回退 Brain 而非报错，got %v", err)
 	}
@@ -254,8 +257,8 @@ func TestPlanRoundJevBlockedAndDone(t *testing.T) {
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
-	if _, _, terminal, _, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq); err != nil || terminal == "" {
-		t.Fatalf("BLOCKED 应终止本轮，got terminal=%q err=%v", terminal, err)
+	if out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil); err != nil || out.terminal == "" {
+		t.Fatalf("BLOCKED 应终止本轮，got terminal=%q err=%v", out.terminal, err)
 	}
 	if fb.calls != 0 {
 		t.Fatal("BLOCKED 不应再调 Brain")
@@ -264,8 +267,8 @@ func TestPlanRoundJevBlockedAndDone(t *testing.T) {
 	fd2 := mkOp("DONE")
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd2))
 	seq = 0
-	if _, done, terminal, _, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq); err != nil || !done || terminal != "" {
-		t.Fatalf("DONE 应 done=true，got done=%v terminal=%q err=%v", done, terminal, err)
+	if out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil); err != nil || !out.done || out.terminal != "" {
+		t.Fatalf("DONE 应 done=true，got done=%v terminal=%q err=%v", out.done, out.terminal, err)
 	}
 }
 
@@ -291,14 +294,54 @@ func TestPlanRoundJevDispatchErrorFallsBack(t *testing.T) {
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
-	steps, _, _, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil)
+	steps, tokens := out.stepsJSON, out.brainTokens+out.jevTokens
 	if err != nil {
 		t.Fatalf("调度失败应回退 Brain 而非报错，got %v", err)
+	}
+	if !out.jevAttempted || out.jevOK {
+		t.Fatalf("调度失败应记 attempted 且 !ok，got attempted=%v ok=%v", out.jevAttempted, out.jevOK)
 	}
 	if fb.calls != 1 || tokens != 9 || string(steps) != string(fb.stepsJSON) {
 		t.Fatalf("应回退 Brain（调度 1 次重试 + Brain），got fb.calls=%d tokens=%d steps=%s fd.calls=%d", fb.calls, tokens, string(steps), fd.calls)
 	}
 	if fd.calls != 2 {
 		t.Fatalf("可重试错误应调调度 2 次（含 1 次重试），got %d", fd.calls)
+	}
+}
+
+func TestIsJevStale(t *testing.T) {
+	if isJevStale("a", "a") {
+		t.Fatal("相同指纹不应判 stale")
+	}
+	if !isJevStale("a", "b") {
+		t.Fatal("不同指纹应判 stale")
+	}
+	if isJevStale("", "b") || isJevStale("a", "") {
+		t.Fatal("空指纹应 fail-soft 放行（不断 stale）")
+	}
+}
+
+func TestPlanRoundJevOffSkipsJev(t *testing.T) {
+	// session 熔断后（js.off）→ 直走 Brain，不碰调度。
+	fd := &fakeJevDispatcher{
+		content: jevAnswersJSON(t, jevClickOp(), jevClickTarget()),
+		usage:   llm.TokenUsage{TotalTokens: 15},
+	}
+	fb := &fakeBrain{stepsJSON: []byte(`[{"action":"wait"}]`), tokens: 7}
+	e := &Executor{brain: fb}
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
+	task, session := testTaskSession()
+	seq := 0
+	js := &jevSessionState{off: true}
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, js)
+	if err != nil {
+		t.Fatalf("熔断后应直走 Brain，got %v", err)
+	}
+	if out.jevAttempted || fd.calls != 0 || fb.calls != 1 {
+		t.Fatalf("熔断后不应尝试 JEV，got attempted=%v fd.calls=%d fb.calls=%d", out.jevAttempted, fd.calls, fb.calls)
+	}
+	if out.brainTokens != 7 {
+		t.Fatalf("Brain token 应透传（7），got %d", out.brainTokens)
 	}
 }

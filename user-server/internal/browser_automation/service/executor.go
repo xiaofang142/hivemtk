@@ -734,6 +734,8 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	// P1-1：session 级 token 预算熔断（plan+judge 全计入）
 	tokenUsed := 0
 	tokenBudget := brainTokenBudget()
+	// JEV session 级熔断/独立预算（Executor 进程级单例不放计数，随 task 结束丢弃）
+	jevSess := &jevSessionState{}
 	// wall-clock 看门狗（R22）：ctx 取消链在某些 LLM/DB 调用栈不生效（session132 实测 11min+ active），
 	// 以真实时钟兜底——超执行预算+30s 强制收敛，会话必有终态。
 	// 预算走 taskExecBudget（Brain 模式下 LLM 也能编排出写步，确认挂起同样要留出时长）
@@ -782,12 +784,23 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 		st := &reflectState{History: histView, PrevEvaluation: prevEvaluation, Memory: memory}
 		// JEV 优先、Brain 回退（设计步骤四 §2：planRound 内决策；JEV 未启用/失败即原路径）。
-		stepsJSON, done, terminal, planTokens, err := e.planRound(ctx, task, session, snap, pageURL, st, history, &cmdSeq)
+		planOut, err := e.planRound(ctx, task, session, snap, pageURL, st, history, &cmdSeq, jevSess)
+		stepsJSON, done, terminal := planOut.stepsJSON, planOut.done, planOut.terminal
 		if terminal != "" {
 			return success, failed, terminal
 		}
 		prevEvaluation, memory = st.PrevEvaluation, st.Memory
-		tokenUsed += planTokens // P1-1 session 级 token 计量（JEV 轮为 0）
+		tokenUsed += planOut.brainTokens // P1-1 session 级 token 计量（Brain 口径；JEV 走独立预算）
+		jevSess.tokensUsed += planOut.jevTokens
+		if jevSess.tokensUsed > jevSessionTokenBudget {
+			jevSess.off = true // JEV 独立预算超限：本 session 剩余轮次直走 Brain
+		}
+		if planOut.jevAttempted && !planOut.jevOK {
+			jevSess.fails++
+			if jevSess.fails >= jevMaxSessionFails {
+				jevSess.off = true // JEV 连续失败熔断：剩余轮次直走 Brain
+			}
+		}
 		if tokenUsed > tokenBudget {
 			return success, failed, "Token 预算耗尽（" + itoa(tokenUsed) + " > " + itoa(tokenBudget) + "）"
 		}

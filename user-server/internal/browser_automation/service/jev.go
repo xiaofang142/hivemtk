@@ -33,7 +33,7 @@ import (
 // brainPlanStepRejection → executeStepWithRetry（写步判定/禁重试/双发闸/D7）全套闸门。
 
 const (
-	jevDefaultChoiceTimeoutSec = 5   // 单次 choice 调用的 ctx 超时（快败，失败即回退 Brain）
+	jevDefaultChoiceTimeoutSec = 5 // 单次 choice 调用的 ctx 超时（快败，失败即回退 Brain）
 	jevChoiceMaxTokens         = 1024
 	jevMaxElements             = 250 // 候选元素截断，与 ultrafast 同口径
 	jevMaxTextRunes            = 6000
@@ -58,11 +58,11 @@ const (
 // APIKey 不再是启用条件——统一调度下的本地网关通常免 key；
 // 无可用 provider 时 Dispatch 报错 → planRound 回退 Brain（fail-closed 在调度层）。
 type JevConfig struct {
-	Enabled         bool
-	Endpoint        string
-	APIKey          string
-	Model           string
-	TimeoutSeconds  int
+	Enabled        bool
+	Endpoint       string
+	APIKey         string
+	Model          string
+	TimeoutSeconds int
 }
 
 func loadJevConfig() JevConfig {
@@ -429,6 +429,43 @@ func jevDecisionFromAnswers(out jevChoiceAnswers, opIDs, clickIDs []string) (Jev
 	return dec, nil
 }
 
+// planOutcome planRound 单轮规划结果：Brain/JEV 双路径的统一出口。
+// brainTokens 走 session 总预算；jevTokens 走独立预算（不进 LastAuxTokens，
+// 见 planRound 注释——执行器用 LastAuxTokens 累 judge 预算）。
+type planOutcome struct {
+	stepsJSON    []byte
+	done         bool
+	terminal     string
+	brainTokens  int
+	jevTokens    int
+	jevAttempted bool
+	jevOK        bool
+}
+
+// jevSessionState JEV session 级状态：Executor 进程级单例不可放计数，
+// 熔断/预算挂在单次执行循环的局部变量上，随 task 结束丢弃。
+type jevSessionState struct {
+	off        bool
+	fails      int
+	tokensUsed int
+}
+
+const (
+	// jevMaxSessionFails session 内 JEV 连续失败（attempted && !ok）≥3 即关闭本 session 的 JEV。
+	jevMaxSessionFails = 3
+	// jevSessionTokenBudget session 内 JEV 独立 token 预算（实测单轮 ~15，2 万 ≈ 千轮量级，正常到不了）。
+	jevSessionTokenBudget = 20000
+)
+
+// isJevStale 新鲜度比对：决策指纹 vs 执行前重拍指纹，不一致即 stale。
+// 任一指纹为空时判不断（fail-soft：解析异常不阻断主流程，直接放行）。
+func isJevStale(decisionFP, freshFP string) bool {
+	if decisionFP == "" || freshFP == "" {
+		return false
+	}
+	return decisionFP != freshFP
+}
+
 // planRound Brain 轮的规划入口：JEV 优先、Brain 回退。
 //
 //   - JEV 未启用/未配置 → 原 GeneratePlanReflect 调用（逐字保留），planTokens=Brain 消耗。
@@ -437,50 +474,84 @@ func jevDecisionFromAnswers(out jevChoiceAnswers, opIDs, clickIDs []string) (Jev
 //   - JEV 失败/非法 → event 帧 jev_fallback 留因，回退 Brain。
 //   - JEV 判 BLOCKED → terminal 非空，调用方直接终止本轮（不是瞬态失败，不计 consecutiveFails）。
 func (e *Executor) planRound(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession,
-	snap, pageURL string, st *reflectState, history []string, seq *int) (stepsJSON []byte, done bool, terminal string, planTokens int, err error) {
+	snap, pageURL string, st *reflectState, history []string, seq *int, js *jevSessionState) (planOutcome, error) {
+	var out planOutcome
+	brainPath := func() (planOutcome, error) {
+		b, d, err := e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
+		out.stepsJSON, out.done = b, d
+		out.brainTokens = e.brain.LastPlanTokens()
+		return out, err
+	}
 	jc := e.jevClient
 	if jc == nil {
 		jc = NewJevClientFromEnv()
 	}
-	if !jc.Ready() {
-		stepsJSON, done, err = e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
-		return stepsJSON, done, "", e.brain.LastPlanTokens(), err
-	}
-	fallback := func(reason string) ([]byte, bool, string, int, error) {
-		*seq++
-		e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "event", "jev_fallback",
-			map[string]any{"reason": truncateRunes(reason, 200, "…")}, 0, verdict(true))
-		logger.Warnf("[BrowserJEV] 回退 Brain session=%d: %s", session.ID, reason)
-		b, d, err := e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
-		return b, d, "", e.brain.LastPlanTokens(), err
-	}
-	dec, jevTokens, err := jc.Choose(ctx, task.BrainGoal, buildJevState(pageURL, "", snap, history))
-	if err != nil {
-		return fallback(err.Error())
-	}
-	// JEV 成本行：kind=jev_choice 落库（outcome 记决策摘要；不碰 Brain 的
-	// lastAuxTokens——执行器用 LastAuxTokens 累 judge 预算，JEV tokens 由返回值走独立口径）。
-	if bs, ok := e.brain.(*BrainService); ok && bs != nil {
-		bs.recordJevPlan(ctx, task.ID, session.ID, task.BrainGoal,
-			"operation="+dec.Operation+" target="+dec.Target, jevTokens)
-	}
-	stepsJSON, done, terminal, err = decisionToSteps(dec)
-	if err != nil {
-		return fallback(err.Error())
-	}
-	if terminal != "" {
+	// js==nil（旧调用/单测直调）= 无熔断记账但仍走 JEV；js.off 才彻底跳过。
+	if jc.Ready() && (js == nil || !js.off) {
+		dec, jevTokens, err := jc.Choose(ctx, task.BrainGoal, buildJevState(pageURL, "", snap, history))
+		if err != nil {
+			out.jevAttempted = true
+			return e.jevFallback(ctx, task, session, snap, st, seq, &out, err.Error())
+		}
+		// Freshness re-check：Choose 耗时中页面可能已变；hand==nil（单测）时跳过。
+		if e.hand != nil {
+			fresh, _, ferr := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
+			if ferr != nil {
+				out.jevAttempted = true
+				return e.jevFallback(ctx, task, session, snap, st, seq, &out, "freshness snapshot failed: "+ferr.Error())
+			}
+			if isJevStale(dec.Fingerprint, fingerprintState(pageURL, fresh, parseSnapshotElements(fresh))) {
+				out.jevAttempted = true
+				*seq++
+				e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "event", "jev_stale",
+					map[string]any{"fingerprint": dec.Fingerprint}, 0, verdict(true))
+				return e.jevFallback(ctx, task, session, snap, st, seq, &out, "snapshot changed during choose")
+			}
+		}
+		// JEV 成本行：kind=jev_choice 落库（outcome 记决策摘要；不碰 Brain 的
+		// lastAuxTokens——执行器用 LastAuxTokens 累 judge 预算，JEV tokens 由返回值走独立口径）。
+		if bs, ok := e.brain.(*BrainService); ok && bs != nil {
+			bs.recordJevPlan(ctx, task.ID, session.ID, task.BrainGoal,
+				"operation="+dec.Operation+" target="+dec.Target, jevTokens)
+		}
+		stepsJSON, done, terminal, derr := decisionToSteps(dec)
+		if derr != nil {
+			out.jevAttempted = true
+			out.jevTokens = jevTokens
+			return e.jevFallback(ctx, task, session, snap, st, seq, &out, derr.Error())
+		}
+		out.jevAttempted, out.jevOK, out.jevTokens = true, true, jevTokens
+		if terminal != "" {
+			out.terminal = terminal
+			*seq++
+			e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "judge", "jev_decision",
+				map[string]any{"operation": dec.Operation, "decision": "blocked",
+					"confidence": dec.Confidence, "latency_ms": dec.LatencyMs}, dec.LatencyMs, verdict(false))
+			return out, nil
+		}
+		out.stepsJSON, out.done = stepsJSON, done
 		*seq++
 		e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "judge", "jev_decision",
-			map[string]any{"operation": dec.Operation, "decision": "blocked",
-				"confidence": dec.Confidence, "latency_ms": dec.LatencyMs}, dec.LatencyMs, verdict(false))
-		return nil, false, terminal, jevTokens, nil
+			map[string]any{"operation": dec.Operation, "target": dec.Target,
+				"confidence": dec.Confidence, "latency_ms": dec.LatencyMs,
+				"fingerprint": dec.Fingerprint}, dec.LatencyMs, verdict(true))
+		return out, nil
 	}
+	return brainPath()
+}
+
+// jevFallback JEV 未命中后的统一回退：记 jev_fallback 帧，走 Brain 原路径。
+// out 已带 jevAttempted=true（与 jevTokens 如有），Brain 消耗进 brainTokens。
+func (e *Executor) jevFallback(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession,
+	snap string, st *reflectState, seq *int, out *planOutcome, reason string) (planOutcome, error) {
 	*seq++
-	e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "judge", "jev_decision",
-		map[string]any{"operation": dec.Operation, "target": dec.Target,
-			"confidence": dec.Confidence, "latency_ms": dec.LatencyMs,
-			"fingerprint": dec.Fingerprint}, dec.LatencyMs, verdict(true))
-	return stepsJSON, done, "", jevTokens, nil
+	e.appendCommandLog(ctx, session.ID, task.ID, 0, *seq, "event", "jev_fallback",
+		map[string]any{"reason": truncateRunes(reason, 200, "…")}, 0, verdict(true))
+	logger.Warnf("[BrowserJEV] 回退 Brain session=%d: %s", session.ID, reason)
+	b, d, err := e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
+	out.stepsJSON, out.done = b, d
+	out.brainTokens = e.brain.LastPlanTokens()
+	return *out, err
 }
 
 // decisionToSteps JEV 决策 → 执行步（white-list 映射；未知 operation 拒绝）。
