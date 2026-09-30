@@ -87,6 +87,10 @@ type Executor struct {
 	// nil=未接线（熔断写入跳过，执行不受影响）——熔断是增强不是门禁。
 	profileHealthRepo repository.BrowserProfileHealthRepository
 
+	// outreachDedupeRepo 跨任务触达去重仓储（Chunk3：同一平台同一目标同一动作同一文案只触达一次）。
+	// nil=未接线（去重检查跳过，执行不受影响）——去重是防扰民层，真安全网是写声明与台账。
+	outreachDedupeRepo repository.BrowserOutreachDedupeRepository
+
 	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
 	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
 
@@ -181,6 +185,11 @@ func (e *Executor) SetJevClient(c *JevClient) {
 // SetProfileHealthRepo 主 Profile 健康仓储注入（路由装配可选——nil 时熔断写入跳过）。
 func (e *Executor) SetProfileHealthRepo(r repository.BrowserProfileHealthRepository) {
 	e.profileHealthRepo = r
+}
+
+// SetOutreachDedupeRepository 触达去重仓储注入（路由装配可选——nil 时去重检查跳过）。
+func (e *Executor) SetOutreachDedupeRepository(r repository.BrowserOutreachDedupeRepository) {
+	e.outreachDedupeRepo = r
 }
 
 // appendCommandLog append-only 命令-事件日志（P8）。失败仅告警不阻断执行：
