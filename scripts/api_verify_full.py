@@ -723,7 +723,27 @@ def _http(method, url_path, token, body, timeout=15):
 
 
 def _is_gin404(status, text):
-    return status == 404 and text.strip().startswith("404 page not found")
+    """gin 未注册路由的 404 形态。
+
+    本服务注册了 SPA NoRoute 兜底(internal/router/embed_static_routes.go)，
+    /api/* 未命中路由返回 404 + {"error":"not found"}，不再是 gin 默认纯文本
+    "404 page not found"。两种形态都算"路由未注册"，否则幻影通道
+    (_verify_phantom) 永不触发，静态清单幻影会被误判成"响应非契约JSON(缺code)"。
+    """
+    if status != 404:
+        return False
+    t = text.strip()
+    if t.startswith("404 page not found"):
+        return True
+    # 仅接受 NoRoute 的精确签名：单 error 字段且值为 not found。
+    # handler 走 response 包产出 {"code","message"}，不会长这样，故不误伤。
+    if t == '{"error":"not found"}':
+        return True
+    try:
+        j = json.loads(t)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(j, dict) and len(j) == 1 and j.get("error") == "not found"
 
 
 def _verify_phantom(method, path, fe_calls):
