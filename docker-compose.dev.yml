@@ -21,6 +21,11 @@ services:
       DB_PORT: "8202"
       REDIS_HOST: mtk-redis
       REDIS_PORT: "8203"
+      # cron 按业务时区触发：容器默认 UTC 会使 geo 定时(spec 按 CST 设计)错位 8h。
+      TZ: Asia/Shanghai
+      # 审批运行时装配开关：容器 env 无此变量时 parse→off→InitApprovalRuntime 返回 nil，
+      # /api/approvals/* 全 503 空壳（ltc 链 L6 被拦）。shadow 档装配 svc 但 sweeper 只观察。
+      FF_LTC_APPROVAL_RESUME: shadow
     networks:
       mtk-user-network:
         aliases:

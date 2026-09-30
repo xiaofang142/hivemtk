@@ -253,14 +253,14 @@ func (m *JobManager) acquireDistributedLock(jobName string, timeout time.Duratio
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var result int
+	var result bool
 	err := m.db.WithContext(ctx).Raw(
 		"SELECT pg_try_advisory_lock(hashtext(?))", jobName,
 	).Scan(&result).Error
 	if err != nil {
 		return false, err
 	}
-	return result == 1, nil
+	return result, nil
 }
 
 // releaseDistributedLock 释放分布式锁

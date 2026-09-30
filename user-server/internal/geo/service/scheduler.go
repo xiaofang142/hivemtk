@@ -45,40 +45,53 @@ func sovRefreshJob(ctx context.Context) (string, error) {
 	}
 	logger.Info(fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新覆盖关键词数=%d", len(allKW)))
 
-	success, failed := 0, 0
+	success, partial, failed := 0, 0, 0
 	for i, kw := range allKW {
 		if ctx.Err() != nil {
-			return fmt.Sprintf("超时中止，进度 %d/%d (成功=%d, 部分失败=%d)", i, len(allKW), success, failed),
+			return fmt.Sprintf("超时中止，进度 %d/%d (成功=%d, 部分成功=%d, 全失败=%d)", i, len(allKW), success, partial, failed),
 				fmt.Errorf("执行超时中止")
 		}
-		_, errs := probeSvc.ProbeAllEnginesConcurrent(ctx, kw)
-		if len(errs) > 0 {
-			failed++
-			logger.Error(fmt.Errorf("%v", errs[0]), fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新关键词 %q 探针部分失败", kw))
-		} else {
+		runs, errs := probeSvc.ProbeAllEnginesConcurrent(ctx, kw)
+		switch {
+		case len(runs) > 0 && len(errs) == 0:
 			success++
+		case len(runs) > 0:
+			// 至少一个引擎持久化了探针行：算部分成功，不再因单个坏引擎毒化整词。
+			partial++
+			errMsgs := make([]string, 0, len(errs))
+			for _, e := range errs {
+				errMsgs = append(errMsgs, runeTruncate(e.Error(), 120))
+			}
+			logger.Error(fmt.Errorf("%s", strings.Join(errMsgs, " | ")), fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新关键词 %q 探针部分成功(成功引擎=%d, 失败引擎=%d)", kw, len(runs), len(errs)))
+		default:
+			failed++
+			errMsgs := make([]string, 0, len(errs))
+			for _, e := range errs {
+				errMsgs = append(errMsgs, runeTruncate(e.Error(), 120))
+			}
+			logger.Error(fmt.Errorf("%s", strings.Join(errMsgs, " | ")), fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新关键词 %q 探针全失败", kw))
 		}
 		if (i+1)%50 == 0 {
-			logger.Info(fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新进度 %d/%d (成功=%d, 部分失败=%d)", i+1, len(allKW), success, failed))
+			logger.Info(fmt.Sprintf("[GEO Job sov_refresh] SOV 刷新进度 %d/%d (成功=%d, 部分成功=%d, 全失败=%d)", i+1, len(allKW), success, partial, failed))
 		}
 	}
 
 	aggErr := aggregateDailyStats(ctx, probeRepo)
-	summary := fmt.Sprintf("覆盖关键词=%d 探针成功=%d 部分失败=%d", len(allKW), success, failed)
+	summary := fmt.Sprintf("覆盖关键词=%d 探针成功=%d 部分成功=%d 全失败=%d", len(allKW), success, partial, failed)
 	if aggErr != nil {
 		return summary, fmt.Errorf("daily_stats 聚合失败: %w", aggErr)
+	}
+	if success+partial == 0 {
+		// 全轮零持久化：显式报错，避免假成功掩盖探针通道故障。
+		return summary, fmt.Errorf("全部关键词探针失败(覆盖=%d)，请检查 LLM 引擎通道", len(allKW))
 	}
 	return summary, nil
 }
 
 func aggregateDailyStats(ctx context.Context, probeRepo repository.GeoProbeRunRepository) error {
 	dailyRepo := repository.NewGeoDailyStatRepository()
-	// 业务日口径：stat_date 是 DB 的日期键，探针行是 timestamptz。宿主时区一漂，
-	// 这里会把整轮聚合写到**昨天**的键下（UTC 16:00 之后必然发生）。窗口首同理：
-	// `time.Parse("2006-01-02")` 给的是 UTC 零点，与业务日首恒差 8 小时 ——
-	// 白天那几轮 ListSince 从 CST 08:00 起拉，业务日 00:00–08:00 的记录整段漏算；
-	// 晚间那几轮反而多拉回昨天 16 小时，再被日期过滤掉（实测：同一瞬间
-	// 宿主键 2026-09-20 / 业务键 2026-09-21，两个窗口首差 16h）。
+	// 业务日口径：stat_date 与窗口首都用 timeutil 业务日 helpers（Asia/Shanghai），
+	// 与探针行 timestamptz 一致，避免宿主时区漂移导致聚合写错键或漏算。
 	todayStart := timeutil.StartOfBusinessDay(time.Now())
 	today := timeutil.BusinessDate(todayStart)
 	type aggKey struct {
@@ -181,11 +194,23 @@ func negativeMonitorJob(ctx context.Context) (string, error) {
 	}
 
 	hit := 0
+	failedQueries := 0
 	for _, q := range queries {
 		if ctx.Err() != nil {
 			return fmt.Sprintf("已检查部分查询命中=%d", hit), fmt.Errorf("执行超时中止")
 		}
-		runs, _ := probeSvc.ProbeAllEngines(ctx, q)
+		runs, errs := probeSvc.ProbeAllEngines(ctx, q)
+		if len(runs) == 0 {
+			// 全引擎失败：该查询无任何探针数据，不能视为"零负面"。
+			// 计数失败查询，整轮全失败则返回 error，避免 success+命中=0 的静默降级。
+			failedQueries++
+			errMsgs := make([]string, 0, len(errs))
+			for _, e := range errs {
+				errMsgs = append(errMsgs, e.Error())
+			}
+			logger.Warn(fmt.Sprintf("[GEO Job negative_monitor] 查询 %q 全引擎探针失败(%d): %s", q, len(errs), strings.Join(errMsgs, " | ")))
+			continue
+		}
 		for _, r := range runs {
 			resp := strings.ToLower(r.Response)
 			for _, neg := range negativeWords {
@@ -211,7 +236,11 @@ func negativeMonitorJob(ctx context.Context) (string, error) {
 			}
 		}
 	}
-	return fmt.Sprintf("品牌=%s 负面词=%d 检查查询=%d 命中=%d", brandName, len(negativeWords), len(queries), hit), nil
+	summary := fmt.Sprintf("品牌=%s 负面词=%d 检查查询=%d 命中=%d 失败查询=%d", brandName, len(negativeWords), len(queries), hit, failedQueries)
+	if failedQueries == len(queries) {
+		return summary, fmt.Errorf("全部 %d 个查询探针失败，本轮无有效数据", len(queries))
+	}
+	return summary, nil
 }
 
 func sourceCatalogSyncJob(ctx context.Context) (string, error) {
