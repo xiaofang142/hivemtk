@@ -39,7 +39,14 @@ if python3 -c "import modelscope" >/dev/null 2>&1; then
 import sys
 from modelscope import snapshot_download
 repo, target = sys.argv[1], sys.argv[2]
-snapshot_download(repo, local_dir=target)
+# 只取根目录英文 checkpoint（server.py 以 subfolder=None 加载，仅读根目录）：
+# typed-decisions/、multilingual/ 是兄弟变体（约 1.4G），从不加载，不下载。
+snapshot_download(repo, local_dir=target, allow_patterns=[
+    "*.json", "*.py", "*.md",
+    "model.safetensors",
+    "tokenizer/*", "encoder/*",
+    "assets/*", "eval/*",
+])
 print("[laya-download] modelscope SDK 下载成功")
 PYEOF
     if compgen -G "$LAYA_DIR/*.safetensors" >/dev/null 2>&1; then
