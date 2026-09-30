@@ -38,7 +38,11 @@ def iter_web_files():
 route_re = re.compile(r'(\w+)\.(GET|POST|PUT|DELETE|PATCH)\(\s*"([^"]*)"', re.ASCII)
 group_re = re.compile(r'(\w+)\s*:?=\s*(\w+)\.Group\(\s*"([^"]*)"')
 func_re = re.compile(r'func\s+(?:\((\w+)\s+\*?(\w+)\)\s+)?(\w+)\s*\(([^)]*)\)\s*\{')
-rgtype = re.compile(r'\*gin\.RouterGroup\b')
+# 形参类型即路由挂载点：RouterGroup 有组前缀，*gin.Engine 直挂引擎（前缀恒空串）。
+# 2026-09-30：原先只认 RouterGroup，于是 `SetupBrowserAutomationRoutes(auth, engine *gin.Engine, ...)`
+# 的 engine 形参进不了绑定表 → 路由解析成 <UNRESOLVED:engine>/api/browser/host-ws，
+# 而该路由运行时确实注册（401）。补上 Engine 后 fixpoint 绑定 engine→调用点实参 r→''。
+rgtype = re.compile(r'\*gin\.(?:RouterGroup|Engine)\b')
 m_re = re.compile(r"http\.(get|post|put|delete|patch)\(\s*([`'\"])([^`'\"]+)\2")
 tpl = re.compile(r"\$\{[^}]+\}")
 # 模块级字符串常量：const BASE = '/api/dingtalk-app/accounts'
@@ -216,7 +220,17 @@ def resolve(fkey, var, depth=0):
     if ff and fkey[0] == ff[0]:
         for _, pname in ff[1]:
             if pname == var:
-                return bindings.get((fkey[0], fkey[1], var))
+                v = bindings.get((fkey[0], fkey[1], var))
+                if v is not None:
+                    return v
+                # 该形参尚无任何调用点绑定（典型：调用点写成
+                # `deps.xxxCtrl.RegisterRoutes(public, nil)` 这类字段选择器，
+                # 类型反推不到控制器）。此前这里直接 `return None` 短路，
+                # 连同名的按名推断规则（public→/api）一起吃掉，于是同一份
+                # 路由在函数级 scope 被判 <UNRESOLVED:public>、文件级却能
+                # 解析成 /api —— 成对出现的假未解析。这里改为继续往下走：
+                # 绑定存在则以绑定为准（本分支已处理），不存在才用按名推断。
+                break
     if var in func_file:
         cf, rgn = func_file[var]
         for idx, pname in rgn:

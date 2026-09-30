@@ -210,6 +210,15 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		service.NewEmailOpenTrackerService(nil, nil),
 	)
 	emailOpenTrackerCtrl.RegisterRoutes(nil, auth)
+
+	// 邮件追踪：任务指标 / 事件列表 / 区间聚合（后台管理，需 JWT）。
+	// 此前 NewEmailTrackingController 全树零调用方，3 条 /email/track/* 鉴权路由
+	// 从未注册（运行时 404）；公开侧像素/点击由 setupPublicRoutes 挂在 public 组。
+	emailTrackingRepo := repository.NewEmailTrackingRepository(gormDB)
+	emailTrackingCtrl := controller.NewEmailTrackingController(
+		service.NewEmailTrackingService(emailTrackingRepo),
+	)
+	emailTrackingCtrl.RegisterRoutes(nil, auth)
 }
 
 func setupSmsRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {

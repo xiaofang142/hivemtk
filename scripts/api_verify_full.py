@@ -685,6 +685,10 @@ _GET_ACTION_SEG = frozenset((
 ))
 # 允许匿名写成功的公开端点白名单（命中才不判「未鉴权写」）
 _PUBLIC_MUT_OK = frozenset(("/api/auth/login", "/api/auth/logout", "/api/auth/refresh"))
+# 独立令牌闸门端点：不认 JWT，匿名与持 JWT 的 admin 一律 401 UNAUTHORIZED_2001。
+# 例：/api/browser/host-ws 用专用 Host token 握手（缺省无 token 时 HTTP401
+# `Host token 无效`），对它套用「admin 必须 code=0」会把设计内行为误判成失败。
+_HOST_TOKEN_OK = frozenset(("/api/browser/host-ws",))
 _ERR_HTTP = frozenset((400, 401, 403, 404, 405, 409, 410, 415, 422, 429))
 
 
@@ -799,6 +803,8 @@ def _judge(kind, path, status, j, ctype, text, err):
             # 规范设计: response.ErrorWithBusinessCode —— 业务错误码(4004/6001…)放
             # 响应体 code、HTTP 恒 200, 前端按 body code 判定(见 response.go 注释)
             return True, f"业务错误码(200+{code})"
+        if status == 401 and code == "UNAUTHORIZED_2001" and path in _HOST_TOKEN_OK:
+            return True, "独立令牌闸门(JWT 不适用,设计内)"
         return False, f"code={code!r} HTTP{status} 期望 code=0 或 400/404"
     if kind == "get_anon":
         if success:

@@ -77,6 +77,10 @@ func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.L
 
 	deps.emailOpenTrackerCtrl.RegisterRoutes(public, nil)
 
+	// 邮件追踪像素/点击重定向：邮件客户端直连、无 JWT，故挂 public 组
+	// （authed 侧指标查询在 setupEmailRoutes 注册）。此前该控制器零接线，运行时 404。
+	deps.emailTrackingCtrl.RegisterRoutes(public, nil)
+
 	ingressGrp := public.Group("/chat/ingress", middleware.IngressSecretAuth())
 	ingressGrp.POST("", deps.inboxIngressCtrl.Ingress)
 }
@@ -87,6 +91,7 @@ type publicDeps struct {
 	smsUnsubscribeCtrl     *controller.SmsUnsubscribeController
 	smsDeliveryTrackerCtrl *controller.SmsDeliveryTrackerController
 	emailOpenTrackerCtrl   *controller.EmailOpenTrackerController
+	emailTrackingCtrl      *controller.EmailTrackingController
 	inboxIngressCtrl       *controller.InboxIngressController
 }
 
@@ -99,6 +104,7 @@ func wirePublicDependencies(db *gorm.DB) publicDeps {
 		smsUnsubscribeCtrl:     controller.NewSmsUnsubscribeController(service.NewSmsUnsubscribeService(smsUnsubscribeRepo)),
 		smsDeliveryTrackerCtrl: controller.NewSmsDeliveryTrackerController(service.NewSmsDeliveryTrackerService(db, nil, nil)),
 		emailOpenTrackerCtrl:   controller.NewEmailOpenTrackerController(service.NewEmailOpenTrackerService(nil, nil)),
+		emailTrackingCtrl:      controller.NewEmailTrackingController(service.NewEmailTrackingService(repository.NewEmailTrackingRepository(db))),
 		inboxIngressCtrl:       controller.NewInboxIngressController(service.NewInboxIngressService()),
 	}
 }
