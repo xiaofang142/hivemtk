@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# status.sh —— 查看三服务（llm / embedding / rerank）运行状态
+# status.sh —— 查看三服务（llm / embedding / rerank）+ Laya 决策服务运行状态
 #
 # 用法：
 #   bash scripts/inference-host/status.sh
@@ -15,6 +15,7 @@ echo "[status] 服务状态："
 describe_role llm       "$LLM_PORT"
 describe_role embedding "$EMBEDDING_PORT"
 describe_role rerank    "$RERANK_PORT"
+describe_role laya      "${LAYA_PORT:-8210}"
 echo
 
 # MLX 引擎附加信息：统计摘要
