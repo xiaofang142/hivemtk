@@ -103,7 +103,7 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, markRaw, onMounted, onUnmounted } from 'vue'
 import { FullScreen, User, ShoppingCart, ChatLineRound, Document, Promotion, Bell, Money } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
@@ -141,7 +141,11 @@ const activityMeta = {
   customer: { icon: User, color: '#ee6666' },
   message: { icon: ChatLineRound, color: '#fac858' }
 }
-const pickIcon = (t) => (activityMeta[t]?.icon) || Bell
+// icon 是 Vue 组件对象，不是业务数据。realtimeActivities 是深响应 ref，组件对象落进去会被
+// reactive 代理，模板 `<component :is="item.icon" />` 取到代理后的组件就会触发
+// "Vue received a Component that was made a reactive object" 警告（实测 20 条 / 每条活动 1 条）。
+// markRaw 标记为不可代理，与 dashboardScreen/Builder.vue 的既有写法一致。
+const pickIcon = (t) => markRaw(activityMeta[t]?.icon || Bell)
 const pickColor = (t) => (activityMeta[t]?.color) || '#909399'
 
 const loadRealtime = async () => {
