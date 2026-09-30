@@ -307,9 +307,12 @@ const onSizeChange = () => {
   loadData()
 };
 
-const statusType = (s) => ({ draft: 'info', published: 'success', archived: 'warning' }[s] || '');
+// 两个 type 映射的兜底都不能用空串：el-tag 的 type 合法值只有 primary/success/info/
+// warning/danger，传 '' 会触发 `Invalid prop: validation failed for prop "type"` 告警，
+// 并回落到 default(primary) 显示成蓝色，与「未知状态」的中性语义不符。
+const statusType = (s) => ({ draft: 'info', published: 'success', archived: 'warning' }[s] || 'info');
 const statusText = (s) => ({ draft: '草稿', published: '已发布', archived: '已归档' }[s] || s)
-const execStatusType = (s) => ({ running: 'primary', completed: 'success', failed: 'danger', terminated: 'warning' }[s] || '')
+const execStatusType = (s) => ({ running: 'primary', completed: 'success', failed: 'danger', terminated: 'warning' }[s] || 'info')
 const execStatusText = (s) => ({ running: '运行中', completed: '已完成', failed: '失败', terminated: '已终止' }[s] || s)
 
 const formatTime = (t) => {

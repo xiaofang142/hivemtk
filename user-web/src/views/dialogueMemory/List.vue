@@ -120,7 +120,11 @@
     </el-card>
 
     
-    <el-dialog v-model="detailVisible" title="客户对话记忆详情" width="920px" top="5vh" v-loading="detailLoading">
+    <!-- detailLoading 已移除：v-loading 不能挂在 el-dialog 上（teleport 渲染，根节点非单个元素，
+         Vue 每次渲染都报 "Runtime directive used on component with non-element root node"），
+         且它从声明起就从未被赋 true，是死状态。弹窗内的短消息/长期记忆分区各自有
+         shortLoading / longLoading 转圈，删掉不影响任何可见行为。 -->
+    <el-dialog v-model="detailVisible" title="客户对话记忆详情" width="920px" top="5vh">
       <template v-if="currentMemory">
         
         <el-descriptions :column="3" border size="small">
@@ -286,7 +290,6 @@ const filterCustomerID = ref('')
 const pagination = ref({ page: 1, pageSize: 20, total: 0 })
 
 const detailVisible = ref(false);
-const detailLoading = ref(false)
 const currentMemory = ref(null)
 const activeTab = ref('short')
 const shortMessages = ref([])

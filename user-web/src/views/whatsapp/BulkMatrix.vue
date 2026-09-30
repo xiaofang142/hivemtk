@@ -105,8 +105,17 @@ const progressList = ref([])
 const progressStatus = ref('')
 
 async function load() {
-  templates.value = (await http.get('/api/whatsapp/templates')) || []
-  segments.value = (await http.get('/api/user-segments')) || []
+  // 这两个端点的 data 不是裸数组：/api/whatsapp/templates 返回 { data: [...] }，
+  // /api/user-segments 返回 { list: [...], total }。http 拦截器已解一层信封
+  // （utils/request.js:155 return data.data），这里必须再解一层，
+  // 否则 v-for 遍历的是对象的属性值，option 的 label/value 全 undefined，
+  // 模板与分群下拉实际渲染空白且选不中（实测 12 条 ElOption type check 告警）。
+  const [tplRes, segRes] = await Promise.all([
+    http.get('/api/whatsapp/templates'),
+    http.get('/api/user-segments')
+  ])
+  templates.value = tplRes?.data || []
+  segments.value = segRes?.list || []
 }
 
 const progressStats = computed(() => {

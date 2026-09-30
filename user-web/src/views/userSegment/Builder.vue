@@ -63,6 +63,10 @@
 import { ref, reactive, computed, h } from 'vue';
 import { ElMessage } from 'element-plus'
 import { http } from '@/utils/request'
+// RuleNode 此前只在模板里用、从未 import 也从未定义（git HEAD 同样如此），
+// 导致 Vue 每次渲染都报 Failed to resolve component: RuleNode，且整棵规则树 UI 根本不显示。
+// 数据结构由本文件的 addNode / compileNode 唯一定义，组件按该契约实现。
+import RuleNode from './RuleNode.vue'
 
 const rules = ref([
   {

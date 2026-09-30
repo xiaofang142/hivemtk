@@ -66,7 +66,10 @@
         </div>
       </el-col>
     </el-row>
-  </div>
+  <!-- el-dialog 原先与根 div 平级，使本组件有两个根节点（fragment）。路由层的
+       <Transition> 无法给 fragment 做动画，进页面必报 "Component inside <Transition>
+       renders non-element root node that cannot be animated"（实测 17 条）。
+       它带 append-to-body（teleport 到 body），所以挪进根 div 内视觉与行为完全不变。 -->
   <el-dialog v-model="saveDialogVisible" title="保存看板" width="420px" append-to-body>
     <el-form label-width="80px">
       <el-form-item label="看板名称">
@@ -81,6 +84,7 @@
       <el-button type="primary" :loading="saving" @click="confirmSave">保存</el-button>
     </template>
   </el-dialog>
+  </div>
 </template>
 
 <script setup>

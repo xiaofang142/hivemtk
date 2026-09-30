@@ -269,13 +269,18 @@ const TYPE_TAG = {
   user: 'primary',
   notification: 'warning',
   ai: 'success',
-  text: '',
+  // 文本消息是最常见的内容类型（实测占绝大多数行），这里原先留空串，
+  // 导致 el-tag 收到非法 type=""：Vue 每行打两条 Invalid prop 告警，
+  // 且颜色回落到 default(primary) 蓝色。中性语义与同表的 system/file 一致，用 'info'。
+  text: 'info',
   image: 'success',
   file: 'info',
   event: 'warning'
 }
 const getTypeLabel = (v) => TYPE_LABEL[v] || (v ? String(v) : '-')
-const getTypeTagType = (v) => TYPE_TAG[v] || ''
+// 未知 type 同样不能回落空串（空串是 el-tag 非法值），中性用 'info'，
+// 与本文件 getStatusTagType 的兜底保持一致。
+const getTypeTagType = (v) => TYPE_TAG[v] || 'info'
 
 const STATUS_LABEL = {
   unread: '未读',

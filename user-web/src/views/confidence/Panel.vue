@@ -403,7 +403,10 @@ function decisionLabel(d) {
   return { auto_reply: '自动回复', llm_fallback: 'LLM 兜底', review_queue: '审核队列', transfer: '转人工' }[d] || d || '-'
 }
 function decisionTagType(d) {
-  return { auto_reply: 'success', llm_fallback: 'info', review_queue: 'warning', transfer: 'danger' }[d] || ''
+  // 兜底不能用空串：el-tag 的 type 合法值只有 primary/success/info/warning/danger，
+  // 传 '' 会触发 `Invalid prop: validation failed for prop "type"` 告警，
+  // 并回落到 default(primary) 显示成蓝色，与「未识别的决策」这一中性语义不符。
+  return { auto_reply: 'success', llm_fallback: 'info', review_queue: 'warning', transfer: 'danger' }[d] || 'info'
 }
 function formatTime(t) {
   if (!t) return '-'

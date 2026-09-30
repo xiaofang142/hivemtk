@@ -2,9 +2,13 @@ export default [
   {
     path: '/browser-automation',
     name: 'BrowserAutomation',
+    // redirect 挂在父路由上，与全仓其余模块一致（tiktok.js:5、bridgeToken.js:4、index.js:47 等）。
+    // 原先这里写的是子路由 { path: '', redirect: ... }：vue-router 遇到「有 name 的父路由 + 无 name
+    // 且空 path 的子路由」必报 The route named "BrowserAutomation" has a child without a name and
+    // an empty path（实测每次进入该模块刷 3 条）；全仓也只有这一个模块用这种写法。
+    redirect: '/browser-automation/tasks',
     meta: { title: '浏览器自动化', icon: 'Monitor', group: 'automation', requiresAuth: true },
     children: [
-      { path: '', redirect: '/browser-automation/tasks' },
       {
         path: 'tasks',
         name: 'BrowserAutomationList',

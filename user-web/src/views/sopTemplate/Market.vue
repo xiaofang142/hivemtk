@@ -193,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, markRaw, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Collection,
@@ -216,7 +216,12 @@ const builtInTemplates = ref([
     name: '售前跟进 SOP',
     description: '客户首次咨询后的标准化跟进流程，覆盖介绍产品、了解需求、引导试用三个阶段',
     category: 'presale',
-    icon: Phone,
+    // icon 是 Vue 组件对象。builtInTemplates 是深响应 ref（下面还要就地写 t.imported，
+    // 不能改用 shallowRef，否则模板 :116 的 v-if="tpl.imported" 会失去响应性），
+    // 组件对象落进去会被 reactive 代理，模板 <component :is="tpl.icon" /> 取到代理组件
+    // 就会触发 "Vue received a Component that was made a reactive object"（实测 109 条）。
+    // markRaw 与 dashboardScreen/List.vue 同一修法。
+    icon: markRaw(Phone),
     color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     intent: 'inquiry',
     stage: 'initial',
@@ -249,7 +254,7 @@ const builtInTemplates = ref([
     name: '售后服务 SOP',
     description: '客户报修/退款/咨询的标准响应流程，确保 1 小时首响应、24 小时解决方案',
     category: 'aftersale',
-    icon: Service,
+    icon: markRaw(Service),
     color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
     intent: 'support',
     stage: 'middle',
@@ -283,7 +288,7 @@ const builtInTemplates = ref([
     name: '节日营销 SOP',
     description: '春节/双11/618 等大促节点的批量触达模板，集成优惠券 + 个性化推荐',
     category: 'marketing',
-    icon: Present,
+    icon: markRaw(Present),
     color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
     intent: 'purchase',
     stage: 'initial',
@@ -320,7 +325,7 @@ const builtInTemplates = ref([
     name: '节假日问候 SOP',
     description: '元旦/中秋/端午等传统节日的温情问候，提升品牌温度与客户粘性',
     category: 'marketing',
-    icon: Sunny,
+    icon: markRaw(Sunny),
     color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
     intent: 'greeting',
     stage: 'initial',
@@ -353,7 +358,7 @@ const builtInTemplates = ref([
     name: '新客转化 SOP',
     description: '首次注册到首次付费的 7 日引导流程，含注册、激活、试用、付费 4 个关键触点',
     category: 'presale',
-    icon: UserFilled,
+    icon: markRaw(UserFilled),
     color: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
     intent: 'follow_up',
     stage: 'late',

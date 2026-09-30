@@ -38,7 +38,7 @@
             <el-table-column prop="name" label="姓名" min-width="120" />
             <el-table-column label="综合分" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="scoreColor(row.overall_score || row.overallScore)">
+                <el-tag :type="scoreTagType(row.overall_score || row.overallScore)">
                   {{ Math.round(row.overall_score || row.overallScore || 0) }}
                 </el-tag>
               </template>
@@ -309,6 +309,16 @@ const scoreColor = (score) => {
   if (score >= 80) return '#10B981'
   if (score >= 60) return '#F59E0B'
   return '#EF4444'
+}
+
+// 综合分对应的 el-tag 语义色。必须与 scoreColor 分开：
+// el-tag 的 type 只能取 primary/success/info/warning/danger，直接传 scoreColor 的 hex
+// （实测返回 '#EF4444'）会触发 "Invalid prop: validation failed for prop type" 告警，
+// 标签色还会错误回落到 primary 蓝色。scoreColor 仍用于 :color 进度条与 scoreColorValue 文字色。
+const scoreTagType = (score) => {
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
 }
 
 const scoreColorValue = (score) => scoreColor(score)

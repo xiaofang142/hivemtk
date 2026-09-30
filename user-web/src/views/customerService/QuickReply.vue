@@ -16,11 +16,17 @@
         <div class="card-header">
           <el-space>
             <el-select v-model="filterCategory" :placeholder="$t('按分类筛选')" clearable style="width: 180px">
+              <!-- categories 的后端契约是 []string（service/quick_reply.go: GetCategories 返回
+                   []string，实测 /api/quick-replies/categories 返回 ["R2-闭环测试话术", ...]），
+                   这里原先却按对象取 c.code / c.name，两个字段在字符串上都是 undefined，
+                   于是每个选项的 label 与 value 全是 undefined：Vue 每次渲染报
+                   "Invalid prop: type check failed for prop value ... got Undefined"，
+                   且该筛选下拉实际渲染成空白、无法选中任何分类。 -->
               <el-option
                 v-for="c in categories"
-                :key="c.code || c.name"
-                :label="c.name || c.code"
-                :value="c.code || c.name"
+                :key="c"
+                :label="c"
+                :value="c"
               />
             </el-select>
             <el-input v-model="search" :placeholder="$t('搜索标题/内容')" clearable style="width: 220px" />

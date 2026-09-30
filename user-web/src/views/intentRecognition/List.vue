@@ -105,7 +105,7 @@
             />
           </el-descriptions-item>
           <el-descriptions-item label="置信级别">
-            <el-tag :type="getConfidenceColor(recognizeResult.confidence_level)" size="small" effect="plain">
+            <el-tag :type="getConfidenceTagType(recognizeResult.confidence_level)" size="small" effect="plain">
               {{ recognizeResult.confidence_level || '-' }}
             </el-tag>
           </el-descriptions-item>
@@ -481,7 +481,10 @@ import { getChannelLabel } from '@/constants/channel'
 const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合' };
 const RECOGNIZE_METHOD_TAG = { llm: 'danger', rule: 'info', keyword: 'success', bert: 'warning', hybrid: 'primary' }
 const getMethodLabel = (m) => RECOGNIZE_METHOD[m] || m || '-'
-const getMethodTagType = (m) => RECOGNIZE_METHOD_TAG[m] || ''
+// 兜底必须是 el-tag 的合法 type：空串会触发
+// "Invalid prop: validation failed for prop type" 告警并回落到 default(primary) 显示成蓝色。
+// 与本文件 getIntentTagType(:666) / getFineMethodType(:517) 的 'info' 兜底一致。
+const getMethodTagType = (m) => RECOGNIZE_METHOD_TAG[m] || 'info'
 
 const statsLoading = ref(false);
 const statsData = ref({})
@@ -698,6 +701,16 @@ const getConfidenceColor = (level) => {
   if (level === 'high') return '#10B981'
   if (level === 'medium') return '#F59E0B'
   return '#EF4444'
+}
+
+// 置信度对应的 el-tag 语义色。必须与上面的 getConfidenceColor 分开：
+// el-tag 的 type 只能取 primary/success/info/warning/danger，传 hex 颜色（实测返回 '#EF4444'）
+// 会触发 "Invalid prop: validation failed for prop type" 告警，标签色还会错误回落到 primary 蓝色。
+// 与本文件 getIntentTagType(:666) 的「颜色函数管图表、*TagType 管标签」配对写法一致。
+const getConfidenceTagType = (level) => {
+  if (level === 'high') return 'success'
+  if (level === 'medium') return 'warning'
+  return 'danger'
 }
 
 const formatTime = (t) => {
