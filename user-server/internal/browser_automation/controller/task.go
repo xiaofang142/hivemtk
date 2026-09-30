@@ -109,6 +109,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 	t.Platform = strings.TrimSpace(req.Platform) // 空值由 Service.Create 缺省 xiaohongshu
 	t.BrainMode = req.BrainMode
 	t.BrainGoal = req.BrainGoal
+	t.CopyText = req.CopyText
 	t.LoopCount = req.LoopCount
 	t.DelayMs = req.DelayMs
 	t.TimeoutSec = req.TimeoutSec
@@ -198,6 +199,9 @@ func (c *TaskController) Update(ctx *gin.Context) {
 		}
 		if req.BrainGoal != nil {
 			t.BrainGoal = *req.BrainGoal
+		}
+		if req.CopyText != nil {
+			t.CopyText = *req.CopyText
 		}
 		if req.Steps != nil {
 			raw, err := json.Marshal(req.Steps)

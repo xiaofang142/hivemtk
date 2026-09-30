@@ -98,7 +98,7 @@ func TestValidateChoice(t *testing.T) {
 }
 
 func TestDecisionToSteps(t *testing.T) {
-	click, done, terminal, err := decisionToSteps(JevDecision{Operation: jevOpClick, Target: "@e2"})
+	click, done, terminal, err := decisionToSteps(JevDecision{Operation: jevOpClick, Target: "@e2"}, "")
 	if err != nil || done || terminal != "" {
 		t.Fatalf("CLICK 应产单步，got err=%v done=%v terminal=%q", err, done, terminal)
 	}
@@ -109,22 +109,102 @@ func TestDecisionToSteps(t *testing.T) {
 	if err := json.Unmarshal(click, &items); err != nil || len(items) != 1 || items[0].Action != "click" || items[0].Target != "@e2" {
 		t.Fatalf("CLICK 映射错: %s err=%v", string(click), err)
 	}
-	if _, d, _, err := decisionToSteps(JevDecision{Operation: jevOpDone}); err != nil || !d {
+	if _, d, _, err := decisionToSteps(JevDecision{Operation: jevOpDone}, ""); err != nil || !d {
 		t.Fatalf("DONE 应 done=true，got %v %v", d, err)
 	}
-	if _, _, term, err := decisionToSteps(JevDecision{Operation: jevOpBlocked}); err != nil || term == "" {
+	if _, _, term, err := decisionToSteps(JevDecision{Operation: jevOpBlocked}, ""); err != nil || term == "" {
 		t.Fatalf("BLOCKED 应给 terminal，got %q %v", term, err)
 	}
 	for _, op := range []string{jevOpScrollDown, jevOpScrollUp, jevOpWait} {
-		if _, d, term, err := decisionToSteps(JevDecision{Operation: op}); err != nil || d || term != "" {
+		if _, d, term, err := decisionToSteps(JevDecision{Operation: op}, ""); err != nil || d || term != "" {
 			t.Fatalf("%s 应产单步，got %v %v %q", op, d, term, err)
 		}
 	}
-	if _, _, _, err := decisionToSteps(JevDecision{Operation: "TYPE_TEXT", Target: "@e3"}); err == nil {
-		t.Fatal("未知 operation 应拒绝（v1 无 TYPE_TEXT）")
+	// TYPE_TEXT：有文本→产 type 步（Value=任务文案）；空文本→拒绝（JEV 绝不编造文本）。
+	typeBlob, d, term, err := decisionToSteps(JevDecision{Operation: jevOpTypeText, Target: "@e3"}, "好评，已关注")
+	if err != nil || d || term != "" {
+		t.Fatalf("TYPE_TEXT 应产单步，got err=%v done=%v terminal=%q", err, d, term)
 	}
-	if _, _, _, err := decisionToSteps(JevDecision{Operation: jevOpClick}); err == nil {
+	var typeItems []struct {
+		Action string `json:"action"`
+		Target string `json:"target"`
+		Value  string `json:"value"`
+	}
+	if err := json.Unmarshal(typeBlob, &typeItems); err != nil || len(typeItems) != 1 ||
+		typeItems[0].Action != "type" || typeItems[0].Target != "@e3" || typeItems[0].Value != "好评，已关注" {
+		t.Fatalf("TYPE_TEXT 映射错: %s err=%v", string(typeBlob), err)
+	}
+	if _, _, _, err := decisionToSteps(JevDecision{Operation: jevOpTypeText, Target: "@e3"}, ""); err == nil {
+		t.Fatal("TYPE_TEXT 空文本应拒绝")
+	}
+	if _, _, _, err := decisionToSteps(JevDecision{Operation: "TYPE_TEXTT", Target: "@e3"}, "x"); err == nil {
+		t.Fatal("未知 operation 应拒绝")
+	}
+	if _, _, _, err := decisionToSteps(JevDecision{Operation: jevOpClick}, ""); err == nil {
 		t.Fatal("CLICK 无目标应拒绝")
+	}
+	if _, _, _, err := decisionToSteps(JevDecision{Operation: jevOpTypeText}, "x"); err == nil {
+		t.Fatal("TYPE_TEXT 无目标应拒绝")
+	}
+}
+
+func jevTypeTextOp() jevChoiceRecord {
+	return jevChoiceRecord{Choice: jevOpTypeText, Probabilities: map[string]float64{jevOpTypeText: 0.8, "CLICK": 0.05, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.0, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}, Confidence: 0.8}
+}
+
+func jevTypeTarget() jevChoiceRecord {
+	return jevChoiceRecord{Choice: "@e3", Probabilities: map[string]float64{"@e3": 1.0}, Confidence: 0.9}
+}
+
+func TestChooseTypeText(t *testing.T) {
+	fd := &fakeJevDispatcher{
+		content: jevAnswersJSONWith(t, jevTypeTextOp(), "type_target", jevTypeTarget()),
+		usage:   llm.TokenUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+	}
+	fb := &fakeBrain{stepsJSON: []byte(`[]`)}
+	e := &Executor{brain: fb}
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
+	task, session := testTaskSession()
+	task.CopyText = "好评，已关注"
+	seq := 0
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil)
+	if err != nil || out.done || out.terminal != "" {
+		t.Fatalf("JEV TYPE_TEXT 应产单步，got err=%v done=%v terminal=%q", err, out.done, out.terminal)
+	}
+	var items []struct {
+		Action string `json:"action"`
+		Target string `json:"target"`
+		Value  string `json:"value"`
+	}
+	if err := json.Unmarshal(out.stepsJSON, &items); err != nil || len(items) != 1 ||
+		items[0].Action != "type" || items[0].Target != "@e3" || items[0].Value != "好评，已关注" {
+		t.Fatalf("TYPE_TEXT 应映射为 type @e3（Value=任务文案），got %s err=%v", string(out.stepsJSON), err)
+	}
+	if fb.calls != 0 {
+		t.Fatal("JEV 成功时不应调 Brain")
+	}
+	if fd.calls != 1 {
+		t.Fatalf("应恰调一次调度，got %d", fd.calls)
+	}
+}
+
+func TestPlanRoundTypeTextEmptyFallsBack(t *testing.T) {
+	// 任务无文案却选中 TYPE_TEXT → 拒绝执行，回退 Brain（JEV 绝不编造文本）。
+	fd := &fakeJevDispatcher{content: jevAnswersJSONWith(t, jevTypeTextOp(), "type_target", jevTypeTarget())}
+	fb := &fakeBrain{stepsJSON: []byte(`[{"action":"wait"}]`), tokens: 9}
+	e := &Executor{brain: fb}
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
+	task, session := testTaskSession() // CopyText 为空
+	seq := 0
+	out, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq, nil)
+	if err != nil {
+		t.Fatalf("空文案 TYPE_TEXT 应回退 Brain 而非报错，got %v", err)
+	}
+	if fb.calls != 1 || string(out.stepsJSON) != string(fb.stepsJSON) {
+		t.Fatalf("应回退 Brain，got calls=%d steps=%s", fb.calls, string(out.stepsJSON))
+	}
+	if !out.jevAttempted || out.jevOK {
+		t.Fatalf("应记 attempted 且 !ok，got attempted=%v ok=%v", out.jevAttempted, out.jevOK)
 	}
 }
 
@@ -152,9 +232,15 @@ func (f *fakeJevDispatcher) DispatchStructured(ctx context.Context, req llm.Disp
 // jevAnswersJSON 组装同体 choice 响应 JSON。
 func jevAnswersJSON(t *testing.T, op jevChoiceRecord, target jevChoiceRecord) string {
 	t.Helper()
+	return jevAnswersJSONWith(t, op, "click_target", target)
+}
+
+// jevAnswersJSONWith 组装同体 choice 响应 JSON（target head 键名可指定：click_target/type_target）。
+func jevAnswersJSONWith(t *testing.T, op jevChoiceRecord, targetKey string, target jevChoiceRecord) string {
+	t.Helper()
 	m := map[string]jevChoiceRecord{"operation": op}
 	if target.Choice != "" || len(target.Probabilities) > 0 {
-		m["click_target"] = target
+		m[targetKey] = target
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -164,7 +250,7 @@ func jevAnswersJSON(t *testing.T, op jevChoiceRecord, target jevChoiceRecord) st
 }
 
 func jevClickOp() jevChoiceRecord {
-	return jevChoiceRecord{Choice: "CLICK", Probabilities: map[string]float64{"CLICK": 0.8, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.05, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}, Confidence: 0.8}
+	return jevChoiceRecord{Choice: "CLICK", Probabilities: map[string]float64{"CLICK": 0.8, "TYPE_TEXT": 0.0, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.05, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}, Confidence: 0.8}
 }
 
 func jevClickTarget() jevChoiceRecord {

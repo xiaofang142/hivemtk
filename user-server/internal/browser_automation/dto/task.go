@@ -37,6 +37,7 @@ type CreateBrowserTaskReq struct {
 	Platform    string `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），空=xiaohongshu 兼容存量
 	BrainMode   bool   `json:"brain_mode"`
 	BrainGoal   string `json:"brain_goal"`
+	CopyText    string `json:"copy_text"`
 	// Steps 数组长度必须有上界。其余数值参数一早就钳了区间，只有步数没钳，
 	// 于是「一条任务带 100 万步」是合法请求。真正被打穿的不是执行（会话有 TimeoutSec 硬闸），
 	// 而是**读放大**：steps 整列随任务详情返回，GET 一次就是把百 MB JSON 拉进内存再吐给前端，
@@ -77,6 +78,7 @@ type UpdateBrowserTaskReq struct {
 	Platform    *string `json:"platform" binding:"omitempty,max=32"`
 	BrainMode   *bool   `json:"brain_mode"`
 	BrainGoal   *string `json:"brain_goal"`
+	CopyText    *string `json:"copy_text"`
 	// Steps 编辑路径同口径——创建拦得住、编辑绕得过去，等于没拦
 	// dive 同 CreateBrowserTaskReq：漏一侧＝该侧的步内规则（三行 oneof + retry_* 区间）全不生效
 	Steps      []StepItem `json:"steps" binding:"omitempty,max=200,dive"`

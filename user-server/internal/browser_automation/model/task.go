@@ -19,6 +19,8 @@ type BrowserTask struct {
 	Steps     datatypes.JSON `gorm:"column:steps;type:jsonb" json:"steps"`
 	BrainMode bool           `gorm:"column:brain_mode;default:false" json:"brain_mode"`
 	BrainGoal string         `gorm:"column:brain_goal;type:text" json:"brain_goal"`
+	// CopyText 触达任务文案：JEV TYPE_TEXT 唯一文本来源（JEV 绝不编造文本）。
+	CopyText string `gorm:"column:copy_text;type:text" json:"copy_text"`
 	// G9 死代码收口（R25）：LlmPlanID 零写入零消费（成本账走 browser_llm_plans 表
 	// 按 task_id/session_id 维度查，D3 已落地）；字段删除，DB 列按 D6 决策保留不动。
 	// 执行控制
