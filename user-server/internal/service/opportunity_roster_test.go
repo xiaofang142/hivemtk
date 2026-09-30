@@ -32,6 +32,11 @@ type rosterRepo struct {
 
 func (r *rosterRepo) Create(ctx context.Context, ev *model.SalesEvent) error { return nil }
 
+// ListByOpportunityID T-P8-01 接口扩展后的替身补位：名单腿不读链，恒空。
+func (r *rosterRepo) ListByOpportunityID(ctx context.Context, opportunityID string) ([]*model.SalesEvent, error) {
+	return nil, nil
+}
+
 func (r *rosterRepo) ListByType(ctx context.Context, eventType, ownerID string, sinceUnix int64) ([]*model.SalesEvent, error) {
 	r.calls++
 	r.gotType = eventType
