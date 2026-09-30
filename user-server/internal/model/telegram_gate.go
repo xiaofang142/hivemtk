@@ -55,8 +55,15 @@ type TelegramGroupMember struct {
 
 	VerifyToken string     `gorm:"type:varchar(64);index" json:"verify_token"` // /start <token> 匹配用
 	ExpiresAt   *time.Time `json:"expires_at"`                                 // 验证截止时间
-	CreatedAt   time.Time  `gorm:"autoCreateTime;index" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+
+	// 群内验证提示的送达状态。补偿循环过去只用 expires_at 一列同时表达"临近到期"
+	// 和"提示没送达"两种意思，于是每个未验证成员每隔一个 TTL 就被重新播报一次入群
+	// 提示（线上实测 6 个人共 219 条）。这两列把两件事分开：已送达就不再播报。
+	WelcomeSentAt  *time.Time `json:"welcome_sent_at"`                  // 提示最近一次送达时间（nil=从未送达）
+	WelcomeResends int        `gorm:"default:0" json:"welcome_resends"` // 提示补发尝试次数（送达后清零）
+
+	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (TelegramGroupMember) TableName() string { return "telegram_group_members" }
