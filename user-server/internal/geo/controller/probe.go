@@ -45,10 +45,11 @@ func (c *ProbeController) TestSingle(ctx *gin.Context) {
 }
 
 // ProbeAll 触发所有引擎探针
-// POST /geo/probe/all  body: {"query":"..."}
+// POST /geo/probe/all  body: {"query":"...", "rounds":1}（rounds 可选 1-5，多轮采样展示提及率）
 func (c *ProbeController) ProbeAll(ctx *gin.Context) {
 	var body struct {
-		Query string `json:"query"`
+		Query  string `json:"query"`
+		Rounds int    `json:"rounds"`
 	}
 	if !response.BindJSON(ctx, &body) {
 		return
@@ -57,12 +58,13 @@ func (c *ProbeController) ProbeAll(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "query 必填")
 		return
 	}
-	runs, errs := c.probeSvc.ProbeAllEngines(ctx.Request.Context(), body.Query)
+	runs, errs, summary := c.probeSvc.ProbeAllEnginesSampled(ctx.Request.Context(), body.Query, body.Rounds)
 	response.Success(ctx, gin.H{
-		"runs":   runs,
-		"errors": errlistStrings(errs),
-		"total":  len(runs),
-		"failed": len(errs),
+		"runs":    runs,
+		"errors":  errlistStrings(errs),
+		"total":   len(runs),
+		"failed":  len(errs),
+		"summary": summary,
 	}, "ok")
 }
 

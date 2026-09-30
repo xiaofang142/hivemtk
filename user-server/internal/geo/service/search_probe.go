@@ -262,9 +262,107 @@ type ProbeService struct {
 	repo   repository.GeoProbeRunRepository
 }
 
+// probeAttemptBackoff 探针重试退避间隔（指数退避：2s、4s）
+var probeRetryBackoffs = []time.Duration{2 * time.Second, 4 * time.Second}
+
+// nonRetryableProbeError 凭证类错误（401/403）不重试，重试无意义
+func nonRetryableProbeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "status 401") || strings.Contains(msg, "status 403")
+}
+
+// probeWithRetry 带重试的单引擎探针（对标 gego 失败3次重试）
+// 最多尝试 1+len(backoffs) 次；偶发网络/网关错误自动重试，凭证错误直接返回。
+func probeWithRetry(ctx context.Context, p SearchProbe, query string) (*ProbeResult, error) {
+	pr, err := p.Probe(ctx, query)
+	if err == nil || nonRetryableProbeError(err) {
+		return pr, err
+	}
+	for i, wait := range probeRetryBackoffs {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+		pr, err = p.Probe(ctx, query)
+		if err == nil {
+			return pr, nil
+		}
+		if nonRetryableProbeError(err) {
+			return nil, err
+		}
+		_ = i
+	}
+	return nil, err
+}
+
+// matchBrandNames 响应命中任一品牌名/别名即算提及（大小写不敏感）
+// 对标 elmo 品牌别名归一：HiveMtk/微蜂/HiveMTK 等写法统一识别。
+func matchBrandNames(response string, names []string) bool {
+	lr := strings.ToLower(response)
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		if strings.Contains(lr, strings.ToLower(n)) {
+			return true
+		}
+	}
+	return false
+}
+
 // NewProbeService 创建 ProbeService
 func NewProbeService(probes []SearchProbe, repo repository.GeoProbeRunRepository) *ProbeService {
 	return &ProbeService{probes: probes, repo: repo}
+}
+
+// MaxProbeSampleRounds 单次探针最多采样轮数（对标 Auriti citations --runs 置信区间；
+// 上限 5 轮防止 LLM 成本爆炸，默认 1 轮保持现有行为）
+const MaxProbeSampleRounds = 5
+
+// SampleSummary 多轮采样汇总：提及率 + 样本数即置信展示
+type SampleSummary struct {
+	Rounds          int     `json:"rounds"`
+	TotalRuns       int     `json:"total_runs"`
+	BrandHits       int     `json:"brand_hits"`
+	BrandMentionRate float64 `json:"brand_mention_rate"`
+}
+
+// ProbeAllEnginesSampled 多轮采样：同 query 跑 rounds 轮，返回全部 runs 与汇总。
+// rounds 越界时钳制到 [1, MaxProbeSampleRounds]。
+func (s *ProbeService) ProbeAllEnginesSampled(ctx context.Context, query string, rounds int) ([]*model.GeoProbeRun, []error, SampleSummary) {
+	if rounds < 1 {
+		rounds = 1
+	}
+	if rounds > MaxProbeSampleRounds {
+		rounds = MaxProbeSampleRounds
+	}
+	allRuns := []*model.GeoProbeRun{}
+	allErrs := []error{}
+	for r := 0; r < rounds; r++ {
+		if err := ctx.Err(); err != nil {
+			allErrs = append(allErrs, err)
+			break
+		}
+		runs, errs := s.ProbeAllEnginesConcurrent(ctx, query)
+		allRuns = append(allRuns, runs...)
+		allErrs = append(allErrs, errs...)
+	}
+	hits := 0
+	for _, run := range allRuns {
+		if run.BrandMentioned {
+			hits++
+		}
+	}
+	summary := SampleSummary{Rounds: rounds, TotalRuns: len(allRuns), BrandHits: hits}
+	if len(allRuns) > 0 {
+		summary.BrandMentionRate = float64(hits) / float64(len(allRuns))
+	}
+	return allRuns, allErrs, summary
 }
 
 // ProbeAllEngines 遍历所有引擎，逐个调用，结果写入 geo_probe_runs
@@ -276,7 +374,7 @@ func (s *ProbeService) ProbeAllEngines(ctx context.Context, query string) ([]*mo
 	runs := make([]*model.GeoProbeRun, 0, len(probes))
 	errs := []error{}
 	for _, p := range probes {
-		pr, err := p.Probe(ctx, query)
+		pr, err := probeWithRetry(ctx, p, query)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("probe %s: %w", p.Name(), err))
 			continue
@@ -308,7 +406,7 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 		wg.Add(1)
 		go func(i int, p SearchProbe) {
 			defer wg.Done()
-			pr, err := p.Probe(ctx, query)
+			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {
 				outcomes[i] = probeOutcome{err: fmt.Errorf("probe %s: %w", p.Name(), err)}
 				return
@@ -335,8 +433,7 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 }
 
 func (s *ProbeService) buildProbeRun(ctx context.Context, p SearchProbe, pr *ProbeResult) *model.GeoProbeRun {
-	brandName := s.getBrandName(ctx)
-	brandHit := brandName != "" && strings.Contains(strings.ToLower(pr.Response), strings.ToLower(brandName))
+	brandHit := matchBrandNames(pr.Response, s.getBrandNames(ctx))
 	run := &model.GeoProbeRun{
 		Engine:         pr.Engine,
 		Query:          pr.Query,
@@ -356,12 +453,11 @@ func (s *ProbeService) buildProbeRun(ctx context.Context, p SearchProbe, pr *Pro
 func (s *ProbeService) TestSingle(ctx context.Context, engineName, query string) (*ProbeResult, error) {
 	for _, p := range s.probes {
 		if engineName == "" || p.Name() == engineName {
-			pr, err := p.Probe(ctx, query)
+			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {
 				return nil, err
 			}
-			brandName := s.getBrandName(ctx)
-			pr.BrandHit = brandName != "" && strings.Contains(strings.ToLower(pr.Response), strings.ToLower(brandName))
+			pr.BrandHit = matchBrandNames(pr.Response, s.getBrandNames(ctx))
 
 			return pr, nil
 		}
@@ -403,4 +499,40 @@ func (s *ProbeService) getBrandName(ctx context.Context) string {
 		return ""
 	}
 	return cfg.BrandName
+}
+
+// getBrandNames 品牌名全集：配置主名 + 实体别名（对标 elmo/gego 品牌别名归一）
+// mention 判定用全集匹配，"微蜂/HiveMTK" 等别名写法同样识别为提及。
+func (s *ProbeService) getBrandNames(ctx context.Context) []string {
+	names := []string{}
+	seen := map[string]bool{}
+	add := func(n string) {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			return
+		}
+		k := strings.ToLower(n)
+		if !seen[k] {
+			seen[k] = true
+			names = append(names, n)
+		}
+	}
+	add(s.getBrandName(ctx))
+	entRepo := repository.NewGeoEntityRepository()
+	ents, _, err := entRepo.List(ctx, "", "", 1, 500)
+	if err != nil {
+		return names
+	}
+	for _, e := range ents {
+		add(e.Name)
+		var aliases []string
+		if len(e.Aliases) > 0 {
+			if err := json.Unmarshal(e.Aliases, &aliases); err == nil {
+				for _, a := range aliases {
+					add(a)
+				}
+			}
+		}
+	}
+	return names
 }

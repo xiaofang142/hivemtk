@@ -54,6 +54,27 @@ func (c *TechMetricsController) GenerateSitemap(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"content": c.techconfigSvc.GenerateSitemap(&cfg)}, "生成成功")
 }
 
+// AuditContent 内容审计（25 因子评分 + 等级 + 修复清单）
+// POST /geo/techconfig/audit
+func (c *TechMetricsController) AuditContent(ctx *gin.Context) {
+	var req struct {
+		URL          string `json:"url"`
+		Title        string `json:"title"`
+		Content      string `json:"content" binding:"required"`
+		MetaDesc     string `json:"meta_desc"`
+		SchemaJSONLD string `json:"schema_jsonld"`
+		Live         bool   `json:"live"`
+	}
+	if !response.BindJSON(ctx, &req) {
+		return
+	}
+	if req.Live && req.URL != "" {
+		response.Success(ctx, c.techconfigSvc.RunGEOAuditLive(ctx.Request.Context(), req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD), "审计完成（含真实技术检查）")
+		return
+	}
+	response.Success(ctx, c.techconfigSvc.RunGEOAudit(req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD), "审计完成")
+}
+
 // AnalyzeMetrics 分析内容质量指标
 // POST /geo/metrics/analyze
 func (c *TechMetricsController) AnalyzeMetrics(ctx *gin.Context) {

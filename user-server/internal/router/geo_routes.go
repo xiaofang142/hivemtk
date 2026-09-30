@@ -127,6 +127,13 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	probeRepo := georepo.NewGeoProbeRunRepositoryWithDB(gormDB)
 	probeSvc := geoservice.NewProbeService(probes, probeRepo)
 	probeCtrl := geoctrl.NewProbeController(probeSvc)
+	citeSvc := geoservice.NewCitationService(probeRepo, configRepo, georepo.NewGeoCompetitorRepository())
+	citeCtrl := geoctrl.NewCitationController(citeSvc)
+	oppSvc := geoservice.NewOpportunityService(
+		analyticsSvc, citeSvc,
+		georepo.NewGeoAlertRepositoryWithDB(gormDB),
+		articleRepo, configRepo)
+	oppCtrl := geoctrl.NewOpportunityController(oppSvc)
 
 	visibilitySvc := geoservice.NewVisibilityService(georepo.NewGeoDailyStatRepositoryWithDB(gormDB))
 	fanoutSvc := geoservice.NewPromptFanoutService(llmAdapter, probeSvc)
@@ -218,6 +225,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/techconfig/robots", tmCtrl.GenerateRobots)
 	geo.POST("/techconfig/sitemap", tmCtrl.GenerateSitemap)
 	geo.POST("/techconfig/llms-txt", tmCtrl.GenerateLLMsTxt)
+	geo.POST("/techconfig/audit", tmCtrl.AuditContent)
 
 	geo.POST("/metrics/analyze", tmCtrl.AnalyzeMetrics)
 
@@ -276,6 +284,9 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/probe/run-source-sync", probeCtrl.RunSourceSync)
 	geo.POST("/probe/run-sov", probeCtrl.RunSOVRefresh)
 	geo.GET("/probe/runs", probeCtrl.ListRuns)
+	geo.GET("/citations/domains", citeCtrl.Domains)
+	geo.GET("/citations/matrix", citeCtrl.Matrix)
+	geo.GET("/opportunities", oppCtrl.List)
 
 	geo.GET("/source-catalog/levels", sourceCtrl.LookupLevels)
 
