@@ -572,6 +572,7 @@ func (s *QuoteSendService) dispatch(ctx context.Context, row *model.Quote, appro
 	recorded := true
 	ev := &model.SalesEvent{
 		EventType:     model.SalesEventTypeQuote,
+		Action:        "sent",
 		OpportunityID: row.OpportunityID,
 		QuoteID:       row.QuoteID,
 		OwnerID:       in.Operator,

@@ -136,11 +136,14 @@ func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
 		return svc.GetDuration(ctxBG, "misc", "heartbeat_interval", 3*time.Minute)
 	})
 
-	var created, existing int
+	var created, existing, refreshed int
 	for _, def := range DefaultParamDefs() {
 		p, err := repo.GetByGroupKey(ctx, def.Group, def.Key)
 		if err == nil && p != nil {
 			existing++
+			if syncParamDef(ctx, db, p, def) {
+				refreshed++
+			}
 			continue
 		}
 
@@ -164,9 +167,70 @@ func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
 		}
 		created++
 	}
-	logger.Infof("[ConfigParam] seed done: created=%d existing=%d total_defs=%d",
-		created, existing, len(DefaultParamDefs()))
+	logger.Infof("[ConfigParam] seed done: created=%d existing=%d refreshed_defs=%d total_defs=%d",
+		created, existing, refreshed, len(DefaultParamDefs()))
 	return nil
+}
+
+// syncParamDef 把存量行的**定义列**对齐当前种子定义。
+//
+// 为什么必须对齐：SeedConfigParams 原本只补插缺失行，于是种子里改文案等于没改——
+// 存量库继续展示建库那一次写进去的旧说明。实测代价：bridge 的两条轮询超时参数的说明写着
+// 「超时由服务端主动返回」，而服务端从来没有长轮询实现（ingest 立即返回，回复走 SSE 推送
+// 或扩展侧 /outbox 轮询），运营在管理台改这个值不会有任何效果，页面上那句话却一直是旧的。
+// 种子是这些文案的唯一事实源，不刷新就等于没有事实源。
+//
+// 唯一不许碰的是 value：运营改过的那个值才是这条链路上要保住的东西。
+func syncParamDef(ctx context.Context, db *gorm.DB, p *model.ConfigParam, def ParamDef) bool {
+	updates := map[string]any{}
+	if p.Name != def.Name {
+		updates["Name"] = def.Name
+	}
+	if p.Description != def.Description {
+		updates["Description"] = def.Description
+	}
+	if p.ValueType != def.ValueType {
+		updates["ValueType"] = def.ValueType
+	}
+	if p.DefaultValue != def.DefaultValue {
+		updates["DefaultValue"] = def.DefaultValue
+	}
+	if !sameOptionalPtr(p.Min, def.Min) {
+		updates["Min"] = def.Min
+	}
+	if !sameOptionalPtr(p.Max, def.Max) {
+		updates["Max"] = def.Max
+	}
+	if !sameOptionalPtr(p.Step, def.Step) {
+		updates["Step"] = def.Step
+	}
+	if p.ReadOnly != def.ReadOnly {
+		updates["ReadOnly"] = def.ReadOnly
+	}
+	if p.Restart != def.Restart {
+		updates["Restart"] = def.Restart
+	}
+	if p.Category != def.Category {
+		updates["Category"] = def.Category
+	}
+	if len(updates) == 0 {
+		return false
+	}
+	// 按主键定位，不再用 (group,key) 条件：这两列本身也可能在本次更新里。
+	if err := db.WithContext(ctx).Model(&model.ConfigParam{}).
+		Where("id = ?", p.ID).Updates(updates).Error; err != nil {
+		logger.Warnf("[ConfigParam] seed 参数定义刷新失败 %s.%s: %v（管理台会继续展示旧说明，事实订正到不了运营眼前）",
+			def.Group, def.Key, err)
+		return false
+	}
+	return true
+}
+
+func sameOptionalPtr(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func (s *ConfigParamService) GetInt(ctx context.Context, group, key string, fallback int) int {

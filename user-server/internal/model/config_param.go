@@ -14,8 +14,8 @@ import (
 //  5. read_only=true 标记由系统自动推导/锁死（暂不开放给用户改）
 type ConfigParam struct {
 	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Group        string    `gorm:"column:param_group;type:varchar(50);not null;index" json:"group"`
-	Key          string    `gorm:"type:varchar(100);not null;uniqueIndex:idx_group_key" json:"key"`
+	Group        string    `gorm:"column:param_group;type:varchar(50);not null;index;uniqueIndex:idx_group_key,priority:1" json:"group"`
+	Key          string    `gorm:"type:varchar(100);not null;uniqueIndex:idx_group_key,priority:2" json:"key"`
 	Name         string    `gorm:"type:varchar(200);not null" json:"name"`
 	Description  string    `gorm:"type:varchar(500)" json:"description"`
 	ValueType    string    `gorm:"type:varchar(20);not null;default:int" json:"value_type"`
