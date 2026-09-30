@@ -265,11 +265,13 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`
 };
 
+// 'default' 不在 el-tag 的合法 type 里（primary/success/info/warning/danger），会触发 Vue prop
+// 校验告警并回落到 default='primary'。未识别动作用中性的 'info'。
 const getActionType = (action) => {
   const typeMap = {
     'view': 'info'
   }
-  return typeMap[action] || 'default'
+  return typeMap[action] || 'info'
 };
 
 const getActionText = (action) => {

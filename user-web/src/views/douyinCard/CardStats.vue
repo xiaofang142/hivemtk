@@ -252,11 +252,13 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`
 };
 
+// el-tag 的 type 只接受 primary/success/info/warning/danger，传 '' 会触发 Vue prop 校验告警
+// 并回落到 default='primary'。中性动作用 'info'，与 kuaishouCard/CardStats.vue 既有写法一致。
 const getActionType = (action) => {
   const actionMap = {
-    view: ''
+    view: 'info'
   }
-  return actionMap[action] || ''
+  return actionMap[action] || 'info'
 };
 
 const getActionText = (action) => {

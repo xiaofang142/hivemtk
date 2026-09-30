@@ -280,11 +280,14 @@ const formatTime = (timeStr) => {
   }
 }
 
+// el-tag 的 type 只接受 primary/success/info/warning/danger（Element Plus 2.14 tagProps.values），
+// 传 '' 会触发 Vue prop 校验告警并回落到 default='primary'。中性动作用 'info'，
+// 与 kuaishouCard/CardStats.vue 的既有写法保持一致。
 const getActionType = (action) => {
   const types = {
-    view: ''
+    view: 'info'
   }
-  return types[action] || ''
+  return types[action] || 'info'
 }
 
 const getActionText = (action) => {

@@ -275,11 +275,13 @@ const formatTime = (time) => {
   return new Date(time).toLocaleString()
 }
 
+// el-tag 的 type 只接受 primary/success/info/warning/danger，传 '' 会触发 Vue prop 校验告警
+// 并回落到 default='primary'。中性动作用 'info'，与 kuaishouCard/CardStats.vue 既有写法一致。
 const getActionType = (type) => {
   const typeMap = {
-    view: ''
+    view: 'info'
   }
-  return typeMap[type] || ''
+  return typeMap[type] || 'info'
 }
 
 const getActionText = (type) => {

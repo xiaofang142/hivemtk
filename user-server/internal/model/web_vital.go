@@ -4,10 +4,14 @@ import "time"
 
 // WebVitalRecord 前端性能指标（Web Vitals: CLS/FID/LCP/FCP/TTFB）
 type WebVitalRecord struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Metric    string    `gorm:"type:varchar(16);index;not null" json:"metric"`
-	Value     float64   `json:"value"`
-	Rating    string    `gorm:"type:varchar(16)" json:"rating"`
+	ID     uint    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Metric string  `gorm:"type:varchar(16);index;not null" json:"metric"`
+	Value  float64 `json:"value"`
+	// web-vitals v4 的 rating 枚举是 good / needs-improvement / poor，
+	// 其中 "needs-improvement" 是 17 字符 —— 原先的 varchar(16) 一遇到中等评分就撞
+	// SQLSTATE 22001，整个上报 500 且前端 .catch(()=>{}) 静默吞掉，性能数据永久丢失。
+	// 32 是按规范最长值留的余量。
+	Rating    string    `gorm:"type:varchar(32)" json:"rating"`
 	Page      string    `gorm:"type:varchar(300)" json:"page"`
 	SessionID string    `gorm:"type:varchar(64);index" json:"session_id"`
 	UserAgent string    `gorm:"type:varchar(300)" json:"user_agent"`

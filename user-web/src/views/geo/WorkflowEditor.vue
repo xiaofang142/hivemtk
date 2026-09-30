@@ -58,7 +58,10 @@
             <div class="step-body">
               <div class="step-title">
                 <el-tag v-if="stepMeta(step.type, 'kind') === 'control'" size="small" type="info" effect="plain" style="margin-right:6px">{{ stepMeta(step.type, 'label') }}</el-tag>
-                <el-tag v-else size="small" :type="stepMeta(step.type, 'color') || ''" effect="light" style="margin-right:6px">{{ stepMeta(step.type, 'label') }}</el-tag>
+                <!-- 兜底不能用空串：stepMeta 对 STEP_TYPES 之外的陈旧 step.type 返回 undefined，
+                     `undefined || ''` 会把空串传给 el-tag 的 type，触发 prop 校验告警并回落到
+                     default(primary)。合法集合为 primary/success/info/warning/danger，中性用 info。 -->
+                <el-tag v-else size="small" :type="stepMeta(step.type, 'color') || 'info'" effect="light" style="margin-right:6px">{{ stepMeta(step.type, 'label') }}</el-tag>
                 <el-input v-model="step.name" size="small" placeholder="步骤名称" style="width:200px" />
               </div>
               <div class="step-config">

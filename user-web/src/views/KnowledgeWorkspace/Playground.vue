@@ -83,7 +83,10 @@
               <span>检索结果</span>
               <div v-if="result" class="result-stats">
                 <el-tag size="small" type="info">命中 {{ result.total }} 条</el-tag>
-                <el-tag size="small" :type="result.from_cache ? 'success' : ''">
+                <!-- el-tag 的 type 合法值只有 primary/success/info/warning/danger。
+                     传空串会触发 "Invalid prop: validation failed for prop type" 告警，
+                     并回落到 default(primary) 显示成蓝色，与「未命中缓存」的中性语义不符。 -->
+                <el-tag size="small" :type="result.from_cache ? 'success' : 'info'">
                   {{ result.from_cache ? '命中缓存' : '未命中缓存' }}
                 </el-tag>
                 <el-tag size="small" type="warning">耗时 {{ result.latency_ms }} ms</el-tag>

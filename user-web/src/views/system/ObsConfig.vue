@@ -247,9 +247,11 @@ const domainPlaceholder = computed(() =>
   formData.provider === 'local' ? '/files' : '留空则使用 endpoint 访问'
 )
 
+// 'default' 不在 el-tag 的合法 type 里（primary/success/info/warning/danger），会触发 Vue prop
+// 校验告警并回落到 default='primary'。本地存储与未识别厂商用中性的 'info'。
 const getProviderType = (provider) => {
-  const types = { qiniu: 'warning', aliyun: 'primary', tencent: 'success', aws: 'info', local: 'default' }
-  return types[provider] || 'default'
+  const types = { qiniu: 'warning', aliyun: 'primary', tencent: 'success', aws: 'info', local: 'info' }
+  return types[provider] || 'info'
 }
 const getProviderLabel = (provider) => {
   const labels = { local: '本地存储', aliyun: '阿里云OSS', qiniu: '七牛云', tencent: '腾讯云COS', aws: 'AWS S3' }

@@ -107,7 +107,10 @@
               aria-label="选择号码文件"
               @change="handleFileChange"
             />
-            <el-button size="small" type="link" @click="handleBatchUpload">批量上传</el-button>
+            <!-- 链接态按钮要用独立的 link prop（见 components/AgentBindingDialog.vue:44 等既有写法），
+                 type 的合法值是 default/primary/success/warning/info/danger/text/空串，不含 link；
+                 写 type="link" 会触发 prop 校验告警并回落到 default，链接外观失效。 -->
+            <el-button link size="small" @click="handleBatchUpload">批量上传</el-button>
             <span class="tips-text">或从线索库选择</span>
           </div>
         </el-form-item>
