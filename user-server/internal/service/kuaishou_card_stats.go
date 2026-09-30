@@ -72,11 +72,27 @@ func (s *KuaishouCardStatsService) GetCardStats(ctx context.Context, req *dto.Ku
 		return nil, err
 	}
 
+	recentResults, err := s.repo.GetRecentActivitiesByCard(ctx, req.CardID, 10)
+	if err != nil {
+		return nil, err
+	}
+	recentActivity := make([]dto.Activity, 0, len(recentResults))
+	for _, r := range recentResults {
+		recentActivity = append(recentActivity, dto.Activity{
+			ID:        r.ID,
+			CardID:    r.CardID,
+			Action:    r.Action,
+			IPAddress: r.UserIP,
+			CreatedAt: r.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
 	response := &dto.KuaishouCardStatsResponse{
-		CardID:     card.ID,
-		CardTitle:  card.Title,
-		TotalViews: int(totalViews),
-		DailyStats: dailyStats,
+		CardID:         card.ID,
+		CardTitle:      card.Title,
+		TotalViews:     int(totalViews),
+		DailyStats:     dailyStats,
+		RecentActivity: recentActivity,
 	}
 
 	return response, nil

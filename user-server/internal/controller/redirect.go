@@ -199,12 +199,27 @@ func renderCardChatPage(ctx *gin.Context, gen cardChatPageGenerator, id uint, ba
 	ctx.String(http.StatusOK, html)
 }
 
+// extractCardID 从短链目标地址的 path 段里解析卡片 ID。
+//
+// 只能在 path 段里找。早先直接在整条 originalURL 上 strings.Replace(pathPrefix, "", 1)，
+// 会把前缀从 URL 中间挖掉：「https://h/douyin/card/60」→「https://h60」，
+// 紧接着 IndexAny(idStr, "?#/") 又从 https: 的第一个 '/' 截断成 "https:"，Sscanf 必失败。
+// 而短链 original_url 按铁律#24 必须是 https://，所以早先的实现对所有真实短链恒返回
+// (0, false) ⇒ redirect.go 里卡片分支永不命中 ⇒ renderCardChatPage 不执行 ⇒
+// 它的 onSuccess 回调里的 RecordActivity 永不触发 ⇒ 卡片浏览量永久不落库
+// （4 张 *_card_activities 表实测全 0 行，/api/douyin/stats/overall 的 recentActivity 恒 null）。
 func extractCardID(originalURL, pathPrefix string) (uint, bool) {
-	if !strings.Contains(originalURL, pathPrefix) {
+	u, err := url.Parse(originalURL)
+	if err != nil {
 		return 0, false
 	}
-	idStr := strings.Replace(originalURL, pathPrefix, "", 1)
-	if idx := strings.IndexAny(idStr, "?#/"); idx >= 0 {
+	// query/fragment 已由 url.Parse 拆走，这里只可能是相对路径（如 /douyin/card/60）
+	path := u.Path
+	if !strings.Contains(path, pathPrefix) {
+		return 0, false
+	}
+	idStr := strings.Replace(path, pathPrefix, "", 1)
+	if idx := strings.Index(idStr, "/"); idx >= 0 {
 		idStr = idStr[:idx]
 	}
 	var id uint

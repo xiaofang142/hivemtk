@@ -40,6 +40,11 @@ type KuaishouCardStatsRepository interface {
 	GetPopularCards(ctx context.Context, limit int) ([]model.KuaishouCard, error)
 	GetOverallDailyStats(ctx context.Context, startDate, endDate time.Time) ([]KuaishouCardStatsDailyResult, error)
 	GetRecentActivitiesWithJoin(ctx context.Context, limit int) ([]KuaishouRecentActivity, error)
+	// GetRecentActivitiesByCard 单卡维度的最近浏览记录。原先仓储只有不带 cardID 的
+	// GetRecentActivitiesWithJoin，导致 /api/kuaishou/stats/card/:id 拿不到该卡的
+	// 活动记录，前端 kuaishouCard/CardStats.vue 的「最近活动」表格恒空
+	// （抖音/小红书两仓都有同名方法，快手是漏实现）。
+	GetRecentActivitiesByCard(ctx context.Context, cardID uint, limit int) ([]KuaishouRecentActivity, error)
 	CreateActivity(ctx context.Context, activity *model.KuaishouCardActivity) error
 	SaveCard(ctx context.Context, card *model.KuaishouCard) error
 	IncrementViewCount(ctx context.Context, id uint) error
@@ -123,6 +128,18 @@ func (r *kuaishouCardStatsRepository) GetRecentActivitiesWithJoin(ctx context.Co
 		Select("kuaishou_card_activities.id, kuaishou_card_activities.card_id, kuaishou_cards.title as card_title, kuaishou_card_activities.activity_type as action, kuaishou_card_activities.ip_address as user_ip, kuaishou_card_activities.user_agent, kuaishou_card_activities.extra_data, kuaishou_card_activities.created_at").
 		Joins("LEFT JOIN kuaishou_cards ON kuaishou_card_activities.card_id = kuaishou_cards.id").
 		Where("kuaishou_card_activities.activity_type = ?", "view").
+		Order("kuaishou_card_activities.created_at DESC").
+		Limit(limit).
+		Scan(&results).Error
+	return results, err
+}
+
+func (r *kuaishouCardStatsRepository) GetRecentActivitiesByCard(ctx context.Context, cardID uint, limit int) ([]KuaishouRecentActivity, error) {
+	var results []KuaishouRecentActivity
+	err := r.db.WithContext(ctx).Table("kuaishou_card_activities").
+		Select("kuaishou_card_activities.id, kuaishou_card_activities.card_id, kuaishou_cards.title as card_title, kuaishou_card_activities.activity_type as action, kuaishou_card_activities.ip_address as user_ip, kuaishou_card_activities.user_agent, kuaishou_card_activities.extra_data, kuaishou_card_activities.created_at").
+		Joins("LEFT JOIN kuaishou_cards ON kuaishou_card_activities.card_id = kuaishou_cards.id").
+		Where("kuaishou_card_activities.card_id = ? AND kuaishou_card_activities.activity_type = ?", cardID, "view").
 		Order("kuaishou_card_activities.created_at DESC").
 		Limit(limit).
 		Scan(&results).Error
