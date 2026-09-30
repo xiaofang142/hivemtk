@@ -99,6 +99,17 @@ def analyze(dirs):
                     calls.append((mm.group(1), get_args(body, mm.end()), None))
                 for mm in re.finditer(r'\b(\w+)\.((?:Register|Mount)\w*)\s*\(', body):
                     calls.append((mm.group(2), get_args(body, mm.end()), mm.group(1)))
+                # 构造链式注册：controller.NewBadCaseController(svc).RegisterRoutes(auth)
+                # 上面两条正则都抓不到 —— 方法前是 `)` 而非标识符，于是 obj=None、
+                # callee='RegisterRoutes' 在 func_file 里查不到限定名 → 该控制器的
+                # RouterGroup 形参绑定永远缺失 → resolve() 走 `(pp or '') + prefix`
+                # 静默得到空前缀，产出 `/bad-cases`（缺 /api）这类错误路径。
+                # 这里按构造函数反推类型，给出限定名 callee。
+                for mm in re.finditer(
+                        r'\bNew(\w+)\s*\([^()]*\)\s*\.\s*((?:Register|Mount)\w*)\s*\(',
+                        body):
+                    calls.append((mm.group(1) + '.' + mm.group(2),
+                                  get_args(body, mm.end()), None))
                 # doReg/doRegAdmin 闭包直注册：doReg("GET","/path",...)
                 extra_routes = []
                 for mm in re.finditer(r'\bdoReg\w*\(\s*"(GET|POST|PUT|DELETE|PATCH)"\s*,\s*"([^"]*)"', body):
@@ -279,14 +290,41 @@ for _ in range(8):
 # 2) 方法调用 x.RegisterRoutes(y) 已并入上方 fixpoint（obj 分支）
 
 backend = {}
+# 2026-09-30 修复（幻影前缀）：同一路由字面量会被捕获两次 ——
+#   ① 函数级 scope：组变量绑定在本函数内，前缀可正确解析（如 admin := auth.Group("/llm") → /api/llm/xxx）；
+#   ② 文件级伪 scope（qual == '<file>'，body = 整份源码）：groups 由 dict 覆盖式收集，
+#      同名变量在同文件里被反复赋值时**最后一个胜出**。实测 service_routes.go 有 13 处
+#      admin := auth.Group(...)，其中 11 处前缀为空串，于是文件级把 admin 解析成 /api，
+#      产出 /api/scene-routing、/api/strategies、/api/models 这类**运行时不存在的幻影路由**
+#      （真实路由是 /api/llm/scene-routing 等）。幻影与真实路径共存会污染全量矩阵探测、
+#      并把真实路由误算进 BACKEND_NOT_CALLED 死接口清单。
+#   此处：先收集「函数级已成功解析」的 (文件, 方法, 字面量) 三元组，再跳过同文件的
+#   文件级重复捕获。文件级独有的注册（包级 init/r.GET 等）不受影响。
+_func_lit = set()
+for fkey, d in sc_info.items():
+    if fkey[1] == '<file>':
+        continue
+    for var, meth, path in d['routes']:
+        if meth == 'Any':
+            meth = 'GET'
+        if resolve(fkey, var) is not None:
+            _func_lit.add((fkey[0], meth, path))
+
+_skipped_phantom = 0
 for fkey, d in sc_info.items():
     for var, meth, path in d['routes']:
         if meth == 'Any':
             meth = 'GET'
+        if fkey[1] == '<file>' and (fkey[0], meth, path) in _func_lit:
+            _skipped_phantom += 1
+            continue
         full = resolve(fkey, var)
         if full is None:
             full = '<UNRESOLVED:%s>' % var
         backend[(meth, full + path)] = fkey
+
+if _skipped_phantom:
+    print("file-scope 幻影前缀重复捕获已剔除: %d 条" % _skipped_phantom)
 
 # 未解析项去重（2026-09-16）：同一路由会在两个 scope 中被捕获 ——
 #   ① 函数级 scope（如 RegisterRoutes(rg *gin.RouterGroup)）—— 能解析出前缀；
