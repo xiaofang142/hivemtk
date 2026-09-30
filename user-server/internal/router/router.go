@@ -638,6 +638,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupSecurityAuditRoutes(auth, gormDB)
 
+		setupSecurityRulesRoutes(auth, gormDB)
+
+		setupSupportMetricsRoutes(auth, gormDB)
+
 		setupBatchRoutes(auth)
 
 		setupAIContentRoutes(auth)

@@ -473,3 +473,18 @@ func setupSecurityAuditRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	admin.POST("/security/audit", ctrl.RunSecurityAudit)
 }
+
+// setupSecurityRulesRoutes 运营后台「安全规则配置」：敏感词过滤 / 输出内容护栏 / 数据脱敏。
+func setupSecurityRulesRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
+	rulesCtrl := controller.NewSecurityRulesController(service.NewSecurityRulesService(gormDB))
+	auth.GET("/security/rules", rulesCtrl.GetRules)
+
+	admin := auth.Group("", middleware.AdminAuthMiddleware())
+	admin.PUT("/security/rules", rulesCtrl.PutRules)
+}
+
+// setupSupportMetricsRoutes 运营后台「指标看板」：自助解决率 / 转人工率 / 会话轮次 / 知识库召回准确率。
+func setupSupportMetricsRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
+	metricsCtrl := controller.NewSupportMetricsController(service.NewSupportMetricsService(gormDB))
+	auth.GET("/metrics/support", metricsCtrl.GetSupportMetrics)
+}
