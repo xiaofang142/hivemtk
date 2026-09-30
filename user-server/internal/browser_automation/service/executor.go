@@ -79,6 +79,10 @@ type Executor struct {
 	brain          brainPlanner
 	feedback       *FeedbackService
 
+	// jevClient JEV 步决策客户端（nil=按环境变量即时构造；默认关闭，见 jev.go）。
+	// 测试经 SetJevClient 注入 fake server 指向的客户端。
+	jevClient *JevClient
+
 	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
 	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
 
@@ -163,6 +167,11 @@ func (e *Executor) SetCommandLogRepository(r repository.BrowserCommandLogReposit
 // 少接一行装配是可见的、可当天补的，一次双发是不可见、撤不回的。
 func (e *Executor) SetWriteClaimRepository(r repository.BrowserWriteClaimRepository) {
 	e.writeClaimRepo = r
+}
+
+// SetJevClient JEV 客户端注入（测试/未来 kv 接线用；nil=按环境变量即时构造）。
+func (e *Executor) SetJevClient(c *JevClient) {
+	e.jevClient = c
 }
 
 // appendCommandLog append-only 命令-事件日志（P8）。失败仅告警不阻断执行：
@@ -749,7 +758,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			session.ChromeTabID = tabID
 			_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 		}
-		snap, _, err := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
+		snap, pageURL, err := e.hand.snapshot(ctx, task.UserID, session.ChromeTabID)
 		if err != nil {
 			// tab 可能在 LLM 思考间隙被 SW 空闲回收/用户关闭：重开一次再 snapshot
 			logger.Warnf("[BrowserExec] brain snapshot 失败 session=%d tab=%d: %v，尝试重开 tab", session.ID, session.ChromeTabID, err)
@@ -761,7 +770,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			_ = e.sessionRepo.UpdateChromeTabID(ctx, session.ID, tabID)
 			cmdSeq++ // P2-1 自愈动作落审计
 			e.appendCommandLog(ctx, session.ID, task.ID, 0, cmdSeq, "event", "open_tab_recovery", map[string]any{"reason": "snapshot_failed", "new_tab": tabID}, 0, verdict(true))
-			if snap, _, err = e.hand.snapshot(ctx, task.UserID, session.ChromeTabID); err != nil {
+			if snap, pageURL, err = e.hand.snapshot(ctx, task.UserID, session.ChromeTabID); err != nil {
 				return success, failed, "snapshot 失败: " + err.Error()
 			}
 		}
@@ -772,9 +781,13 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			histView = append([]string{hdr}, history...)
 		}
 		st := &reflectState{History: histView, PrevEvaluation: prevEvaluation, Memory: memory}
-		stepsJSON, done, err := e.brain.GeneratePlanReflect(ctx, task.ID, session.ID, task.BrainGoal, taskPlatformID(task), snap, st)
+		// JEV 优先、Brain 回退（设计步骤四 §2：planRound 内决策；JEV 未启用/失败即原路径）。
+		stepsJSON, done, terminal, planTokens, err := e.planRound(ctx, task, session, snap, pageURL, st, history, &cmdSeq)
+		if terminal != "" {
+			return success, failed, terminal
+		}
 		prevEvaluation, memory = st.PrevEvaluation, st.Memory
-		tokenUsed += e.brain.LastPlanTokens() // P1-1 session 级 token 计量
+		tokenUsed += planTokens // P1-1 session 级 token 计量（JEV 轮为 0）
 		if tokenUsed > tokenBudget {
 			return success, failed, "Token 预算耗尽（" + itoa(tokenUsed) + " > " + itoa(tokenBudget) + "）"
 		}
