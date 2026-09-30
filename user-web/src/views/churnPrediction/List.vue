@@ -185,50 +185,56 @@
     </el-dialog>
 
     
-    <el-dialog v-model="detailVisible" title="用户流失风险详情" width="700px" v-loading="detailLoading">
-      <template v-if="currentUser">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="用户ID">{{ currentUser.user_id }}</el-descriptions-item>
-          <el-descriptions-item label="风险等级">
-            <el-tag :type="getRiskLevelType(currentUser.churn_risk)">{{ currentUser.churn_risk }}</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="最后活跃">{{ currentUser.last_activity_at }}</el-descriptions-item>
-          <el-descriptions-item label="预测时间">{{ currentUser.predicted_at }}</el-descriptions-item>
-        </el-descriptions>
+    <!-- v-loading 不能直接挂在 el-dialog 上：el-dialog 走 teleport 渲染、根节点不是单个
+         元素，Vue 会打 "Runtime directive used on component with non-element root node.
+         The directives will not function as intended."，指令也实际不生效。挂到弹窗体内
+         的普通 div 上才是 Element Plus 的正确用法。 -->
+    <el-dialog v-model="detailVisible" title="用户流失风险详情" width="700px">
+      <div v-loading="detailLoading" style="min-height: 80px">
+        <template v-if="currentUser">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="用户ID">{{ currentUser.user_id }}</el-descriptions-item>
+            <el-descriptions-item label="风险等级">
+              <el-tag :type="getRiskLevelType(currentUser.churn_risk)">{{ currentUser.churn_risk }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="最后活跃">{{ currentUser.last_activity_at }}</el-descriptions-item>
+            <el-descriptions-item label="预测时间">{{ currentUser.predicted_at }}</el-descriptions-item>
+          </el-descriptions>
 
-        <el-divider content-position="left">风险评分</el-divider>
-        <div style="padding: 0 20px">
-          <el-progress
-            :percentage="Math.round(currentUser.churn_score || 0)"
-            :color="getRiskColor(currentUser.churn_score)"
-            :stroke-width="20"
+          <el-divider content-position="left">风险评分</el-divider>
+          <div style="padding: 0 20px">
+            <el-progress
+              :percentage="Math.round(currentUser.churn_score || 0)"
+              :color="getRiskColor(currentUser.churn_score)"
+              :stroke-width="20"
+            />
+          </div>
+
+          <el-divider content-position="left">流失原因分析</el-divider>
+          <el-alert
+            v-if="currentUser.risk_factors"
+            :title="currentUser.risk_factors"
+            type="warning"
+            :closable="false"
+            show-icon
           />
-        </div>
 
-        <el-divider content-position="left">流失原因分析</el-divider>
-        <el-alert
-          v-if="currentUser.risk_factors"
-          :title="currentUser.risk_factors"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
-
-        <template v-if="currentUser.riskFactors && currentUser.riskFactors.length">
-          <el-divider content-position="left">风险因素</el-divider>
-          <el-table :data="currentUser.riskFactors" border size="small">
-            <el-table-column prop="factor" label="因素" min-width="180" />
-            <el-table-column prop="impact" label="影响程度" width="120">
-              <template #default="{ row: r }">
-                <el-tag :type="r.impact === '高' ? 'danger' : r.impact === '中' ? 'warning' : 'info'" size="small">
-                  {{ r.impact }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
-          </el-table>
+          <template v-if="currentUser.riskFactors && currentUser.riskFactors.length">
+            <el-divider content-position="left">风险因素</el-divider>
+            <el-table :data="currentUser.riskFactors" border size="small">
+              <el-table-column prop="factor" label="因素" min-width="180" />
+              <el-table-column prop="impact" label="影响程度" width="120">
+                <template #default="{ row: r }">
+                  <el-tag :type="r.impact === '高' ? 'danger' : r.impact === '中' ? 'warning' : 'info'" size="small">
+                    {{ r.impact }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
+            </el-table>
+          </template>
         </template>
-      </template>
+      </div>
     </el-dialog>
   </div>
 </template>

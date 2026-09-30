@@ -252,7 +252,12 @@ function statusTagType(status) {
   if (status === 'running') return 'success'
   if (status === 'paused') return 'warning'
   if (status === 'completed') return 'info'
-  return ''
+  // el-tag 的 type 合法值只有 primary/success/info/warning/danger（element-plus
+  // tag/src/tag.mjs:11-22），空串不在其中：传 '' 会打
+  // "Invalid prop: validation failed for prop type" 并回落到 default(primary)，
+  // 显示成蓝色（实测 draft 行每行一条告警，本页累计 20+ 条）。
+  // draft 等中性状态统一用 'info'，与本文件 completed 分支及仓库其它映射表一致。
+  return 'info'
 }
 function statusLabel(status) {
   if (status === 'running') return t('ab.statusRunning')
