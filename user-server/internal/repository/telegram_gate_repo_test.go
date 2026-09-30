@@ -1,10 +1,14 @@
 // ListStalledRestricted 的取数口径（补偿循环的唯一入口，SQL 在仓储、策略在 service）。
 //
-// 两类条件各拦一种线上故障：
+// 三类条件各拦一种线上故障：
 //   - welcome_sent_at IS NULL：提示从未送达才需要补；已送达的人由 SweepExpired 按到期
 //     口径处置。旧版把"临近到期"当"提示没送达"的代理，于是每个 TTL 给同一个人重播一次
 //     入群提示，重播还顺手把 expires_at 顶回去（实测一名成员一天 60+ 条）。
 //   - 窗口没到期（expires_at 为空视作待补）：窗口走完就不再补，避免与到期处置抢同一个人。
+//   - 请求内路径不再握着这一行（idleBefore 之前没再写过，或已留下一笔失败尝试的痕迹）：
+//     入群请求从写台账到收尾之间夹两次 TG 往返，那段时间这一行同样"从未送达 + 窗口开着"，
+//     补偿循环照单捞取就会对同一个人再禁言 + 再播报一次。取数口径见
+//     TestTelegramMember_ListStalledRestrictedIdleWindow。
 package repository
 
 import (
@@ -50,7 +54,11 @@ func TestTelegramMember_ListStalledRestricted(t *testing.T) {
 		}
 	}
 
-	got, err := repo.ListStalledRestricted(ctx, now, 0)
+	// idleBefore 取"未来"：本矩阵只判送达/窗口/状态这几列的取数口径，"请求内路径是否
+	// 还握着这一行"那一条另有专门用例（TestTelegramMember_ListStalledRestrictedIdleWindow），
+	// 在这里放宽它才不会把矩阵的命中数变成窗口计时的函数。
+	idleAlways := now.Add(time.Hour)
+	got, err := repo.ListStalledRestricted(ctx, now, idleAlways, 0)
 	if err != nil {
 		t.Fatalf("查询失败: %v", err)
 	}
@@ -63,7 +71,7 @@ func TestTelegramMember_ListStalledRestricted(t *testing.T) {
 	}
 
 	// limit 生效
-	limited, err := repo.ListStalledRestricted(ctx, now, 1)
+	limited, err := repo.ListStalledRestricted(ctx, now, idleAlways, 1)
 	if err != nil {
 		t.Fatalf("limit 查询失败: %v", err)
 	}
@@ -77,7 +85,7 @@ func TestTelegramMember_ListStalledRestricted(t *testing.T) {
 		Update("welcome_sent_at", now).Error; err != nil {
 		t.Fatalf("补记送达状态失败: %v", err)
 	}
-	empty, err := repo.ListStalledRestricted(ctx, now.Add(-time.Hour), 0)
+	empty, err := repo.ListStalledRestricted(ctx, now.Add(-time.Hour), idleAlways, 0)
 	if err != nil {
 		t.Fatalf("空结果查询失败: %v", err)
 	}
@@ -274,13 +282,17 @@ func TestTelegramMember_ClaimStalledResend(t *testing.T) {
 		t.Fatalf("到上限后认领必须失败, ok=%v err=%v", ok, err)
 	}
 
-	// 已送达的行认领失败
+	// 已送达的行认领失败。计数要一并回到上限以下：上一段已经把它顶到 3，
+	// 留着"未达上限"那道谓词一起拦，这一腿就量不出"未送达"那道谓词有没有牙。
 	now := time.Now()
 	if err := db.Model(&model.TelegramGroupMember{}).Where("id = ?", seed.ID).
-		Update("welcome_sent_at", now).Error; err != nil {
+		Updates(map[string]any{"welcome_sent_at": now, "welcome_resends": 0}).Error; err != nil {
 		t.Fatalf("补记送达失败: %v", err)
 	}
-	if ok, err := repo.ClaimStalledResend(ctx, seed.ID, 3, 3); err != nil || ok {
+	if got := rereadMember(t, db, 9, "c9", "u9"); got.WelcomeSentAt == nil || got.WelcomeResends != 0 {
+		t.Fatalf("夹具前置未成立（送达位已置且计数低于上限）: sent=%v resends=%d", got.WelcomeSentAt, got.WelcomeResends)
+	}
+	if ok, err := repo.ClaimStalledResend(ctx, seed.ID, 0, 3); err != nil || ok {
 		t.Fatalf("已送达行的认领必须失败, ok=%v err=%v", ok, err)
 	}
 }

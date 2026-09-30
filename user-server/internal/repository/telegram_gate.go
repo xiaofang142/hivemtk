@@ -203,21 +203,37 @@ func (r *TelegramGroupMemberRepository) ListExpired(ctx context.Context, now tim
 }
 
 // ListStalledRestricted 找出需要补偿循环补发入群提示的成员：
-// 禁言中、未验证、welcome_sent_at 为空（提示从未送达）、且验证窗口还没到期。
+// 禁言中、未验证、welcome_sent_at 为空（提示从未送达）、验证窗口还没到期，
+// 并且这一行当前没有正被入群请求内路径处理（idleBefore 之前就没再被写过，
+// 或者已经留下一次失败尝试的痕迹）。
 //
-// 两列各拦一种线上故障：
+// 三组条件各拦一种线上故障：
 //   - welcome_sent_at IS NULL 是必要条件。已送达提示的人该由 SweepExpired 按到期口径
 //     处置，把他捞进来就会一遍遍给他续期，TTL 形同虚设——"同一名成员一天被重播 60+ 次
 //     入群提示"就是这么来的（旧版用"临近到期"当提示没送达的代理，两个信号根本无关）。
 //   - expires_at 还没到期（没有窗口视为待补，人工/迁移留下的行不该被静默漏掉）。窗口一旦
 //     走完就交给 SweepExpired：他按"从未送达不处置"放过，补偿循环不再空转。
+//   - 这一行不在请求内路径手里。HandleNewMembers 从写台账到收尾（登记送达或计一次失败）
+//     之间要夹两次 TG 往返（实测 8–10 秒，受渠道层超时约束上界到分钟级），这段时间里这一行
+//     恰好也满足"从未送达 + 窗口开着"，补偿循环跳进去就是给同一个人第二次禁言 + 第二次
+//     播报（线上实测同一次入群收到三条提示）。归属信号是 updated_at：写台账（Upsert 覆盖列）
+//     与每一次尝试的收尾（失败计数、认领、送达登记）都会把它顶到现在，所以
+//     "updated_at 早于 idleBefore"＝这一行已经没人管了，可以补。
+//     welcome_resends > 0 单独放行：计数 +1 是请求内路径在这一行上的最后一笔写入，
+//     看见它就等于看见"这次尝试已经失败并交棒了"，补偿该立刻接手——否则安静窗口比
+//     verify_ttl_min 还长的那些群会整批丢掉补偿能力。
+//     这条是**延迟**判据而不是"年轻就永久跳过"：只要一直没人登记送达，跨过窗口就补；
+//     updated_at 为 NULL（手工/迁移写入的行）一律视为早已安静，照补。
 //
-// 补发次数的上限属于 service 的策略，不下沉到这条查询里。
-func (r *TelegramGroupMemberRepository) ListStalledRestricted(ctx context.Context, now time.Time, limit int) ([]*model.TelegramGroupMember, error) {
+// 安静窗口取多长由调用方算成 idleBefore 传进来。补发次数的上限不在这一条 SQL 上执行：
+// 它在 ClaimStalledResend 的认领谓词里（读到写之间的竞态只有落库那一侧拦得住），
+// service 侧的预检只是省一次注定失败的认领。
+func (r *TelegramGroupMemberRepository) ListStalledRestricted(ctx context.Context, now, idleBefore time.Time, limit int) ([]*model.TelegramGroupMember, error) {
 	var members []*model.TelegramGroupMember
 	q := r.db.WithContext(ctx).Where(
-		"join_status = ? AND authorized = ? AND welcome_sent_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
-		model.TGMemberRestricted, false, now)
+		"join_status = ? AND authorized = ? AND welcome_sent_at IS NULL AND (expires_at IS NULL OR expires_at > ?)"+
+			" AND (welcome_resends > 0 OR updated_at IS NULL OR updated_at <= ?)",
+		model.TGMemberRestricted, false, now, idleBefore)
 	if limit > 0 {
 		q = q.Limit(limit)
 	}

@@ -700,6 +700,21 @@ func (s *TelegramGateService) AuthorizeMemberByID(ctx context.Context, memberID 
 // 对这种成员每分钟重发一次只会把群刷屏（线上实测 6 名成员被重播 219 条）。
 const tgGateWelcomeResendMax = 3
 
+// tgGateInFlightQuiet 一行台账"可能还正被入群请求内路径握着"的时长上界。
+//
+// 这条窗口守的不变量：同一次入群只许播报一次。请求内路径（HandleNewMembers）在
+// 写台账与本次尝试的收尾写入之间夹两次 TG 往返，那段时间里这一行同样满足
+// "从未送达 + 窗口开着"，补偿循环如果照单捞取，就会对同一个人再禁言一次、再播报
+// 一次（线上实测第 2、3 条提示即由此而来，两次 restrict 相隔 8 秒）。
+//
+// 上界怎么来的：这一行上的最长串是"禁言 + 提示"两次渠道层调用，单次受
+// core.DefaultHTTPTimeout=30s 约束 ⇒ 60s；实测 8–10s。取两个清扫节拍（2 分钟）
+// 既盖住上界也留出余量。
+//
+// 这条只延后补发、不取消补发：请求内路径真的发失败时那一行会留下 welcome_resends>0
+// 的痕迹，补偿循环当轮就接手（见 ListStalledRestricted 的归属判据）。
+const tgGateInFlightQuiet = 2 * gateSweeperInterval
+
 // RecoverStalled 入群响应补偿循环（可靠性的最后兜底）。
 //
 // HandleNewMembers 在 webhook 请求内同步执行，TG API 网络抖动可能让禁言或
@@ -711,7 +726,9 @@ const tgGateWelcomeResendMax = 3
 // 计时也不再被顶回去（历史上"临近到期"被当成"提示没送达"，每个 TTL 给同一个人重播
 // 一次群消息，且重播顺手把 expires_at 顶回去，TTL 清理对这个人永不触发）。
 //
-// 进来的人两条路：
+// 进来的人三条路：
+//   - 请求内路径还握着这一行（刚写台账、还没留下任何尝试收尾）：本轮不碰，等它收尾
+//     或跨过 tgGateInFlightQuiet 再说——这一条就是"同一次入群播报三次"的刹车；
 //   - 补发未到上限：补禁言 + 补发，成功登记送达并把计时改为"送达时刻 + TTL"（验证窗口
 //     从他真被告知那刻起算），失败计一次补发数；
 //   - 已到上限：只停手，让 expires_at 自然到期，由清扫器按"从未送达"不对他处置。
@@ -721,9 +738,10 @@ func (s *TelegramGateService) RecoverStalled(ctx context.Context, limit int) {
 	if !s.wired() {
 		return
 	}
-	// 窗口还开着的人才是补偿对象：窗口已经走完的交给 SweepExpired 的到期口径，
-	// 不要在这里再走一遍"发不出去就计数"的空转。
-	stalled, err := s.memberRepo.ListStalledRestricted(ctx, time.Now(), limit)
+	// 窗口还开着、且请求内路径已经不在这一行上的人才是补偿对象：窗口已经走完的交给
+	// SweepExpired 的到期口径，正被请求内路径处理的留给它自己收尾，别抢同一个人。
+	now := time.Now()
+	stalled, err := s.memberRepo.ListStalledRestricted(ctx, now, now.Add(-tgGateInFlightQuiet), limit)
 	if err != nil || len(stalled) == 0 {
 		return
 	}
