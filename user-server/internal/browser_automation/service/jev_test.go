@@ -3,11 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/browser_automation/model"
 )
 
@@ -129,24 +128,52 @@ func TestDecisionToSteps(t *testing.T) {
 	}
 }
 
-// jevFakeServer 具名 canned 答案的 fake System-One。
-func jevFakeServer(t *testing.T, answers map[string]jevChoiceRecord, status int) *httptest.Server {
+// fakeJevDispatcher jevDispatcher 替身：脚本化 choice JSON（经统一调度口径，不打真 LLM）。
+type fakeJevDispatcher struct {
+	content string // DispatchStructured  unmarshalled 进 schema 的 JSON
+	usage   llm.TokenUsage
+	err     error
+	calls   int
+	lastReq llm.DispatchRequest
+}
+
+func (f *fakeJevDispatcher) DispatchStructured(ctx context.Context, req llm.DispatchRequest, schema any) (*llm.DispatchResult, error) {
+	f.calls++
+	f.lastReq = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	if err := json.Unmarshal([]byte(f.content), schema); err != nil {
+		return nil, err
+	}
+	return &llm.DispatchResult{Provider: "fake", Model: "fake-m", Usage: f.usage}, nil
+}
+
+// jevAnswersJSON 组装同体 choice 响应 JSON。
+func jevAnswersJSON(t *testing.T, op jevChoiceRecord, target jevChoiceRecord) string {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("JEV 应为 POST，got %s", r.Method)
-		}
-		if status != 0 {
-			w.WriteHeader(status)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
-	}))
+	m := map[string]jevChoiceRecord{"operation": op}
+	if target.Choice != "" || len(target.Probabilities) > 0 {
+		m["click_target"] = target
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func jevClickOp() jevChoiceRecord {
+	return jevChoiceRecord{Choice: "CLICK", Probabilities: map[string]float64{"CLICK": 0.8, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.05, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}, Confidence: 0.8}
+}
+
+func jevClickTarget() jevChoiceRecord {
+	return jevChoiceRecord{Choice: "@e1", Probabilities: map[string]float64{"@e1": 0.6, "@e2": 0.3, "@e4": 0.1}, Confidence: 0.6}
 }
 
 func TestPlanRoundBrainFallbackWhenDisabled(t *testing.T) {
 	fb := &fakeBrain{stepsJSON: []byte(`[{"action":"click","target":"@e1"}]`), tokens: 123}
-	e := &Executor{brain: fb, jevClient: NewJevClientWithConfig(JevConfig{Enabled: false}, nil)}
+	e := &Executor{brain: fb, jevClient: NewJevClientWithConfig(JevConfig{Enabled: false}, &fakeJevDispatcher{})}
 	task, session := testTaskSession()
 	seq := 0
 	st := &reflectState{}
@@ -163,25 +190,30 @@ func TestPlanRoundBrainFallbackWhenDisabled(t *testing.T) {
 }
 
 func TestPlanRoundJevClick(t *testing.T) {
-	srv := jevFakeServer(t, map[string]jevChoiceRecord{
-		"operation":    {Choice: "CLICK", Probabilities: map[string]float64{"CLICK": 0.8, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.05, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}, Confidence: 0.8},
-		"click_target": {Choice: "@e1", Probabilities: map[string]float64{"@e1": 0.6, "@e2": 0.3, "@e4": 0.1}, Confidence: 0.6},
-	}, 0)
-	defer srv.Close()
+	fd := &fakeJevDispatcher{
+		content: jevAnswersJSON(t, jevClickOp(), jevClickTarget()),
+		usage:   llm.TokenUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+	}
 	fb := &fakeBrain{stepsJSON: []byte(`[]`)}
 	e := &Executor{brain: fb}
-	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true, Endpoint: srv.URL, APIKey: "k", Model: "m"}, nil))
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
 	steps, done, terminal, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
 	if err != nil || done || terminal != "" {
 		t.Fatalf("JEV CLICK 应产单步，got err=%v done=%v terminal=%q", err, done, terminal)
 	}
-	if tokens != 0 {
-		t.Fatalf("JEV 轮 token 应为 0，got %d", tokens)
+	if tokens != 15 {
+		t.Fatalf("JEV 轮 token 应为实计（15），got %d", tokens)
 	}
 	if fb.calls != 0 {
 		t.Fatal("JEV 成功时不应调 Brain")
+	}
+	if fd.calls != 1 {
+		t.Fatalf("应恰调一次调度，got %d", fd.calls)
+	}
+	if fd.lastReq.Scenario != llm.ScenarioJevChoice {
+		t.Fatalf("应走 jev_choice scenario，got %q", fd.lastReq.Scenario)
 	}
 	if !strings.Contains(string(steps), `"action":"click"`) || !strings.Contains(string(steps), "@e1") {
 		t.Fatalf("CLICK 应映射为 click @e1，got %s", string(steps))
@@ -190,14 +222,11 @@ func TestPlanRoundJevClick(t *testing.T) {
 
 func TestPlanRoundJevInvalidFallsBack(t *testing.T) {
 	// click_target 概率和偏离 1 → 非法 → 回退 Brain。
-	srv := jevFakeServer(t, map[string]jevChoiceRecord{
-		"operation":    {Choice: "CLICK", Probabilities: map[string]float64{"CLICK": 0.8, "SCROLL_DOWN": 0.05, "SCROLL_UP": 0.05, "WAIT": 0.03, "DONE": 0.04, "BLOCKED": 0.03}},
-		"click_target": {Choice: "@e1", Probabilities: map[string]float64{"@e1": 0.5, "@e2": 0.3, "@e4": 0.1}},
-	}, 0)
-	defer srv.Close()
+	fd := &fakeJevDispatcher{content: jevAnswersJSON(t, jevClickOp(),
+		jevChoiceRecord{Choice: "@e1", Probabilities: map[string]float64{"@e1": 0.5, "@e2": 0.3, "@e4": 0.1}})}
 	fb := &fakeBrain{stepsJSON: []byte(`[{"action":"wait"}]`), tokens: 9}
 	e := &Executor{brain: fb}
-	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true, Endpoint: srv.URL, APIKey: "k", Model: "m"}, nil))
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
 	steps, _, _, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
@@ -210,20 +239,19 @@ func TestPlanRoundJevInvalidFallsBack(t *testing.T) {
 }
 
 func TestPlanRoundJevBlockedAndDone(t *testing.T) {
-	mkOp := func(choice string) *httptest.Server {
+	mkOp := func(choice string) *fakeJevDispatcher {
 		probs := map[string]float64{}
 		for _, id := range jevOpIDs() {
 			probs[id] = 0.0
 		}
 		probs[choice] = 1.0
-		return jevFakeServer(t, map[string]jevChoiceRecord{"operation": {Choice: choice, Probabilities: probs}}, 0)
+		return &fakeJevDispatcher{content: jevAnswersJSON(t, jevChoiceRecord{Choice: choice, Probabilities: probs}, jevChoiceRecord{})}
 	}
 	// BLOCKED
-	srv := mkOp("BLOCKED")
-	defer srv.Close()
+	fd := mkOp("BLOCKED")
 	fb := &fakeBrain{}
 	e := &Executor{brain: fb}
-	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true, Endpoint: srv.URL, APIKey: "k", Model: "m"}, nil))
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
 	task, session := testTaskSession()
 	seq := 0
 	if _, _, terminal, _, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq); err != nil || terminal == "" {
@@ -233,9 +261,8 @@ func TestPlanRoundJevBlockedAndDone(t *testing.T) {
 		t.Fatal("BLOCKED 不应再调 Brain")
 	}
 	// DONE
-	srv2 := mkOp("DONE")
-	defer srv2.Close()
-	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true, Endpoint: srv2.URL, APIKey: "k", Model: "m"}, nil))
+	fd2 := mkOp("DONE")
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd2))
 	seq = 0
 	if _, done, terminal, _, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq); err != nil || !done || terminal != "" {
 		t.Fatalf("DONE 应 done=true，got done=%v terminal=%q err=%v", done, terminal, err)
@@ -244,12 +271,34 @@ func TestPlanRoundJevBlockedAndDone(t *testing.T) {
 
 func TestLoadJevConfigDisabledByDefault(t *testing.T) {
 	t.Setenv("BROWSER_JEV_ENABLED", "")
-	t.Setenv("BROWSER_JEV_API_KEY", "")
+	t.Setenv("BROWSER_JEV_ENDPOINT", "")
 	if c := NewJevClientFromEnv(); c.Ready() {
 		t.Fatal("默认（无 env）JEV 必须关闭")
 	}
+	// v1.1：启用不再要求 key（统一调度下本地网关免 key）；无可用 provider 时
+	// 调度报错 → planRound 回退 Brain（fail-closed 在调度层，不在配置层）。
 	t.Setenv("BROWSER_JEV_ENABLED", "1")
-	if c := NewJevClientFromEnv(); c.Ready() {
-		t.Fatal("有开关无 key 仍必须关闭（fail-closed）")
+	if c := NewJevClientFromEnv(); !c.Ready() {
+		t.Fatal("BROWSER_JEV_ENABLED=1 应 Ready（key 不再是启用条件）")
+	}
+}
+
+func TestPlanRoundJevDispatchErrorFallsBack(t *testing.T) {
+	// 调度层无可用 provider（报错）→ 回退 Brain，不抛错。
+	fd := &fakeJevDispatcher{err: context.DeadlineExceeded}
+	fb := &fakeBrain{stepsJSON: []byte(`[{"action":"wait"}]`), tokens: 9}
+	e := &Executor{brain: fb}
+	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd))
+	task, session := testTaskSession()
+	seq := 0
+	steps, _, _, tokens, err := e.planRound(context.Background(), task, session, jevTestSnap, "https://x.test/", &reflectState{}, nil, &seq)
+	if err != nil {
+		t.Fatalf("调度失败应回退 Brain 而非报错，got %v", err)
+	}
+	if fb.calls != 1 || tokens != 9 || string(steps) != string(fb.stepsJSON) {
+		t.Fatalf("应回退 Brain（调度 1 次重试 + Brain），got fb.calls=%d tokens=%d steps=%s fd.calls=%d", fb.calls, tokens, string(steps), fd.calls)
+	}
+	if fd.calls != 2 {
+		t.Fatalf("可重试错误应调调度 2 次（含 1 次重试），got %d", fd.calls)
 	}
 }

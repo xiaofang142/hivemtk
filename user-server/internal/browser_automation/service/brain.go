@@ -132,6 +132,25 @@ func (s *BrainService) recordAuxPlan(ctx context.Context, taskID, sessionID uint
 	}
 }
 
+// recordJevPlan JEV choice 消耗落库（kind=jev_choice，与 plan/judge/summary 同表成成本账）。
+// 刻意不碰 lastAuxTokens：执行器用 LastAuxTokens 累 judge/summary 预算，
+// JEV tokens 由 planRound 返回值走独立口径（见 Chunk 3 分账），互不污染。
+func (s *BrainService) recordJevPlan(ctx context.Context, taskID, sessionID uint, goal, outcome string, tokens int) {
+	row := &model.BrowserLLMPlan{
+		TaskID:    taskID,
+		SessionID: sessionID,
+		Kind:      "jev_choice",
+		Goal:      goal,
+		Steps:     datatypes.JSON([]byte(`[]`)),
+		Reasoning: truncateRunes(outcome, 2048, "…"),
+		Model:     "jev_choice",
+		TokenIn:   tokens,
+	}
+	if err := s.planRepo.Create(ctx, row); err != nil {
+		logger.Errorf("[BrowserBrain] jev_choice 落库失败 task=%d: %v", taskID, err)
+	}
+}
+
 // plan 核心：模板工厂拼 prompt → LLM → 落库。
 // 重试分类（P0-3）：可重试错误（429/5xx/网络/超时）按退避重试；不可重试（401/403 鉴权类）立即快败。
 func (s *BrainService) plan(ctx context.Context, taskID, sessionID uint, goal, platformID, snapshot string, st *reflectState, extraSuffix string) (stepsJSON []byte, done bool, err error) {
