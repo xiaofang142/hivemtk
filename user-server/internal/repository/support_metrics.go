@@ -60,7 +60,7 @@ func (r *supportMetricsRepo) QuerySupportMetrics(ctx context.Context, start, end
 		Select(`
 			COUNT(*) AS total,
 			COALESCE(SUM(CASE WHEN handoff_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS handoff,
-			COALESCE(SUM(CASE WHEN resolved_at IS NOT NULL AND handoff_at IS NULL THEN 1 ELSE 0 END), 0) AS self_service,
+			COALESCE(SUM(CASE WHEN handoff_at IS NULL AND (resolved_at IS NOT NULL OR status IN ('resolved','closed')) THEN 1 ELSE 0 END), 0) AS self_service,
 			COALESCE(SUM(message_count), 0) AS message_sum`).
 		Where("created_at >= ? AND created_at < ?", start, end).
 		Scan(&agg).Error
