@@ -43,6 +43,12 @@ export default [
     component: () => import('@/views/geo/CompetitorManage.vue'),
     meta: { title: '竞品管理', group: 'config', icon: 'Users', order: 6, requiresAuth: true }
   },
+  {
+    path: '/geo-tools/config',
+    name: 'GeoConfigOptimizer',
+    component: () => import('@/views/geo/ConfigOptimizer.vue'),
+    meta: { title: '配置优化', group: 'config', icon: 'Setting', order: 7, requiresAuth: true }
+  },
 
   // ────────────────────────────────────────────────────
   // Layer 2: 执行 (group: 'execute')
