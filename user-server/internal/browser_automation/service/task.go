@@ -22,6 +22,8 @@ type TaskService struct {
 	executor    *Executor
 	// triggerRemover 由装配处注入（CronService）：nil = 本进程没有定时触发器面（测试装配常见）。
 	triggerRemover TriggerRemover
+	// profileHealthRepo 主 Profile 健康仓储（熔断门/人工恢复）：nil = 熔断面关闭（测试装配常见）。
+	profileHealthRepo repository.BrowserProfileHealthRepository
 }
 
 // TriggerRemover 宿主任务生命周期变化时回收其定时触发器。
@@ -33,6 +35,11 @@ type TriggerRemover interface {
 }
 
 func (s *TaskService) SetTriggerRemover(r TriggerRemover) { s.triggerRemover = r }
+
+// SetProfileHealthRepo 主 Profile 熔断面注入：nil = 熔断门关闭（测试装配常见）。
+func (s *TaskService) SetProfileHealthRepo(r repository.BrowserProfileHealthRepository) {
+	s.profileHealthRepo = r
+}
 
 // removeTriggers 回收失败不改写本次结论：任务已经删掉/改完了，此时回 500 只会让人
 // 以为操作没发生而反复点。失败记进日志（列表侧也有「宿主已不可执行」的可见面兜底）。
@@ -453,6 +460,15 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 		return nil, err
 	}
 
+	// 主 Profile 熔断门：同平台被封后新任务拒绝，需人工恢复（单 Profile 无他号可换，
+	// 熔断行由 Executor.detectBlockedIfFatal 命中时经 recordProfileBlocked 写入）。
+	if s.profileHealthRepo != nil {
+		platform := taskPlatformID(t)
+		if h, err := s.profileHealthRepo.GetByPlatform(ctx, platform); err == nil && h != nil && h.Blocked {
+			return nil, stateConflict("主 Profile 在 %s 被拦截（%s），已熔断暂停，需人工恢复后重试", platform, h.Reason)
+		}
+	}
+
 	// 解析 steps
 	steps, err := ParseSteps(t.Steps)
 	if err != nil {
@@ -488,6 +504,15 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 		s.executor.ExecuteSession(execCtx, t, session, steps)
 	})
 	return session, nil
+}
+
+// RecoverProfile 人工恢复：清指定平台的主 Profile 熔断标记（行保留作审计）。
+// 仓储未装配时拒绝，避免"恢复成功"的假象。
+func (s *TaskService) RecoverProfile(ctx context.Context, platform string) error {
+	if s.profileHealthRepo == nil {
+		return errors.New("profile 健康仓储未装配，无法恢复")
+	}
+	return s.profileHealthRepo.MarkRecovered(ctx, platform)
 }
 
 // MarshalSteps 编排步骤数组落库前序列化

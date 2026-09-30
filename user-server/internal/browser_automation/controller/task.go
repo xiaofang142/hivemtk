@@ -350,3 +350,20 @@ func (c *TaskController) SetDependency(ctx *gin.Context) {
 	}
 	response.Success(ctx, nil, "依赖已更新")
 }
+
+// RecoverProfile POST /browser-automation/admin/profile/recover（管理端人工恢复，主 Profile 熔断清标记）
+// Chunk2：封号熔断的人工出口。平台名必填；行不存在时仓储层幂等（Update 零行不报错）。
+func (c *TaskController) RecoverProfile(ctx *gin.Context) {
+	var req struct {
+		Platform string `json:"platform" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		bindErrToResponse(ctx, err, &req)
+		return
+	}
+	if err := c.svc.RecoverProfile(ctx.Request.Context(), req.Platform); err != nil {
+		taskErrToResponse(ctx, err)
+		return
+	}
+	response.Success(ctx, gin.H{"platform": req.Platform}, "熔断标记已清除")
+}

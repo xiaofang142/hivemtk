@@ -32,6 +32,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	cmdLogRepo := barepo.NewBrowserCommandLogRepositoryWithDB(gormDB)
 	digestRepo := barepo.NewBrowserAuditDigestRepositoryWithDB(gormDB)
 	writeClaimRepo := barepo.NewBrowserWriteClaimRepositoryWithDB(gormDB)
+	profileHealthRepo := barepo.NewBrowserProfileHealthRepositoryWithDB(gormDB)
 	kvRepo := hrepo.NewSystemConfigKVRepository()
 
 	// --- Service（进程级单例：registry / hand）---
@@ -42,7 +43,9 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	executor := basvc.NewExecutor(hand, sessionRepo, stepRepo, brainSvc, feedbackSvc)
 	executor.SetCommandLogRepository(cmdLogRepo)
 	executor.SetWriteClaimRepository(writeClaimRepo) // 批20f（A12）：漏这一行 = 所有写步拒绝下发
+	executor.SetProfileHealthRepo(profileHealthRepo) // Chunk2：封号熔断落库。漏这一行 = 熔断面静默关闭
 	taskSvc := basvc.NewTaskService(taskRepo, sessionRepo, executor)
+	taskSvc.SetProfileHealthRepo(profileHealthRepo) // Chunk2：RunTask 启动门 + 人工恢复
 	sessionSvc := basvc.NewSessionService(sessionRepo, stepRepo, executor)
 	sessionSvc.SetCommandLogRepository(cmdLogRepo) // D1（G1）：命令流审计查询
 	sessionSvc.SetLLMPlanRepository(planRepo)      // I5：审计导出含 LLM 成本账
@@ -132,6 +135,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	baAdmin := ba.Group("")
 	baAdmin.Use(middleware.AdminAuthMiddleware())
 	baAdmin.POST("/host/token/reset", hostCtrl.ResetToken)
+	baAdmin.POST("/profile/recover", taskCtrl.RecoverProfile) // Chunk2：主 Profile 熔断人工恢复
 
 	// --- Host WebSocket（双层防护：token + 本地回环 IP；fail-closed）---
 	engine.GET("/api/browser/host-ws", bactrl.NewHostWSHandler(registry, kvRepo).Handle)

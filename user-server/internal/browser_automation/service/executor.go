@@ -83,6 +83,10 @@ type Executor struct {
 	// 测试经 SetJevClient 注入 fake server 指向的客户端。
 	jevClient *JevClient
 
+	// profileHealthRepo 主 Profile 健康熔断仓储（Chunk2：单主 Profile 健康监护）。
+	// nil=未接线（熔断写入跳过，执行不受影响）——熔断是增强不是门禁。
+	profileHealthRepo repository.BrowserProfileHealthRepository
+
 	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
 	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
 
@@ -172,6 +176,11 @@ func (e *Executor) SetWriteClaimRepository(r repository.BrowserWriteClaimReposit
 // SetJevClient JEV 客户端注入（测试/未来 kv 接线用；nil=按环境变量即时构造）。
 func (e *Executor) SetJevClient(c *JevClient) {
 	e.jevClient = c
+}
+
+// SetProfileHealthRepo 主 Profile 健康仓储注入（路由装配可选——nil 时熔断写入跳过）。
+func (e *Executor) SetProfileHealthRepo(r repository.BrowserProfileHealthRepository) {
+	e.profileHealthRepo = r
 }
 
 // appendCommandLog append-only 命令-事件日志（P8）。失败仅告警不阻断执行：
@@ -659,6 +668,8 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 						// 失败收口前先过一次拦截判定，命中即用语义更准的风控归因替换原始错误。
 						if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
 							sessionFailed = reason
+							// 熔断写入：同平台新任务启动门 + 人工恢复（best-effort，不改终止语义）
+							_ = e.recordProfileBlocked(ctx, task, session, reason)
 						}
 						break loop
 					}
@@ -666,6 +677,8 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 				// 拦截页检测（铁律 4）：成功步后页面可能已跳风控页——disconnect 类终止，全自动闭环
 				if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
 					sessionFailed = reason
+					// 熔断写入：同平台新任务启动门 + 人工恢复（best-effort，不改终止语义）
+					_ = e.recordProfileBlocked(ctx, task, session, reason)
 					break loop
 				}
 			}
@@ -956,6 +969,8 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 		}
 		// 拦截页检测（铁律 4）：Brain 轮后同样检测——风控页命中即终止，全自动闭环
 		if blocked, reason := e.detectBlockedIfFatal(ctx, task, session, &cmdSeq); blocked {
+			// 熔断写入：同平台新任务启动门 + 人工恢复（best-effort，不改终止语义）
+			_ = e.recordProfileBlocked(ctx, task, session, reason)
 			return success, failed, reason
 		}
 		// 循环检测 nudge（对标 browser-use 循环指纹）：连续 3 轮同序列 → 注入换路径提示
