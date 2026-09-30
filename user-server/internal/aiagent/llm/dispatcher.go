@@ -29,6 +29,8 @@ const (
 	ScenarioHighQuality DispatchScenario = "high_quality"
 
 	ScenarioLowCost DispatchScenario = "low_cost"
+
+	ScenarioJevChoice DispatchScenario = "jev_choice"
 )
 
 type ProviderConfig struct {

@@ -120,6 +120,7 @@ func (d *Dispatcher) registerLocalFirstRoutes(primary string, maxLatencyMs int) 
 		{Scenario: ScenarioLongSummary, Provider: prim, Fallbacks: fallback, CostWeight: 3, MaxLatency: maxLatencyMs, MinQuality: 0.85},
 		{Scenario: ScenarioHighQuality, Provider: prim, Fallbacks: fallback, CostWeight: 1, MaxLatency: maxLatencyMs, MinQuality: 0.95},
 		{Scenario: ScenarioLowCost, Provider: prim, Fallbacks: fallback, CostWeight: 15, MaxLatency: maxLatencyMs, MinQuality: 0.7},
+		{Scenario: ScenarioJevChoice, Provider: prim, Fallbacks: fallback, CostWeight: 5, MaxLatency: 5000, MinQuality: 0.7},
 	}
 	for _, r := range routes {
 		d.routes[r.Scenario] = r
@@ -211,6 +212,7 @@ func (d *Dispatcher) registerDefaultRoutes() {
 		{Scenario: ScenarioLongSummary, Provider: "kimi", Fallbacks: []string{"qwen-max"}, CostWeight: 3, MaxLatency: 6000, MinQuality: 0.85},
 		{Scenario: ScenarioHighQuality, Provider: "gpt-4o", Fallbacks: []string{"glm-4"}, CostWeight: 1, MaxLatency: 5000, MinQuality: 0.95},
 		{Scenario: ScenarioLowCost, Provider: "deepseek", Fallbacks: []string{"qwen-turbo"}, CostWeight: 5, MaxLatency: 4000, MinQuality: 0.7},
+		{Scenario: ScenarioJevChoice, Provider: "deepseek", Fallbacks: []string{"qwen-turbo"}, CostWeight: 5, MaxLatency: 5000, MinQuality: 0.7},
 	}
 	for _, r := range routes {
 		d.routes[r.Scenario] = r
