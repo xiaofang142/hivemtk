@@ -8,6 +8,7 @@
 .PHONY: db-up db-down db-logs db-ps db-backup db-restore
 .PHONY: inference-host-install inference-host-models inference-host-up inference-host-down
 .PHONY: inference-host-warmup inference-host-logs inference-host-ps inference-host-test inference-host-status
+.PHONY: laya-models laya-up laya-down laya-warmup laya-test laya-logs
 .PHONY: dev dev-install dev-stop dev-all dev-down dev-clean dev-help
 
 # 默认目标
@@ -39,6 +40,14 @@ help:
 	@echo "  make inference-host-ps       - ps aux | grep llama-server"
 	@echo "  make inference-host-models-prod  - 下载 prod 档模型（16G+ 内存机器）"
 	@echo ""
+	@echo "【Laya 决策服务（:8210，可选）】"
+	@echo "  make laya-models          - 下载 Laya 决策模型（首次，ModelScope 优先）"
+	@echo "  make laya-up              - 启动 Laya 决策服务（POST /v1/decide）"
+	@echo "  make laya-down            - 停止 Laya 决策服务"
+	@echo "  make laya-warmup          - 预热 Laya 决策端点"
+	@echo "  make laya-test            - Laya 端到端 smoke test"
+	@echo "  make laya-logs            - tail Laya 服务日志"
+	@echo ""
 	@echo "【user-server（宿主机 Go 服务）】"
 	@echo "  make user-build           - 编译 user-server 二进制到 user-server/bin/"
 	@echo "  make dev                  - 启动 user-server 热更新（air，开发用，无需手动重编）"
@@ -59,6 +68,7 @@ help:
 	@echo "  make lint                 - golangci-lint 架构护栏"
 	@echo "  make vet                  - go vet"
 	@echo "  make test-go              - go test ./..."
+	@echo "  make go-cache-trim        - Go 构建缓存按分配量封顶（默认 dry-run；CAP=8 APPLY=1 才删）"
 
 # =============================================================================
 # 首次安装
@@ -172,6 +182,29 @@ inference-host-status: db-ps inference-host-ps
 	else \
 		echo "  ❌ 127.0.0.1:8204 user-server ($$code)"; \
 	fi
+
+# =============================================================================
+# Laya 决策服务（ModernBERT-large 421M，host-only torch，可选组件）
+# -----------------------------------------------------------------------------
+# 与 llama.cpp 三件套独立：端点 POST 127.0.0.1:8210/v1/decide
+# =============================================================================
+laya-models:
+	bash scripts/inference-host/download-laya.sh
+
+laya-up:
+	bash scripts/inference-host/start-laya.sh
+
+laya-down:
+	bash scripts/inference-host/stop-laya.sh
+
+laya-warmup:
+	bash scripts/inference-host/warmup-laya.sh
+
+laya-test:
+	bash scripts/inference-host/smoke-laya.sh
+
+laya-logs:
+	@tail -F $${HIVEMTK_RUNTIME_DIR:-$$HOME/.hivemtk/runtime}/laya.log
 
 # =============================================================================
 # user-server 宿主机二进制构建
@@ -311,7 +344,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune audit audit-artifacts audit-secrets
+.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets
 
 # 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
 # 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
@@ -410,6 +443,21 @@ test-db-prune:
 		docker exec -e PGPASSWORD="$$PW" mtk-postgres psql -U admin -p 8202 -d postgres -tAc \
 			"SELECT count(*)||' 个孤儿测试库，共 '||coalesce(pg_size_pretty(sum(pg_database_size(datname))),'0 bytes') FROM pg_database WHERE datname ~ '$$ORPHAN_RE';"; \
 	fi
+
+# 给 Go 构建缓存按分配量封顶（默认只报数，CAP/apply 才动手）。
+#
+# 登记本目标的原因：Go 侧**没有**容量上限这个东西 —— `go env -w GOCACHE` 只能换目录，
+# 缓存按内容寻址只增不减，唯一内建的收缩手段是 `go clean -cache`（整体清空，下一次全量
+# 构建从零开始）。实测两个缓存分别长到 55 GB / 33 GB，而共享盘只剩 14 GB 时，门禁会因
+# 写不下而报出与代码无关的红 —— 那时"红"读起来像缺陷，实际是磁盘。
+# 按年龄裁无效（大对象与新条目混在一起），故按大小排序删、够数即停；条目删了只会重编，不影响正确性。
+#   make go-cache-trim                 # dry-run：只报每个目标的分配量与"够数要删几条"
+#   make go-cache-trim CAP=8 APPLY=1   # 每个缓存封顶 8 GB
+go-cache-trim:
+	@args="--cap $${CAP:-8}"; \
+	if [ "$${APPLY:-0}" = "1" ]; then args="$$args --apply"; fi; \
+	for d in $${EXTRA_CACHE:-}; do args="$$args --cache $$d"; done; \
+	bash scripts/trim-go-cache.sh $$args
 
 # =============================================================================
 # 静态审计护栏（本地与 CI 同口径）

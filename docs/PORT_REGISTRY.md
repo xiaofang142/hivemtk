@@ -21,6 +21,7 @@
 | **8207** | LLM 推理           | 宿主机 llama-server | —      | 8207                            | `LLM_BASE_URL`                 | `inference.llm.base_url`       | OpenAI 兼容，served name 取 `.env` 的 `LLM_SERVED_NAME`（现值 Qwen2.5-3B-Instruct） |
 | **8208** | Embedding 推理     | 宿主机 llama     | —         | 8208                            | `EMBEDDING_BASE_URL`           | `inference.embedding.base_url` | **私域部署强制本地**（数据不出域）                   |
 | **8209** | Rerank 推理        | 宿主机 llama     | —         | 8209                            | `RERANK_BASE_URL`              | `inference.rerank.base_url`    | 与 Embedding 同属 RAG 链路                 |
+| **8210** | Laya 决策服务      | 宿主机 torch（FastAPI） | —      | 8210                            | `LAYA_PORT`（`LAYA_BASE_URL` 暂无） | —                        | ModernBERT-large 421M，非自回归 choice/score/noul；端点 `POST /v1/decide`（非 OpenAI chat 形态，不走 llama.cpp） |
 
 ### 前端开发端口（外部依赖，不在 ports.go）
 
@@ -146,4 +147,5 @@ Redis：
 | 2026-09 | docker-compose.yml 注释补全 PG 映射逻辑     | 避免"8202→8202" vs "8202→8232" 双轨误导 | —  |
 | 2026-09 | .env-example PG 节明确区分 Dev/Docker 模式 | 新同学看 .env-example 知道 8232 是故意的    | —  |
 | 2026-09 | 后端进容器（模式 C）：user-server 改 docker dev 热重载；embed-sdk 5174→8214 | 后端容器化定案；前端端口统一 82 段且 contributor/embed-sdk 相邻 | —  |
+| 2026-09 | 新增 8210 Laya 决策服务（host-only torch，POST /v1/decide） | convaiinnovations/laya（ModernBERT-large 421M）本地部署：ports.go DefaultLayaPort + `.env-example` LAYA_PORT/LAYA_REPO + scripts/inference-host/laya/ | —  |
 

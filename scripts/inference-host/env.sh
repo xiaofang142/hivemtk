@@ -60,6 +60,13 @@ LLAMACPP_BIN="$(detect_llamacpp_bin)"
 : "${LLM_PORT:=8207}"
 : "${EMBEDDING_PORT:=8208}"
 : "${RERANK_PORT:=8209}"
+: "${LAYA_PORT:=8210}"
+
+# ---- Laya 决策服务（ModernBERT-large 421M，host-only torch）----
+# 推理设备默认 cpu：本机实测 torch 2.12 + macOS 27 上 MPS 单次 forward 约 150s
+# （疑似 MPS 回退），CPU 仅约 0.3~0.8s；有可用 CUDA/MPS 且验证过延迟再改。
+: "${LAYA_DEVICE:=cpu}"
+: "${LAYA_SERVED_NAME:=laya}"
 
 # ---- LLM 引擎：统一 llama.cpp（GGUF）——
 # 2026-09-07 移除 MLX 引擎（SmolLM3-3B MLX safetensors 已废弃）

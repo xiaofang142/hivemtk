@@ -48,6 +48,7 @@ func TestPortsConstants(t *testing.T) {
 			{"DefaultLLMPort", DefaultLLMPort, 8207},
 			{"DefaultEmbeddingPort", DefaultEmbeddingPort, 8208},
 			{"DefaultRerankPort", DefaultRerankPort, 8209},
+			{"DefaultLayaPort", DefaultLayaPort, 8210},
 		}
 		for _, c := range cases {
 			if c.got != c.want {
@@ -89,6 +90,11 @@ func TestPortsConstants(t *testing.T) {
 			if !strings.Contains(c.url, ":"+c.port+"/") {
 				t.Errorf("%s 应包含端口 :%s/，实际 %s", c.name, c.port, c.url)
 			}
+		}
+	})
+	t.Run("LayaBaseURLContainsPort", func(t *testing.T) {
+		if !strings.Contains(DefaultLayaBaseURLDev, ":"+DefaultLayaPortStr) {
+			t.Errorf("DefaultLayaBaseURLDev 应包含端口 :%s，实际 %s", DefaultLayaPortStr, DefaultLayaBaseURLDev)
 		}
 	})
 	t.Run("DockerBaseURLsContainPort", func(t *testing.T) {
@@ -138,6 +144,7 @@ func TestPortsConstants(t *testing.T) {
 		"DefaultLLMBaseURLDocker":       DefaultLLMBaseURLDocker,
 		"DefaultEmbeddingBaseURLDocker": DefaultEmbeddingBaseURLDocker,
 		"DefaultRerankBaseURLDocker":    DefaultRerankBaseURLDocker,
+		"DefaultLayaBaseURLDev":         DefaultLayaBaseURLDev,
 		"DefaultBGEBaseURLDev":          DefaultBGEBaseURLDev,
 		"DefaultBGEBaseURLDocker":       DefaultBGEBaseURLDocker,
 		"DefaultOllamaBaseURL":          DefaultOllamaBaseURL,

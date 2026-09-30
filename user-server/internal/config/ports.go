@@ -33,6 +33,12 @@ const (
 	DefaultRerankPort = 8209
 
 	DefaultRerankPortStr = "8209"
+
+	// DefaultLayaPort Laya 决策服务（ModernBERT-large 421M，非自回归 choice/score/noul）。
+	// Host-only torch 服务（scripts/inference-host/laya/server.py），端点 POST /v1/decide。
+	DefaultLayaPort = 8210
+
+	DefaultLayaPortStr = "8210"
 )
 
 const (
@@ -57,6 +63,10 @@ const (
 	DefaultEmbeddingBaseURLDocker = "http://mtk-embedding:" + DefaultEmbeddingPortStr + "/v1"
 
 	DefaultRerankBaseURLDocker = "http://mtk-rerank:" + DefaultRerankPortStr + "/v1"
+
+	// DefaultLayaBaseURLDev Laya 决策服务基址（host-only，无容器形态）。
+	// 注意无 /v1 后缀：决策端点是 POST {base}/v1/decide（非 OpenAI chat 形态）。
+	DefaultLayaBaseURLDev = "http://127.0.0.1:" + DefaultLayaPortStr
 
 	DefaultBGEBaseURLDev = "http://127.0.0.1:" + DefaultEmbeddingPortStr + "/v1"
 
