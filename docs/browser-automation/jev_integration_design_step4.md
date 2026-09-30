@@ -67,3 +67,30 @@ v1 复用现有 `@eN` 快照做元素表（accessibility.js 行协议已稳定�
 - `go vet ./internal/browser_automation/...` 零输出；`go test ./internal/browser_automation/service/ -count=1` 全绿。
 - 新增单测：快照解析（含 `*` 新元素标记/畸形行跳过/250 截断）、validateChoice 正反 6 例、operation 映射 6 例、未配置回退（fake brain 断言走到 Brain）、fake HTTP server 端到端 Choose（含非法响应回退）。
 - 默认关闭验证：无 env 时行为与改前一致（既有全量用例即回归网）。
+
+## 7. v1.1 统一调度口径（2026-09-30，chunks 1–4；Q1 决议：JEV 走 LLM provider 统一配置）
+
+- **传输迁移**：删除 TypeSafe HTTP 直调（chooseOnce/jevQuestion/jevMaxRetries/jevHTTPTimeout）；
+  `JevClient` 改持 `jevDispatcher` 接口（默认 `llm.GetGlobalDispatcher`），`Choose` 经
+  `DispatchStructured` 调 `jev_choice` scenario（5s ctx 超时 + `isRetryableLLMError` 口径 1 次重试，
+  非法答案不重试）。prompt 文本化（`buildJevChoicePrompt`：目标 + 操作候选 + 可点候选 +
+  `<page_snapshot>` 隔离 + recent_actions），同体解析 `jevChoiceAnswers→jevDecisionFromAnswers`
+ （沿用 validateChoice 五项 + CLICK 无候选拒绝），tokens 实计返回。
+- **Scenario 路由**：dispatcher 新增 `ScenarioJevChoice` + 双路径路由
+ （MaxLatency 5000 / MinQuality 0.7；default 走 deepseek→qwen-turbo，localFirst 走 prim→fallback）。
+- **planRound 新签名**：`(ctx, task, session, snap, pageURL, st, history, seq, js) (planOutcome, error)`；
+  `planOutcome{stepsJSON, done, terminal, brainTokens, jevTokens, jevAttempted, jevOK}` 聚合双路径口径。
+- **新鲜度**：Choose 后 `e.hand != nil` 时重拍 snapshot 比指纹（`fingerprintState`），stale 记
+  `jev_stale` 帧回退 Brain；`hand == nil`（单测）跳过。`isJevStale` 纯函数，空指纹 fail-soft 放行。
+- **Session 熔断/独立预算**：`jevSessionState{off, fails, tokensUsed}` 由执行循环持有（Executor 进程级
+  单例不放计数，随 task 结束丢弃）；`attempted && !ok` 连续 ≥3（`jevMaxSessionFails`）或 JEV token
+  超 20000（`jevSessionTokenBudget`，实测单轮 ~15）即 `off`，剩余轮次直走 Brain。
+  执行器：`tokenUsed += brainTokens`（原 P1-1 总预算，JEV 不再记 0），`jevSess.tokensUsed += jevTokens`。
+- **配置变更**：`loadJevConfig` 去 key 门槛（`Enabled` = 开关）；`Ready = Enabled && dispatcher != nil`；
+  `BROWSER_JEV_ENDPOINT` 降级为可选 OpenAI-compatible 覆盖（幂等注册 `jev_env_override` + SetRoute，
+  Model-only 告警忽略）；无可用 provider 时调度报错 → planRound 回退 Brain（fail-closed 在调度层）。
+- **成本行**：`BrainService.recordJevPlan(kind=jev_choice)` 落库，不碰 `lastAuxTokens`
+  （执行器用 `LastAuxTokens` 累 judge 预算，JEV 走独立口径）。
+- **验收增量**：`TestIsJevStale`、`TestPlanRoundJevOffSkipsJev`；既有 6 处 planRound 调用方切新签名
+  （末参 js，现有测试传 nil）；`go vet` 干净、`gofmt` 干净、service 整包回归绿
+ （需 `POSTGRES_TEST_PORT=8232` + `.env` 的 `POSTGRES_PASSWORD`，264s）。
