@@ -143,7 +143,14 @@ func AggregateCitationDomains(runs []*model.GeoProbeRun, ownDomain string, compe
 			QueryCount: len(b.queries), EngineCount: len(b.engines),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	// 只按 Count 排时并列项先后取自 buckets 的迭代序（Go 每轮随机）⇒ 同数据两次请求给出不同榜单；
+	// 域名升序兜底把顺序钉死。
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Domain < out[j].Domain
+	})
 	return out
 }
 
@@ -203,7 +210,14 @@ func topKeys(m map[string]int, n int) []string {
 	for k, v := range m {
 		all = append(all, kv{k, v})
 	}
-	sort.Slice(all, func(i, j int) bool { return all[i].v > all[j].v })
+	// 同分必须按 key 升序兜底：只按 v 排时，并列项的先后取自 map 迭代序（Go 每轮随机），
+	// 而下面又要截断到 n —— 于是同一份数据，两次请求能给出不同的 Top-N 榜单。
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].v != all[j].v {
+			return all[i].v > all[j].v
+		}
+		return all[i].k < all[j].k
+	})
 	if len(all) > n {
 		all = all[:n]
 	}

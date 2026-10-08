@@ -95,7 +95,12 @@ func (e *TFIDFPhraseExtractor) Extract(messages []ChampionMessage, topN int) []T
 		all = append(all, scored{phrase, score, tf, df, phraseTypeMap[phrase]})
 	}
 	sort.Slice(all, func(i, j int) bool {
-		return all[i].score > all[j].score
+		// all 由 tfMap(map) 摊出，只比 score 时同分词组先后随 map 迭代序变；
+		// 下面还要截 topN ⇒ 选出的强调词组本身会漂，必须用词组名升序把顺序钉死。
+		if all[i].score != all[j].score {
+			return all[i].score > all[j].score
+		}
+		return all[i].phrase < all[j].phrase
 	})
 	if len(all) > topN {
 		all = all[:topN]

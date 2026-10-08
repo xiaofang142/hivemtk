@@ -444,7 +444,12 @@ func (h *HybridSearcher) reciprocalRankFusion(vecResults, kwResults []Chunk, vec
 		pairs = append(pairs, kv{k, v})
 	}
 	sort.Slice(pairs, func(i, j int) bool {
-		return pairs[i].score > pairs[j].score
+		// pairs 由 scores(map) 摊出，只比 score 时同分块次的先后取自 map 迭代序（每轮随机）；
+		// 下游按顺序截 Top-K 当 LLM 上下文 ⇒ 同一个查询两次能取到不同的召回片段。
+		if pairs[i].score != pairs[j].score {
+			return pairs[i].score > pairs[j].score
+		}
+		return pairs[i].key < pairs[j].key
 	})
 
 	result := make([]Chunk, 0, len(pairs))

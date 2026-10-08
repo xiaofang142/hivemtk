@@ -67,8 +67,13 @@ func (s *KeywordEnhanceService) AnalyzeHistoricalPerformance(ctx context.Context
 		perfs = append(perfs, p)
 	}
 
+	// perfs 来自 perfMap 迭代，只比 HighValueScore 时同分词的先后每轮随机；
+	// 下面还要截前 20 个 ⇒ 「高价值词」名单本身会漂，必须用关键词升序把顺序钉死。
 	sort.Slice(perfs, func(i, j int) bool {
-		return perfs[i].HighValueScore > perfs[j].HighValueScore
+		if perfs[i].HighValueScore != perfs[j].HighValueScore {
+			return perfs[i].HighValueScore > perfs[j].HighValueScore
+		}
+		return perfs[i].Keyword < perfs[j].Keyword
 	})
 
 	highValue := make([]*dto.KeywordPerformance, 0, 20)
