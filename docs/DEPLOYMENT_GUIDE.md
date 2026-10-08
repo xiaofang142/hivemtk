@@ -248,6 +248,12 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `LTC_RECOVERY_WORKER_BACKOFF` | `24h` | 重试退避基数（同时是无文案项的推后幅度）。小于触达冷却窗口时抬到"冷却窗口 + 余量"，否则每次到期都只换来一次 cooldown 拒绝，白耗一轮 |
 | `FF_LTC_COLLECTION_JOB` | `off` | 催收任务（逾期应收自动提醒 + 越过升级线转人工待办）的三态开关 `off|shadow|enforce`（`internal/service/collection_job.go`，解析复用挽回 worker 的 `parseRecoveryWorkerMode`，别名口径与它同一份）。`off` 连轮询协程都不起、一轮都不扫；`shadow` 只选路不发不写；`enforce` 才真给真人发提醒。**env 这一档在装配期读一次 ⇒ 改档要重启**；每轮现读的是第二把锁 `ltc.config` 的 `collection` 阶段档（它关着的每一轮一次查询都不发，一键回滚要下一轮就咬得住，指的是这一把）。写布尔真值（`true`/`1`/`on`）一律按 `shadow` 处理并告警——短信不可撤回，要真发必须显式写 `enforce` |
 | `LTC_COLLECTION_JOB_BATCH` | `20` | 催收单轮扫描封顶（对应 `ScanOverdue` 的 limit），可用区间 `[1,200]`；非整数或超界 ⇒ 告警并沿用默认。上限比挽回队列的 `[1,500]` 窄是代价决定的：单轮内每行一次商机读（应收表上没有客户列，身份按 `bills.opportunity_id` 现推），批越大跨表读越多 |
+| `BROWSER_JEV_ENABLED` | 关 | JEV 外部决策服务总开关（`internal/browser_automation/service/jev.go`）。**铁律：默认关闭**——未置位时每轮 plan 原样走内置 Brain 路径，一个字节都不发往外部。取值 `1/true/on` 才开启 |
+| `BROWSER_JEV_ENDPOINT` | 空 | JEV `DispatchStructured` 的端点地址（无 scheme 时按 http 补齐）。为空 ⇒ JEV 侧不可用，退回内置 Brain 路径并打 warn。它同时是 `BROWSER_JEV_MODEL` 的生效前提：只设 MODEL 不设 ENDPOINT 时覆盖被忽略并显式告警——模型名长在 provider 上，没有 provider 就无处可挂 |
+| `BROWSER_JEV_API_KEY` | 空 | JEV 端点的鉴权密钥，作为 `Authorization` 头发出。空 ⇒ 不带该头（端点自身若要求鉴权会 401，届时回退内置 Brain） |
+| `BROWSER_JEV_MODEL` | 空 | 覆盖 JEV 路由里 provider 声明的模型名。**仅在 `BROWSER_JEV_ENDPOINT` 已设时生效**；单独设置会被忽略并告警（见上一行） |
+| `BACKUP_BASE_DIR` | `./backups` | 备份落盘根目录（`internal/storage/backup_source.go`）。换盘或挂独立卷时设成挂载点 |
+| `RESTORE_TMP_DIR` | `./restore_tmp` | 恢复流程的暂存根目录（还原期间解包落在这里再入正式库）。与大备份同盘时建议指到独立卷，否则还原期可能把目标卷写满 |
 | `LTC_COLLECTION_JOB_INTERVAL` | `6h` | 催收轮询间隔（Go duration 写法，如 `30m`/`6h`）。非法时长 ⇒ 告警并沿用默认；低于 `30m` 抬到 `30m` 并告警——一轮没跑完下一轮就起时，同一张单会被两轮各领一次（提醒窗的锁拦得住外发，但报告会开始大量出现 `reminders_held`） |
 | `TOOL_CIRCUIT_BASE_COOLDOWN` | `30s` | 按工具熔断的起始冷却，可用区间 `[1ms,1h]`。非法时长或超界 ⇒ 告警并沿用默认；五项参数各自校验，配错一项不拖累其余（`internal/app/tool_circuit_breaker_wiring.go`） |
 | `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
