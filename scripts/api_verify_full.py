@@ -141,16 +141,22 @@ class APIClient:
             self.s.headers["X-Bridge-Token"] = bridge_token
 
     def req(self, method, path, desc, expect_code=None, ok_status=(200,), allow_codes=(), **kw):
-        """【入参】【返回】【预期】 三维打印; 返回 (resp_json, ok)
+        """按 CLAUDE.md 的三端验收口径逐行打印【入参】【返回】【预期】; 返回 (resp_json, ok)
 
         allow_codes: 这一步允许出现的**响应体 code** 集合（默认只允许 expect_code）。
         用于「失败形态也是被验收对象」的步骤——例如出站链路在离线环境只能拿到
         outbound_failed，那条 502 就是预期结果的一部分，硬判 code=0 会把
         环境噪声与真缺陷混成同一个红。
+
+        【预期】单独成行是这张卡 AC① 的字面要求：原先只有 docstring 里写着三维，
+        实测整轮 ltc 输出里【预期】是 0 行，读者只能把下面 check 的实际值当预期读。
         """
         url = BASE + path
         body = kw.pop("json", None)
         params = kw.pop("params", None)
+        want_codes = set(allow_codes)
+        if expect_code is not None:
+            want_codes.add(expect_code)
         print(f"\n--- {desc} ---")
         print(f"【入参】{method} {path}" + (f" params={params}" if params else "") + (f" body={json.dumps(body, ensure_ascii=False)[:200]}" if body else ""))
         try:
@@ -159,6 +165,8 @@ class APIClient:
             check(f"{desc}", False, f"请求异常: {e}")
             return None, False
         print(f"【返回】HTTP {r.status_code} {r.text[:300]}")
+        print(f"【预期】HTTP {list(ok_status)}"
+              + (f" 响应体 code={sorted(want_codes, key=str)}" if want_codes else " 响应体 code 不限"))
         code_ok = r.status_code in ok_status
         contract_ok = True
         try:
@@ -166,15 +174,12 @@ class APIClient:
         except ValueError:
             j = None
             contract_ok = False
-        want_codes = set(allow_codes)
-        if expect_code is not None:
-            want_codes.add(expect_code)
         if j is not None and want_codes and isinstance(j, dict):
             if "code" in j:
                 contract_ok = contract_ok and j.get("code") in want_codes
         ok = check(f"{desc}", code_ok and contract_ok,
                    "" if code_ok and contract_ok
-                   else f"HTTP={r.status_code} 期望code={sorted(want_codes) or expect_code}")
+                   else f"HTTP={r.status_code} 期望code={sorted(want_codes, key=str) or expect_code}")
         return j, ok
 
 
