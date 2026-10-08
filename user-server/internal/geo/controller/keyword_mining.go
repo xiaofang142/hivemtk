@@ -20,6 +20,8 @@ func NewKeywordMiningController(svc *service.KeywordMiningService) *KeywordMinin
 
 // CrawlSuggest POST /geo/keyword-mining/crawl-suggest
 // body: {"seeds": ["CRM", "SCRM"], "engines": ["baidu","bing","google","360","sogou"]}
+// 返回带 per_engine（各引擎去重前条数）与 errors（逐条抓取报错）：
+// count=0 有两种意思（上游全挂 / 这词真没下拉词），只给 count 分不开。
 func (c *KeywordMiningController) CrawlSuggest(ctx *gin.Context) {
 	var req struct {
 		Seeds   []string `json:"seeds" binding:"required"`
@@ -28,17 +30,19 @@ func (c *KeywordMiningController) CrawlSuggest(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
-	results, err := c.svc.CrawlSuggest(ctx.Request.Context(), req.Seeds, req.Engines)
-	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
-		return
-	}
-	saved, err := c.svc.SaveMiningResults(ctx.Request.Context(), req.Seeds, results)
+	outcome := c.svc.CrawlSuggest(ctx.Request.Context(), req.Seeds, req.Engines)
+	saved, err := c.svc.SaveMiningResults(ctx.Request.Context(), req.Seeds, outcome.Keywords)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "下拉词落库失败: "+err.Error())
 		return
 	}
-	response.Success(ctx, gin.H{"count": len(results), "saved": saved, "keywords": results}, "ok")
+	response.Success(ctx, gin.H{
+		"count":      len(outcome.Keywords),
+		"saved":      saved,
+		"per_engine": outcome.PerEngine,
+		"errors":     outcome.Errors,
+		"keywords":   outcome.Keywords,
+	}, "ok")
 }
 
 // CombineLongtail POST /geo/keyword-mining/longtail
@@ -52,9 +56,12 @@ func (c *KeywordMiningController) CombineLongtail(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
+	// 缺省模板走 DB 优先字典（ActiveLongtailTemplates：缺行自动播种、故障 fail-open 回内置）。
+	// 原先直引 service.DefaultLongtailTemplates，会让管理员对 geo_dicts/longtail_templates
+	// 的修改在这条入口上被静默忽略——管线那条入口已经走字典，两条口径会分叉。
 	templates := []service.LongtailTemplate{}
 	if req.UseDefaultTpls || len(req.CustomTemplates) == 0 {
-		templates = service.DefaultLongtailTemplates
+		templates = service.ActiveLongtailTemplates()
 	}
 	for _, t := range req.CustomTemplates {
 		templates = append(templates, service.LongtailTemplate{Template: t})

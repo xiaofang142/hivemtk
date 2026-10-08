@@ -65,11 +65,12 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 	if len(suggestSeeds) > geoPipelineSuggestSeedCap {
 		suggestSeeds = suggestSeeds[:geoPipelineSuggestSeedCap]
 	}
-	suggests, err := miningSvc.CrawlSuggest(ctx, suggestSeeds, nil)
-	if err != nil {
-		logger.Warnf("[GEO Job keyword_pipeline] 下拉抓取部分失败（仅日志，不断链）: %v", err)
-		suggests = nil
+	suggestOutcome := miningSvc.CrawlSuggest(ctx, suggestSeeds, nil)
+	if len(suggestOutcome.Errors) > 0 {
+		logger.Warnf("[GEO Job keyword_pipeline] 下拉抓取 %d 组（引擎×种子）报错，仅日志不断链: %v",
+			len(suggestOutcome.Errors), suggestOutcome.Errors)
 	}
+	suggests := suggestOutcome.Keywords
 
 	// 4. 业务线回填 Cluster（结果词：ParentKeyword → seedLines）
 	all := make([]*model.GeoKeyword, 0, len(longtails)+len(suggests))

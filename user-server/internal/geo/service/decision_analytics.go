@@ -149,8 +149,14 @@ func (s *GeoDecisionAnalyticsService) GetShareOfVoiceBetween(ctx context.Context
 			SOV: safeDivF(a.count, total) * 100, AvgSentiment: sentiment,
 		})
 	}
-	// SOV 高的排前面，前端直接可读
-	sort.Slice(out, func(i, j int) bool { return out[i].SOV > out[j].SOV })
+	// SOV 高的排前面，前端直接可读；
+	// 同分必须按品牌名兜底：out 来自 byBrand 迭代，只比 SOV 时并列品牌先后每轮随机。
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SOV != out[j].SOV {
+			return out[i].SOV > out[j].SOV
+		}
+		return out[i].Brand < out[j].Brand
+	})
 	return out, nil
 }
 
