@@ -391,7 +391,7 @@ func HashPassword(password string) (string, error) {
 // InitAdmin 初始化系统首个超管（公开，无 JWT）
 //
 // 系统用户统一 plan v3.1 §3.2：
-//   - 调用方必须在请求体中传入 username/password/email（不再读 config 默认值）
+//   - 调用方必须传入 username/password，email 选填（不再读 config 默认值）
 //   - 密码强度：至少 8 位，含大小写字母 + 数字
 //   - username 唯一性、email 唯一性（防重复初始化由路由层 install.lock 闸负责，见 admin_routes.go）
 //   - 创建后写 install.lock（AdminUsername + Initialized=true），作为"已初始化"标记
@@ -403,16 +403,18 @@ func HashPassword(password string) (string, error) {
 func (s *AuthService) InitAdmin(ctx context.Context, username, password, email string) error {
 	username = strings.TrimSpace(username)
 	email = strings.TrimSpace(email)
-	if username == "" || password == "" || email == "" {
-		return errors.New("username/password/email 均不能为空")
+	if username == "" || password == "" {
+		return errors.New("username/password 均不能为空")
 	}
 
 	if err := validatePassword(password); err != nil {
 		return err
 	}
 
-	if err := validateEmail(email); err != nil {
-		return err
+	if email != "" {
+		if err := validateEmail(email); err != nil {
+			return err
+		}
 	}
 
 	if err := validateUsername(username); err != nil {
@@ -422,8 +424,10 @@ func (s *AuthService) InitAdmin(ctx context.Context, username, password, email s
 	if exists, _ := s.systemUserRepo.UsernameExists(ctx, username, 0); exists {
 		return errors.New("用户名已存在")
 	}
-	if exists, _ := s.systemUserRepo.EmailExists(ctx, email, 0); exists {
-		return errors.New("邮箱已被使用")
+	if email != "" {
+		if exists, _ := s.systemUserRepo.EmailExists(ctx, email, 0); exists {
+			return errors.New("邮箱已被使用")
+		}
 	}
 
 	user := &model.SystemUser{
