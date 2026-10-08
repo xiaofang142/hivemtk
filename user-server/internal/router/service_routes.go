@@ -252,7 +252,7 @@ func setupTraceRoutes(auth *gin.RouterGroup) {
 	auth.GET("/trace/:traceId", traceCtrl.GetTrace)
 }
 
-func setupSSEDashboardRoutes(auth *gin.RouterGroup) {
+func setupSSEDashboardRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	sseCtrl := controller.NewSSEDashboardController()
 	auth.GET("/dashboard/sse", sseCtrl.Stream)
 	auth.GET("/dashboard/clients", sseCtrl.ListClients)
@@ -261,6 +261,15 @@ func setupSSEDashboardRoutes(auth *gin.RouterGroup) {
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	admin.POST("/dashboard/broadcast", sseCtrl.Broadcast)
+
+	// 实时驾驶舱 SSE（长连接推送）：此前 DashboardSSEController 的三个 handler
+	// （Stream/Snapshot/Metrics）没有任何装配点，运行时一律 404——写好的实时面
+	// 从未上线。db 传 nil 时控制器进入「离线模式」：连接可建、跳过 DB 采集返回零值快照，
+	// 与该控制器原本声明的语义一致。
+	dashSSECtrl := controller.NewDashboardSSEController(service.NewDashboardStatsService(db))
+	auth.GET("/dashboards/stream", dashSSECtrl.StreamEventStream)
+	auth.GET("/dashboards/snapshot", dashSSECtrl.Snapshot)
+	auth.GET("/dashboards/metrics", dashSSECtrl.Metrics)
 }
 
 func setupDialogueMemoryRoutes(auth *gin.RouterGroup, db *gorm.DB) {

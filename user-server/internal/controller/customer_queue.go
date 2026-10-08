@@ -16,11 +16,6 @@ func NewCustomerServiceController() *CustomerServiceController {
 	return &CustomerServiceController{svc: service.NewCustomerQueueService()}
 }
 
-// NewCustomerServiceControllerWithService 注入 Service（测试用）
-func NewCustomerServiceControllerWithService(svc *service.CustomerQueueService) *CustomerServiceController {
-	return &CustomerServiceController{svc: svc}
-}
-
 // QueueSnapshot 队列快照
 type QueueSnapshot = service.QueueSnapshot
 

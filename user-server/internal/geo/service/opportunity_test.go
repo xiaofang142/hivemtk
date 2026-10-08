@@ -42,8 +42,8 @@ func TestBuildOpportunitiesCitedAndAlerts(t *testing.T) {
 			{Domain: "rival.com", Category: "competitor", Count: 12, QueryCount: 5, EngineCount: 2},
 			{Domain: "own.com", Category: "own", Count: 99},
 		},
-		UnreadAlerts:    3,
-		RecentNegAlerts: []string{"HiveMTK 差评"},
+		UnreadAlerts:     3,
+		RecentNegAlerts:  []string{"HiveMTK 差评"},
 		LowScoreArticles: []string{"旧文章A"},
 	})
 	types := map[string]bool{}

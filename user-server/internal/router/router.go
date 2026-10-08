@@ -135,8 +135,19 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），
 		// 而浏览器对自定义头要先过预检——这里没列出它，跨源网页调用方就会在预检阶段被拦，
-		// 拿到的报错与"凭证不对"长得完全不同，很容易被当成服务端故障。
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token")
+		// 拿到的报错与「凭证不对」长得完全不同，很容易被当成服务端故障。
+		//
+		// X-Chat-* 那四枚是前台聊天窗的调用面：/api/chat/public/* 用 X-Chat-Visitor-Id 做会话归属
+		// （controller/chat_public.go 里缺它直接回 400「X-Chat-Visitor-Id 必填」），用
+		// X-Chat-Channel-Id 选渠道。仓库自带的 iframe 窗与 API 同源、不会触发预检，所以现网没炸过；
+		// 但 ADR 的跨域/CDN 部署（docs/architecture/adr/ADR-011-chat-widget-embed.md §6.2）要求
+		// 接入方自建前端直连 /api/chat/public/*，那种页面一发预检就死在允许头上，报错读起来像
+		// 「服务端 403」而不是「头没登记」。
+		//
+		// 反过来，机器对机器的签名/凭证头（X-Ingress-Secret、X-Webhook-Secret、X-API-KEY、
+		// 各渠道签名头、X-Knowledge-Token）一律不加：那些没有浏览器调用方，加进允许头只是把
+		// 凭证的可达面平白摊给任意被放行的源。
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token,X-Chat-App-Key,X-Chat-Channel-Id,X-Chat-Visitor-Id,X-Chat-Visitor-Token")
 		c.Header("Access-Control-Expose-Headers", "Last-Event-ID,X-Trace-Id")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -556,7 +567,13 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 
-		bridgeWS.POST("/mcp", controller.NewMCPController().Handle)
+		// MCP 工具调用入口单独一条门：它挂在桥接组里时，BRIDGE_INGEST_AUTH=off 这条
+		// 「内网扩展可不带凭证上报」的历史逃生阀会把**服务端工具调用**一起放开，
+		// 而且每台运营机器上的扩展凭证会变成工具调用凭证。判据见 middleware.MCPGuard。
+		mcpGroup := r.Group("/api")
+		mcpGroup.Use(middleware.InitGuard())
+		mcpGroup.Use(middleware.MCPGuard())
+		mcpGroup.POST("/mcp", controller.NewMCPController().Handle)
 
 		channelPipeline := channelgw.NewPipeline(bridgeIngressSvc)
 		channelWSTransport := channelgw.NewWSTransport(channelPipeline, channelgw.Default)
@@ -626,7 +643,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupLLMProviderRoutes(auth)
 		setupTraceRoutes(auth)
-		setupSSEDashboardRoutes(auth)
+		setupSSEDashboardRoutes(auth, gormDB)
 
 		setupAnalyticsRoutes(auth)
 

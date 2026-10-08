@@ -65,6 +65,40 @@
       </el-table>
     </el-card>
 
+    <el-card header="触达回执" style="margin-top: 16px">
+      <template v-if="receipts.length">
+        <el-table :data="receipts">
+          <el-table-column prop="created_at" label="时间" width="170">
+            <template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN') }}</template>
+          </el-table-column>
+          <el-table-column prop="platform" label="平台" width="120" />
+          <el-table-column prop="action" label="动作" width="120" />
+          <el-table-column label="帖子链接" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <a v-if="row.target_url" :href="row.target_url" target="_blank" rel="noopener">{{ row.target_url }}</a>
+              <span v-else style="color: #909399">未取到（页面已跳转或快照失败）</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="copy_snapshot" label="文案快照" min-width="200" show-overflow-tooltip />
+          <el-table-column label="验证" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.verified ? 'success' : 'warning'">{{ row.verified ? '已确认发布' : '结果未知' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="截图" width="100">
+            <template #default="{ row }">
+              <a v-if="row.screenshot_url" :href="row.screenshot_url" target="_blank" rel="noopener">查看</a>
+              <span v-else style="color: #909399">—</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="cron-warn">
+          「结果未知」= 平台侧回查没归因到这条评论，不等于没发出去——请人工核对后再决定是否重跑
+        </div>
+      </template>
+      <div v-else style="color: #909399">暂无回执。该任务的触达步若已发布，收口时会自动留存截图、帖子链接与文案快照。</div>
+    </el-card>
+
     <el-card v-if="task.task_type === 'cron'" header="定时触发器" style="margin-top: 16px">
       <template v-if="cron">
         <el-space>
@@ -100,7 +134,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getBrowserTask, publishBrowserTask, runBrowserTask,
-  listBrowserTaskSessions,
+  listBrowserTaskSessions, listBrowserTaskReceipts,
   createBrowserCron, listBrowserCron, enableBrowserCron, disableBrowserCron, deleteBrowserCron,
 } from '@/api/browserAutomation'
 import { classifyRunError, HOST_OFFLINE, TASK_BUSY, RUN_ERROR_TEXT } from './hostRunError'
@@ -111,6 +145,7 @@ const route = useRoute()
 const router = useRouter()
 const task = ref(null)
 const sessions = ref([])
+const receipts = ref([])
 const cron = ref(null)
 const newCronExpr = ref('*/5 * * * *')
 const newCronTz = ref('Asia/Shanghai')
@@ -129,6 +164,16 @@ async function load() {
   const sRes = await listBrowserTaskSessions(id, { limit: 20 })
   const sData = unpack(sRes)
   sessions.value = sData?.list || []
+
+  // 回执读取失败不许拖垮整页：会话历史与触发器是这一页的主干，
+  // 而回执只是验收面——它读不到时应该显示「暂无」而不是白屏。
+  try {
+    const rRes = await listBrowserTaskReceipts(id)
+    const rData = unpack(rRes)
+    receipts.value = rData?.list || (Array.isArray(rData) ? rData : [])
+  } catch {
+    receipts.value = []
+  }
 
   const cRes = await listBrowserCron()
   const cList = unpack(cRes)

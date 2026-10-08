@@ -54,7 +54,7 @@ func TestBlockedWriteStepReasonSurvivesCanceledCtx(t *testing.T) {
 		t.Fatal(err)
 	}
 	seq := 0
-	status, msg, _ := exec.executeStepWithRetry(ctx, task, session, 3, steps[3], nil, &seq)
+	status, msg, _ := exec.executeStepWithRetry(ctx, task, session, 3, steps[3], nil, &seq, "")
 	if status != "failed" || !strings.Contains(msg, "双发闸") {
 		t.Fatalf("闸门结论=%q %q（want failed + 点名双发闸）", status, msg)
 	}

@@ -36,8 +36,9 @@ func (s *b19hStubBrain) GeneratePlanReflect(_ context.Context, _, _ uint, _, _, 
 	return []byte(s.plans[i]), false, nil
 }
 
-func (s *b19hStubBrain) LastPlanTokens() int { return 0 }
-func (s *b19hStubBrain) LastAuxTokens() int  { return 0 }
+func (s *b19hStubBrain) LastPlanTokens() int   { return 0 }
+func (s *b19hStubBrain) LastPlanModel() string { return "" }
+func (s *b19hStubBrain) LastAuxTokens() int    { return 0 }
 
 func (s *b19hStubBrain) JudgeDone(_ context.Context, _, _ uint, _, _ string) (bool, string) {
 	return true, "stub 放行"

@@ -31,6 +31,9 @@ type BrowserTaskRepository interface {
 	SetNextRetryAt(ctx context.Context, id uint, at *time.Time) error
 	// ownerUserIDs：本进程持有 Host 连接的用户白名单（空=不加此过滤，见 ClaimDueRetries 注释）
 	ClaimDueRetries(ctx context.Context, now time.Time, limit int, ownerUserIDs []uint) ([]*model.BrowserTask, error)
+	// TryConsumeCampaignActBudget 触达 P0 Chunk4：原子扣减活动触达条数预算。
+	// 返回 ok=false 表示「预算已耗尽或未配置预算，调用方不得下发该写步」；err 非空是 DB 故障。
+	TryConsumeCampaignActBudget(ctx context.Context, taskID uint) (ok bool, err error)
 }
 
 type browserTaskRepo struct {
@@ -224,3 +227,30 @@ func (r *browserTaskRepo) ClaimDueRetries(ctx context.Context, now time.Time, li
 }
 
 var ErrTaskNotFound = errors.New("browser task not found")
+
+// TryConsumeCampaignActBudget 触达 P0 Chunk4：活动触达条数预算的原子扣减。
+//
+// 条件更新（`used < budget` 写进 WHERE）而不是「先 SELECT 判额度、再 UPDATE」：
+// 后者在多副本/多 session 并发下是经典的 check-then-act 竞态——两条腿同时读到
+// used=9,budget=10，于是都判「还有 1 条」，最后写出 used=11。预算超发一次，
+// 意味着一条计划外的触达真的被下发出去（不可逆动作），所以裁决权必须落在库里。
+//
+// 条件里的三条门各自有理由：
+//   - campaign_key <> ”：未编入活动的任务不受活动预算约束（活动键是显式配置，不是默认全员参与）
+//   - campaign_act_budget > 0：0 = 不限。不限时既不扣减也不拦停——存量行为必须逐字不变
+//   - campaign_act_used < campaign_act_budget：额度判据，RowsAffected=0 即耗尽
+//
+// 返回 ok=false 有两种成因（调用方对外表现一致：预算耗尽，不许下发）：耗尽，或未配置预算。
+// 两者刻意不区分，也**不再回查一次库**去说清是哪一种——回查只为日志，而不限任务每条写步都会
+// 白付一次 SELECT。要判成因该在服务层按 task 快照判断，那里本来就有值。
+// err 非空才是真故障（连接池/DDL 问题），调用方须与 ok=false 区别对待。
+func (r *browserTaskRepo) TryConsumeCampaignActBudget(ctx context.Context, taskID uint) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&model.BrowserTask{}).
+		Where("id = ? AND deleted_at IS NULL AND campaign_key <> '' AND campaign_act_budget > 0 AND campaign_act_used < campaign_act_budget",
+			taskID).
+		Update("campaign_act_used", gorm.Expr("campaign_act_used + 1"))
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}

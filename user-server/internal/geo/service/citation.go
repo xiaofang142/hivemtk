@@ -41,9 +41,9 @@ type CitationDomainStat struct {
 
 // CitationDomainResult 域名聚合结果
 type CitationDomainResult struct {
-	Days    int                 `json:"days"`
+	Days    int                  `json:"days"`
 	Domains []CitationDomainStat `json:"domains"`
-	Total   int                 `json:"total"`
+	Total   int                  `json:"total"`
 }
 
 // CitationMatrixRow keyword×domain 矩阵行

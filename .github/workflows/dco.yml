@@ -2,9 +2,25 @@
 #
 # 强制要求（v2，2026-08-16 升级）：
 #   1. 每个 commit 必须包含 "Signed-off-by: Name <email>"
-#   2. Commit subject 必须符合 Conventional Commits 格式（首期仅警告）
-#   3. Commit body 至少 10 字符（首期仅警告）
+#   2. Commit subject 必须符合 Conventional Commits 格式
+#   3. Commit body 至少 10 字符
 #   4. v3.21.0 起：subject/body 不合规将阻断合并
+#
+# 触发面（2026-10-08 订正，OPT-DOC-EXT-4）：
+#   本仓走**成员直推 master**（CLAUDE.md 规则0 禁 PR 流程），此前本文件只声明
+#   `on: pull_request` —— 而本仓不存在 PR，等于这道闸从未运行过。
+#   现补 `push: branches: [master]`，让它真的在每次直推后执行。
+#
+#   **阻断强度按事件分档**，不是简单地照抄 PR 的硬阻断：
+#   | 事件 | Signed-off-by | subject 格式 | body 长度 |
+#   |------|---------------|--------------|-----------|
+#   | PR   | 硬阻断        | 硬阻断       | 硬阻断    |
+#   | push | 警告（不阻断）| 警告         | 警告      |
+#   理由：本仓现有历史 30 个 commit **零个**带 Signed-off-by（实测），
+#   若 push 侧直接照抄 PR 的硬阻断，第一次直推就会把这条线永久锁死——
+#   补触发面的目的是让闸跑起来，不是让闸变成没人能过的墙。
+#   存量历史不回填 signoff（改写历史属禁止动作，见 CLAUDE.md 规则0）；
+#   建议新提交起 `git commit -s`，等 push 侧也升为硬阻断时自然就已合规。
 #
 # 参考：
 #   - https://developercertificate.org/
@@ -13,7 +29,9 @@
 name: DCO Check + Conventional Commits
 
 on:
-  - pull_request
+  pull_request:
+  push:
+    branches: [master]
 
 permissions:
   contents: read
@@ -28,11 +46,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check Signed-off-by (硬阻断)
+      # 两种事件算 commit 区间的方式完全不同：
+      #   PR  —— event.pull_request.base.sha .. head.sha（PR 自身的区间）
+      #   push —— github.event.before .. github.sha（本次推送带入的 commit）
+      #   push 的 before 可能是全零（新建分支的首推），此时回落为「最近一个 commit」
+      #   —— 判据宁可只判一笔，也不该在 before 为空时静默判绿。
+      - name: Resolve commit range
+        id: range
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              echo "首推无 base，收敛为最近一个 commit"
+              BASE="$HEAD_SHA^"
+            fi
+            # before 可能已被 GC 或 force-push 覆盖：取不到就退回浅层比较，避免整门报错
+            if ! git cat-file -e "$BASE" 2>/dev/null; then
+              echo "base $BASE 不在本地，退回「最近 20 个 commit」"
+              BASE="$(git rev-list --max-count=21 "$HEAD_SHA" | tail -n 1)"
+            fi
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          COMMITS=$(git rev-list --no-merges "$BASE".."$HEAD_SHA" || true)
+          echo "commits=$(echo "$COMMITS" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+
+      # 硬阻断仅在 PR 侧；push 侧同一判据降级为警告（理由见文件头表格）
+      - name: Check Signed-off-by
         run: |
           echo "=== [1/3] 检查 Signed-off-by 签名 ==="
-          COMMITS=$(git rev-list --no-merges "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}")
-
+          COMMITS="${{ steps.range.outputs.commits }}"
           if [ -z "$COMMITS" ]; then
             echo "未发现 commit"
             exit 0
@@ -53,30 +101,30 @@ jobs:
           if [ -n "$MISSING" ]; then
             echo ""
             echo "============================================"
-            echo "以下 commit 缺少 Signed-off-by（已阻断）:"
+            echo "以下 commit 缺少 Signed-off-by:"
             echo "$MISSING"
             echo ""
-            echo "如何修复："
+            echo "如何修复（对已推送 commit 需改写历史，本仓禁止）："
             echo "  git config --global user.name \"Your Name\""
             echo "  git config --global user.email \"you@example.com\""
-            echo "  git commit --amend --no-edit -s"
-            echo "  git push --force-with-lease"
+            echo "  git commit -s        # 从下一笔提交起生效"
             echo "============================================"
-            exit 1
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              exit 1
+            fi
+            echo "⚠️ push 直推侧不阻断（存量历史零 signoff，见文件头说明）"
+          else
+            echo ""
+            echo "✅ 所有 commit 都包含 Signed-off-by"
           fi
 
-          echo ""
-          echo "✅ 所有 commit 都包含 Signed-off-by"
-          echo ""
-
-      - name: Check Conventional Commits subject (首期警告)
+      - name: Check Conventional Commits subject
         run: |
           echo "=== [2/3] 检查 commit subject 格式 (Conventional Commits) ==="
           echo "允许的类型：feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert"
           echo ""
 
-          COMMITS=$(git rev-list --no-merges "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}")
-
+          COMMITS="${{ steps.range.outputs.commits }}"
           if [ -z "$COMMITS" ]; then
             echo "未发现 commit"
             exit 0
@@ -104,24 +152,25 @@ jobs:
             echo "以下 commit subject 不符合 Conventional Commits："
             echo "$WARNINGS"
             echo ""
-            echo "⚠️ 当前为警告，不阻断（v2 软实施）"
-            echo "⚠️ v3.21.0 起将升级为硬阻断"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "❌ 硬阻断"
+              exit 1
+            fi
+            echo "⚠️ push 直推侧不阻断"
             echo ""
             echo "完整规范：https://www.conventionalcommits.org/"
             echo "============================================"
-            # 不 exit 1，首期仅警告
           else
             echo ""
             echo "✅ 所有 commit subject 都符合 Conventional Commits"
           fi
 
-      - name: Check commit body length (首期警告)
+      - name: Check commit body length
         run: |
           echo "=== [3/3] 检查 commit body 长度 (≥ 10 字符) ==="
           echo ""
 
-          COMMITS=$(git rev-list --no-merges "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}")
-
+          COMMITS="${{ steps.range.outputs.commits }}"
           if [ -z "$COMMITS" ]; then
             echo "未发现 commit"
             exit 0
@@ -147,15 +196,16 @@ jobs:
             echo "以下 commit body 过短（< 10 字符）："
             echo "$WARNINGS"
             echo ""
-            echo "⚠️ 当前为警告，不阻断（v2 软实施）"
-            echo "⚠️ v3.21.0 起将升级为硬阻断"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "❌ 硬阻断"
+              exit 1
+            fi
+            echo "⚠️ push 直推侧不阻断"
             echo ""
             echo "修复示例："
-            echo "  git commit --amend -m \"feat(api): add user endpoint\" \\"
-            echo "    -m \"Implement GET /api/users with pagination\" \\"
-            echo "    -m \"Signed-off-by: Name <email>\""
+            echo "  git commit -m \"feat(api): add user endpoint\" \\"
+            echo "    -m \"Implement GET /api/users with pagination\""
             echo "============================================"
-            # 不 exit 1，首期仅警告
           else
             echo ""
             echo "✅ 所有 commit body 长度符合要求"
@@ -166,13 +216,14 @@ jobs:
         run: |
           echo ""
           echo "============================================"
-          echo "DCO + Commits Lint 总结"
+          echo "DCO + Commits Lint 总结（事件：${{ github.event_name }}）"
           echo "============================================"
-          echo "✅ 硬阻断: Signed-off-by 缺失"
-          echo "⚠️ 软警告: Conventional Commits subject 格式"
-          echo "⚠️ 软警告: Commit body 长度 (≥ 10 chars)"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "阻断档：3 项全硬阻断"
+          else
+            echo "阻断档：3 项均为警告（存量历史未回填 signoff）"
+            echo "建议：git config commit.gpgsign / git commit -s 从下一笔起带 signoff"
+          fi
           echo ""
-          echo "状态演进路线："
-          echo "  v3.20.0 (当前) - 1 硬阻断 + 2 软警告"
-          echo "  v3.21.0 (建议) - 3 硬阻断"
+          echo "触发面：pull_request + push(master)——本仓禁 PR 流程，push 侧才是实际生效的那条腿"
           echo "============================================"

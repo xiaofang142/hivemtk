@@ -33,6 +33,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	digestRepo := barepo.NewBrowserAuditDigestRepositoryWithDB(gormDB)
 	writeClaimRepo := barepo.NewBrowserWriteClaimRepositoryWithDB(gormDB)
 	profileHealthRepo := barepo.NewBrowserProfileHealthRepositoryWithDB(gormDB)
+	outreachDedupeRepo := barepo.NewBrowserOutreachDedupeRepositoryWithDB(gormDB)
+	outreachReceiptRepo := barepo.NewBrowserOutreachReceiptRepositoryWithDB(gormDB)
 	kvRepo := hrepo.NewSystemConfigKVRepository()
 
 	// --- Service（进程级单例：registry / hand）---
@@ -44,8 +46,18 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	executor.SetCommandLogRepository(cmdLogRepo)
 	executor.SetWriteClaimRepository(writeClaimRepo) // 批20f（A12）：漏这一行 = 所有写步拒绝下发
 	executor.SetProfileHealthRepo(profileHealthRepo) // Chunk2：封号熔断落库。漏这一行 = 熔断面静默关闭
+	// Chunk3：跨任务触达去重。漏这一行不报错，但同目标同文案的重复打扰会全部放行
+	// （resolveOutreachDedupe 在 repo 为 nil 时 fail-open）。
+	executor.SetOutreachDedupeRepository(outreachDedupeRepo)
+	// Chunk4：活动触达条数预算的原子扣减。漏这一行不报错（consumeCampaignActBudget 在
+	// repo 为 nil 时 fail-open），代价是活动预算形同虚设——cron 可以一直发到号被封。
+	executor.SetTaskRepository(taskRepo)
+	// Chunk5：触达回执（截图 + 帖子链接 + 文案快照）。漏这一行不报错（enqueue 与
+	// capture 都会因 repo nil 短路），代价是触达照发但验收面永远为空。
+	executor.SetOutreachReceiptRepository(outreachReceiptRepo)
 	taskSvc := basvc.NewTaskService(taskRepo, sessionRepo, executor)
 	taskSvc.SetProfileHealthRepo(profileHealthRepo) // Chunk2：RunTask 启动门 + 人工恢复
+	taskSvc.SetOutreachReceiptRepository(outreachReceiptRepo)
 	sessionSvc := basvc.NewSessionService(sessionRepo, stepRepo, executor)
 	sessionSvc.SetCommandLogRepository(cmdLogRepo) // D1（G1）：命令流审计查询
 	sessionSvc.SetLLMPlanRepository(planRepo)      // I5：审计导出含 LLM 成本账
@@ -110,6 +122,8 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	ba.GET("/sessions/:id/logs", sessionCtrl.ListLogs) // D1：command/event/judge 全链路还原
 	ba.GET("/sessions/:id/export", sessionCtrl.Export) // I5：审计包单请求归并导出
 	ba.GET("/tasks/:id/sessions", sessionCtrl.ListByTask)
+	// Chunk5：触达回执（验收面：截图 + 帖子链接 + 文案快照）
+	ba.GET("/tasks/:id/receipts", taskCtrl.ListReceipts)
 	ba.POST("/sessions/:id/stop", sessionCtrl.Stop)
 	// D7 放行读侧：先取「正在等批的是哪一步/哪份载荷」，再把哈希带回 confirm（批20 A5）。
 	// 这道口不是便利贴：没有它，前端唯一的输入就是一个布尔，绑载荷就无从谈起。

@@ -41,19 +41,19 @@ func NewOpportunityService(
 
 // sovPoint SOV 窗口快照（纯函数输入）
 type sovPoint struct {
-	OwnSOV float64
-	TopRival string
+	OwnSOV      float64
+	TopRival    string
 	TopRivalSOV float64
 }
 
 // OpportunityInputs 机会构建输入（纯函数可测）
 type OpportunityInputs struct {
-	Cur, Prev         sovPoint
-	HasSOVData        bool
-	CitedDomains      []CitationDomainStat
-	UnreadAlerts      int64
-	RecentNegAlerts   []string
-	LowScoreArticles  []string
+	Cur, Prev        sovPoint
+	HasSOVData       bool
+	CitedDomains     []CitationDomainStat
+	UnreadAlerts     int64
+	RecentNegAlerts  []string
+	LowScoreArticles []string
 }
 
 // rankOpportunities 优先级排序：high 先行，同级按类型稳定输出

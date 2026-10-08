@@ -38,7 +38,7 @@ fi
 
 # 模型缺失则自动下载（对齐 ensure_model_file 行为）
 if ! compgen -G "$LAYA_DIR/*.safetensors" >/dev/null 2>&1; then
-  log_warn "[laya] 模型产物不存在: $LAYA_DIR，正在下载 ..."
+  log_warn "[laya] 模型产物不存在: ${LAYA_DIR}，正在下载 ..."
   bash "$SCRIPT_DIR/laya/download-model.sh" || {
     log_err "[laya] 模型准备失败"
     exit 1

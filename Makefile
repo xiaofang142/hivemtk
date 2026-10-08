@@ -513,6 +513,8 @@ audit:
 	@bash scripts/check-bash32-parse.sh
 	@echo "── 常驻变异电池的每份产物都必须写着「这轮读的是哪一笔字节」（轴一形状含 A5 归属／A6 口径对账，A7 名字轴拦「编译绿、跑到那行才 NameError」的悬空调用，轴二实测最近一轮；两份台账 D0–D4／O1–O5 各带上界与过期判据）──"
 	@python3 scripts/check-battery-identity.py --quiet-ok
+	@echo "── vite 主版本守卫：7 个 pin 必须同主版本，锁文件不得落后一个 minor（OPT-FE-07）──"
+	@bash scripts/check-vite-version.sh
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——

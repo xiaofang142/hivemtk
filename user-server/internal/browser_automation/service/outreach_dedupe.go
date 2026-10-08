@@ -63,8 +63,10 @@ type outreachDedupeCtx struct {
 
 // resolveOutreachDedupe 写步去重检查（只在写步调用）：返回 (ctx*, skip, err)。
 // skip=true 表示跨任务已触达过，调用方应 finishStep skipped + 审计帧后绿返回。
-// fail-open：repo 未接线 / pageURL 缺失且快照失败 / 归一化失败 / DB 错误，一律
-// warn 后放行——去重是防扰民层，真安全网是写声明与台账，不得因它拦停发送。
+// ctx 在**未命中时也非 nil**（键已冻结，供 verified 后落去重行）；
+// 只有「压根没查成」——repo 未接线 / pageURL 缺失且快照失败 / 归一化失败 / DB 错误——才是 nil。
+// fail-open：上述任一情形一律 warn 后放行——去重是防扰民层，真安全网是写声明与台账，
+// 不得因它拦停发送。
 func resolveOutreachDedupe(ctx context.Context, e *Executor, task *model.BrowserTask, step parsedStep, writeKey, pageURL string, tabID int) (*outreachDedupeCtx, bool, error) {
 	if e.outreachDedupeRepo == nil {
 		return nil, false, nil
@@ -86,15 +88,21 @@ func resolveOutreachDedupe(ctx context.Context, e *Executor, task *model.Browser
 		logger.Warnf("[BrowserExec] 去重查询失败（跳过去重检查）: %v", err)
 		return nil, false, nil
 	}
-	if !hit {
+	if key.TargetURL == "" {
+		// 归一化不出来 ⇒ 没有可冻结的键。fail-open 放行，且不去重行也不落
+		// （落一个空 URL 的行等于把「未知目标」永久标成已触达）。
 		return nil, false, nil
 	}
-	return &outreachDedupeCtx{
+	// 键在检查点冻结：命中与未命中都要带走。未命中时它是空委托——
+	// 本步 verified 之后由 recordOutreachDedupeSend 落行，下一个任务才撞得上。
+	// 检查与插入之间页面可能跳转，此刻重新取 URL / 重算 hash 拿到的会是另一个键。
+	oc := &outreachDedupeCtx{
 		platform:  key.Platform,
 		targetURL: key.TargetURL,
 		action:    step.Action,
-		copyHash:  writeKey,
-	}, true, nil
+		copyHash:  key.CopyHash,
+	}
+	return oc, hit, nil
 }
 
 // recordOutreachDedupeSend verified 后记去重行：published 即事实，插入失败仅 warn 不判红。

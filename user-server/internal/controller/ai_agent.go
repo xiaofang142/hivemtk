@@ -19,12 +19,6 @@ type AIAgentController struct {
 	engine *service.SalesEngine
 }
 
-func NewAIAgentController() *AIAgentController {
-	return &AIAgentController{
-		svc: service.NewAIAgentService(),
-	}
-}
-
 func NewAIAgentControllerWithService(svc *service.AIAgentService) *AIAgentController {
 	return &AIAgentController{svc: svc}
 }
@@ -460,12 +454,6 @@ type ChannelAgentBindingController struct {
 	svc *service.ChannelAgentBindingService
 }
 
-func NewChannelAgentBindingController() *ChannelAgentBindingController {
-	return &ChannelAgentBindingController{
-		svc: service.NewChannelAgentBindingService(),
-	}
-}
-
 func NewChannelAgentBindingControllerWithService(svc *service.ChannelAgentBindingService) *ChannelAgentBindingController {
 	return &ChannelAgentBindingController{svc: svc}
 }
@@ -604,12 +592,6 @@ func (ctrl *ChannelAgentBindingController) Delete(c *gin.Context) {
 
 type CustomerServiceAgentController struct {
 	svc *service.CustomerServiceAgentService
-}
-
-func NewCustomerServiceAgentController() *CustomerServiceAgentController {
-	return &CustomerServiceAgentController{
-		svc: service.NewCustomerServiceAgentService(),
-	}
 }
 
 func NewCustomerServiceAgentControllerWithService(svc *service.CustomerServiceAgentService) *CustomerServiceAgentController {

@@ -24,6 +24,8 @@ type TaskService struct {
 	triggerRemover TriggerRemover
 	// profileHealthRepo 主 Profile 健康仓储（熔断门/人工恢复）：nil = 熔断面关闭（测试装配常见）。
 	profileHealthRepo repository.BrowserProfileHealthRepository
+	// outreachReceiptRepo 触达回执读侧（Chunk5 验收面）：nil = 回执列表恒空（装配常见于测试）。
+	outreachReceiptRepo repository.BrowserOutreachReceiptRepository
 }
 
 // TriggerRemover 宿主任务生命周期变化时回收其定时触发器。

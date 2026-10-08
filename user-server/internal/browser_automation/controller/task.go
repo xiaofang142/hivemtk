@@ -367,3 +367,20 @@ func (c *TaskController) RecoverProfile(ctx *gin.Context) {
 	}
 	response.Success(ctx, gin.H{"platform": req.Platform}, "熔断标记已清除")
 }
+
+// ListReceipts GET /browser-automation/tasks/:id/receipts
+// Chunk5：触达回执（验收交付物 = 截图 + 帖子链接 + 文案快照）。
+// 挂在任务而不是会话上：验收问的是「这批触达发出去了什么」，而跨 session 的 cron 活动
+// 恰好没有单个会话视角。归属校验在 service 层（先过任务再查回执）。
+func (c *TaskController) ListReceipts(ctx *gin.Context) {
+	id, ok := parseID(ctx)
+	if !ok {
+		return
+	}
+	list, err := c.svc.ListOutreachReceipts(ctx.Request.Context(), id, taskUserID(ctx))
+	if err != nil {
+		taskErrToResponse(ctx, err)
+		return
+	}
+	response.SuccessWithList(ctx, list, int64(len(list)))
+}

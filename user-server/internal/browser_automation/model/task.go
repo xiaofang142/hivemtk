@@ -45,6 +45,20 @@ type BrowserTask struct {
 	// NextRetryAt 重试持久化到期时间（D4b/G5）：原为内存 goroutine 定时器，进程重启即丢；
 	// 现在 scheduleRetry 落列 + 每分钟扫描认领（条件更新置 NULL，多副本同库仅一方触发）——重启不丢。
 	NextRetryAt *time.Time `gorm:"column:next_retry_at" json:"next_retry_at,omitempty"`
+	// —— 触达 P0 Chunk 4：活动级预算（单次触达成本核算）——
+	//
+	// 「活动」在本仓没有独立实体：触达活动就是任务本体（cron/loop/retry 的所有 session
+	// 都累计到同一行 browser_tasks）。因此预算落成任务行上的**持久累计额度**，跨 session、
+	// 跨重跑累计——Executor 是进程级单例，放内存就等于「换个进程/重启即清零」，
+	// 而预算的意义恰恰是跨进程的累计上限。
+	//
+	// 全部字段 0/空 = 不限。加字段不等于加限制：存量任务与未配置任务的行为逐字不变。
+	TokenBudget int `gorm:"column:token_budget;default:0" json:"token_budget"` // session 级 token 预算覆盖（0=用默认常量 brainTokenBudget）
+	// CampaignKey 活动键（同一次活动的多次触达任务共用同一键，用于归组与看板）
+	CampaignKey string `gorm:"column:campaign_key;size:128;default:'';index" json:"campaign_key"`
+	// CampaignActBudget/CampaignActUsed 活动触达条数预算与已用量（原子条件更新扣减，多副本不超发）
+	CampaignActBudget int `gorm:"column:campaign_act_budget;default:0" json:"campaign_act_budget"`
+	CampaignActUsed   int `gorm:"column:campaign_act_used;default:0" json:"campaign_act_used"`
 	// 归属
 	UserID    uint   `gorm:"column:user_id;index;not null" json:"user_id"`
 	AccountID uint   `gorm:"column:account_id;index" json:"account_id"`

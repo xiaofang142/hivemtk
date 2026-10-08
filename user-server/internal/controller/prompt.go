@@ -20,11 +20,6 @@ func NewPromptController() *PromptController {
 	return &PromptController{svc: service.NewPromptService()}
 }
 
-// NewPromptControllerWithService 注入 Service（测试用）
-func NewPromptControllerWithService(svc *service.PromptService) *PromptController {
-	return &PromptController{svc: svc}
-}
-
 // GetVersions 获取某个 SOP Node / Prompt ID 的所有历史版本（prompt_candidates）
 // GET /api/prompts/:id/versions?sop_node_id=xxx&status=active
 func (c *PromptController) GetVersions(ctx *gin.Context) {

@@ -207,4 +207,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewConfigParamGroupKeyUniqueMigration(db))
 	register(NewBrowserTaskCopyTextMigration(db))
 	register(NewBrowserProfileHealthMigration(db))
+	register(NewBrowserOutreachDedupeMigration(db))
+	register(NewBrowserTaskCampaignBudgetMigration(db))
+	register(NewBrowserOutreachReceiptMigration(db))
 }

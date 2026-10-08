@@ -28,8 +28,9 @@ func (f *fakeBrain) GeneratePlanReflect(ctx context.Context, taskID, sessionID u
 	return f.stepsJSON, f.done, f.err
 }
 
-func (f *fakeBrain) LastPlanTokens() int { return f.tokens }
-func (f *fakeBrain) LastAuxTokens() int  { return 0 }
+func (f *fakeBrain) LastPlanTokens() int   { return f.tokens }
+func (f *fakeBrain) LastPlanModel() string { return "" }
+func (f *fakeBrain) LastAuxTokens() int    { return 0 }
 func (f *fakeBrain) JudgeDone(ctx context.Context, taskID, sessionID uint, goal, evidence string) (bool, string) {
 	return true, "fake"
 }

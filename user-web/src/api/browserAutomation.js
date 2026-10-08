@@ -96,6 +96,11 @@ export const getBrowserSessionLogs = (id, direction) =>
 export const exportBrowserSessionAudit = (id) =>
   http.get(`/api/browser-automation/sessions/${id}/export`)
 
+// Chunk5：触达回执（验收交付物 = 截图 + 帖子链接 + 文案快照）。
+// 挂在任务而非会话上：cron 触达跨多个会话，验收问的是「这批触达发出去了什么」。
+export const listBrowserTaskReceipts = (taskId) =>
+  http.get(`/api/browser-automation/tasks/${taskId}/receipts`)
+
 // ========== Cron ==========
 
 export const listBrowserCron = () =>

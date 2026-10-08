@@ -326,9 +326,9 @@ const MaxProbeSampleRounds = 5
 
 // SampleSummary 多轮采样汇总：提及率 + 样本数即置信展示
 type SampleSummary struct {
-	Rounds          int     `json:"rounds"`
-	TotalRuns       int     `json:"total_runs"`
-	BrandHits       int     `json:"brand_hits"`
+	Rounds           int     `json:"rounds"`
+	TotalRuns        int     `json:"total_runs"`
+	BrandHits        int     `json:"brand_hits"`
 	BrandMentionRate float64 `json:"brand_mention_rate"`
 }
 

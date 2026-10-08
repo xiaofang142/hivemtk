@@ -25,8 +25,9 @@ type BrainService struct {
 	planRepo repository.BrowserLLMPlanRepository
 
 	mu             sync.Mutex
-	lastPlanTokens int // P1-1 最近一次 plan token 消耗（计量信号；精确审计看 plans 表）
-	lastAuxTokens  int // P1-1 最近一次 judge/summary token 消耗（session 预算累计用）
+	lastPlanTokens int    // P1-1 最近一次 plan token 消耗（计量信号；精确审计看 plans 表）
+	lastAuxTokens  int    // P1-1 最近一次 judge/summary token 消耗（session 预算累计用）
+	lastPlanModel  string // Chunk4：最近一次 plan 的模型名（时间线可观测；空串=该步没走 LLM，不编造）
 }
 
 func NewBrainService(planRepo repository.BrowserLLMPlanRepository) *BrainService {
@@ -289,6 +290,7 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 	}
 	s.mu.Lock()
 	s.lastPlanTokens = planTokIn + planTokOut
+	s.lastPlanModel = planModel // Chunk4：执行器据此把模型名写进审计帧（时间线可观测）
 	s.mu.Unlock()
 	return steps, p.Done, nil
 }
@@ -353,4 +355,15 @@ func (s *BrainService) LastPlanTokens() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastPlanTokens
+}
+
+// LastPlanModel 最近一次 planOnce 的模型名（Chunk4：任务时间线可观测，每步审计帧的 llm_model）。
+// 与 LastPlanTokens 同一把锁、同一套纪律：BrainService 无状态多 session 并发安全，
+// 值仅作为时间线信号，精确成本账仍看 browser_llm_plans。
+// 空串表示「这一次没有 plan 过模型」——显式编排（非 Brain 模式）走的就是这条，
+// 此时执行器**不写** llm_model 字段，而不是写个空串让读者以为是「模型叫空」。
+func (s *BrainService) LastPlanModel() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPlanModel
 }

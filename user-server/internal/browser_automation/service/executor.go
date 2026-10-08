@@ -59,6 +59,7 @@ type parsedStep struct {
 type brainPlanner interface {
 	GeneratePlanReflect(ctx context.Context, taskID, sessionID uint, goal, platformID, snapshot string, st *reflectState) (stepsJSON []byte, done bool, err error)
 	LastPlanTokens() int
+	LastPlanModel() string // Chunk4：审计帧每步的 llm_model（空串=该步没走 LLM，调用方不写该字段）
 	LastAuxTokens() int
 	JudgeDone(ctx context.Context, taskID, sessionID uint, goal, evidence string) (approve bool, reason string)
 	SummarizeSession(ctx context.Context, taskID, sessionID uint, goal string, success, total int, extracts string) string
@@ -83,6 +84,15 @@ type Executor struct {
 	// 测试经 SetJevClient 注入 fake server 指向的客户端。
 	jevClient *JevClient
 
+	// outreachReceiptRepo 触达回执仓储（Chunk5：验收交付物 = 截图 + 帖子链接 + 文案快照）。
+	// nil=未接线（回执全空，执行不受影响）——回执是增强层，落不落得住都不改「已发布」这个事实。
+	outreachReceiptRepo repository.BrowserOutreachReceiptRepository
+
+	// pendingReceipts sessionID → 待落回执行（Chunk5 收口期挂起，见 outreach_receipt.go）。
+	// 只在「本会话已经发过触达」这一罕见路径上有内容，纯只读任务恒为空。
+	receiptMu       sync.Mutex
+	pendingReceipts map[uint][]*receiptPending
+
 	// profileHealthRepo 主 Profile 健康熔断仓储（Chunk2：单主 Profile 健康监护）。
 	// nil=未接线（熔断写入跳过，执行不受影响）——熔断是增强不是门禁。
 	profileHealthRepo repository.BrowserProfileHealthRepository
@@ -90,6 +100,13 @@ type Executor struct {
 	// outreachDedupeRepo 跨任务触达去重仓储（Chunk3：同一平台同一目标同一动作同一文案只触达一次）。
 	// nil=未接线（去重检查跳过，执行不受影响）——去重是防扰民层，真安全网是写声明与台账。
 	outreachDedupeRepo repository.BrowserOutreachDedupeRepository
+
+	// taskRepo 任务仓储（Chunk4：活动触达条数预算的原子扣减落在这里）。
+	// nil=未接线 ⇒ **不扣减也不拦停**（fail-open），与存量行为一致。
+	// 之所以敢 fail-open：预算的失败形态是「多打扰了几次」，而双发的失败形态是「用户被重复骚扰
+	// 且无法撤回」。预算若因接线缺失而把整条触达线锁死，那是更大的事故；真要收紧预算强度，
+	// 该在 TaskService 启动门做（见 task.go 的 profileHealth 启动门范式）。
+	taskRepo repository.BrowserTaskRepository
 
 	// relocateLLM A1 自愈 LLM 接缝（默认 defaultRelocateLLM；测试替换免真机 LLM）
 	relocateLLM func(ctx context.Context, systemPrompt, prompt string) (relocateOutcome, error)
@@ -133,6 +150,8 @@ func NewExecutor(hand *Hand, sessionRepo repository.BrowserSessionRepository, st
 
 		ledgerBroken: make(map[uint]string),
 		ledgerGaps:   make(map[string]bool),
+
+		pendingReceipts: make(map[uint][]*receiptPending),
 	}
 	// 不把 *BrainService(nil) 直接赋给接口字段：那会得到一个「非 nil 的 nil 接口」，
 	// e.brain == nil 判假，随后 executeBrain 就在 nil receiver 上发起真调用。
@@ -190,6 +209,11 @@ func (e *Executor) SetProfileHealthRepo(r repository.BrowserProfileHealthReposit
 // SetOutreachDedupeRepository 触达去重仓储注入（路由装配可选——nil 时去重检查跳过）。
 func (e *Executor) SetOutreachDedupeRepository(r repository.BrowserOutreachDedupeRepository) {
 	e.outreachDedupeRepo = r
+}
+
+// SetTaskRepository 任务仓储注入（Chunk4：活动触达条数预算扣减；nil 时不扣减）。
+func (e *Executor) SetTaskRepository(r repository.BrowserTaskRepository) {
+	e.taskRepo = r
 }
 
 // appendCommandLog append-only 命令-事件日志（P8）。失败仅告警不阻断执行：
@@ -650,7 +674,7 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 					}
 				}
 				// 轮次 >0 时重新 open_tab 的场景由显式 steps 表达；此处不隐式开 tab
-				status, errMsg, _ := e.executeStepWithRetry(ctx, task, session, i, step, stopCh, &cmdSeq)
+				status, errMsg, _ := e.executeStepWithRetry(ctx, task, session, i, step, stopCh, &cmdSeq, "")
 				switch status {
 				case "success":
 					success++
@@ -716,6 +740,10 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 	// Profile 累积 40 个泄漏 tab（cron 任务按周期无限增长，后台 tab 常驻还拖慢 SW）。
 	// 「留着给用户看结果」不成立：证据已在审计包（快照/截图/command_log），且崩后
 	// chrome_tab_id 本就失效（A9 结论：续跑唯一合法入口是重新 open_tab）。
+	// Chunk5 触达回执：拍验收截图 + 落本会话的回执行。
+	// **必须在 cleanupSessionTab 之前**：tab 一回收，captureVisibleTab 就只能截到用户
+	// 自己的页面（静默假内容，比没有更坏），顺序颠倒等于回执永远拍不到真页面。
+	e.captureSessionReceipts(writeCtx, task, session, &cmdSeq)
 	e.cleanupSessionTab(ctx, task, session, &cmdSeq)
 
 	// Brain 模式：LLM 总结执行结果落 llm_summary（P2-2：completed 与 failed 都总结——失败归因同样是交付物）
@@ -754,8 +782,9 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 	// F6 历史压缩台账：滑窗溢出条目按动作折叠计数，台账首行回喂 LLM（零 LLM 成本的 browser-use 压缩等价）
 	foldedHistory := map[string]int{}
 	// P1-1：session 级 token 预算熔断（plan+judge 全计入）
+	// Chunk4：预算可由任务字段 TokenBudget 覆盖（0=用默认常量），取数唯一入口 taskTokenBudget。
 	tokenUsed := 0
-	tokenBudget := brainTokenBudget()
+	tokenBudget := taskTokenBudget(task)
 	// JEV session 级熔断/独立预算（Executor 进程级单例不放计数，随 task 结束丢弃）
 	jevSess := &jevSessionState{}
 	// wall-clock 看门狗（R22）：ctx 取消链在某些 LLM/DB 调用栈不生效（session132 实测 11min+ active），
@@ -923,7 +952,7 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 			}
 			// P0-4：LLM 幻觉参数服务端钳位
 			step.RetryCount, step.RetryBackoffMs = clampBrainStepParams(step.RetryCount, step.RetryBackoffMs)
-			status, errMsg, stepResult := e.executeStepWithRetry(ctx, task, session, stepIdx, step, stopCh, &cmdSeq)
+			status, errMsg, stepResult := e.executeStepWithRetry(ctx, task, session, stepIdx, step, stopCh, &cmdSeq, pageURL)
 			stepIdx++
 			// 历史记录（F6 滑窗压缩：溢出最旧条折叠入账）：LLM 下轮能看到已做过的关键动作
 			hist := step.Action + " " + step.Target
@@ -998,7 +1027,9 @@ func (e *Executor) executeBrain(ctx context.Context, task *model.BrowserTask, se
 // executeStepWithRetry 单步执行（含 retry/backoff），返回 (finalStatus, errMsg, resultJSON)。
 // resultJSON：成功时的原语回包（F6a 页面变化证据用），失败为 nil。
 // seq：session 局部命令日志计数器（P0-2，调用方持有保证 session 内单调、跨 session 隔离）。
-func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int) (string, string, json.RawMessage) {
+// pageURL：调用方手上的当前页 URL 现货（brain 模式传本轮 snapshot 的 URL；显式编排无现货传 ""，
+// 由 resolveOutreachDedupe 按需快照补齐）。只用于触达去重键的归一化，查不到即 fail-open 放行。
+func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, index int, step parsedStep, stopCh chan struct{}, seq *int, pageURL string) (string, string, json.RawMessage) {
 	// 写步判定先于落库——is_write 要作为事实随步行一起存，
 	// 事后从 action 名字反推会把「type+回车提交」这类隐形写漏掉。
 	// 三态分类。effectUnknown（平台定位表取不到）与 effectWrite 同样进闸门，
@@ -1035,6 +1066,10 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 	// 双发闸 + 重试豁免：闸门必须在任何帧下发之前——prep/type 本身会改页面状态
 	// （把草稿塞进输入框），不是「零副作用探测」。
 	writeKey := ""
+	// outreachCtx：写步去重键（命中跳过时为 nil，未命中但已备好键时非 nil）。
+	// 下传给 dispatchStep，供 verified 后落去重行——检查与插入之间页面可能跳转，
+	// 键必须在检查点冻结，不能等到提交后重新取 URL/重算 hash。
+	var outreachCtx *outreachDedupeCtx
 	if writeStep {
 		// 本会话台账已经写失败过一次 ⇒ 之后的写步一帧都不下发。
 		// 闸门依据的是库里的台账，台账自己写不进去时「过闸」只是走过场——
@@ -1046,6 +1081,24 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			return "failed", msg, nil
 		}
 		writeKey = writeStepKey(step)
+		// 跨任务触达去重（Chunk3）：同平台 + 同归一化目标页 + 同文案已触达过 ⇒ 本步不下发。
+		// 位置排在 writeKey 备齐之后、双发闸之前：去重是「更外层」的扰民拦截，先于会话内
+		// 台账判据生效；命中即整步跳过并绿返（目标本就已达成，重发只会二次扰民）。
+		// 去重库未接线 / 快照失败 / 查库报错一律 fail-open 放行，绝不因去重拦停发送。
+		oc, dupHit, _ := resolveOutreachDedupe(ctx, e, task, step, writeKey, pageURL, session.ChromeTabID)
+		if dupHit {
+			msg := fmt.Sprintf("触达去重跳过（%s）：%s 已有同文案触达记录，跨任务防重复打扰", writeWhy, oc.targetURL)
+			e.finishStep(ctx, stepRow.ID, "skipped", nil, 0, msg)
+			*seq++
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
+				mergeAuditMeta(map[string]any{
+					"dedupe_hit": true, "target_url": oc.targetURL, "reason": "outreach_already_sent",
+				}, e.stepAuditMeta(0)), 0, verdict(true))
+			logger.Infof("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
+			// 绿返：去重命中意味着内容早已触达，本轮无需再证明什么，不计成败、不中断。
+			return "skipped", "", nil
+		}
+		outreachCtx = oc
 		switch err := e.guardResubmit(ctx, task, writeKey, stepRow.ID); {
 		case errors.Is(err, errRetrySkipped):
 			prior := priorOfSkippedWrite(err)
@@ -1076,6 +1129,19 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		// 腾坑挂在本步收尾（executeStepWithRetry 是步级作用域），不是会话级：
 		// 坑留到会话结束会把「这一步从未跨提交点、下一会话应当能重跑」也一并留死。
 		defer func() { e.releaseWriteSlot(ctx, task.ID, session.ID, stepRow.ID, writeKey) }()
+		// Chunk4 活动触达条数预算：这一条是「本步真的会发出去」的最后一刻，故扣减排在此处——
+		// 排在占坑之后，被双发闸/D7 确认挡掉的步不消费额度（它们最终没发出去）。
+		// 预算耗尽 = 配置事实，不是异常：判红 + 拒绝下发 + 说明缺什么，让用户去调预算而不是重跑。
+		if !e.consumeCampaignActBudget(ctx, task) {
+			msg := fmt.Sprintf("写步未下发（%s）：%s", writeWhy, campaignBudgetExhaustedMsg(task))
+			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, msg)
+			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
+				mergeAuditMeta(map[string]any{
+					"reason": "campaign_budget_exhausted", "campaign_key": task.CampaignKey,
+					"campaign_act_budget": task.CampaignActBudget, "campaign_act_used": task.CampaignActUsed,
+				}, e.stepAuditMeta(0)), 0, verdict(false))
+			return "failed", msg, nil
+		}
 	}
 	// D7 覆盖派生写。把「type+回车 / click 发送按钮 / click_near 发送」认成写步之后，
 	// 闸门却仍只长在 post_comment 原语内部——开了 require_confirm 的用户，这类隐形写照样被
@@ -1112,8 +1178,18 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		// 而那个 ✓ 在这一行上什么也不指。它 attempted，不 succeeded。
 		*seq++
 		cmdPayload := map[string]any{"action": step.Action, "target": step.Target, "params": buildStepParams(step)}
+		// Chunk4：写步的下发帧带上活动预算水位（配置了活动预算时）。读审计包的人据此能回答
+		// 「当时这次触达是第几次、还剩几条」，而不必去猜时间戳落在哪次运行里。
+		// 未配置预算则整段不出现（不写 0/0 的假水位）。
+		if writeStep {
+			if snap := campaignBudgetSnapshot(task); snap != nil {
+				for k, v := range snap {
+					cmdPayload[k] = v
+				}
+			}
+		}
 		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "command", step.Action, cmdPayload, 0, nil)
-		result, err := e.dispatchStep(ctx, task, session, step, stepRow, seq)
+		result, err := e.dispatchStep(ctx, task, session, step, stepRow, seq, outreachCtx)
 		dur := time.Since(start).Milliseconds()
 		// 回包帧自己占一个号：dispatchStep 内部还会落 d7_*/comment_send/write_confirm 帧，
 		// 沿用「一问一答同序号」的旧写法会让步级 event 与它们同号（审计面上两条同号帧，
@@ -1130,12 +1206,14 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 				msg := fmt.Sprintf("写步已下发但台账未落（%v）——本轮判红：命令可能已生效，重发即双发，请人工核对该步结果", ledgerErr)
 				logger.Warnf("[BrowserExec] %s session=%d idx=%d action=%s", msg, session.ID, index, step.Action)
 				e.finishStep(ctx, stepRow.ID, "failed", result, dur, msg)
-				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": msg}, dur, verdict(false))
+				e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
+					mergeAuditMeta(map[string]any{"error": msg}, e.stepAuditMeta(dur)), dur, verdict(false))
 				return "failed", msg, json.RawMessage(result)
 			}
 			e.finishStep(ctx, stepRow.ID, "success", result, dur, "")
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
-				map[string]any{"result": json.RawMessage(auditEventPayload(result))}, dur, verdict(true))
+				mergeAuditMeta(map[string]any{"result": json.RawMessage(auditEventPayload(result))}, e.stepAuditMeta(dur)),
+				dur, verdict(true))
 			return "success", "", json.RawMessage(result)
 		}
 		lastErr = err.Error()
@@ -1145,7 +1223,8 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 				lastErr = fmt.Sprintf("%s；且写台账未落（%v）——重跑本任务前请人工核对该步是否已生效", lastErr, ledgerErr)
 			}
 		}
-		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action, map[string]any{"error": lastErr}, dur, verdict(false))
+		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
+			mergeAuditMeta(map[string]any{"error": lastErr}, e.stepAuditMeta(dur)), dur, verdict(false))
 		logger.Warnf("[BrowserExec] step 失败 session=%d idx=%d action=%s attempt=%d: %s", session.ID, index, step.Action, attempt, lastErr)
 		// F7（G16）：重试按平台错误归因分线（MediaCrawler 处置矩阵语义）——
 		// bad_body（内容被拒）重试无意义直接终止；refresh_token/disconnect 同样终止（交上层 session 级处置）；
@@ -1256,7 +1335,9 @@ func (e *Executor) detectBlockedIfFatal(ctx context.Context, task *model.Browser
 // stepRow：本步的 DB 行（含 ID），写原语分支用它落 submit_state 台账。
 // seq：session 局部命令号——post_comment 的 D7 闸门在分支内部，它要落的 d7_wait/d7_confirm 帧
 // 与外层命令帧共用同一个号段（计数器不下放给闸门，否则两处各自编号必然撞号）。
-func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep, seq *int) ([]byte, error) {
+// outreachCtx：写步去重键（executeStepWithRetry 的去重检查点冻结），verified 后落去重行用；
+// 非写步恒为 nil，落库入口自行判空短路。
+func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, session *model.BrowserSession, step parsedStep, stepRow *model.BrowserStep, seq *int, outreachCtx *outreachDedupeCtx) ([]byte, error) {
 	userID := task.UserID
 	tabID := session.ChromeTabID
 	p := buildStepParams(step)
@@ -1449,6 +1530,10 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			"evidence":   evidence,
 			"posted_at":  time.Now().Format(time.RFC3339),
 		})
+		// Chunk5 回执挂起（不落库，收口时一起落，见 captureSessionReceipts）：
+		// 放在 mergeExtract 之后、两条结论分支之前——verified 与 unattributed 都是
+		// 「已经发出去了」的事实，只有一边留回执的话，验收面就成了替平台做裁决。
+		e.enqueueOutreachReceipt(ctx, task, session, step, stepRow, outreachCtx, evidence, verified)
 		// 台账缺口优先于「看起来成功」：verified 的回查证据是真的，但库里没有这次提交，
 		// 下一轮的同文本重发就不会被拦——所以这一格不能给绿。判红不等于宣称失败，
 		// 文案里把「回查见/未见」原样带上，人一眼能判该不该补这条台账。
@@ -1460,6 +1545,9 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 			return nil, fmt.Errorf("post_comment %s，但提交台账未落全（%v）——本会话写能力已降级，重跑本任务前请人工核对该评论是否已发布", seen, ledgerErr)
 		}
 		if verified {
+			// Chunk3 跨任务触达去重落行：published 是事实，行落不落得住不改这个事实
+			// （warn-only）。行在，下一个任务撞见同目标同文案就会跳过。
+			recordOutreachDedupeSend(ctx, e, task, session, outreachCtx)
 			return recordResultPayload(map[string]any{
 				"posted": true, "verified": true, "evidence": evidence,
 				// finalize 只回答「我的文字上去没」，identity_checked 回答的是
