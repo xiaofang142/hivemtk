@@ -28,7 +28,7 @@ func TestProactiveReachService_PickChannel_OutboundChannels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, recipient, acc, err := svc.pickChannel(context.Background(), []string{tt.channel}, customer)
+			_, recipient, acc, err := svc.pickChannel(context.Background(), []string{tt.channel}, NewCustomerIdentity(customer, nil))
 			if err != nil {
 				t.Fatalf("expected no error for %s, got: %v", tt.channel, err)
 			}
@@ -49,7 +49,7 @@ func TestProactiveReachService_PickChannel_NilDB_OutboundChannels(t *testing.T) 
 		UnifiedID: "phone:13800138000",
 		Phone:     "13800138000",
 	}
-	channel, recipient, _, err := svc.pickChannel(context.Background(), []string{"sms"}, customer)
+	channel, recipient, _, err := svc.pickChannel(context.Background(), []string{"sms"}, NewCustomerIdentity(customer, nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestProactiveReachService_PickChannel_SkipsEmptyIdentity(t *testing.T) {
 		Phone:     "13800138000",
 	}
 
-	_, _, _, err := svc.pickChannel(context.Background(), []string{"wechat"}, customer)
+	_, _, _, err := svc.pickChannel(context.Background(), []string{"wechat"}, NewCustomerIdentity(customer, nil))
 	if err == nil {
 		t.Fatalf("expected error when no wechat identity")
 	}
@@ -82,7 +82,7 @@ func TestProactiveReachService_PickChannel_UsesAccountLookup(t *testing.T) {
 		UnifiedID:      "telegram:12345",
 		TelegramChatID: 12345,
 	}
-	channel, recipient, acc, err := svc.pickChannel(context.Background(), []string{"telegram"}, customer)
+	channel, recipient, acc, err := svc.pickChannel(context.Background(), []string{"telegram"}, NewCustomerIdentity(customer, nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestProactiveReachService_PickChannel_NoActiveAccount(t *testing.T) {
 		UnifiedID:      "telegram:12345",
 		TelegramChatID: 12345,
 	}
-	_, _, _, err := svc.pickChannel(context.Background(), []string{"telegram"}, customer)
+	_, _, _, err := svc.pickChannel(context.Background(), []string{"telegram"}, NewCustomerIdentity(customer, nil))
 	if err == nil {
 		t.Fatalf("expected error when no active account")
 	}

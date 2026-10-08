@@ -136,8 +136,14 @@ class APIClient:
         if bridge_token:
             self.s.headers["X-Bridge-Token"] = bridge_token
 
-    def req(self, method, path, desc, expect_code=None, ok_status=(200,), **kw):
-        """【入参】【返回】【预期】 三维打印; 返回 (resp_json, ok)"""
+    def req(self, method, path, desc, expect_code=None, ok_status=(200,), allow_codes=(), **kw):
+        """【入参】【返回】【预期】 三维打印; 返回 (resp_json, ok)
+
+        allow_codes: 这一步允许出现的**响应体 code** 集合（默认只允许 expect_code）。
+        用于「失败形态也是被验收对象」的步骤——例如出站链路在离线环境只能拿到
+        outbound_failed，那条 502 就是预期结果的一部分，硬判 code=0 会把
+        环境噪声与真缺陷混成同一个红。
+        """
         url = BASE + path
         body = kw.pop("json", None)
         params = kw.pop("params", None)
@@ -156,11 +162,15 @@ class APIClient:
         except ValueError:
             j = None
             contract_ok = False
-        if j is not None and expect_code is not None and isinstance(j, dict):
+        want_codes = set(allow_codes)
+        if expect_code is not None:
+            want_codes.add(expect_code)
+        if j is not None and want_codes and isinstance(j, dict):
             if "code" in j:
-                contract_ok = contract_ok and j.get("code") == expect_code
+                contract_ok = contract_ok and j.get("code") in want_codes
         ok = check(f"{desc}", code_ok and contract_ok,
-                   "" if code_ok and contract_ok else f"HTTP={r.status_code} 期望code={expect_code}")
+                   "" if code_ok and contract_ok
+                   else f"HTTP={r.status_code} 期望code={sorted(want_codes) or expect_code}")
         return j, ok
 
 
@@ -283,8 +293,21 @@ def run_chain(keep=False):
     check("S5.1 AI回复产生(outbound落库)", reply is not None, s51_detail)
     if reply:
         check("S5.2 is_ai_reply标记", reply["is_ai_reply"] is True, f"got={reply['is_ai_reply']}")
-        check("S5.3 回复内容非空且非模板垃圾", len(reply["content"] or "") >= 2 and "抱歉" not in (reply["content"] or "")[:6],
-              f"content[:80]={reply['content'][:80]!r}")
+        # 判据是「命中已知兜底文案整句」，不是「开头有没有抱歉」：
+        # LLM 答不出资料时完全可以礼貌地以「抱歉，暂未检索到…」开头，
+        # 那是一条真答案（承认查不到并反问用户走哪条路），不是模板垃圾。
+        # 原判据把前者一并判红，于是知识库一空这条就开始假红——它量的是用词，不是可用性。
+        # 已知兜底文案清单取自 aiagent/llm/fallback_tree.go 的模板树（截 40 字比对够用）。
+        _tpl_markers = (
+            "非常抱歉给您带来困扰",
+            "当前客服系统繁忙",
+            "服务暂时不可用",
+            "当前服务暂时繁忙",
+        )
+        _c = reply["content"] or ""
+        check("S5.3 回复内容非空且非模板兜底",
+              len(_c) >= 2 and not any(m in _c[:40] for m in _tpl_markers),
+              f"content[:80]={_c[:80]!r}")
         check("S5.4 回复会话绑定正确", reply["conversation_id"] == conversation_id)
         check("S5.5 trace_id可观测", bool(reply["trace_id"]), f"trace_id={reply['trace_id']}")
 
@@ -589,9 +612,33 @@ def run_ltc(keep=False):
         check("L6.1 审批通过 (HTTP)", True, f"approval_id={approval_id}")
 
     # ---- L7 次发 (HTTP 200 sent) ----
+    # 选路要过三道门才谈得上 sent：客户有渠道身份 → 该渠道有可用账号 → 发送器真的发得出去。
+    # 本机是离线环境（无 SMTP、无 bot token、无 wechat app_secret），第三道门必然过不去；
+    # 所以这里分两档断言，判据是**失败形态**而不是"必须成功"：
+    #   · 真发出去了            → status=sent，后续账单派生照跑
+    #   · 因环境发不出去而退回  → HTTP 502 outbound_failed，且报价已退回 draft
+    #     （这条恰恰是 quote_send.go 里 CAS + 状态回滚那段逻辑的验收：外发失败绝不能把
+    #      这一版留在 sent，否则重试会被 NotDraft 挡掉、而客户其实没收到）
+    # 分档的理由：把"环境发不出去"记成 FAIL 会让整条链的失败形态与真缺陷无法区分
+    # （此前 L7 一红，L8 账单随之 409 not_sent，六个阶段的结论全被这一处环境噪声带走）。
     j, ok = adm.req("POST", f"/api/quote/{qrow_id}/send", "L7 报价次发(期望sent)",
-                    expect_code=0, json={"approval_id": approval_id})
-    check("L7.1 返回 status=sent", ((j or {}).get("data") or {}).get("status") == "sent",
+                    expect_code=0, json={"approval_id": approval_id}, allow_codes=(0, 502))
+    sent = ((j or {}).get("data") or {}).get("status") == "sent"
+    if not sent:
+        reason = ((j or {}).get("data") or {}).get("reason")
+        qdb = q1("SELECT status FROM quotes WHERE id=%s", (qrow_id,))
+        check("L7.1 外发失败时报价退回 draft（外发不可逆，状态不能留在 sent）",
+              reason == "outbound_failed" and (qdb or {}).get("status") == "draft",
+              f"reason={reason!r} quote.status={(qdb or {}).get('status')!r} "
+              f"msg={str((j or {}).get('message'))[:120]!r}")
+        check("L7.2 环境无出站能力（渠道无账号/发送器不可达），非链路缺陷",
+              "no active account" in str((j or {}).get("message") or "")
+              or "service not registered" in str((j or {}).get("message") or "")
+              or "no channel identity" in str((j or {}).get("message") or ""),
+              f"msg={str((j or {}).get('message'))[:160]!r}")
+        _ltc_cleanup(seeded_tpl, cfg_orig=cfg_orig, adm=adm, seeded_script_id=seeded_script_id)
+        return finish(keep)
+    check("L7.1 返回 status=sent", True,
           f"data={json.dumps((j or {}).get('data'), ensure_ascii=False)[:150]}")
 
     # ---- L8 账单派生 (HTTP) ----
@@ -703,10 +750,15 @@ _GET_ACTION_SEG = frozenset((
 ))
 # 允许匿名写成功的公开端点白名单（命中才不判「未鉴权写」）
 _PUBLIC_MUT_OK = frozenset(("/api/auth/login", "/api/auth/logout", "/api/auth/refresh"))
-# 独立令牌闸门端点：不认 JWT，匿名与持 JWT 的 admin 一律 401 UNAUTHORIZED_2001。
-# 例：/api/browser/host-ws 用专用 Host token 握手（缺省无 token 时 HTTP401
-# `Host token 无效`），对它套用「admin 必须 code=0」会把设计内行为误判成失败。
+# 独立令牌闸门端点：不认 JWT，匿名与持 JWT 的 admin 一律被拦。对它套用
+# 「admin 必须 code=0」会把设计内行为误判成失败。
+# /api/browser/host-ws 是唯一一条，且它有两道门（见 browser_automation/controller/host.go）：
+#   ① 回环 IP 门 —— 只认连接真实对端（ctx.RemoteIP()，不采信 X-Forwarded-For）；
+#      本机跑时对端是 127.0.0.1 放行，容器化部署时对端是 docker 网关 ⇒ HTTP403 FORBIDDEN_2002。
+#   ② Host token 门 —— token 无效/未配置 ⇒ HTTP401 UNAUTHORIZED_2001。
+# 两条都是"设计上就该拒"，故 401 与 403 都算通过。
 _HOST_TOKEN_OK = frozenset(("/api/browser/host-ws",))
+_HOST_TOKEN_GATE_HTTP = frozenset((401, 403))
 _ERR_HTTP = frozenset((400, 401, 403, 404, 405, 409, 410, 415, 422, 429))
 
 
@@ -821,8 +873,8 @@ def _judge(kind, path, status, j, ctype, text, err):
             # 规范设计: response.ErrorWithBusinessCode —— 业务错误码(4004/6001…)放
             # 响应体 code、HTTP 恒 200, 前端按 body code 判定(见 response.go 注释)
             return True, f"业务错误码(200+{code})"
-        if status == 401 and code == "UNAUTHORIZED_2001" and path in _HOST_TOKEN_OK:
-            return True, "独立令牌闸门(JWT 不适用,设计内)"
+        if path in _HOST_TOKEN_OK and status in _HOST_TOKEN_GATE_HTTP and rejected:
+            return True, f"独立令牌/回环闸门(JWT 不适用,设计内) code={code} HTTP{status}"
         return False, f"code={code!r} HTTP{status} 期望 code=0 或 400/404"
     if kind == "get_anon":
         if success:

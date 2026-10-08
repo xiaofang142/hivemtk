@@ -125,13 +125,20 @@ func (c *ProactiveReachController) ListChannels(ctx *gin.Context) {
 		return
 	}
 
-	available := service.CustomerAvailableChannels(cust, nil)
-	channels := make([]map[string]any, 0, len(available))
-	for _, ch := range available {
+	// 预览口径必须与外发闸门同源：外发认「反规范化列 + customer_channels 绑定表」的并集
+	//（见 service.CustomerIdentity），这里若只认反规范化列，就会对同一个客户给出
+	//「可用渠道=空、外发却说该渠道不可用」这种自相矛盾的画面。
+	avail, err := c.svc.ListChannelAvailability(ctx.Request.Context(), cust)
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "查询渠道身份失败")
+		return
+	}
+	channels := make([]map[string]any, 0, len(avail))
+	for _, a := range avail {
 		channels = append(channels, map[string]any{
-			"channel":      ch,
-			"identity":     service.CustomerChannelIdentity(cust, ch),
-			"has_identity": service.CustomerHasChannelIdentity(cust, ch),
+			"channel":      a.Channel,
+			"identity":     a.Identity,
+			"has_identity": a.Identity != "",
 		})
 	}
 	response.Success(ctx, gin.H{

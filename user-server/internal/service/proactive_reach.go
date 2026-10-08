@@ -324,7 +324,18 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		return nil, errors.New("customer not found: provide customer_id, one_id, phone, or email")
 	}
 
-	available := CustomerAvailableChannels(customer, req.PreferredChannels)
+	// 身份来源取「反规范化列 + customer_channels 绑定表」的并集：
+	// 渠道绑定只落在绑定表里的客户（直接 SQL 播种、导入脚本、迁移）原先一律被判成
+	// 「无渠道身份」，于是报价次发与主动触达在这条路上全线失败——见 CustomerIdentity 注释。
+	ident, err := s.loadCustomerIdentity(ctx, customer)
+	if err != nil {
+		// 读绑定表失败不阻断外发：退回只认反规范化列是旧行为（保守、少发），
+		// 而在这里报错会把「多写一份表」这种数据形态升级成外发全线不可用。
+		logger.Warnf("[ProactiveReach] 读渠道绑定表失败，退回仅反规范化列 one_id=%s: %v", customer.UnifiedID, err)
+		ident = NewCustomerIdentity(customer, nil)
+	}
+
+	available := ident.Available(req.PreferredChannels)
 	if len(available) == 0 {
 		return nil, fmt.Errorf("customer %s has no channel identity on file, please bind at least one channel", customer.UnifiedID)
 	}
@@ -340,7 +351,7 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 	}
 
 	if req.DryRun {
-		channel, recipient, accountID, err := s.pickChannelDryRun(available, customer)
+		channel, recipient, accountID, err := s.pickChannelDryRun(available, ident)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +366,7 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		}, nil
 	}
 
-	channel, recipient, accountID, err := s.pickChannel(ctx, available, customer)
+	channel, recipient, accountID, err := s.pickChannel(ctx, available, ident)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +431,30 @@ func (s *ProactiveReachService) LoadCustomer(ctx context.Context, customerID, on
 	return s.loadCustomer(ctx, customerID, oneID)
 }
 
+// CustomerChannelAvailability 单个渠道的可用性与身份（预览用）。
+type CustomerChannelAvailability struct {
+	Channel  string
+	Identity string
+}
+
+// ListChannelAvailability 列出客户可用渠道及其身份（预览用）。
+//
+// 与 ReachByCustomer 的闸门同源同口径：同样走 loadCustomerIdentity，
+// 于是「预览说有渠道」与「外发时选得出渠道」永远一致，不会两处各判各的。
+// 一次调用出全量（available + identity 同源），不为每个渠道重查一次绑定表。
+func (s *ProactiveReachService) ListChannelAvailability(ctx context.Context, c *model.Customer) ([]CustomerChannelAvailability, error) {
+	ident, err := s.loadCustomerIdentity(ctx, c)
+	if err != nil {
+		logger.Warnf("[ProactiveReach] 预览渠道读绑定表失败，退回仅反规范化列 one_id=%s: %v", c.UnifiedID, err)
+	}
+	available := ident.Available(nil)
+	out := make([]CustomerChannelAvailability, 0, len(available))
+	for _, ch := range available {
+		out = append(out, CustomerChannelAvailability{Channel: ch, Identity: ident.Identity(ch)})
+	}
+	return out, nil
+}
+
 func (s *ProactiveReachService) loadCustomerPreferredOrder(ctx context.Context, oneID string, fallback []string) ([]string, error) {
 	if s.repo == nil {
 		return nil, nil
@@ -443,9 +478,27 @@ func (s *ProactiveReachService) loadCustomerPreferredOrder(ctx context.Context, 
 	return ordered, nil
 }
 
-func (s *ProactiveReachService) pickChannelDryRun(candidates []string, customer *model.Customer) (channel, recipient, accountID string, err error) {
+// loadCustomerIdentity 读「反规范化列 + 绑定表」并成集。
+//
+// 只在绑定表读得到行时才把它折进 bindings；读不到行不是错误（新客户本来就没有绑定），
+// 与「读失败」区分开，免得把数据形态当故障报。
+func (s *ProactiveReachService) loadCustomerIdentity(ctx context.Context, c *model.Customer) (*CustomerIdentity, error) {
+	if s.repo == nil || c.UnifiedID == "" {
+		return NewCustomerIdentity(c, nil), nil
+	}
+	rows, err := s.repo.ListCustomerChannelsByOneID(ctx, c.UnifiedID)
+	if err != nil {
+		return NewCustomerIdentity(c, nil), err
+	}
+	if len(rows) == 0 {
+		return NewCustomerIdentity(c, nil), nil
+	}
+	return NewCustomerIdentity(c, CustomerChannelBindings(rows)), nil
+}
+
+func (s *ProactiveReachService) pickChannelDryRun(candidates []string, ident *CustomerIdentity) (channel, recipient, accountID string, err error) {
 	for _, ch := range candidates {
-		recipient = CustomerChannelIdentity(customer, ch)
+		recipient = ident.Identity(ch)
 		if recipient == "" {
 			continue
 		}
@@ -454,14 +507,14 @@ func (s *ProactiveReachService) pickChannelDryRun(candidates []string, customer 
 		}
 		return ch, recipient, "dry_run_account", nil
 	}
-	return "", "", "", fmt.Errorf("no channel identity for customer %s", customer.UnifiedID)
+	return "", "", "", fmt.Errorf("no channel identity for customer %s", ident.cust.UnifiedID)
 }
 
-func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []string, customer *model.Customer) (channel, recipient, accountID string, err error) {
+func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []string, ident *CustomerIdentity) (channel, recipient, accountID string, err error) {
 	var tried []string
 	for _, ch := range candidates {
 		tried = append(tried, ch)
-		recipient = CustomerChannelIdentity(customer, ch)
+		recipient = ident.Identity(ch)
 		if recipient == "" {
 			continue
 		}
@@ -480,7 +533,7 @@ func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []st
 		}
 		return ch, recipient, acc, nil
 	}
-	return "", "", "", fmt.Errorf("no active account for customer %s, tried: %s", customer.UnifiedID, strings.Join(tried, ","))
+	return "", "", "", fmt.Errorf("no active account for customer %s, tried: %s", ident.cust.UnifiedID, strings.Join(tried, ","))
 }
 
 // reachCooldownWindow 同一客户两次外发的最小间隔。
