@@ -79,6 +79,10 @@ if _MISSING_ENV:
     sys.exit(3)
 
 REPORT = []
+# 降级项：某条腿因为环境前提（不是被测逻辑）只能验到形态，或只能把状态在库内补齐给下游时，
+# 在这里登记一句，finish() 单独打印。它们不计入 FAIL（否则又回到"环境噪声与真缺陷同一个红"），
+# 但必须在报告里单列，否则 38/38 会把"这一跳其实没有证据"读成"这一跳过了"。
+DEGRADED = []
 
 
 def section(title):
@@ -390,6 +394,8 @@ def finish(keep):
         if not ok:
             print(f"  ✗ {name} — {detail}")
     print(f"\n总计: {passed}/{total} PASS ({passed * 100 // total if total else 0}%)")
+    for d in DEGRADED:
+        print(f"  ⚠ 降级: {d}")
     return 0 if passed == total else 1
 
 
@@ -414,6 +420,17 @@ def _ltc_cleanup(seeded_template=False, cfg_orig=None, adm=None, seeded_script_i
     if cfg_orig is not None and adm is not None:
         adm.req("PUT", "/api/manage/ltc/config", "L13.0 LTC 配置恢复快照", expect_code=0,
                 json=cfg_orig)
+    # 旅程态不在这张 SQL 清理面上（它只落 L2 缓存，库里没有这张表），却必须每轮复位：
+    # 回款钩子那一跳走的是 Transition，而 Transition 对"当前已在目标阶段"是幂等短路
+    # ——直接返回、既不写态也不写阶段索引。上一轮留下的 repurchase 会让本轮的 L11
+    # 一个字节都测不到（读数照样是 0 或 1，但没有一次是真的由本链产生的）。
+    # 用产品自己的入口打回 lost，而不是绕过它去删缓存：删缓存没有 HTTP 面，
+    # 而脚本不该长出一个 Redis 客户端。
+    if adm is not None:
+        adm.req("POST", "/api/customer-journey/transition", "LTC 前置：旅程态打回 lost",
+                expect_code=0,
+                json={"customer_id": LTC_CUST_ID, "to_stage": "lost",
+                      "source": "ltc-e2e-cleanup", "reason": "LTC 验证链复跑前置复位"})
     opp = q1("SELECT id FROM opportunities WHERE id=%s", (LTC_OPP_ID,))
     qid = (opp or {}).get("id")
     qrow = q1("SELECT id FROM quotes WHERE opportunity_id=%s", (LTC_OPP_ID,))
@@ -448,7 +465,7 @@ def run_ltc(keep=False):
     section("LTC 全链路 E2E：线索→商机→报价→审批→账单→回款→赢单→复购 (T-P9-03)")
     token = login_admin()
     adm = APIClient(token=token)
-    _ltc_cleanup()
+    _ltc_cleanup(adm=adm)
     seeded_tpl = False
     seeded_script_id = None
 
@@ -501,7 +518,9 @@ def run_ltc(keep=False):
     clue_id = clue["id"]
 
     # ---- L2 商机固定 seed (SQL) + GET 核对 ----
-    # 无 HTTP convert 端点是设计：ConvertFromClue 只走 service 层（collection hook 调用）。
+    # 没有 HTTP 建商机端点是设计：/api/opportunity/* 只有读口与状态动作（见
+    # router/opportunity_routes_test.go 的端点名单），行本身由线索发掘那条 LLM 路径
+    # 经 ConvertFromClue 产出。本脚本要确定性，故商机行走 SQL 固定 seed + GET 核对。
     section("L2 商机固定seed + GET 核对 (无HTTP convert是设计)")
     qexec("INSERT INTO customers (id, unified_id, name, phone, email, created_at, updated_at)"
           " VALUES (%s,%s,%s,'','',now(),now()) ON CONFLICT (id) DO NOTHING",
@@ -622,7 +641,8 @@ def run_ltc(keep=False):
     # 分档的理由：把"环境发不出去"记成 FAIL 会让整条链的失败形态与真缺陷无法区分
     # （此前 L7 一红，L8 账单随之 409 not_sent，六个阶段的结论全被这一处环境噪声带走）。
     j, ok = adm.req("POST", f"/api/quote/{qrow_id}/send", "L7 报价次发(期望sent)",
-                    expect_code=0, json={"approval_id": approval_id}, allow_codes=(0, 502))
+                    expect_code=0, json={"approval_id": approval_id},
+                    ok_status=(200, 502), allow_codes=(0, "UNKNOWN_1000"))
     sent = ((j or {}).get("data") or {}).get("status") == "sent"
     if not sent:
         reason = ((j or {}).get("data") or {}).get("reason")
@@ -636,10 +656,34 @@ def run_ltc(keep=False):
               or "service not registered" in str((j or {}).get("message") or "")
               or "no channel identity" in str((j or {}).get("message") or ""),
               f"msg={str((j or {}).get('message'))[:160]!r}")
+        # 降级支不再提前收链。原先这里直接 return，L8–L12（账单派生→webhook 回款→赢单→
+        # 复购→事件链）整段不参与，报告却仍然印 20/21 —— 分母里没有没跑的那十二项，
+        # 读起来像"链路基本通过"。现在把 dispatch 成功后库里该有的那两格补齐
+        # （版本行 status=sent + 一条 quote/sent 销售事件），下游各跳照旧走真 HTTP + SQL 断言。
+        # 补齐的是**状态**不是断言：这一跳为什么降级进 DEGRADED 单独出声。
+        if (qdb or {}).get("status") == "draft":
+            qexec("UPDATE quotes SET status='sent', updated_at=now()"
+                  " WHERE id=%s AND status='draft'", (qrow_id,))
+            lq = q1("SELECT quote_id FROM quotes WHERE id=%s", (qrow_id,)) or {}
+            qexec("INSERT INTO sales_events (event_type, action, opportunity_id, quote_id,"
+                  " owner_id, occurred_at, created_at)"
+                  " VALUES ('quote', 'sent', %s, %s, 'e2e_admin', now(), now())",
+                  (LTC_OPP_ID, lq.get("quote_id")))
+            DEGRADED.append("L7 报价外发：本机无出站能力（无渠道账号/无发件凭证），"
+                            "sent 态与 quote/sent 事件按 dispatch 成功形态在库内补齐；"
+                            "⇒ 「客户真收到报价」这一跳无证据，L8–L12 验的是其下游各跳")
+    else:
+        check("L7.1 返回 status=sent", True,
+              f"data={json.dumps((j or {}).get('data'), ensure_ascii=False)[:150]}")
+
+    # 两支合流后先自证 L8 的前置真在库里：账单派生只认 sent，
+    # 前置没落上就该在这里红，而不是让 L8 回 409 再把根因藏到下一跳。
+    qnow = q1("SELECT status FROM quotes WHERE id=%s", (qrow_id,))
+    if not check("L7.3 【DB】进 L8 前版本行 status=sent",
+                 (qnow or {}).get("status") == "sent",
+                 f"status={(qnow or {}).get('status')!r} sent_by_http={sent}"):
         _ltc_cleanup(seeded_tpl, cfg_orig=cfg_orig, adm=adm, seeded_script_id=seeded_script_id)
         return finish(keep)
-    check("L7.1 返回 status=sent", True,
-          f"data={json.dumps((j or {}).get('data'), ensure_ascii=False)[:150]}")
 
     # ---- L8 账单派生 (HTTP) ----
     j, ok = adm.req("POST", "/api/bill", "L8 账单派生",
@@ -689,14 +733,31 @@ def run_ltc(keep=False):
               f"count={(j.get('data') or {}).get('count')}")
 
     # ---- L12 链路事件不断链 (SQL) ----
-    evs = qall("SELECT event_type, action FROM sales_events WHERE opportunity_id=%s ORDER BY id",
-               (LTC_OPP_ID,))
+    # 判据取 T-P8-01 交付的那条规范链，而不是"这一轮跑出了什么"：
+    # internal/service/sales_trace_chain_test.go 里写死的五跳是
+    #   opportunity.created → quote.sent → bill.created → bill.settled(result=paid) → opportunity.won
+    # 末跳是**赢单收口**不是账单结清（回款完成才判赢单，见 collection_hook.go 的三步），
+    # 所以原先"末跳 bill.settled"这一格与产品契约相反，它红的是断言自己。
+    # 本链从报价起跳：商机行由 SQL 固定 seed 建出（见 L2 那段——商机唯一的产出入口是
+    # 线索发掘那条 LLM 路径，本脚本无法确定性驱动），第一跳必然缺席。
+    # 缺席不写成通过：登记进 DEGRADED，并反向断言库里确实没有它（有则说明混进了上一轮残留）。
+    evs = qall("SELECT event_type, action, result, opportunity_id FROM sales_events"
+               " WHERE opportunity_id=%s ORDER BY id", (LTC_OPP_ID,))
     kinds = [(e["event_type"], e["action"]) for e in evs]
-    check("L12.1 【DB】链路事件>=4跳", len(kinds) >= 4, f"kinds={kinds}")
-    check("L12.2 【DB】首跳 opportunity.created", kinds[:1] == [("opportunity", "created")],
-          f"kinds={kinds}")
-    check("L12.3 【DB】末跳 bill.settled", kinds[-1:] == [("bill", "settled")],
-          f"kinds={kinds}")
+    canonical_tail = [("quote", "sent"), ("bill", "created"), ("bill", "settled"), ("opportunity", "won")]
+    check("L12.1 【DB】报价之后四跳齐全且按规范链有序", kinds == canonical_tail, f"kinds={kinds}")
+    check("L12.2 【DB】每一跳都挂在本链商机上（没有串到别的商机）",
+          len(evs) > 0 and all(e["opportunity_id"] == LTC_OPP_ID for e in evs),
+          f"opp_ids={sorted({e['opportunity_id'] for e in evs})}")
+    settled = [e for e in evs if (e["event_type"], e["action"]) == ("bill", "settled")]
+    check("L12.3 【DB】bill.settled 带 result=paid（结清方向由 status 表达）",
+          len(settled) == 1 and settled[0]["result"] == "paid",
+          f"settled={[s['result'] for s in settled]}")
+    check("L12.4 【DB】本链没有 opportunity.created（第一跳由 SQL seed 代打，非本链产物）",
+          ("opportunity", "created") not in kinds, f"kinds={kinds}")
+    DEGRADED.append("L12 首跳 opportunity.created 未在本三端验证里覆盖：ConvertFromClue（发这一跳的唯一生产调用点）"
+                    "只被线索发掘路径调用，没有 HTTP 入口；本链的商机行是 SQL 固定 seed。"
+                    "⇒ 那一跳的证据在 service 层规范链用例 sales_trace_chain_test.go，不在本脚本")
 
     # ---- L13 清理 ----
     section("L13 清理测试数据")

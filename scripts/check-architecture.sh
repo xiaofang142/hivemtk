@@ -331,6 +331,15 @@ for f in $(find "$TARGET/internal" \
   if [[ $f == *_test.go ]] && grep -Eq "^func (Test|Benchmark|Example)[A-Z_]" "$f" 2>/dev/null; then
     continue
   fi
+  # 「*_copy*」抓的是重复文件残渣，但迁移文件名里的 copy_text 是**业务列名**
+  # （browser_tasks.copy_text：JEV TYPE_TEXT 的唯一文案来源），不是副本标记。
+  # 豁免判据打在内容上而不是目录上：只有"落在 migrations 目录下、且自己实现了
+  # Version() string（＝注册过的迁移）"的文件才放行 —— 同一目录放一份没有
+  # Version() 的 foo_copy.go 仍然报红（反向测试已验证：去掉那一个方法名即红）。
+  if [[ $f == *_copy*.go && $f == */internal/migration/migrations/* ]] \
+     && grep -Eq "^func \(.*\) Version\(\) string" "$f" 2>/dev/null; then
+    continue
+  fi
   log_fail "[命名] 文件后缀违规: $f"
   NAMING_VIOLATIONS=$((NAMING_VIOLATIONS+1))
 done

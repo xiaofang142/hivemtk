@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -13,6 +14,12 @@ import (
 
 const (
 	journeyStateKeyPrefix = "journey:state:"
+
+	// 阶段成员索引：journey:stage_index:<stage> 是客户号列表，
+	// journey:stage_seen:<stage>:<customerID> 是"这个客户号已经进过这一格"的哨兵。
+	// 没有哨兵键的话每一次互动（Touch 也走 persistState）都会往列表里再推一次同一个客户号。
+	journeyStageIndexPrefix = "journey:stage_index:"
+	journeyStageSeenPrefix  = "journey:stage_seen:"
 
 	journeyL1TTL = 60 * time.Second
 
@@ -25,6 +32,14 @@ const (
 
 func journeyStateKey(customerID string) string {
 	return journeyStateKeyPrefix + customerID
+}
+
+func journeyStageIndexKey(stage JourneyStage) string {
+	return journeyStageIndexPrefix + string(stage)
+}
+
+func journeyStageSeenKey(stage JourneyStage, customerID string) string {
+	return journeyStageSeenPrefix + string(stage) + ":" + customerID
 }
 
 func journeyStateTTL(stage JourneyStage) time.Duration {
@@ -232,7 +247,55 @@ func (s *CustomerJourneyService) persistState(ctx context.Context, state *Journe
 	if err := s.cache.SetJSON(ctx, journeyStateKey(state.CustomerID), state, ttl); err != nil {
 		logger.Warnf("journey.persistState(%s) stage=%s error: %v",
 			state.CustomerID, state.CurrentStage, err)
+		return
 	}
+	s.indexStageMember(ctx, state.CurrentStage, state.CustomerID, ttl)
+}
+
+// indexStageMember 把「这个客户在这个阶段」登记进阶段索引（判据见 ListByStage 函数头）。
+//
+// 失败只 Warn：索引坏了不是"这个客户不存在"，读侧回退本地视图仍能给出可用名单；
+// 让一次索引写失败冒到业务写之上，等于把旅程推进这一事实本身回滚掉。
+func (s *CustomerJourneyService) indexStageMember(ctx context.Context, stage JourneyStage,
+	customerID string, ttl time.Duration) {
+	if customerID == "" {
+		return
+	}
+	seenKey := journeyStageSeenKey(stage, customerID)
+	seen, err := s.cache.Exists(ctx, seenKey)
+	if err != nil {
+		logger.Warnf("journey.indexStageMember(%s@%s) 哨兵读失败: %v", customerID, stage, err)
+		return
+	}
+	if seen {
+		return
+	}
+	if err := s.cache.RPush(ctx, journeyStageIndexKey(stage), customerID, ttl); err != nil {
+		logger.Warnf("journey.indexStageMember(%s@%s) 索引写失败: %v", customerID, stage, err)
+		return
+	}
+	if err := s.cache.Set(ctx, seenKey, "1", ttl); err != nil {
+		logger.Warnf("journey.indexStageMember(%s@%s) 哨兵写失败: %v", customerID, stage, err)
+	}
+}
+
+// authoritativeStage 读一个客户当前所处的旅程阶段：只读 L2，不看本实例的 L1，也不回填。
+//
+// 不看 L1 是因为这份缓存只属于这一个实例：本实例把客户写进 lead 之后的 60s 里，
+// 别的实例早已把他推进 interested，本实例按阶段列名单却仍然把他算进 lead 那一格 ——
+// 而这份名单的用途是"照着去联系"，多一个已经离开这个阶段的人就是打错一次电话。
+// 不回填同理：一次扫描要看几十个键，回填会把 60s 读缓存挤满只为这次读取而存在的状态。
+// 读不到（无记录或缓存故障）返回空阶段，成员在名单里落选：这一个人 unverifiable，
+// 而整张索引读不动是另一回事，那条退路在 ListByStage 里。
+func (s *CustomerJourneyService) authoritativeStage(ctx context.Context, customerID string) JourneyStage {
+	if s.cache == nil || customerID == "" {
+		return ""
+	}
+	var loaded JourneyState
+	if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil {
+		return ""
+	}
+	return loaded.CurrentStage
 }
 
 func (s *CustomerJourneyService) getLiveL1(customerID string) (*JourneyState, bool) {
@@ -394,8 +457,46 @@ func (s *CustomerJourneyService) AddSubscriber(ctx context.Context, sub JourneyS
 	s.subscribers = append(s.subscribers, sub)
 }
 
-// ListByStage 按阶段列出客户（本地 L1 视图）
+// ListByStage 按阶段列出客户。
+//
+// 名单来自 L2 的阶段索引，不是本实例的 L1 —— 这条服务在本仓是多实例的（HTTP 控制器、
+// 回款钩子、跟进与草稿装配各自 New 一份），而 L1 只是**实例内** 60s 的读缓存：
+// 扫本地 map 的列表只能看见"这个实例自己写过的客户"，于是回款钩子把客户切进复购期之后，
+// HTTP 那一侧按阶段查仍然是空表（判据见 customer_journey_stage_index_test.go 的跨实例那一格）。
+// 这与本文件头写的权威化口径是同一条：单客户读路径早已落 L2，按阶段列表是漏掉的那一条。
+//
+// 索引是**提示**不是权威：每个成员都回读权威态确认它还在这个阶段才收进名单，
+// 所以成员换阶段（哪怕换在另一份实例上）既不用删索引条目，也不会被误报进来。
+// 名单按客户号排序返回：索引是追加写的列表，到达顺序随写序变，
+// 不排序的话同一份状态两次请求能给出两份顺序不同的名单。
 func (s *CustomerJourneyService) ListByStage(ctx context.Context, stage JourneyStage) []string {
+	if s.cache == nil {
+		return s.listByStageLocal(stage)
+	}
+	members, err := s.cache.LRange(ctx, journeyStageIndexKey(stage), 0, -1)
+	if err != nil {
+		// 索引读不动时退回本实例视图，而不是回一张空表：空表与"这个阶段没有客户"
+		// 在调用方看来一模一样，而前者是故障、后者是事实。
+		logger.Warnf("journey.ListByStage(%s) 阶段索引读失败，退回本实例视图: %v", stage, err)
+		return s.listByStageLocal(stage)
+	}
+	ids := []string{}
+	checked := make(map[string]bool, len(members))
+	for _, cid := range members {
+		if cid == "" || checked[cid] {
+			continue
+		}
+		checked[cid] = true
+		if s.authoritativeStage(ctx, cid) == stage {
+			ids = append(ids, cid)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// listByStageLocal 本实例 L1 视图：缓存缺席或故障时的退路，覆盖面只有这一份实例写过的客户。
+func (s *CustomerJourneyService) listByStageLocal(stage JourneyStage) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	customerIDs := []string{}
@@ -408,6 +509,7 @@ func (s *CustomerJourneyService) ListByStage(ctx context.Context, stage JourneyS
 			customerIDs = append(customerIDs, cid)
 		}
 	}
+	sort.Strings(customerIDs)
 	return customerIDs
 }
 
