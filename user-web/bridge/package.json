@@ -18,7 +18,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
-    "globals": "^15.0.0",
+    "globals": "^17.12.0",
     "jsdom": "^24.1.0",
     "vite": "^8.1.1",
     "vitest": "^4.1.10"
