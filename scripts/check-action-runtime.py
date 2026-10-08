@@ -68,6 +68,9 @@ RUNTIMES = {
     "codecov/codecov-action@v7": "composite",
     "gitleaks/gitleaks-action@v2": "node20",
     "golangci/golangci-lint-action@v8": "node20",
+    # v9 的 runs.using 取自 v9 tag 的 action.yml（runs: using: "node24"），非按版本号推断。
+    # user-server-ci.yml 已在 2026-10-08 合并 upstream/master 时从 v8 抬到 v9。
+    "golangci/golangci-lint-action@v9": "node24",
     "lycheeverse/lychee-action@v2": "composite",
     "release-drafter/release-drafter@v7": "node24",
     "slsa-framework/slsa-verifier/actions/installer@v2.7.1": "node20",
@@ -78,13 +81,10 @@ RUNTIMES = {
 # 这些是本仓库当前动不了的部分：user-server-ci.yml 整份在并行泳道手里（未提交改动），
 # 逐条抬 pin 会撞对方正在编辑的 hunk；slsa-verifier 则是上游根本没发过 node24 的版本。
 GRANDFATHER = {
-    ("user-server-ci.yml", "actions/checkout@v4"): (12, "并行泳道持有该文件未提交改动"),
     ("user-server-ci.yml", "actions/setup-go@v5"): (6, "同上"),
-    ("user-server-ci.yml", "actions/setup-node@v4"): (5, "同上"),
     ("user-server-ci.yml", "actions/upload-artifact@v4"): (2, "同上"),
     ("user-server-ci.yml", "codecov/codecov-action@v4"): (2, "同上"),
     ("user-server-ci.yml", "gitleaks/gitleaks-action@v2"): (1, "同上"),
-    ("user-server-ci.yml", "golangci/golangci-lint-action@v8"): (1, "同上"),
     ("slsa.yml", "slsa-framework/slsa-verifier/actions/installer@v2.7.1"):
         (1, "上游最新 tag 仍是 v2.7.1=node20，无可抬目标；等上游发 node24 版"),
 }
