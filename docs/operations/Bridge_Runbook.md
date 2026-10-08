@@ -4,7 +4,7 @@
 > **日期:** 2026-08-15
 > **维护:** HiveMTK 运维组
 > **适用范围:** HiveBridge Chrome 扩展（user-web/bridge）+ 桥接后端接口（user-server `/api/bridge/*`）+ 宿主机推理栈
-> **配套文档:** [SLA/SLO](SLA_SLO.md) · [高可用部署](HA_DEPLOYMENT.md) · [灾难恢复](DR_RECOVERY.md) · [AI 智能体部署](AI_AGENT_PERF_DEPLOY.md)
+> **配套文档:** [SLA/SLO](SLA_SLO.md) · [高可用部署](HA_DEPLOYMENT.md) · [灾难恢复](DR_RECOVERY.md) · [AI 智能体部署](AI_AGENT_PERF_DEPLOY.md) · [反代长连接配置](reverse-proxy/README.md)
 
 ---
 
@@ -15,8 +15,8 @@
 | 组件 | 位置 | 端口 / 协议 | 启停方式 |
 |------|------|-------------|----------|
 | user-server (Go) | `user-server/` | :8204 HTTP | `make dev`（air 热更新）/ systemd `user-server` |
-| PostgreSQL 15+ | Docker | :8202 | `make db-up / db-down` |
-| Redis 7 | Docker | :8203 | `make db-up / db-down` |
+| PostgreSQL 15+ | Docker `mtk-postgres` | 容器内 :8202，宿主机映射 `127.0.0.1:8232` | `make db-up / db-down` |
+| Redis 7 | Docker `mtk-redis` | :8203（宿主机同口映射） | `make db-up / db-down` |
 | LLM (llama-server) | 宿主机 | :8207/v1 | `make inference-host-up / down` |
 | Embedding (TEI/llama) | 宿主机 | :8208/v1 | 同上 |
 | Rerank | 宿主机 | :8209 | 同上 |
@@ -26,17 +26,48 @@
 
 | 通道 | 方向 | 说明 |
 |------|------|------|
-| uplink | 扩展 → 服务端 | 上报会话/消息（`X-Bridge-Token` 头） |
-| outbox | 扩展 → 服务端 | 拉取待下发消息（长轮询） |
-| ack | 扩展 → 服务端 | 确认已下发（`AckOutboundItem` 原子化 `UPDATE...RETURNING`） |
+| uplink | 扩展 → 服务端 | `POST /api/bridge/ingest`，上报会话/消息（`X-Bridge-Token` 头） |
+| outbox | 扩展 → 服务端 | `GET /api/bridge/outbox`，拉取待下发消息（长轮询） |
+| ack | 扩展 → 服务端 | `POST /api/bridge/outbox/ack`，确认已下发（`AckOutboundItem` 原子化 `UPDATE...RETURNING`） |
+
+三通道之外还有两条只读口（同一 `X-Bridge-Token` 闸门）：
+
+| 口 | 端点 | 说明 |
+|------|------|------|
+| SSE 下行 | `GET /api/bridge/outbox/sse?channel=&account_id=` | **生产默认下行形态**：扩展启动时先探 capabilities，`sse_enabled=true` 就走 SSE 并直接 return，轮询定时器根本不创建（`user-web/bridge/src/core/polling-loop.js:88-100`）。`EventSource` 不能带自定义头，凭证走 `?bridge_token=`；建连先下发 `retry: 15000`，空闲时每 ~15s 一条注释帧 `: ping`（实测首帧 14 字节）。渠道只认桥接五渠道，`channel=telegram` 这类直接投递渠道回 400 `unsupported bridge channel`。经反代必须免缓冲，见 [反代长连接配置](reverse-proxy/README.md) |
+| capabilities | `GET /api/bridge/capabilities` | 下行形态协商口，服务端能力自报，实测 `{"poll_interval_ms":1500,"sse_enabled":true,"sse_heartbeat_ms":15000}`；缺凭证回 401 `UNAUTHORIZED_2001`。**扩展侧把它当保守探测**：请求失败或 4xx 时按 `sse_enabled=false` 处理 ⇒ 静默降到 1.5s 轮询。运维判"为什么下行变慢/日志里在打轮询"，先 `curl` 这个口看 `sse_enabled`，再看服务端 `FF_SSE_BRIDGE`（`internal/pkg/featureflag/flag.go:27-28` 注册默认 true，env 名即 `FF_SSE_BRIDGE`） |
 
 ### 0.3 一键巡检命令
 
 ```bash
 make inference-host-status   # 检查 8204/8207/8208/8209 四个端点连通性
 make db-ps                   # 检查 PG + Redis 容器
-bash scripts/bridge-monitor.sh   # 桥接健康巡检（如存在）
+bash scripts/bridge-monitor.sh          # 桥接健康巡检，默认 30m 窗口
+bash scripts/bridge-monitor.sh 90m      # 窗口只认 <整数><s|m|h|d>；1h30m 这类复合写法在入口就被拒
+BRIDGE_LOG_FILE=/tmp/bridge-run/air.log bash scripts/bridge-monitor.sh  # 开发态读日志源
 ```
+
+`bridge-monitor.sh` 的日志源两条路：给了 `BRIDGE_LOG_FILE` 就读该文件（开发态 `make dev` = air 热重载，
+Go 进程不在容器里，容器路径会"没数据可分析"，本机实测还会带出 `Error response from daemon: No such container`）；
+没给则找 docker 容器。文件那一路按每行 `"time":"..."` 字段筛，
+**没有 time 字段的行（air 自己的 `!analysis ...` 噪声）不计入**。
+
+窗口写法在两条路上必须是同一个答案，所以脚本做了两件事：
+1. **入口先拦语法**：只认 `<整数><s|m|h|d>`（`30m`/`2h`/`45s`/`1d`）。`1h30m` 这类复合写法 docker 能吞、
+   文件那一路换算不出，不设这道闸就是一条命令两种"参数合不合法"；复合写法请自己换算（`1h30m` ⇒ `90m`）。
+2. **两条路都先把窗口换算成秒**：文件路用秒数算起点时间戳，容器路把原样写法换成 `--since <秒>s` 交给 docker。
+   第二条是必需的——`docker logs --since` 用 Go 的 `ParseDuration`，**实测不认 `d`**（`--since 1d` 退 1、
+   报 `invalid value for "since"`），而按本脚本的语法 `1d` 是合法窗口；改传 `86400s` 后同一条 `1d`
+   在容器路径实测读到 315,094 行。
+
+退出码三档：判 FAIL ⇒ `1`（业务结论「Bridge 功能异常」）；OK/WARN ⇒ `0`（cron/CI 读 rc，不读颜色）；
+窗口写法不合法 ⇒ `2` 且**不产出任何报告**（这是"脚本没跑起来"，不是"bridge 坏了"；敲错参数报成 1 会让
+cron 拿一次笔误去喊线上故障）。实测：`bash scripts/bridge-monitor.sh 1h30m` ⇒ stderr 一行原因、stdout 0 字节、`rc=2`。
+
+服务端端到端模拟（`user-server/scripts/bridge-e2e-sim.sh`）的退出码分三档，用来把"环境红"和"业务红"分开：
+`0` 全绿 / `1` 有业务失败 / `3` 所有失败判定时 `/api/health` 都不是 200（服务没起或正被热重载换 PID，
+先恢复服务再复跑，不要按功能回归处理）。撞在这一档上的实测样本：一轮 e2e 里 8 枚 ingest 报红，
+真因是跑中途 air 换了监听进程，同脚本对同一份码复跑 ⇒ 88 通过 / 0 失败。
 
 ### 0.4 出站行的状态语义（读积压数字前先看这节）
 
@@ -64,7 +95,25 @@ bash scripts/bridge-monitor.sh   # 桥接健康巡检（如存在）
 一行都不改。放量步骤＝读着这行日志确认候选口径无误 → `config_params` 里把该键置 `false` → 下一轮真正落 `failed`。
 为什么默认要停在报数侧：这道写入不可逆，而回扫是 5 分钟一跑的后台任务，开发态存盘即热重载进真实例、连真库
 （2026-09-28 实测：闸门上线前的一轮 cron 把 38 行历史 pending 直接烧成 failed，事后已逐行还原）。
+现成的达标读数（2026-09-29 本机，另用一条独立 SQL 按同一判据复算过，两个数逐字一致）：
+`ttl=604800s groups=30 candidates=38 skipped_reachable=0` —— 要放量就是把这 38 行落 `failed`，先核对是不是都该弃。
 
+### 0.5 「在线」只有一个数：按 `last_sync_at` 的宽限窗判，不按 `status` 列
+
+`bridge_accounts.status` 是**粘住的列**：只有 SSE 正常收尾时 `SetOffline` 会把它改回 `offline`，扩展崩溃、
+浏览器被杀、断网、机器休眠都不走那条路径，列就长期停在 `online`。实测本机 171 行里 159 行标 online，
+而按最后同步时间判定的真值是 **0**。所以任何"在线数"都必须按 `status <> 'offline' AND last_sync_at IS NOT NULL
+AND now() - last_sync_at < grace` 算，grace 取 `config_params` 的 `bridge/online_grace_window`（裸数字按秒，缺省 30s）。
+
+这一条现在有四个读数点，全部同源，对不上就是 bug：
+- 服务端渠道总览计数（`repository.CountBridgeOnline`）
+- 主动触达选号（`repository.FindActiveAccountID`，挑中不可达账号等于发一条永不投递的出站行）
+- 离线回扫报告（`[BridgeReplay] 回扫完成: … online=… offline=… grace=…s`，日志里带 grace 是为了能和另两处对账）
+- 巡检脚本（`bridge-monitor.sh` 的「桥接账号 总数/在线」，窗口同样现读配置）
+
+三处 Go 侧共用一条判定串（`repository/bridge_online_predicate.go`），改它会让四个用例一起红；
+补投门另有一道 per-account 探针（活 SSE 订阅 OR 窗内同步过），所以"报告说在线"从来不是投递的前置条件——
+坏的是读数，不是投递。
 `unreachable_channels` 一格不等于"没人连 SSE"：轮询式下发的账号是靠 `last_sync_at` 落在宽限窗内才算在线的。
 
 ---

@@ -1,0 +1,14 @@
+2026-09-30T00:38:16+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/哨兵本身_⇒_409
+    kb_gate_merchant_reply_test.go:58: 哨兵本身 ⇒ 409 应回 409，实得 400（响应体：{"code":"INVALID_PARAM_1001","message":"该知识库已启用发布制：请通过知识变更流程提交（新增/修订/下线），由审批与发布使其生效"}）
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/仓储包装过一层仍认得_⇒_409
+    kb_gate_merchant_reply_test.go:58: 仓储包装过一层仍认得 ⇒ 409 应回 409，实得 400（响应体：{"code":"INVALID_PARAM_1001","message":"该知识库已启用发布制：请通过知识变更流程提交（新增/修订/下线），由审批与发布使其生效（chunk=7 product=p-1）"}）
+=== RUN   TestKM_ChunkWriteErrorMapsGovernedTo409/其余错误维持既有_400_口径
+--- FAIL: TestKM_ChunkWriteErrorMapsGovernedTo409 (0.00s)
+    --- FAIL: TestKM_ChunkWriteErrorMapsGovernedTo409/哨兵本身_⇒_409 (0.00s)
+    --- FAIL: TestKM_ChunkWriteErrorMapsGovernedTo409/仓储包装过一层仍认得_⇒_409 (0.00s)
+    --- PASS: TestKM_ChunkWriteErrorMapsGovernedTo409/其余错误维持既有_400_口径 (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/aiagent/knowledge/controller	0.425s
+FAIL

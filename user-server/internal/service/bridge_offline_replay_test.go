@@ -230,9 +230,14 @@ func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
 	}
 }
 
-// TestOfflineReplayService_DetectPartitionsByStatus 在线/离线两侧必须互斥且各归其位：
+// TestOfflineReplayService_DetectPartitionsByReachability 在线/离线两侧必须互斥且各归其位：
 // 两侧同源于同一份 bridge_accounts 快照，旧实现里"在线"这一侧根本不存在（只有恒报错的检测）。
-func TestOfflineReplayService_DetectPartitionsByStatus(t *testing.T) {
+//
+// 判据是"此刻收得到"（grace 窗口内的最后同步时间），不是 status 列：status='online' 只在
+// SSE 正常收尾时才被改回 offline，扩展被杀/断网都留着 online —— 实测 164 台里 159 台标在线
+// 而真值是 0 台。回扫报告读粘住的列就等于给运维一屏假绿，而它和渠道总览、主动触达必须是
+// 同一个数（三处共用 repository.bridgeOnlineSQLPredicate）。
+func TestOfflineReplayService_DetectPartitionsByReachability(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.BridgeAccount{})
 	svc := NewBridgeOfflineReplayService().WithDB(db)
 	ctx := context.Background()
@@ -241,8 +246,7 @@ func TestOfflineReplayService_DetectPartitionsByStatus(t *testing.T) {
 	stale := now.Add(-time.Hour)
 	seedSvcBridgeAccount(t, db, "douyin", "acc-on", "online", &now)
 	seedSvcBridgeAccount(t, db, "xiaohongshu", "acc-off", "offline", &stale)
-	// status 是唯一判据：last_sync_at 陈旧但未被置离线的渠道仍算在线
-	// （刷新在线位由 SSE 连接/心跳负责，回扫不得用时间窗自己发明一套判定）。
+	// 粘住的在线位：同步时间早出窗口、status 却还标着 online ⇒ 必须落到离线侧。
 	seedSvcBridgeAccount(t, db, "tiktok", "acc-stale-online", "online", &stale)
 
 	on, err := svc.DetectOnlineChannels(ctx)
@@ -260,15 +264,25 @@ func TestOfflineReplayService_DetectPartitionsByStatus(t *testing.T) {
 	for _, c := range on {
 		onIDs[c.AccountID] = c.Platform
 	}
+	if len(on) != 1 || onIDs["acc-on"] != "douyin" {
+		t.Errorf("在线侧错: on=%+v，want 只剩刚同步过的 acc-on（粘住在线位的 acc-stale-online 不得算在线）", on)
+	}
+	if len(off) != 2 {
+		t.Fatalf("离线侧=%d 行 want 2（显式离线 + 粘住在线位）: %+v", len(off), off)
+	}
+	offIDs := map[string]time.Time{}
 	for _, c := range off {
 		if _, dup := onIDs[c.AccountID]; dup {
 			t.Errorf("渠道 %s 同时出现在在线与离线两侧", c.AccountID)
 		}
+		offIDs[c.AccountID] = c.OfflineSince
 	}
-	if onIDs["acc-on"] != "douyin" || onIDs["acc-stale-online"] != "tiktok" {
-		t.Errorf("在线侧错: %+v", onIDs)
+	if _, ok := offIDs["acc-off"]; !ok {
+		t.Errorf("显式离线渠道没落进离线侧: %+v", off)
 	}
-	if len(off) != 1 || off[0].AccountID != "acc-off" || off[0].Platform != "xiaohongshu" {
-		t.Errorf("离线侧错: %+v", off)
+	// 掉线时刻取最后同步时间：TouchLastSync 会连 updated_at 一起刷，
+	// 用它就把"一小时没回来"报成"刚刚才掉线"，运维会再等一轮而不是去查扩展。
+	if since, ok := offIDs["acc-stale-online"]; !ok || since.After(now.Add(-30*time.Minute)) {
+		t.Errorf("acc-stale-online 的掉线时刻=%v，应≈造出的 1 小时前而非刚写过的 updated_at", since)
 	}
 }

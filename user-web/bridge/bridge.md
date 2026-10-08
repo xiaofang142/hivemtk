@@ -158,9 +158,11 @@ export interface UnifiedMessage {
 
 ## 4. 协议（HTTP 三通道）
 
-bridge ↔ user-server 走**纯 HTTP**（非 WebSocket）：上行 ingest、下行 outbox 轮询、状态 ack 三个通道
-相互独立、参数可配置；下行另有一条**可选的 SSE 补推通道**（§4.6），它只缩短"知道有回复"的延迟，
-ack 收口与租约重投的规则和轮询完全共用，轮询始终是兜底。
+bridge ↔ user-server 走**纯 HTTP**（非 WebSocket）：上行 ingest、下行 outbox、状态 ack 三个通道
+相互独立、参数可配置。下行有两种形态且**默认是 SSE**（§4.6）：扩展启动时先探 capabilities，
+`sse_enabled=true` 就走 SSE 长连接，1.5s 轮询定时器根本不创建；只有探测失败、服务端关旗子、
+或全部渠道 SSE 启动失败时才落到轮询。两种形态共用同一张待办表与同一套 ack 收口/租约重投规则，
+换的只是"怎么知道有新回复"，不改收口语义。
 
 ### 4.1 通道 A · 上行（Uplink）
 
@@ -296,18 +298,19 @@ Response 200:
   而 SSE 是默认下行形态（§4.7 探到 `sse_enabled` 后轮询根本不启动），
   配置写错的客户会看到「一条错误都没有、也一条回复都收不到」。
 
-### 4.5 为什么以 HTTP 轮询为主干（而不是 WebSocket）
+### 4.5 为什么下行是 HTTP 长连接而不是 WebSocket
 
 - **MV3 Service Worker 友好**：WS 长连接在 SW 冻结/恢复时易断，HTTP 三通道天然无状态；
 - **可测性强**：`curl` 即可端到端联调，无需专用 WS 客户端；
 - **状态可核对**：待下发/已认领/已收口全在 `message_hub` 一行上，运维只查表就能对账；
-- **离线不丢回复**：AI 回复入 outbox 持久层，扩展下次轮询自然拉回（连接恢复即补发）；
+- **离线不丢回复**：AI 回复入 outbox 持久层，扩展重连后按 `last_event_id` 续传或下次轮询自然拉回；
 - **运营友好**：故障定位只需看 HTTP access log。
 
-主干实时性由轮询间隔决定（默认 1500ms，见 `BRIDGE_THREE_CHANNEL.outboxPollIntervalMs`
-与 §4.6 的 capabilities 读数），SSE 只在这之上补推"有新回复"这件事，不改变收口语义。
+实时性由下行形态决定：**SSE 形态**下服务端认领成功即经 SSEBus 推流，不等轮询节拍；**轮询兜底形态**
+下由轮询间隔决定（默认 1500ms，见 `BRIDGE_THREE_CHANNEL.outboxPollIntervalMs` 与 §4.7 的 capabilities 读数）。
+两种形态走的都是 `message_hub` 同一张待办表，ack 收口语义不变。
 
-### 4.6 通道 B′ · SSE 补推（可选）
+### 4.6 通道 B′ · SSE 下行（默认形态，轮询兜底）
 
 ```
 GET /api/bridge/outbox/sse?channel=<ch>&account_id=<acc>[&last_event_id=<id>]
@@ -393,8 +396,16 @@ bridgeWS.GET ("/bridge/outbox/sse",   bridgeHandler.HandleOutboxSSE)
 bridgeWS.GET ("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 ```
 
-> 同一个组里还挂着 `/api/mcp` 与 `/api/ws/channel`，因此它们**也要求 `X-Bridge-Token`**
-> （实测无凭证：两者均 401 `缺少 X-Bridge-Token`）。改桥接凭证等于同时改这两个端点的门禁。
+> 同一个组里还挂着 `/api/ws/channel`，因此它**也要求 `X-Bridge-Token`**
+> （实测无凭证：401 `缺少 X-Bridge-Token`）。改桥接凭证等于同时改这个端点的门禁。
+>
+> `/api/mcp` **已从桥接组拆出**（`internal/middleware/mcp_guard.go` 的 `MCPGuard`）：它是服务端
+> 工具调用入口，能力比扩展大一个量级，跟着桥接组就会被 `BRIDGE_INGEST_AUTH=off` 这条历史逃生阀
+> 一起放开。拆分后的门禁（实测于本机热重载实例）：
+> - 配了 `mcp_token`（KV）或 `MCP_TOKEN`/`MCP_TOKEN_PREV`（env）→ 只认 `X-MCP-Token` 或
+>   `Authorization: Bearer`，此时 `X-Bridge-Token` **不再算凭据**（扩展凭证换不到工具调用权限）；
+> - 没配专用凭证 → 回落接受桥接凭证（等价于拆分前，存量部署不会当场 401）；
+> - 两者都没有 → 503 fail-closed，且**不读** `BRIDGE_INGEST_AUTH=off`。
 
 ### 5.3 入站接线（零改动中台）
 
@@ -408,7 +419,7 @@ bridgeWS.GET ("/bridge/capabilities", controller.NewBridgeCapabilitiesController
    整批交给 `InboxIngressService` 的入站批处理（`callHandleIngressBatch`），每条结果写进 `ingested[]`；
 6. 群聊渠道（全部五个渠道都算）触发线索挖掘回调 `leadMiner`；
 7. 响应只带回执（`ingested[]{event_id,accepted,duplicate,ai_handled,reason}` + `session_id` + `server_time`），
-   **不携带 AI 回复**：回复只在通道 B（`outbox` 轮询 / SSE 补推）里出现，
+   **不携带 AI 回复**：回复只在通道 B（`outbox` 轮询 / SSE 下行）里出现，
    扩展不持续轮询或挂 SSE 就永远收不到第一条回复。
 
 ### 5.4 出站接线：`BridgeReachAdapter`

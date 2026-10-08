@@ -112,6 +112,46 @@ func TestFlag_NormalizedNameWins(t *testing.T) {
 	}
 }
 
+// TestEnvNameOf_SSEBridgeFlagIsTheDocumentedKnob 钉住「文档里那个回退开关真的存在」。
+//
+// Go 侧常量写作 FF_ENABLE_SSE_BRIDGE，而它承载的 flag 名是 "sse_bridge" ⇒ 拼出来的变量名
+// 是 FF_SSE_BRIDGE。照常量名去设 FF_ENABLE_SSE_BRIDGE=0 不起任何作用，桥接下行照旧走 SSE，
+// 而运维以为已经切回轮询了。所以名字要钉死，且设置后必须真读到翻转——只测字符串拼接的话，
+// readEnv 换成读常量名字符串这一格仍然是绿的。
+func TestEnvNameOf_SSEBridgeFlagIsTheDocumentedKnob(t *testing.T) {
+	const env = "FF_SSE_BRIDGE"
+	if got := EnvNameOf(FF_ENABLE_SSE_BRIDGE); got != env {
+		t.Fatalf("EnvNameOf(%q) = %q，运维手册写的是 %s", FF_ENABLE_SSE_BRIDGE, got, env)
+	}
+
+	prev, had := os.LookupEnv(env)
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(env, prev)
+		} else {
+			os.Unsetenv(env)
+		}
+		refreshAll()
+	})
+
+	// 前置：默认必须是开着的，否则下面的"设 0 变 false"没有判别力。
+	if !Get(FF_ENABLE_SSE_BRIDGE).Bool() {
+		t.Fatalf("前置不成立：未设置 %s 时 %q 应为默认 true（本机 env 里带着它？）", env, FF_ENABLE_SSE_BRIDGE)
+	}
+
+	os.Setenv(env, "0")
+	refreshAll()
+	if Get(FF_ENABLE_SSE_BRIDGE).Bool() {
+		t.Errorf("设了 %s=0 后旗子仍为 true ⇒ 手册写的轮询回退开关是假的", env)
+	}
+
+	os.Unsetenv(env)
+	refreshAll()
+	if !Get(FF_ENABLE_SSE_BRIDGE).Bool() {
+		t.Errorf("撤掉 %s 后应回到默认 true，实际 false ⇒ 上一格的红不是这格测出来的", env)
+	}
+}
+
 // TestEnvNameOf_NoCollisionInRegistry 归一化会把 `a.b` 与 `a_b` 并成同一个变量名。
 // 现在没有这种成对的名字，但**新加旗子的人会踩**：撞名之后两个旗子共用一份 env，
 // 开一个就开了另一个，而两处都读不出这件事。这一格是那条的棘轮。

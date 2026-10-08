@@ -120,16 +120,12 @@ func (r *ChannelOverviewRepository) CountBridge(ctx context.Context, channel str
 
 // CountBridgeOnline 统计指定 Bridge 渠道此刻可达的账号数。
 //
-// 不能按 status='online' 数：那一列只在 SSE 正常收尾时被 SetOffline 改回离线，
-// 扩展崩溃 / 浏览器被杀 / 断网都不走那条路径，列就粘在 online 上。实测某台实例 155 行里 152 行标
-// online，而按最后同步时间判定的真值是 0——总览因此报出一屏"在线"，客户消息发出去却没人来取。
-// 口径与 bridge.isOnlineByLastSync 同一条：非 offline、last_sync_at 非空、且落在 grace 窗口内
-// （窗口来自 bridge/online_grace_window，由调用方读好传进来，仓库层不自己找配置）。
+// 判定串见 bridgeOnlineSQLPredicate（那里写明了为什么不能按 status='online' 数），
+// 窗口来自 bridge/online_grace_window，由调用方读好传进来，仓库层不自己找配置。
 func (r *ChannelOverviewRepository) CountBridgeOnline(ctx context.Context, channel string, graceSeconds int) (int64, error) {
 	return r.countWhere(ctx, "bridge_accounts",
-		"channel = ? AND status <> ? AND last_sync_at IS NOT NULL"+
-			" AND now() - last_sync_at < (? * interval '1 second')",
-		channel, "offline", graceSeconds)
+		"channel = ? AND "+bridgeOnlineSQLPredicate,
+		channel, bridgeStatusOffline, graceSeconds)
 }
 
 // CountWechat 统计微信公众号账号总数

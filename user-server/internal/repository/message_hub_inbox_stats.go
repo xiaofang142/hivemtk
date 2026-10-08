@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+
+	"gorm.io/gorm"
 )
 
 type HubStatsResult struct {
@@ -20,6 +22,22 @@ type HubStatsResult struct {
 	Recent24h   int64
 }
 
+// hubWindow 把调用方给的起止界加到任意一条统计查询上。
+//
+// 这道门必须套在**每一条**上，而不是只套总数：只套总数时，一次带窗口的请求返回的是
+// 「total 属于这一小时、inbound/outbound/unread/各维度分布属于全量」这种混口径的一组数。
+// 调用方看不出区别，只会发现各方向加起来对不上总数，以及管理台把全量积压当成"最近 1 小时"
+// 报给客户。Recent24h 那一格例外——它的语义本身就写死 24h，不跟请求窗口走。
+func hubWindow(q *gorm.DB, start, end *time.Time) *gorm.DB {
+	if start != nil {
+		q = q.Where("sent_at >= ?", *start)
+	}
+	if end != nil {
+		q = q.Where("sent_at <= ?", *end)
+	}
+	return q
+}
+
 func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time.Time) (*HubStatsResult, error) {
 	if r == nil || r.db == nil {
 		return &HubStatsResult{
@@ -30,25 +48,15 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 
 	var total, inbound, outbound, unread int64
 
-	countQuery := r.db.WithContext(ctx).Model(&model.MessageHub{}).Where("1 = 1")
-	if start != nil {
-		countQuery = countQuery.Where("sent_at >= ?", *start)
-	}
-	if end != nil {
-		countQuery = countQuery.Where("sent_at <= ?", *end)
-	}
-	if err := countQuery.Count(&total).Error; err != nil {
+	if err := hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).Count(&total).Error; err != nil {
 		return nil, err
 	}
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("direction = ?", "inbound").
-		Count(&inbound)
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("direction = ?", "outbound").
-		Count(&outbound)
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("(is_read = ? OR is_read IS NULL)", false).
-		Count(&unread)
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = ?", "inbound"), start, end).Count(&inbound)
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = ?", "outbound"), start, end).Count(&outbound)
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("(is_read = ? OR is_read IS NULL)", false), start, end).Count(&unread)
 
 	stats := &HubStatsResult{
 		Total: total, Inbound: inbound, Outbound: outbound, Unread: unread,
@@ -61,13 +69,11 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C        int64
 	}
 	var pCounts []pcount
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("1 = 1").
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
 		Select("platform AS platform, COUNT(*) AS c").
 		Group("platform").Scan(&pCounts)
 	for _, p := range pCounts {
 		stats.ByPlatform[p.Platform] = p.C
-		stats.ByDirection["inbound_or_outbound"] += p.C
 	}
 
 	type dcount struct {
@@ -75,8 +81,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C         int64
 	}
 	var dCounts []dcount
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("1 = 1").
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
 		Select("direction AS direction, COUNT(*) AS c").
 		Group("direction").Scan(&dCounts)
 	for _, d := range dCounts {
@@ -88,8 +93,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C       int64
 	}
 	var tCounts []tcount
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("1 = 1").
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
 		Select("msg_type AS msg_type, COUNT(*) AS c").
 		Group("msg_type").Scan(&tCounts)
 	for _, t := range tCounts {
@@ -101,8 +105,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C         int64
 	}
 	var aCounts []acount
-	r.db.WithContext(ctx).Model(&model.MessageHub{}).
-		Where("1 = 1").
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
 		Select("account_id AS account_id, COUNT(*) AS c").
 		Group("account_id").Order("c DESC").Limit(50).Scan(&aCounts)
 	for _, a := range aCounts {

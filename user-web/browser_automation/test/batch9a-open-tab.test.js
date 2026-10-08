@@ -77,6 +77,26 @@ describe('open_tab 等加载（假绿收口）', () => {
     }
   });
 
+  it('tabs.create 迟到 → 扩展侧回收孤儿 tab（服务端因超时拿不到 tab_id，无人回收）', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveCreate;
+      const lateTab = { id: 4242, url: 'https://www.douyin.com/jingxuan?modal_id=1', title: '' };
+      const deps = makeDeps({ openTab: () => new Promise((r) => { resolveCreate = () => r(lateTab); }) });
+      fakeChrome.tabs.remove.mockClear();
+      const p = dispatch({ action: 'open_tab', url: 'https://www.douyin.com/', open_tab_timeout_ms: 5000 }, deps);
+      const assertion = expect(p).rejects.toThrow(/open_tab_timeout/);
+      await vi.advanceTimersByTimeAsync(5000);
+      resolveCreate();
+      await assertion;
+      await Promise.resolve();
+      // 不回收 = 孤儿重页占住浏览器进程 IPC，后续 open_tab 跟着卡死（真机 session625）
+      expect(fakeChrome.tabs.remove).toHaveBeenCalledWith(4242);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('load 等待不越竞速闸：create 已吃掉预算时按剩余预算夹紧', async () => {
     const deps = makeDeps({
       openTab: async () => {

@@ -39,16 +39,23 @@ type BridgeChannelRow struct {
 	Status     string     `gorm:"column:status"`
 	LastSyncAt *time.Time `gorm:"column:last_sync_at"`
 	UpdatedAt  time.Time  `gorm:"column:updated_at"`
+	// Reachable 由 SQL 侧按 bridgeOnlineSQLPredicate 算出，不是表里的列。
+	// 带着算好的值出来，是为了让"这一轮扫到几台在线"与渠道总览报的在线数是同一个数；
+	// 若留给 service 按 status 划，同一份数据会量出两个口径。
+	Reachable bool `gorm:"column:reachable"`
 }
 
-// ListBridgeAccounts 全量渠道账号快照（在线/离线两批由 service 侧划分）。
-func (r *BridgeOfflineReplayRepository) ListBridgeAccounts(ctx context.Context) ([]BridgeChannelRow, error) {
+// ListBridgeAccounts 全量渠道账号快照（在线/离线两批由 Reachable 决定）。
+//
+// graceSeconds 由调用方从 config_params(bridge/online_grace_window) 读好传入。
+func (r *BridgeOfflineReplayRepository) ListBridgeAccounts(ctx context.Context, graceSeconds int) ([]BridgeChannelRow, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	var rows []BridgeChannelRow
 	err := r.db.WithContext(ctx).Table("bridge_accounts").
-		Select("channel, account_id, status, last_sync_at, updated_at").
+		Select("channel, account_id, status, last_sync_at, updated_at, ("+bridgeOnlineSQLPredicate+") AS reachable",
+			bridgeStatusOffline, graceSeconds).
 		Order("channel ASC, account_id ASC").
 		Scan(&rows).Error
 	return rows, err

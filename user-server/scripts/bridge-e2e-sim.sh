@@ -15,6 +15,7 @@
 #   6) msg_id 回环：把 AI 回复原样回灌(event_id=内容哈希) → 被拦截
 # 另含：负向用例(缺参/不支持渠道) + 跨语言哈希契约锚点 + 推理栈健康门控。
 # AI 回复依赖推理栈；若推理栈不健康则相关项记 WARN(归属环境)而非 FAIL。
+# 退出码：0 全绿 / 1 有业务红 / 3 全部红都发生在「服务连不上」的当口（环境红，先恢复服务再复跑）。
 # =============================================================================
 set -uo pipefail
 
@@ -75,7 +76,19 @@ if [ -t 1 ]; then
 else C_GREEN=""; C_RED=""; C_YEL=""; C_BLU=""; C_RST=""; fi
 
 ok()   { PASS=$((PASS+1)); REPORT+=("${C_GREEN}PASS${C_RST} $1"); }
-bad()  { FAIL=$((FAIL+1)); REPORT+=("${C_RED}FAIL${C_RST} $1 :: $2"); }
+# 判失败的当口复探一次健康位：开发态存盘即热重载，撞上重启窗口的断言拿到的是空响应，
+# 报成业务 FAIL 会把人引向"接口坏了"（实测一轮 8 枚 ingest 全红，真因是进程换 PID）。
+# 只在失败路径多一次 curl，绿色轮次零开销；汇总按"失败里有多少枚判定时服务不可达"分开报，
+# 全属不可达时退出码走 3（环境红）而不是 1（业务红）。
+UNREACHABLE=0
+bad()  {
+  FAIL=$((FAIL+1))
+  REPORT+=("${C_RED}FAIL${C_RST} $1 :: $2")
+  if [ "$(http_code "$BASE_URL/api/health" 2)" != "200" ]; then
+    UNREACHABLE=$((UNREACHABLE+1))
+    REPORT+=("${C_YEL}ENV${C_RST} ↑ 判定时 $BASE_URL/api/health 非 200：这一枚取到的是「没连上服务」而不是「服务端判了不通过」，先排重启/未起，别查业务链路")
+  fi
+}
 warn() { WARN=$((WARN+1)); REPORT+=("${C_YEL}WARN${C_RST} $1 :: $2"); }
 
 # FNV-1a 32 位：输入 channel|TrimSpace(content) → mh:{8hex}，与后端逐字节一致
@@ -718,6 +731,9 @@ echo "-------------------------------------------------------------------"
 for line in "${REPORT[@]}"; do echo "$line"; done
 echo "-------------------------------------------------------------------"
 echo "通过: ${C_GREEN}$PASS${C_RST}  失败: ${C_RED}$FAIL${C_RST}  告警: ${C_YEL}$WARN${C_RST}"
+if [ "$FAIL" -gt 0 ] && [ "$UNREACHABLE" -gt 0 ]; then
+  echo "失败中判定时服务不可达: ${C_YEL}$UNREACHABLE${C_RST} 枚（见上面成对的 ENV 行）"
+fi
 echo "==================================================================="
 
 # ---- 清理 sim 测试数据 ----
@@ -726,4 +742,11 @@ if [ -n "$PW" ]; then
   psql_q "DELETE FROM message_hub WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%'; DELETE FROM inbox_conversations WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%'; DELETE FROM customer_sessions WHERE account_id LIKE 'sim_%' OR account_id LIKE 'deep_%' OR account_id LIKE 'alias_%';" >/dev/null || true
 fi
 
+# 退出码分三档，让 cron/CI 不必读终端也能分诊：
+#   0 = 全绿；1 = 有业务红（或业务红与环境红混杂）；3 = 全部失败都发生在服务不可达的当口
+#   （环境红：服务没起/正被热重载换 PID），这一档不该记成 bridge 功能回归，先恢复服务再复跑。
+if [ "$FAIL" -gt 0 ] && [ "$UNREACHABLE" -eq "$FAIL" ]; then
+  echo "${C_YEL}本轮 $FAIL 枚失败判定时服务均不可达 ⇒ 判为环境红（exit 3），不代表桥接功能回归${C_RST}"
+  exit 3
+fi
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

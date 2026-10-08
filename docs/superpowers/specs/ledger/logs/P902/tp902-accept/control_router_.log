@@ -1,0 +1,26 @@
+2026-09-30T00:13:17+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBReleaseRoutes_UnassembledAnswers503WithoutData
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 变更/发布 API 已连通（底座可用=false，闸门档位=off/FF_LTC_KB_CHANGE_GATE） component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 当前档位不改任何召回结果，且导入内容不打版本戳 ⇒ 变更流程可提交可发布，但"未发布不可见"只对走变更通路的内容成立；观察请置 shadow，真拦须显式写 on component=user-server
+--- PASS: TestKBReleaseRoutes_UnassembledAnswers503WithoutData (0.00s)
+=== RUN   TestKBReleaseRoutes_StaticSegmentsWin
+2026-09-30T00:13:17+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:13:17+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 变更/发布 API 已连通（底座可用=true，闸门档位=off/FF_LTC_KB_CHANGE_GATE） component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 当前档位不改任何召回结果，且导入内容不打版本戳 ⇒ 变更流程可提交可发布，但"未发布不可见"只对走变更通路的内容成立；观察请置 shadow，真拦须显式写 on component=user-server
+--- PASS: TestKBReleaseRoutes_StaticSegmentsWin (0.32s)
+=== RUN   TestKBReleaseRoutes_AssemblyAndStopAreSymmetric
+2026-09-30T00:13:17+08:00 WRN [kb-release] ⚠️ 无 DB 句柄 ⇒ 知识库变更底座不装配：/api/kb-changes/* 与 /api/kb-releases/* 全部回 503；读路径的版本闸门不受本句影响（它只看 FF_LTC_KB_CHANGE_GATE），未装配时召回与今天逐字节相同 component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 变更/发布 API 已连通（底座可用=false，闸门档位=off/FF_LTC_KB_CHANGE_GATE） component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 当前档位不改任何召回结果，且导入内容不打版本戳 ⇒ 变更流程可提交可发布，但"未发布不可见"只对走变更通路的内容成立；观察请置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:13:17+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:13:17+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 变更/发布 API 已连通（底座可用=true，闸门档位=off/FF_LTC_KB_CHANGE_GATE） component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 当前档位不改任何召回结果，且导入内容不打版本戳 ⇒ 变更流程可提交可发布，但"未发布不可见"只对走变更通路的内容成立；观察请置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 变更/发布 API 已连通（底座可用=false，闸门档位=off/FF_LTC_KB_CHANGE_GATE） component=user-server
+2026-09-30T00:13:17+08:00 INF [Router] kb_release 当前档位不改任何召回结果，且导入内容不打版本戳 ⇒ 变更流程可提交可发布，但"未发布不可见"只对走变更通路的内容成立；观察请置 shadow，真拦须显式写 on component=user-server
+--- PASS: TestKBReleaseRoutes_AssemblyAndStopAreSymmetric (0.15s)
+=== RUN   TestKBReleaseRoutes_AssemblyOrderInRouter
+--- PASS: TestKBReleaseRoutes_AssemblyOrderInRouter (0.00s)
+PASS
+ok  	hivemtk-user/internal/router	1.216s

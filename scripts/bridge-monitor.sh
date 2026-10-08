@@ -61,6 +61,29 @@ DB_PORT="${BRIDGE_DB_PORT:-${USER_POSTGRES_HOST_PORT:-8232}}"
 DB_NAME="${BRIDGE_DB_NAME:-${USER_DB_NAME:-user_db}}"
 DB_USER="${BRIDGE_DB_USER:-${POSTGRES_USER:-admin}}"
 
+# 判词累加器：日志节与数据库节都往这里降级（OK → WARN → FAIL），【结论】段和退出码都读它。
+# 必须在这里初始化：早于任何 warn/fail 分支，否则 set -u 下第一次读它就炸；
+# 也不能在【结论】段再置一次 OK，那会把日志节已经降过的级悄悄抹平。
+overall="OK"
+downgrade_to_warn() { if [ "$overall" = "OK" ]; then overall="WARN"; fi; }
+downgrade_to_fail() { overall="FAIL"; }
+
+# 窗口语法在入口统一判掉，两条日志源共用一条口径。
+# 只收「一段数字 + 一个单位」：复合写法（1h30m）在文件那一路换算不出 ⇒ 会报 FAIL；
+# 但容器那一路是把原串直接交给 `docker logs --since`，而 docker 自己认 1h30m ⇒
+# 同一条命令换个日志源，"这个参数合不合法"就有两种答案，文档也没法写清。
+# 所以这里先拦，判据与日志源无关。
+#
+# 坏参数直接退 2 而不是往下跑：rc=1 在本脚本里专指「bridge 功能异常」这条业务结论，
+# 参数写错却报成 1，cron 会把一次敲错命令当成线上故障去喊人；而往下跑更糟——数据库节
+# 照样出数、【结论】照样印「请立即排查」，读的人拿到的是半份报告加一条假红。
+# 这类「脚本没跑起来」的独立档，与 user-server/scripts/bridge-e2e-sim.sh 用 rc=3 区分
+# 「服务没起」是同一个道理。
+if [[ ! "$SINCE" =~ ^[0-9]+[smhd]$ ]]; then
+  echo "窗口写法「${SINCE}」不被接受：只认 <整数><s|m|h|d>（如 45s / 30m / 2h / 1d），复合写法请自己换算（1h30m ⇒ 90m）" >&2
+  exit 2
+fi
+
 echo "============================================================"
 if [ -n "$BRIDGE_LOG_FILE" ]; then
   LOG_DESC="文件 ${BRIDGE_LOG_FILE}"
@@ -72,18 +95,22 @@ echo " 时间: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================================"
 
 # ---------- 1) 日志信号 ----------
-# 窗口写法 → 秒数。docker logs 自己认 30m/1h，文件这一路要先把窗口换算成可比较的起点时间戳。
+# 窗口写法 → 秒数。两条日志源都先走这个换算：文件这一路拿秒数算出可比较的起点时间戳，
+# 容器这一路把秒数拼成 `<秒>s` 传给 docker（docker 的 --since 不认 d，见下面那段）。
+# 只收「一段数字 + 一个单位」：复合写法（1h30m）若按第一个单位解析会把 130 当成小时数，
+# 于是窗口悄悄放大几十倍，读数假高，所以宁可报「换算不出」。
 since_seconds() {
-  local raw="$1" unit num
-  unit="${raw#*[0-9]}"
-  num="${raw%"${unit}"}"
-  case "$unit" in
-    s) echo "$num" ;;
-    m) echo $(( num * 60 )) ;;
-    h) echo $(( num * 3600 )) ;;
-    d) echo $(( num * 86400 )) ;;
-    *) echo "" ;;
-  esac
+  local raw="$1"
+  if [[ "$raw" =~ ^([0-9]+)([smhd])$ ]]; then
+    case "${BASH_REMATCH[2]}" in
+      s) echo "${BASH_REMATCH[1]}" ;;
+      m) echo $(( ${BASH_REMATCH[1]} * 60 )) ;;
+      h) echo $(( ${BASH_REMATCH[1]} * 3600 )) ;;
+      d) echo $(( ${BASH_REMATCH[1]} * 86400 )) ;;
+    esac
+  else
+    echo ""
+  fi
 }
 
 # 窗口起点，格式与 slog 的 "time" 字段一致（截到秒即可按字典序比较；BSD 用 -v，GNU 用 -d）
@@ -105,10 +132,10 @@ if [ -n "$BRIDGE_LOG_FILE" ]; then
   CUT=""
   [ -n "$WINDOW_SECONDS" ] && CUT="$(window_cutoff "$WINDOW_SECONDS")"
   if [ ! -r "$BRIDGE_LOG_FILE" ]; then
-    fail "BRIDGE_LOG_FILE 指向的文件读不到：${BRIDGE_LOG_FILE}"
+    fail "BRIDGE_LOG_FILE 指向的文件读不到：${BRIDGE_LOG_FILE}"; downgrade_to_fail
   elif [ -z "$CUT" ]; then
     # 算不出起点就整文件读：那是把几小时前的失败也算进本窗口，读数会假高，宁可不读
-    fail "窗口「${SINCE}」换算不出起点时间戳（文件这一路要按日志里的 time 字段筛行；窗口请写 30m/1h/45s/2d，或确认本机 date 支持 -v/-d）"
+    fail "窗口「${SINCE}」换算不出起点时间戳（文件这一路要按日志里的 time 字段筛行；窗口请写 30m/1h/45s/2d，或确认本机 date 支持 -v/-d）"; downgrade_to_fail
   else
     LOG_SOURCE="${LOG_DESC}（起点 ${CUT}）"
     LOG_LINES="$(awk -v cut="$CUT" '
@@ -118,15 +145,30 @@ if [ -n "$BRIDGE_LOG_FILE" ]; then
         if (ts >= cut) print }' "$BRIDGE_LOG_FILE")"
   fi
 elif command -v docker >/dev/null 2>&1; then
-  LOG_SOURCE="${LOG_DESC}"
-  LOG_LINES="$(docker logs "$BRIDGE_CONTAINER" --since "$SINCE" 2>&1)"
-  if [ $? -ne 0 ] || [ -z "$LOG_LINES" ]; then
-    warn "无法读取容器 ${BRIDGE_CONTAINER} 日志（容器未运行或名称不符？可用 BRIDGE_CONTAINER 指定；开发态请把进程日志文件交给 BRIDGE_LOG_FILE）"
+  # 窗口必须先换算成秒再交给 docker：`docker logs --since` 用 Go 的 ParseDuration，实测只认
+  # s/m/h，**不认 d**（`--since 1d` 退 1、报 invalid value for "since"）。原样把用户写法传下去，
+  # 同一个 1d 在文件那一路能读、在容器这一路读不到，而且它的报错还会被下面"容器没运行"
+  # 那格的文案盖成无关原因。换成 <秒>s 之后两条日志源的窗口口径才是同一个。
+  WINDOW_SECONDS="$(since_seconds "$SINCE")"   # 入口闸保证写法必是 <整数><s|m|h|d>
+  LOG_RAW="$(docker logs "$BRIDGE_CONTAINER" --since "${WINDOW_SECONDS}s" 2>&1)"
+  DOCKER_RC=$?
+  if [ "$DOCKER_RC" -ne 0 ]; then
+    # docker 自己的第一行必须打出来：只报"容器未运行或名称不符"会把人引去猜容器名，
+    # 而真因可能是守护进程没起、权限、或窗口语法 docker 不认。
+    warn "读不到容器 ${BRIDGE_CONTAINER} 的日志（docker 退 ${DOCKER_RC}）：$(printf '%s\n' "$LOG_RAW" | head -1)｜容器名由 BRIDGE_CONTAINER 指定；开发态 go run/air 没有容器，请改给 BRIDGE_LOG_FILE"; downgrade_to_warn
     LOG_LINES=""
     LOG_SOURCE=""
+  elif [ -z "$LOG_RAW" ]; then
+    # 读通了、只是这个窗口内一条都没有：这和"数据源读不到"是两回事，
+    # 留 LOG_SOURCE 有值，让下面「日志源可读但窗口内零行」出那条准确判词。
+    LOG_LINES=""
+    LOG_SOURCE="${LOG_DESC}（--since ${WINDOW_SECONDS}s）"
+  else
+    LOG_LINES="$LOG_RAW"
+    LOG_SOURCE="${LOG_DESC}（--since ${WINDOW_SECONDS}s）"
   fi
 else
-  warn "既没给 BRIDGE_LOG_FILE，也没检测到 docker ⇒ 日志这一路没有数据源"
+  warn "既没给 BRIDGE_LOG_FILE，也没检测到 docker ⇒ 日志这一路没有数据源"; downgrade_to_warn
 fi
 
 if [ -n "$LOG_LINES" ]; then
@@ -136,34 +178,50 @@ if [ -n "$LOG_LINES" ]; then
   cnt_ingest_ok=$(printf '%s\n' "$LOG_LINES" | grep -c 'http_ingest_response' || true)
   cnt_ingest_err=$(printf '%s\n' "$LOG_LINES" | grep -c 'http_ingest_failed' || true)
   cnt_api=$(printf '%s\n' "$LOG_LINES" | grep -c '"event":"api_interaction"' || true)
-  # 仅统计 bridge 相关错误（避免平台端/触达工具等无关噪声），含 4xx/5xx 与 ingest 失败
-  cnt_err=$(printf '%s\n' "$LOG_LINES" | grep -E '"event":"api_interaction"' | grep -E '/bridge' | grep -E '"status":[45][0-9][0-9]' | wc -l | tr -d ' ')
-  cnt_err=$(( cnt_err + $(printf '%s\n' "$LOG_LINES" | grep -c 'http_ingest_failed' | tr -d ' ') ))
+  # 仅统计 bridge 相关错误（避免平台端/触达工具等无关噪声）。4xx 与 5xx 必须分开看：
+  # 4xx 是调用方没带对凭证/参数（开发机上大量是仿真脚本的负向用例），5xx 才是服务端真把
+  # 请求处理挂了。混成一个数，读的人要么跟着 119 条 4xx 紧张，要么把 2 条 500 当噪声跳过。
+  bridge_err_lines=$(printf '%s\n' "$LOG_LINES" | grep -E '"event":"api_interaction"' | grep -E '/bridge' | grep -E '"status":[45][0-9][0-9]' || true)
+  cnt_err_4xx=0
+  cnt_err_5xx=0
+  if [ -n "$bridge_err_lines" ]; then
+    cnt_err_4xx=$(printf '%s\n' "$bridge_err_lines" | grep -cE '"status":4' || true)
+    cnt_err_5xx=$(printf '%s\n' "$bridge_err_lines" | grep -cE '"status":5' || true)
+  fi
+  # ingest 失败是写侧没落库，归到服务端故障一侧
+  cnt_err_5xx=$(( cnt_err_5xx + $(printf '%s\n' "$LOG_LINES" | grep -c 'http_ingest_failed' | tr -d ' ') ))
+  cnt_err=$(( cnt_err_4xx + cnt_err_5xx ))
 
   dim "桥接上报(http_ingest_request): ${cnt_ingest} 次"
   dim "桥接响应(http_ingest_response): ${cnt_ingest_ok} 次"
   dim "桥接失败(http_ingest_failed):   ${cnt_ingest_err} 次"
   dim "API 交互日志(api_interaction):  ${cnt_api} 条"
-  dim "桥接相关错误(4xx/5xx):          ${cnt_err} 条"
+  dim "桥接相关错误(4xx/5xx):          ${cnt_err} 条（调用方 4xx ${cnt_err_4xx} / 服务端 5xx ${cnt_err_5xx}）"
 
   if [ "$cnt_ingest" -gt 0 ] && [ "$cnt_ingest_err" -eq 0 ]; then
     ok "上报日志正常：桥接扩展在持续上行消息"
   elif [ "$cnt_ingest" -gt 0 ] && [ "$cnt_ingest_err" -gt 0 ]; then
-    warn "上报日志存在失败：${cnt_ingest_err} 次 ingest 失败"
+    warn "上报日志存在失败：${cnt_ingest_err} 次 ingest 失败"; downgrade_to_warn
   elif [ "$cnt_ingest" -eq 0 ]; then
-    warn "近 ${SINCE} 无桥接上报日志（可能扩展离线 / 渠道无流量 / 日志源里根本没有 ingest 记录）"
+    warn "近 ${SINCE} 无桥接上报日志（可能扩展离线 / 渠道无流量 / 日志源里根本没有 ingest 记录）"; downgrade_to_warn
+  fi
+  if [ "$cnt_err_5xx" -gt 0 ]; then
+    fail "近 ${SINCE} 有 ${cnt_err_5xx} 条服务端故障级桥接请求（5xx 或 ingest 未落库），这是要立刻查的那类"
+    downgrade_to_fail
+  elif [ "$cnt_err_4xx" -gt 0 ]; then
+    warn "近 ${SINCE} 有 ${cnt_err_4xx} 条 4xx：调用方凭证/参数不对（扩展没带 X-Bridge-Token、渠道名写错等），服务端本身没坏"
+    downgrade_to_warn
   fi
   if [ "$cnt_err" -gt 0 ]; then
-    warn "近 ${SINCE} 检测到 ${cnt_err} 条桥接相关错误，建议查看详情"
     printf '%s\n' "$LOG_LINES" | grep -E '"event":"api_interaction".*/bridge' | grep -iE '"status":[45]' | tail -n 5 | while read -r l; do dim "$l"; done
   fi
 else
   if [ -n "$LOG_SOURCE" ]; then
     # 数据源是好的、窗口里确实一行都没有：这和「读不到源」是两回事，得单列出来，
     # 否则进程静默（或 time 字段格式/时区对不上筛选）会被读成「日志无异常」。
-    warn "日志源可读（${LOG_SOURCE}）但窗口 ${SINCE} 内零行 ⇒ 进程这段时间没打日志，或日志时间格式与筛选口径不符；这一节不等于「无异常」"
+    warn "日志源可读（${LOG_SOURCE}）但窗口 ${SINCE} 内零行 ⇒ 进程这段时间没打日志，或日志时间格式与筛选口径不符；这一节不等于「无异常」"; downgrade_to_warn
   else
-    warn "无日志数据可分析（数据源没落地，日志节的结论缺失，不等于「无异常」）"
+    warn "无日志数据可分析（数据源没落地，日志节的结论缺失，不等于「无异常」）"; downgrade_to_warn
   fi
 fi
 
@@ -292,8 +350,9 @@ if [ ${#PSQL[@]} -gt 0 ]; then
   dim "非桥接渠道出站 pending(不计入上面归因): ${pending_nonbridge}（其中 AI 回复 ${pending_nonbridge_ai}）"
   dim "桥接账号 总数/在线:            ${acct_total} / ${acct_online}  (在线=last_sync_at 在 ${online_grace_secs}s 内，与服务端同口径)"
 
-  # 白名单漂移守卫的读数在这里取，判词放进【结论】段——那里才初始化 overall，
-  # 提前调用 warn 分支既踩 set -u 又会被随后的 overall="OK" 抹掉。
+  # 白名单漂移守卫在这段只取数，判词留到下面的【结论】段统一下（那里是全部降级语句的落点，
+  # 读数与判词成对出现，改口径时不会只动一半）。overall 现在在脚本开头初始化，
+  # 提前调用 downgrade_* 也安全。
   acct_offlist=$(psql_val "SELECT count(*) FROM bridge_accounts WHERE channel NOT IN (${BRIDGE_PLATFORMS_SQL});")
   offlist_names=""
   if [ "$acct_offlist" -gt 0 ]; then
@@ -315,29 +374,28 @@ if [ ${#PSQL[@]} -gt 0 ]; then
   # ---- 健康判定 ----
   echo
   echo "【结论】"
-  overall="OK"
   if [ "$acct_total" -eq 0 ]; then
-    warn "无桥接账号：扩展尚未连接注册（bridge_accounts 为空）"; overall="WARN"
+    warn "无桥接账号：扩展尚未连接注册（bridge_accounts 为空）"; downgrade_to_warn
   elif [ "$acct_online" -eq 0 ]; then
-    warn "所有桥接账号均离线：扩展可能已全部断开"; overall="WARN"
+    warn "所有桥接账号均离线：扩展可能已全部断开"; downgrade_to_warn
   else
     ok "桥接账号在线：${acct_online}/${acct_total}"
   fi
 
   if [ "$acct_offlist" -gt 0 ]; then
-    warn "bridge_accounts 里有 ${acct_offlist} 个账号属白名单外渠道 [${offlist_names}]：本脚本的桥接渠道白名单落后于服务端渠道注册表（权威见 internal/bridge/channel.go 的 gw.Default.Names()），这些渠道的积压不会进上面的 FAIL 判定"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "bridge_accounts 里有 ${acct_offlist} 个账号属白名单外渠道 [${offlist_names}]：本脚本的桥接渠道白名单落后于服务端渠道注册表（权威见 internal/bridge/channel.go 的 gw.Default.Names()），这些渠道的积压不会进上面的 FAIL 判定"; downgrade_to_warn
   fi
 
   if [ $(( stuck_online + stuck_offline + stuck_unregistered )) -ne "$stuck_ai_deliverable" ]; then
-    fail "积压归因不自洽：在线 ${stuck_online} + 离线 ${stuck_offline} + 无注册 ${stuck_unregistered} ≠ 可达积压 ${stuck_ai_deliverable}（口径被改动，或 bridge_accounts.channel 与 message_hub.platform 不同名）"; overall="FAIL"
+    fail "积压归因不自洽：在线 ${stuck_online} + 离线 ${stuck_offline} + 无注册 ${stuck_unregistered} ≠ 可达积压 ${stuck_ai_deliverable}（口径被改动，或 bridge_accounts.channel 与 message_hub.platform 不同名）"; downgrade_to_fail
   elif [ "$stuck_online_missing" -gt 0 ]; then
-    fail "有 ${stuck_online_missing} 条 AI 回复：账号按服务端口径仍在线（${online_grace_secs}s 内同步过）、会话在系统却无记录（可能已删/屏蔽），超过 10 分钟未送达——真实投递故障"; overall="FAIL"
+    fail "有 ${stuck_online_missing} 条 AI 回复：账号按服务端口径仍在线（${online_grace_secs}s 内同步过）、会话在系统却无记录（可能已删/屏蔽），超过 10 分钟未送达——真实投递故障"; downgrade_to_fail
   elif [ "$stuck_online" -gt 0 ]; then
-    warn "有 ${stuck_online} 条 AI 回复：账号在线却未送达（会话存在:${stuck_exists} 多为小红书等无法主动打开屏外会话，需用户在网页端打开该会话；会话无记录:${stuck_missing} 请核对是否已删)"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "有 ${stuck_online} 条 AI 回复：账号在线却未送达（会话存在:${stuck_exists} 多为小红书等无法主动打开屏外会话，需用户在网页端打开该会话；会话无记录:${stuck_missing} 请核对是否已删)"; downgrade_to_warn
   elif [ "$stuck_unregistered" -gt 0 ] || [ "$stuck_offline" -gt 0 ]; then
-    warn "有 $(( stuck_unregistered + stuck_offline )) 条 AI 回复积压超 10 分钟且当前不可能被投递：bridge_accounts 无注册行 ${stuck_unregistered} 条（任何扩展都不会来拉这批，要清队列须先人工确认归属）、账号已离线 ${stuck_offline} 条（重连后按 ${online_grace_secs}s 窗口补投）——先确认扩展是否还在运行，而不是查投递链路"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "有 $(( stuck_unregistered + stuck_offline )) 条 AI 回复积压超 10 分钟且当前不可能被投递：bridge_accounts 无注册行 ${stuck_unregistered} 条（任何扩展都不会来拉这批，要清队列须先人工确认归属）、账号已离线 ${stuck_offline} 条（重连后按 ${online_grace_secs}s 窗口补投）——先确认扩展是否还在运行，而不是查投递链路"; downgrade_to_warn
   elif [ "$pending_deliverable" -gt 0 ] && [ "$pending_oldest_deliverable_min" -gt 15 ]; then
-    warn "下行队列有 ${pending_deliverable} 条可达目标待发送，最旧已 ${pending_oldest_deliverable_min} 分钟（xiaohongshu 等无法主动打开会话，需用户在网页端打开该会话才下发）"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "下行队列有 ${pending_deliverable} 条可达目标待发送，最旧已 ${pending_oldest_deliverable_min} 分钟（xiaohongshu 等无法主动打开会话，需用户在网页端打开该会话才下发）"; downgrade_to_warn
   elif [ "$pending_deliverable" -gt 0 ]; then
     ok "下行队列有 ${pending_deliverable} 条可达目标待发送（最旧 ${pending_oldest_deliverable_min} 分钟，正常）"
   else
@@ -345,18 +403,18 @@ if [ ${#PSQL[@]} -gt 0 ]; then
   fi
 
   if [ "$pending_placeholder" -gt 0 ]; then
-    warn "下行队列有 ${pending_placeholder} 条 pending 属占位账号(<channel>-unknown)，真正不可达（后端已对新增标 failed）；存量建议归档"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "下行队列有 ${pending_placeholder} 条 pending 属占位账号(<channel>-unknown)，真正不可达（后端已对新增标 failed）；存量建议归档"; downgrade_to_warn
   fi
   if [ "$pending_convname" -gt 0 ]; then
-    warn "下行队列有 ${pending_convname} 条 pending 属昵称派生会话(conv:<名>)：前端现会按列表项 name 尝试投递，打不开则留 pending 下一轮重试（待观察，非必失败）"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "下行队列有 ${pending_convname} 条 pending 属昵称派生会话(conv:<名>)：前端现会按列表项 name 尝试投递，打不开则留 pending 下一轮重试（待观察，非必失败）"; downgrade_to_warn
   fi
 
   if [ "$failed_total" -gt 0 ]; then
-    warn "下行队列有 ${failed_total} 条 failed 状态消息（含不可达目标标记，需排查投递失败原因）"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "下行队列有 ${failed_total} 条 failed 状态消息（含不可达目标标记，需排查投递失败原因）"; downgrade_to_warn
   fi
 
   if [ "$inbound_1h" -eq 0 ] && [ "$inbound_24h" -gt 0 ]; then
-    warn "近 1 小时无客户上行消息（可能渠道静默 / 扩展离线）"; [ "$overall" = "OK" ] && overall="WARN"
+    warn "近 1 小时无客户上行消息（可能渠道静默 / 扩展离线）"; downgrade_to_warn
   fi
 
   if [ "$overall" = "OK" ]; then
@@ -370,7 +428,15 @@ if [ ${#PSQL[@]} -gt 0 ]; then
     fail "Bridge 功能异常，请立即排查 ❌"
   fi
 else
-  warn "无数据库数据可分析"
+  warn "无数据库数据可分析"; downgrade_to_warn
 fi
 
 echo "============================================================"
+
+# 退出码跟着判词走：判词只印在终端上，cron/CI 读的是 rc。FAIL 必须让 rc 非 0，
+# 否则「Bridge 功能异常，请立即排查」这条红字配上 rc=0，等于把巡检本身变成假绿。
+# WARN 仍退 0：安静但健康的部署天天会出 WARN，把它做成非 0 只会让人关掉这个巡检。
+case "${overall}" in
+  FAIL) exit 1 ;;
+  *)    exit 0 ;;
+esac

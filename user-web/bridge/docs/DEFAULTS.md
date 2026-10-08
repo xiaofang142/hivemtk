@@ -23,7 +23,11 @@
 | `healthPaths` | `['/health', '/healthz', '/readyz', '/api/health']` | `user-server/internal/router/router.go` 实际注册顺序（优先 /health 含依赖检查） |
 | `profile` | `dev` | `user-server/config.yaml inference.profile: dev` |
 
-> bridge ↔ user-server 走 **HTTP 三通道**（非 WS、非 SSE）。无 `wsPath` 字段。
+> bridge ↔ user-server 走 **HTTP 三条主通道**（上行 ingest、下行轮询 outbox、回执 ack），
+> 外加一条可选的下行推送 SSE（`/api/bridge/outbox/sse`）：`/api/bridge/capabilities` 报
+> `sse_enabled=true` 时扩展用它省掉轮询，报 false 或建连失败时自动退回轮询，功能不受影响。
+> 没有 WebSocket：`DEFAULT_USER_SERVER` 无 `wsPath` 字段，扩展源码里也没有 `new WebSocket`。
+> 服务端同前缀下真实存在的 `/api/ws/channel` 属 channelgw 传输口，扩展不连它。
 
 ### 2.2 端口兜底（cmd/api/main.go）
 
@@ -36,9 +40,14 @@
 
 | 端点 | 方法 | 中间件 | 用途 |
 | --- | --- | --- | --- |
-| `/api/bridge/ingest` | POST | InitGuard | 上行消息（inbound + history） + 拉取同会话待发 reply |
-| `/api/bridge/outbox` | GET | InitGuard | 下行轮询：拉取待发 AI 回复 |
-| `/api/bridge/outbox/ack` | POST | InitGuard | 标记 msg_id 为 `delivered` / `failed` |
+| `/api/bridge/ingest` | POST | InitGuard + BridgeIngressGuard | 上行消息（inbound + history） + 拉取同会话待发 reply |
+| `/api/bridge/outbox` | GET | InitGuard + BridgeIngressGuard | 下行轮询：拉取待发 AI 回复 |
+| `/api/bridge/outbox/ack` | POST | InitGuard + BridgeIngressGuard | 标记 msg_id 为 `delivered` / `failed` |
+| `/api/bridge/outbox/sse` | GET | InitGuard + BridgeIngressGuard | 下行推送：有新回复时即时通知（凭证可走 `?bridge_token=`） |
+| `/api/bridge/capabilities` | GET | InitGuard + BridgeIngressGuard | 申报本实例能力（`sse_enabled`、轮询间隔），popup「测试连接」用它验凭证 |
+
+> 这张表按 `router.go` 里 `bridgeWS := r.Group("/api")` 那一段现抄：整组两道中间件都在，
+> 少写一道就会有人以为 `/api/bridge/outbox` 不带 `X-Bridge-Token` 也能拉（实际 401）。
 
 约束：
 

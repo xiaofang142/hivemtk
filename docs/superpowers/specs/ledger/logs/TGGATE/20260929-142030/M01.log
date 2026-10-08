@@ -1,0 +1,105 @@
+$ bash /tmp/r65.sh go test -v -count=1 -run TestSweepOnceRunsOnlyForLeaseHolder|TestGateSweeperTickLoopTakesAndReleasesLease|TestStartGateSweeperIdempotentAndStopSafe|TestGateSweeperSelfHealsAfterTickPanic|TestSweeperPanicRestartSkippedDuringShutdown|TestRecoverStalledNeverRebroadcastsDeliveredWelcome|TestRecoverStalledResendsOnlyWhenNeverDelivered|TestRecoverStalledCountsFailedAttemptsAndStopsAtCap|TestRecoverStalledSkipsRowStillInsideInRequestWindow|TestRecoverStalledResendsAfterInRequestWindowPasses|TestRecoverStalledResendsImmediatelyAfterRequestPathHandedOff|TestRecoverStalledStillPicksRowsWithoutUpdatedAt|TestHandleNewMembersRecordsDeliveryOutcome|TestHandleNewMembersReJoinResetsWelcomeState|TestHandleNewMembersFailedSendStaysUndelivered|TestSweepExpiredLeavesNeverNotifiedMember|TestSweepExpiredGivesOneTTLGrace|TestSweepExpiredRemovesAfterGraceAndKeepsRejoinOpen|TestSweepExpiredDeclinesJoinRequest|TestSweepExpiredKeepsRetryWhenBanFails|TestSweepExpiredSkipsAuthorizedMember|TestSweepExpiredFilter|TestCronJobLease_HoldAndRelease|TestCronJobLease_RejectsEmptyArgs|TestTelegramMember_ListStalledRestricted|TestTelegramMember_ListStalledRestrictedIdleWindow|TestTelegramMember_UpsertResetsWelcomeState|TestTelegramMember_WelcomeStateGuards|TestTelegramMember_ClaimStalledResend|TestGateSweeperPairedOnShutdown ./internal/service/ ./internal/repository/ ./cmd/api/
+[rc=1] [73.4s]
+
+[90m2026-09-29T14:25:06+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestRecoverStalledSkipsRowStillInsideInRequestWindow
+--- PASS: TestRecoverStalledSkipsRowStillInsideInRequestWindow (3.46s)
+=== RUN   TestRecoverStalledResendsAfterInRequestWindowPasses
+[90m2026-09-29T14:25:10+08:00[0m [32mINF[0m [1m[TG-Gate] 补偿完成：已补禁言+补发提示 chat=-10099887766 user=8002[0m [36mcomponent=[0muser-server
+--- PASS: TestRecoverStalledResendsAfterInRequestWindowPasses (0.57s)
+=== RUN   TestRecoverStalledResendsImmediatelyAfterRequestPathHandedOff
+[90m2026-09-29T14:25:11+08:00[0m [32mINF[0m [1m[TG-Gate] 补偿完成：已补禁言+补发提示 chat=-10099887766 user=8003[0m [36mcomponent=[0muser-server
+--- PASS: TestRecoverStalledResendsImmediatelyAfterRequestPathHandedOff (0.93s)
+=== RUN   TestRecoverStalledStillPicksRowsWithoutUpdatedAt
+[90m2026-09-29T14:25:12+08:00[0m [32mINF[0m [1m[TG-Gate] 补偿完成：已补禁言+补发提示 chat=-10099887766 user=8004[0m [36mcomponent=[0muser-server
+--- PASS: TestRecoverStalledStillPicksRowsWithoutUpdatedAt (0.77s)
+=== RUN   TestSweepOnceRunsOnlyForLeaseHolder
+[90m2026-09-29T14:25:13+08:00[0m [32mINF[0m [1m[TG-Gate] 超时未验证已移出（可重新入群）chat=-10099887766 user=8001 提示送达于=2026-09-29 14:00:13[0m [36mcomponent=[0muser-server
+--- PASS: TestSweepOnceRunsOnlyForLeaseHolder (0.59s)
+=== RUN   TestGateSweeperTickLoopTakesAndReleasesLease
+[90m2026-09-29T14:25:13+08:00[0m [32mINF[0m [1m[TG-Gate] 超时未验证已移出（可重新入群）chat=-10099887766 user=8101 提示送达于=2026-09-29 14:00:13[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:13+08:00[0m [32mINF[0m [1m[TG-Gate] TTL 清扫完成，处理 1 个超时成员[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:13+08:00[0m [31mERR[0m [1m[TG-Gate] TTL 清扫失败: context canceled[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:13+08:00[0m [31mERR[0m [1m[TG-Gate] TTL 清扫失败: context canceled[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:13+08:00[0m [32mINF[0m [1m[TG-Gate] TTL 清扫器已停止 worker=worker-tick[0m [36mcomponent=[0muser-server
+--- PASS: TestGateSweeperTickLoopTakesAndReleasesLease (0.40s)
+=== RUN   TestStartGateSweeperIdempotentAndStopSafe
+[90m2026-09-29T14:25:14+08:00[0m [32mINF[0m [1m[TG-Gate] TTL 清扫器已停止 worker=worker-first[0m [36mcomponent=[0muser-server
+--- PASS: TestStartGateSweeperIdempotentAndStopSafe (0.39s)
+=== RUN   TestGateSweeperSelfHealsAfterTickPanic
+[90m2026-09-29T14:25:14+08:00[0m [31mERR[0m [1m[TG-Gate] TTL 清扫协程 panic 重启: runtime error: invalid memory address or nil pointer dereference[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:14+08:00[0m [31mERR[0m [1m[TG-Gate] TTL 清扫协程 panic 重启: runtime error: invalid memory address or nil pointer dereference[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:14+08:00[0m [32mINF[0m [1m[TG-Gate] TTL 清扫器已停止 worker=worker-panic[0m [36mcomponent=[0muser-server
+--- PASS: TestGateSweeperSelfHealsAfterTickPanic (0.39s)
+=== RUN   TestSweeperPanicRestartSkippedDuringShutdown
+[90m2026-09-29T14:25:14+08:00[0m [32mINF[0m [1m[TG-Gate] TTL 清扫器已停止 worker=worker-shutdown[0m [36mcomponent=[0muser-server
+--- PASS: TestSweeperPanicRestartSkippedDuringShutdown (0.42s)
+=== RUN   TestRecoverStalledNeverRebroadcastsDeliveredWelcome
+--- PASS: TestRecoverStalledNeverRebroadcastsDeliveredWelcome (0.63s)
+=== RUN   TestRecoverStalledResendsOnlyWhenNeverDelivered
+[90m2026-09-29T14:25:15+08:00[0m [32mINF[0m [1m[TG-Gate] 补偿完成：已补禁言+补发提示 chat=-10099887766 user=2001[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:15+08:00[0m [33mWRN[0m [1m[TG-Gate] 提示补发已到上限（3 次）：停止播报 chat=-10099887766 user=2003[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:15+08:00[0m [33mWRN[0m [1m[TG-Gate] 提示补发已到上限（3 次）：停止播报 chat=-10099887766 user=2003[0m [36mcomponent=[0muser-server
+--- PASS: TestRecoverStalledResendsOnlyWhenNeverDelivered (0.41s)
+=== RUN   TestRecoverStalledCountsFailedAttemptsAndStopsAtCap
+=== RUN   TestRecoverStalledCountsFailedAttemptsAndStopsAtCap/禁言失败
+[90m2026-09-29T14:25:16+08:00[0m [33mWRN[0m [1m[TG-Gate] 补偿禁言失败 chat=-10099887766 user=3001: tg restrictChatMember status 400: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:16+08:00[0m [33mWRN[0m [1m[TG-Gate] 提示补发已到上限（3 次）：停止播报 chat=-10099887766 user=3001[0m [36mcomponent=[0muser-server
+=== RUN   TestRecoverStalledCountsFailedAttemptsAndStopsAtCap/提示发送失败
+[90m2026-09-29T14:25:16+08:00[0m [33mWRN[0m [1m[TG-Gate] 补偿提示发送失败 chat=-10099887766 user=3001: tg send chunk 1/1 failed: tg send status 400: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:16+08:00[0m [33mWRN[0m [1m[TG-Gate] 提示补发已到上限（3 次）：停止播报 chat=-10099887766 user=3001[0m [36mcomponent=[0muser-server
+--- PASS: TestRecoverStalledCountsFailedAttemptsAndStopsAtCap (0.68s)
+    --- PASS: TestRecoverStalledCountsFailedAttemptsAndStopsAtCap/禁言失败 (0.42s)
+    --- PASS: TestRecoverStalledCountsFailedAttemptsAndStopsAtCap/提示发送失败 (0.26s)
+=== RUN   TestHandleNewMembersRecordsDeliveryOutcome
+--- PASS: TestHandleNewMembersRecordsDeliveryOutcome (0.25s)
+=== RUN   TestHandleNewMembersReJoinResetsWelcomeState
+[90m2026-09-29T14:25:18+08:00[0m [31mERR[0m [1m[TG-Gate] 群内验证提示发送失败（已入补偿队列，清扫器将补发）account=1 chat=-10099887766: tg send chunk 1/1 failed: tg send status 400: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}[0m [36mcomponent=[0muser-server
+--- PASS: TestHandleNewMembersReJoinResetsWelcomeState (1.52s)
+=== RUN   TestHandleNewMembersFailedSendStaysUndelivered
+[90m2026-09-29T14:25:18+08:00[0m [31mERR[0m [1m[TG-Gate] 群内验证提示发送失败（已入补偿队列，清扫器将补发）account=1 chat=-10099887766: tg send chunk 1/1 failed: tg send status 400: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}[0m [36mcomponent=[0muser-server
+[90m2026-09-29T14:25:18+08:00[0m [32mINF[0m [1m[TG-Gate] 补偿完成：已补禁言+补发提示 chat=-10099887766 user=6001[0m [36mcomponent=[0muser-server
+--- PASS: TestHandleNewMembersFailedSendStaysUndelivered (0.41s)
+=== RUN   TestSweepExpiredLeavesNeverNotifiedMember
+--- PASS: TestSweepExpiredLeavesNeverNotifiedMember (0.22s)
+=== RUN   TestSweepExpiredGivesOneTTLGrace
+--- PASS: TestSweepExpiredGivesOneTTLGrace (0.48s)
+=== RUN   TestSweepExpiredRemovesAfterGraceAndKeepsRejoinOpen
+[90m2026-09-29T14:25:19+08:00[0m [32mINF[0m [1m[TG-Gate] 超时未验证已移出（可重新入群）chat=-10099887766 user=7003 提示送达于=2026-09-29 14:00:19[0m [36mcomponent=[0muser-server
+--- PASS: TestSweepExpiredRemovesAfterGraceAndKeepsRejoinOpen (0.51s)
+=== RUN   TestSweepExpiredDeclinesJoinRequest
+--- PASS: TestSweepExpiredDeclinesJoinRequest (0.22s)
+=== RUN   TestSweepExpiredKeepsRetryWhenBanFails
+[90m2026-09-29T14:25:20+08:00[0m [33mWRN[0m [1m[TG-Gate] 踢出超时成员失败 chat=-10099887766 user=7005: tg banChatMember status 400: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}[0m [36mcomponent=[0muser-server
+--- PASS: TestSweepExpiredKeepsRetryWhenBanFails (0.19s)
+=== RUN   TestSweepExpiredSkipsAuthorizedMember
+--- PASS: TestSweepExpiredSkipsAuthorizedMember (0.45s)
+=== RUN   TestSweepExpiredFilter
+--- PASS: TestSweepExpiredFilter (0.09s)
+PASS
+ok  	hivemtk-user/internal/service	15.929s
+[90m2026-09-29T14:25:05+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCronJobLease_HoldAndRelease
+--- PASS: TestCronJobLease_HoldAndRelease (4.38s)
+=== RUN   TestCronJobLease_RejectsEmptyArgs
+--- PASS: TestCronJobLease_RejectsEmptyArgs (0.10s)
+=== RUN   TestTelegramMember_ListStalledRestricted
+    telegram_gate_repo_test.go:70: 命中集合应={u5,u6}, 实际=map[u1:true u2:true u5:true u6:true]
+--- FAIL: TestTelegramMember_ListStalledRestricted (0.24s)
+=== RUN   TestTelegramMember_UpsertResetsWelcomeState
+--- PASS: TestTelegramMember_UpsertResetsWelcomeState (0.79s)
+=== RUN   TestTelegramMember_WelcomeStateGuards
+--- PASS: TestTelegramMember_WelcomeStateGuards (0.30s)
+=== RUN   TestTelegramMember_ClaimStalledResend
+--- PASS: TestTelegramMember_ClaimStalledResend (0.26s)
+=== RUN   TestTelegramMember_ListStalledRestrictedIdleWindow
+    telegram_gate_stalled_idle_test.go:82: 命中集合应=map[handed-off:true idle:true no-stamp:true], 实际=map[delivered-idle:true handed-off:true idle:true no-stamp:true]
+--- FAIL: TestTelegramMember_ListStalledRestrictedIdleWindow (0.86s)
+FAIL
+FAIL	hivemtk-user/internal/repository	7.850s
+[90m2026-09-29T14:25:06+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestGateSweeperPairedOnShutdown
+--- PASS: TestGateSweeperPairedOnShutdown (0.00s)
+PASS
+ok  	hivemtk-user/cmd/api	0.942s
+FAIL

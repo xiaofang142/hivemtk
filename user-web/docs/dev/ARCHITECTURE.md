@@ -360,7 +360,9 @@ sequenceDiagram
 
 ## 6. WebSocket / SSE 实时通道架构
 
-user-web 共存在两条 WebSocket 通道与若干 SSE 推送场景。
+user-web 只有两条 WebSocket 长连接通道。服务端另有 `GET /api/dashboard/sse` 这一条 SSE 端点，
+但**管理台里没有任何 `EventSource` 消费者**（现测 `src/` 零命中，端点本身现测 401 需要 JWT）：
+数据大屏走的是 `setInterval` 每 5 秒轮询 `/api/dashboards/activities`。
 
 ```mermaid
 graph LR
@@ -369,20 +371,22 @@ graph LR
         ChatSocket["utils/chatSocket.js<br/>ChatSocket 类"]
         ViewInbox["views/unifiedInbox/List.vue<br/>views/customerSession/List.vue"]
         ViewEmbed["views/chat/embed/Index.vue<br/>→ ChatWindow.vue"]
-        Dashboard["views/dashboardScreen/List.vue<br/>SSE 大屏推送"]
+        Dashboard["views/dashboardScreen/List.vue<br/>setInterval 5s 轮询"]
     end
 
     subgraph 后端 user-server
         WSAgent["/api/ws/agent"]
         WSVisitor["/api/ws/visitor"]
-        SSEHub["/api/sse/*"]
+        ScreenApi["/api/dashboards/activities<br/>/api/dashboards/data"]
+        SSEHub["/api/dashboard/sse<br/>（管理台暂无消费者）"]
     end
 
     ViewInbox --> AgentSocket
     AgentSocket -->|?agent_id=&agent_name=&token=| WSAgent
     ViewEmbed --> ChatSocket
     ChatSocket -->|?session_id=&visitor_id=&channel_id=&since_seq=| WSVisitor
-    Dashboard -.EventSource.-> SSEHub
+    Dashboard -->|GET，带 JWT| ScreenApi
+    SSEHub -.仅服务端就绪，前端未接.- Dashboard
 ```
 
 ### 6.1 AgentSocket（坐席侧）
@@ -407,9 +411,15 @@ graph LR
   - `lastSeq` 持久化到 `sessionStorage`（key: `chatSocket:lastSeq:{sessionId}:{visitorId}`）
   - `onopen` 自动 flush pending acks；`since_seq` 让服务端走精确路径补发
 
-### 6.3 SSE 大屏推送
+### 6.3 数据大屏：轮询，不是 SSE
 
-`views/dashboardScreen/List.vue` 通过 `EventSource` 订阅 `/api/sse/*`，由后端推送营销 KPI 与图表数据。前端不需要鉴权 header（依赖 cookie 或 query token）。
+`views/dashboardScreen/List.vue` 用 `setInterval(…, 5000)` 拉 `getRealtimeActivities()`
+（`GET /api/dashboards/activities`）与 `getDashboardData()`（`GET /api/dashboards/data`），
+全仓 `src/` 里 `new EventSource` 零命中。
+
+服务端那条 `GET /api/dashboard/sse`（`service_routes.go:257`，auth 组，现测未带 token 回 401）
+目前**没有管理台调用方**；`/api/sse/*` 这个前缀整块不存在（现测 404）。
+要把大屏改成推送时，接的是 `/api/dashboard/sse`，别再照旧文档去连 `/api/sse/…`。
 
 ## 7. 渠道集成前端接入图
 

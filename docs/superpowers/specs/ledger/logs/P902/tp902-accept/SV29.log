@@ -1,0 +1,88 @@
+2026-09-30T00:27:09+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBRelease_UnavailableEverywhere
+--- PASS: TestKBRelease_UnavailableEverywhere (0.00s)
+=== RUN   TestKBRelease_GlobalRegistryRoundTrip
+--- PASS: TestKBRelease_GlobalRegistryRoundTrip (0.00s)
+=== RUN   TestKBRelease_SubmitInputNormalization
+--- PASS: TestKBRelease_SubmitInputNormalization (0.00s)
+=== RUN   TestKBRelease_WriteArgs
+    kb_release_test.go:401: kbWriteArgs("p1","") 应判入参不合法，实得 <nil>
+    kb_release_test.go:401: kbWriteArgs("p1","   ") 应判入参不合法，实得 <nil>
+--- FAIL: TestKBRelease_WriteArgs (0.00s)
+=== RUN   TestKBRelease_ChangeIDErrsOnOverflow
+--- PASS: TestKBRelease_ChangeIDErrsOnOverflow (0.00s)
+=== RUN   TestKBRelease_SubmitChangeHappyPath
+2026-09-30T00:27:09+08:00 INF [kb-release] 变更已提交：kbc_1700000000000000000_1 op=add product=p1 approval=apr_77（新建=true） component=user-server
+--- PASS: TestKBRelease_SubmitChangeHappyPath (0.00s)
+=== RUN   TestKBRelease_SubmitChangeApprovalFailureLeavesNoRow
+--- PASS: TestKBRelease_SubmitChangeApprovalFailureLeavesNoRow (0.00s)
+=== RUN   TestKBRelease_SubmitChangeNilApprovalWithoutError
+--- PASS: TestKBRelease_SubmitChangeNilApprovalWithoutError (0.00s)
+=== RUN   TestKBRelease_SubmitChangeInsertFailure
+--- PASS: TestKBRelease_SubmitChangeInsertFailure (0.00s)
+=== RUN   TestKBRelease_SubmitChangeAuditFailureStillSucceeds
+2026-09-30T00:27:09+08:00 WRN [kb-release] 变更 kbc_1700000000000000000_1 的 submitted 留痕写入失败: 审计表写入失败 component=user-server
+2026-09-30T00:27:09+08:00 INF [kb-release] 变更已提交：kbc_1700000000000000000_1 op=add product=p1 approval=apr_stub（新建=true） component=user-server
+--- PASS: TestKBRelease_SubmitChangeAuditFailureStillSucceeds (0.00s)
+=== RUN   TestKBRelease_WithdrawChange
+=== RUN   TestKBRelease_WithdrawChange/入参判据
+=== RUN   TestKBRelease_WithdrawChange/查无此条
+=== RUN   TestKBRelease_WithdrawChange/读故障上抛
+=== RUN   TestKBRelease_WithdrawChange/已发布的撤不掉
+=== RUN   TestKBRelease_WithdrawChange/撤回成功
+=== RUN   TestKBRelease_WithdrawChange/CAS_被抢先
+=== RUN   TestKBRelease_WithdrawChange/留痕失败上抛
+--- PASS: TestKBRelease_WithdrawChange (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/入参判据 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/查无此条 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/读故障上抛 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/已发布的撤不掉 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/撤回成功 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/CAS_被抢先 (0.00s)
+    --- PASS: TestKBRelease_WithdrawChange/留痕失败上抛 (0.00s)
+=== RUN   TestKBRelease_PublishPendingVerdicts
+2026-09-30T00:27:09+08:00 WRN [kb-release] 变更 kbc_bogus 的审批 apr_bogus status="someday" 无法识别 ⇒ 本次不带 component=user-server
+2026-09-30T00:27:09+08:00 WRN [kb-release] 变更 kbc_other 挂着审批 apr_other，但三列是 (quote,kbc_other,kb.change.apply) ⇒ 不是这条变更的结论，本次不带 component=user-server
+2026-09-30T00:27:09+08:00 WRN [kb-release] 变更 kbc_wrong 挂着审批 apr_wrong，但三列是 (kb_change,kbc_someone-else,kb.change.apply) ⇒ 不是这条变更的结论，本次不带 component=user-server
+2026-09-30T00:27:09+08:00 WRN [kb-release] 变更 kbc_pol 挂着审批 apr_pol，但三列是 (kb_change,kbc_pol,ltc.some.other_policy) ⇒ 不是这条变更的结论，本次不带 component=user-server
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 发布完成：v3 → v4，落库 0 条变更 component=user-server
+--- PASS: TestKBRelease_PublishPendingVerdicts (0.00s)
+=== RUN   TestKBRelease_PublishPendingApprovalReadFailureStopsEverything
+--- PASS: TestKBRelease_PublishPendingApprovalReadFailureStopsEverything (0.00s)
+=== RUN   TestKBRelease_PublishPendingNothingApprovedSkipsTransaction
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 本次没有可发布的变更：待审 1 条 / 被拒 0 条 / 过期 0 条 / 结论不明 0 条 component=user-server
+--- PASS: TestKBRelease_PublishPendingNothingApprovedSkipsTransaction (0.00s)
+=== RUN   TestKBRelease_PublishPendingArgsAndStoreErrors
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 本次没有可发布的变更：待审 0 条 / 被拒 0 条 / 过期 0 条 / 结论不明 0 条 component=user-server
+    kb_release_test.go:786: 空操作者应判入参（发布要归人）: <nil>
+--- FAIL: TestKBRelease_PublishPendingArgsAndStoreErrors (0.00s)
+=== RUN   TestKBRelease_PublishPendingRequiresGoverned
+=== RUN   TestKBRelease_PublishPendingRequiresGoverned/没有发布行
+=== RUN   TestKBRelease_PublishPendingRequiresGoverned/有行但_governed=false
+--- PASS: TestKBRelease_PublishPendingRequiresGoverned (0.00s)
+    --- PASS: TestKBRelease_PublishPendingRequiresGoverned/没有发布行 (0.00s)
+    --- PASS: TestKBRelease_PublishPendingRequiresGoverned/有行但_governed=false (0.00s)
+=== RUN   TestKBRelease_PublishPendingDraftBucketWithoutChanges
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 发布完成：v4 → v5，落库 0 条变更 component=user-server
+--- PASS: TestKBRelease_PublishPendingDraftBucketWithoutChanges (0.00s)
+=== RUN   TestKBRelease_EmbedAppliedAfterCommit
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 发布完成：v1 → v2，落库 3 条变更 component=user-server
+2026-09-30T00:27:09+08:00 ERR [kb-release] 库 p1 版本 v3 的向量补算失败（1 条分段，词面检索不受影响，可重放 reindex）: embedding 服务不可用 component=user-server
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 发布完成：v0 → v3，落库 1 条变更 component=user-server
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 发布完成：v0 → v4，落库 1 条变更 component=user-server
+--- PASS: TestKBRelease_EmbedAppliedAfterCommit (0.00s)
+=== RUN   TestKBRelease_PointerMovesGoToStore
+--- PASS: TestKBRelease_PointerMovesGoToStore (0.00s)
+=== RUN   TestKBRelease_SetGoverned
+2026-09-30T00:27:09+08:00 WRN [kb-release] 库 p1 已进发布制，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 闸门不加进召回 SQL，待发布内容照常可见；要真拦需置 on component=user-server
+2026-09-30T00:27:09+08:00 INF [kb-release] 库 p1 governed=false（闸门档位 off） component=user-server
+    kb_release_test.go:990: 空操作者应判入参（谁启的治理要留得下来）: <nil>
+    kb_release_test.go:997: 判据过了就该走到仓储，实得 3 次
+--- FAIL: TestKBRelease_SetGoverned (0.00s)
+=== RUN   TestKBRelease_Views
+--- PASS: TestKBRelease_Views (0.00s)
+=== RUN   TestKBRelease_StatsFlagsShadowReadings
+--- PASS: TestKBRelease_StatsFlagsShadowReadings (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/service	0.644s
+FAIL

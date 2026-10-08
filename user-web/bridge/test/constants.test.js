@@ -4,7 +4,6 @@ import {
   DEFAULT_USER_SERVER,
   PLATFORM_ENTRY_URLS,
   RATE_LIMIT_DEFAULTS,
-  WS_CLIENT_DEFAULTS,
   UI_DEFAULTS,
   PROTOCOL,
   SECURITY,
@@ -27,10 +26,6 @@ describe('DEFAULT_USER_SERVER', () => {
     expect(DEFAULT_USER_SERVER.healthPaths[0]).toBe('/health');
     expect(DEFAULT_USER_SERVER.healthPaths).toContain('/healthz');
     expect(DEFAULT_USER_SERVER.healthPaths).toContain('/readyz');
-  });
-
-  it('wsPath 必须为 /api/ws/bridge（与 router/service_routes.go:90 一致）', () => {
-    expect(DEFAULT_USER_SERVER.wsPath).toBe('/api/ws/bridge');
   });
 
   it('profile 必须为 dev', () => {
@@ -77,19 +72,21 @@ describe('RATE_LIMIT_DEFAULTS', () => {
   });
 });
 
-describe('WS_CLIENT_DEFAULTS', () => {
-  it('serverIdleTimeoutMs (25s) 必须 < 服务端 pongWait (60s)', () => {
-    expect(WS_CLIENT_DEFAULTS.serverIdleTimeoutMs).toBeLessThan(60 * 1000);
-    expect(WS_CLIENT_DEFAULTS.serverIdleTimeoutMs).toBeGreaterThan(0);
+describe('WS_CLIENT_DEFAULTS 已随 WS 传输一起删除', () => {
+  // 扩展这条链路两侧都没有 WebSocket 了：服务端 internal/bridge 包里 pongWait/pingPeriod 零命中
+  // （那个 WS handler 早随传输一起删除），扩展 src/ 里 new WebSocket 零命中。留下的只有
+  // HTTP 上行/下行轮询/ack 三条加一条 SSE。（channelgw 的 /api/ws/channel 是另一条口的东西，
+  // 扩展不连它。）这格守的是「别再往 DEFAULT_USER_SERVER 里塞一个指向不存在端点的字段」
+  // ——历史上 wsPath:'/api/ws/bridge' 就是这么活着的，而服务端从未注册过那个路径。
+  it('DEFAULT_USER_SERVER 的字段集合就是这四条通道用到的那些', () => {
+    expect(Object.keys(DEFAULT_USER_SERVER).sort()).toEqual(
+      ['baseUrl', 'healthPaths', 'host', 'port', 'profile'].sort()
+    );
   });
 
-  it('reconnect 指数退避必须合法', () => {
-    expect(WS_CLIENT_DEFAULTS.reconnectBaseMs).toBeLessThanOrEqual(WS_CLIENT_DEFAULTS.reconnectMaxMs);
-    expect(WS_CLIENT_DEFAULTS.reconnectJitterMs).toBeLessThan(WS_CLIENT_DEFAULTS.reconnectBaseMs);
-  });
-
-  it('冻结对象', () => {
-    expect(Object.isFrozen(WS_CLIENT_DEFAULTS)).toBe(true);
+  it('模块不再导出 WS_CLIENT_DEFAULTS', async () => {
+    const mod = await import('../src/core/constants.js');
+    expect(mod.WS_CLIENT_DEFAULTS).toBeUndefined();
   });
 });
 
@@ -146,7 +143,6 @@ describe('DEFAULTS 文档源完整性', () => {
       'DEFAULT_USER_SERVER',
       'PLATFORM_ENTRY_URLS',
       'RATE_LIMIT_DEFAULTS',
-      'WS_CLIENT_DEFAULTS',
       'UI_DEFAULTS',
       'PROTOCOL',
       'SECURITY',
@@ -154,11 +150,10 @@ describe('DEFAULTS 文档源完整性', () => {
     expect(typeof DEFAULT_USER_SERVER).toBe('object');
     expect(typeof PLATFORM_ENTRY_URLS).toBe('object');
     expect(typeof RATE_LIMIT_DEFAULTS).toBe('object');
-    expect(typeof WS_CLIENT_DEFAULTS).toBe('object');
     expect(typeof UI_DEFAULTS).toBe('object');
     expect(typeof PROTOCOL).toBe('object');
     expect(typeof SECURITY).toBe('object');
-    expect(expected.length).toBe(7);
+    expect(expected.length).toBe(6);
   });
 });
 

@@ -95,6 +95,10 @@ type IngestMessage struct {
 }
 
 // IngestRequest HTTP 上报请求体（与扩展端 http-ingest.js 严格对齐）。
+//
+// ExpectReply / TimeoutMs 目前**服务端不消费**：ingest 恒立即返回，回复由扩展经
+// SSE 推送或 `/api/bridge/outbox` 轮询取回。扩展仍会带 timeout_ms（uplink.js），
+// 它只是一个被忽略的字段 —— 别把它当成"这次请求会阻塞到回复或超时"。
 type IngestRequest struct {
 	V              int              `json:"v,omitempty"`
 	Channel        string           `json:"channel"`

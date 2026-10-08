@@ -153,11 +153,16 @@ function saveConfig(cfg, cb) {
 
 // ---- 测试连接：fetch 健康检查端点 ----
 // 策略：依次尝试 HEALTH_PATHS 多个候选路径
-//   - 2xx：服务端可达，立即返回成功
-//   - 5xx：服务端可达但降级（PG/Redis/LLM 故障），仍记为"可连"，提示用户
+//   - 2xx：服务端可达；**再读响应体**判降级（user-server 把依赖故障写在 200 的体里，
+//     见 readHealthVerdict——只看 HTTP 码会把"数据库挂了"的部署报成完全正常）
+//   - 5xx：服务端可达但进程/反代层故障，仍记为"可连 + 已降级"
 //   - 404：当前路径不存在，继续试下一个（避免误报）
 //   - 其他 4xx：认证/权限问题，立即返回
 //   - 网络错误/超时/拒绝：保留 last error，作为 unreachable 返回
+//
+// 这一路只回答"地址通不通、服务端自身怎么样"，**不含凭证**：能不能收发由
+// probeBridgeCredential（打在挂同一道闸门的 capabilities 口上）单独回答，两条判词在
+// 点击处理里合成一条 banner。
 //
 // 共享 AbortController（2026-08-05 审计 P1 修复）：
 //   原实现每次 fetch 各建独立 AbortController 仅用于超时；存在两类泄漏：
@@ -173,6 +178,12 @@ function abortInFlightHealth() {
   if (_healthAbortCtl) {
     try { _healthAbortCtl.abort(); } catch (_) {  }
     _healthAbortCtl = null;
+  }
+  // 凭证探测口同样是 in-flight fetch：用户连点或关掉 popup 时一起取消，
+  // 否则旧一轮的凭证判词会盖掉新一版（与健康口那两条是同一条故障形态）。
+  if (_credAbortCtl) {
+    try { _credAbortCtl.abort(); } catch (_) {  }
+    _credAbortCtl = null;
   }
 }
 async function testConnection(serverUrl) {
@@ -200,9 +211,21 @@ async function testConnection(serverUrl) {
           cache: 'no-store',
         });
         clearTimeout(t);
-        if (res.ok) return { ok: true, url, status: res.status, degraded: false };
+        if (res.ok) {
+          // 2xx 之后还要读体：见 readHealthVerdict 的说明（降级时服务端仍回 HTTP 200）。
+          const verdict = await readHealthVerdict(res);
+          return {
+            ok: true,
+            url,
+            status: res.status,
+            degraded: verdict.degraded,
+            degradedByServer: verdict.declaredByServer,
+            healthStatus: verdict.overall,
+            degradedChecks: verdict.checks,
+          };
+        }
         if (res.status === 404) continue; 
-        if (res.status >= 500 && res.status < 600) return { ok: true, url, status: res.status, degraded: true };
+        if (res.status >= 500 && res.status < 600) return { ok: true, url, status: res.status, degraded: true, degradedByServer: true, degradedChecks: [`HTTP ${res.status}`] };
         if (res.status >= 400 && res.status < 500) return { ok: false, url, status: res.status, reason: 'http_' + res.status };
         return { ok: false, url, status: res.status, reason: 'http_' + res.status };
       } catch (e) {
@@ -219,6 +242,197 @@ async function testConnection(serverUrl) {
   } finally {
     if (_healthAbortCtl === parentCtl) _healthAbortCtl = null;
   }
+}
+
+// 读 /health 响应体里的依赖判词。
+//
+// 为什么必须读体：`internal/router/health.go` 在 overallOK 为假时走
+// `response.ErrorWithBusinessCode(c, 50301, "service degraded", data)`，而那个 helper 用的状态码是
+// `http.StatusOK` ⇒ 数据库挂了、或没有可用 LLM provider 时，HTTP 仍是 200，真话只在体里的
+// `code:50301` 与 `data.status:"degraded"`。只看 res.ok 会把这种部署显示成「✓ 服务端可达」。
+//
+// 只认这两个红信号，别的状态值一律不算红：
+//   - `inference` 正常时写的是 "up"、`/healthz` 写 "alive"、`/readyz` 写 "ready"、
+//     redis 未配置写 "not_configured"（服务端自己的总判在这种情形仍是 ok）；
+//     按 `status !== 'ok'` 一刀切会把这些正常态报成降级。
+//   - 单格故障看 `checks.<name>.status === 'down'`，服务端只在真失败时才写这个值。
+//
+// 两类信号必须分开报，因为服务端只把**它认为关键的**依赖计入总判：`health.go` 里
+// embedding 仅在 `HEALTH_EMBEDDING_CRITICAL=true` 时才把 `overallOK` 置假 ⇒ 活实测
+// 「data.status:"ok" + checks.embedding.status:"down"（8208 连不上）」是能同时出现的。
+// 这时扩展不能替服务端宣布"已降级"（那是它没作过的结论），但也不能不提——
+// 向量召回挂了会走兜底话术，对桥接用户是看得见的事。所以 `declaredByServer` 单独回传，
+// 合成文案那一路据此选标题。
+// 体读不出来（不是 JSON、或旧版没有 data 格）就退回"不改变可达结论"，宁可不判。
+const HEALTH_DEGRADED_BUSINESS_CODE = 50301;
+async function readHealthVerdict(res) {
+  const none = { degraded: false, declaredByServer: false, overall: '', checks: [] };
+  if (!res || typeof res.json !== 'function') return none;
+  let body;
+  try { body = await res.json(); } catch (_) { return none; }
+  if (!body || typeof body !== 'object') return none;
+  const data = body.data;
+  if (!data || typeof data !== 'object') return none;
+  const checks = [];
+  const items = data.checks && typeof data.checks === 'object' ? Object.entries(data.checks) : [];
+  for (const [name, v] of items) {
+    if (v && v.status === 'down') {
+      checks.push(`${name}: ${String(v.error || '服务端未给原因').slice(0, 160)}`);
+    }
+  }
+  const topDegraded = data.status === 'degraded' || body.code === HEALTH_DEGRADED_BUSINESS_CODE;
+  if (topDegraded && checks.length === 0) checks.push(`总判 ${data.status || 'degraded'}`);
+  return {
+    degraded: topDegraded || checks.length > 0,
+    declaredByServer: topDegraded,
+    overall: String(data.status || ''),
+    checks,
+  };
+}
+
+// 凭证探测：GET /api/bridge/capabilities，带 X-Bridge-Token。
+//
+// 为什么原本要补这一格：「测试连接」只打无鉴权的健康口，所以**凭证填错也照样报「✓ 服务端可达」**，
+// 用户下一步看到的就是"扩展连着、一条客户消息也不上来、一条回复也不下发"。
+// 选这个口是因为它是 bridge 五条路由里唯一"只读、无副作用、又与 ingest/outbox/ack/SSE 挂同一道
+// `BridgeIngressGuard`"的（`internal/router/router.go` 的 bridge group）——活实测三态互不混淆：
+//   不带凭证 ⇒ 401 `缺少 X-Bridge-Token`；带错 ⇒ 401 `bridge token 无效`；带对 ⇒ 200 + 能力读数。
+// 反过来说 ingest/outbox/ack 会真写队列，不能拿来"测试"。
+// 返回体绝不回显凭证；服务端那句 message 是闸门自己写的固定文案，直接抄给用户比任何猜测准。
+const BRIDGE_CREDENTIAL_PROBE_PATH = '/api/bridge/capabilities';
+let _credAbortCtl = null;
+async function probeBridgeCredential(serverUrl, token) {
+  const base = normalizeServerUrl(serverUrl);
+  if (!base) return { state: 'invalid_url' };
+  const url = base + BRIDGE_CREDENTIAL_PROBE_PATH;
+  const creds = String(token || '').trim();
+  const ctl = new AbortController();
+  _credAbortCtl = ctl;
+  const t = setTimeout(() => ctl.abort(), POPUP_HEALTH_CHECK_TIMEOUT_MS);
+  const headers = {};
+  // 空凭证时不伪造空头：不发与发空串，服务端给的都是同一句 401，
+  // 但"你压根没填"只有不发才判得出来（state==='missing'）。
+  if (creds) headers['X-Bridge-Token'] = creds;
+  try {
+    const res = await fetch(url, { method: 'GET', headers, signal: ctl.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (res.ok) {
+      let caps = null;
+      try { caps = await res.json(); } catch (_) { caps = null; }
+      return {
+        state: 'verified',
+        url,
+        status: res.status,
+        sseEnabled: !!(caps && caps.sse_enabled),
+        pollIntervalMs: caps && caps.poll_interval_ms,
+      };
+    }
+    if (res.status === 404) return { state: 'no_probe_endpoint', url, status: 404 };
+    if (res.status === 401 || res.status === 403) {
+      let msg = '';
+      try {
+        const b = await res.json();
+        msg = (b && (b.message || b.msg)) || '';
+      } catch (_) { msg = ''; }
+      // 防御：任何情况下都不把用户刚填的凭证回显进判词。
+      if (creds && String(msg).includes(creds)) msg = '';
+      return { state: creds ? 'rejected' : 'missing', url, status: res.status, serverMessage: String(msg).slice(0, 160) };
+    }
+    return { state: 'unexpected_status', url, status: res.status };
+  } catch (e) {
+    clearTimeout(t);
+    if (ctl.signal.aborted) return { state: 'timeout', url };
+    return { state: 'unreachable', url, detail: e && e.message ? e.message : String(e) };
+  } finally {
+    if (_credAbortCtl === ctl) _credAbortCtl = null;
+  }
+}
+
+// 「测试连接」的判词合成：可达性 + 依赖降级 + 凭证，三条读数出**一条** banner。
+// 单独抽成纯函数是因为这条 banner 就是用户看到的全部东西——"通不通"必须由它说了算，
+// 而不是由 fetch 的返回值说了算；抽出来之后每条用户可见文案都能直接用例钉住。
+// 严重度取最差：凭证被拒 ⇒ 红（链路一条也走不通），仅依赖降级 ⇒ 黄。
+function buildConnectionVerdict(reach, cred) {
+  const r = reach || {};
+  if (!r.ok) {
+    if (r.reason === 'empty') {
+      return { kind: 'error', title: '请输入服务端地址', body: '例如 ' + DEFAULT_PLACEHOLDER };
+    }
+    if (r.reason && /^http_/.test(r.reason)) {
+      return {
+        kind: 'warn',
+        title: '⚠ 服务端响应 4xx',
+        body: `${r.url}  ${r.reason}\n\n检查：\n  1. user-server 是否在运行\n  2. 健康检查路径是否被中间件拦截\n  3. URL 是否正确`,
+      };
+    }
+    const detail = r.detail ? `\n详细: ${r.detail}` : '';
+    return {
+      kind: 'error',
+      title: '✗ 无法连接',
+      body: `${r.url}${detail}\n\n可能原因：\n  1. user-server 未启动（默认端口 ${DEFAULT_PORT_HINT}）\n  2. 端口不正确：检查 cmd/api/main.go 或 PORT 环境变量\n  3. 防火墙/CORS 拦截\n  4. URL 写错\n  5. manifest.json host_permissions 未覆盖此域名`,
+    };
+  }
+
+  const lines = [`${r.url}  HTTP ${r.status}`];
+  let kind = 'success';
+  let title = '✓ 服务端可达';
+
+  if (r.degraded) {
+    kind = 'warn';
+    const why = (r.degradedChecks && r.degradedChecks.length) ? r.degradedChecks.join('\n  ') : `HTTP ${r.status}`;
+    if (r.degradedByServer) {
+      title = '⚠ 服务端可达但已降级';
+      lines.push(`服务端健康检查点名的问题：\n  ${why}\n桥接收发本身不受影响，但 AI 回复会变慢或失败。`);
+    } else {
+      // 服务端总判仍是 ok（它只把关键依赖计入降级，embedding 要 HEALTH_EMBEDDING_CRITICAL=true 才算），
+      // 标题就不许替它宣布"已降级"；但这格实测报 down，对桥接用户是可感知的，必须点名。
+      title = '⚠ 可达，有一项依赖实测故障';
+      lines.push(`服务端总判为「${r.healthStatus || 'ok'}」，未把它计为降级，而这一格报的是 down：\n  ${why}\n`
+        + '桥接收发不受影响；向量召回打不中时回复会走兜底话术。');
+    }
+  }
+
+  const c = cred || {};
+  switch (c.state) {
+    case 'verified':
+      // 标题不许盖掉健康口那一路已经判出的降级：颜色与文案必须同一条口径，
+      // 否则「黄底绿字」会让用户以为一切正常，依赖故障这一条就白报了。
+      if (kind === 'success') title = '✓ 可达，凭证可用';
+      lines.push(c.sseEnabled
+        ? '凭证可用；下行形态 SSE 长连接（服务端 capabilities 实报 sse_enabled=true）。'
+        : `凭证可用；下行形态轮询（服务端实报 sse_enabled=false${c.pollIntervalMs ? `，间隔 ${c.pollIntervalMs}ms` : ''}）。`);
+      break;
+    case 'rejected':
+      kind = 'error';
+      title = '✗ 凭证被服务端拒绝';
+      lines.push(`capabilities 返回 ${c.status}${c.serverMessage ? `：${c.serverMessage}` : ''}\n`
+        + '上报/拉取/ack/SSE 五条路由挂的是同一道闸门，全都会被拦下 ⇒ 扩展会"连着"却一条也不同步。\n'
+        + '请核对这里填的凭证与服务端配置（环境变量 BRIDGE_INGEST_TOKEN，或系统配置项 bridge_ingest_token）是否一致。');
+      break;
+    case 'missing':
+      kind = 'error';
+      title = '✗ 未填桥接凭证';
+      lines.push(`服务端要求 X-Bridge-Token（capabilities 返回 ${c.status}${c.serverMessage ? `：${c.serverMessage}` : ''}），而凭证栏是空的。\n不填的话每一条桥接请求都会 401。`);
+      break;
+    case 'no_probe_endpoint':
+      if (kind === 'success') { kind = 'warn'; title = '⚠ 可达，但凭证没能校验'; }
+      lines.push('该地址没有 capabilities 探测口（HTTP 404）：user-server 版本可能偏旧，凭证要等真正收发时才会被检验。');
+      break;
+    case 'timeout':
+    case 'unreachable':
+    case 'unexpected_status':
+    case 'invalid_url':
+      if (kind === 'success') { kind = 'warn'; title = '⚠ 可达，但凭证没能校验'; }
+      lines.push(c.state === 'unexpected_status'
+        ? `凭证探测返回了非预期状态（HTTP ${c.status}），这条判词不作数。`
+        : '凭证探测请求没通（超时或网络错误），这条判词不作数——健康口通不代表桥接口通。');
+      break;
+    default:
+      break;
+  }
+
+  if (kind === 'success') lines.push('请打开 抖音/小红书/TikTok/闲鱼 私信页启动桥接。');
+  return { kind, title, body: lines.join('\n\n') };
 }
 
 // 渠道展示名：统一只显示「抖音 / 小红书 / TikTok / 闲鱼」，不出现 douyin_web/xhs_web 这类内部编码
@@ -876,26 +1090,21 @@ document.addEventListener('DOMContentLoaded', () => {
   $('test').addEventListener('click', async () => {
     const btn = $('test');
     const serverUrl = normalizeServerUrl($('serverUrl').value);
+    const token = String($('token').value || '').trim();
     if (!serverUrl) {
       showBanner('error', '请输入服务端地址', '例如 ' + DEFAULT_PLACEHOLDER);
       return;
     }
     btn.disabled = true;
-    showBanner('info', '⏳ 正在测试…', `${serverUrl} /api/health`);
+    // 占位文案不写死某个路径：命中哪一条由 HEALTH_PATHS 的顺序决定（本机实测停在 /health），
+    // 原来那句"… /api/health"与实际打的那一口不一致，照着它排查会走偏。
+    showBanner('info', '⏳ 正在测试…', `${serverUrl}\n健康口依次试：${HEALTH_PATHS.join(' → ')}\n凭证口：${BRIDGE_CREDENTIAL_PROBE_PATH}`);
     const r = await testConnection(serverUrl);
+    // 健康口都没通时不再打凭证探测：那时它必然也失败，只会把"地址不通"淹在第二条红里。
+    const cred = r.ok ? await probeBridgeCredential(serverUrl, token) : null;
     btn.disabled = false;
-    if (r.ok && r.degraded) {
-      showBanner('warn', '⚠ 服务端可达但已降级', `${r.url}  HTTP ${r.status}\n\nPG/Redis/LLM 依赖可能故障。桥接仍可工作，但 AI 回复会变慢或失败。`);
-    } else if (r.ok) {
-      showBanner('success', '✓ 服务端可达', `${r.url}  HTTP ${r.status}\n\n请打开 抖音/小红书/TikTok/闲鱼 私信页启动桥接。`);
-    } else if (r.reason === 'empty') {
-      showBanner('error', '请输入服务端地址', '例如 ' + DEFAULT_PLACEHOLDER);
-    } else if (r.reason && /^http_/.test(r.reason)) {
-      showBanner('warn', '⚠ 服务端响应 4xx', `${r.url}  ${r.reason}\n\n检查：\n  1. user-server 是否在运行\n  2. 健康检查路径是否被中间件拦截\n  3. URL 是否正确`);
-    } else {
-      const detail = r.detail ? `\n详细: ${r.detail}` : '';
-      showBanner('error', '✗ 无法连接', `${r.url}${detail}\n\n可能原因：\n  1. user-server 未启动（默认端口 ${DEFAULT_PORT_HINT}）\n  2. 端口不正确：检查 cmd/api/main.go 或 PORT 环境变量\n  3. 防火墙/CORS 拦截\n  4. URL 写错\n  5. manifest.json host_permissions 未覆盖此域名`);
-    }
+    const v = buildConnectionVerdict(r, cred);
+    showBanner(v.kind, v.title, v.body);
   });
 
   $('serverUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save').click(); });
@@ -1092,6 +1301,8 @@ if (typeof window !== 'undefined') {
   window.__popup = {
     normalizeServerUrl,
     testConnection,
+    probeBridgeCredential,
+    buildConnectionVerdict,
     saveConfig,
     loadConfig,
     showBanner,

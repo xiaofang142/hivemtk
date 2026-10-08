@@ -507,6 +507,108 @@ func TestMessageHubRepository_GetHubStats(t *testing.T) {
 	}
 }
 
+// 带窗口的统计请求，返回的每一格都必须属于这个窗口。
+//
+// 旧实现只给 total 套了时间界，inbound/outbound/unread 与 by_platform/by_account/by_msg_type
+// 仍是全量。调用方看不出区别：管理台「消息中心」那张卡把全量积压当成「最近 1 小时」报给客户，
+// 而各方向之和与总数永远对不上（total 3、inbound+outbound 却是 6）。上面那格只判 total，
+// 正是这个缺口活了很久的原因——所以这格把每一个字段都点名判一遍，并让窗口内外的行在方向、
+// 渠道、账号、已读位上全不同种，这样"漏套某一格"一定会改变那格的读数本身。
+func TestMessageHubRepository_GetHubStatsWindowAppliesToEveryField(t *testing.T) {
+	db := setupHubFullTestDB(t)
+	repo := &MessageHubRepository{db: db}
+	ctx := context.Background()
+	now := time.Now()
+
+	// 窗口内 3 行（微信收 1 未读、抖音发 1 已读、抖音收 1 未读），
+	// 窗口外 3 行（全在微信、30 分钟前；其中一行故意留未读——不然 unread 这一格
+	// 带不带窗口都是 2，"漏套窗口"在这格上就量不出来了）。
+	seed := []struct {
+		platform, account, customer, msgID, direction string
+		isRead                                        bool
+		sentAt                                        time.Time
+	}{
+		{"wechat", "acc_win", "cuw1", "m_winn_1", "inbound", false, now.Add(-3 * time.Minute)},
+		{"douyin", "acc_win", "cuw2", "m_winn_2", "outbound", true, now.Add(-3 * time.Minute)},
+		{"douyin", "acc_win", "cuw3", "m_winn_3", "inbound", false, now.Add(-3 * time.Minute)},
+		{"wechat", "acc_old", "cuo1", "m_winn_4", "inbound", true, now.Add(-30 * time.Minute)},
+		{"wechat", "acc_old", "cuo2", "m_winn_5", "outbound", true, now.Add(-30 * time.Minute)},
+		{"wechat", "acc_old", "cuo3", "m_winn_6", "inbound", false, now.Add(-30 * time.Minute)},
+	}
+	for _, s := range seed {
+		h := newHubWithConv(s.platform, s.account, s.customer, s.msgID, s.direction, "received", s.sentAt)
+		h.IsRead = s.isRead
+		if err := db.Create(h).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all, err := repo.GetHubStats(ctx, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 正控制：不带窗口时六行全算。少了这一腿，下面「带窗口的数变小」可能只是夹具根本没插进去。
+	if all.Total != 6 || all.Inbound != 4 || all.Outbound != 2 || all.Unread != 3 {
+		t.Errorf("不带窗口期望 total=6 inbound=4 outbound=2 unread=3, 得 total=%d inbound=%d outbound=%d unread=%d",
+			all.Total, all.Inbound, all.Outbound, all.Unread)
+	}
+	if all.ByPlatform["wechat"] != 4 || all.ByPlatform["douyin"] != 2 {
+		t.Errorf("不带窗口期望 by_platform wechat=4 douyin=2, 得 %+v", all.ByPlatform)
+	}
+
+	start := now.Add(-5 * time.Minute)
+	end := now.Add(-1 * time.Minute)
+	win, err := repo.GetHubStats(ctx, &start, &end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if win.Total != 3 {
+		t.Errorf("窗口内期望 total=3, 得 %d", win.Total)
+	}
+	if win.Inbound != 2 {
+		t.Errorf("窗口内期望 inbound=2（旧实现在这里回全量 4）, 得 %d", win.Inbound)
+	}
+	if win.Outbound != 1 {
+		t.Errorf("窗口内期望 outbound=1（旧实现在这里回全量 2）, 得 %d", win.Outbound)
+	}
+	if win.Unread != 2 {
+		t.Errorf("窗口内期望 unread=2, 得 %d", win.Unread)
+	}
+	if win.Inbound+win.Outbound != win.Total {
+		t.Errorf("各方向之和必须等于同窗口的总数，实得 inbound=%d outbound=%d total=%d",
+			win.Inbound, win.Outbound, win.Total)
+	}
+	if win.ByPlatform["wechat"] != 1 || win.ByPlatform["douyin"] != 2 {
+		t.Errorf("窗口内期望 by_platform wechat=1 douyin=2, 得 %+v", win.ByPlatform)
+	}
+	if win.ByAccount["acc_win"] != 3 {
+		t.Errorf("窗口内期望 by_account acc_win=3, 得 %+v", win.ByAccount)
+	}
+	if n, ok := win.ByAccount["acc_old"]; ok {
+		t.Errorf("窗口外的账号 acc_old 出现在窗口读数里（得 %d），分布那几格没套上时间界", n)
+	}
+	if win.ByMsgType["text"] != 3 {
+		t.Errorf("窗口内期望 by_msg_type text=3, 得 %+v", win.ByMsgType)
+	}
+	// by_direction 只该有真实方向那两格：实现里曾在一个无关的 by_platform 循环里往同一张 map
+	// 塞过一个合成键（值等于 total），任何把这张表当"方向分布"求和或画饼图的客户端都会得到两倍总数。
+	if len(win.ByDirection) != 2 {
+		t.Errorf("by_direction 期望恰好 inbound/outbound 两格, 得 %d 格：%+v", len(win.ByDirection), win.ByDirection)
+	}
+	var dirSum int64
+	for _, n := range win.ByDirection {
+		dirSum += n
+	}
+	if dirSum != win.Total {
+		t.Errorf("by_direction 各格之和必须等于同窗口总数，实得 sum=%d total=%d（%+v）", dirSum, win.Total, win.ByDirection)
+	}
+	// Recent24h 语义写死 24 小时、故意不跟请求窗口走：这格把它钉成 6，
+	// 免得日后有人"顺手统一口径"把它也套上窗口。
+	if win.Recent24h != 6 {
+		t.Errorf("Recent24h 不随请求窗口变化，期望 6, 得 %d", win.Recent24h)
+	}
+}
+
 func TestMessageHubRepository_FindSyncGapConversations(t *testing.T) {
 	db := setupHubFullTestDB(t)
 	repo := &MessageHubRepository{db: db}

@@ -1,27 +1,83 @@
 # ============================================================================
 # HiveMtk user-server Traefik 反代模板（v3 审计 P1-A1）
-# ============================================================================
+# ----------------------------------------------------------------------------
 # static configuration（traefik.yml）
+#
+# 长连接路径清单与判读口径见同目录 README.md（含实测对照）。
+#
+# 实测（traefik:v3.5 / Version 3.5.6）：
+#   - 早先这份写的 entryPoints.websecure.http.http2.enabled: false 会让 Traefik
+#     直接退出：field not found, node: http2（退出码 1）。v3.5 的静态配置里
+#     entryPoints.<name>.http2 只有 maxconcurrentstreams，**没有** enabled 旋钮
+#     （判法：traefik --help 里把 --entrypoints.<name>.* 的键全列一遍）。
+#   - 真正管用的是下面 transport.respondingtimeouts 的三个超时：它们才是
+#     "长连接会不会被反代掐掉"的开关。
+#   - 下面 entryPoints./routers./services. 这一段跑起来实测过（明文 :8080 那一版，
+#     SSE 逐帧到达 / 两条 WS 路径 Upgrade 透传 / 普通 API 落到另一份 service，
+#     见 README §六）。本文件这一份带 TLS 的形状**只验证了"能加载"**：容器保持 Up、
+#     没有 field not found；但 https 路由没跑通 —— ACME 账号取不到时 Traefik 会把
+#     这些 router 丢掉并回 404（实测日志：The ACME resolve is skipped from the
+#     resolvers list / unable to get ACME account: open …/acme.json: no such file）。
+#     上线前两步：先按你的域名把 acme.json 建出来（存在且权限 600），再按
+#     README §五 的 1)/2) 各验一次。
+# ============================================================================
+
 entryPoints:
   websecure:
     address: :443
-    # [关键] SSE + FRP 兼容：禁用 HTTP/2
-    http:
-      http2:
-        enabled: false
+    transport:
+      respondingtimeouts:
+        readTimeout: 24h    # [关键] 空闲长连接不被默认超时切断
+        writeTimeout: 24h
+        idleTimeout: 24h
+
+# Traefik 默认流式转发响应（实测上游逐帧 flush 时，帧到达间隔 = 上游发送间隔），
+# 因此不需要 nginx 那样的 "关闭缓冲" 开关；要配的只有上面那三个超时。
 
 http:
   routers:
+    # ---- SSE：任何 ^/api/…/sse（现测三条：/api/bridge/outbox/sse、
+    #      /api/dashboard/sse、/api/chat/typing-predict/sse）----
+    hivemtk-sse:
+      rule: PathRegexp(`^/api/.+/sse$`)
+      entryPoints: [websecure]
+      service: hivemtk-long
+      tls:
+        certResolver: letsencrypt
+
+    # ---- WebSocket：/api/ws/ 前缀 + /api/browser/host-ws（后者不在 /api/ws/ 下）----
+    hivemtk-ws:
+      rule: PathRegexp(`^/api/(ws/|browser/host-ws$)`)
+      entryPoints: [websecure]
+      service: hivemtk-long
+      tls:
+        certResolver: letsencrypt
+
+    # ---- 普通业务 API ----
     hivemtk:
-      rule: Host(`your-domain.com`)
+      rule: PathPrefix(`/api`)
       entryPoints: [websecure]
       service: hivemtk-svc
       tls:
         certResolver: letsencrypt
+
   services:
+    # 长连接与业务 API 分开两份，是为了给长连接单独挂中间件/超时策略；
+    # 超时本身由上面 entryPoints.websecure.transport.respondingtimeouts 决定。
+    hivemtk-long:
+      loadBalancer:
+        servers:
+          - url: http://user-server:8204
+
     hivemtk-svc:
       loadBalancer:
         servers:
           - url: http://user-server:8204
-        # SSE 无缓冲：Traefik 默认流式转发，但需确保 entryPoint 已禁用 HTTP/2
-        # （见上方 entryPoints.websecure.http.http2.enabled: false）
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # 占位：换成你自己的邮箱与域名，ACME 这一段本模板未实测
+      email: ops@your-domain.com
+      storage: /etc/traefik/acme.json
+      tlsChallenge: {}

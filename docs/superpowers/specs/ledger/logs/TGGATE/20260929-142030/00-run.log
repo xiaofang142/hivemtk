@@ -1,0 +1,41 @@
+SHADOW /tmp/r65-shadow/hivemtk/user-server
+LOGDIR /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/TGGATE/20260929-142030
+基线字节：`ec7120b2`｜未入库字节 15 处｜装架覆盖来树 16 份（其中 15 份未入库，计入本轮读数）｜本轮读影子 `--shared` 克隆的 HEAD＋上面现测的那批来树覆盖字节；活树同批文件的 md5 由 `--check` 逐份印出，两份逐字相同才算这一轮的数
+来源活树：`3bfa156a`｜未入库字节 86 处｜装架覆盖来树 16 份（其中 15 份未入库，计入本轮读数）｜上面 overlay 名单的出处；本电池不在活树装架，只把这里读出的字节盖进影子克隆
+CONTROL rc=0 pass=30 fail=0 skip=0 ran=30/30
+CONTROL_LOG /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/TGGATE/20260929-142030/CT00-control.log
+M01  KILLED    killed=TestTelegramMember_ListStalledRestricted extra=TestTelegramMember_ListStalledRestrictedIdleWindow restored=True ran=30/30
+M02  DECLARED-SURVIVOR killed=- extra=- restored=True ran=30/30
+M03  KILLED    killed=TestRecoverStalledCountsFailedAttemptsAndStopsAtCap extra=TestRecoverStalledResendsOnlyWhenNeverDelivered restored=True ran=30/30
+M04  KILLED-PANIC killed=TestSweepExpiredLeavesNeverNotifiedMember extra=- restored=True ran=24/30
+M05  KILLED    killed=TestSweepExpiredGivesOneTTLGrace extra=- restored=True ran=30/30
+M06  KILLED    killed=TestSweepExpiredKeepsRetryWhenBanFails extra=- restored=True ran=30/30
+M07  KILLED    killed=TestTelegramMember_WelcomeStateGuards extra=- restored=True ran=30/30
+M08  KILLED    killed=TestHandleNewMembersFailedSendStaysUndelivered extra=TestHandleNewMembersReJoinResetsWelcomeState restored=True ran=30/30
+M09  KILLED    killed=TestSweepOnceRunsOnlyForLeaseHolder extra=- restored=True ran=30/30
+M10  KILLED    killed=TestGateSweeperTickLoopTakesAndReleasesLease extra=- restored=True ran=30/30
+M11  KILLED    killed=TestCronJobLease_HoldAndRelease extra=- restored=True ran=30/30
+M12  KILLED    killed=TestStartGateSweeperIdempotentAndStopSafe extra=- restored=True ran=30/30
+M13  KILLED    killed=TestCronJobLease_RejectsEmptyArgs extra=- restored=True ran=30/30
+M14  KILLED    killed=TestGateSweeperPairedOnShutdown extra=- restored=True ran=30/30
+M15  KILLED    killed=TestGateSweeperSelfHealsAfterTickPanic extra=- restored=True ran=30/30
+M16  KILLED    killed=TestSweeperPanicRestartSkippedDuringShutdown extra=- restored=True ran=30/30
+M17  KILLED    killed=TestHandleNewMembersReJoinResetsWelcomeState,TestTelegramMember_UpsertResetsWelcomeState extra=- restored=True ran=30/30
+M18  DECLARED-SURVIVOR killed=- extra=- restored=True ran=30/30
+M19  KILLED    killed=TestSweepExpiredFilter extra=- restored=True ran=30/30
+M20  KILLED    killed=TestTelegramMember_ClaimStalledResend extra=- restored=True ran=30/30
+M21  KILLED    killed=TestTelegramMember_ClaimStalledResend extra=- restored=True ran=30/30
+M22  KILLED    killed=TestTelegramMember_ClaimStalledResend extra=- restored=True ran=30/30
+M23  KILLED    killed=TestRecoverStalledResendsImmediatelyAfterRequestPathHandedOff,TestTelegramMember_ListStalledRestrictedIdleWindow extra=TestHandleNewMembersFailedSendStaysUndelivered restored=True ran=30/30
+M24  KILLED    killed=TestRecoverStalledStillPicksRowsWithoutUpdatedAt,TestTelegramMember_ListStalledRestrictedIdleWindow extra=- restored=True ran=30/30
+M25  KILLED    killed=TestRecoverStalledResendsAfterInRequestWindowPasses,TestRecoverStalledSkipsRowStillInsideInRequestWindow,TestTelegramMember_ListStalledRestrictedIdleWindow extra=TestRecoverStalledCountsFailedAttemptsAndStopsAtCap,TestRecoverStalledResendsOnlyWhenNeverDelivered,TestTelegramMember_ListStalledRestricted restored=True ran=30/30
+M26  KILLED    killed=TestRecoverStalledSkipsRowStillInsideInRequestWindow extra=TestRecoverStalledResendsAfterInRequestWindowPasses restored=True ran=30/30
+
+=== 复原对账（影子树的每一刀目标文件必须逐字回到放刀前）===
+OK   cmd/api/main.go
+OK   internal/repository/cron_job_lease.go
+OK   internal/repository/telegram_gate.go
+OK   internal/service/telegram_gate.go
+RESTORE-LEFT=0
+
+BATTERY cells=26 KILLED=23 KILLED-PANIC=1 DECLARED-SURVIVOR=2 SURVIVED=0 BROKEN=0

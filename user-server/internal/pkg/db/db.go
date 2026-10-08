@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/config"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,10 +45,13 @@ func InitDB() {
 		panic("数据库连接密码缺失：配置文件未保留 password 字段，必须由运行时环境变量 POSTGRES_PASSWORD 注入")
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=Asia/Shanghai",
+	// libpq keyword/value 格式：含空格/引号的口令必须单引号包裹（' 转义为 \'），
+	// 否则 DSN 解析错位导致 SASL 认证失败（宿主机 PGPASSWORD 走 libpq 直连不受影响，
+	// 故只在容器内复现——排查时极易误判为“口令漂移”）。
+	dsn := fmt.Sprintf("host=%s user=%s password='%s' dbname=%s port=%d sslmode=%s TimeZone=Asia/Shanghai",
 		appConfig.Database.Postgres.Host,
 		appConfig.Database.Postgres.User,
-		pgPassword,
+		strings.ReplaceAll(pgPassword, "'", "\\'"),
 		appConfig.Database.Postgres.DBName,
 		appConfig.Database.Postgres.Port,
 		appConfig.Database.Postgres.SSLMode,

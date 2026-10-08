@@ -43,7 +43,8 @@
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.4",
     "vue-router": "^4.5.1",
-    "web-vitals": "^4.2.4"
+    "web-vitals": "^4.2.4",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

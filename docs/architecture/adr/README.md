@@ -1,8 +1,8 @@
 # HiveMtk 架构决策记录索引（ADR Index）
 
 > **位置**：`hivemtk/docs/architecture/adr/`  
-> **状态**：2026-08-16 整理
-> **总 ADR 数**：14 份
+> **状态**：2026-09-29 整理
+> **总 ADR 数**：15 份
 
 ---
 
@@ -24,9 +24,10 @@
 | [ADR-013](ADR-013-module-rename.md) | 模块重命名（market → hivemtk） | ✅ Accepted | 2026-Q3 | 全局 |
 | [ADR-014](ADR-014-knowledge-group-isolation.md) | 知识库隔离架构 | ⚠️ Simplified | 2026-Q3 | AI 销冠 |
 | [ADR-015](ADR-015-empty-package-disposition.md) | 空壳包处置策略 | ✅ Accepted | 2026-Q3 | 仓库清理 |
+| ADR-016（文件 `ADR-016-telegram-group-gate-policy.md`，入库后把本列换成链接）| Telegram 社群门控的三项处置口径 | ✅ Accepted | 2026-09-29 | Telegram 渠道 / 后台任务 |
 
 **统计**：
-- Accepted：8 份
+- Accepted：9 份
 - Merged：5 份
 - Simplified：1 份
 
@@ -55,8 +56,8 @@
 |------|------|------|
 | ADR-003 | ❌ 已删除 | 原为 WebSocket 方案决策；该方案已弃用（现行为 HTTP 长轮询 + SSE），故编号作废且**不复用**，以保持历史引用的稳定性 |
 
-> 现有编号：001、002、004~015 共 **14 份**（ADR-003 缺号）。
-> 新增 ADR 请从 **ADR-016** 起顺延，不要回填 ADR-003。
+> 现有编号：001、002、004~016 共 **15 份**（ADR-003 缺号）。
+> 新增 ADR 请从 **ADR-017** 起顺延，不要回填 ADR-003。
 
 ### 已合并说明
 
@@ -86,3 +87,4 @@
 | v1.0 | 2026-08-16 | audit-agent | 初版 |
 | v1.1 | 2026-08-16 | audit-agent | 删除 ADR-003（已弃用 WebSocket）、简化 ADR-014、修正引用 |
 | v1.2 | 2026-09-15 | audit-agent | 修复 ADR-001 死链（`ADR-001-layered-architecture.md` → `ADR-001-five-layer-architecture.md`）；将 ADR-003 缺号说明从修订历史提升为独立小节，避免新 ADR 回填该编号 |
+| v1.3 | 2026-09-29 | @maintainer-team | 增补 ADR-016（Telegram 社群门控三项处置口径）；总数 14→15、Accepted 8→9、起始编号改 ADR-017 |

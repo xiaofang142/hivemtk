@@ -11,7 +11,7 @@
 >
 > | 位置 | 文档说法 | 代码实测 |
 > |------|----------|----------|
-> | §一 / §九 | `POST /api/v1/ai/chat`、`GET /api/v1/ai/chat/poll`、`/api/v1/ai/health`、`/api/v1/ai/features` | `internal/router/` 里 **0 处注册**；按本文档实现调用方一律 404。真实的智能体对话入口只有三个：`POST /api/ai-agents/:id/test`（body `{customer_id, message}`，`controller/ai_agent.go:414-437`）、`GET /ws/chat`（`router/ws.go:36`，走 `SalesEngine.HandleStream`）、`GET /api/ws/visitor`（`router/chat_routes.go:51`）；渠道侧由 webhook 触发，没有 REST 同步对话端点 |
+> | §一 / §九 | `POST /api/v1/ai/chat`、`GET /api/v1/ai/chat/poll`、`/api/v1/ai/health`、`/api/v1/ai/features` | `internal/router/` 里 **0 处注册**；按本文档实现调用方一律 404。真实的智能体对话入口只有两个可调用：`POST /api/ai-agents/:id/test`（body `{customer_id, message}`，`controller/ai_agent.go:414-437`）、`GET /api/ws/visitor`（`router/chat_routes.go:51`）；渠道侧由 webhook 触发，没有 REST 同步对话端点。**2026-09-29 订正**：本表旧版还把 `GET /ws/chat`（`router/ws.go`）算作第三个入口，实测 `RegisterWSRoutes` 全树零调用方（那句"Setup() 中调用"的注释是错的），这条路由从未注册进引擎，`GET /ws/chat` 会落到 SPA 的 NoRoute 兜底拿到 200 + index.html —— 它是死代码，不是入口 |
 > | §六 | 示例监听 `localhost:8080`，响应体是 `{trace_id, session_id, reply, layer, reason, wall_ms, model, tokens, llm_skipped, steps}` | user-server 实际监听 **8204**（`docs/PORT_REGISTRY.md` / `config.yaml`），8080 无从生效；响应外层是 `{code:0, message, data}`（`internal/pkg/utils/response/response.go:40-48`），`data` 为 `dto.SalesResponse`（`dto/sales.go:302-331`）——**没有** `trace_id`/`session_id`/`layer`/`reason`/`wall_ms`/`model`/`tokens`/`llm_skipped` 这些键，对应实名为 `latency_ms`/`llm_model`/`cost_tokens`，Layer 决策只在流式 chunk 与 `layer_decision_logs` 里出现 |
 > | §三 | 5 个开关、默认"性能优化全开" | `internal/pkg/featureflag/flag.go:61-70` 注册 **6 个**（多出 `sse_bridge`），且 parallel/stream/layer1/fallback_chain/debug_log **默认全为 false**，只有 `sse_bridge` 默认 true |
 > | §三 | `viper.WatchConfig + SIGHUP 热加载`、`systemctl reload` 即回滚 | 全仓无 `viper.WatchConfig`、无 `SIGHUP` 处理（`signal.Notify` 只在 `cmd/bridge-mock`）；机制是启动读 env + 每 5s 轮询**本进程已有**的 env ⇒ 改 `FF_*` 必须**重启进程**，`reload` 不生效 |
@@ -39,8 +39,8 @@ AI 智能体性能优化交付两类对外接口：REST 同步返回 + HTTP 长�
 
 | 通道 | Method | Path | 用途 | 设计稿状态 | **实测状态（2026-09-22）** |
 |------|--------|------|------|------|------|
-| REST | POST | `/api/v1/ai/chat` | 同步返回完整回复 | **保留** | 🔴 未注册；等价调用面是 `POST /api/ai-agents/:id/test` 或 `GET /ws/chat` |
-| REST | GET | `/api/v1/ai/chat/poll?session_id=xxx` | 长轮询增量获取（30s 超时） | **保留** | 🔴 未注册；增量只在 `GET /ws/chat` 上按帧下发 |
+| REST | POST | `/api/v1/ai/chat` | 同步返回完整回复 | **保留** | 🔴 未注册；等价调用面是 `POST /api/ai-agents/:id/test`（`GET /ws/chat` 也不算——它同样没接线，见上表 2026-09-29 订正） |
+| REST | GET | `/api/v1/ai/chat/poll?session_id=xxx` | 长轮询增量获取（30s 超时） | **保留** | 🔴 未注册；增量只在 `router/ws.go` 的 `/ws/chat` 上按帧下发，而该路由**当前无调用方、不可达** |
 | REST | GET | `/api/v1/ai/health` | AI Agent 健康检查 | 新增 | 🔴 未注册；有全局 `/health`、`/healthz`、`/readyz`（`router.go:196-198`），但没有 AI 专属健康检查 |
 | REST | GET | `/api/v1/ai/features` | 查询当前 FeatureFlag 状态 | 新增 | 🔴 未注册；DB 版开关在 `GET /api/feature-flags`（`business_routes.go:161`，需管理员），**env 版 6 个开关没有任何查询端点** |
 
@@ -298,10 +298,13 @@ type LayerDecision struct {
 >
 > （字段名是 `message` 而非 `text`：`controller/ai_agent.go:421-424`；`customer_id` 可省。）
 >
-> **6.2 的可用替代（WS 增量）：** `GET /ws/chat?token=<JWT>` 握手后发
+> **6.2 的替代（WS 增量，2026-09-29 起标注为不可用）：** `GET /ws/chat?token=<JWT>` 握手后发
 > `{"type":"chat","user_message":"...","platform":"web"}`（`controller/chat_ws.go:311-317`），
 > 服务端逐帧回 `dto.StreamChunk`；WS 的 `trace_id` 是第三种格式 `<毫秒>-<16位hex>`
 > （`chat_ws.go:319-326`），与 UUID、`lr-<unixnano>` 都不同。
+> **但这条路现在走不通**：注册它的 `router.RegisterWSRoutes` 全树零调用方，`/ws/chat` 从未进入
+> 路由表（实测 GET 到 SPA 兜底的 index.html）。要按本节实现调用方，得先接线并补鉴权
+> （`HandleChatWS` 只校验 `session_id`/`customer_id` 非空，不校验任何凭据）。
 > 主动取消：客户端关连接即可，`cancel` 类型不下发（见 §九）。
 
 ### 6.1 REST `/api/v1/ai/chat` (curl)
@@ -548,6 +551,8 @@ systemctl reload user-server
 > **实测口径（2026-09-22）**：本节整条 HTTP 长轮询通道未实装——`/api/v1/ai/chat`、`/api/v1/ai/chat/poll`
 > 在 `internal/router/` 里 0 注册，仓内也没有 `poll` 端点。增量协议本身是**真的**，但载体是
 > WebSocket：`GET /ws/chat`（`router/ws.go:49`）→ `SalesEngine.HandleStream`（`sales_engine.go:509`）
+> —— 2026-09-29 订正：这段代码是真的，但**当前不可达**，注册它的 `RegisterWSRoutes` 全树零调用方；
+> 下面这些行号描述的是"接线之后会怎样"，不是"现在能调到什么"。
 > → 每个 chunk 立刻 `conn.WriteMessage(websocket.TextMessage, …)` 单帧下发（`controller/chat_ws.go:237`）。
 > 因此 9.4 的"每 50ms 一批 / 客户端轮询间隔 200ms"这两个数字在代码里 **0 命中**（`chat_ws.go:241` 的
 > ticker 只用于 WS 心跳 ping，不做攒批），

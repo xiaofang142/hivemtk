@@ -25,10 +25,14 @@ import (
 // HTTP 端点参数（DB 驱动，以下为 fallback 默认值）
 // 实际运行时通过 service.GlobalConfigParam() 按 group=bridge 读取 DB 参数：
 //
-//	bridge.polling_max_timeout → HTTPPollingMaxTimeout (fallback)
-//	bridge.polling_default_timeout → HTTPPollingDefaultTimeout (fallback)
 //	bridge.ingest_max_body_bytes → HTTPIngestMaxBodySize (fallback)
 //	bridge.ingest_max_messages → HTTPIngestMaxMessages (fallback)
+//
+// HTTPPollingMaxTimeout / HTTPPollingDefaultTimeout 是**尚未接线**的两个值：服务端没有
+// 长轮询实现（ingest 立即返回，回复走 SSE 推送或扩展侧 /outbox 轮询），因此
+// bridge.polling_max_timeout / bridge.polling_default_timeout 两个参数读不到任何消费点。
+// 两行仍留在种子里（存量库已有这两行），它们的 Description 写明了"当前不生效"。
+// 真要长轮询时：把这两个常量当 fallback 传给 GetDuration，并给等待加 ctx.Done() 退出。
 const (
 	HTTPPollingMaxTimeout     = 500 * time.Second
 	HTTPPollingDefaultTimeout = 30 * time.Second

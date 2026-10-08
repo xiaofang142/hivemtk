@@ -1,0 +1,199 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_ialfuq2
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P902/tp902-accept
+取证基线：HEAD=359ff202 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 0:12  up 6 days, 14 hrs, 4 users, load averages: 10.79 9.95 12.11 日志 tag=tp902-accept
+覆盖 39 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  3f90c51f9d6ebad665c4f42f7ca4118d  user-server/internal/aiagent/knowledge/controller/knowledge_merchant.go
+  87b904a8d78c14eee64a17acc20e6281  user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go
+  190c8c0cdd44203b45f84a6f7fa93abc  user-server/internal/aiagent/knowledge/service/rag_searcher.go
+  133269c6653d33f7b379c115f58de3d3  user-server/internal/aiagent/knowledge/service/rag_searcher_bm25.go
+  47eac23620ef61c682c123d18d8d83ef  user-server/internal/aiagent/knowledge/service/rag_searcher_vector.go
+  9ce13662bb7a8e59ea6fa6a3367e7eaa  user-server/internal/aiagent/rag/retrieval/hybrid_searcher.go
+  0a1976deca8866b70ec65f5f5499e17d  user-server/internal/aiagent/rag/retrieval/lexical_retriever.go
+  bb66b668fbf925eb68baf65bf6bf6f37  user-server/internal/aiagent/rag/retrieval/vector_retriever.go
+  74a322de23a08202fcbd4efd046df76c  user-server/internal/app/kb_release_wiring.go
+  a1e64ccd7c3433d6bbd5c97993e1d51b  user-server/internal/controller/kb_release.go
+  f213d1f505bd940c334ef54350e56b2f  user-server/internal/model/kb_release.go
+  1f6615f0bb1d55fddf033c955c99d589  user-server/internal/pkg/kbrelease/kbrelease.go
+  dbdb9586968768fc736d853ba2ed6fde  user-server/internal/repository/kb_release.go
+  4efed602baf92773aa0d1a2ace2d1553  user-server/internal/router/kb_release_routes.go
+  2ecc124a08c5a5605c1905beb4660960  user-server/internal/router/router.go
+  87366b222eea4f6c938e11c9c397f4bf  user-server/internal/service/kb_release.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=19 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=22 skip=0 红名=—
+[控制组 ./internal/controller/] rc=0 settled=32 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=4 skip=0 红名=—
+[控制组 ./internal/pkg/kbrelease/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/repository/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/service/] rc=0 settled=3 skip=0 红名=—
+[控制组 ./internal/aiagent/knowledge/controller/] rc=0 settled=1 skip=0 红名=—
+[控制组 ./internal/aiagent/rag/retrieval/] rc=0 settled=3 skip=0 红名=—
+M1    动作值域少一项（retire 成了非法动作）                           杀掉                             红=TestKBChangeModel_OpValueDomain settled=6/6
+M2    状态值域少一项（withdrawn 从契约里消失）                        杀掉                             红=TestKBChangeModel_StatusValueDomain,TestKBChangeModel_TransitionTableCoversStatuses settled=6/6
+M3    applied 不再是终态（已发布的能直接撤回）                         杀掉                             红=TestKBChangeModel_TransitionTable settled=6/6
+M4    跃迁表少一个键（新加状态忘了开行）                                杀掉                             红=TestKBChangeModel_TransitionTableCoversStatuses settled=6/6
+M5    pending 不能直接 apply（发布这条路被断）                      杀掉                             红=TestKBChangeModel_TransitionTable settled=6/6
+M6    表名漂移（闸门片段写死的是另一个）                                杀掉                             红=TestKBChangeModel_TableNames settled=6/6
+M7    审计动作值域里出现重复                                      杀掉                             红=TestKBChangeModel_AuditActionsAreDistinct settled=6/6
+M8    状态判据与值域分叉（rejected 被判成合法）                        杀掉                             红=TestKBChangeModel_StatusValueDomain settled=6/6
+LF1   shadow 这个档位名失联（观察期变成真拦）                          杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn,TestKbRelease_parseMode settled=14/14
+LF2   on 不再等于开闸（显式写 on 的人拿不到拦截）                        杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateShape,TestKbRelease_ShadowsOrOn,TestKbRelease_UnknownValueWarns,TestKbRelease_WhereVisible,TestKbRelease_parseMode settled=14/14
+LF3   布尔式真值直接拿到 on（按习惯写 =true 就改了生产召回）                 杀掉                             红=TestKbRelease_PredicateEmptyUnlessOn,TestKbRelease_parseMode settled=14/14
+LF4   认不出的值保守回 off 这条失效（拼错就开闸）                         杀掉                             红=TestKbRelease_UnknownValueWarns,TestKbRelease_parseMode settled=14/14
+LF5   认不出的值不再出声（运维以为闸门开着）                              杀掉                             红=TestKbRelease_UnknownValueWarns settled=14/14
+LF6   可见性判据少了 NOT（把该显示的当隐藏）                            杀掉                             红=TestKbRelease_PredicateShape,TestKbRelease_WhereVisible settled=14/14
+LF7   闸门对所有库生效（丢了 governed 半边）                         杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF8   退役半边失效（被下线的仍可见）                                  杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF9   AndVisible 不带前导 AND（拼进 SQL 就是语法错）                杀掉                             红=TestKbRelease_PredicateShape settled=14/14
+LF10  AndVisible 在关闸时返回非空（空串塞进 SQL 尾巴）                 杀掉                             红=TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+LF11  GateOn 判据变松（shadow 档也拦人）                         杀掉                             红=TestKbRelease_DirectWriteBlockedOffEvenWithRow,TestKbRelease_ModeIsReadPerCall,TestKbRelease_PredicateEmptyUnlessOn settled=14/14
+LF12  ShadowsOrOn 漏掉 shadow（影子期不打版本戳）                  杀掉                             红=TestKbRelease_ModeIsReadPerCall,TestKbRelease_ShadowsOrOn settled=14/14
+LF13  WhereVisible 开闸时不挂谓词（该藏的线上内容全量召回）                杀掉                             红=TestKbRelease_WhereVisible settled=14/14
+LF14  待发布桶分配的幂等键写反（同批导入拿到不同号）                          杀掉                             红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_EnsureDraftStampConcurrent,TestKBReleaseRepo_PublishPublishesDraftBucket,TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+LF15  off 档也打版本戳（关闸失效，导入被挡在桶里）                         杀掉                             红=TestKbRelease_StampForWriteOffLeavesRowsAlone settled=14/14
+LF16  未治理库的 0 也被写回版本列（放行口变拦截口）                         杀掉                             红=TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+LF17  影子读数在无货时也出声（0 条会被隐藏也报）                           杀掉                             红=TestKbGate_ShadowSilentWhenNothingWouldHide settled=3/3
+LF18  影子统计在 off 档也跑（关闸那次白付一次查询）                        杀掉                             红=TestKbGate_ShadowLogsWouldHide settled=3/3
+LF19  就地改写的 off 守卫失效（没开闸也拦编辑入口）                        杀掉                             红=TestKbRelease_DirectWriteBlockedOffEvenWithRow settled=14/14
+LF20  拒绝文案不再指路（运营拿到一句没有出口的错）                           杀掉                             红=TestKbRelease_ErrGovernedDirectWriteIsStandalone settled=14/14
+RP1   裸 SQL 建行顺带开启治理（看一眼就把库推进发布制）                      杀掉                             红=TestKBReleaseRepo_LockReleaseEnsuresRow,TestKBReleaseRepo_PublishJudgments,TestKBReleaseRepo_SetGovernedIdempotent,TestKBReleaseRepo_StampForWriteRealRows settled=19/19
+RP2   建行幂等键换列（同一个库建出两行）                                杀掉                             红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_LockReleaseEnsuresRow,TestKBReleaseRepo_PointerMovesRefuseCleanRows,TestKBReleaseRepo_PublishAddStampsAndAdvances,TestKBReleaseRepo_PublishJudgments,TestKBReleaseRepo_PublishPublishesDraftBucket,TestKBReleaseRepo_PublishRejectsBadChanges,TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending,TestKBReleaseRepo_ReviseAndRetireShape,TestKBReleaseRepo_RollbackTouchesNoCorpus,TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP3   锁脱离事务也能用（FOR UPDATE 立刻释放）                        杀掉                             红=TestKBReleaseRepo_LockReleaseEnsuresRow settled=19/19
+RP4   查无此行不再报 NotFound（零值行冒充记录）                        杀掉                             红=TestKBReleaseRepo_LockReleaseEnsuresRow settled=19/19
+RP5   幂等启停也空转一次写（changed_by/updated_at 被没改动的点击盖掉）      杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP35  没真的改变也留痕（重复启用在审计里记成启用两次）                         杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP6   留痕的改前改后写反                                        杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP7   受治理名单把所有库都列进去                                    杀掉                             红=TestKBReleaseRepo_SetGovernedIdempotent settled=19/19
+RP8   查无此条变成错误（404 与 500 分不开）                          杀掉                             红=TestKBReleaseRepo_ChangeViews settled=19/19
+RP9   变更列表的页长夹住失效（一次拉全表）                               杀掉                             红=TestKBReleaseRepo_ChangeViews,TestKBReleaseRepo_ClampsAreExact settled=19/19
+RP10  留痕读取的页长夹住失效                                      杀掉                             红=TestKBReleaseRepo_ClampsAreExact settled=19/19
+RP11  待办清单把已落地的也算进去                                    杀掉                             红=TestKBReleaseRepo_WithdrawCAS settled=19/19
+RP12  撤回不带 CAS 条件（已发布的能被改回待处理）                         杀掉                             红=TestKBReleaseRepo_WithdrawCAS settled=19/19
+RP13  发布不查治理开关（未进发布制的库也能发）                             杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP14  跨号发布禁令撤掉（回滚掉的语料被静默放回）                            杀掉                             红=TestKBReleaseRepo_PublishJudgments,TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP15  桶号可以等于在服号（绕过审批直接上线）                              杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP16  空批也走一次发布（审计里多出不存在的一次发布）                          杀掉                             红=TestKBReleaseRepo_PublishJudgments settled=19/19
+RP17  add 可以没有内容                                       杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP18  修订已退役的分段也放行                                      杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP19  修订可以指向别的库                                        杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP20  下线可以指向别的库                                        杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP21  修订的目标行不存在被静默跳过（AC① 的反面）                          杀掉                             红=TestKBReleaseRepo_PublishRejectsBadChanges settled=19/19
+RP22  重复下线同一条被静默放过                                     杀掉                             红=TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP23  修订后的新行落在别的分段号上（上下文邻接断了）                          杀掉                             红=TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP24  修订的文档归属不继承老行                                     杀掉                             红=TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP25  版本戳没真的写进语料行                                      杀掉                             红=TestKBReleaseRepo_PublishAddStampsAndAdvances,TestKBReleaseRepo_ReviseAndRetireShape settled=19/19
+RP26  发布状态回写不带 CAS（撤回与发布抢同一行）                          杀掉                             红=TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending settled=19/19
+RP27  同一次发布里两条 add 抢同一个分段号                             杀掉                             红=TestKBReleaseRepo_PublishAddStampsAndAdvances settled=19/19
+RP28  回滚顺手改写了语料的版本戳（AC② 破了）                            杀掉                             红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP29  第二次回滚被允许（穿到更老的历史）                                杀掉                             红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP30  没有撤下号也能放回（凭空造一版）                                 杀掉                             红=TestKBReleaseRepo_PointerMovesRefuseCleanRows settled=19/19
+RP31  回滚与放回写同一种留痕（审计读不出方向）                             杀掉                             红=TestKBReleaseRepo_RollbackTouchesNoCorpus settled=19/19
+RP32  在服数不看闸门（页面说有待发布、实际搜不到）                           杀掉                             红=TestKBReleaseRepo_CountChunksInForce,TestKBReleaseRepo_PublishPublishesDraftBucket settled=19/19
+RP33  字段不全的留痕行被收下（AC③ 少一个出处）                           杀掉                             红=TestKBReleaseRepo_AuditShape settled=19/19
+RP34  发布留痕的 subject_key 丢了前缀（按号查不到全部动作）                杀掉                             红=TestKBReleaseRepo_PublishAddStampsAndAdvances settled=19/19
+SV1   底座可用性不看审批服务（能提交但永远没人能批）                          杀掉                             红=TestKBRelease_UnavailableEverywhere settled=22/22
+SV2   product_id 不再去空白（带空格的库号各记一套账）                    杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV3   op 不再归一小写（ADD 被判成非法动作）                           杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV4   变更可以不写理由（AC③ 的落点被抹掉）                             杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV5   动作值域闸失效（未知 op 也能提交）                              杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV6   add 也能带 target_chunk_id                          杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV7   retire 也能带 content（下线顺手改了正文）                     杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV8   revise 不指定被替换的分段也能提交                             杀掉                             红=TestKBRelease_SubmitInputNormalization settled=22/22
+SV9   变更号超列宽被截断使用                                      杀掉                             红=TestKBRelease_ChangeIDErrsOnOverflow settled=22/22
+SV10  审批入队的三列写错（结论挂到别的对象上）                             杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV11  审批回空记录也当成功（留下没有结论的变更行）                           杀掉                             红=TestKBRelease_SubmitChangeNilApprovalWithoutError settled=22/22
+SV12  变更行落库时状态初值写成 applied（还没发布就算已生效）                  杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV13  submitted 留痕不写了（AC③ 少一条）                         杀掉                             红=TestKBRelease_SubmitChangeHappyPath settled=22/22
+SV14  跃迁表被绕过（applied 也能直接撤回）                           杀掉                             红=TestKBRelease_WithdrawChange settled=22/22
+SV15  CAS 落败被当成成功（与发布抢同一行时静默覆盖）                        杀掉                             红=TestKBRelease_WithdrawChange settled=22/22
+SV16  撤回不记留痕（谁按的查不出来）                                  杀掉                             红=TestKBRelease_WithdrawChange settled=22/22
+SV17  发布不先问治理（你没开门被说成屋里是空的）                            杀掉                             红=TestKBRelease_PublishPendingRequiresGoverned settled=22/22
+SV18  读指针的故障被归成没有发布行                                   杀掉                             红=TestKBRelease_PublishPendingArgsAndStoreErrors settled=22/22
+SV19  审批三列比对少一列（给别的对象开门）                               杀掉                             红=TestKBRelease_PublishPendingVerdicts settled=22/22
+SV20  没批的也算进本次发布（AC① 正面破口）                             杀掉                             红=TestKBRelease_PublishPendingNothingApprovedSkipsTransaction,TestKBRelease_PublishPendingVerdicts settled=22/22
+SV21  认不出的审批状态不再保守（不当成不明）                              杀掉                             红=TestKBRelease_PublishPendingVerdicts settled=22/22
+SV22  读不到结论时继续发布（把故障说成没批）                              杀掉                             红=TestKBRelease_PublishPendingApprovalReadFailureStopsEverything settled=22/22
+SV23  一条都没批也进事务（留下一次空发布的痕）                             杀掉                             红=TestKBRelease_PublishPendingNothingApprovedSkipsTransaction settled=22/22
+SV24  有桶却没有变更时不再真发布（导入的内容永远上不了线）                       杀掉                             红=TestKBRelease_PublishPendingDraftBucketWithoutChanges settled=22/22
+SV25  retire 那条也去补向量（空内容占一次调用）                         杀掉                             红=TestKBRelease_EmbedAppliedAfterCommit settled=22/22
+SV26  没有新行也调用向量通路                                      杀掉                             红=TestKBRelease_EmbedAppliedAfterCommit settled=22/22
+SV27  回滚与放回走同一条仓储通路（方向串了）                              杀掉                             红=TestKBRelease_PointerMovesGoToStore settled=22/22
+SV28  发布/回滚不校验库号列宽（一句数据库报错）                            杀掉                             红=TestKBRelease_PointerMovesGoToStore,TestKBRelease_WriteArgs settled=22/22
+SV29  留痕可以不给操作者（追责没有出处）                                杀掉                             红=TestKBRelease_PublishPendingArgsAndStoreErrors,TestKBRelease_SetGoverned,TestKBRelease_WriteArgs settled=22/22
+SV30  没有发布行时回 404 而不是未启用（前端读成库不存在）                     杀掉                             红=TestKBRelease_Views settled=22/22
+SV31  统计视图把影子读数当成真拦读数                                  杀掉                             红=TestKBRelease_StatsFlagsShadowReadings settled=22/22
+SV32  留痕读口接受空 subject_key（整张事件流倒给用户）                   杀掉                             红=TestKBRelease_Views settled=22/22
+SV33  全局登记处不清空（撤掉装配后端点仍回 200）                          杀掉                             红=TestKBRelease_GlobalRegistryRoundTrip settled=22/22
+CT1   底座不可用回 500（运维该报装配却被领着改请求）                        杀掉                             红=TestKBReleaseController_UnavailableEveryExit settled=32/32
+CT2   提交不带身份也放行（留痕里是一句空串的谁改的）                          杀掉                             红=TestKBReleaseController_WriteRequiresOperator settled=32/32
+CT3   发布口的 401 写成 403                                  杀掉                             红=TestKBReleaseController_WriteRequiresOperator settled=32/32
+CT4   状态筛选器的值域闸失效（打错字母被说成没有这种变更）                       杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT5   动作筛选器的值域闸失效                                      杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT6   查询里的库号长度闸失效                                      杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT7   page=0 被静默纠正成第一页                                 杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT8   page_size 非法被静默纠正                                杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT9   路径参数长度闸失效（免费的慢查询）                                杀掉                             红=TestKBReleaseController_ParamGates settled=32/32
+CT10  库号闸按字节数而不是字数（64 个汉字被拒）                           杀掉                             红=TestKBReleaseController_ProductParamCountsRunes settled=32/32
+CT11  留痕的 limit 非法被静默纠正                                杀掉                             红=TestKBReleaseController_ParamGates settled=32/32
+CT12  变更列表空结果回 null（前端得先判类型）                           杀掉                             红=TestKBReleaseController_ListQueryTranslation settled=32/32
+CT13  留痕列表空结果回 null                                    杀掉                             红=TestKBReleaseController_AuditSubjectKeys settled=32/32
+CT14  受治理名单空结果回 null                                   杀掉                             红=TestKBReleaseController_ListReleases settled=32/32
+CT15  发布行缺席时回 404（读成库不存在）                              杀掉                             红=TestKBReleaseController_GetReleaseAbsent,TestKBReleaseController_RealStack settled=32/32
+CT16  启停治理漏字段时当成启用（静默扩大治理范围）                           杀掉                             红=TestKBReleaseController_BadBodies settled=32/32
+CT17  闸门档位回显把读侧与写侧并成一格                                 杀掉                             红=TestKBReleaseController_GateModes settled=32/32
+CT18  底座不在时名单回空数组（把读不到说成一个都没有）                         杀掉                             红=TestKBReleaseController_GateAnswersWithoutStore settled=32/32
+CT19  名单读取失败时不出声（回一个空名单）                               杀掉                             红=TestKBReleaseController_GateReadFailureStillAnswers settled=32/32
+CT20  变更号取错（按号取数取到别的行）                                 杀掉                             红=TestKBReleaseController_GetChange404 settled=32/32
+CT21  审批没给结论回 409（该报装配的成了改请求）                          杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT22  跨号发布禁令映成 500（运营会重试一个注定失败的动作）                     杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT23  就地改写被拒映成 500                                     杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT24  500 把内部错误原文回显出去（响应体放大器）                          杀掉                             红=TestKBReleaseController_ReplyErrorTable settled=32/32
+CT25  提交口把 target_chunk_id 丢了                          杀掉                             红=TestKBReleaseController_SubmitInputJudgments,TestKBReleaseController_SubmitShape settled=32/32
+CT26  值域出口自己抄了一份 ops（库里加了选不到）                          杀掉                             红=TestKBReleaseController_Taxonomy settled=32/32
+CT27  值域出口开始依赖底座（最需要时不给答案）                             杀掉                             红=TestKBReleaseController_TaxonomyWithoutStore settled=32/32
+CT28  变更留痕的 subject_key 丢了前缀                           杀掉                             红=TestKBReleaseController_AuditSubjectKeys,TestKBReleaseController_RealStack settled=32/32
+CT29  发布出口把 result 吞了（空发布与没发生分不开）                      杀掉                             红=TestKBReleaseController_PublicNullVsEmpty,TestKBReleaseController_PublishGovernanceAndBucket,TestKBReleaseController_PublishIntentCarriesApprovedOnly,TestKBReleaseController_RealStack settled=32/32
+CT30  回滚与放回并成一条通路                                      杀掉                             红=TestKBReleaseController_PointerMovesNotInterchangeable settled=32/32
+CT31  撤回口不校验跃迁（把服务层的 409 说成 200）                       杀掉                             红=TestKBReleaseController_RealStack,TestKBReleaseController_ReplyErrorTable,TestKBReleaseController_WithdrawPaths settled=32/32
+RT1   挂载不读全局登记处（路由对着 nil 底座挂上）                         杀掉                             红=TestKBReleaseRoutes_AssemblyAndStopAreSymmetric,TestKBReleaseRoutes_StaticSegmentsWin settled=4/4
+RT2   gate 静态段被参数段抢走（档位读不回来）                           杀掉                             红=TestKBReleaseRoutes_StaticSegmentsWin,TestKBReleaseRoutes_UnassembledAnswers503WithoutData settled=4/4
+RT3   变更底座装在了审批运行时之前（两份审批服务分家）                         杀掉                             红=TestKBReleaseRoutes_AssemblyOrderInRouter settled=4/4
+RT4   挂载挂到了鉴权组之外（六个写入口匿名可用）                            杀掉                             红=TestKBReleaseRoutes_AssemblyOrderInRouter settled=4/4
+AP1   无 DB 句柄时不清空全局（路由对着未装配回 200）                      杀掉                             红=TestInitKBReleaseRuntime_NilDBClearsGlobal settled=4/4
+AP2   撤销装配没清全局（旗子关掉后端点照旧服务）                            杀掉                             红=TestInitKBReleaseRuntime_RegistersUsableGlobal settled=4/4
+AP3   装配出来的实例没登记到全局（路由取到 nil）                          杀掉                             红=TestInitKBReleaseRuntime_RegistersUsableGlobal,TestInitKBReleaseRuntime_UsesGlobalApprovalService,TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues settled=4/4
+KR1   单条插入不打版本戳（AC① 的无声绕过口）                            杀掉                             红=TestKbRepo_WriteStampingRoutesToDraftBucket settled=3/3
+KR2   批量插入不打版本戳                                        杀掉                             红=TestKbRepo_WriteStampingRoutesToDraftBucket settled=3/3
+KR3   打戳失败被静默放过（读不到归属就当没进发布制）                          杀掉                             红=TestKbRepo_WriteStampingRoutesToDraftBucket settled=3/3
+KR4   就地改写在 shadow 档也被拦（观察期改了写语义）                      杀掉                             红=TestKbRepo_GuardDirectWrite settled=3/3
+KR5   删除不看闸门（已上线内容被没有留痕的动作撤下）                          杀掉                             红=TestKbRepo_GuardDirectWrite settled=3/3
+KR6   回查归属时把没有这一行当成错误（凭空多一个 404）                       杀掉                             红=TestKbRepo_GuardDirectWrite settled=3/3
+KR7   整批删除的告警数了全部行（把重建也报成丢在服内容）                        杀掉                             红=TestKbRepo_BatchDeleteWarnsOnlyInForceRows settled=3/3
+KR8   批量删除的告警撤掉（丢了多少没人知道）                              杀掉                             红=TestKbRepo_BatchDeleteWarnsOnlyInForceRows settled=3/3
+KR9   归属账读不动时删除照样执行（拿不准就放行）                            杀掉                             红=TestKbRepo_BatchDeleteWarnsOnlyInForceRows settled=3/3
+KS1   bm25 全库召回不挂闸门（未发布内容当场可检）                         杀掉                             红=TestKbGate_RagSearcherSitesHideUnpublished settled=3/3
+KS2   bm25 按库召回不挂闸门                                    杀掉                             红=TestKbGate_RagSearcherSitesHideUnpublished settled=3/3
+KS3   向量召回（按库）不挂闸门                                     杀掉                             红=TestKbGate_RagSearcherSitesHideUnpublished settled=3/3
+KS4   向量召回（全库）不挂闸门                                     杀掉                             红=TestKbGate_RagSearcherSitesHideUnpublished settled=3/3
+KS5   通用那一路的影子读数没了                                     杀掉                             红=TestKbGate_ShadowLogsWouldHide,TestKbGate_ShadowSilentWhenNothingWouldHide settled=3/3
+KS6   商家那一路的读数被通用那一路顶替（label 写串）                       杀掉                             红=TestKbGate_ShadowLogsWouldHide settled=3/3
+KC1   就地改写的拒绝被映成 400（运营照着改请求重试）                        杀掉                             红=TestKM_ChunkWriteErrorMapsGovernedTo409 settled=1/1
+KC2   这条出口不再认发布制的拒绝                                    杀掉                             红=TestKM_ChunkWriteErrorMapsGovernedTo409 settled=1/1
+RR1   hybrid 向量那一路不挂闸门                                 杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR2   hybrid 词面那一路不挂闸门（带库过滤）                           杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR3   hybrid 兜底那一路不挂闸门                                 杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR4   lexical tsquery 带库过滤不挂闸门                         杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR5   lexical tsquery 全库不挂闸门                           杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR6   lexical 兜底带库过滤不挂闸门                               杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR7   lexical 兜底全库不挂闸门                                 杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR8   vector 检索器 SearchVector 带库过滤不挂闸门                 杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR9   vector 检索器 SearchVector 全库不挂闸门                   杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR10  vector 检索器 Retrieve 带库过滤不挂闸门                     杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+RR11  vector 检索器 Retrieve 全库不挂闸门                       杀掉                             红=TestKbGate_RetrievalSitesHideUnpublished settled=3/3
+
+结果：杀掉 162/162 格 
+终态：全部格子杀掉，逐文件 md5 已复原，控制组与取证日志见上面的 tag。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_ialfuq2/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p902mut-_ialfuq2

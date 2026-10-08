@@ -1,15 +1,20 @@
 # Bridge 架构总览
 
-> **当前架构（HTTP 三通道）**。本模块不维护 WebSocket 长连接、不使用 SSE；
-> 扩展 ↔ 服务端走三条相互独立的 HTTP 通道，详细协议见 [./../bridge.md](../bridge.md) §4。
+> **当前架构（HTTP 三条主通道 + 一条可选 SSE）**。本模块不维护 WebSocket 长连接；
+> 扩展 ↔ 服务端走上行 ingest、下行轮询 outbox、回执 ack 三条相互独立的 HTTP 通道，
+> 下行另有 SSE 形态且**默认走它**（先探 capabilities，`sse_enabled=true` 时轮询定时器根本不创建），
+> 详细协议见 [./../bridge.md](../bridge.md) §4。「不使用 SSE」这一句在本文件里流传了很久，
+> 与 `src/background/sse-client.js`、`src/core/sse-fetch-client.js` 的实现相反，2026-09-29 按实码订正。
 
 ## 1. 通道划分
 
 | 通道 | 方法 | 端点 | 触发 | 用途 |
 | --- | --- | --- | --- | --- |
 | A · Uplink | POST | `/api/bridge/ingest` | content script 检测到新消息 / 会话切换 | 上行消息（inbound + history），同时拉取同会话待发 AI 回复 |
-| B · Downlink | GET | `/api/bridge/outbox` | background 轮询（`BRIDGE_THREE_CHANNEL.outboxPollIntervalMs=1500ms`） | 拉取待发 AI 回复（网页渠道） |
+| B · Downlink（轮询，兜底形态） | GET | `/api/bridge/outbox` | background 轮询（`BRIDGE_THREE_CHANNEL.outboxPollIntervalMs=1500ms`） | 拉取待发 AI 回复（网页渠道） |
+| B′ · Downlink（SSE，默认形态） | GET | `/api/bridge/outbox/sse` | capabilities 报 `sse_enabled=true` 时由 background 建长连接 | 服务端认领成功即推流，省掉轮询节拍；建连失败按原因降回 B |
 | C · Ack | POST | `/api/bridge/outbox/ack` | content script 模拟发送成功后 | 标记 `msg_id` 为 `delivered` / `failed` |
+| D · Capabilities | GET | `/api/bridge/capabilities` | 扩展启动、popup「测试连接」 | 读回本实例申报的传输能力（`sse_enabled`、轮询间隔），决定走 B′ 还是 B |
 
 三通道参数（`src/core/constants.js` → `BRIDGE_THREE_CHANNEL`）：
 
@@ -28,13 +33,25 @@
 
 ## 2. 路由注册（user-server）
 
-`internal/router/router.go`（`bridgeWS` 路由组，仅过 `InitGuard` 中间件）：
+`internal/router/router.go`（`bridgeWS` 路由组，过 `InitGuard` + `BridgeIngressGuard` 两道）：
 
 ```go
-bridgeWS.POST("/bridge/ingest",       bridgeHandler.HandleHTTPIngest)
-bridgeWS.GET ("/bridge/outbox",       bridgeHandler.GetBridgeOutbox)
-bridgeWS.POST("/bridge/outbox/ack",   bridgeHandler.AckBridgeOutbox)
+bridgeWS := r.Group("/api")
+bridgeWS.Use(middleware.InitGuard())
+bridgeWS.Use(middleware.BridgeIngressGuard())
+
+bridgeWS.POST("/bridge/ingest", bridgeHandler.HandleHTTPIngest)
+bridgeWS.GET("/bridge/outbox", bridgeHandler.GetBridgeOutbox)
+bridgeWS.POST("/bridge/outbox/ack", bridgeHandler.AckBridgeOutbox)
+bridgeWS.GET("/bridge/outbox/sse", bridgeHandler.HandleOutboxSSE)
+bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 ```
+
+抄到这里是为了让「这个组里到底有什么」有一处能对账：同一个组里还挂着 `/api/ws/channel`，
+它与桥接四端点共用同一枚 `X-Bridge-Token`（见 §2.1）。`/api/mcp` 曾挂在同一组里，现已拆到
+独立的 `mcpGroup`（`middleware.MCPGuard`）——理由是这个组带着 `BRIDGE_INGEST_AUTH=off` 这条
+「内网可不带凭证」的逃生阀，而 MCP 是服务端工具调用入口，不该跟着一起被放开；
+未配置专用凭证时它仍回落认桥接凭证，所以存量部署不受影响。
 
 - `account_id` 缺失 → 400 `account_id required`（不写 `default` 兜底）；
 - `channel` 不在白名单 → 400 `unsupported`；

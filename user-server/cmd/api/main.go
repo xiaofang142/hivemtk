@@ -485,6 +485,13 @@ func main() {
 	// 且要再重启一次才恢复。登记在持久层 Close 之后 ⇒ 本 defer 先执行，释放语句仍进得了库。
 	defer service.StopAllTelegramPolling()
 
+	// TG 群门控清扫器的租约同样要在关停时交回：cron_job_leases 里那一行若仍写着已死进程，
+	// 其他实例要等租约陈旧窗口（3 分钟）才敢接手，期间没有一个人清理超时未验证的成员；
+	// 反过来"协程还没退出就释放"会留下双跑窗——两个实例同时对真人移出群。
+	// StopGateSweeper 内部就是按"先等退出、再释放"这个顺序写的，登记位置与上一行同一条
+	// 约束（排在持久层 Close 之后 ⇒ LIFO 下先执行，释放语句仍进得了库）。
+	defer service.StopGateSweeper(context.Background())
+
 	addr := resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))
 	logger.Infof("营销后端服务启动于 %s", addr)
 	// serveHTTP 按平台拆分:Unix 走 endless(零停机热重启),Windows 走标准 http

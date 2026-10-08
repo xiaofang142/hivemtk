@@ -1,24 +1,63 @@
 # ============================================================================
 # HiveMtk user-server Caddy 反代模板（v3 审计 P1-A1）
+# ----------------------------------------------------------------------------
+# 长连接路径清单与判读口径见同目录 README.md（含实测对照）。
+#
+# 两条 path_regexp 的口径：
+#   @sse —— 任何 ^/api/…/sse 的流式端点（现测三条：/api/bridge/outbox/sse、
+#           /api/dashboard/sse、/api/chat/typing-predict/sse）
+#   @ws  —— /api/ws/ 前缀 + /api/browser/host-ws（后者不在 /api/ws/ 下，漏了它
+#           握手就落到兜底那条 reverse_proxy 上）
+#
+# 注意：命名匹配器（@sse/@ws）必须定义在 site 块层、不能写进 reverse_proxy 块里。
+# 早先版本把 `@sse path /api/sse/*` 塞在 reverse_proxy 块内，Caddy 直接拒绝适配：
+#   Error: adapting config using caddyfile: parsing caddyfile tokens for 'reverse_proxy':
+#   unrecognized response matcher path（实测 caddy v2.11.4 / caddy validate，退出码 1）
+#
+# 早先版本还写 `transport http { versions h1 }`：这一条能通过语法适配、但起不来 ——
+# provision 阶段报 unsupported HTTP version: h1, supported version: 1.1, 2, h2c, 3。
+# 正确的字面量是 versions 1.1（实测）。
+#
+# 实测补充：Caddy 对 Content-Type: text/event-stream 的响应**默认就逐帧下发**
+# （对照实验：裸 reverse_proxy 不写 flush_interval，帧到达时刻同样是 0s/1s/2s）。
+# 所以 @sse 里的 flush_interval -1 不是"这条流今天能活"的理由，它的作用是把结论
+# 不押在 Content-Type 上（将来若有流式端点漏设 text/event-stream，仍然逐帧下发）。
+# WS 侧同理：Caddy 自带 Upgrade 透传，早先那两行 header_up Upgrade/Connection 是多余的，
+# 删掉后实测 /api/ws/channel、/api/ws/visitor、/api/browser/host-ws 三条都收到
+# Upgrade: websocket。
 # ============================================================================
 
 your-domain.com {
-    # [关键] Caddy 默认 HTTP/2，需在 transport 配强制 HTTP/1.1
     encode gzip zstd
 
-    reverse_proxy user-server:8204 {
-        # SSE 必须无缓冲
-        @sse path /api/sse/*
-        request_buffering off
-        flush_interval -1
+    @sse path_regexp sse ^/api/.+/sse$
+    @ws  path_regexp ws ^/api/(ws/|browser/host-ws$)
 
-        # WebSocket
-        @ws path /api/ws/*
-        header_up Upgrade {http.request.header.Upgrade}
-        header_up Connection upgrade
+    # ---- SSE：逐帧下发，不被响应缓冲压住 ----
+    handle @sse {
+        reverse_proxy user-server:8204 {
+            flush_interval -1
+            transport http {
+                versions 1.1
+            }
+        }
+    }
 
-        transport http {
-            versions h1  # 强制 HTTP/1.1
+    # ---- WebSocket：Caddy 自带 Upgrade 透传，无需手工 header_up ----
+    handle @ws {
+        reverse_proxy user-server:8204 {
+            transport http {
+                versions 1.1
+            }
+        }
+    }
+
+    # ---- 普通业务 API ----
+    handle {
+        reverse_proxy user-server:8204 {
+            transport http {
+                versions 1.1
+            }
         }
     }
 }

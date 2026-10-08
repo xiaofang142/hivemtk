@@ -11,12 +11,18 @@
 //   | 8232 | PostgreSQL（dev 本地直连）        |
 // 交叉验证：user-server/Dockerfile:57  ENV SERVER_PORT=8204
 // 交叉验证：user-server/cmd/api/main.go listenAddr 默认 :8204
+//
+// 这里刻意没有 wsPath：扩展与 user-server 之间只有 HTTP 上行 /api/bridge/ingest、
+// 下行轮询 /api/bridge/outbox、回执 /api/bridge/outbox/ack，加一条下行推送 SSE
+// /api/bridge/outbox/sse（capabilities 报 sse_enabled=false 时自动退回轮询）。
+// 那个常量的值 /api/ws/bridge 在服务端从未注册过（router 层全量 grep 零命中；同前缀下
+// 真实存在的是 /api/ws/channel，那是 channelgw 的传输口，扩展不走它），而扩展 src/ 里
+// 也从未出现 new WebSocket。
 export const DEFAULT_USER_SERVER = {
   host: 'localhost',
   port: 8204,
   baseUrl: 'http://localhost:8204',
   healthPaths: ['/health', '/healthz', '/readyz', '/api/health'],
-  wsPath: '/api/ws/bridge',
   profile: 'dev',
 };
 
@@ -55,22 +61,7 @@ export const RATE_LIMIT_DEFAULTS = Object.freeze({
 });
 
 // =============================================================
-// 4) WS 客户端默认值（bridge-client.js）
-// =============================================================
-// 心跳超时 25s（与 server handler.go pongWait=60s 错开 35s 以上）
-// 文档源：user-server/internal/bridge/handler.go
-//   const pongWait   = 60 * time.Second
-//   const pingPeriod = 50 * time.Second
-// 客户端 25s 超时 < 服务端 60s，避免出现客户端先断导致连接泄漏
-export const WS_CLIENT_DEFAULTS = Object.freeze({
-  serverIdleTimeoutMs: 25 * 1000,
-  reconnectBaseMs: 1000,
-  reconnectMaxMs: 30 * 1000,
-  reconnectJitterMs: 500,
-});
-
-// =============================================================
-// 5) 巡检制度（patrol）默认值（详见 bridge.md 上行巡检）
+// 4) 巡检制度（patrol）默认值（详见 bridge.md 上行巡检）
 // =============================================================
 // 巡检语义：一轮巡检完成 → 自动进入下一轮。遍历左侧聊天列表，对有新消息
 // （未读红点）的会话点击进入右侧聊天页，捕获新消息上行（触发 AI 自动对话）。
@@ -102,7 +93,7 @@ export const PATROL_DEFAULTS = Object.freeze({
 });
 
 // =============================================================
-// 5b) 历史回填宽限期（per-channel，2026-08-05 审计 P0/A6）
+// 5) 历史回填宽限期（per-channel，2026-08-05 审计 P0/A6）
 // =============================================================
 // 语义：会话初次挂载/切换后的一段时间内，新出现的客户消息仅回填历史（落库），
 //   不触发 AI 自动回复。避免打开含存量私信的会话时被当成新消息逐一自动回复。

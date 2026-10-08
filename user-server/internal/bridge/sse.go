@@ -15,8 +15,9 @@
 //
 // 设计要点：
 //   - 复用现有长轮询的「取 outbox」逻辑（同一数据源）
-//   - HTTP 响应头：text/event-stream, Cache-Control: no-cache, Connection: keep-alive
-//   - 心跳：每 15s 发送 :keepalive 注释行（防代理超时）
+//   - HTTP 响应头：text/event-stream, Cache-Control: no-cache, Connection: keep-alive,
+//     X-Accel-Buffering: no（后两个头是给反代看的，见 docs/operations/reverse-proxy/README.md）
+//   - 建连先写 retry: 15000，之后空闲时每 15s 发一条注释帧 ": ping\n\n" 防代理超时
 //   - 自动重连：客户端用 Last-Event-ID header 续传
 //   - 并发安全：每客户端独立 goroutine + ctx cancel
 //   - Phase 1 新增：SSEBus 事件驱动推送（轮询 → 即时推送，延迟降至 <500ms）

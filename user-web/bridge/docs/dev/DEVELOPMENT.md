@@ -65,7 +65,13 @@ npm run dev    # 持续构建（推荐）
 ```bash
 # 1. 扩展 popup 打开后「测试连接」按钮
 #    默认 server = http://localhost:8204（与 user-server 端口对齐）
-#    应弹出「连接成功」
+#    凭证栏填对时弹「✓ 可达，凭证可用」，并按服务端 capabilities 实报值点名下行形态
+#    （sse_enabled=true ⇒ SSE 长连接；false ⇒ 轮询 + 间隔）。
+#    注意两件事：
+#      · 凭证填错/留空 ⇒ 判词是红的（「✗ 凭证被服务端拒绝」/「✗ 未填桥接凭证」），
+#        不会再说「服务端可达」了事——健康口无鉴权，只有 capabilities 才验凭证。
+#      · /health 在依赖故障时**仍回 HTTP 200**（降级写在响应体的 data.status / code:50301 里），
+#        所以这条按钮读的是体，不是只看状态码。
 
 # 2. 打开抖音/小红书/TikTok 私信页
 #    F12 → Console 看到 [bridge] ... 日志
@@ -358,11 +364,33 @@ npm run release
 - **排查**：
   ```bash
   # 1. 确认 user-server 在 8204 端口运行
-  curl http://localhost:8204/health
+  curl -s -o /tmp/h.json -w '%{http_code}\n' http://localhost:8204/health
+  cat /tmp/h.json
+  #    HTTP 200 **不等于**健康：`internal/router/health.go` 在 overallOK 为假时走
+  #    response.ErrorWithBusinessCode(50301)，那个 helper 用的状态码就是 StatusOK，
+  #    真话只在体里的 data.status="degraded" / code=50301。
+  #    另一头，单格依赖（如 embedding）报 down 时服务端总判仍写 ok
+  #    ——它要 HEALTH_EMBEDDING_CRITICAL=true 才计入降级。popup 两条都会点名。
 
-  # 2. 确认扩展 popup 的 server URL 与 user-server 端口一致
+  # 2. 确认凭证对不对：这一条才代表"能不能收发"
+  #    （健康口无鉴权，凭证填错它在第 1 步照样回 200）
+  curl -s -o /dev/null -w 'no-token=%{http_code}\n' http://localhost:8204/api/bridge/capabilities
+  curl -s -H "X-Bridge-Token: ${BRIDGE_INGEST_TOKEN}" -o /dev/null -w 'with-token=%{http_code}\n' \
+       http://localhost:8204/api/bridge/capabilities
+  #    不带 ⇒ 401（闸门在，读的是 X-Bridge-Token，不是 Authorization Bearer）
+  #    带对 ⇒ 200 + {"poll_interval_ms":…,"sse_enabled":…,"sse_heartbeat_ms":…}
+  #    带错 ⇒ 401 "bridge token 无效"
+  #    凭证的取值点：system_config_kv 的 bridge_ingest_token，其次环境变量 BRIDGE_INGEST_TOKEN
+
+  # 3. 确认扩展 popup 的 server URL 与 user-server 端口一致
   #    单一源：src/core/constants.js DEFAULT_USER_SERVER.baseUrl
   ```
+- **判词与含义**（`src/popup/index.js` 的 `buildConnectionVerdict`，用例在 `test/popup-connection-verdict.test.js`）：
+  「✗ 无法连接」= 四条健康路径全没通；「⚠ 服务端响应 4xx」= 通但被中间件挡；
+  「✓ 可达，凭证可用」= 两条腿都过；「✗ 凭证被服务端拒绝」/「✗ 未填桥接凭证」= 地址通但五条桥接路由都会 401；
+  「⚠ 可达，但凭证没能校验」= 探测口本身没通或旧版没这个口，**不冒充已验证**；
+  「⚠ 服务端可达但已降级」= 服务端自己报了 degraded；
+  「⚠ 可达，有一项依赖实测故障」= 服务端总判仍是 ok、某格报 down。
 
 ### 9.2 content script 未注入抖音页
 

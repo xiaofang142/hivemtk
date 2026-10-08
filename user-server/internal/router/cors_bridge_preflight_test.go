@@ -98,6 +98,34 @@ func TestCorsPreflightAdvertisesBridgeTokenHeader(t *testing.T) {
 	}
 }
 
+// TestCorsPreflightAdvertisesWidgetHeaders 前台聊天窗的四个自定义头必须在允许头里：
+// /api/chat/public/* 用 X-Chat-Visitor-Id 做会话归属（缺了后端直接回 400）、用
+// X-Chat-Channel-Id 选渠道。仓库自带的 iframe 窗与 API 同源、走不到预检，所以这格在现网
+// 不会红；它守的是 ADR-011 §6.2 那种「接入方自建前端 + CORS_ALLOW_ORIGINS_USER 放行来源」
+// 的部署——那种页面一旦放行来源却漏登记允许头，请求死在预检，而调用方读到的形态像服务端故障。
+// 反向那腿同样要紧：机器侧凭证/签名头不许被顺手加进来，否则等于把它们的可达面摊给
+// 任意被放行的浏览器来源。
+func TestCorsPreflightAdvertisesWidgetHeaders(t *testing.T) {
+	r := setupWithBridgeRoutes(t)
+
+	pf := optionsProbe(t, r, "http://localhost:8204/api/chat/public/session", "http://console.example")
+	if pf.code != http.StatusNoContent {
+		t.Fatalf("预检返回 %d，期望 204", pf.code)
+	}
+	for _, want := range []string{"X-Chat-App-Key", "X-Chat-Channel-Id", "X-Chat-Visitor-Id", "X-Chat-Visitor-Token"} {
+		if !pf.allowHeaders[want] {
+			t.Errorf("允许头里没有 %s，跨源的聊天窗调用会在预检阶段被浏览器拦掉", want)
+		}
+	}
+	// 这些只该出现在「预检答不答复」之外的机器侧：加进允许头没有任何浏览器调用方需要它，
+	// 只会扩大凭证的可达面。
+	for _, mustNot := range []string{"X-Knowledge-Token", "X-Ingress-Secret", "X-Webhook-Secret", "X-API-KEY"} {
+		if pf.allowHeaders[mustNot] {
+			t.Errorf("允许头里出现了机器侧凭证头 %s，它没有浏览器调用方，不该被登记", mustNot)
+		}
+	}
+}
+
 // TestCorsPreflightAnswersBeforeAuth 管理台口（auth 组 + 超管）的预检同样不得要求凭证：
 // 浏览器按规范发预检时不会带 Authorization / Cookie，若这层漏到鉴权中间件后面，
 // 管理台一整个跨源场景都会以 401 形态死在预检上。

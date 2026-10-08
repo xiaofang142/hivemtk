@@ -234,7 +234,8 @@
 | --- | --- | --- | --- | --- |
 | 坐席工作台 WebSocket | WebSocket | `/api/ws/agent?agent_id=&agent_name=&token=` | `utils/agentSocket.js` | 客服工作台、统一收件箱实时刷新；事件：`new_session` / `new_message` / `session_update` / `ai_suggestion` |
 | 访客 WebSocket | WebSocket | `/api/ws/visitor?session_id=&visitor_id=&channel_id=&since_seq=` | `utils/chatSocket.js` | 嵌入聊天窗；事件：`welcome` / `offline_messages` / `message` / `agent_joined` / `session_closed` / `ai_typing` / `missed_ack` |
-| 大屏 SSE 推送 | SSE（EventSource） | `/api/sse/*` | `views/dashboardScreen/List.vue` | 营销 KPI 数据大屏实时推送 |
+| 大屏数据刷新 | HTTP 轮询（`setInterval`） | 大屏配置里逐项取数的 HTTP 口 | `views/dashboardScreen/List.vue` | 营销 KPI 数据大屏；**没有 SSE**：`List.vue` 里 `new EventSource` 零命中，实时性由轮询间隔决定 |
+| 看板 SSE 推送 | SSE（EventSource） | `/api/dashboard/sse`（auth 组，需 JWT） | `service_routes.go` `auth.GET("/dashboard/sse", sseCtrl.Stream)` | 服务端确有这一条口；**`/api/sse/*` 这个前缀整块不存在**（实测 `GET /api/sse/dashboard` → 404），旧文档写的那条路径调用方一律打空 |
 | 消息中心 | —（HTTP 轮询/通知） | `/api/notifications/*` | `components/MessageNotification.vue` | 顶栏铃铛宿主；展示未读数与列表 |
 
 ### WebSocket 鲁棒性设计

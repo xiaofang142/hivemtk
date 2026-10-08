@@ -202,3 +202,42 @@ func TestCollectionJobMountedAfterRouterSetup(t *testing.T) {
 		t.Errorf("collectionJob.Stop 出现 %d 次，期望 1 ⇒ 优雅关停时这一台还在跑下一轮", n)
 	}
 }
+
+// TestGateSweeperPairedOnShutdown TG 群门控的 TTL 清扫器必须"启动在路由装配里、
+// 停止登记在优雅关停里"，两半都要有人守着。
+//
+// 漏掉 Stop 的那一种不会报错也不会红：cron_job_leases 里那一行仍写着已经死掉的进程，
+// 下一个实例要等租约陈旧窗口（3 分钟）才敢接手，期间超时未验证的入群者无人清理，
+// 而群里那段"请点链接验证"的提示也不再补发 —— 表现正是这个模块最初被报的故障。
+// 漏掉 Start 更直接：清扫器整条链路不存在，只有台账在长。
+func TestGateSweeperPairedOnShutdown(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("读取 main.go: %v", err)
+	}
+	s := string(src)
+
+	const stop = "service.StopGateSweeper(context.Background())"
+	if n := strings.Count(s, stop); n != 1 {
+		t.Fatalf("main.go 里 %s 出现 %d 次，期望 1 次", stop, n)
+	}
+	if !strings.Contains(s, "defer "+stop) {
+		t.Errorf("门控清扫器停止不在 defer 上：serveHTTP 返回后这句根本不执行，租约留在已死进程名下")
+	}
+	closePersistence := strings.Index(s, "app.CloseToolAuditPersistence()")
+	if closePersistence < 0 {
+		t.Fatal("main.go 里已找不到 app.CloseToolAuditPersistence()，先后判据失去参照物")
+	}
+	if idx := strings.Index(s, stop); idx < closePersistence {
+		t.Errorf("门控清扫器停止(偏移 %d)登记在持久层 Close(偏移 %d)之前 ⇒ LIFO 下它后执行，"+
+			"释放租约的 UPDATE 撞上已关闭的持久层", idx, closePersistence)
+	}
+
+	rs, err := os.ReadFile("../../internal/router/router.go")
+	if err != nil {
+		t.Fatalf("读取 router.go: %v", err)
+	}
+	if n := strings.Count(string(rs), "service.StartGateSweeper("); n != 1 {
+		t.Fatalf("router.go 里 service.StartGateSweeper( 出现 %d 次，期望 1 次（0 次=清扫器根本不起，2 次=两台在扫同一批台账）", n)
+	}
+}

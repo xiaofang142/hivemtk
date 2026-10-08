@@ -1,0 +1,61 @@
+2026-09-30T00:35:25+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/shadow_受管库：首条分配、次条复用同一桶
+    kb_gate_chunk_write_test.go:120: 首条该拿到 allocated(3)+1=4，实际 0
+    kb_gate_chunk_write_test.go:127: 库里那行 kb_version=0，期望 4（内存里改了、库里没落 = 本卡最怕的形态）
+    kb_gate_chunk_write_test.go:131: 桶位推进不对：draft=0 allocated=3，期望 4/4
+    kb_gate_chunk_write_test.go:139: 同库第二条应复用桶 4，实际 0（一批导入的内容必须整体上线）
+    kb_gate_chunk_write_test.go:143: 第二条不该再往前挪一格：draft=0 allocated=3
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_受管库：首条分配、次条复用同一桶
+    kb_gate_chunk_write_test.go:120: 首条该拿到 allocated(3)+1=4，实际 0
+    kb_gate_chunk_write_test.go:127: 库里那行 kb_version=0，期望 4（内存里改了、库里没落 = 本卡最怕的形态）
+    kb_gate_chunk_write_test.go:131: 桶位推进不对：draft=0 allocated=3，期望 4/4
+    kb_gate_chunk_write_test.go:139: 同库第二条应复用桶 4，实际 0（一批导入的内容必须整体上线）
+    kb_gate_chunk_write_test.go:143: 第二条不该再往前挪一格：draft=0 allocated=3
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/off_受管库：一行都不碰、一次分配都不做
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_未受管库：版本_0，且不新建_release_行
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_未_governance_的既有库：版本_0，高水位不动
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_空归属：跨库重建这类调用方不给库号_⇒_版本_0
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_BatchCreate_跨库：各归各的桶
+=== RUN   TestKbRepo_WriteStampingRoutesToDraftBucket/on_账目读不动：Create_报错且不落库
+    kb_gate_chunk_write_test.go:254: 归属账读不动时 Create 仍成功了（会静默写 kb_version=0 ⇒ 闸门绕过口）
+--- FAIL: TestKbRepo_WriteStampingRoutesToDraftBucket (1.22s)
+    --- FAIL: TestKbRepo_WriteStampingRoutesToDraftBucket/shadow_受管库：首条分配、次条复用同一桶 (0.94s)
+    --- FAIL: TestKbRepo_WriteStampingRoutesToDraftBucket/on_受管库：首条分配、次条复用同一桶 (0.03s)
+    --- PASS: TestKbRepo_WriteStampingRoutesToDraftBucket/off_受管库：一行都不碰、一次分配都不做 (0.03s)
+    --- PASS: TestKbRepo_WriteStampingRoutesToDraftBucket/on_未受管库：版本_0，且不新建_release_行 (0.04s)
+    --- PASS: TestKbRepo_WriteStampingRoutesToDraftBucket/on_未_governance_的既有库：版本_0，高水位不动 (0.04s)
+    --- PASS: TestKbRepo_WriteStampingRoutesToDraftBucket/on_空归属：跨库重建这类调用方不给库号_⇒_版本_0 (0.04s)
+    --- PASS: TestKbRepo_WriteStampingRoutesToDraftBucket/on_BatchCreate_跨库：各归各的桶 (0.05s)
+    --- FAIL: TestKbRepo_WriteStampingRoutesToDraftBucket/on_账目读不动：Create_报错且不落库 (0.04s)
+=== RUN   TestKbRepo_GuardDirectWrite
+=== RUN   TestKbRepo_GuardDirectWrite/on_受管库：Update_被拒且正文没变
+=== RUN   TestKbRepo_GuardDirectWrite/shadow_受管库：Update_照常生效
+=== RUN   TestKbRepo_GuardDirectWrite/on_受管库：Delete_被拒且行还在
+=== RUN   TestKbRepo_GuardDirectWrite/off_档即使受管也放行
+=== RUN   TestKbRepo_GuardDirectWrite/shadow_档即使受管也放行
+=== RUN   TestKbRepo_GuardDirectWrite/on_档未受管放行
+=== RUN   TestKbRepo_GuardDirectWrite/on_档没有_release_行放行
+=== RUN   TestKbRepo_GuardDirectWrite/on_受管库：不存在的_id_不报错也不查账
+--- PASS: TestKbRepo_GuardDirectWrite (0.36s)
+    --- PASS: TestKbRepo_GuardDirectWrite/on_受管库：Update_被拒且正文没变 (0.04s)
+    --- PASS: TestKbRepo_GuardDirectWrite/shadow_受管库：Update_照常生效 (0.04s)
+    --- PASS: TestKbRepo_GuardDirectWrite/on_受管库：Delete_被拒且行还在 (0.04s)
+    --- PASS: TestKbRepo_GuardDirectWrite/off_档即使受管也放行 (0.05s)
+    --- PASS: TestKbRepo_GuardDirectWrite/shadow_档即使受管也放行 (0.05s)
+    --- PASS: TestKbRepo_GuardDirectWrite/on_档未受管放行 (0.05s)
+    --- PASS: TestKbRepo_GuardDirectWrite/on_档没有_release_行放行 (0.04s)
+    --- PASS: TestKbRepo_GuardDirectWrite/on_受管库：不存在的_id_不报错也不查账 (0.04s)
+=== RUN   TestKbRepo_BatchDeleteWarnsOnlyInForceRows
+=== RUN   TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且有在服行_⇒_出声
+=== RUN   TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且全未发布_⇒_不出声
+=== RUN   TestKbRepo_BatchDeleteWarnsOnlyInForceRows/off_档_⇒_不出声也不查账
+=== RUN   TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且_kb_releases_读不动_⇒_报错且一行都不删
+--- PASS: TestKbRepo_BatchDeleteWarnsOnlyInForceRows (0.19s)
+    --- PASS: TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且有在服行_⇒_出声 (0.05s)
+    --- PASS: TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且全未发布_⇒_不出声 (0.05s)
+    --- PASS: TestKbRepo_BatchDeleteWarnsOnlyInForceRows/off_档_⇒_不出声也不查账 (0.05s)
+    --- PASS: TestKbRepo_BatchDeleteWarnsOnlyInForceRows/on_且_kb_releases_读不动_⇒_报错且一行都不删 (0.05s)
+FAIL
+FAIL	hivemtk-user/internal/aiagent/knowledge/repository	2.204s
+FAIL

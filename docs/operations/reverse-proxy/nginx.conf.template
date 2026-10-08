@@ -3,10 +3,18 @@
 # ----------------------------------------------------------------------------
 # 关键约束：
 #   1. HTTP/2 必须显式关闭（SSE 长连接与 h2 多路复用冲突 → 大屏数据延迟/丢失）
-#   2. SSE 路径 proxy_buffering off（nginx 默认开启缓冲会吞掉流式推送）
+#   2. 长连接路径必须逐条落进下面的 location —— 没落进去就等于用 nginx 默认值代理
+#      （实测：2026-09-29，nginx 1.26.3，见下方"路径清单从哪来"）
 #   3. WebSocket 路径透传 Upgrade/Connection 头
 #   4. 走 frps vhost 时，必须显式 proxy_set_header Host <customDomain>
 #      （frps 按 Host 匹配 customDomains，透传 $host 会匹配不到）
+#
+# 路径清单从哪来（改路由后照这三条命令重取，别照抄本文件）：
+#   cd user-server && grep -rn -E '\.(GET|Any)\("[^"]*(sse|ws)' internal/router/ | grep -v _test
+#   # SSE  现测：/api/bridge/outbox/sse  /api/dashboard/sse  /api/chat/typing-predict/sse
+#   # WS   现测：/api/ws/channel  /api/ws/visitor  /api/ws/agent  /api/browser/host-ws
+#   # 逐条证它存在（不带凭证：注册了 → 401/400；没注册 → 404）：
+#   curl -s -o /dev/null -w '%{http_code} %{url_effective}\n' http://127.0.0.1:8204/api/bridge/outbox/sse
 # ============================================================================
 
 # ---- upstream：user-server（Go, :8204）----
@@ -32,8 +40,10 @@ server {
     ssl_certificate_key /etc/nginx/certs/your-domain.com.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    # ---- SSE：/api/sse/* 必须无缓冲 + 超长超时 ----
-    location /api/sse/ {
+    # ---- SSE：^/api/…/sse 必须无缓冲 + 超长超时 ----
+    # 写成正则而不是某个具体路径，是为了让下一个流式端点不必再改本文件；
+    # 普通业务接口路径不以 /sse 结尾，不会被这条抢走。
+    location ~ ^/api/.+/sse$ {
         proxy_pass http://hivemtk_user_server;
         proxy_http_version 1.1;
 
@@ -42,7 +52,11 @@ server {
         proxy_read_timeout 24h;       # 长连接不被 60s 默认值切断
         proxy_send_timeout 24h;
 
-        add_header X-Accel-Buffering no;  # 双保险：禁用 FastCGI/代理层缓冲
+        # 这里不要再挂 add_header X-Accel-Buffering no：那个头要生效必须由「上游」发出，
+        # nginx 往客户端再补一份不改变 proxy_buffering 的行为（实测：上游不发该头时，
+        # 只有本块的 proxy_buffering off 能让逐帧下发；把该头只加给客户端则整条流被压住）。
+        # user-server 的各 SSE handler 确实都发了这个头，本块是把兜底收回反代侧，
+        # 不依赖上游实现是否一直在。
 
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -51,8 +65,11 @@ server {
         proxy_set_header Connection "";
     }
 
-    # ---- WebSocket：/api/ws/* 透传 Upgrade ----
-    location /api/ws/ {
+    # ---- WebSocket：/api/ws/* 与 /api/browser/host-ws 透传 Upgrade ----
+    # host-ws 不在 /api/ws/ 前缀下（它注册在 internal/router/browser_automation_routes.go
+    # 的 engine 上）。少了下面这条精确匹配，它会落进 location /api/，而那里
+    # proxy_set_header Connection ""，实测上游收到的 Upgrade/Connection 都是空 ⇒ 握手必败。
+    location ~ ^/api/(ws/|browser/host-ws$) {
         proxy_pass http://hivemtk_user_server;
         proxy_http_version 1.1;
 

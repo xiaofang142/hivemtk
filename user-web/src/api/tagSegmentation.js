@@ -6,7 +6,10 @@ export const TagSegmentationApi = {
   },
 
   updateTags: (data) => {
-    return http.put('/api/session-tags', data)
+    // 服务端只有 PUT /api/session-tags/:id（service_routes.go:67）：打到集合路径上是 405，
+    // 编辑标签从来存不下去。id 走路径， body 里那份摘掉，避免多带一个字段。
+    const { id, ...body } = data
+    return http.put(`/api/session-tags/${id}`, body)
   },
 
   createTag: (data) => {

@@ -105,14 +105,14 @@ func (r *ProactiveReachRepository) FindActiveAccountID(ctx context.Context, chan
 		}
 		return fmt.Sprintf("%d", acc.ID), nil
 	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu":
-
+		// 在线判定串与渠道总览共用 bridgeOnlineSQLPredicate：主动触达挑中的账号，
+		// 必须就是总览报为可达的那批，否则「面板说在线」与「消息真发得出去」会分叉。
 		var acc struct {
 			AccountID string
 		}
 		if err := r.db.WithContext(ctx).Table("bridge_accounts").
-			Where("channel = ? AND status <> ? AND last_sync_at IS NOT NULL"+
-				" AND now() - last_sync_at < (? * interval '1 second')",
-				channel, "offline", bridgeGraceSeconds).
+			Where("channel = ? AND "+bridgeOnlineSQLPredicate,
+				channel, bridgeStatusOffline, bridgeGraceSeconds).
 			Order("last_sync_at DESC").First(&acc).Error; err != nil {
 			return "", err
 		}

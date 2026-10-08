@@ -1,0 +1,25 @@
+SHADOW /tmp/r65-shadow/hivemtk/user-server
+LOGDIR /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/TGGATE/20260929-141811
+基线字节：`ec7120b2`｜未入库字节 15 处｜装架覆盖来树 16 份（其中 15 份未入库，计入本轮读数）｜本轮读影子 `--shared` 克隆的 HEAD＋上面现测的那批来树覆盖字节；活树同批文件的 md5 由 `--check` 逐份印出，两份逐字相同才算这一轮的数
+来源活树：`3bfa156a`｜未入库字节 85 处｜装架覆盖来树 16 份（其中 15 份未入库，计入本轮读数）｜上面 overlay 名单的出处；本电池不在活树装架，只把这里读出的字节盖进影子克隆
+LANE_FILES 现数 16 份（同＝活树与影子树逐字相同）：
+  同 139e40c029696a5801080d73a26356f7  cmd/api/main.go
+  同 6cd75d7c35a1fd4c0976de9943948e54  cmd/api/startup_order_test.go
+  同 afa3ef2f719e677349428f089a54d5d8  internal/model/cron_job_lease.go
+  同 4fd14611b3ea696d2bffd896f514cd68  internal/model/telegram_gate.go
+  同 8e7c60ba030dca62f5e97aa1e2e3afe9  internal/pkg/db/migrate.go
+  同 3a251061bbe385d455e7ff7caef83e11  internal/repository/cron_job_lease.go
+  同 0b76411a2d9e42bf330cd722997f503d  internal/repository/cron_job_lease_test.go
+  同 849bb5a44f7f0b6fbe764aa264f4c2ab  internal/repository/telegram_gate.go
+  同 4042d9531d7ddd0148af865de393c7b6  internal/repository/telegram_gate_repo_test.go
+  同 475d3a2fc9d9df68dc5c0edc67d4b4cf  internal/repository/telegram_gate_stalled_idle_test.go
+  异 830e3662a1e30d8e5d32aa6b97f8a1bf  internal/service/telegram_gate.go
+       影子 da971b018307c816d156d97f717f8484
+  同 1b7a0ee001c9b692cb2fce79307de38f  internal/service/telegram_gate_in_flight_test.go
+  同 82bc1f3d45488927ac9c107cbb6fe60d  internal/service/telegram_gate_lease_test.go
+  同 e639e23fef7351c92130b03ec8d48a0b  internal/service/telegram_gate_recover_stalled_test.go
+  同 1d828f3387f0ad4b86deb385f460ce58  internal/service/telegram_gate_sweep_test.go
+  同 b66421b4caa85ece0e7b1a262456d200  internal/service/telegram_gate_test.go
+CHECK-BAD PARITY internal/service/telegram_gate.go md5 不一致（影子树是旧字节）
+CHECK-BAD M16 锚点命中 0 次（期望 1）: internal/service/telegram_gate.go
+parity bad=1 anchors=26 anchor bad=1

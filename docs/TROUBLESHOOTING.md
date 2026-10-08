@@ -259,10 +259,67 @@ psql -h 127.0.0.1 -p 8202 -U admin -d user_db \
 1. 出站通道模式：feature flag `sse_bridge` 默认开启（SSE），若网络中间层（部分反代/CDN）缓冲 SSE 流会导致延迟堆积，可设 `FF_SSE_BRIDGE=0` 回退长轮询验证；
 2. flag 是热加载的（约 5 秒生效），改环境变量无需重启。
 
+### 4.4 社群门控：入群提示反复播 / 有人进群后又被移出
+
+**症状**：同一个人在群里反复收到"点击验证"提示；或新成员进群几分钟后被移出（"有人加入但是又被踢掉了"）。
+
+**同一次入群收到三条提示**这一型已修（2026-09-29）。它的形状不是"多实例各跑一份"，也不是"临近到期被当成没送达"，
+而是**同一进程里补偿循环抢了请求内路径正在处理的那一行**：`HandleNewMembers` 写完台账后要先禁言、再发提示，
+两次渠道往返实测 8–10 秒；这段时间里这一行在台账上恰好是"未送达 + 窗口开着"，每分钟一跳的清扫器落进去
+就补一次禁言 + 补发一条（于是同一个人两条内容相同、token 相同）。判据出处 ADR-016 决策一第 5 条；
+现在这一行要等安静窗口（`tgGateInFlightQuiet` = 2 个清扫节拍）过去、或请求内路径自己留下失败计数，才会被补偿接手。
+
+**口径出处**：`architecture/adr/ADR-016-telegram-group-gate-policy.md`。本节只给读数与手工干预手法，不重述判据。
+
+**自查（只读 SQL）**：
+
+```sql
+-- 谁在被重复播报：resend 在涨而 sent_at 仍为空 ⇒ 提示发不出去（多半 Bot 已无群内发言权限）
+SELECT chat_id, user_id, username, join_status, welcome_sent_at, welcome_resends, expires_at
+  FROM telegram_group_members
+ WHERE authorized = false
+ ORDER BY welcome_resends DESC, updated_at DESC LIMIT 20;
+
+-- 同一次入群是否被播了两次：只看那一行的写入轨迹
+-- updated_at 与 welcome_sent_at 相差在安静窗口内（<= 2 分钟）⇒ 现在这版会跳过它，不该再补发；
+-- 若同一分钟内既有 restricted→restricted 的 chat_member 更新又有一条"补偿完成"日志 ⇒ 还是抢跑了，来查这一路。
+SELECT id, chat_id, user_id, join_status, welcome_sent_at, welcome_resends, updated_at,
+       expires_at - updated_at AS window_left
+  FROM telegram_group_members
+ WHERE chat_id = '<群 chat_id>' AND user_id = '<user_id>';
+
+-- 各群的门控形态与验证窗口（verify_ttl_min 非正值按 10 分钟兜底）
+SELECT chat_id, chat_title, mode, enabled, verify_ttl_min,
+       CASE WHEN welcome_msg = '' THEN '默认文案' ELSE '自定义' END AS welcome
+  FROM telegram_group_gates;
+```
+
+服务端日志按 `[TG-Gate]` 前缀过滤：`群内验证提示发送失败`／`提示补发已到上限`／`超时未验证已移出（可重新入群）`／
+`提示从未送达，超时也不处置`／`已到期但在宽限期内`／`补偿完成：已补禁言+补发提示`。
+**已送达的人不该再出现在 `补偿完成` 里**——出现了就说明有人把 `welcome_sent_at IS NULL` 那一条改了或删了。
+
+**"被移出"要三个条件同时成立**（少一个就不会动手）：提示**确实送达过**、`expires_at` 已过、
+且再过了一个 `verify_ttl_min` 的宽限。移出走 `banChatMember(过去时间戳)` + 立即 `unbanChatMember`，
+所以是"踢出但不拉黑"，他可以马上再申请。
+
+**想保住某个成员**：把这一行的 `expires_at` 推到未来即可（唯一不动 TG API 的手法）。
+**不要**只把 `join_status` 手工改成 `approved`——台账与群内真实状态会错位：禁言是 TG 侧的状态，
+手工改列不会替他解禁，正确路径是走管理端放行（`AuthorizeMemberByID`，它会真打 `unrestrictChatMember`）。
+
+**多实例各跑一份**：`SELECT job_name, owner, heartbeat_at FROM cron_job_leases;`——`owner` 是 `hostname:pid`。
+非持有者的实例每轮零动作。若 `owner` 指向一个已经不存在的进程，说明它是被 `SIGKILL` 带走的（没走
+`StopGateSweeper`），等心跳陈旧窗口（3 分钟）自动接管即可，不必手工清行。
+
+**为什么这些提示在 `message_hub` 里查不到**：门控广播刻意不落 `message_hub`（ADR-016 决策三——
+落库会把运营事件算进"发送消息"业务指标，并淹没客服收件箱）。按渠道看入群/验证转化只能读 `telegram_group_members`。
+
+**改判据之前**：这一族的判据属"删掉不会有任何东西红"的类型（它不崩、不报错，只是对真人多动手一次）。
+动 `SweepExpired`／`RecoverStalled`／租约那几处之前先跑常驻变异电池 `scripts/mut_tg_gate_policy.py`
+（`--check` 看装配，`run` 逐刀杀伤；用法与口径见 ADR-016 §验证），它会把"这道守卫没牙"直接报出来。
+
 ---
 
 ## 五、数据一致性类
-
 ### 5.1 定时任务/SOP 节点被重复执行
 
 **症状**：同一 SOP 节点触发两次，客户收到重复消息。
@@ -270,6 +327,12 @@ psql -h 127.0.0.1 -p 8202 -U admin -d user_db \
 **事实**：多实例并发取任务时若无行锁会重复派发。当前代码已启用 `SELECT ... FOR UPDATE SKIP LOCKED` 修复此问题。
 
 **验证方法**：开两个 user-server 实例，观察日志 `[outbox] processed due timers` 的 fired_count 总和应等于数据库实际触发行数。若你仍在单实例部署且看到重复，优先怀疑上游渠道重推而非 Outbox。
+
+**另一族机制（不是同一处代码）**：会**对外部世界动手**的后台任务改用 `cron_job_leases` 租约表选主
+（`job_name` 主键 + `owner` + `heartbeat_at`，心跳陈旧窗口 3 分钟），抢不到租约的实例本轮零动作。
+当前在册的作业名与判据见 `architecture/adr/ADR-016-telegram-group-gate-policy.md`；
+读 `SELECT * FROM cron_job_leases` 就能答"这一路现在在谁名下、心跳什么时候"。
+只写自己聚合行的任务（如小时汇总）不加租约——重复执行不外发，加锁只会多一张运维面。
 
 ### 5.2 表结构与代码对不上：`column does not exist` / `relation already exists`
 
@@ -370,6 +433,7 @@ flag 家族一览（均为 `FF_<大写名>` 格式，默认关，`sse_bridge` �
 | Telegram/飞书/钉钉收不到消息 | 4.1 |
 | 批量任务卡 running | 4.2 |
 | 桥接消息重复/延迟 | 4.3 |
+| 入群提示反复播 / 进群又被移出 | 4.4 |
 | SOP 节点重复执行 | 5.1 |
 | column/relation 冲突 | 5.2 |
 | 审计日志缺失 | 5.3 |

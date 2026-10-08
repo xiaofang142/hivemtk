@@ -77,6 +77,9 @@ func seedBridgeAccount(t *testing.T, database *gorm.DB, channel, accountID, stat
 // 旧实现的两条渠道查询分别引用 bridge_metrics（指标时间序列，没有 platform /
 // account_id / updated_at）与 bridge_accounts.platform（该表的渠道列叫 channel），
 // 在真库上必然 42703 ⇒ DetectOfflineChannels 恒报错返回 ⇒ 离线回扫从未投过一条。
+//
+// reachable 是查询里算出来的表达式，不是表列：它必须与渠道总览的在线计数同一条口径，
+// 否则同一份数据会在回扫日志和总览面板上量出两个"在线数"。
 func TestListBridgeAccounts_ReadsRealColumns(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.BridgeAccount{})
 	repo := NewBridgeOfflineReplayRepositoryWithDB(database)
@@ -86,21 +89,38 @@ func TestListBridgeAccounts_ReadsRealColumns(t *testing.T) {
 	stale := now.Add(-time.Hour)
 	seedBridgeAccount(t, database, "douyin", "acc-online", "online", &now)
 	seedBridgeAccount(t, database, "xiaohongshu", "acc-off", "offline", &stale)
+	// 粘住的在线位：status 仍是 online，但早就没同步过了（扩展被杀时就是这一格）。
+	seedBridgeAccount(t, database, "kuaishou", "acc-sticky", "online", &stale)
+	// 从未同步过（注册了账号但扩展一次也没来过）：没有可比的时间戳，必须算不可达，
+	// 否则 now() - NULL 在 SQL 里是 NULL、整条件判为" unknown"，行会被静默漏掉而不是归到离线侧。
+	seedBridgeAccount(t, database, "xianyu", "acc-neversync", "online", nil)
 
-	rows, err := repo.ListBridgeAccounts(ctx)
+	rows, err := repo.ListBridgeAccounts(ctx, 30)
 	if err != nil {
 		t.Fatalf("读渠道快照失败（R14 复现：SQL 引用的列无人建立）: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("渠道快照=%d 行，want 2：%+v", len(rows), rows)
+	if len(rows) != 4 {
+		t.Fatalf("渠道快照=%d 行，want 4：%+v", len(rows), rows)
 	}
 	byAcc := make(map[string]BridgeChannelRow, len(rows))
 	for _, r := range rows {
 		byAcc[r.AccountID] = r
 	}
+	if got := byAcc["acc-sticky"].Reachable; got {
+		t.Error("粘住的在线位被判为可达：status='online' 且 last_sync_at 落在窗口外时必须算不可达")
+	}
+	if got := byAcc["acc-neversync"].Reachable; got {
+		t.Error("last_sync_at 为空的账号被判为可达：IS NOT NULL 那一子句失效（窗口判定对无时间戳的行无从起算）")
+	}
 	online := byAcc["acc-online"]
 	if online.Channel != "douyin" || online.Status != "online" {
 		t.Errorf("acc-online 快照错：channel=%q status=%q", online.Channel, online.Status)
+	}
+	if !online.Reachable {
+		t.Error("acc-online（刚同步过）被判为不可达 ⇒ 补投门会把可达渠道整轮跳过")
+	}
+	if got := byAcc["acc-off"].Reachable; got {
+		t.Error("acc-off（status=offline）被判为可达 ⇒ grace 窗口开过了显式离线的账号")
 	}
 	off := byAcc["acc-off"]
 	if off.Channel != "xiaohongshu" {
@@ -114,10 +134,40 @@ func TestListBridgeAccounts_ReadsRealColumns(t *testing.T) {
 	}
 }
 
+// TestListBridgeAccounts_GraceSecondsIsTheKnob 窗口参数必须真的参与判定：
+// 同一个账号（2 分钟前同步过）在 30s 窗口下不可达、在 300s 窗口下达。
+// 传进去不参与 SQL 的话，配置项 bridge/online_grace_window 改了没人受影响。
+func TestListBridgeAccounts_GraceSecondsIsTheKnob(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.BridgeAccount{})
+	repo := NewBridgeOfflineReplayRepositoryWithDB(database)
+	ctx := context.Background()
+
+	ago2min := time.Now().Add(-2 * time.Minute)
+	seedBridgeAccount(t, database, "douyin", "acc-2min", "online", &ago2min)
+
+	reachable := func(t *testing.T, grace int) bool {
+		t.Helper()
+		rows, err := repo.ListBridgeAccounts(ctx, grace)
+		if err != nil {
+			t.Fatalf("grace=%d 读快照失败: %v", grace, err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("grace=%d 快照=%d 行，want 1：%+v", grace, len(rows), rows)
+		}
+		return rows[0].Reachable
+	}
+	if reachable(t, 30) {
+		t.Error("grace=30s 时 2 分钟前的同步仍判可达 ⇒ 传进来的秒数没进 SQL")
+	}
+	if !reachable(t, 300) {
+		t.Error("grace=300s 时 2 分钟前的同步判不可达 ⇒ 放长窗口对读数没有影响")
+	}
+}
+
 // TestListBridgeAccounts_NoDBGuardReturnsNil 无库时必须返回空快照而非 panic：
 // 回扫由 cron 调用，DB 未装配的进程里它应当静默无事可做。
 func TestListBridgeAccounts_NoDBGuardReturnsNil(t *testing.T) {
-	rows, err := NewBridgeOfflineReplayRepositoryWithDB(nil).ListBridgeAccounts(context.Background())
+	rows, err := NewBridgeOfflineReplayRepositoryWithDB(nil).ListBridgeAccounts(context.Background(), 30)
 	if err != nil || rows != nil {
 		t.Errorf("无库守卫失效: rows=%v err=%v", rows, err)
 	}

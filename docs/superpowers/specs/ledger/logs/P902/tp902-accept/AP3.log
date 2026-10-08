@@ -1,0 +1,24 @@
+2026-09-30T00:35:22+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestInitKBReleaseRuntime_NilDBClearsGlobal
+2026-09-30T00:35:23+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:35:23+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+2026-09-30T00:35:23+08:00 WRN [kb-release] ⚠️ 无 DB 句柄 ⇒ 知识库变更底座不装配：/api/kb-changes/* 与 /api/kb-releases/* 全部回 503；读路径的版本闸门不受本句影响（它只看 FF_LTC_KB_CHANGE_GATE），未装配时召回与今天逐字节相同 component=user-server
+--- PASS: TestInitKBReleaseRuntime_NilDBClearsGlobal (1.26s)
+=== RUN   TestInitKBReleaseRuntime_RegistersUsableGlobal
+2026-09-30T00:35:23+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:35:23+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+    kb_release_wiring_test.go:70: 路由取的全局与 Init 返回的不是同一个实例（两处各一份就会漂移）
+    kb_release_wiring_test.go:79: 全局实例提交变更失败: 知识库变更底座未装配（无 DB 句柄）
+--- FAIL: TestInitKBReleaseRuntime_RegistersUsableGlobal (0.09s)
+=== RUN   TestInitKBReleaseRuntime_UsesGlobalApprovalService
+2026-09-30T00:35:24+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+    kb_release_wiring_test.go:118: 提交失败: 知识库变更底座未装配（无 DB 句柄）
+--- FAIL: TestInitKBReleaseRuntime_UsesGlobalApprovalService (0.12s)
+=== RUN   TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues
+2026-09-30T00:35:24+08:00 INF [kb-release] ✅ 变更底座已装配，但 FF_LTC_KB_CHANGE_GATE=off ⇒ 召回侧不加版本闸门：已批准的变更仍要先发布才进语料，而**导入链路的新内容不受版本管控**（当场可见）。影子期请先置 shadow，真拦须显式写 on component=user-server
+2026-09-30T00:35:24+08:00 WRN [kb-release] ⚠️ 审批运行时未装配（FF_LTC_APPROVAL_RESUME=off）⇒ 变更底座自带一个只用于入队/读结论的审批服务：pending 会正常落库、待办会正常投递，但 /api/approvals/* 回 503，**没人能在 HTTP 上批准这一条**，发布永远是"已批准的变更 0 条"。要出变更须把该旗子开到 on|shadow 并重启 component=user-server
+    kb_release_wiring_test.go:151: 提交失败: 知识库变更底座未装配（无 DB 句柄）
+--- FAIL: TestInitKBReleaseRuntime_WithoutGlobalApprovalStillEnqueues (0.11s)
+FAIL
+FAIL	hivemtk-user/internal/app	2.135s
+FAIL

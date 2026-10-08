@@ -56,15 +56,26 @@ type ReplayStats struct {
 	FinishedAt          time.Time `json:"finished_at"`
 }
 
-// partitionBridgeChannels 按 status 把渠道划成在线/离线两批。
+// partitionBridgeChannels 按"此刻收不收得到"把渠道划成在线/离线两批。
 //
 // 两侧必须互斥且并集为全集：旧实现里"离线"取自一条永远报 42703 的 bridge_metrics
 // 聚合查询、"在线"根本没有这一侧，于是回扫既检不出渠道，也谈不上投递。
-// status 的可靠性由 SSE 生命周期写在线位负责（连接/心跳刷新、断开置离线）。
+//
+// 判据取行上的 Reachable（SQL 侧按 grace 窗口算），不取 status：status='online' 是粘住的列，
+// 只有 SSE 正常收尾才会被改回 offline，扩展崩溃/断网/被杀都留着 online。实测 164 台里
+// 159 台标在线而按同步时间判定的真值是 0 —— 拿它划批，这份报告就是一屏假绿（补投本身另有
+// bridgeChannelOnline 这道门拦着，所以坏的是读数，不是投递）。
 func partitionBridgeChannels(rows []repository.BridgeChannelRow) (on, off []OfflineChannel) {
 	for _, a := range rows {
-		ch := OfflineChannel{Platform: a.Channel, AccountID: a.AccountID, OfflineSince: a.UpdatedAt}
-		if a.Status == bridgeStatusOffline {
+		// "掉线时刻"取最后同步时间而不是 updated_at：现在这一批里大多是 status 仍标 online
+		// 但早已不发消息的账号，而 TouchLastSync 会把 updated_at 一起刷新，取它就会报成
+		// "刚刚才掉线"，把三周没回来的账号读成值得等待重连的那一类。
+		since := a.UpdatedAt
+		if a.LastSyncAt != nil {
+			since = *a.LastSyncAt
+		}
+		ch := OfflineChannel{Platform: a.Channel, AccountID: a.AccountID, OfflineSince: since}
+		if !a.Reachable {
 			off = append(off, ch)
 			continue
 		}
@@ -72,9 +83,6 @@ func partitionBridgeChannels(rows []repository.BridgeChannelRow) (on, off []Offl
 	}
 	return on, off
 }
-
-// bridgeStatusOffline bridge_accounts.status 的离线态字面量（与 bridge 包 Upsert/SetOffline 同值）
-const bridgeStatusOffline = "offline"
 
 // --- 补投门：扩展此刻收不收得到消息 ---------------------------------------
 //
@@ -143,7 +151,7 @@ func (s *BridgeOfflineReplayService) detectBridgeChannels(ctx context.Context) (
 	if s.repo == nil {
 		return nil, nil, nil
 	}
-	rows, err := s.repo.ListBridgeAccounts(ctx)
+	rows, err := s.repo.ListBridgeAccounts(ctx, int(BridgeOnlineGraceWindow(ctx).Seconds()))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -278,8 +286,11 @@ func (s *BridgeOfflineReplayService) RunOnce(ctx context.Context) ReplayStats {
 	stats.FinishedAt = time.Now()
 	// 计数名用「不可达」而不是「无订阅者」：轮询式下发的账号没有订阅，
 	// 它是在线位过期才落到这一格的，取证时按"没连 SSE"读会找错方向。
-	logger.Infof("[BridgeReplay] 回扫完成: scanned=%d online=%d offline=%d unreachable_channels=%d replayed=%d failed=%d duration=%s",
-		stats.ScannedChannels, stats.OnlineChannels, stats.OfflineChannels, stats.SkippedOffline,
+	// online/offline 旁边必须带 grace 秒数：这两个数是按窗口算的，读数不带口径就没法和
+	// 巡检脚本、渠道总览对账（三处同一条 SQL，但窗口是运维可改的配置项）。
+	logger.Infof("[BridgeReplay] 回扫完成: scanned=%d online=%d offline=%d grace=%ds unreachable_channels=%d replayed=%d failed=%d duration=%s",
+		stats.ScannedChannels, stats.OnlineChannels, stats.OfflineChannels,
+		int(BridgeOnlineGraceWindow(ctx).Seconds()), stats.SkippedOffline,
 		stats.ReplayedMessages, stats.FailedMessages,
 		stats.FinishedAt.Sub(startedAt).Round(time.Millisecond))
 	return stats
