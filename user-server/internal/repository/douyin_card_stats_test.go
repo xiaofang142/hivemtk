@@ -45,8 +45,17 @@ func TestDouyinCardStats_GroupByBuckets(t *testing.T) {
 
 	now := time.Now()
 	newDouyinActivity(t, repo, cardID, 1, "view", now)
-	newDouyinActivity(t, repo, cardID, 2, "view", now.Add(-14*24*time.Hour)) // 必定跨周
-	newDouyinActivity(t, repo, cardID, 3, "view", now.Add(-40*24*time.Hour)) // 必定跨月
+	newDouyinActivity(t, repo, cardID, 2, "view", now.Add(-14*24*time.Hour)) // 相隔 14 天，必定跨周
+	newDouyinActivity(t, repo, cardID, 3, "view", now.Add(-40*24*time.Hour)) // 相隔 40 天，必定跨月
+
+	// 月桶数量**不能写死**：now / now-14d / now-40d 落在几个月桶里取决于「今天是几号」。
+	// 例：3/31 时 -40d=2/19、-14d=3/17 → 只有 2 个桶；10/8 时 -40d=8/29、-14d=9/24 → 3 个桶。
+	// 原断言「相隔 40 天落在两个月桶」只在部分月份成立 ⇒ 这条测试是**日历相关**的，
+	// 会随运行日期时红时绿。改成按三个时间戳各自月份前缀去重后计数，与日历无关。
+	wantMonths := map[string]bool{}
+	for _, at := range []time.Time{now, now.Add(-14 * 24 * time.Hour), now.Add(-40 * 24 * time.Hour)} {
+		wantMonths[timeutil.BusinessDate(at)[:7]] = true
+	}
 
 	dayStats, err := repo.GetCardDailyStats(ctx, cardID, "", "", "day")
 	require.NoError(t, err)
@@ -54,20 +63,20 @@ func TestDouyinCardStats_GroupByBuckets(t *testing.T) {
 
 	weekStats, err := repo.GetCardDailyStats(ctx, cardID, "", "", "week")
 	require.NoError(t, err, "week 分支必须是可查询的，不是报错")
-	assert.Len(t, weekStats, 3, "三条分别相隔 14/26 天，落在三个 ISO 周桶")
+	assert.Len(t, weekStats, 3, "now 与 -14d 差 14 天、-14d 与 -40d 差 26 天，必定落在三个不同 ISO 周桶")
 	for _, s := range weekStats {
 		assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, s.Date)
 	}
 
 	monthStats, err := repo.GetCardDailyStats(ctx, cardID, "", "", "month")
 	require.NoError(t, err, "month 分支必须是可查询的，不是报错")
-	assert.Len(t, monthStats, 2, "相隔 40 天落在两个月桶")
+	assert.Len(t, monthStats, len(wantMonths), "月桶数等于三个时间戳各自月份前缀的去重个数")
 	seen := map[string]bool{}
 	for _, s := range monthStats {
 		assert.Regexp(t, `^\d{4}-\d{2}$`, s.Date)
 		seen[s.Date] = true
 	}
-	assert.True(t, seen[timeutil.BusinessDate(now)[:7]], "本月桶必须在结果里")
+	assert.Equal(t, wantMonths, seen, "月桶必须与三个时间戳的月份前缀一一对应")
 }
 
 // TestDouyinCardStats_DateRangeBoundaries 钉住两条边界口径：

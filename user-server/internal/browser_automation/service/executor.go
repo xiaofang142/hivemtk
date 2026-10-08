@@ -636,6 +636,11 @@ func (e *Executor) ExecuteSession(ctx context.Context, task *model.BrowserTask, 
 	stopCh := e.registerStop(session.ID)
 	defer e.unregisterStop(session.ID)
 	defer e.clearLedgerBroken(session.ID)
+	// Chunk5 回执兜底清理：正常路径上 captureSessionReceipts 自己摘掉这条 entry，
+	// 这条 defer 只在「会话中途 panic / 提前退出、收口没跑到」时兜底。
+	// 不加它，Executor 是进程级单例，泄漏的 pendingReceipts 会随异常会话单调增长且永不回收——
+	// 而这类泄漏的特征是「进程跑得越久越慢」，事后从日志里根本看不出来是哪次会话留下的。
+	defer e.discardPendingReceipts(session.ID)
 
 	_ = e.sessionRepo.UpdateStatus(ctx, session.ID, "active", "")
 	_ = steps // Brain 模式忽略显式编排，由 LLM 生成
@@ -1093,7 +1098,7 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
 				mergeAuditMeta(map[string]any{
 					"dedupe_hit": true, "target_url": oc.targetURL, "reason": "outreach_already_sent",
-				}, e.stepAuditMeta(0)), 0, verdict(true))
+				}, e.stepAuditMeta(latencyNotMeasured)), 0, verdict(true))
 			logger.Infof("[BrowserExec] %s session=%d idx=%d", msg, session.ID, index)
 			// 绿返：去重命中意味着内容早已触达，本轮无需再证明什么，不计成败、不中断。
 			return "skipped", "", nil
@@ -1135,11 +1140,15 @@ func (e *Executor) executeStepWithRetry(ctx context.Context, task *model.Browser
 		if !e.consumeCampaignActBudget(ctx, task) {
 			msg := fmt.Sprintf("写步未下发（%s）：%s", writeWhy, campaignBudgetExhaustedMsg(task))
 			e.finishStep(ctx, stepRow.ID, "failed", nil, 0, msg)
+			// seq 必须自增：与本函数其余所有 appendCommandLog 调用点同纪律。
+			// 漏自增会让这一帧与上一帧共用同一个 seq，审计包按 seq 排序时两帧并列，
+			// 「预算耗尽发生在哪一步之前/之后」这个问题就没有答案了。
+			*seq++
 			e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", step.Action,
 				mergeAuditMeta(map[string]any{
 					"reason": "campaign_budget_exhausted", "campaign_key": task.CampaignKey,
 					"campaign_act_budget": task.CampaignActBudget, "campaign_act_used": task.CampaignActUsed,
-				}, e.stepAuditMeta(0)), 0, verdict(false))
+				}, e.stepAuditMeta(latencyNotMeasured)), 0, verdict(false))
 			return "failed", msg, nil
 		}
 	}

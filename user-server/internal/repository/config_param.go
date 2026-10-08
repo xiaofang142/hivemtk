@@ -4,9 +4,25 @@ import (
 	"context"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbencrypt"
 
 	"gorm.io/gorm"
 )
+
+// 变更审计里的改前/改后值默认加密落库（OPT-SEC-04 残项，与 api_logs 同一把钥匙）。
+//
+// 为什么审计表也要加密：config_params 里存着 API Key 一类的敏感参数（见
+// config_param_group_key_unique 的复合唯一键分组），明文留痕等于把当前与历史
+// 密钥全量抄进一张无访问控制的表 —— 比主表泄露更糟，主表至少有 config 读取
+// 权限，审计表通常是「谁改了什么」的运维只读视图。
+//
+// 列类型已是 text，无需迁移（对照 api_logs 需要 057 迁移纯粹是因为
+// ip_address 是 varchar(45) 装不下密文）。存量明文行不做批量改写：AES-256-GCM
+// 的 nonce 随机生成且密钥只在应用侧，纯 SQL 改不了；读取出口 Decrypt 对非
+// `enc:v1:` 前缀原样返回，故新旧混读安全。
+func encryptAuditValues(oldValue, newValue string) (string, string) {
+	return dbencrypt.Encrypt(oldValue), dbencrypt.Encrypt(newValue)
+}
 
 // ConfigParamRepository 动态参数仓储
 type ConfigParamRepository struct {
@@ -62,10 +78,11 @@ func (r *ConfigParamRepository) UpdateValue(ctx context.Context, group, key, new
 		if err := tx.Model(&p).Updates(updates).Error; err != nil {
 			return err
 		}
+		encOld, encNew := encryptAuditValues(oldValue, newValue)
 		return tx.Create(&model.ConfigParamAuditLog{
 			ParamKey: key,
-			OldValue: oldValue,
-			NewValue: newValue,
+			OldValue: encOld,
+			NewValue: encNew,
 			Action:   "update",
 			ActorID:  actorID,
 		}).Error
@@ -86,10 +103,11 @@ func (r *ConfigParamRepository) ResetToDefault(ctx context.Context, group, key s
 		}).Error; err != nil {
 			return err
 		}
+		encOld, encNew := encryptAuditValues(oldValue, p.DefaultValue)
 		return tx.Create(&model.ConfigParamAuditLog{
 			ParamKey: key,
-			OldValue: oldValue,
-			NewValue: p.DefaultValue,
+			OldValue: encOld,
+			NewValue: encNew,
 			Action:   "reset",
 			ActorID:  actorID,
 		}).Error
@@ -111,10 +129,11 @@ func (r *ConfigParamRepository) BulkResetGroup(ctx context.Context, group string
 			if err := tx.Model(&p).Update("Value", p.DefaultValue).Error; err != nil {
 				return err
 			}
+			encOld, encNew := encryptAuditValues(oldValue, p.DefaultValue)
 			if err := tx.Create(&model.ConfigParamAuditLog{
 				ParamKey: p.Key,
-				OldValue: oldValue,
-				NewValue: p.DefaultValue,
+				OldValue: encOld,
+				NewValue: encNew,
 				Action:   "bulk_reset",
 				ActorID:  actorID,
 			}).Error; err != nil {
@@ -133,6 +152,10 @@ func (r *ConfigParamRepository) AuditLogs(ctx context.Context, limit int) ([]mod
 	var logs []model.ConfigParamAuditLog
 	if err := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&logs).Error; err != nil {
 		return nil, err
+	}
+	for i := range logs {
+		logs[i].OldValue = dbencrypt.Decrypt(logs[i].OldValue)
+		logs[i].NewValue = dbencrypt.Decrypt(logs[i].NewValue)
 	}
 	return logs, nil
 }

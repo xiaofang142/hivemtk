@@ -504,6 +504,27 @@ func (s *Customer360Service) buildClueInfo(ctx context.Context, userID string, u
 	return s.assembleClueInfo(ctx, []string{accountID, userPhone, userEmail})
 }
 
+// clueLevelOf 线索温度等级读取口径（P-9 动态化）。
+//
+// 口径源是 model.Clue.Level 那一列：ClueScoreService 按 clue_score 写回
+// hot(>=70) / warm(40-69) / cold(<40)，空串表示「尚未评分」。
+//
+// 为什么不用 IntentScore 在这里另算一套：评分服务的写回口径已经在库里了，
+// 读侧再算一次会出现「库里 cold、面板 hot」的双口径分叉，而分叉之后没人知道该信谁。
+// 空串兜底 warm 是 model/clue.go 注释里写明的契约，不兜底会让未评分线索在面板上
+// 显示成「冷」，被当成已判定的结论——「没数据」与「数据是冷的」不是一回事。
+func clueLevelOf(c *model.Clue) string {
+	if c == nil {
+		return "warm"
+	}
+	switch strings.TrimSpace(c.Level) {
+	case "hot", "warm", "cold":
+		return strings.TrimSpace(c.Level)
+	default:
+		return "warm"
+	}
+}
+
 func (s *Customer360Service) assembleClueInfo(ctx context.Context, keys []string) (*ClueInfo, error) {
 	clues, err := s.clueRepo.ListByAccounts(ctx, keys)
 	if err != nil {
@@ -521,7 +542,7 @@ func (s *Customer360Service) assembleClueInfo(ctx context.Context, keys []string
 		Name:      latestClue.Name,
 		Phone:     latestClue.Account,
 		Status:    "new",
-		Level:     "warm",
+		Level:     clueLevelOf(latestClue),
 		CreatedAt: time.Unix(latestClue.CreateTime, 0).Format("2006-01-02 15:04:05"),
 	}
 
@@ -1009,7 +1030,7 @@ func (s *Customer360Service) buildClueInfoFromMap(userSessions []*model.Customer
 		Name:      latest.Name,
 		Phone:     latest.Account,
 		Status:    "new",
-		Level:     "warm",
+		Level:     clueLevelOf(latest),
 		CreatedAt: time.Unix(latest.CreateTime, 0).Format("2006-01-02 15:04:05"),
 	}
 	if latest.IsVerify == 1 {

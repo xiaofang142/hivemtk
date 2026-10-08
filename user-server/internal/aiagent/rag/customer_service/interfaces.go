@@ -232,17 +232,6 @@ type QualityAssessmentInterface interface {
 	EvaluateRelevance(ctx context.Context, response, query string) (float64, error)
 	EvaluateAccuracy(ctx context.Context, response string, referenceSources []string) (float64, error)
 	EvaluateCoherence(ctx context.Context, response string) (float64, error)
-	GetQualityMetrics(ctx context.Context, sessionID string) (QualityMetrics, error)
-}
-
-// QualityMetrics 质量指标
-type QualityMetrics struct {
-	SessionID      string    `json:"session_id"`
-	AvgRelevance   float64   `json:"avg_relevance"`
-	AvgAccuracy    float64   `json:"avg_accuracy"`
-	AvgCoherence   float64   `json:"avg_coherence"`
-	ResolutionRate float64   `json:"resolution_rate"`
-	UpdateTime     time.Time `json:"update_time"`
 }
 
 // FeedbackLearningInterface 反馈学习接口

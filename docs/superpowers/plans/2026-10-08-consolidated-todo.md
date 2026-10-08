@@ -63,7 +63,7 @@ P0/P1/P2…P8 共 52 卡均有「执行结果」回灌，仅剩：
 - [x] **OPT-FE-07 残项①** `website` 锁文件 vite `8.1.4` → 与其余 6 个对齐 `8.3.0`
 - [x] **OPT-FE-07 残项②** `scripts/check-vite-version.sh` 已建未注册 → 接入 `make audit` / CI
 - [x] **OPT-DOC-EXT-4** `.github/workflows/dco.yml` 触发条件 `on: pull_request`，而本项目直推 master ⇒ 永不触发；改 `on: push`
-- [ ] **OPT-SEC-04 残项**（本轮未吞：`audit_logs` 加密是 schema 级改造，与 A 段 browser_automation 热区同批改会让回归面失真，独立排期） `audit_logs` 敏感字段加密（`api_logs` 侧已由 `migrations/057_api_logs_encrypt_fields.sql` 覆盖）
+- [x] **OPT-SEC-04 残项** ✅ 2026-10-08 收口轮闭环：`audit_logs` 表在本仓**不存在**（Go/migrations 命中全是别的审计表；测试库 `information_schema` 亦无）⇒ 该条是陈旧文档；顺链查出真实泄漏面 `config_param_audit_logs.old_value/new_value` 明文留痕 config_params 里的 API Key，已用 `internal/pkg/dbencrypt` 在三条写入分支加密、`AuditLogs` 读取出口解密透传，测试 `config_param_audit_encrypt_test.go` 覆盖密文/往返/存量明文三态
 
 ### D2 需跨日工程量（本次不吞，登记在册）
 - OPT-FE-04 补 i18n 缺失 key（P1）
@@ -83,23 +83,33 @@ P0/P1/P2…P8 共 52 卡均有「执行结果」回灌，仅剩：
 
 ---
 
-## E. 功能盘点实测缺口（`docs/architecture/MASTER_FEATURE_INVENTORY.md`）
+## E. 功能盘点实测缺口（`docs/architecture/MASTER_FEATURE_INVENTORY.md`）— ✅ 2026-10-08 收口轮逐条对账
 
-| 项 | 实测缺口 | 规模 |
-|---|---|---|
-| 用户画像推导 | `Tags/Interests/RiskLevel/PreferredTime` **恒空串**；Clue Level 恒 `"warm"` | 中 |
-| 异议响应编排 | `UseLLM` 字段定义未实现（TECH_DEBT M9 称已删字段 ⇒ 文档漂移，需二选一定案） | 小 |
-| 分渠道验签 | `wechat` secrets 恒空 → 永远失败；抖音泛化 HMAC 与官方口径不同 | 中（安全） |
-| 消息下发 | `msg_id` 内容哈希致同会话同文案无法重发 | 中 |
+| 项 | 原文声称 | 2026-10-08 实测结论 | 处置 |
+|---|---|---|---|
+| 用户画像推导 | `Tags/Interests/RiskLevel/PreferredTime` **恒空串**；Clue Level 恒 `"warm"` | 四字段**已全部实现**（`customer_360.go:719 enrichUserProfile`：Tags 取 tagRepo 按 Confidence 前 5、Interests 取 aiTagger interest 词条、RiskLevel 取 RFM 流失映射、PreferredTime 取近 30 天消息小时直方图；旁证 `customer_profile_p349_test.go`）；Clue Level **确为真缺口**（两处硬编码 `"warm"`） | 前者改文档（陈旧）；后者改代码：新增 `clueLevelOf(*model.Clue)`（读库，非法/空串兜底 warm），`assembleClueInfo` 与 map 版两处接线 |
+| 异议响应编排 | `UseLLM` 字段定义未实现 | **该字段在全仓 Go 代码中零命中**（`grep -rn "UseLLM\|use_llm\|UseLlm"` = 0），既无类型也无列 ⇒ 是陈旧条目而非「未实现」 | 改文档，删掉伪缺口，只留真实项「内存 sort 冗余」 |
+| 分渠道验签 | `wechat` secrets 恒空 → 永远失败；抖音泛化 HMAC 与官方口径不同 | 两条均已闭环：wechat 缺 secret 时是 **fail-closed + 可诊断中文错误**（仅 `ALLOW_INSECURE_WEBHOOK=true` 才旁路并记 bypass 日志），`getWechatSecrets` 真实取库（accountID → `GetFirstActiveAccount` 回落）；抖音已换 `verifyDouyinWebhook`，按官方 `sha1(client_secret‖原始body)` 置 `X-Douyin-Signature` | 改文档为已闭环 + 列出 8 渠道各自信签口径 |
+| 渠道标准化 | WA 只处理每批第一条其余丢弃；抖音 generic MsgID 含 UnixNano 天然不去重；WeCom 解密遍历所有账号试 key | 三条全部为陈旧：WA 是 `Entry→Changes→Messages` 三层嵌套全量遍历；抖音事件与 generic msgID 均走 `ContentHashMsgID` 内容哈希（`UnixNano` 在仓内只出现在 repository/websocket/app/controller/channelbot 等无关处）；WeCom 实为「按 AgentID/account **精确路由优先**，解密失败才回退全量遍历」 | 改文档为已闭环，WeCom 兜底遍历保留为已知取舍 |
+| 消息下发 | `msg_id` 内容哈希致同会话同文案无法重发 | **真缺口**，机理已核到可执行粒度（见下） | 登记待人工裁决，本轮**未擅改** |
+
+### E-1 出站 `msg_id` 缺口：机理与候选修法（本轮未实施，理由在册）
+
+- **现象**：`ContentHashMsgID(channel, conversationID, content)` 的哈希输入只有 `channel|content`，**`conversationID` 形参未被使用**；而唯一索引 `uni_message_hub_platform_msg_conv` 是 `(platform, msg_id, conversation_id)` 三元组；`MessageHubRepository.Create` 是裸 `db.Create` 无 `OnConflict`，`DeliverOutbound` 在 `Create` 失败时直接返错 ⇒ **同会话同文案的第二次出站硬失败**（不同会话同文案因 conversation_id 不同可共存）。
+- **不能直接修的约束**：`ContentHashMsgID` 是**跨语言回环去重契约**——`TestContentHashMsgIDCrossLanguageContract` 与前端 `types.js::contentHash` 逐字节锚定（锚值 `mh:00550fed`），`channelgw/protocol.go` 亦要求扩展端按同源算法生成。给哈希加序号会让回环去重全线崩。
+- **关键事实**：入站防回环**完全走 SELECT 钩子**（`inbox_ingress_persist.go:261-266` 钩子2 msg_id 精确判等、`:277-290` 钩子2.5 contentHash 判等 + `eventAssertsDistinctMessage` 开关，另有 `GetByPlatformContent` / `GetByPlatformContentNormalized` 两级兜底），**不依赖该 DB 索引**。
+- **候选修法**：① 首选 `docs/architecture/MASTER_COMPETITIVE_DECISIONS.md` L205/L301/L336 的 **B-4**：出站 msg_id 改业务幂等键 `bc_{convID}_{ulid()}`，内容哈希仅用于入站去重（要求扩展端把 msg_id 当不透明串，需先核实插件代码无格式假设）；② 备选：唯一索引改部分索引 `WHERE direction='inbound'`（会削弱入站库级兜底强度，`verifyUniqueIndex` 与相关测试需连带调整）。
+- **本轮不实施的理由**：这是**安全权衡**（削弱防回环的库级兜底）+ 跨语言契约变更，两者都需人工拍板，不属于「发现即修」可自行决定的范围。
 
 ---
 
-## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md` D1–D12）
+## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md`）— ✅ 2026-10-08 收口轮逐条对账（实际共 D01–D23，23 条）
 
-12 条全部标「已决策-待开发」，规模大（schema 变更 + 第三方组件），需独立排期：
-D1 sparse 头 / D2 `sop_executions.executed_nodes` / D3 Saga 试点 / D4 回流 job /
-D5 failsafe-go 熔断 / D6 DBOS spike / D7 greeting 词条拆分 / D8 `ToolResult.ErrorCode` /
-D9 循环检测 / D10 异议 LLM 兜底 / D11 配置层收敛 / D12 权限矩阵外置 / D13 Redis WS seq。
+详见 `docs/tech-research/DECISIONS.md` 的「附二：2026-10-08 状态对账」小节（含逐条证据文件位置）。摘要：
+
+- **已闭环 12 条**（文档陈旧）：D01 置信度聚合（`smart_cs_orchestrator.go:1110-1122` Aggregate 优先 + 启发式降级，装配 `app/sales_engine_factory.go:66/:119`）/ D02 `executed_nodes`（`v3_29_0_sop_executed_nodes_migration.go`）/ D03 Saga 补偿（`sop_compensation.go:92` + `sop_dispatcher.go:110/:734`）/ D04 Bandit 回流（`bandit_reward_reflux_cron.go` 等 6 文件）/ D06 Checkpoint（`agent_checkpoint_repo.go` + 接线测试）/ D11 MultiModelVote+selfconsistency / D14 触达频控（`reach_gcra_limiter.go:88` → `reach_send_pipeline.go:249` → `app/reach_tool_wiring.go:34`，生产已接线）/ D15 WS seq+epoch / D16 HashEmbedding / D19 Conformal / D20 转人工条件门 / D22 BG/NBD。
+- **部分落地 2 条**：D07 greeting 未见单一词典实体（54 文件散落）；D08 主链已闭环（`tooluse/tool.go:59`），仅 `agent/runtime/context.go:14` 同名死声明待清（需连带改其测试，登记为卫生项）。
+- **确未落地 9 条**（各带实测证据与不吞理由）：D05 failsafe / D09 state_hash / D10 异议 LLM 兜底 / D12 配置层统一 / D13 Casbin / D17 sparse / D18 goldSet / D21 pg_search / D23 意图中间层。
 
 ---
 
@@ -171,3 +181,42 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
 - **D2**（OPT-FE-04/05/06/12/13/14、OPT-DOC-04/05、OPT-SEC-06/08）与 **E/F**：跨日工程量，须独立排期
 - **E 的分渠道验签**（wechat secrets 恒空 / 抖音 HMAC 口径）：安全项，且与 A 段共处同一热区，本轮刻意不与去重改动同批
 - `NewUserController` / `NewChatWSHub`：测试各引用 18 处，删构造会破测试编译，属独立决策面
+
+## 收口轮执行结果（2026-10-08 二次复查 + 文档整理）
+
+### (1) 对上一轮改动的头脑风暴式二次复查 —— 查出并修掉 4 个真问题
+
+先核实了几条「疑似风险」并确认**无需改动**（结论同样写进历史，避免下轮重复调研）：`sessionFinalWriteBudget(120s) > handScreenshotTimeout(60s)` ⇒ 收口截图不会必然假超时；`ExecuteSession` 到收口之间无提前 return ⇒ 正常路径都走到 `captureSessionReceipts`；`hand.screenshot` 缺 `base64` 键时返空串、`e.feedback == nil` 时短路 ⇒ 测试不会真打 LocalDriver；gin v1.12 静态段优先于 `:id` ⇒ `/dashboards/stream` 与既有 `/dashboards/:id` 共存无启动期 panic。
+
+| # | 问题 | 后果 | 修法 |
+|---|---|---|---|
+| 1 | `stepAuditMeta` 无条件写 `latency_ms`，而去重命中帧 / 预算耗尽帧传 `stepAuditMeta(0)` | 这两帧是**写步在 dispatch 之前就被闸门拦下**，延迟压根没被测量；写 `0` 会被读成「这一步瞬间完成」，与「没测」是两件事，审计面有歧义就会被人拿去做判断 | 新增 `latencyNotMeasured = int64(-1)`，`stepAuditMeta(durMs)` 仅在 `durMs >= 0` 时写该字段，两个调用点改传 `latencyNotMeasured` |
+| 2 | 预算耗尽帧 `appendCommandLog(..., *seq, ...)` **漏了 `*seq++`** | 该帧与上一帧共用同一 seq，按 seq 排序时两帧并列，「预算耗尽发生在哪一步之前/之后」无解 | 补 `*seq++` + 注释说明理由 |
+| 3 | `pendingReceipts`（`sessionID → []*receiptPending`）只在 `captureSessionReceipts` 里 delete | 会话中途 panic/提前退出 ⇒ entry 永不回收。Executor 是**进程级单例**，泄漏特征是「跑得越久越慢」，事后从日志看不出是哪次会话留下的 | `ExecuteSession` 顶部加 `defer e.discardPendingReceipts(session.ID)`（正常路径 capture 自己摘掉，此 defer 只兜异常路径）+ 新增该方法 |
+| 4 | `steps` 存在 sessions 表里可被写入，畸形编排能让单会话 `pendingReceipts` 无限增长 | 内存无界 | 新增 `receiptPendingCap = 200`，超限只 `logger.Errorf` 不挂起（**不阻断触达**：回执是增强层，宁可少留证据也不能让触达线停摆） |
+
+配套测试：新增 `internal/router/dashboard_route_tree_test.go`（9 条 `/dashboards` 路径同形注册，判静态段优先 + 注册不 panic；冲突的表现是**启动期 panic 整个服务起不来**，不是某个 404，必须在注册那一刻判）；`campaign_budget_test.go` 反转 1 条断言并新增 4 用例（seq 唯一性、`latencyNotMeasured` 区分、异常退出清理挂起项且不误删他会话、超限不阻断触达）。
+
+### (2) 整理所有文档 + 汇总剩余未完成计划并执行
+
+| 来源文档 | 处置 |
+|---|---|
+| `docs/architecture/MASTER_FEATURE_INVENTORY.md` | 5 行（用户画像 / 异议编排 / 分渠道验签 / 渠道标准化 / 出站下发）逐条核实回写；**其中 4 行是陈旧文档**，1 行（出站 msg_id）是真缺口但属安全权衡，已写明候选修法与不实施理由 |
+| `docs/tech-research/DECISIONS.md` | 实际 **D01–D23 共 23 条**（非早前记录的 D1–D13）。追加「附二：2026-10-08 状态对账」小节（472 → 524 行）：已闭环 12 / 部分落地 2 / 确未落地 9，逐条给证据文件位置与不吞理由 |
+| `docs/governance/78-OPTIMIZATION-TASKS.md` | OPT-SEC-04 残项闭环（`audit_logs` 表不存在 ⇒ 陈旧；真实泄漏面 `config_param_audit_logs` 已用 dbencrypt 加密）；新增「2026-10-08 收口轮」小节为剩余 9 项 + OPT-DOC-04 逐条写不吞理由；执行记录补一行 |
+| `docs/architecture/TECH_DEBT_TODOLIST.md` | H1–H5 / M1–M12 / L1–L6 早已全勾，无遗留，未改动 |
+| `docs/replan-2026-09/新规划任务清单.md` | 52 卡全部有执行结果回灌，T-P9-03 已核实落地、T-P9-04 已于上一轮完成，无遗留 |
+| `.sisyphus/cycle_state.json` | known_issues 逐条对账（`GetQualityMetrics` 已删、`ClickRedirect` 注释已改、`GET /ws/chat` 保持故意不接线并写明理由） |
+
+### (2a) 本轮新增的两处代码修复
+
+- **删 `GetQualityMetrics` 全 0.0 死桩**（`aiagent/rag/customer_service/`）：defs=2（impl + 接口）、calls=0。它返回一组 0.0 且 `err=nil`，任何未来接线的人都会把「没实现」读成「质量分是 0」——留着比删掉更坏。同步删 `interfaces.go` 里的接口方法与 `QualityMetrics` 结构体（`QualityAssessmentInterface` 实际使用点只有 `rag_customer.go:199` 的 `EvaluateResponse`）。
+- **`email_tracking.go` ClickRedirect 注释与实现不符**：`controller/email_tracking.go:73` 写「缺失时取 query 参数 url」，实现（`service/email_tracking.go:142`）只返回 `claim.Target`。**改注释而非加实现**——追踪端点一旦接受调用方指定的跳转地址就是任意域名的开放重定向出口，钓鱼链接可直接挂在可信路径下。
+- **Clue Level 改读库**（`customer_360.go`）：见上表 E 段。
+- **OPT-SEC-04 真实泄漏面闭环**（`internal/repository/config_param.go`）：见上表。
+
+### (2b) 对账方法学（留给下一轮，DECISIONS.md 内同款记录）
+
+1. **命中数只能证伪不能证真**。D14 一度因 `NewRedisGCRARateLimiter` 只有自身 + 测试引用被判「未接线」，打开调用链才发现真正的生产入口是同文件的 `NewGCRARateLimiterFromGlobalCache` ⇒ **判死资产前必须把整条调用链读完，不能只看构造器名**。本轮所有判「已落地」的项都要求确认到生产装配点（构造器 → 工厂/装配函数 → 生产调用方）。
+2. **区分「陈旧文档」与「真缺口」**，两类都要改文档，不能只改代码——本轮 MASTER_FEATURE_INVENTORY 的 5 行里有 4 行属前者。
+3. **确未落地项必须写不吞理由，且理由要核实到可执行粒度**，不能写「工程量大」这种下轮还得重新调研一遍的话。

@@ -68,8 +68,11 @@ func (c *EmailTrackingController) TrackingPixel(ctx *gin.Context) {
 
 // ClickRedirect GET /api/email/track/click/{token}?url=xxx
 //
-// 记录点击事件后 302 跳转到目标 URL
-// 优先使用 token 内 target；缺失时取 query 参数 url
+// 记录点击事件后 302 跳转到目标 URL。
+// 目标 URL 只认 token 内验签出来的 claim.Target，**刻意不接受 query 参数 url**：
+// 追踪端点一旦接受调用方指定的跳转地址，就成了任意域名的开放重定向出口（钓鱼链接
+// 可以直接挂在这个可信路径下）。旧注释写的「缺失时取 query 参数 url」与实现不符，
+// 且那条兜底路径本身不该存在——缺目标就 400，不猜。
 func (c *EmailTrackingController) ClickRedirect(ctx *gin.Context) {
 	token := ctx.Param("token")
 	if token == "" {
@@ -86,7 +89,6 @@ func (c *EmailTrackingController) ClickRedirect(ctx *gin.Context) {
 	}
 
 	if target == "" {
-
 		ctx.String(http.StatusBadRequest, "缺少跳转目标 URL")
 		return
 	}

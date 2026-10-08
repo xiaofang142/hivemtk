@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"strings"
-	"time"
 )
 
 // QualityAssessorImpl 质量评估器实现
@@ -142,20 +141,6 @@ func (qa *QualityAssessorImpl) EvaluateCoherence(ctx context.Context, response s
 	coherenceScore := calculateCoherenceScore(response)
 
 	return coherenceScore, nil
-}
-
-// GetQualityMetrics 获取质量指标
-func (qa *QualityAssessorImpl) GetQualityMetrics(ctx context.Context, sessionID string) (QualityMetrics, error) {
-	metrics := QualityMetrics{
-		SessionID:      sessionID,
-		AvgRelevance:   0.0,
-		AvgAccuracy:    0.0,
-		AvgCoherence:   0.0,
-		ResolutionRate: 0.0,
-		UpdateTime:     time.Now(),
-	}
-
-	return metrics, nil
 }
 
 func calculateSemanticSimilarity(text1, text2 string) float64 {

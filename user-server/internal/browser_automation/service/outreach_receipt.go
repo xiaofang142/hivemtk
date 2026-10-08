@@ -88,12 +88,30 @@ func (e *Executor) enqueueOutreachReceipt(ctx context.Context, task *model.Brows
 	p.evidence = evidence
 	// 与 stopRegistry / confirmRegistry 同纪律：Executor 是进程级单例，
 	// 不同用户的会话在同一个 map 上并存，裸 map 写入是数据竞态。
+	// 不走 defer：超限分支要先解锁再打日志（defer + 手动 Unlock = 二次解锁 panic）
 	e.receiptMu.Lock()
-	defer e.receiptMu.Unlock()
 	if e.pendingReceipts == nil {
 		e.pendingReceipts = make(map[uint][]*receiptPending)
 	}
+	if len(e.pendingReceipts[session.ID]) >= receiptPendingCap {
+		e.receiptMu.Unlock()
+		logger.Errorf("[BrowserExec] 回执挂起数超上限（%d）session=%d，本条不再挂起（触达本身已执行，不受影响）", receiptPendingCap, session.ID)
+		return
+	}
 	e.pendingReceipts[session.ID] = append(e.pendingReceipts[session.ID], p)
+	e.receiptMu.Unlock()
+}
+
+// receiptPendingCap 单会话待落回执行上限。触达步数由 steps JSON 决定、有界，
+// 但 sessions 表里 steps 是可写的——没有上限时，一条畸形编排就能把进程内存吃光。
+// 超限后只记日志不阻断触达：回执是增强层，宁可少留证据也不能让触达线停摆。
+const receiptPendingCap = 200
+
+// discardPendingReceipts 兜底清理（ExecuteSession 收口没跑到时兜底，见调用点 defer）。
+func (e *Executor) discardPendingReceipts(sessionID uint) {
+	e.receiptMu.Lock()
+	defer e.receiptMu.Unlock()
+	delete(e.pendingReceipts, sessionID)
 }
 
 // captureSessionReceipts 会话收口：拍一张验收截图 + 把本会话待落的回执行写进库。

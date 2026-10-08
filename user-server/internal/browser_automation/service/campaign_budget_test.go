@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"hivemtk-user/internal/browser_automation/dto"
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
 )
@@ -80,8 +81,10 @@ func TestCampaignBudgetExhaustedBlocksWriteStep(t *testing.T) {
 	if !strings.Contains(payload, "campaign_budget_exhausted") {
 		t.Errorf("审计帧应带预算归因，实得 %q", payload)
 	}
-	if !strings.Contains(payload, "latency_ms") {
-		t.Errorf("每步事件帧都应带 latency_ms（时间线最小公约数），实得 %q", payload)
+	if strings.Contains(payload, "latency_ms") {
+		// 预算闸在 dispatch 之前就把步拦下了，延迟没被测量过。
+		// 写 latency_ms:0 会被读成「这一步瞬间完成」——0 是合法测量值，与「没测」不是一回事。
+		t.Errorf("未下发的步不得带 latency_ms（0 会被误读为瞬时完成），实得 %q", payload)
 	}
 }
 
@@ -297,5 +300,90 @@ func TestStepAuditMeta(t *testing.T) {
 	meta = named.stepAuditMeta(3)
 	if meta["llm_model"] != "qwen-plus" || meta["llm_tokens"] != 0 {
 		t.Errorf("Brain 模式应带 llm_model/llm_tokens，实得 %+v", meta)
+	}
+}
+
+// 预算耗尽帧的 seq 必须自增：漏自增会让它与上一帧共用 seq，
+// 审计包按 seq 排序时两帧并列，「预算耗尽发生在哪一步之前」就没有答案了。
+func TestCampaignBudgetExhaustedFrameSeqIsUnique(t *testing.T) {
+	exec, ext, bundle := newWSE2E(t, happyReply)
+	exec.SetTaskRepository(&campaignBudgetRepo{ok: false})
+	task, session := bundle.seedTask(t, dedupeSteps, false)
+	task.CampaignKey = "k"
+	task.CampaignActBudget = 1
+	task.CampaignActUsed = 1
+
+	seq := 0
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
+	t.Cleanup(cancel)
+	// 先跑只读步产出若干帧，否则「seq 唯一」这条判据在单帧上没有分辨力
+	steps, err := ParseSteps([]byte(dedupeSteps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec.executeStepWithRetry(ctx, task, session, 0, steps[0], nil, &seq, "")
+	exec.executeStepWithRetry(ctx, task, session, 1, dedupePostCommentStep(t), nil, &seq, "https://www.xiaohongshu.com/explore/abc")
+
+	var seqs []int
+	if err := bundle.db.WithContext(ctx).Model(&model.BrowserCommandLog{}).
+		Where("session_id = ?", session.ID).Order("id asc").Pluck("seq", &seqs).Error; err != nil {
+		t.Fatalf("回读 command_log 失败: %v", err)
+	}
+	if len(seqs) < 2 {
+		t.Fatalf("至少应有两条审计帧，实得 %d（%s）", len(seqs), ext.actions())
+	}
+	seen := map[int]bool{}
+	for _, s := range seqs {
+		if seen[s] {
+			t.Errorf("审计帧 seq 重复：%v（同一 seq 会让排序失去意义）", seqs)
+			break
+		}
+		seen[s] = true
+	}
+}
+
+// 未下发的步不写 latency_ms；跑过的步才写。
+func TestStepAuditMetaOmitsLatencyWhenNotMeasured(t *testing.T) {
+	if _, ok := (&Executor{}).stepAuditMeta(latencyNotMeasured)["latency_ms"]; ok {
+		t.Error("latencyNotMeasured 帧不得带 latency_ms")
+	}
+	if got := (&Executor{}).stepAuditMeta(latencyNotMeasured); len(got) != 0 {
+		t.Errorf("latencyNotMeasured 帧应为空元数据，实得 %+v", got)
+	}
+	if got := (&Executor{}).stepAuditMeta(0); got["latency_ms"] != int64(0) {
+		t.Errorf("实测 0ms 必须与「没测」区分开，实得 %+v", got)
+	}
+}
+
+// 收口没跑到时（会话中途异常），挂起的回执必须被兜底摘掉：
+// Executor 是进程级单例，泄漏的特征是「跑得越久越慢」，日志里看不出来。
+func TestPendingReceiptsDiscardedOnAbnormalExit(t *testing.T) {
+	e := &Executor{outreachReceiptRepo: &recordingReceiptRepo{}, pendingReceipts: make(map[uint][]*receiptPending)}
+	e.pendingReceipts[7] = []*receiptPending{{platform: "xiaohongshu", action: "post_comment"}}
+	e.discardPendingReceipts(7)
+	if _, ok := e.pendingReceipts[7]; ok {
+		t.Error("异常退出会话的回执挂起项未被清理（进程级单例下会单调泄漏）")
+	}
+	// 未涉及会话不得被误删
+	e.pendingReceipts[8] = []*receiptPending{{}}
+	e.discardPendingReceipts(7)
+	if _, ok := e.pendingReceipts[8]; !ok {
+		t.Error("兜底清理误删了别的会话的回执挂起项")
+	}
+}
+
+// 挂起上限：畸形 steps 编排不得把进程内存吃光，且不得阻断触达本身。
+func TestPendingReceiptsCapDoesNotBlockOutreach(t *testing.T) {
+	repo := &recordingReceiptRepo{}
+	e := &Executor{outreachReceiptRepo: repo, pendingReceipts: make(map[uint][]*receiptPending)}
+	for i := 0; i < receiptPendingCap+50; i++ {
+		e.enqueueOutreachReceipt(context.Background(),
+			&model.BrowserTask{ID: 1, Platform: "xiaohongshu"},
+			&model.BrowserSession{ID: 9},
+			parsedStep{StepItem: dto.StepItem{Action: "post_comment", Value: "x"}},
+			nil, nil, map[string]any{"verified": true}, true)
+	}
+	if got := len(e.pendingReceipts[9]); got != receiptPendingCap {
+		t.Errorf("挂起数=%d want 上限 %d", got, receiptPendingCap)
 	}
 }

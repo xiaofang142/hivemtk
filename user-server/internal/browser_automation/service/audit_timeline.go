@@ -20,10 +20,20 @@ import (
 //     BrainService 的 lastPlan* 是跨 session 共享的计量槽（见其字段注释），并发 session 下
 //     归到具体一步本就不精确——写进审计帧是为了让时间线可读，不是为了当账本用。
 
-// stepAuditMeta 组装每步事件帧的可观测字段：latency_ms 恒写，llm_* 仅 Brain 模式有值时写。
+// latencyNotMeasured 传给 stepAuditMeta 表示「这一步没跑，延迟无从谈起」。
+const latencyNotMeasured = int64(-1)
+
+// stepAuditMeta 组装每步事件帧的可观测字段：latency_ms 恒写（除没跑的步），llm_* 仅 Brain 模式有值时写。
 // 显式编排的步仍会带 latency_ms（那部分是真事实），只是没有模型与 token。
+//
+// durMs 传 latencyNotMeasured = 写步闸门在 dispatch 之前就把步拦下了（去重命中 / 预算耗尽）。
+// 此时**不写 latency_ms 而不是写 0**：0 是一个合法测量值，它会被读成「这一步瞬间完成」，
+// 与「没测」完全是两件事——审计面上一旦出现这种歧义，人就会拿它做判断。
 func (e *Executor) stepAuditMeta(durMs int64) map[string]any {
-	meta := map[string]any{"latency_ms": durMs}
+	meta := map[string]any{}
+	if durMs >= 0 {
+		meta["latency_ms"] = durMs
+	}
 	if e.brain == nil {
 		return meta
 	}
