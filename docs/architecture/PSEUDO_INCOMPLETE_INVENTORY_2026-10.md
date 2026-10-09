@@ -218,6 +218,13 @@
 
 ### B1（最大一条）RAG/FAQ 语义答案缓存整条竖没有任何生产装配
 
+> **状态（2026-10-09 I16 复测）：并行泳道执行中，本泳道不碰。**
+> 工作区实况：`internal/app/faq_cache_wiring.go`（`??` 新件，读 `faq_answer_enabled`/`faq_ttl`/`default_semantic_threshold` 三键、
+> 开关默认 false 才装配、`llm.NewEmbeddingService()` 做 embedder）+ `internal/app/sales_engine_factory.go`（M，:143 调
+> `attachFAQAnswerCache`）+ `internal/service/smart_cs_faq_cache_test.go`（`??`）。下述「注入口零调用」的旧世界已在提交版改写：
+> 包级 `SetGlobalFAQAnswerCache`/`globalFAQCache` 已删，换成实例 setter `SmartCSOrchestrator.SetFAQAnswerCache`（成对注入、
+> 不调则字段恒 nil、读写两段分支不进）。B1 收口以该泳道提交为准。
+
 现状是"零件齐全、独缺接线"：
 
 | 段 | 位置 | 状态 |
@@ -245,6 +252,14 @@
 
 ### B2 触达回执的 message_id 与 message_hub 行没有公共键
 
+> **状态（2026-10-09 I16 复测）：最小切口已设计，因 reach 泳道并行占用暂缓。**
+> 设计：`TelegramIntegrationService` 新增 `SendMessageWithReceipt`（现 `SendMessageEx` 全量 body，成功时把 hub 出站键
+> `tg-out-{account}-{平台消息号}` 作为回执交回），`SendMessageEx` 改为委托并丢弃 id（签名不变、老调用方零影响）；
+> `IntegrationReachAdapter.SendTelegram` 改调它，替换 `tg-{acc}-{nano}` 假号 ⇒ `_tracking.message_id`（dispatch.go 抄入）
+> 变成可 join `message_hub` 的真键；无任何测试断言旧 nano 格式。**不做的原因：** `integration_reach_adapter.go`（M，574 行他人
+> WIP，Recall/SendCard/ListAccounts 区全在改）、`reach_pipeline*.go`、`bridge/reach_adapter.go` 均被并行泳道占用，动必撞。
+> Recall 反查（凭 hub 键取平台号）作为第二半随该泳道收口后再接。
+
 发送侧回 `tg-{account}-{纳秒}`，落库行是 `tg-out-{account}-{平台消息号}`。
 两个串都真实存在，但没有 join 键，因此：运营台读到的 `_tracking.message_id` 查不到任何行，
 `Recall` 也无法从回执反查平台消息号。根治需要 `SendMessageEx` 把平台 `message_id` 回传
@@ -253,11 +268,18 @@
 
 ### B3 知识库内容归属（A11 的另一半）
 
+> **状态（2026-10-09 I16 复测）：并行泳道执行中，本泳道不碰。**
+> 工作区实况：`internal/model/knowledge_base.go`、`internal/dto/knowledge_base.go`、`internal/repository/faq_entry.go`、
+> `internal/service/kb_cache_baseline_test.go`、`kb_canary_test.go` 与 app 侧 kb wiring 均为 M/??，归属口径正在该泳道成形。
+
 内容表（faq/sop/documents）与 `knowledge_bases` 行没有外键；`hit_count` 恒 0 且前端仍在传
 无人读取的 `kb_id`。要么给内容表加 `kb_id` 外键并回填（数据迁移 + 归属口径评审），
 要么把 KB 列表页的统计列摘掉。这是产品口径，不是补一个 COUNT 能诚实收掉的。
 
 ### B4 5 条 UNWIRED 台账行（原 9 条：项20d 于 2026-10 转 wired，项9/11a/11b 于 2026-10-09 I6 转 wired）
+
+> **状态（2026-10-09 I16 复测）：`check-unwired-assets.sh` 已不再被他泳道占用（工作区干净），但每行「接还是撤」是产品拍板项，不机械动。**
+> 防回归行的待加内容已写在 A1/A5/A6/A7 判据里成人能抄的形式，随各条能力真正接线时一并登记。
 
 `scripts/check-unwired-assets.sh` 现在按 UNWIRED 登记的格（项14、项19 的四条）
 本身是诚实的：它们明写"未接线"，并且漂移会让门变红。
@@ -274,6 +296,10 @@ I6 再接三格：项9 读侧（`NewSalesEventStatsService` 由工作台装配�
 共享索引下不能再叠一次改动。待加的行列在 A1/A5/A6/A7 的判据里已经写成人能抄的形式。
 
 ### B5 78 条"未接线"参数里要接哪些
+
+> **状态（2026-10-09 I16 复测）：`config_param_seeds.go`/`config_param.go` 被并行泳道占用（M），暂不接。**
+> 读点门（`check-config-param-readpoints.py`）规定接线必须同轮撤掉 Name 里的「未接线」标注（否则 STALE 红）、
+> 只撤标注不接线也红（UNDECLARED 红）——两头都要改种子文件，他泳道在改时叠改必撞。当前读数 43 有读取点 / 72 已声明未接线 / 0 / 0。
 
 A14 只是停止谎报。逐条接线需要按业务优先级挑（例如 `confidence.persona_default_threshold`
 背后是整条 `LLMPersonaEvaluator`，见 B6；`cache.faq_ttl` 背后是 B1）。
@@ -335,4 +361,19 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
 
 ## 5. 复测读数
 
-（本节在最后一轮门禁跑完后填，命令与读数逐条对应上面的判据。）
+（2026-10-09，I16 轮复测，命令与读数如下；三道门禁在仓库根执行。）
+
+| 判据 | 命令 | 读数 |
+| --- | --- | --- |
+| UNWIRED 台账与漂移 | `bash scripts/check-unwired-assets.sh --repo .` | exit 0，98/103 行已接线，其余按登记保持未接线 |
+| 已清零假性资产不再回潮 | `bash scripts/check-cleared-fake-assets.sh --repo .` | exit 0，通过 19 / 违规 0 / 检查对象缺失 0 |
+| 文档一致性 | `bash scripts/check-doc-consistency.sh` | exit 0，全部检查通过 |
+| 参数中心读取点 | `python3 scripts/check-config-param-readpoints.py` | exit 0，有读取点且未挂标注=43 / 未接线且已声明=72 / 未接线但未声明=0 / 声明过期=0（共 115） |
+| CI 门资产在库 | `git ls-files scripts/check-cleared-fake-assets.sh scripts/check-config-param-readpoints.py` | 两脚本在列（`68c1e54a` 首次入库；此前 `??` 未跟踪=I15 遗留缺陷，见改进清单 §五 I16） |
+| CI 门路径登记 | `python3 scripts/check-ci-gate-paths.py --repo .` | exit 0，15 份工作流 / 41 门站点 / 派生判据 9 / paths-ignore 0 |
+
+Go 侧读数（`DEVELOPER_DIR=/Library/Developer/CommandLineTools`，rc 用 `out=$(cmd); rc=$?` 形状取）：
+`CGO_ENABLED=0 go build ./...` rc=0；`go vet ./...` rc=0；`gofmt -l` 空。
+`go test` 现存 2 条既有失败，均归因并行泳道未提交 WIP、与本清单已落卡无关：
+`TestDefaultParamDefsCount`（他人 `config_param_seeds.go` WIP 种子 115≠114）、
+`TestFullPipeline_FailOnUnimplementedChannel`（他人 `reach_pipeline_dispatch.go` WIP `\"douyin\":true`）。
