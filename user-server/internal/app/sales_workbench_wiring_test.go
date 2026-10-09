@@ -42,6 +42,15 @@ func TestInitSalesWorkbenchRuntime_Assembles(t *testing.T) {
 		t.Error("Todos 应是空切片而不是 nil：前端把 null 当解析失败")
 	}
 
+	// I7 事件流读侧：GetTeamDashboard/GetChampionProfile 此前生产零调用方，
+	// 装配后必须能经工作台服务读出来（nil 只可能是读侧没接上）。
+	if dash := wb.GetTeamDashboard(ctx, 30); dash == nil {
+		t.Error("装配后 GetTeamDashboard 应返回仪表盘")
+	}
+	if champ := wb.GetChampionProfile(ctx, 30); champ == nil {
+		t.Error("装配后 GetChampionProfile 应返回画像")
+	}
+
 	// 二次调用必须幂等（重复装配不产生第二个实例可被观察到的分叉）。
 	if wb2 := InitSalesWorkbenchRuntime(); wb2 == nil {
 		t.Error("重复装配仍应返回实例")

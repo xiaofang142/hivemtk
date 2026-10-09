@@ -613,13 +613,15 @@ type TeamDashboard struct {
 }
 
 // GetTeamDashboard 获取团队综合仪表盘（journey 用于构建转化漏斗）
+//
+// journey 允许为 nil：漏斗是从草稿竖借来的内存态，草稿竖未装配时仪表盘照样要出
+// 其余三块（排行/AI 产能/销冠画像），少一块 ≠ 整个端点 500。
 func (s *SalesEventStatsService) GetTeamDashboard(ctx context.Context, journey *CustomerJourneyService, since time.Time) *TeamDashboard {
 	now := time.Now()
 	if since.IsZero() {
 		since = now.AddDate(0, 0, -30)
 	}
-	return &TeamDashboard{
-		Funnel:         journey.Funnel(ctx),
+	dash := &TeamDashboard{
 		TopSales:       s.GetTeamRanking(ctx, since, 5),
 		AIProductivity: s.GetAIProductivity(ctx, since),
 		Champion:       s.GetChampionProfile(ctx, since),
@@ -627,4 +629,13 @@ func (s *SalesEventStatsService) GetTeamDashboard(ctx context.Context, journey *
 		PeriodEnd:      now,
 		GeneratedAt:    now,
 	}
+	if journey != nil {
+		dash.Funnel = journey.Funnel(ctx)
+		if dash.Funnel != nil {
+			// 该字段此前永远是 0（只声明未赋值）。漏斗入口客户数是仪表盘里
+			// 唯一同源的"客户总量"口径，直接对齐它，不另起第二条查询。
+			dash.TotalCustomers = dash.Funnel.TotalEntered
+		}
+	}
+	return dash
 }

@@ -470,3 +470,82 @@ func TestWorkbench_ConcurrentGetOverview(t *testing.T) {
 	}
 	t.Logf("✅ 并发查询: %d 次", n)
 }
+
+// TestWorkbench_TeamDashboardAndChampion I7 事件流读侧：团队仪表盘与销冠画像
+// 此前 GetTeamDashboard/GetChampionProfile 全仓生产零调用方（只有测试叫）。
+// 工作台服务把它们接成 HTTP 读侧后，这里守住数据形状与两条防回归线：
+//  1. 数据在场时仪表盘四块齐全，TotalCustomers 对齐漏斗入口数；
+//  2. journey 为 nil（草稿竖未装配）不 panic —— 漏斗缺一块 ≠ 整个端点炸。
+func TestWorkbench_TeamDashboardAndChampion(t *testing.T) {
+	journey, _, _, stats, _, workbench := setupWorkbenchEnv(t)
+	ctx := context.Background()
+
+	stats.RegisterSales(ctx, SalesProfile{
+		SalesID: "s_dash", Name: "阿赛", Team: "华东", Tags: []string{"快单", "高客单"},
+	})
+	stats.RecordOrder(ctx, OrderEvent{
+		OrderID: "od_1", CustomerID: "c_dash", OwnerID: "s_dash", Amount: 800, OrderedAt: time.Now(),
+	})
+	stats.RecordFollowUp(ctx, FollowUpEvent{
+		CustomerID: "c_dash", OwnerID: "s_dash", IsAI: true, Result: "converted", OccurredAt: time.Now(),
+	})
+	for i := 0; i < 4; i++ {
+		_, _ = journey.Transition(ctx, "c_dash_f_"+intToStr(i), StageStranger, "test", "s", "test", nil)
+	}
+	_, _ = journey.Transition(ctx, "c_dash_f_0", StageInterested, "test", "s", "test", nil)
+
+	dash := workbench.GetTeamDashboard(ctx, 30)
+	if dash == nil {
+		t.Fatal("GetTeamDashboard 应返回仪表盘")
+	}
+	if dash.Funnel == nil {
+		t.Fatal("journey 已注入，漏斗不应为 nil")
+	}
+	if dash.TotalCustomers != dash.Funnel.TotalEntered {
+		t.Errorf("TotalCustomers 应对齐漏斗入口数 %d，实际 %d",
+			dash.Funnel.TotalEntered, dash.TotalCustomers)
+	}
+	if dash.AIProductivity == nil {
+		t.Error("AI 产能块不应为 nil")
+	}
+	if dash.Champion == nil {
+		t.Error("销冠画像块不应为 nil")
+	}
+	if len(dash.TopSales) == 0 {
+		t.Fatal("排行应至少包含 s_dash")
+	}
+	if dash.TopSales[0].SalesID != "s_dash" {
+		t.Errorf("榜首应是 s_dash，实际 %s", dash.TopSales[0].SalesID)
+	}
+	if dash.PeriodStart.After(dash.PeriodEnd) {
+		t.Error("窗口起点不应晚于终点")
+	}
+
+	champ := workbench.GetChampionProfile(ctx, 30)
+	if champ == nil {
+		t.Fatal("GetChampionProfile 应返回画像")
+	}
+	if champ.GeneratedAt.IsZero() {
+		t.Error("画像应带生成时间")
+	}
+
+	// journey 为 nil：漏斗缺块但不 panic（本条是 nil-guard 的直接回归线）。
+	noJourney := NewSalesWorkbenchService()
+	noJourney.SetStats(ctx, stats)
+	d2 := noJourney.GetTeamDashboard(ctx, 30)
+	if d2 == nil {
+		t.Fatal("无 journey 时仍应回非 nil 仪表盘（其余三块照常出）")
+	}
+	if d2.Funnel != nil {
+		t.Error("journey 未注入时漏斗应为 nil")
+	}
+
+	// stats 未注入：回 nil（"没装配"的诚实形态，控制器据此转 503）。
+	bare := NewSalesWorkbenchService()
+	if bare.GetTeamDashboard(ctx, 30) != nil {
+		t.Error("stats 未注入时 GetTeamDashboard 应回 nil")
+	}
+	if bare.GetChampionProfile(ctx, 30) != nil {
+		t.Error("stats 未注入时 GetChampionProfile 应回 nil")
+	}
+}

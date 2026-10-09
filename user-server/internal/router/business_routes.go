@@ -80,6 +80,13 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 	// 与 order-draft 端点同一口径 —— 控制器不自己 new 服务，装配层那次注入才有意义。
 	auth.GET("/sales-workbench/overview",
 		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetOverview)
+	// I7 事件流报表读侧：团队仪表盘 / 销冠画像。装配口径同上（服务取自
+	// app.InitSalesWorkbenchRuntime）；数据源 sales_events，与 SQL 口径的
+	// /api/ai-productivity/* 并存不替换（字段集不同，换源=改历史数字）。
+	auth.GET("/sales-workbench/team-dashboard",
+		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetTeamDashboard)
+	auth.GET("/sales-workbench/champion",
+		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetChampionProfile)
 	wvCtrl := controller.NewWebVitalsController()
 	auth.POST("/monitor/web-vitals", wvCtrl.Report)
 	mfSyncCtrl := controller.NewMarketingFlowSyncController()

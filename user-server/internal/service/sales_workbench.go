@@ -178,6 +178,40 @@ func (s *SalesWorkbenchService) GetOverview(ctx context.Context, salesID string)
 	return overview
 }
 
+// GetTeamDashboard 团队综合仪表盘（I7 事件流读侧）：排行/AI 产能/销冠画像/漏斗
+// 一次取齐，数据全部来自 sales_events + 草稿竖的内存漏斗。
+// stats 未注入时回 nil —— 与"没装配"同形态，控制器转 503 而不是回空壳。
+func (s *SalesWorkbenchService) GetTeamDashboard(ctx context.Context, days int) *TeamDashboard {
+	s.mu.RLock()
+	stats := s.stats
+	journey := s.journey
+	s.mu.RUnlock()
+	if stats == nil {
+		return nil
+	}
+	return stats.GetTeamDashboard(ctx, journey, sinceDays(days))
+}
+
+// GetChampionProfile 销冠画像（I7 事件流读侧）：按事件窗口给 TopPerformers、
+// 共性标签与洞察。stats 未注入时回 nil（同上）。
+func (s *SalesWorkbenchService) GetChampionProfile(ctx context.Context, days int) *ChampionProfile {
+	s.mu.RLock()
+	stats := s.stats
+	s.mu.RUnlock()
+	if stats == nil {
+		return nil
+	}
+	return stats.GetChampionProfile(ctx, sinceDays(days))
+}
+
+// sinceDays 把天数参数折算成窗口起点；<=0 走默认 30 天。
+func sinceDays(days int) time.Time {
+	if days <= 0 {
+		days = 30
+	}
+	return time.Now().AddDate(0, 0, -days)
+}
+
 func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID string, followup *FollowUpService, draft *OrderDraftService) []*WorkbenchTodo {
 	todos := make([]*WorkbenchTodo, 0)
 	now := time.Now()
