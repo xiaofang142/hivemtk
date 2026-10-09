@@ -466,6 +466,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { salesWorkbenchApi } from '@/api/salesWorkbench'
 import { useUserStore } from '@/stores/user'
 
@@ -539,7 +540,15 @@ async function loadAll() {
 }
 
 function goTodo(row) {
-  if (row?.url?.startsWith('/')) router.push(row.url)
+  if (!row?.url?.startsWith('/')) return
+  // 先解析再跳：跟进类待办的 /dashboard/followups/* 落点页还没交付（登记在
+  // 改进清单 A11），直接 push 会落 NotFound —— 没有的落点给提示，有的照跳。
+  const r = router.resolve(row.url)
+  if (r.matched.length) {
+    router.push(row.url)
+  } else {
+    ElMessage.warning('该待办的落点页尚未交付（改进清单 A11 跟进读侧）')
+  }
 }
 
 onMounted(loadAll)
