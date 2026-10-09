@@ -294,12 +294,19 @@ A14 只是停止谎报。逐条接线需要按业务优先级挑（例如 `confi
 其余四条按本表"处置"列执行完毕——删除后 `go build`/`go vet`/三门禁/参数读取点门全绿，
 service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（seeds 计数、reach dispatch 加 `"douyin":true`），与本删除零关联。
 
-### B7 门禁的 CI 面
+### B7 门禁的 CI 面（2026-10-09 I15 已处置）
 
-- 本轮新增/改动的门目前只有本地执行点（`make audit` 的 20 个静态门里没有 Go 测试、也没有 lint）。
-- Go lint 在 CI 只有一个执行点：`user-server-ci` 的 `static-gates` 步骤；
-  `lint.yml` 注释写着 golangci-lint，但那个 workflow 里没有对应 job。
-- 新门（参数读取点、未接线标注）要进 CI 需要单独一步；否则它是"本地绿、CI 不知道"的门。
+- 原判断（2026-10-09 早）："新门只有本地执行点；`make audit` 没有 Go 测试也没有 lint"——
+  复测后一半不成立：`user-server-ci.yml` 的 `static-gates` 早有 go vet/gofmt/golangci-lint（架构护栏 depguard），
+  test job 有 `go test`（Coverage 系），audit 与 CI 是两条互补的静态线，audit 不含测试≠测试没进 CI。
+- 真缺口（成立）：两道新门只在 `make audit` 里跑——`check-config-param-readpoints.py` 与
+  `check-cleared-fake-assets.sh` 属"本地绿、CI 不知道"。
+- **已修（I15）**：两门各加一步进 `user-server-ci.yml` 的 `static-gates`（排在 check-unwired-assets 后），
+  `on.push.paths` 与 `on.pull_request.paths` 同步登记两枚脚本本体（`check-ci-gate-paths.py` 的规矩：
+  被作业执行的门，其脚本必须在触发面里，否则"只改判据"的提交不重跑这道门）；
+  `lint.yml` 头注释"Lint：golangci-lint（Go）+ ESLint"改真话（Go lint 唯一执行点在 user-server-ci，本工作流只有 ESLint）。
+  验证：`check-ci-gate-paths.py` 绿（15 份工作流/41 门站点）、其用例 `check-ci-gate-paths.test.sh` 全过、
+  `check_workflow_refs.py` 绿、两门本地实跑 rc=0、YAML 解析通过。
 
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
