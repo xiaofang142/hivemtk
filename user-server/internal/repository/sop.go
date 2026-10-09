@@ -244,7 +244,7 @@ func (r *SopAgentRepository) UpdateActive(ctx context.Context, id uint, isActive
 }
 
 // List 列出 SOP 智能体（scenario 为空时不筛选），分页返回
-func (r *SopAgentRepository) List(ctx context.Context, scenario string, page, pageSize int) ([]model.SOPAgent, int64, error) {
+func (r *SopAgentRepository) List(ctx context.Context, scenario, status string, page, pageSize int) ([]model.SOPAgent, int64, error) {
 	if r == nil || r.db == nil {
 		return nil, 0, errors.New("sop agent repository not initialized")
 	}
@@ -257,6 +257,14 @@ func (r *SopAgentRepository) List(ctx context.Context, scenario string, page, pa
 	q := r.db.WithContext(ctx).Model(&model.SOPAgent{})
 	if scenario != "" {
 		q = q.Where("scenario = ?", scenario)
+	}
+	if status != "" {
+		switch status {
+		case "active":
+			q = q.Where("is_active = ?", true)
+		default:
+			q = q.Where("is_active = ?", false)
+		}
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

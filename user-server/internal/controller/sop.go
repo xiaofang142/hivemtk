@@ -119,12 +119,13 @@ func (c *SOPController) Get(ctx *gin.Context) {
 // @Router       /api/sops [get]
 func (c *SOPController) List(ctx *gin.Context) {
 	scenario := ctx.Query("scenario")
+	status := ctx.Query("status")
 	page, pageSize, err := pagination.Parse(ctx)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := c.svc.List(ctx.Request.Context(), scenario, page, pageSize)
+	list, total, err := c.svc.List(ctx.Request.Context(), scenario, status, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

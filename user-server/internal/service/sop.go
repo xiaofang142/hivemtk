@@ -284,11 +284,26 @@ func (s *SOPService) Get(ctx context.Context, id uint) (*model.SOPAgent, error) 
 		}
 		return nil, err
 	}
+	agent.Status = agentStatusString(agent.IsActive)
 	return agent, nil
 }
 
-func (s *SOPService) List(ctx context.Context, scenario string, page, pageSize int) ([]model.SOPAgent, int64, error) {
-	return s.agentRepo.List(ctx, scenario, page, pageSize)
+func (s *SOPService) List(ctx context.Context, scenario, status string, page, pageSize int) ([]model.SOPAgent, int64, error) {
+	list, total, err := s.agentRepo.List(ctx, scenario, status, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		list[i].Status = agentStatusString(list[i].IsActive)
+	}
+	return list, total, nil
+}
+
+func agentStatusString(active bool) string {
+	if active {
+		return "active"
+	}
+	return "inactive"
 }
 
 func (s *SOPService) Delete(ctx context.Context, id uint) error {
@@ -558,11 +573,12 @@ func (s *SOPService) MatchByIntent(ctx context.Context, intentType string) ([]mo
 
 func (s *SOPService) Stats(ctx context.Context) (map[string]int64, error) {
 	stats := map[string]int64{
-		"total":   0,
-		"active":  0,
-		"running": 0,
-		"success": 0,
-		"failed":  0,
+		"total":    0,
+		"active":   0,
+		"inactive": 0,
+		"running":  0,
+		"success":  0,
+		"failed":   0,
 	}
 	totalAgents, err := s.agentRepo.CountAll(ctx)
 	if err != nil {
@@ -597,6 +613,7 @@ func (s *SOPService) Stats(ctx context.Context) (map[string]int64, error) {
 
 	stats["total"] = totalAgents
 	stats["active"] = activeAgents
+	stats["inactive"] = totalAgents - activeAgents
 	stats["running"] = runningExecs
 	stats["success"] = successExecs
 	stats["failed"] = failedExecs
@@ -938,40 +955,4 @@ func InitSOPService(db *gorm.DB, dispatcher *llm.Dispatcher) *SOPService {
 		sopInstance = NewSOPService(db, dispatcher)
 	})
 	return sopInstance
-}
-
-func NewWelcomeSOP() *CreateRequest {
-	return &CreateRequest{
-		Name:        "客户欢迎 SOP",
-		Scenario:    "welcome",
-		Description: "新客户接入时的标准欢迎流程（14 节点类型示范）",
-		TriggerType: SOPTriggerAuto,
-		SOPGraph: SOPGraph{
-			Name:     "welcome_graph",
-			Scenario: "welcome",
-			Version:  "2.0",
-			Entry:    "start",
-			Exits:    []string{"end"},
-			Nodes: []SOPNode{
-				{ID: "start", Type: SOPNodeTypeStart, Name: "开始", Next: []string{"greeting"}},
-				{
-					ID:          "greeting",
-					Type:        SOPNodeTypeGreeting,
-					Name:        "问候",
-					Description: "标准化客户问候",
-					Prompt:      "您好，欢迎咨询，我是您的专属顾问",
-					Next:        []string{"inquire"},
-				},
-				{
-					ID:          "inquire",
-					Type:        SOPNodeTypeInquire,
-					Name:        "询问需求",
-					Description: "了解客户核心诉求",
-					Prompt:      "请问您想了解什么产品或服务？",
-					Next:        []string{"end"},
-				},
-				{ID: "end", Type: SOPNodeTypeEnd, Name: "结束"},
-			},
-		},
-	}
 }

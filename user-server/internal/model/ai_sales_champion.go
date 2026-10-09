@@ -126,6 +126,7 @@ type SOPAgent struct {
 	SOPGraph       JSONMap        `gorm:"type:text;not null" json:"sop_graph"`
 	Version        int            `gorm:"default:1" json:"version"`
 	IsActive       bool           `gorm:"default:true;index" json:"is_active"`
+	Status         string         `gorm:"-" json:"status,omitempty"` // 派生字段：由 IsActive 计算，供列表/详情展示与筛选
 	Priority       int            `gorm:"default:0" json:"priority"`
 	ExecutionCount int            `gorm:"default:0" json:"execution_count"`
 	SuccessCount   int            `gorm:"default:0" json:"success_count"`
