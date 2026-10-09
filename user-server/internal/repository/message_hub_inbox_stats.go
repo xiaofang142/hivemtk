@@ -55,7 +55,10 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		Where("direction = ?", "inbound"), start, end).Count(&inbound)
 	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
 		Where("direction = ?", "outbound"), start, end).Count(&outbound)
+	// 未读只算入站消息：出站消息由本系统发出，不存在"待本系统阅读"的语义，
+	// 计入会让「未读」大于「接收」，出现逻辑矛盾的读数（实测 297 > 257）。
 	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = ?", "inbound").
 		Where("(is_read = ? OR is_read IS NULL)", false), start, end).Count(&unread)
 
 	stats := &HubStatsResult{
