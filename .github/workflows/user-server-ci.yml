@@ -17,6 +17,10 @@ on:
       - 'scripts/arch-l4-getdb.baseline'
       - 'scripts/check-date-bucket-tz.sh'
       - 'scripts/check-unwired-assets.sh'
+      # 已清零的假性未完成资产门：判据脚本本体进触发面，改它必须重跑（check-ci-gate-paths 的规矩）。
+      - 'scripts/check-cleared-fake-assets.sh'
+      # 参数中心读取点门：每条参数要么有人读、要么文案承认未接线（同上，脚本本体即判据）。
+      - 'scripts/check-config-param-readpoints.py'
       - 'scripts/date-bucket-tz.baseline'
       # 下面两行是 `test-nil-deref` 作业的命门：门自己的判据与它读的基线若不进触发面，
       # "只改判据"/"只动基线"这类提交就根本不重跑这道门（platform docs-link-check.yml 的教训）。
@@ -40,6 +44,8 @@ on:
       - 'scripts/arch-l4-getdb.baseline'
       - 'scripts/check-date-bucket-tz.sh'
       - 'scripts/check-unwired-assets.sh'
+      - 'scripts/check-cleared-fake-assets.sh'
+      - 'scripts/check-config-param-readpoints.py'
       - 'scripts/date-bucket-tz.baseline'
       - 'scripts/check-test-nil-deref.py'
       - 'scripts/test-nil-deref.baseline'
@@ -157,6 +163,18 @@ jobs:
         run: |
           chmod +x scripts/check-unwired-assets.sh
           bash scripts/check-unwired-assets.sh
+
+      - name: 已清零的假性未完成资产不得长回来
+        # 2026-10-09（B7）：本门此前只在本地 `make audit` 里跑——"本地绿、CI 不知道"的门
+        # 与坏掉的门长得一样（同 check-unwired-assets 当年接 CI 的理由）。19 条判据来自
+        # docs/architecture/PSEUDO_INCOMPLETE_INVENTORY_2026-10.md A 类：已删的说谎符号
+        # 不得原样长回、已修的真接线不得断。无 DB 无网络，纯 grep。
+        run: bash scripts/check-cleared-fake-assets.sh --repo .
+
+      - name: 参数中心读取点门（要么有人读、要么承认未接线）
+        # 2026-10-09（B7）：同上从 make audit 常驻化到 CI。判据现读 user-server 种子与
+        # 非测试 Go 源，接线后不撤"未接线"标注、或新参数既没人读也不自我声明，都当场红。
+        run: python3 scripts/check-config-param-readpoints.py
 
       - name: CI 的 PG 名额与代码侧池上界必须同源
         # §23.21 第 8 段⑤ 的常驻化：此前"CI 容器只有默认名额、代码侧池上界比它大"这件事

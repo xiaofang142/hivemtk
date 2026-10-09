@@ -1,5 +1,9 @@
-# Lint：golangci-lint（Go）+ ESLint（user-web 主应用 + Bridge 扩展）
+# Lint：ESLint（user-web 主应用 + Bridge 扩展）
 # 文档: https://golangci-lint.run/usage/install/
+#
+# Go 侧 lint（golangci-lint，架构护栏 depguard）不在本工作流：它的唯一执行点是
+# user-server-ci.yml 的 static-gates 步骤（2026-10-09 B7 复核实测）。此前本文件
+# 头注释声称"Lint：golangci-lint（Go）+ ESLint"但通篇无 Go job，属口径谎言，已改。
 #
 # 架构合规检查（五层架构）已合并到 user-server-ci.yml（test job 中），
 # 不再在此处重复执行。参见 OPT-CI-07。
