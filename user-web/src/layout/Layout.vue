@@ -195,6 +195,9 @@ const topMenus = ref([
       // AI 谈单产出的待确认草稿的人工入口：确认/取消/改价都在这一页。
       // 深链 /dashboard/drafts/:id 与工作台聚合待办生成的 URL 同一条（sales_workbench.go）。
       { key: 'orderDraft', title: '订单草稿', icon: 'Document', path: '/dashboard/drafts', roles: ['admin', 'manager', 'sales'] },
+      // 销售工作台：个人待办+今日/月度与团队排行/漏斗/销冠画像（/api/sales-workbench/* 三读口）。
+      // 与 salesCockpit（AI 运维聚合的驾驶舱）是两套域，分开两个入口。
+      { key: 'salesWorkbench', title: '销售工作台', icon: 'Notebook', path: '/sales-workbench', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]
   },

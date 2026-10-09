@@ -97,6 +97,7 @@ const moduleNames = [
   "leadMining",
   "browserAutomation",
   "orderDraft",
+  "salesWorkbench",
 ];
 
 const eagerLoadedRoutes = [];
@@ -154,6 +155,9 @@ const pathToModule = {
   // 首段 'dashboard' 映射到 orderDraft 模块 —— ensureRouteLoaded 按首段找模块名，
   // 没有这条映射，深链会落进 NotFound 而不是草稿页。
   'dashboard': 'orderDraft',
+  // 销售工作台页挂在 /sales-workbench，首段 'sales-workbench'（含连字符）
+  // 映射到 salesWorkbench 模块 —— 不映射则按原样找模块名找不到，进不了懒装配白名单。
+  'sales-workbench': 'salesWorkbench',
   'douyin': 'douyinCard',
   'xiaohongshu': 'xiaohongshuCard',
   'kuaishou': 'kuaishouCard',
