@@ -146,7 +146,7 @@ graph TD
     Internet[互联网]
 
     subgraph 入口层
-        CF["Cloudflare / 反向代理层（可选）<br/>域名解析 / SSL 终结 / 反向代理"]
+        CFNginx["Cloudflare / Nginx（可选）<br/>域名解析 / SSL 终结 / 反向代理"]
     end
 
     subgraph 客户本地服务器
@@ -161,8 +161,8 @@ graph TD
         end
     end
 
-    Internet -- "HTTPS 443/80" --> CF
-    CF -- "HTTPS" --> UserServer
+    Internet -- "HTTPS 443/80" --> CFNginx
+    CFNginx -- "HTTPS" --> UserServer
     UserServer --> LlamaHost
     UserServer --> MtkPostgres
     UserServer --> MtkRedis

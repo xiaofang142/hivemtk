@@ -130,7 +130,7 @@ CORS_ALLOW_ORIGINS_USER="https://chat.example.com,https://admin.example.com"
 
 1. token 过期或未传——浏览器 WebSocket API 不能带自定义 header，token 必须走 query 参数；
 2. query 里 `agent_id` 与 token 内 `user_id` 不一致（鉴权强制对齐）；
-3. 反向代理层 未透传 Upgrade 头。
+3. Nginx 未透传 Upgrade 头。
 
 **修复**：
 
@@ -138,7 +138,7 @@ CORS_ALLOW_ORIGINS_USER="https://chat.example.com,https://admin.example.com"
 const ws = new WebSocket(`wss://chat.example.com/ws?agent_id=${userId}&token=${token}`)
 ```
 
-反向代理层 参考配置见[部署运维手册 §七 模式 B](DEPLOYMENT_GUIDE.md)（关键是 `/ws/` location 的 Upgrade 头与 86400s 读超时）。
+Nginx 参考配置见[部署运维手册 §七 模式 B](DEPLOYMENT_GUIDE.md)（关键是 `/ws/` location 的 Upgrade 头与 86400s 读超时）。
 
 ### 2.3 登录后频繁被踢出
 

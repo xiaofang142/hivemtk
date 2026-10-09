@@ -11,14 +11,14 @@
 >
 > | 位置 | 文档说法 | 代码实测 |
 > |------|----------|----------|
-> | §一 / §九 | `POST /api/v1/ai/chat`、`GET /api/v1/ai/chat/poll`、`/api/v1/ai/health`、`/api/v1/ai/features` | `internal/router/` 里 **0 处注册**；按本文档实现调用方一律 404。真实的智能体对话入口只有两个可调用：`POST /api/ai-agents/:id/test`（body `{customer_id, message}`，`controller/ai_agent.go:414-437`）、`GET /api/ws/visitor`（`router/chat_routes.go:51`）；渠道侧由 webhook 触发，没有 REST 同步对话端点。**2026-09-29 订正**：本表旧版还把 `GET /ws/chat`（`router/ws.go`）算作第三个入口，实测 `RegisterWSRoutes` 全树零调用方（那句"Setup() 中调用"的注释是错的），这条路由从未注册进引擎，`GET /ws/chat` 会落到 SPA 的 NoRoute 兜底拿到 200 + index.html —— 它是死代码，不是入口 |
+> | §一 / §九 | `POST /api/v1/ai/chat`、`GET /api/v1/ai/chat/poll`、`/api/v1/ai/health`、`/api/v1/ai/features` | `internal/router/` 里 **0 处注册**；按本文档实现调用方一律 404。真实的智能体对话入口只有两个可调用：`POST /api/ai-agents/:id/test`（路由 `controller/ai_agent.go:39`；handler `Test` 在 `:409-433`，body `{customer_id, message}` 的字段定义在 `:415-418`）、`GET /api/ws/visitor`（`router/chat_routes.go:51`）；渠道侧由 webhook 触发，没有 REST 同步对话端点。**2026-09-29 订正**：本表旧版还把 `GET /ws/chat`（`router/ws.go`）算作第三个入口，实测 `RegisterWSRoutes` 全树零调用方（那句"Setup() 中调用"的注释是错的），这条路由从未注册进引擎，`GET /ws/chat` 会落到 SPA 的 NoRoute 兜底拿到 200 + index.html —— 它是死代码，不是入口 |
 > | §六 | 示例监听 `localhost:8080`，响应体是 `{trace_id, session_id, reply, layer, reason, wall_ms, model, tokens, llm_skipped, steps}` | user-server 实际监听 **8204**（`docs/PORT_REGISTRY.md` / `config.yaml`），8080 无从生效；响应外层是 `{code:0, message, data}`（`internal/pkg/utils/response/response.go:40-48`），`data` 为 `dto.SalesResponse`（`dto/sales.go:302-331`）——**没有** `trace_id`/`session_id`/`layer`/`reason`/`wall_ms`/`model`/`tokens`/`llm_skipped` 这些键，对应实名为 `latency_ms`/`llm_model`/`cost_tokens`，Layer 决策只在流式 chunk 与 `layer_decision_logs` 里出现 |
 > | §三 | 5 个开关、默认"性能优化全开" | `internal/pkg/featureflag/flag.go:61-70` 注册 **6 个**（多出 `sse_bridge`），且 parallel/stream/layer1/fallback_chain/debug_log **默认全为 false**，只有 `sse_bridge` 默认 true |
 > | §三 | `viper.WatchConfig + SIGHUP 热加载`、`systemctl reload` 即回滚 | 全仓无 `viper.WatchConfig`、无 `SIGHUP` 处理（`signal.Notify` 只在 `cmd/bridge-mock`）；机制是启动读 env + 每 5s 轮询**本进程已有**的 env ⇒ 改 `FF_*` 必须**重启进程**，`reload` 不生效 |
 > | §五 | `reason` 取 `faq_hit/sop_hit/fallback/layer1_disabled`，`layer` 取 `layer1/layer2/fallback_template/fallback_cache` | reason 真值集是 `internal/dto/layer_chunk.go:18-29` 的 10 个常量（文档少列 `low_confidence_skip` 等）；layer 只有 `layer1`/`layer2` 两值，`fallback_template`/`fallback_cache` **不存在** |
 > | §5.3 | reason 落库值 `faq_match/sop_template/llm_response/7b_fail_3b/cache_hit` | 前四个作为 reason 字面量 **0 命中**（`sop_template` 只在 `cmd/seed/seed_assets.go` 当资产编码用），落库写的是上面那批 `faq_hit` 系列 |
 > | §七 | `X-Auth-Token` + `tk_live_*/tk_svc_*/tk_ops_*` + `auth-service` 签发 | 四个符号全仓 **0 命中**；现网鉴权是 `Authorization: Bearer <JWT>`（`internal/middleware/jwt.go:38`），FeatureFlag 的真实读接口是 `/api/feature-flags`（`internal/router/business_routes.go:161`，`AdminAuthMiddleware` 保护） |
-> | §八 | 四层限流 20/10/5 req/s + 单 session 30 req/60s；响应体 `{"error":"rate_limited",...}`；`AI_RATE_LIMIT_DISABLED` 熔断 | 实装：全局 per-IP 令牌桶 `RPS:1000 / BucketSize:20000`（`internal/router/router.go:205`，豁免 `/api/bridge/ingest`、`/api/ws/channel`）+ 按路径 `rate_quota.go` + 访客 `PerIPRPS:20`；429 体是 `{"code":429,"msg":"请求过于频繁，请稍后再试","retry_after":5}`；无 `X-RateLimit-*` 头；`AI_RATE_LIMIT_DISABLED` **0 命中** |
+> | §八 | 四层限流 20/10/5 req/s + 单 session 30 req/60s；响应体 `{"error":"rate_limited",...}`；`AI_RATE_LIMIT_DISABLED` 熔断 | 实装：全局 per-IP 令牌桶 `RPS:1000 / BucketSize:20000`（`internal/router/router.go:211-218`，豁免 `/api/bridge/ingest`、`/api/ws/channel`）+ 按路径 `rate_quota.go` + 访客 `PerIPRPS:20`；429 体是 `{"code":429,"msg":"请求过于频繁，请稍后再试","retry_after":5}`；无 `X-RateLimit-*` 头；`AI_RATE_LIMIT_DISABLED` **0 命中** |
 > | §十一 | 5 个 Prometheus 指标名 | 仓内无 Prometheus 依赖，5 个指标名 **0 命中**；有自研 `internal/pkg/metrics` + `MetricsMiddleware`，但**没有任何注册点**（只在注释里示例），故 `/metrics` 不暴露；可观测面只有 §5.3 的 `layer_decision_logs` 落库 |
 > | §三 | 6 个开关都当作可用旋钮 | 只有 `FF_PARALLEL`/`FF_LAYER1`/`FF_DEBUG_LOG` 有非测试消费点；`FF_STREAM` 无人读，`FF_FALLBACK_CHAIN` 只被没接进链路的降级树读，`FF_SSE_BRIDGE` 只作为 `sse_enabled` 上报（详见 §三 消费表） |
 > | §十 | 4 级降级链（7B→3B→Redis 24h 缓存→10 条模板）、连续 3 次失败禁用 5 分钟 | 降级树 `DecisionTree` 非测试 0 调用点＝没接线；缓存在 PG 表 `rag_answer_cache` 且无 TTL；模板是 1 条可配字符串；熔断实为 5 次失败 / 60s（`provider_failover.go:33-34`） |
@@ -41,7 +41,7 @@ AI 智能体性能优化交付两类对外接口：REST 同步返回 + HTTP 长�
 |------|--------|------|------|------|------|
 | REST | POST | `/api/v1/ai/chat` | 同步返回完整回复 | **保留** | 🔴 未注册；等价调用面是 `POST /api/ai-agents/:id/test`（`GET /ws/chat` 也不算——它同样没接线，见上表 2026-09-29 订正） |
 | REST | GET | `/api/v1/ai/chat/poll?session_id=xxx` | 长轮询增量获取（30s 超时） | **保留** | 🔴 未注册；增量只在 `router/ws.go` 的 `/ws/chat` 上按帧下发，而该路由**当前无调用方、不可达** |
-| REST | GET | `/api/v1/ai/health` | AI Agent 健康检查 | 新增 | 🔴 未注册；有全局 `/health`、`/healthz`、`/readyz`（`router.go:196-198`），但没有 AI 专属健康检查 |
+| REST | GET | `/api/v1/ai/health` | AI Agent 健康检查 | 新增 | 🔴 未注册；有全局 `/health`、`/healthz`、`/readyz`（`router.go:202-204`），但没有 AI 专属健康检查 |
 | REST | GET | `/api/v1/ai/features` | 查询当前 FeatureFlag 状态 | 新增 | 🔴 未注册；DB 版开关在 `GET /api/feature-flags`（`business_routes.go:161`，需管理员），**env 版 6 个开关没有任何查询端点** |
 
 > TG / WeCom / Feishu / Xianyu 等外部渠道 webhook 继续走 `controller/ai_agent.go` 老路径，不受本次改造影响。
@@ -103,7 +103,7 @@ AI 智能体性能优化交付两类对外接口：REST 同步返回 + HTTP 长�
 `aiagent/llm/dispatcher.go` + `provider_failover.go`（见 §十 实测口径），流式实际走 WS（见 §九 实测口径）。
 
 **热加载的真相（原稿写的是 viper + SIGHUP，代码里没有）：** `flag.go:34` 的 `PollInterval = 5s`
-起一个后台 poller 周期性重读 `os.Getenv`。进程环境变量在进程存活期内不会自己变，
+起一个后台 poller 周期性重读 `os.LookupEnv`（`flag.go:197 readEnvNamed`，取的是本进程环境）。进程环境变量在进程存活期内不会自己变，
 所以"改 env 不重启即生效"只在**测试里直接改 env** 或将来接了真正的注入源时成立；
 部署面上改 `FF_*` 需要 `systemctl restart user-server`（或容器重建）。
 全仓没有 `viper.WatchConfig`，也没有 `SIGHUP` 处理（`signal.Notify` 仅出现在 `cmd/bridge-mock`）。
@@ -296,7 +296,7 @@ type LayerDecision struct {
 > # 200: {"code":0,"message":"测试成功","data":{ ...dto.SalesResponse... }}
 > ```
 >
-> （字段名是 `message` 而非 `text`：`controller/ai_agent.go:421-424`；`customer_id` 可省。）
+> （字段名是 `message` 而非 `text`：请求体结构体 `controller/ai_agent.go:415-418`，`Message` 的 json tag 在 `:417`、`binding:"required"`；`customer_id` 可省。）
 >
 > **6.2 的替代（WS 增量，2026-09-29 起标注为不可用）：** `GET /ws/chat?token=<JWT>` 握手后发
 > `{"type":"chat","user_message":"...","platform":"web"}`（`controller/chat_ws.go:311-317`），
@@ -307,7 +307,7 @@ type LayerDecision struct {
 > （`HandleChatWS` 只校验 `session_id`/`customer_id` 非空，不校验任何凭据）。
 > 主动取消：客户端关连接即可，`cancel` 类型不下发（见 §九）。
 
-### 6.1 REST `/api/v1/ai/chat` (curl)
+### 6.1 REST `/api/v1/ai/chat` (curl) — 设计稿·端点未实装
 
 **请求：**
 
@@ -369,7 +369,7 @@ curl -X POST http://127.0.0.1:8204/api/v1/ai/chat \
 }
 ```
 
-### 6.2 HTTP 长轮询 `/api/v1/ai/chat/poll`
+### 6.2 HTTP 长轮询 `/api/v1/ai/chat/poll`（设计稿·该端点从未实装）
 
 **发起长轮询请求（同步返回首包，后续增量通过轮询获取）：**
 
@@ -498,7 +498,7 @@ X-Request-Id: req-20260731-0001
 
 > **实测口径（2026-09-22）**：下面 8.1~8.3 的三层阈值、`X-RateLimit-*` 响应头和
 > `AI_RATE_LIMIT_DISABLED` 熔断都**没有实装**（三者在 `user-server` 全仓 0 命中）。现网真实限流是：
-> 全局 per-IP 令牌桶 `RPS:1000 / BucketSize:20000`（`internal/router/router.go:205-212`，
+> 全局 per-IP 令牌桶 `RPS:1000 / BucketSize:20000`（`internal/router/router.go:211-218`，
 > 豁免 `/api/bridge/ingest`、`/api/ws/channel`）+ 按路径配额表 `rate_quota.go` + 访客通道
 > `PerIPRPS:20`（`middleware/visitor_rate_limit.go:24`，另有按渠道的限流）。三者 429 响应体各不相同：
 > 全局桶 `{code:429,msg:"请求过于频繁，请稍后再试",retry_after:5}`（`ratelimit.go:164-169`）、
@@ -507,8 +507,8 @@ X-Request-Id: req-20260731-0001
 > `visitor_rate_limit.go:142-146` / `154-158`）。三者都**没有** 8.2 里的 `X-RateLimit-*` 头，也不发
 > `Retry-After`（本仓该头只出现在登录防爆破 `middleware/brute_force.go:146` 和 webhook `controller/webhook.go:156`）。
 > 要临时放开只能改代码里的阈值后重启进程，没有环境变量开关。8.1 里"L4 网关 10 req/s"与
-> `middleware/ratelimit.go:26-30` 的 `DefaultRateLimitConfig.RPS:10` 数值只是巧合：该默认值除测试外
-> **0 引用**，实际生效的是 `router.go:205-212` 显式传入的 1000。
+> `middleware/ratelimit.go:26-30` 的 `DefaultRateLimitConfig.RPS:10` 数值只是巧合：该默认值只在传入 config 的
+> `RPS<=0` 时作为兜底被读（`ratelimit.go:66`、`:69`、`:133`），路由入口 `router.go:211-218` 显式传 1000，故 10 在现网从不生效。
 
 为防止恶意流量击穿 LLM 推理栈，AI Agent 通道在 3 个层级实施限流。
 
@@ -559,10 +559,10 @@ systemctl reload user-server
 > 只有 9.3 的 `start/delta/final/error` 四类对应 `dto.StreamChunk`（`dto/layer_chunk.go:102-115`）实存；
 > `cancel` 类型有常量 `ChunkTypeCancel` 但**没有任何下发点**（全仓非测试 0 引用）。
 
-### 9.1 端点
+### 9.1 端点（设计稿，均**未实装**，见上方实测口径）
 
-- `POST /api/v1/ai/chat` — 发起对话
-- `GET /api/v1/ai/chat/poll?session_id=xxx` — 长轮询获取增量（30s 超时）
+- `POST /api/v1/ai/chat` — 发起对话（未注册）
+- `GET /api/v1/ai/chat/poll?session_id=xxx` — 长轮询获取增量（未注册；增量真实载体是 WS `StreamChunk`，且 `/ws/chat` 当前也不可达，见上）
 
 ### 9.2 协议 (JSON over HTTP)
 
@@ -747,7 +747,7 @@ go run cmd/importfaq/main.go -input ../scripts/faq_seed.json
 > **实测口径（2026-09-22）**：下表 7 个 `AI_*` 码在仓内 **0 命中**，`internal/` 也没有任何一处按它们返回。
 > 真实的错误码词表是 `internal/pkg/utils/error_code.go` 的 **36 个** `ErrorCode` 常量，
 > 响应体为 `{code, message, data?}`（键名是 `message` 不是 `msg`；`response.go:82-105`），
-> `code` 取字符串码，HTTP 状态由 `errorCodeFromHTTPCode` 反推（`response.go:176-196`）。
+> `code` 取字符串码，HTTP 状态由 `errorCodeFromHTTPCode` 反推（`response.go:191-212`）。
 > 下表按"设计意图 → 现网等价物"读：
 >
 > | 设计稿错误码 | 现网等价行为 |
@@ -756,7 +756,7 @@ go run cmd/importfaq/main.go -input ../scripts/faq_seed.json
 > | `AI_FAQ_NOT_FOUND` / `AI_SOP_RENDER_FAIL` | 不是错误：Layer1 未命中即静默走 Layer2（`layer.go` 无错可返回） |
 > | `AI_LLM_TIMEOUT` | LLM 超时是 `provider_failover` 的失败计数 + 熔断，对外表现为 `reply` 为空或模板话术；HTTP 侧最接近 `TIMEOUT_1004` / `SERVICE_UNAVAILABLE_6003` |
 > | `AI_ALL_FALLBACK_FAIL` | 返回 `provider_failover.go:68` 的那一条 `TemplateReply` 文本，HTTP 200，无错误码 |
-> | `AI_RATE_LIMITED` | 中间件直接吐 429 裸 JSON（`{code:429,msg/retry_after}`，见 §八），**不走** `Response` 信封；若走信封则映射为 `INSUFFICIENT_QUOTA_5003`（`response.go:188-189`） |
+> | `AI_RATE_LIMITED` | 中间件直接吐 429 裸 JSON（`{code:429,msg/retry_after}`，见 §八），**不走** `Response` 信封；若走信封则映射为 `INSUFFICIENT_QUOTA_5003`（`response.go:203-204`） |
 > | `AI_AGENT_MISMATCH` | 无此码；智能体隔离在 service 层按 `agent_id` 入参过滤，越权目前表现为"查不到数据"而非 403 |
 
 > 另注：LLM 超时时长以配置为准 —— `config.yaml:111` 是 `timeout_seconds: 720`，

@@ -349,7 +349,7 @@ try {
 | `5xx` | 提示「服务器开小差」 |
 | `INIT_REQUIRED` | 跳 `/setup`（系统未初始化） |
 | 其他业务码 | 提示 `data.message` 或 `data.msg` |
-| 非 JSON 响应 | 提示「响应异常」（反向代理层 兜底 404 HTML） |
+| 非 JSON 响应 | 提示「响应异常」（Nginx 兜底 404 HTML） |
 
 ### 5.5 loading 管理
 

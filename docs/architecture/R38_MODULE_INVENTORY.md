@@ -81,7 +81,7 @@ R38 解决"代码维度"的最高标准合规：
 
 ### M9. SVG 上传收敛（P1-2 落地）
 
-- **现状**：`controller/upload.go:31` 允许上传 `.svg`，存在存储型 XSS 面（反代/ 反向代理层 同源直出 + 无 CSP）
+- **现状**：`controller/upload.go:31` 允许上传 `.svg`，存在存储型 XSS 面（反代/Nginx 同源直出 + 无 CSP）
 - **目标**：移除 svg 白名单，或出网关加 `nosniff` + CSP
 - **风险**：存量素材库若含 svg 需兼容 → 加 `?legacy=1` query 参数临时放行 + 邮件通知存量用户
 

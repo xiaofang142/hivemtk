@@ -697,7 +697,7 @@ go build -o bin/embedding-server ./cmd/embedding-server
 - `POSTGRES_USER: admin`
 - `POSTGRES_PASSWORD: password123`
 - `POSTGRES_DB: marketing_tools`
-- `PLATFORM_JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min-len-OK`（≥32 字符）
+- `USER_JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min-len-OK`（≥32 字符；代码 `internal/pkg/utils/jwt.go:63-65` 先读 `USER_JWT_SECRET`，为空才兜底 `JWT_SECRET`；`PLATFORM_JWT_SECRET` 是平台端变量，本仓不用）
 - `EMBEDDING_ALLOW_FALLBACK: true`（允许 hash embedding 降级）
 - `WECOM_DISABLE_OUTBOUND: 1`（禁用企微真实出站）
 

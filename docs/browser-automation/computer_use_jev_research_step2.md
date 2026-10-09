@@ -7,7 +7,7 @@
 JEV = System-One 决策模型：给定 state + typed question，返回**结构化可分支答案**（Choice / true-estimate / rubric-score），不写散文、不产坐标/脚本/JS。适用“在已知合法集合里选一个”，不适用开放生成（文案/代码/规划仍归 LLM）。
 
 - API：`POST https://api.typesafe.ai/v1/systemone`，body `{model, state, questions}`；question `{type:"choice", criteria:{id:label|{...}}, instructions:{goal, operation, rules}}`；answer `{choice, probabilities, confidence}`。
-- 校验（jev-ultrafast/model.py validate_choice）：choice∈ids、probabilities 键集合==ids、值∈[0,1]有限、sum≈1(±0.02)、choice 即 argmax；非法 → “Invalid TypeSafe response; no action executed”。
+- 校验（jev-ultrafast/model.py validate_choice）：choice∈ids、probabilities 键集合==ids、值∈[0,1]有限、sum≈1(±0.02)、choice 即 argmax；非法 → “invalid TypeSafe response; no action executed”。
 - 成本/速度：毫秒级、近零推理成本；与大 LLM 分工：JEV 选操作+目标，小 LLM 仅在 TYPE_TEXT 时写字段值。
 
 ## 2. Computer Use 通用全链路（CUA-JEV 提炼）

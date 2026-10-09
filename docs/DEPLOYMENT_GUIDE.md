@@ -33,7 +33,7 @@
 │  ├─ user-server 二进制        默认监听 0.0.0.0:8204        │
 │  │   （make user-build 产物，air 热重载用于开发；           │
 │  │     SERVER_HOST=127.0.0.1 可把网口收回本机，见 §6.2）    │
-│  └─ user-web 静态产物         由 反向代理层 或任意静态服务托管   │
+│  └─ user-web 静态产物         由 Nginx 或任意静态服务托管   │
 │                                                          │
 │  推理层（scripts/inference-host/）                        │
 │  ├─ llama-server · LLM       127.0.0.1:8207              │
@@ -177,7 +177,7 @@ make sdk-build     # 可选：构建 embed-sdk 网页挂件
 cd user-server && ./bin/user-server
 ```
 
-前端构建产物（`user-web/dist`）部署到 反向代理层 或任意静态服务器即可，user-server 当前配置中不含静态托管段。
+前端构建产物（`user-web/dist`）部署到 Nginx 或任意静态服务器即可，user-server 当前配置中不含静态托管段。
 
 ### 第 6 步：验证
 
@@ -321,7 +321,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 
 什么都不用配。访问 `http://<内网IP>:8204` 即可。适合个人体验与内网测试。注意此模式下被动渠道 Webhook 不可用（无公网 HTTPS 地址），相关渠道自动走轮询。
 
-### 模式 B：反向代理层 反向代理 + HTTPS（公网标准部署）
+### 模式 B：Nginx 反向代理 + HTTPS（公网标准部署）
 
 证书签发：
 
@@ -369,7 +369,7 @@ customDomains = ["chat.example.com"]
 | `/readyz` | 就绪 | 依赖就绪才返回 200；适合负载均衡摘流判断 |
 | `/health` | 综合 | 附带数据层依赖检查详情；人工巡检首选 |
 
-接入示例（systemd 或 supervisor 心跳检测用 `/healthz`；反向代理层 upstream 健康检查用 `/readyz`）。
+接入示例（systemd 或 supervisor 心跳检测用 `/healthz`；Nginx upstream 健康检查用 `/readyz`）。
 
 ## 九、日常运维操作
 
@@ -382,7 +382,11 @@ make dev-help        # 开发类目标说明
 ### 9.1 数据层
 
 ```bash
-make db-up / db-down / db-ps / db-logs
+# 每条都是独立命令（`make a / b` 这种写法不是 make 语法，粘进去会把 `/` 当目标名报错）
+make db-up
+make db-down
+make db-ps
+make db-logs
 make db-backup                 # 备份（见第十节）
 make db-restore FILE=/path/to/dump
 ```
@@ -392,10 +396,12 @@ make db-restore FILE=/path/to/dump
 ```bash
 make inference-host-status     # 三端口健康一览
 make inference-host-logs       # 跟踪 llama-server 日志
-make inference-host-restart    # 整组重启
+# 没有 `make inference-host-restart` 这个目标（`grep -oE '^[a-z-]+:' Makefile` 现取：
+# inference-host-{install,models,models-prod,up,down,ps,status,logs,warmup,test} 共 10 个）。
+# 整组重启 = 先停再起：
+make inference-host-down && make inference-host-up
 make inference-host-warmup     # 冷启动预热
 make inference-host-test       # 冒烟测试（含 smoke-test.sh）
-make inference-host-down       # 整组停止
 make inference-host-models-prod # 切换生产档位模型
 ```
 

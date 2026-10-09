@@ -15,11 +15,24 @@
 
 ## 2. 可用性承诺
 
-| 指标 | 目标 | 说明 |
-|------|------|------|
-| 系统可用性 | ≥ 99% | 月度计算，排除计划维护 |
-| API 响应时间 | P95 < 500ms | 不含 LLM 推理时间 |
-| 数据持久性 | 100% | 备份数据不丢失 |
+| 指标 | 目标 | 说明 | 本仓的取数口径 |
+|------|------|------|---------------|
+| 系统可用性 | ≥ 99% | 月度计算，排除计划维护 | 无自动打点，由 §3 的维护记录 + 故障工单时长人工汇总 |
+| API 响应时间 | P95 < 500ms | 不含 LLM 推理时间 | `api_logs.duration`（`user-server/internal/model` 里的 ApiLog，列 `path/method/status_code/duration/created_at`），按 §6.3 的 SQL 离线算 |
+| 数据持久性 | 100% | 备份数据不丢失 | 备份闭环见 [DR_RECOVERY.md](DR_RECOVERY.md)；本机实测的恢复校验（恢复到临时库 + 表数/行数断言）在其 §4.1 |
+
+> 取数现实（必须按这个口径对外承诺，不要按「有监控系统」写）：
+> 本仓**不接入任何外部 Prometheus / APM / 托管告警通道**。
+> - `internal/pkg/metrics` 的 `/metrics` 文本端点只有包内 `Handler()`，
+>   **没有注册进路由**（实测 `curl http://127.0.0.1:8204/metrics` 返回 404），抓不了；
+> - `internal/pkg/sla` 的 `SLOTracker` 定义了 SLO/错误预算，但全仓**没有生产装配点**
+>   （`grep -rn "hivemtk-user/internal/pkg/sla" --include=*.go` 只命中该包自己和它的测试），
+>   所以 §7 的 SLO **不是运行时自动产出的**，只能靠下面的 SQL 离线统计；
+> - 唯一的自动告警是应用内的那套：`internal/service/alert_checker.go`
+>   （文件头自述「不依赖外部 Alertmanager；通知由注入的 AlertNotifier 实现（邮件 / 钉钉 / webhook）」），
+>   规则与历史落在本仓的 `alert_rules` / `alert_histories` 两张表，读取口是 `/api/alerts/rules`、
+>   `/api/alerts/histories`、`/api/monitor/alerts/unread`。
+
 
 ## 3. 维护窗口
 
@@ -49,44 +62,118 @@
 
 ### 5.1 常见故障处理
 
+本仓 Docker 只跑数据层两个容器（`mtk-postgres` / `mtk-redis`），
+后端与推理三件套都是宿主机进程 —— 所以「服务进程挂掉」不能靠 `docker compose restart` 解决。
+
 | 故障 | 处理方式 | 恢复时间 |
 |------|---------|---------|
-| 服务进程挂掉 | `docker compose restart` | < 5 分钟 |
-| 数据库连接丢失 | 检查网络 + 重启 PG | < 15 分钟 |
-| 磁盘空间不足 | 清理日志 + 扩容 | < 30 分钟 |
-| LLM 推理超时 | 重启 llama.cpp | < 10 分钟 |
-| 数据丢失 | 从备份恢复 | < 2 小时 |
+| user-server 进程挂掉 | systemd 场景 `systemctl restart hivemtk-user`；手工场景 `cd /opt/hivemtk/user-server && ./bin/user-server`（`docker compose restart` 对它无效，compose 里没这个服务） | < 5 分钟 |
+| 数据层容器不健康 | `docker compose restart mtk-postgres mtk-redis`，再 `make db-ps` 看 healthy 状态 | < 15 分钟 |
+| 数据库连不上 | `docker compose exec -T mtk-postgres pg_isready -U "${POSTGRES_USER}" -h 127.0.0.1 -p 8202`；注意端口是 8202 不是默认 5432 | < 15 分钟 |
+| Redis 连不上 | `docker compose exec -T mtk-redis redis-cli -p 8203 -a "${REDIS_PASSWORD}" --no-auth-warning ping`（容器内监听 8203 且开了 requirepass） | < 15 分钟 |
+| 磁盘空间不足 | 日志在 `user-server/logs/user-server.log`（`config.yaml` 单文件 200MB 上限）、上传在 `user-server/uploads/`、数据在卷 `mtk_user_pg_data`；`df -h` 定位后再清 | < 30 分钟 |
+| LLM 推理超时 | 三件套是宿主机 llama-server；Makefile **没有 `inference-host-restart` 目标**，整组重启 = `make inference-host-down && make inference-host-up`，再 `make inference-host-status` | < 10 分钟 |
+| 数据丢失 | 按 [DR_RECOVERY.md §2](DR_RECOVERY.md) 从 `pg_dump` 备份恢复（无 WAL 归档，恢复点粒度 = 上次备份时间） | < 2 小时 |
+
 
 ## 6. 日志与监控
 
 ### 6.1 关键日志路径
 
 ```bash
-# 应用日志
-/var/log/hivemtk/app.log
+# 后端应用日志（唯一落盘文件；config.yaml: logging.output=both, level=info,
+# file=logs/user-server.log, max_size=200 —— 相对 user-server 工作目录）
+# 旧写法 /var/log/hivemtk/app.log 与 /var/log/hivemtk/error.log 在本仓没有任何产出点：
+# 日志器只写 os.Stdout + 上面这一个文件（internal/pkg/utils/logger/logger.go），
+# 错误级别不单独分文件，按 level 字段在同一份 JSON 里过滤。
+tail -n 100 /opt/hivemtk/user-server/logs/user-server.log
 
-# 错误日志
-/var/log/hivemtk/error.log
+# 数据层日志：compose 用 json-file 驱动（x-logging，max-size 100m × max-file 5），
+# 容器里 PostgreSQL 的 logging_collector 实测为 off，所以宿主机没有 PG 日志文件可 tail
+make db-logs                                   # PG + Redis 一起跟
+docker compose logs --tail=100 mtk-postgres    # 单看 PG
 
-# 审计日志
-数据库 audit_logs 表
+# llama-server 日志（三个推理服务）
+make inference-host-logs
+
+# 审计：**没有 audit_logs 这张表**（实测 ERROR: relation "audit_logs" does not exist）。
+# 真实表按 GORM TableName() 分三条，别混用：
+#   operation_logs      人工操作审计（internal/model 的 TableName 返回该值，本机现 45144 行）
+#   tool_call_audits    AI 工具调用审计
+#   api_logs            接口访问与耗时（P95 用它）
+```
+
+```bash
+cd /opt/hivemtk && set -a && . ./.env && set +a
+
+# 操作审计（表名 operation_logs，不是 audit_logs）
+docker compose exec -T mtk-postgres psql \
+  -U "${POSTGRES_USER:-admin}" -d "${USER_DB_NAME:-user_db}" -h 127.0.0.1 -p 8202 \
+  -c "SELECT count(*) FROM operation_logs;"
+
+# 工具调用审计（不存在 audit_logs / tool_audit_logs / agent_tool_audit_logs 这三个名字）
+docker compose exec -T mtk-postgres psql \
+  -U "${POSTGRES_USER:-admin}" -d "${USER_DB_NAME:-user_db}" -h 127.0.0.1 -p 8202 \
+  -c "SELECT count(*) FROM tool_call_audits;"
 ```
 
 ### 6.2 常用排查命令
 
 ```bash
-# 查看服务状态
+cd /opt/hivemtk
+set -a
+. ./.env
+set +a
+
+# 查看数据层服务状态（compose 里只有这两个服务）
 docker compose ps
 
-# 查看最近错误
-tail -f /var/log/hivemtk/error.log
+# 查看后端最近错误（同一份文件里按 level 过滤，没有独立的 error.log）
+grep '"level":"error"' user-server/logs/user-server.log | tail -n 50
 
-# 查看数据库状态
-docker compose exec postgres pg_isready
+# 查看数据库状态：服务名 mtk-postgres，PG 在容器里被改成监听 8202，
+# 不带 -p 会去撞 /var/run/postgresql/.s.PGSQL.5432 直接失败
+docker compose exec -T mtk-postgres pg_isready -U "${POSTGRES_USER:-admin}" -h 127.0.0.1 -p 8202
 
-# 查看 Redis 状态
-docker compose exec redis redis-cli ping
+# 查看 Redis 状态：服务名 mtk-redis，端口 8203，开了 requirepass
+docker compose exec -T mtk-redis redis-cli -p 8203 -a "${REDIS_PASSWORD}" --no-auth-warning ping
+
+# 后端三个探针（8204 是 user-server 的发布口，8080 在本仓不是任何服务的端口）
+curl -s http://127.0.0.1:8204/healthz   # 存活：只看进程，不看依赖
+curl -s http://127.0.0.1:8204/health    # 依赖详情：database/redis/inference/embedding
+curl -s http://127.0.0.1:8204/readyz    # 就绪：依赖没齐回 503
+
+# 推理栈三个端口（宿主机进程，容器 DNS 名解析不到，写 127.0.0.1）
+make inference-host-status
 ```
+
+### 6.3 SLO 取数：P95 与错误率
+
+没有 APM，`api_logs` 就是 P95 的唯一取数口。以下两条 SQL 在本机 `user_db`（8202）实测通过。
+
+```bash
+cd /opt/hivemtk && set -a && . ./.env && set +a
+
+# 接口 P95 耗时（api_logs.duration 单位 ms）与 5xx 错误率
+docker compose exec -T mtk-postgres psql \
+  -U "${POSTGRES_USER:-admin}" -d "${USER_DB_NAME:-user_db}" -h 127.0.0.1 -p 8202 -tA \
+  -c "SELECT count(*) AS n,
+             percentile_cont(0.95) WITHIN GROUP (ORDER BY duration) AS p95_ms,
+             round(100.0 * count(*) FILTER (WHERE status_code >= 500) / NULLIF(count(*),0), 2) AS err5xx_pct
+      FROM api_logs
+      WHERE created_at >= now() - interval '1 day';"
+
+# 分层链路耗时（layer_decision_logs 只有 trace_id/session_id/customer_id/layer/reason/
+# intent/conf_in/conf_out/wall_ms/llm_skipped/extra/created_at/deleted_at 这些列，
+# 没有 lcp_ms / status / fallback_chain / from_layer / to_layer，写了就是 ERROR）
+docker compose exec -T mtk-postgres psql \
+  -U "${POSTGRES_USER:-admin}" -d "${USER_DB_NAME:-user_db}" -h 127.0.0.1 -p 8202 -tA \
+  -c "SELECT layer, count(*), percentile_cont(0.95) WITHIN GROUP (ORDER BY wall_ms) AS p95_wall_ms
+      FROM layer_decision_logs
+      WHERE created_at >= now() - interval '1 day'
+      GROUP BY layer;"
+```
+
 
 ---
 
@@ -139,9 +226,20 @@ docker compose exec redis redis-cli ping
 - 定义：终态审批行中 24h 内办结的占比。
 - 分子：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL AND decided_at - created_at <= INTERVAL '24 hours'`
 - 分母：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL`
-- 字段锚点：`ApprovalRequest.CreatedAt/DecidedAt/ExpiresAt` + 四态 + decided_by 三值常量。
-- 诚实标注：24h 是政策目标，**代码中无 TTL 常量**（ExpiresAt 当前无生产赋值），
-  达标率由本 SQL 离线/脚本统计，不进 P95。
+- 字段锚点：`ApprovalRequest.CreatedAt/DecidedAt/ExpiresAt`（`internal/model/approval_request.go:59-63`）
+  + 四态 `pending / approved / rejected / expired`（同文件 :79-82）
+  + `decided_by` 是两个常量 —— `policy:auto`（:157）与 `system:ttl`（:160）—— 加上人工裁决时的操作者 ID。
+- 24h 是**代码常量**，不是政策目标（本节旧写法「代码中无 TTL 常量」已被代码推翻）：
+  `internal/service/approval_request.go:42` `DefaultApprovalRequestTTL = 24 * time.Hour`，
+  :43 `MaxApprovalRequestTTL = 30 * 24 * time.Hour`，越界返回 `ErrApprovalTTLTooLong`（:58）而不是夹取。
+  创建路径按 `in.TTL <= 0 → DefaultApprovalRequestTTL` 取值并在 :469 写入 `req.ExpiresAt`；
+  到期由 `internal/repository/approval_request.go:291 ExpirePendingBatch`（`expires_at <= now` 的同一判据）
+  翻成 `expired` 并置 `decided_by = system:ttl`（:321/:330），服务侧入口
+  `internal/service/approval_request.go:654 ExpireOverdue`。
+  本机 `user_db` 现测 7 行审批全部有 `expires_at`，其中 1 行已是 `expired` ⇒
+  「ExpiresAt 当前无生产赋值」这句话现在照抄是错的。
+- 达标率仍由本 SQL 离线/脚本统计，不进 P95（没有运行时 SLO 打点，见 §2 的取数现实）。
+
 
 ### 7.6 外联触达与硬预算（C10）
 

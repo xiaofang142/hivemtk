@@ -3532,6 +3532,15 @@ env 门的文档面只能收紧不能放宽；`email_tracking_test.go` 夹具里
   唯一会往下传非 nil 的 `ProductionReachAdapter.SendEmail` 依赖 `NewProductionReachAdapter()`，
   而该构造函数全仓非测试调用点为 0（grep 仅命中定义处）⇒ 死装配。为一条不可达路径重写
   握手报文（multipart + 另一套 TLS/auth 行为）不划算，且会动到在用的事务邮件出口。
+  **后续订正（别去找那个符号）**：`ProductionReachAdapter` 连同 `NewProductionReachAdapter`
+  已整份删除（原路径 `internal/aiagent/agent/tooluse/production_reach_adapter.go`，非测试构造点为 0
+  的那条死装配已摘掉，同时摘掉的还有只喂它的注册装配），reach 侧邮件出口只剩
+  `IntegrationReachAdapter` 一条；`email.go` 里那条注释也已按删除后的账重算为「Send 非测试调用点
+  共 7 处，6 处字面 nil，第 7 处是 `SetEmailRegistry` 回调原样透传而 `sendEmail` 仍传 nil」。
+  上面「活调用点 4 处」是漏数：另外两处（`controller/r44_gap_endpoints.go` 的运营台直发、
+  `service/alert_checker.go` 的 `EmailSender` 抽象调用点）在本文件登记日（2026-09-23）之前就已存在
+  （`-S` 现查为 e38b6d0e 2026-08-29、fbe4b760 2026-09-02），两处也都传字面 nil，
+  所以结论没变、账要按 7 处算。
 - reach / agent 的邮件出口不走那条：`IntegrationReachAdapter.SendEmail`
   → `email/service.EmailSendService.SendEmail` → `buildEmailMessage` ⇒ 已被本轮修好。
 - 不做"兼容旧的扁平附件值"：历史行里那些扁平文件名（`file1.pdf`）本来就永远挂不上，

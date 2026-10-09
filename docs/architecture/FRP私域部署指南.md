@@ -29,8 +29,8 @@ HiveMtk 用户端采用**私域独立部署**：数据库、推理栈、用户�
 
 | 方案 | TLS 终结方 | 适用场景 | 复杂度 | 推荐度 |
 |------|-----------|---------|--------|--------|
-| **A. frps 自终止 TLS** | frps | 不想再装 反向代理层 | ⭐⭐ | ⭐⭐⭐ |
-| **B. 反向代理层终止 TLS,frpc=http** | 反向代理层 + frpc | 已有 反向代理层 / 宝塔 | ⭐ | ⭐⭐⭐⭐ |
+| **A. frps 自终止 TLS** | frps | 不想再装 nginx | ⭐⭐ | ⭐⭐⭐ |
+| **B. nginx 终止 TLS,frpc=http** | nginx + frpc | 已有 nginx / 宝塔 | ⭐ | ⭐⭐⭐⭐ |
 | **C. Cloudflare Tunnel** | Cloudflare 边缘 | 全球加速 + 不想运维 frps | ⭐ | ⭐⭐ |
 
 > **默认推荐方案 B**：与现有 `hivemtk-platform/scripts/release.sh` 的 `frpc.toml` 模板（方案 A）互补，覆盖更多部署环境。
@@ -206,12 +206,12 @@ wscat -c "wss://chat.example.com/api/ws/visitor?session_id=test&visitor_id=test&
 
 ---
 
-## 四、方案 B：反向代理层终止 TLS,frpc 用 http 代理（推荐）
+## 四、方案 B：nginx 终止 TLS,frpc 用 http 代理（推荐）
 
 ### 4.1 架构
 
 ```
-访客 ──HTTPS(443)──> 反向代理层(云端,终止TLS)
+访客 ──HTTPS(443)──> nginx (云端,终止TLS)
                               │
                               ▼
                          frps（仅做隧道,不碰 TLS）
@@ -236,7 +236,43 @@ auth.token = "CHANGE_ME_RANDOM_64_CHARS"
 # 方案 B 不需要 frps 终止 TLS,简化配置
 ```
 
-### 4.3 静态托管配置（云端,宝塔或原生）
+### 4.3 nginx 配置（云端,宝塔或原生）
+
+```nginx
+# /www/server/panel/vhost/nginx/chat.example.com.conf
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name chat.example.com;
+
+    # SSL 证书(宝塔站点 SSL 标签页申请)
+    ssl_certificate     /www/server/panel/vhost/cert/chat.example.com/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/chat.example.com/privkey.pem;
+
+    # HSTS
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # HTTP 强转 HTTPS
+    if ($scheme = http) {
+        return 301 https://$host$request_uri;
+    }
+
+    # frpc 在本机 8205 监听（不是 8204,是为了避免与 user-server 冲突）
+    location / {
+        proxy_pass http://127.0.0.1:8205;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # WebSocket 关键配置
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+```
 
 ### 4.4 frpc 配置（本地）
 
@@ -248,7 +284,7 @@ auth.method = "token"
 auth.token = "CHANGE_ME_RANDOM_64_CHARS"  # 与 frps 一致
 transport.tls.enable = true
 
-# 关键:type=http + 不带 certFile(让 反向代理层终止 TLS)
+# 关键:type=http + 不带 certFile(让 nginx 终止 TLS)
 [[proxies]]
 name = "mtk-user-chat"
 type = "http"
@@ -261,16 +297,16 @@ transport.heartbeatInterval = 30
 transport.heartbeatTimeout = 90
 ```
 
-> 端口 8204 → 8205:这里把本地 8204 通过 frp 暴露到云端 8205(端口任意,只要不被占用),反向代理层 再把 443 反代到 8205。这种"双跳"避免 frpc 与 反向代理层 端口冲突,也便于同机多实例(每个应用/客户用独立 8xxx 端口避免冲突)。
+> 端口 8204 → 8205:这里把本地 8204 通过 frp 暴露到云端 8205(端口任意,只要不被占用),nginx 再把 443 反代到 8205。这种"双跳"避免 frpc 与 nginx 端口冲突,也便于同机多实例(每个应用/客户用独立 8xxx 端口避免冲突)。
 
 ### 4.5 验证
 
 ```bash
-# 1) 云端直接 curl(走 反向代理层)
+# 1) 云端直接 curl(走 nginx)
 curl -I https://chat.example.com/health
 # 200 OK
 
-# 2) 绕过 反向代理层 直连 frpc(应该 404,因为 type=http 期待完整 HTTP 请求)
+# 2) 绕过 nginx 直连 frpc(应该 404,因为 type=http 期待完整 HTTP 请求)
 curl -I http://127.0.0.1:8205/health
 # 200 OK
 
@@ -351,7 +387,7 @@ transport.heartbeatInterval = 30    # 30s 一次 ping
 transport.heartbeatTimeout = 90     # 90s 无响应判定失联
 transport.tcpKeepalive = 60         # TCP keepalive
 
-### 反向代理层 端（方案 B 必加）
+### nginx 端（方案 B 必加）
 proxy_http_version 1.1;
 proxy_set_header Upgrade $http_upgrade;
 proxy_set_header Connection "upgrade";
@@ -444,7 +480,7 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 | **TLS** | 强制 TLS 1.2+；禁用 SSLv3/TLS 1.0/1.1 |
 | **dashboard** | frps 控制台加白名单 IP 或改非默认端口 |
 | **fail2ban** | frps 7000 端口接 fail2ban,防暴力枚举 |
-| **真实 IP 透传** | 反向代理层 `X-Forwarded-For` + user-server `CORS_ALLOW_ORIGINS_USER` 校验 |
+| **真实 IP 透传** | nginx `X-Forwarded-For` + user-server `CORS_ALLOW_ORIGINS_USER` 校验 |
 | **Webhook secret** | 若用 frpc webhook 做动态域名,加 secret 校验 |
 | **定期轮换** | 90 天轮换一次 `auth.token` + TLS 证书 |
 
@@ -461,7 +497,7 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 
 ### Q2: 能打开页面但 WebSocket 一直 reconnecting
 
-- 反向代理层 缺 `proxy_set_header Upgrade` 配置（方案 B）
+- nginx 缺 `proxy_set_header Upgrade` 配置（方案 B）
 - frpc 缺 `transport.heartbeatInterval`
 - 浏览器 DevTools Network → WS 帧，查看是否收到 ping/pong
 
@@ -518,7 +554,7 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 > 域名一律用 `*.hivemtk.example.com` 占位，落地时换成你自己的。
 >
 > **2026-09-03 踩坑记录**：之前按"独立 Chat 整站穿透"理解架构，错误地把前端整站域名 `user.hivemtk.example.com`
-> 都走 frp，实际上**前端静态包在服务器 反向代理层 上**，只有 API 路径才走 frp。此节记录正确架构和必守铁律，避免再犯。
+> 都走 frp，实际上**前端静态包在服务器 nginx 上**，只有 API 路径才走 frp。此节记录正确架构和必守铁律，避免再犯。
 
 ### 13.1 架构图
 
@@ -527,7 +563,7 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
                               ┌─────────────────────────────┐
                               │                             │
   ┌────────────────────┐      │   ┌─────────────────┐       │
-  │  用户浏览器         │──HTTPS──>│  反向代理层    │       │
+  │  用户浏览器         │──HTTPS──>│  nginx    │       │
   └────────────────────┘      │   │  443 ssl        │       │
                               │   └────────┬────────┘       │
                               │            │                │
@@ -539,7 +575,7 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
                               │   │ /favicon.svg    │       │
                               │   │                 │       │
                               │   │  → root dist/   │       │
-                              │   │  (反向代理层 直接读)  │       │
+                              │   │  (nginx 直接读)  │       │
                               │   └─────────────────┘       │
                               │            │                │
                               │   ┌────────┴────────┐       │
@@ -583,10 +619,10 @@ chmod +x /usr/local/bin/mtk-healthcheck.sh
 | 公网域名 | frpc customDomain | frps vhost 匹配后转到 | 本地服务 |
 |----------|-------------------|-----------------------|----------|
 | `user-api.hivemtk.example.com` | `user-api.hivemtk.example.com` | 本地 :8204 | Go user-server |
-| `user.hivemtk.example.com/api/*` | (无独立域名, **反向代理层 里 Host 改写**到上一行) | 同 `user-api.hivemtk.example.com` | Go user-server |
+| `user.hivemtk.example.com/api/*` | (无独立域名, **nginx 里 Host 改写**到上一行) | 同 `user-api.hivemtk.example.com` | Go user-server |
 | `user.hivemtk.example.com/chat/embed` | `user.hivemtk.example.com` | 本地 :8204 | Go user-server (embed 路由) |
 
-### 13.3 反向代理层 关键配置（避免踩坑的完整模板）
+### 13.3 nginx 关键配置（避免踩坑的完整模板）
 
 见仓内 `docs/operations/reverse-proxy/nginx.conf.template`——它已把本节所有铁律落成可抄的 location 块
 （SSE 关缓冲、WS 透传 Upgrade、frps vhost 显式改写 Host）。本节不再重复贴一份，避免两处漂移。
@@ -618,21 +654,21 @@ customDomains = ["user.hivemtk.example.com"]
 transport.useCompression = true
 ```
 
-### 13.5 frps 配置（云端, 同机 反向代理层）
+### 13.5 frps 配置（云端, 同机 nginx）
 
 ```toml
 # /www/wwwroot/frp/frps.toml
 bindPort = 7000                        # 控制连接端口 (frpc 连这个)
 auth.token = "CHANGE_ME_RANDOM_64_CHARS"   # 与 frpc 同一个随机值
-vhostHTTPPort = 8280                   # ← 关键! 同源托管这个端口
+vhostHTTPPort = 8280                   # ← 关键! nginx 反代这个端口
 transport.tcpMux = true
 transport.maxPoolCount = 10
 webServer.addr = "0.0.0.0"
 webServer.port = 7500
 webServer.user = "admin"
 webServer.password = "CHANGE_ME"           # 7500 后台口令；曾在本文件里明文写过一条真口令，已清除，请轮换
-# 注意: 反向代理层 占了 80/443, 所以 frps 不直接监听这些端口
-# frps 只提供 8280 vhost, 由 反向代理层 转发过来
+# 注意: nginx 占了 80/443, 所以 frps 不直接监听这些端口
+# frps 只提供 8280 vhost, 由 nginx 转发过来
 ```
 
 ### 13.6 排错 Checklist（按顺序执行）
@@ -656,19 +692,19 @@ webServer.password = "CHANGE_ME"           # 7500 后台口令；曾在本文件
          → 期望: LISTEN *:8280 (不是 7000!)
          → 如果 frps 没监听 vhostHTTPPort: 检查 frps.toml + systemctl restart frps
 
-[Step 4] frps 能否直接匹配 Host? (绕过 反向代理层 验证)
+[Step 4] frps 能否直接匹配 Host? (绕过 nginx 验证)
          curl -sS -H "Host: user-api.hivemtk.example.com" http://127.0.0.1:8280/api/health
          → 本地 frps 上执行 (或 ssh 进服务器后测)
-         → 返回 200 → frp 链路 OK, 问题在 反向代理层 层
+         → 返回 200 → frp 链路 OK, 问题在 nginx 层
          → 返回 404 → frpc customDomain 没注册上 (Step 2 检查)
          → 返回 502 → frpc customDomain 存在但 local service 挂了 (Step 1 检查)
 
-[Step 5] 反向代理层 Host header 是否改写了? (最常见的坑!)
+[Step 5] nginx Host header 是否改写了? (最常见的坑!)
          → grep "proxy_set_header Host"
          → 期望: proxy_set_header Host  user-api.hivemtk.example.com;
          → 如果是 $host 或前端那个域名 → 改过来!
 
-[Step 6] 反向代理层 proxy_pass 端口对不对?
+[Step 6] nginx proxy_pass 端口对不对?
          → 同机 frps 用 127.0.0.1:8280 (内网回环)
          → 跨机 frps 用 IP:8280 (公网 IP)
          → 错写成 7000? 那是 frp 控制端口, 不是 vhost HTTP 端口!
@@ -683,13 +719,13 @@ webServer.password = "CHANGE_ME"           # 7500 后台口令；曾在本文件
 | 时间 | 错误行为 | 根因 | 正确做法 |
 |------|---------|------|---------|
 | 2026-09-03 10:00 | 把前端域名整站反代 frps | 以为前端也走 frp 热更新 | 前端静态包托管在服务器, 只有 `/api/` 走 frp |
-| 2026-09-03 10:00 | frpc.toml 加了 `mtk-user-web` proxy | 对应上条错误理解 | 删除, 前端 反向代理层 直接读 dist/ |
+| 2026-09-03 10:00 | frpc.toml 加了 `mtk-user-web` proxy | 对应上条错误理解 | 删除, 前端 nginx 直接读 dist/ |
 | 2026-09-03 10:00 | Vite 加 `allowedHosts: true` 为了 frp 反代 | 前端不走 frp, 这条不需要 | 回滚 |
-| 2026-09-03 10:05 | 反向代理层 `location /api/` 透传 `$host` | 忘了 frps 按 Host 匹配 customDomain | 显式 `proxy_set_header Host <API 侧 customDomain>` |
+| 2026-09-03 10:05 | nginx `location /api/` 透传 `$host` | 忘了 frps 按 Host 匹配 customDomain | 显式 `proxy_set_header Host <API 侧 customDomain>` |
 | 2026-09-03 10:15 | frpc 被杀后残留进程冲突 | 用 kill -9 PID 但不知道 root 用户也在跑 | 先看 `ps aux \| grep frpc` 找出所有用户的进程 |
 | 2026-09-03 10:15 | frpc.toml 文件 `operation not permitted` | macOS 扩展属性 `com.apple.quarantine` | `xattr -cr frpc.toml` |
 | 2026-09-03 10:20 | Go 服务 `MASTER_KEY missing` 退出 | 没 export GIN_MODE=debug + MASTER_KEY | `GIN_MODE=debug MASTER_KEY=<32字节+> ./mtk-serve` |
-| 2026-09-03 10:20 | 以为 frps 监听 80/443 | 反向代理层 占了 80/443, frps 监听 `vhostHTTPPort=8280` | 反向代理层 `proxy_pass http://127.0.0.1:8280` |
+| 2026-09-03 10:20 | 以为 frps 监听 80/443 | nginx 占了 80/443, frps 监听 `vhostHTTPPort=8280` | nginx `proxy_pass http://127.0.0.1:8280` |
 
 ### 13.8 一句话口诀
 

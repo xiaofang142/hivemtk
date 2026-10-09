@@ -56,7 +56,7 @@
 ❌ Playwright 级精细 selector 自动化（脆）、独立浏览器实例、分布式浏览器集群、自建模型推理、**反检测/CAPTCHA 破解（Skyvern 路线）**。
 定位红线：个人助理工具——单账号、低频、用户自己的账号，**不做批量矩阵**（合规：各平台 ToS 禁自动化）。
 
-**部署安全口（合并自 LANDING 遗留）**：生产 nginx 必须对 `location /api/browser/` 加 `deny all` 兜底——Host WS 端点虽已有回环 IP+token 双层防护，反向代理层不应放行公网流量。
+**部署安全口（合并自 LANDING 遗留）**：生产 nginx 必须对 `location /api/browser/` 加 `deny all` 兜底——Host WS 端点虽已有回环 IP+token 双层防护，nginx 不应放行公网流量。
 
 ## 1.5 Charter 四铁律 + 验收 A1–A6（最高裁决，platform-base/PLATFORM_BASE_CHARTER.md）
 

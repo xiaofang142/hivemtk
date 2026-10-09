@@ -70,7 +70,8 @@ chore   杂项
 ### PR 流程
 
 1. Fork 仓库 → 创建特性分支
-2. 本地验证：`make ci-local`
+2. 本地验证：`make audit`（本仓没有 `make ci-local` 这个目标；`make audit` 是聚合门禁，
+   但它**不含** golangci-lint 与 Go 测试，需另跑 `make lint vet test-go`）
 3. 签署 DCO：`git commit -s`
 4. 推送 + 创建 PR
 5. 2 位 Review + Approve

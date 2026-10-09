@@ -355,7 +355,7 @@ sequenceDiagram
 | 业务码跳转 | `INIT_REQUIRED` → `/setup`；通过 `INIT_REDIRECT_MAP` 扩展 |
 | 401 | 清除 token + 跳 `/login`，并通过 `lastToastMsg` 2500ms 去重避免并发弹多条 |
 | 403 / 404 / 429 / 5xx | 走 `t('http.*')` 国际化文案统一弹窗 |
-| 非 JSON 兜底 | 反向代理层 把 404 兜底成前端 HTML 时识别并提示"响应异常" |
+| 非 JSON 兜底 | Nginx 把 404 兜底成前端 HTML 时识别并提示"响应异常" |
 | `_silent` 标记 | 调用方传 `{ _silent: true }` 关闭统一 toast，自行处理错误 |
 
 ## 6. WebSocket / SSE 实时通道架构

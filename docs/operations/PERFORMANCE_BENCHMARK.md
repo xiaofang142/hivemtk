@@ -2,6 +2,16 @@
 
 > 性能测试方法论、目标值、实测基线、调优指南。
 
+> ⚠️ **§2 的实测表是 2026-08-15 的历史快照**（单机：4C8G SSD / 无 GPU；3 副本：3×4C8G；hivemtk 仓 `master`，约 commit `7d8ed832` 前后）。本档只重写快照数字之外的可执行部分。2026-10-09 按现行代码逐条复核端点/命令/SQL，结论如下（均为现跑 grep + `information_schema` 取证）：
+>
+> - **user-server 监听 8204**（`docs/PORT_REGISTRY.md`），不是 8080；§4.4 的 curl/wrk 口已对，pprof 见下。
+> - **`POST /api/bridge/ack` 路径有误**：真实注册是 `POST /api/bridge/outbox/ack`（`internal/router/router.go:564`，handler `AckBridgeOutbox`）。
+> - **`GET /api/bridge/outbox` 不是长轮询**：`internal/bridge/handler_http.go:782 GetBridgeOutbox` 只做一次 `ClaimPendingOutbound` 快照查询后立即返回，无 `lp`/超时挂起参数；本仓**没有长轮询实现**（`grep -rn "LongPoll\|long_poll\|/poll" internal/router/ internal/controller/` 零命中）。表里那行 "lp=30 / P50 30s" 记的是长轮询时代的语义，现网复现不出，出站实时链路是 SSE（`GET /api/bridge/outbox/sse`，`router.go:566`）。
+> - **`GET /api/team/users`、`POST /api/agent/dispatch` 在现行 `internal/router/` 里 0 注册**（`grep` 全树无 `/team`、无 `dispatch` HTTP 路由）；最接近的真实端点分别是 `GET /api/users`（`internal/router/auth_routes.go:56`）和 `POST /api/ai-agents/:id/test`（`internal/router/router.go:721` → `controller/ai_agent.go:39`）。这两行 P99 属历史口径，照抄无法命中。
+> - **`go tool pprof http://localhost:8204/debug/pprof/…` 打不通**：user-server 全仓未注册 `net/http/pprof`（`grep -rn pprof user-server --include=*.go` 非测试 0 命中）；要做 CPU/heap profile 需自行挂 pprof 或用调试构建，§4.4 第 6 步已据此改写。
+> - **附录 B 的 `bridge_ingest_duration_ms` / `bridge_ingest_logs` / `bridge_ingest_duration_ms_bucket` 三张表都不存在**（`information_schema.tables` 查无）；bridge 时延/错误只进进程内自研指标注册表（`internal/pkg/metrics`，`/metrics` 未挂路由）。可查的性能事实源是 `layer_decision_logs` / `llm_routing_logs` / `rag_query_logs`。附录 B SQL 已改用真实表。
+> - **§4.3 测试数据 SQL 的 `-U hivemtk -d hivemtk` 与表名 `conversations` 都是错的**：库角色/名走 `.env`（`POSTGRES_USER`/`USER_DB_NAME`，现值 `admin`/`user_db`，宿主机映射口取 `USER_POSTGRES_HOST_PORT`，现 8202）；无 `conversations` 表，真实会话表是 `inbox_conversations`（`internal/model/ai_sales_champion.go:447`）与 `customer_sessions`。已按真实列改写。
+
 ---
 
 ## 1. 测试工具
@@ -27,10 +37,12 @@
 | GET /healthz | 100 | 28,000 | 3ms | 8ms | 15ms | 0% |
 | GET /readyz | 100 | 1,200 | 80ms | 200ms | 350ms | 0% |
 | POST /api/bridge/ingest | 50 | 1,500 | 30ms | 80ms | 150ms | 0% |
-| GET /api/bridge/outbox (lp=30) | 20 | 35 | 30s | 30s | 30s | 0% |
-| POST /api/bridge/ack | 30 | 800 | 35ms | 90ms | 180ms | 0% |
-| GET /api/team/users | 50 | 2,500 | 18ms | 45ms | 80ms | 0% |
-| POST /api/agent/dispatch (AI) | 10 | 8 | 1.2s | 2.5s | 4s | 0% |
+| GET /api/bridge/outbox † | 20 | 35 | 30s | 30s | 30s | 0% |
+| POST /api/bridge/outbox/ack | 30 | 800 | 35ms | 90ms | 180ms | 0% |
+| GET /api/team/users † | 50 | 2,500 | 18ms | 45ms | 80ms | 0% |
+| POST /api/agent/dispatch (AI) † | 10 | 8 | 1.2s | 2.5s | 4s | 0% |
+
+> † 端点语义与现行代码不符，见文首勘误：outbox 现为快照查询（非 `lp=30` 长轮询，P50 30s 复现不出）；`/api/team/users`、`/api/agent/dispatch` 现行 `internal/router/` 未注册（真实最近端点 `GET /api/users`、`POST /api/ai-agents/:id/test`）。数字保留为 2026-08-15 历史值。
 
 ### 2.2 3 副本（生产推荐配置：3 × 4C8G）
 
@@ -38,9 +50,11 @@
 |------|----|----|-----|-----|-----|
 | GET /healthz | 300 | 80,000 | 3ms | 8ms | 15ms |
 | POST /api/bridge/ingest | 150 | 4,500 | 30ms | 80ms | 150ms |
-| GET /api/bridge/outbox | 60 | 100 | 30s | 30s | 30s |
-| POST /api/bridge/ack | 90 | 2,400 | 35ms | 90ms | 180ms |
-| POST /api/agent/dispatch | 30 | 24 | 1.2s | 2.5s | 4s |
+| GET /api/bridge/outbox † | 60 | 100 | 30s | 30s | 30s |
+| POST /api/bridge/outbox/ack | 90 | 2,400 | 35ms | 90ms | 180ms |
+| POST /api/agent/dispatch † | 30 | 24 | 1.2s | 2.5s | 4s |
+
+> † 同 §2.1 勘误：outbox 非长轮询；`/api/agent/dispatch` 现行路由未注册。
 
 ---
 
@@ -84,27 +98,39 @@
 ### 4.3 测试数据
 
 ```bash
-# 准备 1 万测试账号 / 10 万会话
-psql -h 127.0.0.1 -U hivemtk -d hivemtk << 'EOF'
--- 测试数据（仅 dev 环境）
-INSERT INTO bridge_accounts (id, channel, account_id, agent_id, created_at)
+# 准备 1 万测试账号 / 10 万会话（仅 dev 环境）
+# 连接参数走 .env：库角色/名不是 hivemtk，宿主机映射口也不是默认的 5432。在仓库根执行：
+set -a; . ./.env; set +a
+export PGHOST="${DB_HOST:-127.0.0.1}" PGPORT="${USER_POSTGRES_HOST_PORT:-8202}" \
+       PGUSER="$POSTGRES_USER" PGDATABASE="$USER_DB_NAME"
+export PGPASSWORD="$POSTGRES_PASSWORD"   # 口令只进环境变量，别写进命令行/日志/本文档
+
+psql -v ON_ERROR_STOP=1 <<'SQL'
+-- bridge_accounts 的真实 NOT NULL 列是 user_id / channel / account_id / account_name /
+-- agent_id / status（id 走 bridge_accounts_id_seq 默认，无需手填；agent_id 是 bigint，
+-- 旧写法把 'test-agent-N' 字符串塞进去会类型报错）。以下已在 dev 库 EXPLAIN 校验通过：
+INSERT INTO bridge_accounts (user_id, channel, account_id, account_name, agent_id, status, created_at)
 SELECT
-  i,
+  (i % 10) + 1,
   (ARRAY['douyin','xiaohongshu','tiktok','xianyu'])[1 + (i % 4)],
   'test-acc-' || i,
-  'test-agent-' || (i % 10),
+  '测试账号-' || i,
+  (i % 10) + 1,
+  'active',
   NOW()
 FROM generate_series(1, 10000) AS s(i);
 
-INSERT INTO conversations (id, channel, account_id, conversation_id, created_at)
+-- 没有 conversations 这张表；真实会话表是 inbox_conversations（NOT NULL：
+-- platform / account_id / customer_id）。旧列名 channel→platform，并补上必填的 customer_id。
+INSERT INTO inbox_conversations (platform, account_id, customer_id, conversation_id, created_at)
 SELECT
-  i,
   (ARRAY['douyin','xiaohongshu','tiktok','xianyu'])[1 + (i % 4)],
   'test-acc-' || ((i % 10000) + 1),
+  'test-cust-' || i,
   'test-conv-' || i,
   NOW()
 FROM generate_series(1, 100000) AS s(i);
-EOF
+SQL
 ```
 
 ### 4.4 测试流程
@@ -130,8 +156,12 @@ done
 # 5. 持久测试
 k6 run --vus 100 --duration 24h scripts/perf/bridge-load.js
 
-# 6. 收集 pprof
-go tool pprof http://localhost:8204/debug/pprof/profile?seconds=30
+# 6. 收集 pprof —— 注意：user-server 未注册 net/http/pprof（全仓 grep 非测试 0 命中），
+#    直接打 http://localhost:8204/debug/pprof/... 会得到 SPA 兜底页而非 profile。
+#    要 CPU/heap 采样，先在调试分支给 main 挂上 pprof（import _ "net/http/pprof" + 独占监听口），
+#    或改用 OS 级采样。下面这行是「挂上之后」的形态，现网默认跑不通：
+# go tool pprof http://localhost:8204/debug/pprof/profile?seconds=30
+# 未接线时的 OS 级替代（按宿主系统择一，无需改应用）：Linux 用 perf record -g -p $(pgrep -f user-server) -- sleep 30；macOS 用 sample $(pgrep -f user-server) 30
 ```
 
 ---
@@ -169,7 +199,7 @@ go tool pprof http://localhost:8204/debug/pprof/profile?seconds=30
 | 优化 | 效果 |
 |------|------|
 | HTTP keep-alive | 减少 50% RTT |
-| 长轮询 | 减少 90% 轮询开销 |
+| SSE / WebSocket 长连接（本仓实况：出站 `/api/bridge/outbox/sse`、访客 `/api/ws/visitor`；未实现长轮询）| 减少 90% 轮询开销 |
 | 批量 API | 减少 N+1 调用 |
 | gzip / brotli | 减少 70% 流量 |
 
@@ -250,22 +280,28 @@ done > /tmp/test-tokens.txt
 
 ### 附录 B：性能指标 SQL 查询
 
-> 私域部署版本无外部监控面板，性能指标通过 PostgreSQL 查询 `bridge_ingest_duration_ms_bucket` 聚合表获取。
+> **勘误**：不存在 `bridge_ingest_duration_ms` / `bridge_ingest_logs` / `bridge_ingest_duration_ms_bucket` 这些表（`information_schema.tables` 现查无）；bridge 入站/出站的时延与错误只写进进程内自研指标 `internal/pkg/metrics`（`/metrics` 未挂路由，不能 SQL 查）。可 SQL 查的性能事实源是：`layer_decision_logs`（`wall_ms`）、`llm_routing_logs`（`latency_ms` / `success` / `is_fallback`）、`rag_query_logs`（`latency_ms` / `hit_count` / `precision` / `recall`）。连接参数见 §4.3 的 `.env` 导出块；以下四条已在 dev 库 `user_db` 跑通（无近期数据时返回空值，非报错）。
 
 ```sql
--- P95 latency (最近 5 分钟)
-SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95
-FROM bridge_ingest_duration_ms
+-- LLM 推理时延 P95（最近 5 分钟）
+SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS llm_p95_ms
+FROM llm_routing_logs
 WHERE created_at > NOW() - INTERVAL '5 minutes';
 
--- 错误率 (最近 5 分钟)
-SELECT COUNT(*) FILTER (WHERE status >= 500)::float / COUNT(*) AS error_rate
-FROM bridge_ingest_logs
+-- LLM 错误率（success 是 boolean；最近 5 分钟）
+SELECT COUNT(*) FILTER (WHERE NOT success)::float / NULLIF(COUNT(*), 0) AS llm_error_rate
+FROM llm_routing_logs
 WHERE created_at > NOW() - INTERVAL '5 minutes';
 
--- 吞吐量 (最近 5 分钟)
-SELECT COUNT(*) AS throughput
-FROM bridge_ingest_logs
+-- 吞吐量（决策条数，最接近旧「throughput」口径；最近 5 分钟）
+SELECT COUNT(*) AS decisions
+FROM layer_decision_logs
+WHERE created_at > NOW() - INTERVAL '5 minutes';
+
+-- RAG 检索时延 P95 + 平均命中数（最近 5 分钟）
+SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS rag_p95_ms,
+       AVG(hit_count) AS avg_hit_count
+FROM rag_query_logs
 WHERE created_at > NOW() - INTERVAL '5 minutes';
 ```
 

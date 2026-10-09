@@ -27,7 +27,7 @@
 ### K16 明细（18个零散）
 1. mentions/:x/read POST — 通知已读
 2. mentions/mine GET — 已存在(401), 跳过
-3. cards/cross-publish — 名片跨平台复制发布
+3. cards/cross-publish — 名片跨平台复制发布(已下线: 未接任何平台发布 API，实际只建本地卡片+短链，名不副实；建卡能力保留在各平台卡片管理页)
 4. customer-events/batch POST — 批量事件写入
 5. marketing-flows/:x/sync-ab-results — 流程AB结果回写
 6. admin/tuning/escalation-config GET/PUT — 转人工配置

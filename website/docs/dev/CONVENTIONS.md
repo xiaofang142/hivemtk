@@ -379,7 +379,7 @@ Sitemap: https://xiaofang142.github.io/hivemtk/sitemap.xml
 
 ### 9.1 架构禁止
 
-- **禁止**依赖 反向代理容器（项目已删除 `Dockerfile` / 反向代理层配置，唯一发布目标是 GitHub Pages）
+- **禁止**依赖 nginx 容器（项目已删除 `Dockerfile` / nginx 配置，唯一发布目标是 GitHub Pages）
 - **禁止**依赖后端服务运行（`src/api/` 已整块删除；运行期零 XHR/fetch，详见 ARCHITECTURE.md §五）
 - **禁止**引入 SSR/SSG（保持纯客户端 SPA）
 - **禁止**引入状态管理库（无 Vuex/Pinia，使用 composables + 模块级单例）

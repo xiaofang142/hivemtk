@@ -593,9 +593,9 @@
 ### 页面: AssetMarketList.vue
 | API 方法 | HTTP 方法 | API 路径 | 参数 | 说明 |
 |---------|----------|---------|------|------|
-| getAssetList | GET | /api/asset-market/list | - | 获取资产列表 |
-| getAsset | GET | /api/asset-market/:id | id | 获取资产详情 |
-| purchaseAsset | POST | /api/asset-market/:id/purchase | id | 购买资产 |
+| getAssetList | GET | /api/v1/asset-market/list | - | 获取资产列表 |
+| getAsset | GET | /api/v1/asset-market/detail/:id | id | 获取资产详情 |
+| purchaseAsset | POST | /api/v1/asset-market/purchase | - | 购买资产 |
 
 ---
 

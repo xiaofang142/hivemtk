@@ -35,7 +35,7 @@
 │       └──────────┬───────────┘                    │
 │                  │                                │
 └──────────────────┼────────────────────────────────┘
-                   │ HTTPS / HTTP 长轮询
+                   │ HTTPS 请求 + WebSocket（/api/ws/visitor）
                    ▼
    ┌──────────────────────────────────┐
    │  user-server (HiveMtk 用户端)    │
@@ -92,9 +92,9 @@
 
 ### 4.1 准备浮标脚本
 
-`embed-sdk` 是 HiveMtk 提供的网页客服浮标 SDK（独立前端工程），构建后产物在 `embed-sdk/dist/`。
+`embed-sdk` 是 HiveMtk 提供的网页客服浮标 SDK（独立前端工程），需先构建：在仓库根执行 `make sdk-build`（等价于 `cd embed-sdk && npm install && npm run build`），产物落在 `embed-sdk/dist/`（该目录是构建产物，未纳入版本控制，checkout 后默认不存在）。
 
-由 `user-server` 在 `/embed/` 路径下服务（通过 docker-compose 挂载 `embed-sdk/dist` 到容器内的 `/app/embed-sdk-dist`）。
+由 `user-server` 在 `/embed/` 路径下服务。现行 dev 形态（模式 C）下 user-server 是**宿主机进程**、不是容器，没有 compose 挂载这一步：`setupEmbedStaticRoutes`（`user-server/internal/router/embed_static_routes.go:108` 的 `r.Static("/embed", embedDist)`）从默认候选目录 `../embed-sdk/dist`（相对二进制工作目录，见同文件 :31）取文件，可用环境变量 `EMBED_SDK_DIST` 覆盖（同文件 :28）。
 
 ### 4.2 嵌入企业官网
 
@@ -107,7 +107,9 @@
 </script>
 ```
 
-### 4.3 必传参数
+### 4.3 参数
+
+> 只有 `src` 必填，其余都是可选属性（缺省走内置默认值）。字段与优先级以 `embed-sdk/README.md` 为准。
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
@@ -129,9 +131,9 @@
 ## 五、用户端域名要求
 
 - 浮标脚本 URL 域名 **必须** 与 `user-server` 部署域名一致（同源部署）
-- 长轮询走同一域名（由 SDK 自动推断）
-- 外部反代（CDN / 云负载均衡）需透传 `/api/chat/public/*` 与 `/api/v1/ai/chat/poll` 路径
-- 跨域部署场景：详见 [embed-sdk/README.md](../../embed-sdk/README.md) "跨域部署"小节
+- 实时消息走 WebSocket `/api/ws/visitor`，域名由 SDK 自动推断（本仓**没有**长轮询实现，SDK 与后端通信表见 `embed-sdk/README.md`）
+- 外部反代（CDN / 云负载均衡）需透传 `/api/chat/public/*`，并对 `/api/ws/visitor` 放行 WebSocket Upgrade（透传 `Upgrade` / `Connection` 头、放宽空闲超时）。本仓**不存在** `/api/v1/ai/chat/poll`——长轮询端点从未实现（`grep -rn "LongPoll\|long_poll\|/poll" user-server/internal/router/ user-server/internal/controller/` 零命中），实时性由 WebSocket 承担
+- 跨域部署场景：详见 [embed-sdk/README.md](../../embed-sdk/README.md)「跨域部署」小节
 
 ---
 
@@ -139,7 +141,7 @@
 
 - 页面加载完成后自动注入右下角浮标按钮
 - 用户点击后弹出 iframe 聊天窗（最大宽度 380px）
-- iframe 内容由 user-server 提供（`/chat/embed/:channel_ref` 路径，channel_ref = appKey / channelId / `default`）
+- iframe 内容由 user-server 提供（`/chat/embed/:channel_ref` 路径，channel_ref 优先 `channelId`、次 `appKey`、最后 `default`，见 `embed-sdk/README.md`）
 - 父子页面通过 `postMessage` 通信（带 origin 校验）
 - 访客身份由 localStorage 生成的 UUID 跟踪
 
@@ -149,7 +151,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| 实时消息 | HTTP 长轮询 |
+| 实时消息 | WebSocket（`/api/ws/visitor`，私域无鉴权）|
 | 消息历史 | localStorage 缓存 + API 拉取 |
 | 快捷回复 | 内置常见问题模板 |
 | 文件上传 | 七牛直传，支持图片/文档/音频/视频 |
@@ -191,7 +193,7 @@ window.mcwInstance.destroy()
 <script src="https://chat.example.com/embed/marketing-chat-widget.iife.js"></script>
 ```
 
-> 配置优先级：`data-*` 属性 > `window.MarketingChatWidgetConfig` > 内置默认值。
+> 配置优先级（`embed-sdk/src/config.js:128-132` 的 `Object.assign` 叠加顺序，后写覆盖先写；与 `embed-sdk/README.md`「解析优先级」一致）：`window.MarketingChatWidgetConfig` > query 参数 > `data-*` 属性 > 内置默认值。（`config.js:4` 的注释把 `data-*` 排在最前，与实际代码相反，别照它写。）
 
 ---
 
@@ -207,7 +209,7 @@ window.mcwInstance.destroy()
 
 - 访客消息 HTML 转义（防 XSS）
 - WebSocket 无鉴权（私域部署，访客是企业自己的用户）
-- 速率限制：30 条消息/分钟/IP
+- 速率限制：`/api/chat/public` 组挂了 `VisitorRateLimitMiddleware`（`user-server/internal/router/chat_routes.go:25`），默认按 IP 令牌桶 **20 req/s（桶容量 40）** + 按渠道 **100 req/s（桶 200）**（`user-server/internal/middleware/visitor_rate_limit.go:24-27`）。这是"每秒请求数"，不是"每分钟消息数"；旧版写的"30 条消息/分钟/IP"与代码不符
 - iframe 通信用 postMessage + origin 校验
 
 ---

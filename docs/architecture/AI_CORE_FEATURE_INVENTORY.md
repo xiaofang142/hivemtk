@@ -173,7 +173,7 @@ L1 LRU热缓存(1024条/30min) → L2 温索引 → L3 冷索引 → L4 关键�
 query_rewriter / multi_query_generator / hyde_generator / contextual_retrieval / incremental_indexer / translation_cache / redis+LRU 双缓存
 
 ## F5 知识库管线
-EmbeddingDim=1024(BGE-M3 TEI localhost:8080)、TopK=5、相似阈值0.5、异步处理15min、SSRF校验5s、BM25扫描上限10000、失败回退 HashEmbeddingService
+EmbeddingDim=1024(BGE-M3 TEI localhost:8208；代码 bge_m3_vectorizer.go 硬编码默认仍为 8080，属待修不一致)、TopK=5、相似阈值0.5、异步处理15min、SSRF校验5s、BM25扫描上限10000、失败回退 HashEmbeddingService
 
 - **答案缓存的版本与灰度**（T-P2-05，2026-09-19）：`knowledge_bases` 新增 `version`/`canary_enabled`/`canary_percent`
   三列，唯一生效面是 `rag_answer_cache.prompt_version` 的命名空间选择（**不是**内容副本、**不是**行复制，理由见 G18）。

@@ -150,6 +150,11 @@ cp .env /tmp/env.backup.$(date +%s)
 ```bash
 # 1. 先确认"线上实际用的是哪一枚密钥"——根 .env 与 user-server/.env 都有 USER_JWT_SECRET，
 #    后加载的覆盖先加载的；改了没在用的那枚，等于没换。做法：拿一个真 token，逐个候选验签。
+#    覆盖关系由"怎么起的"决定，不是由文件内容决定：`make dev` 走 air，而 `.air.toml:8`/`:13`
+#    只 `set -a; . ../.env`（即仓库根那一份），所以 air 拉起的进程读不到 user-server/.env；
+#    下面 §3.2 第 2 步那种手工 nohup 重启才会再 source 一次 user-server/.env 并覆盖掉根值。
+#    因此"哪枚生效"是一次**进程级**观测（本文 :166 那行 2026-09-19 的实测结论只属于当时那个实例），
+#    每次轮换前照下面的方法现验，别沿用旧结论。
 set -a && . .env && set +a
 TOKEN=$(curl -s -X POST http://127.0.0.1:8204/api/auth/login -H 'Content-Type: application/json' \
   -d '{"username":"'"${HIVEMTK_ADMIN:-e2e_admin}"'","password":"'"$HIVEMTK_ADMIN_PASS"'"}' \

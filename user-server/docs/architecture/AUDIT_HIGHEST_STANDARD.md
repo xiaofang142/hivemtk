@@ -55,7 +55,7 @@ $ go test ./internal/router/-run TestSetup_WeComRoutes
 | # | 位置 | 问题 | 建议 |
 |---|------|------|------|
 | P1-1 | `router/router.go:93,106-108` | SSE 端点对**任意 Origin** 反射 ACAO 且带 `Access-Control-Allow-Credentials: true`。当前鉴权靠 X-Bridge-Token 头故可利用性低，但一旦任何端点引入 Cookie 会话即刻升级为凭据型 CSRF | SSE 白名单化 Origin 或去掉 credentials 头 |
-| P1-2 | `controller/upload.go:31` | 允许上传 `.svg`（image/svg+xml）。SVG 可内嵌 script，若反代/ 反向代理层 同源直出且无 `Content-Security-Policy`/`Content-Disposition` 即构成存储型 XSS | 移除 svg 或出网关加 nosniff+CSP |
+| P1-2 | `controller/upload.go:31` | 允许上传 `.svg`（image/svg+xml）。SVG 可内嵌 script，若反代/Nginx 同源直出且无 `Content-Security-Policy`/`Content-Disposition` 即构成存储型 XSS | 移除 svg 或出网关加 nosniff+CSP |
 | P1-3 | 全仓 76 处 `go func`，55 处 6 行窗口内无 `recover()`（如 `middleware/trace.go:86`、`service/webhook.go` 系列、`service/layer.go` 多处） | goroutine 内 panic 不被 gin.Recovery 捕获 → 整进程崩溃（可用性 P0 级连锁） | 统一 SafeGo wrapper |
 | P1-4 | `router/router.go:408-417 bridge.RegisterOwnershipChecker` | 账号查询 `ErrRecordNotFound` 时**返回 true（放行）**——fail-open 设计，账号不存在反而通过归属校验 | 改为 fail-closed 返回 false 或显式错误 |
 | P1-5 | 抽查 10 个业务资源 handler（ai_agent/tiktok_card/telegram_account/feishu_account/whatsapp_cloud/dingtalk 等） | `GetByID/Update/Delete` 全部不校验资源归属用户（staff A 可改 staff B 的渠道账号、AI Agent）。单租户内部系统降低了危害，但渠道账号含 Bot Token/AppSecret 等敏感凭据 | 至少对渠道凭据类资源加归属/角色校验 |

@@ -332,7 +332,7 @@ sitemap.xml 覆盖 7 个核心路由（`/`、`/features`、`/toolchain`、`/work
 ## 七、部署架构
 
 官网为**纯静态 SPA**，唯一发布目标是 GitHub Pages：`https://xiaofang142.github.io/hivemtk/`。
-前身是自建服务器上那台到期不续费的站点（原 `Dockerfile` / 反向代理层配置 / rsync 发布链随之下线，仓库内已无这些文件）。
+前身是自建服务器上那台到期不续费的站点（原 `Dockerfile` / nginx配置 / rsync 发布链随之下线，仓库内已无这些文件）。
 
 ```mermaid
 graph LR

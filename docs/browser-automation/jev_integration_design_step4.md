@@ -24,7 +24,7 @@ service/jev.go（新建，唯一新增生产文件）
 ├── buildJevState（page{url,title,text≤6000} + elements + recent_actions[-10:]）+ fingerprintState（sha256）
 ├── JevClient.Choose（POST {endpoint} {model,state,questions}，timeout 25s；429/529/503 退避 0.5*2^n×3，照抄 ultrafast）
 ├── validateChoice（5 项，照抄 model.py：choice∈ids / probs 键==ids / 值∈[0,1]有限 / sum≈1±0.02 / choice==argmax；
-│   非法 → "Invalid TypeSafe response; no action executed"，回退 Brain）
+│   非法 → "invalid TypeSafe response; no action executed"，回退 Brain）
 └── decisionToSteps（CLICK→click @eN / SCROLL_DOWN|UP→scroll / WAIT→wait 500ms / DONE→done=true / BLOCKED→中止；
     未知 operation → 拒绝回退；TYPE_TEXT/select 首版不支持——JEV 不产字段文本，表单填写仍走 Brain，见 §5）
 
