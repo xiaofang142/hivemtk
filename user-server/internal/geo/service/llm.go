@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -182,6 +183,9 @@ func (a *LLMAdapter) Generate(ctx context.Context, systemPrompt, prompt string, 
 	if a.dispatcher == nil {
 		return nil, fmt.Errorf("LLM dispatcher 未初始化")
 	}
+	if !a.dispatcher.HasHealthyProvider(llm.ScenarioHighQuality) {
+		return nil, errors.New("LLM provider 已全部熔断，跳过重试（触发降级）")
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
@@ -212,6 +216,9 @@ func (a *LLMAdapter) Generate(ctx context.Context, systemPrompt, prompt string, 
 func (a *LLMAdapter) GenerateJSON(ctx context.Context, systemPrompt, prompt string, maxTokens int) (*LLMResult, error) {
 	if a.dispatcher == nil {
 		return nil, fmt.Errorf("LLM dispatcher 未初始化")
+	}
+	if !a.dispatcher.HasHealthyProvider(llm.ScenarioHighQuality) {
+		return nil, errors.New("LLM provider 已全部熔断，跳过重试（触发降级）")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()

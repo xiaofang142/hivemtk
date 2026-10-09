@@ -582,3 +582,31 @@ func SetFanoutVoteEnabledGetter(fn func() bool) {
 		fanoutVoteEnabledGetter = fn
 	}
 }
+
+// HasHealthyProvider 判断指定场景路由是否有至少一个健康（未熔断且启用）的候选 provider
+func (d *Dispatcher) HasHealthyProvider(scenario DispatchScenario) bool {
+	if d == nil {
+		return false
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	route, ok := d.routes[scenario]
+	if !ok || route == nil {
+		return false
+	}
+	fo := GetGlobalFailover()
+	names := []string{route.Provider}
+	names = append(names, route.Fallbacks...)
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if fo != nil && fo.IsCircuitOpen(name) {
+			continue
+		}
+		if p, ok := d.providers[name]; ok && p.Enabled {
+			return true
+		}
+	}
+	return false
+}

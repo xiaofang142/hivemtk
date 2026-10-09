@@ -95,9 +95,11 @@
       <template #header>
         <div class="card-header">
           <span class="card-title">负面监控</span>
-          <el-button type="warning" :loading="monitoring" @click="handleMonitorNegative">
-            <el-icon><Warning /></el-icon><span>检测负面</span>
-          </el-button>
+          <el-tooltip :content="form.brand_name.trim() ? '' : '请先填写品牌名称'" :disabled="!!form.brand_name.trim()" placement="top">
+            <el-button type="warning" :loading="monitoring" :disabled="!form.brand_name.trim()" @click="handleMonitorNegative">
+              <el-icon><Warning /></el-icon><span>检测负面</span>
+            </el-button>
+          </el-tooltip>
         </div>
       </template>
       <el-empty v-if="!negativeResults.length" description="暂无负面监控数据，点击「检测负面」生成" :image-size="60" />
