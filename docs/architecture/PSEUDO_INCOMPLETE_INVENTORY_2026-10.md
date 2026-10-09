@@ -282,16 +282,17 @@ A14 只是停止谎报。逐条接线需要按业务优先级挑（例如 `confi
 
 每一个都验证过"全仓含测试零引用"（单 Go 模块、包在 `internal/` 下，不存在外部消费者）：
 
-| 孤岛 | 位置 | 备注 |
+| 孤岛 | 位置 | 处置（2026-10-09 I14） |
 | --- | --- | --- |
-| 卡片访问 UV/PV 统计 | `internal/service/card_access.go`（接口+构造+实现）、`repository` 的两个 CardAccess 仓储 | 表 `card_accesses` / `daily_card_uv_stats` 本机库里都不存在（现测计数 0/2）；`user-web` 无任何 UV 展示消费点。卡片域另一泳道正在动（`card_routes.go` 为 `M`），所以只报不删 |
-| AI 解决率统计 | `internal/service/ai_resolution_stats.go` + `repository/ai_resolution_stats.go` | 只有这条死服务消费仓储 |
-| 抖音集成服务 | `internal/service/douyin_integration.go` | `db any` 签名；真实抖音外发已走 bridge。2026-09-22 的渠道审计批动过它（1af6d28c），`docs/superpowers/plans/…coverage…md:3778` 已记录它在丢弃面里 |
-| LLM 人设评估 | `internal/service/persona_evaluator.go` 的 `NewLLMPersonaEvaluator` | 人性化评估已装配（`InitHumanizeEvalService`），人设评估没有；对应参数 `persona_default_threshold` 已按"未接线"标注 |
-| 欢迎 SOP 模板 | `internal/service/sop.go:932` `NewWelcomeSOP()` | 返回一份 14 节点示范图，零调用；要么做成种子数据，要么删 |
+| 卡片访问 UV/PV 统计 | `internal/service/card_access.go`（接口+构造+实现）、`repository` 的两个 CardAccess 仓储 | **保留只报**：表 `card_accesses` / `daily_card_uv_stats` 本机库里都不存在（现测计数 0/2）；`user-web` 无任何 UV 展示消费点。卡片域另一泳道正在动（`card_routes.go` 为 `M`），所以只报不删 |
+| AI 解决率统计 | `internal/service/ai_resolution_stats.go` + `repository/ai_resolution_stats.go` | **已删**（I14）：服务+仓储自闭环对整体删除，无其他消费者，删后不留新孤儿 |
+| 抖音集成服务 | `internal/service/douyin_integration.go` | **已删服务体**（I14）：`DouyinIntegrationService`+`FormatDouyinLeadDesc`+`DetectDouyinIntent` 摘除；同文件 4 个活符号（`dmOutreachAllowed`/`BuildDouyinDMWelcome`/`dyDMOutreachCooldown`/`dyDMOutreachMinScore`）是 lead_miner 在用的，保留——2026-09-22 渠道审计批（1af6d28c）与 `docs/superpowers/plans/…coverage…md:3778` 丢弃面记录均与此一致 |
+| LLM 人设评估 | `internal/service/persona_evaluator.go` 的 `NewLLMPersonaEvaluator` | **已删**（I14）：整文件 749 行+958 行测试删除（LLM/规则评估器、`PersonaEvaluationService`、包级 `ListLowQualitySamples`/`MarkLowQualitySampleHandled` 全竖零引用；tuning/humanize 各有同名但独立实现，不受影响）；连带 `repository/persona.go`（唯一消费者是被删文件，不删即成新孤儿）。人性化评估已装配（`InitHumanizeEvalService`）不受影响；参数 `persona_default_threshold` 仍按"未接线"标注、读取点门声明过期=0 |
+| 欢迎 SOP 模板 | `internal/service/sop.go` `NewWelcomeSOP()` | **已删**（I14）：零调用的 14 节点示范图函数摘除（不做种子数据） |
 
-处置建议分两类：卡片域那条等泳道收口（怕撞），其余四条可以直接删，
-但删代码不等于删决定，故在此点名等一句"删"。
+处置结论（2026-10-09 I14 回填）：卡片域那条继续等泳道收口（`card_routes.go` 仍 `M`），
+其余四条按本表"处置"列执行完毕——删除后 `go build`/`go vet`/三门禁/参数读取点门全绿，
+service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（seeds 计数、reach dispatch 加 `"douyin":true`），与本删除零关联。
 
 ### B7 门禁的 CI 面
 
