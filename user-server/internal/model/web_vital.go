@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"math"
+	"time"
+)
 
 // WebVitalRecord 前端性能指标（Web Vitals: CLS/FID/LCP/FCP/TTFB）
 type WebVitalRecord struct {
@@ -61,3 +65,33 @@ type RagEvalRun struct {
 }
 
 func (RagEvalRun) TableName() string { return "rag_eval_runs" }
+
+// safeFloat64 把 NaN/±Inf 归零：encoding/json 无法序列化 NaN，一旦某行指标为 NaN
+// （如 total=0 导致 0/0），c.JSON 会写失败并返回 HTTP 200 + 空 body，前端拿到空串后
+// 调 .map 直接崩。这里在序列化层兜底，保证任何脏数据都不会让响应体为空。
+func safeFloat64(f float64) float64 {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	return f
+}
+
+// MarshalJSON 序列化前清洗所有 float 指标，杜绝 NaN/Inf 进入 JSON。
+func (r RagEvalRun) MarshalJSON() ([]byte, error) {
+	type alias RagEvalRun
+	return json.Marshal(&struct {
+		alias
+		Recall5     float64 `json:"recall5"`
+		MRR         float64 `json:"mrr"`
+		NDCG5       float64 `json:"ndcg5"`
+		AvgRecall    float64 `json:"avg_recall"`
+		AvgPrecision float64 `json:"avg_precision"`
+	}{
+		alias:       alias(r),
+		Recall5:     safeFloat64(r.Recall5),
+		MRR:         safeFloat64(r.MRR),
+		NDCG5:       safeFloat64(r.NDCG5),
+		AvgRecall:    safeFloat64(r.AvgRecall),
+		AvgPrecision: safeFloat64(r.AvgPrecision),
+	})
+}

@@ -81,8 +81,8 @@ async function load() {
       http.get('/api/rag/eval/runs', { limit: 20 })
     ])
     Object.assign(stats, s || {})
-    recentRuns.value = runs || []
-    renderChart(runs || [])
+    recentRuns.value = Array.isArray(runs) ? runs : []
+    renderChart(recentRuns.value)
   } finally {
     loading.value = false
   }

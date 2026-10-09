@@ -170,7 +170,9 @@ func (s *RagEvalAutoService) evaluateRetrievalHit(ctx context.Context, questions
 			if q.Recall > 1 {
 				q.Recall = 1
 			}
-			q.Precision = float64(hitCount) / float64(len(chunks))
+			if len(chunks) > 0 {
+				q.Precision = float64(hitCount) / float64(len(chunks))
+			}
 		}
 	}
 }
