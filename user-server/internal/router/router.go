@@ -246,6 +246,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 就是不装配，此时下面那组 /api/human-tasks/* 端点全部回 503（不会回一个空列表骗人）。
 	app.InitHumanTaskRuntime(gormDB)
 
+	// 待办 SLA 超时闭环（I2）：排在 InitHumanTaskRuntime 之后（读的就是它那张表），
+	// 在路由之前装配。三态旗子 FF_LTC_HANDOFF_SLA_JOB（off|shadow|enforce），默认 off ⇒
+	// 只打一行"不装配"日志、不产生协程。enforce 档逾期即发站内提醒、拖过一个 SLA 窗口再升级。
+	app.InitHumanTaskSLA(gormDB)
+
 	// Bad Case 底座（T-P8-03）：同一位置约束（在编排器与路由之前）。本竖也没有旗子 ——
 	// 编排器按全局服务决定挂不挂"这一轮低质 → 留一条痕"的标记器，不装配时
 	// 下面那组 /api/bad-cases/* 全部回 503，且回答路径与本卡之前逐字一致。
@@ -508,6 +513,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		auth.GET("/manage/session-chain/sla-config", handoffCtrl.GetAutoResolveConfig)
 		auth.GET("/manage/rules", handoffCtrl.ListRules)
 
+		sloCtrl := controller.NewSLOController()
+		auth.GET("/manage/slo", sloCtrl.List)
+
 		manageAdmin := auth.Group("/manage", middleware.AdminAuthMiddleware())
 		{
 			manageAdmin.POST("/co-pilot/evaluate", copilotCtrl.Evaluate)
@@ -544,12 +552,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 				CreatedAt:      createdAt,
 			}))
 		})
-
-		tooluseBridgeAdapter := bridge.NewBridgeReachAdapter(
-			app.NewIntegrationReachAdapterFromDB(gormDB),
-			bridgeIngressSvc,
-		)
-		bridge.GlobalBridgeReachAdapter = tooluseBridgeAdapter
 
 		douyinLeadMiner := webhookSvc.DouyinLeadMiner()
 		bridgeHandler.SetLeadMiner(douyinLeadMiner)

@@ -16,6 +16,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/sla"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -23,16 +24,6 @@ import (
 )
 
 const faqPromptVersion = "v1"
-
-var (
-	globalFAQCache    *ragcache.FAQAnswerCacheService
-	globalFAQEmbedder llm.EmbeddingServiceInterface
-)
-
-func SetGlobalFAQAnswerCache(svc *ragcache.FAQAnswerCacheService, embedder llm.EmbeddingServiceInterface) {
-	globalFAQCache = svc
-	globalFAQEmbedder = embedder
-}
 
 // SmartCSOrchestrator 智能体编排器
 type SmartCSOrchestrator struct {
@@ -118,9 +109,20 @@ func NewSmartCSOrchestrator(engine *SalesEngine, cfg *OrchestratorConfig, kbRepo
 		confidenceThreshold: cfg.ConfidenceThreshold,
 		enableAutoReply:     cfg.EnableAutoReply,
 		maxAIConsecutive:    cfg.MaxAIConsecutive,
-		faqCache:            globalFAQCache,
-		faqEmbedder:         globalFAQEmbedder,
 	}
+}
+
+// SetFAQAnswerCache 注入语义答案缓存与它的查询向量化服务。
+//
+// 两个字段必须成对注入：读缓存那段分支的入参是 (缓存服务, embedder) 两样，
+// 只有一个时另一个就是 nil，所以装配层要么两个都给，要么一个都不给。
+// 不调本方法时（装配层没开这个能力）两个字段都是零值 nil，
+// HandleIncomingWithAgent 里的读/写两段缓存分支都不进，回答路径与挂载前逐字一致。
+//
+// 调用方：internal/app.BuildSmartOrchestrator（唯一的编排器构造点，见 faq_cache_wiring.go）。
+func (o *SmartCSOrchestrator) SetFAQAnswerCache(svc *ragcache.FAQAnswerCacheService, embedder llm.EmbeddingServiceInterface) {
+	o.faqCache = svc
+	o.faqEmbedder = embedder
 }
 
 // SetCustomerServiceAgentService 注入客服座席智能体挂载服务
@@ -443,12 +445,15 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 			result.TransferReason = fmt.Sprintf("AI 置信度不足 (%.2f < %.2f)", result.Confidence, threshold)
 		}
 		utils.WarnErrKV("smartcs.transferToHuman.lowConfidence", o.transferToHuman(ctx, session, result.TransferReason, result), "session_id", session.SessionID, "confidence", strconv.FormatFloat(result.Confidence, 'f', 4, 64), "threshold", strconv.FormatFloat(threshold, 'f', 4, 64))
+		sla.Record(sla.SLOInboundHandled, true)
+		sla.Record(sla.SLOAIAutoReplyCoverage, false)
 		return result, nil
 	}
 
 	result.HandlerType = model.HandlerTypeAI
 	result.AIReplied = true
 	result.Reply = salesResp.Reply
+	sla.Record(sla.SLOInboundHandled, true)
 
 	// FAQ 答案缓存写入守卫：只有当 top1 RAG 召回分数达到置信度阈值时才缓存。
 	// 无门槛写入会让低分召回（甚至幻觉拼接）的回复长期留在缓存里，
@@ -483,6 +488,8 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 
 	if o.enableAutoReply && salesResp.Reply != "" {
 		if err := o.saveOutboundMessage(ctx, session, salesResp.Reply, true); err != nil {
+			sla.Record(sla.SLOInboundHandled, false)
+			sla.Record(sla.SLOAIAutoReplyCoverage, false)
 			return nil, fmt.Errorf("save outbound message failed: %w", err)
 		}
 		utils.WarnErrKV("smartcs.markSuggestionUsed", o.markSuggestionUsed(ctx, suggestionID), "session_id", session.SessionID, "suggestion_id", strconv.FormatUint(uint64(suggestionID), 10))
@@ -493,6 +500,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 				Str("session_id", session.SessionID).
 				Msg("[Orchestrator] UpdateLastMessage(ai) failed — message_count 可能不准")
 		}
+		sla.Record(sla.SLOAIAutoReplyCoverage, true)
 	}
 
 	// 订单意向提取 → 建草稿（T-P2-06 的生产入口）。三点口径：
@@ -603,6 +611,20 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, pr
 	if err != nil || lr == nil || lr.Tier == ragcache.TierMiss || strings.TrimSpace(lr.Answer) == "" {
 		return nil, false
 	}
+	// 置信度取召回相似度：语义层是实际余弦值，精确层按定义就是 1（见 rag/cache/service.go）。
+	// 恒 1.0 会绕过置信度阈值→转人工的下游判断，缓存命中变成"免检通道"；
+	// 相似度低于阈值时仍走正常降级链。
+	//
+	// 判据必须在改动 result 之前：调用方把同一个 result 交给后面的生成路径，
+	// 这里先写 Reply/AIReplied 再返回 false，等于"缓存没命中"的那次回答带着一份缓存答案的形状走出去。
+	if lr.Similarity < o.confidenceThreshold {
+		logger.Ctx(ctx).Info().
+			Str("kb_id", kbID).
+			Float64("similarity", lr.Similarity).
+			Float64("threshold", o.confidenceThreshold).
+			Msg("[ragcache] similarity below confidence threshold, skip cache hit")
+		return nil, false
+	}
 	logger.Ctx(ctx).Info().
 		Str("kb_id", kbID).
 		Str("prompt_version", promptVersion).
@@ -612,16 +634,6 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, pr
 	result.HandlerType = model.HandlerTypeAI
 	result.AIReplied = true
 	result.Reply = lr.Answer
-	// 置信度用实际召回相似度而非恒 1.0：恒 1.0 会绕过置信度阈值→转人工的
-	// 下游判断，缓存命中变成"免检通道"。相似度低于阈值时仍走正常降级。
-	if lr.Similarity < o.confidenceThreshold {
-		logger.Ctx(ctx).Info().
-			Str("kb_id", kbID).
-			Float64("similarity", lr.Similarity).
-			Float64("threshold", o.confidenceThreshold).
-			Msg("[ragcache] similarity below confidence threshold, skip cache hit")
-		return nil, false
-	}
 	result.Confidence = lr.Similarity
 	if o.enableAutoReply {
 		if session := o.sessionOfResult(result); session != nil {

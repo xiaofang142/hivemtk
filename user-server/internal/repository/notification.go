@@ -159,3 +159,20 @@ func (r *NotificationRepository) CountAll(ctx context.Context) (int64, error) {
 	}
 	return count, nil
 }
+
+// CountByTypeLinkSince 统计 type=ntype 且 link=link 且 created_at >= since 的通知条数。
+//
+// 存在的唯一理由是**去重**：待办 SLA 的节拍器每轮都会重新扫到同一批逾期行，
+// 没有这一问，"逾期提醒"会在每个节拍给坐席刷一条新通知，提醒本身变成噪音。
+// 用 type+link 而不是 metadata 里的 JSON 串做键：前者是建了索引的列，
+// 后者要 LIKE 全表，而这张表会被通知中心每次打开都读。
+func (r *NotificationRepository) CountByTypeLinkSince(ctx context.Context, ntype, link string, since time.Time) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Notification{}).
+		Where("type = ? AND link = ? AND created_at >= ?", ntype, link, since).
+		Count(&count).Error
+	return count, err
+}

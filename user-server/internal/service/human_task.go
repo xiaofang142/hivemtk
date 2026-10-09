@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/sla"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -491,6 +492,11 @@ func normalizeHumanTaskQuery(q HumanTaskListQuery) HumanTaskListQuery {
 		}
 	}
 	out.AssigneeUserID = strings.TrimSpace(q.AssigneeUserID)
+	// 逾期视图的基准时刻用时钟 seam 填：repo 侧对零值虽会退到 time.Now()，
+	// 但那是兜底；service 是唯一该知道"现在几点"的层，测试才能把时钟钉死复算。
+	if out.OverdueOnly && out.OverdueAt.IsZero() {
+		out.OverdueAt = loadHumanTaskNowFn()()
+	}
 	return out
 }
 
@@ -545,13 +551,28 @@ func (s *HumanTaskService) Counts(ctx context.Context) (*HumanTaskCounts, error)
 
 // Claim 认领（仅 conversation_handoff）：会话所有权可以抢、可以退。
 func (s *HumanTaskService) Claim(ctx context.Context, id, operator string) (*model.HumanTask, error) {
-	return s.transition(ctx, id, model.HumanTaskActionClaim, operator, nil,
+	task, err := s.transition(ctx, id, model.HumanTaskActionClaim, operator, nil,
 		func(m *model.HumanTask, op string) error {
 			now := loadHumanTaskNowFn()()
 			m.AssigneeUserID = op
 			m.ClaimedAt = &now
 			return nil
 		})
+	if err != nil {
+		return nil, err
+	}
+	recordHumanFirstResponseSLO(task)
+	return task, nil
+}
+
+// recordHumanFirstResponseSLO 认领即人工首次接管（首响），按是否早于
+// SlaFirstResponseAt 记一次 human_first_response_sla。缺任一时间戳时不记
+// （没有基线可判，记成功或失败都会污染达成率）。
+func recordHumanFirstResponseSLO(task *model.HumanTask) {
+	if task == nil || task.SlaFirstResponseAt == nil || task.ClaimedAt == nil {
+		return
+	}
+	sla.Record(sla.SLOHumanFirstResponse, !task.ClaimedAt.After(*task.SlaFirstResponseAt))
 }
 
 // Release 释放：退回池子等别人认领。**只有当前认领人**能释放。

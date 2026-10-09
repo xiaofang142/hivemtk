@@ -424,3 +424,90 @@ func newBareOrchestrator(t *testing.T) *service.SmartCSOrchestrator {
 		MaxAIConsecutive:    1,
 	}, nil)
 }
+
+// TestInitOrderDraftRuntime_ConfirmLegProducesRealOrder 装配必须把确认成单这条腿的
+// 三把依赖递进去（SetOrderService / SetJourney / SetFollowUp 此前全仓非测试构造点为零）。
+//
+// 判据不是"服务里某个字段非 nil"，而是走完一次确认之后库里真多出一行订单、
+// 且结果不带"临时订单号"标志：前者证明这条腿真的通到底座，后者证明没有退成假数据。
+func TestInitOrderDraftRuntime_ConfirmLegProducesRealOrder(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.OrderDraft{}, &model.Order{})
+	db.SetTestDB(database)
+	installDraftRuntimeCleanup(t)
+	t.Setenv(OrderDraftFlagEnv, "shadow")
+
+	rt := InitOrderDraftRuntime(database)
+	if rt == nil {
+		t.Fatal("shadow 档应装配运行时")
+	}
+	// HTTP 出口取的必须是刚装配那一份：不是同一份的话，端点操作的底座与生产者写的
+	// 底座是两个（多副本/重复 Setup 下这就是"确认了一条列表里看不到的草稿"）。
+	if got := OrderDraftServiceForHTTP(); got != rt.svc {
+		t.Fatalf("OrderDraftServiceForHTTP 与装配出的服务不是同一份：%p vs %p", got, rt.svc)
+	}
+
+	const cust = "cust-confirm-leg"
+	d := rt.svc.CreateFromIntent(context.Background(), &service.OrderIntent{
+		CustomerID: cust, ProductName: "确认腿产品", UnitPrice: 1999, Quantity: 2, Confidence: 0.9,
+	}, "7")
+	if d == nil {
+		t.Fatal("CreateFromIntent 没产出草稿")
+	}
+	res, err := rt.svc.Confirm(context.Background(), d.ID, "7")
+	if err != nil {
+		t.Fatalf("确认失败：%v", err)
+	}
+	if res.OrderProvisional {
+		t.Error("装配好的运行时不该走临时订单号那条路 ⇒ 订单服务没递进去")
+	}
+	if res.OrderID == "" {
+		t.Fatal("确认结果没有订单号")
+	}
+
+	var rows int64
+	if err := database.Model(&model.Order{}).Where("account_id = ?", cust).Count(&rows).Error; err != nil {
+		t.Fatalf("数订单行失败：%v", err)
+	}
+	if rows != 1 {
+		t.Errorf("确认后订单表应有 1 行，实际 %d ⇒ 草稿确认成了没有落点的假单", rows)
+	}
+	// 订单号要落在草稿行上：那是重启/多副本之后唯一能对上账的键。
+	cur, err := rt.svc.GetByID(context.Background(), d.ID)
+	if err != nil || cur == nil {
+		t.Fatalf("回读草稿失败：%v / %v", err, cur)
+	}
+	if cur.OrderID != res.OrderID {
+		t.Errorf("草稿上的订单号与确认结果不一致：草稿 %q，结果 %q", cur.OrderID, res.OrderID)
+	}
+}
+
+// TestInitOrderDraftRuntime_WithoutDBConfirmIsMarkedProvisional 这一格守的是反向那一半：
+// 没有 DB 句柄时确认照样会把草稿翻成 confirmed，但那个订单号必须是**显式标出的临时号**。
+//
+// 它不需要测试库，所以 CI 里没起 PG 也照样开火（上一格在没库时是 Skip，
+// 只靠它的话"退成假单"这条路径在门禁里没有任何判据）。
+func TestInitOrderDraftRuntime_WithoutDBConfirmIsMarkedProvisional(t *testing.T) {
+	installDraftRuntimeCleanup(t)
+	t.Setenv(OrderDraftFlagEnv, "shadow")
+
+	rt := InitOrderDraftRuntime(nil)
+	if rt == nil {
+		t.Fatal("shadow 档即使没有 DB 也应装配（读走内存），否则本格的前提不成立")
+	}
+	d := rt.svc.CreateFromIntent(context.Background(), &service.OrderIntent{
+		CustomerID: "cust-no-db", ProductName: "无库确认产品", UnitPrice: 500, Quantity: 1, Confidence: 0.8,
+	}, "7")
+	if d == nil {
+		t.Fatal("CreateFromIntent 没产出草稿")
+	}
+	res, err := rt.svc.Confirm(context.Background(), d.ID, "7")
+	if err != nil {
+		t.Fatalf("确认失败：%v", err)
+	}
+	if !res.OrderProvisional {
+		t.Errorf("没有订单服务时 OrderProvisional 必须为 true，否则调用方会把临时号当真订单用：%+v", res)
+	}
+	if res.OrderID == "" {
+		t.Error("临时号仍要有值：草稿状态已经翻了，回一个空订单号会让人以为确认没生效")
+	}
+}

@@ -30,7 +30,7 @@ One workspace for every social channel. One AI agent for every customer conversa
 
 | | | | |
 |---|---|---|---|
-| **94** business modules<br>SCRM + AI + CDP + automation | **10+** reach channels<br>Douyin / Xiaohongshu / TikTok / WhatsApp… | **41** agent tools<br>ReAct autonomous orchestration | **0** bytes of data egress<br>Local inference, fully offline-capable |
+| **94** business modules<br>SCRM + AI + CDP + automation | **10+** reach channels<br>Douyin / Xiaohongshu / TikTok / WhatsApp… | **42** agent tools<br>ReAct autonomous orchestration | **0** bytes of data egress<br>Local inference, fully offline-capable |
 
 ---
 
@@ -51,7 +51,7 @@ One workspace for every social channel. One AI agent for every customer conversa
 **HiveMtk** ("Hive" + "Marketing Toolkit") is an **open-source AI marketing system for private-domain operations**, nailing four things in a single repo:
 
 1. **All-channel social reach** — Douyin / Kuaishou / Xiaohongshu / Xianyu / TikTok via a Chrome-extension bridge; WeCom / Telegram / WhatsApp / Email / SMS via protocol-direct; one unified inbox
-2. **ReAct autonomous agents** — perceive → plan → tool-call → reflect; 41 atomic tools composed on the fly, not hardcoded if-else workflows
+2. **ReAct autonomous agents** — perceive → plan → tool-call → reflect; 42 atomic tools composed on the fly, not hardcoded if-else workflows
 3. **Local knowledge base RAG** — pgvector 1024-dim hybrid retrieval + bge-m3 + bge-reranker-v2-m3 fine ranking
 4. **Zero data egress** — llama.cpp (Qwen2.5) + TEI local inference stack; conversations, knowledge base, and embeddings never leave your network
 
@@ -69,7 +69,7 @@ Covers the full **acquisition → outreach → conversion → repurchase** funne
 |-----------|------------------------|----------------|-----------------|--------------------|
 | Core positioning | AI marketing system | General LLM app platform | Commercial SaaS | WeCom SCRM |
 | Reach channels | **Multi-channel (10+)** | None built-in | 1-3 | 1 (WeCom) |
-| AI capability | **ReAct agents + 41 tools** | Visual Workflow | Basic CS bot | Simple RAG / none |
+| AI capability | **ReAct agents + 42 tools** | Visual Workflow | Basic CS bot | Simple RAG / none |
 | Data deployment | **100% on-prem + local inference** | Self-host / SaaS | Cloud | SaaS / private |
 | License | AGPL-3.0 | Apache-2.0 | Proprietary | Partially open |
 | Best for | Teams wanting **self-control, multi-channel, strong AI** | Pure AI app dev | SMBs without IT | WeCom power users |
@@ -93,7 +93,7 @@ Unified CDP customer profiles, one profile reaching everywhere; unified inbox �
 ### 🤖 ReAct Autonomous Agents: Not Dead Workflows
 
 - **ReAct loop**: perceive → plan → tool-call → reflect; unseen scenarios get handled by composing tools on the fly
-- **41 atomic tools** across five domains (reach / projects / customers / knowledge base / business), each wrapped by a five-layer decorator chain: Permission → Retry → Timeout → RateLimit → Audit
+- **42 atomic tools** across five domains (reach / projects / customers / knowledge base / business), each wrapped by a five-layer decorator chain: Permission → Retry → Timeout → RateLimit → Audit
 - **Hybrid RAG**: pgvector HNSW + BM25 with RRF fusion, bge-reranker fine ranking, optional HyDE / MultiQuery rewrite
 - **Multi-agent collaboration**: reactive answering agent + proactive outreach agent; four-layer memory (short-term / long-term / SOP state / business facts)
 - **Visual workflow builder**: zero-code SOP editor for marketing automation

@@ -260,6 +260,16 @@ func humanTaskQueryFromRequest(ctx *gin.Context) (service.HumanTaskListQuery, bo
 		return q, false
 	}
 	q.Page, q.PageSize = page, size
+
+	// overdue=1/true 只列"自己那一档 SLA 已逾期"的行（每类只认自己那一列，
+	// 口径与 Counts 的逾期读数同源）。它是布尔筛选器：认不出的值按 false 处理，
+	// 不像 kind 那样报 400 —— kind 是值域（未知 kind 会让读数悄悄为空），
+	// 而一个拼错的布尔值只会让筛选器不生效，报 400 反而把列表页打不开。
+	if raw := strings.TrimSpace(ctx.Query("overdue")); raw != "" {
+		if b, err := strconv.ParseBool(raw); err == nil {
+			q.OverdueOnly = b
+		}
+	}
 	return q, true
 }
 

@@ -107,6 +107,20 @@ func (s *NotificationService) Create(ctx context.Context, n *model.Notification)
 	return s.repo.Create(ctx, n)
 }
 
+// HasRecentByTypeLink 问一句"这条提醒在最近 window 里发过没有"（SLA 去重用）。
+//
+// 去重键 = (type, link)：待办 SLA 的节拍器每轮都扫到同一批逾期行，
+// 靠"发过就别发"才不至于把提醒刷成噪音。判据放在这一层而不是调用方，
+// 是因为"查过没有"和"没有才写"必须同一事务口径：分开写会有 TOCTOU，
+// 两个并发节拍会各自查到 0、各写一条。
+func (s *NotificationService) HasRecentByTypeLink(ctx context.Context, ntype, link string, since time.Time) (bool, error) {
+	n, err := s.repo.CountByTypeLinkSince(ctx, ntype, link, since)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // SeedIfEmpty 若表为空，注入演示通知（便于首次访问通知中心有数据可看）
 func (s *NotificationService) SeedIfEmpty(ctx context.Context) error {
 	count, err := s.repo.CountAll(ctx)

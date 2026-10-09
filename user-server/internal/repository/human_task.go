@@ -64,6 +64,12 @@ type HumanTaskQuery struct {
 	// 非空 = 精确列这些状态（每个都必须是已知状态）。
 	Statuses       []string
 	AssigneeUserID string
+	// OverdueOnly 为真时只列"自己那一档 SLA 已过 OverdueAt"的行，口径与
+	// CountOverdueOpenByKind 逐字一致（每类只认自己那一列，绝不 COALESCE 三列）。
+	OverdueOnly bool
+	// OverdueAt 逾期判定的基准时刻；零值 = 用 time.Now()。service 侧用时钟 seam
+	// 填它，进程内调用不填也能工作。
+	OverdueAt time.Time
 	// Page/PageSize 分页：**要么都给、要么都不给**（都给时 Page 从 1 起，PageSize 超
 	// humanTaskMaxPageSize 会被夹住；都不给时一次读全表，只给进程内调用用）。
 	// 半分页在 List 里直接报错，理由见函数内注释。
@@ -274,14 +280,49 @@ func humanTaskScopeWhere(q HumanTaskQuery) (string, []any, error) {
 	statuses := q.Statuses
 	if len(statuses) == 0 {
 		// 默认口径 = 未落定，与 uq_human_task_open 的谓词同源（见 model 层）。
-		return where + " AND " + model.HumanTaskOpenPredicateSQL(), args, nil
-	}
-	for _, s := range statuses {
-		if !model.HumanTaskStatusKnown(s) {
-			return "", nil, fmt.Errorf("%w: status %q 不在值域里", ErrHumanTaskInputInvalid, s)
+		where += " AND " + model.HumanTaskOpenPredicateSQL()
+	} else {
+		for _, s := range statuses {
+			if !model.HumanTaskStatusKnown(s) {
+				return "", nil, fmt.Errorf("%w: status %q 不在值域里", ErrHumanTaskInputInvalid, s)
+			}
 		}
+		where += " AND status IN ?"
+		args = append(args, statuses)
 	}
-	return where + " AND status IN ?", append(args, statuses), nil
+
+	if q.OverdueOnly {
+		odWhere, odArgs, err := humanTaskOverdueWhere(kinds, q.OverdueAt)
+		if err != nil {
+			return "", nil, err
+		}
+		where += " AND " + odWhere
+		args = append(args, odArgs...)
+	}
+	return where, args, nil
+}
+
+// humanTaskOverdueWhere 构造"每类只认自己那一列"的逾期谓词（组内 OR）。
+//
+// 每类一段 `(kind = ? AND <本类SLA列> IS NOT NULL AND <本类SLA列> <= ?)`，
+// 与 CountOverdueOpenByKind 逐类发出的那三条 WHERE 逐字同源。合并成
+// COALESCE(三列) 是最省事的写错法：一行会话待办被填上审批档时刻就会按审批档判逾期，
+// 坐席的响应指标当场失真（AC④）。kinds 为空时已在上游补成三类，这里不再兜底。
+func humanTaskOverdueWhere(kinds []string, now time.Time) (string, []any, error) {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	parts := make([]string, 0, len(kinds))
+	args := make([]any, 0, len(kinds)*2)
+	for _, k := range kinds {
+		col := HumanTaskSLAColumnForKind(k)
+		if col == "" {
+			return "", nil, fmt.Errorf("%w: kind %q 没有对应的 SLA 列", ErrHumanTaskInputInvalid, k)
+		}
+		parts = append(parts, "(kind = ? AND "+col+" IS NOT NULL AND "+col+" <= ?)")
+		args = append(args, k, now)
+	}
+	return "(" + strings.Join(parts, " OR ") + ")", args, nil
 }
 
 func (r *humanTaskRepo) List(ctx context.Context, q HumanTaskQuery) ([]*model.HumanTask, int64, error) {

@@ -452,6 +452,10 @@ func main() {
 	// 否则 InitInferenceOrchestrator 构造推理闭环时拿不到 store。
 	app.InitAgentCheckpointStore(db.GetDB())
 
+	// SLO 跟踪器（internal/pkg/sla）：启动期显式登记三条 SLI 并注册指标。
+	// 记录点分布在 service 层（编排器、人工待办），走 sla.Record 直达同一实例。
+	app.InitSLO()
+
 	router.Setup(r, db.GetDB())
 
 	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），

@@ -1,7 +1,7 @@
 # Agent 工具系统完整参考（user-server）
 
 > 适用代码： `internal/aiagent/agent/tooluse/*`、`internal/service/sales_engine*.go`、`internal/router/tool_executor_*.go`、`internal/dto/sales.go`
-> 工具总数：**41**（customer 8 · knowledge 4 · business 6 · pm 3 · reach 20）
+> 工具总数：**42**（customer 8 · knowledge 4 · business 6 · pm 3 · reach 20）
 
 ---
 

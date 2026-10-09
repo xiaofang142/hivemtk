@@ -116,6 +116,19 @@ func currentOrderDraftRuntime() *OrderDraftRuntime {
 	return orderDraftRuntime
 }
 
+// OrderDraftServiceForHTTP 取当前草稿运行时的服务实例，未装配返回 nil。
+//
+// 单独开这个口是为了和待办底座同一关闸形状：路由照挂、服务缺席 ⇒ 每个请求回 503，
+// 而不是回一份空列表。空列表是一句业务结论（"今天没有待确认草稿"），
+// 拿"本进程压根没装配"去支撑它，销售就会停止处理本该处理的单。
+func OrderDraftServiceForHTTP() *service.OrderDraftService {
+	rt := currentOrderDraftRuntime()
+	if rt == nil {
+		return nil
+	}
+	return rt.svc
+}
+
 // InitOrderDraftRuntime 按旗子装配草稿运行时；off 档返回 nil（并出声）。
 //
 // 先停旧的再装新的，可重复调用。不是防御性洁癖：
@@ -155,6 +168,18 @@ func InitOrderDraftRuntime(db *gorm.DB) *OrderDraftRuntime {
 		extractor: service.NewOrderIntentExtractor(),
 		mode:      mode,
 	}
+	// 确认成单这条腿的三把依赖在这里递进去（SetOrderService 此前全仓非测试构造点为零）。
+	//
+	// 为什么必须在这儿递而不是等调用方：Confirm 在 orderService 缺席时会退成
+	// "生成本进程临时订单号"，草稿照样翻成 confirmed，销售看到的是一个 orders 表里
+	// 不存在的订单号 —— 那比直接失败更坏，因为下一步（开票/对账）会打在假号上。
+	// journey/followup 缺席只是"少推一次阶段、少排一次售后回访"，不产假数据。
+	if db != nil {
+		svc.SetOrderService(context.Background(), service.NewOrderServiceWithDB(db))
+	}
+	journey := service.NewCustomerJourneyService()
+	svc.SetJourney(context.Background(), journey)
+	svc.SetFollowUp(context.Background(), service.NewFollowUpService(journey))
 	// 清扫 worker 两档都装：ExpireOverdue 在内存底座上同样要跑 ——
 	// "7 天未确认自动过期"这条口径此前只存在于注释里，从来没有调用方。
 	rt.sweeper = service.NewOrderDraftSweepWorker(svc, service.DefaultOrderDraftSweepInterval, 0)

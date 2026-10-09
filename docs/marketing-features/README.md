@@ -73,7 +73,7 @@ HiveMtk 是一套**开源自部署**的 AI 私域运营系统，解决一个核�
 | ReAct 适配 | 对不支持函数调用的模型自动注入工具协议提示词 |
 | 多数投票 | 关键场景可采样 N=5 取多数结果提升稳定性 |
 
-> 如实说明：多模型投票（MultiModelVote）目前只取质量分最高者的结果，尚未做真正的一致性比对。
+> 已修正（2026-10 复核）：多模型投票（MultiModelVote）已实现真实多数派一致性比对（`internal/aiagent/llm/dispatcher_dispatch.go:488`），2/3 一致即胜出，无过半多数派时回退质量分最高者。
 
 ### 3.2 Agent 推理闭环（F2）
 
@@ -268,20 +268,20 @@ HiveMtk 是一套**开源自部署**的 AI 私域运营系统，解决一个核�
 
 ## 九、已知限制（如实披露）
 
-以下短板在源码审查中确认存在（编号 G1–G12 来自父仓库 [`docs/architecture/AI_CORE_FEATURE_INVENTORY.md`](../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) 末尾的「已知限制」章节），选购/二开前请知悉：
+以下清单为 **2026-10 复核**后的现状（编号来自父仓库 [`docs/architecture/AI_CORE_FEATURE_INVENTORY.md`](../../docs/architecture/AI_CORE_FEATURE_INVENTORY.md) 末尾的「已知限制」章节），逐条标注「已修（附证据）/ 仍存在」，选购/二开前请知悉：
 
-| # | 限制 | 影响 |
-|---|------|------|
-| G1 | SOP Saga 补偿空壳 | SOP 执行中途宕机后无法精确续跑，只能整体重跑或人工介入 |
-| G2 | MultiModelVote 无真实投票 | 多模型投票名不副实，仅取最高质量分者 |
-| G3 | greeting 意图规则不可达 | 问候语意图永远走不到规则分支（常量未入词典） |
-| G4 | 置信度两套体系割裂 | 编排层启发式置信度与 confidence 五信号体系未打通 |
-| G7 | 行为拟人默认关闭 | 分条发送/打字模拟需手动 A/B 灰度开启 |
-| G8 | 异议分类置信度硬编码 0.85 | 分类无真实置信度，首中即返回 |
-| G9 | 四层检索短路式 | 可能漏掉冷库中更优结果 |
-| G10 | 模板兜底文案单一 | 四级降级最后一级文案无场景区分 |
-| G11 | 主动触达未落地 | active 模式仅有骨架，定时主动外联不可用 |
-| G12 | 评测较薄 | 无对话级端到端评测集，仅单轮 ChrF + LLM Judge |
+| # | 限制 | 当前状态（2026-10 复核） |
+|---|------|--------------------------|
+| G1 | SOP Saga 补偿空壳 | **已修**：`service.InitSOPCompensation` 在 `cmd/api/main.go:300` 按 `FF_LTC_SAGA_COMPENSATION` 注入，补偿器已接线 |
+| G2 | MultiModelVote 无真实投票 | **已修**：`internal/aiagent/llm/dispatcher_dispatch.go:488` 真实多数派投票（`dispatcher_vote_test.go:16`） |
+| G3 | greeting 意图规则不可达 | **已修**：`internal/service/intent_recognition.go:505` 问候语已入词典 |
+| G4 | 置信度两套体系割裂 | 仍存在：编排层启发式置信度与 confidence 五信号体系未打通 |
+| G7 | 行为拟人默认关闭 | 仍存在：分条发送/打字模拟需手动 A/B 灰度开启 |
+| G8 | 异议分类置信度硬编码 0.85 | **已修**：`internal/service/objection_handler.go:131` 按命中数给 0.90/0.70/0.40，非硬编码 |
+| G9 | 四层检索短路式 | 仍存在：可能漏掉冷库中更优结果 |
+| G10 | 模板兜底文案单一 | 仍存在：四级降级最后一级文案无场景区分 |
+| G11 | 主动触达未落地 | 部分修复：双模式（Passive/Active）已有入口，但 `ModeOf`/`IsActive`/`AutoExecute`/`DecisionStrategyIDs` 四格仍 UNWIRED |
+| G12 | 评测较薄 | 仍存在：无对话级端到端评测集，仅单轮 ChrF + LLM Judge |
 
 ---
 
@@ -296,4 +296,4 @@ HiveMtk 是一套**开源自部署**的 AI 私域运营系统，解决一个核�
 
 ---
 
-*最后更新：2026-08-26 · 基于 user-server 源码实测*
+*最后更新：2026-10-09 · 基于 user-server 源码实测（已知限制章节经 2026-10 逐条复核）*
