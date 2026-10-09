@@ -115,6 +115,27 @@ func BridgeOnlineGraceWindow(ctx context.Context) time.Duration {
 	return GlobalConfigParam().GetDuration(ctx, "bridge", BridgeOnlineGraceParam, BridgeOnlineGraceDefault)
 }
 
+const (
+	AbExposureBufferParam      = "ab_exposure_buffer"
+	InboxOverdueThresholdParam = "inbox_overdue_threshold"
+	InboxStaffLoadLimitParam   = "inbox_default_staff_load_limit"
+)
+
+// AbExposureBufferSize 读 AB 实验曝光异步落库缓冲容量，未装配时回落默认 AbExposureBuffer=1024。
+func AbExposureBufferSize(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, "misc", AbExposureBufferParam, AbExposureBuffer)
+}
+
+// InboxOverdueWindow 读收件箱会话超时标记为 overdue 的时长，未装配时回落默认 InboxOverdueThreshold=30m。
+func InboxOverdueWindow(ctx context.Context) time.Duration {
+	return GlobalConfigParam().GetDuration(ctx, "session", InboxOverdueThresholdParam, InboxOverdueThreshold)
+}
+
+// InboxStaffLoadLimit 读单个客服默认负载上限，未装配时回落默认 InboxDefaultStaffLoadLimit=30。
+func InboxStaffLoadLimit(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, "session", InboxStaffLoadLimitParam, InboxDefaultStaffLoadLimit)
+}
+
 // SeedConfigParams 启动时调用：AutoMigrate + Upsert 默认参数。
 // 首次启动会写入全部 60+ 参数；后续启动只补齐缺失项，不覆盖用户已改值。
 func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
@@ -276,15 +297,33 @@ func (s *ConfigParamService) GetDuration(ctx context.Context, group, key string,
 		return fallback
 	}
 
-	if d, err := time.ParseDuration(v); err == nil {
-		return d
-	}
-
-	f, err := strconv.ParseFloat(v, 64)
+	sec, err := parseDurationSeconds(v)
 	if err != nil {
 		return fallback
 	}
-	return time.Duration(f * float64(time.Second))
+	return time.Duration(sec * float64(time.Second))
+}
+
+// parseDurationSeconds 把 duration 参数的原始字符串解析成「秒」。
+//
+// 这是读取侧（GetDuration）与校验侧（validateValue）共用的唯一口径：
+// 先试 Go duration 字面量（"30s"/"5m"/"1h30m"），再退到「裸数字 = 秒」（"30"/"0.5"）。
+//
+// 两侧必须共用一个函数，否则会裂成两种形态：
+//   - 校验只认裸数字、读取认 duration 字面量 → 写进去的值读出来是 fallback（静默失效）
+//   - 校验解析失败就放过 → 任意值都能绕过 min/max 写进库
+//
+// 现存 duration 参数的 DefaultValue/Min/Max/Step 一律是裸秒数（如 "500"/"3600"），
+// 走的是第二条路径；Go 字面量是为「运维在页面上习惯性敲 30s」留的口子。
+func parseDurationSeconds(raw string) (float64, error) {
+	if d, err := time.ParseDuration(raw); err == nil {
+		return d.Seconds(), nil
+	}
+	f, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, fmt.Errorf("value %q not valid duration: want Go duration (30s/5m/1h30m) or a bare seconds number", raw)
+	}
+	return f, nil
 }
 
 func (s *ConfigParamService) GetString(ctx context.Context, group, key, fallback string) string {
@@ -436,10 +475,19 @@ func (s *ConfigParamService) invalidateGroup(group string) {
 	s.mu.Unlock()
 }
 
+// validateValue 校验待写入的值是否符合该参数的类型与范围。
+//
+// 两条纪律（都是被真实绕过口教出来的）：
+//  1. 类型校验**无条件执行**，不因为没配 min/max 就跳过。
+//     否则运维给一个 int 参数写进 "abc"，GetInt 读到解析失败、悄悄回退到编译期兜底值，
+//     页面显示「保存成功」、行为却完全没变——这跟「登记了没人读」是同一种病。
+//  2. 解析失败一律 return error，**没有任何一条分支允许 return nil 蒙混过关**。
+//     （历史缺陷：duration 分支在 time.ParseDuration/ParseFloat 失败时直接 return nil，
+//     等于把 min/max 校验整个关掉，写 "999999999s" 也能存进去。）
+//
+// min/max 自身解析失败也报错而不是当 0 处理——库里存了个坏边界是数据问题，
+// 静默当 0 会让所有值都「通过校验」，比报错难查得多。
 func validateValue(valueType, value string, min, max *string) error {
-	if min == nil && max == nil {
-		return nil
-	}
 	switch valueType {
 	case "int":
 		v, err := strconv.Atoi(value)
@@ -447,13 +495,19 @@ func validateValue(valueType, value string, min, max *string) error {
 			return fmt.Errorf("value %q not valid int: %w", value, err)
 		}
 		if min != nil {
-			m, _ := strconv.Atoi(*min)
+			m, err := strconv.Atoi(*min)
+			if err != nil {
+				return fmt.Errorf("min %q of int param not valid: %w", *min, err)
+			}
 			if v < m {
 				return fmt.Errorf("value %d < min %d", v, m)
 			}
 		}
 		if max != nil {
-			m, _ := strconv.Atoi(*max)
+			m, err := strconv.Atoi(*max)
+			if err != nil {
+				return fmt.Errorf("max %q of int param not valid: %w", *max, err)
+			}
 			if v > m {
 				return fmt.Errorf("value %d > max %d", v, m)
 			}
@@ -464,34 +518,46 @@ func validateValue(valueType, value string, min, max *string) error {
 			return fmt.Errorf("value %q not valid float: %w", value, err)
 		}
 		if min != nil {
-			m, _ := strconv.ParseFloat(*min, 64)
+			m, err := strconv.ParseFloat(*min, 64)
+			if err != nil {
+				return fmt.Errorf("min %q of float param not valid: %w", *min, err)
+			}
 			if v < m {
 				return fmt.Errorf("value %f < min %f", v, m)
 			}
 		}
 		if max != nil {
-			m, _ := strconv.ParseFloat(*max, 64)
+			m, err := strconv.ParseFloat(*max, 64)
+			if err != nil {
+				return fmt.Errorf("max %q of float param not valid: %w", *max, err)
+			}
 			if v > m {
 				return fmt.Errorf("value %f > max %f", v, m)
 			}
 		}
 	case "duration":
-
-		v, err := strconv.ParseFloat(value, 64)
+		// 口径与 GetDuration 严格一致（parseDurationSeconds），
+		// 单位统一折成秒再比大小，否则「值写 30s、边界写 30」这类混写会算出荒谬结果。
+		v, err := parseDurationSeconds(value)
 		if err != nil {
-
-			return nil
+			return err
 		}
 		if min != nil {
-			m, _ := strconv.ParseFloat(*min, 64)
+			m, err := parseDurationSeconds(*min)
+			if err != nil {
+				return fmt.Errorf("min %q of duration param not valid: %w", *min, err)
+			}
 			if v < m {
-				return fmt.Errorf("value %f < min %f", v, m)
+				return fmt.Errorf("value %fs < min %fs", v, m)
 			}
 		}
 		if max != nil {
-			m, _ := strconv.ParseFloat(*max, 64)
+			m, err := parseDurationSeconds(*max)
+			if err != nil {
+				return fmt.Errorf("max %q of duration param not valid: %w", *max, err)
+			}
 			if v > m {
-				return fmt.Errorf("value %f > max %f", v, m)
+				return fmt.Errorf("value %fs > max %fs", v, m)
 			}
 		}
 	}
