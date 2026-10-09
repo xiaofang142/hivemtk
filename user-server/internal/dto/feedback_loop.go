@@ -40,7 +40,7 @@ const (
 
 // CollectRequest 反馈采集请求（外部 → FeedbackCollector）
 //
-// 用法：SalesEngine / PersonaEvaluator / API handler 构造此请求提交给 FeedbackCollector.Collect
+// 用法：SalesEngine / API handler 构造此请求提交给 FeedbackCollector.Collect
 type CollectRequest struct {
 	SessionID         string            `json:"session_id"`
 	CustomerID        string            `json:"customer_id"`

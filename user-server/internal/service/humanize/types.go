@@ -45,7 +45,8 @@ type ChampionMessage struct {
 
 // LowQualitySampleCollector 低质样本收集器接口
 //
-// 复用 已有 DBLowQualitySampleCollector，但 HumanizeEvalService 通过此抽象接口调用
+// 实现由 repository.NewHumanizeLowQualitySampleCollector 提供（humanize_init.go 装配），
+// HumanizeEvalService 通过此抽象接口调用
 type LowQualitySampleCollector interface {
 	Collect(ctx context.Context, sample *model.LowQualitySample) error
 }
