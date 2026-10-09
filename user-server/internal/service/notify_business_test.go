@@ -134,8 +134,8 @@ func TestOrderDraftCreatedNotification_Builder(t *testing.T) {
 	if n.UserID != 10086 {
 		t.Errorf("数字 owner 应解析成本人：%d", n.UserID)
 	}
-	if n.Type != OrderDraftCreatedNotifyType || n.Link != "" {
-		t.Errorf("type/link 错：type=%q link=%q（草稿竖无前端页，link 必须为空）", n.Type, n.Link)
+	if n.Type != OrderDraftCreatedNotifyType || n.Link != "/dashboard/drafts/od_1" {
+		t.Errorf("type/link 错：type=%q link=%q（应直指该草稿详情页 /dashboard/drafts/<id>）", n.Type, n.Link)
 	}
 	for _, want := range []string{"od_1", "光子嫩肤"} {
 		if !strings.Contains(n.Content, want) {
@@ -216,7 +216,7 @@ func TestCreateFromIntent_NotifiesOnlyOnNew(t *testing.T) {
 		t.Fatalf("首建应恰响 1 条，实得 %d", rec.count())
 	}
 	n := rec.last()
-	if n.UserID != 10086 || n.Type != OrderDraftCreatedNotifyType || n.Link != "" {
+	if n.UserID != 10086 || n.Type != OrderDraftCreatedNotifyType || n.Link != "/dashboard/drafts/"+d1.ID {
 		t.Errorf("通知形状错：%+v", n)
 	}
 	if !strings.Contains(n.Content, d1.ID) {

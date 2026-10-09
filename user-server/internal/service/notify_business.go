@@ -100,9 +100,9 @@ func notifyUserID(raw string) uint {
 
 // OrderDraftCreatedNotification 新订单草稿待确认：发给草稿 owner（解析不出回 0 广播）。
 //
-// Link 为空不是漏写：草稿竖今天只有 API（/api/agent/order-drafts/*）没有前端页，
-// 宁可给不出跳转也不给一个点了就 404 的死链 —— 正文里带全草稿 ID 与金额，
-// 收到的人不点开也知道发生了什么。
+// Link 直指这条草稿的详情页（/dashboard/drafts/:id，与工作台聚合待办生成的深链同一条，
+// 由 I10 落点）—— 点铃铛即落到确认/取消/改价三动作所在的页面，不用回列表自己找。
+// 正文仍带全草稿 ID 与金额：通知列表不跳转的人不点开也知道发生了什么。
 func OrderDraftCreatedNotification(d *OrderDraft) *model.Notification {
 	if d == nil {
 		return nil
@@ -113,7 +113,7 @@ func OrderDraftCreatedNotification(d *OrderDraft) *model.Notification {
 		Title:  "新订单草稿待确认",
 		Content: fmt.Sprintf("订单草稿 %s：%s ×%d，金额 %.2f，状态待确认。",
 			d.ID, d.ProductName, d.Quantity, d.TotalAmount),
-		Link: "",
+		Link: "/dashboard/drafts/" + d.ID,
 	}
 }
 
