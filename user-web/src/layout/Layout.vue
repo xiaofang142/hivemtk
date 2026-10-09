@@ -314,8 +314,7 @@ const topMenus = ref([
         children: [
           { key: 'chatChannelList', title: '客服渠道', icon: 'Connection', path: '/chatChannel/list' },
           { key: 'whatsappCloud', title: 'WhatsApp Cloud', icon: 'Connection', path: '/whatsapp-cloud' },
-          { key: 'dingtalkApp', title: '钉钉应用账号', icon: 'Connection', path: '/dingtalk-app' },
-          { key: 'cardsCrossPublish', title: '跨平台发布', icon: 'Share', path: '/cards/cross-publish' }
+          { key: 'dingtalkApp', title: '钉钉应用账号', icon: 'Connection', path: '/dingtalk-app' }
         ]
       },
       {
@@ -542,6 +541,20 @@ const topMenus = ref([
         path: '/geo-tools/keyword-mining',
         children: [
           {
+            key: 'geoConfigGroup',
+            title: '配置',
+            icon: 'Setting',
+            children: [
+              { key: 'geoBrandConfig', title: '品牌与域名', icon: 'OfficeBuilding', path: '/geo-tools/brand-config' },
+              { key: 'geoSeoInfra', title: 'SEO 基础设施', icon: 'DocumentChecked', path: '/geo-tools/seo-infra' },
+              { key: 'geoPusherConfig', title: '蜘蛛推送配置', icon: 'Key', path: '/geo-tools/pusher-config' },
+              { key: 'geoSiteConfig', title: '静态站部署', icon: 'Monitor', path: '/geo-tools/site-config' },
+              { key: 'geoSchemaTemplates', title: 'Schema 模板', icon: 'Collection', path: '/geo-tools/schema-templates' },
+              { key: 'geoCompetitors', title: '竞品管理', icon: 'UserFilled', path: '/geo-tools/competitors' },
+              { key: 'geoConfig', title: '配置优化', icon: 'Setting', path: '/geo-tools/config' },
+            ]
+          },
+          {
             key: 'geoProd',
             title: '生产',
             icon: 'EditPen',
@@ -550,6 +563,7 @@ const topMenus = ref([
               { key: 'geoContentCreation', title: '内容创作', icon: 'EditPen', path: '/geo-tools/content-creation' },
               { key: 'geoContentOptimize', title: '文章优化', icon: 'Document', path: '/geo-tools/content-optimize' },
               { key: 'geoKnowledgeBase', title: 'GEO 知识库', icon: 'FolderOpened', path: '/geo-tools/knowledge-base' },
+              { key: 'geoEntityGraph', title: '实体图谱', icon: 'Share', path: '/geo-tools/entity-graph' },
             ]
           },
           {
@@ -557,6 +571,8 @@ const topMenus = ref([
             title: '发布',
             icon: 'Connection',
             children: [
+              { key: 'geoSitePublish', title: '发布到官网', icon: 'Upload', path: '/geo-tools/site-publish' },
+              { key: 'geoPushCenter', title: '蜘蛛推送', icon: 'Promotion', path: '/geo-tools/push-center' },
               { key: 'geoPlatformPublish', title: '平台发布', icon: 'Connection', path: '/geo-tools/platform-publish' },
               { key: 'geoWorkflow', title: '工作流', icon: 'Setting', path: '/geo-tools/workflow' },
             ]
@@ -566,16 +582,15 @@ const topMenus = ref([
             title: '监控',
             icon: 'Monitor',
             children: [
+              { key: 'geoFunnelDashboard', title: '漏斗总览', icon: 'DataAnalysis', path: '/geo-tools/funnel-dashboard' },
+              { key: 'geoIndexTracking', title: '收录与引用', icon: 'CircleCheck', path: '/geo-tools/index-tracking' },
               { key: 'geoVisibilityBoard', title: '可见性观测', icon: 'TrendCharts', path: '/geo-tools/visibility' },
               { key: 'geoSovBoard', title: '竞品 SOV', icon: 'DataLine', path: '/geo-tools/sov-board' },
-              { key: 'geoCompetitors', title: '竞品管理', icon: 'UserFilled', path: '/geo-tools/competitors' },
               { key: 'geoCrawlerStats', title: '爬虫统计', icon: 'Monitor', path: '/geo-tools/crawler-stats' },
-              { key: 'geoEntityGraph', title: '实体图谱', icon: 'Share', path: '/geo-tools/entity-graph' },
               { key: 'geoVerification', title: '多模型验证', icon: 'CircleCheck', path: '/geo-tools/verification' },
               { key: 'geoAlerts', title: '预警中心', icon: 'Bell', path: '/geo-tools/alerts' },
               { key: 'geoReports', title: '数据报表', icon: 'DataAnalysis', path: '/geo-tools/reports' },
               { key: 'geoDecisionReport', title: '决策报告', icon: 'Document', path: '/geo/decision-report' },
-              { key: 'geoConfig', title: '配置优化', icon: 'Setting', path: '/geo-tools/config' },
             ]
           }
         ]

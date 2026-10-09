@@ -64,7 +64,7 @@ database:
   type: postgres
   postgres:
     host: "${DB_HOST:127.0.0.1}"
-    port: ${DB_PORT:8232}
+    port: ${DB_PORT:8202}
     user: admin
     dbname: user_db
     sslmode: disable

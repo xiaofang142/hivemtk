@@ -76,27 +76,37 @@ type minedKeyword struct {
 }
 
 // MineKeywords 挖掘关键词
+//
+// 支持三种模式：
+//   - combination：纯词库组合，不依赖 LLM；
+//   - llm：LLM 生成，LLM 不可用时降级为词库组合，保证链路不中断；
+//   - mixed/longtail：LLM 生成，同样具备降级兜底。
 func (s *KeywordService) MineKeywords(ctx context.Context, seedWords []string, mode string, brandName string, advantages []string) ([]*model.GeoKeyword, error) {
-	advantagesStr := AdvantagesToString(advantages)
-	seedWordsJSON := KeywordsToJSON(seedWords)
-
 	baseKeywords := generateKeywordCombinations(seedWords)
 
-	var prompt string
-	if mode == "longtail" {
-		prompt = KeywordPolishPrompt(brandName, KeywordsToJSON(baseKeywords))
+	var keywords []*minedKeyword
+	if mode == "combination" {
+		keywords = heuristicMinedKeywords(baseKeywords)
 	} else {
-		prompt = KeywordMiningPrompt(brandName, advantagesStr, seedWordsJSON)
+		advantagesStr := AdvantagesToString(advantages)
+		seedWordsJSON := KeywordsToJSON(seedWords)
+
+		var prompt string
+		if mode == "longtail" {
+			prompt = KeywordPolishPrompt(brandName, KeywordsToJSON(baseKeywords))
+		} else {
+			prompt = KeywordMiningPrompt(brandName, advantagesStr, seedWordsJSON)
+		}
+
+		resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
+		if err != nil {
+			logger.Errorf("[GEO] 关键词挖掘 LLM 不可用，降级词库组合: %v", err)
+			keywords = heuristicMinedKeywords(baseKeywords)
+		} else {
+			s.recordAPICall(ctx, resp, "keyword_mining")
+			keywords = s.parseMinedKeywords(resp.Content, baseKeywords)
+		}
 	}
-
-	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
-	if err != nil {
-		return nil, fmt.Errorf("关键词挖掘失败: %w", err)
-	}
-
-	s.recordAPICall(ctx, resp, "keyword_mining")
-
-	keywords := s.parseMinedKeywords(resp.Content, baseKeywords)
 
 	result := make([]*model.GeoKeyword, 0, len(keywords))
 	failed := 0
@@ -125,6 +135,20 @@ func (s *KeywordService) MineKeywords(ctx context.Context, seedWords []string, m
 		logger.Errorf("关键词挖掘入库部分失败: %d/%d 条写入失败", failed, len(keywords))
 	}
 	return result, nil
+}
+
+// heuristicMinedKeywords 将词库组合结果转为带启发式意图标注的挖掘结果（零 LLM 成本）。
+func heuristicMinedKeywords(baseKeywords []string) []*minedKeyword {
+	out := make([]*minedKeyword, 0, len(baseKeywords))
+	for _, kw := range baseKeywords {
+		out = append(out, &minedKeyword{
+			Keyword:        kw,
+			Category:       "组合",
+			Intent:         classifyIntent(kw),
+			EstimatedValue: 5,
+		})
+	}
+	return out
 }
 
 func (s *KeywordService) parseMinedKeywords(content string, baseKeywords []string) []*minedKeyword {

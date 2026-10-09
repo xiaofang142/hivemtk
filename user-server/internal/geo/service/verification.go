@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 type VerificationService struct {
@@ -217,7 +218,20 @@ func (s *VerificationService) MonitorNegative(ctx context.Context, brandName str
 
 	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
 	if err != nil {
-		return nil, fmt.Errorf("负面监控失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO Verify] LLM 不可用，降级负面监控: brand=%s err=%v", brandName, err))
+		return map[string]any{
+			"model":   "heuristic_fallback",
+			"queries": []map[string]any{},
+			"summary": map[string]any{
+				"total_queries":         0,
+				"high_risk_count":       0,
+				"medium_risk_count":     0,
+				"low_risk_count":        0,
+				"average_mention_count": 0,
+				"alerts":                []string{"LLM 不可用，本次负面监控为降级结果，请稍后重试"},
+				"recommendations":       []string{},
+			},
+		}, nil
 	}
 	s.recordAPICall(ctx, resp, "negative_monitor")
 

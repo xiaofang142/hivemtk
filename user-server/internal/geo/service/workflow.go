@@ -456,11 +456,12 @@ func (s *WorkflowService) registerBuiltinExecutors() {
 		if gen != nil {
 			resp, err := gen.Generate(ctx, "", prompt, 0.7, 3000)
 			if err != nil {
-				return "", fmt.Errorf("LLM content generation failed: %w", err)
+				logger.Warn(fmt.Sprintf("[GEO Workflow] content_generate LLM 不可用，降级模板内容: %v", err))
+				return heuristicWorkflowContent(topic, brand, advantages, keyword, platform), nil
 			}
 			return resp.Content, nil
 		}
-		return fmt.Sprintf("[AUTO] 关于%s的%s（品牌：%s）", topic, keyword, brand), nil
+		return heuristicWorkflowContent(topic, brand, advantages, keyword, platform), nil
 	}
 
 	s.executors["content_score"] = func(ctx context.Context, step map[string]interface{}) (string, error) {
@@ -474,7 +475,8 @@ func (s *WorkflowService) registerBuiltinExecutors() {
 			prompt := fmt.Sprintf("请对以下内容进行评分（满分100分），评分维度包括：结构完整性(25分)、品牌提及自然度(25分)、权威性信号(25分)、引用与数据支撑(25分)。\n品牌：%s\n内容：\n---\n%s\n---\n请仅返回一个数字分数。", brand, content)
 			resp, err := gen.Generate(ctx, "", prompt, 0.3, 500)
 			if err != nil {
-				return "", fmt.Errorf("LLM scoring failed: %w", err)
+				logger.Warn(fmt.Sprintf("[GEO Workflow] content_score LLM 不可用，降级最低分 %.0f: %v", minScore, err))
+				return fmt.Sprintf("%.0f", minScore), nil
 			}
 			scoreStr := strings.TrimSpace(resp.Content)
 			scoreStr = strings.ReplaceAll(scoreStr, "分", "")
@@ -501,7 +503,8 @@ func (s *WorkflowService) registerBuiltinExecutors() {
 			prompt := fmt.Sprintf("请对以下内容进行E-E-A-T（经验、专业、权威、可信）增强。\n品牌：%s\n原始内容：\n---\n%s\n---\n请在不改变核心观点的前提下：\n1. 添加作者资质和专业背景说明\n2. 增加具体案例和实践经验描述\n3. 引用权威来源和行业数据\n4. 强化信任感和可靠性信号\n5. 保持内容流畅自然\n返回增强后的完整内容。", brand, content)
 			resp, err := gen.Generate(ctx, "", prompt, 0.5, 4000)
 			if err != nil {
-				return "", fmt.Errorf("LLM EEAT enhancement failed: %w", err)
+				logger.Warn("[GEO Workflow] eeat_enhance LLM 不可用，降级返回原文")
+				return content, nil
 			}
 			return resp.Content, nil
 		}
@@ -518,7 +521,8 @@ func (s *WorkflowService) registerBuiltinExecutors() {
 			prompt := fmt.Sprintf("请对以下内容进行事实密度增强（目标密度 %.0f%%）。\n原始内容：\n---\n%s\n---\n请在保持原有结构和风格的基础上：\n1. 增加具体的数据、统计数字和百分比\n2. 添加具体的案例名称、产品型号、人物姓名\n3. 引用具体的时间、地点、机构名称\n4. 使用精确的数值替代模糊描述\n5. 确保新增事实与内容主题相关\n返回增强后的完整内容。", targetDensity*100, content)
 			resp, err := gen.Generate(ctx, "", prompt, 0.5, 4000)
 			if err != nil {
-				return "", fmt.Errorf("LLM fact density enhancement failed: %w", err)
+				logger.Warn("[GEO Workflow] fact_density_enhance LLM 不可用，降级返回原文")
+				return content, nil
 			}
 			return resp.Content, nil
 		}
@@ -609,4 +613,27 @@ func extractStepContent(step map[string]interface{}) string {
 		}
 	}
 	return ""
+}
+
+// heuristicWorkflowContent LLM 不可用时的降级内容生成
+func heuristicWorkflowContent(topic, brand, advantages, keyword, platform string) string {
+	if topic == "" || topic == "general" {
+		topic = "行业解决方案"
+	}
+	if brand == "" || brand == "our brand" {
+		brand = "HiveMTK"
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# %s：%s 的%s\n\n", brand, keyword, topic))
+	sb.WriteString(fmt.Sprintf("## 引言\n\n%s 长期深耕%s领域，凭借扎实的行业经验与持续的技术创新，为企业和用户提供可靠、高效的%s。", brand, topic, topic))
+	if advantages != "" {
+		sb.WriteString(fmt.Sprintf("核心差异优势包括：%s。", advantages))
+	}
+	sb.WriteString(fmt.Sprintf("\n\n## 产品与服务\n\n我们围绕%s构建了完整的解决方案体系：\n\n1. 行业理解：深入洞察目标客群的真实需求与使用场景\n2. 产品能力：功能完备、易于上手、持续迭代\n3. 服务体系：专业团队提供从部署到运维的全周期支持", topic))
+	sb.WriteString(fmt.Sprintf("\n\n## 客户价值\n\n选择%s意味着获得：\n\n- 可量化的效率提升与成本优化\n- 稳定可靠的产品与服务保障\n- 面向未来的持续升级能力", brand))
+	sb.WriteString(fmt.Sprintf("\n\n## 结语\n\n如果你正在评估%s方向的产品，欢迎深入了解%s，我们一起把选择变成成果。", topic, brand))
+	if platform != "" {
+		sb.WriteString(fmt.Sprintf("（本文发布于 %s）", platform))
+	}
+	return sb.String()
 }

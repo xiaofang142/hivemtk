@@ -12,6 +12,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
@@ -141,7 +142,13 @@ func (s *KBService) Ask(ctx context.Context, question string) (*dto.KBAskRespons
 
 	resp, err := s.llm.Generate(ctx, "你是知识库问答助手。请基于以下提供的事实片段回答用户问题，若不足以回答请坦诚说明。", "事实片段：\n"+strings.Join(snippets, "\n\n")+"\n\n用户问题："+question, 0.3, 2000)
 	if err != nil {
-		return nil, fmt.Errorf("知识库问答失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO KB] LLM 不可用，降级为知识库检索摘要: question=%s", question))
+		return &dto.KBAskResponse{
+			Answer:   heuristicKBAnswer(question, snippets),
+			Sources:  sources,
+			Provider: "heuristic_fallback",
+			Model:    "retrieval_v1",
+		}, nil
 	}
 	return &dto.KBAskResponse{
 		Answer:   resp.Content,
@@ -176,4 +183,29 @@ func toDocResponse(d *model.GeoKnowledgeDocument) dto.KnowledgeDocumentResponse 
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 	}
+}
+
+// heuristicKBAnswer LLM 不可用时基于知识库检索结果拼装的降级回答
+func heuristicKBAnswer(question string, snippets []string) string {
+	if len(snippets) == 0 {
+		return "当前知识库暂无与问题相关的内容，无法回答。请尝试其他问题或补充相关文档。"
+	}
+	const maxSnippets = 3
+	const snippetLimit = 200
+	var sb strings.Builder
+	sb.WriteString("根据知识库检索到的相关文档，内容概要：\n\n")
+	count := len(snippets)
+	if count > maxSnippets {
+		count = maxSnippets
+	}
+	for i := 0; i < count; i++ {
+		content := snippets[i]
+		if r := []rune(content); len(r) > snippetLimit {
+			content = string(r[:snippetLimit]) + "…"
+		}
+		sb.WriteString("- ")
+		sb.WriteString(content)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }

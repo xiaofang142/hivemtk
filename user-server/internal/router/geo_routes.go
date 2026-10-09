@@ -116,7 +116,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	dictSvc := geoservice.NewDictService(georepo.NewGeoDictRepositoryWithDB(gormDB))
 	dictCtrl := geoctrl.NewDictController(dictSvc)
 	pushCtrl := geoctrl.NewPushController(pushSvc)
-	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc)
+	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc, configRepo)
 	indexCtrl := geoctrl.NewIndexTrackerController(indexTrackerSvc)
 
 	// ⬇️ GEO v2 CRUD Controller（3 张核心配置表）
@@ -303,14 +303,14 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geoAdmin.DELETE("/platform/accounts/:id", platformCtrl.DeleteAccount)
 	geoAdmin.POST("/platform/publish", platformCtrl.Publish)
 
-	geoAdmin.POST("/workflow/workflows", wfCtrl.Create)
-	geoAdmin.PUT("/workflow/workflows/:id", wfCtrl.Update)
-	geoAdmin.DELETE("/workflow/workflows/:id", wfCtrl.Delete)
-	geoAdmin.POST("/workflow/workflows/:id/run", wfCtrl.Run)
-	geoAdmin.POST("/workflow/templates", wfCtrl.CreateTemplate)
+	geo.POST("/workflow/workflows", wfCtrl.Create)
+	geo.PUT("/workflow/workflows/:id", wfCtrl.Update)
+	geo.DELETE("/workflow/workflows/:id", wfCtrl.Delete)
+	geo.POST("/workflow/workflows/:id/run", wfCtrl.Run)
+	geo.POST("/workflow/templates", wfCtrl.CreateTemplate)
 
-	geoAdmin.POST("/kb/documents", kbCtrl.Save)
-	geoAdmin.DELETE("/kb/documents/:id", kbCtrl.Delete)
+	geo.POST("/kb/documents", kbCtrl.Save)
+	geo.DELETE("/kb/documents/:id", kbCtrl.Delete)
 
 	geoAdmin.GET("/jobs", jobCtrl.List)
 	geoAdmin.GET("/jobs/runs", jobCtrl.Runs)

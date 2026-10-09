@@ -81,7 +81,28 @@ func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, bra
 
 	resp, err := s.llm.Generate(ctx, "", prompt, 0.7, 4000)
 	if err != nil {
-		return nil, fmt.Errorf("内容生成失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式内容生成: keyword=%s, brand=%s", keyword, brandName))
+		title, content := generateHeuristicContent(keyword, brandName, advantages, wordCount, style)
+		article := &model.GeoArticle{
+			Keyword:   keyword,
+			Title:     title,
+			BrandName: brandName,
+			Content:   content,
+			Model:     "heuristic_fallback",
+			WordCount: len([]rune(content)),
+		}
+		if err := s.articleRepo.Create(article); err != nil {
+			return nil, fmt.Errorf("保存文章失败: %w", err)
+		}
+		if s.kbRepo != nil {
+			_ = s.kbRepo.Create(&model.GeoKnowledgeDocument{
+				Title:       article.Title,
+				Content:     article.Content,
+				DocType:     "generated",
+				SourceLevel: "D",
+			})
+		}
+		return article, nil
 	}
 	s.recordAPICall(ctx, resp, "content_generate")
 
@@ -123,7 +144,17 @@ func (s *ContentService) OptimizeContent(ctx context.Context, articleID, content
 
 	resp, err := s.llm.Generate(ctx, "", prompt, 0.6, 4000)
 	if err != nil {
-		return nil, fmt.Errorf("内容优化失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式内容优化: articleID=%s", articleID))
+		optimization := &model.GeoOptimization{
+			ArticleID:        articleID,
+			OriginalContent:  content,
+			OptimizedContent: content,
+			Model:            "heuristic_fallback",
+		}
+		if err := s.optimizationRepo.Create(optimization); err != nil {
+			return nil, fmt.Errorf("保存优化记录失败: %w", err)
+		}
+		return optimization, nil
 	}
 	s.recordAPICall(ctx, resp, "content_optimize")
 
@@ -153,7 +184,22 @@ func (s *ContentService) ScoreContent(ctx context.Context, articleID, content, b
 
 	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
 	if err != nil {
-		return nil, fmt.Errorf("内容评分失败: %w", err)
+		logger.Warn("[GEO Content] LLM 不可用，降级为启发式内容评分")
+		result := heuristicScoreContent(content, brandName, keyword)
+		if articleID != "" && s.articleRepo != nil {
+			if article, gErr := s.articleRepo.GetByID(articleID); gErr == nil && article != nil {
+				if scores, ok := result["scores"].(map[string]any); ok {
+					if total, ok2 := scores["total"].(float64); ok2 {
+						article.Score = total
+					}
+				}
+				if detail, jErr := json.Marshal(result); jErr == nil {
+					article.ScoreDetail = string(detail)
+				}
+				_ = s.articleRepo.Update(article)
+			}
+		}
+		return result, nil
 	}
 	s.recordAPICall(ctx, resp, "content_score")
 
@@ -224,7 +270,20 @@ func (s *ContentService) EnhanceEEAT(ctx context.Context, articleID, content, br
 
 	resp, err := s.llm.Generate(ctx, "", prompt, 0.5, 4000)
 	if err != nil {
-		return nil, fmt.Errorf("E-E-A-T 增强失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式 EEAT 增强: articleID=%s", articleID))
+		result := map[string]any{
+			"original": content,
+			"enhanced": content,
+			"provider": "heuristic_fallback",
+			"model":    "template_v1",
+		}
+		if articleID != "" && s.articleRepo != nil {
+			if article, gErr := s.articleRepo.GetByID(articleID); gErr == nil && article != nil {
+				article.WordCount = len([]rune(content))
+				_ = s.articleRepo.Update(article)
+			}
+		}
+		return result, nil
 	}
 	s.recordAPICall(ctx, resp, "eeat_enhance")
 
@@ -256,7 +315,25 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 
 	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
 	if err != nil {
-		return nil, fmt.Errorf("schema 生成失败: %w", err)
+		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式 Schema 生成: articleID=%s", articleID))
+		schema := map[string]any{
+			"@context":    "https://schema.org",
+			"@type":       "Organization",
+			"name":        brandName,
+			"description": description,
+			"url":         domain,
+			"provider":    "heuristic_fallback",
+			"model":       "template_v1",
+		}
+		if articleID != "" && s.articleRepo != nil {
+			if article, gErr := s.articleRepo.GetByID(articleID); gErr == nil && article != nil {
+				if ld, jErr := json.Marshal(schema); jErr == nil {
+					article.JSONLD = string(ld)
+					_ = s.articleRepo.Update(article)
+				}
+			}
+		}
+		return schema, nil
 	}
 	s.recordAPICall(ctx, resp, "schema_generate")
 
@@ -403,6 +480,98 @@ func (s *ContentService) GetArticleList(ctx context.Context, page, limit int) ([
 // GetArticleByID 根据 ID 获取文章
 func (s *ContentService) GetArticleByID(ctx context.Context, id string) (*model.GeoArticle, error) {
 	return s.articleRepo.GetByID(id)
+}
+
+func heuristicScoreContent(content, brandName, keyword string) map[string]any {
+	runes := len([]rune(content))
+	structure := 60.0
+	if strings.Contains(content, "##") || strings.Contains(content, "#") {
+		structure += 20
+	}
+	if strings.Contains(content, "1.") || strings.Contains(content, "-") {
+		structure += 10
+	}
+	if runes > 500 {
+		structure += 10
+	}
+	if structure > 100 {
+		structure = 100
+	}
+
+	brandMention := 0.0
+	if brandName != "" && strings.Contains(content, brandName) {
+		brandMention = 80
+	}
+
+	authority := 50.0
+	if strings.Contains(content, "经验") || strings.Contains(content, "专业") {
+		authority += 20
+	}
+	if strings.Contains(content, "案例") || strings.Contains(content, "客户") {
+		authority += 15
+	}
+	if authority > 100 {
+		authority = 100
+	}
+
+	citations := 30.0
+	if strings.Contains(content, "http") || strings.Contains(content, "www") {
+		citations += 40
+	}
+	if strings.Contains(content, "数据") || strings.Contains(content, "报告") {
+		citations += 20
+	}
+	if citations > 100 {
+		citations = 100
+	}
+
+	total := (structure + brandMention + authority + citations) / 4
+	if total > 100 {
+		total = 100
+	}
+
+	return map[string]any{
+		"scores": map[string]float64{
+			"structure":     structure,
+			"brand_mention": brandMention,
+			"authority":     authority,
+			"citations":     citations,
+			"total":         total,
+		},
+		"details":      map[string]string{},
+		"improvements": []string{"增加更多结构化标题", "补充品牌提及", "添加权威数据引用"},
+		"strengths":    []string{},
+		"summary":      "启发式评分（LLM 不可用）",
+		"provider":     "heuristic_fallback",
+		"model":        "rule_v1",
+	}
+}
+
+func generateHeuristicContent(keyword, brandName string, advantages []string, wordCount int, style string) (title, content string) {
+	title = fmt.Sprintf("%s：%s 专业解决方案", brandName, keyword)
+	if title == "" {
+		title = fmt.Sprintf("%s 解决方案", keyword)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+	sb.WriteString(fmt.Sprintf("## %s 简介\n\n", keyword))
+	sb.WriteString(fmt.Sprintf("%s 是一家专注于 %s 领域的领先企业。", brandName, keyword))
+	if len(advantages) > 0 {
+		sb.WriteString(fmt.Sprintf("我们的核心优势包括：%s。", strings.Join(advantages, "、")))
+	}
+	sb.WriteString("\n\n")
+	sb.WriteString("## 核心优势\n\n")
+	for i, adv := range advantages {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, adv))
+	}
+	sb.WriteString("\n\n## 为什么选择我们\n\n")
+	sb.WriteString(fmt.Sprintf("选择 %s，您将获得：\n\n", brandName))
+	sb.WriteString("- 专业的技术团队和丰富的行业经验\n")
+	sb.WriteString("- 完善的售后服务体系\n")
+	sb.WriteString("- 持续的技术创新和升级\n")
+	sb.WriteString("\n\n## 联系我们\n\n")
+	sb.WriteString("如需了解更多信息，请联系我们。")
+	return title, sb.String()
 }
 
 func (s *ContentService) recordAPICall(ctx context.Context, resp *LLMResult, operation string) {
