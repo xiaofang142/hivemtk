@@ -340,7 +340,11 @@
     "geoSitePublish": "发布到官网",
     "geoPushCenter": "蜘蛛推送",
     "geoFunnelDashboard": "漏斗总览",
-    "geoIndexTracking": "收录与引用"
+    "geoIndexTracking": "收录与引用",
+    "orderDraft": "订单草稿",
+    "salesWorkbench": "销售工作台",
+    "followups": "今日跟进",
+    "qq": "QQ 机器人"
   },
   "保存": "保存",
   "提交": "提交",
