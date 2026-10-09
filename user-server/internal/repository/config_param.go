@@ -80,11 +80,12 @@ func (r *ConfigParamRepository) UpdateValue(ctx context.Context, group, key, new
 		}
 		encOld, encNew := encryptAuditValues(oldValue, newValue)
 		return tx.Create(&model.ConfigParamAuditLog{
-			ParamKey: key,
-			OldValue: encOld,
-			NewValue: encNew,
-			Action:   "update",
-			ActorID:  actorID,
+			ParamGroup: group,
+			ParamKey:   key,
+			OldValue:   encOld,
+			NewValue:   encNew,
+			Action:     "update",
+			ActorID:    actorID,
 		}).Error
 	})
 }
@@ -105,11 +106,12 @@ func (r *ConfigParamRepository) ResetToDefault(ctx context.Context, group, key s
 		}
 		encOld, encNew := encryptAuditValues(oldValue, p.DefaultValue)
 		return tx.Create(&model.ConfigParamAuditLog{
-			ParamKey: key,
-			OldValue: encOld,
-			NewValue: encNew,
-			Action:   "reset",
-			ActorID:  actorID,
+			ParamGroup: group,
+			ParamKey:   key,
+			OldValue:   encOld,
+			NewValue:   encNew,
+			Action:     "reset",
+			ActorID:    actorID,
 		}).Error
 	})
 }
@@ -131,11 +133,12 @@ func (r *ConfigParamRepository) BulkResetGroup(ctx context.Context, group string
 			}
 			encOld, encNew := encryptAuditValues(oldValue, p.DefaultValue)
 			if err := tx.Create(&model.ConfigParamAuditLog{
-				ParamKey: p.Key,
-				OldValue: encOld,
-				NewValue: encNew,
-				Action:   "bulk_reset",
-				ActorID:  actorID,
+				ParamGroup: p.Group,
+				ParamKey:   p.Key,
+				OldValue:   encOld,
+				NewValue:   encNew,
+				Action:     "bulk_reset",
+				ActorID:    actorID,
 			}).Error; err != nil {
 				return err
 			}

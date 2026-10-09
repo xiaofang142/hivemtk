@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,6 +159,14 @@ func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
 	})
 
 	var created, existing, refreshed int
+	// seed 失败的参数**必须冒泡**。
+	//
+	// 历史实现是 `logger.Warnf(...)` + `continue`：插入失败（比如撞唯一索引）后这一条
+	// 就不存在了——管理台看不到它、代码里的 Get* 永远读到 fallback，
+	// 而启动日志里只有一行 Warn，混在几百行 INFO 里没人会注意到。
+	// 于是「加一条参数」变成了一件要看运气的操作：参数可能根本没进库，
+	// 而所有人都会以为它进库了。攒起来返回 error，让调用方至少在启动日志里看到红字。
+	var seedFailures []string
 	for _, def := range DefaultParamDefs() {
 		p, err := repo.GetByGroupKey(ctx, def.Group, def.Key)
 		if err == nil && p != nil {
@@ -183,13 +192,19 @@ func SeedConfigParams(ctx context.Context, db *gorm.DB) error {
 			Restart:      def.Restart,
 			Category:     def.Category,
 		}).Error; err != nil {
-			logger.Warnf("[ConfigParam] seed create %s.%s failed: %v", def.Group, def.Key, err)
+			logger.Errorf("[ConfigParam] seed create %s.%s failed: %v（这条参数没有进库：管理台看不到、代码只会读兜底值）",
+				def.Group, def.Key, err)
+			seedFailures = append(seedFailures, fmt.Sprintf("%s/%s: %v", def.Group, def.Key, err))
 			continue
 		}
 		created++
 	}
-	logger.Infof("[ConfigParam] seed done: created=%d existing=%d refreshed_defs=%d total_defs=%d",
-		created, existing, refreshed, len(DefaultParamDefs()))
+	logger.Infof("[ConfigParam] seed done: created=%d existing=%d refreshed_defs=%d total_defs=%d failed=%d",
+		created, existing, refreshed, len(DefaultParamDefs()), len(seedFailures))
+	if len(seedFailures) > 0 {
+		return fmt.Errorf("参数种子有 %d/%d 条没进库（这些参数等于不存在：管理台不显示、代码读兜底值）：%s",
+			len(seedFailures), len(DefaultParamDefs()), strings.Join(seedFailures, "; "))
+	}
 	return nil
 }
 

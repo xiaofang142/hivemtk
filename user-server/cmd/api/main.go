@@ -151,7 +151,9 @@ func main() {
 		if err := service.SeedConfigParams(context.Background(), gdb); err != nil {
 			logger.Errorf("[ConfigParam] seed failed: %v", err)
 		} else {
-			logger.Info("[ConfigParam] dynamic threshold params seeded (59 defaults)")
+			// 数量从种子现取。这行原来写死 "59 defaults"，种子涨到 115 条之后它一直在撒谎——
+			// 跟「登记了没人读」是同一类病：日志看着像证据，实际早就不准了。
+			logger.Info("[ConfigParam] dynamic threshold params seeded (" + strconv.Itoa(len(service.DefaultParamDefs())) + " defaults)")
 		}
 	}
 

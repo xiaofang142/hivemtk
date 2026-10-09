@@ -35,14 +35,21 @@ type ConfigParam struct {
 func (ConfigParam) TableName() string { return "config_params" }
 
 // ConfigParamAuditLog 变更审计
+//
+// ParamGroup 是补上的：config_params 的唯一键已经是 (param_group, key) 复合
+// （migration v3.47.0 + 模型标签一致），所以「bridge.max_tokens」和
+// 「misc.max_tokens」是两条合法的、不同的参数行。只记 ParamKey 的审计行
+// 在这种库里是歧义的——看到 `max_tokens` 被改成 800，无法判断改的是哪一组的那个。
+// 补这一列让审计重新可追；AutoMigrate 加可空列，旧行留空即「历史数据，组别未知」。
 type ConfigParamAuditLog struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	ParamKey  string    `gorm:"type:varchar(100);index;not null" json:"param_key"`
-	OldValue  string    `gorm:"type:text" json:"old_value"`
-	NewValue  string    `gorm:"type:text" json:"new_value"`
-	Action    string    `gorm:"type:varchar(20);not null" json:"action"`
-	ActorID   uint      `json:"actor_id"`
-	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	ID         uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ParamGroup string    `gorm:"column:param_group;type:varchar(50);index" json:"param_group"`
+	ParamKey   string    `gorm:"type:varchar(100);index;not null" json:"param_key"`
+	OldValue   string    `gorm:"type:text" json:"old_value"`
+	NewValue   string    `gorm:"type:text" json:"new_value"`
+	Action     string    `gorm:"type:varchar(20);not null" json:"action"`
+	ActorID    uint      `json:"actor_id"`
+	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }
 
 func (ConfigParamAuditLog) TableName() string { return "config_param_audit_logs" }

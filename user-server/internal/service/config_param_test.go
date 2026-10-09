@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -127,8 +128,9 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-09-20（T-P3-03）：+1 = `human_task.handoff_first_response_minutes`。
 // 2026-09-28：+2 = `bridge.outbound_orphan_ttl` / `bridge.outbound_orphan_dry_run`（桥接出站孤儿结算的阈值与"只报数"闸门）。
 // 2026-10-09：+1 = `cache.faq_answer_enabled`（FAQ 语义答案缓存开关，装配点 app/faq_cache_wiring.go）。
-//   这条是被漏掉的锚点：种子里已加、读点已接，但本锚点还停在 114，
-//   于是 TestDefaultParamDefsCount 一进仓库就红——"登记了但没人看见"的一种。
+//
+//	这条是被漏掉的锚点：种子里已加、读点已接，但本锚点还停在 114，
+//	于是 TestDefaultParamDefsCount 一进仓库就红——"登记了但没人看见"的一种。
 const defaultParamDefsWant = 115
 
 func TestDefaultParamDefsCount(t *testing.T) {
@@ -156,19 +158,40 @@ func TestDefaultParamDefsCount(t *testing.T) {
 // 而它只 logger.Warnf 后 continue —— 表现是"这条参数在控制台上永远不存在"，
 // 读侧一路走代码里的 fallback，运维改不动、也没人报警。
 // 本守卫把这条隐性约束变成显式红：新增参数撞名即在 CI 拦住，而不是留一条静默 warn。
-func TestDefaultParamDefsKeysGloballyUnique(t *testing.T) {
-	seen := make(map[string][]string, len(DefaultParamDefs()))
-	for _, d := range DefaultParamDefs() {
-		seen[d.Key] = append(seen[d.Key], d.Group)
-	}
+// 参数唯一性的口径是 **(param_group, key) 复合**，不是单列 key。
+//
+// 库侧事实：migration v3.47.0 已把 idx_group_key 从 `UNIQUE (key)` 重建为
+// `UNIQUE (param_group, key)`，模型标签（Group priority:1 / Key priority:2）与之��致。
+// 所以跨 group 同名 key 是**合法**的两条参数行，`bridge.max_tokens` 与
+// `misc.max_tokens` 互不冲突——这正是复合唯一换来的东西（key 命名不必再背 group 前缀）。
+//
+// 本守卫改成盯复合唯一本身：组内重名才是真的坏数据，
+// 因为 GetByGroupKey / UpdateValue 都按 (group,key) 定位，重名会让更新打到错误的那一行。
+func TestDefaultParamDefsGroupKeyUnique(t *testing.T) {
+	seen := make(map[string]string, len(DefaultParamDefs()))
 	var dupes []string
-	for key, groups := range seen {
-		if len(groups) > 1 {
-			dupes = append(dupes, fmt.Sprintf("%s（出现在 group: %s）", key, strings.Join(groups, ", ")))
+	for _, d := range DefaultParamDefs() {
+		ident := d.Group + "/" + d.Key
+		if prev, ok := seen[ident]; ok {
+			dupes = append(dupes, fmt.Sprintf("%s（与 %s 冲突，读取侧按 (group,key) 定位会打到错误行）", ident, prev))
 		}
+		seen[ident] = ident
 	}
 	if len(dupes) > 0 {
 		sort.Strings(dupes)
-		t.Errorf("参数 key 跨 group 重名，库里的 UNIQUE (key) 会让后 seed 的那条静默丢失：%s", strings.Join(dupes, "; "))
+		t.Errorf("参数 (param_group, key) 组内重名：%s", strings.Join(dupes, "; "))
+	}
+}
+
+// 审计行必须带上 group。只记 key 的审计在复合唯一下是歧义的：
+// 看到 `max_tokens` 被改成 800，无法判断改的是哪一组的那个参数。
+func TestConfigParamAuditLogCarriesGroup(t *testing.T) {
+	fields := reflect.TypeOf(model.ConfigParamAuditLog{})
+	got, ok := fields.FieldByName("ParamGroup")
+	if !ok {
+		t.Fatal("ConfigParamAuditLog 缺 ParamGroup 字段：复合唯一下审计只记 key 无法区分是哪一组的参数")
+	}
+	if col := got.Tag.Get("gorm"); !strings.Contains(col, "column:param_group") {
+		t.Errorf("ParamGroup 的 gorm 标签应显式指定 column:param_group，实际 %q", col)
 	}
 }
