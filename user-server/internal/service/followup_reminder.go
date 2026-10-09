@@ -174,6 +174,13 @@ func (s *FollowUpService) CompleteWithResult(ctx context.Context, reminderID str
 		s.mu.Unlock()
 		return fmt.Errorf("提醒 %s 不存在", reminderID)
 	}
+	// 状态守卫（A11）：done/canceled 不允许再完成 —— 该函数锁外会推进旅程并
+	// 记销售事件，重复调用一次就多记一笔排行/漏斗数据；错误串带"已处理"供
+	// HTTP 层映射 409。
+	if r.Status != "pending" {
+		s.mu.Unlock()
+		return fmt.Errorf("提醒 %s 已处理", reminderID)
+	}
 	now := time.Now()
 	r.CompletedAt = &now
 	r.Status = "done"
@@ -213,6 +220,11 @@ func (s *FollowUpService) Cancel(ctx context.Context, reminderID string) error {
 	r, ok := s.reminders[reminderID]
 	if !ok {
 		return fmt.Errorf("提醒 %s 不存在", reminderID)
+	}
+	// 状态守卫（A11）：终态（done/canceled）不可再改写，否则已完成的跟进会被
+	// 回改成 canceled、完成记录悬空。
+	if r.Status != "pending" {
+		return fmt.Errorf("提醒 %s 已处理", reminderID)
 	}
 	r.Status = "canceled"
 	return nil

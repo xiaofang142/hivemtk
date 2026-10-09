@@ -1,5 +1,6 @@
 import {
   Aim,
+  AlarmClock,
   Bell,
   Box,
   ChatDotRound,
@@ -61,6 +62,7 @@ import {
 
 export const routeIconMap = {
   Aim,
+  AlarmClock,
   Bell,
   Box,
   ChatDotRound,

@@ -262,7 +262,7 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 				CustomerID:  r.CustomerID,
 				DueAt:       r.DueAt,
 				CreatedAt:   r.CreatedAt,
-				URL:         "/dashboard/followups/" + r.ID,
+				URL:         "/followups/" + r.ID,
 			})
 		}
 		for _, r := range followup.ListOverdue(ctx, salesID) {
@@ -276,7 +276,7 @@ func (s *SalesWorkbenchService) aggregateTodos(ctx context.Context, salesID stri
 				CustomerID:  r.CustomerID,
 				DueAt:       r.DueAt,
 				CreatedAt:   r.CreatedAt,
-				URL:         "/dashboard/followups/" + r.ID,
+				URL:         "/followups/" + r.ID,
 			})
 		}
 	}
@@ -426,7 +426,7 @@ func (s *SalesWorkbenchService) GetQuickActions(ctx context.Context, salesID str
 	return []*QuickAction{
 		{ID: "new_draft", Title: "新建订单", Icon: "edit", URL: "/dashboard/drafts/new", Badge: 0},
 		{ID: "ai_assist", Title: "AI 接管客户", Icon: "robot", URL: "/dashboard/ai/transfer", Badge: 0},
-		{ID: "followup_today", Title: "今日跟进", Icon: "calendar", URL: "/dashboard/followups/today", Badge: 0},
+		{ID: "followup_today", Title: "今日跟进", Icon: "calendar", URL: "/followups/today", Badge: 0},
 		{ID: "lead_pool", Title: "线索池", Icon: "inbox", URL: "/dashboard/leads", Badge: 0},
 		{ID: "dashboard", Title: "我的业绩", Icon: "chart", URL: "/dashboard/sales/" + salesID, Badge: 0},
 	}

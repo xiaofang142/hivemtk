@@ -98,6 +98,7 @@ const moduleNames = [
   "browserAutomation",
   "orderDraft",
   "salesWorkbench",
+  'followups',
 ];
 
 const eagerLoadedRoutes = [];

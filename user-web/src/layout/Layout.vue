@@ -198,6 +198,10 @@ const topMenus = ref([
       // 销售工作台：个人待办+今日/月度与团队排行/漏斗/销冠画像（/api/sales-workbench/* 三读口）。
       // 与 salesCockpit（AI 运维聚合的驾驶舱）是两套域，分开两个入口。
       { key: 'salesWorkbench', title: '销售工作台', icon: 'Notebook', path: '/sales-workbench', roles: ['admin', 'manager', 'sales'] },
+      // 今日跟进（A11）：跟进提醒读写口的消费入口，与订单草稿（草稿确认）
+      // 是两件事 —— 那边是"AI 写的单子要不要放行"，这边是"今天该联系谁、
+      // 联系结果记哪去"。合并会把 SLA 跟进混进草稿确认队列。
+      { key: 'followups', title: '今日跟进', icon: 'AlarmClock', path: '/followups/today', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]
   },

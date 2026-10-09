@@ -87,6 +87,16 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetTeamDashboard)
 	auth.GET("/sales-workbench/champion",
 		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetChampionProfile)
+	// A11 跟进提醒读写口：服务借草稿竖运行时（app.JourneyFollowUpForHTTP），
+	// 进程内内存态 —— 未装配为 nil ⇒ 控制器 503，与 sales-workbench 同口径。
+	// 前端落点 /followups/today（新首段，免与 dashboard→orderDraft 单模块映射冲突）。
+	_, followupSvc := app.JourneyFollowUpForHTTP()
+	followupCtrl := controller.NewFollowUpController(followupSvc)
+	auth.GET("/followups/today", followupCtrl.GetToday)
+	auth.GET("/followups/pending", followupCtrl.GetPending)
+	auth.GET("/followups/overdue", followupCtrl.GetOverdue)
+	auth.POST("/followups/:id/complete", followupCtrl.Complete)
+	auth.POST("/followups/:id/cancel", followupCtrl.Cancel)
 	wvCtrl := controller.NewWebVitalsController()
 	auth.POST("/monitor/web-vitals", wvCtrl.Report)
 	mfSyncCtrl := controller.NewMarketingFlowSyncController()
