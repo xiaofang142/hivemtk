@@ -21,6 +21,13 @@ export const http = {
     return getRequestInstance().put(url, data, config)
   },
 
+  // patch 与 put 同形。此前缺这个方法，而 KnowledgeManagement.vue 的
+  // 公开性切换已经在调 http.patch —— 运行时会抛 "http.patch is not a function"，
+  // 订单草稿的改价/改量（PATCH /api/manage/order-drafts/:id）也走这一口。
+  patch(url, data, config = {}) {
+    return getRequestInstance().patch(url, data, config)
+  },
+
   delete(url, params, config = {}) {
     let realParams = params
     if (

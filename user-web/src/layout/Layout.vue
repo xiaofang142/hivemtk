@@ -192,6 +192,9 @@ const topMenus = ref([
       // 这一边是"这次答得不好的那一次，该判给哪个责任层"。合并成一个入口会把归因账混进值班队列里。
       { key: 'badCase', title: 'Bad Case 队列', icon: 'Warning', path: '/badCase/list' },
       { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
+      // AI 谈单产出的待确认草稿的人工入口：确认/取消/改价都在这一页。
+      // 深链 /dashboard/drafts/:id 与工作台聚合待办生成的 URL 同一条（sales_workbench.go）。
+      { key: 'orderDraft', title: '订单草稿', icon: 'Document', path: '/dashboard/drafts', roles: ['admin', 'manager', 'sales'] },
       { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
     ]
   },

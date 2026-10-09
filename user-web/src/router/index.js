@@ -96,6 +96,7 @@ const moduleNames = [
   "bridgeToken",
   "leadMining",
   "browserAutomation",
+  "orderDraft",
 ];
 
 const eagerLoadedRoutes = [];
@@ -149,6 +150,10 @@ const loadedModules = new Set();
 const loadedRoutes = []
 
 const pathToModule = {
+  // 订单草稿页挂在 /dashboard/drafts（与工作台聚合待办生成的深链对齐），
+  // 首段 'dashboard' 映射到 orderDraft 模块 —— ensureRouteLoaded 按首段找模块名，
+  // 没有这条映射，深链会落进 NotFound 而不是草稿页。
+  'dashboard': 'orderDraft',
   'douyin': 'douyinCard',
   'xiaohongshu': 'xiaohongshuCard',
   'kuaishou': 'kuaishouCard',
