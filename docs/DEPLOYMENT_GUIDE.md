@@ -241,12 +241,12 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `EMAIL_TRACKING_SECRET` | 空 | 邮件追踪 token 的 HMAC-SHA256 密钥（`internal/service/email_tracking.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验直接拒。此前它退化成"空密钥自签自验"，任何人按公开的 claim 结构都能算出合法签名 ⇒ 伪造打开/点击事件、伪签他人邮箱的退订。token 有效期 90 天，轮换即让存量追踪链接失效 |
 | `EMAIL_UNSUBSCRIBE_SECRET` | 空 | 邮件退订链接 token 的 HMAC-SHA256 密钥（`internal/service/email_unsubscribe.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验侧拒绝**所有** token（包括 `payload.` 这种空签名——空密钥下 `hmac.Equal(空,空)` 为真，所以"没配密钥"绝不能当成一种校验，否则任何人都能伪签别人的退订链接）。有效期 30 天，轮换即让存量退订链接失效 |
 | `MASTER_KEY` | 空 | 凭证盘 AES-256-GCM 主密钥，**≥32 字节**（`internal/secrets/aesgcm.go`）。缺失/过短时 `Ready()` 为 false，加解密降级为明文读写 + WARN；**生产环境（`APP_ENV`/`MODE` 非开发值）装配层据此拒绝启动**。任意路径泄露即整盘作废，建议由 secret manager 注入；改值不会自动重加密存量 |
-| `FF_LTC_REACH_GATE` | `off` | 外发审批闸门模式 `off|shadow|block`（`internal/app/reach_gate_wiring.go`）。`shadow` 只留痕不拦，`block` 真拦；写布尔真值（`true`/`1`）一律按 `shadow` 处理并告警——给真人发短信不可撤回，转阻断必须在 env 里写出 `block` 这个词。依赖 `FF_LTC_APPROVAL_GATE` 未接线时**拒绝装门**（没有裁决来源的门只能恒放或恒拒，两种都长得像在拦） |
-| `FF_TOOL_PERMISSION_ENFORCE` | `off` | 工具风险判定层 `off|shadow`（`internal/app/permission_wiring.go`）。**这个构建里没有阻断态**：写 `enforce`/`block`/`true` 一律按 `shadow` 挂载并显式告警"它拦不住任何东西"（转阻断排在 P9）。别以为写了 `enforce` 就在拦 |
+| `FF_LTC_REACH_GATE` | `off` | 外发审批闸门模式 `off\|shadow\|block`（`internal/app/reach_gate_wiring.go`）。`shadow` 只留痕不拦，`block` 真拦；写布尔真值（`true`/`1`）一律按 `shadow` 处理并告警——给真人发短信不可撤回，转阻断必须在 env 里写出 `block` 这个词。依赖 `FF_LTC_APPROVAL_GATE` 未接线时**拒绝装门**（没有裁决来源的门只能恒放或恒拒，两种都长得像在拦） |
+| `FF_TOOL_PERMISSION_ENFORCE` | `off` | 工具风险判定层 `off\|shadow`（`internal/app/permission_wiring.go`）。**这个构建里没有阻断态**：写 `enforce`/`block`/`true` 一律按 `shadow` 挂载并显式告警"它拦不住任何东西"（转阻断排在 P9）。别以为写了 `enforce` 就在拦 |
 | `LTC_RECOVERY_WORKER_BATCH` | `20` | 挽回队列单轮处理上限，可用区间 `[1,500]`；非整数或超界 ⇒ 告警并沿用默认（`internal/service/recovery_queue_worker.go`）。前提是 `FF_LTC_RECOVERY_WORKER=enforce` |
 | `LTC_RECOVERY_WORKER_INTERVAL` | `5m` | 挽回队列轮询间隔（Go duration 写法，如 `30s`/`5m`）。低于 `30s` 抬到 `30s`，否则一轮没跑完下一轮就起、同一条会被两轮领走 |
 | `LTC_RECOVERY_WORKER_BACKOFF` | `24h` | 重试退避基数（同时是无文案项的推后幅度）。小于触达冷却窗口时抬到"冷却窗口 + 余量"，否则每次到期都只换来一次 cooldown 拒绝，白耗一轮 |
-| `FF_LTC_COLLECTION_JOB` | `off` | 催收任务（逾期应收自动提醒 + 越过升级线转人工待办）的三态开关 `off|shadow|enforce`（`internal/service/collection_job.go`，解析复用挽回 worker 的 `parseRecoveryWorkerMode`，别名口径与它同一份）。`off` 连轮询协程都不起、一轮都不扫；`shadow` 只选路不发不写；`enforce` 才真给真人发提醒。**env 这一档在装配期读一次 ⇒ 改档要重启**；每轮现读的是第二把锁 `ltc.config` 的 `collection` 阶段档（它关着的每一轮一次查询都不发，一键回滚要下一轮就咬得住，指的是这一把）。写布尔真值（`true`/`1`/`on`）一律按 `shadow` 处理并告警——短信不可撤回，要真发必须显式写 `enforce` |
+| `FF_LTC_COLLECTION_JOB` | `off` | 催收任务（逾期应收自动提醒 + 越过升级线转人工待办）的三态开关 `off\|shadow\|enforce`（`internal/service/collection_job.go`，解析复用挽回 worker 的 `parseRecoveryWorkerMode`，别名口径与它同一份）。`off` 连轮询协程都不起、一轮都不扫；`shadow` 只选路不发不写；`enforce` 才真给真人发提醒。**env 这一档在装配期读一次 ⇒ 改档要重启**；每轮现读的是第二把锁 `ltc.config` 的 `collection` 阶段档（它关着的每一轮一次查询都不发，一键回滚要下一轮就咬得住，指的是这一把）。写布尔真值（`true`/`1`/`on`）一律按 `shadow` 处理并告警——短信不可撤回，要真发必须显式写 `enforce` |
 | `LTC_COLLECTION_JOB_BATCH` | `20` | 催收单轮扫描封顶（对应 `ScanOverdue` 的 limit），可用区间 `[1,200]`；非整数或超界 ⇒ 告警并沿用默认。上限比挽回队列的 `[1,500]` 窄是代价决定的：单轮内每行一次商机读（应收表上没有客户列，身份按 `bills.opportunity_id` 现推），批越大跨表读越多 |
 | `BROWSER_JEV_ENABLED` | 关 | JEV 外部决策服务总开关（`internal/browser_automation/service/jev.go`）。**铁律：默认关闭**——未置位时每轮 plan 原样走内置 Brain 路径，一个字节都不发往外部。取值 `1/true/on` 才开启 |
 | `BROWSER_JEV_ENDPOINT` | 空 | JEV `DispatchStructured` 的端点地址（无 scheme 时按 http 补齐）。为空 ⇒ JEV 侧不可用，退回内置 Brain 路径并打 warn。它同时是 `BROWSER_JEV_MODEL` 的生效前提：只设 MODEL 不设 ENDPOINT 时覆盖被忽略并显式告警——模型名长在 provider 上，没有 provider 就无处可挂 |
@@ -255,6 +255,9 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `BACKUP_BASE_DIR` | `./backups` | 备份落盘根目录（`internal/storage/backup_source.go`）。换盘或挂独立卷时设成挂载点 |
 | `RESTORE_TMP_DIR` | `./restore_tmp` | 恢复流程的暂存根目录（还原期间解包落在这里再入正式库）。与大备份同盘时建议指到独立卷，否则还原期可能把目标卷写满 |
 | `LTC_COLLECTION_JOB_INTERVAL` | `6h` | 催收轮询间隔（Go duration 写法，如 `30m`/`6h`）。非法时长 ⇒ 告警并沿用默认；低于 `30m` 抬到 `30m` 并告警——一轮没跑完下一轮就起时，同一张单会被两轮各领一次（提醒窗的锁拦得住外发，但报告会开始大量出现 `reminders_held`） |
+| `FF_LTC_ORDER_DRAFT_DB` | `off` | 订单草稿持久化三态 `off\|shadow\|on`（`internal/app/order_draft_wiring.go`，常量 `OrderDraftFlagEnv`；**装配期读一次 ⇒ 改档要重启**）。`off` 不装配草稿运行时（`order_drafts` 无写入方、到期草稿无人清扫，与交付前一致）；`shadow` 读走内存并镜像进库、`Durable` 仍为 false（**重启仍会丢**，只用于对照）；`on` 才把权威副本交给库（拿不到 DB 句柄时底座退回内存并打 ❌ 告警）。布尔真值（`true`/`1`）按 `shadow` 处理并告警，不认识的值按 `off`。转 `on` 前先核对 `/api/agent/order-drafts/stats` 的 counts 与 mirror.row_counts |
+| `FF_LTC_HANDOFF_SLA_JOB` | `off` | 转人工待办 SLA 超时闭环三态 `off\|shadow\|enforce`（`internal/app/human_task_sla_wiring.go` + `internal/service/human_task_sla_job.go`；**装配期读一次 ⇒ 改档要重启**）。`off` 不装配（逾期只被数、不被办）；`shadow` 只扫只数打日志、**一条不写**；`enforce` 才真写——逾期给责任人发站内提醒、拖过完整 SLA 窗口再向管理员广播升级（不新增 human task kind）。布尔真值按 `shadow` 处理并告警——要真写必须显式写 `enforce`；不认识的值按 `off` |
+| `FF_LTC_SALES_TRIGGER` | `off` | AI 谈单响应后的分发路径开关，**只有开/关两态**（`internal/app/order_draft_wiring.go`，常量 `SalesTriggerFlagEnv`；**装配期读一次 ⇒ 改档要重启**）。关（默认）走既有 `CreateDraftsFromSalesResponse` 只建草稿，行为与从前逐字节一致；真值（`true`/`1`/`yes`/`on`）改走 `SalesActionTrigger.TriggerAfterSales`（打标/推旅程/建草稿/排跟进/记事件五类副作用一次到位）。与 `FF_LTC_ORDER_DRAFT_DB` 是**互斥分流不是叠加**：同一意向被两条路径各处理一次会让 pending 草稿数量翻倍（3 → 6），那是假订单数据。这里不设 shadow 档（行为开关没有可观察中间态），不认识的值按关处理并告警 |
 | `TOOL_CIRCUIT_BASE_COOLDOWN` | `30s` | 按工具熔断的起始冷却，可用区间 `[1ms,1h]`。非法时长或超界 ⇒ 告警并沿用默认；五项参数各自校验，配错一项不拖累其余（`internal/app/tool_circuit_breaker_wiring.go`） |
 | `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
 | `TOOL_CIRCUIT_BACKOFF_MULTIPLIER` | `2.0` | 每多熔断一次的冷却倍率，可用区间 `[1,100]`；非数字或超界 ⇒ 沿用默认 |
@@ -520,4 +523,4 @@ make user-build web-build
 
 ---
 
-*最后更新：2026-08-26 · 基于 ports.go / Makefile / docker-compose.yml / .env-example / config.yaml 源码核对*
+*最后更新：2026-10-09 · 基于 ports.go / Makefile / docker-compose.yml / .env-example / config.yaml 源码核对（同日补录 §6.2 三装配期旗 `FF_LTC_ORDER_DRAFT_DB` / `FF_LTC_HANDOFF_SLA_JOB` / `FF_LTC_SALES_TRIGGER`，并转义表内反引号中的 `|` 防拆列）*
