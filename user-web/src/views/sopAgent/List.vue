@@ -305,7 +305,8 @@
     </el-dialog>
 
     
-    <el-dialog v-model="execDetailVisible" title="执行详情" width="760px" v-loading="execDetailLoading">
+    <el-dialog v-model="execDetailVisible" title="执行详情" width="760px">
+      <div v-loading="execDetailLoading" style="min-height: 120px">
       <template v-if="currentExecution">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="执行 ID">{{ currentExecution.id || currentExecution.execution_id || '-' }}</el-descriptions-item>
@@ -329,6 +330,7 @@
         </el-steps>
         <el-empty v-else description="暂无节点流转数据" :image-size="80" />
       </template>
+      </div>
     </el-dialog>
 
     

@@ -144,6 +144,7 @@ func (SOPAgent) TableName() string { return "sop_agents" }
 type SOPExecution struct {
 	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
 	SOPID          uint       `gorm:"index;not null" json:"sop_id"`
+	SOPName        string     `gorm:"-" json:"sop_name,omitempty"` // 派生字段：由 SOPID 关联 sop_agents 计算
 	CustomerID     string     `gorm:"type:varchar(64);not null;index" json:"customer_id"`
 	SessionID      string     `gorm:"type:varchar(120)" json:"session_id"`
 	CurrentNode    string     `gorm:"type:varchar(50)" json:"current_node"`

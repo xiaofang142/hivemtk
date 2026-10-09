@@ -542,11 +542,48 @@ func (s *SOPService) GetExecution(ctx context.Context, execID uint) (*model.SOPE
 		}
 		return nil, err
 	}
+	s.fillSOPNames(ctx, []model.SOPExecution{*exec})
+	if exec.SOPName == "" {
+		exec.SOPName = s.fillSOPName(ctx, exec.SOPID)
+	}
 	return exec, nil
 }
 
 func (s *SOPService) ListExecutions(ctx context.Context, customerID string, status string, page, pageSize int) ([]model.SOPExecution, int64, error) {
-	return s.execRepo.List(ctx, customerID, status, page, pageSize)
+	list, total, err := s.execRepo.List(ctx, customerID, status, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	s.fillSOPNames(ctx, list)
+	return list, total, nil
+}
+
+// fillSOPNames 为执行记录批量补齐 SOP 名称（派生展示字段，避免前端回退显示 sop_id）。
+func (s *SOPService) fillSOPNames(ctx context.Context, execs []model.SOPExecution) {
+	if len(execs) == 0 {
+		return
+	}
+	cache := map[uint]string{}
+	for i := range execs {
+		id := execs[i].SOPID
+		name, ok := cache[id]
+		if !ok {
+			name = s.fillSOPName(ctx, id)
+			cache[id] = name
+		}
+		execs[i].SOPName = name
+	}
+}
+
+func (s *SOPService) fillSOPName(ctx context.Context, sopID uint) string {
+	if sopID == 0 {
+		return ""
+	}
+	agent, err := s.agentRepo.GetByID(ctx, sopID)
+	if err != nil || agent == nil {
+		return ""
+	}
+	return agent.Name
 }
 
 func (s *SOPService) MatchByIntent(ctx context.Context, intentType string) ([]model.SOPAgent, error) {
