@@ -509,4 +509,9 @@ func InitGlobalDispatcherWithDB(d *Dispatcher, gormDB *gorm.DB) {
 	if getAuditDB() == nil {
 		setAuditDB(db.GetDB())
 	}
+	// 启动全局熔断健康检查，首次请求前即可感知 LLM provider 不可达，
+	// 配合 HasHealthyProvider 短路，消除首次请求的逐 provider 重试时延。
+	if fo := GetGlobalFailover(); fo != nil {
+		fo.Start(context.Background())
+	}
 }
