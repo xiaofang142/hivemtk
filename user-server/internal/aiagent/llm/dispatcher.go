@@ -604,6 +604,13 @@ func (d *Dispatcher) HasHealthyProvider(scenario DispatchScenario) bool {
 		if fo != nil && fo.IsCircuitOpen(name) {
 			continue
 		}
+		if fo != nil {
+			if health := fo.GetHealth(name); health != nil {
+				if health.Status == ProviderStatusDown || health.Status == ProviderStatusDegraded || health.ConsecutiveFailures >= DefaultFailureThreshold {
+					continue
+				}
+			}
+		}
 		if p, ok := d.providers[name]; ok && p.Enabled {
 			return true
 		}
