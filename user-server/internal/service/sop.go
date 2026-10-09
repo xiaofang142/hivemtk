@@ -121,6 +121,13 @@ var (
 	ErrSOPExecNotFound = errors.New("execution not found")
 
 	ErrSOPExecNotRunning = errors.New("execution is not running")
+
+	// ErrSOPNodeToolsUnsupported：节点声明了 `Tools` 白名单，但 SOP 节点至今**没有**
+	// 任何工具执行通路（`Tools` 只在 deepCopySOPNode 里被原样抄走，执行器零读取）。
+	// 与其让画布上的最小权限配置静默失效（与 OWASP "Excessive Agency" 方向相反），
+	// 不如在保存/更新的图验证期就 fail-closed 拒绝 —— 配置期报错，而不是运行期静默忽略。
+	// 见 sop.go validateGraph 与 TestValidateGraph_RejectsNodeTools。
+	ErrSOPNodeToolsUnsupported = errors.New("sop node declares tools but sop nodes have no tool execution path")
 )
 
 const (
@@ -632,6 +639,10 @@ func (s *SOPService) validateGraph(ctx context.Context, graph *SOPGraph) error {
 		ids[n.ID] = true
 		if !SOPNodeSupportedTypes[n.Type] {
 			return fmt.Errorf("node %s has unsupported type: %s", n.ID, n.Type)
+		}
+		// `Tools` 无执行通路，拒绝保存而非静默忽略（fail-closed，见 ErrSOPNodeToolsUnsupported）。
+		if len(n.Tools) > 0 {
+			return fmt.Errorf("node %s: %w", n.ID, ErrSOPNodeToolsUnsupported)
 		}
 		if n.Type == SOPNodeTypeStart {
 			hasStart = true

@@ -112,15 +112,22 @@ BASELINE=(
   # 观察端点），但装配过程中实测出**读侧与售后侧仍然没人注入**：
   #   11a `SalesWorkbenchService.SetDraft` 在非测试代码零调用 ⇒ 工作台聚合待办里永远没有
   #       草稿项，销售打开系统看不到"我有几条待确认草稿"（本卡只改了它的错误口径）；
-  #   11b `SalesActionTrigger.SetDraftService` 同理零调用 ⇒ 售后触发器提取的意向不落草稿；
-  #   11c `OrderDraftService.SetOrderService` 同理零调用 ⇒ `Confirm` 走到
-  #       `createOrderFromDraft` 只能回 "orderService 未注入"（实测：它明确报错，不会静默
-  #       造一条假订单，但"草稿可确认成单"这句话在注入补齐前说不出口）。
-  # 三行按 UNWIRED 登记而不是留白：否则"AI 谈单会产草稿、销售在工作台确认草稿"这半句话
+  #   11b `SalesActionTrigger.SetDraftService` 同理零调用 ⇒ 售后触发器提取的意向不落草稿。
+  # 这两行按 UNWIRED 登记而不是留白：否则"AI 谈单会产草稿、销售在工作台确认草稿"这半句话
   # 会被读成整句都成立。兑现卡未在清单里指派（P4 是商机域、P8 是看板），开工前须先认领。
+  #   11c 已转 **wired**（防回退，不是待办）：装配点 internal/app/order_draft_wiring.go 的
+  #       InitOrderDraftRuntime 在拿到 DB 句柄时注入订单服务，确认成单这条腿不再有
+  #       "orderService 未注入"这条路；句柄缺席时 Confirm 仍会退成临时订单号，但那份
+  #       假数据由 DraftConfirmResult.OrderProvisional 显式标出、HTTP 出口连消息一起透出。
+  #       这一格只证明"订单服务被递进去了"，不证明"现网一定递了"：旗子
+  #       FF_LTC_ORDER_DRAFT_DB 默认 off，off 档连草稿运行时都没有。
   "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|"
   "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|"
-  "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|"
+  "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|wired"
+  # 11d：草稿的销售操作出口（列表/详情/确认/取消/编辑）必须挂在 router 上。登记它是因为
+  # 这个失败面与 11c 相反：装配在、路由被摘 ⇒ 前端 404、后端一句日志都没有，
+  # 而"草稿能用"这句话在观察端点上仍然是绿的。
+  "11|草稿销售操作端点的挂载调用|func NewOrderDraftController|NewOrderDraftController\(|internal/router|wired"
   # 项12 = T-P3-01 建表、T-P3-02 接线。T-P3-01 交付时 approval_requests 在生产路径上一行
   # 都不会写（装配入口零构造、恢复读入口零调用），两行按 UNWIRED 登记而不是留白：否则
   # "审批闸门已经建好"会被读成"P3 已经闭环"。
@@ -369,16 +376,17 @@ BASELINE=(
   #       **摘掉构造器里那行，用例照样全绿、线上退订客户照发**。这是三判据里唯一一条
   #       "测试面完全看不见"的连线，台账是仅有的判据（17 那一课：wired 只要求命中 ≥1，
   #       所以一格只锚一个消费点，不把"setter 与构造器"并成一格）。
-  #   20d 节点上的 `Tools`，本卡**查出来、刻意不接**的字段，登记在此防止误判：
-  #       唯一的"消费"是 `deepCopySOPNode` 把它原样抄一份，执行器侧读取数为 **0**
-  #       （实测 `\.Node\.Tools` 非测试命中 0）。这正是本卡把外发做成**新节点类型**
-  #       而不是"给既有节点配一个工具"的原因 —— 后者写进图里就永不会被执行，
-  #       且看起来完全像配好了。defpat 用 `Tools +\[\]string`（字段对齐是多空格，
-  #       写 `Tools \[\]string` 会一格都不命中，判成 exit 2）。
+  #   20d 节点上的 `Tools`：I5 起改为**验证期显式拒绝**。此前唯一的"消费"是
+  #       `deepCopySOPNode` 把它原样抄一份，执行器侧读取数为 **0**，画布上配的工具
+  #       白名单静默失效（与 OWASP "Excessive Agency" 的最小权限方向相反）。
+  #       现在 `validateGraph` 对带非空 Tools 的节点 fail-closed 拒绝保存
+  #       （ErrSOPNodeToolsUnsupported），配置期报错而非运行期静默忽略。
+  #       defpat 用 `Tools +\[\]string`（字段对齐是多空格，写 `Tools \[\]string`
+  #       会一格都不命中，判成 exit 2）；callpat 锚验证器里的 `len(n.Tools)`。
   "20|SOP 节点执行器的注册链入口（摘掉即未登记类型静默按\"完成\"处置、包内用例全绿）|func InitSOPExecutionDispatcher|InitSOPExecutionDispatcher\\(|cmd/api|wired"
   "20|SOP 外发出口的装配点（摘掉即图上每一步都能走完、只有最后发送永久失败）|func SetSOPReachSender|service\\.SetSOPReachSender\\(|internal/router|wired"
   "20|退订检查在生产构造点上的装配（setter 侧零生产调用方，摘掉这行退订用例仍全绿）|func NewDoNotContactService|dnc:[[:space:]]*NewDoNotContactService\\(|internal/service|wired"
-  "20|节点 Tools 字段的执行器读取方（写入靠深拷贝原样抄、读取 0 处，外发因此走独立节点类型）|Tools +\\[\\]string|\\.Node\\.Tools|"
+  "20|节点 Tools 字段的验证期消费（带非空 Tools 的图保存期 fail-closed 拒绝，不再静默失效）|Tools +\\[\\]string|len\\(n\\.Tools\\)|internal/service|wired"
   # ---- T-P6-01 起登记、T-P6-02 改口、T-P6-03 补齐装配的一族（21a–21d）———————————
   # 21a 盯"有没有人构造报价仓储"。scope 刻意排除 internal/repository —— 实现文件里
   #      两个构造函数的**定义**永远在，把它算成接线就从第一天起假绿（项16 的 16a 同一课）。
