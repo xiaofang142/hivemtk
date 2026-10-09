@@ -35,6 +35,12 @@ export const salesWorkbenchApi = {
   // 两条都消费才算三端点全接。
   champion(days) {
     return http.get(`${base}/champion`, { days })
+  },
+
+  // 快链区（A10）：静态 5 条、无参（URL 已由后端改指真实落点，死链 4/5 修复）。
+  // 与三条数据读口同装配：未装配 503，不吞。
+  quickActions() {
+    return http.get(`${base}/quick-actions`)
   }
 }
 

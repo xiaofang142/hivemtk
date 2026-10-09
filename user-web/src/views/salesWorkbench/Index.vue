@@ -153,6 +153,28 @@
       </el-col>
     </el-row>
 
+    <!-- 快链（A10：GetQuickActions 读口的消费区，URL 已全为真实落点） -->
+    <el-card
+      v-if="quickActions.length"
+      shadow="never"
+      class="wb-card wb-block"
+    >
+      <template #header>
+        <span>快捷入口</span>
+        <span class="wb-hint">常用页面一键直达</span>
+      </template>
+      <div class="wb-quick">
+        <el-button
+          v-for="a in quickActions"
+          :key="a.id"
+          class="wb-quick-btn"
+          @click="goQuick(a)"
+        >
+          {{ a.title }}
+        </el-button>
+      </div>
+    </el-card>
+
     <!-- 我的待办 -->
     <el-card
       shadow="never"
@@ -488,6 +510,7 @@ const dayOptions = [7, 30, 90]
 const overview = ref({})
 const team = ref({})
 const champion = ref({})
+const quickActions = ref([])
 
 const me = () => String(userStore.userInfo?.id ?? '')
 
@@ -527,11 +550,18 @@ async function loadTeam() {
   champion.value = champ || {}
 }
 
+// 快链（A10）：GetQuickActions 此前零 HTTP 暴露，本页快链区是它的第一个
+// 消费方。失败不单独吞：与三读口同 Promise.all，503 同措辞。
+async function loadQuickActions() {
+  const res = await salesWorkbenchApi.quickActions()
+  quickActions.value = res?.list || []
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
   try {
-    await Promise.all([loadOverview(), loadTeam()])
+    await Promise.all([loadOverview(), loadTeam(), loadQuickActions()])
   } catch (e) {
     error.value = errMsg(e, '加载工作台数据')
   } finally {
@@ -539,16 +569,25 @@ async function loadAll() {
   }
 }
 
-function goTodo(row) {
-  if (!row?.url?.startsWith('/')) return
-  // 先解析再跳：跟进类待办的 /dashboard/followups/* 落点页还没交付（登记在
-  // 改进清单 A11），直接 push 会落 NotFound —— 没有的落点给提示，有的照跳。
-  const r = router.resolve(row.url)
+// 统一的"先解析再跳"：落点在路由表里才 push，否则给提示不进 NotFound。
+// 待办与快链共用 —— 快链 URL 已改指真实落点（A10），保留探活是防未来
+// URL 再漂移时静默 404。
+function goResolved(url, kind) {
+  if (!url?.startsWith('/')) return
+  const r = router.resolve(url)
   if (r.matched.length) {
-    router.push(row.url)
+    router.push(url)
   } else {
-    ElMessage.warning('该待办的落点页尚未交付（改进清单 A11 跟进读侧）')
+    ElMessage.warning(`该${kind}的落点页尚未交付`)
   }
+}
+
+function goTodo(row) {
+  goResolved(row.url, '待办')
+}
+
+function goQuick(action) {
+  goResolved(action.url, '快链')
 }
 
 onMounted(loadAll)
@@ -594,6 +633,14 @@ onMounted(loadAll)
   float: right;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.wb-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.wb-quick-btn {
+  margin-left: 0;
 }
 .wb-stats {
   display: grid;

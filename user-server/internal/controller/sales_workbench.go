@@ -95,3 +95,16 @@ func (c *SalesWorkbenchController) GetChampionProfile(ctx *gin.Context) {
 	}
 	response.Success(ctx, data, "ok")
 }
+
+// GetQuickActions GET /api/sales-workbench/quick-actions
+//
+// 快链区读口（A10）：服务方法 GetQuickActions 在此之前零 HTTP 暴露——建了
+// 没接。静态列表（无 sales_id/days 参数，URL 已全改指真实落点），未装配
+// 回 503 的口径与同组端点一致。
+func (c *SalesWorkbenchController) GetQuickActions(ctx *gin.Context) {
+	if c.svc == nil {
+		response.Error(ctx, http.StatusServiceUnavailable, "工作台服务未装配")
+		return
+	}
+	response.Success(ctx, gin.H{"list": c.svc.GetQuickActions(ctx.Request.Context(), "")}, "ok")
+}

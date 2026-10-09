@@ -422,13 +422,17 @@ func (s *SalesWorkbenchService) GetTodosOnly(ctx context.Context, salesID string
 
 // GetQuickActions 销售最常用的快捷入口
 // 商业产品级：销售工作台首页"快链"区
+//
+// URL 一律指真实落点（A10 曾 4/5 是死链：/dashboard/drafts/new 落
+// orderDraft 的 :id=new 回 404，/dashboard/ai|leads|sales 前端无路由）——
+// 快链给的是"点了就到"的承诺，死链比没有这条入口更伤。
 func (s *SalesWorkbenchService) GetQuickActions(ctx context.Context, salesID string) []*QuickAction {
 	return []*QuickAction{
-		{ID: "new_draft", Title: "新建订单", Icon: "edit", URL: "/dashboard/drafts/new", Badge: 0},
-		{ID: "ai_assist", Title: "AI 接管客户", Icon: "robot", URL: "/dashboard/ai/transfer", Badge: 0},
+		{ID: "new_draft", Title: "新建订单", Icon: "edit", URL: "/dashboard/drafts", Badge: 0},
+		{ID: "ai_assist", Title: "AI 接管客户", Icon: "robot", URL: "/inbox/list", Badge: 0},
 		{ID: "followup_today", Title: "今日跟进", Icon: "calendar", URL: "/followups/today", Badge: 0},
-		{ID: "lead_pool", Title: "线索池", Icon: "inbox", URL: "/dashboard/leads", Badge: 0},
-		{ID: "dashboard", Title: "我的业绩", Icon: "chart", URL: "/dashboard/sales/" + salesID, Badge: 0},
+		{ID: "lead_pool", Title: "线索池", Icon: "inbox", URL: "/clue/list", Badge: 0},
+		{ID: "dashboard", Title: "我的业绩", Icon: "chart", URL: "/sales-workbench", Badge: 0},
 	}
 }
 

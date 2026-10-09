@@ -87,6 +87,10 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetTeamDashboard)
 	auth.GET("/sales-workbench/champion",
 		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetChampionProfile)
+	// A10 快链读口：服务方法零暴露多轮，此端点为工作台页快链区的消费面；
+	// 静态列表无参，URL 已全改指真实落点（死链 4/5 已修）。
+	auth.GET("/sales-workbench/quick-actions",
+		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetQuickActions)
 	// A11 跟进提醒读写口：服务借草稿竖运行时（app.JourneyFollowUpForHTTP），
 	// 进程内内存态 —— 未装配为 nil ⇒ 控制器 503，与 sales-workbench 同口径。
 	// 前端落点 /followups/today（新首段，免与 dashboard→orderDraft 单模块映射冲突）。

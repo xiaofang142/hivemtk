@@ -55,4 +55,16 @@ describe('销售工作台 API', () => {
     http.get.mockRejectedValue(err)
     await expect(salesWorkbenchApi.teamDashboard(30)).rejects.toMatchObject({ status: 503 })
   })
+
+  it('quickActions 走 /api/sales-workbench/quick-actions 且无参数', async () => {
+    await salesWorkbenchApi.quickActions()
+    expect(http.get).toHaveBeenCalledWith('/api/sales-workbench/quick-actions')
+    expect(http.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('quickActions 返回 {list} 原样 resolve（页面取 res.list）', async () => {
+    const payload = { list: [{ id: 'new_draft', url: '/dashboard/drafts' }] }
+    http.get.mockResolvedValue(payload)
+    await expect(salesWorkbenchApi.quickActions()).resolves.toEqual(payload)
+  })
 })

@@ -30,12 +30,13 @@ func TestSalesWorkbenchRoutes_Registered(t *testing.T) {
 	for _, r := range engine.Routes() {
 		found[r.Method+" "+r.Path] = true
 	}
-	// 三条一起断言：overview（项11a）与两条 I7 读口是同一条竖的入口，
-	// 挂一半不算挂上。
+	// 四条一起断言：overview（项11a）、两条 I7 读口与 A10 快链是同一条竖的
+	// 入口，挂一半不算挂上。
 	for _, want := range []string{
 		"GET /api/sales-workbench/overview",
 		"GET /api/sales-workbench/team-dashboard",
 		"GET /api/sales-workbench/champion",
+		"GET /api/sales-workbench/quick-actions",
 	} {
 		if !found[want] {
 			t.Errorf("路由未注册：%s（实际 %v）", want, found)
@@ -58,6 +59,7 @@ func TestSalesWorkbenchRoutes_DashboardEndToEnd(t *testing.T) {
 	for _, path := range []string{
 		"/api/sales-workbench/team-dashboard?days=30",
 		"/api/sales-workbench/champion?days=7",
+		"/api/sales-workbench/quick-actions",
 	} {
 		rec := httptest.NewRecorder()
 		engine.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
