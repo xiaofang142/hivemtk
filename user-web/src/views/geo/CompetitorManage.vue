@@ -103,8 +103,8 @@ const form = ref({
   category: 'direct', priority: 5, status: 'active', notes: ''
 })
 
-const categoryLabel = (c) => ({ direct: '直接竞品', global: '海外巨头', indirect: '间接竞品' }[c] || c)
-const categoryTag = (c) => ({ direct: '', global: 'warning', indirect: 'info' }[c] || '')
+const categoryLabel = (c) => ({ direct: '直接竞品', global: '海外巨头', indirect: '间接竞品' }[c] || c || '—')
+const categoryTag = (c) => ({ direct: 'success', global: 'warning', indirect: 'info' }[c] || 'info')
 
 async function load() {
   loading.value = true
