@@ -79,6 +79,42 @@ func parseOrderDraftMode(raw string) orderDraftMode {
 	return orderDraftOff
 }
 
+// SalesTriggerFlagEnv 销售动作触发器开关：控制"AI 谈单响应后的那一次分发"走哪条路径。
+//
+// 为什么必须与草稿旗子分开（项11b 的关键取舍）：
+//   - off（默认）：生产者走既有的 OrderDraftService.CreateDraftsFromSalesResponse，
+//     只建草稿，行为与今天逐字节一致；
+//   - 真值：生产者改走 SalesActionTrigger.TriggerAfterSales，交付其注释里那套
+//     "商业产品级业务流"（打标签 / 推进旅程 / 提取意向建草稿 / 按意图排跟进 /
+//     记销售事件），草稿仍由同一条 CreateFromIntent 口径产出。
+//
+// 两条分支**互斥**，不是可叠加的两步：同一份意向若被两条路径各处理一次，
+// CreateFromIntent 的"同客户同产品 pending 合并"会把数量累加（3 次 → 6 次），
+// 那是假订单数据，比少建一张草稿坏得多。
+//
+// 语义只分"关/开"而不做三态：这是行为开关而不是存储介质开关（草稿旗子那种
+// 从内存换库的档位），shadow 档在这里没有可观察的中间态可言。
+const SalesTriggerFlagEnv = "FF_LTC_SALES_TRIGGER"
+
+// parseSalesTriggerEnabled 解析触发器开关：真值（true/1/yes/on）⇒ 开；
+// 空/显式关（off|false|0|no|none|disabled）⇒ 关；不识别 ⇒ 关并出声
+// （与 parseOrderDraftMode 同一 fail-closed 口径：认不出的值不给人多开一档行为）。
+func parseSalesTriggerEnabled(raw string) bool {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	switch v {
+	case "true", "1", "yes", "y", "on", "enabled":
+		return true
+	case "", "off", "false", "0", "no", "n", "none", "disabled":
+		return false
+	}
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	logger.Warnf("[order-draft] %s=%q 无法识别 ⇒ 按 off 处理（触发器不接管分发，仍只建草稿）",
+		SalesTriggerFlagEnv, raw)
+	return false
+}
+
 // OrderDraftStoreNone 未装配时的 store 回显值。
 //
 // 与三副底座的名字并列而不留空字符串：空串会被端点读成"字段没填"，
@@ -96,6 +132,20 @@ type OrderDraftRuntime struct {
 	// 两个独立的失败面：运行时装配在 Init 里，挂生产者在后一步。只回"运行时在"的话，
 	// "装配了但没人调"这个本卡开工前的原病灶就会被端点说成已修好。
 	producerAttached bool
+
+	// trigger 销售动作触发器（项11b）。非 nil = 本运行时装配了触发器（SetDraftService /
+	// SetTrigger 两跳在 Init 里就已落位）；**是否由它接管 AI 响应的分发**另看 triggerEnabled，
+	// 因为台账是静态判据（要的是"生产代码里真有这一跳"），而接管与否是会改变行为的运行期
+	// 决定，必须能单独关 —— 否则打开草稿旗子就等于顺手打开了打标/排跟进/记事件。
+	trigger        *service.SalesActionTrigger
+	triggerEnabled bool
+
+	// journey / followup 本运行时装配的旅程与跟进服务。除了喂给触发器和草稿服务，
+	// 它们还是这两个组件在进程里**唯一**的写入方（states / pending 都是进程内内存），
+	// 所以要留给读侧（项11a 的销售工作台）借 —— 工作台若自建一份，概览会回
+	// "漏斗 0、待办 0"的空数据，那正是假性完成的形态。
+	journey  *service.CustomerJourneyService
+	followup *service.FollowUpService
 }
 
 // Mode 生效档位（off 时运行时根本不存在，故本方法只在已装配实例上调用）。
@@ -127,6 +177,18 @@ func OrderDraftServiceForHTTP() *service.OrderDraftService {
 		return nil
 	}
 	return rt.svc
+}
+
+// JourneyFollowUpForHTTP 把本进程草稿竖装配的旅程与跟进服务借给读侧端点
+// （项11a 销售工作台）用。两个都可能为 nil（旗子 off ⇒ 运行时不存在），
+// 调用方按 nil 跳过对应板块即可 —— 这时概览里相关字段是 null，而不是编一个 0：
+// 没有写入方的时候，"0 个客户进了漏斗"是一句会被当真的话。
+func JourneyFollowUpForHTTP() (*service.CustomerJourneyService, *service.FollowUpService) {
+	rt := currentOrderDraftRuntime()
+	if rt == nil {
+		return nil, nil
+	}
+	return rt.journey, rt.followup
 }
 
 // InitOrderDraftRuntime 按旗子装配草稿运行时；off 档返回 nil（并出声）。
@@ -179,7 +241,28 @@ func InitOrderDraftRuntime(db *gorm.DB) *OrderDraftRuntime {
 	}
 	journey := service.NewCustomerJourneyService()
 	svc.SetJourney(context.Background(), journey)
-	svc.SetFollowUp(context.Background(), service.NewFollowUpService(journey))
+	followup := service.NewFollowUpService(journey)
+	svc.SetFollowUp(context.Background(), followup)
+	rt.journey, rt.followup = journey, followup
+
+	// 销售动作触发器的装配（项11b）。SetDraftService / SetTrigger 这两跳此前全仓非测试
+	// 调用点为 0 —— 一个只写不读的引用（s.trigger）加一个永远没人递的注入点，正是
+	// "实现了但没人调用"的形状。依赖必须在装配期递进去，理由与上面 SetOrderService 同一条：
+	// 等调用方来递就等于没人递。
+	//
+	// 只装配、不接管：AI 响应走哪条分发另由 SalesTriggerFlagEnv 决定（见
+	// orderDraftProduceFunc 的互斥分发）。分开是因为这两件事的风险不同 ——
+	// 装配零行为变化，接管会多出打标/推旅程/排跟进/记事件四类副作用。
+	statsSvc := service.NewSalesEventStatsService()
+	trigger := service.NewSalesActionTrigger(service.NewAITagger(), journey, followup, rt.extractor, statsSvc, nil)
+	trigger.SetDraftService(context.Background(), svc)
+	svc.SetTrigger(context.Background(), trigger)
+	rt.trigger = trigger
+	rt.triggerEnabled = parseSalesTriggerEnabled(os.Getenv(SalesTriggerFlagEnv))
+	if rt.triggerEnabled {
+		logger.Infof("[order-draft] ✅ %s 开启 ⇒ AI 响应由触发器接管分发（打标/推旅程/建草稿/排跟进/记事件五类副作用一次到位）",
+			SalesTriggerFlagEnv)
+	}
 	// 清扫 worker 两档都装：ExpireOverdue 在内存底座上同样要跑 ——
 	// "7 天未确认自动过期"这条口径此前只存在于注释里，从来没有调用方。
 	rt.sweeper = service.NewOrderDraftSweepWorker(svc, service.DefaultOrderDraftSweepInterval, 0)
@@ -252,6 +335,13 @@ func attachOrderDraftProducer(o *service.SmartCSOrchestrator, rt *OrderDraftRunt
 // 现在闭包的构造与注入共用这一个口。
 func orderDraftProduceFunc(rt *OrderDraftRuntime) func(context.Context, string, string, *service.SalesResponse) {
 	return func(ctx context.Context, customerID, ownerID string, resp *service.SalesResponse) {
+		// 两条分支**互斥**，由 FF_LTC_SALES_TRIGGER 决定走哪一条，永不串联执行：
+		// CreateFromIntent 对"同客户同产品 pending"的既有处理是数量累加（3 次 → 6 次），
+		// 串联同一条响应两次就等于凭空翻倍，那是假订单数据，比少建一张草稿坏得多。
+		if rt.triggerEnabled && rt.trigger != nil {
+			rt.trigger.TriggerAfterSales(ctx, customerID, ownerID, resp)
+			return
+		}
 		rt.svc.CreateDraftsFromSalesResponse(ctx, rt.extractor, customerID, ownerID, resp)
 	}
 }
@@ -279,6 +369,13 @@ type OrderDraftSnapshot struct {
 
 	ProducerAttached bool
 
+	// TriggerAttached 销售动作触发器是否已装配（项11b 的可观测面：装配在 Init、
+	// 与是否接管分发是两件事，分开回）。
+	TriggerAttached bool
+	// TriggerEnabled FF_LTC_SALES_TRIGGER 的装配期取值：true = AI 响应由触发器接管分发
+	// （否则走只建草稿的老路径）。
+	TriggerEnabled bool
+
 	SweepInterval string
 	SweepRunning  bool
 	SweepRounds   int64
@@ -293,15 +390,25 @@ type OrderDraftSnapshot struct {
 func GetOrderDraftSnapshot(ctx context.Context) OrderDraftSnapshot {
 	orderDraftMu.RLock()
 	rt := orderDraftRuntime
-	var attached bool
+	var attached, trigAttached, trigEnabled bool
 	if rt != nil {
 		attached = rt.producerAttached
+		trigAttached = rt.trigger != nil
+		trigEnabled = rt.triggerEnabled
 	}
 	orderDraftMu.RUnlock()
 
-	snap := OrderDraftSnapshot{Store: OrderDraftStoreNone, ProducerAttached: attached}
+	snap := OrderDraftSnapshot{
+		Store:            OrderDraftStoreNone,
+		ProducerAttached: attached,
+		TriggerAttached:  trigAttached,
+		TriggerEnabled:   trigEnabled,
+	}
 	if rt == nil {
 		snap.Mode = string(parseOrderDraftMode(os.Getenv(OrderDraftFlagEnv)))
+		// 运行时缺席 ⇒ 触发器也不存在（它住在运行时里）；但开关本身还是要照读，
+		// 否则运维问"这台机器到底开没开"时端点会回一个假的 false。
+		snap.TriggerEnabled = parseSalesTriggerEnabled(os.Getenv(SalesTriggerFlagEnv))
 		return snap
 	}
 	snap.Mode = rt.Mode()

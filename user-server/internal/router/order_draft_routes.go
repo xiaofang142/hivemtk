@@ -1,4 +1,4 @@
-// order_draft_routes.go 订单草稿竖的观察端点（新规划任务清单 T-P2-06 ④）。
+// order_draft_routes.go 订单草稿竖的对外端点：一条观察端点 + 五条销售操作端点。
 //
 // 为什么要有这条路由：T-P2-01 到 T-P2-06 之间，这条竖的全部对外可观察面就是
 // "函数存在、单测通过"。灰度期最容易被读反的一句话是"草稿已经落库了" ——
@@ -10,14 +10,34 @@ import (
 	"context"
 
 	"hivemtk-user/internal/app"
+	"hivemtk-user/internal/controller"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
+// setupOrderDraftRoutes 在**已鉴权**的 /api 组下挂观察端点与销售操作端点。
+//
+// 两类端点故意挂在同一个函数里：它们回答的是同一条竖的两半 ——
+// stats 说"这个进程的草稿运行时是什么状态"，order-drafts 说"里面有哪些草稿、谁来处理"。
+// 分开两处挂载，迟早出现"观察端点在、操作端点没挂"的半接线，而那恰好是本竖开工前的原病灶。
+//
+// 服务实例取自装配层的全局运行时（app.InitOrderDraftRuntime，按旗子 FF_LTC_ORDER_DRAFT_DB）。
+// 取到 nil 不是错误：路由照挂，每个请求回 503 —— 关闸的形态是"不给底座"，不是"不挂路由"，
+// 后者在前端表现为 404，会被读成"这个功能没做"。
 func setupOrderDraftRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/order-drafts/stats", handleOrderDraftStats)
+
+	svc := app.OrderDraftServiceForHTTP()
+	controller.NewOrderDraftController(svc, app.OrderDraftFlagEnv).RegisterRoutes(auth)
+	if svc == nil {
+		logger.Infof("[Router] order-draft 操作端点已挂载，但未装配草稿运行时 ⇒ 全部回 503"+
+			"（检查 %s 与 app.InitOrderDraftRuntime 是否在路由之前跑过）", app.OrderDraftFlagEnv)
+		return
+	}
+	logger.Infof("[Router] order-draft 销售端点已连通（底座=%s，durable=%v）", svc.StoreKind(), svc.Durable())
 }
 
 // orderDraftStatsPayload 把快照渲染成响应体。
@@ -35,7 +55,13 @@ func orderDraftStatsPayload(snap app.OrderDraftSnapshot) gin.H {
 		"store":             snap.Store,
 		"durable":           snap.Durable,
 		"producer_attached": snap.ProducerAttached,
-		"counts":            nil,
+		// 项11b 的可观测面：装配（trigger_attached）与接管（trigger_enabled）是两件事，
+		// 只回一个数会把"装了但没接管"（=今天默认档）读成"没装"。
+		"trigger_attached": snap.TriggerAttached,
+		"trigger_enabled":  snap.TriggerEnabled,
+		"trigger_env": app.SalesTriggerFlagEnv + "=on|true|1|yes（开=AI 响应由销售动作触发器接管分发：" +
+			"打标/推旅程/建草稿/排跟进/记事件；off|空=只建草稿，与旧行为逐字节一致。档位只在装配期读一次，改完须重启）",
+		"counts": nil,
 		"env_hint": app.OrderDraftFlagEnv + "=off|shadow|on（off=不装配（默认）；shadow=读走内存、写镜像进库，" +
 			"durable 仍为 false；on=权威副本进库。档位只在装配期读一次，改完须重启）",
 	}

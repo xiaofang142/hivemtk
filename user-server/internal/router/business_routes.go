@@ -1,6 +1,7 @@
 package router
 
 import (
+	"hivemtk-user/internal/app"
 	contentctrl "hivemtk-user/internal/content/controller"
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
@@ -75,6 +76,10 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 	auth.POST("/customer-events/batch", extrasCtrl.TrackBatch)
 
 	auth.GET("/ai/sales-cockpit", controller.NewSalesCockpitController().GetCockpit)
+	// 销售工作台首页概览（项11a）：服务实例取自装配层（app.InitSalesWorkbenchRuntime），
+	// 与 order-draft 端点同一口径 —— 控制器不自己 new 服务，装配层那次注入才有意义。
+	auth.GET("/sales-workbench/overview",
+		controller.NewSalesWorkbenchController(app.SalesWorkbenchServiceForHTTP()).GetOverview)
 	wvCtrl := controller.NewWebVitalsController()
 	auth.POST("/monitor/web-vitals", wvCtrl.Report)
 	mfSyncCtrl := controller.NewMarketingFlowSyncController()

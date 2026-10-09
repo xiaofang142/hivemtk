@@ -30,17 +30,82 @@ func TestSetupOrderDraftRoutes_Registered(t *testing.T) {
 	auth := engine.Group("/api")
 	setupOrderDraftRoutes(auth)
 
-	var found []string
+	found := map[string]bool{}
 	for _, r := range engine.Routes() {
-		found = append(found, r.Method+" "+r.Path)
+		found[r.Method+" "+r.Path] = true
 	}
-	want := "GET /api/agent/order-drafts/stats"
-	for _, line := range found {
-		if line == want {
-			return
+	// 六条一起断言，而不是"其中一条在就算挂上了"：观察端点与操作端点是同一条竖的两半，
+	// 只挂一半正是这条竖开工前的原病灶（有计数可读、没人能处理）。
+	want := []string{
+		"GET /api/agent/order-drafts/stats",
+		"GET /api/manage/order-drafts",
+		"GET /api/manage/order-drafts/:id",
+		"PATCH /api/manage/order-drafts/:id",
+		"POST /api/manage/order-drafts/:id/confirm",
+		"POST /api/manage/order-drafts/:id/cancel",
+	}
+	var missing []string
+	for _, w := range want {
+		if !found[w] {
+			missing = append(missing, w)
 		}
 	}
-	t.Fatalf("路由未注册 %s，实际 %v", want, found)
+	if len(missing) > 0 {
+		t.Fatalf("路由未注册 %v，实际 %v", missing, found)
+	}
+}
+
+// TestSetupOrderDraftRoutes_FlagOffIs503 走**真正的挂载函数**验关闸形状：
+// 旗子 off ⇒ 没有草稿运行时，五条操作端点全部 503 且提示里带着该改的旗子名。
+//
+// 这条不能只靠 controller 包里"手动传 nil"那条用例：那种写法测的是控制器认 nil，
+// 不证明挂载函数在旗子 off 时真的把 nil 递进去（那一步取的是装配层的全局运行时）。
+func TestSetupOrderDraftRoutes_FlagOffIs503(t *testing.T) {
+	t.Setenv(app.OrderDraftFlagEnv, "off")
+	app.StopOrderDraftRuntime()
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set("user_id", "7"); c.Next() })
+	auth := engine.Group("/api")
+	setupOrderDraftRoutes(auth)
+
+	cases := []struct{ method, path, body string }{
+		{"GET", "/api/manage/order-drafts", ""},
+		{"GET", "/api/manage/order-drafts/draft_1", ""},
+		{"POST", "/api/manage/order-drafts/draft_1/confirm", ""},
+		{"POST", "/api/manage/order-drafts/draft_1/cancel", `{"reason":"客户预算取消"}`},
+		{"PATCH", "/api/manage/order-drafts/draft_1", `{"quantity":2}`},
+	}
+	for _, tc := range cases {
+		var req *http.Request
+		if tc.body == "" {
+			req = httptest.NewRequest(tc.method, tc.path, nil)
+		} else {
+			req = httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s 期望 503，实际 %d：%s", tc.method, tc.path, rec.Code, rec.Body.String())
+			continue
+		}
+		if body := rec.Body.String(); !strings.Contains(body, app.OrderDraftFlagEnv) {
+			t.Errorf("%s %s 的 503 应点出旗子名，实际 %s", tc.method, tc.path, body)
+		}
+	}
+
+	// 观察端点在 off 档仍要能答上话（200 + counts 为 null），它和操作端点是两种用途：
+	// 前者回答"为什么没装配"，后者是"没装配就别给我业务结论"。
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest("GET", "/api/agent/order-drafts/stats", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stats 端点在 off 档应回 200，实际 %d：%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"counts":null`) {
+		t.Errorf("off 档的 stats 应把 counts 渲染成 null（一次都没读到），实际 %s", rec.Body.String())
+	}
 }
 
 func TestOrderDraftStatsPayload_NotAssembled(t *testing.T) {

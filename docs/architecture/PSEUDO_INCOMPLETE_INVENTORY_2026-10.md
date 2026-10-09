@@ -257,12 +257,18 @@
 无人读取的 `kb_id`。要么给内容表加 `kb_id` 外键并回填（数据迁移 + 归属口径评审），
 要么把 KB 列表页的统计列摘掉。这是产品口径，不是补一个 COUNT 能诚实收掉的。
 
-### B4 8 条 UNWIRED 台账行（原 9 条，项20d 已于 2026-10 转 wired）
+### B4 5 条 UNWIRED 台账行（原 9 条：项20d 于 2026-10 转 wired，项9/11a/11b 于 2026-10-09 I6 转 wired）
 
-`scripts/check-unwired-assets.sh` 现在按 UNWIRED 登记的格（项9 读/统计侧、项11 的两条草稿侧、
-项14、项19 的四条）本身是诚实的：它们明写"未接线"，并且漂移会让门变红。
+`scripts/check-unwired-assets.sh` 现在按 UNWIRED 登记的格（项14、项19 的四条）
+本身是诚实的：它们明写"未接线"，并且漂移会让门变红。
 （原"项20"即 SOP 节点 `Tools` 字段：I5 已落地为 `validateGraph` 保存期 fail-closed 拒绝
-`ErrSOPNodeToolsUnsupported`，该格转 wired，基线从 94/103 升至 95/103。）
+`ErrSOPNodeToolsUnsupported`，该格转 wired，基线从 94/103 升至 95/103。
+I6 再接三格：项9 读侧（`NewSalesEventStatsService` 由工作台装配入口构造）、
+11a（`SalesWorkbenchService.SetDraft` 由 `app.InitSalesWorkbenchRuntime` 注入，端点
+`GET /api/sales-workbench/overview`）、11b（`SalesActionTrigger.SetDraftService` +
+`SetTrigger` 由 `InitOrderDraftRuntime` 落位，接管另受 `FF_LTC_SALES_TRIGGER` 默认 off 管控，
+与建草稿老路径互斥）⇒ 基线 95→**98/103**。项9 的注释同时写明它**只证明读侧服务被构造注入**，
+团队排行/冠军画像等报表改走事件流仍是 I7 的待办。）
 但每一格都对应一个"UI 上有入口/文档里有说法，运行时长不到"的能力，需要逐条决定接还是撤。
 本轮**没能**往里加防回归行：该脚本被另一泳道占着（`git status` 里是 `M`），
 共享索引下不能再叠一次改动。待加的行列在 A1/A5/A6/A7 的判据里已经写成人能抄的形式。

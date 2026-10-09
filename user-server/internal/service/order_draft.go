@@ -80,6 +80,18 @@ type DraftUpdates struct {
 	Note        *string  `json:"note,omitempty"`
 }
 
+// 草稿读写的三类可预期失败。
+//
+// 包级哨兵是为了 HTTP 层能把"这条不存在"与"库里读不动"翻成 404 与 500 两个状态码：
+// 只靠 fmt 的中文消息匹配，前端刷新列表（409/404）和重试打转（500）就分不开。
+// 包装一律用 %w 且**保留原句子串**（"草稿 x 不存在"/"不可确认"/"草稿已过期"），
+// 既有用例按子串断言，改文案会把它们的判据一起换掉。
+var (
+	ErrOrderDraftNotFound   = errors.New("订单草稿不存在")
+	ErrOrderDraftNotPending = errors.New("订单草稿已过待确认态")
+	ErrOrderDraftExpired    = errors.New("草稿已过期")
+)
+
 // DraftConfirmResult 草稿确认结果
 type DraftConfirmResult struct {
 	Draft         *OrderDraft  `json:"draft"`
@@ -87,6 +99,12 @@ type DraftConfirmResult struct {
 	Order         *orderRecord `json:"order,omitempty"`
 	StageAdvanced string       `json:"stage_advanced"`
 	FollowUpID    string       `json:"followup_id,omitempty"`
+	// OrderProvisional 为真表示 order_id 是本进程临时生成的、orders 表里**没有**这一行。
+	//
+	// 它是"确认成功"这句话里唯一会被读反的半边：没有订单服务时确认仍然会翻草稿状态，
+	// 但若把这个号当真实订单回给销售，下一步（开票/发货/对账）就会打在一个不存在的单上。
+	// HTTP 出口必须把它透出去，而不是把订单号单独回一个看起来正常的字符串。
+	OrderProvisional bool `json:"order_provisional,omitempty"`
 }
 
 type orderRecord struct {
@@ -544,10 +562,10 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 		return nil, fmt.Errorf("读取草稿 %s 失败: %w", draftID, err)
 	}
 	if cur == nil {
-		return nil, fmt.Errorf("草稿 %s 不存在", draftID)
+		return nil, fmt.Errorf("%w：草稿 %s 不存在", ErrOrderDraftNotFound, draftID)
 	}
 	if cur.Status != DraftStatusPending {
-		return nil, fmt.Errorf("草稿状态为 %s，不可确认", cur.Status)
+		return nil, fmt.Errorf("%w：草稿 %s 状态为 %s，不可确认", ErrOrderDraftNotPending, draftID, cur.Status)
 	}
 	now := time.Now()
 	if now.After(cur.ExpiresAt) {
@@ -562,7 +580,7 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 		} else if !applied {
 			logger.Warnf("[order-draft] 草稿 %s 在判过期与回写之间被并发改动 ⇒ 仍按已过期拒绝本次确认", draftID)
 		}
-		return nil, fmt.Errorf("草稿已过期")
+		return nil, ErrOrderDraftExpired
 	}
 	// 判 pending 与翻 confirmed 是一次加锁读里的一个动作（见 repository.MutatePending）：
 	// 分成两步 = 两个销售同时点确认时会各建一张订单。
@@ -577,9 +595,9 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 	if !applied {
 		fresh, _ := s.store.get(ctx, draftID)
 		if fresh == nil {
-			return nil, fmt.Errorf("草稿 %s 不存在", draftID)
+			return nil, fmt.Errorf("%w：草稿 %s 不存在", ErrOrderDraftNotFound, draftID)
 		}
-		return nil, fmt.Errorf("草稿状态为 %s，不可确认", fresh.Status)
+		return nil, fmt.Errorf("%w：草稿 %s 状态为 %s，不可确认", ErrOrderDraftNotPending, draftID, fresh.Status)
 	}
 	if confirmedBy == "" {
 		confirmedBy = draft.OwnerID
@@ -614,6 +632,7 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 	} else {
 		orderID = generateTempOrderID()
 		result.OrderID = orderID
+		result.OrderProvisional = true
 	}
 
 	if orderID != "" {
@@ -712,9 +731,9 @@ func (s *OrderDraftService) Cancel(ctx context.Context, draftID, reason, cancell
 			return fmt.Errorf("读取草稿 %s 失败: %w", draftID, e)
 		}
 		if cur == nil {
-			return fmt.Errorf("草稿 %s 不存在", draftID)
+			return fmt.Errorf("%w：草稿 %s 不存在", ErrOrderDraftNotFound, draftID)
 		}
-		return fmt.Errorf("草稿状态为 %s，不可取消", cur.Status)
+		return fmt.Errorf("%w：草稿 %s 状态为 %s，不可取消", ErrOrderDraftNotPending, draftID, cur.Status)
 	}
 
 	if s.stats != nil {
@@ -749,7 +768,10 @@ func (s *OrderDraftService) Edit(ctx context.Context, draftID string, updates Dr
 		if updates.Note != nil {
 			d.Note = *updates.Note
 		}
-		d.TotalAmount = d.UnitPrice * float64(d.Quantity)
+		// 与创建侧同一口径四舍五入到分：这里不夹一次的话，编辑过价格的行会拿到
+		// float64 乘法误差（19.99*3 = 59.969999999999995），写进 NUMERIC(12,2) 列
+		// 时与前端展示的 59.97 对不上账。
+		d.TotalAmount = roundMoney(d.UnitPrice * float64(d.Quantity))
 		d.UpdatedAt = time.Now()
 	})
 	if err != nil {
@@ -764,9 +786,9 @@ func (s *OrderDraftService) Edit(ctx context.Context, draftID string, updates Dr
 		return fmt.Errorf("读取草稿 %s 失败: %w", draftID, e)
 	}
 	if cur == nil {
-		return fmt.Errorf("草稿 %s 不存在", draftID)
+		return fmt.Errorf("%w：草稿 %s 不存在", ErrOrderDraftNotFound, draftID)
 	}
-	return fmt.Errorf("草稿状态为 %s，不可编辑", cur.Status)
+	return fmt.Errorf("%w：草稿 %s 状态为 %s，不可编辑", ErrOrderDraftNotPending, draftID, cur.Status)
 }
 
 // GetByID 根据 ID 查询草稿。

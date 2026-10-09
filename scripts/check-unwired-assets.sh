@@ -93,9 +93,14 @@ BASELINE=(
   #   （internal/service/quote_send.go 的报价外发事件，句柄由 app/quote_wiring.go 递进去），
   #   而本项盯的**读/统计**侧仍然零接线（callpat 的 scope 里没有 internal/service，
   #   sales_event_stats.go 里那个 NewSalesEventRepository() 是统计服务自己的构造，不算证据）。
-  #   所以这一格继续留白 = 待办，但口径要说准：现在缺的不是"没人写"，是"写了没人读"——
+  #   所以这一格先前一直留白 = 待办，口径要说准：现在缺的不是"没人写"，是"写了没人读"——
   #   而后者才是僵尸表的形状（漏斗读的是 opportunities 表，不是这条事件流）。
-  "9|销售事件统计服务的装配入口（写侧 T-P6-03 起有真实生产写入方，读侧仍零接线）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|"
+  # 【11a/11b 轮次后更正】读侧接上了，本行转 **wired**（防回退）：销售工作台的装配入口
+  #   internal/app/sales_workbench_wiring.go 无条件构造 stats（GetTeamRanking /
+  #   GetAIProductivity / GetSalesPerformance 都从它出，且 stats 一变还会顺着 aggregateTodos
+  #   落到待办里）。注意这一格只证明"读侧服务被构造并注入"，不证明"漏斗报表已改走事件流"
+  #   —— 团队排行/冠军画像那些报表仍读老路径，那部分是 I7 的口径、不在本项内。
+  "9|销售事件统计服务的装配入口（写侧 T-P6-03 起有真实生产写入方，读侧已由销售工作台装配）|func NewSalesEventStatsService|NewSalesEventStatsService\(|internal/app cmd/api internal/controller internal/router|wired"
   # 项10 = T-P2-05 新增：四行全部登记为 **wired**（防回退），不是待办。
   # 10a 是答案缓存版本路由的唯一决策口：它的调用点在 smart_cs_orchestrator.go 里，
   #   一旦被重构掉，编排器会静默退回挂载前的写死 "v1"，管理端配的版本/灰度当场变成
@@ -111,18 +116,29 @@ BASELINE=(
   # 项11 = T-P2-06 新增：本卡把草稿竖的**生产者侧**接上了（AI 回复→建草稿、清扫节拍、
   # 观察端点），但装配过程中实测出**读侧与售后侧仍然没人注入**：
   #   11a `SalesWorkbenchService.SetDraft` 在非测试代码零调用 ⇒ 工作台聚合待办里永远没有
-  #       草稿项，销售打开系统看不到"我有几条待确认草稿"（本卡只改了它的错误口径）；
+  #       草稿项，销售打开系统看不到"我有几条待确认草稿"；
   #   11b `SalesActionTrigger.SetDraftService` 同理零调用 ⇒ 售后触发器提取的意向不落草稿。
   # 这两行按 UNWIRED 登记而不是留白：否则"AI 谈单会产草稿、销售在工作台确认草稿"这半句话
-  # 会被读成整句都成立。兑现卡未在清单里指派（P4 是商机域、P8 是看板），开工前须先认领。
+  # 会被读成整句都成立。
+  # 【11a/11b 轮次后更正】两行均已转 **wired**（防回退，不是待办），各自的接线事实：
+  #   11a 装配入口 internal/app/sales_workbench_wiring.go：草稿服务从草稿竖的运行时**借**
+  #       （app.OrderDraftServiceForHTTP），旅程与跟进同借（app.JourneyFollowUpForHTTP）——
+  #       三者都是进程内内存，本进程唯一的写入方就在草稿竖，工作台自建一份等于永远回空。
+  #       装配点在 router.Setup 的 InitOrderDraftRuntime 之后（router.go 同一处），
+  #       端点 GET /api/sales-workbench/overview 已挂。
+  #   11b 装配在 app.InitOrderDraftRuntime 内：SetDraftService 与 SetTrigger 两跳落位后，
+  #       **是否由触发器接管 AI 响应的分发**另由 FF_LTC_SALES_TRIGGER（默认 off）决定，
+  #       两分支互斥 —— 这一格只证明"依赖递进去了"，接管与否看观察端点的 trigger_enabled。
+  #       （合并执行会让同一条意向被处理两次：CreateFromIntent 的"同客户同产品 pending 合并"
+  #       会把数量 3 累加成 6，那是假订单，所以互斥是硬约束而不是风格。）
   #   11c 已转 **wired**（防回退，不是待办）：装配点 internal/app/order_draft_wiring.go 的
   #       InitOrderDraftRuntime 在拿到 DB 句柄时注入订单服务，确认成单这条腿不再有
   #       "orderService 未注入"这条路；句柄缺席时 Confirm 仍会退成临时订单号，但那份
   #       假数据由 DraftConfirmResult.OrderProvisional 显式标出、HTTP 出口连消息一起透出。
   #       这一格只证明"订单服务被递进去了"，不证明"现网一定递了"：旗子
   #       FF_LTC_ORDER_DRAFT_DB 默认 off，off 档连草稿运行时都没有。
-  "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|"
-  "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|"
+  "11|销售工作台草稿读侧的注入点|func \\(s \\*SalesWorkbenchService\\) SetDraft|SetDraft\(|internal/app cmd/api internal/controller internal/router|wired"
+  "11|售后触发器草稿写侧的注入点|func \\(t \\*SalesActionTrigger\\) SetDraftService|SetDraftService\(|internal/app cmd/api internal/controller internal/router|wired"
   "11|草稿确认成单所需的订单服务注入点|func \\(s \\*OrderDraftService\\) SetOrderService|SetOrderService\(|internal/app cmd/api internal/controller internal/router|wired"
   # 11d：草稿的销售操作出口（列表/详情/确认/取消/编辑）必须挂在 router 上。登记它是因为
   # 这个失败面与 11c 相反：装配在、路由被摘 ⇒ 前端 404、后端一句日志都没有，
