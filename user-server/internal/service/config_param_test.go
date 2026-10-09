@@ -126,7 +126,10 @@ func TestFallbackNilDB(t *testing.T) {
 // 该进 DefaultParamDefs()，而不是"顺手多加了一个"）。
 // 2026-09-20（T-P3-03）：+1 = `human_task.handoff_first_response_minutes`。
 // 2026-09-28：+2 = `bridge.outbound_orphan_ttl` / `bridge.outbound_orphan_dry_run`（桥接出站孤儿结算的阈值与"只报数"闸门）。
-const defaultParamDefsWant = 114
+// 2026-10-09：+1 = `cache.faq_answer_enabled`（FAQ 语义答案缓存开关，装配点 app/faq_cache_wiring.go）。
+//   这条是被漏掉的锚点：种子里已加、读点已接，但本锚点还停在 114，
+//   于是 TestDefaultParamDefsCount 一进仓库就红——"登记了但没人看见"的一种。
+const defaultParamDefsWant = 115
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

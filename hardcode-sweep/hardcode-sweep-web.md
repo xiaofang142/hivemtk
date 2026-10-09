@@ -1,0 +1,608 @@
+# 前端（user-web）硬编码扫描报告
+
+## 概览
+
+- 扫描文件: 479
+- CN（未走 i18n 的中文字面量）: 7237（其中用户可见属性 3793）
+- CONFIG（命名数值/布尔常量）: 65
+- DATA（选项/枚举/标签映射字面量）: 524
+- URL（写死绝对地址）: 0
+- TUNE（内联调参数字）: 1752
+
+## DATA 选项/枚举字面量
+
+- `user-web/src/App.vue:18` `elMap`
+- `user-web/src/api/agentKBBinding.js:23` `agentKBBindingAPI`
+- `user-web/src/api/aiProductivity.js:3` `AIProductivityApi`
+- `user-web/src/api/approval.js:15` `approvalApi`
+- `user-web/src/api/badCase.js:40` `badCaseApi`
+- `user-web/src/api/browserAutomation.js:79` `CONFIRM_STATUSES`
+- `user-web/src/api/clue.js:3` `clueApi`
+- `user-web/src/api/community.js:3` `communityApi`
+- `user-web/src/api/conversionFunnel.js:3` `ConversionFunnelApi`
+- `user-web/src/api/dialogueMemory.js:3` `memoryApi`
+- `user-web/src/api/domainPool.js:10` `domainPoolApi`
+- `user-web/src/api/email.js:3` `emailApi`
+- `user-web/src/api/faq.js:3` `faqApi`
+- `user-web/src/api/followup.js:18` `followupApi`
+- `user-web/src/api/followup.js:21` `params`
+- `user-web/src/api/followup.js:28` `params`
+- `user-web/src/api/geo.js:3` `geoApi`
+- `user-web/src/api/humanTask.js:39` `humanTaskApi`
+- `user-web/src/api/inbox.js:4` `inboxApi`
+- `user-web/src/api/intentRecognition.js:3` `intentApi`
+- `user-web/src/api/knowledge.js:3` `knowledgeAPI`
+- `user-web/src/api/knowledgeBase.js:31` `knowledgeBaseAPI`
+- `user-web/src/api/knowledgeMerchant.js:3` `knowledgeMerchantAPI`
+- `user-web/src/api/llmRouting.js:3` `LlmRoutingApi`
+- `user-web/src/api/llmRouting.js:50` `params`
+- `user-web/src/api/ltcRates.js:3` `LtcRatesApi`
+- `user-web/src/api/messageHub.js:3` `messageHubApi`
+- `user-web/src/api/monitor.js:3` `MonitorApi`
+- `user-web/src/api/orderDraft.js:19` `orderDraftApi`
+- `user-web/src/api/permission.js:15` `permissionApi`
+- `user-web/src/api/platform.js:3` `platformAPI`
+- `user-web/src/api/platformAccount.js:3` `platformAccountApi`
+- `user-web/src/api/ragProductConfig.js:10` `ragProductConfigAPI`
+- `user-web/src/api/reachPipeline.js:3` `reachPipelineApi`
+- `user-web/src/api/role.js:26` `roleApi`
+- `user-web/src/api/salesWorkbench.js:20` `salesWorkbenchApi`
+- `user-web/src/api/scriptAb.js:3` `scriptAbApi`
+- `user-web/src/api/shortLink.js:3` `shortLinkApi`
+- `user-web/src/api/sopAgent.js:3` `sopApi`
+- `user-web/src/api/sopTemplate.js:3` `sopTemplateApi`
+- `user-web/src/api/stats.js:3` `StatsApi`
+- `user-web/src/api/system.js:3` `SystemApi`
+- `user-web/src/api/systemUser.js:23` `systemUserApi`
+- `user-web/src/api/tagSegmentation.js:3` `TagSegmentationApi`
+- `user-web/src/api/unifiedMessage.js:3` `unifiedMessageApi`
+- `user-web/src/api/users.js:3` `usersApi`
+- `user-web/src/api/wecomAccount.js:3` `wecomAccountApi`
+- `user-web/src/api/workflowOrchestrator.js:3` `workflowOrchestratorApi`
+- `user-web/src/api/workflowOrchestrator.js:11` `params`
+- `user-web/src/components/AgentBindingDialog.vue:144` `map`
+- `user-web/src/components/AgentMountDialog.vue:141` `map`
+- `user-web/src/components/Breadcrumb.vue:24` `topMenusMap`
+- `user-web/src/components/Breadcrumb.vue:34` `subMenusMap`
+- `user-web/src/components/Breadcrumb.vue:100` `result`
+- `user-web/src/components/CollaborativeChatInput.vue:192` `names`
+- `user-web/src/components/ReachChannelSelector.vue:58` `ICON_MAP`
+- `user-web/src/components/VueFlowCanvas.vue:87` `position`
+- `user-web/src/components/WeComSendDialog.vue:107` `payload`
+- `user-web/src/components/cards/PlatformCardEditor.vue:75` `platforms`
+- `user-web/src/components/cards/PlatformCardEditor.vue:116` `apiMap`
+- `user-web/src/components/dialogs/MaterialSelectDialog.vue:76` `list`
+- `user-web/src/constants/riskLevel.js:8` `ALIAS`
+- `user-web/src/constants/status.js:118` `labelMap`
+- `user-web/src/constants/status.js:119` `tagTypeMap`
+- `user-web/src/i18n/index.js:16` `messages`
+- `user-web/src/i18n/locale.js:1` `SUPPORTED_LOCALES`
+- `user-web/src/router/index.js:221` `extraModules`
+- `user-web/src/stores/permission.js:5` `ROLE_RANK`
+- `user-web/src/utils/a11y.js:7` `_focusTrapStack`
+- `user-web/src/utils/format.js:13` `map`
+- `user-web/src/utils/format.js:38` `opts`
+- `user-web/src/utils/format.js:89` `units`
+- `user-web/src/utils/http.js:3` `http`
+- `user-web/src/utils/i18nPlural.js:1` `PLURAL_RULES`
+- `user-web/src/utils/i18nTextExpansion.js:1` `EXPANSION_FACTORS`
+- `user-web/src/utils/i18nTextExpansion.js:36` `MIN_BUTTON_WIDTH`
+- `user-web/src/utils/iconMap.js:63` `routeIconMap`
+- `user-web/src/utils/journeyTracker.js:8` `JOURNEY_STAGES`
+- `user-web/src/utils/journeyTracker.js:115` `journey`
+- `user-web/src/utils/journeyTracker.js:135` `event`
+- `user-web/src/utils/kbSecurity.js:1` `KB_SECURITY_POLICY`
+- `user-web/src/utils/map.js:4` `_LEGACY_PLATFORM_NAME_MAP`
+- `user-web/src/utils/map.js:10` `_LEGACY_PLATFORM_TAG_MAP`
+- `user-web/src/utils/map.js:29` `_LEGACY_STATUS_TYPE_MAP`
+- `user-web/src/utils/map.js:36` `_LEGACY_STATUS_NAME_MAP`
+- `user-web/src/utils/map.js:52` `legacy`
+- `user-web/src/utils/request.js:41` `INIT_REDIRECT_MAP`
+- `user-web/src/utils/templateRender.js:61` `errors`
+- `user-web/src/utils/templateRender.js:79` `BUILTIN_VARIABLES`
+- `user-web/src/utils/webVitalsMonitor.js:68` `data`
+- `user-web/src/views/KnowledgeWorkspace/ApiToken.vue:193` `rules`
+- `user-web/src/views/KnowledgeWorkspace/BatchImport.vue:286` `out`
+- `user-web/src/views/KnowledgeWorkspace/BatchImport.vue:301` `out`
+- `user-web/src/views/KnowledgeWorkspace/Connectors.vue:100` `form`
+- `user-web/src/views/KnowledgeWorkspace/Connectors.vue:129` `payload`
+- `user-web/src/views/KnowledgeWorkspace/Connectors.vue:130` `cfg`
+- `user-web/src/views/KnowledgeWorkspace/ExternalImport.vue:252` `payload`
+- `user-web/src/views/KnowledgeWorkspace/FeedbackList.vue:160` `s`
+- `user-web/src/views/KnowledgeWorkspace/KnowledgeManagement.vue:376` `iconMap`
+- `user-web/src/views/KnowledgeWorkspace/KnowledgeStatistics.vue:411` `SOURCE_COLOR_MAP`
+- `user-web/src/views/KnowledgeWorkspace/OpenAPIIntegration.vue:204` `HTTP_METHOD_TAG`
+- `user-web/src/views/KnowledgeWorkspace/OpenAPIIntegration.vue:240` `rules`
+- `user-web/src/views/KnowledgeWorkspace/OpenAPIIntegration.vue:329` `authConfig`
+- `user-web/src/views/KnowledgeWorkspace/OpenAPIIntegration.vue:337` `payload`
+- `user-web/src/views/KnowledgeWorkspace/OpenAPIIntegration.vue:372` `payload`
+- `user-web/src/views/KnowledgeWorkspace/Playground.vue:189` `templates`
+- `user-web/src/views/KnowledgeWorkspace/Playground.vue:260` `labels`
+- `user-web/src/views/Login.vue:102` `rules`
+- `user-web/src/views/Notifications.vue:172` `map`
+- `user-web/src/views/Notifications.vue:177` `map`
+- `user-web/src/views/Notifications.vue:189` `params`
+- `user-web/src/views/Notifications.vue:221` `byType`
+- `user-web/src/views/OpsOverview/Index.vue:110` `rows`
+- `user-web/src/views/OpsOverview/Index.vue:111` `groups`
+- `user-web/src/views/Profile.vue:196` `rules`
+- `user-web/src/views/Profile.vue:220` `pwdRules`
+- `user-web/src/views/RagProductConfig/AccountConfig.vue:199` `rules`
+- `user-web/src/views/RagProductConfig/AccountConfig.vue:272` `submitData`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:284` `rules`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:328` `CATEGORY_LABELS`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:341` `types`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:395` `updatedProduct`
+- `user-web/src/views/aiAgent/Edit.vue:520` `kbTreeProps`
+- `user-web/src/views/aiAgent/Edit.vue:560` `rules`
+- `user-web/src/views/aiAgent/Edit.vue:664` `tree`
+- `user-web/src/views/aiAgent/Edit.vue:739` `data`
+- `user-web/src/views/aiAgent/Edit.vue:827` `data`
+- `user-web/src/views/aiAgent/List.vue:270` `typeMap`
+- `user-web/src/views/aiAgent/List.vue:308` `params`
+- `user-web/src/views/aiAgent/List.vue:388` `data`
+- `user-web/src/views/aiAgent/ToolManagement/ToolList.vue:212` `categoryMap`
+- `user-web/src/views/aiAgent/ToolManagement/ToolList.vue:223` `map`
+- `user-web/src/views/aiAgent/ToolManagement/ToolList.vue:240` `params`
+- `user-web/src/views/approvalTask/List.vue:337` `KINDS`
+- `user-web/src/views/approvalTask/List.vue:338` `STATUSES`
+- `user-web/src/views/approvalTask/List.vue:339` `OPEN_STATUSES`
+- `user-web/src/views/approvalTask/List.vue:341` `KIND_LABELS`
+- `user-web/src/views/approvalTask/List.vue:346` `KIND_TAG_TYPES`
+- `user-web/src/views/approvalTask/List.vue:351` `STATUS_LABELS`
+- `user-web/src/views/approvalTask/List.vue:357` `ACTION_LABELS`
+- `user-web/src/views/approvalTask/List.vue:364` `VERDICT_LABELS`
+- `user-web/src/views/approvalTask/List.vue:442` `q`
+- `user-web/src/views/approvalTask/List.vue:545` `ACTION_FN`
+- `user-web/src/views/approvalTask/actions.js:20` `OPEN_STATUSES`
+- `user-web/src/views/approvalTask/actions.js:27` `KIND_SLA_FIELD`
+- `user-web/src/views/approvalTask/actions.js:62` `acts`
+- `user-web/src/views/approvalTask/actions.js:87` `HUMAN_VERDICTS`
+- `user-web/src/views/assetBundle/MerchantEditor.vue:420` `payload`
+- `user-web/src/views/assetBundle/Playground.vue:347` `payload`
+- `user-web/src/views/assetBundle/Playground.vue:411` `result`
+- `user-web/src/views/backup/List.vue:297` `createRules`
+- `user-web/src/views/backup/List.vue:309` `result`
+- `user-web/src/views/backup/List.vue:341` `map`
+- `user-web/src/views/backup/List.vue:345` `map`
+- `user-web/src/views/backup/List.vue:352` `units`
+- `user-web/src/views/badCase/List.vue:513` `SOURCE_LABELS`
+- `user-web/src/views/badCase/List.vue:518` `SOURCE_TAG_TYPES`
+- `user-web/src/views/badCase/List.vue:523` `STATUS_LABELS`
+- `user-web/src/views/badCase/List.vue:529` `LABEL_NAMES`
+- `user-web/src/views/badCase/List.vue:538` `LAYER_LABELS`
+- `user-web/src/views/badCase/List.vue:544` `ACTION_LABELS`
+- `user-web/src/views/badCase/List.vue:632` `q`
+- `user-web/src/views/badCase/actions.js:23` `OPEN_STATUSES`
+- `user-web/src/views/browserAutomation/Cron.vue:115` `TIMEZONES`
+- `user-web/src/views/browserAutomation/Cron.vue:132` `RUNNABLE_STATUS`
+- `user-web/src/views/browserAutomation/Detail.vue:174` `RUNNABLE_STATUS`
+- `user-web/src/views/browserAutomation/Editor.vue:177` `TIMEZONES`
+- `user-web/src/views/browserAutomation/Editor.vue:179` `RUNNABLE_STATUS`
+- `user-web/src/views/browserAutomation/Editor.vue:181` `actions`
+- `user-web/src/views/browserAutomation/Editor.vue:192` `platformNames`
+- `user-web/src/views/browserAutomation/Editor.vue:240` `presets`
+- `user-web/src/views/browserAutomation/Editor.vue:359` `payload`
+- `user-web/src/views/browserAutomation/List.vue:65` `statusOptions`
+- `user-web/src/views/browserAutomation/Monitor.vue:189` `CONFIRM_COPY`
+- `user-web/src/views/browserAutomation/Monitor.vue:218` `SUBMIT_COPY`
+- `user-web/src/views/browserAutomation/Monitor.vue:259` `groups`
+- `user-web/src/views/browserAutomation/durationText.js:12` `TERMINAL_SESSION_STATUSES`
+- `user-web/src/views/chat/embed/ChatWindow.vue:329` `userMsg`
+- `user-web/src/views/chat/embed/ChatWindow.vue:342` `body`
+- `user-web/src/views/chat/embed/components/ChatInput.vue:96` `payload`
+- `user-web/src/views/chatChannel/Create.vue:178` `map`
+- `user-web/src/views/chatChannel/Create.vue:196` `rules`
+- `user-web/src/views/chatChannel/Create.vue:239` `payload`
+- `user-web/src/views/chatChannel/Edit.vue:124` `map`
+- `user-web/src/views/chatChannel/Edit.vue:143` `rules`
+- `user-web/src/views/chatChannel/Edit.vue:225` `payload`
+- `user-web/src/views/churnPrediction/List.vue:299` `map`
+- `user-web/src/views/churnPrediction/List.vue:303` `map`
+- `user-web/src/views/churnPrediction/List.vue:308` `counts`
+- `user-web/src/views/clue/List.vue:362` `clues`
+- `user-web/src/views/clue/Statistics.vue:168` `charts`
+- `user-web/src/views/clue/Statistics.vue:214` `channels`
+- `user-web/src/views/clue/Statistics.vue:228` `labels`
+- `user-web/src/views/clue/Statistics.vue:229` `values`
+- `user-web/src/views/community/List.vue:284` `rules`
+- `user-web/src/views/community/List.vue:302` `params`
+- `user-web/src/views/confidence/Panel.vue:286` `params`
+- `user-web/src/views/customReport/List.vue:154` `DIM_MAP`
+- `user-web/src/views/customReport/List.vue:161` `METRIC_MAP`
+- `user-web/src/views/customReport/List.vue:170` `DS_LABELS`
+- `user-web/src/views/customReport/List.vue:174` `CT_LABELS`
+- `user-web/src/views/customReport/List.vue:203` `formRules`
+- `user-web/src/views/customerEvent/List.vue:189` `map`
+- `user-web/src/views/customerEvent/List.vue:193` `data`
+- `user-web/src/views/customerJourney/Dashboard.vue:250` `stageColors`
+- `user-web/src/views/customerService/QuickReply.vue:173` `payload`
+- `user-web/src/views/customerService/SessionTag.vue:151` `payload`
+- `user-web/src/views/customerSession/composables/useSessionFilters.js:58` `SESSION_STATUS_META`
+- `user-web/src/views/customerSession/composables/useSessionFilters.js:70` `ACTIVE_STATUSES`
+- `user-web/src/views/customerSession/composables/useSessionList.js:206` `ids`
+- `user-web/src/views/dashboardScreen/Builder.vue:100` `blockTypes`
+- `user-web/src/views/dashboardScreen/List.vue:138` `activityMeta`
+- `user-web/src/views/dialogueMemory/List.vue:338` `map`
+- `user-web/src/views/dialogueMemory/List.vue:352` `map`
+- `user-web/src/views/dialogueMemory/List.vue:393` `params`
+- `user-web/src/views/dingtalkApp/DingtalkAppAccount.vue:211` `payload`
+- `user-web/src/views/domainPool/List.vue:162` `rules`
+- `user-web/src/views/domainPool/List.vue:184` `params`
+- `user-web/src/views/douyinCard/CardStats.vue:161` `params`
+- `user-web/src/views/douyinCard/CardStats.vue:190` `visitOption`
+- `user-web/src/views/douyinCard/CardStats.vue:258` `actionMap`
+- `user-web/src/views/douyinCard/CardStats.vue:265` `actionMap`
+- `user-web/src/views/douyinCard/List.vue:271` `rules`
+- `user-web/src/views/douyinCard/List.vue:305` `params`
+- `user-web/src/views/douyinCard/Stats.vue:160` `params`
+- `user-web/src/views/douyinCard/Stats.vue:287` `types`
+- `user-web/src/views/douyinCard/Stats.vue:294` `texts`
+- `user-web/src/views/email/Drafts.vue:108` `formRules`
+- `user-web/src/views/email/Drafts.vue:195` `draftData`
+- `user-web/src/views/email/Drafts.vue:249` `sendData`
+- `user-web/src/views/email/DragEditor.vue:93` `BLOCK_TYPES`
+- `user-web/src/views/email/DragEditor.vue:114` `builtinVars`
+- `user-web/src/views/email/Guide.vue:47` `steps`
+- `user-web/src/views/email/Info.vue:229` `types`
+- `user-web/src/views/email/Smtp.vue:90` `rules`
+- `user-web/src/views/faq/Editor.vue:160` `presetCategories`
+- `user-web/src/views/faq/Editor.vue:183` `rules`
+- `user-web/src/views/faq/Editor.vue:234` `data`
+- `user-web/src/views/faq/List.vue:268` `map`
+- `user-web/src/views/faq/List.vue:336` `params`
+- `user-web/src/views/feedbackLoop/Panel.vue:282` `params`
+- `user-web/src/views/feishu/FeishuAccount.vue:238` `rules`
+- `user-web/src/views/followups/Today.vue:352` `resultOptions`
+- `user-web/src/views/geo/ConfigOptimizer.vue:185` `map`
+- `user-web/src/views/geo/CrawlerStats.vue:169` `all`
+- `user-web/src/views/geo/EntityGraph.vue:130` `svgSize`
+- `user-web/src/views/geo/FunnelDashboard.vue:71` `labelMap`
+- `user-web/src/views/geo/FunnelDashboard.vue:101` `colors`
+- `user-web/src/views/geo/FunnelDashboard.vue:102` `idx`
+- `user-web/src/views/geo/KeywordMining.vue:237` `LAYER_META`
+- `user-web/src/views/geo/KeywordMining.vue:283` `ENGINE_LABELS`
+- `user-web/src/views/geo/KeywordMining.vue:284` `INTENT_LABELS`
+- `user-web/src/views/geo/KeywordMining.vue:288` `STAGE_LABELS`
+- `user-web/src/views/geo/KeywordMining.vue:296` `map`
+- `user-web/src/views/geo/KeywordMining.vue:301` `map`
+- `user-web/src/views/geo/KeywordMining.vue:317` `params`
+- `user-web/src/views/geo/KnowledgeBase.vue:110` `isText`
+- `user-web/src/views/geo/PlatformPublish.vue:208` `map`
+- `user-web/src/views/geo/PusherConfig.vue:116` `m`
+- `user-web/src/views/geo/PusherConfig.vue:146` `payload`
+- `user-web/src/views/geo/Reports.vue:126` `map`
+- `user-web/src/views/geo/SchemaTemplates.vue:165` `payload`
+- `user-web/src/views/geo/SovBoard.vue:111` `BRAND_HINTS`
+- `user-web/src/views/geo/SovBoard.vue:182` `sorted`
+- `user-web/src/views/geo/Verification.vue:170` `map`
+- `user-web/src/views/geo/Verification.vue:174` `map`
+- `user-web/src/views/geo/VisibilityBoard.vue:191` `worst`
+- `user-web/src/views/geo/WorkflowEditor.vue:198` `STEP_TYPES`
+- `user-web/src/views/geo/WorkflowEditor.vue:256` `payload`
+- `user-web/src/views/glossary/List.vue:333` `categoryOptions`
+- `user-web/src/views/glossary/List.vue:374` `rules`
+- `user-web/src/views/glossary/List.vue:399` `obj`
+- `user-web/src/views/glossary/List.vue:430` `params`
+- `user-web/src/views/glossary/List.vue:535` `translations`
+- `user-web/src/views/glossary/List.vue:548` `payload`
+- `user-web/src/views/inbox/List.vue:330` `STATUS_MAP`
+- `user-web/src/views/inbox/List.vue:344` `ACTION_MAP`
+- `user-web/src/views/inbox/List.vue:349` `TOTYPE_MAP`
+- `user-web/src/views/inbox/List.vue:381` `params`
+- `user-web/src/views/integration/List.vue:213` `formRules`
+- `user-web/src/views/intentRecognition/List.vue:481` `RECOGNIZE_METHOD`
+- `user-web/src/views/intentRecognition/List.vue:482` `RECOGNIZE_METHOD_TAG`
+- `user-web/src/views/intentRecognition/List.vue:513` `fineMajorOptions`
+- `user-web/src/views/intentRecognition/List.vue:517` `FINE_METHOD_LABEL`
+- `user-web/src/views/intentRecognition/List.vue:518` `FINE_METHOD_TAG`
+- `user-web/src/views/intentRecognition/List.vue:633` `map`
+- `user-web/src/views/intentRecognition/List.vue:680` `map`
+- `user-web/src/views/intentRecognition/List.vue:751` `params`
+- `user-web/src/views/intentRecognition/List.vue:785` `examples`
+- `user-web/src/views/intentRecognition/List.vue:803` `data`
+- `user-web/src/views/intentRecognition/List.vue:843` `examples`
+- `user-web/src/views/intentRecognition/List.vue:862` `data`
+- `user-web/src/views/intentRecognition/List.vue:878` `params`
+- `user-web/src/views/knowledgeBase/KBDrawer.vue:254` `map`
+- `user-web/src/views/knowledgeBase/KBDrawer.vue:259` `map`
+- `user-web/src/views/knowledgeBase/List.vue:329` `map`
+- `user-web/src/views/knowledgeBase/List.vue:334` `map`
+- `user-web/src/views/knowledgeBase/List.vue:367` `params`
+- `user-web/src/views/kuaishouCard/CardStats.vue:160` `params`
+- `user-web/src/views/kuaishouCard/CardStats.vue:191` `visitOption`
+- `user-web/src/views/kuaishouCard/CardStats.vue:271` `typeMap`
+- `user-web/src/views/kuaishouCard/CardStats.vue:278` `typeMap`
+- `user-web/src/views/kuaishouCard/List.vue:282` `rules`
+- `user-web/src/views/kuaishouCard/List.vue:311` `params`
+- `user-web/src/views/kuaishouCard/Stats.vue:175` `params`
+- `user-web/src/views/kuaishouCard/Stats.vue:209` `dates`
+- `user-web/src/views/kuaishouCard/Stats.vue:210` `views`
+- `user-web/src/views/kuaishouCard/Stats.vue:226` `option`
+- `user-web/src/views/kuaishouCard/Stats.vue:335` `actionTypeMap`
+- `user-web/src/views/kuaishouCard/Stats.vue:342` `actionTextMap`
+- `user-web/src/views/leadMining/Index.vue:129` `channelOptions`
+- `user-web/src/views/leadMining/Index.vue:167` `payload`
+- `user-web/src/views/livecode/LiveCodeManagement.vue:346` `liveCodeRules`
+- `user-web/src/views/livecode/LiveCodeManagement.vue:365` `qrRules`
+- `user-web/src/views/livecode/LiveCodeManagement.vue:376` `params`
+- `user-web/src/views/llmRouting/List.vue:493` `scenarioPresets`
+- `user-web/src/views/llmRouting/List.vue:498` `canaryColors`
+- `user-web/src/views/llmRouting/List.vue:513` `modelFormRules`
+- `user-web/src/views/llmRouting/List.vue:532` `routingFormRules`
+- `user-web/src/views/llmRouting/List.vue:700` `payload`
+- `user-web/src/views/llmRouting/List.vue:790` `next`
+- `user-web/src/views/marketingFlow/List.vue:151` `formRules`
+- `user-web/src/views/marketingFlow/List.vue:238` `map`
+- `user-web/src/views/marketingFlow/List.vue:241` `map`
+- `user-web/src/views/messageHub/Dashboard.vue:137` `DIRECTION_LABELS`
+- `user-web/src/views/messageHub/Dashboard.vue:141` `MSG_TYPE_LABELS`
+- `user-web/src/views/messageHub/Dashboard.vue:223` `failures`
+- `user-web/src/views/messageHub/List.vue:359` `out`
+- `user-web/src/views/messageHub/List.vue:416` `pushRules`
+- `user-web/src/views/messageHub/List.vue:491` `params`
+- `user-web/src/views/messageHub/List.vue:615` `payload`
+- `user-web/src/views/objection/List.vue:214` `colorMap`
+- `user-web/src/views/oneid/Conflicts.vue:122` `map`
+- `user-web/src/views/oneid/MergeRuleConfig.vue:117` `FIELD_LABELS`
+- `user-web/src/views/operationLog/Enhanced.vue:96` `params`
+- `user-web/src/views/operationLog/List.vue:137` `map`
+- `user-web/src/views/operationLog/List.vue:140` `map`
+- `user-web/src/views/operationLog/List.vue:159` `params`
+- `user-web/src/views/orderDraft/Detail.vue:239` `STATUS_TAGS`
+- `user-web/src/views/orderDraft/Detail.vue:240` `STATUS_LABELS`
+- `user-web/src/views/orderDraft/Detail.vue:392` `updates`
+- `user-web/src/views/orderDraft/List.vue:278` `STATUS_TAGS`
+- `user-web/src/views/orderDraft/List.vue:279` `STATUS_LABELS`
+- `user-web/src/views/orderDraft/List.vue:309` `q`
+- `user-web/src/views/persona/List.vue:392` `points`
+- `user-web/src/views/persona/List.vue:404` `points`
+- `user-web/src/views/persona/List.vue:425` `points`
+- `user-web/src/views/platformAccount/List.vue:280` `rules`
+- `user-web/src/views/platformAccount/List.vue:304` `params`
+- `user-web/src/views/platformAccount/List.vue:393` `submitData`
+- `user-web/src/views/qq/account.vue:267` `rules`
+- `user-web/src/views/qq/account.vue:322` `payload`
+- `user-web/src/views/reachPipeline/Editor.vue:27` `nodeTemplates`
+- `user-web/src/views/reachPipeline/List.vue:595` `stepOptions`
+- `user-web/src/views/reachPipeline/List.vue:610` `jobStateOptions`
+- `user-web/src/views/reachPipeline/List.vue:750` `pipeRules`
+- `user-web/src/views/reachPipeline/List.vue:771` `data`
+- `user-web/src/views/reachPipeline/List.vue:946` `jobRules`
+- `user-web/src/views/reachPipeline/List.vue:972` `data`
+- `user-web/src/views/reachPipeline/List.vue:1028` `map`
+- `user-web/src/views/salesWorkbench/Index.vue:508` `dayOptions`
+- `user-web/src/views/scriptTemplate/List.vue:120` `formRules`
+- `user-web/src/views/scriptTemplate/List.vue:145` `map`
+- `user-web/src/views/scriptTemplate/List.vue:176` `payload`
+- `user-web/src/views/securityAudit/List.vue:216` `result`
+- `user-web/src/views/securityAudit/List.vue:237` `map`
+- `user-web/src/views/securityAudit/List.vue:241` `map`
+- `user-web/src/views/securityAudit/List.vue:245` `map`
+- `user-web/src/views/securityAudit/List.vue:249` `map`
+- `user-web/src/views/setup/InitSetup.vue:166` `adminRules`
+- `user-web/src/views/shortLink/List.vue:304` `rules`
+- `user-web/src/views/shortLink/List.vue:328` `params`
+- `user-web/src/views/shortLink/List.vue:492` `params`
+- `user-web/src/views/shortLink/List.vue:556` `trendOption`
+- `user-web/src/views/shortLink/List.vue:593` `deviceOption`
+- `user-web/src/views/shortLink/Stats.vue:282` `params`
+- `user-web/src/views/shortLink/Stats.vue:339` `params`
+- `user-web/src/views/shortLink/Stats.vue:366` `params`
+- `user-web/src/views/shortLink/Stats.vue:430` `trendOption`
+- `user-web/src/views/shortLink/Stats.vue:467` `deviceOption`
+- `user-web/src/views/shortLink/Stats.vue:520` `trendOption`
+- `user-web/src/views/shortLink/Stats.vue:557` `deviceOption`
+- `user-web/src/views/sms/Drafts.vue:114` `rules`
+- `user-web/src/views/sms/Drafts.vue:128` `params`
+- `user-web/src/views/sms/Drafts.vue:181` `draftData`
+- `user-web/src/views/sms/Jobs.vue:214` `rules`
+- `user-web/src/views/sms/Jobs.vue:232` `statusMap`
+- `user-web/src/views/sms/Jobs.vue:243` `statusMap`
+- `user-web/src/views/sms/Jobs.vue:269` `params`
+- `user-web/src/views/sms/Jobs.vue:337` `validPhones`
+- `user-web/src/views/sms/Jobs.vue:338` `invalidPhones`
+- `user-web/src/views/sms/Jobs.vue:339` `duplicatePhones`
+- `user-web/src/views/sms/Jobs.vue:359` `messages`
+- `user-web/src/views/sms/Jobs.vue:401` `jobData`
+- `user-web/src/views/sms/List.vue:113` `statusMap`
+- `user-web/src/views/sms/List.vue:123` `statusMap`
+- `user-web/src/views/sms/List.vue:135` `params`
+- `user-web/src/views/sopAgent/List.vue:378` `sopNodeTypeOptions`
+- `user-web/src/views/sopAgent/List.vue:438` `map`
+- `user-web/src/views/sopAgent/List.vue:443` `map`
+- `user-web/src/views/sopAgent/List.vue:448` `map`
+- `user-web/src/views/sopAgent/List.vue:471` `parts`
+- `user-web/src/views/sopAgent/List.vue:524` `params`
+- `user-web/src/views/sopAgent/List.vue:548` `params`
+- `user-web/src/views/sopAgent/List.vue:635` `data`
+- `user-web/src/views/sopAgent/List.vue:779` `intents`
+- `user-web/src/views/sopAgent/List.vue:795` `data`
+- `user-web/src/views/sopTemplate/Editor.vue:167` `presetIntents`
+- `user-web/src/views/sopTemplate/Editor.vue:171` `stageOptions`
+- `user-web/src/views/sopTemplate/Editor.vue:192` `rules`
+- `user-web/src/views/sopTemplate/Editor.vue:247` `data`
+- `user-web/src/views/sopTemplate/List.vue:189` `stageOptions`
+- `user-web/src/views/sopTemplate/List.vue:196` `map`
+- `user-web/src/views/sopTemplate/List.vue:234` `params`
+- `user-web/src/views/sopTemplate/Market.vue:403` `categories`
+- `user-web/src/views/system/ConfigParams.vue:325` `SEED_GROUPS`
+- `user-web/src/views/system/Guide.vue:56` `steps`
+- `user-web/src/views/system/LTCConfig.vue:252` `STAGES`
+- `user-web/src/views/system/LTCConfig.vue:261` `THRESHOLDS`
+- `user-web/src/views/system/LTCConfig.vue:268` `REASON_TEXT`
+- `user-web/src/views/system/LTCConfig.vue:335` `stages`
+- `user-web/src/views/system/LTCConfig.vue:337` `thresholds`
+- `user-web/src/views/system/MaterialLibrary.vue:241` `labels`
+- `user-web/src/views/system/MaterialLibrary.vue:260` `params`
+- `user-web/src/views/system/ObsConfig.vue:185` `OBS_STATUS`
+- `user-web/src/views/system/ObsConfig.vue:186` `OBS_STATUS_TAG`
+- `user-web/src/views/system/ObsConfig.vue:212` `rules`
+- `user-web/src/views/system/ObsConfig.vue:238` `map`
+- `user-web/src/views/system/ObsConfig.vue:253` `types`
+- `user-web/src/views/system/ObsConfig.vue:257` `labels`
+- `user-web/src/views/system/PermissionPanel.vue:197` `formRules`
+- `user-web/src/views/system/PermissionPanel.vue:210` `actionOptions`
+- `user-web/src/views/system/RagOverview.vue:213` `STATUS_ZH_TO_VALUE`
+- `user-web/src/views/system/RagOverview.vue:223` `STATUS_ZH_LABEL`
+- `user-web/src/views/system/TraceMonitor.vue:356` `channels`
+- `user-web/src/views/system/TraceMonitor.vue:386` `NODE_LABEL`
+- `user-web/src/views/system/TraceMonitor.vue:427` `out`
+- `user-web/src/views/system/TraceMonitor.vue:432` `turns`
+- `user-web/src/views/system/TraceMonitor.vue:477` `params`
+- `user-web/src/views/system/TraceMonitor.vue:501` `params`
+- `user-web/src/views/system/TraceMonitor.vue:554` `order`
+- `user-web/src/views/system/UserList.vue:203` `editableRoleOptions`
+- `user-web/src/views/system/UserList.vue:267` `params`
+- `user-web/src/views/tagSegmentation/List.vue:250` `tagFormRules`
+- `user-web/src/views/tagSegmentation/List.vue:259` `ruleFormRules`
+- `user-web/src/views/tagSegmentation/List.vue:274` `map`
+- `user-web/src/views/tagSegmentation/List.vue:277` `map`
+- `user-web/src/views/tagSegmentation/List.vue:403` `payload`
+- `user-web/src/views/tagSegmentation/List.vue:450` `payload`
+- `user-web/src/views/telegram/account.vue:383` `rules`
+- `user-web/src/views/telegram/account.vue:551` `problems`
+- `user-web/src/views/telegram/gate.vue:159` `rules`
+- `user-web/src/views/telegram/gate.vue:199` `payload`
+- `user-web/src/views/telegram/gate.vue:232` `params`
+- `user-web/src/views/tiktokCard/CardStats.vue:161` `params`
+- `user-web/src/views/tiktokCard/CardStats.vue:190` `visitOption`
+- `user-web/src/views/tiktokCard/CardStats.vue:258` `actionMap`
+- `user-web/src/views/tiktokCard/CardStats.vue:265` `actionMap`
+- `user-web/src/views/tiktokCard/List.vue:268` `rules`
+- `user-web/src/views/tiktokCard/List.vue:302` `params`
+- `user-web/src/views/tiktokCard/Stats.vue:160` `params`
+- `user-web/src/views/tiktokCard/Stats.vue:286` `types`
+- `user-web/src/views/tiktokCard/Stats.vue:293` `texts`
+- `user-web/src/views/unifiedMessage/List.vue:237` `channelTabs`
+- `user-web/src/views/unifiedMessage/List.vue:257` `TYPE_LABEL`
+- `user-web/src/views/unifiedMessage/List.vue:267` `TYPE_TAG`
+- `user-web/src/views/unifiedMessage/List.vue:285` `STATUS_LABEL`
+- `user-web/src/views/unifiedMessage/List.vue:294` `STATUS_TAG`
+- `user-web/src/views/unifiedMessage/List.vue:351` `params`
+- `user-web/src/views/unifiedMessage/List.vue:369` `counts`
+- `user-web/src/views/userSegment/List.vue:278` `formRules`
+- `user-web/src/views/userSegment/List.vue:289` `LEGACY_SEGMENT_TYPE`
+- `user-web/src/views/userSegment/List.vue:292` `map`
+- `user-web/src/views/userSegment/List.vue:323` `map`
+- `user-web/src/views/userSegment/List.vue:335` `fakeSegment`
+- `user-web/src/views/userSegment/RuleNode.vue:61` `OPS`
+- `user-web/src/views/userSegment/RuleNode.vue:72` `list`
+- `user-web/src/views/userSegment/RuleNode.vue:77` `list`
+- `user-web/src/views/wecomAccount/Data.vue:292` `sourceMap`
+- `user-web/src/views/wecomAccount/Data.vue:299` `topGroups`
+- `user-web/src/views/wecomAccount/Data.vue:305` `days`
+- `user-web/src/views/wecomAccount/Data.vue:313` `trendMap`
+- `user-web/src/views/wecomAccount/List.vue:260` `createRules`
+- `user-web/src/views/wecomAccount/List.vue:316` `payload`
+- `user-web/src/views/wecomAccount/List.vue:378` `map`
+- `user-web/src/views/wecomAccount/List.vue:383` `map`
+- `user-web/src/views/wecomAccount/List.vue:388` `map`
+- `user-web/src/views/wecomAccount/List.vue:393` `map`
+- `user-web/src/views/wecomAccount/List.vue:467` `apiMap`
+- `user-web/src/views/whatsapp/WhatsappDrafts.vue:89` `rules`
+- `user-web/src/views/whatsapp/WhatsappJobs.vue:133` `types`
+- `user-web/src/views/whatsapp/WhatsappJobs.vue:137` `texts`
+- `user-web/src/views/whatsappBot/BulkMessaging.vue:254` `sendRules`
+- `user-web/src/views/whatsappBot/BulkMessaging.vue:269` `templateRules`
+- `user-web/src/views/whatsappCloud/WhatsappCloudAccount.vue:238` `payload`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:220` `nodeTypes`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:423` `newNode`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:460` `inDegree`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:461` `adj`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:471` `layers`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:476` `next`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:492` `byLayer`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:592` `config`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:616` `payloadDefinition`
+- `user-web/src/views/workflowOrchestrator/List.vue:173` `formRules`
+- `user-web/src/views/workflowOrchestrator/List.vue:189` `definition`
+- `user-web/src/views/workflowOrchestrator/List.vue:221` `payload`
+- `user-web/src/views/workflowOrchestrator/List.vue:281` `params`
+- `user-web/src/views/xianyuCard/CardStats.vue:203` `viewsOption`
+- `user-web/src/views/xianyuCard/CardStats.vue:230` `clicksOption`
+- `user-web/src/views/xianyuCard/CardStats.vue:270` `params`
+- `user-web/src/views/xianyuCard/List.vue:211` `rules`
+- `user-web/src/views/xianyuCard/List.vue:246` `params`
+- `user-web/src/views/xianyuCard/Stats.vue:162` `viewsOption`
+- `user-web/src/views/xianyuCard/Stats.vue:189` `clicksOption`
+- `user-web/src/views/xianyuCard/Stats.vue:219` `params`
+- `user-web/src/views/xiaohongshuCard/CardStats.vue:248` `params`
+- `user-web/src/views/xiaohongshuCard/CardStats.vue:314` `viewOption`
+- `user-web/src/views/xiaohongshuCard/List.vue:283` `rules`
+- `user-web/src/views/xiaohongshuCard/List.vue:319` `params`
+- `user-web/src/views/xiaohongshuCard/Stats.vue:164` `params`
+- `user-web/src/views/xiaohongshuCard/Stats.vue:223` `viewOption`
+- `user-web/src/views/xiaohongshuCard/Stats.vue:281` `typeMap`
+- `user-web/src/views/xiaohongshuCard/Stats.vue:288` `textMap`
+
+## CONFIG 命名常量
+
+- `user-web/src/components/MessageNotification.vue:56` `pollingStopped = false`
+- `user-web/src/components/VueFlowCanvas.vue:123` `hasCycle = false`
+- `user-web/src/utils/agentSocket.js:4` `MAX_RECONNECT_ATTEMPTS_DEFAULT = 10`
+- `user-web/src/utils/agentSocket.js:5` `INITIAL_RECONNECT_DELAY_MS = 2000`
+- `user-web/src/utils/agentSocket.js:6` `MAX_RECONNECT_DELAY_MS = 30000`
+- `user-web/src/utils/agentSocket.js:7` `PING_INTERVAL_MS = 25000`
+- `user-web/src/utils/agentSocket.js:8` `ACK_BATCH_INTERVAL_MS = 200`
+- `user-web/src/utils/agentSocket.js:78` `h = 0`
+- `user-web/src/utils/agentSocket.js:80` `i = 0`
+- `user-web/src/utils/chatSocket.js:2` `MAX_RECONNECT_DELAY_MS = 30000`
+- `user-web/src/utils/chatSocket.js:3` `INITIAL_RECONNECT_DELAY_MS = 1000`
+- `user-web/src/utils/chatSocket.js:4` `PING_INTERVAL_MS = 25000`
+- `user-web/src/utils/chatSocket.js:5` `ACK_BATCH_INTERVAL_MS = 200`
+- `user-web/src/utils/chatSocket.js:6` `MAX_RECONNECT_ATTEMPTS_DEFAULT = 50`
+- `user-web/src/utils/i18nPlural.js:59` `i = 0`
+- `user-web/src/utils/i18nPlural.js:63` `depth = 1`
+- `user-web/src/utils/i18nTextExpansion.js:24` `padding = 32`
+- `user-web/src/utils/journeyTracker.js:5` `MAX_HISTORY = 50`
+- `user-web/src/utils/journeyTracker.js:6` `MAX_QUEUE = 100`
+- `user-web/src/utils/journeyTracker.js:7` `FLUSH_INTERVAL_MS = 30`
+- `user-web/src/utils/request.js:46` `lastToastTs = 0`
+- `user-web/src/views/KnowledgeWorkspace/BatchImport.vue:287` `i = 1`
+- `user-web/src/views/KnowledgeWorkspace/BatchImport.vue:303` `inQuote = false`
+- `user-web/src/views/KnowledgeWorkspace/BatchImport.vue:304` `i = 0`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:342` `hash = 0`
+- `user-web/src/views/RagProductConfig/RagProductManagement.vue:343` `i = 0`
+- `user-web/src/views/approvalTask/List.vue:368` `COUNTS_POLL_MS = 30000`
+- `user-web/src/views/assetBundle/Playground.vue:449` `weaveOk = false`
+- `user-web/src/views/backup/List.vue:353` `i = 0`
+- `user-web/src/views/badCase/List.vue:548` `STATS_POLL_MS = 30000`
+- `user-web/src/views/browserAutomation/List.vue:149` `go = true`
+- `user-web/src/views/browserAutomation/Monitor.vue:284` `POLL_FAILURE_LIMIT = 3`
+- `user-web/src/views/browserAutomation/Monitor.vue:286` `pollFailures = 0`
+- `user-web/src/views/browserAutomation/Monitor.vue:344` `gateLoading = false`
+- `user-web/src/views/browserAutomation/Status.vue:96` `go = true`
+- `user-web/src/views/chatChannel/InstallGuide.vue:214` `w = 380`
+- `user-web/src/views/clue/Statistics.vue:224` `days = 30`
+- `user-web/src/views/customerJourney/Dashboard.vue:256` `maxRate = 100`
+- `user-web/src/views/customerSession/List.vue:452` `DEEP_LINK_SCAN_PAGE_SIZE = 500`
+- `user-web/src/views/dashboardScreen/Builder.vue:114` `_id = 1`
+- `user-web/src/views/email/DragEditor.vue:127` `_blockId = 1`
+- `user-web/src/views/geo/SovBoard.vue:112` `trendDays = 30`
+- `user-web/src/views/geo/VisibilityBoard.vue:180` `runsLimit = 50`
+- `user-web/src/views/glossary/List.vue:536` `hasInvalid = false`
+- `user-web/src/views/kuaishouCard/Stats.vue:212` `i = 6`
+- `user-web/src/views/messageHub/Dashboard.vue:111` `WINDOW_HOURS = 1`
+- `user-web/src/views/messageHub/Dashboard.vue:112` `REFRESH_MS = 30000`
+- `user-web/src/views/oneid/List.vue:230` `c = 0`
+- `user-web/src/views/persona/List.vue:284` `svgSize = 400`
+- `user-web/src/views/persona/List.vue:286` `svgRadius = 150`
+- `user-web/src/views/persona/List.vue:393` `i = 0`
+- `user-web/src/views/persona/List.vue:405` `i = 0`
+- `user-web/src/views/persona/List.vue:426` `i = 0`
+- `user-web/src/views/system/MaterialLibrary.vue:323` `maxSize = 10`
+- `user-web/src/views/wecomAccount/Data.vue:168` `pageSize = 20`
+- `user-web/src/views/wecomAccount/Data.vue:169` `chartPageSize = 100`
+- `user-web/src/views/wecomAccount/Data.vue:307` `i = 29`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:235` `NODE_W = 140`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:236` `NODE_H = 56`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:420` `idCounter = 1`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:474` `iter = 0`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:498` `COL_W = 200`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:499` `ROW_H = 90`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:500` `START_X = 40`
+- `user-web/src/views/workflowOrchestrator/Editor.vue:501` `START_Y = 40`
+
+## URL 写死地址
+

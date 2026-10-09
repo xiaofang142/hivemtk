@@ -1,0 +1,394 @@
+# 硬编码扫描报告
+
+## 概览
+
+- 配置类常量(CONFIG): 839
+- 数据类字面量(DATA): 80
+- 中文字符串(CN): 12495
+- 内联数字候选(INLINE_NUM): 1430
+
+## 数据类字面量(DATA)
+
+- `internal/aiagent/agent/tooluse/tool_risk.go:29` `KnownRiskLevels`
+- `internal/aiagent/llm/react_adapter.go:182` `ToolCalls`
+- `internal/aiagent/mcp/server.go:23` `SupportedProtocolVersions`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:363` `Categories`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:366` `Categories`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:369` `Categories`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:372` `Categories`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:375` `Categories`
+- `internal/aiagent/rag/customer_service/dialog_manager.go:378` `Categories`
+- `internal/aiagent/rag/eval/lightweight.go:235` `Contexts`
+- `internal/aiagent/rag/retrieval/llm_chat_intent.go:37` `AllKeyIntents`
+- `internal/app/reach_gate_wiring.go:216` `Metrics`
+- `internal/config/ws_origin.go:10` `DefaultAllowedWSOrigins`
+- `internal/content/model/ai_content.go:70` `SystemPromptTemplates`
+- `internal/controller/dashboard_sse.go:150` `MessageVolume`
+- `internal/dto/humanize.go:17` `AllHumanizeDimensions`
+- `internal/dto/sales.go:175` `AllStages`
+- `internal/geo/service/keyword_mining.go:680` `DefaultLongtailTemplates`
+- `internal/middleware/sanitize.go:31` `DEFAULT_PII_RULES`
+- `internal/model/approval_request.go:86` `ApprovalStatuses`
+- `internal/model/approval_request.go:100` `ApprovalDecidedStatuses`
+- `internal/model/bad_case.go:97` `BadCaseSources`
+- `internal/model/bad_case.go:112` `BadCaseStatuses`
+- `internal/model/bad_case.go:153` `BadCaseLabels`
+- `internal/model/bad_case.go:173` `BadCaseFixLayers`
+- `internal/model/bill.go:123` `BillStatuses`
+- `internal/model/bill.go:149` `BillStatusesChased`
+- `internal/model/feedback_learning.go:20` `AllSalesChampionDimensions`
+- `internal/model/human_task.go:116` `HumanTaskKinds`
+- `internal/model/human_task.go:137` `HumanTaskStatuses`
+- `internal/model/human_task.go:145` `HumanTaskOpenStatuses`
+- `internal/model/human_task.go:154` `HumanTaskTerminalStatuses`
+- `internal/model/human_task.go:200` `HumanTaskActions`
+- `internal/model/human_task.go:284` `HumanTaskSLAColumns`
+- `internal/model/kb_release.go:89` `KBChangeOps`
+- `internal/model/kb_release.go:104` `KBChangeStatuses`
+- `internal/model/kb_release.go:219` `KBChangeAuditActions`
+- `internal/model/opportunity.go:187` `OpportunityStages`
+- `internal/model/opportunity.go:221` `OpportunityStatuses`
+- `internal/model/opportunity.go:235` `OpportunityOutcomes`
+- `internal/model/order_draft.go:69` `OrderDraftTerminalStatuses`
+- `internal/model/payment.go:108` `PaymentStatuses`
+- `internal/model/payment.go:123` `PaymentStatusesCounted`
+- `internal/model/quote.go:166` `QuoteStatuses`
+- `internal/model/role.go:29` `SystemRoleList`
+- `internal/ops/service/dashboard_screen.go:371` `Funnel`
+- `internal/ops/service/dashboard_screen.go:392` `Dates`
+- `internal/ops/service/dashboard_screen.go:393` `ThisWeek`
+- `internal/ops/service/dashboard_screen.go:394` `LastWeek`
+- `internal/ops/service/dashboard_screen.go:402` `Kpis`
+- `internal/pkg/sso/oidc.go:142` `Scopes`
+- `internal/pkg/sso/oidc.go:472` `Audience`
+- `internal/service/agent_checkpoint.go:25` `AgentStageNames`
+- `internal/service/ai_resolution_stats.go:53` `DailyTrend`
+- `internal/service/email_open_tracker.go:19` `EmailOpenPixel`
+- `internal/service/humanize/behavioral/behavioral.go:92` `Messages`
+- `internal/service/intent_recognition.go:436` `DefaultIntents`
+- `internal/service/ltc_config.go:54` `LTCKnownStages`
+- `internal/service/ltc_config.go:166` `LTCKnownThresholdKeys`
+- `internal/service/password_policy.go:65` `DefaultCommonPasswords`
+- `internal/service/persona_evaluator.go:52` `AllPersonaDimensions`
+- `internal/service/persona_evaluator.go:627` `AllReplies`
+- `internal/service/reach_pipeline.go:52` `DefaultPipelineSteps`
+- `internal/service/reach_send_pipeline.go:36` `DefaultSendPipelineSteps`
+- `internal/service/reach_send_pipeline_steps.go:100` `Output`
+- `internal/service/reach_send_pipeline_steps.go:111` `Output`
+- `internal/service/reach_send_pipeline_steps.go:192` `Output`
+- `internal/service/reach_send_pipeline_steps.go:298` `Output`
+- `internal/service/reach_send_pipeline_steps.go:322` `Output`
+- `internal/service/reach_send_pipeline_steps.go:346` `Output`
+- `internal/service/reach_send_pipeline_steps.go:382` `Output`
+- `internal/service/sales_event_stats.go:584` `RecommendedSOPs`
+- `internal/service/sop_loader.go:125` `Next`
+- `internal/service/sop_loader.go:135` `Next`
+- `internal/service/typing_predict.go:100` `SuggestedReplies`
+- `internal/service/typing_predict.go:108` `SuggestedReplies`
+- `internal/service/typing_predict.go:116` `SuggestedReplies`
+- `internal/service/typing_predict.go:124` `SuggestedReplies`
+- `internal/service/typing_predict.go:132` `SuggestedReplies`
+- `internal/service/typing_predict.go:140` `SuggestedReplies`
+
+## 配置类常量(CONFIG) 前 300 条（完整见 JSON）
+
+- `cmd/api/main.go:524` `AGENT_RUNTIME_BUS_ENABLED = true` (bool)
+- `cmd/api/serve_unix.go:21` `DefaultHammerTime = 15` (go_num)
+- `cmd/api/serve_unix.go:27` `ReadHeaderTimeout = 10` (go_num)
+- `cmd/api/serve_unix.go:28` `IdleTimeout = 120` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:63` `Empathy = 5` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:65` `Empathy = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:67` `Empathy = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:69` `Empathy = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:71` `Empathy = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:76` `Enthusiasm = 5` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:78` `Enthusiasm = 5` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:80` `Enthusiasm = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:82` `Enthusiasm = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:84` `Enthusiasm = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:86` `Enthusiasm = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:98` `Patience = 5` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:100` `Patience = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:102` `Patience = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:104` `Patience = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:111` `Clarity = 4` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:113` `Clarity = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:115` `Clarity = 3` (go_num)
+- `internal/aiagent/agent/runtime/alignment_stage.go:121` `Politeness = 5` (go_num)
+- `internal/aiagent/agent/runtime/asset_bundle_loader.go:42` `HistoryLimit = 10` (go_num)
+- `internal/aiagent/agent/runtime/asset_bundle_loader.go:45` `RAGTopK = 5` (go_num)
+- `internal/aiagent/agent/runtime/asset_bundle_loader.go:50` `IncludeMerchantVars = true` (bool)
+- `internal/aiagent/agent/runtime/asset_bundle_loader.go:51` `StripFewShotJSON = true` (bool)
+- `internal/aiagent/agent/runtime/gatekeeper_stage.go:87` `HandoffToHuman = true` (bool)
+- `internal/aiagent/agent/runtime/inference_cycle.go:315` `HandoffToHuman = true` (bool)
+- `internal/aiagent/agent/runtime/inference_types.go:112` `CrisisLevel = 0` (go_num)
+- `internal/aiagent/agent/runtime/inference_types.go:113` `CrisisLevel = 1` (go_num)
+- `internal/aiagent/agent/runtime/inference_types.go:114` `CrisisLevel = 2` (go_num)
+- `internal/aiagent/agent/runtime/inference_types.go:115` `CrisisLevel = 3` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:69` `SkipLLM = true` (bool)
+- `internal/aiagent/agent/runtime/planner_stage.go:72` `Confidence = 0.95` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:81` `Confidence = 0.85` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:90` `Confidence = 0.75` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:98` `Confidence = 0.80` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:106` `Confidence = 0.70` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:114` `Confidence = 0.70` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:122` `Confidence = 0.78` (go_num)
+- `internal/aiagent/agent/runtime/planner_stage.go:130` `Confidence = 0.55` (go_num)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:116` `Passed = false` (bool)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:119` `OverallScore = 1.0` (go_num)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:146` `Passed = false` (bool)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:169` `Passed = false` (bool)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:192` `Passed = false` (bool)
+- `internal/aiagent/agent/runtime/reviewer_stage.go:215` `Passed = false` (bool)
+- `internal/aiagent/agent/tooluse/circuit_breaker.go:173` `BackoffMultiplier = 2.0` (go_num)
+- `internal/aiagent/agent/tooluse/circuit_breaker.go:176` `MaxCooldown = 5` (go_num)
+- `internal/aiagent/agent/tooluse/customer_tools.go:641` `HasRFMMin = true` (bool)
+- `internal/aiagent/agent/tooluse/customer_tools.go:645` `HasRFMMax = true` (bool)
+- `internal/aiagent/agent/tooluse/executor.go:115` `DefaultTimeout = 30` (go_num)
+- `internal/aiagent/agent/tooluse/executor.go:239` `Success = false` (bool)
+- `internal/aiagent/agent/tooluse/knowledge_tools.go:242` `Hit = 1` (go_num)
+- `internal/aiagent/agent/tooluse/knowledge_tools.go:560` `DocCount = 0` (go_num)
+- `internal/aiagent/agent/tooluse/knowledge_tools.go:561` `ChunkCount = 0` (go_num)
+- `internal/aiagent/agent/tooluse/knowledge_tools.go:564` `SearchCount = 0` (go_num)
+- `internal/aiagent/agent/tooluse/loop_guard.go:48` `CostDriftFactor = 5.0` (go_num)
+- `internal/aiagent/agent/tooluse/loop_guard.go:97` `MaxRepeatCount = 3` (go_num)
+- `internal/aiagent/agent/tooluse/loop_guard.go:100` `WindowSize = 60` (go_num)
+- `internal/aiagent/agent/tooluse/loop_guard.go:103` `MaxTraces = 10000` (go_num)
+- `internal/aiagent/agent/tooluse/provider.go:211` `Skipped = true` (bool)
+- `internal/aiagent/agent/tooluse/risk_gate.go:114` `WouldDeny = true` (bool)
+- `internal/aiagent/agent/tooluse/risk_gate.go:120` `WouldDeny = true` (bool)
+- `internal/aiagent/agent/tooluse/risk_gate.go:128` `WouldDeny = true` (bool)
+- `internal/aiagent/agent/tooluse/risk_gate.go:145` `Allowed = true` (bool)
+- `internal/aiagent/agent/tooluse/tool_router.go:59` `FailThreshold = 5` (go_num)
+- `internal/aiagent/agent/tooluse/tool_router.go:62` `CooldownDuration = 30` (go_num)
+- `internal/aiagent/agent/tooluse/tool_router.go:65` `DefaultToolCost = 0.001` (go_num)
+- `internal/aiagent/embedding/embedding.go:32` `DefaultDimension = 1024` (go_num)
+- `internal/aiagent/embedding/embedding.go:35` `SourceDim = 16384` (go_num)
+- `internal/aiagent/embedding/embedding.go:39` `MinNGram = 2` (go_num)
+- `internal/aiagent/embedding/embedding.go:40` `MaxNGram = 3` (go_num)
+- `internal/aiagent/eval/dialogue_gold.go:85` `ActionSkipped = true` (bool)
+- `internal/aiagent/eval/dialogue_gold.go:96` `Composite = 0.5` (go_num)
+- `internal/aiagent/eval/dialogue_gold.go:174` `ActionMatchRate = 1.0` (go_num)
+- `internal/aiagent/eval/judge_calibration.go:22` `MinCalibrationSamples = 30` (go_num)
+- `internal/aiagent/eval/judge_calibration.go:25` `KappaThreshold = 0.6` (go_num)
+- `internal/aiagent/eval/ragas.go:12` `FaithfulnessTarget = 0.90` (go_num)
+- `internal/aiagent/eval/ragas.go:13` `ContextPrecisionTarget = 0.80` (go_num)
+- `internal/aiagent/eval/ragas.go:144` `Faithfulness = 1` (go_num)
+- `internal/aiagent/eval/ragas.go:156` `AnswerRelevancy = 1` (go_num)
+- `internal/aiagent/knowledge/controller/knowledge_workspace.go:465` `TopK = 5` (go_num)
+- `internal/aiagent/knowledge/controller/knowledge_workspace.go:468` `Threshold = 0.6` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_document.go:38` `Status = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_document.go:102` `Page = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_document.go:105` `PageSize = 20` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_import_log.go:38` `Page = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_import_log.go:41` `PageSize = 20` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_merchant.go:45` `Page = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_merchant.go:48` `PageSize = 20` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_merchant.go:179` `Page = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_merchant.go:182` `PageSize = 20` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_openapi.go:43` `Enabled = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_search_log.go:40` `Page = 1` (go_num)
+- `internal/aiagent/knowledge/repository/knowledge_search_log.go:43` `PageSize = 20` (go_num)
+- `internal/aiagent/knowledge/service/constants.go:154` `DefaultPageSize = 20` (go_num)
+- `internal/aiagent/knowledge/service/constants.go:157` `DefaultFrequencyPenalty = 0.5` (go_num)
+- `internal/aiagent/knowledge/service/constants.go:160` `DefaultPresencePenalty = 0.5` (go_num)
+- `internal/aiagent/knowledge/service/knowledge_merchant_feedback.go:79` `HasRating = true` (bool)
+- `internal/aiagent/knowledge/service/knowledge_merchant_playground.go:66` `TopK = 50` (go_num)
+- `internal/aiagent/knowledge/service/knowledge_merchant_playground.go:69` `SimilarityThreshold = 0` (go_num)
+- `internal/aiagent/knowledge/service/knowledge_merchant_playground.go:72` `SimilarityThreshold = 1` (go_num)
+- `internal/aiagent/knowledge/service/rag_config.go:97` `Enabled = true` (bool)
+- `internal/aiagent/knowledge/service/rag_config.go:104` `Enabled = true` (bool)
+- `internal/aiagent/knowledge/service/rag_config.go:110` `IsActive = true` (bool)
+- `internal/aiagent/llm/dispatcher.go:115` `Version = 1` (go_num)
+- `internal/aiagent/llm/dispatcher_dispatch.go:170` `Logprobs = true` (bool)
+- `internal/aiagent/llm/dispatcher_dispatch.go:174` `TopLogprobs = 20` (go_num)
+- `internal/aiagent/llm/dispatcher_dispatch.go:283` `JSONMode = true` (bool)
+- `internal/aiagent/llm/embedding.go:284` `EMBEDDING_ALLOW_FALLBACK = true` (bool)
+- `internal/aiagent/llm/llm.go:557` `MaxRetries = 1` (go_num)
+- `internal/aiagent/llm/llm.go:560` `RequestTimeout = 60` (go_num)
+- `internal/aiagent/llm/llm.go:566` `MaxTokens = 2048` (go_num)
+- `internal/aiagent/llm/provider_failover.go:32` `DefaultHealthCheckInterval = 30` (go_num)
+- `internal/aiagent/llm/provider_failover.go:33` `DefaultFailureThreshold = 5` (go_num)
+- `internal/aiagent/llm/provider_failover.go:34` `DefaultCircuitOpenDuration = 60` (go_num)
+- `internal/aiagent/llm/provider_failover.go:35` `DefaultHealthCheckTimeout = 5` (go_num)
+- `internal/aiagent/llm/provider_failover.go:334` `ConsecutiveFailures = 0` (go_num)
+- `internal/aiagent/llm/provider_failover.go:401` `ConsecutiveFailures = 0` (go_num)
+- `internal/aiagent/llm/provider_failover.go:416` `ConsecutiveFailures = 0` (go_num)
+- `internal/aiagent/llm/react_adapter.go:50` `IsFinal = true` (bool)
+- `internal/aiagent/rag/cache/answer_cache_model.go:21` `DefaultSemanticThreshold = 0.95` (go_num)
+- `internal/aiagent/rag/customer_service/dialog_manager.go:35` `DefaultMaxHistoryLength = 10` (go_num)
+- `internal/aiagent/rag/customer_service/dialog_manager.go:38` `DefaultSessionTimeout = 30` (go_num)
+- `internal/aiagent/rag/customer_service/dialog_manager.go:41` `SessionCleanupInterval = 5` (go_num)
+- `internal/aiagent/rag/customer_service/dialog_manager.go:379` `Confidence = 0.6` (go_num)
+- `internal/aiagent/rag/retrieval/bge_m3_vectorizer.go:23` `BGEM3DefaultDimension = 1024` (go_num)
+- `internal/aiagent/rag/retrieval/bge_m3_vectorizer.go:94` `BatchSize = 32` (go_num)
+- `internal/aiagent/rag/retrieval/bge_m3_vectorizer.go:97` `RequestTimeout = 60` (go_num)
+- `internal/aiagent/rag/retrieval/bge_m3_vectorizer.go:100` `MaxRetries = 3` (go_num)
+- `internal/aiagent/rag/retrieval/hybrid_searcher.go:481` `Score = 1.0` (go_num)
+- `internal/aiagent/rag/retrieval/llm_chat_intent.go:184` `Confidence = 0.5` (go_num)
+- `internal/aiagent/rag/retrieval/llm_chat_intent.go:187` `Confidence = 1` (go_num)
+- `internal/aiagent/rag/retrieval/pgvector_index_ops.go:18` `HNSWM = 16` (go_num)
+- `internal/aiagent/rag/retrieval/pgvector_index_ops.go:21` `HNSWEfConstruction = 200` (go_num)
+- `internal/aiagent/rag/retrieval/pgvector_index_ops.go:24` `HNSWEfSearch = 100` (go_num)
+- `internal/aiagent/rag/retrieval/query_rewriter.go:109` `CacheHit = true` (bool)
+- `internal/aiagent/rag/retrieval/query_rewriter.go:124` `CacheHit = true` (bool)
+- `internal/aiagent/rag/retrieval/rerank.go:183` `RERANK_ENABLED = false` (bool)
+- `internal/aiagent/rag/retrieval/three_tier.go:128` `FromCache = true` (bool)
+- `internal/aiagent/rag/retrieval/translation_cache.go:16` `TranslationCacheTTLDefault = 1` (go_num)
+- `internal/aiagent/rag/retrieval/translation_cache.go:22` `TranslationCacheMaxEntriesDefault = 100000` (go_num)
+- `internal/app/approval_wiring.go:243` `ApprovalShadow = false` (bool)
+- `internal/app/approval_wiring.go:261` `ApprovalShadow = true` (bool)
+- `internal/app/approval_wiring.go:265` `ApprovalShadow = false` (bool)
+- `internal/app/collection_wiring.go:182` `Assembled = true` (bool)
+- `internal/app/collection_wiring.go:191` `ReachGateChecked = true` (bool)
+- `internal/app/integration_reach_adapter.go:889` `DailyRemain = 0` (go_num)
+- `internal/app/integration_reach_adapter.go:898` `DailyRemain = 0` (go_num)
+- `internal/app/order_draft_wiring.go:415` `Assembled = true` (bool)
+- `internal/app/permission_wiring.go:129` `RiskEnforce = false` (bool)
+- `internal/app/reach_gate_wiring.go:479` `DependencyUnmet = true` (bool)
+- `internal/app/reach_tool_wiring.go:37` `QuietHoursEnabled = true` (bool)
+- `internal/app/sales_engine_factory.go:115` `ConfidenceThreshold = 0.5` (go_num)
+- `internal/app/tool_audit_wiring.go:156` `HasStats = true` (bool)
+- `internal/app/tool_circuit_breaker_wiring.go:185` `CircuitBreakerShadow = false` (bool)
+- `internal/bridge/account_repo.go:116` `IsPrimary = true` (bool)
+- `internal/bridge/account_repo.go:117` `Enabled = true` (bool)
+- `internal/bridge/handler_http.go:37` `HTTPPollingMaxTimeout = 500` (go_num)
+- `internal/bridge/handler_http.go:38` `HTTPPollingDefaultTimeout = 30` (go_num)
+- `internal/bridge/handler_http.go:39` `HTTPIngestMaxBodySize = 4` (go_num)
+- `internal/bridge/handler_http.go:40` `HTTPIngestMaxMessages = 200` (go_num)
+- `internal/bridge/handler_http.go:655` `Duplicate = true` (bool)
+- `internal/bridge/sse.go:55` `SSEDefaultHeartbeatInterval = 15` (go_num)
+- `internal/bridge/sse.go:56` `SSEDefaultMaxStreamDuration = 5` (go_num)
+- `internal/bridge/sse.go:57` `SSEMaxBacklogEvents = 1000` (go_num)
+- `internal/bridge/sse.go:58` `SSEBusBufferSize = 100` (go_num)
+- `internal/browser_automation/repository/profile_health.go:58` `Blocked = true` (bool)
+- `internal/browser_automation/service/executor.go:1662` `ChromeTabID = 0` (go_num)
+- `internal/browser_automation/service/task.go:142` `LoopCount = 1` (go_num)
+- `internal/browser_automation/service/task.go:145` `TimeoutSec = 120` (go_num)
+- `internal/channelbot/core/core.go:26` `DefaultHTTPTimeout = 30` (go_num)
+- `internal/channelbot/qq/qq.go:38` `QQMessageMaxLen = 2000` (go_num)
+- `internal/channelbot/qq/qq.go:404` `CallbackOpVerify = 13` (go_num)
+- `internal/channelbot/telegram/telegram.go:25` `TGMessageMaxLength = 4096` (go_num)
+- `internal/channelbot/telegram/telegram.go:26` `TGInlineRowsMax = 100` (go_num)
+- `internal/channelbot/telegram/telegram.go:27` `TGInlineButtonsPerRowMax = 8` (go_num)
+- `internal/channelbot/telegram/telegram.go:122` `ReplyToMessageID = 0` (go_num)
+- `internal/channelbot/telegram/telegram.go:124` `DisableMarkdownConversion = true` (bool)
+- `internal/channelbot/telegram/telegram.go:464` `ALLOW_INSECURE_TELEGRAM_WEBHOOK = true` (bool)
+- `internal/channelgw/protocol.go:15` `ProtocolVersionV1 = 1` (go_num)
+- `internal/channelgw/protocol.go:16` `ProtocolVersionV2 = 2` (go_num)
+- `internal/config/ports.go:15` `DefaultDBPortDev = 8232` (go_num)
+- `internal/config/ports.go:17` `DefaultDBPortDocker = 8202` (go_num)
+- `internal/config/ports.go:25` `DefaultLLMPort = 8207` (go_num)
+- `internal/config/ports.go:29` `DefaultEmbeddingPort = 8208` (go_num)
+- `internal/config/ports.go:33` `DefaultRerankPort = 8209` (go_num)
+- `internal/config/ports.go:39` `DefaultLayaPort = 8210` (go_num)
+- `internal/config/server.go:584` `Dimension = 1024` (go_num)
+- `internal/content/controller/ai_content.go:183` `IsFavorite = true` (bool)
+- `internal/content/controller/template_market.go:152` `IsOfficial = false` (bool)
+- `internal/content/service/ai_content.go:350` `Status = 1` (go_num)
+- `internal/content/service/batch_operation.go:76` `LazyQuotes = true` (bool)
+- `internal/content/service/marketing_flow_action.go:713` `MARKETING_WEBHOOK_ALLOW_INSECURE = true` (bool)
+- `internal/controller/ai_agent.go:196` `Status = 1` (go_num)
+- `internal/controller/ai_agent.go:202` `Temperature = 0.7` (go_num)
+- `internal/controller/ai_agent.go:205` `MaxTokens = 800` (go_num)
+- `internal/controller/ai_agent.go:208` `RAGTopK = 3` (go_num)
+- `internal/controller/ai_agent.go:211` `ConfidenceThreshold = 0.5` (go_num)
+- `internal/controller/ai_agent.go:214` `EnableRAG = true` (bool)
+- `internal/controller/ai_agent.go:217` `EnableScriptMatch = true` (bool)
+- `internal/controller/ai_agent.go:220` `EnableHumanizePolish = true` (bool)
+- `internal/controller/ai_agent.go:223` `EnablePlaybook = true` (bool)
+- `internal/controller/asset_bundle.go:328` `RAGMessages = 1` (go_num)
+- `internal/controller/asset_market.go:56` `PLATFORM_ENABLED = true` (bool)
+- `internal/controller/clue.go:41` `Page = 1` (go_num)
+- `internal/controller/clue.go:44` `PageSize = 20` (go_num)
+- `internal/controller/dingtalk_app_account.go:144` `Status = 1` (go_num)
+- `internal/controller/douyin_card.go:115` `Page = 1` (go_num)
+- `internal/controller/douyin_card.go:118` `PageSize = 10` (go_num)
+- `internal/controller/email_jobs.go:47` `Page = 1` (go_num)
+- `internal/controller/email_jobs.go:50` `PageSize = 20` (go_num)
+- `internal/controller/email_list.go:53` `Page = 1` (go_num)
+- `internal/controller/email_list.go:56` `PageSize = 20` (go_num)
+- `internal/controller/email_list.go:176` `Page = 1` (go_num)
+- `internal/controller/email_list.go:179` `Size = 50` (go_num)
+- `internal/controller/glossary.go:67` `Page = 1` (go_num)
+- `internal/controller/glossary.go:70` `PageSize = 20` (go_num)
+- `internal/controller/kuaishou_card.go:116` `Page = 1` (go_num)
+- `internal/controller/kuaishou_card.go:119` `PageSize = 10` (go_num)
+- `internal/controller/proactive_reach.go:161` `DryRun = true` (bool)
+- `internal/controller/qq_account.go:139` `Status = 1` (go_num)
+- `internal/controller/sso.go:20` `SSOCookieTTL = 5` (go_num)
+- `internal/controller/telegram_account.go:342` `WebhookEnabled = true` (bool)
+- `internal/controller/upload.go:22` `MaxUploadSize = 10` (go_num)
+- `internal/controller/upload.go:89` `EnableVirusScan = true` (bool)
+- `internal/controller/upload.go:93` `EnableVirusScan = true` (bool)
+- `internal/controller/xianyu_card.go:103` `Page = 1` (go_num)
+- `internal/controller/xianyu_card.go:106` `PageSize = 10` (go_num)
+- `internal/domain/errors/codes.go:5` `CodeSuccess = 0` (go_num)
+- `internal/domain/errors/codes.go:6` `CodeParamInvalid = 4000` (go_num)
+- `internal/domain/errors/codes.go:7` `CodeUnauthorized = 4001` (go_num)
+- `internal/domain/errors/codes.go:8` `CodeForbidden = 4003` (go_num)
+- `internal/domain/errors/codes.go:9` `CodeNotFound = 4004` (go_num)
+- `internal/domain/errors/codes.go:10` `CodeConflict = 4009` (go_num)
+- `internal/domain/errors/codes.go:11` `CodeInternal = 5000` (go_num)
+- `internal/domain/errors/codes.go:12` `CodePlatformUnavail = 5001` (go_num)
+- `internal/domain/errors/codes.go:13` `CodeAssetNotFound = 6001` (go_num)
+- `internal/domain/errors/codes.go:14` `CodeAssetDup = 6002` (go_num)
+- `internal/domain/errors/codes.go:15` `CodeAssetInvalid = 6003` (go_num)
+- `internal/domain/errors/codes.go:16` `CodeSyncFailed = 6004` (go_num)
+- `internal/domain/errors/codes.go:17` `CodeLoaderFallback = 6005` (go_num)
+- `internal/email/service/email_drain_worker.go:23` `DefaultEmailDrainInterval = 30` (go_num)
+- `internal/email/service/email_list.go:158` `IsRead = 1` (go_num)
+- `internal/email/service/email_send.go:37` `EmailPendingTTL = 24` (go_num)
+- `internal/email/service/email_send.go:44` `EmailSendingStaleAfter = 30` (go_num)
+- `internal/etl/document_text.go:112` `Strict = false` (bool)
+- `internal/geo/controller/geo_site.go:53` `Active = true` (bool)
+- `internal/geo/service/alert.go:40` `Page = 1` (go_num)
+- `internal/geo/service/alert.go:43` `Limit = 50` (go_num)
+- `internal/geo/service/competitor.go:67` `Priority = 5` (go_num)
+- `internal/geo/service/entity_extractor.go:104` `Confidence = 0.8` (go_num)
+- `internal/geo/service/opportunity.go:137` `HasSOVData = true` (bool)
+- `internal/geo/service/push.go:148` `Success = false` (bool)
+- `internal/geo/service/push.go:200` `Success = true` (bool)
+- `internal/geo/service/push.go:257` `Success = false` (bool)
+- `internal/geo/service/push.go:292` `Success = true` (bool)
+- `internal/geo/service/push.go:426` `Success = false` (bool)
+- `internal/geo/service/push.go:466` `Success = true` (bool)
+- `internal/geo/service/push.go:678` `SuccessCount = 1` (go_num)
+- `internal/geo/service/push.go:681` `FailCount = 1` (go_num)
+- `internal/geo/service/push.go:718` `SuccessCount = 1` (go_num)
+- `internal/geo/service/push.go:721` `FailCount = 1` (go_num)
+- `internal/geo/service/search_probe.go:325` `MaxProbeSampleRounds = 5` (go_num)
+- `internal/geo/service/verification.go:106` `BrandMentioned = true` (bool)
+- `internal/geo/service/visibility.go:78` `Days = 30` (go_num)
+- `internal/geo/service/visibility.go:109` `Visibility = 1` (go_num)
+- `internal/geo/service/visibility.go:152` `Change = 0` (go_num)
+- `internal/geo/service/visibility.go:153` `ChangePct = 0` (go_num)
+- `internal/geo/service/visibility.go:162` `Days = 30` (go_num)
+- `internal/middleware/body_limit.go:30` `DefaultMaxJSONBodyMB = 8` (go_num)
+- `internal/model/customer_rfm.go:113` `RecoveryDefaultMaxAttempts = 3` (go_num)
+- `internal/model/email_send.go:22` `EmailStatusPending = 0` (go_num)
+- `internal/model/email_send.go:23` `EmailStatusSent = 1` (go_num)
+- `internal/model/email_send.go:24` `EmailStatusFailed = 2` (go_num)
+- `internal/model/email_send.go:25` `EmailStatusSending = 3` (go_num)
+- `internal/model/email_send.go:26` `EmailStatusExpired = 4` (go_num)
+- `internal/model/opportunity.go:260` `OpportunityWinProbabilityMax = 1.0` (go_num)
+- `internal/model/sms_tracking.go:70` `MaxRetry = 3` (go_num)
+- `internal/monitor/monitor.go:430` `HasAbnormal = true` (bool)
+- `internal/ops/service/ab_experiment.go:79` `IsControl = true` (bool)
+- `internal/ops/service/ab_experiment.go:134` `IsControl = true` (bool)
+- `internal/ops/service/ab_stats.go:81` `Confidence = 1` (go_num)
+- `internal/ops/service/ab_stats.go:83` `IsWinner = true` (bool)
+- `internal/ops/service/churn_prediction.go:465` `DaysSincePurchase = 9999` (go_num)
+- `internal/ops/service/conversion_funnel.go:111` `Rate = 100` (go_num)
+- `internal/ops/service/conversion_funnel.go:118` `DropRate = 100` (go_num)
+- `internal/ops/service/custom_report_export.go:16` `CSVExportMaxRows = 30000` (go_num)
+- `internal/ops/service/performance_testing.go:38` `Concurrency = 10` (go_num)
+- `internal/ops/service/performance_testing.go:41` `DurationSec = 30` (go_num)
+- `internal/pkg/cron/emaillistcron.go:130` `IsSend = 1` (go_num)
+- `internal/pkg/cron/emaillistcron.go:131` `IsSuccess = 0` (go_num)
+- `internal/pkg/cron/emaillistcron.go:207` `IsSend = 1` (go_num)
+- `internal/pkg/db/db.go:98` `MaxOpenConns = 20` (go_num)
+- `internal/pkg/featureflag/flag.go:34` `PollInterval = 5` (go_num)
+- `internal/pkg/kbrelease/kbrelease.go:285` `RetiredVersion = 0` (go_num)
+- `internal/pkg/mail/mail.go:21` `ImplicitTLSPort = 465` (go_num)
+- `internal/pkg/mail/mail.go:106` `Port = 587` (go_num)

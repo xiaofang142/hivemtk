@@ -2,7 +2,7 @@
 
 > **规则级别**: ⭐⭐⭐ 项目级硬性约束
 > **适用范围**: 所有工程目录的开发文档导航
-> **最近更新日期**: 2026-08-27
+> **最近更新日期**: 2026-10-09（新增「二.C 跨工程专题文档」：配置与硬编码治理）
 
 ---
 
@@ -114,6 +114,27 @@ Vue 3 + Vite + Vue Router，产品官网。包含首页、文档页、FAQ 页，
 | 代码开发手册 | [website/docs/dev/DEVELOPMENT.md](https://github.com/xiaofang142/hivemtk-platform/blob/master/website/docs/dev/DEVELOPMENT.md) |
 | 代码规范 | [website/docs/dev/CONVENTIONS.md](https://github.com/xiaofang142/hivemtk-platform/blob/master/website/docs/dev/CONVENTIONS.md) |
 | 功能清单 | [website/docs/dev/FEATURES.md](https://github.com/xiaofang142/hivemtk-platform/blob/master/website/docs/dev/FEATURES.md) |
+
+### C. 跨工程专题文档（`hivemtk/`）
+
+不按工程目录划分、而是横跨 user-server 与 user-web 的专题治理文档。
+
+#### 8. 配置与硬编码治理
+
+| 文档 | 路径 | 作用 |
+| --- | --- | --- |
+| 硬编码点位清单 | [docs/HARDCODE_INVENTORY.md](./HARDCODE_INVENTORY.md) | 全量硬编码点位（阈值/上限/文案/字典）清单，标注 file:line、归类桶、建议 group/key 与优先级；含「不迁项」的理由 |
+| 数据库驱动方案 | [docs/CONFIG_DB_DRIVEN_PLAN.md](./CONFIG_DB_DRIVEN_PLAN.md) | 基于现有 `config_params` 参数中心的收敛方案：目标架构、阶段 0~五 实施路线、门禁 G1~G6、风险与验收标准 |
+
+配套扫描器（可复现清单，产物在 `hardcode-sweep/`）：
+
+| 脚本 | 作用 |
+| --- | --- |
+| [scripts/hardcode_sweep.py](../scripts/hardcode_sweep.py) | Go 侧扫描（CONFIG / DATA / CN / INLINE_NUM） |
+| [scripts/hardcode_classify.py](../scripts/hardcode_classify.py) | Go CONFIG 假阳性切分 + 五分归类（TUNABLE / PROTOCOL / DEPLOY / INFRA / FIELD_LIT） |
+| [scripts/hardcode_sweep_web.py](../scripts/hardcode_sweep_web.py) | user-web 侧扫描（CN / CONFIG / DATA / URL / TUNE） |
+| [scripts/hardcode_inventory.py](../scripts/hardcode_inventory.py) | 合并三份产物 → `hardcode-sweep/INVENTORY.csv`，自动分配 group/key/优先级 |
+| [scripts/check-config-param-readpoints.py](../scripts/check-config-param-readpoints.py) | 参数中心读点门：每条参数要么有人读，要么自己承认未接线 |
 
 ---
 
