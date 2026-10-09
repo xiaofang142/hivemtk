@@ -269,6 +269,12 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 而变更行在发布之前一行都不进 knowledge_chunks ⇒ 装上不等于线上有变化。
 	app.InitKBReleaseRuntime(gormDB)
 
+	// 业务通知口（I8）：同一位置约束（在编排器与路由之前）。排在这三个底座
+	// （草稿/坏例/知识库变更）之后是读法上的顺序 —— 它只登记一台通知服务，
+	// 不依赖前面任何一个的实例。本竖没有旗子、也不产生协程：拿到 DB 即装配，
+	// 拿不到就全局置空（生产者全部 no-op，业务动作照常成功，只是铃铛不响）。
+	app.InitBusinessNotifier(gormDB)
+
 	// 商机底座（T-P4-04）：同一位置约束（在编排器与路由之前）。本竖没有旗子，也不产生协程 ——
 	// 不装配就是 /api/opportunity/* 全部回 503，不会回一个空列表骗人。
 	app.InitOpportunityRuntime(gormDB)

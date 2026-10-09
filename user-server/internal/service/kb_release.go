@@ -366,6 +366,9 @@ func (s *KBReleaseService) SubmitChange(ctx context.Context, in KBChangeSubmitIn
 	}
 	logger.Infof("[kb-release] 变更已提交：%s op=%s product=%s approval=%s（新建=%t）",
 		id, in.Op, in.ProductID, appr.ID, created)
+	// I8：变更发布前进不了 knowledge_chunks，这条铃铛就是"队列里压了一单"
+	// 的唯一即时提醒；写失败只出声，提交本身已经成功。
+	NotifyBusiness(ctx, KBChangePendingNotification(ch))
 	return ch, nil
 }
 

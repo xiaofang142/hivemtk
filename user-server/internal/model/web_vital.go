@@ -81,16 +81,16 @@ func (r RagEvalRun) MarshalJSON() ([]byte, error) {
 	type alias RagEvalRun
 	return json.Marshal(&struct {
 		alias
-		Recall5     float64 `json:"recall5"`
-		MRR         float64 `json:"mrr"`
-		NDCG5       float64 `json:"ndcg5"`
+		Recall5      float64 `json:"recall5"`
+		MRR          float64 `json:"mrr"`
+		NDCG5        float64 `json:"ndcg5"`
 		AvgRecall    float64 `json:"avg_recall"`
 		AvgPrecision float64 `json:"avg_precision"`
 	}{
-		alias:       alias(r),
-		Recall5:     safeFloat64(r.Recall5),
-		MRR:         safeFloat64(r.MRR),
-		NDCG5:       safeFloat64(r.NDCG5),
+		alias:        alias(r),
+		Recall5:      safeFloat64(r.Recall5),
+		MRR:          safeFloat64(r.MRR),
+		NDCG5:        safeFloat64(r.NDCG5),
 		AvgRecall:    safeFloat64(r.AvgRecall),
 		AvgPrecision: safeFloat64(r.AvgPrecision),
 	})

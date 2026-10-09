@@ -195,6 +195,8 @@ func (s *BadCaseService) Mark(ctx context.Context, in BadCaseMarkInput) (bool, e
 			Str("case_id", row.ID).Str("source", source).Str("session_id", in.SessionID).
 			Float64("confidence", in.Confidence).Float64("threshold", threshold).
 			Msg("[BadCase] 自动标记一条低质回答")
+		// I8：新坏例广播给做归因的人。写失败只出声 —— 标记本身已经成功了。
+		NotifyBusiness(ctx, BadCasePendingNotification(row))
 	}
 	return created, nil
 }
@@ -271,6 +273,8 @@ func (s *BadCaseService) MarkManual(ctx context.Context, in BadCaseMarkInput, la
 	if _, err := s.repo.InsertIfAbsent(ctx, row); err != nil {
 		return nil, err
 	}
+	// I8：人工补录同样要催归因 —— 人报了不等于有人来 Label。
+	NotifyBusiness(ctx, BadCasePendingNotification(row))
 	return s.repo.GetByID(ctx, id)
 }
 

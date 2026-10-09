@@ -303,14 +303,30 @@ func (s *OrderDraftService) SetTrigger(ctx context.Context, t *SalesActionTrigge
 // CreateFromIntent 从订单意向自动生成草稿（-11 核心入口）
 // 商业产品级业务流：AI 谈单时提取到"光子嫩肤 3 次 2280 元"→
 //  1. 自动生成草稿（pending 状态）
-//  2. 通知销售（在"待确认草稿"列表里出现）
+//  2. 通知销售（站内铃铛一条 + 出现在"待确认草稿"列表）
 //  3. 仪表盘记录 draft_created 事件
 //  4. 销售点"确认"即可生成正式订单
 //
 // 去重：同一客户同一产品的 pending 草稿不会重复创建（数量累加到现有草稿）
+//
+// 合并进已有草稿不算"新建"，不发通知：客户多聊几句同一产品会反复命中合并，
+// 每次都响铃铛的话，真正的那条新草稿反而被刷没了。
 func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderIntent, ownerID string) *OrderDraft {
+	draft, created := s.createFromIntentLocked(ctx, intent, ownerID)
+	if created && draft != nil {
+		// 通知必须放锁外：Create 要打一次数据库，占着 s.mu 会让并发创建者
+		// 陪跑一次写延迟 —— 这把锁只护"查→合并或新建"，通知不在其职责内。
+		NotifyBusiness(ctx, OrderDraftCreatedNotification(draft))
+	}
+	return draft
+}
+
+// createFromIntentLocked CreateFromIntent 的持锁主体（在 s.mu 内跑）。
+// created 仅在**真正新建**一行时为 true；合并、各失败分支一律 false ——
+// 谁该响铃铛只由这个返回值决定，别在调用方再猜一次。
+func (s *OrderDraftService) createFromIntentLocked(ctx context.Context, intent *OrderIntent, ownerID string) (*OrderDraft, bool) {
 	if intent == nil || intent.CustomerID == "" || intent.ProductName == "" {
-		return nil
+		return nil, false
 	}
 	if ownerID == "" {
 		ownerID = "system"
@@ -349,11 +365,11 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 	candidates, err := s.findPendingDraftByProduct(ctx, intent.CustomerID, intent.ProductName)
 	if err != nil {
 		logger.Errorf("[order-draft] 去重查询失败 ⇒ 本次 intent 不建草稿（宁缺勿重）：%v", err)
-		return nil
+		return nil, false
 	}
 	if candidates != nil {
 		if merged, ok := mergeInto(candidates.ID); ok {
-			return merged
+			return merged, false
 		}
 		// 合并落败 = 那条草稿在读取后已被确认/取消 ⇒ 它不再是"待确认"的那一个，
 		// 本次意向按新建处理（原实现无并发对手，所以从未暴露这一支）。
@@ -409,14 +425,14 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 			// 冲突行必然满足模糊匹配，重查一次按合并处理即可。
 			if other, e := s.findPendingDraftByProduct(ctx, intent.CustomerID, intent.ProductName); e == nil && other != nil {
 				if merged, ok := mergeInto(other.ID); ok {
-					return merged
+					return merged, false
 				}
 			}
 			logger.Errorf("[order-draft] %s 的 pending 草稿冲突且重查未命中 ⇒ 本次 intent 丢弃", intent.ProductName)
-			return nil
+			return nil, false
 		}
 		logger.Errorf("[order-draft] 草稿落库失败 ⇒ 本次意向未记为草稿（不静默当成成功）：%v", err)
-		return nil
+		return nil, false
 	}
 
 	if s.stats != nil {
@@ -432,7 +448,7 @@ func (s *OrderDraftService) CreateFromIntent(ctx context.Context, intent *OrderI
 			OccurredAt:  now,
 		})
 	}
-	return draft
+	return draft, true
 }
 
 // CreateDraftsFromSalesResponse 从一条 AI 谈单响应里提取订单意向并建草稿
@@ -545,6 +561,9 @@ func (s *OrderDraftService) CreateManual(ctx context.Context, req *CreateDraftRe
 			OccurredAt:  now,
 		})
 	}
+	// 手创也响铃铛（I8）：草稿"待确认"本身就是挂在 owner 头上的一步待办 ——
+	// 创建者即 owner 时这条是自提提醒，不算噪音；owner 是别人时这正是他要的。
+	NotifyBusiness(ctx, OrderDraftCreatedNotification(draft))
 	return draft, nil
 }
 
