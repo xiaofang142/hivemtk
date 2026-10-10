@@ -38,7 +38,11 @@ func runtimeWSWriteTimeout(ctx context.Context) time.Duration {
 	return service.GlobalConfigParam().GetDuration(ctx, "channelgw", "ws_write_timeout", wsWriteTimeout)
 }
 func runtimeWSPushIntervalDefault(ctx context.Context) time.Duration {
-	return service.GlobalConfigParam().GetDuration(ctx, "channelgw", "ws_push_interval_default", wsPushIntervalDefault)
+	// key 必须是 channelgw.ws_push_interval —— 与 config_param_seeds.go 里的登记一致。
+	// 这里原本写成 "ws_push_interval_default"，种子里并没有这个 key，
+	// GetDuration 每次都 miss 然后回落到兜底值，等于这个参数改了永远不生效（门禁也管不到：
+	// 它只检查「种子 key 有没有读取点」，而这里是读取点用了另一个 key）。
+	return service.GlobalConfigParam().GetDuration(ctx, "channelgw", "ws_push_interval", wsPushIntervalDefault)
 }
 func runtimeWSPipelineTimeout(ctx context.Context) time.Duration {
 	return service.GlobalConfigParam().GetDuration(ctx, "channelgw", "ws_pipeline_timeout", wsPipelineTimeout)

@@ -32,15 +32,37 @@ type ImportDocumentResult struct {
 	Status     string `json:"status"`
 }
 
-const MaxUploadFileSize int64 = 50 << 20
+// DefaultMaxUploadFileSize 是参数中心 knowledge.max_upload_file_size 的兜底值（50MB）。
+const DefaultMaxUploadFileSize int64 = 50 << 20
+
+// maxUploadFileSizeProvider 由 internal/app 的参数装配层注入。
+// 传 nil 表示不注入（装配顺序错时不该把兜底值顶掉）。
+var maxUploadFileSizeProvider = func() int64 { return DefaultMaxUploadFileSize }
+
+// SetMaxUploadFileSizeProvider 注入知识库上传大小上限读取器，仅装配层调用。
+func SetMaxUploadFileSizeProvider(fn func() int64) {
+	if fn != nil {
+		maxUploadFileSizeProvider = fn
+	}
+}
+
+// MaxUploadFileSize 返回生效中的知识库上传大小上限（字节）。
+// 调大会同步抬高 io.LimitReader 的读取上限与 body_limit 中间件需要容忍的单文件体积。
+func MaxUploadFileSize() int64 {
+	n := maxUploadFileSizeProvider()
+	if n <= 0 {
+		return DefaultMaxUploadFileSize
+	}
+	return n
+}
 
 // ImportDocument 导入文档:保存文件 + 创建记录(status=pending) + 异步处理
 func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string, file multipart.File, header *multipart.FileHeader) (*ImportDocumentResult, error) {
 	if header == nil {
 		return nil, errors.New("文件不能为空")
 	}
-	if header.Size > MaxUploadFileSize {
-		return nil, fmt.Errorf("文件过大: %d 字节, 上限 %d MB", header.Size, MaxUploadFileSize>>20)
+	if header.Size > MaxUploadFileSize() {
+		return nil, fmt.Errorf("文件过大: %d 字节, 上限 %d MB", header.Size, MaxUploadFileSize()>>20)
 	}
 
 	ext := strings.ToLower(filepath.Ext(header.Filename))
@@ -63,7 +85,7 @@ func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string,
 	}
 	defer func() { _ = dst.Close() }()
 
-	if _, err := io.Copy(dst, io.LimitReader(file, MaxUploadFileSize+1)); err != nil {
+	if _, err := io.Copy(dst, io.LimitReader(file, MaxUploadFileSize()+1)); err != nil {
 		_ = os.Remove(filePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
 	}
@@ -71,9 +93,9 @@ func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string,
 		_ = os.Remove(filePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
 	}
-	if size, _ := getFileSize(filePath); size > MaxUploadFileSize {
+	if size, _ := getFileSize(filePath); size > MaxUploadFileSize() {
 		_ = os.Remove(filePath)
-		return nil, fmt.Errorf("文件超过大小上限 %d MB", MaxUploadFileSize>>20)
+		return nil, fmt.Errorf("文件超过大小上限 %d MB", MaxUploadFileSize()>>20)
 	}
 
 	size, _ := getFileSize(filePath)

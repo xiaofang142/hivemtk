@@ -18,20 +18,41 @@ import (
 const MFAVerifyContextKey = "mfa_verified"
 
 const (
-	mfaRecentVerifyTTL    = 5 * time.Minute
-	mfaRecentVerifyKeyFmt = "mfa:verified:%d"
+	// DefaultMfaRecentVerifyTTL 是参数中心 middleware.mfa_recent_verify_ttl 的兜底值。
+	DefaultMfaRecentVerifyTTL = 5 * time.Minute
+	mfaRecentVerifyKeyFmt     = "mfa:verified:%d"
 )
 
 var (
 	mfaRecentVerify      = make(map[uint]time.Time)
 	mfaRecentVerifyMutex sync.RWMutex
+	// mfaRecentVerifyTTLProvider 由 internal/app 的参数装配层注入。
+	// 传 nil 表示不注入（装配顺序错时不该把兜底值顶掉）。
+	mfaRecentVerifyTTLProvider = func() time.Duration { return DefaultMfaRecentVerifyTTL }
 )
+
+// SetMfaRecentVerifyTTLProvider 注入 MFA 二次验证宽限期读取器，仅装配层调用。
+func SetMfaRecentVerifyTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		mfaRecentVerifyTTLProvider = fn
+	}
+}
+
+// MFARecentVerifyTTL 返回生效中的 MFA 宽限期。
+// 这是一段「已经过了二次验证」的免打扰窗口：调长它等于把敏感操作的二次验证要求放宽。
+func MFARecentVerifyTTL() time.Duration {
+	ttl := mfaRecentVerifyTTLProvider()
+	if ttl <= 0 {
+		return DefaultMfaRecentVerifyTTL
+	}
+	return ttl
+}
 
 func MarkMFAVerified(userID uint) {
 	now := time.Now()
 
 	key := fmt.Sprintf(mfaRecentVerifyKeyFmt, userID)
-	if err := cache.GetGlobalCache().Set(context.Background(), key, now.Unix(), mfaRecentVerifyTTL); err != nil {
+	if err := cache.GetGlobalCache().Set(context.Background(), key, now.Unix(), MFARecentVerifyTTL()); err != nil {
 		logger.Warnf("MarkMFAVerified Redis Set failed, fallback to memory: %v", err)
 
 		mfaRecentVerifyMutex.Lock()
@@ -63,7 +84,7 @@ func IsMFAVerifiedRecently(userID uint) bool {
 		var ts int64
 		if _, scanErr := fmt.Sscanf(val, "%d", &ts); scanErr == nil {
 			verifiedAt := time.Unix(ts, 0)
-			if time.Since(verifiedAt) < mfaRecentVerifyTTL {
+			if time.Since(verifiedAt) < MFARecentVerifyTTL() {
 				return true
 			}
 		}
@@ -75,7 +96,7 @@ func IsMFAVerifiedRecently(userID uint) bool {
 	if !ok {
 		return false
 	}
-	return time.Since(t) < mfaRecentVerifyTTL
+	return time.Since(t) < MFARecentVerifyTTL()
 }
 
 func cleanupExpiredMFAVerified() {
@@ -83,7 +104,7 @@ func cleanupExpiredMFAVerified() {
 	defer mfaRecentVerifyMutex.Unlock()
 	now := time.Now()
 	for k, v := range mfaRecentVerify {
-		if now.Sub(v) >= mfaRecentVerifyTTL {
+		if now.Sub(v) >= MFARecentVerifyTTL() {
 			delete(mfaRecentVerify, k)
 		}
 	}

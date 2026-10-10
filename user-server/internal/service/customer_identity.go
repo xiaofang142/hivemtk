@@ -332,7 +332,7 @@ func (s *CustomerIdentityService) ResolveIdentity(ctx context.Context, identifie
 
 func (s *CustomerIdentityService) findExistingWithRetry(ctx context.Context, identifiers identity.Identifiers) (*model.Customer, error) {
 
-	const maxAttempts = 8
+	maxAttempts := identityMaxAttempts()
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
@@ -373,3 +373,31 @@ func unifiedIDFromIdentifiers(id identity.Identifiers) string {
 		return ""
 	}
 }
+
+// DefaultIdentityMaxAttempts 是参数中心 sales.identity_max_attempts 的兜底值。
+const DefaultIdentityMaxAttempts = 8
+
+// identityMaxAttemptsProvider 由 internal/app 的参数装配层注入。
+// 传 nil 表示不注入（装配顺序错时不该把兜底值顶掉）。
+var identityMaxAttemptsProvider = func() int { return DefaultIdentityMaxAttempts }
+
+// SetIdentityMaxAttemptsProvider 注入身份合并重试上限读取器，仅装配层调用。
+func SetIdentityMaxAttemptsProvider(fn func() int) {
+	if fn != nil {
+		identityMaxAttemptsProvider = fn
+	}
+}
+
+// identityMaxAttempts 返回生效中的身份合并重试上限。
+// 这是仓储写入失败时的乐观重试次数：调高会放大一次合并请求对 DB 的压力，
+// 调低则并发写冲突更容易直接把这次合并判失败。
+func identityMaxAttempts() int {
+	n := identityMaxAttemptsProvider()
+	if n <= 0 {
+		return DefaultIdentityMaxAttempts
+	}
+	return n
+}
+
+// ProbeIdentityMaxAttempts 供装配层测试读取生效值，避免为了断言而导出正式读取口。
+func ProbeIdentityMaxAttempts() int { return identityMaxAttempts() }

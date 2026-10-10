@@ -236,8 +236,8 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
-> **处置进度（2026-10-10）**：第 1~7 批已接线并提交（第 7 批 `inbox_sales`/`session`/`pagination` 详见下行）。
-> 门禁读数：`wired 40→96`、`UNDECLARED 72→0`、`已声明未接线 19`。
+> **处置进度（2026-10-10）：阶段一全部 8 批已接线并提交（8/8）。**
+> 门禁读数：`wired 40→102`、`UNDECLARED 72→0`、`已声明未接线 13`。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |
@@ -254,11 +254,11 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `session`(3) ✅已接线 | `active_ttl`✅（`repository/customer_session.go`，service 侧改为直接读同一读取口以保持单一源）、`idle_ttl`✅（`aiagent/mcp/http.go`）、`max_delay_seconds`✅（`content/service/marketing_flow.go handleDelay`；**种子原描述「触达排程超期放弃」与实现不符——实现是「delay 节点等待上限、超过截断」，已一并改写对齐**） |
 | `pagination`(3) ⚠️1条已接线 | `cursor_page_size`✅（`pkg/pagination/cursor.go`，经 `utils.ParseCursorParams`→`ClampLimit` 被 operation_log/security_audit/customer 三处生产调用）；`page_max_size`/`page_default_size` **无处可接**——对应的 `ParsePagination`/`ParsePaginationOffset` 全树只有 `pagination_test.go` 调用；`page_default_size` 在 `ParseCursorParams` 的兜底分支又被三个调用方的正数 `defaultLimit` 遮蔽。另注种子写 100、代码 `defaultMaxPageSize` 写 200 本就不一致 |
 | `wechat`(3) ❌无处可接 | `chat_ws_ping_period`、`chat_ws_pong_wait`、`chat_ws_write_wait` **无处可接**——常量在 `controller/chat_ws.go` 有读取点，但承载它的 `router/ws.go RegisterWSRoutes` 全树零调用方（`GET /ws/chat` 从未注册，实测落到 SPA NoRoute 兜底）。另：后端无微信渠道 WS 客户端，`internal/channelbot` 只有 core/qq/telegram/whatsapp |
-| `sales`(2) | `insight_limit`、`identity_max_attempts` |
-| `middleware`(2) | `audit_flush_interval`、`mfa_recent_verify_ttl` |
-| `knowledge`(2) | `max_upload_file_size`、`merchant_knowledge_max_len` |
-| `wecom`(1) | `error_rate_degrade` |
-| `channelgw`(1) | `ws_push_interval` |
+| `sales`(2) ⚠️1条已接线 | `identity_max_attempts`✅（`service/customer_identity.go findExistingWithRetry`）；`insight_limit` **无处可接**——`trace_learning.TopInsights` 的 `limit` 是**入参不是默认值**，全仓唯一调用方是 `insights_test.go`（且三处都硬传 3），生产链路没有任何地方取这个数量 |
+| `middleware`(2) ✅已接线 | `audit_flush_interval`✅（`middleware/audit.go processAuditLogs` 的 `time.NewTicker`）、`mfa_recent_verify_ttl`✅（`middleware/mfa.go`，4 个读取点：Redis Set / 近期校验 / 内存表校验 / 后台清理） |
+| `knowledge`(2) ✅已接线 | `max_upload_file_size`✅（`knowledge/service/knowledge_base_import.go`，5 个读取点 + `knowledge_service_import.go` 4 个；导出 const 已改为函数）、`merchant_knowledge_max_len`✅（`knowledge/service/knowledge_merchant_external.go splitMarkdownToItems` 的 flush 闭包内，原本是闭包内的局部 const） |
+| `wecom`(1) ❌无处可接 | `error_rate_degrade` **无处可接**——`WeComErrorRateDegradeThreshold=0.3` 只出现在常量声明和一句**撒谎的注释**里（「运行时通过 GlobalConfigParam() 读取」），根本没有对应读取函数；现存 `computeHealthScore` 的成功率判定是写死的三档（`<50` 扣 30 / `<80` 扣 15 / `<95` 扣 5），单一阈值表达不了递减分档 |
+| `channelgw`(1) ✅已接线 | `ws_push_interval`✅（`channelgw/ws.go runtimeWSPushIntervalDefault`）——**但这条原本是门禁抓不到的假接线**：读取点存在，key 却是 `"ws_push_interval_default"`，种子里登记的是 `"ws_push_interval"`，多一个后缀导致每次读都 miss、每次都回落兜底 2s，参数改了永远不生效。同组另外 4 条 key 都对，是单点笔误。readpoints 门检查的是「种子 key 有没有读取点」，看不出读取点用的是别的 key，本批已改正并补真库行为测试钉住 |
 
 **逐条对上了本清单 A 桶的硬编码**（这就是"接线"的具体施工单）：
 
@@ -286,7 +286,7 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `inbox_sales.preview_sample_limit` | `service/oneid_merge_preview.go:40 =20` ✅ |
 | `inbox_sales.geo_lead_preview_max_len` | `service/trace_learning/insights.go:25 =200` ✅（seam 本就存在，只补注入 + 非正值守卫） |
 | `wechat.chat_ws_ping_period` 等 3 条 | `controller/chat_ws.go:51-55` —— 常量有读取点但 `/ws/chat` 路由从未注册（详见上表行内说明）；另前端 `utils/chatSocket.js` 有对应常量属**前端**阈值，归阶段三 |
-| `wecom.error_rate_degrade` | `wecom_account_health.go:45 =0.3` |
+| `wecom.error_rate_degrade` | `wecom_account_health.go:45 =0.3` ❌（**无读取点**，且常量旁的注释谎称「运行时通过 GlobalConfigParam() 读取」，已一并修正；实现是写死三档，单一阈值接不上） |
 | `telemetry.feature_flag_poll_interval` | `pkg/featureflag/flag.go:34 =5` ✅ |
 | `workflow.max_subflow_depth` | `workflow_node_executors.go:14 =5` ✅ |
 | `telemetry.node_health_window` | `internal/monitor/monitor.go:19 nodeHealthWindow=24h` ✅ |
@@ -295,6 +295,12 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `workflow.max_workflow_steps` | `internal/service/workflow_dispatcher.go:153 函数内 const =1000` ✅ |
 | `workflow.max_running_per_sop` | `internal/service/sop_scheduler.go:233 函数内 const =50` ✅ |
 | `workflow.max_executed_node_trace` | `internal/service/sop_dispatcher.go:706 =200` ✅ |
+| `sales.identity_max_attempts` | `service/customer_identity.go:335 函数内 const maxAttempts =8` ✅ |
+| `middleware.audit_flush_interval` | `middleware/audit.go:58 函数内 const flushInterval =5s` ✅ |
+| `middleware.mfa_recent_verify_ttl` | `middleware/mfa.go:21 mfaRecentVerifyTTL =5m` ✅（4 个读取点） |
+| `knowledge.max_upload_file_size` | `knowledge/service/knowledge_base_import.go:35 MaxUploadFileSize =50<<20` ✅（导出 const 已改为函数；另 `knowledge_service_import.go` 4 处） |
+| `knowledge.merchant_knowledge_max_len` | `knowledge/service/knowledge_merchant_external.go:483 flush 闭包内 const maxLen =2000` ✅ |
+| `channelgw.ws_push_interval` | `channelgw/ws.go:41 =2s` ✅（**原为假接线**：读取点 key 写成 `ws_push_interval_default`，种子里是 `ws_push_interval`，已改正；真库行为测试已钉住） |
 
 → **接线动作就是把上表右列的常量替换为 `config.GetInt/GetDuration(...)`，然后把种子里的
 「（未接线）」标注撤掉**（门禁第 2 条会检查标注是否过期）。

@@ -36,10 +36,14 @@ const (
 	WeComLoginOffline = "offline"
 	WeComLoginBanned  = "banned"
 
-	// WeComErrorRateDegradeThreshold / WeComQuotaDegradeThreshold 为 fallback 默认值（DB 驱动）
+	// WeComQuotaDegradeThreshold 为 fallback 默认值（DB 驱动）。
 	// 运行时通过 GlobalConfigParam() 按 group=wecom 读取 DB 参数：
-	//   wecom.error_rate_degrade → WeComErrorRateDegradeThreshold (fallback)
 	//   wecom.quota_degrade → WeComQuotaDegradeThreshold (fallback)
+	//
+	// WeComErrorRateDegradeThreshold 没有对应的读取函数，且现存实现也用不上它：
+	// computeHealthScore 的成功率判定是写死的三档（<50 / <80 / <95），
+	// 单一「错误率阈值」表达不了这种递减分档，硬套进来只能新造第四档或改掉现有行为。
+	// 参数中心那条 wecom.error_rate_degrade 仍如实标着「未接线」。
 	WeComErrorRateDegradeThreshold = 0.3
 	WeComQuotaDegradeThreshold     = 0.9
 )

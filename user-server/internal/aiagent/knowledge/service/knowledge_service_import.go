@@ -36,8 +36,8 @@ func (s *KnowledgeService) importUploadedFile(ctx context.Context, req *ImportRe
 	if req.File == nil || req.FileHeader == nil {
 		return nil, errors.New("文件不能为空")
 	}
-	if req.FileHeader.Size > MaxUploadFileSize {
-		return nil, fmt.Errorf("文件过大: %d 字节, 上限 %d MB", req.FileHeader.Size, MaxUploadFileSize>>20)
+	if req.FileHeader.Size > MaxUploadFileSize() {
+		return nil, fmt.Errorf("文件过大: %d 字节, 上限 %d MB", req.FileHeader.Size, MaxUploadFileSize()>>20)
 	}
 	ext := strings.ToLower(filepath.Ext(req.FileHeader.Filename))
 	allowed := map[string]bool{".pdf": true, ".docx": true, ".doc": true, ".txt": true, ".md": true, ".html": true, ".json": true, ".csv": true}
@@ -58,14 +58,14 @@ func (s *KnowledgeService) importUploadedFile(ctx context.Context, req *ImportRe
 	}
 	defer func() { _ = dst.Close() }()
 
-	size, err := io.Copy(dst, io.LimitReader(req.File, MaxUploadFileSize+1))
+	size, err := io.Copy(dst, io.LimitReader(req.File, MaxUploadFileSize()+1))
 	if err != nil {
 		_ = os.Remove(filePath)
 		return nil, fmt.Errorf("写入文件失败: %w", err)
 	}
-	if size > MaxUploadFileSize {
+	if size > MaxUploadFileSize() {
 		_ = os.Remove(filePath)
-		return nil, fmt.Errorf("文件超过大小上限 %d MB", MaxUploadFileSize>>20)
+		return nil, fmt.Errorf("文件超过大小上限 %d MB", MaxUploadFileSize()>>20)
 	}
 	if err := dst.Close(); err != nil {
 		_ = os.Remove(filePath)

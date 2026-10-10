@@ -480,7 +480,7 @@ func splitMarkdownToItems(markdown, sourceID, source string) []BatchImportItem {
 			return
 		}
 
-		const maxLen = 2000
+		maxLen := MerchantKnowledgeMaxLen()
 		if len([]rune(body)) > maxLen {
 			chunks := softSplitParagraphs(body, maxLen)
 			for i, c := range chunks {
@@ -549,4 +549,28 @@ func softSplitParagraphs(body string, maxLen int) []string {
 		chunks = append(chunks, strings.TrimSpace(buf.String()))
 	}
 	return chunks
+}
+
+// DefaultMerchantKnowledgeMaxLen 是参数中心 knowledge.merchant_knowledge_max_len 的兜底值（字符数）。
+const DefaultMerchantKnowledgeMaxLen = 2000
+
+// merchantKnowledgeMaxLenProvider 由 internal/app 的参数装配层注入。
+// 传 nil 表示不注入（装配顺序错时不该把兜底值顶掉）。
+var merchantKnowledgeMaxLenProvider = func() int { return DefaultMerchantKnowledgeMaxLen }
+
+// SetMerchantKnowledgeMaxLenProvider 注入外部知识库单条内容上限读取器，仅装配层调用。
+func SetMerchantKnowledgeMaxLenProvider(fn func() int) {
+	if fn != nil {
+		merchantKnowledgeMaxLenProvider = fn
+	}
+}
+
+// MerchantKnowledgeMaxLen 返回生效的外部知识库单条内容字符上限。
+// 超限内容不会被丢弃，而是按段落软切成多条导入项。
+func MerchantKnowledgeMaxLen() int {
+	n := merchantKnowledgeMaxLenProvider()
+	if n <= 0 {
+		return DefaultMerchantKnowledgeMaxLen
+	}
+	return n
 }

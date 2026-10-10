@@ -176,8 +176,10 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1~7 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) / agent_tool(4/5) / telemetry(4)+workflow(4) / inbox_sales(4)+session(3)+pagination(1) 已入库（7/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=96 / 已声明未接线=19 / UNDECLARED=0 / 声明过期=0`。
+> **进度（2026-10-10）：阶段一全部 8 批已入库（8/8）。**
+> misc(16) / confidence(5/7) / agent_llm(7) / cache(5) / agent_tool(4/5) / telemetry(4)+workflow(4) /
+> inbox_sales(4)+session(3)+pagination(1) / sales(1)+middleware(2)+knowledge(2)+channelgw(1)。
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=102 / 已声明未接线=13 / UNDECLARED=0 / 声明过期=0`。
 >
 > **入库位置（如实记录，勿按 commit message 找）**：
 > - 第 1 批 misc(16) → `c75c78b6 feat(config-params): 阶段一第1批 —— misc 组 16 条僵尸参数接线`
@@ -189,8 +191,41 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 > - 第 4 批 cache(5) → `8bcc0443 feat(config-params): 阶段一第4批 —— cache 组 5 条僵尸参数接线`
 > - 第 5 批 agent_tool(4/5) → `5fb6f400 feat(config-params): 阶段一第5批 —— agent_tool 组 4 条僵尸参数接线`
 > - 第 6 批 telemetry(4)+workflow(4) → `21dff6d0 feat(config-params): 阶段一第6批 —— telemetry(4)+workflow(4) 组 8 条僵尸参数接线`
-> - 第 7 批 inbox_sales(4)+session(3)+pagination(1) → 本提交。
+> - 第 7 批 inbox_sales(4)+session(3)+pagination(1) → `7a0ae7b0 feat(config-params): 阶段一第7批 —— inbox_sales(4)+session(3)+pagination(1) 组接线`
+> - 第 8 批 sales(1)+middleware(2)+knowledge(2)+channelgw(1) → 本提交。
 > - 台账回填另计：`2f2ba9cb`（第 3 批）、以及各批随附的 docs 提交。
+>
+> **第 8 批查出一个门禁管不到的 bug（比 72 条僵尸更隐蔽，值得单独记）**
+>
+> `channelgw.ws_push_interval` 之前被种子里标着「未接线」，本批去接线时发现它其实**有读取点**
+> —— `internal/channelgw/ws.go` 的 `runtimeWSPushIntervalDefault` 真真切切在调
+> `GetDuration(ctx, "channelgw", <key>, …)`。但那个 `<key>` 是 `"ws_push_interval_default"`，
+> 而种子里登记的是 `"ws_push_interval"`。多一个 `_default` 后缀，于是
+> **每次读都 miss、每次都回落到兜底值 2s**：参数在管理台改得动、页面显示保存成功、
+> 代码就是读不到。同组另外 4 条 key（`ws_register_timeout` / `ws_read_idle_timeout` /
+> `ws_write_timeout` / `ws_pipeline_timeout`）都是对的，所以这是一处单点笔误。
+>
+> **这类故障 readpoints 门结构上抓不到**：它检查的是「种子 key 有没有读取点」，
+> 而这里读取点有，只是用的不是那个 key。反向的「登记了没人读」它能抓（判 UNDECLARED），
+> 正向的「有人读但读的是别的 key」它一个字都看不出来。本批已改正 key，
+> 并补 `TestRuntimeWSPushIntervalReadsSeededKey`（真库改值 → 断言读取函数读到改后的值，
+> key 再写错就会红）把这类回归钉住。
+>
+> **第 8 批：8 条目标里接了 6 条，另 2 条经核实确实没有生产消费点**
+> （同第 2/5/7 批口径：如实保留「未接线」标注并把 Description 改写为写明真实原因）：
+> - `wecom.error_rate_degrade`：`WeComErrorRateDegradeThreshold = 0.3` 只出现在常量声明和
+>   一句**撒谎的注释**里（「运行时通过 GlobalConfigParam() 读取」）—— 根本没有对应的读取函数。
+>   现存实现 `computeHealthScore` 的成功率判定是写死的三档（`<50` 扣 30 / `<80` 扣 15 /
+>   `<95` 扣 5），单一「错误率阈值」表达不了这种递减分档；硬套进来只能新造第四档或改掉现有
+>   扣分行为，所以没接。**顺带修掉那句撒谎的注释**（规则2：不留"已发现但不改"的东西）。
+> - `sales.insight_limit`：`trace_learning.TopInsights` 的 `limit` 是**入参不是默认值**，
+>   全仓唯一调用方是 `insights_test.go`（且三处都硬传 3），生产链路没有任何地方取这个数量。
+>
+> **第 8 批顺带确认的一处「配额降级半接线」**：`wecom.quota_degrade` 是真接线
+> （`runtimeWeComQuotaDegrade` 有真实 `GetFloat`），但 `computeHealthScore` 的配额三档
+> （`>0.95` 扣 25 / `>quotaDegrade` 扣 15 / `>0.7` 扣 5）里只有中间一档读了参数，
+> **上下两档 0.95 / 0.7 仍是写死的**。所以把 `quota_degrade` 调到 0.95 以上时，
+> 上面那档会先命中、参数等于失效。这属于「新增点位」（阶段二/三范围），本批只如实记录不扩范围。
 >
 > **第 7 批：16 条目标里只接了 8 条，另 8 条经核实确实没有生产消费点**
 > （同第 2/5 批口径：如实保留「未接线」标注并把 Description 改写为写明真实原因，

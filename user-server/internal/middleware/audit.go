@@ -27,6 +27,30 @@ type AuditManager struct {
 // DefaultAuditManager 默认审计管理器
 var DefaultAuditManager = NewAuditManager()
 
+// DefaultAuditFlushInterval 是参数中心 middleware.audit_flush_interval 的兜底值。
+const DefaultAuditFlushInterval = 5 * time.Second
+
+// auditFlushIntervalProvider 由 internal/app 的参数装配层注入。
+// 传 nil 表示不注入（装配顺序错时不该把兜底值顶掉）。
+var auditFlushIntervalProvider = func() time.Duration { return DefaultAuditFlushInterval }
+
+// SetAuditFlushIntervalProvider 注入审计刷盘周期读取器，仅装配层调用。
+func SetAuditFlushIntervalProvider(fn func() time.Duration) {
+	if fn != nil {
+		auditFlushIntervalProvider = fn
+	}
+}
+
+// AuditFlushInterval 返回生效中的审计刷盘周期。
+// 这是「审计日志从内存队列落库到 DB」的最大滞留时间，敏感操作审计要可查就得靠它兜底。
+func AuditFlushInterval() time.Duration {
+	d := auditFlushIntervalProvider()
+	if d <= 0 {
+		return DefaultAuditFlushInterval
+	}
+	return d
+}
+
 // NewAuditManager 创建审计管理器
 func NewAuditManager() *AuditManager {
 	return &AuditManager{}
@@ -55,7 +79,7 @@ func (m *AuditManager) GetDroppedCount() int64 {
 
 func (m *AuditManager) processAuditLogs() {
 	const batchSize = 50
-	const flushInterval = 5 * time.Second
+	flushInterval := AuditFlushInterval()
 
 	batch := make([]*AuditEntry, 0, batchSize)
 	ticker := time.NewTicker(flushInterval)

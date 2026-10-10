@@ -200,6 +200,13 @@ func main() {
 		logger.Info("[ConfigParam] inbox_sales/session/pagination 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 最后一批：sales(1)+middleware(2)+knowledge(2) 五条走 provider 注入；
+	// channelgw.ws_push_interval / wecom.quota_degrade 走「读取函数自己读参数中心」的
+	// 直连范式，不需要装配（其中 ws_push_interval 原先的 key 与种子对不上，本轮已修正）。
+	if wired := app.WireSalesMiddlewareKnowledgeWecomChannelGWConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] sales/middleware/knowledge 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 
