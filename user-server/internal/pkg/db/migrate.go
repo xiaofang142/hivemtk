@@ -331,6 +331,9 @@ func allModels() []any {
 		// 审计表 ConfigParamAuditLog 在下面有登记，主表历史上只靠开发库遗留存在。
 		// MCPCredential（表 mcp_credentials）：MCP 工具入口的 ClientID+APIKey 凭证对。
 		&model.MCPCredential{},
+		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
+		&model.ExternalKBConnector{},
+		&model.ExternalKBSyncItem{},
 		&model.ConfigParam{},
 		&model.ConfigParamAuditLog{},
 		&model.CustomerChannel{},
