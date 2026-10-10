@@ -44,6 +44,10 @@ func WireInboxSalesSessionPaginationConfigParams() []string {
 	wired = append(wired, "inbox_sales.tg_lead_opportunity_threshold")
 
 	appsvc.SetUnifiedMinerOpportunityThresholdProvider(func() int {
+		appsvc.SetLeadLLMRefineProviders(
+			func() bool { return cp.GetBool(bg, "lead", "llm_refine_enabled", true) },
+			func() string { return cp.GetString(bg, "lead", "industry_profile", "") },
+		)
 		return cp.GetInt(bg, "inbox_sales", "unified_miner_lead_threshold", appsvc.DefaultUnifiedMinerOpportunityThreshold)
 	})
 	wired = append(wired, "inbox_sales.unified_miner_lead_threshold")

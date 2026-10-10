@@ -394,6 +394,8 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "inbox_sales", Key: "tg_lead_opportunity_threshold", Name: "Telegram 线索机会阈值",
 			Description: "Telegram 线索识别判定为有机会的最低分数",
 			ValueType:   "int", DefaultValue: "40", Min: strPtr("5"), Max: strPtr("200"), Step: strPtr("1")},
+		{Group: "lead", Key: "llm_refine_enabled", Name: "线索LLM复核开关", DefaultValue: "true", ValueType: "bool", Category: "线索挖掘", Description: "开启后线索/商机判定走 LLM 行业无关判别，关键词打分仅作兜底"},
+		{Group: "lead", Key: "industry_profile", Name: "行业画像", DefaultValue: "", ValueType: "string", Category: "线索挖掘", Description: "一段自由文本描述本站业务（如：装修公司，主营业内全包/半包家装，面向抖音业主），LLM 线索判别按此理解行业语义"},
 		{Group: "inbox_sales", Key: "unified_miner_lead_threshold", Name: "统一挖掘线索阈值",
 			Description: "统一线索挖掘判定为有效线索的最低分数",
 			ValueType:   "int", DefaultValue: "40", Min: strPtr("5"), Max: strPtr("200"), Step: strPtr("1")},
