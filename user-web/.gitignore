@@ -68,3 +68,6 @@ backups/
 
 # ---------- API配置文件 ----------
 src/config/http.js
+
+# ---------- e2e 巡检报告（本地生成，不入库）----------
+scripts/e2e/.out/

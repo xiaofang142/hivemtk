@@ -122,24 +122,43 @@ npm run dev
 // src/router/modules/campaign.js
 export default [
   {
-    path: 'campaign/list',
+    path: '/campaign/list',    // 绝对路径即可（模块整体挂在 Layout 下）
     name: 'CampaignList',
     component: () => import('@/views/campaign/List.vue'),
     meta: {
-      title: '市场活动',
-      group: 'reach',          // 决定侧边栏分组
-      icon: 'Promotion',       // Element Plus 图标名（裸用）
+      title: '市场活动',        // 兜底标题（i18n 缺键时用它）
+      menuKey: 'campaignList', // 侧边栏标题走 t('menu.campaignList')
+      menuSection: 'reach',    // 顶层分区（见 src/layout/menuRegistry.js）
+      menuParents: ['campaign'], // 可选：中间分组，从外到内
+      menuOrder: 3,            // 同级排序
+      icon: 'Promotion',       // meta.icon；菜单可用 menuIcon 覆盖
+      menuRoles: ['admin', 'manager'], // 可选：菜单可见角色
       requiresAuth: true
     }
   }
 ]
 ```
 
-> 路由 `path` 不要以 `/` 开头（自动挂在 `Layout` 下）；模块名需与 `router/index.js` 的 `moduleNames` 列表项一致，**新模块必须在 `moduleNames` 数组中追加**才能被懒加载守卫识别。
+> **路由文件存在 = 路由存在 = 菜单里能看到**。`src/router/index.js` 用
+> `import.meta.glob('./modules/*.js', { eager: true })` 在启动期注册 `modules/` 下全部模块，
+> 不需要（也不存在）任何 `moduleNames` / `pathToModule` 白名单——历史上那两张手工表漏一项，
+> 用户看到的就是「点菜单进页面不存在」。
+>
+> 详情页/编辑页等不该出现在侧边栏的路由，写 `menuHidden: true` 即可；
+> 什么都不写则既不进菜单也不报错，路由仍可直接访问。
+>
+> 侧边栏由 `src/layout/menu.js` 读 `router.getRoutes()` 自动生成，`Layout.vue` 里没有页面清单。
+> 分区/分组的图标与顺序集中在 `src/layout/menuRegistry.js`；未登记的分组会按 key 兜底渲染，
+> 因此漏登记只影响外观，不会让页面从菜单里消失。
 
-### Step 2：编辑 `src/router/index.js`
+### Step 2：补九语菜单译文
 
-在 `moduleNames` 数组末尾追加 `'campaign'`。
+菜单标题取 `t('menu.<menuKey>')`，缺失时回退 `meta.title`（不会印裸 key，但会退回中文）。
+九份语言包 `src/i18n/locales/{zh,en,ja,ar,es,fr,de,ru,pt}.json` 的 `menu` 段都要补上，然后跑闸门：
+
+```bash
+node scripts/check-menu-autogen.cjs   # 或 npm run menu:check
+```
 
 ### Step 3：编写视图
 
@@ -194,18 +213,21 @@ export const campaignAPI = {
 export default campaignAPI
 ```
 
-### Step 5：注册菜单（MENU_SPEC.md）
+### Step 5：菜单与文档
 
-参照 [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) 的结构在文档中追加菜单项；如需在 `Layout.vue` 的 `topMenus` 中挂菜单，编辑 `Layout.vue` 的菜单树（参考既有分组字段 `group: 'reach'`）。
+页面进不进菜单只由 Step 1 的路由 meta 决定，**不需要再去 Layout.vue 挂菜单**。
+如需同步本目录的界面清单文档，参照 [../../MENU_SPEC.md](../ui-inventory/MENU_SPEC.md) 追加条目
+（该文档是一份人工快照，不是运行期事实源）。
 
 ### Step 6：补 i18n 文案
 
-在 `src/i18n/locales/zh.json` 与 `en.json` 中追加 `menu.campaign` 与对应业务文案。
+九份语言包 `src/i18n/locales/{zh,en,ja,ar,es,fr,de,ru,pt}.json` 的 `menu` 段都要补 `menu.<menuKey>`，
+业务文案同理（只补 zh/en 会让其余 7 种语言退回英文或中文）。
 
 ### Step 7：自测
 
 - `npm run dev` 后访问 `http://localhost:8211/#/campaign/list` 应能正常加载
-- 运行 `node check_menu.mjs` 校验菜单与路由一致性
+- `npm run menu:check` 校验路由可达性与九语菜单键齐备（原 `node check_menu.mjs` 系列脚本已不存在）
 - 若涉及多步骤交互，补充 `tests/e2e/campaign.spec.js`
 
 ## 5. 新增 API 调用的标准流程
@@ -422,21 +444,23 @@ test.describe('客户360', () => {
 })
 ```
 
-### 8.3 check_menu.mjs 脚本
+### 8.3 菜单 / 路由 / i18n 闸门脚本
 
-仓库根有 `check_menu.mjs` / `check_menu2.mjs` / `check_menu3.mjs` 三个巡检脚本，用于校验：
+`user-web/scripts/check-menu-autogen.cjs`（`npm run menu:check`）——路由与菜单改造后的唯一巡检入口：
 
-- 路由模块文件与 `moduleNames` 列表一致性
-- 菜单配置（`Layout.vue` 中 `topMenus`）与实际路由是否对应
-- `MENU_SPEC.md` 中记录的页面与代码中实际存在的视图组件是否匹配
+- `router/index.js` 是否仍是 `import.meta.glob(..., { eager: true })` 全量注册（没有退回手工白名单）
+- `modules/*.js` 的每条静态路由是否都能被路由表解析（没有"写了文件却没挂上"的页面）
+- 每条带 `menuSection` 的路由，其 `menuSection` / `menuParents` 是否在 `menuRegistry.js` 里登记
+- 每个菜单键在 9 份语言包里是否都有非空译文；非 zh/ja 语言包的 `menu` 段是否混进汉字
+- 语言包里是否残留扁平 `"menu.*"` 键或 `[XX]` 未翻译占位
+- `Layout.vue` 是否又长出 `const topMenus = ref([...])` 手写菜单树
 
 ```bash
-node check_menu.mjs        # 基础校验
-node check_menu2.mjs       # 二次校验（更严格）
-node check_menu3.mjs       # 三次校验（含文档一致性）
+npm run menu:check                                    # 等价于 node scripts/check-menu-autogen.cjs
+node scripts/check-i18n-coverage.cjs                  # 语言包 key 覆盖率（另一条腿）
 ```
 
-**推荐**在每次新增 / 重命名路由后执行。
+**推荐**在每次新增 / 重命名路由、改语言包后执行。
 
 ### 8.4 API 联调清单
 
@@ -518,17 +542,26 @@ localStorage.getItem('agentSocket:lastSeq:1')   // 坐席 seq
 sessionStorage.getItem('chatSocket:lastSeq:sessionId:visitorId')  // 访客 seq
 ```
 
-### 10.4 路由懒加载问题
+### 10.4 路由 / 菜单问题
 
-- 首次访问某路由 404：检查 `moduleNames` 数组是否包含模块名
-- 路径首段 kebab-case 与模块名 camelCase 不匹配：在 `router/index.js` 的 `pathToModule` 中显式映射（如 `'asset-market' → 'assetMarket'`）
-- `/system/*` 命名空间跨模块：`router.beforeEach` 已对 `system/` 自动加载 `ragProductConfig` / `systemUser` / `role` / `permission` 四个模块
+- 路由已改为**全量 eager 注册**（`import.meta.glob('./modules/*.js', { eager: true })`）：
+  新建 `src/router/modules/*.js` 即生效，不再有 `moduleNames` / `pathToModule` 白名单，
+  也**不再需要**为 `/system/*` 之类的命名空间额外挂模块
+- 页面 404（页面不存在）先看这条路由的 `path` 是否真的写成了绝对路径、以及文件是否在 `modules/` 下；
+  再跑 `npm run menu:check`
+- 菜单里看不到某个页面：检查该路由 `meta.menuSection` 是否写了、是否被误标 `menuHidden: true`；
+  分区/分组要能在 `src/layout/menuRegistry.js` 里找到（找不到会按 key 兜底，外观会退化）
+- 菜单标题显示成中文（切了语言也不变）：`meta.menuKey` 对应的 `menu.<key>` 在九份语言包里缺了译文，
+  构建器回退到了 `meta.title`；跑 `npm run menu:check` 会点名缺哪个
 
 ### 10.5 i18n 调试
 
-- 临时切语言：`localStorage.locale = 'en'` 后刷新
-- 缺失 key 会显示原始 key（`missingWarn: false` 关闭了警告），调试期可临时改成 `true` 排查
-- CSP 报错（`unsafe-eval`）：确认 `vite.config.js` 的 `VueI18n` 插件 `dropMessageCompiler: true`
+- 临时切语言：`localStorage.app_locale = 'en'` 后刷新（键名见 `src/i18n/locale.js`）
+- 缺失 key 会回落到 `fallbackLocale: 'zh'`；zh 也缺则显示原始 key（`missingWarn: false` 关闭了警告），
+  调试期可临时改成 `true` 排查
+- **不要在语言包顶层写带点的键**（如 `"menu.workspace": "…"`）：它和 `menu.workspace` 同形，
+  会绕过 `menu` 段造成"九种语言都是中文"这类事故，`npm run menu:check` 会直接判红
+- CSP 报错（`unsafe-eval`）：确认 `vite.config.js` 的 `hivemtk-i18n-functions` 插件把 locales 预编译为消息函数
 
 ### 10.6 WebSocket 调试
 
@@ -564,7 +597,7 @@ await updateRequestConfig()
 | 现象 | 排查方向 |
 | --- | --- |
 | 页面整页白屏 | 检查 i18n 是否触发 CSP `unsafe-eval`；检查 `vue.config.js` `compatConfig` |
-| 路由跳转后 404 | 确认 `moduleNames` 列表已包含模块；`pathToModule` 是否需要 kebab→camel 映射 |
+| 路由跳转后 404（页面不存在） | 路由模块是否真在 `src/router/modules/` 下、`path` 是否绝对路径；跑 `npm run menu:check`（全量 eager 注册后不再有白名单可漏） |
 | 接口 401 但未跳登录 | 检查 `_silent` 是否误传 true；确认 `clearAuthAndGoLogin` 中的 `redirectTo` 是否被覆盖 |
 | toast 重复弹出 | 检查是否在 2.5s 内对相同 message 触发多次（`lastToastMsg` 去重逻辑） |
 | 文件上传 415 | 确认是否使用 `http.upload(url, formData)` 自动注入 `multipart/form-data` |

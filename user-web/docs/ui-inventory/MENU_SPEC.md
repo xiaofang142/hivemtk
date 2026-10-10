@@ -2,8 +2,13 @@
 
 > 生成日期：2026-07-22  ｜  技术栈：Vue 3 + Vue Router + Element Plus + Vite
 >
-> 菜单来源：`user-web/src/layout/Layout.vue` 中硬编码 `topMenus`；路由与视图来自 `src/router/index.js` 及各 `src/router/modules/*.js`（懒加载）。
-> 权限模型：侧边栏在 `roles` 缺失时对所有登录用户可见；标注 `[角色:merchant]` 的项仅商户超管可见。
+> ⚠️ **本文档是 2026-07-22 的人工快照，不是运行期事实源。** 侧边栏已改为从路由表自动生成：
+> 页面归属由 `src/router/modules/*.js` 的 `meta.menuSection` / `menuParents` / `menuOrder` / `menuKey`
+> 决定，分区骨架见 `src/layout/menuRegistry.js`，构建器见 `src/layout/menu.js`；
+> `Layout.vue` 里不再有硬编码 `topMenus` 菜单树。校验用 `npm run menu:check`
+> （`user-web/scripts/check-menu-autogen.cjs`）。
+>
+> 正文中的路径、图标与角色标注均为当时快照，可能与现状不符 —— 以路由 meta 为准。
 
 ## 一、侧边栏菜单结构
 

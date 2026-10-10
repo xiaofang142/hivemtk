@@ -7,7 +7,7 @@
   >
     <template #title>
       <el-icon><component :is="resolveRouteIcon(menu.icon)" /></el-icon>
-      <span>{{ t('menu.' + menu.key) }}</span>
+      <span>{{ menu.title }}</span>
     </template>
 
     
@@ -19,7 +19,7 @@
   
   <el-menu-item v-else :index="menu.path" @click="handleMenuClick(menu)">
     <el-icon><component :is="resolveRouteIcon(menu.icon || 'Document')" /></el-icon>
-    <span>{{ t('menu.' + menu.key) }}</span>
+    <span>{{ menu.title }}</span>
   </el-menu-item>
 </template>
 
@@ -27,9 +27,9 @@
 import { useRouter } from 'vue-router'
 import { resolveRouteIcon } from '@/utils/iconMap'
 
-import i18n from '@/i18n'
-const t = i18n.global.t
-
+// 菜单标题由 src/layout/menu.js 在构建时解析好（t('menu.<key>') → meta.title 回退），
+// 这里只负责渲染 menu.title：组件内再拼一次 t('menu.' + key) 会让「键缺失」重新变成
+// 界面上的一串裸 key，把菜单构建器的兜底白做一遍。
 const router = useRouter()
 
 const handleMenuClick = (menu) => {

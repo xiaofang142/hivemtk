@@ -19,24 +19,30 @@ const OUT = path.resolve(__dirname, 'coverage')
 fs.mkdirSync(OUT, { recursive: true })
 
 // ==================== 1. 前端页面路由 ====================
-// router/index.js 中 moduleNames 列表决定加载哪些模块；每个模块导出 path 数组（Layout children）
+// 全量提取 router/modules/*.js 的 path（index.js 已改成 import.meta.glob eager 全量注册，
+// 不再有 moduleNames 白名单：文件存在即注册）。子路由的相对 path 会按父路径拼接。
 function extractRoutes() {
   const modDir = path.join(WEB, 'router/modules')
   const mods = fs.readdirSync(modDir).filter((f) => f.endsWith('.js'))
   const routes = []
+  const join = (base, p) => (p.startsWith('/') ? p : `${base.replace(/\/$/, '')}/${p}`.replace(/\/{2,}/g, '/'))
+  const walk = (list, base, mod) => {
+    for (const r of Array.isArray(list) ? list : [list]) {
+      if (!r || typeof r.path !== 'string') continue
+      const full = join(base, r.path)
+      routes.push({ path: full, module: mod, absolute: r.path.startsWith('/') })
+      if (Array.isArray(r.children)) walk(r.children, full, mod)
+    }
+  }
   for (const f of mods) {
     const src = fs.readFileSync(path.join(modDir, f), 'utf8')
-    // 提取 path: 'xxx' 或 path: "/xxx"
-    const re = /path:\s*['"]([^'"]+)['"]/g
-    let m
-    while ((m = re.exec(src)) !== null) {
-      let p = m[1]
-      if (p.startsWith('/')) {
-        routes.push({ path: p, module: f, absolute: true })
-      } else {
-        routes.push({ path: '/' + p, module: f, absolute: false })
-      }
+    let mod
+    try {
+      mod = new Function(src.replace(/export\s+default/, 'return'))()
+    } catch {
+      continue
     }
+    walk(mod, '', f)
   }
   // 去重 + 排序
   const seen = new Set()

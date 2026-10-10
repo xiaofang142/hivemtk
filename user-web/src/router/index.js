@@ -4,11 +4,37 @@ import { isInitialized } from '@/utils/initHelper'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 
-const routeModules = import.meta.glob('./modules/*.js');
+// ============================================================================
+// 路由装配：全量、启动期一次性注册（模块元信息极轻，页面组件仍是懒加载）
+// ----------------------------------------------------------------------------
+// 旧实现是「按 URL 首段 + 手工白名单懒装配」：
+//   moduleNames（模块名白名单）+ pathToModule（kebab 首段→camel 模块名映射）
+//   + beforeEach 里的 ensureRouteLoaded 动态 addRoute。
+// 它是「大量页面点进去报页面不存在」的根因——白名单要人工维护，任一环节漏登记：
+//   · 新增模块忘了进 moduleNames           → 永不 addRoute
+//   · 白名单里写了名字但没有文件           → lazyModule() 返 null（如 capMatrix）
+//   · 首段 kebab-case 与模块名不一致且没映射 → 按首段找不到模块（tiktok-card-stats）
+//   · 路由挂在别的模块文件里（/cap/matrix 在 kbConnector.js）
+// 结果都是同一种用户可见故障：菜单/深链能点，但路由表里没有 ⇒ NotFound「页面不存在」。
+//
+// 现在改为 import.meta.glob(..., { eager: true }) 在启动期注册 modules/ 下**全部**模块：
+//   · 路由文件存在 = 路由存在，不再需要任何白名单，漏登记这一类故障从机制上消失
+//   · 侧边栏由 router.getRoutes() 自动生成（见 layout/menu.js），不再有第二份手写菜单树
+//   · 页面组件依旧 () => import('@/views/...')，首屏体积不受影响
+// ============================================================================
+const routeModules = import.meta.glob('./modules/*.js', { eager: true })
 
-const lazyModule = (name) => {
-  const key = `./modules/${name}.js`
-  return routeModules[key] || null
+const moduleRoutes = []
+for (const [file, mod] of Object.entries(routeModules)) {
+  const routes = mod && mod.default
+  if (Array.isArray(routes)) {
+    moduleRoutes.push(...routes)
+  } else if (routes && typeof routes === 'object') {
+    // 兼容导出单个路由对象（历史上 dingtalkApp / whatsappCloud 就是这种写法）
+    moduleRoutes.push(routes)
+  } else {
+    console.error(`[router] 路由模块没有 default 导出：${file}`)
+  }
 }
 
 const initRoutes = [
@@ -52,57 +78,6 @@ const initRoutes = [
   }
 ];
 
-const moduleNames = [
-  'email', 'telegram', 'qq', 'whatsapp', 'clue', 'system',
-  'domainPool', 'shortLink', 'douyinCard', 'xiaohongshuCard', 'kuaishouCard',
-  'xianyuCard', 'sms', 'livecode', 'tiktok',
-  'abExperiment', 'batchOperation', 'churnPrediction',
-  'customReport', 'customer360', 'customerEvent', 'customerSession',
-  "oneid",
-  'dashboardScreen', 'integration', 'marketingFlow', 'operationLog',
-  'ragProductConfig', 'scriptTemplate', 'userSegment',
-  'community', 'unifiedMessage', 'platformAccount', 'messageHub',
-  "intentRecognition", 'dialogueMemory', 'sopAgent',
-  "reachPipeline", 'wecomAccount',
-  'inbox',
-  'approvalTask',
-  'badCase',
-  'whatsappCloud',
-  'dingtalkApp',
-  "llmRouting", 'tagSegmentation', 'conversionFunnel',
-  'aiProductivity',
-  "knowledge",
-  "aiAgent",
-  "faq", 'sopTemplateKb',
-  "knowledgeBase",
-  "assetMarket",
-  "assetBundle",
-  "customerService",
-  "chatChannel",
-  "objection", 'persona',
-  "customerJourney",
-  "backup", 'securityAudit',
-  "workflowOrchestrator",
-  "feishu",
-  "tuning",
-  "systemUser",
-  "role",
-  "permission",
-  "glossary", 'i18nStats',
-  "ops",
-  "geoTools",
-  "analytics",
-  "bridgeToken",
-  "leadMining",
-  "browserAutomation",
-  "orderDraft",
-  "salesWorkbench",
-  'followups',
-];
-
-const eagerLoadedRoutes = [];
-const lazyRoutes = [];
-
 const routes = [
   {
     path: '/',
@@ -110,18 +85,19 @@ const routes = [
     component: Layout,
     redirect: '/messageHub/list',
     children: [
-      ...eagerLoadedRoutes,
+      // modules/ 下的全部业务路由（绝对路径，直接挂在 Layout 下）
+      ...moduleRoutes,
       {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/Profile.vue'),
-        meta: { title: '个人资料', requiresAuth: true }
+        meta: { title: '个人资料', requiresAuth: true, menuHidden: true }
       },
       {
         path: 'notifications',
         name: 'Notifications',
         component: () => import('@/views/Notifications.vue'),
-        meta: { title: '通知中心', requiresAuth: true }
+        meta: { title: '通知中心', requiresAuth: true, menuHidden: true }
       }
     ],
   },
@@ -147,129 +123,24 @@ const router = createRouter({
   routes
 })
 
-const loadedModules = new Set();
-const loadedRoutes = []
-
-const pathToModule = {
-  // 订单草稿页挂在 /dashboard/drafts（与工作台聚合待办生成的深链对齐），
-  // 首段 'dashboard' 映射到 orderDraft 模块 —— ensureRouteLoaded 按首段找模块名，
-  // 没有这条映射，深链会落进 NotFound 而不是草稿页。
-  'dashboard': 'orderDraft',
-  // 销售工作台页挂在 /sales-workbench，首段 'sales-workbench'（含连字符）
-  // 映射到 salesWorkbench 模块 —— 不映射则按原样找模块名找不到，进不了懒装配白名单。
-  'sales-workbench': 'salesWorkbench',
-  'douyin': 'douyinCard',
-  'xiaohongshu': 'xiaohongshuCard',
-  'kuaishou': 'kuaishouCard',
-  'xianyu': 'xianyuCard',
-  'douyin-card-stats': 'douyinCard',
-  'xiaohongshu-card-stats': 'xiaohongshuCard',
-  'kuaishou-card-stats': 'kuaishouCard',
-  'xianyu-card-stats': 'xianyuCard',
-  'asset-market': 'assetMarket',
-  'asset-bundle': 'assetBundle',
-  'confidence': 'tuning',
-  'humanize': 'tuning',
-  'feedbackLoop': 'tuning',
-  'whatsapp-cloud': 'whatsappCloud',
-  'dingtalk-app': 'dingtalkApp',
-  'i18n': 'i18nStats',
-  'sop-template': 'sopTemplateKb',
-  'ops-overview': 'ops',
-  'sales-cockpit': 'ops',
-  'workflow-orchestrator': 'workflowOrchestrator',
-  'geo-tools': 'geoTools',
-  'geo': 'geoTools',
-  'bridge': 'bridgeToken',
-  'token': 'bridgeToken',
-  'lead-mining': 'leadMining',
-  'browser-automation': 'browserAutomation',
-};
-
-async function ensureRouteLoaded(path) {
-  const pathSegments = path.split('/').filter(Boolean);
-  if (pathSegments.length === 0) return false
-
-  const moduleName = pathToModule[pathSegments[0]] || pathSegments[0]
-  if (!moduleNames.includes(moduleName)) return false
-  if (loadedModules.has(moduleName)) return false
-
-  try {
-    const lazyFn = lazyModule(moduleName);
-    if (!lazyFn) return false
-    const mod = await lazyFn()
-    if (!mod || !mod.default) {
-      console.warn(`[router] 模块 ${moduleName} 加载失败或无 default 导出`)
-      return false
-    }
-    const routes = Array.isArray(mod.default) ? mod.default : [mod.default]
-    for (const r of routes) {
-      try { router.addRoute('Layout', r) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
-    }
-    loadedModules.add(moduleName)
-    return true
-  } catch (e) {
-    console.error(`[router] 模块 ${moduleName} 加载异常`, e)
-    return false
-  }
-}
-
-router.beforeEach(async (to, from, next) => {
-  const routeLoaded = await ensureRouteLoaded(to.path);
-
-  if (to.path.startsWith('/system/')) {
-    const extraModules = ['ragProductConfig', 'systemUser', 'role', 'permission']
-    for (const modName of extraModules) {
-      if (loadedModules.has(modName)) continue
-      try {
-        const mod = await lazyModule(modName)()
-        const moduleRoutes = mod.default || mod
-        if (Array.isArray(moduleRoutes)) {
-          moduleRoutes.forEach(route => {
-            router.addRoute('Layout', route)
-            loadedRoutes.push(route)
-          })
-        }
-        loadedModules.add(modName)
-      } catch (err) {
-        console.error(`[Lazy Router] Failed to load ${modName}:`, err)
-      }
-    }
-  }
-
+router.beforeEach((to) => {
   const isPublicPath = to.path === '/setup' || to.path === '/login' || to.path.startsWith('/chat/embed');
   const isPublic = to.meta?.public === true || isPublicPath
 
   if (!isPublic) {
     if (!isInitialized()) {
-      next('/setup')
-      return
+      return '/setup'
     }
     const userStore = useUserStore()
     if (!userStore.isLoggedIn) {
-      next('/login')
-      return
+      return '/login'
     }
     if (to.meta?.requiresAdmin && userStore.role !== 'admin') {
       ElMessage.error('无权访问（403）：仅管理员可使用该功能')
-      next({ name: 'NotFound', query: { status: '403', from: to.fullPath }, replace: true })
-      return
+      return { name: 'NotFound', query: { status: '403', from: to.fullPath }, replace: true }
     }
   }
-
-  if (routeLoaded) {
-    // 必须带上 query 与 hash：这一支是"模块刚装好，重新走一次导航"，只给 path 等于把
-    // 深链参数抹了。实测（真实例 + 真浏览器）新开页 http://…/#/customerSession/list?session_id=X
-    // 落地后地址栏是 #/customerSession/list（参数没了），于是 CSAT 看板「查看会话」
-    // 永远选不中那条会话——页面里再怎么写都白写。同一个会话里第二次进这一页才保留参数，
-    // 因为那时 routeLoaded 已经是 false，不会重定向。
-    next({ path: to.path, query: to.query, hash: to.hash, replace: true })
-  } else {
-    if (to.matched.length === 0) {
-      next({ name: 'NotFound', replace: true })
-    } else {
-      next()
-    }
-  }
+  return true
 })
+
 export default router

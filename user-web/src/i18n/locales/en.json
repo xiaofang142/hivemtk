@@ -345,7 +345,9 @@
     "geoSitePublish": "Publish to Site",
     "geoPushCenter": "Crawler Push",
     "geoFunnelDashboard": "Funnel Overview",
-    "geoIndexTracking": "Index & Citations"
+    "geoIndexTracking": "Index & Citations",
+    "mcpCredentials": "MCP Credentials",
+    "capabilityMatrix": "Capability Matrix"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1287,7 +1289,7 @@
   "操作类型": "Operation Type",
   "登出": "Sign out",
   "操作人": "Who",
-  "已支付": "已支付/Payment completed",
+  "已支付": "Paid",
   "待支付": "Pending",
   "已退款": "is already refunded",
   "请输入 TG ID": "Please enter TG ID",
@@ -1860,10 +1862,10 @@
     "disabled": "Disabled"
   },
   "事件总量": "Total Events",
-  "事件来源": "事件来源",
-  "总事件数": "总事件数",
-  "请先选择客户": "请先选择客户",
-  "请至少填写一个身份标识（手机号/邮箱/微信/抖音）": "请至少填写一个身份标识（手机号/邮箱/微信/抖音）",
+  "事件来源": "Event Source",
+  "总事件数": "Total Events",
+  "请先选择客户": "Please select a customer first",
+  "请至少填写一个身份标识（手机号/邮箱/微信/抖音）": "Provide at least one identity (phone / email / WeChat / Douyin)",
   "历史会话加载失败，请稍后重试": "Failed to load chat history. Please try again later",
   "您有 {n} 条未读消息": "You have {n} unread messages"
 }

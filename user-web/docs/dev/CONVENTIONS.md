@@ -385,33 +385,40 @@ try {
 }
 ```
 
-### 6.2 懒加载
+### 6.2 注册方式（全量注册，无白名单）
 
 - 所有业务页面使用动态 `import()`：`component: () => import('@/views/foo/List.vue')`
 - 路由模块文件位于 `src/router/modules/*.js`，每个文件 `export default []` 路由数组
-- 新增模块必须在 `src/router/index.js` 的 `moduleNames` 数组中追加
-- 路径首段 kebab-case 与 camelCase 模块名不匹配时，在 `pathToModule` 中显式映射
+- `src/router/index.js` 用 `import.meta.glob('./modules/*.js', { eager: true })` 在启动期注册全部模块：
+  **新增文件即新增路由**，不需要在任何清单里登记（历史上的 `moduleNames` / `pathToModule` 已废除）
+- 侧边栏由 `src/layout/menu.js` 读 `router.getRoutes()` 自动生成，`Layout.vue` 里没有页面清单；
+  页面是否进菜单、进哪个分区，由它自己的路由 meta 决定（见 6.4）
 
 ### 6.3 路径约定
 
-- 子路由 `path` 不以 `/` 开头（自动拼接在 `Layout` 下）
+- 模块内路由 `path` 用绝对路径（如 `/campaign/list`），整体挂在 `Layout` 下
 - 资源详情类用 `:id`：`campaign/edit/:id`
 - 卡片统计类用 `:id`：`douyin-card-stats/:id`
 - 兜底重定向用 `redirect`：`{ path: '/oneid', redirect: '/oneid/list' }`
 
-### 6.4 路由分组映射
+### 6.4 路由 meta → 侧边栏
 
-| group 值 | 侧边栏分组 |
+路由 meta 是菜单的唯一事实源（`src/layout/menu.js` + `menuRegistry.js`）：
+
+| meta 字段 | 作用 |
 | --- | --- |
-| `workspace` | 工作台 |
-| `customer` | 客户管理 |
-| `aiAgent` | AI 智能体 |
-| `knowledge` | 知识库 |
-| `reach` | 营销触达 |
-| `community` | 社媒运营 |
-| `analytics` / `dataAnalysis` | 分析洞察 |
-| `system` | 系统管理（仅 admin） |
-| `sales` | 销冠相关（异议处理、画像） |
+| `menuSection` | 顶层分区 key，取值见 `MENU_SECTIONS`：`workspace` / `customer` / `aiAgent` / `reach` / `knowledge` / `analytics` / `system` |
+| `menuParents` | 可选，中间分组 key 数组（从外到内），如 `['geoTools', 'geoMonitor']`；取值见 `MENU_GROUPS` |
+| `menuOrder` | 同级排序（数字） |
+| `menuKey` | 菜单标题的 i18n 键：`t('menu.<menuKey>')`，缺译文时回退 `meta.title` |
+| `menuIcon` | 菜单图标，不写用 `meta.icon` |
+| `menuRoles` | 菜单可见角色，不写则按 `meta.requiresAdmin` 推导（admin 全通） |
+| `menuHidden` | `true` 表示该页不进菜单（详情/编辑/重定向页），路由本身仍可直接访问 |
+
+> 分区/分组的图标、顺序与角色集中在 `src/layout/menuRegistry.js`；新页面只需写路由 meta。
+> 未登记的分组会按 key 兜底渲染（icon 用 `Menu`，标题走 `menu.<key>` 再回退 key），
+> 所以"漏登记"只会让外观退化，不会让页面从菜单里消失或把裸 key 印到界面上。
+> 改完跑 `npm run menu:check`。
 
 ## 7. 样式规范
 

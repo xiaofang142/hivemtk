@@ -1,0 +1,153 @@
+{
+  "_readme": "非 menu 段的译文修正（scripts/apply-menu-i18n.cjs 消费）。两类：1) 值仍是中文的条目（键名就是中文，历史遗留）；2) ja/ar 里带 [JA]/[AR] 前缀的未翻译占位条目。键为 locale，值为 { 键路径或字面键名: 译文 }。",
+  "_comment": {
+    "de": "TRANSLATION REQUIRED — to be completed by [translator-name]. Source language: en.json. Do not change keys. File: de.json",
+    "es": "TRANSLATION REQUIRED — to be completed by [translator-name]. Source language: en.json. Do not change keys. File: es.json",
+    "fr": "TRANSLATION REQUIRED — to be completed by [translator-name]. Source language: en.json. Do not change keys. File: fr.json",
+    "pt": "TRANSLATION REQUIRED — to be completed by [translator-name]. Source language: en.json. Do not change keys. File: pt.json",
+    "ru": "TRANSLATION REQUIRED — to be completed by [translator-name]. Source language: en.json. Do not change keys. File: ru.json"
+  },
+  "已支付": {
+    "en": "Paid",
+    "ja": "支払済み",
+    "de": "Bezahlt",
+    "es": "Pagado",
+    "fr": "Payé",
+    "pt": "Pago",
+    "ru": "Оплачено",
+    "ar": "مدفوع"
+  },
+  "事件总量": {
+    "en": "Total Events",
+    "ja": "総イベント数",
+    "de": "Ereignisse gesamt",
+    "es": "Eventos totales",
+    "fr": "Total des événements",
+    "pt": "Total de eventos",
+    "ru": "Всего событий",
+    "ar": "إجمالي الأحداث"
+  },
+  "事件来源": {
+    "en": "Event Source",
+    "ja": "イベントソース",
+    "de": "Ereignisquelle",
+    "es": "Origen del evento",
+    "fr": "Source de l'événement",
+    "pt": "Origem do evento",
+    "ru": "Источник события",
+    "ar": "مصدر الحدث"
+  },
+  "总事件数": {
+    "en": "Total Events",
+    "ja": "イベント総数",
+    "de": "Ereignisse gesamt",
+    "es": "Eventos totales",
+    "fr": "Total des événements",
+    "pt": "Total de eventos",
+    "ru": "Всего событий",
+    "ar": "إجمالي الأحداث"
+  },
+  "请先选择客户": {
+    "en": "Please select a customer first",
+    "ja": "先に顧客を選択してください",
+    "de": "Bitte zuerst einen Kunden auswählen",
+    "es": "Seleccione primero un cliente",
+    "fr": "Veuillez d'abord sélectionner un client",
+    "pt": "Selecione primeiro um cliente",
+    "ru": "Сначала выберите клиента",
+    "ar": "يرجى تحديد عميل أولاً"
+  },
+  "请至少填写一个身份标识（手机号/邮箱/微信/抖音）": {
+    "en": "Provide at least one identity (phone / email / WeChat / Douyin)",
+    "ja": "本人確認情報を少なくとも1つ入力してください（電話番号/メール/WeChat/抖音）",
+    "de": "Bitte mindestens eine Identität angeben (Telefon / E-Mail / WeChat / Douyin)",
+    "es": "Introduzca al menos una identidad (teléfono / correo / WeChat / Douyin)",
+    "fr": "Saisissez au moins une identité (téléphone / e-mail / WeChat / Douyin)",
+    "pt": "Informe ao menos uma identidade (telefone / e-mail / WeChat / Douyin)",
+    "ru": "Укажите хотя бы один идентификатор (телефон / e-mail / WeChat / Douyin)",
+    "ar": "يرجى إدخال هوية واحدة على الأقل (الهاتف / البريد / WeChat / Douyin)"
+  },
+  "关联 AI 工具": {
+    "ja": "関連 AI ツール",
+    "ar": "أدوات الذكاء الاصطناعي المرتبطة"
+  },
+  "发送邮件": {
+    "ja": "メール送信",
+    "ar": "إرسال بريد"
+  },
+  "查看追踪": {
+    "ja": "トレースを表示",
+    "ar": "عرض التتبّع"
+  },
+  "短信列表": {
+    "ja": "SMS 一覧",
+    "ar": "قائمة SMS"
+  },
+  "管理工具": {
+    "ja": "ツール管理",
+    "ar": "إدارة الأدوات"
+  },
+  "追踪信息": {
+    "ja": "トレース情報",
+    "ar": "معلومات التتبّع"
+  },
+  "选择知识库": {
+    "ja": "ナレッジベースを選択",
+    "ar": "اختر قاعدة المعرفة"
+  },
+  "permission.confirmResetPassword": {
+    "ja": "このアカウントのパスワードをリセットしますか？旧パスワードは直ちに無効になります。",
+    "ar": "هل أنت متأكد من إعادة تعيين كلمة مرور هذا الحساب؟ ستصبح كلمة المرور القديمة غير صالحة فوراً."
+  },
+  "permission.confirmToggle": {
+    "ja": "このアカウントを{enabled}してもよろしいですか？",
+    "ar": "هل أنت متأكد من {enabled} هذا الحساب؟"
+  },
+  "ab.addVariant": { "ja": "バリアントを追加", "ar": "إضافة نسخة" },
+  "ab.completed": { "ja": "完了", "ar": "مكتمل" },
+  "ab.content": { "ja": "コンテンツ", "ar": "المحتوى" },
+  "ab.create": { "ja": "実験を作成", "ar": "إنشاء تجربة" },
+  "ab.description": { "ja": "説明", "ar": "الوصف" },
+  "ab.descriptionPlaceholder": { "ja": "説明を入力してください", "ar": "يرجى إدخال الوصف" },
+  "ab.detail": { "ja": "詳細", "ar": "التفاصيل" },
+  "ab.edit": { "ja": "編集", "ar": "تعديل" },
+  "ab.endDate": { "ja": "終了日", "ar": "تاريخ الانتهاء" },
+  "ab.experimentName": { "ja": "実験名", "ar": "اسم التجربة" },
+  "ab.experimentNamePlaceholder": { "ja": "実験名を入力してください", "ar": "يرجى إدخال اسم التجربة" },
+  "ab.isControl": { "ja": "対照群", "ar": "المجموعة الضابطة" },
+  "ab.list": { "ja": "実験一覧", "ar": "قائمة التجارب" },
+  "ab.newExperiment": { "ja": "新しい実験", "ar": "تجربة جديدة" },
+  "ab.noResults": { "ja": "結果はまだありません", "ar": "لا توجد نتائج بعد" },
+  "ab.operation": { "ja": "操作", "ar": "الإجراء" },
+  "ab.participants": { "ja": "参加者", "ar": "المشاركون" },
+  "ab.pause": { "ja": "一時停止", "ar": "إيقاف مؤقت" },
+  "ab.removeVariant": { "ja": "削除", "ar": "إزالة" },
+  "ab.resultConversion": { "ja": "コンバージョン数", "ar": "التحويلات" },
+  "ab.resultRate": { "ja": "コンバージョン率", "ar": "معدل التحويل" },
+  "ab.resultTraffic": { "ja": "トラフィック", "ar": "الزيارات" },
+  "ab.resultVariant": { "ja": "バリアント", "ar": "النسخة" },
+  "ab.results": { "ja": "結果", "ar": "النتائج" },
+  "ab.resume": { "ja": "再開", "ar": "استئناف" },
+  "ab.running": { "ja": "実行中", "ar": "قيد التشغيل" },
+  "ab.sourceId": { "ja": "ソース ID", "ar": "معرّف المصدر" },
+  "ab.sourceIdPlaceholder": { "ja": "ソース ID を入力してください", "ar": "يرجى إدخال معرّف المصدر" },
+  "ab.sourceType": { "ja": "ソースタイプ", "ar": "نوع المصدر" },
+  "ab.sourceTypeComponent": { "ja": "コンポーネント", "ar": "مكوّن" },
+  "ab.sourceTypeMessage": { "ja": "メッセージ", "ar": "رسالة" },
+  "ab.sourceTypeOther": { "ja": "その他", "ar": "أخرى" },
+  "ab.sourceTypePage": { "ja": "ページ", "ar": "صفحة" },
+  "ab.sourceTypePlaceholder": { "ja": "ソースタイプを選択してください", "ar": "يرجى اختيار نوع المصدر" },
+  "ab.start": { "ja": "開始", "ar": "بدء" },
+  "ab.startDate": { "ja": "開始日", "ar": "تاريخ البدء" },
+  "ab.status": { "ja": "ステータス", "ar": "الحالة" },
+  "ab.statusCompleted": { "ja": "完了", "ar": "مكتمل" },
+  "ab.statusDraft": { "ja": "下書き", "ar": "مسودة" },
+  "ab.statusPaused": { "ja": "一時停止", "ar": "موقوف مؤقتاً" },
+  "ab.statusRunning": { "ja": "実行中", "ar": "قيد التشغيل" },
+  "ab.stop": { "ja": "停止", "ar": "إيقاف" },
+  "ab.totalUsers": { "ja": "総ユーザー数", "ar": "إجمالي المستخدمين" },
+  "ab.trafficSplit": { "ja": "トラフィック配分 (%)", "ar": "توزيع الزيارات (%)" },
+  "ab.variantName": { "ja": "バリアント名", "ar": "اسم النسخة" },
+  "ab.weight": { "ja": "重み", "ar": "الوزن" },
+  "ab.winner": { "ja": "勝者", "ar": "الأفضل" }
+}

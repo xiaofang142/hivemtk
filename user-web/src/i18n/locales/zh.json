@@ -344,7 +344,9 @@
     "orderDraft": "订单草稿",
     "salesWorkbench": "销售工作台",
     "followups": "今日跟进",
-    "qq": "QQ 机器人"
+    "qq": "QQ 机器人",
+    "mcpCredentials": "MCP 凭证",
+    "capabilityMatrix": "能力矩阵"
   },
   "保存": "保存",
   "提交": "提交",

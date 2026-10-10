@@ -1,0 +1,2508 @@
+{
+  "sections": [
+    {
+      "key": "workspace",
+      "icon": "Monitor",
+      "fallback": "工作台",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 1
+    },
+    {
+      "key": "customer",
+      "icon": "UserFilled",
+      "fallback": "客户中心",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 2
+    },
+    {
+      "key": "aiAgent",
+      "icon": "Cpu",
+      "fallback": "智能体",
+      "roles": [
+        "admin",
+        "manager",
+        "customer_service",
+        "staff"
+      ],
+      "order": 3
+    },
+    {
+      "key": "reach",
+      "icon": "Promotion",
+      "fallback": "触达运营",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 4
+    },
+    {
+      "key": "knowledge",
+      "icon": "Collection",
+      "fallback": "知识中心",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 5
+    },
+    {
+      "key": "analytics",
+      "icon": "DataAnalysis",
+      "fallback": "数据分析",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 6
+    },
+    {
+      "key": "system",
+      "icon": "Setting",
+      "fallback": "系统设置",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "order": 7
+    }
+  ],
+  "groups": [
+    {
+      "key": "customerIdentity",
+      "icon": "Connection",
+      "fallback": "客户身份",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "customer",
+      "parents": [],
+      "order": 9
+    },
+    {
+      "key": "agentManage",
+      "icon": "Cpu",
+      "fallback": "智能体管理",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "agentPassive",
+      "icon": "ChatDotRound",
+      "fallback": "被动应答",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "agentActive",
+      "icon": "Promotion",
+      "fallback": "主动触达",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "agentSupport",
+      "icon": "Connection",
+      "fallback": "能力支撑",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [],
+      "order": 5
+    },
+    {
+      "key": "agentWorkbench",
+      "icon": "Headset",
+      "fallback": "客服工作台",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "customer_service"
+      ],
+      "section": "aiAgent",
+      "parents": [],
+      "order": 6
+    },
+    {
+      "key": "agentChannel",
+      "icon": "Connection",
+      "fallback": "客服渠道",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "aiAgent",
+      "parents": [],
+      "order": 7
+    },
+    {
+      "key": "agentSalesIntel",
+      "icon": "Trophy",
+      "fallback": "销售智能",
+      "roles": [
+        "admin",
+        "manager",
+        "sales"
+      ],
+      "section": "aiAgent",
+      "parents": [],
+      "order": 8
+    },
+    {
+      "key": "emailReach",
+      "icon": "Message",
+      "fallback": "邮件触达",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "smsReach",
+      "icon": "ChatDotSquare",
+      "fallback": "短信触达",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "douyin",
+      "icon": "VideoPlay",
+      "fallback": "抖音",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "kuaishou",
+      "icon": "Bell",
+      "fallback": "快手",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "xiaohongshu",
+      "icon": "Picture",
+      "fallback": "小红书",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 5
+    },
+    {
+      "key": "xianyu",
+      "icon": "ShoppingBag",
+      "fallback": "闲鱼",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 6
+    },
+    {
+      "key": "tiktok",
+      "icon": "VideoPlay",
+      "fallback": "TikTok",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 7
+    },
+    {
+      "key": "whatsapp",
+      "icon": "ChatDotRound",
+      "fallback": "WhatsApp",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 8
+    },
+    {
+      "key": "telegram",
+      "icon": "ChatDotRound",
+      "fallback": "电报社群",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 9
+    },
+    {
+      "key": "qq",
+      "icon": "ChatDotRound",
+      "fallback": "QQ 机器人",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 10
+    },
+    {
+      "key": "feishu",
+      "icon": "ChatDotRound",
+      "fallback": "飞书",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "reach",
+      "parents": [],
+      "order": 11
+    },
+    {
+      "key": "shortLink",
+      "icon": "Link",
+      "fallback": "短链管理",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 13
+    },
+    {
+      "key": "knowledgeWorkspace",
+      "icon": "Files",
+      "fallback": "知识库工作台",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "knowledge",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "ragProductConfig",
+      "icon": "ChatLineRound",
+      "fallback": "RAG 知识库",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "knowledge",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "i18nManage",
+      "icon": "Coin",
+      "fallback": "多语言管理",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "knowledge",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "browserAutomation",
+      "icon": "Monitor",
+      "fallback": "浏览器自动化",
+      "roles": null,
+      "section": "analytics",
+      "parents": [],
+      "order": 12
+    },
+    {
+      "key": "geoTools",
+      "icon": "MagicStick",
+      "fallback": "GEO 智能优化",
+      "roles": null,
+      "section": "analytics",
+      "parents": [],
+      "order": 13
+    },
+    {
+      "key": "geoConfigGroup",
+      "icon": "Setting",
+      "fallback": "配置",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools"
+      ],
+      "order": 1
+    },
+    {
+      "key": "geoProd",
+      "icon": "EditPen",
+      "fallback": "生产",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools"
+      ],
+      "order": 2
+    },
+    {
+      "key": "geoPublish",
+      "icon": "Connection",
+      "fallback": "发布",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools"
+      ],
+      "order": 3
+    },
+    {
+      "key": "geoMonitor",
+      "icon": "Monitor",
+      "fallback": "监控",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools"
+      ],
+      "order": 4
+    },
+    {
+      "key": "siteConfig",
+      "icon": "Tools",
+      "fallback": "站点配置",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "teamGroup",
+      "icon": "UserFilled",
+      "fallback": "团队",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "permissionGroup",
+      "icon": "Lock",
+      "fallback": "权限设置",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "assetBundle",
+      "icon": "Box",
+      "fallback": "资产包",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer",
+        "staff"
+      ],
+      "section": "system",
+      "parents": [],
+      "order": 5
+    }
+  ],
+  "leaves": [
+    {
+      "key": "messageHub",
+      "title": "消息中台 MQ",
+      "icon": "MessageBox",
+      "path": "/messageHub/list",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "messageHubDashboard",
+      "title": "消息中台看板",
+      "icon": "DataBoard",
+      "path": "/messageHub/dashboard",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "inbox",
+      "title": "统一收件箱",
+      "icon": "Box",
+      "path": "/inbox/list",
+      "roles": null,
+      "section": "workspace",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "approvalTask",
+      "title": "待办中心",
+      "icon": "Tickets",
+      "path": "/approvalTask/list",
+      "roles": null,
+      "section": "workspace",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "badCase",
+      "title": "Bad Case 队列",
+      "icon": "Warning",
+      "path": "/badCase/list",
+      "roles": null,
+      "section": "workspace",
+      "parents": [],
+      "order": 5
+    },
+    {
+      "key": "salesCockpit",
+      "title": "销售驾驶舱",
+      "icon": "DataLine",
+      "path": "/sales-cockpit",
+      "roles": [
+        "admin",
+        "manager",
+        "sales"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 6
+    },
+    {
+      "key": "orderDraft",
+      "title": "订单草稿",
+      "icon": "Document",
+      "path": "/dashboard/drafts",
+      "roles": [
+        "admin",
+        "manager",
+        "sales"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 7
+    },
+    {
+      "key": "salesWorkbench",
+      "title": "销售工作台",
+      "icon": "Notebook",
+      "path": "/sales-workbench",
+      "roles": [
+        "admin",
+        "manager",
+        "sales"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 8
+    },
+    {
+      "key": "followups",
+      "title": "今日跟进",
+      "icon": "AlarmClock",
+      "path": "/followups/today",
+      "roles": [
+        "admin",
+        "manager",
+        "sales"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 9
+    },
+    {
+      "key": "wecomAccount",
+      "title": "多账号聚合",
+      "icon": "Connection",
+      "path": "/wecomAccount/list",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "workspace",
+      "parents": [],
+      "order": 10
+    },
+    {
+      "key": "clueList",
+      "title": "线索列表",
+      "icon": "Document",
+      "path": "/clue/list",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "clueStatistics",
+      "title": "线索统计",
+      "icon": "DataAnalysis",
+      "path": "/clue/statistics",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "leadMining",
+      "title": "线索挖掘",
+      "icon": "Search",
+      "path": "/lead-mining/index",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "customer360",
+      "title": "客户 360",
+      "icon": "UserFilled",
+      "path": "/customer360/list",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "customerEvent",
+      "title": "客户事件",
+      "icon": "Bell",
+      "path": "/customerEvent/list",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 5
+    },
+    {
+      "key": "tagSegmentation",
+      "title": "标签分层",
+      "icon": "PriceTag",
+      "path": "/tagSegmentation/list",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "customer",
+      "parents": [],
+      "order": 6
+    },
+    {
+      "key": "userSegment",
+      "title": "用户分层 RFM",
+      "icon": "PieChart",
+      "path": "/userSegment/list",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "customer",
+      "parents": [],
+      "order": 7
+    },
+    {
+      "key": "unifiedMessage",
+      "title": "统一消息",
+      "icon": "Message",
+      "path": "/unifiedMessage/list",
+      "roles": null,
+      "section": "customer",
+      "parents": [],
+      "order": 8
+    },
+    {
+      "key": "oneidList",
+      "title": "OneID 列表",
+      "icon": "List",
+      "path": "/oneid/list",
+      "roles": null,
+      "section": "customer",
+      "parents": [
+        "customerIdentity"
+      ],
+      "order": 1
+    },
+    {
+      "key": "oneidConflicts",
+      "title": "身份冲突解决",
+      "icon": "Warning",
+      "path": "/oneid/conflicts",
+      "roles": null,
+      "section": "customer",
+      "parents": [
+        "customerIdentity"
+      ],
+      "order": 2
+    },
+    {
+      "key": "oneidMergeRules",
+      "title": "合并规则配置",
+      "icon": "Setting",
+      "path": "/oneid/merge-rules",
+      "roles": null,
+      "section": "customer",
+      "parents": [
+        "customerIdentity"
+      ],
+      "order": 3
+    },
+    {
+      "key": "mcpCredentials",
+      "title": "MCP 凭证",
+      "icon": "Key",
+      "path": "/mcp/credentials",
+      "roles": [
+        "admin"
+      ],
+      "section": "aiAgent",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "aiAgentList",
+      "title": "智能体列表",
+      "icon": "List",
+      "path": "/aiAgent/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentManage"
+      ],
+      "order": 1
+    },
+    {
+      "key": "aiAgentCreate",
+      "title": "创建智能体",
+      "icon": "Plus",
+      "path": "/aiAgent/create",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentManage"
+      ],
+      "order": 2
+    },
+    {
+      "key": "customerSession",
+      "title": "客服会话",
+      "icon": "Service",
+      "path": "/customerSession/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentPassive"
+      ],
+      "order": 1
+    },
+    {
+      "key": "intentRecognition",
+      "title": "意图识别",
+      "icon": "Aim",
+      "path": "/intentRecognition/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentPassive"
+      ],
+      "order": 2
+    },
+    {
+      "key": "dialogueMemory",
+      "title": "对话记忆",
+      "icon": "ChatDotRound",
+      "path": "/dialogueMemory/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentPassive"
+      ],
+      "order": 3
+    },
+    {
+      "key": "llmRouting",
+      "title": "LLM 路由",
+      "icon": "Cpu",
+      "path": "/llmRouting/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentPassive"
+      ],
+      "order": 4
+    },
+    {
+      "key": "reachPipeline",
+      "title": "触达 Pipeline",
+      "icon": "Promotion",
+      "path": "/reachPipeline/list",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "aiAgent",
+      "parents": [
+        "agentActive"
+      ],
+      "order": 1
+    },
+    {
+      "key": "marketingFlow",
+      "title": "营销流程",
+      "icon": "SetUp",
+      "path": "/marketingFlow/list",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "aiAgent",
+      "parents": [
+        "agentActive"
+      ],
+      "order": 2
+    },
+    {
+      "key": "batchOperation",
+      "title": "批量运营",
+      "icon": "Operation",
+      "path": "/batchOperation/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentActive"
+      ],
+      "order": 3
+    },
+    {
+      "key": "sopAgent",
+      "title": "SOP 智能体",
+      "icon": "Connection",
+      "path": "/sopAgent/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 1
+    },
+    {
+      "key": "sopTemplate",
+      "title": "SOP 模板库",
+      "icon": "Tickets",
+      "path": "/sop-template/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 2
+    },
+    {
+      "key": "sopTemplateMarket",
+      "title": "SOP 模板市场",
+      "icon": "ShoppingCart",
+      "path": "/sop-template/market",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 3
+    },
+    {
+      "key": "faqKb",
+      "title": "FAQ 知识库",
+      "icon": "Notebook",
+      "path": "/faq/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 4
+    },
+    {
+      "key": "knowledgeBase",
+      "title": "知识库管理",
+      "icon": "Files",
+      "path": "/knowledgeBase",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 5
+    },
+    {
+      "key": "scriptTemplate",
+      "title": "销冠话术库",
+      "icon": "ChatLineSquare",
+      "path": "/scriptTemplate/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 6
+    },
+    {
+      "key": "scriptTemplateAbStats",
+      "title": "话术 AB 统计",
+      "icon": "DataLine",
+      "path": "/scriptTemplate/ab-stats",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 7
+    },
+    {
+      "key": "aiToolManagement",
+      "title": "AI 工具管理",
+      "icon": "Tools",
+      "path": "/aiAgent/tools",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSupport"
+      ],
+      "order": 8
+    },
+    {
+      "key": "agentStatus",
+      "title": "坐席状态",
+      "icon": "Headset",
+      "path": "/customerService/agentStatus",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentWorkbench"
+      ],
+      "order": 1
+    },
+    {
+      "key": "csatDashboard",
+      "title": "CSAT 看板",
+      "icon": "Star",
+      "path": "/customerService/csat",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentWorkbench"
+      ],
+      "order": 2
+    },
+    {
+      "key": "quickReply",
+      "title": "快捷回复",
+      "icon": "ChatLineSquare",
+      "path": "/customerService/quickReply",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentWorkbench"
+      ],
+      "order": 3
+    },
+    {
+      "key": "sessionTag",
+      "title": "会话标签",
+      "icon": "CollectionTag",
+      "path": "/customerService/sessionTag",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentWorkbench"
+      ],
+      "order": 4
+    },
+    {
+      "key": "aiSuggestion",
+      "title": "AI 建议",
+      "icon": "MagicStick",
+      "path": "/customerService/aiSuggestion",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentWorkbench"
+      ],
+      "order": 5
+    },
+    {
+      "key": "chatChannelList",
+      "title": "客服渠道",
+      "icon": "Connection",
+      "path": "/chatChannel/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentChannel"
+      ],
+      "order": 1
+    },
+    {
+      "key": "whatsappCloud",
+      "title": "WhatsApp Cloud",
+      "icon": "Connection",
+      "path": "/whatsapp-cloud",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentChannel"
+      ],
+      "order": 2
+    },
+    {
+      "key": "dingtalkApp",
+      "title": "钉钉应用账号",
+      "icon": "Connection",
+      "path": "/dingtalk-app",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentChannel"
+      ],
+      "order": 3
+    },
+    {
+      "key": "objectionList",
+      "title": "异议处理",
+      "icon": "ChatLineRound",
+      "path": "/objection/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSalesIntel"
+      ],
+      "order": 1
+    },
+    {
+      "key": "personaList",
+      "title": "销冠画像",
+      "icon": "UserFilled",
+      "path": "/persona/list",
+      "roles": null,
+      "section": "aiAgent",
+      "parents": [
+        "agentSalesIntel"
+      ],
+      "order": 2
+    },
+    {
+      "key": "emailList",
+      "title": "邮件列表",
+      "icon": "ChatSquare",
+      "path": "/email",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 1
+    },
+    {
+      "key": "emailDrafts",
+      "title": "我的草稿",
+      "icon": "Document",
+      "path": "/email/drafts",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 2
+    },
+    {
+      "key": "emailJobs",
+      "title": "我的任务",
+      "icon": "Document",
+      "path": "/email/jobs",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 3
+    },
+    {
+      "key": "emailSmtp",
+      "title": "邮件账号",
+      "icon": "Setting",
+      "path": "/email/smtp",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 4
+    },
+    {
+      "key": "emailInfo",
+      "title": "邮件代理",
+      "icon": "Setting",
+      "path": "/email/info",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 5
+    },
+    {
+      "key": "emailDeliverability",
+      "title": "送达分析",
+      "icon": "DataAnalysis",
+      "path": "/email/deliverability",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 6
+    },
+    {
+      "key": "emailGuide",
+      "title": "邮件使用指南",
+      "icon": "Document",
+      "path": "/email/guide",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "emailReach"
+      ],
+      "order": 7
+    },
+    {
+      "key": "smsList",
+      "title": "短信列表",
+      "icon": "ChatDotSquare",
+      "path": "/sms/list",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "smsReach"
+      ],
+      "order": 1
+    },
+    {
+      "key": "smsDrafts",
+      "title": "短信草稿",
+      "icon": "Document",
+      "path": "/sms/drafts",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "smsReach"
+      ],
+      "order": 2
+    },
+    {
+      "key": "smsJobs",
+      "title": "短信任务",
+      "icon": "List",
+      "path": "/sms/jobs",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "smsReach"
+      ],
+      "order": 3
+    },
+    {
+      "key": "smsConfig",
+      "title": "短信配置",
+      "icon": "Setting",
+      "path": "/sms/config",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "smsReach"
+      ],
+      "order": 4
+    },
+    {
+      "key": "douyinCard",
+      "title": "抖音卡片",
+      "icon": "VideoPlay",
+      "path": "/douyinCard",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "douyin"
+      ],
+      "order": 1
+    },
+    {
+      "key": "douyinStats",
+      "title": "抖音统计",
+      "icon": "DataAnalysis",
+      "path": "/douyin/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "douyin"
+      ],
+      "order": 2
+    },
+    {
+      "key": "kuaishouCard",
+      "title": "快手卡片",
+      "icon": "ChatDotRound",
+      "path": "/kuaishouCard",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "kuaishou"
+      ],
+      "order": 1
+    },
+    {
+      "key": "kuaishouStats",
+      "title": "快手统计",
+      "icon": "DataAnalysis",
+      "path": "/kuaishou/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "kuaishou"
+      ],
+      "order": 2
+    },
+    {
+      "key": "xiaohongshuCard",
+      "title": "小红书卡片",
+      "icon": "Picture",
+      "path": "/xiaohongshuCard",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "xiaohongshu"
+      ],
+      "order": 1
+    },
+    {
+      "key": "xiaohongshuStats",
+      "title": "小红书统计",
+      "icon": "DataAnalysis",
+      "path": "/xiaohongshu/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "xiaohongshu"
+      ],
+      "order": 2
+    },
+    {
+      "key": "xianyuCard",
+      "title": "闲鱼卡片",
+      "icon": "ShoppingBag",
+      "path": "/xianyuCard",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "xianyu"
+      ],
+      "order": 1
+    },
+    {
+      "key": "xianyuStats",
+      "title": "闲鱼统计",
+      "icon": "DataAnalysis",
+      "path": "/xianyu/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "xianyu"
+      ],
+      "order": 2
+    },
+    {
+      "key": "tiktokList",
+      "title": "TikTok卡片",
+      "icon": "VideoPlay",
+      "path": "/tiktok/list",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "tiktok"
+      ],
+      "order": 1
+    },
+    {
+      "key": "tiktokStats",
+      "title": "TikTok统计",
+      "icon": "DataAnalysis",
+      "path": "/tiktok/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "tiktok"
+      ],
+      "order": 2
+    },
+    {
+      "key": "whatsappAccount",
+      "title": "账号管理",
+      "icon": "Cpu",
+      "path": "/whatsapp/account",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 1
+    },
+    {
+      "key": "whatsappDrafts",
+      "title": "草稿箱",
+      "icon": "Document",
+      "path": "/whatsapp/drafts",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 2
+    },
+    {
+      "key": "whatsappJobs",
+      "title": "群发",
+      "icon": "Promotion",
+      "path": "/whatsapp/jobs",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 3
+    },
+    {
+      "key": "whatsappLeadGroup",
+      "title": "群发线索分组",
+      "icon": "UserFilled",
+      "path": "/whatsapp/lead-group-selection",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 4
+    },
+    {
+      "key": "whatsappBulkMatrix",
+      "title": "群发统计矩阵",
+      "icon": "Grid",
+      "path": "/whatsapp/bulk-matrix",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 5
+    },
+    {
+      "key": "whatsappGroupMessaging",
+      "title": "群发矩阵",
+      "icon": "Grid",
+      "path": "/whatsapp/group-messaging",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "whatsapp"
+      ],
+      "order": 6
+    },
+    {
+      "key": "telegramAccount",
+      "title": "机器人",
+      "icon": "Cpu",
+      "path": "/telegram/account",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "telegram"
+      ],
+      "order": 1
+    },
+    {
+      "key": "qqAccount",
+      "title": "机器人账号",
+      "icon": "Cpu",
+      "path": "/qq/account",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "qq"
+      ],
+      "order": 1
+    },
+    {
+      "key": "feishuAccount",
+      "title": "飞书账号",
+      "icon": "Cpu",
+      "path": "/feishu/account",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "feishu"
+      ],
+      "order": 1
+    },
+    {
+      "key": "community",
+      "title": "社群管理",
+      "icon": "UserFilled",
+      "path": "/community/list",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 12
+    },
+    {
+      "key": "shortLinkList",
+      "title": "短链列表",
+      "icon": "Link",
+      "path": "/shortLink",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "shortLink"
+      ],
+      "order": 1
+    },
+    {
+      "key": "shortLinkStats",
+      "title": "短链统计",
+      "icon": "DataAnalysis",
+      "path": "/shortLink/stats",
+      "roles": null,
+      "section": "reach",
+      "parents": [
+        "shortLink"
+      ],
+      "order": 2
+    },
+    {
+      "key": "livecode",
+      "title": "活码管理",
+      "icon": "QrCode",
+      "path": "/livecode",
+      "roles": null,
+      "section": "reach",
+      "parents": [],
+      "order": 14
+    },
+    {
+      "key": "workflowOrchestrator",
+      "title": "工作流编排",
+      "icon": "Share",
+      "path": "/workflow-orchestrator/list",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "reach",
+      "parents": [],
+      "order": 15
+    },
+    {
+      "key": "knowledgeManagement",
+      "title": "文档管理",
+      "icon": "Document",
+      "path": "/knowledge/management",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 1
+    },
+    {
+      "key": "knowledgeBatchImport",
+      "title": "批量导入",
+      "icon": "UploadFilled",
+      "path": "/knowledge/batch-import",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 2
+    },
+    {
+      "key": "knowledgePlayground",
+      "title": "检索 Playground",
+      "icon": "Aim",
+      "path": "/knowledge/playground",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 3
+    },
+    {
+      "key": "knowledgeFeedbacks",
+      "title": "反馈管理",
+      "icon": "ChatLineRound",
+      "path": "/knowledge/feedbacks",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 4
+    },
+    {
+      "key": "knowledgeTokens",
+      "title": "API Token",
+      "icon": "Key",
+      "path": "/knowledge/tokens",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 5
+    },
+    {
+      "key": "knowledgeExternal",
+      "title": "外部系统接入",
+      "icon": "Connection",
+      "path": "/knowledge/external",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 6
+    },
+    {
+      "key": "knowledgeStatistics",
+      "title": "知识库统计",
+      "icon": "DataAnalysis",
+      "path": "/knowledge/statistics",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 7
+    },
+    {
+      "key": "knowledgeRagEval",
+      "title": "RAG 评测",
+      "icon": "CircleCheck",
+      "path": "/knowledge/rag-eval",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 8
+    },
+    {
+      "key": "knowledgeOpenAPI",
+      "title": "OpenAPI 集成",
+      "icon": "Connection",
+      "path": "/knowledge/openapi",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 9
+    },
+    {
+      "key": "knowledgeConnectors",
+      "title": "知识库连接器（第三方同步）",
+      "icon": "Link",
+      "path": "/kb/connectors",
+      "roles": [
+        "admin"
+      ],
+      "section": "knowledge",
+      "parents": [
+        "knowledgeWorkspace"
+      ],
+      "order": 10
+    },
+    {
+      "key": "ragMainConfig",
+      "title": "RAG 主配置",
+      "icon": "Setting",
+      "path": "/system/rag-product-config",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "ragProductConfig"
+      ],
+      "order": 1
+    },
+    {
+      "key": "ragAccount",
+      "title": "RAG 账号配置",
+      "icon": "Key",
+      "path": "/system/rag-account",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "ragProductConfig"
+      ],
+      "order": 2
+    },
+    {
+      "key": "ragProduct",
+      "title": "RAG 产品管理",
+      "icon": "Goods",
+      "path": "/system/rag-product",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [
+        "ragProductConfig"
+      ],
+      "order": 3
+    },
+    {
+      "key": "ragOverview",
+      "title": "RAG 概览",
+      "icon": "Monitor",
+      "path": "/system/rag-overview",
+      "roles": null,
+      "section": "knowledge",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "glossary",
+      "title": "术语表管理",
+      "icon": "Collection",
+      "path": "/glossary",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "knowledge",
+      "parents": [
+        "i18nManage"
+      ],
+      "order": 1
+    },
+    {
+      "key": "i18nDashboard",
+      "title": "多语言监控",
+      "icon": "DataLine",
+      "path": "/i18n/dashboard",
+      "roles": [
+        "admin",
+        "manager"
+      ],
+      "section": "knowledge",
+      "parents": [
+        "i18nManage"
+      ],
+      "order": 2
+    },
+    {
+      "key": "dashboardScreen",
+      "title": "数据大屏",
+      "icon": "DataBoard",
+      "path": "/dashboardScreen/list",
+      "roles": null,
+      "section": "analytics",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "conversionFunnel",
+      "title": "转化漏斗",
+      "icon": "Filter",
+      "path": "/conversionFunnel/list",
+      "roles": null,
+      "section": "analytics",
+      "parents": [],
+      "order": 2
+    },
+    {
+      "key": "aiProductivity",
+      "title": "AI 产能分析",
+      "icon": "DataAnalysis",
+      "path": "/aiProductivity/list",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 3
+    },
+    {
+      "key": "customReport",
+      "title": "自定义报表",
+      "icon": "Document",
+      "path": "/customReport/list",
+      "roles": null,
+      "section": "analytics",
+      "parents": [],
+      "order": 4
+    },
+    {
+      "key": "abExperiment",
+      "title": "A/B 实验",
+      "icon": "DataLine",
+      "path": "/abExperiment/list",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 5
+    },
+    {
+      "key": "churnPrediction",
+      "title": "流失预警",
+      "icon": "Warning",
+      "path": "/churnPrediction/list",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 6
+    },
+    {
+      "key": "customerJourney",
+      "title": "客户旅程大屏",
+      "icon": "TrendCharts",
+      "path": "/customerJourney/dashboard",
+      "roles": [
+        "admin",
+        "manager",
+        "sales",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 7
+    },
+    {
+      "key": "cohortPath",
+      "title": "同期群路径分析",
+      "icon": "Guide",
+      "path": "/analytics/cohort-path",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 8
+    },
+    {
+      "key": "confidencePanel",
+      "title": "置信度看板",
+      "icon": "CircleCheck",
+      "path": "/confidence/panel",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 9
+    },
+    {
+      "key": "humanizePanel",
+      "title": "拟人度看板",
+      "icon": "MagicStick",
+      "path": "/humanize/panel",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 10
+    },
+    {
+      "key": "feedbackLoopPanel",
+      "title": "反馈闭环",
+      "icon": "Refresh",
+      "path": "/feedbackLoop/panel",
+      "roles": [
+        "admin",
+        "manager",
+        "viewer"
+      ],
+      "section": "analytics",
+      "parents": [],
+      "order": 11
+    },
+    {
+      "key": "baTasks",
+      "title": "任务列表",
+      "icon": "Monitor",
+      "path": "/browser-automation/tasks",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "browserAutomation"
+      ],
+      "order": 1
+    },
+    {
+      "key": "baCreate",
+      "title": "新建任务",
+      "icon": "Plus",
+      "path": "/browser-automation/tasks/create",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "browserAutomation"
+      ],
+      "order": 2
+    },
+    {
+      "key": "baCron",
+      "title": "定时触发器",
+      "icon": "Timer",
+      "path": "/browser-automation/cron",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "browserAutomation"
+      ],
+      "order": 3
+    },
+    {
+      "key": "baStatus",
+      "title": "Host 状态",
+      "icon": "CircleCheck",
+      "path": "/browser-automation/status",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "browserAutomation"
+      ],
+      "order": 4
+    },
+    {
+      "key": "geoBrandConfig",
+      "title": "品牌与域名",
+      "icon": "OfficeBuilding",
+      "path": "/geo-tools/brand-config",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 1
+    },
+    {
+      "key": "geoSeoInfra",
+      "title": "SEO 基础设施",
+      "icon": "DocumentChecked",
+      "path": "/geo-tools/seo-infra",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 2
+    },
+    {
+      "key": "geoPusherConfig",
+      "title": "蜘蛛推送配置",
+      "icon": "Key",
+      "path": "/geo-tools/pusher-config",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 3
+    },
+    {
+      "key": "geoSiteConfig",
+      "title": "静态站部署",
+      "icon": "Monitor",
+      "path": "/geo-tools/site-config",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 4
+    },
+    {
+      "key": "geoSchemaTemplates",
+      "title": "Schema 模板",
+      "icon": "Collection",
+      "path": "/geo-tools/schema-templates",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 5
+    },
+    {
+      "key": "geoCompetitors",
+      "title": "竞品管理",
+      "icon": "UserFilled",
+      "path": "/geo-tools/competitors",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 6
+    },
+    {
+      "key": "geoConfig",
+      "title": "配置优化",
+      "icon": "Setting",
+      "path": "/geo-tools/config",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoConfigGroup"
+      ],
+      "order": 7
+    },
+    {
+      "key": "geoKeywordMining",
+      "title": "关键词蒸馏",
+      "icon": "Search",
+      "path": "/geo-tools/keyword-mining",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoProd"
+      ],
+      "order": 1
+    },
+    {
+      "key": "geoContentCreation",
+      "title": "内容创作",
+      "icon": "EditPen",
+      "path": "/geo-tools/content-creation",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoProd"
+      ],
+      "order": 2
+    },
+    {
+      "key": "geoContentOptimize",
+      "title": "文章优化",
+      "icon": "Document",
+      "path": "/geo-tools/content-optimize",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoProd"
+      ],
+      "order": 3
+    },
+    {
+      "key": "geoKnowledgeBase",
+      "title": "GEO 知识库",
+      "icon": "FolderOpened",
+      "path": "/geo-tools/knowledge-base",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoProd"
+      ],
+      "order": 4
+    },
+    {
+      "key": "geoEntityGraph",
+      "title": "实体图谱",
+      "icon": "Share",
+      "path": "/geo-tools/entity-graph",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoProd"
+      ],
+      "order": 5
+    },
+    {
+      "key": "geoSitePublish",
+      "title": "发布到官网",
+      "icon": "Upload",
+      "path": "/geo-tools/site-publish",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoPublish"
+      ],
+      "order": 1
+    },
+    {
+      "key": "geoPushCenter",
+      "title": "蜘蛛推送",
+      "icon": "Promotion",
+      "path": "/geo-tools/push-center",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoPublish"
+      ],
+      "order": 2
+    },
+    {
+      "key": "geoPlatformPublish",
+      "title": "平台发布",
+      "icon": "Connection",
+      "path": "/geo-tools/platform-publish",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoPublish"
+      ],
+      "order": 3
+    },
+    {
+      "key": "geoWorkflow",
+      "title": "工作流",
+      "icon": "Setting",
+      "path": "/geo-tools/workflow",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoPublish"
+      ],
+      "order": 4
+    },
+    {
+      "key": "geoFunnelDashboard",
+      "title": "漏斗总览",
+      "icon": "DataAnalysis",
+      "path": "/geo-tools/funnel-dashboard",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 1
+    },
+    {
+      "key": "geoIndexTracking",
+      "title": "收录与引用",
+      "icon": "CircleCheck",
+      "path": "/geo-tools/index-tracking",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 2
+    },
+    {
+      "key": "geoVisibilityBoard",
+      "title": "可见性观测",
+      "icon": "TrendCharts",
+      "path": "/geo-tools/visibility",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 3
+    },
+    {
+      "key": "geoSovBoard",
+      "title": "竞品 SOV",
+      "icon": "DataLine",
+      "path": "/geo-tools/sov-board",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 4
+    },
+    {
+      "key": "geoCrawlerStats",
+      "title": "爬虫统计",
+      "icon": "Monitor",
+      "path": "/geo-tools/crawler-stats",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 5
+    },
+    {
+      "key": "geoVerification",
+      "title": "多模型验证",
+      "icon": "CircleCheck",
+      "path": "/geo-tools/verification",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 6
+    },
+    {
+      "key": "geoAlerts",
+      "title": "预警中心",
+      "icon": "Bell",
+      "path": "/geo-tools/alerts",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 7
+    },
+    {
+      "key": "geoReports",
+      "title": "数据报表",
+      "icon": "DataAnalysis",
+      "path": "/geo-tools/reports",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 8
+    },
+    {
+      "key": "geoDecisionReport",
+      "title": "决策报告",
+      "icon": "Document",
+      "path": "/geo/decision-report",
+      "roles": null,
+      "section": "analytics",
+      "parents": [
+        "geoTools",
+        "geoMonitor"
+      ],
+      "order": 9
+    },
+    {
+      "key": "capabilityMatrix",
+      "title": "能力矩阵",
+      "icon": "Grid",
+      "path": "/cap/matrix",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [],
+      "order": 1
+    },
+    {
+      "key": "systemConfig",
+      "title": "站点设置",
+      "icon": "Tools",
+      "path": "/system/config",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 1
+    },
+    {
+      "key": "systemObsConfig",
+      "title": "存储配置",
+      "icon": "Cloud",
+      "path": "/system/obs-config",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 2
+    },
+    {
+      "key": "systemMaterialLibrary",
+      "title": "素材库",
+      "icon": "Picture",
+      "path": "/system/material-library",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 3
+    },
+    {
+      "key": "systemMonitor",
+      "title": "监控",
+      "icon": "Cpu",
+      "path": "/system/monitor",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 4
+    },
+    {
+      "key": "systemTrace",
+      "title": "链路追踪",
+      "icon": "Connection",
+      "path": "/system/trace",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 5
+    },
+    {
+      "key": "systemGuide",
+      "title": "系统使用指南",
+      "icon": "Document",
+      "path": "/system/guide",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 6
+    },
+    {
+      "key": "domainPool",
+      "title": "域名池",
+      "icon": "Link",
+      "path": "/domainPool",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 7
+    },
+    {
+      "key": "backupList",
+      "title": "备份恢复",
+      "icon": "FolderOpened",
+      "path": "/backup/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 8
+    },
+    {
+      "key": "backupEnhanced",
+      "title": "备份高级版",
+      "icon": "FolderChecked",
+      "path": "/backup/enhanced",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 9
+    },
+    {
+      "key": "automationCenter",
+      "title": "自动化中心",
+      "icon": "Operation",
+      "path": "/system/automation-hub",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 10
+    },
+    {
+      "key": "dynamicThreshold",
+      "title": "动态阈值参数",
+      "icon": "DataLine",
+      "path": "/system/config-params",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 11
+    },
+    {
+      "key": "ltcConfig",
+      "title": "LTC 运营开关",
+      "icon": "Open",
+      "path": "/system/ltc-config",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 12
+    },
+    {
+      "key": "opsOverview",
+      "title": "运维总览",
+      "icon": "Monitor",
+      "path": "/ops-overview",
+      "roles": [
+        "admin"
+      ],
+      "section": "system",
+      "parents": [
+        "siteConfig"
+      ],
+      "order": 13
+    },
+    {
+      "key": "systemUser",
+      "title": "人员管理",
+      "icon": "UserFilled",
+      "path": "/system/users",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "teamGroup"
+      ],
+      "order": 1
+    },
+    {
+      "key": "roleManage",
+      "title": "角色管理",
+      "icon": "UserFilled",
+      "path": "/system/roles",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "teamGroup"
+      ],
+      "order": 2
+    },
+    {
+      "key": "permissionManage",
+      "title": "授权管理",
+      "icon": "Lock",
+      "path": "/system/permissions",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "teamGroup"
+      ],
+      "order": 3
+    },
+    {
+      "key": "platformAccount",
+      "title": "平台账号",
+      "icon": "Platform",
+      "path": "/platformAccount/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "permissionGroup"
+      ],
+      "order": 1
+    },
+    {
+      "key": "integration",
+      "title": "第三方对接",
+      "icon": "Connection",
+      "path": "/integration/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "permissionGroup"
+      ],
+      "order": 2
+    },
+    {
+      "key": "bridgeToken",
+      "title": "桥接凭证",
+      "icon": "Key",
+      "path": "/bridge/token",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "permissionGroup"
+      ],
+      "order": 3
+    },
+    {
+      "key": "operationLog",
+      "title": "操作日志",
+      "icon": "Tickets",
+      "path": "/operationLog/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "permissionGroup"
+      ],
+      "order": 4
+    },
+    {
+      "key": "securityAudit",
+      "title": "安全审计",
+      "icon": "Shield",
+      "path": "/securityAudit/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "permissionGroup"
+      ],
+      "order": 5
+    },
+    {
+      "key": "assetMarket",
+      "title": "资产市场",
+      "icon": "ShoppingCart",
+      "path": "/asset-market",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 1
+    },
+    {
+      "key": "myAssets",
+      "title": "我的资产",
+      "icon": "Files",
+      "path": "/asset-market/my-assets",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 2
+    },
+    {
+      "key": "assetBundleList",
+      "title": "资产包管理",
+      "icon": "List",
+      "path": "/asset-bundle/list",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 3
+    },
+    {
+      "key": "assetBundlePlayground",
+      "title": "开发者 Playground",
+      "icon": "EditPen",
+      "path": "/asset-bundle/playground",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 4
+    },
+    {
+      "key": "assetBundleMerchant",
+      "title": "商户话术包",
+      "icon": "ChatDotRound",
+      "path": "/asset-bundle/merchant-new",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 5
+    },
+    {
+      "key": "syncLog",
+      "title": "同步日志",
+      "icon": "Refresh",
+      "path": "/asset-market/sync-log",
+      "roles": null,
+      "section": "system",
+      "parents": [
+        "assetBundle"
+      ],
+      "order": 6
+    }
+  ]
+}

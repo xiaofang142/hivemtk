@@ -7,10 +7,10 @@ export default [{
   path: '/followups/today',
   name: 'FollowUpToday',
   component: () => import('@/views/followups/Today.vue'),
-  meta: { title: '今日跟进', group: 'workspace', icon: 'Calendar', requiresAuth: true }
+  meta: { menuKey: 'followups', menuSection: 'workspace', menuOrder: 9, menuRoles: ["admin","manager","sales"], menuIcon: 'AlarmClock', title: '今日跟进', group: 'workspace', icon: 'Calendar', requiresAuth: true }
 }, {
   path: '/followups/:id',
   name: 'FollowUpDetail',
   component: () => import('@/views/followups/Today.vue'),
-  meta: { title: '跟进详情', group: 'workspace', icon: 'Calendar', requiresAuth: true }
+  meta: { menuHidden: true, title: '跟进详情', group: 'workspace', icon: 'Calendar', requiresAuth: true }
 }];

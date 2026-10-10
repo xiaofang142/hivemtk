@@ -102,6 +102,31 @@
 
 ### 修复 (Fixed)
 
+#### 用户端菜单/路由/i18n 四联修复 (2026-10-10)
+- **语言包不再"全是中文"**：删除被 `scripts/fix_menu_i18n.cjs` 误追加到 9 份 locale 尾部的
+  208 个扁平 `"menu.xxx": "中文"` 键（该脚本用大括号计数定位 `menu` 块，把字符串里的 `{n}` 当括号，
+  于是全部插到了文件末尾）。给 `menu` 段补上 de/es/fr/pt/ru 共 ~140 键的对应语言译文，
+  清掉 ja/ar 的 79 处 `[JA]`/`[AR]` 未翻译占位与 5 个值为中文的条目；`t()` 缺失回退不再印裸 key。
+- **大量页面"页面不存在"**：根因是 `router/index.js` 的「URL 首段 + `moduleNames`/`pathToModule`
+  手工白名单懒装配」——白名单漏登记、白名单写了不存在的模块名（`capMatrix`）、路由挂在别的模块
+  文件里（`/cap/matrix` 实际在 `kbConnector.js`），都会让 `addRoute` 永不发生。改为
+  `import.meta.glob('./modules/*.js', { eager: true })` 启动期全量注册，删除两张白名单与
+  `ensureRouteLoaded`；页面组件仍是懒加载。实测真浏览器 189 条静态路由 0 个页面不存在。
+- **`menu.capabilityMatrix` 不存在**：`menu` 段缺 `capabilityMatrix` / `mcpCredentials` 两键，
+  界面直接显示键名本身。两键已按 9 种语言补齐，且菜单标题改为「有译文用译文、没有回退
+  `meta.title`」，从机制上不会再出现裸 key。
+- **侧边栏改为从路由自动生成**：废除 `Layout.vue` 里 500 行的硬编码 `topMenus` 菜单树，
+  改为 `src/layout/menu.js` 读 `router.getRoutes()` 按路由 meta（`menuKey`/`menuSection`/
+  `menuParents`/`menuOrder`/`menuIcon`/`menuRoles`/`menuHidden`）生成；分区骨架集中在
+  `src/layout/menuRegistry.js`，未登记分组按 key 兜底。`Breadcrumb.vue` 里同源的第二份硬编码
+  菜单表（`topMenusMap`/`subMenusMap`）一并废除。新增页面只需写路由 meta，菜单自动可见。
+- **登录页**：`/api/public/config` 探测从模块顶层挪进 `onMounted` 并标 `_silent`（无后端时
+  会在登录页弹"网络超时"红条，看着像登录失败）；登录请求只发 `{username, password}`，
+  不再把注册用的 `email` 混进登录体。
+- **门禁**：新增 `user-web/scripts/check-menu-autogen.cjs`（`npm run menu:check`）并接入
+  `lint.yml`；新增 `tests/unit/menu_autogen.test.js` 等 3 份守护用例改为打真路由表
+  （原判据是 grep `moduleNames` 源码字符串）。全量 vitest 45 文件 / 522 用例全绿，`vite build` 通过。
+
 - 双巡检冲突（删除 PollingLoop._patrol，保留 BaseAdapter._startPatrolAuto）
 - `OutboxMessage.Extra` 字段缺失（前端主动私信路由失效）
 - `account_id` 缺失时 default 兜底（垃圾数据风险）

@@ -95,6 +95,14 @@ jobs:
       - name: Check i18n coverage
         run: node user-web/scripts/check-i18n-coverage.cjs
 
+      # 菜单/路由/i18n 闸门（2026-10-10 加入）：
+      # 锁住四类真实故障 —— ① 路由退回「URL 首段 + 手工白名单」懒装配（漏登记=点菜单进页面不存在，
+      # 实测 /cap/matrix、/tiktok-card-stats/:id）；② Layout.vue 重新长出硬编码菜单树（新页面不可见）；
+      # ③ 菜单标题键缺失导致界面印出裸 key（menu.capabilityMatrix）；④ 语言包里出现扁平 "menu.*"
+      # 中文键或 [XX] 未翻译占位（曾让 9 种语言的菜单全是中文）。
+      - name: Check menu / routes / i18n gate
+        run: node user-web/scripts/check-menu-autogen.cjs
+
   # ── 工作流自身的静态一致性 ──
   # GitHub 不编译 workflow YAML：with.file/context/path 指向不存在的文件、
   # steps.<id> 引用了没写 id: 的步骤、needs 指向不存在的 job、artifact 上传/下载名

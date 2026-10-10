@@ -95,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -145,10 +145,20 @@ const handleRegister = async () => {
 }
 
 import { http as httpApi } from '@/utils/request'
-httpApi.get('/api/public/config').then((res) => {
-  const data = res?.data ?? res
-  enableRegister.value = !!data?.enable_register
-}).catch(() => { enableRegister.value = false })
+// 自助注册开关（公开配置，未登录可取）：
+//  1) 放进 onMounted —— 模块顶层发请求会在页面还没挂载时就打出去，没人能取消/清理；
+//  2) 标 _silent —— 这是"页面上多不多一个注册入口"的探测，不是用户动作。后端没起或网络抖动时
+//     弹红条会把登录页搞得像登录失败（实测无后端环境下这里弹 "Network connection timed out"）。
+onMounted(() => {
+  // 注意 http.get 的签名是 (url, params, config)：_silent 必须放第三个参数，
+  // 放进第二个会被当成 query 参数发出去（?_silent=true），红条该弹还是弹。
+  httpApi.get('/api/public/config', null, { _silent: true })
+    .then((res) => {
+      const data = res?.data ?? res
+      enableRegister.value = !!data?.enable_register
+    })
+    .catch(() => { enableRegister.value = false })
+})
 
 const rules = {
   username: [
@@ -172,7 +182,12 @@ const handleLogin = async () => {
   try {
     loading.value = true
 
-    const response = await usersApi.login(loginForm)
+    // 只发登录真正用得到的两个字段：email 是注册模式才有的，混进登录请求体
+    // 既让 /api/auth/login 的契约变模糊，也让"登录发什么"变得不可断言。
+    const response = await usersApi.login({
+      username: loginForm.username,
+      password: loginForm.password
+    })
 
     if (response) {
       const token = response.token || response.Token

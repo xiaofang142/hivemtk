@@ -253,24 +253,31 @@ graph TD
     Root --> Standalone["独立路由（非菜单）<br/>/login /setup /profile /notifications<br/>/chat/embed/:channel_ref<br/>/oneid/list /oneid/conflicts<br/>/asset-market/detail/:id /asset-market/sync-log"]
 ```
 
-### 路由懒加载机制
+### 路由注册机制（全量 eager，无白名单）
 
-`router/index.js` 使用 `import.meta.glob('./modules/*.js')` 静态收集所有模块文件，运行时按访问路径的首段匹配模块名，再 `await lazyModule(name)()` 动态 `import()` 并 `router.addRoute('Layout', route)` 注入。特殊路径（如 `douyin-card-stats/:id`）通过 `pathToModule` 显式映射到对应模块。
+`router/index.js` 用 `import.meta.glob('./modules/*.js', { eager: true })` 在启动期把
+`modules/` 下**全部**模块的路由记录一次性挂到 `Layout` 下；模块文件只是路由元信息（几 KB），
+页面组件仍是 `() => import('@/views/...')` 懒加载。
+
+> 旧实现是"按 URL 首段 + `moduleNames` / `pathToModule` 手工白名单懒装配"：
+> 白名单漏一项、或白名单里写了不存在的模块名（实测 `capMatrix`）、或路由挂在别的模块文件里
+> （`/cap/matrix` 挂在 `kbConnector.js`），用户看到的都是同一个故障——点菜单进「页面不存在」。
+> 全量注册让"路由文件存在 = 路由存在"，这类故障从机制上消失。
 
 ```mermaid
 sequenceDiagram
-    participant U as 用户
-    participant R as router.beforeEach
-    participant L as lazyModule(name)
+    participant B as 启动（createRouter）
+    participant G as import.meta.glob(eager)
+    participant RT as 路由表
+    participant M as layout/menu.js
+    participant L as Layout.vue
     participant V as 业务视图
 
-    U->>R: 访问 /customer360/list
-    R->>L: ensureRouteLoaded(path)
-    L->>L: 首段 customer360 → 模块名匹配
-    L-->>R: 未加载 → import('./modules/customer360.js')
-    R->>R: router.addRoute('Layout', route)
-    R->>R: next({ path: to.path, replace: true })
-    R->>V: 重新匹配路由 → 渲染 List.vue
+    B->>G: 收集 modules/*.js
+    G->>RT: 注册全部路由记录
+    RT->>M: router.getRoutes()
+    M->>L: 按 meta.menuSection/menuParents/menuOrder 生成侧边栏
+    L->>V: router-view 按 path 命中，组件懒加载
 ```
 
 ## 4. 状态管理图

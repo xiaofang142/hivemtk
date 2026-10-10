@@ -6,5 +6,5 @@ export default [{
   path: '/sales-workbench',
   name: 'SalesWorkbenchIndex',
   component: () => import('@/views/salesWorkbench/Index.vue'),
-  meta: { title: '销售工作台', group: 'workspace', icon: 'Notebook', requiresAuth: true }
+  meta: { menuKey: 'salesWorkbench', menuSection: 'workspace', menuOrder: 8, menuRoles: ["admin","manager","sales"], menuIcon: 'Notebook', title: '销售工作台', group: 'workspace', icon: 'Notebook', requiresAuth: true }
 }];
