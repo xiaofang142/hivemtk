@@ -616,13 +616,23 @@ func telegramOutboundHubMsgID(accountID uint, messageID int64) string {
 }
 
 // SendMessageEx 带完整 SendMessageOptions（ParseMode / ReplyToMessageID / DisableWebPreview 等）
+//
+// 委托 SendMessageWithReceipt 并丢弃回执 id，老调用方签名零影响。
 func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountID uint, chatID int64, content string, opts telegram.SendMessageOptions) error {
+	_, err := s.SendMessageWithReceipt(ctx, accountID, chatID, content, opts)
+	return err
+}
+
+// SendMessageWithReceipt 同 SendMessageEx，成功时返回出站回执 id（message_hub 键
+// `tg-out-{account}-{平台消息号}`：可与 message_hub 行 join，运营台 _tracking.message_id
+// 不再是查无此行的占位假号；失败返回空串）。
+func (s *TelegramIntegrationService) SendMessageWithReceipt(ctx context.Context, accountID uint, chatID int64, content string, opts telegram.SendMessageOptions) (string, error) {
 	if s.tg == nil {
-		return errors.New("db nil")
+		return "", errors.New("db nil")
 	}
 	acc, err := s.tg.GetAccount(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("get tg account: %w", err)
+		return "", fmt.Errorf("get tg account: %w", err)
 	}
 	cli := telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client))
 
@@ -639,7 +649,7 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 		// 失败也要留出站轨迹：否则会话里只剩客户入站行，事后既看不出 AI 生成过回复、
 		// 也看不出投递失败（2026-09-19 断网实测：日志有 outbound send failed，库里零痕迹）。
 		s.pushTelegramSendFailureTrace(ctx, accountID, chatID, content, err)
-		return fmt.Errorf("send tg msg: %w", err)
+		return "", fmt.Errorf("send tg msg: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
 	msgID := telegramOutboundHubMsgID(accountID, messageID)
@@ -663,7 +673,7 @@ func (s *TelegramIntegrationService) SendMessageEx(ctx context.Context, accountI
 			logger.Warnf("[feishu] upsert outbound to inbox failed: %v", err)
 		}
 	}
-	return nil
+	return msgID, nil
 }
 
 // pushTelegramSendFailureTrace 投递失败时补一条 send_failed 出站轨迹（只落库，不进 inbox 镜像）。

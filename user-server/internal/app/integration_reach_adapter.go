@@ -13,6 +13,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 
 	"hivemtk-user/internal/bridge"
+	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
@@ -89,7 +90,8 @@ func NewIntegrationReachAdapterFromDB(db *gorm.DB) *IntegrationReachAdapter {
 // SendTelegram 通过 TelegramIntegrationService 发送消息
 //
 // 参数：accountID 数字字符串，chatID 数字字符串（私聊为正、群组为负），content 消息文本
-// 返回：msgID 为 "tg-{accountID}-{nanos}" 占位（真实 message_id 已写入 MessageHub）
+// 返回：msgID 为出站回执键 `tg-out-{accountID}-{平台消息号}`（与 message_hub 行同键，
+// 可 join、可被 Recall 反查；不再返回查无此行的纳秒占位假号）
 // 错误：IntegrationService 透传（网络错误、Bot Token 无效、chat 限流等）
 func (a *IntegrationReachAdapter) SendTelegram(ctx context.Context, accountID, chatID, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
@@ -105,11 +107,12 @@ func (a *IntegrationReachAdapter) SendTelegram(ctx context.Context, accountID, c
 	if err != nil {
 		return "", fmt.Errorf("telegram: %w", err)
 	}
-	if err := a.tg.SendMessage(ctx, accID, cid, content); err != nil {
+	msgID, err := a.tg.SendMessageWithReceipt(ctx, accID, cid, content, telegram.SendMessageOptions{})
+	if err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", "telegram").Str("account_id", accountID).Msg("reach send failed")
 		return "", fmt.Errorf("telegram send: %w", err)
 	}
-	return fmt.Sprintf("tg-%d-%d", accID, time.Now().UnixNano()), nil
+	return msgID, nil
 }
 
 // SendWhatsApp 通过 WhatsAppCloudIntegrationService 发送消息
@@ -525,8 +528,9 @@ func composeCardMessage(title, description, link string) string {
 // 两条独立的事实在这里叠着，任何一条单独解决都还发不回一条撤回请求：
 //   - 桥接渠道（抖音/快手/小红书/tiktok/闲鱼）：msgID 是 BridgeReachAdapter 生成的合成键
 //     （或 ContentHash 的总线键），不是平台消息标识，拿它调撤回只会误撤/静默失败；
-//   - 接口渠道（TG/企微/飞书/WA）：发送侧返回的是 "tg-{账号}-{纳秒}" 这类占位 id，
-//     平台的真实 message_id 在出站时就被丢掉了，服务端手里根本没有可寻址的 id。
+//   - 接口渠道：WA/飞书/企微发送侧仍返回 "wa-{账号}-{纳秒}" 这类占位 id（平台真实
+//     message_id 出站时即被丢弃，无可寻址目标）；TG 已改为回执 `tg-out-{账号}-{平台号}`
+//     （I28，可 join message_hub），但撤回本身仍未接，且需按渠道合同统一键语义后再做。
 //
 // 要真做撤回，得先改发送侧的 msgID 契约（把平台 id 带回来并落库），那是另一张卡的事，
 // 不在"把已有能力接上"的范围内。

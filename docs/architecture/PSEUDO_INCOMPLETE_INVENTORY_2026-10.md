@@ -218,12 +218,10 @@
 
 ### B1（最大一条）RAG/FAQ 语义答案缓存整条竖没有任何生产装配
 
-> **状态（2026-10-09 I16 复测）：并行泳道执行中，本泳道不碰。**
-> 工作区实况：`internal/app/faq_cache_wiring.go`（`??` 新件，读 `faq_answer_enabled`/`faq_ttl`/`default_semantic_threshold` 三键、
-> 开关默认 false 才装配、`llm.NewEmbeddingService()` 做 embedder）+ `internal/app/sales_engine_factory.go`（M，:143 调
-> `attachFAQAnswerCache`）+ `internal/service/smart_cs_faq_cache_test.go`（`??`）。下述「注入口零调用」的旧世界已在提交版改写：
-> 包级 `SetGlobalFAQAnswerCache`/`globalFAQCache` 已删，换成实例 setter `SmartCSOrchestrator.SetFAQAnswerCache`（成对注入、
-> 不调则字段恒 nil、读写两段分支不进）。B1 收口以该泳道提交为准。
+> **状态（2026-10-10 I28 复核：已由并行泳道收口）。** 生产链完整在 HEAD：`app/faq_cache_wiring.go:65 attachFAQAnswerCache`
+> ← `sales_engine_factory.go:143` 调用、`:79 o.SetFAQAnswerCache(cacheSvc, llm.NewEmbeddingService())`、
+> `smart_cs_orchestrator.go:123` 实例 setter（成对注入、不调则恒 nil）。开关读三键（`faq_answer_enabled` 默认 false 才装配）、
+> 阈值 `default_semantic_threshold`。下表「注入口零调用」为 I16 时旧世界，已被提交版改写；B1 本体销项。
 
 现状是"零件齐全、独缺接线"：
 
@@ -252,13 +250,13 @@
 
 ### B2 触达回执的 message_id 与 message_hub 行没有公共键
 
-> **状态（2026-10-09 I16 复测）：最小切口已设计，因 reach 泳道并行占用暂缓。**
-> 设计：`TelegramIntegrationService` 新增 `SendMessageWithReceipt`（现 `SendMessageEx` 全量 body，成功时把 hub 出站键
-> `tg-out-{account}-{平台消息号}` 作为回执交回），`SendMessageEx` 改为委托并丢弃 id（签名不变、老调用方零影响）；
-> `IntegrationReachAdapter.SendTelegram` 改调它，替换 `tg-{acc}-{nano}` 假号 ⇒ `_tracking.message_id`（dispatch.go 抄入）
-> 变成可 join `message_hub` 的真键；无任何测试断言旧 nano 格式。**不做的原因：** `integration_reach_adapter.go`（M，574 行他人
-> WIP，Recall/SendCard/ListAccounts 区全在改）、`reach_pipeline*.go`、`bridge/reach_adapter.go` 均被并行泳道占用，动必撞。
-> Recall 反查（凭 hub 键取平台号）作为第二半随该泳道收口后再接。
+> **状态（2026-10-10 I28：TG 半已接线收口）。** 按 I16 设计落地：`TelegramIntegrationService.SendMessageWithReceipt`
+> （原 SendMessageEx 全量 body，成功回执=hub 出站键 `tg-out-{account}-{平台消息号}`），`SendMessageEx` 改薄委托丢弃 id
+> （签名不变零影响），`IntegrationReachAdapter.SendTelegram` 改调它 ⇒ `_tracking.message_id` 变成可 join `message_hub`
+> 的真键；消费方四层链（reach_tools/reach_sender_wiring/reach_tool_wiring/bridge/reach_adapter）均透传 msgID 全链自动生效。
+> **仍开放的第二半：** ① Recall 反查（凭 hub 键取平台号）未接，随渠道合同拍板；② WA/飞书/企微发送侧仍是 `wa-{acc}-{nano}`
+> 类占位假号（同型另卡）；③「回执号=平台号 vs hub 行号」的合同归属拍板（当前实现选 hub 行号口径）。
+> 守护测试 `outbound_status_settlement_guard_test.go` 站点表已同步指向 `SendMessageWithReceipt`（守卫要求「站点身份失效须同步本表」）。
 
 发送侧回 `tg-{account}-{纳秒}`，落库行是 `tg-out-{account}-{平台消息号}`。
 两个串都真实存在，但没有 join 键，因此：运营台读到的 `_tracking.message_id` 查不到任何行，
