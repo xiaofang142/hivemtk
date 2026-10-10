@@ -1,26 +1,16 @@
 # CLAUDE.md - 最高规则
 
-## 🏆 规则0：Git 仓库与协作模式(最高指示,优先级最高)
-
-- **只允许使用这两个仓库**,其他仓库一律不用(jungle-hero/hivemtkbot 等 forks 已弃用,勿推送):
-  - `gitee.com/xhpmayun/hivemtk`(本地 remote 名 `gitee-upstream`)
-  - `github.com/xiaofang142/hivemtk`(本地 remote 名 `upstream`)
-- **禁止使用 PR 流程**(不发 PR、不提 PR、不走评审合并)。
-- 协作模式为**成员开发直推**:每次开发完成后,将 `master` 直推到上述两个 remote。
-- 推送前必须 `git fetch` 确认是 fast-forward;若分叉,先 merge 再推。
-- 本规则与规则1冲突时以本规则为准。
-
-## 🏆 规则0b：禁止使用子 Agent 并行（RPM 限制，最高优先级）
-- 因 RPM（请求速率）限制，**禁止调用子 Agent（Task/搜索子代理等）并行执行任务**
-- 所有任务由主 Agent 直接执行，串行推进，不依赖子 Agent 分担
-- 需要探索/搜索/实现时，直接使用主 Agent 的工具（Read/Grep/Glob/LS/WebSearch 等）
-- 本规则优先于其他一切规则，与其他规则冲突时以本规则为准
+> 基础协作规则（身份、提交信息规范、推送前置约束等）遵循全局 `~/.claude/CLAUDE.md`，
+> 以下为本项目专属补充规则；与本规则冲突时，项目规则优先。
 
 ## 🏆 规则1：每次任务完成自动提交并推送
+- 推送目标**唯一**：`gitea`（http://192.168.199.239:8418/Alan/hivemtk）
+- **永不推送 GitHub**（upstream/fork），**不发起/不同步 PR** 到原作者仓库
 - 任务/轮次完成后，必须自动 `git add` 变更文件
 - 自动 `git commit` 含清晰 message（轮次/功能/测试状态）
-- 自动 `git push` 到 **gitee-upstream(xhpmayun) 和 upstream(xiaofang142)** 双远端
-- 不等待确认，不询问，作为工作流固化步骤执行
+- 自动 `git push` 到 gitea，并同步部署到阿里云服务器
+- 推送前必须 `git fetch` 确认是 fast-forward；若分叉，先 merge 再推
+- 不等待确认，不询问，作为工作流固化步骤执行（本规则为全局"不自动推送"的项目级豁免）
 
 ---
 
