@@ -7,31 +7,16 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/aiagent/agent/portcontract"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-// ToolResult 工具执行结果（本地定义，避免循环依赖）
-type ToolResult struct {
-	Success    bool       `json:"success"`
-	Data       any        `json:"data,omitempty"`
-	Error      string     `json:"error,omitempty"`
-	Timing     ToolTiming `json:"timing"`
-	ToolName   string     `json:"tool_name"`
-	ExecutedAt time.Time  `json:"executed_at"`
-	AuditTrace string     `json:"audit_trace,omitempty"`
-}
+// ToolResult / ToolTiming 引用 portcontract 的唯一定义。这里曾各自定义过一份并漂移
+// （少 error_code/card），同一份工具结果 JSON 在两条链路上读出不同字段集。
+type ToolResult = portcontract.ToolResult
 
 // ToolTiming 执行耗时统计
-type ToolTiming struct {
-	DurationMs int64 `json:"duration_ms"`
-	RetryCount int   `json:"retry_count"`
-}
-
-// ToJSON 将 ToolResult 序列化为 JSON 字符串
-func (r ToolResult) ToJSON() string {
-	data, _ := json.Marshal(r)
-	return string(data)
-}
+type ToolTiming = portcontract.ToolTiming
 
 // Message 消息类型
 type Message struct {

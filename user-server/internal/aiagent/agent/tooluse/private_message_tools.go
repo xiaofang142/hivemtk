@@ -94,7 +94,7 @@ func (t *openPrivateSessionTool) Execute(ctx context.Context, args map[string]an
 	return SuccessResult(t.Name(), map[string]any{
 		"session_id": session.SessionID,
 		"status":     session.Status,
-	}).withTiming(t.Name(), start), nil
+	}).WithTiming(t.Name(), start), nil
 }
 
 type readPrivateSessionTool struct {
@@ -150,7 +150,7 @@ func (t *readPrivateSessionTool) Execute(ctx context.Context, args map[string]an
 		"session_id": sessionID,
 		"total":      total,
 		"messages":   messages,
-	}).withTiming(t.Name(), start), nil
+	}).WithTiming(t.Name(), start), nil
 }
 
 type sendPrivateMessageTool struct {
@@ -218,7 +218,7 @@ func (t *sendPrivateMessageTool) Execute(ctx context.Context, args map[string]an
 		"message_id":  msg.ID,
 		"session_id":  msg.SessionID,
 		"sender_type": msg.SenderType,
-	}).withTiming(t.Name(), start), nil
+	}).WithTiming(t.Name(), start), nil
 }
 
 var errInvalidSenderType = errStr("sender_type 必须为 ai 或 agent")

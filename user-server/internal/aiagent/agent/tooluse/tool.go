@@ -2,12 +2,11 @@ package tooluse
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/aiagent/agent/portcontract"
 )
 
 // ToolCategory 工具分类
@@ -55,18 +54,12 @@ type ToolParam struct {
 	Maximum   *float64 `json:"maximum,omitempty"`
 }
 
-// ToolResult 工具执行结果
-type ToolResult struct {
-	Success    bool            `json:"success"`
-	Data       any             `json:"data,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	ErrorCode  string          `json:"error_code,omitempty"`
-	Timing     ToolTiming      `json:"timing"`
-	ToolName   string          `json:"tool_name"`
-	ExecutedAt time.Time       `json:"executed_at"`
-	AuditTrace string          `json:"audit_trace,omitempty"`
-	Card       *model.RichCard `json:"card,omitempty"`
-}
+// ToolResult / ToolTiming 的唯一定义在 portcontract（agent_runtime 亦需引用，而它 import
+// 不到本包）。此处保留本包名，既有调用方与 JSON 形状均不变。
+type ToolResult = portcontract.ToolResult
+
+// ToolTiming 执行耗时统计
+type ToolTiming = portcontract.ToolTiming
 
 // 工具失败分类枚举（D08）：随 ToolResult.error_code 回灌给 LLM。
 // 语义约定：INVALID_PARAMS→修参重试；RATE_LIMITED/CIRCUIT_OPEN→等待或降级；
@@ -112,18 +105,6 @@ func ClassifyToolError(err error) string {
 		return ToolErrInternal
 	}
 	return ToolErrInternal
-}
-
-// ToolTiming 执行耗时统计
-type ToolTiming struct {
-	DurationMs int64 `json:"duration_ms"`
-	RetryCount int   `json:"retry_count"`
-}
-
-// ToJSON 将 ToolResult 序列化为 JSON 字符串
-func (r ToolResult) ToJSON() string {
-	data, _ := json.Marshal(r)
-	return string(data)
 }
 
 // BaseTool 工具基类（简化工具实现）
@@ -185,13 +166,6 @@ func SuccessResult(toolName string, data any) ToolResult {
 		ToolName:   toolName,
 		ExecutedAt: time.Now(),
 	}
-}
-
-func (r ToolResult) withTiming(toolName string, start time.Time) ToolResult {
-	r.ToolName = toolName
-	r.ExecutedAt = time.Now()
-	r.Timing = ToolTiming{DurationMs: time.Since(start).Milliseconds()}
-	return r
 }
 
 // ValidateRequired 校验必填参数

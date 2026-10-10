@@ -91,7 +91,7 @@ func (t *CardShowTool) Execute(ctx context.Context, args map[string]any) (ToolRe
 	start := time.Now()
 	title := getArgString(args, "title")
 	if title == "" {
-		return ErrorResult(t.Name(), errors.New("title 为必填项")).withTiming(t.Name(), start),
+		return ErrorResult(t.Name(), errors.New("title 为必填项")).WithTiming(t.Name(), start),
 			errors.New("title 为必填项")
 	}
 
@@ -102,7 +102,7 @@ func (t *CardShowTool) Execute(ctx context.Context, args map[string]any) (ToolRe
 	switch model.RichCardType(cardType) {
 	case model.CardTypeProduct, model.CardTypeOrder, model.CardTypePromo, model.CardTypeGeneric:
 	default:
-		return ErrorResult(t.Name(), fmt.Errorf("type 非法：%q，必须是 product/order/promo/generic", cardType)).withTiming(t.Name(), start),
+		return ErrorResult(t.Name(), fmt.Errorf("type 非法：%q，必须是 product/order/promo/generic", cardType)).WithTiming(t.Name(), start),
 			fmt.Errorf("type 非法：%q", cardType)
 	}
 
@@ -143,7 +143,7 @@ func (t *CardShowTool) Execute(ctx context.Context, args map[string]any) (ToolRe
 
 	res := SuccessResult(t.Name(), card)
 	res.Card = card
-	return res.withTiming(t.Name(), start), nil
+	return res.WithTiming(t.Name(), start), nil
 }
 
 // BuildCardTools 构造会话内卡片工具集

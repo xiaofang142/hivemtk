@@ -2,9 +2,32 @@ package agent_runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
+
+	"hivemtk-user/internal/aiagent/agent/portcontract"
+	"hivemtk-user/internal/model"
 )
+
+// ToolResult 的字段集在全仓只允许有一份定义（在 portcontract）。本包曾各自定义过一份，
+// 少 error_code 与 card 两个字段 ⇒ 同一份工具结果 JSON 在两条链路上读出不同字段集。
+// 若有人再改回本地结构体，下面的类型别名赋值会直接编不过。
+func TestToolResultIsTheSharedContractType(t *testing.T) {
+	var _ portcontract.ToolResult = ToolResult{}
+
+	raw := ToolResult{
+		Error:     "上游超时",
+		ErrorCode: "TOOL_TIMEOUT",
+		Card:      &model.RichCard{Type: "generic", Title: "回执"},
+	}.ToJSON()
+
+	for _, want := range []string{`"error_code":"TOOL_TIMEOUT"`, `"card":{`} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("ToJSON() 应含 %s，实际 %s", want, raw)
+		}
+	}
+}
 
 type mockLLMClient struct {
 	response string
