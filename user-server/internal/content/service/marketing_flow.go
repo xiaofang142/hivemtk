@@ -22,12 +22,6 @@ func SetSmsSender(fn func(phone, content string) error) {
 	smsSenderFunc = fn
 }
 
-var workflowAssetResolverFunc func(ctx context.Context) (json.RawMessage, bool)
-
-func SetWorkflowAssetResolver(fn func(ctx context.Context) (json.RawMessage, bool)) {
-	workflowAssetResolverFunc = fn
-}
-
 type MarketingWorkflow struct {
 	ID       string                   `json:"id"`
 	Name     string                   `json:"name"`
