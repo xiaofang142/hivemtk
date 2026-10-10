@@ -2,9 +2,16 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"os"
 	"strings"
+	"sync"
+	"time"
+
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/db"
 
 	"github.com/gin-gonic/gin"
 
@@ -53,14 +60,36 @@ func mcpDedicatedCandidates(ctx context.Context) []string {
 //   - 拿到扩展凭证（存在于每台运营机器上）就等于拿到工具调用凭证。
 //
 // 语义：
-//   - 配了专用凭证（KV mcp_token / env MCP_TOKEN / MCP_TOKEN_PREV）就只认它，
+//   - 带 X-Client-Id + X-API-Key 头的请求走**凭证对**校验（mcp_credentials 表，
+//     sha256 恒时比较 + enabled 检查）——管理端签发，供外部 AI Skill/Agent 接入；
+//     校验失败直接 401，不再落到单值链路（防两把锁互相兜底）；
+//   - 不带凭证对头的老调用方继续走单值链路：
+//     配了专用凭证（KV mcp_token / env MCP_TOKEN / MCP_TOKEN_PREV）就只认它，
 //     请求头接受 X-MCP-Token 或 Authorization: Bearer；此时桥接那枚值不在候选集合里，
 //     从哪个头进来都换不到工具调用权限；
-//   - 没配专用凭证时**回落到桥接凭证**（等价于拆分前的行为，存量部署不会当场 401）；
+//     没配专用凭证时**回落到桥接凭证**（等价于拆分前的行为，存量部署不会当场 401）；
 //   - 两者都没有：fail-closed 503，且绝不读 BRIDGE_INGEST_AUTH=off。
 func MCPGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
+
+		// 凭证对分支（ClientID + APIKey）：只要带了 X-Client-Id 就只认这条链。
+		if clientID := strings.TrimSpace(c.GetHeader("X-Client-Id")); clientID != "" {
+			apiKey := strings.TrimSpace(c.GetHeader("X-API-Key"))
+			if apiKey == "" {
+				response.Error(c, 401, "缺少 X-API-Key")
+				c.Abort()
+				return
+			}
+			if !verifyMCPCredentialPair(ctx, clientID, apiKey) {
+				response.Error(c, 401, "Client ID 或 API Key 无效（或已停用）")
+				c.Abort()
+				return
+			}
+			c.Next()
+			return
+		}
+
 		candidates := mcpDedicatedCandidates(ctx)
 		dedicated := len(candidates) > 0
 		if !dedicated {
@@ -105,4 +134,81 @@ func extractMCPToken(c *gin.Context) string {
 		return strings.TrimSpace(v[7:])
 	}
 	return strings.TrimSpace(c.GetHeader("X-Bridge-Token"))
+}
+
+// =============================================================================
+// ClientID + APIKey 凭证对校验（mcp_credentials 表）
+// =============================================================================
+
+var (
+	mcpCredMu        sync.RWMutex
+	mcpCredCache     map[string]mcpCredCacheEntry
+	mcpCredCacheTTL  = 60 * time.Second
+	mcpCredLastTouch sync.Map // clientID -> time.Time（last_used 回写节流，1 次/分钟）
+)
+
+type mcpCredCacheEntry struct {
+	hash    string
+	enabled bool
+	expires time.Time
+}
+
+// verifyMCPCredentialPair 校验凭证对：client_id 查缓存/库，sha256 恒时比较。
+// 校验通过节流回写 last_used_at（每凭证至多 1 次/分钟，避免写风暴）。
+func verifyMCPCredentialPair(ctx context.Context, clientID, apiKey string) bool {
+	now := time.Now()
+	mcpCredMu.RLock()
+	entry, ok := mcpCredCache[clientID]
+	mcpCredMu.RUnlock()
+	if !ok || now.After(entry.expires) {
+		g := db.GetDB()
+		if g == nil {
+			return false
+		}
+		var cred model.MCPCredential
+		if err := g.WithContext(ctx).
+			Where("client_id = ? AND enabled = ?", clientID, true).
+			First(&cred).Error; err != nil {
+			mcpCredMu.Lock()
+			if mcpCredCache == nil {
+				mcpCredCache = map[string]mcpCredCacheEntry{}
+			}
+			mcpCredCache[clientID] = mcpCredCacheEntry{expires: now.Add(mcpCredCacheTTL), enabled: false}
+			mcpCredMu.Unlock()
+			return false
+		}
+		mcpCredMu.Lock()
+		if mcpCredCache == nil {
+			mcpCredCache = map[string]mcpCredCacheEntry{}
+		}
+		mcpCredCache[clientID] = mcpCredCacheEntry{hash: cred.APIKeyHash, enabled: cred.Enabled, expires: now.Add(mcpCredCacheTTL)}
+		mcpCredMu.Unlock()
+		entry = mcpCredCache[clientID]
+	}
+	if !entry.enabled {
+		return false
+	}
+	sum := sha256.Sum256([]byte(apiKey))
+	if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(entry.hash)) != 1 {
+		return false
+	}
+	// last_used_at 回写节流：命中缓存前提下每凭证 1 次/分钟
+	if last, seen := mcpCredLastTouch.Load(clientID); !seen || now.Sub(last.(time.Time)) > time.Minute {
+		mcpCredLastTouch.Store(clientID, now)
+		if g := db.GetDB(); g != nil {
+			if err := g.WithContext(ctx).Model(&model.MCPCredential{}).
+				Where("client_id = ?", clientID).
+				Update("last_used_at", now).Error; err != nil {
+				mcpCredLastTouch.Delete(clientID)
+			}
+		}
+	}
+	return true
+}
+
+// InvalidateMCPCredentialCache 管理端增删改凭证后调用，立刻生效。
+func InvalidateMCPCredentialCache() {
+	mcpCredMu.Lock()
+	mcpCredCache = nil
+	mcpCredMu.Unlock()
 }

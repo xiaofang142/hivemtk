@@ -401,6 +401,10 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 	}
 
 	admin.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
+		admin.GET("/mcp/credentials", controller.ListMCPCredentials)
+		admin.POST("/mcp/credentials", controller.CreateMCPCredential)
+		admin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
+		admin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
 	admin.PUT("/llm/embedding-config", controller.UpdateEmbeddingConfig)
 	auth.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
 	auth.GET("/llm/models", llmCtrl.ListModels)
