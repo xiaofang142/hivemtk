@@ -9,14 +9,14 @@ import (
 
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 // mcp_credential.go MCP 凭证对管理端（ClientID + APIKey）
-//
+// DB 访问走 repository（L3 分层约束）。
 // 签发：client_id = "mcp-" + 8hex；api_key = "wgk_" + 32hex（明文只在创建响应出现一次，
 // 库里只存 sha256）。吊销 = enabled=false 或删除，InvalidateMCPCredentialCache 即刻生效。
 
@@ -30,14 +30,17 @@ type mcpCredentialRow struct {
 }
 
 // ListMCPCredentials GET /api/mcp/credentials
+var mcpAdminSvc = func() *service.McpCredentialAdminService { return service.NewMcpCredentialAdminService() }
+
+func mcpReady() bool { return mcpAdminSvc().Ready() }
+
 func ListMCPCredentials(ctx *gin.Context) {
-	g := db.GetDB()
-	if g == nil {
+	if !mcpAdminSvc().Ready() {
 		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")
 		return
 	}
-	var rows []model.MCPCredential
-	if err := g.WithContext(ctx).Order("id DESC").Limit(200).Find(&rows).Error; err != nil {
+	rows, err := mcpAdminSvc().List(ctx.Request.Context(), 200)
+	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -50,8 +53,7 @@ func ListMCPCredentials(ctx *gin.Context) {
 
 // CreateMCPCredential POST /api/mcp/credentials  body: {"name":"..."}
 func CreateMCPCredential(ctx *gin.Context) {
-	g := db.GetDB()
-	if g == nil {
+	if !mcpAdminSvc().Ready() {
 		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")
 		return
 	}
@@ -69,7 +71,7 @@ func CreateMCPCredential(ctx *gin.Context) {
 		APIKeyHash: hex.EncodeToString(sum[:]),
 		Enabled:    true,
 	}
-	if err := g.WithContext(ctx).Create(&cred).Error; err != nil {
+	if err := mcpAdminSvc().Create(ctx.Request.Context(), &cred); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "创建失败: "+err.Error())
 		return
 	}
@@ -82,9 +84,9 @@ func CreateMCPCredential(ctx *gin.Context) {
 
 // UpdateMCPCredential PUT /api/mcp/credentials/:id  body: {"enabled":bool} 或 {"name":"..."}
 func UpdateMCPCredential(ctx *gin.Context) {
-	g := db.GetDB()
-	if g == nil {
-		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")
+	id := parseUintOrZero(ctx.Param("id"))
+	if id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "无效 id")
 		return
 	}
 	var req struct {
@@ -106,8 +108,7 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无可更新字段")
 		return
 	}
-	if err := g.WithContext(ctx).Model(&model.MCPCredential{}).
-		Where("id = ?", ctx.Param("id")).Updates(updates).Error; err != nil {
+	if err := mcpAdminSvc().Update(ctx.Request.Context(), id, updates); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -117,12 +118,12 @@ func UpdateMCPCredential(ctx *gin.Context) {
 
 // DeleteMCPCredential DELETE /api/mcp/credentials/:id
 func DeleteMCPCredential(ctx *gin.Context) {
-	g := db.GetDB()
-	if g == nil {
-		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")
+	id := parseUintOrZero(ctx.Param("id"))
+	if id == 0 {
+		response.Error(ctx, http.StatusBadRequest, "无效 id")
 		return
 	}
-	if err := g.WithContext(ctx).Delete(&model.MCPCredential{}, ctx.Param("id")).Error; err != nil {
+	if err := mcpAdminSvc().Delete(ctx.Request.Context(), id); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
