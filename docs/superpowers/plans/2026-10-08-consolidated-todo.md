@@ -124,13 +124,21 @@ P0/P1/P2…P8 共 52 卡均有「执行结果」回灌，仅剩：
 
 ---
 
-## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md`）— ✅ 2026-10-08 收口轮逐条对账（实际共 D01–D23，23 条）
+## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md`）— 2026-10-08 附二逐条对账 ＋ 2026-10-11 附三增量对账（实际共 D01–D23，23 条）
 
-详见 `docs/tech-research/DECISIONS.md` 的「附二：2026-10-08 状态对账」小节（含逐条证据文件位置）。摘要：
+详见 `docs/tech-research/DECISIONS.md` 的「附二：2026-10-08 状态对账」＋「附三：2026-10-11 增量对账」两张表
+（含逐条证据与可复跑判据；**下一轮按两张表合并后读，只看附二会读到已闭环项的旧状态**。
+该文件与 `docs/architecture/ZOMBIE_API_TRIAGE.md` 同族：**在工作区根、仓库之外，克隆里没有这份文件**，
+`find hivemtk -name DECISIONS.md` 零命中 ⇒ 下面这份摘要就是本仓读者能拿到的全部，逐条证据都写了本仓内的可复核坐标）。
+口径与附三一致：
 
-- **已闭环 12 条**（文档陈旧）：D01 置信度聚合（`smart_cs_orchestrator.go:1110-1122` Aggregate 优先 + 启发式降级，装配 `app/sales_engine_factory.go:66/:119`）/ D02 `executed_nodes`（`v3_29_0_sop_executed_nodes_migration.go`）/ D03 Saga 补偿（`sop_compensation.go:92` + `sop_dispatcher.go:110/:734`）/ D04 Bandit 回流（`bandit_reward_reflux_cron.go` 等 6 文件）/ D06 Checkpoint（`agent_checkpoint_repo.go` + 接线测试）/ D11 MultiModelVote+selfconsistency / D14 触达频控（`reach_gcra_limiter.go:88` → `reach_send_pipeline.go:249` → `app/reach_tool_wiring.go:34`，生产已接线）/ D15 WS seq+epoch / D16 HashEmbedding / D19 Conformal / D20 转人工条件门 / D22 BG/NBD。
-- **部分落地 2 条**：D07 greeting 未见单一词典实体（54 文件散落）；D08 主链已闭环（`tooluse/tool.go:59`），仅 `agent/runtime/context.go:14` 同名死声明待清（需连带改其测试，登记为卫生项）。
-- **确未落地 9 条**（各带实测证据与不吞理由）：D05 failsafe / D09 state_hash / D10 异议 LLM 兜底 / D12 配置层统一 / D13 Casbin / D17 sparse / D18 goldSet / D21 pg_search / D23 意图中间层。
+- **已闭环 13 条**（文档陈旧）：D01 置信度聚合（`smart_cs_orchestrator.go:1110-1122` Aggregate 优先 + 启发式降级，装配 `app/sales_engine_factory.go:66/:119`）/ D02 `executed_nodes`（`v3_29_0_sop_executed_nodes_migration.go`）/ D03 Saga 补偿（`sop_compensation.go:92` + `sop_dispatcher.go:110/:734`）/ D04 Bandit 回流（`bandit_reward_reflux_cron.go` 等 6 文件）/ D06 Checkpoint（`agent_checkpoint_repo.go` + 接线测试）/ D08 工具失败 `error_code`（主链 `tooluse/tool.go:59`，`agent/runtime/context.go:16` 那份漂移副本已删成类型别名 `= portcontract.ToolResult`，单一事实源在 `portcontract/tool_result.go:13`，`a65059b6`）/ D11 MultiModelVote+selfconsistency / D14 触达频控（`reach_gcra_limiter.go:88` → `reach_send_pipeline.go:249` → `app/reach_tool_wiring.go:34`，生产已接线）/ D15 WS seq+epoch / D16 HashEmbedding / D19 Conformal / D20 转人工条件门 / D22 BG/NBD。
+- **部分落地 2 条**：D07 greeting 落的是**一致性门**（ENUM 门第 6 项锁 `IntentXxx` 常量 ↔ `DefaultIntents` 词条 `Type` 双向覆盖，`ce892c31`，CI 执行点 `.github/workflows/enum-consistency.yml:46`），**不是**把 54 处散落引用收进单一实体文件 ⇒ 按决策原文的"单一数据源"仍未闭环；D12 把两个点位（`provider_failover_policy`／`embedding_global`）的读路径从遗留 `system_config_kv` 迁进参数中心，后者带可回滚的一次性迁移 `v3_54_0_…_migration.go`，**"两套 KV 物理合并 + 热重载"未落地**（附二的不吞理由仍适用：破坏性重构，需与 D13 一并排期）。
+- **确未落地 8 条**（各带实测证据与不吞理由）：D05 failsafe / D09 state_hash / D10 异议 LLM 兜底 / D13 Casbin / D17 sparse / D18 goldSet / D21 pg_search / D23 意图中间层。
+
+**计数自证**：13 ＋ 2 ＝ 15 条已在本仓代码里核到落点，另 8 条确未落地，合计 23 ＝ 工作区根那份
+`DECISIONS.md` 的 `grep -c '^## 决策 D'` 现数（2026-10-11 测于该文件，克隆里跑不出这条——它不入库）；
+本摘要的对账判据是"每条都能在**本仓**指到一个文件或一条命令"，指不到的只许写在"确未落地"里并带不吞理由。
 
 ---
 
