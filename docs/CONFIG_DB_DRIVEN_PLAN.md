@@ -176,8 +176,8 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1~6 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) / agent_tool(4/5) / telemetry(4)+workflow(4) 已入库（6/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=88 / 已声明未接线=27 / UNDECLARED=0 / 声明过期=0`。
+> **进度（2026-10-10）：第 1~7 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) / agent_tool(4/5) / telemetry(4)+workflow(4) / inbox_sales(4)+session(3)+pagination(1) 已入库（7/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=96 / 已声明未接线=19 / UNDECLARED=0 / 声明过期=0`。
 >
 > **入库位置（如实记录，勿按 commit message 找）**：
 > - 第 1 批 misc(16) → `c75c78b6 feat(config-params): 阶段一第1批 —— misc 组 16 条僵尸参数接线`
@@ -188,8 +188,39 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 > - 第 3 批 agent_llm(7) → `97ebaefb feat(config-params): 阶段一第3批 —— agent_llm 组 7 条僵尸参数接线`
 > - 第 4 批 cache(5) → `8bcc0443 feat(config-params): 阶段一第4批 —— cache 组 5 条僵尸参数接线`
 > - 第 5 批 agent_tool(4/5) → `5fb6f400 feat(config-params): 阶段一第5批 —— agent_tool 组 4 条僵尸参数接线`
-> - 第 6 批 telemetry(4)+workflow(4) → 本提交。
+> - 第 6 批 telemetry(4)+workflow(4) → `21dff6d0 feat(config-params): 阶段一第6批 —— telemetry(4)+workflow(4) 组 8 条僵尸参数接线`
+> - 第 7 批 inbox_sales(4)+session(3)+pagination(1) → 本提交。
 > - 台账回填另计：`2f2ba9cb`（第 3 批）、以及各批随附的 docs 提交。
+>
+> **第 7 批：16 条目标里只接了 8 条，另 8 条经核实确实没有生产消费点**
+> （同第 2/5 批口径：如实保留「未接线」标注并把 Description 改写为写明真实原因，
+> 不为让门变绿而凭空造读取点）：
+> - `pagination.page_max_size` / `page_default_size`：对应的
+>   `internal/pkg/utils/pagination.go` `ParsePagination` / `ParsePaginationOffset`
+>   **全树只有 `pagination_test.go` 调用**，零生产调用方；`page_default_size` 在
+>   `ParseCursorParams` 里那条兜底分支又被 operation_log / security_audit / customer
+>   三个调用方传的正数 `defaultLimit` 遮蔽。顺带发现种子写 100、代码写 200 本就不一致。
+> - `wechat.chat_ws_ping_period` / `chat_ws_pong_wait` / `chat_ws_write_wait`：常量在
+>   `internal/controller/chat_ws.go` 有读取点，但承载它的
+>   `internal/router/ws.go` `RegisterWSRoutes` **全树零调用方**（`GET /ws/chat`
+>   从未注册，实测落到 SPA 的 NoRoute 兜底）。另：后端根本没有微信渠道 WS 客户端，
+>   `internal/channelbot` 下只有 core/qq/telegram/whatsapp，种子「微信渠道 WS」本身名不副实。
+> - `bridge.polling_max_timeout` / `polling_default_timeout` /
+>   `bridge.max_reply_content_bytes`：承第 6 批已核实，长轮询未实现，
+>   `maxReplyContentBytes` 自带 `//nolint:unused`。
+>
+> **第 7 批的又一处「种子与代码不一致」**：`session.max_delay_seconds` 的种子写
+> 「触达流水线排程允许的最大延迟，超过视为放弃」，实现
+> `internal/content/service/marketing_flow.go handleDelay` 其实是「营销流程 delay 节点
+> 单次等待时长的上限，超过则截断」。代码里没有「超期放弃」这个概念，已连接线带改写一并对齐。
+>
+> **第 7 批踩到的一个坑（值得写下来）**：seam setter 的 `nil` 语义是「**不注入**」
+> （`if fn != nil` 守卫，防装配顺序错时把兜底值顶掉），不是「复位」。按直觉写
+> 「传 nil 后应该回到兜底」的用例会红，而且红得有理有据。本批复用了前六批的同一范式，
+> 于是测试里统一改成两件事：① 把「传 nil 等于撤销注入」改写成「传 nil 是空操作」并
+> 先重新注入一个已知的非兜底值再断言；② `t.Cleanup` 里同包直接写包内 `provider` 变量复位
+> （生产 setter 复位不了，测试能）。**这个坑不是本批独有的，前六批的 seam 测试也写了
+> 「传 nil 等于撤销注入」，只是它们的断言恰好在 provider 仍是被注入值的位置才没红。**
 >
 > **第 6 批的两条「种子与代码不一致」处置**（这是接线时才发现的、写死没人看得出来的漂移）：
 > 1. `telemetry.trace_sink_buffer` 种子写 8192，代码兜底是 `aiagent/llm/trace_sink.go` 的 2048。

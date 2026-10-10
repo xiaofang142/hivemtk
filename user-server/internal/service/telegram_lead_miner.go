@@ -22,7 +22,27 @@ import (
 	"hivemtk-user/internal/model"
 )
 
-const tgLeadOpportunityThreshold = 40
+// DefaultTgLeadOpportunityThreshold Telegram 线索判为「商机」的最低意向分（参数中心未配置时的兜底）
+const DefaultTgLeadOpportunityThreshold = 40
+
+var tgLeadOpportunityThresholdProvider = func() int { return DefaultTgLeadOpportunityThreshold }
+
+// SetTgLeadOpportunityThresholdProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetTgLeadOpportunityThresholdProvider(fn func() int) {
+	if fn != nil {
+		tgLeadOpportunityThresholdProvider = fn
+	}
+}
+
+// tgLeadOpportunityThreshold 非正值一律回落兜底：阈值 ≤0 会让每条群发言都被判成商机，
+// 线索库里全是噪声商机分，反而把真正的机会淹掉。
+func tgLeadOpportunityThreshold() int {
+	v := tgLeadOpportunityThresholdProvider()
+	if v <= 0 {
+		return DefaultTgLeadOpportunityThreshold
+	}
+	return v
+}
 
 var (
 	tgEmailRe = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
@@ -79,7 +99,7 @@ func DetectTelegramIntent(text string) (score int, signals []string, isOpportuni
 	if score > 100 {
 		score = 100
 	}
-	return score, signals, score >= tgLeadOpportunityThreshold
+	return score, signals, score >= tgLeadOpportunityThreshold()
 }
 
 func formatTelegramLeadDesc(groupTitle, snippet string, score int, signals []string, isOpportunity bool) string { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用
@@ -152,3 +172,6 @@ func boolToInt64(b bool) int64 {
 	}
 	return 0
 }
+
+// ProbeTgLeadOpportunityThreshold 暴露读取口当前值，供装配层测试断言接线确实生效。
+func ProbeTgLeadOpportunityThreshold() int { return tgLeadOpportunityThreshold() }

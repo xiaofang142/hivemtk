@@ -196,6 +196,10 @@ func main() {
 		logger.Info("[ConfigParam] telemetry/workflow 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	if wired := app.WireInboxSalesSessionPaginationConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] inbox_sales/session/pagination 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

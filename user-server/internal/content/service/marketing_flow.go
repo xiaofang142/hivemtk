@@ -521,12 +521,34 @@ func evalIn(fieldValue any, value string) (bool, error) {
 	return false, nil
 }
 
+// DefaultMaxFlowDelaySeconds 营销流程 delay 节点单次等待时长的上限秒数（参数中心未配置时的兜底）
+const DefaultMaxFlowDelaySeconds = 300
+
+var maxFlowDelaySecondsProvider = func() int { return DefaultMaxFlowDelaySeconds }
+
+// SetMaxFlowDelaySecondsProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetMaxFlowDelaySecondsProvider(fn func() int) {
+	if fn != nil {
+		maxFlowDelaySecondsProvider = fn
+	}
+}
+
+// maxFlowDelaySeconds 非正值一律回落兜底：上限 ≤0 会让所有 delay 节点的时长被 clamp 成 0，
+// 配置的等待完全不发生，流程看起来跑通但等待步骤全部被跳过。
+func maxFlowDelaySeconds() int {
+	v := maxFlowDelaySecondsProvider()
+	if v <= 0 {
+		return DefaultMaxFlowDelaySeconds
+	}
+	return v
+}
+
 func (s *MarketingFlowService) handleDelay(ctx context.Context, node model.FlowNode) (map[string]any, error) {
 	duration, _ := node.Config["duration"].(float64)
 
-	const maxDelaySeconds = 300
-	if duration > maxDelaySeconds {
-		duration = maxDelaySeconds
+	maxDelay := maxFlowDelaySeconds()
+	if duration > float64(maxDelay) {
+		duration = float64(maxDelay)
 	}
 	if duration > 0 {
 		select {
@@ -562,3 +584,6 @@ func (s *MarketingFlowService) TriggerFlowByID(ctx context.Context, flowID uint,
 	}
 	return nil, nil
 }
+
+// ProbeMaxFlowDelaySeconds 暴露读取口当前值，供装配层测试断言接线确实生效。
+func ProbeMaxFlowDelaySeconds() int { return maxFlowDelaySeconds() }

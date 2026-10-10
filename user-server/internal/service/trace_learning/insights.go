@@ -22,15 +22,26 @@ const insightSystemPrompt = `你是销售对话复盘专家。给定一次被评
 
 var insightJunkRe = regexp.MustCompile(`^[\s"'` + "`" + `]+|[\s"'` + "`" + `]+$`)
 
-const insightMaxLen = 200
+// DefaultInsightMaxLen 洞察文本截断长度（参数中心未配置时的兜底）
+const DefaultInsightMaxLen = 200
 
-var insightMaxLenProvider = func() int { return insightMaxLen }
+var insightMaxLenProvider = func() int { return DefaultInsightMaxLen }
 
 // SetInsightMaxLenProvider 上层注入函数（ConfigParam 初始化后调用）
 func SetInsightMaxLenProvider(fn func() int) {
 	if fn != nil {
 		insightMaxLenProvider = fn
 	}
+}
+
+// InsightMaxLen 当前生效的洞察截断长度（非正值一律回落兜底：
+// 截断长度 ≤0 会让每条洞察都被截成空串，洞察功能看起来正常但产出全没了）
+func InsightMaxLen() int {
+	v := insightMaxLenProvider()
+	if v <= 0 {
+		return DefaultInsightMaxLen
+	}
+	return v
 }
 
 // InsightLLM 洞察提取所需的最小 LLM 能力（*llm.Dispatcher 天然满足；测试可注入替身）
@@ -96,7 +107,7 @@ func normalizeInsight(raw string) string {
 	if s == "" {
 		return ""
 	}
-	maxLen := insightMaxLenProvider()
+	maxLen := InsightMaxLen()
 	r := []rune(s)
 	if len(r) > maxLen {
 		s = string(r[:maxLen])

@@ -236,8 +236,8 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
-> **处置进度（2026-10-10）**：第 1 批 `misc`(16)、第 2 批 `confidence`(5/7) **已接线并提交**。
-> 门禁读数：`wired 40→88`、`UNDECLARED 72→0`、`已声明未接线 27`。
+> **处置进度（2026-10-10）**：第 1~7 批已接线并提交（第 7 批 `inbox_sales`/`session`/`pagination` 详见下行）。
+> 门禁读数：`wired 40→96`、`UNDECLARED 72→0`、`已声明未接线 19`。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |
@@ -249,11 +249,11 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `agent_tool`(5) ⚠️4条已接线 | `max_concurrent`✅、`max_content_len`✅、`cooldown_duration`✅、`fail_threshold`✅；`result_cache_ttl` **无处可接**——`tooluse/result_cache.go` 的 `NewResultCache` 全仓只有 `p2_test.go` 调用，生产链路从未构造过它，没有构造点就接不上 TTL，保留「未接线」标注 |
 | `telemetry`(4) ✅已接线 | `node_health_window`、`trace_sink_buffer`、`geo_position_window`、`feature_flag_poll_interval` |
 | `workflow`(4) ✅已接线 | `max_subflow_depth`、`max_workflow_steps`、`max_running_per_sop`、`max_executed_node_trace` |
-| `inbox_sales`(4) | `tg_lead_opportunity_threshold`、`unified_miner_lead_threshold`、`preview_sample_limit`、`geo_lead_preview_max_len` |
-| `bridge`(3) | `polling_max_timeout`、`polling_default_timeout`、`max_reply_content_bytes` |
-| `session`(3) | `active_ttl`、`idle_ttl`、`max_delay_seconds` |
-| `pagination`(3) | `page_max_size`、`page_default_size`、`cursor_page_size` |
-| `wechat`(3) | `chat_ws_ping_period`、`chat_ws_pong_wait`、`chat_ws_write_wait` |
+| `inbox_sales`(4) ✅已接线 | `tg_lead_opportunity_threshold`✅（`service/telegram_lead_miner.go`）、`unified_miner_lead_threshold`✅（`service/lead_miner_unified.go`）、`preview_sample_limit`✅（`service/oneid_merge_preview.go`）、`geo_lead_preview_max_len`✅（`service/trace_learning/insights.go`，seam 本就存在，只补注入） |
+| `bridge`(3) ❌无处可接 | `polling_max_timeout`、`polling_default_timeout`、`max_reply_content_bytes` **无处可接**——`handler_http.go` 的两个长轮询常量全树只有 `defaults_test.go` 引用（文件注释自陈「服务端没有长轮询实现」），`bridge_helpers.go` 的 `maxReplyContentBytes` 自带 `//nolint:unused`，生产路径无任何回复截断 |
+| `session`(3) ✅已接线 | `active_ttl`✅（`repository/customer_session.go`，service 侧改为直接读同一读取口以保持单一源）、`idle_ttl`✅（`aiagent/mcp/http.go`）、`max_delay_seconds`✅（`content/service/marketing_flow.go handleDelay`；**种子原描述「触达排程超期放弃」与实现不符——实现是「delay 节点等待上限、超过截断」，已一并改写对齐**） |
+| `pagination`(3) ⚠️1条已接线 | `cursor_page_size`✅（`pkg/pagination/cursor.go`，经 `utils.ParseCursorParams`→`ClampLimit` 被 operation_log/security_audit/customer 三处生产调用）；`page_max_size`/`page_default_size` **无处可接**——对应的 `ParsePagination`/`ParsePaginationOffset` 全树只有 `pagination_test.go` 调用；`page_default_size` 在 `ParseCursorParams` 的兜底分支又被三个调用方的正数 `defaultLimit` 遮蔽。另注种子写 100、代码 `defaultMaxPageSize` 写 200 本就不一致 |
+| `wechat`(3) ❌无处可接 | `chat_ws_ping_period`、`chat_ws_pong_wait`、`chat_ws_write_wait` **无处可接**——常量在 `controller/chat_ws.go` 有读取点，但承载它的 `router/ws.go RegisterWSRoutes` 全树零调用方（`GET /ws/chat` 从未注册，实测落到 SPA NoRoute 兜底）。另：后端无微信渠道 WS 客户端，`internal/channelbot` 只有 core/qq/telegram/whatsapp |
 | `sales`(2) | `insight_limit`、`identity_max_attempts` |
 | `middleware`(2) | `audit_flush_interval`、`mfa_recent_verify_ttl` |
 | `knowledge`(2) | `max_upload_file_size`、`merchant_knowledge_max_len` |
@@ -276,9 +276,16 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `confidence.humanize_default_threshold` / `persona_default_threshold` / `persona_max_retry` | `service/humanize/service.go:16,28`、`service/persona_evaluator.go:585,587` |
 | `cache.translation_cache_max_entries` | `rag/retrieval/translation_cache.go:22 =100000` |
 | `bridge.polling_max_timeout` / `polling_default_timeout` | `bridge/handler_http.go:37,38 =500,30` |
-| `session.active_ttl` | `repository/customer_session.go:24 =24` |
-| `pagination.page_max_size` / `page_default_size` / `cursor_page_size` | `pkg/utils/pagination.go:46,48`、`pkg/pagination/cursor.go:14` |
-| `wechat.chat_ws_ping_period` 等 3 条 | 前端 `utils/chatSocket.js` 对应项 |
+| `session.active_ttl` | `repository/customer_session.go:24 =24h` ✅（service 侧 `CustomerSessionActiveTTL` const 保留为兜底值声明，运行时改读 `repository.SessionActiveTTL()`） |
+| `session.idle_ttl` | `aiagent/mcp/http.go:17 sessionIdleTTL=30m` ✅ |
+| `session.max_delay_seconds` | `content/service/marketing_flow.go:527 函数内 const =300` ✅（**种子原描述与实现不符，已改写**） |
+| `pagination.cursor_page_size` | `pkg/pagination/cursor.go:14 CursorPageSize=100` ✅ |
+| `pagination.page_max_size` / `page_default_size` | `pkg/utils/pagination.go` 的 `ParsePagination`/`ParsePaginationOffset` —— **零生产调用方**（详见上表行内说明） |
+| `inbox_sales.tg_lead_opportunity_threshold` | `service/telegram_lead_miner.go:25 =40` ✅ |
+| `inbox_sales.unified_miner_lead_threshold` | `service/lead_miner_unified.go:48 =40` ✅ |
+| `inbox_sales.preview_sample_limit` | `service/oneid_merge_preview.go:40 =20` ✅ |
+| `inbox_sales.geo_lead_preview_max_len` | `service/trace_learning/insights.go:25 =200` ✅（seam 本就存在，只补注入 + 非正值守卫） |
+| `wechat.chat_ws_ping_period` 等 3 条 | `controller/chat_ws.go:51-55` —— 常量有读取点但 `/ws/chat` 路由从未注册（详见上表行内说明）；另前端 `utils/chatSocket.js` 有对应常量属**前端**阈值，归阶段三 |
 | `wecom.error_rate_degrade` | `wecom_account_health.go:45 =0.3` |
 | `telemetry.feature_flag_poll_interval` | `pkg/featureflag/flag.go:34 =5` ✅ |
 | `workflow.max_subflow_depth` | `workflow_node_executors.go:14 =5` ✅ |

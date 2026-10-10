@@ -29,12 +29,13 @@ type CustomerSessionService struct {
 	blacklistRepo  *repository.UserBlacklistRepository
 }
 
-// CustomerSessionActiveTTL 客服会话活跃 TTL（与 repository.DefaultSessionActiveTTL 保持一致）
+// CustomerSessionActiveTTL 客服会话活跃 TTL 的兜底值声明。
 //
-// 24h 内有消息互动的会话视为「活跃」；超过 24h 自动关闭（由 AutoCloseStaleSessions
-// 定时任务驱动）。这是 GetActiveByUserID 的隐含语义边界。
+// 单一源：repository.DefaultSessionActiveTTL。调整需同步更新那边。
 //
-// 单一源：repository.DefaultSessionActiveTTL；调整需同步更新两边。
+// 运行时不要读这个 const —— 读 repository.SessionActiveTTL()，它才带参数中心的当前值。
+// 保留 const 是为了让「兜底值是多少」这件事在本文件里仍然一眼可见（原先就是直接读它，
+// 现在改了会静默漂成 24h）。
 const CustomerSessionActiveTTL = repository.DefaultSessionActiveTTL
 
 const autoCloseStaleBatchSize = 500
@@ -51,12 +52,13 @@ const autoCloseStaleBatchSize = 500
 //   - 只关闭「活跃」状态（pending/ai_handling/waiting/human_handling）
 //   - 已 resolved/closed 的会话不会被重复关闭
 func (s *CustomerSessionService) AutoCloseStaleSessions(ctx context.Context) (int64, error) {
-	total, err := s.sessionRepo.AutoCloseStaleSessions(ctx, CustomerSessionActiveTTL, autoCloseStaleBatchSize)
+	ttl := repository.SessionActiveTTL()
+	total, err := s.sessionRepo.AutoCloseStaleSessions(ctx, ttl, autoCloseStaleBatchSize)
 	if err != nil {
 		return 0, err
 	}
 	if total > 0 {
-		logger.Infof("auto-close stale sessions: closed %d (TTL=%s)", total, CustomerSessionActiveTTL)
+		logger.Infof("auto-close stale sessions: closed %d (TTL=%s)", total, ttl)
 	}
 	return total, nil
 }

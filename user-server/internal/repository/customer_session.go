@@ -13,15 +13,38 @@ import (
 	"gorm.io/gorm"
 )
 
-// DefaultSessionActiveTTL 客服会话的默认活跃 TTL
+// DefaultSessionActiveTTL 客服会话的默认活跃 TTL（参数中心未配置时的兜底）。
 //
 // 设计：
 //   - 24h 内有消息互动的会话视为「活跃」，AI / 坐席可继续复用
 //   - 超过 24h 未互动的会话自动 close（由 service.CustomerSessionService.AutoCloseStaleSessions 定时任务驱动）
-//   - 该常量与 service.CustomerSessionActiveTTL 必须保持单一源（service 层会覆盖本地为同值）
 //
-// 修改本值需同步：service/customer_session.go CustomerSessionActiveTTL + DEVELOPMENT.md。
+// 单一时效来源（single source of truth）：
+// 运行时一律读 SessionActiveTTL()，它返回参数中心当前值、读不到时回落本常量；
+// service.CustomerSessionActiveTTL 这个 const 同样初始化自本常量，保留为「兜底值声明」，
+// 运行时不再直接引用（AutoCloseStaleSessions 传的是 SessionActiveTTL() 的结果）。
 const DefaultSessionActiveTTL = 24 * time.Hour
+
+var sessionActiveTTLProvider = func() time.Duration { return DefaultSessionActiveTTL }
+
+// SetSessionActiveTTLProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetSessionActiveTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		sessionActiveTTLProvider = fn
+	}
+}
+
+// SessionActiveTTL 当前生效的会话活跃 TTL。
+//
+// 非正值一律回落兜底：TTL ≤0 会让 cutoff = now，所有会话都算「从未互动过」，
+// GetActiveBy* 直接返回 nil —— 表现为「坐席一打开工作台就没有会话」，而日志里什么错都没有。
+func SessionActiveTTL() time.Duration {
+	v := sessionActiveTTLProvider()
+	if v <= 0 {
+		return DefaultSessionActiveTTL
+	}
+	return v
+}
 
 // CustomerSessionRepository 客服会话仓库
 type CustomerSessionRepository struct {
@@ -278,14 +301,14 @@ func (r *CustomerSessionRepository) GetAgentSessions(ctx context.Context, agentI
 // 活跃状态：pending / ai_handling / waiting / human_handling。
 // 若存在多条，返回最近一条有消息记录的会话。
 //
-// 24h TTL（与 service.CustomerSessionActiveTTL 对齐）：只返回 last_message_at 在
-// SessionActiveTTL 之内的会话。超过 24h 未互动的会话视为历史会话，避免被复用导致
+// TTL 语义（参数 session.active_ttl，默认 24h）：只返回 last_message_at 在
+// SessionActiveTTL() 之内的会话。超过该时长的会话视为历史会话，避免被复用导致
 // AI 上下文被无关历史污染。
 func (r *CustomerSessionRepository) GetActiveByUserID(ctx context.Context, userID string) (*model.CustomerSession, error) {
 	if userID == "" {
 		return nil, errors.New("user_id 不能为空")
 	}
-	cutoff := time.Now().Add(-DefaultSessionActiveTTL)
+	cutoff := time.Now().Add(-SessionActiveTTL())
 	var session model.CustomerSession
 	err := r.db.Where("user_id = ? AND status IN ?", userID, []model.SessionStatus{
 		model.SessionStatusPending,
@@ -334,7 +357,7 @@ func (r *CustomerSessionRepository) GetActiveByOneID(ctx context.Context, oneID 
 	if oneID == "" {
 		return nil, nil
 	}
-	cutoff := time.Now().Add(-DefaultSessionActiveTTL)
+	cutoff := time.Now().Add(-SessionActiveTTL())
 	var session model.CustomerSession
 	err := r.db.Where("one_id = ? AND status IN ?", oneID, []model.SessionStatus{
 		model.SessionStatusPending,

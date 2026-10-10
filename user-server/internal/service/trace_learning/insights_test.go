@@ -46,7 +46,7 @@ func TestNormalizeInsight(t *testing.T) {
 	assert.Equal(t, "报价前未确认预算", normalizeInsight("  \"报价前未确认预算\"\n"))
 	long := strings.Repeat("长", 300)
 	got := normalizeInsight(long)
-	require.Len(t, []rune(got), insightMaxLen)
+	require.Len(t, []rune(got), DefaultInsightMaxLen)
 
 	assert.Equal(t, "a b", normalizeInsight("a\nb"))
 }

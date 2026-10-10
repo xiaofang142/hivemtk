@@ -11,7 +11,29 @@ import (
 	"gorm.io/gorm"
 )
 
-const CursorPageSize = 100
+// DefaultCursorPageSize 游标分页每批条数的兜底上限（参数中心未配置时的默认值与硬上限）
+const DefaultCursorPageSize = 100
+
+var cursorPageSizeProvider = func() int { return DefaultCursorPageSize }
+
+// SetCursorPageSizeProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetCursorPageSizeProvider(fn func() int) {
+	if fn != nil {
+		cursorPageSizeProvider = fn
+	}
+}
+
+// CursorPageSize 当前生效的游标分页条数。
+//
+// 非正值一律回落兜底：这个值同时是「默认每批条数」与「硬上限」，
+// ≤0 会让 ClampLimit 把一切非正数 limit 变成 0，SQL 里变成 LIMIT 0，列表恒空。
+func CursorPageSize() int {
+	v := cursorPageSizeProvider()
+	if v <= 0 {
+		return DefaultCursorPageSize
+	}
+	return v
+}
 
 // orderClauseRe 与 repository.generic 同源："列名 ASC/DESC" 逗号串的语法子集。
 var orderClauseRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*( (asc|desc))(,[ ]*[a-z_][a-z0-9_]*( (asc|desc)))*$`)
@@ -101,8 +123,8 @@ type CursorQueryResult struct {
 //  4. 比 N 多取 1 条用于判断 hasMore
 func CursorQuery(ctx context.Context, db *gorm.DB, opts CursorQueryOpts) (*CursorQueryResult, error) {
 	pageSize := opts.PageSize
-	if pageSize <= 0 || pageSize > CursorPageSize {
-		pageSize = CursorPageSize
+	if pageSize <= 0 || pageSize > CursorPageSize() {
+		pageSize = CursorPageSize()
 	}
 
 	q := db.WithContext(ctx).Table(opts.Table)
@@ -167,16 +189,16 @@ func NextCursor(rows any, pageSize int) Cursor {
 }
 
 func IsValidLimit(limit int) bool {
-	return limit > 0 && limit <= CursorPageSize
+	return limit > 0 && limit <= CursorPageSize()
 }
 
-// ClampLimit 限制 limit 在 [1, CursorPageSize] 范围内
+// ClampLimit 限制 limit 在 [1, CursorPageSize()] 范围内
 func ClampLimit(limit int) int {
 	if limit <= 0 {
-		return CursorPageSize
+		return CursorPageSize()
 	}
-	if limit > CursorPageSize {
-		return CursorPageSize
+	if limit > CursorPageSize() {
+		return CursorPageSize()
 	}
 	return limit
 }

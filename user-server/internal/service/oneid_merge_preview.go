@@ -37,7 +37,27 @@ type MergePreview struct {
 	Samples        []MergePreviewSample `json:"samples"`
 }
 
-const previewSampleLimit = 20
+// DefaultPreviewSampleLimit OneID 合并预览的最大采样数（参数中心未配置时的兜底）
+const DefaultPreviewSampleLimit = 20
+
+var previewSampleLimitProvider = func() int { return DefaultPreviewSampleLimit }
+
+// SetPreviewSampleLimitProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetPreviewSampleLimitProvider(fn func() int) {
+	if fn != nil {
+		previewSampleLimitProvider = fn
+	}
+}
+
+// previewSampleLimit 非正值一律回落兜底：容量参数传 0 会 make 出零长切片，
+// 下面的 len 判据又恒成立，循环会在第一条就 break，预览永远空。
+func previewSampleLimit() int {
+	v := previewSampleLimitProvider()
+	if v <= 0 {
+		return DefaultPreviewSampleLimit
+	}
+	return v
+}
 
 func identityFieldValue(c *model.Customer, field string) string {
 	switch field {
@@ -146,9 +166,10 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 	}
 	sort.Strings(keys)
 
-	samples := make([]MergePreviewSample, 0, previewSampleLimit)
+	sampleLimit := previewSampleLimit()
+	samples := make([]MergePreviewSample, 0, sampleLimit)
 	for _, k := range keys {
-		if len(samples) >= previewSampleLimit {
+		if len(samples) >= sampleLimit {
 			break
 		}
 		parts := strings.SplitN(k, "|", 2)
@@ -156,3 +177,6 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 	}
 	return &MergePreview{CandidateCount: len(pairScore), Samples: samples}, nil
 }
+
+// ProbePreviewSampleLimit 暴露读取口当前值，供装配层测试断言接线确实生效。
+func ProbePreviewSampleLimit() int { return previewSampleLimit() }

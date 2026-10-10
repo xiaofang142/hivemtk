@@ -45,13 +45,13 @@ func TestClampLimit(t *testing.T) {
 		input    int
 		expected int
 	}{
-		{0, CursorPageSize},
-		{-1, CursorPageSize},
+		{0, DefaultCursorPageSize},
+		{-1, DefaultCursorPageSize},
 		{1, 1},
 		{50, 50},
-		{CursorPageSize, CursorPageSize},
-		{CursorPageSize + 1, CursorPageSize},
-		{9999, CursorPageSize},
+		{DefaultCursorPageSize, DefaultCursorPageSize},
+		{DefaultCursorPageSize + 1, DefaultCursorPageSize},
+		{9999, DefaultCursorPageSize},
 	}
 	for _, c := range cases {
 		got := ClampLimit(c.input)
@@ -68,7 +68,7 @@ func TestIsValidLimit(t *testing.T) {
 	if IsValidLimit(0) {
 		t.Error("0 should be invalid")
 	}
-	if IsValidLimit(CursorPageSize + 1) {
+	if IsValidLimit(DefaultCursorPageSize + 1) {
 		t.Error("over max should be invalid")
 	}
 }

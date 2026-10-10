@@ -45,7 +45,26 @@ type ChannelLeadAdapter interface {
 	TriggerOutreach(ctx context.Context, s *WebhookService, accountID, fromID, groupID, groupTitle string, score int, originalText string)
 }
 
-const unifiedMinerOpportunityThreshold = 40
+// DefaultUnifiedMinerOpportunityThreshold 统一线索挖掘判为「有效线索」的最低分（参数中心未配置时的兜底）
+const DefaultUnifiedMinerOpportunityThreshold = 40
+
+var unifiedMinerOpportunityThresholdProvider = func() int { return DefaultUnifiedMinerOpportunityThreshold }
+
+// SetUnifiedMinerOpportunityThresholdProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetUnifiedMinerOpportunityThresholdProvider(fn func() int) {
+	if fn != nil {
+		unifiedMinerOpportunityThresholdProvider = fn
+	}
+}
+
+// unifiedMinerOpportunityThreshold 非正值一律回落兜底：阈值 ≤0 会让每条群发言都进线索库。
+func unifiedMinerOpportunityThreshold() int {
+	v := unifiedMinerOpportunityThresholdProvider()
+	if v <= 0 {
+		return DefaultUnifiedMinerOpportunityThreshold
+	}
+	return v
+}
 
 // unifiedIntentBaseScore 打分起点：正文里没有任何意向词时的分数。
 // 调用方用它做"是否命中过词库"的判据（score > 起点 = 至少命中一词），
@@ -124,7 +143,7 @@ func DetectUnifiedIntent(text string, extraHigh, extraMedium []string) (score in
 	if score > 100 {
 		score = 100
 	}
-	return score, signals, score >= unifiedMinerOpportunityThreshold
+	return score, signals, score >= unifiedMinerOpportunityThreshold()
 }
 
 // FormatUnifiedLeadDesc 通用线索描述生成（内嵌 [意向分:NN] 供增量更新解析）。
@@ -295,3 +314,6 @@ func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.
 	_ = scoreSvc.RecordEngagement(ctx, clue.ID, "group_message", channel, map[string]any{"is_opportunity": isOpp})
 	_, _ = scoreSvc.ScoreClue(ctx, clue)
 }
+
+// ProbeUnifiedMinerOpportunityThreshold 暴露读取口当前值，供装配层测试断言接线确实生效。
+func ProbeUnifiedMinerOpportunityThreshold() int { return unifiedMinerOpportunityThreshold() }

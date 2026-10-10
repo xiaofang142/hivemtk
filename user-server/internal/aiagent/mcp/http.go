@@ -14,7 +14,27 @@ import (
 // HeaderMcpSessionID MCP 会话标识响应头/请求头名
 const HeaderMcpSessionID = "Mcp-Session-Id"
 
-const sessionIdleTTL = 30 * time.Minute
+// DefaultSessionIdleTTL MCP 会话空闲过期时长（参数中心未配置时的兜底）
+const DefaultSessionIdleTTL = 30 * time.Minute
+
+var sessionIdleTTLProvider = func() time.Duration { return DefaultSessionIdleTTL }
+
+// SetSessionIdleTTLProvider 由装配层注入参数中心读取口（nil 视为不注入）
+func SetSessionIdleTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		sessionIdleTTLProvider = fn
+	}
+}
+
+// SessionIdleTTL 非正值一律回落兜底：TTL ≤0 会让 storeSession 一进来就把所有在册会话
+// 清掉，MCP 客户端每次 initialize 都被当成新会话，服务端状态反复重置。
+func SessionIdleTTL() time.Duration {
+	v := sessionIdleTTLProvider()
+	if v <= 0 {
+		return DefaultSessionIdleTTL
+	}
+	return v
+}
 
 // HTTPHandler MCP Streamable HTTP 最小子集处理器。
 //
@@ -113,7 +133,7 @@ func (h *HTTPHandler) storeSession(id string, srv *Server) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for sid, s := range h.sessions {
-		if now.Sub(s.lastSeen) > sessionIdleTTL {
+		if now.Sub(s.lastSeen) > SessionIdleTTL() {
 			delete(h.sessions, sid)
 		}
 	}
