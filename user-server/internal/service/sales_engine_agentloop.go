@@ -130,7 +130,7 @@ func (e *SalesEngine) runAgentLoop(
 	if e.sessionMsgRepo != nil && req.SessionID != "" {
 		// 历史注入走 token 预算截断：无预算的原样注入在长会话下会顶爆
 		// provider ContextWindow，dispatcher 逐个跳过候选最终降级模板回复
-		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates); herr == nil {
+		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates()); herr == nil {
 			hist = excludeSystemHistoryNotices(hist)
 			if len(hist) > 0 && hist[0].Content == req.UserMessage {
 				hist = hist[1:]
@@ -718,7 +718,31 @@ const agentLoopHistoryTokenBudget = 4096
 
 const agentLoopHistoryOutputReservePct = 30
 
-const agentLoopHistoryMaxCandidates = 200
+// defaultAgentLoopHistoryMaxCandidates 历史注入候选条数上限的代码兜底值，与参数中心
+// `misc.agentloop_history_max_candidates` 的 DefaultValue 一致。
+const defaultAgentLoopHistoryMaxCandidates = 200
+
+// agentLoopHistoryMaxCandidatesProvider 由装配层注入；未注入时回落默认值。
+var agentLoopHistoryMaxCandidatesProvider = func() int { return defaultAgentLoopHistoryMaxCandidates }
+
+// SetAgentLoopHistoryMaxCandidatesProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetAgentLoopHistoryMaxCandidatesProvider(fn func() int) {
+	if fn != nil {
+		agentLoopHistoryMaxCandidatesProvider = fn
+	}
+}
+
+// agentLoopHistoryMaxCandidates 取当前上限（非正数一律回落默认值）。
+//
+// 它是"喂给模型的历史最多取几条"，不是"截断成多少字"——真正决定 token 预算的是
+// 上面的 agentLoopHistoryTokenBudget。所以这个数调大不会直接撑爆上下文，
+// 但会让每轮多付一次 DB 往返与向量化前的文本拼装成本。
+func agentLoopHistoryMaxCandidates() int {
+	if n := agentLoopHistoryMaxCandidatesProvider(); n > 0 {
+		return n
+	}
+	return defaultAgentLoopHistoryMaxCandidates
+}
 
 const historyMsgTokenOverhead = 6
 
@@ -742,7 +766,7 @@ func (e *SalesEngine) fetchHistoryWithinTokenBudget(sessionID, userMessage strin
 	if e.sessionMsgRepo == nil {
 		return nil
 	}
-	hist, err := e.sessionMsgRepo.ListRecentDescBySessionID(context.Background(), sessionID, agentLoopHistoryMaxCandidates)
+	hist, err := e.sessionMsgRepo.ListRecentDescBySessionID(context.Background(), sessionID, agentLoopHistoryMaxCandidates())
 	if err != nil || len(hist) == 0 {
 		return nil
 	}

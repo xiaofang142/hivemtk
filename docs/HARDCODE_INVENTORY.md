@@ -236,9 +236,13 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
+> **处置进度（2026-10-10）**：第 1 批 `misc`(16) **已接线并提交**。
+> 门禁读数：`wired 40→56`、`UNDECLARED 72→56`（含上表其余各组）、`已声明未接线 56`。
+> 下表是**接线前**的基线快照，`misc` 一行保留原样以便对照，其状态见该行末尾。
+
 | group | 僵尸 key |
 | --- | --- |
-| `misc`(16) | `visitor_token_ttl`、`sso_cookie_ttl`、`polling_lock_stale_threshold`、`domain_check_concurrency`、`sms_max_retry`、`csv_export_max_rows`、`backup_page_size`、`text_truncate_max_bytes`、`preview_max_len`、`sop_scheduler_interval`、`sop_max_wait`、`deepl_timeout`、`reply_sem_timeout`、`ownership_cache_ttl`、`summary_stale_threshold`、`agentloop_history_max_candidates` |
+| `misc`(16) ✅已接线 | `visitor_token_ttl`、`sso_cookie_ttl`、`polling_lock_stale_threshold`、`domain_check_concurrency`、`sms_max_retry`、`csv_export_max_rows`、`backup_page_size`、`text_truncate_max_bytes`、`preview_max_len`、`sop_scheduler_interval`、`sop_max_wait`、`deepl_timeout`、`reply_sem_timeout`、`ownership_cache_ttl`、`summary_stale_threshold`、`agentloop_history_max_candidates` |
 | `confidence`(7) | `humanize_default_threshold`、`persona_default_threshold`、`persona_max_retry`、`intent_fewshot_min_cos`、`weak_truth_min_confidence`、`emb_retry_cooldown`、`veto_low_rag_threshold` |
 | `agent_llm`(7) | `vote_agreement_threshold`、`default_health_check_interval`、`default_circuit_open_duration`、`default_health_check_timeout`、`default_failure_threshold`、`default_http_timeout`、`db_sink_stop_deadline` |
 | `cache`(5) | `max_keys`、`faq_decay_max_batch`、`memo_ttl`、`platform_cache_ttl`、`translation_cache_max_entries` |

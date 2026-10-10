@@ -15,6 +15,54 @@ type BackupController struct {
 	backupService *service.BackupService
 }
 
+const (
+	// DefaultBackupPageSizeCap 备份列表单页条数上限，对应参数中心 misc.backup_page_size。
+	// 代码兜底值，参数读不到时用它。
+	DefaultBackupPageSizeCap = 1000
+
+	// defaultBackupPageSize 备份列表默认每页条数。
+	//
+	// 与上面那个上限刻意分开：种子里那条的默认值是 1000，只有当"单页上限"才说得通。
+	// 当"默认分页大小"接的话，升级后备份列表每页会从 10 行静默变成 1000 行，
+	// 一页几百条记录，且没人会觉得那是配置生效的结果。
+	defaultBackupPageSize = 10
+)
+
+var backupPageSizeCapProvider func() int
+
+// SetBackupPageSizeCapProvider 注入备份列表单页上限的取值来源（装配层用）。
+func SetBackupPageSizeCapProvider(fn func() int) { backupPageSizeCapProvider = fn }
+
+func backupPageSizeCap() int {
+	if backupPageSizeCapProvider == nil {
+		return DefaultBackupPageSizeCap
+	}
+	if v := backupPageSizeCapProvider(); v > 0 {
+		return v
+	}
+	return DefaultBackupPageSizeCap
+}
+
+// clampBackupPageSize 把入参规整进 [1, 单页上限]。
+func clampBackupPageSize(pageSize int) int {
+	if pageSize <= 0 {
+		return defaultBackupPageSize
+	}
+	if cap := backupPageSizeCap(); pageSize > cap {
+		return cap
+	}
+	return pageSize
+}
+
+// atoiOrDefault 解析失败（含空串、脏字符）时回落到 def，而不是回落 0。
+func atoiOrDefault(raw string, def int) int {
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
 // NewBackupController 创建备份控制器实例
 func NewBackupController() *BackupController {
 	return &BackupController{
@@ -91,7 +139,7 @@ func (c *BackupController) GetBackupList(ctx *gin.Context) {
 	}
 
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	pageSize := clampBackupPageSize(atoiOrDefault(ctx.DefaultQuery("page_size", ""), defaultBackupPageSize))
 
 	backups, total, err := c.backupService.GetBackupList(ctx.Request.Context(), page, pageSize)
 	if err != nil {

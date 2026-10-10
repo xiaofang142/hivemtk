@@ -627,7 +627,27 @@ type WaitExecutor struct {
 	timerRepo *repository.SOPTimerRepository
 }
 
+// sopTimerDefaultMaxWait SOP 等待节点最大等待时长的代码兜底值，与参数中心
+// `misc.sop_max_wait` 的 DefaultValue（86400 秒）一致。
 const sopTimerDefaultMaxWait = 24 * time.Hour
+
+// sopTimerMaxWaitProvider 由装配层注入；未注入时回落 sopTimerDefaultMaxWait。
+var sopTimerMaxWaitProvider = func() time.Duration { return sopTimerDefaultMaxWait }
+
+// SetSOPTimerMaxWaitProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetSOPTimerMaxWaitProvider(fn func() time.Duration) {
+	if fn != nil {
+		sopTimerMaxWaitProvider = fn
+	}
+}
+
+// sopTimerMaxWait 取当前上限（非正数一律回落默认值）。
+func sopTimerMaxWait() time.Duration {
+	if d := sopTimerMaxWaitProvider(); d > 0 {
+		return d
+	}
+	return sopTimerDefaultMaxWait
+}
 
 func (e *WaitExecutor) NodeType() string { return SOPNodeTypeWait }
 
@@ -679,7 +699,7 @@ func (e *WaitExecutor) Execute(ctx context.Context, ec *ExecutionContext) (*Node
 		now := time.Now()
 		maxWaitSeconds, _ := ec.Node.Config["max_wait_seconds"].(float64)
 		if maxWaitSeconds <= 0 {
-			maxWaitSeconds = float64(sopTimerDefaultMaxWait / time.Second)
+			maxWaitSeconds = float64(sopTimerMaxWait() / time.Second)
 		}
 		maxWaitAt := now.Add(time.Duration(int64(maxWaitSeconds)) * time.Second)
 		timer := &model.SOPTimer{

@@ -165,8 +165,32 @@ func RequireOwnerWithChecker(resourceKey, table string, checker OwnershipChecker
 	}
 }
 
-// RequireOwnerWithCache 带 TTL 内存缓存的归属校验中间件（防 DoS）。
+// defaultOwnershipCacheTTL 归属缓存默认存活时长，与参数中心
+// `misc.ownership_cache_ttl` 的 DefaultValue（5 秒）一致。
 //
+// 5s 这个取值是有取舍的：缓存存在的目的是挡住"拿别人的资源 ID 批量扫"的 DoS，
+// 而它同时是一段**越权窗口**——owner 在这 5s 内被改掉，命中缓存的旧请求仍按旧 owner 放行。
+// 调长要重新评估这条，调短则缓存基本失去意义（每请求一次 DB 查询）。
+const defaultOwnershipCacheTTL = 5 * time.Second
+
+// ownershipCacheTTLProvider 由装配层注入；未注入时回落默认值。
+var ownershipCacheTTLProvider = func() time.Duration { return defaultOwnershipCacheTTL }
+
+// SetOwnershipCacheTTLProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetOwnershipCacheTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		ownershipCacheTTLProvider = fn
+	}
+}
+
+// ownershipCacheTTL 取当前 TTL（非正数一律回落默认值）。
+func ownershipCacheTTL() time.Duration {
+	if d := ownershipCacheTTLProvider(); d > 0 {
+		return d
+	}
+	return defaultOwnershipCacheTTL
+}
+
 // ttl 推荐 5s——业务可调，但需评估：过长放大越权窗口，过短失去缓存意义。
 // 缓存 key = (table, resourceID, userID)；userID 不进 key 可借助上下文比对，
 // 但为简化失效语义这里直接合并。
@@ -177,7 +201,7 @@ func RequireOwnerWithCache(resourceKey, table string, ttl time.Duration) gin.Han
 // RequireOwnerWithCacheAndChecker 带 checker + 缓存的归属校验中间件。
 func RequireOwnerWithCacheAndChecker(resourceKey, table string, ttl time.Duration, checker OwnershipChecker) gin.HandlerFunc {
 	if ttl <= 0 {
-		ttl = 5 * time.Second
+		ttl = ownershipCacheTTL()
 	}
 	return func(c *gin.Context) {
 		uid := utils.GetUID(c)

@@ -176,6 +176,13 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
+> **进度（2026-10-10）：第 1 批 misc 组 16 条已完成并提交（1/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=56 / 已声明未接线=56 / UNDECLARED=2`。
+> 余下 2 条 UNDECLARED 是 `cache.faq_ttl` 与 `agent_llm.default_semantic_threshold`，
+> 它们的唯一读取点在 `app/faq_cache_wiring.go`——一个尚未入库的在途文件，属于别人正在做的
+> FAQ 语义缓存特性（该特性还要改 `rag/cache/service.go` 的构造签名并连带两个测试文件）。
+> **不为了让门变绿而把别人的半成品特性带进本提交**；等对方入库后这两条自然转绿。
+
 - **动作**：清单 §7 对照表右列的常量，逐个换成 `config.GetInt/GetDuration/GetBool/GetFloat/GetString`，
   保留原常量名做 fallback（避免大面积改调用点）。
 - **接线范式**（以 `InboxLockTTL` 为例，符合五层架构：常量在 Model 层、读取在 Repository/Service 层）：
@@ -193,6 +200,16 @@ func InboxLockTTL(ctx context.Context) time.Duration {
 - **验收**：
   - `check-config-param-readpoints.py` 输出 `未接线且已声明=0`
   - 每个域一个回归：改库 → 60s 内行为变化（`configParamTTL = 60s`）→ 改回
+
+- **第 1 批（misc 组 16 条）实际落地形态与原计划的出入**：
+
+| 原计划 | 实际落地 | 为什么改 |
+| --- | --- | --- |
+| 每条常量旁写一个 `GetXxx(ctx)` | 统一 `const xxxDefault` + `var xxxProvider` + `SetXxxProvider(fn)` + 包级 `xxx()` | 点位横跨 `model` / `repository` / `middleware` / `pkg` / `ops`，这些包**不能反向依赖 `service`**（Model 层禁止 import 上层），就地接线只能各造函数变量。装配层 `internal/app/misc_params_wiring.go` 是唯一能同时看见全部 16 条的地方 |
+| 逐个替换调用点 | 只改**取值那一行**，调用点结构不动 | 16 条里有几条的常量被多处引用（`text_truncate_max_bytes` 在 `pkg/tracing` 等），逐点替换会把 diff 撑大到无法 review |
+| — | provider 传 nil 视为不注入；`xxx()` 拿到非正数一律回落兜底 | 装配顺序错时不能把兜底值顶掉；`make(chan, 0)` 会死锁、上限取到 0 会把内容全截没 |
+| — | `backup_page_size` 按「单页上限 clamp」接入，保留默认分页 10 | 种子默认 1000 只在「上限」语义下说得通。若当「默认分页大小」接入，升级后备份列表默认每页会从 10 行静默变成 1000 行 |
+| — | `sop_scheduler_interval` 不与 `utils.LongTimeout` 共用常量 | 一个是外部调用超时、一个是调度周期，共用会让「改超时」意外改掉调度频率 |
 
 ### 阶段二：P0 新增 58 个点位入库
 

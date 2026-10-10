@@ -411,22 +411,22 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		}()
 	}
 
-	// replySem 并发限流：正常 5s 超时；商机触发放宽到 30s（高意向不能丢）
-	replySemTimeout := 5 * time.Second
+	// replySem 并发限流：正常取 reply_sem_timeout（默认 5s）；商机触发放宽到 30s（高意向不能丢）
+	timeout := replySemTimeout()
 	replyReason := "normal"
 	if meta := extractTelegramReplyMetaFromCtx(ctx); meta != nil && meta.TriggerReason == "opportunity" {
-		replySemTimeout = 30 * time.Second
+		timeout = opportunityReplySemTimeout
 		replyReason = "opportunity"
 	}
 	select {
 	case s.replySem <- struct{}{}:
 		defer func() { <-s.replySem }()
-	case <-time.After(replySemTimeout):
+	case <-time.After(timeout):
 		logger.Ctx(ctx).Error().
 			Str("channel", string(channel)).
 			Str("account_id", accountID).
 			Str("event_id", p.EventID).
-			Dur("timeout", replySemTimeout).
+			Dur("timeout", timeout).
 			Int("sem_capacity", cap(s.replySem)).
 			Str("trigger_reason", replyReason).
 			Msg("[Webhook] runAIGeneration replySem 满 / 阻塞超时 — 跳过本轮 AI 推理，避免 goroutine 堆积 OOM；依赖下轮 inbound 重试")
@@ -578,4 +578,29 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		Str("session_id", result.SessionID).
 		Str("handler", string(result.HandlerType)).
 		Msg("no outbound")
+}
+
+// defaultReplySemTimeout replySem 等待超时的代码兜底值，与参数中心
+// `misc.reply_sem_timeout` 的 DefaultValue（5 秒）一致。
+const defaultReplySemTimeout = 5 * time.Second
+
+// opportunityReplySemTimeout 商机触发时的放宽值：宁可多等 30s 也不能把高意向线索丢掉。
+const opportunityReplySemTimeout = 30 * time.Second
+
+// replySemTimeoutProvider 由装配层注入；未注入时回落默认值。
+var replySemTimeoutProvider = func() time.Duration { return defaultReplySemTimeout }
+
+// SetReplySemTimeoutProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetReplySemTimeoutProvider(fn func() time.Duration) {
+	if fn != nil {
+		replySemTimeoutProvider = fn
+	}
+}
+
+// replySemTimeout 取当前超时（非正数一律回落默认值）。
+func replySemTimeout() time.Duration {
+	if d := replySemTimeoutProvider(); d > 0 {
+		return d
+	}
+	return defaultReplySemTimeout
 }

@@ -123,12 +123,33 @@ func (r *InboxConversationRepository) Create(ctx context.Context, conv *model.In
 	return r.db.Create(conv).Error
 }
 
+// defaultPreviewMaxLen 消息预览最大字符数的代码兜底值，与参数中心
+// `misc.preview_max_len` 的 DefaultValue 一致。
+const defaultPreviewMaxLen = 500
+
+// previewMaxLenProvider 由装配层注入；未注入时回落默认值。
+var previewMaxLenProvider = func() int { return defaultPreviewMaxLen }
+
+// SetPreviewMaxLenProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetPreviewMaxLenProvider(fn func() int) {
+	if fn != nil {
+		previewMaxLenProvider = fn
+	}
+}
+
+// previewMaxLen 取当前上限（非正数一律回落默认值）。
+func previewMaxLen() int {
+	if n := previewMaxLenProvider(); n > 0 {
+		return n
+	}
+	return defaultPreviewMaxLen
+}
+
 // UpdateLastMessage 更新最后消息字段（含 unread_count 自增）
 func (r *InboxConversationRepository) UpdateLastMessage(ctx context.Context, id uint, lastMessage string, lastMessageAt time.Time, unreadInc int) error {
 
-	const previewMaxLen = 500
-	if len(lastMessage) > previewMaxLen {
-		lastMessage = lastMessage[:previewMaxLen]
+	if limit := previewMaxLen(); len(lastMessage) > limit {
+		lastMessage = lastMessage[:limit]
 	}
 	return r.db.Model(&model.InboxConversation{}).Where("id = ?", id).
 		Updates(map[string]any{

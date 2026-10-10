@@ -173,7 +173,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 
 	results := make([]dto.DomainPoolCheckResponse, len(domainPools))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, domainCheckConcurrency)
+	sem := make(chan struct{}, domainCheckConcurrency())
 	for i, dp := range domainPools {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -218,7 +218,30 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 	return results, nil
 }
 
-const domainCheckConcurrency = 16
+// defaultDomainCheckConcurrency 域名批量检测的默认并发，也是参数中心
+// `misc.domain_check_concurrency` 的代码兜底值（两者必须一致）。
+const defaultDomainCheckConcurrency = 16
+
+// domainCheckConcurrencyProvider 由装配层注入；未注入时回落默认值。
+var domainCheckConcurrencyProvider = func() int { return defaultDomainCheckConcurrency }
+
+// SetDomainCheckConcurrencyProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetDomainCheckConcurrencyProvider(fn func() int) {
+	if fn != nil {
+		domainCheckConcurrencyProvider = fn
+	}
+}
+
+// domainCheckConcurrency 取当前并发值。
+//
+// 非正数一律回落默认值：make(chan struct{}, 0) 是一条**永不有人通过的**信号量，
+// CheckAllDomains 会整批挂死在 wg.Wait()，参数填错等于把这个接口打成超时。
+func domainCheckConcurrency() int {
+	if n := domainCheckConcurrencyProvider(); n > 0 {
+		return n
+	}
+	return defaultDomainCheckConcurrency
+}
 
 // domainCheckHTTPClient 域名健康检查共享 HTTP 客户端：
 // 复用连接池避免每次检查新建 client（高频检查下耗尽临时端口）。

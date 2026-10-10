@@ -157,6 +157,13 @@ func main() {
 		}
 	}
 
+	// misc 组接线上线：把参数中心的取值注入到 model/repository/middleware/pkg/ops 等
+	// 无法反向依赖 service 的下层包。放在 seed 之后，这样刚改的值本次启动就生效；
+	// 放在 if 之外，这样 seed 失败（DB 抖了）时各点位仍能拿到代码兜底值而不是没人注入。
+	if wired := app.WireMiscConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] misc 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

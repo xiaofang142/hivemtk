@@ -53,10 +53,36 @@ func (s *SOPScheduler) SOPService(ctx context.Context) *SOPService {
 func InitSOPScheduler(db *gorm.DB, dispatcher any) *SOPScheduler {
 	schedulerOnce.Do(func() {
 		svc := InitSOPService(db, nil)
-		globalSOPScheduler = NewSOPScheduler(svc, db, utils.LongTimeout)
+		globalSOPScheduler = NewSOPScheduler(svc, db, soPSchedulerScanInterval())
 		globalSOPScheduler.Start(context.Background())
 	})
 	return globalSOPScheduler
+}
+
+// defaultSOPSchedulerScanInterval 调度器扫描周期的代码兜底值，与参数中心
+// `misc.sop_scheduler_interval` 的 DefaultValue（60 秒）一致。
+//
+// 口径与 utils.LongTimeout 相同但**独立取一份**：LongTimeout 是"外部调用该等多久"，
+// 调度周期是"多久看一眼有没有到点的 SOP"，两者碰巧都是 60s 但语义不同，
+// 共用一个常量会让"改超时"意外改掉调度频率。
+const defaultSOPSchedulerScanInterval = 60 * time.Second
+
+// sopSchedulerScanIntervalProvider 由装配层注入；未注入时回落默认值。
+var sopSchedulerScanIntervalProvider = func() time.Duration { return defaultSOPSchedulerScanInterval }
+
+// SetSOPSchedulerScanIntervalProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetSOPSchedulerScanIntervalProvider(fn func() time.Duration) {
+	if fn != nil {
+		sopSchedulerScanIntervalProvider = fn
+	}
+}
+
+// soPSchedulerScanInterval 取当前扫描周期（非正数一律回落默认值）。
+func soPSchedulerScanInterval() time.Duration {
+	if d := sopSchedulerScanIntervalProvider(); d > 0 {
+		return d
+	}
+	return defaultSOPSchedulerScanInterval
 }
 
 // NewSOPScheduler 构造调度器

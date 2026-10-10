@@ -11,7 +11,27 @@ import (
 )
 
 // DefaultVisitorTokenTTL visitor token 默认有效期（7 天）
+//
+// 它同时是参数中心 `misc.visitor_token_ttl` 的代码兜底值：两者必须一致，
+// 否则「运维改了参数」与「没配参数」会走出两种 TTL，而页面上看不出区别。
 const DefaultVisitorTokenTTL = 7 * 24 * time.Hour
+
+// visitorTokenTTLProvider 由装配层（internal/app/misc_params_wiring.go）在
+// SeedConfigParams 之后注入；未注入时回落 DefaultVisitorTokenTTL。
+//
+// 做成函数而不是直接读全局单例：这个包是叶子包，不该知道参数中心的存在。
+var visitorTokenTTLProvider = func() time.Duration { return DefaultVisitorTokenTTL }
+
+// GetVisitorTokenTTL 返回当前生效的访客 token 有效期。
+func GetVisitorTokenTTL() time.Duration { return visitorTokenTTLProvider() }
+
+// SetVisitorTokenTTLProvider 注入读取函数（参数中心装配层调用；测试可注入桩）。
+// nil 视为不注入，避免装配顺序出错时把兜底值顶掉。
+func SetVisitorTokenTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		visitorTokenTTLProvider = fn
+	}
+}
 
 // GenerateVisitorToken 使用 HMAC-SHA256 为访客生成签名 token
 //
@@ -33,7 +53,7 @@ func GenerateVisitorToken(secret, channelID, visitorID, sessionID string, ttl ti
 		return "", errors.New("channel_id、visitor_id、session_id 均不能为空")
 	}
 	if ttl <= 0 {
-		ttl = DefaultVisitorTokenTTL
+		ttl = GetVisitorTokenTTL()
 	}
 	expireTS := time.Now().Add(ttl).Unix()
 	payload := fmt.Sprintf("%s|%s|%s|%d", channelID, visitorID, sessionID, expireTS)

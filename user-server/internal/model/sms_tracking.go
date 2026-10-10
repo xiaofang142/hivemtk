@@ -61,13 +61,39 @@ func (*SmsDeliveryStatus) TableName() string {
 	return "sms_delivery_statuses"
 }
 
+// DefaultSmsMaxRetry 短信最大重试次数的代码兜底值，与参数中心
+// `misc.sms_max_retry` 的 DefaultValue 一致。
+const DefaultSmsMaxRetry = 3
+
+// smsMaxRetryProvider 由装配层注入；未注入时回落 DefaultSmsMaxRetry。
+//
+// 放在 model 而不是 service：重试次数是这条记录自身的字段缺省，在 BeforeCreate 里补齐
+// 才是它成立的位置。Model 不 import 任何上层包，接线靠函数变量（与
+// repository/telegram_polling_lock.go 同一个办法）。
+var smsMaxRetryProvider = func() int { return DefaultSmsMaxRetry }
+
+// GetSmsMaxRetry 返回当前生效的短信最大重试次数（非正数一律回落默认值）。
+func GetSmsMaxRetry() int {
+	if n := smsMaxRetryProvider(); n > 0 {
+		return n
+	}
+	return DefaultSmsMaxRetry
+}
+
+// SetSmsMaxRetryProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetSmsMaxRetryProvider(fn func() int) {
+	if fn != nil {
+		smsMaxRetryProvider = fn
+	}
+}
+
 // BeforeCreate 创建前补全接收时间
 func (s *SmsDeliveryStatus) BeforeCreate(tx *gorm.DB) error {
 	if s.ReceivedAt.IsZero() {
 		s.ReceivedAt = time.Now()
 	}
 	if s.MaxRetry == 0 {
-		s.MaxRetry = 3
+		s.MaxRetry = GetSmsMaxRetry()
 	}
 	return nil
 }

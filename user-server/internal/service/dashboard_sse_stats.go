@@ -82,7 +82,27 @@ type MessageVolumePoint struct {
 	Source string `json:"source"`
 }
 
-const summaryStaleThreshold = 10 * time.Minute
+// summaryStaleThresholdDefault 汇总表新鲜度上限的代码兜底值，与参数中心
+// `misc.summary_stale_threshold` 的 DefaultValue（600 秒）一致。
+const summaryStaleThresholdDefault = 10 * time.Minute
+
+// summaryStaleThresholdProvider 由装配层注入；未注入时回落默认值。
+var summaryStaleThresholdProvider = func() time.Duration { return summaryStaleThresholdDefault }
+
+// SetSummaryStaleThresholdProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetSummaryStaleThresholdProvider(fn func() time.Duration) {
+	if fn != nil {
+		summaryStaleThresholdProvider = fn
+	}
+}
+
+// summaryStaleThreshold 取当前上限（非正数一律回落默认值）。
+func summaryStaleThreshold() time.Duration {
+	if d := summaryStaleThresholdProvider(); d > 0 {
+		return d
+	}
+	return summaryStaleThresholdDefault
+}
 
 const (
 	volumeSourceSummary = "summary"
@@ -299,7 +319,7 @@ func (s *dashboardStatsService) CollectMessageVolume(ctx context.Context, window
 	if rows, err := s.repo.QueryMessageVolumeFromSummary(ctx, since); err == nil {
 		stale := true
 		if latest, lerr := s.repo.LatestSummaryBucket(ctx); lerr == nil && latest != nil {
-			stale = time.Since(*latest) > summaryStaleThreshold
+			stale = time.Since(*latest) > summaryStaleThreshold()
 		} else if lerr != nil {
 			logger.Ctx(ctx).Warn().Err(lerr).Msg("dashboard_sse: latest summary bucket query failed")
 		}

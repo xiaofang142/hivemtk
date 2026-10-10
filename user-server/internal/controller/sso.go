@@ -17,7 +17,22 @@ import (
 )
 
 // SSOCookieTTL state/nonce/verifier cookie 有效期（5 分钟，与 sso 包默认一致）
+//
+// 它同时是参数中心 `misc.sso_cookie_ttl` 的代码兜底值，两者必须一致。
 const SSOCookieTTL = 5 * time.Minute
+
+// ssoCookieTTLProvider 由装配层注入；未注入时回落 SSOCookieTTL。
+var ssoCookieTTLProvider = func() time.Duration { return SSOCookieTTL }
+
+// getSSOCookieTTL 返回当前生效的 SSO cookie 有效期。
+func getSSOCookieTTL() time.Duration { return ssoCookieTTLProvider() }
+
+// SetSSOCookieTTLProvider 注入读取函数（装配层调用；测试可注入桩）。nil 视为不注入。
+func SetSSOCookieTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		ssoCookieTTLProvider = fn
+	}
+}
 
 // SSOController 企业 SSO 登录控制器
 type SSOController struct {
@@ -152,7 +167,7 @@ func (c *SSOController) callbackError(ctx *gin.Context, err error) {
 }
 
 func setSSOCookie(ctx *gin.Context, name, value string) {
-	ctx.SetCookie(name, value, int(SSOCookieTTL.Seconds()), "/", "", true, true)
+	ctx.SetCookie(name, value, int(getSSOCookieTTL().Seconds()), "/", "", true, true)
 }
 
 func clearSSOCookies(ctx *gin.Context) {
