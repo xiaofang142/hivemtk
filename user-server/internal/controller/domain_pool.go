@@ -29,6 +29,13 @@ func NewDomainPoolController(domainPoolService service.DomainPoolService, health
 }
 
 // Create 创建域名池
+// @Summary 创建域名
+// @Tags 域名池
+// @Accept json
+// @Produce json
+// @Param body body dto.DomainPoolCreateRequest true "域名、端口、用途"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool [post]
 func (c *DomainPoolController) Create(ctx *gin.Context) {
 	var req dto.DomainPoolCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -45,6 +52,13 @@ func (c *DomainPoolController) Create(ctx *gin.Context) {
 }
 
 // Update 更新域名池
+// @Summary 更新域名
+// @Tags 域名池
+// @Accept json
+// @Produce json
+// @Param body body dto.DomainPoolUpdateRequest true "id 必填；auto_switch_enabled 缺省表示不改"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id} [put]
 func (c *DomainPoolController) Update(ctx *gin.Context) {
 	var req dto.DomainPoolUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -68,6 +82,13 @@ func (c *DomainPoolController) Update(ctx *gin.Context) {
 }
 
 // Delete 删除域名池
+// @Summary 删除域名
+// @Description 仍被活码引用时回 400，不会静默解绑
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id} [delete]
 func (c *DomainPoolController) Delete(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -94,6 +115,12 @@ func (c *DomainPoolController) Delete(ctx *gin.Context) {
 }
 
 // GetByID 根据ID获取域名池
+// @Summary 按 ID 读单个域名
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id} [get]
 func (c *DomainPoolController) GetByID(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -112,6 +139,13 @@ func (c *DomainPoolController) GetByID(ctx *gin.Context) {
 }
 
 // List 获取域名池列表
+// @Summary 域名池列表
+// @Description /api/domain-pool 与 /api/domain-pool/list 是同两个注册指向同一个 handler
+// @Tags 域名池
+// @Produce json
+// @Param query query dto.DomainPoolListRequest false "分页、域名、状态"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool [get]
 func (c *DomainPoolController) List(ctx *gin.Context) {
 	var req dto.DomainPoolListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -165,6 +199,11 @@ func (c *DomainPoolController) CheckDomain(ctx *gin.Context) {
 }
 
 // CheckAllDomains 检查所有域名是否可访问
+// @Summary 批量连通性检查
+// @Tags 域名池
+// @Produce json
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/check-all [post]
 func (c *DomainPoolController) CheckAllDomains(ctx *gin.Context) {
 	results, err := c.domainPoolService.CheckAllDomains(ctx.Request.Context())
 	if err != nil {
@@ -181,7 +220,7 @@ func (c *DomainPoolController) CheckAllDomains(ctx *gin.Context) {
 // @Tags 域名池
 // @Param id path int true "域名 ID"
 // @Success 200 {object} object{data=service.HealthCheckResult}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) HealthCheck(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -217,7 +256,7 @@ func (c *DomainPoolController) HealthCheckAll(ctx *gin.Context) {
 // @Tags 域名池
 // @Param id path int true "目标域名 ID"
 // @Success 200 {object} object{data=model.DomainPool}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) SwitchActive(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -241,7 +280,7 @@ func (c *DomainPoolController) SwitchActive(ctx *gin.Context) {
 // @Summary 自动切换到最优域名
 // @Tags 域名池
 // @Success 200 {object} object{data=model.DomainPool}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 	best, err := c.healthService.SwitchToBest(ctx.Request.Context(), "API 触发自动切换")
 	if err != nil {
@@ -259,7 +298,7 @@ func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 // @Summary 获取活跃域名
 // @Tags 域名池
 // @Success 200 {object} object{data=model.DomainPool}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) GetActiveDomain(ctx *gin.Context) {
 	active, err := c.healthService.GetActiveDomain(ctx.Request.Context())
 	if err != nil {
@@ -278,7 +317,7 @@ func (c *DomainPoolController) GetActiveDomain(ctx *gin.Context) {
 // @Tags 域名池
 // @Param min_score query int false "最低评分，默认 80"
 // @Success 200 {object} object{data=[]model.DomainPool}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) ListAvailableDomains(ctx *gin.Context) {
 	minScore, _ := strconv.Atoi(ctx.DefaultQuery("min_score", "80"))
 	rows, err := c.healthService.ListAvailable(ctx.Request.Context(), minScore)
@@ -299,7 +338,7 @@ func (c *DomainPoolController) ListAvailableDomains(ctx *gin.Context) {
 // @Param id path int true "域名 ID"
 // @Param limit query int false "条数，默认 50"
 // @Success 200 {object} object{data=[]model.DomainHealthLog}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) ListHealthLogs(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -330,7 +369,7 @@ type AddBlacklistRequest struct {
 // @Tags 域名池
 // @Param body body AddBlacklistRequest true "黑名单"
 // @Success 200 {object} object{message=string}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) AddBlacklist(ctx *gin.Context) {
 	var req AddBlacklistRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -349,7 +388,7 @@ func (c *DomainPoolController) AddBlacklist(ctx *gin.Context) {
 // @Tags 域名池
 // @Param domain path string true "域名"
 // @Success 200 {object} object{message=string}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) RemoveBlacklist(ctx *gin.Context) {
 	domain := ctx.Param("domain")
 	if domain == "" {
@@ -367,7 +406,7 @@ func (c *DomainPoolController) RemoveBlacklist(ctx *gin.Context) {
 // @Summary 域名黑名单
 // @Tags 域名池
 // @Success 200 {object} object{data=[]model.DomainBlacklist}
-// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
 func (c *DomainPoolController) ListBlacklist(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
@@ -443,6 +482,13 @@ func indexOf(s, sub string) int {
 }
 
 // CheckBlacklist GET /api/domain-pool/:id/blacklist — 查询域名是否在黑名单（:id=域名字符串）
+// @Summary 查询域名是否在平台黑名单
+// @Description 这里的 :id 是域名字符串本身，不是自增 ID
+// @Tags 域名池
+// @Produce json
+// @Param id path string true "域名"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id}/blacklist [get]
 func (c *DomainPoolController) CheckBlacklist(ctx *gin.Context) {
 	domain := ctx.Param("id")
 	if domain == "" {
@@ -458,6 +504,12 @@ func (c *DomainPoolController) CheckBlacklist(ctx *gin.Context) {
 }
 
 // SuspendDomain POST /api/domain-pool/:id/suspend — 停用域名
+// @Summary 停用域名
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id}/suspend [post]
 func (c *DomainPoolController) SuspendDomain(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil || id <= 0 {
@@ -472,6 +524,12 @@ func (c *DomainPoolController) SuspendDomain(ctx *gin.Context) {
 }
 
 // RotateToBackup POST /api/domain-pool/:id/rotate — 轮换激活到备用域名
+// @Summary 轮换激活到备用域名
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "目标域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id}/rotate [post]
 func (c *DomainPoolController) RotateToBackup(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil || id <= 0 {
@@ -486,6 +544,11 @@ func (c *DomainPoolController) RotateToBackup(ctx *gin.Context) {
 }
 
 // ListAlerts GET /api/domain-pool/alerts — 域名告警列表
+// @Summary 域名告警列表
+// @Tags 域名池
+// @Produce json
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/alerts [get]
 func (c *DomainPoolController) ListAlerts(ctx *gin.Context) {
 	alerts, err := c.domainPoolService.ListAlerts(ctx.Request.Context())
 	if err != nil {
@@ -500,6 +563,13 @@ func (c *DomainPoolController) ListAlerts(ctx *gin.Context) {
 }
 
 // ResolveAlert POST /api/domain-pool/alerts/:id/resolve — 告警确认（复检+恢复）
+// @Summary 处理域名告警
+// @Description 复检该域名，通过则恢复可用并消警
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "告警对应的域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/alerts/{id}/resolve [post]
 func (c *DomainPoolController) ResolveAlert(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil || id <= 0 {
@@ -514,6 +584,12 @@ func (c *DomainPoolController) ResolveAlert(ctx *gin.Context) {
 }
 
 // CheckDomainByID POST /api/domain-pool/:id/check — 按 ID 触发健康检查
+// @Summary 按 ID 触发连通性检查
+// @Tags 域名池
+// @Produce json
+// @Param id path int true "域名 ID"
+// @Success 200 {object} response.Response
+// @Router /api/domain-pool/{id}/check [post]
 func (c *DomainPoolController) CheckDomainByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil || id <= 0 {

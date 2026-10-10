@@ -1783,6 +1783,146 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/domain-pool": {
+            "get": {
+                "description": "/api/domain-pool 与 /api/domain-pool/list 是同两个注册指向同一个 handler",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "域名池列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "domain",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "创建域名",
+                "parameters": [
+                    {
+                        "description": "域名、端口、用途",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_dto.DomainPoolCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/alerts": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "域名告警列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/alerts/{id}/resolve": {
+            "post": {
+                "description": "复检该域名，通过则恢复可用并消警",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "处理域名告警",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "告警对应的域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/check-all": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "批量连通性检查",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/domain-pool/health": {
             "get": {
                 "tags": [
@@ -1802,6 +1942,205 @@ const docTemplate = `{
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "按 ID 读单个域名",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "更新域名",
+                "parameters": [
+                    {
+                        "description": "id 必填；auto_switch_enabled 缺省表示不改",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_dto.DomainPoolUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "仍被活码引用时回 400，不会静默解绑",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "删除域名",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/{id}/blacklist": {
+            "get": {
+                "description": "这里的 :id 是域名字符串本身，不是自增 ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "查询域名是否在平台黑名单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "域名",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/{id}/check": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "按 ID 触发连通性检查",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/{id}/rotate": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "轮换激活到备用域名",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "目标域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/domain-pool/{id}/suspend": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "域名池"
+                ],
+                "summary": "停用域名",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "域名 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
                     }
                 }
@@ -6172,6 +6511,50 @@ const docTemplate = `{
                 },
                 "unified_id": {
                     "type": "string"
+                }
+            }
+        },
+        "hivemtk-user_internal_dto.DomainPoolCreateRequest": {
+            "type": "object",
+            "required": [
+                "domain"
+            ],
+            "properties": {
+                "domain": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "purpose": {
+                    "type": "string"
+                }
+            }
+        },
+        "hivemtk-user_internal_dto.DomainPoolUpdateRequest": {
+            "type": "object",
+            "required": [
+                "domain",
+                "id"
+            ],
+            "properties": {
+                "auto_switch_enabled": {
+                    "type": "boolean"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "purpose": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
                 }
             }
         },

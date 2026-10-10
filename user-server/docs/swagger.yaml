@@ -144,6 +144,35 @@ definitions:
       unified_id:
         type: string
     type: object
+  hivemtk-user_internal_dto.DomainPoolCreateRequest:
+    properties:
+      domain:
+        type: string
+      port:
+        type: integer
+      purpose:
+        type: string
+    required:
+    - domain
+    type: object
+  hivemtk-user_internal_dto.DomainPoolUpdateRequest:
+    properties:
+      auto_switch_enabled:
+        type: boolean
+      domain:
+        type: string
+      id:
+        type: integer
+      port:
+        type: integer
+      purpose:
+        type: string
+      status:
+        type: integer
+    required:
+    - domain
+    - id
+    type: object
   hivemtk-user_internal_dto.RFMComputeAllResponse:
     properties:
       computed:
@@ -2626,6 +2655,224 @@ paths:
       summary: 实时驾驶舱 SSE 数据流
       tags:
       - Dashboard
+  /api/domain-pool:
+    get:
+      description: /api/domain-pool 与 /api/domain-pool/list 是同两个注册指向同一个 handler
+      parameters:
+      - in: query
+        name: domain
+        type: string
+      - in: query
+        name: page
+        type: integer
+      - in: query
+        name: page_size
+        type: integer
+      - in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 域名池列表
+      tags:
+      - 域名池
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 域名、端口、用途
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/hivemtk-user_internal_dto.DomainPoolCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 创建域名
+      tags:
+      - 域名池
+  /api/domain-pool/{id}:
+    delete:
+      description: 仍被活码引用时回 400，不会静默解绑
+      parameters:
+      - description: 域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 删除域名
+      tags:
+      - 域名池
+    get:
+      parameters:
+      - description: 域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 按 ID 读单个域名
+      tags:
+      - 域名池
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: id 必填；auto_switch_enabled 缺省表示不改
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/hivemtk-user_internal_dto.DomainPoolUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 更新域名
+      tags:
+      - 域名池
+  /api/domain-pool/{id}/blacklist:
+    get:
+      description: 这里的 :id 是域名字符串本身，不是自增 ID
+      parameters:
+      - description: 域名
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 查询域名是否在平台黑名单
+      tags:
+      - 域名池
+  /api/domain-pool/{id}/check:
+    post:
+      parameters:
+      - description: 域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 按 ID 触发连通性检查
+      tags:
+      - 域名池
+  /api/domain-pool/{id}/rotate:
+    post:
+      parameters:
+      - description: 目标域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 轮换激活到备用域名
+      tags:
+      - 域名池
+  /api/domain-pool/{id}/suspend:
+    post:
+      parameters:
+      - description: 域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 停用域名
+      tags:
+      - 域名池
+  /api/domain-pool/alerts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 域名告警列表
+      tags:
+      - 域名池
+  /api/domain-pool/alerts/{id}/resolve:
+    post:
+      description: 复检该域名，通过则恢复可用并消警
+      parameters:
+      - description: 告警对应的域名 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 处理域名告警
+      tags:
+      - 域名池
+  /api/domain-pool/check-all:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 批量连通性检查
+      tags:
+      - 域名池
   /api/domain-pool/health:
     get:
       responses:
