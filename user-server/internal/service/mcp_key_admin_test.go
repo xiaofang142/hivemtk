@@ -75,7 +75,8 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 		t.Errorf("第二把钥匙不应改写 legacy 镜像")
 	}
 
-	// ④ 状态机：disable → enable 往返；revoke 终态后 enable 必须被拒。
+	// ④ 状态机：disable → enable 往返；suspend（欠费/违规）可 enable 恢复；
+	// revoke 终态后 enable 必须被拒。
 	if _, err := svc.SetKeyStatus(ctx, cred.ID, k2.ID, model.MCPKeyStatusDisabled); err != nil {
 		t.Fatalf("disable 失败: %v", err)
 	}
@@ -84,6 +85,12 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 	}
 	if _, err := svc.SetKeyStatus(ctx, cred.ID, k2.ID, model.MCPKeyStatusActive); err != nil {
 		t.Fatalf("enable 失败: %v", err)
+	}
+	if _, err := svc.SetKeyStatus(ctx, cred.ID, k2.ID, model.MCPKeyStatusSuspended); err != nil {
+		t.Fatalf("suspend 失败: %v", err)
+	}
+	if _, err := svc.SetKeyStatus(ctx, cred.ID, k2.ID, model.MCPKeyStatusActive); err != nil {
+		t.Fatalf("suspended 后应可 enable 恢复: %v", err)
 	}
 	if _, err := svc.SetKeyStatus(ctx, cred.ID, k2.ID, model.MCPKeyStatusRevoked); err != nil {
 		t.Fatalf("revoke 失败: %v", err)
@@ -106,6 +113,14 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 	after, _ = svc.GetCredential(ctx, cred.ID)
 	if after.APIKeyHash != "" {
 		t.Errorf("删除镜像钥匙后 legacy 列应清空，got %q", after.APIKeyHash)
+	}
+
+	// ⑥b 软删除：行还在（deleted_at 打标）供审计对账；guard 查询自动排除。
+	var softRows int64
+	dbutil.GetDB().Unscoped().Model(&model.MCPCredentialKey{}).
+		Where("credential_id = ? AND deleted_at IS NOT NULL", cred.ID).Count(&softRows)
+	if softRows == 0 {
+		t.Errorf("删除应为软删除（deleted_at 打标），got 0 行")
 	}
 
 	// ⑦ 管理审计有账：签发/状态/删除都该留痕。

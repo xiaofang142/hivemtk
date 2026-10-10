@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // MCPCredentialKey MCP 凭证（Client ID）名下的单把 API Key（2026-10-11 新增）。
 //
@@ -30,10 +34,14 @@ type MCPCredentialKey struct {
 	// 迁移行没有明文，两者为空串，前端展示为「旧密钥」。
 	KeyPrefix string `gorm:"column:key_prefix;type:varchar(16)" json:"key_prefix"`
 	KeySuffix string `gorm:"column:key_suffix;type:varchar(8)" json:"key_suffix"`
-	// Status 生命周期：active（启用，可认证）/ disabled（禁用，可再启用）/
-	// revoked（停用/吊销，终态不可恢复，仅可删除）。expired 不是存储状态——
+	// Status 生命周期：active（启用，可认证）/ disabled（禁用，管理员手动，可再启用）/
+	// suspended（暂停，欠费/违规等系统级停用，恢复启用即可回到 active）/
+	// revoked（停用/吊销，终态不可恢复）。expired 不是存储状态——
 	// 由 ExpiresAt 推导，guard 判过期优先于状态。
+	// （状态机对齐 docs/backlog/multi-tenant-rbac-saas.md M-5 的建议机器。）
 	Status string `gorm:"column:status;type:varchar(16);not null;default:active;index" json:"status"`
+	// DeletedAt 软删除：删除 = 打标保留行（审计对账），guard 查询自动排除。
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 	// ExpiresAt 本钥匙独立过期时间（NULL=跟随凭证/永不过期）；签发时可指定
 	ExpiresAt  *time.Time `gorm:"column:expires_at;index" json:"expires_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
@@ -45,14 +53,16 @@ func (MCPCredentialKey) TableName() string { return "mcp_credential_keys" }
 
 // Key 生命周期状态常量（guard / controller / 前端口径一致）。
 const (
-	MCPKeyStatusActive   = "active"
-	MCPKeyStatusDisabled = "disabled"
-	MCPKeyStatusRevoked  = "revoked"
+	MCPKeyStatusActive    = "active"
+	MCPKeyStatusDisabled  = "disabled"
+	MCPKeyStatusSuspended = "suspended"
+	MCPKeyStatusRevoked   = "revoked"
 )
 
 // MCPKeyStatusValid 报告状态字面量是否合法（写入前防脏值）。
 func MCPKeyStatusValid(s string) bool {
-	return s == MCPKeyStatusActive || s == MCPKeyStatusDisabled || s == MCPKeyStatusRevoked
+	return s == MCPKeyStatusActive || s == MCPKeyStatusDisabled ||
+		s == MCPKeyStatusSuspended || s == MCPKeyStatusRevoked
 }
 
 // KeyExpired 报告该钥匙是否已过独立过期时间（nil = 永不过期）。

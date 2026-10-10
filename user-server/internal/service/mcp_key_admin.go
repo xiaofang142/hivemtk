@@ -135,6 +135,8 @@ func (s *McpKeyAdminService) SetKeyStatus(ctx context.Context, credentialID, key
 	if key.Status == to {
 		return key, nil
 	}
+	// disabled ↔ suspended 之间不直达：先 enable 回 active 再转目标态，
+	// 避免"手动禁用"和"系统暂停"两种语义互相覆盖（审计里能看清是谁停的）。
 	if err := s.repo.Update(ctx, keyID, map[string]any{"status": to}); err != nil {
 		return nil, err
 	}
@@ -142,7 +144,13 @@ func (s *McpKeyAdminService) SetKeyStatus(ctx context.Context, credentialID, key
 	return key, nil
 }
 
-// DeleteKey 物理删除一把钥匙。若删除的是 legacy 镜像基准行，同步清空凭证的
+// SuspendKey 系统级暂停（欠费/违规）。与手动 disable 分离：审计口径
+// "谁停的"不同——suspend 只允许平台侧链路调用（计费/风控），管理端 UI 走 disable。
+func (s *McpKeyAdminService) SuspendKey(ctx context.Context, credentialID, keyID uint) (*model.MCPCredentialKey, error) {
+	return s.SetKeyStatus(ctx, credentialID, keyID, model.MCPKeyStatusSuspended)
+}
+
+// DeleteKey 软删除一把钥匙（deleted_at 打标保留行供审计对账，guard 查询自动排除）。若删除的是 legacy 镜像基准行，同步清空凭证的
 // api_key_hash——清空后回滚的旧二进制对该凭证 fail-closed（401），
 // 好过放行一把已经删除的钥匙（fail-closed 是两害相权取其轻）。
 func (s *McpKeyAdminService) DeleteKey(ctx context.Context, credentialID, keyID uint) (*model.MCPCredentialKey, error) {

@@ -16,6 +16,7 @@ export const mcpKeyApi = {
   create: (credentialId, data) => http.post(`/api/mcp/credentials/${credentialId}/keys`, data),
   enable: (credentialId, keyId) => http.post(`/api/mcp/credentials/${credentialId}/keys/${keyId}/enable`),
   disable: (credentialId, keyId) => http.post(`/api/mcp/credentials/${credentialId}/keys/${keyId}/disable`),
+  suspend: (credentialId, keyId) => http.post(`/api/mcp/credentials/${credentialId}/keys/${keyId}/suspend`),
   revoke: (credentialId, keyId) => http.post(`/api/mcp/credentials/${credentialId}/keys/${keyId}/revoke`),
   reveal: (credentialId, keyId) => http.get(`/api/mcp/credentials/${credentialId}/keys/${keyId}/reveal`),
   remove: (credentialId, keyId) => http.delete(`/api/mcp/credentials/${credentialId}/keys/${keyId}`)

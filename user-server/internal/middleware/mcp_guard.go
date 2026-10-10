@@ -293,12 +293,13 @@ const (
 
 // 鉴权失败原因字面量（审计行 error_msg 与响应措辞共用一套口径）。
 const (
-	mcpReasonMissingKey  = "missing_api_key"     // 带了 X-Client-Id 但没带钥匙
-	mcpReasonInvalid     = "invalid"             // 钥匙不存在 / 凭证不存在 / 比对失败
-	mcpReasonExpired     = "expired"             // 密钥正确但已过期（钥匙级或凭证级）
-	mcpReasonKeyDisabled = "key_disabled"        // 钥匙被禁用（可再启用）
-	mcpReasonKeyRevoked  = "key_revoked"         // 钥匙被停用/吊销（终态）
-	mcpReasonCredOff     = "credential_disabled" // 凭证级停用（伞开关）
+	mcpReasonMissingKey   = "missing_api_key"     // 带了 X-Client-Id 但没带钥匙
+	mcpReasonInvalid      = "invalid"             // 钥匙不存在 / 凭证不存在 / 比对失败
+	mcpReasonExpired      = "expired"             // 密钥正确但已过期（钥匙级或凭证级）
+	mcpReasonKeyDisabled  = "key_disabled"        // 钥匙被禁用（可再启用）
+	mcpReasonKeySuspended = "key_suspended"       // 钥匙被暂停（欠费/违规，系统级）
+	mcpReasonKeyRevoked   = "key_revoked"         // 钥匙被停用/吊销（终态）
+	mcpReasonCredOff      = "credential_disabled" // 凭证级停用（伞开关）
 )
 
 // mcpCredScope 校验通过后要带回调用面的信息。
@@ -324,6 +325,8 @@ func mcpAuthFailMessage(expired bool, reason string) string {
 		return "缺少 X-API-Key"
 	case reason == mcpReasonKeyDisabled:
 		return "API Key 已禁用（可在管理端重新启用）"
+	case reason == mcpReasonKeySuspended:
+		return "API Key 已暂停（欠费/违规或系统级停用），请联系平台管理员"
 	case reason == mcpReasonKeyRevoked:
 		return "API Key 已停用（吊销不可恢复，请重新签发）"
 	case reason == mcpReasonCredOff:
@@ -473,6 +476,8 @@ func judgeMCPCredEntry(entry mcpCredCacheEntry, apiKey string, now time.Time) (m
 	switch entry.keyStatus {
 	case model.MCPKeyStatusDisabled:
 		return scope, false, false, mcpReasonKeyDisabled
+	case model.MCPKeyStatusSuspended:
+		return scope, false, false, mcpReasonKeySuspended
 	case model.MCPKeyStatusRevoked:
 		return scope, false, false, mcpReasonKeyRevoked
 	}

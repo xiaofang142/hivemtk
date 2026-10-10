@@ -248,6 +248,7 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.POST("/mcp/credentials/:id/keys", controller.CreateMCPCredentialKey)
 		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/enable", controller.EnableMCPCredentialKey)
 		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/disable", controller.DisableMCPCredentialKey)
+		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/suspend", controller.SuspendMCPCredentialKey)
 		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/revoke", controller.RevokeMCPCredentialKey)
 		authPlainAdmin.GET("/mcp/credentials/:id/keys/:keyId/reveal", controller.RevealMCPCredentialKey)
 		authPlainAdmin.DELETE("/mcp/credentials/:id/keys/:keyId", controller.DeleteMCPCredentialKey)

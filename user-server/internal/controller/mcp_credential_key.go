@@ -232,6 +232,12 @@ func DisableMCPCredentialKey(ctx *gin.Context) {
 	mcpKeyStatusAction(ctx, model.MCPKeyStatusDisabled, model.MCPAuditActionKeyDisable)
 }
 
+// SuspendMCPCredentialKey POST /api/mcp/credentials/:id/keys/:keyId/suspend
+// 系统级暂停（欠费/违规）；与管理员手动 disable 分离——审计能看清"谁停的"。
+func SuspendMCPCredentialKey(ctx *gin.Context) {
+	mcpKeyStatusAction(ctx, model.MCPKeyStatusSuspended, model.MCPAuditActionKeySuspend)
+}
+
 // RevokeMCPCredentialKey POST /api/mcp/credentials/:id/keys/:keyId/revoke（终态，不可逆）
 func RevokeMCPCredentialKey(ctx *gin.Context) {
 	mcpKeyStatusAction(ctx, model.MCPKeyStatusRevoked, model.MCPAuditActionKeyRevoke)

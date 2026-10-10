@@ -176,6 +176,7 @@
             <el-tag v-if="row.expired" type="danger" size="small">已过期</el-tag>
             <el-tag v-else-if="row.status === 'active'" type="success" size="small">启用</el-tag>
             <el-tag v-else-if="row.status === 'disabled'" type="warning" size="small">禁用</el-tag>
+            <el-tag v-else-if="row.status === 'suspended'" type="warning" size="small">已暂停</el-tag>
             <el-tag v-else type="info" size="small">已停用</el-tag>
           </template>
         </el-table-column>
@@ -192,6 +193,7 @@
           <template #default="{ row }">
             <el-button v-if="row.status === 'disabled'" size="small" type="success" plain @click="keyEnable(row)">启用</el-button>
             <el-button v-if="row.status === 'active'" size="small" @click="keyDisable(row)">禁用</el-button>
+            <el-button v-if="row.status === 'active' || row.status === 'disabled'" size="small" type="warning" plain @click="keySuspend(row)">暂停</el-button>
             <el-button v-if="row.status !== 'revoked'" size="small" type="warning" plain @click="keyRevoke(row)">停用</el-button>
             <el-button size="small" type="danger" plain @click="keyRemove(row)">删除</el-button>
           </template>
@@ -477,6 +479,7 @@ const keyStatusAction = async (row, action, confirmText) => {
 const keyEnable = (row) => keyStatusAction(row, 'enable', `确认启用密钥「${row.name}」？`)
 const keyDisable = (row) => keyStatusAction(row, 'disable', `确认禁用密钥「${row.name}」？禁用后该钥匙立即无法调用（可再启用）。`)
 
+const keySuspend = (row) => keyStatusAction(row, 'suspend', `确认暂停密钥「${row.name}」？暂停后该钥匙立即无法调用（可再启用）。`)
 const keyRevoke = (row) => keyStatusAction(row, 'revoke', `确认停用（吊销）密钥「${row.name}」？吊销为终态，不可重新启用，仅可删除。`)
 
 const keyRemove = async (row) => {

@@ -47,6 +47,7 @@ const (
 	MCPAuditActionKeyCreate        = "key.create"
 	MCPAuditActionKeyEnable        = "key.enable"
 	MCPAuditActionKeyDisable       = "key.disable"
+	MCPAuditActionKeySuspend       = "key.suspend"
 	MCPAuditActionKeyRevoke        = "key.revoke"
 	MCPAuditActionKeyDelete        = "key.delete"
 	MCPAuditActionKeyReveal        = "key.reveal"
