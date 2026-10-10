@@ -33,6 +33,38 @@ export function sanitizeForDisplay(text, maxBytes = MAX_BODY_BYTES) {
   return s;
 }
 
+// ---------------------------------------------------------------------------
+// 私聊 DM 出站的 Markdown 剥除（与服务端 bridge_outbound_markdown.go 同口径，
+// 双保险：服务端入队前剥一次，扩展发送前再剥一次——服务端漏改版本/离线重放
+// 旧信封时仍有兜底）。
+//
+// 防误清洗约定（与服务端 StripMarkdownForDM 一致）：
+//   - 只剥成对语法标记与行首标记，内容本体保留；
+//   - 链接 [text](url) → text（url），URL 永远保留；
+//   - 不动不成对星号（3*4）与下划线（snake_case）；
+//   - 表格不处理。
+// ---------------------------------------------------------------------------
+export function stripMarkdownForDM(text) {
+  if (text == null) return '';
+  let s = String(text);
+  if (!/[*_`~#[\]\n-]/.test(s)) return s;
+  s = s.replace(/^```[a-zA-Z0-9]*[ \t]*\r?\n?/gm, '').replace(/```/g, '');
+  s = s.replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, (_m, text2, url) => {
+    const t = String(text2).trim();
+    return t === '' || t === url ? url : `${t}（${url}）`;
+  });
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '$1');
+  s = s.replace(/__([^_\n]+)__/g, '$1');
+  s = s.replace(/~~([^~\n]+)~~/g, '$1');
+  s = s.replace(/`([^`\n]+)`/g, '$1');
+  s = s.replace(/\*([^*\n]+)\*/g, '$1');
+  s = s.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '');
+  s = s.replace(/^[ \t]{0,3}>[ \t]?/gm, '');
+  s = s.replace(/^[ \t]{0,3}-[ \t]+/gm, '· ');
+  s = s.replace(/^[ \t]{0,3}\*[ \t]+/gm, '· ');
+  return s.replace(/\n+$/, '');
+}
+
 // 安全设值到 contenteditable 容器：使用 textContent 而非 innerHTML
 //   - 防止 AI 回复中携带 <script> 之类 XSS payload 触发
 //   - 平台 IM 容器通常用 contenteditable 渲染，textContent 即可保留换行

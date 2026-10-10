@@ -63,11 +63,26 @@
               size="large"
               style="width: 100%"
               :loading="loading"
-              @click="handleLogin"
+              @click="mode === 'login' ? handleLogin() : handleRegister()"
             >
-              {{ t('core.login.submit') }}
+              {{ mode === 'login' ? t('core.login.submit') : '注 册' }}
             </el-button>
           </el-form-item>
+
+          <div v-if="mode === 'register'">
+            <el-form-item prop="email">
+              <el-input v-model="loginForm.email" placeholder="邮箱" prefix-icon="Message" size="large" />
+            </el-form-item>
+          </div>
+
+          <div class="register-switch">
+            <template v-if="mode === 'login'">
+              <a v-if="enableRegister" @click.prevent="switchMode('register')">没有账号？注册新账号</a>
+            </template>
+            <template v-else>
+              <a @click.prevent="switchMode('login')">已有账号？返回登录</a>
+            </template>
+          </div>
 
         </el-form>
 
@@ -96,8 +111,44 @@ const loading = ref(false)
 
 const loginForm = reactive({
   username: '',
-  password: ''
+  password: '',
+  email: ''
 });
+
+// 自助注册：开关由公开配置 /api/public/config 提供（未登录可取）
+const mode = ref('login')
+const enableRegister = ref(false)
+const switchMode = (m) => { mode.value = m }
+
+const handleRegister = async () => {
+  if (!loginFormRef.value) return
+  if (!loginForm.username || !loginForm.password || !loginForm.email) {
+    ElMessage.warning('请填写用户名、邮箱和密码')
+    return
+  }
+  loading.value = true
+  try {
+    const { http } = await import('@/utils/request')
+    await http.post('/api/auth/register', {
+      username: loginForm.username,
+      password: loginForm.password,
+      email: loginForm.email
+    })
+    ElMessage.success('注册成功，请登录')
+    mode.value = 'login'
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '注册失败'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
+  }
+}
+
+import { http as httpApi } from '@/utils/request'
+httpApi.get('/api/public/config').then((res) => {
+  const data = res?.data ?? res
+  enableRegister.value = !!data?.enable_register
+}).catch(() => { enableRegister.value = false })
 
 const rules = {
   username: [
@@ -290,6 +341,15 @@ const handleLogin = async () => {
   margin: 0;
 }
 
+.register-switch {
+  text-align: center;
+  margin: -6px 0 10px;
+  font-size: 13px;
+}
+.register-switch a {
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
 .login-disclaimer {
   margin-top: 28px;
   padding-top: 18px;

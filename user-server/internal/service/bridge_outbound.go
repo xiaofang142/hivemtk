@@ -86,6 +86,11 @@ func DeliverBridgeOutbound(ctx context.Context, channel, accountID, conversation
 			Msg("bridge outbound target undeliverable; rejected before enqueue")
 		return fmt.Errorf("bridge outbound undeliverable: %s", reason)
 	}
+	// 网页私聊渠道（抖音/小红书等）输入框是纯文本：LLM 回复自带的 Markdown
+	// 语法符号在入队前剥成纯文本，覆盖 AI 回复/SOP/触达/主动私信全部出站路径。
+	if stripMarkdownForBridgeChannel(channel, msgType) {
+		content = StripMarkdownForDM(content)
+	}
 	h := &model.MessageHub{
 		MsgID:          ContentHashMsgID(channel, conversationID, content),
 		Platform:       channel,

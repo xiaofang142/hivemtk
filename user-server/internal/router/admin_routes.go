@@ -41,6 +41,11 @@ func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.L
 
 	public.POST("/auth/mfa/verify", middleware.BruteForceGuard("auth.mfa"), controller.NewAuthController().VerifyMFALogin)
 
+	// 自助注册：受 system_config.enable_register 开关 gate（控制器内 403），
+	// BruteForceGuard 防灌号；公开站点配置供前端渲染注册入口。
+	public.POST("/auth/register", middleware.BruteForceGuard("auth.register"), controller.NewAuthController().Register)
+	public.GET("/public/config", controller.NewAuthController().PublicConfig)
+
 	systemInitCtrl := controller.NewSystemInitController()
 	authCtrl := controller.NewAuthController()
 	public.GET("/system/init-status", systemInitCtrl.GetInitStatus)
