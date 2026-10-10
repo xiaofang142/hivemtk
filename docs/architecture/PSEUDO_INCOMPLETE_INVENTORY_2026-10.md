@@ -364,6 +364,25 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   gofmt 结构或 `^}` 专属终止符为准，map/struct 字面量的第 0 列 `}` 不是函数结尾**。
 - 边界：零引用**类型**未扫未删（本轮只到函数）；`reach_tools.go` 2 符号待 reach 泳道收口后复扫。
 
+### B10 后端零引用导出类型（2026-10-10 I20 已处置）
+
+- 源流：B9（I19）收口时登记的边界「零引用类型未扫未删」，I20 当轮兑现（规则2）。
+- 读数：导出类型 3757 → 严格零引用 15 → 排除他泳道 staged 的
+  `dispatcher_dispatch.go:TokenUsageDetailed` 后**实删 14 个 / 13+1 文件**。
+- 形态：13 个从未被绑定/调用的死 DTO 请求结构（含五个 email* 系）+ 两个零引用服务接口
+  （`CardAccessService`/`Customer360ServiceInterface`，接口死=抽象死，实现类照常活着）+
+  `SentimentResult`/`SubjectStatusType`/`RunBrowserTaskReq`；`RAGStack` 随 I19 删
+  `NewRAGStack` 后成为孤儿，本卡补删并把只剩空壳的 `rag_factory.go` 整文件移除。
+- **已处置（I20，删除）**：结构感知删除器（花括号深度配对）执行，事后 diff 审计
+  56 行纯删=块尺寸精确和、零过度删除；本卡 5 包 build+vet rc=0、四门 rc=0。
+  （`rag_factory.go` 的删除暂存后被他泳道 README 提交 `17c88f85` 连带收入——
+  I14/I18 同款共享 index 事故第三例，文件已从 HEAD 归零、归属记改进清单 §五 I20。）
+- 方法论沉淀：共享工作区的零引用读数是**快照**——首轮候选
+  `DeleteEmailSmtpListRequest` 动手时已被他泳道 WIP 回退，delta 复扫才暴露同文件
+  真真空洞 `GetEmailSmtpListRequest`；**动手前必须复扫**。
+- 边界：`TokenUsageDetailed`（他泳道 staged）与 `reach_tools.go` 2 符号待对应泳道
+  收口后复扫；前端侧零引用 API 模块面已=0（I17）。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。

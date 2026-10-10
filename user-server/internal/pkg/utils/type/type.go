@@ -1,7 +1,5 @@
 package _type
 
-type SubjectStatusType int
-
 type Proxy struct {
 	EnableProxy bool   `json:"enable_proxy" desc:"是否开启网络代理"`
 	Protocol    string `json:"protocol" desc:"协议"`

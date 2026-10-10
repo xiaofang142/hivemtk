@@ -21,11 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type Customer360ServiceInterface interface {
-	GetCustomer360(userID string) (*Customer360DTO, error)
-	GetCustomerList(page, pageSize int, filters map[string]string) (map[string]*Customer360DTO, int64, error)
-}
-
 type Customer360Service struct {
 	sessionRepo      *repository.CustomerSessionRepository
 	messageRepo      *repository.SessionMessageRepository

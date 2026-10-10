@@ -5,13 +5,6 @@ import (
 	"unicode"
 )
 
-type SentimentResult struct {
-	Positive int
-	Negative int
-	Neutral  int
-	Label    string
-}
-
 var positiveWords = map[string]struct{}{
 	"好": {}, "好的": {}, "不错": {}, "满意": {}, "喜欢": {}, "爱": {}, "棒": {}, "精彩": {},
 	"优秀": {}, "完美": {}, "支持": {}, "赞": {}, "牛": {}, "顶": {}, "推荐": {},

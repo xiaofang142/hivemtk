@@ -52,7 +52,3 @@ type UpdateAccountRequest struct {
 type DeleteAccountRequest struct {
 	ID string `uri:"id" binding:"required"`
 }
-
-type GetAccountRequest struct {
-	ID string `form:"id" binding:"required"`
-}

@@ -54,12 +54,3 @@ type UserResponse struct {
 	LastName   string               `json:"last_name"`
 	UserName   string               `json:"user_name"`
 }
-
-type GetUserListRequest struct {
-	Page     int `form:"page"`
-	PageSize int `form:"page_size"`
-}
-
-type DeleteUserRequest struct {
-	ID string `uri:"id" binding:"required"`
-}

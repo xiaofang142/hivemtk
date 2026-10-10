@@ -96,10 +96,6 @@ type UpdateBrowserTaskReq struct {
 	MaxRetryTimes *int  `json:"max_retry_times" binding:"omitempty,min=0,max=10"`
 }
 
-type RunBrowserTaskReq struct {
-	// 预留：后续支持带参运行（如注入变量），MVP 无必填参数
-}
-
 type ListTaskReq struct {
 	Status   string `form:"status" binding:"omitempty,oneof=draft ready running paused done failed archived"`
 	TaskType string `form:"task_type" binding:"omitempty,oneof=one_shot loop cron workflow"`

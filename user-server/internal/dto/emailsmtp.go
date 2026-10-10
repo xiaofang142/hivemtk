@@ -33,11 +33,6 @@ type UpdateEmailSmtpRequest struct {
 	Limit    int64  `json:"limit"`
 }
 
-type GetEmailSmtpListRequest struct {
-	Page     int `form:"page"`
-	PageSize int `form:"limit"`
-}
-
 type DeleteEmailSmtpRequest struct {
 	ID string `uri:"id" binding:"required"`
 }

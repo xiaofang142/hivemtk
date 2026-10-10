@@ -11,13 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type CardAccessService interface {
-	RecordAccess(ctx context.Context, cardID uint, cardType string, ip, ua, referer string) error
-	GetCardUVStats(ctx context.Context, cardID uint, cardType string, startDate, endDate time.Time) (*CardStatsResponse, error)
-	GetDailyUVStats(ctx context.Context, cardID uint, cardType string) ([]DailyStats, error)
-	GetTodayUV(ctx context.Context, cardID uint, cardType string) (int, error)
-}
-
 type CardStatsResponse struct {
 	CardID    uint      `json:"card_id"`
 	CardType  string    `json:"card_type"`

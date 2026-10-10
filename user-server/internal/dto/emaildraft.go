@@ -34,6 +34,3 @@ type GetEmailDraftListResponse struct {
 	Total int64                 `json:"total"`
 	List  []*EmailDraftResponse `json:"list"`
 }
-type DeleteEmailDraftRequest struct {
-	ID string `uri:"id" binding:"required"`
-}

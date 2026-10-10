@@ -48,6 +48,3 @@ type GetEmailJobsListResponse struct {
 	Total int64                `json:"total"`
 	List  []*EmailJobsResponse `json:"list"`
 }
-type DeleteEmailJobsRequest struct {
-	ID string `uri:"id" binding:"required"`
-}
