@@ -21,14 +21,17 @@ func NewOperationLogService() *OperationLogService {
 
 // OperationLogView 操作日志视图（脱离 model 的 DTO）
 type OperationLogView struct {
-	ID           uint      `json:"id"`
-	UserID       uint      `json:"user_id"`
-	Username     string    `json:"username"`
-	Action       string    `json:"action"`
-	Module       string    `json:"module"`
-	Resource     string    `json:"resource"`
-	ResourceID   string    `json:"resource_id"`
-	IP           string    `json:"ip"`
+	ID         uint   `json:"id"`
+	UserID     uint   `json:"user_id"`
+	Username   string `json:"username"`
+	Action     string `json:"action"`
+	Module     string `json:"module"`
+	Resource   string `json:"resource"`
+	ResourceID string `json:"resource_id"`
+	IP         string `json:"ip"`
+	// UserAgent / Detail 导出面需要（2026-10-11）：UA 对账"哪台客户端"，Detail 是变更摘要。
+	UserAgent    string    `json:"user_agent"`
+	Detail       string    `json:"detail"`
 	CreatedAt    time.Time `json:"created_at"`
 	Rollbackable bool      `json:"rollbackable"`
 }
@@ -47,6 +50,8 @@ func toOperationLogView(log *model.OperationLog) *OperationLogView {
 		Resource:     log.Resource,
 		ResourceID:   log.ResourceID,
 		IP:           log.IP,
+		UserAgent:    log.UserAgent,
+		Detail:       log.Detail,
 		CreatedAt:    log.CreatedAt,
 		Rollbackable: log.OldValue != "",
 	}
@@ -200,11 +205,13 @@ func (s *OperationLogService) GetStatistics(ctx context.Context) (*OperationLogS
 }
 
 // ExportAll 导出操作日志（返回视图列表，controller 负责渲染 CSV）
-func (s *OperationLogService) ExportAll(ctx context.Context, pageSize int) ([]*OperationLogView, error) {
+// ExportAll 导出（带筛选：与 GetList 同源的 user_id/action/module/start_time/end_time；
+// 此前导出忽略全部筛选，"筛了再导"导出的是全量——报表口径事故）。
+func (s *OperationLogService) ExportAll(ctx context.Context, pageSize int, filters map[string]any) ([]*OperationLogView, error) {
 	if pageSize <= 0 || pageSize > 50000 {
 		pageSize = 10000
 	}
-	logs, _, err := s.logRepo.GetAll(ctx, 1, pageSize, nil)
+	logs, _, err := s.logRepo.GetAll(ctx, 1, pageSize, filters)
 	if err != nil {
 		return nil, err
 	}

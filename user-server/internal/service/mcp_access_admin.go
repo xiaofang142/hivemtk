@@ -28,16 +28,19 @@ func NewMCPCallAuditAdminService() *MCPCallAuditAdminService {
 
 func (s *MCPCallAuditAdminService) Ready() bool { return s.repo != nil && s.repo.Available() }
 
-func (s *MCPCallAuditAdminService) List(ctx context.Context, clientID, tool string, allowed *bool, event string, page, size int) ([]model.MCPCallAudit, int64, error) {
-	return s.repo.List(ctx, clientID, tool, allowed, event, page, size)
+func (s *MCPCallAuditAdminService) List(ctx context.Context, clientID, tool string, allowed *bool, event, start, end string, teamID uint, page, size int) ([]model.MCPCallAudit, int64, error) {
+	return s.repo.List(ctx, clientID, tool, allowed, event, start, end, teamID, page, size)
 }
 
-// Record 追加一条审计（MCP 入口调用路径使用；失败只记日志不断工具调用）。
+// Record 追加一条审计（MCP 入口调用路径使用）。
+// 2026-10-11 起走异步队列（批量+重试+丢弃计数，见 mcp_audit_async.go）：
+// 请求路径不再扛审计写放大；队满时同步兜底，失败计入丢弃计数——
+// 审计写失败依旧不阻断工具调用，但"丢了多少"可观测。
 func (s *MCPCallAuditAdminService) Record(ctx context.Context, row *model.MCPCallAudit) {
 	if s.repo == nil {
 		return
 	}
-	_ = s.repo.Create(ctx, row) // best-effort：审计写失败不阻断 MCP 工具调用
+	GetMCPAuditWriter().EnqueueCall(s.repo, row)
 }
 
 // MCPSkillAdminService Skill 注册表管理。

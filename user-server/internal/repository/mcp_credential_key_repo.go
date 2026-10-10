@@ -99,8 +99,9 @@ func (r *MCPCredentialAuditLogRepo) Create(ctx context.Context, row *model.MCPCr
 	return r.db.WithContext(ctx).Create(row).Error
 }
 
-// List 分页查询。action/targetType/credentialID 均可空（不限定）。
-func (r *MCPCredentialAuditLogRepo) List(ctx context.Context, action, targetType string, credentialID *uint, page, size int) ([]model.MCPCredentialAuditLog, int64, error) {
+// List 分页查询。action/targetType/credentialID/operator 均可空（不限定）；
+// start/end 为 created_at 范围；teamID>0 按团队过滤。
+func (r *MCPCredentialAuditLogRepo) List(ctx context.Context, action, targetType string, credentialID *uint, operator, start, end string, teamID uint, page, size int) ([]model.MCPCredentialAuditLog, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -116,6 +117,18 @@ func (r *MCPCredentialAuditLogRepo) List(ctx context.Context, action, targetType
 	}
 	if credentialID != nil && *credentialID > 0 {
 		q = q.Where("credential_id = ?", *credentialID)
+	}
+	if operator != "" {
+		q = q.Where("operator_username = ?", operator)
+	}
+	if start != "" {
+		q = q.Where("created_at >= ?", start)
+	}
+	if end != "" {
+		q = q.Where("created_at <= ?", end)
+	}
+	if teamID > 0 {
+		q = q.Where("team_id = ?", teamID)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

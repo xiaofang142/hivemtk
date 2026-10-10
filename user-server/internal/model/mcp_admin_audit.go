@@ -30,6 +30,12 @@ type MCPCredentialAuditLog struct {
 	TargetLabel string `gorm:"column:target_label;type:varchar(128)" json:"target_label"`
 	// Detail JSON 摘要（status 前后值 / ttl / 掩码形 / 变更字段名），固定字段拼装，无明文钥匙
 	Detail string `gorm:"type:text" json:"detail"`
+	// TeamID 操作人归属团队（多租户 P0）：管理审计按团队可筛。
+	TeamID uint `gorm:"column:team_id;index;default:0" json:"team_id"`
+	// UserAgent 操作端 UA
+	UserAgent string `gorm:"column:user_agent;type:varchar(255)" json:"user_agent"`
+	// RequestID 链路追踪 id（trace_id），与日志/trace 对账
+	RequestID string `gorm:"column:request_id;type:varchar(64);index" json:"request_id"`
 	// OperatorUserID 操作人（JWT user_id；system 管理员路径可能缺失 → NULL）
 	OperatorUserID   *uint     `gorm:"column:operator_user_id;index" json:"operator_user_id"`
 	OperatorUsername string    `gorm:"column:operator_username;type:varchar(64)" json:"operator_username"`

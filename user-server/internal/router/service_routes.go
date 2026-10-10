@@ -254,6 +254,9 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.DELETE("/mcp/credentials/:id/keys/:keyId", controller.DeleteMCPCredentialKey)
 		// 管理面操作审计（凭证/钥匙/Skill 的增删改、状态流转、明文查看 reveal）。
 		authPlainAdmin.GET("/mcp/admin-audits", controller.ListMCPCredentialAuditLogs)
+		// 审计导出（CSV，与列表同源筛选，1 万行上限）。
+		authPlainAdmin.GET("/mcp/audits/export", controller.ExportMCPCallAudits)
+		authPlainAdmin.GET("/mcp/admin-audits/export", controller.ExportMCPCredentialAuditLogs)
 
 		// —— 多租户 P0：团队（租户）管理 ——
 		// 平台管理员面：全量 CRUD + 成员调拨（需求 3）。

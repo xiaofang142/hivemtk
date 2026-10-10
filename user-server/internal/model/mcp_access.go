@@ -21,6 +21,12 @@ type MCPCallAudit struct {
 	// 鉴权失败此前只在 HTTP 401 里一闪而过，出事无法回答"谁在什么时候拿错钥匙撞门"；
 	// 2026-10-11 起 guard 层把凭证对链路的失败也落进本表。
 	Event string `gorm:"column:event;type:varchar(16);not null;default:call;index" json:"event"`
+	// TeamID 调用方归属团队（多租户 P0）：凭证沿 owner 账户继承，审计按团队可筛。
+	TeamID uint `gorm:"column:team_id;index;default:0" json:"team_id"`
+	// UserAgent 调用方 UA（Agent 框架自报的标识常在这里，排障时能对上"是哪个客户端"）
+	UserAgent string `gorm:"column:user_agent;type:varchar(255)" json:"user_agent"`
+	// RequestID 链路追踪 id（TraceMiddleware 写入的 trace_id）：审计行与日志/trace 对账
+	RequestID string `gorm:"column:request_id;type:varchar(64);index" json:"request_id"`
 	// Method 取 tools/list / tools/call（也记其它 JSON-RPC 方法，便于看客户端行为）
 	Method string `gorm:"type:varchar(40);index" json:"method"`
 	// Tool 仅在 tools/call 时非空

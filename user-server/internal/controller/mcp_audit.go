@@ -44,8 +44,10 @@ func ListMCPCallAudits(ctx *gin.Context) {
 		v := false
 		allowed = &v
 	}
+	teamID := parseUintOrZero(ctx.Query("team_id"))
 	rows, total, err := svc.List(ctx.Request.Context(),
-		ctx.Query("client_id"), ctx.Query("tool"), allowed, ctx.Query("event"), page, size)
+		ctx.Query("client_id"), ctx.Query("tool"), allowed, ctx.Query("event"),
+		ctx.Query("start"), ctx.Query("end"), teamID, page, size)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "查询审计失败: "+err.Error())
 		return

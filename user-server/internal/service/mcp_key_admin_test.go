@@ -125,7 +125,7 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 
 	// ⑦ 管理审计有账：签发/状态/删除都该留痕。
 	auditSvc := NewMCPCredentialAuditLogAdminService()
-	rows, total, err := auditSvc.List(ctx, "", "", &cred.ID, 1, 50)
+	rows, total, err := auditSvc.List(ctx, "", "", &cred.ID, "", "", "", 0, 1, 50)
 	if err != nil || total < 3 {
 		t.Fatalf("管理审计应≥3条（签发/状态/删除），got total=%d err=%v", total, err)
 	}

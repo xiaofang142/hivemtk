@@ -216,14 +216,14 @@ func NewMCPCredentialAuditLogAdminService() *MCPCredentialAuditLogAdminService {
 
 func (s *MCPCredentialAuditLogAdminService) Ready() bool { return s.repo != nil }
 
-// Record 追加一条管理审计（best-effort：记账失败不影响管理操作本身）。
+// Record 追加一条管理审计（异步队列，见 mcp_audit_async.go；失败不影响管理操作本身）。
 func (s *MCPCredentialAuditLogAdminService) Record(ctx context.Context, row *model.MCPCredentialAuditLog) {
 	if s.repo == nil {
 		return
 	}
-	_ = s.repo.Create(ctx, row)
+	GetMCPAuditWriter().EnqueueAdmin(s.repo, row)
 }
 
-func (s *MCPCredentialAuditLogAdminService) List(ctx context.Context, action, targetType string, credentialID *uint, page, size int) ([]model.MCPCredentialAuditLog, int64, error) {
-	return s.repo.List(ctx, action, targetType, credentialID, page, size)
+func (s *MCPCredentialAuditLogAdminService) List(ctx context.Context, action, targetType string, credentialID *uint, operator, start, end string, teamID uint, page, size int) ([]model.MCPCredentialAuditLog, int64, error) {
+	return s.repo.List(ctx, action, targetType, credentialID, operator, start, end, teamID, page, size)
 }

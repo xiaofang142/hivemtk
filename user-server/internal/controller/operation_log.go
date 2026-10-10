@@ -179,7 +179,24 @@ func (c *OperationLogController) ExportLogs(ctx *gin.Context) {
 		pageSize = 10000
 	}
 
-	logs, err := c.logSvc.ExportAll(ctx, pageSize)
+	// 导出与列表同源筛选（此前导出忽略筛选，导出的是全量）
+	exportFilters := make(map[string]any)
+	if v := ctx.Query("user_id"); v != "" {
+		exportFilters["user_id"] = v
+	}
+	if v := ctx.Query("action"); v != "" {
+		exportFilters["action"] = v
+	}
+	if v := ctx.Query("module"); v != "" {
+		exportFilters["module"] = v
+	}
+	if v := ctx.Query("start_time"); v != "" {
+		exportFilters["start_time"] = v
+	}
+	if v := ctx.Query("end_time"); v != "" {
+		exportFilters["end_time"] = v
+	}
+	logs, err := c.logSvc.ExportAll(ctx, pageSize, exportFilters)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询日志失败: "+err.Error())
 		return
@@ -187,15 +204,19 @@ func (c *OperationLogController) ExportLogs(ctx *gin.Context) {
 
 	var buf bytes.Buffer
 	writer := csv.NewWriter(&buf)
-	_ = writer.Write([]string{"ID", "Module", "Action", "Username", "IP", "CreatedAt"})
+	_ = writer.Write([]string{"ID", "Module", "Action", "Resource", "ResourceID", "Username", "IP", "UserAgent", "CreatedAt", "Detail"})
 	for _, log := range logs {
 		_ = writer.Write([]string{
 			fmt.Sprintf("%d", log.ID),
 			log.Module,
 			log.Action,
+			log.Resource,
+			log.ResourceID,
 			log.Username,
 			log.IP,
+			log.UserAgent,
 			log.CreatedAt.Format("2006-01-02 15:04:05"),
+			log.Detail,
 		})
 	}
 	writer.Flush()

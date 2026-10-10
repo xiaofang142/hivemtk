@@ -72,10 +72,21 @@ func mcpWriteAdminAudit(ctx *gin.Context, action, targetType string, targetID ui
 		return
 	}
 	userID, username, ip := mcpOperatorOf(ctx)
+	var teamID uint
+	if v, ok := ctx.Get("team_id"); ok {
+		if id, ok2 := v.(uint); ok2 {
+			teamID = id
+		}
+	}
+	reqID := ""
+	if v, ok := ctx.Get("trace_id"); ok {
+		reqID, _ = v.(string)
+	}
 	svc.Record(ctx.Request.Context(), &model.MCPCredentialAuditLog{
 		Action: action, TargetType: targetType, TargetID: targetID,
 		CredentialID: credentialID, TargetLabel: label, Detail: mcpAuditDetail(detail),
 		OperatorUserID: userID, OperatorUsername: username, IP: ip,
+		TeamID: teamID, UserAgent: ctx.Request.UserAgent(), RequestID: reqID,
 	})
 }
 
@@ -318,7 +329,8 @@ func ListMCPCredentialAuditLogs(ctx *gin.Context) {
 	if v := parseUintOrZero(ctx.Query("credential_id")); v > 0 {
 		credID = &v
 	}
-	rows, total, err := svc.List(ctx.Request.Context(), ctx.Query("action"), ctx.Query("target_type"), credID, page, size)
+	rows, total, err := svc.List(ctx.Request.Context(), ctx.Query("action"), ctx.Query("target_type"), credID,
+		ctx.Query("operator"), ctx.Query("start"), ctx.Query("end"), parseUintOrZero(ctx.Query("team_id")), page, size)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "查询管理审计失败: "+err.Error())
 		return

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"hivemtk-user/internal/repository/scope"
 	"io"
 	"net/http"
 
@@ -61,9 +62,14 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 	// 记了也无法对账到签发记录，反而把两套鉴权混在一张表里。
 	if cid, _ := clientID.(string); cid != "" {
 		keyID, _ := ctx.Get(middleware.MCPCtxKeyID)
+		ua := ctx.Request.UserAgent()
+		traceID, _ := ctx.Get("trace_id")
+		reqID, _ := traceID.(string)
+		teamInfo, _ := scope.TeamInfoFromCtx(ctx.Request.Context())
 		mcpSrv.SetAuditSink(func(rec mcp.AuditRecord) {
 			rec.ClientID = cid
-			c.auditWith(ctx.Request.Context(), rec, ctx.ClientIP(), credentialID, keyID)
+			c.auditWith(ctx.Request.Context(), rec, ctx.ClientIP(), credentialID, keyID,
+				ua, reqID, teamInfo.TeamID)
 		})
 	}
 
@@ -84,7 +90,7 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 // auditWith 审计落库（best-effort，失败只记日志不阻断工具调用）。
 // credentialID/keyID 用于把审计行与签发记录对上（client_id 可被人工改，id 才是稳定键；
 // 1:N 之后同一凭证可有多把钥匙，"哪把钥匙干的"只有 key_id 能回答）。
-func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip string, credentialID, keyID any) {
+func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip string, credentialID, keyID any, userAgent, requestID string, teamID uint) {
 	row := &model.MCPCallAudit{
 		ClientID:  rec.ClientID,
 		Method:    rec.Method,
@@ -96,6 +102,9 @@ func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip s
 		LatencyMS: rec.LatencyMS,
 		IP:        ip,
 		Event:     rec.Event,
+		TeamID:    teamID,
+		UserAgent: userAgent,
+		RequestID: requestID,
 	}
 	if row.Event == "" {
 		row.Event = "call"

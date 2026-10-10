@@ -80,7 +80,8 @@ func MCPGuard() gin.HandlerFunc {
 		if clientID := strings.TrimSpace(c.GetHeader("X-Client-Id")); clientID != "" {
 			apiKey := strings.TrimSpace(c.GetHeader("X-API-Key"))
 			if apiKey == "" {
-				mcpRecordAuthAudit(ctx, clientID, 0, mcpReasonMissingKey, c.ClientIP())
+				missIP, missUA, missReqID, missTeam := mcpAuditMeta(c)
+				mcpRecordAuthAudit(ctx, clientID, 0, mcpReasonMissingKey, missIP, missUA, missReqID, missTeam)
 				response.Error(c, 401, "缺少 X-API-Key")
 				c.Abort()
 				return
@@ -88,7 +89,8 @@ func MCPGuard() gin.HandlerFunc {
 			credScope, ok, expired, reason := verifyMCPCredentialPair(ctx, clientID, apiKey)
 			if !ok {
 				// 鉴权失败也落审计：出事要能回答"谁在什么时候拿错钥匙撞门"。
-				mcpRecordAuthAudit(ctx, clientID, credScope.KeyID, reason, c.ClientIP())
+				failIP, failUA, failReqID, failTeam := mcpAuditMeta(c)
+				mcpRecordAuthAudit(ctx, clientID, credScope.KeyID, reason, failIP, failUA, failReqID, failTeam)
 				response.Error(c, 401, mcpAuthFailMessage(expired, reason))
 				c.Abort()
 				return
@@ -235,18 +237,33 @@ var mcpAuthAuditSink = func(ctx context.Context, row *model.MCPCallAudit) {
 	_ = r.Create(ctx, row)
 }
 
+// mcpAuditMeta 鉴权审计的UA/trace/team 元组（gin ctx 里现成可取）。
+func mcpAuditMeta(c *gin.Context) (ip string, ua, reqID string, teamID uint) {
+	ip = c.ClientIP()
+	ua = c.Request.UserAgent()
+	if v, ok := c.Get("trace_id"); ok {
+		reqID, _ = v.(string)
+	}
+	info, _ := scope.TeamInfoFromCtx(c.Request.Context())
+	teamID = info.TeamID
+	return
+}
+
 // mcpRecordAuthAudit 落一条鉴权失败审计（event=auth）。
 // 只覆盖凭证对链路（client_id 非空）：单值链路的调用方是内部扩展/桥接，
 // 没有可对账的凭证行，记了也无法归属（与 mcp_call_audits 的口径一致）。
-func mcpRecordAuthAudit(ctx context.Context, clientID string, keyID uint, reason, ip string) {
+func mcpRecordAuthAudit(ctx context.Context, clientID string, keyID uint, reason string, ip, ua, reqID string, teamID uint) {
 	row := &model.MCPCallAudit{
-		ClientID: clientID,
-		Method:   "auth",
-		Allowed:  false,
-		OK:       false,
-		ErrorMsg: mcpAuthFailMessage(false, reason),
-		IP:       ip,
-		Event:    "auth",
+		ClientID:  clientID,
+		Method:    "auth",
+		Allowed:   false,
+		OK:        false,
+		ErrorMsg:  mcpAuthFailMessage(false, reason),
+		IP:        ip,
+		Event:     "auth",
+		TeamID:    teamID,
+		UserAgent: ua,
+		RequestID: reqID,
 	}
 	if keyID != 0 {
 		row.KeyID = &keyID
