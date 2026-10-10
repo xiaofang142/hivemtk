@@ -9,8 +9,32 @@ import (
 	"hivemtk-user/internal/dto"
 )
 
-// WeakTruthMinConfidence 进入混淆矩阵的最低置信度阈值（等于阈值即入，之下进低置信桶）
+// WeakTruthMinConfidence 进入混淆矩阵的最低置信度阈值（编译期兜底，等于阈值即入，之下进低置信桶）
 const WeakTruthMinConfidence = 0.9
+
+// weakTruthMinConfidenceProvider 由装配层（internal/app/confidence_params_wiring.go）注入，
+// 数据源是 config_params 的 confidence.weak_truth_min_confidence。
+var weakTruthMinConfidenceProvider = func() float64 { return WeakTruthMinConfidence }
+
+// SetWeakTruthMinConfidenceProvider 注入弱真值置信度阈值读取口；传 nil 视为不注入。
+func SetWeakTruthMinConfidenceProvider(fn func() float64) {
+	if fn != nil {
+		weakTruthMinConfidenceProvider = fn
+	}
+}
+
+// weakTruthMinConfidence 当前生效的最低置信度阈值。
+// 非 (0,1] 的值一律回落兜底：取到 0 会把所有低置信预测都算进混淆矩阵，
+// 矩阵分母被噪声灌满，PR 指标随之失真。
+func weakTruthMinConfidence() float64 {
+	if t := weakTruthMinConfidenceProvider(); t > 0 && t <= 1 {
+		return t
+	}
+	return WeakTruthMinConfidence
+}
+
+// ProbeWeakTruthMinConfidence 导出当前生效的弱真值阈值（仅供装配层测试断言读取口）。
+func ProbeWeakTruthMinConfidence() float64 { return weakTruthMinConfidence() }
 
 var fallbackClassSet = map[string]bool{
 	IntentUnknown:  true,
@@ -73,7 +97,7 @@ func (c *ConfusionStore) RecordPrediction(predicted string, gold string, confide
 	if predicted == "" || gold == "" {
 		return
 	}
-	if confidence < WeakTruthMinConfidence {
+	if confidence < weakTruthMinConfidence() {
 		c.mu.Lock()
 		c.lowConf[predicted+"|"+gold]++
 		c.lowTotal++

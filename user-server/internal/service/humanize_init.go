@@ -101,7 +101,7 @@ func InitHumanizeEvalService(db *gorm.DB, dispatcher *llm.Dispatcher) *humanizes
 				svc = svc.WithThreshold(context.Background(), thr)
 				logger.Infof("[humanize] MTK_HUMANIZE_EVAL_THRESHOLD 生效 threshold=%.2f", thr)
 			} else {
-				logger.Warnf("[humanize] MTK_HUMANIZE_EVAL_THRESHOLD=%q 非法（须 0<thr<=1），使用默认 %.2f", v, humanizesvc.DefaultThreshold)
+				logger.Warnf("[humanize] MTK_HUMANIZE_EVAL_THRESHOLD=%q 非法（须 0<thr<=1），使用 %.2f", v, humanizesvc.EffectiveThreshold())
 			}
 		}
 		humanizeEvalService = svc
@@ -118,7 +118,9 @@ func humanizeEffectiveThreshold() float64 {
 	if svc := GetHumanizeEvalService(); svc != nil {
 		return svc.Threshold()
 	}
-	return humanizesvc.DefaultThreshold
+	// 评估器还没初始化（单测里常见）时不能退回编译期常量：
+	// 那会让落库的 threshold 字段与参数中心里的值对不上。
+	return humanizesvc.EffectiveThreshold()
 }
 
 type humanizeRegenerateAdapter struct {

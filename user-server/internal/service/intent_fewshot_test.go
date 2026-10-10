@@ -134,7 +134,7 @@ func TestFewShotStore_SelectExamples_KNN(t *testing.T) {
 		fake.vecs[txt] = near[i]
 	}
 	store := NewFewShotStore(fake)
-	got := store.SelectExamples(qv, 3, fewShotMinCos)
+	got := store.SelectExamples(qv, 3, fewShotMinCos())
 	if len(got) != 3 {
 		t.Fatalf("应选中 3 条登记近邻（其余示例为正交基被过滤）, got %d: %v", len(got), got)
 	}
@@ -155,7 +155,7 @@ func TestFewShotStore_AllBelowMinCos_ReturnsNil(t *testing.T) {
 
 	fake.vecs["我要买，怎么付款？"] = []float32{0, 0, 0, 0, 0, 0, 0, 1}
 	store := NewFewShotStore(fake)
-	if got := store.SelectExamples([]float32{1, 1, 1, 0, 0, 0, 0, 0}, 3, fewShotMinCos); got != nil {
+	if got := store.SelectExamples([]float32{1, 1, 1, 0, 0, 0, 0, 0}, 3, fewShotMinCos()); got != nil {
 		t.Errorf("全部低于 minCos 应返回 nil, got %v", got)
 	}
 }
@@ -165,7 +165,7 @@ func TestFewShotStore_EmbedderFail_ReturnsNil(t *testing.T) {
 	fake := newFakeFewShotEmbedder()
 	fake.fail = true
 	store := NewFewShotStore(fake)
-	if got := store.SelectExamples([]float32{1, 1, 1, 0, 0, 0, 0, 0}, 3, fewShotMinCos); got != nil {
+	if got := store.SelectExamples([]float32{1, 1, 1, 0, 0, 0, 0, 0}, 3, fewShotMinCos()); got != nil {
 		t.Errorf("embedder 失败应返回 nil, got %v", got)
 	}
 }

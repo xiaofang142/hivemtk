@@ -62,7 +62,32 @@ type VetoLowRAG struct {
 	Threshold float64
 }
 
-const defaultVetoLowRAGThreshold = 0.1
+// DefaultVetoLowRAGThreshold 否决低 RAG 的编译期兜底阈值（RAGQual 低于它视为知识库无覆盖）
+const DefaultVetoLowRAGThreshold = 0.1
+
+// vetoLowRAGThresholdProvider 由装配层（internal/app/confidence_params_wiring.go）注入，
+// 数据源是 config_params 的 confidence.veto_low_rag_threshold。
+var vetoLowRAGThresholdProvider = func() float64 { return DefaultVetoLowRAGThreshold }
+
+// SetVetoLowRAGThresholdProvider 注入否决阈值读取口；传 nil 视为不注入。
+func SetVetoLowRAGThresholdProvider(fn func() float64) {
+	if fn != nil {
+		vetoLowRAGThresholdProvider = fn
+	}
+}
+
+// vetoLowRAGThreshold 当前生效的否决阈值。
+// 非 (0,1] 的值一律回落兜底：取到 0 会让任何 RAG 得分都触发否决（含满分），
+// 一票否决规则会变成「全部转人工」。
+func vetoLowRAGThreshold() float64 {
+	if t := vetoLowRAGThresholdProvider(); t > 0 && t <= 1 {
+		return t
+	}
+	return DefaultVetoLowRAGThreshold
+}
+
+// ProbeVetoLowRAGThreshold 导出当前生效的否决阈值（仅供装配层测试断言读取口）。
+func ProbeVetoLowRAGThreshold() float64 { return vetoLowRAGThreshold() }
 
 // Check 实现 VetoRule
 //
@@ -70,7 +95,7 @@ const defaultVetoLowRAGThreshold = 0.1
 func (r *VetoLowRAG) Check(signals *dto.FiveSignals, _ *VetoContext) (bool, string) {
 	threshold := r.Threshold
 	if threshold == 0 {
-		threshold = defaultVetoLowRAGThreshold
+		threshold = vetoLowRAGThreshold()
 	}
 	if threshold < 0 {
 		return false, ""

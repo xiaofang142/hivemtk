@@ -176,8 +176,13 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1 批 misc 组 16 条已完成并提交（1/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=56 / 已声明未接线=56 / UNDECLARED=2`。
+> **进度（2026-10-10）：第 1 批 misc(16) 与第 2 批 confidence(5/7) 已完成并提交（2/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=61 / 已声明未接线=51 / UNDECLARED=2`。
+> confidence 组 7 条里只接了 5 条：`persona_default_threshold` 与 `persona_max_retry` 的实现
+> `internal/service/persona_evaluator.go` 已随 `9a5f716c` 整体删除（749 行实现 + 958 行测试），
+> 代码里不存在等价能力，**不为了凑数凭空造一个读取口**，两条如实保留「未接线」标注，
+> 并在 Description 里写明「实现已随 9a5f716c 删除」以及「若要暴露重生成上限请另立
+> `humanize_max_retry` 而不是改这条」——免得后来人以为只是漏接线。
 > 余下 2 条 UNDECLARED 是 `cache.faq_ttl` 与 `agent_llm.default_semantic_threshold`，
 > 它们的唯一读取点在 `app/faq_cache_wiring.go`——一个尚未入库的在途文件，属于别人正在做的
 > FAQ 语义缓存特性（该特性还要改 `rag/cache/service.go` 的构造签名并连带两个测试文件）。

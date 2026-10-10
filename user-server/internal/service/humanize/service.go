@@ -15,6 +15,30 @@ import (
 // DefaultThreshold 默认达标阈值（PRD §5.2 G6：≥ 0.85）
 const DefaultThreshold = 0.85
 
+// thresholdProvider 由装配层（internal/app/confidence_params_wiring.go）注入，
+// 数据源是 config_params 的 confidence.humanize_default_threshold。
+// 单独一个 provider 而不是直接读库：humanize 是下层包，不能反向依赖 service
+// 读参数中心（那会形成 service/humanize → service 的循环）。
+var thresholdProvider = func() float64 { return DefaultThreshold }
+
+// SetDefaultThresholdProvider 注入达标阈值读取口。
+// 传 nil 视为不注入：装配顺序错时宁可用编译期默认值，也不要拿到一个空函数。
+func SetDefaultThresholdProvider(fn func() float64) {
+	if fn != nil {
+		thresholdProvider = fn
+	}
+}
+
+// EffectiveThreshold 当前生效的达标阈值。
+// 非 (0,1] 的值一律回落编译期默认值——阈值取到 0 会让所有文本都判达标，
+// 取到 1 以上则永远不达标，两种都是静默的行为错误。
+func EffectiveThreshold() float64 {
+	if t := thresholdProvider(); t > 0 && t <= 1 {
+		return t
+	}
+	return DefaultThreshold
+}
+
 // DefaultBoundaryLow 边界样本下界（含）
 const DefaultBoundaryLow = 0.70
 
@@ -56,7 +80,7 @@ func NewHumanizeEvalService(
 		baselineRepo:    baselineRepo,
 		scoreRepo:       scoreRepo,
 		sampleCollector: sampleCollector,
-		threshold:       DefaultThreshold,
+		threshold:       EffectiveThreshold(),
 		sampleRate:      DefaultSampleRate,
 		boundaryLow:     DefaultBoundaryLow,
 		boundaryHigh:    DefaultBoundaryHigh,

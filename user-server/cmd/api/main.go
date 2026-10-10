@@ -164,6 +164,12 @@ func main() {
 		logger.Info("[ConfigParam] misc 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// confidence 组同理：点位分布在 service 本体与 service/humanize、service/confidence
+	// 两个下层包，下层包不能反向 import service，只能由装配层注入。
+	if wired := app.WireConfidenceConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] confidence 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

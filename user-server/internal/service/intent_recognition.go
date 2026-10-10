@@ -284,7 +284,32 @@ func parsePGVectorLiteral(s string, expectDim int) ([]float32, error) {
 	return out, nil
 }
 
-const embRetryCooldown = 60 * time.Second
+// EmbRetryCooldownDefault Embedding 锚点重试冷却（编译期兜底）
+const EmbRetryCooldownDefault = 60 * time.Second
+
+// embRetryCooldownProvider 由装配层（internal/app/confidence_params_wiring.go）注入，
+// 数据源是 config_params 的 confidence.emb_retry_cooldown。
+var embRetryCooldownProvider = func() time.Duration { return EmbRetryCooldownDefault }
+
+// SetEmbRetryCooldownProvider 注入重试冷却读取口；传 nil 视为不注入。
+func SetEmbRetryCooldownProvider(fn func() time.Duration) {
+	if fn != nil {
+		embRetryCooldownProvider = fn
+	}
+}
+
+// embRetryCooldown 当前生效的重试冷却。
+// 非正数一律回落兜底：冷却取 0 会让每次请求都触发一次后台 embedding
+// 预计算，等于把限流关掉。
+func embRetryCooldown() time.Duration {
+	if d := embRetryCooldownProvider(); d > 0 {
+		return d
+	}
+	return EmbRetryCooldownDefault
+}
+
+// ProbeEmbRetryCooldown 导出当前生效的重试冷却（仅供装配层测试断言读取口）。
+func ProbeEmbRetryCooldown() time.Duration { return embRetryCooldown() }
 
 func (s *IntentRecognizer) recognizeByEmbedding(ctx context.Context, text string) *dto.RecognizeResult {
 	if s.embedSvc == nil {
@@ -297,11 +322,11 @@ func (s *IntentRecognizer) recognizeByEmbedding(ctx context.Context, text string
 	s.anchorMu.RUnlock()
 
 	if len(anchors) == 0 || disabled {
-		if time.Since(lastTry) < embRetryCooldown {
+		if time.Since(lastTry) < embRetryCooldown() {
 			return nil
 		}
 		s.anchorMu.Lock()
-		shouldRetry := !s.embLastPrecompute.After(time.Now().Add(-embRetryCooldown))
+		shouldRetry := !s.embLastPrecompute.After(time.Now().Add(-embRetryCooldown()))
 		if shouldRetry {
 			s.embLastPrecompute = time.Now()
 		}

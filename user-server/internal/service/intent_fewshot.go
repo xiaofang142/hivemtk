@@ -13,7 +13,36 @@ import (
 
 const fewShotLoadCooldown = 10 * time.Minute
 
-const fewShotMinCos = 0.7
+// FewShotMinCosDefault Few-Shot 检索的最小余弦相似度（编译期兜底）
+const FewShotMinCosDefault = 0.7
+
+// fewShotMinCosProvider 由装配层（internal/app/confidence_params_wiring.go）注入，
+// 数据源是 config_params 的 confidence.intent_fewshot_min_cos。
+var fewShotMinCosProvider = func() float64 { return FewShotMinCosDefault }
+
+// SetFewShotMinCosProvider 注入 Few-Shot 最小余弦读取口；传 nil 视为不注入。
+func SetFewShotMinCosProvider(fn func() float64) {
+	if fn != nil {
+		fewShotMinCosProvider = fn
+	}
+}
+
+// fewShotMinCos 当前生效的最小余弦相似度。
+// 非 (0,1] 的值一律回落兜底：取到 0 会把语义完全不相关的样本也当成命中，
+// Few-Shot 反而污染意图判定。
+func fewShotMinCos() float64 {
+	if c := fewShotMinCosProvider(); c > 0 && c <= 1 {
+		return c
+	}
+	return FewShotMinCosDefault
+}
+
+// ProbeFewShotMinCos 导出当前生效的 Few-Shot 最小余弦。
+//
+// 只给装配层测试用：它要证明「参数中心改了值 → 读取口真的变了」，
+// 而 fewShotMinCos 是包内私有、无法从 app 包断言。与其断言 setter 收下了
+// 函数（那证明不了行为变化），不如把读取口露出来。
+func ProbeFewShotMinCos() float64 { return fewShotMinCos() }
 
 type fewShotCandidate struct {
 	Intent string
@@ -194,7 +223,7 @@ func (s *IntentRecognizer) fillTopKExamplesDynamic(ctx context.Context, text str
 		return
 	}
 	store.EnsureReady(ctx)
-	picked := store.SelectExamples(qvec, intentTopKExamples, fewShotMinCos)
+	picked := store.SelectExamples(qvec, intentTopKExamples, fewShotMinCos())
 	if shouldFallbackStatic(len(picked), intentTopKExamples) {
 		fallback()
 		return

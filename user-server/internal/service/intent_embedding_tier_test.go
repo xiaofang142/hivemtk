@@ -242,7 +242,7 @@ func TestRecognizeEmbedding_LazyRetryAfterCooldown(t *testing.T) {
 	}
 
 	rec.anchorMu.Lock()
-	rec.embLastPrecompute = time.Now().Add(-embRetryCooldown - time.Second)
+	rec.embLastPrecompute = time.Now().Add(-embRetryCooldown() - time.Second)
 	rec.embFailCount = 0
 	rec.anchorMu.Unlock()
 	stub.failN = 0
