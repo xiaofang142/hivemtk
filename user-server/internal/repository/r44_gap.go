@@ -215,7 +215,7 @@ func (r *CohortGapRepo) CountCustomersBetween(ctx context.Context, start, end ti
 func (r *CohortGapRepo) CountRetainedEvents(ctx context.Context, cohortStart, cohortEnd, weekStart, weekEnd time.Time) (int64, error) {
 	var n int64
 	err := r.db.WithContext(ctx).Model(&model.CustomerEvent{}).
-		Joins("JOIN customers ON customers.one_id = customer_events.customer_id OR customers.id::text = customer_events.customer_id").
+		Joins("JOIN customers ON customers.unified_id = customer_events.customer_id OR customers.id::text = customer_events.customer_id").
 		Where("customers.created_at >= ? AND customers.created_at < ?", cohortStart, cohortEnd).
 		Where("customer_events.created_at >= ? AND customer_events.created_at < ?", weekStart, weekEnd).
 		Distinct("customer_events.customer_id").
