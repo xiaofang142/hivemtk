@@ -176,6 +176,12 @@ func main() {
 		logger.Info("[ConfigParam] agent_llm 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// agent_tool 组：并发上限、工具结果截断、ToolRouter 熔断阈值与冷却期，
+	// 都在 internal/aiagent/agent/tooluse 里，那个包同样不能反向 import service。
+	if wired := app.WireAgentToolConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] agent_tool 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	// cache 组同理：内存缓存 LRU 上限、安装 memo、平台信息缓存、翻译缓存四样分别住在
 	// internal/cache、internal/system/install、internal/controller、internal/aiagent/rag/retrieval，
 	// 四个包都不反向 import service，只有装配层同时看得见它们。

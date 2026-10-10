@@ -56,10 +56,10 @@ func NewToolRouter(executor *ToolExecutor, rateLimiter RateLimiter, cfg RouterCo
 		rateLimiter = &NoOpRateLimiter{}
 	}
 	if cfg.FailThreshold <= 0 {
-		cfg.FailThreshold = 5
+		cfg.FailThreshold = RouterFailThreshold()
 	}
 	if cfg.CooldownDuration <= 0 {
-		cfg.CooldownDuration = 30 * time.Second
+		cfg.CooldownDuration = RouterCooldownDuration()
 	}
 	if cfg.DefaultToolCost < 0 {
 		cfg.DefaultToolCost = 0.001
@@ -255,3 +255,43 @@ func defaultKeyBuilder(toolName string, tc *ToolContext) string {
 
 // ErrRouterUnavailable 路由不可用
 var ErrRouterUnavailable = errors.New("tool router unavailable")
+
+// DefaultRouterFailThreshold ToolRouter 内置熔断（失败即切同类工具）的连续失败
+// 次数兜底值。
+const DefaultRouterFailThreshold = 5
+
+// DefaultRouterCooldownDuration 上面那个熔断的冷却期兜底值。
+const DefaultRouterCooldownDuration = 30 * time.Second
+
+var (
+	routerFailThresholdProvider    func() int
+	routerCooldownDurationProvider func() time.Duration
+)
+
+// SetRouterFailThresholdProvider 注入熔断阈值；传 nil 视为不注入。
+func SetRouterFailThresholdProvider(fn func() int) { routerFailThresholdProvider = fn }
+
+// SetRouterCooldownDurationProvider 注入熔断冷却期；传 nil 视为不注入。
+func SetRouterCooldownDurationProvider(fn func() time.Duration) { routerCooldownDurationProvider = fn }
+
+// RouterFailThreshold 生效的熔断阈值。非正值一律回落兜底——阈值 0 会让任意一次
+// 失败都触发换工具，一个抖动就把整条工具链掀掉。
+func RouterFailThreshold() int {
+	if p := routerFailThresholdProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultRouterFailThreshold
+}
+
+// RouterCooldownDuration 生效的熔断冷却期。非正值一律回落兜底——冷却 0 等于没有
+// 冷却，失败的工具会被立刻重新选中，退化成不停重试。
+func RouterCooldownDuration() time.Duration {
+	if p := routerCooldownDurationProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultRouterCooldownDuration
+}

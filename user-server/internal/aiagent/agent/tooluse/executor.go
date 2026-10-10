@@ -487,8 +487,7 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 	start := time.Now()
 	results := make([]LLMToolResult, len(toolCalls))
 
-	const maxConcurrent = 5
-	sem := make(chan struct{}, maxConcurrent)
+	sem := make(chan struct{}, MaxConcurrent())
 	var wg sync.WaitGroup
 	for i, call := range toolCalls {
 		wg.Add(1)
@@ -595,7 +594,7 @@ func (e *ToolExecutor) executeSingleLLMToolCall(ctx context.Context, call LLMToo
 	content, _ := json.Marshal(execResult.ToolResult)
 	contentStr := string(content)
 
-	const maxContentLen = 4000
+	maxContentLen := MaxContentLen()
 	if len(contentStr) > maxContentLen {
 		originalLen := len(contentStr)
 		contentStr = contentStr[:maxContentLen] + fmt.Sprintf(`...[truncated, original_size=%d]`, originalLen)
@@ -686,4 +685,46 @@ func (e *ToolExecutor) preflightToolCall(toolName string, args map[string]any) e
 // SetGlobalExecutor 替换全局执行器（用于测试 / 热重载）
 func SetGlobalExecutor(exec *ToolExecutor) {
 	globalExecutor = exec
+}
+
+// DefaultMaxConcurrent 并发执行多个 tool_call 时的并发上限兜底值。
+// 5 是权衡过的：足够覆盖常见业务场景（如 customer.search + order.query 并行），
+// 又不至于让单次工具调用把所有下游配额一次吃掉。
+const DefaultMaxConcurrent = 5
+
+// DefaultMaxContentLen 单个工具结果回灌给模型前的最大字节数兜底值。
+// 超出的部分会截断并附 original_size，模型据此知道结果被切过。
+const DefaultMaxContentLen = 4000
+
+var (
+	maxConcurrentProvider func() int
+	maxContentLenProvider func() int
+)
+
+// SetMaxConcurrentProvider 注入并发上限；传 nil 视为不注入。
+func SetMaxConcurrentProvider(fn func() int) { maxConcurrentProvider = fn }
+
+// SetMaxContentLenProvider 注入工具结果截断上限；传 nil 视为不注入。
+func SetMaxContentLenProvider(fn func() int) { maxContentLenProvider = fn }
+
+// MaxConcurrent 生效的并发上限。非正值一律回落兜底——信号量容量为 0 会让
+// 每个 goroutine 永久阻塞在 sem <- struct{}{} 上，整个并发执行直接挂死。
+func MaxConcurrent() int {
+	if p := maxConcurrentProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultMaxConcurrent
+}
+
+// MaxContentLen 生效的工具结果截断上限。非正值一律回落兜底——上限 0 会把每个
+// 工具结果都削成只剩一条截断尾注，模型拿到的等于没有结果。
+func MaxContentLen() int {
+	if p := maxContentLenProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultMaxContentLen
 }
