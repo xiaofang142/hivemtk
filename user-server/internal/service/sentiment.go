@@ -1,9 +1,6 @@
 package service
 
-import (
-	"strings"
-	"unicode"
-)
+import ()
 
 var positiveWords = map[string]struct{}{
 	"好": {}, "好的": {}, "不错": {}, "满意": {}, "喜欢": {}, "爱": {}, "棒": {}, "精彩": {},
@@ -44,44 +41,4 @@ var negativeWords = map[string]struct{}{
 	"rude": {}, "ignored": {}, "delay": {},
 	"难": {}, "复杂": {}, "麻烦": {}, "繁琐": {}, "混乱": {}, "脏": {},
 	"绝望": {}, "打击": {}, "困难": {}, "棘手": {}, "痛": {},
-}
-
-func tokenize(text string) []string {
-	text = strings.ToLower(strings.TrimSpace(text))
-	if text == "" {
-		return nil
-	}
-	var tokens []string
-	var sb strings.Builder
-	flush := func() {
-		if sb.Len() > 0 {
-			tokens = append(tokens, sb.String())
-			sb.Reset()
-		}
-	}
-	for _, r := range text {
-		if unicode.Is(unicode.Han, r) {
-			flush()
-			tokens = append(tokens, string(r))
-			continue
-		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			sb.WriteRune(r)
-			continue
-		}
-		flush()
-	}
-	flush()
-	var merged []string
-	mergeWindows := []int{2, 3}
-	hasHan := strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Han, r) })
-	if hasHan {
-		for _, w := range mergeWindows {
-			for i := 0; i+w <= len(tokens); i++ {
-				merged = append(merged, strings.Join(tokens[i:i+w], ""))
-			}
-		}
-	}
-	tokens = append(tokens, merged...)
-	return tokens
 }

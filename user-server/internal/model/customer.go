@@ -10,20 +10,17 @@ import (
 )
 
 const (
-	unifiedIDPrefixPhone        = "phone:"
-	unifiedIDPrefixEmail        = "email:"
-	unifiedIDPrefixTelegram     = "telegram:"
-	unifiedIDPrefixWhatsApp     = "whatsapp:"
-	unifiedIDPrefixWechat       = "wechat:"
-	unifiedIDPrefixFeishu       = "feishu:"
-	unifiedIDPrefixWeCom        = "wecom:"
-	unifiedIDPrefixDouyin       = "douyin:"
-	unifiedIDPrefixTikTok       = "tiktok:"
-	unifiedIDPrefixKuaishou     = "kuaishou:"
-	unifiedIDPrefixXiaohongshu  = "xiaohongshu:"
-	unifiedIDPrefixXianyu       = "xianyu:"
-	unifiedIDPrefixSMS          = "sms:"
-	unifiedIDPrefixEmailContact = "email_c:"
+	unifiedIDPrefixEmail       = "email:"
+	unifiedIDPrefixTelegram    = "telegram:"
+	unifiedIDPrefixWhatsApp    = "whatsapp:"
+	unifiedIDPrefixWechat      = "wechat:"
+	unifiedIDPrefixFeishu      = "feishu:"
+	unifiedIDPrefixWeCom       = "wecom:"
+	unifiedIDPrefixDouyin      = "douyin:"
+	unifiedIDPrefixTikTok      = "tiktok:"
+	unifiedIDPrefixKuaishou    = "kuaishou:"
+	unifiedIDPrefixXiaohongshu = "xiaohongshu:"
+	unifiedIDPrefixXianyu      = "xianyu:"
 )
 
 // Customer 客户模型 - CDP 统一客户数据

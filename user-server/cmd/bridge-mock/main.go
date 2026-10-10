@@ -46,10 +46,9 @@ import (
 )
 
 const (
-	defaultPort         = "18080"
-	defaultAIDelayMs    = 1500
-	mockAIDefaultReply  = "AI 自动回复：你好，很高兴为你服务 :)"
-	mockAccountIDPrefix = "mock"
+	defaultPort        = "18080"
+	defaultAIDelayMs   = 1500
+	mockAIDefaultReply = "AI 自动回复：你好，很高兴为你服务 :)"
 )
 
 type mockInbox struct {

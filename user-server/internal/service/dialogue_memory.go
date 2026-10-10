@@ -31,7 +31,6 @@ type DialogueMemoryService struct {
 const (
 	shortTermWindow    = 10
 	shortTermMsgMaxLen = 1500
-	memoryTTL          = 30 * 24 * time.Hour
 
 	summaryBufferMax     = 12
 	summaryDupTrigger    = 2

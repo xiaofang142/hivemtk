@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	sopCacheTTL         = 5 * time.Minute
 	sopCacheMaxN        = 2000
 	sopTopK             = 5
 	sopAgentShared uint = 0

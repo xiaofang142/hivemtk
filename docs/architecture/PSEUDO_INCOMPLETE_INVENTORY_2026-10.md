@@ -402,6 +402,15 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   **删完验完立刻 pathspec commit，工作区不过夜**。
 - 边界：`TokenUsageDetailed`/`reach_tools.go` 2 符号仍待对应泳道收口复扫。
 
+### B12 零引用未导出包级符号（2026-10-10 I22 已处置）
+
+- 源流：B9（I19 导出函数）→ B10（I20 导出类型）→ B11（I21 导出 var/const）→ 本节（I22 私有面），四面收齐「包级符号孤岛」全集。
+- 读数：155 包未导出声明 → 严格零引用 23 → 剔 10 `init`（隐式调用）+ 2 假候选（hostPort/refusedAddr，git grep 全语料兜底抓出）→ **真零 11 / 9 文件**。
+- 死簇：`inbox_ingress.go` `getInboxLockMgr` 无调用者 ⇒ mgr 恒 nil ⇒ 2 处 if 分支恒假 + `checkExpired` 无调用者——type+2var+getter+3method+死分支 57 行整删，消灭「deadline 被追踪」的误导性假象。
+- 单点：sentiment `tokenize` 死副本（service 包内零用）、4 死 TTL/阈值（faqDecayMinHits/memoryTTL/qqSeqSweepCycles/sopCacheTTL）、4 死前缀/来源常量、1 mock 常量。
+- **已处置（I22，删除）**：全量 build rc=0、本卡 5 包 vet rc=0、gofmt 空、11 名 git grep 归零、五门 rc=0。
+- 方法论：扫描器按包收词会漏跨文件/跨行用点，**权威兜底必须 git grep 全语料**；`init` 永不入候选；死簇连带清恒假分支与孤儿 import。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。

@@ -24,7 +24,6 @@ const (
 	faqTopKDefault  = 3
 	faqDecayPerWeek = 0.1
 	faqDecayDays    = 7 * 24 * time.Hour
-	faqDecayMinHits = 5
 	// DefaultFaqDecayMaxBatch 衰减批量大小的代码兜底；生效值走 FaqDecayMaxBatch()。
 	DefaultFaqDecayMaxBatch      = 1000
 	faqAgentShared          uint = 0

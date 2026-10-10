@@ -135,9 +135,8 @@ type qqSeqEntry struct {
 }
 
 const (
-	qqSeqTTL         = 10 * time.Minute
-	qqSeqMaxEntries  = 4096
-	qqSeqSweepCycles = 64 // 每若干次写入触发一次惰性清扫
+	qqSeqTTL        = 10 * time.Minute
+	qqSeqMaxEntries = 4096
 )
 
 // NewQQIntegrationService 创建 QQ 集成服务

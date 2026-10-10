@@ -18,7 +18,6 @@ const (
 	srcCustomerCompany   = "customer.company"
 	srcCustomerAddress   = "customer.address"
 	srcCustomerTags      = "customer.tags"
-	srcCustomerSource    = "customer.source"
 	srcCustomerUnifiedID = "customer.unified_id"
 
 	srcOrderID    = "order.id"
