@@ -140,7 +140,14 @@ func TestFallbackNilDB(t *testing.T) {
 //
 // 2026-10-10（第三次，阶段二 2a）：+2 = `misc.upload_max_size_mb` /
 // `middleware.max_json_body_mb`，把上传上限的三份副本与全局请求体上限收进参数中心。
-const defaultParamDefsWant = 117
+//
+// 2026-10-10（第四次，阶段二 2c）：+7 = 新建的 `lock` 组。其中 6 条接上了真实的锁
+// TTL 读取点（inbox_human / inbox_pending / inbox_content_dedup / ingest_lock /
+// ai_processing / message_hub_idem），第 7 条 `lock.ai_lock_ttl` 如实保留「未接线」
+// 标注：tryAcquireAILock / ReleaseAILock / IsSessionAIBusy 三个函数整条生产链路都
+// 没人调用（源文件自带 //nolint:unused），真正在跑的并发闸是 ai_processing_ttl 那条。
+// 这一组与其它组的区别是性质：锁 TTL 写错 = 死锁或重复处理，是正确性参数不是调优项。
+const defaultParamDefsWant = 124
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

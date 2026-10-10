@@ -141,7 +141,7 @@ func (s *InboxIngressService) contentDedupWindow() time.Duration {
 	if s.contentDedupTTL > 0 {
 		return s.contentDedupTTL
 	}
-	return InboxContentDedupTTL
+	return inboxContentDedupTTL()
 }
 
 // SetPendingOutboundProbe 注入延迟出站队列仓储，让 recheck 在「回复已排队待投」时让位。
@@ -224,11 +224,11 @@ func (s *InboxIngressService) LockSessionForHuman(ctx context.Context, sessionID
 		return errors.New("cache unavailable")
 	}
 	key := InboxHumanLockKey + sessionID
-	if err := s.cache.Set(ctx, key, "true", InboxLockTTL); err != nil {
+	if err := s.cache.Set(ctx, key, "true", inboxHumanLockTTL()); err != nil {
 		return err
 	}
 	if reason != "" {
-		_ = s.cache.Set(ctx, InboxHumanLockKey+"reason:"+sessionID, reason, 24*time.Hour)
+		_ = s.cache.Set(ctx, InboxHumanLockKey+"reason:"+sessionID, reason, inboxHumanLockTTL())
 	}
 	logger.Infof("[Inbox] 会话 %s 已被人工接管: %s", sessionID, reason)
 	return nil
@@ -248,7 +248,7 @@ func (s *InboxIngressService) RenewSessionHumanLock(ctx context.Context, session
 		return errors.New("cache or sessionID unavailable")
 	}
 	if ttl <= 0 {
-		ttl = InboxLockTTL
+		ttl = inboxHumanLockTTL()
 	}
 	if err := s.cache.Set(ctx, InboxHumanLockKey+sessionID, "true", ttl); err != nil {
 		return err
@@ -287,7 +287,7 @@ func (s *InboxIngressService) AppendPendingMessage(ctx context.Context, sessionI
 	if s.cache == nil || sessionID == "" {
 		return nil
 	}
-	return s.cache.LPush(ctx, InboxPendingKey+sessionID, content, InboxPendingTTL)
+	return s.cache.LPush(ctx, InboxPendingKey+sessionID, content, inboxPendingTTL())
 }
 
 func (s *InboxIngressService) PopPendingMessages(ctx context.Context, sessionID string) ([]string, error) {
@@ -597,7 +597,7 @@ func (s *InboxIngressService) markAIProcessing(ctx context.Context, conversation
 		return true
 	}
 	aiKey := InboxAIProcessingKey + conversationID
-	acquired, lerr := s.cache.SetNX(ctx, aiKey, "1", InboxAIProcessingTTL)
+	acquired, lerr := s.cache.SetNX(ctx, aiKey, "1", aiProcessingTTL())
 	if lerr != nil {
 		logger.Ctx(ctx).Warn().Err(lerr).
 			Str("conv_id", conversationID).
@@ -632,7 +632,7 @@ func (s *InboxIngressService) withIngestLock(ctx context.Context, conversationID
 	token := uuid.NewString()
 	const retries = 4
 	for i := 0; i < retries; i++ {
-		ok, err := s.cache.SetNX(ctx, key, token, IngestLockTTL)
+		ok, err := s.cache.SetNX(ctx, key, token, ingestLockTTL())
 		if err != nil {
 			logger.Ctx(ctx).Warn().Err(err).
 				Str("conv_id", conversationID).

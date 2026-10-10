@@ -145,6 +145,22 @@ admin API 的写操作能在运行时翻转签名校验 —— 相比 env + 启�
 （`human_escalation.go`）；`PollingLockStaleThreshold=60`（`repository/telegram_polling_lock.go`）。
 锁 TTL 写错 = 死锁或重复处理，不是「调优」而是「正确性」。
 
+**③ 处置结果（2026-10-10，阶段二 2c）：新建 `lock` 组 7 条，13 个点位接得动 6 条**
+
+| 点位 | 处置 |
+| --- | --- |
+| `InboxLockTTL=24` | ✅ `lock.inbox_human_ttl`。**顺带接上 `inbox_ingress.go:231` 一处裸 `24*time.Hour`**（人类锁 reason 键的 TTL，与锁同一把却走字面量），与锁共用同一参数 |
+| `InboxPendingTTL=5` | ✅ `lock.inbox_pending_ttl`（生产调用方 `service/ai_debounce.go:68`） |
+| `InboxContentDedupTTL=5` | ✅ `lock.inbox_content_dedup_ttl`（经既有 `contentDedupWindow()`，字段优先、零值回落） |
+| `IngestLockTTL=25` | ✅ `lock.ingest_lock_ttl`（生产调用方 `inbox_ingress_persist.go:137`） |
+| `InboxAIProcessingTTL=2` | ✅ `lock.ai_processing_ttl`（生产调用方 `:483`/`:585`，这是**真正在跑的防重复回复并发闸**） |
+| `MessageHubDefaultIdemTTL=24` | ✅ `lock.message_hub_idem_ttl`，**本组唯一 `Restart=true`**：读取点在账号服务构造期，而账号服务有 6 处构造点全在启动时完成（`qq_account.go:146`、`wecom_integration.go:34`、`feishu.go:115/562/932`、`email.go:55/63`），运行时改值对已启动账号不生效 |
+| `InboxAILockTTL=15` | ❌ **刻意不接**。唯一读取点 `inbox_ingress.go:265` 所在的 `tryAcquireAILock` 自带 `//nolint:unused //// 仅被 *_test.go 引用，生产路径未用`，`ReleaseAILock`/`IsSessionAIBusy` 同样无生产调用。保留「未接线」标注并在 Description 写明「真正在跑的并发闸是 `ai_processing_ttl` 那条」 |
+| `PollingLockStaleThreshold=60` | ✅ **早在阶段 1.1 已接**（`misc.polling_lock_stale_threshold`），本批不重复 |
+| `HumanLockDefaultTTL=24`、`HumanLockReasonTTL=24`、`LockExpiryCheckInterval=1m` | ❌ **不新增种子，只记死代码事实**。这三条常量所在的 `HumanEscalationManager` 在生产链路上死了：`NewHumanEscalationManager` 唯一生产引用为零（只有 `human_escalation_test.go` 19 处调用），`TriggerCensorshipEscalation`/`IsSessionLockedForHuman`/`StartLockExpiryChecker` 全树零生产调用。这是「运行时有同名锁、但实现不在这个文件」的典型——真正在跑的是 `inbox_ingress.go` 的 `InboxHumanLockKey` 系列（`hivemtk:lock:human:`）。给一条死代码建参数只会让人以为改它有用 |
+
+**顺带修掉一个真 bug（与硬编码无关，是写对了才暴露的）**：`internal/cache/memory.go` 的 `PopAll` **不判过期**。`Get`/`Exists`/`LRange`/`scanExpired` 全都判 `item.expiration`，唯独 `PopAll` 只判 `listMode` 和 `len(listItems)`，所以 `LPush(key, v, 60ms)` 写入的列表过了 TTL 仍被原样 Pop 出来。影响面：只在内存缓存（`cache.NewMemoryCache()`，无 Redis 时的回退路径）上显形；Redis 路径由 `EXPIRE` 保证不受影响。对应业务：AI 防抖暂存的入站消息本该随 TTL 过期，内存回退下会被迟到的 Pop 重新投给 AI。修法是补一段与 `Get`/`Exists` 逐字同构的过期判断（`IsZero() && Before(time.Now())`），顺带把过期项从 LRU 摘掉。**这个 bug 是 `TestPendingMessagesExpireByConfiguredTTL` 首跑红暴露的**——不是因为接线写错，是「写对了才看得见底下有坑」。
+
 **④ 渠道与配额硬上限**
 `QQMessageMaxLen=2000`、`TGMessageMaxLength=4096`、`TGInlineRowsMax=100`、`TGInlineButtonsPerRowMax=8`、
 `SSEMaxConnPerIP=5`、`TierMinRatePerMin=12.0`、`TierQuotaMarketing=1`、`TierQuotaUtility=4`、
@@ -273,11 +289,12 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
-> **处置进度（2026-10-10）：阶段一全部 8 批已接线并提交（8/8）。**
-> 门禁读数：`wired 40→104`（阶段二 2a 后）、`UNDECLARED 72→0`、`已声明未接线 13`。
+> **处置进度（2026-10-10）：阶段一全部 8 批 + 阶段二 2a/2b/2c 已接线并提交（11/11）。**
+> 门禁读数：`wired 40→110`、`UNDECLARED 72→0`、`已声明未接线 14`。
 > 阶段一 8 批（wired 40→102）处理的是本节的僵尸参数；阶段二起处理 §2.1 的 P0 新增点位，
 > 每接一条也会让 wired 读数上涨。2a 接的 `misc.upload_max_size_mb` / `middleware.max_json_body_mb`
-> 即对应 §2.1①。
+> 即对应 §2.1①；2c 是新登记的 `lock` 组 7 条（含 1 条刻意不接，故 wired +6 而
+> 「已声明未接线」从 13 涨到 14）。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |

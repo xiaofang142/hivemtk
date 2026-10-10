@@ -252,7 +252,7 @@ func NewMessageHubServiceWithDB(db *gorm.DB, c cache.Cache) *MessageHubService {
 		cache:      c,
 		streams:    make(map[string]*hubStream),
 		streamSize: MessageHubDefaultQueueSize,
-		idemTTL:    MessageHubDefaultIdemTTL,
+		idemTTL:    messageHubIdemTTL(),
 		maxContent: MessageHubDefaultMaxContent,
 	}
 	return s

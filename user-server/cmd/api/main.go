@@ -213,6 +213,13 @@ func main() {
 		logger.Info("[ConfigParam] 上传/body 上限接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 阶段二 2c：锁与幂等 TTL。这一组是正确性参数而不是调优项，锁 TTL 写错的
+	// 结果是死锁或重复处理，所以六条都在这里显式注入。放在 SeedConfigParams 的
+	// if/else 之外是为了 seed 失败时各锁仍能托在兜底常量上正常跑。
+	if wired := app.WireLockIdempotencyConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] 锁与幂等 TTL 接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

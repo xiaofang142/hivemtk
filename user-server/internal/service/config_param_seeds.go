@@ -419,5 +419,31 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "misc", Key: "agentloop_history_max_candidates", Name: "AgentLoop 历史最大候选",
 			Description: "AgentLoop 召回的历史对话最大候选数",
 			ValueType:   "int", DefaultValue: "200", Min: strPtr("10"), Max: strPtr("10000"), Step: strPtr("10")},
+
+		// ---- lock 组：锁与幂等 TTL（阶段 2c）----
+		// 这一组与其它组性质不同：这些 TTL 是正确性参数而不是调优项，写错的
+		// 结果是死锁、并发重复落库或重复回复，所以每条 Description 都写清
+		// 「改小/改大会出什么事」，而不是只写「是什么」。
+		{Group: "lock", Key: "inbox_human_ttl", Name: "人工接管锁 TTL",
+			Description: "收件箱人工接管锁的存活时间（秒）。锁到期后该会话的入站消息会被 AI 继续处理——写小＝人工还没说完就被交回给 AI，写大＝人工忘记点「结束接管」后长时间无法自动恢复",
+			ValueType:   "duration", DefaultValue: "86400", Min: strPtr("60"), Max: strPtr("604800"), Step: strPtr("60"), Restart: false},
+		{Group: "lock", Key: "inbox_pending_ttl", Name: "入站待处理队列 TTL",
+			Description: "AI 防抖期间暂存入站消息的存活时间（秒）。写小＝防抖窗口还没走完消息就消失了，客户那句话直接丢失且无投递痕迹",
+			ValueType:   "duration", DefaultValue: "300", Min: strPtr("30"), Max: strPtr("86400"), Step: strPtr("30"), Restart: false},
+		{Group: "lock", Key: "inbox_content_dedup_ttl", Name: "入站内容去重窗口",
+			Description: "入口「渠道+发送者+内容」去重键的存活时间（秒）。写小＝平台重发与出站回显这类正常重复会漏过，写大＝客户隔很久把同一句话又说了一遍会被当成重复而吞掉",
+			ValueType:   "duration", DefaultValue: "300", Min: strPtr("10"), Max: strPtr("86400"), Step: strPtr("30"), Restart: false},
+		{Group: "lock", Key: "ingest_lock_ttl", Name: "入站落库锁 TTL",
+			Description: "同一会话入站落库互斥锁的存活时间（秒）。锁只在落库函数执行期间持有，写小＝长事务没跑完锁就被别人抢走导致并发重复落库，写大＝进程崩溃后该会话被挡住直到 TTL 自然过期",
+			ValueType:   "duration", DefaultValue: "25", Min: strPtr("5"), Max: strPtr("600"), Step: strPtr("5"), Restart: false},
+		{Group: "lock", Key: "ai_processing_ttl", Name: "AI 处理中标记 TTL",
+			Description: "「AI 正在处理」排他标记的存活时间（秒），推理期间到达的新消息靠它避免被补触发第二次。写小＝重复回复，写大＝AI 进程崩了之后该会话长时间不再响应",
+			ValueType:   "duration", DefaultValue: "120", Min: strPtr("10"), Max: strPtr("3600"), Step: strPtr("10"), Restart: false},
+		{Group: "lock", Key: "message_hub_idem_ttl", Name: "消息中台幂等 TTL",
+			Description: "消息中台投递幂等键的存活时间（秒），同一 msgID 在此窗口内重复投递会被判重丢弃。注意它在账号服务构造期读取，改动要重启才对已启动的账号生效",
+			ValueType:   "duration", DefaultValue: "86400", Min: strPtr("60"), Max: strPtr("604800"), Step: strPtr("60"), Restart: true},
+		{Group: "lock", Key: "ai_lock_ttl", Name: "AI 会话锁 TTL（未接线）",
+			Description: "【当前不生效，改了也没人读】InboxAILockKey 那把锁的兜底 TTL（秒）。tryAcquireAILock / ReleaseAILock / IsSessionAIBusy 三个函数整条生产链路都没人调用（源文件自带 //nolint:unused 标注），真正在跑的并发闸是上面 ai_processing_ttl 那条；要启用这套锁得先接 callers，再接本参数",
+			ValueType:   "duration", DefaultValue: "15", Min: strPtr("5"), Max: strPtr("300"), Step: strPtr("5"), Restart: false},
 	}
 }

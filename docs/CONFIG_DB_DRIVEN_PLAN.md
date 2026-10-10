@@ -334,7 +334,7 @@ func InboxLockTTL(ctx context.Context) time.Duration {
 | --- | --- | --- |
 | 2a | 上传/body 上限（`upload_max_size_mb`、`max_json_body_mb`） | **合并三份副本**为 1 键；`system_config.MaxUploadSizeMB` 保留为兼容列，读新键优先 |
 | 2b | Webhook 验签降级开关（**不新增参数键，改为收敛护栏强度**） | 方案原文「单键覆盖 14 个硬编码点、默认改 `false`」经实测**前提全部不成立**，实际处置见下方「2b 已落地」；正确地讲这是「全面数据库驱动」的一个受控例外 |
-| 2c | 锁与幂等 TTL（收件箱/消息中台/人工接管/TG 轮询锁，13 个点位） | TTL 是正确性不是调优；必须带 `Restart=false`（要能热改） |
+| 2c | 锁与幂等 TTL（收件箱/消息中台/人工接管/TG 轮询锁，13 个点位） | **已落地**：13 个点位逐条核实后只接得动 6 条，新建 `lock` 组 7 条（含 1 条刻意不接）；`message_hub_idem_ttl` 单独标 `Restart=true`；`TG 轮询锁`那条早在 1.1 已接、不重复；`human_escalation` 三条是死代码不建种子。实际处置见下方「2c 已落地」 |
 | 2d | 渠道与配额上限（QQ/TG 长度、SSE 每 IP 连接、配额降级阈值，15 个点位） | — |
 
 - 每条种子的 `Min/Max` 必填（`config_params` 已支持），避免运维填出 `max_tokens=999999`。
@@ -403,6 +403,38 @@ env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
 4. **钉住语义**：`"TRUE"`/`"1"`/`"yes"`/`"true "`（带尾空格）**不算开启**，测试逐格覆盖，避免将来有人图省事改成 `strconv.ParseBool` 放宽口径。
 
 **这是「全面数据库驱动」的一个受控例外，不是漏做**：判定标准是——**能不能让运行时的一个写操作翻掉安全闸**。阈值、TTL、上限都是"调坏了我看得见、改回来就行"；验签旁路不是，翻错的代价是外部伪造回调直接进业务。凡属此类的一律留在 env + 启动护栏，本批次起在两份文档中逐条登记。
+
+#### 2c 已落地（2026-10-10）
+
+锁与幂等 TTL 入库，新建 `lock` 组 7 条（117→124），`wired 104→110`、锚点同步到 124。
+
+**13 个点位逐条核实后，只有 6 条接得动**：
+
+| 种子 key | 默认（秒） | Restart | 代码点位 |
+| --- | --- | --- | --- |
+| `lock.inbox_human_ttl` | 86400 | false | `internal/service/inbox_ingress.go:28` `InboxLockTTL`；读取点 `:227`（`LockSessionForHuman` 的 `cache.Set`）、`:251`（`RenewSessionHumanLock` 的 `ttl<=0` 兜底）、**`:231` 的裸 `24*time.Hour`** |
+| `lock.inbox_pending_ttl` | 300 | false | 同文件 `InboxPendingTTL`；读取点 `:290` `AppendPendingMessage` 的 `cache.LPush`（生产调用方 `internal/service/ai_debounce.go:68`） |
+| `lock.inbox_content_dedup_ttl` | 300 | false | 同文件 `InboxContentDedupTTL`；经既有 `contentDedupWindow()`（`:140-145`，字段优先、零值回落）在 `inbox_ingress_ingest.go:167` 的 `SetNX` |
+| `lock.ingest_lock_ttl` | 25 | false | 同文件 `IngestLockTTL`；读取点 `:635` `withIngestLock` 的 `SetNX`（生产调用方 `inbox_ingress_persist.go:137`） |
+| `lock.ai_processing_ttl` | 120 | false | 同文件 `InboxAIProcessingTTL`；读取点 `:600` `markAIProcessing`（生产调用方 `:483`/`:585`，防重复回复的并发闸） |
+| `lock.message_hub_idem_ttl` | 86400 | **true** | `internal/service/message_hub.go:172` `MessageHubDefaultIdemTTL`；读取点 `:255`（构造期 `idemTTL` 字段初值）与 `:373`（`cache.Set`） |
+| `lock.ai_lock_ttl` | 15 | false | **刻意不接**，见下 |
+
+`internal/service/inbox_ingress.go:231` 有一处**裸 `24*time.Hour`**（人类锁 reason 键的 TTL），与人类锁同一把但走字面量。本批一并接上与锁共用同一参数：理由先于锁过期 = 被接管会话在界面上显示不出「为什么被接管」，理由比锁活得久 = 一段无主数据，两者都不值得单开一个参数。
+
+**`lock.message_hub_idem_ttl` 是本组唯一 `Restart: true`**：它的读取点在账号服务的构造期（`NewMessageHubServiceWithDB` 的 `idemTTL` 字段初值），而账号服务有 6 处构造点全在启动时完成（`qq_account.go:146`、`wecom_integration.go:34`、`feishu.go:115/562/932`、`email.go:55/63`），运行时改值对已启动的账号不生效，必须重启。同一条链上已有 `WithIdemTTL`（`message_hub.go:262`）可显式覆盖，但全树无生产调用。其余 5 条都是每请求/每次调用读，`Restart: false` 热生效。
+
+**`lock.ai_lock_ttl` 刻意不接**：唯一读取点 `:265` 在 `tryAcquireAILock`，该函数自带 `//nolint:unused //// 仅被 *_test.go 引用，生产路径未用`，`ReleaseAILock`/`IsSessionAIBusy` 同样无生产调用。真正在跑的并发闸是 `ai_processing_ttl` 那条。保留「（未接线）」标注并在 Description 写明这层关系——**去掉标注测试会先红**（`TestAILockTTLStaysUnwired` 反向钉死）。
+
+**`human_escalation.go` 三条常量不新增种子，只在文档记死代码事实**：`HumanLockDefaultTTL`/`HumanLockReasonTTL`/`LockExpiryCheckInterval`（`human_escalation.go:22/25/27`）所在的 `HumanEscalationManager` 在生产链路上死了 —— `NewHumanEscalationManager` 唯一生产引用为零（只有 `human_escalation_test.go` 19 处调用），`TriggerCensorshipEscalation`/`IsSessionLockedForHuman`/`StartLockExpiryChecker` 全树零生产调用。这是「运行时有同名锁、但实现不在这个文件」的典型：真正在跑的是 `inbox_ingress.go` 的 `InboxHumanLockKey` 系列（`hivemtk:lock:human:`）。给一条死代码建参数只会让人以为改它有用。
+
+**`misc.polling_lock_stale_threshold` 早在 1.1 已接**，本批不重复。
+
+**顺手修掉一个真 bug**：`internal/cache/memory.go` 的 `PopAll` 不判过期。`Get`/`Exists`/`LRange`/`scanExpired` 全都判 `item.expiration`，唯独 `PopAll` 只判 `listMode` 和 `len(listItems)`，所以 `LPush(key, v, 60ms)` 写入的列表过了 TTL 仍被原样 Pop 出来。影响面：只在内存缓存（`cache.NewMemoryCache()`，无 Redis 时的回退路径）上显形；Redis 路径由 `EXPIRE` 保证不受影响。对应业务：AI 防抖暂存的入站消息本该随 TTL 过期，内存回退下会被迟到的 Pop 重新投给 AI。修法是补一段与 `Get`/`Exists` 逐字同构的过期判断（`IsZero() && Before(time.Now())`），顺带把过期项从 LRU 摘掉。**这个 bug 是 `TestPendingMessagesExpireByConfiguredTTL` 首跑红暴露的**——不是因为接线写错，是「写对了才看得见底下有坑」。
+
+**`lock` 组是方案新增的一个 group**（原计划倾向塞进 `session` 组）：这些是「正确性」型参数（改错 = 死锁或重复处理，不是调优），与 `session` 组「交互窗口」型混在一起会让运维在调 TTL 时误判影响面。每条 Description 都写「改小/改大会出什么事」。6 个 seam 集中在新建的 `internal/service/lock_idempotency_params.go` 单文件里：常量原本分处 `message_hub.go`/`inbox_ingress.go`/`inbox_ingress_ingest.go` 三处，散着看不出「锁的世界观」全貌。
+
+**验证**：gofmt 空、`go build ./...`、`go vet ./...` 全过；`go test ./internal/cache/ ./internal/app/` 绿（app 100s）、`internal/service` 全包 **ok 852s**。门禁 `wired 110 / 已声明未接线 14 / UNDECLARED 0 / STALE 0`，rc=0，种子 124 条。行为级测试覆盖 6 条（`lock_idempotency_behavior_test.go`）：锁在注入的小 TTL 后真的消失、TTL 内第二次获取真的失败（防重复回复）、结构体字段非零时仍优先于 provider。
 
 ### 阶段三：P1 130 个点位 + 前端接线
 

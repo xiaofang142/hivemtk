@@ -340,6 +340,11 @@ func (m *MemoryCache) PopAll(ctx context.Context, key string) ([]string, error) 
 		return []string{}, nil
 	}
 	item := ele.Value.(*cacheItem)
+	if !item.expiration.IsZero() && item.expiration.Before(time.Now()) {
+		m.order.Remove(ele)
+		delete(m.data, key)
+		return []string{}, nil
+	}
 	if !item.listMode || len(item.listItems) == 0 {
 		m.order.Remove(ele)
 		delete(m.data, key)
