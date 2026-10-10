@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	"hivemtk-user/internal/pkg/timeutil"
+	"hivemtk-user/internal/repository/scope"
 	"time"
 
 	"gorm.io/gorm"
@@ -104,7 +105,8 @@ func (r *KnowledgeDocumentRepository) List(ctx context.Context, filter ListFilte
 	if filter.PageSize < 1 {
 		filter.PageSize = 20
 	}
-	q := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{})
+	// 多租户 P0：文档按团队隔离（系统上下文/平台管理员直通）。
+	q := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).Scopes(scope.TeamScoped(ctx))
 	if filter.ProductID != "" {
 		q = q.Where("product_id = ?", filter.ProductID)
 	}

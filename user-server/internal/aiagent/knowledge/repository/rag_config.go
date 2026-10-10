@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	sysmodel "hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 	"time"
 
 	"github.com/google/uuid"
@@ -214,7 +215,7 @@ func (r *RagConfigRepository) UpdateRagProduct(ctx context.Context, product *mod
 	if len(updates) == 1 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.RagProduct{}).
+	return r.db.WithContext(ctx).Model(&model.RagProduct{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ?", product.ID).
 		Updates(updates).Error
 }

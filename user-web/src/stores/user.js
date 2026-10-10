@@ -6,7 +6,9 @@ export const useUserStore = defineStore('user', () => {
     id: '',
     username: '',
     email: '',
-    role: ''
+    role: '',
+    teamId: 0,
+    dataScope: ''
   })
   
   const token = ref('')
@@ -16,13 +18,16 @@ export const useUserStore = defineStore('user', () => {
   const username = computed(() => userInfo.value.username)
   const role = computed(() => userInfo.value.role || '')
   const isAdmin = computed(() => role.value === 'admin');
+  const isTeamAdmin = computed(() => role.value === 'team_admin' || isAdmin.value);
   
   const setUserInfo = (info) => {
     userInfo.value = {
       id: info.id || '',
       username: info.username || '',
       email: info.email || '',
-      role: info.role || ''
+      role: info.role || '',
+      teamId: info.team_id || info.teamId || 0,
+      dataScope: info.data_scope || info.dataScope || ''
     }
     localStorage.setItem('user_info', JSON.stringify(userInfo.value));
   }
@@ -46,7 +51,9 @@ export const useUserStore = defineStore('user', () => {
       id: '',
       username: '',
       email: '',
-      role: ''
+      role: '',
+      teamId: 0,
+      dataScope: ''
     }
     token.value = ''
     localStorage.removeItem('token')
@@ -66,7 +73,9 @@ export const useUserStore = defineStore('user', () => {
           id: parsed.id || '',
           username: parsed.username || '',
           email: parsed.email || '',
-          role: parsed.role || ''
+          role: parsed.role || '',
+          teamId: parsed.teamId || 0,
+          dataScope: parsed.dataScope || ''
         }
       } catch (e) {
         localStorage.removeItem('user_info')
@@ -83,6 +92,7 @@ export const useUserStore = defineStore('user', () => {
     username,
     role,
     isAdmin,
+    isTeamAdmin,
     setUserInfo,
     setToken,
     login,

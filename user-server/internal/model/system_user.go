@@ -7,21 +7,29 @@ import (
 	"gorm.io/gorm"
 )
 
-// SystemUserRole 系统用户角色常量（文档化：详见 docs/architecture/DUAL_ROLE_MODEL.md）
+// SystemUserRole 系统用户角色常量
 //
-// 私域独立部署下，SystemUser 仅有两种角色：
-//   - admin：部署超管，由 system_init 初始化向导创建，每实例唯一
-//   - user ：系统普通用户（保留值，扩展位）
+// 私域独立部署下，SystemUser 的角色：
+//   - admin     ：部署超管（平台管理员），由 system_init 初始化向导创建，每实例唯一；
+//     跨团队全量直通（多租户 P0 需求 3）
+//   - team_admin：团队管理员（多租户 P0 新增）——仅能管理本团队的用户与配置，
+//     业务数据范围 = 本团队（DataScope=team）
+//   - user      ：系统普通用户（默认角色）
 //
 // 注意：SystemUser.admin 与 TeamUser.admin 是不同实体的角色，权限层级不同。
+// 存量库的 role CHECK（migrations/025）由 postMigrateRelaxSystemUserRoleCheck 放宽，
+// 否则 team_admin 在带 CHECK 的库上插不进去。
 const (
-	SystemUserRoleAdmin = "admin"
-	SystemUserRoleUser  = "user"
+	SystemUserRoleAdmin     = "admin"
+	SystemUserRoleTeamAdmin = "team_admin"
+	SystemUserRoleUser      = "user"
 )
 
 // IsValidSystemUserRole 校验系统用户角色是否合法
 func IsValidSystemUserRole(role string) bool {
-	return role == SystemUserRoleAdmin || role == SystemUserRoleUser
+	return role == SystemUserRoleAdmin ||
+		role == SystemUserRoleTeamAdmin ||
+		role == SystemUserRoleUser
 }
 
 // DataScope 数据范围枚举（行级权限）
@@ -47,12 +55,16 @@ func IsValidDataScope(scope string) bool {
 }
 
 // DefaultDataScopeForRole 根据角色返回默认数据范围
-// admin → all, 其他 → self
+// admin → all（平台侧全量）；team_admin → team（本团队）；其他 → self
 func DefaultDataScopeForRole(role string) string {
-	if role == SystemUserRoleAdmin {
+	switch role {
+	case SystemUserRoleAdmin:
 		return DataScopeAll
+	case SystemUserRoleTeamAdmin:
+		return DataScopeTeam
+	default:
+		return DataScopeSelf
 	}
-	return DataScopeSelf
 }
 
 // SystemUser 系统用户模型

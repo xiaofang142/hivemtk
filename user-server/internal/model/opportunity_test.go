@@ -129,6 +129,8 @@ func TestOpportunitySchemaShape(t *testing.T) {
 		"Stage", "Status", "Amount", "Currency", "WinProbability",
 		"OwnerUserID", "ExpectedCloseAt", "LostReason",
 		"Version", "CreatedAt", "UpdatedAt",
+		// 多租户 P0（2026-10-11）：归属团队列，隔离语义见 Customer.TeamID。
+		"TeamID",
 	}
 	for _, name := range wantFields {
 		if _, ok := st.FieldByName(name); !ok {

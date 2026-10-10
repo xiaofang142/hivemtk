@@ -33,12 +33,15 @@ type LoginResponse struct {
 
 // SystemUserResponse 系统用户响应
 type SystemUserResponse struct {
-	ID          uint       `json:"id"`
-	Username    string     `json:"username"`
-	Email       string     `json:"email"`
-	Phone       string     `json:"phone"`
-	RealName    string     `json:"real_name"`
-	Role        string     `json:"role"`
+	ID       uint   `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+	RealName string `json:"real_name"`
+	Role     string `json:"role"`
+	// TeamID / DataScope 多租户 P0 出参：前端 store 需要知道归属团队与数据范围
+	TeamID      uint       `json:"team_id"`
+	DataScope   string     `json:"data_scope"`
 	Status      int        `json:"status"`
 	LastLogin   *time.Time `json:"last_login"`
 	LastLoginAt *time.Time `json:"last_login_at"`
@@ -136,7 +139,11 @@ func (s *AuthService) loginWithUser(ctx context.Context, user *model.SystemUser)
 		}, nil
 	}
 
-	token, err := s.jwtUtils.GenerateToken(user.ID, user.Username, user.Role)
+	// 多租户 P0：登录签发必须带齐 scope 三件（data_scope/department_id/team_id）。
+	// 此前登录走 GenerateToken 空作用域，租户过滤在 ctx 里拿到的永远是 0——
+	// 刷新链路（RefreshToken）早已回源重签，这里对齐同一口径。
+	token, err := s.jwtUtils.GenerateTokenWithScope(
+		user.ID, user.Username, user.Role, user.DataScope, user.DepartmentID, user.TeamID)
 	if err != nil {
 		logger.Error(err, "生成JWT令牌失败")
 		return nil, errors.New("登录失败，请稍后重试")
@@ -155,6 +162,24 @@ func (s *AuthService) loginWithUser(ctx context.Context, user *model.SystemUser)
 	}
 
 	return response, nil
+}
+
+// IssueTokenForUser 为已通过 MFA 二步验证的用户签发正式令牌（多租户 P0）。
+//
+// 为什么不直接用 VerifyMFALogin 返回的 (userID, username, role) 现场拼 token：
+// 那会重蹈登录链路的覆辙——签出无 team_id/data_scope 的空作用域令牌，
+// 租户过滤在 ctx 里拿到的永远是 0。这里回源取账号当前的 scope 三件再签，
+// 与 RefreshToken 同一事实源。
+func (s *AuthService) IssueTokenForUser(ctx context.Context, userID uint, username, role string) (string, error) {
+	user, err := s.systemUserRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", errors.New("账号不存在或已被删除")
+	}
+	if user.Status != 1 || !user.Enabled {
+		return "", errors.New("用户已被禁用")
+	}
+	return s.jwtUtils.GenerateTokenWithScope(
+		user.ID, user.Username, user.Role, user.DataScope, user.DepartmentID, user.TeamID)
 }
 
 // RefreshToken 续期令牌。
@@ -287,6 +312,8 @@ func (s *AuthService) toUserResponse(ctx context.Context, user *model.SystemUser
 		Phone:       user.Phone,
 		RealName:    user.RealName,
 		Role:        user.Role,
+		TeamID:      user.TeamID,
+		DataScope:   user.DataScope,
 		Status:      user.Status,
 		LastLogin:   user.LastLogin,
 		LastLoginAt: user.LastLogin,
@@ -335,15 +362,20 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Logi
 		return nil, ErrEmailExists
 	}
 
+	// 多租户 P0：自助注册归入「默认团队」（P2 起改为注册即建团队），
+	// role=user + 无团队在隔离开启后等于什么都看不到——注册兜底归属必须在这里定。
+	teamID := EnsureDefaultTeamID(ctx)
 	user := &model.SystemUser{
-		Username: username,
-		Password: password,
-		Email:    email,
-		Phone:    strings.TrimSpace(req.Phone),
-		RealName: strings.TrimSpace(req.RealName),
-		Role:     model.SystemUserRoleUser,
-		Status:   1,
-		Enabled:  true,
+		Username:  username,
+		Password:  password,
+		Email:     email,
+		Phone:     strings.TrimSpace(req.Phone),
+		RealName:  strings.TrimSpace(req.RealName),
+		Role:      model.SystemUserRoleUser,
+		TeamID:    teamID,
+		DataScope: model.DefaultDataScopeForRole(model.SystemUserRoleUser),
+		Status:    1,
+		Enabled:   true,
 	}
 	if err := s.systemUserRepo.Create(ctx, user); err != nil {
 		logger.Error(err, "Register 创建用户失败: "+username)
@@ -358,7 +390,8 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Logi
 		}
 	}
 
-	token, err := s.jwtUtils.GenerateToken(user.ID, user.Username, user.Role)
+	token, err := s.jwtUtils.GenerateTokenWithScope(
+		user.ID, user.Username, user.Role, user.DataScope, user.DepartmentID, user.TeamID)
 	if err != nil {
 		logger.Error(err, "Register 生成 JWT 失败: "+username)
 		return nil, errors.New("注册成功但签发令牌失败，请登录")

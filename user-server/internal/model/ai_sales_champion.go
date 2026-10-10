@@ -34,14 +34,16 @@ type MessageHub struct {
 	// PushAttempts/PushError（批20d-A3）只给出站行记账：服务端每把一行交给桥端一次计一次，
 	// 到 MaxOutboundPushAttempts 即落终态 failed，PushError 写明「为什么不再是 pending」。
 	// 计数留在行上而不是内存里：SW 回收/进程重启都要能接着算，否则预算每次重启都白送一轮。
-	PushAttempts int            `gorm:"not null;default:0" json:"push_attempts"`
-	PushError    string         `gorm:"type:varchar(200);not null;default:''" json:"push_error"`
-	IsRead       bool           `gorm:"default:false" json:"is_read"`
-	ReadAt       *time.Time     `json:"read_at"`
-	SentAt       time.Time      `gorm:"index" json:"sent_at"`
-	Extra        JSONMap        `gorm:"type:text" json:"extra"`
-	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	PushAttempts int        `gorm:"not null;default:0" json:"push_attempts"`
+	PushError    string     `gorm:"type:varchar(200);not null;default:''" json:"push_error"`
+	IsRead       bool       `gorm:"default:false" json:"is_read"`
+	ReadAt       *time.Time `json:"read_at"`
+	SentAt       time.Time  `gorm:"index" json:"sent_at"`
+	Extra        JSONMap    `gorm:"type:text" json:"extra"`
+	// TeamID 归属团队（多租户 P0）：见 Customer.TeamID 注释。
+	TeamID    uint           `gorm:"column:team_id;index;default:0" json:"team_id"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MessageHub) TableName() string { return "message_hub" }
@@ -419,31 +421,33 @@ func (AISalesLog) TableName() string { return "ai_sales_logs" }
 
 // InboxConversation 统一收件箱会话
 type InboxConversation struct {
-	ID                 uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform           string         `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
-	AccountID          string         `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
-	CustomerID         string         `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
-	CustomerName       string         `gorm:"type:varchar(200)" json:"customer_name"`
-	ConversationID     string         `gorm:"type:varchar(100);index" json:"conversation_id"`
-	Status             string         `gorm:"type:varchar(20);default:'unread';index" json:"status"`
-	AssignedTo         string         `gorm:"type:varchar(64);index" json:"assigned_to"`
-	AssignedToSOP      uint           `gorm:"index" json:"assigned_to_sop"`
-	AssignedAt         *time.Time     `json:"assigned_at"`
-	UnreadCount        int            `gorm:"default:0" json:"unread_count"`
-	TotalCount         int            `gorm:"default:0" json:"total_count"`
-	LastMessageID      uint           `json:"last_message_id"`
-	LastMessagePreview string         `gorm:"type:varchar(500)" json:"last_message_preview"`
-	LastMessageAt      *time.Time     `gorm:"index" json:"last_message_at"`
-	LastMessageFrom    string         `gorm:"type:varchar(20)" json:"last_message_from"`
-	Pinned             bool           `gorm:"default:false;index" json:"pinned"`
-	Starred            bool           `gorm:"default:false" json:"starred"`
-	Muted              bool           `gorm:"default:false" json:"muted"`
-	Tags               JSONArray      `gorm:"type:text" json:"tags"`
-	Extra              JSONMap        `gorm:"type:text" json:"extra"`
-	ClosedAt           *time.Time     `json:"closed_at"`
-	CreatedAt          time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt          time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt          gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID                 uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform           string     `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
+	AccountID          string     `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
+	CustomerID         string     `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
+	CustomerName       string     `gorm:"type:varchar(200)" json:"customer_name"`
+	ConversationID     string     `gorm:"type:varchar(100);index" json:"conversation_id"`
+	Status             string     `gorm:"type:varchar(20);default:'unread';index" json:"status"`
+	AssignedTo         string     `gorm:"type:varchar(64);index" json:"assigned_to"`
+	AssignedToSOP      uint       `gorm:"index" json:"assigned_to_sop"`
+	AssignedAt         *time.Time `json:"assigned_at"`
+	UnreadCount        int        `gorm:"default:0" json:"unread_count"`
+	TotalCount         int        `gorm:"default:0" json:"total_count"`
+	LastMessageID      uint       `json:"last_message_id"`
+	LastMessagePreview string     `gorm:"type:varchar(500)" json:"last_message_preview"`
+	LastMessageAt      *time.Time `gorm:"index" json:"last_message_at"`
+	LastMessageFrom    string     `gorm:"type:varchar(20)" json:"last_message_from"`
+	Pinned             bool       `gorm:"default:false;index" json:"pinned"`
+	Starred            bool       `gorm:"default:false" json:"starred"`
+	Muted              bool       `gorm:"default:false" json:"muted"`
+	Tags               JSONArray  `gorm:"type:text" json:"tags"`
+	Extra              JSONMap    `gorm:"type:text" json:"extra"`
+	ClosedAt           *time.Time `json:"closed_at"`
+	// TeamID 归属团队（多租户 P0）：会话按团队隔离，见 Customer.TeamID。
+	TeamID    uint           `gorm:"column:team_id;index;default:0" json:"team_id"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (InboxConversation) TableName() string { return "inbox_conversations" }

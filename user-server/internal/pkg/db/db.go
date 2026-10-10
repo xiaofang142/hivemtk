@@ -1,9 +1,11 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/repository/scope"
 	"os"
 	"strings"
 	"sync"
@@ -78,6 +80,11 @@ func InitDB() {
 	}
 
 	applyPool(sqlDB, poolConfig)
+
+	// 租户回调（多租户 P0）：Create 前按 ctx 团队回填 team_id——业务行归属
+	// 在这一处统一收口，ingest 等各写入路径无需各自感知租户（语义见 scope/team.go）。
+	scope.SetDefaultTeamIDDB(func(ctx context.Context) *gorm.DB { return db })
+	scope.RegisterTenantTeamCallback(db)
 
 	dbMu.Lock()
 	DB = db

@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -32,7 +33,7 @@ func (r *InboxConversationRepository) CountByAssignedToStatus(ctx context.Contex
 		return 0, nil
 	}
 	var n int64
-	err := r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	err := r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Where("assigned_to = ? AND status IN ?", staffUserID, statuses).
 		Count(&n).Error
 	return n, err
@@ -112,20 +113,20 @@ func (r *InboxConversationRepository) AssignTx(ctx context.Context, in AssignTxI
 
 		switch in.Action {
 		case "release":
-			if err := tx.Model(&model.InboxConversation{}).
+			if err := tx.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).
 				Where("id = ?", in.ConversationID).
 				UpdateColumn("assigned_at", gorm.Expr("NULL")).Error; err != nil {
 				return err
 			}
 		case "reopen":
-			if err := tx.Model(&model.InboxConversation{}).
+			if err := tx.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).
 				Where("id = ?", in.ConversationID).
 				UpdateColumn("closed_at", gorm.Expr("NULL")).Error; err != nil {
 				return err
 			}
 		}
 
-		if err := tx.Model(&model.InboxConversation{}).
+		if err := tx.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).
 			Where("id = ?", in.ConversationID).
 			Updates(updates).Error; err != nil {
 			return err

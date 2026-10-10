@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository/scope"
 	"time"
 
 	"gorm.io/gorm"
@@ -50,7 +51,7 @@ func (r *clueRepo) Create(ctx context.Context, clue *model.Clue) error {
 
 	var count int64
 	db := r.db.WithContext(ctx)
-	err := db.Model(&model.Clue{}).Where("type = ? and account = ?", clue.Type, clue.Account).Count(&count).Error
+	err := db.Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Where("type = ? and account = ?", clue.Type, clue.Account).Count(&count).Error
 	if err != nil {
 		return err
 	}
@@ -90,7 +91,7 @@ func (r *clueRepo) BatchCreateWithDedup(ctx context.Context, clues []*model.Clue
 	if len(pairs) > 0 {
 		db := r.db.WithContext(ctx)
 
-		conds := db.Model(&model.Clue{})
+		conds := db.Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx))
 		for i, p := range pairs {
 			if i == 0 {
 				conds = conds.Where("(type = ? AND account = ?)", p.Type, p.Account)
@@ -134,7 +135,8 @@ func (r *clueRepo) BatchCreateWithDedup(ctx context.Context, clues []*model.Clue
 
 func (r *clueRepo) GetByID(ctx context.Context, id string) (*model.Clue, error) {
 	var clue model.Clue
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&clue).Error
+	// 多租户 P0：跨团队 id 直读落到"不存在"。
+	err := r.db.WithContext(ctx).Scopes(scope.TeamScoped(ctx)).Where("id = ?", id).First(&clue).Error
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +147,7 @@ func (r *clueRepo) GetClueList(ctx context.Context, page int, limit int) ([]*mod
 	var cluelists []*model.Clue
 	var total int64
 	db := r.db.WithContext(ctx)
-	err := db.Model(&model.Clue{}).Count(&total).Error
+	err := db.Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -179,7 +181,7 @@ func (r *clueRepo) GetClueAllList(ctx context.Context, clueType int64) ([]*model
 	var cluelists []*model.Clue
 	var total int64
 	db := r.db.WithContext(ctx)
-	err := db.Where("type = ?", clueType).Model(&model.Clue{}).Count(&total).Error
+	err := db.Where("type = ?", clueType).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -197,7 +199,7 @@ func (r *clueRepo) GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, 
 	var cluelists []*model.Clue
 	var total int64
 	db := r.db.WithContext(ctx)
-	err := db.Where("type IN (?)", []int64{5, 7}).Model(&model.Clue{}).Count(&total).Error
+	err := db.Where("type IN (?)", []int64{5, 7}).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -213,7 +215,7 @@ func (r *clueRepo) GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, 
 
 func (r *clueRepo) ExistsByTypeAndAccount(ctx context.Context, clueType int64, account string) (bool, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&model.Clue{}).Where("type = ? and account = ?", clueType, account).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Where("type = ? and account = ?", clueType, account).Count(&count).Error
 	if err != nil {
 		return false, err
 	}
@@ -222,7 +224,7 @@ func (r *clueRepo) ExistsByTypeAndAccount(ctx context.Context, clueType int64, a
 
 func (r *clueRepo) FindByTypeAndAccount(ctx context.Context, clueType int64, account string) (*model.Clue, error) {
 	var clue model.Clue
-	err := r.db.WithContext(ctx).Model(&model.Clue{}).Where("type = ? and account = ?", clueType, account).First(&clue).Error
+	err := r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Where("type = ? and account = ?", clueType, account).First(&clue).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -234,7 +236,7 @@ func (r *clueRepo) FindByTypeAndAccount(ctx context.Context, clueType int64, acc
 
 func (r *clueRepo) GetDistinctTypes(ctx context.Context) ([]int64, error) {
 	var types []int64
-	err := r.db.WithContext(ctx).Model(&model.Clue{}).Distinct("type").Pluck("type", &types).Error
+	err := r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Distinct("type").Pluck("type", &types).Error
 	return types, err
 }
 
@@ -245,7 +247,7 @@ func (r *clueRepo) UpdateByID(ctx context.Context, id string, updates map[string
 	if len(updates) == 0 {
 		return nil
 	}
-	result := r.db.WithContext(ctx).Model(&model.Clue{}).Where("id = ?", id).Updates(updates)
+	result := r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -292,7 +294,7 @@ func (r *clueRepo) BatchUpdateInTx(ctx context.Context, ids []string, updates ma
 			if id == "" {
 				continue
 			}
-			if err := tx.Model(&model.Clue{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			if err := tx.Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)).Where("id = ?", id).Updates(updates).Error; err != nil {
 				continue
 			}
 			count++

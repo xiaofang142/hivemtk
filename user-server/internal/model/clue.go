@@ -6,7 +6,9 @@ import (
 )
 
 type Clue struct {
-	ID             string `gorm:"type:varchar(36);primary_key" json:"id"`
+	ID string `gorm:"type:varchar(36);primary_key" json:"id"`
+	// TeamID 归属团队（多租户 P0）：线索按团队隔离，见 Customer.TeamID。
+	TeamID         uint   `gorm:"column:team_id;index;default:0" json:"team_id"`
 	SourceID       string `gorm:"source_id" json:"source_id"`
 	Account        string `gorm:"account" json:"account"`
 	Type           int64  `gorm:"column:type;index" json:"type"`

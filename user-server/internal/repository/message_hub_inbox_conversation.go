@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 
 	_db "hivemtk-user/internal/pkg/db"
 
@@ -151,7 +152,7 @@ func (r *InboxConversationRepository) UpdateLastMessage(ctx context.Context, id 
 	if limit := previewMaxLen(); len(lastMessage) > limit {
 		lastMessage = lastMessage[:limit]
 	}
-	return r.db.Model(&model.InboxConversation{}).Where("id = ?", id).
+	return r.db.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"last_message_preview": lastMessage,
 			"last_message_at":      lastMessageAt,
@@ -175,7 +176,7 @@ func (r *InboxConversationRepository) Update(ctx context.Context, conv *model.In
 func (r *InboxConversationRepository) ListByAccount(ctx context.Context, platform, accountID string, page, pageSize int) ([]*model.InboxConversation, int64, error) {
 	var items []*model.InboxConversation
 	var total int64
-	query := r.db.Model(&model.InboxConversation{}).
+	query := r.db.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).
 		Where("platform = ? AND account_id = ?", platform, accountID)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -288,7 +289,7 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 			updates["status"] = "open"
 		}
 	}
-	return tx.Model(&model.InboxConversation{}).
+	return tx.Scopes(scope.TeamScoped(ctx)).Model(&model.InboxConversation{}).
 		Where("id = ?", conv.ID).
 		Updates(updates).Error
 }
@@ -323,7 +324,7 @@ func (r *InboxConversationRepository) MarkRead(ctx context.Context, conversation
 	if r == nil || r.db == nil {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	return r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ?", conversationID).
 		Updates(map[string]any{
 			"unread_count": 0,
@@ -336,7 +337,7 @@ func (r *InboxConversationRepository) UpdateField(ctx context.Context, conversat
 	if r == nil || r.db == nil {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	return r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ?", conversationID).
 		Update(field, value).Error
 }

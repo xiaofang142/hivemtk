@@ -1,0 +1,14 @@
+# tenant-scope.baseline — 多租户裸查询豁免点（check-tenant-scope.sh 生成）
+# 每行 <TARGET 相对路径>:count；豁免必须在代码注释里写明理由（系统上下文直通/平台管线）
+internal/aiagent/knowledge/service/knowledge_base_import.go:3
+internal/monitor/monitor.go:8
+internal/ops/service/dashboard_screen.go:7
+internal/repository/message_hub_inbox_ctx.go:1
+internal/repository/message_hub_inbox_media.go:1
+internal/repository/message_hub_inbox_stats.go:1
+internal/repository/opportunity.go:3
+internal/repository/r44_gap.go:1
+internal/router/geo_routes.go:1
+internal/service/douyin_media.go:1
+internal/service/qq_media.go:1
+internal/service/telegram_media.go:1

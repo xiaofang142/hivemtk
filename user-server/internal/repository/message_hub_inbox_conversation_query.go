@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 )
 
 // ListByQuery 按条件分页查询会话（行为与原 service.List 一致）
@@ -19,7 +20,8 @@ func (r *InboxConversationRepository) ListByQuery(ctx context.Context, q InboxCo
 		q.PageSize = 20
 	}
 
-	tx := r.db.WithContext(ctx).Model(&model.InboxConversation{})
+	// 多租户 P0：会话按团队隔离（系统上下文/平台管理员直通，见 scope.TeamScoped）。
+	tx := r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).Scopes(scope.TeamScoped(ctx))
 	if q.Platform != "" {
 		tx = tx.Where("platform = ?", q.Platform)
 	}
@@ -290,7 +292,7 @@ func (r *InboxConversationRepository) GetStats(ctx context.Context, validStatuse
 		C      int64
 	}
 	var scs []sc
-	if err := r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	if err := r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).Scopes(scope.TeamScoped(ctx)).
 		Select("status, COUNT(*) AS c").
 		Where("status IN ?", validStatuses).
 		Group("status").Scan(&scs).Error; err != nil {
@@ -315,7 +317,7 @@ func (r *InboxConversationRepository) GetStats(ctx context.Context, validStatuse
 		C        int64
 	}
 	var pcs []pc
-	r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Select("platform AS platform, COUNT(*) AS c").
 		Group("platform").Scan(&pcs)
 	for _, p := range pcs {
@@ -327,7 +329,7 @@ func (r *InboxConversationRepository) GetStats(ctx context.Context, validStatuse
 		C          int64
 	}
 	var acs []ac
-	r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Select("assigned_to, COUNT(*) AS c").
 		Where("assigned_to <> '' AND status IN ?", activeStatuses).
 		Group("assigned_to").Scan(&acs)
@@ -336,7 +338,7 @@ func (r *InboxConversationRepository) GetStats(ctx context.Context, validStatuse
 	}
 
 	var overdue int64
-	r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+	r.db.WithContext(ctx).Model(&model.InboxConversation{}).Scopes(scope.TeamScoped(ctx)).
 		Where("status IN ? AND last_message_from = ? AND last_message_at <= ?",
 			[]string{"unread", "open", "assigned"}, from, threshold).
 		Count(&overdue)

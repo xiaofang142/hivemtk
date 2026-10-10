@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -47,7 +48,7 @@ func (r *MessageHubRepository) CreateWithInboxTx(
 
 func (r *MessageHubRepository) MarkReadByID(ctx context.Context, id uint) error {
 	now := time.Now()
-	return r.db.Model(&model.MessageHub{}).Where("id = ?", id).
+	return r.db.Scopes(scope.TeamScoped(ctx)).Model(&model.MessageHub{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"is_read": true,
 			"read_at": now,
@@ -68,7 +69,7 @@ func (r *MessageHubRepository) UpdateMsgID(ctx context.Context, id uint, platfor
 	if r == nil || r.db == nil || platformMsgID == "" {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ? AND direction = ?", id, "outbound").
 		Update("msg_id", platformMsgID).Error
 }
@@ -110,7 +111,7 @@ func (r *MessageHubRepository) MarkOutboundSendFailed(ctx context.Context, id ui
 	if r == nil || r.db == nil || id == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ? AND direction = ?", id, "outbound").
 		Updates(map[string]any{
 			"status": "send_failed",
@@ -156,7 +157,7 @@ func (r *MessageHubRepository) UpdateDeliveryStatus(ctx context.Context, platfor
 	default:
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ?", row.ID).Updates(updates).Error
 }
 
@@ -176,7 +177,7 @@ func (r *MessageHubRepository) MarkReadByIDs(ctx context.Context, ids []uint) er
 		return nil
 	}
 	now := time.Now()
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Where("id IN ?", ids).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).Where("id IN ?", ids).
 		Updates(map[string]any{
 			"is_read": true,
 			"read_at": now,
@@ -188,7 +189,7 @@ func (r *MessageHubRepository) UpdateMediaURL(ctx context.Context, id uint, medi
 	if r == nil || r.db == nil || id == 0 || mediaURL == "" {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Where("id = ?", id).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).Where("id = ?", id).
 		Update("media_url", mediaURL).Error
 }
 
@@ -197,7 +198,7 @@ func (r *MessageHubRepository) UpdateMediaURLByMsgID(ctx context.Context, platfo
 	if r == nil || r.db == nil || platform == "" || msgID == "" || mediaURL == "" {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("platform = ? AND msg_id = ?", platform, msgID).
 		Update("media_url", mediaURL).Error
 }

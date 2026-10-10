@@ -44,6 +44,8 @@ type RerankProviderConfig struct {
 // RagProduct RAG 产品配置 - RAG V2.0 权威基线
 // 一个产品 = 一个 pgvector 集合 + 完整 LLM/Embedding 参数
 type RagProduct struct {
+	// TeamID 归属团队（多租户 P0）：知识库产品线按团队隔离，文档随之。
+	TeamID                  uint                    `gorm:"column:team_id;index;default:0" json:"team_id"`
 	ID                      string                  `json:"id" gorm:"primaryKey;size:64"`
 	Name                    string                  `json:"name" gorm:"size:255;not null"`
 	Description             string                  `json:"description"`

@@ -253,6 +253,22 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.DELETE("/mcp/credentials/:id/keys/:keyId", controller.DeleteMCPCredentialKey)
 		// 管理面操作审计（凭证/钥匙/Skill 的增删改、状态流转、明文查看 reveal）。
 		authPlainAdmin.GET("/mcp/admin-audits", controller.ListMCPCredentialAuditLogs)
+
+		// —— 多租户 P0：团队（租户）管理 ——
+		// 平台管理员面：全量 CRUD + 成员调拨（需求 3）。
+		authPlainAdmin.GET("/manage/teams", controller.ListTeams)
+		authPlainAdmin.POST("/manage/teams", controller.CreateTeam)
+		authPlainAdmin.PUT("/manage/teams/:id", controller.UpdateTeam)
+		authPlainAdmin.DELETE("/manage/teams/:id", controller.DeleteTeam)
+		authPlainAdmin.GET("/manage/teams/:id/users", controller.ListTeamUsers)
+		authPlainAdmin.PUT("/manage/teams/:id/users/:userId/role", controller.SetTeamUserRole)
+		authPlainAdmin.POST("/manage/teams/:id/users/:userId/move", controller.MoveTeamUser)
+		// 团队管理员面：TeamAdminAuthMiddleware 放行 admin+team_admin，
+		// "只能本团队"由 service.authorizeTeamAccess 服务端强制（teamID 取自 JWT，不收调用方参数）。
+		teamAuth := auth.Group("", middleware.TeamAdminAuthMiddleware())
+		teamAuth.GET("/team/detail", controller.MyTeam)
+		teamAuth.GET("/team/users", controller.MyTeamUsers)
+		teamAuth.PUT("/team/users/:userId/role", controller.SetMyTeamUserRole)
 		// MCP 调用审计与 Skill 注册表（2026-10-10）：凭证对的口径与上组一致
 		// （authPlainAdmin + AdminAuthMiddleware）。两项此前只有"签发了哪些凭证"，
 		// 现在补上"谁调了什么工具、成没成"与"有哪些 Skill、绑定哪把凭证"。

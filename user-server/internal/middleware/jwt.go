@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/repository/scope"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +34,8 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			c.Set("license_id", "system_admin")
 			c.Set("role", "admin")
 			c.Set("data_scope", "all")
+			c.Set("team_id", uint(0))
+			injectTeamScopeCtx(c, scope.TeamInfo{TeamID: 0, Platform: true})
 			c.Next()
 			return
 		}
@@ -93,6 +97,46 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		c.Set("department_id", claims.DepartmentID)
 		c.Set("team_id", claims.TeamID)
 
+		// 租户上下文进请求 ctx（多租户 P0）：repository 的 scope.TeamScoped /
+		// db 层的 Create 回调都从 Request.Context() 取团队身份——在中间件
+		// 这一处注入，全部下游调用无需各自透传 gin 值。
+		injectTeamScopeCtx(c, scope.TeamInfo{TeamID: claims.TeamID, Platform: claims.Role == "admin"})
+
+		c.Next()
+	}
+}
+
+// injectTeamScopeCtx 把租户身份写入请求 ctx（幂等：已有则覆盖为本次 claims 的值，
+// 保证"刚改过团队/角色"后刷新的令牌立即生效）。
+func injectTeamScopeCtx(c *gin.Context, info scope.TeamInfo) {
+	if c.Request == nil {
+		return
+	}
+	c.Request = c.Request.WithContext(scope.WithTeamInfo(c.Request.Context(), info))
+}
+
+// TeamAdminAuthMiddleware 团队管理员门（多租户 P0）：
+// 平台管理员（role=admin）全量直通；team_admin 放行到控制器后再做
+// "只能操作本团队" 的归属校验（team 参数一致性在 controller 层判，见 team_admin.go）。
+func TeamAdminAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsTestMode && testModeGate() {
+			c.Set("role", "admin")
+			c.Next()
+			return
+		}
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "未找到用户角色信息"})
+			c.Abort()
+			return
+		}
+		r, _ := role.(string)
+		if r != "admin" && r != model.SystemUserRoleTeamAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "权限不足，需要团队管理员权限"})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

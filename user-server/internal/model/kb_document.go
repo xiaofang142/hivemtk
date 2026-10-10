@@ -16,7 +16,9 @@ const (
 
 // KBDocument 知识库文档模型
 type KBDocument struct {
-	ID         uint             `gorm:"primaryKey;autoIncrement" json:"id"`
+	ID uint `gorm:"primaryKey;autoIncrement" json:"id"`
+	// TeamID 归属团队（多租户 P0）：文档按团队隔离，见 Customer.TeamID。
+	TeamID     uint             `gorm:"column:team_id;index;default:0" json:"team_id"`
 	Title      string           `gorm:"size:255;not null" json:"title"`
 	Content    string           `gorm:"type:text" json:"content"`
 	FilePath   string           `gorm:"size:500" json:"file_path"`

@@ -135,6 +135,14 @@ jobs:
           chmod +x scripts/check-architecture.sh
           bash scripts/check-architecture.sh
 
+      - name: 多租户隔离守卫（核心表必须带 team scope）
+        # 对应 docs/backlog/multi-tenant-rbac-saas.md P0-9：
+        # 核心业务表新增裸查询会让跨团队数据漏给普通用户。
+        # 棘轮：裸查询豁免点只许降不许升，基线见 scripts/tenant-scope.baseline。
+        run: |
+          chmod +x scripts/check-tenant-scope.sh
+          bash scripts/check-tenant-scope.sh
+
       - name: 日期口径守卫（宿主机时区棘轮）
         # 2026-09-20 第二十六轮（A8/A9）：本仓 DB 会话时区钉在 Asia/Shanghai，而
         # Go 进程跟宿主机时区 ⇒ 日期键/日期窗口在 UTC 容器上恒漂 8 小时，这类缺陷

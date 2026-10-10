@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -45,7 +46,7 @@ func (r *KBDocumentRepository) List(ctx context.Context, page, pageSize int) ([]
 
 	var docs []*model.KBDocument
 	var total int64
-	q := r.db.WithContext(ctx).Model(&model.KBDocument{})
+	q := r.db.WithContext(ctx).Model(&model.KBDocument{}).Scopes(scope.TeamScoped(ctx))
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -73,7 +74,7 @@ func (r *KBDocumentRepository) UpdateStatusFields(ctx context.Context, id uint, 
 		fields = map[string]any{}
 	}
 	fields["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&model.KBDocument{}).
+	return r.db.WithContext(ctx).Model(&model.KBDocument{}).Scopes(scope.TeamScoped(ctx)).
 		Where("id = ?", id).
 		Updates(fields).Error
 }

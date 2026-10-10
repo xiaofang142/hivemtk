@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -89,12 +90,12 @@ func (r *clueRepo) ListWithQuery(ctx context.Context, q ClueQuery, page, limit i
 		limit = 20
 	}
 	var total int64
-	countTx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}), q)
+	countTx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)), q)
 	if err := countTx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var clues []*model.Clue
-	listTx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}), q)
+	listTx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)), q)
 	if err := listTx.Order("create_time DESC").
 		Offset((page - 1) * limit).Limit(limit).Find(&clues).Error; err != nil {
 		return nil, 0, err
@@ -104,14 +105,14 @@ func (r *clueRepo) ListWithQuery(ctx context.Context, q ClueQuery, page, limit i
 
 func (r *clueRepo) CountWithQuery(ctx context.Context, q ClueQuery) (int64, error) {
 	var total int64
-	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}), q)
+	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)), q)
 	err := tx.Count(&total).Error
 	return total, err
 }
 
 func (r *clueRepo) TypeDistribution(ctx context.Context, q ClueQuery) ([]ClueTypeAgg, error) {
 	var rows []ClueTypeAgg
-	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}), q)
+	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)), q)
 	err := tx.Select("type AS type, COUNT(*) AS total, COALESCE(SUM(CASE WHEN COALESCE(is_verify,0) >= 1 THEN 1 ELSE 0 END), 0) AS verify_total").
 		Group("type").Order("type").Scan(&rows).Error
 	if err != nil {
@@ -122,7 +123,7 @@ func (r *clueRepo) TypeDistribution(ctx context.Context, q ClueQuery) ([]ClueTyp
 
 func (r *clueRepo) TrendByDay(ctx context.Context, q ClueQuery) ([]ClueTrendAgg, error) {
 	var rows []ClueTrendAgg
-	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}), q)
+	tx := applyClueQuery(r.db.WithContext(ctx).Model(&model.Clue{}).Scopes(scope.TeamScoped(ctx)), q)
 
 	const dayExpr = "to_char(to_timestamp(create_time), 'YYYY-MM-DD')"
 	err := tx.Select(

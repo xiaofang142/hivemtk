@@ -377,10 +377,11 @@ func (c *AuthController) VerifyMFALogin(ctx *gin.Context) {
 	}
 	middleware.ClearBruteForceFailure(ctx, "auth.mfa")
 
-	jwtUtils := c.authService.JwtUtils(ctx.Request.Context())
-	token, err := jwtUtils.GenerateToken(userID, username, role)
+	// 多租户 P0：MFA 二步签发走回源签发（带 team_id/data_scope/department_id），
+	// 不再用 VerifyMFALogin 的三元组拼空作用域令牌（与登录/刷新同口径）。
+	token, err := c.authService.IssueTokenForUser(ctx.Request.Context(), userID, username, role)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "颁发令牌失败")
+		response.Error(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 

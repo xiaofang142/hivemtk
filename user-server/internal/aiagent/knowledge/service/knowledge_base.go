@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/etl"
 	chunkModel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository/scope"
 	"os"
 
 	"gorm.io/gorm"
@@ -56,7 +57,7 @@ func (s *KnowledgeBaseService) ListDocuments(ctx context.Context, page, pageSize
 
 	var docs []*model.KBDocument
 	var total int64
-	q := s.db.WithContext(ctx).Model(&model.KBDocument{})
+	q := s.db.WithContext(ctx).Model(&model.KBDocument{}).Scopes(scope.TeamScoped(ctx))
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

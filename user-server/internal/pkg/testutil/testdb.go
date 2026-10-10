@@ -11,6 +11,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -202,6 +204,12 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	if err != nil {
 		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), err)
 	}
+
+	// 与生产 InitDB 同口径挂租户回调：PG 依赖用例在测试库上验证的行为
+	// 必须与生产行为一致（Create 回填 team_id），不能只在生产路径生效。
+	testDB := database
+	scope.SetDefaultTeamIDDB(func(ctx context.Context) *gorm.DB { return testDB })
+	scope.RegisterTenantTeamCallback(database)
 
 	if sqlDB, dbErr := database.DB(); dbErr == nil {
 		sqlDB.SetMaxOpenConns(testDBMaxOpenConns)

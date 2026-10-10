@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	ragcachemodel "hivemtk-user/internal/aiagent/rag/cache"
 	browsermodel "hivemtk-user/internal/browser_automation/model"
@@ -348,6 +349,11 @@ func allModels() []any {
 		// 审计表 ConfigParamAuditLog 在下面有登记，主表历史上只靠开发库遗留存在。
 		// MCPCredential（表 mcp_credentials）：MCP 工具入口的 ClientID+APIKey 凭证对。
 		&model.MCPCredential{},
+		// Team（表 teams）：租户（团队）锚点表（多租户 P0，2026-10-11）。
+		// system_users.team_id 列已在标签上（AutoMigrate 只加不删），业务表
+		// team_id 列同样走标签建列；本表登记晚一卡，EnsureDefaultTeamID 会
+		// 在全新库上建不出默认团队，注册流程当场 500。
+		&model.Team{},
 		// MCPCallAudit（表 mcp_call_audits）：MCP 入口的调用审计（谁/哪把凭证/哪个工具/成没成）。
 		// MCPSkill（表 mcp_skills）：Skill 注册表（说明 + 绑定凭证 + 期望工具集）。
 		// 两者都是 2026-10-10 新增：MCP 入口此前只有"签发了哪些凭证"，没有调用记录与
@@ -514,8 +520,111 @@ func AutoMigrate() *gorm.DB {
 	// 1:N 钥匙表回填（2026-10-11）：存量 1:1 凭证对的 api_key_hash 迁成钥匙行。
 	// 排在终校验之后：表刚建出来才谈得上回填；幂等，可重复执行。
 	postMigrateBackfillMCPCredentialKeys(DB)
+	// 多租户 P0（2026-10-11）：默认团队 + 存量归属回填 + 角色 CHECK 放宽。
+	// 幂等，可重复执行；回滚口径见 scripts/rollback-tenant-p0.sh。
+	postMigrateBackfillDefaultTeam(DB)
+	postMigrateRelaxSystemUserRoleCheck(DB)
 
 	return DB
+}
+
+// tenantBackfillTables 多租户 P0 的业务回填清单（表名 → 用途）。
+// 与 model 层带 TeamID 的核心业务表一一对应；漏登记一张，
+// 那张表的存量行就沉在 team_id=0 里没人看得见（fail-closed 的静默数据丢失）。
+var tenantBackfillTables = []string{
+	"customers",
+	"inbox_conversations",
+	"message_hub",
+	"clues",
+	"opportunities",
+	"rag_products",
+	"kb_documents",
+}
+
+// postMigrateBackfillDefaultTeam 存量数据归入「默认团队」（多租户 P0，幂等）。
+//
+// 隔离开启后普通身份只能看自己团队：不回填 = 升级瞬间所有存量业务行
+// 沉进 team_id=0，普通用户眼前一黑。口径：
+//   - 默认团队不存在则创建（与注册兜底 EnsureDefaultTeamID 同名同唯一索引）；
+//   - 非平台管理员（role != 'admin'）的 team_id=0 用户 → 默认团队；
+//   - 业务表 team_id=0 行 → 默认团队。
+//   - 平台管理员（admin）保持 team_id=0（平台侧，直通全量）。
+//
+// 幂等：条件恒为 team_id=0，回填后重复执行是 no-op。
+func postMigrateBackfillDefaultTeam(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	var team model.Team
+	err := db.Where("name = ?", model.DefaultTeamName).First(&team).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Warnf("[tenant-backfill] 查默认团队失败，跳过本轮回填: %v", err)
+			return
+		}
+		team = model.Team{Name: model.DefaultTeamName, Plan: model.TeamPlanFree, Status: model.TeamStatusActive}
+		if err := db.Create(&team).Error; err != nil {
+			// 唯一索引冲突（并发启动）：回查即可。
+			if e2 := db.Where("name = ?", model.DefaultTeamName).First(&team).Error; e2 != nil {
+				logger.Warnf("[tenant-backfill] 创建默认团队失败，跳过本轮回填: %v", err)
+				return
+			}
+		} else {
+			logger.Infof("[tenant-backfill] 已创建默认团队 id=%d", team.ID)
+		}
+	}
+
+	res := db.Model(&model.SystemUser{}).
+		Where("team_id = 0 AND role <> ?", model.SystemUserRoleAdmin).
+		Update("team_id", team.ID)
+	if res.Error != nil {
+		logger.Warnf("[tenant-backfill] system_users 回填失败: %v", res.Error)
+	} else if res.RowsAffected > 0 {
+		logger.Infof("[tenant-backfill] %d 个存量用户归入默认团队", res.RowsAffected)
+	}
+
+	for _, table := range tenantBackfillTables {
+		r := db.Table(table).Where("team_id = 0").Update("team_id", team.ID)
+		if r.Error != nil {
+			// 表不存在（模型未登记/降级环境）只告警不阻断启动。
+			logger.Warnf("[tenant-backfill] %s 回填失败: %v", table, r.Error)
+			continue
+		}
+		if r.RowsAffected > 0 {
+			logger.Infof("[tenant-backfill] %s: %d 行归入默认团队", table, r.RowsAffected)
+		}
+	}
+}
+
+// postMigrateRelaxSystemUserRoleCheck 放宽 system_users.role 上的历史 CHECK（幂等）。
+//
+// migrations/025_unify_system_users.sql 给 role 加过 IN ('admin','customer_service','staff')
+// 的 CHECK，而 Go 侧合法值是 admin/user（+本次的 team_admin）。CHECK 在的库上，
+// 创建 team_admin 会直接被 DB 拒绝——多租户 P0 的团队管理员当场落不了库。
+// 处置：找到 system_users 上定义里含 role IN 的 CHECK 按名 DROP（Go 侧
+// IsValidSystemUserRole 是唯一真值源，DB 层白名单只会漂移）。
+func postMigrateRelaxSystemUserRoleCheck(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	type constraintRow struct {
+		Name string
+	}
+	var rows []constraintRow
+	err := db.Raw(`SELECT conname AS name FROM pg_constraint
+		WHERE conrelid = 'system_users'::regclass AND contype = 'c'
+		AND pg_get_constraintdef(oid) ILIKE '%role%' AND pg_get_constraintdef(oid) ILIKE '%IN%'`).Scan(&rows).Error
+	if err != nil {
+		logger.Warnf("[tenant-role-check] 查询历史 CHECK 失败（非 PG 或权限不足时仅告警）: %v", err)
+		return
+	}
+	for _, row := range rows {
+		if err := db.Exec("ALTER TABLE system_users DROP CONSTRAINT IF EXISTS " + "\"" + row.Name + "\"").Error; err != nil {
+			logger.Warnf("[tenant-role-check] 放宽 CHECK %s 失败: %v", row.Name, err)
+			continue
+		}
+		logger.Infof("[tenant-role-check] 已放宽 system_users 历史 CHECK：%s（Go 侧 IsValidSystemUserRole 为唯一口径）", row.Name)
+	}
 }
 
 // postMigrateBackfillMCPCredentialKeys 把存量 1:1 凭证对迁移成钥匙行（2026-10-11）。

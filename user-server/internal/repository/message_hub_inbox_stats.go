@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -48,16 +49,16 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 
 	var total, inbound, outbound, unread int64
 
-	if err := hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).Count(&total).Error; err != nil {
+	if err := hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)), start, end).Count(&total).Error; err != nil {
 		return nil, err
 	}
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("direction = ?", "inbound"), start, end).Count(&inbound)
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("direction = ?", "outbound"), start, end).Count(&outbound)
 	// 未读只算入站消息：出站消息由本系统发出，不存在"待本系统阅读"的语义，
 	// 计入会让「未读」大于「接收」，出现逻辑矛盾的读数（实测 297 > 257）。
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).
 		Where("direction = ?", "inbound").
 		Where("(is_read = ? OR is_read IS NULL)", false), start, end).Count(&unread)
 
@@ -72,7 +73,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C        int64
 	}
 	var pCounts []pcount
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)), start, end).
 		Select("platform AS platform, COUNT(*) AS c").
 		Group("platform").Scan(&pCounts)
 	for _, p := range pCounts {
@@ -84,7 +85,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C         int64
 	}
 	var dCounts []dcount
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)), start, end).
 		Select("direction AS direction, COUNT(*) AS c").
 		Group("direction").Scan(&dCounts)
 	for _, d := range dCounts {
@@ -96,7 +97,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C       int64
 	}
 	var tCounts []tcount
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)), start, end).
 		Select("msg_type AS msg_type, COUNT(*) AS c").
 		Group("msg_type").Scan(&tCounts)
 	for _, t := range tCounts {
@@ -108,7 +109,7 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 		C         int64
 	}
 	var aCounts []acount
-	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}), start, end).
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)), start, end).
 		Select("account_id AS account_id, COUNT(*) AS c").
 		Group("account_id").Order("c DESC").Limit(50).Scan(&aCounts)
 	for _, a := range aCounts {

@@ -167,7 +167,9 @@ func (s *SSOService) HandleCallback(ctx context.Context, provider, code, verifie
 		return nil, err
 	}
 
-	token, err := s.jwtUtils.GenerateToken(user.ID, user.Username, user.Role)
+	// 多租户 P0：SSO 签发同样带齐 scope 三件（与登录/刷新/MFA 同口径）。
+	token, err := s.jwtUtils.GenerateTokenWithScope(
+		user.ID, user.Username, user.Role, user.DataScope, user.DepartmentID, user.TeamID)
 	if err != nil {
 		return nil, fmt.Errorf("sso: 签发本地令牌失败: %w", err)
 	}

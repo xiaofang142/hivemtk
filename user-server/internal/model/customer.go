@@ -59,6 +59,11 @@ type Customer struct {
 
 	OwnerAgentID *uint `gorm:"index;column:owner_agent_id" json:"owner_agent_id,omitempty"`
 
+	// TeamID 归属团队（多租户 P0）：查询统一走 scope.TeamScoped，建行由 db 层
+	// 租户回调回填；0=平台侧行（对平台管理员及未归属身份可见）。
+	// 存量行由 postMigrateBackfillDefaultTeam 归入「默认团队」。
+	TeamID uint `gorm:"column:team_id;index;default:0" json:"team_id"`
+
 	// 时间
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`

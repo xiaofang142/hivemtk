@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -117,7 +118,8 @@ func (r *MessageHubRepository) GetByPlatformContentNormalized(ctx context.Contex
 func (r *MessageHubRepository) ListByConversation(ctx context.Context, conversationID string, page, pageSize int) ([]*model.MessageHub, int64, error) {
 	var items []*model.MessageHub
 	var total int64
-	query := r.db.Model(&model.MessageHub{}).Where("conversation_id = ?", conversationID)
+	// 多租户 P0：会话内消息同样过团队过滤（防跨团队 conversationID 枚举）。
+	query := r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx)).Where("conversation_id = ?", conversationID)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -205,7 +207,8 @@ func (r *MessageHubRepository) ListByHubQuery(ctx context.Context, q HubListQuer
 		q.PageSize = 20
 	}
 
-	tx := r.db.WithContext(ctx).Model(&model.MessageHub{})
+	// 多租户 P0：消息按团队隔离（系统上下文/平台管理员直通）。
+	tx := r.db.WithContext(ctx).Model(&model.MessageHub{}).Scopes(scope.TeamScoped(ctx))
 	if q.Platform != "" {
 		tx = tx.Where("platform = ?", q.Platform)
 	}

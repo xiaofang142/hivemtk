@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	_utils "hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/repository/scope"
 
 	"gorm.io/gorm"
 )
@@ -87,7 +88,8 @@ func (r *customerRepository) Create(ctx context.Context, customer *model.Custome
 
 func (r *customerRepository) GetByID(ctx context.Context, id string) (*model.Customer, error) {
 	var customer model.Customer
-	if err := dbFromCtx(ctx).First(&customer, "id = ?", id).Error; err != nil {
+	// 多租户 P0：按 id 直读也要过团队过滤——跨团队 id 枚举/猜测一律落到"不存在"。
+	if err := dbFromCtx(ctx).Scopes(scope.TeamScoped(ctx)).First(&customer, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -156,7 +158,8 @@ func (r *customerRepository) Update(ctx context.Context, customer *model.Custome
 }
 
 func (r *customerRepository) Delete(ctx context.Context, id string) error {
-	return dbFromCtx(ctx).Delete(&model.Customer{}, "id = ?", id).Error
+	// 多租户 P0：删除同样过团队过滤（跨团队 id 删除落到 no-op）。
+	return dbFromCtx(ctx).Scopes(scope.TeamScoped(ctx)).Delete(&model.Customer{}, "id = ?", id).Error
 }
 
 func (r *customerRepository) List(ctx context.Context, page, limit int, keyword string) ([]*model.Customer, int64, error) {
@@ -164,7 +167,7 @@ func (r *customerRepository) List(ctx context.Context, page, limit int, keyword 
 	var total int64
 
 	offset := (page - 1) * limit
-	q := dbFromCtx(ctx).Model(&model.Customer{})
+	q := dbFromCtx(ctx).Model(&model.Customer{}).Scopes(scope.TeamScoped(ctx))
 
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {
@@ -196,7 +199,7 @@ func (r *customerRepository) ListKeyset(ctx context.Context, cursor string, limi
 		limit = 20
 	}
 
-	q := dbFromCtx(ctx).Model(&model.Customer{})
+	q := dbFromCtx(ctx).Model(&model.Customer{}).Scopes(scope.TeamScoped(ctx))
 
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {
@@ -264,7 +267,7 @@ func (r *customerRepository) FindByIdentity(ctx context.Context, phone, email, w
 
 	conditions = conditions[:len(conditions)-4]
 
-	if err := query.Where(conditions, args...).First(&customer).Error; err != nil {
+	if err := query.Scopes(scope.TeamScoped(ctx)).Where(conditions, args...).First(&customer).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -332,7 +335,7 @@ func (r *customerRepository) CountNotEmpty(ctx context.Context, fieldName string
 		return 0, nil
 	}
 	stmt := fieldName + " <> '' AND " + fieldName + " IS NOT NULL"
-	if err := dbFromCtx(ctx).Model(&model.Customer{}).Where(stmt).Count(&n).Error; err != nil {
+	if err := dbFromCtx(ctx).Model(&model.Customer{}).Scopes(scope.TeamScoped(ctx)).Where(stmt).Count(&n).Error; err != nil {
 		return 0, err
 	}
 	return n, nil
@@ -441,7 +444,7 @@ func (r *customerRepository) GetByXiaohongshuID(ctx context.Context, xhsID strin
 		return nil, nil
 	}
 	var customer model.Customer
-	if err := dbFromCtx(ctx).Where("xiaohongshu_id = ?", xhsID).First(&customer).Error; err != nil {
+	if err := dbFromCtx(ctx).Scopes(scope.TeamScoped(ctx)).Where("xiaohongshu_id = ?", xhsID).First(&customer).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -463,7 +466,7 @@ func (r *customerRepository) SearchByFilter(ctx context.Context, filter Customer
 		pageSize = 100
 	}
 
-	q := dbFromCtx(ctx).Model(&model.Customer{})
+	q := dbFromCtx(ctx).Model(&model.Customer{}).Scopes(scope.TeamScoped(ctx))
 
 	if filter.Tag != "" {
 		q = q.Where("tags::jsonb @> ?", fmt.Sprintf(`["%s"]`, escapeJSONString(filter.Tag)))
