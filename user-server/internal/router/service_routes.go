@@ -412,6 +412,7 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 	admin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)
 	admin.DELETE("/kb-connectors/:id", controller.DeleteKBConnector)
 	admin.POST("/kb-connectors/:id/sync", controller.SyncKBConnector)
+		admin.GET("/capabilities", controller.CapabilityMatrix)
 	auth.GET("/llm/models", llmCtrl.ListModels)
 	auth.GET("/llm/models/:name", llmCtrl.GetModel)
 	auth.GET("/llm/strategies", llmCtrl.ListStrategies)

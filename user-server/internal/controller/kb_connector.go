@@ -70,6 +70,8 @@ func CreateKBConnector(ctx *gin.Context) {
 	var req struct {
 		Type            string          `json:"type" binding:"required"`
 		Name            string          `json:"name"`
+		ClientID        string          `json:"client_id"`
+		APIKey          string          `json:"api_key"`
 		Config          json.RawMessage `json:"config"`
 		IntervalMinutes int             `json:"interval_minutes"`
 		Enabled         *bool           `json:"enabled"`
@@ -81,6 +83,21 @@ func CreateKBConnector(ctx *gin.Context) {
 	if _, err := kbconnector.LookupProvider(req.Type); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
+	}
+	// Client ID / API Key 是一等字段：直接并入 provider config（ima 用双头认证）
+	if req.ClientID != "" || req.APIKey != "" {
+		cfg := map[string]any{}
+		if len(req.Config) > 0 {
+			_ = json.Unmarshal(req.Config, &cfg)
+		}
+		if req.ClientID != "" {
+			cfg["client_id"] = req.ClientID
+		}
+		if req.APIKey != "" {
+			cfg["api_key"] = req.APIKey
+		}
+		blob, _ := json.Marshal(cfg)
+		req.Config = blob
 	}
 	enabled := true
 	if req.Enabled != nil {
