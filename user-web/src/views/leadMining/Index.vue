@@ -149,7 +149,8 @@ function parseList(text) {
 async function loadConfig() {
   try {
     const res = await getLeadMiningConfig()
-    const data = res?.data?.data || res?.data || {}
+    // 拦截器已拆包：config 直接回配置对象，按信封取 .data 只会读到 undefined
+    const data = res?.data?.data || res?.data || res || {}
     form.enabled = !!data.enabled
     form.channels = data.channels || []
     form.requirement = data.requirement || ''

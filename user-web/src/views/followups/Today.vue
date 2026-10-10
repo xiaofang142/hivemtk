@@ -428,9 +428,10 @@ const reload = async () => {
       followupApi.pending(ownerId),
       followupApi.overdue(ownerId)
     ])
-    todayList.value = today?.data?.list || []
-    pendingList.value = pending?.data?.list || []
-    overdueList.value = overdue?.data?.list || []
+    // 拦截器已拆包：followups 列表端点直接回 {list,...}，按信封取 .data 只会读到 undefined
+    todayList.value = today?.list || today?.data?.list || []
+    pendingList.value = pending?.list || pending?.data?.list || []
+    overdueList.value = overdue?.list || overdue?.data?.list || []
     await locateRouteId()
   } catch (err) {
     const e = describeError(err)

@@ -65,7 +65,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!loadingStats && !statsVersions.length" :description="$t('暂无曝光数据，等待话术被使用后自动记录')" />
+        <el-empty v-if="!loadingStats && !statsVersions.length" description="暂无曝光数据，等待话术被使用后自动记录" />
       </el-card>
     </template>
     <el-empty v-else :description="$t('请先选择一个话术')" />
@@ -91,7 +91,8 @@ const statsVersions = computed(() => stats.value.versions || []);
 const loadScripts = async () => {
   try {
     const res = await getScriptTemplateList({ page: 1, pageSize: 100 });
-    const list = res?.data?.list || res?.data || [];
+    // 拦截器已拆包：/api/scripts 直接回 {list,total,...}，按信封取 .data 只会读到 undefined
+    const list = res?.list || res?.data?.list || [];
     scripts.value = list.map((s) => ({ id: s.id, name: s.name || s.title }));
   } catch (e) {
     scripts.value = [];
@@ -102,7 +103,7 @@ const loadVersions = async () => {
   loadingVersions.value = true;
   try {
     const res = await scriptAbApi.listVersions(scriptId.value);
-    versions.value = res?.data?.list || [];
+    versions.value = res?.list ?? [];
   } catch (e) {
     versions.value = [];
   } finally {
@@ -114,7 +115,7 @@ const loadStats = async () => {
   loadingStats.value = true;
   try {
     const res = await scriptAbApi.getAbStats(scriptId.value);
-    stats.value = res?.data || {};
+    stats.value = res?.data ?? res ?? {};
     if (stats.value.config) {
       abForm.value = {
         enabled: !!stats.value.config.enabled,

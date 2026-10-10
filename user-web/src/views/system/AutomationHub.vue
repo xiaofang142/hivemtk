@@ -145,16 +145,19 @@ const loadAll = async () => {
     http.get('/api/webhook-subscriptions').catch(() => null),
     http.get('/api/report-subscriptions').catch(() => null)
   ])
-  if (ohRes?.data) oh.value = { ...oh.value, ...ohRes.data }
-  macros.value = macroRes?.data?.list || []
-  hooks.value = hookRes?.data?.list || []
-  subs.value = subRes?.data?.list || []
+  // 响应拦截器已把 {code,data} 拆包：/api/office-hours 直接回配置对象，
+  // 列表端点直接回 {list,total}。按信封再取 .data 只会读到 undefined。
+  const ohData = ohRes?.data ?? ohRes
+  if (ohData) oh.value = { ...oh.value, ...ohData }
+  macros.value = macroRes?.list ?? []
+  hooks.value = hookRes?.list ?? []
+  subs.value = subRes?.list ?? []
   loadPerf()
 }
 
 const loadPerf = async () => {
   const res = await http.get(`/api/analytics/ai-performance?days=${perfDays.value}`).catch(() => null)
-  perf.value = res?.data || null
+  perf.value = res?.data ?? res ?? null
 }
 
 const saveOH = async () => {
@@ -184,7 +187,7 @@ const delMacro = async (row) => {
 const addHook = async () => {
   try {
     const res = await http.post('/api/webhook-subscriptions', newHook.value)
-    ElMessageBox.alert(`订阅创建成功。签名密钥（仅显示一次，用于校验推送）：\n${res?.data?.secret || ''}`, '请保存 Secret')
+    ElMessageBox.alert(`订阅创建成功。签名密钥（仅显示一次，用于校验推送）：\n${res?.data?.secret || res?.secret || ''}`, '请保存 Secret')
     loadAll()
   } catch (e) { ElMessage.error(e?.message || '创建失败') }
 }
@@ -216,7 +219,7 @@ const delSub = async (row) => {
 const sendNow = async () => {
   try {
     const res = await http.post('/api/report-subscriptions/send-now')
-    ElMessage.success(`已发送 ${res?.data?.sent ?? 0} 份（未配置 SMTP 时会失败并记录日志）`)
+    ElMessage.success(`已发送 ${res?.data?.sent ?? res?.sent ?? 0} 份（未配置 SMTP 时会失败并记录日志）`)
   } catch (e) { ElMessage.error(e?.message || '发送失败') }
 }
 
