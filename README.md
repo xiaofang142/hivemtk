@@ -262,9 +262,13 @@ hivemtk/                        # 用户端仓库
 
 > 扫码添加作者微信,或搜索微信号 `xiao142000` 直接添加。
 
-| 微信二维码 | 微信号 |
-|---|---|
-| ![作者微信二维码](docs/wechat-qr.jpg) | `xiao142000` |
+<div align="center">
+
+![作者微信二维码](docs/wechat-qr.jpg)
+
+**微信号:`xiao142000`**
+
+</div>
 
 **镜像仓库**:Gitee 主仓库 [gitee.com/xhpmayun/hivemtk](https://gitee.com/xhpmayun/hivemtk)(国内推荐,下载更快)· GitHub 镜像 [github.com/xiaofang142/hivemtk](https://github.com/xiaofang142/hivemtk)(Actions 定时同步)
 
