@@ -206,13 +206,17 @@ func TestDefaultParamDefsCount(t *testing.T) {
 }
 
 // 空默认值的豁免面钉成一条具名清单，而不是"凡是 string 都放行"：
-// 今天只有一格真的没有有意义的默认（lead.industry_profile 是一段行业自由描述，
-// 空 = 未填行业画像，读侧本来就按未配置处理）。清单有上界，新增一格就得在这里
-// 解释一次，否则这道门对自由文本的放行会变成又一个"改了没人读"的入口。
+// 新增一格就得在这里解释一次，否则这道门对自由文本的放行会变成又一个"改了没人读"的入口。
+//
+// 2026-10-10：清单现在是**空的**。曾经里面挂着 lead.industry_profile（"一段行业自由描述，
+// 空 = 未填行业画像"），但 PR#40 顺手给它填了一个默认值（"通用零售/服务咨询：…"），
+// 于是这条豁免变成了谎话——而本用例另一半断言"豁免清单里的每一条现在必须真的还是空默认"
+// 当场就红了。这正是 ratchet 该干的事：豁免面只允许被**主动撤掉**，不允许悄悄失效。
+//
+// 保留空清单而不是删掉整个用例：上面那个 for 还在负责"出现新的空默认就报警"，
+// 删掉这道门等于把"空默认"这件事重新变成没人看管的入口。
 func TestDefaultParamDefsEmptyDefaultRatchet(t *testing.T) {
-	allowedEmptyDefault := map[string]bool{
-		"lead.industry_profile": true,
-	}
+	allowedEmptyDefault := map[string]bool{}
 	seen := map[string]bool{}
 	for _, d := range DefaultParamDefs() {
 		if d.DefaultValue != "" {
