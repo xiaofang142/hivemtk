@@ -15,7 +15,7 @@ type RagSession struct {
 
 type RagMessage struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	SessionID string    `gorm:"size:120" json:"session_id"`
+	SessionID string    `gorm:"size:120;index" json:"session_id"`
 	MessageID string    `gorm:"size:64"`
 	Role      string    `gorm:"size:20"`
 	Content   string    `gorm:"type:text"`

@@ -65,8 +65,13 @@ func TestWebVitalRecord_RatingAcceptsEveryEnumValue(t *testing.T) {
 	}
 }
 
-// TestWebVitalRecord_OtherColumnsUnchanged 确认这次只动了 Rating，
-// 避免将来有人顺手改其它列时无感知。
+// TestWebVitalRecord_OtherColumnsUnchanged 钉住"除 Rating 以外的那几列今天仍是这个宽度"。
+//
+// 它量的是**当前宽度**，不是"永远不许变"：谁改了列宽，这一格必须红，
+// 然后由改的人把期望值重订一次（并在下面写明为什么变），而不是让它悄悄绿。
+// SessionID 那一行在 2026-10-10 从 64 重订到 120——40a19abb 把全仓 session_id 一族的
+// 字符串列一起放宽到 120，而 AutoMigrate 只加不减，库里已经是 120，
+// 把标签改回 64 会让"全新装库"和"升级库"两边形状不一致，所以这里跟着读数走。
 func TestWebVitalRecord_OtherColumnsUnchanged(t *testing.T) {
 	for _, c := range []struct {
 		field string
@@ -74,7 +79,7 @@ func TestWebVitalRecord_OtherColumnsUnchanged(t *testing.T) {
 	}{
 		{"Metric", 16},
 		{"Page", 300},
-		{"SessionID", 64},
+		{"SessionID", 120},
 		{"UserAgent", 300},
 	} {
 		if got := varcharWidthOf(t, c.field); got != c.want {
