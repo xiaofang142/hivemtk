@@ -127,11 +127,13 @@ func TestFallbackNilDB(t *testing.T) {
 // 该进 DefaultParamDefs()，而不是"顺手多加了一个"）。
 // 2026-09-20（T-P3-03）：+1 = `human_task.handoff_first_response_minutes`。
 // 2026-09-28：+2 = `bridge.outbound_orphan_ttl` / `bridge.outbound_orphan_dry_run`（桥接出站孤儿结算的阈值与"只报数"闸门）。
-// 2026-10-09：+1 = `cache.faq_answer_enabled`（FAQ 语义答案缓存开关，装配点 app/faq_cache_wiring.go）。
 //
-//	这条是被漏掉的锚点：种子里已加、读点已接，但本锚点还停在 114，
-//	于是 TestDefaultParamDefsCount 一进仓库就红——"登记了但没人看见"的一种。
-const defaultParamDefsWant = 115
+// 2026-10-10：回退到 114。曾按工作区里那条尚未入库的 `cache.faq_answer_enabled`
+// （种子 + app/faq_cache_wiring.go 都还在途）把本锚点顶到 115，结果 HEAD 上的
+// `config_param_seeds.go` 只有 114 条，干净检出直接红——把别人在途的条数算进
+// 自己的锚点，等于替那条尚未发生的提交背书。种子入库时门会在这里亮一次，
+// 那正是这个锚点存在的意义：条数变化必须有人看见，而不是悄悄漂过去。
+const defaultParamDefsWant = 114
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
@@ -148,24 +150,19 @@ func TestDefaultParamDefsCount(t *testing.T) {
 	t.Logf("✅ %d default defs validated", defaultParamDefsWant)
 }
 
-// 参数 key 必须在**全表**唯一，而不只是在各自 group 内唯一。
-//
-// 为什么不是显然的要求：config_params 上那条名字看起来像复合唯一的索引
-// idx_group_key 实际是 `UNIQUE (key)` 单列（model 里 Group 只带普通 index，
-// uniqueIndex 挂在 Key 一个字段上，实测 user_db 的 indexdef 为
-// `CREATE UNIQUE INDEX idx_group_key ON public.config_params USING btree (key)`）。
-// 于是两个 group 用同名 key 时，SeedConfigParams 的第二条 Create 撞唯一索引，
-// 而它只 logger.Warnf 后 continue —— 表现是"这条参数在控制台上永远不存在"，
-// 读侧一路走代码里的 fallback，运维改不动、也没人报警。
-// 本守卫把这条隐性约束变成显式红：新增参数撞名即在 CI 拦住，而不是留一条静默 warn。
 // 参数唯一性的口径是 **(param_group, key) 复合**，不是单列 key。
 //
-// 库侧事实：migration v3.47.0 已把 idx_group_key 从 `UNIQUE (key)` 重建为
-// `UNIQUE (param_group, key)`，模型标签（Group priority:1 / Key priority:2）与之��致。
-// 所以跨 group 同名 key 是**合法**的两条参数行，`bridge.max_tokens` 与
-// `misc.max_tokens` 互不冲突——这正是复合唯一换来的东西（key 命名不必再背 group 前缀）。
+// 历史坑：model 上那条名字看起来像复合唯一的索引 idx_group_key，在存量库里实际是
+// `UNIQUE (key)` 单列。两个 group 用同名 key 时，SeedConfigParams 的第二条 Create
+// 撞唯一索引，而它只 logger.Warnf 后 continue —— 表现是"这条参数在控制台上永远
+// 不存在"，读侧一路走代码里的 fallback，运维改不动、也没人报警。
 //
-// 本守卫改成盯复合唯一本身：组内重名才是真的坏数据，
+// 现已闭环：migration v3.47.0 把 idx_group_key 从 `UNIQUE (key)` 重建为
+// `UNIQUE (param_group, key)`，模型标签（Group priority:1 / Key priority:2）与之���致，
+// 种子插入失败也不再静默（SeedConfigParams 汇总成 error 返回）。跨 group 同名 key
+// 现在是**合法**的两条参数行，`bridge.max_tokens` 与 `misc.max_tokens` 互不冲突。
+//
+// 所以本守卫改成盯复合唯一本身：组内重名才是真的坏数据，
 // 因为 GetByGroupKey / UpdateValue 都按 (group,key) 定位，重名会让更新打到错误的那一行。
 func TestDefaultParamDefsGroupKeyUnique(t *testing.T) {
 	seen := make(map[string]string, len(DefaultParamDefs()))
