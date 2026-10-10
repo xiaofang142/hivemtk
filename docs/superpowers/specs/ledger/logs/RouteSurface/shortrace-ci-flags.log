@@ -334,3 +334,5 @@
 --- PASS: TestE2EInventoryMatchesLiveRoutes (0.34s)
 PASS
 ok  	hivemtk-user/internal/router	7.971s
+
+调用方补记（2026-10-11，非装架轮次）：本件是人工执行的 `go test -race`（带 CI 口径标志）输出重定向件，不由 scripts/mut_route_surface.py 装架产生 ⇒ 没有注码/还原对账，也没有克隆 HEAD 身份行。跑于 2026-10-11 00:35:11（+08:00）：当时仓库 HEAD＝7437684f，本泳道路由守卫的改动（后随 5c778881 入库）仍留在工作树未提交；同一批字节的装架读数见同目录 `20261011-000025/`（那一轮的 00-run.log 自带基线字节行）。
