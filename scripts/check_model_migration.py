@@ -58,7 +58,15 @@ ALLOWLIST = {
 SKIP_DIRS = {'vendor', 'node_modules', '.git', 'dist', 'build'}
 
 TYPE_STRUCT = re.compile(r'^type\s+(\w+)\s+struct\s*\{', re.M)
-TABLE_NAME = re.compile(r'func\s+\(\s*(?:\w+|\*?\w+)\s*\*?(\w+)\s*\)\s*TableName\s*\(')
+# TableName() 的接收者有两种合法写法：具名 `func (s T) TableName()` /
+# `func (s *T) TableName()`，以及匿名 `func (T) TableName()` / `func (*T) TableName()`。
+# ⚠️ 2026-10-10：原正则写成 `func\s+\(\s*(?:\w+|\*?\w+)\s*\*?(\w+)\s*\)`，**只认具名接收者**：
+# 遇到 `func (MsgHourlySummary) TableName()` 时，那个可选的名字组先把类型名吃掉，
+# 后面要求再有一个 \w+，于是整条不匹配 ⇒ 类型名进不了 table_names。
+# 后果不是"少报一个名字"，而是**整车漏检**：MsgHourlySummary 既没有 primaryKey、
+# TableName() 又没被认出来，直接被 collect_models() 判为"不是模型候选"，
+# 闸门报 ✅，而现网 msg_hourly_summary 表根本不存在（hub_summary_agg_cron 每轮 42P01 报错）。
+TABLE_NAME = re.compile(r'func\s+\(\s*(?:\w+\s+)?\*?(\w+)\s*\)\s*TableName\s*\(')
 REGISTERED_QUALIFIED = re.compile(r'&(\w+)\.(\w+)\{\}')
 REGISTERED_BARE = re.compile(r'&(\w+)\{\}')
 
@@ -166,9 +174,58 @@ def collect_registered():
     return names
 
 
+def selftest():
+    """自检：TableName() 的四种接收者写法都必须被认出来，且真实仓库里
+    「没有 primaryKey + 匿名接收者 TableName」的模型必须进入候选集合。
+
+    为什么要有这一段（2026-10-10 事故）：
+      TABLE_NAME 旧正则只认具名接收者，`func (MsgHourlySummary) TableName()` 认不出来；
+      而 MsgHourlySummary 又没有 primaryKey ⇒ 两条候选判据同时落空 ⇒ 它**根本不是候选**，
+      闸门报 ✅。现网后果：msg_hourly_summary 表从未建出，hub_summary_agg_cron 每轮
+      `relation ... does not exist (42P01)`，6h 内报 68 次，而闸门一直绿。
+      所以"闸门绿"本身需要一条判据来守——就是这里。
+    """
+    failures = []
+    cases = [
+        ('func (R) TableName() string { return "t" }', 'R'),
+        ('func (r R) TableName() string { return "t" }', 'R'),
+        ('func (r *R) TableName() string { return "t" }', 'R'),
+        ('func (*R) TableName() string { return "t" }', 'R'),
+        ('func (*R) TableName() string {\n\treturn "t"\n}', 'R'),
+    ]
+    for src, want in cases:
+        got = TABLE_NAME.findall(src)
+        if got != [want]:
+            failures.append("TABLE_NAME 认不出 %r（得到 %r，期望 ['%s']）" % (src, got, want))
+
+    # 真实仓库回归钉子：匿名接收者 + 无 primaryKey 的模型必须进候选
+    if os.path.isfile(MIGRATE):
+        models = collect_models()
+        for name in ('MsgHourlySummary', 'EmailJobMetric', 'EmailTrackingEvent', 'SmsJobMetric'):
+            if name not in models:
+                failures.append(
+                    "%s 未进入模型候选集合（匿名接收者 TableName / 无 primaryKey 的漏检回归）" % name)
+    return failures
+
+
 def main():
     if not os.path.isfile(MIGRATE):
         print("❌ 找不到 %s" % MIGRATE)
+        return 2
+
+    st = selftest()
+    if '--selftest' in sys.argv:
+        if st:
+            print("❌ 自检失败：")
+            for f in st:
+                print("   " + f)
+            return 1
+        print("✅ 自检通过（TableName 四种接收者写法 + 4 个无 primaryKey 模型均被识别为候选）")
+        return 0
+    if st:
+        print("❌ 本闸门自检失败 —— 读数不可信，先修闸门再看下面的结论：")
+        for f in st:
+            print("   " + f)
         return 2
 
     models = collect_models()

@@ -104,7 +104,11 @@ const doCreate = async () => {
   creating.value = true
   try {
     const res = await mcpCredentialApi.create({ name: createName.value })
-    issued.value = res?.data ?? {}
+    // 注意：@/utils/request 的响应拦截器已经把 {code,data} 里的 data 拆出来了，
+    // res 本身就是 {id, client_id, api_key, api_hint}。这里再写 res?.data ?? {} 会
+    // 在 res.data 为 undefined 时兜成空对象 ⇒ 弹窗与「复制并关闭」印出
+    // "Client ID: undefined / API Key: undefined"（真实报障）。保留 res 兜底。
+    issued.value = res?.data ?? res ?? {}
     createVisible.value = false
     issuedVisible.value = true
     await load()

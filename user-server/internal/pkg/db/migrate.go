@@ -313,6 +313,23 @@ func allModels() []any {
 		//   - TraceEvent        （internal/aiagent/llm，见该文件 init）
 		// -------------------------------------------------------------------
 		&model.AggregationWatermark{},
+		// -------------------------------------------------------------------
+		// 2026-10-10：以下 4 个模型长期漏登记，由 scripts/check_model_migration.py
+		// 修好「匿名接收者 TableName() 认不出来」的漏检后一次性补回。
+		//
+		// 现网实证：msg_hourly_summary 在生产库**不存在**，hub_summary_agg_cron 每轮
+		// 都以 `ERROR: relation "msg_hourly_summary" does not exist (SQLSTATE 42P01)`
+		// 失败（实测 6h 内 68 次）——正是"没登记就永远建不出表、而写入侧把错误吞掉"
+		// 这条已知形态。email/sms 三张表在**当前**这套库里有（早期 SQL DDL 建的），
+		// 但全新部署不会建 ⇒ 属于同一类潜伏缺口。
+		//
+		// 建表形状与 ON CONFLICT 目标一致：msg_hourly_summary 的
+		// uniqueIndex:uni_mhs_bucket_dim(hour_bucket, merchant_id, platform)
+		// 正好是 repository/msg_hourly_summary.go 里 upsertIncrementSQL 的冲突键。
+		&model.EmailJobMetric{},
+		&model.EmailTrackingEvent{},
+		&model.MsgHourlySummary{},
+		&model.SmsJobMetric{},
 		&model.AlertHistory{},
 		&model.AlertRule{},
 		// ApprovalRequest（表 approval_requests）：T-P3-01 / N-4 审批检查点，
