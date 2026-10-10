@@ -94,3 +94,22 @@ WECOM_ALLOW_OUTBOUND	待补文档（第三十五轮登记为债）；读取点 u
 WECOM_DISABLE_OUTBOUND	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/wecom_integration.go
 WHATSAPP_FALLBACK_TEMPLATE	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/webhook_outbound.go
 WHATSAPP_FALLBACK_TEMPLATE_LANG	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/webhook_outbound.go
+DEEPSEEK_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+DOUBAO_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+ERNIE_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+GEO_BATCH	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+GEO_DB_DSN	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+GEO_SEED_DSN	待补文档（第36轮登记为债）；读取点 user-server/cmd/seedkw/main.go
+GOLDEN_DIR	待补文档（第36轮登记为债）；读取点 user-server/internal/pkg/goldentest/goldentest.go
+HIVE_MTK_HOST_TOKEN	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
+HIVE_MTK_HOST_VERSION	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
+HIVE_MTK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
+HIVE_MTK_WS_URL	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
+K_TRACE_LLM_REFINE	待补文档（第36轮登记为债）；读取点 user-server/internal/service/lead_intent_llm.go
+MOCK_AI_DELAY_MS	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go
+MOCK_AI_REPLY	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go
+MOCK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go
+PERF_PASSWORD	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
+PERF_USERNAME	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
+QWEN_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+UPDATE_GOLDEN	黄金测试刷新开关（internal/pkg/goldentest，仅测试进程读取）
