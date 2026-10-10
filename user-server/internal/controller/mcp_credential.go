@@ -2,7 +2,6 @@ package controller
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"strings"
@@ -102,12 +101,11 @@ func CreateMCPCredential(ctx *gin.Context) {
 		// 显式 no_expiry=true 或给了绝对时间都直接用（给了绝对时间时 ttl_days 忽略）。
 		expiresAt = req.ExpiresAt
 	}
-	apiKey := "wgk_" + randHex(16)
-	sum := sha256.Sum256([]byte(apiKey))
+	// 1:N 之后凭证行不再自带钥匙：先落凭证，再经 IssueKey 签发第一把钥匙
+	// （sha256+密文双轨入 mcp_credential_keys，hash 同时镜像进凭证 legacy 列）。
 	cred := model.MCPCredential{
 		ClientID:    clientID,
 		Name:        req.Name,
-		APIKeyHash:  hex.EncodeToString(sum[:]),
 		Enabled:     true,
 		OwnerUserID: req.OwnerUserID,
 		ExpiresAt:   expiresAt,
@@ -116,10 +114,21 @@ func CreateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, "创建失败: "+err.Error())
 		return
 	}
+	_, apiKey, err := mcpKeySvc().IssueKey(ctx.Request.Context(), cred.ID, "初始密钥", expiresAt)
+	if err != nil {
+		// 钥匙没签出来的凭证是一把打不开的锁：回滚删除，保持"签发成功=钥匙可用"的原子性。
+		_ = mcpAdminSvc().Delete(ctx.Request.Context(), cred.ID)
+		response.Error(ctx, http.StatusInternalServerError, "签发钥匙失败: "+err.Error())
+		return
+	}
+	mcpWriteAdminAudit(ctx, model.MCPAuditActionCredentialCreate, "credential", cred.ID, &cred.ID, clientID, gin.H{
+		"name": cred.Name, "key_name": "初始密钥", "expires_at": expiresAt, "owner_user_id": req.OwnerUserID,
+	})
+	middleware.InvalidateMCPCredentialCache()
 	response.Success(ctx, gin.H{
 		"id": cred.ID, "client_id": clientID, "name": cred.Name,
-		"api_key":  apiKey, // 明文仅此一次
-		"api_hint": "API Key 只显示这一次，请立即保存",
+		"api_key":  apiKey, // 明文仅此一次（此后可在钥匙列表 reveal）
+		"api_hint": "API Key 明文只完整显示这一次，请立即保存；之后可在钥匙列表查看/复制",
 	}, "创建成功")
 }
 
@@ -188,6 +197,9 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+	mcpWriteAdminAudit(ctx, model.MCPAuditActionCredentialUpdate, "credential", id, &id, "", gin.H{
+		"fields": updates,
+	})
 	middleware.InvalidateMCPCredentialCache()
 	response.Success(ctx, gin.H{"ok": true}, "已更新")
 }
@@ -199,14 +211,27 @@ func DeleteMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效 id")
 		return
 	}
+	// 审计标签尽力取（db 未装配时 keysvc 未就绪，跳过即可——删除本身由
+	// mcpAdminSvc 的 repo 报错兜底，不能让标签查询的空服务 panic 掉主流程）。
+	var clientID string
+	if ks := mcpKeySvc(); ks.Ready() {
+		if cred, err := ks.GetCredential(ctx.Request.Context(), id); err == nil {
+			clientID = cred.ClientID
+		}
+	}
 	if err := mcpAdminSvc().Delete(ctx.Request.Context(), id); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+	mcpWriteAdminAudit(ctx, model.MCPAuditActionCredentialDelete, "credential", id, &id, clientID, gin.H{
+		"client_id": clientID, "cascade_keys": true,
+	})
 	middleware.InvalidateMCPCredentialCache()
 	response.Success(ctx, gin.H{"ok": true}, "已删除")
 }
 
+// randHex 随机 hex（client_id 自动生成的最后一个使用者；API Key 明文生成
+// 已随签发职责移入 service.generateMCPKeyPlaintext，与 hash/密文双轨落库同事务语义）。
 func randHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)

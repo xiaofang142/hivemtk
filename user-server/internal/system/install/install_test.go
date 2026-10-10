@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -309,7 +310,9 @@ func TestSaveLeavesNoTempFileAndKeepsMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save 后读不到文件：%v", err)
 	}
-	if info.Mode().Perm() != 0o644 {
+	// 0644 判据只在 Unix 成立：Windows 的 Mode().Perm() 恒报 666（chmod 只翻只读位），
+	// 生产代码 Save 写 0644 的意图由 Unix CI 兑现。
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o644 {
 		t.Errorf("install.lock 权限应为 0644，实得 %v", info.Mode().Perm())
 	}
 	readBackFromDisk(t, path)

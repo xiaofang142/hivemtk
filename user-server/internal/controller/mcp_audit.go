@@ -23,9 +23,10 @@ import (
 // mcpAuditAdminSvc 审计服务句柄（controller 可测试替换）。
 var mcpAuditAdminSvc = func() *service.MCPCallAuditAdminService { return service.NewMCPCallAuditAdminService() }
 
-// ListMCPCallAudits GET /api/manage/mcp/audits?client_id=&tool=&allowed=&page=&size=
+// ListMCPCallAudits GET /api/manage/mcp/audits?client_id=&tool=&allowed=&event=&page=&size=
 //
 // allowed 三态：缺省=不限；"1"/"0" 分别只查允许/被拒（值与 Allowed 列一致）。
+// event 过滤：call（tools/call）/ list（tools/list）/ auth（鉴权失败）。
 func ListMCPCallAudits(ctx *gin.Context) {
 	svc := mcpAuditAdminSvc()
 	if svc == nil || !svc.Ready() {
@@ -44,28 +45,35 @@ func ListMCPCallAudits(ctx *gin.Context) {
 		allowed = &v
 	}
 	rows, total, err := svc.List(ctx.Request.Context(),
-		ctx.Query("client_id"), ctx.Query("tool"), allowed, page, size)
+		ctx.Query("client_id"), ctx.Query("tool"), allowed, ctx.Query("event"), page, size)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "查询审计失败: "+err.Error())
 		return
 	}
 	type row struct {
-		ID           uint       `json:"id"`
-		ClientID     string     `json:"client_id"`
-		CredentialID *uint      `json:"credential_id"`
-		Method       string     `json:"method"`
-		Tool         string     `json:"tool"`
-		Allowed      bool       `json:"allowed"`
-		OK           bool       `json:"ok"`
-		ErrorMsg     string     `json:"error_msg"`
-		ArgsHash     string     `json:"args_hash"`
-		LatencyMS    int64      `json:"latency_ms"`
-		IP           string     `json:"ip"`
-		CreatedAt    time.Time  `json:"created_at"`
+		ID           uint      `json:"id"`
+		ClientID     string    `json:"client_id"`
+		CredentialID *uint     `json:"credential_id"`
+		KeyID        *uint     `json:"key_id"`
+		Event        string    `json:"event"`
+		Method       string    `json:"method"`
+		Tool         string    `json:"tool"`
+		Allowed      bool      `json:"allowed"`
+		OK           bool      `json:"ok"`
+		ErrorMsg     string    `json:"error_msg"`
+		ArgsHash     string    `json:"args_hash"`
+		LatencyMS    int64     `json:"latency_ms"`
+		IP           string    `json:"ip"`
+		CreatedAt    time.Time `json:"created_at"`
 	}
 	out := make([]row, 0, len(rows))
 	for _, r := range rows {
+		event := r.Event
+		if event == "" {
+			event = "call" // 存量行（加列前）按原语义归 call
+		}
 		out = append(out, row{ID: r.ID, ClientID: r.ClientID, CredentialID: r.CredentialID,
+			KeyID: r.KeyID, Event: event,
 			Method: r.Method, Tool: r.Tool, Allowed: r.Allowed, OK: r.OK,
 			ErrorMsg: r.ErrorMsg, ArgsHash: r.ArgsHash, LatencyMS: r.LatencyMS,
 			IP: r.IP, CreatedAt: r.CreatedAt})
@@ -158,6 +166,9 @@ func CreateMCPSkill(ctx *gin.Context) {
 		return
 	}
 	syncCredentialScope(ctx.Request.Context(), req.CredentialID, req.AllowedTools)
+	mcpWriteAdminAudit(ctx, model.MCPAuditActionSkillCreate, "skill", row.ID, req.CredentialID, row.Name, gin.H{
+		"allowed_tools": req.AllowedTools, "doc_url": req.DocURL,
+	})
 	response.Success(ctx, gin.H{"id": row.ID, "name": row.Name}, "创建成功")
 }
 
@@ -226,7 +237,14 @@ func UpdateMCPSkill(ctx *gin.Context) {
 		cur, err := svc.GetByID(ctx.Request.Context(), id)
 		if err == nil {
 			syncCredentialScope(ctx.Request.Context(), cur.CredentialID, *req.AllowedTools)
+			mcpWriteAdminAudit(ctx, model.MCPAuditActionSkillUpdate, "skill", id, cur.CredentialID, cur.Name, gin.H{
+				"fields": updates,
+			})
 		}
+	} else {
+		mcpWriteAdminAudit(ctx, model.MCPAuditActionSkillUpdate, "skill", id, nil, "", gin.H{
+			"fields": updates,
+		})
 	}
 	response.Success(ctx, gin.H{"ok": true}, "已更新")
 }
@@ -247,6 +265,14 @@ func DeleteMCPSkill(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, "删除 Skill 失败: "+err.Error())
 		return
 	}
+	// 删除后行已不在，标签从删除前的快照取（拿不到就空着，id 足够对账）。
+	label := ""
+	var credID *uint
+	if row, err := svc.GetByID(ctx.Request.Context(), id); err == nil {
+		label = row.Name
+		credID = row.CredentialID
+	}
+	mcpWriteAdminAudit(ctx, model.MCPAuditActionSkillDelete, "skill", id, credID, label, gin.H{})
 	response.Success(ctx, gin.H{"ok": true}, "已删除")
 }
 

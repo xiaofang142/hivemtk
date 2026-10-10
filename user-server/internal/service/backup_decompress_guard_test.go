@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"hivemtk-user/internal/storage"
@@ -71,14 +72,25 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 
 	_, restoreTmp := storage.BackupSource()
 
-	for _, rel := range []string{"data.json", "b..c.txt", "d/nested.txt"} {
-		p := filepath.Join(restoreTmp, rel)
-		st, err := os.Stat(p)
-		if err != nil {
-			t.Fatalf("应解出 %s: %v", p, err)
+	// 权限位判据只在 Unix 上成立：Windows 的 Mode().Perm() 恒报 666/777，
+	// chmod 只能翻只读位，在这上面断言就是拿平台差异当 bug。
+	nameChecks := []string{"data.json", "b..c.txt", "d/nested.txt"}
+	if runtime.GOOS == "windows" {
+		for _, rel := range nameChecks {
+			if _, err := os.Stat(filepath.Join(restoreTmp, rel)); err != nil {
+				t.Errorf("应解出 %s: %v", rel, err)
+			}
 		}
-		if mode := st.Mode().Perm(); mode != 0o600 {
-			t.Errorf("%s 权限 = %o, want 600", p, mode)
+	} else {
+		for _, rel := range nameChecks {
+			p := filepath.Join(restoreTmp, rel)
+			st, err := os.Stat(p)
+			if err != nil {
+				t.Fatalf("应解出 %s: %v", p, err)
+			}
+			if mode := st.Mode().Perm(); mode != 0o600 {
+				t.Errorf("%s 权限 = %o, want 600", p, mode)
+			}
 		}
 	}
 	// 目录条目须落在暂存根内（旧实现漏了前缀，会在 CWD 造出散目录）
@@ -88,7 +100,9 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 	if _, err := os.Stat("d"); !os.IsNotExist(err) {
 		t.Error("目录条目泄漏到暂存根之外")
 	}
-	if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
-		t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
+			t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
+		}
 	}
 }

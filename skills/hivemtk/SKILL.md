@@ -10,7 +10,9 @@ description: HiveMTK/WeGEO 私域营销中台的 MCP 工具入口——查客户
 ## 接入
 
 1. 管理员在 HiveMTK 后台签发凭证：`POST /api/mcp/credentials {"name":"..."}`，
-   得到 `client_id`（`mcp-` 开头）与 `api_key`（`wgk_` 开头，**只显示一次**）。
+   得到 `client_id`（`mcp-` 开头）与 `api_key`（`wgk_` 开头，**响应里只完整出现一次**；
+   之后管理员可在后台「密钥」列表重新查看/复制，每次查看都会记入管理审计——
+   但仍应立即妥善保存，同一 Client ID 可签发多把 Key 做轮换）。
 2. 保存到 `~/.hivemtk/skill.json`：
    ```json
    {"client_id":"mcp-xxxx","api_key":"wgk_xxxx","server":"https://api.xjznpt.com"}

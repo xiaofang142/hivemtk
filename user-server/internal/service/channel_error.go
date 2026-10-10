@@ -292,6 +292,8 @@ func classifyChannelError(raw string) *ChannelError {
 
 	case ce.StatusCode >= 500,
 		strings.Contains(lower, "connection refused"),
+		// Windows 的 WSAECONNREFUSED 文案（本机拨号错误在 Windows 开发机上很常见）
+		strings.Contains(lower, "actively refused"),
 		strings.Contains(lower, "connection reset"),
 		strings.Contains(lower, "context deadline exceeded"),
 		strings.Contains(lower, "timeout"),

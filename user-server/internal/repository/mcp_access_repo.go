@@ -35,8 +35,8 @@ func (r *MCPCallAuditRepo) Create(ctx context.Context, row *model.MCPCallAudit) 
 	return r.db.WithContext(ctx).Create(row).Error
 }
 
-// List 分页查询。过滤参数均可为空（不限定）。
-func (r *MCPCallAuditRepo) List(ctx context.Context, clientID, tool string, allowed *bool, page, size int) ([]model.MCPCallAudit, int64, error) {
+// List 分页查询。过滤参数均可为空（不限定）；event 空串=不限（call/list/auth）。
+func (r *MCPCallAuditRepo) List(ctx context.Context, clientID, tool string, allowed *bool, event string, page, size int) ([]model.MCPCallAudit, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -52,6 +52,9 @@ func (r *MCPCallAuditRepo) List(ctx context.Context, clientID, tool string, allo
 	}
 	if allowed != nil {
 		q = q.Where("allowed = ?", *allowed)
+	}
+	if event != "" {
+		q = q.Where("event = ?", event)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

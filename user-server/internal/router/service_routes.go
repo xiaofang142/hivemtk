@@ -242,6 +242,17 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.POST("/mcp/credentials", controller.CreateMCPCredential)
 		authPlainAdmin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
 		authPlainAdmin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
+		// 1:N 钥匙管理（2026-10-11）：Client ID 名下多把 API Key，各自 启用/禁用/停用/删除；
+		// reveal 是敏感 GET（明文查看），强制落 mcp_credential_audit_logs。
+		authPlainAdmin.GET("/mcp/credentials/:id/keys", controller.ListMCPCredentialKeys)
+		authPlainAdmin.POST("/mcp/credentials/:id/keys", controller.CreateMCPCredentialKey)
+		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/enable", controller.EnableMCPCredentialKey)
+		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/disable", controller.DisableMCPCredentialKey)
+		authPlainAdmin.POST("/mcp/credentials/:id/keys/:keyId/revoke", controller.RevokeMCPCredentialKey)
+		authPlainAdmin.GET("/mcp/credentials/:id/keys/:keyId/reveal", controller.RevealMCPCredentialKey)
+		authPlainAdmin.DELETE("/mcp/credentials/:id/keys/:keyId", controller.DeleteMCPCredentialKey)
+		// 管理面操作审计（凭证/钥匙/Skill 的增删改、状态流转、明文查看 reveal）。
+		authPlainAdmin.GET("/mcp/admin-audits", controller.ListMCPCredentialAuditLogs)
 		// MCP 调用审计与 Skill 注册表（2026-10-10）：凭证对的口径与上组一致
 		// （authPlainAdmin + AdminAuthMiddleware）。两项此前只有"签发了哪些凭证"，
 		// 现在补上"谁调了什么工具、成没成"与"有哪些 Skill、绑定哪把凭证"。

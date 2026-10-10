@@ -2,6 +2,7 @@ package ragcustomerservice
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -165,7 +166,14 @@ func TestUpdateSessionMetadataMerges(t *testing.T) {
 	if got.Metadata["stage"] != "quote" || got.Metadata["owner"] != "agent-1" {
 		t.Errorf("元数据未合并: %v", got.Metadata)
 	}
-	if !got.UpdatedAt.After(before) {
+	// Windows 墙钟粒度约 15.6ms：创建与两次更新常落在同一 tick，严格 After 会假红
+	//（本用例 0.00s 跑完即此因）。Windows 上退化为"不得回拨"；严格刷新判据由
+	// Unix CI 兑现——那里的 monotonic 时钟是纳秒级。
+	if runtime.GOOS == "windows" {
+		if got.UpdatedAt.Before(before) {
+			t.Error("更新元数据不应回拨 UpdatedAt")
+		}
+	} else if !got.UpdatedAt.After(before) {
 		t.Error("更新元数据应刷新 UpdatedAt")
 	}
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -141,6 +142,7 @@ func pairProbe() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{
 			"client_id":     c.GetString(MCPCtxClientID),
 			"credential_id": c.GetUint(MCPCtxCredentialID),
+			"key_id":        c.GetUint(MCPCtxKeyID),
 			"allowed":       c.GetString(MCPCtxAllowedTools),
 		})
 	})
@@ -174,10 +176,56 @@ func withCredSeam(t *testing.T, rows map[string]*model.MCPCredential) {
 		return nil, gorm.ErrRecordNotFound
 	}
 	t.Cleanup(func() { mcpCredLookup = old })
-	// 清缓存：上一条用例可能已把同名 clientID 缓存成 enabled=false，不清则新行永远走不到。
+	resetMCPCaches()
+}
+
+// withKeySeam 替换 1:N 钥匙链的三个 seam（key 查询 / 凭证查询 / 鉴权审计），
+// 并清空缓存与负缓存——同包用例共享进程，脏缓存是"换行不生效"的第一嫌疑人。
+// legacy seam 一并钉成"查无凭证"，让本组用例只走钥匙表路径。
+func withKeySeam(t *testing.T,
+	keysByHash map[string]*model.MCPCredentialKey,
+	credsByID map[uint]*model.MCPCredential,
+	authAudits *[]*model.MCPCallAudit) {
+	t.Helper()
+	oldKey := mcpKeyLookup
+	oldCredByID := mcpCredLookupByID
+	oldCred := mcpCredLookup
+	oldSink := mcpAuthAuditSink
+	mcpKeyLookup = func(_ context.Context, keyHash string) (*model.MCPCredentialKey, error) {
+		if key, ok := keysByHash[keyHash]; ok {
+			return key, nil
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
+	mcpCredLookupByID = func(_ context.Context, id uint) (*model.MCPCredential, error) {
+		if cred, ok := credsByID[id]; ok {
+			return cred, nil
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
+	mcpCredLookup = func(_ context.Context, _ string) (*model.MCPCredential, error) {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if authAudits != nil {
+		mcpAuthAuditSink = func(_ context.Context, row *model.MCPCallAudit) {
+			*authAudits = append(*authAudits, row)
+		}
+	}
+	t.Cleanup(func() {
+		mcpKeyLookup = oldKey
+		mcpCredLookupByID = oldCredByID
+		mcpCredLookup = oldCred
+		mcpAuthAuditSink = oldSink
+	})
+	resetMCPCaches()
+}
+
+// resetMCPCaches 清空钥匙/凭证缓存与 client_id 负缓存（用例间隔离的唯一正道）。
+func resetMCPCaches() {
 	mcpCredMu.Lock()
 	mcpCredCache = map[string]mcpCredCacheEntry{}
 	mcpCredMu.Unlock()
+	mcpCredNegPair = sync.Map{}
 }
 
 func TestMCPGuard_CredentialPair_ValidInjectsScope(t *testing.T) {
@@ -258,4 +306,123 @@ func TestMCPGuard_CredentialPair_NoExpiryStaysValid(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("无过期时间的存量凭证应保持可用，got %d body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+// =============================================================================
+// 1:N 钥匙表路径（2026-10-11）：多把钥匙各自的状态/过期独立生效，鉴权失败落审计
+// =============================================================================
+
+// keyFixture 构造一把钥匙行（hash 由明文 keyName 推导，与请求头里的 X-API-Key 对齐）。
+func keyFixture(id, credID uint, keyName, status string, expiresAt *time.Time) *model.MCPCredentialKey {
+	sum := sha256.Sum256([]byte(keyName))
+	return &model.MCPCredentialKey{
+		ID:           id,
+		CredentialID: credID,
+		Name:         "key-" + keyName,
+		KeyHash:      hex.EncodeToString(sum[:]),
+		Status:       status,
+		ExpiresAt:    expiresAt,
+	}
+}
+
+func TestMCPGuard_KeyTable_StatusesAndAudit(t *testing.T) {
+	fut := time.Now().Add(24 * time.Hour)
+	past := time.Now().Add(-time.Hour)
+	cred := credFixture(&fut, "customer.read")
+	cred.ID = 7
+
+	keys := map[string]*model.MCPCredentialKey{
+		hashOf("ka"): keyFixture(11, 7, "ka", model.MCPKeyStatusActive, nil),
+		hashOf("kb"): keyFixture(12, 7, "kb", model.MCPKeyStatusDisabled, nil),
+		hashOf("kc"): keyFixture(13, 7, "kc", model.MCPKeyStatusRevoked, nil),
+		hashOf("kd"): keyFixture(14, 7, "kd", model.MCPKeyStatusActive, &past),
+	}
+	var audits []*model.MCPCallAudit
+	withSeams(t, nil, nil)
+	withKeySeam(t, keys, map[uint]*model.MCPCredential{7: cred}, &audits)
+	r := pairProbe()
+
+	// ① active 钥匙放行，且 key_id 注入上下文（1:N 之后"哪把钥匙干的"全靠它对账）。
+	code, body := postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "ka"})
+	if code != http.StatusOK || !strings.Contains(body, `"key_id":11`) {
+		t.Errorf("active 钥匙应放行且 key_id=11，got code=%d body=%s", code, body)
+	}
+
+	// ② 禁用钥匙：401 且措辞点名"禁用"（与"无效"分开，运维下一步完全不同）。
+	code, body = postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "kb"})
+	if code != http.StatusUnauthorized || !strings.Contains(body, "禁用") {
+		t.Errorf("disabled 钥匙应 401 且点名禁用，got code=%d body=%s", code, body)
+	}
+
+	// ③ 吊销（终态）：401 且措辞点名"停用"。
+	code, body = postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "kc"})
+	if code != http.StatusUnauthorized || !strings.Contains(body, "停用") {
+		t.Errorf("revoked 钥匙应 401 且点名停用，got code=%d body=%s", code, body)
+	}
+
+	// ④ 钥匙级独立过期：钥匙状态 active 也会被 ExpiresAt 拦下。
+	code, body = postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "kd"})
+	if code != http.StatusUnauthorized || !strings.Contains(body, "过期") {
+		t.Errorf("过期钥匙应 401 且报过期，got code=%d body=%s", code, body)
+	}
+
+	// ⑤ 三次失败都要落 event=auth 审计行，且能对回钥匙 id。
+	if len(audits) != 3 {
+		t.Fatalf("三次失败应各落一条审计，got %d： %+v", len(audits), audits)
+	}
+	wantKeys := map[uint]bool{12: true, 13: true, 14: true}
+	for _, a := range audits {
+		if a.Event != "auth" || a.ClientID != "mcp-test-1" || a.OK {
+			t.Errorf("审计行口径错: %+v", a)
+		}
+		if a.KeyID == nil || !wantKeys[*a.KeyID] {
+			t.Errorf("审计行未对回钥匙 id: %+v", a)
+		}
+	}
+}
+
+func TestMCPGuard_KeyTable_UnknownKeyFallsToLegacy(t *testing.T) {
+	// 钥匙表未命中的钥匙落 legacy 兜底；legacy 也查无此凭证时按"无效"拒绝
+	// 并写负缓存（防同一 client_id 反复撞门）。
+	fut := time.Now().Add(24 * time.Hour)
+	var audits []*model.MCPCallAudit
+	withSeams(t, nil, nil)
+	withKeySeam(t, map[string]*model.MCPCredentialKey{}, map[uint]*model.MCPCredential{}, &audits)
+	withCredSeam(t, map[string]*model.MCPCredential{"mcp-test-1": credFixture(&fut, "")})
+	r := pairProbe()
+
+	// ① 钥匙表未命中 → legacy 命中（hash 列 = sha256("k")）→ 放行，key_id=0。
+	code, body := postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "k"})
+	if code != http.StatusOK {
+		t.Fatalf("legacy 兜底路径应放行，got code=%d body=%s", code, body)
+	}
+	if !strings.Contains(body, `"key_id":0`) {
+		t.Errorf("legacy 命中不经过钥匙表，key_id 应为 0，body=%s", body)
+	}
+
+	// ② legacy 也比不上的钥匙：401 无效措辞 + 审计行（event=auth，key_id 缺省）。
+	code, body = postMCPBody(t, r, map[string]string{"X-Client-Id": "mcp-test-1", "X-API-Key": "wrong"})
+	if code != http.StatusUnauthorized || strings.Contains(body, "过期") {
+		t.Errorf("错钥匙应 401 且不报过期，got code=%d body=%s", code, body)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("一次失败应落一条审计，got %d", len(audits))
+	}
+}
+
+func hashOf(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// postMCPBody 与 postMCP 同型，但回传响应体（钥匙链路要断言措辞与注入的 key_id）。
+func postMCPBody(t *testing.T, r *gin.Engine, headers map[string]string) (int, string) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	r.ServeHTTP(rec, req)
+	return rec.Code, rec.Body.String()
 }

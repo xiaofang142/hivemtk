@@ -8,9 +8,16 @@ import "time"
 // 不带头的老调用方继续走单值链路——存量部署零破坏。
 // API Key 只存 sha256：管理端签发时明文只出现一次。
 type MCPCredential struct {
-	ID         uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	ClientID   string `gorm:"column:client_id;type:varchar(64);uniqueIndex" json:"client_id"`
-	Name       string `gorm:"type:varchar(128)" json:"name"`
+	ID       uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	ClientID string `gorm:"column:client_id;type:varchar(64);uniqueIndex" json:"client_id"`
+	Name     string `gorm:"type:varchar(128)" json:"name"`
+	// APIKeyHash 【遗留列，2026-10-11 起 1:N 钥匙在 mcp_credential_keys 表】。
+	// 保留原因：① 存量行由启动期 postMigrateBackfillMCPCredentialKeys 回填成钥匙行，
+	// 回填前/回填失败时 guard 仍按本列兜底校验（存量部署零破坏）；
+	// ② 旧版本二进制回滚窗口内的唯一可用校验列。
+	// 维护口径：签发第一把钥匙时镜像写入；删除与之对应的钥匙行时清空
+	// （清空后回滚的旧二进制对该凭证 fail-closed，好过放行一把已删除的钥匙）。
+	// 新增钥匙不再写本列——1:N 的真值源是 mcp_credential_keys。
 	APIKeyHash string `gorm:"column:api_key_hash;type:char(64);not null" json:"-"`
 	Enabled    bool   `gorm:"default:true" json:"enabled"`
 	// OwnerUserID 凭证绑定的系统账户（system_users.id，NULL=未绑定）。

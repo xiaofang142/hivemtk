@@ -191,8 +191,10 @@ type Server struct {
 
 // AuditRecord 一次 MCP 工具调用的审计快照（参数摘要化后落库，见 model.MCPCallAudit）。
 type AuditRecord struct {
-	ClientID  string
-	Method    string
+	ClientID string
+	Method   string
+	// Event 事件类型：call（tools/call）/ list（tools/list）；空串由落库侧补默认 call。
+	Event     string
 	Tool      string
 	Allowed   bool // false = 被凭证 scope 拒绝，未执行
 	OK        bool
@@ -333,7 +335,19 @@ func (s *Server) handleToolsList(_ context.Context, req JSONRPCRequest) ([]byte,
 	if errResp, ok := s.checkInitialized(req); !ok {
 		return errResp, nil
 	}
+	start := time.Now()
 	tools := s.listTools()
+	// 审计留痕（2026-10-11）：tools/list 是"看仓库里有什么"的侦察动作，
+	// 与 tools/call 同样值得记账——出事时要能回答"谁枚举过工具清单"。
+	if s.auditSink != nil {
+		s.audit(AuditRecord{
+			Method:    "tools/list",
+			Event:     "list",
+			Allowed:   true,
+			OK:        true,
+			LatencyMS: time.Since(start).Milliseconds(),
+		})
+	}
 	return s.successResponse(req.ID, ListToolsResult{Tools: tools}), nil
 }
 

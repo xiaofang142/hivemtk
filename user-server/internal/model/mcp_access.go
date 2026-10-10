@@ -14,6 +14,13 @@ type MCPCallAudit struct {
 	// CredentialID 签发侧稳定键（mcp_credentials.id，可空=单值链路不落审计）。
 	// client_id 可被人工修改，审计行要能对回"当初签发的那一行"，故额外带 id。
 	CredentialID *uint `gorm:"column:credential_id;index" json:"credential_id"`
+	// KeyID 命中的钥匙（mcp_credential_keys.id，可空=单值链路/迁移前老数据）。
+	// 1:N 之后同一凭证可以有多把钥匙，"哪把钥匙干的"只有这里能回答。
+	KeyID *uint `gorm:"column:key_id;index" json:"key_id"`
+	// Event 事件类型：call（tools/call，默认）/ list（tools/list）/ auth（鉴权失败）。
+	// 鉴权失败此前只在 HTTP 401 里一闪而过，出事无法回答"谁在什么时候拿错钥匙撞门"；
+	// 2026-10-11 起 guard 层把凭证对链路的失败也落进本表。
+	Event string `gorm:"column:event;type:varchar(16);not null;default:call;index" json:"event"`
 	// Method 取 tools/list / tools/call（也记其它 JSON-RPC 方法，便于看客户端行为）
 	Method string `gorm:"type:varchar(40);index" json:"method"`
 	// Tool 仅在 tools/call 时非空

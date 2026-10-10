@@ -45,6 +45,7 @@ func (s *ExternalKBConnectorAdminService) Delete(ctx context.Context, id uint) e
 // McpCredentialAdminService MCP 凭证对管理。
 type McpCredentialAdminService struct {
 	repo *repository.MCPCredentialRepo
+	keys *repository.MCPCredentialKeyRepo
 }
 
 func NewMcpCredentialAdminService() *McpCredentialAdminService {
@@ -54,7 +55,7 @@ func NewMcpCredentialAdminService() *McpCredentialAdminService {
 		// 与"装配了但查询报错"（500）分开——见 repository.Available 的分诊纪律。
 		return &McpCredentialAdminService{}
 	}
-	return &McpCredentialAdminService{repo: r}
+	return &McpCredentialAdminService{repo: r, keys: repository.NewMCPCredentialKeyRepo()}
 }
 
 func (s *McpCredentialAdminService) Ready() bool { return s.repo != nil && s.repo.Available() }
@@ -72,6 +73,13 @@ func (s *McpCredentialAdminService) Update(ctx context.Context, id uint, updates
 }
 
 func (s *McpCredentialAdminService) Delete(ctx context.Context, id uint) error {
+	// 1:N 拆表后钥匙行的真值源在本表：凭证删除必须级联清钥匙，
+	// 否则留下孤儿钥匙行——hash 仍唯一索引有效，但管理端再也看不见它们。
+	if s.keys != nil && s.keys.Available() {
+		if err := s.keys.DeleteByCredential(ctx, id); err != nil {
+			return err
+		}
+	}
 	return s.repo.Delete(ctx, id)
 }
 

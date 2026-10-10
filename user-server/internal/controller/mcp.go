@@ -60,9 +60,10 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 	// 审计钩子：仅凭证对链路（clientID 非空）才落审计行——单值链路没有"哪一行凭证"，
 	// 记了也无法对账到签发记录，反而把两套鉴权混在一张表里。
 	if cid, _ := clientID.(string); cid != "" {
+		keyID, _ := ctx.Get(middleware.MCPCtxKeyID)
 		mcpSrv.SetAuditSink(func(rec mcp.AuditRecord) {
 			rec.ClientID = cid
-			c.auditWith(ctx.Request.Context(), rec, ctx.ClientIP(), credentialID)
+			c.auditWith(ctx.Request.Context(), rec, ctx.ClientIP(), credentialID, keyID)
 		})
 	}
 
@@ -81,8 +82,9 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 }
 
 // auditWith 审计落库（best-effort，失败只记日志不阻断工具调用）。
-// credentialID 用于把审计行与签发记录对上（client_id 可被人工改，id 才是稳定键）。
-func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip string, credentialID any) {
+// credentialID/keyID 用于把审计行与签发记录对上（client_id 可被人工改，id 才是稳定键；
+// 1:N 之后同一凭证可有多把钥匙，"哪把钥匙干的"只有 key_id 能回答）。
+func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip string, credentialID, keyID any) {
 	row := &model.MCPCallAudit{
 		ClientID:  rec.ClientID,
 		Method:    rec.Method,
@@ -93,9 +95,16 @@ func (c *MCPController) auditWith(ctx context.Context, rec mcp.AuditRecord, ip s
 		ArgsHash:  rec.ArgsHash,
 		LatencyMS: rec.LatencyMS,
 		IP:        ip,
+		Event:     rec.Event,
+	}
+	if row.Event == "" {
+		row.Event = "call"
 	}
 	if id, ok := credentialID.(uint); ok && id != 0 {
 		row.CredentialID = &id
+	}
+	if id, ok := keyID.(uint); ok && id != 0 {
+		row.KeyID = &id
 	}
 	svc := service.NewMCPCallAuditAdminService()
 	if svc == nil || !svc.Ready() {

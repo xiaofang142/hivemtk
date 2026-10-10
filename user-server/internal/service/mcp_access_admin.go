@@ -28,8 +28,8 @@ func NewMCPCallAuditAdminService() *MCPCallAuditAdminService {
 
 func (s *MCPCallAuditAdminService) Ready() bool { return s.repo != nil && s.repo.Available() }
 
-func (s *MCPCallAuditAdminService) List(ctx context.Context, clientID, tool string, allowed *bool, page, size int) ([]model.MCPCallAudit, int64, error) {
-	return s.repo.List(ctx, clientID, tool, allowed, page, size)
+func (s *MCPCallAuditAdminService) List(ctx context.Context, clientID, tool string, allowed *bool, event string, page, size int) ([]model.MCPCallAudit, int64, error) {
+	return s.repo.List(ctx, clientID, tool, allowed, event, page, size)
 }
 
 // Record 追加一条审计（MCP 入口调用路径使用；失败只记日志不断工具调用）。

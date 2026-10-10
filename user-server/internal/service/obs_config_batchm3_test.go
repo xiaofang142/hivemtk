@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -284,9 +285,13 @@ func TestBatchM_TestConnectionLocalProbesDirectory(t *testing.T) {
 
 	// 只读目录这一档要求进程不是 root（root 无视 0500），CI 上常以 root 跑 ⇒ 显式跳过，
 	// 而不是让这一档在别人的环境里以错误的理由红。
+	// Windows 同理无判据：目录的只读属性不拦「在里面创建文件」，探测成功是对的。
 	t.Run("不可写目录要报不可写", func(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("以 root 运行，0500 目录照样可写，这一档无判据")
+		}
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows 目录只读属性不影响在其中创建文件，这一档无判据")
 		}
 		ro := filepath.Join(base, "readonly")
 		if err := os.Mkdir(ro, 0o755); err != nil {

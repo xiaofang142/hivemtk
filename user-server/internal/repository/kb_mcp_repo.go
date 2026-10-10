@@ -93,6 +93,16 @@ func (r *MCPCredentialRepo) GetByClientID(ctx context.Context, clientID string) 
 	return &row, nil
 }
 
+// GetByIDAny 按 id 查凭证行（不筛 enabled）："凭证已停用"要能作为独立原因
+// 回到 guard/管理端，而不是混进"不存在"。命名带 Any 以与日后筛 enabled 的版本区分。
+func (r *MCPCredentialRepo) GetByIDAny(ctx context.Context, id uint) (*model.MCPCredential, error) {
+	var row model.MCPCredential
+	if err := r.db.WithContext(ctx).First(&row, id).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *MCPCredentialRepo) Create(ctx context.Context, row *model.MCPCredential) error {
 	return r.db.WithContext(ctx).Create(row).Error
 }

@@ -93,11 +93,7 @@ func TestLoadOrInitMerchantKeyWritesDurableFile(t *testing.T) {
 	if string(b) != key {
 		t.Errorf("落盘内容=%q 与返回值不符", b)
 	}
-	if fi, err := os.Stat(filepath.Join(dir, ".merchant_key")); err != nil {
-		t.Fatalf("stat: %v", err)
-	} else if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("key 文件权限=%o want 600", perm)
-	}
+	requireFilePerm0600(t, filepath.Join(dir, ".merchant_key"), "key 文件")
 
 	// 目录不同的两台实例必须是两个身份，否则共享状态盘会把它们并成一个商户
 	t.Setenv("MERCHANT_STATE_DIR", t.TempDir())

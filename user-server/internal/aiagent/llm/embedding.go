@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"hivemtk-user/internal/config"
@@ -401,12 +404,32 @@ func isConnError(err error) bool {
 
 // isUnreachable 判定"端点根本不存在"（端口无人监听 / 域名解析不出来）。
 // 与 i/o timeout 分开：后者说明对端在但慢，同一请求内退避重试有意义。
+//
+// 判据分两层：优先按 error 链里的 syscall（跨平台稳定，不受文案措辞影响——
+// Windows 的拒绝连接文案是 "connectex: No connection could be made because the
+// target machine actively refused it"，根本不含 "connection refused" 子串，
+// 只查字符串会在 Windows 上把拒绝连接当成普通网络错误退避三连），
+// 字符串兜底留给老的包装层错误。
 func isUnreachable(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.EHOSTUNREACH) ||
+		errors.Is(err, syscall.ENETUNREACH) ||
+		errors.Is(err, syscall.ENOENT) {
+		return true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
 	msg := err.Error()
-	return strings.Contains(msg, "no such host") || strings.Contains(msg, "connection refused")
+	return strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "connection refused") ||
+		// Windows WSAECONNREFUSED 的两种常见呈现
+		strings.Contains(msg, "actively refused") ||
+		strings.Contains(msg, "No connection could be made")
 }
 
 func isRateLimited(err error) bool {

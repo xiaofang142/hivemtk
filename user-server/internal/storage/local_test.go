@@ -75,8 +75,10 @@ func TestUploadReader_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Download: %v", err)
 	}
-	defer rc.Close()
 	got, _ := io.ReadAll(rc)
+	// 读完立刻关：Windows 上未关闭的句柄会挡住下面的 Delete（remove 报
+	// "being used by another process"），Unix 的 unlink 语义在这里不成立。
+	rc.Close()
 	if !bytes.Equal(got, []byte(content)) {
 		t.Fatalf("Download content = %q", got)
 	}

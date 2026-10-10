@@ -354,6 +354,12 @@ func allModels() []any {
 		// Skill 登记面 —— 出事后答不出"这条消息是谁发出去的"。
 		&model.MCPCallAudit{},
 		&model.MCPSkill{},
+		// MCPCredentialKey（表 mcp_credential_keys）：1:N 钥匙表（2026-10-11）。
+		// Client ID 与 API Key 解耦：同一凭证多把钥匙，可单独 启用/禁用/停用/删除。
+		// MCPCredentialAuditLog（表 mcp_credential_audit_logs）：MCP/Skill 管理面操作审计
+		// （凭证/钥匙/Skill 增删改、状态流转、明文查看 reveal）——与 mcp_call_audits 使用面互补。
+		&model.MCPCredentialKey{},
+		&model.MCPCredentialAuditLog{},
 		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
 		&model.ExternalKBConnector{},
 		&model.ExternalKBSyncItem{},
@@ -505,8 +511,57 @@ func AutoMigrate() *gorm.DB {
 	// 排在终校验之后：它动的是**存量形状**（AutoMigrate 只加不删的那一半），
 	// 表都没建出来时这一句只会得到一句被吞掉的告警，而那句话会被读成"旧索引删掉了"。
 	postMigrateDropLegacyExternalOrderKey(DB)
+	// 1:N 钥匙表回填（2026-10-11）：存量 1:1 凭证对的 api_key_hash 迁成钥匙行。
+	// 排在终校验之后：表刚建出来才谈得上回填；幂等，可重复执行。
+	postMigrateBackfillMCPCredentialKeys(DB)
 
 	return DB
+}
+
+// postMigrateBackfillMCPCredentialKeys 把存量 1:1 凭证对迁移成钥匙行（2026-10-11）。
+//
+// 拆表后认证真值源是 mcp_credential_keys：不回填的话，升级瞬间所有存量凭证
+// 在新校验路径下全部靠 legacy 兜底列救回，缓存与 last_used 口径分裂成两套。
+// 回填行没有明文（老表只有 sha256），KeyEnc/KeyPrefix/KeySuffix 留空：
+// guard 照常校验，管理端不可 reveal，轮换走"新建钥匙 + 删除旧钥匙"。
+// 幂等：按 (credential_id, key_hash) 防重，重复启动不产生第二行。
+func postMigrateBackfillMCPCredentialKeys(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	var creds []model.MCPCredential
+	if err := db.Where("api_key_hash <> ''").Find(&creds).Error; err != nil {
+		logger.Warnf("[mcp-key-backfill] 读存量凭证失败，跳过回填（guard 走 legacy 兜底列）: %v", err)
+		return
+	}
+	backfilled := 0
+	for _, c := range creds {
+		var cnt int64
+		if err := db.Model(&model.MCPCredentialKey{}).
+			Where("credential_id = ? AND key_hash = ?", c.ID, c.APIKeyHash).
+			Count(&cnt).Error; err != nil {
+			logger.Warnf("[mcp-key-backfill] credential=%d 防重查询失败，跳过该凭证: %v", c.ID, err)
+			continue
+		}
+		if cnt > 0 {
+			continue
+		}
+		row := model.MCPCredentialKey{
+			CredentialID: c.ID,
+			Name:         "初始密钥（回填）",
+			KeyHash:      c.APIKeyHash,
+			Status:       model.MCPKeyStatusActive,
+			ExpiresAt:    c.ExpiresAt,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			logger.Warnf("[mcp-key-backfill] credential=%d 回填失败（唯一冲突则下次启动自然幂等）: %v", c.ID, err)
+			continue
+		}
+		backfilled++
+	}
+	if backfilled > 0 {
+		logger.Infof("[mcp-key-backfill] 已把 %d 把存量凭证密钥回填进 mcp_credential_keys", backfilled)
+	}
 }
 
 // verifyUniqueIndex 在报"已就绪"之前读一次库里的**形状**：返回空串表示那枚索引确实唯一，
