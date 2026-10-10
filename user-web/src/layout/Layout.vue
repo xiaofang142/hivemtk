@@ -23,7 +23,7 @@
           :index="menu.key"
         >
           <el-icon><component :is="iconComponents[menu.icon]" /></el-icon>
-          <span>{{ t('menu.' + menu.key) }}</span>
+          <span>{{ menu.title }}</span>
         </el-menu-item>
       </el-menu>
 
@@ -82,7 +82,7 @@
       <el-aside :width="sidebarCollapsed ? '64px' : '240px'" v-if="currentTopMenu && currentTopMenu.children" class="app-aside" :class="{ 'is-collapsed': sidebarCollapsed }">
         <div class="aside-brand">
           <el-icon v-show="!sidebarCollapsed"><Menu /></el-icon>
-          <span v-show="!sidebarCollapsed">{{ t('menu.' + currentTopMenu.key) }}</span>
+          <span v-show="!sidebarCollapsed">{{ currentTopMenu.title }}</span>
           <el-button
             class="collapse-btn"
             :class="{ 'collapse-btn--collapsed': sidebarCollapsed }"
@@ -175,508 +175,63 @@ const persistSidebarCollapsed = () => {
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
-const topMenus = ref([
-  {
-    key: 'workspace',
-    title: '工作台',
-    icon: 'Monitor',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      { key: 'messageHub', title: '消息中台 MQ', icon: 'MessageBox', path: '/messageHub/list', roles: ['admin', 'manager'] },
-      { key: 'messageHubDashboard', title: '消息中台看板', icon: 'DataBoard', path: '/messageHub/dashboard', roles: ['admin', 'manager'] },
-      { key: 'inbox', title: '统一收件箱', icon: 'Box', path: '/inbox/list' },
-      // 待办中心与收件箱是两件事：那一边是"这个会话现在归谁"，这一边是"有件事在等人办，
-      // 几点之前不办就算逾期"。合并成一个入口会让 SLA 读数混进会话列表里。
-      { key: 'approvalTask', title: '待办中心', icon: 'Tickets', path: '/approvalTask/list' },
-      // Bad Case 队列与待办中心是两件事：那一边是"有件事在等人办，几点前不办算逾期"，
-      // 这一边是"这次答得不好的那一次，该判给哪个责任层"。合并成一个入口会把归因账混进值班队列里。
-      { key: 'badCase', title: 'Bad Case 队列', icon: 'Warning', path: '/badCase/list' },
-      { key: 'salesCockpit', title: '销售驾驶舱', icon: 'DataLine', path: '/sales-cockpit', roles: ['admin', 'manager', 'sales'] },
-      // AI 谈单产出的待确认草稿的人工入口：确认/取消/改价都在这一页。
-      // 深链 /dashboard/drafts/:id 与工作台聚合待办生成的 URL 同一条（sales_workbench.go）。
-      { key: 'orderDraft', title: '订单草稿', icon: 'Document', path: '/dashboard/drafts', roles: ['admin', 'manager', 'sales'] },
-      // 销售工作台：个人待办+今日/月度与团队排行/漏斗/销冠画像（/api/sales-workbench/* 三读口）。
-      // 与 salesCockpit（AI 运维聚合的驾驶舱）是两套域，分开两个入口。
-      { key: 'salesWorkbench', title: '销售工作台', icon: 'Notebook', path: '/sales-workbench', roles: ['admin', 'manager', 'sales'] },
-      // 今日跟进（A11）：跟进提醒读写口的消费入口，与订单草稿（草稿确认）
-      // 是两件事 —— 那边是"AI 写的单子要不要放行"，这边是"今天该联系谁、
-      // 联系结果记哪去"。合并会把 SLA 跟进混进草稿确认队列。
-      { key: 'followups', title: '今日跟进', icon: 'AlarmClock', path: '/followups/today', roles: ['admin', 'manager', 'sales'] },
-      { key: 'wecomAccount', title: '多账号聚合', icon: 'Connection', path: '/wecomAccount/list', roles: ['admin', 'manager'] }
-    ]
-  },
-  {
-    key: 'customer',
-    title: '客户中心',
-    icon: 'UserFilled',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      { key: 'clueList', title: '线索列表', icon: 'Document', path: '/clue/list' },
-      { key: 'clueStatistics', title: '线索统计', icon: 'DataAnalysis', path: '/clue/statistics' },
-      { key: 'leadMining', title: '线索挖掘', icon: 'Search', path: '/lead-mining/index' },
-      { key: 'customer360', title: '客户 360', icon: 'UserFilled', path: '/customer360/list' },
-      { key: 'customerEvent', title: '客户事件', icon: 'Bell', path: '/customerEvent/list' },
-      { key: 'tagSegmentation', title: '标签分层', icon: 'PriceTag', path: '/tagSegmentation/list', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'userSegment', title: '用户分层 RFM', icon: 'PieChart', path: '/userSegment/list', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'unifiedMessage', title: '统一消息', icon: 'Message', path: '/unifiedMessage/list' },
-      {
-        key: 'customerIdentity',
-        title: '客户身份',
-        icon: 'Connection',
-        roles: ['admin', 'manager'],
-        children: [
-          {
-            key: 'oneidList',
-            title: 'OneID 列表',
-            icon: 'List',
-            path: '/oneid/list'
-          },
-          {
-            key: 'oneidConflicts',
-            title: '身份冲突解决',
-            icon: 'Warning',
-            path: '/oneid/conflicts'
-          },
-          {
-            key: 'oneidMergeRules',
-            title: '合并规则配置',
-            icon: 'Setting',
-            path: '/oneid/merge-rules'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    key: 'aiAgent',
-    title: '智能体',
-    icon: 'Cpu',
-    roles: ['admin', 'manager', 'customer_service', 'staff'],
-    children: [
-      { key: 'mcpCredentials', title: 'MCP 凭证', icon: 'Key', path: '/mcp/credentials', roles: ['admin'] },
-      {
-        key: 'agentManage',
-        title: '智能体管理',
-        icon: 'Cpu',
-        children: [
-          { key: 'aiAgentList', title: '智能体列表', icon: 'List', path: '/aiAgent/list' },
-          { key: 'aiAgentCreate', title: '创建智能体', icon: 'Plus', path: '/aiAgent/create' }
-        ]
-      },
-      {
-        key: 'agentPassive',
-        title: '被动应答',
-        icon: 'ChatDotRound',
-        children: [
-          {
-            key: 'customerSession',
-            title: '客服会话',
-            icon: 'Service',
-            path: '/customerSession/list'
-          },
-          { key: 'intentRecognition', title: '意图识别', icon: 'Aim', path: '/intentRecognition/list' },
-          { key: 'dialogueMemory', title: '对话记忆', icon: 'ChatDotRound', path: '/dialogueMemory/list' },
-          { key: 'llmRouting', title: 'LLM 路由', icon: 'Cpu', path: '/llmRouting/list' }
-        ]
-      },
-      {
-        key: 'agentActive',
-        title: '主动触达',
-        icon: 'Promotion',
-        children: [
-          { key: 'reachPipeline', title: '触达 Pipeline', icon: 'Promotion', path: '/reachPipeline/list', roles: ['admin', 'manager'] },
-          { key: 'marketingFlow', title: '营销流程', icon: 'SetUp', path: '/marketingFlow/list', roles: ['admin', 'manager'] },
-          { key: 'batchOperation', title: '批量运营', icon: 'Operation', path: '/batchOperation/list' }
-        ]
-      },
-      {
-        key: 'agentSupport',
-        title: '能力支撑',
-        icon: 'Connection',
-        children: [
-          { key: 'sopAgent', title: 'SOP 智能体', icon: 'Connection', path: '/sopAgent/list' },
-          { key: 'sopTemplate', title: 'SOP 模板库', icon: 'Tickets', path: '/sop-template/list' },
-          { key: 'sopTemplateMarket', title: 'SOP 模板市场', icon: 'ShoppingCart', path: '/sop-template/market' },
-          { key: 'faqKb', title: 'FAQ 知识库', icon: 'Notebook', path: '/faq/list' },
-          { key: 'knowledgeBase', title: '知识库管理', icon: 'Files', path: '/knowledgeBase' },
-          { key: 'scriptTemplate', title: '销冠话术库', icon: 'ChatLineSquare', path: '/scriptTemplate/list' },
-          { key: 'scriptTemplateAbStats', title: '话术 AB 统计', icon: 'DataLine', path: '/scriptTemplate/ab-stats' },
-          { key: 'aiToolManagement', title: 'AI 工具管理', icon: 'Tools', path: '/aiAgent/tools' }
-        ]
-      },
-      {
-        key: 'agentWorkbench',
-        title: '客服工作台',
-        icon: 'Headset',
-        roles: ['admin', 'manager', 'sales', 'customer_service'],
-        children: [
-          { key: 'agentStatus', title: '坐席状态', icon: 'Headset', path: '/customerService/agentStatus' },
-          { key: 'csatDashboard', title: 'CSAT 看板', icon: 'Star', path: '/customerService/csat' },
-          { key: 'quickReply', title: '快捷回复', icon: 'ChatLineSquare', path: '/customerService/quickReply' },
-          { key: 'sessionTag', title: '会话标签', icon: 'CollectionTag', path: '/customerService/sessionTag' },
-          { key: 'aiSuggestion', title: 'AI 建议', icon: 'MagicStick', path: '/customerService/aiSuggestion' }
-        ]
-      },
-      {
-        key: 'agentChannel',
-        title: '客服渠道',
-        icon: 'Connection',
-        roles: ['admin', 'manager'],
-        children: [
-          { key: 'chatChannelList', title: '客服渠道', icon: 'Connection', path: '/chatChannel/list' },
-          { key: 'whatsappCloud', title: 'WhatsApp Cloud', icon: 'Connection', path: '/whatsapp-cloud' },
-          { key: 'dingtalkApp', title: '钉钉应用账号', icon: 'Connection', path: '/dingtalk-app' }
-        ]
-      },
-      {
-        key: 'agentSalesIntel',
-        title: '销售智能',
-        icon: 'Trophy',
-        roles: ['admin', 'manager', 'sales'],
-        children: [
-          { key: 'objectionList', title: '异议处理', icon: 'ChatLineRound', path: '/objection/list' },
-          { key: 'personaList', title: '销冠画像', icon: 'UserFilled', path: '/persona/list' }
-        ]
-      }
-    ]
-  },
-  {
-    key: 'reach',
-    title: '触达运营',
-    icon: 'Promotion',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      {
-        key: 'emailReach',
-        title: '邮件触达',
-        icon: 'Message',
-        children: [
-          { key: 'emailList', title: '邮件列表', icon: 'ChatSquare', path: '/email' },
-          { key: 'emailDrafts', title: '我的草稿', icon: 'Document', path: '/email/drafts' },
-          { key: 'emailJobs', title: '我的任务', icon: 'Document', path: '/email/jobs' },
-          { key: 'emailSmtp', title: '邮件账号', icon: 'Setting', path: '/email/smtp' },
-          { key: 'emailInfo', title: '邮件代理', icon: 'Setting', path: '/email/info' },
-          { key: 'emailDeliverability', title: '送达分析', icon: 'DataAnalysis', path: '/email/deliverability' },
-          { key: 'emailGuide', title: '邮件使用指南', icon: 'Document', path: '/email/guide' }
-        ]
-      },
-      {
-        key: 'smsReach',
-        title: '短信触达',
-        icon: 'ChatDotSquare',
-        children: [
-          { key: 'smsList', title: '短信列表', icon: 'ChatDotSquare', path: '/sms/list' },
-          { key: 'smsDrafts', title: '短信草稿', icon: 'Document', path: '/sms/drafts' },
-          { key: 'smsJobs', title: '短信任务', icon: 'List', path: '/sms/jobs' },
-          { key: 'smsConfig', title: '短信配置', icon: 'Setting', path: '/sms/config' }
-        ]
-      },
-      {
-        key: 'douyin',
-        title: '抖音',
-        icon: 'VideoPlay',
-        children: [
-          { key: 'douyinCard', title: '抖音卡片', icon: 'VideoPlay', path: '/douyinCard' },
-          { key: 'douyinStats', title: '抖音统计', icon: 'DataAnalysis', path: '/douyin/stats' }
-        ]
-      },
-      {
-        key: 'kuaishou',
-        title: '快手',
-        icon: 'Bell',
-        children: [
-          { key: 'kuaishouCard', title: '快手卡片', icon: 'ChatDotRound', path: '/kuaishouCard' },
-          { key: 'kuaishouStats', title: '快手统计', icon: 'DataAnalysis', path: '/kuaishou/stats' }
-        ]
-      },
-      {
-        key: 'xiaohongshu',
-        title: '小红书',
-        icon: 'Picture',
-        children: [
-          { key: 'xiaohongshuCard', title: '小红书卡片', icon: 'Picture', path: '/xiaohongshuCard' },
-          { key: 'xiaohongshuStats', title: '小红书统计', icon: 'DataAnalysis', path: '/xiaohongshu/stats' }
-        ]
-      },
-      {
-        key: 'xianyu',
-        title: '闲鱼',
-        icon: 'ShoppingBag',
-        children: [
-          { key: 'xianyuCard', title: '闲鱼卡片', icon: 'ShoppingBag', path: '/xianyuCard' },
-          { key: 'xianyuStats', title: '闲鱼统计', icon: 'DataAnalysis', path: '/xianyu/stats' }
-        ]
-      },
-      {
-        key: 'tiktok',
-        title: 'TikTok',
-        icon: 'VideoPlay',
-        children: [
-          { key: 'tiktokList', title: 'TikTok卡片', icon: 'VideoPlay', path: '/tiktok/list' },
-          { key: 'tiktokStats', title: 'TikTok统计', icon: 'DataAnalysis', path: '/tiktok/stats' }
-        ]
-      },
-      {
-        key: 'whatsapp',
-        title: 'WhatsApp',
-        icon: 'ChatDotRound',
-        children: [
-          { key: 'whatsappAccount', title: '账号管理', icon: 'Cpu', path: '/whatsapp/account' },
-          { key: 'whatsappDrafts', title: '草稿箱', icon: 'Document', path: '/whatsapp/drafts' },
-          { key: 'whatsappJobs', title: '群发', icon: 'Promotion', path: '/whatsapp/jobs' },
-          { key: 'whatsappLeadGroup', title: '群发线索分组', icon: 'UserFilled', path: '/whatsapp/lead-group-selection' },
-          { key: 'whatsappBulkMatrix', title: '群发统计矩阵', icon: 'Grid', path: '/whatsapp/bulk-matrix' },
-          { key: 'whatsappGroupMessaging', title: '群发矩阵', icon: 'Grid', path: '/whatsapp/group-messaging' }
-        ]
-      },
-      {
-        key: 'telegram',
-        title: '电报社群',
-        icon: 'ChatDotRound',
-        children: [
-          { key: 'telegramAccount', title: '机器人', icon: 'Cpu', path: '/telegram/account' }
-        ]
-      },
-      {
-        key: 'qq',
-        title: 'QQ 机器人',
-        icon: 'ChatDotRound',
-        children: [
-          { key: 'qqAccount', title: '机器人账号', icon: 'Cpu', path: '/qq/account' }
-        ]
-      },
-      {
-        key: 'feishu',
-        title: '飞书',
-        icon: 'ChatDotRound',
-        roles: ['admin', 'manager'],
-        children: [
-          { key: 'feishuAccount', title: '飞书账号', icon: 'Cpu', path: '/feishu/account' }
-        ]
-      },
-      { key: 'community', title: '社群管理', icon: 'UserFilled', path: '/community/list' },
-      {
-        key: 'shortLink',
-        title: '短链管理',
-        icon: 'Link',
-        children: [
-          { key: 'shortLinkList', title: '短链列表', icon: 'Link', path: '/shortLink' },
-          { key: 'shortLinkStats', title: '短链统计', icon: 'DataAnalysis', path: '/shortLink/stats' }
-        ]
-      },
-      { key: 'livecode', title: '活码管理', icon: 'QrCode', path: '/livecode' },
-      { key: 'workflowOrchestrator', title: '工作流编排', icon: 'Share', path: '/workflow-orchestrator/list', roles: ['admin', 'manager'] }
-    ]
-  },
-  {
-    key: 'knowledge',
-    title: '知识中心',
-    icon: 'Collection',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      {
-        key: 'knowledgeWorkspace',
-        title: '知识库工作台',
-        icon: 'Files',
-        roles: ['admin', 'manager'],
-        children: [
-          { key: 'knowledgeManagement', title: '文档管理', icon: 'Document', path: '/knowledge/management' },
-          { key: 'knowledgeBatchImport', title: '批量导入', icon: 'UploadFilled', path: '/knowledge/batch-import' },
-          { key: 'knowledgePlayground', title: '检索 Playground', icon: 'Aim', path: '/knowledge/playground' },
-          { key: 'knowledgeFeedbacks', title: '反馈管理', icon: 'ChatLineRound', path: '/knowledge/feedbacks' },
-          { key: 'knowledgeTokens', title: 'API Token', icon: 'Key', path: '/knowledge/tokens' },
-          { key: 'knowledgeExternal', title: '外部系统接入', icon: 'Connection', path: '/knowledge/external' },
-          { key: 'knowledgeStatistics', title: '知识库统计', icon: 'DataAnalysis', path: '/knowledge/statistics' },
-          { key: 'knowledgeRagEval', title: 'RAG 评测', icon: 'CircleCheck', path: '/knowledge/rag-eval' },
-          { key: 'knowledgeOpenAPI', title: 'OpenAPI 集成', icon: 'Connection', path: '/knowledge/openapi' },
-          { key: 'knowledgeConnectors', title: '知识库连接器（第三方同步）', icon: 'Link', path: '/kb/connectors', roles: ['admin'] }
-        ]
-      },
-      {
-        key: 'ragProductConfig',
-        title: 'RAG 知识库',
-        icon: 'ChatLineRound',
-        roles: ['admin', 'manager'],
-        children: [
-          { key: 'ragMainConfig', title: 'RAG 主配置', icon: 'Setting', path: '/system/rag-product-config' },
-          { key: 'ragAccount', title: 'RAG 账号配置', icon: 'Key', path: '/system/rag-account' },
-          { key: 'ragProduct', title: 'RAG 产品管理', icon: 'Goods', path: '/system/rag-product' }
-        ]
-      },
-      { key: 'ragOverview', title: 'RAG 概览', icon: 'Monitor', path: '/system/rag-overview' },
-      {
-        key: 'i18nManage',
-        title: '多语言管理',
-        icon: 'Coin',
-        roles: ['admin', 'manager'],
-        children: [
-          { key: 'glossary', title: '术语表管理', icon: 'Collection', path: '/glossary', roles: ['admin', 'manager'] },
-          { key: 'i18nDashboard', title: '多语言监控', icon: 'DataLine', path: '/i18n/dashboard', roles: ['admin', 'manager'] }
-        ]
-      }
-    ]
-  },
-  {
-    key: 'analytics',
-    title: '数据分析',
-    icon: 'DataAnalysis',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      { key: 'dashboardScreen', title: '数据大屏', icon: 'DataBoard', path: '/dashboardScreen/list' },
-      { key: 'conversionFunnel', title: '转化漏斗', icon: 'Filter', path: '/conversionFunnel/list' },
-      { key: 'aiProductivity', title: 'AI 产能分析', icon: 'DataAnalysis', path: '/aiProductivity/list', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'customReport', title: '自定义报表', icon: 'Document', path: '/customReport/list' },
-      { key: 'abExperiment', title: 'A/B 实验', icon: 'DataLine', path: '/abExperiment/list', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'churnPrediction', title: '流失预警', icon: 'Warning', path: '/churnPrediction/list', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'customerJourney', title: '客户旅程大屏', icon: 'TrendCharts', path: '/customerJourney/dashboard', roles: ['admin', 'manager', 'sales', 'viewer'] },
-      { key: 'cohortPath', title: '同期群路径分析', icon: 'Guide', path: '/analytics/cohort-path', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'confidencePanel', title: '置信度看板', icon: 'CircleCheck', path: '/confidence/panel', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'humanizePanel', title: '拟人度看板', icon: 'MagicStick', path: '/humanize/panel', roles: ['admin', 'manager', 'viewer'] },
-      { key: 'feedbackLoopPanel', title: '反馈闭环', icon: 'Refresh', path: '/feedbackLoop/panel', roles: ['admin', 'manager', 'viewer'] },
-      {
-        key: 'browserAutomation',
-        title: '浏览器自动化',
-        icon: 'Monitor',
-        path: '/browser-automation/tasks',
-        children: [
-          { key: 'baTasks', title: '任务列表', icon: 'Monitor', path: '/browser-automation/tasks' },
-          { key: 'baCreate', title: '新建任务', icon: 'Plus', path: '/browser-automation/tasks/create' },
-          { key: 'baCron', title: '定时触发器', icon: 'Timer', path: '/browser-automation/cron' },
-          { key: 'baStatus', title: 'Host 状态', icon: 'CircleCheck', path: '/browser-automation/status' },
-        ]
-      },
-      {
-        key: 'geoTools',
-        title: 'GEO 智能优化',
-        icon: 'MagicStick',
-        path: '/geo-tools/keyword-mining',
-        children: [
-          {
-            key: 'geoConfigGroup',
-            title: '配置',
-            icon: 'Setting',
-            children: [
-              { key: 'geoBrandConfig', title: '品牌与域名', icon: 'OfficeBuilding', path: '/geo-tools/brand-config' },
-              { key: 'geoSeoInfra', title: 'SEO 基础设施', icon: 'DocumentChecked', path: '/geo-tools/seo-infra' },
-              { key: 'geoPusherConfig', title: '蜘蛛推送配置', icon: 'Key', path: '/geo-tools/pusher-config' },
-              { key: 'geoSiteConfig', title: '静态站部署', icon: 'Monitor', path: '/geo-tools/site-config' },
-              { key: 'geoSchemaTemplates', title: 'Schema 模板', icon: 'Collection', path: '/geo-tools/schema-templates' },
-              { key: 'geoCompetitors', title: '竞品管理', icon: 'UserFilled', path: '/geo-tools/competitors' },
-              { key: 'geoConfig', title: '配置优化', icon: 'Setting', path: '/geo-tools/config' },
-            ]
-          },
-          {
-            key: 'geoProd',
-            title: '生产',
-            icon: 'EditPen',
-            children: [
-              { key: 'geoKeywordMining', title: '关键词蒸馏', icon: 'Search', path: '/geo-tools/keyword-mining' },
-              { key: 'geoContentCreation', title: '内容创作', icon: 'EditPen', path: '/geo-tools/content-creation' },
-              { key: 'geoContentOptimize', title: '文章优化', icon: 'Document', path: '/geo-tools/content-optimize' },
-              { key: 'geoKnowledgeBase', title: 'GEO 知识库', icon: 'FolderOpened', path: '/geo-tools/knowledge-base' },
-              { key: 'geoEntityGraph', title: '实体图谱', icon: 'Share', path: '/geo-tools/entity-graph' },
-            ]
-          },
-          {
-            key: 'geoPublish',
-            title: '发布',
-            icon: 'Connection',
-            children: [
-              { key: 'geoSitePublish', title: '发布到官网', icon: 'Upload', path: '/geo-tools/site-publish' },
-              { key: 'geoPushCenter', title: '蜘蛛推送', icon: 'Promotion', path: '/geo-tools/push-center' },
-              { key: 'geoPlatformPublish', title: '平台发布', icon: 'Connection', path: '/geo-tools/platform-publish' },
-              { key: 'geoWorkflow', title: '工作流', icon: 'Setting', path: '/geo-tools/workflow' },
-            ]
-          },
-          {
-            key: 'geoMonitor',
-            title: '监控',
-            icon: 'Monitor',
-            children: [
-              { key: 'geoFunnelDashboard', title: '漏斗总览', icon: 'DataAnalysis', path: '/geo-tools/funnel-dashboard' },
-              { key: 'geoIndexTracking', title: '收录与引用', icon: 'CircleCheck', path: '/geo-tools/index-tracking' },
-              { key: 'geoVisibilityBoard', title: '可见性观测', icon: 'TrendCharts', path: '/geo-tools/visibility' },
-              { key: 'geoSovBoard', title: '竞品 SOV', icon: 'DataLine', path: '/geo-tools/sov-board' },
-              { key: 'geoCrawlerStats', title: '爬虫统计', icon: 'Monitor', path: '/geo-tools/crawler-stats' },
-              { key: 'geoVerification', title: '多模型验证', icon: 'CircleCheck', path: '/geo-tools/verification' },
-              { key: 'geoAlerts', title: '预警中心', icon: 'Bell', path: '/geo-tools/alerts' },
-              { key: 'geoReports', title: '数据报表', icon: 'DataAnalysis', path: '/geo-tools/reports' },
-              { key: 'geoDecisionReport', title: '决策报告', icon: 'Document', path: '/geo/decision-report' },
-            ]
-          }
-        ]
-      }
-    ]
-  },
-  {
-    key: 'system',
-    title: '系统设置',
-    icon: 'Setting',
-    roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-    children: [
-      { key: 'capabilityMatrix', title: '能力矩阵', icon: 'Grid', path: '/cap/matrix', roles: ['admin'] },
-      {
-        key: 'siteConfig',
-        title: '站点配置',
-        icon: 'Tools',
-        roles: ['admin'],
-        children: [
-          { key: 'systemConfig', title: '站点设置', icon: 'Tools', path: '/system/config' },
-          { key: 'systemObsConfig', title: '存储配置', icon: 'Cloud', path: '/system/obs-config' },
-          { key: 'systemMaterialLibrary', title: '素材库', icon: 'Picture', path: '/system/material-library' },
-          { key: 'systemMonitor', title: '监控', icon: 'Cpu', path: '/system/monitor' },
-          { key: 'systemTrace', title: '链路追踪', icon: 'Connection', path: '/system/trace' },
-          { key: 'systemGuide', title: '系统使用指南', icon: 'Document', path: '/system/guide' },
-          { key: 'domainPool', title: '域名池', icon: 'Link', path: '/domainPool' },
-          { key: 'backupList', title: '备份恢复', icon: 'FolderOpened', path: '/backup/list' },
-          { key: 'backupEnhanced', title: '备份高级版', icon: 'FolderChecked', path: '/backup/enhanced' },
-          { key: 'automationCenter', title: '自动化中心', icon: 'Operation', path: '/system/automation-hub', roles: ['admin'] },
-          { key: 'dynamicThreshold', title: '动态阈值参数', icon: 'DataLine', path: '/system/config-params', roles: ['admin'] },
-          { key: 'ltcConfig', title: 'LTC 运营开关', icon: 'Open', path: '/system/ltc-config', roles: ['admin'] },
-          { key: 'opsOverview', title: '运维总览', icon: 'Monitor', path: '/ops-overview', roles: ['admin'] }
-        ]
-      },
-      {
-        key: 'teamGroup',
-        title: '团队',
-        icon: 'UserFilled',
-        roles: ['admin'],
-        children: [
-          { key: 'systemUser', title: '人员管理', icon: 'UserFilled', path: '/system/users' },
-          { key: 'roleManage', title: '角色管理', icon: 'UserFilled', path: '/system/roles' },
-          { key: 'permissionManage', title: '授权管理', icon: 'Lock', path: '/system/permissions' }
-        ]
-      },
-      {
-        key: 'permissionGroup',
-        title: '权限设置',
-        icon: 'Lock',
-        roles: ['admin'],
-        children: [
-          { key: 'platformAccount', title: '平台账号', icon: 'Platform', path: '/platformAccount/list' },
-          { key: 'integration', title: '第三方对接', icon: 'Connection', path: '/integration/list' },
-          { key: 'bridgeToken', title: '桥接凭证', icon: 'Key', path: '/bridge/token' },
-          { key: 'operationLog', title: '操作日志', icon: 'Tickets', path: '/operationLog/list' },
-          { key: 'securityAudit', title: '安全审计', icon: 'Shield', path: '/securityAudit/list' }
-        ]
-      },
-      {
-        key: 'assetBundle',
-        title: '资产包',
-        icon: 'Box',
-        roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
-        children: [
-          { key: 'assetMarket', title: '资产市场', icon: 'ShoppingCart', path: '/asset-market' },
-          { key: 'myAssets', title: '我的资产', icon: 'Files', path: '/asset-market/my-assets' },
-          { key: 'assetBundleList', title: '资产包管理', icon: 'List', path: '/asset-bundle/list' },
-          { key: 'assetBundlePlayground', title: '开发者 Playground', icon: 'EditPen', path: '/asset-bundle/playground' },
-          { key: 'assetBundleMerchant', title: '商户话术包', icon: 'ChatDotRound', path: '/asset-bundle/merchant-new' },
-          { key: 'syncLog', title: '同步日志', icon: 'Refresh', path: '/asset-market/sync-log' }
-        ]
-      }
-    ]
+// ==========================================================================
+// 侧边栏菜单 = 路由元信息自动生成（本文件不再维护手写菜单树）。
+// 规则：收集已注册路由中带 meta.group 的项，按 MENU_GROUPS 顺序与命名分组；
+// 标题直接取 meta.title（不再走 t('menu.*') 翻译，杜绝「menu.xxx 不存在」）；
+// meta.roles 存在时按角色过滤；分组成员为空的组不显示。
+// 新页面接入：在 src/router/modules/*.js 给路由加 meta（title/group/icon）即可。
+// ==========================================================================
+const MENU_GROUPS = [
+  { key: 'workspace', title: '工作台', icon: 'Monitor' },
+  { key: 'aiAgent', title: '智能体', icon: 'Cpu' },
+  { key: 'customer', title: '客户', icon: 'User' },
+  { key: 'knowledge', title: '知识中心', icon: 'Collection' },
+  { key: 'reach', title: '触达', icon: 'Promotion' },
+  { key: 'automation', title: '自动化', icon: 'Share' },
+  { key: 'analytics', title: '分析', icon: 'DataAnalysis' },
+  { key: 'dataAnalysis', title: '数据分析', icon: 'TrendCharts' },
+  { key: 'community', title: '社群', icon: 'UserFilled' },
+  { key: 'email', title: '邮件', icon: 'Message' },
+  { key: 'config', title: '配置', icon: 'Setting' },
+  { key: 'execute', title: '执行', icon: 'VideoPlay' },
+  { key: 'observe', title: '观测', icon: 'View' },
+  { key: 'sales', title: '销售', icon: 'ShoppingCart' },
+  { key: 'i18n', title: '多语言', icon: 'Comment' },
+  { key: 'system', title: '系统设置', icon: 'Setting' },
+]
+
+const buildRouteMenus = () => {
+  const seen = new Set()
+  const items = []
+  for (const r of router.getRoutes()) {
+    const m = r.meta || {}
+    if (!m.group || m.hideLayout || m.public) continue
+    if (seen.has(r.path)) continue
+    seen.add(r.path)
+    items.push({
+      path: r.path,
+      key: String(r.name || r.path),
+      title: m.title || r.path,
+      group: m.group,
+      icon: m.icon || 'Menu',
+      roles: m.roles || null,
+      order: typeof m.menuOrder === 'number' ? m.menuOrder : 9999,
+    })
   }
-]);
+  return MENU_GROUPS.map((g) => ({
+    key: g.key,
+    title: g.title,
+    icon: g.icon,
+    children: items
+      .filter((i) => i.group === g.key)
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'zh'))
+      .map((i) => ({ key: i.key, title: i.title, icon: i.icon, path: i.path, roles: i.roles })),
+  })).filter((g) => g.children.length > 0)
+}
+
+const topMenus = ref(buildRouteMenus())
+;
 
 const hasPermission = (menu) => {
   if (!menu.roles || menu.roles.length === 0) return true
