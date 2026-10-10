@@ -70,16 +70,6 @@ func (r *PromptRepo) Create(ctx context.Context, p *model.PromptCandidate) error
 	return r.db.WithContext(ctx).Create(p).Error
 }
 
-// Update 更新 Prompt 候选
-func (r *PromptRepo) Update(ctx context.Context, p *model.PromptCandidate) error {
-	return r.db.WithContext(ctx).Save(p).Error
-}
-
-// Delete 删除 Prompt 候选
-func (r *PromptRepo) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&model.PromptCandidate{}, id).Error
-}
-
 // GetByID 按 ID 查询 Prompt 候选
 func (r *PromptRepo) GetByID(ctx context.Context, id uint) (*model.PromptCandidate, error) {
 	var p model.PromptCandidate

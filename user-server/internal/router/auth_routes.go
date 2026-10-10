@@ -61,13 +61,9 @@ func setupUserRoutes(auth *gin.RouterGroup) {
 	admin := auth.Group("")
 	admin.Use(middleware.AdminAuthMiddleware())
 	{
-		admin.POST("/user", userCtrl.CreateUser)
 		admin.POST("/users", userCtrl.CreateUser)
-		admin.PUT("/user/:id", userCtrl.UpdateUser)
 		admin.PUT("/users/:id", userCtrl.UpdateUser)
-		admin.DELETE("/user/:id", userCtrl.DeleteUser)
 		admin.DELETE("/users/:id", userCtrl.DeleteUser)
-		admin.PUT("/user/:id/password", userCtrl.ResetPassword)
 		admin.PUT("/users/:id/password", userCtrl.ResetPassword)
 	}
 }
@@ -81,13 +77,7 @@ func setupAlertRoutes(auth *gin.RouterGroup) {
 
 	auth.GET("/monitor/alerts/unread", alertCtrl.Unread)
 
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
-		admin.POST("/alerts/rules", alertCtrl.Create)
-		admin.PUT("/alerts/rules/:id", alertCtrl.Update)
-		admin.DELETE("/alerts/rules/:id", alertCtrl.Delete)
-		admin.PUT("/alerts/rules/status", alertCtrl.SetStatus)
-		admin.POST("/alerts/histories/resolve", alertCtrl.ResolveHistory)
 	}
 }
 
@@ -96,13 +86,6 @@ func setupAccountRoutes(auth *gin.RouterGroup) {
 	auth.GET("/account/list", accountCtrl.GetAccounts)
 	auth.GET("/account/:id", accountCtrl.GetAccount)
 	auth.GET("/accounts/list", accountCtrl.GetAccounts)
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.POST("/account", accountCtrl.CreateAccount)
-	admin.PUT("/account/:id", accountCtrl.UpdateAccount)
-	admin.DELETE("/account/:id", accountCtrl.DeleteAccount)
-	admin.POST("/accounts/create", accountCtrl.CreateAccount)
-	admin.PUT("/accounts/update/:id", accountCtrl.UpdateAccount)
-	admin.DELETE("/accounts/delete/:id", accountCtrl.DeleteAccount)
 }
 
 func setupShortLinkRoutes(auth *gin.RouterGroup, public *gin.RouterGroup, gormDB *gorm.DB) {
@@ -120,9 +103,6 @@ func setupShortLinkRoutes(auth *gin.RouterGroup, public *gin.RouterGroup, gormDB
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
-		admin.POST("/short-link", shortLinkCtrl.Create)
-		admin.PUT("/short-link/:id", shortLinkCtrl.Update)
-		admin.DELETE("/short-link/:id", shortLinkCtrl.Delete)
 		admin.POST("/shortlink/create", shortLinkCtrl.Create)
 		admin.PUT("/shortlink/update", shortLinkCtrl.Update)
 		admin.DELETE("/shortlink/delete/:id", shortLinkCtrl.Delete)
@@ -148,13 +128,6 @@ func setupLiveCodeRoutes(auth *gin.RouterGroup, liveCodeController *controller.L
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
-		admin.POST("/live-code", liveCodeController.Create)
-		admin.PUT("/live-code/:id", liveCodeController.Update)
-		admin.DELETE("/live-code/:id", liveCodeController.Delete)
-		admin.POST("/live-code/:id/qr-code", liveCodeController.GenerateQRCode)
-		admin.POST("/live-code/:id/share", liveCodeController.Share)
-		admin.DELETE("/live-code/:id/qr-codes/:qr_id", liveCodeController.DeleteLiveCodeQR)
-		admin.PUT("/live-code/:id/qr-codes/:qr_id", liveCodeController.UpdateLiveCodeQR)
 		admin.POST("/live-codes/create", liveCodeController.Create)
 		admin.PUT("/live-codes/:id/update", liveCodeController.Update)
 		admin.DELETE("/live-codes/:id/delete", liveCodeController.Delete)
@@ -176,10 +149,7 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 	auth.GET("/email/list", emailListCtrl.GetEmailListList)
 	auth.GET("/email/list/:id", emailListCtrl.GetEmailListDetail)
-	emailAdmin.POST("/email/list", emailListCtrl.CreateEmailList)
-	emailAdmin.PUT("/email/list/:id", emailListCtrl.UpdateEmailList)
 	emailAdmin.DELETE("/email/list/:id", emailListCtrl.DeleteEmailList)
-	emailAdmin.POST("/email/list/:id/trace", emailListCtrl.TraceEmail)
 
 	auth.GET("/email/smtp", emailSmtpCtrl.GetEmailSmtpList)
 	auth.GET("/email/smtp/:id", emailSmtpCtrl.GetEmailSmtp)
@@ -194,7 +164,6 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.DELETE("/email/drafts/:id", emailDraftCtrl.DeleteEmailDraft)
 
 	auth.GET("/email/jobs", emailJobsCtrl.GetEmailJobsList)
-	emailAdmin.POST("/email/jobs", emailJobsCtrl.CreateEmailJobs)
 	emailAdmin.DELETE("/email/jobs/:id", emailJobsCtrl.DeleteEmailJobs)
 	auth.GET("/email/jobs/:id", emailJobsCtrl.GetEmailJobsDetail)
 

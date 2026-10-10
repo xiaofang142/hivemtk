@@ -42,8 +42,6 @@ func setupClueRoutes(auth *gin.RouterGroup) {
 
 	clueAdmin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
-		clueAdmin.DELETE("/clue/:id", clueCtrl.DeleteClue)
-		clueAdmin.POST("/clue/import", clueCtrl.ImportClues)
 		clueAdmin.DELETE("/clues/delete/:id", clueCtrl.DeleteClue)
 		clueAdmin.POST("/clues/import", clueCtrl.ImportClues)
 	}
@@ -79,11 +77,6 @@ func setupRecoveryQueueRoutes(auth *gin.RouterGroup) {
 	auth.GET("/recovery-queue/list", ctrl.ListByStage)
 	auth.GET("/recovery-queue/distribution", ctrl.Distribution)
 	auth.GET("/recovery-queue/ready", ctrl.ListReadyForAttempt)
-	admin := auth.Group("/recovery-queue", middleware.AdminAuthMiddleware())
 	{
-		admin.POST("/enqueue", ctrl.Enqueue)
-		admin.POST("/:id/attempt", ctrl.MarkAttempt)
-		admin.POST("/:id/recovered", ctrl.MarkRecovered)
-		admin.POST("/:id/cancel", ctrl.Cancel)
 	}
 }

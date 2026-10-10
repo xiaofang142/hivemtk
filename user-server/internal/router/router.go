@@ -508,8 +508,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		copilotCtrl := controller.NewManageCoPilotController()
 		auth.GET("/manage/co-pilot/config", copilotCtrl.GetConfig)
 
-		smartRouterCtrl := controller.NewManageSmartRouterController()
-
 		ragEvalCtrl := controller.NewManageRagEvalController()
 		auth.GET("/manage/rag-eval/runs", ragEvalCtrl.List)
 		auth.GET("/manage/rag-eval/runs/:id", ragEvalCtrl.Detail)
@@ -527,17 +525,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		sloCtrl := controller.NewSLOController()
 		auth.GET("/manage/slo", sloCtrl.List)
 
-		manageAdmin := auth.Group("/manage", middleware.AdminAuthMiddleware())
 		{
-			manageAdmin.POST("/co-pilot/evaluate", copilotCtrl.Evaluate)
-			manageAdmin.PUT("/co-pilot/config", copilotCtrl.SetConfig)
-			manageAdmin.POST("/smart-router/match", smartRouterCtrl.MatchAgent)
-			manageAdmin.POST("/rag-eval/run", ragEvalCtrl.Run)
-			manageAdmin.PUT("/session-chain/sla-config", handoffCtrl.SaveAutoResolveConfig)
-			manageAdmin.POST("/session-chain/reopen", handoffCtrl.ReopenOnInboundMessage)
-			manageAdmin.POST("/rules", handoffCtrl.CreateRule)
-			manageAdmin.DELETE("/rules/:id", handoffCtrl.DeleteRule)
-			manageAdmin.PUT("/rules/:id/toggle", handoffCtrl.ToggleRule)
 		}
 
 		app.SetBridgeIngressSvc(bridgeIngressSvc)

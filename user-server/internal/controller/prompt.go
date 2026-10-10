@@ -49,36 +49,6 @@ type PublishRequest struct {
 	Variables          string `json:"variables,omitempty"`
 }
 
-// Publish 发布新版本（从 draft → active，自动把旧版本降为 retired）
-// POST /api/prompts/:id/publish
-func (c *PromptController) Publish(ctx *gin.Context) {
-	idStr := ctx.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
-		return
-	}
-	var req PublishRequest
-	if !response.BindJSON(ctx, &req) {
-		return
-	}
-
-	newVersion, err := c.svc.Publish(ctx.Request.Context(), service.PublishRequest{
-		SystemPrompt:       req.SystemPrompt,
-		UserPromptTemplate: req.UserPromptTemplate,
-		SOPNodeID:          req.SOPNodeID,
-		SOPID:              req.SOPID,
-		ImprovementNotes:   req.ImprovementNotes,
-		Variables:          req.Variables,
-		ParentID:           uint(id),
-	})
-	if err != nil {
-		response.ErrorFromDB(ctx, err, "发布新版本失败")
-		return
-	}
-	response.Success(ctx, newVersion, "发布成功")
-}
-
 // GetABExperiments 获取所有 Prompt A/B 实验列表
 // GET /api/prompts/ab-experiments?status=running
 func (c *PromptController) GetABExperiments(ctx *gin.Context) {
@@ -133,70 +103,6 @@ func (c *PromptController) Create(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, p, "创建成功")
-}
-
-// Update 更新 Prompt 候选
-// PUT /api/prompts/:id
-func (c *PromptController) Update(ctx *gin.Context) {
-	idStr := ctx.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
-		return
-	}
-	p, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
-	if err != nil {
-		response.ErrorFromDB(ctx, err, "Prompt 不存在")
-		return
-	}
-	var req PromptCandidateRequest
-	if !response.BindJSON(ctx, &req) {
-		return
-	}
-	if req.Scenario != "" {
-		p.Scenario = req.Scenario
-	}
-	if req.Version != "" {
-		p.Version = req.Version
-	}
-	if req.Title != "" {
-		p.Title = req.Title
-	}
-	if req.SystemPrompt != "" {
-		p.SystemPrompt = req.SystemPrompt
-	}
-	if req.UserPromptTemplate != "" {
-		p.UserPromptTemplate = req.UserPromptTemplate
-	}
-	p.SOPNodeID = req.SOPNodeID
-	if req.SOPID > 0 {
-		p.SOPID = req.SOPID
-	}
-	if req.Status != "" {
-		p.Status = req.Status
-	}
-	p.ImprovementNotes = req.ImprovementNotes
-	if err := c.svc.Update(ctx.Request.Context(), p); err != nil {
-		response.ErrorFromDB(ctx, err, "更新 Prompt 失败")
-		return
-	}
-	response.Success(ctx, p, "更新成功")
-}
-
-// Delete 删除 Prompt 候选
-// DELETE /api/prompts/:id
-func (c *PromptController) Delete(ctx *gin.Context) {
-	idStr := ctx.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "无效的 prompt id")
-		return
-	}
-	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, "删除 Prompt 失败")
-		return
-	}
-	response.Success(ctx, nil, "删除成功")
 }
 
 // GetByID 按 ID 查询 Prompt 候选

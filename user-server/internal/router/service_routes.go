@@ -130,10 +130,6 @@ func setupCustomerServiceRoutes(auth *gin.RouterGroup, aiAgentSvc *service.AIAge
 
 	auth.GET("/app-config/health", appConfigCtrl.HealthCheck)
 
-	appAdmin := auth.Group("", middleware.AdminAuthMiddleware())
-	appAdmin.GET("/app-config", appConfigCtrl.GetAppConfig)
-	appAdmin.PUT("/app-config", appConfigCtrl.UpdateAppConfig)
-	appAdmin.POST("/app-config/sync", appConfigCtrl.SyncWithPlatform)
 }
 
 func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
@@ -229,13 +225,6 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 	failoverSvc := service.NewLLMFailoverService(app.GetGlobalProviderFailover())
 	llmProvCtrl := controller.NewLLMProviderController(failoverSvc)
 
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.POST("/llm/providers/circuit/reset", llmProvCtrl.ResetCircuit)
-	admin.POST("/llm/providers/circuit/reset/:provider", llmProvCtrl.ResetCircuit)
-	admin.PUT("/llm/providers/policy", llmProvCtrl.UpdatePolicy)
-	admin.POST("/llm-routings/providers/circuit/reset", llmProvCtrl.ResetCircuit)
-	admin.PUT("/llm-routings/policy", llmProvCtrl.UpdatePolicy)
-
 	auth.GET("/llm/providers/health", llmProvCtrl.GetHealth)
 	auth.GET("/llm/providers/health/:provider", llmProvCtrl.GetProviderHealth)
 	auth.GET("/llm/providers/policy", llmProvCtrl.GetPolicy)
@@ -258,9 +247,6 @@ func setupSSEDashboardRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	auth.GET("/dashboard/clients", sseCtrl.ListClients)
 	auth.GET("/dashboard/topics", sseCtrl.ListTopics)
 	auth.GET("/dashboard/stats", sseCtrl.Stats)
-
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.POST("/dashboard/broadcast", sseCtrl.Broadcast)
 
 	// 实时驾驶舱 SSE（长连接推送）：此前 DashboardSSEController 的三个 handler
 	// （Stream/Snapshot/Metrics）没有任何装配点，运行时一律 404——写好的实时面
@@ -468,8 +454,6 @@ func setupQualityRoutes(auth *gin.RouterGroup) {
 	auth.GET("/perf/list", perfCtrl.ListResults)
 	auth.GET("/perf/:id", perfCtrl.GetResult)
 
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.POST("/perf/run", perfCtrl.RunTest)
 }
 
 func setupSecurityAuditRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
@@ -486,8 +470,6 @@ func setupSecurityRulesRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	rulesCtrl := controller.NewSecurityRulesController(service.NewSecurityRulesService(gormDB))
 	auth.GET("/security/rules", rulesCtrl.GetRules)
 
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.PUT("/security/rules", rulesCtrl.PutRules)
 }
 
 // setupSupportMetricsRoutes 运营后台「指标看板」：自助解决率 / 转人工率 / 会话轮次 / 知识库召回准确率。

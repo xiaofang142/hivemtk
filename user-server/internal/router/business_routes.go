@@ -193,14 +193,6 @@ func setupScriptRoutes(auth *gin.RouterGroup) {
 	flagAdmin := auth.Group("/feature-flags", middleware.AdminAuthMiddleware())
 	{
 		flagAdmin.POST("", flagCtrl.Create)
-		flagAdmin.PUT("/:id", flagCtrl.Update)
-		flagAdmin.DELETE("/:id", flagCtrl.Delete)
-		flagAdmin.POST("/:id/enable", flagCtrl.Enable)
-		flagAdmin.POST("/:id/disable", flagCtrl.Disable)
-		flagAdmin.POST("/:id/rollout", flagCtrl.Rollout)
-		flagAdmin.POST("/evaluate", flagCtrl.Evaluate)
-		flagAdmin.POST("/evaluate-batch", flagCtrl.EvaluateBatch)
-		flagAdmin.POST("/:id/code-references", flagCtrl.RegisterCodeReference)
 	}
 }
 
@@ -356,9 +348,6 @@ func setupPromptRoutes(auth *gin.RouterGroup) {
 
 	admin := auth.Group("/prompts", middleware.AdminAuthMiddleware())
 	admin.POST("", ctrl.Create)
-	admin.PUT("/:id", ctrl.Update)
-	admin.DELETE("/:id", ctrl.Delete)
-	admin.POST("/:id/publish", ctrl.Publish)
 }
 
 func setupTypingPredictRoutes(auth *gin.RouterGroup) {

@@ -2,7 +2,6 @@ package router
 
 import (
 	"hivemtk-user/internal/controller"
-	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
@@ -17,6 +16,4 @@ func setupChannelOverviewRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	auth.GET("/channels/overview", ov.Overview)
 
 	auth.GET("/channels/customer/:customer_id", ov.ListCustomerChannels)
-	admin := auth.Group("", middleware.AdminAuthMiddleware())
-	admin.POST("/channels/bind", ov.BindChannel)
 }

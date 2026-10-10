@@ -425,6 +425,15 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   是否喂给外部接口」；同尾名（CardStatsResponse 撞 14 个 dto 尾名）复扫必须带词边界。
 - 边界：KEEP 9 方法登记为扫描器结构性盲区，方法面再扫需 receiver-aware+赋值链核验。
 
+### B14 BACKEND_NOT_CALLED 死路由（717→561，2026-10-10 I27 攻坚）
+
+- 性质：audit_api_contract 死单=前端 1011 调用里找不到的后端注册 717 条。I26 证伪「扩展盲区主因」后本卡做静态归因四桶。
+- **已删（I27，156 条）**：admin 桶=仅 `AdminAuthMiddleware` 可达（管理 JWT 只有 user-web 签发持有、移动端无法鉴权）且前端不调 ⇒ 可证死。
+- **登记不删（557 条=C 类）**：user 桶 419（非管理组注册，移动端可消费，前端静态扫描不可见⇒不谎报死）/ unverified 127（组链解析失败）/ nosite 11（`POST("")` 空字面量注册不在索引）。
+- 事故与修复：同名组重定义 last-wins 致 3 误删 FE 活路由（UNMATCHED 暴露当轮恢复）；契约测试断言的 tool_debug/ltc 4 行按「测试=意图证据」当轮恢复；prompts admin PUT/DELETE 真删+Publish/Update/Delete 三层孤儿链清。
+- 方法论：compose 组链验证（rev(chain)+lit==bp）+ 位置化组解析（defs 按 offset<注册行偏）+ 删后必复跑 audit 看 UNMATCHED。
+- 边界：unverified 127 需更强静态分析（跨文件组传递全解析）才能再分桶；user 419 需移动端联调或网关日志才能证死。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。
