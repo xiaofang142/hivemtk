@@ -12,6 +12,11 @@
     "**/vendor/**",
     "**/.git/**",
     "**/tmp/**",
-    "**/backups/**"
+    "**/backups/**",
+    // 与 .gitignore 的 `models/`（第 248 行）对齐：cli2 不读 .gitignore，于是本地按 workflow
+    // 头注释那条命令（`npx -y markdownlint-cli2`）跑，会把这份从未入库的 README 判红 8 处，
+    // 而 CI 的干净检出里根本没有它 ⇒ 恒红的是本地复现命令，不是门。实测该目录下
+    // `git ls-files | grep 'models/.*\\.md$'` 命中 0 份 ⇒ 这条豁免没有挡掉任何在库文件。
+    "models/**"
   ]
 }

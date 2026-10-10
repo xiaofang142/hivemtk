@@ -131,7 +131,9 @@ describe('BaseAdapter.patrol 巡检一轮', () => {
     const onInbound = vi.fn();
     adapter.callbacks.onMessage = onInbound;
 
-    const r = await adapter.patrol({ throttleMs: 1, waitActiveMs: 200, visitAllWhenNoUnread: true });
+    // 两个 switch 延时必须显式归零：缺省时它们是生产的 3000–5000ms 随机切会话节奏，
+    // 本用例真等 ⇒ 单条耗 3–5s，贴着 vitest 默认的 5s 单测超时，CI 上与 jsdom 启动争抢时先红。
+    const r = await adapter.patrol({ throttleMs: 1, waitActiveMs: 200, switchMinMs: 0, switchMaxMs: 0, visitAllWhenNoUnread: true });
     expect(r.visited).toBe(1);
     expect(r.captured).toBe(1);
     expect(onInbound).toHaveBeenCalledTimes(1);

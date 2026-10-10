@@ -16,6 +16,10 @@
      必须逐条出现在该工作流 `on.push.paths` 与 `on.pull_request.paths` 里；
   3. 该事件若**整体没有** `paths:` 过滤（＝每次 push 都触发）⇒ 判为满足，但必须打印出来，
      不许静默通过。
+  4. `run: make <target>` 也是门站点，只是它的判据文件不在 scripts/ 下而在仓根 `Makefile`
+     （配方本身就是判据）。这类站点要求：目标名在 Makefile 里真有一条规则（改名没同步 CI
+     会在 runner 上炸，拦不住改动），且 `Makefile` 进该工作流的 push 与 pull_request paths。
+     只认剥完整行注释后仍剩下的 `make`，注释里提到的不计入。
 
 派生而不是手抄：判据集合从门脚本源码现抓（同 [[feedback-mutation-battery-hygiene]] 的
 "还原表由 patch() 自动登记而非手写"、[[project-gate-scope-blind-spots]] ㉗ 的教训——
@@ -32,7 +36,8 @@
 执行入口：本地 `python3 scripts/check-ci-gate-paths.py`；已接 CI（`lint.yml` 的
 `Workflow refs integrity` 作业，与 `check-action-runtime`／`check-ci-step-coverage` 同处）。
 牙齿：`bash scripts/check-ci-gate-paths.test.sh`（G1 摘掉 paths 必红／G2 补齐必绿／
-G2b 无过滤须明说／G3 真仓库计数对账／G4 缺目录退 2）。
+G2b 无过滤须明说／G3 真仓库计数对账（含 make 站点数与"Makefile 确实在 paths 里"）／
+G4 缺目录退 2／G5 make 站点缺 paths 或缺目标必红、补齐必绿／G6 注释里的 make 不计入）。
 """
 
 from __future__ import annotations
@@ -51,6 +56,12 @@ except ImportError:  # 环境前提缺位 ≠ 判据成立
 
 # 步骤里"真跑了某个脚本"的站点：只认 repo 相对路径写法，避免把注释里的文件名数进来
 STEP_SCRIPT = re.compile(r"(?:^|[\s\"'&|(])((?:scripts|[\w.\-/]+)/[\w.\-]+\.(?:py|sh))\b")
+# `run: make <target>` 站点：判据文件不在 scripts/ 下，而是仓根 Makefile（配方即判据本身）。
+# 前面必须是行首或空白/分隔符，避免把 `npm make`、路径片段里的 make 数进来。
+STEP_MAKE = re.compile(r"(?:^|[\s;&|(])make[ \t]+([a-z][a-z0-9_-]*)")
+# Makefile 里的目标定义行：行首、标识符紧跟冒号。`VAR := x` 因冒号前有空格而不落入。
+MAKE_RULE = re.compile(r"^([A-Za-z0-9_.-]+):", re.M)
+MAKEFILE_NEEDLE = "Makefile"
 # 门源码里的判据文件字面量（基线／注册表），按 [[feedback-cli-toolchain-gotchas]] 锚死后缀
 JUDGMENT_FILE = re.compile(r"[\w.\-]+\.(?:baseline|registry)\b")
 # 输入面（只打印、不要求进 paths）
@@ -77,6 +88,18 @@ def covered(needle: str, patterns: list[str]) -> bool:
     return False
 
 
+def without_comment_lines(block: str) -> str:
+    """剥掉 run 块里的整行注释，只留会真正执行的行。
+
+    判"CI 跑没跑这道门"要按执行位判：注释里提到过的命令不是执行站点。本门现在只把
+    剥完还剩下的 `make <target>` 计入，用例 G6 用一行 `# make zz-comment-only`
+    反向钉住这条口径（不剥注释就会多计一个站点，并把 Makefile 拖进一个并不跑它的作业）。
+    """
+    return "\n".join(
+        "" if line.lstrip().startswith("#") else line for line in block.splitlines()
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=".", help="仓库根（用于推导 .github/workflows 与 scripts）")
@@ -94,11 +117,19 @@ def main() -> int:
         return 2
 
     sites = 0
+    make_sites = 0
     derived_total = 0
     doc_inputs = 0
     ignore_sites = 0
     problems: list[str] = []
     notes: list[str] = []
+
+    # Makefile 的目标名现取，不手抄：CI 的 `run: make <target>` 步骤把判据搬到了这里，
+    # 目标改名/删除而 CI 没跟上时，这一步会在 runner 上炸（而不是拦住这次改动）。
+    mkfile = root / MAKEFILE_NEEDLE
+    make_defined: set[str] | None = None
+    if mkfile.is_file():
+        make_defined = set(MAKE_RULE.findall(mkfile.read_text(encoding="utf-8", errors="replace")))
 
     for wf in wfiles:
         try:
@@ -162,7 +193,35 @@ def main() -> int:
                                     f"（该路径被作业 {job_id} 的步骤实际执行 ⇒ 改它不会重跑这道门）"
                                 )
 
-    print(f"工作流 {len(wfiles)} 份 · 门站点 {sites} 处 · 派生判据文件 {derived_total} 份"
+                for target in sorted(set(STEP_MAKE.findall(without_comment_lines(run)))):
+                    if make_defined is None:
+                        problems.append(
+                            f"{wf.name} 的 {job_id} 调用 `make {target}`，但仓根没有 {MAKEFILE_NEEDLE}"
+                        )
+                        continue
+                    if target not in make_defined:
+                        problems.append(
+                            f"{wf.name} 的 {job_id} 调用 `make {target}`，"
+                            f"而 {MAKEFILE_NEEDLE} 里没有这条目标（改了名没同步 CI ⇒ 这一步会在 runner 上炸）"
+                        )
+                        continue
+                    make_sites += 1
+                    for ev, (present, pats) in handlers.items():
+                        if not present:
+                            continue
+                        if not pats:
+                            notes.append(
+                                f"{wf.name}:{job_id} [{ev}] 无 paths 过滤⇒每次触发（{MAKEFILE_NEEDLE} 天然被覆盖）"
+                            )
+                            continue
+                        if not covered(MAKEFILE_NEEDLE, pats):
+                            problems.append(
+                                f"{wf.name} 的 {ev}.paths 缺 `{MAKEFILE_NEEDLE}`"
+                                f"（`make {target}` 由作业 {job_id} 实际执行 ⇒ 改配方不会重跑这道门）"
+                            )
+
+    print(f"工作流 {len(wfiles)} 份 · 门站点 {sites} 处 · make 站点 {make_sites} 处（判据 {MAKEFILE_NEEDLE}）"
+          f" · 派生判据文件 {derived_total} 份"
           f" · 输入面 md 引用 {doc_inputs} 处（不要求进 paths）· paths-ignore 站点 {ignore_sites}")
     for n in sorted(set(notes)):
         print(f"  · {n}")

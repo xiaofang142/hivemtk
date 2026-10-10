@@ -54,14 +54,18 @@
 | 项 | 2026-10-11 现测 | 结论 |
 |---|---|---|
 | 5 个「删除」项（`NewAIAgentController` / `NewChannelAgentBindingController` / `NewCustomerServiceAgentController` / `NewCustomerServiceControllerWithService` / `NewPromptControllerWithService`） | 全树 Go 源码 grep 裸名：**零命中**。在用的是 `…WithService` 三胞胎（`router.go:708/:712/:715` 构造，定义在 `ai_agent.go:22/:457/:597`）与普通版（`NewCustomerServiceController`、`NewPromptController`）。普通版今天的位置：`service_routes.go:74` 与 `business_routes.go:342`（上表写的 `:324` 是 2026-10-08 的行号，此后该文件有别的注册在它前面） | ✅ 已删，`git log --all -S'func NewAIAgentController('` 命中 `7256777d` |
-| `NewDashboardSSEController` | 已接线：`service_routes.go:262 setupSSEDashboardRoutes` → `:273` 构造 → `:274-276` 注册三个 GET。今天的路由表里 `GET /api/dashboards/{stream,snapshot,metrics}` 三行都在（运行时快照 `/tmp/r80-routes.tsv:387/:389/:390`，测于 2026-10-10 23:12——/tmp 会清，这条是当时的读数记录；在库坐标为上面那组 `service_routes.go` 行号＋常驻守护 `dashboard_sse_wiring_test.go:41`，handler 归 `DashboardSSEController`），消费档位 **weak**（无精确消费方，靠前缀匹配）。接线本身有常驻守护 `dashboard_sse_wiring_test.go:41` 断言源码里存在该构造 | ✅ 已接线（`7256777d`）；三行仍是 weak，属「有路由、无客户端」——不是僵尸候选，是待前端接入 |
+| `NewDashboardSSEController` | 已接线：`service_routes.go:262 setupSSEDashboardRoutes` → `:273` 构造 → `:274-276` 注册三个 GET。今天的路由表里 `GET /api/dashboards/{stream,snapshot,metrics}` 三行都在（在库事实源 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-033621/live_routes.tsv:388/:390/:391`，由 `user-server/internal/router/route_surface_dump_test.go` 现装配导出；此前引用的 `/tmp/r80-routes.tsv:387/:389/:390` 是同一路由表的无表头版，行号差 1 即表头那一行），消费档位 **weak**（无精确消费方，靠前缀匹配；名册行 `bucket-weak.tsv:34-36`，可单条否证：`python3 scripts/route-consumer-triage.py --routes <同上> --why "GET /api/dashboards/stream"`）。接线本身有常驻守护 `dashboard_sse_wiring_test.go:41` 断言源码里存在该构造 | ✅ 已接线（`7256777d`）；三行仍是 weak，属「有路由、无客户端」——不是僵尸候选，是待前端接入 |
 | `GetQualityMetrics` | 全树零命中 | ✅ 已删（`516405fa`） |
 | `ClickRedirect` 注释 | `email_tracking.go:69-76` 已改成不漂移的版本，并写明**为什么不能**接受 `?url=`（开放重定向出口），路由在 `:183` | ✅ 已改（附带把「缺失时兜底 query」这条路径判为不该存在） |
 | `NewUserController`（def `user.go:17`） | 非测试构造点仍为 0，`user_test.go` 里 18 处构造（现测 `grep -c "NewUserController()"` = 18）。`UserController` 的 7 个 handler（`user.go:21/:38/:51/:68/:86/:99/:118`＝GetUserList/GetUser/CreateUser/UpdateUser/DeleteUser/UpdatePassword/Login）在 `internal/router/` 全树无任何注册点 ⇒ 整块是「测试自造的面」 | ⏸ 不删、不接线，理由见下 |
 | `NewChatWSHub`（def `chat_ws_hub.go:140`） | 非测试构造点 0，两个测试文件合计 18 处调用（13 + 5）。**类型本身在生产代码里出现**：`chat_ws.go:73` 字段 + `NewChatWSController(hub *ChatWSHub, …)`，而该构造器唯一调用点 `router/ws.go:53` 所在的 `RegisterWSRoutes` **全树零调用方** ⇒ `GET /ws/chat` 从未注册，实测落到 SPA 的 NoRoute 兜底 | ⏸ 不删、不接线，理由见下 |
 
 **为什么不顺手删掉 `UserController` / `ChatWSHub`**：两者的删除面不一样。`ChatWSHub` 的方法（`Run/Stop/Register/Unregister/SendChunk/Broadcast/…`）是 `ChatWSController` 唯一的推送底座，删它等于删 `/ws/chat` 这条**只差一次注册**的路由的全部实现——这是一次产品决策（要不要上线 WS 流式对话），不是死代码清理；`ws.go:10-30` 与 `config_param_seeds.go:415/418/421` 已把这层「参数能改但没人读」的现状写进库内描述，三个 `chat_ws_*` 配置项被明确标注为不生效。`UserController` 则是另一类：它与 `SystemUserController`（def `auth.go:576`，注册在 `auth_routes.go:54`）功能重叠，删它要连带删 18 处用例，且「用户端要不要一套独立于 system_users 的用户 CRUD」同样是产品问题。
-两者**都不是本轮可自行决定的「发现即修」**——删了碰 18 枚用例与一条待接线的路由，接线了要补鉴权（`HandleChatWS` 只校验 `session_id/customer_id`，`ws.go:30` 已写明）。故登记为待裁决，见 `docs/architecture/ZOMBIE_API_TRIAGE.md` 的「待人工裁决」一节。
+两者**都不是本轮可自行决定的「发现即修」**——删了碰 18 枚用例与一条待接线的路由，接线了要补鉴权（`HandleChatWS` 只校验 `session_id/customer_id`，`ws.go:30` 已写明）。故登记为待裁决，判据全文写在工作区根的 `ZOMBIE_API_TRIAGE.md`——**那份文档在仓库之外、不受版本控制**，
+只读本仓的读者看不到它；上面两段已把裁决所需的证据就地写全（构造点计数、测试引用数、重叠实现的位置、
+接线缺的那一步），本节自成一体。本仓内另有同形引用（规划文档路径 `docs/replan-2026-09/…`：在库 `.md` 里
+现测 `git grep -l -F replan-2026-09` 命中 5 个文件，含本文件；与朴素 `grep -rl --include='*.md'` 计数一致），
+属"规划面刻意留在工作区"的既有约定，不是本轮新造的缺口，已另记在册。
 
 ---
 
@@ -120,13 +124,21 @@ P0/P1/P2…P8 共 52 卡均有「执行结果」回灌，仅剩：
 
 ---
 
-## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md`）— ✅ 2026-10-08 收口轮逐条对账（实际共 D01–D23，23 条）
+## F. 技术调研已决策未开发（`docs/tech-research/DECISIONS.md`）— 2026-10-08 附二逐条对账 ＋ 2026-10-11 附三增量对账（实际共 D01–D23，23 条）
 
-详见 `docs/tech-research/DECISIONS.md` 的「附二：2026-10-08 状态对账」小节（含逐条证据文件位置）。摘要：
+详见 `docs/tech-research/DECISIONS.md` 的「附二：2026-10-08 状态对账」＋「附三：2026-10-11 增量对账」两张表
+（含逐条证据与可复跑判据；**下一轮按两张表合并后读，只看附二会读到已闭环项的旧状态**。
+该文件与 `docs/architecture/ZOMBIE_API_TRIAGE.md` 同族：**在工作区根、仓库之外，克隆里没有这份文件**，
+`find hivemtk -name DECISIONS.md` 零命中 ⇒ 下面这份摘要就是本仓读者能拿到的全部，逐条证据都写了本仓内的可复核坐标）。
+口径与附三一致：
 
-- **已闭环 12 条**（文档陈旧）：D01 置信度聚合（`smart_cs_orchestrator.go:1110-1122` Aggregate 优先 + 启发式降级，装配 `app/sales_engine_factory.go:66/:119`）/ D02 `executed_nodes`（`v3_29_0_sop_executed_nodes_migration.go`）/ D03 Saga 补偿（`sop_compensation.go:92` + `sop_dispatcher.go:110/:734`）/ D04 Bandit 回流（`bandit_reward_reflux_cron.go` 等 6 文件）/ D06 Checkpoint（`agent_checkpoint_repo.go` + 接线测试）/ D11 MultiModelVote+selfconsistency / D14 触达频控（`reach_gcra_limiter.go:88` → `reach_send_pipeline.go:249` → `app/reach_tool_wiring.go:34`，生产已接线）/ D15 WS seq+epoch / D16 HashEmbedding / D19 Conformal / D20 转人工条件门 / D22 BG/NBD。
-- **部分落地 2 条**：D07 greeting 未见单一词典实体（54 文件散落）；D08 主链已闭环（`tooluse/tool.go:59`），仅 `agent/runtime/context.go:14` 同名死声明待清（需连带改其测试，登记为卫生项）。
-- **确未落地 9 条**（各带实测证据与不吞理由）：D05 failsafe / D09 state_hash / D10 异议 LLM 兜底 / D12 配置层统一 / D13 Casbin / D17 sparse / D18 goldSet / D21 pg_search / D23 意图中间层。
+- **已闭环 13 条**（文档陈旧）：D01 置信度聚合（`smart_cs_orchestrator.go:1110-1122` Aggregate 优先 + 启发式降级，装配 `app/sales_engine_factory.go:66/:119`）/ D02 `executed_nodes`（`v3_29_0_sop_executed_nodes_migration.go`）/ D03 Saga 补偿（`sop_compensation.go:92` + `sop_dispatcher.go:110/:734`）/ D04 Bandit 回流（`bandit_reward_reflux_cron.go` 等 6 文件）/ D06 Checkpoint（`agent_checkpoint_repo.go` + 接线测试）/ D08 工具失败 `error_code`（主链 `tooluse/tool.go:59`，`agent/runtime/context.go:16` 那份漂移副本已删成类型别名 `= portcontract.ToolResult`，单一事实源在 `portcontract/tool_result.go:13`，`a65059b6`）/ D11 MultiModelVote+selfconsistency / D14 触达频控（`reach_gcra_limiter.go:88` → `reach_send_pipeline.go:249` → `app/reach_tool_wiring.go:34`，生产已接线）/ D15 WS seq+epoch / D16 HashEmbedding / D19 Conformal / D20 转人工条件门 / D22 BG/NBD。
+- **部分落地 2 条**：D07 greeting 落的是**一致性门**（ENUM 门第 6 项锁 `IntentXxx` 常量 ↔ `DefaultIntents` 词条 `Type` 双向覆盖，`ce892c31`，CI 执行点 `.github/workflows/enum-consistency.yml:46`），**不是**把 54 处散落引用收进单一实体文件 ⇒ 按决策原文的"单一数据源"仍未闭环；D12 把两个点位（`provider_failover_policy`／`embedding_global`）的读路径从遗留 `system_config_kv` 迁进参数中心，后者带可回滚的一次性迁移 `v3_54_0_…_migration.go`，**"两套 KV 物理合并 + 热重载"未落地**（附二的不吞理由仍适用：破坏性重构，需与 D13 一并排期）。
+- **确未落地 8 条**（各带实测证据与不吞理由）：D05 failsafe / D09 state_hash / D10 异议 LLM 兜底 / D13 Casbin / D17 sparse / D18 goldSet / D21 pg_search / D23 意图中间层。
+
+**计数自证**：13 ＋ 2 ＝ 15 条已在本仓代码里核到落点，另 8 条确未落地，合计 23 ＝ 工作区根那份
+`DECISIONS.md` 的 `grep -c '^## 决策 D'` 现数（2026-10-11 测于该文件，克隆里跑不出这条——它不入库）；
+本摘要的对账判据是"每条都能在**本仓**指到一个文件或一条命令"，指不到的只许写在"确未落地"里并带不吞理由。
 
 ---
 
@@ -237,3 +249,263 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
 1. **命中数只能证伪不能证真**。D14 一度因 `NewRedisGCRARateLimiter` 只有自身 + 测试引用被判「未接线」，打开调用链才发现真正的生产入口是同文件的 `NewGCRARateLimiterFromGlobalCache` ⇒ **判死资产前必须把整条调用链读完，不能只看构造器名**。本轮所有判「已落地」的项都要求确认到生产装配点（构造器 → 工厂/装配函数 → 生产调用方）。
 2. **区分「陈旧文档」与「真缺口」**，两类都要改文档，不能只改代码——本轮 MASTER_FEATURE_INVENTORY 的 5 行里有 4 行属前者。
 3. **确未落地项必须写不吞理由，且理由要核实到可执行粒度**，不能写「工程量大」这种下轮还得重新调研一遍的话。
+
+## 第四轮收口（2026-10-11 夜间：CI 读数回读 ＋ 路由消费面取证器 ＋ 配置面门的枚举盲区）
+
+### (1) tip 上的 CI 全部转绿（任务「static-gates 的 golangci-lint 红」结案）
+
+`d52dabd5` 这一笔的 run `38075916853`：`status=completed`／`conclusion=success`，
+逐作业现读 **13 枚全 success**（`gh api /repos/xiaofang142/hivemtk/actions/runs/38075916853/jobs`，
+判据取 `.jobs[].conclusion`——注意该端点的负载键是 `.jobs`，`.workflow_jobs` 会 `cannot iterate over: null`）。
+此前挂着的最后两枚 `Unit tests -race (user-server core)` 与 `Coverage (user-server)` 都已回报成功。
+`Static gates` 的修复证据在作业日志里：`:662-665` install-only、`:685` 「OK: .golangci.yml 通过 JSON Schema 校验（第 1 次尝试）」、
+`:688` `install-mode: none`、`:728` 「golangci-lint found no issues」。
+上一笔 `20ed9fbd` 的 run `38072310142` 是 failure（同一枚 lint 步骤），`dac68182`／`d52dabd5` 两笔 success ⇒ 修复方向被两侧读数夹住，不是"这轮碰巧绿"。
+
+### (2) 僵尸接口四档读数做成可重跑的取证器（任务 #12）
+
+原状况：四档读数（1048/135/209/348）出自 `/tmp/r80-consumer-scan2.py` ＋ `/tmp/r80-routes.tsv`——
+两件都不在仓库里，`grep -rn r80-consumer-scan hivemtk/` 零命中 ⇒ **任何人换台机器都跑不出来**，
+而那份名单是要拿去做删除决策的输入。
+
+- **事实源进库**：`user-server/internal/router/route_surface_dump_test.go`（新增）。只在 `ROUTE_DUMP_FILE` 设了才干活，
+  不设就 `t.Skip`——它不是门，只是给分诊器产字节，避免给守卫加第二条装配腿。导出后断言表里必须有 `GET /health`
+  （`router.go:200`，`Setup()` 的无条件注册项），空事实源直接 `t.Fatalf`。
+  现测：带 env `--- PASS`＋「导出 1740 行路由表」，不带 env `--- SKIP`，`gofmt -l` 空，`go vet` rc=0，
+  同一次跑里原有三枚守卫用例仍 PASS。
+- **分诊器进库**：`scripts/route-consumer-triage.py`（新增）。三面（client／ops／self-page）＋四档，
+  `--self-check` 10 枚控制（五正向＋五负向），`--why "METHOD PATH"` 可把单条路由的判档依据与证据出处摊开，全量跑会先执行控制、
+  **任一失败就不写名册**。
+- **现测读数**（当前有效轮次 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-033621/`；
+  前一轮 `20261011-030703/` 因取证器缺陷已作废，见下「取证器缺陷之二」，它留在树里只为留住差值证据）：
+  client 1035 · ops/self-page 279 · weak 143 · none 283，合计 1740＝路由表行数（计数器对不上就退 1）；
+  distinct (方法,处理器) 1454 · `/api/` 1721 行。扫描面 687／299／6 份，抽出形状 1324／1781／7 个。与旧快照的差值是**口径差**（旧版把兄弟仓库 `hivemtk-platform/platform-web/src`、
+  `platform-contributor/src` 记进 client、把工作区根 `scripts/`、`cold-start/` 记进 ops；新版只扫本仓库，
+  否则 clean clone 跑不出同一份），**逐条归因本轮没做**，所以只报方向与量级。
+  事实源内容两侧同一：`diff <(tail -n +2 live_routes.tsv) /tmp/r80-routes.tsv` 空输出、退 0，只差表头一行。
+- **确定性**：02:58 与 03:07 两轮独立重跑，五份产物 `diff` 逐字相同（`live_routes.tsv` md5 `f2565b6919405ef65ef2d96aed1c184a`）。
+  02:58 那一轮入库前已删除（四档名册与事实源逐字相同、且它不带 `00-provenance.log`，留两族重复产物只会让后来人分不清读哪一份），
+  所以这条 diff 是删前的现测、不可再复验；能复验的是"同一棵树连跑两趟仍逐字相同"这一判据本身。
+  两轮之间扫描面各多 1 份文件，是并行泳道在期间新建的 `user-web/src/utils/errorReporting.js`（birth 03:03:36）与
+  `user-web/tests/unit/error_reporting_console_scope.test.js`（birth 03:06:25）⇒ 面文件数跟树走、档位不跟。
+- **入库后在零脏树里复现（这一格才是"可重跑"的判据）**：`git clone --shared` 出自本笔的树，`git status --porcelain` 0 行，
+  同一套命令重跑 ⇒ 事实源 `diff` 空、md5 仍 `f2565b6919405ef65ef2d96aed1c184a`；四档名册 `diff` 全空
+  （client `d2ee804ef7246615b65a4357a0cd23be`／ops `7713fdff3df83284300075ddcdfa5637`／
+  weak `86127985787dda83214c1f65f10cce71`／none `7d1b077cc0e2a623be239644a87430ca`）。
+  两边的**扫描面并不相同**：本树带着并行泳道 76 份未提交文件，client 面 687 份／形状 1813 个、ops 面 297 份／1869 个，
+  克隆里对应 684／1807 与 294／1863，**面有差而名册零差**（多出来那几份的形状已被别处覆盖）。
+  顺带一条同类对账：入库后在主树再跑一趟（`--out` 指到 `/tmp`，不往证据树里落第二轮），四份名册与入库版 `diff` 仍逐字为空。
+- **零脏克隆里的整链复跑**：同一棵克隆里 `make audit` ⇒ 日志 `读数: 通过 19 / 违规 0 / 检查对象缺失 0`＋`✅ 19 条判据全部成立`，
+  `AUDIT_RC=0`（单独落文件，不取自管道末位），全日志 `❌` 0 处、`FAIL` 0 处；`go test ./internal/router -count=1 -v`
+  ⇒ rc=0、`--- PASS` 220 行、无 FAIL/SKIP、`ok 9.922s`（新导出件与原有守卫同编同跑）。
+  克隆里没有 `.env`（它不入库），DB 口令须从主树那份现取——这条属环境前提，不是仓库红。
+- **本轮查出并修掉取证器自身的缺陷**：初版把三类「写了路径字面量但不是调用方」的文件算进消费面——
+  `scripts/mut_*.py`（注码锚点）、取证器自己（文档串示例路径）、`user-server/tests/e2e/probe_result.tsv`（探针**输出**表）。
+  是 `--why` 这一格逼出来的：`POST /api/livecode/:id/click` 的精确形状证据原本有 4 条，其中 2 条属此类。
+  修法＝非消费方排除表＋第 9 枚控制；注码验证：清空 `NON_CONSUMER_NAMES`/`NON_CONSUMER_PREFIXES` 后
+  `--self-check` 退 1 并点名 4 项「该排没排」，还原后 md5 与基线一致。
+  **排除前后四档名册 `diff` 逐字未变** ⇒ 这条修复在这一版数据上只改证据出处、不改档位（数据性质，不是保证）。
+- **取证器缺陷之二（这一条改了档位，且是已发布名册的读数错）**：`@/api/x`、`../x`、`~/x` 三类 token 是
+  **打包器别名／相对 import／home 别名**，不是 HTTP 调用，却被抽成 `/api/x` 形状记进消费面。
+  发现路径不是设计出来的，是反向量出来的：为核 BACKLOG 里「断链 API ~200」那格的空档，把两侧形状集合求差集，
+  才看见 client 面 489 个形状只有 import 说明符供着。已发布轮次（`20261011-030703`）因此**同时**错在两处：
+  ① `POST /api/material` 被判 client，依据是 `user-web/src/views/system/MaterialLibrary.vue:204` 的
+  `} from '@/api/material'`——而该模块真实调用面是 `user-web/src/api/material.js:4-40` 的
+  `/api/material/list|upload|categories|selector|stats|${id}/usage`，**没有任何一处调裸 `/api/material`**
+  （同一个 `UploadMaterial` 处理器双注册在 `POST /api/material` 与 `POST /api/material/upload`，前端只走后一条）；
+  ② **62 条路由只因同族有 `@/api/<模块>` 而被记成"有弱证据"**，从删除候选名册里被藏掉了。
+  修法＝token 级前一字符判位（`MODULE_SPEC_PREV = {"@",".","~"}`，`scripts/route-consumer-triage.py:99`）＋第 10 枚控制
+  （极性对：三种别名写法必须抽出**空集合**，而 `http.post('/api/material')` 必须照常抽出；只测"挡得住"会退化成"什么都挡"）。
+  注码验证：把 `MODULE_SPEC_PREV` 置空 ⇒ `--self-check` 打 `✗ 负向控制之五` 并**退 1**，还原后 md5 与基线一致（`a564da79…`）。
+  差值用**同一棵主树＋同一份事实源**跑两版取证器现算（旧版字节可再取：`git show 3520250c~1:scripts/route-consumer-triage.py`
+  那份 md5 `e3090a9327d7d7378d495526abe53987`，新版＝`3520250c` 那份 md5 `a564da79da77e78d484b025e621bc4f9`；
+  跑旧版必须带 `--repo .`，否则它会按脚本自身位置推仓库根、在同一趟里读出「三面各 0 份」的空面——那是布局不是内容）：
+  形状 client 1813→1324（−489）、ops 1871→1781（−90）、self-page 7→7，合计挡掉 **579 个形状**；
+  四档 client 1036→1035、ops 278→279、weak 205→143、none 221→283，合计仍 1740。
+  逐条档位差（按键集对齐现算，不是计数差）：**63 行换档，只有两种去向**——`weak→none` 62 行、`client→ops` 1 行；
+  62 行按业务族分布 `/api/email*` 19、`/api/geo*` 18、`/api/sms*` 16、`/api/system*` 5、`/api/chat*` 2、`/api/oneid*` 2。
+  被挡形状的归属也逐条看过：client 侧被挡 489 个的首段分布是 `views` 233／`api` 129／`src` 41／`components` 29／
+  `utils` 27／`core` 18／`constants` 17 等，全是模块说明符；ops 侧 90 个含 `/../../etc/passwd` 这类**安全用例载荷**
+  与 `/www/go/hivemtk`（`~/Documents/...` 展开）；唯一可疑串 `/api/yyy` 现读为
+  `user-web/tests/audit/map_page_api.py:39` 注释里那句「import X from '@/api/yyy'」的模式描述，不是调用。
+  **副作用要把话说在最前**：这 62 行里有 8 行的消费方天然静态不可见——
+  `GET /api/email/track/open/:token`（像素）、`GET /api/email/track/click/:token`（302）、
+  `POST /api/email/track/webhook/postmark|sendcloud`、`POST /api/sms/delivery/webhook`、`POST /api/sms/webhook/inbound`、
+  `POST /api/email/unsubscribe/confirm|resubscribe`（收件人在邮件里点的链接）。
+  像素与短链的 URL 是 `user-server/internal/service/email_open_tracker.go:68`、`email_tracking.go:68` **运行时拼进邮件正文**的，
+  仓里没有任何前端／模板串能命中它——「三面全不命中」对这一族**必然是假阴性**，正是本工具末行提醒的第②类。
+  确定性：新取证器连跑两趟（第二趟 `--out /tmp`，不往证据树落第二轮），五份产物逐字节相同、事实源 md5 仍 `f2565b69…`。
+- **新名册的跨树复现（入库笔 `3520250c` 现测）**：`git clone --shared` 出自这一笔，克隆里 `git status --porcelain` **0 行**，
+  同一套命令重跑 ⇒ 事实源 md5 仍 `f2565b6919405ef65ef2d96aed1c184a`、**五份产物与入库版逐字节相同**，四档读数 1035/279/143/283 不变。
+  扫描面比主树小：client 684 份／1321 个形状（主树 687／1324）、ops 294 份／1778（主树 299／1781）、self-page 6 份／7 个（两树相同）
+  ⇒ 又是**面有差而名册零差**，这份处置输入不依赖任何未入库文件。同棵克隆里另跑三项：
+  `make audit` ⇒ `读数: 通过 19 / 违规 0 / 检查对象缺失 0`＋`✅ 19 条判据全部成立`，`AUDIT_RC=0`（单独落文件，不取自管道末位），
+  全日志 `❌` 0 处、`FAIL` 0 处；`go test ./internal/router -count=1 -v`（`TZ=UTC`）⇒ rc=0、
+  `--- PASS` **267** 行／`--- SKIP` 1 行／`--- FAIL` 0 行，`ok 7.7s`——唯一那行 SKIP 现读就是 `TestDumpLiveRouteTable`
+  （未设 `ROUTE_DUMP_FILE`，按设计让路，不是门）；用例数从上一轮记录的 220 涨到 267 是并行泳道往本包新增的测试，
+  引用前先现数。`python3 -m py_compile scripts/route-consumer-triage.py` 通过；
+  常驻门两枚在主树复跑：`check-battery-identity.py` ⇒ `归属 A5：磁盘 43 族＝驱动 23 族＋非电池登记 20 族`、0 项不合格／rc=0
+  （新轮次目录的 A4 由 `00-provenance.log` 的 `基线字节` 行认领），
+  `check-env-coverage.py` ⇒ 读取键 201 · 红 0（未文档化 0 · 基线陈旧 0）／rc=0。本轮零 Go 代码改动，`gofmt`／`go vet` 无对象。
+
+### (3) 门的产物归属轴自己逮到了这一族（顺带补装架）
+
+03:03 那次 `make audit` 唯一一处红是 `check-battery-identity.py` 的 A5：
+「族 `RouteTriage` 在树里有轮次目录，却既无驱动归属、也未登记为非电池」。处理：
+取证器改为每轮写 `00-provenance.log` 的 `基线字节` 身份行（HEAD＋取证器与事实源 md5＋控制枚数＋读数＋复现命令），
+并在 `NOT_A_BATTERY` 写实登记（静态分诊器没有格子、不注码，驱动轴只 ast 解析 `mut_*.py`，本就不该认领它）。
+复跑：`0 项不合格`／rc=0，`归属 A5：磁盘 43 族＝驱动 23 族＋非电池登记 20 族`（名单含 `RouteTriage`）。
+反向注码：摘掉那条登记 ⇒ rc=1 并打回同一句 A5；还原 md5 一致。
+`.gitignore` 三条例外逐行现测（`git check-ignore -v` 命中哪条）：目录行必需（少了它 `logs/*` 挡回整棵子树）、
+`**/*.log` 必需（仓库根第 24 行 `*.log` 会命中 `00-provenance.log`）、`**/*.tsv` 多余（只留目录行时 .tsv 已不被忽略），
+现数对齐 43＝43。
+
+### (4) 配置面可发现性门的枚举盲区（`make audit` 上一轮的 rc=2 根因）
+
+`7437684f` 把若干 env 读取搬进 `(ctx, "KEY", ...)` 形状的 helper 后，`scripts/check-env-coverage.py` 只认
+**第一个实参**位置 ⇒ 门当场读出 3 条 STALE `WEBHOOK_*`（看着像"键没人读了"，其实是门看不见）。
+按"门坏了修门"处理：`helper_call_args()` 取整张实参表（允许一层嵌套括号），表内标识符也解析回常量值。
+现测：读取键 194 → **201**、经 helper 枚举到的键名 22 → **29**。
+新露出的 4 个 `TOOL_*` 键**补文档而不是塞基线**（`docs/DEPLOYMENT_GUIDE.md` §6.2 新增
+`TOOL_CIRCUIT_FAILURE_THRESHOLD`／`TOOL_CIRCUIT_HALF_OPEN_ATTEMPTS`／`TOOL_AUDIT_QUEUE_SIZE`／`TOOL_RISK_OBSERVED_RETAINED` 四行，
+各写默认值、可用区间与判红坐标）。
+反向注码：把枚举退回"只看第一个实参"，3 条 STALE 原样复现；还原 md5 一致。
+另修同文件的汇总行自身会骗人：`红 {len(holes)}` 不含 stale ⇒ 纯 STALE 的红会印「红 0」却退 1。
+现改为 `红 N（未文档化 X · 基线陈旧 Y）`；注码：往基线里塞一条不存在且带理由的键 ⇒ rc=1 且印「红 1（未文档化 0 · 基线陈旧 1）」，
+撤码 md5 一致。门当前读数：读取键 201 · 已文档化 94 · 工具进程自动豁免 16 · 基线登记 91 · 红 0。
+
+### (5) 文档失真回写（任务 #8）
+
+- `docs/architecture/ZOMBIE_API_TRIAGE.md`：旧「2026-10-11 重测」一节改标题为**一次性快照**并写明它的脚本与事实源都在 `/tmp`、
+  不可重跑；新增「二次重测：取证器进仓库」一节，含复现命令、现测读数、口径差异、本轮修掉的取证器缺陷与注码证据。
+  标题（H1）里那句「API_PAGE_INVENTORY §4.2 · 287 个注册」换成现口径。
+- `docs/architecture/API_PAGE_INVENTORY.md`：H1 的「自动生成」从未成立（无任何脚本产它或读它），
+  加作废横幅：总览「1114」vs 现测「`/api/` 1721」＝少算 607 行，派生的「287 僵尸」「209 断链」不可作处置输入。
+  `docs/INDEX.md` 对应行随改成 `⌛归档`／`archived`（`📋报告` 与 `current` 的判据是徽章图例第 32 行）。
+- `docs/architecture/BACKLOG_TODOLIST.md`：P1 两行里的 348／135／209 换成可重跑读数 221／278／205，
+  并保留「旧一次性快照读作 348/135/209、面集合不同」的说明。
+- 工作区根 `CLAUDE.md` 规则1 写的远端名 `origin`／`github` 与本仓实测不符（本仓是 `gitee-upstream`＋`upstream`，
+  在 hivemtk 里 `git push origin` 直接报 "The origin remote does not exist"）⇒ 换成现测名，并写明与仓库内 `hivemtk/CLAUDE.md` 规则0 冲突时以仓库内为准。
+
+### (6) 登记未吞项（不是待办措辞，是判据不在本树的那几类）
+
+- **僵尸判定的运行时腿**：静态三面扫不到地址栏直开口、渠道/ESP 回调、版本不可知的老前端构建三类消费方，
+  删除动作必须另有访问日志证据；本机没有可用的线上日志源 ⇒ 属"要外部数据"的阻塞，名单与判据形状已进文档。
+- **并行泳道的脏文件**（本轮入库后最后一次现数＝`git status --porcelain` 76 份：`user-web` 70／`user-server` 6，
+  含 `user-web/src/utils/errorReporting.js`、`user-web/src/utils/clipboard.js` 等；这个数字随对方干活会漂，
+  引用前先现取）：归属按 mtime 窗口与 `git status` 现读，不代签、不代改。
+- **两枚同类慢测**（`user-web/bridge/test/humanize.test.js` 3701ms、`test/adapter-b24-send-verify.test.js` 文件级 13422ms）：
+  与本轮报告的入口不同类不同泳道，只登记。
+- **`sop_state_memories.session_id` 的 `not null`**：属 schema 取舍决策，`20ed9fbd` 里点名过，未擅改。
+- **四刀「真杀」仍需要一个会编 Go 的 bash 3.2 执行点**、**`make audit` 整链在 CI 里无执行点**：沿用第五十六轮的在册判定，本轮没有给整链新增执行点。
+  例外只有本文件 (8) 那一道：取证器的口径自检单独搬进了 CI，其余 21 道仍只在本地 `make audit` 跑。
+
+### (7) 反向那一趟量出来的三条真断链候选与一处静默错数据（本轮未擅改，理由在册）
+
+修完取证器的 token 级缺陷后，顺手把**反方向**（前端有串、路由表无对应）也现算了一遍：
+client 面 1324 个形状里 **499** 个在路由表无精确对应，其中 `/api/` 前缀 **9** 个（旧取证器同一棵树读成 119 个，
+`@/api/<模块>` 这类 import 说明符全在这一侧虚高过）。9 个逐条读原文（每条都能被 `grep -n` 与 `--why` 否证）：
+
+| 串 | 出处 | 定性 |
+|---|---|---|
+| `/api/main.go` | `user-web/bridge/src/popup/index.js:35` 注释里的源码路径 | **假阳性**（不是 URL） |
+| `/api/ai-productivity` | `user-web/src/views/salesWorkbench/Index.vue:453` 界面提示文案字面串 | **假阳性**（文案，不是调用） |
+| `/api/approvals`、`/api/followups`、`/api/inbox`、`/api/sales-workbench` | 各 api 模块的 **base 常量**（如 `user-web/src/api/approval.js:12`），真实调用是 `` `${base}/pending` `` 模板拼接 | **提取器无法把变量拼回去** ⇒ 不是断链；路由表里这四个前缀分别有 2/5/18/4 行注册 |
+| `/api/knowledge` | `user-web/src/views/knowledgeBase/KBDrawer.vue:310` 直接 `http.get(url, {kb_id…})`，`url` 三支之一 | **真断链**：路由表 `GET /api/knowledge` **0 行**（该引擎 `HandleMethodNotAllowed=true` ⇒ 404），而同支的 `/api/faqs`、`/api/sop-templates` 都存在 |
+| `/api/webhook/qq/*` | `user-web/src/views/qq/account.vue:11` 与 `:265` 让用户把 QQ 开放平台回调地址配成 `{域名}/api/webhook/qq/{账号ID}` | **缺整条回调口**：路由表里 qq 只有 `/api/qq/accounts*` 7 行 CRUD／验签测试口，无一条 webhook；其余 5 渠道都有 `GET /api/webhook/{dingtalk,feishu,wechat,wecom,whatsapp}/:account_id`（`live_routes.tsv:966/967/970/971/972`）⇒ **用户照提示配了必然收不到消息** |
+| `/api/ws/bridge` | `user-web/bridge/src/core/constants.js:18` 的常量，且该文件注释自己写着"在服务端从未注册过" | 与在册的 `/api/ws/agent` 那格同族（WS 面，`Setup()` 里 `/ws/chat` 也零行） |
+
+**另查出一处"不报错但显示错数据"**：`KBDrawer.vue:310-312` 三支预览都把 `kb_id` 当查询参数发，而
+`FAQController.List`（`user-server/internal/controller/faq.go`）只读 `keyword/category/intent/enabled`＋分页，
+`sop_template.go` 同样不含 `kb_id`（两文件 `grep -rn kb_id` 现读 0 命中，正控制＝文件确实存在）
+⇒ 抽屉里"这个知识库的条目预览"实际显示的是**不分库的全量列表**，rag 那一支则直接 404。
+
+**本轮不擅自修的理由（与 `docs/architecture/ZOMBIE_API_TRIAGE.md` ③ 类同口径）**：补 `/api/knowledge` 的 rag 列表口
+要定"按 kb 过滤文档"的契约归属（前端改打 `/api/knowledge/documents` 还是后端给 `FAQFilter`/`List` 加 `kb_id`），
+补 QQ 回调口是**新增一条无鉴权写口**并要定验签口径——两者都是产品/安全拍板面，不是"发现即修"的代码缺陷；
+且一次动 3 渠道 × 5 张卡的对称面会重演上一轮被驳回的整站改造。已按上面坐标登记，判据全部可在本树复算。
+
+### (8) 给取证器的 10 枚控制补执行点（本地 ＋ CI 各一处），四格反向验证
+
+**修的是什么**：`--self-check` 的 10 枚控制此前只有人手跑一次工具才会响。这不是假想的风险，是本轮已经兑现过两次的
+失效形态——文件级排除表漏掉 `mut_*` 锚点、token 级漏掉 `@/api/x`，两次都不是门报的，是人工比对两份名册才发现的。
+工具的正常路径本来就有闸门（`scripts/route-consumer-triage.py:475`：名册写出前先判 `control_rc`，不过就不产出），
+缺的是"每次提交都跑到"这一层：**恒绿的自检与坏掉的自检长得一样**。
+
+**落点两处**（同一判据，两道执行点）：
+
+- 仓根 `Makefile` 的 `audit:` 配方，接在 `check-battery-identity.py --quiet-ok` 之后 ⇒ audit 门标题行 **21 → 22**
+  （`python3` 现数，不是 `grep -c '^── '`；日志里那个 26 含子脚本自己印的分节线）。
+- `.github/workflows/user-server-ci.yml` 的 `static-gates` 作业加同名步骤 ⇒ 该作业步骤 **16 → 17**
+  （`yaml.safe_load` 现数）。同时把 `scripts/route-consumer-triage.py` 加进该文件 `on.push.paths` 与
+  `on.pull_request.paths`——这一步是被作业真执行的门站点，不进触发面就得到"看着在跑、实际永远绿"的门，
+  由 `scripts/check-ci-gate-paths.py` 常驻拦截。
+
+**四格反向验证**（全部 `cp` 备份＋写回，没对未提交文件跑过 `git checkout`／`restore`；每格还原后逐文件 md5 比对）：
+
+| 注码 | 判据应当怎么红 | 实测 |
+|---|---|---|
+| ① `MODULE_SPEC_PREV = set()`（token 级排除表摘掉） | 控制五失效 | `✗ 负向控制之五：token 级模块路径规则坏了` ＋ 同一行把三枚别名串**原样列出**（`@/api/material`、`../../../../packages/browser-core/index.js`、`~/api/material/upload` 都被重新抽成路径），并印出极性另一侧「真实调用读出 `['/api/material']`」；末行 `自检：10 枚控制，失败 1 枚`，rc=1 |
+| ① 同注码下跑整链 | audit 当场红、不跳过下游 | `make audit` rc=2，末行 `make: *** [audit] Error 1`；`✅ 静态审计通过` 出现 **0** 次；排在它之后的 vite 门出现 **0** 次（＝没被跳过，是真拦住了） |
+| ② `NON_CONSUMER_PREFIXES = ()`（文件级排除表摘掉） | 控制四失效并点名漏网的文件 | `✗ 负向控制之四：非消费方排除表坏了（该排没排 ['mut_route_surface.py', 'mut_tg_gate_policy.py'] · 误伤 []）`，rc=1 |
+| ③ 摘掉 workflow 里那两行 `paths` | 触发面守卫点名这一道门 | `check-ci-gate-paths.py` rc=1，两行分别印「user-server-ci.yml 的 pull_request.paths 缺 `scripts/route-consumer-triage.py`（该路径被作业 static-gates 的步骤实际执行 ⇒ 改它不会重跑这道门）」与 push 同句 ⇒ 证明新步骤**真被当成门站点数到**、paths 那两行是载荷而非装饰 |
+| ④ 三处注码逐一还原 | 回到基线字节 | 取证器 md5 `a564da79da77e78d484b025e621bc4f9`（＝`git show HEAD:scripts/route-consumer-triage.py`，`git status` 该文件干净）；workflow md5 `656634db426d13655f671302b93cad29`；还原后 `make audit` rc=0 且日志里 `自检：10 枚控制，失败 0 枚` 恰 1 次 |
+
+**成本现测**：`--self-check` 三连跑 0.10 / 0.04 / 0.04s（取中位 0.04s），不读仓库、不连库、不联网
+（`if args.self_check: return self_check()[0]` 在 `root = args.repo or repo_root()` 之前，见 `scripts/route-consumer-triage.py:428-431`）。
+注释里"文档引用的数字必须能现算"这一条也是这么处理的：上面 21/22、16/17、0.04s 全是本轮现取，不是沿用。
+
+**推送后 CI 回读（tip `37ef8136`，双远端同 SHA）**：7 条 run 全部 `completed success`
+（`38089276906` user-server-ci／`38089276910` Markdown Lint／`38089276955` Docs Consistency／
+`38089276927` Lint／`38089276897` DCO／`38089276899` SBOM／`38089277005` Docs Link Check；
+唯一 skipped 是 `Lint` 作业里的 `LICENSE Compliance Scan`——它挂 `if: schedule`，属节奏步骤，见 `check-ci-step-coverage.py` 的既有口径）。
+新步骤的**执行证据到步骤级**：`gh api …/actions/runs/38089276906/jobs` 现数该作业 `steps` 共 **23** 项，
+第 **10** 项就是「路由消费面取证器口径自检（10 枚控制，含两条极性对）」，`conclusion=success`；
+第二端取 job 日志原文（`actions/jobs/114322182208/logs`）——
+`##[group]Run python3 scripts/route-consumer-triage.py --self-check` 打在 `21:52:57.9415`，
+`自检：10 枚控制，失败 0 枚` 打在 `21:52:57.9957`（runner 上 0.054s，与本地中位同量级），
+相邻两步也一并复核：作业级数组里第 **9**、**11** 项都是 `success`（「参数中心读取点门」「CI 的 PG 名额与代码侧池上界必须同源」），
+日志那端前一步的末行输出打在 `21:52:57.9316`、后一步的 `##[group]` 打在 `21:52:58.0062`
+⇒ 它排在链中、真被执行、且没被上游遮挡（作业级 `success` 不够，步骤级才算）。
+**取日志这一端本轮踩到的坑**：`curl` 不带 `-L` 打 `actions/jobs/<id>/logs` 时，GitHub 回 **302** 指向 Azure Blob，
+于是落一个 **0 字节的日志文件而 `curl` 退 0**——随后 `grep` 零命中会读成"日志里没有这一步"。
+第一趟是靠 `bytes=$(wc -c<文件)` 打出 **0** 才发现可疑（`curl` 本身退 0，不会提醒），第二趟补上
+`http=%{http_code} size=%{size_download}` 才确认是 302 没跟——跟随后 70170 字节里第 518／545 行正是上面两句。
+**这一段的第一版把"读日志"的理由写成"steps 数组只回前 10 项"——那句是错的**：把两条读数摆在一起才发现
+API 那份数组本来就含这一步（23 项、第 10 项、success），我先前看到的 9 行截断是**我这边命令输出的截断**，
+不是 GitHub 的。结论（步骤级证据＝数组＋日志双端）不变，但机制句要按现数改回来，别留给下一个人当事实。
+门站点计数也现取了两版：`d9669f76` 的干净克隆 `check-ci-gate-paths.py` 印 **41 处**，本轮改完是 **42 处**
+（新增的那一处就是 static-gates 里的这一步 ⇒ "这道门在 CI 里真被数到"有独立于 rc 的证据）。
+
+**下一笔纯文档提交（tip `2c898582`，双远端同 SHA）的回读形状**：6 条 run 全部 `completed success`
+（Docs Link Check `38092001081`／Markdown Lint `38092001059`／Docs Consistency `38092001058`／
+DCO `38092001108`／SBOM `38092001120`／Lint `38092001193`），**其中没有 `user-server-ci`**
+——改的是 `docs/**`，落不进那份作业的 `paths`，所以这不是新门失效，而是触发面的正常形状。
+写这一段专门防一种误读：下一个人拿"最新 tip 没有 Go 侧作业"当"那一步没注册上"的证据。
+判"这道门在不在 CI 里"用的是 `check-ci-gate-paths.py` 的门站点计数（当前 **42 处**，本轮在已提交树上复测）
+和**含 Go／脚本改动那一趟**的步骤级读数，不是 tip 的作业名单。
+
+
+### (9) `npx -y markdownlint-cli2` 这条本地复现命令恒红 8 处——红在豁免表漏抄，不在门
+
+复现 (8) 那道门的文档改动时按 `.github/workflows/markdownlint.yml` 头注释给的命令跑了一遍：
+
+- 实测 `rc=1`、`Summary: 8 issues in 1 file`，8 处全是 MD004/ul-style，出处 `models/laya/README.md:83,85,86,330,331,332,359,360`。
+- 那份文件 `git check-ignore -v` 回 `.gitignore:248:models/` ⇒ **从未入库**；CI 跑的是干净检出，
+  且 Markdown Lint 作业在 tip `d9669f76` 上回读是 `completed success`。
+  ⇒ 恒红的是**本地复现命令的口径**，不是这道门；照这个读数去"修 README"等于给一个 CI 里不存在的文件改样式。
+- 根因：markdownlint-cli2 不读 `.gitignore`，而 `.markdownlint-cli2.jsonc` 的 `ignores` 手抄了
+  `dist/build/pg_data/uploads/logs/vendor/tmp/backups` 那一族，独独漏了 `models/`——手抄表最先失效的那一格。
+- 处置（一行豁免，代价先核再改）：`git ls-files 'models/**/*.md' '**/models/**/*.md'` 现测 **0** 份，
+  `find models -name '*.md'` 的两份（`laya/README.md`、`laya/eval/results.md`）逐份读 `tracked=0 ignored=yes`
+  ⇒ 这条豁免不挡任何在库文件。改完 `npx -y markdownlint-cli2` **rc=0**、`Linting: 183 → 181 files`
+  （少的两份就是上面这两份），`.markdownlint-cli2.jsonc` 本就在该作业 `paths` 第 32 行 ⇒ 这次改动会自己拉起 Markdown Lint。
+- **本轮没测的那段**：CI 侧结论以推送后回读为准（本地 rc=0 只证明工作树口径与干净检出对齐了，不证明 runner 上一样）。
+
+顺带把一个**既有**口径写清（不是这行豁免造成的，别把它当新盲区）：同一份配置在干净检出里跑是
+`Linting: 175 files`，而 `git ls-files '*.md'` 现数 **200** 份 ⇒ 差的 25 份全在
+`docs/superpowers/specs/ledger/logs/**`（取证日志按白名单入库、又被 `**/logs/**` 排除在样式门外）。
+也就是说本仓的取证产物从来不受 markdownlint 约束，这条豁免只移除了 `models/` 那两份从未入库的文件。
+
+
+

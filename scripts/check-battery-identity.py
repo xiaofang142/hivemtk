@@ -128,6 +128,11 @@ NOT_A_BATTERY = {
     "P903": "常驻变异电池 `mut_journey_stage_index_p903.sh`（.sh 驱动）；本门驱动轴只覆盖 `mut_*.py`"
             "（ast/tokenize 解析），.sh 候选不进 drivers() ⇒ 无身份发射点可挂；"
             "产物为 `go test -overlay` customer_journey 阶段索引变异读数，非人工重定向",
+    "RouteTriage": "静态取证器 `scripts/route-consumer-triage.py`（路由消费面四档分诊）的轮次名册，"
+                   "不是变异电池：没有格子、不注码、不 overlay，所以驱动轴（只 ast 解析 `mut_*.py`）"
+                   "本就不该认领它。它也不是人工重定向的产物——产物由工具自己落盘，"
+                   "且每轮带 `00-provenance.log` 的 `基线字节` 身份行（HEAD＋工具与事实源的 md5＋自检枚数），"
+                   "复跑 `python3 scripts/route-consumer-triage.py --self-check` 可验它的 9 枚控制",
 }
 
 # 合并带进来的**他人泳道**常驻电池：它们确实把逐格产物写进仓库树，但驱动里没有身份发射点

@@ -18,7 +18,9 @@
 
 口径边界（按「门禁口径盲区」的规矩写明，别把"没数据"印成"没问题"）：
   - 枚举源是**字面量**三条路径：直读 `os.Getenv("X")` / `os.LookupEnv("X")`、把键名以字面量传给
-    「形参直通 os.Getenv」的 helper（见 find_env_helpers 自动识别）、以及同包内 `NAME = "X"` 再
+    「形参直通 os.Getenv」的 helper（见 find_env_helpers 自动识别；**键名可以在实参表的任意位置**，
+    见 helper_call_args——只认第一个实参的旧写法会把 `helper(ctx, "KEY", ...)` 这类"上下文优先"
+    的参数序读成"这个键没人读"，实测它让三个 webhook 旋钮被判 STALE）、以及同包内 `NAME = "X"` 再
     `os.Getenv(NAME)`（本卡为"文案与读取处不漂移"引入的常量写法，见 CONST_ASSIGN）；
     用变量拼装或运行时算出的键名不在本门视野内；
   - 只扫 `*_test.go` 之外的文件（测试夹具不算运维配置面）；
@@ -83,6 +85,12 @@ def find_env_helpers(sources: dict[Path, str]) -> set[str]:
     return helpers
 
 
+def helper_call_args(helper: str, text: str) -> list[str]:
+    """某个 helper 每次调用的实参表原文（允许一层嵌套括号，如 `raw(ctx)` 这种实参）。"""
+    pat = re.compile(r'\b' + re.escape(helper) + r'\(((?:[^()]|\([^()]*\))*)\)')
+    return [m.group(1) for m in pat.finditer(text)]
+
+
 def documented_surfaces() -> list[tuple[str, str | None, set[str]]]:
     """每个文档面能替哪些键作证：(面名, 键前缀约束, 该面出现过的整词集合)。"""
     return [
@@ -127,11 +135,16 @@ def collect_reads() -> tuple[dict[str, list[str]], int]:
             if ident in table:
                 add(table[ident], rel)
         for helper in helpers:
-            for key in re.findall(r'\b' + re.escape(helper) + r'\("([A-Z0-9_]+)"', text):
-                add(key, rel, through_helper=True)
-            for ident in re.findall(r'\b' + re.escape(helper) + r'\((\w+)[,)]', text):
-                if ident in table:
-                    add(table[ident], rel, through_helper=True)
+            # 键名不必是第一个实参：`webhookIntAfterEnv(ctx, "WEBHOOK_QUEUE_SIZE", raw, def)`
+            # 这类"上下文在前"的参数序是真在读的键，旧写法只扫 `helper("KEY"` 会把它读成"没人读"，
+            # 于是基线里那条被反向判成 STALE（门的第二判据反过来咬了正确登记的条目）。
+            # 这里取整张实参表，再在表内找字面量/常量标识符；嵌套一层括号（`raw(ctx)` 这种实参）不吃。
+            for args in helper_call_args(helper, text):
+                for key in re.findall(r'"([A-Z0-9_]{2,})"', args):
+                    add(key, rel, through_helper=True)
+                for ident in re.findall(r'\b([A-Za-z_]\w*)\b', args):
+                    if ident in table:
+                        add(table[ident], rel, through_helper=True)
     direct = set()
     for text in sources.values():
         direct.update(ENV_READ.findall(text))
@@ -196,9 +209,12 @@ def main() -> int:
 
     stale = sorted(k for k in baseline if k not in reads or is_documented(surfaces, k))
 
+    # 红数必须把 STALE 那类也算进去：只数 holes 时"基线里有已消失的键"会印出「红 0」却退 1，
+    # 读数与 rc 相反，看汇总行的人会把门禁当成绿的。
     print(
         f"生产代码读取键 {len(reads)} · 已文档化 {documented} · "
-        f"工具进程自动豁免 {exempt_tooling} · 基线登记 {exempt_baseline} · 红 {len(holes)}"
+        f"工具进程自动豁免 {exempt_tooling} · 基线登记 {exempt_baseline} · "
+        f"红 {len(holes) + len(stale)}（未文档化 {len(holes)} · 基线陈旧 {len(stale)}）"
     )
     # 计数自证：helper 侧枚举到的键数单独印出来，否则"识别到 0 个 helper"和"没有键经 helper"看不出差别
     print(f"（其中经 env helper 字面量枚举到 {helper_keys} 个键名）")
