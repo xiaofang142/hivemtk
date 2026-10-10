@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -137,14 +136,10 @@ export default defineConfig({
     // 避免 vue-i18n 用 new Function 触发 CSP script-src 'self' 的 unsafe-eval 拦截。
     // runtimeOnly 默认 true：改用 vue-i18n 运行时构建（无消息编译器）。
     // strictMessage:false 因为部分翻译含 <g>/<x>/<string> 等占位标签，按字面量保留。
-    // exclude: locales 下的 json 由上面的 hivemtk-i18n-functions 处理（函数形式），
-    // intlify 只保留别名/define，不管这些文件，避免它输出 AST。
-    VueI18n({
-      include: resolve(__dirname, './src/i18n/locales/**'),
-      exclude: resolve(__dirname, './src/i18n/locales/**'),
-      strictMessage: false,
-      dropMessageCompiler: true,
-    }),
+    // 注：@intlify/unplugin-vue-i18n 已移除——它的 include/exclude 配了同一路径等于
+    // 空转（locales 预编译由上面的 hivemtk-i18n-functions 独立完成），却拖进
+    // fast-glob→micromatch→braces 传递链（GHSA-vfj7-8cjw-p6xm 无补丁版本，
+    // npm audit high 恒红）。locales 的 exclude 注释保留给 vue() 插件段参考。
     vue({
       compilerOptions: {
         // 禁用深度选择器弃用警告
