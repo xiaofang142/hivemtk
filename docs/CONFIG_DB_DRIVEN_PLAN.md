@@ -176,20 +176,26 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1 批 misc(16) 与第 2 批 confidence(5/7) 已完成并入库（2/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=61 / 已声明未接线=51 / UNDECLARED=2`。
+> **进度（2026-10-10）：第 1~3 批 misc(16) / confidence(5/7) / agent_llm(7) 已入库（3/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=68 / 已声明未接线=44 / UNDECLARED=2`。
 >
 > **入库位置（如实记录，勿按 commit message 找）**：
 > - 第 1 批 misc(16) → `c75c78b6 feat(config-params): 阶段一第1批 —— misc 组 16 条僵尸参数接线`
 > - 第 2 批 confidence(5/7) → **`86b92349`**。这批的 17 个文件当时已在暂存区等待提交，
 >   被一次并行的他人提交（`chore(scripts): 删孤儿重复门 check-enum-consistency.py`）一并带走，
->   因此 commit message 与内容不符。内容已逐文件核对完整（17/17，含 wiring、4 组 seam 测试、
->   seeds 的 confidence 12 增 12 删、`main.go` 装配行），且在干净检出上 gofmt/build/vet/测试全绿，
+>   因此 commit message 与内容不符。内容已逐文件核对完整（17/17），且在干净检出上全绿，
 >   故不改写已推送的历史，只在此登记归属。
-> - **教训（写下来防止再犯）**：暂存区是**共享**的，不属于某一条泳道。跨多个工作阶段把文件
+> - 第 3 批 agent_llm(7) → `97ebaefb feat(config-params): 阶段一第3批 —— agent_llm 组 7 条僵尸参数接线`
+>
+> **教训（写下来防止再犯）**：暂存区是**共享**的，不属于某一条泳道。跨多个工作阶段把文件
 >   长期留在暂存区，等于把「我下一条 commit 会带上它们」这件事暴露给任何并行提交的人。
 >   正确姿势是**验完立刻提交**，把暂存区停留时间压到最短；`git commit` 前先
 >   `git diff --cached --name-only` 核一遍自己到底要带谁走。
+>
+> **工作区随时可能是半成品状态**：本轮多次撞见他人正在编辑、留下未使用 import 导致
+> `internal/service` 编译不过。碰到这种共享工作区的破损，正确做法是**把自己的文件倒进
+>   干净 worktree 验证**（`git worktree add --detach /tmp/xxx HEAD` + `git show ":$f" >`），
+>   既能证明「我的改动是绿的」，又不去动别人正在写的东西。
 > confidence 组 7 条里只接了 5 条：`persona_default_threshold` 与 `persona_max_retry` 的实现
 > `internal/service/persona_evaluator.go` 已随 `9a5f716c` 整体删除（749 行实现 + 958 行测试），
 > 代码里不存在等价能力，**不为了凑数凭空造一个读取口**，两条如实保留「未接线」标注，
