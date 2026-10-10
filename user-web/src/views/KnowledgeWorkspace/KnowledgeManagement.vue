@@ -255,8 +255,8 @@
         <el-descriptions-item label="文件大小">{{ formatFileSize(currentDoc.file_size) }}</el-descriptions-item>
         <el-descriptions-item label="分段数">{{ currentDoc.chunk_count }}</el-descriptions-item>
         <el-descriptions-item label="Tokens">{{ currentDoc.total_tokens }}</el-descriptions-item>
-        <el-descriptions-item label="检索次数">{{ currentDoc.search_count }}</el-descriptions-item>
-        <el-descriptions-item label="命中次数">{{ currentDoc.hit_count }}</el-descriptions-item>
+        <el-descriptions-item label="检索次数"><el-text type="info">未接入</el-text></el-descriptions-item>
+        <el-descriptions-item label="命中次数"><el-text type="info">未接入</el-text></el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="embedStatusTag(currentDoc.embed_status)">{{ embedStatusLabel(currentDoc.embed_status) }}</el-tag>
         </el-descriptions-item>

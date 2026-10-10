@@ -275,6 +275,9 @@
 > 恒 0 属实，执行 B3 选项2（摘假统计列）：后端 GetKBStats 移除 item_count/hit_count 假键
 > 只留 agent_count；前端 KBDrawer 两格改「未接入」占位、List.vue 摘「条目数」列与顶部卡。
 > 真统计需内容表加 kb_id 外键+回填（数据迁移+产品口径评审），属产品决策，本卡不碰。
+> **I31 补（2026-10-10）**：文档级 `KnowledgeDocument.SearchCount/HitCount`（kb_workspace.go:56/57）
+> 同样全仓无写入路径恒 0（对比 `KnowledgeChunk.HitCount` 活）；前端详情弹窗两格改「未接入」、
+> 「热门文档」tab 改 el-empty 诚实占位，后端字段加注释登记。真统计需检索回写文档计数或 chunk 聚合，属产品口径。
 
 内容表（faq/sop/documents）与 `knowledge_bases` 行没有外键；`hit_count` 恒 0 且前端仍在传
 无人读取的 `kb_id`。要么给内容表加 `kb_id` 外键并回填（数据迁移 + 归属口径评审），

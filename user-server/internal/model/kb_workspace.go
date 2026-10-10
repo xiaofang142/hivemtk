@@ -53,11 +53,14 @@ type KnowledgeDocument struct {
 	ImportedBy    string      `gorm:"size:64" json:"imported_by"`
 	AgentID       *uint       `gorm:"index" json:"agent_id,omitempty"`
 	LastIndexAt   *time.Time  `json:"last_index_at"`
-	SearchCount   int64       `gorm:"default:0" json:"search_count"`
-	HitCount      int64       `gorm:"default:0" json:"hit_count"`
-	Status        int         `gorm:"default:1" json:"status"`
-	CreatedAt     time.Time   `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt     time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
+	// SearchCount/HitCount 文档级检索计数：全仓无写入路径，恒 0（I31 核实）。
+	// 真统计需检索命中时回写文档级计数或从 KnowledgeChunk.HitCount 聚合，
+	// 属产品口径决策；当前前端详情/热门文档已诚实化为「未接入」占位。
+	SearchCount int64     `gorm:"default:0" json:"search_count"`
+	HitCount    int64     `gorm:"default:0" json:"hit_count"`
+	Status      int       `gorm:"default:1" json:"status"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 // TableName 表名

@@ -146,15 +146,7 @@
       </div>
 
       <div v-else-if="docStatsTab === 'top'">
-        <el-table :data="documentStats.top_documents || []" size="small">
-          <el-table-column type="index" label="#" width="50" />
-          <el-table-column prop="title" label="文档标题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="search_count" label="检索次数" width="100" />
-          <el-table-column prop="hit_count" label="命中次数" width="100" />
-          <el-table-column label="命中率" width="120">
-            <template #default="{ row }">{{ formatPercent(row.hit_rate) }}</template>
-          </el-table-column>
-        </el-table>
+        <el-empty description="文档级检索命中统计尚未接入（检索未回写文档计数），暂无法计算热门文档" />
       </div>
     </el-card>
 
