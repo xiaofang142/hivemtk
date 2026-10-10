@@ -106,9 +106,15 @@ func TestIntegrationReachAdapter_SentinelErrors(t *testing.T) {
 	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
 		t.Errorf("SendEmail 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
+	// Recall 的 db-nil 闸（:552-554）排在渠道分类之前，nil 句柄下与上面五个 Send*
+	// 同理只能报 ErrIntegrationServiceNotConfigured —— 查不到 message_hub 就无从
+	// 判断这个渠道属「已实现 / 无撤回接口 / 未实现」。
+	// 注意有库里也拿不到 ErrChannelNotImplemented：recallWindow(:588) 只认
+	// telegram/feishu/wecom 三家，其余平台在 :561 就已按 ErrRecallNotSupported
+	// 返回，所以 :576 那个 default 分支实际不可达（属死代码，别照它写断言）。
 	err = a.Recall(context.Background(), "sms", "x")
-	if !errors.Is(err, ErrChannelNotImplemented) {
-		t.Errorf("Recall 应返回 ErrChannelNotImplemented, got %v", err)
+	if !errors.Is(err, ErrIntegrationServiceNotConfigured) {
+		t.Errorf("Recall 应返回 ErrIntegrationServiceNotConfigured, got %v", err)
 	}
 	// 账号读侧从"恒 not implemented"变成真读表之后，sms 这类渠道的答案不再是
 	// 「这条路没实现」，而是「这个渠道没有账号这一层」——两类错误不能混用，

@@ -170,6 +170,19 @@ admin API 的写操作能在运行时翻转签名校验 —— 相比 env + 启�
 `DefaultAudienceLimit=200`、`MaxAudienceLimit=500`、`CircuitBreakerShadow=false`、
 `LTCConfigCacheTTL=60`、`TranslationCacheTTLDefault=1`、`WebHook*` 限流四项。
 
+> **✅ 已于 2026-10-10 部分入库（阶段 2d，接 10 条）**：新建 `channelbot`（5）+ `sse`（3）+ `bridge`（2）
+> 三组种子，`wired 110→120`。已接：`QQMessageMaxLen`、`TGMessageMaxLength`、`TGInlineRowsMax`、
+> `TGInlineButtonsPerRowMax`、`DefaultHTTPTimeout`、`SSEHeartbeatInterval`、`SSEMaxConnPerIP`、
+> `SSEClientBufferSize`、`SSEMaxBacklogEvents`、`SSEBusBufferSize`。
+> 其中 `DefaultMaxJSONBodyMB=8` 已在 2a 单独入库（见 ①），`MaxUploadSize=10` 已随 ① 收敛成代码兜底，
+> `SSOCookieTTL=5` / `DefaultVisitorTokenTTL=7` / 短信 `MaxRetry=3` 已在 1.1 接为 `misc.sso_cookie_ttl`
+> / `misc.visitor_token_ttl` / `misc.sms_max_retry`。
+> **仍未接**：`TierMinRatePerMin`/`TierQuotaMarketing`/`TierQuotaUtility`（WhatsApp 分层配额，
+> 属 P1 → 阶段三 3.1）、`WeComErrorRateDegradeThreshold`（见 ③，判定是写死三档，单一阈值表达不了）、
+> `ConsecutiveFailureLimit`/`L1TTLHours`/`MaxTokens` 三处同名不同值（见 §2.2）、
+> `EditLockTTL`/`DefaultAudienceLimit`/`MaxAudienceLimit`/`CircuitBreakerShadow`/`LTCConfigCacheTTL`/
+> `TranslationCacheTTLDefault`/`WebHook*` 四项（P1 → 阶段三）。
+
 ### 2.2 同名不同值：12 组自相矛盾的配置
 
 CSV 里同一 `group/key` 出现多个值，说明**同一个概念在不同地方各写各的**。这是硬编码最典型的病征：
@@ -289,12 +302,12 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
-> **处置进度（2026-10-10）：阶段一全部 8 批 + 阶段二 2a/2b/2c 已接线并提交（11/11）。**
-> 门禁读数：`wired 40→110`、`UNDECLARED 72→0`、`已声明未接线 14`。
+> **处置进度（2026-10-10）：阶段一全部 8 批 + 阶段二 2a/2b/2c/2d 已接线并提交（12/12）。**
+> 门禁读数：`wired 40→120`、`UNDECLARED 72→0`、`已声明未接线 14`。
 > 阶段一 8 批（wired 40→102）处理的是本节的僵尸参数；阶段二起处理 §2.1 的 P0 新增点位，
 > 每接一条也会让 wired 读数上涨。2a 接的 `misc.upload_max_size_mb` / `middleware.max_json_body_mb`
 > 即对应 §2.1①；2c 是新登记的 `lock` 组 7 条（含 1 条刻意不接，故 wired +6 而
-> 「已声明未接线」从 13 涨到 14）。
+> 「已声明未接线」从 13 涨到 14）；2d 是新登记的 `channelbot`/`sse`/`bridge` 三组 10 条，对应 §2.1④。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |

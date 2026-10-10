@@ -335,7 +335,7 @@ func InboxLockTTL(ctx context.Context) time.Duration {
 | 2a | 上传/body 上限（`upload_max_size_mb`、`max_json_body_mb`） | **合并三份副本**为 1 键；`system_config.MaxUploadSizeMB` 保留为兼容列，读新键优先 |
 | 2b | Webhook 验签降级开关（**不新增参数键，改为收敛护栏强度**） | 方案原文「单键覆盖 14 个硬编码点、默认改 `false`」经实测**前提全部不成立**，实际处置见下方「2b 已落地」；正确地讲这是「全面数据库驱动」的一个受控例外 |
 | 2c | 锁与幂等 TTL（收件箱/消息中台/人工接管/TG 轮询锁，13 个点位） | **已落地**：13 个点位逐条核实后只接得动 6 条，新建 `lock` 组 7 条（含 1 条刻意不接）；`message_hub_idem_ttl` 单独标 `Restart=true`；`TG 轮询锁`那条早在 1.1 已接、不重复；`human_escalation` 三条是死代码不建种子。实际处置见下方「2c 已落地」 |
-| 2d | 渠道与配额上限（QQ/TG 长度、SSE 每 IP 连接、配额降级阈值，15 个点位） | — |
+| 2d | 渠道与配额上限（QQ/TG 长度、SSE 每 IP 连接、配额降级阈值，15 个点位） | **已落地**：15 个候选逐条核实后接 10 条，新建 `channelbot`（5）+ `sse`（3）+ `bridge`（2）三组种子。`internal/service` 反向 import `channelbot/{qq,telegram,core}`，这三个子包走 provider seam + 装配层注入；`service/sse_hub.go` 与 `bridge/sse.go` 本就能直接调 `GlobalConfigParam()`，走直连不造 seam。实际处置见下方「2d 已落地」 |
 
 - 每条种子的 `Min/Max` 必填（`config_params` 已支持），避免运维填出 `max_tokens=999999`。
 - `ValueType` 用 `duration` 的，`Step` 填合理步长（如 `30s`）。
@@ -435,6 +435,39 @@ env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
 **`lock` 组是方案新增的一个 group**（原计划倾向塞进 `session` 组）：这些是「正确性」型参数（改错 = 死锁或重复处理，不是调优），与 `session` 组「交互窗口」型混在一起会让运维在调 TTL 时误判影响面。每条 Description 都写「改小/改大会出什么事」。6 个 seam 集中在新建的 `internal/service/lock_idempotency_params.go` 单文件里：常量原本分处 `message_hub.go`/`inbox_ingress.go`/`inbox_ingress_ingest.go` 三处，散着看不出「锁的世界观」全貌。
 
 **验证**：gofmt 空、`go build ./...`、`go vet ./...` 全过；`go test ./internal/cache/ ./internal/app/` 绿（app 100s）、`internal/service` 全包 **ok 852s**。门禁 `wired 110 / 已声明未接线 14 / UNDECLARED 0 / STALE 0`，rc=0，种子 124 条。行为级测试覆盖 6 条（`lock_idempotency_behavior_test.go`）：锁在注入的小 TTL 后真的消失、TTL 内第二次获取真的失败（防重复回复）、结构体字段非零时仍优先于 provider。
+
+#### 2d 已落地（2026-10-10）
+
+渠道与配额上限入库，新建 `channelbot`（5）+ `sse`（3）+ `bridge`（2）三组种子（124→134），`wired 110→120`、锚点同步到 134。
+
+**15 个候选逐条核实，接 10 条**：
+
+| 种子 key | 默认 | Restart | 代码点位与消费点 |
+| --- | --- | --- | --- |
+| `channelbot.qq_message_max_len` | 2000 | false | `internal/channelbot/qq/qq.go:38` `QQMessageMaxLen`；`SendMessage` 分段 + `splitQQMessage` 兜底，生产调用方 `service/qq_account.go:258` |
+| `channelbot.tg_message_max_length` | 4096 | false | `telegram.go:26`；`SendMessage` + `splitMessage` 兜底，生产调用方 `service/telegram_gate.go` 6 处 |
+| `channelbot.tg_inline_rows_max` | 100 | false | `telegram.go:27`；`buildInlineKeyboard` 截断 |
+| `channelbot.tg_inline_buttons_per_row_max` | 8 | false | `telegram.go:28`；`buildInlineKeyboard` 截断 |
+| `channelbot.http_timeout` | 30s | **true** | `channelbot/core/core.go:26`；`NewBaseClient` 构造期读两处（`:108` `HTTPClient.Timeout`、`:124` 字段） |
+| `sse.heartbeat_interval` | 15s | false | `service/sse_hub.go:27`；`:392` `time.NewTicker` |
+| `sse.max_conn_per_ip` | 5 | false | `sse_hub.go:28`；`:152` 每 IP 连接闸 |
+| `sse.client_buffer_size` | 100 | **true** | `sse_hub.go:62`；`NewSSEClient` 构造期 `make(chan,…)` |
+| `bridge.sse_max_backlog_events` | 1000 | false | `bridge/sse.go:57`；`:770` 回放截断 |
+| `bridge.sse_bus_buffer_size` | 100 | **true** | `bridge/sse.go:58`；`:178` `buffer:` 构造期 |
+
+三条 `Restart: true` 全是**构造期读取**：账号 HTTP 客户端、SSE 客户端事件信道、SSE 广播总线缓冲。运行时改值只对新建对象生效，已连接的客户端拿不到，必须重启——这一点写进 Description，否则运维改完看不到效果会以为又出僵尸参数。
+
+**不接的 5 条**：`qq.CallbackOpVerify=13`（QQ 回调 event op 码，属协议常量不可调）；`bridge.sse_heartbeat_interval` / `bridge.sse_max_stream_duration`（**早已 DB 驱动**，`runtimeSSEHeartbeatInterval`/`runtimeSSEMaxStreamDuration` 已在读，不重复接线）；`wecom.error_rate_degrade`（承 1.8：`computeHealthScore` 的成功率判定是写死三档，单一阈值表达不了，保留未接线标注）。
+
+**架构判断：两个子域走两条路，不要强行统一**。`internal/service` 反向 import `channelbot/{qq,telegram,core}`（`webhook.go:14-15`、`qq_account.go:14-15`、`telegram_gate.go:14`、`channel_error.go:12`、`feishu.go:24-25`），这三个子包若 import service 即成环 ⇒ 必须走 **provider seam + 装配层注入**（`internal/app/channelbot_params_wiring.go`，5 条显式闭包）；而 `internal/service/sse_hub.go` 与 `internal/bridge/sse.go` 本就能直接调 `GlobalConfigParam()`（`bridge/sse.go` 已有 `runtimeSSE*` 先例）⇒ 走**直连**，不造 seam。硬给后者造 seam 会多出 5 个一辈子只被读一次的函数。
+
+**顺带修掉 1.8 发现的「配额降级半接线」**：`service/wecom_account_health.go` 的 `computeHealthScore` 原本有两套独立阈值——`quotaRate > 0.95` 写死扣 25 分，`quotaRate > quotaDegrade`（读 `wecom.quota_degrade`，默认 0.9）扣 15 分。运维把参数调到 0.95 以上时，最高档先命中，参数根本轮不到生效——**「已登记 + 已暴露 UI + 就是不改行为」比僵尸参数更隐蔽**。修法是引入 `quotaCriticalRate := 0.95; if quotaDegrade > quotaCriticalRate { quotaCriticalRate = quotaDegrade }`，取两者较大值：默认 0.9 < 0.95 时行为与写死逐档一致（零回归），调高后两档同时抬高。测试 `wecom_quota_degrade_tiers_test.go` 用 4 组参数值 × 9 个 `quotaRate` 采样点逐档钉住。
+
+**种子的 Min/Max 一律贴平台硬上限**：QQ 2000、TG 4096、TG inline 100 行 × 8 钮都是平台自己的限制，填超了平台直接拒收。`TestChannelBotSeedsStayWithinPlatformCaps` 反向钉死「种子默认值与 `Max` 都等于平台上限」。
+
+**本轮新踩的坑（前几批的 seam 测试可能也埋着）**：`SetXxxProvider(nil)` 是**空操作，不是复位**（`if fn != nil` 守卫）。在 `core`/`qq`/`telegram` 三个新测试里写 `t.Cleanup(func(){ SetXxxProvider(nil) })` 导致用例间串味（`TestNewBaseClientPicksUpTimeoutSeam` 读到上一个用例注入的 `90s`）。**正确做法是 `t.Cleanup` 里直接写包内 provider 变量**（`httpTimeoutProvider = nil` 等），同包测试是唯一能真正摘掉 provider 的地方。
+
+**验证**：gofmt 空、`go build ./...`、`go vet ./...` 全过；`go test ./internal/app/`（ok 38s）、`./internal/channelbot/...`（4 包全 ok）、`./internal/bridge/`（ok 9.5s）、service 相关用例全绿。门禁 **`wired 120 / 已声明未接线 14 / UNDECLARED 0 / STALE 0`，rc=0，种子 134 条**。行为级测试：`splitQQMessage`/`splitMessage` 真按配置值分段、`buildInlineKeyboard` 真按配置值截断、`NewBaseClient` 真拿到配置超时、`WithTimeout(120s)` 仍赢过注入值。
 
 ### 阶段三：P1 130 个点位 + 前端接线
 
