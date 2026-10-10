@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/bridge"
 	channelgw "hivemtk-user/internal/channelgw"
-	contentservice "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/controller"
 	geomodel "hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/middleware"
@@ -320,16 +318,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	)
 
 	service.InitAssetResolver(gormDB)
-	contentservice.SetWorkflowAssetResolver(func(ctx context.Context) (json.RawMessage, bool) {
-		if r := service.GetAssetResolver(); r != nil {
-			if w, ok := r.GetActiveWorkflow(ctx); ok && w != nil {
-				if b, err := json.Marshal(w); err == nil {
-					return b, true
-				}
-			}
-		}
-		return nil, false
-	})
 
 	public := r.Group("/api")
 	{
