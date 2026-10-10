@@ -46,6 +46,19 @@ type quoteFakeReader struct {
 	genView   *service.QuoteView
 	genErr    error
 	genCalled int
+
+	reviseID  string
+	reviseIn  service.QuoteGenerateInput
+	reviseErr error
+
+	viewAtID  string
+	viewAtVer int64
+	viewAtErr error
+
+	// emptyResult 让写视图的那两格（Generate/Revise）返回 (nil, nil)：
+	// 这是"服务层实现漂了"的注码——本层的判据是不许把这种漂移渲染成一次成功。
+	// 只作用于写腿：读腿的空结果有它自己的档位（404 not_found，见 MissingVersionReadsNotFound）。
+	emptyResult bool
 }
 
 func (r *quoteFakeReader) Available() bool { return r.available }
@@ -72,10 +85,40 @@ func (r *quoteFakeReader) Generate(_ context.Context, in service.QuoteGenerateIn
 	if r.genErr != nil {
 		return nil, r.genErr
 	}
+	if r.emptyResult {
+		return nil, nil
+	}
 	if r.genView != nil {
 		return r.genView, nil
 	}
 	return quoteTestView(), nil
+}
+
+// Revise 记的是"链号 + 那份入参"两格：判据要能看出模板与收件人有没有被递进服务层。
+// 默认回一份 version=2 的视图（与 quoteTestView 同一行的下一版），
+// 因为上一版视图的 version 是 1 —— 返回同一个 version 会让"版本号推进了"这件事读不出来。
+func (r *quoteFakeReader) Revise(_ context.Context, quoteID string, in service.QuoteGenerateInput) (*service.QuoteView, error) {
+	r.reviseID = quoteID
+	r.reviseIn = in
+	if r.viewErr != nil {
+		return nil, r.viewErr
+	}
+	if r.emptyResult {
+		return nil, nil
+	}
+	next := quoteTestView()
+	next.ID = "q_100_2"
+	next.Version = 2
+	return next, nil
+}
+
+func (r *quoteFakeReader) ViewAt(_ context.Context, quoteID string, version int64) (*service.QuoteView, error) {
+	r.viewAtID = quoteID
+	r.viewAtVer = version
+	if r.viewErr != nil {
+		return nil, r.viewErr
+	}
+	return r.view, nil
 }
 
 // quoteFakeSender 实现 QuoteSender。三个计数是分诊的根据：
@@ -511,7 +554,7 @@ func TestQuoteController_ReadDistinguishesNoneFromNotAsked(t *testing.T) {
 	}
 }
 
-// TestQuoteController_UnassembledAnswersFiveOhThree 未装配 ⇒ 四条端点全部 503，
+// TestQuoteController_UnassembledAnswersFiveOhThree 未装配 ⇒ 六条端点全部 503，
 // 且谁都不许回空对象（同商机那一路的判据：`{}` 与 `[]` 都是一句业务结论）。
 func TestQuoteController_UnassembledAnswersFiveOhThree(t *testing.T) {
 	for _, pair := range []struct {
@@ -523,7 +566,9 @@ func TestQuoteController_UnassembledAnswersFiveOhThree(t *testing.T) {
 	}{
 		{"读一版/读腿缺", &quoteFakeReader{}, &quoteFakeSender{available: true}, http.MethodGet, "/api/quote/q_1", ""},
 		{"读最新/读腿缺", &quoteFakeReader{}, &quoteFakeSender{available: true}, http.MethodGet, "/api/quote/latest/QT-1", ""},
+		{"读指定版本/读腿缺", &quoteFakeReader{}, &quoteFakeSender{available: true}, http.MethodGet, "/api/quote/version/QT-1/2", ""},
 		{"生成/读腿缺", &quoteFakeReader{}, &quoteFakeSender{available: true}, http.MethodPost, "/api/quote", `{"opportunity_id":"opp_1","template_code":"std"}`},
+		{"追加一版/读腿缺", &quoteFakeReader{}, &quoteFakeSender{available: true}, http.MethodPost, "/api/quote/revise/QT-1", `{}`},
 		{"发送/发腿缺", &quoteFakeReader{available: true}, &quoteFakeSender{}, http.MethodPost, "/api/quote/q_1/send", `{}`},
 	} {
 		t.Run(pair.name, func(t *testing.T) {
@@ -668,7 +713,320 @@ func TestQuoteController_GenerateErrorsAreTriaged(t *testing.T) {
 	}
 }
 
-// —— ⑥ 入参关闸：id 形状 ——————————————————————————————
+// —— ⑥ 还价（追加一版）与按版本号回读 ——————————————————
+
+// TestQuoteController_ReviseRefusesTemplateAndRecipientFields 还价的入参面比生成窄。
+//
+// 这一条不是"少一个字段"的洁癖，而是两种坏法各挡一种：
+//  1. 接受 `template_code` 时，服务层压根不会重跑模板（还价继承基准版的行项目）：这一格当场
+//     变成"改了没人读"——调用方以为换了模板，库里那一版还是老行项目。这类缺陷在本仓最贵：
+//     页面显示已保存而底层没动，看起来一切正常。
+//  2. 接受 `one_id` 时，收件人成了请求体的一部分，而发送腿的收件人是商机带出来的：在还价这一格
+//     先破一个口子，AC① 的"收件人由报价自己说"就只剩注释。
+//
+// 未知字段必须 400 且服务层一次都不被调用（静默丢弃等于把上面第 1 条变成默认行为）。
+func TestQuoteController_ReviseRefusesTemplateAndRecipientFields(t *testing.T) {
+	for _, body := range []string{
+		`{"template_code":"premium"}`,
+		`{"one_id":"one_zhang"}`,
+		`{"content":"您好，这是还价后的正文"}`,
+		`{"status":"accepted"}`,
+		`{"version":9}`,
+		`{"total":0.01}`,
+	} {
+		reader := &quoteFakeReader{available: true}
+		engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+		code, env, _ := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A", body)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s 回 %d，期望 400：%s", body, code, env.Message)
+			continue
+		}
+		if got := quoteReason(t, env); got != "input_invalid" {
+			t.Errorf("reason=%q，期望 input_invalid", got)
+		}
+		if reader.reviseID != "" {
+			t.Errorf("越界入参走到了服务层（链号 %q）：那就变成\"静默丢掉那一格\"", reader.reviseID)
+		}
+	}
+}
+
+func TestQuoteController_RevisePassesTheDeclaredInputThrough(t *testing.T) {
+	reader := &quoteFakeReader{available: true}
+	engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+	body := `{"opportunity_id":"opp_9","currency":"usd","valid_until":"2026-11-01T00:00:00Z",` +
+		`"lines":[{"product_id":"p1","quantity":2,"unit_price":88.5,"discount_percent":0}]}`
+	code, env, raw := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A-B", body)
+	if code != http.StatusOK {
+		t.Fatalf("回 %d：%s —— %s", code, env.Message, raw)
+	}
+	quoteOK(t, env, code, raw)
+	if reader.reviseID != "QT-A-B" {
+		t.Errorf("链号递成了 %q，期望 QT-A-B（地址上是逻辑号，行键归服务层算）", reader.reviseID)
+	}
+	if reader.reviseIn.TemplateCode != "" {
+		t.Errorf("TemplateCode=%q，期望留空：还价不重跑模板", reader.reviseIn.TemplateCode)
+	}
+	if reader.reviseIn.OneID != "" {
+		t.Errorf("OneID=%q，期望留空：收件人不是入参", reader.reviseIn.OneID)
+	}
+	if reader.reviseIn.OpportunityID != "opp_9" || reader.reviseIn.Currency != "usd" {
+		t.Errorf("归属/币种没递到：%+v", reader.reviseIn)
+	}
+	if reader.reviseIn.ValidUntil == nil || !reader.reviseIn.ValidUntil.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("valid_until=%v，期望 RFC3339 解出的那个时刻", reader.reviseIn.ValidUntil)
+	}
+	if len(reader.reviseIn.Lines) != 1 {
+		t.Fatalf("行项目没递到：%+v", reader.reviseIn.Lines)
+	}
+	// 与生成侧同一条指针判据：还价到原价（显式 0 折扣）不能被读成"没给"，
+	// 否则那一份折扣会悄悄留在下一版上，而报价单看起来已经"回到原价"了。
+	line := reader.reviseIn.Lines[0]
+	if line.DiscountPercent == nil || *line.DiscountPercent != 0 {
+		t.Errorf("discount_percent=%v，期望显式的 0", line.DiscountPercent)
+	}
+	if line.Quantity == nil || *line.Quantity != 2 {
+		t.Errorf("quantity=%v，期望 2", line.Quantity)
+	}
+
+	data := quoteData(t, env)
+	if data["id"] != "q_100_2" {
+		t.Errorf("data.id=%v，期望新版的行键：没有它就发不出去", data["id"])
+	}
+	if data["version"] != float64(2) {
+		t.Errorf("data.version=%v，期望 2 —— 版本号由仓储递增，出口回显的就是它", data["version"])
+	}
+}
+
+// TestQuoteController_ReviseEmptyBodyIsAPureAppend 空体与 `{}` 都放行：
+// "客户没还，我们只是把这一版重新发一次"这件事在链上就是要占一个版本号。
+// 让 curl 必须写出一个字段才能点"追加一版"，前端就会造一个假的空 lines 出来，
+// 而那与"继承基准版"在库里是两种结果。
+func TestQuoteController_ReviseEmptyBodyIsAPureAppend(t *testing.T) {
+	for _, raw := range []string{"", "{}"} {
+		reader := &quoteFakeReader{available: true}
+		engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+		code, env, body := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A", raw)
+		if code != http.StatusOK {
+			t.Errorf("体=%q 回 %d，期望 200：%s —— %s", raw, code, env.Message, body)
+			continue
+		}
+		if len(reader.reviseIn.Lines) != 0 || reader.reviseIn.OpportunityID != "" || reader.reviseIn.Currency != "" {
+			t.Errorf("体=%q 时入参被填出了东西：%+v", raw, reader.reviseIn)
+		}
+		if reader.reviseIn.ValidUntil != nil {
+			t.Errorf("体=%q 时 valid_until 被凭空造出来：%v", raw, reader.reviseIn.ValidUntil)
+		}
+	}
+
+	// 反向：非 JSON 的体与未知字段一样必须拒（"空体合法"不等于"任意体合法"）。
+	reader := &quoteFakeReader{available: true}
+	engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+	for _, raw := range []string{"not json", `{"approval_id":"apr_1"}`} {
+		code, env, _ := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A", raw)
+		if code != http.StatusBadRequest {
+			t.Errorf("体=%q 回 %d，期望 400：%s", raw, code, env.Message)
+		}
+	}
+	if reader.reviseID != "" {
+		t.Errorf("越界体走到了服务层（链号 %q）", reader.reviseID)
+	}
+}
+
+func TestQuoteController_ReviseErrorsAreTriaged(t *testing.T) {
+	// 分诊开关（replyError）由六条端点共用，所以这里从追加那一条打也照样量到全部映射；
+	// `lines_missing` 由发送腿产出、经同一个 switch，钉的是"它落 409 而不是 500"这一格。
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantReason string
+	}{
+		{"闸门关", service.ErrQuoteGateClosed, http.StatusConflict, "gate_closed"},
+		{"链上无版本（含基准版无可继承行项目）", service.ErrQuoteVersionMissing, http.StatusNotFound, "not_found"},
+		{"商机不存在", service.ErrQuoteOpportunityMissing, http.StatusNotFound, "not_found"},
+		{"版本号被占", service.ErrQuoteVersionConflict, http.StatusConflict, "version_conflict"},
+		{"行项目缺失", service.ErrQuoteSendLinesMissing, http.StatusConflict, "lines_missing"},
+		{"话术无生效版本", service.ErrQuoteScriptUnavailable, http.StatusConflict, "script_unavailable"},
+		{"入参越界", service.ErrQuoteInputInvalid, http.StatusBadRequest, "input_invalid"},
+		{"未装配", service.ErrQuoteServiceUnavailable, http.StatusServiceUnavailable, "unavailable"},
+		{"底层故障", errors.New("duplicate key value violates unique constraint"), http.StatusInternalServerError, "internal"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := &quoteFakeReader{available: true, viewErr: tc.err}
+			engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+			code, env, raw := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A", `{}`)
+			if code != tc.wantStatus {
+				t.Fatalf("回 %d，期望 %d：%s —— %s", code, tc.wantStatus, env.Message, raw)
+			}
+			if got := quoteReason(t, env); got != tc.wantReason {
+				t.Errorf("reason=%q，期望 %q", got, tc.wantReason)
+			}
+			// 409 这一档里 version_conflict 必须与 gate_closed / lines_missing 分得开：
+			// 三者的修法分别是"重读最新版再追加""等运营开闸""先补行项目"。
+			// 状态码相同而 reason 相同，前端就只能弹窗"冲突"了事。
+		})
+	}
+
+	// 底层故障不许把 SQL 片段透出给调用方（与商机侧同一条判据）。
+	reader := &quoteFakeReader{available: true, viewErr: errors.New("duplicate key value violates unique constraint \"idx_quote_version\"")}
+	engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+	_, env, _ := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT-A", `{}`)
+	if strings.Contains(env.Message, "idx_quote_version") || strings.Contains(env.Message, "duplicate key") {
+		t.Errorf("500 的文案透出了底层错误串：%q", env.Message)
+	}
+}
+
+func TestQuoteController_VersionReadsTheExactVersion(t *testing.T) {
+	reader := &quoteFakeReader{available: true, view: quoteTestView()}
+	engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+	code, env, raw := doQuote(t, engine, http.MethodGet, "/api/quote/version/QT-A-B/3", "")
+	if code != http.StatusOK {
+		t.Fatalf("回 %d：%s —— %s", code, env.Message, raw)
+	}
+	quoteOK(t, env, code, raw)
+	if reader.viewAtID != "QT-A-B" {
+		t.Errorf("链号=%q，期望 QT-A-B", reader.viewAtID)
+	}
+	if reader.viewAtVer != 3 {
+		t.Errorf("版本号=%d，期望 3（原样递过去，不能被读成\"取最新\"）", reader.viewAtVer)
+	}
+	if data := quoteData(t, env); data["id"] != "q_100_1" {
+		t.Errorf("回的不是那一版的行键：%v", data)
+	}
+	// 按版本读也要能看见开放审批（与读行键那一条同一个理由：审批状态是"这一版现在能不能发"的一部分）。
+	if data := quoteData(t, env); data["approval_lookup"] != "none" {
+		t.Errorf("approval_lookup=%v，期望 none：%v", data["approval_lookup"], data)
+	}
+}
+
+// TestQuoteController_VersionNumberMustBeAPositiveInteger 0 / 负数 / 非数字一律 400 且不落到仓储。
+//
+// 放 0 走到底层会回一个 404（那一版不存在），而 404 与"这么写根本没有对应事实"是两件事：
+// 前者会让人去查数据，后者才是该修的地方。更实际的风险是日后有人把 0 实现成"取最新"，
+// 那就凭空多出一条不在任何清单上、也没人审过的别名入口。
+func TestQuoteController_VersionNumberMustBeAPositiveInteger(t *testing.T) {
+	reader := &quoteFakeReader{available: true, viewErr: errors.New("never reached")}
+	engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+
+	// 负数走 `<= 0` 那一格，`1e3` 与 20 位数字走 ParseInt 报错那一格（后者是溢出，
+	// 不是形状不对 —— 两者都归 400，但红因要能分得开，所以两条都留着）。
+	// 不带 `%20` 这类空白：编号与版本号都先 trim 再判（与读行键那一条同一个口径），
+	// `" 2"` 是合法的 2，不是非法形状。
+	for _, probe := range []string{"/0", "/-1", "/abc", "/1.5", "/1e3", "/" + strings.Repeat("9", 20)} {
+		code, env, _ := doQuote(t, engine, http.MethodGet, "/api/quote/version/QT-A"+probe, "")
+		if code != http.StatusBadRequest {
+			t.Errorf("%s 回 %d，期望 400：%s", probe, code, env.Message)
+			continue
+		}
+		if got := quoteReason(t, env); got != "input_invalid" {
+			t.Errorf("%s 的 reason=%q，期望 input_invalid", probe, got)
+		}
+	}
+	if reader.viewAtID != "" {
+		t.Errorf("非法版本号走到了服务层：链号 %q", reader.viewAtID)
+	}
+
+	// 对照组：合法版本号必须真去查（否则上面那些 400 可能只是路由没接上）。
+	if code, _, _ := doQuote(t, engine, http.MethodGet, "/api/quote/version/QT-A/1", ""); code != http.StatusInternalServerError {
+		t.Errorf("合法版本号回 %d，期望 500（对照组不成立）", code)
+	}
+	if reader.viewAtID != "QT-A" || reader.viewAtVer != 1 {
+		t.Errorf("对照组没递到服务层：%q / %d", reader.viewAtID, reader.viewAtVer)
+	}
+}
+
+// TestQuoteController_MissingVersionReadsNotFound 服务层说"那一版不存在"时，HTTP 面必须回 404。
+// 回 200 + 空对象会让前端长成"这一版金额为 0"那样的一句业务结论。
+func TestQuoteController_MissingVersionReadsNotFound(t *testing.T) {
+	engine := quoteTestEngine(NewQuoteController(&quoteFakeReader{available: true}, &quoteFakeSender{available: true}), uint(7))
+	code, env, _ := doQuote(t, engine, http.MethodGet, "/api/quote/version/QT-A/9", "")
+	if code != http.StatusNotFound {
+		t.Fatalf("回 %d，期望 404：%s", code, env.Message)
+	}
+	if got := quoteReason(t, env); got != "not_found" {
+		t.Errorf("reason=%q，期望 not_found", got)
+	}
+	// data 里只许有分诊码：带出 id/status/lines 中的任何一格，调用方就会拿它当"读到的那一版"。
+	data := quoteData(t, env)
+	for _, business := range []string{"id", "quote_id", "status", "lines", "total", "version"} {
+		if v, ok := data[business]; ok {
+			t.Errorf("404 的 data 里出现了业务字段 %s=%v", business, v)
+		}
+	}
+}
+
+// —— ⑦ 服务层给不出结果、也不给错 ——————————————————————
+
+// TestQuoteController_ServiceNilResultWithoutError 服务层"要么给视图/结果，要么给错"这条
+// 不变量在 HTTP 侧的兜底：返回 nil 又不给错时按失败报，绝不回一个 data 为 null 的成功信封。
+//
+// 为什么不放过这一格：200 + 「data:null」在调用方读起来是"成功了，只是没内容"，
+// 而在报价这条链路上"没内容"最容易被接着读成"这一版没有行项目"——
+// 于是人去补行项目，真正的故障（服务层实现漂了）一次都没出声。
+// reason 必须是 internal 而不是 not_found：not_found 说的是"查无此号"，
+// 那是客户端能自助修的事实，而这里没有任何客户端能修的东西。
+func TestQuoteController_ServiceNilResultWithoutError(t *testing.T) {
+	for _, probe := range []struct{ name, method, path, body string }{
+		{"生成", http.MethodPost, "/api/quote", `{"opportunity_id":"opp_1","template_code":"std"}`},
+		{"追加一版", http.MethodPost, "/api/quote/revise/QT-A-B", `{}`},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			reader := &quoteFakeReader{available: true, emptyResult: true}
+			engine := quoteTestEngine(NewQuoteController(reader, &quoteFakeSender{available: true}), uint(7))
+			code, env, raw := doQuote(t, engine, probe.method, probe.path, probe.body)
+			if code >= 200 && code < 300 {
+				t.Fatalf("%s：空结果被当成成功回了 %d（body=%s）—— 调用方会把它读成「没内容」而不是「失败了」", probe.name, code, raw)
+			}
+			if code != http.StatusInternalServerError {
+				t.Errorf("回 %d，期望 500：%s", code, env.Message)
+			}
+			if got := quoteReason(t, env); got != "internal" {
+				t.Errorf("reason=%q，期望 internal", got)
+			}
+		})
+	}
+
+	// 发送腿：假件把 result 留空、err 也留空，就是同一个漂移形状。
+	sender := &quoteFakeSender{available: true}
+	engine := quoteTestEngine(NewQuoteController(&quoteFakeReader{available: true}, sender), uint(7))
+	code, env, raw := doQuote(t, engine, http.MethodPost, "/api/quote/q_100_1/send", `{}`)
+	if code >= 200 && code < 300 {
+		t.Fatalf("发送腿的空结果被当成成功回了 %d（body=%s）", code, raw)
+	}
+	if code != http.StatusInternalServerError {
+		t.Errorf("发送腿回 %d，期望 500：%s", code, env.Message)
+	}
+	if got := quoteReason(t, env); got != "internal" {
+		t.Errorf("发送腿 reason=%q，期望 internal", got)
+	}
+	if sender.calls != 1 {
+		t.Errorf("发送腿被调了 %d 次，期望 1 次（没走到服务就回 500，那测的不是这一格）", sender.calls)
+	}
+
+	// 正向对照：同一个假件把空结果关掉就必须回 2xx。
+	// 少了这一句，上面那些 500 可能只是因为这几条路由压根没接上服务层。
+	control := quoteTestEngine(NewQuoteController(&quoteFakeReader{available: true}, &quoteFakeSender{
+		available: true, result: &service.QuoteSendResult{Disposition: service.QuoteSendSent},
+	}), uint(7))
+	for _, probe := range []struct{ name, method, path, body string }{
+		{"生成", http.MethodPost, "/api/quote", `{"opportunity_id":"opp_1","template_code":"std"}`},
+		{"追加一版", http.MethodPost, "/api/quote/revise/QT-A-B", `{}`},
+		{"发送", http.MethodPost, "/api/quote/q_100_1/send", `{}`},
+	} {
+		code, env, raw := doQuote(t, control, probe.method, probe.path, probe.body)
+		if code < 200 || code >= 300 {
+			t.Errorf("正向对照（%s）回 %d，期望 2xx：%s —— %s", probe.name, code, env.Message, raw)
+		}
+	}
+}
+
+// —— ⑧ 入参关闸：id 形状 ——————————————————————————————
 
 func TestQuoteController_BlankAndOversizedIDsAreRefusedBeforeTheService(t *testing.T) {
 	reader := &quoteFakeReader{available: true, viewErr: errors.New("never reached")}
@@ -678,8 +1036,11 @@ func TestQuoteController_BlankAndOversizedIDsAreRefusedBeforeTheService(t *testi
 	for _, probe := range []struct{ method, path, body string }{
 		{http.MethodGet, "/api/quote/%20", ""},
 		{http.MethodGet, "/api/quote/latest/%20", ""},
+		{http.MethodGet, "/api/quote/version/%20/1", ""},
 		{http.MethodPost, "/api/quote/%20/send", `{}`},
+		{http.MethodPost, "/api/quote/revise/%20", `{}`},
 		{http.MethodGet, "/api/quote/opp_" + strings.Repeat("x", 200), ""},
+		{http.MethodPost, "/api/quote/revise/QT" + strings.Repeat("x", 200), `{}`},
 	} {
 		code, env, _ := doQuote(t, engine, probe.method, probe.path, probe.body)
 		if code != http.StatusBadRequest {
@@ -693,14 +1054,27 @@ func TestQuoteController_BlankAndOversizedIDsAreRefusedBeforeTheService(t *testi
 			t.Errorf("%s 的超长 id 被整段回显：%q", probe.path, env.Message)
 		}
 	}
-	if reader.gotRowID != "" || reader.gotLatestID != "" || sender.calls != 0 {
-		t.Errorf("越界 id 走到了服务层：row=%q latest=%q send=%d", reader.gotRowID, reader.gotLatestID, sender.calls)
+	if reader.gotRowID != "" || reader.gotLatestID != "" || reader.reviseID != "" || reader.viewAtID != "" || sender.calls != 0 {
+		t.Errorf("越界 id 走到了服务层：row=%q latest=%q revise=%q view_at=%q send=%d",
+			reader.gotRowID, reader.gotLatestID, reader.reviseID, reader.viewAtID, sender.calls)
 	}
 
 	// 正向对照：同样的句柄收到合规 id 就必须真去查，否则上面那些 400
 	// 可能只是因为路由压根没接上服务。
-	if code, _, _ := doQuote(t, engine, http.MethodGet, "/api/quote/q_ok", ""); code != http.StatusInternalServerError {
-		t.Errorf("合规 id 回 %d，期望 500（对照组不成立，上面的 400 判不出关闸）", code)
+	for _, path := range []string{"/api/quote/q_ok", "/api/quote/latest/QT_OK", "/api/quote/version/QT_OK/1"} {
+		if code, _, _ := doQuote(t, engine, http.MethodGet, path, ""); code != http.StatusInternalServerError {
+			t.Errorf("%s 回 %d，期望 500（对照组不成立，上面的 400 判不出关闸）", path, code)
+		}
+	}
+	{
+		// 追加那一条的正向对照：链号合规就必须真的走到服务层。
+		reader.reviseID = ""
+		if code, _, _ := doQuote(t, engine, http.MethodPost, "/api/quote/revise/QT_OK", `{}`); code != http.StatusInternalServerError {
+			t.Errorf("合规链号的追加回 %d，期望 500（对照组不成立）", code)
+		}
+		if reader.reviseID != "QT_OK" {
+			t.Errorf("服务层收到的链号是 %q，期望 QT_OK", reader.reviseID)
+		}
 	}
 }
 
@@ -778,7 +1152,7 @@ func TestQuoteController_LargeSendBodyIsRefused(t *testing.T) {
 	}
 }
 
-// —— ⑦ 类型层：控制器只够得着那几格 ————————————————
+// —— ⑨ 类型层：控制器只够得着那几格 ————————————————
 
 // TestQuoteController_InterfacesAreTheNarrowSurfaces 两道接缝的方法集合钉成白名单。
 //
@@ -791,7 +1165,7 @@ func TestQuoteController_InterfacesAreTheNarrowSurfaces(t *testing.T) {
 	readerMethods := ifaceMethods(reflect.TypeOf((*QuoteViewReader)(nil)).Elem())
 	senderMethods := ifaceMethods(reflect.TypeOf((*QuoteSender)(nil)).Elem())
 
-	if want := []string{"Available", "Generate", "LatestView", "View"}; !equalStrings(readerMethods, want) {
+	if want := []string{"Available", "Generate", "LatestView", "Revise", "View", "ViewAt"}; !equalStrings(readerMethods, want) {
 		t.Errorf("读接缝方法集=%v，期望 %v", readerMethods, want)
 	}
 	if want := []string{"Available", "OpenApproval", "Send"}; !equalStrings(senderMethods, want) {

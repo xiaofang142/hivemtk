@@ -1,14 +1,15 @@
-// quote.go T-P6-03：报价域的 HTTP 出口（发送必经审批检查点 + 让那一格结论读得出来）。
+// quote.go T-P6-03 / T-P6-04：报价域的 HTTP 出口（发送必经审批检查点 + 让那一格结论读得出来
+// + 链上还价与按版本号回读）。
 //
 // 本层只做三件事，且刻意不做第四件（同 controller/opportunity.go 的分工）：
 //  1. **形状**：请求体 → service 的入参结构，以及 CLAUDE.md 那套 {code,data,message} 契约。
 //     绑定一律拒收未知字段，理由在 generate 那一条上比商机侧更硬：报价的入参面一旦容得下
 //     `content`（话术正文）或 `one_id`（收件人），AC① 的"话术必经版本/灰度"与
 //     "收件人由报价自己说"两条判据就同时失效，而库里那行看起来与走正路的一模一样。
-//  2. **状态码 + 分诊码**：四种处置（awaiting / sent / rejected / expired）与十三个哨兵
-//     各自对应一种**修法不同**的失败。HTTP 状态码分不开那些同码不同病的（三个 409
-//     的处置动作是"等审批人""重取这一版""去补行项目"），所以每个错误都随 `data.reason`
-//     出一个机器可读的判据词。
+//  2. **状态码 + 分诊码**：四种处置（awaiting / sent / rejected / expired）与每一个错误哨兵
+//     各自对应一种**修法不同**的失败。HTTP 状态码分不开那些同码不同病的（同是 409，
+//     处置动作分别是"等审批人""重取这一版""去补行项目""重读最新版再决定还价"），
+//     所以每个错误都随 `data.reason` 出一个机器可读的判据词。
 //  3. **装配回显**：任一条腿没装配时相关端点回 503，且读口的 `approval_lookup` 说清
 //     "没问"与"问了没有"是两件事。
 //
@@ -42,13 +43,17 @@ import (
 
 // QuoteViewReader 读侧与生成侧的接缝。*service.QuoteService 天然满足。
 //
-// 只有三格业务方法：读一版、读链上最新、生成第一版。**没有** Revise / ViewAt / ListVersions，
-// 也**没有**任何写状态的方法：还价与按版本回读今天没有出口（登记给 T-P6-04），
-// 而 GET 里能改状态是比"多一个方法"更坏的那件事。
+// 五格业务方法：生成第一版、在链上追加一版、按行键读一版、按版本号读某一版、读链上最新。
+// **没有** ListVersions：链上"列全表"那一条今天没有消费方，开出来就是一个能把别人的
+// 报价单整条读一遍的入口（判据同下面那条"没有写状态的方法"）。
+// 也**没有**任何写状态的方法：状态跃迁只有发送那条腿够得着，而 GET 里能改状态是比
+// "多一个方法"更坏的那件事。
 type QuoteViewReader interface {
 	Available() bool
 	Generate(ctx context.Context, in service.QuoteGenerateInput) (*service.QuoteView, error)
+	Revise(ctx context.Context, quoteID string, in service.QuoteGenerateInput) (*service.QuoteView, error)
 	View(ctx context.Context, id string) (*service.QuoteView, error)
+	ViewAt(ctx context.Context, quoteID string, version int64) (*service.QuoteView, error)
 	LatestView(ctx context.Context, quoteID string) (*service.QuoteView, error)
 }
 
@@ -84,11 +89,18 @@ func NewQuoteController(reads QuoteViewReader, sends QuoteSender) *QuoteControll
 // 没有 `POST /:id/won` 那一条：接受报价（accepted）是**客户**的动作，不是销售的按钮，
 // 而它的判据属于 P7（回款派生）。这里开出任何写 accepted 的口，
 // 就等于把"客户点了同意"这件事变成"销售点了同意"。
+//
+// 后挂的两条（revise / version）都带**静态前缀**而不是写成 `/quote/:quoteID/:version`：
+// gin 在同一个树位置只允许一个参数名，`/:id` 已经占了 `/quote/` 后面那一位，
+// 换个名字再挂一条会在进程启动时 panic（不是 404，是起不来）。静态段与 `:id` 可以并存，
+// 且静态优先，所以 `/quote/version/QT-1-2/1` 不会被当成"行键叫 version 的那一版"。
 func (c *QuoteController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/quote")
 	{
 		g.POST("", c.Generate)
+		g.POST("/revise/:quoteID", c.Revise)
 		g.GET("/latest/:quoteID", c.Latest)
+		g.GET("/version/:quoteID/:version", c.Version)
 		g.GET("/:id", c.Get)
 		g.POST("/:id/send", c.Send)
 	}
@@ -108,11 +120,14 @@ const (
 // quoteReason* 错误响应里 data.reason 的取值集合。与 HTTP 状态码一起构成完整判据：
 // 状态码给"这一类请求要不要重发"，reason 给"具体改哪一处"。
 const (
-	quoteReasonUnauthenticated  = "unauthenticated"
-	quoteReasonInputInvalid     = "input_invalid"
-	quoteReasonNotFound         = "not_found"
-	quoteReasonGateClosed       = "gate_closed"
-	quoteReasonNotDraft         = "not_draft"
+	quoteReasonUnauthenticated = "unauthenticated"
+	quoteReasonInputInvalid    = "input_invalid"
+	quoteReasonNotFound        = "not_found"
+	quoteReasonGateClosed      = "gate_closed"
+	quoteReasonNotDraft        = "not_draft"
+	// quoteReasonVersionConflict 与 not_draft / approval_mismatch 同为 409，但修法不同：
+	// 这一格是"有人在你之前把下一版追加上了"，调用方要重读最新版再决定，而不是改载荷。
+	quoteReasonVersionConflict  = "version_conflict"
 	quoteReasonApprovalMismatch = "approval_mismatch"
 	quoteReasonApprovalNotFound = "approval_not_found"
 	quoteReasonApprovalRejected = "approval_rejected"
@@ -169,6 +184,78 @@ func (c *QuoteController) Generate(ctx *gin.Context) {
 	if view == nil {
 		// 服务层"要么给视图要么给错"，走到这里就是实现漂了：按失败报，不回一个空对象。
 		c.replyError(ctx, errors.New("生成报价返回了空结果而没有给错误"), "生成报价")
+		return
+	}
+	response.Success(ctx, view, "ok")
+}
+
+// quoteReviseBody 还价入参：**没有** template_code，也**没有** one_id。
+//
+// 不复用 service.QuoteGenerateInput 是刻意的：那一格里有 TemplateCode，而这一路
+// 服务端**不重跑模板**（行起点是链上最新版那些持久化的行 —— 模板在两次谈判之间被
+// 运营改过的话，重跑会把客户没见过的一批行悄悄换进来）。收下这个字段就等于交付一个
+// "改了没人读"的入口：调用方会以为换模板能改价，实际那一版原样继承。
+// 绑定拒收未知字段，所以递 template_code 当场 400；one_id 同一判据（收件人不是入参，
+// 服务层那一格本来就带 json:"-"，从体里看它就是未知字段）。
+type quoteReviseBody struct {
+	OpportunityID string                   `json:"opportunity_id"` // 留空 = 继承基准版的归属；给了别的号会被服务层拒
+	Currency      string                   `json:"currency"`       // 空 = 沿用基准版
+	ValidUntil    *time.Time               `json:"valid_until"`    // nil = 沿用基准版
+	Lines         []service.QuoteLineInput `json:"lines"`          // 对基准行的覆盖与追加，可空
+}
+
+// toInput 换成服务层那份入参结构。TemplateCode 与 OneID 留空就是这一路的语义：
+// 不重跑模板、按"没定位到人"的分桶解析话术（与生成那一条完全同一个口径）。
+func (b quoteReviseBody) toInput() service.QuoteGenerateInput {
+	return service.QuoteGenerateInput{
+		OpportunityID: b.OpportunityID,
+		Currency:      b.Currency,
+		ValidUntil:    b.ValidUntil,
+		Lines:         b.Lines,
+	}
+}
+
+// Revise POST /api/quote/revise/:quoteID —— 在链上追加下一版（客户还价）。
+//
+// 地址用**逻辑号**而不是版本行键：还价的对象是"这张报价单"，而下一版的编号由仓储从
+// 链上最新版递增。递行键的话，调用方必须先知道最新版是哪一行的键，那个信息它只能
+// 再问一次 latest 才有 —— 两次读之间的追加会让"基于哪一版"这件事没有答案。
+// 空体是合法入参（原样追加一版，只推进版本号），与发送那一条同一个理由。
+//
+// @Summary      在既有报价链上追加一版（还价）
+// @Description  行项目继承链上最新版，模板不参与；闸门未开、话术无生效版本或基准版没有行项目时一行都不写
+// @Tags         Quote
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        quoteID  path    string           true   "报价逻辑号 quotes.quote_id"
+// @Param        body     body    quoteReviseBody  false  "行覆盖/追加 + 可选币种与有效期；空体 = 原样追加一版"
+// @Success      200      {object}  response.Response  "成功（data 为新版视图，version 已递增）"
+// @Failure      400      {object}  response.Response  "编号形状不合法 / 体形状不对 / 试图改商机归属或换模板"
+// @Failure      404      {object}  response.Response  "链上一版都没有（先走生成）/ 基准版没有可继承的行项目"
+// @Failure      409      {object}  response.Response  "闸门未开 / 版本号已被占用（有人先一步追加）/ 话术失效"
+// @Failure      503      {object}  response.Response  "底座未装配"
+// @Router       /api/quote/revise/{quoteID} [post]
+func (c *QuoteController) Revise(ctx *gin.Context) {
+	if !c.readsAvailable() {
+		c.unavailable(ctx, "报价")
+		return
+	}
+	quoteID, ok := c.pathParam(ctx, "quoteID", "报价编号")
+	if !ok {
+		return
+	}
+	var body quoteReviseBody
+	if !c.bindOptionalJSON(ctx, &body) {
+		return
+	}
+	view, err := c.reads.Revise(ctx.Request.Context(), quoteID, body.toInput())
+	if err != nil {
+		c.replyError(ctx, err, "追加报价版本")
+		return
+	}
+	if view == nil {
+		c.replyError(ctx, errors.New("追加报价版本返回了空结果而没有给错误"), "追加报价版本")
 		return
 	}
 	response.Success(ctx, view, "ok")
@@ -250,6 +337,49 @@ func (c *QuoteController) Latest(ctx *gin.Context) {
 		return
 	}
 	view, err := c.reads.LatestView(ctx.Request.Context(), quoteID)
+	c.replyView(ctx, view, err)
+}
+
+// Version GET /api/quote/version/:quoteID/:version —— 读链上**指定的那一版**。
+//
+// 存在的理由是"旧版不可变"这件事唯一能被读出来的地方：报价是多轮的，只有 latest 那一条
+// 时，第二次谈判之后"第一版当时报给客户的是多少钱"就只剩当前态能看见 —— 而当前态正是
+// 会被下一版改掉的那个态。事后核对与审批争议都要回到某一版，这一格就是那条路。
+//
+// @Summary      按版本号读取某一版报价
+// @Tags         Quote
+// @Produce      json
+// @Security     BearerAuth
+// @Param        quoteID  path    string  true  "报价逻辑号 quotes.quote_id"
+// @Param        version  path    int     true  "版本号（从 1 起，由仓储递增，调用方不能自带）"
+// @Success      200      {object}  response.Response  "成功"
+// @Failure      400      {object}  response.Response  "编号形状不合法 / 版本号不是正整数"
+// @Failure      404      {object}  response.Response  "那一版不存在"
+// @Failure      503      {object}  response.Response  "底座未装配"
+// @Router       /api/quote/version/{quoteID}/{version} [get]
+func (c *QuoteController) Version(ctx *gin.Context) {
+	if !c.readsAvailable() {
+		c.unavailable(ctx, "报价")
+		return
+	}
+	quoteID, ok := c.pathParam(ctx, "quoteID", "报价编号")
+	if !ok {
+		return
+	}
+	raw, ok := c.pathParam(ctx, "version", "报价版本号")
+	if !ok {
+		return
+	}
+	version, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || version <= 0 {
+		// 0 与负数在这一格是"没有对应事实的写法"而不是"查不到"。放它走到底层会回 404，
+		// 于是下一次有人把 0 实现成"取最新"，就等于多出一条没人声明、也没人审的别名入口。
+		response.Error(ctx, http.StatusBadRequest,
+			"报价版本号必须是从 1 开始的正整数（得到 "+raw+"）",
+			gin.H{"reason": quoteReasonInputInvalid})
+		return
+	}
+	view, err := c.reads.ViewAt(ctx.Request.Context(), quoteID, version)
 	c.replyView(ctx, view, err)
 }
 
@@ -380,11 +510,13 @@ func (c *QuoteController) sendParam(ctx *gin.Context) (string, bool) {
 	return c.pathParam(ctx, "id", "报价版本行键")
 }
 
-// bindOptionalJSON 允许**空体**的绑定（只给发送那一条用）。
+// bindOptionalJSON 允许**空体**的绑定（给发送与还价那两条用）。
 //
-// 空体在这里是合法入参而不是"忘了传"：发送的第一阶段就是"手里还没有结论"，
-// `curl -X POST .../send` 不写体与写 `{}` 必须是同一个动作。
-// 反面的做法是让调用方写 `{"approval_id":""}` —— 那等于允许"用一个空串自称带了结论"，
+// 空体在这两条上都是合法入参而不是"忘了传"：发送的第一阶段就是"手里还没有结论"，
+// `curl -X POST .../send` 不写体与写 `{}` 必须是同一个动作；还价的"不改任何行、
+// 只把版本号推进一格"（有效期到了、要重新发一次同一张单子）也是同一个动作的两种写法，
+// 逼调用方写 `{"lines":[]}` 只是把同一个语义换了个语法，而两种语法迟早有一种被特殊对待。
+// 反面的例子是 `{"approval_id":""}` —— 那等于允许"用一个空串自称带了结论"，
 // 而两种写法走的是不同分支（前者开待办、后者按号读），一种语法两种语义正是旁路的形状。
 // EOF 之外的一切（含未知字段、超体积、形状不对）仍然照原样拒。
 func (c *QuoteController) bindOptionalJSON(ctx *gin.Context, target any) bool {
@@ -514,6 +646,12 @@ func (c *QuoteController) replyError(ctx *gin.Context, err error, action string)
 		response.Error(ctx, http.StatusConflict, err.Error(), gin.H{"reason": quoteReasonGateClosed})
 	case errors.Is(err, service.ErrQuoteSendNotDraft):
 		response.Error(ctx, http.StatusConflict, err.Error(), gin.H{"reason": quoteReasonNotDraft})
+	case errors.Is(err, service.ErrQuoteVersionConflict):
+		// 409 而不是 500：调用方什么都没做错，做错的是"两个人同时基于同一版追加"这件事，
+		// 而修法也不是改载荷，是重读最新版再决定要不要在那之上还价。
+		// reason 必须与 not_draft / approval_mismatch 分开：那两格是"这一版不能这么动"，
+		// 这一格是"这一版已经被人动过了"。
+		response.Error(ctx, http.StatusConflict, err.Error(), gin.H{"reason": quoteReasonVersionConflict})
 	case errors.Is(err, service.ErrQuoteSendRecipientMissing):
 		response.Error(ctx, http.StatusConflict, err.Error(), gin.H{"reason": quoteReasonRecipientMissing})
 	case errors.Is(err, service.ErrQuoteSendLinesMissing):
