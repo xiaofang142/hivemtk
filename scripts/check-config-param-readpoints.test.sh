@@ -10,7 +10,10 @@
 #   F1 齐全 ⇒ 绿（正控制：证明夹具确实满足每一格的前置，否则后面的红可能是假阳）
 #   F2 没读取点也没挂「未接线」 ⇒ 红，UNDECLARED 点名那个 key
 #   F3 有读取点但仍挂着「未接线」 ⇒ 红，STALE 点名那个 key
-#   F4 条目形状变了（Name 与 Description 挤在同一行） ⇒ rc=2，说对账失败
+#   F4 整条挤成一行（Name 与 Description 同行） ⇒ 仍要枚举到 ⇒ 绿。真仓库里 `38ea7489` 那两条
+#      lead 条目就是这个形状：旧枚举源只认"Name 之后紧跟换行 + Description"，把它们当成不存在，
+#      于是那两条的接线状态从没人核过（本格守的是"看不见 ≠ 没问题"）
+#   F4b 条目头真的漂走（Key 挪到 Name 之后，`Key:` 行照旧数得到） ⇒ rc=2，说对账失败
 #   F5 种子文件不在 ⇒ rc=2，不许把"没对象"印成"没问题"
 #   F6 读取点走常量（IDENT = "key" ＋ Get*(…, IDENT, …)） ⇒ 绿（证明门认得这条读取路径）
 #   F7 读取点只出现在 *_test.go ⇒ 红，UNDECLARED 点名（测试引用不算生产读取点）
@@ -123,7 +126,9 @@ else
   bad "F3 应 rc=1 且点名 STALE: demo.sleepy_ttl，实际 rc=${RC}：$(printf '%s\n' "$OUT" | tr '\n' ' | ')"
 fi
 
-# ── F4 条目形状变了 ⇒ rc=2 说对账失败 ──
+# ── F4 整条挤成一行 ⇒ 仍被枚举 ⇒ 绿 ──
+# 这一格断的是"枚举源对形状免疫"：条目压成一行是运维侧真发生过的写法（`38ea7489`），
+# 而门一旦看不见某条，那条的"改了没人读"就永远不会被报出来 —— 报不出来与全绿在输出上一样。
 T=$WORK/f4
 seed_tree "$T"
 perl -0pi -e 's/\n\s*Description: "演示用：生产代码真会读它",/ Description: "演示用：生产代码真会读它",/' \
@@ -133,10 +138,30 @@ if grep -q '^[[:space:]]*Description: "演示用' "$T/user-server/internal/servi
 else
   OUT=$(run "$T")
   RC=$?
-  if [ "$RC" = 2 ] && printf '%s\n' "$OUT" | grep -q '条目解析对账失败'; then
-    ok "F4 枚举源变瞎时 rc=2 并说「条目解析对账失败」，不是冒充绿"
+  if [ "$RC" = 0 ] && printf '%s\n' "$OUT" | grep -q '种子条目 2 条' \
+     && printf '%s\n' "$OUT" | grep -q '有读取点且未挂标注=1  未接线且已声明=1  未接线但未声明=0  声明过期=0'; then
+    ok "F4 单行条目照样被枚举（种子条目 2 条）且判据正常开火"
   else
-    bad "F4 应 rc=2 且说对账失败，实际 rc=${RC}：$(printf '%s\n' "$OUT" | tr '\n' ' | ')"
+    bad "F4 应 rc=0 且枚举到 2 条、读数 1/1/0/0，实际 rc=${RC}：$(printf '%s\n' "$OUT" | tr '\n' ' | ')"
+  fi
+fi
+
+# ── F4b 条目头漂走（Key 挪到 Name 之后）⇒ rc=2 说对账失败 ──
+# 与 F4 相反的那一侧：`Key:` 行还数得到、条目头解不出 ⇒ 两条计数必须对上，
+# 否则"少枚举一条"会被读成"少一条要判的参数"（那就是把盲区放行的口子）。
+T=$WORK/f4b
+seed_tree "$T"
+perl -0pi -e 's/\{Group: "demo", Key: "wired_threshold", Name: "演示阈值",/{Group: "demo", Name: "演示阈值", Key: "wired_threshold",/' \
+  "$T/user-server/internal/service/config_param_seeds.go"
+if ! grep -q '{Group: "demo", Name: "演示阈值", Key: "wired_threshold",' "$T/user-server/internal/service/config_param_seeds.go"; then
+  bad "F4b 注码没落到磁盘（字段顺序未变＝变异未生效），本格结论不作数"
+else
+  OUT=$(run "$T")
+  RC=$?
+  if [ "$RC" = 2 ] && printf '%s\n' "$OUT" | grep -q '条目解析对账失败'; then
+    ok "F4b 枚举源少解一条时 rc=2 并说「条目解析对账失败」，不是冒充绿"
+  else
+    bad "F4b 应 rc=2 且说对账失败，实际 rc=${RC}：$(printf '%s\n' "$OUT" | tr '\n' ' | ')"
   fi
 fi
 
