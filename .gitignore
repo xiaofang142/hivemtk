@@ -371,3 +371,14 @@ docs/superpowers/specs/ledger/logs/R22-lanes/service-full-mut-batchecho.log
 # 与 logs/ 下的轮次目录数对齐（电池跑完才有目录，先加行的窗口内差 1 属预期）。
 !docs/superpowers/specs/ledger/logs/RouteSurface/
 !docs/superpowers/specs/ledger/logs/RouteSurface/**/*.log
+# route-consumer-triage.py（僵尸接口四档取证器）的名单轮次：目录行＋两条后缀行。
+# 产物是 4 份 .tsv 名册＋1 份事实源 .tsv＋1 份 `00-provenance.log` 字节身份行。
+# 每一行的必要性都实测过（四向现测，判据＝`git check-ignore -v` 命中哪一条）：
+#   · 目录行**必需**——只删它，上面 `docs/.../logs/*` 就把整棵轮次树挡回；
+#   · `**/*.log` **必需**——仓库根第 24 行的 `*.log` 会命中 `00-provenance.log`；
+#   · `**/*.tsv` 是**多余的**——只留目录行时 .tsv 已不被忽略（没有任何规则匹配 .tsv），
+#     留它只为写明本族放行的后缀面，并防今后有人给仓库根加一条宽后缀规则。
+# 现数口径同上方「四条一组」那段：以 !docs...logs/<轮次>/ 形状的行数与 logs/ 下的轮次目录数对齐。
+!docs/superpowers/specs/ledger/logs/RouteTriage/
+!docs/superpowers/specs/ledger/logs/RouteTriage/**/*.tsv
+!docs/superpowers/specs/ledger/logs/RouteTriage/**/*.log

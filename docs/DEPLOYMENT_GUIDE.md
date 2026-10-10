@@ -261,6 +261,10 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `TOOL_CIRCUIT_BASE_COOLDOWN` | `30s` | 按工具熔断的起始冷却，可用区间 `[1ms,1h]`。非法时长或超界 ⇒ 告警并沿用默认；五项参数各自校验，配错一项不拖累其余（`internal/app/tool_circuit_breaker_wiring.go`） |
 | `TOOL_CIRCUIT_MAX_COOLDOWN` | `5m` | 熔断冷却的指数退避上限，可用区间 `[1ms,24h]`。小于 `TOOL_CIRCUIT_BASE_COOLDOWN` 时抬到 base，否则退避被反向夹住 |
 | `TOOL_CIRCUIT_BACKOFF_MULTIPLIER` | `2.0` | 每多熔断一次的冷却倍率，可用区间 `[1,100]`；非数字或超界 ⇒ 沿用默认 |
+| `TOOL_CIRCUIT_FAILURE_THRESHOLD` | `5` | 同一工具连续失败几次就熔断它，可用区间 `[1,1000]`；非整数或超界 ⇒ 告警并沿用默认（默认值来自 `tooluse.DefaultCircuitBreakerConfig()`，`internal/aiagent/agent/tooluse/circuit_breaker.go:50`）。这一层熔断挂在 executor 的装饰链上，与 ToolRouter 内部"失败即换同类工具"的那条短路各算各的，重置端点 `/agent/tools/circuit/reset` 只管后者 |
+| `TOOL_CIRCUIT_HALF_OPEN_ATTEMPTS` | `1` | 熔断进入半开态后最多放几次试探请求，可用区间 `[1,100]`。默认 `1` = 一次试探定生死（成功即闭合、失败立刻重新熔断）；调大等于允许坏工具在恢复期连着挨几次真实调用，只在观察某工具抖动时临时设 |
+| `TOOL_AUDIT_QUEUE_SIZE` | `10000` | 工具审计异步落库队列的容量，可用区间 `[1,200000]`（`internal/app/tool_audit_wiring.go`）。**队列满 ⇒ 那一条只进内存缓冲、不落库**，所以它是"突发写入从哪一刻开始掉 DB 侧"的唯一可调旋钮；只在 `FF_TOOL_AUDIT_DB` 打开时生效 |
+| `TOOL_RISK_OBSERVED_RETAINED` | `2000` | 风险观察器在保留窗内留存的判定条数上限，可用区间 `[10,100000]`（`internal/app/permission_wiring.go`）。它不改变计数口径（环形留存，见 `tooluse.NewMemoryRiskObserver`），调小只是让"能回看的历史"变短 |
 | `TELEGRAM_POLLING_ENABLED` | 未设置 | `1`/`true`/`yes` 强制启用 polling，`0`/`false`/`no` 强制禁用；**未设置则自动判定**：配了 `external.public_base_url` 就注册 webhook 并禁用 polling，没配（内网/本地）自动启用 polling（`internal/service/telegram_polling.go`）。polling 只能单实例跑，多实例部署须显式设 `0`，否则同一消息被多台机器各拉一遍 |
 
 > **换掉"已经装好的那台"的超管口令，不能靠重跑 bootstrap。** `SEED_PASSWORD=… bash scripts/bootstrap.sh`
