@@ -107,6 +107,12 @@ func (c *AuthController) recordLoginRiskAsync(ctx *gin.Context, username string,
 // @Failure      409   {object}  response.Response  "用户名/邮箱已存在"
 // @Router       /public/register [post]
 func (c *AuthController) Register(ctx *gin.Context) {
+	// enable_register 开关：关闭时 403（配置读失败按保守口径同样拒绝）
+	cfg, cfgErr := service.NewSystemConfigService().GetConfig(ctx.Request.Context())
+	if cfgErr != nil || !cfg.EnableRegister {
+		response.Error(ctx, http.StatusForbidden, "当前站点未开放注册")
+		return
+	}
 	var req service.RegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, err.Error())
