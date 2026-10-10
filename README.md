@@ -258,6 +258,14 @@ hivemtk/                        # 用户端仓库
 | 📧 商务合作 / 技术支持 | `jideilvluoqun@gmail.com` | 企业级技术支持、定制集成、私有部署咨询 |
 | 🔒 安全漏洞 | `jideilvluoqun@gmail.com` | 私密报告,详见 [SECURITY.md](SECURITY.md) |
 
+### 作者微信
+
+> 扫码添加作者微信,或搜索微信号 `xiao142000` 直接添加。
+
+| 微信二维码 | 微信号 |
+|---|---|
+| ![作者微信二维码](docs/wechat-qr.jpg) | `xiao142000` |
+
 **镜像仓库**:Gitee 主仓库 [gitee.com/xhpmayun/hivemtk](https://gitee.com/xhpmayun/hivemtk)(国内推荐,下载更快)· GitHub 镜像 [github.com/xiaofang142/hivemtk](https://github.com/xiaofang142/hivemtk)(Actions 定时同步)
 
 ---
