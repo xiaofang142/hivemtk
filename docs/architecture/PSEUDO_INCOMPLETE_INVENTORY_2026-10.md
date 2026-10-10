@@ -304,7 +304,7 @@ I6 再接三格：项9 读侧（`NewSalesEventStatsService` 由工作台装配�
 
 ### B5 78 条"未接线"参数里要接哪些
 
-> **状态（2026-10-09 I16 复测）：`config_param_seeds.go`/`config_param.go` 被并行泳道占用（M），暂不接。**
+> **状态（2026-10-10 I33 复测）：阻塞解除（工作区全清）。他泳道已接线至 104/117，剩 13 条已声明未接线**——bridge.polling_max_timeout/polling_default_timeout、bridge.max_reply_content_bytes、pagination.page_max_size/page_default_size、wecom.error_rate_degrade、sales.insight_limit、agent_tool.result_cache_ttl、confidence.persona_default_threshold/persona_max_retry、wechat.chat_ws_ping_period/pong_wait/write_wait。每条背后实现状态已在种子 Description 或接线文件（如 `app/inbox_sales_session_pagination_wechat_params_wiring.go`、`service/wecom_account_health.go`、`app/agent_tool_params_wiring.go`）注明，属产品拍板项。读点门 rc=0（104 有读取点 / 13 已声明未接线 / 0 / 0）。
 > 读点门（`check-config-param-readpoints.py`）规定接线必须同轮撤掉 Name 里的「未接线」标注（否则 STALE 红）、
 > 只撤标注不接线也红（UNDECLARED 红）——两头都要改种子文件，他泳道在改时叠改必撞。当前读数 43 有读取点 / 72 已声明未接线 / 0 / 0。
 
@@ -325,7 +325,9 @@ A14 只是停止谎报。逐条接线需要按业务优先级挑（例如 `confi
 
 处置结论（2026-10-09 I14 回填）：卡片域那条继续等泳道收口（`card_routes.go` 仍 `M`），
 其余四条按本表"处置"列执行完毕——删除后 `go build`/`go vet`/三门禁/参数读取点门全绿，
-service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（seeds 计数、reach dispatch 加 `"douyin":true`），与本删除零关联。
+  service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（seeds 计数、reach dispatch 加 `"douyin":true`），与本删除零关联。
+
+> **状态（2026-10-10 I33 补记）：第一行 card_access 已由 I24 删全链**（`service/card_access.go` 接口+构造+实现、两个 CardAccess 仓储共 4 文件 466 行，死簇四级联动删除）——原「保留只报」已过时，B6 五条全部销项。
 
 ### B7 门禁的 CI 面（2026-10-09 I15 已处置）
 
