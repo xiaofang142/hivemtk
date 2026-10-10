@@ -182,7 +182,18 @@ func TestFallbackNilDB(t *testing.T) {
 //   - memory.l1_ttl_hours：短期记忆存活秒数，同时是多轮召回的窗口。
 //   - geo.default_visibility_days：拆分原 `q.Days <= 0 || q.Days > 365` 那一个条件
 //     得来的两个语义——没给走参数中心，给超了仍夹 365（查询成本闸，不随默认值放大）。
-const defaultParamDefsWant = 147
+//
+// 2026-10-10（第八次，阶段三 3.1 第二批）：+7 = webhook 组的并发、限流与重试七件套。
+//   - 七个常量原先散在 webhook_dedup.go / webhook.go / webhook_ai.go 三处，且本已有
+//     一层 env 覆盖（webhookEnvInt）。现在是 env > 参数中心 > 常量兜底，env 保留为
+//     部署层应急开关（改 env 要重启，参数中心改完即生效）。
+//   - 生效时机分两类，故 Restart 不同：dedup_ttl / rate_limit / rate_burst /
+//     max_retries 是每请求读（令牌桶按 key 懒构造，桶用完即丢，下一个 key 就是新值）；
+//     worker_count / queue_size / reply_concurrency 在 NewWebhookService 里
+//     make(chan, N) 与起 goroutine，只对下次启动生效，三条都标 Restart=true。
+//   - max_retries 与 agent_llm.max_retries 同名不同义（那一条管 LLM 调用本身的重试，
+//     本条目管渠道出网投递），Description 里写明了区分，免得运维在页面上看混。
+const defaultParamDefsWant = 154
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

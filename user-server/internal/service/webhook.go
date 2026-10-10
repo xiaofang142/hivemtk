@@ -161,10 +161,10 @@ func NewWebhookService(db *gorm.DB) *WebhookService {
 		delayedRepo:       repository.NewDelayedOutboundRepository(db),
 		ingressSvc:        NewInboxIngressServiceWithDB(db, nil),
 		rlBuckets:         make(map[string]*tokenBucket),
-		workerCount:       webhookEnvInt("WEBHOOK_WORKER_COUNT", WebhookWorkerCount),
-		queue:             make(chan *webhookJob, webhookEnvInt("WEBHOOK_QUEUE_SIZE", WebhookQueueSize)),
+		workerCount:       webhookWorkerCount(context.Background()),
+		queue:             make(chan *webhookJob, webhookQueueSize(context.Background())),
 		stopCh:            make(chan struct{}),
-		replySem:          make(chan struct{}, webhookEnvInt("WEBHOOK_REPLY_CONCURRENCY", WebhookReplyConcurrency)),
+		replySem:          make(chan struct{}, webhookReplyConcurrency(context.Background())),
 	}
 	s.startWorkers(context.Background())
 	s.startRLJanitor(context.Background())
