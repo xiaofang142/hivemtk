@@ -1,0 +1,93 @@
+# =============================================================================
+# registry.yaml — hivemtk 统一平台词汇表与权限矩阵（单一事实源）
+#
+# 生成闭环（R-2，2026-10-11）：scripts/gen-registry.py 读本文件生成
+#   1. user-server/internal/rbac/permissions_gen.go（权限点常量 + 角色矩阵）
+#   2. docs/registry/generated/api-vocabulary.md（人读版词汇/权限文档）
+# 新鲜度由 rbac 包的 TestGeneratedPermissionsFresh 钉住（生成物与源不一致即红）。
+#
+# 口径：
+#   - 渠道清单不在这里维护——以 internal/capregistry 为准（避免双事实源），
+#     本文件只承载"全平台统一词汇 + RBAC 权限矩阵"（ADR-017 / R-2）。
+#   - 生成物当前是**纯声明**（常量/文档），不改变运行行为——P1 的
+#     RequirePermission 中间件消费 rbac 包常量（backlog P1-1/P1-3）。
+#     因此无运行时 feature flag：回滚 = 回退生成物文件。
+# =============================================================================
+version: 1
+
+entities:
+  - name: Team / Tenant
+    label_zh: 团队（租户）
+    notes: teams 表锚点；team_id=0 为平台侧保留值；存量行回填默认团队
+  - name: Account / User
+    label_zh: 账户（用户）
+    notes: system_users；role ∈ {admin, team_admin, user}；team_id 归属租户
+  - name: Role
+    label_zh: 角色
+    notes: P0 用内置角色轴（admin/team_admin/user）；P1 起 roles/permissions 表化
+  - name: Permission
+    label_zh: 权限点
+    notes: 资源.动作 命名（如 customer.read）；由本文件矩阵生成
+  - name: Scope
+    label_zh: 数据范围
+    notes: all/department/team/self；P0 落 team 维度（scope.TeamScoped）
+  - name: Client ID
+    label_zh: MCP 客户端标识
+    notes: mcp_credentials；1:N 挂钥匙；绑定账户继承团队
+  - name: API Key
+    label_zh: API 密钥
+    notes: mcp_credential_keys；明文双轨（sha256 校验 + AES-GCM 可查看）
+  - name: MCP
+    label_zh: MCP 工具入口
+    notes: POST /api/mcp（JSON-RPC），MCPGuard 唯一门
+  - name: Skill
+    label_zh: Skill 注册表
+    notes: mcp_skills；绑定凭证；allowed_tools 同步凭证 scope
+  - name: Channel
+    label_zh: 渠道
+    notes: 清单以 internal/capregistry 为准（此处不重复维护）
+  - name: Plan / Entitlement
+    label_zh: 计费档位（权益）
+    notes: teams.plan（free/pro/enterprise）；P0 只登记，P2 起消费
+
+roles:
+  super_admin:
+    label_zh: 超级管理员（平台）
+    notes: role=admin；跨团队全量直通（需求 3）
+  team_admin:
+    label_zh: 团队管理员
+    notes: role=team_admin；本团队用户与配置 + 全部本团队业务数据
+  member:
+    label_zh: 成员
+    notes: role=user；按授权读写本团队数据
+  read_only_auditor:
+    label_zh: 只读审计
+    notes: P1 落地；只读 + 审计页
+
+# 权限矩阵（P1 RequirePermission 的输入；P0 仅生成常量与文档，不改变路由行为）
+permissions:
+  - { id: customer.read,    resource: customer,    action: read,    label_zh: 客户-读,    roles: [super_admin, team_admin, member, read_only_auditor] }
+  - { id: customer.write,   resource: customer,    action: write,   label_zh: 客户-写,    roles: [super_admin, team_admin, member] }
+  - { id: customer.delete,  resource: customer,    action: delete,  label_zh: 客户-删,    roles: [super_admin, team_admin] }
+  - { id: inbox.read,       resource: inbox,       action: read,    label_zh: 收件箱-读,  roles: [super_admin, team_admin, member, read_only_auditor] }
+  - { id: inbox.write,      resource: inbox,       action: write,   label_zh: 收件箱-写,  roles: [super_admin, team_admin, member] }
+  - { id: clue.read,        resource: clue,        action: read,    label_zh: 线索-读,    roles: [super_admin, team_admin, member, read_only_auditor] }
+  - { id: clue.write,       resource: clue,        action: write,   label_zh: 线索-写,    roles: [super_admin, team_admin, member] }
+  - { id: kb.read,          resource: kb,          action: read,    label_zh: 知识库-读,  roles: [super_admin, team_admin, member, read_only_auditor] }
+  - { id: kb.write,         resource: kb,          action: write,   label_zh: 知识库-写,  roles: [super_admin, team_admin, member] }
+  - { id: opportunity.read, resource: opportunity, action: read,    label_zh: 商机-读,    roles: [super_admin, team_admin, member, read_only_auditor] }
+  - { id: opportunity.write, resource: opportunity, action: write,  label_zh: 商机-写,    roles: [super_admin, team_admin, member] }
+  - { id: reach.send,       resource: reach,       action: send,    label_zh: 触达-外发,  roles: [super_admin, team_admin] }
+  - { id: mcp.credential.manage, resource: mcp_credential, action: manage, label_zh: MCP凭证-管理, roles: [super_admin, team_admin] }
+  - { id: api_key.reveal,   resource: api_key,     action: reveal,  label_zh: 密钥-查看明文, roles: [super_admin, team_admin] }
+  - { id: audit.read,       resource: audit,       action: read,    label_zh: 审计-读,    roles: [super_admin, team_admin, read_only_auditor] }
+  - { id: audit.export,     resource: audit,       action: export,  label_zh: 审计-导出,  roles: [super_admin, team_admin] }
+  - { id: team.manage,      resource: team,        action: manage,  label_zh: 团队-管理（跨团队）, roles: [super_admin] }
+  - { id: team.member.manage, resource: team,      action: member_manage, label_zh: 团队-成员管理（本团队）, roles: [super_admin, team_admin] }
+
+# API Key 生命周期状态机（与 model.MCPCredentialKey 常量同口径，测试钉同步）
+api_key_states:
+  - { id: active,    label_zh: 启用, notes: 可认证 }
+  - { id: disabled,  label_zh: 禁用, notes: 管理员手动，可再启用 }
+  - { id: suspended, label_zh: 暂停, notes: 欠费/违规系统级停用，enable 可恢复 }
+  - { id: revoked,   label_zh: 吊销, notes: 终态，仅可（软）删除 }

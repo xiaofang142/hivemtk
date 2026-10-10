@@ -135,6 +135,11 @@ jobs:
           chmod +x scripts/check-architecture.sh
           bash scripts/check-architecture.sh
 
+      - name: 统一词汇表生成物新鲜度（registry.yaml）
+        # R-2：权限点/角色矩阵以 docs/registry/registry.yaml 为单一事实源，
+        # 生成物漂移（改源没重新生成）直接红。
+        run: python scripts/gen-registry.py --check
+
       - name: 多租户隔离守卫（核心表必须带 team scope）
         # 对应 docs/backlog/multi-tenant-rbac-saas.md P0-9：
         # 核心业务表新增裸查询会让跨团队数据漏给普通用户。
