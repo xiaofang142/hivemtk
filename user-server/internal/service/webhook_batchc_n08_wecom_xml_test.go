@@ -97,7 +97,13 @@ func TestN08_VerifyWeCom_XMLEnvelopeSignature(t *testing.T) {
 	}
 
 	// 反向：改一个字节必须拒（否则本用例是恒真守卫）。
-	bad := map[string]string{"timestamp": q["timestamp"], "nonce": q["nonce"], "msg_signature": q["msg_signature"][:38] + "00"}
+	// 翻转首字符保证与真实签名必然不同——不能用「尾部替换固定字符」：
+	// 真实签名末两位恰好是被替换的串时（1/256 概率）篡改串==真实签名，断言必炸。
+	flipped := "0"
+	if q["msg_signature"][0] == '0' {
+		flipped = "1"
+	}
+	bad := map[string]string{"timestamp": q["timestamp"], "nonce": q["nonce"], "msg_signature": flipped + q["msg_signature"][1:]}
 	if ok2, _ := verifyWeCom(acc.CallbackToken, aesKey, body, bad); ok2 {
 		t.Error("被篡改的 msg_signature 不得通过")
 	}
