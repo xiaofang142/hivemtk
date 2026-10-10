@@ -176,7 +176,6 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 		SessionID:   p.ChatID,
 		UserMessage: p.Content,
 		Platform:    string(channel),
-		AutoExecute: true,
 		Config:      DefaultSalesEngineConfig(),
 	}
 

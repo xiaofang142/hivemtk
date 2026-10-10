@@ -45,10 +45,9 @@ type AgentContext struct {
 	FAQEntryIDs    []string
 	SOPTemplateIDs []string
 
-	SOPIDs              []string
-	ScriptLibraryIDs    []string
-	DecisionStrategyIDs []string
-	ABExperimentIDs     []string
+	SOPIDs           []string
+	ScriptLibraryIDs []string
+	ABExperimentIDs  []string
 
 	LLMModel         string
 	Temperature      float64

@@ -621,7 +621,6 @@ func (s *WebhookService) triggerTelegramJoinSales(ctx context.Context, accountID
 		OneID:       "telegram:" + senderID,
 		UserMessage: triggerMsg,
 		Platform:    "telegram",
-		AutoExecute: true,
 		Config:      DefaultSalesEngineConfig(),
 	}
 

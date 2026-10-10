@@ -285,8 +285,7 @@
 
 ### B4 5 条 UNWIRED 台账行（原 9 条：项20d 于 2026-10 转 wired，项9/11a/11b 于 2026-10-09 I6 转 wired）
 
-> **状态（2026-10-09 I16 复测）：`check-unwired-assets.sh` 已不再被他泳道占用（工作区干净），但每行「接还是撤」是产品拍板项，不机械动。**
-> 防回归行的待加内容已写在 A1/A5/A6/A7 判据里成人能抄的形式，随各条能力真正接线时一并登记。
+> **状态（2026-10-10 I35 B4 拍板「撤」）：四条死代码已删——`agent.ModeOf`/`agent.IsActive`（整包删，无 importer）、`SalesRequest.AutoExecute`（5 写入 0 读取）、`AgentContext.DecisionStrategyIDs`（model/dto/runtime 三处定义+测试引用）。项14a `LTCStageGate` 保留（设计定稿 tripwire，首条挂载即 DRIFT_NEW 变红）。`check-unwired-assets.sh` 同步删 4 行，读数 98/103 → 98/99。**
 
 `scripts/check-unwired-assets.sh` 现在按 UNWIRED 登记的格（项14、项19 的四条）
 本身是诚实的：它们明写"未接线"，并且漂移会让门变红。

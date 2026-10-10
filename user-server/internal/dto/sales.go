@@ -247,8 +247,6 @@ type AgentContext struct {
 	ConfidenceThreshold  float64           `json:"confidence_threshold"`
 	MaxAIConsecutive     int               `json:"max_ai_consecutive"`
 
-	DecisionStrategyIDs []string `json:"decision_strategy_ids"`
-
 	ABExperimentIDs []string `json:"ab_experiment_ids"`
 
 	AssetBundleID string `json:"asset_bundle_id,omitempty"`
@@ -284,7 +282,6 @@ type SalesRequest struct {
 	OneID       string             `json:"one_id"`
 	UserMessage string             `json:"user_message"`
 	Platform    string             `json:"platform"`
-	AutoExecute bool               `json:"auto_execute"`
 	Config      *SalesEngineConfig `json:"config,omitempty"`
 
 	AgentContext *AgentContext `json:"agent_context,omitempty"`

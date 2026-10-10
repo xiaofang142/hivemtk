@@ -366,7 +366,6 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		OneID:       in.OneID,
 		UserMessage: in.Content,
 		Platform:    string(in.Platform),
-		AutoExecute: o.enableAutoReply,
 		EmotionHint: emotionHint,
 	}
 	salesResp, err := o.engine.HandleWithAgent(ctx, salesReq, finalAgentCtx)

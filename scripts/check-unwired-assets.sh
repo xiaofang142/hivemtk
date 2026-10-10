@@ -368,10 +368,6 @@ BASELINE=(
   #       所以 Active 的"决策"只能取智能体挂的第一个可解析 SOP（见 active.go 头部）。
   "19|双模式运行时的启动装配点（摘掉即线上每次运行稳定回 503、app 用例全绿）|func InitAgentLifecycles|InitAgentLifecycles\\(|internal/router|wired"
   "19|双模式运行入口的路由登记点（摘掉即重新回到「有实现、零调用方」）|func SetupAgentLifecycleRoutes|SetupAgentLifecycleRoutes\\(|internal/router|wired"
-  "19|模式判读 helper ModeOf 的包外调用方（运行期分派走 app 侧 Resolver）|func ModeOf\\(|agent\\.ModeOf\\(|"
-  "19|主动模式判定 IsActive 的包外调用方（唯一消费是同文件里它调 ModeOf）|func IsActive\\(|agent\\.IsActive\\(|"
-  "19|SalesRequest.AutoExecute 的读取方（写入 5 处、读取 0 处，开关其实在编排器里）|AutoExecute bool|\\.AutoExecute|"
-  "19|决策策略 ID 列表的读取方（Active 因此只能取第一个可解析 SOP）|DecisionStrategyIDs \\[\\]string|\\.DecisionStrategyIDs|"
   # ---- T-P5-03（外联闸门串联 / reach_send 节点）新增四格 ------------------------------
   # 前两格守"这一族能力在启动路径上真的被接上"：本卡的行为用例全在 internal/service 里
   # 就地 new 调度器、就地 SetSOPReachSender，它们证明不了生产装配点还挂着这两跳。

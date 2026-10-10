@@ -251,7 +251,6 @@ func (s *AIAgentService) TestAgent(ctx context.Context, agentID uint, customerID
 	req := &SalesRequest{
 		CustomerID:  customerID,
 		UserMessage: message,
-		AutoExecute: true,
 	}
 	return engine.HandleWithAgent(ctx, req, agentCtx)
 }

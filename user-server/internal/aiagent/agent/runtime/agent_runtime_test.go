@@ -10,16 +10,15 @@ import (
 // TestAgentContext_Structure 验证 AgentContext 字段完整性
 func TestAgentContext_Structure(t *testing.T) {
 	ctx := &AgentContext{
-		AgentID:             1,
-		AgentCode:           "test_agent",
-		Name:                "测试智能体",
-		AgentType:           "sales",
-		Persona:             "专业销售",
-		RagProductIDs:       []string{"rag_001"},
-		SOPIDs:              []string{"sop_001"},
-		ScriptLibraryIDs:    []string{"script_001"},
-		DecisionStrategyIDs: []string{"strategy_001"},
-		ABExperimentIDs:     []string{"exp_001"},
+		AgentID:          1,
+		AgentCode:        "test_agent",
+		Name:             "测试智能体",
+		AgentType:        "sales",
+		Persona:          "专业销售",
+		RagProductIDs:    []string{"rag_001"},
+		SOPIDs:           []string{"sop_001"},
+		ScriptLibraryIDs: []string{"script_001"},
+		ABExperimentIDs:  []string{"exp_001"},
 	}
 
 	if ctx.AgentID != 1 {
@@ -27,9 +26,6 @@ func TestAgentContext_Structure(t *testing.T) {
 	}
 	if ctx.AgentCode != "test_agent" {
 		t.Errorf("AgentCode = %s, want test_agent", ctx.AgentCode)
-	}
-	if len(ctx.DecisionStrategyIDs) != 1 {
-		t.Errorf("DecisionStrategyIDs length = %d, want 1", len(ctx.DecisionStrategyIDs))
 	}
 	if len(ctx.ABExperimentIDs) != 1 {
 		t.Errorf("ABExperimentIDs length = %d, want 1", len(ctx.ABExperimentIDs))

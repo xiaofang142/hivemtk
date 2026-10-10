@@ -51,8 +51,6 @@ type AIAgent struct {
 
 	ScriptLibraryIDs pq.StringArray `gorm:"type:text[];column:script_library_ids" json:"script_library_ids"`
 
-	DecisionStrategyIDs pq.StringArray `gorm:"type:text[];column:decision_strategy_ids" json:"decision_strategy_ids"`
-
 	ABExperimentIDs pq.StringArray `gorm:"type:text[];column:ab_experiment_ids" json:"ab_experiment_ids"`
 
 	AssetBundleID string `gorm:"type:varchar(128);column:asset_bundle_id;default:''" json:"asset_bundle_id"`

@@ -717,7 +717,6 @@ func (e *SalesEngine) ProcessIncomingMessage(ctx context.Context, msg *ChannelMe
 		OneID:       customerID,
 		UserMessage: content,
 		Platform:    msg.Channel,
-		AutoExecute: true,
 		Config:      DefaultSalesEngineConfig(),
 	}
 
