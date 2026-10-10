@@ -226,6 +226,24 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 	llmProvCtrl := controller.NewLLMProviderController(failoverSvc)
 
 	auth.GET("/llm/providers/health", llmProvCtrl.GetHealth)
+
+	// —— 非 LLM 语义的管理面：连接器 / MCP 凭证 / 能力矩阵 / 全局 embedding ——
+	// 注意：不要放进上面 admin := auth.Group("/llm") 那个组，否则路径会带 /llm 双前缀。
+	authPlainAdmin := auth.Group("", middleware.AdminAuthMiddleware())
+	{
+		authPlainAdmin.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
+		authPlainAdmin.PUT("/llm/embedding-config", controller.UpdateEmbeddingConfig)
+		authPlainAdmin.GET("/kb-connectors", controller.ListKBConnectors)
+		authPlainAdmin.POST("/kb-connectors", controller.CreateKBConnector)
+		authPlainAdmin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)
+		authPlainAdmin.DELETE("/kb-connectors/:id", controller.DeleteKBConnector)
+		authPlainAdmin.POST("/kb-connectors/:id/sync", controller.SyncKBConnector)
+		authPlainAdmin.GET("/mcp/credentials", controller.ListMCPCredentials)
+		authPlainAdmin.POST("/mcp/credentials", controller.CreateMCPCredential)
+		authPlainAdmin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
+		authPlainAdmin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
+	}
+	auth.GET("/capabilities", controller.CapabilityMatrix)
 	auth.GET("/llm/providers/health/:provider", llmProvCtrl.GetProviderHealth)
 	auth.GET("/llm/providers/policy", llmProvCtrl.GetPolicy)
 	auth.GET("/llm-routings/providers/health", llmProvCtrl.GetHealth)
@@ -400,19 +418,15 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 		admin.POST("/fallback", llmCtrl.UpdateSceneRouting)
 	}
 
-	admin.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
 		admin.GET("/mcp/credentials", controller.ListMCPCredentials)
 		admin.POST("/mcp/credentials", controller.CreateMCPCredential)
 		admin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
 		admin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
-	admin.PUT("/llm/embedding-config", controller.UpdateEmbeddingConfig)
-	auth.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
 	admin.GET("/kb-connectors", controller.ListKBConnectors)
 	admin.POST("/kb-connectors", controller.CreateKBConnector)
 	admin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)
 	admin.DELETE("/kb-connectors/:id", controller.DeleteKBConnector)
 	admin.POST("/kb-connectors/:id/sync", controller.SyncKBConnector)
-		admin.GET("/capabilities", controller.CapabilityMatrix)
 	auth.GET("/llm/models", llmCtrl.ListModels)
 	auth.GET("/llm/models/:name", llmCtrl.GetModel)
 	auth.GET("/llm/strategies", llmCtrl.ListStrategies)
