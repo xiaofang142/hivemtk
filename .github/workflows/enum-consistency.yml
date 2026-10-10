@@ -6,6 +6,9 @@
 # 值域不一致的后果是**应用启动失败**，故必须在 CI 阶段拦截。
 #
 # 配套脚本：scripts/check-enum-consistency.sh
+#
+# paths 里必须同时列 intent_recognition.go：脚本的第 6 项（D07 意图常量 ↔ 词条覆盖）
+# 读的就是这个文件。此前只列了 *_fine.go，改坏常量表或词条不会重跑这道门。
 name: ENUM Consistency
 
 on:
@@ -14,6 +17,7 @@ on:
     paths:
       - 'migrations/*.sql'
       - 'user-server/internal/model/*.go'
+      - 'user-server/internal/service/intent_recognition.go'
       - 'user-server/internal/service/intent_recognition_fine.go'
       - 'scripts/check-enum-consistency.sh'
       - '.github/workflows/enum-consistency.yml'
@@ -21,6 +25,7 @@ on:
     paths:
       - 'migrations/*.sql'
       - 'user-server/internal/model/*.go'
+      - 'user-server/internal/service/intent_recognition.go'
       - 'user-server/internal/service/intent_recognition_fine.go'
       - 'scripts/check-enum-consistency.sh'
       - '.github/workflows/enum-consistency.yml'
