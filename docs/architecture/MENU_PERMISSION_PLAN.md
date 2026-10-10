@@ -63,7 +63,7 @@
 | 菜单 | 后端路由 | admin | cs | staff | 中间件 |
 |------|---------|:---:|:---:|:---:|--------|
 | 活码 (短链) | `/api/short-links` 写 | ✅ | ❌ | ❌ | AdminAuthMiddleware |
-| 域名池 | `/api/domainpool` | ✅ | ❌ | ❌ | AdminAuthMiddleware |
+| 域名池 | `/api/domain-pool` | ✅ | ❌ | ❌ | 读=JWT 登录，写=AdminAuthMiddleware |
 | 自动化营销 | `/api/marketing-flows` | ✅ | ❌ | ❌ | AdminAuthMiddleware |
 | 实验管理 | `/api/ab-experiments` | ✅ | ❌ | ❌ | AdminAuthMiddleware |
 | 竞品情报 | `/api/competitor` | ✅ | ❌ | ❌ | AdminAuthMiddleware |

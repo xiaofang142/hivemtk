@@ -181,7 +181,7 @@ func (c *DomainPoolController) CheckAllDomains(ctx *gin.Context) {
 // @Tags 域名池
 // @Param id path int true "域名 ID"
 // @Success 200 {object} object{data=service.HealthCheckResult}
-// @Router /api/domainpool/{id}/health-check [post]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) HealthCheck(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -201,7 +201,7 @@ func (c *DomainPoolController) HealthCheck(ctx *gin.Context) {
 // @Summary 全部域名健康度探测
 // @Tags 域名池
 // @Success 200 {object} object{data=[]service.HealthCheckResult}
-// @Router /api/domainpool/health-check-all [post]
+// @Router /api/domain-pool/health [get]
 func (c *DomainPoolController) HealthCheckAll(ctx *gin.Context) {
 	results, err := c.healthService.CheckAll(ctx.Request.Context())
 	if err != nil {
@@ -217,7 +217,7 @@ func (c *DomainPoolController) HealthCheckAll(ctx *gin.Context) {
 // @Tags 域名池
 // @Param id path int true "目标域名 ID"
 // @Success 200 {object} object{data=model.DomainPool}
-// @Router /api/domainpool/{id}/switch [post]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) SwitchActive(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -241,7 +241,7 @@ func (c *DomainPoolController) SwitchActive(ctx *gin.Context) {
 // @Summary 自动切换到最优域名
 // @Tags 域名池
 // @Success 200 {object} object{data=model.DomainPool}
-// @Router /api/domainpool/switch-best [post]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 	best, err := c.healthService.SwitchToBest(ctx.Request.Context(), "API 触发自动切换")
 	if err != nil {
@@ -259,7 +259,7 @@ func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 // @Summary 获取活跃域名
 // @Tags 域名池
 // @Success 200 {object} object{data=model.DomainPool}
-// @Router /api/domainpool/active [get]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) GetActiveDomain(ctx *gin.Context) {
 	active, err := c.healthService.GetActiveDomain(ctx.Request.Context())
 	if err != nil {
@@ -278,7 +278,7 @@ func (c *DomainPoolController) GetActiveDomain(ctx *gin.Context) {
 // @Tags 域名池
 // @Param min_score query int false "最低评分，默认 80"
 // @Success 200 {object} object{data=[]model.DomainPool}
-// @Router /api/domainpool/available [get]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) ListAvailableDomains(ctx *gin.Context) {
 	minScore, _ := strconv.Atoi(ctx.DefaultQuery("min_score", "80"))
 	rows, err := c.healthService.ListAvailable(ctx.Request.Context(), minScore)
@@ -299,7 +299,7 @@ func (c *DomainPoolController) ListAvailableDomains(ctx *gin.Context) {
 // @Param id path int true "域名 ID"
 // @Param limit query int false "条数，默认 50"
 // @Success 200 {object} object{data=[]model.DomainHealthLog}
-// @Router /api/domainpool/{id}/health-log [get]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) ListHealthLogs(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -330,7 +330,7 @@ type AddBlacklistRequest struct {
 // @Tags 域名池
 // @Param body body AddBlacklistRequest true "黑名单"
 // @Success 200 {object} object{message=string}
-// @Router /api/domainpool/blacklist [post]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) AddBlacklist(ctx *gin.Context) {
 	var req AddBlacklistRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -349,7 +349,7 @@ func (c *DomainPoolController) AddBlacklist(ctx *gin.Context) {
 // @Tags 域名池
 // @Param domain path string true "域名"
 // @Success 200 {object} object{message=string}
-// @Router /api/domainpool/blacklist/{domain} [delete]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) RemoveBlacklist(ctx *gin.Context) {
 	domain := ctx.Param("domain")
 	if domain == "" {
@@ -367,7 +367,7 @@ func (c *DomainPoolController) RemoveBlacklist(ctx *gin.Context) {
 // @Summary 域名黑名单
 // @Tags 域名池
 // @Success 200 {object} object{data=[]model.DomainBlacklist}
-// @Router /api/domainpool/blacklist [get]
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回 @Router。
 func (c *DomainPoolController) ListBlacklist(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
