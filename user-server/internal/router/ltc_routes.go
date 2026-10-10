@@ -246,7 +246,7 @@ func collectionStatusView(snap app.CollectionSnapshot) gin.H {
 // @Produce  json
 // @Success  200 {object} response.Response
 // @Router   /api/manage/ltc/collection [get]
-// @x-Permissions [] "admin"
+// @x-Permissions ["admin"]
 func handleCollectionStatusGet(c *gin.Context) {
 	response.Success(c, collectionStatusView(app.GetCollectionSnapshot(c.Request.Context())), "ok")
 }
