@@ -250,13 +250,15 @@
 
 ### B2 触达回执的 message_id 与 message_hub 行没有公共键
 
-> **状态（2026-10-10 I28：TG 半已接线收口）。** 按 I16 设计落地：`TelegramIntegrationService.SendMessageWithReceipt`
-> （原 SendMessageEx 全量 body，成功回执=hub 出站键 `tg-out-{account}-{平台消息号}`），`SendMessageEx` 改薄委托丢弃 id
-> （签名不变零影响），`IntegrationReachAdapter.SendTelegram` 改调它 ⇒ `_tracking.message_id` 变成可 join `message_hub`
-> 的真键；消费方四层链（reach_tools/reach_sender_wiring/reach_tool_wiring/bridge/reach_adapter）均透传 msgID 全链自动生效。
-> **仍开放的第二半：** ① Recall 反查（凭 hub 键取平台号）未接，随渠道合同拍板；② WA/飞书/企微发送侧仍是 `wa-{acc}-{nano}`
-> 类占位假号（同型另卡）；③「回执号=平台号 vs hub 行号」的合同归属拍板（当前实现选 hub 行号口径）。
-> 守护测试 `outbound_status_settlement_guard_test.go` 站点表已同步指向 `SendMessageWithReceipt`（守卫要求「站点身份失效须同步本表」）。
+> **状态（2026-10-10 I28+I29：发送侧回执键四渠道全真，仅剩 Recall 半）。** 按 I16 设计落地：
+> TG（I28）`tg-out-{account}-{平台消息号}`；WA（I29）= 平台 `wamid` 本体（底层早有真号，适配器曾自造
+> `wa-{acc}-{nano}` 已消灭）；飞书（I29）= `feishu-out-{account}-{平台message_id}`（apiResult 曾丢弃平台
+> data.message_id 已补解析，双假修正）；企微 = hub 行键（本就真）。`SendMessageEx`/`SendMessage`/
+> `SendTemplateMessage` 等老签名薄委托零影响；消费方四层链透传 msgID 全链自动生效；守护测试站表
+> 已同步至 body 迁移后的函数名（sendMessageTypedEx/sendMessageWithTemplate）。
+> **仍开放：** ① Recall 反查（凭 hub 键取平台号）未接，随渠道合同拍板；② 平台撤回 API
+> 与键语义合同仍需按渠道拍板；③「回执号=平台号 vs hub 行号」合同归属（TG/WA 倾向平台号、
+> 飞书/企微倾向 hub 行号口径）。
 
 发送侧回 `tg-{account}-{纳秒}`，落库行是 `tg-out-{account}-{平台消息号}`。
 两个串都真实存在，但没有 join 键，因此：运营台读到的 `_tracking.message_id` 查不到任何行，

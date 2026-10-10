@@ -118,7 +118,7 @@ func (a *IntegrationReachAdapter) SendTelegram(ctx context.Context, accountID, c
 // SendWhatsApp 通过 WhatsAppCloudIntegrationService 发送消息
 //
 // 参数：accountID 数字字符串，toPhone E.164 格式，content 消息文本
-// 返回：msgID 为 "wa-{accountID}-{nanos}" 占位
+// 返回：msgID 为 message_hub 键 = 平台 wamid（I29 起不再自造 wa-{账号}-{纳秒} 占位）
 // 错误：透传 IntegrationService（401 token 失效、403 模板未审批、429 限流等）
 func (a *IntegrationReachAdapter) SendWhatsApp(ctx context.Context, accountID, toPhone, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
@@ -130,17 +130,18 @@ func (a *IntegrationReachAdapter) SendWhatsApp(ctx context.Context, accountID, t
 	if err != nil {
 		return "", fmt.Errorf("whatsapp: %w", err)
 	}
-	if err := a.wa.SendMessage(ctx, accID, toPhone, content); err != nil {
+	msgID, err := a.wa.SendMessageWithReceipt(ctx, accID, toPhone, content, "", nil)
+	if err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", "whatsapp").Str("account_id", accountID).Msg("reach send failed")
 		return "", fmt.Errorf("whatsapp send: %w", err)
 	}
-	return fmt.Sprintf("wa-%d-%d", accID, time.Now().UnixNano()), nil
+	return msgID, nil
 }
 
 // SendFeishu 通过 FeishuIntegrationService 发送消息
 //
 // 参数：accountID 数字字符串，openID 飞书 open_id，content 消息文本
-// 返回：msgID 为 "feishu-{accountID}-{nanos}" 占位
+// 返回：msgID 为 message_hub 键 = feishu-out-{账号}-{平台message_id}（I29 起不再自造占位）
 // 错误：透传 IntegrationService（token 过期、app_id 无效、用户不在可见范围等）
 func (a *IntegrationReachAdapter) SendFeishu(ctx context.Context, accountID, openID, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
@@ -152,11 +153,12 @@ func (a *IntegrationReachAdapter) SendFeishu(ctx context.Context, accountID, ope
 	if err != nil {
 		return "", fmt.Errorf("feishu: %w", err)
 	}
-	if err := a.feishu.SendMessage(ctx, accID, openID, content, "open_id", ""); err != nil {
+	msgID, err := a.feishu.SendMessageWithReceipt(ctx, accID, openID, content, "open_id", "")
+	if err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", "feishu").Str("account_id", accountID).Msg("reach send failed")
 		return "", fmt.Errorf("feishu send: %w", err)
 	}
-	return fmt.Sprintf("feishu-%d-%d", accID, time.Now().UnixNano()), nil
+	return msgID, nil
 }
 
 // SendWeb 通过网页客服渠道（WebSocket）向访客会话推送消息。
@@ -528,9 +530,9 @@ func composeCardMessage(title, description, link string) string {
 // 两条独立的事实在这里叠着，任何一条单独解决都还发不回一条撤回请求：
 //   - 桥接渠道（抖音/快手/小红书/tiktok/闲鱼）：msgID 是 BridgeReachAdapter 生成的合成键
 //     （或 ContentHash 的总线键），不是平台消息标识，拿它调撤回只会误撤/静默失败；
-//   - 接口渠道：WA/飞书/企微发送侧仍返回 "wa-{账号}-{纳秒}" 这类占位 id（平台真实
-//     message_id 出站时即被丢弃，无可寻址目标）；TG 已改为回执 `tg-out-{账号}-{平台号}`
-//     （I28，可 join message_hub），但撤回本身仍未接，且需按渠道合同统一键语义后再做。
+//   - 接口渠道：发送侧回执已统一为可 join message_hub 真键（TG `tg-out-{账号}-{平台号}`
+//     / WA=平台 wamid / 飞书 `feishu-out-{账号}-{平台message_id}` / 企微=hub 行键，
+//     I28+I29）；但撤回本身仍未接，且飞书/WA 的平台撤回 API 与键语义合同仍需按渠道拍板。
 //
 // 要真做撤回，得先改发送侧的 msgID 契约（把平台 id 带回来并落库），那是另一张卡的事，
 // 不在"把已有能力接上"的范围内。

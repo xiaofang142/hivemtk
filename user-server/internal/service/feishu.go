@@ -223,20 +223,34 @@ func feishuCallError(status int, body []byte, rateLimitReset string) error {
 }
 
 // sendMessageTyped 按 msg_type 发送飞书消息（text/interactive 等）并统一落库。
+// 委托 sendMessageTypedEx 并丢弃回执 id，老调用方签名零影响。
 func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, accountID uint, openID, msgType, content, receiveIDType, conversationID string) error {
+	_, err := s.sendMessageTypedEx(ctx, accountID, openID, msgType, content, receiveIDType, conversationID)
+	return err
+}
+
+// SendMessageWithReceipt 同 SendMessage，成功时返回出站回执 id（message_hub 键
+// `feishu-out-{account}-{平台message_id}`：可与 message_hub 行 join，运营台
+// _tracking.message_id 不再是查无此行的占位假号；失败返回空串）。
+func (s *FeishuIntegrationService) SendMessageWithReceipt(ctx context.Context, accountID uint, openID, content, receiveIDType, conversationID string) (string, error) {
+	return s.sendMessageTypedEx(ctx, accountID, openID, "text", content, receiveIDType, conversationID)
+}
+
+// sendMessageTypedEx 按 msg_type 发送飞书消息并统一落库，返回出站回执 id。
+func (s *FeishuIntegrationService) sendMessageTypedEx(ctx context.Context, accountID uint, openID, msgType, content, receiveIDType, conversationID string) (string, error) {
 	if s.feishuMsgRepo == nil {
-		return errors.New("db nil")
+		return "", errors.New("db nil")
 	}
 	acc, err := s.feishu.GetAccount(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("get feishu account: %w", err)
+		return "", fmt.Errorf("get feishu account: %w", err)
 	}
 	tk, err := s.getAccessToken(ctx, acc)
 	if err != nil {
 		logger.Errorf("[feishu] 拉 token 失败（accountID=%d）: %v", accountID, err)
 		// 真实原因必须跟着返回：只给一句常量会让授权类失败在归一层落进 unknown+retryable，
 		// 于是该 fail-fast 的失败被无限重试（N-11③）。
-		return &ChannelError{
+		return "", &ChannelError{
 			Channel:   string(ChannelFeishu),
 			Category:  CategoryAuth,
 			Retryable: false,
@@ -283,31 +297,34 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := httpclient.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send feishu msg: %w", err)
+		return "", fmt.Errorf("send feishu msg: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respB, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		recordAccountError(string(respB))
-		return feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
+		return "", feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
 	}
 	// 飞书业务错误走 HTTP 200 + 非零 code（如 230013 出联系人范围），
 	// 只看状态码会把「没送达」记成「已送达」，持久化重试通道也就永不触发。
 	var apiResult struct {
 		Code int    `json:"code"`
 		Msg  string `json:"msg"`
+		Data struct {
+			MessageID string `json:"message_id"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(respB, &apiResult); err != nil {
 		recordAccountError(string(respB))
-		return fmt.Errorf("parse feishu response: %w (body=%s)", err, string(respB))
+		return "", fmt.Errorf("parse feishu response: %w (body=%s)", err, string(respB))
 	}
 	if apiResult.Code != 0 {
 		recordAccountError(string(respB))
-		return feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
+		return "", feishuCallError(resp.StatusCode, respB, resp.Header.Get(feishuRateLimitResetHeader))
 	}
 	outMsg := &model.FeishuMessage{
 		AccountID: accountID,
-		MsgID:     fmt.Sprintf("feishu-out-%d", time.Now().UnixNano()),
+		MsgID:     feishuOutboundHubMsgID(accountID, apiResult.Data.MessageID),
 		ChatID:    openID,
 		ChatType:  chatType,
 		SenderID:  openID,
@@ -342,7 +359,7 @@ func (s *FeishuIntegrationService) sendMessageTyped(ctx context.Context, account
 			logger.Warnf("[feishu] upsert outbound to inbox failed: %v", err)
 		}
 	}
-	return nil
+	return outMsg.MsgID, nil
 }
 
 func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *model.FeishuAccount) (string, error) {
@@ -613,6 +630,16 @@ func telegramOutboundHubMsgID(accountID uint, messageID int64) string {
 		return fmt.Sprintf("tg-out-%d-%d", accountID, messageID)
 	}
 	return fmt.Sprintf("tg-out-%d", time.Now().UnixNano())
+}
+
+// feishuOutboundHubMsgID 出站消息在 message_hub 的 msg_id（I29：键含平台真实
+// message_id，可与回执/撤回反查对齐；旧 feishu-out-{纳秒} 无平台号可寻址）。
+// 含 accountID 理由同 telegramOutboundHubMsgID（唯一键不含账号，防跨账号撞键）。
+func feishuOutboundHubMsgID(accountID uint, messageID string) string {
+	if messageID != "" {
+		return fmt.Sprintf("feishu-out-%d-%s", accountID, messageID)
+	}
+	return fmt.Sprintf("feishu-out-%d", time.Now().UnixNano())
 }
 
 // SendMessageEx 带完整 SendMessageOptions（ParseMode / ReplyToMessageID / DisableWebPreview 等）
@@ -966,19 +993,35 @@ type WhatsAppTemplatePayload struct {
 
 // SendTemplateMessage 通过 Cloud API 发送模板消息（窗外合规触达路径）。
 // 成功后与 SendMessage 一致落 feishu_messages 之外的 hub/inbox 出站记录。
+// 委托 SendMessageWithReceipt 并丢弃回执 id，老调用方签名零影响。
 func (s *WhatsAppCloudIntegrationService) SendTemplateMessage(ctx context.Context, accountID uint, toPhone, content string, tpl *WhatsAppTemplatePayload) error {
-	return s.SendMessageWithTemplate(ctx, accountID, toPhone, content, tpl.TemplateName, tpl)
+	_, err := s.SendMessageWithReceipt(ctx, accountID, toPhone, content, tpl.TemplateName, tpl)
+	return err
+}
+
+// SendMessageWithReceipt 发送 WA 消息并返回出站回执 id（message_hub 键=平台 wamid
+// `wamid.xxx`，与 Meta 状态回执、hub 行同一取值；I29：适配器不再自造 wa-{账号}-{纳秒}
+// 占位假号。模板名语义同 SendMessageWithTemplate）。
+func (s *WhatsAppCloudIntegrationService) SendMessageWithReceipt(ctx context.Context, accountID uint, toPhone, content, templateName string, tpl *WhatsAppTemplatePayload) (string, error) {
+	return s.sendMessageWithTemplate(ctx, accountID, toPhone, content, templateName, tpl)
 }
 
 // SendMessageWithTemplate 发送 WA 消息：模板名为空走自由文本（仅 24h 客服窗口内），
 // 非空走预审批模板（窗外唯一合规路径）。
+// 委托 sendMessageWithTemplate 并丢弃回执 id，老调用方签名零影响。
 func (s *WhatsAppCloudIntegrationService) SendMessageWithTemplate(ctx context.Context, accountID uint, toPhone, content, templateName string, tpl *WhatsAppTemplatePayload) error {
+	_, err := s.sendMessageWithTemplate(ctx, accountID, toPhone, content, templateName, tpl)
+	return err
+}
+
+// sendMessageWithTemplate 发送 WA 消息并返回出站回执 id（hub 键=平台 wamid）。
+func (s *WhatsAppCloudIntegrationService) sendMessageWithTemplate(ctx context.Context, accountID uint, toPhone, content, templateName string, tpl *WhatsAppTemplatePayload) (string, error) {
 	if s.wa == nil {
-		return errors.New("db nil")
+		return "", errors.New("db nil")
 	}
 	acc, err := s.wa.GetAccount(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("get wa account: %w", err)
+		return "", fmt.Errorf("get wa account: %w", err)
 	}
 	cli := whatsapp.NewCloudClient(acc.PhoneNumberID, acc.AccessToken, core.WithHTTPClient(httpclient.Client))
 
@@ -1008,7 +1051,7 @@ func (s *WhatsAppCloudIntegrationService) SendMessageWithTemplate(ctx context.Co
 			// 持久化失败只影响下次重启前的自愈，记日志留痕
 			logger.Warnf("[wa] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
 		}
-		return fmt.Errorf("send wa msg: %w", err)
+		return "", fmt.Errorf("send wa msg: %w", err)
 	}
 	outType := "text"
 	if templateName != "" {
@@ -1038,7 +1081,7 @@ func (s *WhatsAppCloudIntegrationService) SendMessageWithTemplate(ctx context.Co
 			logger.Warnf("[feishu] upsert outbound to inbox failed: %v", err)
 		}
 	}
-	return nil
+	return msgID, nil
 }
 
 func DecryptFeishuEvent(encryptKey, encrypted string) ([]byte, error) {

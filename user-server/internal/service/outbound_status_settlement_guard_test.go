@@ -29,10 +29,10 @@ type pushSite struct {
 
 // settledSites 发送已确认成功后才落库的出站站点，PushMessageRequest 必须声明 delivered。
 var settledSites = []pushSite{
-	{"feishu.go", "FeishuIntegrationService", "sendMessageTyped"},
+	{"feishu.go", "FeishuIntegrationService", "sendMessageTypedEx"},
 	{"feishu.go", "TelegramIntegrationService", "SendMessageWithReceipt"},
-	{"feishu.go", "TelegramIntegrationService", "SendCard"},
-	{"feishu.go", "WhatsAppCloudIntegrationService", "SendMessageWithTemplate"},
+
+	{"feishu.go", "WhatsAppCloudIntegrationService", "sendMessageWithTemplate"},
 	{"qq_account.go", "QQIntegrationService", "SendMessage"},
 	{"email.go", "EmailService", "Send"},
 }
