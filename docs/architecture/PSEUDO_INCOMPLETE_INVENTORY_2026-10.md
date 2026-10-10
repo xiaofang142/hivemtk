@@ -397,7 +397,9 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   vet 两红为 config-params 泳道在途（`agent_tool_params_wiring.go` 写一半/seeds 语法错），零交集。
 - 方法论：**occurrence 扫描不得在声明分支 `continue` 掉本行 token**（会把「用点在
   另一条声明行」的真引用漏成假候选）；权威兜底用 `git grep HEAD` 而非工作区快照；
-  共享 index 有他泳道大批 staged 时用 `git commit -- <paths>` 路径限定提交防吞并（第四次事故的机制性预防）。
+  `git commit -- <paths>` 只防「我的 commit 吞别人」，不防「别人的 commit 吞我
+  未提交的工作区」（本卡 52 文件被 `36483f93` 扫入=第 4 次，内容复验无损）——
+  **删完验完立刻 pathspec commit，工作区不过夜**。
 - 边界：`TokenUsageDetailed`/`reach_tools.go` 2 符号仍待对应泳道收口复扫。
 
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
