@@ -380,8 +380,8 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
 - 方法论沉淀：共享工作区的零引用读数是**快照**——首轮候选
   `DeleteEmailSmtpListRequest` 动手时已被他泳道 WIP 回退，delta 复扫才暴露同文件
   真真空洞 `GetEmailSmtpListRequest`；**动手前必须复扫**。
-- 边界：`TokenUsageDetailed`（他泳道 staged）与 `reach_tools.go` 2 符号待对应泳道
-  收口后复扫；前端侧零引用 API 模块面已=0（I17）。
+- 边界：`TokenUsageDetailed` 已于 I23 复扫销项（`97ebaefb` 扫入 HEAD 后仍零引用，删 7 行）；
+  `reach_tools.go` 2 符号待 reach 泳道收口后复扫；前端侧零引用 API 模块面已=0（I17）。
 
 ### B11 零引用包级 var/const（2026-10-10 I21 已处置）
 
@@ -400,7 +400,7 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   `git commit -- <paths>` 只防「我的 commit 吞别人」，不防「别人的 commit 吞我
   未提交的工作区」（本卡 52 文件被 `36483f93` 扫入=第 4 次，内容复验无损）——
   **删完验完立刻 pathspec commit，工作区不过夜**。
-- 边界：`TokenUsageDetailed`/`reach_tools.go` 2 符号仍待对应泳道收口复扫。
+- 边界：`TokenUsageDetailed` 已 I23 销项；`reach_tools.go` 2 符号待 reach 泳道收口复扫。
 
 ### B12 零引用未导出包级符号（2026-10-10 I22 已处置）
 

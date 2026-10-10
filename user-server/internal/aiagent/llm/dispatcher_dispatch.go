@@ -72,14 +72,6 @@ type TokenUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-type TokenUsageDetailed struct {
-	PromptTokens     int     `json:"prompt_tokens"`
-	CompletionTokens int     `json:"completion_tokens"`
-	TotalTokens      int     `json:"total_tokens"`
-	Cost             float64 `json:"cost"`
-	LatencyMs        int     `json:"latency_ms"`
-}
-
 func (d *Dispatcher) pickEnabledFallback(route *ScenarioRoute) string {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
