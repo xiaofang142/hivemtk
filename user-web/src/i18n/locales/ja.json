@@ -372,7 +372,9 @@
     "mcpCredentials": "MCP 認証情報",
     "mcpAudits": "MCP 呼び出し監査",
     "mcpSkills": "Skill レジストリ",
-    "capabilityMatrix": "機能マトリクス"
+    "capabilityMatrix": "機能マトリクス",
+    "systemTeams": "チーム管理",
+    "systemMyTeam": "マイチーム"
   },
   "保存": "保存",
   "提交": "送信",

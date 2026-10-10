@@ -364,7 +364,9 @@
     "mcpCredentials": "MCP 凭证",
     "mcpAudits": "MCP 调用审计",
     "mcpSkills": "Skill 注册表",
-    "capabilityMatrix": "能力矩阵"
+    "capabilityMatrix": "能力矩阵",
+    "systemTeams": "团队管理",
+    "systemMyTeam": "我的团队"
   },
   "保存": "保存",
   "提交": "提交",

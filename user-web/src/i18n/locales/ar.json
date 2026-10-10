@@ -325,7 +325,9 @@
     "mcpCredentials": "بيانات اعتماد MCP",
     "mcpAudits": "تدقيق استدعاءات MCP",
     "mcpSkills": "سجل المهارات",
-    "capabilityMatrix": "مصفوفة القدرات"
+    "capabilityMatrix": "مصفوفة القدرات",
+    "systemTeams": "إدارة الفرق",
+    "systemMyTeam": "فريقي"
   },
   "保存": "حفظ",
   "提交": "إرسال",

@@ -366,7 +366,9 @@
     "mcpCredentials": "MCP-Anmeldedaten",
     "mcpAudits": "MCP-Aufrufprotokoll",
     "mcpSkills": "Skill-Register",
-    "capabilityMatrix": "Funktionsmatrix"
+    "capabilityMatrix": "Funktionsmatrix",
+    "systemTeams": "Teams",
+    "systemMyTeam": "Mein Team"
   },
   "保存": "Save",
   "提交": "Submit",

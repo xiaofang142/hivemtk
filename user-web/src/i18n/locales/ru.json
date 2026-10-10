@@ -366,7 +366,9 @@
     "mcpCredentials": "Учётные данные MCP",
     "mcpAudits": "Аудит вызовов MCP",
     "mcpSkills": "Реестр Skill",
-    "capabilityMatrix": "Матрица возможностей"
+    "capabilityMatrix": "Матрица возможностей",
+    "systemTeams": "Команды",
+    "systemMyTeam": "Моя команда"
   },
   "保存": "Save",
   "提交": "Submit",
