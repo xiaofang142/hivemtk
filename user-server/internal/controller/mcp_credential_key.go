@@ -133,6 +133,14 @@ func ListMCPCredentialKeys(ctx *gin.Context) {
 		response.Error(ctx, http.StatusNotFound, "凭证不存在")
 		return
 	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
 	keys, err := svc.ListByCredential(ctx.Request.Context(), credID)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "查询钥匙失败: "+err.Error())
@@ -162,6 +170,14 @@ func CreateMCPCredentialKey(ctx *gin.Context) {
 	cred, err := svc.GetCredential(ctx.Request.Context(), credID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "凭证不存在")
+		return
+	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
 		return
 	}
 	var req struct {
@@ -220,6 +236,10 @@ func mcpKeyStatusAction(ctx *gin.Context, to string, action string) {
 		response.Error(ctx, http.StatusNotFound, "凭证不存在")
 		return
 	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
 	key, err := svc.SetKeyStatus(ctx.Request.Context(), credID, keyID, to)
 	if err != nil {
 		code, msg := mcpKeySvcError(err)
@@ -273,6 +293,10 @@ func RevealMCPCredentialKey(ctx *gin.Context) {
 		response.Error(ctx, http.StatusNotFound, "凭证不存在")
 		return
 	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
 	plain, err := svc.RevealKey(ctx.Request.Context(), credID, keyID)
 	if err != nil {
 		code, msg := mcpKeySvcError(err)
@@ -301,6 +325,10 @@ func DeleteMCPCredentialKey(ctx *gin.Context) {
 	cred, err := svc.GetCredential(ctx.Request.Context(), credID)
 	if err != nil {
 		response.Error(ctx, http.StatusNotFound, "凭证不存在")
+		return
+	}
+	if teamID, platform := mcpManageScope(ctx); !platform && cred.TeamID != teamID {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
 		return
 	}
 	key, err := svc.DeleteKey(ctx.Request.Context(), credID, keyID)

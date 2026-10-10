@@ -76,9 +76,14 @@ func NewMCPCredentialRepo() *MCPCredentialRepo {
 // 构造出的 repo 恒非 nil，"没装配 503"与"装配了但查询报错 500"必须分开）。
 func (r *MCPCredentialRepo) Available() bool { return r != nil && r.db != nil }
 
-func (r *MCPCredentialRepo) List(ctx context.Context, limit int) ([]model.MCPCredential, error) {
+// List 凭证列表（多租户 P1：teamID>0 按团队过滤——team_admin 只见本团队）。
+func (r *MCPCredentialRepo) List(ctx context.Context, limit int, teamID uint) ([]model.MCPCredential, error) {
 	var rows []model.MCPCredential
-	err := r.db.WithContext(ctx).Order("id DESC").Limit(limit).Find(&rows).Error
+	q := r.db.WithContext(ctx).Order("id DESC").Limit(limit)
+	if teamID > 0 {
+		q = q.Where("team_id = ?", teamID)
+	}
+	err := q.Find(&rows).Error
 	return rows, err
 }
 

@@ -524,8 +524,28 @@ func AutoMigrate() *gorm.DB {
 	// 幂等，可重复执行；回滚口径见 scripts/rollback-tenant-p0.sh。
 	postMigrateBackfillDefaultTeam(DB)
 	postMigrateRelaxSystemUserRoleCheck(DB)
+	postMigrateBackfillMCPCredentialTeams(DB)
 
 	return DB
+}
+
+// postMigrateBackfillMCPCredentialTeams 存量凭证沿绑定账户继承团队（多租户 P1，幂等）。
+// 管理面按 team_id 过滤（team_admin 只见本团队凭证）：不回填 = 存量绑定凭证
+// 全沉在 team 0，团队管理员升级后眼前一黑。
+func postMigrateBackfillMCPCredentialTeams(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	res := db.Exec(`UPDATE mcp_credentials c SET team_id = u.team_id
+		FROM system_users u
+		WHERE c.owner_user_id = u.id AND c.team_id = 0 AND u.team_id <> 0`)
+	if res.Error != nil {
+		logger.Warnf("[tenant-backfill] mcp_credentials 团队继承失败: %v", res.Error)
+		return
+	}
+	if res.RowsAffected > 0 {
+		logger.Infof("[tenant-backfill] %d 个绑定凭证沿账户归入团队", res.RowsAffected)
+	}
 }
 
 // tenantBackfillTables 多租户 P0 的业务回填清单（表名 → 用途）。

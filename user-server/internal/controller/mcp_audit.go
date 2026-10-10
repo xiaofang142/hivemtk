@@ -44,7 +44,9 @@ func ListMCPCallAudits(ctx *gin.Context) {
 		v := false
 		allowed = &v
 	}
-	teamID := parseUintOrZero(ctx.Query("team_id"))
+	// 多租户 P1：team_admin 强制本团队口径（teamID 取自 JWT，
+	// 查询参数里的 team_id 不被信任；admin 全量）
+	teamID, _ := mcpManageScope(ctx)
 	rows, total, err := svc.List(ctx.Request.Context(),
 		ctx.Query("client_id"), ctx.Query("tool"), allowed, ctx.Query("event"),
 		ctx.Query("start"), ctx.Query("end"), teamID, page, size)

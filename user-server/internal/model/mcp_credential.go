@@ -32,6 +32,9 @@ type MCPCredential struct {
 	// 到期后 MCPGuard 直接 401，不进入密钥比对（过期即死的语义最省事，
 	// 免得"密钥对但已过期"和"密钥错"混在一条日志里）。
 	ExpiresAt *time.Time `gorm:"column:expires_at;index" json:"expires_at"`
+	// TeamID 归属团队（多租户 P1）：绑定 owner 后由 SyncCredentialTeam 沿账户侧
+	// 继承；管理面按团队过滤（team_admin 只见本团队凭证）。0=平台侧（未绑定）。
+	TeamID uint `gorm:"column:team_id;index;default:0" json:"team_id"`
 	// AllowedTools 该凭证可调用的工具白名单（逗号分隔）。
 	// 空串 = 不限制（存量凭证行为不变：这一列是 2026-10-10 新增的可空列，
 	// AutoMigrate 只加不删，老行留空即"未曾设限"）。

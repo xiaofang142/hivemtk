@@ -47,6 +47,7 @@ const maxKeysPerCredential = 20
 type McpKeyAdminService struct {
 	repo     *repository.MCPCredentialKeyRepo
 	credRepo *repository.MCPCredentialRepo
+	userRepo repository.SystemUserRepository
 }
 
 func NewMcpKeyAdminService() *McpKeyAdminService {
@@ -56,10 +57,37 @@ func NewMcpKeyAdminService() *McpKeyAdminService {
 		// 未装配：返回空服务，控制器 Ready()=false 回 503（分诊纪律同 McpCredentialAdminService）。
 		return &McpKeyAdminService{}
 	}
-	return &McpKeyAdminService{repo: kr, credRepo: cr}
+	return &McpKeyAdminService{repo: kr, credRepo: cr, userRepo: repository.NewSystemUserRepository()}
 }
 
 func (s *McpKeyAdminService) Ready() bool { return s.repo != nil && s.credRepo != nil }
+
+// OwnerTeamID 解析账户归属团队（0=平台侧/不存在）。
+func (s *McpKeyAdminService) OwnerTeamID(ctx context.Context, ownerUserID uint) uint {
+	if ownerUserID == 0 {
+		return 0
+	}
+	if u, err := s.userRepo.GetByID(ctx, ownerUserID); err == nil {
+		return u.TeamID
+	}
+	return 0
+}
+
+// SyncCredentialTeam 凭证归属团队沿绑定账户继承（多租户 P1）：
+// owner 绑定/变更后调用；未绑定 → team 0（平台侧）。
+func (s *McpKeyAdminService) SyncCredentialTeam(ctx context.Context, credentialID uint) error {
+	cred, err := s.credRepo.GetByIDAny(ctx, credentialID)
+	if err != nil {
+		return err
+	}
+	teamID := uint(0)
+	if cred.OwnerUserID != nil && *cred.OwnerUserID != 0 {
+		if u, err := s.userRepo.GetByID(ctx, *cred.OwnerUserID); err == nil {
+			teamID = u.TeamID
+		}
+	}
+	return s.credRepo.Update(ctx, credentialID, map[string]any{"team_id": teamID})
+}
 
 // GetCredential 暴露凭证行（管理端归属展示与审计标签用；不筛 enabled）。
 func (s *McpKeyAdminService) GetCredential(ctx context.Context, id uint) (*model.MCPCredential, error) {

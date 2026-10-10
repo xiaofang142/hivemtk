@@ -39,6 +39,35 @@ type mcpCredentialRow struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+// mcpManageScope MCP 管理面调用方口径（多租户 P1）：
+// team_admin → teamID=本团队（强制过滤，忽略请求参数）；admin → platform=true（全量）。
+func mcpManageScope(ctx *gin.Context) (teamID uint, platform bool) {
+	if v, ok := ctx.Get("team_id"); ok {
+		if id, ok2 := v.(uint); ok2 {
+			teamID = id
+		}
+	}
+	if v, ok := ctx.Get("role"); ok {
+		r, _ := v.(string)
+		platform = r == model.SystemUserRoleAdmin
+	}
+	return
+}
+
+// mcpAuthorizeCredential 对 :id 型路由做归属校验：team_admin 只能操作本团队凭证。
+// 返回凭证行与错误（403 语义由调用方映射）。
+func mcpAuthorizeCredential(ctx *gin.Context, credID uint) (*model.MCPCredential, error) {
+	cred, err := mcpKeySvc().GetCredential(ctx.Request.Context(), credID)
+	if err != nil {
+		return nil, err
+	}
+	teamID, platform := mcpManageScope(ctx)
+	if !platform && cred.TeamID != teamID {
+		return nil, errTeamAdminOnly
+	}
+	return cred, nil
+}
+
 // ListMCPCredentials GET /api/mcp/credentials
 var mcpAdminSvc = func() *service.McpCredentialAdminService { return service.NewMcpCredentialAdminService() }
 
@@ -47,7 +76,8 @@ func ListMCPCredentials(ctx *gin.Context) {
 		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")
 		return
 	}
-	rows, err := mcpAdminSvc().List(ctx.Request.Context(), 200)
+	teamID, _ := mcpManageScope(ctx)
+	rows, err := mcpAdminSvc().List(ctx.Request.Context(), 200, teamID)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -114,12 +144,23 @@ func CreateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, "创建失败: "+err.Error())
 		return
 	}
+	// 多租户 P1：team_admin 绑定 owner 时，owner 必须在本团队（服务端强制）。
+	if teamID, platform := mcpManageScope(ctx); !platform && req.OwnerUserID != nil {
+		if ownerTeam := mcpKeySvc().OwnerTeamID(ctx.Request.Context(), *req.OwnerUserID); ownerTeam != teamID {
+			_ = mcpAdminSvc().Delete(ctx.Request.Context(), cred.ID) // 回滚半签发的凭证
+			response.Error(ctx, http.StatusForbidden, "绑定账户不属于本团队")
+			return
+		}
+	}
 	_, apiKey, err := mcpKeySvc().IssueKey(ctx.Request.Context(), cred.ID, "初始密钥", expiresAt)
 	if err != nil {
 		// 钥匙没签出来的凭证是一把打不开的锁：回滚删除，保持"签发成功=钥匙可用"的原子性。
 		_ = mcpAdminSvc().Delete(ctx.Request.Context(), cred.ID)
 		response.Error(ctx, http.StatusInternalServerError, "签发钥匙失败: "+err.Error())
 		return
+	}
+	if req.OwnerUserID != nil {
+		_ = mcpKeySvc().SyncCredentialTeam(ctx.Request.Context(), cred.ID)
 	}
 	mcpWriteAdminAudit(ctx, model.MCPAuditActionCredentialCreate, "credential", cred.ID, &cred.ID, clientID, gin.H{
 		"name": cred.Name, "key_name": "初始密钥", "expires_at": expiresAt, "owner_user_id": req.OwnerUserID,
@@ -157,6 +198,11 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
+	// 多租户 P1：team_admin 只能操作本团队凭证
+	if _, err := mcpAuthorizeCredential(ctx, id); err != nil {
+		response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+		return
+	}
 	updates := map[string]any{}
 	if req.Enabled != nil {
 		updates["enabled"] = *req.Enabled
@@ -173,6 +219,13 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		updates["client_id"] = cid
 	}
 	if req.OwnerUserID != nil {
+		// 多租户 P1：team_admin 变更绑定时，新 owner 必须在本团队
+		if teamID, platform := mcpManageScope(ctx); !platform {
+			if ownerTeam := mcpKeySvc().OwnerTeamID(ctx.Request.Context(), *req.OwnerUserID); ownerTeam != teamID {
+				response.Error(ctx, http.StatusForbidden, "绑定账户不属于本团队")
+				return
+			}
+		}
 		updates["owner_user_id"] = *req.OwnerUserID
 	}
 	if req.ClearExpires {
@@ -197,6 +250,9 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if _, hasOwner := updates["owner_user_id"]; hasOwner {
+		_ = mcpKeySvc().SyncCredentialTeam(ctx.Request.Context(), id)
+	}
 	mcpWriteAdminAudit(ctx, model.MCPAuditActionCredentialUpdate, "credential", id, &id, "", gin.H{
 		"fields": updates,
 	})
@@ -211,11 +267,16 @@ func DeleteMCPCredential(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效 id")
 		return
 	}
-	// 审计标签尽力取（db 未装配时 keysvc 未就绪，跳过即可——删除本身由
-	// mcpAdminSvc 的 repo 报错兜底，不能让标签查询的空服务 panic 掉主流程）。
+	// 归属校验 + 审计标签（db 未装配时跳过——删除本身由 mcpAdminSvc 兜底）
 	var clientID string
 	if ks := mcpKeySvc(); ks.Ready() {
-		if cred, err := ks.GetCredential(ctx.Request.Context(), id); err == nil {
+		cred, err := ks.GetCredential(ctx.Request.Context(), id)
+		if err == nil {
+			teamID, platform := mcpManageScope(ctx)
+			if !platform && cred.TeamID != teamID {
+				response.Error(ctx, http.StatusForbidden, "无权操作其他团队的凭证")
+				return
+			}
 			clientID = cred.ClientID
 		}
 	}

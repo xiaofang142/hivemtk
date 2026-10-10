@@ -60,8 +60,8 @@ func NewMcpCredentialAdminService() *McpCredentialAdminService {
 
 func (s *McpCredentialAdminService) Ready() bool { return s.repo != nil && s.repo.Available() }
 
-func (s *McpCredentialAdminService) List(ctx context.Context, limit int) ([]model.MCPCredential, error) {
-	return s.repo.List(ctx, limit)
+func (s *McpCredentialAdminService) List(ctx context.Context, limit int, teamID uint) ([]model.MCPCredential, error) {
+	return s.repo.List(ctx, limit, teamID)
 }
 
 func (s *McpCredentialAdminService) Create(ctx context.Context, row *model.MCPCredential) error {

@@ -48,9 +48,10 @@ func ExportMCPCallAudits(ctx *gin.Context) {
 		v := false
 		allowed = &v
 	}
+	teamID, _ := mcpManageScope(ctx)
 	rows, _, err := svc.List(ctx.Request.Context(),
 		ctx.Query("client_id"), ctx.Query("tool"), allowed, ctx.Query("event"),
-		ctx.Query("start"), ctx.Query("end"), parseUintOrZero(ctx.Query("team_id")),
+		ctx.Query("start"), ctx.Query("end"), teamID,
 		1, mcpAuditExportCap)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "导出失败: "+err.Error())
@@ -100,9 +101,10 @@ func ExportMCPCredentialAuditLogs(ctx *gin.Context) {
 	if v := parseUintOrZero(ctx.Query("credential_id")); v > 0 {
 		credID = &v
 	}
+	teamID, _ := mcpManageScope(ctx)
 	rows, _, err := svc.List(ctx.Request.Context(), ctx.Query("action"), ctx.Query("target_type"), credID,
 		ctx.Query("operator"), ctx.Query("start"), ctx.Query("end"),
-		parseUintOrZero(ctx.Query("team_id")), 1, mcpAuditExportCap)
+		teamID, 1, mcpAuditExportCap)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "导出失败: "+err.Error())
 		return
