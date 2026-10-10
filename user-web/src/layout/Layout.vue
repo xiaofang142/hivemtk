@@ -253,6 +253,7 @@ const topMenus = ref([
     icon: 'Cpu',
     roles: ['admin', 'manager', 'customer_service', 'staff'],
     children: [
+      { key: 'mcpCredentials', title: 'MCP 凭证', icon: 'Key', path: '/mcp/credentials', roles: ['admin'] },
       {
         key: 'agentManage',
         title: '智能体管理',
@@ -488,7 +489,7 @@ const topMenus = ref([
           { key: 'knowledgeStatistics', title: '知识库统计', icon: 'DataAnalysis', path: '/knowledge/statistics' },
           { key: 'knowledgeRagEval', title: 'RAG 评测', icon: 'CircleCheck', path: '/knowledge/rag-eval' },
           { key: 'knowledgeOpenAPI', title: 'OpenAPI 集成', icon: 'Connection', path: '/knowledge/openapi' },
-          { key: 'knowledgeConnectors', title: '连接器配置', icon: 'Link', path: '/knowledge/connectors' }
+          { key: 'knowledgeConnectors', title: '知识库连接器（第三方同步）', icon: 'Link', path: '/kb/connectors', roles: ['admin'] }
         ]
       },
       {
@@ -613,6 +614,7 @@ const topMenus = ref([
     icon: 'Setting',
     roles: ['admin', 'manager', 'sales', 'viewer', 'staff'],
     children: [
+      { key: 'capabilityMatrix', title: '能力矩阵', icon: 'Grid', path: '/cap/matrix', roles: ['admin'] },
       {
         key: 'siteConfig',
         title: '站点配置',
