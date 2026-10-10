@@ -418,10 +418,10 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 		admin.POST("/fallback", llmCtrl.UpdateSceneRouting)
 	}
 
-		admin.GET("/mcp/credentials", controller.ListMCPCredentials)
-		admin.POST("/mcp/credentials", controller.CreateMCPCredential)
-		admin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
-		admin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
+	admin.GET("/mcp/credentials", controller.ListMCPCredentials)
+	admin.POST("/mcp/credentials", controller.CreateMCPCredential)
+	admin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
+	admin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
 	admin.GET("/kb-connectors", controller.ListKBConnectors)
 	admin.POST("/kb-connectors", controller.CreateKBConnector)
 	admin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)

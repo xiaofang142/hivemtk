@@ -101,7 +101,7 @@ is_opportunity = intent_score >= %d
 	if newScore > 100 {
 		newScore = 100
 	}
-	newOpp := isOpp
+	var newOpp bool
 	if parsed.IsOpp != nil {
 		newOpp = *parsed.IsOpp
 	} else {

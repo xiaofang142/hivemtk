@@ -227,8 +227,8 @@ docker compose exec -T mtk-postgres psql \
 - 分子：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL AND decided_at - created_at <= INTERVAL '24 hours'`
 - 分母：`SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL`
 - 字段锚点：`ApprovalRequest.CreatedAt/DecidedAt/ExpiresAt`（`internal/model/approval_request.go:59-63`）
-  + 四态 `pending / approved / rejected / expired`（同文件 :79-82）
-  + `decided_by` 是两个常量 —— `policy:auto`（:157）与 `system:ttl`（:160）—— 加上人工裁决时的操作者 ID。
+  - 四态 `pending / approved / rejected / expired`（同文件 :79-82）
+  - `decided_by` 是两个常量 —— `policy:auto`（:157）与 `system:ttl`（:160）—— 加上人工裁决时的操作者 ID。
 - 24h 是**代码常量**，不是政策目标（本节旧写法「代码中无 TTL 常量」已被代码推翻）：
   `internal/service/approval_request.go:42` `DefaultApprovalRequestTTL = 24 * time.Hour`，
   :43 `MaxApprovalRequestTTL = 30 * 24 * time.Hour`，越界返回 `ErrApprovalTTLTooLong`（:58）而不是夹取。

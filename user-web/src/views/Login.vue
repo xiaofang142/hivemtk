@@ -77,10 +77,10 @@
 
           <div class="register-switch">
             <template v-if="mode === 'login'">
-              <a v-if="enableRegister" @click.prevent="switchMode('register')">没有账号？注册新账号</a>
+              <el-button v-if="enableRegister" link type="primary" @click="switchMode('register')">没有账号？注册新账号</el-button>
             </template>
             <template v-else>
-              <a @click.prevent="switchMode('login')">已有账号？返回登录</a>
+              <el-button link type="primary" @click="switchMode('login')">已有账号？返回登录</el-button>
             </template>
           </div>
 
