@@ -32,7 +32,7 @@ type DBTraceSink struct {
 }
 
 const (
-	dbSinkBufferSize          = 2048
+	DefaultDBSinkBufferSize   = 2048
 	dbSinkBatchSize           = 128
 	dbSinkFlushPeriod         = 500 * time.Millisecond
 	DefaultDBSinkStopDeadline = 3 * time.Second
@@ -56,11 +56,28 @@ func DBSinkStopDeadline() time.Duration {
 	return DefaultDBSinkStopDeadline
 }
 
+var dbSinkBufferSizeProvider func() int
+
+// SetDBSinkBufferSizeProvider 注入 Trace DB Sink 缓冲队列容量；传 nil 视为不注入。
+func SetDBSinkBufferSizeProvider(fn func() int) { dbSinkBufferSizeProvider = fn }
+
+// DBSinkBufferSize 生效的缓冲队列容量。非正值一律回落兜底——0 意味着 unbuffered
+// channel，OnEvent 的非阻塞投递在高频 trace 下会大面积走 default 分支丢事件，
+// 而丢弃只累加计数器、不报错，表现为"追踪数据莫名少了一截"。
+func DBSinkBufferSize() int {
+	if p := dbSinkBufferSizeProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultDBSinkBufferSize
+}
+
 // NewDBTraceSink 构造 DB 订阅者；db 允许为空（此时事件将被丢弃并计数）。
 func NewDBTraceSink(db *gorm.DB) *DBTraceSink {
 	return &DBTraceSink{
 		db:     db,
-		buffer: make(chan TraceEvent, dbSinkBufferSize),
+		buffer: make(chan TraceEvent, DBSinkBufferSize()),
 		stopCh: make(chan struct{}),
 		doneCh: make(chan struct{}),
 	}
@@ -71,7 +88,7 @@ func NewDBTraceSink(db *gorm.DB) *DBTraceSink {
 func (s *DBTraceSink) Start() {
 	go s.flushLoop()
 	logger.GetLogger().Info().
-		Int("buffer", dbSinkBufferSize).
+		Int("buffer", DBSinkBufferSize()).
 		Int("batch", dbSinkBatchSize).
 		Dur("period", dbSinkFlushPeriod).
 		Msg("[DBTraceSink] started")

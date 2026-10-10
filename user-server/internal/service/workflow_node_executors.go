@@ -11,7 +11,24 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-const MaxSubflowDepth = 5
+// DefaultMaxSubflowDepth 子流程嵌套层数的代码兜底（参数中心 workflow.max_subflow_depth 未配置时用）。
+const DefaultMaxSubflowDepth = 5
+
+var maxSubflowDepthProvider func() int
+
+// SetMaxSubflowDepthProvider 注入子流程最大深度；传 nil 视为不注入。
+func SetMaxSubflowDepthProvider(fn func() int) { maxSubflowDepthProvider = fn }
+
+// MaxSubflowDepth 生效的子流程最大深度。非正值一律回落兜底——0 会让第一层子流程
+// 就被判超限，任何含子流程的工作流全部失败。
+func MaxSubflowDepth() int {
+	if p := maxSubflowDepthProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultMaxSubflowDepth
+}
 
 // TriggerNodeExecutor 触发器节点执行器
 type TriggerNodeExecutor struct{}
@@ -381,8 +398,8 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 			depth = d
 		}
 	}
-	if depth >= MaxSubflowDepth {
-		return &WorkflowNodeExecResult{Status: NodeStatusFailed, Output: model.JSONMap{"error": fmt.Sprintf("subflow max depth %d exceeded", MaxSubflowDepth)}}, nil
+	if depth >= MaxSubflowDepth() {
+		return &WorkflowNodeExecResult{Status: NodeStatusFailed, Output: model.JSONMap{"error": fmt.Sprintf("subflow max depth %d exceeded", MaxSubflowDepth())}}, nil
 	}
 	sideEffectKey := WorkflowSideEffectKey(wctx, "subflow:"+subWorkflowID)
 	if HasWorkflowSideEffect(wctx, sideEffectKey) {
@@ -416,3 +433,6 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 		SideEffects: []string{sideEffectKey},
 	}, nil
 }
+
+// ProbeMaxSubflowDepth 导出当前生效的子流程最大深度（仅供装配层测试断言读取口）。
+func ProbeMaxSubflowDepth() int { return MaxSubflowDepth() }

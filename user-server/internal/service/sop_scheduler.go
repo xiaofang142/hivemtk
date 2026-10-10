@@ -230,9 +230,11 @@ func (s *SOPScheduler) tryExecute(ctx context.Context, agent model.SOPAgent) {
 		return
 	}
 
-	const maxRunningPerSOP = 50
-	if count >= maxRunningPerSOP {
-		logger.Warnf("[SOPScheduler] SOP %d 已在跑 %d 个，超过阈值 %d，跳过本轮调度", agent.ID, count, maxRunningPerSOP)
+	// 上限在本轮开始时读一次，下面按剩余额度截名单，两处必须用同一个值，
+	// 否则会出现"判了没超限却把名单截短"或"截了名单却仍按满额开工"的错位。
+	runningCap := maxRunningPerSOP()
+	if int64(runningCap) <= count {
+		logger.Warnf("[SOPScheduler] SOP %d 已在跑 %d 个，超过阈值 %d，跳过本轮调度", agent.ID, count, runningCap)
 		return
 	}
 
@@ -243,7 +245,7 @@ func (s *SOPScheduler) tryExecute(ctx context.Context, agent model.SOPAgent) {
 	}
 	// 阈值是在本轮开始时读的；圈选一轮最多可回 MaxAudienceLimit 人，所以这里按剩余额度截一次，
 	// 否则 maxRunningPerSOP 只在"上一轮已经跑满"时才生效，一轮就能把并发从 0 顶到 500。
-	if budget := maxRunningPerSOP - int(count); len(customers) > budget {
+	if budget := runningCap - int(count); len(customers) > budget {
 		logger.Warnf("[SOPScheduler] SOP %d 名单 %d 人超在本轮剩余额度 %d，只开工前 %d 人", agent.ID, len(customers), budget, budget)
 		customers = customers[:budget]
 	}
@@ -375,3 +377,26 @@ func setJSONMapValue(m model.JSONMap, key, value string) string {
 func fmtUintSafe(v uint) string {
 	return strconv.FormatUint(uint64(v), 10)
 }
+
+// DefaultMaxRunningPerSOP 单个 SOP 模板同时运行的最大实例数的代码兜底
+// （参数中心 workflow.max_running_per_sop 未配置时用）。
+const DefaultMaxRunningPerSOP = 50
+
+var maxRunningPerSOPProvider func() int
+
+// SetMaxRunningPerSOPProvider 注入单 SOP 最大并发；传 nil 视为不注入。
+func SetMaxRunningPerSOPProvider(fn func() int) { maxRunningPerSOPProvider = fn }
+
+// maxRunningPerSOP 生效的单 SOP 最大并发。非正值一律回落兜底——0 会让
+// count>=0 恒成立，调度器对所有 SOP 永久停摆。
+func maxRunningPerSOP() int {
+	if p := maxRunningPerSOPProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultMaxRunningPerSOP
+}
+
+// ProbeMaxRunningPerSOP 导出当前生效的单 SOP 最大并发（仅供装配层测试断言读取口）。
+func ProbeMaxRunningPerSOP() int { return maxRunningPerSOP() }

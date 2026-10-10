@@ -189,6 +189,13 @@ func main() {
 		logger.Info("[ConfigParam] cache 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// telemetry + workflow 两组共八条：节点健康窗口与 Trace 缓冲住在 monitor / aiagent/llm，
+	// 品牌词去重窗口住在 geo/service，Feature Flag 热加载周期住在 pkg/featureflag，
+	// 四条 workflow 点位住在 service 本体。同样因为下层包不能反向 import service，统一装配。
+	if wired := app.WireTelemetryWorkflowConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] telemetry/workflow 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

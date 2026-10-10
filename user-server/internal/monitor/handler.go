@@ -55,7 +55,7 @@ func nodeHealthHandler(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(c, gin.H{"nodes": nh, "window": nodeHealthWindow.String()}, "success")
+	response.Success(c, gin.H{"nodes": nh, "window": NodeHealthWindow().String()}, "success")
 }
 
 func latencyHandler(c *gin.Context) {

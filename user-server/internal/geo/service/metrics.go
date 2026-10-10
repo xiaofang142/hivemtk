@@ -68,7 +68,26 @@ func brandRegex(brand string) *regexp.Regexp {
 	return v.(*regexp.Regexp)
 }
 
-const positionWindow = 20
+// DefaultPositionDedupWindow 品牌词命中去重窗口的代码兜底（参数中心
+// telemetry.geo_position_window 未配置时用）。单位是**字符偏移**不是条数：
+// 相邻两处命中的间隔小于该值时算同一处提及（"Apple 发布会" 不会被数成两次）。
+const DefaultPositionDedupWindow = 20
+
+var positionDedupWindowProvider func() int
+
+// SetPositionDedupWindowProvider 注入命中去重窗口（字符）；传 nil 视为不注入。
+func SetPositionDedupWindowProvider(fn func() int) { positionDedupWindowProvider = fn }
+
+// positionDedupWindow 生效的去重窗口。非正值一律回落兜底——0 会让每一次命中都被
+// 算成独立提及，品牌提及量成倍虚高。
+func positionDedupWindow() int {
+	if p := positionDedupWindowProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultPositionDedupWindow
+}
 
 type matchPos struct{ start, end int }
 
@@ -80,9 +99,10 @@ func dedupMatches(allMatches []matchPos) int {
 		return allMatches[i].start < allMatches[j].start
 	})
 	count := 0
-	prevEnd := -positionWindow - 1
+	w := positionDedupWindow()
+	prevEnd := -w - 1
 	for _, m := range allMatches {
-		if m.start-prevEnd > positionWindow {
+		if m.start-prevEnd > w {
 			count++
 			prevEnd = m.end
 		}
@@ -260,3 +280,6 @@ func (s *MetricsService) Analyze(content, keyword, brand string) MetricsResult {
 		Structure:           structure,
 	}
 }
+
+// ProbePositionDedupWindow 导出当前生效的命中去重窗口（仅供装配层测试断言读取口）。
+func ProbePositionDedupWindow() int { return positionDedupWindow() }

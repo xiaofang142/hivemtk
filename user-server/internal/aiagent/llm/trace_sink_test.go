@@ -17,7 +17,7 @@ func TestDBTraceSink_OnEvent_NonBlocking(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < dbSinkBufferSize+100; i++ {
+		for i := 0; i < DefaultDBSinkBufferSize+100; i++ {
 			sink.OnEvent(TraceEvent{
 				TraceID:    "t1",
 				SpanID:     "s1",

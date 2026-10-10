@@ -16,7 +16,25 @@ import (
 // ErrNoDB 表示未初始化数据库句柄（测试/未连接场景）。
 var ErrNoDB = errors.New("database not initialized")
 
-const nodeHealthWindow = 24 * time.Hour
+// DefaultNodeHealthWindow 节点健康统计窗口的代码兜底（参数中心 telemetry.node_health_window
+// 未配置时用）。
+const DefaultNodeHealthWindow = 24 * time.Hour
+
+var nodeHealthWindowProvider func() time.Duration
+
+// SetNodeHealthWindowProvider 注入节点健康统计窗口；传 nil 视为不注入。
+func SetNodeHealthWindowProvider(fn func() time.Duration) { nodeHealthWindowProvider = fn }
+
+// NodeHealthWindow 生效的统计窗口。非正值一律回落兜底——0 会把 since 推到当下，
+// 聚合出的健康率恒为空列表，看上去像"所有渠道都没心跳"。
+func NodeHealthWindow() time.Duration {
+	if p := nodeHealthWindowProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultNodeHealthWindow
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // 业务生命周期健康概览（区别于系统监控：聚焦核心链路而非 CPU/内存）。
@@ -272,7 +290,7 @@ func NodeHealthByChannel(ctx context.Context) ([]NodeHealth, error) {
 	if d == nil {
 		return nil, ErrNoDB
 	}
-	since := time.Now().Add(-nodeHealthWindow)
+	since := time.Now().Add(-NodeHealthWindow())
 
 	type aggRow struct {
 		Channel      string

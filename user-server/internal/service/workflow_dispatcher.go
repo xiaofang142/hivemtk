@@ -150,12 +150,11 @@ func (d *WorkflowDispatcher) runExecution(ctx context.Context, executionID uint,
 		return
 	}
 
-	const maxWorkflowSteps = 1000
 	steps := 0
 
 	for {
 		steps++
-		if steps > maxWorkflowSteps {
+		if steps > maxWorkflowSteps() {
 			logger.Ctx(ctx).Error().Int("steps", steps).Msg("workflow step limit exceeded (cycle?)")
 			d.failExecution(ctx, exec, "workflow step limit exceeded; check definition for cycles")
 			return
@@ -440,3 +439,27 @@ func writeAttempt(exec *model.WorkflowExecution, attempt int) {
 	}
 	exec.Context["_wf_attempt"] = attempt
 }
+
+// DefaultMaxWorkflowSteps 单个工作流可执行的最大节点数的代码兜底
+// （参数中心 workflow.max_workflow_steps 未配置时用）。
+// 它是死循环的最后一道闸：定义里出现环时靠这个把执行打断，而不是无限跑下去。
+const DefaultMaxWorkflowSteps = 1000
+
+var maxWorkflowStepsProvider func() int
+
+// SetMaxWorkflowStepsProvider 注入工作流最大步数；传 nil 视为不注入。
+func SetMaxWorkflowStepsProvider(fn func() int) { maxWorkflowStepsProvider = fn }
+
+// maxWorkflowSteps 生效的最大步数。非正值一律回落兜底——0 会在第一步就判超限，
+// 所有工作流全部失败。
+func maxWorkflowSteps() int {
+	if p := maxWorkflowStepsProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultMaxWorkflowSteps
+}
+
+// ProbeMaxWorkflowSteps 导出当前生效的工作流最大步数（仅供装配层测试断言读取口）。
+func ProbeMaxWorkflowSteps() int { return maxWorkflowSteps() }

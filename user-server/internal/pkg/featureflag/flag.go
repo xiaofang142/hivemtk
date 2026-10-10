@@ -28,10 +28,27 @@ const (
 	FF_ENABLE_SSE_BRIDGE = "sse_bridge"
 )
 
-// PollInterval 热加载轮询周期 (生产化加固)
+// DefaultPollInterval 热加载轮询周期的代码兜底（参数中心 telemetry.feature_flag_poll_interval
+// 未配置时用）。
 // 每 5s 重新读取 env, 实现 "改 env 不重启" 的热加载。
 // 5s 平衡了响应延迟和 CPU 开销 (每秒 0.2 次 env 读取, 对 5 个 flag 几乎无负担)。
-const PollInterval = 5 * time.Second
+const DefaultPollInterval = 5 * time.Second
+
+var pollIntervalProvider func() time.Duration
+
+// SetPollIntervalProvider 注入热加载轮询周期；传 nil 视为不注入。
+func SetPollIntervalProvider(fn func() time.Duration) { pollIntervalProvider = fn }
+
+// PollInterval 生效的热加载轮询周期。非正值一律回落兜底——0 会让 time.NewTicker(0)
+// 直接 panic，把轮询 goroutine 的启动失败变成进程级崩溃。
+func PollInterval() time.Duration {
+	if p := pollIntervalProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultPollInterval
+}
 
 // Flag 表示一个 FeatureFlag 实例 (线程安全)
 type Flag struct {
@@ -93,7 +110,7 @@ func (m *FlagManager) startPoller() {
 	m.pollOnce.Do(func() {
 		m.stopCh = make(chan struct{})
 		go func() {
-			ticker := time.NewTicker(PollInterval)
+			ticker := time.NewTicker(PollInterval())
 			defer ticker.Stop()
 			for {
 				select {

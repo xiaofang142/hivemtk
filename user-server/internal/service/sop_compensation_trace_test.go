@@ -44,11 +44,11 @@ func TestAppendExecutedNode_NilSafety(t *testing.T) {
 func TestAppendExecutedNode_TruncatesOversizedTrace(t *testing.T) {
 	exec := &model.SOPExecution{}
 	node := &dto.SOPNode{ID: "n", Type: "llm"}
-	for i := 0; i < maxExecutedNodeTrace+10; i++ {
+	for i := 0; i < DefaultMaxExecutedNodeTrace+10; i++ {
 		appendExecutedNode(exec, node, 0, "")
 	}
-	if len(exec.ExecutedNodes) != maxExecutedNodeTrace {
-		t.Fatalf("轨迹应封顶 %d 防止无限增长，实际 %d", maxExecutedNodeTrace, len(exec.ExecutedNodes))
+	if len(exec.ExecutedNodes) != DefaultMaxExecutedNodeTrace {
+		t.Fatalf("轨迹应封顶 %d 防止无限增长，实际 %d", DefaultMaxExecutedNodeTrace, len(exec.ExecutedNodes))
 	}
 }
 

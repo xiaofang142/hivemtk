@@ -176,8 +176,8 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1~4 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) 已入库（4/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=73 / 已声明未接线=39 / UNDECLARED=2`。
+> **进度（2026-10-10）：第 1~6 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) / agent_tool(4/5) / telemetry(4)+workflow(4) 已入库（6/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=88 / 已声明未接线=27 / UNDECLARED=0 / 声明过期=0`。
 >
 > **入库位置（如实记录，勿按 commit message 找）**：
 > - 第 1 批 misc(16) → `c75c78b6 feat(config-params): 阶段一第1批 —— misc 组 16 条僵尸参数接线`
@@ -187,7 +187,20 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 >   故不改写已推送的历史，只在此登记归属。
 > - 第 3 批 agent_llm(7) → `97ebaefb feat(config-params): 阶段一第3批 —— agent_llm 组 7 条僵尸参数接线`
 > - 第 4 批 cache(5) → `8bcc0443 feat(config-params): 阶段一第4批 —— cache 组 5 条僵尸参数接线`
+> - 第 5 批 agent_tool(4/5) → `5fb6f400 feat(config-params): 阶段一第5批 —— agent_tool 组 4 条僵尸参数接线`
+> - 第 6 批 telemetry(4)+workflow(4) → 本提交。
 > - 台账回填另计：`2f2ba9cb`（第 3 批）、以及各批随附的 docs 提交。
+>
+> **第 6 批的两条「种子与代码不一致」处置**（这是接线时才发现的、写死没人看得出来的漂移）：
+> 1. `telemetry.trace_sink_buffer` 种子写 8192，代码兜底是 `aiagent/llm/trace_sink.go` 的 2048。
+>    取**代码的 2048** 回填种子，理由：参数中心的默认值语义是「没人配置时系统现在的行为」，
+>    不是「更合理的目标值」。照抄 8192 等于升级即把每个 trace sink 的缓冲内存翻 4 倍，
+>    而丢弃事件只在缓冲区满时暴露 —— 越晚暴露、越难定位。
+> 2. `telemetry.geo_position_window` 的 Name/Description 与实现完全不是一回事：种子写
+>    「Geo 地理位置统计的滑动窗口大小」，实现 `geo/service/metrics.go dedupMatches` 里
+>    比较的是**字符偏移**（`m.start - prevEnd > window`），语义是「相邻两处品牌词提及
+>    间隔小于该字符数即算同一处」。已一并改写，否则配的人会按"条数"去理解一个字符参数。
+>
 >
 > **第 4 批踩到的三个坑（都写下来）**：
 > 1. `internal/controller/platform.go` 的 `platformCacheTTL` 原本是**函数内的局部 const**，

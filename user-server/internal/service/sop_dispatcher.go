@@ -703,7 +703,25 @@ func (d *SOPExecutionDispatcher) failExecution(ctx context.Context, exec *model.
 	d.tryCompensate(ctx, exec)
 }
 
-const maxExecutedNodeTrace = 200
+// DefaultMaxExecutedNodeTrace 单次 SOP 执行保留的节点轨迹条数上限的代码兜底
+// （参数中心 workflow.max_executed_node_trace 未配置时用）。
+const DefaultMaxExecutedNodeTrace = 200
+
+var maxExecutedNodeTraceProvider func() int
+
+// SetMaxExecutedNodeTraceProvider 注入执行轨迹节点数上限；传 nil 视为不注入。
+func SetMaxExecutedNodeTraceProvider(fn func() int) { maxExecutedNodeTraceProvider = fn }
+
+// maxExecutedNodeTrace 生效的轨迹条数上限。非正值一律回落兜底——0 会让第一条轨迹
+// 就被丢弃，整次执行在界面上看不到任何节点，排查时完全失明。
+func maxExecutedNodeTrace() int {
+	if p := maxExecutedNodeTraceProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultMaxExecutedNodeTrace
+}
 
 func appendExecutedNode(exec *model.SOPExecution, node *dto.SOPNode, attempt int, errMsg string) {
 	appendExecutedNodeWithStatus(exec, node, attempt, "completed", errMsg, "")
@@ -713,7 +731,7 @@ func appendExecutedNodeWithStatus(exec *model.SOPExecution, node *dto.SOPNode, a
 	if exec == nil || node == nil {
 		return
 	}
-	if len(exec.ExecutedNodes) >= maxExecutedNodeTrace {
+	if len(exec.ExecutedNodes) >= maxExecutedNodeTrace() {
 		return
 	}
 	rec := map[string]any{
@@ -889,3 +907,6 @@ func InitSOPExecutionDispatcher(db *gorm.DB, sopSvc *SOPService, cfg *SOPDispatc
 func GetSOPExecutionDispatcher() *SOPExecutionDispatcher {
 	return globalSOPDispatcher
 }
+
+// ProbeMaxExecutedNodeTrace 导出当前生效的执行轨迹节点数上限（仅供装配层测试断言读取口）。
+func ProbeMaxExecutedNodeTrace() int { return maxExecutedNodeTrace() }

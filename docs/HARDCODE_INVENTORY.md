@@ -237,18 +237,18 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 按 group 分布（`group / key / 名称`）：
 
 > **处置进度（2026-10-10）**：第 1 批 `misc`(16)、第 2 批 `confidence`(5/7) **已接线并提交**。
-> 门禁读数：`wired 40→61`、`UNDECLARED 72→51`、`已声明未接线 51`。
+> 门禁读数：`wired 40→88`、`UNDECLARED 72→0`、`已声明未接线 27`。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |
 | --- | --- |
 | `misc`(16) ✅已接线 | `visitor_token_ttl`、`sso_cookie_ttl`、`polling_lock_stale_threshold`、`domain_check_concurrency`、`sms_max_retry`、`csv_export_max_rows`、`backup_page_size`、`text_truncate_max_bytes`、`preview_max_len`、`sop_scheduler_interval`、`sop_max_wait`、`deepl_timeout`、`reply_sem_timeout`、`ownership_cache_ttl`、`summary_stale_threshold`、`agentloop_history_max_candidates` |
 | `confidence`(7) ⚠️5条已接线 | `humanize_default_threshold`✅、`intent_fewshot_min_cos`✅、`weak_truth_min_confidence`✅、`emb_retry_cooldown`✅、`veto_low_rag_threshold`✅；`persona_default_threshold`/`persona_max_retry` **无处可接**——其实现 `persona_evaluator.go` 已随 `9a5f716c` 整体删除（749 行实现 + 958 行测试），代码里不存在等价能力，保留「未接线」标注 |
-| `agent_llm`(7) | `vote_agreement_threshold`、`default_health_check_interval`、`default_circuit_open_duration`、`default_health_check_timeout`、`default_failure_threshold`、`default_http_timeout`、`db_sink_stop_deadline` |
-| `cache`(5) | `max_keys`、`faq_decay_max_batch`、`memo_ttl`、`platform_cache_ttl`、`translation_cache_max_entries` |
-| `agent_tool`(5) | `max_concurrent`、`max_content_len`、`result_cache_ttl`、`cooldown_duration`、`fail_threshold` |
-| `telemetry`(4) | `node_health_window`、`trace_sink_buffer`、`geo_position_window`、`feature_flag_poll_interval` |
-| `workflow`(4) | `max_subflow_depth`、`max_workflow_steps`、`max_running_per_sop`、`max_executed_node_trace` |
+| `agent_llm`(7) ✅已接线 | `vote_agreement_threshold`、`default_health_check_interval`、`default_circuit_open_duration`、`default_health_check_timeout`、`default_failure_threshold`、`default_http_timeout`、`db_sink_stop_deadline` |
+| `cache`(5) ✅已接线 | `max_keys`、`faq_decay_max_batch`、`memo_ttl`、`platform_cache_ttl`、`translation_cache_max_entries` |
+| `agent_tool`(5) ⚠️4条已接线 | `max_concurrent`✅、`max_content_len`✅、`cooldown_duration`✅、`fail_threshold`✅；`result_cache_ttl` **无处可接**——`tooluse/result_cache.go` 的 `NewResultCache` 全仓只有 `p2_test.go` 调用，生产链路从未构造过它，没有构造点就接不上 TTL，保留「未接线」标注 |
+| `telemetry`(4) ✅已接线 | `node_health_window`、`trace_sink_buffer`、`geo_position_window`、`feature_flag_poll_interval` |
+| `workflow`(4) ✅已接线 | `max_subflow_depth`、`max_workflow_steps`、`max_running_per_sop`、`max_executed_node_trace` |
 | `inbox_sales`(4) | `tg_lead_opportunity_threshold`、`unified_miner_lead_threshold`、`preview_sample_limit`、`geo_lead_preview_max_len` |
 | `bridge`(3) | `polling_max_timeout`、`polling_default_timeout`、`max_reply_content_bytes` |
 | `session`(3) | `active_ttl`、`idle_ttl`、`max_delay_seconds` |
@@ -280,8 +280,14 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `pagination.page_max_size` / `page_default_size` / `cursor_page_size` | `pkg/utils/pagination.go:46,48`、`pkg/pagination/cursor.go:14` |
 | `wechat.chat_ws_ping_period` 等 3 条 | 前端 `utils/chatSocket.js` 对应项 |
 | `wecom.error_rate_degrade` | `wecom_account_health.go:45 =0.3` |
-| `telemetry.feature_flag_poll_interval` | `pkg/featureflag/flag.go:34 =5` |
-| `workflow.max_subflow_depth` | `workflow_node_executors.go:14 =5` |
+| `telemetry.feature_flag_poll_interval` | `pkg/featureflag/flag.go:34 =5` ✅ |
+| `workflow.max_subflow_depth` | `workflow_node_executors.go:14 =5` ✅ |
+| `telemetry.node_health_window` | `internal/monitor/monitor.go:19 nodeHealthWindow=24h` ✅ |
+| `telemetry.trace_sink_buffer` | `internal/aiagent/llm/trace_sink.go:35 dbSinkBufferSize=2048` ✅（**种子原写 8192，已按代码回填为 2048**） |
+| `telemetry.geo_position_window` | `internal/geo/service/metrics.go:71 positionWindow=20` ✅（**单位是字符偏移不是条数，种子 Name/Description 已一并改写**） |
+| `workflow.max_workflow_steps` | `internal/service/workflow_dispatcher.go:153 函数内 const =1000` ✅ |
+| `workflow.max_running_per_sop` | `internal/service/sop_scheduler.go:233 函数内 const =50` ✅ |
+| `workflow.max_executed_node_trace` | `internal/service/sop_dispatcher.go:706 =200` ✅ |
 
 → **接线动作就是把上表右列的常量替换为 `config.GetInt/GetDuration(...)`，然后把种子里的
 「（未接线）」标注撤掉**（门禁第 2 条会检查标注是否过期）。
