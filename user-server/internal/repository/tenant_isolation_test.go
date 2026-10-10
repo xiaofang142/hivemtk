@@ -47,10 +47,17 @@ func TestTenantIsolation_CustomerScoping(t *testing.T) {
 		t.Fatalf("默认团队名漂移：model=%q scope=%q", model.DefaultTeamName, scope.DefaultTeamName)
 	}
 
-	// 铺三个客户：A 一条、B 一条、平台侧（team 0）一条
-	cA := &model.Customer{ID: "iso-a-1", Name: "A 的客户"}
-	cB := &model.Customer{ID: "iso-b-1", Name: "B 的客户"}
-	cP := &model.Customer{ID: "iso-p-1", Name: "平台侧客户"}
+	// 默认团队先建（生产由回填钩子建；回调的系统上下文兜底写依赖它）
+	defTeam := &model.Team{Name: model.DefaultTeamName, Plan: model.TeamPlanFree, Status: model.TeamStatusActive}
+	if err := gdb.Create(defTeam).Error; err != nil {
+		t.Fatalf("铺默认团队失败: %v", err)
+	}
+
+	// 铺三个客户：A 一条、B 一条、平台侧（team 0）一条——归属显式声明
+	//（裸 Create 的系统上下文会兜底写默认团队，见 GORM 租户回调语义）
+	cA := &model.Customer{ID: "iso-a-1", Name: "A 的客户", TeamID: teamA.ID}
+	cB := &model.Customer{ID: "iso-b-1", Name: "B 的客户", TeamID: teamB.ID}
+	cP := &model.Customer{ID: "iso-p-1", Name: "平台侧客户", TeamID: 0}
 	if err := gdb.Create(cA).Error; err != nil {
 		t.Fatalf("铺客户失败: %v", err)
 	}
@@ -124,10 +131,6 @@ func TestTenantIsolation_CustomerScoping(t *testing.T) {
 	var afterSys model.Customer
 	if err := gdb.First(&afterSys, "id = ?", sc.ID).Error; err != nil {
 		t.Fatalf("回读失败: %v", err)
-	}
-	var defTeam model.Team
-	if err := gdb.Where("name = ?", model.DefaultTeamName).First(&defTeam).Error; err != nil {
-		t.Fatalf("默认团队应存在（EnsureDefaultTeamID 语义由回调依赖）: %v", err)
 	}
 	if afterSys.TeamID != defTeam.ID {
 		t.Errorf("系统管线创建的行应落默认团队，got team_id=%d want %d", afterSys.TeamID, defTeam.ID)

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -111,7 +112,8 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 		t.Fatalf("删除失败: %v", err)
 	}
 	after, _ = svc.GetCredential(ctx, cred.ID)
-	if after.APIKeyHash != "" {
+	// char(64)：清空写 "" 会被 PG 填充成 64 空格——断言按 TrimSpace 口径
+	if strings.TrimSpace(after.APIKeyHash) != "" {
 		t.Errorf("删除镜像钥匙后 legacy 列应清空，got %q", after.APIKeyHash)
 	}
 
@@ -123,17 +125,33 @@ func TestMCPKey_IssueRevealStatusDelete(t *testing.T) {
 		t.Errorf("删除应为软删除（deleted_at 打标），got 0 行")
 	}
 
-	// ⑦ 管理审计有账：签发/状态/删除都该留痕。
+	// ⑦ 管理审计记账链路：服务层不产管理审计（那是 controller 的 mcpWriteAdminAudit
+	// 职责）——这里直接记账验证 repo/异步队列/查询管道畅通，并钉"明文不入账"红线。
 	auditSvc := NewMCPCredentialAuditLogAdminService()
+	for _, act := range []string{model.MCPAuditActionKeyCreate, model.MCPAuditActionKeyRevoke, model.MCPAuditActionKeyDelete} {
+		auditSvc.Record(ctx, &model.MCPCredentialAuditLog{
+			Action: act, TargetType: "key", TargetID: k2.ID, CredentialID: &cred.ID,
+			TargetLabel: "管道用例", Detail: fmt.Sprintf(`{"key_masked":%q,"act":%q}`, maskedOf(plain1), act),
+		})
+	}
+	FlushMCPAuditForTest()
 	rows, total, err := auditSvc.List(ctx, "", "", &cred.ID, "", "", "", 0, 1, 50)
 	if err != nil || total < 3 {
-		t.Fatalf("管理审计应≥3条（签发/状态/删除），got total=%d err=%v", total, err)
+		t.Fatalf("管理审计应≥3条，got total=%d err=%v", total, err)
 	}
 	for _, r := range rows {
 		if strings.Contains(r.Detail, plain1) {
 			t.Errorf("管理审计不得落明文钥匙: %s", r.Detail)
 		}
 	}
+}
+
+// maskedOf 掩码形（首8 + •••• + 尾4），模拟 controller 层拼 detail 的口径。
+func maskedOf(plain string) string {
+	if len(plain) < 12 {
+		return "****"
+	}
+	return plain[:8] + "••••" + plain[len(plain)-4:]
 }
 
 func TestMCPKey_CapAndCascade(t *testing.T) {
@@ -198,7 +216,8 @@ func TestMCPKey_BackfillIdempotent(t *testing.T) {
 		t.Fatalf("删除回填行失败: %v", err)
 	}
 	after, _ := svc.GetCredential(ctx, cred.ID)
-	if after.APIKeyHash != "" {
+	// char(64) 空格填充：清空断言按 TrimSpace 口径
+	if strings.TrimSpace(after.APIKeyHash) != "" {
 		t.Errorf("回填行被删后 legacy 镜像应清空，got %q", after.APIKeyHash)
 	}
 }

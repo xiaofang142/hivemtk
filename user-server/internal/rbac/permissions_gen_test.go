@@ -10,7 +10,7 @@ import (
 // `python scripts/gen-registry.py --check` 钉；这里钉"生成物与消费方一致"）。
 
 // TestAPIKeyStates_SyncWithModel rbac 生成的状态字面量必须与 model 层常量同值
-//（两处都消费：guard 判定用 model 常量，P1 权限面用 rbac 常量——漂移即状态机分裂）。
+// （两处都消费：guard 判定用 model 常量，P1 权限面用 rbac 常量——漂移即状态机分裂）。
 func TestAPIKeyStates_SyncWithModel(t *testing.T) {
 	pairs := map[string]string{
 		APIKeyStateActive:    model.MCPKeyStatusActive,

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -99,7 +100,9 @@ func (s *McpKeyAdminService) IssueKey(ctx context.Context, credentialID uint, na
 	}
 	// legacy 镜像：仅当凭证还没有基准 hash 时写入（1:N 之后不再主动维护本列，
 	// 清空时机见 DeleteKey——"签发成功=回滚后的旧二进制也能认"只对第一把钥匙成立）。
-	if cred.APIKeyHash == "" {
+	// TrimSpace：api_key_hash 是 char(64)，PG 会把空串填充成 64 个空格——
+	// 直接 == "" 判断在 Postgres 上恒 false，镜像/清空逻辑整体失效（实测踩坑）。
+	if strings.TrimSpace(cred.APIKeyHash) == "" {
 		_ = s.credRepo.Update(ctx, credentialID, map[string]any{"api_key_hash": key.KeyHash})
 	}
 	return key, plaintext, nil
@@ -162,7 +165,7 @@ func (s *McpKeyAdminService) DeleteKey(ctx context.Context, credentialID, keyID 
 		return nil, err
 	}
 	cred, err := s.credRepo.GetByIDAny(ctx, credentialID)
-	if err == nil && cred.APIKeyHash == key.KeyHash {
+	if err == nil && strings.TrimSpace(cred.APIKeyHash) == key.KeyHash {
 		_ = s.credRepo.Update(ctx, credentialID, map[string]any{"api_key_hash": ""})
 	}
 	return key, nil

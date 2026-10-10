@@ -33,9 +33,10 @@ type mcpAuditWriter struct {
 	callCh  chan *model.MCPCallAudit
 	adminCh chan *model.MCPCredentialAuditLog
 
-	dropped atomic.Int64 // 重试耗尽仍失败的行数（可观测口径）
-	retried atomic.Int64 // 重试次数（>0 即发生过 DB 抖动）
-	flushed atomic.Int64 // 成功落库行数
+	dropped  atomic.Int64 // 重试耗尽仍失败的行数（可观测口径）
+	retried  atomic.Int64 // 重试次数（>0 即发生过 DB 抖动）
+	flushed  atomic.Int64 // 成功落库行数
+	enqueued atomic.Int64 // 入队总数（Flush 的确定性等待判据）
 
 	startOnce sync.Once
 }
@@ -64,25 +65,64 @@ func GetMCPAuditWriter() *mcpAuditWriter {
 // MCPAuditDroppedCount 丢弃计数（监控/告警接 P2；当前先可查询）。
 func MCPAuditDroppedCount() int64 { return GetMCPAuditWriter().dropped.Load() }
 
+// FlushMCPAuditForTest 同步排空两条队列（逐行同步落库，忽略批量窗口）。
+// 供测试断言前确定性落账；也可复用为优雅停机时的收尾 flush。
+func FlushMCPAuditForTest() {
+	w := GetMCPAuditWriter()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		drained := false
+		select {
+		case row := <-w.callCh:
+			w.flushCall([]*model.MCPCallAudit{row})
+			drained = true
+		default:
+		}
+		select {
+		case row := <-w.adminCh:
+			w.flushAdmin([]*model.MCPCredentialAuditLog{row})
+			drained = true
+		default:
+		}
+		// 后台循环可能已把行取进自己的 batch：等 enqueued 口径收敛
+		//（flushed+dropped ≥ enqueued 即全部有了着落）
+		if !drained && w.flushed.Load()+w.dropped.Load() >= w.enqueued.Load() {
+			return
+		}
+		if time.Now().After(deadline) {
+			return // 超时兜底：让上层断言暴露问题，而不是挂死测试
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // EnqueueCall 入队一条调用审计；队满时同步兜底写一次（尽力而为）。
 func (w *mcpAuditWriter) EnqueueCall(repo *repository.MCPCallAuditRepo, row *model.MCPCallAudit) {
+	w.enqueued.Add(1)
 	select {
 	case w.callCh <- row:
 	default:
+		w.enqueued.Add(-1) // 同步兜底路径不走队列，从待 flush 计数里扣回
 		// 队满：同步写兜底，失败计入丢弃——绝不因审计积压阻塞工具调用。
 		if err := repo.Create(context.Background(), row); err != nil {
 			w.dropped.Add(1)
+		} else {
+			w.flushed.Add(1)
 		}
 	}
 }
 
 // EnqueueAdmin 同 EnqueueCall（管理审计）。
 func (w *mcpAuditWriter) EnqueueAdmin(repo *repository.MCPCredentialAuditLogRepo, row *model.MCPCredentialAuditLog) {
+	w.enqueued.Add(1)
 	select {
 	case w.adminCh <- row:
 	default:
+		w.enqueued.Add(-1)
 		if err := repo.Create(context.Background(), row); err != nil {
 			w.dropped.Add(1)
+		} else {
+			w.flushed.Add(1)
 		}
 	}
 }
