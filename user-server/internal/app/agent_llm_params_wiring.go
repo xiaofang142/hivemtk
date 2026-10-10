@@ -26,7 +26,7 @@ import (
 func WireAgentLLMConfigParams() []string {
 	bg := context.Background()
 	cp := service.GlobalConfigParam()
-	wired := make([]string, 0, 7)
+	wired := make([]string, 0, 8)
 
 	llmpkg.SetHealthCheckIntervalProvider(func() time.Duration {
 		return cp.GetDuration(bg, "agent_llm", "default_health_check_interval", llmpkg.DefaultHealthCheckInterval)
@@ -62,6 +62,14 @@ func WireAgentLLMConfigParams() []string {
 		return cp.GetDuration(bg, "agent_llm", "db_sink_stop_deadline", llmpkg.DefaultDBSinkStopDeadline)
 	})
 	wired = append(wired, "agent_llm.db_sink_stop_deadline")
+
+	// 整份降级策略（config 覆盖 + scenarios 候选表）走同一条读取口：返回原始 JSON 字符串，
+	// 由 LoadPolicy 解析。兜底传空串——空串在 LoadPolicy 里就是"不覆盖，用内置默认"，
+	// 而这里若传真 JSON 会让参数值与代码各持一份策略表。
+	llmpkg.SetFailoverPolicyProvider(func(ctx context.Context) string {
+		return cp.GetString(ctx, "agent_llm", "provider_failover_policy", "")
+	})
+	wired = append(wired, "agent_llm.provider_failover_policy")
 
 	return wired
 }

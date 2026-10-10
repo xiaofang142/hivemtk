@@ -210,4 +210,6 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewBrowserOutreachDedupeMigration(db))
 	register(NewBrowserTaskCampaignBudgetMigration(db))
 	register(NewBrowserOutreachReceiptMigration(db))
+	register(NewFailoverPolicyToConfigParamMigration(db))
+	register(NewEmbeddingGlobalOverrideToConfigParamMigration(db))
 }

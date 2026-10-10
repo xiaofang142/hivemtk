@@ -51,7 +51,6 @@ func TestD12_NoNewLegacyKVDirectQuery(t *testing.T) {
 		// 经 SystemConfigKVRepository.Get 读回调密钥，无裸 SQL：与同类入站守卫
 		// bridge_ingress_guard.go 同规格。本守卫拦的是新写的裸 KV 直查。
 		"webhook_signature.go":       true,
-		"provider_failover.go":       true,
 		"config_param.go":            true,
 		"intent.go":                  true,
 		"bridge_ingress_guard.go":    true,

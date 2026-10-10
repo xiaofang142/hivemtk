@@ -194,7 +194,7 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 		allowFallback = v == "true" || v == "1" || v == "yes"
 	}
 
-	// 全局手动配置（管理端在线改，存 system_config_kv）：优先级在文件/env 之后、
+	// 全局手动配置（管理端在线改，存参数中心 embedding.global_override）：优先级在文件/env 之后、
 	// 内置默认之前。enabled=true 且 base_url 非空才生效——只想关掉本地栈而不给
 	// 云端地址时保持 enabled=false，走原有回落链。
 	if o := GetGlobalEmbeddingOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {

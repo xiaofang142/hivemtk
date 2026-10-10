@@ -11,7 +11,7 @@ import (
 	"hivemtk-user/internal/service"
 )
 
-// wantAgentLLMWired 是 agent_llm 组本轮接线的 7 条，逐条写死而不是从
+// wantAgentLLMWired 是 agent_llm 组本轮接线的 8 条，逐条写死而不是从
 // DefaultParamDefs() 过滤——理由同 wantMiscWired / wantConfidenceWired：
 // 过滤只能钉住"接上的都在本组内"，拼错 key 时断言照样成立，真正漏接的那条没人发现。
 var wantAgentLLMWired = []string{
@@ -22,9 +22,10 @@ var wantAgentLLMWired = []string{
 	"agent_llm.vote_agreement_threshold",
 	"agent_llm.default_http_timeout",
 	"agent_llm.db_sink_stop_deadline",
+	"agent_llm.provider_failover_policy",
 }
 
-// resetAgentLLMProviders 把 7 个注入点摘回未装配状态。provider 是包级变量，
+// resetAgentLLMProviders 把 8 个注入点摘回未装配状态。provider 是包级变量，
 // 测试之间不还原会互相污染：上一格注入的值会让下一格"未注入"的断言假绿。
 func resetAgentLLMProviders(t *testing.T) {
 	t.Helper()
@@ -36,6 +37,7 @@ func resetAgentLLMProviders(t *testing.T) {
 		llmpkg.SetVoteAgreementThresholdProvider(nil)
 		llmpkg.SetDefaultHTTPTimeoutProvider(nil)
 		llmpkg.SetDBSinkStopDeadlineProvider(nil)
+		llmpkg.SetFailoverPolicyProvider(nil)
 	})
 }
 
@@ -57,7 +59,7 @@ func newAgentLLMParamFixture(t *testing.T) *service.ConfigParamService {
 	return svc
 }
 
-// TestWireAgentLLMConfigParamsKeys 装配点声明接线的键，必须与上面那 7 条逐条相等。
+// TestWireAgentLLMConfigParamsKeys 装配点声明接线的键，必须与上面那 8 条逐条相等。
 func TestWireAgentLLMConfigParamsKeys(t *testing.T) {
 	resetAgentLLMProviders(t)
 	got := WireAgentLLMConfigParams()
@@ -76,7 +78,7 @@ func TestWireAgentLLMConfigParamsKeys(t *testing.T) {
 	}
 }
 
-// TestWiredAgentLLMKeysExistInSeed 上面那 7 条必须在种子表里真实存在。
+// TestWiredAgentLLMKeysExistInSeed 上面那 8 条必须在种子表里真实存在。
 // 引用一个没登记的键 = 运行期永远读兜底值 + 管理台上看不见这一行，
 // 和当初那 72 条僵尸一模一样的病。
 func TestWiredAgentLLMKeysExistInSeed(t *testing.T) {
@@ -143,6 +145,24 @@ func TestWireAgentLLMConfigParamsReachesReaders(t *testing.T) {
 	}
 	if got, want := llmpkg.DBSinkStopDeadline(), 6*time.Second; got != want {
 		t.Errorf("db_sink_stop_deadline 未被读走：got %v（原 %v）want %v", got, beforeSink, want)
+	}
+
+	// 整份策略 JSON 也要真的被读走：这条连线是参数中心与 LoadPolicy 之间唯一的桥，
+	// 少接一条的话运维在管理台改了候选表，运行期仍按内置默认跑，且不会有任何报错。
+	const customPolicyJSON = `{"config":{"degraded_latency_ms":4321},"scenarios":{"sop_reply":["only-in-param-center"]}}`
+	if err := svc.UpdateValue(ctx, "agent_llm", "provider_failover_policy", customPolicyJSON, 1); err != nil {
+		t.Fatalf("改 agent_llm.provider_failover_policy 失败：%v", err)
+	}
+	policy := llmpkg.NewProviderFailover(nil).LoadPolicy(ctx)
+	if got := policy.Scenarios["sop_reply"]; len(got) != 1 || got[0] != "only-in-param-center" {
+		t.Errorf("provider_failover_policy 未被读走：scenarios[sop_reply] = %v，期望 [only-in-param-center]", got)
+	}
+	if got, want := policy.Config.DegradedLatencyMs, int64(4321); got != want {
+		t.Errorf("provider_failover_policy 未被读走：degraded_latency_ms = %d，期望 %d", got, want)
+	}
+	// 单条旋钮在整份 JSON 缺字段时仍由常量/参数兜底：这里只改了两个字段，其余必须保持默认。
+	if got, want := policy.Config.HealthCheckPath, "/health"; got != want {
+		t.Errorf("未覆盖的 health_check_path 应回落默认：got %q want %q", got, want)
 	}
 }
 

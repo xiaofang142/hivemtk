@@ -227,6 +227,12 @@ func main() {
 		logger.Info("[ConfigParam] 渠道上限与外部依赖超时接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 全局 Embedding 提供商覆盖：一读一写两条缝。写侧原来是裸 SQL 直写遗留 KV 表，
+	// 收敛到参数中心才拿得到值校验、缓存失效与"谁改的"那条审计。
+	if wired := app.WireEmbeddingConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] Embedding 全局覆盖接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 
@@ -339,7 +345,7 @@ func main() {
 		}
 	}
 
-	failover := llm.InitGlobalFailover(llm.GetGlobalDispatcher(), db.GetDB())
+	failover := llm.InitGlobalFailover(llm.GetGlobalDispatcher())
 	failover.Start(context.Background())
 	defer failover.Stop()
 	app.SetGlobalProviderFailover(failover)

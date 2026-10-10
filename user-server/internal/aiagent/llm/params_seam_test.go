@@ -126,8 +126,8 @@ func TestHealthCheckerAndClientPickUpTimeoutSeam(t *testing.T) {
 }
 
 // TestDefaultFailoverConfigReadsParams 熔断四件套里有三个的兜底值流进
-// DefaultFailoverConfig()，而它又是 system_config_kv 的 llm_provider_failover
-// 缺失时的回退。这条断言证明"参数中心的值确实进了降级策略默认值"，
+// DefaultFailoverConfig()，而它又是参数中心 agent_llm.provider_failover_policy
+// 读不到值时的回退。这条断言证明"参数中心的值确实进了降级策略默认值"，
 // 而不只是停在 seam 上没人用。
 func TestDefaultFailoverConfigReadsParams(t *testing.T) {
 	resetFailoverSeams(t)
@@ -173,6 +173,7 @@ func resetFailoverSeams(t *testing.T) {
 		SetFailureThresholdProvider(nil)
 		SetCircuitOpenDurationProvider(nil)
 		SetHealthCheckTimeoutProvider(nil)
+		SetFailoverPolicyProvider(nil)
 	})
 }
 

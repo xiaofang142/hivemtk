@@ -370,9 +370,18 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "agent_llm", Key: "db_sink_stop_deadline", Name: "DB Sink 停止截止",
 			Description: "Trace DB Sink 停止时等待的最大时间（秒）",
 			ValueType:   "duration", DefaultValue: "3", Min: strPtr("1"), Max: strPtr("60"), Step: strPtr("1")},
+		{Group: "agent_llm", Key: "provider_failover_policy", Name: "LLM 降级策略（整份 JSON）",
+			Description: "按部署覆盖 ProviderFailover 的整份策略：config 里 >0/非空的字段逐项覆盖上面四条 default_* 旋钮；scenarios 是整表替换，少写一个场景不会报错，那个意图改由调度路由给候选。读路径在 internal/aiagent/llm/provider_failover.go 的 LoadPolicy，每 tick 走参数中心 60s 缓存；JSON 非法时整份回落内置默认并打 Warn",
+			ValueType:   "string", DefaultValue: `{"config":{"health_check_interval":30,"failure_threshold":5,"circuit_open_duration":60,"degraded_latency_ms":3000,"local_fallback_provider":"default","template_reply":"抱歉，当前服务暂时繁忙，请稍后再试或联系人工客服。","health_check_path":"/health"},"scenarios":{"intent_recognize":["default","deepseek","qwen"],"sop_reply":["default","gpt-4o","glm-4"],"objection":["default","gpt-4o","glm-4"],"friendly_chat":["default","deepseek"],"long_summary":["default","kimi","qwen"],"high_quality":["default","gpt-4o","glm-4"],"low_cost":["default","deepseek"]}}`,
+			Category: "LLM"},
 		{Group: "agent_llm", Key: "default_semantic_threshold", Name: "语义缓存阈值",
 			Description: "FAQ 语义缓存 Tier2 命中相似度阈值（0-1），只在 cache.faq_answer_enabled 为真时有人读。契约只允许调紧：小于 0.95 的值会被构造器抬回 0.95，因此填 0.8 与填 0.95 效果相同",
 			ValueType:   "float", DefaultValue: "0.95", Min: strPtr("0.5"), Max: strPtr("1.0"), Step: strPtr("0.05")},
+
+		{Group: "embedding", Key: "global_override", Name: "全局 Embedding 提供商覆盖（整份 JSON）",
+			Description: "整份 JSON：{enabled,base_url,api_key,model}。enabled 为真且 base_url 非空时，EmbeddingService.DefaultConfig 用它顶掉 config.yaml/env 那一层，指向云端 OpenAI 兼容端点；关掉只需把 enabled 写成 false。维度硬约束 1024（pgvector 兼容），非 1024 维模型在调用侧强制回落并告警。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/embedding_global_config.go，写路径由管理端 PUT /api/llm/embedding-config 走本条（带操作者审计）",
+			ValueType:   "string", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":""}`,
+			Category: "LLM"},
 
 		{Group: "knowledge", Key: "max_upload_file_size", Name: "知识库上传大小上限",
 			Description: "知识库文档上传的最大文件大小（字节）",

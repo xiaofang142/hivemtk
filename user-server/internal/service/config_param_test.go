@@ -156,7 +156,17 @@ func TestFallbackNilDB(t *testing.T) {
 // 的是 bridge/sse.go 里同文件却仍写死的回放 backlog 与总线缓冲。
 // 其中 channelbot.http_timeout / sse.client_buffer_size / bridge.sse_bus_buffer_size
 // 三条标 Restart=true：读取点在构造函数里，改完要重启才对已建立的连接生效。
-const defaultParamDefsWant = 134
+// 2026-10-10（第六次，D12 收尾两批）：+2。
+//   - `agent_llm.provider_failover_policy`：LLM 降级策略整份 JSON 从遗留表
+//     system_kv_config 搬进来（v3.53.0 带值），读路径改走本服务的 60s 缓存。
+//   - `embedding.global_override`：全局 Embedding 提供商覆盖从遗留表 system_config_kv
+//     搬进来（v3.54.0 带值），写路径终于有了来路审计。
+//
+// 同一趟还发现常量本身已经漂移过：`lead` 组的 llm_refine_enabled / industry_profile
+// （38ea7489）加进种子时没同步这里，所以 134 → 实际 136 → 138 一次对平。
+// 顺带说明下面那条循环判据为什么改成"只有 string 允许空默认值"：
+// 计数那格的 Fatalf 一直先炸，循环从没跑到过，industry_profile 的空默认因此被藏了很久。
+const defaultParamDefsWant = 138
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
@@ -166,11 +176,43 @@ func TestDefaultParamDefsCount(t *testing.T) {
 		t.Fatalf("want %d defs, got %d", defaultParamDefsWant, len(defs))
 	}
 	for i, d := range defs {
-		if d.Group == "" || d.Key == "" || d.DefaultValue == "" {
-			t.Errorf("def[%d] bad: group=%q key=%q default=%q", i, d.Group, d.Key, d.DefaultValue)
+		if d.Group == "" || d.Key == "" {
+			t.Errorf("def[%d] bad: group=%q key=%q", i, d.Group, d.Key)
+		}
+		// 空默认值只对自由文本合法：int/float/bool/duration 的空默认读不出兜底值，
+		// 而"重置为默认"会把这一格变成"未配置"——那是两种不同的动作。
+		if d.DefaultValue == "" && d.ValueType != "string" {
+			t.Errorf("def[%d] bad: %s.%s 默认值为空而 value_type=%q（非自由文本必须有可解析的默认值）",
+				i, d.Group, d.Key, d.ValueType)
 		}
 	}
 	t.Logf("✅ %d default defs validated", defaultParamDefsWant)
+}
+
+// 空默认值的豁免面钉成一条具名清单，而不是"凡是 string 都放行"：
+// 今天只有一格真的没有有意义的默认（lead.industry_profile 是一段行业自由描述，
+// 空 = 未填行业画像，读侧本来就按未配置处理）。清单有上界，新增一格就得在这里
+// 解释一次，否则这道门对自由文本的放行会变成又一个"改了没人读"的入口。
+func TestDefaultParamDefsEmptyDefaultRatchet(t *testing.T) {
+	allowedEmptyDefault := map[string]bool{
+		"lead.industry_profile": true,
+	}
+	seen := map[string]bool{}
+	for _, d := range DefaultParamDefs() {
+		if d.DefaultValue != "" {
+			continue
+		}
+		name := d.Group + "." + d.Key
+		seen[name] = true
+		if !allowedEmptyDefault[name] {
+			t.Errorf("%s 的默认值为空但不在豁免清单里：要么给一个真有意义的默认值，要么在这里写明为什么空才是对的", name)
+		}
+	}
+	for name := range allowedEmptyDefault {
+		if !seen[name] {
+			t.Errorf("豁免清单里的 %s 已经不再有空默认值：这条豁免该撤掉了", name)
+		}
+	}
 }
 
 // 参数唯一性的口径是 **(param_group, key) 复合**，不是单列 key。
