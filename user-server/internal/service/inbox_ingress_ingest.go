@@ -134,8 +134,17 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 			norm := normalizeEchoText(content)
 			if norm != "" {
 				for i := range rows {
-					if normalizeEchoText(rows[i].Content) == norm {
+					outNorm := normalizeEchoText(rows[i].Content)
+					if outNorm == norm {
 						return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound normalized match)"}, nil
+					}
+					// 网页渠道（抖音等）AI 的一条回复常被拆成多条气泡发送，扩展巡检会把
+					// 相邻气泡拼成一整条抓回，与任何单条出站记录都不再全等，回声便穿过
+					// 等值闸触发二次回复（自回复循环）。出站原文归一化后 ≥16 字且被入站
+					// 完整包含时判回声：真实客户消息几乎不可能逐字包含我们刚发出的整句；
+					// 短于 16 字的出站（如"好的~"）不参与包含判定，防止把引用式回复误吞。
+					if len([]rune(outNorm)) >= 16 && strings.Contains(norm, outNorm) {
+						return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
 					}
 				}
 			}
