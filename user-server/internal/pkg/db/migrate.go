@@ -348,6 +348,12 @@ func allModels() []any {
 		// 审计表 ConfigParamAuditLog 在下面有登记，主表历史上只靠开发库遗留存在。
 		// MCPCredential（表 mcp_credentials）：MCP 工具入口的 ClientID+APIKey 凭证对。
 		&model.MCPCredential{},
+		// MCPCallAudit（表 mcp_call_audits）：MCP 入口的调用审计（谁/哪把凭证/哪个工具/成没成）。
+		// MCPSkill（表 mcp_skills）：Skill 注册表（说明 + 绑定凭证 + 期望工具集）。
+		// 两者都是 2026-10-10 新增：MCP 入口此前只有"签发了哪些凭证"，没有调用记录与
+		// Skill 登记面 —— 出事后答不出"这条消息是谁发出去的"。
+		&model.MCPCallAudit{},
+		&model.MCPSkill{},
 		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
 		&model.ExternalKBConnector{},
 		&model.ExternalKBSyncItem{},

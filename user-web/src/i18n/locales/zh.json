@@ -55,7 +55,23 @@
       "fail": "登录失败",
       "failServer": "登录失败：服务器返回数据异常",
       "resetDone": "已重置配置，请重新初始化",
-      "resetFail": "重置失败"
+      "resetFail": "重置失败",
+      "heroTitle": "一个智能体",
+      "heroPrefix": "全域",
+      "heroHighlight": "获客 · 转化 · 复购",
+      "heroDesc": "私有化部署的营销智能体中台：多渠道统一接入、本地 RAG 知识库、智能体客服与销售协同，让增长在一条闭环里自动跑起来。",
+      "featureDeploy": "私有化部署，客户数据 100% 归你",
+      "featureChannels": "企微 / 飞书 / 抖音 / 网页等全渠道接入",
+      "featureRag": "基于私有知识库的本地 RAG 检索",
+      "featureAgent": "7×24 智能体在线承接，夜间不丢单",
+      "footerBrand": "© 2026 营销智能体套件 · HiveMtk",
+      "register": "注 册",
+      "registerPrompt": "没有账号？注册新账号",
+      "backToLogin": "已有账号？返回登录",
+      "emailPlaceholder": "邮箱",
+      "fillRequired": "请填写用户名、邮箱和密码",
+      "registerSuccess": "注册成功，请登录",
+      "registerFail": "注册失败"
     }
   },
   "disclaimer.login": "HiveMtk 是完全开源的本地私有化客服底座工具。您本地部署任何大语言模型、构建知识库及进行对话时，须自行遵守所在国家、地区及相关社交平台（如 Telegram、WhatsApp）的法律法规。作者不参与任何用户的实际部署与运营，亦不对用户因本地模型产生的任何言论、内容合规性及导致的任何后果承担任何法律责任。",
@@ -346,6 +362,8 @@
     "followups": "今日跟进",
     "qq": "QQ 机器人",
     "mcpCredentials": "MCP 凭证",
+    "mcpAudits": "MCP 调用审计",
+    "mcpSkills": "Skill 注册表",
     "capabilityMatrix": "能力矩阵"
   },
   "保存": "保存",

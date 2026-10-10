@@ -9,21 +9,21 @@
         </div>
 
         <h1 class="aside-title">
-          一个智能体<br />
-          全域<span class="grad">获客 · 转化 · 复购</span>
+          {{ t('core.login.heroTitle') }}<br />
+          {{ t('core.login.heroPrefix') }}<span class="grad">{{ t('core.login.heroHighlight') }}</span>
         </h1>
         <p class="aside-desc">
-          私有化部署的营销智能体中台：多渠道统一接入、本地 RAG 知识库、智能体客服与销售协同，让增长在一条闭环里自动跑起来。
+          {{ t('core.login.heroDesc') }}
         </p>
 
         <ul class="feature-list">
-          <li><el-icon><Check /></el-icon>私有化部署，客户数据 100% 归你</li>
-          <li><el-icon><Check /></el-icon>企微 / 飞书 / 抖音 / 网页等全渠道接入</li>
-          <li><el-icon><Check /></el-icon>基于私有知识库的本地 RAG 检索</li>
-          <li><el-icon><Check /></el-icon>7×24 智能体在线承接，夜间不丢单</li>
+          <li><el-icon><Check /></el-icon>{{ t('core.login.featureDeploy') }}</li>
+          <li><el-icon><Check /></el-icon>{{ t('core.login.featureChannels') }}</li>
+          <li><el-icon><Check /></el-icon>{{ t('core.login.featureRag') }}</li>
+          <li><el-icon><Check /></el-icon>{{ t('core.login.featureAgent') }}</li>
         </ul>
 
-        <div class="aside-footer">© 2026 营销智能体套件 · HiveMtk</div>
+        <div class="aside-footer">{{ t('core.login.footerBrand') }}</div>
       </div>
     </div>
 
@@ -65,22 +65,22 @@
               :loading="loading"
               @click="mode === 'login' ? handleLogin() : handleRegister()"
             >
-              {{ mode === 'login' ? t('core.login.submit') : '注 册' }}
+              {{ mode === 'login' ? t('core.login.submit') : t('core.login.register') }}
             </el-button>
           </el-form-item>
 
           <div v-if="mode === 'register'">
             <el-form-item prop="email">
-              <el-input v-model="loginForm.email" placeholder="邮箱" prefix-icon="Message" size="large" />
+              <el-input v-model="loginForm.email" :placeholder="t('core.login.emailPlaceholder')" prefix-icon="Message" size="large" />
             </el-form-item>
           </div>
 
           <div class="register-switch">
             <template v-if="mode === 'login'">
-              <el-button v-if="enableRegister" link type="primary" @click="switchMode('register')">没有账号？注册新账号</el-button>
+              <el-button v-if="enableRegister" link type="primary" @click="switchMode('register')">{{ t('core.login.registerPrompt') }}</el-button>
             </template>
             <template v-else>
-              <el-button link type="primary" @click="switchMode('login')">已有账号？返回登录</el-button>
+              <el-button link type="primary" @click="switchMode('login')">{{ t('core.login.backToLogin') }}</el-button>
             </template>
           </div>
 
@@ -123,7 +123,7 @@ const switchMode = (m) => { mode.value = m }
 const handleRegister = async () => {
   if (!loginFormRef.value) return
   if (!loginForm.username || !loginForm.password || !loginForm.email) {
-    ElMessage.warning('请填写用户名、邮箱和密码')
+    ElMessage.warning(t('core.login.fillRequired'))
     return
   }
   loading.value = true
@@ -134,10 +134,10 @@ const handleRegister = async () => {
       password: loginForm.password,
       email: loginForm.email
     })
-    ElMessage.success('注册成功，请登录')
+    ElMessage.success(t('core.login.registerSuccess'))
     mode.value = 'login'
   } catch (e) {
-    const msg = e?.response?.data?.message || e?.message || '注册失败'
+    const msg = e?.response?.data?.message || e?.message || t('core.login.registerFail')
     ElMessage.error(msg)
   } finally {
     loading.value = false

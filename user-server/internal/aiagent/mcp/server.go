@@ -3,8 +3,11 @@ package mcp
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -174,6 +177,29 @@ type Server struct {
 	clientInfo    Implementation
 	clientCaps    ClientCapabilities
 	initStartedAt time.Time
+
+	// allowedTools 凭证级工具授权范围（2026-10-10）。
+	// nil/空 = 不限制（单值链路、向后兼容）；非空时 tools/list 只返回白名单内工具，
+	// tools/call 对白名单外工具返回 JSON-RPC error 而非执行。
+	allowedTools map[string]bool
+
+	// auditSink 调用审计写入钩子（2026-10-10）：一次 tools/call 的成败快照。
+	// 由 controller 注入（写库在哪一层由注入方决定，本包不碰 DB）；
+	// 未注入（nil）时审计静默跳过——单测与无管理端的部署不受影响。
+	auditSink func(AuditRecord)
+}
+
+// AuditRecord 一次 MCP 工具调用的审计快照（参数摘要化后落库，见 model.MCPCallAudit）。
+type AuditRecord struct {
+	ClientID  string
+	Method    string
+	Tool      string
+	Allowed   bool // false = 被凭证 scope 拒绝，未执行
+	OK        bool
+	ErrorMsg  string
+	ArgsHash  string
+	LatencyMS int64
+	IP        string
 }
 
 // NewServer 构造 MCP 服务端
@@ -181,6 +207,48 @@ func NewServer(registry *tooluse.ToolRegistry) *Server {
 	return &Server{
 		registry: registry,
 	}
+}
+
+// SetAllowedTools 设置该请求凭证的工具白名单（逗号分隔，空串=不限制）。
+// 由 controller 在构造 Server 后、HandleRequest 前调用 —— scope 来自 MCPGuard 写入的上下文。
+func (s *Server) SetAllowedTools(commaSep string) {
+	commaSep = strings.TrimSpace(commaSep)
+	if commaSep == "" {
+		s.allowedTools = nil
+		return
+	}
+	m := map[string]bool{}
+	for _, t := range strings.Split(commaSep, ",") {
+		if v := strings.TrimSpace(t); v != "" {
+			m[v] = true
+		}
+	}
+	if len(m) > 0 {
+		s.allowedTools = m
+	}
+}
+
+// AllowedTool 返回该工具名是否在当前凭证的授权范围内。
+// 未设白名单（nil）时一律 true（兼容存量凭证与单值链路）。
+func (s *Server) AllowedTool(name string) bool {
+	if s.allowedTools == nil {
+		return true
+	}
+	return s.allowedTools[name]
+}
+
+// SetAuditSink 注入审计钩子；传 nil 即摘掉（测试与未装配环境）。
+// 审计在调用方（controller）构造 Server 后注入，与凭证信息同源。
+func (s *Server) SetAuditSink(fn func(AuditRecord)) {
+	s.auditSink = fn
+}
+
+// audit 记录一次调用（sink 未注入或为空时 no-op；审计失败不上抛——记录是旁路职责）。
+func (s *Server) audit(rec AuditRecord) {
+	if s.auditSink == nil {
+		return
+	}
+	s.auditSink(rec)
 }
 
 // HandleRequest 处理单个 JSON-RPC 2.0 请求
@@ -283,7 +351,28 @@ func (s *Server) handleToolsCall(ctx context.Context, req JSONRPCRequest) ([]byt
 		return s.errorResponse(req.ID, ErrCodeInvalidParams, "tool name required", nil), nil
 	}
 
+	start := time.Now()
 	result, err := s.callTool(ctx, params)
+	latency := time.Since(start).Milliseconds()
+
+	// 审计留痕：不论成败与是否被 scope 拒绝都记一条（Allowed 区分"被拒"与"真执行"）。
+	if s.auditSink != nil {
+		ok := err == nil && result != nil && !result.IsError
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		s.audit(AuditRecord{
+			Method:    "tools/call",
+			Tool:      params.Name,
+			Allowed:   s.AllowedTool(params.Name),
+			OK:        ok,
+			ErrorMsg:  truncateMsg(msg, 300),
+			ArgsHash:  hashArgs(params.Arguments),
+			LatencyMS: latency,
+		})
+	}
+
 	if err != nil {
 
 		return s.successResponse(req.ID, CallToolResult{
@@ -294,6 +383,28 @@ func (s *Server) handleToolsCall(ctx context.Context, req JSONRPCRequest) ([]byt
 	return s.successResponse(req.ID, result), nil
 }
 
+// hashArgs 参数摘要：sha256 前 24 字符。MCP 参数常带手机号/邮箱/正文，
+// 原文入库等于复制一份敏感数据，审计只需要"这条调用长这样"的可对账指纹。
+func hashArgs(args map[string]any) string {
+	if len(args) == 0 {
+		return ""
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:12])
+}
+
+// truncateMsg 审计错误文案截断（防止渠道把超长响应文本写进审计表）。
+func truncateMsg(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
 func (s *Server) listTools() []MCPTool {
 	if s.registry == nil {
 		return []MCPTool{}
@@ -301,6 +412,9 @@ func (s *Server) listTools() []MCPTool {
 	tools := s.registry.List()
 	out := make([]MCPTool, 0, len(tools))
 	for _, t := range tools {
+		if !s.AllowedTool(t.Name()) {
+			continue // 凭证 scope 过滤：白名单外的工具不暴露给 tools/list
+		}
 		params := t.Parameters()
 		out = append(out, MCPTool{
 			Name:        t.Name(),
@@ -314,6 +428,10 @@ func (s *Server) listTools() []MCPTool {
 func (s *Server) callTool(ctx context.Context, params CallToolParams) (*CallToolResult, error) {
 	if s.registry == nil {
 		return nil, fmt.Errorf("tool registry not configured")
+	}
+	// 凭证级 scope 拦截：白名单外工具一律拒绝执行（不发消息、不写客户数据）。
+	if !s.AllowedTool(params.Name) {
+		return nil, fmt.Errorf("工具 %q 不在当前凭证的授权范围内", params.Name)
 	}
 	tool, err := s.registry.Get(params.Name)
 	if err != nil {

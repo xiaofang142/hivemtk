@@ -56,7 +56,23 @@
       "fail": "Login failed",
       "failServer": "Login failed: server returned abnormal data",
       "resetDone": "Configuration reset, please reinitialize",
-      "resetFail": "Reset failed"
+      "resetFail": "Reset failed",
+      "heroTitle": "Один агент",
+      "heroPrefix": "Весь домен",
+      "heroHighlight": "Весь домен · Привлечение · Конверсия · Повторные покупки",
+      "heroDesc": "Самостоятельно размещаемая AI-маркетинговая платформа: интеграция всех каналов, локальная база знаний RAG, коммерческие ИИ-агенты — рост идёт автоматически в одном цикле.",
+      "featureDeploy": "Самостоятельный хостинг, 100% ваших данных",
+      "featureChannels": "Все каналы: WeCom / Feishu / Douyin / Web",
+      "featureRag": "Локальный RAG-поиск по вашей базе знаний",
+      "featureAgent": "ИИ-агенты 24×7, ни один лид не потерян ночью",
+      "footerBrand": "© 2026 HiveMtk Marketing Suite",
+      "register": "Регистрация",
+      "registerPrompt": "Нет аккаунта? Создать",
+      "backToLogin": "Есть аккаунт? Вернуться ко входу",
+      "emailPlaceholder": "Эл. почта",
+      "fillRequired": "Заполните имя, эл. почту и пароль",
+      "registerSuccess": "Регистрация успешна, войдите",
+      "registerFail": "Ошибка регистрации"
     }
   },
   "disclaimer.login": "HiveMtk is a fully open-source, locally self-hosted customer-service foundation tool. When using this system to locally deploy any large language model, build a knowledge base, or conduct conversations, you must comply on your own with the laws and regulations of your country, region, and relevant social platforms (such as Telegram, WhatsApp). The authors do not participate in any user’s actual deployment or operation, and assume no legal liability for any statements, content compliance, or any consequences arising from your local models.",
@@ -348,6 +364,8 @@
     "geoFunnelDashboard": "Обзор воронки",
     "geoIndexTracking": "Индексация и цитирование",
     "mcpCredentials": "Учётные данные MCP",
+    "mcpAudits": "Аудит вызовов MCP",
+    "mcpSkills": "Реестр Skill",
     "capabilityMatrix": "Матрица возможностей"
   },
   "保存": "Save",

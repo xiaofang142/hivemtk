@@ -509,3 +509,89 @@ func TestServer_ContentBlockType(t *testing.T) {
 }
 
 var _ = fmt.Sprintf
+
+// =============================================================================
+// 凭证 scope 过滤 + 审计钩子（2026-10-10 新增）
+// =============================================================================
+
+func TestServer_SetAllowedToolsFiltersListAndCall(t *testing.T) {
+	r := tooluse.NewToolRegistry()
+	r.Register(&mockTool{name: "allowed", executeFn: func(_ context.Context, _ map[string]any) (tooluse.ToolResult, error) {
+		return tooluse.ToolResult{Success: true, Data: map[string]any{"ok": 1}}, nil
+	}})
+	r.Register(&mockTool{name: "forbidden", executeFn: func(_ context.Context, _ map[string]any) (tooluse.ToolResult, error) {
+		return tooluse.ToolResult{Success: true, Data: map[string]any{"ok": 1}}, nil
+	}})
+	s := NewServer(r)
+	s.SetAllowedTools("allowed")
+	initializeReq(t, s)
+
+	// tools/list 只暴露白名单内
+	resp := send(t, s, "tools/list", map[string]any{})
+	if resp.Error != nil {
+		t.Fatalf("tools/list failed: %v", resp.Error)
+	}
+	var list ListToolsResult
+	data, _ := json.Marshal(resp.Result)
+	json.Unmarshal(data, &list)
+	if len(list.Tools) != 1 || list.Tools[0].Name != "allowed" {
+		t.Errorf("scope 过滤后应只剩 allowed，got %+v", list.Tools)
+	}
+
+	// 白名单外 tools/call 拒绝执行
+	resp = send(t, s, "tools/call", CallToolParams{Name: "forbidden", Arguments: map[string]any{}})
+	if resp.Error != nil {
+		t.Fatalf("expected isError response for forbidden tool, got error: %v", resp.Error)
+	}
+	var result CallToolResult
+	data, _ = json.Marshal(resp.Result)
+	json.Unmarshal(data, &result)
+	if !result.IsError {
+		t.Error("白名单外工具应 isError=true 且不执行")
+	}
+	if !strings.Contains(result.Content[0].Text, "授权范围") {
+		t.Errorf("越权文案应点名'授权范围'，got %q", result.Content[0].Text)
+	}
+}
+
+func TestServer_AuditSinkRecordsCallAndReject(t *testing.T) {
+	r := tooluse.NewToolRegistry()
+	r.Register(&mockTool{name: "echo", executeFn: func(_ context.Context, args map[string]any) (tooluse.ToolResult, error) {
+		return tooluse.ToolResult{Success: true, Data: map[string]any{"echoed": args["msg"]}}, nil
+	}})
+	s := NewServer(r)
+	s.SetAllowedTools("echo")
+	initializeReq(t, s)
+
+	var audits []AuditRecord
+	s.SetAuditSink(func(rec AuditRecord) { audits = append(audits, rec) })
+
+	send(t, s, "tools/call", CallToolParams{Name: "echo", Arguments: map[string]any{"msg": "hi"}})
+	if len(audits) != 1 {
+		t.Fatalf("应有 1 条审计，got %d", len(audits))
+	}
+	a := audits[0]
+	if a.Method != "tools/call" || a.Tool != "echo" || !a.Allowed || !a.OK {
+		t.Errorf("成功调用审计字段不对：%+v", a)
+	}
+	if a.ArgsHash == "" {
+		t.Error("参数摘要不应为空")
+	}
+
+	// 白名单外调用：allowed=false 且未执行
+	send(t, s, "tools/call", CallToolParams{Name: "other", Arguments: map[string]any{"x": 1}})
+	if len(audits) != 2 {
+		t.Fatalf("越权调用也应留痕，got %d", len(audits))
+	}
+	b := audits[1]
+	if b.Tool != "other" || b.Allowed || b.OK {
+		t.Errorf("越权调用审计应为 allowed=false OK=false，got %+v", b)
+	}
+}
+
+func TestServer_AuditSinkNotSetIsNoop(t *testing.T) {
+	s := NewServer(tooluse.NewToolRegistry())
+	initializeReq(t, s)
+	send(t, s, "tools/call", CallToolParams{Name: "nope", Arguments: map[string]any{}})
+	// 无 sink 不应 panic（回归：审计是旁路职责）
+}

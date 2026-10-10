@@ -242,6 +242,15 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.POST("/mcp/credentials", controller.CreateMCPCredential)
 		authPlainAdmin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
 		authPlainAdmin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
+		// MCP 调用审计与 Skill 注册表（2026-10-10）：凭证对的口径与上组一致
+		// （authPlainAdmin + AdminAuthMiddleware）。两项此前只有"签发了哪些凭证"，
+		// 现在补上"谁调了什么工具、成没成"与"有哪些 Skill、绑定哪把凭证"。
+		authPlainAdmin.GET("/mcp/audits", controller.ListMCPCallAudits)
+		authPlainAdmin.GET("/mcp/skills", controller.ListMCPSkills)
+		authPlainAdmin.GET("/mcp/skills/:id", controller.GetMCPSkill)
+		authPlainAdmin.POST("/mcp/skills", controller.CreateMCPSkill)
+		authPlainAdmin.PUT("/mcp/skills/:id", controller.UpdateMCPSkill)
+		authPlainAdmin.DELETE("/mcp/skills/:id", controller.DeleteMCPSkill)
 	}
 	auth.GET("/capabilities", controller.CapabilityMatrix)
 	auth.GET("/llm/providers/health/:provider", llmProvCtrl.GetProviderHealth)
@@ -418,15 +427,6 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 		admin.POST("/fallback", llmCtrl.UpdateSceneRouting)
 	}
 
-	admin.GET("/mcp/credentials", controller.ListMCPCredentials)
-	admin.POST("/mcp/credentials", controller.CreateMCPCredential)
-	admin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
-	admin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
-	admin.GET("/kb-connectors", controller.ListKBConnectors)
-	admin.POST("/kb-connectors", controller.CreateKBConnector)
-	admin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)
-	admin.DELETE("/kb-connectors/:id", controller.DeleteKBConnector)
-	admin.POST("/kb-connectors/:id/sync", controller.SyncKBConnector)
 	auth.GET("/llm/models", llmCtrl.ListModels)
 	auth.GET("/llm/models/:name", llmCtrl.GetModel)
 	auth.GET("/llm/strategies", llmCtrl.ListStrategies)

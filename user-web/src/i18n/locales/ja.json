@@ -55,7 +55,23 @@
       "fail": "ログインに失敗しました",
       "failServer": "ログイン失敗：サーバーが異常なデータを返しました",
       "resetDone": "設定をリセットしました。再初期化してください",
-      "resetFail": "リセットに失敗しました"
+      "resetFail": "リセットに失敗しました",
+      "heroTitle": "1つのエージェント",
+      "heroPrefix": "全領域",
+      "heroHighlight": "全領域 · 獲得 · 転換 · 再購入",
+      "heroDesc": "セルフホスト型AIマーケティング基盤：マルチチャネル統合、ローカルRAG知識ベース、営業AIエージェントが連携し、成長が一つのループで自動的に回ります。",
+      "featureDeploy": "セルフホスト、データは100%あなたのもの",
+      "featureChannels": "全チャネル：WeCom / Feishu / Douyin / Web",
+      "featureRag": "プライベート知識ベースのローカルRAG検索",
+      "featureAgent": "24時間365日AIエージェントが夜間も取りこぼさない",
+      "footerBrand": "© 2026 HiveMtk マーケティングスイート",
+      "register": "登録",
+      "registerPrompt": "アカウントがない？新規登録",
+      "backToLogin": "アカウントをお持ちですか？ログインへ",
+      "emailPlaceholder": "メール",
+      "fillRequired": "ユーザー名、メール、パスワードを入力してください",
+      "registerSuccess": "登録成功、ログインしてください",
+      "registerFail": "登録失敗"
     }
   },
   "disclaimer.login": "HiveMtk は完全にオープンソースのローカル・セルフホステッド型カスタマーサービス基盤ツールです。本システムを使用して大規模言語モデルをローカルにデプロイしたり、ナレッジベースを構築したり、会話を行ったりする際、ユーザーは自国・地域および関連するソーシャルプラットフォーム（Telegram、WhatsApp など）の法令を自ら遵守する必要があります。作者はいかなるユーザーの実際のデプロイや運用にも関与せず、ローカルモデルによって生じたいかなる発言、コンテンツのコンプライアンス、およびそれに伴ういかなる結果についても法的責任を負いません。",
@@ -354,6 +370,8 @@
     "geoFunnelDashboard": "ファネル概要",
     "geoIndexTracking": "インデックスと引用",
     "mcpCredentials": "MCP 認証情報",
+    "mcpAudits": "MCP 呼び出し監査",
+    "mcpSkills": "Skill レジストリ",
     "capabilityMatrix": "機能マトリクス"
   },
   "保存": "保存",

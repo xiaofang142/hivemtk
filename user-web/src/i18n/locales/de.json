@@ -56,7 +56,23 @@
       "fail": "Login failed",
       "failServer": "Login failed: server returned abnormal data",
       "resetDone": "Configuration reset, please reinitialize",
-      "resetFail": "Reset failed"
+      "resetFail": "Reset failed",
+      "heroTitle": "Ein Agent",
+      "heroPrefix": "Ganzheitlich",
+      "heroHighlight": "Ganzheitlich · Acquire · Convert · Repurchase",
+      "heroDesc": "Eine selbstgehostete KI-Marketingplattform: Multi-Kanal-Anbindung, lokale RAG-Wissensbasis, KI-Agenten für Vertrieb — Wachstum läuft automatisch in einer Schleife.",
+      "featureDeploy": "Self-hosted, 100 % Datenhoheit",
+      "featureChannels": "Alle Kanäle: WeCom / Feishu / Douyin / Web",
+      "featureRag": "Lokaler RAG-Abruf über Ihre Wissensbasis",
+      "featureAgent": "7×24 KI-Agenten, keine verlorenen Leads nachts",
+      "footerBrand": "© 2026 HiveMtk Marketing Suite",
+      "register": "Registrieren",
+      "registerPrompt": "Kein Konto? Registrieren",
+      "backToLogin": "Schon ein Konto? Zurück zum Login",
+      "emailPlaceholder": "E-Mail",
+      "fillRequired": "Bitte Benutzername, E-Mail und Passwort ausfüllen",
+      "registerSuccess": "Registriert, bitte anmelden",
+      "registerFail": "Registrierung fehlgeschlagen"
     }
   },
   "disclaimer.login": "HiveMtk is a fully open-source, locally self-hosted customer-service foundation tool. When using this system to locally deploy any large language model, build a knowledge base, or conduct conversations, you must comply on your own with the laws and regulations of your country, region, and relevant social platforms (such as Telegram, WhatsApp). The authors do not participate in any user’s actual deployment or operation, and assume no legal liability for any statements, content compliance, or any consequences arising from your local models.",
@@ -348,6 +364,8 @@
     "geoFunnelDashboard": "Trichterübersicht",
     "geoIndexTracking": "Indexierung und Zitate",
     "mcpCredentials": "MCP-Anmeldedaten",
+    "mcpAudits": "MCP-Aufrufprotokoll",
+    "mcpSkills": "Skill-Register",
     "capabilityMatrix": "Funktionsmatrix"
   },
   "保存": "Save",

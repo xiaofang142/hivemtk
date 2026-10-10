@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/repository"
 )
 
 // =============================================================================

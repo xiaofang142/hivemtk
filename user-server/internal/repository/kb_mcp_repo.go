@@ -72,6 +72,10 @@ func NewMCPCredentialRepo() *MCPCredentialRepo {
 	return &MCPCredentialRepo{db: db.GetDB()}
 }
 
+// Available 报告底层库句柄是否就绪（与 mcp_access_repo 同判据：
+// 构造出的 repo 恒非 nil，"没装配 503"与"装配了但查询报错 500"必须分开）。
+func (r *MCPCredentialRepo) Available() bool { return r != nil && r.db != nil }
+
 func (r *MCPCredentialRepo) List(ctx context.Context, limit int) ([]model.MCPCredential, error) {
 	var rows []model.MCPCredential
 	err := r.db.WithContext(ctx).Order("id DESC").Limit(limit).Find(&rows).Error

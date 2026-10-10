@@ -2,11 +2,18 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"hivemtk-user/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // MCPGuard 的用例全部走 seam（mcpTokenLookup / bridgeCredentialCandidates）：
@@ -119,5 +126,136 @@ func TestMCPGuard_EnvRotationAcceptsPrevToken(t *testing.T) {
 	}
 	if code, ok := postMCP(t, r, map[string]string{"X-MCP-Token": "old-1"}); !ok || code != http.StatusOK {
 		t.Errorf("轮换期旧值应继续可用（否则一次改配置就把全部调用方踢下线），got code=%d reached=%v", code, ok)
+	}
+}
+
+// =============================================================================
+// 凭证对链路（X-Client-Id + X-API-Key）：过期 / 无效 / scope 注入
+// =============================================================================
+
+// pairProbe 凭证对链路的探针：回显 MCP 上下文键，证明 scope 注入到了请求。
+func pairProbe() *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/mcp", MCPGuard(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"client_id":     c.GetString(MCPCtxClientID),
+			"credential_id": c.GetUint(MCPCtxCredentialID),
+			"allowed":       c.GetString(MCPCtxAllowedTools),
+		})
+	})
+	return r
+}
+
+// credFixture 构造一条 mcp_credentials 行（hash=sha256 的 "k"）。
+func credFixture(expiresAt *time.Time, allowedTools string) *model.MCPCredential {
+	sum := sha256.Sum256([]byte("k"))
+	return &model.MCPCredential{
+		ID:           7,
+		ClientID:     "mcp-test-1",
+		APIKeyHash:   hex.EncodeToString(sum[:]),
+		Enabled:      true,
+		OwnerUserID:  ptrUint(3),
+		ExpiresAt:    expiresAt,
+		AllowedTools: allowedTools,
+	}
+}
+
+func ptrUint(v uint) *uint { return &v }
+
+// withCredSeam 替换 mcpCredLookup 为固定返回（成对还原，防同包用例互相污染）。
+func withCredSeam(t *testing.T, rows map[string]*model.MCPCredential) {
+	t.Helper()
+	old := mcpCredLookup
+	mcpCredLookup = func(_ context.Context, clientID string) (*model.MCPCredential, error) {
+		if row, ok := rows[clientID]; ok {
+			return row, nil
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
+	t.Cleanup(func() { mcpCredLookup = old })
+	// 清缓存：上一条用例可能已把同名 clientID 缓存成 enabled=false，不清则新行永远走不到。
+	mcpCredMu.Lock()
+	mcpCredCache = map[string]mcpCredCacheEntry{}
+	mcpCredMu.Unlock()
+}
+
+func TestMCPGuard_CredentialPair_ValidInjectsScope(t *testing.T) {
+	fut := time.Now().Add(24 * time.Hour)
+	withSeams(t, nil, nil)
+	withCredSeam(t, map[string]*model.MCPCredential{"mcp-test-1": credFixture(&fut, "customer.read,reach.send")})
+	r := pairProbe()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "k")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("有效凭证应放行，got %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"mcp-test-1", "customer.read,reach.send"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scope 未注入上下文，缺 %q，body=%s", want, body)
+		}
+	}
+}
+
+func TestMCPGuard_CredentialPair_ExpiredRefused(t *testing.T) {
+	past := time.Now().Add(-time.Hour)
+	withSeams(t, nil, nil)
+	withCredSeam(t, map[string]*model.MCPCredential{"mcp-test-1": credFixture(&past, "")})
+	r := pairProbe()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "k")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("过期凭证必须 401，got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "过期") {
+		t.Errorf("过期 vs 无效要分开措辞，got body=%s", rec.Body.String())
+	}
+}
+
+func TestMCPGuard_CredentialPair_BadKeyRefused(t *testing.T) {
+	fut := time.Now().Add(24 * time.Hour)
+	withSeams(t, nil, nil)
+	withCredSeam(t, map[string]*model.MCPCredential{"mcp-test-1": credFixture(&fut, "")})
+	r := pairProbe()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "wrong-key")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("错误 API Key 必须 401，got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "过期") {
+		t.Errorf("错密钥不该报'过期'，got body=%s", rec.Body.String())
+	}
+}
+
+func TestMCPGuard_CredentialPair_NoExpiryStaysValid(t *testing.T) {
+	// 存量行没有 expired_at=NULL：兼容语义 = 永不过期。
+	withSeams(t, nil, nil)
+	withCredSeam(t, map[string]*model.MCPCredential{"mcp-test-1": credFixture(nil, "")})
+	r := pairProbe()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "k")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("无过期时间的存量凭证应保持可用，got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

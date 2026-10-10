@@ -102,8 +102,10 @@ func TestFollowUpController_Params(t *testing.T) {
 func TestFollowUpController_Lifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := service.NewFollowUpService(nil)
+	// 偏移用 1 分钟而不是 1 小时：1 小时在午夜窗口（23:00 后跑用例）会把提醒排到次日，
+	// "today" 按当天查询读不到——跨天 flake，与业务无关（2026-10-10 实测失败）。
 	r, err := svc.Schedule(context.Background(), "c1", "u1", service.ReminderCustom,
-		time.Hour, &service.ScheduleOptions{Title: "回访"})
+		time.Minute, &service.ScheduleOptions{Title: "回访"})
 	if err != nil {
 		t.Fatalf("排程失败: %v", err)
 	}

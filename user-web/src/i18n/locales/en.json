@@ -55,7 +55,23 @@
       "fail": "Login failed",
       "failServer": "Login failed: server returned abnormal data",
       "resetDone": "Configuration reset, please reinitialize",
-      "resetFail": "Reset failed"
+      "resetFail": "Reset failed",
+      "heroTitle": "One Agent",
+      "heroPrefix": "All-domains",
+      "heroHighlight": "All-domain · Acquire · Convert · Repurchase",
+      "heroDesc": "A self-hosted AI marketing middle platform: multi-channel unified access, local RAG knowledge base, and AI agent sales collaboration — growth runs automatically in one closed loop.",
+      "featureDeploy": "Self-hosted, 100% customer data ownership",
+      "featureChannels": "All channels: WeCom / Feishu / Douyin / Web",
+      "featureRag": "Local RAG retrieval over your private knowledge base",
+      "featureAgent": "24×7 AI agents online, no lost leads at night",
+      "footerBrand": "© 2026 HiveMtk Marketing Suite",
+      "register": "Register",
+      "registerPrompt": "No account? Create one",
+      "backToLogin": "Have an account? Back to login",
+      "emailPlaceholder": "Email",
+      "fillRequired": "Please fill in username, email and password",
+      "registerSuccess": "Registered successfully, please log in",
+      "registerFail": "Registration failed"
     }
   },
   "disclaimer.login": "HiveMtk is a fully open-source, locally self-hosted customer-service foundation tool. When using this system to locally deploy any large language model, build a knowledge base, or conduct conversations, you must comply on your own with the laws and regulations of your country, region, and relevant social platforms (such as Telegram, WhatsApp). The authors do not participate in any user’s actual deployment or operation, and assume no legal liability for any statements, content compliance, or any consequences arising from your local models.",
@@ -347,6 +363,8 @@
     "geoFunnelDashboard": "Funnel Overview",
     "geoIndexTracking": "Index & Citations",
     "mcpCredentials": "MCP Credentials",
+    "mcpAudits": "MCP Call Audit",
+    "mcpSkills": "Skill Registry",
     "capabilityMatrix": "Capability Matrix"
   },
   "保存": "Save",

@@ -56,7 +56,23 @@
       "fail": "Login failed",
       "failServer": "Login failed: server returned abnormal data",
       "resetDone": "Configuration reset, please reinitialize",
-      "resetFail": "Reset failed"
+      "resetFail": "Reset failed",
+      "heroTitle": "Un agent",
+      "heroPrefix": "Omnicanal",
+      "heroHighlight": "Omnicanal · Acquérir · Convertir · Racheter",
+      "heroDesc": "Une plateforme marketing IA auto-hébergée : unification multicanal, base de connaissances RAG locale, agents IA commerciaux — la croissance tourne seule en une boucle.",
+      "featureDeploy": "Auto-hébergé, 100 % de vos données",
+      "featureChannels": "Tous canaux : WeCom / Feishu / Douyin / Web",
+      "featureRag": "Recherche RAG locale sur votre base privée",
+      "featureAgent": "Agents IA 7j/24, aucune piste perdue la nuit",
+      "footerBrand": "© 2026 HiveMtk Marketing Suite",
+      "register": "S'inscrire",
+      "registerPrompt": "Pas de compte ? Créer un compte",
+      "backToLogin": "Déjà un compte ? Revenir à la connexion",
+      "emailPlaceholder": "E-mail",
+      "fillRequired": "Veuillez remplir nom, e-mail et mot de passe",
+      "registerSuccess": "Inscription réussie, veuillez vous connecter",
+      "registerFail": "Échec de l'inscription"
     }
   },
   "disclaimer.login": "HiveMtk is a fully open-source, locally self-hosted customer-service foundation tool. When using this system to locally deploy any large language model, build a knowledge base, or conduct conversations, you must comply on your own with the laws and regulations of your country, region, and relevant social platforms (such as Telegram, WhatsApp). The authors do not participate in any user’s actual deployment or operation, and assume no legal liability for any statements, content compliance, or any consequences arising from your local models.",
@@ -348,6 +364,8 @@
     "geoFunnelDashboard": "Vue d'ensemble de l'entonnoir",
     "geoIndexTracking": "Indexation et citations",
     "mcpCredentials": "Identifiants MCP",
+    "mcpAudits": "Journal d'appels MCP",
+    "mcpSkills": "Registre Skill",
     "capabilityMatrix": "Matrice des capacités"
   },
   "保存": "Save",

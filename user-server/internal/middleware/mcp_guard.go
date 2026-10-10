@@ -14,6 +14,7 @@ import (
 	"hivemtk-user/internal/pkg/db"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/repository"
@@ -81,11 +82,20 @@ func MCPGuard() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			if !verifyMCPCredentialPair(ctx, clientID, apiKey) {
-				response.Error(c, 401, "Client ID 或 API Key 无效（或已停用）")
+			scope, ok, expired := verifyMCPCredentialPair(ctx, clientID, apiKey)
+			if !ok {
+				if expired {
+					response.Error(c, 401, "凭证已过期，请在管理端续期或重新签发")
+				} else {
+					response.Error(c, 401, "Client ID 或 API Key 无效（或已停用）")
+				}
 				c.Abort()
 				return
 			}
+			// 把"这把凭证是谁、能用哪些工具"落到上下文：MCP 入口按 tools 过滤与越权拒绝。
+			c.Set(MCPCtxClientID, clientID)
+			c.Set(MCPCtxCredentialID, scope.ID)
+			c.Set(MCPCtxAllowedTools, scope.AllowedTools)
 			c.Next()
 			return
 		}
@@ -145,52 +155,114 @@ var (
 	mcpCredCache     map[string]mcpCredCacheEntry
 	mcpCredCacheTTL  = 60 * time.Second
 	mcpCredLastTouch sync.Map // clientID -> time.Time（last_used 回写节流，1 次/分钟）
-)
-
-type mcpCredCacheEntry struct {
-	hash    string
-	enabled bool
-	expires time.Time
-}
-
-// verifyMCPCredentialPair 校验凭证对：client_id 查缓存/库，sha256 恒时比较。
-// 校验通过节流回写 last_used_at（每凭证至多 1 次/分钟，避免写风暴）。
-func verifyMCPCredentialPair(ctx context.Context, clientID, apiKey string) bool {
-	now := time.Now()
-	mcpCredMu.RLock()
-	entry, ok := mcpCredCache[clientID]
-	mcpCredMu.RUnlock()
-	if !ok || now.After(entry.expires) {
+	// mcpCredLookup 凭证行查询（seam，测试注入假实现；生产走 db.GetDB()）。
+	// 与 mcpTokenLookup 同型同理由：MCPGuard 的用例不连库，靠 seam 覆盖
+	// "库里有/没有这行、行过期/停用"各自的分支。
+	mcpCredLookup = func(ctx context.Context, clientID string) (*model.MCPCredential, error) {
 		g := db.GetDB()
 		if g == nil {
-			return false
+			return nil, gorm.ErrInvalidDB
 		}
 		var cred model.MCPCredential
 		if err := g.WithContext(ctx).
 			Where("client_id = ? AND enabled = ?", clientID, true).
 			First(&cred).Error; err != nil {
+			return nil, err
+		}
+		return &cred, nil
+	}
+)
+
+type mcpCredCacheEntry struct {
+	hash         string
+	enabled      bool
+	id           uint
+	allowedTools string
+	expires      time.Time  // 缓存自身 TTL（min(凭证过期, 60s) 的取小项见下）
+	expiresAt    *time.Time // 凭证自身过期时间（nil=永不）；缓存窗口内到点也按过期判
+}
+
+// =============================================================================
+// 凭证作用域（2026-10-10 新增）：凭证级工具授权范围
+// =============================================================================
+//
+// 为什么放在中间件：MCPGuard 是唯一"能拿到这把凭证是哪一行"的地方（它查 mcp_credentials
+// 做 sha256 校验）。作用域必须在这里落到请求上下文，后面的 MCP 入口才能按它过滤
+// tools/list 并拒绝越权 tools/call —— 否则就要在 controller 里再查一次库，等于两处事实源。
+//
+// 单值链路（X-MCP-Token / 桥接凭证回落）没有"某一行凭证"，因此不带作用域，
+// 语义保持与拆分前一致：可调用全部工具。
+const (
+	// MCPCtxClientID 凭证对的 client_id（单值链路为空）
+	MCPCtxClientID = "mcp_client_id"
+	// MCPCtxCredentialID mcp_credentials.id（单值链路为 0）
+	MCPCtxCredentialID = "mcp_credential_id"
+	// MCPCtxAllowedTools 逗号分隔的工具白名单；空串 = 不限制
+	MCPCtxAllowedTools = "mcp_allowed_tools"
+)
+
+// mcpCredScope 校验通过后要带回调用面的信息。
+type mcpCredScope struct {
+	ID           uint
+	AllowedTools string
+}
+
+// verifyMCPCredentialPair 校验凭证对：client_id 查缓存/库，sha256 恒时比较。
+// 校验通过节流回写 last_used_at（每凭证至多 1 次/分钟，避免写风暴）。
+// 返回值：
+//   - expired=true 表示**密钥正确但凭证已过期**（上层应回"已过期"而非"无效"）；
+//   - expired 与 ok 同时为 true 不可能（过期即拒绝）。
+//
+// 返回该凭证的作用域（id + 工具白名单），供上层做授权范围控制。
+func verifyMCPCredentialPair(ctx context.Context, clientID, apiKey string) (scope mcpCredScope, ok, expired bool) {
+	now := time.Now()
+	mcpCredMu.RLock()
+	entry, cached := mcpCredCache[clientID]
+	if cached {
+		// 缓存窗口内到点也算过期：TTL 60s 内被续期的凭证最多晚 60s 生效（可接受）；
+		// 但**先过期后续期**的窗口里不能放行——过期判据永远以"当前时刻"为准。
+		if entry.expiresAt != nil && now.After(*entry.expiresAt) {
+			mcpCredMu.RUnlock()
+			return mcpCredScope{}, false, true
+		}
+	}
+	mcpCredMu.RUnlock()
+	if !cached || now.After(entry.expires) {
+		cred, err := mcpCredLookup(ctx, clientID)
+		if err != nil {
 			mcpCredMu.Lock()
 			if mcpCredCache == nil {
 				mcpCredCache = map[string]mcpCredCacheEntry{}
 			}
 			mcpCredCache[clientID] = mcpCredCacheEntry{expires: now.Add(mcpCredCacheTTL), enabled: false}
 			mcpCredMu.Unlock()
-			return false
+			return mcpCredScope{}, false, false
+		}
+		entry = mcpCredCacheEntry{
+			hash:         cred.APIKeyHash,
+			enabled:      cred.Enabled,
+			id:           cred.ID,
+			allowedTools: cred.AllowedTools,
+			expiresAt:    cred.ExpiresAt,
+			expires:      now.Add(mcpCredCacheTTL),
 		}
 		mcpCredMu.Lock()
 		if mcpCredCache == nil {
 			mcpCredCache = map[string]mcpCredCacheEntry{}
 		}
-		mcpCredCache[clientID] = mcpCredCacheEntry{hash: cred.APIKeyHash, enabled: cred.Enabled, expires: now.Add(mcpCredCacheTTL)}
+		mcpCredCache[clientID] = entry
 		mcpCredMu.Unlock()
-		entry = mcpCredCache[clientID]
+		// 刚下探出来的行直接判过期（不等到下一次请求）。
+		if entry.expiresAt != nil && now.After(*entry.expiresAt) {
+			return mcpCredScope{}, false, true
+		}
 	}
 	if !entry.enabled {
-		return false
+		return mcpCredScope{}, false, false
 	}
 	sum := sha256.Sum256([]byte(apiKey))
 	if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(entry.hash)) != 1 {
-		return false
+		return mcpCredScope{}, false, false
 	}
 	// last_used_at 回写节流：命中缓存前提下每凭证 1 次/分钟
 	if last, seen := mcpCredLastTouch.Load(clientID); !seen || now.Sub(last.(time.Time)) > time.Minute {
@@ -203,7 +275,7 @@ func verifyMCPCredentialPair(ctx context.Context, clientID, apiKey string) bool 
 			}
 		}
 	}
-	return true
+	return mcpCredScope{ID: entry.id, AllowedTools: entry.allowedTools}, true, false
 }
 
 // InvalidateMCPCredentialCache 管理端增删改凭证后调用，立刻生效。

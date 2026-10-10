@@ -48,10 +48,16 @@ type McpCredentialAdminService struct {
 }
 
 func NewMcpCredentialAdminService() *McpCredentialAdminService {
-	return &McpCredentialAdminService{repo: repository.NewMCPCredentialRepo()}
+	r := repository.NewMCPCredentialRepo()
+	if r == nil || !r.Available() {
+		// 未装配（db 句柄缺失）：返回空服务，控制器 Ready()=false 回 503，
+		// 与"装配了但查询报错"（500）分开——见 repository.Available 的分诊纪律。
+		return &McpCredentialAdminService{}
+	}
+	return &McpCredentialAdminService{repo: r}
 }
 
-func (s *McpCredentialAdminService) Ready() bool { return s.repo != nil }
+func (s *McpCredentialAdminService) Ready() bool { return s.repo != nil && s.repo.Available() }
 
 func (s *McpCredentialAdminService) List(ctx context.Context, limit int) ([]model.MCPCredential, error) {
 	return s.repo.List(ctx, limit)
