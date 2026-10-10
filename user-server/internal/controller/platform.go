@@ -63,7 +63,6 @@ func (pc *PlatformController) platformDataRaw(c *gin.Context, method, path strin
 		return false, platform.ErrPlatformNotConfigured
 	}
 
-	const platformCacheTTL = 20 * time.Second
 	cacheKey := method + ":" + path
 	if method == http.MethodGet {
 		if gc := cache.GetGlobalCache(); gc != nil {
@@ -90,7 +89,7 @@ func (pc *PlatformController) platformDataRaw(c *gin.Context, method, path strin
 
 	if method == http.MethodGet {
 		if gc := cache.GetGlobalCache(); gc != nil {
-			_ = gc.SetJSON(c.Request.Context(), cacheKey, resp, platformCacheTTL)
+			_ = gc.SetJSON(c.Request.Context(), cacheKey, resp, PlatformCacheTTL())
 		}
 	}
 	return true, nil
@@ -330,4 +329,26 @@ func (pc *PlatformController) GetPlatformMerchantStats(c *gin.Context) {
 
 	path := fmt.Sprintf("/platform/stats/merchant?days=%s", days)
 	pc.platformCall(c, "GET", path, nil, &resp, "获取商户统计失败")
+}
+
+// DefaultPlatformCacheTTL 平台信息缓存有效期的代码兜底；生效值走 PlatformCacheTTL()。
+const DefaultPlatformCacheTTL = 20 * time.Second
+
+var platformCacheTTLProvider func() time.Duration
+
+// SetPlatformCacheTTLProvider 注入平台信息缓存有效期；传 nil 视为不注入。
+func SetPlatformCacheTTLProvider(fn func() time.Duration) {
+	platformCacheTTLProvider = fn
+}
+
+// PlatformCacheTTL 生效的平台信息缓存有效期。非正值一律回落兜底——0 或负数会让
+// 缓存一写入即过期，平台列表每次都回源；某些缓存实现对非正 TTL 直接不写，
+// 表现则是读一次源一次。
+func PlatformCacheTTL() time.Duration {
+	if p := platformCacheTTLProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultPlatformCacheTTL
 }

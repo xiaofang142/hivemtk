@@ -176,6 +176,13 @@ func main() {
 		logger.Info("[ConfigParam] agent_llm 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// cache 组同理：内存缓存 LRU 上限、安装 memo、平台信息缓存、翻译缓存四样分别住在
+	// internal/cache、internal/system/install、internal/controller、internal/aiagent/rag/retrieval，
+	// 四个包都不反向 import service，只有装配层同时看得见它们。
+	if wired := app.WireCacheConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] cache 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

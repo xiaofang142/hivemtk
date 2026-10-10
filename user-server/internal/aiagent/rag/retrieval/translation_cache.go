@@ -51,7 +51,7 @@ func NewTranslationCache(redisClient RedisClient, ttl time.Duration, keyPrefix s
 		redis:      redisClient,
 		ttl:        ttl,
 		keyPrefix:  keyPrefix,
-		maxEntries: TranslationCacheMaxEntriesDefault,
+		maxEntries: TranslationCacheMaxEntries(),
 	}
 }
 
@@ -141,4 +141,22 @@ func (c *TranslationCache) buildKey(internalLang, targetLang, query, kbVersion s
 	raw := internalLang + "|" + targetLang + "|" + query + "|" + kbVersion
 	h := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%s%s", c.keyPrefix, hex.EncodeToString(h[:16]))
+}
+
+var translationCacheMaxEntriesProvider func() int
+
+// SetTranslationCacheMaxEntriesProvider 注入翻译缓存最大条目；传 nil 视为不注入。
+func SetTranslationCacheMaxEntriesProvider(fn func() int) {
+	translationCacheMaxEntriesProvider = fn
+}
+
+// TranslationCacheMaxEntries 生效的最大条目数。非正值一律回落兜底——上限是 0
+// 会让统计接口把缓存报成 0 条，掩盖"缓存其实一直在命中"这个事实。
+func TranslationCacheMaxEntries() int {
+	if p := translationCacheMaxEntriesProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return TranslationCacheMaxEntriesDefault
 }

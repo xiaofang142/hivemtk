@@ -18,16 +18,35 @@ import (
 )
 
 const (
-	faqCacheTTL           = 5 * time.Minute
-	faqCacheMaxN          = 5000
-	faqHitThresh          = 0.6
-	faqTopKDefault        = 3
-	faqDecayPerWeek       = 0.1
-	faqDecayDays          = 7 * 24 * time.Hour
-	faqDecayMinHits       = 5
-	faqDecayMaxBatch      = 1000
-	faqAgentShared   uint = 0
+	faqCacheTTL     = 5 * time.Minute
+	faqCacheMaxN    = 5000
+	faqHitThresh    = 0.6
+	faqTopKDefault  = 3
+	faqDecayPerWeek = 0.1
+	faqDecayDays    = 7 * 24 * time.Hour
+	faqDecayMinHits = 5
+	// DefaultFaqDecayMaxBatch 衰减批量大小的代码兜底；生效值走 FaqDecayMaxBatch()。
+	DefaultFaqDecayMaxBatch      = 1000
+	faqAgentShared          uint = 0
 )
+
+var faqDecayMaxBatchProvider func() int
+
+// SetFaqDecayMaxBatchProvider 注入 FAQ 衰减批量；传 nil 视为不注入。
+func SetFaqDecayMaxBatchProvider(fn func() int) {
+	faqDecayMaxBatchProvider = fn
+}
+
+// FaqDecayMaxBatch 生效的每轮衰减批量。非正值一律回落兜底——传 0 给
+// ListDecayCandidates 的 limit 会取不到任何行，衰减任务静默变成空跑。
+func FaqDecayMaxBatch() int {
+	if p := faqDecayMaxBatchProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultFaqDecayMaxBatch
+}
 
 // Clock 时钟抽象 (用于 WeekDecay 测试注入, 五层架构 L4)
 //
@@ -445,7 +464,7 @@ func (s *FAQService) WeekDecay(ctx context.Context) (int, error) {
 	}
 	now := s.now()
 	cutoff := now.Add(-faqDecayDays)
-	candidates, err := s.repo.ListDecayCandidates(ctx, cutoff, faqDecayMaxBatch)
+	candidates, err := s.repo.ListDecayCandidates(ctx, cutoff, FaqDecayMaxBatch())
 	if err != nil {
 		return 0, err
 	}

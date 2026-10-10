@@ -59,7 +59,26 @@ var (
 	adminProbe   func(ctx context.Context) (string, error)
 )
 
-const memoTTL = 2 * time.Second
+// DefaultMemoTTL 安装信息 memo 有效期的代码兜底；生效值走 MemoTTL()。
+const DefaultMemoTTL = 2 * time.Second
+
+var memoTTLProvider func() time.Duration
+
+// SetMemoTTLProvider 注入安装 memo 有效期；传 nil 视为不注入。
+func SetMemoTTLProvider(fn func() time.Duration) {
+	memoTTLProvider = fn
+}
+
+// MemoTTL 生效的 memo 有效期。非正值一律回落兜底——非正值会让 memo 永不过期，
+// 首次探测出的 admin 用户名会被一直缓存住，改库后探测也不会重跑。
+func MemoTTL() time.Duration {
+	if p := memoTTLProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultMemoTTL
+}
 
 // SetAdminProbe 注入数据库超管探测函数（main 启动时调用）。
 // fn 返回首个超管用户名；若库中无超管返回 ("", nil) 或 gorm.ErrRecordNotFound。
@@ -97,7 +116,7 @@ func Load() (*Lock, error) {
 	mu.Lock()
 	memoLR = &lr
 	memoPath = path
-	memoExp = time.Now().Add(memoTTL)
+	memoExp = time.Now().Add(MemoTTL())
 	mu.Unlock()
 	out := lr
 	return &out, nil
@@ -136,7 +155,7 @@ func Save(lr *Lock) error {
 	mu.Lock()
 	memoLR = &cp
 	memoPath = path
-	memoExp = time.Now().Add(memoTTL)
+	memoExp = time.Now().Add(MemoTTL())
 	mu.Unlock()
 	return nil
 }

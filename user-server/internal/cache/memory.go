@@ -17,8 +17,15 @@ const DefaultMaxKeys = 10_000
 
 var maxKeysProvider = func() int { return DefaultMaxKeys }
 
-// MaxKeys 返回当前 LRU 上限（DB 驱动优先，fallback 为 DefaultMaxKeys）
-func MaxKeys() int { return maxKeysProvider() }
+// MaxKeys 返回当前 LRU 上限（DB 驱动优先，fallback 为 DefaultMaxKeys）。
+// 非正值一律回落兜底——上限 0 会让缓存一条都留不下，每次读都穿透到源头，
+// 而此时管理台上的「缓存命中率」看起来仍然正常，故障会一路藏到源头上。
+func MaxKeys() int {
+	if n := maxKeysProvider(); n > 0 {
+		return n
+	}
+	return DefaultMaxKeys
+}
 
 // SetMaxKeysProvider 上层注入函数（ConfigParam 初始化后调用）
 func SetMaxKeysProvider(fn func() int) {
