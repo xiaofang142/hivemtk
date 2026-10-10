@@ -26,6 +26,24 @@
         <el-descriptions-item label="备注" :span="3">{{ team.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
 
+      <el-descriptions v-if="billing" :column="3" border size="small" style="margin-bottom: 16px" title="订阅与账单">
+        <el-descriptions-item label="当前方案">{{ billing.subscription?.plan_code || '未订阅' }}</el-descriptions-item>
+        <el-descriptions-item label="到期时间">{{ fmtTime(billing.subscription?.ends_at) }}</el-descriptions-item>
+        <el-descriptions-item label="自动续费">{{ billing.subscription?.auto_renew ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item label="最近账单" :span="3">
+          <template v-if="(billing.records || []).length">
+            <el-tag
+              v-for="r in billing.records.slice(0, 5)"
+              :key="r.id"
+              size="small"
+              :type="r.status === 'paid' ? 'success' : r.status === 'pending' ? 'warning' : 'info'"
+              style="margin-right: 6px"
+            >¥{{ (r.amount_cents / 100).toFixed(2) }}（{{ { pending: '应收', paid: '已收', void: '作废' }[r.status] }}）</el-tag>
+          </template>
+          <span v-else class="muted">暂无账单</span>
+        </el-descriptions-item>
+      </el-descriptions>
+
       <el-table v-loading="loading" :data="members" border size="small">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" />
@@ -80,6 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { myTeamApi } from '@/api/teamAdmin'
+import { http } from '@/utils/request'
 
 const team = ref(null)
 const members = ref([])
@@ -87,6 +106,9 @@ const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
 const size = 20
+
+const billing = ref(null)
+const fmtTime = (v) => (v ? String(v).replace('T', ' ').slice(0, 19) : '—')
 
 const load = async () => {
   loading.value = true
@@ -98,6 +120,13 @@ const load = async () => {
     team.value = null
   } finally {
     loading.value = false
+  }
+  // 订阅与账单（只读；无权/无团队静默）
+  try {
+    const res = await http.get('/api/team/billing')
+    billing.value = res?.data ?? res ?? null
+  } catch {
+    billing.value = null
   }
   await loadMembers()
 }
@@ -129,5 +158,9 @@ onMounted(load)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.muted {
+  color: #999;
+  font-size: 12px;
 }
 </style>

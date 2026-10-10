@@ -195,6 +195,10 @@ func (s *TeamAdminService) MoveMember(ctx context.Context, userID, toTeamID uint
 		if _, err := s.repo.GetByID(ctx, toTeamID); err != nil {
 			return nil, errors.New("目标团队不存在")
 		}
+		// 计费配额闸（SaaS P2）：有订阅的团队按方案 MaxUsers 限员；未订阅不限。
+		if err := NewBillingAdminService().CheckMemberQuota(ctx, toTeamID); err != nil {
+			return nil, err
+		}
 	}
 	u.TeamID = toTeamID
 	if err := s.userRepo.Update(ctx, u); err != nil {

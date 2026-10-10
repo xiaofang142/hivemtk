@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/model"
 	opsmodel "hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/rbac"
 	"strings"
 	"sync"
 
@@ -366,6 +367,13 @@ func allModels() []any {
 		// （凭证/钥匙/Skill 增删改、状态流转、明文查看 reveal）——与 mcp_call_audits 使用面互补。
 		&model.MCPCredentialKey{},
 		&model.MCPCredentialAuditLog{},
+		// 计费三件套 + 角色-权限覆盖层（SaaS P2 首批 / P1-1，2026-10-11）。
+		// BillingPlan 漏登记 = 方案 CRUD 全废；RolePermission 漏登记 = 权限
+		// 覆盖层永远落不了库（执法层回落生成矩阵，管理端改动静默丢失）。
+		&model.BillingPlan{},
+		&model.TeamSubscription{},
+		&model.BillingRecord{},
+		&rbac.RolePermission{},
 		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
 		&model.ExternalKBConnector{},
 		&model.ExternalKBSyncItem{},
@@ -525,8 +533,34 @@ func AutoMigrate() *gorm.DB {
 	postMigrateBackfillDefaultTeam(DB)
 	postMigrateRelaxSystemUserRoleCheck(DB)
 	postMigrateBackfillMCPCredentialTeams(DB)
+	postMigrateSeedBillingPlans(DB)
 
 	return DB
+}
+
+// postMigrateSeedBillingPlans 计费方案种子（幂等，按 code 防重）。
+// 免费档不设成员上限（0=不限），让存量团队零感知；付费档给参考配额，
+// 运营可在管理端直接改（方案 CRUD 是真值源）。
+func postMigrateSeedBillingPlans(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	seeds := []model.BillingPlan{
+		{Code: "free", Name: "免费版", PriceCents: 0, YearlyPriceCents: 0, MaxUsers: 0, MaxMessagesMonthly: 0, Status: model.BillingPlanStatusActive, Sort: 1, Remark: "基础功能，不限成员"},
+		{Code: "pro", Name: "专业版", PriceCents: 29900, YearlyPriceCents: 299000, MaxUsers: 50, MaxMessagesMonthly: 50000, Status: model.BillingPlanStatusActive, Sort: 2, Remark: "50 成员 / 5 万条消息每月"},
+		{Code: "enterprise", Name: "旗舰版", PriceCents: 99900, YearlyPriceCents: 999000, MaxUsers: 0, MaxMessagesMonthly: 0, Status: model.BillingPlanStatusActive, Sort: 3, Remark: "不限成员与消息量"},
+	}
+	for _, p := range seeds {
+		var cnt int64
+		if err := db.Model(&model.BillingPlan{}).Where("code = ?", p.Code).Count(&cnt).Error; err != nil || cnt > 0 {
+			continue
+		}
+		if err := db.Create(&p).Error; err != nil {
+			logger.Warnf("[billing-seed] 方案 %s 种子失败: %v", p.Code, err)
+			continue
+		}
+		logger.Infof("[billing-seed] 已种计费方案 %s（%s）", p.Code, p.Name)
+	}
 }
 
 // postMigrateBackfillMCPCredentialTeams 存量凭证沿绑定账户继承团队（多租户 P1，幂等）。

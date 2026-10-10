@@ -263,6 +263,21 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.GET("/manage/teams", controller.ListTeams)
 		// RBAC 矩阵只读出参（P1-2：前端"权限矩阵"页数据源）
 		authPlainAdmin.GET("/manage/rbac-matrix", controller.GetRBACMatrix)
+		// 权限覆盖层可编辑（P1-1：谁有什么权限，DB 优先/生成为兜底；super_admin 锁定）
+		authPlainAdmin.GET("/manage/role-permissions/:roleCode", controller.GetRolePermissions)
+		authPlainAdmin.PUT("/manage/role-permissions/:roleCode", controller.SetRolePermissions)
+		// —— 计费管理（SaaS P2 首批）：方案 / 订阅 / 账单 ——
+		authPlainAdmin.GET("/manage/billing/plans", controller.ListBillingPlans)
+		authPlainAdmin.POST("/manage/billing/plans", controller.CreateBillingPlan)
+		authPlainAdmin.PUT("/manage/billing/plans/:id", controller.UpdateBillingPlan)
+		authPlainAdmin.DELETE("/manage/billing/plans/:id", controller.DeleteBillingPlan)
+		authPlainAdmin.GET("/manage/billing/subscriptions", controller.ListBillingSubscriptions)
+		authPlainAdmin.PUT("/manage/billing/subscriptions/:teamId", controller.AssignBillingPlan)
+		authPlainAdmin.POST("/manage/billing/subscriptions/:teamId/cancel", controller.CancelBillingSubscription)
+		authPlainAdmin.GET("/manage/billing/records", controller.ListBillingRecords)
+		authPlainAdmin.POST("/manage/billing/records", controller.CreateBillingRecord)
+		authPlainAdmin.PUT("/manage/billing/records/:id/pay", controller.PayBillingRecord)
+		authPlainAdmin.PUT("/manage/billing/records/:id/void", controller.VoidBillingRecord)
 		authPlainAdmin.POST("/manage/teams", controller.CreateTeam)
 		authPlainAdmin.PUT("/manage/teams/:id", controller.UpdateTeam)
 		authPlainAdmin.DELETE("/manage/teams/:id", controller.DeleteTeam)
@@ -276,6 +291,7 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		teamAuth.GET("/team/detail", controller.MyTeam)
 		teamAuth.GET("/team/users", controller.MyTeamUsers)
 		teamAuth.PUT("/team/users/:userId/role", controller.SetMyTeamUserRole)
+		teamAuth.GET("/team/billing", controller.MyTeamBilling)
 		// MCP 调用审计与 Skill 注册表（2026-10-10）：凭证对的口径与上组一致
 		// （authPlainAdmin + AdminAuthMiddleware）。两项此前只有"签发了哪些凭证"，
 		// 现在补上"谁调了什么工具、成没成"与"有哪些 Skill、绑定哪把凭证"。

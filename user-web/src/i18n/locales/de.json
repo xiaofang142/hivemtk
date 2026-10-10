@@ -369,7 +369,8 @@
     "capabilityMatrix": "Funktionsmatrix",
     "systemTeams": "Teams",
     "systemMyTeam": "Mein Team",
-    "systemRbacMatrix": "RBAC-Matrix"
+    "systemRbacMatrix": "RBAC-Matrix",
+    "systemBilling": "Abrechnung"
   },
   "保存": "Save",
   "提交": "Submit",

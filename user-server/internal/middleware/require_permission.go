@@ -3,19 +3,11 @@ package middleware
 import (
 	"net/http"
 
-	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/rbac"
 
 	"github.com/gin-gonic/gin"
 )
-
-// systemRoleToRBACRole 系统角色 → 生成矩阵角色（rbac 包口径）。
-var systemRoleToRBACRole = map[string]string{
-	model.SystemUserRoleAdmin:     "super_admin",
-	model.SystemUserRoleTeamAdmin: "team_admin",
-	model.SystemUserRoleUser:      "member",
-}
 
 // RequireRBACPermission 权限点门（backlog P1-1，2026-10-11）。
 //
@@ -40,8 +32,14 @@ func RequireRBACPermission(permission string) gin.HandlerFunc {
 			return
 		}
 		r, _ := role.(string)
-		mapped, ok := systemRoleToRBACRole[r]
-		if !ok || !rbac.RoleHasPermission(mapped, permission) {
+		mapped, ok := rbac.RBACRoleFor(r)
+		if !ok {
+			response.Error(c, http.StatusForbidden, "权限不足，需要 "+permission)
+			c.Abort()
+			return
+		}
+		// DB 优先、生成为兜底（管理端可编辑的权限矩阵走这条判定）
+		if !rbac.EffectiveHas(mapped, permission) {
 			response.Error(c, http.StatusForbidden, "权限不足，需要 "+permission)
 			c.Abort()
 			return

@@ -369,7 +369,8 @@
     "capabilityMatrix": "Матрица возможностей",
     "systemTeams": "Команды",
     "systemMyTeam": "Моя команда",
-    "systemRbacMatrix": "Матрица RBAC"
+    "systemRbacMatrix": "Матрица RBAC",
+    "systemBilling": "Биллинг"
   },
   "保存": "Save",
   "提交": "Submit",

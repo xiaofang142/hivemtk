@@ -369,7 +369,8 @@
     "capabilityMatrix": "Matriz de capacidades",
     "systemTeams": "Equipos",
     "systemMyTeam": "Mi equipo",
-    "systemRbacMatrix": "Matriz RBAC"
+    "systemRbacMatrix": "Matriz RBAC",
+    "systemBilling": "Facturación"
   },
   "保存": "Save",
   "提交": "Submit",

@@ -14,6 +14,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"hivemtk-user/internal/rbac"
 	"net"
 	"os"
 	"regexp"
@@ -209,6 +210,8 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	// 必须与生产行为一致（Create 回填 team_id），不能只在生产路径生效。
 	testDB := database
 	scope.SetDefaultTeamIDDB(func(ctx context.Context) *gorm.DB { return testDB })
+	scope.RegisterTenantTeamCallback(database)
+	rbac.SetOverrideDB(func(ctx context.Context) *gorm.DB { return testDB })
 	scope.RegisterTenantTeamCallback(database)
 
 	if sqlDB, dbErr := database.DB(); dbErr == nil {

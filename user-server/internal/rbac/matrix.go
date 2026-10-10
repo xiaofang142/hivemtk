@@ -57,6 +57,16 @@ func Matrix() (roles []RoleDef, permissions []PermissionDef, states []StateDef) 
 	return roles, permissions, states
 }
 
+// PermissionCatalog 权限点目录（生成层全量 id，管理端编辑覆盖层的合法性依据）。
+func PermissionCatalog() []string {
+	_, permissions, _ := Matrix()
+	out := make([]string, 0, len(permissions))
+	for _, p := range permissions {
+		out = append(out, p.ID)
+	}
+	return out
+}
+
 // RBACRoleFor 系统角色 → 矩阵角色（admin→super_admin 等；未知角色 ok=false）。
 func RBACRoleFor(systemRole string) (string, bool) {
 	switch systemRole {

@@ -31,6 +31,7 @@
 | F-12 | mcp_credentials.api_key_hash 镜像/清空在生产 PG 失效 | char(64) 把空串填充成 64 空格，`== ""` 恒 false（无 PG 的本机测试抓不到） | 服务层统一 TrimSpace 口径 | PG 隧道实测（SSH 隧道连阿里云测试库） |
 | F-13 | 审计异步器断言竞态 | 后台 flush 循环与测试排空共享队列，行被取走未落账 | enqueued 收敛判据 + FlushMCPAuditForTest 确定性等待 | 同上 |
 | F-14 | 全量并发 + SSH 隧道下 TestE2E_KnowledgeIndexFlow / TestD14_5 假红 | 资源型 flake（单跑/合跑均绿） | 记录在案；观察 CI 复现情况 | 单跑+合跑验证 |
+| F-15 | TestE2E_CustomerAndKnowledgeInParallel 与上同类假红 | 同 F-14（runtime 包 E2E 并发族） | 同上 | 单跑验证 |
 
 ## 已豁免（带理由）
 

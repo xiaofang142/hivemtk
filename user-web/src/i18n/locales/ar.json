@@ -328,7 +328,8 @@
     "capabilityMatrix": "مصفوفة القدرات",
     "systemTeams": "إدارة الفرق",
     "systemMyTeam": "فريقي",
-    "systemRbacMatrix": "مصفوفة RBAC"
+    "systemRbacMatrix": "مصفوفة RBAC",
+    "systemBilling": "الفواتير"
   },
   "保存": "حفظ",
   "提交": "إرسال",

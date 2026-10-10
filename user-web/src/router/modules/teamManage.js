@@ -4,18 +4,24 @@ export default [
     path: '/system/teams',
     name: 'SystemTeams',
     component: () => import('@/views/system/Teams.vue'),
-    meta: { menuKey: 'systemTeams', menuSection: 'system', menuParents: ["siteConfig"], menuOrder: 7, menuIcon: 'OfficeBuilding', title: '团队管理', group: 'system', icon: 'OfficeBuilding', requiresAuth: true, menuRoles: ["admin"] }
+    meta: { menuKey: 'systemTeams', menuSection: 'system', menuParents: ["teamGroup"], menuOrder: 7, menuIcon: 'OfficeBuilding', title: '团队管理', group: 'system', icon: 'OfficeBuilding', requiresAuth: true, menuRoles: ["admin"] }
+  },
+  {
+    path: '/system/billing',
+    name: 'SystemBilling',
+    component: () => import('@/views/system/Billing.vue'),
+    meta: { menuKey: 'systemBilling', menuSection: 'system', menuParents: ["teamGroup"], menuOrder: 10, menuIcon: 'Money', title: '计费管理', group: 'system', icon: 'Money', requiresAuth: true, menuRoles: ["admin"] }
   },
   {
     path: '/system/rbac-matrix',
     name: 'SystemRBACMatrix',
     component: () => import('@/views/system/RBACMatrix.vue'),
-    meta: { menuKey: 'systemRbacMatrix', menuSection: 'system', menuParents: ["siteConfig"], menuOrder: 9, menuIcon: 'Grid', title: '权限矩阵', group: 'system', icon: 'Grid', requiresAuth: true, menuRoles: ["admin"] }
+    meta: { menuKey: 'systemRbacMatrix', menuSection: 'system', menuParents: ["teamGroup"], menuOrder: 9, menuIcon: 'Grid', title: '权限矩阵', group: 'system', icon: 'Grid', requiresAuth: true, menuRoles: ["admin"] }
   },
   {
     path: '/system/my-team',
     name: 'SystemMyTeam',
     component: () => import('@/views/system/MyTeam.vue'),
-    meta: { menuKey: 'systemMyTeam', menuSection: 'system', menuParents: ["siteConfig"], menuOrder: 8, menuIcon: 'UserFilled', title: '我的团队', group: 'system', icon: 'UserFilled', requiresAuth: true, menuRoles: ["admin", "team_admin"] }
+    meta: { menuKey: 'systemMyTeam', menuSection: 'system', menuParents: ["teamGroup"], menuOrder: 8, menuIcon: 'UserFilled', title: '我的团队', group: 'system', icon: 'UserFilled', requiresAuth: true, menuRoles: ["team_admin"] }
   }
 ]
