@@ -4,8 +4,9 @@ import { JSDOM } from 'jsdom';
 beforeEach(() => {
   document.body.innerHTML = '';
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https://www.xiaohongshu.com/chat' });
-  global.window = dom.window;
-  global.document = dom.window.document;
+  // vitest5 jsdom 环境：global.window/document 是只读 getter，须用 defineProperty 覆盖
+  Object.defineProperty(globalThis, 'window', { value: dom.window, writable: true, configurable: true });
+  Object.defineProperty(globalThis, 'document', { value: dom.window.document, writable: true, configurable: true });
 });
 
 // 让 jsdom 元素可见

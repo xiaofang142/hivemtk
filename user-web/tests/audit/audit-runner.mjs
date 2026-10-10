@@ -512,7 +512,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true })
 
   let pages
-  let discovered = null
+  let discovered
   if (single) {
     pages = [single]
   } else if (auto) {

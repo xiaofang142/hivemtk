@@ -66,8 +66,13 @@ beforeEach(() => {
       create: vi.fn(),
     },
   };
-  globalThis.window = globalThis.window || globalThis;
-  globalThis.document = globalThis.document || { getElementById: () => null, addEventListener: () => {} };
+  // vitest5 jsdom 环境：window/document 是只读 getter，仅在缺失时用 defineProperty 补
+  if (typeof globalThis.window === 'undefined') {
+    Object.defineProperty(globalThis, 'window', { value: globalThis, writable: true, configurable: true });
+  }
+  if (typeof globalThis.document === 'undefined') {
+    Object.defineProperty(globalThis, 'document', { value: { getElementById: () => null, addEventListener: () => {} }, writable: true, configurable: true });
+  }
   globalThis.window.confirm = vi.fn(() => true);
 });
 

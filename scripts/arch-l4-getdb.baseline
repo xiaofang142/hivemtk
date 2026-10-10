@@ -22,6 +22,6 @@ user-server/internal/service/sales_persona.go	2	存量：service 直接取 DB �
 user-server/internal/service/security_audit.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/sop_template.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/trace_learning/insights.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/trace_learning/service.go	4	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/trace_learning/service.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/webhook.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/wecom.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）

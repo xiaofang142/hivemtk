@@ -35,7 +35,7 @@ const all = [...uniq];
       if (u.includes('/api/') && s >= 400) row.fails.push(`${s} ${u}`);
       if (u.includes('/api/') && s >= 200 && s < 400) {
         const ct = res.headers()['content-type'] || '';
-        if (ct.includes('json')) { try { const j = await res.json(); if (j && typeof j.code !== 'undefined' && j.code !== 0 && j.code !== '0') row.apiBad.push(`${u} => ${j.code} ${j.message||''}`); } catch(e){} }
+        if (ct.includes('json')) { try { const j = await res.json(); if (j && typeof j.code !== 'undefined' && j.code !== 0 && j.code !== '0') row.apiBad.push(`${u} => ${j.code} ${j.message||''}`); } catch(e){ /* 采集失败留空即可 */ } }
       }
     };
     page.on('response', onResp);

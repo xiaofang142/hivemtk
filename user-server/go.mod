@@ -2,7 +2,7 @@ module hivemtk-user
 
 go 1.26.0
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 require (
 	github.com/Rhymen/go-whatsapp v0.1.1
@@ -31,7 +31,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0
@@ -88,7 +88,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect

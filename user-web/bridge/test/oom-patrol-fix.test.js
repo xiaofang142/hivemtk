@@ -2,32 +2,44 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { BaseAdapter } from '../src/core/channel-adapter.js';
 import { PATROL_DEFAULTS } from '../src/core/types.js';
 
-global.document = {
-  body: { tagName: 'BODY' },
-  querySelector: () => null,
-  querySelectorAll: () => [],
-  createElement: () => ({ tagName: 'DIV', children: [], classList: { add: () => {}, contains: () => false } }),
-};
+// vitest5 jsdom 环境：global.document 是只读 getter，须用 defineProperty 覆盖
+Object.defineProperty(globalThis, 'document', {
+  value: {
+    body: { tagName: 'BODY' },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: () => ({ tagName: 'DIV', children: [], classList: { add: () => {}, contains: () => false } }),
+  },
+  writable: true,
+  configurable: true,
+});
+
+// vitest5 jsdom 环境：MutationObserver 同样是只读全局，读改走 defineProperty
+function withMockMutationObserver(mock, fn) {
+  const OrigMO = global.MutationObserver;
+  Object.defineProperty(globalThis, 'MutationObserver', { value: mock, writable: true, configurable: true });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(globalThis, 'MutationObserver', { value: OrigMO, writable: true, configurable: true });
+  }
+}
 
 describe('OOM 巡检 修复', () => {
   it('MutationObserver 不再监听 characterData（防抖屏 OOM）', () => {
     // 验证 _observe 不会传 characterData:true
     const observed = {};
-    const OrigMO = global.MutationObserver;
-    global.MutationObserver = class {
+    withMockMutationObserver(class {
       observe(_root, opts) { Object.assign(observed, opts); }
       disconnect() {}
-    };
-    try {
+    }, () => {
       const fakeRoot = document.createElement('div');
       const adapter = new BaseAdapter({ name: 'test', channel: 'xiaohongshu', hooks: { getMessageListRoot: () => fakeRoot } });
       adapter._observe(fakeRoot);
       expect('characterData' in observed).toBe(false);
       expect(observed.childList).toBe(true);
       expect(observed.subtree).toBe(true);
-    } finally {
-      global.MutationObserver = OrigMO;
-    }
+    });
   });
 
   it('内容指纹去重已移至后端（纯桥接：adapter 不再维护 seen Set）', () => {
