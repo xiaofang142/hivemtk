@@ -23,14 +23,23 @@ type SystemConfigKVRepository interface {
 	EnsureTable(ctx context.Context) error
 }
 
+// ErrKVStoreUnavailable 未装配数据库句柄时返回。
+//
+// 为什么要有它而不是安静地当成"没配过"：nil 句柄只可能来自装配顺序不对
+// （构造那一刻 db.GetDB() 还是 nil），而"没配过"是一个合法的业务状态、
+// 两者在 Get 里都表现为空值。合成一种返回，运维改了配置不生效时无从查起。
+var ErrKVStoreUnavailable = errors.New("system_config_kv: 未装配数据库句柄")
+
 type systemConfigKVRepo struct {
 	db *gorm.DB
 }
 
 // NewSystemConfigKVRepository 构造。
 //
-// 注意它捕获的是**调用那一刻**的 db.GetDB()：装配顺序不对时拿到的是 nil，
-// 而 nil *gorm.DB 在 Get 里不是 error 而是 panic。需要句柄确定性的装配点用下面那个。
+// 注意它捕获的是**调用那一刻**的 db.GetDB()：装配顺序不对时拿到的是 nil。
+// 拿到 nil 不再是崩，而是三个方法一律返回 ErrKVStoreUnavailable（调用侧本来
+// 就都有"读不到就回落默认值"的分支，所以改成 error 对它们是可观测的、不是新增行为）。
+// 需要句柄确定性的装配点用下面那个。
 func NewSystemConfigKVRepository() SystemConfigKVRepository {
 	return &systemConfigKVRepo{db: db.GetDB()}
 }
@@ -49,6 +58,9 @@ func (r *systemConfigKVRepo) Available() bool {
 }
 
 func (r *systemConfigKVRepo) Get(ctx context.Context, key string) (string, error) {
+	if !r.Available() {
+		return "", ErrKVStoreUnavailable
+	}
 	var row model.SystemConfigKV
 	err := r.db.WithContext(ctx).Where("key = ?", key).First(&row).Error
 	if err != nil {
@@ -61,6 +73,9 @@ func (r *systemConfigKVRepo) Get(ctx context.Context, key string) (string, error
 }
 
 func (r *systemConfigKVRepo) Upsert(ctx context.Context, key, value string) (string, error) {
+	if !r.Available() {
+		return "", ErrKVStoreUnavailable
+	}
 	now := time.Now()
 	row := model.SystemConfigKV{
 		Key:       key,
@@ -94,6 +109,9 @@ func (r *systemConfigKVRepo) Upsert(ctx context.Context, key, value string) (str
 }
 
 func (r *systemConfigKVRepo) EnsureTable(ctx context.Context) error {
+	if !r.Available() {
+		return ErrKVStoreUnavailable
+	}
 	stmt := `CREATE TABLE IF NOT EXISTS system_config_kv (
 		key VARCHAR(100) PRIMARY KEY,
 		value TEXT NOT NULL,

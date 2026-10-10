@@ -35,7 +35,7 @@ func SetupBrowserAutomationRoutes(auth *gin.RouterGroup, engine *gin.Engine, gor
 	profileHealthRepo := barepo.NewBrowserProfileHealthRepositoryWithDB(gormDB)
 	outreachDedupeRepo := barepo.NewBrowserOutreachDedupeRepositoryWithDB(gormDB)
 	outreachReceiptRepo := barepo.NewBrowserOutreachReceiptRepositoryWithDB(gormDB)
-	kvRepo := hrepo.NewSystemConfigKVRepository()
+	kvRepo := hrepo.NewSystemConfigKVRepositoryWithDB(gormDB)
 
 	// --- Service（进程级单例：registry / hand）---
 	registry := basvc.NewHostRegistry()
