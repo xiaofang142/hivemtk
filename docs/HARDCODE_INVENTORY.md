@@ -74,7 +74,7 @@ P0 判据 = 「改了以后**一定**有人想改，而且改错会出事」。�
 
 | 位置 | 值 | 性质 |
 | --- | --- | --- |
-| `internal/controller/upload.go:22` | `MaxUploadSize = 10 * 1024 * 1024` | 编译期常量，**实际生效的就是它** |
+| `internal/controller/upload.go:24` | `MaxUploadSize = 10 * 1024 * 1024` | 编译期常量，**实际生效的就是它** |
 | `internal/model/system_config.go:21` + `internal/service/system_config.go:40,87` | `MaxUploadSizeMB = 50` | 运维在「系统配置」页可改，`gorm:"default:50"` |
 | `user-web/src/views/system/MaterialLibrary.vue:323` | `maxSize = 10` | 前端又写死一份 10 |
 
@@ -87,10 +87,28 @@ P0 判据 = 「改了以后**一定**有人想改，而且改错会出事」。�
 > 配套：`SystemConfigService.ResolveUploadMaxBytes` 只认"行真实存在且 > 0"的值（不走 `GetConfig`，
 > 否则读失败时它的 `defaultConfig()` 会拿 50MB 顶上，等于把存量站点从 10MB 悄悄放宽 5 倍）；
 > `systemConfigRepo.GetConfig` 加 nil 句柄哨兵错，避免上传链路因装配问题崩进程。
-> **仍未收敛**：前端 `MaterialLibrary.vue:323 maxSize = 10` 第三份副本 → 阶段 3.3；
-> JSON body 上限 `middleware/body_limit.go:30` → 阶段 2a。
+> **✅ 三份副本已全部收敛到数据库（阶段 0.5 → 阶段 2a）**。最终优先级链：
+> **env `UPLOAD_MAX_SIZE` > `misc.upload_max_size_mb`（参数中心，2a）>
+> `system_config.max_upload_size_mb`（兼容列，0.5）> 10MB 代码兜底**。
+> 关键取舍：`misc.upload_max_size_mb` **默认值取 0**，语义是「不覆盖，沿用下游」——
+> 填 10 会把运维已在系统配置页调好的 200MB 又压回 10MB（把 0.5 刚修好的 bug 原样退回），
+> 填 50 则让新装站点从 10MB 静默放宽 5 倍；取 0 让存量与新装站点行为与上线前逐字节一致。
+> 该键每请求读，改完即时生效。
+> **仍未收敛**：前端 `MaterialLibrary.vue:323 maxSize = 10` 第三份副本 → 阶段 3.3。
+> **⚠️ 别混淆**：`knowledge_base_import.go:35 MaxUploadFileSize = 50<<20` 是**另一条**
+> 知识库文档上传上限，已在阶段 1.8 作为 `knowledge.max_upload_file_size` 单独入库，与本节不是同一处。
 
 同类：JSON body 上限 `middleware/body_limit.go:30 DefaultMaxJSONBodyMB=8`。
+
+> **✅ 已于 2026-10-10 入库（阶段 2a）**：`middleware.max_json_body_mb`，默认 8、`Min 1`、`Restart true`。
+> 三个决策：① 默认必须保持 8 —— `TestGlobalDefaultDoesNotTightenExistingCaps` 钉死
+> 全局默认值 ≥ webhook 可调顶格 4MB，调小会把运维已放行的高段请求截断；
+> ② **有意不给 0** —— env 侧 `<=0` 的「不限制」是部署层排障应急开关，参数中心是运维日常调的面，
+> 再开一个关掉全局 body 封顶的口子风险大于收益，Description 里指明"临时放开请用 env 设 0"；
+> ③ `Restart: true` —— 这是 `ParamDef.Restart` **首次被真正用上**（此前 115 条种子一条都没填），
+> 因为 `router.Setup` 里 `r.Use(middleware.BodyLimit(...))` 是装配期读一次，不重启不生效。
+> 另外 `maxMultipartMemoryMB` 保持独立不联动（它是把 gin 默认 32MB 主动调小的内存优化，
+> 跟随 body 上限会顺带把每个并发上传的内存放大）。
 
 **② Webhook 验签降级开关（14 处重复）**
 `ALLOW_INSECURE_WEBHOOK = true` 出现在
@@ -237,7 +255,10 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 按 group 分布（`group / key / 名称`）：
 
 > **处置进度（2026-10-10）：阶段一全部 8 批已接线并提交（8/8）。**
-> 门禁读数：`wired 40→102`、`UNDECLARED 72→0`、`已声明未接线 13`。
+> 门禁读数：`wired 40→104`（阶段二 2a 后）、`UNDECLARED 72→0`、`已声明未接线 13`。
+> 阶段一 8 批（wired 40→102）处理的是本节的僵尸参数；阶段二起处理 §2.1 的 P0 新增点位，
+> 每接一条也会让 wired 读数上涨。2a 接的 `misc.upload_max_size_mb` / `middleware.max_json_body_mb`
+> 即对应 §2.1①。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |

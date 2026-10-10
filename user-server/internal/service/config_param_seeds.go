@@ -212,6 +212,9 @@ func DefaultParamDefs() []ParamDef {
 			Description: "CustomerIdentity 身份合并的最大重试次数",
 			ValueType:   "int", DefaultValue: "8", Min: strPtr("1"), Max: strPtr("50"), Step: strPtr("1")},
 
+		{Group: "misc", Key: "upload_max_size_mb", Name: "上传文件大小上限",
+			Description: "单次上传的文件大小上限（MB）。0 表示不覆盖、沿用下游：优先级为 env UPLOAD_MAX_SIZE > 本参数 > 「系统配置」页的兼容列 > 代码兜底 10MB。默认 0 是为了让存量站点保持现状——填 10 会把运维已在系统配置页调好的 200MB 又压回 10MB",
+			ValueType:   "int", DefaultValue: "0", Min: strPtr("0"), Max: strPtr("512"), Step: strPtr("1")},
 		{Group: "misc", Key: "visitor_token_ttl", Name: "访客 Token TTL",
 			Description: "未登录访客的身份 Token 有效期（秒）",
 			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("3600"), Max: strPtr("2592000"), Step: strPtr("3600")},
@@ -290,6 +293,9 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "middleware", Key: "mfa_recent_verify_ttl", Name: "MFA 近验有效期",
 			Description: "MFA 二次验证后的宽限期（秒）",
 			ValueType:   "duration", DefaultValue: "300", Min: strPtr("60"), Max: strPtr("3600"), Step: strPtr("60")},
+		{Group: "middleware", Key: "max_json_body_mb", Name: "全局请求体上限",
+			Description: "JSON / 表单请求体的全局封顶（MB）。必须高于各端点既有上界（webhook 可调顶格 4MB），调小会把已放行的高段请求截成半份；env MAX_JSON_BODY_MB 仍可覆盖。临时放开请用 env 设 0（不限制），本参数最小为 1。改动需重启",
+			ValueType:   "int", DefaultValue: "8", Min: strPtr("1"), Max: strPtr("100"), Step: strPtr("1"), Restart: true},
 
 		{Group: "confidence", Key: "humanize_default_threshold", Name: "人性化默认阈值",
 			Description: "文本人性化判定阈值（0-1），落库到 humanize_scores.threshold；装配点 app/confidence_params_wiring.go",

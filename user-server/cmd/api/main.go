@@ -207,6 +207,12 @@ func main() {
 		logger.Info("[ConfigParam] sales/middleware/knowledge 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 阶段二 2a：全局请求体上限注入中间件；上传上限那条走 controller 直连范式。
+	// body 上限在 router.Setup 里装配期读一次，所以它的种子标了 Restart=true。
+	if wired := app.WireUploadBodyLimitConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] 上传/body 上限接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

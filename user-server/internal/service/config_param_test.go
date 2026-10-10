@@ -137,7 +137,10 @@ func TestFallbackNilDB(t *testing.T) {
 // 的种子与装配点 `app/faq_cache_wiring.go` 都进了 master，于是本锚点第二次亮红。
 // 这正是它该干的事：条数变化必须有人看见，而不是悄悄漂过去。红灯与修复分属两条提交，
 // 免得后来人分不清这条到底是谁加的。
-const defaultParamDefsWant = 115
+//
+// 2026-10-10（第三次，阶段二 2a）：+2 = `misc.upload_max_size_mb` /
+// `middleware.max_json_body_mb`，把上传上限的三份副本与全局请求体上限收进参数中心。
+const defaultParamDefsWant = 117
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

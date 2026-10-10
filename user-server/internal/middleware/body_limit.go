@@ -39,19 +39,48 @@ const DefaultMaxJSONBodyMB = 8
 // 所以这道装配是**把默认值调小**（每并发上传请求的内存降到 1/4），不是照抄别处的更大值。
 const maxMultipartMemoryMB = 8
 
+// maxJSONBodyMBProvider 是全局 body 上限的取值口。默认返回常量，等价于参数中心未装配时的行为。
+//
+// 做成 provider 而不是直接在这里调 config_param service：middleware 不能反向依赖 service
+// （service 层已经有一堆包，middleware 被它们间接持有，反向依赖会成环），
+// 装配点在 internal/app，与本仓其余 8 批参数接线同一套范式。
+var maxJSONBodyMBProvider = func() int { return DefaultMaxJSONBodyMB }
+
+// SetMaxJSONBodyMBProvider 注入参数中心取值口。传 nil 是**空操作**而不是复位：
+// 与本仓其余 seam 一致，防止装配顺序出错时把兜底值顶掉。
+func SetMaxJSONBodyMBProvider(fn func() int) {
+	if fn != nil {
+		maxJSONBodyMBProvider = fn
+	}
+}
+
+// maxJSONBodyMB 返回生效的 MB 数。非正数一律回落 DefaultMaxJSONBodyMB：
+// 上限为 0 意味着「所有请求体都不许超过 0 字节」，会把健康检查、探活一并打死。
+//
+// ⚠️ env 侧的「<=0 表示不限制」是**部署层排障应急开关**，与这里不是一回事，
+// 所以种子把 middleware.max_json_body_mb 的 Min 卡在 1，运营侧不给这个口子；
+// 真要临时放开请改 env MAX_JSON_BODY_MB=0 并重启。
+func maxJSONBodyMB() int {
+	if mb := maxJSONBodyMBProvider(); mb > 0 {
+		return mb
+	}
+	return DefaultMaxJSONBodyMB
+}
+
 // BodyLimitFromEnv 读取 MAX_JSON_BODY_MB 决定全局上限（字节）。
-// 未设置 / 非法值回落到 DefaultMaxJSONBodyMB；0 或负数表示**不限制**（排障与迁移期的应急开关）。
+// 优先级：env > 参数中心 middleware.max_json_body_mb > DefaultMaxJSONBodyMB。
+// env 设为 0 或负数仍是**不限制**（排障与迁移期的应急开关），这条既有语义不动。
 //
 // 用环境变量而非配置文件：与 platform 端同名同语义（`MAX_JSON_BODY_MB`），
 // 部署层一次配好两端，不必按仓记两套旋钮。
 func BodyLimitFromEnv() int64 {
 	raw := strings.TrimSpace(os.Getenv("MAX_JSON_BODY_MB"))
 	if raw == "" {
-		return int64(DefaultMaxJSONBodyMB) * 1024 * 1024
+		return int64(maxJSONBodyMB()) * 1024 * 1024
 	}
 	mb, err := strconv.Atoi(raw)
 	if err != nil {
-		return int64(DefaultMaxJSONBodyMB) * 1024 * 1024
+		return int64(maxJSONBodyMB()) * 1024 * 1024
 	}
 	if mb <= 0 {
 		return 0

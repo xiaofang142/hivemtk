@@ -341,6 +341,36 @@ func InboxLockTTL(ctx context.Context) time.Duration {
 - `ValueType` 用 `duration` 的，`Step` 填合理步长（如 `30s`）。
 - **验收**：`scripts/api_verify_full.py` 跑通 + 每个 PR 附"改值→行为变化→改回"三步证据。
 
+#### 2a 已落地（2026-10-10）
+
+上传/body 上限两条入库，`wired 102→104`、种子条目 115→117、锚点同步到 117。
+
+**上传链最终优先级**（`internal/controller/upload.go` 的 `resolveUploadMaxSize`）：
+
+```
+env UPLOAD_MAX_SIZE > misc.upload_max_size_mb > system_config.max_upload_size_mb（兼容列）> 10MB 代码兜底
+```
+
+- `misc.upload_max_size_mb` **默认 0**，语义是「不覆盖，沿用下游」，`Min: "0"`。这个默认值不是偷懒，是刻意取舍的两个反面各错一遍：填 `10` 会把运维已在「系统配置」页调好的 200MB 又压回 10MB（把阶段 0.5 刚修好的 bug 原样退回）；填 `50` 则让新装站点从 10MB 静默放宽 5 倍。填 0 时存量与新装站点行为与上线前**逐字节一致**。
+- 兼容列保留在第二顺位：存量站点已经在那儿调过值，新键一上线就把它顶掉会造成「配置莫名失效」。
+- 该键是**每请求读**，改完即时生效（上传入口不停服）。
+- 配套 `mbToBytes(mb)` 辅助：非正数原样返回 0，即「0 = 未配置」是本链上下游共用的哨兵值，混进换算会把 0 变成"0 字节"从而打死所有上传。
+
+**body 链最终优先级**（`internal/middleware/body_limit.go` 的 `BodyLimitFromEnv`）：
+
+```
+env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
+```
+
+- 默认 8 必须保持：`TestGlobalDefaultDoesNotTightenExistingCaps` 钉死全局默认值 ≥ webhook 可调顶格 4MB，调小会把运维已放行的高段请求截断。
+- `Min: "1"` **有意不给 0**：env 侧 `<=0` 的「不限制」是部署层排障应急开关，参数中心是运维日常调的面，再开一个关掉全局 body 封顶的口子风险大于收益。Description 里写明「临时放开请用 env 设 0」。
+- `Restart: true` —— 这是 **`ParamDef.Restart` 字段首次被真正用上**（此前 115 条种子一条都没填）：`router.Setup` 里 `r.Use(middleware.BodyLimit(...))` 是**装配期读一次**，标成 false 会让运维改完看不到任何生效提示。
+- `maxMultipartMemoryMB` 保持独立不联动：它是把 gin 默认 32MB 主动调小的内存优化，跟随 body 上限会顺带把每个并发上传的内存放大。
+
+**接线范式**：`middleware.max_json_body_mb` 走 provider 注入（middleware 不能反向依赖 service）；`misc.upload_max_size_mb` 走读取函数直连参数中心（读取点在 controller，本来就能依赖 service），两者的正确性分别由 `internal/app/upload_body_limit_params_wiring_test.go` 与 `internal/controller/upload_param_limit_test.go` 的真库行为测试盯住。
+
+**未纳入本批**（如实记录，避免后人误以为已覆盖）：前端第三份副本 `user-web/src/views/system/MaterialLibrary.vue:323` 的 `maxSize = 10` 属阶段 3.3；`knowledge_base_import.go:35 MaxUploadFileSize = 50<<20` 已在阶段 1.8 作为 `knowledge.max_upload_file_size` 单独入库，与本条不是同一个上限。
+
 ### 阶段三：P1 130 个点位 + 前端接线
 
 - 后端 130 个按 group 打包 PR。

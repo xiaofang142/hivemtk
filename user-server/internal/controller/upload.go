@@ -73,25 +73,49 @@ var DefaultUploadConfig = UploadConfig{
 	CheckMagicNumber: true,
 }
 
-// resolveMaxUploadBytes 是"从库里取上传上限"的取值口，做成包级变量是为了能打桩。
-// 优先级链里唯一的变量就是库里那个值，真去造一行 DB 记录会把用例绑死在 fixture 上；
-// 而且这条链（env > 库 > 兜底）恰恰是最容易改错顺序的地方，必须能单独测。
+// resolveMaxUploadBytes 是"从 system_config 兼容列取上传上限"的取值口，做成包级变量是为了能打桩。
+// 优先级链里有两个变量值（参数中心与兼容列），真去造 DB 记录会把用例绑死在 fixture 上；
+// 而且这条链恰恰是最容易改错顺序的地方，必须能单独测。
 var resolveMaxUploadBytes = func(ctx context.Context) int64 {
 	return service.NewSystemConfigService().ResolveUploadMaxBytes(ctx)
 }
 
+// mbToBytes 把 MB 换算成字节。非正数原样返回 0 —— 「0 = 未配置 / 不覆盖」是本链
+// 上下游共用的哨兵值，混进换算会让 0 变成 0 字节（把所有上传打死）。
+func mbToBytes(mb int) int64 {
+	if mb <= 0 {
+		return 0
+	}
+	return int64(mb) * 1024 * 1024
+}
+
+// resolveUploadParamMaxBytes 是"从参数中心取上传上限（MB 换算成字节）"的取值口，同样可打桩。
+//
+// 默认实现读 misc.upload_max_size_mb —— 该键默认值就是 0，语义是「不覆盖，沿用下游」，
+// 与 ResolveUploadMaxBytes 的「库里没读到值」同源，两处约定必须一致：
+// 一个把 0 当"未读到"，另一个就不能把 0 当"0 字节"。
+var resolveUploadParamMaxBytes = func(ctx context.Context) int64 {
+	return mbToBytes(service.GlobalConfigParam().GetInt(ctx, "misc", "upload_max_size_mb", 0))
+}
+
 // resolveUploadMaxSize 定出本次上传真正生效的上限（字节）。
-// 优先级：env UPLOAD_MAX_SIZE > 库里的系统配置（system_config.max_upload_size_mb）> 代码兜底。
+// 优先级：env UPLOAD_MAX_SIZE > 参数中心 misc.upload_max_size_mb
+//
+//	> 兼容列 system_config.max_upload_size_mb > 代码兜底 10MB。
 //
 // env 排第一是历史行为（容器化部署靠它临时覆盖），保持不动。
-// 中间这层是这次补上的接线：过去「系统配置」页改上传上限能存进库、能显示"保存成功"，
-// 但上传链路一处都不读它，实际永远是 10MB——运维把上限调成 200MB 也是白调。
+// 参数中心这层是统一入口：「系统配置」页的上传上限语义是站级配置、覆盖面窄，
+// 且历史上改了不起作用（上传链路一处都不读）；放进参数中心后与其它阈值同一张脸。
+// 兼容列继续保留为第二顺位：存量站点已经在那儿调过值，不能因为新键一上线就把它顶掉。
 // 代码兜底 10MB 必须保留：没有配置行的存量站点不能因为这次接线就突然放宽 5 倍。
 func resolveUploadMaxSize(ctx context.Context) int64 {
 	if envMaxSize := os.Getenv("UPLOAD_MAX_SIZE"); envMaxSize != "" {
 		if size := parseInt64(envMaxSize); size > 0 {
 			return size
 		}
+	}
+	if size := resolveUploadParamMaxBytes(ctx); size > 0 {
+		return size
 	}
 	if size := resolveMaxUploadBytes(ctx); size > 0 {
 		return size
