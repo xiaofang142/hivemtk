@@ -22,7 +22,13 @@ RDIRS = ['user-server/internal/router', 'user-server/internal/controller']
 # 后端未实现）」可能的来源：两边说的根本不是同一批调用。
 #
 # 现改为递归扫描整个 `user-web/src`，同时覆盖 .js 与 .vue。
-WEB_ROOTS = [os.path.join(ROOT, 'user-web/src')]
+WEB_ROOTS = [os.path.join(ROOT, 'user-web/src'),
+             # TOOL-07（I26）：浏览器扩展也是前端客户端，但用 fetch/apiCall/EventSource
+             # 而非 http.* helper，原扫描对它们完全不可见 → 其在用的后端路由
+             # （如 /api/browser-automation/*）被误列进 BACKEND_NOT_CALLED 假死清单。
+             # 只取 src/（test/e2e/dist 不是契约调用方）。
+             os.path.join(ROOT, 'user-web/bridge/src'),
+             os.path.join(ROOT, 'user-web/browser_automation/src')]
 WEB_EXT = ('.js', '.vue')
 WEB_SKIP_DIRS = {'node_modules', 'dist', 'build', '.git'}
 
@@ -51,11 +57,15 @@ tpl = re.compile(r"\$\{[^}]+\}")
 #   GET  :param/:param 命中 79 条后端路由、PUT 命中 8 条、DELETE 命中 3 条……
 # 即这些前端调用**从未被真正校验过**（后端把该路由删掉它也照样"匹配"），
 # 与此同时真实后端路由被反向误报进 BACKEND_NOT_CALLED 死接口清单。
-const_re = re.compile(r"\b(?:const|let|var)\s+(\w+)\s*=\s*(['\"])([^'\"]+)\2")
+# TOOL-07（I26）：值类扩 backtick 且禁换行（扩展前端的 URL 模板几乎全是单行反引号串）。
+const_re = re.compile(r"\b(?:const|let|var)\s+(\w+)\s*=\s*(['\"`])([^'\"`\n]+)\2")
 # 裸常量实参：http.get(BASE, params) —— 实参不是字符串字面量，m_re 完全匹配不到
 ident_re = re.compile(r"http\.(get|post|put|delete|patch)\(\s*([A-Za-z_$][\w$]*)\s*[,)]")
 # ${NAME} 形式引用已知常量
 tpl_name = re.compile(r"\$\{(\w+)\}")
+# TOOL-07（I26）：扩展前端的调用形态是 fetch/getJSON/apiCall/EventSource 而非 http.* helper。
+fetchish_re = re.compile(r"\b(fetch|getJSON|apiCall)\(\s*([`'\"])([^`'\"]+)\2")
+es_re = re.compile(r"\bEventSource\(\s*([`'\"])([^`'\"]+)\1")
 
 
 def braces(src, start):
@@ -361,7 +371,8 @@ for k in unres:
 
 frontend = {}
 for _path in iter_web_files():
-    fn2 = os.path.relpath(_path, os.path.join(ROOT, 'user-web/src')).replace('\\', '/')
+    # TOOL-07（I26）：roots 扩到 bridge/browser_automation 后，统一按 ROOT 相对标注。
+    fn2 = os.path.relpath(_path, ROOT).replace('\\', '/')
     src = open(_path, encoding='utf-8').read()
     consts = {m.group(1): m.group(3) for m in const_re.finditer(src)}
 
@@ -382,6 +393,46 @@ for _path in iter_web_files():
         if name in consts:
             p = consts[name].split('?')[0]
             frontend.setdefault((m.group(1).upper(), p), []).append(fn2)
+
+    # ③/④ TOOL-07（I26）：扩展前端 fetch/getJSON/apiCall/EventSource 四形态。
+    # 路径须含字面量 /api/ 才入账（过滤 `${base}${path}` 这类纯动态噪音）；
+    # `${origin}/api/...` 经 tpl 退化成 `:param/api/...` 时剥掉前导 origin 段
+    # （业务路径不会以 :param 开头，而 :param/api/ 恒为「origin前缀+绝对路径」形态）。
+    def _clean(rawp):
+        if '/api/' not in rawp:
+            return None
+        p = tpl.sub(':param', _expand(rawp)).split('?')[0]
+        if p.startswith(':param/api/'):
+            p = p[len(':param'):]
+        return p
+
+    def _meth(m, default='GET'):
+        # 方法只能从**本调用自己的实参表**里推断：无界向后看会跨进下一个调用
+        # （实测 api-client.js 连排 apiCall(...) 时，getTask 的 GET 被 207 行
+        # createTask 的 method:'POST' 污染出假 UNMATCHED）。按括号配平截到本调用 `)`。
+        op = src.find('(', m.start())
+        if op < 0:
+            return default
+        depth, j = 0, op
+        while j < len(src):
+            if src[j] == '(':
+                depth += 1
+            elif src[j] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        mm = re.search(r"method:\s*['\"]?(GET|POST|PUT|DELETE|PATCH)", src[m.end():j])
+        return mm.group(1) if mm else default
+
+    for m in fetchish_re.finditer(src):
+        p = _clean(m.group(3))
+        if p:
+            frontend.setdefault((_meth(m), p), []).append(fn2)
+    for m in es_re.finditer(src):
+        p = _clean(m.group(2))
+        if p:
+            frontend.setdefault(('GET', p), []).append(fn2)
 
 
 # 自检（TOOL-05）：首段为 `:param` 的 key 是**通配**路径，会匹配任意同长度同方法的路由
