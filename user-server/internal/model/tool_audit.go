@@ -22,7 +22,7 @@ type ToolCallAudit struct {
 	CallerID      string    `gorm:"size:64" json:"caller_id"`
 	AgentID       string    `gorm:"size:64" json:"agent_id"`
 	CustomerID    string    `gorm:"size:64" json:"customer_id"`
-	SessionID string `gorm:"size:120" json:"session_id"`
+	SessionID     string    `gorm:"size:120" json:"session_id"`
 	Success       bool      `gorm:"index" json:"success"`
 	Error         string    `gorm:"type:text" json:"error"`
 	DurationMs    int64     `json:"duration_ms"`

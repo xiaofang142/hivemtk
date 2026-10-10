@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/kbconnector"
-	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

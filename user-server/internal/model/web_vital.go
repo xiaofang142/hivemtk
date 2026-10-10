@@ -18,7 +18,7 @@ type WebVitalRecord struct {
 	// 32 是按规范最长值留的余量。
 	Rating    string    `gorm:"type:varchar(32)" json:"rating"`
 	Page      string    `gorm:"type:varchar(300)" json:"page"`
-	SessionID string `gorm:"type:varchar(120);index" json:"session_id"`
+	SessionID string    `gorm:"type:varchar(120);index" json:"session_id"`
 	UserAgent string    `gorm:"type:varchar(300)" json:"user_agent"`
 	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }

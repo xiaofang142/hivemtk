@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	qqbot "hivemtk-user/internal/channelbot/qq"
 	corebot "hivemtk-user/internal/channelbot/core"
+	qqbot "hivemtk-user/internal/channelbot/qq"
 	tgbot "hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
@@ -164,9 +164,9 @@ func TestChannelBotSeedsStayWithinPlatformCaps(t *testing.T) {
 	want := map[string]struct {
 		def, max string
 	}{
-		"channelbot.qq_message_max_len":           {"2000", "2000"},
-		"channelbot.tg_message_max_length":        {"4096", "4096"},
-		"channelbot.tg_inline_rows_max":           {"100", "100"},
+		"channelbot.qq_message_max_len":            {"2000", "2000"},
+		"channelbot.tg_message_max_length":         {"4096", "4096"},
+		"channelbot.tg_inline_rows_max":            {"100", "100"},
 		"channelbot.tg_inline_buttons_per_row_max": {"8", "8"},
 	}
 	index := make(map[string]service.ParamDef)

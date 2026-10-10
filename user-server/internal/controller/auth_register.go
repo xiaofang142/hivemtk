@@ -1,9 +1,8 @@
 package controller
 
 import (
-
-	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

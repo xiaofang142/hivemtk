@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	qqbot "hivemtk-user/internal/channelbot/qq"
 	corebot "hivemtk-user/internal/channelbot/core"
+	qqbot "hivemtk-user/internal/channelbot/qq"
 	tgbot "hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/service"
 )
