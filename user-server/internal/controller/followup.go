@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -58,7 +59,9 @@ func (c *FollowUpController) GetToday(ctx *gin.Context) {
 	}
 	date := time.Now()
 	if raw := ctx.Query("date"); raw != "" {
-		parsed, err := time.Parse("2006-01-02", raw)
+		// 业务时区口径：time.Parse 产出 UTC 零点、Format 跟随宿主机时区，
+		// 与 CST 会话时区下的日期分桶差 8 小时（date-bucket-tz 守卫的立项原因）
+		parsed, err := timeutil.ParseBusinessDate(raw)
 		if err != nil {
 			response.Error(ctx, http.StatusBadRequest, "参数错误")
 			return
@@ -67,7 +70,7 @@ func (c *FollowUpController) GetToday(ctx *gin.Context) {
 	}
 	list := c.svc.GetDailyCalendar(ctx.Request.Context(), owner, date)
 	response.Success(ctx, gin.H{
-		"date": date.Format("2006-01-02"),
+		"date": timeutil.BusinessDate(date),
 		"list": list,
 	}, "ok")
 }
