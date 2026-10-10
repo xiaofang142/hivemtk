@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/channelbot/core"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 const defaultGraphBase = "https://graph.facebook.com"
@@ -139,10 +140,20 @@ func VerifySubscribe(mode, token, challenge, verifyToken string) (string, bool) 
 }
 
 // VerifyWebhook 校验 X-Hub-Signature-256（HMAC-SHA256）。
-// appSecret 为空表示未配置，跳过验签（与项目既有行为一致）。
+//
+// appSecret 为空一律**拒签**（fail-closed）。旧实现在空密钥时直接 return true，
+// 注释还写着「与项目既有行为一致」——那是本仓验签链路里唯一一处 fail-open，
+// 且形状比任何 env 旁路都危险：不带任何开关、不记任何日志、调用方漏掉前置
+// 守卫就静默放行伪造回调。
+//
+// 生产链路今天走到这里时 secret 必然非空（webhook.go:661-666 已先拒了空密钥
+// 账号），所以这一分支实际不可达；改 fail-closed 属于拆掉未爆的雷，不改变
+// 现有行为。真要在联调期放行无密钥的回调，走全局 ALLOW_INSECURE_WEBHOOK
+// （有启动护栏 + 每次放行打 warn），别在这里开暗门。
 func VerifyWebhook(appSecret string, body []byte, signature string) bool {
 	if appSecret == "" {
-		return true
+		logger.Warnf("[whatsapp] VerifyWebhook 收到空 appSecret，直接拒签（未配置密钥的账号不应走到验签）")
+		return false
 	}
 	signature = strings.TrimPrefix(signature, "sha256=")
 	mac := hmac.New(sha256.New, []byte(appSecret))

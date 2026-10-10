@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/channelbot/core"
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -459,14 +460,27 @@ func (c *Client) DeleteWebhook(ctx context.Context) error {
 
 func VerifyWebhook(secret, headerSecret string) bool {
 	if secret == "" {
-
-		if os.Getenv("ALLOW_INSECURE_TELEGRAM_WEBHOOK") == "true" {
+		if insecureTelegramWebhookAllowed() {
 			logger.Warnf("[telegram] ALLOW_INSECURE_TELEGRAM_WEBHOOK=true 启用，跳过 secret 校验")
 			return true
 		}
 		return false
 	}
 	return core.SecureEqual(secret, headerSecret)
+}
+
+// insecureTelegramWebhookAllowed 与 ALLOW_INSECURE_WEBHOOK / MARKETING_WEBHOOK_ALLOW_INSECURE
+// 同口径：显式开关与开发姿态必须**同时**满足，缺一个都不跳过验签。
+//
+// 旧实现只看开关 ⇒ 生产环境误设该变量会让 Telegram 回调验签被静默跳过（仅一条
+// Warnf），而 service 包的 guardInsecureWebhookAtStartup 只覆盖
+// ALLOW_INSECURE_WEBHOOK 一个键，启动也不报错 —— 这是三处验签旁路里唯一没有
+// 环境护栏的一处。
+func insecureTelegramWebhookAllowed() bool {
+	if os.Getenv("ALLOW_INSECURE_TELEGRAM_WEBHOOK") != "true" {
+		return false
+	}
+	return config.IsDevelopmentEnv()
 }
 
 // callMethod 调用任意 Bot API 方法（群管理类接口专用；非 200 返回错误体）。

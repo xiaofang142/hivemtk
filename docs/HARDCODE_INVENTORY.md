@@ -59,7 +59,7 @@ CSV 有意**不去噪**：宁可多列让人筛，也不让扫描器替人做判
 | `knowledge` | 33 | `channelgw` | 8 |
 | `frontend_ui` | 50（≈15 真） | `wecom` | 7 |
 | `agent_llm` | 20（`alignment_stage` 五维评分是同一份映射表，实际 6 个） | `pagination` | 6 |
-| `workflow` | 16（`ALLOW_INSECURE_WEBHOOK` 14 行是同一个开关） | `reach` | 6 |
+| `workflow` | 16（原记「`ALLOW_INSECURE_WEBHOOK` 14 行是同一个开关」，实测是 3 个读取点、其余为文案提及，见 §2.1②） | `reach` | 6 |
 | `confidence` | 27 | `sales` | 4 |
 | `telemetry` | 22 | `middleware` | 3 |
 | `inbox_sales` | 16 | `frontend_ws` | 11（两个 socket 工具各有同名项） |
@@ -110,13 +110,32 @@ P0 判据 = 「改了以后**一定**有人想改，而且改错会出事」。�
 > 另外 `maxMultipartMemoryMB` 保持独立不联动（它是把 gin 默认 32MB 主动调小的内存优化，
 > 跟随 body 上限会顺带把每个并发上传的内存放大）。
 
-**② Webhook 验签降级开关（14 处重复）**
-`ALLOW_INSECURE_WEBHOOK = true` 出现在
-`internal/service/webhook.go`（10 处）、`webhook_channel_douyin.go:217`、
-`internal/service/dingtalk_app.go:489,492,520,523`、
-`internal/content/service/marketing_flow_action.go:713`（`MARKETING_WEBHOOK_ALLOW_INSECURE`）、
-`internal/channelbot/telegram/telegram.go:464`（`ALLOW_INSECURE_TELEGRAM_WEBHOOK`）。
-**默认 true = 默认关闭验签**。这是安全默认值反了的典型，必须第一批发 DB 化并默认 `false`。
+**② Webhook 验签降级开关 —— ✅ 已处置（2026-10-10，阶段 2b），结论是「参数化不是答案」**
+
+本清单原记录「`ALLOW_INSECURE_WEBHOOK` 14 处重复、默认 true」，**该描述经实测为假**，如实更正：
+
+- 只有 3 个真实读取点，其余 11 处是错误文案/日志里提到变量名。
+- 三处**本来就 fail-closed**（只认字面量 `"true"`，且仅限该账号压根没配密钥时才可能豁免），不存在"默认 true"。
+- 诊断从"这是安全默认值写反了"修正为"三把开关的护栏强度不一致"，**真正的问题是强度不是默认值**。
+
+| 变量 | 读取点 | 原护栏 |
+| --- | --- | --- |
+| `ALLOW_INSECURE_WEBHOOK` | `internal/service/webhook.go:509` | 启动护栏：非开发环境 `log.Fatalf` |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | `internal/channelbot/telegram/telegram.go:463` | **无任何环境护栏**（唯一缺陷） |
+| `MARKETING_WEBHOOK_ALLOW_INSECURE` | `internal/content/service/marketing_flow_action.go:703` | 运行时判 `config.IsDevelopmentEnv()` |
+
+顺带查出**第三个"似的缺陷"**：`internal/channelbot/whatsapp/whatsapp.go` 的 `VerifyWebhook` 在空 secret 时
+直接返回 true（fail-open），无 env 开关、无护栏、无 warn 痕迹，注释还写着"与项目既有行为一致"。
+它**不在硬编码盘点范围内**（不是字面量，是控制流写错），但性质更严重，已在本批一并改为 fail-closed。
+
+**为什么最终不做成 DB 参数**（详见 `CONFIG_DB_DRIVEN_PLAN.md` §阶段二 2b）：做成数据库可改等于让
+admin API 的写操作能在运行时翻转签名校验 —— 相比 env + 启动 `log.Fatalf` 是**安全回退**
+（DB 改完即时生效、无重启、无启动拦截）。且 DB 镜像 env 状态必然造假值（ReadOnly 与"服务端自写"
+自相矛盾，或静态 false 纯误导）。**判定标准：能不能让运行时的一个写操作翻掉安全闸** ——
+凡能的一律留 env + 启动护栏，此为"全面数据库驱动"的受控例外。
+
+实际落地 = 补齐 TG 开关的 dev 环境护栏 + whatsapp fail-open 改 fail-closed + 启动护栏扩到两个变量 +
+测试逐格钉住只认字面量 `"true"`（`"TRUE"`/`"1"`/`"yes"`/`"true "` 都不开）。`wired` 计数不变（无参数键）。
 
 **③ 分布式锁与幂等 TTL（收件箱/消息中台）**
 `InboxLockTTL=24`、`InboxAILockTTL=15`、`InboxPendingTTL=5`、`IngestLockTTL=25`、

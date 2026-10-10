@@ -230,14 +230,14 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `ONEID_SALT` | 源码固定串 | OneID 手机号/邮箱哈希的盐。**只能在库里还没有客户之前设定**：换值会让存量 `customers.phone_hash` 与 `unified_id` 全体错位（按哈希查不到人 ⇒ 同一客户被建成第二条记录）。多实例必须同值，否则两台机器给同一手机号算出两个 OneID |
 | `BRUTE_FORCE_DISABLED` | 关 | `1`/`true` 关闭登录爆破锁定。该判定在**包级变量初始化时求值**，运行中改环境变量无效，只能改完重启 |
 | `ALLOW_INSECURE_WEBHOOK` | 关 | `true` 时对"渠道账号压根没配密钥"的回调跳过验签（每次跳过打 warn；已配密钥的账号不受该开关影响）。受启动护栏约束：`APP_ENV` 非开发值时进程**直接拒绝启动** |
-| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 关 | Telegram 专用：`true` 跳过 secret 校验，同样只在联调用 |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 关 | Telegram 专用：`true` 跳过 secret 校验。双重条件——开关必须是字面量 `"true"` **且** `APP_ENV`/`MODE` 为开发值（或 `GIN_MODE=debug`），生产误设**既不放行也不静默**，启动即失败。这是三把旁路开关里最后补上护栏的一把（2026-10-10） |
 | `MARKETING_WEBHOOK_ALLOW_INSECURE` | 关 | 营销流 webhook 动作的 SSRF 闸门（只允许 https + 非内网地址）豁免开关。**只在 `APP_ENV=development`（或 `GIN_MODE=debug`）下生效**；生产设了也不放行，每次豁免打 warn |
 | `ALLOW_SELF_RESTART` | 关 | `true` 才允许「系统运维」接口让本进程退出重启 |
 | `WS_AGENT_ALLOW_ALL_USERS` | 关 | `true` 放开坐席通知订阅的角色限制（默认仅 admin/manager/staff/customer_service，见 R14-3 的 403 重连循环） |
 | `TOOL_PERMISSION_DEFAULT_DENY` | 关 | 工具权限白名单的缺省姿态：**不设＝白名单外放行**，设 `true` 才拒绝。生产建议设 |
 | `ORDER_WEBHOOK_NONCE_STRICT` | 关 | 设 `on` 开启商机回调 nonce 严格重放校验 |
 | `SMS_ALLOW_NIGHT_SEND` | 关 | `true` 绕开 22:00–08:00（CST）夜间不发短信的限制 |
-| `APP_ENV` / `MODE` / `GIN_MODE` | 无 | **开发环境判定**（`config.IsDevelopmentEnv`）：按 `APP_ENV` → `MODE` 取第一个非空值，`dev|development|debug|test|testing|local` 算开发；三者都空时再看 `GIN_MODE=debug`。都不设 ⇒ 按**生产**姿态走，这决定了多把安全闸的强度：`MASTER_KEY` 缺失时生产拒绝启动、`ALLOW_INSECURE_WEBHOOK=true` 时生产拒绝启动、`MARKETING_WEBHOOK_ALLOW_INSECURE` 只在开发姿态下才放行内网 webhook。**别指望"没设就是开发"**——没设恰恰是最严的那一侧 |
+| `APP_ENV` / `MODE` / `GIN_MODE` | 无 | **开发环境判定**（`config.IsDevelopmentEnv`）：按 `APP_ENV` → `MODE` 取第一个非空值，`dev|development|debug|test|testing|local` 算开发；三者都空时再看 `GIN_MODE=debug`。都不设 ⇒ 按**生产**姿态走，这决定了多把安全闸的强度：`MASTER_KEY` 缺失时生产拒绝启动、`ALLOW_INSECURE_WEBHOOK=true` 或 `ALLOW_INSECURE_TELEGRAM_WEBHOOK=true` 时生产拒绝启动、`MARKETING_WEBHOOK_ALLOW_INSECURE` 与 Telegram 旁路只在开发姿态下才放行。**别指望"没设就是开发"**——没设恰恰是最严的那一侧 |
 | `EMAIL_TRACKING_SECRET` | 空 | 邮件追踪 token 的 HMAC-SHA256 密钥（`internal/service/email_tracking.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验直接拒。此前它退化成"空密钥自签自验"，任何人按公开的 claim 结构都能算出合法签名 ⇒ 伪造打开/点击事件、伪签他人邮箱的退订。token 有效期 90 天，轮换即让存量追踪链接失效 |
 | `EMAIL_UNSUBSCRIBE_SECRET` | 空 | 邮件退订链接 token 的 HMAC-SHA256 密钥（`internal/service/email_unsubscribe.go`）。**未配置时签发与校验双双 fail-closed**：签发返回错误、校验侧拒绝**所有** token（包括 `payload.` 这种空签名——空密钥下 `hmac.Equal(空,空)` 为真，所以"没配密钥"绝不能当成一种校验，否则任何人都能伪签别人的退订链接）。有效期 30 天，轮换即让存量退订链接失效 |
 | `MASTER_KEY` | 空 | 凭证盘 AES-256-GCM 主密钥，**≥32 字节**（`internal/secrets/aesgcm.go`）。缺失/过短时 `Ready()` 为 false，加解密降级为明文读写 + WARN；**生产环境（`APP_ENV`/`MODE` 非开发值）装配层据此拒绝启动**。任意路径泄露即整盘作废，建议由 secret manager 注入；改值不会自动重加密存量 |

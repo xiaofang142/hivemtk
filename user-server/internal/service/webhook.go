@@ -472,8 +472,30 @@ func (s *WebhookService) Receive(ctx context.Context, req *ReceiveRequest) (*Rec
 	}, nil
 }
 
-func insecureWebhookStartupError(appEnv, mode, ginMode, allowInsecure string) error {
-	if allowInsecure != "true" {
+func insecureWebhookStartupError(appEnv, mode, ginMode, allowInsecure, allowInsecureTelegram string) error {
+	if err := insecureEnvStartupError(
+		"ALLOW_INSECURE_WEBHOOK", allowInsecure, appEnv, mode, ginMode,
+		"该开关会跳过渠道 webhook 验签。请移除该环境变量，并为企业微信/飞书/Telegram 等"+
+			"各渠道账号配置正确的 CallbackToken/AppSecret 后重启",
+	); err != nil {
+		return err
+	}
+	// Telegram 专用旁路与主开关同一口径收口：主开关在 WebhookService.Verify 入口兜底，
+	// 这个键在 channelbot/telegram.VerifyWebhook 内层兜底，两层都必须过环境护栏，
+	// 否则任何一侧漏检都能让"跳过验签"在生产姿态存活。
+	return insecureEnvStartupError(
+		"ALLOW_INSECURE_TELEGRAM_WEBHOOK", allowInsecureTelegram, appEnv, mode, ginMode,
+		"该开关会跳过 Telegram 回调的 secret 校验。请移除该环境变量并为 telegram_accounts.webhook_secret 配置密钥后重启",
+	)
+}
+
+// insecureEnvStartupError 单键的启动护栏判定：置 true 但环境未显式声明为开发 ⇒ 拒绝启动。
+//
+// 抽成单键函数是因为这类"跳过安全校验"的键会不断新增（ALLOW_INSECURE_WEBHOOK、
+// ALLOW_INSECURE_TELEGRAM_WEBHOOK、MARKETING_WEBHOOK_ALLOW_INSECURE…），
+// 每加一个键都要能独立护栏，同时不允许任何一键绕过整体判定。
+func insecureEnvStartupError(key, value, appEnv, mode, ginMode, remedy string) error {
+	if value != "true" {
 		return nil
 	}
 	env := strings.ToLower(strings.TrimSpace(appEnv))
@@ -486,16 +508,14 @@ func insecureWebhookStartupError(appEnv, mode, ginMode, allowInsecure string) er
 		if strings.EqualFold(strings.TrimSpace(ginMode), "debug") {
 			return nil
 		}
-		return errors.New("ALLOW_INSECURE_WEBHOOK=true 但环境未显式声明为开发：" +
-			"请设置 APP_ENV=development（或 GIN_MODE=debug），或在生产环境移除该变量")
+		return errors.New(key + "=true 但环境未显式声明为开发：" +
+			"请设置 APP_ENV=development（或 GIN_MODE=debug），或在生产环境移除该变量。" + remedy)
 	}
 	switch env {
 	case "dev", "development", "debug", "test", "testing", "local":
 		return nil
 	default:
-		return errors.New("ALLOW_INSECURE_WEBHOOK=true 禁止在非开发环境(APP_ENV/MODE=" + env + ")使用：" +
-			"该开关会跳过渠道 webhook 验签。请移除该环境变量，并为企业微信/飞书/Telegram 等" +
-			"各渠道账号配置正确的 CallbackToken/AppSecret 后重启")
+		return errors.New(key + "=true 禁止在非开发环境(APP_ENV/MODE=" + env + ")使用：" + remedy)
 	}
 }
 
@@ -525,7 +545,8 @@ func guardInsecureWebhookAtStartup() {
 			return
 		}
 		if err := insecureWebhookStartupError(
-			os.Getenv("APP_ENV"), os.Getenv("MODE"), os.Getenv("GIN_MODE"), os.Getenv("ALLOW_INSECURE_WEBHOOK"),
+			os.Getenv("APP_ENV"), os.Getenv("MODE"), os.Getenv("GIN_MODE"),
+			os.Getenv("ALLOW_INSECURE_WEBHOOK"), os.Getenv("ALLOW_INSECURE_TELEGRAM_WEBHOOK"),
 		); err != nil {
 			log.Fatalf("[SECURITY] %v", err)
 		}

@@ -75,8 +75,12 @@ func TestVerifyWebhook(t *testing.T) {
 	if VerifyWebhook("appsecret", body, "sha256=deadbeef") {
 		t.Fatal("invalid HMAC should fail")
 	}
-	if !VerifyWebhook("", body, "sha256=anything") {
-		t.Fatal("empty secret should skip (pass)")
+	// 空 appSecret 必须拒签。这条断言的方向 2026-10-10 被倒转过：旧实现 return true
+	// （fail-open），旧断言钉的是「empty secret should skip (pass)」。fail-open 是
+	// 本仓验签链路唯一一处不带开关、不打日志的旁路，任何漏掉前置守卫的调用方都会
+	// 静默放行伪造回调，因此把不变式改成 fail-closed。
+	if VerifyWebhook("", body, "sha256=anything") {
+		t.Fatal("empty secret must fail closed")
 	}
 }
 

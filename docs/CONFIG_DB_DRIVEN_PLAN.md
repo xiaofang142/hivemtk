@@ -333,7 +333,7 @@ func InboxLockTTL(ctx context.Context) time.Duration {
 | PR | 内容 | 关键点 |
 | --- | --- | --- |
 | 2a | 上传/body 上限（`upload_max_size_mb`、`max_json_body_mb`） | **合并三份副本**为 1 键；`system_config.MaxUploadSizeMB` 保留为兼容列，读新键优先 |
-| 2b | Webhook 验签降级开关（`allow_insecure_webhook` 单键，覆盖 14 个硬编码点） | **默认值改为 `false`**；此项属安全默认值修正，需单独发版说明 |
+| 2b | Webhook 验签降级开关（**不新增参数键，改为收敛护栏强度**） | 方案原文「单键覆盖 14 个硬编码点、默认改 `false`」经实测**前提全部不成立**，实际处置见下方「2b 已落地」；正确地讲这是「全面数据库驱动」的一个受控例外 |
 | 2c | 锁与幂等 TTL（收件箱/消息中台/人工接管/TG 轮询锁，13 个点位） | TTL 是正确性不是调优；必须带 `Restart=false`（要能热改） |
 | 2d | 渠道与配额上限（QQ/TG 长度、SSE 每 IP 连接、配额降级阈值，15 个点位） | — |
 
@@ -370,6 +370,39 @@ env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
 **接线范式**：`middleware.max_json_body_mb` 走 provider 注入（middleware 不能反向依赖 service）；`misc.upload_max_size_mb` 走读取函数直连参数中心（读取点在 controller，本来就能依赖 service），两者的正确性分别由 `internal/app/upload_body_limit_params_wiring_test.go` 与 `internal/controller/upload_param_limit_test.go` 的真库行为测试盯住。
 
 **未纳入本批**（如实记录，避免后人误以为已覆盖）：前端第三份副本 `user-web/src/views/system/MaterialLibrary.vue:323` 的 `maxSize = 10` 属阶段 3.3；`knowledge_base_import.go:35 MaxUploadFileSize = 50<<20` 已在阶段 1.8 作为 `knowledge.max_upload_file_size` 单独入库，与本条不是同一个上限。
+
+#### 2b 已落地（2026-10-10）——「不 DB 化」是一个受控例外
+
+**方案原文的三处前提经实测全部不成立，如实记录以免后人按错的方向再走一遍**：
+
+| 原文说法 | 实测 |
+| --- | --- |
+| 14 个硬编码点 | **只有 3 个真实读取点**（`internal/service/webhook.go:509`、`internal/channelbot/telegram/telegram.go:463`、`internal/content/service/marketing_flow_action.go:703`）；其余 11 处是错误文案/日志里提到变量名 |
+| 默认 `true`（硬编码开着） | 三处**本来就 fail-closed**（只认字面量 `"true"`，且都要求「该账号压根没配密钥」时才可能豁免），不存在要改的默认值 |
+| 单键可覆盖 | 三把开关护栏强度分三档（见下），语义各不相同，**一个键覆盖不了** |
+
+三把开关的真实护栏强度（这是本批真正要解决的问题）：
+
+| 变量 | 原护栏 | 风险 |
+| --- | --- | --- |
+| `ALLOW_INSECURE_WEBHOOK` | 启动护栏：`APP_ENV` 非开发值 ⇒ `log.Fatalf` 拒绝启动 | 挡得住 |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | **完全没有**，仅 `logger.Warnf` | **生产误设 ⇒ 验签被静默跳过，启动不报错**（本批修的真实缺陷） |
+| `MARKETING_WEBHOOK_ALLOW_INSECURE` | 运行时判 `config.IsDevelopmentEnv()` | 挡得住，但只挡运行时，启动不报 |
+
+**为什么不做成 DB 参数**（这是本节的核心结论，比"多接一条线"重要得多）：
+
+把验签绕过做成数据库可改，等于让 admin API 的写操作能在**运行时翻转签名校验** —— 相比现在的"env + 启动 `log.Fatalf` 护栏"是**安全回退**：DB 改完即时生效、不需要重启、没有启动拦截、且改完那一刻没有任何日志。env 的代价（要重发一次部署）恰恰是它作为安全闸的屏障。
+
+另一个更朴素的理由：**DB 镜像 env 状态会造假值**。若为了让控制台"看得见"而建一条种子行，它的 `Value` 要么是启动时写入的（只反映最后一次重启时的 env，与当前进程实际读到的 env 可能不同），要么永远静态 false（控制台显示"未开启"但 env 可能正开着）。前者需要 ReadOnly 的键在启动时被写入（`ReadOnly` 与「服务端自写」自相矛盾），后者是纯误导。因此**不给这三处加 `config_params` 种子行**，`wired` 计数不变。
+
+**实际落地的四件事**：
+
+1. **修真缺陷**：`telegram.go` 旁路从裸 `os.Getenv(...)=="true"` 改为 `insecureTelegramWebhookAllowed()`（开关 **且** `config.IsDevelopmentEnv()`），与 marketing 那处同口径。
+2. **补第二处缺陷**：`internal/channelbot/whatsapp/whatsapp.go` 的 `VerifyWebhook` 在空 secret 时从 **fail-open 改为 fail-closed**（旧注释写"与项目既有行为一致"，实际是本仓唯一一处无开关、无护栏、无审计痕迹的验签绕过）。改后打 `logger.Warnf`。
+3. **扩启动护栏**：`insecureWebhookStartupError` 加第 5 个参数 `allowInsecureTelegram`，`guardInsecureWebhookAtStartup` 同时读两个变量 —— 生产误设任一都拒绝启动。
+4. **钉住语义**：`"TRUE"`/`"1"`/`"yes"`/`"true "`（带尾空格）**不算开启**，测试逐格覆盖，避免将来有人图省事改成 `strconv.ParseBool` 放宽口径。
+
+**这是「全面数据库驱动」的一个受控例外，不是漏做**：判定标准是——**能不能让运行时的一个写操作翻掉安全闸**。阈值、TTL、上限都是"调坏了我看得见、改回来就行"；验签旁路不是，翻错的代价是外部伪造回调直接进业务。凡属此类的一律留在 env + 启动护栏，本批次起在两份文档中逐条登记。
 
 ### 阶段三：P1 130 个点位 + 前端接线
 

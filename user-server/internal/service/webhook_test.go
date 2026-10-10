@@ -722,7 +722,7 @@ func TestWebhookInsecureWebhookGuard(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := insecureWebhookStartupError(tc.appEnv, tc.mode, tc.ginMode, tc.allowInsecure)
+			err := insecureWebhookStartupError(tc.appEnv, tc.mode, tc.ginMode, tc.allowInsecure, "")
 			if gotFatal := err != nil; gotFatal != tc.wantFatal {
 				t.Fatalf("wantFatal=%v, got err=%v", tc.wantFatal, err)
 			}
@@ -733,5 +733,53 @@ func TestWebhookInsecureWebhookGuard(t *testing.T) {
 				t.Errorf("fatal 指引应包含变量名，got: %v", err)
 			}
 		})
+	}
+}
+
+// TestWebhookInsecureTelegramGuard ALLOW_INSECURE_TELEGRAM_WEBHOOK 与主开关同口径收口。
+//
+// 该键 2026-10-10 之前只 fail-closed、没有任何环境护栏：设了就静默跳过 Telegram 回调
+// 验签（仅一条 Warnf），生产环境误设也不会拒绝启动。本组用例钉住修好后的双向约束：
+// 独立过护栏（主开关没开、它自己把进程拦下来），且不会反过来放宽主开关的判定。
+func TestWebhookInsecureTelegramGuard(t *testing.T) {
+	cases := []struct {
+		name        string
+		appEnv      string
+		ginMode     string
+		mainSwitch  string
+		tgSwitch    string
+		wantFatal   bool
+		wantMention string
+	}{
+		{"production+TG开关开启_拒绝", "production", "", "", "true", true, "ALLOW_INSECURE_TELEGRAM_WEBHOOK"},
+		{"production+两开关都开_报主开关", "production", "", "true", "true", true, "ALLOW_INSECURE_WEBHOOK"},
+		{"production+主开关开TG未开_报主开关", "production", "", "true", "", true, "ALLOW_INSECURE_WEBHOOK"},
+		{"development+TG开关开启_放行", "development", "", "", "true", false, ""},
+		{"环境未声明+GIN_MODE=debug_放行", "", "debug", "", "true", false, ""},
+		{"production+TG开关未开_放行", "production", "", "", "false", false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := insecureWebhookStartupError(tc.appEnv, "", tc.ginMode, tc.mainSwitch, tc.tgSwitch)
+			if gotFatal := err != nil; gotFatal != tc.wantFatal {
+				t.Fatalf("wantFatal=%v, got err=%v", tc.wantFatal, err)
+			}
+			if !tc.wantFatal {
+				return
+			}
+			if tc.wantMention != "" && !strings.Contains(err.Error(), tc.wantMention) {
+				t.Errorf("fatal 指引应优先报 %s，got: %v", tc.wantMention, err)
+			}
+		})
+	}
+}
+
+// TestInsecureEnvStartupErrorNilValueIsNoop 单键护栏在键未设置时必须完全静默：
+// 判定只认字符串 "true"，空串/false/其他任何值都不该触发拒绝启动。
+func TestInsecureEnvStartupErrorNilValueIsNoop(t *testing.T) {
+	for _, v := range []string{"", "false", "TRUE", "1", "yes", "true "} {
+		if err := insecureEnvStartupError("ALLOW_INSECURE_WEBHOOK", v, "production", "", "", ""); err != nil {
+			t.Errorf("value=%q 在 production 下必须放行，got err=%v", v, err)
+		}
 	}
 }
