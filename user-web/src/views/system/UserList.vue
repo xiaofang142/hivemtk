@@ -94,6 +94,13 @@
           </template>
         </el-table-column>
         <el-table-column :label="t('systemUser.phone')" prop="phone" min-width="120" />
+        <el-table-column label="团队" min-width="120">
+          <template #default="{ row }">
+            <el-tag v-if="teamName(row.team_id)" size="small">{{ teamName(row.team_id) }}</el-tag>
+            <el-tag v-else-if="row.role === 'admin'" size="small" type="danger">平台侧</el-tag>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('systemUser.enabled')" prop="status" width="100">
           <template #default="{ row }">
             <el-tag :type="getEnabledTagType(row.status)">{{ getEnabledLabel(row.status) }}</el-tag>
@@ -184,6 +191,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { teamAdminApi } from '@/api/teamAdmin'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -383,7 +391,20 @@ const deleteUser = async (row) => {
   }
 }
 
-onMounted(() => refreshData())
+// 团队名映射（多租户 P1：用户列表显示归属团队；非管理员视角静默降级）
+const teamMap = ref({})
+const teamName = (id) => teamMap.value[id] || ''
+const loadTeams = async () => {
+  try {
+    const res = await teamAdminApi.list({ page: 1, size: 200 })
+    const list = (res?.data ?? res ?? {}).list ?? []
+    const m = {}
+    list.forEach((t) => { m[t.id] = t.name })
+    teamMap.value = m
+  } catch { /* 非管理员无权限：静默 */ }
+}
+
+onMounted(() => { refreshData(); loadTeams() })
 </script>
 
 <style scoped lang="scss">

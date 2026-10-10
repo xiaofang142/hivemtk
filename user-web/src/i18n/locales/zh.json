@@ -366,7 +366,8 @@
     "mcpSkills": "Skill 注册表",
     "capabilityMatrix": "能力矩阵",
     "systemTeams": "团队管理",
-    "systemMyTeam": "我的团队"
+    "systemMyTeam": "我的团队",
+    "systemRbacMatrix": "权限矩阵"
   },
   "保存": "保存",
   "提交": "提交",

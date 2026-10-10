@@ -368,7 +368,8 @@
     "mcpSkills": "Registre Skill",
     "capabilityMatrix": "Matrice des capacités",
     "systemTeams": "Équipes",
-    "systemMyTeam": "Mon équipe"
+    "systemMyTeam": "Mon équipe",
+    "systemRbacMatrix": "Matrice RBAC"
   },
   "保存": "Save",
   "提交": "Submit",

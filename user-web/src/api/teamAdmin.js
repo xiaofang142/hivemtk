@@ -13,6 +13,12 @@ export const teamAdminApi = {
   moveMember: (teamId, userId) => http.post(`/api/manage/teams/${teamId}/users/${userId}/move`)
 }
 
+// RBAC 矩阵（P1-2）：权限点/角色只读出参
+export const rbacApi = {
+  matrix: () => http.get('/api/manage/rbac-matrix'),
+  myPermissions: () => http.get('/api/auth/my-permissions')
+}
+
 export const myTeamApi = {
   detail: () => http.get('/api/team/detail'),
   members: (params) => http.get('/api/team/users', { params }),

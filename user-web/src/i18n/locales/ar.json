@@ -327,7 +327,8 @@
     "mcpSkills": "سجل المهارات",
     "capabilityMatrix": "مصفوفة القدرات",
     "systemTeams": "إدارة الفرق",
-    "systemMyTeam": "فريقي"
+    "systemMyTeam": "فريقي",
+    "systemRbacMatrix": "مصفوفة RBAC"
   },
   "保存": "حفظ",
   "提交": "إرسال",

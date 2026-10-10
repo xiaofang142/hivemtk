@@ -64,7 +64,28 @@ func (r *TeamRepository) List(ctx context.Context, page, size int) ([]model.Team
 	}
 	var rows []model.Team
 	err := q.Order("id ASC").Offset((page - 1) * size).Limit(size).Find(&rows).Error
-	return rows, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	// 成员数聚合（团队量小，一条 GROUP BY 足够；非持久化列）
+	if len(rows) > 0 {
+		type cntRow struct {
+			TeamID uint
+			Cnt    int64
+		}
+		var counts []cntRow
+		if err := r.db.WithContext(ctx).Model(&model.SystemUser{}).
+			Select("team_id, COUNT(*) AS cnt").Group("team_id").Scan(&counts).Error; err == nil {
+			m := map[uint]int64{}
+			for _, c := range counts {
+				m[c.TeamID] = c.Cnt
+			}
+			for i := range rows {
+				rows[i].MemberCount = m[rows[i].ID]
+			}
+		}
+	}
+	return rows, total, nil
 }
 
 // CountMembers 团队成员数（system_users.team_id = team）。

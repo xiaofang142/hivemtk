@@ -18,7 +18,9 @@ type Team struct {
 	// Status 生命周期：active / disabled（停用后成员登录仍可，业务写入面在 P2 收紧）
 	Status string `gorm:"type:varchar(16);default:'active';index" json:"status"`
 	// OwnerUserID 团队主管理员（system_users.id，可 NULL=暂无）
-	OwnerUserID *uint     `gorm:"column:owner_user_id;index" json:"owner_user_id"`
+	OwnerUserID *uint `gorm:"column:owner_user_id;index" json:"owner_user_id"`
+	// MemberCount 成员数（非持久化列，TeamRepository.List 聚合填充）
+	MemberCount int64     `gorm:"-" json:"member_count"`
 	Remark      string    `gorm:"type:varchar(255)" json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

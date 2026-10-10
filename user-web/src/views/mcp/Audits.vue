@@ -33,7 +33,18 @@
               <el-option label="已执行" :value="1" />
               <el-option label="被拒（越权）" :value="0" />
             </el-select>
+            <el-date-picker
+              v-model="filters.range"
+              type="datetimerange"
+              size="small"
+              style="width: 320px"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              value-format="YYYY-MM-DDTHH:mm:ssZ"
+              @change="load"
+            />
             <el-button type="primary" size="small" @click="load">刷新</el-button>
+            <el-button size="small" @click="exportCSV('mcp/audits/export', 'mcp-call-audits')">导出 CSV</el-button>
           </div>
           <div v-else class="filters">
             <el-select v-model="adminFilters.action" placeholder="动作" clearable filterable size="small" style="width: 180px" @change="loadAdmin">
@@ -44,7 +55,19 @@
               <el-option label="密钥" value="key" />
               <el-option label="Skill" value="skill" />
             </el-select>
+            <el-input v-model="adminFilters.operator" placeholder="操作人" clearable size="small" style="width: 120px" @change="loadAdmin" />
+            <el-date-picker
+              v-model="adminFilters.range"
+              type="datetimerange"
+              size="small"
+              style="width: 320px"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              value-format="YYYY-MM-DDTHH:mm:ssZ"
+              @change="loadAdmin"
+            />
             <el-button type="primary" size="small" @click="loadAdmin">刷新</el-button>
+            <el-button size="small" @click="exportCSV('mcp/admin-audits/export', 'mcp-admin-audits')">导出 CSV</el-button>
           </div>
         </div>
       </template>
@@ -160,6 +183,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { mcpAuditApi, mcpAdminAuditApi } from '@/api/mcpCredential'
 
 const tab = ref('call')
@@ -170,14 +194,14 @@ const rows = ref([])
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
-const filters = ref({ client_id: '', tool: '', allowed: undefined, event: undefined })
+const filters = ref({ client_id: '', tool: '', allowed: undefined, event: undefined, range: null })
 
 // —— 管理审计 ——
 const adminRows = ref([])
 const adminLoading = ref(false)
 const adminTotal = ref(0)
 const adminPage = ref(1)
-const adminFilters = ref({ action: '', target_type: '' })
+const adminFilters = ref({ action: '', target_type: '', operator: '', range: null })
 const actions = [
   'credential.create', 'credential.update', 'credential.delete',
   'key.create', 'key.enable', 'key.disable', 'key.revoke', 'key.delete', 'key.reveal',
@@ -200,6 +224,8 @@ const load = async () => {
     if (filters.value.client_id) params.client_id = filters.value.client_id
     if (filters.value.tool) params.tool = filters.value.tool
     if (filters.value.event) params.event = filters.value.event
+    if (filters.value.range?.[0]) params.start = filters.value.range[0]
+    if (filters.value.range?.[1]) params.end = filters.value.range[1]
     if (filters.value.allowed !== undefined && filters.value.allowed !== null && filters.value.allowed !== '') {
       params.allowed = filters.value.allowed
     }
@@ -218,6 +244,9 @@ const loadAdmin = async () => {
     const params = { page: adminPage.value, size }
     if (adminFilters.value.action) params.action = adminFilters.value.action
     if (adminFilters.value.target_type) params.target_type = adminFilters.value.target_type
+    if (adminFilters.value.operator) params.operator = adminFilters.value.operator
+    if (adminFilters.value.range?.[0]) params.start = adminFilters.value.range[0]
+    if (adminFilters.value.range?.[1]) params.end = adminFilters.value.range[1]
     const res = await mcpAdminAuditApi.list({ params })
     const data = res?.data ?? res ?? {}
     adminRows.value = data.list ?? []
@@ -230,6 +259,32 @@ const loadAdmin = async () => {
 watch(tab, (v) => {
   if (v === 'admin' && adminRows.value.length === 0) loadAdmin()
 })
+
+// 导出：带 JWT 的 fetch 下载（导出端点在鉴权组内，window.open 不带令牌）
+const exportCSV = async (path, name) => {
+  try {
+    const token = localStorage.getItem('token') || ''
+    const qs = new URLSearchParams()
+    const src = tab.value === 'call' ? filters.value : adminFilters.value
+    Object.entries(src).forEach(([k, v]) => {
+      if (k === 'range' || v === undefined || v === null || v === '') return
+      qs.set(k, v)
+    })
+    const resp = await fetch(`/api/${path}?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error('导出失败：' + e.message)
+  }
+}
 
 onMounted(load)
 </script>

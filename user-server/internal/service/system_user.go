@@ -308,6 +308,8 @@ func (s *SystemUserService) toUserResponse(_ context.Context, user *model.System
 		Phone:       user.Phone,
 		RealName:    user.RealName,
 		Role:        user.Role,
+		TeamID:      user.TeamID,
+		DataScope:   user.DataScope,
 		Status:      user.Status,
 		LastLogin:   user.LastLogin,
 		LastLoginAt: user.LastLogin,

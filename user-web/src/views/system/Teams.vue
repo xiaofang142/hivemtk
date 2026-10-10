@@ -39,6 +39,11 @@
             <span v-else class="muted">未指定</span>
           </template>
         </el-table-column>
+        <el-table-column label="成员数" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" type="info">{{ row.member_count ?? 0 }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
         <el-table-column prop="created_at" label="创建时间" width="160">
           <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>

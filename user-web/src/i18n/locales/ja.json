@@ -374,7 +374,8 @@
     "mcpSkills": "Skill レジストリ",
     "capabilityMatrix": "機能マトリクス",
     "systemTeams": "チーム管理",
-    "systemMyTeam": "マイチーム"
+    "systemMyTeam": "マイチーム",
+    "systemRbacMatrix": "権限マトリクス"
   },
   "保存": "保存",
   "提交": "送信",

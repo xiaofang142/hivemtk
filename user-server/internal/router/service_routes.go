@@ -261,6 +261,8 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		// —— 多租户 P0：团队（租户）管理 ——
 		// 平台管理员面：全量 CRUD + 成员调拨（需求 3）。
 		authPlainAdmin.GET("/manage/teams", controller.ListTeams)
+		// RBAC 矩阵只读出参（P1-2：前端"权限矩阵"页数据源）
+		authPlainAdmin.GET("/manage/rbac-matrix", controller.GetRBACMatrix)
 		authPlainAdmin.POST("/manage/teams", controller.CreateTeam)
 		authPlainAdmin.PUT("/manage/teams/:id", controller.UpdateTeam)
 		authPlainAdmin.DELETE("/manage/teams/:id", controller.DeleteTeam)
@@ -269,6 +271,7 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.POST("/manage/teams/:id/users/:userId/move", controller.MoveTeamUser)
 		// 团队管理员面：TeamAdminAuthMiddleware 放行 admin+team_admin，
 		// "只能本团队"由 service.authorizeTeamAccess 服务端强制（teamID 取自 JWT，不收调用方参数）。
+		auth.GET("/auth/my-permissions", controller.GetMyPermissions)
 		teamAuth := auth.Group("", middleware.TeamAdminAuthMiddleware())
 		teamAuth.GET("/team/detail", controller.MyTeam)
 		teamAuth.GET("/team/users", controller.MyTeamUsers)
