@@ -220,6 +220,13 @@ func main() {
 		logger.Info("[ConfigParam] 锁与幂等 TTL 接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 渠道侧长度/条数上限与外部依赖超时。同样放 seed 的 if/else 之外：
+	// 这几个读取点横跨 qq/telegram/core 三个子包，service 反向 import 它们，
+	// 底层包接不了 config_params，只能由这一层注入。
+	if wired := app.WireChannelBotConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] 渠道上限与外部依赖超时接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

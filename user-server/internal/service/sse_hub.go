@@ -23,11 +23,44 @@ const (
 )
 
 // SSE 默认参数
+//
+// 这三个值在 DB 驱动下的 fallback（读 config_params group=sse）：
+//
+//	sse.heartbeat_interval  → SSEHeartbeatInterval
+//	sse.max_conn_per_ip     → SSEMaxConnPerIP
+//	sse.client_buffer_size  → SSEClientBufferSize（构造期读，标 Restart=true）
 const (
 	SSEHeartbeatInterval = 15 * time.Second
 	SSEMaxConnPerIP      = 5
 	SSEClientBufferSize  = 100
 )
+
+// runtimeSSEHeartbeatInterval 读 DB 参数，非正值回落兜底。
+// 心跳为 0 会让 time.NewTicker(0) 直接 panic，必须守。
+func runtimeSSEHeartbeatInterval(ctx context.Context) time.Duration {
+	if v := GlobalConfigParam().GetDuration(ctx, "sse", "heartbeat_interval", SSEHeartbeatInterval); v > 0 {
+		return v
+	}
+	return SSEHeartbeatInterval
+}
+
+// runtimeSSEMaxConnPerIP 读 DB 参数，非正值回落兜底。
+// 每 IP 连接数为 0 等于把所有访客一次性挡在门外。
+func runtimeSSEMaxConnPerIP(ctx context.Context) int {
+	if v := GlobalConfigParam().GetInt(ctx, "sse", "max_conn_per_ip", SSEMaxConnPerIP); v > 0 {
+		return v
+	}
+	return SSEMaxConnPerIP
+}
+
+// runtimeSSEClientBufferSize 读 DB 参数，非正值回落兜底。
+// 缓冲为 0 会让 make(chan, 0) 退化为同步信道，一次慢客户端就堵死广播。
+func runtimeSSEClientBufferSize(ctx context.Context) int {
+	if v := GlobalConfigParam().GetInt(ctx, "sse", "client_buffer_size", SSEClientBufferSize); v > 0 {
+		return v
+	}
+	return SSEClientBufferSize
+}
 
 // SSEEvent SSE 事件
 type SSEEvent struct {
@@ -59,7 +92,7 @@ func NewSSEClient(id, ip string, topics []string) *SSEClient {
 		id:        id,
 		ip:        ip,
 		topics:    topicSet,
-		eventCh:   make(chan SSEEvent, SSEClientBufferSize),
+		eventCh:   make(chan SSEEvent, runtimeSSEClientBufferSize(context.Background())),
 		closeCh:   make(chan struct{}),
 		createdAt: time.Now(),
 	}
@@ -149,8 +182,9 @@ func (h *SSEHub) Register(ctx context.Context, client *SSEClient) error {
 	if h.stopped.Load() {
 		return fmt.Errorf("hub stopped")
 	}
-	if h.ipCount[client.ip] >= SSEMaxConnPerIP {
-		return fmt.Errorf("exceeded max connections per IP: %d", SSEMaxConnPerIP)
+	maxConnPerIP := runtimeSSEMaxConnPerIP(context.Background())
+	if h.ipCount[client.ip] >= maxConnPerIP {
+		return fmt.Errorf("exceeded max connections per IP: %d", maxConnPerIP)
 	}
 	if _, exists := h.clients[client.id]; exists {
 		return fmt.Errorf("client id already exists: %s", client.id)
@@ -389,7 +423,7 @@ func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
 		Timestamp: time.Now(),
 	})
 
-	heartbeatTicker := time.NewTicker(SSEHeartbeatInterval)
+	heartbeatTicker := time.NewTicker(runtimeSSEHeartbeatInterval(context.Background()))
 	defer heartbeatTicker.Stop()
 
 	clientClosed := c.Request.Context().Done()

@@ -31,6 +31,75 @@ const (
 	tgSendMaxWait            = 5 * time.Second
 )
 
+// 以下三个 provider 由 internal/app 层在启动时注入（读 config_params
+// group=channelbot）。nil 即未注入，走兜底常量。
+var (
+	tgMessageMaxLenProvider          func() int
+	tgInlineRowsMaxProvider          func() int
+	tgInlineButtonsPerRowMaxProvider func() int
+)
+
+// SetTGMessageMaxLenProvider 注入 TG 单条消息长度上限读取函数。
+// fn 传 nil 视为「不注入」，保留兜底值。
+func SetTGMessageMaxLenProvider(fn func() int) {
+	if fn != nil {
+		tgMessageMaxLenProvider = fn
+	}
+}
+
+// SetTGInlineRowsMaxProvider 注入 inline keyboard 行数上限读取函数。
+func SetTGInlineRowsMaxProvider(fn func() int) {
+	if fn != nil {
+		tgInlineRowsMaxProvider = fn
+	}
+}
+
+// SetTGInlineButtonsPerRowMaxProvider 注入 inline keyboard 每行按钮数上限读取函数。
+func SetTGInlineButtonsPerRowMaxProvider(fn func() int) {
+	if fn != nil {
+		tgInlineButtonsPerRowMaxProvider = fn
+	}
+}
+
+// TGMessageMaxLengthEffective 返回实际生效的单条消息长度上限。
+// 非正值一律回落兜底：上限 0 会把每条消息都截成空。
+func TGMessageMaxLengthEffective() int {
+	if tgMessageMaxLenProvider != nil {
+		if v := tgMessageMaxLenProvider(); v > 0 {
+			return v
+		}
+	}
+	return TGMessageMaxLength
+}
+
+// TGInlineRowsMaxEffective 返回实际生效的 inline keyboard 行数上限。
+func TGInlineRowsMaxEffective() int {
+	if tgInlineRowsMaxProvider != nil {
+		if v := tgInlineRowsMaxProvider(); v > 0 {
+			return v
+		}
+	}
+	return TGInlineRowsMax
+}
+
+// TGInlineButtonsPerRowMaxEffective 返回实际生效的每行按钮数上限。
+func TGInlineButtonsPerRowMaxEffective() int {
+	if tgInlineButtonsPerRowMaxProvider != nil {
+		if v := tgInlineButtonsPerRowMaxProvider(); v > 0 {
+			return v
+		}
+	}
+	return TGInlineButtonsPerRowMax
+}
+
+// ProbeTGMessageMaxLength / ProbeTGInlineRowsMax / ProbeTGInlineButtonsPerRowMax
+// 导出读口，供装配层测试断言注入是否真的生效。
+func ProbeTGMessageMaxLength() int { return TGMessageMaxLengthEffective() }
+func ProbeTGInlineRowsMax() int    { return TGInlineRowsMaxEffective() }
+func ProbeTGInlineButtonsPerRowMax() int {
+	return TGInlineButtonsPerRowMaxEffective()
+}
+
 // Client Telegram Bot API 客户端
 type Client struct {
 	core.BaseClient
@@ -112,7 +181,7 @@ func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, opt
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
-	chunks := splitMessage(text, TGMessageMaxLength)
+	chunks := splitMessage(text, TGMessageMaxLengthEffective())
 	if len(chunks) == 0 {
 		return 0, fmt.Errorf("empty text")
 	}
@@ -243,7 +312,7 @@ func apiErr(status, retryAfterSec int, raw string) *core.APIError {
 
 func splitMessage(text string, limit int) []string {
 	if limit <= 0 {
-		limit = TGMessageMaxLength
+		limit = TGMessageMaxLengthEffective()
 	}
 	text = strings.TrimRight(text, "\n")
 	if text == "" {
@@ -323,12 +392,12 @@ func buildInlineKeyboard(rows [][]InlineButton) map[string]any {
 	}
 	out := make([][]map[string]string, 0, len(rows))
 	for i, row := range rows {
-		if i >= TGInlineRowsMax {
+		if i >= TGInlineRowsMaxEffective() {
 			break
 		}
 		btnRow := make([]map[string]string, 0, len(row))
 		for j, btn := range row {
-			if j >= TGInlineButtonsPerRowMax {
+			if j >= TGInlineButtonsPerRowMaxEffective() {
 				break
 			}
 			if btn.Text == "" {

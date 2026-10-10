@@ -10,7 +10,7 @@ type LowQualitySampleType string
 type LowQualitySample struct {
 	ID               uint64               `gorm:"primaryKey;autoIncrement" json:"id"`
 	CustomerID       string               `gorm:"type:varchar(64);index" json:"customer_id"`
-	SessionID        string               `gorm:"type:varchar(64);index" json:"session_id"`
+	SessionID string `gorm:"type:varchar(120);index" json:"session_id"`
 	SampleType       LowQualitySampleType `gorm:"type:varchar(32);not null;index" json:"sample_type"`
 	CustomerMessage  string               `gorm:"type:text" json:"customer_message"`
 	AIReply          string               `gorm:"type:text;not null" json:"ai_reply"`

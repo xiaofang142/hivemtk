@@ -50,7 +50,7 @@ func (ScriptCategory) TableName() string {
 // ScriptRecommend 话术推荐记录
 type ScriptRecommend struct {
 	ID            uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	SessionID     string     `gorm:"type:varchar(50);index" json:"session_id"`
+	SessionID     string     `gorm:"type:varchar(120);index" json:"session_id"`
 	Message       string     `gorm:"type:text" json:"message"`
 	TemplateID    uint       `json:"template_id"`
 	TemplateTitle string     `gorm:"type:varchar(100)" json:"template_title"`

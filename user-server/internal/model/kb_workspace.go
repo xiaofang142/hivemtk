@@ -145,7 +145,7 @@ type KnowledgeSearchLog struct {
 	LatencyMs           int       `json:"latency_ms"`
 	Hit                 int       `gorm:"default:0" json:"hit"`
 	Source              string    `gorm:"size:32" json:"source"`
-	SessionID           string    `gorm:"size:64" json:"session_id"`
+	SessionID string `gorm:"size:120" json:"session_id"`
 	CreatedAt           time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }
 

@@ -147,7 +147,16 @@ func TestFallbackNilDB(t *testing.T) {
 // 标注：tryAcquireAILock / ReleaseAILock / IsSessionAIBusy 三个函数整条生产链路都
 // 没人调用（源文件自带 //nolint:unused），真正在跑的并发闸是 ai_processing_ttl 那条。
 // 这一组与其它组的区别是性质：锁 TTL 写错 = 死锁或重复处理，是正确性参数不是调优项。
-const defaultParamDefsWant = 124
+//
+// 2026-10-10（第五次，阶段二 2d）：+10。前 5 条 `channelbot` 组是渠道侧长度/条数上限与
+// 外部依赖超时（qq_message_max_len / tg_message_max_length / tg_inline_rows_max /
+// tg_inline_buttons_per_row_max / http_timeout）；接下来 3 条 `sse` 组是业务 SSE Hub
+// 自己的参数（heartbeat_interval / max_conn_per_ip / client_buffer_size），与更早 DB 化
+// 的 bridge.sse_* 是两套东西——那两条管 bridge 长连接，这组管业务 SSE Hub；最后 2 条补
+// 的是 bridge/sse.go 里同文件却仍写死的回放 backlog 与总线缓冲。
+// 其中 channelbot.http_timeout / sse.client_buffer_size / bridge.sse_bus_buffer_size
+// 三条标 Restart=true：读取点在构造函数里，改完要重启才对已建立的连接生效。
+const defaultParamDefsWant = 134
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

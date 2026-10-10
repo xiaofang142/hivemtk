@@ -43,6 +43,8 @@ import (
 //
 //	bridge.sse_heartbeat_interval → SSEDefaultHeartbeatInterval (fallback)
 //	bridge.sse_max_stream_duration → SSEDefaultMaxStreamDuration (fallback)
+//	bridge.sse_max_backlog_events → SSEMaxBacklogEvents (fallback)
+//	bridge.sse_bus_buffer_size    → SSEBusBufferSize (fallback，构造期读，标 Restart=true)
 //
 // B-1 心跳约束（强制）：
 //
@@ -68,6 +70,25 @@ func runtimeSSEHeartbeatInterval(ctx context.Context) time.Duration {
 }
 func runtimeSSEMaxStreamDuration(ctx context.Context) time.Duration {
 	return service.GlobalConfigParam().GetDuration(ctx, "bridge", "sse_max_stream_duration", SSEDefaultMaxStreamDuration)
+}
+
+// runtimeSSEMaxBacklogEvents 读 DB 参数，非正值回落兜底。
+// 每个连接的回放 backlog 上限：调小会让断线重连的客户端丢事件，
+// 调大则每个长连接按上限常驻内存。
+func runtimeSSEMaxBacklogEvents(ctx context.Context) int {
+	if v := service.GlobalConfigParam().GetInt(ctx, "bridge", "sse_max_backlog_events", SSEMaxBacklogEvents); v > 0 {
+		return v
+	}
+	return SSEMaxBacklogEvents
+}
+
+// runtimeSSEBusBufferSize 读 DB 参数，非正值回落兜底（构造期读，Restart=true）。
+// 缓冲 0 会让 make(chan, 0) 退化为同步信道，一个慢消费者就能堵死整个总线。
+func runtimeSSEBusBufferSize(ctx context.Context) int {
+	if v := service.GlobalConfigParam().GetInt(ctx, "bridge", "sse_bus_buffer_size", SSEBusBufferSize); v > 0 {
+		return v
+	}
+	return SSEBusBufferSize
 }
 
 // SSEOutboxFetcher 拉取 outbox 事件的接口
@@ -175,7 +196,7 @@ var GlobalSSEBus = NewSSEBus()
 func NewSSEBus() *SSEBus {
 	return &SSEBus{
 		subs:   make(map[string][]chan SSEEvent),
-		buffer: SSEBusBufferSize,
+		buffer: runtimeSSEBusBufferSize(context.Background()),
 	}
 }
 
@@ -767,8 +788,9 @@ func (m *MemoryOutboxFetcher) Push(eventType string, data map[string]any) SSEEve
 		Timestamp: time.Now(),
 	}
 	m.events = append(m.events, ev)
-	if len(m.events) > SSEMaxBacklogEvents {
-		m.events = m.events[len(m.events)-SSEMaxBacklogEvents:]
+	maxBacklog := runtimeSSEMaxBacklogEvents(context.Background())
+	if len(m.events) > maxBacklog {
+		m.events = m.events[len(m.events)-maxBacklog:]
 	}
 	return ev
 }

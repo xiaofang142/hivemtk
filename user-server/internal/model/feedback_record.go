@@ -8,7 +8,7 @@ import (
 // FeedbackRecordORM 反馈记录持久化行
 type FeedbackRecordORM struct {
 	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	SessionID      string         `gorm:"type:varchar(64);index" json:"session_id"`
+	SessionID string `gorm:"type:varchar(120);index" json:"session_id"`
 	CustomerID     string         `gorm:"type:varchar(64);index" json:"customer_id"`
 	IntentType     string         `gorm:"type:varchar(50);index" json:"intent_type"`
 	Confidence     float64        `gorm:"type:decimal(5,4);default:0" json:"confidence"`

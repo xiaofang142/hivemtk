@@ -39,6 +39,8 @@ const (
 	// WeComQuotaDegradeThreshold 为 fallback 默认值（DB 驱动）。
 	// 运行时通过 GlobalConfigParam() 按 group=wecom 读取 DB 参数：
 	//   wecom.quota_degrade → WeComQuotaDegradeThreshold (fallback)
+	// 它控制 computeHealthScore 里配额扣分的 -15 档；-25 档取
+	// max(0.95, quotaDegrade)，改这个参数会同时挪动两档（见 computeHealthScore）。
 	//
 	// WeComErrorRateDegradeThreshold 没有对应的读取函数，且现存实现也用不上它：
 	// computeHealthScore 的成功率判定是写死的三档（<50 / <80 / <95），
@@ -382,7 +384,16 @@ func computeHealthScore(loginState string, quotaRate, successRate float64, error
 	if loginState == WeComLoginOffline {
 		score -= 50
 	}
-	if quotaRate > 0.95 {
+	// quotaCriticalRate 是 -25 档（配额近乎耗尽）的阈值。它原来写死 0.95，
+	// 与下面读参数的 -15 档（quotaDegrade）是两套独立阈值 —— 于是运维把
+	// wecom.quota_degrade 调到 0.95 以上时，>0.95 那一档先命中，参数根本轮不到生效，
+	// 「配额降级」就成了半接线：改得动中间档、改不动最高档。
+	// 取两者较大者，保证三档严格递减；默认 0.9 < 0.95，行为与写死 0.95 逐档一致。
+	quotaCriticalRate := 0.95
+	if quotaDegrade > quotaCriticalRate {
+		quotaCriticalRate = quotaDegrade
+	}
+	if quotaRate > quotaCriticalRate {
 		score -= 25
 	} else if quotaRate > quotaDegrade {
 		score -= 15

@@ -445,5 +445,46 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "lock", Key: "ai_lock_ttl", Name: "AI 会话锁 TTL（未接线）",
 			Description: "【当前不生效，改了也没人读】InboxAILockKey 那把锁的兜底 TTL（秒）。tryAcquireAILock / ReleaseAILock / IsSessionAIBusy 三个函数整条生产链路都没人调用（源文件自带 //nolint:unused 标注），真正在跑的并发闸是上面 ai_processing_ttl 那条；要启用这套锁得先接 callers，再接本参数",
 			ValueType:   "duration", DefaultValue: "15", Min: strPtr("5"), Max: strPtr("300"), Step: strPtr("5"), Restart: false},
+
+		// ── channelbot 组：渠道侧的长度/条数上限与外部依赖超时 ──────────────
+		// 平台自身也有硬上限（QQ 2000 / TG 4096 / inline keyboard 100 行 8 钮），
+		// 调大超过平台限制只会让平台侧报错，调小则提前分批发送。
+		{Group: "channelbot", Key: "qq_message_max_len", Name: "QQ 单条消息长度上限",
+			Description: "QQ 渠道单条文本消息的最大长度（字符）。超出即自动分段发送，返回首段 msg_id。写大超过平台 2000 上限会被平台直接拒收而本地毫不知情，写小则一条回复被拆成很多条、观感碎",
+			ValueType:   "int", DefaultValue: "2000", Min: strPtr("1"), Max: strPtr("2000"), Step: strPtr("1"), Restart: false},
+		{Group: "channelbot", Key: "tg_message_max_length", Name: "TG 单条消息长度上限",
+			Description: "Telegram 渠道单条文本消息的最大长度（字符）。超出即自动分段发送，返回首段 message_id。写大超过平台 4096 上限会被平台直接拒收，写小则一条回复被拆成很多条",
+			ValueType:   "int", DefaultValue: "4096", Min: strPtr("1"), Max: strPtr("4096"), Step: strPtr("1"), Restart: false},
+		{Group: "channelbot", Key: "tg_inline_rows_max", Name: "TG inline 键盘行数上限",
+			Description: "Telegram inline keyboard 的最大行数。超出即截断（多出来的按钮直接消失）。写大超过平台 100 行上限会让整个键盘被平台拒收导致按钮全部消失，比截断更糟",
+			ValueType:   "int", DefaultValue: "100", Min: strPtr("1"), Max: strPtr("100"), Step: strPtr("1"), Restart: false},
+		{Group: "channelbot", Key: "tg_inline_buttons_per_row_max", Name: "TG inline 键盘每行按钮数上限",
+			Description: "Telegram inline keyboard 每一行的最大按钮数。超出即截断。写大超过平台 8 个上限会让整个键盘被拒收导致按钮全部消失",
+			ValueType:   "int", DefaultValue: "8", Min: strPtr("1"), Max: strPtr("8"), Step: strPtr("1"), Restart: false},
+		{Group: "channelbot", Key: "http_timeout", Name: "渠道外部依赖 HTTP 超时",
+			Description: "channelbot 各子包（QQ/TG/WhatsApp）访问平台 API 的默认 HTTP 超时（秒）。构造期读一次，改完需重启。写大＝外部依赖挂起时请求 goroutine 长时间占着不放，写小＝平台侧慢一点就误判超时（Telegram 的长轮询 getUpdates 天然需要几十秒，别把它调小）",
+			ValueType:   "duration", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("120"), Step: strPtr("1"), Restart: true},
+
+		// ── sse 组：业务侧 SSE 连接参数 ───────────────────────────────────
+		// 注意与 bridge.sse_* 区分：那两条管 bridge 长连接，这一组管业务 SSE Hub。
+		{Group: "sse", Key: "heartbeat_interval", Name: "SSE 心跳间隔",
+			Description: "业务 SSE 连接发送心跳注释帧的间隔（秒）。写大＝反代/CDN 的 proxy_read_timeout（通常 60s）会切断长连接，写小＝空连接也持续占用带宽。0 值会让 time.NewTicker(0) 直接 panic，故非法值一律回落兜底",
+			ValueType:   "duration", DefaultValue: "15", Min: strPtr("1"), Max: strPtr("60"), Step: strPtr("1"), Restart: false},
+		{Group: "sse", Key: "max_conn_per_ip", Name: "SSE 单 IP 连接数上限",
+			Description: "同一个来源 IP 允许同时打开的 SSE 连接数。这是防单点刷连接的闸。写大＝一个 IP 能把连接池占满挤掉正常用户，写小＝NAT/办公室出口共用 IP 的场景下多名正常用户会互相挤掉。0 会把所有访客一次性挡在门外",
+			ValueType:   "int", DefaultValue: "5", Min: strPtr("1"), Max: strPtr("200"), Step: strPtr("1"), Restart: false},
+		{Group: "sse", Key: "client_buffer_size", Name: "SSE 客户端事件缓冲",
+			Description: "每个 SSE 连接本地事件队列的容量（条）。写大＝每个连接按上限常驻内存，写小＝事件突发时更早触发丢弃/断链。0 会让缓冲退化为同步信道，一个慢客户端就能堵死整个广播。构造期读一次，改完需重启",
+			ValueType:   "int", DefaultValue: "100", Min: strPtr("1"), Max: strPtr("10000"), Step: strPtr("1"), Restart: true},
+
+		// ── bridge 组补充：回放 backlog 与总线缓冲 ────────────────────────
+		// bridge.sse_heartbeat_interval / sse_max_stream_duration 更早就已 DB 驱动，
+		// 这里补的是同文件里另外两个此前写死的。
+		{Group: "bridge", Key: "sse_max_backlog_events", Name: "bridge SSE 回放 backlog 上限",
+			Description: "每个 bridge SSE 连接为断线重连保留的回放事件数（条）。写大＝每个长连接按上限常驻内存，写小＝客户端重连后更早开始丢事件（表现为「中间几条消息没收到」）",
+			ValueType:   "int", DefaultValue: "1000", Min: strPtr("1"), Max: strPtr("100000"), Step: strPtr("1"), Restart: false},
+		{Group: "bridge", Key: "sse_bus_buffer_size", Name: "bridge SSE 总线缓冲",
+			Description: "bridge SSE 事件总线的 channel 容量（条）。写大＝一次事件洪峰更不容易阻塞发布方，代价是常驻内存；写小＝洪峰时发布方被阻塞。0 会让总线退化为同步信道，一个慢消费者就能堵死所有出站投递。构造期读一次，改完需重启",
+			ValueType:   "int", DefaultValue: "100", Min: strPtr("1"), Max: strPtr("100000"), Step: strPtr("1"), Restart: true},
 	}
 }

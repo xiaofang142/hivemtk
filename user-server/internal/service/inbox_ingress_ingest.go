@@ -67,6 +67,19 @@ func channelMsgIDOf(event *model.MessageEvent) string {
 // 放宽这一个字符，内容维度的去重就对整个入站流失效。
 var occurrenceMsgIDRe = regexp.MustCompile(`^mh:[0-9a-f]{8}#[1-9][0-9]*$`)
 
+// stripOccurrenceSuffix 剥离 event_id 尾部的 `#N` 发生次数后缀，返回 base hash。
+// 若无后缀则原样返回。用于出站回声检测：bridge 巡检把 AI 回复从 DOM 抓回时可能
+// 因同内容重复出现而追加 #N 后缀，剥掉后才能与出站 msg_id（无后缀）对齐。
+func stripOccurrenceSuffix(eventID string) string {
+	if idx := strings.LastIndex(eventID, "#"); idx > 0 {
+		base := eventID[:idx]
+		if occurrenceMsgIDRe.MatchString(eventID) {
+			return base
+		}
+	}
+	return eventID
+}
+
 // eventAssertsDistinctMessage 判断上报方是否用身份本身否定了「内容即身份」这条假设。
 // 为真时只放弃内容维度的嗅探（入口 Redis 内容窗口 + 落库钩子2.5 的三个内容查找），
 // msg_id 精确判等（钩子2）与 DB 唯一索引照旧 —— 同一帧重发仍只有一行。
@@ -121,6 +134,17 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 			}
 		} else if _, err := s.hubRepo.GetOutgoingByPlatformMsgID(ctx, event.Channel, accID, chanMsgID); err == nil {
 			return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(platform msg_id exact match)"}, nil
+		}
+	}
+
+	// 出站回声检测（base hash 比对）：bridge 巡检把 AI 出站回复从 DOM 抓回当 inbound 时，
+	// event_id 就是出站 msg_id 的 ContentHash（可能追加 #N 后缀）。剥离后缀后与出站 msg_id
+	// 精确比对，命中即判定为自回声。此检查不依赖 sender_name / content / 时间窗口，
+	// 是对下面三项内容维度嗅探的兜底加固。
+	if event.EventID != "" && s.hubRepo != nil {
+		baseID := stripOccurrenceSuffix(event.EventID)
+		if existing, err := s.hubRepo.GetByMsgID(ctx, baseID); err == nil && existing != nil && existing.Direction == "outbound" {
+			return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(event_id base hash match)"}, nil
 		}
 	}
 

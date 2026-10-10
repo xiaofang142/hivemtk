@@ -57,6 +57,13 @@ var (
 	// ErrUnknownReachChannel 渠道名不在触达支持集合内。拼错的名字必须当场响，
 	// 静默返回 0 条会让调用方把"名字写错"排查成"账号没配"。
 	ErrUnknownReachChannel = errors.New("unknown reach channel")
+	// ErrRecallNotSupported 该渠道没有平台主动撤回通道（WA 无主动撤回 API，
+	// 桥接渠道的 msgID 是合成键而非平台消息标识）。
+	ErrRecallNotSupported = errors.New("recall not supported for channel")
+	// ErrRecallWindowExpired 已超过平台撤回时间窗口（TG 48h、飞书/企微 24h）。
+	ErrRecallWindowExpired = errors.New("recall window expired")
+	// ErrHubKeyNotFound message_hub 无 msgID 对应行，无法反查平台消息标识。
+	ErrHubKeyNotFound = errors.New("hub message not found for recall")
 )
 
 // NewIntegrationReachAdapter 创建集成服务适配器
@@ -537,7 +544,104 @@ func composeCardMessage(title, description, link string) string {
 // 要真做撤回，得先改发送侧的 msgID 契约（把平台 id 带回来并落库），那是另一张卡的事，
 // 不在"把已有能力接上"的范围内。
 func (a *IntegrationReachAdapter) Recall(ctx context.Context, channel, msgID string) error {
-	return fmt.Errorf("recall(%s): %w（发送侧未保留平台消息 id，服务端无可寻址目标）", channel, ErrChannelNotImplemented)
+	ctx = logger.WithModule(ctx, "reach")
+	logger.Ctx(ctx).Debug().Str("channel", channel).Str("msg_id", msgID).Msg("reach recall start")
+	if bridge.IsBridgeChannel(channel) {
+		return fmt.Errorf("recall(%s): %w（桥接渠道 msgID 是合成键，不是平台消息标识）", channel, ErrRecallNotSupported)
+	}
+	if a.db == nil {
+		return ErrIntegrationServiceNotConfigured
+	}
+	var hub model.MessageHub
+	if err := a.db.WithContext(ctx).Where("msg_id = ?", msgID).First(&hub).Error; err != nil {
+		return fmt.Errorf("recall(%s): 查 message_hub 无此行: %w", channel, ErrHubKeyNotFound)
+	}
+	win, ok := recallWindow(hub.Platform)
+	if !ok {
+		return fmt.Errorf("recall(%s): 渠道 %s 无平台主动撤回: %w", channel, hub.Platform, ErrRecallNotSupported)
+	}
+	if time.Since(hub.SentAt) > win {
+		return fmt.Errorf("recall(%s): 已超过 %s 撤回窗口: %w", channel, win, ErrRecallWindowExpired)
+	}
+	var err error
+	switch hub.Platform {
+	case "telegram":
+		err = a.recallTelegram(ctx, &hub)
+	case "feishu":
+		err = a.recallFeishu(ctx, &hub)
+	case "wecom":
+		err = a.recallWeCom(ctx, &hub)
+	case "whatsapp":
+		return fmt.Errorf("recall(%s): WhatsApp Cloud API 无主动撤回接口（仅用户侧 revoke 通知）: %w", channel, ErrRecallNotSupported)
+	default:
+		return fmt.Errorf("recall(%s): %w", channel, ErrChannelNotImplemented)
+	}
+	if err != nil {
+		logger.Ctx(ctx).Error().Err(err).Str("channel", channel).Str("msg_id", msgID).Msg("reach recall failed")
+		return fmt.Errorf("recall(%s): %w", channel, err)
+	}
+	logger.Ctx(ctx).Info().Str("channel", channel).Str("msg_id", msgID).Msg("reach recall ok")
+	return nil
+}
+
+// recallWindow 各渠道平台主动撤回的时间窗口（超过则平台拒绝）。
+func recallWindow(platform string) (time.Duration, bool) {
+	switch platform {
+	case "telegram":
+		return 48 * time.Hour, true
+	case "feishu":
+		return 24 * time.Hour, true
+	case "wecom":
+		return 24 * time.Hour, true
+	default:
+		return 0, false
+	}
+}
+
+// recallTelegram 平台撤回（Telegram deleteMessage）。
+// TODO: 平台撤回 API 未接（撤回本身仍未接，见 Recall 注释），暂返回不支持。
+func (a *IntegrationReachAdapter) recallTelegram(ctx context.Context, hub *model.MessageHub) error {
+	return fmt.Errorf("recallTelegram: %w（平台撤回 API 未接）", ErrRecallNotSupported)
+}
+
+// recallFeishu 平台撤回（飞书撤回消息 API）。
+// TODO: 平台撤回 API 未接（撤回本身仍未接，见 Recall 注释），暂返回不支持。
+func (a *IntegrationReachAdapter) recallFeishu(ctx context.Context, hub *model.MessageHub) error {
+	return fmt.Errorf("recallFeishu: %w（平台撤回 API 未接）", ErrRecallNotSupported)
+}
+
+// recallWeCom 平台撤回（企微撤回消息 API）。
+// TODO: 平台撤回 API 未接（撤回本身仍未接，见 Recall 注释），暂返回不支持。
+func (a *IntegrationReachAdapter) recallWeCom(ctx context.Context, hub *model.MessageHub) error {
+	return fmt.Errorf("recallWeCom: %w（平台撤回 API 未接）", ErrRecallNotSupported)
+}
+
+// platformMessageID 从 hub 行反查平台消息标识。
+//
+// TG/飞书的行键内嵌平台号：tg-out-{acc}-{平台号} / feishu-out-{acc}-{平台id}，
+// 取末段即可；企微是 wecom-out-{uuid}（uuid 随机），平台 msgid 落在 Extra；
+// WA 的行键就是 wamid 本体，但 WA 无主动撤回，到不了这里。
+func platformMessageID(hub *model.MessageHub) (string, error) {
+	if hub == nil {
+		return "", ErrHubKeyNotFound
+	}
+	switch hub.Platform {
+	case "telegram", "feishu":
+		segs := strings.Split(hub.MsgID, "-")
+		if len(segs) < 3 || segs[len(segs)-1] == "" {
+			return "", fmt.Errorf("%w: 行键 %q 无法解析平台号", ErrHubKeyNotFound, hub.MsgID)
+		}
+		return segs[len(segs)-1], nil
+	case "wecom":
+		if v, ok := hub.Extra["msgid"]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s, nil
+			}
+		}
+		return "", fmt.Errorf("%w: 企微行 %q 无 Extra.msgid", ErrHubKeyNotFound, hub.MsgID)
+	default:
+		return "", fmt.Errorf("%w: 渠道 %s 不支持撤回", ErrRecallNotSupported, hub.Platform)
+	}
 }
 
 // AccountHealth 读单个账号的健康度。

@@ -30,8 +30,8 @@ type CustomerSession struct {
 	ID          uint          `gorm:"primaryKey;autoIncrement" json:"id"`
 	SessionID   string        `gorm:"type:varchar(120);uniqueIndex;not null" json:"session_id"`
 	Platform    Platform      `gorm:"type:varchar(20)" json:"platform"`
-	AccountID   string        `gorm:"type:varchar(50)" json:"account_id"`
-	UserID      string        `gorm:"type:varchar(50);index" json:"user_id"`
+	AccountID   string        `gorm:"type:varchar(120)" json:"account_id"`
+	UserID      string        `gorm:"type:varchar(120);index" json:"user_id"`
 	OneID       string        `gorm:"type:varchar(100);index:idx_sessions_one_id_status" json:"one_id"`
 	UserName    string        `gorm:"type:varchar(100)" json:"user_name"`
 	UserAvatar  string        `gorm:"type:varchar(500)" json:"user_avatar"`

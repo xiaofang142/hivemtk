@@ -75,6 +75,10 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 
 	hub.DedupHash = ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), strings.TrimSpace(event.Content))
 
+	if hub.Direction == "inbound" {
+		hub.Status = "received"
+	}
+
 	if hub.TraceID == "" {
 		if hub.Direction == "inbound" {
 			hub.TraceID = tracing.LinkInboundTraceID(ctx, hub.ConversationID)

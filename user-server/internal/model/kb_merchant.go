@@ -38,7 +38,7 @@ type KnowledgeFeedback struct {
 	Rating     int       `gorm:"default:0" json:"rating"`
 	Comment    string    `gorm:"type:text" json:"comment"`
 	Operator   string    `gorm:"size:64" json:"operator"`
-	SessionID  string    `gorm:"size:64;index" json:"session_id"`
+	SessionID string `gorm:"size:120" json:"session_id"`
 	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }
 

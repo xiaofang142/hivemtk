@@ -25,6 +25,33 @@ import (
 // DefaultHTTPTimeout 默认 HTTP 超时（外部依赖默认 30s）
 const DefaultHTTPTimeout = 30 * time.Second
 
+// httpTimeoutProvider 由 internal/app 层在启动时注入（读 config_params
+// group=channelbot, key=http_timeout）。nil 即未注入，走兜底常量。
+var httpTimeoutProvider func() time.Duration
+
+// SetHTTPTimeoutProvider 注入外部依赖默认 HTTP 超时读取函数。
+// fn 传 nil 视为「不注入」，保留兜底值。
+func SetHTTPTimeoutProvider(fn func() time.Duration) {
+	if fn != nil {
+		httpTimeoutProvider = fn
+	}
+}
+
+// HTTPTimeoutEffective 返回实际生效的外部依赖默认 HTTP 超时。
+// 非正值一律回落兜底：超时 0 在 net/http 语义里是「不设超时」，
+// 一次外部依赖挂起就能把整个请求 goroutine 挂死。
+func HTTPTimeoutEffective() time.Duration {
+	if httpTimeoutProvider != nil {
+		if v := httpTimeoutProvider(); v > 0 {
+			return v
+		}
+	}
+	return DefaultHTTPTimeout
+}
+
+// ProbeHTTPTimeout 导出读口，供装配层测试断言注入是否真的生效。
+func ProbeHTTPTimeout() time.Duration { return HTTPTimeoutEffective() }
+
 // ClientOption BaseClient 配置项
 type ClientOption func(*BaseClient)
 
@@ -78,7 +105,7 @@ type BaseClient struct {
 func NewBaseClient(opts ...ClientOption) BaseClient {
 	bc := BaseClient{
 		HTTPClient: &http.Client{
-			Timeout: DefaultHTTPTimeout,
+			Timeout: HTTPTimeoutEffective(),
 			Transport: &http.Transport{
 				Proxy:                 http.ProxyFromEnvironment,
 				MaxIdleConns:          100,
@@ -94,7 +121,7 @@ func NewBaseClient(opts ...ClientOption) BaseClient {
 				}).DialContext,
 			},
 		},
-		Timeout: DefaultHTTPTimeout,
+		Timeout: HTTPTimeoutEffective(),
 	}
 	for _, opt := range opts {
 		opt(&bc)

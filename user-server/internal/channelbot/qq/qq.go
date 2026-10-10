@@ -39,6 +39,32 @@ const (
 	qqTokenRefreshLe = 300 * time.Second
 )
 
+// qqMessageMaxLenProvider 由 internal/app 层在启动时注入（读 config_params
+// group=channelbot, key=qq_message_max_len）。nil 即未注入，走兜底常量。
+var qqMessageMaxLenProvider func() int
+
+// SetQQMessageMaxLenProvider 注入 QQ 单条消息长度上限读取函数。
+// fn 传 nil 视为「不注入」，保留兜底值——装配顺序不对时不能把兜底顶掉。
+func SetQQMessageMaxLenProvider(fn func() int) {
+	if fn != nil {
+		qqMessageMaxLenProvider = fn
+	}
+}
+
+// QQMessageMaxLenEffective 返回实际生效的单条消息长度上限。
+// 非正值一律回落兜底：上限 0 会把每条消息都截成空。
+func QQMessageMaxLenEffective() int {
+	if qqMessageMaxLenProvider != nil {
+		if v := qqMessageMaxLenProvider(); v > 0 {
+			return v
+		}
+	}
+	return QQMessageMaxLen
+}
+
+// ProbeQQMessageMaxLen 导出读口，供装配层测试断言注入是否真的生效。
+func ProbeQQMessageMaxLen() int { return QQMessageMaxLenEffective() }
+
 // Client QQ 机器人 API 客户端
 type Client struct {
 	core.BaseClient
@@ -166,7 +192,7 @@ func (c *Client) SendMessage(ctx context.Context, target SendTarget, text string
 	if target.GroupOpenID == "" && target.UserOpenID == "" {
 		return "", errors.New("qq send: empty target")
 	}
-	chunks := splitQQMessage(text, QQMessageMaxLen)
+	chunks := splitQQMessage(text, QQMessageMaxLenEffective())
 	if len(chunks) == 0 {
 		return "", errors.New("qq send: empty text")
 	}
@@ -263,7 +289,7 @@ func truncateForLog(b []byte) string {
 
 func splitQQMessage(text string, limit int) []string {
 	if limit <= 0 {
-		limit = QQMessageMaxLen
+		limit = QQMessageMaxLenEffective()
 	}
 	text = strings.TrimRight(text, "\n")
 	if text == "" {
