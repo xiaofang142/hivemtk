@@ -24,10 +24,10 @@ func GetEmbeddingConfig(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{
-		"enabled":      o.Enabled,
-		"base_url":     o.BaseURL,
-		"model":        o.Model,
-		"api_key_set":  o.APIKey != "",
+		"enabled":     o.Enabled,
+		"base_url":    o.BaseURL,
+		"model":       o.Model,
+		"api_key_set": o.APIKey != "",
 	}, "ok")
 }
 

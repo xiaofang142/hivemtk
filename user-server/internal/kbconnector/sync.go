@@ -3,10 +3,10 @@ package kbconnector
 import (
 	"context"
 	"crypto/sha256"
-	"os"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"

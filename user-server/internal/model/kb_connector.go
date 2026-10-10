@@ -14,7 +14,7 @@ type ExternalKBConnector struct {
 	ID              uint       `gorm:"primaryKey;autoIncrement" json:"id"`
 	Type            string     `gorm:"type:varchar(32);not null" json:"type"` // ima | webhttp
 	Name            string     `gorm:"type:varchar(128)" json:"name"`
-	Config          string     `gorm:"type:text" json:"config"` // provider 各自的 JSON 配置（凭证等，脱敏返回）
+	Config          string     `gorm:"type:text" json:"config"`           // provider 各自的 JSON 配置（凭证等，脱敏返回）
 	IntervalMinutes int        `gorm:"default:0" json:"interval_minutes"` // >0 时由调度器周期同步；0=仅手动
 	Enabled         bool       `gorm:"default:true" json:"enabled"`
 	LastSyncAt      *time.Time `json:"last_sync_at"`

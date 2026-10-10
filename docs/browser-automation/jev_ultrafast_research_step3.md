@@ -10,7 +10,7 @@ observe → choose(JEV) → [fill? field_text(小LLM)] → browser.act → histo
 
 - predict：fresh 检查→ choose(page, goal, history[-10:]) → decision{choice,operation,target,confidence,probabilities,...} → decisions.append（含 fingerprint/elapsed）；done/blocked 后拒再 predict；decisions 上限 MAX_STEPS*2。
 - act：decision 一次性消费（先置 None 防 double-click 重试双点）；DONE/BLOCKED 需 fresh 否则 StalePage 重选；fill 种先 fresh 再 field_text（pending_text 整输入不变才复用）；`browser.act` 内再 fresh（含文本生成后）；执行后先写 history 再 observe（stale 观察不擦执行记录）；3 轮无 page_changed 且非 wait → blocked；MAX_STEPS=60。
-- run()：status∈{ready} 循环 tick 至 done/blocked；snapshot() 暴露 elements=action_space(actions)[0]。
+- run()：status∈{ready} 循环 tick 至 done/blocked；snapshot() 暴露 elements=action_space(actions) 的第 [0] 项。
 
 ## 2. 决策（model.py choose + questions.py）
 
