@@ -529,6 +529,66 @@ env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
   前端在 Pinia 里建一个 `useRuntimeConfig()` 一次性拉取并缓存。
 - 顺手把前端 1752 处自造默认分页/时间窗统一到 `pagination` group（分批，先改 `src/api/*.js` 的默认值，再改 `views/**` 的 `pageSize||20` 兜底）。
 
+#### 3.1 第二批已落地（2026-10-10）：`webhook` 组 7 条
+
+**本批范围**：webhook 回调配发的并发、限流与重试。七条全是"改错就丢消息"的那类旋钮，
+且原本本已有一层 env 覆盖，只是参数中心看不见。
+
+**优先级链**（每条都一样）：
+
+```
+env（WEBHOOK_WORKER_COUNT / QUEUE_SIZE / REPLY_CONCURRENCY）
+  > config_params(webhook 组)
+  > 常量兜底（WebhookDedupTTL / WebhookRateLimit / ...）
+```
+
+env 保留为**部署层应急开关**：改 env 必须重启进程，参数中心改完即生效。日常调参走
+参数中心，临时顶一把才动 env。非法 env（空串/`abc`/`0`/负数）**不短路整条链**——
+一个残留的空环境变量不能把运维刚调好的库值盖掉。
+
+| group.key | 默认 | 代码点位 | 生效时机 |
+| --- | --- | --- | --- |
+| `webhook.dedup_ttl` | 300 | `webhook_dedup.go` `WebhookDedupTTL` | 每请求（`isDuplicate` 的 SetNX） |
+| `webhook.rate_limit` | 30 | 同文件 `WebhookRateLimit` | 每请求（令牌桶 refillRate，桶按 key 懒构造） |
+| `webhook.rate_burst` | 60 | 同文件 `WebhookRateBurst` | 每请求（令牌桶 capacity/tokens 初值） |
+| `webhook.max_retries` | 3 | `webhook_ai.go` 两处重试循环 | 每请求 |
+| `webhook.worker_count` | 4 | `webhook.go` `NewWebhookService` | **构造期，Restart=true** |
+| `webhook.queue_size` | 512 | 同上 `make(chan, N)` | **构造期，Restart=true** |
+| `webhook.reply_concurrency` | 32 | 同上信号量 `make(chan, N)` | **构造期，Restart=true** |
+
+**三条判断**：
+
+1. **走直连而不是 provider seam**。七个读取点全在 `internal/service` 包内，本就看得见
+   `GlobalConfigParam()`，与 3.1 第一批的 `geo.default_visibility_days` 同一判据
+   （"读取点在不在 `internal/service` 包内"）。
+2. **每个键拆成 raw / 带兜底两个函数**，不是为了对称——`scripts/check-config-param-readpoints.py`
+   认的是"某一行里同时出现 `GetInt(`/`GetDuration(` 与键名常量"这个形状。第一版把读点藏进
+   通用 helper 的形参（`webhookParamInt(ctx, key, def)`），门禁当场把 6 条判成 UNDECLARED。
+   这是 1.1 批"`Get*(` 与键名同行"约束的另一种形态：**helper 的通用性是门禁的盲区**。
+3. **`max_retries` 与 `agent_llm.max_retries` 同名不同义**（那一条管 LLM 调用本身的重试，
+   本条目管渠道出网投递），Description 里写明区分。这与 2d 的
+   `max_retries`/`heartbeat_interval` 同名是同一类问题：库里 key 是全局单列，同名只有
+   靠复合唯一 + Description 区分，不能靠命名。
+
+**`Min` 全部 ≥ 1（duration 那条 ≥ 10s）**：这一组没有"配 0 就照做"的合法语义——
+并发 0 = 一个 worker 都不起、队列 0 = 每条消息同步处理、速率 0 = 全拒、burst 0 = 一条
+都放不进去、去重 0 = 之后所有重试都被判重复而丢掉。读取侧再套一层
+`positiveIntOr`/`positiveDurationOr` 兜底，防的是"库里已有坏值"（历史数据、直接改库、
+绕过 service 写）——service 的 min/max 守卫管不到这三条来路。
+
+**顺带修掉门禁的一个假阳性盲区**：`TestWebhookParamKeysAreAllRead` 逐条钉死"登记了必须
+有人读"。读取点门禁只看 `Get*(` 的形状，看不出某个键是不是压根没被任何读口接过
+（`max_retries` 就因 `agent_llm.max_retries` 已有 `CONST_ASSIGN` 而被门禁误判为已接线，
+实际是另一条参数）。
+
+**验证**：干净 worktree（`git worktree add --detach /tmp/hivemtk_v24 HEAD`，倒本批 7 个
+文件）上 gofmt 空、`go build ./...`、`go vet ./...` 全过；`internal/service` 全包
+**ok 434.777s**（0 失败）。门禁 **`wired 133 → 140`、已声明未接线 14、UNDECLARED 0、
+STALE 0，rc=0**，种子条目 147 → 154、锚点同步到 154。
+行为级测试：`TestWebhookTokenBucketPicksUpConfiguredRate`（burst=2 时前 5 次只放行 2 次、
+换成 burst=4 后新 key 的桶放行 4 次）、`TestWebhookEnvWinsOverParamCenter`（env 压过库值，
+四种非法 env 全部让位给库值）。
+
 ### 阶段四：字典表 + i18n（单独立项，不与阈值混做）
 
 - 44 个 Go 字典 + `user-web/src/constants/*.js` 24 个字典**合并为一套 DB 字典**。
@@ -622,63 +682,3 @@ GET  /api/config/runtime?groups=frontend_ws,frontend_ui,pagination
   `dictionaries` 走标准 `Model → Repository → Service → Controller → Router`。
 - 不引入新框架：不加 ORM 之外的依赖，不改 `config_params` 已有列语义，
   新增列全部可空并给默认值，**旧数据零迁移风险**。
-
-#### 3.1 第二批已落地（2026-10-10）：`webhook` 组 7 条
-
-**本批范围**：webhook 回调配发的并发、限流与重试。七条全是"改错就丢消息"的那类旋钮，
-且原本本已有一层 env 覆盖，只是参数中心看不见。
-
-**优先级链**（每条都一样）：
-
-```
-env（WEBHOOK_WORKER_COUNT / QUEUE_SIZE / REPLY_CONCURRENCY）
-  > config_params(webhook 组)
-  > 常量兜底（WebhookDedupTTL / WebhookRateLimit / ...）
-```
-
-env 保留为**部署层应急开关**：改 env 必须重启进程，参数中心改完即生效。日常调参走
-参数中心，临时顶一把才动 env。非法 env（空串/`abc`/`0`/负数）**不短路整条链**——
-一个残留的空环境变量不能把运维刚调好的库值盖掉。
-
-| group.key | 默认 | 代码点位 | 生效时机 |
-| --- | --- | --- | --- |
-| `webhook.dedup_ttl` | 300 | `webhook_dedup.go` `WebhookDedupTTL` | 每请求（`isDuplicate` 的 SetNX） |
-| `webhook.rate_limit` | 30 | 同文件 `WebhookRateLimit` | 每请求（令牌桶 refillRate，桶按 key 懒构造） |
-| `webhook.rate_burst` | 60 | 同文件 `WebhookRateBurst` | 每请求（令牌桶 capacity/tokens 初值） |
-| `webhook.max_retries` | 3 | `webhook_ai.go` 两处重试循环 | 每请求 |
-| `webhook.worker_count` | 4 | `webhook.go` `NewWebhookService` | **构造期，Restart=true** |
-| `webhook.queue_size` | 512 | 同上 `make(chan, N)` | **构造期，Restart=true** |
-| `webhook.reply_concurrency` | 32 | 同上信号量 `make(chan, N)` | **构造期，Restart=true** |
-
-**三条判断**：
-
-1. **走直连而不是 provider seam**。七个读取点全在 `internal/service` 包内，本就看得见
-   `GlobalConfigParam()`，与 3.1 第一批的 `geo.default_visibility_days` 同一判据
-   （"读取点在不在 `internal/service` 包内"）。
-2. **每个键拆成 raw / 带兜底两个函数**，不是为了对称——`scripts/check-config-param-readpoints.py`
-   认的是"某一行里同时出现 `GetInt(`/`GetDuration(` 与键名常量"这个形状。第一版把读点藏进
-   通用 helper 的形参（`webhookParamInt(ctx, key, def)`），门禁当场把 6 条判成 UNDECLARED。
-   这是 1.1 批"`Get*(` 与键名同行"约束的另一种形态：**helper 的通用性是门禁的盲区**。
-3. **`max_retries` 与 `agent_llm.max_retries` 同名不同义**（那一条管 LLM 调用本身的重试，
-   本条目管渠道出网投递），Description 里写明区分。这与 2d 的
-   `max_retries`/`heartbeat_interval` 同名是同一类问题：库里 key 是全局单列，同名只有
-   靠复合唯一 + Description 区分，不能靠命名。
-
-**`Min` 全部 ≥ 1（duration 那条 ≥ 10s）**：这一组没有"配 0 就照做"的合法语义——
-并发 0 = 一个 worker 都不起、队列 0 = 每条消息同步处理、速率 0 = 全拒、burst 0 = 一条
-都放不进去、去重 0 = 之后所有重试都被判重复而丢掉。读取侧再套一层
-`positiveIntOr`/`positiveDurationOr` 兜底，防的是"库里已有坏值"（历史数据、直接改库、
-绕过 service 写）——service 的 min/max 守卫管不到这三条来路。
-
-**顺带修掉门禁的一个假阳性盲区**：`TestWebhookParamKeysAreAllRead` 逐条钉死"登记了必须
-有人读"。读取点门禁只看 `Get*(` 的形状，看不出某个键是不是压根没被任何读口接过
-（`max_retries` 就因 `agent_llm.max_retries` 已有 `CONST_ASSIGN` 而被门禁误判为已接线，
-实际是另一条参数）。
-
-**验证**：干净 worktree（`git worktree add --detach /tmp/hivemtk_v24 HEAD`，倒本批 7 个
-文件）上 gofmt 空、`go build ./...`、`go vet ./...` 全过；`internal/service` 全包
-**ok 434.777s**（0 失败）。门禁 **`wired 133 → 140`、已声明未接线 14、UNDECLARED 0、
-STALE 0，rc=0**，种子条目 147 → 154、锚点同步到 154。
-行为级测试：`TestWebhookTokenBucketPicksUpConfiguredRate`（burst=2 时前 5 次只放行 2 次、
-换成 burst=4 后新 key 的桶放行 4 次）、`TestWebhookEnvWinsOverParamCenter`（env 压过库值，
-四种非法 env 全部让位给库值）。
