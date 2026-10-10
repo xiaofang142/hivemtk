@@ -176,8 +176,8 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
-> **进度（2026-10-10）：第 1~3 批 misc(16) / confidence(5/7) / agent_llm(7) 已入库（3/8）。**
-> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=68 / 已声明未接线=44 / UNDECLARED=2`。
+> **进度（2026-10-10）：第 1~4 批 misc(16) / confidence(5/7) / agent_llm(7) / cache(5) 已入库（4/8）。**
+> 门禁读数从 `wired=40 / UNDECLARED=72` 变为 `wired=73 / 已声明未接线=39 / UNDECLARED=2`。
 >
 > **入库位置（如实记录，勿按 commit message 找）**：
 > - 第 1 批 misc(16) → `c75c78b6 feat(config-params): 阶段一第1批 —— misc 组 16 条僵尸参数接线`
@@ -186,6 +186,19 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 >   因此 commit message 与内容不符。内容已逐文件核对完整（17/17），且在干净检出上全绿，
 >   故不改写已推送的历史，只在此登记归属。
 > - 第 3 批 agent_llm(7) → `97ebaefb feat(config-params): 阶段一第3批 —— agent_llm 组 7 条僵尸参数接线`
+> - 第 4 批 cache(5) → `8bcc0443 feat(config-params): 阶段一第4批 —— cache 组 5 条僵尸参数接线`
+> - 台账回填另计：`2f2ba9cb`（第 3 批）、以及各批随附的 docs 提交。
+>
+> **第 4 批踩到的三个坑（都写下来）**：
+> 1. `internal/controller/platform.go` 的 `platformCacheTTL` 原本是**函数内的局部 const**，
+>    只改名不提到包级，新加的包级 `PlatformCacheTTL()` 读不到它 —— 只跑
+>    `go build ./internal/controller/` 才暴露，只 `go vet` 挑过的子包漏掉了这个包。
+>    **凡是加 seam 的包，都要单独 `go build` 一次，不能只 vet 自己"以为相关"的那几个。**
+> 2. `internal/aiagent/rag/retrieval` 的**包名是 `ragretrieval`**，导入必须写别名；
+>    同目录的 `NewTranslationCache(client, ttl, prefix)` 参数顺序也容易记反。
+> 3. `git worktree add` 到 `/tmp/xxx` 时，若该路径被更早的会话留成过 worktree，
+>    git 会报「路径已存在」而**不切换 base**，导致把文件倒进了一个旧 commit 的检出里，
+>    验证结论完全无效。**每次用新目录名；add 之后必须 `git worktree list` 确认 HEAD 对得上。**
 >
 > **教训（写下来防止再犯）**：暂存区是**共享**的，不属于某一条泳道。跨多个工作阶段把文件
 >   长期留在暂存区，等于把「我下一条 commit 会带上它们」这件事暴露给任何并行提交的人。
@@ -193,7 +206,7 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 >   `git diff --cached --name-only` 核一遍自己到底要带谁走。
 >
 > **工作区随时可能是半成品状态**：本轮多次撞见他人正在编辑、留下未使用 import 导致
-> `internal/service` 编译不过。碰到这种共享工作区的破损，正确做法是**把自己的文件倒进
+>   `internal/service` 编译不过。碰到这种共享工作区的破损，正确做法是**把自己的文件倒进
 >   干净 worktree 验证**（`git worktree add --detach /tmp/xxx HEAD` + `git show ":$f" >`），
 >   既能证明「我的改动是绿的」，又不去动别人正在写的东西。
 > confidence 组 7 条里只接了 5 条：`persona_default_threshold` 与 `persona_max_retry` 的实现
