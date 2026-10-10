@@ -1,9 +1,10 @@
 package model
 
 import (
-	"encoding/json"
 	"math"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // WebVitalRecord 前端性能指标（Web Vitals: CLS/FID/LCP/FCP/TTFB）
@@ -68,7 +69,7 @@ func (RagEvalRun) TableName() string { return "rag_eval_runs" }
 
 // safeFloat64 把 NaN/±Inf 归零：encoding/json 无法序列化 NaN，一旦某行指标为 NaN
 // （如 total=0 导致 0/0），c.JSON 会写失败并返回 HTTP 200 + 空 body，前端拿到空串后
-// 调 .map 直接崩。这里在序列化层兜底，保证任何脏数据都不会让响应体为空。
+// 调 .map 直接崩。这里在数据层兜底，保证任何脏数据都不会让响应体为空。
 func safeFloat64(f float64) float64 {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return 0
@@ -76,22 +77,27 @@ func safeFloat64(f float64) float64 {
 	return f
 }
 
-// MarshalJSON 序列化前清洗所有 float 指标，杜绝 NaN/Inf 进入 JSON。
-func (r RagEvalRun) MarshalJSON() ([]byte, error) {
-	type alias RagEvalRun
-	return json.Marshal(&struct {
-		alias
-		Recall5      float64 `json:"recall5"`
-		MRR          float64 `json:"mrr"`
-		NDCG5        float64 `json:"ndcg5"`
-		AvgRecall    float64 `json:"avg_recall"`
-		AvgPrecision float64 `json:"avg_precision"`
-	}{
-		alias:        alias(r),
-		Recall5:      safeFloat64(r.Recall5),
-		MRR:          safeFloat64(r.MRR),
-		NDCG5:        safeFloat64(r.NDCG5),
-		AvgRecall:    safeFloat64(r.AvgRecall),
-		AvgPrecision: safeFloat64(r.AvgPrecision),
-	})
+// SanitizeRagEvalRun 清洗所有 float 指标，杜绝 NaN/Inf 进入 JSON。
+// 架构约束：model 层只允许 GORM Hook/TableName 方法（check-architecture.sh §4），
+// 因此清洗逻辑做成包级函数，由下方 GORM Hook（AfterFind/BeforeSave）与
+// service 构造完成时调用——DB 读、DB 写、内存直返三条路径都先过清洗，
+// 序列化层不再需要自定义 MarshalJSON。
+func SanitizeRagEvalRun(r *RagEvalRun) {
+	r.Recall5 = safeFloat64(r.Recall5)
+	r.MRR = safeFloat64(r.MRR)
+	r.NDCG5 = safeFloat64(r.NDCG5)
+	r.AvgRecall = safeFloat64(r.AvgRecall)
+	r.AvgPrecision = safeFloat64(r.AvgPrecision)
+}
+
+// AfterFind 从库加载后清洗指标（承接原 MarshalJSON 的序列化期兜底职责）。
+func (r *RagEvalRun) AfterFind(tx *gorm.DB) error {
+	SanitizeRagEvalRun(r)
+	return nil
+}
+
+// BeforeSave 落库前清洗，保证库里不存 NaN/Inf。
+func (r *RagEvalRun) BeforeSave(tx *gorm.DB) error {
+	SanitizeRagEvalRun(r)
+	return nil
 }
