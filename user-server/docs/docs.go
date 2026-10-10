@@ -770,6 +770,197 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/bill": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "只有链上最新且已发出的一版能被确认；金额取自该版行项目合计，不是入参；账期是可选入参（不给则记为未定）；同版重复确认复用已有账单（data.reused=true）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bill"
+                ],
+                "summary": "由已成交报价派生账单",
+                "parameters": [
+                    {
+                        "description": "版本行主键 quotes.id（不是跨版本重复出现的逻辑号）＋ 可选 due_at（带偏移的 RFC3339）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.billDeriveBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（data 为账单视图，reused 区分新开与复用）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "入参不合法（含未知字段：金额、状态、币种都不是入参；账期形状不对也落这一档）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "会话里没有操作者身份",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "该版报价不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "该版未发出 / 不是链上最新 / 该链已有一次成交 / 无行项目 / 状态写不动",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/bill/of-quote/{quote_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "一条报价链的多个版本各自成交时，这里给出那一串应收及各自的已收/未收；没有一张时 list 为空数组而不是 null",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bill"
+                ],
+                "summary": "按报价读它开过的全部账单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "报价逻辑号 quotes.quote_id（跨版本重复出现的那一把，不是版本行号）",
+                        "name": "quote_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（data.list 为对账视图数组，data.count 与其同长）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "路径上的报价号为空或超宽",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "未鉴权",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "底座或数据异常",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "对账腿未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/bill/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回该应收的金额、已收、未收与逐笔回款行；已收由回款行求和得出，账单上不存第二个数字",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bill"
+                ],
+                "summary": "读一张账单的对账视图",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "账单号 bills.id（不是报价号，也不接受空串）",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（data 为对账视图，payments 恒为数组）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "路径上的账单号为空或超宽",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "未鉴权（本表没有租户列，读单必须落在鉴权链内）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "该账单号没有对应的应收",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "底座或数据异常（不透出底层错误串）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "对账腿未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/bridge/token/reset": {
             "post": {
                 "security": [
@@ -1592,145 +1783,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/domainpool/active": {
+        "/api/domain-pool/health": {
             "get": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "获取活跃域名",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_model.DomainPool"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/available": {
-            "get": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "可用域名列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "最低评分，默认 80",
-                        "name": "min_score",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/hivemtk-user_internal_model.DomainPool"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/blacklist": {
-            "get": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "域名黑名单",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/hivemtk-user_internal_model.DomainBlacklist"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "添加域名黑名单",
-                "parameters": [
-                    {
-                        "description": "黑名单",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_controller.AddBlacklistRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/blacklist/{domain}": {
-            "delete": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "移除域名黑名单",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "域名",
-                        "name": "domain",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/health-check-all": {
-            "post": {
                 "tags": [
                     "域名池"
                 ],
@@ -1746,128 +1800,6 @@ const docTemplate = `{
                                     "items": {
                                         "$ref": "#/definitions/hivemtk-user_internal_service.HealthCheckResult"
                                     }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/switch-best": {
-            "post": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "自动切换到最优域名",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_model.DomainPool"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/{id}/health-check": {
-            "post": {
-                "description": "DNS + HTTP HEAD + 黑名单综合探测，写入评分与日志",
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "健康度探测",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "域名 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_service.HealthCheckResult"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/{id}/health-log": {
-            "get": {
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "健康度日志",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "域名 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "条数，默认 50",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/hivemtk-user_internal_model.DomainHealthLog"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/domainpool/{id}/switch": {
-            "post": {
-                "description": "将指定域名标记为活跃（先 deactive 所有，再激活该域名）",
-                "tags": [
-                    "域名池"
-                ],
-                "summary": "切换活跃域名",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "目标域名 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_model.DomainPool"
                                 }
                             }
                         }
@@ -2724,6 +2656,80 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/llm/embedding-config": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "整份 JSON 落参数中心 embedding.global_override，api_key 加密后入库；保存即让本进程的读取缓存失效",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "LLM"
+                ],
+                "summary": "保存全局 Embedding 提供商手动配置",
+                "parameters": [
+                    {
+                        "description": "enabled/base_url/api_key/model（启用时 base_url 与 model 必填）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "body 形状不对，或启用时缺 base_url/model",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "保存失败（含参数中心写口未注入）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/manage/ltc/collection": {
+            "get": {
+                "description": "逾期扫描任务当前的档位、节奏、口径（宽限期/升级线/两把频控窗）、跨轮累计与最近一轮读数。\n账单金额与账期都不在这里改写：这里是纯读，写只有 POST /api/bill 与订单 webhook。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "LTC"
+                ],
+                "summary": "催收腿运行时状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                },
+                "x-Permissions": [
+                    "admin"
+                ]
+            }
+        },
         "/api/monitor/alerts/unread": {
             "get": {
                 "description": "返回 firing 状态告警计数与最近列表（OpsOverview 顶栏未读角标）",
@@ -2986,6 +2992,487 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/opportunity/rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "阶段顺序、状态值域、每个 (阶段,状态) 当前可请求的动作、以及不经 HTTP 暴露的机器动作",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "商机状态机与值域（机器规则）",
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "读取单条商机",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "id 形状不合法",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "PUT 语义＝整份替换：省略 expected_close_at 等于清掉它。赢率由本层按新事实重算，不接受传入",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "整份改写商机的可编辑四格",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "金额/币种/归属/预计关单日 + 期望版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.opportunityEditBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "入参不合法（含未知字段、缺 version）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "版本过期 / 已收口 / 这一行本身越界",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "作废商机（误建或重复）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "期望版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.opportunityVersionBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "缺 version",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "已收口 / 版本过期 / 这一行越界",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}/lost": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "原因是丢单归因的唯一可读列；收口后赢率冻结，不再重算",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "标记商机输单（必须给原因）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "输单原因 + 期望版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.opportunityLostBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "原因为空或超长 / 缺 version",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "已收口 / 版本过期 / 这一行越界",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}/moves": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "与 /rules 同一张边表的单行视图；不含赢单（那是回款完成触发的，不是按钮）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "列出某条商机当前可请求的动作",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}/reopen": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "把输单商机拉回在跑（清空输单原因并重算赢率）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "期望版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.opportunityVersionBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "缺 version",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "这一行不是输单态 / 版本过期 / 越界",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/opportunity/{id}/stage": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "同格不算跃迁（否则\"再点一次\"就能凭空把 version 涨一格）；赢率随阶段重算",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Opportunity"
+                ],
+                "summary": "推进或回退商机阶段",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "商机业务主键",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "目标阶段 + 期望版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.opportunityStageBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "阶段字面值不在值域里 / 缺 version",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "状态机不允许 / 已收口 / 版本过期 / 这一行越界",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/public/config": {
+            "get": {
+                "description": "仅暴露站点名与注册开关，不含任何敏感字段",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "公开站点配置",
+                "responses": {}
+            }
+        },
         "/api/public/forgot-password": {
             "post": {
                 "description": "发送密码重置邮件",
@@ -3059,6 +3546,385 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误或令牌无效",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "话术取自生效版本、金额取自模板，两者都不是入参；未过闸门/没有生效话术时一行都不写",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "由商机生成一版报价草稿",
+                "parameters": [
+                    {
+                        "description": "商机号 + 模板代号 + 可选币种/有效期/行覆盖",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_service.QuoteGenerateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（data 为报价视图，id 是版本行键）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "入参不合法（含未知字段：正文与收件人不是入参）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "来源商机不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "闸门未开 / 模板未配或读不出 / 话术无生效版本",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote/latest/{quoteID}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "读取某张报价单的最新版本",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "报价逻辑号 quotes.quote_id",
+                        "name": "quoteID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "编号形状不合法",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "报价链不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote/revise/{quoteID}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "行项目继承链上最新版，模板不参与；闸门未开、话术无生效版本或基准版没有行项目时一行都不写",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "在既有报价链上追加一版（还价）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "报价逻辑号 quotes.quote_id",
+                        "name": "quoteID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "行覆盖/追加 + 可选币种与有效期；空体 = 原样追加一版",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.quoteReviseBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功（data 为新版视图，version 已递增）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "编号形状不合法 / 体形状不对 / 试图改商机归属或换模板",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "链上一版都没有（先走生成）/ 基准版没有可继承的行项目",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "闸门未开 / 版本号已被占用（有人先一步追加）/ 话术失效",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote/version/{quoteID}/{version}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "按版本号读取某一版报价",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "报价逻辑号 quotes.quote_id",
+                        "name": "quoteID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "版本号（从 1 起，由仓储递增，调用方不能自带）",
+                        "name": "version",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "编号形状不合法 / 版本号不是正整数",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "那一版不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "读取单版报价（含这一版当前开着的审批）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "版本行主键 quotes.id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "id 形状不合法",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "报价版本不存在",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quote/{id}/send": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "审批未放行时回 202 并带回审批号，本次不外发；放行后重新解析生效话术、认领 draft→sent 再交给出域出口",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Quote"
+                ],
+                "summary": "发送一版报价（未过审批则只开一条待办）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "版本行主键 quotes.id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "可选：手里已有那条结论时带上审批号",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.quoteSendBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "已发送",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "202": {
+                        "description": "已开待办，等待裁决（data.disposition=awaiting）",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "id 或请求体形状不合法",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "会话里没有操作者身份",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "报价版本不存在 / 审批号查无此号",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "闸门未开 / 非草稿 / 审批与对象不符 / 无收件人 / 无行项目 / 话术失效 / 状态写不动",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "502": {
+                        "description": "外发失败且状态已退回草稿",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "503": {
+                        "description": "底座未装配",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -4517,7 +5383,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "渠道：wechat/wecom/douyin/xiaohongshu/email",
+                        "description": "渠道：wecom/whatsapp/telegram/qq/feishu/douyin/tiktok（其余渠道有专用入口或无服务端回调，通用路由返回 400）",
                         "name": "channel",
                         "in": "path",
                         "required": true
@@ -5367,8 +6233,30 @@ const docTemplate = `{
                 "account": {
                     "type": "string"
                 },
+                "content": {
+                    "description": "Content 外发文案；worker 只发有文案的项",
+                    "type": "string"
+                },
                 "customer_id": {
                     "type": "string"
+                },
+                "max_attempts": {
+                    "description": "MaxAttempts 最大尝试次数；0 表示用默认 3",
+                    "type": "integer"
+                },
+                "params": {
+                    "description": "Params 模板参数",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "preferred_channels": {
+                    "description": "PreferredChannels 期望渠道（按序），留空由触达服务选路",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "priority": {
                     "type": "integer"
@@ -5377,6 +6265,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "strategy": {
+                    "type": "string"
+                },
+                "subject": {
+                    "description": "Subject 邮件主题",
+                    "type": "string"
+                },
+                "template_id": {
+                    "description": "TemplateID 渠道侧模板 ID",
                     "type": "string"
                 },
                 "unified_id": {
@@ -6226,6 +7122,10 @@ const docTemplate = `{
                 "num_goroutine": {
                     "type": "integer"
                 },
+                "platform_enabled": {
+                    "description": "PlatformEnabled 平台集成是否启用（PLATFORM_ENABLED）。/api/system/info 是 public 端点，\n前端启动即可拿到，用来隐藏那些\"点了必然 403\"的上架入口。",
+                    "type": "boolean"
+                },
                 "server_time": {
                     "type": "string"
                 },
@@ -6684,6 +7584,54 @@ const docTemplate = `{
                 }
             }
         },
+        "hivemtk-user_internal_service.QuoteGenerateInput": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "description": "空 = 取模板那份，再空 = 建表默认",
+                    "type": "string"
+                },
+                "lines": {
+                    "description": "对模板/基准行的覆盖与追加，可空",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/hivemtk-user_internal_service.QuoteLineInput"
+                    }
+                },
+                "opportunity_id": {
+                    "description": "必填（还价侧留空 = 继承基准那一版的归属）",
+                    "type": "string"
+                },
+                "template_code": {
+                    "description": "生成第一版必填；还价不重跑模板（见 Revise）",
+                    "type": "string"
+                },
+                "valid_until": {
+                    "description": "nil = 由模板 valid_days 推，再没有 = 不设",
+                    "type": "string"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.QuoteLineInput": {
+            "type": "object",
+            "properties": {
+                "discount_percent": {
+                    "type": "number"
+                },
+                "product_id": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "number"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "unit_price": {
+                    "type": "number"
+                }
+            }
+        },
         "hivemtk-user_internal_service.RagHealthDimension": {
             "type": "object",
             "properties": {
@@ -7007,6 +7955,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_controller.billDeriveBody": {
+            "type": "object",
+            "properties": {
+                "due_at": {
+                    "type": "string"
+                },
+                "quote_row_id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_controller.faqCreateReq": {
             "type": "object",
             "required": [
@@ -7055,6 +8014,89 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "secondary_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controller.opportunityEditBody": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "expected_close_at": {
+                    "description": "nil = 没有关单日目标（常态）",
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_controller.opportunityLostBody": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_controller.opportunityStageBody": {
+            "type": "object",
+            "properties": {
+                "to_stage": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_controller.opportunityVersionBody": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_controller.quoteReviseBody": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "description": "空 = 沿用基准版",
+                    "type": "string"
+                },
+                "lines": {
+                    "description": "对基准行的覆盖与追加，可空",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/hivemtk-user_internal_service.QuoteLineInput"
+                    }
+                },
+                "opportunity_id": {
+                    "description": "留空 = 继承基准版的归属；给了别的号会被服务层拒",
+                    "type": "string"
+                },
+                "valid_until": {
+                    "description": "nil = 沿用基准版",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controller.quoteSendBody": {
+            "type": "object",
+            "properties": {
+                "approval_id": {
                     "type": "string"
                 }
             }
