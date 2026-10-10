@@ -621,28 +621,6 @@ func (a *IntegrationReachAdapter) recallWeCom(ctx context.Context, hub *model.Me
 // TG/飞书的行键内嵌平台号：tg-out-{acc}-{平台号} / feishu-out-{acc}-{平台id}，
 // 取末段即可；企微是 wecom-out-{uuid}（uuid 随机），平台 msgid 落在 Extra；
 // WA 的行键就是 wamid 本体，但 WA 无主动撤回，到不了这里。
-func platformMessageID(hub *model.MessageHub) (string, error) {
-	if hub == nil {
-		return "", ErrHubKeyNotFound
-	}
-	switch hub.Platform {
-	case "telegram", "feishu":
-		segs := strings.Split(hub.MsgID, "-")
-		if len(segs) < 3 || segs[len(segs)-1] == "" {
-			return "", fmt.Errorf("%w: 行键 %q 无法解析平台号", ErrHubKeyNotFound, hub.MsgID)
-		}
-		return segs[len(segs)-1], nil
-	case "wecom":
-		if v, ok := hub.Extra["msgid"]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s, nil
-			}
-		}
-		return "", fmt.Errorf("%w: 企微行 %q 无 Extra.msgid", ErrHubKeyNotFound, hub.MsgID)
-	default:
-		return "", fmt.Errorf("%w: 渠道 %s 不支持撤回", ErrRecallNotSupported, hub.Platform)
-	}
-}
 
 // AccountHealth 读单个账号的健康度。
 //

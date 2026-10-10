@@ -156,7 +156,7 @@ func TestFallbackNilDB(t *testing.T) {
 // 的是 bridge/sse.go 里同文件却仍写死的回放 backlog 与总线缓冲。
 // 其中 channelbot.http_timeout / sse.client_buffer_size / bridge.sse_bus_buffer_size
 // 三条标 Restart=true：读取点在构造函数里，改完要重启才对已建立的连接生效。
-const defaultParamDefsWant = 134
+const defaultParamDefsWant = 136
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
