@@ -54,7 +54,6 @@ type agentLoopGuard struct {
 
 	maxRepeatCalls   int
 	costDriftFactor2 float64
-	iterationCount   int
 
 	usedTokens int
 	usedCost   float64
