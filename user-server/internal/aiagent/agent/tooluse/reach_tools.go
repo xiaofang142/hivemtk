@@ -76,12 +76,6 @@ type ReachToolDeps struct {
 	SendPipeline ReachSendPipelinePort
 }
 
-func NewReachToolDeps() ReachToolDeps {
-	return ReachToolDeps{
-		Adapter: NoOpReachAdapter{},
-	}
-}
-
 func dispatchToAdapter(ctx context.Context, adapter ReachAdapter, req *ReachSendRequest) (string, error) {
 	if adapter == nil {
 		return "", ErrAdapterNotConfigured
@@ -187,12 +181,6 @@ func RegisterReachTools(registry *ToolRegistry, deps ReachToolDeps) error {
 		}
 	}
 	return nil
-}
-
-func MustRegisterReachTools(registry *ToolRegistry, deps ReachToolDeps) {
-	if err := RegisterReachTools(registry, deps); err != nil {
-		panic(err)
-	}
 }
 
 func (t *ReachSMSSendTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {

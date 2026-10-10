@@ -362,7 +362,7 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   `decorator_approval.go` 的包级 `var coldOutreachNameSegs`（被 `IsColdOutreachTool` 使用），
   build 当轮打红、当即恢复并全量审计其余 65 处无第二例——**教训：删函数必须以
   gofmt 结构或 `^}` 专属终止符为准，map/struct 字面量的第 0 列 `}` 不是函数结尾**。
-- 边界：零引用**类型**未扫未删（本轮只到函数）；`reach_tools.go` 2 符号待 reach 泳道收口后复扫。
+- 边界：零引用**类型**未扫未删（本轮只到函数）→ 已由 I20 兑现；`reach_tools.go` 2 符号 → I25 已销项（`NewReachToolDeps`/`MustRegisterReachTools` 删）。
 
 ### B10 后端零引用导出类型（2026-10-10 I20 已处置）
 
@@ -381,7 +381,7 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   `DeleteEmailSmtpListRequest` 动手时已被他泳道 WIP 回退，delta 复扫才暴露同文件
   真真空洞 `GetEmailSmtpListRequest`；**动手前必须复扫**。
 - 边界：`TokenUsageDetailed` 已于 I23 复扫销项（`97ebaefb` 扫入 HEAD 后仍零引用，删 7 行）；
-  `reach_tools.go` 2 符号待 reach 泳道收口后复扫；前端侧零引用 API 模块面已=0（I17）。
+  ~~reach_tools.go 2 符号待复扫~~（I25 已删两包装函数，`RegisterReachTools` 本体活）；前端侧零引用 API 模块面已=0（I17）。
 
 ### B11 零引用包级 var/const（2026-10-10 I21 已处置）
 
