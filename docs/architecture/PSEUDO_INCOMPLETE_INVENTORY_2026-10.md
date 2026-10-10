@@ -383,6 +383,23 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
 - 边界：`TokenUsageDetailed`（他泳道 staged）与 `reach_tools.go` 2 符号待对应泳道
   收口后复扫；前端侧零引用 API 模块面已=0（I17）。
 
+### B11 零引用包级 var/const（2026-10-10 I21 已处置）
+
+- 源流：B9（I19 函数）→ B10（I20 类型）→ 本节（I21 变量/常量），「零引用导出符号」三段收齐。
+- 读数：导出 var/const 2319 → 严格零引用 150 → 扫描器 bug 权威复核剔 1 假候选
+  （`ProtocolVersionLegacy`：唯一用点在另一条顶层 `var` 行被 `continue` 漏计，已恢复）
+  → **净删 149 个 / 52 文件**（174 行，含 doc 注释与空块折叠）。
+- 大头：`response/errors.go` 19 个从未接线的错误消息常量（整文件近乎死词汇表）、
+  websocket 协议词汇 12、`model/*` 枚举成员 ~40、`upload.go` 4 个未接线 MIME 冗余默认值。
+- **upload 排查结论（非漏洞）**：上传安全链全程活代码（扩展名→危险扩展拦截→魔数比对→
+  `config.AllowedTypes` MIME 白名单），4 个零引用 const 是从未接线的冗余默认值，删后链路不动。
+- **已处置（I21，删除）**：全量 build rc=0、本卡 52 文件 gofmt 空、四门 rc=0；
+  vet 两红为 config-params 泳道在途（`agent_tool_params_wiring.go` 写一半/seeds 语法错），零交集。
+- 方法论：**occurrence 扫描不得在声明分支 `continue` 掉本行 token**（会把「用点在
+  另一条声明行」的真引用漏成假候选）；权威兜底用 `git grep HEAD` 而非工作区快照；
+  共享 index 有他泳道大批 staged 时用 `git commit -- <paths>` 路径限定提交防吞并（第四次事故的机制性预防）。
+- 边界：`TokenUsageDetailed`/`reach_tools.go` 2 符号仍待对应泳道收口复扫。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。
