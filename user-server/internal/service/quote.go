@@ -75,6 +75,12 @@ var (
 	ErrQuoteScriptUnavailable = errors.New("quote: 报价话术没有可用的生效版本")
 	// ErrQuoteVersionMissing 按 (quote_id, version) 或行键读不到那一版。
 	ErrQuoteVersionMissing = errors.New("quote: 报价版本不存在")
+	// ErrQuoteVersionConflict 同一条链的同一版本号已被占用：两个人基于同一版同时追加时，
+	// 仓储按 (quote_id, version) 的唯一索引判出输家，本层不重读、不重试（那是"谁先报价"
+	// 这个事实的裁决，重试会把它抹平）。值直接用仓储那一条而不另造：另造一次就得在
+	// 两层之间维护同一个错误，而 errors.Is 会在某一天悄悄断掉。控制器不 import 仓储，
+	// 所以在这里重导出一次，让 409 的判据留在能看见它的那一层。
+	ErrQuoteVersionConflict = repository.ErrQuoteVersionConflict
 )
 
 // quoteStore 本层对存储的全部依赖 —— QuoteRepository **去掉 UpdateStatus** 的那一份。

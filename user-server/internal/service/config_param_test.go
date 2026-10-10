@@ -156,7 +156,33 @@ func TestFallbackNilDB(t *testing.T) {
 // 的是 bridge/sse.go 里同文件却仍写死的回放 backlog 与总线缓冲。
 // 其中 channelbot.http_timeout / sse.client_buffer_size / bridge.sse_bus_buffer_size
 // 三条标 Restart=true：读取点在构造函数里，改完要重启才对已建立的连接生效。
-const defaultParamDefsWant = 136
+// 2026-10-10（第六次，D12 收尾两批）：+2。
+//   - `agent_llm.provider_failover_policy`：LLM 降级策略整份 JSON 从遗留表
+//     system_kv_config 搬进来（v3.53.0 带值），读路径改走本服务的 60s 缓存。
+//   - `embedding.global_override`：全局 Embedding 提供商覆盖从遗留表 system_config_kv
+//     搬进来（v3.54.0 带值），写路径终于有了来路审计。
+//
+// 同一趟还发现常量本身已经漂移过：`lead` 组的 llm_refine_enabled / industry_profile
+// （38ea7489）加进种子时没同步这里，所以 134 → 实际 136 → 138 一次对平。
+// 顺带说明下面那条循环判据为什么改成"只有 string 允许空默认值"：
+// 计数那格的 Fatalf 一直先炸，循环从没跑到过，industry_profile 的空默认因此被藏了很久。
+//
+// 2026-10-10（第七次，阶段三 3.1 第一批）：+9 = 拟人度评估剩下三个边界 + 圈选一对 +
+// 编辑锁 TTL + 短期记忆 TTL + 可见性趋势默认天数。
+//   - confidence.humanize_boundary_low / boundary_high / sample_rate / max_retry：
+//     DefaultThreshold 早在 1.2 就已接上，这四条是与它同一套判据的其余旋钮
+//     （阈值定「谁算不达标」、边界定「哪些算边缘样本值得送 LLM」、采样率定「其中送
+//     多少」、重试定「重写几轮」），一直散在 humanize/service.go 里没人读参数中心。
+//     三个 float 的合法区间并不相同：boundary_low 是 [0,1)、boundary_high 是 (0,1]、
+//     sample_rate 是 [0,1]（0 = 一个都不送 LLM，是合法语义）。
+//   - sales.audience_default_limit / audience_max_limit：成对出现，只接一个会让另一个
+//     仍是编译期常量。默认值决定「运营没填 limit 时一轮圈多少人」，上限是并发闸。
+//   - misc.edit_lock_ttl：这把锁没有后台清理线程，TTL 同时是持锁人异常退出后的自愈时间，
+//     所以调它是在协作灵敏度与坐席被锁时长之间取舍，不是纯调优。
+//   - memory.l1_ttl_hours：短期记忆存活秒数，同时是多轮召回的窗口。
+//   - geo.default_visibility_days：拆分原 `q.Days <= 0 || q.Days > 365` 那一个条件
+//     得来的两个语义——没给走参数中心，给超了仍夹 365（查询成本闸，不随默认值放大）。
+const defaultParamDefsWant = 147
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
@@ -166,11 +192,47 @@ func TestDefaultParamDefsCount(t *testing.T) {
 		t.Fatalf("want %d defs, got %d", defaultParamDefsWant, len(defs))
 	}
 	for i, d := range defs {
-		if d.Group == "" || d.Key == "" || d.DefaultValue == "" {
-			t.Errorf("def[%d] bad: group=%q key=%q default=%q", i, d.Group, d.Key, d.DefaultValue)
+		if d.Group == "" || d.Key == "" {
+			t.Errorf("def[%d] bad: group=%q key=%q", i, d.Group, d.Key)
+		}
+		// 空默认值只对自由文本合法：int/float/bool/duration 的空默认读不出兜底值，
+		// 而"重置为默认"会把这一格变成"未配置"——那是两种不同的动作。
+		if d.DefaultValue == "" && d.ValueType != "string" {
+			t.Errorf("def[%d] bad: %s.%s 默认值为空而 value_type=%q（非自由文本必须有可解析的默认值）",
+				i, d.Group, d.Key, d.ValueType)
 		}
 	}
 	t.Logf("✅ %d default defs validated", defaultParamDefsWant)
+}
+
+// 空默认值的豁免面钉成一条具名清单，而不是"凡是 string 都放行"：
+// 新增一格就得在这里解释一次，否则这道门对自由文本的放行会变成又一个"改了没人读"的入口。
+//
+// 2026-10-10：清单现在是**空的**。曾经里面挂着 lead.industry_profile（"一段行业自由描述，
+// 空 = 未填行业画像"），但 PR#40 顺手给它填了一个默认值（"通用零售/服务咨询：…"），
+// 于是这条豁免变成了谎话——而本用例另一半断言"豁免清单里的每一条现在必须真的还是空默认"
+// 当场就红了。这正是 ratchet 该干的事：豁免面只允许被**主动撤掉**，不允许悄悄失效。
+//
+// 保留空清单而不是删掉整个用例：上面那个 for 还在负责"出现新的空默认就报警"，
+// 删掉这道门等于把"空默认"这件事重新变成没人看管的入口。
+func TestDefaultParamDefsEmptyDefaultRatchet(t *testing.T) {
+	allowedEmptyDefault := map[string]bool{}
+	seen := map[string]bool{}
+	for _, d := range DefaultParamDefs() {
+		if d.DefaultValue != "" {
+			continue
+		}
+		name := d.Group + "." + d.Key
+		seen[name] = true
+		if !allowedEmptyDefault[name] {
+			t.Errorf("%s 的默认值为空但不在豁免清单里：要么给一个真有意义的默认值，要么在这里写明为什么空才是对的", name)
+		}
+	}
+	for name := range allowedEmptyDefault {
+		if !seen[name] {
+			t.Errorf("豁免清单里的 %s 已经不再有空默认值：这条豁免该撤掉了", name)
+		}
+	}
 }
 
 // 参数唯一性的口径是 **(param_group, key) 复合**，不是单列 key。

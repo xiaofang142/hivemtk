@@ -302,12 +302,15 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 
 按 group 分布（`group / key / 名称`）：
 
-> **处置进度（2026-10-10）：阶段一全部 8 批 + 阶段二 2a/2b/2c/2d 已接线并提交（12/12）。**
-> 门禁读数：`wired 40→120`、`UNDECLARED 72→0`、`已声明未接线 14`。
+> **处置进度（2026-10-10）：阶段一全部 8 批 + 阶段二 2a/2b/2c/2d + 阶段三 3.1 第一批已接线并提交。**
+> 门禁读数：`wired 40→133`、`UNDECLARED 72→0`、`已声明未接线 14`。
 > 阶段一 8 批（wired 40→102）处理的是本节的僵尸参数；阶段二起处理 §2.1 的 P0 新增点位，
 > 每接一条也会让 wired 读数上涨。2a 接的 `misc.upload_max_size_mb` / `middleware.max_json_body_mb`
 > 即对应 §2.1①；2c 是新登记的 `lock` 组 7 条（含 1 条刻意不接，故 wired +6 而
-> 「已声明未接线」从 13 涨到 14）；2d 是新登记的 `channelbot`/`sse`/`bridge` 三组 10 条，对应 §2.1④。
+> 「已声明未接线」从 13 涨到 14）；2d 是新登记的 `channelbot`/`sse`/`bridge` 三组 10 条，对应 §2.1④；
+> 阶段三 3.1 第一批 9 条（`confidence` 4 + `sales` 2 + `misc` 1 + `memory` 1 + `geo` 1）
+> 对应 §2.1④ 与 §2.2 的 P1 未接项，其中 `geo.default_visibility_days` 拆开了
+> `q.Days <= 0 || q.Days > 365` 那一个条件兼任的两件事。
 > 下表是**接线前**的基线快照，各行状态见行末标注。
 
 | group | 僵尸 key |

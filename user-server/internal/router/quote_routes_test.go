@@ -1,7 +1,7 @@
 // quote_routes_test.go T-P6-03：报价 HTTP 出口的挂载点、契约面与"真 Setup 走一遍"。
 //
 // 与 controller/quote_test.go 的分工：那一份钉的是"四种处置在状态码上分不分得开"，
-// 本份钉的是"这四条端点在不在、挂在哪个鉴权组下、以及摘掉挂载那一条会不会有人发现"。
+// 本份钉的是"这六条端点在不在、挂在哪个鉴权组下、以及摘掉挂载那一条会不会有人发现"。
 // 两条都是非行为断言的静态锁（路由表里没有内联闭包、每条端点有 @Router 注解），
 // 理由与商机那一路一样：只有"把那一处摘掉/加回去"的注码能让它们红，
 // 所以配套的变异在电池里，而不是在这里自我声明。
@@ -31,15 +31,22 @@ import (
 	"hivemtk-user/internal/service"
 )
 
-// quoteRouteSpecs 本卡交付的全部端点（顺序无关，判据按集合比）。
+// quoteRouteSpecs 本域交付的全部端点（顺序无关，判据按集合比）。
 //
 // 少一条 = 前端有一个按钮点了报 404，而 404 在网关日志里与"路径写错"长得一模一样；
 // 多一条 = 有一个没人声明的入口在跑（本域最危险的两条是"能写 accepted 的那一条"
 // 与"能改审批结论的那一条"）。
+//
+// 两条带参数的读/写入口（`/latest/:quoteID`、`/version/:quoteID/:version`、
+// `/revise/:quoteID`）都必须是**静态前缀**而不是裸的 `/:quoteID` 兄弟：
+// gin 在同一树位置不允许两个不同名的参数共存，写成 `/:quoteID/:version` 会当场 panic，
+// 而 panic 发生在装配期——测试树里看得见，生产日志里只剩一句"启动失败"。
 var quoteRouteSpecs = []string{
 	"GET /api/quote/:id",
 	"GET /api/quote/latest/:quoteID",
+	"GET /api/quote/version/:quoteID/:version",
 	"POST /api/quote",
+	"POST /api/quote/revise/:quoteID",
 	"POST /api/quote/:id/send",
 }
 
@@ -96,6 +103,11 @@ func TestQuoteRoutes_NoEndpointWritesApprovalOrAccepted(t *testing.T) {
 	for _, probe := range []struct{ method, path string }{
 		{http.MethodPost, "/api/quote/q_1/approve"},
 		{http.MethodPost, "/api/quote/q_1/accept"},
+		// 追加那一条只认 `/revise/<链号>` 这一个形状：写成 `/<行键>/revise` 会撞上发送腿的
+		// `/:id/send` 同级前缀，而少一段的 `/version/<链号>` 一旦能被匹配，就等于凭空多出
+		// "版本号缺省 = 取最新"那条没人声明的别名入口。
+		{http.MethodPost, "/api/quote/q_1/revise"},
+		{http.MethodGet, "/api/quote/version/QT-1"},
 		{http.MethodPost, "/api/quote/q_1/reject"},
 		{http.MethodPost, "/api/quote/q_1/expire"},
 		{http.MethodPost, "/api/quote/q_1/status"},
@@ -148,7 +160,7 @@ func TestQuoteRoutes_SwaggerCoversEveryRoute(t *testing.T) {
 			t.Errorf("@Router 注解形状不对：%q", trimmed)
 			continue
 		}
-		path := strings.NewReplacer("{id}", ":id", "{quoteID}", ":quoteID").Replace(fields[0])
+		path := strings.NewReplacer("{id}", ":id", "{quoteID}", ":quoteID", "{version}", ":version").Replace(fields[0])
 		method := strings.Trim(fields[1], "[]")
 		declared[strings.ToUpper(method)+" "+path] = true
 	}
@@ -187,12 +199,12 @@ func swaggerDeclaresStatus(src, status string) bool {
 // TestQuoteRoutes_MountedAtTheRightPlace 两道顺序锁，各挡一种"挂上了但挂错地方"的坏法。
 //
 // 为什么是静态锁而不是匿名探针（本仓的匿名探针在报价这一族上判不出东西）：
-// 这四条端点在没有身份时**本来就该**回非 2xx（GET 读不到行是 404、发送没有操作者是 401），
+// 这六条端点在没有身份时**本来就该**回非 2xx（GET 读不到行是 404、发送没有操作者是 401），
 // 所以"匿名回非 2xx"在挂对与挂错两种情况下都绿 —— 那条判据在这里没有牙。
 // 有牙的那一格（匿名调用若放理会真的写出东西）需要全套活夹具，归 LiveThroughRealSetup 的 ⑥。
 //
 //  1. `app.InitQuoteRuntime` 必须先于挂载：挂载时读一次全局实例，读早了就是两条永久的 nil
-//     ⇒ 四条端点全部 503，而 503 在别处也是"合法"响应，没人会去查装配顺序。
+//     ⇒ 六条端点全部 503，而 503 在别处也是"合法"响应，没人会去查装配顺序。
 //  2. 必须先于 `auth.Use(JWTAuthMiddleware())` 挂载：gin 的 Use 只对**注册之后**建起来的路由
 //     生效（同文件里那段 2026-09 的历史缺陷注释就是这件事），写在 Use 之前的端点永远不带鉴权。
 func TestQuoteRoutes_MountedAtTheRightPlace(t *testing.T) {
@@ -219,7 +231,7 @@ func TestQuoteRoutes_MountedAtTheRightPlace(t *testing.T) {
 			initAt, mountAt)
 	}
 	if mountAt < useAt {
-		t.Errorf("setupQuoteRoutes 写在 auth.Use(JWTAuthMiddleware()) 之前：那四条端点拿不到鉴权链，匿名即可读报价、写草稿")
+		t.Errorf("setupQuoteRoutes 写在 auth.Use(JWTAuthMiddleware()) 之前：那六条端点拿不到鉴权链，匿名即可读报价、写草稿")
 	}
 	// 挂到哪个组是第三个字面量判据：参数写成 public/r 时上面两道顺序锁全部照样绿。
 	if !strings.Contains(src, "setupQuoteRoutes(auth)") || strings.Contains(src, "setupQuoteRoutes(public") || strings.Contains(src, "setupQuoteRoutes(r,") || strings.Contains(src, "setupQuoteRoutes(r)") {
@@ -227,7 +239,7 @@ func TestQuoteRoutes_MountedAtTheRightPlace(t *testing.T) {
 	}
 }
 
-// TestQuoteRoutes_MountedBySetup 判据只有一条：Setup() 之后这四条端点在引擎上。
+// TestQuoteRoutes_MountedBySetup 判据只有一条：Setup() 之后这六条端点在引擎上。
 //
 // 摘掉 setupQuoteRoutes 那一句，本条立刻红，而上面所有用例仍然全绿 ——
 // 这就是它必须单独存在的原因。
@@ -276,7 +288,8 @@ func quoteRoutesFromSetup(t *testing.T, database *gorm.DB) []string {
 }
 
 // TestQuoteRoutes_LiveThroughRealSetup 真 Setup + 真装配 + 真库走一遍：
-// 生成 → 发送（未批 ⇒ 202）→ 读回（含开放审批那一格）→ 按链读最新 → 越界入参拒。
+// 生成 → 发送（未批 ⇒ 202）→ 读回（含开放审批那一格）→ 按链读最新 → 越界入参拒
+// → 链上追加一版（继承基准行）→ 按版本号回读旧版（含"那一版不存在/版本号不对"两格）。
 //
 // 这一条是整个出口的关闸用例。它钉住四件上面那些用例各自钉不住的事：
 //  1. **Setup 自己**把两条腿装起来了（开局先清全局：不洗这一把的话，摘掉
@@ -285,7 +298,7 @@ func quoteRoutesFromSetup(t *testing.T, database *gorm.DB) []string {
 //  2. 装配点给的那九个句柄接的是**同一把库**（缺任何一个都只会回 503，而 503 在这里是红）；
 //  3. 停在 pending 这件事在 HTTP 面上**读得出来**（AC① 的"100% 停在 pending"若只能从
 //     服务层返回值看，操作者刷新的时候看到的就是一个没有任何变化的草稿页）；
-//  4. 这四条端点在鉴权链之内 —— 用 ⑥ 那一格判：同一个能让 ① 写出行的体，去掉令牌之后
+//  4. 这六条端点在鉴权链之内 —— 用 ⑥ 那一格判：同一个能让 ① 写出行的体，去掉令牌之后
 //     既不能回 2xx、也不能留下任何行。
 func TestQuoteRoutes_LiveThroughRealSetup(t *testing.T) {
 	prevGen, prevSend := service.GlobalQuoteService(), service.GlobalQuoteSendService()
@@ -420,6 +433,100 @@ func TestQuoteRoutes_LiveThroughRealSetup(t *testing.T) {
 	}
 	if after := quoteRowCount(t, database); after != before {
 		t.Errorf("匿名调用之后报价行数从 %d 变成 %d：请求被拒了但**副作用**留下来了", before, after)
+	}
+
+	// ⑦ 链上追加一版（还价）：地址是**逻辑号**，行项目继承基准版，不递的字段沿用。
+	//
+	// 这一格是"真装配"才能验的一格：Revise 要走 store.Latest → ListLines → mergeQuoteLines →
+	// store.Append 这条完整路径，替身测得出入参形状，测不出"下一版的编号由仓储从链上递增"
+	// 与"基准行的单价从库里读回来"这两件事。
+	chain := quoteChainIDOf(t, database, rowID)
+	code, env, raw = doQuoteLive(t, engine, http.MethodPost, "/api/quote/revise/"+chain, tok,
+		`{"lines":[{"product_id":"p_seat","quantity":5,"discount_percent":0}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("追加一版回 %d：%s —— %s", code, env.Message, raw)
+	}
+	v2 := quoteDataFrom(t, env)
+	if v2["version"] != float64(2) {
+		t.Errorf("新版 version=%v，期望 2（由仓储递增，调用方递不进这一格）", v2["version"])
+	}
+	row2, _ := v2["id"].(string)
+	if row2 == "" || row2 == rowID {
+		t.Fatalf("追加得到的行键是 %q，与基准版 %q 分不开：要么没写成新行，要么就地改了旧行", row2, rowID)
+	}
+	if v2["quote_id"] != chain {
+		t.Errorf("新版挂在 %v 上，期望同一条链 %s", v2["quote_id"], chain)
+	}
+	if v2["status"] != model.QuoteStatusDraft {
+		t.Errorf("新版状态=%v，期望 %s（还价出来的那一版同样要过审批才能外发）", v2["status"], model.QuoteStatusDraft)
+	}
+	// 继承＋覆盖同时成立：只改数量与折扣，单价仍取自库里那一行（199.00），
+	// 于是金额是 5×199=995 而不是 5×模板那份折扣。摘掉继承那条路时这里会读出 0 单价。
+	lines2, _ := v2["lines"].([]any)
+	if len(lines2) != 1 {
+		t.Fatalf("继承后行项目数=%d，期望 1：%v", len(lines2), v2["lines"])
+	}
+	line2, _ := lines2[0].(map[string]any)
+	if line2["unit_price"] != float64(199) {
+		t.Errorf("继承来的单价=%v，期望 199：%v", line2["unit_price"], line2)
+	}
+	if line2["quantity"] != float64(5) {
+		t.Errorf("覆盖后的数量=%v，期望 5", line2["quantity"])
+	}
+	if v2["total"] != float64(995) {
+		t.Errorf("新版总额=%v，期望 995（5×199，折扣回到 0）：%v", v2["total"], v2)
+	}
+	if v2["currency"] != back["currency"] {
+		t.Errorf("新版币种=%v，期望沿用基准版的 %v", v2["currency"], back["currency"])
+	}
+
+	// ⑧ 按版本号回读旧版：第一版必须**还是第一版那一笔**。
+	// "旧版不可变"这件事只有能被读出来才算存在 —— 否则第二次谈判之后，
+	// "当时报给客户的是多少钱"就只剩当前态能看，而当前态正是会被下一版改掉的那个态。
+	code, env, raw = doQuoteLive(t, engine, http.MethodGet, "/api/quote/version/"+chain+"/1", tok, "")
+	if code != http.StatusOK {
+		t.Fatalf("回读第一版回 %d：%s —— %s", code, env.Message, raw)
+	}
+	back1 := quoteDataFrom(t, env)
+	if back1["id"] != rowID {
+		t.Errorf("按版本号 1 读到的是 %v，期望基准行键 %s", back1["id"], rowID)
+	}
+	if back1["total"] != back["total"] {
+		t.Errorf("第一版的总额从 %v 变成了 %v：追加把旧版就地改掉了", back["total"], back1["total"])
+	}
+
+	// ⑧b 那一版不存在 ⇒ 404（不是 200 + 空对象，也不是"取最新"）。
+	code, env, _ = doQuoteLive(t, engine, http.MethodGet, "/api/quote/version/"+chain+"/99", tok, "")
+	if code != http.StatusNotFound {
+		t.Errorf("不存在的版本号回 %d，期望 404：%s", code, env.Message)
+	}
+	if got := quoteReasonFrom(t, env); got != "not_found" {
+		t.Errorf("reason=%q，期望 not_found", got)
+	}
+
+	// ⑧c 版本号形状不对 ⇒ 400，且库里那一版一动不动（这条探针有牙的地方在副作用上：
+	// 若形状检查落在仓储之后，写坏一版才会被拒，而这一格要的是"根本没走到写口"）。
+	beforeRows := quoteRowCount(t, database)
+	code, env, _ = doQuoteLive(t, engine, http.MethodGet, "/api/quote/version/"+chain+"/0", tok, "")
+	if code != http.StatusBadRequest {
+		t.Errorf("版本号 0 回 %d，期望 400：%s", code, env.Message)
+	}
+	if got := quoteReasonFrom(t, env); got != "input_invalid" {
+		t.Errorf("reason=%q，期望 input_invalid（0 是「没有这种写法」，不是「查无此版」）", got)
+	}
+	if afterRows := quoteRowCount(t, database); afterRows != beforeRows {
+		t.Errorf("非法版本号之后报价行数从 %d 变成 %d：读口写出了行", beforeRows, afterRows)
+	}
+
+	// ⑨ 追加不许改商机归属：递另一个号必须被拒，且链上不多出第三版。
+	// 换商机只能另起一条链——挂在同一串版本号上的两笔不同商机的报价，事后没人能拆开。
+	other := `{"opportunity_id":"opp_does_not_exist"}`
+	code, env, _ = doQuoteLive(t, engine, http.MethodPost, "/api/quote/revise/"+chain, tok, other)
+	if code == http.StatusOK {
+		t.Errorf("还价改商机归属回 200，必须拒掉：%s", env.Message)
+	}
+	if afterRows := quoteRowCount(t, database); afterRows != beforeRows {
+		t.Errorf("越界追加之后报价行数是 %d，期望仍是 %d（⑦ 那一版）：被拒的请求留下了副作用", afterRows, beforeRows)
 	}
 }
 
@@ -574,7 +681,7 @@ func quoteDataFrom(t *testing.T, env quoteEnvelopeShape) map[string]any {
 
 // —— 反向：装配点缺席时，路由必须诚实报错而不是给出空结论 ——————————————
 
-// TestQuoteRoutes_UnassembledAnswersFiveOhThree 不装配 ⇒ 三条读口/写口全 503，data 非空。
+// TestQuoteRoutes_UnassembledAnswersFiveOhThree 不装配 ⇒ 六条端点全部 503，data 非空。
 //
 // 这一条就是本卡的关闸：路由已进 Setup、而装配点还没跑（或旗子没开）的那个窗口里，
 // 出口必须说"我起不来"。回 200 + 空对象会让前端长成"这个商机还没报过价"，
@@ -584,7 +691,9 @@ func TestQuoteRoutes_UnassembledAnswersFiveOhThree(t *testing.T) {
 	for _, probe := range []struct{ method, path, body string }{
 		{http.MethodGet, "/api/quote/q_any", ""},
 		{http.MethodGet, "/api/quote/latest/QT-any", ""},
+		{http.MethodGet, "/api/quote/version/QT-any/1", ""},
 		{http.MethodPost, "/api/quote", `{"opportunity_id":"opp_1","template_code":"std"}`},
+		{http.MethodPost, "/api/quote/revise/QT-any", `{}`},
 		{http.MethodPost, "/api/quote/q_any/send", `{}`},
 	} {
 		code, env, _ := doQuoteRequest(t, engine, probe.method, probe.path, probe.body)
@@ -650,6 +759,14 @@ func (f failingQuoteReader) LatestView(context.Context, string) (*service.QuoteV
 }
 
 func (f failingQuoteReader) Generate(context.Context, service.QuoteGenerateInput) (*service.QuoteView, error) {
+	return nil, f.err
+}
+
+func (f failingQuoteReader) Revise(context.Context, string, service.QuoteGenerateInput) (*service.QuoteView, error) {
+	return nil, f.err
+}
+
+func (f failingQuoteReader) ViewAt(context.Context, string, int64) (*service.QuoteView, error) {
 	return nil, f.err
 }
 

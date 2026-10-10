@@ -13,8 +13,6 @@ import (
 	"hivemtk-user/internal/cache"
 	"time"
 
-	"gorm.io/gorm"
-
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -36,8 +34,9 @@ const (
 // HealthCheckInterval() / FailureThreshold() / CircuitOpenDuration() /
 // HealthCheckTimeout()，而不是直接读常量。
 //
-// 分层口径：参数中心是**全局默认**，system_config_kv 的 llm_provider_failover
-// 是**按部署的覆盖**——KV 里有值就以 KV 为准，KV 没存或存 0 才回落到参数中心。
+// 分层口径：降级策略整体住在参数中心的 agent_llm 组——单条旋钮（default_*）给全局默认，
+// 整份 JSON（provider_failover_policy）是**按部署的覆盖**，JSON 里 >0/非空的字段优先，
+// 缺省才回落到下面的常量。
 const (
 	DefaultHealthCheckInterval = 30 * time.Second
 	DefaultFailureThreshold    = 5
@@ -50,6 +49,7 @@ var (
 	failureThresholdProvider    func() int
 	circuitOpenDurationProvider func() time.Duration
 	healthCheckTimeoutProvider  func() time.Duration
+	failoverPolicyProvider      func(context.Context) string
 )
 
 // SetHealthCheckIntervalProvider 注入健康检查周期；传 nil 视为不注入，回落到 DefaultHealthCheckInterval。
@@ -70,6 +70,15 @@ func SetCircuitOpenDurationProvider(fn func() time.Duration) {
 // SetHealthCheckTimeoutProvider 注入健康检查超时；传 nil 视为不注入，回落到 DefaultHealthCheckTimeout。
 func SetHealthCheckTimeoutProvider(fn func() time.Duration) {
 	healthCheckTimeoutProvider = fn
+}
+
+// SetFailoverPolicyProvider 注入降级策略 JSON 的读取口（参数中心 agent_llm.provider_failover_policy）。
+// 传 nil 视为不注入，LoadPolicy 回落到 DefaultFailoverPolicy。
+//
+// 迁走的是原先对 system_kv_config 的裸 SQL 直查（D12 配置层统一）：那张表既没有缓存也没有
+// 管理端写路径，改一次策略要手工写 SQL，且健康检查循环每个 tick 都打一次 DB。
+func SetFailoverPolicyProvider(fn func(context.Context) string) {
+	failoverPolicyProvider = fn
 }
 
 // HealthCheckInterval 生效的健康检查周期。非正值一律回落兜底——0 或负数会让健康检查退化成
@@ -127,7 +136,7 @@ type ProviderHealth struct {
 	LatencyP95Ms        int64          `json:"latency_p95_ms,omitempty"`
 }
 
-// FailoverConfig 降级策略配置（从 system_kv_config 表 key=llm_provider_failover 读取）
+// FailoverConfig 降级策略配置（读自参数中心 agent_llm.provider_failover_policy 的 JSON）
 type FailoverConfig struct {
 	HealthCheckInterval   int    `json:"health_check_interval"`
 	FailureThreshold      int    `json:"failure_threshold"`
@@ -151,13 +160,13 @@ func DefaultFailoverConfig() FailoverConfig {
 	}
 }
 
-// FailoverPolicy 降级策略（从 system_kv_config 读取的完整 JSON）
+// FailoverPolicy 降级策略（参数中心里那份完整 JSON）
 type FailoverPolicy struct {
 	Config    FailoverConfig      `json:"config"`
 	Scenarios map[string][]string `json:"scenarios"`
 }
 
-// DefaultFailoverPolicy 默认降级策略（注入到 system_kv_config 表的种子数据）
+// DefaultFailoverPolicy 默认降级策略（参数中心读不到值时的兜底）
 func DefaultFailoverPolicy() FailoverPolicy {
 	return FailoverPolicy{
 		Config: DefaultFailoverConfig(),
@@ -233,19 +242,17 @@ type ProviderFailover struct {
 	checker    HealthChecker
 	health     map[string]*ProviderHealth
 	config     FailoverConfig
-	db         *gorm.DB
 	stopCh     chan struct{}
 	stopped    atomic.Bool
 }
 
 // NewProviderFailover 创建降级管理器
-func NewProviderFailover(dispatcher *Dispatcher, db *gorm.DB) *ProviderFailover {
+func NewProviderFailover(dispatcher *Dispatcher) *ProviderFailover {
 	return &ProviderFailover{
 		dispatcher: dispatcher,
 		checker:    NewHTTPHealthChecker(),
 		health:     make(map[string]*ProviderHealth),
 		config:     DefaultFailoverConfig(),
-		db:         db,
 		stopCh:     make(chan struct{}),
 	}
 }
@@ -257,24 +264,25 @@ func (f *ProviderFailover) SetHealthChecker(checker HealthChecker) {
 	}
 }
 
-// LoadPolicy 从 system_kv_config 表加载策略（key=llm_provider_failover）
-// 表不存在或读不到时使用默认策略
+// LoadPolicy 从参数中心加载策略（agent_llm.provider_failover_policy）；
+// 未注入读取口、值为空或 JSON 非法时使用默认策略。
+//
+// 两条合并规则不对称，都在这里生效：
+//   - config 逐字段合并，只有 >0 / 非空的字段才覆盖默认，所以可以只写想改的那一项；
+//   - scenarios 整表替换，只要非空就以 JSON 为准。少写一个场景不会报错，那个场景会
+//     改由调度路由与本地兜底提供候选（buildCandidates），降级层级随之变少。
 func (f *ProviderFailover) LoadPolicy(ctx context.Context) FailoverPolicy {
 	policy := DefaultFailoverPolicy()
-	if f.db == nil {
-		return policy
-	}
-	var raw string
-	tx := f.db.WithContext(ctx).Raw(`SELECT value FROM system_kv_config WHERE key = 'llm_provider_failover' LIMIT 1`).Scan(&raw)
-	if tx.Error != nil {
-		return policy
+	raw := ""
+	if p := failoverPolicyProvider; p != nil {
+		raw = p(ctx)
 	}
 	if raw == "" {
 		return policy
 	}
 	var loaded FailoverPolicy
 	if err := json.Unmarshal([]byte(raw), &loaded); err != nil {
-		logger.Warnf("[ProviderFailover] 解析 llm_provider_failover 配置失败: %v", err)
+		logger.Warnf("[ProviderFailover] 解析参数中心 agent_llm.provider_failover_policy 失败: %v", err)
 		return policy
 	}
 	if loaded.Config.HealthCheckInterval > 0 {
@@ -668,9 +676,9 @@ var (
 )
 
 // InitGlobalFailover 初始化全局降级管理器
-func InitGlobalFailover(dispatcher *Dispatcher, db *gorm.DB) *ProviderFailover {
+func InitGlobalFailover(dispatcher *Dispatcher) *ProviderFailover {
 	globalFailoverOnce.Do(func() {
-		globalFailover = NewProviderFailover(dispatcher, db)
+		globalFailover = NewProviderFailover(dispatcher)
 	})
 	return globalFailover
 }

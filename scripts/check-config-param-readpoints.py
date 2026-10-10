@@ -42,10 +42,29 @@ SEEDS_REL = Path("user-server") / "internal" / "service" / "config_param_seeds.g
 SCAN_REL = Path("user-server")
 GETCALL = re.compile(r'Get(?:Int|Float|Bool|Duration|String)\(')
 KEY_LINE = re.compile(r'Key:\s*"([a-z0-9_]+)"')
-ENTRY = re.compile(
-    r'\{Group:\s*"([a-z_]+)",\s*Key:\s*"([a-z0-9_]+)",\s*Name:\s*"([^"]*)",\s*\n\s*Description:\s*"([^"]*)"'
-)
+# 条目头：每个条目的固定前缀是 `{Group: "g", Key: "k", Name: "n"`，其余字段顺序不定
+# （`38ea7489` 那两条 lead 条目把 DefaultValue/ValueType/Category 写在 Description 之前且整条一行，
+#  按"Name 之后必须紧跟换行 + Description"匹配的旧写法解不出来 ⇒ 枚举源看不见它们，
+#  而它看不见的那几条照样会被算进"全绿"）。
+# 因此这里只锚条目头，Description 在该条目到下一个条目头之间的片段里找。
+ENTRY_HEAD = re.compile(r'\{Group:\s*"([a-z_]+)",\s*Key:\s*"([a-z0-9_]+)",\s*Name:\s*"([^"]*)"')
+ENTRY_DESC = re.compile(r'Description:\s*"([^"]*)"')
 CONST_ASSIGN = re.compile(r'\b([A-Za-z_]\w*)\s*=\s*"([a-z0-9_]+)"')
+
+
+def parse_entries(text: str) -> list[tuple[str, str, str, str]]:
+    """列出 (group, key, name, description)。
+
+    没有 Description 的条目返回空串：它照样要过判据 1（没读取点又不承认 ⇒ UNDECLARED），
+    不能因为"读不出文案"就绕过分诊。
+    """
+    heads = list(ENTRY_HEAD.finditer(text))
+    out: list[tuple[str, str, str, str]] = []
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        d = ENTRY_DESC.search(text[m.end():end])
+        out.append((m.group(1), m.group(2), m.group(3), d.group(1) if d else ""))
+    return out
 
 
 def fail(msg: str, code: int = 2) -> "NoReturn":  # type: ignore[name-defined]
@@ -61,7 +80,7 @@ def main() -> int:
     seed_text = seeds.read_text(encoding="utf-8")
 
     key_rows = KEY_LINE.findall(seed_text)
-    entries = ENTRY.findall(seed_text)
+    entries = parse_entries(seed_text)
     if not key_rows:
         fail("种子文件里一条 Key 都没解出：枚举源坏了，不能据此说「没有违规」")
     if len(entries) != len(key_rows):

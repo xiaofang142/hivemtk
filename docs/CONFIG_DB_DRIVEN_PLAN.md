@@ -472,6 +472,58 @@ env MAX_JSON_BODY_MB > middleware.max_json_body_mb > DefaultMaxJSONBodyMB(8)
 ### 阶段三：P1 130 个点位 + 前端接线
 
 - 后端 130 个按 group 打包 PR。
+
+#### 3.1 第一批已落地（2026-10-10）：9 条
+
+**本批范围**（不是把 130 条一次做完，而是先取"有真实生产消费点 + 语义清楚"的一批）：
+
+| group.key | 默认 | 代码点位 | 接线方式 |
+| --- | --- | --- | --- |
+| `confidence.humanize_boundary_low` | 0.70 | `internal/service/humanize/service.go` `DefaultBoundaryLow` | provider seam |
+| `confidence.humanize_boundary_high` | 0.85 | 同文件 `DefaultBoundaryHigh` | provider seam |
+| `confidence.humanize_sample_rate` | 0.10 | 同文件 `DefaultSampleRate` | provider seam |
+| `confidence.humanize_max_retry` | 3 | 同文件 `DefaultMaxRetry` | provider seam |
+| `sales.audience_default_limit` | 200 | `internal/service/audience_selector.go` `DefaultAudienceLimit` | provider seam |
+| `sales.audience_max_limit` | 500 | 同文件 `MaxAudienceLimit` | provider seam |
+| `misc.edit_lock_ttl` | 300 | `internal/service/customer_service_plus.go` `EditLockTTL` | provider seam |
+| `memory.l1_ttl_hours` | 86400 | `internal/service/memory_system.go` `L1TTLHours` | provider seam |
+| `geo.default_visibility_days` | 30 | `internal/geo/service/visibility.go` 原写死 `q.Days = 30` | **直连**，不造 seam |
+
+**三条判断，写在这里免得下轮重新论证一遍**：
+
+1. **humanize 四条与 `DefaultThreshold` 是同一套判据**。阈值定"谁算不达标"、边界定
+   "哪些算边缘样本值得送 LLM"、采样率定"其中送多少"、重试定"重写几轮"。阈值早在
+   阶段 1.2 接上了，剩下三条散着没人读参数中心，于是"改一个旋钮只动了四分之一"。
+2. **`geo` 走直连而不是 seam**。`internal/geo/service` 早已 import `internal/service`
+   （`llm.go`、`keyword_pipeline.go`），没有环可成；再造一层 provider 只是多一层转发。
+   判据统一为「**读取点在不在 `internal/service` 包内**」：在则 seam，不在则直连。
+3. **`q.Days <= 0 || q.Days > 365` 那一个条件原本兼任两件事**——"没给"和"给超了"共用
+   同一个兜底 30。拆开后：没给走参数中心，给超了仍夹 365（查询成本闸，一次要回 365 行
+   按引擎的聚合，不该跟着默认值一起被放大）。
+
+**三个 float 参数的合法区间并不相同，必须逐条声明**（本轮写错过一次，把 0 当坏值）：
+
+| 参数 | 合法区间 | 0 的语义 |
+| --- | --- | --- |
+| `humanize_boundary_low` | `[0,1)` | 0 = "所有样本都算边缘"，**合法** |
+| `humanize_boundary_high` | `(0,1]` | 0 会让"边缘区间"这个概念消失，**非法，回落** |
+| `humanize_sample_rate` | `[0,1]` | 0 = "一个都不送 LLM"，**合法** |
+
+**顺带修掉 master 上一个既有红灯**：`config_param_test.go` 的 `TestDefaultParamDefsCount`
+只把 `DefaultValue == ""` 一律判坏，而 PR#39 引入的 `lead.industry_profile`（自由文本行业
+画像）合法地没有默认值——HEAD 上这条用例本来就是红的。改成"只对 `value_type != string`
+要求有可解析默认值"，并把空默认的豁免面收成一条**具名清单**（`TestDefaultParamDefsEmptyDefaultRatchet`），
+而不是"凡是 string 都放行"——否则这道门对自由文本的放行会变成又一个改了没人读的入口。
+
+**仍未修的 master 红灯（他的文件，未动）**：`TestD12_NoNewLegacyKVDirectQuery` 在纯净 HEAD
+上同样红，报的是 `internal/aiagent/llm/embedding_global_config.go` 直查 `system_config_kv`。
+那是他自己的 D12 在途工作（`agent_llm.provider_failover_policy` / `embedding.global_override`），
+往白名单里加一条就等于替一个真实违规盖章，等他本人定夺。
+
+**门禁**：`wired 131 → 133`、`已声明未接线 14`、`UNDECLARED 0`、`STALE 0`，rc=0。
+种子条目 138 → 147。**`internal/service` 全包从"2 红"变成"0 红"**：除上面那条
+`TestDefaultParamDefsCount` 外，纯净 HEAD 上的 `TestD12_NoNewLegacyKVDirectQuery` 也红了
+（报他自己的 `embedding_global_config.go` 直查 `system_config_kv`），已随他的 D12 收尾自行转绿。
 - **前端**：15 个真阈值走一个 `GET /api/manage/config-params/public?group=frontend_ws` 之类的
   轻量只读端点（**不要把 `/api/manage/config-params` 原样暴露给终端用户**，那是管理端全量列表），
   前端在 Pinia 里建一个 `useRuntimeConfig()` 一次性拉取并缓存。
