@@ -481,7 +481,6 @@ func (p *IndexNowPusher) Push(ctx context.Context, urls []string) ([]PushResult,
 
 type ToutiaoPusher struct {
 	Site string
-	cli  *http.Client
 }
 
 func (p *ToutiaoPusher) Name() string { return "toutiao" }
