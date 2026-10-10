@@ -50,6 +50,7 @@ COVERED: dict[str, str] = {
     "mut_retention_a6.py": SHAPE_B,
     "mut_write_claim_a12.py": SHAPE_B,
     "mut_ingest_dedup_r23.py": SHAPE_B,
+    "mut_route_surface.py": SHAPE_B,
 }
 
 # 本门读不了的电池，逐份列全（不是"暂时没写全"的省略号）。分成三类，理由写在括号里：
@@ -64,12 +65,18 @@ UNCOVERED: tuple[str, ...] = (
     "mut_dingtalk_msgid_r22lane.py",
     "mut_egress_pool_r30.py",
     "mut_extension_auth_b19h.py", "mut_host_gate_b19f.py", "mut_hub_media_backfill.py",
+    # 这两枚一直在 scripts/ 里、也各自带 `--check`（上面第 (i) 类），却从没进过这份名单，
+    # 于是"COVERED ∪ UNCOVERED == 磁盘现算名单"那枚硬计数器对所有人都是红的：
+    # 新电池落进 scripts/ 时先撞到的不是自己的锚点，而是这两条陈年噪音。
+    # 现证：`git log -1 --format=%h -- scripts/<这份>.py` 有值，而
+    # `git show HEAD:scripts/anchor-preflight.py | grep -c <这份>` 为 0。
+    "mut_kb_release_p902.py",
     "mut_ledger_b16.py", "mut_ledger_b16b.py", "mut_ledger_b16c.py",
     "mut_outbound_claim_r22lane.py", "mut_prune_batch_b19g.py", "mut_push_budget_b20d.py",
     "mut_reach_p503.py", "mut_review_r22_teeth.py", "mut_seam_guard_r28.py",
     "mut_send_verify_b24.py", "mut_sentcache_r22lane.py", "mut_session_err_b19d.py",
     "mut_sse_ack_r23.py", "mut_startup_hook_p702.py", "mut_step_cap_b19e.py",
-    "mut_submit_enter_b18.py",
+    "mut_submit_enter_b18.py", "mut_tg_gate_policy.py",
     # 2026-09-29 并入旁道那一笔带进来的第 32 枚：它的 `--check`（"只验锚点与用例名，要装架、
     # 不跑 go test"）就是上面第 (i) 类，本门不重复实现；且它的格表是「文件常量 + 原文/注码 +
     # 两列用例名」的 7 元组、没有 SHAPE_A 要的 `cell_rels`/`apply_cell`，硬接只会让适配器报错。

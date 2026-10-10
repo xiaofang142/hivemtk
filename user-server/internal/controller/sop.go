@@ -34,7 +34,7 @@ func NewSOPController(svc *service.SOPService) *SOPController {
 // @Param        body  body  service.CreateRequest  true  "SOP 创建参数"
 // @Success      200   {object}  response.Response  "创建成功"
 // @Failure      400   {object}  response.Response  "参数错误"
-// @Router       /api/sops [post]
+// @Router       /api/sop [post]
 func (c *SOPController) Create(ctx *gin.Context) {
 	var req service.CreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -60,7 +60,7 @@ func (c *SOPController) Create(ctx *gin.Context) {
 // @Param        id    path   int                       true  "SOP ID"
 // @Param        body  body   service.CreateRequest  true  "更新参数"
 // @Success      200   {object}  response.Response  "更新成功"
-// @Router       /api/sops/{id} [put]
+// @Router       /api/sop/{id} [put]
 func (c *SOPController) Update(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -90,7 +90,7 @@ func (c *SOPController) Update(ctx *gin.Context) {
 // @Param        id  path  int  true  "SOP ID"
 // @Success      200  {object}  response.Response  "成功"
 // @Failure      404  {object}  response.Response  "未找到"
-// @Router       /api/sops/{id} [get]
+// @Router       /api/sop/{id} [get]
 func (c *SOPController) Get(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -116,7 +116,7 @@ func (c *SOPController) Get(ctx *gin.Context) {
 // @Param        page      query  int     false  "页码"  default(1)
 // @Param        page_size query  int     false  "每页"   default(20)
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/sops [get]
+// @Router       /api/sop [get]
 func (c *SOPController) List(ctx *gin.Context) {
 	scenario := ctx.Query("scenario")
 	status := ctx.Query("status")

@@ -294,6 +294,15 @@ func (c *Customer360Controller) GetCustomer360ByID(ctx *gin.Context) {
 }
 
 // AddCustomerTag 添加客户标签（兼容前端 POST /api/customer/:id/tags）
+// @Summary 添加客户标签
+// @Description 给客户追加一个标签，返回追加后的全部标签；请求体是单数字段 tag，不是标签数组
+// @Tags CDP-客户管理
+// @Accept json
+// @Produce json
+// @Param id path string true "客户 ID"
+// @Param request body object{tag=string} true "单个标签"
+// @Success 200 {object} object{message=string} "添加成功"
+// @Router /api/customer/{id}/tags [post]
 func (c *Customer360Controller) AddCustomerTag(ctx *gin.Context) {
 	userID := ctx.Param("id")
 	if userID == "" {
@@ -348,6 +357,15 @@ func (c *Customer360Controller) RemoveCustomerTag(ctx *gin.Context) {
 }
 
 // GetCustomerDetail 获取客户详情（兼容前端 GET /api/customer/:id）
+// @Summary 获取客户详情
+// @Description 按客户 ID 返回客户 360° 视图；前端 GET /api/customer/:id 打的是这里
+// @Tags CDP-客户管理
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "客户 ID"
+// @Success 200 {object} object{data=service.Customer360DTO} "获取成功"
+// @Failure 404 {object} object{code=string,message=string} "客户不存在"
+// @Router /api/customer/{id} [get]
 func (c *Customer360Controller) GetCustomerDetail(ctx *gin.Context) {
 	userID := ctx.Param("id")
 	if userID == "" {

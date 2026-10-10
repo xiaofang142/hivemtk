@@ -105,7 +105,7 @@ func (c *AuthController) recordLoginRiskAsync(ctx *gin.Context, username string,
 // @Success      200   {object}  response.Response  "注册成功，返回 token"
 // @Failure      400   {object}  response.Response  "参数错误"
 // @Failure      409   {object}  response.Response  "用户名/邮箱已存在"
-// @Router       /public/register [post]
+// @Router       /api/auth/register [post]
 func (c *AuthController) Register(ctx *gin.Context) {
 	// enable_register 开关：关闭时 403（配置读失败按保守口径同样拒绝）
 	cfg, cfgErr := service.NewSystemConfigService().GetConfig(ctx.Request.Context())
@@ -141,7 +141,7 @@ func (c *AuthController) Register(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Success      200  {object}  response.Response  "刷新成功"
 // @Failure      401  {object}  response.Response  "认证失败"
-// @Router       /api/auth/refresh [post]
+// @Router       /api/auth/refresh-token [post]
 func (c *AuthController) RefreshToken(ctx *gin.Context) {
 	authHeader := ctx.GetHeader("Authorization")
 	if authHeader == "" {
@@ -199,7 +199,7 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Success      200  {object}  response.Response  "成功"
 // @Failure      401  {object}  response.Response  "未登录"
-// @Router       /api/auth/me [get]
+// @Router       /api/auth/current-user [get]
 func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {
@@ -235,7 +235,7 @@ func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 // @Param        body  body  service.ChangePasswordRequest  true  "修改密码请求"
 // @Success      200   {object}  response.Response  "成功"
 // @Failure      400   {object}  response.Response  "参数错误"
-// @Router       /api/auth/password [put]
+// @Router       /api/auth/change-password [post]
 func (c *AuthController) ChangePassword(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {

@@ -74,7 +74,7 @@ func (c *CustomerEventController) TrackEvent(ctx *gin.Context) {
 // @Param id path string true "客户 ID"
 // @Param limit query int false "返回数量" default(50)
 // @Success 200 {object} object{data=[]model.CustomerEvent} "获取成功"
-// @Router /api/events/customer/:id [get]
+// @Router /api/events/customer/{id} [get]
 func (c *CustomerEventController) GetEventHistory(ctx *gin.Context) {
 	customerID := ctx.Param("id")
 	if customerID == "" {
@@ -106,7 +106,7 @@ func (c *CustomerEventController) GetEventHistory(ctx *gin.Context) {
 // @Produce json
 // @Param id path string true "客户 ID"
 // @Success 200 {object} object{data=object{deleted_count=int}} "删除成功"
-// @Router /api/events/customer/:id [delete]
+// @Router /api/events/customer/{id} [delete]
 func (c *CustomerEventController) DeleteEvent(ctx *gin.Context) {
 	customerID := ctx.Param("id")
 	if customerID == "" {

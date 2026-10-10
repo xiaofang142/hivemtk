@@ -1,0 +1,22 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-xgw5w3th
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/RouteSurface/20261010-233136
+取证基线：HEAD=21828b63 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk load=23:31  up 17 days, 13:19, 2 users, load averages: 43.82 21.16 14.20 日志 tag=20261010-233136
+装架：克隆 master + 覆盖 20 个本泳道脏/未跟踪文件（其余面走 HEAD 字节）：user-server/docs/docs.go, user-server/docs/swagger.json, user-server/docs/swagger.yaml, user-server/internal/controller/alert_rule.go, user-server/internal/controller/auth.go, user-server/internal/controller/clue.go, user-server/internal/controller/customer.go, user-server/internal/controller/customer_360.go, user-server/internal/controller/customer_event.go, user-server/internal/controller/customer_oneid.go, user-server/internal/controller/intent.go, user-server/internal/controller/recovery_queue.go, user-server/internal/controller/sales_persona.go, user-server/internal/controller/short_link.go, user-server/internal/controller/sop.go, user-server/internal/controller/workflow_orchestrator.go, user-server/internal/geo/controller/alert.go, user-server/internal/router/route_surface_consistency_test.go, user-server/internal/service/oneid_merge_rule.go, user-server/tests/e2e/routes_user.tsv
+本轮基线字节（注码前 == 还原后 才算干净）：
+  4902773e64782af0f3d9e86e9ccd0a0c  user-server/internal/router/route_surface_consistency_test.go
+  8bb2c7da09ddf60d00c814a10a7afb3c  user-server/internal/controller/customer_360.go
+  e5525fdf667df226eab644d7f50c7278  user-server/tests/e2e/routes_user.tsv
+[控制组] rc=0 settled=2 skip=0 红名=—
+G1   注解指向路由表里不存在的端点（幽灵接口进 swagger）                                杀掉                         rc=1 红名=['TestAnnotationsMatchLiveRoutes']
+G2   注解挂在并不服务该路由的函数上（路径在、归属错）                                     跳过（--only 未选）
+G3   参数段退回 gin 的冒号写法（OpenAPI 路径模板非法）                              跳过（--only 未选）
+G4   冒烟清单里出现不指向任何路由的死行                                            跳过（--only 未选）
+G5   清单覆盖的 /api/ 条数跌破棘轮下界                                         跳过（--only 未选）
+G6   注解扫描根空转（一条注解都扫不到时门要自杀而不是放行）                                  跳过（--only 未选）
+G7   撤掉前端静态面的 dist 前提（清单里那三条静态行会变死行）                              跳过（--only 未选）
+G8   打归属谎言的同时摘掉 handlerNames 比对（期望全绿＝归属腿是谎言的唯一拦截面）                跳过（--only 未选）
+
+===== 判定：1 格逐刀被杀，无存活
+OK：源文件逐字节还原（guard=4902773e ann=8bb2c7da tsv=e5525fdf），日志在 /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/RouteSurface/20261010-233136
+   注：本次按 --only 只跑了窄口子，**门禁不认这一行**，认的是不带 --only 的全量。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-xgw5w3th/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-xgw5w3th

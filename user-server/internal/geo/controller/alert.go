@@ -64,6 +64,15 @@ func (c *AlertController) MarkNotified(ctx *gin.Context) {
 }
 
 // Delete DELETE /geo/alerts/:id
+// @Summary      删除 GEO 告警
+// @Description  按告警 ID 删除 GEO 告警中心里的一条记录
+// @Tags         GEO-告警中心
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  path  int  true  "告警 ID"
+// @Success      200  {object}  response.Response
+// @Failure      404  {object}  response.Response  "告警不存在"
+// @Router       /api/geo/alerts/{id} [delete]
 func (c *AlertController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {

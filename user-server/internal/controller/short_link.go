@@ -32,7 +32,7 @@ func NewShortLinkController(shortLinkService service.ShortLinkService) *ShortLin
 // @Security     BearerAuth
 // @Param        body  body  dto.CreateShortLinkRequest  true  "创建短链请求"
 // @Success      200   {object}  response.Response  "成功"
-// @Router       /api/short-links [post]
+// @Router       /api/shortlink/create [post]
 func (c *ShortLinkController) Create(ctx *gin.Context) {
 	var req dto.CreateShortLinkRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -58,7 +58,7 @@ func (c *ShortLinkController) Create(ctx *gin.Context) {
 // @Param        id    path  int                          true  "短链 ID"
 // @Param        body  body  dto.UpdateShortLinkRequest   true  "更新参数"
 // @Success      200   {object}  response.Response  "成功"
-// @Router       /api/short-links/{id} [put]
+// @Router       /api/shortlink/update [put]
 func (c *ShortLinkController) Update(ctx *gin.Context) {
 	var req dto.UpdateShortLinkRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

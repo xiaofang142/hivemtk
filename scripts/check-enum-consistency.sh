@@ -272,7 +272,7 @@ check_intent_dictionary() {
         continue
       fi
       if ! printf '%s\n' "$types" | grep -Fxq "$dst"; then
-        log_fail "[intent_dict] 归并别名 $src → $dst，但 $dst 无词条：归并后仍然产不出该意图"
+        log_fail "[intent_dict] 归并别名 $src → ${dst}，但 $dst 无词条：归并后仍然产不出该意图"
       fi
     done <<< "$pairs"
   fi

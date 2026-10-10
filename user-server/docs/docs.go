@@ -170,34 +170,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/alerts/histories/resolve": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "告警"
-                ],
-                "summary": "手动恢复告警历史",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "规则ID",
-                        "name": "rule_id",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/api/alerts/rules": {
             "get": {
                 "produces": [
@@ -237,70 +209,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "告警"
-                ],
-                "summary": "创建告警规则",
-                "parameters": [
-                    {
-                        "description": "规则",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_service.AlertRuleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/alerts/rules/status": {
-            "put": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "告警"
-                ],
-                "summary": "批量启用/禁用规则",
-                "parameters": [
-                    {
-                        "description": "{ids:[1,2], enabled:true}",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
             }
         },
         "/api/alerts/rules/{id}": {
@@ -329,57 +237,52 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "put": {
-                "consumes": [
-                    "application/json"
+            }
+        },
+        "/api/analytics/persona/staffs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "返回所有员工 ID 和基础信息",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "告警"
+                    "Sales Persona"
                 ],
-                "summary": "更新告警规则",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "规则ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "规则",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_service.AlertRuleRequest"
-                        }
-                    }
-                ],
+                "summary": "销冠员工列表",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
                     }
                 }
-            },
-            "delete": {
+            }
+        },
+        "/api/analytics/persona/staffs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据员工 ID 生成多维度能力画像报告（沟通力/转化力/产品力等）",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "告警"
+                    "Sales Persona"
                 ],
-                "summary": "删除告警规则",
+                "summary": "销冠能力画像",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "规则ID",
+                        "description": "员工 ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -387,7 +290,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -589,6 +498,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/auth/change-password": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "修改成功后旧 token 会被加入黑名单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "修改当前用户密码",
+                "parameters": [
+                    {
+                        "description": "修改密码请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_service.ChangePasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/current-user": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "从 JWT token 解析 user_id 并返回用户基本信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "获取当前登录用户信息",
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/login": {
             "post": {
                 "description": "使用用户名+密码登录，支持 MFA 第二步验证；登录成功返回 JWT token",
@@ -657,86 +645,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/auth/me": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "从 JWT token 解析 user_id 并返回用户基本信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "获取当前登录用户信息",
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/auth/password": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "修改成功后旧 token 会被加入黑名单",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "修改当前用户密码",
-                "parameters": [
-                    {
-                        "description": "修改密码请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_service.ChangePasswordRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/auth/refresh": {
+        "/api/auth/refresh-token": {
             "post": {
                 "security": [
                     {
@@ -763,6 +672,52 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "认证失败",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/register": {
+            "post": {
+                "description": "自主注册，支持邮箱验证（可选），注册成功返回 JWT token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "用户注册",
+                "parameters": [
+                    {
+                        "description": "注册请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_service.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "注册成功，返回 token",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "用户名/邮箱已存在",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -1243,35 +1198,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/clues/statistics": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "返回线索总数、转化率、来源分布",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Clue"
-                ],
-                "summary": "获取线索统计数据",
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/clues/{id}": {
+        "/api/clues/delete/{id}": {
             "delete": {
                 "security": [
                     {
@@ -1314,9 +1241,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/customer": {
+        "/api/clues/statistics": {
             "get": {
-                "description": "获取所有客户，支持分页",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回线索总数、转化率、来源分布",
                 "consumes": [
                     "application/json"
                 ],
@@ -1324,35 +1256,20 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CDP-客户管理"
+                    "Clue"
                 ],
-                "summary": "获取客户列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
+                "summary": "获取线索统计数据",
                 "responses": {
                     "200": {
-                        "description": "获取成功",
+                        "description": "成功",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
                     }
                 }
-            },
+            }
+        },
+        "/api/customer": {
             "post": {
                 "description": "创建新客户或更新现有客户（通过身份标识匹配）。至少需要提供一个有效身份标识。",
                 "consumes": [
@@ -1568,115 +1485,61 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/customer/:id/tags": {
-            "post": {
-                "description": "给客户添加一个或多个标签",
-                "consumes": [
-                    "application/json"
+        "/api/customer/oneid/list": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "分页查询客户 OneID 及其身份",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "CDP-客户管理"
+                    "OneID"
                 ],
-                "summary": "给客户添加标签",
+                "summary": "OneID 列表",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "客户 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
                     },
                     {
-                        "description": "标签列表",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "tags": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键词",
+                        "name": "keyword",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "添加成功",
+                        "description": "成功",
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "从客户移除一个或多个标签",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CDP-客户管理"
-                ],
-                "summary": "从客户移除标签",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "客户 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "标签列表",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "tags": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "移除成功",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
                     }
                 }
             }
         },
-        "/api/customer/merge": {
+        "/api/customer/oneid/merge": {
             "post": {
-                "description": "将 secondary 客户合并到 primary 客户，保留 primary 的信息并合并标签",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "把两个 OneID 合并为一个，保留主 ID 全部行为轨迹",
                 "consumes": [
                     "application/json"
                 ],
@@ -1684,25 +1547,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CDP-客户管理"
+                    "OneID"
                 ],
-                "summary": "合并客户",
+                "summary": "合并 OneID 客户身份",
                 "parameters": [
                     {
-                        "description": "客户 ID",
-                        "name": "request",
+                        "description": "合并请求",
+                        "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                " secondary_id": {
-                                    "type": "string"
-                                },
-                                "primary_id": {
-                                    "type": "string"
-                                }
-                            }
+                            "$ref": "#/definitions/internal_controller.mergeRequest"
                         }
                     }
                 ],
@@ -1710,12 +1565,38 @@ const docTemplate = `{
                     "200": {
                         "description": "合并成功",
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/customer/oneid/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回 OneID 总数、冲突数、合并率等",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OneID"
+                ],
+                "summary": "OneID 统计",
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
                     }
                 }
@@ -1723,10 +1604,12 @@ const docTemplate = `{
         },
         "/api/customer/{id}": {
             "get": {
-                "description": "根据客户 ID 获取客户 360° 视图",
-                "consumes": [
-                    "application/json"
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "按客户 ID 返回客户 360° 视图；前端 GET /api/customer/:id 打的是这里",
                 "produces": [
                     "application/json"
                 ],
@@ -1750,7 +1633,72 @@ const docTemplate = `{
                             "type": "object",
                             "properties": {
                                 "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_service.CustomerProfile"
+                                    "$ref": "#/definitions/hivemtk-user_internal_service.Customer360DTO"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "客户不存在",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "code": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/customer/{id}/tags": {
+            "post": {
+                "description": "给客户追加一个标签，返回追加后的全部标签；请求体是单数字段 tag，不是标签数组",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CDP-客户管理"
+                ],
+                "summary": "添加客户标签",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "客户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "单个标签",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "tag": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "添加成功",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string"
                                 }
                             }
                         }
@@ -2297,7 +2245,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/events/customer/:id": {
+        "/api/events/customer/{id}": {
             "get": {
                 "description": "获取指定客户的事件历史记录",
                 "consumes": [
@@ -2820,38 +2768,39 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/intent/batch": {
-            "post": {
+        "/api/geo/alerts/{id}": {
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "支持 items 或 messages 两种入参风格",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "按告警 ID 删除 GEO 告警中心里的一条记录",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Intent"
+                    "GEO-告警中心"
                 ],
-                "summary": "批量意图识别",
+                "summary": "删除 GEO 告警",
                 "parameters": [
                     {
-                        "description": "批量请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_controller.BatchRecognizeRequest"
-                        }
+                        "type": "integer",
+                        "description": "告警 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功",
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "告警不存在",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -2885,6 +2834,45 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/internal_controller.RecognizeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/intent/recognize/batch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "支持 items 或 messages 两种入参风格",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Intent"
+                ],
+                "summary": "批量意图识别",
+                "parameters": [
+                    {
+                        "description": "批量请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controller.BatchRecognizeRequest"
                         }
                     }
                 ],
@@ -3098,98 +3086,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/oneid": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "分页查询客户 OneID 及其身份",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "OneID"
-                ],
-                "summary": "OneID 列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页",
-                        "name": "page_size",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "关键词",
-                        "name": "keyword",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/oneid/merge": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "把两个 OneID 合并为一个，保留主 ID 全部行为轨迹",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "OneID"
-                ],
-                "summary": "合并 OneID 客户身份",
-                "parameters": [
-                    {
-                        "description": "合并请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_controller.mergeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "合并成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/api/oneid/merge-rules": {
             "get": {
                 "security": [
@@ -3209,7 +3105,12 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_service.MergeRuleSet"
+                            "type": "object",
+                            "properties": {
+                                "data": {
+                                    "$ref": "#/definitions/hivemtk-user_internal_service.MergeRuleSet"
+                                }
+                            }
                         }
                     }
                 }
@@ -3299,31 +3200,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/oneid/stats": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "返回 OneID 总数、冲突数、合并率等",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "OneID"
-                ],
-                "summary": "OneID 统计",
-                "responses": {
-                    "200": {
-                        "description": "成功",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -4546,44 +4422,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/recovery-queue/enqueue": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "挽回队列"
-                ],
-                "summary": "手动入队",
-                "parameters": [
-                    {
-                        "description": "入队参数",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_dto.RecoveryEnqueueRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "data": {
-                                    "$ref": "#/definitions/hivemtk-user_internal_dto.RecoveryQueueResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/recovery-queue/list": {
             "get": {
                 "tags": [
@@ -4657,192 +4495,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/recovery-queue/{id}/attempt": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "挽回队列"
-                ],
-                "summary": "记录触达尝试",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "队列 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "尝试参数",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_dto.RecoveryMarkAttemptRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/recovery-queue/{id}/cancel": {
-            "post": {
-                "tags": [
-                    "挽回队列"
-                ],
-                "summary": "取消入队",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "队列 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/recovery-queue/{id}/recovered": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "挽回队列"
-                ],
-                "summary": "标记挽回成功",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "队列 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "挽回金额",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_dto.RecoveryMarkRecoveredRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/sales-persona/staffs": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "返回所有员工 ID 和基础信息",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Sales Persona"
-                ],
-                "summary": "销冠员工列表",
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/sales-persona/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据员工 ID 生成多维度能力画像报告（沟通力/转化力/产品力等）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Sales Persona"
-                ],
-                "summary": "销冠能力画像",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "员工 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/short-links": {
+        "/api/shortlink/create": {
             "post": {
                 "security": [
                     {
@@ -4881,7 +4534,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/short-links/{id}": {
+        "/api/shortlink/update": {
             "put": {
                 "security": [
                     {
@@ -5243,71 +4896,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/sop/{id}/heatmap": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "返回指定 SOP 的每个节点 entered/completed/drop_rate/avg_duration，",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "SOP"
-                ],
-                "summary": "SOP 节点转化热力图",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "SOP ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Variant 名称筛选（A/B/...）",
-                        "name": "variant",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "拉取执行数上限（默认 200，最大 1000）",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/hivemtk-user_internal_service.SopHeatmapReport"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/sops": {
+        "/api/sop": {
             "get": {
                 "security": [
                     {
@@ -5400,7 +4989,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/sops/{id}": {
+        "/api/sop/{id}": {
             "get": {
                 "security": [
                     {
@@ -5480,6 +5069,70 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sop/{id}/heatmap": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回指定 SOP 的每个节点 entered/completed/drop_rate/avg_duration，",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SOP"
+                ],
+                "summary": "SOP 节点转化热力图",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "SOP ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Variant 名称筛选（A/B/...）",
+                        "name": "variant",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "拉取执行数上限（默认 200，最大 1000）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/hivemtk-user_internal_service.SopHeatmapReport"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
                         }
@@ -5861,7 +5514,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/executions/:id": {
+        "/api/workflows/executions/{id}": {
             "get": {
                 "security": [
                     {
@@ -5898,7 +5551,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/executions/:id/nodes": {
+        "/api/workflows/executions/{id}/nodes": {
             "get": {
                 "security": [
                     {
@@ -5935,7 +5588,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/executions/:id/stop": {
+        "/api/workflows/executions/{id}/stop": {
             "post": {
                 "security": [
                     {
@@ -6052,7 +5705,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/versions/:id": {
+        "/api/workflows/versions/{id}": {
             "get": {
                 "security": [
                     {
@@ -6174,7 +5827,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/versions/:id/archive": {
+        "/api/workflows/versions/{id}/archive": {
             "post": {
                 "security": [
                     {
@@ -6211,7 +5864,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/workflows/versions/:id/publish": {
+        "/api/workflows/versions/{id}/publish": {
             "post": {
                 "security": [
                     {
@@ -6247,67 +5900,9 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/public/register": {
-            "post": {
-                "description": "自主注册，支持邮箱验证（可选），注册成功返回 JWT token",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "用户注册",
-                "parameters": [
-                    {
-                        "description": "注册请求",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_service.RegisterRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "注册成功，返回 token",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    },
-                    "409": {
-                        "description": "用户名/邮箱已存在",
-                        "schema": {
-                            "$ref": "#/definitions/hivemtk-user_internal_pkg_utils_response.Response"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
-        "gorm.DeletedAt": {
-            "type": "object",
-            "properties": {
-                "time": {
-                    "type": "string"
-                },
-                "valid": {
-                    "description": "Valid is true if Time is not NULL",
-                    "type": "boolean"
-                }
-            }
-        },
         "hivemtk-user_internal_dto.ClueEngagementRequest": {
             "type": "object",
             "required": [
@@ -7186,86 +6781,6 @@ const docTemplate = `{
                 }
             }
         },
-        "hivemtk-user_internal_model.Customer": {
-            "type": "object",
-            "properties": {
-                "churn_risk": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "description": "时间",
-                    "type": "string"
-                },
-                "custom_attributes": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "douyin_open_id": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "feishu_open_id": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "kuaishou_open_id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner_agent_id": {
-                    "type": "integer"
-                },
-                "phone": {
-                    "description": "强标识（用作 OneID 主键候选）",
-                    "type": "string"
-                },
-                "rfm_score": {
-                    "type": "integer"
-                },
-                "tags": {
-                    "description": "标签 + 评分",
-                    "type": "string"
-                },
-                "telegram_chat_id": {
-                    "type": "integer"
-                },
-                "telegram_username": {
-                    "type": "string"
-                },
-                "tiktok_open_id": {
-                    "type": "string"
-                },
-                "unified_id": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "wechat_open_id": {
-                    "type": "string"
-                },
-                "wecom_external_id": {
-                    "type": "string"
-                },
-                "whatsapp_phone": {
-                    "type": "string"
-                },
-                "xianyu_id": {
-                    "type": "string"
-                },
-                "xiaohongshu_id": {
-                    "type": "string"
-                }
-            }
-        },
         "hivemtk-user_internal_model.CustomerEvent": {
             "type": "object",
             "properties": {
@@ -7612,6 +7127,38 @@ const docTemplate = `{
                 }
             }
         },
+        "hivemtk-user_internal_service.ClueInfo": {
+            "type": "object",
+            "properties": {
+                "clue_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "hivemtk-user_internal_service.CreateRequest": {
             "type": "object",
             "required": [
@@ -7650,6 +7197,70 @@ const docTemplate = `{
                 }
             }
         },
+        "hivemtk-user_internal_service.Customer360DTO": {
+            "type": "object",
+            "properties": {
+                "basic_info": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.CustomerBasicInfo"
+                },
+                "clue_info": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.ClueInfo"
+                },
+                "interaction_stats": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.InteractionStats"
+                },
+                "message_history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/hivemtk-user_internal_service.MessageHistoryItem"
+                    }
+                },
+                "order_info": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.OrderInfo"
+                },
+                "session_history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/hivemtk-user_internal_service.SessionHistoryItem"
+                    }
+                },
+                "session_stats": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.SessionStatistics"
+                },
+                "user_profile": {
+                    "$ref": "#/definitions/hivemtk-user_internal_service.UserProfile"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.CustomerBasicInfo": {
+            "type": "object",
+            "properties": {
+                "first_seen_at": {
+                    "type": "string"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "source_platform": {
+                    "type": "string"
+                },
+                "user_avatar": {
+                    "type": "string"
+                },
+                "user_email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "user_name": {
+                    "type": "string"
+                },
+                "user_phone": {
+                    "type": "string"
+                }
+            }
+        },
         "hivemtk-user_internal_service.CustomerDTO": {
             "type": "object",
             "properties": {
@@ -7667,26 +7278,6 @@ const docTemplate = `{
                 },
                 "xiaohongshu_id": {
                     "type": "string"
-                }
-            }
-        },
-        "hivemtk-user_internal_service.CustomerProfile": {
-            "type": "object",
-            "properties": {
-                "customer": {
-                    "$ref": "#/definitions/hivemtk-user_internal_model.Customer"
-                },
-                "recent_events": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/hivemtk-user_internal_model.CustomerEvent"
-                    }
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -7774,6 +7365,41 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "port": {
+                    "type": "integer"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.InteractionStats": {
+            "type": "object",
+            "properties": {
+                "avg_messages_per_session": {
+                    "type": "number"
+                },
+                "douyin_count": {
+                    "type": "integer"
+                },
+                "first_response_time": {
+                    "type": "integer"
+                },
+                "kuaishou_count": {
+                    "type": "integer"
+                },
+                "last_30_days": {
+                    "type": "integer"
+                },
+                "last_7_days": {
+                    "type": "integer"
+                },
+                "tiktok_count": {
+                    "type": "integer"
+                },
+                "total_interactions": {
+                    "type": "integer"
+                },
+                "xianyu_count": {
+                    "type": "integer"
+                },
+                "xiaohongshu_count": {
                     "type": "integer"
                 }
             }
@@ -7938,6 +7564,32 @@ const docTemplate = `{
                 }
             }
         },
+        "hivemtk-user_internal_service.MessageHistoryItem": {
+            "type": "object",
+            "properties": {
+                "ai_confidence": {
+                    "type": "number"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "content_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "sender_name": {
+                    "type": "string"
+                },
+                "sender_type": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "string"
+                }
+            }
+        },
         "hivemtk-user_internal_service.NodeHeatmapEntry": {
             "type": "object",
             "properties": {
@@ -7964,6 +7616,52 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "hivemtk-user_internal_service.OrderInfo": {
+            "type": "object",
+            "properties": {
+                "last_order_amount": {
+                    "type": "number"
+                },
+                "last_order_at": {
+                    "type": "string"
+                },
+                "last_order_id": {
+                    "type": "string"
+                },
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/hivemtk-user_internal_service.OrderItem"
+                    }
+                },
+                "total_amount": {
+                    "type": "number"
+                },
+                "total_orders": {
+                    "type": "integer"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.OrderItem": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "string"
+                },
+                "product_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -8202,6 +7900,70 @@ const docTemplate = `{
                 }
             }
         },
+        "hivemtk-user_internal_service.SessionHistoryItem": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string"
+                },
+                "handler_type": {
+                    "type": "string"
+                },
+                "last_message": {
+                    "type": "string"
+                },
+                "last_message_at": {
+                    "type": "string"
+                },
+                "message_count": {
+                    "type": "integer"
+                },
+                "platform": {
+                    "type": "string"
+                },
+                "rating": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.SessionStatistics": {
+            "type": "object",
+            "properties": {
+                "active_sessions": {
+                    "type": "integer"
+                },
+                "ai_replies": {
+                    "type": "integer"
+                },
+                "avg_response_time": {
+                    "type": "integer"
+                },
+                "closed_sessions": {
+                    "type": "integer"
+                },
+                "human_replies": {
+                    "type": "integer"
+                },
+                "rating_count": {
+                    "type": "integer"
+                },
+                "total_messages": {
+                    "type": "integer"
+                },
+                "total_sessions": {
+                    "type": "integer"
+                },
+                "user_rating": {
+                    "type": "integer"
+                }
+            }
+        },
         "hivemtk-user_internal_service.SopHeatmapReport": {
             "type": "object",
             "properties": {
@@ -8225,6 +7987,38 @@ const docTemplate = `{
                 },
                 "variant": {
                     "type": "string"
+                }
+            }
+        },
+        "hivemtk-user_internal_service.UserProfile": {
+            "type": "object",
+            "properties": {
+                "activity_level": {
+                    "type": "string"
+                },
+                "interests": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "preferred_platform": {
+                    "type": "string"
+                },
+                "preferred_time": {
+                    "type": "string"
+                },
+                "purchase_power": {
+                    "type": "string"
+                },
+                "risk_level": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -8480,90 +8274,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "approval_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_service.MergeRule": {
-            "type": "object",
-            "properties": {
-                "built_in": {
-                    "type": "boolean"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "example": {
-                    "type": "string"
-                },
-                "field": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "op": {
-                    "type": "string"
-                },
-                "priority": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_service.MergeRuleSet": {
-            "type": "object",
-            "properties": {
-                "built_in": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_service.MergeRule"
-                    }
-                },
-                "custom": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_service.MergeRule"
-                    }
-                },
-                "strategy": {
-                    "$ref": "#/definitions/internal_service.MergeStrategy"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_service.MergeStrategy": {
-            "type": "object",
-            "properties": {
-                "conflict_behavior": {
-                    "type": "string"
-                },
-                "post_merge_actions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "primary_rule": {
-                    "type": "string"
-                },
-                "window_end": {
-                    "type": "string"
-                },
-                "window_start": {
                     "type": "string"
                 }
             }

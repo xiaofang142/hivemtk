@@ -95,7 +95,7 @@ type BatchRecognizeRequest struct {
 // @Security     BearerAuth
 // @Param        body  body  BatchRecognizeRequest  true  "批量请求"
 // @Success      200   {object}  response.Response  "成功"
-// @Router       /api/intent/batch [post]
+// @Router       /api/intent/recognize/batch [post]
 func (c *IntentController) BatchRecognize(ctx *gin.Context) {
 	var req BatchRecognizeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {

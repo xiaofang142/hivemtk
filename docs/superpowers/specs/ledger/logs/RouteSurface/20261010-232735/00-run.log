@@ -1,0 +1,15 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-1ynbz9j9
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/RouteSurface/20261010-232735
+取证基线：HEAD=21828b63 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk load=23:27  up 17 days, 13:15, 2 users, load averages: 9.76 10.37 9.68 日志 tag=20261010-232735
+装架：克隆 master + 覆盖 14 个本泳道脏/未跟踪文件（其余面走 HEAD 字节）：user-server/docs/docs.go, user-server/docs/swagger.json, user-server/docs/swagger.yaml, user-server/internal/controller/alert_rule.go, user-server/internal/controller/customer.go, user-server/internal/controller/customer_360.go, user-server/internal/controller/customer_event.go, user-server/internal/controller/customer_oneid.go, user-server/internal/controller/recovery_queue.go, user-server/internal/controller/workflow_orchestrator.go, user-server/internal/geo/controller/alert.go, user-server/internal/router/route_surface_consistency_test.go, user-server/internal/service/oneid_merge_rule.go, user-server/tests/e2e/routes_user.tsv
+本轮基线字节（注码前 == 还原后 才算干净）：
+  4902773e64782af0f3d9e86e9ccd0a0c  user-server/internal/router/route_surface_consistency_test.go
+  8bb2c7da09ddf60d00c814a10a7afb3c  user-server/internal/controller/customer_360.go
+  e5525fdf667df226eab644d7f50c7278  user-server/tests/e2e/routes_user.tsv
+[控制组] rc=1 settled=2 skip=0 红名=['TestAnnotationsMatchLiveRoutes']
+   红因: route_surface_consistency_test.go:215: 扫到接口注解 145 条，逐条核对路径存在性与服务方归属
+   红因: route_surface_consistency_test.go:223: 接口注解声明了路由表里不存在的端点（14/145 条）：
+   红因: route_surface_consistency_test.go:297: 清单 749 行全部命中路由表；/api/ 路由 1721 条，覆盖 738 条，未覆盖 983 条
+ENV-BROKEN：守卫在基线上就红——先修守卫，再谈它有没有牙（停机）
+收尾闸：这条中止路没接显式收尾（dispose），已由兜底闸回收；要把现场留成取证，走 --keep
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-1ynbz9j9/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-1ynbz9j9

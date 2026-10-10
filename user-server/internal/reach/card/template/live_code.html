@@ -225,7 +225,7 @@
         
         // 记录点击统计
         function recordClick() {
-            fetch('/api/live-codes/{{.ID}}/click', {
+            fetch('/api/livecode/{{.ID}}/click', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
