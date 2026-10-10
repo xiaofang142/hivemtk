@@ -133,19 +133,27 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 		if rerr == nil && len(rows) > 0 {
 			norm := normalizeEchoText(content)
 			if norm != "" {
+				// 网页渠道（抖音等）AI 的一条回复常被拆成多条气泡发送，扩展巡检会把
+				// 相邻气泡拼成一整条抓回，与任何单条出站记录都不再全等——回声就这样
+				// 穿过等值闸触发二次回复（自回复循环）。
+				// 剥离判定：把入站文本剥掉全部近期出站（≥16 字者才参与剥离），剩下的
+				// 实质内容不足以构成一句真实发言（<4 字，如只剩标点/表情）时判回声。
+				// 16 字护栏防止"好的~"这类短出站误剥；剥离后要求剩余近空，则客户
+				// 引用我们某句话再追问的场景（剩余为自己的问题原文）不会被误吞。
+				remainder := norm
+				strippedAny := false
 				for i := range rows {
 					outNorm := normalizeEchoText(rows[i].Content)
 					if outNorm == norm {
 						return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound normalized match)"}, nil
 					}
-					// 网页渠道（抖音等）AI 的一条回复常被拆成多条气泡发送，扩展巡检会把
-					// 相邻气泡拼成一整条抓回，与任何单条出站记录都不再全等，回声便穿过
-					// 等值闸触发二次回复（自回复循环）。出站原文归一化后 ≥16 字且被入站
-					// 完整包含时判回声：真实客户消息几乎不可能逐字包含我们刚发出的整句；
-					// 短于 16 字的出站（如"好的~"）不参与包含判定，防止把引用式回复误吞。
-					if len([]rune(outNorm)) >= 16 && strings.Contains(norm, outNorm) {
-						return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
+					if len([]rune(outNorm)) >= 16 && strings.Contains(remainder, outNorm) {
+						remainder = strings.ReplaceAll(remainder, outNorm, "")
+						strippedAny = true
 					}
+				}
+				if strippedAny && len([]rune(remainder)) < 4 {
+					return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
 				}
 			}
 		}
