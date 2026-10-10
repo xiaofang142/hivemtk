@@ -279,6 +279,17 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   所以这条 diff 是删前的现测、不可再复验；能复验的是"同一棵树连跑两趟仍逐字相同"这一判据本身。
   两轮之间扫描面各多 1 份文件，是并行泳道在期间新建的 `user-web/src/utils/errorReporting.js`（birth 03:03:36）与
   `user-web/tests/unit/error_reporting_console_scope.test.js`（birth 03:06:25）⇒ 面文件数跟树走、档位不跟。
+- **入库后在零脏树里复现（这一格才是"可重跑"的判据）**：`git clone --shared` 出自本笔的树，`git status --porcelain` 0 行，
+  同一套命令重跑 ⇒ 事实源 `diff` 空、md5 仍 `f2565b6919405ef65ef2d96aed1c184a`；四档名册 `diff` 全空
+  （client `d2ee804ef7246615b65a4357a0cd23be`／ops `7713fdff3df83284300075ddcdfa5637`／
+  weak `86127985787dda83214c1f65f10cce71`／none `7d1b077cc0e2a623be239644a87430ca`）。
+  两边的**扫描面并不相同**：本树带着并行泳道 76 份未提交文件，client 面 687 份／形状 1813 个、ops 面 297 份／1869 个，
+  克隆里对应 684／1807 与 294／1863，**面有差而名册零差**（多出来那几份的形状已被别处覆盖）。
+  顺带一条同类对账：入库后在主树再跑一趟（`--out` 指到 `/tmp`，不往证据树里落第二轮），四份名册与入库版 `diff` 仍逐字为空。
+- **零脏克隆里的整链复跑**：同一棵克隆里 `make audit` ⇒ 日志 `读数: 通过 19 / 违规 0 / 检查对象缺失 0`＋`✅ 19 条判据全部成立`，
+  `AUDIT_RC=0`（单独落文件，不取自管道末位），全日志 `❌` 0 处、`FAIL` 0 处；`go test ./internal/router -count=1 -v`
+  ⇒ rc=0、`--- PASS` 220 行、无 FAIL/SKIP、`ok 9.922s`（新导出件与原有守卫同编同跑）。
+  克隆里没有 `.env`（它不入库），DB 口令须从主树那份现取——这条属环境前提，不是仓库红。
 - **本轮查出并修掉取证器自身的缺陷**：初版把三类「写了路径字面量但不是调用方」的文件算进消费面——
   `scripts/mut_*.py`（注码锚点）、取证器自己（文档串示例路径）、`user-server/tests/e2e/probe_result.tsv`（探针**输出**表）。
   是 `--why` 这一格逼出来的：`POST /api/livecode/:id/click` 的精确形状证据原本有 4 条，其中 2 条属此类。
@@ -329,7 +340,9 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
 
 - **僵尸判定的运行时腿**：静态三面扫不到地址栏直开口、渠道/ESP 回调、版本不可知的老前端构建三类消费方，
   删除动作必须另有访问日志证据；本机没有可用的线上日志源 ⇒ 属"要外部数据"的阻塞，名单与判据形状已进文档。
-- **并行泳道的 55 份脏文件**（含本轮新增的 `user-web/src/utils/errorReporting.js` 等）：归属按 mtime 窗口与 `git status` 现读，不代签。
+- **并行泳道的脏文件**（本轮入库后最后一次现数＝`git status --porcelain` 76 份：`user-web` 70／`user-server` 6，
+  含 `user-web/src/utils/errorReporting.js`、`user-web/src/utils/clipboard.js` 等；这个数字随对方干活会漂，
+  引用前先现取）：归属按 mtime 窗口与 `git status` 现读，不代签、不代改。
 - **两枚同类慢测**（`user-web/bridge/test/humanize.test.js` 3701ms、`test/adapter-b24-send-verify.test.js` 文件级 13422ms）：
   与本轮报告的入口不同类不同泳道，只登记。
 - **`sop_state_memories.session_id` 的 `not null`**：属 schema 取舍决策，`20ed9fbd` 里点名过，未擅改。
