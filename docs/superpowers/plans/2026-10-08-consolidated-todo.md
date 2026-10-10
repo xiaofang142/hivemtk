@@ -317,7 +317,9 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   修法＝token 级前一字符判位（`MODULE_SPEC_PREV = {"@",".","~"}`，`scripts/route-consumer-triage.py:99`）＋第 10 枚控制
   （极性对：三种别名写法必须抽出**空集合**，而 `http.post('/api/material')` 必须照常抽出；只测"挡得住"会退化成"什么都挡"）。
   注码验证：把 `MODULE_SPEC_PREV` 置空 ⇒ `--self-check` 打 `✗ 负向控制之五` 并**退 1**，还原后 md5 与基线一致（`a564da79…`）。
-  差值用**同一棵主树＋同一份事实源**跑两版取证器现算（`git show HEAD:scripts/route-consumer-triage.py` 那份 md5 `e3090a93…`）：
+  差值用**同一棵主树＋同一份事实源**跑两版取证器现算（旧版字节可再取：`git show 3520250c~1:scripts/route-consumer-triage.py`
+  那份 md5 `e3090a9327d7d7378d495526abe53987`，新版＝`3520250c` 那份 md5 `a564da79da77e78d484b025e621bc4f9`；
+  跑旧版必须带 `--repo .`，否则它会按脚本自身位置推仓库根、在同一趟里读出「三面各 0 份」的空面——那是布局不是内容）：
   形状 client 1813→1324（−489）、ops 1871→1781（−90）、self-page 7→7，合计挡掉 **579 个形状**；
   四档 client 1036→1035、ops 278→279、weak 205→143、none 221→283，合计仍 1740。
   逐条档位差（按键集对齐现算，不是计数差）：**63 行换档，只有两种去向**——`weak→none` 62 行、`client→ops` 1 行；
@@ -333,6 +335,18 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   像素与短链的 URL 是 `user-server/internal/service/email_open_tracker.go:68`、`email_tracking.go:68` **运行时拼进邮件正文**的，
   仓里没有任何前端／模板串能命中它——「三面全不命中」对这一族**必然是假阴性**，正是本工具末行提醒的第②类。
   确定性：新取证器连跑两趟（第二趟 `--out /tmp`，不往证据树落第二轮），五份产物逐字节相同、事实源 md5 仍 `f2565b69…`。
+- **新名册的跨树复现（入库笔 `3520250c` 现测）**：`git clone --shared` 出自这一笔，克隆里 `git status --porcelain` **0 行**，
+  同一套命令重跑 ⇒ 事实源 md5 仍 `f2565b6919405ef65ef2d96aed1c184a`、**五份产物与入库版逐字节相同**，四档读数 1035/279/143/283 不变。
+  扫描面比主树小：client 684 份／1321 个形状（主树 687／1324）、ops 294 份／1778（主树 299／1781）、self-page 6 份／7 个（两树相同）
+  ⇒ 又是**面有差而名册零差**，这份处置输入不依赖任何未入库文件。同棵克隆里另跑三项：
+  `make audit` ⇒ `读数: 通过 19 / 违规 0 / 检查对象缺失 0`＋`✅ 19 条判据全部成立`，`AUDIT_RC=0`（单独落文件，不取自管道末位），
+  全日志 `❌` 0 处、`FAIL` 0 处；`go test ./internal/router -count=1 -v`（`TZ=UTC`）⇒ rc=0、
+  `--- PASS` **267** 行／`--- SKIP` 1 行／`--- FAIL` 0 行，`ok 7.7s`——唯一那行 SKIP 现读就是 `TestDumpLiveRouteTable`
+  （未设 `ROUTE_DUMP_FILE`，按设计让路，不是门）；用例数从上一轮记录的 220 涨到 267 是并行泳道往本包新增的测试，
+  引用前先现数。`python3 -m py_compile scripts/route-consumer-triage.py` 通过；
+  常驻门两枚在主树复跑：`check-battery-identity.py` ⇒ `归属 A5：磁盘 43 族＝驱动 23 族＋非电池登记 20 族`、0 项不合格／rc=0
+  （新轮次目录的 A4 由 `00-provenance.log` 的 `基线字节` 行认领），
+  `check-env-coverage.py` ⇒ 读取键 201 · 红 0（未文档化 0 · 基线陈旧 0）／rc=0。本轮零 Go 代码改动，`gofmt`／`go vet` 无对象。
 
 ### (3) 门的产物归属轴自己逮到了这一族（顺带补装架）
 
