@@ -128,12 +128,16 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-09-20（T-P3-03）：+1 = `human_task.handoff_first_response_minutes`。
 // 2026-09-28：+2 = `bridge.outbound_orphan_ttl` / `bridge.outbound_orphan_dry_run`（桥接出站孤儿结算的阈值与"只报数"闸门）。
 //
-// 2026-10-10：回退到 114。曾按工作区里那条尚未入库的 `cache.faq_answer_enabled`
+// 2026-10-10（第一次）：回退到 114。曾按工作区里那条尚未入库的 `cache.faq_answer_enabled`
 // （种子 + app/faq_cache_wiring.go 都还在途）把本锚点顶到 115，结果 HEAD 上的
 // `config_param_seeds.go` 只有 114 条，干净检出直接红——把别人在途的条数算进
-// 自己的锚点，等于替那条尚未发生的提交背书。种子入库时门会在这里亮一次，
-// 那正是这个锚点存在的意义：条数变化必须有人看见，而不是悄悄漂过去。
-const defaultParamDefsWant = 114
+// 自己的锚点，等于替那条尚未发生的提交背书。
+//
+// 2026-10-10（第二次）：回到 115。上面那次入库已经发生——`cache.faq_answer_enabled`
+// 的种子与装配点 `app/faq_cache_wiring.go` 都进了 master，于是本锚点第二次亮红。
+// 这正是它该干的事：条数变化必须有人看见，而不是悄悄漂过去。红灯与修复分属两条提交，
+// 免得后来人分不清这条到底是谁加的。
+const defaultParamDefsWant = 115
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
