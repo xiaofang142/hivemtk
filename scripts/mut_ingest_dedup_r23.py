@@ -212,11 +212,14 @@ A_REL_UNCOND = ("\ts.releaseInboundDedup(ctx, decision) // 变异：补偿写成
                 "\tif err := s.persistMessage(ctx, event); err != nil {\n")
 # §6-1 有界性的第三刀：窗口长度本身。默认 5min 没有任何腿跨得过，所以 TTL 做成了可注入字段；
 # 这一格把「注入值不生效」注进去，红的正是那条跨界的腿（`TestIngress_ContentDedupWindowExpires`）。
+# 默认值那一支在「锁与幂等 TTL 入库」之后从包级常量换成了 `inboxContentDedupTTL()`
+# （provider 有值用 provider，否则回落 `InboxContentDedupTTL`），锚点跟着搬，期望不变：
+# 这一刀破坏的仍是"注入的窗口长度进不了实际存活时间"这一维，不是默认值从哪来。
 A_TTL = ("func (s *InboxIngressService) contentDedupWindow() time.Duration {\n"
          "\tif s.contentDedupTTL > 0 {\n\t\treturn s.contentDedupTTL\n\t}\n"
-         "\treturn InboxContentDedupTTL\n}\n")
+         "\treturn inboxContentDedupTTL()\n}\n")
 A_TTL_IGNORED = ("func (s *InboxIngressService) contentDedupWindow() time.Duration {\n"
-                 "\treturn InboxContentDedupTTL // 变异：注入的窗口长度不生效（TTL 这一维无从断言）\n}\n")
+                 "\treturn inboxContentDedupTTL() // 变异：注入的窗口长度不生效（TTL 这一维无从断言）\n}\n")
 # §6-2 时间界：调用方那一层
 A_ECHOSINCE = "\t\techoSince := time.Now().Add(-InboxOutboundEchoWindow)\n"
 A_ECHOSINCE_ZERO = "\t\techoSince := time.Time{} // 变异：不看回声窗口，历史里多老的行都算回声\n"

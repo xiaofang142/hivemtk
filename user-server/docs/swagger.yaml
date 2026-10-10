@@ -1,13 +1,5 @@
 basePath: /
 definitions:
-  gorm.DeletedAt:
-    properties:
-      time:
-        type: string
-      valid:
-        description: Valid is true if Time is not NULL
-        type: boolean
-    type: object
   hivemtk-user_internal_dto.ClueEngagementRequest:
     properties:
       channel:
@@ -593,60 +585,6 @@ definitions:
     - definition
     - name
     type: object
-  hivemtk-user_internal_model.Customer:
-    properties:
-      churn_risk:
-        type: string
-      created_at:
-        description: 时间
-        type: string
-      custom_attributes:
-        type: string
-      deleted_at:
-        $ref: '#/definitions/gorm.DeletedAt'
-      douyin_open_id:
-        type: string
-      email:
-        type: string
-      feishu_open_id:
-        type: string
-      id:
-        type: string
-      kuaishou_open_id:
-        type: string
-      name:
-        type: string
-      owner_agent_id:
-        type: integer
-      phone:
-        description: 强标识（用作 OneID 主键候选）
-        type: string
-      rfm_score:
-        type: integer
-      tags:
-        description: 标签 + 评分
-        type: string
-      telegram_chat_id:
-        type: integer
-      telegram_username:
-        type: string
-      tiktok_open_id:
-        type: string
-      unified_id:
-        type: string
-      updated_at:
-        type: string
-      wechat_open_id:
-        type: string
-      wecom_external_id:
-        type: string
-      whatsapp_phone:
-        type: string
-      xianyu_id:
-        type: string
-      xiaohongshu_id:
-        type: string
-    type: object
   hivemtk-user_internal_model.CustomerEvent:
     properties:
       created_at:
@@ -886,6 +824,27 @@ definitions:
     - new_password
     - old_password
     type: object
+  hivemtk-user_internal_service.ClueInfo:
+    properties:
+      clue_id:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      level:
+        type: string
+      name:
+        type: string
+      owner:
+        type: string
+      phone:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+    type: object
   hivemtk-user_internal_service.CreateRequest:
     properties:
       ab_test_config:
@@ -912,6 +871,48 @@ definitions:
     - scenario
     - sop_graph
     type: object
+  hivemtk-user_internal_service.Customer360DTO:
+    properties:
+      basic_info:
+        $ref: '#/definitions/hivemtk-user_internal_service.CustomerBasicInfo'
+      clue_info:
+        $ref: '#/definitions/hivemtk-user_internal_service.ClueInfo'
+      interaction_stats:
+        $ref: '#/definitions/hivemtk-user_internal_service.InteractionStats'
+      message_history:
+        items:
+          $ref: '#/definitions/hivemtk-user_internal_service.MessageHistoryItem'
+        type: array
+      order_info:
+        $ref: '#/definitions/hivemtk-user_internal_service.OrderInfo'
+      session_history:
+        items:
+          $ref: '#/definitions/hivemtk-user_internal_service.SessionHistoryItem'
+        type: array
+      session_stats:
+        $ref: '#/definitions/hivemtk-user_internal_service.SessionStatistics'
+      user_profile:
+        $ref: '#/definitions/hivemtk-user_internal_service.UserProfile'
+    type: object
+  hivemtk-user_internal_service.CustomerBasicInfo:
+    properties:
+      first_seen_at:
+        type: string
+      last_seen_at:
+        type: string
+      source_platform:
+        type: string
+      user_avatar:
+        type: string
+      user_email:
+        type: string
+      user_id:
+        type: string
+      user_name:
+        type: string
+      user_phone:
+        type: string
+    type: object
   hivemtk-user_internal_service.CustomerDTO:
     properties:
       douyin_open_id:
@@ -924,19 +925,6 @@ definitions:
         type: string
       xiaohongshu_id:
         type: string
-    type: object
-  hivemtk-user_internal_service.CustomerProfile:
-    properties:
-      customer:
-        $ref: '#/definitions/hivemtk-user_internal_model.Customer'
-      recent_events:
-        items:
-          $ref: '#/definitions/hivemtk-user_internal_model.CustomerEvent'
-        type: array
-      tags:
-        items:
-          type: string
-        type: array
     type: object
   hivemtk-user_internal_service.DeliveryRateMetrics:
     properties:
@@ -994,6 +982,29 @@ definitions:
       on_blacklist:
         type: boolean
       port:
+        type: integer
+    type: object
+  hivemtk-user_internal_service.InteractionStats:
+    properties:
+      avg_messages_per_session:
+        type: number
+      douyin_count:
+        type: integer
+      first_response_time:
+        type: integer
+      kuaishou_count:
+        type: integer
+      last_7_days:
+        type: integer
+      last_30_days:
+        type: integer
+      tiktok_count:
+        type: integer
+      total_interactions:
+        type: integer
+      xianyu_count:
+        type: integer
+      xiaohongshu_count:
         type: integer
     type: object
   hivemtk-user_internal_service.LoginRequest:
@@ -1101,6 +1112,23 @@ definitions:
       window_start:
         type: string
     type: object
+  hivemtk-user_internal_service.MessageHistoryItem:
+    properties:
+      ai_confidence:
+        type: number
+      content:
+        type: string
+      content_type:
+        type: string
+      created_at:
+        type: string
+      sender_name:
+        type: string
+      sender_type:
+        type: string
+      session_id:
+        type: string
+    type: object
   hivemtk-user_internal_service.NodeHeatmapEntry:
     properties:
       avg_duration_ms:
@@ -1119,6 +1147,36 @@ definitions:
         additionalProperties:
           type: integer
         type: object
+    type: object
+  hivemtk-user_internal_service.OrderInfo:
+    properties:
+      last_order_amount:
+        type: number
+      last_order_at:
+        type: string
+      last_order_id:
+        type: string
+      orders:
+        items:
+          $ref: '#/definitions/hivemtk-user_internal_service.OrderItem'
+        type: array
+      total_amount:
+        type: number
+      total_orders:
+        type: integer
+    type: object
+  hivemtk-user_internal_service.OrderItem:
+    properties:
+      amount:
+        type: number
+      created_at:
+        type: string
+      order_id:
+        type: string
+      product_name:
+        type: string
+      status:
+        type: string
     type: object
   hivemtk-user_internal_service.QuoteGenerateInput:
     properties:
@@ -1278,6 +1336,48 @@ definitions:
     - new_password
     - token
     type: object
+  hivemtk-user_internal_service.SessionHistoryItem:
+    properties:
+      agent_name:
+        type: string
+      handler_type:
+        type: string
+      last_message:
+        type: string
+      last_message_at:
+        type: string
+      message_count:
+        type: integer
+      platform:
+        type: string
+      rating:
+        type: integer
+      session_id:
+        type: string
+      status:
+        type: string
+    type: object
+  hivemtk-user_internal_service.SessionStatistics:
+    properties:
+      active_sessions:
+        type: integer
+      ai_replies:
+        type: integer
+      avg_response_time:
+        type: integer
+      closed_sessions:
+        type: integer
+      human_replies:
+        type: integer
+      rating_count:
+        type: integer
+      total_messages:
+        type: integer
+      total_sessions:
+        type: integer
+      user_rating:
+        type: integer
+    type: object
   hivemtk-user_internal_service.SopHeatmapReport:
     properties:
       generated_at:
@@ -1294,6 +1394,27 @@ definitions:
         type: integer
       variant:
         type: string
+    type: object
+  hivemtk-user_internal_service.UserProfile:
+    properties:
+      activity_level:
+        type: string
+      interests:
+        items:
+          type: string
+        type: array
+      preferred_platform:
+        type: string
+      preferred_time:
+        type: string
+      purchase_power:
+        type: string
+      risk_level:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
     type: object
   internal_controller.AddBlacklistRequest:
     properties:
@@ -1464,61 +1585,6 @@ definitions:
       approval_id:
         type: string
     type: object
-  internal_service.MergeRule:
-    properties:
-      built_in:
-        type: boolean
-      description:
-        type: string
-      enabled:
-        type: boolean
-      example:
-        type: string
-      field:
-        type: string
-      id:
-        type: integer
-      name:
-        type: string
-      op:
-        type: string
-      priority:
-        type: integer
-      updated_at:
-        type: string
-      value:
-        type: string
-    type: object
-  internal_service.MergeRuleSet:
-    properties:
-      built_in:
-        items:
-          $ref: '#/definitions/internal_service.MergeRule'
-        type: array
-      custom:
-        items:
-          $ref: '#/definitions/internal_service.MergeRule'
-        type: array
-      strategy:
-        $ref: '#/definitions/internal_service.MergeStrategy'
-      updated_at:
-        type: string
-    type: object
-  internal_service.MergeStrategy:
-    properties:
-      conflict_behavior:
-        type: string
-      post_merge_actions:
-        items:
-          type: string
-        type: array
-      primary_rule:
-        type: string
-      window_end:
-        type: string
-      window_start:
-        type: string
-    type: object
 info:
   contact: {}
   description: |-
@@ -1626,24 +1692,6 @@ paths:
       summary: 告警历史
       tags:
       - 告警
-  /api/alerts/histories/resolve:
-    post:
-      parameters:
-      - description: 规则ID
-        in: query
-        name: rule_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 手动恢复告警历史
-      tags:
-      - 告警
   /api/alerts/rules:
     get:
       parameters:
@@ -1671,44 +1719,7 @@ paths:
       summary: 告警规则列表
       tags:
       - 告警
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 规则
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_service.AlertRuleRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 创建告警规则
-      tags:
-      - 告警
   /api/alerts/rules/{id}:
-    delete:
-      parameters:
-      - description: 规则ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 删除告警规则
-      tags:
-      - 告警
     get:
       parameters:
       - description: 规则ID
@@ -1726,52 +1737,46 @@ paths:
       summary: 获取告警规则详情
       tags:
       - 告警
-    put:
-      consumes:
+  /api/analytics/persona/staffs:
+    get:
+      description: 返回所有员工 ID 和基础信息
+      produces:
       - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 销冠员工列表
+      tags:
+      - Sales Persona
+  /api/analytics/persona/staffs/{id}:
+    get:
+      description: 根据员工 ID 生成多维度能力画像报告（沟通力/转化力/产品力等）
       parameters:
-      - description: 规则ID
+      - description: 员工 ID
         in: path
         name: id
         required: true
         type: integer
-      - description: 规则
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_service.AlertRuleRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: 成功
           schema:
             $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 更新告警规则
-      tags:
-      - 告警
-  /api/alerts/rules/status:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: '{ids:[1,2], enabled:true}'
-        in: body
-        name: body
-        required: true
-        schema:
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
+        "400":
+          description: 参数错误
           schema:
             $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 批量启用/禁用规则
+      security:
+      - BearerAuth: []
+      summary: 销冠能力画像
       tags:
-      - 告警
+      - Sales Persona
   /api/auth/anomaly/alerts:
     get:
       consumes:
@@ -1898,6 +1903,55 @@ paths:
       summary: 查询登录事件列表
       tags:
       - A域-认证安全
+  /api/auth/change-password:
+    post:
+      consumes:
+      - application/json
+      description: 修改成功后旧 token 会被加入黑名单
+      parameters:
+      - description: 修改密码请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/hivemtk-user_internal_service.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 修改当前用户密码
+      tags:
+      - Auth
+  /api/auth/current-user:
+    get:
+      consumes:
+      - application/json
+      description: 从 JWT token 解析 user_id 并返回用户基本信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前登录用户信息
+      tags:
+      - Auth
   /api/auth/login:
     post:
       consumes:
@@ -1941,56 +1995,7 @@ paths:
       summary: 登出
       tags:
       - Auth
-  /api/auth/me:
-    get:
-      consumes:
-      - application/json
-      description: 从 JWT token 解析 user_id 并返回用户基本信息
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: 获取当前登录用户信息
-      tags:
-      - Auth
-  /api/auth/password:
-    put:
-      consumes:
-      - application/json
-      description: 修改成功后旧 token 会被加入黑名单
-      parameters:
-      - description: 修改密码请求
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_service.ChangePasswordRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: 修改当前用户密码
-      tags:
-      - Auth
-  /api/auth/refresh:
+  /api/auth/refresh-token:
     post:
       consumes:
       - application/json
@@ -2009,6 +2014,36 @@ paths:
       security:
       - BearerAuth: []
       summary: 刷新 JWT 令牌
+      tags:
+      - Auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 自主注册，支持邮箱验证（可选），注册成功返回 JWT token
+      parameters:
+      - description: 注册请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/hivemtk-user_internal_service.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 注册成功，返回 token
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "409":
+          description: 用户名/邮箱已存在
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      summary: 用户注册
       tags:
       - Auth
   /api/bill:
@@ -2310,7 +2345,7 @@ paths:
       summary: 获取线索列表
       tags:
       - Clue
-  /api/clues/{id}:
+  /api/clues/delete/{id}:
     delete:
       consumes:
       - application/json
@@ -2355,32 +2390,6 @@ paths:
       tags:
       - Clue
   /api/customer:
-    get:
-      consumes:
-      - application/json
-      description: 获取所有客户，支持分页
-      parameters:
-      - default: 1
-        description: 页码
-        in: query
-        name: page
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 获取成功
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 获取客户列表
-      tags:
-      - CDP-客户管理
     post:
       consumes:
       - application/json
@@ -2517,80 +2526,9 @@ paths:
       summary: 按分层分页查询
       tags:
       - 客户RFM
-  /api/customer/:id/tags:
-    delete:
-      consumes:
-      - application/json
-      description: 从客户移除一个或多个标签
-      parameters:
-      - description: 客户 ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 标签列表
-        in: body
-        name: request
-        required: true
-        schema:
-          properties:
-            tags:
-              items:
-                type: string
-              type: array
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 移除成功
-          schema:
-            properties:
-              message:
-                type: string
-            type: object
-      summary: 从客户移除标签
-      tags:
-      - CDP-客户管理
-    post:
-      consumes:
-      - application/json
-      description: 给客户添加一个或多个标签
-      parameters:
-      - description: 客户 ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 标签列表
-        in: body
-        name: request
-        required: true
-        schema:
-          properties:
-            tags:
-              items:
-                type: string
-              type: array
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 添加成功
-          schema:
-            properties:
-              message:
-                type: string
-            type: object
-      summary: 给客户添加标签
-      tags:
-      - CDP-客户管理
   /api/customer/{id}:
     get:
-      consumes:
-      - application/json
-      description: 根据客户 ID 获取客户 360° 视图
+      description: 按客户 ID 返回客户 360° 视图；前端 GET /api/customer/:id 打的是这里
       parameters:
       - description: 客户 ID
         in: path
@@ -2605,41 +2543,128 @@ paths:
           schema:
             properties:
               data:
-                $ref: '#/definitions/hivemtk-user_internal_service.CustomerProfile'
+                $ref: '#/definitions/hivemtk-user_internal_service.Customer360DTO'
             type: object
+        "404":
+          description: 客户不存在
+          schema:
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
       summary: 获取客户详情
       tags:
       - CDP-客户管理
-  /api/customer/merge:
+  /api/customer/{id}/tags:
     post:
       consumes:
       - application/json
-      description: 将 secondary 客户合并到 primary 客户，保留 primary 的信息并合并标签
+      description: 给客户追加一个标签，返回追加后的全部标签；请求体是单数字段 tag，不是标签数组
       parameters:
       - description: 客户 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 单个标签
         in: body
         name: request
         required: true
         schema:
           properties:
-            ' secondary_id':
-              type: string
-            primary_id:
+            tag:
               type: string
           type: object
       produces:
       - application/json
       responses:
         "200":
-          description: 合并成功
+          description: 添加成功
           schema:
             properties:
               message:
                 type: string
             type: object
-      summary: 合并客户
+      summary: 添加客户标签
       tags:
       - CDP-客户管理
+  /api/customer/oneid/list:
+    get:
+      description: 分页查询客户 OneID 及其身份
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页
+        in: query
+        name: page_size
+        type: integer
+      - description: 关键词
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: OneID 列表
+      tags:
+      - OneID
+  /api/customer/oneid/merge:
+    post:
+      consumes:
+      - application/json
+      description: 把两个 OneID 合并为一个，保留主 ID 全部行为轨迹
+      parameters:
+      - description: 合并请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller.mergeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 合并成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 合并 OneID 客户身份
+      tags:
+      - OneID
+  /api/customer/oneid/stats:
+    get:
+      description: 返回 OneID 总数、冲突数、合并率等
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: OneID 统计
+      tags:
+      - OneID
   /api/dashboards/stream:
     get:
       description: 保持长连接，每 2 秒推送 dashboard_update，每 15 秒推送 heartbeat
@@ -2984,7 +3009,7 @@ paths:
       summary: 追踪点击事件
       tags:
       - CDP-事件追踪
-  /api/events/customer/:id:
+  /api/events/customer/{id}:
     delete:
       consumes:
       - application/json
@@ -3319,30 +3344,31 @@ paths:
       summary: 更新 FAQ
       tags:
       - FAQ
-  /api/intent/batch:
-    post:
-      consumes:
-      - application/json
-      description: 支持 items 或 messages 两种入参风格
+  /api/geo/alerts/{id}:
+    delete:
+      description: 按告警 ID 删除 GEO 告警中心里的一条记录
       parameters:
-      - description: 批量请求
-        in: body
-        name: body
+      - description: 告警 ID
+        in: path
+        name: id
         required: true
-        schema:
-          $ref: '#/definitions/internal_controller.BatchRecognizeRequest'
+        type: integer
       produces:
       - application/json
       responses:
         "200":
-          description: 成功
+          description: OK
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+        "404":
+          description: 告警不存在
           schema:
             $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
       security:
       - BearerAuth: []
-      summary: 批量意图识别
+      summary: 删除 GEO 告警
       tags:
-      - Intent
+      - GEO-告警中心
   /api/intent/recognize:
     post:
       consumes:
@@ -3365,6 +3391,30 @@ paths:
       security:
       - BearerAuth: []
       summary: 单条意图识别
+      tags:
+      - Intent
+  /api/intent/recognize/batch:
+    post:
+      consumes:
+      - application/json
+      description: 支持 items 或 messages 两种入参风格
+      parameters:
+      - description: 批量请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller.BatchRecognizeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 批量意图识别
       tags:
       - Intent
   /api/knowledge-bases:
@@ -3496,64 +3546,6 @@ paths:
       summary: 未恢复告警概览
       tags:
       - 告警
-  /api/oneid:
-    get:
-      description: 分页查询客户 OneID 及其身份
-      parameters:
-      - default: 1
-        description: 页码
-        in: query
-        name: page
-        type: integer
-      - default: 20
-        description: 每页
-        in: query
-        name: page_size
-        type: integer
-      - description: 关键词
-        in: query
-        name: keyword
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: OneID 列表
-      tags:
-      - OneID
-  /api/oneid/merge:
-    post:
-      consumes:
-      - application/json
-      description: 把两个 OneID 合并为一个，保留主 ID 全部行为轨迹
-      parameters:
-      - description: 合并请求
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/internal_controller.mergeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 合并成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: 合并 OneID 客户身份
-      tags:
-      - OneID
   /api/oneid/merge-rules:
     get:
       description: 返回预置规则 + 自定义规则 + 合并策略
@@ -3563,7 +3555,10 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_service.MergeRuleSet'
+            properties:
+              data:
+                $ref: '#/definitions/hivemtk-user_internal_service.MergeRuleSet'
+            type: object
       security:
       - BearerAuth: []
       summary: 获取 OneID 合并规则集
@@ -3624,21 +3619,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 合并规则命中预览
-      tags:
-      - OneID
-  /api/oneid/stats:
-    get:
-      description: 返回 OneID 总数、冲突数、合并率等
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: OneID 统计
       tags:
       - OneID
   /api/opportunity/{id}:
@@ -4406,83 +4386,6 @@ paths:
       summary: 停止后台定时采集
       tags:
       - RAG Recall
-  /api/recovery-queue/{id}/attempt:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 队列 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 尝试参数
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_dto.RecoveryMarkAttemptRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              message:
-                type: string
-            type: object
-      summary: 记录触达尝试
-      tags:
-      - 挽回队列
-  /api/recovery-queue/{id}/cancel:
-    post:
-      parameters:
-      - description: 队列 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              message:
-                type: string
-            type: object
-      summary: 取消入队
-      tags:
-      - 挽回队列
-  /api/recovery-queue/{id}/recovered:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 队列 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 挽回金额
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_dto.RecoveryMarkRecoveredRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              message:
-                type: string
-            type: object
-      summary: 标记挽回成功
-      tags:
-      - 挽回队列
   /api/recovery-queue/distribution:
     get:
       responses:
@@ -4494,30 +4397,6 @@ paths:
                 $ref: '#/definitions/hivemtk-user_internal_dto.RecoveryDistributionResponse'
             type: object
       summary: 阶段分布
-      tags:
-      - 挽回队列
-  /api/recovery-queue/enqueue:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 入队参数
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_dto.RecoveryEnqueueRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              data:
-                $ref: '#/definitions/hivemtk-user_internal_dto.RecoveryQueueResponse'
-            type: object
-      summary: 手动入队
       tags:
       - 挽回队列
   /api/recovery-queue/list:
@@ -4566,47 +4445,7 @@ paths:
       summary: 列出可触达任务
       tags:
       - 挽回队列
-  /api/sales-persona/{id}:
-    get:
-      description: 根据员工 ID 生成多维度能力画像报告（沟通力/转化力/产品力等）
-      parameters:
-      - description: 员工 ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: 销冠能力画像
-      tags:
-      - Sales Persona
-  /api/sales-persona/staffs:
-    get:
-      description: 返回所有员工 ID 和基础信息
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: 销冠员工列表
-      tags:
-      - Sales Persona
-  /api/short-links:
+  /api/shortlink/create:
     post:
       consumes:
       - application/json
@@ -4630,7 +4469,7 @@ paths:
       summary: 创建短链
       tags:
       - Short Link
-  /api/short-links/{id}:
+  /api/shortlink/update:
     put:
       consumes:
       - application/json
@@ -4862,45 +4701,7 @@ paths:
       summary: 短信任务执行记录
       tags:
       - SMS
-  /api/sop/{id}/heatmap:
-    get:
-      description: 返回指定 SOP 的每个节点 entered/completed/drop_rate/avg_duration，
-      parameters:
-      - description: SOP ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Variant 名称筛选（A/B/...）
-        in: query
-        name: variant
-        type: string
-      - description: 拉取执行数上限（默认 200，最大 1000）
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-            - properties:
-                data:
-                  $ref: '#/definitions/hivemtk-user_internal_service.SopHeatmapReport'
-              type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      security:
-      - BearerAuth: []
-      summary: SOP 节点转化热力图
-      tags:
-      - SOP
-  /api/sops:
+  /api/sop:
     get:
       consumes:
       - application/json
@@ -4959,7 +4760,7 @@ paths:
       summary: 创建 SOP 智能体
       tags:
       - SOP
-  /api/sops/{id}:
+  /api/sop/{id}:
     get:
       consumes:
       - application/json
@@ -5012,6 +4813,44 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新 SOP 智能体
+      tags:
+      - SOP
+  /api/sop/{id}/heatmap:
+    get:
+      description: 返回指定 SOP 的每个节点 entered/completed/drop_rate/avg_duration，
+      parameters:
+      - description: SOP ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Variant 名称筛选（A/B/...）
+        in: query
+        name: variant
+        type: string
+      - description: 拉取执行数上限（默认 200，最大 1000）
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/hivemtk-user_internal_service.SopHeatmapReport'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
+      security:
+      - BearerAuth: []
+      summary: SOP 节点转化热力图
       tags:
       - SOP
   /api/system/info:
@@ -5261,7 +5100,7 @@ paths:
       summary: 执行实例列表
       tags:
       - Workflow
-  /api/workflows/executions/:id:
+  /api/workflows/executions/{id}:
     get:
       consumes:
       - application/json
@@ -5284,7 +5123,7 @@ paths:
       summary: 获取执行详情
       tags:
       - Workflow
-  /api/workflows/executions/:id/nodes:
+  /api/workflows/executions/{id}/nodes:
     get:
       consumes:
       - application/json
@@ -5307,7 +5146,7 @@ paths:
       summary: 获取节点执行明细
       tags:
       - Workflow
-  /api/workflows/executions/:id/stop:
+  /api/workflows/executions/{id}/stop:
     post:
       consumes:
       - application/json
@@ -5380,7 +5219,7 @@ paths:
       summary: 创建工作流版本
       tags:
       - Workflow
-  /api/workflows/versions/:id:
+  /api/workflows/versions/{id}:
     delete:
       consumes:
       - application/json
@@ -5457,7 +5296,7 @@ paths:
       summary: 更新工作流版本
       tags:
       - Workflow
-  /api/workflows/versions/:id/archive:
+  /api/workflows/versions/{id}/archive:
     post:
       consumes:
       - application/json
@@ -5480,7 +5319,7 @@ paths:
       summary: 归档工作流版本
       tags:
       - Workflow
-  /api/workflows/versions/:id/publish:
+  /api/workflows/versions/{id}/publish:
     post:
       consumes:
       - application/json
@@ -5503,36 +5342,6 @@ paths:
       summary: 发布工作流版本
       tags:
       - Workflow
-  /public/register:
-    post:
-      consumes:
-      - application/json
-      description: 自主注册，支持邮箱验证（可选），注册成功返回 JWT token
-      parameters:
-      - description: 注册请求
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/hivemtk-user_internal_service.RegisterRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 注册成功，返回 token
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-        "409":
-          description: 用户名/邮箱已存在
-          schema:
-            $ref: '#/definitions/hivemtk-user_internal_pkg_utils_response.Response'
-      summary: 用户注册
-      tags:
-      - Auth
 securityDefinitions:
   BearerAuth:
     description: Bearer JWT，格式：Bearer <token>

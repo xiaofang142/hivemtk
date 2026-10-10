@@ -66,7 +66,7 @@ func (c *EmailTrackingController) TrackingPixel(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "image/png", transparent1x1PNG)
 }
 
-// ClickRedirect GET /api/email/track/click/{token}?url=xxx
+// ClickRedirect GET /api/email/track/click/{token}
 //
 // 记录点击事件后 302 跳转到目标 URL。
 // 目标 URL 只认 token 内验签出来的 claim.Target，**刻意不接受 query 参数 url**：

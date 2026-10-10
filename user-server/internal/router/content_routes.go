@@ -77,6 +77,4 @@ func setupRecoveryQueueRoutes(auth *gin.RouterGroup) {
 	auth.GET("/recovery-queue/list", ctrl.ListByStage)
 	auth.GET("/recovery-queue/distribution", ctrl.Distribution)
 	auth.GET("/recovery-queue/ready", ctrl.ListReadyForAttempt)
-	{
-	}
 }

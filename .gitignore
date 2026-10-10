@@ -364,3 +364,10 @@ docs/superpowers/specs/ledger/logs/R22-lanes/service-full-mut-batchecho.log
 # 与 logs/ 下的轮次目录数对齐（本批加行后两侧同增 1；电池跑完才有目录，先加行的窗口内差 1 属预期）。
 !docs/superpowers/specs/ledger/logs/P903/
 !docs/superpowers/specs/ledger/logs/P903/**/*.log
+# mut_route_surface.py（路由声明面守卫的反向注码电池，12 格 G1–G12）的取证轮次：一对两行。
+# 覆盖面按四个面对齐：接口注解面 G1 幽灵路径/G2 归属错位/G3 参数段写法/G6 扫描根空转/G8 摘归属比对，
+# 冒烟清单面 G4 死行/G5 覆盖棘轮/G7 dist 前提，落地页模板面 G9 引用未注册/G10 豁免反向棘轮/G11 键拼错自曝/G12 整面离门。
+# 现数口径同上方「四条一组」那段：以 !docs...logs/<轮次>/ 形状的行数
+# 与 logs/ 下的轮次目录数对齐（电池跑完才有目录，先加行的窗口内差 1 属预期）。
+!docs/superpowers/specs/ledger/logs/RouteSurface/
+!docs/superpowers/specs/ledger/logs/RouteSurface/**/*.log

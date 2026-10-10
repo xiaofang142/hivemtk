@@ -45,7 +45,7 @@ type mergeRequest struct {
 // @Param        body  body  mergeRequest  true  "合并请求"
 // @Success      200   {object}  response.Response  "合并成功"
 // @Failure      400   {object}  response.Response  "参数错误"
-// @Router       /api/oneid/merge [post]
+// @Router       /api/customer/oneid/merge [post]
 func (c *CustomerOneIDController) MergeIdentity(ctx *gin.Context) {
 	var req mergeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -79,7 +79,7 @@ func (c *CustomerOneIDController) MergeIdentity(ctx *gin.Context) {
 // @Param        page_size query  int     false  "每页"   default(20)
 // @Param        keyword   query  string  false  "关键词"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/oneid [get]
+// @Router       /api/customer/oneid/list [get]
 func (c *CustomerOneIDController) ListOneID(ctx *gin.Context) {
 	page := parsePage(ctx.Query("page"))
 	pageSize := parsePageSize(ctx.Query("page_size"), 20)
@@ -100,7 +100,7 @@ func (c *CustomerOneIDController) ListOneID(ctx *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/oneid/stats [get]
+// @Router       /api/customer/oneid/stats [get]
 func (c *CustomerOneIDController) OneIDStats(ctx *gin.Context) {
 	stats := c.custQuerySvc.OneIDStats(ctx.Request.Context())
 	response.Success(ctx, stats, "获取成功")
@@ -265,6 +265,14 @@ func parsePage(s string) int {
 	return n
 }
 
+// GetMergeRules 读取 OneID 合并规则集
+// @Summary      获取 OneID 合并规则集
+// @Description  返回预置规则 + 自定义规则 + 合并策略
+// @Tags         OneID
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  object{data=service.MergeRuleSet}
+// @Router       /api/oneid/merge-rules [get]
 func (c *CustomerOneIDController) GetMergeRules(ctx *gin.Context) {
 	mergeRuleSvc := service.NewOneIDMergeRuleService()
 	set, err := mergeRuleSvc.GetRules(ctx.Request.Context())

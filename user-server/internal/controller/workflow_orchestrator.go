@@ -59,7 +59,7 @@ func (c *WorkflowOrchestratorController) CreateVersion(ctx *gin.Context) {
 // @Param        id  path  int  true  "版本 ID"
 // @Success      200  {object}  response.Response  "成功"
 // @Failure      404  {object}  response.Response  "未找到"
-// @Router       /api/workflows/versions/:id [get]
+// @Router       /api/workflows/versions/{id} [get]
 func (c *WorkflowOrchestratorController) GetVersion(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -124,7 +124,7 @@ func (c *WorkflowOrchestratorController) ListVersions(ctx *gin.Context) {
 // @Param        id    path  int                           true  "版本 ID"
 // @Param        body  body  dto.WorkflowVersionUpdateRequest  true  "更新参数"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/versions/:id [put]
+// @Router       /api/workflows/versions/{id} [put]
 func (c *WorkflowOrchestratorController) UpdateVersion(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -155,7 +155,7 @@ func (c *WorkflowOrchestratorController) UpdateVersion(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  int  true  "版本 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/versions/:id/publish [post]
+// @Router       /api/workflows/versions/{id}/publish [post]
 func (c *WorkflowOrchestratorController) PublishVersion(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -180,7 +180,7 @@ func (c *WorkflowOrchestratorController) PublishVersion(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  int  true  "版本 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/versions/:id/archive [post]
+// @Router       /api/workflows/versions/{id}/archive [post]
 func (c *WorkflowOrchestratorController) ArchiveVersion(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -205,7 +205,7 @@ func (c *WorkflowOrchestratorController) ArchiveVersion(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  int  true  "版本 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/versions/:id [delete]
+// @Router       /api/workflows/versions/{id} [delete]
 func (c *WorkflowOrchestratorController) DeleteVersion(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -257,7 +257,7 @@ func (c *WorkflowOrchestratorController) Execute(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  uint  true  "执行 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/executions/:id [get]
+// @Router       /api/workflows/executions/{id} [get]
 func (c *WorkflowOrchestratorController) GetExecution(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -314,7 +314,7 @@ func (c *WorkflowOrchestratorController) ListExecutions(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  uint  true  "执行 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/executions/:id/nodes [get]
+// @Router       /api/workflows/executions/{id}/nodes [get]
 func (c *WorkflowOrchestratorController) GetNodeExecutions(ctx *gin.Context) {
 	execID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
@@ -340,7 +340,7 @@ func (c *WorkflowOrchestratorController) GetNodeExecutions(ctx *gin.Context) {
 // @Security     BearerAuth
 // @Param        id  path  uint  true  "执行 ID"
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/workflows/executions/:id/stop [post]
+// @Router       /api/workflows/executions/{id}/stop [post]
 func (c *WorkflowOrchestratorController) StopExecution(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {

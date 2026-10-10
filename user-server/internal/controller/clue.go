@@ -78,7 +78,7 @@ func (c *ClueController) GetClueList(ctx *gin.Context) {
 // @Param        id  path  int  true  "线索 ID"
 // @Success      200  {object}  response.Response  "删除成功"
 // @Failure      400  {object}  response.Response  "参数错误"
-// @Router       /api/clues/{id} [delete]
+// @Router       /api/clues/delete/{id} [delete]
 func (c *ClueController) DeleteClue(ctx *gin.Context) {
 	var req dto.DeleteClueRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {

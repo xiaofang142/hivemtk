@@ -47,6 +47,22 @@
 | `internal/aiagent/rag/customer_service/quality_assessor.go` `GetQualityMetrics` | 全 0.0 死桩，零调用方 | 删接口或接线 |
 | `email_tracking.go` `ClickRedirect` 注释「取 query url」 | 实现只读 DB target，注释漂移 | 改注释 |
 
+### B-对账（2026-10-11 现测，原表行不划掉，只登记实际落点）
+
+上表 10 行里 **7 行已在 `7256777d`（2026-10-08）/ `516405fa`（2026-10-08）收口**，3 行按下面口径处理：
+
+| 项 | 2026-10-11 现测 | 结论 |
+|---|---|---|
+| 5 个「删除」项（`NewAIAgentController` / `NewChannelAgentBindingController` / `NewCustomerServiceAgentController` / `NewCustomerServiceControllerWithService` / `NewPromptControllerWithService`） | 全树 Go 源码 grep 裸名：**零命中**。在用的是 `…WithService` 三胞胎（`router.go:708/:712/:715` 构造，定义在 `ai_agent.go:22/:457/:597`）与普通版（`NewCustomerServiceController`、`NewPromptController`）。普通版今天的位置：`service_routes.go:74` 与 `business_routes.go:342`（上表写的 `:324` 是 2026-10-08 的行号，此后该文件有别的注册在它前面） | ✅ 已删，`git log --all -S'func NewAIAgentController('` 命中 `7256777d` |
+| `NewDashboardSSEController` | 已接线：`service_routes.go:262 setupSSEDashboardRoutes` → `:273` 构造 → `:274-276` 注册三个 GET。今天的路由表里 `GET /api/dashboards/{stream,snapshot,metrics}` 三行都在（运行时快照 `/tmp/r80-routes.tsv:387/:389/:390`，测于 2026-10-10 23:12——/tmp 会清，这条是当时的读数记录；在库坐标为上面那组 `service_routes.go` 行号＋常驻守护 `dashboard_sse_wiring_test.go:41`，handler 归 `DashboardSSEController`），消费档位 **weak**（无精确消费方，靠前缀匹配）。接线本身有常驻守护 `dashboard_sse_wiring_test.go:41` 断言源码里存在该构造 | ✅ 已接线（`7256777d`）；三行仍是 weak，属「有路由、无客户端」——不是僵尸候选，是待前端接入 |
+| `GetQualityMetrics` | 全树零命中 | ✅ 已删（`516405fa`） |
+| `ClickRedirect` 注释 | `email_tracking.go:69-76` 已改成不漂移的版本，并写明**为什么不能**接受 `?url=`（开放重定向出口），路由在 `:183` | ✅ 已改（附带把「缺失时兜底 query」这条路径判为不该存在） |
+| `NewUserController`（def `user.go:17`） | 非测试构造点仍为 0，`user_test.go` 里 18 处构造（现测 `grep -c "NewUserController()"` = 18）。`UserController` 的 7 个 handler（`user.go:21/:38/:51/:68/:86/:99/:118`＝GetUserList/GetUser/CreateUser/UpdateUser/DeleteUser/UpdatePassword/Login）在 `internal/router/` 全树无任何注册点 ⇒ 整块是「测试自造的面」 | ⏸ 不删、不接线，理由见下 |
+| `NewChatWSHub`（def `chat_ws_hub.go:140`） | 非测试构造点 0，两个测试文件合计 18 处调用（13 + 5）。**类型本身在生产代码里出现**：`chat_ws.go:73` 字段 + `NewChatWSController(hub *ChatWSHub, …)`，而该构造器唯一调用点 `router/ws.go:53` 所在的 `RegisterWSRoutes` **全树零调用方** ⇒ `GET /ws/chat` 从未注册，实测落到 SPA 的 NoRoute 兜底 | ⏸ 不删、不接线，理由见下 |
+
+**为什么不顺手删掉 `UserController` / `ChatWSHub`**：两者的删除面不一样。`ChatWSHub` 的方法（`Run/Stop/Register/Unregister/SendChunk/Broadcast/…`）是 `ChatWSController` 唯一的推送底座，删它等于删 `/ws/chat` 这条**只差一次注册**的路由的全部实现——这是一次产品决策（要不要上线 WS 流式对话），不是死代码清理；`ws.go:10-30` 与 `config_param_seeds.go:415/418/421` 已把这层「参数能改但没人读」的现状写进库内描述，三个 `chat_ws_*` 配置项被明确标注为不生效。`UserController` 则是另一类：它与 `SystemUserController`（def `auth.go:576`，注册在 `auth_routes.go:54`）功能重叠，删它要连带删 18 处用例，且「用户端要不要一套独立于 system_users 的用户 CRUD」同样是产品问题。
+两者**都不是本轮可自行决定的「发现即修」**——删了碰 18 枚用例与一条待接线的路由，接线了要补鉴权（`HandleChatWS` 只校验 `session_id/customer_id`，`ws.go:30` 已写明）。故登记为待裁决，见 `docs/architecture/ZOMBIE_API_TRIAGE.md` 的「待人工裁决」一节。
+
 ---
 
 ## C. 新规划剩余（`docs/replan-2026-09/新规划任务清单.md`）

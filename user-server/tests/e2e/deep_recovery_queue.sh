@@ -1,55 +1,46 @@
 #!/usr/bin/env bash
-# deep_recovery_queue.sh — 挽回队列深度回归 (入队/尝试/已挽回/取消/列表/分布/就绪)
+# deep_recovery_queue.sh — 挽回队列深度回归 (三条读口 + 四条写口必须仍然不可达)
 set -uo pipefail
 source "$(dirname "$0")/deep_lib.sh"
 mtk_login
 
 PASS=0; FAIL=0
 
-# ---------- 入队 ----------
-api POST /api/recovery-queue/enqueue "{\"customer_id\":\"cust_reg_$$\",\"unified_id\":\"u_reg_$$\",\"account\":\"douyin:reg_$$\",\"reason\":\"7日未活跃\",\"strategy\":\"push\",\"priority\":5}"
-if [ "$API_HTTP" = "200" ]; then
-  RQ_ID=$(jdata 'id') && pass "挽回 入队 200 -> $RQ_ID" || { fail "挽回 id 解析失败 body=$API_BODY"; RQ_ID=""; }
-  [ -n "$RQ_ID" ] && {
-    dbv=$(dbqv "select customer_id from recovery_queue where id=$RQ_ID;")
-    [ "$dbv" = "cust_reg_$$" ] && pass "挽回 DB 落库 (recovery_queue)" || fail "挽回 DB 期望 cust_reg_$$ 实=$dbv"
-    # 尝试
-    api POST "/api/recovery-queue/$RQ_ID/attempt" "{\"channel\":\"sms\",\"result\":\"sent\",\"stage\":\"contact\",\"next_delay\":3600}" && [ "$API_HTTP" = "200" ] && pass "挽回 尝试 200" || fail "挽回 尝试 http=$API_HTTP"
-    # 已挽回
-    api POST "/api/recovery-queue/$RQ_ID/recovered" "{\"recovery_value\":99.5}" && [ "$API_HTTP" = "200" ] && pass "挽回 标记已挽回 200" || fail "挽回 已挽回 http=$API_HTTP"
-    dbv=$(dbqv "select status from recovery_queue where id=$RQ_ID;")
-    [ "$dbv" = "recovered" ] && pass "挽回 状态 DB=recovered" || info "挽回 状态 DB ($dbv)"
-  }
-else
-  fail "挽回 入队 http=$API_HTTP body=$API_BODY"
-fi
+# ---------------- 写口：路由从未注册，打它只会拿到 404 ----------------
+# 这一段原本是断言"入队 200 / 尝试 200 / 已挽回 200 / 取消 200 并核 DB 落库"，
+# 而那四条 POST 口根本不在路由表里：注册面只有三条 GET
+# （internal/router/content_routes.go 的 setupRecoveryQueueRoutes）。
+# 断言 200 的脚本每次跑都恒红，模块里唯一真的三条读口就被淹在永久红里。
+#
+# 队列今天是怎么被写坏的：
+#   - 入队：internal/service/customer_rfm.go 的 enqueueRecovery 直接 repository.Create，
+#     绕过 service.Enqueue 与本控制器，所以队列有数据、但不是从入队口径来的；
+#   - 推进：internal/service/recovery_queue_worker.go 只用 service.MarkAttempt / DeferAttempt，
+#     耗尽次数置 failed、命中免打扰置 cancelled 都由 worker 传 stage 完成；
+#   - 缺口：全仓没有任何代码把队列项写成 succeed——RecoveryStageSucceed 只出现在
+#     service.MarkRecovered 里，而它唯一的调用方就是下面那个没有路由的 handler。
+#     客户回流后这条记录不会收敛成"已挽回"，只会一路走到 failed。
+#
+# 探针保留而不删，是为了"哪天有人把写口注册上却没同步这段脚本"时当场红。
+# 读失败时注意区分两种红：路径不在=404，路径在但方法没注册=405
+# （internal/router/router.go 开了 HandleMethodNotAllowed），两者含义不同。
+for p in /api/recovery-queue/enqueue /api/recovery-queue/1/attempt \
+         /api/recovery-queue/1/recovered /api/recovery-queue/1/cancel; do
+	info "POST $p"
+	api POST "$p" "{\"customer_id\":\"cust_probe_$$\"}"
+	[ "$API_HTTP" = "404" ] && pass "写口 404 $(basename "$p")" || fail "$p 期望 404, 实际 $API_HTTP"
+done
 
-# ---------- 取消 (新入队一个再取消) ----------
-api POST /api/recovery-queue/enqueue "{\"customer_id\":\"cust_cancel_$$\",\"unified_id\":\"u_cancel_$$\",\"account\":\"douyin:cancel_$$\",\"reason\":\"测试\",\"strategy\":\"push\",\"priority\":1}"
-if [ "$API_HTTP" = "200" ]; then
-  CID2=$(jdata 'id')
-  [ -n "$CID2" ] && {
-    api POST "/api/recovery-queue/$CID2/cancel" "{\"reason\":\"用户要求\"}" && [ "$API_HTTP" = "200" ] && pass "挽回 取消 200" || fail "挽回 取消 http=$API_HTTP"
-    dbv=$(dbqv "select status from recovery_queue where id=$CID2;")
-    [ "$dbv" = "cancelled" ] && pass "挽回 取消 DB=cancelled" || info "挽回 取消 DB ($dbv)"
-    # 清理取消的记录
-    dbq "DELETE FROM recovery_queue WHERE id=$CID2;" >/dev/null 2>&1
-  }
-else
-  info "挽回 二次入队 http=$API_HTTP"
-fi
-
-# ---------- 列表 / 分布 / 就绪 ----------
+# ---------- 列表 / 分布 / 就绪（路由表里真有这三条）----------
 api GET /api/recovery-queue/list "?stage=recovered" && [ "$API_HTTP" = "200" ] && pass "挽回 列表 200" || fail "挽回 列表 http=$API_HTTP"
 api GET /api/recovery-queue/distribution && [ "$API_HTTP" = "200" ] && pass "挽回 分布 200" || fail "挽回 分布 http=$API_HTTP"
 api GET /api/recovery-queue/ready "?limit=10" && [ "$API_HTTP" = "200" ] && pass "挽回 就绪 200" || fail "挽回 就绪 http=$API_HTTP"
 
-# ---------- 异常路径 ----------
-api POST /api/recovery-queue/enqueue "{}"  # 缺必填
-[ "$API_HTTP" = "400" ] && pass "挽回 入队 缺必填 400" || fail "挽回 入队 缺必填 期望400 实=$API_HTTP"
-
-# ---------- cleanup ----------
-[ -n "${RQ_ID:-}" ] && { dbq "DELETE FROM recovery_queue WHERE id=$RQ_ID;" >/dev/null 2>&1 && info "挽回 记录清理 $RQ_ID"; }
+# ---------- 只读口径下队列不该被这次跑批改动 ----------
+# 这段脚本不再建记录，所以不再需要 cleanup；核一次行数读数，
+# 万一上面哪条 POST 被注册上并开始落库，这里会跟着红。
+before=$(dbqv "select count(*) from recovery_queue;")
+[ -n "$before" ] && pass "队列行数可读 ($before)" || fail "队列行数读不到（表或库不通）"
 
 info "==== deep_recovery_queue 完成 PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

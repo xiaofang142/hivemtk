@@ -12,6 +12,18 @@ import (
 )
 
 // AlertRuleController 告警规则控制器
+//
+// 这个控制器里只有一半方法进了路由表：GET /api/alerts/rules、/api/alerts/rules/:id、
+// /api/alerts/histories、/api/monitor/alerts/unread 是活的；
+// Create/Update/Delete/SetStatus/ResolveHistory 没有注册路由（用 gin 的 RouteInfo 现跑过路由表核对）。
+// 写侧整条链（controller → service.AlertRuleService → repository.AlertRuleRepository.Create/Update/
+// BatchUpdateStatus）代码完整、入口缺失，因此 alert_rules 表没有任何生产写入路径：
+// 建表在 internal/migration/migrations/alert_rule_migration.go 与 internal/pkg/db/migrate.go 的模型清单里，
+// 而规则行只能靠手工 SQL 插入（备份恢复 internal/service/backup.go 的扩表清单里确实有 alert_rules，
+// 但它恢复的是既有备份中的行，第一条规则依旧没有代码路径可落）。后果是运行中的扫描器恒空转——
+// cmd/api/main.go 里 AlertChecker.Start() 每轮先 ListEnabled
+// （internal/service/alert_checker.go），拿到零条规则就直接返回 0，一条告警也不会产生。
+// 下面每个未接线方法都保留下来，等的是"告警规则管理"这块 UI/路由排期，不是待删的死代码。
 type AlertRuleController struct {
 	svc *service.AlertRuleService
 }
@@ -28,7 +40,7 @@ func NewAlertRuleController() *AlertRuleController {
 // @Produce      json
 // @Param        body  body  service.AlertRuleRequest  true  "规则"
 // @Success      201   {object}  response.Response
-// @Router       /api/alerts/rules [post]
+// 未接线：路由表里没有这条 POST，它是上面写侧缺口的唯一入口候选（见类型注释）。
 func (c *AlertRuleController) Create(ctx *gin.Context) {
 	var req service.AlertRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -57,7 +69,7 @@ func (c *AlertRuleController) Create(ctx *gin.Context) {
 // @Param        id    path  int                       true  "规则ID"
 // @Param        body  body  service.AlertRuleRequest  true  "规则"
 // @Success      200   {object}  response.Response
-// @Router       /api/alerts/rules/{id} [put]
+// 未接线：路由表里没有这条 PUT；改阈值同样没有出口，规则行只能手工 SQL 维护。
 func (c *AlertRuleController) Update(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -91,7 +103,9 @@ func (c *AlertRuleController) Update(ctx *gin.Context) {
 // @Produce      json
 // @Param        id  path  int  true  "规则ID"
 // @Success      200  {object}  response.Response
-// @Router       /api/alerts/rules/{id} [delete]
+// 未接线：路由表里没有这条 DELETE。原先这里挂的接口注解声明的是 /api/geo/alerts/{id} 的 delete，
+// 而那条路由由 internal/geo/controller.(*AlertController).Delete 服务，删的是 GEO 告警中心的记录，
+// 跟本方法操作的 alert_rules 表不是同一个资源；接口注解已改挂到真正的服务方。
 func (c *AlertRuleController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	if err != nil || id == 0 {
@@ -158,7 +172,9 @@ func (c *AlertRuleController) List(ctx *gin.Context) {
 // @Produce      json
 // @Param        body  body  object  true  "{ids:[1,2], enabled:true}"
 // @Success      200  {object}  response.Response
-// @Router       /api/alerts/rules/status [put]
+// 未接线：路由表里没有这条 PUT。规则行的 enabled 列只有两个写入者——
+// 本方法下面的 service（无入口）和备份恢复，扫描器按 enabled 取规则，
+// 所以没有规则管理入口时，启停也只能靠手工 SQL 改列。
 func (c *AlertRuleController) SetStatus(ctx *gin.Context) {
 	var req struct {
 		IDs     []uint `json:"ids"`
@@ -208,7 +224,10 @@ func (c *AlertRuleController) ListHistory(ctx *gin.Context) {
 // @Produce      json
 // @Param        rule_id  query  int  true  "规则ID"
 // @Success      200  {object}  response.Response
-// @Router       /api/alerts/histories/resolve [post]
+// 未接线：路由表里没有这条 POST。alert_histories 的恢复目前只有自动一条路——
+// 扫描器在指标回落到阈值下时调 tryResolve（internal/service/alert_checker.go），
+// 手工"确认已处理"没有 HTTP 出口；GEO 那边同名的 /api/geo/alerts/{id}/ack 处置的是
+// geo 告警中心的另一张表，不能拿来恢复这里的 firing 历史。
 func (c *AlertRuleController) ResolveHistory(ctx *gin.Context) {
 	ruleID, err := strconv.ParseUint(ctx.Query("rule_id"), 10, 64)
 	if err != nil || ruleID == 0 {

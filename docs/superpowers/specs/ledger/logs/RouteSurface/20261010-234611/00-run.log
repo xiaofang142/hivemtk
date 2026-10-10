@@ -1,0 +1,19 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-u283r2gv
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/RouteSurface/20261010-234611
+取证基线：HEAD=21828b63 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk load=23:46  up 17 days, 13:34, 2 users, load averages: 13.45 12.93 14.75 日志 tag=20261010-234611
+装架：克隆 master + 覆盖 21 个本泳道脏/未跟踪文件（其余面走 HEAD 字节）：user-server/docs/docs.go, user-server/docs/swagger.json, user-server/docs/swagger.yaml, user-server/internal/controller/alert_rule.go, user-server/internal/controller/auth.go, user-server/internal/controller/clue.go, user-server/internal/controller/customer.go, user-server/internal/controller/customer_360.go, user-server/internal/controller/customer_event.go, user-server/internal/controller/customer_oneid.go, user-server/internal/controller/intent.go, user-server/internal/controller/recovery_queue.go, user-server/internal/controller/sales_persona.go, user-server/internal/controller/short_link.go, user-server/internal/controller/sop.go, user-server/internal/controller/workflow_orchestrator.go, user-server/internal/geo/controller/alert.go, user-server/internal/reach/card/template/live_code.html, user-server/internal/router/route_surface_consistency_test.go, user-server/internal/service/oneid_merge_rule.go, user-server/tests/e2e/routes_user.tsv
+本轮基线字节（注码前 == 还原后 才算干净）：
+  8bb2c7da09ddf60d00c814a10a7afb3c  user-server/internal/controller/customer_360.go
+  4626e7b4de4debb08e6ca32e72a1e829  user-server/internal/reach/card/template/xianyu_card.html
+  51dafc6838754c1f8144246dc6fe3e09  user-server/internal/router/route_surface_consistency_test.go
+  35ce995aa37c301a044cedb9a40577ea  user-server/internal/reach/card/template/live_code.html
+  e5525fdf667df226eab644d7f50c7278  user-server/tests/e2e/routes_user.tsv
+[控制组] rc=1 settled=3 skip=0 红名=['TestPageTemplateLinksMatchLiveRoutes']
+   红因: route_surface_consistency_test.go:215: 扫到接口注解 145 条，逐条核对路径存在性与服务方归属
+   红因: route_surface_consistency_test.go:328: 扫到落地页模板 6 份，逐条核对其中的 /api 引用；已登记豁免 3 条
+   红因: route_surface_consistency_test.go:331: 豁免表里 3 条引用已经不在模板里出现了（口注册上了或上报删掉了），把这条豁免一并删掉：
+   红因: route_surface_consistency_test.go:336: 落地页模板里有 4 个 /api 引用不指向任何已注册路由，终端用户点了只会拿到 404：
+   红因: route_surface_consistency_test.go:395: 清单 749 行全部命中路由表；/api/ 路由 1721 条，覆盖 738 条，未覆盖 983 条
+ENV-BROKEN：守卫在基线上就红——先修守卫，再谈它有没有牙（停机）
+收尾闸：这条中止路没接显式收尾（dispose），已由兜底闸回收；要把现场留成取证，走 --keep
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-u283r2gv/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/routesurfacemut-u283r2gv

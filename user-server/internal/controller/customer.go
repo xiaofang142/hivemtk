@@ -32,7 +32,7 @@ func NewCustomerController() *CustomerController {
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20)
 // @Success 200 {object} map[string]interface{} "获取成功"
-// @Router /api/customer [get]
+// 未接线：客户列表的 HTTP 出口是 GET /api/customer/list（Customer360Controller），本方法无路由注册。
 func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {
 		customers, total, nextCursor, err := c.customerService.ListKeyset(ctx.Request.Context(), cursor, limit)
@@ -70,14 +70,10 @@ func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 }
 
 // GetCustomer 获取客户详情
-// @Summary 获取客户详情
-// @Description 根据客户 ID 获取客户 360° 视图
-// @Tags CDP-客户管理
-// @Accept json
-// @Produce json
-// @Param id path string true "客户 ID"
-// @Success 200 {object} object{data=service.CustomerProfile} "获取成功"
-// @Router /api/customer/{id} [get]
+//
+// 未接线：路由表里没有 GET /api/customer/:id——这条由同包的
+// Customer360Controller.GetCustomerDetail 服务（它才是前端 Customer360 页走的那个入口），
+// 本方法没有任何注册。接口注解因此挂在会误导读者来这个方法找实现，已改挂到真正的服务方。
 func (c *CustomerController) GetCustomer(ctx *gin.Context) {
 	customerID := ctx.Param("id")
 	if customerID == "" {
@@ -132,16 +128,12 @@ func (c *CustomerController) CreateCustomer(ctx *gin.Context) {
 	response.Success(ctx, customer, "创建成功")
 }
 
-// AddTags 给客户添加标签
-// @Summary 给客户添加标签
-// @Description 给客户添加一个或多个标签
-// @Tags CDP-客户管理
-// @Accept json
-// @Produce json
-// @Param id path string true "客户 ID"
-// @Param request body object{tags=[]string} true "标签列表"
-// @Success 200 {object} object{message=string} "添加成功"
-// @Router /api/customer/:id/tags [post]
+// AddTags 批量给客户加标签
+//
+// 未接线：路由表里没有 POST /api/customer/:id/tags——那条注册在
+// Customer360Controller.AddCustomerTag 上，收的是单数字段 tag（一次一个标签）；
+// 本方法收的是 tags 数组，走的是另一个服务，接口注解已按真实服务方改挂过去，
+// 批量加标签目前没有任何 HTTP 入口。
 func (c *CustomerController) AddTags(ctx *gin.Context) {
 	customerID := ctx.Param("id")
 	if customerID == "" {
@@ -181,7 +173,7 @@ func (c *CustomerController) AddTags(ctx *gin.Context) {
 // @Param id path string true "客户 ID"
 // @Param request body object{tags=[]string} true "标签列表"
 // @Success 200 {object} object{message=string} "移除成功"
-// @Router /api/customer/:id/tags [delete]
+// 未接线：批量删标签只作为 Agent 工具暴露（internal/service/tool_ports_adapter.go），HTTP 侧只有按单个标签的 DELETE /api/customer/{id}/tags/{tag}。
 func (c *CustomerController) RemoveTags(ctx *gin.Context) {
 	customerID := ctx.Param("id")
 	if customerID == "" {
@@ -220,7 +212,7 @@ func (c *CustomerController) RemoveTags(ctx *gin.Context) {
 // @Produce json
 // @Param request body object{primary_id=string, secondary_id=string} true "客户 ID"
 // @Success 200 {object} object{message=string} "合并成功"
-// @Router /api/customer/merge [post]
+// 未接线：客户合并由 OneID 合并规则任务与 Agent 工具调用服务层，本方法无路由注册。
 func (c *CustomerController) MergeCustomers(ctx *gin.Context) {
 	var req struct {
 		PrimaryID   string `json:"primary_id" binding:"required"`

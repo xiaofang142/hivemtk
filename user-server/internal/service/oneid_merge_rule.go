@@ -57,14 +57,11 @@ type MergeRuleSet struct {
 	UpdatedAt string        `json:"updated_at"`
 }
 
-// GetRules godoc
-// @Summary      获取 OneID 合并规则集
-// @Description  返回预置规则 + 自定义规则 + 合并策略
-// @Tags         OneID
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  MergeRuleSet
-// @Router       /api/oneid/merge-rules [get]
+// GetRules 返回内存里的完整规则集。
+//
+// 未接线为 HTTP 出口：GET /api/oneid/merge-rules 由 controller 层的
+// CustomerOneIDController.GetMergeRules 服务，接口注解挂在那里才对得上路由表；
+// 本方法是它下面的取数步骤，不是路由的服务方。
 func (s *OneIDMergeRuleService) GetRules(ctx context.Context) (*MergeRuleSet, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -102,8 +102,16 @@ func TestFollowUpController_Params(t *testing.T) {
 func TestFollowUpController_Lifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := service.NewFollowUpService(nil)
+	// 排程窗要按读侧的分桶口径算，不能写死 +1h：today 按"跑这条用例这台机器的自然日"分桶，
+	// 而临近日午夜那一小时里 now+1h 已是次日，于是每天有一段必红窗（TZ=UTC+8 23:15 实测 list 为空）。
+	// 贴到当天 23:00 之前排，due 与查询日恒在同一天；排到过去也不影响 pending 腿（ListPending 只认状态）。
+	now := time.Now()
+	delta := time.Hour
+	if until := time.Date(now.Year(), now.Month(), now.Day(), 23, 0, 0, 0, now.Location()).Sub(now); until < delta {
+		delta = until
+	}
 	r, err := svc.Schedule(context.Background(), "c1", "u1", service.ReminderCustom,
-		time.Hour, &service.ScheduleOptions{Title: "回访"})
+		delta, &service.ScheduleOptions{Title: "回访"})
 	if err != nil {
 		t.Fatalf("排程失败: %v", err)
 	}

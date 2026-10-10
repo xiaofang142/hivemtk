@@ -171,6 +171,10 @@ func (c *DomainPoolController) List(ctx *gin.Context) {
 }
 
 // CheckDomain 检查单个域名是否可访问
+// 未接线：路由表里没有这条端点（旧 /api/domainpool/* 组已随新版命名整体下线），接线时在 router 层注册并补回接口注解。
+// 与另外九个未接线函数不同类：它的活已由 CheckDomainByID 接走（POST /api/domain-pool/:id/check，
+// 注册在 frontend_aliases.go），两者调同一个 service 方法、返回体形状不同，
+// 且本文件的控制器用例仍在注册并断言这个函数本身，所以它不是"零引用可删"。
 func (c *DomainPoolController) CheckDomain(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.Atoi(idStr)

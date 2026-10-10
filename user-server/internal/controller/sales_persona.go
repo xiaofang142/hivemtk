@@ -30,7 +30,7 @@ func NewSalesPersonaController() *SalesPersonaController {
 // @Param        id  path  int  true  "员工 ID"
 // @Success      200  {object}  response.Response  "成功"
 // @Failure      400  {object}  response.Response  "参数错误"
-// @Router       /api/sales-persona/{id} [get]
+// @Router       /api/analytics/persona/staffs/{id} [get]
 func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 	staffIDStr := ctx.Param("id")
 	staffID, err := strconv.ParseUint(staffIDStr, 10, 32)
@@ -53,7 +53,7 @@ func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 // @Produce      json
 // @Security     BearerAuth
 // @Success      200  {object}  response.Response  "成功"
-// @Router       /api/sales-persona/staffs [get]
+// @Router       /api/analytics/persona/staffs [get]
 func (c *SalesPersonaController) ListStaffs(ctx *gin.Context) {
 	staffs, err := c.svc.ListStaffs(ctx.Request.Context())
 	if err != nil {
