@@ -125,6 +125,9 @@ NOT_A_BATTERY = {
     "calib2": "同上的第二趟标定，人工重定向",
     "dentproof-anchor": "锚点预检的一次性\"凹痕证明\"读数（证明参数真进了装架），人工重定向",
     "wiring-anchor": "门禁注册接线核查的一次性锚点读数，人工重定向",
+    "P903": "常驻变异电池 `mut_journey_stage_index_p903.sh`（.sh 驱动）；本门驱动轴只覆盖 `mut_*.py`"
+            "（ast/tokenize 解析），.sh 候选不进 drivers() ⇒ 无身份发射点可挂；"
+            "产物为 `go test -overlay` customer_journey 阶段索引变异读数，非人工重定向",
 }
 
 # 合并带进来的**他人泳道**常驻电池：它们确实把逐格产物写进仓库树，但驱动里没有身份发射点

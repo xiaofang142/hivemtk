@@ -96,7 +96,7 @@ run_cell() {
       return 6
     fi
     if ! grep -q -- "--- FAIL: $expect_fail" "$log"; then
-      echo "[$name] WRONG_KILL：判据面没按预期开火（期望 $expect_fail）"
+      echo "[$name] WRONG_KILL：判据面没按预期开火（期望 ${expect_fail}）"
       return 7
     fi
     return 1
@@ -106,7 +106,7 @@ run_cell() {
   local npass
   npass=$(grep -cE '^ *--- PASS: TestCustomerJourney' "$log")
   if [ "$npass" -lt "$BOUND_MIN" ]; then
-    echo "[$name] FIXTURE_MISSING：绑定用例只跑过 $npass 枚（下界 $BOUND_MIN）"
+    echo "[$name] FIXTURE_MISSING：绑定用例只跑过 $npass 枚（下界 ${BOUND_MIN}）"
     return 8
   fi
   local missing="" t

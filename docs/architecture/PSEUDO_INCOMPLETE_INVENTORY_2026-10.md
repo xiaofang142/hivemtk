@@ -457,9 +457,15 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
 ## 4. D 类：门禁面（这轮拿到的新证据）
 
 1. `make audit` 的 shell 形状门会被他泳道挡住：`scripts/mut_journey_stage_index_p903.sh:74`
-   在 bash 3.2 + UTF-8 下会把 `$expect_fail` 紧跟的中文字节一起吃掉，
-   `check-shell-cjk-expansion.sh` 因此报 `scanned=157 命中 2（基线 1）` 而整链 rc=2。
-   该文件是未跟踪的新件（`??`，mtime 2026-10-09 00:37），属正在写的活。一行修法：改成 `${expect_fail}`。
+    在 bash 3.2 + UTF-8 下会把 `$expect_fail` 紧跟的中文字节一起吃掉，
+    `check-shell-cjk-expansion.sh` 因此报 `scanned=157 命中 2（基线 1）` 而整链 rc=2。
+    该文件是未跟踪的新件（`??`，mtime 2026-10-09 00:37），属正在写的活。一行修法：改成 `${expect_fail}`。
+    **状态（2026-10-10 I32 已修）**：该文件已入库（他泳道 commit、工作区 clean）。真缺陷在
+    `:99 $expect_fail）`、`:109 $BOUND_MIN）`（后紧跟全角 `）`），已加花括号 `${expect_fail}`/`${BOUND_MIN}`；
+    `check-shell-cjk-expansion.sh` 复跑 rc=0（scanned=159，命中1=基线内他泳道热文件）、`bash -n` SYNTAX_OK。
+    连带暴露下一道门：字节身份行门 A5 拦 P903（`.sh` 驱动不进 `mut_*.py` 驱动轴 ⇒ 无身份发射点），
+    已在 `check-battery-identity.py` 的 `NOT_A_BATTERY` 登记 P903（理由写实：.sh 常驻变异电池、
+    驱动轴只覆盖 `mut_*.py`）。`make audit` 全链 rc=0。
 2. 在 user-server 里 `go build ./...` 不带 `DEVELOPER_DIR` 会撞 Xcode 许可门，
    打印 `# runtime/cgo / You have not agreed to the Xcode license`；
    而这条错误如果经 `| head` 管道读码，`$?` 拿到的是 `head` 的 0 ⇒ 假绿。
