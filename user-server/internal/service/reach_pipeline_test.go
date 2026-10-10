@@ -2114,13 +2114,27 @@ func TestFullPipeline_FailOnEmptyContent(t *testing.T) {
 }
 
 func TestFullPipeline_FailOnUnimplementedChannel(t *testing.T) {
+	// 这里刻意**不装** reachStubSender。newReachTestService 会装上它，而那个 stub
+	// 对任意渠道都回成功（"sent_" + channel），于是 dispatchOutbound 的第一道分支
+	// 就把作业发走了，永远走不到"没有出口、必须失败"那条路径——用带 stub 的服务
+	// 测这条断言，测的是 stub 不是断言本身。
+	//
+	// 渠道也不能选 douyin：它在 bridgeChannels 里（douyin/kuaishou/xiaohongshu/
+	// tiktok/xianyu），没装 sender 时走的是包级外发台 DeliverBridgeOutbound，
+	// 那条路径本来就该成功。选一个既不在 bridgeChannels 里、又没有 sender 的渠道，
+	// 才是本用例真正要钉的"未实现渠道"。
 	svc, _ := newReachTestService(t)
+	svc.SetReachSender(nil)
+
+	// wecom 能通过 CreatePipeline 的渠道校验（newReachPipelineReq 的默认值就是它），
+	// 又不在 bridgeChannels 里，所以没装 sender 时必然落到"没有出口"那条分支。
+	const unimplemented = "wecom"
 	req := newReachPipelineReq("m-1")
-	req.Channel = "douyin"
+	req.Channel = unimplemented
 	pipe, _ := svc.CreatePipeline(context.Background(), req)
 	jobReq := &EnqueueJobRequest{
 		PipelineID: pipe.ID,
-		Channel:    "douyin",
+		Channel:    unimplemented,
 		CustomerID: "u-test-1",
 		Payload:    map[string]any{"content": "test"},
 	}
@@ -2130,9 +2144,9 @@ func TestFullPipeline_FailOnUnimplementedChannel(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 	if executed.State != JobStateFailed {
-		t.Errorf("expected state=failed for douyin, got %s", executed.State)
+		t.Errorf("expected state=failed for %s, got %s", unimplemented, executed.State)
 	}
-	if !strings.Contains(executed.ErrorMessage, "douyin") {
-		t.Errorf("expected error message about douyin, got %q", executed.ErrorMessage)
+	if !strings.Contains(executed.ErrorMessage, unimplemented) {
+		t.Errorf("expected error message about %s, got %q", unimplemented, executed.ErrorMessage)
 	}
 }
