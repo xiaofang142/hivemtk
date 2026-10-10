@@ -390,18 +390,19 @@ function getConversationId() {
   if (/[?&]conversation_id=/.test(location.href)) {
     return new URLSearchParams(location.search).get('conversation_id');
   }
+  const active = qsa(
+    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [class*="conversation-item"][class*="curConversation"], [class*="ConversationItem"][class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
+  ).find((el) => el.offsetParent !== null);
+  // ConversationShortID 优先（与后端 webhook conversation_id 格式一致），
+  // 避免 URL /chat/<sec_uid> 与列表 /user/<sec_uid> 链接格式不一致导致 openConversation 错配
+  const dataConv = active?.getAttribute('data-conversation-id') || active?.getAttribute('data-conv-id') || active?.getAttribute('data-id');
+  if (dataConv) return dataConv;
   // /chat/{id} 专用路由路径解析（与小红书对称）：抖音 /chat 也可能带会话 id 路径，
   // 如群聊 /chat/{group_id} 或深链 /chat/{sec_uid}。不解析则返回 null → 守卫拦截全部消息。
   const pathMatch = (location.pathname || '').match(/\/chat\/([^/?#]+)/);
   if (pathMatch && pathMatch[1]) {
     return decodeURIComponent(pathMatch[1]);
   }
-  const active = qsa(
-    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [class*="conversation-item"][class*="curConversation"], [class*="ConversationItem"][class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
-  ).find((el) => el.offsetParent !== null);
-  // 群聊：活动项可能含群名而非 /user/ 链接；优先取 data-* 上的会话标识
-  const dataConv = active?.getAttribute('data-conversation-id') || active?.getAttribute('data-conv-id') || active?.getAttribute('data-id');
-  if (dataConv) return dataConv;
   const link = active?.querySelector('a[href*="/user/"]') || qs('[class*="chat-header"] a[href*="/user/"]');
   // 兼容 /user/<数字id> 与 /user/MS4w...（token 形式）；命中后切换会话会重新回填历史
   const m = link?.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
@@ -486,15 +487,17 @@ function getConversationList() {
   const ids = new Set();
   for (const item of items) {
     if (!item || !item.offsetParent) continue; 
-    // 会话 id：优先会话项内 /user/<id> 链接（最可靠）；其次 data-conversation-id / data-sec_uid；
-    // 最后用昵称文本派生（/chat 专用路由的会话项常无链接与 data 属性，实测需此兜底）。
+    // 会话 id：优先 data-conversation-id（ConversationShortID，与后端 webhook 格式一致）；
+    // 其次会话项内 /user/<id> 链接；最后用昵称文本派生（兜底）。
     let id = null;
-    const link = item.querySelector('a[href*="/user/"]');
-    if (link) {
-      const m = link.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
-      if (m && m[1] && m[1] !== 'self') id = m[1];
+    id = item.getAttribute('data-conversation-id') || item.getAttribute('data-sec_uid') || item.getAttribute('data-id') || null;
+    if (!id) {
+      const link = item.querySelector('a[href*="/user/"]');
+      if (link) {
+        const m = link.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
+        if (m && m[1] && m[1] !== 'self') id = m[1];
+      }
     }
-    if (!id) id = item.getAttribute('data-conversation-id') || item.getAttribute('data-sec_uid') || item.getAttribute('data-id') || null;
     // 昵称：会话项内的昵称/名称元素（sanitizePeerName 剥离时间戳/状态后缀，
     // 否则同会话不同时刻的 name 不同 → id 不同 → 重复枚举/下行错配）
     const nameEl = item.querySelector(
