@@ -88,7 +88,30 @@ type LLMService struct {
 	httpClient *http.Client
 }
 
-var defaultHTTPTimeout = 180 * time.Second
+// DefaultLLMHTTPTimeout LLM 客户端 HTTP 请求默认超时的代码兜底。
+const DefaultLLMHTTPTimeout = 180 * time.Second
+
+var defaultHTTPTimeout = DefaultLLMHTTPTimeout
+
+var defaultHTTPTimeoutProvider func() time.Duration
+
+// SetDefaultHTTPTimeoutProvider 注入 LLM 客户端 HTTP 默认超时；传 nil 视为不注入。
+// 与下面的包级变量并存：变量供历史调用点与测试直接改，provider 供参数中心注入；
+// DefaultHTTPTimeout() 会优先走 provider。
+func SetDefaultHTTPTimeoutProvider(fn func() time.Duration) {
+	defaultHTTPTimeoutProvider = fn
+}
+
+// DefaultHTTPTimeout 生效的 LLM 客户端 HTTP 请求超时。非正值一律回落兜底——
+// 0 表示不超时，一个卡住的上游会把 worker 永久占住。
+func DefaultHTTPTimeout() time.Duration {
+	if p := defaultHTTPTimeoutProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return defaultHTTPTimeout
+}
 
 func setDefaultHTTPTimeout(d time.Duration) {
 	if d <= 0 {
@@ -101,7 +124,7 @@ func setDefaultHTTPTimeout(d time.Duration) {
 func NewLLMService() *LLMService {
 	return &LLMService{
 		httpClient: &http.Client{
-			Timeout: defaultHTTPTimeout,
+			Timeout: DefaultHTTPTimeout(),
 		},
 	}
 }

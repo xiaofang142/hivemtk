@@ -170,6 +170,12 @@ func main() {
 		logger.Info("[ConfigParam] confidence 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// agent_llm 组同理：熔断四件套、投票一致阈值、客户端 HTTP 超时、Trace DB Sink
+	// 停止截止，全都住在 internal/aiagent/llm 里，而这个包不能反向 import service。
+	if wired := app.WireAgentLLMConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] agent_llm 组接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	service.InitDefaultStorageIfEmpty(db.GetDB())
 	service.BindAssetLoaderRepository(db.GetDB())
 

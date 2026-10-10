@@ -430,7 +430,26 @@ func (d *Dispatcher) DispatchMultiModel(ctx context.Context, req DispatchRequest
 	return results, nil
 }
 
-const voteAgreementThreshold = 0.80
+// DefaultVoteAgreementThreshold 投票一致阈值的代码兜底；生效值走 VoteAgreementThreshold()。
+const DefaultVoteAgreementThreshold = 0.80
+
+var voteAgreementThresholdProvider func() float64
+
+// SetVoteAgreementThresholdProvider 注入投票一致阈值；传 nil 视为不注入。
+func SetVoteAgreementThresholdProvider(fn func() float64) {
+	voteAgreementThresholdProvider = fn
+}
+
+// VoteAgreementThreshold 生效的投票一致阈值。区间 (0,1]：非正数会让任何一对答案都算一致
+// （投票直接退化成随便选一个），大于 1 则永远选不出共识。越界一律回落兜底。
+func VoteAgreementThreshold() float64 {
+	if p := voteAgreementThresholdProvider; p != nil {
+		if v := p(); v > 0 && v <= 1 {
+			return v
+		}
+	}
+	return DefaultVoteAgreementThreshold
+}
 
 func normalizeVoteText(s string) string {
 	var b strings.Builder
@@ -510,7 +529,7 @@ func (d *Dispatcher) MultiModelVote(results []*DispatchResult) string {
 	support := make([]int, len(results))
 	for i := range norms {
 		for j := range norms {
-			if i != j && bigramJaccard(norms[i], norms[j]) >= voteAgreementThreshold {
+			if i != j && bigramJaccard(norms[i], norms[j]) >= VoteAgreementThreshold() {
 				support[i]++
 			}
 		}

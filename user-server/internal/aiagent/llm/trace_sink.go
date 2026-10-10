@@ -32,11 +32,29 @@ type DBTraceSink struct {
 }
 
 const (
-	dbSinkBufferSize   = 2048
-	dbSinkBatchSize    = 128
-	dbSinkFlushPeriod  = 500 * time.Millisecond
-	dbSinkStopDeadline = 3 * time.Second
+	dbSinkBufferSize          = 2048
+	dbSinkBatchSize           = 128
+	dbSinkFlushPeriod         = 500 * time.Millisecond
+	DefaultDBSinkStopDeadline = 3 * time.Second
 )
+
+var dbSinkStopDeadlineProvider func() time.Duration
+
+// SetDBSinkStopDeadlineProvider 注入 Trace DB Sink 停止等待上限；传 nil 视为不注入。
+func SetDBSinkStopDeadlineProvider(fn func() time.Duration) {
+	dbSinkStopDeadlineProvider = fn
+}
+
+// DBSinkStopDeadline 生效的停止等待上限。非正值一律回落兜底——0 会让
+// Stop() 一进来就判定超时并强退，缓冲里的尾段 trace 事件全部丢掉。
+func DBSinkStopDeadline() time.Duration {
+	if p := dbSinkStopDeadlineProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultDBSinkStopDeadline
+}
 
 // NewDBTraceSink 构造 DB 订阅者；db 允许为空（此时事件将被丢弃并计数）。
 func NewDBTraceSink(db *gorm.DB) *DBTraceSink {
@@ -83,7 +101,7 @@ func (s *DBTraceSink) Stop() {
 		close(s.stopCh)
 		select {
 		case <-s.doneCh:
-		case <-time.After(dbSinkStopDeadline):
+		case <-time.After(DBSinkStopDeadline()):
 			logger.GetLogger().Warn().Msg("[DBTraceSink] stop deadline exceeded, forcing exit")
 		}
 	})

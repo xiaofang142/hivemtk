@@ -606,7 +606,7 @@ func (d *Dispatcher) HasHealthyProvider(scenario DispatchScenario) bool {
 		}
 		if fo != nil {
 			if health := fo.GetHealth(name); health != nil {
-				if health.Status == ProviderStatusDown || health.Status == ProviderStatusDegraded || health.ConsecutiveFailures >= DefaultFailureThreshold {
+				if health.Status == ProviderStatusDown || health.Status == ProviderStatusDegraded || health.ConsecutiveFailures >= FailureThreshold() {
 					continue
 				}
 			}

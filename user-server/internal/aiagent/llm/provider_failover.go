@@ -28,12 +28,93 @@ const (
 )
 
 // 熔断器默认参数
+//
+// 这四个值同时是「参数中心」的兜底：运维在 config_params 的 agent_llm 组改了
+// default_health_check_interval / default_failure_threshold /
+// default_circuit_open_duration / default_health_check_timeout 之后，
+// 由 internal/app 的装配层经下面四个 SetXxxProvider 注入，实际生效点走
+// HealthCheckInterval() / FailureThreshold() / CircuitOpenDuration() /
+// HealthCheckTimeout()，而不是直接读常量。
+//
+// 分层口径：参数中心是**全局默认**，system_config_kv 的 llm_provider_failover
+// 是**按部署的覆盖**——KV 里有值就以 KV 为准，KV 没存或存 0 才回落到参数中心。
 const (
 	DefaultHealthCheckInterval = 30 * time.Second
 	DefaultFailureThreshold    = 5
 	DefaultCircuitOpenDuration = 60 * time.Second
 	DefaultHealthCheckTimeout  = 5 * time.Second
 )
+
+var (
+	healthCheckIntervalProvider func() time.Duration
+	failureThresholdProvider    func() int
+	circuitOpenDurationProvider func() time.Duration
+	healthCheckTimeoutProvider  func() time.Duration
+)
+
+// SetHealthCheckIntervalProvider 注入健康检查周期；传 nil 视为不注入，回落到 DefaultHealthCheckInterval。
+func SetHealthCheckIntervalProvider(fn func() time.Duration) {
+	healthCheckIntervalProvider = fn
+}
+
+// SetFailureThresholdProvider 注入熔断失败阈值；传 nil 视为不注入，回落到 DefaultFailureThreshold。
+func SetFailureThresholdProvider(fn func() int) {
+	failureThresholdProvider = fn
+}
+
+// SetCircuitOpenDurationProvider 注入熔断保持时长；传 nil 视为不注入，回落到 DefaultCircuitOpenDuration。
+func SetCircuitOpenDurationProvider(fn func() time.Duration) {
+	circuitOpenDurationProvider = fn
+}
+
+// SetHealthCheckTimeoutProvider 注入健康检查超时；传 nil 视为不注入，回落到 DefaultHealthCheckTimeout。
+func SetHealthCheckTimeoutProvider(fn func() time.Duration) {
+	healthCheckTimeoutProvider = fn
+}
+
+// HealthCheckInterval 生效的健康检查周期。非正值一律回落兜底——0 或负数会让健康检查退化成
+// 每个 tick 都跑（或根本不跑），把 provider 全部标成 down。
+func HealthCheckInterval() time.Duration {
+	if p := healthCheckIntervalProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultHealthCheckInterval
+}
+
+// FailureThreshold 生效的连续失败熔断阈值。非正值一律回落兜底——阈值 0 会让任何一次失败
+// （含一次网络抖动）立刻熔断整个 provider。
+func FailureThreshold() int {
+	if p := failureThresholdProvider; p != nil {
+		if n := p(); n > 0 {
+			return n
+		}
+	}
+	return DefaultFailureThreshold
+}
+
+// CircuitOpenDuration 生效的熔断保持时长。非正值一律回落兜底——0 等于不熔断，
+// 熔断器形同虚设。
+func CircuitOpenDuration() time.Duration {
+	if p := circuitOpenDurationProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultCircuitOpenDuration
+}
+
+// HealthCheckTimeout 生效的健康检查请求超时。非正值一律回落兜底——0 会让
+// context.WithTimeout 立刻超时，等于把所有 provider 判死。
+func HealthCheckTimeout() time.Duration {
+	if p := healthCheckTimeoutProvider; p != nil {
+		if d := p(); d > 0 {
+			return d
+		}
+	}
+	return DefaultHealthCheckTimeout
+}
 
 // ProviderHealth Provider 健康状态记录（运行期数据 + 可选 DB 持久化）
 type ProviderHealth struct {
@@ -60,9 +141,9 @@ type FailoverConfig struct {
 // DefaultFailoverConfig 默认降级策略
 func DefaultFailoverConfig() FailoverConfig {
 	return FailoverConfig{
-		HealthCheckInterval:   int(DefaultHealthCheckInterval / time.Second),
-		FailureThreshold:      DefaultFailureThreshold,
-		CircuitOpenDuration:   int(DefaultCircuitOpenDuration / time.Second),
+		HealthCheckInterval:   int(HealthCheckInterval() / time.Second),
+		FailureThreshold:      FailureThreshold(),
+		CircuitOpenDuration:   int(CircuitOpenDuration() / time.Second),
 		DegradedLatencyMs:     3000,
 		LocalFallbackProvider: "default",
 		TemplateReply:         "抱歉，当前服务暂时繁忙，请稍后再试或联系人工客服。",
@@ -105,7 +186,7 @@ type HTTPHealthChecker struct {
 // NewHTTPHealthChecker 创建 HTTP 健康检查器
 func NewHTTPHealthChecker() *HTTPHealthChecker {
 	return &HTTPHealthChecker{
-		httpClient: &http.Client{Timeout: DefaultHealthCheckTimeout},
+		httpClient: &http.Client{Timeout: HealthCheckTimeout()},
 	}
 }
 
@@ -283,7 +364,7 @@ func (f *ProviderFailover) interval() time.Duration {
 	cfg := f.Config()
 	sec := cfg.HealthCheckInterval
 	if sec <= 0 {
-		sec = int(DefaultHealthCheckInterval / time.Second)
+		sec = int(HealthCheckInterval() / time.Second)
 	}
 	return time.Duration(sec) * time.Second
 }
@@ -304,7 +385,7 @@ func (f *ProviderFailover) checkAll(ctx context.Context) {
 }
 
 func (f *ProviderFailover) checkOne(ctx context.Context, provider *ProviderConfig, cfg FailoverConfig) {
-	checkCtx, cancel := context.WithTimeout(ctx, DefaultHealthCheckTimeout)
+	checkCtx, cancel := context.WithTimeout(ctx, HealthCheckTimeout())
 	defer cancel()
 	latency, err := f.checker.Ping(checkCtx, provider, cfg)
 	f.mu.Lock()
